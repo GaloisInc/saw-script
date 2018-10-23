@@ -26,6 +26,8 @@ data Term
   | App Term [Term]
   | Sort Sort
   | Var Ident
+  | NatLit Integer
+  | List [Term]
     deriving (Show)
 
 -- | Type synonym useful for indicating when a term is used as a type.

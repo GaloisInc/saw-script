@@ -73,6 +73,10 @@ ppTerm e =
       ppSort s
     Var x ->
       ppIdent x
+    NatLit i ->
+      integer i
+    List ts ->
+      list (map ppTerm ts)
 
 ppDecl :: Decl -> Doc
 ppDecl decl = case decl of

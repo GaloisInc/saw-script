@@ -29,7 +29,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
 --import Verifier.SAW.Term.Pretty
---import qualified Data.Vector as Vector (toList)
+import qualified Data.Vector as Vector (toList)
 
 data TranslationError a
   = NotSupported a
@@ -113,35 +113,35 @@ identMap = Map.fromList
   [ ("Prelude.Bool", "bool")
   , ("Prelude.False", "false")
   , ("Prelude.True", "true")
-  , ("Prelude.Nat", "int")
+  , ("Prelude.Nat", "nat")
   , ("Prelude.Vec", "list")
   , ("Prelude.append", "(++)")
   , ("Cryptol.ecCat", "(++)")
-  , ("Prelude.take", "take")
-  , ("Prelude.drop", "drop")
-  , ("Prelude.zip", "zip")
-  , ("Cryptol.seq", "cryptolSeq")
-  , ("Cryptol.seqZip", "zip")
-  , ("Prelude.zipWith", "zipWith")
-  , ("Prelude.uncurry", "sawcoreUncurry")
+  , ("Prelude.take", "take") -- TODO: define
+  , ("Prelude.drop", "drop") -- TODO: define
+  , ("Prelude.zip", "zip") -- TODO: define
+  , ("Cryptol.seq", "cryptolSeq") -- TODO: define
+  , ("Cryptol.seqZip", "zip") -- TODO: define
+  , ("Prelude.zipWith", "zipWith") -- TODO: define
+  , ("Prelude.uncurry", "prod_uncurry")
   , ("Prelude.map", "map")
   , ("Cryptol.seqMap", "map")
-  , ("Prelude.bvXor", "sawcoreBVXor")
-  , ("Cryptol.ecDemote", "cryptolECDemote")
-  , ("Cryptol.ecJoin", "cryptolECJoin")
-  , ("Cryptol.ecSplit", "cryptolECSplit")
-  , ("Cryptol.ecSplitAt", "cryptolECSplitAt")
-  , ("Cryptol.Num", "int")
+  , ("Prelude.bvXor", "BVXor")
+  , ("Cryptol.ecDemote", "cryptolECDemote") -- TODO: define
+  , ("Cryptol.ecJoin", "cryptolECJoin") -- TODO: define
+  , ("Cryptol.ecSplit", "cryptolECSplit") -- TODO: define
+  , ("Cryptol.ecSplitAt", "cryptolECSplitAt") -- TODO: define
+  , ("Cryptol.Num", "nat")
   , ("Cryptol.TCNum", "id")
   , ("Cryptol.tcAdd", "(+)")
   , ("Cryptol.tcSub", "(-)")
   , ("Cryptol.tcMul", "( * )")
   , ("Cryptol.ecEq", "(=)")
   , ("Prelude.eq", "(=)")
-  , ("Cryptol.ecXor", "cryptolECXor")
-  , ("Cryptol.PLogicSeq", "cryptolPLogicSeq")
-  , ("Cryptol.PLogicSeqBool", "cryptolPLogicSeq")
-  , ("Cryptol.PLogicWord", "cryptolPLogicWord")
+  , ("Cryptol.ecXor", "cryptolECXor") -- TODO: define
+  , ("Cryptol.PLogicSeq", "cryptolPLogicSeq") -- TODO: define
+  , ("Cryptol.PLogicSeqBool", "cryptolPLogicSeq") -- TODO: define
+  , ("Cryptol.PLogicWord", "cryptolPLogicWord") -- TODO: define
   ]
 
 filterArgs :: Ident -> [a] -> [a]
@@ -171,19 +171,16 @@ flatTermFToExpr go tf = --traceFTermF "flatTermFToExpr" tf $
     PairType x y  -> Coq.App (Coq.Var "prod") <$> traverse go [x, y]
     PairLeft t    -> Coq.App (Coq.Var "fst") <$> traverse go [t]
     PairRight t   -> Coq.App (Coq.Var "snd") <$> traverse go [t]
-    {-
-    EmptyValue    -> undefined
-    -}
-    EmptyType     -> pure (Coq.Var "Empty_set")
     DataTypeApp n is as -> do
       Coq.App (Coq.Var (translateIdent n)) <$> traverse go (is ++ as)
     CtorApp n is as -> do
       Coq.App (Coq.Var (translateIdent n)) <$> traverse go (is ++ as)
     --RecursorApp _ _ _ _ _ _ -> undefined
     Sort s -> pure (Coq.Sort (if s == propSort then Coq.Prop else Coq.Type))
+    NatLit i -> pure (Coq.NatLit i)
+    ArrayValue _ vec ->
+      (Coq.List . Vector.toList) <$> traverse go vec  -- TODO: special case bit vectors?
     {-
-    NatLit i -> undefined
-    ArrayValue _ vec -> undefined
     StringLit _    -> undefined
     ExtCns (EC _ _ _) -> undefined
     -}
