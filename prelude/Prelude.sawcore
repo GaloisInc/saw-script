@@ -638,6 +638,20 @@ and_triv2 (x : Bool) : Eq Bool (and (not x) x) False =
 EqTrue : Bool -> sort 1;
 EqTrue x = Eq Bool x True;
 
+TrueI : EqTrue True;
+TrueI = Refl Bool True;
+
+andI : (x y : Bool) -> EqTrue x -> EqTrue y -> EqTrue (and x y);
+andI x y p q =
+  trans4 Bool (and x y) (and x True) x True
+  (eq_cong Bool y True q Bool (and x)) (and_True2 x) p;
+
+impliesI (x y : Bool) : (EqTrue x -> EqTrue y) -> EqTrue (implies x y) =
+  iteDep (\ (x : Bool) -> (EqTrue x -> EqTrue y) -> EqTrue (implies x y)) x
+         (\ (H : EqTrue True -> EqTrue y) ->
+           trans Bool (implies True y) y True (implies_True1 y) (H TrueI))
+         (\ (_ : EqTrue False -> EqTrue y) -> implies_False1 y);
+
 
 --------------------------------------------------------------------------------
 -- Decidable equality
