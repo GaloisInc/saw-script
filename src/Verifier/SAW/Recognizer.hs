@@ -66,6 +66,7 @@ module Verifier.SAW.Recognizer
   , asVecType
   , isVecType
   , asMux
+  , asEq
   , asEqTrue
   ) where
 
@@ -100,7 +101,7 @@ orElse f g t = f t <|> g t
 (<:) f g (h:r) = do x <- f h; _ <- g r; return x
 (<:) _ _ [] = fail "empty-list"
 
--- | Recognizes the head and tail of a list, and returns head.
+-- | Recognizes the head and tail of a list, and returns both.
 (<:>) :: Monad f
      => Recognizer f t a -> Recognizer f [t] b -> Recognizer f [t] (a :*: b)
 (<:>) f g (h:r) = do x <- f h; y <- g r; return (x :*: y)
@@ -390,6 +391,13 @@ asBitvectorType =
 
 asMux :: (Monad f) => Recognizer f Term (Term :*: Term :*: Term :*: Term)
 asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return
+
+asEq :: Monad f => Recognizer f Term (Term, Term, Term)
+asEq t =
+  do (o, l) <- asDataType t
+     case l of
+       [a, x, y] | "Prelude.Eq" == o -> return (a, x, y)
+       _ -> fail "not Eq"
 
 asEqTrue :: Monad f => Recognizer f Term Term
 asEqTrue = isGlobalDef "Prelude.EqTrue" @> return
