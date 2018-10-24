@@ -482,6 +482,48 @@ goal_apply (Theorem rule) =
                 let newgoals = reverse [ goal { goalTerm = t } | t <- newgoalterms ]
                 return ((), ProofState (newgoals ++ goals') concl stats timeout)
 
+goal_assume :: ProofScript Theorem
+goal_assume =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_assume failed: no subgoal"
+    goal : goals' ->
+      case asPi (goalTerm goal) of
+        Nothing -> fail "goal_assume failed: not a pi type"
+        Just (_nm, tp, body)
+          | looseVars body /= emptyBitSet -> fail "goal_assume failed: dependent pi type"
+          | otherwise ->
+            let goal' = goal { goalTerm = body } in
+            return (Theorem tp, ProofState (goal' : goals') concl stats timeout)
+
+goal_intro :: String -> ProofScript TypedTerm
+goal_intro s =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_intro failed: no subgoal"
+    goal : goals' ->
+      case asPi (goalTerm goal) of
+        Nothing -> fail "goal_intro failed: not a pi type"
+        Just (nm, tp, body) ->
+          do let name = if null s then nm else s
+             sc <- SV.getSharedContext
+             x <- io $ scFreshGlobal sc name tp
+             tt <- io $ mkTypedTerm sc x
+             body' <- io $ instantiateVar sc 0 x body
+             let goal' = goal { goalTerm = body' }
+             return (tt, ProofState (goal' : goals') concl stats timeout)
+
+goal_insert :: Theorem -> ProofScript ()
+goal_insert (Theorem t) =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_insert failed: no subgoal"
+    goal : goals' ->
+      do sc <- SV.getSharedContext
+         body' <- io $ scFun sc t (goalTerm goal)
+         let goal' = goal { goalTerm = body' }
+         return ((), ProofState (goal' : goals') concl stats timeout)
+
 returnsBool :: Term -> Bool
 returnsBool ((asBoolType . snd . asPiList) -> Just ()) = True
 returnsBool _ = False
@@ -1140,6 +1182,13 @@ core_axiom :: String -> TopLevel Theorem
 core_axiom input = do
   t <- parseCore input
   return (Theorem t)
+
+core_thm :: String -> TopLevel Theorem
+core_thm input =
+  do t <- parseCore input
+     sc <- getSharedContext
+     ty <- io $ scTypeOf sc t
+     return (Theorem ty)
 
 get_opt :: Int -> TopLevel String
 get_opt n = do

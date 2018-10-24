@@ -566,6 +566,10 @@ primitives = Map.fromList
     , "iteration."
     ]
 
+  , prim "run"                 "{a} TopLevel a -> a"
+    (funVal1 (id :: TopLevel Value -> TopLevel Value))
+    [ "Evaluate a monadic TopLevel computation to produce a value." ]
+
   , prim "null"                "{a} [a] -> Bool"
     (pureVal (null :: [Value] -> Bool))
     [ "Test whether a list value is empty." ]
@@ -897,7 +901,20 @@ primitives = Map.fromList
     [ "Apply an introduction rule to the current goal. Depending on the"
     , "rule, this will result in zero or more new subgoals."
     ]
-
+  , prim "goal_assume"         "ProofScript Theorem"
+    (pureVal goal_assume)
+    [ "Convert the first hypothesis in the current proof goal into a"
+    , "local Theorem."
+    ]
+  , prim "goal_insert"         "Theorem -> ProofScript ()"
+    (pureVal goal_intro)
+    [ "Insert a Theorem as a new hypothesis in the current proof goal."
+    ]
+  , prim "goal_intro"          "String -> ProofScript Term"
+    (pureVal goal_intro)
+    [ "Introduce a quantified variable in the current proof goal, returning"
+    , "the variable as a Term."
+    ]
   , prim "print_goal"          "ProofScript ()"
     (pureVal print_goal)
     [ "Print the current goal that a proof script is attempting to prove." ]
@@ -1584,6 +1601,10 @@ primitives = Map.fromList
     , "The input string contains a proof goal in saw-core syntax. The"
     , "return value is a Theorem that may be added to a Simpset."
     ]
+
+  , prim "core_thm"           "String -> Theorem"
+    (funVal1 core_thm)
+    [ "Create a theorem from the type of the given core expression." ]
 
   , prim "get_opt"            "Int -> String"
     (funVal1 get_opt)
