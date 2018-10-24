@@ -1213,6 +1213,9 @@ ecInfFromThen a pa x y =
 
 
 -- Run-time error
+ecError : (a : sort 0) -> (len : Num) -> seq len (bitvector 8) -> a;
+ecError a len msg = error a "cryptol error"; -- FIXME: don't throw away message
+{-
 primitive cryError : (a : sort 0) -> (n : Nat) -> Vec n (bitvector 8) -> a;
 
 ecError : (a : sort 0) -> (len : Num) -> seq len (bitvector 8) -> a;
@@ -1220,6 +1223,7 @@ ecError a =
   finNumRec
     (\ (len:Num) -> seq len (bitvector 8) -> a)
     (\ (len:Nat) -> cryError a len);
+-}
 
 -- Random values
 ecRandom : (a : sort 0) -> bitvector 32 -> a;
