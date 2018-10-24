@@ -300,6 +300,8 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (unwrapTermF -> Constant _ body _) = ruleOfProp body
+ruleOfProp (R.asEq -> Just (_, x, y)) =
+  RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asEqTrue -> Just body) = ruleOfProp body
 ruleOfProp t = error $ "ruleOfProp: Predicate not an equation: " ++ scPrettyTerm defaultPPOpts t
 
