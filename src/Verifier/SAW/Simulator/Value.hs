@@ -224,6 +224,7 @@ valRecordProj v _ = fail $ "valRecordProj: not a record value: " ++ show v
 
 apply :: VMonad l => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
+apply (VPiType _ f) x = f x
 apply _ _ = fail "Not a function value"
 
 applyAll :: VMonad l => Value l -> [Thunk l] -> MValue l

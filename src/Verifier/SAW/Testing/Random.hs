@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      :  Verifier.SAW.Testing.Random
 -- Copyright   :  (c) 2013-2015 Galois, Inc.
@@ -17,7 +18,7 @@ module Verifier.SAW.Testing.Random where
 import Verifier.SAW.FiniteValue
   (asFiniteTypePure, scFiniteValue, FiniteType(..), FiniteValue(..))
 import Verifier.SAW.Prim (Nat(..))
-import Verifier.SAW.Recognizer (asBoolType, asPi)
+import Verifier.SAW.Recognizer (asBoolType, asPi, asEq)
 import Verifier.SAW.SharedTerm
   (scApplyAll, scGetModuleMap, scWhnf, SharedContext, Term)
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm, CValue)
@@ -79,6 +80,8 @@ scRunTest sc fun gens = do
     VBool True -> return $ Nothing
     VBool False -> do
       return $ Just xs
+    VDataType "Prelude.Eq" [VBoolType, VBool x, VBool y] -> do
+      return $ if x == y then Nothing else Just xs
     _ -> panic "Type error while running test"
          [ "Expected a boolean, but got:"
          , show result ]
@@ -94,6 +97,8 @@ scRunTest sc fun gens = do
 -- arguments. The supported function types are of the form
 --
 --   'FiniteType -> ... -> FiniteType -> Bool'
+--   or
+--   'FiniteType -> ... -> FiniteType -> Eq (...) (...)'
 --
 -- and 'Nothing' is returned when attempting to generate arguments for
 -- functions of unsupported type.
@@ -107,6 +112,7 @@ scTestableType sc ty = do
       rngGens <- scTestableType sc rng
       return $ (domGen :) <$> rngGens
     (asBoolType -> Just ()) -> return $ Just []
+    (asEq -> Just _) -> return $ Just []
     _ -> return Nothing
 
 ----------------------------------------------------------------
