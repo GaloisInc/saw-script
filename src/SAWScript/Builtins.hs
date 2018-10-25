@@ -334,8 +334,9 @@ quickcheckGoal sc n = do
     let tm = goalTerm goal
     ty <- scTypeOf sc tm
     maybeInputs <- scTestableType sc ty
+    maybeInputs' <- scTestableType sc tm
     let stats = solverStats "quickcheck" (scSharedSize tm)
-    case maybeInputs of
+    case msum [maybeInputs, maybeInputs'] of
       Just inputs -> do
         result <- scRunTestsTFIO sc n tm inputs
         case result of
@@ -345,7 +346,8 @@ quickcheckGoal sc n = do
           -- TODO: use reasonable names here
           Just cex -> return (SV.SatMulti stats (zip (repeat "_") (map toFirstOrderValue cex)), stats, Just goal)
       Nothing -> fail $ "quickcheck:\n" ++
-        "term has non-testable type"
+        "term has non-testable type:\n" ++
+        showTerm ty ++ ", for term: " ++ showTerm tm
 
 assumeValid :: ProofScript SV.ProofResult
 assumeValid = withFirstGoal $ \goal -> do
