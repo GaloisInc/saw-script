@@ -907,7 +907,7 @@ primitives = Map.fromList
     , "local Theorem."
     ]
   , prim "goal_insert"         "Theorem -> ProofScript ()"
-    (pureVal goal_intro)
+    (pureVal goal_insert)
     [ "Insert a Theorem as a new hypothesis in the current proof goal."
     ]
   , prim "goal_intro"          "String -> ProofScript Term"
