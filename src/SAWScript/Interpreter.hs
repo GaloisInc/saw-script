@@ -915,6 +915,11 @@ primitives = Map.fromList
     [ "Introduce a quantified variable in the current proof goal, returning"
     , "the variable as a Term."
     ]
+  , prim "goal_when"           "String -> ProofScript () -> ProofScript ()"
+    (pureVal goal_when)
+    [ "Run the given proof script only when the goal name contains"
+    , "the given string."
+    ]
   , prim "print_goal"          "ProofScript ()"
     (pureVal print_goal)
     [ "Print the current goal that a proof script is attempting to prove." ]

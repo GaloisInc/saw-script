@@ -31,7 +31,7 @@ import qualified Control.Exception as Ex
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid ((<>))
@@ -525,6 +525,13 @@ goal_insert (Theorem t) =
          body' <- io $ scFun sc t (goalTerm goal)
          let goal' = goal { goalTerm = body' }
          return ((), ProofState (goal' : goals') concl stats timeout)
+
+goal_when :: String -> ProofScript () -> ProofScript ()
+goal_when str script =
+  StateT $ \s ->
+  case psGoals s of
+    g : _ | str `isInfixOf` goalName g -> runStateT script s
+    _ -> return ((), s)
 
 returnsBool :: Term -> Bool
 returnsBool ((asBoolType . snd . asPiList) -> Just ()) = True
