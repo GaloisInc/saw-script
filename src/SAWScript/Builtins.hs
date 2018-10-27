@@ -464,25 +464,32 @@ goal_apply (Theorem rule) =
     [] -> fail "goal_apply failed: no subgoal"
     goal : goals' ->
       do sc <- getSharedContext
-         let (goalArgs, goalConcl) = asPiList (goalTerm goal)
-         let (ruleArgs, ruleConcl) = asPiList rule
-         result <- io $ scMatch sc ruleConcl goalConcl
-         case result of
-           Nothing -> fail "goal_apply failed: no match"
-           Just inst ->
-             do let inst' = [ Map.lookup i inst | i <- take (length ruleArgs) [0..] ]
-                dummy <- io $ scUnitType sc
-                let mkNewGoals (Nothing : mts) ((_, prop) : args) =
-                      do c0 <- instantiateVarList sc 0 (map (fromMaybe dummy) mts) prop
-                         c' <- scPiList sc goalArgs c0
-                         cs <- mkNewGoals mts args
-                         return (c' : cs)
-                    mkNewGoals (Just _ : mts) (_ : args) =
-                      mkNewGoals mts args
-                    mkNewGoals _ _ = return []
-                newgoalterms <- io $ mkNewGoals inst' (reverse ruleArgs)
-                let newgoals = reverse [ goal { goalTerm = t } | t <- newgoalterms ]
-                return ((), ProofState (newgoals ++ goals') concl stats timeout)
+         let applyFirst [] = fail "goal_apply failed: no match"
+             applyFirst ((ruleArgs, ruleConcl) : rest) =
+               do result <- io $ scMatch sc ruleConcl (goalTerm goal)
+                  case result of
+                    Nothing -> applyFirst rest
+                    Just inst ->
+                      do let inst' = [ Map.lookup i inst | i <- take (length ruleArgs) [0..] ]
+                         dummy <- io $ scUnitType sc
+                         let mkNewGoals (Nothing : mts) ((_, prop) : args) =
+                               do c0 <- instantiateVarList sc 0 (map (fromMaybe dummy) mts) prop
+                                  cs <- mkNewGoals mts args
+                                  return (c0 : cs)
+                             mkNewGoals (Just _ : mts) (_ : args) =
+                               mkNewGoals mts args
+                             mkNewGoals _ _ = return []
+                         newgoalterms <- io $ mkNewGoals inst' (reverse ruleArgs)
+                         let newgoals = reverse [ goal { goalTerm = t } | t <- newgoalterms ]
+                         return ((), ProofState (newgoals ++ goals') concl stats timeout)
+         applyFirst (asPiLists rule)
+  where
+    asPiLists :: Term -> [([(String, Term)], Term)]
+    asPiLists t =
+      case asPi t of
+        Nothing -> [([], t)]
+        Just (nm, tp, body) ->
+          [ ((nm, tp) : args, concl) | (args, concl) <- asPiLists body ] ++ [([], t)]
 
 goal_assume :: ProofScript Theorem
 goal_assume =
