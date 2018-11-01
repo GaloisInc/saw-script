@@ -12,6 +12,7 @@ module SAWScript.Prover.Exporter
   , writeSMTLib2
   , write_smtlib2
   , writeUnintSMTLib2
+  , writeCoq
   , writeCore
 
     -- * Misc
@@ -32,6 +33,7 @@ import Verifier.SAW.TypedTerm
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer(asPi, asPiList, asBoolType)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
+import qualified Verifier.SAW.Export.Coq as Coq
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 
@@ -182,6 +184,11 @@ writeUnintSMTLib2 unints sc f t = do
 writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)
 
+writeCoq :: FilePath -> Term -> IO ()
+writeCoq path t = do
+  case Coq.translateTermDoc False t of
+    Left err -> putStrLn $ "Error translating: " ++ show err
+    Right doc -> print doc
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
