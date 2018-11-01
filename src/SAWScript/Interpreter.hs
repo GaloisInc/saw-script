@@ -924,6 +924,10 @@ primitives = Map.fromList
     Current
     [ "Write out a representation of a term in SAWCore external format." ]
 
+  , prim "write_coq"          "String -> Term -> TopLevel ()"
+    (pureVal writeCoq)
+    [ "Write out a representation of a term in Gallina syntax for Coq." ]
+
   , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal (autoMatch stmtInterpreter :: FilePath -> FilePath -> TopLevel ()))
     Current
