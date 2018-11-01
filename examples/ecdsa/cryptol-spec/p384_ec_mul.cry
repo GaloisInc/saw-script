@@ -32,7 +32,7 @@ property ripple_adc_toJavaArray x y =
 
 /* Returns (xl # c) >> 1. */
 ripple_shr : {m, n} (m >= 1, fin m, n >= 1, fin n) => ([n][m],Bit) -> ([n][m])
-ripple_shr(xl,c) = [ (x' << (width(x) - 1:[width m])) || (x >> 1)
+ripple_shr(xl,c) = [ (x' << (length(x) - 1:[width m])) || (x >> 1)
                    | x <- xl
                    | x' <- drop`{1}(xl) # [(uext([c]))]
                    ]
