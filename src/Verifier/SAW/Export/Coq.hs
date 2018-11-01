@@ -171,20 +171,21 @@ flatTermFToExpr go tf = --traceFTermF "flatTermFToExpr" tf $
     PairType x y  -> Coq.App (Coq.Var "prod") <$> traverse go [x, y]
     PairLeft t    -> Coq.App (Coq.Var "fst") <$> traverse go [t]
     PairRight t   -> Coq.App (Coq.Var "snd") <$> traverse go [t]
+    -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as -> do
       Coq.App (Coq.Var (translateIdent n)) <$> traverse go (is ++ as)
+    -- TODO: maybe have more customizable translation of data constructors
     CtorApp n is as -> do
       Coq.App (Coq.Var (translateIdent n)) <$> traverse go (is ++ as)
-    --RecursorApp _ _ _ _ _ _ -> undefined
+    -- TODO: support this next!
+    RecursorApp _ _ _ _ _ _ -> notSupported
     Sort s -> pure (Coq.Sort (if s == propSort then Coq.Prop else Coq.Type))
     NatLit i -> pure (Coq.NatLit i)
     ArrayValue _ vec ->
       (Coq.List . Vector.toList) <$> traverse go vec  -- TODO: special case bit vectors?
-    {-
-    StringLit _    -> undefined
-    ExtCns (EC _ _ _) -> undefined
-    -}
-    _ -> notSupported
+    StringLit _    -> notSupported
+    ExtCns (EC _ _ _) -> notSupported
+    _ -> notSupported -- TODO: remove once obsolete constructors removed
   where
     notSupported = throwError $ NotSupported errorTerm
     --badTerm = throwError $ BadTerm errorTerm
@@ -203,6 +204,10 @@ asSeq t = do (f, args) <- asApplyAllRecognizer t
 asApplyAllRecognizer :: Monad f => Recognizer f Term (Term, [Term])
 asApplyAllRecognizer t = do _ <- asApp t
                             return $ asApplyAll t
+
+mkDecl :: Coq.Ident -> Coq.Term -> Coq.Decl
+mkDecl name (Coq.Fun bs t) = Coq.Definition name bs Nothing t
+mkDecl name t = Coq.Definition name [] Nothing t
 
 -- env is innermost first order
 translateTerm :: Bool -> [String] -> Term -> CoqTrans Coq.Term
@@ -274,10 +279,7 @@ translateTerm traverseConsts env t = --traceTerm "translateTerm" t $
          | not traverseConsts || any (matchDecl n) decls -> Coq.Var <$> pure n
          | otherwise -> do
              b <- go env body
-             case b of
-               Coq.Fun bs b' -> 
-                 modify (Coq.Definition n bs Nothing b' :)
-               _ -> modify (Coq.Definition n [] Nothing b :)
+             modify (mkDecl n b :)
              Coq.Var <$> pure n
     _ -> {- trace "translateTerm fallthrough" -} notSupported
   where
@@ -291,5 +293,12 @@ translateTermDoc :: Bool -> Term -> Either (TranslationError Term) Doc
 translateTermDoc traverseConsts t = do
   (term, decls) <- runStateT (runCoqTrans $ translateTerm traverseConsts [] t) []
   return $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls) <$$>
-           hardline <$$>
+           (if null decls then empty else hardline) <$$>
            Coq.ppTerm term
+
+translateDefDoc :: Bool -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
+translateDefDoc traverseConsts name t = do
+  (term, decls) <- runStateT (runCoqTrans $ translateTerm traverseConsts [] t) []
+  return $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls) <$$>
+           (if null decls then empty else hardline) <>
+           Coq.ppDecl (mkDecl name term)

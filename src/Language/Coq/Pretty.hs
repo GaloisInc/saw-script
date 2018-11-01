@@ -57,7 +57,7 @@ ppTerm e =
     Forall bs t ->
       text "forall" <+> ppBinders bs <> comma <+> ppTerm t
     Fun bs t ->
-      text "fun" <+> ppBinders bs <> text "=>" <+> ppTerm t
+      text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm t
     Let x bs mty t body ->
       text "let" <+> ppIdent x <+> ppBinders bs <+> ppMaybeTy mty <+>
       text ":=" <+> ppTerm t <+> text "in" <+> ppTerm body
@@ -81,8 +81,8 @@ ppTerm e =
 ppDecl :: Decl -> Doc
 ppDecl decl = case decl of
   Definition nm bs mty body ->
-    nest 2 $
-    hsep ([text "Definition", text nm] ++
+    (nest 2 $
+     hsep ([text "Definition", text nm] ++
           map ppBinder bs ++
           [ppMaybeTy mty, text ":="]) <$>
-    ppTerm body <> period
+     ppTerm body <> period) <> hardline
