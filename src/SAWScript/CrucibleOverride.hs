@@ -274,12 +274,12 @@ failure loc e = OM (lift (throwE (OF loc e)))
 
 ------------------------------------------------------------------------
 
--- | This function is responsable for implementing the \"override\" behavior
+-- | This function is responsible for implementing the \"override\" behavior
 --   of method specifications.  The main work done in this function to manage
 --   the process of selecting between several possible different override
 --   specifications that could apply.  We want a proof to succeed if _any_
 --   choice of method spec allows the proof to go through, which is a slightly
---   akward thing to fit into the symbolic simulation framework.
+--   awkward thing to fit into the symbolic simulation framework.
 --
 --   The main work of determining the preconditions, postconditions, memory
 --   updates and return value for a single specification is done by
@@ -376,10 +376,12 @@ methodSpecHandler opts sc cc top_loc css retTy = do
            )
          | (precond, cs, st) <- branches
          ] ++
-         [ ( W4.truePred sym
-           , liftIO $ Crucible.addFailedAssertion sym (Crucible.GenericSimError "no override specification applies")
-           , Just (W4.plSourceLoc top_loc)
-           )]
+        [   let (_, cs, _) = head branches in
+            ( W4.truePred sym
+            , liftIO $ Crucible.addFailedAssertion sym (Crucible.GenericSimError $ "no override specification applies for " ++ cs^.csName)
+            , Just (W4.plSourceLoc top_loc)
+            )
+        ]
        ))
      (Crucible.RegMap args)
 
