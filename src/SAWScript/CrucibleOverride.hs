@@ -376,9 +376,14 @@ methodSpecHandler opts sc cc top_loc css retTy = do
            )
          | (precond, cs, st) <- branches
          ] ++
-        [   let (_, cs, _) = head branches in
+        [   
+            
+            let fnName = case branches of 
+                           (_, cs, _) : _  -> cs^.csName
+                           _               -> "unknown function" 
+            in
             ( W4.truePred sym
-            , liftIO $ Crucible.addFailedAssertion sym (Crucible.GenericSimError $ "no override specification applies for " ++ cs^.csName)
+            , liftIO $ Crucible.addFailedAssertion sym (Crucible.GenericSimError $ "no override specification applies for " ++ fnName)
             , Just (W4.plSourceLoc top_loc)
             )
         ]
