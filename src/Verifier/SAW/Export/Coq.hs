@@ -31,6 +31,8 @@ import Verifier.SAW.Term.Functor
 --import Verifier.SAW.Term.Pretty
 import qualified Data.Vector as Vector (toList)
 
+import Debug.Trace
+
 data TranslationError a
   = NotSupported a
   | NotExpr a
@@ -82,12 +84,14 @@ globalArgsMap = Map.fromList
   , ("Prelude.map", [False, False, True, False, True])
   , ("Prelude.bvXor", [False, True, True])
   , ("Prelude.zipWith", [False, False, False, True, False, True, True])
+  , ("Prelude.coerce", [False, False, False, True])
+  , ("Prelude.unsafeCoerce", [False, False, True])
   , ("Prelude.eq", [False, True, True])
   , ("Cryptol.ecEq", [False, False, True, True])
   , ("Cryptol.ecDemote", [True, True])
   -- Assuming only finite Cryptol sequences
   , ("Cryptol.ecCat", [False, False, False, True, True])
-  , ("Cryptol.seq", [True, False])
+  , ("Cryptol.seq", [False, True])
   , ("Cryptol.seqZip", [False, False, False, False, True, True])
   , ("Cryptol.seqMap", [False, False, False, True, True])
   , ("Cryptol.ecJoin", [False, False, False, True])
@@ -120,11 +124,13 @@ identMap = Map.fromList
   , ("Prelude.take", "take") -- TODO: define
   , ("Prelude.drop", "drop") -- TODO: define
   , ("Prelude.zip", "zip") -- TODO: define
-  , ("Cryptol.seq", "cryptolSeq") -- TODO: define
+  , ("Cryptol.seq", "list")
   , ("Cryptol.seqZip", "zip") -- TODO: define
   , ("Prelude.zipWith", "zipWith") -- TODO: define
   , ("Prelude.uncurry", "prod_uncurry")
   , ("Prelude.map", "map")
+  , ("Prelude.coerce", "id")
+  , ("Prelude.unsafeCoerce", "id")
   , ("Cryptol.seqMap", "map")
   , ("Prelude.bvXor", "BVXor")
   , ("Cryptol.ecDemote", "cryptolECDemote") -- TODO: define
@@ -150,19 +156,17 @@ filterArgs i = maybe id zipFilter (Map.lookup i globalArgsMap)
 translateIdent :: Ident -> Coq.Ident
 translateIdent i = Map.findWithDefault (show i) i identMap
 
-{-
 traceFTermF :: String -> FlatTermF Term -> a -> a
 traceFTermF ctx tf = traceTerm ctx (Unshared $ FTermF tf)
   
 traceTerm :: String -> Term -> a -> a
 traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
--}
 
 flatTermFToExpr ::
   (Term -> CoqTrans Coq.Term) ->
   FlatTermF Term ->
   CoqTrans Coq.Term
-flatTermFToExpr go tf = --traceFTermF "flatTermFToExpr" tf $
+flatTermFToExpr go tf = traceFTermF "flatTermFToExpr" tf $
   case tf of
     GlobalDef i   -> pure (Coq.Var (translateIdent i))
     UnitValue     -> pure (Coq.Var "tt")
@@ -206,48 +210,51 @@ asApplyAllRecognizer t = do _ <- asApp t
                             return $ asApplyAll t
 
 mkDecl :: Coq.Ident -> Coq.Term -> Coq.Decl
-mkDecl name (Coq.Fun bs t) = Coq.Definition name bs Nothing t
+mkDecl name (Coq.Lambda bs t) = Coq.Definition name bs Nothing t
 mkDecl name t = Coq.Definition name [] Nothing t
+
+translateParams :: Bool -> [String] -> [(String, Term)] -> CoqTrans [Coq.Binder]
+translateParams _ _ [] = return []
+translateParams traverseConsts env ((n, ty):ps) = do
+  ty' <- translateTerm traverseConsts env ty
+  ps' <- translateParams traverseConsts (n : env) ps
+  return (Coq.Binder n (Just ty') : ps')
 
 -- env is innermost first order
 translateTerm :: Bool -> [String] -> Term -> CoqTrans Coq.Term
-translateTerm traverseConsts env t = --traceTerm "translateTerm" t $
+translateTerm traverseConsts env t = traceTerm "translateTerm" t $
   case t of
     (asFTermF -> Just tf)  -> flatTermFToExpr (go env) tf
+    (asPi -> Just _) -> do
+      paramTerms <- translateParams traverseConsts env params
+      Coq.Pi <$> pure paramTerms
+                 -- env is in innermost first (reverse) binder order
+                 <*> go ((reverse paramNames) ++ env) e
+        where
+          -- params are in normal, outermost first, order
+          (params, e) = asPiList t
+          -- param names are in normal, outermost first, order
+          paramNames = map fst $ params
     (asLambda -> Just _) -> do
-      paramTerms <- mapM translateParam params
-      Coq.Fun <$> pure paramTerms
-              -- env is in innermost first (reverse) binder order
-              <*> go ((reverse paramNames) ++ env) e
+      paramTerms <- translateParams traverseConsts env params
+      Coq.Lambda <$> pure paramTerms
+                 -- env is in innermost first (reverse) binder order
+                 <*> go ((reverse paramNames) ++ env) e
         where
           -- params are in normal, outermost first, order
           (params, e) = asLambdaList t
           -- param names are in normal, outermost first, order
           paramNames = map fst $ params
-          translateParam (n, ty) = do
-            -- TODO: what if argument types are dependent?
-            ty' <- translateTerm traverseConsts env ty
-            return (Coq.Binder n (Just ty'))
     (asApp -> Just _) ->
       -- asApplyAll: innermost argument first
       let (f, args) = asApplyAll t
       in case f of
            (asGlobalDef -> Just i) ->
              case i of
-                "Cryptol.unsafeCoerce" ->
-                -- assuming unsafeCoerce is safe in SAW-Core generated
-                -- by the Cryptol compiler, so we just strip it
-                -- away. For now throwing away the type, but we'll see
-                -- if we need the resulting type (second parameter) in
-                -- practice.
-                  go env (last args)
-                "Prelude.unsafeCoerce" ->
-                  go env (last args)
                 "Prelude.ite" -> case args of
                   [_ty, c, tt, ft] ->
                     Coq.If <$> go env c <*> go env tt <*> go env ft
                   _ -> badTerm
-                {-
                 "Prelude.fix" -> case args of
                   [resultType, lambda] -> 
                     case resultType of
@@ -258,12 +265,11 @@ translateTerm traverseConsts env t = --traceTerm "translateTerm" t $
                               len <- go env n
                               -- let len = EC.App (EC.ModVar "size") [EC.ModVar x]
                               expr <- go (x:env) body
-                              typ <- translateType env ty
-                              return $ EC.App (EC.ModVar "iter") [len, EC.Binding EC.Lambda [(x, Just typ)] expr, EC.List []]
+                              typ <- go env ty
+                              return $ Coq.App (Coq.Var "iter") [len, Coq.Lambda [Coq.Binder x (Just typ)] expr, Coq.List []]
                           _ -> badTerm   
                       _ -> notSupported
                   _ -> badTerm
-                -}
                 _ -> Coq.App <$> go env f
                              <*> traverse (go env) (filterArgs i args)
                   

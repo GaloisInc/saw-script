@@ -9,6 +9,7 @@ Portability : portable
 
 module Language.Coq.Pretty where
 
+import Data.List (intersperse)
 import Text.PrettyPrint.ANSI.Leijen
 import Language.Coq.AST
 import Prelude hiding ((<$>), (<>))
@@ -51,13 +52,18 @@ ppSort Prop = text "Prop"
 ppSort Set = text "Set"
 ppSort Type = text "Type"
 
+ppPi :: [Binder] -> Doc
+ppPi bs = hsep $ intersperse (text "->") (map ppBinder bs)
+
 ppTerm :: Term -> Doc
 ppTerm e =
   case e of
     Forall bs t ->
       text "forall" <+> ppBinders bs <> comma <+> ppTerm t
-    Fun bs t ->
-      text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm t
+    Lambda bs t ->
+      parens (text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm t)
+    Pi bs t ->
+      ppPi bs <+> text "->" <+> ppTerm t
     Let x bs mty t body ->
       text "let" <+> ppIdent x <+> ppBinders bs <+> ppMaybeTy mty <+>
       text ":=" <+> ppTerm t <+> text "in" <+> ppTerm body
@@ -65,10 +71,8 @@ ppTerm e =
       text "if" <+> ppTerm c <+>
       text "then" <+> ppTerm t <+>
       text "else" <+> ppTerm f
-    Arrow t1 t2 ->
-      ppTerm t1 <+> text "->" <+> ppTerm t2
     App f args ->
-      hsep (ppTerm f : map ppTerm args)
+      parens (hsep (ppTerm f : map ppTerm args))
     Sort s ->
       ppSort s
     Var x ->

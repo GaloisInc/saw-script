@@ -19,10 +19,10 @@ data Sort
 
 data Term
   = Forall [Binder] Term
-  | Fun [Binder] Term
+  | Lambda [Binder] Term
+  | Pi [Binder] Term
   | Let Ident [Binder] (Maybe Type) Term Term
   | If Term Term Term
-  | Arrow Term Term
   | App Term [Term]
   | Sort Sort
   | Var Ident
