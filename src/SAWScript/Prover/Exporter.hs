@@ -184,11 +184,13 @@ writeUnintSMTLib2 unints sc f t = do
 writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)
 
-writeCoq :: FilePath -> Term -> IO ()
-writeCoq path t = do
-  case Coq.translateTermDoc False t of
+writeCoq :: String -> FilePath -> Term -> IO ()
+writeCoq name path t = do
+  case Coq.translateDefDoc True name t of
     Left err -> putStrLn $ "Error translating: " ++ show err
-    Right doc -> print doc
+    Right doc -> case path of
+      "" -> print doc
+      _ -> writeFile path (show doc)
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
