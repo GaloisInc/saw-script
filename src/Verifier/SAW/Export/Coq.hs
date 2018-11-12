@@ -276,3 +276,12 @@ translateDefDoc traverseConsts name t = do
   return $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls) <$$>
            (if null decls then empty else hardline) <>
            Coq.ppDecl (mkDecl name term)
+
+translateDefDocImports :: Bool -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
+translateDefDocImports traverseConsts name t = do
+  doc <- translateDefDoc traverseConsts name t
+  let imports = vcat [ "Require Import Coq.Lists.List."
+                     , "Require Import Cryptol."
+                     , "Require Import SAW."
+                     ]
+  return (imports <$$> doc)
