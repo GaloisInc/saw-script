@@ -67,49 +67,15 @@ instance MonadError (TranslationError Term) CoqTrans where
     throwError e = CoqTrans $ lift $ throwError e
     catchError (CoqTrans a) h = CoqTrans $ catchError a $ runCoqTrans . h
 
-zipFilter :: [Bool] -> [a] -> [a]
-zipFilter bs = map snd . filter fst . zip bs
-
 showFTermF :: FlatTermF Term -> String
 showFTermF = show . Unshared . FTermF
-
--- arg order: outermost binding first
-globalArgsMap :: Map.Map Ident [Bool]
-globalArgsMap = Map.fromList
-  [ ("Prelude.append", [False, False, False, True, True])
-  , ("Prelude.take", [False, True, False, True])
-  , ("Prelude.drop", [False, False, True, True])
-  , ("Prelude.Vec", [False, True])
-  , ("Prelude.uncurry", [False, False, False, True])
-  , ("Prelude.map", [False, False, True, False, True])
-  , ("Prelude.bvXor", [False, True, True])
-  , ("Prelude.zipWith", [False, False, False, True, False, True, True])
-  , ("Prelude.coerce", [False, False, False, True])
-  , ("Prelude.unsafeCoerce", [False, False, True])
-  , ("Prelude.eq", [False, True, True])
-  , ("Cryptol.ecEq", [False, False, True, True])
-  , ("Cryptol.ecDemote", [True, True])
-  -- Assuming only finite Cryptol sequences
-  , ("Cryptol.ecCat", [False, False, False, True, True])
-  , ("Cryptol.seq", [False, True])
-  , ("Cryptol.seqZip", [False, False, False, False, True, True])
-  , ("Cryptol.seqMap", [False, False, False, True, True])
-  , ("Cryptol.ecJoin", [False, False, False, True])
-  , ("Cryptol.ecSplit", [False, True, False, True])
-  , ("Cryptol.ecSplitAt", [True, True, False, True])
-  , ("Cryptol.ecXor", [False, True, True, True])
-  , ("Cryptol.ecZero", [True, False])
-  , ("Cryptol.PLogicSeq", [False, False, True])
-  , ("Cryptol.PLogicSeqBool", [False])
-  , ("Cryptol.PLogicWord", [False])
-  ]
 
 cryptolPreludeMap :: Map.Map String String
 cryptolPreludeMap = Map.fromList
   [ ("repeat", "cryptolRepeat")
   , ("take", "cryptolTake")
   , ("drop", "cryptolDrop")
-  , ("/\\", "(/\\)")
+  , ("/\\", "cryptolAnd")
   ]
 
 identMap :: Map.Map Ident Coq.Ident
@@ -118,40 +84,42 @@ identMap = Map.fromList
   , ("Prelude.False", "false")
   , ("Prelude.True", "true")
   , ("Prelude.Nat", "nat")
-  , ("Prelude.Vec", "list")
-  , ("Prelude.append", "(++)")
-  , ("Cryptol.ecCat", "(++)")
-  , ("Prelude.take", "take") -- TODO: define
-  , ("Prelude.drop", "drop") -- TODO: define
-  , ("Prelude.zip", "zip") -- TODO: define
-  , ("Cryptol.seq", "list")
-  , ("Cryptol.seqZip", "zip") -- TODO: define
-  , ("Prelude.zipWith", "zipWith") -- TODO: define
-  , ("Prelude.uncurry", "prod_uncurry")
-  , ("Prelude.map", "map")
-  , ("Prelude.coerce", "id")
-  , ("Prelude.unsafeCoerce", "id")
-  , ("Cryptol.seqMap", "map")
-  , ("Prelude.bvXor", "BVXor")
-  , ("Cryptol.ecDemote", "cryptolECDemote") -- TODO: define
-  , ("Cryptol.ecJoin", "cryptolECJoin") -- TODO: define
-  , ("Cryptol.ecSplit", "cryptolECSplit") -- TODO: define
-  , ("Cryptol.ecSplitAt", "cryptolECSplitAt") -- TODO: define
-  , ("Cryptol.Num", "nat")
-  , ("Cryptol.TCNum", "id")
-  , ("Cryptol.tcAdd", "(+)")
-  , ("Cryptol.tcSub", "(-)")
-  , ("Cryptol.tcMul", "( * )")
-  , ("Cryptol.ecEq", "(=)")
-  , ("Prelude.eq", "(=)")
-  , ("Cryptol.ecXor", "cryptolECXor") -- TODO: define
-  , ("Cryptol.PLogicSeq", "cryptolPLogicSeq") -- TODO: define
-  , ("Cryptol.PLogicSeqBool", "cryptolPLogicSeq") -- TODO: define
-  , ("Cryptol.PLogicWord", "cryptolPLogicWord") -- TODO: define
+  , ("Prelude.Vec", "sawVec")
+  , ("Prelude.append", "vecApp")
+  , ("Cryptol.ecCat", "cryptolApp")
+  , ("Cryptol.ecNumber", "cryptolNumber")
+  , ("Prelude.take", "vecTake")
+  , ("Prelude.drop", "vecDrop")
+  , ("Prelude.zip", "vecZip")
+  , ("Cryptol.seq", "cryptolSeq")
+  , ("Cryptol.seqZip", "cryptolZip")
+  , ("Prelude.zipWith", "sawZipWith")
+  , ("Prelude.uncurry", "sawUncurry")
+  , ("Prelude.map", "sawMap")
+  , ("Prelude.coerce", "sawCoerce")
+  , ("Prelude.unsafeCoerce", "sawUnsafeCoerce")
+  , ("Prelude.unsafeAssert", "sawUnsafeAssert")
+  , ("Cryptol.seqMap", "cryptolMap")
+  , ("Prelude.bvXor", "sawBVXor")
+  , ("Cryptol.ecDemote", "cryptolECDemote")
+  , ("Cryptol.ecJoin", "cryptolECJoin")
+  , ("Cryptol.ecSplit", "cryptolECSplit")
+  , ("Cryptol.ecSplitAt", "cryptolECSplitAt")
+  , ("Cryptol.Num", "CryptolNum")
+  , ("Cryptol.TCNum", "CryptolTCNum")
+  , ("Cryptol.tcAdd", "cryptolAdd")
+  , ("Cryptol.tcSub", "cryptolSub")
+  , ("Cryptol.tcMul", "cryptolMul")
+  , ("Cryptol.tcMin", "cryptolMin")
+  , ("Cryptol.ecEq", "cryptolEq")
+  , ("Cryptol.seqEq1", "cryptolSeqEq1")
+  , ("Prelude.eq", "sawEq")
+  , ("Cryptol.ecXor", "cryptolECXor")
+  , ("Cryptol.PLogicSeq", "cryptolPLogicSeq")
+  , ("Cryptol.PLogicSeqBool", "cryptolPLogicSeqBool")
+  , ("Cryptol.PLogicWord", "cryptolPLogicWord")
+  , ("Cryptol.PLiteralSeqBool", "cryptolPLiteralSeqBool")
   ]
-
-filterArgs :: Ident -> [a] -> [a]
-filterArgs i = maybe id zipFilter (Map.lookup i globalArgsMap)
 
 translateIdent :: Ident -> Coq.Ident
 translateIdent i = Map.findWithDefault (show i) i identMap
@@ -271,7 +239,7 @@ translateTerm traverseConsts env t = traceTerm "translateTerm" t $
                       _ -> notSupported
                   _ -> badTerm
                 _ -> Coq.App <$> go env f
-                             <*> traverse (go env) (filterArgs i args)
+                             <*> traverse (go env) args
                   
            _ -> Coq.App <$> go env f
                         <*> traverse (go env) args
