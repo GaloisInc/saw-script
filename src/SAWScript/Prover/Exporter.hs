@@ -177,7 +177,7 @@ writeCore path t = writeFile path (scWriteExternal t)
 
 writeCoq :: String -> FilePath -> Term -> IO ()
 writeCoq name path t = do
-  case Coq.translateDefDoc True name t of
+  case Coq.translateDefDocImports True name t of
     Left err -> putStrLn $ "Error translating: " ++ show err
     Right doc -> case path of
       "" -> print doc
