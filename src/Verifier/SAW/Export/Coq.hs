@@ -31,7 +31,7 @@ import Verifier.SAW.Term.Functor
 --import Verifier.SAW.Term.Pretty
 import qualified Data.Vector as Vector (toList)
 
-import Debug.Trace
+--import Debug.Trace
 
 data TranslationError a
   = NotSupported a
@@ -85,56 +85,70 @@ identMap = Map.fromList
   , ("Prelude.True", "true")
   , ("Prelude.Nat", "nat")
   , ("Prelude.Vec", "sawVec")
-  , ("Prelude.append", "vecApp")
-  , ("Cryptol.ecCat", "cryptolApp")
-  , ("Cryptol.ecNumber", "cryptolNumber")
+  , ("Prelude.append", "vecAppend")
+  , ("Cryptol.ecCat", "seqCat")
+  , ("Cryptol.ecNumber", "ecNumber")
   , ("Prelude.take", "vecTake")
   , ("Prelude.drop", "vecDrop")
   , ("Prelude.zip", "vecZip")
-  , ("Cryptol.seq", "cryptolSeq")
-  , ("Cryptol.seqZip", "cryptolZip")
+  , ("Cryptol.seq", "seq")
+  , ("Cryptol.seqZip", "seqZip")
   , ("Prelude.zipWith", "sawZipWith")
   , ("Prelude.uncurry", "sawUncurry")
-  , ("Prelude.map", "sawMap")
+  , ("Prelude.map", "vecMap")
   , ("Prelude.coerce", "sawCoerce")
   , ("Prelude.unsafeCoerce", "sawUnsafeCoerce")
   , ("Prelude.unsafeAssert", "sawUnsafeAssert")
-  , ("Cryptol.seqMap", "cryptolMap")
+  , ("Cryptol.seqMap", "seqMap")
   , ("Prelude.bvXor", "sawBVXor")
-  , ("Cryptol.ecDemote", "cryptolECDemote")
-  , ("Cryptol.ecJoin", "cryptolECJoin")
-  , ("Cryptol.ecSplit", "cryptolECSplit")
-  , ("Cryptol.ecSplitAt", "cryptolECSplitAt")
-  , ("Cryptol.Num", "CryptolNum")
-  , ("Cryptol.TCNum", "CryptolTCNum")
-  , ("Cryptol.tcAdd", "cryptolAdd")
-  , ("Cryptol.tcSub", "cryptolSub")
-  , ("Cryptol.tcMul", "cryptolMul")
-  , ("Cryptol.tcMin", "cryptolMin")
-  , ("Cryptol.ecEq", "cryptolEq")
-  , ("Cryptol.seqEq1", "cryptolSeqEq1")
+  , ("Cryptol.ecDemote", "ecDemote")
+  , ("Cryptol.ecJoin", "ecJoin")
+  , ("Cryptol.ecSplit", "ecSplit")
+  , ("Cryptol.ecSplitAt", "ecSplitAt")
+  , ("Cryptol.Num", "Num")
+  , ("Cryptol.TCNum", "TCNum")
+  , ("Cryptol.tcAdd", "tcAdd")
+  , ("Cryptol.tcSub", "tcSub")
+  , ("Cryptol.tcMul", "tcMul")
+  , ("Cryptol.tcMin", "tcMin")
+  , ("Cryptol.ecEq", "ecEq")
+  , ("Cryptol.ecGt", "ecGt")
+  , ("Cryptol.seqEq1", "seqEq1")
   , ("Prelude.eq", "sawEq")
-  , ("Cryptol.ecXor", "cryptolECXor")
-  , ("Cryptol.PLogicSeq", "cryptolPLogicSeq")
-  , ("Cryptol.PLogicSeqBool", "cryptolPLogicSeqBool")
-  , ("Cryptol.PLogicWord", "cryptolPLogicWord")
-  , ("Cryptol.PLiteralSeqBool", "cryptolPLiteralSeqBool")
+  , ("Cryptol.ecAnd", "ecAnd")
+  , ("Cryptol.ecOr", "ecOr")
+  , ("Cryptol.ecXor", "ecXor")
+  , ("Cryptol.PLogicBit", "PLogicBit")
+  , ("Cryptol.PLogicSeq", "PLogicSeq")
+  , ("Cryptol.PLogicSeqBool", "PLogicSeqBool")
+  , ("Cryptol.PLogicWord", "PLogicSeqBool")
+  , ("Cryptol.PCmpBit", "PCmpBit")
+  , ("Cryptol.PCmpSeq", "PCmpSeq")
+  , ("Cryptol.PCmpSeqBool", "PCmpSeqBool")
+  , ("Cryptol.PCmpWord", "PCmpSeqBool")
+  , ("Cryptol.PZeroBit", "PZeroBit")
+  , ("Cryptol.PZeroSeq", "PZeroSeq")
+  , ("Cryptol.PZeroSeqBool", "PZeroSeqBool")
+  , ("Cryptol.PZeroWord", "PZeroSeqBool")
+  , ("Cryptol.PLiteralSeqBool", "PLiteralSeqBool")
   ]
 
 translateIdent :: Ident -> Coq.Ident
 translateIdent i = Map.findWithDefault (show i) i identMap
 
+{-
 traceFTermF :: String -> FlatTermF Term -> a -> a
 traceFTermF ctx tf = traceTerm ctx (Unshared $ FTermF tf)
   
 traceTerm :: String -> Term -> a -> a
 traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
+-}
 
 flatTermFToExpr ::
   (Term -> CoqTrans Coq.Term) ->
   FlatTermF Term ->
   CoqTrans Coq.Term
-flatTermFToExpr go tf = traceFTermF "flatTermFToExpr" tf $
+flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
     GlobalDef i   -> pure (Coq.Var (translateIdent i))
     UnitValue     -> pure (Coq.Var "tt")
@@ -188,13 +202,21 @@ translateParams traverseConsts env ((n, ty):ps) = do
   ps' <- translateParams traverseConsts (n : env) ps
   return (Coq.Binder n (Just ty') : ps')
 
+translatePiParams :: Bool -> [String] -> [(String, Term)] -> CoqTrans [Coq.PiBinder]
+translatePiParams _ _ [] = return []
+translatePiParams traverseConsts env ((n, ty):ps) = do
+  ty' <- translateTerm traverseConsts env ty
+  ps' <- translatePiParams traverseConsts (n : env) ps
+  let n' = if n == "_" then Nothing else Just n
+  return (Coq.PiBinder n' ty' : ps')
+
 -- env is innermost first order
 translateTerm :: Bool -> [String] -> Term -> CoqTrans Coq.Term
-translateTerm traverseConsts env t = traceTerm "translateTerm" t $
+translateTerm traverseConsts env t = -- traceTerm "translateTerm" t $
   case t of
     (asFTermF -> Just tf)  -> flatTermFToExpr (go env) tf
     (asPi -> Just _) -> do
-      paramTerms <- translateParams traverseConsts env params
+      paramTerms <- translatePiParams traverseConsts env params
       Coq.Pi <$> pure paramTerms
                  -- env is in innermost first (reverse) binder order
                  <*> go ((reverse paramNames) ++ env) e
@@ -259,8 +281,7 @@ translateTerm traverseConsts env t = traceTerm "translateTerm" t $
   where
     notSupported = throwError $ NotSupported t
     badTerm = throwError $ BadTerm t
-    --matchDecl n (EC.OpDecl n' _ _) = n == n'
-    matchDecl _ _ = False
+    matchDecl n (Coq.Definition n' _ _ _) = n == n'
     go = translateTerm traverseConsts
 
 translateTermDoc :: Bool -> Term -> Either (TranslationError Term) Doc
@@ -283,5 +304,6 @@ translateDefDocImports traverseConsts name t = do
   let imports = vcat [ "Require Import Coq.Lists.List."
                      , "Require Import Cryptol."
                      , "Require Import SAW."
+                     , "Import ListNotations."
                      ]
-  return (imports <$$> doc)
+  return (imports <$$> hardline <> doc)

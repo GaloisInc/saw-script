@@ -18,9 +18,8 @@ data Sort
     deriving (Show)
 
 data Term
-  = Forall [Binder] Term
-  | Lambda [Binder] Term
-  | Pi [Binder] Term
+  = Lambda [Binder] Term
+  | Pi [PiBinder] Term
   | Let Ident [Binder] (Maybe Type) Term Term
   | If Term Term Term
   | App Term [Term]
@@ -35,6 +34,10 @@ type Type = Term
 
 data Binder
   = Binder Ident (Maybe Type)
+    deriving (Show)
+
+data PiBinder
+  = PiBinder (Maybe Ident) Type
     deriving (Show)
 
 data Decl
