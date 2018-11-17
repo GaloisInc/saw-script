@@ -1333,6 +1333,21 @@ primitive sbvToInt : (n:Nat) -> bitvector n -> Integer;
 
 
 --------------------------------------------------------------------------------
+-- Integers mod n
+
+primitive IntMod : Nat -> sort 0;
+
+primitive toIntMod : (n : Nat) -> Integer -> IntMod n;
+primitive fromIntMod : (n : Nat) -> IntMod n -> Integer;
+
+primitive intModEq  : (n : Nat) -> IntMod n -> IntMod n -> Bool;
+primitive intModAdd : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
+primitive intModSub : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
+primitive intModMul : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
+primitive intModNeg : (n : Nat) -> IntMod n -> IntMod n;
+
+
+--------------------------------------------------------------------------------
 -- Point-update functions
 
 updNatFun : (a:sort 0)
