@@ -231,6 +231,12 @@ seqConst : (n : Num) -> (a : sort 0) -> a -> seq n a;
 seqConst n =
   Num#rec (\ (n:Num) -> (a : sort 0) -> a -> seq n a) replicate streamConst n;
 
+--------------------------------------------------------------------------------
+-- Integers mod n
+
+IntModNum : (num : Num) -> sort 0;
+IntModNum num =
+  Num#rec (\ (n : Num) -> sort 0) IntMod Integer num;
 
 --------------------------------------------------------------------------------
 -- Type coercions
@@ -503,6 +509,12 @@ PZeroBit = False;
 PZeroInteger : PZero Integer;
 PZeroInteger = natToInt 0;
 
+PZeroIntMod : (n : Nat) -> PZero (IntMod n);
+PZeroIntMod n = toIntMod n (natToInt 0);
+
+PZeroIntModNum : (num : Num) -> PZero (IntModNum num);
+PZeroIntModNum num = Num#rec (\ (n : Num) -> PZero (IntModNum n)) PZeroIntMod PZeroInteger num;
+
 PZeroSeq : (n : Num) -> (a : sort 0) -> PZero a -> PZero (seq n a);
 PZeroSeq n a pa = seqConst n a pa;
 
@@ -639,6 +651,25 @@ PArithInteger =
   , smod = errorBinary "no implementation for smod on Integer" Integer
   , int = \ (i : Integer) -> i
   };
+
+PArithIntMod : (n : Nat) -> PArith (IntMod n);
+PArithIntMod n =
+  { add = intModAdd n
+  , sub = intModSub n
+  , mul = intModMul n
+  , div = \(x y : IntMod n) -> toIntMod n (intDiv (fromIntMod n x) (fromIntMod n y))
+  , mod = \(x y : IntMod n) -> toIntMod n (intMod (fromIntMod n x) (fromIntMod n y))
+  , exp = errorBinary "no implementation for exp on IntMod" (IntMod n)
+  , lg2 = errorUnary "no implementation for lg2 on IntMod" (IntMod n)
+  , neg = intModNeg n
+  , sdiv = errorBinary "no implementation for sdiv on IntMod" (IntMod n)
+  , smod = errorBinary "no implementation for smod on IntMod" (IntMod n)
+  , int = toIntMod n
+  };
+
+PArithIntModNum : (num : Num) -> PArith (IntModNum num);
+PArithIntModNum num =
+  Num#rec (\ (n : Num) -> PArith (IntModNum n)) PArithIntMod PArithInteger num;
 
 PArithVec : (n : Nat) -> (a : sort 0) -> PArith a -> PArith (Vec n a);
 PArithVec n a pa =
@@ -787,6 +818,14 @@ PCmpBit = { cmp = boolCmp };
 PCmpInteger : PCmp Integer;
 PCmpInteger = { cmp = integerCmp };
 
+PCmpIntMod : (n : Nat) -> PCmp (IntMod n);
+PCmpIntMod n =
+  { cmp = \ (x y : IntMod n) -> integerCmp (fromIntMod n x) (fromIntMod n y) };
+
+PCmpIntModNum : (num : Num) -> PCmp (IntModNum num);
+PCmpIntModNum num =
+  Num#rec (\ (n : Num) -> PCmp (IntModNum n)) PCmpIntMod PCmpInteger num;
+
 PCmpVec : (n : Nat) -> (a : sort 0) -> PCmp a -> PCmp (Vec n a);
 PCmpVec n a pa = { cmp = vecCmp n a pa.cmp };
 
@@ -856,6 +895,13 @@ PLiteralSeqBool n =
 
 PLiteralInteger : PLiteral Integer;
 PLiteralInteger = natToInt;
+
+PLiteralIntMod : (n : Nat) -> PLiteral (IntMod n);
+PLiteralIntMod n = \ (x : Nat) -> toIntMod n (natToInt x);
+
+PLiteralIntModNum : (num : Num) -> PLiteral (IntModNum num);
+PLiteralIntModNum num =
+  Num#rec (\ (n : Num) -> PLiteral (IntModNum n)) PLiteralIntMod PLiteralInteger num;
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions

@@ -180,7 +180,7 @@ importType sc env ty =
             C.TCInf      -> scCtorApp sc "Cryptol.TCInf" []
             C.TCBit      -> scBoolType sc
             C.TCInteger  -> scIntegerType sc
-            C.TCIntMod   -> unimplemented "importType TCIntMod"
+            C.TCIntMod   -> scGlobalApply sc "Cryptol.IntModNum" =<< traverse go tyargs
             C.TCSeq      -> scGlobalApply sc "Cryptol.seq" =<< traverse go tyargs
             C.TCFun      -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
@@ -255,6 +255,10 @@ proveProp sc env prop =
         -- instance Zero Integer
         (C.pIsZero -> Just (C.tIsInteger -> True))
           -> do scGlobalApply sc "Cryptol.PZeroInteger" []
+        -- instance Zero (Z n)
+        (C.pIsZero -> Just (C.tIsIntMod -> Just n))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PZeroIntModNum" [n']
         -- instance Zero [n]
         (C.pIsZero -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -325,6 +329,10 @@ proveProp sc env prop =
         -- instance Arith Integer
         (C.pIsArith -> Just (C.tIsInteger -> True))
           -> do scGlobalApply sc "Cryptol.PArithInteger" []
+        -- instance Arith (Z n)
+        (C.pIsArith -> Just (C.tIsIntMod -> Just n))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PArithIntModNum" [n']
         -- instance (fin n) => Arith [n]
         (C.pIsArith -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -369,6 +377,10 @@ proveProp sc env prop =
         -- instance Cmp Integer
         (C.pIsCmp -> Just (C.tIsInteger -> True))
           -> do scGlobalApply sc "Cryptol.PCmpInteger" []
+        -- instance Cmp (Z n)
+        (C.pIsCmp -> Just (C.tIsIntMod -> Just n))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PCmpIntModNum" [n']
         -- instance (fin n) => Cmp [n]
         (C.pIsCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -439,6 +451,10 @@ proveProp sc env prop =
         -- instance Literal val Integer
         (C.pIsLiteral -> Just (_, C.tIsInteger -> True))
           -> do scGlobalApply sc "Cryptol.PLiteralInteger" []
+        -- instance Literal val (Z n)
+        (C.pIsLiteral -> Just (_, C.tIsIntMod -> Just n))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PLiteralIntModNum" [n']
         -- instance (fin n, n >= width val) => Literal val [n]
         (C.pIsLiteral -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
