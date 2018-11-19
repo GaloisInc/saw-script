@@ -1201,7 +1201,7 @@ exportValue ty v = case ty of
     V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
   TV.TVIntMod _modulus ->
-    error "unimplemented: exportValue TVIntMod"
+    V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
   TV.TVSeq _ e ->
     case v of
