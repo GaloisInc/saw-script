@@ -234,6 +234,15 @@ constMap =
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
+  -- Integers mod n
+  , ("Prelude.IntMod"    , constFun VIntType)
+  , ("Prelude.toIntMod"  , toIntModOp)
+  , ("Prelude.fromIntMod", VFun force)
+  , ("Prelude.intModEq"  , intModEqOp)
+  , ("Prelude.intModAdd" , intModBinOp (+))
+  , ("Prelude.intModSub" , intModBinOp (-))
+  , ("Prelude.intModMul" , intModBinOp (*))
+  , ("Prelude.intModNeg" , intModUnOp negate)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
@@ -285,6 +294,34 @@ bvShiftR c (BV w x) i = Prim.bv w (c' .|. (x `shiftR` j))
   where c' = if c then (full `shiftL` (w - j)) .&. full else 0
         full = (1 `shiftL` w) - 1
         j = fromInteger (i `min` toInteger w)
+
+------------------------------------------------------------
+
+toIntModOp :: CValue
+toIntModOp =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "toIntModOp" $ \x -> return $
+  VInt (x `mod` toInteger n)
+
+intModEqOp :: CValue
+intModEqOp =
+  constFun $
+  Prims.intFun "intModEqOp" $ \x -> return $
+  Prims.intFun "intModEqOp" $ \y -> return $
+  VBool (x == y)
+
+intModBinOp :: (Integer -> Integer -> Integer) -> CValue
+intModBinOp f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModBinOp x" $ \x -> return $
+  Prims.intFun "intModBinOp y" $ \y -> return $
+  VInt (f x y `mod` toInteger n)
+
+intModUnOp :: (Integer -> Integer) -> CValue
+intModUnOp f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModUnOp" $ \x -> return $
+  VInt (f x `mod` toInteger n)
 
 ------------------------------------------------------------
 
