@@ -256,6 +256,15 @@ beConstMap be =
   , ("Prelude.intToBv" , intToBvOp be)
   , ("Prelude.bvToInt" , bvToIntOp be)
   , ("Prelude.sbvToInt", sbvToIntOp be)
+  -- Integers mod n
+  , ("Prelude.IntMod"    , constFun VIntType)
+  , ("Prelude.toIntMod"  , toIntModOp)
+  , ("Prelude.fromIntMod", VFun force)
+  , ("Prelude.intModEq"  , intModEqOp be)
+  , ("Prelude.intModAdd" , intModBinOp (+))
+  , ("Prelude.intModSub" , intModBinOp (-))
+  , ("Prelude.intModMul" , intModBinOp (*))
+  , ("Prelude.intModNeg" , intModUnOp negate)
 -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
@@ -319,6 +328,34 @@ intToBvOp g =
     VWord <$>
      if n >= 0 then return (AIG.bvFromInteger g (fromIntegral n) x)
                else AIG.neg g (AIG.bvFromInteger g (fromIntegral n) (negate x))
+
+------------------------------------------------------------
+
+toIntModOp :: BValue l
+toIntModOp =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "toIntModOp" $ \x -> return $
+  VInt (x `mod` toInteger n)
+
+intModEqOp :: AIG.IsAIG l g => g s -> BValue (l s)
+intModEqOp be =
+  constFun $
+  Prims.intFun "intModEqOp" $ \x -> return $
+  Prims.intFun "intModEqOp" $ \y -> return $
+  VBool (AIG.constant be (x == y))
+
+intModBinOp :: (Integer -> Integer -> Integer) -> BValue l
+intModBinOp f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModBinOp x" $ \x -> return $
+  Prims.intFun "intModBinOp y" $ \y -> return $
+  VInt (f x y `mod` toInteger n)
+
+intModUnOp :: (Integer -> Integer) -> BValue l
+intModUnOp f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModUnOp" $ \x -> return $
+  VInt (f x `mod` toInteger n)
 
 ----------------------------------------
 
