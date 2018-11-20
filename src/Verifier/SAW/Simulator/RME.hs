@@ -218,6 +218,15 @@ constMap =
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
+  -- Integers mod n
+  , ("Prelude.IntMod"    , constFun VIntType)
+  , ("Prelude.toIntMod"  , toIntModOp)
+  , ("Prelude.fromIntMod", VFun force)
+  , ("Prelude.intModEq"  , intModEqOp)
+  , ("Prelude.intModAdd" , intModBinOp (+))
+  , ("Prelude.intModSub" , intModBinOp (-))
+  , ("Prelude.intModMul" , intModBinOp (*))
+  , ("Prelude.intModNeg" , intModUnOp negate)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
@@ -264,6 +273,34 @@ vSignedShiftR xs i
   | V.length xs > 0 = Prims.vShiftR x xs i
   | otherwise       = xs
  where x = xs V.! 0
+
+------------------------------------------------------------
+
+toIntModOp :: RValue
+toIntModOp =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "toIntModOp" $ \x -> return $
+  VInt (x `mod` toInteger n)
+
+intModEqOp :: RValue
+intModEqOp =
+  constFun $
+  Prims.intFun "intModEqOp" $ \x -> return $
+  Prims.intFun "intModEqOp" $ \y -> return $
+  VBool (RME.constant (x == y))
+
+intModBinOp :: (Integer -> Integer -> Integer) -> RValue
+intModBinOp f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModBinOp x" $ \x -> return $
+  Prims.intFun "intModBinOp y" $ \y -> return $
+  VInt (f x y `mod` toInteger n)
+
+intModUnOp :: (Integer -> Integer) -> RValue
+intModUnOp f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModUnOp" $ \x -> return $
+  VInt (f x `mod` toInteger n)
 
 ----------------------------------------
 
