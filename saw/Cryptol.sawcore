@@ -920,6 +920,11 @@ ecToInteger n =
 ecFromInteger : (a : sort 0) -> PArith a -> Integer -> a;
 ecFromInteger a pa = pa.int;
 
+ecFromZ : (n : Num) -> IntModNum n -> Integer;
+ecFromZ n =
+  Num#rec (\ (n : Num) -> IntModNum n -> Integer)
+          fromIntMod (\ (x : Integer) -> x) n;
+
 -- Arith
 ecPlus : (a : sort 0) -> PArith a -> a -> a -> a;
 ecPlus a pa = pa.add;
