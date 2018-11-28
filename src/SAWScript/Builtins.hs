@@ -747,32 +747,31 @@ satWhat4_UnintCVC4 =  wrapProver . Prover.satWhat4_cvc4
 satWhat4_UnintYices :: [String] -> ProofScript SV.SatResult
 satWhat4_UnintYices =  wrapProver . Prover.satWhat4_yices
 
-satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
-                -> String
-                -> String
-                -> ProofScript SV.SatResult
-satWithExporter exporter path ext = withFirstGoal $ \g -> do
-  let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-      mode = case goalQuant g of
-               Existential -> CheckSat
-               Universal   -> Prove
+satWithExporter ::
+  (SharedContext -> FilePath -> Term -> IO ()) ->
+  String ->
+  String ->
+  ProofScript SV.SatResult
+satWithExporter exporter path ext =
+  withFirstGoal $ \g -> do
+    let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
 
-  sc <- SV.getSharedContext
-  stats <- io $ Prover.satWithExporter exporter file sc mode (goalTerm g)
+    sc <- SV.getSharedContext
+    stats <- io $ Prover.satWithExporter exporter file sc (goalTerm g)
 
-  case goalQuant g of
-    Existential -> return (SV.Unsat stats, stats, Just g)
-    Universal   -> return (SV.Unsat stats, stats, Nothing)
+    case goalQuant g of
+      Existential -> return (SV.Unsat stats, stats, Just g)
+      Universal   -> return (SV.Unsat stats, stats, Nothing)
 
 satAIG :: FilePath -> ProofScript SV.SatResult
 satAIG path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  satWithExporter (Prover.writeAIG proxy) path ".aig"
+  satWithExporter (Prover.adaptExporter (Prover.writeAIG proxy)) path ".aig"
 
 satCNF :: FilePath -> ProofScript SV.SatResult
 satCNF path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  satWithExporter (Prover.writeCNF proxy) path ".cnf"
+  satWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
 
 satExtCore :: FilePath -> ProofScript SV.SatResult
 satExtCore path = satWithExporter (const Prover.writeCore) path ".extcore"
