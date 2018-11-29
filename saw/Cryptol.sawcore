@@ -467,10 +467,19 @@ unitCmp _ _ _ = False;
 emptyCmp : #{} -> #{} -> Bool -> Bool;
 emptyCmp _ _ _ = False;
 
+pairEq : (a b : sort 0) -> (a -> a -> Bool) -> (b -> b -> Bool) ->
+  #(a | b) -> #(a | b) -> Bool;
+pairEq a b f g x y =
+  and (f (fst a b x) (fst a b y)) (g (snd a b x) (snd a b y));
+
 pairCmp : (a b : sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
         -> #(a | b) -> #(a | b) -> Bool -> Bool;
 pairCmp a b f g x12 y12 k =
   f (fst a b x12) (fst a b y12) (g (snd a b x12) (snd a b y12) k);
+
+fieldEq : (s : String) -> (a : sort 0) -> (a -> a -> Bool) ->
+  Field a s -> Field a s -> Bool;
+fieldEq s a f x y = f (projField s a x) (projField s a y);
 
 fieldCmp : (s : String) -> (a : sort 0)
          -> (a -> a -> Bool -> Bool)
@@ -796,24 +805,27 @@ PArithField s a pa =
 -- Cmp class
 
 PCmp : sort 0 -> sort 0;
-PCmp a = #{ cmp : a -> a -> Bool -> Bool };
+PCmp a =
+  #{ eq  : a -> a -> Bool
+   , cmp : a -> a -> Bool -> Bool };
 
 PCmpBit : PCmp Bool;
-PCmpBit = { cmp = boolCmp };
+PCmpBit = { eq = boolEq, cmp = boolCmp };
 
 PCmpInteger : PCmp Integer;
-PCmpInteger = { cmp = integerCmp };
+PCmpInteger = { eq = intEq, cmp = integerCmp };
 
 PCmpIntMod : (n : Nat) -> PCmp (IntMod n);
 PCmpIntMod n =
-  { cmp = \ (x y : IntMod n) -> integerCmp (fromIntMod n x) (fromIntMod n y) };
+  { eq = intModEq n
+  , cmp = \ (x y : IntMod n) -> integerCmp (fromIntMod n x) (fromIntMod n y) };
 
 PCmpIntModNum : (num : Num) -> PCmp (IntModNum num);
 PCmpIntModNum num =
   Num#rec (\ (n : Num) -> PCmp (IntModNum n)) PCmpIntMod PCmpInteger num;
 
 PCmpVec : (n : Nat) -> (a : sort 0) -> PCmp a -> PCmp (Vec n a);
-PCmpVec n a pa = { cmp = vecCmp n a pa.cmp };
+PCmpVec n a pa = { eq = vecEq n a pa.eq, cmp = vecCmp n a pa.cmp };
 
 PCmpSeq : (n : Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a);
 PCmpSeq n =
@@ -823,7 +835,7 @@ PCmpSeq n =
           n;
 
 PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
-PCmpWord n = { cmp = bvCmp n };
+PCmpWord n = { eq = bvEq n, cmp = bvCmp n };
 
 PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
 PCmpSeqBool n =
@@ -833,16 +845,18 @@ PCmpSeqBool n =
           n;
 
 PCmpUnit : PCmp #();
-PCmpUnit = { cmp = unitCmp };
+PCmpUnit = { eq = \ (x y : ()) -> True, cmp = unitCmp };
 
 PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp #(a | b);
-PCmpPair a b pa pb = { cmp = pairCmp a b pa.cmp pb.cmp };
+PCmpPair a b pa pb =
+  { eq  = pairEq a b pa.eq pb.eq
+  , cmp = pairCmp a b pa.cmp pb.cmp };
 
 PCmpEmpty : PCmp #{};
-PCmpEmpty = { cmp = emptyCmp };
+PCmpEmpty = { eq = \ (x y : ()) -> True, cmp = emptyCmp };
 
 PCmpField : (s : String) -> (a : sort 0) -> PCmp a -> PCmp (Field a s);
-PCmpField s a pa = { cmp = fieldCmp s a pa.cmp };
+PCmpField s a pa = { eq = fieldEq s a pa.eq, cmp = fieldCmp s a pa.cmp };
 
 -- SignedCmp class
 
