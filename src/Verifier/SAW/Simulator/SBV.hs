@@ -178,6 +178,15 @@ constMap =
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
+  -- Integers mod n
+  , ("Prelude.IntMod"    , constFun VIntType)
+  , ("Prelude.toIntMod"  , constFun (VFun force))
+  , ("Prelude.fromIntMod", fromIntModOp)
+  , ("Prelude.intModEq"  , intModEqOp)
+  , ("Prelude.intModAdd" , intModBinOp svPlus)
+  , ("Prelude.intModSub" , intModBinOp svMinus)
+  , ("Prelude.intModMul" , intModBinOp svTimes)
+  , ("Prelude.intModNeg" , intModUnOp svUNeg)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
@@ -387,6 +396,42 @@ svShiftL b x i = svIte b (svNot (svShiftLeft (svNot x) i)) (svShiftLeft x i)
 
 svShiftR :: SBool -> SWord -> SWord -> SWord
 svShiftR b x i = svIte b (svNot (svShiftRight (svNot x) i)) (svShiftRight x i)
+
+------------------------------------------------------------
+-- Integers mod n
+
+fromIntModOp :: SValue
+fromIntModOp =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "fromIntModOp" $ \x -> return $
+  VInt (svRem x (literalSInteger (toInteger n)))
+
+intModEqOp :: SValue
+intModEqOp =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModEqOp" $ \x -> return $
+  Prims.intFun "intModEqOp" $ \y -> return $
+  let modulus = literalSInteger (toInteger n)
+  in VBool (svEqual (svRem (svMinus x y) modulus) (literalSInteger 0))
+
+intModBinOp :: (SInteger -> SInteger -> SInteger) -> SValue
+intModBinOp f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModBinOp x" $ \x -> return $
+  Prims.intFun "intModBinOp y" $ \y -> return $
+  VInt (normalizeIntMod n (f x y))
+
+intModUnOp :: (SInteger -> SInteger) -> SValue
+intModUnOp f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModUnOp" $ \x -> return $
+  VInt (normalizeIntMod n (f x))
+
+normalizeIntMod :: Nat -> SInteger -> SInteger
+normalizeIntMod n x =
+  case svAsInteger x of
+    Nothing -> x
+    Just i -> literalSInteger (i `mod` toInteger n)
 
 ------------------------------------------------------------
 -- Stream operations
