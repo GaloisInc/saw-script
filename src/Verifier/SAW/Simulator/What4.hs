@@ -195,7 +195,7 @@ prims =
   }
 
 
-constMap :: (Sym sym) => Map Ident (SValue sym)
+constMap :: forall sym. (Sym sym) => Map Ident (SValue sym)
 constMap =
   Map.union (Prims.constMap prims) $
   Map.fromList
@@ -210,11 +210,21 @@ constMap =
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
+  -- Integers mod n
+  , ("Prelude.IntMod"    , constFun VIntType)
+  , ("Prelude.toIntMod"  , constFun (VFun force))
+  , ("Prelude.fromIntMod", fromIntModOp sym)
+  , ("Prelude.intModEq"  , intModEqOp sym)
+  , ("Prelude.intModAdd" , intModBinOp sym W.intAdd)
+  , ("Prelude.intModSub" , intModBinOp sym W.intSub)
+  , ("Prelude.intModMul" , intModBinOp sym W.intMul)
+  , ("Prelude.intModNeg" , intModUnOp sym W.intNeg)
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
   , ("Prelude.bvStreamGet", bvStreamGetOp)
   ]
+  where sym = given :: sym
 
 -----------------------------------------------------------------------
 -- Implementation of constMap primitives
@@ -316,6 +326,49 @@ intMax :: (IsExprBuilder sym) => sym -> SInt sym -> SInt sym -> IO (SInt sym)
 intMax sym i1 i2 = do
   p <- W.intLt sym i1 i2
   W.intIte sym p i2 i1
+
+------------------------------------------------------------
+-- Integers mod n
+
+fromIntModOp :: IsExprBuilder sym => sym -> SValue sym
+fromIntModOp sym =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "fromIntModOp" $ \x ->
+  VInt <$> (W.intMod sym x =<< W.intLit sym (toInteger n))
+
+intModEqOp :: IsExprBuilder sym => sym -> SValue sym
+intModEqOp sym =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModEqOp" $ \x -> return $
+  Prims.intFun "intModEqOp" $ \y ->
+  do modulus <- W.intLit sym (toInteger n)
+     d <- W.intSub sym x y
+     r <- W.intMod sym d modulus
+     z <- W.intLit sym 0
+     VBool <$> W.intEq sym r z
+
+intModBinOp ::
+  IsExprBuilder sym => sym ->
+  (sym -> SInt sym -> SInt sym -> IO (SInt sym)) -> SValue sym
+intModBinOp sym f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModBinOp x" $ \x -> return $
+  Prims.intFun "intModBinOp y" $ \y ->
+  VInt <$> (normalizeIntMod sym n =<< f sym x y)
+
+intModUnOp ::
+  IsExprBuilder sym => sym ->
+  (sym -> SInt sym -> IO (SInt sym)) -> SValue sym
+intModUnOp sym f =
+  Prims.natFun $ \n -> return $
+  Prims.intFun "intModUnOp" $ \x ->
+  VInt <$> (normalizeIntMod sym n =<< f sym x)
+
+normalizeIntMod :: IsExprBuilder sym => sym -> Nat -> SInt sym -> IO (SInt sym)
+normalizeIntMod sym n x =
+  case W.asInteger x of
+    Nothing -> return x
+    Just i -> W.intLit sym (i `mod` toInteger n)
 
 ------------------------------------------------------------
 -- Stream operations
