@@ -221,7 +221,7 @@ constMap =
   -- Integers mod n
   , ("Prelude.IntMod"    , constFun VIntType)
   , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", VFun force)
+  , ("Prelude.fromIntMod", constFun (VFun force))
   , ("Prelude.intModEq"  , intModEqOp)
   , ("Prelude.intModAdd" , intModBinOp (+))
   , ("Prelude.intModSub" , intModBinOp (-))
