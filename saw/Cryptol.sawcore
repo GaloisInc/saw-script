@@ -241,61 +241,47 @@ IntModNum num =
 --------------------------------------------------------------------------------
 -- Type coercions
 
-seqEq : (m : Num) -> (n : Num) -> (a : sort 0) -> (b : sort 0) ->
+seq_cong : (m : Num) -> (n : Num) -> (a : sort 0) -> (b : sort 0) ->
   Eq Num m n -> Eq (sort 0) a b -> Eq (sort 0) (seq m a) (seq n b);
-seqEq m n a b eq_mn eq_ab =
+seq_cong m n a b eq_mn eq_ab =
   trans
     (sort 0) (seq m a) (seq n a) (seq n b)
     (eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> seq x a))
     (eq_cong (sort 0) a b eq_ab (sort 0) (\ (x:sort 0) -> seq n x));
 
-seqEq1 : (m : Num) -> (n : Num) -> (a : sort 0) ->
+seq_cong1 : (m : Num) -> (n : Num) -> (a : sort 0) ->
   Eq Num m n -> Eq (sort 0) (seq m a) (seq n a);
-seqEq1 m n a eq_mn =
+seq_cong1 m n a eq_mn =
   eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> seq x a);
 
-funEq : (a : sort 0) -> (b : sort 0) -> (c : sort 0) -> (d : sort 0) ->
+fun_cong : (a : sort 0) -> (b : sort 0) -> (c : sort 0) -> (d : sort 0) ->
   Eq (sort 0) a b -> Eq (sort 0) c d -> Eq (sort 0) (a -> c) (b -> d);
-funEq a b c d eq_ab eq_cd =
+fun_cong a b c d eq_ab eq_cd =
   trans
     (sort 0) (a -> c) (b -> c) (b -> d)
     (eq_cong (sort 0) a b eq_ab (sort 0) (\ (x:sort 0) -> (x -> c)))
     (eq_cong (sort 0) c d eq_cd (sort 0) (\ (x:sort 0) -> (b -> x)));
 
-pairEq : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
+pair_cong : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
   Eq (sort 0) a a' -> Eq (sort 0) b b' -> Eq (sort 0) #(a | b) #(a' | b');
-pairEq a a' b b' eq_a eq_b =
+pair_cong a a' b b' eq_a eq_b =
   trans
     (sort 0) #(a | b) #(a' | b) #(a' | b')
     (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> #(x | b)))
     (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> #(a' | x)));
 
-pairEq1 : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) ->
+pair_cong1 : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) ->
   Eq (sort 0) a a' -> Eq (sort 0) #(a | b) #(a' | b);
-pairEq1 a a' b eq_a =
+pair_cong1 a a' b eq_a =
   (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> #(x | b)));
 
-pairEq2 : (a : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
+pair_cong2 : (a : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
   Eq (sort 0) b b' -> Eq (sort 0) #(a | b) #(a | b');
-pairEq2 a b b' eq_b =
+pair_cong2 a b b' eq_b =
   (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> #(a | x)));
 
-emptyEq : Eq (sort 0) #{} #{};
-emptyEq = Refl (sort 0) #{};
-
--- FIXME: these "just add one field" record types are no longer supported...
-{-
-fieldEq :
-  (s : String) -> (a : sort 0) -> (b : sort 0) ->
-  (c : sort 0) -> (d : sort 0) ->
-  Eq (sort 0) a b -> Eq (sort 0) c d ->
-  Eq (sort 0) #{ (s) : a | c } #{ (s) : b | d };
-fieldEq s a b c d eq_ab eq_cd =
-  trans
-    (sort 0) #{ (s) : a | c } #{ (s) : b | c } #{ (s) : b | d }
-    (eq_cong (sort 0) a b eq_ab (\ (x:sort 0) -> #{ (s) : x | c }))
-    (eq_cong (sort 0) c d eq_cd (\ (x:sort 0) -> #{ (s) : b | x }));
--}
+empty_cong : Eq (sort 0) #{} #{};
+empty_cong = Refl (sort 0) #{};
 
 axiom unsafeAssert_same_Num :
   (n : Num) -> Eq (Eq Num n n) (unsafeAssert Num n n) (Refl Num n);

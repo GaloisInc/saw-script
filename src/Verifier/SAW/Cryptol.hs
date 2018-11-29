@@ -943,8 +943,8 @@ proveEq sc env t1 t2
                   else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
            aEq <- proveEq sc env a1 a2
            if a1 == a2
-             then scGlobalApply sc "Cryptol.seqEq1" [n1', n2', a1', nEq]
-             else scGlobalApply sc "Cryptol.seqEq" [n1', n2', a1', a2', nEq, aEq]
+             then scGlobalApply sc "Cryptol.seq_cong1" [n1', n2', a1', nEq]
+             else scGlobalApply sc "Cryptol.seq_cong" [n1', n2', a1', a2', nEq, aEq]
       (C.tIsFun -> Just (a1, b1), C.tIsFun -> Just (a2, b2)) ->
         do a1' <- importType sc env a1
            a2' <- importType sc env a2
@@ -952,7 +952,7 @@ proveEq sc env t1 t2
            b2' <- importType sc env b2
            aEq <- proveEq sc env a1 a2
            bEq <- proveEq sc env b1 b2
-           scGlobalApply sc "Cryptol.funEq" [a1', a2', b1', b2', aEq, bEq]
+           scGlobalApply sc "Cryptol.fun_cong" [a1', a2', b1', b2', aEq, bEq]
       (C.tIsTuple -> Just (a1 : ts1), C.tIsTuple -> Just (a2 : ts2))
         | length ts1 == length ts2 ->
           do let b1 = C.tTuple ts1
@@ -964,10 +964,10 @@ proveEq sc env t1 t2
              aEq <- proveEq sc env a1 a2
              bEq <- proveEq sc env b1 b2
              if b1 == b2
-               then scGlobalApply sc "Cryptol.pairEq1" [a1', a2', b1', aEq]
+               then scGlobalApply sc "Cryptol.pair_cong1" [a1', a2', b1', aEq]
                else if a1 == a2
-                    then scGlobalApply sc "Cryptol.pairEq2" [a1', b1', b2', bEq]
-                    else scGlobalApply sc "Cryptol.pairEq" [a1', a2', b1', b2', aEq, bEq]
+                    then scGlobalApply sc "Cryptol.pair_cong2" [a1', b1', b2', bEq]
+                    else scGlobalApply sc "Cryptol.pair_cong" [a1', a2', b1', b2', aEq, bEq]
       (C.tIsRec -> Just ts1, C.tIsRec -> Just ts2)
         | map fst ts1 == map fst ts2 ->
           do panic $ unwords ["unimplemented type coercion:", pretty t1, pretty t2]
