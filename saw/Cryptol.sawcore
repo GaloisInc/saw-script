@@ -487,9 +487,6 @@ fieldCmp : (s : String) -> (a : sort 0)
 fieldCmp s a f fld1 fld2 k =
   f (projField s a fld1) (projField s a fld2) k;
 
-errorCmp : (a : sort 0) -> a -> a -> Bool -> Bool;
-errorCmp _ _ _ _ = error Bool "invalid Cmp instance";
-
 --------------------------------------------------------------------------------
 -- Dictionaries and overloading
 
@@ -831,7 +828,7 @@ PCmpSeq : (n : Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a);
 PCmpSeq n =
   Num#rec (\ (n:Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a))
           (\ (n:Nat) -> PCmpVec n)
-          (\ (a:sort 0) (pa : PCmp a) -> { cmp = errorCmp (Stream a) })
+          (\ (a:sort 0) (pa : PCmp a) -> error (PCmp (Stream a)) "invalid Cmp instance")
           n;
 
 PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
@@ -841,11 +838,11 @@ PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
 PCmpSeqBool n =
   Num#rec (\ (n : Num) -> PCmp (seq n Bool))
           (\ (n:Nat) -> PCmpWord n)
-          ({ cmp = errorCmp (Stream Bool) })
+          (error (PCmp (Stream Bool)) "invalid Cmp instance")
           n;
 
 PCmpUnit : PCmp #();
-PCmpUnit = { eq = \ (x y : ()) -> True, cmp = unitCmp };
+PCmpUnit = { eq = \ (x y : #()) -> True, cmp = unitCmp };
 
 PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp #(a | b);
 PCmpPair a b pa pb =
@@ -853,7 +850,7 @@ PCmpPair a b pa pb =
   , cmp = pairCmp a b pa.cmp pb.cmp };
 
 PCmpEmpty : PCmp #{};
-PCmpEmpty = { eq = \ (x y : ()) -> True, cmp = emptyCmp };
+PCmpEmpty = { eq = \ (x y : #{}) -> True, cmp = emptyCmp };
 
 PCmpField : (s : String) -> (a : sort 0) -> PCmp a -> PCmp (Field a s);
 PCmpField s a pa = { eq = fieldEq s a pa.eq, cmp = fieldCmp s a pa.cmp };
