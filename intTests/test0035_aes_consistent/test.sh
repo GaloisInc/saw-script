@@ -1,9 +1,6 @@
 #!/bin/sh
 set -e
 
-mkdir -p tmp
-cp ../../examples/aes/* tmp
-cd tmp
+cp ../../examples/aes/aes.saw .
 $SAW aes.saw
-cd ..
-rm -r tmp
+rm -f aes.saw

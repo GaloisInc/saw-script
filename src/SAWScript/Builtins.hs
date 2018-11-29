@@ -48,6 +48,7 @@ import Text.Read (readMaybe)
 
 
 import qualified Verifier.SAW.Cryptol as Cryptol
+import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
 import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -335,8 +336,9 @@ quickcheckGoal sc n = do
     let tm = goalTerm goal
     ty <- scTypeOf sc tm
     maybeInputs <- scTestableType sc ty
+    maybeInputs' <- scTestableType sc tm
     let stats = solverStats "quickcheck" (scSharedSize tm)
-    case maybeInputs of
+    case msum [maybeInputs, maybeInputs'] of
       Just inputs -> do
         result <- scRunTestsTFIO sc n tm inputs
         case result of
@@ -346,7 +348,8 @@ quickcheckGoal sc n = do
           -- TODO: use reasonable names here
           Just cex -> return (SV.SatMulti stats (zip (repeat "_") (map toFirstOrderValue cex)), stats, Just goal)
       Nothing -> fail $ "quickcheck:\n" ++
-        "term has non-testable type"
+        "term has non-testable type:\n" ++
+        showTerm ty ++ ", for term: " ++ showTerm tm
 
 assumeValid :: ProofScript SV.ProofResult
 assumeValid = withFirstGoal $ \goal -> do
@@ -366,7 +369,7 @@ trivial = withFirstGoal $ \goal -> do
   return (SV.Unsat mempty, mempty, Nothing)
   where
     checkTrue :: Term -> TopLevel ()
-    checkTrue (asLambdaList -> (_, asBool -> Just True)) = return ()
+    checkTrue (asPiList -> (_, asEqTrue -> Just (asBool -> Just True))) = return ()
     checkTrue _ = fail "trivial: not a trivial goal"
 
 split_goal :: ProofScript ()
@@ -455,6 +458,75 @@ beta_reduce_goal = withFirstGoal $ \goal -> do
   let trm = goalTerm goal
   trm' <- io $ betaNormalize sc trm
   return ((), mempty, Just (goal { goalTerm = trm' }))
+
+goal_apply :: Theorem -> ProofScript ()
+goal_apply (Theorem rule) =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_apply failed: no subgoal"
+    goal : goals' ->
+      do sc <- getSharedContext
+         let (goalArgs, goalConcl) = asPiList (goalTerm goal)
+         let (ruleArgs, ruleConcl) = asPiList rule
+         result <- io $ scMatch sc ruleConcl goalConcl
+         case result of
+           Nothing -> fail "goal_apply failed: no match"
+           Just inst ->
+             do let inst' = [ Map.lookup i inst | i <- take (length ruleArgs) [0..] ]
+                dummy <- io $ scUnitType sc
+                let mkNewGoals (Nothing : mts) ((_, prop) : args) =
+                      do c0 <- instantiateVarList sc 0 (map (fromMaybe dummy) mts) prop
+                         c' <- scPiList sc goalArgs c0
+                         cs <- mkNewGoals mts args
+                         return (c' : cs)
+                    mkNewGoals (Just _ : mts) (_ : args) =
+                      mkNewGoals mts args
+                    mkNewGoals _ _ = return []
+                newgoalterms <- io $ mkNewGoals inst' (reverse ruleArgs)
+                let newgoals = reverse [ goal { goalTerm = t } | t <- newgoalterms ]
+                return ((), ProofState (newgoals ++ goals') concl stats timeout)
+
+goal_assume :: ProofScript Theorem
+goal_assume =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_assume failed: no subgoal"
+    goal : goals' ->
+      case asPi (goalTerm goal) of
+        Nothing -> fail "goal_assume failed: not a pi type"
+        Just (_nm, tp, body)
+          | looseVars body /= emptyBitSet -> fail "goal_assume failed: dependent pi type"
+          | otherwise ->
+            let goal' = goal { goalTerm = body } in
+            return (Theorem tp, ProofState (goal' : goals') concl stats timeout)
+
+goal_intro :: String -> ProofScript TypedTerm
+goal_intro s =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_intro failed: no subgoal"
+    goal : goals' ->
+      case asPi (goalTerm goal) of
+        Nothing -> fail "goal_intro failed: not a pi type"
+        Just (nm, tp, body) ->
+          do let name = if null s then nm else s
+             sc <- SV.getSharedContext
+             x <- io $ scFreshGlobal sc name tp
+             tt <- io $ mkTypedTerm sc x
+             body' <- io $ instantiateVar sc 0 x body
+             let goal' = goal { goalTerm = body' }
+             return (tt, ProofState (goal' : goals') concl stats timeout)
+
+goal_insert :: Theorem -> ProofScript ()
+goal_insert (Theorem t) =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_insert failed: no subgoal"
+    goal : goals' ->
+      do sc <- SV.getSharedContext
+         body' <- io $ scFun sc t (goalTerm goal)
+         let goal' = goal { goalTerm = body' }
+         return ((), ProofState (goal' : goals') concl stats timeout)
 
 returnsBool :: Term -> Bool
 returnsBool ((asBoolType . snd . asPiList) -> Just ()) = True
@@ -586,7 +658,6 @@ satUnintSBV conf unints = do
 
 wrapProver ::
   ( SharedContext ->
-    ProverMode ->
     Term -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
   ProofScript SV.SatResult
 wrapProver f = do
@@ -596,7 +667,7 @@ wrapProver f = do
                Existential -> CheckSat
                Universal   -> Prove
 
-  (mb,stats) <- io $ f sc mode (goalTerm g)
+  (mb,stats) <- io $ f sc (goalTerm g)
 
   let nope r = do ft <- io $ scApplyPrelude_False sc
                   return (r, stats, Just g { goalTerm = ft })
@@ -709,7 +780,9 @@ provePrim :: ProofScript SV.SatResult
           -> TypedTerm -> TopLevel SV.ProofResult
 provePrim script t = do
   io $ checkBooleanSchema (ttSchema t)
-  (r, pstate) <- runStateT script (startProof (ProofGoal Universal 0 "prove" "prove" (ttTerm t)))
+  sc <- getSharedContext
+  goal <- io $ makeProofGoal sc Universal 0 "prove" "prove" (ttTerm t)
+  (r, pstate) <- runStateT script (startProof goal)
   case finishProof pstate of
     (_stats, Just _)  -> return ()
     (_stats, Nothing) -> printOutLnTop Info $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)"
@@ -718,7 +791,9 @@ provePrim script t = do
 provePrintPrim :: ProofScript SV.SatResult
                -> TypedTerm -> TopLevel Theorem
 provePrintPrim script t = do
-  (r, pstate) <- runStateT script (startProof (ProofGoal Universal 0 "prove" "prove" (ttTerm t)))
+  sc <- getSharedContext
+  goal <- io $ makeProofGoal sc Universal 0 "prove" "prove" (ttTerm t)
+  (r, pstate) <- runStateT script (startProof goal)
   opts <- rwPPOpts <$> getTopLevelRW
   case finishProof pstate of
     (_,Just thm) -> do printOutLnTop Info "Valid"
@@ -728,9 +803,11 @@ provePrintPrim script t = do
 
 satPrim :: ProofScript SV.SatResult -> TypedTerm
         -> TopLevel SV.SatResult
-satPrim script t = do
-  io $ checkBooleanSchema (ttSchema t)
-  evalStateT script (startProof (ProofGoal Existential 0 "sat" "sat" (ttTerm t)))
+satPrim script t =
+  do io $ checkBooleanSchema (ttSchema t)
+     sc <- getSharedContext
+     goal <- io $ makeProofGoal sc Existential 0 "sat" "sat" (ttTerm t)
+     evalStateT script (startProof goal)
 
 satPrintPrim :: ProofScript SV.SatResult
              -> TypedTerm -> TopLevel ()
@@ -759,12 +836,9 @@ quickCheckPrintPrim opts sc numTests tt = do
       pretty (ttSchema tt)
 
 cryptolSimpset :: TopLevel Simpset
-cryptolSimpset = do
-  sc <- getSharedContext
-  m <- io $ scFindModule sc (mkModuleName ["Cryptol"])
-  io $ scSimpset sc (cryptolDefs m) [] []
-  where cryptolDefs m = filter (not . excluded) $ moduleDefs m
-        excluded d = defIdent d `elem` [ "Cryptol.fix" ]
+cryptolSimpset =
+  do sc <- getSharedContext
+     io $ Cryptol.mkCryptolSimpset sc
 
 addPreludeEqs :: [String] -> Simpset
               -> TopLevel Simpset
@@ -1112,6 +1186,13 @@ core_axiom :: String -> TopLevel Theorem
 core_axiom input = do
   t <- parseCore input
   return (Theorem t)
+
+core_thm :: String -> TopLevel Theorem
+core_thm input =
+  do t <- parseCore input
+     sc <- getSharedContext
+     ty <- io $ scTypeOf sc t
+     return (Theorem ty)
 
 get_opt :: Int -> TopLevel String
 get_opt n = do

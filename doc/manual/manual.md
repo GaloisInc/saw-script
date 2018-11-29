@@ -2586,13 +2586,6 @@ The NULL pointer is called `crucible_null`:
 crucible_null : SetupValue
 ~~~~
 
-Pointers to global variables or functions can be accessed with
-`crucible_global`:
-
-~~~~
-crucible_global : String -> SetupValue
-~~~~
-
 ## Specifying Heap Values
 
 Pointers returned by `crucible_alloc` don't, initially, point to
@@ -2650,6 +2643,89 @@ functions construct compound values from lists of element values.
 crucible_array : [SetupValue] -> SetupValue
 crucible_struct : [SetupValue] -> SetupValue
 ~~~~
+
+## Global variables
+
+Pointers to global variables or functions can be accessed with
+`crucible_global`:
+
+~~~~
+crucible_global : String -> SetupValue
+~~~~
+
+Like the pointers returned by `crucible_alloc`, however, these
+aren't initialized at the beginning of symbolic simulation. This is intentional
+-- setting global variables may be unsound in the presence of 
+[compositional verification](#compositional-verification).
+
+To understand the issues surrounding global variables, consider the following C
+code:
+
+<!-- This should (partially) match intTests/test0036_globals/test.c -->
+~~~
+int x = 0;
+
+int f(int y) {
+  x = x + 1;
+  return x + y;
+}
+
+int g(int z) {
+  x = x + 2;
+  return x + z;
+}
+~~~
+
+One might initially write the following specifications for `f` and `g`:
+
+<!-- This should (partially) match intTests/test0036_globals/test-fail.saw -->
+~~~
+m <- llvm_load_module "./test.bc";
+
+f_spec <- crucible_llvm_verify m "f" [] true (do {
+    y <- crucible_fresh_var "y" (llvm_int 32);
+    crucible_execute_func [crucible_term y];
+    crucible_return (crucible_term {{ 1 + y : [32] }});
+}) abc;
+
+g_spec <- crucible_llvm_verify m "g" [] true (do {
+    z <- crucible_fresh_var "z" (llvm_int 32);
+    crucible_execute_func [crucible_term z];
+    crucible_return (crucible_term {{ 2 + z : [32] }});
+}) abc;
+~~~
+
+If globals were always initialized at the beginning of verification, both
+of these specs would be provable. However, the results wouldn't truly
+be compositional. For instance, it's not the case that 
+`f(g(z)) == z + 3` for all `z`, because both `f` and `g` modify the global
+variable `x` in a way that crosses function boundaries.
+
+Instead, the specifications for `f` and `g` must make this reliance on the
+value of `x` explicit, e.g. one could write
+
+<!-- This should (partially) match intTests/test0036_globals/test.saw -->
+~~~
+m <- llvm_load_module "./test.bc";
+
+
+let init_global name = do {
+  crucible_points_to (crucible_global name)
+                     (crucible_global_initializer name);
+};
+
+f_spec <- crucible_llvm_verify m "f" [] true (do {
+    y <- crucible_fresh_var "y" (llvm_int 32);
+    init_global "x";
+    crucible_execute_func [crucible_term y];
+    crucible_return (crucible_term {{ 1 + y : [32] }});
+}) abc;
+~~~
+
+which initializes `x` to whatever it is initialized to in the C code
+at the beginning of verification. This specification is now safe for
+compositional verification: SAW won't rewrite a term with `f_spec`
+unless it can determine that `x` still has its initial value.
 
 ## Preconditions and Postconditions
 

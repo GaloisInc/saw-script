@@ -10,27 +10,25 @@ import qualified Verifier.SAW.Simulator.RME.Base as RME
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
 import Verifier.SAW.Recognizer(asPiList)
 
+import SAWScript.Proof(propToPredicate)
 import SAWScript.Prover.Rewrite(rewriteEqs)
-import SAWScript.Prover.Mode(ProverMode(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 
 satRME ::
   SharedContext {- ^ Context for working with terms -} ->
-  ProverMode    {- ^ Prove/check -} ->
   Term          {- ^ A boolean term to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
-satRME sc mode t0 =
-  do TypedTerm schema t <-
+satRME sc goal =
+  do t0 <- propToPredicate sc goal
+     TypedTerm schema t <-
         bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc
      checkBooleanSchema schema
      tp <- scWhnf sc =<< scTypeOf sc t
      let (args, _) = asPiList tp
          argNames = map fst args
      RME.withBitBlastedPred sc Map.empty t $ \lit0 shapes ->
-       let lit = case mode of
-                   CheckSat -> lit0
-                   Prove    -> RME.compl lit0
+       let lit = RME.compl lit0
            stats = solverStats "RME" (scSharedSize t0)
        in case RME.sat lit of
             Nothing -> return (Nothing, stats)

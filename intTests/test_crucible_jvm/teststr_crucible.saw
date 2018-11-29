@@ -33,5 +33,5 @@ sat_print abc {{ \(x:[32]) -> (pr 3 == x) }};
 //print "**Evaluating: trim, should be 1";
 //sat_print abc {{ \(x:[32]) -> (trim 3 == x) }};
 
-print "**Proving: main";
-prove_print abc {{ \(x:[32]) -> (m x == 3) }};
+//print "**Proving: main";
+//prove_print abc {{ \(x:[32]) -> (m x == 3) }};

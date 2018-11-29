@@ -1,4 +1,4 @@
-import "AES.cry";
+import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Block/AES.cry";
 
 print "Proving encrypt_lemma...";
 encrypt_lemma <-

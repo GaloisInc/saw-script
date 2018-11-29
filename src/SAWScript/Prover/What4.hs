@@ -16,8 +16,8 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
 import Verifier.SAW.Recognizer(asPi)
 
+import           SAWScript.Proof(propToPredicate)
 import           SAWScript.Prover.Rewrite(rewriteEqs)
-import           SAWScript.Prover.Mode(ProverMode(..))
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Prover.Util
 
@@ -29,7 +29,6 @@ import           What4.Config
 import           What4.Solver
 import           What4.SatResult
 import           What4.Interface
-import           What4.BaseTypes
 import           What4.Expr.GroundEval
 import qualified Verifier.SAW.Simulator.What4 as W
 import           Verifier.SAW.Simulator.What4.FirstOrder
@@ -50,20 +49,18 @@ data St t = St
 satWhat4_sym :: SolverAdapter St
              -> [String]
              -> SharedContext
-             -> ProverMode
              -> Term
              -> IO (Maybe [(String, FirstOrderValue)], SolverStats)
-satWhat4_sym solver un sc pm t = do
+satWhat4_sym solver un sc t = do
   -- TODO: get rid of GlobalNonceGenerator ???
   sym <- B.newExprBuilder St globalNonceGenerator
-  satWhat4_solver solver sym un sc pm t
+  satWhat4_solver solver sym un sc t
 
 
 satWhat4_z3, satWhat4_boolector, satWhat4_cvc4,
   satWhat4_dreal, satWhat4_stp, satWhat4_yices ::
   [String]      {- ^ Uninterpreted functions -} ->
   SharedContext {- ^ Context for working with terms -} ->
-  ProverMode    {- ^ Prove/check -} ->
   Term          {- ^ A boolean term to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
 
@@ -83,19 +80,18 @@ satWhat4_solver :: forall st t ff.
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
   [String]           {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
-  ProverMode         {- ^ Prove/check -} ->
-  Term               {- ^ A boolean term to be proved/checked. -} ->
+  Term               {- ^ A proposition to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
   -- ^ (example/counter-example, solver statistics)
-satWhat4_solver solver sym _unints sc mode term =
+satWhat4_solver solver sym _unints sc goal =
 
   do
+     -- convert goal to lambda term
+     term <- propToPredicate sc goal
      -- symbolically evaluate
      (t', argNames, (bvs,lit0)) <- give sym $ prepWhat4 sc [] term
 
-     lit <- case mode of
-              CheckSat -> return lit0
-              Prove    -> notPred sym lit0
+     lit <- notPred sym lit0
 
      extendConfig (solver_adapter_config_options solver)
                   (getConfiguration sym)
@@ -107,7 +103,7 @@ satWhat4_solver solver sym _unints sc mode term =
      let logger _ str = putStr str
 
      -- run solver
-     solver_adapter_check_sat solver sym logger lit $ \ r -> case r of
+     solver_adapter_check_sat solver sym logger "SAW proof" lit $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
            mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)

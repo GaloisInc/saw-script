@@ -1,0 +1,29 @@
+m <- llvm_load_module "./test.bc";
+
+let init_global name = do {
+  crucible_points_to (crucible_global name)
+                     (crucible_global_initializer name);
+};
+
+f_spec <- crucible_llvm_verify m "f" [] true (do {
+    y <- crucible_fresh_var "y" (llvm_int 32);
+    init_global "x";
+    crucible_execute_func [crucible_term y];
+    crucible_return (crucible_term {{ 1 + y : [32] }});
+}) abc;
+
+g_spec <- crucible_llvm_verify m "g" [] true (do {
+    z <- crucible_fresh_var "z" (llvm_int 32);
+    init_global "x";
+    crucible_execute_func [crucible_term z];
+    crucible_return (crucible_term {{ 2 + z : [32] }});
+}) abc;
+
+// Note that the f and g overrides are not actually used for
+// rewriting, because their preconditions aren't met.
+crucible_llvm_verify m "h" [f_spec, g_spec] true (do {
+    w <- crucible_fresh_var "w" (llvm_int 32);
+    init_global "x";
+    crucible_execute_func [crucible_term w];
+    crucible_return (crucible_term {{ 4 + w : [32] }});
+}) abc;

@@ -1,4 +1,4 @@
-import "chacha20.cry" as chacha20;
+import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry" as chacha20;
 
 // Copied from the SAW manual, page 36:
 

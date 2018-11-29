@@ -9,7 +9,7 @@ import           Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import           Verifier.SAW.Recognizer(asPiList)
 
-import SAWScript.Prover.Mode (ProverMode(..))
+import SAWScript.Proof(propToPredicate)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
@@ -22,11 +22,11 @@ satABC ::
   (AIG.IsAIG l g) =>
   AIG.Proxy l g ->
   SharedContext ->
-  ProverMode ->
   Term ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
-satABC proxy sc mode t0 =
-  do TypedTerm schema t <-
+satABC proxy sc goal =
+  do t0 <- propToPredicate sc goal
+     TypedTerm schema t <-
         (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
      checkBooleanSchema schema
      tp <- scWhnf sc =<< scTypeOf sc t
@@ -34,9 +34,7 @@ satABC proxy sc mode t0 =
          argNames = map fst args
      BBSim.withBitBlastedPred proxy sc bitblastPrimitives t $
       \be lit0 shapes ->
-         do let lit = case mode of
-                        CheckSat -> lit0
-                        Prove    -> AIG.not lit0
+         do let lit = AIG.not lit0
             satRes <- getModel argNames shapes =<< AIG.checkSat be lit
             let stats = solverStats "ABC" (scSharedSize t0)
             return (satRes, stats)

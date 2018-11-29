@@ -145,8 +145,7 @@ crucible_java_extract bic opts c mname = do
 
   -- allocate all of the handles/static vars that are directly referenced by
   -- this class
-  let refs = Set.toList (CJ.classRefs c)
-  traceM $ "refs are " ++ show refs
+  let refs = map J.mkClassName CJ.initClasses ++ Set.toList (CJ.classRefs c)
   mapM_ (prepareClassToplevel bic . J.unClassName) refs
 
   halloc <- getHandleAlloc
@@ -161,7 +160,8 @@ crucible_java_extract bic opts c mname = do
 
           (ecs, args) <- setupArgs sc sym h
 
-          res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc ctx verbosity className h args
+          res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc
+                     ctx verbosity className h args
                          
           case res of
             Crucible.FinishedResult _ pr -> do

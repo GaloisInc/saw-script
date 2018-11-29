@@ -20,6 +20,7 @@ packages:
   - deps/crucible/crucible-jvm/
   - deps/crucible/crucible-llvm/
   - deps/crucible/crucible-saw/
+  - deps/crucible/crux/
   - deps/parameterized-utils/
   - deps/dwarf/
   - deps/elf-edit/
