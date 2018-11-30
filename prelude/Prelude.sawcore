@@ -1172,6 +1172,8 @@ bvXor = bvZipWith xor;
 bvEq : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 bvEq n x y = vecEq n Bool boolEq x y;
 
+axiom bvEq_refl : (n : Nat) -> (x : bitvector n) -> Eq Bool (bvEq n x x) True;
+
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
 axiom eq_bitvector : (n : Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
 
