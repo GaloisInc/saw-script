@@ -1157,23 +1157,23 @@ scCryptolType sc t =
     Nothing -> fail $ "scCryptolType: unsupported type " ++ showTerm t
 
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term
-scCryptolEq sc x y = do
-  rules <- concat <$> traverse defRewrites (defs1 ++ defs2)
-  let ss = addConvs natConversions (addRules rules emptySimpset)
-  tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
-  ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
-  unless (tx == ty) $ fail $ unwords [ "scCryptolEq: type mismatch between"
-                                     , pretty tx
-                                     , "and"
-                                     , pretty ty
-                                     ]
+scCryptolEq sc x y =
+  do rules <- concat <$> traverse defRewrites (defs1 ++ defs2)
+     let ss = addConvs natConversions (addRules rules emptySimpset)
+     tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
+     ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
+     unless (tx == ty) $ fail $ unwords [ "scCryptolEq: type mismatch between"
+                                        , pretty tx
+                                        , "and"
+                                        , pretty ty
+                                        ]
 
-  -- Actually apply the equality function, along with the bogus "proof" ePCmp
-  t <- scTypeOf sc x
-  c <- scCryptolType sc t
-  k <- importType sc emptyEnv c
-  cmpPrf <- scGlobalApply sc "Cryptol.ePCmp" [k]
-  scGlobalApply sc "Cryptol.ecEq" [k, cmpPrf, x, y]
+     -- Actually apply the equality function, along with the Cmp class dictionary
+     t <- scTypeOf sc x
+     c <- scCryptolType sc t
+     k <- importType sc emptyEnv c
+     cmpPrf <- proveProp sc emptyEnv (C.pCmp c)
+     scGlobalApply sc "Cryptol.ecEq" [k, cmpPrf, x, y]
 
   where
     defs1 = map (mkIdent (mkModuleName ["Prelude"])) ["bitvector"]
