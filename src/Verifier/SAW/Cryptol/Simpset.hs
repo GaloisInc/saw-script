@@ -47,4 +47,5 @@ excludedNames =
   , "PLiteral"
   , "PLogic"
   , "PSignedCmp"
+  , "ecEq"
   ]

@@ -970,7 +970,7 @@ ecSLt : (a : sort 0) -> PSignedCmp a -> a -> a -> Bool;
 ecSLt a pa x y = pa.scmp x y False;
 
 ecEq : (a : sort 0) -> PCmp a -> a -> a -> Bool;
-ecEq a _ = eq a;
+ecEq a pa = pa.eq;
 
 ecNotEq : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecNotEq a pa x y = not (ecEq a pa x y);
@@ -1362,6 +1362,8 @@ ecSle =
 
 --------------------------------------------------------------------------------
 -- Rewrite rules
+
+axiom ecEq_refl : (a : sort 0) -> (pa : PCmp a) -> (x : a) -> Eq Bool (ecEq a pa x x) True;
 
 axiom replicate_False : (n : Nat) -> Eq (bitvector n) (replicate n Bool False) (bvNat n 0);
 
