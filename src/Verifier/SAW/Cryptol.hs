@@ -15,7 +15,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Cryptol where
 
-import Control.Monad (foldM, join, unless)
+import Control.Monad (foldM, join, unless, zipWithM)
 import qualified Data.Foldable as Fold
 import Data.List
 import qualified Data.IntTrie as IntTrie
@@ -170,8 +170,14 @@ importType sc env ty =
                          Just (t, j) -> incVars sc 0 j t
                          Nothing -> panic "importType TVBound"
     C.TUser _ _ t  -> go t
-    C.TRec fs -> scRecordType sc =<< mapM (\(f,t) -> (f,) <$> go t) tm
-      where tm = [ (C.unpackIdent n, t) | (n, t) <- fs ]
+    C.TRec fs ->
+      do let doField (n, t) =
+               do n' <- scString sc (C.unpackIdent n)
+                  t' <- go t
+                  scDataTypeApp sc "Cryptol.Field" [t', n']
+         fs' <- traverse doField fs
+         scTupleType sc fs'
+
     C.TCon tcon tyargs ->
       case tcon of
         C.TC tc ->
@@ -281,9 +287,14 @@ proveProp sc env prop =
                 scTuple sc ps
         -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
         (C.pIsZero -> Just (C.tIsRec -> Just fs))
-          -> do let tm = Map.fromList [ (C.unpackIdent n, t) | (n, t) <- fs ]
-                pm <- traverse (proveProp sc env . C.pZero) tm
-                scRecord sc pm
+          -> do let doField (n, t) =
+                      do n' <- scString sc (C.unpackIdent n)
+                         let p = C.pZero t
+                         p' <- importType sc env p
+                         z <- proveProp sc env p
+                         scCtorAppParams sc "Cryptol.MkField" [p'] [n', z]
+                ps <- traverse doField fs
+                scTuple sc ps
 
         -- instance Logic Bit
         (C.pIsLogic -> Just (C.tIsBit -> True))
@@ -316,7 +327,7 @@ proveProp sc env prop =
                 scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
         -- instance Logic {}
         (C.pIsLogic -> Just (C.tIsRec -> Just []))
-          -> do scGlobalApply sc "Cryptol.PLogicEmpty" []
+          -> do scGlobalApply sc "Cryptol.PLogicUnit" []
         -- instance (Logic a, Logic b) => instance Logic { x : a, y : b }
         (C.pIsLogic -> Just (C.tIsRec -> Just ((n, t) : fs)))
           -> do s <- scString sc (C.unpackIdent n)
@@ -324,7 +335,9 @@ proveProp sc env prop =
                 b <- importType sc env (C.TRec fs)
                 pa <- proveProp sc env (C.pLogic t)
                 pb <- proveProp sc env (C.pLogic (C.TRec fs))
-                scGlobalApply sc "Cryptol.PLogicField" [s, a, b, pa, pb]
+                fa <- scDataTypeApp sc "Cryptol.Field" [a, s]
+                pfa <- scGlobalApply sc "Cryptol.PLogicField" [s, a, pa]
+                scGlobalApply sc "Cryptol.PLogicPair" [fa, b, pfa, pb]
 
         -- instance Arith Integer
         (C.pIsArith -> Just (C.tIsInteger -> True))
@@ -361,7 +374,7 @@ proveProp sc env prop =
                 scGlobalApply sc "Cryptol.PArithPair" [a, b, pa, pb]
         -- instance Arith {}
         (C.pIsArith -> Just (C.tIsRec -> Just []))
-          -> do scGlobalApply sc "Cryptol.PArithEmpty" []
+          -> do scGlobalApply sc "Cryptol.PArithUnit" []
         -- instance (Arith a, Arith b) => instance Arith { x : a, y : b }
         (C.pIsArith -> Just (C.tIsRec -> Just ((n, t) : fs)))
           -> do s <- scString sc (C.unpackIdent n)
@@ -369,7 +382,9 @@ proveProp sc env prop =
                 b <- importType sc env (C.TRec fs)
                 pa <- proveProp sc env (C.pArith t)
                 pb <- proveProp sc env (C.pArith (C.TRec fs))
-                scGlobalApply sc "Cryptol.PArithField" [s, a, b, pa, pb]
+                fa <- scDataTypeApp sc "Cryptol.Field" [a, s]
+                pfa <- scGlobalApply sc "Cryptol.PArithField" [s, a, pa]
+                scGlobalApply sc "Cryptol.PArithPair" [fa, b, pfa, pb]
 
         -- instance Cmp Bit
         (C.pIsCmp -> Just (C.tIsBit -> True))
@@ -403,7 +418,7 @@ proveProp sc env prop =
                 scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
         -- instance Cmp {}
         (C.pIsCmp -> Just (C.tIsRec -> Just []))
-          -> do scGlobalApply sc "Cryptol.PCmpEmpty" []
+          -> do scGlobalApply sc "Cryptol.PCmpUnit" []
         -- instance (Cmp a, Cmp b) => instance Cmp { x : a, y : b }
         (C.pIsCmp -> Just (C.tIsRec -> Just ((n, t) : fs)))
           -> do s <- scString sc (C.unpackIdent n)
@@ -411,7 +426,9 @@ proveProp sc env prop =
                 b <- importType sc env (C.TRec fs)
                 pa <- proveProp sc env (C.pCmp t)
                 pb <- proveProp sc env (C.pCmp (C.TRec fs))
-                scGlobalApply sc "Cryptol.PCmpField" [s, a, b, pa, pb]
+                fa <- scDataTypeApp sc "Cryptol.Field" [a, s]
+                pfa <- scGlobalApply sc "Cryptol.PCmpField" [s, a, pa]
+                scGlobalApply sc "Cryptol.PCmpPair" [fa, b, pfa, pb]
 
         -- instance SignedCmp Bit
         (C.pIsSignedCmp -> Just (C.tIsBit -> True))
@@ -438,7 +455,7 @@ proveProp sc env prop =
                 scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
         -- instance SignedCmp {}
         (C.pIsSignedCmp -> Just (C.tIsRec -> Just []))
-          -> do scGlobalApply sc "Cryptol.PSignedCmpEmpty" []
+          -> do scGlobalApply sc "Cryptol.PSignedCmpUnit" []
         -- instance (SignedCmp a, SignedCmp b) => instance SignedCmp { x : a, y : b }
         (C.pIsSignedCmp -> Just (C.tIsRec -> Just ((n, t) : fs)))
           -> do s <- scString sc (C.unpackIdent n)
@@ -446,7 +463,9 @@ proveProp sc env prop =
                 b <- importType sc env (C.TRec fs)
                 pa <- proveProp sc env (C.pSignedCmp t)
                 pb <- proveProp sc env (C.pSignedCmp (C.TRec fs))
-                scGlobalApply sc "Cryptol.PSignedCmpField" [s, a, b, pa, pb]
+                fa <- scDataTypeApp sc "Cryptol.Field" [a, s]
+                pfa <- scGlobalApply sc "Cryptol.PSignedCmpField" [s, a, pa]
+                scGlobalApply sc "Cryptol.PSignedCmpPair" [fa, b, pfa, pb]
 
         -- instance Literal val Integer
         (C.pIsLiteral -> Just (_, C.tIsInteger -> True))
@@ -552,9 +571,14 @@ importExpr sc env expr =
          scTuple sc es'
 
     C.ERec fs ->
-      do let em = Map.fromList [ (C.unpackIdent n, e) | (n, e) <- fs ]
-         em' <- traverse (importExpr sc env) em
-         scRecord sc em'
+      do let doField (n, e) =
+               do n' <- scString sc (C.unpackIdent n)
+                  let t = fastTypeOf (envC env) e
+                  t' <- importType sc env t
+                  e' <- importExpr sc env e
+                  scCtorAppParams sc "Cryptol.MkField" [t'] [n', e']
+         fs' <- traverse doField fs
+         scTuple sc fs'
 
     C.ESel e sel ->
       -- Elimination for tuple/record/list
@@ -571,11 +595,17 @@ importExpr sc env expr =
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
-             case t of
-               C.TRec{} ->
-                 do scRecordSelect sc e' (C.unpackIdent x)
-               _ ->
-                 do f <- mapRecordSelector sc env x t
+             case C.tIsRec t of
+               Just fs ->
+                 do i <- the (elemIndex x (map fst fs))
+                    e'' <- scTupleSelector sc e' (i+1)
+                    let u = snd (fs !! i)
+                    u' <- importType sc env u
+                    x' <- scString sc (C.unpackIdent x)
+                    scGlobalApply sc "Cryptol.projField" [x', u', e'']
+               Nothing ->
+                 do putStrLn $ unwords ["record selector:", C.unpackIdent x, show t]
+                    f <- mapRecordSelector sc env x t
                     scApply sc f e'
         C.ListSel i _maybeLen ->
           do let t = fastTypeOf (envC env) e
@@ -654,6 +684,11 @@ importExpr sc env expr =
       do env' <- importDeclGroups sc env dgs
          importExpr sc env' e
 
+  where
+    the :: Maybe a -> IO a
+    the = maybe (panic "importExpr: internal type error") return
+
+
 -- | Convert a Cryptol expression with the given type schema to a
 -- SAW-Core term. Calling 'scTypeOf' on the result of @'importExpr''
 -- sc env schema expr@ must yield a type that is equivalent (i.e.
@@ -671,10 +706,14 @@ importExpr' sc env schema expr =
     C.ERec fs ->
       do ty <- the (C.isMono schema)
          ts <- the (C.tIsRec ty)
-         let tm = Map.fromList [ (C.unpackIdent n, t) | (n, t) <- ts ]
-         let em = Map.fromList [ (C.unpackIdent n, e) | (n, e) <- fs ]
-         em' <- sequence (Map.intersectionWith go tm em)
-         scRecord sc em'
+         let doField (n, t) (n2, e) =
+               do unless (n == n2) $ fail $ "importExpr': record field mismatch: " ++ show (n, n2)
+                  n' <- scString sc (C.unpackIdent n)
+                  t' <- importType sc env t
+                  e' <- importExpr sc env e
+                  scCtorAppParams sc "Cryptol.MkField" [t'] [n', e']
+         fs' <- zipWithM doField ts fs
+         scTuple sc fs'
 
     C.EIf e1 e2 e3 ->
       do ty <- the (C.isMono schema)
@@ -776,26 +815,30 @@ mapRecordSelector sc env i = fmap fst . go
     go :: C.Type -> IO (Term, C.Type)
     go t =
       case C.tNoUser t of
-        (C.tIsSeq -> Just (n, a)) -> do
-          (f, b) <- go a
-          a' <- importType sc env a
-          b' <- importType sc env b
-          n' <- importType sc env n
-          g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
-          return (g, C.tSeq n b)
-        (C.tIsFun -> Just (n, a)) -> do
-          (f, b) <- go a
-          a' <- importType sc env a
-          b' <- importType sc env b
-          n' <- importType sc env n
-          g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
-          return (g, C.tFun n b)
-        (C.tIsRec -> Just ts) | Just b <- lookup i ts -> do
-          x <- scLocalVar sc 0
-          y <- scRecordSelect sc x (C.unpackIdent i)
-          t' <- importType sc env t
-          f <- scLambda sc "x" t' y
-          return (f, b)
+        (C.tIsSeq -> Just (n, a)) ->
+          do (f, b) <- go a
+             a' <- importType sc env a
+             b' <- importType sc env b
+             n' <- importType sc env n
+             g <- scGlobalApply sc "Cryptol.seqMap" [a', b', n', f]
+             return (g, C.tSeq n b)
+        (C.tIsFun -> Just (n, a)) ->
+          do (f, b) <- go a
+             a' <- importType sc env a
+             b' <- importType sc env b
+             n' <- importType sc env n
+             g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
+             return (g, C.tFun n b)
+        (C.tIsRec -> Just ts) | Just k <- elemIndex i (map fst ts) ->
+          do x <- scLocalVar sc 0
+             i' <- scString sc (C.unpackIdent i)
+             let b = snd (ts !! k)
+             b' <- importType sc env b
+             xk <- scTupleSelector sc x (k+1)
+             y <- scGlobalApply sc "Cryptol.projField" [i', b', xk]
+             t' <- importType sc env t
+             f <- scLambda sc "x" t' y
+             return (f, b)
         _ -> panic $ unwords ["importExpr: invalid record selector", show i, show t]
 
 -- | Apply a substitution to a type *without* simplifying
