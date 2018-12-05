@@ -351,7 +351,7 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: invalid infinite stream type"
       Cryptol.TVTuple tps ->
         do sc <- Crucible.saw_ctx <$> (readIORef (W4.sbStateManager sym))
-           tms <- mapM (scTupleSelector sc tm) [1 .. length tps]
+           tms <- mapM (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
            vals <- zipWithM (resolveSAWTerm cc) tps tms
            storTy <-
              case toLLVMType dl tp of
