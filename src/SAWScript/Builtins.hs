@@ -107,7 +107,7 @@ import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
 import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
-import qualified Cryptol.TypeCheck.Subst as C (apSubst, listSubst)
+import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst)
 import qualified Cryptol.Eval.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
@@ -1127,17 +1127,33 @@ defaultTypedTerm opts sc cfg (TypedTerm schema trm) = do
       let vars = C.sVars schema
       let nms = C.addTNames vars IntMap.empty
       mapM_ (warnDefault nms) (zip vars tys)
-      let applyType :: Term -> Cryptol.Type -> IO Term
+      let applyType :: Term -> C.Type -> IO Term
           applyType t ty = do
             ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
             scApply sc t ty'
+      let dischargeProp :: Term -> C.Prop -> IO Term
+          dischargeProp t p
+            | Cryptol.isErasedProp p = return t
+            | otherwise = scApply sc t =<< Cryptol.proveProp sc Cryptol.emptyEnv p
       trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
+      let props = map (plainSubst su) (C.sProps schema)
+      trm'' <- foldM dischargeProp trm' props
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))
-      return (TypedTerm schema' trm')
+      return (TypedTerm schema' trm'')
   where
     warnDefault ns (x,t) =
       printOutLn opts Info $ show $ C.text "Assuming" C.<+> C.ppWithNames ns (x :: C.TParam) C.<+> C.text "=" C.<+> C.pp t
+    -- Apply a substitution to a type *without* simplifying
+    -- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to
+    -- 'apSubst', which performs simplifications wherever possible.)
+    plainSubst :: C.Subst -> C.Type -> C.Type
+    plainSubst s ty =
+      case ty of
+        C.TCon tc ts   -> C.TCon tc (map (plainSubst s) ts)
+        C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
+        C.TRec fs      -> C.TRec [ (x, plainSubst s t) | (x, t) <- fs ]
+        C.TVar x       -> C.apSubst s (C.TVar x)
 
 eval_size :: C.Schema -> TopLevel Integer
 eval_size s =
