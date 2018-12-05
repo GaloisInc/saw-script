@@ -236,10 +236,6 @@ flattenSValue v = do
         VPair x y                 -> do (xs, sx) <- flattenSValue =<< force x
                                         (ys, sy) <- flattenSValue =<< force y
                                         return (xs ++ ys, sx ++ sy)
-        VEmpty                    -> return ([], "")
-        VField _ x y              -> do (xs, sx) <- flattenSValue =<< force x
-                                        (ys, sy) <- flattenSValue y
-                                        return (xs ++ ys, sx ++ sy)
         VRecordValue elems        -> do (xss, sxs) <-
                                           unzip <$>
                                           mapM (flattenSValue <=< force . snd) elems
@@ -539,14 +535,6 @@ parseUninterpreted cws nm ty =
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             return (VPair (ready x1) (ready x2))
 
-    VEmptyType
-      -> return VEmpty
-
-    (VFieldType f ty1 ty2)
-      -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
-            x2 <- parseUninterpreted cws (nm ++ ".R") ty2
-            return (VField f (ready x1) x2)
-
     (VRecordType elem_tps)
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
@@ -585,14 +573,6 @@ vAsFirstOrderType v =
             t2 <- vAsFirstOrderType v2
             case t2 of
               FOTTuple ts -> return (FOTTuple (t1 : ts))
-              _ -> Nothing
-    VEmptyType
-      -> return (FOTRec Map.empty)
-    VFieldType k v1 v2
-      -> do t1 <- vAsFirstOrderType v1
-            t2 <- vAsFirstOrderType v2
-            case t2 of
-              FOTRec tm -> return (FOTRec (Map.insert k t1 tm))
               _ -> Nothing
     (asVTupleType -> Just vs)
       -> FOTTuple <$> mapM vAsFirstOrderType vs
@@ -785,13 +765,6 @@ sbvSetOutput checkSz (FOTTuple ts) (asVTuple -> Just thunks) i = do
 
 sbvSetOutput _checkSz (FOTRec fs) VUnit i | Map.null fs = do
    return i
-sbvSetOutput checkSz (FOTRec fs) (VField fn x rec) i = do
-   x' <- liftIO $ force x
-   case Map.lookup fn fs of
-     Just t -> do
-       let fs' = Map.delete fn fs
-       sbvSetOutput checkSz t x' i >>= sbvSetOutput checkSz (FOTRec fs') rec
-     Nothing -> fail "sbvCodeGen: type mismatch when setting record output value"
 
 sbvSetOutput _checkSz (FOTRec fs) (VRecordValue []) i | Map.null fs = return i
 
