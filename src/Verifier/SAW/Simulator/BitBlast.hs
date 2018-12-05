@@ -127,11 +127,6 @@ flattenBValue (VPair x y) = do
   vx <- flattenBValue =<< force x
   vy <- flattenBValue =<< force y
   return $ AIG.concat [vx, vy]
-flattenBValue VEmpty = return $ AIG.concat []
-flattenBValue (VField _ x y) = do
-  vx <- flattenBValue =<< force x
-  vy <- flattenBValue y
-  return $ AIG.concat [vx, vy]
 flattenBValue (VRecordValue elems) = do
   AIG.concat <$> mapM (flattenBValue <=< force . snd) elems
 flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.BitBlast.flattenBValue: unsupported value"]
