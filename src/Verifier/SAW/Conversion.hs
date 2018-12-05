@@ -556,7 +556,7 @@ eq_Record = Conversion $ thenMatcher matcher action
       Just (foldr mkAnd (mkBool True) (map mkEq (Map.assocs tm)))
       where
         mkAnd t1 t2 = mkGlobalDef "Prelude.and" `mkApp` t1 `mkApp` t2
-        sel t i = mkTermF . FTermF . RecordSelector t =<< mkTermF (FTermF (StringLit i))
+        sel t i = mkTermF (FTermF (RecordProj t i))
         mkEq (i, t) = mkGlobalDef "Prelude.eq"
                       `mkApp` return t
                       `mkApp` sel x i
