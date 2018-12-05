@@ -1204,9 +1204,9 @@ exportTupleValue tys v =
 exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.Value)]
 exportRecordValue fields v =
   case (fields, v) of
-    ([]         , SC.VEmpty      ) -> []
-    ((n, t) : ts, SC.VField _ x y) ->
-      (n, V.ready $ exportValue t (run x)) : exportRecordValue ts y
+    ([]         , SC.VUnit    ) -> []
+    ((n, t) : ts, SC.VPair x y) ->
+      (n, V.ready $ exportValue t (run x)) : exportRecordValue ts (run y)
     (_, SC.VRecordValue (alistAllFields
                          (map (C.unpackIdent . fst) fields) -> Just ths)) ->
       zipWith (\(n,t) x -> (n, V.ready $ exportValue t (run x))) fields ths
