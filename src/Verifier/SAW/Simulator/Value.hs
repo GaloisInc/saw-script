@@ -46,8 +46,6 @@ data Value l
   = VFun !(Thunk l -> MValue l)
   | VUnit
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
-  | VEmpty
-  | VField FieldName (Thunk l) !(Value l)
   | VCtorApp !Ident !(Vector (Thunk l))
   | VVector !(Vector (Thunk l))
   | VVecType (Value l) (Value l)
@@ -64,8 +62,6 @@ data Value l
   | VPiType !(Value l) !(Thunk l -> MValue l)
   | VUnitType
   | VPairType (Value l) (Value l)
-  | VEmptyType
-  | VFieldType FieldName !(Value l) !(Value l)
   | VDataType !Ident [Value l]
   | VRecordType ![(String, Value l)]
   | VRecordValue ![(String, Thunk l)]
@@ -131,8 +127,6 @@ instance Show (Extra l) => Show (Value l) where
       VFun {}        -> showString "<<fun>>"
       VUnit          -> showString "()"
       VPair{}        -> showString "<<tuple>>"
-      VEmpty         -> showString "{}"
-      VField f _ _   -> showString "{" . showString f . showString " = _, ...}"
       VCtorApp s xv
         | V.null xv  -> shows s
         | otherwise  -> shows s . showList (toList xv)
@@ -151,8 +145,6 @@ instance Show (Extra l) => Show (Value l) where
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
       VPairType x y  -> showParen True (shows x . showString " * " . shows y)
-      VEmptyType {}  -> showString "<<record type>>"
-      VFieldType {}  -> showString "<<record type>>"
       VDataType s vs
         | null vs    -> shows s
         | otherwise  -> shows s . showList vs
@@ -208,12 +200,6 @@ asVTupleType :: Value l -> Maybe [Value l]
 asVTupleType (VRecordType elems) = recordAListAsTuple elems
 asVTupleType _ = Nothing
 
-valRecordSelect :: (VMonad l, Show (Extra l)) =>
-  FieldName -> Value l -> MValue l
-valRecordSelect k (VField k' x r) = if k == k' then force x else valRecordSelect k r
-valRecordSelect k VEmpty = fail $ "valRecordSelect: record field not found: " ++ k
-valRecordSelect _ v = fail $ "valRecordSelect: Not a record value: " ++ show v
-
 valRecordProj :: (VMonad l, Show (Extra l)) => Value l -> String -> MValue l
 valRecordProj (VRecordValue fld_map) fld
   | Just t <- lookup fld fld_map = force t
@@ -243,13 +229,6 @@ asFiniteTypeValue v =
       t2 <- asFiniteTypeValue v2
       case t2 of
         FTTuple ts -> return (FTTuple (t1 : ts))
-        _ -> Nothing
-    VEmptyType -> return (FTRec Map.empty)
-    VFieldType k v1 v2 -> do
-      t1 <- asFiniteTypeValue v1
-      t2 <- asFiniteTypeValue v2
-      case t2 of
-        FTRec tm -> return (FTRec (Map.insert k t1 tm))
         _ -> Nothing
     VRecordType elem_tps ->
       FTRec <$> Map.fromList <$>

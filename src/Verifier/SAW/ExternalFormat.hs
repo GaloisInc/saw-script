@@ -87,11 +87,6 @@ scWriteExternal t0 =
             PairType x y        -> unwords ["PairT", show x, show y]
             PairLeft e          -> unwords ["ProjL", show e]
             PairRight e         -> unwords ["ProjR", show e]
-            EmptyValue          -> unwords ["Empty"]
-            EmptyType           -> unwords ["EmptyT"]
-            FieldValue f x y    -> unwords ["OldRecord", show f, show x, show y]
-            FieldType f x y     -> unwords ["OldRecordT", show f, show x, show y]
-            RecordSelector e i  -> unwords ["OldRecordSel", show e, show i]
             CtorApp i ps es     ->
               unwords ("Ctor" : show i : map show ps ++ argsep : map show es)
             DataTypeApp i ps es ->
@@ -142,11 +137,6 @@ scReadExternal sc input =
         ["PairT", x, y]     -> FTermF (PairType (read x) (read y))
         ["ProjL", x]        -> FTermF (PairLeft (read x))
         ["ProjR", x]        -> FTermF (PairRight (read x))
-        ["Empty"]           -> FTermF EmptyValue
-        ["EmptyT"]          -> FTermF EmptyType
-        ["OldRecord",f,x,y] -> FTermF (FieldValue (read f) (read x) (read y))
-        ["OldRecordT",f,x,y] -> FTermF (FieldType (read f) (read x) (read y))
-        ["OldRecordSel", e, i] -> FTermF (RecordSelector (read e) (read i))
         ("Ctor" : i : (separateArgs -> Just (ps, es))) ->
           FTermF (CtorApp (parseIdent i) (map read ps) (map read es))
         ("Data" : i : (separateArgs -> Just (ps, es))) ->

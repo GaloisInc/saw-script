@@ -79,9 +79,6 @@ module Verifier.SAW.SharedTerm
   , scRecord
   , scRecordSelect
   , scRecordType
-  , scOldRecord
-  , scOldRecordSelect
-  , scOldRecordType
   , scDataTypeAppParams
   , scDataTypeApp
   , scCtorAppParams
@@ -122,10 +119,6 @@ module Verifier.SAW.SharedTerm
   , scPairType
   , scPairLeft
   , scPairRight
-  , scEmptyValue
-  , scEmptyType
-  , scFieldValue
-  , scFieldType
   , scTuple
   , scTupleType
   , scTupleSelector
@@ -581,7 +574,6 @@ data WHNFElim
   = ElimApp Term
   | ElimProj String
   | ElimPair Bool
-  | ElimOldProj FieldName
   | ElimRecursor Ident [Term] Term [(Ident,Term)] [Term]
 
 -- | Test if a term is a constructor application that should be converted to a
@@ -620,7 +612,6 @@ scWhnf sc t0 =
     go xs                     (convertsToNat    -> Just k) = scFlatTermF sc (NatLit k) >>= go xs
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
-    go xs                     (asOldRecordSelector -> Just (t, n)) = go (ElimOldProj n : xs) t
     go xs                     (asPairSelector -> Just (t, i)) = go (ElimPair i : xs) t
     go (ElimApp x : xs)       (asLambda -> Just (_, _, body))   = instantiateVar sc 0 x body >>= go xs
     go (ElimPair i : xs)      (asPairValue -> Just (a, b))      = go xs (if i then b else a)
@@ -628,12 +619,6 @@ scWhnf sc t0 =
                                                                     Just t -> go xs t
                                                                     Nothing ->
                                                                       error "scWhnf: field missing in record"
-    go (ElimOldProj i : xs)   (asFieldValue -> Just (s, a, b))  = do s' <- memo s
-                                                                     b' <- memo b
-                                                                     t' <- scFieldValue sc s' a b'
-                                                                     case asRecordValue t' of
-                                                                       Just tm -> go xs ((Map.!) tm i)
-                                                                       Nothing -> foldM reapply t' xs
     go (ElimRecursor d ps
         p_ret cs_fs _ : xs)   (asCtorOrNat ->
                                Just (c, _, args))               = (scReduceRecursor sc d ps
@@ -646,18 +631,9 @@ scWhnf sc t0 =
     go xs                     (asPairValue -> Just (a, b))      = do b' <- memo b
                                                                      t' <- scPairValue sc a b'
                                                                      foldM reapply t' xs
-    go xs                     (asFieldValue -> Just (s, a, b))  = do s' <- memo s
-                                                                     b' <- memo b
-                                                                     t' <- scFieldValue sc s' a b'
-                                                                     foldM reapply t' xs
     go xs                     (asPairType -> Just (a, b))       = do a' <- memo a
                                                                      b' <- memo b
                                                                      t' <- scPairType sc a' b'
-                                                                     foldM reapply t' xs
-    go xs                     (asFieldType -> Just (s, a, b))   = do s' <- memo s
-                                                                     a' <- memo a
-                                                                     b' <- memo b
-                                                                     t' <- scFieldType sc s' a' b'
                                                                      foldM reapply t' xs
     go xs                     (asRecordType -> Just elems)   = do elems' <-
                                                                     mapM (\(i,t) -> (i,) <$> memo t) (Map.assocs elems)
@@ -677,7 +653,6 @@ scWhnf sc t0 =
     reapply t (ElimApp x) = scApply sc t x
     reapply t (ElimProj i) = scRecordSelect sc t i
     reapply t (ElimPair i) = scPairSelector sc t i
-    reapply t (ElimOldProj i) = scOldRecordSelect sc t i
     reapply t (ElimRecursor d ps p_ret cs_fs ixs) =
       scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs t)
 
@@ -831,22 +806,6 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         PairRight t -> do
           STApp{ stAppTermF = FTermF (PairType _ t2) } <- memo t >>= liftIO . scWhnf sc
           return t2
-        EmptyValue -> lift $ scEmptyType sc
-        EmptyType -> lift $ scSort sc (mkSort 0)
-        FieldValue f x y -> do
-          tx <- memo x
-          ty <- memo y
-          lift $ scFieldType sc f tx ty
-        FieldType _ x y -> do
-          sx <- sort x
-          sy <- sort y
-          lift $ scSort sc (max sx sy)
-        RecordSelector t f -> do
-          f' <- asStringLit =<< liftIO (scWhnf sc f)
-          t' <- memo t >>= liftIO . scWhnf sc
-          m <- asRecordType t'
-          let Just tp = Map.lookup f' m
-          return tp
         CtorApp c params args -> do
           t <- lift $ scTypeOfCtor sc c
           lift $ foldM (reducePi sc) t (params ++ args)
@@ -1089,30 +1048,11 @@ scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 scRecord :: SharedContext -> Map FieldName Term -> IO Term
 scRecord sc m = scFlatTermF sc (RecordValue $ Map.assocs m)
 
-scOldRecord :: SharedContext -> Map FieldName Term -> IO Term
-scOldRecord sc m = go (Map.assocs m)
-  where go [] = scEmptyValue sc
-        go ((f, x) : xs) = do l <- scString sc f
-                              r <- go xs
-                              scFieldValue sc l x r
-
 scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
 scRecordSelect sc t fname = scFlatTermF sc (RecordProj t fname)
 
-scOldRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
-scOldRecordSelect sc t fname = do
-  l <- scString sc fname
-  scFlatTermF sc (RecordSelector t l)
-
 scRecordType :: SharedContext -> [(String,Term)] -> IO Term
 scRecordType sc elem_tps = scFlatTermF sc (RecordType elem_tps)
-
-scOldRecordType :: SharedContext -> Map FieldName Term -> IO Term
-scOldRecordType sc m = go (Map.assocs m)
-  where go [] = scEmptyType sc
-        go ((f, x) : xs) = do l <- scString sc f
-                              r <- go xs
-                              scFieldType sc l x r
 
 scUnitValue :: SharedContext -> IO Term
 scUnitValue sc = scFlatTermF sc UnitValue
@@ -1125,18 +1065,6 @@ scPairValue sc x y = scFlatTermF sc (PairValue x y)
 
 scPairType :: SharedContext -> Term -> Term -> IO Term
 scPairType sc x y = scFlatTermF sc (PairType x y)
-
-scEmptyValue :: SharedContext -> IO Term
-scEmptyValue sc = scFlatTermF sc EmptyValue
-
-scEmptyType :: SharedContext -> IO Term
-scEmptyType sc = scFlatTermF sc EmptyType
-
-scFieldValue :: SharedContext -> Term -> Term -> Term -> IO Term
-scFieldValue sc f x y = scFlatTermF sc (FieldValue f x y)
-
-scFieldType :: SharedContext -> Term -> Term -> Term -> IO Term
-scFieldType sc f x y = scFlatTermF sc (FieldType f x y)
 
 scTuple :: SharedContext -> [Term] -> IO Term
 scTuple sc [] = scUnitValue sc

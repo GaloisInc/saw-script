@@ -257,11 +257,6 @@ data FlatTermF e
   | PairType e e
   | PairLeft e
   | PairRight e
-  | EmptyValue
-  | EmptyType
-  | FieldValue e e e -- Field name, field value, remainder of record
-  | FieldType e e e
-  | RecordSelector e e -- Record value, field name
 
     -- | An inductively-defined type, applied to parameters and type indices
   | DataTypeApp !Ident ![e] ![e]
@@ -352,15 +347,6 @@ zipWithFlatTermF f = go
     go (PairType x1 x2) (PairType y1 y2) = Just (PairType (f x1 y1) (f x2 y2))
     go (PairLeft x) (PairLeft y) = Just (PairLeft (f x y))
     go (PairRight x) (PairRight y) = Just (PairLeft (f x y))
-
-    go EmptyValue EmptyValue = Just EmptyValue
-    go EmptyType EmptyType = Just EmptyType
-    go (FieldValue x1 x2 x3) (FieldValue y1 y2 y3) =
-      Just $ FieldValue (f x1 y1) (f x2 y2) (f x3 y3)
-    go (FieldType x1 x2 x3) (FieldType y1 y2 y3) =
-      Just $ FieldType (f x1 y1) (f x2 y2) (f x3 y3)
-    go (RecordSelector x1 x2) (RecordSelector y1 y2) =
-      Just $ RecordSelector (f x1 y1) (f x2 y2)
 
     go (CtorApp cx psx lx) (CtorApp cy psy ly)
       | cx == cy = Just $ CtorApp cx (zipWith f psx psy) (zipWith f lx ly)

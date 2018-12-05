@@ -588,11 +588,6 @@ rewriteSharedTermTypeSafe sc ss t0 =
           PairType{}       -> return ftf -- doesn't matter
           PairLeft{}       -> traverse rewriteAll ftf
           PairRight{}      -> traverse rewriteAll ftf
-          EmptyValue       -> return ftf
-          EmptyType        -> return ftf
-          FieldValue{}     -> traverse rewriteAll ftf
-          FieldType{}      -> return ftf -- doesn't matter
-          RecordSelector{} -> traverse rewriteAll ftf
 
           -- NOTE: we don't rewrite arguments of constructors, datatypes, or
           -- recursors because of dependent types, as we could potentially cause

@@ -506,11 +506,6 @@ eqOp bp =
       do b1 <- go' x1 y1
          b2 <- go' x2 y2
          bpAnd bp b1 b2
-    go VEmpty VEmpty = return (bpTrue bp)
-    go (VField xf x1 x2) (VField yf y1 y2) | xf == yf =
-      do b1 <- go' x1 y1
-         b2 <- go x2 y2
-         bpAnd bp b1 b2
     go (VWord w1) (VWord w2) = bpBvEq bp w1 w2
     go (VVector v1) (VVector v2) =
       do bs <- sequence $ zipWith go' (V.toList v1) (V.toList v2)
@@ -1094,9 +1089,6 @@ muxValue bp b = value
                                                   value x y
     value VUnit             VUnit             = return VUnit
     value (VPair x1 x2)     (VPair y1 y2)     = VPair <$> thunk x1 y1 <*> thunk x2 y2
-    value VEmpty            VEmpty            = return VEmpty
-    value (VField xf x1 x2) (VField yf y1 y2) | xf == yf
-                                              = VField xf <$> thunk x1 y1 <*> value x2 y2
     value (VRecordValue elems1) (VRecordValue
                                  (alistAllFields (map fst elems1) ->
                                   Just elems2)) =

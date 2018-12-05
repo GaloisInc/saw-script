@@ -334,20 +334,6 @@ ppRecord type_p alist =
 ppProj :: String -> Doc -> Doc
 ppProj sel doc = doc <> char '.' <> text sel
 
--- | Pretty-print an old-style record field value
-ppOldFieldValue :: Doc -> Doc -> Doc -> Doc
-ppOldFieldValue f x y =
-  braces (eqn f x <+> char '|' <+> y)
-  where eqn l r = group (nest 2 (l <+> equals <<$>> r))
-
--- | Pretty-print an old-style record field type
-ppOldFieldType :: Doc -> Doc -> Doc -> Doc
-ppOldFieldType f x y = char '#' <> ppOldFieldValue f x y
-
--- | Pretty-print an old-style record selector @x.(f)@
-ppOldRecordSel :: Doc -> Doc -> Doc
-ppOldRecordSel x f = x <> char '.' <> parens f
-
 -- | Pretty-print an array value @[v1, ..., vn]@
 ppArrayValue :: [Doc] -> Doc
 ppArrayValue = list
@@ -398,22 +384,13 @@ ppFlatTermF :: Prec -> FlatTermF Term -> PPM Doc
 ppFlatTermF prec tf =
   case tf of
     GlobalDef i   -> return $ ppIdent i
-    UnitValue     -> return $ text "()"
-    UnitType      -> return $ text "#()"
+    UnitValue     -> return $ text "(-empty-)"
+    UnitType      -> return $ text "#(-empty-)"
     PairValue x y -> ppPair <$> ppTerm' PrecNone x <*> ppTerm' PrecNone y
     PairType x y  -> ppPairType <$> ppTerm' PrecNone x <*> ppTerm' PrecNone y
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
-    EmptyValue          -> return $ text "{}"
-    EmptyType           -> return $ text "#{}"
-    FieldValue f x y    ->
-      ppOldFieldValue <$> ppTerm' PrecNone f <*>
-      ppTerm' PrecNone x <*> ppTerm' PrecNone y
-    FieldType f x y     ->
-      ppOldFieldType <$> ppTerm' PrecNone f <*>
-      ppTerm' PrecNone x <*> ppTerm' PrecNone y
-    RecordSelector t f  ->
-      ppOldRecordSel <$> ppTerm' PrecArg t <*> ppTerm' PrecArg f
+
     CtorApp c params args ->
       ppAppList prec (ppIdent c) <$> mapM (ppTerm' PrecArg) (params ++ args)
     DataTypeApp dt params args ->
@@ -517,8 +494,6 @@ shouldMemoizeTerm t =
     FTermF GlobalDef{} -> False
     FTermF UnitValue -> False
     FTermF UnitType -> False
-    FTermF EmptyValue -> False
-    FTermF EmptyType -> False
     FTermF (CtorApp _ [] []) -> False
     FTermF (DataTypeApp _ [] []) -> False
     FTermF Sort{} -> False

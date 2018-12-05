@@ -31,14 +31,9 @@ module Verifier.SAW.Recognizer
   , asTupleType
   , asTupleValue
   , asTupleSelector
-  , asFieldType
-  , asFieldValue
   , asRecordType
   , asRecordValue
   , asRecordSelector
-  , asOldRecordType
-  , asOldRecordValue
-  , asOldRecordSelector
   , asCtorParams
   , asCtor
   , asCtorOrNat
@@ -203,38 +198,12 @@ asTupleSelector t = do
     PairRight y -> do (x, i) <- asTupleSelector y; return (x, i+1)
     _           -> fail "asTupleSelector"
 
-asFieldType :: (Monad m) => Recognizer m Term (Term, Term, Term)
-asFieldType t = do
-  ftf <- asFTermF t
-  case ftf of
-    FieldType x y z -> return (x, y, z)
-    _               -> fail "asFieldType"
-
-asFieldValue :: (Monad m) => Recognizer m Term (Term, Term, Term)
-asFieldValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    FieldValue x y z -> return (x, y, z)
-    _                -> fail "asFieldValue"
-
 asRecordType :: (Monad m) => Recognizer m Term (Map FieldName Term)
 asRecordType t = do
   ftf <- asFTermF t
   case ftf of
     RecordType elems -> return $ Map.fromList elems
     _                -> fail $ "asRecordType: " ++ showTerm t
-
--- | Old version of 'asRecordType', that works on old-style record types
-asOldRecordType :: (Monad m) => Recognizer m Term (Map FieldName Term)
-asOldRecordType t = do
-  ftf <- asFTermF t
-  case ftf of
-    EmptyType       -> return Map.empty
-    FieldType f x y -> do m <- asRecordType y
-                          s <- asStringLit f
-                          return (Map.insert s x m)
-    _               -> fail $ "asRecordType: " ++ showTerm t
-
 
 asRecordValue :: (Monad m) => Recognizer m Term (Map FieldName Term)
 asRecordValue t = do
@@ -243,26 +212,9 @@ asRecordValue t = do
     RecordValue elems -> return $ Map.fromList elems
     _                 -> fail $ "asRecordValue: " ++ showTerm t
 
--- | Old version of 'asRecordValue', that uses 'EmptyValue' and 'FieldValue'
-asOldRecordValue :: (Monad m) => Recognizer m Term (Map FieldName Term)
-asOldRecordValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    EmptyValue       -> return Map.empty
-    FieldValue f x y -> do m <- asRecordValue y
-                           s <- asStringLit f
-                           return (Map.insert s x m)
-    _                -> fail $ "asRecordValue: " ++ showTerm t
-
 asRecordSelector :: (Monad m) => Recognizer m Term (Term, FieldName)
 asRecordSelector t = do
   RecordProj u s <- asFTermF t
-  return (u, s)
-
-asOldRecordSelector :: (Monad m) => Recognizer m Term (Term, FieldName)
-asOldRecordSelector t = do
-  RecordSelector u i <- asFTermF t
-  s <- asStringLit i
   return (u, s)
 
 -- | Test whether a term is an application of a constructor, and, if so, return

@@ -144,19 +144,6 @@ evalTermF cfg lam recEval tf env =
                                   return $ VPairType vx vy
         PairLeft x          -> valPairLeft =<< recEval x
         PairRight x         -> valPairRight =<< recEval x
-        EmptyValue          -> return VEmpty
-        EmptyType           -> return VEmptyType
-        FieldValue f x y    -> do VString s <- recEval f
-                                  tx <- recEvalDelay x
-                                  vy <- recEval y
-                                  return $ VField s tx vy
-        FieldType f x y     -> do VString s <- recEval f
-                                  vx <- recEval x
-                                  vy <- recEval y
-                                  return $ VFieldType s vx vy
-        RecordSelector t k  -> do vt <- recEval t
-                                  VString s <- recEval k
-                                  valRecordSelect s vt
         CtorApp ident ps ts -> do v <- simGlobal cfg ident
                                   ps' <- mapM recEvalDelay ps
                                   ts' <- mapM recEvalDelay ts
