@@ -62,6 +62,7 @@ import Verifier.SAW.Lexer
   '{'     { PosPair _ (TKey "{") }
   '}'     { PosPair _ (TKey "}") }
   '|'     { PosPair _ (TKey "|") }
+  '*'     { PosPair _ (TKey "*") }
   'data'      { PosPair _ (TKey "data") }
   'hiding'    { PosPair _ (TKey "hiding") }
   'import'    { PosPair _ (TKey "import") }
@@ -146,12 +147,18 @@ Term : LTerm { $1 }
 
 -- Term with uses of pi and lambda, but no type ascriptions
 LTerm :: { Term }
-LTerm : AppTerm                          { $1 }
+LTerm : ProdTerm                         { $1 }
       | PiArg '->' LTerm                 { Pi (pos $2) $1 $3 }
       | '\\' VarCtx '->' LTerm           { Lambda (pos $1) $2 $4 }
 
 PiArg :: { [(TermVar, Term)] }
-PiArg : AppTerm { mkPiArg $1 }
+PiArg : ProdTerm { mkPiArg $1 }
+
+-- Term formed from infix product type operator (right-associative)
+ProdTerm :: { Term }
+ProdTerm
+  : AppTerm                        { $1 }
+  | AppTerm '*' ProdTerm           { PairType (pos $1) $1 $3 }
 
 -- Term formed from applications of atomic expressions
 AppTerm :: { Term }

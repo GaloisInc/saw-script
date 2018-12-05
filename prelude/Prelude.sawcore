@@ -63,10 +63,10 @@ Pair_snd : (a b : sort 0) -> PairType a b -> b;
 Pair_snd a b = Pair__rec a b (\ (p:PairType a b) -> b)
                              (\ (x:a) -> \ (y:b) -> y);
 
-fst : (a b : sort 0) -> #(a | b) -> a;
+fst : (a b : sort 0) -> a * b -> a;
 fst a b tup = tup.(1);
 
-snd : (a b : sort 0) -> #(a | b) -> b;
+snd : (a b : sort 0) -> a * b -> b;
 snd a b tup = tup.(2);
 
 uncurry (a b c : sort 0) (f : a -> b -> c) : (#(a, b) -> c)

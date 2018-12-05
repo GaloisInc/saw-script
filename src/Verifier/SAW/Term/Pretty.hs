@@ -74,6 +74,7 @@ depthAllowed _ _ = True
 data Prec
   = PrecNone   -- ^ Nonterminal 'Term'
   | PrecLambda -- ^ Nonterminal 'LTerm'
+  | PrecProd   -- ^ Nonterminal 'ProductTerm'
   | PrecApp    -- ^ Nonterminal 'AppTerm'
   | PrecArg    -- ^ Nonterminal 'AtomTerm'
 
@@ -88,6 +89,8 @@ precContains _ PrecArg = True
 precContains PrecArg _ = False
 precContains _ PrecApp = True
 precContains PrecApp _ = False
+precContains _ PrecProd = True
+precContains PrecProd _ = False
 precContains _ PrecLambda = True
 precContains PrecLambda _ = False
 precContains PrecNone PrecNone = True
@@ -308,10 +311,9 @@ ppLetBlock defs body =
 ppPair :: Doc -> Doc -> Doc
 ppPair x y = parens (x <+> char '|' <+> y)
 
--- | Pretty-print pair types as "#(x | y)"
-ppPairType :: Doc -> Doc -> Doc
-ppPairType x y =
-  char '#' <> parens (x <+> char '|' <+> y)
+-- | Pretty-print pair types as "x * y"
+ppPairType :: Prec -> Doc -> Doc -> Doc
+ppPairType prec x y = ppParensPrec prec PrecProd (x <+> char '*' <+> y)
 
 -- | Pretty-print records (if the flag is 'False') or record types (if the flag
 -- is 'True'), where the latter are preceded by the string @#@, either as:
@@ -387,7 +389,7 @@ ppFlatTermF prec tf =
     UnitValue     -> return $ text "(-empty-)"
     UnitType      -> return $ text "#(-empty-)"
     PairValue x y -> ppPair <$> ppTerm' PrecNone x <*> ppTerm' PrecNone y
-    PairType x y  -> ppPairType <$> ppTerm' PrecNone x <*> ppTerm' PrecNone y
+    PairType x y  -> ppPairType prec <$> ppTerm' PrecApp x <*> ppTerm' PrecProd y
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
