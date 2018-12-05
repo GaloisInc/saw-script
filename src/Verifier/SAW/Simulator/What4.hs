@@ -517,14 +517,6 @@ parseUninterpreted nm ty =
             x2 <- parseUninterpreted (nm ++ ".R") ty2
             return (VPair (ready x1) (ready x2))
 
-    VEmptyType
-      -> return VEmpty
-
-    (VFieldType f ty1 ty2)
-      -> do x1 <- parseUninterpreted (nm ++ ".L") ty1
-            x2 <- parseUninterpreted (nm ++ ".R") ty2
-            return (VField f (ready x1) x2)
-
     (VRecordType elem_tps)
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
@@ -554,10 +546,6 @@ flattenSValue v = do
     VUnit                     -> return ("")
     VPair x y                 -> do sx <- flattenSValue =<< force x
                                     sy <- flattenSValue =<< force y
-                                    return (sx ++ sy)
-    VEmpty                    -> return ("")
-    VField _ x y              -> do sx <- flattenSValue =<< force x
-                                    sy <- flattenSValue y
                                     return (sx ++ sy)
     VRecordValue elems        -> do sxs <- mapM (flattenSValue <=< force . snd) elems
                                     return (concat sxs)
@@ -641,14 +629,6 @@ vAsFirstOrderType v =
             t2 <- vAsFirstOrderType v2
             case t2 of
               FOTTuple ts -> return (FOTTuple (t1 : ts))
-              _ -> Nothing
-    VEmptyType
-      -> return (FOTRec Map.empty)
-    VFieldType k v1 v2
-      -> do t1 <- vAsFirstOrderType v1
-            t2 <- vAsFirstOrderType v2
-            case t2 of
-              FOTRec tm -> return (FOTRec (Map.insert k t1 tm))
               _ -> Nothing
     (asVTupleType -> Just vs)
       -> FOTTuple <$> mapM vAsFirstOrderType vs
