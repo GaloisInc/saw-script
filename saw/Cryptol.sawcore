@@ -247,22 +247,22 @@ fun_cong a b c d eq_ab eq_cd =
     (eq_cong (sort 0) c d eq_cd (sort 0) (\ (x:sort 0) -> (b -> x)));
 
 pair_cong : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
-  Eq (sort 0) a a' -> Eq (sort 0) b b' -> Eq (sort 0) #(a | b) #(a' | b');
+  Eq (sort 0) a a' -> Eq (sort 0) b b' -> Eq (sort 0) (a * b) (a' * b');
 pair_cong a a' b b' eq_a eq_b =
   trans
-    (sort 0) #(a | b) #(a' | b) #(a' | b')
-    (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> #(x | b)))
-    (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> #(a' | x)));
+    (sort 0) (a * b) (a' * b) (a' * b')
+    (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> (x * b)))
+    (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> (a' * x)));
 
 pair_cong1 : (a : sort 0) -> (a' : sort 0) -> (b : sort 0) ->
-  Eq (sort 0) a a' -> Eq (sort 0) #(a | b) #(a' | b);
+  Eq (sort 0) a a' -> Eq (sort 0) (a * b) (a' * b);
 pair_cong1 a a' b eq_a =
-  (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> #(x | b)));
+  (eq_cong (sort 0) a a' eq_a (sort 0) (\ (x:sort 0) -> (x * b)));
 
 pair_cong2 : (a : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
-  Eq (sort 0) b b' -> Eq (sort 0) #(a | b) #(a | b');
+  Eq (sort 0) b b' -> Eq (sort 0) (a * b) (a * b');
 pair_cong2 a b b' eq_b =
-  (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> #(a | x)));
+  (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> (a * x)));
 
 empty_cong : Eq (sort 0) #{} #{};
 empty_cong = Refl (sort 0) #{};
@@ -395,11 +395,11 @@ emptyUnary _ = {};
 unitBinary : #() -> #() -> #();
 unitBinary _ _ = ();
 
-pairUnary : (a b : sort 0) -> (a -> a) -> (b -> b) -> #(a | b) -> #(a | b);
+pairUnary : (a b : sort 0) -> (a -> a) -> (b -> b) -> (a * b) -> (a * b);
 pairUnary a b f g xy = (f (fst a b xy) | g (snd a b xy));
 
 pairBinary : (a b : sort 0) -> (a -> a -> a) -> (b -> b -> b)
-           -> #(a | b) -> #(a | b) -> #(a | b);
+           -> (a * b) -> (a * b) -> (a * b);
 pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12) |
                               g (snd a b x12) (snd a b y12));
 
@@ -443,12 +443,12 @@ emptyCmp : #{} -> #{} -> Bool -> Bool;
 emptyCmp _ _ _ = False;
 
 pairEq : (a b : sort 0) -> (a -> a -> Bool) -> (b -> b -> Bool) ->
-  #(a | b) -> #(a | b) -> Bool;
+  a * b -> a * b -> Bool;
 pairEq a b f g x y =
   and (f (fst a b x) (fst a b y)) (g (snd a b x) (snd a b y));
 
 pairCmp : (a b : sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
-        -> #(a | b) -> #(a | b) -> Bool -> Bool;
+        -> a * b -> a * b -> Bool -> Bool;
 pairCmp a b f g x12 y12 k =
   f (fst a b x12) (fst a b y12) (g (snd a b x12) (snd a b y12) k);
 
@@ -553,7 +553,7 @@ PLogicUnit =
   , not  = unitUnary
   };
 
-PLogicPair : (a b : sort 0) -> PLogic a -> PLogic b -> PLogic #(a | b);
+PLogicPair : (a b : sort 0) -> PLogic a -> PLogic b -> PLogic (a * b);
 PLogicPair a b pa pb =
   { and  = pairBinary a b pa.and pb.and
   , or   = pairBinary a b pa.or  pb.or
@@ -711,7 +711,7 @@ PArithUnit =
   , int = \ (i : Integer) -> ()
   };
 
-PArithPair : (a b : sort 0) -> PArith a -> PArith b -> PArith #(a | b);
+PArithPair : (a b : sort 0) -> PArith a -> PArith b -> PArith (a * b);
 PArithPair a b pa pb =
   { add = pairBinary a b pa.add pb.add
   , sub = pairBinary a b pa.sub pb.sub
@@ -786,7 +786,7 @@ PCmpSeqBool n =
 PCmpUnit : PCmp #();
 PCmpUnit = { eq = \ (x y : #()) -> True, cmp = unitCmp };
 
-PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp #(a | b);
+PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp (a * b);
 PCmpPair a b pa pb =
   { eq  = pairEq a b pa.eq pb.eq
   , cmp = pairCmp a b pa.cmp pb.cmp };
@@ -808,7 +808,7 @@ PSignedCmpWord n = { scmp = bvSCmp n };
 PSignedCmpUnit : PSignedCmp #();
 PSignedCmpUnit = { scmp = unitCmp };
 
-PSignedCmpPair : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp #(a | b);
+PSignedCmpPair : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp (a * b);
 PSignedCmpPair a b pa pb = { scmp = pairCmp a b pa.scmp pb.scmp };
 
 PSignedCmpEmpty : PSignedCmp #{};
