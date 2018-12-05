@@ -307,6 +307,8 @@ proveProp sc env prop =
         (C.pIsLogic -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PLogicUnit" []
         -- instance (Logic a, Logic b) => Logic (a, b)
+        (C.pIsLogic -> Just (C.tIsTuple -> Just [t]))
+          -> do proveProp sc env (C.pLogic t)
         (C.pIsLogic -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
@@ -344,6 +346,8 @@ proveProp sc env prop =
         (C.pIsArith -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PArithUnit" []
         -- instance (Arith a, Arith b) => Arith (a, b)
+        (C.pIsArith -> Just (C.tIsTuple -> Just [t]))
+          -> do proveProp sc env (C.pArith t)
         (C.pIsArith -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
@@ -378,6 +382,8 @@ proveProp sc env prop =
         (C.pIsCmp -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PCmpUnit" []
         -- instance (Cmp a, Cmp b) => Cmp (a, b)
+        (C.pIsCmp -> Just (C.tIsTuple -> Just [t]))
+          -> do proveProp sc env (C.pCmp t)
         (C.pIsCmp -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
@@ -405,6 +411,8 @@ proveProp sc env prop =
         (C.pIsSignedCmp -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PSignedCmpUnit" []
         -- instance (SignedCmp a, SignedCmp b) => SignedCmp (a, b)
+        (C.pIsSignedCmp -> Just (C.tIsTuple -> Just [t]))
+          -> do proveProp sc env (C.pSignedCmp t)
         (C.pIsSignedCmp -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
@@ -529,8 +537,8 @@ importExpr sc env expr =
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
              case C.tIsTuple t of
-               Just _  ->
-                 do scTupleSelector sc e' (i+1)
+               Just ts ->
+                 do scTupleSelector sc e' (i+1) (length ts)
                Nothing ->
                  do f <- mapTupleSelector sc env i t
                     scApply sc f e'
@@ -540,7 +548,7 @@ importExpr sc env expr =
              case C.tIsRec t of
                Just fs ->
                  do i <- the (elemIndex x (map fst fs))
-                    scTupleSelector sc e' (i+1)
+                    scTupleSelector sc e' (i+1) (length fs)
                Nothing ->
                  do f <- mapRecordSelector sc env x t
                     scApply sc f e'
@@ -735,7 +743,7 @@ mapTupleSelector sc env i = fmap fst . go
           return (g, C.tFun n b)
         (C.tIsTuple -> Just ts) -> do
           x <- scLocalVar sc 0
-          y <- scTupleSelector sc x (i+1)
+          y <- scTupleSelector sc x (i+1) (length ts)
           t' <- importType sc env t
           f <- scLambda sc "x" t' y
           return (f, ts !! i)
@@ -763,7 +771,7 @@ mapRecordSelector sc env i = fmap fst . go
              return (g, C.tFun n b)
         (C.tIsRec -> Just ts) | Just k <- elemIndex i (map fst ts) ->
           do x <- scLocalVar sc 0
-             y <- scTupleSelector sc x (k+1)
+             y <- scTupleSelector sc x (k+1) (length ts)
              t' <- importType sc env t
              f <- scLambda sc "x" t' y
              return (f, snd (ts !! k))
@@ -1085,8 +1093,10 @@ asCryptolTypeValue v =
     SC.VUnitType -> return (C.tTuple [])
     SC.VPairType v1 v2 -> do
       t1 <- asCryptolTypeValue v1
-      ts <- asCryptolTypeValue v2 >>= C.tIsTuple
-      return (C.tTuple (t1 : ts))
+      t2 <- asCryptolTypeValue v2
+      case C.tIsTuple t2 of
+        Just ts -> return (C.tTuple (t1 : ts))
+        Nothing -> return (C.tTuple [t1, t2])
     SC.VPiType v1 f -> do
       case v1 of
         -- if we see that the parameter is a Cryptol.Num, it's a
@@ -1194,6 +1204,7 @@ exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
   case (tys, v) of
     ([]    , SC.VUnit    ) -> []
+    ([t]   , _           ) -> [V.ready $ exportValue t v]
     (t : ts, SC.VPair x y) -> (V.ready $ exportValue t (run x)) : exportTupleValue ts (run y)
     (_     , SC.asVTuple -> Just xs) ->
       zipWith (\t x -> V.ready $ exportValue t (run x)) tys xs
@@ -1205,6 +1216,7 @@ exportRecordValue :: [(C.Ident, TV.TValue)] -> SC.CValue -> [(C.Ident, V.Eval V.
 exportRecordValue fields v =
   case (fields, v) of
     ([]         , SC.VUnit    ) -> []
+    ([(n, t)]   , _           ) -> [(n, V.ready $ exportValue t v)]
     ((n, t) : ts, SC.VPair x y) ->
       (n, V.ready $ exportValue t (run x)) : exportRecordValue ts (run y)
     (_, SC.VRecordValue (alistAllFields

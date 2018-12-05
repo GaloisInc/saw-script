@@ -8,18 +8,6 @@ import Prelude;
 --------------------------------------------------------------------------------
 -- Additional operations on Prelude types
 
-{-
-pairMap : (a1 b1 a2 b2 : sort 0) -> (a1 -> b1) -> (a2 -> b2) ->
-           #(a1, a2) -> #(b1, b2);
-pairMap a1 _ a2 _ f g xy = (f (fst a1 a2 xy), g (snd a1 a2 xy));
-
-pairMap2 : (a1 b1 c1 a2 b2 c2 : sort 0) ->
-            (a1 -> b1 -> c1) -> (a2 -> b2 -> c2) ->
-            #(a1, a2) -> #(b1, b2) -> #(c1, c2);
-pairMap2 a1 b1 _ a2 b2 _ f1 f2 x12 y12 =
-  (f1 (fst a1 a2 x12) (fst b1 b2 y12), f2 (snd a1 a2 x12) (snd b1 b2 y12));
--}
-
 compose : (a b c : sort 0) -> (b -> c) -> (a -> b) -> (a -> c);
 compose _ _ _ f g x = f (g x);
 
@@ -126,7 +114,7 @@ tcMul =
 
 tcDiv : Num -> Num -> Num;
 tcDiv =
-  binaryNumFun (\ (x:Nat) -> \ (y:Nat) -> (divModNat x y).1)
+  binaryNumFun (\ (x:Nat) -> \ (y:Nat) -> divNat x y)
                (\ (x:Nat) -> TCNum 0)
                (\ (y:Nat) -> TCInf)
                -- infinity / infinity = 1
@@ -134,7 +122,7 @@ tcDiv =
 
 tcMod : Num -> Num -> Num;
 tcMod =
-  binaryNumFun (\ (x:Nat) -> \ (y:Nat) -> (divModNat x y).2)
+  binaryNumFun (\ (x:Nat) -> \ (y:Nat) -> modNat x y)
                (\ (x:Nat) -> TCNum 0)
                -- infinity % y = 0, since y*infinity + 0 = infinity
                (\ (y:Nat) -> TCNum 0)
@@ -283,93 +271,93 @@ eListSel a n =
 -- List comprehensions
 
 from : (a b : sort 0) -> (m n : Num) -> seq m a -> (a -> seq n b) ->
-        seq (tcMul m n) #(a, b);
+        seq (tcMul m n) (a * b);
 from a b m n =
   Num#rec
-    (\ (m:Num) -> seq m a -> (a -> seq n b) -> seq (tcMul m n) #(a, b))
+    (\ (m:Num) -> seq m a -> (a -> seq n b) -> seq (tcMul m n) (a * b))
     (\ (m:Nat) ->
        Num#rec
          (\ (n:Num) -> Vec m a -> (a -> seq n b) ->
-                        seq (tcMul (TCNum m) n) #(a, b))
+                        seq (tcMul (TCNum m) n) (a * b))
          -- Case 1: (TCNum m, TCNum n)
          (\ (n:Nat) ->
             \ (xs : Vec m a) ->
             \ (k : a -> Vec n b) ->
-              join m n #(a, b)
-                   (map a (Vec n #(a, b))
+              join m n (a * b)
+                   (map a (Vec n (a * b))
                         (\ (x : a) ->
-                           map b #(a, b) (\ (y : b) -> (x, y)) n (k x))
+                           map b (a * b) (\ (y : b) -> (x, y)) n (k x))
                         m xs))
          -- Case 2: n = (TCNum m, TCInf)
          (natCase
             (\ (m':Nat) -> (Vec m' a -> (a -> Stream b) ->
-               seq (if0Nat Num m' (TCNum 0) TCInf) #(a, b)))
+               seq (if0Nat Num m' (TCNum 0) TCInf) (a * b)))
             (\ (xs : Vec 0 a) ->
-             \ (k : a -> Stream b) -> EmptyVec #(a, b))
+             \ (k : a -> Stream b) -> EmptyVec (a * b))
             (\ (m' : Nat) ->
              \ (xs : Vec (Succ m') a) ->
              \ (k : a -> Stream b) ->
-               (\ (x : a) -> streamMap b #(a, b) (\ (y:b) -> (x, y)) (k x))
+               (\ (x : a) -> streamMap b (a * b) (\ (y:b) -> (x, y)) (k x))
                (at (Succ m') a xs 0))
             m)
          n)
     (Num#rec
-       (\ (n:Num) -> Stream a -> (a -> seq n b) -> seq (tcMul TCInf n) #(a, b))
+       (\ (n:Num) -> Stream a -> (a -> seq n b) -> seq (tcMul TCInf n) (a * b))
        -- Case 3: (TCInf, TCNum n)
        (\ (n:Nat) ->
           natCase
             (\ (n':Nat) -> (Stream a -> (a -> Vec n' b) ->
-                seq (if0Nat Num n' (TCNum 0) TCInf) #(a, b)))
+                seq (if0Nat Num n' (TCNum 0) TCInf) (a * b)))
             (\ (xs : Stream a) ->
-             \ (k : a -> Vec 0 b) -> EmptyVec #(a, b))
+             \ (k : a -> Vec 0 b) -> EmptyVec (a * b))
             (\ (n' : Nat) ->
              \ (xs : Stream a) ->
              \ (k : a -> Vec (Succ n') b) ->
                streamJoin
-                 #(a, b) n'
+                 (a * b) n'
                  (streamMap
-                    a (Vec (Succ n') #(a, b))
+                    a (Vec (Succ n') (a * b))
                     (\ (x:a) ->
-                       map b #(a, b) (\ (y:b) -> (x, y)) (Succ n') (k x))
+                       map b (a * b) (\ (y:b) -> (x, y)) (Succ n') (k x))
                     xs))
             n)
        -- Case 4: (TCInf, TCInf)
        (\ (xs : Stream a) ->
         \ (k : a -> Stream b) ->
-          (\ (x : a) -> streamMap b #(a, b) (\ (y : b) -> (x, y)) (k x))
+          (\ (x : a) -> streamMap b (a * b) (\ (y : b) -> (x, y)) (k x))
           (streamGet a xs 0))
        n)
     m;
 
 
-mlet : (a b : sort 0) -> (n : Num) -> a -> (a -> seq n b) -> seq n #(a, b);
+mlet : (a b : sort 0) -> (n : Num) -> a -> (a -> seq n b) -> seq n (a * b);
 mlet a b n =
   Num#rec
-    (\ (n:Num) -> a -> (a -> seq n b) -> seq n #(a, b))
+    (\ (n:Num) -> a -> (a -> seq n b) -> seq n (a * b))
     (\ (n:Nat) -> \ (x:a) -> \ (f:a -> Vec n b) ->
-       map b #(a, b) (\ (y : b) -> (x, y)) n (f x))
+       map b (a * b) (\ (y : b) -> (x, y)) n (f x))
     (\ (x:a) -> \ (f:a -> Stream b) ->
-       streamMap b #(a, b) (\ (y : b) -> (x, y)) (f x))
+       streamMap b (a * b) (\ (y : b) -> (x, y)) (f x))
     n;
 
 seqZip : (a b : sort 0) -> (m n : Num) -> seq m a -> seq n b ->
-          seq (tcMin m n) #(a, b);
+          seq (tcMin m n) (a * b);
 seqZip a b m n =
   Num#rec
-    (\ (m:Num) -> seq m a -> seq n b -> seq (tcMin m n) #(a, b))
+    (\ (m:Num) -> seq m a -> seq n b -> seq (tcMin m n) (a * b))
     (\ (m : Nat) ->
        Num#rec
-         (\ (n:Num) -> Vec m a -> seq n b -> seq (tcMin (TCNum m) n) #(a, b))
+         (\ (n:Num) -> Vec m a -> seq n b -> seq (tcMin (TCNum m) n) (a * b))
          (\ (n:Nat) -> zip a b m n)
          (\ (xs:Vec m a) -> \ (ys:Stream b) ->
-            gen m #(a, b) (\ (i : Nat) -> (at m a xs i, streamGet b ys i)))
+            gen m (a * b) (\ (i : Nat) -> (at m a xs i, streamGet b ys i)))
          n)
     (Num#rec
-       (\ (n:Num) -> Stream a -> seq n b -> seq (tcMin TCInf n) #(a, b))
+       (\ (n:Num) -> Stream a -> seq n b -> seq (tcMin TCInf n) (a * b))
        (\ (n:Nat) ->
         \ (xs:Stream a) -> \ (ys:Vec n b) ->
-          gen n #(a, b) (\ (i : Nat) -> (streamGet a xs i, at n b ys i)))
-       (streamMap2 a b #(a, b) (\ (x:a) -> \ (y:b) -> (x, y)))
+          gen n (a * b) (\ (i : Nat) -> (streamGet a xs i, at n b ys i)))
+       (streamMap2 a b (a * b) (\ (x:a) -> \ (y:b) -> (x, y)))
        n)
     m;
 
