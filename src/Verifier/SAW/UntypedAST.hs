@@ -217,17 +217,21 @@ asApp = go []
   where go l (App t u)   = go (u:l) t
         go l t = (t,l)
 
--- | Build a tuple value @(x1, .., xn)@. TODO: unary tuples?
+-- | Build a tuple value @(x1, .., xn)@.
 mkTupleValue :: Pos -> [Term] -> Term
 mkTupleValue p [] = UnitValue p
+mkTupleValue _ [x] = x
 mkTupleValue p (x:xs) = PairValue (pos x) x (mkTupleValue p xs)
 
--- | Build a tuple type @#(x1, .., xn)@. TODO: unary tuples?
+-- | Build a tuple type @#(x1, .., xn)@.
 mkTupleType :: Pos -> [Term] -> Term
 mkTupleType p [] = UnitType p
+mkTupleType _ [x] = x
 mkTupleType p (x:xs) = PairType (pos x) x (mkTupleType p xs)
 
--- | Build a projection @t.i@ of a tuple
+-- | Build a projection @t.i@ of a tuple. NOTE: This function does not
+-- work to access the last component in a tuple, since it always
+-- generates a @PairLeft@.
 mkTupleSelector :: Term -> Integer -> Term
 mkTupleSelector t i
   | i == 1    = PairLeft t

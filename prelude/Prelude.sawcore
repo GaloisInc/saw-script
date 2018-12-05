@@ -69,8 +69,8 @@ fst a b tup = tup.(1);
 snd : (a b : sort 0) -> a * b -> b;
 snd a b tup = tup.(2);
 
-uncurry (a b c : sort 0) (f : a -> b -> c) : (#(a, b) -> c)
-  = (\ (x : #(a, b)) -> f x.1 x.2);
+uncurry (a b c : sort 0) (f : a -> b -> c) : a * b -> c
+  = (\ (x : a * b) -> f x.(1) x.(2));
 
 
 --------------------------------------------------------------------------------
@@ -859,13 +859,13 @@ expNat b e =
   Nat_cases Nat 1 (\ (e':Nat) -> \ (exp_b_e:Nat) -> mulNat b exp_b_e) e;
 
 -- | Natural division and modulus
-primitive divModNat : Nat -> Nat -> #(Nat, Nat);
+primitive divModNat : Nat -> Nat -> Nat * Nat;
 
 divNat : Nat -> Nat -> Nat;
-divNat x y = (divModNat x y).1;
+divNat x y = (divModNat x y).(1);
 
 modNat : Nat -> Nat -> Nat;
-modNat x y = (divModNat x y).2;
+modNat x y = (divModNat x y).(2);
 
 -- There are implicit constructors from integer literals.
 
@@ -923,7 +923,7 @@ single = replicate 1;
 axiom at_single : (a : sort 0) -> (x : a) -> (i : Nat) -> Eq a (at 1 a (single a x) i) x;
 
 -- Zip together two lists (truncating the longer of the two).
-primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) #(a, b);
+primitive zip : (a b : sort 0) -> (m n : Nat) -> Vec m a -> Vec n b -> Vec (minNat m n) (a * b);
 
 primitive foldr : (a b : sort 0) -> (n : Nat) -> (a -> b -> b) -> b -> Vec n a -> b;
 
@@ -1089,7 +1089,7 @@ bvCarry n x y = bvult n (bvAdd n x y) x;
 bvSCarry : (n : Nat) -> bitvector (Succ n) -> bitvector (Succ n) -> Bool;
 bvSCarry n x y = and (boolEq (msb n x) (msb n y)) (xor (msb n x) (msb n (bvAdd (Succ n) x y)));
 
-bvAddWithCarry : (n : Nat) -> bitvector n -> bitvector n -> #(Bool, bitvector n);
+bvAddWithCarry : (n : Nat) -> bitvector n -> bitvector n -> Bool * bitvector n;
 bvAddWithCarry n x y = (bvCarry n x y, bvAdd n x y);
 
 axiom bvAddZeroL : (n : Nat) -> (x : bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;

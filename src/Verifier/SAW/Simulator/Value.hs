@@ -171,11 +171,14 @@ instance Show Nil where
 
 vTuple :: VMonad l => [Thunk l] -> Value l
 vTuple [] = VUnit
-vTuple (x:xs) = VPair x (ready (vTuple xs))
+vTuple [_] = error "vTuple: unsupported 1-tuple"
+vTuple [x, y] = VPair x y
+vTuple (x : xs) = VPair x (ready (vTuple xs))
 
 vTupleType :: VMonad l => [Value l] -> Value l
 vTupleType [] = VUnitType
-vTupleType (t:ts) = VPairType t (vTupleType ts)
+vTupleType [t] = t
+vTupleType (t : ts) = VPairType t (vTupleType ts)
 
 valPairLeft :: (VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
@@ -229,7 +232,7 @@ asFiniteTypeValue v =
       t2 <- asFiniteTypeValue v2
       case t2 of
         FTTuple ts -> return (FTTuple (t1 : ts))
-        _ -> Nothing
+        _ -> return (FTTuple [t1, t2])
     VRecordType elem_tps ->
       FTRec <$> Map.fromList <$>
       mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeValue tp) elem_tps

@@ -1068,10 +1068,12 @@ scPairType sc x y = scFlatTermF sc (PairType x y)
 
 scTuple :: SharedContext -> [Term] -> IO Term
 scTuple sc [] = scUnitValue sc
+scTuple _ [t] = return t
 scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
 
 scTupleType :: SharedContext -> [Term] -> IO Term
 scTupleType sc [] = scUnitType sc
+scTupleType _ [t] = return t
 scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 
 scPairLeft :: SharedContext -> Term -> IO Term
@@ -1084,11 +1086,16 @@ scPairSelector :: SharedContext -> Term -> Bool -> IO Term
 scPairSelector sc t False = scPairLeft sc t
 scPairSelector sc t True = scPairRight sc t
 
-scTupleSelector :: SharedContext -> Term -> Int -> IO Term
-scTupleSelector sc t i
+scTupleSelector ::
+  SharedContext -> Term ->
+  Int {- ^ 1-based index -} ->
+  Int {- ^ tuple size -} ->
+  IO Term
+scTupleSelector sc t i n
+  | n == 1    = return t
   | i == 1    = scPairLeft sc t
   | i > 1     = do t' <- scPairRight sc t
-                   scTupleSelector sc t' (i - 1)
+                   scTupleSelector sc t' (i - 1) (n - 1)
   | otherwise = fail "scTupleSelector: non-positive index"
 
 scFun :: SharedContext -> Term -> Term -> IO Term
