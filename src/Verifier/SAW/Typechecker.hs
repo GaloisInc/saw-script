@@ -208,7 +208,12 @@ typeInferCompleteTerm (Un.Lambda p ((Un.termVarString -> x,tp):ctx) t) =
 typeInferCompleteTerm (Un.Pi _ [] t) = typeInferComplete t
 typeInferCompleteTerm (Un.Pi p ((Un.termVarString -> x,tp):ctx) t) =
   do tp_trm <- typeInferComplete tp
-     body <- withVar x (typedVal tp_trm) $
+     -- NOTE: we need the type of x to be normalized when we add it to the
+     -- context in withVar, but we do not want to normalize this type in the
+     -- output, as the contract for typeInferComplete only normalizes the type,
+     -- so we use the unnormalized tp_trm in the return
+     tp_whnf <- typeCheckWHNF $ typedVal tp_trm
+     body <- withVar x tp_whnf $
        typeInferComplete $ Un.Pi p ctx t
      typeInferComplete (Pi x tp_trm body)
 
