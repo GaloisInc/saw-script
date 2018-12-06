@@ -1284,11 +1284,6 @@ ecSle =
 --------------------------------------------------------------------------------
 -- Rewrite rules
 
-ecEq_unfold : (a : sort 0) -> (pa : PCmp a) -> Eq (a -> a -> Bool) (ecEq a pa) pa.eq;
-ecEq_unfold a pa = Refl (a -> a -> Bool) (ecEq a pa);
-
-axiom ecEq_refl : (a : sort 0) -> (pa : PCmp a) -> (x : a) -> Eq Bool (ecEq a pa x x) True;
-
 axiom replicate_False : (n : Nat) -> Eq (bitvector n) (replicate n Bool False) (bvNat n 0);
 
 axiom subNat_0 : (n : Nat) -> Eq Nat (subNat n 0) n;
