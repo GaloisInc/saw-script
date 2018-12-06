@@ -294,13 +294,14 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      -- Step 1: type-check the type annotation, and make sure it is a type
      typed_tp <- typeInferComplete tp
      void $ ensureSort $ typedType typed_tp
-     def_tp <- liftTCM scTypeCheckWHNF (typedVal typed_tp)
+     let def_tp = typedVal typed_tp
+     def_tp_whnf <- liftTCM scTypeCheckWHNF def_tp
 
      -- Step 2: assign types to the bound variables of the definition, by
      -- peeling off the pi-abstraction variables in the type annotation. Any
      -- remaining body of the pi-type is the required type for the def body.
      (ctx, req_body_tp) <-
-       case matchPiWithNames (map Un.termVarString vars) def_tp of
+       case matchPiWithNames (map Un.termVarString vars) def_tp_whnf of
          Just x -> return x
          Nothing ->
              throwTCError $
