@@ -801,10 +801,12 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           sy <- sort y
           lift $ scSort sc (max sx sy)
         PairLeft t -> do
-          STApp{ stAppTermF = FTermF (PairType t1 _) } <- memo t >>= liftIO . scWhnf sc
+          tp <- (liftIO . scWhnf sc) =<< memo t
+          (t1, _) <- asPairType tp
           return t1
         PairRight t -> do
-          STApp{ stAppTermF = FTermF (PairType _ t2) } <- memo t >>= liftIO . scWhnf sc
+          tp <- (liftIO . scWhnf sc) =<< memo t
+          (_, t2) <- asPairType tp
           return t2
         CtorApp c params args -> do
           t <- lift $ scTypeOfCtor sc c
