@@ -69,14 +69,15 @@ dec_enc <-
                         decrypt_lemma]
               (cryptol_ss()));
     unfolding ["AESRound", "AESInvRound", "AESFinalRound", "AESFinalInvRound"];
-    simplify (add_cryptol_eqs ["ecEq_refl"]
+    simplify (add_cryptol_defs ["ecEq"]
+             (add_prelude_eqs ["bvEq_refl"]
              (addsimps [msgToState_stateToMsg,
                         AddRoundKey_cancel,
                         InvShiftRows_ShiftRows,
                         InvSubBytes_SubBytes,
                         InvMixColumns_MixColumns,
                         stateToMsg_msgToState]
-              (cryptol_ss())));
+              (cryptol_ss()))));
     trivial;
   }
   {{ \msg key -> aesDecrypt (aesEncrypt (msg, key), key) == msg }});
@@ -115,14 +116,15 @@ enc_dec <-
                         decrypt_lemma]
               (cryptol_ss()));
     unfolding ["AESRound", "AESInvRound", "AESFinalRound", "AESFinalInvRound"];
-    simplify (add_cryptol_eqs ["ecEq_refl"]
+    simplify (add_cryptol_defs ["ecEq"]
+             (add_prelude_eqs ["bvEq_refl"]
              (addsimps [msgToState_stateToMsg,
                         AddRoundKey_cancel,
                         ShiftRows_InvShiftRows,
                         SubBytes_InvSubBytes,
                         MixColumns_InvMixColumns,
                         stateToMsg_msgToState]
-              (cryptol_ss())));
+              (cryptol_ss()))));
     trivial;
   }
   {{ \msg key -> aesEncrypt (aesDecrypt (msg, key), key) == msg }});
