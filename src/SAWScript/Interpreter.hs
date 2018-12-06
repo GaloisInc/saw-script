@@ -1074,8 +1074,14 @@ primitives = Map.fromList
     ]
 
   , prim "add_prelude_defs"    "[String] -> Simpset -> Simpset"
-    (funVal2 addPreludeDefs)
+    (funVal2 add_prelude_defs)
     [ "Add the named definitions from the Prelude module to the given"
+    , "simplification rule set."
+    ]
+
+  , prim "add_cryptol_defs"    "[String] -> Simpset -> Simpset"
+    (funVal2 add_cryptol_defs)
+    [ "Add the named definitions from the Cryptol module to the given"
     , "simplification rule set."
     ]
 

@@ -867,19 +867,25 @@ addCryptolEqs names ss = do
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-addPreludeDefs :: [String] -> Simpset
-              -> TopLevel Simpset
-addPreludeDefs names ss = do
-  sc <- getSharedContext
-  defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
-  defRules <- io $ concat <$> (mapM (scDefRewriteRules sc) defs)
-  return (addRules defRules ss)
-    where qualify = mkIdent (mkModuleName ["Prelude"])
-          getDef sc n =
-            scFindDef sc (qualify n) >>= \maybe_def ->
-            case maybe_def of
-              Just d -> return d
-              Nothing -> fail $ "Prelude definition " ++ n ++ " not found"
+add_core_defs :: String -> [String] -> Simpset -> TopLevel Simpset
+add_core_defs modname names ss =
+  do sc <- getSharedContext
+     defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
+     defRules <- io $ concat <$> (mapM (scDefRewriteRules sc) defs)
+     return (addRules defRules ss)
+  where
+    qualify = mkIdent (mkModuleName [modname])
+    getDef sc n =
+      scFindDef sc (qualify n) >>= \maybe_def ->
+      case maybe_def of
+        Just d -> return d
+        Nothing -> fail $ modname ++ " definition " ++ n ++ " not found"
+
+add_prelude_defs :: [String] -> Simpset -> TopLevel Simpset
+add_prelude_defs = add_core_defs "Prelude"
+
+add_cryptol_defs :: [String] -> Simpset -> TopLevel Simpset
+add_cryptol_defs = add_core_defs "Cryptol"
 
 rewritePrim :: Simpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
