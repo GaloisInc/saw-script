@@ -307,9 +307,9 @@ ppLetBlock defs body =
     ppEqn (var,d) = ppMemoVar var <+> char '=' <+> d
 
 
--- | Pretty-print pairs as "(x | y)"
-ppPair :: Doc -> Doc -> Doc
-ppPair x y = parens (x <+> char '|' <+> y)
+-- | Pretty-print pairs as "(x, y)"
+ppPair :: Prec -> Doc -> Doc -> Doc
+ppPair prec x y = ppParensPrec prec PrecNone (group (x <> char ',' <$$> y))
 
 -- | Pretty-print pair types as "x * y"
 ppPairType :: Prec -> Doc -> Doc -> Doc
@@ -388,7 +388,7 @@ ppFlatTermF prec tf =
     GlobalDef i   -> return $ ppIdent i
     UnitValue     -> return $ text "(-empty-)"
     UnitType      -> return $ text "#(-empty-)"
-    PairValue x y -> ppPair <$> ppTerm' PrecNone x <*> ppTerm' PrecNone y
+    PairValue x y -> ppPair prec <$> ppTerm' PrecLambda x <*> ppTerm' PrecNone y
     PairType x y  -> ppPairType prec <$> ppTerm' PrecApp x <*> ppTerm' PrecProd y
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
