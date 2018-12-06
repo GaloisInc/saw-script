@@ -1105,24 +1105,21 @@ ecTranspose =
 
 
 ecAt : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a -> seq i Bool -> a;
-ecAt n =
+ecAt n a i =
   Num#rec
-    (\ (n:Num) -> (a:sort 0) -> (i:Num) -> seq n a -> seq i Bool -> a)
-    (\ (n:Nat) -> \ (a:sort 0) ->
-       finNumRec
-         (\ (i:Num) -> Vec n a -> seq i Bool -> a)
+    (\ (i:Num) -> seq n a -> seq i Bool -> a)
+    (\ (i:Nat) ->
+       Num#rec
+         (\ (n:Num) -> seq n a -> Vec i Bool -> a)
          -- Case for (TCNum n, TCNum i)
-         (\ (i:Nat) -> bvAt n a i)
-         -- No case for (TCNum n, TCInf)
-         )
-    (\ (a:sort 0) ->
-       finNumRec
-         (\ (i:Num) -> Stream a -> seq i Bool -> a)
+         (\ (n:Nat) -> bvAt n a i)
          -- Case for (TCInf, TCNum i)
-         (\ (i:Nat) -> bvStreamGet a i)
-         -- No case for (TCNum n, TCInf)
-         )
-    n;
+         (bvStreamGet a i)
+         n
+    )
+    -- No case for (n, TCInf)
+    (error (seq n a -> Stream Bool -> a) "Unexpected Fin constraint violation!")
+    i;
 
 ecAtBack : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a ->
             seq i Bool -> a;
@@ -1286,6 +1283,9 @@ ecSle =
 
 --------------------------------------------------------------------------------
 -- Rewrite rules
+
+ecEq_unfold : (a : sort 0) -> (pa : PCmp a) -> Eq (a -> a -> Bool) (ecEq a pa) pa.eq;
+ecEq_unfold a pa = Refl (a -> a -> Bool) (ecEq a pa);
 
 axiom ecEq_refl : (a : sort 0) -> (pa : PCmp a) -> (x : a) -> Eq Bool (ecEq a pa x x) True;
 
