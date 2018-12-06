@@ -821,7 +821,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           do elem_tps <- mapM (\(fld,t) -> (fld,) <$> memo t) elems
              lift $ scRecordType sc elem_tps
         RecordProj t fld ->
-          do tp <- memo t
+          do tp <- (liftIO . scWhnf sc) =<< memo t
              case asRecordType tp of
                Just (Map.lookup fld -> Just f_tp) -> return f_tp
                Just _ -> fail "Record field not in record type"
