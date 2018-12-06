@@ -181,9 +181,6 @@ AtomTerm
   |     '[' sepBy(Term, ',') ']'       { VecLit (pos $1) $2 }
   |     '{' sepBy(FieldValue, ',') '}' { RecordValue (pos $1) $2 }
   | '#' '{' sepBy(FieldType, ',') '}'  { RecordType  (pos $1) $3 }
-
-  |     '(' Term '|' Term ')'          { PairValue (pos $1) $2 $4 }
-  | '#' '(' Term '|' Term ')'          { PairType (pos $1) $3 $5 }
   | AtomTerm '.' '(' nat ')'           {% mkTupleProj $1 (tokNat (val $4)) }
 
 Ident :: { PosPair String }
