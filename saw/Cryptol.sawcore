@@ -384,11 +384,11 @@ unitBinary : #() -> #() -> #();
 unitBinary _ _ = ();
 
 pairUnary : (a b : sort 0) -> (a -> a) -> (b -> b) -> (a * b) -> (a * b);
-pairUnary a b f g xy = (f (fst a b xy) | g (snd a b xy));
+pairUnary a b f g xy = (f (fst a b xy), g (snd a b xy));
 
 pairBinary : (a b : sort 0) -> (a -> a -> a) -> (b -> b -> b)
            -> (a * b) -> (a * b) -> (a * b);
-pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12) |
+pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12),
                               g (snd a b x12) (snd a b y12));
 
 emptyBinary : #{} -> #{} -> #{};
@@ -711,7 +711,7 @@ PArithPair a b pa pb =
   , neg = pairUnary a b pa.neg pb.neg
   , sdiv = pairBinary a b pa.sdiv pb.sdiv
   , smod = pairBinary a b pa.smod pb.smod
-  , int = \ (i : Integer) -> (pa.int i | pb.int i)
+  , int = \ (i : Integer) -> (pa.int i, pb.int i)
   };
 
 PArithEmpty : PArith #{};
