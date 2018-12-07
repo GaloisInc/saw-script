@@ -150,7 +150,7 @@ instance TypeInfer Un.Term where
                        ++ "type = " ++ show (typedType res))
        return res
 
--- | Main workhore function for type inference on untyped terms
+-- | Main workhorse function for type inference on untyped terms
 typeInferCompleteTerm :: Un.Term -> TCM TypedTerm
 
 -- Names
