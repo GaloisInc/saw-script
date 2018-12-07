@@ -274,11 +274,14 @@ resolveSetupVal cc env tyenv nameEnv val =
       case Map.lookup (L.Symbol name)
                       (Crucible.globalInitMap $ cc^.ccLLVMModuleTrans) of
         -- There was an error in global -> constant translation
-        Just (_, (Left  e)) -> fail e
-        Just (_, (Right v)) ->
+        Just (_, Left e) -> fail e
+        Just (_, Right (_, Just v)) ->
           let ?lc = lc
-          in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) sym (cc^.ccLLVMEmptyMem) (snd v)
-        Nothing             -> fail $ "resolveSetupVal: global not found: " ++ name
+          in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) sym (cc^.ccLLVMEmptyMem) v
+        Just (_, Right (_, Nothing)) ->
+          fail $ "resolveSetupVal: global has no initializer: " ++ name
+        Nothing ->
+          fail $ "resolveSetupVal: global not found: " ++ name
   where
     sym = cc^.ccBackend
     lc = cc^.ccTypeCtx
