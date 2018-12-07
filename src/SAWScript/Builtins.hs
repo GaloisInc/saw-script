@@ -1192,7 +1192,7 @@ parseCore input = do
   let (uterm, errs) = parseSAWTerm base path (B.fromString input)
   mapM_ (printOutLnTop Opts.Error . show) errs
   unless (null errs) $ fail $ show errs
-  let mnm = Just $ mkModuleName ["Prelude"]
+  let mnm = Just $ mkModuleName ["Cryptol"]
   err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
   case err_or_t of
     Left err -> fail (show err)
