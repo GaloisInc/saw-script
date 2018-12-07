@@ -630,8 +630,6 @@ vAsFirstOrderType v =
             case t2 of
               FOTTuple ts -> return (FOTTuple (t1 : ts))
               _ -> Nothing
-    (asVTupleType -> Just vs)
-      -> FOTTuple <$> mapM vAsFirstOrderType vs
     VRecordType tps
       -> (FOTRec <$> Map.fromList <$>
           mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
