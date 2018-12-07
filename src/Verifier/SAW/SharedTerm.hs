@@ -32,8 +32,6 @@ module Verifier.SAW.SharedTerm
   , smallestFreeVar
   , unshare
   , alphaEquiv
-  , recordAListAsTuple
-  , tupleAsRecordAList
   , alistAllFields
     -- * Re-exported pretty-printing functions
   , PPOpts(..)

@@ -191,18 +191,6 @@ valPairRight v = fail $ "valPairRight: Not a pair value: " ++ show v
 vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = VRecordValue (Map.assocs m)
 
--- | Match on a 'VRecordValue' that represents a tuple, i.e., whose fields are
--- all consecutive numbers
-asVTuple :: Value l -> Maybe [Thunk l]
-asVTuple (VRecordValue elems) = recordAListAsTuple elems
-asVTuple _ = Nothing
-
--- | Match on a 'VRecordType' that represents a tuple type, i.e., whose fields
--- are all consecutive numbers
-asVTupleType :: Value l -> Maybe [Value l]
-asVTupleType (VRecordType elems) = recordAListAsTuple elems
-asVTupleType _ = Nothing
-
 valRecordProj :: (VMonad l, Show (Extra l)) => Value l -> String -> MValue l
 valRecordProj (VRecordValue fld_map) fld
   | Just t <- lookup fld fld_map = force t

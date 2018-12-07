@@ -177,7 +177,7 @@ AtomTerm
   | AtomTerm '.' IdentRec        {% parseRecursorProj $1 $3 }
   | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }
   | '(' sepBy(Term, ',') ')'     { mkTupleValue (pos $1) $2 }
-  | '#' '(' sepBy(Term, ',') ')'       {% parseTupleType (pos $1) $3 }
+  | '#' '(' sepBy(Term, ',') ')'       { mkTupleType (pos $1) $3 }
   |     '[' sepBy(Term, ',') ']'       { VecLit (pos $1) $2 }
   |     '{' sepBy(FieldValue, ',') '}' { RecordValue (pos $1) $2 }
   | '#' '{' sepBy(FieldType, ',') '}'  { RecordType  (pos $1) $3 }
@@ -350,14 +350,6 @@ mkPiArg :: Term -> [(TermVar, Term)]
 mkPiArg (TypeConstraint (exprAsIdentList -> Just xs) _ t) =
   map (\x -> (x, t)) xs
 mkPiArg lhs = [(UnusedVar (pos lhs), lhs)]
-
--- | Parse a tuple type @#(x1, .., xn)@ as a record type whose fields are named
--- @1@, @2@, etc. As a special case, the unary tuple @(x)@ is just @x@.
-parseTupleType :: Pos -> [Term] -> Parser Term
-parseTupleType p [tp] =
-  addParseError p "Tuple type may not contain a single value." >>
-  return (badTerm p)
-parseTupleType p tps = return $ mkTupleType p tps
 
 -- | Parse a tuple projection of the form @t.(1)@ or @t.(2)@
 mkTupleProj :: Term -> Integer -> Parser Term

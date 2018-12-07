@@ -41,7 +41,7 @@ module Verifier.SAW.Term.Functor
   , unwrapTermF
   , termToPat
   , alphaEquiv
-  , alistAllFields, recordAListAsTuple, tupleAsRecordAList
+  , alistAllFields
     -- * Sorts
   , Sort, mkSort, propSort, sortOf, maxSort
     -- * Sets of free variables
@@ -318,19 +318,6 @@ alistAllFields (fld:flds) alist
     deleteField f ((f',_):rest) | f == f' = rest
     deleteField f (x:rest) = x : deleteField f rest
 alistAllFields _ _ = Nothing
-
--- | Test if the association list used in a 'RecordType' or 'RecordValue' uses
--- field names that are the strings @"1", "2", ...@ indicating that the record
--- type or value is to be printed as a tuple. If so, return a list of the
--- values, and otherwise return 'Nothing'.
-recordAListAsTuple :: [(String, e)] -> Maybe [e]
-recordAListAsTuple alist =
-  alistAllFields (map show [1 .. length alist]) alist
-
--- | Convert a tuple of expression to an association list used in a 'RecordType'
--- or 'RecordValue' to denote a tuple
-tupleAsRecordAList :: [e] -> [(String, e)]
-tupleAsRecordAList es = zip (map (show :: Integer -> String) [1 ..]) es
 
 -- | Zip a binary function @f@ over a pair of 'FlatTermF's by applying @f@
 -- pointwise to immediate subterms, if the two 'FlatTermF's are the same

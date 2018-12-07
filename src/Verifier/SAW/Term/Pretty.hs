@@ -323,8 +323,6 @@ ppPairType prec x y = ppParensPrec prec PrecProd (x <+> char '*' <+> y)
 -- * @{ fld1 op val1, ..., fldn op valn }@ otherwise, where @op@ is @::@ for
 --   types and @=@ for values.
 ppRecord :: Bool -> [(String,Doc)] -> Doc
-ppRecord type_p (recordAListAsTuple -> Just ds) =
-  (if type_p then (char '#' <>) else id) $ tupled ds
 ppRecord type_p alist =
   (if type_p then (char '#' <>) else id) $
   encloseSep lbrace rbrace comma $ map ppField alist
