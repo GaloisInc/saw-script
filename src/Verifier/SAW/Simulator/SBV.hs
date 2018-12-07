@@ -574,8 +574,6 @@ vAsFirstOrderType v =
             case t2 of
               FOTTuple ts -> return (FOTTuple (t1 : ts))
               _ -> Nothing
-    (asVTupleType -> Just vs)
-      -> FOTTuple <$> mapM vAsFirstOrderType vs
     VRecordType tps
       -> (FOTRec <$> Map.fromList <$>
           mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
@@ -754,14 +752,11 @@ sbvSetOutput checkSz (FOTVec n t) (VVector xv) i = do
      Nothing -> foldM (\i' x -> sbvSetOutput checkSz t x i') i xs
 sbvSetOutput _checkSz (FOTTuple []) VUnit i =
    return i
+sbvSetOutput checkSz (FOTTuple [t]) v i = sbvSetOutput checkSz t v i
 sbvSetOutput checkSz (FOTTuple (t:ts)) (VPair l r) i = do
    l' <- liftIO $ force l
    r' <- liftIO $ force r
    sbvSetOutput checkSz t l' i >>= sbvSetOutput checkSz (FOTTuple ts) r'
-
-sbvSetOutput checkSz (FOTTuple ts) (asVTuple -> Just thunks) i = do
-   vs <- liftIO $ mapM force thunks
-   foldM (\j (t,v) -> sbvSetOutput checkSz t v j) i (zip ts vs)
 
 sbvSetOutput _checkSz (FOTRec fs) VUnit i | Map.null fs = do
    return i
