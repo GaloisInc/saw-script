@@ -103,13 +103,13 @@ satWhat4_solver solver sym _unints sc goal =
      let logger _ str = putStr str
 
      -- run solver
-     solver_adapter_check_sat solver sym logger "SAW proof" lit $ \ r -> case r of
+     solver_adapter_check_sat solver sym logger "SAW proof" [lit] Nothing $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
            mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)
            return (Just (catMaybes mvals), stats) where
 
-         Unsat   -> return (Nothing, stats)
+         Unsat _ -> return (Nothing, stats)
 
          Unknown -> fail "Prover returned Unknown"
 
