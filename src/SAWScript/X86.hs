@@ -81,14 +81,17 @@ import Lang.Crucible.Backend.SAWCore
 import Data.Macaw.Architecture.Info(ArchitectureInfo)
 import Data.Macaw.Discovery(analyzeFunction)
 import Data.Macaw.Discovery.State(FunctionExploreReason(UserRequest)
-                                 , emptyDiscoveryState)
-import Data.Macaw.Memory( Memory, MemSymbol(..), MemSegmentOff(..)
-                        , AddrSymMap, segmentBase, segmentOffset
+                                 , emptyDiscoveryState, AddrSymMap)
+import Data.Macaw.Memory( Memory, MemSegmentOff(..)
+                        , segmentBase, segmentOffset
+                        , msegSegment, msegOffset
                         , addrOffset, memWordInteger
                         , relativeSegmentAddr, incAddr
                         , readWord8, readWord16le, readWord32le, readWord64le)
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
-                                  , memoryForElfAllSymbols )
+                                  , memoryForElfAllSymbols
+                                  , MemSymbol(..)
+                                  )
 import Data.Macaw.Symbolic( ArchRegStruct
                           , ArchRegContext,mkFunCFG
                           , GlobalMap
