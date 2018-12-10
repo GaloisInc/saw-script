@@ -101,9 +101,11 @@ satWhat4_solver solver sym _unints sc goal =
 
      -- log to stdout
      let logger _ str = putStr str
+     let logData = defaultLogData { logCallbackVerbose = logger
+                                  , logReason = "SAW proof" }
 
      -- run solver
-     solver_adapter_check_sat solver sym logger "SAW proof" [lit] Nothing $ \ r -> case r of
+     solver_adapter_check_sat solver sym logData [lit] $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
            mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)

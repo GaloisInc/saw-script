@@ -58,7 +58,7 @@ import Lang.Crucible.Simulator.EvalStmt(executeCrucible)
 import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
           , gpGlobals, AbortedResult(..), SimContext(..), FnState(..)
-          , initSimState
+          , initSimState, ExecState(InitialState)
           )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
@@ -498,12 +498,14 @@ doSim opts elf sfs name (globs,overs) st =
                               , _cruciblePersonality = MacawSimulatorState
                               }
        let initGlobals = insertGlobal mvar (stateMem st) emptyGlobals
-       let s = initSimState ctx initGlobals defaultAbortHandler
-       executeCrucible s $ runOverrideSim macawStructRepr $ do
-         let args :: RegMap Sym (MacawFunctionArgs X86_64)
-             args = RegMap (singleton (RegEntry macawStructRepr (stateRegs st)))
-         crucGenArchConstraints x86 $
-           regValue <$> callCFG cfg args
+       let initExecState =
+             InitialState ctx initGlobals defaultAbortHandler $
+             runOverrideSim macawStructRepr $ do
+               let args :: RegMap Sym (MacawFunctionArgs X86_64)
+                   args = RegMap (singleton (RegEntry macawStructRepr (stateRegs st)))
+               crucGenArchConstraints x86 $
+                 regValue <$> callCFG cfg args
+       executeCrucible [] initExecState
 
      gp <- case execResult of
              FinishedResult _ res ->
