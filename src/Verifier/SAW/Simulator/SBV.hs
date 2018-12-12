@@ -498,7 +498,7 @@ sbvSolveBasic m addlPrims unints t = do
         | Set.member nm unintSet = Just $ parseUninterpreted [] nm ty
         | otherwise              = Nothing
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-         (const (parseUninterpreted []))
+         (\ix nm -> parseUninterpreted [] (nm ++ "#" ++ show ix))
          uninterpreted
   Sim.evalSharedTerm cfg t
 
