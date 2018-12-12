@@ -105,7 +105,7 @@ prims =
   , Prims.bpMuxBool  = pure3 svIte
   , Prims.bpMuxWord  = pure3 svIte
   , Prims.bpMuxInt   = pure3 svIte
-  , Prims.bpMuxExtra = pure3 extraFn
+  , Prims.bpMuxExtra = muxSbvExtra
     -- Booleans
   , Prims.bpTrue   = svTrue
   , Prims.bpFalse  = svFalse
@@ -457,14 +457,17 @@ bvStreamGetOp =
   selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
 
 lookupSStream :: SValue -> Integer -> IO SValue
-lookupSStream (VExtra (SStream f r)) n = do
-   m <- readIORef r
-   case Map.lookup n m of
-     Just v  -> return v
-     Nothing -> do v <- f n
-                   writeIORef r (Map.insert n v m)
-                   return v
+lookupSStream (VExtra s) n = lookupSbvExtra s n
 lookupSStream _ _ = fail "expected Stream"
+
+lookupSbvExtra :: SbvExtra -> Integer -> IO SValue
+lookupSbvExtra (SStream f r) n =
+  do m <- readIORef r
+     case Map.lookup n m of
+       Just v  -> return v
+       Nothing -> do v <- f n
+                     writeIORef r (Map.insert n v m)
+                     return v
 
 ------------------------------------------------------------
 -- Misc operations
@@ -483,8 +486,13 @@ sLg2 x = go 0
 muxBVal :: SBool -> SValue -> SValue -> IO SValue
 muxBVal = Prims.muxValue prims
 
-extraFn :: SBool -> SbvExtra -> SbvExtra -> SbvExtra
-extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
+muxSbvExtra :: SBool -> SbvExtra -> SbvExtra -> IO SbvExtra
+muxSbvExtra c x y =
+  do let f i = do xi <- lookupSbvExtra x i
+                  yi <- lookupSbvExtra y i
+                  muxBVal c xi yi
+     r <- newIORef Map.empty
+     return (SStream f r)
 
 ------------------------------------------------------------
 -- External interface
