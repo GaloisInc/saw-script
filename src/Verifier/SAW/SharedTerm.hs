@@ -1564,7 +1564,7 @@ scAbstractExts sc exts x =
                      ]
       let m = Map.fromList ls
       let lams = [ ( ecName ec, ecType ec ) | ec <- exts ]
-      scLambdaList sc lams =<< scInstantiateExt sc m x
+      scLambdaList sc lams =<< scInstantiateExt sc m =<< incVars sc 0 (length exts) x
 
 -- | Generalize over the given list of external constants by wrapping
 -- the given term with foralls and replacing the external constant
@@ -1575,7 +1575,7 @@ scGeneralizeExts sc exts x =
   do ts <- traverse (scLocalVar sc) (reverse (take (length exts) [0 ..]))
      let m = Map.fromList [ (ecVarIndex ec, t) | (ec, t) <- zip exts ts ]
      let pis = [ (ecName ec, ecType ec) | ec <- exts ]
-     scPiList sc pis =<< scInstantiateExt sc m x
+     scPiList sc pis =<< scInstantiateExt sc m =<< incVars sc 0 (length exts) x
 
 scUnfoldConstants :: SharedContext -> [String] -> Term -> IO Term
 scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0
