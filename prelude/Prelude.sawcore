@@ -1379,6 +1379,53 @@ primitive mkDouble : Integer -> Integer -> Float;
 -- primitive doubleToBV : Double -> bitvector 64;
 
 
+--------------------------------------------------------------------------------
+-- Computation monad
+
+primitive CompM : sort 0 -> sort 0;
+
+primitive returnM : (a:sort 0) -> a -> CompM a;
+primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
+
+primitive errorM : (a:sort 0) -> CompM a;
+
+-- Lists of input and output types for letRecM
+data InputOutputTypes : sort 1 where {
+  TypesNil : InputOutputTypes;
+  TypesCons : sort 0 -> sort 0 -> InputOutputTypes -> InputOutputTypes;
+}
+
+-- Compute the type of a nested tuple of monadic functions, by converting list
+-- [(a1,b1),(a2,b2),...] into ((a1 -> CompM b1), ((a2 -> CompM b2), ...))
+letRecFuns : InputOutputTypes -> sort 0;
+letRecFuns tps =
+  InputOutputTypes#rec
+    (\ (tps:InputOutputTypes) -> sort 0)
+    #()
+    (\ (a b:sort 0) (_:InputOutputTypes) (fun_tp:sort 0) ->
+       #((a -> CompM b), fun_tp))
+    tps;
+
+-- This is like let rec in ML: letRecM defs body defines N recursive functions
+-- in terms of themselves using defs, and then passes them to body. We use this
+-- instead of the more standard fixM because it offers a more compact
+-- representation, and because fixM messes with functional extensionality by
+-- introducing an irreducible term at function type.
+primitive letRecM : (tps : InputOutputTypes) -> (b : sort 0) ->
+                    (letRecFuns tps -> letRecFuns tps) ->
+                    (letRecFuns tps -> CompM b) -> CompM b;
+
+-- We can define fixM as let rec f x = ... in f
+fixM : (a b:sort 0) -> ((a -> CompM b) -> (a -> CompM b)) -> a -> CompM b;
+fixM a b f x =
+  letRecM (TypesCons a b TypesNil) b
+          (\ (funs:#((a -> CompM b), #())) -> ((\ (y:a) -> funs.1 y), ()))
+          (\ (funs:#((a -> CompM b), #())) -> funs.1 x);
+
+
+--------------------------------------------------------------------------------
+-- General axioms
+
 axiom bveq_sameL : (n : Nat)
            -> (x z : bitvector n)
            -> Eq Bool
