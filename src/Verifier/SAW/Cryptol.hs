@@ -170,8 +170,8 @@ importType sc env ty =
                          Just (t, j) -> incVars sc 0 j t
                          Nothing -> panic "importType TVBound"
     C.TUser _ _ t  -> go t
-    C.TRec fs ->
-      importType sc env (C.tTuple (map snd fs))
+    C.TRec (Map.fromList -> fm) ->
+      importType sc env (C.tTuple (Map.elems fm))
 
     C.TCon tcon tyargs ->
       case tcon of
@@ -244,6 +244,9 @@ importPolyType sc env (tp : tps) props ty =
 importSchema :: SharedContext -> Env -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams props ty
 
+tIsRec' :: C.Type -> Maybe (Map C.Ident C.Type)
+tIsRec' t = fmap Map.fromList (C.tIsRec t)
+
 proveProp :: SharedContext -> Env -> C.Prop -> IO Term
 proveProp sc env prop =
   case Map.lookup (normalizeProp prop) (envP env) of
@@ -281,8 +284,8 @@ proveProp sc env prop =
           -> do ps <- traverse (proveProp sc env . C.pZero) ts
                 scTuple sc ps
         -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
-        (C.pIsZero -> Just (C.tIsRec -> Just fs))
-          -> do proveProp sc env (C.pZero (C.tTuple (map snd fs)))
+        (C.pIsZero -> Just (tIsRec' -> Just fm))
+          -> do proveProp sc env (C.pZero (C.tTuple (Map.elems fm)))
 
         -- instance Logic Bit
         (C.pIsLogic -> Just (C.tIsBit -> True))
@@ -316,8 +319,8 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pLogic (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
         -- instance (Logic a, Logic b, ...) => instance Logic { x : a, y : b, ... }
-        (C.pIsLogic -> Just (C.tIsRec -> Just fs))
-          -> do proveProp sc env (C.pLogic (C.tTuple (map snd fs)))
+        (C.pIsLogic -> Just (tIsRec' -> Just fm))
+          -> do proveProp sc env (C.pLogic (C.tTuple (Map.elems fm)))
 
         -- instance Arith Integer
         (C.pIsArith -> Just (C.tIsInteger -> True))
@@ -355,8 +358,8 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pArith (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PArithPair" [a, b, pa, pb]
         -- instance (Arith a, Arith b, ...) => instance Arith { x : a, y : b, ... }
-        (C.pIsArith -> Just (C.tIsRec -> Just fs))
-          -> do proveProp sc env (C.pArith (C.tTuple (map snd fs)))
+        (C.pIsArith -> Just (tIsRec' -> Just fm))
+          -> do proveProp sc env (C.pArith (C.tTuple (Map.elems fm)))
 
         -- instance Cmp Bit
         (C.pIsCmp -> Just (C.tIsBit -> True))
@@ -391,8 +394,8 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
         -- instance (Cmp a, Cmp b, ...) => instance Cmp { x : a, y : b, ... }
-        (C.pIsCmp -> Just (C.tIsRec -> Just fs))
-          -> do proveProp sc env (C.pCmp (C.tTuple (map snd fs)))
+        (C.pIsCmp -> Just (tIsRec' -> Just fm))
+          -> do proveProp sc env (C.pCmp (C.tTuple (Map.elems fm)))
 
         -- instance SignedCmp Bit
         (C.pIsSignedCmp -> Just (C.tIsBit -> True))
@@ -420,8 +423,8 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pSignedCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
         -- instance (SignedCmp a, SignedCmp b, ...) => instance SignedCmp { x : a, y : b, ... }
-        (C.pIsSignedCmp -> Just (C.tIsRec -> Just fs))
-          -> do proveProp sc env (C.pSignedCmp (C.tTuple (map snd fs)))
+        (C.pIsSignedCmp -> Just (tIsRec' -> Just fm))
+          -> do proveProp sc env (C.pSignedCmp (C.tTuple (Map.elems fm)))
 
         -- instance Literal val Integer
         (C.pIsLiteral -> Just (_, C.tIsInteger -> True))
@@ -526,8 +529,8 @@ importExpr sc env expr =
       do es' <- traverse (importExpr sc env) es
          scTuple sc es'
 
-    C.ERec fs ->
-      do es' <- traverse (importExpr sc env) (map snd fs)
+    C.ERec (Map.fromList -> fm) ->
+      do es' <- traverse (importExpr sc env) (Map.elems fm)
          scTuple sc es'
 
     C.ESel e sel ->
@@ -545,10 +548,10 @@ importExpr sc env expr =
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
-             case C.tIsRec t of
-               Just fs ->
-                 do i <- the (elemIndex x (map fst fs))
-                    scTupleSelector sc e' (i+1) (length fs)
+             case tIsRec' t of
+               Just fm ->
+                 do i <- the (elemIndex x (Map.keys fm))
+                    scTupleSelector sc e' (i+1) (Map.size fm)
                Nothing ->
                  do f <- mapRecordSelector sc env x t
                     scApply sc f e'
@@ -648,11 +651,11 @@ importExpr' sc env schema expr =
          es' <- sequence (zipWith go ts es)
          scTuple sc es'
 
-    C.ERec fs ->
+    C.ERec (Map.fromList -> fm) ->
       do ty <- the (C.isMono schema)
-         ts <- the (C.tIsRec ty)
-         let es = map snd fs
-         es' <- sequence (zipWith go (map snd ts) es)
+         tm <- the (tIsRec' ty)
+         let es = Map.elems fm
+         es' <- sequence (zipWith go (Map.elems tm) es)
          scTuple sc es'
 
     C.EIf e1 e2 e3 ->
@@ -769,12 +772,12 @@ mapRecordSelector sc env i = fmap fst . go
              n' <- importType sc env n
              g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
              return (g, C.tFun n b)
-        (C.tIsRec -> Just ts) | Just k <- elemIndex i (map fst ts) ->
+        (tIsRec' -> Just tm) | Just k <- elemIndex i (Map.keys tm) ->
           do x <- scLocalVar sc 0
-             y <- scTupleSelector sc x (k+1) (length ts)
+             y <- scTupleSelector sc x (k+1) (Map.size tm)
              t' <- importType sc env t
              f <- scLambda sc "x" t' y
-             return (f, snd (ts !! k))
+             return (f, Map.elems tm !! k)
         _ -> panic $ unwords ["importExpr: invalid record selector", show i, show t]
 
 -- | Apply a substitution to a type *without* simplifying
@@ -947,9 +950,9 @@ proveEq sc env t1 t2
                else if a1 == a2
                     then scGlobalApply sc "Cryptol.pair_cong2" [a1', b1', b2', bEq]
                     else scGlobalApply sc "Cryptol.pair_cong" [a1', a2', b1', b2', aEq, bEq]
-      (C.tIsRec -> Just ts1, C.tIsRec -> Just ts2)
-        | map fst ts1 == map fst ts2 ->
-          do panic $ unwords ["unimplemented type coercion:", pretty t1, pretty t2]
+      (tIsRec' -> Just tm1, tIsRec' -> Just tm2)
+        | Map.keys tm1 == Map.keys tm2 ->
+          proveEq sc env (C.tTuple (Map.elems tm1)) (C.tTuple (Map.elems tm2))
       (_, _) ->
         panic $ unwords ["Internal type error:", pretty t1, pretty t2]
 
