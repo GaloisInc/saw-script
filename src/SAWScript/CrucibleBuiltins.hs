@@ -173,8 +173,13 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
 
      def <- case find (\d -> L.defName d == nm') (L.modDefines llmod) of
-                    Nothing -> fail ("Could not find function named" ++ show nm)
-                    Just decl -> return decl
+              Just decl -> return decl
+              Nothing   -> fail $ unlines $
+                [ "Could not find function named " ++ show nm
+                ] ++ if simVerbose opts < 3
+                     then [ "Run SAW with --sim-verbose=3 to see all function names" ]
+                     else "Available function names:" :
+                            map (("  " ++) . show . L.defName) (L.modDefines llmod)
      st0 <- either (fail . show . ppSetupError) return (initialCrucibleSetupState cc def setupLoc)
 
      -- execute commands of the method spec
