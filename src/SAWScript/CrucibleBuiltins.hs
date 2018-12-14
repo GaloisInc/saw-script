@@ -185,7 +185,7 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
      mem0 <- case Crucible.lookupGlobal mvar globals of
-       Nothing -> fail "internal error: LLVM Memory global not found"
+       Nothing   -> fail "internal error: LLVM Memory global not found"
        Just mem0 -> return mem0
      let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem0
 
@@ -1038,10 +1038,13 @@ constructExpandedSetupValue sc loc t =
     Crucible.ArrayType n memTy ->
        SetupArray <$> replicateM n (constructExpandedSetupValue sc loc memTy)
 
-    Crucible.FloatType    -> fail "crucible_fresh_expanded_var: Float not supported"
-    Crucible.DoubleType   -> fail "crucible_fresh_expanded_var: Double not supported"
-    Crucible.MetadataType -> fail "crucible_fresh_expanded_var: Metadata not supported"
-    Crucible.VecType{}    -> fail "crucible_fresh_expanded_var: Vec not supported"
+    Crucible.FloatType      -> failUnsupportedType "Float"
+    Crucible.DoubleType     -> failUnsupportedType "Double"
+    Crucible.MetadataType   -> failUnsupportedType "Metadata"
+    Crucible.VecType{}      -> failUnsupportedType "Vec"
+    Crucible.X86_FP80Type{} -> failUnsupportedType "X86_FP80"
+  where failUnsupportedType tyName = fail $ unwords
+          ["crucible_fresh_expanded_var: " ++ tyName ++ " not supported"]
 
 llvmTypeAlias :: L.Type -> Maybe Crucible.Ident
 llvmTypeAlias (L.Alias i) = Just i
