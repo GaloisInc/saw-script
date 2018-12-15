@@ -6,17 +6,20 @@ module SAWScript.Prover.MRSolver
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
   ) where
 
+import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Trans.Except
+import Control.Monad.Except
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 
 import qualified SAWScript.Prover.SBV as SBV
 
--- | Functions to be used in computations, which are either local, letrec-bound
--- names (represented with an 'ExtCns'), or global named constants
-data CompFun = LocalFun (ExtCns Term) | GlobalFun String
+newtype LocalFunName = LocalFunName (ExtCns Term) deriving Eq
+
+-- | Names of functions to be used in computations, which are either local,
+-- letrec-bound names (represented with an 'ExtCns'), or global named constants
+data FunName = LocalFun LocalFunName | GlobalFun String
              deriving Eq
 
 -- | A pattern for matching the form of a computation
@@ -24,7 +27,7 @@ data CompPat
   = Return Term -- ^ Terminates with a return
   | Error -- ^ Raises an error
   | If Term CompTerm CompTerm -- ^ If-then-else that returns @CompM a@
-  | FunBind CompFun [Term] CompFunTerm
+  | FunBind FunName [Term] CompFunTerm
     -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term
 
 -- | Term of type @CompM a@ for some @a@
@@ -37,26 +40,56 @@ newtype CompFunTerm = CompFunTerm Term
 data MRFailure
   = TermsNotEq Term Term
   | ReturnNotError Term
-  | FunsNotEq CompFun CompFun
+  | FunsNotEq FunName FunName
+  | MRFailureCtx CompTerm CompTerm MRFailure
+    -- ^ Records terms we were trying to compare when we got a failure
+  | MRFailureDisj MRFailure MRFailure
+    -- ^ Records a disjunctive branch we took, where both cases failed
 
--- | State maintained by MR solver; that's MR. State to you
-data MRState = MRState {
+data FunBody = FunBody { funTerm :: CompFunTerm,
+                         funFreeVars :: [LocalFunName] }
+
+-- | Environment maintained by MR solver; that's MR. Environment to you
+data MREnv = MREnv {
   mrSC :: SharedContext,
   mrSMTConfig :: SBV.SMTConfig,
-  mrLocalFuns :: [(ExtCns Term, Term)],
-  mrFunEqs :: [(CompFun, CompFun)],
+  mrLocalFuns :: [(LocalFunName, FunBody)],
+  mrFunEqs :: [(FunName, FunName)],
+  mrUnfoldedFuns :: [LocalFunName],
   mrPathCondition :: Term
 }
 
--- | Monad used by the MR solver
--- newtype MRM a = MRM { runMRM :: StateT MRState (ExceptT MRFailure IO) a }
-type MRM = ExceptT MRFailure (StateT MRState IO)
+data MRState = MRState {
+  mrProvedFunEqs :: [(FunName, FunName)]
+}
 
+-- | Monad used by the MR solver
+type MRM = ExceptT MRFailure (ReaderT MREnv (StateT MRState IO))
+
+-- | Run an 'MRM' computation, and apply a function to any failure thrown
+mapFailure :: (MRFailure -> MRFailure) -> MRM a -> MRM a
+mapFailure f m = catchError m (throwError . f)
+
+-- | Try two different 'MRM' computations, combining their failures if needed
+mrOr :: MRM a -> MRM a -> MRM a
+mrOr m1 m2 =
+  catchError m1 $ \err1 ->
+  catchError m2 $ \err2 ->
+  throwError $ MRFailureDisj err1 err2
+
+-- | Run an 'MRM' computation in an extended failure context
+withFailureCtx :: CompTerm -> CompTerm -> MRM a -> MRM a
+withFailureCtx t1 t2 = mapFailure (MRFailureCtx t1 t2)
+
+catchErrorEither :: MonadError e m => m a -> m (Either e a)
+catchErrorEither m = catchError (Right <$> m) (return . Left)
+
+-- | Lift a unary SharedTerm computation into 'MRM'
 liftSC1 :: (SharedContext -> a -> IO b) -> a -> MRM b
-liftSC1 f a = (mrSC <$> get) >>= \sc -> liftIO (f sc a)
+liftSC1 f a = (mrSC <$> ask) >>= \sc -> liftIO (f sc a)
 
 -- | Test if the types of two terms are equal
-mrFunTypesEq :: CompFun -> CompFun -> MRM Bool
+mrFunTypesEq :: FunName -> FunName -> MRM Bool
 mrFunTypesEq = undefined
 
 -- | Test if a Boolean term is satisfiable
@@ -84,15 +117,21 @@ withNotPathCondition :: Term -> MRM () -> MRM ()
 withNotPathCondition cond m =
   liftSC1 scNot cond >>= \cond' -> withPathCondition cond' m
 
+-- | Test if repeatedly unfolding a function, those it calls, etc., in the
+-- current context will eventually lead to that function again, keeping in mind
+-- that we will not unfold any already-unfolded functions
+mrUnfoldsToSelf :: LocalFunName -> MRM Bool
+mrUnfoldsToSelf = undefined
+
 -- | Convert a 'Term' to a computation pattern
 matchCompTerm :: CompTerm -> MRM CompPat
 matchCompTerm = undefined
 
 -- | FIXME: documentation!
-mrUnfoldFun :: CompFun -> [Term] -> CompFunTerm -> MRM CompPat
-mrUnfoldFun = undefined
+mrUnfoldFunBind :: FunName -> [Term] -> CompFunTerm -> MRM CompPat
+mrUnfoldFunBind = undefined
 
-mrCanUnfold :: CompFun -> MRM Bool
+mrCanUnfold :: FunName -> MRM Bool
 mrCanUnfold = undefined
 
 -- | Typeclass for proving that an @a@ and a @b@ represent equivalent
@@ -104,16 +143,19 @@ class MRSolveEq a b where
 instance MRSolveEq Term Term where
   mrSolveEq t1 t2 =
     do eq <- mrTermsEq t1 t2
-       if eq then return () else throwE (TermsNotEq t1 t2)
+       if eq then return () else throwError (TermsNotEq t1 t2)
 
-instance MRSolveEq CompFun CompFun where
+instance MRSolveEq FunName FunName where
   mrSolveEq f1 f2 = undefined
 
 instance MRSolveEq CompTerm CompTerm where
   mrSolveEq t1 t2 =
     do comp1 <- matchCompTerm t1
        comp2 <- matchCompTerm t2
-       mrSolveEq comp1 comp2
+       withFailureCtx t1 t2 (mrSolveEq comp1 comp2)
+
+instance MRSolveEq CompFunTerm CompFunTerm where
+  mrSolveEq t1 t2 = undefined
 
 instance MRSolveEq CompTerm CompPat where
   mrSolveEq t1 comp2 =
@@ -131,10 +173,10 @@ instance MRSolveEq CompPat CompPat where
     mrSolveEq t1 t2
   mrSolveEq (Return t1) Error =
     -- Return is never equal to error
-    throwE (ReturnNotError t1)
+    throwError (ReturnNotError t1)
   mrSolveEq Error (Return t2) =
     -- Return is never equal to error
-    throwE (ReturnNotError t2)
+    throwError (ReturnNotError t2)
   mrSolveEq Error Error =
     -- Error trivially equals itself
     return ()
@@ -161,43 +203,28 @@ instance MRSolveEq CompPat CompPat where
     (withPathCondition cond2 $ mrSolveEq comp1 then2) >>
     (withNotPathCondition cond2 $ mrSolveEq comp1 else2)
   mrSolveEq p1@(FunBind f1 args1 comp1) p2@(FunBind f2 args2 comp2) =
-    -- If we have two function calls whose arguments are equal, then we guess
-    -- that they are supposed to be equal
-    do tps_eq <- mrFunTypesEq f1 f2
-       test_res <-
-         if tps_eq && length args1 == length args2 then
-           Right <$> test_args args1 args2
-         else return (Left ())
-       case test_res of
-         Right Nothing ->
-           -- If all terms are equal, compare the functions
-           mrSolveEq f1 f2
-         Right bad_ts@(Just _) ->
-           -- If not, that may be the failure, so pass it forwards
-           unfoldFun bad_ts
-         Left () ->
-           -- If the funs are of different types, then they definitely cannot be
-           -- equal, so pass Nothing forwards
-           unfoldFun Nothing
+    -- To compare two computations (f1 args1 >>= comp1) and (f2 args2 >>= comp2)
+    -- we first test if (f1 args1) and (f2 args2) are equal. If so, we recurse
+    -- and compare comp1 and comp2; otherwise, we try unfolding one or the other
+    -- of f1 and f2.
+    catchErrorEither cmp_funs >>= \ cmp_fun_res ->
+    case cmp_fun_res of
+      Right () -> mrSolveEq comp1 comp2
+      Left err ->
+        mapFailure (MRFailureDisj err) $
+        (mrUnfoldFunBind f1 args1 comp1 >>= \c -> mrSolveEq c p2)
+        `mrOr`
+        (mrUnfoldFunBind f2 args2 comp2 >>= \c -> mrSolveEq p1 c)
     where
-      -- Test if two lists of terms are equal; return the first failure if not
-      test_args :: [Term] -> [Term] -> MRM (Maybe (Term,Term))
-      test_args (a1:as1) (a2:as2) =
-        do eq <- mrTermsEq a1 a2
-           if eq then test_args as1 as2 else return (Just (a1,a2))
-      test_args [] [] = return Nothing
-      test_args _ _ = error "test_args"
-
-      -- Unfold one of the functions, if possible, and continue
-      unfoldFun :: Maybe (Term,Term) -> MRM ()
-      unfoldFun term_neq =
-        do can_unfold1 <- mrCanUnfold f1
-           can_unfold2 <- mrCanUnfold f2
-           case (can_unfold1, can_unfold2, term_neq) of
-             (True, _, _) -> mrUnfoldFun f1 args1 comp1 >>= \c -> mrSolveEq c p2
-             (_, True, _) -> mrUnfoldFun f2 args2 comp2 >>= \c -> mrSolveEq p1 c
-             (_, _, Just (t1, t2)) -> throwE (TermsNotEq t1 t2)
-             (_, _, Nothing) -> throwE (FunsNotEq f1 f2)
+      cmp_funs = mrSolveEq f1 f2 >> zipWithM_ mrSolveEq args1 args2
+  mrSolveEq (FunBind f1 args1 comp1) p2 =
+    -- This case compares a function call to a Return or Error; the only thing
+    -- to do is unfold the function call and recurse
+    mrUnfoldFunBind f1 args1 comp1 >>= \c -> mrSolveEq c p2
+  mrSolveEq p1 (FunBind f2 args2 comp2) =
+    -- This case compares a function call to a Return or Error; the only thing
+    -- to do is unfold the function call and recurse
+    mrUnfoldFunBind f2 args2 comp2 >>= \c -> mrSolveEq p1 c
 
 -- | Test two monadic, recursive terms for equivalence
 askMRSolver ::
