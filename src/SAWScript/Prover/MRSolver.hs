@@ -88,10 +88,6 @@ catchErrorEither m = catchError (Right <$> m) (return . Left)
 liftSC1 :: (SharedContext -> a -> IO b) -> a -> MRM b
 liftSC1 f a = (mrSC <$> ask) >>= \sc -> liftIO (f sc a)
 
--- | Test if the types of two terms are equal
-mrFunTypesEq :: FunName -> FunName -> MRM Bool
-mrFunTypesEq = undefined
-
 -- | Test if a Boolean term is satisfiable
 mrSatisfiable :: Term -> MRM Bool
 mrSatisfiable = undefined
@@ -117,12 +113,6 @@ withNotPathCondition :: Term -> MRM () -> MRM ()
 withNotPathCondition cond m =
   liftSC1 scNot cond >>= \cond' -> withPathCondition cond' m
 
--- | Test if repeatedly unfolding a function, those it calls, etc., in the
--- current context will eventually lead to that function again, keeping in mind
--- that we will not unfold any already-unfolded functions
-mrUnfoldsToSelf :: LocalFunName -> MRM Bool
-mrUnfoldsToSelf = undefined
-
 -- | Convert a 'Term' to a computation pattern
 matchCompTerm :: CompTerm -> MRM CompPat
 matchCompTerm = undefined
@@ -130,9 +120,6 @@ matchCompTerm = undefined
 -- | FIXME: documentation!
 mrUnfoldFunBind :: FunName -> [Term] -> CompFunTerm -> MRM CompPat
 mrUnfoldFunBind = undefined
-
-mrCanUnfold :: FunName -> MRM Bool
-mrCanUnfold = undefined
 
 -- | Typeclass for proving that an @a@ and a @b@ represent equivalent
 -- computations. The 'MRM' computation returns @()@ on success and throws an
