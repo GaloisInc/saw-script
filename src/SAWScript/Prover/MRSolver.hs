@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module SAWScript.Prover.MRSolver
   (askMRSolver
@@ -24,22 +25,34 @@ newtype LocalFunName = LocalFunName (ExtCns Term) deriving Eq
 data FunName = LocalName LocalFunName | GlobalName Ident
              deriving Eq
 
+-- | A "marking" consisting of a set of unfolded function names
+newtype Mark = Mark [FunName] deriving (Semigroup, Monoid)
+
+inMark :: FunName -> Mark -> Bool
+inMark f (Mark fs) = elem f fs
+
+singleMark :: FunName -> Mark
+singleMark f = Mark [f]
+
 -- | A computation in WHNF
 data WHNFComp
   = Return Term -- ^ Terminates with a return
   | Error -- ^ Raises an error
   | If Term Comp Comp -- ^ If-then-else that returns @CompM a@
-  | FunBind FunName [Term] CompFun
-    -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term
+  | FunBind FunName [Term] Mark CompFun
+    -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term,
+    -- marked with a set of function names
 
 -- | A computation function of type @a -> CompM b@ for some @a@ and @b@
 data CompFun
   = CompFunTerm Term
   | CompFunComp CompFun CompFun
     -- ^ The monadic composition @f >=> g@
+  | CompFunMark CompFun Mark
+    -- ^ A computation marked with function names
 
 -- | A computation of type @CompM a@ for some @a@
-data Comp = CompTerm Term | CompBind Comp CompFun
+data Comp = CompTerm Term | CompBind Comp CompFun | CompMark Comp Mark
 
 -- | That's MR. Failure to you
 data MRFailure
@@ -54,8 +67,6 @@ data MRFailure
   | MRFailureDisj MRFailure MRFailure
     -- ^ Records a disjunctive branch we took, where both cases failed
 
-data FunBody = FunBody { funTerm :: Term, funFreeVars :: [LocalFunName] }
-
 -- | State maintained by MR. Solver
 data MRState = MRState {
   mrSC :: SharedContext,
@@ -66,8 +77,6 @@ data MRState = MRState {
   -- ^ Letrec-bound function names with their definitions as lambda-terms
   mrFunEqs :: [((FunName, FunName), Bool)],
   -- ^ Cache of which named functions are equal
-  mrUnfoldedFuns :: [FunName],
-  -- ^ The functions that have been unfolded along the current path
   mrPathCondition :: Term
   -- ^ The conjunction of all Boolean if conditions along the current path
 }
@@ -144,6 +153,9 @@ applyCompFun (CompFunComp f g) t =
      return $ CompBind comp g
 applyCompFun (CompFunTerm f) t =
   CompTerm <$> liftSC2 scApply f t
+applyCompFun (CompFunMark f mark) t =
+  do comp <- applyCompFun f t
+     return $ CompMark comp mark
 
 -- | Take in an @InputOutputTypes@ list (as a SAW core term) and build a fresh
 -- function variable for each pair of input and output types in it. Return the
@@ -156,6 +168,9 @@ whnfComp :: Comp -> MRM WHNFComp
 whnfComp (CompBind m f) =
   do norm <- whnfComp m
      whnfBind norm f
+whnfComp (CompMark m mark) =
+  do norm <- whnfComp m
+     whnfMark norm mark
 whnfComp (CompTerm t) =
   do t' <- liftSC1 scWhnf t
      case asApplyAll t' of
@@ -186,7 +201,7 @@ whnfComp (CompTerm t) =
                 _ -> error "Computation not of type CompM a for some a"
             ret_fun <- liftSC1 scGlobalDef "Prelude.returnM"
             g <- liftSC2 scApply ret_fun tp
-            return $ FunBind f args (CompFunTerm g)
+            return $ FunBind f args mempty (CompFunTerm g)
        _ -> throwError (MalformedComp t')
 
 
@@ -196,7 +211,17 @@ whnfBind (Return t) f = applyCompFun f t >>= whnfComp
 whnfBind Error _ = return Error
 whnfBind (If cond comp1 comp2) f =
   return $ If cond (CompBind comp1 f) (CompBind comp2 f)
-whnfBind (FunBind f args g) h = return $ FunBind f args (CompFunComp g h)
+whnfBind (FunBind f args mark g) h =
+  return $ FunBind f args mark (CompFunComp g h)
+
+-- | Mark a normalized computation
+whnfMark :: WHNFComp -> Mark -> MRM WHNFComp
+whnfMark (Return t) _ = return $ Return t
+whnfMark Error _ = return Error
+whnfMark (If cond comp1 comp2) mark =
+  return $ If cond (CompMark comp1 mark) (CompMark comp2 mark)
+whnfMark (FunBind f args mark1 g) mark2 =
+  return $ FunBind f args (mark1 `mappend` mark2) (CompFunMark g mark2)
 
 -- | Lookup the definition of a function or throw a 'CannotLookupFunDef' if this is
 -- not allowed, either because it is a global function we are treating as opaque
@@ -210,12 +235,14 @@ mrLookupFunDef f@(LocalName nm) =
        Nothing -> throwError (CannotLookupFunDef f)
 
 -- | Unfold a call to function @f@ in term @f args >>= g@
-mrUnfoldFunBind :: FunName -> [Term] -> CompFun -> MRM Comp
-mrUnfoldFunBind f args g =
+mrUnfoldFunBind :: FunName -> [Term] -> Mark -> CompFun -> MRM Comp
+mrUnfoldFunBind f _ mark _ | inMark f mark = throwError (RecursiveUnfold f)
+mrUnfoldFunBind f args mark g =
   do f_def <- mrLookupFunDef f
-     already_unfolded <- elem f <$> mrUnfoldedFuns <$> get
-     if already_unfolded then throwError (RecursiveUnfold f) else
-       CompBind <$> (CompTerm <$> liftSC2 scApplyAll f_def args) <*> return g
+     CompBind <$>
+       (CompMark <$> (CompTerm <$> liftSC2 scApplyAll f_def args)
+        <*> (return $ singleMark f `mappend` mark))
+       <*> return g
 
 -- | Coinductively prove an equality between two named functions by assuming
 -- the names are equal and proving their bodies equal
@@ -225,7 +252,8 @@ mrSolveCoInd f1 f2 =
      def2 <- mrLookupFunDef f2
      saved <- get
      put $ saved { mrFunEqs = ((f1,f2),True) : mrFunEqs saved }
-     catchError (mrSolveEq (CompFunTerm def1) (CompFunTerm def2)) $ \err ->
+     catchError (mrSolveEq (CompFunMark (CompFunTerm def1) (singleMark f1))
+                 (CompFunMark (CompFunTerm def2) (singleMark f2))) $ \err ->
        -- NOTE: any equalities proved under the assumption that f1 == f2 are
        -- suspect, so we have to throw them out and revert to saved on error
        (put saved >> throwError err)
@@ -313,7 +341,7 @@ instance MRSolveEq WHNFComp WHNFComp where
     -- respective path conditions, to the other computation
     (withPathCondition cond2 $ mrSolveEq norm1 then2) >>
     (withNotPathCondition cond2 $ mrSolveEq norm1 else2)
-  mrSolveEq comp1@(FunBind f1 args1 norm1) comp2@(FunBind f2 args2 norm2) =
+  mrSolveEq comp1@(FunBind f1 args1 mark1 norm1) comp2@(FunBind f2 args2 mark2 norm2) =
     -- To compare two computations (f1 args1 >>= norm1) and (f2 args2 >>= norm2)
     -- we first test if (f1 args1) and (f2 args2) are equal. If so, we recurse
     -- and compare norm1 and norm2; otherwise, we try unfolding one or the other
@@ -323,19 +351,19 @@ instance MRSolveEq WHNFComp WHNFComp where
       Right () -> mrSolveEq norm1 norm2
       Left err ->
         mapFailure (MRFailureDisj err) $
-        (mrUnfoldFunBind f1 args1 norm1 >>= \c -> mrSolveEq c comp2)
+        (mrUnfoldFunBind f1 args1 mark1 norm1 >>= \c -> mrSolveEq c comp2)
         `mrOr`
-        (mrUnfoldFunBind f2 args2 norm2 >>= \c -> mrSolveEq comp1 c)
+        (mrUnfoldFunBind f2 args2 mark2 norm2 >>= \c -> mrSolveEq comp1 c)
     where
       cmp_funs = mrSolveEq f1 f2 >> zipWithM_ mrSolveEq args1 args2
-  mrSolveEq (FunBind f1 args1 norm1) comp2 =
+  mrSolveEq (FunBind f1 args1 mark1 norm1) comp2 =
     -- This case compares a function call to a Return or Error; the only thing
     -- to do is unfold the function call and recurse
-    mrUnfoldFunBind f1 args1 norm1 >>= \c -> mrSolveEq c comp2
-  mrSolveEq comp1 (FunBind f2 args2 norm2) =
+    mrUnfoldFunBind f1 args1 mark1 norm1 >>= \c -> mrSolveEq c comp2
+  mrSolveEq comp1 (FunBind f2 args2 mark2 norm2) =
     -- This case compares a function call to a Return or Error; the only thing
     -- to do is unfold the function call and recurse
-    mrUnfoldFunBind f2 args2 norm2 >>= \c -> mrSolveEq comp1 c
+    mrUnfoldFunBind f2 args2 mark2 norm2 >>= \c -> mrSolveEq comp1 c
 
 -- | Test two monadic, recursive terms for equivalence
 askMRSolver ::
