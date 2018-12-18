@@ -779,8 +779,8 @@ matchArg _sc _cc loc _prepost actual expectedTy expected =
 
 ------------------------------------------------------------------------
 
-zeroValueSC :: SharedContext -> Crucible.Type -> IO Term
-zeroValueSC sc tp = case Crucible.typeF tp of
+zeroValueSC :: SharedContext -> Crucible.StorageType -> IO Term
+zeroValueSC sc tp = case Crucible.storageTypeF tp of
   Crucible.Float -> fail "zeroValueSC: float unsupported"
   Crucible.Double -> fail "zeroValueSC: double unsupported"
   Crucible.Bitvector bs ->
@@ -844,9 +844,9 @@ valueToSC _sym loc failMsg _tval _val =
 
 ------------------------------------------------------------------------
 
-typeToSC :: SharedContext -> Crucible.Type -> IO Term
+typeToSC :: SharedContext -> Crucible.StorageType -> IO Term
 typeToSC sc t =
-  case Crucible.typeF t of
+  case Crucible.storageTypeF t of
     Crucible.Bitvector sz -> scBitvector sc (fromInteger (Crucible.bytesToBits sz))
     Crucible.Float -> fail "typeToSC: float not supported"
     Crucible.Double -> fail "typeToSC: double not supported"
@@ -1013,7 +1013,8 @@ executeAllocation opts cc (var, (loc, memTy)) =
      let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar
      sz <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger w)
-     (ptr, mem') <- liftIO (Crucible.mallocRaw sym mem sz)
+     let alignment = 0 -- default to byte alignment (FIXME)
+     (ptr, mem') <- liftIO (Crucible.mallocRaw sym mem sz alignment)
      writeGlobal memVar mem'
      assignVar cc loc var ptr
 
@@ -1068,8 +1069,9 @@ executePointsTo opts sc cc spec (PointsTo loc ptr val) =
      storTy <- Crucible.toStorableType memTy1
 
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
+     let alignment = 0 -- default to byte alignment (FIXME)
      mem  <- readGlobal memVar
-     mem' <- liftIO (Crucible.doStore sym mem ptr1 vtp storTy val1)
+     mem' <- liftIO (Crucible.doStore sym mem ptr1 vtp storTy alignment val1)
      writeGlobal memVar mem'
 
 

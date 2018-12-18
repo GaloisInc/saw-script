@@ -98,10 +98,10 @@ module SAWScript.CrucibleLLVM
   , pattern LLVMPointerRepr
   , AllocType(HeapAlloc, GlobalAlloc)
   , Mutability(..)
-  , typeF
-  , Type
-  , TypeF(Struct, Float, Double, Array, Bitvector)
-  , typeSize
+  , storageTypeF
+  , StorageType
+  , StorageTypeF(Struct, Float, Double, Array, Bitvector)
+  , storageTypeSize
   , fieldVal
   , bitvectorType
   , fieldPad
@@ -170,8 +170,8 @@ import Lang.Crucible.LLVM.MemModel
    pattern LLVMPointerRepr, LLVMPointerType,
    pattern PtrWidth, llvmPointer_bv, withPtrWidth, pattern LLVMPointer, pattern PtrRepr,
    llvmPointerView, projectLLVM_bv,
-   typeF, Type, TypeF(Struct, Float, Double, Array, Bitvector),
-   typeSize, toStorableType, fieldVal, bitvectorType, fieldPad, arrayType,
+   storageTypeF, StorageType, StorageTypeF(Struct, Float, Double, Array, Bitvector),
+   storageTypeSize, toStorableType, fieldVal, bitvectorType, fieldPad, arrayType,
    mkStructType, AllocType(HeapAlloc, GlobalAlloc), Mutability(..))
 
 import Lang.Crucible.Syntax (mkStruct)
