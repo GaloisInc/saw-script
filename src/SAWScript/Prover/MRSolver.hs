@@ -21,7 +21,7 @@ newtype LocalFunName = LocalFunName (ExtCns Term) deriving Eq
 
 -- | Names of functions to be used in computations, which are either local,
 -- letrec-bound names (represented with an 'ExtCns'), or global named constants
-data FunName = LocalName LocalFunName | GlobalName String
+data FunName = LocalName LocalFunName | GlobalName Ident
              deriving Eq
 
 -- | A computation in WHNF
@@ -130,6 +130,12 @@ withNotPathCondition cond m =
 compFunInputType :: CompFun -> MRM Term
 compFunInputType = undefined
 
+-- | Match a term as a function name
+asFunName :: MonadPlus m => Recognizer m Term FunName
+asFunName t =
+  (LocalName <$> LocalFunName <$> asExtCns t)
+  `mplus` (GlobalName <$> asGlobalDef t)
+
 -- | Apply a computation function to a term argument to get a computation
 applyCompFun :: CompFun -> Term -> MRM Comp
 applyCompFun (CompFunComp f g) t =
@@ -172,6 +178,15 @@ whnfComp (CompTerm t) =
               st { mrLocalFuns = (zip funs defs) ++ mrLocalFuns st }
             body_tm <- liftSC2 scApply body_f funs_tm
             whnfComp (CompTerm body_tm)
+       ((asFunName -> Just f), args) ->
+         do comp_tp <- liftSC1 scTypeOf t >>= liftSC1 scWhnf
+            tp <-
+              case asApp comp_tp of
+                Just (isGlobalDef "Prelude.CompM" -> Just (), tp) -> return tp
+                _ -> error "Computation not of type CompM a for some a"
+            ret_fun <- liftSC1 scGlobalDef "Prelude.returnM"
+            g <- liftSC2 scApply ret_fun tp
+            return $ FunBind f args (CompFunTerm g)
        _ -> throwError (MalformedComp t')
 
 
