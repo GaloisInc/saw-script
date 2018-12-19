@@ -142,9 +142,9 @@ typeOfSetupValue' cc env nameEnv val =
                             , "instead got:"
                             , show (Cryptol.pp s)
                             ]
-    SetupStruct vs ->
+    SetupStruct packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
-         let si = Crucible.mkStructInfo dl False memTys
+         let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
     SetupArray [] -> fail "typeOfSetupValue: invalid empty crucible_array"
     SetupArray (v : vs) ->
@@ -225,10 +225,11 @@ resolveSetupVal cc env tyenv nameEnv val =
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
-    SetupStruct vs -> do
+    SetupStruct packed vs -> do
       vals <- mapM (resolveSetupVal cc env tyenv nameEnv) vs
       let tps = map (typeOfLLVMVal dl) vals
-      let flds = case Crucible.storageTypeF (Crucible.mkStructType (V.fromList (mkFields dl 0 0 tps))) of
+      let t = Crucible.mkStructType (V.fromList (mkFields packed dl 0 0 tps))
+      let flds = case Crucible.storageTypeF t of
                    Crucible.Struct v -> v
                    _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
@@ -394,23 +395,27 @@ toLLVMType dl tp =
       Cryptol.TVRec _flds -> Nothing -- FIXME
       Cryptol.TVFun _ _ -> Nothing
 
+-- FIXME: This struct-padding logic is already implemented in
+-- crucible-llvm. Reimplementing it here is error prone and harder to
+-- maintain.
 mkFields ::
+  Bool {- ^ @True@ = packed, @False@ = unpacked -} ->
   Crucible.DataLayout ->
   Crucible.Alignment ->
   Crucible.Bytes ->
   [Crucible.StorageType] ->
   [(Crucible.StorageType, Crucible.Bytes)]
-mkFields _ _ _ [] = []
-mkFields dl a off (ty : tys) = (ty, pad) : mkFields dl a' off' tys
-    where
-      end = off + Crucible.storageTypeSize ty
-      off' = Crucible.padToAlignment end nextAlign
-      pad = off' - end
-      a' = max a (typeAlignment dl ty)
-      nextAlign = case tys of
-        [] -> a'
-        (ty' : _) -> typeAlignment dl ty'
-
+mkFields _ _ _ _ [] = []
+mkFields packed dl a off (ty : tys) =
+  (ty, pad) : mkFields packed dl a' off' tys
+  where
+    end = off + Crucible.storageTypeSize ty
+    off' = if packed then end else Crucible.padToAlignment end nextAlign
+    pad = off' - end
+    a' = max a (typeAlignment dl ty)
+    nextAlign = case tys of
+      [] -> a'
+      (ty' : _) -> typeAlignment dl ty'
 
 
 typeAlignment :: Crucible.DataLayout -> Crucible.StorageType -> Crucible.Alignment

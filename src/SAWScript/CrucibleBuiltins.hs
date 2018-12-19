@@ -846,7 +846,7 @@ diffMemTypes ::
 diffMemTypes x0 y0 =
   let wptr :: Natural = fromIntegral (natValue ?ptrWidth) in
   case (x0, y0) of
-    -- Special case; consider a one-element struct to be compatiable with
+    -- Special case; consider a one-element struct to be compatible with
     -- the type of its field
     (Crucible.StructType x, _)
       | V.length (Crucible.siFields x) == 1 -> diffMemTypes (Crucible.fiType (V.head (Crucible.siFields x))) y0
@@ -1032,7 +1032,8 @@ constructExpandedSetupValue sc loc t =
          SetupTerm <$> freshVariable sc "" ty
 
     Crucible.StructType si ->
-       SetupStruct . toList <$> traverse (constructExpandedSetupValue sc loc) (Crucible.siFieldTypes si)
+       SetupStruct False {- FIXME: should this always be unpacked? -} . toList <$>
+       traverse (constructExpandedSetupValue sc loc) (Crucible.siFieldTypes si)
 
     Crucible.PtrType symTy ->
       case Crucible.asMemType symTy of

@@ -182,7 +182,9 @@ ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
   SetupVar i     -> PP.text ("@" ++ show i)
   SetupNull      -> PP.text "NULL"
-  SetupStruct vs -> PP.braces (commaList (map ppSetupValue vs))
+  SetupStruct packed vs
+    | packed     -> PP.angles (PP.braces (commaList (map ppSetupValue vs)))
+    | otherwise  -> PP.braces (commaList (map ppSetupValue vs))
   SetupArray vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem v i  -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ show i)
   SetupField v f -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ f)
@@ -614,12 +616,12 @@ matchPointsTos opts sc cc spec prepost = go False []
     setupVars :: SetupValue -> Set AllocIndex
     setupVars v =
       case v of
-        SetupVar    i            -> Set.singleton i
-        SetupStruct xs           -> foldMap setupVars xs
-        SetupArray  xs           -> foldMap setupVars xs
+        SetupVar i               -> Set.singleton i
+        SetupStruct _ xs         -> foldMap setupVars xs
+        SetupArray xs            -> foldMap setupVars xs
         SetupElem x _            -> setupVars x
         SetupField x _           -> setupVars x
-        SetupTerm   _            -> Set.empty
+        SetupTerm _              -> Set.empty
         SetupNull                -> Set.empty
         SetupGlobal _            -> Set.empty
         SetupGlobalInitializer _ -> Set.empty
@@ -743,7 +745,7 @@ matchArg sc cc loc prepost actual expectedTy expected@(SetupTerm expectedTT)
        matchTerm sc cc loc prepost realTerm (ttTerm expectedTT)
 
 -- match the fields of struct point-wise
-matchArg sc cc loc prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
+matchArg sc cc loc prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct _ zs) =
   sequence_
     [ matchArg sc cc loc prepost x y z
        | ((_,x),y,z) <- zip3 (V.toList xs)
@@ -1135,9 +1137,9 @@ instantiateSetupValue ::
 instantiateSetupValue sc s v =
   case v of
     SetupVar _               -> return v
-    SetupTerm tt             -> SetupTerm   <$> doTerm tt
-    SetupStruct vs           -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
-    SetupArray  vs           -> SetupArray  <$> mapM (instantiateSetupValue sc s) vs
+    SetupTerm tt             -> SetupTerm <$> doTerm tt
+    SetupStruct p vs         -> SetupStruct p <$> mapM (instantiateSetupValue sc s) vs
+    SetupArray    vs         -> SetupArray    <$> mapM (instantiateSetupValue sc s) vs
     SetupElem _ _            -> return v
     SetupField _ _           -> return v
     SetupNull                -> return v

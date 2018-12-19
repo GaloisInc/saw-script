@@ -76,7 +76,7 @@ nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
 data SetupValue where
   SetupVar               :: AllocIndex -> SetupValue
   SetupTerm              :: TypedTerm -> SetupValue
-  SetupStruct            :: [SetupValue] -> SetupValue
+  SetupStruct            :: Bool -> [SetupValue] -> SetupValue -- True = packed
   SetupArray             :: [SetupValue] -> SetupValue
   SetupElem              :: SetupValue -> Int -> SetupValue
   SetupField             :: SetupValue -> String -> SetupValue
@@ -103,8 +103,9 @@ setupToTerm opts sc sv =
   let intToNat = fromInteger . toInteger
   in case sv of
     SetupTerm term -> return (ttTerm term)
-    SetupStruct fields -> do ts <- mapM (setupToTerm opts sc) fields
-                             lift $ scTuple sc ts
+    SetupStruct _ fields ->
+      do ts <- mapM (setupToTerm opts sc) fields
+         lift $ scTuple sc ts
     SetupArray elems@(_:_) -> do ts@(t:_) <- mapM (setupToTerm opts sc) elems
                                  typt <- lift $ scTypeOf sc t
                                  vec <- lift $ scVector sc typt ts
@@ -120,9 +121,11 @@ setupToTerm opts sc sv =
                                      et <- setupToTerm opts sc e
                                      typ <- lift $ scTypeOf sc et
                                      lift $ scAt sc lent typ art ixt
-        SetupStruct fs -> do st <- setupToTerm opts sc base
-                             lift $ scTupleSelector sc st ind (length fs)
-        _              -> MaybeT $ return Nothing
+        SetupStruct _ fs ->
+          do st <- setupToTerm opts sc base
+             lift $ scTupleSelector sc st ind (length fs)
+        _ ->
+          MaybeT $ return Nothing
     -- SetupVar, SetupNull, SetupGlobal
     _ -> MaybeT $ return Nothing
 
