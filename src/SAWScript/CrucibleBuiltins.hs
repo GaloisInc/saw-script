@@ -610,8 +610,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
     prepareArgs ctx x =
       Crucible.RegMap <$>
       Ctx.traverseWithIndex (\idx tr ->
-        do a <- Crucible.unpackMemValue sym (x !! Ctx.indexVal idx)
-           v <- Crucible.coerceAny sym tr a
+        do v <- Crucible.unpackMemValue sym tr (x !! Ctx.indexVal idx)
            return (Crucible.RegEntry tr v))
       ctx
 

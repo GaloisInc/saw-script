@@ -26,7 +26,7 @@ import Data.Parameterized.NatRepr(NatRepr,knownNat,natValue)
 
 import SAWScript.CrucibleLLVM
   ( AllocType(HeapAlloc), Mutability(..)
-  , storeConstRaw, doLoad, doMalloc, doPtrAddOffset, coerceAny, packMemValue
+  , storeConstRaw, doLoad, doMalloc, doPtrAddOffset, packMemValue
   , Bytes, toBytes, bytesToInteger
   , projectLLVM_bv, bitvectorType
   , StorageType
@@ -134,8 +134,7 @@ readMem :: MemType t => X86 t -> Value APtr -> Spec Post (Value t)
 readMem w (Value p) =
   withMem $ \sym mem ->
     do let ?ptrWidth = knownNat
-       anyV <- doLoad sym mem p (llvmType w) 0
-       Value <$> coerceAny sym (crucRepr w) anyV
+       Value <$> doLoad sym mem p (llvmType w) (crucRepr w) 0
 
 
 

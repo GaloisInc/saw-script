@@ -78,7 +78,7 @@ import What4.ProgramLoc
 import Lang.Crucible.FunctionHandle
 import SAWScript.CrucibleLLVM
   ( EndianForm(LittleEndian)
-  , MemImpl, coerceAny, doLoad, doPtrAddOffset, emptyMem
+  , MemImpl, doLoad, doPtrAddOffset, emptyMem
   , AllocType(HeapAlloc, GlobalAlloc), Mutability(..), Mem
   , pattern LLVMPointerRepr, doMalloc, storeConstRaw, packMemValue
   , LLVMPointerType, LLVMVal(LLVMValInt)
@@ -433,8 +433,7 @@ getLoc l =
          let mem = stateMem s
          let ?ptrWidth = knownNat
          loc <- adjustPtr sym mem obj n
-         anyV <- doLoad sym mem loc (llvmBytes w) 0
-         coerceAny sym (locRepr l) anyV
+         doLoad sym mem loc (llvmBytes w) (locRepr l) 0
 
 
 ptrTy :: (1 <= w) => NatRepr w -> TypeRepr (LLVMPointerType (8 * w))
@@ -623,9 +622,8 @@ readArr opts ptr n wBytes s sMem =
          llT    = llvmBytes wBytes
          getAt i =
            do let ?ptrWidth = knownNat
-              loc  <- adjustPtr sym mem ptrV (i * natValue wBytes)
-              anyV <- doLoad sym mem loc llT 0
-              coerceAny sym cruT anyV
+              loc <- adjustPtr sym mem ptrV (i * natValue wBytes)
+              doLoad sym mem loc llT cruT 0
 
      mapM getAt [ 0 .. n - 1 ]
 

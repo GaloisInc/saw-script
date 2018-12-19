@@ -644,10 +644,8 @@ computeReturnValue _opts _cc _sc spec ty Nothing =
     _ -> failure (spec^.csLoc) BadReturnSpecification
 
 computeReturnValue opts cc sc spec ty (Just val) =
-  do (_memTy, Crucible.AnyValue xty xval) <- resolveSetupValue opts cc sc spec val
-     case testEquality ty xty of
-       Just Refl -> return xval
-       Nothing -> failure (spec^.csLoc) BadReturnSpecification
+  do (_memTy, xval) <- resolveSetupValue opts cc sc spec ty val
+     return xval
 
 
 ------------------------------------------------------------------------
@@ -932,7 +930,7 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
   do let tyenv = csAllocations spec
          nameEnv = csTypeNames spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
-     (_memTy, ptr1) <- asPointer loc =<< resolveSetupValue opts cc sc spec ptr
+     (_memTy, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
      storTy <- Crucible.toStorableType memTy
@@ -941,7 +939,8 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ (cc^.ccLLVMContext)
 
-     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy)
+     let alignment = 0 -- default to byte alignment (FIXME)
+     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy alignment)
      (p,r,v) <- case res of
                   Left e  -> failure loc (BadPointerLoad e)
                   Right x -> return x
@@ -1059,19 +1058,19 @@ executePointsTo ::
   CrucibleMethodSpecIR       ->
   PointsTo                   ->
   OverrideMatcher arch RW ()
-executePointsTo opts sc cc spec (PointsTo loc ptr val) =
-  do (_, ptr1) <- asPointer loc =<< resolveSetupValue opts cc sc spec ptr
+executePointsTo opts sc cc spec (PointsTo _loc ptr val) =
+  do (_, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
      sym    <- getSymInterface
 
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
-     (memTy1, Crucible.AnyValue vtp val1) <- resolveSetupValue opts cc sc spec val
+     (memTy1, val1) <- resolveSetupValueLLVM opts cc sc spec val
      storTy <- Crucible.toStorableType memTy1
 
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
      let alignment = 0 -- default to byte alignment (FIXME)
      mem  <- readGlobal memVar
-     mem' <- liftIO (Crucible.doStore sym mem ptr1 vtp storTy alignment val1)
+     mem' <- liftIO (Crucible.storeRaw sym mem ptr1 storTy alignment val1)
      writeGlobal memVar mem'
 
 
@@ -1173,27 +1172,11 @@ resolveSetupValue ::
   CrucibleContext arch ->
   SharedContext        ->
   CrucibleMethodSpecIR ->
+  Crucible.TypeRepr tp ->
   SetupValue           ->
-  OverrideMatcher arch md (Crucible.MemType, Crucible.AnyValue Sym)
-resolveSetupValue opts cc sc spec sval =
+  OverrideMatcher arch md (Crucible.MemType, Crucible.RegValue Sym tp)
+resolveSetupValue opts cc sc spec tp sval =
   do (memTy, lval) <- resolveSetupValueLLVM opts cc sc spec sval
      sym <- getSymInterface
-     aval <- liftIO $ Crucible.unpackMemValue sym lval
-     return (memTy, aval)
-
-------------------------------------------------------------------------
-
-asPointer ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  W4.ProgramLoc ->
-  (Crucible.MemType, Crucible.AnyValue Sym) ->
-  OverrideMatcher arch md (Crucible.MemType, LLVMPtr (Crucible.ArchWidth arch))
-
-asPointer
-  _
-  (Crucible.PtrType pty,
-   Crucible.AnyValue Crucible.PtrRepr val)
-  | Right pty' <- Crucible.asMemType pty
-  = return (pty', val)
-
-asPointer loc _ = failure loc BadPointerCast
+     val <- liftIO $ Crucible.unpackMemValue sym tp lval
+     return (memTy, val)
