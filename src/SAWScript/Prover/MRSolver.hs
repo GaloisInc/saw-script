@@ -13,12 +13,13 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 
+import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 
 import qualified SAWScript.Prover.SBV as SBV
 
-newtype LocalFunName = LocalFunName (ExtCns Term) deriving Eq
+newtype LocalFunName = LocalFunName { unLocalFunName :: ExtCns Term } deriving Eq
 
 -- | Names of functions to be used in computations, which are either local,
 -- letrec-bound names (represented with an 'ExtCns'), or global named constants
@@ -37,6 +38,9 @@ inMark f (Mark fs) = elem f fs
 
 singleMark :: FunName -> Mark
 singleMark f = Mark [f]
+
+-- | A term specifically known to be of type @sort i@ for some @i@
+newtype Type = Type Term
 
 -- | A computation in WHNF
 data WHNFComp
@@ -61,6 +65,7 @@ data Comp = CompTerm Term | CompBind Comp CompFun | CompMark Comp Mark
 -- | That's MR. Failure to you
 data MRFailure
   = TermsNotEq Term Term
+  | TypesNotEq Type Type
   | ReturnNotError Term
   | FunsNotEq FunName FunName
   | CannotLookupFunDef FunName
@@ -77,6 +82,8 @@ data MRState = MRState {
   -- ^ Global shared context for building terms, etc.
   mrSMTConfig :: SBV.SMTConfig,
   -- ^ Global SMT configuration for the duration of the MR. Solver call
+  mrSMTTimeout :: Maybe Integer,
+  -- ^ SMT timeout for SMT calls made by Mr. Solver
   mrLocalFuns :: [(LocalFunName, Term)],
   -- ^ Letrec-bound function names with their definitions as lambda-terms
   mrFunEqs :: [((FunName, FunName), Bool)],
@@ -106,6 +113,10 @@ withFailureCtx t1 t2 = mapFailure (MRFailureCtx t1 t2)
 catchErrorEither :: MonadError e m => m a -> m (Either e a)
 catchErrorEither m = catchError (Right <$> m) (return . Left)
 
+-- | Lift a nullary SharedTerm computation into 'MRM'
+liftSC0 :: (SharedContext -> IO a) -> MRM a
+liftSC0 f = (mrSC <$> get) >>= \sc -> liftIO (f sc)
+
 -- | Lift a unary SharedTerm computation into 'MRM'
 liftSC1 :: (SharedContext -> a -> IO b) -> a -> MRM b
 liftSC1 f a = (mrSC <$> get) >>= \sc -> liftIO (f sc a)
@@ -122,7 +133,8 @@ liftSC3 f a b c = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c)
 mrSatisfiable :: Term -> MRM Bool
 mrSatisfiable prop =
   do smt_conf <- mrSMTConfig <$> get
-     (smt_res, _) <- liftSC1 (SBV.satUnintSBV smt_conf [] Nothing) prop
+     timeout <- mrSMTTimeout <$> get
+     (smt_res, _) <- liftSC1 (SBV.satUnintSBV smt_conf [] timeout) prop
      case smt_res of
        Just _ -> return True
        Nothing -> return False
@@ -185,8 +197,16 @@ applyCompFun (CompFunMark f mark) t =
 -- | Take in an @InputOutputTypes@ list (as a SAW core term) and build a fresh
 -- function variable for each pair of input and output types in it. Return the
 -- list of these names along with a term of them tupled up together.
-mkFunVarsForTps :: Term -> MRM ([LocalFunName], Term)
-mkFunVarsForTps = undefined
+mkFunVarsForTps :: Term -> MRM [LocalFunName]
+mkFunVarsForTps (asCtor -> Just ("Prelude.TypesNil", [])) =
+  return []
+mkFunVarsForTps (asCtor -> Just ("Prelude.TypesCons", [a, b, tps])) =
+  do compM <- liftSC1 scGlobalDef "Prelude.CompM"
+     comp_b <- liftSC2 scApply compM b
+     tp <- liftSC3 scPi "x" a comp_b
+     var <- liftSC0 scFreshGlobalVar
+     rest <- mkFunVarsForTps tps
+     return (LocalFunName (EC var "x" tp) : rest)
 
 -- | Normalize a computation to weak head normal form
 whnfComp :: Comp -> MRM WHNFComp
@@ -209,7 +229,9 @@ whnfComp (CompTerm t) =
        (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
          return $ If cond (CompTerm then_tm) (CompTerm else_tm)
        (isGlobalDef "Prelude.letRecM" -> Just (), [tps, _, defs_f, body_f]) ->
-         do (funs, funs_tm) <- mkFunVarsForTps tps
+         do funs <- mkFunVarsForTps tps
+            fun_tms <- mapM (liftSC1 scFlatTermF . ExtCns . unLocalFunName) funs
+            funs_tm <- liftSC1 scTuple fun_tms
             defs_tm <- liftSC2 scApply defs_f funs_tm >>= liftSC1 scWhnf
             defs <- case asTupleValue defs_tm of
               Just defs -> return defs
@@ -297,6 +319,12 @@ instance MRSolveEq Term Term where
     do eq <- mrTermsEq t1 t2
        if eq then return () else throwError (TermsNotEq t1 t2)
 
+instance MRSolveEq Type Type where
+  mrSolveEq tp1@(Type t1) tp2@(Type t2) =
+    do eq <- liftSC3 scConvertible True t1 t2
+       if eq then return () else
+         throwError (TypesNotEq tp1 tp2)
+
 instance MRSolveEq FunName FunName where
   mrSolveEq f1 f2 | f1 == f2 = return ()
   mrSolveEq f1 f2 =
@@ -383,10 +411,9 @@ instance MRSolveEq WHNFComp WHNFComp where
       cmp_funs =
         do tp1 <- funNameType f1
            tp2 <- funNameType f2
-           tps_eq <- liftSC3 scConvertible True tp1 tp2
-           if tps_eq then
-             mrSolveEq f1 f2 >> zipWithM_ mrSolveEq args1 args2
-             else throwError (FunsNotEq f1 f2)
+           mrSolveEq (Type tp1) (Type tp2)
+           mrSolveEq f1 f2
+           zipWithM_ mrSolveEq args1 args2
   mrSolveEq (FunBind f1 args1 mark1 k1) comp2 =
     -- This case compares a function call to a Return or Error; the only thing
     -- to do is unfold the function call and recurse
@@ -398,8 +425,26 @@ instance MRSolveEq WHNFComp WHNFComp where
 
 -- | Test two monadic, recursive terms for equivalence
 askMRSolver ::
+  SharedContext ->
   SBV.SMTConfig {- ^ SBV configuration -} ->
-  Maybe Integer {- ^ Timeout in milliseconds -} ->
+  Maybe Integer {- ^ Timeout in milliseconds for each SMT call -} ->
   Term -> Term -> IO (Maybe MRFailure)
 
-askMRSolver = undefined
+askMRSolver sc smt_conf timeout t1 t2 =
+  do tp1 <- scTypeOf sc t1
+     tp2 <- scTypeOf sc t2
+     true_tm <- scBool sc True
+     let init_st = MRState {
+           mrSC = sc,
+           mrSMTConfig = smt_conf,
+           mrSMTTimeout = timeout,
+           mrLocalFuns = [],
+           mrFunEqs = [],
+           mrPathCondition = true_tm
+           }
+     res <-
+       flip evalStateT init_st $ runExceptT $
+       (mrSolveEq (Type tp1) (Type tp2) >> mrSolveEq t1 t2)
+     case res of
+       Left err -> return $ Just err
+       Right () -> return Nothing
