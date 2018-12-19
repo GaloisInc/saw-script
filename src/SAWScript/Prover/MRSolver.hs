@@ -120,11 +120,22 @@ liftSC3 f a b c = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c)
 
 -- | Test if a Boolean term is satisfiable
 mrSatisfiable :: Term -> MRM Bool
-mrSatisfiable = undefined
+mrSatisfiable prop =
+  do smt_conf <- mrSMTConfig <$> get
+     (smt_res, _) <- liftSC1 (SBV.satUnintSBV smt_conf [] Nothing) prop
+     case smt_res of
+       Just _ -> return True
+       Nothing -> return False
 
 -- | Test if two terms are equal using an SMT solver
 mrTermsEq :: Term -> Term -> MRM Bool
-mrTermsEq = undefined
+mrTermsEq t1 t2 =
+  do tp <- liftSC1 scTypeOf t1
+     eq_fun_tm <- liftSC1 scGlobalDef "Prelude.eq"
+     prop <- liftSC2 scApplyAll eq_fun_tm [tp, t1, t2]
+     -- Remember, t1 == t2 is true iff t1 /= t2 is not satisfiable
+     not_prop <- liftSC1 scNot prop
+     not <$> mrSatisfiable not_prop
 
 -- | Test if a term is equal to a Boolean
 mrTermEqBool :: Term -> Bool -> MRM Bool
@@ -145,7 +156,13 @@ withNotPathCondition cond m =
 
 -- | Get the input type of a computation function
 compFunInputType :: CompFun -> MRM Term
-compFunInputType = undefined
+compFunInputType (CompFunTerm t) =
+  do tp <- liftSC1 scTypeOf t
+     case asPi tp of
+       Just (_, tp_in, _) -> return tp_in
+       Nothing -> error "compFunInputType: Pi type expected!"
+compFunInputType (CompFunComp f _) = compFunInputType f
+compFunInputType (CompFunMark f _) = compFunInputType f
 
 -- | Match a term as a function name
 asFunName :: MonadPlus m => Recognizer m Term FunName
