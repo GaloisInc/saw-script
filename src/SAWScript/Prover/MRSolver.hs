@@ -25,6 +25,10 @@ newtype LocalFunName = LocalFunName (ExtCns Term) deriving Eq
 data FunName = LocalName LocalFunName | GlobalName Ident
              deriving Eq
 
+funNameType :: FunName -> MRM Term
+funNameType (LocalName (LocalFunName ec)) = return $ ecType ec
+funNameType (GlobalName i) = liftSC1 scTypeOfGlobal i
+
 -- | A "marking" consisting of a set of unfolded function names
 newtype Mark = Mark [FunName] deriving (Semigroup, Monoid)
 
@@ -109,6 +113,10 @@ liftSC1 f a = (mrSC <$> get) >>= \sc -> liftIO (f sc a)
 -- | Lift a binary SharedTerm computation into 'MRM'
 liftSC2 :: (SharedContext -> a -> b -> IO c) -> a -> b -> MRM c
 liftSC2 f a b = (mrSC <$> get) >>= \sc -> liftIO (f sc a b)
+
+-- | Lift a trinary SharedTerm computation into 'MRM'
+liftSC3 :: (SharedContext -> a -> b -> c -> IO d) -> a -> b -> c -> MRM d
+liftSC3 f a b c = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c)
 
 -- | Test if a Boolean term is satisfiable
 mrSatisfiable :: Term -> MRM Bool
@@ -261,8 +269,8 @@ mrSolveCoInd f1 f2 =
 
 -- | Typeclass for proving that two (representations of) objects of the same SAW
 -- core type @a@ are equivalent, where the notion of equivalent depends on the
--- type @a@. The 'MRM' computation returns @()@ on success and throws a
--- 'MRFailure' on error.
+-- type @a@. This assumes that the two objects have the same SAW core type. The
+-- 'MRM' computation returns @()@ on success and throws a 'MRFailure' on error.
 class MRSolveEq a b where
   mrSolveEq :: a -> b -> MRM ()
 
@@ -341,29 +349,35 @@ instance MRSolveEq WHNFComp WHNFComp where
     -- respective path conditions, to the other computation
     (withPathCondition cond2 $ mrSolveEq norm1 then2) >>
     (withNotPathCondition cond2 $ mrSolveEq norm1 else2)
-  mrSolveEq comp1@(FunBind f1 args1 mark1 norm1) comp2@(FunBind f2 args2 mark2 norm2) =
+  mrSolveEq comp1@(FunBind f1 args1 mark1 k1) comp2@(FunBind f2 args2 mark2 k2) =
     -- To compare two computations (f1 args1 >>= norm1) and (f2 args2 >>= norm2)
     -- we first test if (f1 args1) and (f2 args2) are equal. If so, we recurse
     -- and compare norm1 and norm2; otherwise, we try unfolding one or the other
     -- of f1 and f2.
     catchErrorEither cmp_funs >>= \ cmp_fun_res ->
     case cmp_fun_res of
-      Right () -> mrSolveEq norm1 norm2
+      Right () -> mrSolveEq k1 k2
       Left err ->
         mapFailure (MRFailureDisj err) $
-        (mrUnfoldFunBind f1 args1 mark1 norm1 >>= \c -> mrSolveEq c comp2)
+        (mrUnfoldFunBind f1 args1 mark1 k1 >>= \c -> mrSolveEq c comp2)
         `mrOr`
-        (mrUnfoldFunBind f2 args2 mark2 norm2 >>= \c -> mrSolveEq comp1 c)
+        (mrUnfoldFunBind f2 args2 mark2 k2 >>= \c -> mrSolveEq comp1 c)
     where
-      cmp_funs = mrSolveEq f1 f2 >> zipWithM_ mrSolveEq args1 args2
-  mrSolveEq (FunBind f1 args1 mark1 norm1) comp2 =
+      cmp_funs =
+        do tp1 <- funNameType f1
+           tp2 <- funNameType f2
+           tps_eq <- liftSC3 scConvertible True tp1 tp2
+           if tps_eq then
+             mrSolveEq f1 f2 >> zipWithM_ mrSolveEq args1 args2
+             else throwError (FunsNotEq f1 f2)
+  mrSolveEq (FunBind f1 args1 mark1 k1) comp2 =
     -- This case compares a function call to a Return or Error; the only thing
     -- to do is unfold the function call and recurse
-    mrUnfoldFunBind f1 args1 mark1 norm1 >>= \c -> mrSolveEq c comp2
-  mrSolveEq comp1 (FunBind f2 args2 mark2 norm2) =
+    mrUnfoldFunBind f1 args1 mark1 k1 >>= \c -> mrSolveEq c comp2
+  mrSolveEq comp1 (FunBind f2 args2 mark2 k2) =
     -- This case compares a function call to a Return or Error; the only thing
     -- to do is unfold the function call and recurse
-    mrUnfoldFunBind f2 args2 mark2 norm2 >>= \c -> mrSolveEq comp1 c
+    mrUnfoldFunBind f2 args2 mark2 k2 >>= \c -> mrSolveEq comp1 c
 
 -- | Test two monadic, recursive terms for equivalence
 askMRSolver ::
