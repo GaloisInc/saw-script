@@ -19,6 +19,7 @@ import Verifier.SAW.Recognizer
 
 import qualified SAWScript.Prover.SBV as SBV
 
+
 newtype LocalFunName = LocalFunName { unLocalFunName :: ExtCns Term } deriving (Eq, Show)
 
 -- | Names of functions to be used in computations, which are either local,
@@ -132,16 +133,20 @@ liftSC2 f a b = (mrSC <$> get) >>= \sc -> liftIO (f sc a b)
 liftSC3 :: (SharedContext -> a -> b -> c -> IO d) -> a -> b -> c -> MRM d
 liftSC3 f a b c = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c)
 
--- | Test if a Boolean term is satisfiable
-mrSatisfiable :: Term -> MRM Bool
-mrSatisfiable bool_prop =
+-- | Test if a Boolean term is "provable", i.e., its negation is unsatisfiable
+mrProvable :: Term -> MRM Bool
+mrProvable bool_prop =
   do smt_conf <- mrSMTConfig <$> get
      timeout <- mrSMTTimeout <$> get
      prop <- liftSC1 scEqTrue bool_prop
      (smt_res, _) <- liftSC1 (SBV.satUnintSBV smt_conf [] timeout) prop
      case smt_res of
-       Just _ -> return True
-       Nothing -> return False
+       Just vals -> return False
+       Nothing -> return True
+
+-- | Test if a Boolean term is satisfiable
+mrSatisfiable :: Term -> MRM Bool
+mrSatisfiable prop = not <$> (liftSC1 scNot prop >>= mrProvable)
 
 -- | Test if two terms are equal using an SMT solver
 mrTermsEq :: Term -> Term -> MRM Bool
@@ -150,8 +155,9 @@ mrTermsEq t1 t2 =
      eq_fun_tm <- liftSC1 scGlobalDef "Prelude.eq"
      prop <- liftSC2 scApplyAll eq_fun_tm [tp, t1, t2]
      -- Remember, t1 == t2 is true iff t1 /= t2 is not satisfiable
-     not_prop <- liftSC1 scNot prop
-     not <$> mrSatisfiable not_prop
+     -- not_prop <- liftSC1 scNot prop
+     -- not <$> mrSatisfiable not_prop
+     mrProvable prop
 
 -- | Run an equality-testing computation under the assumption of an additional
 -- path condition. If the condition is unsatisfiable, the test is vacuously
@@ -445,7 +451,8 @@ askMRSolver sc smt_conf timeout t1 t2 =
            }
      res <-
        flip evalStateT init_st $ runExceptT $
-       (mrSolveEq (Type tp1) (Type tp2) >> mrSolveEq t1 t2)
+       (mrSolveEq (Type tp1) (Type tp2) >>
+        mrSolveEq (CompTerm t1) (CompTerm t2))
      case res of
        Left err -> return $ Just err
        Right () -> return Nothing
