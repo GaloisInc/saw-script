@@ -1283,7 +1283,7 @@ mr_solver_tests :: [SharedContext -> IO Term]
 mr_solver_tests =
   let helper nm = \sc -> scGlobalDef sc nm in
   map helper
-  [ "Prelude.test_comp1" ]
+  [ "Prelude.test_comp0", "Prelude.test_comp1" ]
 
 testMRSolver :: Integer -> Integer -> TopLevel ()
 testMRSolver i1 i2 =
