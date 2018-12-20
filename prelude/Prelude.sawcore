@@ -1387,6 +1387,9 @@ primitive CompM : sort 0 -> sort 0;
 primitive returnM : (a:sort 0) -> a -> CompM a;
 primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
 
+composeM : (a b c: sort 0) -> (a -> CompM b) -> (b -> CompM c) -> a -> CompM c;
+composeM a b c f g x = bindM b c (f x) g;
+
 primitive errorM : (a:sort 0) -> CompM a;
 
 -- Lists of input and output types for letRecM
@@ -1421,6 +1424,11 @@ fixM a b f x =
   letRecM (TypesCons a b TypesNil) b
           (\ (funs:#((a -> CompM b), #())) -> ((\ (y:a) -> funs.1 y), ()))
           (\ (funs:#((a -> CompM b), #())) -> funs.1 x);
+
+
+-- Test computations
+test_comp1 : CompM (bitvector 64);
+test_comp1 = returnM (bitvector 64) (bvNat 64 0);
 
 
 --------------------------------------------------------------------------------
