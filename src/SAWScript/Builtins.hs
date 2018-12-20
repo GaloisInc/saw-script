@@ -91,6 +91,7 @@ import qualified SAWScript.Prover.RME as Prover
 import qualified SAWScript.Prover.ABC as Prover
 import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
+import qualified SAWScript.Prover.MRSolver as Prover (askMRSolver)
 
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
@@ -1276,3 +1277,20 @@ cryptol_load path = do
   (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
+
+
+mr_solver_tests :: [SharedContext -> IO Term]
+mr_solver_tests =
+  let helper nm = \sc -> scGlobalDef sc nm in
+  map helper
+  [ "Prelude.test_comp1" ]
+
+testMRSolver :: Integer -> Integer -> TopLevel ()
+testMRSolver i1 i2 =
+  do sc <- getSharedContext
+     t1 <- liftIO $ (mr_solver_tests !! fromInteger i1) sc
+     t2 <- liftIO $ (mr_solver_tests !! fromInteger i2) sc
+     res <- liftIO $ Prover.askMRSolver sc SBV.z3 Nothing t1 t2
+     case res of
+       Just err -> io $ putStrLn $ show err
+       Nothing -> io $ putStrLn "Success!"

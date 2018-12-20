@@ -1837,6 +1837,11 @@ primitives = Map.fromList
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
     ]
+
+  , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
+    (pureVal testMRSolver)
+    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
+    , " to ask if two monadic terms are equal" ]
   ]
 
   where
