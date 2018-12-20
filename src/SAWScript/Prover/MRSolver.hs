@@ -138,7 +138,9 @@ mrProvable :: Term -> MRM Bool
 mrProvable bool_prop =
   do smt_conf <- mrSMTConfig <$> get
      timeout <- mrSMTTimeout <$> get
-     prop <- liftSC1 scEqTrue bool_prop
+     path_prop <- mrPathCondition <$> get
+     bool_prop' <- liftSC2 scImplies path_prop bool_prop
+     prop <- liftSC1 scEqTrue bool_prop'
      (smt_res, _) <- liftSC1 (SBV.satUnintSBV smt_conf [] timeout) prop
      case smt_res of
        Just vals -> return False
@@ -165,7 +167,13 @@ mrTermsEq t1 t2 =
 withPathCondition :: Term -> MRM () -> MRM ()
 withPathCondition cond m =
   do sat <- mrSatisfiable cond
-     if sat then m else return ()
+     if sat then
+       do old_cond <- mrPathCondition <$> get
+          new_cond <- liftSC2 scAnd old_cond cond
+          modify $ \st -> st { mrPathCondition = new_cond }
+          m
+          modify $ \st -> st { mrPathCondition = old_cond }
+       else return ()
 
 -- | Like 'withPathCondition' but for the negation of a condition
 withNotPathCondition :: Term -> MRM () -> MRM ()
