@@ -1427,8 +1427,11 @@ fixM a b f x =
 
 
 -- Test computations
+test_comp0 : CompM (bitvector 64);
+test_comp0 = returnM (bitvector 64) (bvNat 64 0);
+
 test_comp1 : CompM (bitvector 64);
-test_comp1 = returnM (bitvector 64) (bvNat 64 0);
+test_comp1 = returnM (bitvector 64) (bvNat 64 1);
 
 
 --------------------------------------------------------------------------------
