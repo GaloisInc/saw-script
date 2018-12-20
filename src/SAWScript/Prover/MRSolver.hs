@@ -19,19 +19,19 @@ import Verifier.SAW.Recognizer
 
 import qualified SAWScript.Prover.SBV as SBV
 
-newtype LocalFunName = LocalFunName { unLocalFunName :: ExtCns Term } deriving Eq
+newtype LocalFunName = LocalFunName { unLocalFunName :: ExtCns Term } deriving (Eq, Show)
 
 -- | Names of functions to be used in computations, which are either local,
 -- letrec-bound names (represented with an 'ExtCns'), or global named constants
 data FunName = LocalName LocalFunName | GlobalName Ident
-             deriving Eq
+             deriving (Eq, Show)
 
 funNameType :: FunName -> MRM Term
 funNameType (LocalName (LocalFunName ec)) = return $ ecType ec
 funNameType (GlobalName i) = liftSC1 scTypeOfGlobal i
 
 -- | A "marking" consisting of a set of unfolded function names
-newtype Mark = Mark [FunName] deriving (Semigroup, Monoid)
+newtype Mark = Mark [FunName] deriving (Semigroup, Monoid, Show)
 
 inMark :: FunName -> Mark -> Bool
 inMark f (Mark fs) = elem f fs
@@ -40,7 +40,7 @@ singleMark :: FunName -> Mark
 singleMark f = Mark [f]
 
 -- | A term specifically known to be of type @sort i@ for some @i@
-newtype Type = Type Term
+newtype Type = Type Term deriving Show
 
 -- | A computation in WHNF
 data WHNFComp
@@ -58,9 +58,11 @@ data CompFun
     -- ^ The monadic composition @f >=> g@
   | CompFunMark CompFun Mark
     -- ^ A computation marked with function names
+  deriving Show
 
 -- | A computation of type @CompM a@ for some @a@
 data Comp = CompTerm Term | CompBind Comp CompFun | CompMark Comp Mark
+          deriving Show
 
 -- | That's MR. Failure to you
 data MRFailure
@@ -75,6 +77,7 @@ data MRFailure
     -- ^ Records terms we were trying to compare when we got a failure
   | MRFailureDisj MRFailure MRFailure
     -- ^ Records a disjunctive branch we took, where both cases failed
+  deriving Show
 
 -- | State maintained by MR. Solver
 data MRState = MRState {
@@ -131,9 +134,10 @@ liftSC3 f a b c = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c)
 
 -- | Test if a Boolean term is satisfiable
 mrSatisfiable :: Term -> MRM Bool
-mrSatisfiable prop =
+mrSatisfiable bool_prop =
   do smt_conf <- mrSMTConfig <$> get
      timeout <- mrSMTTimeout <$> get
+     prop <- liftSC1 scEqTrue bool_prop
      (smt_res, _) <- liftSC1 (SBV.satUnintSBV smt_conf [] timeout) prop
      case smt_res of
        Just _ -> return True
@@ -148,10 +152,6 @@ mrTermsEq t1 t2 =
      -- Remember, t1 == t2 is true iff t1 /= t2 is not satisfiable
      not_prop <- liftSC1 scNot prop
      not <$> mrSatisfiable not_prop
-
--- | Test if a term is equal to a Boolean
-mrTermEqBool :: Term -> Bool -> MRM Bool
-mrTermEqBool t b = mrTermsEq t =<< liftSC1 scBool b
 
 -- | Run an equality-testing computation under the assumption of an additional
 -- path condition. If the condition is unsatisfiable, the test is vacuously
@@ -197,16 +197,17 @@ applyCompFun (CompFunMark f mark) t =
 -- | Take in an @InputOutputTypes@ list (as a SAW core term) and build a fresh
 -- function variable for each pair of input and output types in it. Return the
 -- list of these names along with a term of them tupled up together.
-mkFunVarsForTps :: Term -> MRM [LocalFunName]
-mkFunVarsForTps (asCtor -> Just ("Prelude.TypesNil", [])) =
+mkFunVarsForTps :: MRFailure -> Term -> MRM [LocalFunName]
+mkFunVarsForTps _ (asCtor -> Just ("Prelude.TypesNil", [])) =
   return []
-mkFunVarsForTps (asCtor -> Just ("Prelude.TypesCons", [a, b, tps])) =
+mkFunVarsForTps err (asCtor -> Just ("Prelude.TypesCons", [a, b, tps])) =
   do compM <- liftSC1 scGlobalDef "Prelude.CompM"
      comp_b <- liftSC2 scApply compM b
      tp <- liftSC3 scPi "x" a comp_b
      var <- liftSC0 scFreshGlobalVar
-     rest <- mkFunVarsForTps tps
+     rest <- mkFunVarsForTps err tps
      return (LocalFunName (EC var "x" tp) : rest)
+mkFunVarsForTps err _ = throwError err
 
 -- | Normalize a computation to weak head normal form
 whnfComp :: Comp -> MRM WHNFComp
@@ -229,7 +230,7 @@ whnfComp (CompTerm t) =
        (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
          return $ If cond (CompTerm then_tm) (CompTerm else_tm)
        (isGlobalDef "Prelude.letRecM" -> Just (), [tps, _, defs_f, body_f]) ->
-         do funs <- mkFunVarsForTps tps
+         do funs <- mkFunVarsForTps (MalformedComp t') tps
             fun_tms <- mapM (liftSC1 scFlatTermF . ExtCns . unLocalFunName) funs
             funs_tm <- liftSC1 scTuple fun_tms
             defs_tm <- liftSC2 scApply defs_f funs_tm >>= liftSC1 scWhnf
