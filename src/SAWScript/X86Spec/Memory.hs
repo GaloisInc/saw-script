@@ -30,6 +30,7 @@ import SAWScript.CrucibleLLVM
   , Bytes, toBytes, bytesToInteger
   , projectLLVM_bv, bitvectorType
   , StorageType
+  , noAlignment
   )
 
 import SAWScript.X86Spec.Types
@@ -101,7 +102,7 @@ instance (MemType t, a ~ X86 t) => WriteMem (a, Value t) where
          val <- packMemValue sym ty (crucRepr w) x
          -- Here we use the write that ignores mutability.
          -- This is because we are writing initialization code.
-         let alignment = 0 -- default to byte-aligned (FIXME)
+         let alignment = noAlignment -- default to byte-aligned (FIXME)
          storeConstRaw sym mem p ty alignment val
 
 instance (MemType t, Infer t) => WriteMem (Value t) where
@@ -134,7 +135,7 @@ readMem :: MemType t => X86 t -> Value APtr -> Spec Post (Value t)
 readMem w (Value p) =
   withMem $ \sym mem ->
     do let ?ptrWidth = knownNat
-       Value <$> doLoad sym mem p (llvmType w) (crucRepr w) 0
+       Value <$> doLoad sym mem p (llvmType w) (crucRepr w) noAlignment
 
 
 
@@ -149,7 +150,7 @@ instance (t ~ Bits 64) => AllocBytes (Value t) where
     let ?ptrWidth = knownNat in
     updMem $ \sym m ->
       do sz <- projectLLVM_bv sym n
-         let alignment = 0 -- default to byte-aligned (FIXME)
+         let alignment = noAlignment -- default to byte-aligned (FIXME)
          (v,mem1) <- doMalloc sym HeapAlloc mut str m sz alignment
          return (Value v, mem1)
 
@@ -208,5 +209,3 @@ readArray ty p n
                vs <- readArray ty p1 (n-1)
                return (v : vs)
   | otherwise = return []
-
-

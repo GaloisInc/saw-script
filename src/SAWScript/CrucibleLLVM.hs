@@ -24,6 +24,7 @@ module SAWScript.CrucibleLLVM
   , toBytes
     -- * Re-exports from "Lang.Crucible.LLVM.DataLayout"
   , Alignment
+  , noAlignment
   , padToAlignment
   , DataLayout
   , intWidthSize
@@ -132,7 +133,7 @@ import Lang.Crucible.LLVM.Bytes
   (Bytes, bytesToBits, bytesToInteger, toBytes)
 
 import Lang.Crucible.LLVM.DataLayout
-  (Alignment, padToAlignment, DataLayout, EndianForm(..),
+  (Alignment, noAlignment, padToAlignment, DataLayout, EndianForm(..),
    integerAlignment, floatAlignment, intWidthSize, ptrBitwidth)
 
 import Lang.Crucible.LLVM.Extension

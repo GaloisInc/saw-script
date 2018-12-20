@@ -941,7 +941,7 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ (cc^.ccLLVMContext)
 
-     let alignment = 0 -- default to byte alignment (FIXME)
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
      res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy alignment)
      (p,r,v) <- case res of
                   Left e  -> failure loc (BadPointerLoad e)
@@ -1014,7 +1014,7 @@ executeAllocation opts cc (var, (loc, memTy)) =
      let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar
      sz <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger w)
-     let alignment = 0 -- default to byte alignment (FIXME)
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
      (ptr, mem') <- liftIO (Crucible.mallocRaw sym mem sz alignment)
      writeGlobal memVar mem'
      assignVar cc loc var ptr
@@ -1070,7 +1070,7 @@ executePointsTo opts sc cc spec (PointsTo _loc ptr val) =
      storTy <- Crucible.toStorableType memTy1
 
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
-     let alignment = 0 -- default to byte alignment (FIXME)
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
      mem  <- readGlobal memVar
      mem' <- liftIO (Crucible.storeRaw sym mem ptr1 storTy alignment val1)
      writeGlobal memVar mem'

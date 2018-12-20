@@ -415,7 +415,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
          -- then the store type should be determined by the rhs.
          memTy <- typeOfSetupValue cc tyenv nameEnv val
          storTy <- Crucible.toStorableType memTy
-         let alignment = 0 -- default to byte-aligned (FIXME)
+         let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
          let sym = cc^.ccBackend
          mem' <- Crucible.storeConstRaw sym mem ptr'' storTy alignment val'
          return mem'
@@ -475,7 +475,7 @@ doAlloc cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     let alignment = 0 -- default to byte-aligned (FIXME)
+     let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
      Crucible.mallocRaw sym mem sz alignment
 
 -- | Allocate read-only space on the LLVM heap to store a value of the
@@ -489,7 +489,7 @@ doAllocConst cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     let alignment = 0 -- default to byte-aligned (FIXME)
+     let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
      Crucible.mallocConstRaw sym mem sz alignment
 
 --------------------------------------------------------------------------------

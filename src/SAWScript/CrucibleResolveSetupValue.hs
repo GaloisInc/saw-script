@@ -228,7 +228,7 @@ resolveSetupVal cc env tyenv nameEnv val =
     SetupStruct packed vs -> do
       vals <- mapM (resolveSetupVal cc env tyenv nameEnv) vs
       let tps = map (typeOfLLVMVal dl) vals
-      let t = Crucible.mkStructType (V.fromList (mkFields packed dl 0 0 tps))
+      let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))
       let flds = case Crucible.storageTypeF t of
                    Crucible.Struct v -> v
                    _ -> error "impossible"
@@ -425,7 +425,7 @@ typeAlignment dl ty =
     Crucible.Float           -> fromJust (Crucible.floatAlignment dl 32)
     Crucible.Double          -> fromJust (Crucible.floatAlignment dl 64)
     Crucible.Array _sz ty'   -> typeAlignment dl ty'
-    Crucible.Struct flds     -> V.foldl max 0 (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
+    Crucible.Struct flds     -> V.foldl max Crucible.noAlignment (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
 
 typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.StorageType
 typeOfLLVMVal _dl val =
