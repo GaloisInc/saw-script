@@ -288,7 +288,7 @@ mkFunVarsForTps err (asCtor -> Just ("Prelude.TypesCons", [a, b, tps])) =
      tp <- liftSC3 scPi "x" a comp_b
      var <- liftSC0 scFreshGlobalVar
      rest <- mkFunVarsForTps err tps
-     return (LocalFunName (EC var "x" tp) : rest)
+     return (LocalFunName (EC var "f" tp) : rest)
 mkFunVarsForTps err _ = throwError err
 
 -- | Normalize a computation to weak head normal form
@@ -314,7 +314,8 @@ whnfComp (CompTerm t) =
        (isGlobalDef "Prelude.letRecM" -> Just (), [tps, _, defs_f, body_f]) ->
          do funs <- mkFunVarsForTps (MalformedComp t') tps
             fun_tms <- mapM (liftSC1 scFlatTermF . ExtCns . unLocalFunName) funs
-            funs_tm <- liftSC1 scTuple fun_tms
+            funs_tm <-
+              foldr ((=<<) . liftSC2 scPairValue) (liftSC0 scUnitValue) fun_tms
             defs_tm <- liftSC2 scApply defs_f funs_tm >>= liftSC1 scWhnf
             defs <- case asTupleValue defs_tm of
               Just defs -> return defs
