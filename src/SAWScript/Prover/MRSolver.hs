@@ -4,7 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module SAWScript.Prover.MRSolver
-  (askMRSolver
+  (askMRSolver, MRFailure(..), showMRFailure
   , SBV.SMTConfig
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
   ) where
@@ -12,6 +12,8 @@ module SAWScript.Prover.MRSolver
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
+
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
@@ -81,6 +83,65 @@ data MRFailure
     -- ^ Records a disjunctive branch we took, where both cases failed
   deriving Show
 
+instance Pretty Type where
+  pretty (Type t) = ppTerm defaultPPOpts t
+
+instance Pretty Comp where
+  pretty (CompTerm t) = ppTerm defaultPPOpts t
+  pretty (CompBind c f) =
+    group $ hang 2 $ vsep [pretty c, text ">>=", pretty f]
+  pretty (CompMark c _) =
+    -- FIXME: print the mark?
+    pretty c
+
+instance Pretty CompFun where
+  pretty (CompFunTerm t) = ppTerm defaultPPOpts t
+  pretty (CompFunComp f g) =
+    group $ hang 2 $ vsep [pretty f, text ">=>", pretty g]
+  pretty (CompFunMark f _) =
+    -- FIXME: print the mark?
+    pretty f
+
+vsepIndent24 :: Doc -> Doc -> Doc -> Doc -> Doc
+vsepIndent24 d1 d2 d3 d4 =
+  group (d1 <> nest 2 (line <> d2) <> line <> d3 <> nest 2 (line <> d4))
+
+instance Pretty MRFailure where
+  pretty (TermsNotEq t1 t2) =
+    vsepIndent24
+    (text "Terms not equal:") (ppTerm defaultPPOpts t1)
+    (text "and") (ppTerm defaultPPOpts t2)
+  pretty (TypesNotEq tp1 tp2) =
+    vsepIndent24
+    (text "Types not equal:") (pretty tp1)
+    (text "and") (pretty tp2)
+  pretty (ReturnNotError t) =
+    nest 2 (text "errorM not equal to" <+>
+            group (hang 2 $ vsep [text "returnM", ppTerm defaultPPOpts t]))
+  pretty (FunsNotEq nm1 nm2) =
+    vsep [text "Named functions not equal:", text (show nm1), text (show nm2)]
+  pretty (CannotLookupFunDef nm) =
+    vsep [text "Could not find definition for function:", text (show nm)]
+  pretty (RecursiveUnfold nm) =
+    vsep [text "Recursive unfolding of function inside its own body:",
+          text (show nm)]
+  pretty (MalformedComp t) =
+    text "Could not handle computation:"
+    <> nest 2 (line <> ppTerm defaultPPOpts t)
+  pretty (NotCompFunType tp) =
+    text "Not a computation or computational function type:"
+    <> nest 2 (line <> ppTerm defaultPPOpts tp)
+  pretty (MRFailureCtx c1 c2 err) =
+    vsepIndent24 (text "When comparing terms:")
+    (pretty c1) (text "and") (pretty c2)
+    <> line <> pretty err
+  pretty (MRFailureDisj err1 err2) =
+    vsepIndent24 (text "Tried two comparisons:") (pretty err1)
+    (text "Backtracking...") (pretty err2)
+
+showMRFailure :: MRFailure -> String
+showMRFailure = show . pretty
+
 -- | State maintained by MR. Solver
 data MRState = MRState {
   mrSC :: SharedContext,
@@ -144,7 +205,7 @@ mrProvable bool_prop =
      prop <- liftSC1 scEqTrue bool_prop'
      (smt_res, _) <- liftSC1 (SBV.satUnintSBV smt_conf [] timeout) prop
      case smt_res of
-       Just vals -> return False
+       Just _ -> return False
        Nothing -> return True
 
 -- | Test if a Boolean term is satisfiable
