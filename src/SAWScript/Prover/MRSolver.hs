@@ -53,6 +53,7 @@ data WHNFComp
   | FunBind FunName [Term] Mark CompFun
     -- ^ Bind a monadic function with @N@ arguments in an @a -> CompM b@ term,
     -- marked with a set of function names
+  deriving Show
 
 -- | A computation function of type @a -> CompM b@ for some @a@ and @b@
 data CompFun
@@ -67,6 +68,33 @@ data CompFun
 data Comp = CompTerm Term | CompBind Comp CompFun | CompMark Comp Mark
           deriving Show
 
+-- | A universal type for all the different ways MR. Solver represents terms
+data MRTerm
+  = MRTermTerm Term
+  | MRTermType Type
+  | MRTermComp Comp
+  | MRTermCompFun CompFun
+  | MRTermWHNFComp WHNFComp
+  | MRTermFunName FunName
+  deriving Show
+
+-- | Typeclass for things that can be coerced to 'MRTerm'
+class IsMRTerm a where
+  toMRTerm :: a -> MRTerm
+
+instance IsMRTerm Term where toMRTerm = MRTermTerm
+instance IsMRTerm Type where toMRTerm = MRTermType
+instance IsMRTerm Comp where toMRTerm = MRTermComp
+instance IsMRTerm CompFun where toMRTerm = MRTermCompFun
+instance IsMRTerm WHNFComp where toMRTerm = MRTermWHNFComp
+instance IsMRTerm FunName where toMRTerm = MRTermFunName
+
+-- | The context in which a failure occurred
+data FailCtx
+  = FailCtxCmp MRTerm MRTerm
+  | FailCtxWHNF Term
+  deriving Show
+
 -- | That's MR. Failure to you
 data MRFailure
   = TermsNotEq Term Term
@@ -75,66 +103,109 @@ data MRFailure
   | FunsNotEq FunName FunName
   | CannotLookupFunDef FunName
   | RecursiveUnfold FunName
+  | MalformedInOutTypes Term
+  | MalformedDefsFun Term
   | MalformedComp Term
   | NotCompFunType Term
-  | MRFailureCtx Comp Comp MRFailure
+  | MRFailureCtx FailCtx MRFailure
     -- ^ Records terms we were trying to compare when we got a failure
   | MRFailureDisj MRFailure MRFailure
     -- ^ Records a disjunctive branch we took, where both cases failed
   deriving Show
 
+prettyTerm :: Term -> Doc
+prettyTerm = ppTerm defaultPPOpts
+
+prettyAppList :: [Doc] -> Doc
+prettyAppList = group . hang 2 . vsep
+
 instance Pretty Type where
-  pretty (Type t) = ppTerm defaultPPOpts t
+  pretty (Type t) = prettyTerm t
+
+instance Pretty FunName where
+  pretty (LocalName (LocalFunName ec)) = text $ ecName ec
+  pretty (GlobalName i) = text $ show i
 
 instance Pretty Comp where
-  pretty (CompTerm t) = ppTerm defaultPPOpts t
+  pretty (CompTerm t) = prettyTerm t
   pretty (CompBind c f) =
-    group $ hang 2 $ vsep [pretty c, text ">>=", pretty f]
+    prettyAppList [pretty c, text ">>=", pretty f]
   pretty (CompMark c _) =
     -- FIXME: print the mark?
     pretty c
 
 instance Pretty CompFun where
-  pretty (CompFunTerm t) = ppTerm defaultPPOpts t
+  pretty (CompFunTerm t) = prettyTerm t
   pretty (CompFunComp f g) =
-    group $ hang 2 $ vsep [pretty f, text ">=>", pretty g]
+    prettyAppList [pretty f, text ">=>", pretty g]
   pretty (CompFunMark f _) =
     -- FIXME: print the mark?
     pretty f
+
+instance Pretty WHNFComp where
+  pretty (Return t) =
+    prettyAppList [text "returnM", parens (prettyTerm t)]
+  pretty Error = text "errorM"
+  pretty (If cond t1 t2) =
+    prettyAppList [text "ite", prettyTerm cond,
+                   parens (pretty t1), parens (pretty t2)]
+  pretty (FunBind f [] _ k) =
+    prettyAppList [pretty f, (text ">>="), pretty k]
+  pretty (FunBind f args _ k) =
+    prettyAppList
+    [parens (prettyAppList (pretty f : map prettyTerm args)),
+     (text ">>=") <+> pretty k]
 
 vsepIndent24 :: Doc -> Doc -> Doc -> Doc -> Doc
 vsepIndent24 d1 d2 d3 d4 =
   group (d1 <> nest 2 (line <> d2) <> line <> d3 <> nest 2 (line <> d4))
 
+instance Pretty MRTerm where
+  pretty (MRTermTerm t) = prettyTerm t
+  pretty (MRTermType tp) = pretty tp
+  pretty (MRTermComp comp) = pretty comp
+  pretty (MRTermCompFun f) = pretty f
+  pretty (MRTermWHNFComp norm) = pretty norm
+
+instance Pretty FailCtx where
+  pretty (FailCtxCmp t1 t2) =
+    group $ nest 2 $ vsep [text "When comparing terms:", pretty t1, pretty t2]
+  pretty (FailCtxWHNF t) =
+    group $ nest 2 $ vsep [text "When normalizing computation:", prettyTerm t]
+
 instance Pretty MRFailure where
   pretty (TermsNotEq t1 t2) =
     vsepIndent24
-    (text "Terms not equal:") (ppTerm defaultPPOpts t1)
-    (text "and") (ppTerm defaultPPOpts t2)
+    (text "Terms not equal:") (prettyTerm t1)
+    (text "and") (prettyTerm t2)
   pretty (TypesNotEq tp1 tp2) =
     vsepIndent24
     (text "Types not equal:") (pretty tp1)
     (text "and") (pretty tp2)
   pretty (ReturnNotError t) =
     nest 2 (text "errorM not equal to" <+>
-            group (hang 2 $ vsep [text "returnM", ppTerm defaultPPOpts t]))
+            group (hang 2 $ vsep [text "returnM", prettyTerm t]))
   pretty (FunsNotEq nm1 nm2) =
-    vsep [text "Named functions not equal:", text (show nm1), text (show nm2)]
+    vsep [text "Named functions not equal:", pretty nm1, pretty nm2]
   pretty (CannotLookupFunDef nm) =
-    vsep [text "Could not find definition for function:", text (show nm)]
+    vsep [text "Could not find definition for function:", pretty nm]
   pretty (RecursiveUnfold nm) =
     vsep [text "Recursive unfolding of function inside its own body:",
-          text (show nm)]
+          pretty nm]
+  pretty (MalformedInOutTypes t) =
+    text "Not a ground InputOutputTypes list:"
+    <> nest 2 (line <> prettyTerm t)
+  pretty (MalformedDefsFun t) =
+    text "Cannot handle letRecM recursive definitions term:"
+    <> nest 2 (line <> prettyTerm t)
   pretty (MalformedComp t) =
     text "Could not handle computation:"
-    <> nest 2 (line <> ppTerm defaultPPOpts t)
+    <> nest 2 (line <> prettyTerm t)
   pretty (NotCompFunType tp) =
     text "Not a computation or computational function type:"
-    <> nest 2 (line <> ppTerm defaultPPOpts tp)
-  pretty (MRFailureCtx c1 c2 err) =
-    vsepIndent24 (text "When comparing terms:")
-    (pretty c1) (text "and") (pretty c2)
-    <> line <> pretty err
+    <> nest 2 (line <> prettyTerm tp)
+  pretty (MRFailureCtx ctx err) =
+    pretty ctx <> line <> pretty err
   pretty (MRFailureDisj err1 err2) =
     vsepIndent24 (text "Tried two comparisons:") (pretty err1)
     (text "Backtracking...") (pretty err2)
@@ -173,9 +244,10 @@ mrOr m1 m2 =
   throwError $ MRFailureDisj err1 err2
 
 -- | Run an 'MRM' computation in an extended failure context
-withFailureCtx :: Comp -> Comp -> MRM a -> MRM a
-withFailureCtx t1 t2 = mapFailure (MRFailureCtx t1 t2)
+withFailureCtx :: FailCtx -> MRM a -> MRM a
+withFailureCtx ctx = mapFailure (MRFailureCtx ctx)
 
+-- | Catch any errors thrown by a computation and coerce them to a 'Left'
 catchErrorEither :: MonadError e m => m a -> m (Either e a)
 catchErrorEither m = catchError (Right <$> m) (return . Left)
 
@@ -277,19 +349,18 @@ applyCompFun (CompFunMark f mark) t =
      return $ CompMark comp mark
 
 -- | Take in an @InputOutputTypes@ list (as a SAW core term) and build a fresh
--- function variable for each pair of input and output types in it. Return the
--- list of these names along with a term of them tupled up together.
-mkFunVarsForTps :: MRFailure -> Term -> MRM [LocalFunName]
-mkFunVarsForTps _ (asCtor -> Just ("Prelude.TypesNil", [])) =
+-- function variable for each pair of input and output types in it
+mkFunVarsForTps :: Term -> MRM [LocalFunName]
+mkFunVarsForTps (asCtor -> Just ("Prelude.TypesNil", [])) =
   return []
-mkFunVarsForTps err (asCtor -> Just ("Prelude.TypesCons", [a, b, tps])) =
+mkFunVarsForTps (asCtor -> Just ("Prelude.TypesCons", [a, b, tps])) =
   do compM <- liftSC1 scGlobalDef "Prelude.CompM"
      comp_b <- liftSC2 scApply compM b
      tp <- liftSC3 scPi "x" a comp_b
      var <- liftSC0 scFreshGlobalVar
-     rest <- mkFunVarsForTps err tps
+     rest <- mkFunVarsForTps tps
      return (LocalFunName (EC var "f" tp) : rest)
-mkFunVarsForTps err _ = throwError err
+mkFunVarsForTps t = throwError (MalformedInOutTypes t)
 
 -- | Normalize a computation to weak head normal form
 whnfComp :: Comp -> MRM WHNFComp
@@ -300,6 +371,7 @@ whnfComp (CompMark m mark) =
   do norm <- whnfComp m
      whnfMark norm mark
 whnfComp (CompTerm t) =
+  withFailureCtx (FailCtxWHNF t) $
   do t' <- liftSC1 scWhnf t
      case asApplyAll t' of
        (isGlobalDef "Prelude.returnM" -> Just (), [_, x]) ->
@@ -312,14 +384,14 @@ whnfComp (CompTerm t) =
        (isGlobalDef "Prelude.ite" -> Just (), [_, cond, then_tm, else_tm]) ->
          return $ If cond (CompTerm then_tm) (CompTerm else_tm)
        (isGlobalDef "Prelude.letRecM" -> Just (), [tps, _, defs_f, body_f]) ->
-         do funs <- mkFunVarsForTps (MalformedComp t') tps
+         do funs <- mkFunVarsForTps tps
             fun_tms <- mapM (liftSC1 scFlatTermF . ExtCns . unLocalFunName) funs
             funs_tm <-
               foldr ((=<<) . liftSC2 scPairValue) (liftSC0 scUnitValue) fun_tms
             defs_tm <- liftSC2 scApply defs_f funs_tm >>= liftSC1 scWhnf
             defs <- case asTupleValue defs_tm of
               Just defs -> return defs
-              Nothing -> throwError (MalformedComp t')
+              Nothing -> throwError (MalformedDefsFun defs_f)
             modify $ \st ->
               st { mrLocalFuns = (zip funs defs) ++ mrLocalFuns st }
             body_tm <- liftSC2 scApply body_f funs_tm
@@ -394,24 +466,30 @@ mrSolveCoInd f1 f2 =
 -- core type @a@ are equivalent, where the notion of equivalent depends on the
 -- type @a@. This assumes that the two objects have the same SAW core type. The
 -- 'MRM' computation returns @()@ on success and throws a 'MRFailure' on error.
-class MRSolveEq a b where
-  mrSolveEq :: a -> b -> MRM ()
+class (IsMRTerm a, IsMRTerm b) => MRSolveEq a b where
+  mrSolveEq' :: a -> b -> MRM ()
+
+-- | The main function for solving equations, that calls @mrSovleEq'@ but with
+-- debugging support for errors, i.e., adding to the failure context
+mrSolveEq :: MRSolveEq a b => a -> b -> MRM ()
+mrSolveEq a b =
+  withFailureCtx (FailCtxCmp (toMRTerm a) (toMRTerm b)) $ mrSolveEq' a b
 
 -- NOTE: this instance is specifically for terms of non-computation type
 instance MRSolveEq Term Term where
-  mrSolveEq t1 t2 =
+  mrSolveEq' t1 t2 =
     do eq <- mrTermsEq t1 t2
        if eq then return () else throwError (TermsNotEq t1 t2)
 
 instance MRSolveEq Type Type where
-  mrSolveEq tp1@(Type t1) tp2@(Type t2) =
+  mrSolveEq' tp1@(Type t1) tp2@(Type t2) =
     do eq <- liftSC3 scConvertible True t1 t2
        if eq then return () else
          throwError (TypesNotEq tp1 tp2)
 
 instance MRSolveEq FunName FunName where
-  mrSolveEq f1 f2 | f1 == f2 = return ()
-  mrSolveEq f1 f2 =
+  mrSolveEq' f1 f2 | f1 == f2 = return ()
+  mrSolveEq' f1 f2 =
     do eqs <- mrFunEqs <$> get
        case lookup (f1,f2) eqs of
          Just True -> return ()
@@ -419,14 +497,13 @@ instance MRSolveEq FunName FunName where
          Nothing -> mrSolveCoInd f1 f2
 
 instance MRSolveEq Comp Comp where
-  mrSolveEq comp1 comp2 =
-    withFailureCtx comp1 comp2 $
+  mrSolveEq' comp1 comp2 =
     do norm1 <- whnfComp comp1
        norm2 <- whnfComp comp2
        mrSolveEq norm1 norm2
 
 instance MRSolveEq CompFun CompFun where
-  mrSolveEq f1 f2 =
+  mrSolveEq' f1 f2 =
     do tp <- compFunInputType f1
        var <- liftSC2 scFreshGlobal "x" tp
        comp1 <- applyCompFun f1 var
@@ -434,29 +511,29 @@ instance MRSolveEq CompFun CompFun where
        mrSolveEq comp1 comp2
 
 instance MRSolveEq Comp WHNFComp where
-  mrSolveEq comp1 norm2 =
+  mrSolveEq' comp1 norm2 =
     do norm1 <- whnfComp comp1
        mrSolveEq norm1 norm2
 
 instance MRSolveEq WHNFComp Comp where
-  mrSolveEq norm1 comp2 =
+  mrSolveEq' norm1 comp2 =
     do norm2 <- whnfComp comp2
        mrSolveEq norm1 norm2
 
 instance MRSolveEq WHNFComp WHNFComp where
-  mrSolveEq (Return t1) (Return t2) =
+  mrSolveEq' (Return t1) (Return t2) =
     -- Returns are equal iff their returned values are
     mrSolveEq t1 t2
-  mrSolveEq (Return t1) Error =
+  mrSolveEq' (Return t1) Error =
     -- Return is never equal to error
     throwError (ReturnNotError t1)
-  mrSolveEq Error (Return t2) =
+  mrSolveEq' Error (Return t2) =
     -- Return is never equal to error
     throwError (ReturnNotError t2)
-  mrSolveEq Error Error =
+  mrSolveEq' Error Error =
     -- Error trivially equals itself
     return ()
-  mrSolveEq (If cond1 then1 else1) norm2@(If cond2 then2 else2) =
+  mrSolveEq' (If cond1 then1 else1) norm2@(If cond2 then2 else2) =
     -- Special case if the two conditions are equal: assert the one condition to
     -- test the then branches and assert its negtion to test the elses
     do eq <- mrTermsEq cond1 cond2
@@ -468,17 +545,17 @@ instance MRSolveEq WHNFComp WHNFComp where
          -- path conditions, to the whole second computation
          (withPathCondition cond1 $ mrSolveEq then1 norm2) >>
          (withNotPathCondition cond1 $ mrSolveEq else1 norm2)
-  mrSolveEq (If cond1 then1 else1) norm2 =
+  mrSolveEq' (If cond1 then1 else1) norm2 =
     -- To compare an if to anything else, compare the then and else, under their
     -- respective path conditions, to the other computation
     (withPathCondition cond1 $ mrSolveEq then1 norm2) >>
     (withNotPathCondition cond1 $ mrSolveEq else1 norm2)
-  mrSolveEq norm1 (If cond2 then2 else2) =
+  mrSolveEq' norm1 (If cond2 then2 else2) =
     -- To compare an if to anything else, compare the then and else, under their
     -- respective path conditions, to the other computation
     (withPathCondition cond2 $ mrSolveEq norm1 then2) >>
     (withNotPathCondition cond2 $ mrSolveEq norm1 else2)
-  mrSolveEq comp1@(FunBind f1 args1 mark1 k1) comp2@(FunBind f2 args2 mark2 k2) =
+  mrSolveEq' comp1@(FunBind f1 args1 mark1 k1) comp2@(FunBind f2 args2 mark2 k2) =
     -- To compare two computations (f1 args1 >>= norm1) and (f2 args2 >>= norm2)
     -- we first test if (f1 args1) and (f2 args2) are equal. If so, we recurse
     -- and compare norm1 and norm2; otherwise, we try unfolding one or the other
@@ -498,11 +575,11 @@ instance MRSolveEq WHNFComp WHNFComp where
            mrSolveEq (Type tp1) (Type tp2)
            mrSolveEq f1 f2
            zipWithM_ mrSolveEq args1 args2
-  mrSolveEq (FunBind f1 args1 mark1 k1) comp2 =
+  mrSolveEq' (FunBind f1 args1 mark1 k1) comp2 =
     -- This case compares a function call to a Return or Error; the only thing
     -- to do is unfold the function call and recurse
     mrUnfoldFunBind f1 args1 mark1 k1 >>= \c -> mrSolveEq c comp2
-  mrSolveEq comp1 (FunBind f2 args2 mark2 k2) =
+  mrSolveEq' comp1 (FunBind f2 args2 mark2 k2) =
     -- This case compares a function call to a Return or Error; the only thing
     -- to do is unfold the function call and recurse
     mrUnfoldFunBind f2 args2 mark2 k2 >>= \c -> mrSolveEq comp1 c
