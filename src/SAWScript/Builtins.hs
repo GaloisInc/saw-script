@@ -91,7 +91,7 @@ import qualified SAWScript.Prover.RME as Prover
 import qualified SAWScript.Prover.ABC as Prover
 import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
-import qualified SAWScript.Prover.MRSolver as Prover (askMRSolver)
+import qualified SAWScript.Prover.MRSolver as Prover
 
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
@@ -1283,7 +1283,9 @@ mr_solver_tests :: [SharedContext -> IO Term]
 mr_solver_tests =
   let helper nm = \sc -> scGlobalDef sc nm in
   map helper
-  [ "Prelude.test_comp0", "Prelude.test_comp1" ]
+  [ "Prelude.test_fun0", "Prelude.test_fun1", "Prelude.test_fun2"
+  , "Prelude.test_fun3", "Prelude.test_fun4", "Prelude.test_fun5"
+  , "Prelude.test_fun6"]
 
 testMRSolver :: Integer -> Integer -> TopLevel ()
 testMRSolver i1 i2 =
@@ -1292,5 +1294,5 @@ testMRSolver i1 i2 =
      t2 <- liftIO $ (mr_solver_tests !! fromInteger i2) sc
      res <- liftIO $ Prover.askMRSolver sc SBV.z3 Nothing t1 t2
      case res of
-       Just err -> io $ putStrLn $ show err
+       Just err -> io $ putStrLn $ Prover.showMRFailure err
        Nothing -> io $ putStrLn "Success!"
