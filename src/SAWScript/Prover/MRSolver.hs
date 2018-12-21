@@ -74,6 +74,7 @@ data MRFailure
   | CannotLookupFunDef FunName
   | RecursiveUnfold FunName
   | MalformedComp Term
+  | NotCompFunType Term
   | MRFailureCtx Comp Comp MRFailure
     -- ^ Records terms we were trying to compare when we got a failure
   | MRFailureDisj MRFailure MRFailure
@@ -196,6 +197,12 @@ asFunName t =
   (LocalName <$> LocalFunName <$> asExtCns t)
   `mplus` (GlobalName <$> asGlobalDef t)
 
+-- | Match a term as being of the form @CompM a@ for some @a@
+asCompMApp :: Monad m => Recognizer m Term Term
+asCompMApp (asApp -> Just (isGlobalDef "Prelude.CompM" -> Just (), tp)) =
+  return tp
+asCompMApp _ = fail "not CompM app"
+
 -- | Apply a computation function to a term argument to get a computation
 applyCompFun :: CompFun -> Term -> MRM Comp
 applyCompFun (CompFunComp f g) t =
@@ -258,8 +265,8 @@ whnfComp (CompTerm t) =
        ((asFunName -> Just f), args) ->
          do comp_tp <- liftSC1 scTypeOf t >>= liftSC1 scWhnf
             tp <-
-              case asApp comp_tp of
-                Just (isGlobalDef "Prelude.CompM" -> Just (), tp) -> return tp
+              case asCompMApp comp_tp of
+                Just tp -> return tp
                 _ -> error "Computation not of type CompM a for some a"
             ret_fun <- liftSC1 scGlobalDef "Prelude.returnM"
             g <- liftSC2 scApply ret_fun tp
@@ -459,8 +466,15 @@ askMRSolver sc smt_conf timeout t1 t2 =
            }
      res <-
        flip evalStateT init_st $ runExceptT $
-       (mrSolveEq (Type tp1) (Type tp2) >>
-        mrSolveEq (CompTerm t1) (CompTerm t2))
+       do mrSolveEq (Type tp1) (Type tp2)
+          let (pi_args, ret_tp) = asPiList tp1
+          vars <- mapM (\(x, x_tp) -> liftSC2 scFreshGlobal x x_tp) pi_args
+          case asCompMApp ret_tp of
+            Just _ -> return ()
+            Nothing -> throwError (NotCompFunType tp1)
+          t1_app <- liftSC2 scApplyAll t1 vars
+          t2_app <- liftSC2 scApplyAll t2 vars
+          mrSolveEq (CompTerm t1_app) (CompTerm t2_app)
      case res of
        Left err -> return $ Just err
        Right () -> return Nothing
