@@ -157,7 +157,7 @@ prims =
   , Prims.bpXor    = pure2 RME.xor
   , Prims.bpBoolEq = pure2 RME.iff
     -- Bitvector logical
-  , Prims.bpBvNot  = pure1 undefined
+  , Prims.bpBvNot  = pure1 (V.map RME.compl)
   , Prims.bpBvAnd  = pure2 (V.zipWith RME.conj)
   , Prims.bpBvOr   = pure2 (V.zipWith RME.disj)
   , Prims.bpBvXor  = pure2 (V.zipWith RME.xor)
