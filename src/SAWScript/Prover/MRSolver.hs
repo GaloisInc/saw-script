@@ -12,8 +12,9 @@ module SAWScript.Prover.MRSolver
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
+import Data.Semigroup
 
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
