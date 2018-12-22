@@ -142,9 +142,9 @@ typeOfSetupValue' cc env nameEnv val =
                             , "instead got:"
                             , show (Cryptol.pp s)
                             ]
-    SetupStruct vs ->
+    SetupStruct packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
-         let si = Crucible.mkStructInfo dl False memTys
+         let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
     SetupArray [] -> fail "typeOfSetupValue: invalid empty crucible_array"
     SetupArray (v : vs) ->
@@ -225,10 +225,11 @@ resolveSetupVal cc env tyenv nameEnv val =
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
-    SetupStruct vs -> do
+    SetupStruct packed vs -> do
       vals <- mapM (resolveSetupVal cc env tyenv nameEnv) vs
       let tps = map (typeOfLLVMVal dl) vals
-      let flds = case Crucible.typeF (Crucible.mkStructType (V.fromList (mkFields dl 0 0 tps))) of
+      let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))
+      let flds = case Crucible.storageTypeF t of
                    Crucible.Struct v -> v
                    _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
@@ -361,7 +362,7 @@ resolveSAWTerm cc tp tm =
                Just memTy -> Crucible.toStorableType memTy
                _ -> fail "resolveSAWTerm: invalid tuple type"
            fields <-
-             case Crucible.typeF storTy of
+             case Crucible.storageTypeF storTy of
                Crucible.Struct fields -> return fields
                _ -> fail "resolveSAWTerm: impossible: expected struct"
            return (Crucible.LLVMValStruct (V.zip fields (V.fromList vals)))
@@ -394,35 +395,39 @@ toLLVMType dl tp =
       Cryptol.TVRec _flds -> Nothing -- FIXME
       Cryptol.TVFun _ _ -> Nothing
 
+-- FIXME: This struct-padding logic is already implemented in
+-- crucible-llvm. Reimplementing it here is error prone and harder to
+-- maintain.
 mkFields ::
+  Bool {- ^ @True@ = packed, @False@ = unpacked -} ->
   Crucible.DataLayout ->
   Crucible.Alignment ->
   Crucible.Bytes ->
-  [Crucible.Type] ->
-  [(Crucible.Type, Crucible.Bytes)]
-mkFields _ _ _ [] = []
-mkFields dl a off (ty : tys) = (ty, pad) : mkFields dl a' off' tys
-    where
-      end = off + Crucible.typeSize ty
-      off' = Crucible.padToAlignment end nextAlign
-      pad = off' - end
-      a' = max a (typeAlignment dl ty)
-      nextAlign = case tys of
-        [] -> a'
-        (ty' : _) -> typeAlignment dl ty'
+  [Crucible.StorageType] ->
+  [(Crucible.StorageType, Crucible.Bytes)]
+mkFields _ _ _ _ [] = []
+mkFields packed dl a off (ty : tys) =
+  (ty, pad) : mkFields packed dl a' off' tys
+  where
+    end = off + Crucible.storageTypeSize ty
+    off' = if packed then end else Crucible.padToAlignment end nextAlign
+    pad = off' - end
+    a' = max a (typeAlignment dl ty)
+    nextAlign = case tys of
+      [] -> a'
+      (ty' : _) -> typeAlignment dl ty'
 
 
-
-typeAlignment :: Crucible.DataLayout -> Crucible.Type -> Crucible.Alignment
+typeAlignment :: Crucible.DataLayout -> Crucible.StorageType -> Crucible.Alignment
 typeAlignment dl ty =
-  case Crucible.typeF ty of
+  case Crucible.storageTypeF ty of
     Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromInteger (Crucible.bytesToBits bytes))
     Crucible.Float           -> fromJust (Crucible.floatAlignment dl 32)
     Crucible.Double          -> fromJust (Crucible.floatAlignment dl 64)
     Crucible.Array _sz ty'   -> typeAlignment dl ty'
-    Crucible.Struct flds     -> V.foldl max 0 (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
+    Crucible.Struct flds     -> V.foldl max Crucible.noAlignment (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
 
-typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
+typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.StorageType
 typeOfLLVMVal _dl val =
   case val of
     Crucible.LLVMValInt _bkl bv ->

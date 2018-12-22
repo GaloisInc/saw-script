@@ -1767,9 +1767,15 @@ primitives = Map.fromList
 
   , prim "crucible_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal CIR.SetupStruct)
+    (pureVal (CIR.SetupStruct False))
     [ "Create a SetupValue representing a struct, with the given list of"
     , "values as elements." ]
+
+  , prim "crucible_packed_struct"
+    "[SetupValue] -> SetupValue"
+    (pureVal (CIR.SetupStruct True))
+    [ "Create a SetupValue representing a packed struct, with the given"
+    , "list of values as elements." ]
 
   , prim "crucible_elem"
     "SetupValue -> Int -> SetupValue"

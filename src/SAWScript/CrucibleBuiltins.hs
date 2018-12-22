@@ -173,8 +173,13 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
 
      def <- case find (\d -> L.defName d == nm') (L.modDefines llmod) of
-                    Nothing -> fail ("Could not find function named" ++ show nm)
-                    Just decl -> return decl
+              Just decl -> return decl
+              Nothing   -> fail $ unlines $
+                [ "Could not find function named " ++ show nm
+                ] ++ if simVerbose opts < 3
+                     then [ "Run SAW with --sim-verbose=3 to see all function names" ]
+                     else "Available function names:" :
+                            map (("  " ++) . show . L.defName) (L.modDefines llmod)
      st0 <- either (fail . show . ppSetupError) return (initialCrucibleSetupState cc def setupLoc)
 
      -- execute commands of the method spec
@@ -185,7 +190,7 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
      mem0 <- case Crucible.lookupGlobal mvar globals of
-       Nothing -> fail "internal error: LLVM Memory global not found"
+       Nothing   -> fail "internal error: LLVM Memory global not found"
        Just mem0 -> return mem0
      let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem0
 
@@ -410,12 +415,13 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
          -- then the store type should be determined by the rhs.
          memTy <- typeOfSetupValue cc tyenv nameEnv val
          storTy <- Crucible.toStorableType memTy
+         let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
          let sym = cc^.ccBackend
-         mem' <- Crucible.storeConstRaw sym mem ptr'' storTy val'
+         mem' <- Crucible.storeConstRaw sym mem ptr'' storTy alignment val'
          return mem'
 
 -- | Sets up globals (ghost variable), and collects boolean terms
--- that shuld be assumed to be true.
+-- that should be assumed to be true.
 setupPrestateConditions ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   CrucibleMethodSpecIR        ->
@@ -469,7 +475,8 @@ doAlloc cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     Crucible.mallocRaw sym mem sz
+     let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
+     Crucible.mallocRaw sym mem sz alignment
 
 -- | Allocate read-only space on the LLVM heap to store a value of the
 -- given type. Returns the pointer to the allocated memory.
@@ -482,7 +489,8 @@ doAllocConst cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     Crucible.mallocConstRaw sym mem sz
+     let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
+     Crucible.mallocConstRaw sym mem sz alignment
 
 --------------------------------------------------------------------------------
 
@@ -602,8 +610,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
     prepareArgs ctx x =
       Crucible.RegMap <$>
       Ctx.traverseWithIndex (\idx tr ->
-        do a <- Crucible.unpackMemValue sym (x !! Ctx.indexVal idx)
-           v <- Crucible.coerceAny sym tr a
+        do v <- Crucible.unpackMemValue sym tr (x !! Ctx.indexVal idx)
            return (Crucible.RegEntry tr v))
       ctx
 
@@ -697,7 +704,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
 
       let setupMem = do
              -- register the callable override functions
-             _llvmctx' <- execStateT Crucible.register_llvm_overrides ctx
+             _llvmctx' <- execStateT (Crucible.register_llvm_overrides llvm_mod) ctx
 
              -- register all the functions defined in the LLVM module
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
@@ -839,7 +846,7 @@ diffMemTypes ::
 diffMemTypes x0 y0 =
   let wptr :: Natural = fromIntegral (natValue ?ptrWidth) in
   case (x0, y0) of
-    -- Special case; consider a one-element struct to be compatiable with
+    -- Special case; consider a one-element struct to be compatible with
     -- the type of its field
     (Crucible.StructType x, _)
       | V.length (Crucible.siFields x) == 1 -> diffMemTypes (Crucible.fiType (V.head (Crucible.siFields x))) y0
@@ -1025,7 +1032,8 @@ constructExpandedSetupValue sc loc t =
          SetupTerm <$> freshVariable sc "" ty
 
     Crucible.StructType si ->
-       SetupStruct . toList <$> traverse (constructExpandedSetupValue sc loc) (Crucible.siFieldTypes si)
+       SetupStruct False {- FIXME: should this always be unpacked? -} . toList <$>
+       traverse (constructExpandedSetupValue sc loc) (Crucible.siFieldTypes si)
 
     Crucible.PtrType symTy ->
       case Crucible.asMemType symTy of
@@ -1038,10 +1046,13 @@ constructExpandedSetupValue sc loc t =
     Crucible.ArrayType n memTy ->
        SetupArray <$> replicateM n (constructExpandedSetupValue sc loc memTy)
 
-    Crucible.FloatType    -> fail "crucible_fresh_expanded_var: Float not supported"
-    Crucible.DoubleType   -> fail "crucible_fresh_expanded_var: Double not supported"
-    Crucible.MetadataType -> fail "crucible_fresh_expanded_var: Metadata not supported"
-    Crucible.VecType{}    -> fail "crucible_fresh_expanded_var: Vec not supported"
+    Crucible.FloatType      -> failUnsupportedType "Float"
+    Crucible.DoubleType     -> failUnsupportedType "Double"
+    Crucible.MetadataType   -> failUnsupportedType "Metadata"
+    Crucible.VecType{}      -> failUnsupportedType "Vec"
+    Crucible.X86_FP80Type{} -> failUnsupportedType "X86_FP80"
+  where failUnsupportedType tyName = fail $ unwords
+          ["crucible_fresh_expanded_var: " ++ tyName ++ " not supported"]
 
 llvmTypeAlias :: L.Type -> Maybe Crucible.Ident
 llvmTypeAlias (L.Alias i) = Just i

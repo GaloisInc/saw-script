@@ -313,7 +313,7 @@ prover :: Options
 prover vpopts sc ms script vs n g = do
   let exts = getAllExts g
   ppopts <- fmap rwPPOpts getTopLevelRW
-  tt <- io (scAbstractExts sc exts g)
+  tt <- io $ scGeneralizeExts sc exts =<< scEqTrue sc g
   let goal = ProofGoal Universal n "vc" (vsVCName vs) tt
   r <- evalStateT script (startProof goal)
   case r of

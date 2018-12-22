@@ -41,3 +41,4 @@ extra-deps:
   - sbv-7.10
   - panic-0.4.0.0
 resolver: lts-11.22
+allow-newer: true

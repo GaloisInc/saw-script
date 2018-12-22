@@ -182,7 +182,9 @@ ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
   SetupVar i     -> PP.text ("@" ++ show i)
   SetupNull      -> PP.text "NULL"
-  SetupStruct vs -> PP.braces (commaList (map ppSetupValue vs))
+  SetupStruct packed vs
+    | packed     -> PP.angles (PP.braces (commaList (map ppSetupValue vs)))
+    | otherwise  -> PP.braces (commaList (map ppSetupValue vs))
   SetupArray vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem v i  -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ show i)
   SetupField v f -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ f)
@@ -614,12 +616,12 @@ matchPointsTos opts sc cc spec prepost = go False []
     setupVars :: SetupValue -> Set AllocIndex
     setupVars v =
       case v of
-        SetupVar    i            -> Set.singleton i
-        SetupStruct xs           -> foldMap setupVars xs
-        SetupArray  xs           -> foldMap setupVars xs
+        SetupVar i               -> Set.singleton i
+        SetupStruct _ xs         -> foldMap setupVars xs
+        SetupArray xs            -> foldMap setupVars xs
         SetupElem x _            -> setupVars x
         SetupField x _           -> setupVars x
-        SetupTerm   _            -> Set.empty
+        SetupTerm _              -> Set.empty
         SetupNull                -> Set.empty
         SetupGlobal _            -> Set.empty
         SetupGlobalInitializer _ -> Set.empty
@@ -644,10 +646,8 @@ computeReturnValue _opts _cc _sc spec ty Nothing =
     _ -> failure (spec^.csLoc) BadReturnSpecification
 
 computeReturnValue opts cc sc spec ty (Just val) =
-  do (_memTy, Crucible.AnyValue xty xval) <- resolveSetupValue opts cc sc spec val
-     case testEquality ty xty of
-       Just Refl -> return xval
-       Nothing -> failure (spec^.csLoc) BadReturnSpecification
+  do (_memTy, xval) <- resolveSetupValue opts cc sc spec ty val
+     return xval
 
 
 ------------------------------------------------------------------------
@@ -745,7 +745,7 @@ matchArg sc cc loc prepost actual expectedTy expected@(SetupTerm expectedTT)
        matchTerm sc cc loc prepost realTerm (ttTerm expectedTT)
 
 -- match the fields of struct point-wise
-matchArg sc cc loc prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct zs) =
+matchArg sc cc loc prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct _ zs) =
   sequence_
     [ matchArg sc cc loc prepost x y z
        | ((_,x),y,z) <- zip3 (V.toList xs)
@@ -779,8 +779,8 @@ matchArg _sc _cc loc _prepost actual expectedTy expected =
 
 ------------------------------------------------------------------------
 
-zeroValueSC :: SharedContext -> Crucible.Type -> IO Term
-zeroValueSC sc tp = case Crucible.typeF tp of
+zeroValueSC :: SharedContext -> Crucible.StorageType -> IO Term
+zeroValueSC sc tp = case Crucible.storageTypeF tp of
   Crucible.Float -> fail "zeroValueSC: float unsupported"
   Crucible.Double -> fail "zeroValueSC: double unsupported"
   Crucible.Bitvector bs ->
@@ -844,9 +844,9 @@ valueToSC _sym loc failMsg _tval _val =
 
 ------------------------------------------------------------------------
 
-typeToSC :: SharedContext -> Crucible.Type -> IO Term
+typeToSC :: SharedContext -> Crucible.StorageType -> IO Term
 typeToSC sc t =
-  case Crucible.typeF t of
+  case Crucible.storageTypeF t of
     Crucible.Bitvector sz -> scBitvector sc (fromInteger (Crucible.bytesToBits sz))
     Crucible.Float -> fail "typeToSC: float not supported"
     Crucible.Double -> fail "typeToSC: double not supported"
@@ -932,7 +932,7 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
   do let tyenv = csAllocations spec
          nameEnv = csTypeNames spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
-     (_memTy, ptr1) <- asPointer loc =<< resolveSetupValue opts cc sc spec ptr
+     (_memTy, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
      storTy <- Crucible.toStorableType memTy
@@ -941,7 +941,8 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ (cc^.ccLLVMContext)
 
-     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy)
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy alignment)
      (p,r,v) <- case res of
                   Left e  -> failure loc (BadPointerLoad e)
                   Right x -> return x
@@ -1013,7 +1014,8 @@ executeAllocation opts cc (var, (loc, memTy)) =
      let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar
      sz <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger w)
-     (ptr, mem') <- liftIO (Crucible.mallocRaw sym mem sz)
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+     (ptr, mem') <- liftIO (Crucible.mallocRaw sym mem sz alignment)
      writeGlobal memVar mem'
      assignVar cc loc var ptr
 
@@ -1058,18 +1060,19 @@ executePointsTo ::
   CrucibleMethodSpecIR       ->
   PointsTo                   ->
   OverrideMatcher arch RW ()
-executePointsTo opts sc cc spec (PointsTo loc ptr val) =
-  do (_, ptr1) <- asPointer loc =<< resolveSetupValue opts cc sc spec ptr
+executePointsTo opts sc cc spec (PointsTo _loc ptr val) =
+  do (_, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
      sym    <- getSymInterface
 
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
-     (memTy1, Crucible.AnyValue vtp val1) <- resolveSetupValue opts cc sc spec val
+     (memTy1, val1) <- resolveSetupValueLLVM opts cc sc spec val
      storTy <- Crucible.toStorableType memTy1
 
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
+     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
      mem  <- readGlobal memVar
-     mem' <- liftIO (Crucible.doStore sym mem ptr1 vtp storTy val1)
+     mem' <- liftIO (Crucible.storeRaw sym mem ptr1 storTy alignment val1)
      writeGlobal memVar mem'
 
 
@@ -1134,9 +1137,9 @@ instantiateSetupValue ::
 instantiateSetupValue sc s v =
   case v of
     SetupVar _               -> return v
-    SetupTerm tt             -> SetupTerm   <$> doTerm tt
-    SetupStruct vs           -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
-    SetupArray  vs           -> SetupArray  <$> mapM (instantiateSetupValue sc s) vs
+    SetupTerm tt             -> SetupTerm <$> doTerm tt
+    SetupStruct p vs         -> SetupStruct p <$> mapM (instantiateSetupValue sc s) vs
+    SetupArray    vs         -> SetupArray    <$> mapM (instantiateSetupValue sc s) vs
     SetupElem _ _            -> return v
     SetupField _ _           -> return v
     SetupNull                -> return v
@@ -1171,27 +1174,11 @@ resolveSetupValue ::
   CrucibleContext arch ->
   SharedContext        ->
   CrucibleMethodSpecIR ->
+  Crucible.TypeRepr tp ->
   SetupValue           ->
-  OverrideMatcher arch md (Crucible.MemType, Crucible.AnyValue Sym)
-resolveSetupValue opts cc sc spec sval =
+  OverrideMatcher arch md (Crucible.MemType, Crucible.RegValue Sym tp)
+resolveSetupValue opts cc sc spec tp sval =
   do (memTy, lval) <- resolveSetupValueLLVM opts cc sc spec sval
      sym <- getSymInterface
-     aval <- liftIO $ Crucible.unpackMemValue sym lval
-     return (memTy, aval)
-
-------------------------------------------------------------------------
-
-asPointer ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  W4.ProgramLoc ->
-  (Crucible.MemType, Crucible.AnyValue Sym) ->
-  OverrideMatcher arch md (Crucible.MemType, LLVMPtr (Crucible.ArchWidth arch))
-
-asPointer
-  _
-  (Crucible.PtrType pty,
-   Crucible.AnyValue Crucible.PtrRepr val)
-  | Right pty' <- Crucible.asMemType pty
-  = return (pty', val)
-
-asPointer loc _ = failure loc BadPointerCast
+     val <- liftIO $ Crucible.unpackMemValue sym tp lval
+     return (memTy, val)

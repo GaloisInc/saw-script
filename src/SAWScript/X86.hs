@@ -518,6 +518,8 @@ doSim opts elf sfs name (globs,overs) st =
                    malformed $ unlines [ "Failed to finish execution"
                                        , ppAbort mvar res
                                        ]
+             TimeoutResult _ctx ->
+                   malformed $ unlines [ "Execution timed out" ]
 
      mem <- getMem gp mvar
      return ( addrInt

@@ -42,10 +42,10 @@ let dotprod_wrap_spec = do {
     llvm_assert_eq "y->1" {{ 2:[32] }};
     llvm_return {{ dotprod xs ys }};
     llvm_verify_tactic do {
-      simplify (cryptol_ss ());
+      simplify (add_cryptol_defs ["ecEq"] (cryptol_ss ()));
       simplify (add_prelude_defs ["implies"] basic_ss);
-      simplify (add_prelude_eqs ["eq_refl"] basic_ss);
-      simplify (add_prelude_eqs ["or_True"] basic_ss);
+      simplify (add_prelude_eqs ["bvEq_refl"] basic_ss);
+      simplify (add_prelude_eqs ["or_True1"] basic_ss);
       trivial;
     };
 };
