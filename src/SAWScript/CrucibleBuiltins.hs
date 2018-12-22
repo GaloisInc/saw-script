@@ -109,8 +109,8 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
+import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
-
 
 import qualified SAWScript.CrucibleLLVM as Crucible
 
@@ -475,7 +475,7 @@ doAlloc cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
+     let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
      Crucible.mallocRaw sym mem sz alignment
 
 -- | Allocate read-only space on the LLVM heap to store a value of the
@@ -489,7 +489,7 @@ doAllocConst cc (_loc,tp) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
+     let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
      Crucible.mallocConstRaw sym mem sz alignment
 
 --------------------------------------------------------------------------------
