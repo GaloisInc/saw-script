@@ -116,9 +116,8 @@ test-suite test-sawcore
     , vector
     , ansi-wl-pprint
     , QuickCheck >= 2.7
-    , tasty < 1.2
-    -- tasty-ant-xml requires tasty < 1.2
-    , tasty-ant-xml
+    , tasty
+    , tasty-ant-xml >= 1.1.0
     , tasty-hunit
     , tasty-quickcheck
     , tagged
