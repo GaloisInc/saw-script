@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -148,6 +149,10 @@ prims =
   , Prims.bpBvRor    = pure2 svRotateRight
   , Prims.bpBvShl    = pure3 svShiftL
   , Prims.bpBvShr    = pure3 svShiftR
+    -- Bitvector misc
+  , Prims.bpBvPopcount = pure1 svPopcount
+  , Prims.bpBvCountLeadingZeros = pure1 svCountLeadingZeros
+  , Prims.bpBvCountTrailingZeros = pure1 svCountTrailingZeros
     -- Integer operations
   , Prims.bpIntAdd = pure2 svPlus
   , Prims.bpIntSub = pure2 svMinus
@@ -471,6 +476,30 @@ lookupSbvExtra (SStream f r) n =
 
 ------------------------------------------------------------
 -- Misc operations
+
+svPopcount :: SWord -> SWord
+svPopcount xs = if w == 0 then zero else foldr1 svPlus [ svIte b one zero | b <- bits ]
+ where
+ bits = svBlastLE xs
+ w    = length bits
+ one  = literalSWord w 1
+ zero = literalSWord w 0
+
+svCountLeadingZeros :: SWord -> SWord
+svCountLeadingZeros xs = go 0 bits
+ where
+ bits = svBlastBE xs
+ w    = length bits
+ go !i []     = literalSWord w i
+ go !i (b:bs) = svIte b (literalSWord w i) (go (i+1) bs)
+
+svCountTrailingZeros :: SWord -> SWord
+svCountTrailingZeros xs = go 0 bits
+ where
+ bits = svBlastLE xs
+ w    = length bits
+ go !i []     = literalSWord w i
+ go !i (b:bs) = svIte b (literalSWord w i) (go (i+1) bs)
 
 -- | Ceiling (log_2 x)
 sLg2 :: SWord -> SWord
