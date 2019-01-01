@@ -24,6 +24,7 @@ module Verifier.SAW.Simulator.RME.Vector
 import Verifier.SAW.Simulator.RME.Base (RME)
 import qualified Verifier.SAW.Simulator.RME.Base as RME
 
+import Data.Semigroup ( (<>) )
 import qualified Data.Bits as Bits
 import Data.Vector (Vector)
 import qualified Data.Vector as V
