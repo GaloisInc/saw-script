@@ -179,6 +179,10 @@ prims =
   , Prims.bpBvRor    = bvRor sym
   , Prims.bpBvShl    = bvShl sym
   , Prims.bpBvShr    = bvShr sym
+    -- Bitvector misc
+  , Prims.bpBvPopcount = bvPopcount sym
+  , Prims.bpBvCountLeadingZeros = bvCountLeadingZeros sym
+  , Prims.bpBvCountTrailingZeros = bvCountTrailingZeros sym
     -- Integer operations
   , Prims.bpIntAbs = W.intAbs sym
   , Prims.bpIntAdd = W.intAdd sym

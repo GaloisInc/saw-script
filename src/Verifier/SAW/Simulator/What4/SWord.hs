@@ -351,6 +351,15 @@ bvMul :: SWordBin
 bvMul = bvBin W.bvMul
 
 
+bvPopcount :: SWordUn
+bvPopcount = bvUn W.bvPopcount
+
+bvCountLeadingZeros :: SWordUn
+bvCountLeadingZeros = bvUn W.bvCountLeadingZeros
+
+bvCountTrailingZeros :: SWordUn
+bvCountTrailingZeros = bvUn W.bvCountTrailingZeros
+
 -- | Unsigned bitvector division.
 --
 --   The result is undefined when @y@ is zero,
