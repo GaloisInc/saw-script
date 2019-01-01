@@ -203,6 +203,11 @@ prims =
   , Prims.bpBvRor    = pure2 (\x y -> bvRotateR x (unsigned y))
   , Prims.bpBvShl    = pure3 (\b x y -> bvShiftL b x (unsigned y))
   , Prims.bpBvShr    = pure3 (\b x y -> bvShiftR b x (unsigned y))
+    -- Bitvector misc
+  , Prims.bpBvPopcount = pure1 (Prim.bvPopcount undefined)
+  , Prims.bpBvCountLeadingZeros = pure1 (Prim.bvCountLeadingZeros undefined)
+  , Prims.bpBvCountTrailingZeros = pure1 (Prim.bvCountTrailingZeros undefined)
+
     -- Integer operations
   , Prims.bpIntAdd = pure2 (+)
   , Prims.bpIntSub = pure2 (-)

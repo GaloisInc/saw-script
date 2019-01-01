@@ -180,6 +180,9 @@ module Verifier.SAW.SharedTerm
   , scBvShl, scBvShr, scBvSShr
   , scBvUExt, scBvSExt
   , scBvTrunc
+  , scBvPopcount
+  , scBvCountLeadingZeros
+  , scBvCountTrailingZeros
   , scLsb, scMsb
     -- ** Utilities
 --  , scTrue
@@ -1391,6 +1394,13 @@ scBvURem sc n x y = scGlobalApply sc "Prelude.bvURem" [n, x, y]
 scBvUDiv sc n x y = scGlobalApply sc "Prelude.bvUDiv" [n, x, y]
 scBvSRem sc n x y = scGlobalApply sc "Prelude.bvSRem" [n, x, y]
 scBvSDiv sc n x y = scGlobalApply sc "Prelude.bvSDiv" [n, x, y]
+
+-- | bvPopcount/bvCountLeadingZeros/bvCountTrailingZeros :: (x :: Nat) -> bitvector n -> bitvector n;
+scBvPopcount, scBvCountLeadingZeros, scBvCountTrailingZeros
+    :: SharedContext -> Term -> Term -> IO Term
+scBvPopcount sc n x = scGlobalApply sc "Prelude.bvPopcount" [n, x]
+scBvCountLeadingZeros sc n x = scGlobalApply sc "Prelude.bvCountLeadingZeros" [n, x]
+scBvCountTrailingZeros sc n x = scGlobalApply sc "Prelude.bvCountTrailingZeros" [n, x]
 
 -- | bvOr/And/Xor :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
 scBvOr, scBvAnd, scBvXor

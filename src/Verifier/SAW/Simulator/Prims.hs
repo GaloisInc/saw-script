@@ -97,6 +97,10 @@ data BasePrims l =
   , bpBvRor    :: VWord l -> VWord l -> MWord l
   , bpBvShl    :: VBool l -> VWord l -> VWord l -> MWord l
   , bpBvShr    :: VBool l -> VWord l -> VWord l -> MWord l
+    -- Bitvector misc
+  , bpBvPopcount           :: VWord l -> MWord l
+  , bpBvCountLeadingZeros  :: VWord l -> MWord l
+  , bpBvCountTrailingZeros :: VWord l -> MWord l
     -- Integer operations
   , bpIntAdd :: VInt l -> VInt l -> MInt l
   , bpIntSub :: VInt l -> VInt l -> MInt l
@@ -156,6 +160,11 @@ constMap bp = Map.fromList
   , ("Prelude.bvsgt" , wordBinRel (bpPack bp) (bpBvsgt bp))
   , ("Prelude.bvuge" , wordBinRel (bpPack bp) (bpBvuge bp))
   , ("Prelude.bvugt" , wordBinRel (bpPack bp) (bpBvugt bp))
+    -- Bitvector misc
+  , ("Prelude.bvPopcount", wordUnOp (bpPack bp) (bpBvPopcount bp))
+  , ("Prelude.bvCountLeadingZeros", wordUnOp (bpPack bp) (bpBvCountLeadingZeros bp))
+  , ("Prelude.bvCountTrailingZeros", wordUnOp (bpPack bp) (bpBvCountTrailingZeros bp))
+
 {-
   -- Shifts
   , ("Prelude.bvShl" , bvShLOp)

@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
@@ -176,7 +177,7 @@ upd :: Int -> t -> Vec t e -> Int -> e -> Vec t e
 upd _ _ (Vec t v) i e = Vec t (v V.// [(i, e)])
 
 (!) :: Vector a -> Int -> a
-v ! i = case v V.!? i of
+(!) v i = case v V.!? i of
   Just x -> x
   Nothing -> invalidIndex (toInteger i)
 
@@ -215,6 +216,23 @@ bvsgt _ x y = signed x >  signed y
 bvsge _ x y = signed x >= signed y
 bvslt _ x y = signed x <  signed y
 bvsle _ x y = signed x <= signed y
+
+bvPopcount :: Int -> BitVector -> BitVector
+bvPopcount _ (BV w x) = BV w (toInteger (popCount x))
+
+bvCountLeadingZeros :: Int -> BitVector -> BitVector
+bvCountLeadingZeros _ (BV w x) = BV w (toInteger (go 0))
+ where
+ go !i
+   | i < w && testBit x (w - i - 1) == False = go (i+1)
+   | otherwise = i
+
+bvCountTrailingZeros :: Int -> BitVector -> BitVector
+bvCountTrailingZeros _ (BV w x) = BV w (toInteger (go 0))
+ where
+ go !i
+   | i < w && testBit x i == False = go (i+1)
+   | otherwise = i
 
 -- | @get@ specialized to BitVector (big-endian)
 -- get :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Fin n -> a;

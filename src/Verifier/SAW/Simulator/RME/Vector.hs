@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {- |
 Module      : Verifier.SAW.Simulator.RME.Vector
 Copyright   : Galois, Inc. 2016
@@ -15,12 +16,15 @@ module Verifier.SAW.Simulator.RME.Vector
   , udiv, urem, sdiv, srem
   , pmul, pmod, pdiv
   , integer
+  , popcount
+  , countLeadingZeros
+  , countTrailingZeros
   ) where
 
 import Verifier.SAW.Simulator.RME.Base (RME)
 import qualified Verifier.SAW.Simulator.RME.Base as RME
 
-import Data.Bits
+import qualified Data.Bits as Bits
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
@@ -28,7 +32,7 @@ type RMEV = Vector RME
 
 -- | Constant integer literals
 integer :: Int -> Integer -> RMEV
-integer width x = V.reverse (V.generate width (RME.constant . testBit x))
+integer width x = V.reverse (V.generate width (RME.constant . Bits.testBit x))
 
 -- | Bitvector equality
 eq :: RMEV -> RMEV -> RME
@@ -154,6 +158,32 @@ sdivrem dividend divisor = (q',r')
     (q, r) = udivrem dividend' divisor'
     q' = negWhen q signXor
     r' = negWhen r sign1
+
+popcount :: RMEV -> RMEV
+popcount bits = if l == 0 then V.empty else (V.replicate (l-w-1) RME.false) <> pcnt
+ where
+ l = V.length bits
+ w = Bits.countTrailingZeros l -- log_2 rounded down, w+1 is enough bits to hold popcount
+ zs = V.replicate w RME.false
+
+ pcnt = foldr1 add xs -- length is w+1
+ xs = [ zs <> V.singleton b
+      | b <- V.toList bits
+      ]
+
+countTrailingZeros :: RMEV -> RMEV
+countTrailingZeros bits = countLeadingZeros (V.reverse bits)
+
+-- Big endian convention means its easier to count leading zeros
+countLeadingZeros :: RMEV -> RMEV
+countLeadingZeros bits = if l == 0 then V.empty else (V.replicate (l-w-1) RME.false) <> (go 0 (V.toList bits))
+ where
+ l = V.length bits
+ w = Bits.countTrailingZeros l -- log_2 rounded down, w+1 is enough bits to hold count
+
+ go :: Integer -> [RME] -> Vector RME
+ go !i []      = integer (w+1) i
+ go !i (b:bs)  = V.zipWith (RME.mux b) (integer (w+1) i) (go (i+1) bs)
 
 -- | Polynomial multiplication. Note that the algorithm works the same
 -- no matter which endianness convention is used. Result length is

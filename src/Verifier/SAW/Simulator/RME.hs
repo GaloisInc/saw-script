@@ -190,6 +190,10 @@ prims =
   , Prims.bpBvRor    = pure2 (genShift muxRMEV Prims.vRotateR)
   , Prims.bpBvShl    = pure3 (genShift muxRMEV . Prims.vShiftL)
   , Prims.bpBvShr    = pure3 (genShift muxRMEV . Prims.vShiftR)
+    -- Bitvector misc
+  , Prims.bpBvPopcount = pure1 RMEV.popcount
+  , Prims.bpBvCountLeadingZeros = pure1 RMEV.countLeadingZeros
+  , Prims.bpBvCountTrailingZeros = pure1 RMEV.countTrailingZeros
     -- Integer operations
   , Prims.bpIntAdd = pure2 (+)
   , Prims.bpIntSub = pure2 (-)
