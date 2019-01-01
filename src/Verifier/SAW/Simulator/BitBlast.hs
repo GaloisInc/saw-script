@@ -222,6 +222,11 @@ prims be =
   , Prims.bpBvRor    = genShift be lvRotateR
   , Prims.bpBvShl    = genShift be . lvShiftL
   , Prims.bpBvShr    = genShift be . lvShiftR
+    -- Bitvector misc
+  , Prims.bpBvPopcount = AIG.popCount be
+  , Prims.bpBvCountLeadingZeros = AIG.countLeadingZeros be
+  , Prims.bpBvCountTrailingZeros = AIG.countTrailingZeros be
+
     -- Integer operations
   , Prims.bpIntAdd = pure2 (+)
   , Prims.bpIntSub = pure2 (-)
