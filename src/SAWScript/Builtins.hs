@@ -572,10 +572,13 @@ parseDimacsSolution vars ls = map lkup vars
 
 satExternal :: Bool -> String -> [String]
             -> ProofScript SV.SatResult
-satExternal doCNF execName args = withFirstGoal $ \g -> do
+satExternal doCNF execName args = withFirstGoal $ \g0 -> do
   sc <- SV.getSharedContext
   SV.AIGProxy proxy <- SV.getProxy
   io $ do
+  let (vars, concl) = asPiList (goalTerm g0)
+  t0 <- scLambdaList sc vars =<< asEqTrue concl
+  let g = g0 { goalTerm = t0 }
   t <- rewriteEqs sc (goalTerm g)
   tp <- scWhnf sc =<< scTypeOf sc t
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
