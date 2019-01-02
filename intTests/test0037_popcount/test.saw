@@ -1,0 +1,23 @@
+m <- llvm_load_module "./test.bc";
+import "./spec.cry";
+
+let solver = z3;
+let sz = 32;
+
+crucible_llvm_verify m "popcount" [] true (do {
+  x <- crucible_fresh_var "x" (llvm_int sz);
+  crucible_execute_func [crucible_term {{ (zero # x):[32] }}];
+  crucible_return (crucible_term {{ popcount ((zero # x):[32]) }});
+}) solver;
+
+crucible_llvm_verify m "clz" [] true (do {
+  x <- crucible_fresh_var "x" (llvm_int sz);
+  crucible_execute_func [crucible_term {{ (zero # x):[32] }}];
+  crucible_return (crucible_term {{ clz ((zero # x):[32]) }});
+}) solver;
+
+crucible_llvm_verify m "ctz" [] true (do {
+  x <- crucible_fresh_var "x" (llvm_int sz);
+  crucible_execute_func [crucible_term {{ (zero # x):[32] }}];
+  crucible_return (crucible_term {{ ctz ((zero # x):[32]) }});
+}) solver;
