@@ -704,7 +704,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
 
       let setupMem = do
              -- register the callable override functions
-             _llvmctx' <- execStateT (Crucible.register_llvm_overrides llvm_mod) ctx
+             _llvmctx' <- Crucible.register_llvm_overrides llvm_mod ctx
 
              -- register all the functions defined in the LLVM module
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
