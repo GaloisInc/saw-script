@@ -1084,8 +1084,8 @@ primitive bvslt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 primitive bvsle : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 
 primitive bvPopcount : (n : Nat) -> bitvector n -> bitvector n;
-primitive bvCountLeadingZeroes : (n : Nat) -> bitvector n -> bitvector n;
-primitive bvCountTrailingZeroes : (n : Nat) -> bitvector n -> bitvector n;
+primitive bvCountLeadingZeros : (n : Nat) -> bitvector n -> bitvector n;
+primitive bvCountTrailingZeros : (n : Nat) -> bitvector n -> bitvector n;
 
 bvCarry : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 bvCarry n x y = bvult n (bvAdd n x y) x;
