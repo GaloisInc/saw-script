@@ -21,92 +21,13 @@ import Data.Bits
 import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import Numeric.Natural (Natural)
 
 ------------------------------------------------------------
 -- Natural numbers
 
--- | A natural number.
-newtype Nat = Nat { unNat :: Integer }
-  deriving (Eq,Ord)
-
-instance Show Nat where
-  show (Nat x) = show x
-
-instance Num Nat where
-  Nat x + Nat y = Nat (x + y)
-  Nat x * Nat y = Nat (x * y)
-  Nat x - Nat y | r >= 0 = Nat r
-                | otherwise = error "internal: Nat subtraction result must be non-negative."
-    where r = x - y
-
-  negate (Nat 0) = Nat 0
-  negate _ = error "Nat negation is upsupported."
-
-  abs = id
-
-  signum (Nat 0) = 0
-  signum (Nat _) = 1
-
-  fromInteger r | r >= 0 = Nat r
-                | otherwise = error "internal: Natural numbers must be non-negative."
-
-instance Enum Nat where
-  succ (Nat x) = Nat (succ x)
-  pred (Nat 0) = error "Nat 0 has no predecessor."
-  pred (Nat x) = Nat (pred x)
-
-  toEnum   = fromIntegral
-  fromEnum = fromIntegral
-
-  enumFrom       (Nat x)                 = Nat <$> enumFrom x
-  enumFromThen   (Nat x) (Nat y)         = Nat <$> enumFromThen x y
-  enumFromTo     (Nat x)         (Nat z) = Nat <$> enumFromTo x z
-  enumFromThenTo (Nat x) (Nat y) (Nat z) = Nat <$> enumFromThenTo x y z
-
-
-instance Real Nat where
-  toRational (Nat x) = toRational x
-
-instance Integral Nat where
-  Nat x `quotRem` Nat y | y == 0 = error "Nat division by zero."
-                        | otherwise = (Nat q, Nat r)
-    where (q,r) = x `quotRem` y
-  divMod = quotRem
-  toInteger (Nat x) = x
-
-instance Bits Nat where
-  Nat x .&. Nat y   = Nat (x .&. y)
-  Nat x .|. Nat y   = Nat (x .|. y)
-  Nat x `xor` Nat y = Nat (x `xor` y)
-
-  complement = error "complement(Nat) unsupported."
-  Nat x `shift` i = Nat (x `shift` i)
-
-  rotate = shift
-
-  bit = Nat . bit
-  Nat x `setBit` i = Nat (x `setBit` i)
-
-  Nat x `clearBit` i = Nat (x `clearBit` i)
-
-  complementBit (Nat x) i = Nat (x `complementBit` i)
-
-  testBit (Nat x) i = testBit x i
-
-  bitSize = error "bitSize(Nat) unsupported."
-
-#if MIN_VERSION_base(4,7,0)
-  bitSizeMaybe _ = Nothing
-#endif
-
-  isSigned _ = False
-
-#if MIN_VERSION_base(4,6,0)
-  popCount (Nat x) = popCount x
-#endif
-
 -- | width(n) = 1 + floor(log_2(n))
-widthNat :: Nat -> Nat
+widthNat :: Natural -> Natural
 widthNat 0 = 0
 widthNat n = 1 + widthNat (n `div` 2)
 
@@ -189,12 +110,12 @@ bvNat :: Int -> Integer -> BitVector
 bvNat w x = bv w x
 
 -- bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
-bvAdd, bvSub, bvMul :: Nat -> BitVector -> BitVector -> BitVector
+bvAdd, bvSub, bvMul :: Natural -> BitVector -> BitVector -> BitVector
 bvAdd _ (BV w x) (BV _ y) = bv w (x + y)
 bvSub _ (BV w x) (BV _ y) = bv w (x - y)
 bvMul _ (BV w x) (BV _ y) = bv w (x * y)
 
-bvNeg :: Nat -> BitVector -> BitVector
+bvNeg :: Natural -> BitVector -> BitVector
 bvNeg _ x@(BV w _) = bv w $ negate $ signed x
 
 bvAnd, bvOr, bvXor :: Int -> BitVector -> BitVector -> BitVector
@@ -243,7 +164,7 @@ bvCountTrailingZeros _ (BV w x) = BV w (toInteger (go 0))
 
 -- | @at@ specialized to BitVector (big-endian)
 -- at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
-at_bv :: Int -> () -> BitVector -> Nat -> Bool
+at_bv :: Int -> () -> BitVector -> Natural -> Bool
 at_bv _ _ x i = testBit (unsigned x) (width x - 1 - fromIntegral i)
 
 -- | @set@ specialized to BitVector (big-endian)

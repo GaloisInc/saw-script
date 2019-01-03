@@ -115,6 +115,7 @@ import Data.Bits
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
+import Numeric.Natural (Natural)
 
 import qualified Verifier.SAW.Prim as Prim
 import Verifier.SAW.Recognizer ((:*:)(..))
@@ -294,7 +295,7 @@ asSort s = Matcher (termToPat (Unshared (FTermF (Sort s)))) fn
                   unless (s == s') $ fail "Does not matched expected sort."
 
 -- | Match a Nat literal
-asAnyNatLit :: (Monad m) => Matcher m Prim.Nat
+asAnyNatLit :: (Monad m) => Matcher m Natural
 asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return (fromInteger i)
 
 -- | Match a Vec literal
@@ -315,7 +316,7 @@ asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 asBoolType :: (Monad m) => Matcher m ()
 asBoolType = asGlobalDef "Prelude.Bool"
 
-asSuccLit :: (Functor m, Monad m) => Matcher m Prim.Nat
+asSuccLit :: (Functor m, Monad m) => Matcher m Natural
 asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
 
 asBvNatLit :: (Applicative m, Monad m) => Matcher m Prim.BitVector
@@ -340,7 +341,7 @@ instance Applicative m => Matchable m () where
 instance Applicative m => Matchable m Term where
     defaultMatcher = asAny
 
-instance (Monad m) => Matchable m Prim.Nat where
+instance (Monad m) => Matchable m Natural where
     defaultMatcher = asAnyNatLit
 
 instance (Functor m, Monad m) => Matchable m Integer where
@@ -417,7 +418,7 @@ mkDataType i paramsB argsB =
      args <- sequence argsB
      mkTermF $ FTermF $ DataTypeApp i params args
 
-mkNatLit :: Prim.Nat -> TermBuilder Term
+mkNatLit :: Natural -> TermBuilder Term
 mkNatLit n = mkTermF (FTermF (NatLit (toInteger n)))
 
 mkVecLit :: Term -> V.Vector Term -> TermBuilder Term
@@ -427,7 +428,7 @@ mkBool :: Bool -> TermBuilder Term
 mkBool True  = mkGlobalDef "Prelude.True"
 mkBool False = mkGlobalDef "Prelude.False"
 
-mkBvNat :: Prim.Nat -> Integer -> TermBuilder Term
+mkBvNat :: Natural -> Integer -> TermBuilder Term
 mkBvNat n x = do
   mkGlobalDef "Prelude.bvNat"
     `mkApp` (mkNatLit n)
@@ -442,7 +443,7 @@ instance Buildable Term where
 instance Buildable Bool where
   defaultBuilder = mkBool
 
-instance Buildable Nat where
+instance Buildable Natural where
   defaultBuilder = mkNatLit
 
 instance Buildable Integer where
@@ -501,7 +502,7 @@ instance Conversionable Term where
 instance Conversionable Bool where
     convOfMatcher = defaultConvOfMatcher
 
-instance Conversionable Nat where
+instance Conversionable Natural where
     convOfMatcher = defaultConvOfMatcher
 
 instance Conversionable Integer where
@@ -579,7 +580,7 @@ succ_NatLit =
     Conversion $ thenMatcher asSuccLit (\n -> return $ mkNatLit (n + 1))
 
 addNat_NatLit :: Conversion
-addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Nat -> Nat -> Nat)
+addNat_NatLit = globalConv "Prelude.addNat" ((+) :: Natural -> Natural -> Natural)
 
 subNat_NatLit :: Conversion
 subNat_NatLit = Conversion $
@@ -587,10 +588,10 @@ subNat_NatLit = Conversion $
     (\(_ :*: x :*: y) -> if x >= y then Just (mkNatLit (x - y)) else Nothing)
 
 mulNat_NatLit :: Conversion
-mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Nat -> Nat -> Nat)
+mulNat_NatLit = globalConv "Prelude.mulNat" ((*) :: Natural -> Natural -> Natural)
 
 expNat_NatLit :: Conversion
-expNat_NatLit = globalConv "Prelude.expNat" ((^) :: Nat -> Nat -> Nat)
+expNat_NatLit = globalConv "Prelude.expNat" ((^) :: Natural -> Natural -> Natural)
 
 divNat_NatLit :: Conversion
 divNat_NatLit = Conversion $
@@ -605,7 +606,7 @@ remNat_NatLit = Conversion $
          if y /= 0 then Just (mkNatLit (x `rem` y)) else Nothing)
 
 equalNat_NatLit :: Conversion
-equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Nat -> Nat -> Bool)
+equalNat_NatLit = globalConv "Prelude.equalNat" ((==) :: Natural -> Natural -> Bool)
 
 -- | Conversions for operations on vector literals
 vecConversions :: [Conversion]

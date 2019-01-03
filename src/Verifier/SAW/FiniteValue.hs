@@ -18,6 +18,7 @@ import qualified Control.Monad.State as S
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Numeric.Natural (Natural)
 
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
@@ -29,7 +30,7 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 -- | Finite types that can be encoded as bits for a SAT/SMT solver.
 data FiniteType
   = FTBit
-  | FTVec Nat FiniteType
+  | FTVec Natural FiniteType
   | FTTuple [FiniteType]
   | FTRec (Map FieldName FiniteType)
   deriving (Eq, Show)
@@ -37,7 +38,7 @@ data FiniteType
 -- | Values inhabiting those finite types.
 data FiniteValue
   = FVBit Bool
-  | FVWord Nat Integer -- ^ a more efficient special case for 'FVVec FTBit _'.
+  | FVWord Natural Integer -- ^ a more efficient special case for 'FVVec FTBit _'.
   | FVVec FiniteType [FiniteValue]
   | FVTuple [FiniteValue]
   | FVRec (Map FieldName FiniteValue)
@@ -47,7 +48,7 @@ data FiniteValue
 data FirstOrderType
   = FOTBit
   | FOTInt
-  | FOTVec Nat FirstOrderType
+  | FOTVec Natural FirstOrderType
   | FOTTuple [FirstOrderType]
   | FOTRec (Map FieldName FirstOrderType)
   deriving (Eq, Show)
@@ -56,7 +57,7 @@ data FirstOrderType
 data FirstOrderValue
   = FOVBit Bool
   | FOVInt Integer
-  | FOVWord Nat Integer -- ^ a more efficient special case for 'FOVVec FOTBit _'.
+  | FOVWord Natural Integer -- ^ a more efficient special case for 'FOVVec FOTBit _'.
   | FOVVec FirstOrderType [FirstOrderValue]
   | FOVTuple [FirstOrderValue]
   | FOVRec (Map FieldName FirstOrderValue)

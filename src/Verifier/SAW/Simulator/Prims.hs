@@ -29,6 +29,7 @@ import qualified Data.Map as Map
 import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import Numeric.Natural (Natural)
 
 import Verifier.SAW.Term.Functor (Ident, alistAllFields)
 import Verifier.SAW.Simulator.Value
@@ -245,24 +246,24 @@ constMap bp = Map.fromList
 ------------------------------------------------------------
 -- Value accessors and constructors
 
-vNat :: Nat -> Value l
+vNat :: Natural -> Value l
 vNat n = VNat (fromIntegral n)
 
 natFromValue :: Num a => Value l -> a
 natFromValue (VNat n) = fromInteger n
 natFromValue _ = error "natFromValue"
 
-natFun'' :: (VMonad l, Show (Extra l)) => String -> (Nat -> MValue l) -> Value l
+natFun'' :: (VMonad l, Show (Extra l)) => String -> (Natural -> MValue l) -> Value l
 natFun'' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g v = fail $ "expected Nat (" ++ s ++ "): " ++ show v
 
-natFun' :: VMonad l => String -> (Nat -> MValue l) -> Value l
+natFun' :: VMonad l => String -> (Natural -> MValue l) -> Value l
 natFun' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail $ "expected Nat: " ++ s
 
-natFun :: VMonad l => (Nat -> MValue l) -> Value l
+natFun :: VMonad l => (Natural -> MValue l) -> Value l
 natFun f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = fail "expected Nat"

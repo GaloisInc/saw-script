@@ -85,7 +85,6 @@ module Verifier.SAW.SharedTerm
   , scFun
   , scString
   , scStringType
-  , Nat
   , scNat
   , scNatType
   , scAddNat
@@ -230,6 +229,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
+import Numeric.Natural (Natural)
 import Prelude hiding (mapM, maximum)
 
 import Verifier.SAW.Cache
@@ -1036,7 +1036,7 @@ scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 scSort :: SharedContext -> Sort -> IO Term
 scSort sc s = scFlatTermF sc (Sort s)
 
-scNat :: SharedContext -> Nat -> IO Term
+scNat :: SharedContext -> Natural -> IO Term
 scNat sc n = scFlatTermF sc (NatLit (toInteger n))
 
 scString :: SharedContext -> String -> IO Term
@@ -1345,7 +1345,7 @@ scSbvToInt sc n x = scGlobalApply sc "Prelude.sbvToInt" [n,x]
 
 -- | bitvector :: (n : Nat) -> sort 1
 -- bitvector n = Vec n Bool
-scBitvector :: SharedContext -> Nat -> IO Term
+scBitvector :: SharedContext -> Natural -> IO Term
 scBitvector sc size = do
   c <- scGlobalDef sc "Prelude.bitvector"
   s <- scNat sc size
@@ -1356,13 +1356,13 @@ scBvNat :: SharedContext -> Term -> Term -> IO Term
 scBvNat sc x y = scGlobalApply sc "Prelude.bvNat" [x, y]
 
 -- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
-scBvToNat :: SharedContext -> Nat -> Term -> IO Term
+scBvToNat :: SharedContext -> Natural -> Term -> IO Term
 scBvToNat sc n x = do
     n' <- scNat sc n
     scGlobalApply sc "Prelude.bvToNat" [n',x]
 
 -- | Returns constant bitvector.
-scBvConst :: SharedContext -> Nat -> Integer -> IO Term
+scBvConst :: SharedContext -> Natural -> Integer -> IO Term
 scBvConst sc w v = assert (w <= fromIntegral (maxBound :: Int)) $ do
   x <- scNat sc w
   y <- scNat sc $ fromInteger $ v .&. (1 `shiftL` fromIntegral w - 1)

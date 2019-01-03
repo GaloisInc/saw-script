@@ -17,7 +17,6 @@ module Verifier.SAW.Testing.Random where
 
 import Verifier.SAW.FiniteValue
   (asFiniteTypePure, scFiniteValue, FiniteType(..), FiniteValue(..))
-import Verifier.SAW.Prim (Nat(..))
 import Verifier.SAW.Recognizer (asBoolType, asPi, asEq)
 import Verifier.SAW.SharedTerm
   (scApplyAll, scGetModuleMap, scWhnf, SharedContext, Term)
@@ -35,6 +34,7 @@ import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Random
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Numeric.Natural (Natural)
 import System.Random.TF (newTFGen, TFGen)
 
 ----------------------------------------------------------------
@@ -136,16 +136,16 @@ randomBit :: (Functor m, MonadRandom m) => m FiniteValue
 randomBit = FVBit <$> getRandom
 
 -- | Generate a random word of the given length (i.e., a value of type @[w]@)
-randomWord :: (Functor m, MonadRandom m) => Nat -> m FiniteValue
-randomWord w = FVWord w <$> getRandomR (0, 2^(unNat w) - 1)
+randomWord :: (Functor m, MonadRandom m) => Natural -> m FiniteValue
+randomWord w = FVWord w <$> getRandomR (0, 2^w - 1)
 
 {- | Generate a random vector.  Generally, this should be used for sequences
 other than bits.  For sequences of bits use "randomWord".  The difference
 is mostly about how the results will be displayed. -}
 randomVec :: (Applicative m, Functor m, MonadRandom m) =>
-  Nat -> FiniteType -> m FiniteValue
+  Natural -> FiniteType -> m FiniteValue
 randomVec w t =
-  FVVec t <$> replicateM (fromIntegral . unNat $ w) (randomFiniteValue t)
+  FVVec t <$> replicateM (fromIntegral w) (randomFiniteValue t)
 
 -- | Generate a random tuple value.
 randomTuple :: (Applicative m, Functor m, MonadRandom m) =>
@@ -159,5 +159,5 @@ randomRec fieldTys = FVRec <$> traverse randomFiniteValue fieldTys
 
 _test :: IO ()
 _test = do
-  s <- evalRandIO $ randomFiniteValue (FTVec (Nat 16) (FTVec (Nat 1) FTBit))
+  s <- evalRandIO $ randomFiniteValue (FTVec 16 (FTVec 1 FTBit))
   print s

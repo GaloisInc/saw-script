@@ -55,7 +55,6 @@ module Verifier.SAW.Recognizer
   , asBool
   , asBoolType
   , asIntegerType
-  , Nat
   , asBitvectorType
   , asVectorType
   , asVecType
@@ -70,7 +69,8 @@ import Control.Lens
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Verifier.SAW.Prim
+import Numeric.Natural (Natural)
+
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.Prelude.Constants
@@ -260,7 +260,7 @@ isDataType i p t = do
   (o,l) <- asDataType t
   if i == o then p l else fail "not datatype"
 
-asNat :: (Monad f) => Recognizer f Term Nat
+asNat :: (Monad f) => Recognizer f Term Natural
 asNat (unwrapTermF -> FTermF (NatLit i)) = return $ fromInteger i
 asNat (asCtor -> Just (c, [])) | c == "Prelude.Zero" = return 0
 asNat (asCtor -> Just (c, [asNat -> Just i])) | c == "Prelude.Succ" = return (i+1)
@@ -330,13 +330,13 @@ asVectorType = helper ((isGlobalDef "Prelude.Vec" @> return) <@> return) where
        return (n, a)
 
 isVecType :: (Monad f)
-          => Recognizer f Term a -> Recognizer f Term (Nat :*: a)
+          => Recognizer f Term a -> Recognizer f Term (Natural :*: a)
 isVecType tp = (isGlobalDef "Prelude.Vec" @> asNat) <@> tp
 
-asVecType :: (Monad f) => Recognizer f Term (Nat :*: Term)
+asVecType :: (Monad f) => Recognizer f Term (Natural :*: Term)
 asVecType = isVecType return
 
-asBitvectorType :: (Alternative f, Monad f) => Recognizer f Term Nat
+asBitvectorType :: (Alternative f, Monad f) => Recognizer f Term Natural
 asBitvectorType =
   (isGlobalDef "Prelude.bitvector" @> asNat)
   `orElse` ((isGlobalDef "Prelude.Vec" @> asNat) <@ asBoolType)
