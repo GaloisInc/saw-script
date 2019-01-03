@@ -30,6 +30,7 @@ import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
+import Numeric.Natural (Natural)
 
 import Verifier.SAW.FiniteValue (FiniteType(..))
 import Verifier.SAW.Prim
@@ -67,7 +68,7 @@ lvShiftL :: l -> LitVector l -> Integer -> LitVector l
 lvShiftL x xs i = (AIG.++) (AIG.drop j xs) (AIG.replicate j x)
   where j = fromInteger (min i (toInteger (AIG.length xs)))
 
-lvShl :: l -> LitVector l -> Nat -> LitVector l
+lvShl :: l -> LitVector l -> Natural -> LitVector l
 lvShl l v i = AIG.slice v j (n-j) AIG.++ AIG.replicate j l
   where n = AIG.length v
         j = fromIntegral i `min` n
@@ -76,7 +77,7 @@ lvShiftR :: l -> LitVector l -> Integer -> LitVector l
 lvShiftR x xs i = (AIG.++) (AIG.replicate j x) (AIG.take (AIG.length xs - j) xs)
   where j = fromInteger (min i (toInteger (AIG.length xs)))
 
-lvShr :: l -> LitVector l -> Nat -> LitVector l
+lvShr :: l -> LitVector l -> Natural -> LitVector l
 lvShr l v i = AIG.replicate j l AIG.++ AIG.slice v 0 (n-j)
   where n = AIG.length v
         j = fromIntegral i `min` n
@@ -138,7 +139,7 @@ wordFun f = strictFun (\x -> toWord x >>= f)
 
 -- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
 bvShiftOp :: (LitVector l -> LitVector l -> IO (LitVector l))
-          -> (LitVector l -> Nat -> LitVector l)
+          -> (LitVector l -> Natural -> LitVector l)
           -> BValue l
 bvShiftOp bvOp natOp =
   constFun $
@@ -149,7 +150,7 @@ bvShiftOp bvOp natOp =
       VToNat v -> fmap vWord (bvOp x =<< toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp", show y]
 
-lvSShr :: LitVector l -> Nat -> LitVector l
+lvSShr :: LitVector l -> Natural -> LitVector l
 lvSShr v i = lvShr (AIG.msb v) v i
 
 ------------------------------------------------------------
