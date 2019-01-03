@@ -33,7 +33,6 @@ import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
 import Verifier.SAW.FiniteValue (FiniteType(..))
-import Verifier.SAW.Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
