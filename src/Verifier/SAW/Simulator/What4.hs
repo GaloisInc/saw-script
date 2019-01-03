@@ -62,7 +62,7 @@ import Data.Traversable as T
 import Control.Applicative
 #endif
 import Control.Monad.State as ST
-
+import Numeric.Natural (Natural)
 
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.Simulator as Sim
@@ -368,7 +368,7 @@ intModUnOp sym f =
   Prims.intFun "intModUnOp" $ \x ->
   VInt <$> (normalizeIntMod sym n =<< f sym x)
 
-normalizeIntMod :: IsExprBuilder sym => sym -> Nat -> SInt sym -> IO (SInt sym)
+normalizeIntMod :: IsExprBuilder sym => sym -> Natural -> SInt sym -> IO (SInt sym)
 normalizeIntMod sym n x =
   case W.asInteger x of
     Nothing -> return x
