@@ -56,6 +56,7 @@ import Control.Applicative
 #endif
 import Control.Monad.IO.Class
 import Control.Monad.State as ST
+import Numeric.Natural (Natural)
 
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.Simulator as Sim
@@ -428,7 +429,7 @@ intModUnOp f =
   Prims.intFun "intModUnOp" $ \x -> return $
   VInt (normalizeIntMod n (f x))
 
-normalizeIntMod :: Nat -> SInteger -> SInteger
+normalizeIntMod :: Natural -> SInteger -> SInteger
 normalizeIntMod n x =
   case svAsInteger x of
     Nothing -> x
@@ -687,7 +688,7 @@ newVars (FOTRec tm) = do
 ------------------------------------------------------------
 -- Code Generation
 
-newCodeGenVars :: (Nat -> Bool) -> FirstOrderType -> StateT Int IO (SBVCodeGen SValue)
+newCodeGenVars :: (Natural -> Bool) -> FirstOrderType -> StateT Int IO (SBVCodeGen SValue)
 newCodeGenVars _checkSz FOTBit = nextId <&> \s -> (vBool <$> svCgInput KBool s)
 newCodeGenVars _checkSz FOTInt = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
 newCodeGenVars checkSz (FOTVec n FOTBit)
@@ -728,7 +729,7 @@ sbvCodeGen_definition
   -> Map Ident SValue
   -> [String]
   -> Term
-  -> (Nat -> Bool) -- ^ Allowed word sizes
+  -> (Natural -> Bool) -- ^ Allowed word sizes
   -> IO (SBVCodeGen (), [FirstOrderType], FirstOrderType)
 sbvCodeGen_definition sc addlPrims unints t checkSz = do
   ty <- scTypeOf sc t
@@ -745,7 +746,7 @@ sbvCodeGen_definition sc addlPrims unints t checkSz = do
   return (codegen, shapes, resultShape)
 
 
-sbvSetResult :: (Nat -> Bool)
+sbvSetResult :: (Natural -> Bool)
              -> FirstOrderType
              -> SValue
              -> SBVCodeGen ()
@@ -762,7 +763,7 @@ sbvSetResult checkSz ft v = do
    void $ sbvSetOutput checkSz ft v 0
 
 
-sbvSetOutput :: (Nat -> Bool)
+sbvSetOutput :: (Natural -> Bool)
              -> FirstOrderType
              -> SValue
              -> Int
