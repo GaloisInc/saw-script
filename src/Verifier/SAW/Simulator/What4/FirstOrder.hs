@@ -35,7 +35,6 @@ import Data.Parameterized.Context hiding (replicate)
 import Verifier.SAW.Simulator.What4.PosNat
 
 import Verifier.SAW.FiniteValue (FirstOrderType(..),FirstOrderValue(..))
-import Verifier.SAW.Prim (Nat(..))
 
 import What4.BaseTypes
 import What4.Expr.GroundEval
@@ -53,10 +52,10 @@ fotToBaseType (FOTVec nat FOTBit)
   = Some (BaseBVRepr nr)
   | otherwise  -- 0-width bit vector is 0
   = Some BaseIntegerRepr
-fotToBaseType (FOTVec nat fot) 
-  | Some assn <- listToAssn (replicate (fromInteger (unNat nat)) fot)
+fotToBaseType (FOTVec nat fot)
+  | Some assn <- listToAssn (replicate (fromIntegral nat) fot)
   = Some (BaseStructRepr assn)
-fotToBaseType (FOTTuple fots) 
+fotToBaseType (FOTTuple fots)
   | Some assn <- listToAssn fots
   = Some (BaseStructRepr assn)
 fotToBaseType (FOTRec _)
@@ -75,7 +74,7 @@ typeReprToFOT :: BaseTypeRepr ty -> Either String FirstOrderType
 typeReprToFOT BaseBoolRepr            = pure FOTBit
 typeReprToFOT BaseNatRepr             = pure FOTInt
 typeReprToFOT BaseIntegerRepr         = pure FOTInt
-typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (Nat (natValue w)) FOTBit
+typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (fromInteger (natValue w)) FOTBit
 typeReprToFOT BaseRealRepr            = fail "No FO Real"
 typeReprToFOT BaseComplexRepr         = fail "No FO Complex"
 typeReprToFOT BaseStringRepr          = fail "No FO String"
@@ -96,7 +95,7 @@ groundToFOV :: BaseTypeRepr ty -> GroundValue ty -> Either String FirstOrderValu
 groundToFOV BaseBoolRepr    b         = pure $ FOVBit b
 groundToFOV BaseNatRepr     n         = pure $ FOVInt (toInteger n)
 groundToFOV BaseIntegerRepr i         = pure $ FOVInt i
-groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (Nat (natValue w)) bv
+groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (fromInteger (natValue w)) bv
 groundToFOV BaseRealRepr    _         = fail "Real is not FOV"
 groundToFOV BaseComplexRepr         _ = fail "Complex is not FOV"
 groundToFOV BaseStringRepr          _ = fail "String is not FOV"
@@ -109,8 +108,5 @@ tupleToList :: Assignment BaseTypeRepr ctx ->
              Assignment GroundValueWrapper ctx -> Either String [FirstOrderValue]
 tupleToList (viewAssign -> AssignEmpty) (viewAssign -> AssignEmpty) = Right []
 tupleToList (viewAssign -> AssignExtend rs r) (viewAssign -> AssignExtend gvs gv) =
-  (:) <$> groundToFOV r (unGVW gv) <*> tupleToList rs gvs 
+  (:) <$> groundToFOV r (unGVW gv) <*> tupleToList rs gvs
 tupleToList _ _ = error "GADTs should rule this out."
-
-
-
