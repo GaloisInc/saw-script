@@ -866,8 +866,8 @@ diffMemTypes x0 y0 =
       | xn == yn ->
         [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
     (Crucible.StructType x, Crucible.StructType y)
-      | Crucible.siIsPacked x == Crucible.siIsPacked y
-        && V.length (Crucible.siFields x) == V.length (Crucible.siFields y) ->
+      | V.map Crucible.fiOffset (Crucible.siFields x) ==
+        V.map Crucible.fiOffset (Crucible.siFields y) ->
           let xts = Crucible.siFieldTypes x
               yts = Crucible.siFieldTypes y
           in diffMemTypesList 1 (V.toList (V.zip xts yts))
