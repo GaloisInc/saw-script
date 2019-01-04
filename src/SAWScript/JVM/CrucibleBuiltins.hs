@@ -747,9 +747,11 @@ runCFG ::
   Crucible.RegMap sym init ->
   IO (Crucible.ExecResult p sym ext (Crucible.RegEntry sym a))
 runCFG simCtx globals h cfg args = do
-  let simSt = Crucible.initSimState simCtx globals Crucible.defaultAbortHandler
-  Crucible.executeCrucible simSt $ Crucible.runOverrideSim (Crucible.handleReturnType h)
+  let initExecState =
+        Crucible.InitialState simCtx globals Crucible.defaultAbortHandler $
+        Crucible.runOverrideSim (Crucible.handleReturnType h)
                  (Crucible.regValue <$> (Crucible.callCFG cfg args))
+  Crucible.executeCrucible [] initExecState
 
 
 {-
