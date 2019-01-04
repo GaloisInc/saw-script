@@ -1,4 +1,4 @@
-import "../support/MD5.cry";
+import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.cry";
 
 let main = do {
    java_md5 <- read_aig "../support/JavaMD5.aig";

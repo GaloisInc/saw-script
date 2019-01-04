@@ -24,12 +24,13 @@ import GHC.TypeLits(Nat)
 
 import Data.Parameterized.NatRepr(NatRepr,knownNat,natValue)
 
-import qualified SAWScript.CrucibleLLVM as LLVM (Type)
 import SAWScript.CrucibleLLVM
   ( AllocType(HeapAlloc), Mutability(..)
-  , storeConstRaw, doLoad, doMalloc, doPtrAddOffset, coerceAny, packMemValue
+  , storeConstRaw, doLoad, doMalloc, doPtrAddOffset, packMemValue
   , Bytes, toBytes, bytesToInteger
   , projectLLVM_bv, bitvectorType
+  , StorageType
+  , noAlignment
   )
 
 import SAWScript.X86Spec.Types
@@ -86,7 +87,7 @@ instance (MemType t, Infer t) => SizeOf (Value t) where
 n .* t = toBytes (n * bytesToInteger (sizeOf t))
 
 -- | The LLVM type used when manipulating values of the given type in memory.
-llvmType :: SizeOf t => t -> LLVM.Type
+llvmType :: SizeOf t => t -> StorageType
 llvmType x = bitvectorType (sizeOf x)
 
 
@@ -99,9 +100,10 @@ instance (MemType t, a ~ X86 t) => WriteMem (a, Value t) where
       do let ?ptrWidth = knownNat
          let ty = llvmType w
          val <- packMemValue sym ty (crucRepr w) x
-         -- Here we use the write that ignore mutability.
-         -- This is because we are writinging initialization code.
-         storeConstRaw sym mem p ty val
+         -- Here we use the write that ignores mutability.
+         -- This is because we are writing initialization code.
+         let alignment = noAlignment -- default to byte-aligned (FIXME)
+         storeConstRaw sym mem p ty alignment val
 
 instance (MemType t, Infer t) => WriteMem (Value t) where
   writeMem p x = writeMem p (infer, x)
@@ -133,8 +135,7 @@ readMem :: MemType t => X86 t -> Value APtr -> Spec Post (Value t)
 readMem w (Value p) =
   withMem $ \sym mem ->
     do let ?ptrWidth = knownNat
-       anyV <- doLoad sym mem p (llvmType w) 0
-       Value <$> coerceAny sym (crucRepr w) anyV
+       Value <$> doLoad sym mem p (llvmType w) (crucRepr w) noAlignment
 
 
 
@@ -148,7 +149,9 @@ instance (t ~ Bits 64) => AllocBytes (Value t) where
   allocBytes str mut (Value n) =
     let ?ptrWidth = knownNat in
     updMem $ \sym m ->
-      do (v,mem1) <- doMalloc sym HeapAlloc mut str m =<< projectLLVM_bv sym n
+      do sz <- projectLLVM_bv sym n
+         let alignment = noAlignment -- default to byte-aligned (FIXME)
+         (v,mem1) <- doMalloc sym HeapAlloc mut str m sz alignment
          return (Value v, mem1)
 
 instance AllocBytes Bytes where
@@ -206,5 +209,3 @@ readArray ty p n
                vs <- readArray ty p1 (n-1)
                return (v : vs)
   | otherwise = return []
-
-

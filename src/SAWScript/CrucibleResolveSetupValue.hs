@@ -1,5 +1,7 @@
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module SAWScript.CrucibleResolveSetupValue
   ( LLVMVal, LLVMPtr
@@ -32,13 +34,15 @@ import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
                    (NatRepr(..), someNat, natValue, LeqProof(..), isPosNat)
 
-import qualified What4.BaseTypes as W4
-import qualified What4.Interface as W4
+import qualified What4.BaseTypes    as W4
+import qualified What4.Interface    as W4
 import qualified What4.Expr.Builder as W4
-import qualified What4.ProgramLoc as W4
+import qualified What4.ProgramLoc   as W4
 
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
-import qualified SAWScript.CrucibleLLVM as Crucible
+import qualified Lang.Crucible.LLVM.MemModel    as Crucible
+import qualified Lang.Crucible.LLVM.Translation as Crucible
+import qualified Lang.Crucible.Backend.SAWCore  as Crucible
+import qualified SAWScript.CrucibleLLVM         as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -95,7 +99,9 @@ resolveSetupFieldIndex cc env nameEnv v n =
         [] -> Nothing
         o:_ ->
           do Crucible.PtrType symTy <- typeOfSetupValue cc env nameEnv v
-             Crucible.StructType si <- let ?lc = lc in Crucible.asMemType symTy
+             Crucible.StructType si <-
+               let ?lc = lc
+               in either (\_ -> Nothing) Just $ Crucible.asMemType symTy
              V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == toInteger o) (Crucible.siFields si)
 
     _ -> Nothing
@@ -113,7 +119,7 @@ typeOfSetupValue cc env nameEnv val =
   do let ?lc = cc^.ccTypeCtx
      typeOfSetupValue' cc env nameEnv val
 
-typeOfSetupValue' ::
+typeOfSetupValue' :: forall m wptr.
   Monad m =>
   CrucibleContext wptr ->
   Map AllocIndex (W4.ProgramLoc, Crucible.MemType) ->
@@ -136,9 +142,9 @@ typeOfSetupValue' cc env nameEnv val =
                             , "instead got:"
                             , show (Cryptol.pp s)
                             ]
-    SetupStruct vs ->
+    SetupStruct packed vs ->
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
-         let si = Crucible.mkStructInfo dl False memTys
+         let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
     SetupArray [] -> fail "typeOfSetupValue: invalid empty crucible_array"
     SetupArray (v : vs) ->
@@ -156,7 +162,7 @@ typeOfSetupValue' cc env nameEnv val =
          case memTy of
            Crucible.PtrType symTy ->
              case let ?lc = lc in Crucible.asMemType symTy of
-               Just memTy' ->
+               Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
                      | i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
@@ -166,7 +172,7 @@ typeOfSetupValue' cc env nameEnv val =
                        Just fi -> return (Crucible.PtrType (Crucible.MemType (Crucible.fiType fi)))
                        Nothing -> fail $ "typeOfSetupValue: struct type index out of bounds: " ++ show i
                    _ -> fail msg
-               Nothing -> fail msg
+               Left err -> fail (unlines [msg, "Details:", err])
            _ -> fail msg
     SetupNull ->
       -- We arbitrarily set the type of NULL to void*, because a) it
@@ -174,24 +180,38 @@ typeOfSetupValue' cc env nameEnv val =
       -- and b) it prevents us from doing a type-safe dereference
       -- operation.
       return (Crucible.PtrType Crucible.VoidType)
-    SetupGlobal name ->
-      do let m = cc^.ccLLVMModule
-             tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
-                   [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
-                   [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
-         case lookup (L.Symbol name) tys of
-           Nothing -> fail $ "typeOfSetupValue: unknown global " ++ show name
-           Just ty ->
-             case let ?lc = lc in Crucible.liftType ty of
-               Nothing -> fail $ "typeOfSetupValue: invalid type " ++ show ty
-               Just symTy -> return (Crucible.PtrType symTy)
+    -- A global and its initializer have the same type.
+    SetupGlobal            name -> do
+      let m = cc^.ccLLVMModule
+          tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
+                [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
+                [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
+      case lookup (L.Symbol name) tys of
+        Nothing -> fail $ "typeOfSetupValue: unknown global " ++ show name
+        Just ty ->
+          case let ?lc = lc in Crucible.liftType ty of
+            Left err -> fail $ unlines [ "typeOfSetupValue: invalid type " ++ show ty
+                                       , "Details:"
+                                       , err
+                                       ]
+            Right symTy -> return (Crucible.PtrType symTy)
+    SetupGlobalInitializer name -> do
+      case Map.lookup (L.Symbol name) (Crucible.globalInitMap $ cc^.ccLLVMModuleTrans) of
+        Just (g, _) ->
+          case let ?lc = lc in Crucible.liftMemType (L.globalType g) of
+            Left err -> fail $ unlines [ "typeOfSetupValue: invalid type " ++ show (L.globalType g)
+                                       , "Details:"
+                                       , err
+                                       ]
+            Right memTy -> return memTy
+        Nothing             -> fail $ "resolveSetupVal: global not found: " ++ name
   where
     lc = cc^.ccTypeCtx
     dl = Crucible.llvmDataLayout lc
 
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
 -- references
-resolveSetupVal ::
+resolveSetupVal :: forall arch.
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   CrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
@@ -205,10 +225,11 @@ resolveSetupVal cc env tyenv nameEnv val =
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
-    SetupStruct vs -> do
+    SetupStruct packed vs -> do
       vals <- mapM (resolveSetupVal cc env tyenv nameEnv) vs
       let tps = map (typeOfLLVMVal dl) vals
-      let flds = case Crucible.typeF (Crucible.mkStructType (V.fromList (mkFields dl 0 0 tps))) of
+      let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))
+      let flds = case Crucible.storageTypeF t of
                    Crucible.Struct v -> v
                    _ -> error "impossible"
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
@@ -227,7 +248,7 @@ resolveSetupVal cc env tyenv nameEnv val =
          delta <- case memTy of
            Crucible.PtrType symTy ->
              case let ?lc = lc in Crucible.asMemType symTy of
-               Just memTy' ->
+               Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
                      | i < n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
@@ -236,7 +257,7 @@ resolveSetupVal cc env tyenv nameEnv val =
                        Just d -> return d
                        Nothing -> fail $ "resolveSetupVal: struct type index out of bounds: " ++ show (i, memTy')
                    _ -> fail msg
-               Nothing -> fail msg
+               Left err -> fail $ unlines [msg, "Details:", err]
            _ -> fail msg
          ptr <- resolveSetupVal cc env tyenv nameEnv v
          case ptr of
@@ -250,6 +271,18 @@ resolveSetupVal cc env tyenv nameEnv val =
     SetupGlobal name ->
       do let mem = cc^.ccLLVMEmptyMem
          Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
+    SetupGlobalInitializer name ->
+      case Map.lookup (L.Symbol name)
+                      (Crucible.globalInitMap $ cc^.ccLLVMModuleTrans) of
+        -- There was an error in global -> constant translation
+        Just (_, Left e) -> fail e
+        Just (_, Right (_, Just v)) ->
+          let ?lc = lc
+          in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) sym (cc^.ccLLVMEmptyMem) v
+        Just (_, Right (_, Nothing)) ->
+          fail $ "resolveSetupVal: global has no initializer: " ++ name
+        Nothing ->
+          fail $ "resolveSetupVal: global not found: " ++ name
   where
     sym = cc^.ccBackend
     lc = cc^.ccTypeCtx
@@ -322,14 +355,14 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: invalid infinite stream type"
       Cryptol.TVTuple tps ->
         do sc <- Crucible.saw_ctx <$> (readIORef (W4.sbStateManager sym))
-           tms <- mapM (scTupleSelector sc tm) [1 .. length tps]
+           tms <- mapM (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
            vals <- zipWithM (resolveSAWTerm cc) tps tms
            storTy <-
              case toLLVMType dl tp of
                Just memTy -> Crucible.toStorableType memTy
                _ -> fail "resolveSAWTerm: invalid tuple type"
            fields <-
-             case Crucible.typeF storTy of
+             case Crucible.storageTypeF storTy of
                Crucible.Struct fields -> return fields
                _ -> fail "resolveSAWTerm: impossible: expected struct"
            return (Crucible.LLVMValStruct (V.zip fields (V.fromList vals)))
@@ -362,42 +395,47 @@ toLLVMType dl tp =
       Cryptol.TVRec _flds -> Nothing -- FIXME
       Cryptol.TVFun _ _ -> Nothing
 
+-- FIXME: This struct-padding logic is already implemented in
+-- crucible-llvm. Reimplementing it here is error prone and harder to
+-- maintain.
 mkFields ::
+  Bool {- ^ @True@ = packed, @False@ = unpacked -} ->
   Crucible.DataLayout ->
   Crucible.Alignment ->
   Crucible.Bytes ->
-  [Crucible.Type] ->
-  [(Crucible.Type, Crucible.Bytes)]
-mkFields _ _ _ [] = []
-mkFields dl a off (ty : tys) = (ty, pad) : mkFields dl a' off' tys
-    where
-      end = off + Crucible.typeSize ty
-      off' = Crucible.padToAlignment end nextAlign
-      pad = off' - end
-      a' = max a (typeAlignment dl ty)
-      nextAlign = case tys of
-        [] -> a'
-        (ty' : _) -> typeAlignment dl ty'
+  [Crucible.StorageType] ->
+  [(Crucible.StorageType, Crucible.Bytes)]
+mkFields _ _ _ _ [] = []
+mkFields packed dl a off (ty : tys) =
+  (ty, pad) : mkFields packed dl a' off' tys
+  where
+    end = off + Crucible.storageTypeSize ty
+    off' = if packed then end else Crucible.padToAlignment end nextAlign
+    pad = off' - end
+    a' = max a (typeAlignment dl ty)
+    nextAlign = case tys of
+      [] -> a'
+      (ty' : _) -> typeAlignment dl ty'
 
 
-
-typeAlignment :: Crucible.DataLayout -> Crucible.Type -> Crucible.Alignment
+typeAlignment :: Crucible.DataLayout -> Crucible.StorageType -> Crucible.Alignment
 typeAlignment dl ty =
-  case Crucible.typeF ty of
+  case Crucible.storageTypeF ty of
     Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromInteger (Crucible.bytesToBits bytes))
     Crucible.Float           -> fromJust (Crucible.floatAlignment dl 32)
     Crucible.Double          -> fromJust (Crucible.floatAlignment dl 64)
     Crucible.Array _sz ty'   -> typeAlignment dl ty'
-    Crucible.Struct flds     -> V.foldl max 0 (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
+    Crucible.Struct flds     -> V.foldl max Crucible.noAlignment (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
 
-typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.Type
+typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.StorageType
 typeOfLLVMVal _dl val =
   case val of
     Crucible.LLVMValInt _bkl bv ->
        Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (natValue (W4.bvWidth bv))))
-    Crucible.LLVMValFloat _ _    -> error "FIXME: typeOfLLVMVal LLVMValFloat"
+    Crucible.LLVMValFloat _ _   -> error "FIXME: typeOfLLVMVal LLVMValFloat"
     Crucible.LLVMValStruct flds -> Crucible.mkStructType (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
+    Crucible.LLVMValZero tp     -> tp
   where
     fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
 

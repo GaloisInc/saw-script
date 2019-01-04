@@ -18,12 +18,12 @@ import qualified Verifier.SAW.Simulator.SBV as SBVSim
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
-import Verifier.SAW.Recognizer(asPi, asPiList)
+import Verifier.SAW.Recognizer(asPi, asPiList, asEqTrue)
 
 import Verifier.SAW.Cryptol.Prims (sbvPrims)
 
 
-import SAWScript.Prover.Mode(ProverMode(..))
+import SAWScript.Proof(propToPredicate)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.Util(checkBooleanSchema)
@@ -38,16 +38,13 @@ satUnintSBV ::
   [String]      {- ^ Uninterpreted functions -} ->
   Maybe Integer {- ^ Timeout in milliseconds -} ->
   SharedContext {- ^ Context for working with terms -} ->
-  ProverMode    {- ^ Prove/check -} ->
-  Term          {- ^ A boolean term to be proved/checked. -} ->
+  Term          {- ^ A proposition to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
-satUnintSBV conf unints timeout sc mode term =
+satUnintSBV conf unints timeout sc term =
   do (t', mlabels, lit0) <- prepSBV sc unints term
 
-     let lit = case mode of
-                 CheckSat -> lit0
-                 Prove    -> liftM SBV.svNot lit0
+     let lit = liftM SBV.svNot lit0
 
      tp <- scWhnf sc =<< scTypeOf sc t'
      let (args, _) = asPiList tp
@@ -79,17 +76,18 @@ satUnintSBV conf unints timeout sc mode term =
 prepSBV ::
   SharedContext -> [String] -> Term ->
   IO (Term, [Maybe SBVSim.Labeler], SBV.Symbolic SBV.SVal)
-prepSBV sc unints t0 = do
-  -- Abstract over all non-function ExtCns variables
-  let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
-  exts <- filterM nonFun (getAllExts t0)
+prepSBV sc unints goal =
+  do t0 <- propToPredicate sc goal
+     -- Abstract over all non-function ExtCns variables
+     let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
+     exts <- filterM nonFun (getAllExts t0)
 
-  TypedTerm schema t' <-
-      scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc
+     TypedTerm schema t' <-
+         scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc
 
-  checkBooleanSchema schema
-  (labels, lit) <- SBVSim.sbvSolve sc sbvPrims unints t'
-  return (t', labels, lit)
+     checkBooleanSchema schema
+     (labels, lit) <- SBVSim.sbvSolve sc sbvPrims unints t'
+     return (t', labels, lit)
 
 
 
@@ -132,5 +130,3 @@ getLabels ls d argNames
     case SBV.cwVal cw of
       SBV.CWInteger i -> i
       _               -> error "cwToInteger"
-
-

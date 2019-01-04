@@ -31,7 +31,7 @@ import qualified Control.Exception as Ex
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
-import Data.List (isPrefixOf)
+import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid ((<>))
@@ -48,6 +48,7 @@ import Text.Read (readMaybe)
 
 
 import qualified Verifier.SAW.Cryptol as Cryptol
+import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
 import qualified Cryptol.TypeCheck.AST as Cryptol
 
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -90,6 +91,7 @@ import qualified SAWScript.Prover.RME as Prover
 import qualified SAWScript.Prover.ABC as Prover
 import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
+import qualified SAWScript.Prover.MRSolver as Prover
 
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
@@ -106,7 +108,7 @@ import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
 import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
-import qualified Cryptol.TypeCheck.Subst as C (apSubst, listSubst)
+import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst)
 import qualified Cryptol.Eval.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
@@ -333,8 +335,9 @@ quickcheckGoal sc n = do
     let tm = goalTerm goal
     ty <- scTypeOf sc tm
     maybeInputs <- scTestableType sc ty
+    maybeInputs' <- scTestableType sc tm
     let stats = solverStats "quickcheck" (scSharedSize tm)
-    case maybeInputs of
+    case msum [maybeInputs, maybeInputs'] of
       Just inputs -> do
         result <- scRunTestsTFIO sc n tm inputs
         case result of
@@ -344,7 +347,8 @@ quickcheckGoal sc n = do
           -- TODO: use reasonable names here
           Just cex -> return (SV.SatMulti stats (zip (repeat "_") (map toFirstOrderValue cex)), stats, Just goal)
       Nothing -> fail $ "quickcheck:\n" ++
-        "term has non-testable type"
+        "term has non-testable type:\n" ++
+        showTerm ty ++ ", for term: " ++ showTerm tm
 
 assumeValid :: ProofScript SV.ProofResult
 assumeValid = withFirstGoal $ \goal -> do
@@ -364,7 +368,7 @@ trivial = withFirstGoal $ \goal -> do
   return (SV.Unsat mempty, mempty, Nothing)
   where
     checkTrue :: Term -> TopLevel ()
-    checkTrue (asLambdaList -> (_, asBool -> Just True)) = return ()
+    checkTrue (asPiList -> (_, asEqTrue -> Just (asBool -> Just True))) = return ()
     checkTrue _ = fail "trivial: not a trivial goal"
 
 split_goal :: ProofScript ()
@@ -454,6 +458,89 @@ beta_reduce_goal = withFirstGoal $ \goal -> do
   trm' <- io $ betaNormalize sc trm
   return ((), mempty, Just (goal { goalTerm = trm' }))
 
+goal_apply :: Theorem -> ProofScript ()
+goal_apply (Theorem rule) =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_apply failed: no subgoal"
+    goal : goals' ->
+      do sc <- getSharedContext
+         let applyFirst [] = fail "goal_apply failed: no match"
+             applyFirst ((ruleArgs, ruleConcl) : rest) =
+               do result <- io $ scMatch sc ruleConcl (goalTerm goal)
+                  case result of
+                    Nothing -> applyFirst rest
+                    Just inst ->
+                      do let inst' = [ Map.lookup i inst | i <- take (length ruleArgs) [0..] ]
+                         dummy <- io $ scUnitType sc
+                         let mkNewGoals (Nothing : mts) ((_, prop) : args) =
+                               do c0 <- instantiateVarList sc 0 (map (fromMaybe dummy) mts) prop
+                                  cs <- mkNewGoals mts args
+                                  return (c0 : cs)
+                             mkNewGoals (Just _ : mts) (_ : args) =
+                               mkNewGoals mts args
+                             mkNewGoals _ _ = return []
+                         newgoalterms <- io $ mkNewGoals inst' (reverse ruleArgs)
+                         let newgoals = reverse [ goal { goalTerm = t } | t <- newgoalterms ]
+                         return ((), ProofState (newgoals ++ goals') concl stats timeout)
+         applyFirst (asPiLists rule)
+  where
+    asPiLists :: Term -> [([(String, Term)], Term)]
+    asPiLists t =
+      case asPi t of
+        Nothing -> [([], t)]
+        Just (nm, tp, body) ->
+          [ ((nm, tp) : args, concl) | (args, concl) <- asPiLists body ] ++ [([], t)]
+
+goal_assume :: ProofScript Theorem
+goal_assume =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_assume failed: no subgoal"
+    goal : goals' ->
+      case asPi (goalTerm goal) of
+        Nothing -> fail "goal_assume failed: not a pi type"
+        Just (_nm, tp, body)
+          | looseVars body /= emptyBitSet -> fail "goal_assume failed: dependent pi type"
+          | otherwise ->
+            let goal' = goal { goalTerm = body } in
+            return (Theorem tp, ProofState (goal' : goals') concl stats timeout)
+
+goal_intro :: String -> ProofScript TypedTerm
+goal_intro s =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_intro failed: no subgoal"
+    goal : goals' ->
+      case asPi (goalTerm goal) of
+        Nothing -> fail "goal_intro failed: not a pi type"
+        Just (nm, tp, body) ->
+          do let name = if null s then nm else s
+             sc <- SV.getSharedContext
+             x <- io $ scFreshGlobal sc name tp
+             tt <- io $ mkTypedTerm sc x
+             body' <- io $ instantiateVar sc 0 x body
+             let goal' = goal { goalTerm = body' }
+             return (tt, ProofState (goal' : goals') concl stats timeout)
+
+goal_insert :: Theorem -> ProofScript ()
+goal_insert (Theorem t) =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "goal_insert failed: no subgoal"
+    goal : goals' ->
+      do sc <- SV.getSharedContext
+         body' <- io $ scFun sc t (goalTerm goal)
+         let goal' = goal { goalTerm = body' }
+         return ((), ProofState (goal' : goals') concl stats timeout)
+
+goal_when :: String -> ProofScript () -> ProofScript ()
+goal_when str script =
+  StateT $ \s ->
+  case psGoals s of
+    g : _ | str `isInfixOf` goalName g -> runStateT script s
+    _ -> return ((), s)
+
 returnsBool :: Term -> Bool
 returnsBool ((asBoolType . snd . asPiList) -> Just ()) = True
 returnsBool _ = False
@@ -485,10 +572,13 @@ parseDimacsSolution vars ls = map lkup vars
 
 satExternal :: Bool -> String -> [String]
             -> ProofScript SV.SatResult
-satExternal doCNF execName args = withFirstGoal $ \g -> do
+satExternal doCNF execName args = withFirstGoal $ \g0 -> do
   sc <- SV.getSharedContext
   SV.AIGProxy proxy <- SV.getProxy
   io $ do
+  let (vars, concl) = asPiList (goalTerm g0)
+  t0 <- scLambdaList sc vars =<< asEqTrue concl
+  let g = g0 { goalTerm = t0 }
   t <- rewriteEqs sc (goalTerm g)
   tp <- scWhnf sc =<< scTypeOf sc t
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
@@ -584,7 +674,6 @@ satUnintSBV conf unints = do
 
 wrapProver ::
   ( SharedContext ->
-    ProverMode ->
     Term -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
   ProofScript SV.SatResult
 wrapProver f = do
@@ -594,7 +683,7 @@ wrapProver f = do
                Existential -> CheckSat
                Universal   -> Prove
 
-  (mb,stats) <- io $ f sc mode (goalTerm g)
+  (mb,stats) <- io $ f sc (goalTerm g)
 
   let nope r = do ft <- io $ scApplyPrelude_False sc
                   return (r, stats, Just g { goalTerm = ft })
@@ -662,32 +751,31 @@ satWhat4_UnintCVC4 =  wrapProver . Prover.satWhat4_cvc4
 satWhat4_UnintYices :: [String] -> ProofScript SV.SatResult
 satWhat4_UnintYices =  wrapProver . Prover.satWhat4_yices
 
-satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
-                -> String
-                -> String
-                -> ProofScript SV.SatResult
-satWithExporter exporter path ext = withFirstGoal $ \g -> do
-  let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-      mode = case goalQuant g of
-               Existential -> CheckSat
-               Universal   -> Prove
+satWithExporter ::
+  (SharedContext -> FilePath -> Term -> IO ()) ->
+  String ->
+  String ->
+  ProofScript SV.SatResult
+satWithExporter exporter path ext =
+  withFirstGoal $ \g -> do
+    let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
 
-  sc <- SV.getSharedContext
-  stats <- io $ Prover.satWithExporter exporter file sc mode (goalTerm g)
+    sc <- SV.getSharedContext
+    stats <- io $ Prover.satWithExporter exporter file sc (goalTerm g)
 
-  case goalQuant g of
-    Existential -> return (SV.Unsat stats, stats, Just g)
-    Universal   -> return (SV.Unsat stats, stats, Nothing)
+    case goalQuant g of
+      Existential -> return (SV.Unsat stats, stats, Just g)
+      Universal   -> return (SV.Unsat stats, stats, Nothing)
 
 satAIG :: FilePath -> ProofScript SV.SatResult
 satAIG path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  satWithExporter (Prover.writeAIG proxy) path ".aig"
+  satWithExporter (Prover.adaptExporter (Prover.writeAIG proxy)) path ".aig"
 
 satCNF :: FilePath -> ProofScript SV.SatResult
 satCNF path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  satWithExporter (Prover.writeCNF proxy) path ".cnf"
+  satWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
 
 satExtCore :: FilePath -> ProofScript SV.SatResult
 satExtCore path = satWithExporter (const Prover.writeCore) path ".extcore"
@@ -707,7 +795,9 @@ provePrim :: ProofScript SV.SatResult
           -> TypedTerm -> TopLevel SV.ProofResult
 provePrim script t = do
   io $ checkBooleanSchema (ttSchema t)
-  (r, pstate) <- runStateT script (startProof (ProofGoal Universal 0 "prove" "prove" (ttTerm t)))
+  sc <- getSharedContext
+  goal <- io $ makeProofGoal sc Universal 0 "prove" "prove" (ttTerm t)
+  (r, pstate) <- runStateT script (startProof goal)
   case finishProof pstate of
     (_stats, Just _)  -> return ()
     (_stats, Nothing) -> printOutLnTop Info $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)"
@@ -716,7 +806,9 @@ provePrim script t = do
 provePrintPrim :: ProofScript SV.SatResult
                -> TypedTerm -> TopLevel Theorem
 provePrintPrim script t = do
-  (r, pstate) <- runStateT script (startProof (ProofGoal Universal 0 "prove" "prove" (ttTerm t)))
+  sc <- getSharedContext
+  goal <- io $ makeProofGoal sc Universal 0 "prove" "prove" (ttTerm t)
+  (r, pstate) <- runStateT script (startProof goal)
   opts <- rwPPOpts <$> getTopLevelRW
   case finishProof pstate of
     (_,Just thm) -> do printOutLnTop Info "Valid"
@@ -726,9 +818,11 @@ provePrintPrim script t = do
 
 satPrim :: ProofScript SV.SatResult -> TypedTerm
         -> TopLevel SV.SatResult
-satPrim script t = do
-  io $ checkBooleanSchema (ttSchema t)
-  evalStateT script (startProof (ProofGoal Existential 0 "sat" "sat" (ttTerm t)))
+satPrim script t =
+  do io $ checkBooleanSchema (ttSchema t)
+     sc <- getSharedContext
+     goal <- io $ makeProofGoal sc Existential 0 "sat" "sat" (ttTerm t)
+     evalStateT script (startProof goal)
 
 satPrintPrim :: ProofScript SV.SatResult
              -> TypedTerm -> TopLevel ()
@@ -757,12 +851,9 @@ quickCheckPrintPrim opts sc numTests tt = do
       pretty (ttSchema tt)
 
 cryptolSimpset :: TopLevel Simpset
-cryptolSimpset = do
-  sc <- getSharedContext
-  m <- io $ scFindModule sc (mkModuleName ["Cryptol"])
-  io $ scSimpset sc (cryptolDefs m) [] []
-  where cryptolDefs m = filter (not . excluded) $ moduleDefs m
-        excluded d = defIdent d `elem` [ "Cryptol.fix" ]
+cryptolSimpset =
+  do sc <- getSharedContext
+     io $ Cryptol.mkCryptolSimpset sc
 
 addPreludeEqs :: [String] -> Simpset
               -> TopLevel Simpset
@@ -780,19 +871,25 @@ addCryptolEqs names ss = do
   return (addRules eqRules ss)
     where qualify = mkIdent (mkModuleName ["Cryptol"])
 
-addPreludeDefs :: [String] -> Simpset
-              -> TopLevel Simpset
-addPreludeDefs names ss = do
-  sc <- getSharedContext
-  defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
-  defRules <- io $ concat <$> (mapM (scDefRewriteRules sc) defs)
-  return (addRules defRules ss)
-    where qualify = mkIdent (mkModuleName ["Prelude"])
-          getDef sc n =
-            scFindDef sc (qualify n) >>= \maybe_def ->
-            case maybe_def of
-              Just d -> return d
-              Nothing -> fail $ "Prelude definition " ++ n ++ " not found"
+add_core_defs :: String -> [String] -> Simpset -> TopLevel Simpset
+add_core_defs modname names ss =
+  do sc <- getSharedContext
+     defs <- io $ mapM (getDef sc) names -- FIXME: warn if not found
+     defRules <- io $ concat <$> (mapM (scDefRewriteRules sc) defs)
+     return (addRules defRules ss)
+  where
+    qualify = mkIdent (mkModuleName [modname])
+    getDef sc n =
+      scFindDef sc (qualify n) >>= \maybe_def ->
+      case maybe_def of
+        Just d -> return d
+        Nothing -> fail $ modname ++ " definition " ++ n ++ " not found"
+
+add_prelude_defs :: [String] -> Simpset -> TopLevel Simpset
+add_prelude_defs = add_core_defs "Prelude"
+
+add_cryptol_defs :: [String] -> Simpset -> TopLevel Simpset
+add_cryptol_defs = add_core_defs "Cryptol"
 
 rewritePrim :: Simpset -> TypedTerm -> TopLevel TypedTerm
 rewritePrim ss (TypedTerm schema t) = do
@@ -1040,17 +1137,33 @@ defaultTypedTerm opts sc cfg (TypedTerm schema trm) = do
       let vars = C.sVars schema
       let nms = C.addTNames vars IntMap.empty
       mapM_ (warnDefault nms) (zip vars tys)
-      let applyType :: Term -> Cryptol.Type -> IO Term
+      let applyType :: Term -> C.Type -> IO Term
           applyType t ty = do
             ty' <- Cryptol.importType sc Cryptol.emptyEnv ty
             scApply sc t ty'
+      let dischargeProp :: Term -> C.Prop -> IO Term
+          dischargeProp t p
+            | Cryptol.isErasedProp p = return t
+            | otherwise = scApply sc t =<< Cryptol.proveProp sc Cryptol.emptyEnv p
       trm' <- foldM applyType trm tys
       let su = C.listSubst (zip (map C.tpVar vars) tys)
+      let props = map (plainSubst su) (C.sProps schema)
+      trm'' <- foldM dischargeProp trm' props
       let schema' = C.Forall [] [] (C.apSubst su (C.sType schema))
-      return (TypedTerm schema' trm')
+      return (TypedTerm schema' trm'')
   where
     warnDefault ns (x,t) =
       printOutLn opts Info $ show $ C.text "Assuming" C.<+> C.ppWithNames ns (x :: C.TParam) C.<+> C.text "=" C.<+> C.pp t
+    -- Apply a substitution to a type *without* simplifying
+    -- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to
+    -- 'apSubst', which performs simplifications wherever possible.)
+    plainSubst :: C.Subst -> C.Type -> C.Type
+    plainSubst s ty =
+      case ty of
+        C.TCon tc ts   -> C.TCon tc (map (plainSubst s) ts)
+        C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
+        C.TRec fs      -> C.TRec [ (x, plainSubst s t) | (x, t) <- fs ]
+        C.TVar x       -> C.apSubst s (C.TVar x)
 
 eval_size :: C.Schema -> TopLevel Integer
 eval_size s =
@@ -1083,7 +1196,7 @@ parseCore input = do
   let (uterm, errs) = parseSAWTerm base path (B.fromString input)
   mapM_ (printOutLnTop Opts.Error . show) errs
   unless (null errs) $ fail $ show errs
-  let mnm = Just $ mkModuleName ["Prelude"]
+  let mnm = Just $ mkModuleName ["Cryptol"]
   err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
   case err_or_t of
     Left err -> fail (show err)
@@ -1110,6 +1223,13 @@ core_axiom :: String -> TopLevel Theorem
 core_axiom input = do
   t <- parseCore input
   return (Theorem t)
+
+core_thm :: String -> TopLevel Theorem
+core_thm input =
+  do t <- parseCore input
+     sc <- getSharedContext
+     ty <- io $ scTypeOf sc t
+     return (Theorem ty)
 
 get_opt :: Int -> TopLevel String
 get_opt n = do
@@ -1160,3 +1280,22 @@ cryptol_load path = do
   (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
+
+
+mr_solver_tests :: [SharedContext -> IO Term]
+mr_solver_tests =
+  let helper nm = \sc -> scGlobalDef sc nm in
+  map helper
+  [ "Prelude.test_fun0", "Prelude.test_fun1", "Prelude.test_fun2"
+  , "Prelude.test_fun3", "Prelude.test_fun4", "Prelude.test_fun5"
+  , "Prelude.test_fun6"]
+
+testMRSolver :: Integer -> Integer -> TopLevel ()
+testMRSolver i1 i2 =
+  do sc <- getSharedContext
+     t1 <- liftIO $ (mr_solver_tests !! fromInteger i1) sc
+     t2 <- liftIO $ (mr_solver_tests !! fromInteger i2) sc
+     res <- liftIO $ Prover.askMRSolver sc SBV.z3 Nothing t1 t2
+     case res of
+       Just err -> io $ putStrLn $ Prover.showMRFailure err
+       Nothing -> io $ putStrLn "Success!"

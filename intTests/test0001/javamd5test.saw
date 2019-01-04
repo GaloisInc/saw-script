@@ -1,4 +1,5 @@
-import "../support/MD5.cry";
+import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.cry";
+
 
 let md5_spec = do {
     msg <- java_var "msg" (java_array 16 java_byte);

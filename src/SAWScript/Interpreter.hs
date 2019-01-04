@@ -569,6 +569,10 @@ primitives = Map.fromList
     , "iteration."
     ]
 
+  , prim "run"                 "{a} TopLevel a -> a"
+    (funVal1 (id :: TopLevel Value -> TopLevel Value))
+    [ "Evaluate a monadic TopLevel computation to produce a value." ]
+
   , prim "null"                "{a} [a] -> Bool"
     (pureVal (null :: [Value] -> Bool))
     [ "Test whether a list value is empty." ]
@@ -895,6 +899,30 @@ primitives = Map.fromList
     (pureVal beta_reduce_goal)
     [ "Reduce the current goal to beta-normal form." ]
 
+  , prim "goal_apply"          "Theorem -> ProofScript ()"
+    (pureVal goal_apply)
+    [ "Apply an introduction rule to the current goal. Depending on the"
+    , "rule, this will result in zero or more new subgoals."
+    ]
+  , prim "goal_assume"         "ProofScript Theorem"
+    (pureVal goal_assume)
+    [ "Convert the first hypothesis in the current proof goal into a"
+    , "local Theorem."
+    ]
+  , prim "goal_insert"         "Theorem -> ProofScript ()"
+    (pureVal goal_insert)
+    [ "Insert a Theorem as a new hypothesis in the current proof goal."
+    ]
+  , prim "goal_intro"          "String -> ProofScript Term"
+    (pureVal goal_intro)
+    [ "Introduce a quantified variable in the current proof goal, returning"
+    , "the variable as a Term."
+    ]
+  , prim "goal_when"           "String -> ProofScript () -> ProofScript ()"
+    (pureVal goal_when)
+    [ "Run the given proof script only when the goal name contains"
+    , "the given string."
+    ]
   , prim "print_goal"          "ProofScript ()"
     (pureVal print_goal)
     [ "Print the current goal that a proof script is attempting to prove." ]
@@ -1049,8 +1077,14 @@ primitives = Map.fromList
     ]
 
   , prim "add_prelude_defs"    "[String] -> Simpset -> Simpset"
-    (funVal2 addPreludeDefs)
+    (funVal2 add_prelude_defs)
     [ "Add the named definitions from the Prelude module to the given"
+    , "simplification rule set."
+    ]
+
+  , prim "add_cryptol_defs"    "[String] -> Simpset -> Simpset"
+    (funVal2 add_cryptol_defs)
+    [ "Add the named definitions from the Cryptol module to the given"
     , "simplification rule set."
     ]
 
@@ -1582,6 +1616,10 @@ primitives = Map.fromList
     , "return value is a Theorem that may be added to a Simpset."
     ]
 
+  , prim "core_thm"           "String -> Theorem"
+    (funVal1 core_thm)
+    [ "Create a theorem from the type of the given core expression." ]
+
   , prim "get_opt"            "Int -> String"
     (funVal1 get_opt)
     [ "Get the nth command-line argument as a String. Index 0 returns"
@@ -1732,9 +1770,15 @@ primitives = Map.fromList
 
   , prim "crucible_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal CIR.SetupStruct)
+    (pureVal (CIR.SetupStruct False))
     [ "Create a SetupValue representing a struct, with the given list of"
     , "values as elements." ]
+
+  , prim "crucible_packed_struct"
+    "[SetupValue] -> SetupValue"
+    (pureVal (CIR.SetupStruct True))
+    [ "Create a SetupValue representing a packed struct, with the given"
+    , "list of values as elements." ]
 
   , prim "crucible_elem"
     "SetupValue -> Int -> SetupValue"
@@ -1758,6 +1802,15 @@ primitives = Map.fromList
     (pureVal CIR.SetupGlobal)
     [ "Return a SetupValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
+
+  , prim "crucible_global_initializer"
+    "String -> SetupValue"
+    (pureVal CIR.SetupGlobalInitializer)
+    [ "Return a SetupValue representing the value of the initializer of a named"
+    , "global. The String should be the name of a global value."
+    , "Note that initializing global variables may be unsound in the presence"
+    , "of compositional verification (see GaloisInc/saw-script#203)."
+    ] -- TODO: There should be a section in the manual about global-unsoundness.
 
   , prim "crucible_term"
     "Term -> SetupValue"
@@ -1936,6 +1989,12 @@ primitives = Map.fromList
     (pureVal JIR.SetupTerm)
     [ "Construct a `JVMValue` from a `Term`." ]
 
+    ---------------------------------------------------------------------
+
+  , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
+    (pureVal testMRSolver)
+    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
+    , " to ask if two monadic terms are equal" ]
   ]
 
   where

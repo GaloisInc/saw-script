@@ -1,6 +1,7 @@
 {-# Language ViewPatterns #-}
 module SAWScript.Prover.Exporter
   ( satWithExporter
+  , adaptExporter
 
     -- * External formats
   , writeAIG
@@ -27,16 +28,14 @@ import qualified Data.SBV.Dynamic as SBV
 import Cryptol.Utils.PP(pretty)
 
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Term.Functor(unwrapTermF)
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.FiniteValue
-import Verifier.SAW.Recognizer(asPi, asPiList, asBoolType)
+import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
-import SAWScript.Prover.Mode(ProverMode(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
@@ -44,40 +43,28 @@ import SAWScript.Prover.SBV(prepSBV)
 import SAWScript.Value
 
 
-satWithExporter :: (SharedContext -> FilePath -> Term -> IO ())
-                -> String
-                -> SharedContext
-                -> ProverMode
-                -> Term
-                -> IO SolverStats
-satWithExporter exporter path sc mode t0 =
-  do t <- case mode of
-            CheckSat -> return t0
-            Prove -> liftIO $
-              do ty <- scTypeOf sc t0
-                 let (ts, tf) = asPiList ty
-                 tf' <- scWhnf sc tf
-                 case asBoolType tf' of
-                   Nothing -> fail $ "Invalid non-boolean type: " ++ show ty
-                   Just () -> return ()
-                 negTerm (map snd ts) t0
-
-     exporter sc path t
-     let stats = solverStats ("offline: "++ path) (scSharedSize t)
+satWithExporter ::
+  (SharedContext -> FilePath -> Term -> IO ()) ->
+  String ->
+  SharedContext ->
+  Term ->
+  IO SolverStats
+satWithExporter exporter path sc goal =
+  do exporter sc path goal
+     let stats = solverStats ("offline: "++ path) (scSharedSize goal)
      return stats
 
-  where
-  negTerm :: [Term] -> Term -> IO Term
-  negTerm [] p = scNot sc p
-  negTerm (t1 : ts) p =
-    do (x, ty, p') <- case unwrapTermF p of
-                        Lambda x ty p' -> return (x, ty, p')
-                        _ -> do
-                          p1 <- incVars sc 0 1 p
-                          x0 <- scLocalVar sc 0
-                          p' <- scApply sc p1 x0
-                          return ("x", t1, p')
-       scLambda sc x ty =<< negTerm ts p'
+-- | Converts an old-style exporter (which expects to take a predicate
+-- as an argument) into a new-style one (which takes a pi-type proposition).
+adaptExporter ::
+  (SharedContext -> FilePath -> Term -> IO ()) ->
+  (SharedContext -> FilePath -> Term -> IO ())
+adaptExporter exporter sc path goal =
+  do let (args, concl) = asPiList goal
+     p <- asEqTrue concl
+     p' <- scNot sc p
+     t <- scLambdaList sc args p'
+     exporter sc path t
 
 
 --------------------------------------------------------------------------------

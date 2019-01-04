@@ -489,7 +489,7 @@ data LLVMSetupState
 type LLVMSetup a = StateT LLVMSetupState TopLevel a
 
 type CrucibleSetup arch a =
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
 
 data CrucibleSetupM a =
   CrucibleSetupM { runCrucibleSetupM :: forall arch. CrucibleSetup arch a }

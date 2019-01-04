@@ -24,6 +24,7 @@ module SAWScript.CrucibleLLVM
   , toBytes
     -- * Re-exports from "Lang.Crucible.LLVM.DataLayout"
   , Alignment
+  , noAlignment
   , padToAlignment
   , DataLayout
   , intWidthSize
@@ -50,15 +51,21 @@ module SAWScript.CrucibleLLVM
   , siFieldTypes
   , siIsPacked
   , mkStructInfo
+  , ppMemType
   , Ident -- re-exported from llvm-pretty package
     -- * Re-exports from "Lang.Crucible.LLVM.LLVMContext"
-  , LLVMTyCtx
+  , TyCtx.TypeContext
   , llvmMetadataMap
   , llvmDataLayout
   , asMemType
   , liftType
   , liftMemType
   , liftRetType
+    -- * Re-exports from "Lang.Crucible.LLVM.Globals"
+  , GlobalInitializerMap
+  , initializeMemory
+  , makeGlobalMap
+  , populateConstGlobals
     -- * Re-exports from "Lang.Crucible.LLVM.Translation"
   , ModuleTranslation
   , llvmMemVar
@@ -68,8 +75,6 @@ module SAWScript.CrucibleLLVM
   , cfgMap
   , transContext
   , llvmPtrWidth
-  , initializeMemory
-  , initMemoryCFG
   , LLVMContext
   , translateModule
     -- * Re-exports from "Lang.Crucible.LLVM.MemModel"
@@ -80,13 +85,13 @@ module SAWScript.CrucibleLLVM
   , doLoad
   , doStore
   , loadRawWithCondition
+  , storeRaw
   , storeConstRaw
   , mallocRaw
   , mallocConstRaw
   , ppMem
   , packMemValue
   , unpackMemValue
-  , coerceAny
   , buildDisjointRegionsAssertion
   , doPtrAddOffset
   , emptyMem
@@ -94,17 +99,17 @@ module SAWScript.CrucibleLLVM
   , pattern LLVMPointerRepr
   , AllocType(HeapAlloc, GlobalAlloc)
   , Mutability(..)
-  , typeF
-  , Type
-  , TypeF(Struct, Float, Double, Array, Bitvector)
-  , typeSize
+  , storageTypeF
+  , StorageType
+  , StorageTypeF(Struct, Float, Double, Array, Bitvector)
+  , storageTypeSize
   , fieldVal
   , bitvectorType
   , fieldPad
   , arrayType
   , mkStructType
   , mkStruct
-  , LLVMVal(LLVMValStruct, LLVMValInt, LLVMValArray, LLVMValFloat)
+  , LLVMVal(..)
   , LLVMPtr
   , HasPtrWidth
   , ptrToPtrVal
@@ -128,7 +133,7 @@ import Lang.Crucible.LLVM.Bytes
   (Bytes, bytesToBits, bytesToInteger, toBytes)
 
 import Lang.Crucible.LLVM.DataLayout
-  (Alignment, padToAlignment, DataLayout, EndianForm(..),
+  (Alignment, noAlignment, padToAlignment, DataLayout, EndianForm(..),
    integerAlignment, floatAlignment, intWidthSize, ptrBitwidth)
 
 import Lang.Crucible.LLVM.Extension
@@ -142,32 +147,32 @@ import Lang.Crucible.LLVM.MemType
    MemType(..),
    Ident, memTypeSize, fiOffset, fiType,
    siFields, siFieldInfo, siFieldOffset, siFieldTypes, siIsPacked,
-   mkStructInfo)
+   mkStructInfo, ppMemType)
 
-import Lang.Crucible.LLVM.LLVMContext
+import Lang.Crucible.LLVM.TypeContext
   (llvmMetadataMap, llvmDataLayout, asMemType, liftType, liftMemType, liftRetType)
 
-import qualified Lang.Crucible.LLVM.LLVMContext as TyCtx
+import qualified Lang.Crucible.LLVM.TypeContext as TyCtx
+
+import Lang.Crucible.LLVM.Globals
+  (GlobalInitializerMap, initializeMemory, makeGlobalMap, populateConstGlobals)
 
 import Lang.Crucible.LLVM.Translation
-  (llvmMemVar, toStorableType, symbolMap, LLVMHandleInfo(LLVMHandleInfo),
-   cfgMap, transContext, llvmPtrWidth, initializeMemory, initMemoryCFG,
+  (llvmMemVar, symbolMap, LLVMHandleInfo(LLVMHandleInfo),
+   cfgMap, transContext, llvmPtrWidth,
    ModuleTranslation, LLVMContext, translateModule)
 
 import Lang.Crucible.LLVM.MemModel
-  (Mem, MemImpl, doResolveGlobal, storeConstRaw, mallocRaw, mallocConstRaw,
-   ppMem, packMemValue, unpackMemValue, coerceAny, buildDisjointRegionsAssertion,
+  (Mem, MemImpl, doResolveGlobal, storeRaw, storeConstRaw, mallocRaw, mallocConstRaw,
+   ppMem, packMemValue, unpackMemValue, buildDisjointRegionsAssertion,
    doLoad, doStore, loadRawWithCondition, doPtrAddOffset, emptyMem, doMalloc,
-   LLVMVal(LLVMValStruct, LLVMValInt, LLVMValArray, LLVMValFloat),
+   LLVMVal(..),
    LLVMPtr, HasPtrWidth, ptrToPtrVal, mkNullPointer, ptrIsNull, ppPtr, ptrEq,
    pattern LLVMPointerRepr, LLVMPointerType,
    pattern PtrWidth, llvmPointer_bv, withPtrWidth, pattern LLVMPointer, pattern PtrRepr,
    llvmPointerView, projectLLVM_bv,
-   typeF, Type, TypeF(Struct, Float, Double, Array, Bitvector),
-   typeSize, fieldVal, bitvectorType, fieldPad, arrayType, mkStructType,
-   AllocType(HeapAlloc, GlobalAlloc), Mutability(..))
+   storageTypeF, StorageType, StorageTypeF(Struct, Float, Double, Array, Bitvector),
+   storageTypeSize, toStorableType, fieldVal, bitvectorType, fieldPad, arrayType,
+   mkStructType, AllocType(HeapAlloc, GlobalAlloc), Mutability(..))
 
 import Lang.Crucible.Syntax (mkStruct)
-
--- | Renamed copy of 'TyCtx.LLVMContext' from module "Lang.Crucible.LLVM.LLVMContext".
-type LLVMTyCtx = TyCtx.LLVMContext

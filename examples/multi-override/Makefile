@@ -7,7 +7,7 @@ clean:
 	rm -f *.bc *.ll
 
 %.bc: %.c
-	clang -O0 -emit-llvm -c -o $@ $^
+	clang -O0 -emit-llvm -g -c -o $@ $^
 
 %.ll: %.c
-	clang -O0 -emit-llvm -c -S -o $@ $^
+	clang -O0 -emit-llvm -g -c -S -o $@ $^

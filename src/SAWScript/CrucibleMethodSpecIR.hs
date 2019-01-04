@@ -70,15 +70,21 @@ newtype AllocIndex = AllocIndex Int
 nextAllocIndex :: AllocIndex -> AllocIndex
 nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
 
+-- | From the manual: "The SetupValue type corresponds to values that can occur
+-- during symbolic execution, which includes both Term values, pointers, and
+-- composite types consisting of either of these (both structures and arrays)."
 data SetupValue where
-  SetupVar    :: AllocIndex -> SetupValue
-  SetupTerm   :: TypedTerm -> SetupValue
-  SetupStruct :: [SetupValue] -> SetupValue
-  SetupArray  :: [SetupValue] -> SetupValue
-  SetupElem   :: SetupValue -> Int -> SetupValue
-  SetupField  :: SetupValue -> String -> SetupValue
-  SetupNull   :: SetupValue
-  SetupGlobal :: String -> SetupValue
+  SetupVar               :: AllocIndex -> SetupValue
+  SetupTerm              :: TypedTerm -> SetupValue
+  SetupStruct            :: Bool -> [SetupValue] -> SetupValue -- True = packed
+  SetupArray             :: [SetupValue] -> SetupValue
+  SetupElem              :: SetupValue -> Int -> SetupValue
+  SetupField             :: SetupValue -> String -> SetupValue
+  SetupNull              :: SetupValue
+  -- | A pointer to a global variable
+  SetupGlobal            :: String -> SetupValue
+  -- | This represents the value of a global's initializer.
+  SetupGlobalInitializer :: String -> SetupValue
   deriving (Show)
 
 setupToTypedTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO TypedTerm
@@ -97,8 +103,9 @@ setupToTerm opts sc sv =
   let intToNat = fromInteger . toInteger
   in case sv of
     SetupTerm term -> return (ttTerm term)
-    SetupStruct fields -> do ts <- mapM (setupToTerm opts sc) fields
-                             lift $ scTuple sc ts
+    SetupStruct _ fields ->
+      do ts <- mapM (setupToTerm opts sc) fields
+         lift $ scTuple sc ts
     SetupArray elems@(_:_) -> do ts@(t:_) <- mapM (setupToTerm opts sc) elems
                                  typt <- lift $ scTypeOf sc t
                                  vec <- lift $ scVector sc typt ts
@@ -114,8 +121,11 @@ setupToTerm opts sc sv =
                                      et <- setupToTerm opts sc e
                                      typ <- lift $ scTypeOf sc et
                                      lift $ scAt sc lent typ art ixt
-        _                -> do st <- setupToTerm opts sc base
-                               lift $ scTupleSelector sc st ind
+        SetupStruct _ fs ->
+          do st <- setupToTerm opts sc base
+             lift $ scTupleSelector sc st ind (length fs)
+        _ ->
+          MaybeT $ return Nothing
     -- SetupVar, SetupNull, SetupGlobal
     _ -> MaybeT $ return Nothing
 
@@ -262,7 +272,7 @@ makeLenses ''ResolvedState
 ccLLVMContext :: Simple Lens (CrucibleContext wptr) (CL.LLVMContext wptr)
 ccLLVMContext = ccLLVMModuleTrans . CL.transContext
 
-ccTypeCtx :: Simple Lens (CrucibleContext wptr) CL.LLVMTyCtx
+ccTypeCtx :: Simple Lens (CrucibleContext wptr) CL.TypeContext
 ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
 
 --------------------------------------------------------------------------------
@@ -331,22 +341,24 @@ ppSetupError (InvalidArgTypes ts) =
   text "to Crucible types."
 
 resolveArgs ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   [L.Type] ->
   Either SetupError [CL.MemType]
 resolveArgs args = do
   -- TODO: make sure we resolve aliases
   let mtys = traverse CL.liftMemType args
-  maybe (Left (InvalidArgTypes args)) Right mtys
+  -- TODO: should the error message be propagated?
+  either (\_ -> Left (InvalidArgTypes args)) Right mtys
 
 resolveRetTy ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   L.Type ->
   Either SetupError (Maybe CL.MemType)
 resolveRetTy ty = do
   -- TODO: make sure we resolve aliases
   let ret = CL.liftRetType ty
-  maybe (Left (InvalidReturnType ty)) Right ret
+  -- TODO: should the error message be propagated?
+  either (\_ -> Left (InvalidReturnType ty)) Right ret
 
 initialStateSpec :: StateSpec
 initialStateSpec =  StateSpec
@@ -360,7 +372,7 @@ initialStateSpec =  StateSpec
   }
 
 initialDefCrucibleMethodSpecIR ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   L.Define ->
   ProgramLoc ->
   Either SetupError CrucibleMethodSpecIR
@@ -381,7 +393,7 @@ initialDefCrucibleMethodSpecIR def loc = do
     }
 
 initialDeclCrucibleMethodSpecIR ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   L.Declare ->
   ProgramLoc ->
   Either SetupError CrucibleMethodSpecIR
@@ -402,7 +414,7 @@ initialDeclCrucibleMethodSpecIR dec loc = do
     }
 
 initialCrucibleSetupState ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   CrucibleContext wptr ->
   L.Define ->
   ProgramLoc ->
@@ -418,7 +430,7 @@ initialCrucibleSetupState cc def loc = do
     }
 
 initialCrucibleSetupStateDecl ::
-  (?lc :: CL.LLVMTyCtx) =>
+  (?lc :: CL.TypeContext) =>
   CrucibleContext wptr ->
   L.Declare ->
   ProgramLoc ->

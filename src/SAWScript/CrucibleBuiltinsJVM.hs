@@ -175,3 +175,5 @@ crucible_java_extract bic opts c mname = do
               mkTypedTerm sc t'
             Crucible.AbortedResult _ _ar -> do
               fail $ unlines [ "Symbolic execution failed." ]
+            Crucible.TimeoutResult _cxt -> do
+              fail $ unlines [ "Symbolic execution timed out." ]
