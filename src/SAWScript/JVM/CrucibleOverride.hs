@@ -42,7 +42,7 @@ import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
-import qualified Data.Vector as V
+--import qualified Data.Vector as V
 
 --import qualified Text.LLVM.AST as L
 
@@ -62,7 +62,7 @@ import qualified Lang.Crucible.Types as Crucible
 -- what4
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.Expr.Builder as W4
+--import qualified What4.Expr.Builder as W4
 import qualified What4.Symbol as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4

@@ -1874,6 +1874,7 @@ primitives = Map.fromList
     , "jvm_return statement is required if and only if the function"
     , "has a non-void return type." ]
 
+{-
   , prim "crucible_jvm_verify"
     "JavaClass -> String -> [JVMMethodSpec] -> Bool -> JVMSetup () -> ProofScript SatResult -> TopLevel JVMMethodSpec"
     (bicVal crucible_jvm_verify)
@@ -1893,6 +1894,7 @@ primitives = Map.fromList
     , "as would be returned by jvm_verify but without performing any"
     , "verification."
     ]
+-}
 {-
   , prim "jvm_array"
     "[JVMValue] -> JVMValue"

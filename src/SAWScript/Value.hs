@@ -309,6 +309,9 @@ showsPrecValue opts p v =
     VCFG (JVM_CFG g) -> showString (show g)
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
+    VJVMSetup _      -> showString "<<JVM Setup>>"
+    VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
+    VJVMSetupValue x -> shows x
   where
     opts' = sawPPOpts opts
 
@@ -503,11 +506,11 @@ instance Monad CrucibleSetupM where
   CrucibleSetupM m >>= f = CrucibleSetupM (m >>= runCrucibleSetupM . f)
 
 --
-type JVMSetup arch a =
-  (?lc :: Crucible.LLVMTyCtx, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
+type JVMSetup a =
+  StateT JCIR.CrucibleSetupState TopLevel a
 
 data JVMSetupM a =
-  JVMSetupM { runJVMSetupM :: forall arch. JVMSetup arch a }
+  JVMSetupM { runJVMSetupM :: JVMSetup a }
 
 instance Functor JVMSetupM where
   fmap f (JVMSetupM m) = JVMSetupM (fmap f m)
