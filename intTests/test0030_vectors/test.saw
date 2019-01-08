@@ -1,0 +1,8 @@
+
+m <- llvm_load_module "vectortest.bc";
+
+let setup = do {
+  crucible_execute_func [ crucible_term {{ zero:[32] }}, crucible_null ];
+  crucible_return (crucible_term {{ zero:[32] }});
+};
+crucible_llvm_verify m "main" [] false setup z3;
