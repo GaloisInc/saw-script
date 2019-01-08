@@ -628,7 +628,10 @@ rewritingSharedContext sc ss = sc'
     sc' = sc { scTermF = rewriteTop }
 
     rewriteTop :: TermF Term -> IO Term
-    rewriteTop tf = apply (Net.match_term ss t) t
+    rewriteTop tf =
+      case reduceSharedTerm sc' t of
+        Nothing -> apply (Net.match_term ss t) t
+        Just io -> io
       where t = Unshared tf
 
     apply :: [Either RewriteRule Conversion] ->
