@@ -53,7 +53,7 @@ import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
-import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
+--import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
 --import qualified Lang.Crucible.LLVM.Translation as CL
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))

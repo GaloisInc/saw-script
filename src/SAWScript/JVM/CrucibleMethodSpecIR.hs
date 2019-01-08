@@ -61,9 +61,9 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 import qualified Lang.Crucible.JVM.Translation as CJ
 
 --import qualified SAWScript.CrucibleLLVM as CL
-import SAWScript.JavaExpr (JavaType)
+--import SAWScript.JavaExpr (JavaType)
 
--- jvm-verifier
+-- jvm-parser
 --import qualified Language.JVM.Common as J
 import qualified Language.JVM.Parser as J
 
@@ -148,6 +148,17 @@ data SetupCondition where
                         SetupCondition
   deriving (Show)
 
+data Allocation
+  = AllocObject J.ClassName
+  | AllocArray Int J.Type
+  deriving (Show)
+
+allocationType :: Allocation -> J.Type
+allocationType alloc =
+  case alloc of
+    AllocObject cname -> J.ClassType cname
+    AllocArray _len ty -> J.ArrayType ty
+
 type JIdent = String -- FIXME: what to put here?
 
 -- | Verification state (either pre- or post-) specification
@@ -165,7 +176,7 @@ data StateSpec' t = StateSpec
   }
   deriving (Show)
 
-type StateSpec = StateSpec' (ProgramLoc, JavaType)
+type StateSpec = StateSpec' (ProgramLoc, Allocation)
 
 data CrucibleMethodSpecIR' t =
   CrucibleMethodSpec
@@ -181,7 +192,7 @@ data CrucibleMethodSpecIR' t =
   }
   deriving (Show)
 
-type CrucibleMethodSpecIR = CrucibleMethodSpecIR' JavaType
+type CrucibleMethodSpecIR = CrucibleMethodSpecIR' J.Type
 
 type GhostValue  = "GhostValue"
 type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
@@ -200,7 +211,7 @@ instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n (B.Flags B.FloatReal
 makeLenses ''CrucibleMethodSpecIR'
 makeLenses ''StateSpec'
 
-csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex (ProgramLoc, JavaType)
+csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex (ProgramLoc, Allocation)
 csAllocations
   = Map.unions
   . toListOf ((csPreState <> csPostState) . csAllocs)
@@ -340,24 +351,6 @@ testResolved val0 rs = go [] val0
 --  encloseSep lparen rparen comma (map (text . show . L.ppType) ts) <+>
 --  text "to Crucible types."
 
---resolveArgs ::
---  (?lc :: CL.LLVMTyCtx) =>
---  [L.Type] ->
---  Either SetupError [JavaType]
---resolveArgs args = do
---  -- TODO: make sure we resolve aliases
---  let mtys = traverse CL.liftMemType args
---  maybe (Left (InvalidArgTypes args)) Right mtys
-
---resolveRetTy ::
---  (?lc :: CL.LLVMTyCtx) =>
---  L.Type ->
---  Either SetupError (Maybe JavaType)
---resolveRetTy ty = do
---  -- TODO: make sure we resolve aliases
---  let ret = CL.liftRetType ty
---  maybe (Left (InvalidReturnType ty)) Right ret
-
 initialStateSpec :: StateSpec
 initialStateSpec =  StateSpec
   { _csAllocs        = Map.empty
@@ -367,54 +360,50 @@ initialStateSpec =  StateSpec
   , _csVarTypeNames  = Map.empty
   }
 
---initialDefCrucibleMethodSpecIR ::
---  (?lc :: CL.LLVMTyCtx) =>
---  L.Define ->
---  ProgramLoc ->
---  Either SetupError CrucibleMethodSpecIR
---initialDefCrucibleMethodSpecIR def loc = do
---  args <- resolveArgs (L.typedType <$> L.defArgs def)
---  ret <- resolveRetTy (L.defRetType def)
---  let L.Symbol nm = L.defName def
---  return CrucibleMethodSpec
---    { _csName            = nm
---    , _csArgs            = args
---    , _csRet             = ret
---    , _csPreState        = initialStateSpec
---    , _csPostState       = initialStateSpec
---    , _csArgBindings     = Map.empty
---    , _csRetValue        = Nothing
---    , _csSolverStats     = mempty
---    , _csLoc             = loc
---    }
+initialDefCrucibleMethodSpecIR ::
+  J.Method ->
+  ProgramLoc ->
+  CrucibleMethodSpecIR
+initialDefCrucibleMethodSpecIR method loc =
+  CrucibleMethodSpec
+    { _csName            = J.methodName method
+    , _csArgs            = J.methodParameterTypes method
+    , _csRet             = J.methodReturnType method
+    , _csPreState        = initialStateSpec
+    , _csPostState       = initialStateSpec
+    , _csArgBindings     = Map.empty
+    , _csRetValue        = Nothing
+    , _csSolverStats     = mempty
+    , _csLoc             = loc
+    }
 
 --initialDeclCrucibleMethodSpecIR ::
 --  (?lc :: CL.LLVMTyCtx) =>
 --  L.Declare ->
 --  ProgramLoc ->
 --  Either SetupError CrucibleMethodSpecIR
---initialDeclCrucibleMethodSpecIR dec loc = do
---  args <- resolveArgs (L.decArgs dec)
---  ret <- resolveRetTy (L.decRetType dec)
---  let L.Symbol nm = L.decName dec
---  return CrucibleMethodSpec
---    { _csName            = nm
---    , _csArgs            = args
---    , _csRet             = ret
---    , _csPreState        = initialStateSpec
---    , _csPostState       = initialStateSpec
---    , _csArgBindings     = Map.empty
---    , _csRetValue        = Nothing
---    , _csSolverStats     = mempty
---    , _csLoc             = loc
---    }
+--initialDeclCrucibleMethodSpecIR dec loc =
+--  do args <- resolveArgs (L.decArgs dec)
+--     ret <- resolveRetTy (L.decRetType dec)
+--     let L.Symbol nm = L.decName dec
+--     return CrucibleMethodSpec
+--       { _csName            = nm
+--       , _csArgs            = args
+--       , _csRet             = ret
+--       , _csPreState        = initialStateSpec
+--       , _csPostState       = initialStateSpec
+--       , _csArgBindings     = Map.empty
+--       , _csRetValue        = Nothing
+--       , _csSolverStats     = mempty
+--       , _csLoc             = loc
+--       }
 
 --initialCrucibleSetupState ::
---  (?lc :: CL.LLVMTyCtx) =>
---  CrucibleContext wptr ->
+--  -- (?lc :: CL.LLVMTyCtx) =>
+--  CrucibleContext ->
 --  L.Define ->
 --  ProgramLoc ->
---  Either SetupError (CrucibleSetupState wptr)
+--  Either SetupError CrucibleSetupState
 --initialCrucibleSetupState cc def loc = do
 --  ms <- initialDefCrucibleMethodSpecIR def loc
 --  return CrucibleSetupState
@@ -430,7 +419,7 @@ initialStateSpec =  StateSpec
 --  CrucibleContext wptr ->
 --  L.Declare ->
 --  ProgramLoc ->
---  Either SetupError (CrucibleSetupState wptr)
+--  Either SetupError CrucibleSetupState
 --initialCrucibleSetupStateDecl cc dec loc = do
 --  ms <- initialDeclCrucibleMethodSpecIR dec loc
 --  return CrucibleSetupState

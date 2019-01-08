@@ -361,8 +361,6 @@ parseJavaExpr cb cls meth estr = parseParts eparts
               return $ CC.Term $ InstanceField e fid
         eparts = reverse $ splitOn "." estr
 
--- JavaType {{{1
-
 -- | Adapted from type 'JavaType' in Java.sawcore.
 data JavaType
   = JavaBoolean

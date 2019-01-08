@@ -67,7 +67,6 @@ import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 --import qualified Control.Monad.Trans.Maybe as MaybeT
 
 import           Data.Parameterized.Classes
-
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some
@@ -80,6 +79,10 @@ import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 --import           What4.Utils.MonadST
+
+-- jvm-parser
+import qualified Language.JVM.Parser as J
+import qualified Language.JVM.Common as J (dotsToSlashes)
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
@@ -138,7 +141,7 @@ crucible_jvm_verify ::
   String                 ->
   [CrucibleMethodSpecIR] ->
   Bool                   ->
-  JVMSetupM ()      ->
+  JVMSetupM ()           ->
   ProofScript SatResult  ->
   TopLevel CrucibleMethodSpecIR
 crucible_jvm_verify bic opts lm nm lemmas checkSat setup tactic =
@@ -589,7 +592,7 @@ verifyPoststate ::
   CrucibleMethodSpecIR              {- ^ specification                                -} ->
   Map AllocIndex JVMRefVal          {- ^ allocation substitution                      -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
-  Maybe (JavaType, JVMVal)          {- ^ optional return value                        -} ->
+  Maybe (J.Type, JVMVal)            {- ^ optional return value                        -} ->
   TopLevel [(String, Term)]         {- ^ generated labels and verification conditions -}
 verifyPoststate opts sc cc mspec env0 globals ret =
   do poststateLoc <- toW4Loc "_SAW_verify_poststate" <$> getPosition
@@ -909,6 +912,23 @@ logicTypeOfActual sc jty =
            Nothing   -> return Nothing
     JavaClass _ -> return Nothing
 
+parseClassName :: String -> J.ClassName
+parseClassName cname = J.mkClassName (J.dotsToSlashes cname)
+
+typeOfJavaType :: JavaType -> J.Type
+typeOfJavaType jty =
+  case jty of
+    JavaBoolean   -> J.BooleanType
+    JavaByte      -> J.ByteType
+    JavaChar      -> J.CharType
+    JavaShort     -> J.ShortType
+    JavaInt       -> J.IntType
+    JavaLong      -> J.IntType
+    JavaFloat     -> J.FloatType
+    JavaDouble    -> J.DoubleType
+    JavaArray _ t -> J.ArrayType (typeOfJavaType t)
+    JavaClass c   -> J.ClassType (parseClassName c)
+
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
 jvm_fresh_var ::
@@ -944,23 +964,24 @@ jvm_alloc_object ::
   Options        ->
   String {- ^ class name -} ->
   JVMSetupM SetupValue
-jvm_alloc_object _bic _opt cname = JVMSetupM $
+jvm_alloc_object _bic _opt cname =
+  JVMSetupM $
   do loc <- toW4Loc "jvm_alloc_object" <$> lift getPosition
      n <- csVarCounter <<%= nextAllocIndex
-     currentState.csAllocs.at n ?= (loc, JavaClass cname)
+     currentState.csAllocs.at n ?= (loc, AllocObject (parseClassName cname))
      return (SetupVar n)
 
 jvm_alloc_array ::
-  BuiltinContext ->
-  Options        ->
+  BuiltinContext       ->
+  Options              ->
   Int {- array size -} ->
-  JavaType       ->
+  JavaType             ->
   JVMSetupM SetupValue
 jvm_alloc_array _bic _opt len ety =
   JVMSetupM $
   do loc <- toW4Loc "jvm_alloc_array" <$> lift getPosition
      n <- csVarCounter <<%= nextAllocIndex
-     currentState.csAllocs.at n ?= (loc, JavaArray len ety)
+     currentState.csAllocs.at n ?= (loc, AllocArray len (typeOfJavaType ety))
      return (SetupVar n)
 
 jvm_field_is ::

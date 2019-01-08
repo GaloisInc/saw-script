@@ -82,11 +82,14 @@ import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
-import           SAWScript.JavaExpr (JavaType(..))
+--import           SAWScript.JavaExpr (JavaType(..))
 import           SAWScript.JVM.CrucibleMethodSpecIR
 import           SAWScript.JVM.CrucibleResolveSetupValue
 import           SAWScript.Options
 import           SAWScript.Utils (handleException)
+
+-- jvm-parser
+import qualified Language.JVM.Parser as J
 
 -- | The 'OverrideMatcher' type provides the operations that are needed
 -- to match a specification's arguments with the arguments provided by
@@ -133,7 +136,7 @@ data OverrideFailureReason
   | BadPointerLoad String -- ^ loadRaw failed due to type error
   | StructuralMismatch JVMVal
                        SetupValue
-                       JavaType
+                       J.Type
                         -- ^ simulated value, specified value, specified type
   deriving Show
 
@@ -378,8 +381,8 @@ methodSpecHandler1 opts sc cc args retTy cs =
        sym <- getSymInterface
 
        let aux ::
-             (JavaType, SetupValue) -> Crucible.AnyValue Sym ->
-             OverrideMatcher (JVMVal, JavaType, SetupValue)
+             (J.Type, SetupValue) -> Crucible.AnyValue Sym ->
+             OverrideMatcher (JVMVal, J.Type, SetupValue)
            aux (argTy, setupVal) val =
              case decodeJVMVal argTy val of
                Just val' -> return (val', argTy, setupVal)
@@ -673,7 +676,7 @@ matchArg ::
   W4.ProgramLoc ->
   PrePost                                                          ->
   JVMVal             {- ^ concrete simulation value             -} ->
-  JavaType           {- ^ expected memory type                  -} ->
+  J.Type             {- ^ expected memory type                  -} ->
   SetupValue         {- ^ expected specification value          -} ->
   OverrideMatcher ()
 
@@ -885,21 +888,24 @@ learnPred sc cc loc prepost t =
 
 ------------------------------------------------------------------------
 
+-- TODO: replace (W4.ProgramLoc, J.Type) by some allocation datatype
+-- that includes constructors for object allocations and array
+-- allocations (with length).
+
 -- | Perform an allocation as indicated by a 'crucible_alloc'
 -- statement from the postcondition section.
 executeAllocation ::
   Options                        ->
   CrucibleContext                ->
-  (AllocIndex, (W4.ProgramLoc, JavaType)) ->
+  (AllocIndex, (W4.ProgramLoc, Allocation)) ->
   OverrideMatcher ()
-executeAllocation opts cc (var, (loc, memTy)) =
+executeAllocation opts cc (var, (loc, alloc)) =
   do let sym = cc^.ccBackend
-     liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
+     liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show alloc]
      ptr <-
-       case memTy of
-         JavaClass cname -> liftIO $ doAllocateObject sym cname
-         JavaArray len elemTy -> liftIO $ doAllocateArray sym len elemTy
-         _ -> fail "impossible: executeAllocation with invalid type"
+       case alloc of
+         AllocObject cname -> liftIO $ doAllocateObject sym cname
+         AllocArray len elemTy -> liftIO $ doAllocateArray sym len elemTy
      assignVar cc loc var ptr
 
 ------------------------------------------------------------------------
@@ -1035,7 +1041,7 @@ resolveSetupValueJVM ::
   SharedContext        ->
   CrucibleMethodSpecIR ->
   SetupValue           ->
-  OverrideMatcher (JavaType, JVMVal)
+  OverrideMatcher (J.Type, JVMVal)
 resolveSetupValueJVM opts cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
@@ -1052,7 +1058,7 @@ resolveSetupValueJVM opts cc sc spec sval =
 --  SharedContext        ->
 --  CrucibleMethodSpecIR ->
 --  SetupValue           ->
---  OverrideMatcher (JavaType, Crucible.RegValue Sym CJ.JVMValueType)
+--  OverrideMatcher (J.Type, Crucible.RegValue Sym CJ.JVMValueType)
 --resolveSetupValue opts cc sc spec sval =
 --  do (memTy, lval) <- resolveSetupValueJVM opts cc sc spec sval
 --     sym <- getSymInterface
@@ -1066,19 +1072,19 @@ injectJVMVal sym jv =
     IVal x -> Crucible.injectVariant sym W4.knownRepr CJ.tagI x
     LVal x -> Crucible.injectVariant sym W4.knownRepr CJ.tagL x
 
-decodeJVMVal :: JavaType -> Crucible.AnyValue Sym -> Maybe JVMVal
+decodeJVMVal :: J.Type -> Crucible.AnyValue Sym -> Maybe JVMVal
 decodeJVMVal ty v =
   case ty of
-    JavaBoolean -> Nothing -- FIXME
-    JavaByte    -> Nothing -- FIXME
-    JavaChar    -> Nothing -- FIXME
-    JavaShort   -> Nothing -- FIXME
-    JavaInt     -> go @CJ.JVMIntType v CJ.intRepr IVal
-    JavaLong    -> go @CJ.JVMLongType v CJ.longRepr LVal
-    JavaFloat   -> Nothing -- FIXME
-    JavaDouble  -> Nothing -- FIXME
-    JavaArray{} -> go @CJ.JVMRefType v CJ.refRepr RVal
-    JavaClass{} -> go @CJ.JVMRefType v CJ.refRepr RVal
+    J.BooleanType -> Nothing -- FIXME
+    J.ByteType    -> Nothing -- FIXME
+    J.CharType    -> Nothing -- FIXME
+    J.ShortType   -> Nothing -- FIXME
+    J.IntType     -> go @CJ.JVMIntType v CJ.intRepr IVal
+    J.LongType    -> go @CJ.JVMLongType v CJ.longRepr LVal
+    J.FloatType   -> Nothing -- FIXME
+    J.DoubleType  -> Nothing -- FIXME
+    J.ArrayType{} -> go @CJ.JVMRefType v CJ.refRepr RVal
+    J.ClassType{} -> go @CJ.JVMRefType v CJ.refRepr RVal
   where
     go ::
       forall t.
@@ -1099,7 +1105,7 @@ asRVal loc _ = failure loc BadPointerCast
 
 --asRVal ::
 --  W4.ProgramLoc ->
---  (JavaType, Crucible.AnyValue Sym) ->
+--  (J.Type, Crucible.AnyValue Sym) ->
 --  OverrideMatcher (String, JVMRefVal)
 --asRVal _ (JavaClass cname, RVal ptr) = return (cname, ptr)
 --asRVal loc _ = failure loc BadPointerCast
@@ -1122,10 +1128,10 @@ doFieldLoad _sym _ref _fname = fail "doFieldLoad: FIXME"
 doArrayLoad :: Sym -> JVMRefVal -> Int -> IO JVMVal
 doArrayLoad _sym _ref _idx = fail "doArrayLoad: FIXME"
 
-doAllocateObject :: Sym -> String {- ^ class name -} -> IO JVMRefVal
+doAllocateObject :: Sym -> J.ClassName -> IO JVMRefVal
 doAllocateObject _sym _cname = fail "doAllocateObject: FIXME"
 
-doAllocateArray :: Sym -> Int -> JavaType -> IO JVMRefVal
+doAllocateArray :: Sym -> Int -> J.Type -> IO JVMRefVal
 doAllocateArray _sym _len _elemTy = fail "doAllocateArray: FIXME"
 
 doResolveGlobal :: Sym -> () -> String -> IO JVMRefVal

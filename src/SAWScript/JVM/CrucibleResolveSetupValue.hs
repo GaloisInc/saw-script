@@ -63,7 +63,10 @@ import qualified Lang.Crucible.JVM.Translation as CJ
 import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
 import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
-import SAWScript.JavaExpr (JavaType(..))
+-- jvm-parser
+import qualified Language.JVM.Parser as J
+
+--import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Prover.Rewrite
 import SAWScript.JVM.CrucibleMethodSpecIR
 
@@ -144,20 +147,20 @@ data JVMPtr
 typeOfSetupValue ::
   Monad m =>
   CrucibleContext ->
-  Map AllocIndex (W4.ProgramLoc, JavaType) ->
+  Map AllocIndex (W4.ProgramLoc, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
-  m JavaType
+  m J.Type
 typeOfSetupValue _cc env _nameEnv val =
   case val of
     SetupVar i ->
       case Map.lookup i env of
         Nothing -> fail ("typeOfSetupValue: Unresolved prestate variable:" ++ show i)
-        Just (_, ty) -> return ty
+        Just (_, alloc) -> return (allocationType alloc)
     SetupTerm tt ->
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
-          case toJavaType (Cryptol.evalValType Map.empty ty) of
+          case toJVMType (Cryptol.evalValType Map.empty ty) of
             Nothing -> fail "typeOfSetupValue: non-representable type"
             Just jty -> return jty
         s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
@@ -204,7 +207,7 @@ typeOfSetupValue _cc env _nameEnv val =
       -- because a) it is memory-compatible with any type that NULL
       -- can be used at, and b) it prevents us from doing any
       -- type-safe field accesses.
-      return (JavaClass "Java.Lang.Object")
+      return (J.ClassType (J.mkClassName "java/lang/Object"))
     SetupGlobal name ->
       fail ("typeOfSetupValue: unimplemented jvm_global: " ++ name)
       {-
@@ -232,7 +235,7 @@ typeOfSetupValue _cc env _nameEnv val =
 resolveSetupVal ::
   CrucibleContext ->
   Map AllocIndex JVMRefVal ->
-  Map AllocIndex (W4.ProgramLoc, JavaType) ->
+  Map AllocIndex (W4.ProgramLoc, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   IO JVMVal
@@ -396,6 +399,28 @@ resolveBitvectorTerm sym w tm =
        Just x  -> W4.bvLit sym w x
        Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
 
+toJVMType :: Cryptol.TValue -> Maybe J.Type
+toJVMType tp =
+  case tp of
+    Cryptol.TVBit -> Just J.BooleanType
+    Cryptol.TVInteger -> Nothing
+    Cryptol.TVIntMod _ -> Nothing
+    Cryptol.TVSeq n Cryptol.TVBit ->
+      case n of
+        8  -> Just J.CharType
+        16 -> Just J.ShortType
+        32 -> Just J.IntType
+        64 -> Just J.LongType
+        _  -> Nothing
+    Cryptol.TVSeq _n t ->
+      do t' <- toJVMType t
+         Just (J.ArrayType t')
+    Cryptol.TVStream _tp' -> Nothing
+    Cryptol.TVTuple tps -> Nothing
+    Cryptol.TVRec _flds -> Nothing
+    Cryptol.TVFun _ _ -> Nothing
+
+{-
 toJavaType :: Cryptol.TValue -> Maybe JavaType
 toJavaType tp =
   case tp of
@@ -417,6 +442,7 @@ toJavaType tp =
     Cryptol.TVTuple tps -> Nothing
     Cryptol.TVRec _flds -> Nothing
     Cryptol.TVFun _ _ -> Nothing
+-}
 
 --typeOfJVMVal :: Crucible.DataLayout -> JVMVal -> Crucible.Type
 --typeOfJVMVal _dl val =
