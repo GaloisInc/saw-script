@@ -783,6 +783,7 @@ zeroValueSC :: SharedContext -> Crucible.StorageType -> IO Term
 zeroValueSC sc tp = case Crucible.storageTypeF tp of
   Crucible.Float -> fail "zeroValueSC: float unsupported"
   Crucible.Double -> fail "zeroValueSC: double unsupported"
+  Crucible.X86_FP80 -> fail "zeroValueSC: X86_FP80 unsupported"
   Crucible.Bitvector bs ->
     do n <- scNat sc (fromInteger (Crucible.bytesToBits bs))
        z <- scNat sc 0
@@ -850,6 +851,7 @@ typeToSC sc t =
     Crucible.Bitvector sz -> scBitvector sc (fromInteger (Crucible.bytesToBits sz))
     Crucible.Float -> fail "typeToSC: float not supported"
     Crucible.Double -> fail "typeToSC: double not supported"
+    Crucible.X86_FP80 -> fail "typeToSC: X86_FP80 not supported"
     Crucible.Array sz ty ->
       do n <- scNat sc (fromIntegral sz)
          ty' <- typeToSC sc ty

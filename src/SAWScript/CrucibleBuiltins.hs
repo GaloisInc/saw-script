@@ -1044,7 +1044,7 @@ constructExpandedSetupValue sc loc t =
                                    ]
 
     Crucible.ArrayType n memTy ->
-       SetupArray <$> replicateM n (constructExpandedSetupValue sc loc memTy)
+       SetupArray <$> replicateM (fromIntegral n) (constructExpandedSetupValue sc loc memTy)
 
     Crucible.FloatType      -> failUnsupportedType "Float"
     Crucible.DoubleType     -> failUnsupportedType "Double"

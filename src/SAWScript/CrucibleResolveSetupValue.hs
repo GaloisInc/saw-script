@@ -151,7 +151,7 @@ typeOfSetupValue' cc env nameEnv val =
       do memTy <- typeOfSetupValue cc env nameEnv v
          _memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          -- TODO: check that all memTys are compatible with memTy
-         return (Crucible.ArrayType (length (v:vs)) memTy)
+         return (Crucible.ArrayType (fromIntegral (length (v:vs))) memTy)
     SetupField v n ->
       case resolveSetupFieldIndex cc env nameEnv v n of
         Nothing -> fail ("Unable to resolve field name: " ++ show n)
@@ -165,7 +165,7 @@ typeOfSetupValue' cc env nameEnv val =
                Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
-                     | i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
+                     | fromIntegral i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
                      | otherwise -> fail $ "typeOfSetupValue: array type index out of bounds: " ++ show (i, n)
                    Crucible.StructType si ->
                      case Crucible.siFieldInfo si i of
@@ -251,7 +251,7 @@ resolveSetupVal cc env tyenv nameEnv val =
                Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
-                     | i < n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
+                     | fromIntegral i < n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
                    Crucible.StructType si ->
                      case Crucible.siFieldOffset si i of
                        Just d -> return d
@@ -424,6 +424,7 @@ typeAlignment dl ty =
     Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromInteger (Crucible.bytesToBits bytes))
     Crucible.Float           -> fromJust (Crucible.floatAlignment dl 32)
     Crucible.Double          -> fromJust (Crucible.floatAlignment dl 64)
+    Crucible.X86_FP80        -> fromJust (Crucible.floatAlignment dl 80)
     Crucible.Array _sz ty'   -> typeAlignment dl ty'
     Crucible.Struct flds     -> V.foldl max Crucible.noAlignment (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
 
