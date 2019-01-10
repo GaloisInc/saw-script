@@ -1939,6 +1939,7 @@ primitives = Map.fromList
     , "And the last gives the script to use to prove the validity of the resulting"
     , "verification conditions."
     ]
+-}
 
   , prim "crucible_jvm_unsafe_assume_spec"
     "JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec"
@@ -1947,7 +1948,6 @@ primitives = Map.fromList
     , "as would be returned by jvm_verify but without performing any"
     , "verification."
     ]
--}
 {-
   , prim "jvm_array"
     "[JVMValue] -> JVMValue"

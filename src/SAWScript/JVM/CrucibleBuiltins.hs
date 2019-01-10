@@ -30,8 +30,8 @@ module SAWScript.JVM.CrucibleBuiltins
     ( {- crucible_jvm_cfg
     , crucible_jvm_extract
     , crucible_jvm_verify
-    , crucible_jvm_unsafe_assume_spec
-    , -} jvm_return
+    , -} crucible_jvm_unsafe_assume_spec
+    , jvm_return
     , jvm_execute_func
     , jvm_postcond
     , jvm_precond
@@ -71,7 +71,9 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some
 
-import qualified Verifier.Java.Codebase as JSS
+-- jvm-verifier
+-- TODO: transition to Lang.JVM.Codebase from crucible-jvm
+import qualified Verifier.Java.Codebase as CB
 
 import qualified What4.Config as W4
 import qualified What4.FunctionName as W4
@@ -84,6 +86,7 @@ import qualified What4.Expr.Builder as W4
 import qualified Language.JVM.Parser as J
 import qualified Language.JVM.Common as J (dotsToSlashes)
 
+-- crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
@@ -97,6 +100,10 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
+-- crucible-jvm
+import qualified Lang.Crucible.JVM.Translation as CJ
+
+-- parameterized-utils
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
@@ -185,25 +192,23 @@ crucible_jvm_verify bic opts lm nm lemmas checkSat setup tactic =
      stats <- verifyObligations cc methodSpec tactic assumes asserts
      return (methodSpec & csSolverStats .~ stats)
 
+-}
 crucible_jvm_unsafe_assume_spec ::
   BuiltinContext   ->
   Options          ->
-  JavaClass        ->
+  J.Class          ->
   String          {- ^ Name of the method -} ->
   JVMSetupM () {- ^ Boundary specification -} ->
   TopLevel CrucibleMethodSpecIR
-crucible_jvm_unsafe_assume_spec bic opts lm nm setup =
-  setupCrucibleContext bic opts lm $ \cc -> do
-    let nm' = fromString nm
-    let llmod = cc^.ccJVMClass
-    loc <- toW4Loc "_SAW_assume_spec" <$> getPosition
-    st0 <- case initialCrucibleSetupState cc     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <*> pure loc <|>
-                initialCrucibleSetupStateDecl cc <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) <*> pure loc of
-                   Nothing -> fail ("Could not find function named" ++ show nm)
-                   Just (Left err) -> fail (show (ppSetupError err))
-                   Just (Right st0) -> return st0
-    (view csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
--}
+crucible_jvm_unsafe_assume_spec bic opts cls nm setup =
+  do cc <- setupCrucibleContext bic opts cls
+     cb <- getJavaCodebase
+     -- cls' is either cls or a subclass of cls
+     pos <- getPosition
+     (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
+     let loc = toW4Loc "_SAW_assume_spec" pos
+     let st0 = initialCrucibleSetupState cc method loc
+     (view csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
 
 verifyObligations ::
   CrucibleContext ->
@@ -637,64 +642,47 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
 --------------------------------------------------------------------------------
 
+setupCrucibleContext :: BuiltinContext -> Options -> J.Class -> TopLevel CrucibleContext
+setupCrucibleContext bic opts jclass =
+  do halloc <- getHandleAlloc
+     AIGProxy proxy <- getProxy
+     cb <- getJavaCodebase
+     jvmctx0 <- io $ CJ.mkInitialJVMContext halloc
+     let sc  = biSharedContext bic
+     let gen = globalNonceGenerator
+     sym <- io $ Crucible.newSAWCoreBackend proxy sc gen
+     io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
+     return CrucibleContext { _ccJVMClass = jclass
+                            , _ccBackend = sym
+                            , _ccJVMSimContext = undefined -- lsimctx -- Lang.Crucible.Simulator.SimContext
+                            }
 {-
-setupCrucibleContext ::
-  BuiltinContext -> Options -> JavaClass ->
-  (CrucibleContext -> TopLevel a) ->
-  TopLevel a
-setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action =
-  do
-  halloc <- getHandleAlloc
-  AIGProxy proxy <- getProxy
-  let ctx = mtrans^.Crucible.transContext
-  Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
-    let ?lc = ctx^.Crucible.llvmTypeCtx in
-    action =<< (io $ do
-      let gen = globalNonceGenerator
-      let sc  = biSharedContext bic
-      let verbosity = simVerbose opts
-      sym <- Crucible.newSAWCoreBackend proxy sc gen
+         let bindings = Crucible.fnBindingsFromList []
+         let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
+                           bindings Crucible.llvmExtensionImpl Crucible.SAWCruciblePersonality
+         mem <- Crucible.initializeMemory sym ctx llvm_mod
+         let globals  = Crucible.llvmGlobals ctx mem
 
-      let cfg = W4.getConfiguration sym
-      verbSetting <- W4.getOptionSetting W4.verbosity cfg
-      _ <- W4.setOpt verbSetting (toInteger verbosity)
+         let setupMem = do
+                -- register the callable override functions
+                _llvmctx' <- execStateT Crucible.register_llvm_overrides ctx
 
-      let bindings = Crucible.fnBindingsFromList []
-      let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
-                        bindings Crucible.llvmExtensionImpl Crucible.SAWCruciblePersonality
-      mem <- Crucible.initializeMemory sym ctx llvm_mod
-      let globals  = Crucible.llvmGlobals ctx mem
+                -- initialize LLVM global variables
+                _ <- case Crucible.initMemoryCFG mtrans of
+                        Crucible.SomeCFG initCFG ->
+                          Crucible.callCFG initCFG Crucible.emptyRegMap
 
-      let setupMem = do
-             -- register the callable override functions
-             _llvmctx' <- execStateT Crucible.register_llvm_overrides ctx
+                -- register all the functions defined in the LLVM module
+                mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
 
-             -- initialize LLVM global variables
-             _ <- case Crucible.initMemoryCFG mtrans of
-                     Crucible.SomeCFG initCFG ->
-                       Crucible.callCFG initCFG Crucible.emptyRegMap
-
-             -- register all the functions defined in the LLVM module
-             mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
-
-      let simSt = Crucible.initSimState simctx globals Crucible.defaultAbortHandler
-      res <- Crucible.executeCrucible simSt $ Crucible.runOverrideSim Crucible.UnitRepr setupMem
-      (lglobals, lsimctx) <-
-          case res of
-            Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
-            Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
-            Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
-      return
-         CrucibleContext{ _ccLLVMModuleTrans = mtrans
-                        , _ccLLVMModule = llvm_mod
-                        , _ccBackend = sym
-                        , _ccLLVMEmptyMem = mem
-                        , _ccLLVMSimContext = lsimctx
-                        , _ccLLVMGlobals = lglobals
-                        }
-      )
+         let simSt = Crucible.initSimState simctx globals Crucible.defaultAbortHandler
+         res <- Crucible.executeCrucible simSt $ Crucible.runOverrideSim Crucible.UnitRepr setupMem
+         (lglobals, lsimctx) <-
+             case res of
+               Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
+               Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
+               Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
 -}
-
 
 --------------------------------------------------------------------------------
 
@@ -787,14 +775,14 @@ extractFromJVMCFG opts sc cc (Crucible.AnyCFG cfg) =
 --------------------------------------------------------------------------------
 
 {-
-crucible_jvm_extract :: BuiltinContext -> Options -> JavaClass -> String -> TopLevel TypedTerm
+crucible_jvm_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
 crucible_jvm_extract bic opts cls fn_name =
   setupCrucibleContext bic opts cls $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
       Just cfg -> io $ extractFromLLVMCFG opts (biSharedContext bic) cc cfg
 
-crucible_jvm_cfg :: BuiltinContext -> Options -> JavaClass -> String -> TopLevel SAW_CFG
+crucible_jvm_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
 crucible_jvm_cfg bic opts cls fn_name =
   setupCrucibleContext bic opts cls $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of

@@ -675,6 +675,13 @@ instance FromValue CIR.CrucibleMethodSpecIR where
     fromValue (VCrucibleMethodSpec t) = t
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
+instance IsValue JCIR.CrucibleMethodSpecIR where
+    toValue t = VJVMMethodSpec t
+
+instance FromValue JCIR.CrucibleMethodSpecIR where
+    fromValue (VJVMMethodSpec t) = t
+    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+
 -----------------------------------------------------------------------------------
 
 

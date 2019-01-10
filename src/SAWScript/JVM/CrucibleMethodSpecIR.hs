@@ -41,8 +41,7 @@ import           Data.Monoid ((<>))
 -- import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as Crucible
 
-import SAWScript.Prover.SolverStats
-
+-- what4
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
@@ -60,6 +59,10 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 -- crucible-jvm
 import qualified Lang.Crucible.JVM.Translation as CJ
 
+-- jvm-verifier
+-- TODO: transition to Lang.JVM.Codebase from crucible-jvm
+-- import qualified Verifier.Java.Codebase as CB
+
 --import qualified SAWScript.CrucibleLLVM as CL
 --import SAWScript.JavaExpr (JavaType)
 
@@ -67,9 +70,12 @@ import qualified Lang.Crucible.JVM.Translation as CJ
 --import qualified Language.JVM.Common as J
 import qualified Language.JVM.Parser as J
 
+-- saw-core
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
+
 import SAWScript.Options
+import SAWScript.Prover.SolverStats
 
 newtype AllocIndex = AllocIndex Int
   deriving (Eq, Ord, Show)
@@ -398,21 +404,19 @@ initialDefCrucibleMethodSpecIR method loc =
 --       , _csLoc             = loc
 --       }
 
---initialCrucibleSetupState ::
---  -- (?lc :: CL.LLVMTyCtx) =>
---  CrucibleContext ->
---  L.Define ->
---  ProgramLoc ->
---  Either SetupError CrucibleSetupState
---initialCrucibleSetupState cc def loc = do
---  ms <- initialDefCrucibleMethodSpecIR def loc
---  return CrucibleSetupState
---    { _csVarCounter      = AllocIndex 0
---    , _csPrePost         = PreState
---    , _csResolvedState   = emptyResolvedState
---    , _csMethodSpec      = ms
---    , _csCrucibleContext = cc
---    }
+initialCrucibleSetupState ::
+  CrucibleContext ->
+  J.Method ->
+  ProgramLoc ->
+  CrucibleSetupState
+initialCrucibleSetupState cc method loc =
+  CrucibleSetupState
+    { _csVarCounter      = AllocIndex 0
+    , _csPrePost         = PreState
+    , _csResolvedState   = emptyResolvedState
+    , _csMethodSpec      = initialDefCrucibleMethodSpecIR method loc
+    , _csCrucibleContext = cc
+    }
 
 --initialCrucibleSetupStateDecl ::
 --  (?lc :: CL.LLVMTyCtx) =>
