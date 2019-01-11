@@ -54,7 +54,8 @@ import Verifier.SAW.TypedTerm
 import qualified Lang.Crucible.Simulator as Crucible (RegValue)
 
 -- what4
-import What4.Partial (maybePartExpr)
+import qualified What4.Interface as W4
+import qualified What4.Partial as W4
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM.Translation as CJ
@@ -285,7 +286,7 @@ resolveSetupVal cc env _tyenv _nameEnv val =
            _ -> fail msg
 -}
     SetupNull ->
-      return (RVal (maybePartExpr sym Nothing))
+      return (RVal (W4.maybePartExpr sym Nothing))
     SetupGlobal name ->
       fail $ "resolveSetupVal: unimplemented jvm_global: " ++ name
   where
@@ -472,7 +473,10 @@ equalValsPred cc v1 v2 = go (v1, v2)
 
 
 refIsNull :: Sym -> JVMRefVal -> IO (W4.Pred Sym)
-refIsNull _sym _ref = fail "refIsNull: FIXME"
+refIsNull sym ref =
+  case ref of
+    W4.PE p _ -> W4.notPred sym p
+    W4.Unassigned -> return (W4.truePred sym)
 
 refIsEqual :: Sym -> JVMRefVal -> JVMRefVal -> IO (W4.Pred Sym)
 refIsEqual _sym _ref1 _ref2 = fail "refIsEqual: FIXME"

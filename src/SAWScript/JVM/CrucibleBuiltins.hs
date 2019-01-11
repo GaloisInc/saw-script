@@ -75,8 +75,10 @@ import           Data.Parameterized.Some
 -- TODO: transition to Lang.JVM.Codebase from crucible-jvm
 import qualified Verifier.Java.Codebase as CB
 
+-- what4
 import qualified What4.Config as W4
 import qualified What4.FunctionName as W4
+import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
@@ -91,7 +93,7 @@ import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
   (AnyCFG(..), SomeCFG(..), CFG, TypeRepr(..), cfgHandle,
-   asBaseType, AsBaseType(..))
+   asBaseType, AsBaseType(..), VectorType, CtxRepr)
 import qualified Lang.Crucible.CFG.Extension as Crucible
   (IsSyntaxExtension)
 import qualified Lang.Crucible.FunctionHandle as Crucible
@@ -99,6 +101,8 @@ import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
+import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
+import qualified Lang.Crucible.Utils.MuxTree as Crucible (toMuxTree)
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM.Translation as CJ
@@ -140,50 +144,53 @@ ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
   text "Aborted branch"
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
+-}
 
 crucible_jvm_verify ::
-  BuiltinContext         ->
-  Options                ->
-  JSS.Class              ->
-  String                 ->
+  BuiltinContext ->
+  Options ->
+  J.Class ->
+  String {- ^ method name -} ->
   [CrucibleMethodSpecIR] ->
-  Bool                   ->
-  JVMSetupM ()           ->
-  ProofScript SatResult  ->
+  Bool {- ^ path sat checking -} ->
+  JVMSetupM () ->
+  ProofScript SatResult ->
   TopLevel CrucibleMethodSpecIR
-crucible_jvm_verify bic opts lm nm lemmas checkSat setup tactic =
-  setupCrucibleContext bic opts lm $ \cc ->
-  do let sym = cc^.ccBackend
-     let nm' = fromString nm
-     let llmod = error "llmod" --cc^.ccLLVMModule
+crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
+  do cc <- setupCrucibleContext bic opts cls
+     cb <- getJavaCodebase
+     let sym = cc^.ccBackend
 
-     setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
+     pos <- getPosition
+     let loc = toW4Loc "_SAW_verify_prestate" pos
 
-     def <- error "def" {-case find (\d -> L.defName d == nm') (L.modDefines llmod) of
-                    Nothing -> fail ("Could not find function named" ++ show nm)
-                    Just decl -> return decl-}
-     st0 <- either (fail . show . ppSetupError) return (initialCrucibleSetupState cc def setupLoc)
+     (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
+     let st0 = initialCrucibleSetupState cc method loc
 
      -- execute commands of the method spec
-     liftIO $ W4.setCurrentProgramLoc sym setupLoc
+     io $ W4.setCurrentProgramLoc sym loc
      methodSpec <- view csMethodSpec <$> execStateT (runJVMSetupM setup) st0
 
-     -- set up the LLVM memory with a pristine heap
-     let globals = cc^.cjcJavaGlobals
+     -- TODO: the only global used by crucible-jvm is
+     -- 'dynamicClassTable', which is a field of 'JVMContext'. There
+     -- is a 'JVMContext' stored in the 'TopLevelRW', which we can get
+     -- with 'getJVMTrans'.
 
      -- construct the initial state for verifications
-     (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
+     --(args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
+     let assumes = error "assumes"
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
      -- run the symbolic execution
-     (ret, globals3)
-        <- io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
+     --(ret, globals3)
+     --   <- io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
 
      -- collect the proof obligations
-     asserts <- verifyPoststate opts (biSharedContext bic) cc
-                    methodSpec env globals3 ret
+     --asserts <- verifyPoststate opts (biSharedContext bic) cc
+     --               methodSpec env globals3 ret
+     let asserts = error "asserts"
 
      -- restore previous assumption state
      _ <- io $ Crucible.popAssumptionFrame sym frameIdent
@@ -192,7 +199,7 @@ crucible_jvm_verify bic opts lm nm lemmas checkSat setup tactic =
      stats <- verifyObligations cc methodSpec tactic assumes asserts
      return (methodSpec & csSolverStats .~ stats)
 
--}
+
 crucible_jvm_unsafe_assume_spec ::
   BuiltinContext   ->
   Options          ->
@@ -267,49 +274,49 @@ verifyPrestate ::
       [Crucible.LabeledPred Term Crucible.AssumptionReason],
       Map AllocIndex JVMRefVal,
       Crucible.SymGlobalState Sym)
-verifyPrestate cc mspec globals = do
-  let ?lc = cc^.ccTypeCtx
-  let sym = cc^.ccBackend
-  let tyenvRW = mspec^.csPreState.csAllocs
-  let tyenv   = csAllocations mspec
-  let nameEnv = mspec^.csPreState.csVarTypeNames
+verifyPrestate cc mspec globals =
+  do let ?lc = cc^.ccTypeCtx
+     let sym = cc^.ccBackend
+     let tyenvRW = mspec^.csPreState.csAllocs
+     let tyenv   = csAllocations mspec
+     let nameEnv = mspec^.csPreState.csVarTypeNames
 
-  let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
-  liftIO $ W4.setCurrentProgramLoc sym prestateLoc
+     let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
+     liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
-  --let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
-  --let Just mem = Crucible.lookupGlobal lvar globals
+     --let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
+     --let Just mem = Crucible.lookupGlobal lvar globals
 
-  -- Allocate objects in memory for each 'jvm_alloc'
-  (env1, mem') <- runStateT (traverse (doAlloc cc) tyenvRW) mem
-  env2 <- Map.traverseWithKey
-            (\k _ -> executeFreshPointer cc k)
-            (mspec^.csPreState.csFreshPointers)
-  let env = Map.unions [env1, env2]
+     -- Allocate objects in memory for each 'jvm_alloc'
+     (env1, mem') <- runStateT (traverse (doAlloc cc) tyenvRW) mem
+     env2 <- Map.traverseWithKey
+               (\k _ -> executeFreshPointer cc k)
+               (mspec^.csPreState.csFreshPointers)
+     let env = Map.unions [env1, env2]
 
-  mem''' <- setupPrePointsTos mspec cc env (mspec^.csPreState.csPointsTos) mem''
-  let globals1 = Crucible.insertGlobal lvar mem''' globals
-  (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec^.csPreState.csConditions)
-  args <- resolveArguments cc mspec env
+     mem''' <- setupPrePointsTos mspec cc env (mspec^.csPreState.csPointsTos) mem''
+     let globals1 = Crucible.insertGlobal lvar mem''' globals
+     (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec^.csPreState.csConditions)
+     args <- resolveArguments cc mspec env
 
-  -- Check the type of the return setup value
-  case (mspec^.csRetValue, mspec^.csRet) of
-    (Just _, Nothing) ->
-         fail $ unlines
-           [ "Could not resolve return type of " ++ mspec^.csName
-           , "Raw type: " ++ show (mspec^.csRet)
-           ]
-    (Just sv, Just retTy) ->
-      do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
-         b <- liftIO $ checkRegisterCompatibility retTy retTy'
-         unless b $ fail $ unlines
-           [ "Incompatible types for return value when verifying " ++ mspec^.csName
-           , "Expected: " ++ show retTy
-           , "but given value of type: " ++ show retTy'
-           ]
-    (Nothing, _) -> return ()
+     -- Check the type of the return setup value
+     case (mspec^.csRetValue, mspec^.csRet) of
+       (Just _, Nothing) ->
+            fail $ unlines
+              [ "Could not resolve return type of " ++ mspec^.csName
+              , "Raw type: " ++ show (mspec^.csRet)
+              ]
+       (Just sv, Just retTy) ->
+         do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
+            b <- liftIO $ checkRegisterCompatibility retTy retTy'
+            unless b $ fail $ unlines
+              [ "Incompatible types for return value when verifying " ++ mspec^.csName
+              , "Expected: " ++ show retTy
+              , "but given value of type: " ++ show retTy'
+              ]
+       (Nothing, _) -> return ()
 
-  return (args, cs, env, globals2)
+     return (args, cs, env, globals2)
 -}
 
 {-
@@ -437,11 +444,138 @@ assertEqualVals cc v1 v2 =
 
 --------------------------------------------------------------------------------
 
+type JVMOverrideSim = Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
+
+-- | Lookup the data structure associated with a class.
+getJVMClassByName :: CJ.JVMContext -> J.ClassName -> JVMOverrideSim rtp args ret (Crucible.RegValue Sym CJ.JVMClassType)
+getJVMClassByName jc cname =
+  do sym <- Crucible.getSymInterface
+     classtab <- Crucible.readGlobal (CJ.dynamicClassTable jc)
+     let key = Text.pack (J.unClassName cname)
+     let msg = Crucible.GenericSimError $ "Class not found in class table: " ++ J.unClassName cname
+     let pcls = fromMaybe W4.Unassigned (Map.lookup key classtab)
+     liftIO $ Crucible.readPartExpr sym pcls msg
+
+--readRef ::
+--  IsSymInterface sym =>
+--  RefCell tp {- ^ Reference cell to read -} ->
+--  OverrideSim p sym ext rtp args ret (RegValue sym tp)
+--readRef r =
+--  do sym <- getSymInterface
+--     globals <- use (stateTree . actFrame . gpGlobals)
+--     let msg = ReadBeforeWriteSimError "Attempt to read undefined reference cell"
+--     liftIO $ readPartExpr sym (lookupRef r globals) msg
+
+--objectImplRepr :: CtxRepr (EmptyCtx ::> JVMInstanceType ::> JVMArrayType)
+--objectImplRepr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
+
+objectRepr :: Crucible.TypeRepr CJ.JVMObjectType
+objectRepr = knownRepr
+
+arrayRepr :: Crucible.TypeRepr CJ.JVMArrayType
+arrayRepr = knownRepr
+
+instanceRepr :: Crucible.TypeRepr CJ.JVMInstanceType
+instanceRepr = knownRepr
+
+-- | Given a JVM type, generate a runtime value for its representation.
+makeJVMTypeRep :: CJ.JVMContext -> J.Type -> JVMOverrideSim rtp args ret (Crucible.RegValue Sym CJ.JVMTypeRepType)
+makeJVMTypeRep jc ty =
+  case ty of
+    J.ArrayType ety ->
+      do ety' <- makeJVMTypeRep jc ety
+         sym <- Crucible.getSymInterface
+         return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of3 ety')
+    J.ClassType cn ->
+      do cls <- getJVMClassByName jc cn
+         sym <- Crucible.getSymInterface
+         return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i2of3 cls)
+    J.BooleanType -> primTypeRep 0
+    J.ByteType    -> primTypeRep 1
+    J.CharType    -> primTypeRep 2
+    J.DoubleType  -> primTypeRep 3
+    J.FloatType   -> primTypeRep 4
+    J.IntType     -> primTypeRep 5
+    J.LongType    -> primTypeRep 6
+    J.ShortType   -> primTypeRep 7
+  where
+    primTypeRep n =
+      do sym <- Crucible.getSymInterface
+         n' <- liftIO $ W4.bvLit sym CJ.w32 n
+         return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i3of3 n')
+
+doAlloc :: CJ.JVMContext -> Allocation -> JVMOverrideSim rtp args ret JVMRefVal
+doAlloc jc alloc =
+  case alloc of
+    AllocObject cname ->
+      do sym <- Crucible.getSymInterface
+         cls <- getJVMClassByName jc cname
+         let inst = Ctx.Empty Ctx.:> Crucible.RV Map.empty Ctx.:> Crucible.RV cls
+         let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
+         let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i1of2 inst)
+         ref <- Crucible.toMuxTree sym <$> Crucible.newRef objectRepr obj
+         return (W4.justPartExpr sym ref)
+    AllocArray len ty ->
+      do sym <- Crucible.getSymInterface
+         len' <- liftIO $ W4.bvLit sym CJ.w32 (toInteger len)
+         let vec = V.replicate len unassignedJVMValue
+         rep <- makeJVMTypeRep jc ty
+         let arr = Ctx.Empty Ctx.:> Crucible.RV len' Ctx.:> Crucible.RV vec Ctx.:> Crucible.RV rep
+         let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
+         let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i2of2 arr)
+         ref <- Crucible.toMuxTree sym <$> Crucible.newRef objectRepr obj
+         return (W4.justPartExpr sym ref)
+
+-- TODO: move this to Lang.Crucible.Simulator.OverrideSim
+readPartial ::
+  (W4.IsExprBuilder sym, Crucible.IsBoolSolver sym) =>
+  W4.PartExpr (W4.Pred sym) v ->
+  Crucible.SimErrorReason ->
+  Crucible.OverrideSim p sym ext rtp args ret v
+readPartial pe msg =
+  do sym <- Crucible.getSymInterface
+     liftIO $ Crucible.readPartExpr sym pe msg
+
+-- | A degerate value of the variant type, where every branch is
+-- unassigned. This is used to model uninitialized array elements.
+unassignedJVMValue :: Crucible.RegValue sym CJ.JVMValueType
+unassignedJVMValue =
+  Ctx.fmapFC (\_ -> Crucible.VB W4.Unassigned) (knownRepr :: Crucible.CtxRepr CJ.JVMValueCtx)
+
+
+{-
+Crucible.newRef :: IsSymInterface sym => TypeRepr tp -> RegValue sym tp -> OverrideSim p sym ext rtp args ret (RefCell tp)
+-}
+-- type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
+
+-- RegValue sym (BaseToType bt) = SymExpr sym bt
+-- RegValue sym (FloatType fi) = SymInterpretedFloat sym fi
+-- RegValue sym AnyType = AnyValue sym
+-- RegValue sym UnitType = ()
+-- RegValue sym CharType = Word16
+-- RegValue sym (FunctionHandleType a r) = FnVal sym a r
+-- RegValue sym (MaybeType tp) = PartExpr (Pred sym) (RegValue sym tp)
+-- RegValue sym (VectorType tp) = Vector (RegValue sym tp)
+-- RegValue sym (StructType ctx) = Assignment (RegValue' sym) ctx
+-- RegValue sym (VariantType ctx) = Assignment (VariantBranch sym) ctx
+-- RegValue sym (ReferenceType a) = MuxTree sym (RefCell a)
+-- RegValue sym (WordMapType w tp) = WordMap sym w tp
+-- RegValue sym (RecursiveType nm ctx) = RolledType sym nm ctx
+-- RegValue sym (IntrinsicType nm ctx) = Intrinsic sym nm ctx
+-- RegValue sym (StringMapType tp) = Map Text (PartExpr (Pred sym) (RegValue sym tp))
+
+-- type JVMRefType = MaybeType (ReferenceType JVMObjectType)
+-- type JVMObjectType = RecursiveType "JVM_object" EmptyCtx
+-- type JVMObjectImpl = VariantType (EmptyCtx ::> JVMInstanceType ::> JVMArrayType)
+-- type JVMInstanceType = StructType ((EmptyCtx ::> StringMapType JVMValueType) ::> JVMClassType)
+-- type JVMArrayType = StructType (((EmptyCtx ::> JVMIntType) ::> VectorType JVMValueType) ::> JVMTypeRepType)
+-- type JVMTypeRepType = RecursiveType "JVM_TypeRep" EmptyCtx
+-- type JVMTypeRepImpl = VariantType (EmptyCtx ::> JVMTypeRepType ::> JVMClassType ::> JVMIntType)
+
 {-
 -- | Allocate space on the LLVM heap to store a value of the given
 -- type. Returns the pointer to the allocated memory.
-doAlloc ::
-  CrucibleContext        ->
+doAlloc :: CrucibleContext -> Allocation ->
   (W4.ProgramLoc, JavaType) ->
   StateT MemImpl IO JVMRefVal
 doAlloc cc (_loc,tp) = StateT $ \mem ->
