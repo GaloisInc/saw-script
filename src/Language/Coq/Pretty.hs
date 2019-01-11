@@ -83,6 +83,12 @@ ppTerm e =
       integer i
     List ts ->
       brackets (semiSepList (map ppTerm ts))
+    StringLit s ->
+      dquotes (string s)
+    Scope term scope ->
+      parens (ppTerm term) <> text "%" <> text scope
+    Ltac s ->
+      text "ltac:" <> parens (string s)
 
 ppDecl :: Decl -> Doc
 ppDecl decl = case decl of

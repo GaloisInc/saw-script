@@ -27,6 +27,9 @@ data Term
   | Var Ident
   | NatLit Integer
   | List [Term]
+  | StringLit String
+  | Scope Term String
+  | Ltac String
     deriving (Show)
 
 -- | Type synonym useful for indicating when a term is used as a type.

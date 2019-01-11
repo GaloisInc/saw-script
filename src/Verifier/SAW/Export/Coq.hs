@@ -171,7 +171,46 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
       (Coq.List . Vector.toList) <$> traverse go vec  -- TODO: special case bit vectors?
     StringLit _    -> notSupported
     ExtCns (EC _ _ _) -> notSupported
-    _ -> notSupported -- TODO: remove once obsolete constructors removed
+    -- NOTE: The following requires the coq-extensible-records library, because
+    -- Coq records are nominal rather than structural
+    RecordType fs ->
+      let makeField name typ = do
+            typTerm <- go typ
+            return (Coq.App (Coq.Var "@pair")
+              [ Coq.Var "field"
+              , Coq.Var "_"
+              , Coq.Scope (Coq.StringLit name) "string"
+              , typTerm
+              ])
+      in
+      let addField accum (name, typ) = do
+            fieldTerm <- makeField name typ
+            return (Coq.App (Coq.Var "FScons") [fieldTerm, accum])
+      in
+      foldM addField (Coq.Var "FSnil") fs
+    RecordValue fs ->
+      let makeField name val = do
+            valTerm <- go val
+            return (Coq.App (Coq.Var "@record_singleton")
+              [ Coq.Var "_"
+              , Coq.Scope (Coq.StringLit name) "string"
+              , valTerm
+              ])
+      in
+      let addField accum (name, typ) = do
+            fieldTerm <- makeField name typ
+            return (Coq.App (Coq.Var "@Rjoin") [Coq.Var "_", Coq.Var "_", fieldTerm, accum])
+      in
+      foldM addField (Coq.Var "record_empty") fs
+    RecordProj r f -> do
+      rTerm <- go r
+      return (Coq.App (Coq.Var "@Rget")
+              [ Coq.Var "_"
+              , rTerm
+              , Coq.Scope (Coq.StringLit f) "string"
+              , Coq.Var "_"
+              , Coq.Ltac "simpl; exact eq_refl"
+              ])
   where
     notSupported = throwError $ NotSupported errorTerm
     --badTerm = throwError $ BadTerm errorTerm
@@ -305,5 +344,8 @@ translateDefDocImports traverseConsts name t = do
                      , "Require Import Cryptol."
                      , "Require Import SAW."
                      , "Import ListNotations."
+                     , "From Coq Require Import String."
+                     , "From Coq Require Import Vectors.VectorDef."
+                     , "From Records Require Import Records."
                      ]
   return (imports <$$> hardline <> doc)
