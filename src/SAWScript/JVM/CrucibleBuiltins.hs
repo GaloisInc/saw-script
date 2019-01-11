@@ -536,7 +536,7 @@ readPartial pe msg =
   do sym <- Crucible.getSymInterface
      liftIO $ Crucible.readPartExpr sym pe msg
 
--- | A degerate value of the variant type, where every branch is
+-- | A degenerate value of the variant type, where every branch is
 -- unassigned. This is used to model uninitialized array elements.
 unassignedJVMValue :: Crucible.RegValue sym CJ.JVMValueType
 unassignedJVMValue =
