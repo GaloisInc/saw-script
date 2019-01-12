@@ -93,7 +93,7 @@ import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
   (AnyCFG(..), SomeCFG(..), CFG, TypeRepr(..), cfgHandle,
-   asBaseType, AsBaseType(..), VectorType, CtxRepr)
+   asBaseType, AsBaseType(..), VectorType, ReferenceType, CtxRepr)
 import qualified Lang.Crucible.CFG.Extension as Crucible
   (IsSyntaxExtension)
 import qualified Lang.Crucible.FunctionHandle as Crucible
@@ -367,42 +367,73 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
 
 --------------------------------------------------------------------------------
 
-{-
 -- | For each points-to constraint in the pre-state section of the
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos ::
+  forall rtp args ret.
   CrucibleMethodSpecIR     ->
   CrucibleContext          ->
   Map AllocIndex JVMRefVal ->
   [PointsTo]               ->
-  MemImpl                  ->
-  IO MemImpl
-setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
+  JVMOverrideSim rtp args ret ()
+setupPrePointsTos mspec cc env pts = mapM_ doPointsTo pts
   where
     tyenv   = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
 
-    go :: MemImpl -> PointsTo -> IO MemImpl
-    go mem (PointsTo _loc ptr val) =
-      do val' <- resolveSetupVal cc env tyenv nameEnv val
-         ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
-         ptr'' <- case ptr' of
-           Crucible.LLVMValInt blk off
-             | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth
-             -> return (Crucible.LLVMPointer blk off)
-           _ -> fail "Non-pointer value found in points-to assertion"
-         -- In case the types are different (from jvm_points_to_untyped)
-         -- then the store type should be determined by the rhs.
-         memTy <- typeOfSetupValue cc tyenv nameEnv val
-         storTy <- Crucible.toStorableType memTy
-         let sym = cc^.ccBackend
-         mem' <- Crucible.storeConstRaw sym mem ptr'' storTy val'
-         return mem'
--}
+    resolveJVMRefVal ::
+      SetupValue -> JVMOverrideSim rtp args ret (Crucible.RegValue Sym (Crucible.ReferenceType CJ.JVMObjectType))
+    resolveJVMRefVal lhs =
+      do sym <- Crucible.getSymInterface
+         let msg1 = Crucible.GenericSimError "Non-reference value found in points-to assertion"
+         let msg2 = Crucible.GenericSimError "Null reference in points_to declaration"
+         lhs' <- liftIO $ resolveSetupVal cc env tyenv nameEnv lhs
+         mref <-
+           case lhs' of
+             RVal ref -> return ref
+             _ -> liftIO $ Crucible.addFailedAssertion sym msg1
+         liftIO $ Crucible.readPartExpr sym mref msg2
+
+    -- TODO: factor out some OverrideSim functions for jvm field/array updates to put in the crucible-jvm package
+    doPointsTo :: PointsTo -> JVMOverrideSim rtp args ret ()
+    doPointsTo pt =
+      case pt of
+        PointsToField _loc lhs fld rhs ->
+          do sym <- Crucible.getSymInterface
+             rhs' <- liftIO $ resolveSetupVal cc env tyenv nameEnv rhs
+             ref <- resolveJVMRefVal lhs
+             obj <- Crucible.readMuxTreeRef objectRepr ref
+             -- TODO: define a 'projectVariant' function in the OverrideSim monad
+             let msg = Crucible.GenericSimError "Object is not a class instance"
+             inst <- liftIO $ Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i1of2)) msg
+             let tab = Crucible.unRV (inst Ctx.! Ctx.i1of2)
+             let tab' = Map.insert (Text.pack fld) (W4.justPartExpr sym (encodeJVMVal sym rhs')) tab
+             let inst' = Control.Lens.set (ixF Ctx.i1of2) (Crucible.RV tab') inst
+             let obj' = Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of2 inst')
+             Crucible.writeMuxTreeRef objectRepr ref obj'
+        PointsToElem _loc lhs idx rhs ->
+          do sym <- Crucible.getSymInterface
+             rhs' <- liftIO $ resolveSetupVal cc env tyenv nameEnv rhs
+             ref <- resolveJVMRefVal lhs
+             obj <- Crucible.readMuxTreeRef objectRepr ref
+             let msg = Crucible.GenericSimError "Object is not an array"
+             arr <- liftIO $ Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i2of2)) msg
+             let vec = Crucible.unRV (arr Ctx.! Ctx.i2of3)
+             let vec' = vec V.// [(idx, encodeJVMVal sym rhs')]
+             let arr' = Control.Lens.set (ixF Ctx.i2of3) (Crucible.RV vec') arr
+             let obj' = Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i2of2 arr')
+             Crucible.writeMuxTreeRef objectRepr ref obj'
+
+encodeJVMVal :: Sym -> JVMVal -> Crucible.RegValue Sym CJ.JVMValueType
+encodeJVMVal sym val =
+  case val of
+    RVal r -> Crucible.injectVariant sym knownRepr Ctx.i5of5 r
+    IVal i -> Crucible.injectVariant sym knownRepr Ctx.i3of5 i
+    LVal l -> Crucible.injectVariant sym knownRepr Ctx.i4of5 l
 
 -- | Sets up globals (ghost variable), and collects boolean terms
--- that shuld be assumed to be true.
+-- that should be assumed to be true.
 setupPrestateConditions ::
   CrucibleMethodSpecIR        ->
   CrucibleContext             ->
@@ -571,31 +602,6 @@ Crucible.newRef :: IsSymInterface sym => TypeRepr tp -> RegValue sym tp -> Overr
 -- type JVMArrayType = StructType (((EmptyCtx ::> JVMIntType) ::> VectorType JVMValueType) ::> JVMTypeRepType)
 -- type JVMTypeRepType = RecursiveType "JVM_TypeRep" EmptyCtx
 -- type JVMTypeRepImpl = VariantType (EmptyCtx ::> JVMTypeRepType ::> JVMClassType ::> JVMIntType)
-
-{-
--- | Allocate space on the LLVM heap to store a value of the given
--- type. Returns the pointer to the allocated memory.
-doAlloc :: CrucibleContext -> Allocation ->
-  (W4.ProgramLoc, JavaType) ->
-  StateT MemImpl IO JVMRefVal
-doAlloc cc (_loc,tp) = StateT $ \mem ->
-  do let sym = cc^.ccBackend
-     let dl = Crucible.llvmDataLayout ?lc
-     sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     Crucible.mallocRaw sym mem sz
-
--- | Allocate read-only space on the LLVM heap to store a value of the
--- given type. Returns the pointer to the allocated memory.
-doAllocConst ::
-  CrucibleContext           ->
-  (W4.ProgramLoc, JavaType) ->
-  StateT MemImpl IO JVMRefVal
-doAllocConst cc (_loc,tp) = StateT $ \mem ->
-  do let sym = cc^.ccBackend
-     let dl = Crucible.llvmDataLayout ?lc
-     sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     Crucible.mallocConstRaw sym mem sz
--}
 
 --------------------------------------------------------------------------------
 
