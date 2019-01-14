@@ -817,32 +817,18 @@ learnPointsTo opts sc cc spec prepost pt =
   case pt of
 
     PointsToField loc ptr fname val ->
-      do (_, val') <- resolveSetupValueJVM opts cc sc spec val
+      do (ty, val') <- resolveSetupValueJVM opts cc sc spec val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
-         sym <- getSymInterface
-         liftJVMOverrideSim $ doFieldStore rval fname val'
+         v <- liftJVMOverrideSim $ doFieldLoad ty rval fname
+         matchArg sc cc loc prepost v ty val
 
     PointsToElem loc ptr idx val ->
-      do (_, val') <- resolveSetupValueJVM opts cc sc spec val
+      do (ty, val') <- resolveSetupValueJVM opts cc sc spec val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
-         sym <- getSymInterface
-         liftJVMOverrideSim $ doArrayStore rval idx val'
-{-
-  do let tyenv = csAllocations spec
-         nameEnv = csTypeNames spec
-     memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
-     (_memTy, ptr1) <- asPointer loc =<< resolveSetupValue opts cc sc spec ptr
-     sym <- getSymInterface
-
-     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy)
-     (p,r,v) <- case res of
-                  Left e  -> failure loc (BadPointerLoad e)
-                  Right x -> return x
-     addAssert p (Crucible.SimError loc r)
-     matchArg sc cc loc prepost v memTy val
--}
+         v <- liftJVMOverrideSim $ doArrayLoad ty rval idx
+         matchArg sc cc loc prepost v ty val
 
 
 ------------------------------------------------------------------------
@@ -940,14 +926,12 @@ executePointsTo opts sc cc spec pt =
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
-         sym <- getSymInterface
          liftJVMOverrideSim $ doFieldStore rval fname val'
 
     PointsToElem loc ptr idx val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
-         sym <- getSymInterface
          liftJVMOverrideSim $ doArrayStore rval idx val'
 
 ------------------------------------------------------------------------
@@ -963,11 +947,11 @@ executeEqual ::
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher ()
-executeEqual opts sc cc spec v1 v2 = do
-  (_, val1) <- resolveSetupValueJVM opts cc sc spec v1
-  (_, val2) <- resolveSetupValueJVM opts cc sc spec v2
-  p         <- liftIO (equalValsPred cc val1 val2)
-  addAssume p
+executeEqual opts sc cc spec v1 v2 =
+  do (_, val1) <- resolveSetupValueJVM opts cc sc spec v1
+     (_, val2) <- resolveSetupValueJVM opts cc sc spec v2
+     p         <- liftIO (equalValsPred cc val1 val2)
+     addAssume p
 
 -- | Process a "crucible_postcond" statement from the postcondition
 -- section of the CrucibleSetup block.
