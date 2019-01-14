@@ -382,55 +382,27 @@ setupPrePointsTos mspec cc env pts = mapM_ doPointsTo pts
     tyenv   = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
 
-    resolveJVMRefVal ::
-      SetupValue -> JVMOverrideSim rtp args ret (Crucible.RegValue Sym (Crucible.ReferenceType CJ.JVMObjectType))
+    resolveJVMRefVal :: SetupValue -> JVMOverrideSim rtp args ret JVMRefVal
     resolveJVMRefVal lhs =
       do sym <- Crucible.getSymInterface
-         let msg1 = Crucible.GenericSimError "Non-reference value found in points-to assertion"
-         let msg2 = Crucible.GenericSimError "Null reference in points_to declaration"
+         let msg = Crucible.GenericSimError "Non-reference value found in points-to assertion"
          lhs' <- liftIO $ resolveSetupVal cc env tyenv nameEnv lhs
-         mref <-
-           case lhs' of
-             RVal ref -> return ref
-             _ -> liftIO $ Crucible.addFailedAssertion sym msg1
-         liftIO $ Crucible.readPartExpr sym mref msg2
+         case lhs' of
+           RVal ref -> return ref
+           _ -> liftIO $ Crucible.addFailedAssertion sym msg
 
     -- TODO: factor out some OverrideSim functions for jvm field/array updates to put in the crucible-jvm package
     doPointsTo :: PointsTo -> JVMOverrideSim rtp args ret ()
     doPointsTo pt =
       case pt of
         PointsToField _loc lhs fld rhs ->
-          do sym <- Crucible.getSymInterface
+          do lhs' <- resolveJVMRefVal lhs
              rhs' <- liftIO $ resolveSetupVal cc env tyenv nameEnv rhs
-             ref <- resolveJVMRefVal lhs
-             obj <- Crucible.readMuxTreeRef objectRepr ref
-             -- TODO: define a 'projectVariant' function in the OverrideSim monad
-             let msg = Crucible.GenericSimError "Object is not a class instance"
-             inst <- liftIO $ Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i1of2)) msg
-             let tab = Crucible.unRV (inst Ctx.! Ctx.i1of2)
-             let tab' = Map.insert (Text.pack fld) (W4.justPartExpr sym (encodeJVMVal sym rhs')) tab
-             let inst' = Control.Lens.set (ixF Ctx.i1of2) (Crucible.RV tab') inst
-             let obj' = Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of2 inst')
-             Crucible.writeMuxTreeRef objectRepr ref obj'
+             doFieldStore lhs' fld rhs'
         PointsToElem _loc lhs idx rhs ->
-          do sym <- Crucible.getSymInterface
+          do lhs' <- resolveJVMRefVal lhs
              rhs' <- liftIO $ resolveSetupVal cc env tyenv nameEnv rhs
-             ref <- resolveJVMRefVal lhs
-             obj <- Crucible.readMuxTreeRef objectRepr ref
-             let msg = Crucible.GenericSimError "Object is not an array"
-             arr <- liftIO $ Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i2of2)) msg
-             let vec = Crucible.unRV (arr Ctx.! Ctx.i2of3)
-             let vec' = vec V.// [(idx, encodeJVMVal sym rhs')]
-             let arr' = Control.Lens.set (ixF Ctx.i2of3) (Crucible.RV vec') arr
-             let obj' = Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i2of2 arr')
-             Crucible.writeMuxTreeRef objectRepr ref obj'
-
-encodeJVMVal :: Sym -> JVMVal -> Crucible.RegValue Sym CJ.JVMValueType
-encodeJVMVal sym val =
-  case val of
-    RVal r -> Crucible.injectVariant sym knownRepr Ctx.i5of5 r
-    IVal i -> Crucible.injectVariant sym knownRepr Ctx.i3of5 i
-    LVal l -> Crucible.injectVariant sym knownRepr Ctx.i4of5 l
+             doArrayStore lhs' idx rhs'
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -470,18 +442,6 @@ assertEqualVals cc v1 v2 =
 
 --------------------------------------------------------------------------------
 
-type JVMOverrideSim = Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
-
--- | Lookup the data structure associated with a class.
-getJVMClassByName :: CJ.JVMContext -> J.ClassName -> JVMOverrideSim rtp args ret (Crucible.RegValue Sym CJ.JVMClassType)
-getJVMClassByName jc cname =
-  do sym <- Crucible.getSymInterface
-     classtab <- Crucible.readGlobal (CJ.dynamicClassTable jc)
-     let key = Text.pack (J.unClassName cname)
-     let msg = Crucible.GenericSimError $ "Class not found in class table: " ++ J.unClassName cname
-     let pcls = fromMaybe W4.Unassigned (Map.lookup key classtab)
-     liftIO $ Crucible.readPartExpr sym pcls msg
-
 --readRef ::
 --  IsSymInterface sym =>
 --  RefCell tp {- ^ Reference cell to read -} ->
@@ -495,62 +455,11 @@ getJVMClassByName jc cname =
 --objectImplRepr :: CtxRepr (EmptyCtx ::> JVMInstanceType ::> JVMArrayType)
 --objectImplRepr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
 
-objectRepr :: Crucible.TypeRepr CJ.JVMObjectType
-objectRepr = knownRepr
-
-arrayRepr :: Crucible.TypeRepr CJ.JVMArrayType
-arrayRepr = knownRepr
-
-instanceRepr :: Crucible.TypeRepr CJ.JVMInstanceType
-instanceRepr = knownRepr
-
--- | Given a JVM type, generate a runtime value for its representation.
-makeJVMTypeRep :: CJ.JVMContext -> J.Type -> JVMOverrideSim rtp args ret (Crucible.RegValue Sym CJ.JVMTypeRepType)
-makeJVMTypeRep jc ty =
-  case ty of
-    J.ArrayType ety ->
-      do ety' <- makeJVMTypeRep jc ety
-         sym <- Crucible.getSymInterface
-         return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of3 ety')
-    J.ClassType cn ->
-      do cls <- getJVMClassByName jc cn
-         sym <- Crucible.getSymInterface
-         return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i2of3 cls)
-    J.BooleanType -> primTypeRep 0
-    J.ByteType    -> primTypeRep 1
-    J.CharType    -> primTypeRep 2
-    J.DoubleType  -> primTypeRep 3
-    J.FloatType   -> primTypeRep 4
-    J.IntType     -> primTypeRep 5
-    J.LongType    -> primTypeRep 6
-    J.ShortType   -> primTypeRep 7
-  where
-    primTypeRep n =
-      do sym <- Crucible.getSymInterface
-         n' <- liftIO $ W4.bvLit sym CJ.w32 n
-         return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i3of3 n')
-
 doAlloc :: CJ.JVMContext -> Allocation -> JVMOverrideSim rtp args ret JVMRefVal
 doAlloc jc alloc =
   case alloc of
-    AllocObject cname ->
-      do sym <- Crucible.getSymInterface
-         cls <- getJVMClassByName jc cname
-         let inst = Ctx.Empty Ctx.:> Crucible.RV Map.empty Ctx.:> Crucible.RV cls
-         let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
-         let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i1of2 inst)
-         ref <- Crucible.toMuxTree sym <$> Crucible.newRef objectRepr obj
-         return (W4.justPartExpr sym ref)
-    AllocArray len ty ->
-      do sym <- Crucible.getSymInterface
-         len' <- liftIO $ W4.bvLit sym CJ.w32 (toInteger len)
-         let vec = V.replicate len unassignedJVMValue
-         rep <- makeJVMTypeRep jc ty
-         let arr = Ctx.Empty Ctx.:> Crucible.RV len' Ctx.:> Crucible.RV vec Ctx.:> Crucible.RV rep
-         let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
-         let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i2of2 arr)
-         ref <- Crucible.toMuxTree sym <$> Crucible.newRef objectRepr obj
-         return (W4.justPartExpr sym ref)
+    AllocObject cname -> doAllocateObject jc cname
+    AllocArray len ty -> doAllocateArray jc len ty
 
 -- TODO: move this to Lang.Crucible.Simulator.OverrideSim
 readPartial ::
@@ -561,12 +470,6 @@ readPartial ::
 readPartial pe msg =
   do sym <- Crucible.getSymInterface
      liftIO $ Crucible.readPartExpr sym pe msg
-
--- | A degenerate value of the variant type, where every branch is
--- unassigned. This is used to model uninitialized array elements.
-unassignedJVMValue :: Crucible.RegValue sym CJ.JVMValueType
-unassignedJVMValue =
-  Ctx.fmapFC (\_ -> Crucible.VB W4.Unassigned) (knownRepr :: Crucible.CtxRepr CJ.JVMValueCtx)
 
 
 {-
