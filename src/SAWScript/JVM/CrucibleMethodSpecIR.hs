@@ -146,12 +146,8 @@ data PointsTo
   deriving (Show)
 
 data SetupCondition where
-  SetupCond_Equal    :: ProgramLoc ->SetupValue -> SetupValue -> SetupCondition
-  SetupCond_Pred     :: ProgramLoc -> TypedTerm -> SetupCondition
-  SetupCond_Ghost    :: ProgramLoc ->
-                        GhostGlobal ->
-                        TypedTerm ->
-                        SetupCondition
+  SetupCond_Equal :: ProgramLoc -> SetupValue -> SetupValue -> SetupCondition
+  SetupCond_Pred :: ProgramLoc -> TypedTerm -> SetupCondition
   deriving (Show)
 
 data Allocation
@@ -174,7 +170,7 @@ data StateSpec' t = StateSpec
   , _csPointsTos     :: [PointsTo]
     -- ^ points-to statements
   , _csConditions    :: [SetupCondition]
-    -- ^ equality, propositions, and ghost-variable conditions
+    -- ^ equalities and propositions
   , _csFreshVars     :: [TypedTerm]
     -- ^ fresh variables created in this state
   , _csVarTypeNames  :: Map AllocIndex JIdent

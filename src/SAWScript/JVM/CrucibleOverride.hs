@@ -784,22 +784,6 @@ learnSetupCondition ::
   OverrideMatcher ()
 learnSetupCondition opts sc cc spec prepost (SetupCond_Equal loc val1 val2)  = learnEqual opts sc cc spec loc prepost val1 val2
 learnSetupCondition _opts sc cc _    prepost (SetupCond_Pred loc tm)         = learnPred sc cc loc prepost (ttTerm tm)
-learnSetupCondition _opts sc cc _    prepost (SetupCond_Ghost loc var val)   = learnGhost sc cc loc prepost var val
-
-
-------------------------------------------------------------------------
-
-learnGhost ::
-  SharedContext                                          ->
-  CrucibleContext                                        ->
-  W4.ProgramLoc                                          ->
-  PrePost                                                ->
-  GhostGlobal                                            ->
-  TypedTerm                                              ->
-  OverrideMatcher ()
-learnGhost sc cc loc prepost var expected =
-  do actual <- readGlobal var
-     matchTerm sc cc loc prepost (ttTerm actual) (ttTerm expected)
 
 ------------------------------------------------------------------------
 
@@ -921,19 +905,6 @@ executeSetupCondition ::
   OverrideMatcher ()
 executeSetupCondition opts sc cc spec (SetupCond_Equal _loc val1 val2) = executeEqual opts sc cc spec val1 val2
 executeSetupCondition _opts sc cc _    (SetupCond_Pred _loc tm)        = executePred sc cc tm
-executeSetupCondition _opts sc _  _    (SetupCond_Ghost _loc var val)  = executeGhost sc var val
-
-------------------------------------------------------------------------
-
-executeGhost ::
-  SharedContext ->
-  GhostGlobal ->
-  TypedTerm ->
-  OverrideMatcher ()
-executeGhost sc var val =
-  do s <- OM (use termSub)
-     t <- liftIO (ttTermLens (scInstantiateExt sc s) val)
-     writeGlobal var t
 
 ------------------------------------------------------------------------
 

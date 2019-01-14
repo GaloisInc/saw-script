@@ -432,35 +432,30 @@ encodeJVMVal sym val =
     IVal i -> Crucible.injectVariant sym knownRepr Ctx.i3of5 i
     LVal l -> Crucible.injectVariant sym knownRepr Ctx.i4of5 l
 
--- | Sets up globals (ghost variable), and collects boolean terms
--- that should be assumed to be true.
+-- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
   CrucibleMethodSpecIR        ->
   CrucibleContext             ->
   Map AllocIndex JVMRefVal    ->
-  Crucible.SymGlobalState Sym ->
   [SetupCondition]            ->
-  IO (Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term Crucible.AssumptionReason])
+  IO [Crucible.LabeledPred Term Crucible.AssumptionReason]
 setupPrestateConditions mspec cc env = aux []
   where
     tyenv   = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
 
-    aux acc globals [] = return (globals, acc)
+    aux acc [] = return acc
 
-    aux acc globals (SetupCond_Equal loc val1 val2 : xs) =
+    aux acc (SetupCond_Equal loc val1 val2 : xs) =
       do val1' <- resolveSetupVal cc env tyenv nameEnv val1
          val2' <- resolveSetupVal cc env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
          let lp = Crucible.LabeledPred t (Crucible.AssumptionReason loc "equality precondition")
-         aux (lp:acc) globals xs
+         aux (lp:acc) xs
 
-    aux acc globals (SetupCond_Pred loc tm : xs) =
+    aux acc (SetupCond_Pred loc tm : xs) =
       let lp = Crucible.LabeledPred (ttTerm tm) (Crucible.AssumptionReason loc "precondition") in
-      aux (lp:acc) globals xs
-
-    aux acc globals (SetupCond_Ghost _loc var val : xs) =
-      aux acc (Crucible.insertGlobal var val globals) xs
+      aux (lp:acc) xs
 
 --------------------------------------------------------------------------------
 
