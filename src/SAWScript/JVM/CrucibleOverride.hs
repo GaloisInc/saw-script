@@ -1058,6 +1058,30 @@ injectJVMVal sym jv =
     IVal x -> Crucible.injectVariant sym W4.knownRepr CJ.tagI x
     LVal x -> Crucible.injectVariant sym W4.knownRepr CJ.tagL x
 
+projectJVMVal :: Sym -> J.Type -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
+projectJVMVal sym ty v =
+  case ty of
+    J.BooleanType -> err -- FIXME
+    J.ByteType    -> err -- FIXME
+    J.CharType    -> err -- FIXME
+    J.ShortType   -> err -- FIXME
+    J.IntType     -> IVal <$> proj v CJ.tagI
+    J.LongType    -> LVal <$> proj v CJ.tagL
+    J.FloatType   -> err -- FIXME
+    J.DoubleType  -> err -- FIXME
+    J.ArrayType{} -> RVal <$> proj v CJ.tagR
+    J.ClassType{} -> RVal <$> proj v CJ.tagR
+  where
+    proj ::
+      forall tp.
+      Crucible.RegValue Sym CJ.JVMValueType ->
+      Ctx.Index CJ.JVMValueCtx tp ->
+      IO (Crucible.RegValue Sym tp)
+    proj val idx = Crucible.readPartExpr sym (Crucible.unVB (val Ctx.! idx)) msg
+
+    msg = Crucible.GenericSimError "Ill-formed value for type"
+    err = Crucible.addFailedAssertion sym msg
+
 decodeJVMVal :: J.Type -> Crucible.AnyValue Sym -> Maybe JVMVal
 decodeJVMVal ty v =
   case ty of
@@ -1131,11 +1155,37 @@ doArrayStore ref idx val =
      let obj' = Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i2of2 arr')
      Crucible.writeMuxTreeRef objectRepr ref' obj'
 
-doFieldLoad :: Sym -> JVMRefVal -> String -> IO JVMVal
-doFieldLoad _sym _ref _fname = fail "doFieldLoad: FIXME"
+doFieldLoad :: J.Type -> JVMRefVal -> String -> JVMOverrideSim rtp args ret JVMVal
+doFieldLoad ty ref fname =
+  do sym <- Crucible.getSymInterface
+     let msg1 = Crucible.GenericSimError "Field load: null reference"
+     ref' <- liftIO $ Crucible.readPartExpr sym ref msg1
+     obj <- Crucible.readMuxTreeRef objectRepr ref'
+     -- TODO: define a 'projectVariant' function in the OverrideSim monad
+     let msg2 = Crucible.GenericSimError "Field load: object is not a class instance"
+     inst <- liftIO $ Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i1of2)) msg2
+     let tab = Crucible.unRV (inst Ctx.! Ctx.i1of2)
+     let msg3 = Crucible.GenericSimError $ "Field load: field not found: " ++ fname
+     let key = Text.pack fname
+     val <- liftIO $ Crucible.readPartExpr sym (fromMaybe W4.Unassigned (Map.lookup key tab)) msg3
+     liftIO $ projectJVMVal sym ty val
 
-doArrayLoad :: Sym -> JVMRefVal -> Int -> IO JVMVal
-doArrayLoad _sym _ref _idx = fail "doArrayLoad: FIXME"
+doArrayLoad :: J.Type -> JVMRefVal -> Int -> JVMOverrideSim rtp args ret JVMVal
+doArrayLoad ty ref idx =
+  do sym <- Crucible.getSymInterface
+     let msg1 = Crucible.GenericSimError "Field load: null reference"
+     ref' <- liftIO $ Crucible.readPartExpr sym ref msg1
+     obj <- Crucible.readMuxTreeRef objectRepr ref'
+     -- TODO: define a 'projectVariant' function in the OverrideSim monad
+     let msg2 = Crucible.GenericSimError "Array load: object is not an array"
+     arr <- liftIO $ Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i2of2)) msg2
+     let vec = Crucible.unRV (arr Ctx.! Ctx.i2of3)
+     let msg3 = Crucible.GenericSimError $ "Field load: index out of bounds: " ++ show idx
+     val <-
+       case vec V.!? idx of
+         Just val -> return val
+         Nothing -> liftIO $ Crucible.addFailedAssertion sym msg3
+     liftIO $ projectJVMVal sym ty val
 
 doAllocateObject :: CJ.JVMContext -> J.ClassName -> JVMOverrideSim rtp args ret JVMRefVal
 doAllocateObject jc cname =
