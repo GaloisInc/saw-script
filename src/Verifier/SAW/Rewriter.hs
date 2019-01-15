@@ -61,6 +61,7 @@ import Data.Foldable (Foldable)
 #endif
 import Control.Applicative (Alternative)
 import Control.Monad (guard)
+import Control.Monad.Fail (MonadFail)
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
@@ -462,19 +463,19 @@ listRules ss = [ r | Left r <- Net.content ss ]
 ----------------------------------------------------------------------
 -- Destructors for terms
 
-asBetaRedex :: (Monad m) => R.Recognizer m Term (String, Term, Term, Term)
+asBetaRedex :: (MonadFail m) => R.Recognizer m Term (String, Term, Term, Term)
 asBetaRedex t =
     do (f, arg) <- R.asApp t
        (s, ty, body) <- R.asLambda f
        return (s, ty, body, arg)
 
-asPairRedex :: (Monad m) => R.Recognizer m Term Term
+asPairRedex :: (MonadFail m) => R.Recognizer m Term Term
 asPairRedex t =
     do (u, b) <- R.asPairSelector t
        (x, y) <- R.asPairValue u
        return (if b then y else x)
 
-asRecordRedex :: (Monad m) => R.Recognizer m Term (Map FieldName Term, FieldName)
+asRecordRedex :: (MonadFail m) => R.Recognizer m Term (Map FieldName Term, FieldName)
 asRecordRedex t =
     do (x, i) <- R.asRecordSelector t
        ts <- R.asRecordValue x
@@ -484,7 +485,7 @@ asRecordRedex t =
 -- constructor application; specifically, this function recognizes
 --
 -- > RecursorApp d params p_ret cs_fs _ (CtorApp c _ args)
-asIotaRedex :: (Monad m, Alternative m) => R.Recognizer m Term
+asIotaRedex :: (MonadFail m, Alternative m) => R.Recognizer m Term
                (Ident,[Term],Term,[(Ident,Term)],Ident,[Term])
 asIotaRedex t =
   do (d, params, p_ret, cs_fs, _, arg) <- R.asRecursorApp t

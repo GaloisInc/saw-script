@@ -111,6 +111,7 @@ import Control.Applicative (Applicative(..), (<$>), (<*>))
 #endif
 import Control.Lens (view, _1, _2)
 import Control.Monad (ap, liftM, liftM2, unless, (>=>), (<=<))
+import Control.Monad.Fail (MonadFail)
 import Data.Bits
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -225,41 +226,41 @@ x <:>> y = fmap (view _2) $ x <:> y
 
 
 -- | Matches any tuple.
-asAnyTupleValue :: (Monad m) => Matcher m [Term]
+asAnyTupleValue :: (MonadFail m) => Matcher m [Term]
 asAnyTupleValue = asVar R.asTupleValue
 
 -- | Matches a tuple with arguments matching constraints.
-asTupleValue :: (Monad m, ArgsMatchable v m a)
+asTupleValue :: (MonadFail m, ArgsMatchable v m a)
              => v m a -> Matcher m a
 asTupleValue (defaultArgsMatcher -> m) = asVar $ \t -> do
   l <- R.asTupleValue t
   runArgsMatcher m l
 
 -- | Matches the type of any tuple.
-asAnyTupleType :: (Monad m) => Matcher m [Term]
+asAnyTupleType :: (MonadFail m) => Matcher m [Term]
 asAnyTupleType = asVar R.asTupleType
 
 -- | Matches a tuple type with arguments matching constraints.
-asTupleType :: (Monad m, ArgsMatchable v m a)
+asTupleType :: (MonadFail m, ArgsMatchable v m a)
              => v m a -> Matcher m a
 asTupleType (defaultArgsMatcher -> m) = asVar $ \t -> do
   l <- R.asTupleType t
   runArgsMatcher m l
 
-asTupleSelector :: (Functor m, Monad m)
+asTupleSelector :: (Functor m, MonadFail m)
                 => Matcher m a -> Matcher m (a, Int)
 asTupleSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asTupleSelector t
 
 -- | Matches record values, and returns fields.
-asAnyRecordValue :: (Monad m) => Matcher m (Map FieldName Term)
+asAnyRecordValue :: (MonadFail m) => Matcher m (Map FieldName Term)
 asAnyRecordValue = asVar R.asRecordValue
 
 -- | Matches record types, and returns fields.
-asAnyRecordType :: (Monad m) => Matcher m (Map FieldName Term)
+asAnyRecordType :: (MonadFail m) => Matcher m (Map FieldName Term)
 asAnyRecordType = asVar R.asRecordType
 
 -- | Matches
-asRecordSelector :: (Functor m, Monad m)
+asRecordSelector :: (Functor m, MonadFail m)
                  => Matcher m a
                  -> Matcher m (a, FieldName)
 asRecordSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asRecordSelector t
@@ -267,7 +268,7 @@ asRecordSelector m = asVar $ \t -> _1 (runMatcher m) =<< R.asRecordSelector t
 --TODO: RecordSelector
 
 -- | Match a constructor
-asCtor :: (Monad m, ArgsMatchable v m a)
+asCtor :: (MonadFail m, ArgsMatchable v m a)
        => Ident -> v m a -> Matcher m a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
   where match t = do
@@ -276,7 +277,7 @@ asCtor o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
           return (params ++ l)
 
 -- | Match a datatype.
-asDataType :: (Monad m, ArgsMatchable v m a)
+asDataType :: (MonadFail m, ArgsMatchable v m a)
            => Ident -> v m a -> Matcher m a
 asDataType o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
   where match t = do
@@ -285,29 +286,29 @@ asDataType o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
           return (params ++ l)
 
 -- | Match any sort.
-asAnySort :: (Monad m) => Matcher m Sort
+asAnySort :: (MonadFail m) => Matcher m Sort
 asAnySort = asVar $ \t -> do Sort v <- R.asFTermF t; return v
 
 -- | Match a specific sort.
-asSort :: (Monad m) => Sort -> Matcher m ()
+asSort :: (MonadFail m) => Sort -> Matcher m ()
 asSort s = Matcher (termToPat (Unshared (FTermF (Sort s)))) fn
   where fn t = do s' <- R.asSort t
                   unless (s == s') $ fail "Does not matched expected sort."
 
 -- | Match a Nat literal
-asAnyNatLit :: (Monad m) => Matcher m Natural
+asAnyNatLit :: (MonadFail m) => Matcher m Natural
 asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return (fromInteger i)
 
 -- | Match a Vec literal
-asAnyVecLit :: (Monad m) => Matcher m (Term, V.Vector Term)
+asAnyVecLit :: (MonadFail m) => Matcher m (Term, V.Vector Term)
 asAnyVecLit = asVar $ \t -> do ArrayValue u xs <- R.asFTermF t; return (u,xs)
 
 -- | Match any external constant.
-asExtCns :: (Monad m) => Matcher m (ExtCns Term)
+asExtCns :: (MonadFail m) => Matcher m (ExtCns Term)
 asExtCns = asVar $ \t -> do ExtCns ec <- R.asFTermF t; return ec
 
 -- | Returns index of local var if any.
-asLocalVar :: (Monad m) => Matcher m DeBruijnIndex
+asLocalVar :: (MonadFail m) => Matcher m DeBruijnIndex
 asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 
 ----------------------------------------------------------------------
@@ -316,10 +317,10 @@ asLocalVar = asVar $ \t -> do i <- R.asLocalVar t; return i
 asBoolType :: (Monad m) => Matcher m ()
 asBoolType = asGlobalDef "Prelude.Bool"
 
-asSuccLit :: (Functor m, Monad m) => Matcher m Natural
+asSuccLit :: (Functor m, MonadFail m) => Matcher m Natural
 asSuccLit = asCtor "Prelude.Succ" asAnyNatLit
 
-asBvNatLit :: (Applicative m, Monad m) => Matcher m Prim.BitVector
+asBvNatLit :: (Applicative m, MonadFail m) => Matcher m Prim.BitVector
 asBvNatLit =
   (\(_ :*: n :*: x) -> Prim.bv (fromIntegral n) (toInteger x)) <$>
     (asGlobalDef "Prelude.bvNat" <:> asAnyNatLit <:> asAnyNatLit)
@@ -341,19 +342,19 @@ instance Applicative m => Matchable m () where
 instance Applicative m => Matchable m Term where
     defaultMatcher = asAny
 
-instance (Monad m) => Matchable m Natural where
+instance (MonadFail m) => Matchable m Natural where
     defaultMatcher = asAnyNatLit
 
-instance (Functor m, Monad m) => Matchable m Integer where
+instance (Functor m, MonadFail m) => Matchable m Integer where
     defaultMatcher = toInteger <$> asAnyNatLit
 
-instance (Monad m) => Matchable m Int where
+instance (MonadFail m) => Matchable m Int where
     defaultMatcher = thenMatcher asAnyNatLit (checkedIntegerToNonNegInt . toInteger)
 
-instance (Applicative m, Monad m) => Matchable m Prim.BitVector where
+instance (Applicative m, MonadFail m) => Matchable m Prim.BitVector where
     defaultMatcher = asBvNatLit
 
-instance (Functor m, Monad m) => Matchable m (Prim.Vec Term Term) where
+instance (Functor m, MonadFail m) => Matchable m (Prim.Vec Term Term) where
     defaultMatcher = uncurry Prim.Vec <$> asAnyVecLit
 
 ----------------------------------------------------------------------
