@@ -29,8 +29,8 @@ Stability   : provisional
 module SAWScript.JVM.CrucibleBuiltins
     ( {- crucible_jvm_cfg
     , crucible_jvm_extract
-    , crucible_jvm_verify
-    , -} crucible_jvm_unsafe_assume_spec
+    , -} crucible_jvm_verify
+    , crucible_jvm_unsafe_assume_spec
     , jvm_return
     , jvm_execute_func
     , jvm_postcond
