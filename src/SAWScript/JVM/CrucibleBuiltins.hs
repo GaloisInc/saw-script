@@ -249,7 +249,6 @@ verifyObligations cc mspec tactic assumes asserts =
      printOutLnTop Info $ unwords ["Proof succeeded!", nm]
      return (mconcat stats)
 
-{-
 -- | Evaluate the precondition part of a Crucible method spec:
 --
 -- * Allocate heap space for each 'jvm_alloc' statement.
@@ -270,30 +269,28 @@ verifyPrestate ::
   CrucibleContext ->
   CrucibleMethodSpecIR ->
   Crucible.SymGlobalState Sym ->
-  IO ([(JavaType, JVMVal)],
+  IO ([(J.Type, JVMVal)],
       [Crucible.LabeledPred Term Crucible.AssumptionReason],
       Map AllocIndex JVMRefVal,
       Crucible.SymGlobalState Sym)
-verifyPrestate cc mspec globals =
-  do let ?lc = cc^.ccTypeCtx
-     let sym = cc^.ccBackend
+verifyPrestate cc mspec globals0 =
+  do let sym = cc^.ccBackend
+     let jc = cc^.ccJVMContext
      let preallocs = mspec^.csPreState.csAllocs
      let tyenv = csAllocations mspec
      let nameEnv = mspec^.csPreState.csVarTypeNames
 
      let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
-     liftIO $ W4.setCurrentProgramLoc sym prestateLoc
+     W4.setCurrentProgramLoc sym prestateLoc
 
-     --let lvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
+     --let cvar = CJ.dynamicClassTable (cc^.ccJVMContext)
      --let Just mem = Crucible.lookupGlobal lvar globals
 
      -- Allocate objects in memory for each 'jvm_alloc'
-     env <- traverse (doAlloc jc) preallocs
-     --(env1, mem') <- runStateT (traverse (doAlloc cc) tyenvRW) mem
+     (env, globals1) <- runStateT (traverse (doAlloc cc . snd) preallocs) globals0
 
-     mem''' <- setupPrePointsTos mspec cc env (mspec^.csPreState.csPointsTos) mem''
-     let globals1 = Crucible.insertGlobal lvar mem''' globals
-     (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec^.csPreState.csConditions)
+     globals2 <- setupPrePointsTos mspec cc env (mspec^.csPreState.csPointsTos) globals1
+     cs <- setupPrestateConditions mspec cc env (mspec^.csPreState.csConditions)
      args <- resolveArguments cc mspec env
 
      -- Check the type of the return setup value
@@ -314,53 +311,34 @@ verifyPrestate cc mspec globals =
        (Nothing, _) -> return ()
 
      return (args, cs, env, globals2)
--}
 
-{-
-What can I do with a JVMOverrideSim?
+-- | Check two Types for register compatibility.
+checkRegisterCompatibility :: J.Type -> J.Type -> IO Bool
+checkRegisterCompatibility mt mt' =
+  return (storageType mt == storageType mt')
 
-runOverrideSim ::
-  TypeRepr tp {- ^ return type -} ->
-  OverrideSim p sym ext rtp args tp (RegValue sym tp) {- ^ action to execute  -} ->
-  ExecCont p sym ext rtp (OverrideLang tp) ('Just args)
+data StorageType = STInt | STLong | STFloat | STDouble | STRef
+  deriving Eq
 
-type ExecCont p sym ext r f a = ReaderT (SimState p sym ext r f a) IO (ExecState p sym ext r)
-
-executeCrucible ::
-  (IsSymInterface sym, IsSyntaxExtension ext) =>
-  [ExecutionFeature p sym ext rtp] ->
-  ExecState p sym ext rtp ->
-  IO (ExecResult p sym ext rtp)
-
-InitialState ::
-  forall ret. rtp ~ RegEntry sym ret =>
-  !(SimContext p sym ext)                       {- initial 'SimContext' state         -} ->
-  !(SymGlobalState sym)                         {- state of Crucible global variables -} ->
-  !(AbortHandler p sym ext (RegEntry sym ret))  {- initial abort handler              -} ->
-  !(ExecCont p sym ext (RegEntry sym ret) (OverrideLang ret) ('Just EmptyCtx)) {- Entry continuation -} ->
-  ExecState p sym ext rtp
-
--- | Executions that have completed either due to (partial or total)
---   successful completion or by some abort condition.
-data ExecResult p sym ext (r :: Type)
-   = -- | At least one execution path resulted in some return result.
-     FinishedResult !(SimContext p sym ext) !(PartialResult sym ext r)
-     -- | All execution paths resulted in an abort condition, and there is
-     --   no result to return.
-   | AbortedResult  !(SimContext p sym ext) !(AbortedResult sym ext)
-     -- | An execution stopped somewhere in the middle of a run because
-     --   a timeout condition occured.
-   | TimeoutResult !(ExecState p sym ext r)
-
--}
-
-{-
+storageType :: J.Type -> StorageType
+storageType ty =
+  case ty of
+    J.BooleanType -> STInt
+    J.ByteType    -> STInt
+    J.CharType    -> STInt
+    J.ShortType   -> STInt
+    J.IntType     -> STInt
+    J.LongType    -> STLong
+    J.FloatType   -> STFloat
+    J.DoubleType  -> STDouble
+    J.ArrayType{} -> STRef
+    J.ClassType{} -> STRef
 
 resolveArguments ::
   CrucibleContext          ->
   CrucibleMethodSpecIR     ->
   Map AllocIndex JVMRefVal ->
-  IO [(JavaType, JVMVal)]
+  IO [(J.Type, JVMVal)]
 resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec^.csArgs))
@@ -387,7 +365,6 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
           v <- resolveSetupVal cc env tyenv nameEnv sv
           return (mt, v)
         Nothing -> fail $ unwords ["Argument", show i, "unspecified when verifying", show nm]
--}
 
 --------------------------------------------------------------------------------
 
@@ -482,10 +459,9 @@ assertEqualVals cc v1 v2 =
 
 doAlloc ::
   CrucibleContext ->
-  CJ.JVMContext ->
   Allocation ->
   StateT (Crucible.SymGlobalState Sym) IO JVMRefVal
-doAlloc cc jc alloc =
+doAlloc cc alloc =
   case alloc of
     AllocObject cname -> StateT (doAllocateObject sym halloc jc cname)
     AllocArray len ty -> StateT (doAllocateArray sym halloc jc len ty)
@@ -493,6 +469,7 @@ doAlloc cc jc alloc =
     simctx = cc^.ccJVMSimContext
     halloc = Crucible.simHandleAllocator simctx
     sym = simctx^.Crucible.ctxSymInterface
+    jc = cc^.ccJVMContext
 
 {-
 Crucible.newRef :: IsSymInterface sym => TypeRepr tp -> RegValue sym tp -> OverrideSim p sym ext rtp args ret (RefCell tp)

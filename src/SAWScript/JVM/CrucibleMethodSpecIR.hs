@@ -272,6 +272,7 @@ data CrucibleContext =
   CrucibleContext
   { _ccJVMClass       :: J.Class
   -- , _ccJVMModuleTrans :: CJ.ModuleTranslation
+  , _ccJVMContext     :: CJ.JVMContext
   , _ccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
   -- , _ccLLVMEmptyMem   :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
   , _ccJVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
