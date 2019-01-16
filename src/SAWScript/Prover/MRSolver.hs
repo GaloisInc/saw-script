@@ -9,6 +9,7 @@ module SAWScript.Prover.MRSolver
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
   ) where
 
+import Control.Monad.Fail (MonadFail)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
@@ -326,7 +327,7 @@ compFunInputType (CompFunComp f _) = compFunInputType f
 compFunInputType (CompFunMark f _) = compFunInputType f
 
 -- | Match a term as a function name
-asFunName :: MonadPlus m => Recognizer m Term FunName
+asFunName :: (MonadPlus m, MonadFail m) => Recognizer m Term FunName
 asFunName t =
   (LocalName <$> LocalFunName <$> asExtCns t)
   `mplus` (GlobalName <$> asGlobalDef t)
