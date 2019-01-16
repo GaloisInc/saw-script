@@ -31,6 +31,8 @@ module SAWScript.JVM.CrucibleOverride
   , doAllocateArray
   , doFieldStore
   , doArrayStore
+  , jvmIntrinsicTypes
+  , jvmExtensionImpl
   ) where
 
 import           Control.Lens
@@ -1297,5 +1299,10 @@ makeJVMTypeRep sym globals jc ty =
       do n' <- W4.bvLit sym CJ.w32 n
          return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i3of3 n')
 
+-- TODO: move to crucible-jvm
 jvmIntrinsicTypes :: Crucible.IntrinsicTypes Sym
 jvmIntrinsicTypes = MapF.empty
+
+-- TODO: move to crucible-jvm
+jvmExtensionImpl :: Crucible.ExtensionImpl (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
+jvmExtensionImpl = error "unimplemented: jvmExtensionImpl"

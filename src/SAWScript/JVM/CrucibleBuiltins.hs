@@ -160,6 +160,7 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
   do cc <- setupCrucibleContext bic opts cls
      cb <- getJavaCodebase
      let sym = cc^.ccBackend
+     let jc = cc^.ccJVMContext
 
      pos <- getPosition
      let loc = toW4Loc "_SAW_verify_prestate" pos
@@ -175,10 +176,12 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      -- 'dynamicClassTable', which is a field of 'JVMContext'. There
      -- is a 'JVMContext' stored in the 'TopLevelRW', which we can get
      -- with 'getJVMTrans'.
+     let classTab = Map.empty -- FIXME: how to initialize this?
+     let classTabVar = CJ.dynamicClassTable jc
+     let globals1 = Crucible.insertGlobal classTabVar classTab Crucible.emptyGlobals
 
      -- construct the initial state for verifications
-     --(args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
-     let assumes = error "assumes"
+     (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
@@ -690,6 +693,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 setupCrucibleContext :: BuiltinContext -> Options -> J.Class -> TopLevel CrucibleContext
 setupCrucibleContext bic opts jclass =
   do halloc <- getHandleAlloc
+     jc <- getJVMTrans
      AIGProxy proxy <- getProxy
      cb <- getJavaCodebase
      jvmctx0 <- io $ CJ.mkInitialJVMContext halloc
@@ -697,9 +701,13 @@ setupCrucibleContext bic opts jclass =
      let gen = globalNonceGenerator
      sym <- io $ Crucible.newSAWCoreBackend proxy sc gen
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
+     let bindings = Crucible.fnBindingsFromList []
+     let simctx   = Crucible.initSimContext sym jvmIntrinsicTypes halloc stdout
+                    bindings jvmExtensionImpl Crucible.SAWCruciblePersonality
      return CrucibleContext { _ccJVMClass = jclass
                             , _ccBackend = sym
-                            , _ccJVMSimContext = undefined -- lsimctx -- Lang.Crucible.Simulator.SimContext
+                            , _ccJVMContext = jc
+                            , _ccJVMSimContext = simctx
                             }
 {-
          let bindings = Crucible.fnBindingsFromList []
