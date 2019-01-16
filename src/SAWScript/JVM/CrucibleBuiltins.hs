@@ -277,8 +277,8 @@ verifyPrestate ::
 verifyPrestate cc mspec globals =
   do let ?lc = cc^.ccTypeCtx
      let sym = cc^.ccBackend
-     let tyenvRW = mspec^.csPreState.csAllocs
-     let tyenv   = csAllocations mspec
+     let preallocs = mspec^.csPreState.csAllocs
+     let tyenv = csAllocations mspec
      let nameEnv = mspec^.csPreState.csVarTypeNames
 
      let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
@@ -288,11 +288,8 @@ verifyPrestate cc mspec globals =
      --let Just mem = Crucible.lookupGlobal lvar globals
 
      -- Allocate objects in memory for each 'jvm_alloc'
-     (env1, mem') <- runStateT (traverse (doAlloc cc) tyenvRW) mem
-     env2 <- Map.traverseWithKey
-               (\k _ -> executeFreshPointer cc k)
-               (mspec^.csPreState.csFreshPointers)
-     let env = Map.unions [env1, env2]
+     env <- traverse (doAlloc jc) preallocs
+     --(env1, mem') <- runStateT (traverse (doAlloc cc) tyenvRW) mem
 
      mem''' <- setupPrePointsTos mspec cc env (mspec^.csPreState.csPointsTos) mem''
      let globals1 = Crucible.insertGlobal lvar mem''' globals
@@ -320,17 +317,44 @@ verifyPrestate cc mspec globals =
 -}
 
 {-
--- | Check two MemTypes for register compatiblity.  This is a stricter
---   check than the memory compatiblity check that is done for points-to
---   assertions.
-checkRegisterCompatibility ::
-  Crucible.MemType ->
-  Crucible.MemType ->
-  IO Bool
-checkRegisterCompatibility mt mt' =
-  do st  <- Crucible.toStorableType mt
-     st' <- Crucible.toStorableType mt'
-     return (st == st')
+What can I do with a JVMOverrideSim?
+
+runOverrideSim ::
+  TypeRepr tp {- ^ return type -} ->
+  OverrideSim p sym ext rtp args tp (RegValue sym tp) {- ^ action to execute  -} ->
+  ExecCont p sym ext rtp (OverrideLang tp) ('Just args)
+
+type ExecCont p sym ext r f a = ReaderT (SimState p sym ext r f a) IO (ExecState p sym ext r)
+
+executeCrucible ::
+  (IsSymInterface sym, IsSyntaxExtension ext) =>
+  [ExecutionFeature p sym ext rtp] ->
+  ExecState p sym ext rtp ->
+  IO (ExecResult p sym ext rtp)
+
+InitialState ::
+  forall ret. rtp ~ RegEntry sym ret =>
+  !(SimContext p sym ext)                       {- initial 'SimContext' state         -} ->
+  !(SymGlobalState sym)                         {- state of Crucible global variables -} ->
+  !(AbortHandler p sym ext (RegEntry sym ret))  {- initial abort handler              -} ->
+  !(ExecCont p sym ext (RegEntry sym ret) (OverrideLang ret) ('Just EmptyCtx)) {- Entry continuation -} ->
+  ExecState p sym ext rtp
+
+-- | Executions that have completed either due to (partial or total)
+--   successful completion or by some abort condition.
+data ExecResult p sym ext (r :: Type)
+   = -- | At least one execution path resulted in some return result.
+     FinishedResult !(SimContext p sym ext) !(PartialResult sym ext r)
+     -- | All execution paths resulted in an abort condition, and there is
+     --   no result to return.
+   | AbortedResult  !(SimContext p sym ext) !(AbortedResult sym ext)
+     -- | An execution stopped somewhere in the middle of a run because
+     --   a timeout condition occured.
+   | TimeoutResult !(ExecState p sym ext r)
+
+-}
+
+{-
 
 resolveArguments ::
   CrucibleContext          ->
@@ -376,33 +400,34 @@ setupPrePointsTos ::
   CrucibleContext          ->
   Map AllocIndex JVMRefVal ->
   [PointsTo]               ->
-  JVMOverrideSim rtp args ret ()
-setupPrePointsTos mspec cc env pts = mapM_ doPointsTo pts
+  Crucible.SymGlobalState Sym ->
+  IO (Crucible.SymGlobalState Sym)
+setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
   where
-    tyenv   = csAllocations mspec
+    sym = cc^.ccBackend
+    tyenv = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
 
-    resolveJVMRefVal :: SetupValue -> JVMOverrideSim rtp args ret JVMRefVal
+    resolveJVMRefVal :: SetupValue -> IO JVMRefVal
     resolveJVMRefVal lhs =
-      do sym <- Crucible.getSymInterface
-         let msg = Crucible.GenericSimError "Non-reference value found in points-to assertion"
-         lhs' <- liftIO $ resolveSetupVal cc env tyenv nameEnv lhs
+      do let msg = Crucible.GenericSimError "Non-reference value found in points-to assertion"
+         lhs' <- resolveSetupVal cc env tyenv nameEnv lhs
          case lhs' of
            RVal ref -> return ref
            _ -> liftIO $ Crucible.addFailedAssertion sym msg
 
     -- TODO: factor out some OverrideSim functions for jvm field/array updates to put in the crucible-jvm package
-    doPointsTo :: PointsTo -> JVMOverrideSim rtp args ret ()
-    doPointsTo pt =
+    doPointsTo :: Crucible.SymGlobalState Sym -> PointsTo -> IO (Crucible.SymGlobalState Sym)
+    doPointsTo mem pt =
       case pt of
         PointsToField _loc lhs fld rhs ->
           do lhs' <- resolveJVMRefVal lhs
-             rhs' <- liftIO $ resolveSetupVal cc env tyenv nameEnv rhs
-             doFieldStore lhs' fld rhs'
+             rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
+             doFieldStore sym mem lhs' fld rhs'
         PointsToElem _loc lhs idx rhs ->
           do lhs' <- resolveJVMRefVal lhs
-             rhs' <- liftIO $ resolveSetupVal cc env tyenv nameEnv rhs
-             doArrayStore lhs' idx rhs'
+             rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
+             doArrayStore sym mem lhs' idx rhs'
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -455,22 +480,19 @@ assertEqualVals cc v1 v2 =
 --objectImplRepr :: CtxRepr (EmptyCtx ::> JVMInstanceType ::> JVMArrayType)
 --objectImplRepr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
 
-doAlloc :: CJ.JVMContext -> Allocation -> JVMOverrideSim rtp args ret JVMRefVal
-doAlloc jc alloc =
+doAlloc ::
+  CrucibleContext ->
+  CJ.JVMContext ->
+  Allocation ->
+  StateT (Crucible.SymGlobalState Sym) IO JVMRefVal
+doAlloc cc jc alloc =
   case alloc of
-    AllocObject cname -> doAllocateObject jc cname
-    AllocArray len ty -> doAllocateArray jc len ty
-
--- TODO: move this to Lang.Crucible.Simulator.OverrideSim
-readPartial ::
-  (W4.IsExprBuilder sym, Crucible.IsBoolSolver sym) =>
-  W4.PartExpr (W4.Pred sym) v ->
-  Crucible.SimErrorReason ->
-  Crucible.OverrideSim p sym ext rtp args ret v
-readPartial pe msg =
-  do sym <- Crucible.getSymInterface
-     liftIO $ Crucible.readPartExpr sym pe msg
-
+    AllocObject cname -> StateT (doAllocateObject sym halloc jc cname)
+    AllocArray len ty -> StateT (doAllocateArray sym halloc jc len ty)
+  where
+    simctx = cc^.ccJVMSimContext
+    halloc = Crucible.simHandleAllocator simctx
+    sym = simctx^.Crucible.ctxSymInterface
 
 {-
 Crucible.newRef :: IsSymInterface sym => TypeRepr tp -> RegValue sym tp -> OverrideSim p sym ext rtp args ret (RefCell tp)
@@ -487,7 +509,7 @@ Crucible.newRef :: IsSymInterface sym => TypeRepr tp -> RegValue sym tp -> Overr
 -- RegValue sym (VectorType tp) = Vector (RegValue sym tp)
 -- RegValue sym (StructType ctx) = Assignment (RegValue' sym) ctx
 -- RegValue sym (VariantType ctx) = Assignment (VariantBranch sym) ctx
--- RegValue sym (ReferenceType a) = MuxTree sym (RefCell a)
+-- RegValue sym (ReferenceType tp) = MuxTree sym (RefCell tp)
 -- RegValue sym (WordMapType w tp) = WordMap sym w tp
 -- RegValue sym (RecursiveType nm ctx) = RolledType sym nm ctx
 -- RegValue sym (IntrinsicType nm ctx) = Intrinsic sym nm ctx
@@ -500,6 +522,14 @@ Crucible.newRef :: IsSymInterface sym => TypeRepr tp -> RegValue sym tp -> Overr
 -- type JVMArrayType = StructType (((EmptyCtx ::> JVMIntType) ::> VectorType JVMValueType) ::> JVMTypeRepType)
 -- type JVMTypeRepType = RecursiveType "JVM_TypeRep" EmptyCtx
 -- type JVMTypeRepImpl = VariantType (EmptyCtx ::> JVMTypeRepType ::> JVMClassType ::> JVMIntType)
+--type JVMValueType = VariantType JVMValueCtx
+--type JVMValueCtx =
+--  EmptyCtx
+--  ::> JVMDoubleType
+--  ::> JVMFloatType
+--  ::> JVMIntType
+--  ::> JVMLongType
+--  ::> JVMRefType
 
 --------------------------------------------------------------------------------
 
@@ -522,7 +552,7 @@ registerOverride ::
   CrucibleContext            ->
   Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym JVM ->
   [CrucibleMethodSpecIR]     ->
-  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym JVM rtp args ret ()
+  JVMOverrideSim rtp args ret ()
 registerOverride opts cc _ctx cs = do
   let sym = cc^.ccBackend
   sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
@@ -556,7 +586,7 @@ verifySimulate ::
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   [CrucibleMethodSpecIR]        ->
   Crucible.SymGlobalState Sym   ->
-  Bool                          ->
+  Bool {- ^ path sat checking -} ->
   IO (Maybe (JavaType, JVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc mspec args assumes lemmas globals checkSat =
   do let nm = mspec^.csName
