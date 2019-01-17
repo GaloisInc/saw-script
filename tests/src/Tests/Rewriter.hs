@@ -12,7 +12,6 @@ module Tests.Rewriter
   ( rewriter_tests
   ) where
 
-import Control.Monad
 
 import Verifier.SAW.Conversion
 import Verifier.SAW.Prelude

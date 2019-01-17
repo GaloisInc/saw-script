@@ -8,20 +8,13 @@ Portability : non-portable (language extensions)
 
 module Tests.Parser where
 
-import Control.Applicative
-import Control.Lens
-import Control.Monad.Identity
-import Data.Bits
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
-
+import Test.Tasty
+import Test.Tasty.HUnit
 import Verifier.SAW.Module
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Term.Functor
-import Verifier.SAW.Term.Pretty
 
-import Test.Tasty
-import Test.Tasty.HUnit
 
 checkGroundTerm :: Term -> Bool
 checkGroundTerm t = looseVars t == emptyBitSet

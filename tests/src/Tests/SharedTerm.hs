@@ -11,16 +11,10 @@ module Tests.SharedTerm
   ) where
 
 import Control.Monad
-import Data.Hashable
-import qualified Data.Map as Map
-
-import Data.Time.Clock
-
 import Test.Tasty
 import Test.Tasty.HUnit
-
-import Verifier.SAW.SharedTerm
 import Verifier.SAW.Prelude
+import Verifier.SAW.SharedTerm
 
 
 sharedTermTests :: [TestTree]
