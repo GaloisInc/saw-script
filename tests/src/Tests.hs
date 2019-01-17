@@ -17,8 +17,7 @@ import Test.Tasty.Runners.AntXML
 import Test.Tasty.QuickCheck
 import Data.Proxy
 
-import System.Exit
-
+import Tests.CacheTests
 import Tests.Parser
 import Tests.SharedTerm
 import Tests.Rewriter
@@ -42,4 +41,5 @@ tests =
    [ testGroup "SharedTerm" sharedTermTests
    , testGroup "Parser" parserTests
    , testGroup "Rewriter" rewriter_tests
+   , testGroup "Cache" cacheTests
    ]

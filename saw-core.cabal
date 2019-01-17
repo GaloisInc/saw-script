@@ -102,12 +102,14 @@ library
 
 test-suite test-sawcore
   type: exitcode-stdio-1.0
+  GHC-options: -Wall -Werror -Wcompat
   main-is: Tests.hs
   hs-source-dirs: tests/src
   build-depends:
       base >= 4
     , containers
     , hashable
+    , ref-fd
     , lens
     , mtl
     , saw-core
@@ -123,6 +125,7 @@ test-suite test-sawcore
     , tagged
 
   other-modules:
+    Tests.CacheTests
     Tests.Parser
     Tests.Rewriter
     Tests.SharedTerm
