@@ -185,15 +185,15 @@ infixl 9 >:
 (>:) :: (Monad m, ArgsMatchable v m a) => v m a -> Matcher m b -> ArgsMatcher m (a :*: b)
 (>:) = consArgsMatcher . defaultArgsMatcher
 
-runArgsMatcher :: Monad m => ArgsMatcher m a -> [Term] -> m a
+runArgsMatcher :: MonadFail m => ArgsMatcher m a -> [Term] -> m a
 runArgsMatcher (ArgsMatcher _ f) l = do
   (v,[]) <- f l
   return v
 
 -- | Produces a matcher from an ArgsMatcher and a matcher that yields
 -- subterms.
-resolveArgs :: (Monad m, ArgsMatchable v m a)
-               -- Given a term, matches arguments to temr.
+resolveArgs :: (MonadFail m, ArgsMatchable v m a)
+               -- Given a term, matches arguments to term.
             => Matcher m [Term]
             -> v m a
             -> Matcher m a
