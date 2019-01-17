@@ -32,7 +32,7 @@ import qualified Flexdis86 as F
 
 import Lang.Crucible.Simulator.RegValue(RegValue'(RV))
 
-import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
+import Data.Macaw.Symbolic(ToCrucibleType)
 import qualified Data.Macaw.X86.X86Reg as R
 
 import SAWScript.X86Spec.Types

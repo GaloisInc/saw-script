@@ -72,7 +72,7 @@ import Data.Foldable(toList)
 
 import What4.Interface
           (bvLit,isEq, Pred, notPred, orPred
-          , bvUle, truePred, natLit, asNat, andPred )
+          , bvUle, truePred, natLit, asNat, andPred, userSymbol, freshConstant )
 import What4.ProgramLoc
 
 import Lang.Crucible.FunctionHandle
@@ -87,6 +87,7 @@ import SAWScript.CrucibleLLVM
   , Bytes, bytesToInteger, toBytes
   , StorageType
   , noAlignment
+  , pattern LLVMPointer
   )
 
 import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
@@ -108,13 +109,11 @@ import Lang.Crucible.Types
 import Verifier.SAW.SharedTerm
   (Term,scApplyAll,scVector,scBitvector,scAt,scNat)
 import Data.Macaw.Memory(RegionIndex)
-import Data.Macaw.Symbolic(freshValue,GlobalMap)
-import Data.Macaw.Symbolic.PersistentState(ToCrucibleType)
-import Data.Macaw.Symbolic(Regs, macawAssignToCrucM, LookupFunctionHandle(..) )
-import Data.Macaw.Symbolic.CrucGen(MacawSymbolicArchFunctions(..),crucArchRegTypes)
+import Data.Macaw.Symbolic(GlobalMap, ToCrucibleType, LookupFunctionHandle(..), MacawCrucibleRegTypes)
+import Data.Macaw.Symbolic.Backend ( crucArchRegTypes )
 import Data.Macaw.X86.X86Reg
 import Data.Macaw.X86.Symbolic
-     (x86_64MacawSymbolicFns,lookupX86Reg,updateX86Reg,freshX86Reg)
+     (x86_64MacawSymbolicFns,lookupX86Reg,updateX86Reg)
 import Data.Macaw.X86.ArchTypes(X86_64)
 import qualified Data.Macaw.Types as M
 
@@ -395,29 +394,44 @@ locRepr l =
 
 data State = State
   { stateMem  :: MemImpl Sym
-  , stateRegs :: Regs Sym X86_64
+  , stateRegs :: Ctx.Assignment (RegValue' Sym) (MacawCrucibleRegTypes X86_64)
   }
 
 freshState :: Sym -> IO State
 freshState sym =
-  do regs <- macawAssignToCrucM (freshX86Reg sym) $
-             crucGenRegAssignment x86_64MacawSymbolicFns
+  do regs <- Ctx.traverseWithIndex (freshRegister sym) knownRepr
      mem  <- emptyMem LittleEndian
      return State { stateMem = mem, stateRegs = regs }
 
+freshRegister :: Sym -> Ctx.Index ctx tp -> TypeRepr tp -> IO (RegValue' Sym tp)
+freshRegister sym idx repr = RV <$> freshVal sym repr True ("reg" ++ show idx)
 
 freshVal ::
   Sym -> TypeRepr t -> Bool {- ptrOK ?-}-> String -> IO (RegValue Sym t)
 freshVal sym t ptrOk nm =
   case t of
-    BoolRepr -> freshValue sym nm ptr M.BoolTypeRepr
-    LLVMPointerRepr w ->
-      freshValue sym nm ptr (M.BVTypeRepr w)
+    BoolRepr -> do
+      sn <- symName nm
+      freshConstant sym sn BaseBoolRepr
+    LLVMPointerRepr w
+      | ptrOk, Just Refl <- testEquality w (knownNat @64) -> do
+          sn_base <- symName (nm ++ "_base")
+          sn_off <- symName (nm ++ "_off")
+          base <- freshConstant sym sn_base BaseNatRepr
+          off <- freshConstant sym sn_off (BaseBVRepr w)
+          return (LLVMPointer base off)
+      | otherwise -> do
+          sn <- symName nm
+          base <- natLit sym 0
+          off <- freshConstant sym sn (BaseBVRepr w)
+          return (LLVMPointer base off)
     it -> fail ("[freshVal] Unexpected type repr: " ++ show it)
 
   where
-  ptr = if ptrOk then Just (knownNat @64) else Nothing
-
+  symName s =
+    case userSymbol ("macaw_" ++ s) of
+      Left err -> error ("Invalid symbol name " ++ show s ++ ": " ++ show err)
+      Right a -> return a
 
 getLoc :: Loc t -> Sym -> State -> IO (RegValue Sym t)
 getLoc l =
@@ -599,7 +613,7 @@ evalProp opts p s =
          need   <- evalCryFunArr opts s n wBits f xs -- expected values
          have   <- readArr opts ptr n wBytes s (snd s)
          checks <- zipWithM (ptrEq sym wBits) need have
-         foldM (andPred sym) (truePred sym) checks
+         foldM (\chk (p1, p2) -> andPred sym p1 p2 >>= andPred sym chk) (truePred sym) checks
   where
   sym = optsSym opts
 
@@ -634,7 +648,7 @@ evalSame ::
 evalSame sym t v1 v2 =
   case t of
     BoolRepr          -> isEq sym v1 v2
-    LLVMPointerRepr w -> ptrEq sym w v1 v2
+    LLVMPointerRepr w -> ptrEq sym w v1 v2 >>= uncurry (andPred sym)
     it -> fail ("[evalProp] Unexpected value repr: " ++ show it)
 
 
@@ -937,7 +951,7 @@ mkGlobalMap rmap sym mem region off = sequence (addOffset <$> thisRegion)
   where
     thisRegion = join (findRegion <$> asNat region)
     findRegion r = Map.lookup (fromIntegral r) rmap
-    addOffset p = doPtrAddOffset sym mem p off
+    addOffset p = doPtrAddOffset sym Nothing mem p off
       where ?ptrWidth = knownNat
 
 
@@ -982,7 +996,7 @@ setupGlobals opts gs fs s
                  let fname = fromString name
                  return $
                     ( (base,a)
-                    , \_ -> LFH $ \st _ _ ->
+                    , \_ -> LookupFunctionHandle $ \st _ _ ->
                          do
                             let sty = crucArchRegTypes x86_64MacawSymbolicFns
                             let rty = StructRepr sty
@@ -1181,6 +1195,4 @@ adjustPtr sym mem ptr amt
   | amt == 0  = return ptr
   | otherwise =
     do let ?ptrWidth = knownNat
-       doPtrAddOffset sym mem ptr =<< bvLit sym knownNat amt
-
-
+       doPtrAddOffset sym Nothing mem ptr =<< bvLit sym knownNat amt

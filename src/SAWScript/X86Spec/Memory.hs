@@ -164,7 +164,7 @@ class PtrAdd t where
 instance (t ~ Bits 64) => PtrAdd (Value t) where
   ptrAdd (Value p) (Value o) = withMem $ \sym mem ->
     let ?ptrWidth = knownNat
-    in Value <$> (doPtrAddOffset sym mem p =<< projectLLVM_bv sym o)
+    in Value <$> (doPtrAddOffset sym Nothing mem p =<< projectLLVM_bv sym o)
 
 instance PtrAdd Bytes where
   ptrAdd p x = ptrAdd p =<< literal (bytesToInteger x)
