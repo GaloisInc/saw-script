@@ -212,7 +212,6 @@ import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Lens
-import Control.Monad.Ref
 import Control.Monad.State.Strict as State
 import Control.Monad.Reader
 import Data.Bits
@@ -226,6 +225,7 @@ import qualified Data.IntMap as IntMap
 import Data.IORef (IORef,newIORef,readIORef,modifyIORef')
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Ref ( C )
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
@@ -603,13 +603,13 @@ scWhnf sc t0 =
   do cache <- newCacheIntMap
      let ?cache = cache in memo t0
   where
-    memo :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
+    memo :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
     memo t =
       case t of
         Unshared _ -> go [] t
         STApp { stAppIndex = i } -> useCache ?cache i (go [] t)
 
-    go :: (?cache :: Cache IORef TermIndex Term) => [WHNFElim] -> Term -> IO Term
+    go :: (?cache :: Cache IO TermIndex Term) => [WHNFElim] -> Term -> IO Term
     go xs                     (convertsToNat    -> Just k) = scFlatTermF sc (NatLit k) >>= go xs
     go xs                     (asApp            -> Just (t, x)) = go (ElimApp x : xs) t
     go xs                     (asRecordSelector -> Just (t, n)) = go (ElimProj n : xs) t
@@ -657,7 +657,7 @@ scWhnf sc t0 =
     reapply t (ElimRecursor d ps p_ret cs_fs ixs) =
       scFlatTermF sc (RecursorApp d ps p_ret cs_fs ixs t)
 
-    tryDef :: (?cache :: Cache IORef TermIndex Term) =>
+    tryDef :: (?cache :: Cache IO TermIndex Term) =>
               Ident -> [WHNFElim] -> Def -> IO Term
     tryDef _ xs (Def {defBody = Just t}) = go xs t
     tryDef ident xs _ = scGlobalDef sc ident >>= flip (foldM reapply) xs
@@ -676,17 +676,17 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
    c <- newCache
    go c tm1 tm2
 
- where whnf :: Cache IORef TermIndex Term -> Term -> IO (TermF Term)
+ where whnf :: Cache IO TermIndex Term -> Term -> IO (TermF Term)
        whnf _c t@(Unshared _) = unwrapTermF <$> eval sc t
        whnf c t@(STApp{ stAppIndex = idx}) =
          unwrapTermF <$> useCache c idx (eval sc t)
 
-       go :: Cache IORef TermIndex Term -> Term -> Term -> IO Bool
+       go :: Cache IO TermIndex Term -> Term -> Term -> IO Bool
        go _c (STApp{ stAppIndex = idx1}) (STApp{ stAppIndex = idx2})
            | idx1 == idx2 = return True   -- succeed early case
        go c t1 t2 = join (goF c <$> whnf c t1 <*> whnf c t2)
 
-       goF :: Cache IORef TermIndex Term -> TermF Term -> TermF Term -> IO Bool
+       goF :: Cache IO TermIndex Term -> TermF Term -> TermF Term -> IO Bool
 
        goF c (Constant _ _ x) y | unfoldConst = join (goF c <$> whnf c x <*> return y)
        goF c x (Constant _ _ y) | unfoldConst = join (goF c <$> return x <*> whnf c y)
@@ -872,7 +872,7 @@ scImport sc t0 =
     do cache <- newCache
        go cache t0
   where
-    go :: Cache IORef TermIndex Term -> Term -> IO Term
+    go :: Cache IO TermIndex Term -> Term -> IO Term
     go cache (Unshared tf) =
           Unshared <$> traverse (go cache) tf
     go cache (STApp{ stAppIndex = idx, stAppTermF = tf}) =
@@ -888,14 +888,14 @@ instantiateVars sc f initialLevel t0 =
     do cache <- newCache
        let ?cache = cache in go initialLevel t0
   where
-    go :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) Term) =>
+    go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
           DeBruijnIndex -> Term -> IO Term
     go l (Unshared tf) =
             go' l tf
     go l (STApp{ stAppIndex = tidx, stAppTermF = tf}) =
             useCache ?cache (tidx, l) (go' l tf)
 
-    go' :: (?cache :: Cache IORef (TermIndex, DeBruijnIndex) Term) =>
+    go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
            DeBruijnIndex -> TermF Term -> IO Term
     go' l (FTermF (ExtCns ec)) = f l (Left ec)
     go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
@@ -926,11 +926,11 @@ instantiateVar sc k t0 t =
     do cache <- newCache
        let ?cache = cache in instantiateVars sc fn k t
   where -- Use map reference to memoize instantiated versions of t.
-        term :: (?cache :: Cache IORef DeBruijnIndex Term) =>
+        term :: (?cache :: Cache IO DeBruijnIndex Term) =>
                 DeBruijnIndex -> IO Term
         term i = useCache ?cache i (incVars sc 0 i t0)
         -- Instantiate variable 0.
-        fn :: (?cache :: Cache IORef DeBruijnIndex Term) =>
+        fn :: (?cache :: Cache IO DeBruijnIndex Term) =>
               DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term
         fn _ (Left ec) = scFlatTermF sc $ ExtCns ec
         fn i (Right j)
@@ -963,11 +963,11 @@ instantiateVarList sc k ts t =
   where
     l = length ts
     -- Memoize instantiated versions of ts.
-    term :: (Cache IORef DeBruijnIndex Term, Term)
+    term :: (Cache IO DeBruijnIndex Term, Term)
          -> DeBruijnIndex -> IO Term
     term (cache, x) i = useCache cache i (incVars sc 0 (i-k) x)
     -- Instantiate variables [k .. k+l-1].
-    fn :: [(Cache IORef DeBruijnIndex Term, Term)]
+    fn :: [(Cache IO DeBruijnIndex Term, Term)]
        -> DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term
     fn _ _ (Left ec) = scFlatTermF sc $ ExtCns ec
     fn rs i (Right j)
@@ -985,12 +985,12 @@ betaNormalize sc t0 =
   do cache <- newCache
      let ?cache = cache in go t0
   where
-    go :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
+    go :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
     go t = case t of
       Unshared _ -> go' t
       STApp{ stAppIndex = i } -> useCache ?cache i (go' t)
 
-    go' :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
+    go' :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
     go' t = do
       let (f, args) = asApplyAll t
       let (params, body) = asLambdaList f
@@ -1002,7 +1002,7 @@ betaNormalize sc t0 =
         f'' <- instantiateVarList sc 0 (reverse (take n args')) f'
         scApplyAll sc f'' (drop n args')
 
-    go3 :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
+    go3 :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
     go3 (Unshared tf) = Unshared <$> traverseTF go tf
     go3 (STApp{ stAppTermF = tf }) = scTermF sc =<< traverseTF go tf
 
@@ -1477,7 +1477,7 @@ mkSharedContext = do
            , scFreshGlobalVar = freshGlobalVar
            }
 
-useChangeCache :: MonadRef r m => Cache r k (Change v) -> k -> ChangeT m v -> ChangeT m v
+useChangeCache :: C m => Cache m k (Change v) -> k -> ChangeT m v -> ChangeT m v
 useChangeCache c k a = ChangeT $ useCache c k (runChangeT a)
 
 -- | Performs an action when a value has been modified, and otherwise

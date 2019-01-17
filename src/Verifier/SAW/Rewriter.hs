@@ -66,7 +66,6 @@ import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
 import qualified Data.Foldable as Foldable
-import Data.IORef (IORef)
 import Data.Map (Map)
 import Data.Maybe (fromMaybe)
 import qualified Data.List as List
@@ -512,7 +511,7 @@ rewriteSharedTerm sc ss t0 =
     do cache <- newCache
        let ?cache = cache in rewriteAll t0
   where
-    rewriteAll :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
+    rewriteAll :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
     rewriteAll (Unshared tf) =
         traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop
     rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
@@ -520,12 +519,12 @@ rewriteSharedTerm sc ss t0 =
     traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
     traverseTF _ tf@(Constant _ _ _) = pure tf
     traverseTF f tf = traverse f tf
-    rewriteTop :: (?cache :: Cache IORef TermIndex Term) => Term -> IO Term
+    rewriteTop :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
     rewriteTop t =
         case reduceSharedTerm sc t of
           Nothing -> apply (Net.unify_term ss t) t
           Just io -> rewriteAll =<< io
-    apply :: (?cache :: Cache IORef TermIndex Term) =>
+    apply :: (?cache :: Cache IO TermIndex Term) =>
              [Either RewriteRule Conversion] -> Term -> IO Term
     apply [] t = return t
     apply (Left (RewriteRule {lhs, rhs}) : rules) t = do
@@ -557,14 +556,14 @@ rewriteSharedTermTypeSafe sc ss t0 =
     do cache <- newCache
        let ?cache = cache in rewriteAll t0
   where
-    rewriteAll :: (?cache :: Cache IORef TermIndex Term) =>
+    rewriteAll :: (?cache :: Cache IO TermIndex Term) =>
                   Term -> IO Term
     rewriteAll (Unshared tf) =
         rewriteTermF tf >>= scTermF sc >>= rewriteTop
     rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
         -- putStrLn "Rewriting term:" >> print t >>
         useCache ?cache tidx (rewriteTermF tf >>= scTermF sc >>= rewriteTop)
-    rewriteTermF :: (?cache :: Cache IORef TermIndex Term) =>
+    rewriteTermF :: (?cache :: Cache IO TermIndex Term) =>
                     TermF Term -> IO (TermF Term)
     rewriteTermF tf =
         case tf of
@@ -579,7 +578,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
           Lambda pat t e -> Lambda pat t <$> rewriteAll e
           Constant{}     -> return tf
           _ -> return tf -- traverse rewriteAll tf
-    rewriteFTermF :: (?cache :: Cache IORef TermIndex Term) =>
+    rewriteFTermF :: (?cache :: Cache IO TermIndex Term) =>
                      FlatTermF Term -> IO (FlatTermF Term)
     rewriteFTermF ftf =
         case ftf of
@@ -606,10 +605,10 @@ rewriteSharedTermTypeSafe sc ss t0 =
           GlobalDef{}      -> return ftf
           StringLit{}      -> return ftf
           ExtCns{}         -> return ftf
-    rewriteTop :: (?cache :: Cache IORef TermIndex Term) =>
+    rewriteTop :: (?cache :: Cache IO TermIndex Term) =>
                   Term -> IO Term
     rewriteTop t = apply (Net.match_term ss t) t
-    apply :: (?cache :: Cache IORef TermIndex Term) =>
+    apply :: (?cache :: Cache IO TermIndex Term) =>
              [Either RewriteRule Conversion] ->
              Term -> IO Term
     apply [] t = return t
@@ -748,7 +747,7 @@ orderTerms _sc xs = return $ List.sort xs
 
 doHoistIfs :: SharedContext
          -> Simpset
-         -> Cache IORef TermIndex (HoistIfs s)
+         -> Cache IO TermIndex (HoistIfs s)
          -> Term
          -> Term
          -> IO (HoistIfs s)

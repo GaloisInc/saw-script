@@ -12,9 +12,8 @@ module Tests.CacheTests
 where
 
 import Control.Monad
--- import Control.Monad.IO.Class
-import Control.Monad.Ref
 import Control.Monad.ST
+import Data.Ref ( C )
 import Test.Tasty
 import Test.Tasty.HUnit
 import Verifier.SAW.Cache
@@ -85,8 +84,8 @@ intMapTestST =
 
 
 -- Always pass at least 2 entries in the keyval array, keys and values should be independently unique
-cTestA :: (MonadRef r m, Eq k, Eq v, Show k, Show v) =>
-          m (Cache r k v) -> [(k,v)] -> m ()
+cTestA :: (C m, Eq k, Eq v, Show k, Show v) =>
+          m (Cache m k v) -> [(k,v)] -> m ()
 cTestA mkCache keyvals = do
   c1 <- mkCache  -- will cache the keyvals
   c2 <- mkCache  -- will separately cache all keys equal to the same val (the first)

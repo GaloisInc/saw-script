@@ -30,6 +30,7 @@ library
     bytestring,
     containers,
     data-inttrie,
+    data-ref,
     directory,
     filepath,
     hashable >= 1.2,
@@ -39,7 +40,6 @@ library
     parameterized-utils,
     pretty,
     random,
-    ref-fd,
     template-haskell,
     text,
     tf-random,
@@ -108,8 +108,8 @@ test-suite test-sawcore
   build-depends:
       base >= 4
     , containers
+    , data-ref
     , hashable
-    , ref-fd
     , lens
     , mtl
     , saw-core
