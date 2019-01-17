@@ -90,7 +90,7 @@ library
   other-modules:
      Verifier.SAW.UnionFind
      Verifier.SAW.Utils
-  GHC-options: -Wall -Werror
+  GHC-options: -Wall -Werror -Wcompat
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
   GHC-prof-options: -fprof-auto -fprof-cafs
