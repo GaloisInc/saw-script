@@ -18,11 +18,13 @@ Portability : portable
 
 module Verifier.SAW.Export.Coq where
 
-import Control.Monad.Except
-import Control.Monad.Reader
-import Control.Monad.State
+import qualified Control.Monad.Except as Except
+import qualified Control.Monad.Fail as Fail
+import Control.Monad.Reader hiding (fail)
+import Control.Monad.State hiding (fail)
 import Data.List (intersperse)
 import qualified Data.Map as Map
+import Prelude hiding (fail)
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import qualified Language.Coq.AST as Coq
@@ -62,9 +64,9 @@ data ExportConfiguration = ExportConfiguration
   }
 
 type MonadCoqTrans m =
-  ( MonadError  (TranslationError Term) m
-  , MonadReader ExportConfiguration     m
-  , MonadState  [Coq.Decl]              m
+  ( Except.MonadError (TranslationError Term) m
+  , MonadReader       ExportConfiguration     m
+  , MonadState        [Coq.Decl]              m
   )
 
 showFTermF :: FlatTermF Term -> String
@@ -224,21 +226,21 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
               , Coq.Ltac "simpl; exact eq_refl"
               ])
   where
-    notSupported = throwError $ NotSupported errorTerm
+    notSupported = Except.throwError $ NotSupported errorTerm
     --badTerm = throwError $ BadTerm errorTerm
     errorTerm = Unshared $ FTermF tf
     --asString (asFTermF -> Just (StringLit s)) = pure s
     --asString _ = badTerm
 
 -- | Recognizes an $App (App "Cryptol.seq" n) x$ and returns ($n$, $x$).
-asSeq :: Monad f => Recognizer f Term (Term, Term)
+asSeq :: Fail.MonadFail f => Recognizer f Term (Term, Term)
 asSeq t = do (f, args) <- asApplyAllRecognizer t
              fid <- asGlobalDef f
              case (fid, args) of
                ("Cryptol.seq", [n, x]) -> return (n,x)
-               _ -> fail "not a seq"
+               _ -> Fail.fail "not a seq"
 
-asApplyAllRecognizer :: Monad f => Recognizer f Term (Term, [Term])
+asApplyAllRecognizer :: Fail.MonadFail f => Recognizer f Term (Term, [Term])
 asApplyAllRecognizer t = do _ <- asApp t
                             return $ asApplyAll t
 
@@ -320,7 +322,7 @@ translateTerm env t = -- traceTerm "translateTerm" t $
                         <*> traverse (go env) args
     (asLocalVar -> Just n)
       | n < length env -> Coq.Var <$> pure (env !! n)
-      | otherwise -> throwError $ LocalVarOutOfBounds t
+      | otherwise -> Except.throwError $ LocalVarOutOfBounds t
     (unwrapTermF -> Constant n body _) -> do
       configuration <- ask
       decls <- get
@@ -333,8 +335,8 @@ translateTerm env t = -- traceTerm "translateTerm" t $
              Coq.Var <$> pure n
     _ -> {- trace "translateTerm fallthrough" -} notSupported
   where
-    notSupported = throwError $ NotSupported t
-    badTerm = throwError $ BadTerm t
+    notSupported = Except.throwError $ NotSupported t
+    badTerm = Except.throwError $ BadTerm t
     matchDecl n (Coq.Definition n' _ _ _) = n == n'
     go = translateTerm
 
