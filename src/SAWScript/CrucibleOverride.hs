@@ -128,7 +128,6 @@ data OverrideFailureReason
   | BadPointerCast -- ^ Pointer required to process points-to
   | BadReturnSpecification -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
-  | BadPointerLoad String -- ^ loadRaw failed due to type error
   | StructuralMismatch (Crucible.LLVMVal Sym)
                        SetupValue
                        Crucible.MemType
@@ -152,9 +151,6 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "bad return specification"
   NonlinearPatternNotSupported ->
     PP.text "nonlinear pattern no supported"
-  BadPointerLoad msg ->
-    PP.text "type error when loading through pointer" PP.<$$>
-    PP.indent 2 (PP.text msg)
   StructuralMismatch llvmval setupval ty ->
     PP.text "could not match the following terms" PP.<$$>
     PP.indent 2 (PP.text $ show llvmval) PP.<$$>
