@@ -944,11 +944,7 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
                           $ (cc^.ccLLVMContext)
 
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy alignment)
-     (p,r,v) <- case res of
-                  Left e  -> failure loc (BadPointerLoad e)
-                  Right x -> return x
-     addAssert p (Crucible.SimError loc r)
+     v <- liftIO (Crucible.loadRaw sym mem ptr1 storTy alignment)
      matchArg sc cc loc prepost v memTy val
 
 
