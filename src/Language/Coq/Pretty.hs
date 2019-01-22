@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 {- |
 Module      : Language.Coq.Pretty
 Copyright   : Galois, Inc. 2018
@@ -92,9 +94,21 @@ ppTerm e =
 
 ppDecl :: Decl -> Doc
 ppDecl decl = case decl of
+  Axiom nm ty ->
+    (nest 2 $
+     hsep ([text "Axiom", text nm, text ":", ppTerm ty, period])) <> hardline
   Definition nm bs mty body ->
     (nest 2 $
      hsep ([text "Definition", text nm] ++
           map ppBinder bs ++
           [ppMaybeTy mty, text ":="]) <$>
      ppTerm body <> period) <> hardline
+  InductiveDecl (Inductive {..}) ->
+    (nest 2 $
+     hsep ([ text "Inductive"
+           , text inductiveName
+           , text ":"
+           , text "TODO"
+           , period
+           ]))
+    <> hardline

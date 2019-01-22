@@ -18,6 +18,7 @@ library
     ansi-wl-pprint,
     base == 4.*,
     containers,
+    lens,
     mtl,
     saw-core,
     vector
@@ -25,5 +26,5 @@ library
   exposed-modules:
      Language.Coq.AST
      Language.Coq.Pretty
-     Verifier.SAW.Export.Coq
+     Verifier.SAW.Translation.Coq
   ghc-options: -Wall -Werror

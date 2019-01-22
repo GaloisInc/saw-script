@@ -15,7 +15,7 @@ data Sort
   = Prop
   | Set
   | Type
-    deriving (Show)
+  deriving (Show)
 
 data Term
   = Lambda [Binder] Term
@@ -30,7 +30,7 @@ data Term
   | StringLit String
   | Scope Term String
   | Ltac String
-    deriving (Show)
+  deriving (Show)
 
 -- | Type synonym useful for indicating when a term is used as a type.
 type Type = Term
@@ -43,6 +43,26 @@ data PiBinder
   = PiBinder (Maybe Ident) Type
     deriving (Show)
 
+-- Because saw-core does not give very helpful access to the parameters and
+-- indices, we just follow their style and define the constructor by its fully
+-- applied return type.
+data Constructor = Constructor
+  { constructorName    :: Ident
+  , constructorType    :: Term
+  }
+  deriving (Show)
+
+data Inductive = Inductive
+  { inductiveName         :: Ident
+  , inductiveParameters   :: [(Ident, Term)]
+  , inductiveIndices      :: [(Ident, Term)]
+  , inductiveSort         :: Sort
+  , inductiveConstructors :: [Constructor]
+  }
+  deriving (Show)
+
 data Decl
-  = Definition Ident [Binder] (Maybe Type) Term
+  = Axiom Ident Type
+  | Definition Ident [Binder] (Maybe Type) Term
+  | InductiveDecl Inductive
   deriving (Show)
