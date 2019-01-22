@@ -20,6 +20,7 @@ import Control.Monad.Reader
 import qualified Data.Map as Map
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
+import qualified Language.Coq.Pretty as Coq
 import Verifier.SAW.Module
 import Verifier.SAW.Prelude (preludeModule)
 import Verifier.SAW.SharedTerm
@@ -29,7 +30,7 @@ import Verifier.SAW.Translation.Coq
 
 configuration :: TranslationConfiguration
 configuration = TranslationConfiguration
-  { transleVectorsAsCoqVectors = True
+  { translateVectorsAsCoqVectors = True
   , traverseConsts            = True
   }
 
@@ -61,9 +62,9 @@ aRecordType = do
   unitType <- scUnitType sc
   scRecordType sc [("natField", natType), ("unitField", unitType)]
 
-transle :: Monad m => m Term -> m Doc
-transle term = do
-  transleDeclImports configuration "MyDefinition" <$> term >>= \case
+translate :: Monad m => m Term -> m Doc
+translate term = do
+  translateDeclImports configuration "MyDefinition" <$> term >>= \case
     Left  e -> error $ show e
     Right r -> return r
 
@@ -103,11 +104,28 @@ getPreludeDataType name = do
     Nothing -> error $ name ++ " not found"
     Just dt -> return dt
 
+preludeDataTypes :: [String]
+preludeDataTypes =
+  [ "UnitType"
+  , "PairType"
+  , "EmptyType"
+  , "RecordType"
+  -- , "Eq"
+  , "Bit"
+  , "Either"
+  , "Maybe"
+  , "Nat"
+  , "Stream"
+  , "InputOutputTypes"
+  ]
+
 main :: IO ()
 main = do
   sc <- mkSharedContext
   -- In order to get test data types, we load the Prelude
   tcInsertModule sc preludeModule
-  dt <- flip runReaderT sc $ getPreludeDataType "Either"
-  let r = runMonadCoqTrans configuration (transleDataType dt)
-  putStrLn $ show r
+  forM_ preludeDataTypes $ \ dataTypeName -> do
+    dt <- flip runReaderT sc $ getPreludeDataType dataTypeName
+    case runMonadCoqTrans configuration (translateDataType dt) of
+      Left e -> error $ show e
+      Right (decl, _) -> putStrLn $ show $ Coq.ppDecl decl

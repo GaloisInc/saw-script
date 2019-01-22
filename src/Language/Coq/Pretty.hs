@@ -44,7 +44,7 @@ ppBinder (Binder x (Just t)) = parens (ppIdent x <+> colon <+> ppTerm t)
 ppPiBinder :: PiBinder -> Doc
 ppPiBinder (PiBinder Nothing t)  = ppTerm t <+> text "->"
 ppPiBinder (PiBinder (Just x) t) =
-  text "forall" <+> ppIdent x <+> colon <+> ppTerm t <> comma
+  text "forall" <+> lparen <> ppIdent x <+> colon <+> ppTerm t <> rparen <> comma
 
 ppBinders :: [Binder] -> Doc
 ppBinders = hsep . map ppBinder
@@ -103,12 +103,33 @@ ppDecl decl = case decl of
           map ppBinder bs ++
           [ppMaybeTy mty, text ":="]) <$>
      ppTerm body <> period) <> hardline
-  InductiveDecl (Inductive {..}) ->
-    (nest 2 $
-     hsep ([ text "Inductive"
-           , text inductiveName
-           , text ":"
-           , text "TODO"
-           , period
-           ]))
-    <> hardline
+  InductiveDecl ind -> ppInductive ind
+
+ppConstructor :: Constructor -> Doc
+ppConstructor (Constructor {..}) =
+  nest 2 $
+  hsep ([ text "|"
+        , text constructorName
+        , text ":"
+        , ppTerm constructorType
+        ]
+       )
+
+ppInductive :: Inductive -> Doc
+ppInductive (Inductive {..}) =
+  (vsep
+   ([ nest 2 $
+      hsep ([ text "Inductive"
+            , text inductiveName
+            ]
+            ++ map ppBinder inductiveParameters
+            ++ [ text ":" ]
+            ++ map ppPiBinder inductiveIndices
+            ++ [ ppSort inductiveSort ]
+            ++ [ text ":="]
+           )
+    ]
+    <> map ppConstructor inductiveConstructors
+    <> [ period ]
+   )
+  ) <> hardline

@@ -28,7 +28,7 @@ import qualified Control.Monad.Except as Except
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.Reader hiding (fail)
 import Control.Monad.State hiding (fail, state)
-import Data.List (intersperse)
+import Data.List (elemIndices, intersperse)
 import qualified Data.Map as Map
 import Prelude hiding (fail)
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
@@ -38,6 +38,7 @@ import qualified Language.Coq.Pretty as Coq
 import Verifier.SAW.Module
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+-- import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.Term.Functor
 --import Verifier.SAW.Term.Pretty
 -- import qualified Verifier.SAW.UntypedAST as Un
@@ -67,7 +68,7 @@ instance {-# OVERLAPPABLE #-} Show a => Show (TranslationError a) where
   show = showError show
 
 data TranslationConfiguration = TranslationConfiguration
-  { transleVectorsAsCoqVectors :: Bool -- ^ when `False`, transle vectors as Coq lists
+  { translateVectorsAsCoqVectors :: Bool -- ^ when `False`, translate vectors as Coq lists
   , traverseConsts            :: Bool
   }
 
@@ -150,8 +151,21 @@ identMap = Map.fromList
   , ("Cryptol.PLiteralSeqBool", "PLiteralSeqBool")
   ]
 
-transleIdent :: Ident -> Coq.Ident
-transleIdent i = Map.findWithDefault (show i) i identMap
+translateIdent :: Ident -> Coq.Ident
+translateIdent i = Map.findWithDefault (show i) i identMap
+
+-- "Foo.Bar.baz" -> "baz"
+dropModuleName :: String -> String
+dropModuleName s =
+  case elemIndices '.' s of
+  [] -> s
+  indices ->
+    let lastIndex = last indices in
+    drop (lastIndex + 1) s
+
+translateIdentDropModuleName :: Ident -> Coq.Ident
+translateIdentDropModuleName i =
+  Map.findWithDefault (dropModuleName . show $ i) i identMap
 
 {-
 traceFTermF :: String -> FlatTermF Term -> a -> a
@@ -161,32 +175,56 @@ traceTerm :: String -> Term -> a -> a
 traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
 -}
 
-transleBinder ::
+translateBinder ::
   MonadCoqTrans m =>
   (Ident, Term) -> m (Coq.Ident, Coq.Term)
-transleBinder (ident, term) = (,) <$> pure (transleIdent ident) <*> transleTerm term
+translateBinder (ident, term) = (,) <$> pure (translateIdent ident) <*> translateTerm term
 
-transleCtor ::
+dropPi :: Coq.Term -> Coq.Term
+dropPi (Coq.Pi (_ : t) r) = Coq.Pi t r
+dropPi (Coq.Pi _       r) = dropPi r
+dropPi t                  = t
+
+dropModuleNameWithinCtor :: Coq.Term -> Coq.Term
+dropModuleNameWithinCtor = go
+  where
+    go (Coq.Pi bs t)  = Coq.Pi bs (go t)
+    go (Coq.App t as) = Coq.App (go t) as
+    go (Coq.Var v)    = Coq.Var (dropModuleName v)
+    go t              = error $ "Unexpected term in constructor: " ++ show t
+
+translateCtor ::
   MonadCoqTrans m =>
+  [Coq.Binder] -> -- ^ list of parameters to drop from `ctorType`
   Ctor -> m Coq.Constructor
-transleCtor (Ctor {..}) = do
-  let constructorName = transleIdent ctorName
-  constructorType <- transleTerm ctorType
+translateCtor inductiveParameters (Ctor {..}) = do
+  let constructorName = translateIdentDropModuleName ctorName
+  constructorType <-
+    -- Unfortunately, `ctorType` qualifies the inductive type's name in the
+    -- return type.
+    dropModuleNameWithinCtor <$>
+    -- Unfortunately, `ctorType` comes with the inductive parameters universally
+    -- quantified.
+    (\ t -> iterate dropPi t !! length inductiveParameters) <$>
+    translateTerm ctorType
   return $ Coq.Constructor
     { constructorName
     , constructorType
     }
 
-transleDataType :: MonadCoqTrans m => DataType -> m Coq.Decl
-transleDataType (DataType {..}) = do
+translateDataType :: MonadCoqTrans m => DataType -> m Coq.Decl
+translateDataType (DataType {..}) = do
   let inductiveName = identName dtName -- eventually, might want the modules too
-  let mkParamIndex (s, t) = do
-        t' <- transleTerm t
-        return (s, t')
-  inductiveParameters   <- mapM mkParamIndex dtParams
-  inductiveIndices      <- mapM mkParamIndex dtIndices
-  inductiveSort         <- transleSort dtSort
-  inductiveConstructors <- mapM transleCtor dtCtors
+  let mkParam (s, t) = do
+        t' <- translateTerm t
+        return $ Coq.Binder s (Just t')
+  let mkIndex (s, t) = do
+        t' <- translateTerm t
+        return $ Coq.PiBinder (Just s) t'
+  inductiveParameters   <- mapM mkParam dtParams
+  inductiveIndices      <- mapM mkIndex dtIndices
+  inductiveSort         <- translateSort dtSort
+  inductiveConstructors <- mapM (translateCtor inductiveParameters) dtCtors
   return $ Coq.InductiveDecl $ Coq.Inductive
     { inductiveName
     , inductiveParameters
@@ -195,30 +233,30 @@ transleDataType (DataType {..}) = do
     , inductiveConstructors
     }
 
-transleModuleDecl :: MonadCoqTrans m => ModuleDecl -> m Coq.Decl
-transleModuleDecl = \case
-  TypeDecl dataType -> transleDataType dataType
-  DefDecl definition -> transleDef definition
+translateModuleDecl :: MonadCoqTrans m => ModuleDecl -> m Coq.Decl
+translateModuleDecl = \case
+  TypeDecl dataType -> translateDataType dataType
+  DefDecl definition -> translateDef definition
 
-transleDef :: MonadCoqTrans m => Def -> m Coq.Decl
-transleDef (Def {..}) =
+translateDef :: MonadCoqTrans m => Def -> m Coq.Decl
+translateDef (Def {..}) =
   case defQualifier of
   NoQualifier -> case defBody of
     Nothing   -> error "Terms should have a body (unless axiom/primitive)"
     Just body -> Coq.Definition
-                 <$> pure (transleIdent defIdent)
+                 <$> pure (translateIdent defIdent)
                  <*> pure []
-                 <*> (Just <$> transleTerm defType)
-                 <*> transleTerm body
+                 <*> (Just <$> translateTerm defType)
+                 <*> translateTerm body
   AxiomQualifier -> Coq.Axiom
-                    <$> pure (transleIdent defIdent)
-                    <*> transleTerm defType
+                    <$> pure (translateIdent defIdent)
+                    <*> translateTerm defType
   PrimQualifier -> Coq.Axiom
-                   <$> pure (transleIdent defIdent)
-                   <*> transleTerm defType
+                   <$> pure (translateIdent defIdent)
+                   <*> translateTerm defType
 
-transleSort :: MonadCoqTrans m => Sort -> m Coq.Sort
-transleSort s = pure (if s == propSort then Coq.Prop else Coq.Type)
+translateSort :: MonadCoqTrans m => Sort -> m Coq.Sort
+translateSort s = pure (if s == propSort then Coq.Prop else Coq.Type)
 
 flatTermFToExpr ::
   MonadCoqTrans m =>
@@ -227,7 +265,7 @@ flatTermFToExpr ::
   m Coq.Term
 flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
-    GlobalDef i   -> pure (Coq.Var (transleIdent i))
+    GlobalDef i   -> pure (Coq.Var (translateIdent i))
     UnitValue     -> pure (Coq.Var "tt")
     UnitType      -> pure (Coq.Var "unit")
     PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse go [x, y]
@@ -236,17 +274,17 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
     PairRight t   -> Coq.App (Coq.Var "snd") <$> traverse go [t]
     -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as -> do
-      Coq.App (Coq.Var (transleIdent n)) <$> traverse go (is ++ as)
+      Coq.App (Coq.Var (translateIdent n)) <$> traverse go (is ++ as)
     -- TODO: maybe have more customizable translation of data constructors
     CtorApp n is as -> do
-      Coq.App (Coq.Var (transleIdent n)) <$> traverse go (is ++ as)
+      Coq.App (Coq.Var (translateIdent n)) <$> traverse go (is ++ as)
     -- TODO: support this next!
     RecursorApp _ _ _ _ _ _ -> notSupported
-    Sort s -> Coq.Sort <$> transleSort s
+    Sort s -> Coq.Sort <$> translateSort s
     NatLit i -> pure (Coq.NatLit i)
     ArrayValue _ vec -> do
       config <- ask
-      if transleVectorsAsCoqVectors config
+      if translateVectorsAsCoqVectors config
         then
         let addElement accum element = do
               elementTerm <- go element
@@ -325,22 +363,22 @@ mkDefinition name t = Coq.Definition name [] Nothing t
 -- mkConstructor :: Un.CtorDecl -> Coq.Constructor
 -- mkConstructor (Un.Ctor n ctx t) = _
 
-transleParams ::
+translateParams ::
   MonadCoqTrans m =>
   [(String, Term)] -> m [Coq.Binder]
-transleParams [] = return []
-transleParams ((n, ty):ps) = do
-  ty' <- transleTerm ty
+translateParams [] = return []
+translateParams ((n, ty):ps) = do
+  ty' <- translateTerm ty
   modify $ over environment (n :)
-  ps' <- transleParams ps
+  ps' <- translateParams ps
   return (Coq.Binder n (Just ty') : ps')
 
-translePiParams :: MonadCoqTrans m => [(String, Term)] -> m [Coq.PiBinder]
-translePiParams [] = return []
-translePiParams ((n, ty):ps) = do
-  ty' <- transleTerm ty
+translatePiParams :: MonadCoqTrans m => [(String, Term)] -> m [Coq.PiBinder]
+translatePiParams [] = return []
+translatePiParams ((n, ty):ps) = do
+  ty' <- translateTerm ty
   modify $ over environment (n :)
-  ps' <- translePiParams ps
+  ps' <- translatePiParams ps
   let n' = if n == "_" then Nothing else Just n
   return (Coq.PiBinder n' ty' : ps')
 
@@ -349,13 +387,13 @@ translePiParams ((n, ty):ps) = do
 -- modifying what `go` meant.  This can be changed later.
 
 -- env is innermost first order
-transleTerm :: MonadCoqTrans m => Term -> m Coq.Term
-transleTerm t = do -- traceTerm "transleTerm" t $
+translateTerm :: MonadCoqTrans m => Term -> m Coq.Term
+translateTerm t = do -- traceTerm "translateTerm" t $
   env <- view environment <$> get
   case t of
     (asFTermF -> Just tf)  -> flatTermFToExpr (go env) tf
     (asPi -> Just _) -> do
-      paramTerms <- translePiParams params
+      paramTerms <- translatePiParams params
       Coq.Pi <$> pure paramTerms
                  -- env is in innermost first (reverse) binder order
                  <*> go ((reverse paramNames) ++ env) e
@@ -365,7 +403,7 @@ transleTerm t = do -- traceTerm "transleTerm" t $
           -- param names are in normal, outermost first, order
           paramNames = map fst $ params
     (asLambda -> Just _) -> do
-      paramTerms <- transleParams params
+      paramTerms <- translateParams params
       Coq.Lambda <$> pure paramTerms
                  -- env is in innermost first (reverse) binder order
                  <*> go ((reverse paramNames) ++ env) e
@@ -417,7 +455,7 @@ transleTerm t = do -- traceTerm "transleTerm" t $
              b <- go env body
              modify $ over declarations $ (mkDefinition n b :)
              Coq.Var <$> pure n
-    _ -> {- trace "transleTerm fallthrough" -} notSupported
+    _ -> {- trace "translateTerm fallthrough" -} notSupported
   where
     notSupported = Except.throwError $ NotSupported t
     badTerm = Except.throwError $ BadTerm t
@@ -426,7 +464,7 @@ transleTerm t = do -- traceTerm "transleTerm" t $
     matchDecl n (Coq.InductiveDecl (Coq.Inductive n' _ _ _ _)) = n == n'
     go env term = do
       modify $ set environment env
-      transleTerm term
+      translateTerm term
 
 runMonadCoqTrans ::
   TranslationConfiguration ->
@@ -435,20 +473,20 @@ runMonadCoqTrans ::
 runMonadCoqTrans configuration m =
   runStateT (runReaderT m configuration) (TranslationState [] [])
 
-transleTermToDocWith :: TranslationConfiguration -> (Coq.Term -> Doc) -> Term -> Either (TranslationError Term) Doc
-transleTermToDocWith configuration f t = do
-  (term, state) <- runMonadCoqTrans configuration (transleTerm t)
+translateTermToDocWith :: TranslationConfiguration -> (Coq.Term -> Doc) -> Term -> Either (TranslationError Term) Doc
+translateTermToDocWith configuration f t = do
+  (term, state) <- runMonadCoqTrans configuration (translateTerm t)
   let decls = view declarations state
   return $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls) <$$>
            (if null decls then empty else hardline) <$$>
            f term
 
-transleDefDoc :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
-transleDefDoc configuration name = transleTermToDocWith configuration (\ term -> Coq.ppDecl (mkDefinition name term))
+translateDefDoc :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
+translateDefDoc configuration name = translateTermToDocWith configuration (\ term -> Coq.ppDecl (mkDefinition name term))
 
-transleDeclImports :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
-transleDeclImports configuration name t = do
-  doc <- transleDefDoc configuration name t
+translateDeclImports :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
+translateDeclImports configuration name t = do
+  doc <- translateDefDoc configuration name t
   let imports = vcat [ "From Coq          Require Import Lists.List."
                      , "From Coq          Require Import String."
                      , "From Coq          Require Import Vectors.Vector."

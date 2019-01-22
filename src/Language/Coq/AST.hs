@@ -54,8 +54,8 @@ data Constructor = Constructor
 
 data Inductive = Inductive
   { inductiveName         :: Ident
-  , inductiveParameters   :: [(Ident, Term)]
-  , inductiveIndices      :: [(Ident, Term)]
+  , inductiveParameters   :: [Binder]
+  , inductiveIndices      :: [PiBinder]
   , inductiveSort         :: Sort
   , inductiveConstructors :: [Constructor]
   }
