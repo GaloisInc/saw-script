@@ -199,9 +199,8 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
        io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
 
      -- collect the proof obligations
-     --asserts <- verifyPoststate opts (biSharedContext bic) cc
-     --               methodSpec env globals3 ret
-     let asserts = error "asserts"
+     asserts <- verifyPoststate opts (biSharedContext bic) cc
+                    methodSpec env globals3 ret
 
      -- restore previous assumption state
      _ <- io $ Crucible.popAssumptionFrame sym frameIdent
