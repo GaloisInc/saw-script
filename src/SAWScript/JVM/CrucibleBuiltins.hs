@@ -15,10 +15,12 @@ Stability   : provisional
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -44,8 +46,10 @@ module SAWScript.JVM.CrucibleBuiltins
 
 import           Control.Lens
 
-import           Control.Monad.State
 import           Control.Applicative
+import           Control.Monad.State
+import qualified Control.Monad.State.Strict as Strict
+import           Control.Monad.ST (stToIO)
 import           Data.Foldable (for_, toList, find)
 import           Data.Function
 import           Data.IORef
@@ -65,11 +69,6 @@ import           System.IO
 
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 --import qualified Control.Monad.Trans.Maybe as MaybeT
-
-import           Data.Parameterized.Classes
-import           Data.Parameterized.NatRepr
-import           Data.Parameterized.Nonce
-import           Data.Parameterized.Some
 
 -- jvm-verifier
 -- TODO: transition to Lang.JVM.Codebase from crucible-jvm
@@ -108,6 +107,10 @@ import qualified Lang.Crucible.Utils.MuxTree as Crucible (toMuxTree)
 import qualified Lang.Crucible.JVM.Translation as CJ
 
 -- parameterized-utils
+import           Data.Parameterized.Classes
+import           Data.Parameterized.NatRepr
+import           Data.Parameterized.Nonce
+import           Data.Parameterized.Some
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
@@ -130,21 +133,19 @@ import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.JVM.CrucibleMethodSpecIR
 import SAWScript.JVM.CrucibleOverride
 import SAWScript.JVM.CrucibleResolveSetupValue
+import SAWScript.CrucibleBuiltinsJVM ()
 
-
-{-
 ppAbortedResult :: CrucibleContext
                 -> Crucible.AbortedResult Sym a
                 -> Doc
 ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
   text "Infeasible branch"
 ppAbortedResult cc (Crucible.AbortedExec abt gp) = do
-  Crucible.ppAbortExecReason abt <$$> ppGlobalPair cc gp
+  Crucible.ppAbortExecReason abt -- <$$> ppGlobalPair cc gp
 ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
   text "Aborted branch"
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
--}
 
 crucible_jvm_verify ::
   BuiltinContext ->
@@ -187,8 +188,8 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
      -- run the symbolic execution
-     --(ret, globals3)
-     --   <- io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
+     (ret, globals3) <-
+       io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
 
      -- collect the proof obligations
      --asserts <- verifyPoststate opts (biSharedContext bic) cc
@@ -352,7 +353,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
     checkArgTy i mt mt' =
       do b <- checkRegisterCompatibility mt mt'
          unless b $
-           fail $ unlines [ "Type mismatch in argument " ++ show i ++ " when veriyfing " ++ show nm
+           fail $ unlines [ "Type mismatch in argument " ++ show i ++ " when verifying " ++ show nm
                           , "Argument is declared with type: " ++ show mt
                           , "but provided argument has incompatible type: " ++ show mt'
                           , "Note: this may be because the signature of your " ++
@@ -513,15 +514,13 @@ Crucible.newRef :: IsSymInterface sym => TypeRepr tp -> RegValue sym tp -> Overr
 
 --------------------------------------------------------------------------------
 
---ppGlobalPair :: CrucibleContext arch
---             -> Crucible.GlobalPair Sym a
---             -> Doc
---ppGlobalPair cc gp =
---  let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
---      globals = gp ^. Crucible.gpGlobals in
---  case Crucible.lookupGlobal mvar globals of
---    Nothing -> text "LLVM Memory global variable not initialized"
---    Just mem -> Crucible.ppMem mem
+-- ppGlobalPair :: CrucibleContext -> Crucible.GlobalPair Sym a -> Doc
+-- ppGlobalPair cc gp =
+--   let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
+--       globals = gp ^. Crucible.gpGlobals in
+--   case Crucible.lookupGlobal mvar globals of
+--     Nothing -> text "LLVM Memory global variable not initialized"
+--     Just mem -> Crucible.ppMem mem
 
 
 --------------------------------------------------------------------------------
@@ -557,19 +556,71 @@ registerOverride opts cc _ctx cs = do
 
 --------------------------------------------------------------------------------
 
-{-
 verifySimulate ::
   Options                       ->
   CrucibleContext               ->
   CrucibleMethodSpecIR          ->
-  [(JavaType, JVMVal)]          ->
+  [(a, JVMVal)]                 ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   [CrucibleMethodSpecIR]        ->
   Crucible.SymGlobalState Sym   ->
   Bool {- ^ path sat checking -} ->
-  IO (Maybe (JavaType, JVMVal), Crucible.SymGlobalState Sym)
+  IO (Maybe (J.Type, JVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc mspec args assumes lemmas globals checkSat =
-  do let nm = mspec^.csName
+  do let jc = cc^.ccJVMContext
+     let cb = cc^.ccCodebase
+     let sym = cc^.ccBackend
+     let cls = cc^.ccJVMClass
+     let cname = J.className cls
+     let mname = mspec^.csName
+     let verbosity = 3
+     let personality = Crucible.SAWCruciblePersonality
+     let pos = PosInternal "verifySimulate"
+
+     -- executeCrucibleJVM
+
+     when (verbosity > 2) $
+          putStrLn "starting executeCrucibleJVM"
+
+     CJ.setSimulatorVerbosity verbosity sym
+
+     (mcls, meth) <- findMethod cb pos mname =<< lookupClass cb pos cname
+     --when (not (J.methodIsStatic meth)) $ do
+     --  fail $ unlines [ "Crucible can only extract static methods" ]
+
+     halloc <- Crucible.newHandleAllocator -- FIXME: we should get the halloc from the TopLevel state.
+
+     -- Create the initial JVMContext
+     ctx0 <- CJ.mkInitialJVMContext halloc
+
+     -- prep this class && all classes that it refers to
+     allClasses <- CJ.findAllRefs cb (J.className mcls)
+     when (verbosity > 3) $
+       putStrLn $ "all classes are: " ++ show (map J.className allClasses)
+     ctx <- stToIO $ Strict.execStateT (CJ.extendJVMContext halloc mcls >>
+                                 mapM (CJ.extendJVMContext halloc) allClasses) ctx0
+
+
+     (CJ.JVMHandleInfo _ h) <- CJ.findMethodHandle ctx mcls meth
+{-
+     let failIfNotEqual :: forall f m a (b :: k).
+                           (Monad m, Show (f a), Show (f b), TestEquality f)
+                        => f a -> f b -> String -> m (a :~: b)
+         failIfNotEqual r1 r2 str
+           | Just Refl <- testEquality r1 r2 = return Refl
+           | otherwise = fail $ str ++ ": mismatch between " ++ show r1 ++ " and " ++ show r2
+     Refl <- failIfNotEqual (Crucible.handleArgTypes h)   (knownRepr :: Crucible.CtxRepr args)
+       $ "Checking args for method " ++ mname
+     Refl <- failIfNotEqual (Crucible.handleReturnType h) (knownRepr :: Crucible.TypeRepr ret)
+       $ "Checking return type for method " ++ mname
+-}
+     regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
+     res <- CJ.runMethodHandle sym personality halloc ctx verbosity (J.className mcls) h regmap
+
+     --case prepareArgs (map snd args) of
+     --  Some regmap ->
+     --    do res <- CJ.executeCrucibleJVM cb verbosity sym personality cname mname regmap
+{-
      case Map.lookup (L.Symbol nm) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
        Nothing -> fail $ unwords ["function", show nm, "not found"]
        Just (Crucible.AnyCFG cfg) ->
@@ -590,47 +641,67 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                      preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
                      Crucible.addAssumptions sym (Seq.fromList preds)
                    Crucible.regValue <$> (Crucible.callCFG cfg args')
-            case res of
-              Crucible.FinishedResult _ pr ->
-                do Crucible.GlobalPair retval globals1 <-
-                     case pr of
-                       Crucible.TotalRes gp -> return gp
-                       Crucible.PartialRes _ gp _ ->
-                         do printOutLn opts Info "Symbolic simulation completed with side conditions."
-                            return gp
-                   let ret_ty = mspec^.csRet
-                   retval' <- case ret_ty of
-                     Nothing -> return Nothing
-                     Just ret_mt ->
-                       do v <- Crucible.packMemValue sym
-                                 (fromMaybe (error ("Expected storable type:" ++ show ret_ty))
-                                      (Crucible.toStorableType ret_mt))
-                                 (Crucible.regType  retval)
-                                 (Crucible.regValue retval)
-                          return (Just (ret_mt, v))
-                   return (retval', globals1)
+-}
+     case res of
+       Crucible.FinishedResult _ pr ->
+         do Crucible.GlobalPair retval globals1 <-
+              case pr of
+                Crucible.TotalRes gp -> return gp
+                Crucible.PartialRes _ gp _ ->
+                  do printOutLn opts Info "Symbolic simulation completed with side conditions."
+                     return gp
+            let ret_ty = mspec^.csRet
+            retval' <-
+              case ret_ty of
+                Nothing -> return Nothing
+                Just ret_mt ->
+                  case retval of
+                    Crucible.RegEntry ty val ->
+                      case decodeJVMVal ret_mt (Crucible.AnyValue ty val) of
+                        Nothing -> error $ "FIXME: Unsupported return type: " ++ show ret_ty
+                        Just v -> return (Just (ret_mt, v))
+            return (retval', globals1)
 
-              Crucible.AbortedResult _ ar ->
-                do let resultDoc = ppAbortedResult cc ar
-                   fail $ unlines [ "Symbolic execution failed."
-                                  , show resultDoc
-                                  ]
+       Crucible.AbortedResult _ ar ->
+         do let resultDoc = ppAbortedResult cc ar
+            fail $ unlines [ "Symbolic execution failed."
+                           , show resultDoc
+                           ]
 
   where
-    sym = cc^.ccBackend
+    prepareArg :: forall tp. Crucible.TypeRepr tp -> JVMVal -> IO (Crucible.RegValue Sym tp)
+    prepareArg ty v =
+      case v of
+        RVal x -> case testEquality ty CJ.refRepr  of Just Refl -> return x; _ -> fail "argument type mismatch"
+        IVal x -> case testEquality ty CJ.intRepr  of Just Refl -> return x; _ -> fail "argument type mismatch"
+        LVal x -> case testEquality ty CJ.longRepr of Just Refl -> return x; _ -> fail "argument type mismatch"
+
     prepareArgs ::
+      forall xs.
       Ctx.Assignment Crucible.TypeRepr xs ->
       [JVMVal] ->
       IO (Crucible.RegMap Sym xs)
-    prepareArgs ctx x =
+    prepareArgs ctx xs | length xs /= Ctx.sizeInt (Ctx.size ctx) =
+      fail $ "Wrong number of arguments: found " ++ show xs ++ ", expected " ++ show ctx --(Ctx.sizeInt (Ctx.size ctx))
+    prepareArgs ctx xs =
       Crucible.RegMap <$>
       Ctx.traverseWithIndex (\idx tr ->
-        do a <- Crucible.unpackMemValue sym (x !! Ctx.indexVal idx)
-           v <- Crucible.coerceAny sym tr a
+        do v <- prepareArg tr (xs !! Ctx.indexVal idx)
            return (Crucible.RegEntry tr v))
       ctx
--}
+{-
+    prepareArg :: JVMVal -> Some (Crucible.RegEntry Sym)
+    prepareArg v =
+      case v of
+        RVal r -> Some (Crucible.RegEntry CJ.refRepr r)
+        IVal i -> Some (Crucible.RegEntry CJ.intRepr i)
+        LVal l -> Some (Crucible.RegEntry CJ.longRepr l)
 
+    prepareArgs :: [JVMVal] -> Some (Crucible.RegMap Sym)
+    prepareArgs vs =
+      case Ctx.fromList (map prepareArg vs) of
+        Some asgn -> Some (Crucible.RegMap asgn)
+-}
 -- | Build a conjunction from a list of boolean terms.
 scAndList :: SharedContext -> [Term] -> IO Term
 scAndList sc []       = scBool sc True
@@ -694,6 +765,7 @@ setupCrucibleContext :: BuiltinContext -> Options -> J.Class -> TopLevel Crucibl
 setupCrucibleContext bic opts jclass =
   do halloc <- getHandleAlloc
      jc <- getJVMTrans
+     cb <- getJavaCodebase
      AIGProxy proxy <- getProxy
      cb <- getJavaCodebase
      jvmctx0 <- io $ CJ.mkInitialJVMContext halloc
@@ -705,6 +777,7 @@ setupCrucibleContext bic opts jclass =
      let simctx   = Crucible.initSimContext sym jvmIntrinsicTypes halloc stdout
                     bindings jvmExtensionImpl Crucible.SAWCruciblePersonality
      return CrucibleContext { _ccJVMClass = jclass
+                            , _ccCodebase = cb
                             , _ccBackend = sym
                             , _ccJVMContext = jc
                             , _ccJVMSimContext = simctx

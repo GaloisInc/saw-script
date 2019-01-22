@@ -61,7 +61,7 @@ import qualified Lang.Crucible.JVM.Translation as CJ
 
 -- jvm-verifier
 -- TODO: transition to Lang.JVM.Codebase from crucible-jvm
--- import qualified Verifier.Java.Codebase as CB
+import qualified Verifier.Java.Codebase as CB
 
 --import qualified SAWScript.CrucibleLLVM as CL
 --import SAWScript.JavaExpr (JavaType)
@@ -271,6 +271,7 @@ type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator (B.Flags B.Floa
 data CrucibleContext =
   CrucibleContext
   { _ccJVMClass       :: J.Class
+  , _ccCodebase       :: CB.Codebase
   -- , _ccJVMModuleTrans :: CJ.ModuleTranslation
   , _ccJVMContext     :: CJ.JVMContext
   , _ccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
@@ -364,13 +365,14 @@ initialStateSpec =  StateSpec
   }
 
 initialDefCrucibleMethodSpecIR ::
+  J.ClassName ->
   J.Method ->
   ProgramLoc ->
   CrucibleMethodSpecIR
-initialDefCrucibleMethodSpecIR method loc =
+initialDefCrucibleMethodSpecIR cname method loc =
   CrucibleMethodSpec
     { _csName            = J.methodName method
-    , _csArgs            = J.methodParameterTypes method
+    , _csArgs            = thisType ++ J.methodParameterTypes method
     , _csRet             = J.methodReturnType method
     , _csPreState        = initialStateSpec
     , _csPostState       = initialStateSpec
@@ -379,6 +381,8 @@ initialDefCrucibleMethodSpecIR method loc =
     , _csSolverStats     = mempty
     , _csLoc             = loc
     }
+  where
+    thisType = if J.methodIsStatic method then [] else [J.ClassType cname]
 
 --initialDeclCrucibleMethodSpecIR ::
 --  (?lc :: CL.LLVMTyCtx) =>
@@ -411,9 +415,11 @@ initialCrucibleSetupState cc method loc =
     { _csVarCounter      = AllocIndex 0
     , _csPrePost         = PreState
     , _csResolvedState   = emptyResolvedState
-    , _csMethodSpec      = initialDefCrucibleMethodSpecIR method loc
+    , _csMethodSpec      = initialDefCrucibleMethodSpecIR cname method loc
     , _csCrucibleContext = cc
     }
+  where
+    cname = J.className (cc^.ccJVMClass)
 
 --initialCrucibleSetupStateDecl ::
 --  (?lc :: CL.LLVMTyCtx) =>

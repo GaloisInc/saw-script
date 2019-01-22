@@ -1,3 +1,4 @@
+{-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
@@ -33,6 +34,7 @@ module SAWScript.JVM.CrucibleOverride
   , doArrayStore
   , jvmIntrinsicTypes
   , jvmExtensionImpl
+  , decodeJVMVal
   ) where
 
 import           Control.Lens
@@ -62,7 +64,7 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 --import qualified What4.Expr.Builder as W4
-import qualified What4.Symbol as W4
+--import qualified What4.Symbol as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
@@ -73,10 +75,10 @@ import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr), GlobalV
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, freshRefCell)
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.EvalStmt as EvalStmt (readRef, alterRef)
-import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
+--import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
-import qualified Lang.Crucible.Simulator.RegMap as Crucible
-import qualified Lang.Crucible.Simulator.SimError as Crucible
+--import qualified Lang.Crucible.Simulator.RegMap as Crucible
+--import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Types as Crucible
 import qualified Lang.Crucible.Utils.MuxTree as Crucible (toMuxTree)
 
@@ -1205,13 +1207,31 @@ doAllocateObject ::
   Crucible.SymGlobalState Sym ->
   IO (JVMRefVal, Crucible.SymGlobalState Sym)
 doAllocateObject sym halloc jc cname globals =
-  do cls <- getJVMClassByName sym globals jc cname
+  do --cls <- getJVMClassByName sym globals jc cname
+     cls <- dummyClassObject sym cname -- FIXME: temporary hack
      let inst = Ctx.Empty Ctx.:> Crucible.RV Map.empty Ctx.:> Crucible.RV cls
      let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
      let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i1of2 inst)
      ref <- stToIO (Crucible.freshRefCell halloc objectRepr)
      let globals' = Crucible.updateRef ref (W4.justPartExpr sym obj) globals
      return (W4.justPartExpr sym (Crucible.toMuxTree sym ref), globals')
+
+dummyClassObject ::
+  Sym -> J.ClassName -> IO (Crucible.RegValue Sym CJ.JVMClassType)
+dummyClassObject sym cname =
+  do name <- W4.stringLit sym (Text.pack (J.unClassName cname))
+     status <- W4.bvLit sym knownRepr 0
+     let super = W4.Unassigned
+     let methods = Map.empty
+     let interfaces = V.empty
+     return $
+       Crucible.RolledType $
+       Ctx.Empty
+       Ctx.:> Crucible.RV name
+       Ctx.:> Crucible.RV status
+       Ctx.:> Crucible.RV super
+       Ctx.:> Crucible.RV methods
+       Ctx.:> Crucible.RV interfaces
 
 doAllocateArray ::
   Sym ->
@@ -1248,7 +1268,7 @@ getJVMClassByName ::
 getJVMClassByName sym globals jc cname =
   do let key = Text.pack (J.unClassName cname)
      let msg1 = Crucible.GenericSimError "Class table not found"
-     let msg2 = Crucible.GenericSimError $ "Class not found in class table: " ++ J.unClassName cname
+     let msg2 = Crucible.GenericSimError $ "Class was not found in class table: " ++ J.unClassName cname
      classtab <-
        case Crucible.lookupGlobal (CJ.dynamicClassTable jc) globals of
          Just x -> return x
@@ -1284,8 +1304,11 @@ makeJVMTypeRep sym globals jc ty =
       do ety' <- makeJVMTypeRep sym globals jc ety
          return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of3 ety')
     J.ClassType cn ->
+      primTypeRep 8 -- FIXME: temporary hack
+{-
       do cls <- getJVMClassByName sym globals jc cn
          return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i2of3 cls)
+-}
     J.BooleanType -> primTypeRep 0
     J.ByteType    -> primTypeRep 1
     J.CharType    -> primTypeRep 2
@@ -1304,5 +1327,10 @@ jvmIntrinsicTypes :: Crucible.IntrinsicTypes Sym
 jvmIntrinsicTypes = MapF.empty
 
 -- TODO: move to crucible-jvm
-jvmExtensionImpl :: Crucible.ExtensionImpl (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
-jvmExtensionImpl = error "unimplemented: jvmExtensionImpl"
+--jvmExtensionImpl :: Crucible.ExtensionImpl (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
+jvmExtensionImpl :: Crucible.ExtensionImpl personality sym CJ.JVM
+jvmExtensionImpl =
+  Crucible.ExtensionImpl
+  { Crucible.extensionEval = Crucible.extensionEval Crucible.emptyExtensionImpl
+  , Crucible.extensionExec = \case
+  }
