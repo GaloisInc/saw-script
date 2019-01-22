@@ -195,7 +195,7 @@ dropModuleNameWithinCtor = go
 
 translateCtor ::
   MonadCoqTrans m =>
-  [Coq.Binder] -> -- ^ list of parameters to drop from `ctorType`
+  [Coq.Binder] -> -- list of parameters to drop from `ctorType`
   Ctor -> m Coq.Constructor
 translateCtor inductiveParameters (Ctor {..}) = do
   let constructorName = translateIdentDropModuleName ctorName
