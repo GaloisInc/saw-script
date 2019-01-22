@@ -49,7 +49,7 @@ import           Control.Lens
 import           Control.Applicative
 import           Control.Monad.State
 import qualified Control.Monad.State.Strict as Strict
-import           Control.Monad.ST (stToIO)
+import           Control.Monad.ST (RealWorld, stToIO)
 import           Data.Foldable (for_, toList, find)
 import           Data.Function
 import           Data.IORef
@@ -105,6 +105,7 @@ import qualified Lang.Crucible.Utils.MuxTree as Crucible (toMuxTree)
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM.Translation as CJ
+import qualified Lang.Crucible.JVM.ClassRefs as CJ (classRefs)
 
 -- parameterized-utils
 import           Data.Parameterized.Classes
@@ -127,6 +128,7 @@ import SAWScript.TopLevel
 import SAWScript.Value
 import SAWScript.Utils as SS
 import SAWScript.Options
+import SAWScript.CrucibleBuiltinsJVM (prepareClassTopLevel)
 
 import SAWScript.JavaExpr (JavaType(..))
 
@@ -158,7 +160,12 @@ crucible_jvm_verify ::
   ProofScript SatResult ->
   TopLevel CrucibleMethodSpecIR
 crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
-  do cc <- setupCrucibleContext bic opts cls
+  do -- allocate all of the handles/static vars that are directly referenced by
+     -- this class
+     let refs = map J.mkClassName CJ.initClasses ++ Set.toList (CJ.classRefs cls)
+     mapM_ (prepareClassTopLevel bic . J.unClassName) refs
+
+     cc <- setupCrucibleContext bic opts cls
      cb <- getJavaCodebase
      let sym = cc^.ccBackend
      let jc = cc^.ccJVMContext
@@ -470,9 +477,8 @@ doAlloc cc alloc =
     AllocObject cname -> StateT (doAllocateObject sym halloc jc cname)
     AllocArray len ty -> StateT (doAllocateArray sym halloc jc len ty)
   where
-    simctx = cc^.ccJVMSimContext
-    halloc = Crucible.simHandleAllocator simctx
-    sym = simctx^.Crucible.ctxSymInterface
+    sym = cc^.ccBackend
+    halloc = cc^.ccHandleAllocator
     jc = cc^.ccJVMContext
 
 {-
@@ -576,6 +582,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
      let verbosity = 3
      let personality = Crucible.SAWCruciblePersonality
      let pos = PosInternal "verifySimulate"
+     let halloc = cc^.ccHandleAllocator
 
      -- executeCrucibleJVM
 
@@ -588,20 +595,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
      --when (not (J.methodIsStatic meth)) $ do
      --  fail $ unlines [ "Crucible can only extract static methods" ]
 
-     halloc <- Crucible.newHandleAllocator -- FIXME: we should get the halloc from the TopLevel state.
-
-     -- Create the initial JVMContext
-     ctx0 <- CJ.mkInitialJVMContext halloc
-
-     -- prep this class && all classes that it refers to
-     allClasses <- CJ.findAllRefs cb (J.className mcls)
-     when (verbosity > 3) $
-       putStrLn $ "all classes are: " ++ show (map J.className allClasses)
-     ctx <- stToIO $ Strict.execStateT (CJ.extendJVMContext halloc mcls >>
-                                 mapM (CJ.extendJVMContext halloc) allClasses) ctx0
-
-
-     (CJ.JVMHandleInfo _ h) <- CJ.findMethodHandle ctx mcls meth
+     (CJ.JVMHandleInfo _ h) <- CJ.findMethodHandle jc mcls meth
 {-
      let failIfNotEqual :: forall f m a (b :: k).
                            (Monad m, Show (f a), Show (f b), TestEquality f)
@@ -615,7 +609,19 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
        $ "Checking return type for method " ++ mname
 -}
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
-     res <- CJ.runMethodHandle sym personality halloc ctx verbosity (J.className mcls) h regmap
+     -- res <- CJ.runMethodHandle sym personality halloc ctx verbosity (J.className mcls) h regmap
+     res <-
+       do let feats = []
+          let bindings = CJ.mkDelayedBindings jc verbosity
+          let simctx   = Crucible.initSimContext sym CJ.jvmIntrinsicTypes halloc stdout
+                         bindings CJ.jvmExtensionImpl Crucible.SAWCruciblePersonality
+          let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler
+          let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
+          let overrideSim = do _ <- Strict.runStateT (mapM_ CJ.register_jvm_override CJ.stdOverrides) jc
+                               -- _ <- runClassInit halloc ctx classname
+                               fnCall
+          Crucible.executeCrucible (map Crucible.genericToExecutionFeature feats)
+            (simSt (Crucible.runOverrideSim (Crucible.handleReturnType h) overrideSim))
 
      --case prepareArgs (map snd args) of
      --  Some regmap ->
@@ -768,19 +774,15 @@ setupCrucibleContext bic opts jclass =
      cb <- getJavaCodebase
      AIGProxy proxy <- getProxy
      cb <- getJavaCodebase
-     jvmctx0 <- io $ CJ.mkInitialJVMContext halloc
      let sc  = biSharedContext bic
      let gen = globalNonceGenerator
      sym <- io $ Crucible.newSAWCoreBackend proxy sc gen
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
-     let bindings = Crucible.fnBindingsFromList []
-     let simctx   = Crucible.initSimContext sym jvmIntrinsicTypes halloc stdout
-                    bindings jvmExtensionImpl Crucible.SAWCruciblePersonality
      return CrucibleContext { _ccJVMClass = jclass
                             , _ccCodebase = cb
                             , _ccBackend = sym
                             , _ccJVMContext = jc
-                            , _ccJVMSimContext = simctx
+                            , _ccHandleAllocator = halloc
                             }
 {-
          let bindings = Crucible.fnBindingsFromList []

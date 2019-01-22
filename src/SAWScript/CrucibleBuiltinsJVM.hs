@@ -21,6 +21,7 @@ Stability   : provisional
 module SAWScript.CrucibleBuiltinsJVM
        (
          loadJavaClass           -- java_load_class: reads a class from the codebase
+       , prepareClassTopLevel
        , crucible_java_extract   --
        ) where
 
@@ -95,14 +96,14 @@ instance IsCodebase JCB.Codebase where
 loadJavaClass :: BuiltinContext -> String -> TopLevel J.Class
 loadJavaClass bic str = do
   c <- io $ findClass (biJavaCodebase bic) str
-  prepareClassToplevel bic str
+  prepareClassTopLevel bic str
   return c
 
 -----------------------------------------------------------------------
 -- | Allocate the method handles/global static variables for the given
 -- class and add them to the current translation context
-prepareClassToplevel :: BuiltinContext -> String -> TopLevel ()
-prepareClassToplevel bic str = do
+prepareClassTopLevel :: BuiltinContext -> String -> TopLevel ()
+prepareClassTopLevel bic str = do
 
    -- get class from codebase
    c <- io $ findClass (biJavaCodebase bic) str
@@ -146,7 +147,7 @@ crucible_java_extract bic opts c mname = do
   -- allocate all of the handles/static vars that are directly referenced by
   -- this class
   let refs = map J.mkClassName CJ.initClasses ++ Set.toList (CJ.classRefs c)
-  mapM_ (prepareClassToplevel bic . J.unClassName) refs
+  mapM_ (prepareClassTopLevel bic . J.unClassName) refs
 
   halloc <- getHandleAlloc
   AIGProxy proxy <- getProxy

@@ -28,6 +28,7 @@ module SAWScript.JVM.CrucibleMethodSpecIR where
 import           Data.List (isPrefixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Control.Monad.ST (RealWorld)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
@@ -50,9 +51,9 @@ import qualified Lang.Crucible.Types as Crucible
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
+import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 --import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
---import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic){-, IntrinsicMuxFn(IntrinsicMuxFn)-})
 
@@ -275,8 +276,9 @@ data CrucibleContext =
   -- , _ccJVMModuleTrans :: CJ.ModuleTranslation
   , _ccJVMContext     :: CJ.JVMContext
   , _ccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
+  , _ccHandleAllocator :: Crucible.HandleAllocator RealWorld
   -- , _ccLLVMEmptyMem   :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , _ccJVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
+  -- , _ccJVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
   -- , _ccLLVMGlobals    :: Crucible.SymGlobalState Sym
   }
 
