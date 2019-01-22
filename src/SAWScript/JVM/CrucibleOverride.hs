@@ -32,8 +32,6 @@ module SAWScript.JVM.CrucibleOverride
   , doAllocateArray
   , doFieldStore
   , doArrayStore
-  , jvmIntrinsicTypes
-  , jvmExtensionImpl
   , decodeJVMVal
   ) where
 
@@ -1136,14 +1134,14 @@ doFieldStore ::
 doFieldStore sym globals ref fname val =
   do let msg1 = Crucible.GenericSimError "Field store: null reference"
      ref' <- Crucible.readPartExpr sym ref msg1
-     obj <- EvalStmt.readRef sym jvmIntrinsicTypes objectRepr ref' globals
+     obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
      let msg2 = Crucible.GenericSimError "Field store: object is not a class instance"
      inst <- Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i1of2)) msg2
      let tab = Crucible.unRV (inst Ctx.! Ctx.i1of2)
      let tab' = Map.insert (Text.pack fname) (W4.justPartExpr sym (injectJVMVal sym val)) tab
      let inst' = Control.Lens.set (ixF Ctx.i1of2) (Crucible.RV tab') inst
      let obj' = Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of2 inst')
-     EvalStmt.alterRef sym jvmIntrinsicTypes objectRepr ref' (W4.justPartExpr sym obj') globals
+     EvalStmt.alterRef sym CJ.jvmIntrinsicTypes objectRepr ref' (W4.justPartExpr sym obj') globals
 
 doArrayStore ::
   Sym ->
@@ -1155,14 +1153,14 @@ doArrayStore ::
 doArrayStore sym globals ref idx val =
   do let msg1 = Crucible.GenericSimError "Array store: null reference"
      ref' <- Crucible.readPartExpr sym ref msg1
-     obj <- EvalStmt.readRef sym jvmIntrinsicTypes objectRepr ref' globals
+     obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
      let msg2 = Crucible.GenericSimError "Object is not an array"
      arr <- Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i2of2)) msg2
      let vec = Crucible.unRV (arr Ctx.! Ctx.i2of3)
      let vec' = vec V.// [(idx, injectJVMVal sym val)]
      let arr' = Control.Lens.set (ixF Ctx.i2of3) (Crucible.RV vec') arr
      let obj' = Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i2of2 arr')
-     EvalStmt.alterRef sym jvmIntrinsicTypes objectRepr ref' (W4.justPartExpr sym obj') globals
+     EvalStmt.alterRef sym CJ.jvmIntrinsicTypes objectRepr ref' (W4.justPartExpr sym obj') globals
 
 doFieldLoad ::
   Sym ->
@@ -1171,7 +1169,7 @@ doFieldLoad ::
 doFieldLoad sym globals ty ref fname =
   do let msg1 = Crucible.GenericSimError "Field load: null reference"
      ref' <- Crucible.readPartExpr sym ref msg1
-     obj <- EvalStmt.readRef sym jvmIntrinsicTypes objectRepr ref' globals
+     obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
      let msg2 = Crucible.GenericSimError "Field load: object is not a class instance"
      inst <- Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i1of2)) msg2
      let tab = Crucible.unRV (inst Ctx.! Ctx.i1of2)
@@ -1187,7 +1185,7 @@ doArrayLoad ::
 doArrayLoad sym globals ty ref idx =
   do let msg1 = Crucible.GenericSimError "Field load: null reference"
      ref' <- Crucible.readPartExpr sym ref msg1
-     obj <- EvalStmt.readRef sym jvmIntrinsicTypes objectRepr ref' globals
+     obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
      -- TODO: define a 'projectVariant' function in the OverrideSim monad
      let msg2 = Crucible.GenericSimError "Array load: object is not an array"
      arr <- Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i2of2)) msg2
@@ -1322,15 +1320,3 @@ makeJVMTypeRep sym globals jc ty =
       do n' <- W4.bvLit sym CJ.w32 n
          return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i3of3 n')
 
--- TODO: move to crucible-jvm
-jvmIntrinsicTypes :: Crucible.IntrinsicTypes Sym
-jvmIntrinsicTypes = MapF.empty
-
--- TODO: move to crucible-jvm
---jvmExtensionImpl :: Crucible.ExtensionImpl (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
-jvmExtensionImpl :: Crucible.ExtensionImpl personality sym CJ.JVM
-jvmExtensionImpl =
-  Crucible.ExtensionImpl
-  { Crucible.extensionEval = Crucible.extensionEval Crucible.emptyExtensionImpl
-  , Crucible.extensionExec = \case
-  }
