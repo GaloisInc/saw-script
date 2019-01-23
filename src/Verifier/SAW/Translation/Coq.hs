@@ -28,7 +28,7 @@ import qualified Control.Monad.Except as Except
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.Reader hiding (fail)
 import Control.Monad.State hiding (fail, state)
-import Data.List (elemIndices, intersperse)
+import Data.List (intersperse)
 import qualified Data.Map as Map
 import Prelude hiding (fail)
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
@@ -154,18 +154,9 @@ identMap = Map.fromList
 translateIdent :: Ident -> Coq.Ident
 translateIdent i = Map.findWithDefault (show i) i identMap
 
--- "Foo.Bar.baz" -> "baz"
-dropModuleName :: String -> String
-dropModuleName s =
-  case elemIndices '.' s of
-  [] -> s
-  indices ->
-    let lastIndex = last indices in
-    drop (lastIndex + 1) s
-
-translateIdentDropModuleName :: Ident -> Coq.Ident
-translateIdentDropModuleName i =
-  Map.findWithDefault (dropModuleName . show $ i) i identMap
+translateIdentUnqualified :: Ident -> Coq.Ident
+translateIdentUnqualified i =
+  Map.findWithDefault (identName i) i identMap
 
 {-
 traceFTermF :: String -> FlatTermF Term -> a -> a
@@ -185,24 +176,32 @@ dropPi (Coq.Pi (_ : t) r) = Coq.Pi t r
 dropPi (Coq.Pi _       r) = dropPi r
 dropPi t                  = t
 
-dropModuleNameWithinCtor :: Coq.Term -> Coq.Term
-dropModuleNameWithinCtor = go
-  where
-    go (Coq.Pi bs t)  = Coq.Pi bs (go t)
-    go (Coq.App t as) = Coq.App (go t) as
-    go (Coq.Var v)    = Coq.Var (dropModuleName v)
-    go t              = error $ "Unexpected term in constructor: " ++ show t
+-- dropModuleName :: String -> String
+-- dropModuleName s =
+--   case elemIndices '.' s of
+--   [] -> s
+--   indices ->
+--     let lastIndex = last indices in
+--     drop (lastIndex + 1) s
+
+-- unqualifyTypeWithinConstructor :: Coq.Term -> Coq.Term
+-- unqualifyTypeWithinConstructor = go
+--   where
+--     go (Coq.Pi bs t)  = Coq.Pi bs (go t)
+--     go (Coq.App t as) = Coq.App (go t) as
+--     go (Coq.Var v)    = Coq.Var (dropModuleName v)
+--     go t              = error $ "Unexpected term in constructor: " ++ show t
 
 translateCtor ::
   MonadCoqTrans m =>
   [Coq.Binder] -> -- list of parameters to drop from `ctorType`
   Ctor -> m Coq.Constructor
 translateCtor inductiveParameters (Ctor {..}) = do
-  let constructorName = translateIdentDropModuleName ctorName
+  let constructorName = translateIdentUnqualified ctorName
   constructorType <-
     -- Unfortunately, `ctorType` qualifies the inductive type's name in the
     -- return type.
-    dropModuleNameWithinCtor <$>
+    -- dropModuleNameWithinCtor <$>
     -- Unfortunately, `ctorType` comes with the inductive parameters universally
     -- quantified.
     (\ t -> iterate dropPi t !! length inductiveParameters) <$>
@@ -214,7 +213,7 @@ translateCtor inductiveParameters (Ctor {..}) = do
 
 translateDataType :: MonadCoqTrans m => DataType -> m Coq.Decl
 translateDataType (DataType {..}) = do
-  let inductiveName = identName dtName -- eventually, might want the modules too
+  let inductiveName = identName dtName -- TODO: do we want qualified?
   let mkParam (s, t) = do
         t' <- translateTerm t
         return $ Coq.Binder s (Just t')
@@ -274,10 +273,10 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
     PairRight t   -> Coq.App (Coq.Var "snd") <$> traverse go [t]
     -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as -> do
-      Coq.App (Coq.Var (translateIdent n)) <$> traverse go (is ++ as)
+      Coq.App (Coq.Var (translateIdentUnqualified n)) <$> traverse go (is ++ as)
     -- TODO: maybe have more customizable translation of data constructors
     CtorApp n is as -> do
-      Coq.App (Coq.Var (translateIdent n)) <$> traverse go (is ++ as)
+      Coq.App (Coq.Var (translateIdentUnqualified n)) <$> traverse go (is ++ as)
     -- TODO: support this next!
     RecursorApp _ _ _ _ _ _ -> notSupported
     Sort s -> Coq.Sort <$> translateSort s
