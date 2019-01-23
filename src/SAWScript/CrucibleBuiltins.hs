@@ -136,7 +136,6 @@ import SAWScript.CrucibleMethodSpecIR
 import SAWScript.CrucibleOverride
 import SAWScript.CrucibleResolveSetupValue
 
-
 type MemImpl = Crucible.MemImpl Sym
 
 show_cfg :: SAW_CFG -> String
@@ -191,7 +190,7 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      let globals = cc^.ccLLVMGlobals
      let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
      mem0 <- case Crucible.lookupGlobal mvar globals of
-       Nothing   -> fail "internal error: LLVM Memory global not found"
+       Nothing   -> panic "crucible_llvm_verify" ["LLVM Memory global not found"]
        Just mem0 -> return mem0
      let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem0
 
@@ -730,9 +729,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
                                  }
               ]
             r -> panic "setupCrucibleContext" $
-              [ "Simulator initialization failed, for an unknown reason!"
-              , "This is always a bug, please report it."
-              ]
+              [ "Simulator initialization failed, for an unknown reason!" ]
 
       return CrucibleContext{ _ccLLVMModuleTrans = mtrans
                             , _ccLLVMModule      = llvm_mod
