@@ -26,7 +26,7 @@ import qualified Data.AIG as AIG
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
-import           Data.Map ( Map)
+import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
@@ -494,6 +494,7 @@ doSim opts elf sfs name (globs,overs) st =
                                    insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) $
                                    emptyHandleMap
                               , _cruciblePersonality = MacawSimulatorState
+                              , _profilingMetrics = Map.empty
                               }
        let initGlobals = insertGlobal mvar (stateMem st) emptyGlobals
        let initExecState =
