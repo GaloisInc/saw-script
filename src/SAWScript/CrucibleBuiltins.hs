@@ -124,6 +124,7 @@ import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
 
+import SAWScript.Panic (panic)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -717,16 +718,30 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
           case res of
             Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
             Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
-            _ -> fail "simulator initialization failed!"
+            Crucible.AbortedResult st ar@(Crucible.AbortedExec _ gp) -> fail $ unlines $
+              [ "Simulator initialization failed"
+              , show $ flip ppAbortedResult ar $
+                  CrucibleContext{ _ccLLVMModuleTrans = mtrans
+                                 , _ccLLVMModule      = llvm_mod
+                                 , _ccBackend         = sym
+                                 , _ccLLVMEmptyMem    = mem
+                                 , _ccLLVMSimContext  = st
+                                 , _ccLLVMGlobals     = gp^.Crucible.gpGlobals
+                                 }
+              ]
+            r -> panic "setupCrucibleContext" $
+              [ "Simulator initialization failed, for an unknown reason!"
+              , "This is always a bug, please report it."
+              ]
 
-      return
-         CrucibleContext{ _ccLLVMModuleTrans = mtrans
-                        , _ccLLVMModule = llvm_mod
-                        , _ccBackend = sym
-                        , _ccLLVMEmptyMem = mem
-                        , _ccLLVMSimContext = lsimctx
-                        , _ccLLVMGlobals = lglobals
-                        }
+      return CrucibleContext{ _ccLLVMModuleTrans = mtrans
+                            , _ccLLVMModule      = llvm_mod
+                            , _ccBackend         = sym
+                            , _ccLLVMEmptyMem    = mem
+                            , _ccLLVMSimContext  = lsimctx
+                            , _ccLLVMGlobals     = lglobals
+                            }
+
       )
 
 

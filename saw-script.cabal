@@ -54,6 +54,7 @@ library
     , mtl >= 2.1
     , old-locale
     , old-time
+    , panic
     , parameterized-utils
     , parsec
     , pretty
