@@ -216,10 +216,15 @@ translateDataType (DataType {..}) = do
   let inductiveName = identName dtName -- TODO: do we want qualified?
   let mkParam (s, t) = do
         t' <- translateTerm t
+        modify $ over environment (s :)
         return $ Coq.Binder s (Just t')
   let mkIndex (s, t) = do
         t' <- translateTerm t
-        return $ Coq.PiBinder (Just s) t'
+        modify $ over environment (s :)
+        let s' = case s of
+              "_" -> Nothing
+              _   -> Just s
+        return $ Coq.PiBinder s' t'
   inductiveParameters   <- mapM mkParam dtParams
   inductiveIndices      <- mapM mkIndex dtIndices
   inductiveSort         <- translateSort dtSort
