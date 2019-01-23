@@ -40,6 +40,7 @@ import Control.Applicative hiding (empty)
 import Control.Lens
 import Control.Monad
 import Control.Monad.Cont
+import Control.Monad.Fail (MonadFail)
 import Control.Monad.State
 import Control.Monad.Trans.Except
 import Data.Foldable (traverse_)
@@ -95,7 +96,7 @@ runEval v = runExceptT v
 
 -- | Evaluate an LLVM expression, and return its value (r-value) as an
 -- internal term.
-evalLLVMExpr :: (Functor m, MonadIO m) =>
+evalLLVMExpr :: (Functor m, MonadIO m, MonadFail m) =>
                 TC.LLVMExpr -> EvalContext
              -> ExprEvaluator m SpecLLVMValue
 evalLLVMExpr expr ec = eval expr
@@ -136,7 +137,7 @@ evalLLVMExpr expr ec = eval expr
 
 -- | Evaluate an LLVM expression, and return the location it describes
 -- (l-value) as an internal term.
-evalLLVMRefExpr :: (Functor m, MonadIO m) =>
+evalLLVMRefExpr :: (Functor m, MonadIO m, MonadFail m) =>
                    TC.LLVMExpr -> EvalContext
                 -> ExprEvaluator m SpecLLVMValue
 evalLLVMRefExpr expr ec = eval expr
@@ -168,7 +169,7 @@ evalLLVMRefExpr expr ec = eval expr
         gm = ecGlobalMap ec
 
 -- | Evaluate a typed expression in the context of a particular state.
-evalLogicExpr :: (Functor m, MonadIO m) =>
+evalLogicExpr :: (Functor m, MonadIO m, MonadFail m) =>
                  TC.LogicExpr -> EvalContext
               -> ExprEvaluator m SpecLLVMValue
 evalLogicExpr initExpr ec = do
@@ -178,7 +179,7 @@ evalLogicExpr initExpr ec = do
   liftIO $ TC.useLogicExpr sc initExpr args
 
 -- | Return Java value associated with mixed expression.
-evalMixedExpr :: (Functor m, MonadIO m) =>
+evalMixedExpr :: (Functor m, MonadIO m, MonadFail m) =>
                  TC.MixedExpr -> EvalContext
               -> ExprEvaluator m SpecLLVMValue
 evalMixedExpr (TC.LogicE expr) ec = evalLogicExpr expr ec
@@ -246,7 +247,7 @@ ocEval fn m = do
     Left expr -> ocError $ UndefinedExpr expr
     Right v   -> m v
 
-ocSetExprValue :: (MonadIO m, Functor m) =>
+ocSetExprValue :: (MonadIO m, MonadFail m, Functor m) =>
                   TC.LLVMExpr
                -> SpecLLVMValue
                -> OverrideComputation m ()
@@ -301,7 +302,7 @@ ocAssert p _nm x = do
       | otherwise -> return ()
   ocModifyResultStateIO (addAssertion sbe x')
 
-ocStep :: (MonadIO m, Functor m) =>
+ocStep :: (MonadIO m, MonadFail m, Functor m) =>
           BehaviorCommand -> OverrideComputation m ()
 ocStep (Ensure _ _pos lhsExpr rhsExpr) = do
   ocEval (evalMixedExpr rhsExpr) $ \value -> do
@@ -332,7 +333,7 @@ ocStep (ReturnArbitrary tp) = do
   value <- liftIO $ scFreshGlobal sc ("lss__return_" ++ fname) lty
   modify $ \ocs -> ocs { ocsReturnValue = Just value }
 
-execBehavior :: (MonadIO m, Functor m) =>
+execBehavior :: (MonadIO m, MonadFail m, Functor m) =>
                 [BehaviorSpec] -> EvalContext -> SpecPathState
              -> Simulator SpecBackend m [RunResult]
 execBehavior bsl ec ps = do
@@ -373,7 +374,7 @@ execBehavior bsl ec ps = do
        -- Execute statements.
        mapM_ ocStep (bsCommands bs)
 
-execOverride :: (MonadIO m, Functor m)
+execOverride :: (MonadIO m, MonadFail m, Functor m)
              => Options
              -> SharedContext
              -> Pos
@@ -424,7 +425,7 @@ execOverride vpopts sc _pos irs@(ir:_) args = do
                       ]
 
 -- | Add a method override for the given method to the simulator.
-overrideFromSpec :: (MonadIO m, Functor m) =>
+overrideFromSpec :: (MonadIO m, MonadFail m, Functor m) =>
                     Options
                  -> SharedContext
                  -> Pos
@@ -437,7 +438,7 @@ overrideFromSpec vpopts sc pos irs@(ir:_) = do
   -- TODO: check argument types?
   tryRegisterOverride (specFunction ir) (const (Just ovd))
 
-createLogicValue :: (MonadIO m, Monad m, Functor m) =>
+createLogicValue :: (MonadIO m, MonadFail m, Functor m) =>
                     Codebase SpecBackend
                  -> SBE SpecBackend
                  -> SharedContext
@@ -474,7 +475,7 @@ createLogicValue cb _ sc expr ps mtp mrhs = do
           (Nothing, Nothing) -> fail "Can't calculate type for fresh input."
   return (tm, ps)
 
-initializeVerification' :: (MonadIO m, Monad m, Functor m) =>
+initializeVerification' :: (MonadIO m, MonadFail m, Functor m) =>
                            SharedContext
                         -> String
                         -> LLVMMethodSpecIR
@@ -568,7 +569,7 @@ nonNullAssumption dl sc addr = do
   nonNullTerm <- scNot sc =<< scBvEq sc awTerm addr nullPtr
   return nonNullTerm
 
-checkFinalState :: (MonadIO m, Functor m, MonadException m) =>
+checkFinalState :: (MonadIO m, MonadFail m, Functor m, MonadException m) =>
                    SharedContext
                 -> LLVMMethodSpecIR
                 -> SpecPathState
@@ -708,7 +709,7 @@ data VerifyState = VState {
 
 type Verbosity = Int
 
-readLLVMMixedExprPS :: (Functor m, Monad m, MonadIO m) =>
+readLLVMMixedExprPS :: (Functor m, MonadFail m, MonadIO m) =>
                        SharedContext
                     -> SpecPathState
                     -> Maybe SpecLLVMValue
@@ -720,7 +721,7 @@ readLLVMMixedExprPS sc ps mrv args (TC.LogicE le) = do
 readLLVMMixedExprPS _sc ps mrv args (TC.LLVME le) =
   readLLVMTermPS ps mrv args le 1
 
-useLogicExprPS :: (Functor m, Monad m, MonadIO m) =>
+useLogicExprPS :: (Functor m, MonadFail m, MonadIO m) =>
                   SharedContext
                -> SpecPathState
                -> Maybe SpecLLVMValue
@@ -732,7 +733,7 @@ useLogicExprPS sc ps mrv args initExpr = do
           readLLVMTermPS ps mrv args expr 1
   liftIO $ TC.useLogicExpr sc initExpr leArgs
 
-evalAssumptions :: (Functor m, Monad m, MonadIO m) =>
+evalAssumptions :: (Functor m, MonadFail m, MonadIO m) =>
                    SharedContext
                 -> SpecPathState
                 -> Maybe SpecLLVMValue

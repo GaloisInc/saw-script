@@ -70,7 +70,7 @@ import SAWScript.VerificationCheck
 
 import Data.JVM.Symbolic.AST (entryBlock)
 
-import Verifier.Java.Simulator hiding (asBool, State)
+import Verifier.Java.Simulator hiding (asBool, State, InvalidType)
 import Verifier.Java.SAWBackend hiding (basic_ss)
 
 import Verifier.SAW.Prelude

@@ -15,6 +15,7 @@ import Control.Applicative hiding (many)
 #endif
 import Control.Lens
 import Control.Monad.State
+import Control.Monad.Fail (MonadFail)
 import qualified Data.Map as Map
 import Data.Maybe
 import Verifier.LLVM.Backend
@@ -74,7 +75,7 @@ structFieldAddr si idx base =
     Just off -> addrPlusOffsetSim base off
     Nothing -> fail $ "Struct field index " ++ show idx ++ " out of bounds"
 
-storePathState :: (MonadIO m, Functor m) =>
+storePathState :: (MonadIO m, MonadFail m, Functor m) =>
                   Term
                -> MemType
                -> Term
@@ -88,7 +89,7 @@ storePathState dst tp val ps = do
   ps' <- liftIO $ addAssertion sbe c ps
   return (ps' & pathMem .~ m')
 
-loadPathState :: (MonadIO m, Functor m) =>
+loadPathState :: (MonadIO m, MonadFail m, Functor m) =>
                  Term
               -> MemType
               -> SpecPathState
@@ -115,7 +116,7 @@ allocPathState tp ps = do
       return (p, ps' & pathMem .~ m')
     AError msg -> errorPath msg
 
-loadGlobal :: (MonadIO m, Functor m) =>
+loadGlobal :: (MonadIO m, MonadFail m, Functor m) =>
               GlobalMap SpecBackend
            -> Symbol
            -> MemType
@@ -126,7 +127,7 @@ loadGlobal gm sym tp ps = do
     Just addr -> loadPathState addr tp ps
     Nothing -> fail $ "Global " ++ show sym ++ " not found"
 
-storeGlobal :: (MonadIO m, Functor m) =>
+storeGlobal :: (MonadIO m, MonadFail m, Functor m) =>
                GlobalMap SpecBackend
             -> Symbol
             -> MemType
@@ -143,7 +144,7 @@ addAssertion :: SBE SpecBackend -> Term -> SpecPathState -> IO SpecPathState
 addAssertion sbe x p = do
   p & pathAssertions %%~ \a -> liftIO (sbeRunIO sbe (applyAnd sbe a x))
 
-allocSome :: (Functor sbe, Functor m, MonadIO m) =>
+allocSome :: (Functor sbe, Functor m, MonadFail m, MonadIO m) =>
              SBE sbe
           -> DataLayout
           -> Integer
@@ -156,7 +157,7 @@ allocSome sbe dl n ty = do
 
 -- LLVM memory operations
 
-readLLVMTermAddrPS :: (Functor m, Monad m, MonadIO m) =>
+readLLVMTermAddrPS :: (Functor m, MonadFail m, MonadIO m) =>
                       SpecPathState
                    -> Maybe SpecLLVMValue
                    -> [SpecLLVMValue]
@@ -173,7 +174,7 @@ readLLVMTermAddrPS ps mrv args (CC.Term e) =
       structFieldAddr si idx =<< readLLVMTermAddrPS ps mrv args ve
     ReturnValue _ -> fail "Can't read address of return value"
 
-readLLVMTermPS :: (Functor m, Monad m, MonadIO m) =>
+readLLVMTermPS :: (Functor m, MonadFail m, MonadIO m) =>
                   SpecPathState
                -> Maybe SpecLLVMValue -- ^ To use instead of current state.
                -> [SpecLLVMValue]
@@ -199,14 +200,14 @@ readLLVMTermPS ps mrv args et@(CC.Term e) cnt =
       -- TODO: use c
       return v
 
-readLLVMTermAddr :: (Functor m, Monad m, MonadIO m) =>
+readLLVMTermAddr :: (Functor m, MonadFail m, MonadIO m) =>
                     Maybe SpecLLVMValue -> [SpecLLVMValue] -> LLVMExpr
                  -> Simulator SpecBackend m SpecLLVMValue
 readLLVMTermAddr mrv args e = do
   ps <- fromMaybe (error "readLLVMTermAddr") <$> getPath
   readLLVMTermAddrPS ps mrv args e
 
-writeLLVMTerm :: (Functor m, Monad m, MonadIO m) =>
+writeLLVMTerm :: (Functor m, MonadFail m, MonadIO m) =>
                  Maybe SpecLLVMValue
               -> [SpecLLVMValue]
               -> (LLVMExpr, SpecLLVMValue, Integer)
@@ -219,7 +220,7 @@ writeLLVMTerm mrv args (e, t, cnt) = do
   dl <- getDL
   store ty' t addr (memTypeAlign dl ty')
 
-readLLVMTerm :: (Functor m, Monad m, MonadIO m) =>
+readLLVMTerm :: (Functor m, MonadFail m, MonadIO m) =>
                 Maybe SpecLLVMValue
              -> [SpecLLVMValue]
              -> LLVMExpr
