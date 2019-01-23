@@ -1206,8 +1206,11 @@ doAllocateObject ::
   IO (JVMRefVal, Crucible.SymGlobalState Sym)
 doAllocateObject sym halloc jc cname globals =
   do --cls <- getJVMClassByName sym globals jc cname
+     let fieldIds = fieldsOfClassName jc cname
+     let pval = W4.justPartExpr sym unassignedJVMValue
+     let fields = Map.fromList [ (Text.pack (CJ.fieldIdString f), pval) | f <- fieldIds ]
      cls <- dummyClassObject sym cname -- FIXME: temporary hack
-     let inst = Ctx.Empty Ctx.:> Crucible.RV Map.empty Ctx.:> Crucible.RV cls
+     let inst = Ctx.Empty Ctx.:> Crucible.RV fields Ctx.:> Crucible.RV cls
      let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
      let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i1of2 inst)
      ref <- stToIO (Crucible.freshRefCell halloc objectRepr)
@@ -1288,6 +1291,24 @@ instanceRepr = knownRepr
 unassignedJVMValue :: Crucible.RegValue sym CJ.JVMValueType
 unassignedJVMValue =
   Ctx.fmapFC (\_ -> Crucible.VB W4.Unassigned) (knownRepr :: Crucible.CtxRepr CJ.JVMValueCtx)
+
+mkFieldId :: J.Class -> J.Field -> J.FieldId
+mkFieldId c f = J.FieldId (J.className c) (J.fieldName f) (J.fieldType f)
+
+-- | Find the fields not just in this class, but also in the super classes.
+fieldsOfClass :: CJ.JVMContext -> J.Class -> [J.FieldId]
+fieldsOfClass jc cls =
+  case J.superClass cls of
+    Nothing -> fields
+    Just super -> fields ++ fieldsOfClassName jc super
+  where
+    fields = map (mkFieldId cls) (J.classFields cls)
+
+fieldsOfClassName :: CJ.JVMContext -> J.ClassName -> [J.FieldId]
+fieldsOfClassName jc cname =
+  case Map.lookup cname (CJ.classTable jc) of
+    Just cls -> fieldsOfClass jc cls
+    Nothing -> []
 
 -- | Given a JVM type, generate a runtime value for its representation.
 makeJVMTypeRep ::
