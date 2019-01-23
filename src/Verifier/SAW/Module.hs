@@ -406,7 +406,10 @@ completeDataType m (identName -> str) ctors =
 
 -- | Insert a definition into a module
 insDef :: Module -> Def -> Module
-insDef m d = insResolvedName m (ResolvedDef d)
+insDef m d =
+  insResolvedName
+  (m { moduleRDecls = DefDecl d : moduleRDecls m })
+  (ResolvedDef d)
 
 -- | Get the resolved names that are local to a module
 localResolvedNames :: Module -> [ResolvedName]
