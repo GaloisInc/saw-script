@@ -104,28 +104,21 @@ getPreludeDataType name = do
     Nothing -> error $ name ++ " not found"
     Just dt -> return dt
 
-preludeDataTypes :: [String]
-preludeDataTypes =
-  [ "UnitType"
-  , "PairType"
-  , "EmptyType"
-  , "RecordType"
-  -- , "Eq"
-  , "Bit"
-  , "Either"
-  , "Maybe"
-  , "Nat"
-  , "Stream"
-  , "InputOutputTypes"
-  ]
-
 main :: IO ()
 main = do
   sc <- mkSharedContext
   -- In order to get test data types, we load the Prelude
   tcInsertModule sc preludeModule
-  forM_ preludeDataTypes $ \ dataTypeName -> do
-    dt <- flip runReaderT sc $ getPreludeDataType dataTypeName
-    case runMonadCoqTrans configuration (translateDataType dt) of
-      Left e -> error $ show e
-      Right (decl, _) -> putStrLn $ show $ Coq.ppDecl decl
+  flip runReaderT sc $ do
+
+    prelude <- getPreludeModule
+    forM_ (moduleDecls prelude) $ \ decl -> do
+      case decl of
+        TypeDecl td -> do
+          liftIO $ case runMonadCoqTrans configuration (translateDataType td) of
+            Left e -> error $ show e
+            Right (tdecl, _) -> putStrLn $ show $ Coq.ppDecl tdecl
+        DefDecl dd -> do
+          liftIO $ case runMonadCoqTrans configuration (translateDef dd) of
+            Left e -> error $ show e
+            Right (tdecl, _) -> putStrLn $ show $ Coq.ppDecl tdecl

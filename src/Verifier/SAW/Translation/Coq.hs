@@ -245,7 +245,8 @@ translateModuleDecl = \case
 translateDef :: MonadCoqTrans m => Def -> m Coq.Decl
 translateDef (Def {..}) =
   case defQualifier of
-  NoQualifier -> case defBody of
+  NoQualifier ->
+    case defBody of
     Nothing   -> error "Terms should have a body (unless axiom/primitive)"
     Just body -> Coq.Definition
                  <$> pure (translateIdent defIdent)
@@ -283,7 +284,11 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
     CtorApp n is as -> do
       Coq.App (Coq.Var (translateIdentUnqualified n)) <$> traverse go (is ++ as)
     -- TODO: support this next!
-    RecursorApp _ _ _ _ _ _ -> notSupported
+    RecursorApp typeEliminated parameters motive eliminators indices termEliminated ->
+      Coq.App (Coq.Var $ translateIdentUnqualified typeEliminated ++ "_rect") <$>
+      (traverse go $
+       parameters ++ [motive] ++ map snd eliminators ++ indices ++ [termEliminated]
+      )
     Sort s -> Coq.Sort <$> translateSort s
     NatLit i -> pure (Coq.NatLit i)
     ArrayValue _ vec -> do
@@ -386,13 +391,26 @@ translatePiParams ((n, ty):ps) = do
   let n' = if n == "_" then Nothing else Just n
   return (Coq.PiBinder n' ty' : ps')
 
--- TODO: I quickly fixed this to use a state monad, but the old code passed
--- `env` explicitly.  To make refactor faster, I left the code as-is, only
--- modifying what `go` meant.  This can be changed later.
+-- | Run a translation, but keep changes to the environment local to it,
+-- restoring the current environment before returning.
+withLocalEnvironment :: MonadCoqTrans m => m a -> m a
+withLocalEnvironment action = do
+  env <- view environment <$> get
+  result <- action
+  modify $ set environment env
+  return result
+
+-- | This is a convenient helper for when you want to add some bindings before
+-- translating a term.
+translateTermLocallyBinding :: MonadCoqTrans m => [String] -> Term -> m Coq.Term
+translateTermLocallyBinding bindings term =
+  withLocalEnvironment $ do
+  modify $ over environment (bindings ++)
+  translateTerm term
 
 -- env is innermost first order
 translateTerm :: MonadCoqTrans m => Term -> m Coq.Term
-translateTerm t = do -- traceTerm "translateTerm" t $
+translateTerm t = withLocalEnvironment $ do -- traceTerm "translateTerm" t $
   env <- view environment <$> get
   case t of
     (asFTermF -> Just tf)  -> flatTermFToExpr (go env) tf
