@@ -42,7 +42,7 @@ ppBinder (Binder x Nothing)  = ppIdent x
 ppBinder (Binder x (Just t)) = parens (ppIdent x <+> colon <+> ppTerm t)
 
 ppPiBinder :: PiBinder -> Doc
-ppPiBinder (PiBinder Nothing t)  = ppTerm t <+> text "->"
+ppPiBinder (PiBinder Nothing t)  = parens (ppTerm t) <+> text "->"
 ppPiBinder (PiBinder (Just x) t) =
   text "forall" <+> lparen <> ppIdent x <+> colon <+> ppTerm t <> rparen <> comma
 
