@@ -33,6 +33,8 @@ module Verifier.SAW.Module
   , ctorNumParams
   , ctorNumArgs
   , DataType(..)
+  , dtNumParams
+  , dtNumIndices
     -- * Modules
   , Module
   , ModuleDecl(..)
@@ -263,6 +265,14 @@ data DataType =
     -- where the @pi@ are the 'dtParams' and the @ii@ are the 'dtIndices'. Note
     -- that this type should always be top-level, i.e., have no free variables.
   }
+
+-- | Return the number of parameters of a datatype
+dtNumParams :: DataType -> Int
+dtNumParams dt = length $ dtParams dt
+
+-- | Return the number of indices of a datatype
+dtNumIndices :: DataType -> Int
+dtNumIndices dt = length $ dtIndices dt
 
 instance Eq DataType where
   (==) = lift2 dtName (==)
