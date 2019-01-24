@@ -97,6 +97,8 @@ ppDecl decl = case decl of
   Axiom nm ty ->
     (nest 2 $
      hsep ([text "Axiom", text nm, text ":", ppTerm ty, period])) <> hardline
+  Comment s ->
+    text "(*" <+> text s <+> text "*)" <> hardline
   Definition nm bs mty body ->
     (nest 2 $
      hsep ([text "Definition", text nm] ++

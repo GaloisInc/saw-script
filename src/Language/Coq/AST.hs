@@ -63,6 +63,7 @@ data Inductive = Inductive
 
 data Decl
   = Axiom Ident Type
+  | Comment String
   | Definition Ident [Binder] (Maybe Type) Term
   | InductiveDecl Inductive
   deriving (Show)

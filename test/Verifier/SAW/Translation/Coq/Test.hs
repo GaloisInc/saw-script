@@ -112,6 +112,9 @@ main = do
   flip runReaderT sc $ do
 
     prelude <- getPreludeModule
+
+    liftIO $ putStrLn "Module Prelude."
+
     forM_ (moduleDecls prelude) $ \ decl -> do
       case decl of
         TypeDecl td -> do
@@ -122,3 +125,5 @@ main = do
           liftIO $ case runMonadCoqTrans configuration (translateDef dd) of
             Left e -> error $ show e
             Right (tdecl, _) -> putStrLn $ show $ Coq.ppDecl tdecl
+
+    liftIO $ putStrLn "End Module."

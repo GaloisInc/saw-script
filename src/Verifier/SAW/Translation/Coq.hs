@@ -23,7 +23,7 @@ Portability : portable
 
 module Verifier.SAW.Translation.Coq where
 
-import Control.Lens (makeLenses, over, set, view)
+import Control.Lens (_1, makeLenses, over, set, view)
 import qualified Control.Monad.Except as Except
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.Reader hiding (fail)
@@ -88,6 +88,44 @@ type MonadCoqTrans m =
 showFTermF :: FlatTermF Term -> String
 showFTermF = show . Unshared . FTermF
 
+data SpecialTreatment
+  = MapsTo String String
+  | Rename String
+  | Skip
+
+preludeSpecialTreatmentMap :: Map.Map String SpecialTreatment
+preludeSpecialTreatmentMap = Map.fromList
+  [ ("EmptyType",         Skip)
+  , ("EmptyType__rec",    Skip)
+  , ("Eq",                MapsTo "Coq.Init.Datatypes" "identity")
+  , ("Eq__rec",           MapsTo "Coq.Init.Datatypes" "identity_rect")
+  , ("error",             Skip)
+  , ("fix",               Skip)
+  , ("fst",               MapsTo "Coq.Init.Datatypes" "fst")
+  , ("id",                MapsTo "Coq.Init.Datatypes" "id")
+  , ("PairType",          MapsTo "Coq.Init.Datatypes" "prod")
+  , ("PairValue",         MapsTo "Coq.Init.Datatypes" "pair")
+  , ("Pair__rec",         MapsTo "Coq.Init.Datatypes" "prod_rect")
+  , ("RecordType",        Skip)
+  , ("RecordType__rec",   Skip)
+  , ("Refl",              MapsTo "Coq.Init.Datatypes" "identity_refl")
+  , ("snd",               MapsTo "Coq.Init.Datatypes" "snd")
+  , ("String",            MapsTo "Coq.Strings.String" "string")
+  , ("uncurry",           Rename "sawUncurry")
+  , ("Unit",              MapsTo "Coq.Init.Datatypes" "tt")
+  , ("UnitType",          MapsTo "Coq.Init.Datatypes" "unit")
+  , ("UnitType__rec",     MapsTo "Coq.Init.Datatypes" "unit_rect")
+  , ("unsafeAssert",      Skip)
+  , ("unsafeCoerce",      Skip)
+  , ("unsafeCoerce_same", Skip)
+  ]
+
+specialTreatmentMap :: Map.Map ModuleName (Map.Map String SpecialTreatment)
+specialTreatmentMap = Map.fromList $
+  over _1 (mkModuleName . (: [])) <$>
+  [ ("Prelude", preludeSpecialTreatmentMap)
+  ]
+
 cryptolPreludeMap :: Map.Map String String
 cryptolPreludeMap = Map.fromList
   [ ("repeat", "cryptolRepeat")
@@ -96,67 +134,83 @@ cryptolPreludeMap = Map.fromList
   , ("/\\", "cryptolAnd")
   ]
 
-identMap :: Map.Map Ident Coq.Ident
-identMap = Map.fromList
-  [ ("Prelude.Bool", "bool")
-  , ("Prelude.False", "false")
-  , ("Prelude.True", "true")
-  , ("Prelude.Nat", "nat")
-  , ("Prelude.Vec", "sawVec")
-  , ("Prelude.append", "vecAppend")
-  , ("Cryptol.ecCat", "seqCat")
-  , ("Cryptol.ecNumber", "ecNumber")
-  , ("Prelude.take", "vecTake")
-  , ("Prelude.drop", "vecDrop")
-  , ("Prelude.zip", "vecZip")
-  , ("Cryptol.seq", "seq")
-  , ("Cryptol.seqZip", "seqZip")
-  , ("Prelude.zipWith", "sawZipWith")
-  , ("Prelude.uncurry", "sawUncurry")
-  , ("Prelude.map", "vecMap")
-  , ("Prelude.coerce", "sawCoerce")
-  , ("Prelude.unsafeCoerce", "sawUnsafeCoerce")
-  , ("Prelude.unsafeAssert", "sawUnsafeAssert")
-  , ("Cryptol.seqMap", "seqMap")
-  , ("Prelude.bvXor", "sawBVXor")
-  , ("Cryptol.ecDemote", "ecDemote")
-  , ("Cryptol.ecJoin", "ecJoin")
-  , ("Cryptol.ecSplit", "ecSplit")
-  , ("Cryptol.ecSplitAt", "ecSplitAt")
-  , ("Cryptol.Num", "Num")
-  , ("Cryptol.TCNum", "TCNum")
-  , ("Cryptol.tcAdd", "tcAdd")
-  , ("Cryptol.tcSub", "tcSub")
-  , ("Cryptol.tcMul", "tcMul")
-  , ("Cryptol.tcMin", "tcMin")
-  , ("Cryptol.ecEq", "ecEq")
-  , ("Cryptol.ecGt", "ecGt")
-  , ("Cryptol.seqEq1", "seqEq1")
-  , ("Prelude.eq", "sawEq")
-  , ("Cryptol.ecAnd", "ecAnd")
-  , ("Cryptol.ecOr", "ecOr")
-  , ("Cryptol.ecXor", "ecXor")
-  , ("Cryptol.PLogicBit", "PLogicBit")
-  , ("Cryptol.PLogicSeq", "PLogicSeq")
-  , ("Cryptol.PLogicSeqBool", "PLogicSeqBool")
-  , ("Cryptol.PLogicWord", "PLogicSeqBool")
-  , ("Cryptol.PCmpBit", "PCmpBit")
-  , ("Cryptol.PCmpSeq", "PCmpSeq")
-  , ("Cryptol.PCmpSeqBool", "PCmpSeqBool")
-  , ("Cryptol.PCmpWord", "PCmpSeqBool")
-  , ("Cryptol.PZeroBit", "PZeroBit")
-  , ("Cryptol.PZeroSeq", "PZeroSeq")
-  , ("Cryptol.PZeroSeqBool", "PZeroSeqBool")
-  , ("Cryptol.PZeroWord", "PZeroSeqBool")
-  , ("Cryptol.PLiteralSeqBool", "PLiteralSeqBool")
-  ]
+-- identMap :: Map.Map Ident Coq.Ident
+-- identMap = Map.fromList
+--   [ ("Prelude.Bool", "bool")
+--   , ("Prelude.False", "false")
+--   , ("Prelude.True", "true")
+--   , ("Prelude.Nat", "nat")
+--   , ("Prelude.Vec", "sawVec")
+--   , ("Prelude.append", "vecAppend")
+--   , ("Cryptol.ecCat", "seqCat")
+--   , ("Cryptol.ecNumber", "ecNumber")
+--   , ("Prelude.take", "vecTake")
+--   , ("Prelude.drop", "vecDrop")
+--   , ("Prelude.zip", "vecZip")
+--   , ("Cryptol.seq", "seq")
+--   , ("Cryptol.seqZip", "seqZip")
+--   , ("Prelude.zipWith", "sawZipWith")
+--   , ("Prelude.uncurry", "sawUncurry")
+--   , ("Prelude.map", "vecMap")
+--   , ("Prelude.coerce", "sawCoerce")
+--   , ("Prelude.unsafeCoerce", "sawUnsafeCoerce")
+--   , ("Prelude.unsafeAssert", "sawUnsafeAssert")
+--   , ("Cryptol.seqMap", "seqMap")
+--   , ("Prelude.bvXor", "sawBVXor")
+--   , ("Cryptol.ecDemote", "ecDemote")
+--   , ("Cryptol.ecJoin", "ecJoin")
+--   , ("Cryptol.ecSplit", "ecSplit")
+--   , ("Cryptol.ecSplitAt", "ecSplitAt")
+--   , ("Cryptol.Num", "Num")
+--   , ("Cryptol.TCNum", "TCNum")
+--   , ("Cryptol.tcAdd", "tcAdd")
+--   , ("Cryptol.tcSub", "tcSub")
+--   , ("Cryptol.tcMul", "tcMul")
+--   , ("Cryptol.tcMin", "tcMin")
+--   , ("Cryptol.ecEq", "ecEq")
+--   , ("Cryptol.ecGt", "ecGt")
+--   , ("Cryptol.seqEq1", "seqEq1")
+--   , ("Prelude.eq", "sawEq")
+--   , ("Cryptol.ecAnd", "ecAnd")
+--   , ("Cryptol.ecOr", "ecOr")
+--   , ("Cryptol.ecXor", "ecXor")
+--   , ("Cryptol.PLogicBit", "PLogicBit")
+--   , ("Cryptol.PLogicSeq", "PLogicSeq")
+--   , ("Cryptol.PLogicSeqBool", "PLogicSeqBool")
+--   , ("Cryptol.PLogicWord", "PLogicSeqBool")
+--   , ("Cryptol.PCmpBit", "PCmpBit")
+--   , ("Cryptol.PCmpSeq", "PCmpSeq")
+--   , ("Cryptol.PCmpSeqBool", "PCmpSeqBool")
+--   , ("Cryptol.PCmpWord", "PCmpSeqBool")
+--   , ("Cryptol.PZeroBit", "PZeroBit")
+--   , ("Cryptol.PZeroSeq", "PZeroSeq")
+--   , ("Cryptol.PZeroSeqBool", "PZeroSeqBool")
+--   , ("Cryptol.PZeroWord", "PZeroSeqBool")
+--   , ("Cryptol.PLiteralSeqBool", "PLiteralSeqBool")
+--   ]
+
+findSpecialTreatment :: Ident -> Maybe SpecialTreatment
+findSpecialTreatment ident =
+  let moduleMap = Map.findWithDefault Map.empty (identModule ident) specialTreatmentMap in
+  Map.findWithDefault Nothing (identName ident) (Just <$> moduleMap)
+
+findIdentTranslation :: Ident -> (Coq.Ident, Coq.Ident)
+findIdentTranslation i =
+  case findSpecialTreatment i of
+  Nothing -> (show $ identModule i, identName i)
+  Just st ->
+    case st of
+    MapsTo moduleName name -> (moduleName,           name)
+    Rename newName         -> (show $ identModule i, newName)
+    Skip                   -> ("Untranslated",       show i)
 
 translateIdent :: Ident -> Coq.Ident
-translateIdent i = Map.findWithDefault (show i) i identMap
+translateIdent i =
+  let (moduleName, name) = findIdentTranslation i in
+  moduleName ++ "." ++ name
 
 translateIdentUnqualified :: Ident -> Coq.Ident
-translateIdentUnqualified i =
-  Map.findWithDefault (identName i) i identMap
+translateIdentUnqualified i = snd $ findIdentTranslation i
 
 {-
 traceFTermF :: String -> FlatTermF Term -> a -> a
@@ -212,53 +266,79 @@ translateCtor inductiveParameters (Ctor {..}) = do
     }
 
 translateDataType :: MonadCoqTrans m => DataType -> m Coq.Decl
-translateDataType (DataType {..}) = do
-  let inductiveName = identName dtName -- TODO: do we want qualified?
-  let mkParam (s, t) = do
-        t' <- translateTerm t
-        modify $ over environment (s :)
-        return $ Coq.Binder s (Just t')
-  let mkIndex (s, t) = do
-        t' <- translateTerm t
-        modify $ over environment (s :)
-        let s' = case s of
-              "_" -> Nothing
-              _   -> Just s
-        return $ Coq.PiBinder s' t'
-  inductiveParameters   <- mapM mkParam dtParams
-  inductiveIndices      <- mapM mkIndex dtIndices
-  inductiveSort         <- translateSort dtSort
-  inductiveConstructors <- mapM (translateCtor inductiveParameters) dtCtors
-  return $ Coq.InductiveDecl $ Coq.Inductive
-    { inductiveName
-    , inductiveParameters
-    , inductiveIndices
-    , inductiveSort
-    , inductiveConstructors
-    }
+translateDataType (DataType {..}) =
+  case findSpecialTreatment dtName of
+  Just st ->
+    case st of
+    MapsTo coqModule coqIdent -> pure $ mapped  dtName coqModule coqIdent
+    Rename _                  -> translate
+    Skip                      -> pure $ skipped dtName
+  Nothing -> translate
+  where
+    translate = do
+      let inductiveName = identName dtName -- TODO: do we want qualified?
+      let mkParam (s, t) = do
+            t' <- translateTerm t
+            modify $ over environment (s :)
+            return $ Coq.Binder s (Just t')
+      let mkIndex (s, t) = do
+            t' <- translateTerm t
+            modify $ over environment (s :)
+            let s' = case s of
+                  "_" -> Nothing
+                  _   -> Just s
+            return $ Coq.PiBinder s' t'
+      inductiveParameters   <- mapM mkParam dtParams
+      inductiveIndices      <- mapM mkIndex dtIndices
+      inductiveSort         <- translateSort dtSort
+      inductiveConstructors <- mapM (translateCtor inductiveParameters) dtCtors
+      return $ Coq.InductiveDecl $ Coq.Inductive
+        { inductiveName
+        , inductiveParameters
+        , inductiveIndices
+        , inductiveSort
+        , inductiveConstructors
+        }
 
 translateModuleDecl :: MonadCoqTrans m => ModuleDecl -> m Coq.Decl
 translateModuleDecl = \case
   TypeDecl dataType -> translateDataType dataType
   DefDecl definition -> translateDef definition
 
+mapped :: Ident -> String -> String -> Coq.Decl
+mapped sawIdent coqModule coqIdent =
+  Coq.Comment $ show sawIdent ++ " is mapped to " ++ coqModule ++ "." ++ coqIdent
+
+skipped :: Ident -> Coq.Decl
+skipped sawIdent =
+  Coq.Comment $ show sawIdent ++ " was skipped"
+
 translateDef :: MonadCoqTrans m => Def -> m Coq.Decl
 translateDef (Def {..}) =
-  case defQualifier of
-  NoQualifier ->
-    case defBody of
-    Nothing   -> error "Terms should have a body (unless axiom/primitive)"
-    Just body -> Coq.Definition
-                 <$> pure (translateIdent defIdent)
-                 <*> pure []
-                 <*> (Just <$> translateTerm defType)
-                 <*> translateTerm body
-  AxiomQualifier -> Coq.Axiom
-                    <$> pure (translateIdent defIdent)
-                    <*> translateTerm defType
-  PrimQualifier -> Coq.Axiom
-                   <$> pure (translateIdent defIdent)
-                   <*> translateTerm defType
+  case findSpecialTreatment defIdent of
+  Just st ->
+    case st of
+    MapsTo coqModule coqIdent -> pure $ mapped defIdent coqModule coqIdent
+    Rename _                  -> translate
+    Skip                      -> pure $ skipped defIdent
+  Nothing -> translate
+  where
+    translate =
+      case defQualifier of
+      NoQualifier ->
+        case defBody of
+        Nothing   -> error "Terms should have a body (unless axiom/primitive)"
+        Just body -> Coq.Definition
+                     <$> pure (translateIdentUnqualified defIdent)
+                     <*> pure []
+                     <*> (Just <$> translateTerm defType)
+                     <*> translateTerm body
+      AxiomQualifier -> Coq.Axiom
+                        <$> pure (translateIdentUnqualified defIdent)
+                        <*> translateTerm defType
+      PrimQualifier -> Coq.Axiom
+                       <$> pure (translateIdentUnqualified defIdent)
+                       <*> translateTerm defType
 
 translateSort :: MonadCoqTrans m => Sort -> m Coq.Sort
 translateSort s = pure (if s == propSort then Coq.Prop else Coq.Type)
@@ -270,7 +350,7 @@ flatTermFToExpr ::
   m Coq.Term
 flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
-    GlobalDef i   -> pure (Coq.Var (translateIdent i))
+    GlobalDef i   -> pure (Coq.Var ("@" ++ translateIdent i))
     UnitValue     -> pure (Coq.Var "tt")
     UnitType      -> pure (Coq.Var "unit")
     PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse go [x, y]
@@ -279,13 +359,13 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
     PairRight t   -> Coq.App (Coq.Var "snd") <$> traverse go [t]
     -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as -> do
-      Coq.App (Coq.Var (translateIdentUnqualified n)) <$> traverse go (is ++ as)
+      Coq.App (Coq.Var ("@" ++ translateIdentUnqualified n)) <$> traverse go (is ++ as)
     -- TODO: maybe have more customizable translation of data constructors
     CtorApp n is as -> do
-      Coq.App (Coq.Var (translateIdentUnqualified n)) <$> traverse go (is ++ as)
+      Coq.App (Coq.Var ("@" ++ translateIdentUnqualified n)) <$> traverse go (is ++ as)
     -- TODO: support this next!
     RecursorApp typeEliminated parameters motive eliminators indices termEliminated ->
-      Coq.App (Coq.Var $ translateIdentUnqualified typeEliminated ++ "_rect") <$>
+      Coq.App (Coq.Var $ "@" ++ translateIdentUnqualified typeEliminated ++ "_rect") <$>
       (traverse go $
        parameters ++ [motive] ++ map snd eliminators ++ indices ++ [termEliminated]
       )
@@ -368,9 +448,6 @@ asApplyAllRecognizer t = do _ <- asApp t
 mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Decl
 mkDefinition name (Coq.Lambda bs t) = Coq.Definition name bs Nothing t
 mkDefinition name t = Coq.Definition name [] Nothing t
-
--- mkConstructor :: Un.CtorDecl -> Coq.Constructor
--- mkConstructor (Un.Ctor n ctx t) = _
 
 translateParams ::
   MonadCoqTrans m =>
@@ -482,6 +559,7 @@ translateTerm t = withLocalEnvironment $ do -- traceTerm "translateTerm" t $
     notSupported = Except.throwError $ NotSupported t
     badTerm = Except.throwError $ BadTerm t
     matchDecl n (Coq.Axiom n' _) = n == n'
+    matchDecl _ (Coq.Comment _) = False
     matchDecl n (Coq.Definition n' _ _ _) = n == n'
     matchDecl n (Coq.InductiveDecl (Coq.Inductive n' _ _ _ _)) = n == n'
     go env term = do
