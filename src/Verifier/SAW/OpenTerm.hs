@@ -19,7 +19,9 @@ module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm, completeOpenTerm,
   -- * Basic operations for building open terms
-  closedOpenTerm, flatOpenTerm, applyOpenTerm, lambdaOpenTerm, piOpenTerm,
+  closedOpenTerm, flatOpenTerm,
+  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
+  applyOpenTerm, lambdaOpenTerm, piOpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM, completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
@@ -31,6 +33,7 @@ import Control.Monad.IO.Class
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck
+import Verifier.SAW.Module
 
 -- | An open term is represented as a type-checking computation that computes a
 -- SAW core term and its type
@@ -50,6 +53,30 @@ closedOpenTerm t = OpenTerm $ typeInferComplete t
 flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
 flatOpenTerm ftf = OpenTerm $
   (sequence (fmap unOpenTerm ftf) >>= typeInferComplete)
+
+-- | Build an 'OpenTerm' for a constructor applied to its arguments
+ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
+ctorOpenTerm c all_args = OpenTerm $ do
+  maybe_ctor <- liftTCM scFindCtor c
+  (params, args) <-
+    case maybe_ctor of
+      Just ctor -> splitAt (ctorNumParams ctor) <$> mapM unOpenTerm all_args
+      Nothing -> throwTCError $ NoSuchCtor c
+  typeInferComplete $ CtorApp c params args
+
+-- | Build an 'OpenTerm' for a datatype applied to its arguments
+dataTypeOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
+dataTypeOpenTerm d all_args = OpenTerm $ do
+  maybe_dt <- liftTCM scFindDataType d
+  (params, args) <-
+    case maybe_dt of
+      Just dt -> splitAt (dtNumParams dt) <$> mapM unOpenTerm all_args
+      Nothing -> throwTCError $ NoSuchDataType d
+  typeInferComplete $ DataTypeApp d params args
+
+-- | Build an 'OpenTermm' for a global name
+globalOpenTerm :: Ident -> OpenTerm
+globalOpenTerm = flatOpenTerm . GlobalDef
 
 -- | Apply an 'OpenTerm' to another
 applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
