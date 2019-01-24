@@ -89,32 +89,36 @@ showFTermF :: FlatTermF Term -> String
 showFTermF = show . Unshared . FTermF
 
 data SpecialTreatment
-  = MapsTo String String
+  = MapsTo Ident
   | Rename String
   | Skip
 
+mkCoqIdent :: String -> String -> Ident
+mkCoqIdent coqModule coqIdent = mkIdent (mkModuleName [coqModule]) coqIdent
+
 preludeSpecialTreatmentMap :: Map.Map String SpecialTreatment
 preludeSpecialTreatmentMap = Map.fromList
-  [ ("EmptyType",         Skip)
+  [ ("Bool",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "bool")
+  , ("EmptyType",         Skip)
   , ("EmptyType__rec",    Skip)
-  , ("Eq",                MapsTo "Coq.Init.Datatypes" "identity")
-  , ("Eq__rec",           MapsTo "Coq.Init.Datatypes" "identity_rect")
+  , ("Eq",                MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "identity")
+  , ("Eq__rec",           MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "identity_rect")
   , ("error",             Skip)
   , ("fix",               Skip)
-  , ("fst",               MapsTo "Coq.Init.Datatypes" "fst")
-  , ("id",                MapsTo "Coq.Init.Datatypes" "id")
-  , ("PairType",          MapsTo "Coq.Init.Datatypes" "prod")
-  , ("PairValue",         MapsTo "Coq.Init.Datatypes" "pair")
-  , ("Pair__rec",         MapsTo "Coq.Init.Datatypes" "prod_rect")
+  , ("fst",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "fst")
+  , ("id",                MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "id")
+  , ("PairType",          MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "prod")
+  , ("PairValue",         MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "pair")
+  , ("Pair__rec",         MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "prod_rect")
   , ("RecordType",        Skip)
   , ("RecordType__rec",   Skip)
-  , ("Refl",              MapsTo "Coq.Init.Datatypes" "identity_refl")
-  , ("snd",               MapsTo "Coq.Init.Datatypes" "snd")
-  , ("String",            MapsTo "Coq.Strings.String" "string")
+  , ("Refl",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "identity_refl")
+  , ("snd",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "snd")
+  , ("String",            MapsTo $ mkCoqIdent "Coq.Strings.String" "string")
   , ("uncurry",           Rename "sawUncurry")
-  , ("Unit",              MapsTo "Coq.Init.Datatypes" "tt")
-  , ("UnitType",          MapsTo "Coq.Init.Datatypes" "unit")
-  , ("UnitType__rec",     MapsTo "Coq.Init.Datatypes" "unit_rect")
+  , ("Unit",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "tt")
+  , ("UnitType",          MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "unit")
+  , ("UnitType__rec",     MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "unit_rect")
   , ("unsafeAssert",      Skip)
   , ("unsafeCoerce",      Skip)
   , ("unsafeCoerce_same", Skip)
@@ -194,23 +198,21 @@ findSpecialTreatment ident =
   let moduleMap = Map.findWithDefault Map.empty (identModule ident) specialTreatmentMap in
   Map.findWithDefault Nothing (identName ident) (Just <$> moduleMap)
 
-findIdentTranslation :: Ident -> (Coq.Ident, Coq.Ident)
+findIdentTranslation :: Ident -> Ident
 findIdentTranslation i =
   case findSpecialTreatment i of
-  Nothing -> (show $ identModule i, identName i)
+  Nothing -> i
   Just st ->
     case st of
-    MapsTo moduleName name -> (moduleName,           name)
-    Rename newName         -> (show $ identModule i, newName)
-    Skip                   -> ("Untranslated",       show i)
+    MapsTo ident   -> ident
+    Rename newName -> mkIdent (identModule i) newName
+    Skip           -> i -- do we want a marker to indicate this will likely fail?
 
 translateIdent :: Ident -> Coq.Ident
-translateIdent i =
-  let (moduleName, name) = findIdentTranslation i in
-  moduleName ++ "." ++ name
+translateIdent = show . findIdentTranslation
 
 translateIdentUnqualified :: Ident -> Coq.Ident
-translateIdentUnqualified i = snd $ findIdentTranslation i
+translateIdentUnqualified = identName .  findIdentTranslation
 
 {-
 traceFTermF :: String -> FlatTermF Term -> a -> a
@@ -270,9 +272,9 @@ translateDataType (DataType {..}) =
   case findSpecialTreatment dtName of
   Just st ->
     case st of
-    MapsTo coqModule coqIdent -> pure $ mapped  dtName coqModule coqIdent
-    Rename _                  -> translate
-    Skip                      -> pure $ skipped dtName
+    MapsTo ident -> pure $ mapped  dtName ident
+    Rename _     -> translate
+    Skip         -> pure $ skipped dtName
   Nothing -> translate
   where
     translate = do
@@ -305,9 +307,9 @@ translateModuleDecl = \case
   TypeDecl dataType -> translateDataType dataType
   DefDecl definition -> translateDef definition
 
-mapped :: Ident -> String -> String -> Coq.Decl
-mapped sawIdent coqModule coqIdent =
-  Coq.Comment $ show sawIdent ++ " is mapped to " ++ coqModule ++ "." ++ coqIdent
+mapped :: Ident -> Ident -> Coq.Decl
+mapped sawIdent newIdent =
+  Coq.Comment $ show sawIdent ++ " is mapped to " ++ show newIdent
 
 skipped :: Ident -> Coq.Decl
 skipped sawIdent =
@@ -318,9 +320,9 @@ translateDef (Def {..}) =
   case findSpecialTreatment defIdent of
   Just st ->
     case st of
-    MapsTo coqModule coqIdent -> pure $ mapped defIdent coqModule coqIdent
-    Rename _                  -> translate
-    Skip                      -> pure $ skipped defIdent
+    MapsTo ident -> pure $ mapped  defIdent ident
+    Rename _     -> translate
+    Skip         -> pure $ skipped defIdent
   Nothing -> translate
   where
     translate =
