@@ -31,7 +31,7 @@ import Verifier.SAW.Translation.Coq
 configuration :: TranslationConfiguration
 configuration = TranslationConfiguration
   { translateVectorsAsCoqVectors = True
-  , traverseConsts            = True
+  , traverseConsts               = True
   }
 
 -- Creating a bunch of terms with no sharing, for testing purposes
@@ -113,7 +113,8 @@ main = do
 
     prelude <- getPreludeModule
 
-    liftIO $ putStrLn "Module Prelude."
+    liftIO $ putStrLn "From CryptolToCoq Require Import SAW.\n"
+    liftIO $ putStrLn "Module Prelude.\n"
 
     forM_ (moduleDecls prelude) $ \ decl -> do
       case decl of
