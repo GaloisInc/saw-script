@@ -76,7 +76,9 @@ ppTerm e =
       text "then" <+> ppTerm t <+>
       text "else" <+> ppTerm f
     App f args ->
-      parens (hsep (ppTerm f : map ppTerm args))
+      -- FIXME: super conservative parenthesizing because precedence is not
+      -- implemented
+      parens (hsep (ppTerm f : map (parens . ppTerm) args))
     Sort s ->
       ppSort s
     Var x ->
