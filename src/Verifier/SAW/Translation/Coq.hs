@@ -142,8 +142,8 @@ preludeSpecialTreatmentMap = Map.fromList $ []
   , ("False",             MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "false")
   , ("ite",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "ite")
   , ("iteDep",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "iteDep")
-  , ("iteDep_true",       Skip) -- FIXME: change this
-  , ("iteDep_false",      Skip) -- FIXME: change this
+  , ("iteDep_True",       MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "iteDep_True")
+  , ("iteDep_False",      MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "iteDep_False")
   , ("ite_bit",           Skip) -- FIXME: change this
   , ("ite_eq_iteDep",     MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "ite_eq_iteDep")
   , ("not",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "negb")
@@ -183,6 +183,14 @@ preludeSpecialTreatmentMap = Map.fromList $ []
   , ("Zero",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "O")
   , ("Succ",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "S")
   , ("eq_Nat",            Skip)
+  ]
+
+  ++ -- * Vectors
+  [ ("at",                Rename "sawAt") -- `at` is a reserved keyword in Coq
+  , ("EmptyVec",          MapsTo $ mkCoqIdent "Coq.Vectors.Vector" "nil")
+  , ("eq_Vec",            Skip)
+  -- cannot map directly to Vector.t because arguments are in a different order
+  , ("Vec",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "sawVec")
   ]
 
 specialTreatmentMap :: Map.Map ModuleName (Map.Map String SpecialTreatment)
