@@ -258,13 +258,13 @@ verifyObligations ::
   TopLevel SolverStats
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.ccBackend
-     st     <- io $ readIORef $ W4.sbStateManager sym
-     let sc  = Crucible.saw_ctx st
+     st <- io $ readIORef $ W4.sbStateManager sym
+     let sc = Crucible.saw_ctx st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm  = mspec^.csName
      stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
        goal   <- io $ scImplies sc assume assert
-       goal'  <- io $ scAbstractExts sc (getAllExts goal) goal
+       goal'  <- io $ scGeneralizeExts sc (getAllExts goal) =<< scEqTrue sc goal
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
            proofgoal = ProofGoal Universal n "vc" goalname goal'
        r      <- evalStateT tactic (startProof proofgoal)
