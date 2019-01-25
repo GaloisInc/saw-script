@@ -61,8 +61,8 @@ import qualified What4.Partial as W4
 import qualified Lang.Crucible.JVM.Translation as CJ
 
 -- sbv
-import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
-import qualified Data.SBV.Dynamic as SBV (svAsInteger)
+import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord, toBool)
+import qualified Data.SBV.Dynamic as SBV (svAsInteger, svAsBool)
 
 -- jvm-parser
 import qualified Language.JVM.Parser as J
@@ -317,7 +317,11 @@ resolveSAWTerm ::
 resolveSAWTerm cc tp tm =
   case tp of
     Cryptol.TVBit ->
-      fail "resolveSAWTerm: unimplemented type Bit (FIXME)"
+      do b <- resolveBoolTerm sym tm
+         x0 <- W4.bvLit sym W4.knownNat 0
+         x1 <- W4.bvLit sym W4.knownNat 1
+         x <- W4.bvIte sym b x1 x0
+         return (IVal x)
     Cryptol.TVInteger ->
       fail "resolveSAWTerm: unimplemented type Integer (FIXME)"
     Cryptol.TVIntMod _ ->
@@ -399,6 +403,22 @@ resolveBitvectorTerm sym w tm =
      case mx of
        Just x  -> W4.bvLit sym w x
        Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+
+resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
+resolveBoolTerm sym tm =
+  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+     ss <- basic_ss sc
+     tm' <- rewriteSharedTerm sc ss tm
+     mx <- case getAllExts tm' of
+             [] ->
+               do -- Evaluate in SBV to test whether 'tm' is a concrete value
+                  modmap <- scGetModuleMap sc
+                  sbv <- SBV.toBool <$> SBV.sbvSolveBasic modmap Map.empty [] tm'
+                  return (SBV.svAsBool sbv)
+             _ -> return Nothing
+     case mx of
+       Just x  -> return (W4.backendPred sym x)
+       Nothing -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
 
 toJVMType :: Cryptol.TValue -> Maybe J.Type
 toJVMType tp =
