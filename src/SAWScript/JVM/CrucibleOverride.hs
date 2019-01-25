@@ -738,6 +738,9 @@ valueToSC ::
   Cryptol.TValue ->
   JVMVal ->
   OverrideMatcher Term
+valueToSC sym loc failMsg Cryptol.TVBit (IVal x) =
+  liftIO (Crucible.toSC sym x) -- TODO: is this right?
+
 valueToSC sym loc failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (IVal x) =
   liftIO (Crucible.toSC sym x)
 
@@ -1086,7 +1089,7 @@ projectJVMVal sym ty v =
 decodeJVMVal :: J.Type -> Crucible.AnyValue Sym -> Maybe JVMVal
 decodeJVMVal ty v =
   case ty of
-    J.BooleanType -> Nothing -- FIXME
+    J.BooleanType -> go v CJ.intRepr IVal
     J.ByteType    -> Nothing -- FIXME
     J.CharType    -> Nothing -- FIXME
     J.ShortType   -> Nothing -- FIXME
