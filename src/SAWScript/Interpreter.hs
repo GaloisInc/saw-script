@@ -1865,7 +1865,7 @@ primitives = Map.fromList
     , "verified is expected to perform the allocation."
     ]
 
-  , prim "jvm_alloc_array" "Int -> JVMType -> JVMSetup JVMValue"
+  , prim "jvm_alloc_array" "Int -> JavaType -> JVMSetup JVMValue"
     (bicVal jvm_alloc_array)
     [ "Declare that an array of the given size and element type should be"
     , "allocated in a Crucible specification. Before `jvm_execute_func`, this"
