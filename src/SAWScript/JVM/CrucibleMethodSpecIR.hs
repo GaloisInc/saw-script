@@ -254,8 +254,8 @@ instantiateUserVars _spec = undefined
 -- sub-components.
 data ResolvedState =
   ResolvedState
-  { _rsAllocs :: Map AllocIndex [[Int]]
-  , _rsGlobals :: Map String [[Int]]
+  { _rsAllocs :: Map AllocIndex [Either String Int]
+  , _rsGlobals :: Map String [Either String Int]
   }
 
 data CrucibleSetupState =
@@ -301,9 +301,10 @@ emptyResolvedState = ResolvedState Map.empty Map.empty
 -- SetupValue.
 markResolved ::
   SetupValue ->
+  Either String Int ->
   ResolvedState ->
   ResolvedState
-markResolved val0 rs = go [] val0
+markResolved val0 path0 rs = go path0 val0
   where
     go path val =
       case val of
@@ -319,9 +320,10 @@ markResolved val0 rs = go [] val0
 -- been initialized already.
 testResolved ::
   SetupValue ->
+  Either String Int ->
   ResolvedState ->
   Bool
-testResolved val0 rs = go [] val0
+testResolved val0 path0 rs = go path0 val0
   where
     go path val =
       case val of
@@ -331,7 +333,7 @@ testResolved val0 rs = go [] val0
         _             -> False
 
     test _ Nothing = False
-    test path (Just paths) = any (`isPrefixOf` path) paths
+    test path (Just paths) = path `elem` paths -- any (`isPrefixOf` path) paths
 
 
 --intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)

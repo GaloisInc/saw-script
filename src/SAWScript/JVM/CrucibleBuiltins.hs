@@ -1135,9 +1135,10 @@ jvm_field_is typed _bic _opt ptr fname val =
      loc <- toW4Loc "jvm_field_is" <$> lift getPosition
      st <- get
      let rs = st^.csResolvedState
-     if st^.csPrePost == PreState && testResolved ptr rs
-       then fail "Multiple points-to preconditions on same pointer"
-       else csResolvedState %= markResolved ptr
+     let path = Left fname
+     if st^.csPrePost == PreState && testResolved ptr path rs
+       then fail "Multiple points-to preconditions on same pointer (field)"
+       else csResolvedState %= markResolved ptr path
      let env = csAllocations (st^.csMethodSpec)
          nameEnv = csTypeNames (st^.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
@@ -1159,9 +1160,10 @@ jvm_elem_is typed _bic _opt ptr idx val =
      loc <- toW4Loc "jvm_elem_is" <$> lift getPosition
      st <- get
      let rs = st^.csResolvedState
-     if st^.csPrePost == PreState && testResolved ptr rs
+     let path = Right idx
+     if st^.csPrePost == PreState && testResolved ptr path rs
        then fail "Multiple points-to preconditions on same pointer"
-       else csResolvedState %= markResolved ptr
+       else csResolvedState %= markResolved ptr path
      let env = csAllocations (st^.csMethodSpec)
          nameEnv = csTypeNames (st^.csMethodSpec)
      --ptrTy <- typeOfSetupValue cc env nameEnv ptr
