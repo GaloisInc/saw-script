@@ -59,6 +59,7 @@ import           Data.Monoid ((<>))
 import           Data.String
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
@@ -149,6 +150,28 @@ ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
 
+allSuperClasses :: CB.Codebase -> J.Class -> IO [J.Class]
+allSuperClasses cb c =
+  case J.superClass c of
+    Nothing -> return [c]
+    Just cname ->
+      do c' <- CJ.lookupClass cb cname
+         cs <- allSuperClasses cb c'
+         return (c : cs)
+
+allClassRefs :: CB.Codebase -> J.ClassName -> IO (Set J.ClassName)
+allClassRefs cb c0 = go init [c0]
+  where
+    init = Set.fromList (map J.mkClassName CJ.initClasses)
+    go seen [] = return seen
+    go seen (c : cs) =
+      do putStrLn $ "allClassRefs: " ++ J.unClassName c
+         cls <- CJ.findClass cb (J.unClassName c)
+         let refs = CJ.classRefs cls
+         let seen' = Set.union seen refs
+         let next = Set.toList (Set.difference refs seen)
+         go seen' (next ++ cs)
+
 crucible_jvm_verify ::
   BuiltinContext ->
   Options ->
@@ -161,8 +184,11 @@ crucible_jvm_verify ::
   TopLevel CrucibleMethodSpecIR
 crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
   do -- allocate all of the handles/static vars that are directly referenced by
-     -- this class
-     let refs = map J.mkClassName CJ.initClasses ++ Set.toList (CJ.classRefs cls)
+     -- this class (or from superclasses)
+     supers <- io $ allSuperClasses (biJavaCodebase bic) cls
+     let superRefs = Set.toList (Set.unions (map CJ.classRefs supers))
+
+     let refs = map J.mkClassName CJ.initClasses ++ superRefs
      mapM_ (prepareClassTopLevel bic . J.unClassName) refs
 
      cc <- setupCrucibleContext bic opts cls
@@ -180,10 +206,6 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      io $ W4.setCurrentProgramLoc sym loc
      methodSpec <- view csMethodSpec <$> execStateT (runJVMSetupM setup) st0
 
-     -- TODO: the only global used by crucible-jvm is
-     -- 'dynamicClassTable', which is a field of 'JVMContext'. There
-     -- is a 'JVMContext' stored in the 'TopLevelRW', which we can get
-     -- with 'getJVMTrans'.
      let classTab = Map.empty -- FIXME: how to initialize this?
      let classTabVar = CJ.dynamicClassTable jc
      let globals1 = Crucible.insertGlobal classTabVar classTab Crucible.emptyGlobals
