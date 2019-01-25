@@ -113,8 +113,12 @@ main = do
 
     prelude <- getPreludeModule
 
-    liftIO $ putStrLn "From CryptolToCoq Require Import SAW.\n"
-    liftIO $ putStrLn "Module Prelude.\n"
+    liftIO $ do
+      putStrLn "From Coq.Strings  Require Import String."
+      putStrLn "From CryptolToCoq Require Import SAW."
+      putStrLn ""
+      putStrLn "Module Prelude."
+      putStrLn ""
 
     forM_ (moduleDecls prelude) $ \ decl -> do
       case decl of

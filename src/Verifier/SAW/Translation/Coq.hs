@@ -99,11 +99,12 @@ mkCoqIdent coqModule coqIdent = mkIdent (mkModuleName [coqModule]) coqIdent
 preludeSpecialTreatmentMap :: Map.Map String SpecialTreatment
 preludeSpecialTreatmentMap = Map.fromList $ []
 
-  ++ -- * Unsafe SAW features
+  -- Unsafe SAW features
+  ++
   [ ("coerce",            Skip)
   , ("coerce__def",       Skip)
   , ("coerce__eq",        Skip)
-  , ("error",             Skip)
+  , ("error",             MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "error")
   , ("fix",               Skip)
   , ("rcoerce",           Skip)
   , ("unsafeAssert",      Skip)
@@ -111,33 +112,38 @@ preludeSpecialTreatmentMap = Map.fromList $ []
   , ("unsafeCoerce_same", Skip)
   ]
 
-  ++ -- * Unit
+  -- Unit
+  ++
   [ ("Unit",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "tt")
   , ("UnitType",          MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "unit")
   , ("UnitType__rec",     MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "unit_rect")
   ]
 
-  ++ -- * Records
+  -- Records
+  ++
   [ ("EmptyType",         Skip)
   , ("EmptyType__rec",    Skip)
   , ("RecordType",        Skip)
   , ("RecordType__rec",   Skip)
   ]
 
-  ++ -- * Decidable equality, does not make sense in Coq unless turned into a
-     --   type class
-  [ ("eq",                Skip)
-  , ("eq_refl",           Skip)
-  , ("eq_Bool",           Skip)
+  -- Decidable equality, does not make sense in Coq unless turned into a type
+  -- class
+  ++
+  [ ("eq",                MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq")
+  , ("eq_refl",           MapsTo $ mkCoqIdent "CryptolToCow.SAW" "eq_refl")
+  , ("eq_Bool",           MapsTo $ mkCoqIdent "CryptolToCow.SAW" "eq_Bool")
+  -- not sure whether those are used
   , ("ite_eq_cong_1",     Skip)
   , ("ite_eq_cong_2",     Skip)
   ]
 
-  ++ -- * Boolean
+  -- Boolean
+  ++
   [ ("and",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "andb")
   , ("and__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "andb__eq")
-  , ("Bool",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "bool")
-  , ("boolEq",            MapsTo $ mkCoqIdent "Coq.Bool.Bool"      "eqb")
+  , ("Bool",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "Bool")
+  , ("boolEq",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "boolEq")
   , ("boolEq__eq",        MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "eqb__eq")
   , ("False",             MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "false")
   , ("ite",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "ite")
@@ -155,7 +161,8 @@ preludeSpecialTreatmentMap = Map.fromList $ []
   , ("xor__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "xorb__eq")
   ]
 
-  ++ -- * Pairs
+  -- Pairs
+  ++
   [ ("PairType",          MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "prod")
   , ("PairValue",         MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "pair")
   , ("Pair__rec",         MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "prod_rect")
@@ -163,34 +170,45 @@ preludeSpecialTreatmentMap = Map.fromList $ []
   , ("snd",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "snd")
   ]
 
-  ++ -- * Equality
+  -- Equality
+  ++
   [ ("Eq",                MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "identity")
   , ("Eq__rec",           MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "identity_rect")
   , ("Refl",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "identity_refl")
   ]
 
-  ++ -- * Strings
+  -- Strings
+  ++
   [ ("String",            MapsTo $ mkCoqIdent "Coq.Strings.String" "string")
   ]
 
-  ++ -- * Utility functions
+  -- Utility functions
+  ++
   [ ("id",                MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "id")
   , ("uncurry",           Rename "sawUncurry")
   ]
 
-  ++ -- * Natural numbers
-  [ ("Nat",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "nat")
+  -- Natural numbers
+  ++
+  [ ("divModNat",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "divModNat")
+  , ("eq_Nat",            Skip)
+  , ("Nat",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "nat")
+  , ("widthNat",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "widthNat")
   , ("Zero",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "O")
   , ("Succ",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "S")
-  , ("eq_Nat",            Skip)
   ]
 
-  ++ -- * Vectors
+  -- Vectors
+  ++
   [ ("at",                Rename "sawAt") -- `at` is a reserved keyword in Coq
-  , ("EmptyVec",          MapsTo $ mkCoqIdent "Coq.Vectors.Vector" "nil")
+  , ("atWithDefault",     MapsTo $ mkCoqIdent "CryptolToCoq.VectorExtras" "vectorAtWithDefault")
+  , ("coerceVec",         Skip)
+  , ("EmptyVec",          MapsTo $ mkCoqIdent "Coq.Vectors.Vector"        "nil")
   , ("eq_Vec",            Skip)
+  , ("gen",               MapsTo $ mkCoqIdent "CryptolToCoq.VectorExtras" "vectorGen")
+  , ("take0",             Skip)
   -- cannot map directly to Vector.t because arguments are in a different order
-  , ("Vec",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "sawVec")
+  , ("Vec",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW"          "sawVec")
   ]
 
 specialTreatmentMap :: Map.Map ModuleName (Map.Map String SpecialTreatment)
