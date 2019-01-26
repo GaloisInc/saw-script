@@ -20,8 +20,8 @@ module Verifier.SAW.OpenTerm (
   OpenTerm, completeOpenTerm,
   -- * Basic operations for building open terms
   closedOpenTerm, flatOpenTerm,
-  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
-  applyOpenTerm, lambdaOpenTerm, piOpenTerm,
+  natOpenTerm, ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
+  applyOpenTerm, applyOpenTermMulti, lambdaOpenTerm, piOpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM, completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
@@ -54,6 +54,10 @@ flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
 flatOpenTerm ftf = OpenTerm $
   (sequence (fmap unOpenTerm ftf) >>= typeInferComplete)
 
+-- | Build an 'OpenTermm' for a natural number literal
+natOpenTerm :: Integer -> OpenTerm
+natOpenTerm = flatOpenTerm . NatLit
+
 -- | Build an 'OpenTerm' for a constructor applied to its arguments
 ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
 ctorOpenTerm c all_args = OpenTerm $ do
@@ -82,6 +86,10 @@ globalOpenTerm = flatOpenTerm . GlobalDef
 applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
 applyOpenTerm (OpenTerm f) (OpenTerm arg) =
   OpenTerm ((App <$> f <*> arg) >>= typeInferComplete)
+
+-- | Apply an 'OpenTerm' to 0 or more arguments
+applyOpenTermMulti :: OpenTerm -> [OpenTerm] -> OpenTerm
+applyOpenTermMulti = foldl applyOpenTerm
 
 -- | Build an 'OpenTerm' for the top variable in the current context, by
 -- building the 'TCM' computation which checks how much longer the context has
