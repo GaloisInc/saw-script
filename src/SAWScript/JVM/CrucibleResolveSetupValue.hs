@@ -52,7 +52,7 @@ import Verifier.SAW.TypedTerm
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible (IsSymInterface)
-import qualified Lang.Crucible.CFG.Expr as Crucible (App)
+import qualified Lang.Crucible.CFG.Expr as Crucible (App(..))
 import qualified Lang.Crucible.Simulator as Crucible (RegValue, RegValue'(..), extensionEval)
 import qualified Lang.Crucible.Simulator.Evaluation as Crucible (evalApp)
 
@@ -502,7 +502,22 @@ refIsNull sym ref =
     W4.Unassigned -> return (W4.truePred sym)
 
 refIsEqual :: Sym -> JVMRefVal -> JVMRefVal -> IO (W4.Pred Sym)
-refIsEqual _sym _ref1 _ref2 = fail "refIsEqual: FIXME"
+refIsEqual sym ref1 ref2 =
+  case ref1 of
+    W4.Unassigned ->
+      case ref2 of
+        W4.Unassigned -> return (W4.truePred sym)
+        W4.PE p2 r2 -> W4.notPred sym p2
+    W4.PE p1 r1 ->
+      case ref2 of
+        W4.Unassigned -> W4.notPred sym p1
+        W4.PE p2 r2 ->
+          do n1 <- W4.notPred sym p1
+             n2 <- W4.notPred sym p2
+             n <- W4.andPred sym n1 n2
+             p <- W4.andPred sym p1 p2
+             e <- doAppJVM sym (Crucible.ReferenceEq W4.knownRepr (Crucible.RV r1) (Crucible.RV r2))
+             W4.orPred sym n =<< W4.andPred sym p e
 
 -- TODO: move to crucible-jvm?
 doAppJVM ::
