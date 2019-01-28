@@ -345,7 +345,7 @@ methodSpecHandler opts sc cc jc css retTy = do
 
         -- Now, assert each of the preconditions from each branch separately, but weaken them
         -- each by the disjunction of all the other selector variables.  This preserves the original
-        -- metadata associated with the preconidition, but is still a necessary condition in
+        -- metadata associated with the precondition, but is still a necessary condition in
         -- the overall proof.  The added disjunctions allow for the possibility that other override
         -- specifications will be chosen instead of this one.
         forM_ (zip branches (dropith $ map (view _1) branches)) $ \((_,_,preCondRef), otherps) ->
