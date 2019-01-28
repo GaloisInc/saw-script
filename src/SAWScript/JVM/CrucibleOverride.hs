@@ -263,13 +263,13 @@ methodSpecHandler ::
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext          {- ^ context for interacting with Crucible        -} ->
-  CJ.JVMContext            {- ^ context for interacting with Crucible-JVM    -} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
      (Crucible.RegValue Sym ret)
-methodSpecHandler opts sc cc jc css retTy = do
+methodSpecHandler opts sc cc css retTy = do
   sym <- Crucible.getSymInterface
+  let jc = cc^.ccJVMContext
   top_loc <- liftIO $ W4.getCurrentProgramLoc sym
 
   -- Invent the necessary selector variables and set up the precondition IORefs.
