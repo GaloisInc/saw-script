@@ -51,7 +51,10 @@ import Verifier.SAW.TypedTerm
 --import Text.LLVM.DebugUtils as L
 
 -- crucible
-import qualified Lang.Crucible.Simulator as Crucible (RegValue)
+import qualified Lang.Crucible.Backend as Crucible (IsSymInterface)
+import qualified Lang.Crucible.CFG.Expr as Crucible (App)
+import qualified Lang.Crucible.Simulator as Crucible (RegValue, RegValue'(..), extensionEval)
+import qualified Lang.Crucible.Simulator.Evaluation as Crucible (evalApp)
 
 -- what4
 import qualified What4.Interface as W4
@@ -500,3 +503,13 @@ refIsNull sym ref =
 
 refIsEqual :: Sym -> JVMRefVal -> JVMRefVal -> IO (W4.Pred Sym)
 refIsEqual _sym _ref1 _ref2 = fail "refIsEqual: FIXME"
+
+-- TODO: move to crucible-jvm?
+doAppJVM ::
+  Crucible.IsSymInterface sym =>
+  sym -> Crucible.App CJ.JVM (Crucible.RegValue' sym) tp -> IO (Crucible.RegValue sym tp)
+doAppJVM sym =
+  Crucible.evalApp sym CJ.jvmIntrinsicTypes out
+    (Crucible.extensionEval CJ.jvmExtensionImpl sym CJ.jvmIntrinsicTypes out) (return . Crucible.unRV)
+  where
+    out _verbosity = putStrLn -- FIXME: use verbosity
