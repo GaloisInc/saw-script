@@ -502,43 +502,6 @@ doAlloc cc alloc =
     halloc = cc^.ccHandleAllocator
     jc = cc^.ccJVMContext
 
-{-
-Crucible.newRef :: IsSymInterface sym => TypeRepr tp -> RegValue sym tp -> OverrideSim p sym ext rtp args ret (RefCell tp)
--}
--- type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
-
--- RegValue sym (BaseToType bt) = SymExpr sym bt
--- RegValue sym (FloatType fi) = SymInterpretedFloat sym fi
--- RegValue sym AnyType = AnyValue sym
--- RegValue sym UnitType = ()
--- RegValue sym CharType = Word16
--- RegValue sym (FunctionHandleType a r) = FnVal sym a r
--- RegValue sym (MaybeType tp) = PartExpr (Pred sym) (RegValue sym tp)
--- RegValue sym (VectorType tp) = Vector (RegValue sym tp)
--- RegValue sym (StructType ctx) = Assignment (RegValue' sym) ctx
--- RegValue sym (VariantType ctx) = Assignment (VariantBranch sym) ctx
--- RegValue sym (ReferenceType tp) = MuxTree sym (RefCell tp)
--- RegValue sym (WordMapType w tp) = WordMap sym w tp
--- RegValue sym (RecursiveType nm ctx) = RolledType sym nm ctx
--- RegValue sym (IntrinsicType nm ctx) = Intrinsic sym nm ctx
--- RegValue sym (StringMapType tp) = Map Text (PartExpr (Pred sym) (RegValue sym tp))
-
--- type JVMRefType = MaybeType (ReferenceType JVMObjectType)
--- type JVMObjectType = RecursiveType "JVM_object" EmptyCtx
--- type JVMObjectImpl = VariantType (EmptyCtx ::> JVMInstanceType ::> JVMArrayType)
--- type JVMInstanceType = StructType ((EmptyCtx ::> StringMapType JVMValueType) ::> JVMClassType)
--- type JVMArrayType = StructType (((EmptyCtx ::> JVMIntType) ::> VectorType JVMValueType) ::> JVMTypeRepType)
--- type JVMTypeRepType = RecursiveType "JVM_TypeRep" EmptyCtx
--- type JVMTypeRepImpl = VariantType (EmptyCtx ::> JVMTypeRepType ::> JVMClassType ::> JVMIntType)
---type JVMValueType = VariantType JVMValueCtx
---type JVMValueCtx =
---  EmptyCtx
---  ::> JVMDoubleType
---  ::> JVMFloatType
---  ::> JVMIntType
---  ::> JVMLongType
---  ::> JVMRefType
-
 --------------------------------------------------------------------------------
 
 -- ppGlobalPair :: CrucibleContext -> Crucible.GlobalPair Sym a -> Doc
