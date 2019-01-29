@@ -71,7 +71,6 @@ import qualified What4.ProgramLoc as W4
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr), GlobalVar)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, freshRefCell)
 import qualified Lang.Crucible.Simulator as Crucible
@@ -82,6 +81,9 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 --import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Types as Crucible
 import qualified Lang.Crucible.Utils.MuxTree as Crucible (toMuxTree)
+
+-- crucible-saw
+import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM.Translation as CJ
@@ -322,7 +324,7 @@ methodSpecHandler ::
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
-  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
+  Crucible.OverrideSim (CrucibleSAW.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc top_loc css retTy = do
   sym <- Crucible.getSymInterface
@@ -822,13 +824,15 @@ valueToSC ::
   JVMVal ->
   OverrideMatcher Term
 valueToSC sym loc failMsg Cryptol.TVBit (IVal x) =
-  liftIO (Crucible.toSC sym x) -- TODO: is this right?
+  do b <- liftIO $ W4.bvIsNonzero sym x
+      -- TODO: assert that x is 0 or 1
+     liftIO (CrucibleSAW.toSC sym b)
 
 valueToSC sym loc failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (IVal x) =
-  liftIO (Crucible.toSC sym x)
+  liftIO (CrucibleSAW.toSC sym x)
 
 valueToSC sym loc failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (LVal x) =
-  liftIO (Crucible.toSC sym x)
+  liftIO (CrucibleSAW.toSC sym x)
 
 valueToSC _sym loc failMsg _tval _val =
   failure loc failMsg
