@@ -217,8 +217,9 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
      -- run the symbolic execution
+     top_loc <- toW4Loc "crucible_jvm_verify" <$> getPosition
      (ret, globals3) <-
-       io $ verifySimulate opts cc methodSpec args assumes lemmas globals2 checkSat
+       io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
 
      -- collect the proof obligations
      asserts <- verifyPoststate opts (biSharedContext bic) cc
@@ -519,9 +520,10 @@ registerOverride ::
   Options ->
   CrucibleContext ->
   Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM ->
+  W4.ProgramLoc ->
   [CrucibleMethodSpecIR] ->
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
-registerOverride opts cc _ctx cs =
+registerOverride opts cc _ctx top_loc cs =
   do let sym = cc^.ccBackend
      let cb = cc^.ccCodebase
      let jc = cc^.ccJVMContext
@@ -543,7 +545,7 @@ registerOverride opts cc _ctx cs =
               $ Crucible.mkOverride'
                   (Crucible.handleName h)
                   retType
-                  (methodSpecHandler opts sc cc cs retType)
+                  (methodSpecHandler opts sc cc top_loc cs retType)
 
 
 --------------------------------------------------------------------------------
@@ -554,11 +556,12 @@ verifySimulate ::
   CrucibleMethodSpecIR          ->
   [(a, JVMVal)]                 ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  W4.ProgramLoc                 ->
   [CrucibleMethodSpecIR]        ->
   Crucible.SymGlobalState Sym   ->
   Bool {- ^ path sat checking -} ->
   IO (Maybe (J.Type, JVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc mspec args assumes lemmas globals checkSat =
+verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
   do let jc = cc^.ccJVMContext
      let cb = cc^.ccCodebase
      let sym = cc^.ccBackend
@@ -607,7 +610,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                 do liftIO $ putStrLn "registering standard overrides"
                    _ <- Strict.runStateT (mapM_ CJ.register_jvm_override CJ.stdOverrides) jc
                    liftIO $ putStrLn "registering user-provided overrides"
-                   mapM_ (registerOverride opts cc simctx) (groupOn (view csMethodName) lemmas)
+                   mapM_ (registerOverride opts cc simctx top_loc) (groupOn (view csMethodName) lemmas)
                    -- _ <- runClassInit halloc ctx classname
                    liftIO $ putStrLn "registering assumptions"
                    liftIO $ do
