@@ -394,8 +394,9 @@ resolveBitvectorTerm ::
   IO (W4.SymBV Sym w)
 resolveBitvectorTerm sym w tm =
   do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
-     ss <- basic_ss sc
-     tm' <- rewriteSharedTerm sc ss tm
+     --ss <- basic_ss sc
+     --tm' <- rewriteSharedTerm sc ss tm
+     let tm' = tm
      mx <- case getAllExts tm' of
              [] ->
                do -- Evaluate in SBV to test whether 'tm' is a concrete value
