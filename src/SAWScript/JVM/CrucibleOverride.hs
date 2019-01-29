@@ -274,7 +274,7 @@ methodSpecHandler opts sc cc css retTy = do
 
   -- Invent the necessary selector variables and set up the precondition IORefs.
   branches <- forM (zip css [0::Int .. ]) $ \(cs,i) -> liftIO $
-                do let pnm = "lemma_" ++ show i ++ "_" ++ (cs^.csName)
+                do let pnm = "lemma_" ++ show i ++ "_" ++ (cs^.csMethodName)
                    Right smb <- return $ W4.userSymbol pnm
                    p <- W4.freshConstant sym smb W4.BaseBoolRepr
                    preCondRef <- newIORef Nothing
@@ -358,7 +358,7 @@ methodSpecHandler opts sc cc css retTy = do
 
         -- Now project the mabye value we defined above.  This has the effect of asserting that
         -- _some_ override was chosen.
-        let fsym = (head css)^.csName
+        let fsym = (head css)^.csMethodName
         Crucible.readPartExpr sym (Crucible.regValue ret)
           (Crucible.AssertFailureSimError ("No applicable override for " ++ fsym))
 

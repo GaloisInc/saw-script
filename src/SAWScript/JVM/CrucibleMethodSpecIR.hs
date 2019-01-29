@@ -25,7 +25,6 @@ Stability   : provisional
 
 module SAWScript.JVM.CrucibleMethodSpecIR where
 
-import           Data.List (isPrefixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Control.Monad.ST (RealWorld)
@@ -183,7 +182,8 @@ type StateSpec = StateSpec' (ProgramLoc, Allocation)
 
 data CrucibleMethodSpecIR' t =
   CrucibleMethodSpec
-  { _csName            :: String
+  { _csClassName       :: J.ClassName
+  , _csMethodName      :: String
   , _csArgs            :: [t]
   , _csRet             :: Maybe t
   , _csPreState        :: StateSpec -- ^ state before the function runs
@@ -375,7 +375,8 @@ initialDefCrucibleMethodSpecIR ::
   CrucibleMethodSpecIR
 initialDefCrucibleMethodSpecIR cname method loc =
   CrucibleMethodSpec
-    { _csName            = J.methodName method
+    { _csClassName       = cname
+    , _csMethodName      = J.methodName method
     , _csArgs            = thisType ++ J.methodParameterTypes method
     , _csRet             = J.methodReturnType method
     , _csPreState        = initialStateSpec

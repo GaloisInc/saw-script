@@ -177,7 +177,7 @@ crucible_jvm_verify ::
   Options ->
   J.Class ->
   String {- ^ method name -} ->
-  [CrucibleMethodSpecIR] ->
+  [CrucibleMethodSpecIR] {- ^ overrides -} ->
   Bool {- ^ path sat checking -} ->
   JVMSetupM () ->
   ProofScript SatResult ->
@@ -261,7 +261,7 @@ verifyObligations cc mspec tactic assumes asserts =
      st <- io $ readIORef $ W4.sbStateManager sym
      let sc = Crucible.saw_ctx st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
-     let nm  = mspec^.csName
+     let nm = mspec^.csMethodName
      stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
        goal   <- io $ scImplies sc assume assert
        goal'  <- io $ scGeneralizeExts sc (getAllExts goal) =<< scEqTrue sc goal
@@ -329,14 +329,14 @@ verifyPrestate cc mspec globals0 =
      case (mspec^.csRetValue, mspec^.csRet) of
        (Just _, Nothing) ->
             fail $ unlines
-              [ "Could not resolve return type of " ++ mspec^.csName
+              [ "Could not resolve return type of " ++ mspec^.csMethodName
               , "Raw type: " ++ show (mspec^.csRet)
               ]
        (Just sv, Just retTy) ->
          do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
             b <- liftIO $ checkRegisterCompatibility retTy retTy'
             unless b $ fail $ unlines
-              [ "Incompatible types for return value when verifying " ++ mspec^.csName
+              [ "Incompatible types for return value when verifying " ++ mspec^.csMethodName
               , "Expected: " ++ show retTy
               , "but given value of type: " ++ show retTy'
               ]
@@ -376,7 +376,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
     nArgs = toInteger (length (mspec^.csArgs))
     tyenv = csAllocations mspec
     nameEnv = mspec^.csPreState.csVarTypeNames
-    nm = mspec^.csName
+    nm = mspec^.csMethodName
 
     checkArgTy i mt mt' =
       do b <- checkRegisterCompatibility mt mt'
@@ -562,7 +562,7 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
      let sym = cc^.ccBackend
      let cls = cc^.ccJVMClass
      let cname = J.className cls
-     let mname = mspec^.csName
+     let mname = mspec^.csMethodName
      let verbosity = simVerbose opts
      let personality = Crucible.SAWCruciblePersonality
      let pos = PosInternal "verifySimulate"
