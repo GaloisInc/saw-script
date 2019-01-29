@@ -515,34 +515,36 @@ doAlloc cc alloc =
 
 --------------------------------------------------------------------------------
 
-{-
 registerOverride ::
-  Options                    ->
-  CrucibleContext            ->
-  Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym JVM ->
-  [CrucibleMethodSpecIR]     ->
-  JVMOverrideSim rtp args ret ()
-registerOverride opts cc _ctx cs = do
-  let sym = cc^.ccBackend
-  sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
-  let fsym = (head cs)^.csName
-      llvmctx = cc^.ccLLVMContext
-  liftIO $
-    printOutLn opts Info $ "Registering override for `" ++ fsym ++ "`"
-  case Map.lookup (L.Symbol fsym) (llvmctx ^. Crucible.symbolMap) of
-    -- LLVMHandleInfo constructor has two existential type arguments,
-    -- which are bound here. h :: FnHandle args' ret'
-    Just (Crucible.LLVMHandleInfo _decl' h) -> do
-      -- TODO: check that decl' matches (csDefine cs)
-      let retType = Crucible.handleReturnType h
-      Crucible.bindFnHandle h
-        $ Crucible.UseOverride
-        $ Crucible.mkOverride'
-            (Crucible.handleName h)
-            retType
-            (methodSpecHandler opts sc cc cs retType)
-    Nothing -> fail $ "Can't find declaration for `" ++ fsym ++ "`."
--}
+  Options ->
+  CrucibleContext ->
+  Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM ->
+  [CrucibleMethodSpecIR] ->
+  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
+registerOverride opts cc _ctx cs =
+  do let sym = cc^.ccBackend
+     let cb = cc^.ccCodebase
+     let jc = cc^.ccJVMContext
+     let c0 = head cs
+     let cname = c0^.csClassName
+     let mname = c0^.csMethodName
+     let pos = PosInternal "registerOverride"
+     sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
+
+     (mcls, meth) <- liftIO $ findMethod cb pos mname =<< lookupClass cb pos cname
+     mhandle <- liftIO $ CJ.findMethodHandle jc mcls meth
+     case mhandle of
+       -- LLVMHandleInfo constructor has two existential type arguments,
+       -- which are bound here. h :: FnHandle args' ret'
+       CJ.JVMHandleInfo _ h ->
+         do let retType = Crucible.handleReturnType h
+            Crucible.bindFnHandle h
+              $ Crucible.UseOverride
+              $ Crucible.mkOverride'
+                  (Crucible.handleName h)
+                  retType
+                  (methodSpecHandler opts sc cc cs retType)
+
 
 --------------------------------------------------------------------------------
 
@@ -601,37 +603,21 @@ verifySimulate opts cc mspec args assumes lemmas globals checkSat =
                          bindings CJ.jvmExtensionImpl Crucible.SAWCruciblePersonality
           let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
-          let overrideSim = do _ <- Strict.runStateT (mapM_ CJ.register_jvm_override CJ.stdOverrides) jc
-                               -- _ <- runClassInit halloc ctx classname
-                               fnCall
-          Crucible.executeCrucible (map Crucible.genericToExecutionFeature feats)
-            (simSt (Crucible.runOverrideSim (Crucible.handleReturnType h) overrideSim))
-
-     --case prepareArgs (map snd args) of
-     --  Some regmap ->
-     --    do res <- CJ.executeCrucibleJVM cb verbosity sym personality cname mname regmap
-{-
-     case Map.lookup (L.Symbol nm) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
-       Nothing -> fail $ unwords ["function", show nm, "not found"]
-       Just (Crucible.AnyCFG cfg) ->
-         do let h   = Crucible.cfgHandle cfg
-                rty = Crucible.handleReturnType h
-            args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
-            let simCtx = cc^.ccLLVMSimContext
-                conf = W4.getConfiguration sym
-            checkSatOpt <- W4.getOptionSetting Crucible.sawCheckPathSat conf
-            _ <- W4.setOpt checkSatOpt checkSat
-
-            let simSt = Crucible.initSimState simCtx globals Crucible.defaultAbortHandler
-            res <-
-              Crucible.executeCrucible simSt $ Crucible.runOverrideSim rty $
-                do mapM_ (registerOverride opts cc simCtx)
-                         (groupOn (view csName) lemmas)
+          let overrideSim =
+                do liftIO $ putStrLn "registering standard overrides"
+                   _ <- Strict.runStateT (mapM_ CJ.register_jvm_override CJ.stdOverrides) jc
+                   liftIO $ putStrLn "registering user-provided overrides"
+                   mapM_ (registerOverride opts cc simctx) (groupOn (view csMethodName) lemmas)
+                   -- _ <- runClassInit halloc ctx classname
+                   liftIO $ putStrLn "registering assumptions"
                    liftIO $ do
                      preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
                      Crucible.addAssumptions sym (Seq.fromList preds)
-                   Crucible.regValue <$> (Crucible.callCFG cfg args')
--}
+                   liftIO $ putStrLn "simulating function"
+                   fnCall
+          Crucible.executeCrucible (map Crucible.genericToExecutionFeature feats)
+            (simSt (Crucible.runOverrideSim (Crucible.handleReturnType h) overrideSim))
+
      case res of
        Crucible.FinishedResult _ pr ->
          do Crucible.GlobalPair retval globals1 <-
