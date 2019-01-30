@@ -206,7 +206,9 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      io $ W4.setCurrentProgramLoc sym loc
      methodSpec <- view csMethodSpec <$> execStateT (runJVMSetupM setup) st0
 
-     let classTab = Map.empty -- FIXME: how to initialize this?
+     -- TODO: Factor out a top-level function for setting up initial globals.
+     -- It should also initialize static class fields (we don't do this yet)
+     classTab <- liftIO $ setupDynamicClassTable sym jc
      let classTabVar = CJ.dynamicClassTable jc
      let globals1 = Crucible.insertGlobal classTabVar classTab Crucible.emptyGlobals
 
@@ -784,6 +786,66 @@ setupCrucibleContext bic opts jclass =
                Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
                Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
 -}
+
+--------------------------------------------------------------------------------
+
+setupDynamicClassTable :: Sym -> CJ.JVMContext -> IO (Crucible.RegValue Sym CJ.JVMClassTableType)
+setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTable jc))
+  where
+    addClass ::
+      Crucible.RegValue Sym CJ.JVMClassTableType ->
+      (J.ClassName, J.Class) ->
+      IO (Crucible.RegValue Sym CJ.JVMClassTableType)
+    addClass tab (cname, cls) =
+      do cls' <- setupClass cls
+         return $ Map.insert (classNameText cname) (W4.justPartExpr sym cls') tab
+
+    setupClass :: J.Class -> IO (Crucible.RegValue Sym CJ.JVMClassType)
+    setupClass cls =
+      do let cname = J.className cls
+         name <- W4.stringLit sym (classNameText (J.className cls))
+         status <- W4.bvLit sym knownRepr 0
+         super <-
+           case J.superClass cls of
+             Nothing -> return W4.Unassigned
+             Just cname' ->
+               case Map.lookup cname' (CJ.classTable jc) of
+                 Nothing -> return W4.Unassigned -- this should never happen
+                 Just cls' -> W4.justPartExpr sym <$> setupClass cls'
+         let methods = foldr (addMethod cname) Map.empty (J.classMethods cls)
+         interfaces <- V.fromList <$> traverse (W4.stringLit sym . classNameText) (J.classInterfaces cls)
+         return $
+           Crucible.RolledType $
+           Ctx.Empty
+           Ctx.:> Crucible.RV name
+           Ctx.:> Crucible.RV status
+           Ctx.:> Crucible.RV super
+           Ctx.:> Crucible.RV methods
+           Ctx.:> Crucible.RV interfaces
+
+    addMethod ::
+      J.ClassName ->
+      J.Method ->
+      Crucible.RegValue Sym CJ.JVMMethodTableType ->
+      Crucible.RegValue Sym CJ.JVMMethodTableType
+    addMethod cname m tab =
+      case Map.lookup (cname, J.methodKey m) (CJ.methodHandles jc) of
+        Nothing -> tab -- should never happen
+        Just (CJ.JVMHandleInfo key handle) ->
+          Map.insert (methodKeyText key) (W4.justPartExpr sym v) tab
+          where v = Crucible.AnyValue (Crucible.handleType handle) (Crucible.HandleFnVal handle)
+
+    -- This must agree with 'Lang.Crucible.JVM.Class.methodKeyExpr' from package crucible-jvm
+    -- TODO: export this function from there.
+    methodKeyText :: J.MethodKey -> Text.Text
+    methodKeyText k = Text.pack (J.methodKeyName k ++ params ++ res)
+      where
+        params = concatMap show (J.methodKeyParameterTypes k)
+        res    = show (J.methodKeyReturnType k)
+
+    -- TODO: move to crucible-jvm
+    classNameText :: J.ClassName -> Text.Text
+    classNameText cname = Text.pack (J.unClassName cname)
 
 --------------------------------------------------------------------------------
 

@@ -1295,34 +1295,16 @@ doAllocateObject ::
   Crucible.SymGlobalState Sym ->
   IO (JVMRefVal, Crucible.SymGlobalState Sym)
 doAllocateObject sym halloc jc cname globals =
-  do --cls <- getJVMClassByName sym globals jc cname
+  do cls <- getJVMClassByName sym globals jc cname
      let fieldIds = fieldsOfClassName jc cname
      let pval = W4.justPartExpr sym unassignedJVMValue
      let fields = Map.fromList [ (Text.pack (CJ.fieldIdString f), pval) | f <- fieldIds ]
-     cls <- dummyClassObject sym cname -- FIXME: temporary hack
      let inst = Ctx.Empty Ctx.:> Crucible.RV fields Ctx.:> Crucible.RV cls
      let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
      let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i1of2 inst)
      ref <- stToIO (Crucible.freshRefCell halloc objectRepr)
      let globals' = Crucible.updateRef ref (W4.justPartExpr sym obj) globals
      return (W4.justPartExpr sym (Crucible.toMuxTree sym ref), globals')
-
-dummyClassObject ::
-  Sym -> J.ClassName -> IO (Crucible.RegValue Sym CJ.JVMClassType)
-dummyClassObject sym cname =
-  do name <- W4.stringLit sym (Text.pack (J.unClassName cname))
-     status <- W4.bvLit sym knownRepr 0
-     let super = W4.Unassigned
-     let methods = Map.empty
-     let interfaces = V.empty
-     return $
-       Crucible.RolledType $
-       Ctx.Empty
-       Ctx.:> Crucible.RV name
-       Ctx.:> Crucible.RV status
-       Ctx.:> Crucible.RV super
-       Ctx.:> Crucible.RV methods
-       Ctx.:> Crucible.RV interfaces
 
 doAllocateArray ::
   Sym ->
