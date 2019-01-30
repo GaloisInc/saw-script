@@ -910,7 +910,9 @@ learnPointsTo opts sc cc spec prepost pt =
   case pt of
 
     PointsToField loc ptr fname val ->
-      do (ty, val') <- resolveSetupValueJVM opts cc sc spec val
+      do let tyenv = csAllocations spec
+         let nameEnv = csTypeNames spec
+         ty <- typeOfSetupValue cc tyenv nameEnv val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
          sym <- getSymInterface
@@ -919,7 +921,9 @@ learnPointsTo opts sc cc spec prepost pt =
          matchArg sc cc loc prepost v ty val
 
     PointsToElem loc ptr idx val ->
-      do (ty, val') <- resolveSetupValueJVM opts cc sc spec val
+      do let tyenv = csAllocations spec
+         let nameEnv = csTypeNames spec
+         ty <- typeOfSetupValue cc tyenv nameEnv val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
          sym <- getSymInterface
