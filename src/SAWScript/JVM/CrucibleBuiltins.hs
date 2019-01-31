@@ -206,11 +206,8 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      io $ W4.setCurrentProgramLoc sym loc
      methodSpec <- view csMethodSpec <$> execStateT (runJVMSetupM setup) st0
 
-     -- TODO: Factor out a top-level function for setting up initial globals.
-     -- It should also initialize static class fields (we don't do this yet)
-     classTab <- liftIO $ setupDynamicClassTable sym jc
-     let classTabVar = CJ.dynamicClassTable jc
-     let globals1 = Crucible.insertGlobal classTabVar classTab Crucible.emptyGlobals
+     -- construct the dynamic class table and declare static fields
+     globals1 <- liftIO $ setupGlobalState sym jc
 
      -- construct the initial state for verifications
      (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
@@ -788,6 +785,16 @@ setupCrucibleContext bic opts jclass =
 -}
 
 --------------------------------------------------------------------------------
+
+-- | Construct the dynamic class table, and also declare all static
+-- fields (leaving them with uninitialized contents).
+setupGlobalState :: Sym -> CJ.JVMContext -> IO (Crucible.SymGlobalState Sym)
+setupGlobalState sym jc =
+  do classTab <- setupDynamicClassTable sym jc
+     let classTabVar = CJ.dynamicClassTable jc
+     let globals0 = Crucible.insertGlobal classTabVar classTab Crucible.emptyGlobals
+     let declareGlobal var = Crucible.insertGlobal var unassignedJVMValue
+     return $ foldr declareGlobal globals0 (Map.elems (CJ.staticFields jc))
 
 setupDynamicClassTable :: Sym -> CJ.JVMContext -> IO (Crucible.RegValue Sym CJ.JVMClassTableType)
 setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTable jc))

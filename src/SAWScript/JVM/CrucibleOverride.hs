@@ -33,6 +33,7 @@ module SAWScript.JVM.CrucibleOverride
   , doFieldStore
   , doArrayStore
   , decodeJVMVal
+  , unassignedJVMValue
   ) where
 
 import           Control.Lens
