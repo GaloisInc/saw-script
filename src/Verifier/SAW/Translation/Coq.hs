@@ -89,13 +89,21 @@ showFTermF :: FlatTermF Term -> String
 showFTermF = show . Unshared . FTermF
 
 data SpecialTreatment
-  = MapsTo Ident
-  | Rename String
-  | Skip
+  = MapsTo Ident  -- means "don't translate its definition, instead use provided"
+  | Rename String -- means "translate its definition, but rename it"
+  | Skip          -- means "don't translate its definition, no replacement"
 
 mkCoqIdent :: String -> String -> Ident
 mkCoqIdent coqModule coqIdent = mkIdent (mkModuleName [coqModule]) coqIdent
 
+-- NOTE: while I initially did the mapping from SAW core names to the
+-- corresponding Coq construct here, it makes the job of translating SAW core
+-- axioms into Coq theorems much more annoying, because one needs to manually
+-- rename every constant mentioned in the statement to its Coq counterpart.
+-- Instead, I am now trying to keep the names the same as much as possible
+-- during this translation (it is sometimes impossible, for instance, `at` is a
+-- reserved keyword in Coq), so that primitives' and axioms' types can be
+-- copy-pasted as is on the Coq side.
 preludeSpecialTreatmentMap :: Map.Map String SpecialTreatment
 preludeSpecialTreatmentMap = Map.fromList $ []
 
@@ -114,9 +122,9 @@ preludeSpecialTreatmentMap = Map.fromList $ []
 
   -- Unit
   ++
-  [ ("Unit",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "tt")
-  , ("UnitType",          MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "unit")
-  , ("UnitType__rec",     MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "unit_rect")
+  [ ("Unit",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Unit")
+  , ("UnitType",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "UnitType")
+  , ("UnitType__rec",     MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "UnitType__rec")
   ]
 
   -- Records
@@ -129,86 +137,91 @@ preludeSpecialTreatmentMap = Map.fromList $ []
 
   -- Decidable equality, does not make sense in Coq unless turned into a type
   -- class
+  -- Apparently, this is not used much for Cryptol, so we can skip it.
   ++
-  [ ("eq",                MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq")
-  , ("eq_refl",           MapsTo $ mkCoqIdent "CryptolToCow.SAW" "eq_refl")
-  , ("eq_Bool",           MapsTo $ mkCoqIdent "CryptolToCow.SAW" "eq_Bool")
-  -- not sure whether those are used
+  [ ("eq",                Skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq")
+  , ("eq_bitvector",      Skip)
+  , ("eq_Bool",           Skip) -- MapsTo $ mkCoqIdent "CryptolToCow.SAW" "eq_Bool")
+  , ("eq_Nat",            Skip)
+  , ("eq_refl",           Skip) -- MapsTo $ mkCoqIdent "CryptolToCow.SAW" "eq_refl")
+  , ("eq_VecBool",        Skip)
+  , ("eq_VecVec",         Skip)
   , ("ite_eq_cong_1",     Skip)
   , ("ite_eq_cong_2",     Skip)
   ]
 
   -- Boolean
   ++
-  [ ("and",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "andb")
-  , ("and__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "andb__eq")
-  , ("Bool",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "Bool")
-  , ("boolEq",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "boolEq")
-  , ("boolEq__eq",        MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "eqb__eq")
-  , ("False",             MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "false")
-  , ("ite",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "ite")
-  , ("iteDep",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "iteDep")
-  , ("iteDep_True",       MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "iteDep_True")
-  , ("iteDep_False",      MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "iteDep_False")
+  [ ("and",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "and")
+  , ("and__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "and__eq")
+  , ("Bool",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Bool")
+  , ("boolEq",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "boolEq")
+  , ("boolEq__eq",        MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "boolEq__eq")
+  , ("False",             MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "False")
+  , ("ite",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "ite")
+  , ("iteDep",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "iteDep")
+  , ("iteDep_True",       MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "iteDep_True")
+  , ("iteDep_False",      MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "iteDep_False")
   , ("ite_bit",           Skip) -- FIXME: change this
-  , ("ite_eq_iteDep",     MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "ite_eq_iteDep")
-  , ("not",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "negb")
-  , ("not__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "negb__eq")
-  , ("or",                MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "orb")
-  , ("or__eq",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "orb__eq")
-  , ("True",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "true")
-  , ("xor",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "xorb")
-  , ("xor__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "xorb__eq")
+  , ("ite_eq_iteDep",     MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "ite_eq_iteDep")
+  , ("not",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "not")
+  , ("not__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "not__eq")
+  , ("or",                MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "or")
+  , ("or__eq",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "or__eq")
+  , ("True",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "True")
+  , ("xor",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "xor")
+  , ("xor__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "xor__eq")
   ]
 
   -- Pairs
   ++
-  [ ("PairType",          MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "prod")
-  , ("PairValue",         MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "pair")
-  , ("Pair__rec",         MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "prod_rect")
-  , ("fst",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "fst")
-  , ("snd",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "snd")
+  [ ("PairType",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "PairType")
+  , ("PairValue",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "PairValue")
+  , ("Pair__rec",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Pair__rec")
+  , ("fst",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "fst")
+  , ("snd",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "snd")
   ]
 
   -- Equality
   ++
-  [ ("Eq",                MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "identity")
-  , ("Eq__rec",           MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "identity_rect")
-  , ("Refl",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "identity_refl")
+  [ ("Eq",                MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Eq")
+  , ("Eq__rec",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Eq__rec")
+  , ("Refl",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Refl")
   ]
 
   -- Strings
   ++
-  [ ("String",            MapsTo $ mkCoqIdent "Coq.Strings.String" "string")
+  [ ("String",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "String")
   ]
 
   -- Utility functions
   ++
-  [ ("id",                MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "id")
-  , ("uncurry",           Rename "sawUncurry")
+  [ ("id",                MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "id")
   ]
 
   -- Natural numbers
   ++
-  [ ("divModNat",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "divModNat")
-  , ("eq_Nat",            Skip)
-  , ("Nat",               MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "nat")
-  , ("widthNat",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW"   "widthNat")
-  , ("Zero",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "O")
-  , ("Succ",              MapsTo $ mkCoqIdent "Coq.Init.Datatypes" "S")
+  [ ("divModNat",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "divModNat")
+  , ("Nat",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Nat")
+  , ("widthNat",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "widthNat")
+  , ("Zero",              MapsTo $ mkCoqIdent "CryptolToCoq"     "Zero")
+  , ("Succ",              MapsTo $ mkCoqIdent "CryptolToCoq"     "Succ")
   ]
 
   -- Vectors
   ++
   [ ("at",                Rename "sawAt") -- `at` is a reserved keyword in Coq
-  , ("atWithDefault",     MapsTo $ mkCoqIdent "CryptolToCoq.VectorExtras" "vectorAtWithDefault")
-  , ("coerceVec",         Skip)
-  , ("EmptyVec",          MapsTo $ mkCoqIdent "Coq.Vectors.Vector"        "nil")
+  , ("at_single",         Skip) -- is boring, could be proved on the Coq side
+  , ("atWithDefault",     MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "atWithDefault")
+  , ("coerceVec",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "coerceVec")
+  , ("EmptyVec",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "EmptyVec")
   , ("eq_Vec",            Skip)
-  , ("gen",               MapsTo $ mkCoqIdent "CryptolToCoq.VectorExtras" "vectorGen")
+  , ("foldr",             MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "foldr")
+  , ("gen",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "gen")
   , ("take0",             Skip)
   -- cannot map directly to Vector.t because arguments are in a different order
-  , ("Vec",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW"          "sawVec")
+  , ("zip",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "zip")
+  , ("Vec",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Vec")
   ]
 
 specialTreatmentMap :: Map.Map ModuleName (Map.Map String SpecialTreatment)
@@ -224,61 +237,6 @@ cryptolPreludeMap = Map.fromList
   , ("drop", "cryptolDrop")
   , ("/\\", "cryptolAnd")
   ]
-
--- identMap :: Map.Map Ident Coq.Ident
--- identMap = Map.fromList
---   [ ("Prelude.Bool", "bool")
---   , ("Prelude.False", "false")
---   , ("Prelude.True", "true")
---   , ("Prelude.Nat", "nat")
---   , ("Prelude.Vec", "sawVec")
---   , ("Prelude.append", "vecAppend")
---   , ("Cryptol.ecCat", "seqCat")
---   , ("Cryptol.ecNumber", "ecNumber")
---   , ("Prelude.take", "vecTake")
---   , ("Prelude.drop", "vecDrop")
---   , ("Prelude.zip", "vecZip")
---   , ("Cryptol.seq", "seq")
---   , ("Cryptol.seqZip", "seqZip")
---   , ("Prelude.zipWith", "sawZipWith")
---   , ("Prelude.uncurry", "sawUncurry")
---   , ("Prelude.map", "vecMap")
---   , ("Prelude.coerce", "sawCoerce")
---   , ("Prelude.unsafeCoerce", "sawUnsafeCoerce")
---   , ("Prelude.unsafeAssert", "sawUnsafeAssert")
---   , ("Cryptol.seqMap", "seqMap")
---   , ("Prelude.bvXor", "sawBVXor")
---   , ("Cryptol.ecDemote", "ecDemote")
---   , ("Cryptol.ecJoin", "ecJoin")
---   , ("Cryptol.ecSplit", "ecSplit")
---   , ("Cryptol.ecSplitAt", "ecSplitAt")
---   , ("Cryptol.Num", "Num")
---   , ("Cryptol.TCNum", "TCNum")
---   , ("Cryptol.tcAdd", "tcAdd")
---   , ("Cryptol.tcSub", "tcSub")
---   , ("Cryptol.tcMul", "tcMul")
---   , ("Cryptol.tcMin", "tcMin")
---   , ("Cryptol.ecEq", "ecEq")
---   , ("Cryptol.ecGt", "ecGt")
---   , ("Cryptol.seqEq1", "seqEq1")
---   , ("Prelude.eq", "sawEq")
---   , ("Cryptol.ecAnd", "ecAnd")
---   , ("Cryptol.ecOr", "ecOr")
---   , ("Cryptol.ecXor", "ecXor")
---   , ("Cryptol.PLogicBit", "PLogicBit")
---   , ("Cryptol.PLogicSeq", "PLogicSeq")
---   , ("Cryptol.PLogicSeqBool", "PLogicSeqBool")
---   , ("Cryptol.PLogicWord", "PLogicSeqBool")
---   , ("Cryptol.PCmpBit", "PCmpBit")
---   , ("Cryptol.PCmpSeq", "PCmpSeq")
---   , ("Cryptol.PCmpSeqBool", "PCmpSeqBool")
---   , ("Cryptol.PCmpWord", "PCmpSeqBool")
---   , ("Cryptol.PZeroBit", "PZeroBit")
---   , ("Cryptol.PZeroSeq", "PZeroSeq")
---   , ("Cryptol.PZeroSeqBool", "PZeroSeqBool")
---   , ("Cryptol.PZeroWord", "PZeroSeqBool")
---   , ("Cryptol.PLiteralSeqBool", "PLiteralSeqBool")
---   ]
 
 findSpecialTreatment :: Ident -> Maybe SpecialTreatment
 findSpecialTreatment ident =
@@ -675,7 +633,6 @@ translateDefDoc configuration name = translateTermToDocWith configuration (\ ter
 
 translateDeclImports :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
 translateDeclImports configuration name t = do
-  doc <- translateDefDoc configuration name t
   let imports = vcat [ "From Coq          Require Import Lists.List."
                      , "From Coq          Require Import String."
                      , "From Coq          Require Import Vectors.Vector."
@@ -684,4 +641,5 @@ translateDeclImports configuration name t = do
                      , "From CryptolToCoq Require Import SAW."
                      , "Import ListNotations."
                      ]
+  doc <- translateDefDoc configuration name t
   return (imports <$$> hardline <> doc)

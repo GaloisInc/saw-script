@@ -131,4 +131,4 @@ main = do
             Left e -> error $ show e
             Right (tdecl, _) -> putStrLn $ show $ Coq.ppDecl tdecl
 
-    liftIO $ putStrLn "End Module."
+    liftIO $ putStrLn "End Prelude."
