@@ -1302,7 +1302,7 @@ doAllocateObject sym halloc jc cname globals =
   do cls <- getJVMClassByName sym globals jc cname
      let fieldIds = fieldsOfClassName jc cname
      let pval = W4.justPartExpr sym unassignedJVMValue
-     let fields = Map.fromList [ (Text.pack (CJ.fieldIdString f), pval) | f <- fieldIds ]
+     let fields = Map.fromList [ (CJ.fieldIdText f, pval) | f <- fieldIds ]
      let inst = Ctx.Empty Ctx.:> Crucible.RV fields Ctx.:> Crucible.RV cls
      let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
      let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i1of2 inst)
@@ -1343,7 +1343,7 @@ getJVMClassByName ::
   J.ClassName ->
   IO (Crucible.RegValue Sym CJ.JVMClassType)
 getJVMClassByName sym globals jc cname =
-  do let key = Text.pack (J.unClassName cname)
+  do let key = CJ.classNameText cname
      let msg1 = Crucible.GenericSimError "Class table not found"
      let msg2 = Crucible.GenericSimError $ "Class was not found in class table: " ++ J.unClassName cname
      classtab <-

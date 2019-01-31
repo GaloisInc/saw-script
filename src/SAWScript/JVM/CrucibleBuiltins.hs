@@ -798,12 +798,12 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
       IO (Crucible.RegValue Sym CJ.JVMClassTableType)
     addClass tab (cname, cls) =
       do cls' <- setupClass cls
-         return $ Map.insert (classNameText cname) (W4.justPartExpr sym cls') tab
+         return $ Map.insert (CJ.classNameText cname) (W4.justPartExpr sym cls') tab
 
     setupClass :: J.Class -> IO (Crucible.RegValue Sym CJ.JVMClassType)
     setupClass cls =
       do let cname = J.className cls
-         name <- W4.stringLit sym (classNameText (J.className cls))
+         name <- W4.stringLit sym (CJ.classNameText (J.className cls))
          status <- W4.bvLit sym knownRepr 0
          super <-
            case J.superClass cls of
@@ -813,7 +813,7 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
                  Nothing -> return W4.Unassigned -- this should never happen
                  Just cls' -> W4.justPartExpr sym <$> setupClass cls'
          let methods = foldr (addMethod cname) Map.empty (J.classMethods cls)
-         interfaces <- V.fromList <$> traverse (W4.stringLit sym . classNameText) (J.classInterfaces cls)
+         interfaces <- V.fromList <$> traverse (W4.stringLit sym . CJ.classNameText) (J.classInterfaces cls)
          return $
            Crucible.RolledType $
            Ctx.Empty
@@ -832,20 +832,8 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
       case Map.lookup (cname, J.methodKey m) (CJ.methodHandles jc) of
         Nothing -> tab -- should never happen
         Just (CJ.JVMHandleInfo key handle) ->
-          Map.insert (methodKeyText key) (W4.justPartExpr sym v) tab
+          Map.insert (CJ.methodKeyText key) (W4.justPartExpr sym v) tab
           where v = Crucible.AnyValue (Crucible.handleType handle) (Crucible.HandleFnVal handle)
-
-    -- This must agree with 'Lang.Crucible.JVM.Class.methodKeyExpr' from package crucible-jvm
-    -- TODO: export this function from there.
-    methodKeyText :: J.MethodKey -> Text.Text
-    methodKeyText k = Text.pack (J.methodKeyName k ++ params ++ res)
-      where
-        params = concatMap show (J.methodKeyParameterTypes k)
-        res    = show (J.methodKeyReturnType k)
-
-    -- TODO: move to crucible-jvm
-    classNameText :: J.ClassName -> Text.Text
-    classNameText cname = Text.pack (J.unClassName cname)
 
 --------------------------------------------------------------------------------
 
