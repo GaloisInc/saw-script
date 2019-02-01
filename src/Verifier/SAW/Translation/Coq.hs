@@ -69,7 +69,7 @@ instance {-# OVERLAPPABLE #-} Show a => Show (TranslationError a) where
 
 data TranslationConfiguration = TranslationConfiguration
   { translateVectorsAsCoqVectors :: Bool -- ^ when `False`, translate vectors as Coq lists
-  , traverseConsts            :: Bool
+  , traverseConsts               :: Bool
   }
 
 data TranslationState = TranslationState
