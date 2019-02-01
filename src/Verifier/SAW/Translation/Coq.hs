@@ -109,15 +109,19 @@ preludeSpecialTreatmentMap = Map.fromList $ []
 
   -- Unsafe SAW features
   ++
-  [ ("coerce",            Skip)
-  , ("coerce__def",       Skip)
-  , ("coerce__eq",        Skip)
-  , ("error",             MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "error")
+  [ ("error",             MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "error")
   , ("fix",               Skip)
-  , ("rcoerce",           Skip)
   , ("unsafeAssert",      Skip)
   , ("unsafeCoerce",      Skip)
   , ("unsafeCoerce_same", Skip)
+  ]
+
+  -- coercions
+  ++
+  [ ("coerce",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "coerce")
+  , ("coerce__def",       Skip)
+  , ("coerce__eq",        Skip)
+  , ("rcoerce",           Skip)
   ]
 
   -- Unit
