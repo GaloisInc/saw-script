@@ -11,6 +11,7 @@ module SAWScript.JVM.CrucibleResolveSetupValue
   -- , typeOfJVMVal
   , typeOfSetupValue
   , resolveTypedTerm
+  , resolveBoolTerm
   , resolveSAWPred
   -- , resolveSetupFieldIndex
   , equalValsPred
@@ -385,6 +386,7 @@ resolveSAWTerm cc tp tm =
   where
     sym = cc^.ccBackend
 
+-- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
 resolveBitvectorTerm ::
   forall w.
   (1 W4.<= w) =>
@@ -408,6 +410,7 @@ resolveBitvectorTerm sym w tm =
        Just x  -> W4.bvLit sym w x
        Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
 
+-- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
 resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
 resolveBoolTerm sym tm =
   do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)

@@ -876,7 +876,7 @@ matchTerm sc cc loc prepost real expect =
 
        _ ->
          do t <- liftIO $ scEq sc real expect
-            p <- liftIO $ resolveSAWPred cc t
+            p <- liftIO $ resolveBoolTerm (cc^.ccBackend) t
             addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost)))
 
 ------------------------------------------------------------------------
