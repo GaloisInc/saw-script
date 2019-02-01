@@ -165,7 +165,7 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "ambiguous collection of points-to assertions" PP.<$$>
     (PP.indent 2 $ PP.vcat (map ppPointsTo pts))
   AmbiguousVars vs ->
-    PP.text "ambiguous collection of varaibles" PP.<$$>
+    PP.text "ambiguous collection of variables" PP.<$$>
     (PP.indent 2 $ PP.vcat (map ppTypedTerm vs))
   BadTermMatch x y ->
     PP.text "terms do not match" PP.<$$>

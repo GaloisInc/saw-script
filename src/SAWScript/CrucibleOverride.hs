@@ -140,7 +140,7 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "ambiguous collection of points-to assertions" PP.<$$>
     (PP.indent 2 $ PP.vcat (map ppPointsTo pts))
   AmbiguousVars vs ->
-    PP.text "ambiguous collection of varaibles" PP.<$$>
+    PP.text "ambiguous collection of variables" PP.<$$>
     (PP.indent 2 $ PP.vcat (map ppTypedTerm vs))
   BadTermMatch x y ->
     PP.text "terms do not match" PP.<$$>
@@ -346,7 +346,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- memory state, compute return values and compute postcondition predicates.
   --
   -- For each override branch that doesn't fail outright, we assume the relevant
-  -- postconditions, update the crucible global varible state, and return the
+  -- postconditions, update the crucible global variable state, and return the
   -- computed return value.
   --
   -- We add a final default branch that simply fails unless some previous override
