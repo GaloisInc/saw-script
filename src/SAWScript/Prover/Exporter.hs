@@ -33,7 +33,7 @@ import Verifier.SAW.TypedTerm
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
-import qualified Verifier.SAW.Export.Coq as Coq
+import qualified Verifier.SAW.Translation.Coq as Coq
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 
@@ -175,9 +175,15 @@ writeUnintSMTLib2 unints sc f t = do
 writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)
 
+configuration :: Coq.TranslationConfiguration
+configuration = Coq.TranslationConfiguration
+  { Coq.translateVectorsAsCoqVectors = True
+  , Coq.traverseConsts               = True
+  }
+
 writeCoq :: String -> FilePath -> Term -> IO ()
 writeCoq name path t = do
-  case Coq.translateDefDocImports True name t of
+  case Coq.translateDeclImports configuration name t of
     Left err -> putStrLn $ "Error translating: " ++ show err
     Right doc -> case path of
       "" -> print doc
