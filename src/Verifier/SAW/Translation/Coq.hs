@@ -648,12 +648,7 @@ translateTermToDocWith configuration _f t = do
 
 translateDefDoc :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
 translateDefDoc configuration name =
-  translateTermToDocWith configuration
-  (\ term ->
-   preamble
-   <$$> hardline
-   <$$> Coq.ppDecl (mkDefinition name term)
-  )
+  translateTermToDocWith configuration (\ term -> Coq.ppDecl (mkDefinition name term))
 
 translateDeclImports :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
 translateDeclImports configuration name t = do
