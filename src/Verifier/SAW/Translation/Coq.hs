@@ -624,26 +624,38 @@ runMonadCoqTrans ::
 runMonadCoqTrans configuration m =
   runStateT (runReaderT m configuration) (TranslationState [] [])
 
+-- Eventually, different modules will want different preambles, for now,
+-- hardcoded.
+preamble :: Doc
+preamble = vcat
+  [ "From Coq          Require Import Lists.List."
+  , "From Coq          Require Import String."
+  , "From Coq          Require Import Vectors.Vector."
+  , "From Records      Require Import Records."
+  , "From CryptolToCoq Require Import Cryptol."
+  , "From CryptolToCoq Require Import SAW."
+  , "Import ListNotations."
+  ]
+
 translateTermToDocWith :: TranslationConfiguration -> (Coq.Term -> Doc) -> Term -> Either (TranslationError Term) Doc
-translateTermToDocWith configuration f t = do
-  (term, state) <- runMonadCoqTrans configuration (translateTerm t)
+translateTermToDocWith configuration _f t = do
+  (_term, state) <- runMonadCoqTrans configuration (translateTerm t)
   let decls = view declarations state
-  return $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls) <$$>
-           (if null decls then empty else hardline) <$$>
-           f term
+  return
+    $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls)
+    -- <$$> (if null decls then empty else hardline)
+    -- <$$> f term
 
 translateDefDoc :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
-translateDefDoc configuration name = translateTermToDocWith configuration (\ term -> Coq.ppDecl (mkDefinition name term))
+translateDefDoc configuration name =
+  translateTermToDocWith configuration
+  (\ term ->
+   preamble
+   <$$> hardline
+   <$$> Coq.ppDecl (mkDefinition name term)
+  )
 
 translateDeclImports :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
 translateDeclImports configuration name t = do
-  let imports = vcat [ "From Coq          Require Import Lists.List."
-                     , "From Coq          Require Import String."
-                     , "From Coq          Require Import Vectors.Vector."
-                     , "From Records      Require Import Records."
-                     , "From CryptolToCoq Require Import Cryptol."
-                     , "From CryptolToCoq Require Import SAW."
-                     , "Import ListNotations."
-                     ]
   doc <- translateDefDoc configuration name t
-  return (imports <$$> hardline <> doc)
+  return (preamble <$$> hardline <> doc)
