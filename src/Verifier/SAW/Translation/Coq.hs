@@ -23,7 +23,7 @@ Portability : portable
 
 module Verifier.SAW.Translation.Coq where
 
-import Control.Lens (_1, makeLenses, over, set, view)
+import Control.Lens (_1, _2, makeLenses, over, set, view)
 import qualified Control.Monad.Except as Except
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.Reader hiding (fail)
@@ -88,7 +88,12 @@ type MonadCoqTrans m =
 showFTermF :: FlatTermF Term -> String
 showFTermF = show . Unshared . FTermF
 
-data SpecialTreatment
+data SpecialTreatment = SpecialTreatment
+  { moduleRenaming        :: Map.Map ModuleName String
+  , identSpecialTreatment :: Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
+  }
+
+data IdentSpecialTreatment
   = MapsTo Ident  -- means "don't translate its definition, instead use provided"
   | Rename String -- means "translate its definition, but rename it"
   | Skip          -- means "don't translate its definition, no replacement"
@@ -104,8 +109,8 @@ mkCoqIdent coqModule coqIdent = mkIdent (mkModuleName [coqModule]) coqIdent
 -- during this translation (it is sometimes impossible, for instance, `at` is a
 -- reserved keyword in Coq), so that primitives' and axioms' types can be
 -- copy-pasted as is on the Coq side.
-preludeSpecialTreatmentMap :: Map.Map String SpecialTreatment
-preludeSpecialTreatmentMap = Map.fromList $ []
+sawCorePreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
+sawCorePreludeSpecialTreatmentMap = Map.fromList $ []
 
   -- Unsafe SAW features
   ++
@@ -228,10 +233,17 @@ preludeSpecialTreatmentMap = Map.fromList $ []
   , ("Vec",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Vec")
   ]
 
-specialTreatmentMap :: Map.Map ModuleName (Map.Map String SpecialTreatment)
+specialTreatmentMap :: Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
 specialTreatmentMap = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
-  [ ("Prelude", preludeSpecialTreatmentMap)
+  [ ("Prelude", sawCorePreludeSpecialTreatmentMap)
+  ]
+
+moduleRenamingMap :: Map.Map ModuleName ModuleName
+moduleRenamingMap = Map.fromList $
+  over _1 (mkModuleName . (: [])) <$>
+  over _2 (mkModuleName . (: [])) <$>
+  [ ("Prelude", "SAWCorePrelude")
   ]
 
 cryptolPreludeMap :: Map.Map String String
@@ -242,7 +254,11 @@ cryptolPreludeMap = Map.fromList
   , ("/\\", "cryptolAnd")
   ]
 
-findSpecialTreatment :: Ident -> Maybe SpecialTreatment
+translateModuleName :: ModuleName -> ModuleName
+translateModuleName mn =
+  Map.findWithDefault mn mn moduleRenamingMap
+
+findSpecialTreatment :: Ident -> Maybe IdentSpecialTreatment
 findSpecialTreatment ident =
   let moduleMap = Map.findWithDefault Map.empty (identModule ident) specialTreatmentMap in
   Map.findWithDefault Nothing (identName ident) (Just <$> moduleMap)
@@ -250,11 +266,11 @@ findSpecialTreatment ident =
 findIdentTranslation :: Ident -> Ident
 findIdentTranslation i =
   case findSpecialTreatment i of
-  Nothing -> i
+  Nothing -> mkIdent (translateModuleName (identModule i)) (identName i)
   Just st ->
     case st of
     MapsTo ident   -> ident
-    Rename newName -> mkIdent (identModule i) newName
+    Rename newName -> mkIdent (translateModuleName (identModule i)) newName
     Skip           -> i -- do we want a marker to indicate this will likely fail?
 
 translateIdent :: Ident -> Coq.Ident
@@ -631,10 +647,12 @@ preamble = vcat
   [ "From Coq          Require Import Lists.List."
   , "From Coq          Require Import String."
   , "From Coq          Require Import Vectors.Vector."
-  , "From Records      Require Import Records."
+  -- , "From Records      Require Import Records."
   , "From CryptolToCoq Require Import Cryptol."
   , "From CryptolToCoq Require Import SAW."
+  , ""
   , "Import ListNotations."
+  , ""
   ]
 
 translateTermToDocWith :: TranslationConfiguration -> (Coq.Term -> Doc) -> Term -> Either (TranslationError Term) Doc
@@ -650,7 +668,31 @@ translateDefDoc :: TranslationConfiguration -> Coq.Ident -> Term -> Either (Tran
 translateDefDoc configuration name =
   translateTermToDocWith configuration (\ term -> Coq.ppDecl (mkDefinition name term))
 
-translateDeclImports :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
-translateDeclImports configuration name t = do
+translateTermAsDeclImports :: TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
+translateTermAsDeclImports configuration name t = do
   doc <- translateDefDoc configuration name t
   return (preamble <$$> hardline <> doc)
+
+translateDecl :: TranslationConfiguration -> ModuleDecl -> Doc
+translateDecl configuration decl =
+  case decl of
+  TypeDecl td -> do
+    case runMonadCoqTrans configuration (translateDataType td) of
+      Left e -> error $ show e
+      Right (tdecl, _) -> Coq.ppDecl tdecl
+  DefDecl dd -> do
+    case runMonadCoqTrans configuration (translateDef dd) of
+      Left e -> error $ show e
+      Right (tdecl, _) -> Coq.ppDecl tdecl
+
+translateModule :: TranslationConfiguration -> Module -> Doc
+translateModule configuration m =
+  let name = show $ translateModuleName (moduleName m)
+  in
+  vcat $ []
+  ++ [ text $ "Module " ++ name ++ "."
+     , ""
+     ]
+  ++ [ translateDecl configuration decl | decl <- moduleDecls m ]
+  ++ [ text $ "End " ++ name ++ "."
+     ]

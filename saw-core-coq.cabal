@@ -17,6 +17,7 @@ library
   build-depends:
     ansi-wl-pprint,
     base == 4.*,
+    cryptol-verifier,
     containers,
     lens,
     mtl,

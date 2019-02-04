@@ -20,7 +20,8 @@ import Control.Monad.Reader
 import qualified Data.Map as Map
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import qualified Language.Coq.Pretty as Coq
+-- import qualified Language.Coq.Pretty as Coq
+-- import Verifier.SAW.CryptolEnv
 import Verifier.SAW.Module
 import Verifier.SAW.Prelude (preludeModule)
 import Verifier.SAW.SharedTerm
@@ -104,8 +105,8 @@ getPreludeDataType name = do
     Nothing -> error $ name ++ " not found"
     Just dt -> return dt
 
-main :: IO ()
-main = do
+translateSAWCorePrelude :: IO ()
+translateSAWCorePrelude = do
   sc <- mkSharedContext
   -- In order to get test data types, we load the Prelude
   tcInsertModule sc preludeModule
@@ -117,18 +118,18 @@ main = do
       putStrLn "From Coq.Strings  Require Import String."
       putStrLn "From CryptolToCoq Require Import SAW."
       putStrLn ""
-      putStrLn "Module Prelude."
-      putStrLn ""
 
-    forM_ (moduleDecls prelude) $ \ decl -> do
-      case decl of
-        TypeDecl td -> do
-          liftIO $ case runMonadCoqTrans configuration (translateDataType td) of
-            Left e -> error $ show e
-            Right (tdecl, _) -> putStrLn $ show $ Coq.ppDecl tdecl
-        DefDecl dd -> do
-          liftIO $ case runMonadCoqTrans configuration (translateDef dd) of
-            Left e -> error $ show e
-            Right (tdecl, _) -> putStrLn $ show $ Coq.ppDecl tdecl
+    doc <- translateModule configuration prelude
 
-    liftIO $ putStrLn "End Prelude."
+    liftIO $ putStrLn $ show doc
+
+-- translateCryptolPrelude :: IO ()
+-- translateCryptolPrelude = do
+--   sc <- mkSharedContext
+--   cryptolEnv <- initCryptolEnv sc
+--   forM_ (Map.assocs $ eTermEnv cryptolEnv) $ \ (a, b) -> do
+--     putStrLn $ show a
+--   return ()
+
+main :: IO ()
+main = translateSAWCorePrelude
