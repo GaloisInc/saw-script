@@ -13,7 +13,10 @@ module SAWScript.Prover.Exporter
   , writeSMTLib2
   , write_smtlib2
   , writeUnintSMTLib2
-  , writeCoq
+  , writeCoqCryptolPrelude
+  , writeCoqModule
+  , writeCoqSAWCorePrelude
+  , writeCoqTerm
   , writeCore
 
     -- * Misc
@@ -22,20 +25,30 @@ module SAWScript.Prover.Exporter
 
 import Data.Foldable(toList)
 
+import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.AIG as AIG
+import qualified Data.Map as Map
+import Data.Parameterized.Nonce (globalNonceGenerator)
 import qualified Data.SBV.Dynamic as SBV
+import Text.PrettyPrint.ANSI.Leijen (vcat)
 
+import Cryptol.ModuleSystem.Name
+import Cryptol.Utils.Ident
 import Cryptol.Utils.PP(pretty)
 
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedTerm
-import Verifier.SAW.FiniteValue
-import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
+import Lang.Crucible.Backend.SAWCore (newSAWCoreBackend, sawBackendSharedContext)
+import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
+import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
+import Verifier.SAW.FiniteValue
+import Verifier.SAW.Prelude (preludeModule)
+import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
+import Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Translation.Coq as Coq
+import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
-
+import qualified Verifier.SAW.UntypedAST as Un
 
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
 import SAWScript.Proof (predicateToProp, Quantification(..))
@@ -181,13 +194,55 @@ configuration = Coq.TranslationConfiguration
   , Coq.traverseConsts               = True
   }
 
-writeCoq :: String -> FilePath -> Term -> IO ()
-writeCoq name path t = do
-  case Coq.translateDeclImports configuration name t of
+writeCoqTerm :: String -> FilePath -> Term -> IO ()
+writeCoqTerm name path t = do
+  case Coq.translateTermAsDeclImports configuration name t of
     Left err -> putStrLn $ "Error translating: " ++ show err
     Right doc -> case path of
       "" -> print doc
       _ -> writeFile path (show doc)
+
+writeCoqModule :: FilePath -> FilePath -> IO ()
+writeCoqModule inputFile outputFile = do
+  sc  <- mkSharedContext
+  ()  <- scLoadPreludeModule sc
+  ()  <- scLoadCryptolModule sc
+  sym <- newSAWCoreBackend AIG.basicProxy sc globalNonceGenerator
+  ctx <- sawBackendSharedContext sym
+  env <- initCryptolEnv ctx
+  cm  <- loadCryptolModule ctx env inputFile
+  let (CryptolModule sm tm, _) = cm
+  _smDocs <- forM (Map.assocs sm) $ \ (_name, _typeSyn) -> do
+    return ()
+  tmDocs <- forM (Map.assocs tm) $ \ (name, symbol) -> do
+    let t = ttTerm symbol
+    case Coq.translateDefDoc configuration (unpackIdent . nameIdent $ name) t of
+      Left e -> error $ show e
+      Right doc -> return doc
+  writeFile outputFile (show . vcat $ [ Coq.preamble ] ++ tmDocs)
+  -- putStrLn $ showCryptolModule cryptolModule
+
+nameOfSAWCorePrelude :: Un.ModuleName
+nameOfSAWCorePrelude = Un.moduleName preludeModule
+
+nameOfCryptolPrelude :: Un.ModuleName
+nameOfCryptolPrelude = Un.moduleName cryptolModule
+
+writeCoqSAWCorePrelude :: FilePath -> IO ()
+writeCoqSAWCorePrelude outputFile = do
+  sc  <- mkSharedContext
+  ()  <- scLoadPreludeModule sc
+  m   <- scFindModule sc nameOfSAWCorePrelude
+  let doc = Coq.translateModule configuration m
+  writeFile outputFile (show . vcat $ [ Coq.preamble, doc ])
+
+writeCoqCryptolPrelude :: FilePath -> IO ()
+writeCoqCryptolPrelude outputFile = do
+  sc  <- mkSharedContext
+  ()  <- scLoadPreludeModule sc
+  m   <- scFindModule sc nameOfCryptolPrelude
+  let doc = Coq.translateModule configuration m
+  writeFile outputFile (show . vcat $ [ Coq.preamble, doc ])
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
@@ -201,5 +256,3 @@ bitblastPrim proxy sc t = do
 -}
   BBSim.withBitBlastedTerm proxy sc bitblastPrimitives t' $ \be ls -> do
     return (AIG.Network be (toList ls))
-
-

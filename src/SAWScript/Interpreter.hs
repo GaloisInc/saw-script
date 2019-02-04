@@ -924,12 +924,31 @@ primitives = Map.fromList
     Current
     [ "Write out a representation of a term in SAWCore external format." ]
 
-  , prim "write_coq"          "String -> String -> Term -> TopLevel ()"
-    (pureVal writeCoq)
+  , prim "write_coq_term"      "String -> String -> Term -> TopLevel ()"
+    (pureVal writeCoqTerm)
     [ "Write out a representation of a term in Gallina syntax for Coq."
     , "The first argument is the name to use in a Definition, the second is"
     , "the filename to use, and the third is the Term to export. Use an empty"
     , "filename to write to standard output."
+    ]
+
+  , prim "write_coq_module"    "String -> String -> TopLevel ()"
+    (pureVal writeCoqModule)
+    [ "Write out a representation of a Cryptol module in Gallina syntax for"
+    , "Coq. The first argument is the filename to use, the second is the module"
+    , "to export."
+    ]
+
+  , prim "write_coq_sawcore_prelude" "String -> TopLevel ()"
+    (pureVal writeCoqSAWCorePrelude)
+    [ "Write out a representation of the SAW Core prelude in Gallina syntax for"
+    , "Coq. The first argument is the filename to use."
+    ]
+
+  , prim "write_coq_cryptol_prelude" "String -> TopLevel ()"
+    (pureVal writeCoqCryptolPrelude)
+    [ "Write out a representation of the Cryptol prelude in Gallina syntax for"
+    , "Coq. The first argument is the filename to use."
     ]
 
   , prim "auto_match" "String -> String -> TopLevel ()"
