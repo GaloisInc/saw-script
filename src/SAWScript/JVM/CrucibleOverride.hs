@@ -970,7 +970,7 @@ learnPred ::
 learnPred sc cc loc prepost t =
   do s <- OM (use termSub)
      u <- liftIO $ scInstantiateExt sc s t
-     p <- liftIO $ resolveSAWPred cc u
+     p <- liftIO $ resolveBoolTerm (cc^.ccBackend) u
      addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost)))
 
 ------------------------------------------------------------------------
@@ -1075,7 +1075,7 @@ executePred ::
 executePred sc cc tt =
   do s <- OM (use termSub)
      t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
-     p <- liftIO $ resolveSAWPred cc t
+     p <- liftIO $ resolveBoolTerm (cc^.ccBackend) t
      addAssume p
 
 ------------------------------------------------------------------------
