@@ -20,7 +20,7 @@ library
     lens,
     mtl,
     saw-core,
-    sbv >= 7.0 && < 8.0,
+    sbv >= 8.0,
     transformers,
     vector
   hs-source-dirs: src
