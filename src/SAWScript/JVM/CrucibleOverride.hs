@@ -766,10 +766,6 @@ assignTerm sc cc loc prepost var val =
        Just old ->
          matchTerm sc cc loc prepost val old
 
---          do t <- liftIO $ scEq sc old val
---             p <- liftIO $ resolveSAWPred cc t
---             addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost))
-
 
 ------------------------------------------------------------------------
 
@@ -918,7 +914,7 @@ learnPointsTo opts sc cc spec prepost pt =
          rval <- asRVal loc ptr'
          sym <- getSymInterface
          globals <- OM (use overrideGlobals)
-         v <- liftIO $ doFieldLoad sym globals ty rval fname
+         v <- liftIO $ doFieldLoad sym loc globals ty rval fname
          matchArg sc cc loc prepost v ty val
 
     PointsToElem loc ptr idx val ->
@@ -929,7 +925,7 @@ learnPointsTo opts sc cc spec prepost pt =
          rval <- asRVal loc ptr'
          sym <- getSymInterface
          globals <- OM (use overrideGlobals)
-         v <- liftIO $ doArrayLoad sym globals ty rval idx
+         v <- liftIO $ doArrayLoad sym loc globals ty rval idx
          matchArg sc cc loc prepost v ty val
 
 
@@ -1154,8 +1150,8 @@ injectJVMVal sym jv =
     IVal x -> Crucible.injectVariant sym W4.knownRepr CJ.tagI x
     LVal x -> Crucible.injectVariant sym W4.knownRepr CJ.tagL x
 
-projectJVMVal :: Sym -> J.Type -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
-projectJVMVal sym ty v =
+projectJVMVal :: Sym -> J.Type -> String -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
+projectJVMVal sym ty msg' v =
   case ty of
     J.BooleanType -> err -- FIXME
     J.ByteType    -> err -- FIXME
@@ -1175,7 +1171,7 @@ projectJVMVal sym ty v =
       IO (Crucible.RegValue Sym tp)
     proj val idx = Crucible.readPartExpr sym (Crucible.unVB (val Ctx.! idx)) msg
 
-    msg = Crucible.GenericSimError "Ill-formed value for type"
+    msg = Crucible.GenericSimError $ "Ill-formed value for type " ++ show ty ++ " (" ++ msg' ++ ")"
     err = Crucible.addFailedAssertion sym msg
 
 decodeJVMVal :: J.Type -> Crucible.AnyValue Sym -> Maybe JVMVal
@@ -1259,9 +1255,10 @@ doArrayStore sym globals ref idx val =
 
 doFieldLoad ::
   Sym ->
+  W4.ProgramLoc ->
   Crucible.SymGlobalState Sym ->
   J.Type -> JVMRefVal -> String {- ^ field name -} -> IO JVMVal
-doFieldLoad sym globals ty ref fname =
+doFieldLoad sym loc globals ty ref fname =
   do let msg1 = Crucible.GenericSimError "Field load: null reference"
      ref' <- Crucible.readPartExpr sym ref msg1
      obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
@@ -1271,26 +1268,27 @@ doFieldLoad sym globals ty ref fname =
      let msg3 = Crucible.GenericSimError $ "Field load: field not found: " ++ fname
      let key = Text.pack fname
      val <- Crucible.readPartExpr sym (fromMaybe W4.Unassigned (Map.lookup key tab)) msg3
-     projectJVMVal sym ty val
+     projectJVMVal sym ty ("field load " ++ fname ++ ", " ++ show loc) val
 
 doArrayLoad ::
   Sym ->
+  W4.ProgramLoc ->
   Crucible.SymGlobalState Sym ->
   J.Type -> JVMRefVal -> Int {- ^ array index -} -> IO JVMVal
-doArrayLoad sym globals ty ref idx =
-  do let msg1 = Crucible.GenericSimError "Field load: null reference"
+doArrayLoad sym loc globals ty ref idx =
+  do let msg1 = Crucible.GenericSimError "Array load: null reference"
      ref' <- Crucible.readPartExpr sym ref msg1
      obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
      -- TODO: define a 'projectVariant' function in the OverrideSim monad
      let msg2 = Crucible.GenericSimError "Array load: object is not an array"
      arr <- Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i2of2)) msg2
      let vec = Crucible.unRV (arr Ctx.! Ctx.i2of3)
-     let msg3 = Crucible.GenericSimError $ "Field load: index out of bounds: " ++ show idx
+     let msg3 = Crucible.GenericSimError $ "Array load: index out of bounds: " ++ show idx
      val <-
        case vec V.!? idx of
          Just val -> return val
          Nothing -> Crucible.addFailedAssertion sym msg3
-     projectJVMVal sym ty val
+     projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) val
 
 doAllocateObject ::
   Sym ->

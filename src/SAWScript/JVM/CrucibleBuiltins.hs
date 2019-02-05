@@ -1176,7 +1176,7 @@ jvm_field_is typed _bic _opt ptr fname val =
      let rs = st^.csResolvedState
      let path = Left fname
      if st^.csPrePost == PreState && testResolved ptr path rs
-       then fail "Multiple points-to preconditions on same pointer (field)"
+       then fail $ "Multiple points-to preconditions on same pointer (field " ++ fname ++ ")"
        else csResolvedState %= markResolved ptr path
      let env = csAllocations (st^.csMethodSpec)
          nameEnv = csTypeNames (st^.csMethodSpec)
