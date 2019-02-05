@@ -159,18 +159,50 @@ allSuperClasses cb c =
          cs <- allSuperClasses cb c'
          return (c : cs)
 
+-- FIXME: We need a better way to identify a set of class names to
+-- load. This function has two problems: First, unless we put in a
+-- bunch of hard-wired exclusions, we often end up trying to load
+-- classes for which we don't have any parseable bytecode. Second, the
+-- number of classes we load is way too large, and the classes take a
+-- long time to parse and translate.
+
 allClassRefs :: CB.Codebase -> J.ClassName -> IO (Set J.ClassName)
 allClassRefs cb c0 = go init [c0]
   where
     init = Set.fromList (map J.mkClassName CJ.initClasses)
     go seen [] = return seen
     go seen (c : cs) =
-      do putStrLn $ "allClassRefs: " ++ J.unClassName c
+      do -- putStrLn $ "allClassRefs: " ++ show (J.unClassName c)
          cls <- CJ.findClass cb (J.unClassName c)
-         let refs = CJ.classRefs cls
+         let refs = Set.filter (not . excludedClassName) (CJ.classRefs cls)
+         -- putStrLn $ " -> " ++ show (Set.toList refs)
          let seen' = Set.union seen refs
          let next = Set.toList (Set.difference refs seen)
          go seen' (next ++ cs)
+
+excludedClassName :: J.ClassName -> Bool
+excludedClassName cname
+  | "java/time/"             `isPrefixOf` s = True
+  | "javax/"                 `isPrefixOf` s = True
+  | "java/lang/invoke/"      `isPrefixOf` s = True
+  | "java/util/stream/"      `isPrefixOf` s = True
+  | "java/util/Collections$" `isPrefixOf` s = True
+  | "sun/"                   `isPrefixOf` s = True
+  | otherwise = Set.member cname excludedRefs
+  where s = J.unClassName cname
+
+-- hack to fix ecdsa proof
+excludedRefs :: Set J.ClassName
+excludedRefs = Set.fromList
+  [ "java/util/Comparator"
+  , "java/util/Arrays"
+  , "java/lang/reflect/AccessibleObject"
+  , "java/lang/reflect/AnnotatedElement"
+  , "java/lang/invoke/SerializedLambda"
+  , "java/lang/Package"
+  , "java/util/TreeMap$EntrySpliterator"
+  , "java/lang/invoke/MethodHandleInfo"
+  ]
 
 crucible_jvm_verify ::
   BuiltinContext ->
@@ -183,16 +215,14 @@ crucible_jvm_verify ::
   ProofScript SatResult ->
   TopLevel CrucibleMethodSpecIR
 crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
-  do -- allocate all of the handles/static vars that are directly referenced by
-     -- this class (or from superclasses)
-     supers <- io $ allSuperClasses (biJavaCodebase bic) cls
-     let superRefs = Set.toList (Set.unions (map CJ.classRefs supers))
-
-     let refs = map J.mkClassName CJ.initClasses ++ superRefs
+  do cb <- getJavaCodebase
+     -- allocate all of the handles/static vars that are referenced
+     -- (directly or indirectly) by this class
+     allRefs <- io $ Set.toList <$> allClassRefs cb (J.className cls)
+     let refs = map J.mkClassName CJ.initClasses ++ allRefs -- ++ superRefs
      mapM_ (prepareClassTopLevel bic . J.unClassName) refs
 
      cc <- setupCrucibleContext bic opts cls
-     cb <- getJavaCodebase
      let sym = cc^.ccBackend
      let jc = cc^.ccJVMContext
 
