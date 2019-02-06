@@ -37,8 +37,8 @@ extra-deps:
   - simple-smt-0.7.1
   - GraphSCC-1.0.4
   - monadLib-3.7.3
-  - sbv-7.10
-  - crackNum-2.0
+  - sbv-8.0
+  - crackNum-2.3
   - FloatingHex-0.4
   - monad-supply-0.7
   - panic-0.4.0.0
