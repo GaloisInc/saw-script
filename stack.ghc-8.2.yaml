@@ -39,6 +39,7 @@ extra-deps:
   - GraphSCC-1.0.4
   - monadLib-3.7.3
   - sbv-8.0
+  - crackNum-2.3
   - panic-0.4.0.0
 resolver: lts-11.22
 allow-newer: true
