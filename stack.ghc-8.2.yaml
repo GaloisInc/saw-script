@@ -38,7 +38,7 @@ extra-deps:
   - simple-smt-0.7.1
   - GraphSCC-1.0.4
   - monadLib-3.7.3
-  - sbv-7.10
+  - sbv-8.0
   - panic-0.4.0.0
 resolver: lts-11.22
 allow-newer: true
