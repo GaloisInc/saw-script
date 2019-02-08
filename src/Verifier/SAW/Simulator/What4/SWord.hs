@@ -55,10 +55,10 @@ module Verifier.SAW.Simulator.What4.SWord where
 
 import           Data.Vector (Vector)
 import qualified Data.Vector as V
-
+import           Numeric.Natural
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
-import           GHC.TypeLits
+import           GHC.TypeNats
 
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some(Some(..))
@@ -103,7 +103,7 @@ bvAsUnsignedInteger (DBV (bv :: SymBV sym w)) =
 integerToBV :: forall sym width. (Integral width, IsExprBuilder sym) =>
   sym ->  SymInteger sym -> width -> IO (SWord sym)
 integerToBV sym i w
-  | Just (Some (PosNat wr)) <- somePosNat (toInteger w)
+  | Just (Some (PosNat wr)) <- somePosNat w
   = DBV <$> W.integerToBV sym i wr
   | 0 == toInteger w
   = return ZBV
@@ -140,7 +140,7 @@ bvLit _ w _
   | w == 0
   = return ZBV
 bvLit sym w dat
-  | Just (Some (PosNat rw)) <- somePosNat (toInteger w)
+  | Just (Some (PosNat rw)) <- somePosNat w
   = DBV <$> W.bvLit sym rw dat
   | otherwise
   = fail "bvLit: size of bitvector is < 0 or >= maxInt"
@@ -151,8 +151,8 @@ bvAt :: forall sym. IsExprBuilder sym => sym
   -> Int  -- ^ Index of bit (0 is the most significant bit)
   -> IO (Pred sym)
 bvAt sym (DBV (bv :: SymBV sym w)) i = do
-  let w   = toInteger (natValue (knownNat @w))
-  let idx = w - 1 - toInteger i
+  let w   = natValue (knownNat @w)
+  let idx = w - 1 - fromIntegral i
   W.testBitBV sym idx bv
 bvAt _ ZBV _ = fail "cannot index into empty bitvector"
   -- TODO: or could return 0?
@@ -180,8 +180,8 @@ bvSlice :: forall sym. IsExprBuilder sym => sym
   -- ^ Number of bits to take (must be > 0)
   -> SWord sym -> IO (SWord sym)
 bvSlice sym m n (DBV (bv :: SymBV sym w))
-  | Just (Some (PosNat nr)) <- somePosNat (toInteger n),
-    Just (Some mr)          <- someNat (toInteger m),
+  | Just (Some (PosNat nr)) <- somePosNat n,
+    Just (Some mr)          <- someNat m,
     let wr  = knownNat @w,
     Just LeqProof <- testLeq (addNat mr nr)  wr,
     let idx = subNat wr (addNat mr nr),
@@ -200,14 +200,14 @@ w_bvLg2 :: forall sym w. (IsExprBuilder sym, KnownNat w, 1 <= w) =>
 w_bvLg2 sym x = go 0
   where
     size :: Integer
-    size = natValue (knownNat @w)
+    size = intValue (knownNat @w)
     lit :: Integer -> IO (SymBV sym w)
     lit n = W.bvLit sym (knownNat @w) n
     go :: Integer -> IO (SymBV sym w)
     go i | i < size = do
            x' <- lit (2 ^ i)
            b' <- W.bvUle sym x x'
-           th <- lit (toInteger i)
+           th <- lit i
            el <- go (i + 1)
            W.bvIte sym b' th el
          | otherwise    = lit i
@@ -238,10 +238,10 @@ bvUnpack :: forall sym. IsExprBuilder sym =>
   sym -> SWord sym -> IO (Vector (Pred sym))
 bvUnpack _   ZBV = return V.empty
 bvUnpack sym (DBV (bv :: SymBV sym w)) = do
-  let w :: Integer
+  let w :: Natural
       w = natValue (knownNat @w)
   V.generateM (fromIntegral w)
-              (\i -> W.testBitBV sym (w - 1 - toInteger i) bv)
+              (\i -> W.testBitBV sym (w - 1 - fromIntegral i) bv)
 
 -- | convert a vector of booleans to a bitvector
 bvPack :: forall sym. (W.IsExpr (W.SymExpr sym), IsExprBuilder sym) =>
@@ -504,7 +504,7 @@ bvRotateL' sym x i' = do
     pfalse :: Pred sym
     pfalse = W.falsePred sym
 
-    w = natValue (knownNat @w1)
+    w = intValue (knownNat @w1)
 
 -- | Worker function for right rotations
 --

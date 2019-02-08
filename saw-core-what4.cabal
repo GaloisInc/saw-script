@@ -24,7 +24,7 @@ library
     what4,
     transformers,
     vector,
-    parameterized-utils,
+    parameterized-utils >= 1.0.8 && < 1.1,
     reflection
   hs-source-dirs: src
   exposed-modules:

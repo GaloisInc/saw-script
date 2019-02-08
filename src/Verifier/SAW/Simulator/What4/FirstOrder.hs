@@ -48,7 +48,7 @@ fotToBaseType FOTBit
 fotToBaseType FOTInt
   = Some BaseIntegerRepr
 fotToBaseType (FOTVec nat FOTBit)
-  | Just (Some (PosNat nr)) <- somePosNat (toInteger nat)
+  | Just (Some (PosNat nr)) <- somePosNat nat
   = Some (BaseBVRepr nr)
   | otherwise  -- 0-width bit vector is 0
   = Some BaseIntegerRepr
@@ -74,7 +74,7 @@ typeReprToFOT :: BaseTypeRepr ty -> Either String FirstOrderType
 typeReprToFOT BaseBoolRepr            = pure FOTBit
 typeReprToFOT BaseNatRepr             = pure FOTInt
 typeReprToFOT BaseIntegerRepr         = pure FOTInt
-typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (fromInteger (natValue w)) FOTBit
+typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (natValue w) FOTBit
 typeReprToFOT BaseRealRepr            = fail "No FO Real"
 typeReprToFOT BaseComplexRepr         = fail "No FO Complex"
 typeReprToFOT BaseStringRepr          = fail "No FO String"
@@ -95,7 +95,7 @@ groundToFOV :: BaseTypeRepr ty -> GroundValue ty -> Either String FirstOrderValu
 groundToFOV BaseBoolRepr    b         = pure $ FOVBit b
 groundToFOV BaseNatRepr     n         = pure $ FOVInt (toInteger n)
 groundToFOV BaseIntegerRepr i         = pure $ FOVInt i
-groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (fromInteger (natValue w)) bv
+groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) bv
 groundToFOV BaseRealRepr    _         = fail "Real is not FOV"
 groundToFOV BaseComplexRepr         _ = fail "Complex is not FOV"
 groundToFOV BaseStringRepr          _ = fail "String is not FOV"

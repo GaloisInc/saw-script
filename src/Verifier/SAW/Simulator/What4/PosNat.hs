@@ -42,7 +42,7 @@
 module Verifier.SAW.Simulator.What4.PosNat where
 -- TODO: find the right place for this code
 
-import GHC.TypeLits
+import GHC.TypeNats
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Some(Some(..))
 
@@ -57,9 +57,9 @@ data PosNat (n :: Nat) where
   PosNat :: (1 <= n, KnownNat n) => NatRepr n -> PosNat n
 
 -- | Check whether an integer is a positive nat
-somePosNat :: Integer -> Maybe (Some PosNat)
+somePosNat :: Integral a => a -> Maybe (Some PosNat)
 somePosNat n 
-  | Just (Some nr) <- someNat (toInteger n), 
+  | Just (Some nr) <- someNat n,
     Just LeqProof  <- testLeq (knownNat @1) nr
   = withKnownNat nr $ Just (Some (PosNat nr))
   | otherwise
