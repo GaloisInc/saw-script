@@ -12,9 +12,19 @@ let set_setup = do {
     crucible_points_to gp xv;
 };
 
+let get_setup = do {
+    let gp = crucible_global "g";
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    let xt = crucible_term x;
+    crucible_points_to gp xt;
+    crucible_execute_func [];
+    crucible_return xt;
+};
+
 let main : TopLevel () = do {
     m <- llvm_load_module "global.bc";
     crucible_llvm_verify m "clear" [] false clear_setup abc;
     crucible_llvm_verify m "set" [] false set_setup abc;
+    crucible_llvm_verify m "get" [] false get_setup abc;
     print "Done.";
 };
