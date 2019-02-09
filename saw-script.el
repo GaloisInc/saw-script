@@ -186,7 +186,7 @@
          (compilation-buffer-name-function
           'saw-script--compilation-buffer-name-function)
          (default-directory dir) )
-    (let ((compilation-finish-functions (list (lambda (x) (message "Done!")))))
+    (let ((compilation-finish-functions (list (lambda (_x) (message "Done!")))))
       (compile command))))
 
 (defun saw-script-run-buffer (buffer)
@@ -325,47 +325,6 @@
       (concat (substring str 0 117) "...")
     str))
 
-(defun saw-script--flycheck-parse (output checker buffer)
-  "Find Flycheck info in the string OUTPUT from saw using CHECKER applied to BUFFER."
-  (with-current-buffer buffer (saw-script-clear-output))
-  (save-excursion
-    (save-match-data
-      (let ((found '()))
-        (with-temp-buffer
-          (insert output)
-          (goto-char (point-min))
-          (while (re-search-forward saw-script--info-start-regexp nil t)
-            (let ((filename (match-string 1))
-                  (line (string-to-number (match-string 2)))
-                  (column (string-to-number (match-string 3)))
-                  (end-line (and (match-string 5)
-                                 (string-to-number (match-string 5))))
-                  (end-column (and (match-string 6)
-                                   (string-to-number (match-string 6))))
-                  (text (let ((perhaps-text (match-string 4)))
-                          (or perhaps-text
-                              (let ((text-start (point)))
-                                (forward-line 1)
-                                (beginning-of-line)
-                                (while (and (not (eobp))
-                                            (looking-at-p "\t"))
-                                  (forward-line 1)
-                                  (beginning-of-line))
-                                (buffer-substring-no-properties text-start (point)))))))
-              (push (flycheck-error-new-at line column
-                                           (if (match-string 4) 'error 'info)
-                                           (saw-script--abbreviate-string text)
-                                           :checker checker :buffer buffer)
-                    found)
-              (unless (match-string 4)
-                (with-current-buffer buffer
-                  (saw-script-record-output line
-                                            column
-                                            end-line
-                                            end-column
-                                            text))))))
-        found))))
-
 (with-eval-after-load 'flycheck
   (flycheck-define-checker saw-script
     "A checker for SAWScript.
@@ -374,7 +333,47 @@ See URL `http://saw.galois.com' for more information."
     :command ("saw" "--output-locations" source-inplace)
     :error-parser saw-script--flycheck-parse
     :modes (saw-script-mode))
-  (add-to-list 'flycheck-checkers 'saw-script))
+  (add-to-list 'flycheck-checkers 'saw-script)
+
+  (defun saw-script--flycheck-parse (output checker buffer)
+    "Find Flycheck info in the string OUTPUT from saw using CHECKER applied to BUFFER."
+    (with-current-buffer buffer (saw-script-clear-output))
+    (save-excursion
+      (save-match-data
+        (let ((found '()))
+          (with-temp-buffer
+            (insert output)
+            (goto-char (point-min))
+            (while (re-search-forward saw-script--info-start-regexp nil t)
+              (let ((line (string-to-number (match-string 2)))
+                    (column (string-to-number (match-string 3)))
+                    (end-line (and (match-string 5)
+                                   (string-to-number (match-string 5))))
+                    (end-column (and (match-string 6)
+                                     (string-to-number (match-string 6))))
+                    (text (let ((perhaps-text (match-string 4)))
+                            (or perhaps-text
+                                (let ((text-start (point)))
+                                  (forward-line 1)
+                                  (beginning-of-line)
+                                  (while (and (not (eobp))
+                                              (looking-at-p "\t"))
+                                    (forward-line 1)
+                                    (beginning-of-line))
+                                  (buffer-substring-no-properties text-start (point)))))))
+                (push (flycheck-error-new-at line column
+                                             (if (match-string 4) 'error 'info)
+                                             (saw-script--abbreviate-string text)
+                                             :checker checker :buffer buffer)
+                      found)
+                (unless (match-string 4)
+                  (with-current-buffer buffer
+                    (saw-script-record-output line
+                                              column
+                                              end-line
+                                              end-column
+                                              text))))))
+          found)))))
 
 
 ;;; The mode itself
@@ -404,9 +403,6 @@ See URL `http://saw.galois.com' for more information."
   ;; Comment syntax
   (setq-local comment-start "// ")
   (setq-local comment-end "")
-
-  ;; Setup code for output viewing
-  (make-variable-buffer-local 'saw-script-output)
 
   ;; Right click
   (set (make-local-variable 'prop-menu-item-functions) '(saw-script--context-menu-items))
