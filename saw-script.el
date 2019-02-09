@@ -4,7 +4,9 @@
 
 ;; Author: David Thrane Christiansen <dtc@dtc.galois.com>
 ;; Keywords: languages
-;; Package-Requires: ((emacs "24") (prop-menu "0.1") (cl-lib "0.5"))
+;; Package-Requires: ((emacs "24.4") (prop-menu "0.1") (cl-lib "0.5"))
+;; Package-Version: 0.5
+;; Homepage: https://github.com/GaloisInc/saw-script
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
