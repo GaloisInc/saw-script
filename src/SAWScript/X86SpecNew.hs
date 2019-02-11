@@ -155,7 +155,7 @@ data Opts = Opts
 
 (*.) :: Integer -> Unit -> Bytes
 n *. u = toBytes (fromIntegral n * bs)
-  where bs = unitByteSize u natValue :: Integer
+  where bs = unitByteSize u intValue :: Integer
 
 unitBitSize :: Unit -> (forall w. (1 <= w) => NatRepr w -> a) -> a
 unitBitSize u k = unitByteSize u $ \bits ->
@@ -225,7 +225,7 @@ instance Show (Loc t) where
     case x of
       InReg r -> show r
       InMem w l o ->
-        "[" ++ show l ++ off ++ " |" ++ show (8 * natValue w) ++ "]"
+        "[" ++ show l ++ off ++ " |" ++ show (8 * intValue w) ++ "]"
         where off | o < 0     = " - " ++ show (negate o)
                   | o == 0    = ""
                   | otherwise = " + " ++ show o
@@ -315,7 +315,7 @@ instance Show (V p t) where
 
     where
     pars x = "(" ++ x ++ ")"
-    sh w = " : [" ++ show (natValue w) ++ "]"
+    sh w = " : [" ++ show (intValue w) ++ "]"
 
 
 litByte :: Integer -> V p (LLVMPointerType 8)
@@ -457,7 +457,7 @@ ptrTy wb
         LLVMPointerRepr (natMultiply (knownNat @8) wb)
 
 llvmBytes :: NatRepr w -> StorageType
-llvmBytes w = bitvectorType (toBytes (natValue w))
+llvmBytes w = bitvectorType (toBytes (intValue w))
 
 setLoc :: Loc t -> Sym -> RegValue Sym t -> State -> IO State
 setLoc l =
@@ -524,7 +524,7 @@ evalCry :: forall p. Eval p => Opts -> CryArg p -> S p -> IO Term
 evalCry opts cry s =
   case cry of
     CryNat n -> do sc <- sawBackendSharedContext sym
-                   scNat sc (fromInteger n)
+                   scNat sc (fromIntegral n)
 
     Cry v -> toSC sym =<< projectLLVM_bv sym =<< eval v opts s
 
@@ -533,7 +533,7 @@ evalCry opts cry s =
       do vs <- readArr opts ptr n byteW s (curState (Proxy @p) s)
          terms <- mapM (\x -> toSC sym =<< projectLLVM_bv sym x) vs
          sc <- sawBackendSharedContext sym
-         ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
+         ty <- scBitvector sc (fromIntegral (8 * intValue byteW))
          scVector sc ty terms
 
     CryArrPre ptr n u ->
@@ -541,7 +541,7 @@ evalCry opts cry s =
       do vs <- readArr opts ptr n byteW s (fst s)
          terms <- mapM (\x -> toSC sym =<< projectLLVM_bv sym x) vs
          sc <- sawBackendSharedContext sym
-         ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
+         ty <- scBitvector sc (fromIntegral (8 * intValue byteW))
          scVector sc ty terms
 
   where
@@ -574,9 +574,9 @@ evalCryFunArr opts s n w f xs =
   do term <- cryTerm opts f =<< mapM (\x -> evalCry opts x s) xs
      let sym = optsSym opts
      sc  <- sawBackendSharedContext sym
-     len <- scNat sc (fromInteger n)
-     ty  <- scBitvector sc (fromInteger (natValue w))
-     let atIx i = do ind    <- scNat sc (fromInteger i)
+     len <- scNat sc (fromIntegral n)
+     ty  <- scBitvector sc (fromIntegral (intValue w))
+     let atIx i = do ind    <- scNat sc (fromIntegral i)
                      term_i <- scAt sc len ty term ind
                      bv <- bindSAWTerm sym (BaseBVRepr w) term_i
                      llvmPointer_bv sym bv
@@ -637,7 +637,7 @@ readArr opts ptr n wBytes s sMem =
          llT    = llvmBytes wBytes
          getAt i =
            do let ?ptrWidth = knownNat
-              loc <- adjustPtr sym mem ptrV (i * natValue wBytes)
+              loc <- adjustPtr sym mem ptrV (i * intValue wBytes)
               doLoad sym mem loc llT cruT noAlignment
 
      mapM getAt [ 0 .. n - 1 ]
@@ -887,7 +887,7 @@ allocate sym ar s =
 
   names :: [String]
   names = [ areaName ar ++ "_" ++ show uni ++ "_" ++ show i
-          | i <- take (fromInteger num) [ 0 :: Int .. ] ]
+          | i <- take (fromIntegral num) [ 0 :: Int .. ] ]
 
 fillFresh :: Sym -> Bool -> LLVMPtr Sym 64 -> Unit ->
                 [String] -> MemImpl Sym -> IO (MemImpl Sym)
@@ -898,7 +898,7 @@ fillFresh sym ptrOk p u todo mem =
     nm : more ->
       do let ?ptrWidth = knownNat
          let ty        = ptrTy w
-         let elS       = natValue w
+         let elS       = intValue w
          let lty       = bitvectorType (toBytes elS)
          val <- packMemValue sym lty ty =<< freshVal sym ty ptrOk nm
          -- Here we use the write that ignore mutability.
@@ -925,7 +925,7 @@ clobberArea sym mem p ar =
     _  ->
       do base <- adjustPtr sym mem p (negate (bytesToInteger (areaPtr ar)))
          let (num,uni) = areaSize ar
-             xs = take (fromInteger num)
+             xs = take (fromIntegral num)
                   [ areaName ar ++ "_" ++ show uni ++ "_at_" ++ show i
                                                       | i <- [ 0 :: Int .. ]]
          fillFresh sym (areaHasPointers ar) base uni xs mem

@@ -32,7 +32,7 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
-                   (NatRepr(..), someNat, natValue, LeqProof(..), isPosNat)
+                   (NatRepr(..), someNat, intValue, LeqProof(..), isPosNat)
 
 import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
@@ -102,7 +102,7 @@ resolveSetupFieldIndex cc env nameEnv v n =
              Crucible.StructType si <-
                let ?lc = lc
                in either (\_ -> Nothing) Just $ Crucible.asMemType symTy
-             V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == toInteger o) (Crucible.siFields si)
+             V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == fromIntegral o) (Crucible.siFields si)
 
     _ -> Nothing
   where
@@ -381,7 +381,7 @@ toLLVMType dl tp =
       Cryptol.TVInteger -> Nothing
       Cryptol.TVIntMod _ -> Nothing
       Cryptol.TVSeq n Cryptol.TVBit
-        | n > 0 -> Just (Crucible.IntType (fromInteger n))
+        | n > 0 -> Just (Crucible.IntType (fromIntegral n))
         | otherwise -> Nothing
       Cryptol.TVSeq n t -> do
         t' <- toLLVMType dl t
@@ -421,7 +421,7 @@ mkFields packed dl a off (ty : tys) =
 typeAlignment :: Crucible.DataLayout -> Crucible.StorageType -> Crucible.Alignment
 typeAlignment dl ty =
   case Crucible.storageTypeF ty of
-    Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromInteger (Crucible.bytesToBits bytes))
+    Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromIntegral (Crucible.bytesToBits bytes))
     Crucible.Float           -> fromJust (Crucible.floatAlignment dl 32)
     Crucible.Double          -> fromJust (Crucible.floatAlignment dl 64)
     Crucible.X86_FP80        -> fromJust (Crucible.floatAlignment dl 80)
@@ -432,7 +432,7 @@ typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.StorageType
 typeOfLLVMVal _dl val =
   case val of
     Crucible.LLVMValInt _bkl bv ->
-       Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (natValue (W4.bvWidth bv))))
+       Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (intValue (W4.bvWidth bv))))
     Crucible.LLVMValFloat _ _   -> error "FIXME: typeOfLLVMVal LLVMValFloat"
     Crucible.LLVMValStruct flds -> Crucible.mkStructType (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
