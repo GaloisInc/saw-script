@@ -136,7 +136,10 @@ typeOfSetupValue' cc env nameEnv val =
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
           case toLLVMType dl (Cryptol.evalValType Map.empty ty) of
-            Nothing -> fail "typeOfSetupValue: non-representable type"
+            Nothing ->
+              fail $ unlines [ "typeOfSetupValue: non-representable type"
+                             , "  " ++ show (Cryptol.pp ty)
+                             ]
             Just memTy -> return memTy
         s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
                             , "instead got:"
