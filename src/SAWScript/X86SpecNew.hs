@@ -154,8 +154,8 @@ data Opts = Opts
   }
 
 (*.) :: Integer -> Unit -> Bytes
-n *. u = toBytes (fromIntegral n * bs)
-  where bs = unitByteSize u natValue :: Integer
+n *. u = toBytes (fromInteger n * bs)
+  where bs = unitByteSize u natValue :: Natural
 
 unitBitSize :: Unit -> (forall w. (1 <= w) => NatRepr w -> a) -> a
 unitBitSize u k = unitByteSize u $ \bits ->
@@ -575,7 +575,7 @@ evalCryFunArr opts s n w f xs =
      let sym = optsSym opts
      sc  <- sawBackendSharedContext sym
      len <- scNat sc (fromInteger n)
-     ty  <- scBitvector sc (fromInteger (natValue w))
+     ty  <- scBitvector sc (natValue w)
      let atIx i = do ind    <- scNat sc (fromInteger i)
                      term_i <- scAt sc len ty term ind
                      bv <- bindSAWTerm sym (BaseBVRepr w) term_i
@@ -637,7 +637,7 @@ readArr opts ptr n wBytes s sMem =
          llT    = llvmBytes wBytes
          getAt i =
            do let ?ptrWidth = knownNat
-              loc <- adjustPtr sym mem ptrV (i * natValue wBytes)
+              loc <- adjustPtr sym mem ptrV (i * toInteger (natValue wBytes))
               doLoad sym mem loc llT cruT noAlignment
 
      mapM getAt [ 0 .. n - 1 ]
@@ -898,7 +898,7 @@ fillFresh sym ptrOk p u todo mem =
     nm : more ->
       do let ?ptrWidth = knownNat
          let ty        = ptrTy w
-         let elS       = natValue w
+         let elS       = toInteger (natValue w)
          let lty       = bitvectorType (toBytes elS)
          val <- packMemValue sym lty ty =<< freshVal sym ty ptrOk nm
          -- Here we use the write that ignore mutability.

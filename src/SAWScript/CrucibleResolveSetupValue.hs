@@ -102,7 +102,7 @@ resolveSetupFieldIndex cc env nameEnv v n =
              Crucible.StructType si <-
                let ?lc = lc
                in either (\_ -> Nothing) Just $ Crucible.asMemType symTy
-             V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == toInteger o) (Crucible.siFields si)
+             V.findIndex (\fi -> Crucible.bytesToBits (Crucible.fiOffset fi) == fromIntegral o) (Crucible.siFields si)
 
     _ -> Nothing
   where
@@ -424,7 +424,7 @@ mkFields packed dl a off (ty : tys) =
 typeAlignment :: Crucible.DataLayout -> Crucible.StorageType -> Crucible.Alignment
 typeAlignment dl ty =
   case Crucible.storageTypeF ty of
-    Crucible.Bitvector bytes -> Crucible.integerAlignment dl (fromInteger (Crucible.bytesToBits bytes))
+    Crucible.Bitvector bytes -> Crucible.integerAlignment dl (Crucible.bytesToBits bytes)
     Crucible.Float           -> fromJust (Crucible.floatAlignment dl 32)
     Crucible.Double          -> fromJust (Crucible.floatAlignment dl 64)
     Crucible.X86_FP80        -> fromJust (Crucible.floatAlignment dl 80)
