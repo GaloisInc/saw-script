@@ -70,5 +70,5 @@ executable css
 
   hs-source-dirs : css
   main-is : Main.hs
-  GHC-options: -Wall -O2 -rtsopts -pgmlg++
+  GHC-options: -Wall -O2 -rtsopts -pgmlc++
   extra-libraries:      stdc++
