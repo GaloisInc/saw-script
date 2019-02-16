@@ -613,7 +613,7 @@ evalProp opts p s =
          need   <- evalCryFunArr opts s n wBits f xs -- expected values
          have   <- readArr opts ptr n wBytes s (snd s)
          checks <- zipWithM (ptrEq sym wBits) need have
-         foldM (\chk (p1, p2) -> andPred sym p1 p2 >>= andPred sym chk) (truePred sym) checks
+         foldM (andPred sym) (truePred sym) checks
   where
   sym = optsSym opts
 
@@ -648,7 +648,7 @@ evalSame ::
 evalSame sym t v1 v2 =
   case t of
     BoolRepr          -> isEq sym v1 v2
-    LLVMPointerRepr w -> ptrEq sym w v1 v2 >>= uncurry (andPred sym)
+    LLVMPointerRepr w -> ptrEq sym w v1 v2
     it -> fail ("[evalProp] Unexpected value repr: " ++ show it)
 
 

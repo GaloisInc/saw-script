@@ -93,7 +93,7 @@ module SAWScript.X86Spec
 
 import qualified Data.Vector as Vector
 
-import What4.Interface (falsePred, isEq, printSymExpr, andPred)
+import What4.Interface (falsePred, isEq, printSymExpr)
 import SAWScript.CrucibleLLVM (ptrEq, ppPtr)
 
 import Verifier.SAW.Term.Pretty(showTerm)
@@ -157,9 +157,9 @@ sameValAt t (Value x) (Value y) =
     Value <$> (
     let w = bitSize t
     in case t of
-         Bits _    -> ptrEq sym w x y >>= uncurry (andPred sym)
-         Ptr       -> ptrEq sym w x y >>= uncurry (andPred sym)
-         BigFloat  -> ptrEq sym w x y >>= uncurry (andPred sym)
+         Bits _    -> ptrEq sym w x y
+         Ptr       -> ptrEq sym w x y
+         BigFloat  -> ptrEq sym w x y
          Bool      -> isEq sym x y)
 
 
