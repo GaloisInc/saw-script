@@ -128,7 +128,6 @@ data OverrideFailureReason
   | BadPointerCast -- ^ Pointer required to process points-to
   | BadReturnSpecification -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
-  | BadPointerLoad String -- ^ loadRaw failed due to type error
   | StructuralMismatch (Crucible.LLVMVal Sym)
                        SetupValue
                        Crucible.MemType
@@ -152,9 +151,6 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "bad return specification"
   NonlinearPatternNotSupported ->
     PP.text "nonlinear pattern no supported"
-  BadPointerLoad msg ->
-    PP.text "type error when loading through pointer" PP.<$$>
-    PP.indent 2 (PP.text msg)
   StructuralMismatch llvmval setupval ty ->
     PP.text "could not match the following terms" PP.<$$>
     PP.indent 2 (PP.text $ show llvmval) PP.<$$>
@@ -785,7 +781,7 @@ zeroValueSC sc tp = case Crucible.storageTypeF tp of
   Crucible.Double -> fail "zeroValueSC: double unsupported"
   Crucible.X86_FP80 -> fail "zeroValueSC: X86_FP80 unsupported"
   Crucible.Bitvector bs ->
-    do n <- scNat sc (fromInteger (Crucible.bytesToBits bs))
+    do n <- scNat sc (Crucible.bytesToBits bs)
        z <- scNat sc 0
        scBvNat sc n z
   Crucible.Array n tp' ->
@@ -848,7 +844,7 @@ valueToSC _sym loc failMsg _tval _val =
 typeToSC :: SharedContext -> Crucible.StorageType -> IO Term
 typeToSC sc t =
   case Crucible.storageTypeF t of
-    Crucible.Bitvector sz -> scBitvector sc (fromInteger (Crucible.bytesToBits sz))
+    Crucible.Bitvector sz -> scBitvector sc (Crucible.bytesToBits sz)
     Crucible.Float -> fail "typeToSC: float not supported"
     Crucible.Double -> fail "typeToSC: double not supported"
     Crucible.X86_FP80 -> fail "typeToSC: X86_FP80 not supported"
@@ -944,14 +940,7 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
                           $ (cc^.ccLLVMContext)
 
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy alignment)
-     (v, p1, p2, p3) <-
-       case res of
-         Left e  -> failure loc (BadPointerLoad e)
-         Right x -> return x
-     addAssert p1 (Crucible.SimError loc "Read from unallocated memory")
-     addAssert p2 (Crucible.SimError loc "Read from unaligned memory")
-     addAssert p3 (Crucible.SimError loc "Invalid memory load")
+     v <- liftIO (Crucible.loadRaw sym mem ptr1 storTy alignment)
      matchArg sc cc loc prepost v memTy val
 
 

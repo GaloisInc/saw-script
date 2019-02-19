@@ -592,7 +592,6 @@ llvm_assert :: BuiltinContext -> Options -> Term
 llvm_assert bic _ v = do
   let sc = biSharedContext bic
   ms <- gets lsSpec
-  liftIO $ checkBoolean sc v
   me <- mkMixedExpr ms sc v
   le <- case me of
           LogicE le -> return le

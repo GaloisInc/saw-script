@@ -154,8 +154,8 @@ data Opts = Opts
   }
 
 (*.) :: Integer -> Unit -> Bytes
-n *. u = toBytes (fromIntegral n * bs)
-  where bs = unitByteSize u natValue :: Integer
+n *. u = toBytes (fromInteger n * bs)
+  where bs = unitByteSize u natValue :: Natural
 
 unitBitSize :: Unit -> (forall w. (1 <= w) => NatRepr w -> a) -> a
 unitBitSize u k = unitByteSize u $ \bits ->
@@ -575,7 +575,7 @@ evalCryFunArr opts s n w f xs =
      let sym = optsSym opts
      sc  <- sawBackendSharedContext sym
      len <- scNat sc (fromInteger n)
-     ty  <- scBitvector sc (fromInteger (natValue w))
+     ty  <- scBitvector sc (natValue w)
      let atIx i = do ind    <- scNat sc (fromInteger i)
                      term_i <- scAt sc len ty term ind
                      bv <- bindSAWTerm sym (BaseBVRepr w) term_i
@@ -613,7 +613,7 @@ evalProp opts p s =
          need   <- evalCryFunArr opts s n wBits f xs -- expected values
          have   <- readArr opts ptr n wBytes s (snd s)
          checks <- zipWithM (ptrEq sym wBits) need have
-         foldM (\chk (p1, p2) -> andPred sym p1 p2 >>= andPred sym chk) (truePred sym) checks
+         foldM (andPred sym) (truePred sym) checks
   where
   sym = optsSym opts
 
@@ -637,7 +637,7 @@ readArr opts ptr n wBytes s sMem =
          llT    = llvmBytes wBytes
          getAt i =
            do let ?ptrWidth = knownNat
-              loc <- adjustPtr sym mem ptrV (i * natValue wBytes)
+              loc <- adjustPtr sym mem ptrV (i * toInteger (natValue wBytes))
               doLoad sym mem loc llT cruT noAlignment
 
      mapM getAt [ 0 .. n - 1 ]
@@ -648,7 +648,7 @@ evalSame ::
 evalSame sym t v1 v2 =
   case t of
     BoolRepr          -> isEq sym v1 v2
-    LLVMPointerRepr w -> ptrEq sym w v1 v2 >>= uncurry (andPred sym)
+    LLVMPointerRepr w -> ptrEq sym w v1 v2
     it -> fail ("[evalProp] Unexpected value repr: " ++ show it)
 
 
@@ -898,7 +898,7 @@ fillFresh sym ptrOk p u todo mem =
     nm : more ->
       do let ?ptrWidth = knownNat
          let ty        = ptrTy w
-         let elS       = natValue w
+         let elS       = toInteger (natValue w)
          let lty       = bitvectorType (toBytes elS)
          val <- packMemValue sym lty ty =<< freshVal sym ty ptrOk nm
          -- Here we use the write that ignore mutability.

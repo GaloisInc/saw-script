@@ -541,16 +541,6 @@ goal_when str script =
     g : _ | str `isInfixOf` goalName g -> runStateT script s
     _ -> return ((), s)
 
-returnsBool :: Term -> Bool
-returnsBool ((asBoolType . snd . asPiList) -> Just ()) = True
-returnsBool _ = False
-
-checkBoolean :: SharedContext -> Term -> IO ()
-checkBoolean sc t = do
-  ty <- scTypeCheckError sc t
-  unless (returnsBool ty) $
-    fail $ "Invalid non-boolean type: " ++ show ty
-
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
 satABC :: ProofScript SV.SatResult
@@ -583,7 +573,6 @@ satExternal doCNF execName args = withFirstGoal $ \g0 -> do
   tp <- scWhnf sc =<< scTypeOf sc t
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
       argNames = map fst (fst (asPiList tp))
-  checkBoolean sc t
   (path, fh) <- openTempFile "." cnfName
   hClose fh -- Yuck. TODO: allow writeCNF et al. to work on handles.
   let args' = map replaceFileName args
