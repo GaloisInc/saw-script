@@ -29,9 +29,7 @@ Stability   : provisional
 
 
 module SAWScript.JVM.CrucibleBuiltins
-    ( {- crucible_jvm_cfg
-    , crucible_jvm_extract
-    , -} crucible_jvm_verify
+    ( crucible_jvm_verify
     , crucible_jvm_unsafe_assume_spec
     , jvm_return
     , jvm_execute_func
@@ -69,7 +67,6 @@ import           Numeric.Natural
 import           System.IO
 
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
---import qualified Control.Monad.Trans.Maybe as MaybeT
 
 -- jvm-verifier
 -- TODO: transition to Lang.JVM.Codebase from crucible-jvm
@@ -82,7 +79,6 @@ import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
---import           What4.Utils.MonadST
 
 -- jvm-parser
 import qualified Language.JVM.Parser as J
@@ -506,19 +502,6 @@ assertEqualVals cc v1 v2 =
 
 --------------------------------------------------------------------------------
 
---readRef ::
---  IsSymInterface sym =>
---  RefCell tp {- ^ Reference cell to read -} ->
---  OverrideSim p sym ext rtp args ret (RegValue sym tp)
---readRef r =
---  do sym <- getSymInterface
---     globals <- use (stateTree . actFrame . gpGlobals)
---     let msg = ReadBeforeWriteSimError "Attempt to read undefined reference cell"
---     liftIO $ readPartExpr sym (lookupRef r globals) msg
-
---objectImplRepr :: CtxRepr (EmptyCtx ::> JVMInstanceType ::> JVMArrayType)
---objectImplRepr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
-
 doAlloc ::
   CrucibleContext ->
   Allocation ->
@@ -531,17 +514,6 @@ doAlloc cc alloc =
     sym = cc^.ccBackend
     halloc = cc^.ccHandleAllocator
     jc = cc^.ccJVMContext
-
---------------------------------------------------------------------------------
-
--- ppGlobalPair :: CrucibleContext -> Crucible.GlobalPair Sym a -> Doc
--- ppGlobalPair cc gp =
---   let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
---       globals = gp ^. Crucible.gpGlobals in
---   case Crucible.lookupGlobal mvar globals of
---     Nothing -> text "LLVM Memory global variable not initialized"
---     Just mem -> Crucible.ppMem mem
-
 
 --------------------------------------------------------------------------------
 
@@ -614,20 +586,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
      --  fail $ unlines [ "Crucible can only extract static methods" ]
 
      (CJ.JVMHandleInfo _ h) <- CJ.findMethodHandle jc mcls meth
-{-
-     let failIfNotEqual :: forall f m a (b :: k).
-                           (Monad m, Show (f a), Show (f b), TestEquality f)
-                        => f a -> f b -> String -> m (a :~: b)
-         failIfNotEqual r1 r2 str
-           | Just Refl <- testEquality r1 r2 = return Refl
-           | otherwise = fail $ str ++ ": mismatch between " ++ show r1 ++ " and " ++ show r2
-     Refl <- failIfNotEqual (Crucible.handleArgTypes h)   (knownRepr :: Crucible.CtxRepr args)
-       $ "Checking args for method " ++ mname
-     Refl <- failIfNotEqual (Crucible.handleReturnType h) (knownRepr :: Crucible.TypeRepr ret)
-       $ "Checking return type for method " ++ mname
--}
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
-     -- res <- CJ.runMethodHandle sym personality halloc ctx verbosity (J.className mcls) h regmap
      res <-
        do let feats = []
           let bindings = CJ.mkDelayedBindings jc verbosity
@@ -640,7 +599,6 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
                    _ <- Strict.runStateT (mapM_ CJ.register_jvm_override CJ.stdOverrides) jc
                    liftIO $ putStrLn "registering user-provided overrides"
                    mapM_ (registerOverride opts cc simctx top_loc) (groupOn (view csMethodName) lemmas)
-                   -- _ <- runClassInit halloc ctx classname
                    liftIO $ putStrLn "registering assumptions"
                    liftIO $ do
                      preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
@@ -697,19 +655,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
         do v <- prepareArg tr (xs !! Ctx.indexVal idx)
            return (Crucible.RegEntry tr v))
       ctx
-{-
-    prepareArg :: JVMVal -> Some (Crucible.RegEntry Sym)
-    prepareArg v =
-      case v of
-        RVal r -> Some (Crucible.RegEntry CJ.refRepr r)
-        IVal i -> Some (Crucible.RegEntry CJ.intRepr i)
-        LVal l -> Some (Crucible.RegEntry CJ.longRepr l)
 
-    prepareArgs :: [JVMVal] -> Some (Crucible.RegMap Sym)
-    prepareArgs vs =
-      case Ctx.fromList (map prepareArg vs) of
-        Some asgn -> Some (Crucible.RegMap asgn)
--}
 -- | Build a conjunction from a list of boolean terms.
 scAndList :: SharedContext -> [Term] -> IO Term
 scAndList sc []       = scBool sc True
@@ -786,33 +732,6 @@ setupCrucibleContext bic opts jclass =
                             , _ccJVMContext = jc
                             , _ccHandleAllocator = halloc
                             }
-{-
-         let bindings = Crucible.fnBindingsFromList []
-         let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
-                           bindings Crucible.llvmExtensionImpl Crucible.SAWCruciblePersonality
-         mem <- Crucible.initializeMemory sym ctx llvm_mod
-         let globals  = Crucible.llvmGlobals ctx mem
-
-         let setupMem = do
-                -- register the callable override functions
-                _llvmctx' <- execStateT Crucible.register_llvm_overrides ctx
-
-                -- initialize LLVM global variables
-                _ <- case Crucible.initMemoryCFG mtrans of
-                        Crucible.SomeCFG initCFG ->
-                          Crucible.callCFG initCFG Crucible.emptyRegMap
-
-                -- register all the functions defined in the LLVM module
-                mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
-
-         let simSt = Crucible.initSimState simctx globals Crucible.defaultAbortHandler
-         res <- Crucible.executeCrucible simSt $ Crucible.runOverrideSim Crucible.UnitRepr setupMem
-         (lglobals, lsimctx) <-
-             case res of
-               Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
-               Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
-               Crucible.AbortedResult _ _ -> fail "Memory initialization failed!"
--}
 
 --------------------------------------------------------------------------------
 
@@ -932,122 +851,6 @@ runCFG simCtx globals h cfg args = do
                  (Crucible.regValue <$> (Crucible.callCFG cfg args))
   Crucible.executeCrucible [] initExecState
 
-
-{-
-extractFromJVMCFG ::
-  Options -> SharedContext -> CrucibleContext -> Crucible.AnyCFG JVM -> IO TypedTerm
-extractFromJVMCFG opts sc cc (Crucible.AnyCFG cfg) =
-  do let sym = cc^.ccBackend
-     let h   = Crucible.cfgHandle cfg
-     (ecs, args) <- setupArgs sc sym h
-     let simCtx  = cc^.ccLLVMSimContext
-     let globals = cc^.ccLLVMGlobals
-     res <- runCFG simCtx globals h cfg args
-     case res of
-       Crucible.FinishedResult _ pr ->
-         do gp <- getGlobalPair opts pr
-            t <- Crucible.asSymExpr
-                   (gp^.Crucible.gpValue)
-                   (Crucible.toSC sym)
-                   (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
-            t' <- scAbstractExts sc (toList ecs) t
-            mkTypedTerm sc t'
-       Crucible.AbortedResult _ ar ->
-         do let resultDoc = ppAbortedResult cc ar
-            fail $ unlines [ "Symbolic execution failed."
-                           , show resultDoc
-                           ]
--}
-
-
---------------------------------------------------------------------------------
-
-{-
-crucible_jvm_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
-crucible_jvm_extract bic opts cls fn_name =
-  setupCrucibleContext bic opts cls $ \cc ->
-    case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
-      Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-      Just cfg -> io $ extractFromLLVMCFG opts (biSharedContext bic) cc cfg
-
-crucible_jvm_cfg :: BuiltinContext -> Options -> J.Class -> String -> TopLevel SAW_CFG
-crucible_jvm_cfg bic opts cls fn_name =
-  setupCrucibleContext bic opts cls $ \cc ->
-    case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
-      Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-      Just cfg -> return (LLVM_CFG cfg)
--}
-
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
---diffMemTypes ::
---  Crucible.HasPtrWidth wptr =>
---  Crucible.MemType ->
---  Crucible.MemType ->
---  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
---diffMemTypes x0 y0 =
---  let wptr :: Natural = fromIntegral (natValue ?ptrWidth) in
---  case (x0, y0) of
---    -- Special case; consider a one-element struct to be compatiable with
---    -- the type of its field
---    (Crucible.StructType x, _)
---      | V.length (Crucible.siFields x) == 1 -> diffMemTypes (Crucible.fiType (V.head (Crucible.siFields x))) y0
---    (_, Crucible.StructType y)
---      | V.length (Crucible.siFields y) == 1 -> diffMemTypes x0 (Crucible.fiType (V.head (Crucible.siFields y)))
---
---    (Crucible.IntType x, Crucible.IntType y) | x == y -> []
---    (Crucible.FloatType, Crucible.FloatType) -> []
---    (Crucible.DoubleType, Crucible.DoubleType) -> []
---    (Crucible.PtrType{}, Crucible.PtrType{}) -> []
---    (Crucible.IntType w, Crucible.PtrType{}) | w == wptr -> []
---    (Crucible.PtrType{}, Crucible.IntType w) | w == wptr -> []
---    (Crucible.ArrayType xn xt, Crucible.ArrayType yn yt)
---      | xn == yn ->
---        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
---    (Crucible.VecType xn xt, Crucible.VecType yn yt)
---      | xn == yn ->
---        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
---    (Crucible.StructType x, Crucible.StructType y)
---      | Crucible.siIsPacked x == Crucible.siIsPacked y
---        && V.length (Crucible.siFields x) == V.length (Crucible.siFields y) ->
---          let xts = Crucible.siFieldTypes x
---              yts = Crucible.siFieldTypes y
---          in diffMemTypesList 1 (V.toList (V.zip xts yts))
---    _ -> [([], x0, y0)]
-
---diffMemTypesList ::
---  Crucible.HasPtrWidth arch =>
---  Int ->
---  [(Crucible.MemType, Crucible.MemType)] ->
---  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
---diffMemTypesList _ [] = []
---diffMemTypesList i ((x, y) : ts) =
---  [ (Just i : path, l , r) | (path, l, r) <- diffMemTypes x y ]
---  ++ diffMemTypesList (i+1) ts
-
---showMemTypeDiff :: ([Maybe Int], Crucible.MemType, Crucible.MemType) -> String
---showMemTypeDiff (path, l, r) = showPath path
---  where
---    showStep Nothing  = "element type"
---    showStep (Just i) = "field " ++ show i
---    showPath []       = ""
---    showPath [x]      = unlines [showStep x ++ ":", "  " ++ show l, "  " ++ show r]
---    showPath (x : xs) = showStep x ++ " -> " ++ showPath xs
-
----- | Succeed if the types have compatible memory layouts. Otherwise,
----- fail with a detailed message indicating how the types differ.
---checkMemTypeCompatibility ::
---  JavaType ->
---  JavaType ->
---  CrucibleSetup ()
---checkMemTypeCompatibility t1 t2 =
---  case diffMemTypes t1 t2 of
---    [] -> return ()
---    diffs ->
---      fail $ unlines $
---      ["types not memory-compatible:", show t1, show t2]
---      ++ map showMemTypeDiff diffs
 
 --------------------------------------------------------------------------------
 -- Setup builtins
@@ -1205,15 +1008,6 @@ jvm_elem_is typed _bic _opt ptr idx val =
        else csResolvedState %= markResolved ptr path
      let env = csAllocations (st^.csMethodSpec)
          nameEnv = csTypeNames (st^.csMethodSpec)
-     --ptrTy <- typeOfSetupValue cc env nameEnv ptr
-     --lhsTy <- case ptrTy of
-     --  Crucible.PtrType symTy ->
-     --    case Crucible.asMemType symTy of
-     --      Just lhsTy -> return lhsTy
-     --      Nothing -> fail $ "lhs not a valid pointer type: " ++ show ptrTy
-     --  _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
-     --valTy <- typeOfSetupValue cc env nameEnv val
-     --when typed (checkMemTypeCompatibility lhsTy valTy)
      addPointsTo (PointsToElem loc ptr idx val)
 
 toW4Loc :: Text.Text -> SS.Pos -> W4.ProgramLoc
@@ -1221,30 +1015,6 @@ toW4Loc fnm SS.Unknown          = W4.mkProgramLoc (W4.functionNameFromText fnm) 
 toW4Loc fnm SS.PosREPL          = W4.mkProgramLoc (W4.functionNameFromText (fnm <> " <REPL>")) W4.InternalPos
 toW4Loc fnm (SS.PosInternal nm) = W4.mkProgramLoc (W4.functionNameFromText (fnm <> " " <> fromString nm)) W4.InternalPos
 toW4Loc fnm (SS.Range file sl sc _el _ec) = W4.mkProgramLoc (W4.functionNameFromText fnm) (W4.SourcePos (fromString file) sl sc)
-
-{-
-_jvm_equal ::
-  BuiltinContext ->
-  Options        ->
-  SetupValue     ->
-  SetupValue     ->
-  JVMSetupM ()
-_jvm_equal _bic _opt val1 val2 = JVMSetupM $
-  do cc <- getCrucibleContext
-     st <- get
-     let env = csAllocations (st^.csMethodSpec)
-         nameEnv = csTypeNames (st^.csMethodSpec)
-     ty1 <- typeOfSetupValue cc env nameEnv val1
-     ty2 <- typeOfSetupValue cc env nameEnv val2
-     b <- liftIO $ checkRegisterCompatibility ty1 ty2
-     unless b $ fail $ unlines
-       [ "Incompatible types when asserting equality:"
-       , show ty1
-       , show ty2
-       ]
-     loc <- toW4Loc "jvm_equal" <$> lift getPosition
-     addCondition (SetupCond_Equal loc val1 val2)
--}
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond p =

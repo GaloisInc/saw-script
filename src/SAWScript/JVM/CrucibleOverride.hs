@@ -65,8 +65,6 @@ import qualified Cryptol.Utils.PP as Cryptol
 -- what4
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
---import qualified What4.Expr.Builder as W4
---import qualified What4.Symbol as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
@@ -76,10 +74,7 @@ import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr), GlobalV
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, freshRefCell)
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.EvalStmt as EvalStmt (readRef, alterRef)
---import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
---import qualified Lang.Crucible.Simulator.RegMap as Crucible
---import qualified Lang.Crucible.Simulator.SimError as Crucible
 import qualified Lang.Crucible.Types as Crucible
 import qualified Lang.Crucible.Utils.MuxTree as Crucible (toMuxTree)
 
@@ -148,7 +143,6 @@ data OverrideState = OverrideState
 data OverrideFailureReason
   = AmbiguousPointsTos [PointsTo]
   | AmbiguousVars [TypedTerm]
-  --- | BadSymType Crucible.SymType
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
   | BadReturnSpecification -- ^ type mismatch in return specification
@@ -463,47 +457,6 @@ methodSpecHandler_poststate ::
 methodSpecHandler_poststate opts sc cc retTy cs =
   do executeCond opts sc cc cs (cs^.csPostState)
      computeReturnValue opts cc sc cs retTy (cs^.csRetValue)
-
-{-
--- | Use a method spec to override the behavior of a function.
--- That is: match the current state using the pre-condition,
--- and execute the post condition.
-methodSpecHandler1 ::
-  forall ret ctx.
-  Options                  {- ^ output/verbosity options                     -} ->
-  SharedContext            {- ^ context for constructing SAW terms           -} ->
-  CrucibleContext          {- ^ context for interacting with Crucible        -} ->
-  CJ.JVMContext            {- ^ context for interacting with Crucible-JVM    -} ->
-  Ctx.Assignment (Crucible.RegEntry Sym) ctx
-                           {- ^ the arguments to the function -} ->
-  Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
-  CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
-  OverrideMatcher (Crucible.RegValue Sym ret)
-methodSpecHandler1 opts sc cc jc args retTy cs =
-  do let expectedArgTypes = {-(traverse . _1) resolveMemType-} (Map.elems (cs^.csArgBindings))
-
-     sym <- getSymInterface
-
-     let aux ::
-           (J.Type, SetupValue) -> Crucible.AnyValue Sym ->
-           OverrideMatcher (JVMVal, J.Type, SetupValue)
-         aux (argTy, setupVal) val =
-           case decodeJVMVal argTy val of
-             Just val' -> return (val', argTy, setupVal)
-             Nothing -> fail "unexpected type"
-
-     -- todo: fail if list lengths mismatch
-     xs <- zipWithM aux expectedArgTypes (assignmentToList args)
-
-     sequence_ [ matchArg sc cc (cs^.csLoc) PreState x y z | (x, y, z) <- xs ]
-
-     learnCond opts sc cc cs PreState (cs^.csPreState)
-
-     executeCond opts sc cc jc cs (cs^.csPostState)
-
-     computeReturnValue opts cc sc cs retTy (cs^.csRetValue)
--}
-
 
 -- learn pre/post condition
 learnCond ::
@@ -837,22 +790,6 @@ valueToSC _sym loc failMsg _tval _val =
 
 ------------------------------------------------------------------------
 
---typeToSC :: SharedContext -> Crucible.Type -> IO Term
---typeToSC sc t =
---  case Crucible.typeF t of
---    Crucible.Bitvector sz -> scBitvector sc (fromInteger (Crucible.bytesToBits sz))
---    Crucible.Float -> fail "typeToSC: float not supported"
---    Crucible.Double -> fail "typeToSC: double not supported"
---    Crucible.Array sz ty ->
---      do n <- scNat sc (fromIntegral sz)
---         ty' <- typeToSC sc ty
---         scVecType sc n ty'
---    Crucible.Struct fields ->
---      do fields' <- V.toList <$> traverse (typeToSC sc . view Crucible.fieldVal) fields
---         scTuple sc fields'
-
-------------------------------------------------------------------------
-
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
   CrucibleContext {- ^ context for interacting with Crucible -} ->
@@ -1076,21 +1013,6 @@ executePred sc cc tt =
 
 ------------------------------------------------------------------------
 
--- | Construct a completely symbolic pointer. This pointer could point to anything, or it could
--- be NULL.
---executeFreshPointer ::
---  CrucibleContext {- ^ Crucible context       -} ->
---  AllocIndex      {- ^ SetupVar allocation ID -} ->
---  IO JVMRefVal {- ^ Symbolic pointer value -}
---executeFreshPointer cc (AllocIndex i) =
---  do let mkName base = W4.systemSymbol (base ++ show i ++ "!")
---         sym         = cc^.ccBackend
---     blk <- W4.freshConstant sym (mkName "blk") W4.BaseNatRepr
---     off <- W4.freshConstant sym (mkName "off") (W4.BaseBVRepr Crucible.PtrWidth)
---     return (Crucible.LLVMPointer blk off)
-
-------------------------------------------------------------------------
-
 -- | Map the given substitution over all 'SetupTerm' constructors in
 -- the given 'SetupValue'.
 instantiateSetupValue ::
@@ -1102,10 +1024,6 @@ instantiateSetupValue sc s v =
   case v of
     SetupVar _     -> return v
     SetupTerm tt   -> SetupTerm <$> doTerm tt
-    -- SetupStruct vs -> SetupStruct <$> mapM (instantiateSetupValue sc s) vs
-    -- SetupArray  vs -> SetupArray <$> mapM (instantiateSetupValue sc s) vs
-    -- SetupElem _ _  -> return v
-    -- SetupField _ _ -> return v
     SetupNull      -> return v
     SetupGlobal _  -> return v
   where
@@ -1129,19 +1047,6 @@ resolveSetupValueJVM opts cc sc spec sval =
      sval' <- liftIO $ instantiateSetupValue sc s sval
      lval  <- liftIO $ resolveSetupVal cc m tyenv nameEnv sval' `X.catch` handleException opts
      return (memTy, lval)
-
---resolveSetupValue ::
---  Options              ->
---  CrucibleContext      ->
---  SharedContext        ->
---  CrucibleMethodSpecIR ->
---  SetupValue           ->
---  OverrideMatcher (J.Type, Crucible.RegValue Sym CJ.JVMValueType)
---resolveSetupValue opts cc sc spec sval =
---  do (memTy, lval) <- resolveSetupValueJVM opts cc sc spec sval
---     sym <- getSymInterface
---     let aval = encodeJVMVal sym lval
---     return (memTy, aval)
 
 injectJVMVal :: Sym -> JVMVal -> Crucible.RegValue Sym CJ.JVMValueType
 injectJVMVal sym jv =
@@ -1204,13 +1109,6 @@ decodeJVMVal ty v =
 asRVal :: W4.ProgramLoc -> JVMVal -> OverrideMatcher JVMRefVal
 asRVal _ (RVal ptr) = return ptr
 asRVal loc _ = failure loc BadPointerCast
-
---asRVal ::
---  W4.ProgramLoc ->
---  (J.Type, Crucible.AnyValue Sym) ->
---  OverrideMatcher (String, JVMRefVal)
---asRVal _ (JavaClass cname, RVal ptr) = return (cname, ptr)
---asRVal loc _ = failure loc BadPointerCast
 
 ------------------------------------------------------------------------
 -- JVM OverrideSim operations
@@ -1330,10 +1228,6 @@ doResolveGlobal :: Sym -> () -> String -> IO JVMRefVal
 doResolveGlobal _sym _mem _name = fail "doResolveGlobal: FIXME"
 -- FIXME: replace () with whatever type we need to look up global/static references
 
---type JVMRefType = MaybeType (ReferenceType JVMObjectType)
---RegValue sym (MaybeType tp) = PartExpr (Pred sym) (RegValue sym tp)
---RegValue sym (ReferenceType a) = MuxTree sym (RefCell a)
-
 -- | Lookup the data structure associated with a class.
 getJVMClassByName ::
   Sym ->
@@ -1399,10 +1293,6 @@ makeJVMTypeRep sym globals jc ty =
          return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of3 ety')
     J.ClassType cn ->
       primTypeRep 8 -- FIXME: temporary hack
-{-
-      do cls <- getJVMClassByName sym globals jc cn
-         return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i2of3 cls)
--}
     J.BooleanType -> primTypeRep 0
     J.ByteType    -> primTypeRep 1
     J.CharType    -> primTypeRep 2

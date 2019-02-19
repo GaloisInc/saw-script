@@ -31,14 +31,10 @@ import           Control.Monad.ST (RealWorld)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
--- import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
---import qualified Text.LLVM.AST as L
---import qualified Text.LLVM.PP as L
 import           Data.IORef
 import           Data.Monoid ((<>))
 
--- import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as Crucible
 
 -- what4
@@ -52,7 +48,6 @@ import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
---import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic){-, IntrinsicMuxFn(IntrinsicMuxFn)-})
 
@@ -63,11 +58,7 @@ import qualified Lang.Crucible.JVM.Translation as CJ
 -- TODO: transition to Lang.JVM.Codebase from crucible-jvm
 import qualified Verifier.Java.Codebase as CB
 
---import qualified SAWScript.CrucibleLLVM as CL
---import SAWScript.JavaExpr (JavaType)
-
 -- jvm-parser
---import qualified Language.JVM.Common as J
 import qualified Language.JVM.Parser as J
 
 -- saw-core
@@ -86,12 +77,6 @@ nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
 data SetupValue where
   SetupVar    :: AllocIndex -> SetupValue
   SetupTerm   :: TypedTerm -> SetupValue
-{-
-  SetupStruct :: [SetupValue] -> SetupValue
-  SetupArray  :: [SetupValue] -> SetupValue
-  SetupElem   :: SetupValue -> Int -> SetupValue
-  SetupField  :: SetupValue -> String -> SetupValue
--}
   SetupNull   :: SetupValue
   SetupGlobal :: String -> SetupValue
   deriving (Show)
@@ -111,28 +96,6 @@ setupToTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO Term
 setupToTerm _opts _sc sv =
   case sv of
     SetupTerm term -> return (ttTerm term)
-{-
-    SetupStruct fields -> do ts <- mapM (setupToTerm opts sc) fields
-                             lift $ scTuple sc ts
-    SetupArray elems@(_:_) -> do ts@(t:_) <- mapM (setupToTerm opts sc) elems
-                                 typt <- lift $ scTypeOf sc t
-                                 vec <- lift $ scVector sc typt ts
-                                 typ <- lift $ scTypeOf sc vec
-                                 lift $ printOutLn opts Info $ show vec
-                                 lift $ printOutLn opts Info $ show typ
-                                 return vec
-    SetupElem base ind ->
-      case base of
-        SetupArray elems@(e:_) -> do art <- setupToTerm opts sc base
-                                     ixt <- lift $ scNat sc $ intToNat ind
-                                     lent <- lift $ scNat sc $ intToNat $ length elems
-                                     et <- setupToTerm opts sc e
-                                     typ <- lift $ scTypeOf sc et
-                                     lift $ scAt sc lent typ art ixt
-        _                -> do st <- setupToTerm opts sc base
-                               lift $ scTupleSelector sc st ind
--}
-    -- SetupVar, SetupNull, SetupGlobal
     _ -> MaybeT $ return Nothing
 
 data PrePost
@@ -273,24 +236,14 @@ data CrucibleContext =
   CrucibleContext
   { _ccJVMClass       :: J.Class
   , _ccCodebase       :: CB.Codebase
-  -- , _ccJVMModuleTrans :: CJ.ModuleTranslation
   , _ccJVMContext     :: CJ.JVMContext
   , _ccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
   , _ccHandleAllocator :: Crucible.HandleAllocator RealWorld
-  -- , _ccLLVMEmptyMem   :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
-  -- , _ccJVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM
-  -- , _ccLLVMGlobals    :: Crucible.SymGlobalState Sym
   }
 
 makeLenses ''CrucibleContext
 makeLenses ''CrucibleSetupState
 makeLenses ''ResolvedState
-
---ccLLVMContext :: Simple Lens CrucibleContext CJ.LLVMContext
---ccLLVMContext = ccLLVMModuleTrans . CL.transContext
-
---ccTypeCtx :: Simple Lens CrucibleContext CL.LLVMTyCtx
---ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
 
 --------------------------------------------------------------------------------
 
@@ -335,29 +288,7 @@ testResolved val0 path0 rs = go path0 val0
     test _ Nothing = False
     test path (Just paths) = path `elem` paths -- any (`isPrefixOf` path) paths
 
-
---intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
---intrinsics =
---  MapF.insert
---    (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)
---    Crucible.IntrinsicMuxFn
---    CL.llvmIntrinsicTypes
-
 -------------------------------------------------------------------------------
-
---data SetupError
---  = InvalidReturnType L.Type
---  | InvalidArgTypes [L.Type]
---
---ppSetupError :: SetupError -> PP.Doc
---ppSetupError (InvalidReturnType t) =
---  text "Can't lift return type" <+>
---  text (show (L.ppType t)) <+>
---  text "to a Crucible type."
---ppSetupError (InvalidArgTypes ts) =
---  text "Can't lift argument types " <+>
---  encloseSep lparen rparen comma (map (text . show . L.ppType) ts) <+>
---  text "to Crucible types."
 
 initialStateSpec :: StateSpec
 initialStateSpec =  StateSpec
@@ -389,27 +320,6 @@ initialDefCrucibleMethodSpecIR cname method loc =
   where
     thisType = if J.methodIsStatic method then [] else [J.ClassType cname]
 
---initialDeclCrucibleMethodSpecIR ::
---  (?lc :: CL.LLVMTyCtx) =>
---  L.Declare ->
---  ProgramLoc ->
---  Either SetupError CrucibleMethodSpecIR
---initialDeclCrucibleMethodSpecIR dec loc =
---  do args <- resolveArgs (L.decArgs dec)
---     ret <- resolveRetTy (L.decRetType dec)
---     let L.Symbol nm = L.decName dec
---     return CrucibleMethodSpec
---       { _csName            = nm
---       , _csArgs            = args
---       , _csRet             = ret
---       , _csPreState        = initialStateSpec
---       , _csPostState       = initialStateSpec
---       , _csArgBindings     = Map.empty
---       , _csRetValue        = Nothing
---       , _csSolverStats     = mempty
---       , _csLoc             = loc
---       }
-
 initialCrucibleSetupState ::
   CrucibleContext ->
   J.Method ->
@@ -425,19 +335,3 @@ initialCrucibleSetupState cc method loc =
     }
   where
     cname = J.className (cc^.ccJVMClass)
-
---initialCrucibleSetupStateDecl ::
---  (?lc :: CL.LLVMTyCtx) =>
---  CrucibleContext wptr ->
---  L.Declare ->
---  ProgramLoc ->
---  Either SetupError CrucibleSetupState
---initialCrucibleSetupStateDecl cc dec loc = do
---  ms <- initialDeclCrucibleMethodSpecIR dec loc
---  return CrucibleSetupState
---    { _csVarCounter      = AllocIndex 0
---    , _csPrePost         = PreState
---    , _csResolvedState   = emptyResolvedState
---    , _csMethodSpec      = ms
---    , _csCrucibleContext = cc
---    }
