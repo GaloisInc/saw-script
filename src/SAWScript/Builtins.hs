@@ -46,11 +46,10 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
-
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
-import qualified Cryptol.TypeCheck.AST as Cryptol
 
+-- saw-core
 import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
@@ -69,6 +68,45 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (scRunTestsTFIO, scTestableType)
 import Verifier.SAW.TypedAST
+
+-- cryptol-verifier
+import qualified Verifier.SAW.CryptolEnv as CEnv
+
+-- saw-core-aig
+import qualified Verifier.SAW.Simulator.BitBlast as BBSim
+
+-- saw-core-sbv
+import qualified Verifier.SAW.Simulator.SBV as SBVSim
+
+-- saw-core-what4
+import qualified Verifier.SAW.Simulator.What4 as W4Sim
+
+-- parameterized-utils
+import Data.Parameterized.Nonce
+
+-- crucible-saw
+import qualified Lang.Crucible.Backend.SAWCore as Crucible (newSAWCoreBackend, toSC)
+
+-- sbv
+import qualified Data.SBV.Dynamic as SBV
+
+-- aig
+import qualified Data.AIG as AIG
+
+-- cryptol
+import qualified Cryptol.ModuleSystem.Env as C (meSolverConfig)
+import qualified Cryptol.TypeCheck as C (SolverConfig)
+import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
+import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
+import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
+import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
+import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst)
+import qualified Cryptol.Eval.Monad as C (runEval)
+import qualified Cryptol.Eval.Type as C (evalType)
+import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
+import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
+import Cryptol.Utils.PP (pretty)
 
 import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
@@ -92,28 +130,6 @@ import qualified SAWScript.Prover.ABC as Prover
 import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
 import qualified SAWScript.Prover.MRSolver as Prover
-
-import qualified Verifier.SAW.CryptolEnv as CEnv
-import qualified Verifier.SAW.Simulator.BitBlast as BBSim
-import qualified Verifier.SAW.Simulator.SBV as SBVSim
-
-import qualified Data.SBV.Dynamic as SBV
-
-import qualified Data.AIG as AIG
-
-import qualified Cryptol.ModuleSystem.Env as C (meSolverConfig)
-import qualified Cryptol.TypeCheck as C (SolverConfig)
-import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
-import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
-import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
-import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
-import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst)
-import qualified Cryptol.Eval.Monad as C (runEval)
-import qualified Cryptol.Eval.Type as C (evalType)
-import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
-import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
-import Cryptol.Utils.PP (pretty)
 
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do
@@ -450,6 +466,19 @@ simplifyGoal ss = withFirstGoal $ \goal -> do
   let trm = goalTerm goal
   trm' <- io $ rewriteSharedTerm sc ss trm
   return ((), mempty, Just (goal { goalTerm = trm' }))
+
+goal_eval :: ProofScript ()
+goal_eval =
+  withFirstGoal $ \goal ->
+  do sc <- getSharedContext
+     t0 <- liftIO $ propToPredicate sc (goalTerm goal)
+     SV.AIGProxy proxy <- SV.getProxy
+     let gen = globalNonceGenerator
+     sym <- liftIO $ Crucible.newSAWCoreBackend proxy sc gen
+     (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Solve sym sc Map.empty [] t0
+     t1 <- liftIO $ Crucible.toSC sym p
+     t2 <- liftIO $ scEqTrue sc t1
+     return ((), mempty, Just (goal { goalTerm = t2 }))
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal = withFirstGoal $ \goal -> do

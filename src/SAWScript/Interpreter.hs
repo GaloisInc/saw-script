@@ -895,6 +895,10 @@ primitives = Map.fromList
     (pureVal simplifyGoal)
     [ "Apply the given simplifier rule set to the current goal." ]
 
+  , prim "goal_eval"           "ProofScript ()"
+    (pureVal goal_eval)
+    [ "Evaluate the proof goal to a first-order combination of primitives." ]
+
   , prim "beta_reduce_goal"    "ProofScript ()"
     (pureVal beta_reduce_goal)
     [ "Reduce the current goal to beta-normal form." ]
