@@ -77,7 +77,7 @@ import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
 import qualified What4.Interface as W
 import           What4.BaseTypes
 
-import Data.Reflection (Given(..))
+import Data.Reflection (Given(..), give)
 import Data.Parameterized.Some
 
 import Verifier.SAW.Simulator.What4.SWord
@@ -455,7 +455,7 @@ selectV merger maxValue valueFn vx =
 w4SolveBasic :: forall sym. (Given sym, IsSymExprBuilder sym) =>
   ModuleMap
   -> Map Ident (SValue sym)
-  -- ^ additional primatives
+  -- ^ additional primitives
   -> [String]
   -- ^ 'unints' Constants in this list are kept uninterpreted
   -> Term
@@ -564,13 +564,11 @@ flattenSValue v = do
 
 ------------------------------------------------------------
 
-w4Solve :: forall sym. (Given sym, IsSymExprBuilder sym) =>
-         SharedContext
-      -> Map Ident (SValue sym)
-      -> [String]
-      -> Term
-      -> IO ([String], ([Maybe (Labeler sym)], SBool sym))
-w4Solve sc ps unints t = do
+w4Solve ::
+  forall sym. (IsSymExprBuilder sym) =>
+  sym -> SharedContext -> Map Ident (SValue sym) -> [String] -> Term ->
+  IO ([String], ([Maybe (Labeler sym)], SBool sym))
+w4Solve sym sc ps unints t = give sym $ do
   modmap <- scGetModuleMap sc
   let eval = w4SolveBasic modmap ps unints
   ty <- eval =<< scTypeOf sc t
