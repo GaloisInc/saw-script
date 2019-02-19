@@ -53,6 +53,7 @@ import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.LLVMMethodSpecIR as LIR
 import qualified SAWScript.CrucibleLLVM as Crucible
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
+import qualified SAWScript.JVM.CrucibleMethodSpecIR as JCIR
 import qualified Verifier.Java.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
@@ -113,6 +114,10 @@ data Value
   | VCrucibleSetup !(CrucibleSetupM Value)
   | VCrucibleMethodSpec CIR.CrucibleMethodSpecIR
   | VCrucibleSetupValue CIR.SetupValue
+  -----
+  | VJVMSetup !(JVMSetupM Value)
+  | VJVMMethodSpec JCIR.CrucibleMethodSpecIR
+  | VJVMSetupValue JCIR.SetupValue
   -----
   | VJavaType JavaType
   | VLLVMType LLVM.Type
@@ -304,6 +309,9 @@ showsPrecValue opts p v =
     VCFG (JVM_CFG g) -> showString (show g)
     VGhostVar x -> showParen (p > 10)
                  $ showString "Ghost " . showsPrec 11 x
+    VJVMSetup _      -> showString "<<JVM Setup>>"
+    VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
+    VJVMSetupValue x -> shows x
   where
     opts' = sawPPOpts opts
 
@@ -497,6 +505,24 @@ instance Monad CrucibleSetupM where
   return = pure
   CrucibleSetupM m >>= f = CrucibleSetupM (m >>= runCrucibleSetupM . f)
 
+--
+type JVMSetup a =
+  StateT JCIR.CrucibleSetupState TopLevel a
+
+data JVMSetupM a =
+  JVMSetupM { runJVMSetupM :: JVMSetup a }
+
+instance Functor JVMSetupM where
+  fmap f (JVMSetupM m) = JVMSetupM (fmap f m)
+
+instance Applicative JVMSetupM where
+  pure x = JVMSetupM (pure x)
+  JVMSetupM f <*> JVMSetupM m = JVMSetupM (f <*> m)
+
+instance Monad JVMSetupM where
+  return = pure
+  JVMSetupM m >>= f = JVMSetupM (m >>= runJVMSetupM . f)
+--
 type ProofScript a = StateT ProofState TopLevel a
 
 -- IsValue class ---------------------------------------------------------------
@@ -609,11 +635,30 @@ instance FromValue a => FromValue (CrucibleSetupM a) where
       runCrucibleSetupM (fromValue m2)
     fromValue _ = error "fromValue CrucibleSetup"
 
+instance IsValue a => IsValue (JVMSetupM a) where
+    toValue m = VJVMSetup (fmap toValue m)
+
+instance FromValue a => FromValue (JVMSetupM a) where
+    fromValue (VJVMSetup m) = fmap fromValue m
+    fromValue (VReturn v) = return (fromValue v)
+    fromValue (VBind m1 v2) = JVMSetupM $ do
+      v1 <- runJVMSetupM (fromValue m1)
+      m2 <- lift $ applyValue v2 v1
+      runJVMSetupM (fromValue m2)
+    fromValue _ = error "fromValue JVMSetup"
+
 instance IsValue CIR.SetupValue where
   toValue v = VCrucibleSetupValue v
 
 instance FromValue CIR.SetupValue where
   fromValue (VCrucibleSetupValue v) = v
+  fromValue _ = error "fromValue Crucible.SetupValue"
+
+instance IsValue JCIR.SetupValue where
+  toValue v = VJVMSetupValue v
+
+instance FromValue JCIR.SetupValue where
+  fromValue (VJVMSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue SAW_CFG where
@@ -628,6 +673,13 @@ instance IsValue CIR.CrucibleMethodSpecIR where
 
 instance FromValue CIR.CrucibleMethodSpecIR where
     fromValue (VCrucibleMethodSpec t) = t
+    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+
+instance IsValue JCIR.CrucibleMethodSpecIR where
+    toValue t = VJVMMethodSpec t
+
+instance FromValue JCIR.CrucibleMethodSpecIR where
+    fromValue (VJVMMethodSpec t) = t
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
 -----------------------------------------------------------------------------------

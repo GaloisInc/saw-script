@@ -80,6 +80,9 @@ import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
+import SAWScript.JVM.CrucibleBuiltins
+import qualified SAWScript.JVM.CrucibleMethodSpecIR as JIR
+
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
@@ -1843,6 +1846,148 @@ primitives = Map.fromList
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
     ]
+
+    ---------------------------------------------------------------------
+    -- Crucible/JVM commands
+
+  , prim "jvm_fresh_var" "String -> JavaType -> JVMSetup Term"
+    (bicVal jvm_fresh_var)
+    [ "Create a fresh variable for use within a Crucible specification. The"
+    , "name is used only for pretty-printing."
+    ]
+
+  , prim "jvm_alloc_object" "String -> JVMSetup JVMValue"
+    (bicVal jvm_alloc_object)
+    [ "Declare that an instance of the given class should be allocated in a"
+    , "Crucible specification. Before `jvm_execute_func`, this states"
+    , "that the function expects the object to be allocated before it runs."
+    , "After `jvm_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    ]
+
+  , prim "jvm_alloc_array" "Int -> JavaType -> JVMSetup JVMValue"
+    (bicVal jvm_alloc_array)
+    [ "Declare that an array of the given size and element type should be"
+    , "allocated in a Crucible specification. Before `jvm_execute_func`, this"
+    , "states that the function expects the array to be allocated before it"
+    , "runs. After `jvm_execute_func`, it states that the function being"
+    , "verified is expected to perform the allocation."
+    ]
+
+    -- TODO: jvm_alloc_multiarray
+
+  , prim "jvm_field_is" "JVMValue -> String -> JVMValue -> JVMSetup ()"
+    (bicVal (jvm_field_is True))
+    [ "Declare that the indicated object (first argument) has a field"
+    , "(second argument) containing the given value (third argument)."
+    , ""
+    , "In the pre-state section (before jvm_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after jvm_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "jvm_elem_is" "JVMValue -> Int -> JVMValue -> JVMSetup ()"
+    (bicVal (jvm_elem_is True))
+    [ "Declare that the indicated array (first argument) has an element"
+    , "(second argument) containing the given value (third argument)."
+    , ""
+    , "In the pre-state section (before jvm_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after jvm_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "jvm_precond" "Term -> JVMSetup ()"
+    (pureVal jvm_precond)
+    [ "State that the given predicate is a pre-condition on execution of the"
+    , "function being verified."
+    ]
+
+  , prim "jvm_postcond" "Term -> JVMSetup ()"
+    (pureVal jvm_postcond)
+    [ "State that the given predicate is a post-condition of execution of the"
+    , "function being verified."
+    ]
+
+  , prim "jvm_execute_func" "[JVMValue] -> JVMSetup ()"
+    (bicVal jvm_execute_func)
+    [ "Specify the given list of values as the arguments of the function."
+    ,  ""
+    , "The jvm_execute_func statement also serves to separate the pre-state"
+    , "section of the spec (before jvm_execute_func) from the post-state"
+    , "section (after jvm_execute_func). The effects of some JVMSetup"
+    , "statements depend on whether they occur in the pre-state or post-state"
+    , "section."
+    ]
+
+  , prim "jvm_return" "JVMValue -> JVMSetup ()"
+    (bicVal jvm_return)
+    [ "Specify the given value as the return value of the function. A"
+    , "jvm_return statement is required if and only if the function"
+    , "has a non-void return type." ]
+
+  , prim "crucible_jvm_verify"
+    "JavaClass -> String -> [JVMMethodSpec] -> Bool -> JVMSetup () -> ProofScript SatResult -> TopLevel JVMMethodSpec"
+    (bicVal crucible_jvm_verify)
+    [ "Verify the JVM function named by the second parameter in the module"
+    , "specified by the first. The third parameter lists the JVMMethodSpec"
+    , "values returned by previous calls to use as overrides. The fourth (Bool)"
+    , "parameter enables or disables path satisfiability checking. The fifth"
+    , "describes how to set up the symbolic execution engine before verification."
+    , "And the last gives the script to use to prove the validity of the resulting"
+    , "verification conditions."
+    ]
+
+  , prim "crucible_jvm_unsafe_assume_spec"
+    "JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec"
+    (bicVal crucible_jvm_unsafe_assume_spec)
+    [ "Return a JVMMethodSpec corresponding to a JVMSetup block,"
+    , "as would be returned by jvm_verify but without performing any"
+    , "verification."
+    ]
+{-
+  , prim "jvm_array"
+    "[JVMValue] -> JVMValue"
+    (pureVal JIR.SetupArray)
+    [ "Create a JVMValue representing an array, with the given list of"
+    , "values as elements. The list must be non-empty." ]
+
+  , prim "jvm_struct"
+    "[JVMValue] -> JVMValue"
+    (pureVal JIR.SetupStruct)
+    [ "Create a JVMValue representing a struct, with the given list of"
+    , "values as elements." ]
+
+  , prim "jvm_elem"
+    "JVMValue -> Int -> JVMValue"
+    (pureVal JIR.SetupElem)
+    [ "Turn a JVMValue representing a struct or array pointer into"
+    , "a pointer to an element of the struct or array by field index." ]
+
+  , prim "jvm_field"
+    "JVMValue -> String -> JVMValue"
+    (pureVal JIR.SetupField)
+    [ "Turn a JVMValue representing a struct pointer into"
+    , "a pointer to an element of the struct by field name." ]
+-}
+  , prim "jvm_null"
+    "JVMValue"
+    (pureVal JIR.SetupNull)
+    [ "A JVMValue representing a null pointer value." ]
+
+  , prim "jvm_global"
+    "String -> JVMValue"
+    (pureVal JIR.SetupGlobal)
+    [ "Return a JVMValue representing a pointer to the named global."
+    , "The String may be either the name of a global value or a function name." ]
+
+  , prim "jvm_term"
+    "Term -> JVMValue"
+    (pureVal JIR.SetupTerm)
+    [ "Construct a `JVMValue` from a `Term`." ]
+
+    ---------------------------------------------------------------------
 
   , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
     (pureVal testMRSolver)

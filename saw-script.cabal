@@ -136,7 +136,11 @@ library
     SAWScript.VerificationCheck
 
     SAWScript.CrucibleBuiltinsJVM
-                  
+
+    SAWScript.JVM.CrucibleBuiltins
+    SAWScript.JVM.CrucibleMethodSpecIR
+    SAWScript.JVM.CrucibleOverride
+    SAWScript.JVM.CrucibleResolveSetupValue
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite
