@@ -44,26 +44,21 @@ module SAWScript.JVM.CrucibleBuiltins
 
 import           Control.Lens
 
-import           Control.Applicative
 import           Control.Monad.State
 import qualified Control.Monad.State.Strict as Strict
-import           Control.Monad.ST (RealWorld, stToIO)
-import           Data.Foldable (for_, toList, find)
+import           Data.Foldable (for_)
 import           Data.Function
 import           Data.IORef
 import           Data.List
-import           Data.Maybe (fromMaybe)
 import           Data.Monoid ((<>))
 import           Data.String
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
-import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Vector as V
-import           Numeric.Natural
 import           System.IO
 
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
@@ -73,7 +68,6 @@ import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Verifier.Java.Codebase as CB
 
 -- what4
-import qualified What4.Config as W4
 import qualified What4.FunctionName as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
@@ -87,18 +81,11 @@ import qualified Language.JVM.Common as J (dotsToSlashes)
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
-import qualified Lang.Crucible.CFG.Core as Crucible
-  (AnyCFG(..), SomeCFG(..), CFG, TypeRepr(..), cfgHandle,
-   asBaseType, AsBaseType(..), VectorType, ReferenceType, CtxRepr)
-import qualified Lang.Crucible.CFG.Extension as Crucible
-  (IsSyntaxExtension)
+import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(..))
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
-import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
-import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
-import qualified Lang.Crucible.Utils.MuxTree as Crucible (toMuxTree)
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM.Translation as CJ
@@ -106,16 +93,12 @@ import qualified Lang.Crucible.JVM.ClassRefs as CJ (classRefs)
 
 -- parameterized-utils
 import           Data.Parameterized.Classes
-import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Nonce
-import           Data.Parameterized.Some
-import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
 import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
 
@@ -146,15 +129,6 @@ ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
 
-allSuperClasses :: CB.Codebase -> J.Class -> IO [J.Class]
-allSuperClasses cb c =
-  case J.superClass c of
-    Nothing -> return [c]
-    Just cname ->
-      do c' <- CJ.lookupClass cb cname
-         cs <- allSuperClasses cb c'
-         return (c : cs)
-
 -- FIXME: We need a better way to identify a set of class names to
 -- load. This function has two problems: First, unless we put in a
 -- bunch of hard-wired exclusions, we often end up trying to load
@@ -163,9 +137,9 @@ allSuperClasses cb c =
 -- long time to parse and translate.
 
 allClassRefs :: CB.Codebase -> J.ClassName -> IO (Set J.ClassName)
-allClassRefs cb c0 = go init [c0]
+allClassRefs cb c0 = go seen0 [c0]
   where
-    init = Set.fromList (map J.mkClassName CJ.initClasses)
+    seen0 = Set.fromList (map J.mkClassName CJ.initClasses)
     go seen [] = return seen
     go seen (c : cs) =
       do -- putStrLn $ "allClassRefs: " ++ show (J.unClassName c)
@@ -430,7 +404,6 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos ::
-  forall rtp args ret.
   CrucibleMethodSpecIR     ->
   CrucibleContext          ->
   Map AllocIndex JVMRefVal ->
@@ -721,7 +694,6 @@ setupCrucibleContext bic opts jclass =
      jc <- getJVMTrans
      cb <- getJavaCodebase
      AIGProxy proxy <- getProxy
-     cb <- getJavaCodebase
      let sc  = biSharedContext bic
      let gen = globalNonceGenerator
      sym <- io $ Crucible.newSAWCoreBackend proxy sc gen
@@ -790,67 +762,6 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
         Just (CJ.JVMHandleInfo key handle) ->
           Map.insert (CJ.methodKeyText key) (W4.justPartExpr sym v) tab
           where v = Crucible.AnyValue (Crucible.handleType handle) (Crucible.HandleFnVal handle)
-
---------------------------------------------------------------------------------
-
-setupArg ::
-  SharedContext -> Sym ->
-  IORef (Seq (ExtCns Term)) ->
-  Crucible.TypeRepr tp ->
-  IO (Crucible.RegEntry Sym tp)
-setupArg sc sym ecRef tp =
-  case Crucible.asBaseType tp of
-    Crucible.AsBaseType btp ->
-      do sc_tp <- Crucible.baseSCType sym sc btp
-         i     <- scFreshGlobalVar sc
-         ecs   <- readIORef ecRef
-         let len = Seq.length ecs
-         let ec = EC i ("arg_"++show len) sc_tp
-         writeIORef ecRef (ecs Seq.|> ec)
-         t     <- scFlatTermF sc (ExtCns ec)
-         elt   <- Crucible.bindSAWTerm sym btp t
-         return (Crucible.RegEntry tp elt)
-
-    Crucible.NotBaseType ->
-      fail $ unwords ["Crucible extraction currently only supports Crucible base types", show tp]
-
-setupArgs ::
-  SharedContext -> Sym -> Crucible.FnHandle init ret ->
-  IO (Seq (ExtCns Term), Crucible.RegMap Sym init)
-setupArgs sc sym fn =
-  do ecRef  <- newIORef Seq.empty
-     regmap <- Crucible.RegMap <$> Ctx.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
-     ecs    <- readIORef ecRef
-     return (ecs, regmap)
-
---------------------------------------------------------------------------------
-
-getGlobalPair ::
-  Options ->
-  Crucible.PartialResult sym ext v ->
-  IO (Crucible.GlobalPair sym v)
-getGlobalPair opts pr =
-  case pr of
-    Crucible.TotalRes gp -> return gp
-    Crucible.PartialRes _ gp _ -> do
-      printOutLn opts Info "Symbolic simulation completed with side conditions."
-      return gp
-
-runCFG ::
-  (Crucible.IsSyntaxExtension ext, Crucible.IsSymInterface sym) =>
-  Crucible.SimContext p sym ext ->
-  Crucible.SymGlobalState sym ->
-  Crucible.FnHandle args a ->
-  Crucible.CFG ext blocks init a ->
-  Crucible.RegMap sym init ->
-  IO (Crucible.ExecResult p sym ext (Crucible.RegEntry sym a))
-runCFG simCtx globals h cfg args = do
-  let initExecState =
-        Crucible.InitialState simCtx globals Crucible.defaultAbortHandler $
-        Crucible.runOverrideSim (Crucible.handleReturnType h)
-                 (Crucible.regValue <$> (Crucible.callCFG cfg args))
-  Crucible.executeCrucible [] initExecState
-
 
 --------------------------------------------------------------------------------
 -- Setup builtins
