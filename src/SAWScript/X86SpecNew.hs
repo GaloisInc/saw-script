@@ -9,6 +9,10 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language ConstraintKinds #-}
 {-# Language PartialTypeSignatures #-}
+{-# Language CPP #-}
+#if __GLASGOW_HASKELL__ >= 806
+{-# Language NoStarIsType #-}
+#endif
 module SAWScript.X86SpecNew
   ( Specification(..)
   , verifyMode
@@ -207,8 +211,6 @@ area n m u s = Area { areaName = n
                   , areaHasPointers = False
                   , areaPtr = 0 *. Bytes
                   }
-
-
 
 data Loc :: CrucibleType -> Type where
 
