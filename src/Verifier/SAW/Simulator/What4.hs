@@ -78,7 +78,12 @@ import qualified What4.Interface as W
 import           What4.BaseTypes
 
 import Data.Reflection (Given(..), give)
+
+-- parameterized-utils
+import qualified Data.Parameterized.Context as Ctx
+import Data.Parameterized.Context (Assignment)
 import Data.Parameterized.Some
+import Data.Parameterized.TraversableFC (FunctorFC(fmapFC))
 
 import Verifier.SAW.Simulator.What4.SWord
 import Verifier.SAW.Simulator.What4.PosNat
@@ -461,15 +466,16 @@ w4SolveBasic :: forall sym. (Given sym, IsSymExprBuilder sym) =>
   -> Term
   -- ^ term to simulate
   -> IO (SValue sym)
-w4SolveBasic m addlPrims unints t = do
-  let unintSet = Set.fromList unints
-  let uninterpreted nm ty
-        | Set.member nm unintSet = Just $ parseUninterpreted nm ty
-        | otherwise              = Nothing
-  cfg <- Sim.evalGlobal m (constMap `Map.union` addlPrims)
-         (const parseUninterpreted)
-         uninterpreted
-  Sim.evalSharedTerm cfg t
+w4SolveBasic m addlPrims unints t =
+  do let unintSet = Set.fromList unints
+     let sym = given :: sym
+     let uninterpreted nm ty
+           | Set.member nm unintSet = Just $ parseUninterpreted sym nm Ctx.empty ty
+           | otherwise              = Nothing
+     cfg <- Sim.evalGlobal m (constMap `Map.union` addlPrims)
+            (\ix nm -> parseUninterpreted sym (nm ++ "_" ++ show ix) Ctx.empty)
+            uninterpreted
+     Sim.evalSharedTerm cfg t
 
 
 ------------------------------------------------------------
@@ -478,38 +484,36 @@ w4SolveBasic m addlPrims unints t = do
 -- Importantly: The types of these uninterpreted values are *not*
 -- limited to What4 BaseTypes or FirstOrderTypes.
 
-parseUninterpreted :: forall sym. (Given sym, IsSymExprBuilder sym) =>
-  String -> SValue sym -> IO (SValue sym)
-parseUninterpreted nm ty =
+parseUninterpreted ::
+  forall sym args.
+  (IsSymExprBuilder sym) =>
+  sym -> String -> Assignment (SymExpr sym) args -> SValue sym -> IO (SValue sym)
+parseUninterpreted sym nm args ty =
   case ty of
-    VPiType _ rng
+    VPiType _ f
       -> return $
          strictFun $ \x -> do
-           suffix <- flattenSValue x
-           t2 <- rng (ready x)
-           parseUninterpreted (nm ++ suffix) t2
+           (nm', Some args') <- flattenSValue (nm, Some args) x
+           t2 <- f (ready x)
+           parseUninterpreted sym nm' args' t2
 
     VBoolType
-      -> VBool <$> mkUninterpreted @sym nm BaseBoolRepr
+      -> VBool <$> mkUninterpreted sym nm args BaseBoolRepr
 
     VIntType
-      -> VInt  <$> mkUninterpreted @sym nm BaseIntegerRepr
+      -> VInt  <$> mkUninterpreted sym nm args BaseIntegerRepr
 
     -- 0 width bitvector is a constant
     VVecType (VNat 0) VBoolType
       -> return $ VWord ZBV
 
     VVecType (VNat n) VBoolType
-      | Just (Some (PosNat nr)) <- somePosNat n
-      -> (VWord . DBV) <$> mkUninterpreted @sym nm (BaseBVRepr nr)
-
-    VVecType (VNat 0) _
-      -> fail "TODO: 0-width non-bitvectors unsupported"
+      | Just (Some (PosNat w)) <- somePosNat n
+      -> (VWord . DBV) <$> mkUninterpreted sym nm args (BaseBVRepr w)
 
     VVecType (VNat n) ety
-      | Just (Some (PosNat _)) <- somePosNat n
       ->  do xs <- sequence $
-                  [ parseUninterpreted (nm ++ "@" ++ show i) ety
+                  [ parseUninterpreted sym (nm ++ "_a" ++ show i) args ety
                   | i <- [0 .. n-1] ]
              return (VVector (V.fromList (map ready xs)))
 
@@ -517,49 +521,58 @@ parseUninterpreted nm ty =
       -> return VUnit
 
     VPairType ty1 ty2
-      -> do x1 <- parseUninterpreted (nm ++ ".L") ty1
-            x2 <- parseUninterpreted (nm ++ ".R") ty2
+      -> do x1 <- parseUninterpreted sym (nm ++ "_L") args ty1
+            x2 <- parseUninterpreted sym (nm ++ "_R") args ty2
             return (VPair (ready x1) (ready x2))
 
     (VRecordType elem_tps)
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
-                 parseUninterpreted (nm ++ "." ++ f) tp) elem_tps)
+                 parseUninterpreted sym (nm ++ "_" ++ f) args tp) elem_tps)
 
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
 
 
--- NOTE: Ambiguous type. Must include a type application to call
--- this function
-mkUninterpreted :: forall sym t. (Given sym, IsSymExprBuilder sym) =>
-  String -> BaseTypeRepr t -> IO (SymExpr sym t)
-mkUninterpreted nm rep =
+mkUninterpreted ::
+  forall sym args t. (IsSymExprBuilder sym) =>
+  sym -> String -> Assignment (SymExpr sym) args -> BaseTypeRepr t ->
+  IO (SymExpr sym t)
+mkUninterpreted sym nm args ret =
+  do
+  putStrLn $ "mkUninterpreted: " ++ nm
   case W.userSymbol nm of
-    Left err -> fail $ show err ++ ":Cannot create uninterpreted constant " ++ nm
-    Right s  -> W.freshConstant (given :: sym) s rep
+    Left err -> fail $ show err ++ ": Cannot create uninterpreted constant " ++ nm
+    Right s  ->
+      do fn <- W.freshTotalUninterpFn sym s (fmapFC W.exprType args) ret
+         W.applySymFn sym fn args
 
 
-
--- Flatten an SValue to an encoded string
--- encoded as a String.
-flattenSValue :: SValue sym -> IO String
-flattenSValue v = do
+-- | Flatten an 'SValue' to a sequence of components, each of which is
+-- a symbolic value of a base type (e.g. word or boolean), and append
+-- them onto the end of the given 'Assignment'. If the 'SValue'
+-- contains any values built from data constructors, then encode them
+-- as suffixes on the given 'String'.
+flattenSValue ::
+  forall sym.
+  (String, Some (Assignment (SymExpr sym))) ->
+  SValue sym ->
+  IO (String, Some (Assignment (SymExpr sym)))
+flattenSValue args0@(nm, Some xs) v =
   case v of
-    VUnit                     -> return ("")
-    VPair x y                 -> do sx <- flattenSValue =<< force x
-                                    sy <- flattenSValue =<< force y
-                                    return (sx ++ sy)
-    VRecordValue elems        -> do sxs <- mapM (flattenSValue <=< force . snd) elems
-                                    return (concat sxs)
-    VVector (V.toList -> ts)  -> do ss <- traverse (force >=> flattenSValue) ts
-                                    return (concat ss)
-    VBool _sb                 -> return ("")
-    VWord _sw                 -> return ("")
-    VCtorApp i (V.toList->ts) -> do ss <- traverse (force >=> flattenSValue) ts
-                                    return ("_" ++ identName i ++ concat ss)
-    VNat n                    -> return ("_" ++ show n)
+    VUnit                     -> return args0
+    VPair x y                 -> do args1 <- flattenSValue args0 =<< force x
+                                    args2 <- flattenSValue args1 =<< force y
+                                    return args2
+    VRecordValue elems        -> foldM flattenSValue args0 =<< traverse (force . snd) elems
+    VVector xv                -> foldM flattenSValue args0 =<< traverse force xv
+    VBool sb                  -> return (nm, Some (Ctx.extend xs sb))
+    VWord (DBV sw)            -> return (nm, Some (Ctx.extend xs sw))
+    VWord ZBV                 -> return args0
+    VCtorApp i xv             -> foldM flattenSValue args' =<< traverse force xv
+                                   where args' = (nm ++ "_" ++ identName i, Some xs)
+    VNat n                    -> return (nm ++ "_" ++ show n, Some xs)
     _ -> fail $ "Could not create argument for " ++ show v
 
 ------------------------------------------------------------
@@ -671,8 +684,9 @@ newVarsForType v nm =
          return (Just te, sv)
 
     Nothing ->
-      do sv <- lift $ parseUninterpreted nm v
+      do sv <- lift $ parseUninterpreted sym nm Ctx.empty v
          return (Nothing, sv)
+  where sym = given :: sym
 
 myfun ::(Map String (Labeler sym, SValue sym)) -> (Map String (Labeler sym), Map String (SValue sym))
 myfun = fmap fst A.&&& fmap snd
