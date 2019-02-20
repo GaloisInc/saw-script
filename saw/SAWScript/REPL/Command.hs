@@ -165,7 +165,7 @@ typeOfCmd str =
        Right expr -> return expr
      let decl = SS.Decl (getPos expr) (SS.PWild Nothing) Nothing expr
      rw <- getEnvironment
-     SS.Decl _pos _ (Just schema) _expr' <-
+     ~(SS.Decl _pos _ (Just schema) _expr') <-
        either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
      io $ putStrLn $ SS.pShow schema
 
