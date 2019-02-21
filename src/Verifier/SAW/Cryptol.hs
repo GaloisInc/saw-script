@@ -567,6 +567,36 @@ importExpr sc env expr =
              i' <- scNat sc (fromIntegral i)
              scGlobalApply sc "Cryptol.eListSel" [a', n', e', i']
 
+    C.ESet e1 sel e2 ->
+      case sel of
+        C.TupleSel i _maybeLen ->
+          do e1' <- importExpr sc env e1
+             e2' <- importExpr sc env e2
+             let t1 = fastTypeOf (envC env) e1
+             case C.tIsTuple t1 of
+               Nothing -> panic "ESet/TupleSel: not a tuple type"
+               Just ts ->
+                 do ts' <- traverse (importType sc env) ts
+                    let t2' = ts' !! i
+                    f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
+                    g <- tupleUpdate sc f i ts'
+                    scApply sc g e1'
+        C.RecordSel x _ ->
+          do e1' <- importExpr sc env e1
+             e2' <- importExpr sc env e2
+             let t1 = fastTypeOf (envC env) e1
+             case tIsRec' t1 of
+               Nothing -> panic "ESet/TupleSel: not a tuple type"
+               Just tm ->
+                 do i <- the (elemIndex x (Map.keys tm))
+                    ts' <- traverse (importType sc env) (Map.elems tm)
+                    let t2' = ts' !! i
+                    f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
+                    g <- tupleUpdate sc f i ts'
+                    scApply sc g e1'
+        C.ListSel _i _maybeLen ->
+          panic "ESet/ListSel: unsupported"
+
     C.EIf e1 e2 e3 ->
       do let ty = fastTypeOf (envC env) e2
          ty' <- importType sc env ty
@@ -704,6 +734,7 @@ importExpr' sc env schema expr =
 
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
+    C.ESet      {} -> fallback
     C.EComp     {} -> fallback
     C.EVar      {} -> fallback
     C.EApp      {} -> fallback
@@ -779,6 +810,17 @@ mapRecordSelector sc env i = fmap fst . go
              f <- scLambda sc "x" t' y
              return (f, Map.elems tm !! k)
         _ -> panic $ unwords ["importExpr: invalid record selector", show i, show t]
+
+tupleUpdate :: SharedContext -> Term -> Int -> [Term] -> IO Term
+tupleUpdate _ f 0 [_] = return f
+tupleUpdate sc f 0 (a : ts) =
+  do b <- scTupleType sc ts
+     scGlobalApply sc "Cryptol.updFst" [a, b, f]
+tupleUpdate sc f n (a : ts) =
+  do g <- tupleUpdate sc f (n - 1) ts
+     b <- scTupleType sc ts
+     scGlobalApply sc "Cryptol.updSnd" [a, b, g]
+tupleUpdate _ _ _ [] = panic "tupleUpdate: empty tuple"
 
 -- | Apply a substitution to a type *without* simplifying
 -- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to

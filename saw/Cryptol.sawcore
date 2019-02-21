@@ -8,6 +8,9 @@ import Prelude;
 --------------------------------------------------------------------------------
 -- Additional operations on Prelude types
 
+const : (a b : sort 0) -> a -> b -> a;
+const a b x y = x;
+
 compose : (a b c : sort 0) -> (b -> c) -> (a -> b) -> (a -> c);
 compose _ _ _ f g x = f (g x);
 
@@ -17,6 +20,12 @@ bvExp n x y = foldr Bool (bitvector n) n
     ite (bitvector n) b (bvMul n x (bvMul n a a)) (bvMul n a a))
   (bvNat n 1)
   (reverse n Bool y);
+
+updFst : (a b : sort 0) -> (a -> a) -> (a * b) -> (a * b);
+updFst a b f x = (f x.(1), x.(2));
+
+updSnd : (a b : sort 0) -> (b -> b) -> (a * b) -> (a * b);
+updSnd a b f x = (x.(1), f x.(2));
 
 --------------------------------------------------------------------------------
 -- Extended natural numbers
