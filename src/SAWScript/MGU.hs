@@ -608,7 +608,7 @@ inferDecl (Decl pos pat _ e) = withExprPos pos $ do
   let n = patternLName pat
   (e',t) <- inferE (n, e)
   constrainTypeWithPattern n t pat
-  [(e1,s)] <- generalize [e'] [t]
+  ~[(e1,s)] <- generalize [e'] [t]
   return (Decl pos pat (Just s) e1)
 
 inferRecDecls :: [Decl] -> TI [Decl]

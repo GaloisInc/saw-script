@@ -319,7 +319,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
   rw <- getTopLevelRW
   let opts = rwPPOpts rw
 
-  SS.Decl _ _ (Just schema) expr'' <-
+  ~(SS.Decl _ _ (Just schema) expr'') <-
     either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
 
   val <- interpret emptyLocal expr''

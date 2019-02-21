@@ -167,7 +167,7 @@ extractJava bic opts cls mname setup = do
       rslt <- case methodIsStatic meth of
                 True -> execStaticMethod (className cls) (methodKey meth) args
                 False -> do
-                  RValue this <- freshJavaVal (Just argsRef) jsc (ClassInstance cls)
+                  ~(RValue this) <- freshJavaVal (Just argsRef) jsc (ClassInstance cls)
                   execInstanceMethod (className cls) (methodKey meth) this args
       dt <- case (rslt, methodReturnType meth) of
               (Nothing, _) -> fail $ "No return value from " ++ methodName meth
