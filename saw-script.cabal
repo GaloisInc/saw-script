@@ -155,14 +155,6 @@ library
 
     SAWScript.X86
     SAWScript.X86SpecNew
-    SAWScript.X86Spec
-    SAWScript.X86Spec.Memory
-    SAWScript.X86Spec.Registers
-    SAWScript.X86Spec.Fresh
-    SAWScript.X86Spec.Literal
-    SAWScript.X86Spec.SAW
-    SAWScript.X86Spec.Monad
-    SAWScript.X86Spec.Types
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)

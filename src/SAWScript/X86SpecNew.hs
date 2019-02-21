@@ -15,6 +15,8 @@
 #endif
 module SAWScript.X86SpecNew
   ( Specification(..)
+  , SpecType, Pre, Post
+  , FunSpec(..)
   , verifyMode
   , overrideMode
   , State(..)
@@ -42,6 +44,8 @@ module SAWScript.X86SpecNew
   , Overrides
   , debugPPReg
 
+  , Sym
+
   -- * Cryptol
   , CryArg(..)
   , cryPre
@@ -66,8 +70,11 @@ import Data.IORef(newIORef,atomicModifyIORef')
 import Data.String
 import Control.Monad.Reader
 
+import qualified What4.Expr.Builder as B
+
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes
+import Data.Parameterized.Nonce(GlobalNonceGenerator)
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Pair
@@ -106,7 +113,7 @@ import Lang.Crucible.CFG.Common
 import Lang.Crucible.Simulator.RegMap
 
 import Lang.Crucible.Backend.SAWCore
-  (bindSAWTerm,sawBackendSharedContext,toSC)
+  (bindSAWTerm,sawBackendSharedContext,toSC,SAWCoreBackend)
 import Lang.Crucible.Types
   (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType)
 
@@ -123,6 +130,7 @@ import qualified Data.Macaw.Types as M
 
 import Verifier.SAW.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
 
+
 import Cryptol.ModuleSystem.Name(Name)
 import Cryptol.ModuleSystem.Interface(ifTySyns)
 import Cryptol.TypeCheck.AST(TySyn(tsDef))
@@ -130,9 +138,6 @@ import Cryptol.TypeCheck.TypePat(aNat)
 import Cryptol.Utils.PP(alwaysQualify,runDoc,pp)
 import Cryptol.Utils.Patterns(matchMaybe)
 
-
-import SAWScript.X86Spec.Types(Sym)
-import SAWScript.X86Spec.Monad(SpecType,Pre,Post)
 
 data Specification = Specification
   { specAllocs  :: ![Alloc]
@@ -150,6 +155,30 @@ data Specification = Specification
 
 data Unit = Bytes | Words | DWords | QWords | V128s | V256s deriving Show
 
+{- | A specifiction for a function.
+The outer, "Pre", computiation sets up the initial state of the
+computation (i.e., the pre-condition for the function).
+As a result, we return the inital register assignemtn,
+and the post-condition for the function). -}
+data FunSpec =
+    NewStyle (CryptolEnv -> IO Specification)
+             (State -> IO ())
+              -- Debug: Run this to print some stuff at interesting times.
+
+-- | Is this a pre- or post-condition specificiation.
+data {- kind -} SpecType = Pre | Post
+
+-- | We are specifying a pre-condition.
+type Pre  = 'Pre
+
+-- | We are specifying a post-condition.
+type Post = 'Post
+
+
+
+
+-- | The Crucible backend used for speicifcations.
+type Sym = SAWCoreBackend GlobalNonceGenerator (B.Flags B.FloatReal)
 
 data Opts = Opts
   { optsSym :: Sym

@@ -26,22 +26,22 @@ import qualified Data.AIG as AIG
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
-import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
-import           GHC.Natural(Natural)
 import           System.IO(hFlush,stdout)
 
 import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
 
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Classes(knownRepr)
-import Data.Parameterized.Context(Assignment,EmptyCtx,(::>),singleton)
+import Data.Parameterized.Context(EmptyCtx,(::>),singleton)
 import Data.Parameterized.Nonce(globalNonceGenerator)
 
 -- What4
 import What4.Interface(asNat,asUnsignedBV)
+import qualified What4.Interface as W4
+import qualified What4.Config as W4
 import What4.FunctionName(functionNameFromText)
 import What4.ProgramLoc(ProgramLoc,Position(OtherPos))
 
@@ -58,7 +58,7 @@ import Lang.Crucible.Simulator.EvalStmt(executeCrucible)
 import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
           , gpGlobals, AbortedResult(..), SimContext(..), FnState(..)
-          , initSimState, ExecState(InitialState)
+          , ExecState(InitialState)
           )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
@@ -93,7 +93,7 @@ import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , MemSymbol(..)
                                   )
 import Data.Macaw.Symbolic( ArchRegStruct
-                          , ArchRegContext,mkFunCFG
+                          , mkFunCFG
                           , GlobalMap
                           , MacawSimulatorState(..)
                           , macawExtensions
@@ -102,7 +102,7 @@ import qualified Data.Macaw.Symbolic as Macaw ( LookupFunctionHandle(..) )
 import Data.Macaw.Symbolic( MacawExt
                                   , MacawFunctionArgs
                                   )
-import Data.Macaw.Symbolic.Backend(macawAssignToCrucM, MacawSymbolicArchFunctions(..), crucArchRegTypes)
+import Data.Macaw.Symbolic.Backend(MacawSymbolicArchFunctions(..), crucArchRegTypes)
 import Data.Macaw.X86(X86Reg(..), x86_64_linux_info,x86_64_freeBSD_info)
 import Data.Macaw.X86.ArchTypes(X86_64)
 import Data.Macaw.X86.Symbolic
@@ -121,12 +121,8 @@ import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
 import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
-import SAWScript.X86Spec.Types(Sym)
-import SAWScript.X86Spec.Monad(runPreSpec,runPostSpec,PreExtra(..))
-import SAWScript.X86Spec.Registers(macawLookup)
-import SAWScript.X86Spec (Spec,FunSpec(..),Pre,Post,RegAssign)
-
 import SAWScript.X86SpecNew
+import SAWScript.Proof(predicateToProp, Quantification(Universal))
 
 
 
@@ -153,18 +149,6 @@ data Options = Options
 
   , memvar :: GlobalVar Mem
     -- ^ The global variable storing the heap
-
-  , funCalls :: Map (Natural,Integer) CallHandler
-    {- ^ A mapping for function locations to the code to run to handle
-         function calls.  The two integers are the base and offset
-         pair representing the address of function.
-         The handler is just some code that will be executed instead of
-         calling the function.  Typeically, it should assert the functions's
-         precondition and asssume its post condition after.
-
-         Note that his works only when the call is completely known
-         (i.e., no symbolic stuff, etc.)
-    -}
 
   , cryEnv :: CryptolEnv
 
@@ -197,18 +181,15 @@ proof :: (AIG.IsAIG l g) =>
          FilePath {- ^ ELF binary -} ->
          Maybe FilePath {- ^ Cryptol spec, if any -} ->
          [(ByteString,Integer,Unit)] ->
-         (Sym -> CryptolEnv -> IO (Map (Natural,Integer) CallHandler))
-         {- ^ Funciton call handler; used only for OldStyle -} ->
          Fun ->
          IO (SharedContext,Integer,[Goal])
-proof proxy archi file mbCry globs mkCallMap fun =
+proof proxy archi file mbCry globs fun =
   do sc  <- mkSharedContext
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
      sym <- newSAWCoreBackend proxy sc globalNonceGenerator
      cenv <- loadCry sym mbCry
-     callMap <- mkCallMap sym cenv
      mvar <- stToIO (mkMemVar halloc)
      proofWithOptions Options
        { fileName = file
@@ -217,7 +198,6 @@ proof proxy archi file mbCry globs mkCallMap fun =
        , backend = sym
        , allocator = halloc
        , memvar = mvar
-       , funCalls = callMap
        , cryEnv = cenv
        , extraGlobals = globs
        }
@@ -410,14 +390,12 @@ translate opts elf fun =
 
      (globs,st,checkPost) <-
         case funSpec fun of
-          OldStyle spec -> doSpecOldStyle opts spec
           NewStyle mkSpec debug ->
             do gss <- mapM (loadGlobal elf) (extraGlobals opts)
                spec0 <- mkSpec (cryEnv opts)
                let spec = spec0 {specGlobsRO = concat (specGlobsRO spec0:gss)}
                (gs,st,po) <- verifyMode spec sopts
                debug st
-               let _oldStyle = (fst gs, funCalls opts)
                return (gs,st,\st1 -> debug st1 >> po st1)
 
      (addr, st1) <- doSim opts elf sfs name globs st
@@ -429,27 +407,11 @@ translate opts elf fun =
      return (ctx, addr, gs)
 
 
-doSpecOldStyle ::
-  Options ->
-  Spec Pre (RegAssign, Spec Post ()) ->
-  IO ((GlobalMap Sym 64, Overrides), State, State -> IO ())
-doSpecOldStyle opts spec =
-  do let sym = backend opts
-
-     ((initRegs,post), extra) <-
-        statusBlock "  Setting up pre-conditions... " $
-        runPreSpec sym (cryEnv opts) spec
-
-     regs <- macawAssignToCrucM (return . macawLookup initRegs) genRegAssign
-
-     return ( (mkGlobalMap (theRegions extra), funCalls opts)
-            , State { stateMem = theMem extra, stateRegs = regs }
-            , \st1 -> statusBlock "  Setting-up post-conditions... " $
-                      runPostSpec sym (cryEnv opts)
-                                      (stateRegs st1)
-                                      (stateMem st1)
-                                      post
-             )
+setSimulatorVerbosity :: (W4.IsSymExprBuilder sym) => Int -> sym -> IO ()
+setSimulatorVerbosity verbosity sym = do
+  verbSetting <- W4.getOptionSetting W4.verbosity (W4.getConfiguration sym)
+  _ <- W4.setOpt verbSetting (toInteger verbosity)
+  return ()
 
 
 
@@ -479,6 +441,7 @@ doSim opts elf sfs name (globs,overs) st =
 
      let sym = backend opts
          mvar = memvar opts
+     setSimulatorVerbosity 4 sym
 
      execResult <- statusBlock "  Simulating... " $ do
        let crucRegTypes = crucArchRegTypes x86
@@ -587,11 +550,11 @@ data Goal = Goal
 
 -- | The boolean term that needs proving (i.e., assumptions imply conclusion)
 gGoal :: SharedContext -> Goal -> IO Term
-gGoal ctx g = go (gAssumes g)
+gGoal sc g = predicateToProp sc Universal [] =<< go (gAssumes g)
   where
   go xs = case xs of
             []     -> return (gShows g)
-            a : as -> scImplies ctx a =<< go as
+            a : as -> scImplies sc a =<< go as
 
 getGoals :: Sym -> IO [Goal]
 getGoals sym =
@@ -623,10 +586,6 @@ instance Show Goal where
 -- | All functions related to X86.
 x86 :: MacawSymbolicArchFunctions X86_64
 x86 = x86_64MacawSymbolicFns
-
-genRegAssign :: Assignment X86Reg (ArchRegContext X86_64)
-genRegAssign = crucGenRegAssignment x86
-
 
 
 
