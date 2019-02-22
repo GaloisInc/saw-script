@@ -1049,9 +1049,15 @@ primitives = Map.fromList
     (pureVal trivial)
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
-  , prim "w4"             "ProofScript SatResult"
+  , prim "w4"                  "ProofScript SatResult"
     (pureVal satWhat4_Z3)
     [ "Prove the current goal using What4 (Z3 backend)." ]
+
+  , prim "w4_unint_z3"         "[String] -> ProofScript SatResult"
+    (pureVal satWhat4_UnintZ3)
+    [ "Prove the current goal using What4 (Z3 backend). Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
 
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
