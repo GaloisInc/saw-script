@@ -72,8 +72,8 @@ data Flag = CF | PF | AF | ZF | SF | TF | IF | DF | OF
 
 -- | Vector registers.
 data VecReg =
-    YMM0  | YMM1  | YMM2  | YMM3  | YMM4  | YMM5  | YMM6  | YMM7
-  | YMM8  | YMM9  | YMM10 | YMM11 | YMM12 | YMM13 | YMM14 | YMM15
+    ZMM0  | ZMM1  | ZMM2  | ZMM3  | ZMM4  | ZMM5  | ZMM6  | ZMM7
+  | ZMM8  | ZMM9  | ZMM10 | ZMM11 | ZMM12 | ZMM13 | ZMM14 | ZMM15
   deriving (Show,Eq,Ord,Enum,Bounded)
 
 
@@ -135,23 +135,23 @@ macawLookup RegAssign { .. } reg =
     R.R15 -> gp R15
     R.X86_GP _ -> error "[bug] Unexpecet general purpose register."
 
-    R.ZMM 0  -> vec YMM0
-    R.ZMM 1  -> vec YMM1
-    R.ZMM 2  -> vec YMM2
-    R.ZMM 3  -> vec YMM3
-    R.ZMM 4  -> vec YMM4
-    R.ZMM 5  -> vec YMM5
-    R.ZMM 6  -> vec YMM6
-    R.ZMM 7  -> vec YMM7
-    R.ZMM 8  -> vec YMM8
-    R.ZMM 9  -> vec YMM9
-    R.ZMM 10 -> vec YMM10
-    R.ZMM 11 -> vec YMM11
-    R.ZMM 12 -> vec YMM12
-    R.ZMM 13 -> vec YMM13
-    R.ZMM 14 -> vec YMM14
-    R.ZMM 15 -> vec YMM15
-    R.X86_ZMMReg _ -> error "[bug] Unexpected YMM register."
+    R.ZMM 0  -> vec ZMM0
+    R.ZMM 1  -> vec ZMM1
+    R.ZMM 2  -> vec ZMM2
+    R.ZMM 3  -> vec ZMM3
+    R.ZMM 4  -> vec ZMM4
+    R.ZMM 5  -> vec ZMM5
+    R.ZMM 6  -> vec ZMM6
+    R.ZMM 7  -> vec ZMM7
+    R.ZMM 8  -> vec ZMM8
+    R.ZMM 9  -> vec ZMM9
+    R.ZMM 10 -> vec ZMM10
+    R.ZMM 11 -> vec ZMM11
+    R.ZMM 12 -> vec ZMM12
+    R.ZMM 13 -> vec ZMM13
+    R.ZMM 14 -> vec ZMM14
+    R.ZMM 15 -> vec ZMM15
+    R.X86_ZMMReg _ -> error "[bug] Unexpected ZMM register."
 
     R.X87_FPUReg (F.MMXR 0)  -> fp FP0
     R.X87_FPUReg (F.MMXR 1)  -> fp FP1
@@ -293,22 +293,22 @@ instance GetReg Flag where
 instance GetReg VecReg where
   getReg f =
     case f of
-      YMM0  -> lookupReg (R.ZMM 0)
-      YMM1  -> lookupReg (R.ZMM 1)
-      YMM2  -> lookupReg (R.ZMM 2)
-      YMM3  -> lookupReg (R.ZMM 3)
-      YMM4  -> lookupReg (R.ZMM 4)
-      YMM5  -> lookupReg (R.ZMM 5)
-      YMM6  -> lookupReg (R.ZMM 6)
-      YMM7  -> lookupReg (R.ZMM 7)
-      YMM8  -> lookupReg (R.ZMM 8)
-      YMM9  -> lookupReg (R.ZMM 9)
-      YMM10 -> lookupReg (R.ZMM 10)
-      YMM11 -> lookupReg (R.ZMM 11)
-      YMM12 -> lookupReg (R.ZMM 12)
-      YMM13 -> lookupReg (R.ZMM 13)
-      YMM14 -> lookupReg (R.ZMM 14)
-      YMM15 -> lookupReg (R.ZMM 15)
+      ZMM0  -> lookupReg (R.ZMM 0)
+      ZMM1  -> lookupReg (R.ZMM 1)
+      ZMM2  -> lookupReg (R.ZMM 2)
+      ZMM3  -> lookupReg (R.ZMM 3)
+      ZMM4  -> lookupReg (R.ZMM 4)
+      ZMM5  -> lookupReg (R.ZMM 5)
+      ZMM6  -> lookupReg (R.ZMM 6)
+      ZMM7  -> lookupReg (R.ZMM 7)
+      ZMM8  -> lookupReg (R.ZMM 8)
+      ZMM9  -> lookupReg (R.ZMM 9)
+      ZMM10 -> lookupReg (R.ZMM 10)
+      ZMM11 -> lookupReg (R.ZMM 11)
+      ZMM12 -> lookupReg (R.ZMM 12)
+      ZMM13 -> lookupReg (R.ZMM 13)
+      ZMM14 -> lookupReg (R.ZMM 14)
+      ZMM15 -> lookupReg (R.ZMM 15)
 
 
 instance GetReg X87Status where
