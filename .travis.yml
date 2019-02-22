@@ -8,18 +8,28 @@ cache:
   - $HOME/.ghc
   - $HOME/.cabal
 
+# Normally, travis tries `git submodule update --init --recursive`, but
+# that fails for us right now due to some submodules from `macaw`. We
+# only really care about one recursive submodule, so we do the update
+# manually in the `script` section.
+git:
+  submodules: false
+
 matrix:
   include:
-    - env: CABALVER="2.2" GHCVER="8.4.3"
+    - env: CABALVER="2.4" GHCVER="8.6.3"
+      compiler: ": #GHC 8.6.3"
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.6.3], sources: [hvr-ghc]}}
+    - env: CABALVER="2.4" GHCVER="8.4.3"
       compiler: ": #GHC 8.4.3"
-      addons: {apt: {packages: [cabal-install-2.2,ghc-8.4.3], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.4.3], sources: [hvr-ghc]}}
     - os: osx
-      env: CABALVER="2.2" GHCVER="8.4.3"
-      compiler: ": #GHC 8.4.3"
+      env: CABALVER="2.4" GHCVER="8.6.3"
+      compiler: ": #GHC 8.6.3"
 
-    - env: CABALVER="2.2" GHCVER="8.2.2"
+    - env: CABALVER="2.4" GHCVER="8.2.2"
       compiler: ": #GHC 8.2.2"
-      addons: {apt: {packages: [cabal-install-2.2,ghc-8.2.2], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.2.2], sources: [hvr-ghc]}}
 
 before_install:
   - if [[ $TRAVIS_OS_NAME == 'osx' ]];
