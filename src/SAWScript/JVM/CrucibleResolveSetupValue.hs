@@ -46,7 +46,6 @@ import qualified Lang.Crucible.Simulator as Crucible (RegValue, RegValue'(..), e
 import qualified Lang.Crucible.Simulator.Evaluation as Crucible (evalApp)
 
 -- what4
-import qualified What4.Interface as W4
 import qualified What4.Partial as W4
 
 -- crucible-jvm

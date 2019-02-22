@@ -47,7 +47,6 @@ import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
-import           Data.IORef (readIORef, writeIORef, newIORef, IORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe (fromMaybe)
@@ -70,7 +69,7 @@ import qualified What4.ProgramLoc as W4
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
-import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr), GlobalVar)
+import qualified Lang.Crucible.CFG.Core as Crucible ( TypeRepr(UnitRepr) )
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, freshRefCell)
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.EvalStmt as EvalStmt (readRef, alterRef)
@@ -87,7 +86,7 @@ import qualified Lang.Crucible.JVM.Translation as CJ
 -- parameterized-utils
 import           Data.Parameterized.Classes ((:~:)(..), testEquality, knownRepr, ixF)
 import qualified Data.Parameterized.Context as Ctx
-import qualified Data.Parameterized.Map as MapF
+-- import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.TraversableFC as Ctx
 
 -- saw-core

@@ -23,6 +23,8 @@ import Verifier.SAW.Recognizer
 
 import qualified SAWScript.Prover.SBV as SBV
 
+import Prelude
+
 
 newtype LocalFunName = LocalFunName { unLocalFunName :: ExtCns Term } deriving (Eq, Show)
 
