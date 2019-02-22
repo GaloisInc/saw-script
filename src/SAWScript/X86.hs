@@ -31,6 +31,7 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
 import           System.IO(hFlush,stdout)
+import           Data.Maybe(mapMaybe)
 
 -- import Text.PrettyPrint.ANSI.Leijen(pretty)
 
@@ -117,6 +118,7 @@ import Data.Macaw.X86.Crucible(SymFuns(..))
 -- Saw Core
 import Verifier.SAW.SharedTerm(Term, mkSharedContext, SharedContext, scImplies)
 import Verifier.SAW.Term.Pretty(showTerm)
+import Verifier.SAW.Recognizer(asBool)
 
 -- Cryptol Verifier
 import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
@@ -522,8 +524,22 @@ data Goal = Goal
 
 -- | The boolean term that needs proving (i.e., assumptions imply conclusion)
 gGoal :: SharedContext -> Goal -> IO Term
-gGoal sc g = predicateToProp sc Universal [] =<< go (gAssumes g)
+gGoal sc g0 = predicateToProp sc Universal [] =<< go (gAssumes g)
   where
+  g = g0 { gAssumes = mapMaybe skip (gAssumes g0) }
+
+  _shG = do putStrLn "Assuming:"
+            mapM_ _shT (gAssumes g)
+            putStrLn "Shows:"
+            _shT (gShows g)
+
+
+  _shT t = putStrLn ("  " ++ showTerm t)
+
+  skip a = case asBool a of
+             Just True -> Nothing
+             _         -> Just a
+
   go xs = case xs of
             []     -> return (gShows g)
             a : as -> scImplies sc a =<< go as
