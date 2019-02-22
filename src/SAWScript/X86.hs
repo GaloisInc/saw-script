@@ -84,9 +84,9 @@ import Data.Macaw.Discovery.State(FunctionExploreReason(UserRequest)
                                  , emptyDiscoveryState, AddrSymMap)
 import Data.Macaw.Memory( Memory, MemSegmentOff(..)
                         , segmentBase, segmentOffset
-                        , msegSegment, msegOffset
-                        , addrOffset, memWordInteger
-                        , relativeSegmentAddr, incAddr
+                        , segoffSegment, segoffOffset
+                        , addrOffset, memWordToUnsigned
+                        , segoffAddr, incAddr
                         , readWord8, readWord16le, readWord32le, readWord64le)
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , memoryForElfAllSymbols
@@ -346,8 +346,8 @@ loadGlobal elf (nm,n,u) =
                 Right a -> return (fromIntegral a)
 
 
-  loadLoc off = do let start = relativeSegmentAddr off
-                       a  = memWordInteger (addrOffset start)
+  loadLoc off = do let start = segoffAddr off
+                       a  = memWordToUnsigned (addrOffset start)
                    is <- mapM readOne (addrsFor start)
                    return (sname, a, u, is)
 
@@ -465,9 +465,9 @@ doSim opts elf sfs name (globs,overs) st =
   do say "  Looking for address... "
      addr <- findSymbol (symMap elf) name
      let addrInt =
-           let seg = msegSegment addr
+           let seg = segoffSegment addr
            in if segmentBase seg == 0
-                 then toInteger (segmentOffset seg + msegOffset addr)
+                 then toInteger (segmentOffset seg + segoffOffset addr)
                  else error "  Not an absolute address"
 
      sayLn (show addr)
