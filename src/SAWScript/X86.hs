@@ -20,7 +20,7 @@ module SAWScript.X86
 
 import Control.Lens (toListOf, folded, (^.))
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad.ST(ST,stToIO,RealWorld)
+import Control.Monad.ST(stToIO,RealWorld)
 import Control.Monad.IO.Class(liftIO)
 
 import qualified Data.AIG as AIG
@@ -31,6 +31,8 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
 import           System.IO(hFlush,stdout)
+
+-- import Text.PrettyPrint.ANSI.Leijen(pretty)
 
 import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
 
@@ -51,14 +53,13 @@ import Lang.Crucible.Analysis.Postdom (postdomInfo)
 import Lang.Crucible.CFG.Core(SomeCFG(..), TypeRepr(..), cfgHandle)
 import Lang.Crucible.CFG.Common(freshGlobalVar,GlobalVar)
 import Lang.Crucible.Simulator.RegMap(regValue, RegMap(..), RegEntry(..))
-import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
-import Lang.Crucible.Simulator.GlobalState(lookupGlobal,insertGlobal,emptyGlobals)
+import Lang.Crucible.Simulator.RegValue(RegValue'(..))
+import Lang.Crucible.Simulator.GlobalState(insertGlobal,emptyGlobals)
 import Lang.Crucible.Simulator.Operations(defaultAbortHandler)
 import Lang.Crucible.Simulator.OverrideSim(runOverrideSim, callCFG, readGlobal)
 import Lang.Crucible.Simulator.EvalStmt(executeCrucible)
 import Lang.Crucible.Simulator.ExecutionTree
-          (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
-          , gpGlobals, AbortedResult(..), SimContext(..), FnState(..)
+          (ExecResult(..), SimContext(..), FnState(..)
           , ExecState(InitialState)
           )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
@@ -69,7 +70,7 @@ import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHan
 
 -- Crucible LLVM
 import SAWScript.CrucibleLLVM
-  (Mem, ppMem, ppPtr, pattern LLVMPointer, bytesToInteger)
+  (Mem, ppPtr, pattern LLVMPointer, bytesToInteger)
 import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
 import Lang.Crucible.LLVM.MemModel (mkMemVar)
 
@@ -83,11 +84,10 @@ import Data.Macaw.Architecture.Info(ArchitectureInfo)
 import Data.Macaw.Discovery(analyzeFunction)
 import Data.Macaw.Discovery.State(FunctionExploreReason(UserRequest)
                                  , emptyDiscoveryState, AddrSymMap)
-import Data.Macaw.Memory( Memory, MemSegmentOff(..)
+import Data.Macaw.Memory( Memory, MemSegment(..), MemSegmentOff(..)
                         , segmentBase, segmentOffset
-                        , msegSegment, msegOffset
-                        , addrOffset, memWordInteger
-                        , relativeSegmentAddr, incAddr
+                        , addrOffset, memWordToUnsigned
+                        , segoffAddr, incAddr
                         , readWord8, readWord16le, readWord32le, readWord64le)
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , memoryForElfAllSymbols
@@ -327,8 +327,8 @@ loadGlobal elf (nm,n,u) =
                 Right a -> return (fromIntegral a)
 
 
-  loadLoc off = do let start = relativeSegmentAddr off
-                       a  = memWordInteger (addrOffset start)
+  loadLoc off = do let start = segoffAddr off
+                       a  = memWordToUnsigned (addrOffset start)
                    is <- mapM readOne (addrsFor start)
                    return (sname, a, u, is)
 
@@ -426,16 +426,18 @@ doSim ::
 doSim opts elf sfs name (globs,overs) st checkPost =
   do say "  Looking for address... "
      addr <- findSymbol (symMap elf) name
+     -- addr :: MemSegmentOff 64
      let addrInt =
-           let seg = msegSegment addr
+           let seg :: MemSegment 64
+               seg = segoffSegment addr
            in if segmentBase seg == 0
-                 then toInteger (segmentOffset seg + msegOffset addr)
+                 then toInteger (segmentOffset seg + segoffOffset addr)
                  else error "  Not an absolute address"
 
      sayLn (show addr)
 
      SomeCFG cfg <- statusBlock "  Constructing CFG... "
-                    $ stToIO (makeCFG opts elf name addr)
+                    $ makeCFG opts elf name addr
 
      -- writeFile "XXX.hs" (show cfg)
 
@@ -494,12 +496,13 @@ makeCFG ::
   RelevantElf ->
   ByteString ->
   MemSegmentOff 64 ->
-  ST RealWorld TheCFG
+  IO TheCFG
 makeCFG opts elf name addr =
-  do (_,Some funInfo) <- analyzeFunction quiet addr UserRequest empty
-     baseVar <- freshGlobalVar (allocator opts) baseName knownRepr
+  do (_,Some funInfo) <- stToIO $ analyzeFunction quiet addr UserRequest empty
+     -- writeFile "MACAW.cfg" (show (pretty funInfo))
+     baseVar <- stToIO  $ freshGlobalVar (allocator opts) baseName knownRepr
      let memBaseVarMap = Map.singleton 1 baseVar
-     mkFunCFG x86 (allocator opts) memBaseVarMap cruxName posFn funInfo
+     stToIO $ mkFunCFG x86 (allocator opts) memBaseVarMap cruxName posFn funInfo
   where
   txtName   = decodeUtf8 name
   cruxName  = functionNameFromText txtName
