@@ -154,7 +154,7 @@ library
     SAWScript.Prover.Exporter
 
     SAWScript.X86
-    SAWScript.X86SpecNew
+    SAWScript.X86Spec
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)

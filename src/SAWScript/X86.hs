@@ -122,7 +122,7 @@ import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
 import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
-import SAWScript.X86SpecNew
+import SAWScript.X86Spec
 import SAWScript.Proof(predicateToProp, Quantification(Universal))
 
 
