@@ -81,6 +81,8 @@ import Data.Reflection (Given(..), give)
 
 -- parameterized-utils
 import qualified Data.Parameterized.Context as Ctx
+import Data.Parameterized.Map (MapF)
+import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Context (Assignment)
 import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC (FunctorFC(fmapFC))
@@ -453,32 +455,55 @@ selectV merger maxValue valueFn vx =
       p <- bvAt (given :: sym) vx j
       merger p (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
------------------------------------------------------------------------
+----------------------------------------------------------------------
 -- | A basic symbolic simulator/evaluator: interprets a saw-core Term as
 -- a symbolic value
 
-w4SolveBasic :: forall sym. (Given sym, IsSymExprBuilder sym) =>
-  ModuleMap
-  -> Map Ident (SValue sym)
-  -- ^ additional primitives
-  -> [String]
-  -- ^ 'unints' Constants in this list are kept uninterpreted
-  -> Term
-  -- ^ term to simulate
-  -> IO (SValue sym)
-w4SolveBasic m addlPrims unints t =
+w4SolveBasic ::
+  forall sym. (Given sym, IsSymExprBuilder sym) =>
+  ModuleMap ->
+  Map Ident (SValue sym) {- ^ additional primitives -} ->
+  IORef (SymFnCache sym) {- ^ cache for uninterpreted function symbols -} ->
+  [String] {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
+  Term {- ^ term to simulate -} ->
+  IO (SValue sym)
+w4SolveBasic m addlPrims ref unints t =
   do let unintSet = Set.fromList unints
      let sym = given :: sym
      let uninterpreted nm ty
-           | Set.member nm unintSet = Just $ parseUninterpreted sym nm Ctx.empty ty
+           | Set.member nm unintSet = Just $ parseUninterpreted sym ref nm Ctx.empty ty
            | otherwise              = Nothing
      cfg <- Sim.evalGlobal m (constMap `Map.union` addlPrims)
-            (\ix nm -> parseUninterpreted sym (nm ++ "_" ++ show ix) Ctx.empty)
+            (\ix nm -> parseUninterpreted sym ref (nm ++ "_" ++ show ix) Ctx.empty)
             uninterpreted
      Sim.evalSharedTerm cfg t
 
 
-------------------------------------------------------------
+----------------------------------------------------------------------
+-- Uninterpreted function cache
+
+data SymFnWrapper sym :: Ctx.Ctx BaseType -> * where
+  SymFnWrapper :: !(W.SymFn sym args ret) -> SymFnWrapper sym (args Ctx.::> ret)
+
+type SymFnCache sym = Map W.SolverSymbol (MapF (Assignment BaseTypeRepr) (SymFnWrapper sym))
+
+lookupSymFn ::
+  W.SolverSymbol -> Assignment BaseTypeRepr args -> BaseTypeRepr ty ->
+  SymFnCache sym -> Maybe (W.SymFn sym args ty)
+lookupSymFn s args ty cache =
+  do m <- Map.lookup s cache
+     SymFnWrapper fn <- MapF.lookup (Ctx.extend args ty) m
+     return fn
+
+insertSymFn ::
+  W.SolverSymbol -> Assignment BaseTypeRepr args -> BaseTypeRepr ty ->
+  W.SymFn sym args ty -> SymFnCache sym -> SymFnCache sym
+insertSymFn s args ty fn = Map.alter upd s
+  where
+    upd Nothing = Just (MapF.singleton (Ctx.extend args ty) (SymFnWrapper fn))
+    upd (Just m) = Just (MapF.insert (Ctx.extend args ty) (SymFnWrapper fn) m)
+
+----------------------------------------------------------------------
 -- Given a constant nm of (saw-core) type ty, construct an uninterpreted
 -- constant with that type.
 -- Importantly: The types of these uninterpreted values are *not*
@@ -487,21 +512,22 @@ w4SolveBasic m addlPrims unints t =
 parseUninterpreted ::
   forall sym args.
   (IsSymExprBuilder sym) =>
-  sym -> String -> Assignment (SymExpr sym) args -> SValue sym -> IO (SValue sym)
-parseUninterpreted sym nm args ty =
+  sym -> IORef (SymFnCache sym) ->
+  String -> Assignment (SymExpr sym) args -> SValue sym -> IO (SValue sym)
+parseUninterpreted sym ref nm args ty =
   case ty of
     VPiType _ f
       -> return $
          strictFun $ \x -> do
            (nm', Some args') <- flattenSValue (nm, Some args) x
            t2 <- f (ready x)
-           parseUninterpreted sym nm' args' t2
+           parseUninterpreted sym ref nm' args' t2
 
     VBoolType
-      -> VBool <$> mkUninterpreted sym nm args BaseBoolRepr
+      -> VBool <$> mkUninterpreted sym ref nm args BaseBoolRepr
 
     VIntType
-      -> VInt  <$> mkUninterpreted sym nm args BaseIntegerRepr
+      -> VInt  <$> mkUninterpreted sym ref nm args BaseIntegerRepr
 
     -- 0 width bitvector is a constant
     VVecType (VNat 0) VBoolType
@@ -509,11 +535,11 @@ parseUninterpreted sym nm args ty =
 
     VVecType (VNat n) VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
-      -> (VWord . DBV) <$> mkUninterpreted sym nm args (BaseBVRepr w)
+      -> (VWord . DBV) <$> mkUninterpreted sym ref nm args (BaseBVRepr w)
 
     VVecType (VNat n) ety
       ->  do xs <- sequence $
-                  [ parseUninterpreted sym (nm ++ "_a" ++ show i) args ety
+                  [ parseUninterpreted sym ref (nm ++ "_a" ++ show i) args ety
                   | i <- [0 .. n-1] ]
              return (VVector (V.fromList (map ready xs)))
 
@@ -521,15 +547,15 @@ parseUninterpreted sym nm args ty =
       -> return VUnit
 
     VPairType ty1 ty2
-      -> do x1 <- parseUninterpreted sym (nm ++ "_L") args ty1
-            x2 <- parseUninterpreted sym (nm ++ "_R") args ty2
+      -> do x1 <- parseUninterpreted sym ref (nm ++ "_L") args ty1
+            x2 <- parseUninterpreted sym ref (nm ++ "_R") args ty2
             return (VPair (ready x1) (ready x2))
 
     (VRecordType elem_tps)
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
-                 parseUninterpreted sym (nm ++ "_" ++ f) args tp) elem_tps)
+                 parseUninterpreted sym ref (nm ++ "_" ++ f) args tp) elem_tps)
 
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
@@ -537,16 +563,22 @@ parseUninterpreted sym nm args ty =
 
 mkUninterpreted ::
   forall sym args t. (IsSymExprBuilder sym) =>
-  sym -> String -> Assignment (SymExpr sym) args -> BaseTypeRepr t ->
+  sym -> IORef (SymFnCache sym) ->
+  String -> Assignment (SymExpr sym) args -> BaseTypeRepr t ->
   IO (SymExpr sym t)
-mkUninterpreted sym nm args ret =
-  do
-  putStrLn $ "mkUninterpreted: " ++ nm
+mkUninterpreted sym ref nm args ret =
   case W.userSymbol nm of
     Left err -> fail $ show err ++ ": Cannot create uninterpreted constant " ++ nm
     Right s  ->
-      do fn <- W.freshTotalUninterpFn sym s (fmapFC W.exprType args) ret
-         W.applySymFn sym fn args
+      do cache <- readIORef ref
+         let argtys = fmapFC W.exprType args
+         case lookupSymFn s argtys ret cache of
+           Nothing ->
+             do fn <- W.freshTotalUninterpFn sym s argtys ret
+                writeIORef ref (insertSymFn s argtys ret fn cache)
+                W.applySymFn sym fn args
+           Just fn ->
+             do W.applySymFn sym fn args
 
 
 -- | Flatten an 'SValue' to a sequence of components, each of which is
@@ -583,7 +615,8 @@ w4Solve ::
   IO ([String], ([Maybe (Labeler sym)], SBool sym))
 w4Solve sym sc ps unints t = give sym $ do
   modmap <- scGetModuleMap sc
-  let eval = w4SolveBasic modmap ps unints
+  ref <- newIORef Map.empty
+  let eval = w4SolveBasic modmap ps ref unints
   ty <- eval =<< scTypeOf sc t
 
   -- get the names of the arguments to the function
@@ -596,7 +629,7 @@ w4Solve sym sc ps unints t = give sym $ do
   -- construct symbolic expressions for the variables
   vars' <-
     flip evalStateT 0 $
-    sequence (zipWith newVarsForType argTs (argNames ++ moreNames))
+    sequence (zipWith (newVarsForType ref) argTs (argNames ++ moreNames))
 
   -- symbolically evaluate
   bval <- eval t
@@ -676,15 +709,16 @@ nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 
 
 newVarsForType :: forall sym. (Given sym, IsSymExprBuilder sym) =>
+  IORef (SymFnCache sym) ->
   SValue sym -> String -> StateT Int IO (Maybe (Labeler sym), SValue sym)
-newVarsForType v nm =
+newVarsForType ref v nm =
   case vAsFirstOrderType v of
     Just fot -> do
       do (te,sv) <- newVarFOT fot
          return (Just te, sv)
 
     Nothing ->
-      do sv <- lift $ parseUninterpreted sym nm Ctx.empty v
+      do sv <- lift $ parseUninterpreted sym ref nm Ctx.empty v
          return (Nothing, sv)
   where sym = given :: sym
 
