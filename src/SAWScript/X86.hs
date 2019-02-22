@@ -21,6 +21,7 @@ module SAWScript.X86
 import Control.Lens (toListOf, folded, (^.))
 import Control.Exception(Exception(..),throwIO)
 import Control.Monad.ST(ST,stToIO,RealWorld)
+import Control.Monad.IO.Class(liftIO)
 
 import qualified Data.AIG as AIG
 import           Data.ByteString (ByteString)
@@ -53,7 +54,7 @@ import Lang.Crucible.Simulator.RegMap(regValue, RegMap(..), RegEntry(..))
 import Lang.Crucible.Simulator.RegValue(RegValue,RegValue'(..))
 import Lang.Crucible.Simulator.GlobalState(lookupGlobal,insertGlobal,emptyGlobals)
 import Lang.Crucible.Simulator.Operations(defaultAbortHandler)
-import Lang.Crucible.Simulator.OverrideSim(runOverrideSim, callCFG)
+import Lang.Crucible.Simulator.OverrideSim(runOverrideSim, callCFG, readGlobal)
 import Lang.Crucible.Simulator.EvalStmt(executeCrucible)
 import Lang.Crucible.Simulator.ExecutionTree
           (GlobalPair,gpValue,ExecResult(..),PartialResult(..)
@@ -398,9 +399,7 @@ translate opts elf fun =
                debug st
                return (gs,st,\st1 -> debug st1 >> po st1)
 
-     (addr, st1) <- doSim opts elf sfs name globs st
-
-     checkPost st1
+     addr <- doSim opts elf sfs name globs st checkPost
 
      gs <- getGoals sym
      ctx <- sawBackendSharedContext sym
@@ -422,8 +421,9 @@ doSim ::
   ByteString ->
   (GlobalMap Sym 64, Overrides) ->
   State ->
-  IO (Integer,State)
-doSim opts elf sfs name (globs,overs) st =
+  (State -> IO ()) ->
+  IO Integer
+doSim opts elf sfs name (globs,overs) st checkPost =
   do say "  Looking for address... "
      addr <- findSymbol (symMap elf) name
      let addrInt =
@@ -441,7 +441,7 @@ doSim opts elf sfs name (globs,overs) st =
 
      let sym = backend opts
          mvar = memvar opts
-     setSimulatorVerbosity 4 sym
+     setSimulatorVerbosity 0 sym
 
      execResult <- statusBlock "  Simulating... " $ do
        let crucRegTypes = crucArchRegTypes x86
@@ -460,56 +460,27 @@ doSim opts elf sfs name (globs,overs) st =
                               , _profilingMetrics = Map.empty
                               }
        let initGlobals = insertGlobal mvar (stateMem st) emptyGlobals
-       let initExecState =
-             InitialState ctx initGlobals defaultAbortHandler $
-             runOverrideSim macawStructRepr $ do
-               let args :: RegMap Sym (MacawFunctionArgs X86_64)
-                   args = RegMap (singleton (RegEntry macawStructRepr (stateRegs st)))
-               crucGenArchConstraints x86 $
-                 regValue <$> callCFG cfg args
-       executeCrucible [] initExecState
 
-     gp <- case execResult of
-             FinishedResult _ res ->
-                case res of
-                  TotalRes gp -> return gp
-                  PartialRes _pre gp _ab -> return gp
-                  -- XXX: we ignore the _pre, as it should be subsumed
-                  -- by the assertions in the backend. Ask Rob D. for details.
-             AbortedResult _ctx res ->
-                   malformed $ unlines [ "Failed to finish execution"
-                                       , ppAbort mvar res
-                                       ]
-             TimeoutResult _ctx ->
-                   malformed $ unlines [ "Execution timed out" ]
+       executeCrucible []
+         $ InitialState ctx initGlobals defaultAbortHandler
+         $ runOverrideSim macawStructRepr
+         $ do let args :: RegMap Sym (MacawFunctionArgs X86_64)
+                  args = RegMap (singleton (RegEntry macawStructRepr
+                                                      (stateRegs st)))
+              crucGenArchConstraints x86 $
+                  do r <- callCFG cfg args
+                     mem <- readGlobal mvar
+                     let regs = regValue r
+                     let sta = State { stateMem = mem, stateRegs = regs }
+                     liftIO (checkPost sta)
+                     pure regs
 
-     mem <- getMem gp mvar
-     return ( addrInt
-            , State { stateMem = mem, stateRegs = regValue (gp ^. gpValue) }
-            )
+     case execResult of
+       FinishedResult {} -> pure ()
+       AbortedResult {}  -> sayLn "[Warning] Function never returns"
+       TimeoutResult {}  -> malformed $ unlines [ "Execution timed out" ]
 
-ppAbort :: GlobalVar Mem -> AbortedResult Sym b -> String
-ppAbort mvar x =
-  case x of
-    AbortedExec e gp ->
-       case lookupGlobal mvar (gp ^. gpGlobals) of
-         Just mem -> unlines [ "Aborted execution: " ++ show e
-                             , show (ppMem mem) ]
-         Nothing -> "Aborted exexution (no memory?)"
-    AbortedExit {} -> "Aborted exit"
-    AbortedBranch {} -> "Aborted branch"
-
-
-
--- | Get the current model of the memory.
-getMem :: GlobalPair Sym a ->
-          GlobalVar Mem ->
-          IO (RegValue Sym Mem)
-getMem st mvar =
-  case lookupGlobal mvar (st ^. gpGlobals) of
-    Just mem -> return mem
-    Nothing  -> fail ("Global heap value not initialized: " ++ show mvar)
-
+     return addrInt
 
 
 type TheCFG = SomeCFG (MacawExt X86_64)
