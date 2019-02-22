@@ -194,10 +194,6 @@ ppPointsTo pt =
     PointsToElem _loc ptr idx val ->
       ppSetupValue ptr PP.<> PP.brackets (PP.text (show idx)) PP.<+> PP.text "|->" PP.<+> ppSetupValue val
 
-commaList :: [PP.Doc] -> PP.Doc
-commaList []     = PP.empty
-commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
-
 ppSetupValue :: SetupValue -> PP.Doc
 ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
@@ -422,9 +418,6 @@ methodSpecHandler_prestate ::
   OverrideMatcher ()
 methodSpecHandler_prestate opts sc cc args cs =
   do let expectedArgTypes = {-(traverse . _1) resolveMemType-} (Map.elems (cs^.csArgBindings))
-
-     sym <- getSymInterface
-
      let aux ::
            (J.Type, SetupValue) -> Crucible.AnyValue Sym ->
            IO (JVMVal, J.Type, SetupValue)
@@ -537,7 +530,7 @@ refreshTerms sc ss =
 -- an override's precondition are disjoint.
 enforceDisjointness ::
   CrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher ()
-enforceDisjointness cc loc ss =
+enforceDisjointness _cc loc ss =
   do sym <- getSymInterface
      sub <- OM (use setupValueSub)
      let mems = Map.elems $ Map.intersectionWith (,) (view csAllocs ss) sub
@@ -772,15 +765,15 @@ valueToSC ::
   Cryptol.TValue ->
   JVMVal ->
   OverrideMatcher Term
-valueToSC sym loc failMsg Cryptol.TVBit (IVal x) =
+valueToSC sym _ _ Cryptol.TVBit (IVal x) =
   do b <- liftIO $ W4.bvIsNonzero sym x
       -- TODO: assert that x is 0 or 1
      liftIO (CrucibleSAW.toSC sym b)
 
-valueToSC sym loc failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (IVal x) =
+valueToSC sym _ _ (Cryptol.TVSeq _n Cryptol.TVBit) (IVal x) =
   liftIO (CrucibleSAW.toSC sym x)
 
-valueToSC sym loc failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (LVal x) =
+valueToSC sym _ _ (Cryptol.TVSeq _n Cryptol.TVBit) (LVal x) =
   liftIO (CrucibleSAW.toSC sym x)
 
 valueToSC _sym loc failMsg _tval _val =
@@ -1290,7 +1283,7 @@ makeJVMTypeRep sym globals jc ty =
     J.ArrayType ety ->
       do ety' <- makeJVMTypeRep sym globals jc ety
          return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of3 ety')
-    J.ClassType cn ->
+    J.ClassType _cn ->
       primTypeRep 8 -- FIXME: temporary hack
     J.BooleanType -> primTypeRep 0
     J.ByteType    -> primTypeRep 1
