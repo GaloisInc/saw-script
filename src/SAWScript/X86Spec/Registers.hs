@@ -102,7 +102,7 @@ data FPReg = FP0 | FP1 | FP2 | FP3 | FP4 | FP5 | FP6 | FP7
 data RegAssign = RegAssign
   { valIP         ::               Value (Bits 64)
   , valGPReg      :: GPReg      -> GPRegVal
-  , valVecReg     :: VecReg     -> Value (Bits 256)
+  , valVecReg     :: VecReg     -> Value (Bits 512)
   , valFPReg      :: FPReg      -> Value ABigFloat
   , valFlag       :: Flag       -> Value ABool
   , valX87Status  :: X87Status  -> Value ABool
@@ -135,23 +135,23 @@ macawLookup RegAssign { .. } reg =
     R.R15 -> gp R15
     R.X86_GP _ -> error "[bug] Unexpecet general purpose register."
 
-    R.YMM 0  -> vec YMM0
-    R.YMM 1  -> vec YMM1
-    R.YMM 2  -> vec YMM2
-    R.YMM 3  -> vec YMM3
-    R.YMM 4  -> vec YMM4
-    R.YMM 5  -> vec YMM5
-    R.YMM 6  -> vec YMM6
-    R.YMM 7  -> vec YMM7
-    R.YMM 8  -> vec YMM8
-    R.YMM 9  -> vec YMM9
-    R.YMM 10 -> vec YMM10
-    R.YMM 11 -> vec YMM11
-    R.YMM 12 -> vec YMM12
-    R.YMM 13 -> vec YMM13
-    R.YMM 14 -> vec YMM14
-    R.YMM 15 -> vec YMM15
-    R.X86_YMMReg _ -> error "[bug] Unexpected YMM register."
+    R.ZMM 0  -> vec YMM0
+    R.ZMM 1  -> vec YMM1
+    R.ZMM 2  -> vec YMM2
+    R.ZMM 3  -> vec YMM3
+    R.ZMM 4  -> vec YMM4
+    R.ZMM 5  -> vec YMM5
+    R.ZMM 6  -> vec YMM6
+    R.ZMM 7  -> vec YMM7
+    R.ZMM 8  -> vec YMM8
+    R.ZMM 9  -> vec YMM9
+    R.ZMM 10 -> vec YMM10
+    R.ZMM 11 -> vec YMM11
+    R.ZMM 12 -> vec YMM12
+    R.ZMM 13 -> vec YMM13
+    R.ZMM 14 -> vec YMM14
+    R.ZMM 15 -> vec YMM15
+    R.X86_ZMMReg _ -> error "[bug] Unexpected YMM register."
 
     R.X87_FPUReg (F.MMXR 0)  -> fp FP0
     R.X87_FPUReg (F.MMXR 1)  -> fp FP1
@@ -225,7 +225,7 @@ type family RegType a where
   RegType IP                  = Bits 64
   RegType (GPReg,GPRegUse t)  = t
   RegType Flag                = ABool
-  RegType VecReg              = Bits 256
+  RegType VecReg              = Bits 512
   RegType X87Status           = ABool
   RegType X87Top              = Bits 3
   RegType X87Tag              = Bits 2
@@ -293,22 +293,22 @@ instance GetReg Flag where
 instance GetReg VecReg where
   getReg f =
     case f of
-      YMM0  -> lookupReg (R.YMM 0)
-      YMM1  -> lookupReg (R.YMM 1)
-      YMM2  -> lookupReg (R.YMM 2)
-      YMM3  -> lookupReg (R.YMM 3)
-      YMM4  -> lookupReg (R.YMM 4)
-      YMM5  -> lookupReg (R.YMM 5)
-      YMM6  -> lookupReg (R.YMM 6)
-      YMM7  -> lookupReg (R.YMM 7)
-      YMM8  -> lookupReg (R.YMM 8)
-      YMM9  -> lookupReg (R.YMM 9)
-      YMM10 -> lookupReg (R.YMM 10)
-      YMM11 -> lookupReg (R.YMM 11)
-      YMM12 -> lookupReg (R.YMM 12)
-      YMM13 -> lookupReg (R.YMM 13)
-      YMM14 -> lookupReg (R.YMM 14)
-      YMM15 -> lookupReg (R.YMM 15)
+      YMM0  -> lookupReg (R.ZMM 0)
+      YMM1  -> lookupReg (R.ZMM 1)
+      YMM2  -> lookupReg (R.ZMM 2)
+      YMM3  -> lookupReg (R.ZMM 3)
+      YMM4  -> lookupReg (R.ZMM 4)
+      YMM5  -> lookupReg (R.ZMM 5)
+      YMM6  -> lookupReg (R.ZMM 6)
+      YMM7  -> lookupReg (R.ZMM 7)
+      YMM8  -> lookupReg (R.ZMM 8)
+      YMM9  -> lookupReg (R.ZMM 9)
+      YMM10 -> lookupReg (R.ZMM 10)
+      YMM11 -> lookupReg (R.ZMM 11)
+      YMM12 -> lookupReg (R.ZMM 12)
+      YMM13 -> lookupReg (R.ZMM 13)
+      YMM14 -> lookupReg (R.ZMM 14)
+      YMM15 -> lookupReg (R.ZMM 15)
 
 
 instance GetReg X87Status where
