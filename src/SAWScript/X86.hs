@@ -91,6 +91,7 @@ import Data.Macaw.Memory( Memory, MemSegment(..), MemSegmentOff(..)
                         , readWord8, readWord16le, readWord32le, readWord64le)
 import Data.Macaw.Memory.ElfLoader( LoadOptions(..)
                                   , memoryForElfAllSymbols
+                                  , memoryForElf
                                   , MemSymbol(..)
                                   )
 import Data.Macaw.Symbolic( ArchRegStruct
@@ -240,8 +241,9 @@ registerSymFuns opts =
 
 -- | These are the parts of the ELF file that we care about.
 data RelevantElf = RelevantElf
-  { memory  :: Memory 64
-  , symMap  :: AddrSymMap 64
+  { memory    :: Memory 64
+  , funSymMap :: AddrSymMap 64
+  , symMap    :: AddrSymMap 64
   }
 
 -- | Parse an elf file.
@@ -259,17 +261,13 @@ getElf path =
 -- | Extract a Macaw "memory" from an ELF file and resolve symbols.
 getRelevant :: Elf 64 -> IO RelevantElf
 getRelevant elf =
-  case memoryForElfAllSymbols opts elf of
-    Left err -> malformed err
-    Right (mem, addrs, _warnings, _errs) ->
-      do
-{-
-         unless (null errs)
-           $ malformed $ unlines $ "Failed to resolve ELF symbols:"
-                                 : map show errs
--}
-         let toEntry msym = (memSymbolStart msym, memSymbolName msym)
+  case (memoryForElf opts elf, memoryForElfAllSymbols opts elf) of
+    (Left err, _) -> malformed err
+    (_, Left err) -> malformed err
+    (Right (mem, faddrs, _warnings, _errs), Right (_, addrs, _, _)) ->
+      do let toEntry msym = (memSymbolStart msym, memSymbolName msym)
          return RelevantElf { memory = mem
+                            , funSymMap = Map.fromList (map toEntry faddrs)
                             , symMap = Map.fromList (map toEntry addrs)
                             }
 
@@ -508,7 +506,7 @@ makeCFG opts elf name addr =
   cruxName  = functionNameFromText txtName
   baseName  = Text.append "mem_base_" txtName
 
-  empty = emptyDiscoveryState (memory elf) (symMap elf) (archInfo opts)
+  empty = emptyDiscoveryState (memory elf) (funSymMap elf) (archInfo opts)
 
 
 
