@@ -611,7 +611,7 @@ satExternal doCNF execName args = withFirstGoal $ \g0 -> do
   let l = case goalQuant g of
         Existential -> l0
         Universal -> AIG.not l0
-  vars <- (if doCNF then AIG.writeCNF else writeAIGWithMapping) be l path
+  variables <- (if doCNF then AIG.writeCNF else writeAIGWithMapping) be l path
   (_ec, out, err) <- readProcessWithExitCode execName args' ""
   removeFile path
   unless (null err) $
@@ -623,7 +623,7 @@ satExternal doCNF execName args = withFirstGoal $ \g0 -> do
   let stats = solverStats ("external SAT:" ++ execName) (scSharedSize t)
   case (sls, vls) of
     (["s SATISFIABLE"], _) -> do
-      let bs = parseDimacsSolution vars vls
+      let bs = parseDimacsSolution variables vls
       let r = liftCexBB shapes bs
       case r of
         Left msg -> fail $ "Can't parse counterexample: " ++ msg
