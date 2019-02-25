@@ -503,6 +503,23 @@ insertSymFn s args ty fn = Map.alter upd s
     upd Nothing = Just (MapF.singleton (Ctx.extend args ty) (SymFnWrapper fn))
     upd (Just m) = Just (MapF.insert (Ctx.extend args ty) (SymFnWrapper fn) m)
 
+mkSymFn ::
+  forall sym args ret. (IsSymExprBuilder sym) =>
+  sym -> IORef (SymFnCache sym) ->
+  String -> Assignment BaseTypeRepr args -> BaseTypeRepr ret ->
+  IO (W.SymFn sym args ret)
+mkSymFn sym ref nm args ret =
+  case W.userSymbol nm of
+    Left err -> fail $ show err ++ ": Cannot create uninterpreted constant " ++ nm
+    Right s  ->
+      do cache <- readIORef ref
+         case lookupSymFn s args ret cache of
+           Just fn -> return fn
+           Nothing ->
+             do fn <- W.freshTotalUninterpFn sym s args ret
+                writeIORef ref (insertSymFn s args ret fn cache)
+                return fn
+
 ----------------------------------------------------------------------
 -- Given a constant nm of (saw-core) type ty, construct an uninterpreted
 -- constant with that type.
@@ -567,18 +584,8 @@ mkUninterpreted ::
   String -> Assignment (SymExpr sym) args -> BaseTypeRepr t ->
   IO (SymExpr sym t)
 mkUninterpreted sym ref nm args ret =
-  case W.userSymbol nm of
-    Left err -> fail $ show err ++ ": Cannot create uninterpreted constant " ++ nm
-    Right s  ->
-      do cache <- readIORef ref
-         let argtys = fmapFC W.exprType args
-         case lookupSymFn s argtys ret cache of
-           Nothing ->
-             do fn <- W.freshTotalUninterpFn sym s argtys ret
-                writeIORef ref (insertSymFn s argtys ret fn cache)
-                W.applySymFn sym fn args
-           Just fn ->
-             do W.applySymFn sym fn args
+  do fn <- mkSymFn sym ref nm (fmapFC W.exprType args) ret
+     W.applySymFn sym fn args
 
 
 -- | Flatten an 'SValue' to a sequence of components, each of which is
