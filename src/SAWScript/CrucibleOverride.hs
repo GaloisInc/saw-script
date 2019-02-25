@@ -128,6 +128,7 @@ data OverrideFailureReason
   | BadPointerCast -- ^ Pointer required to process points-to
   | BadReturnSpecification -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
+  | BadPointerLoad String -- ^ loadRaw failed due to type error
   | StructuralMismatch (Crucible.LLVMVal Sym)
                        SetupValue
                        Crucible.MemType
@@ -151,6 +152,9 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "bad return specification"
   NonlinearPatternNotSupported ->
     PP.text "nonlinear pattern no supported"
+  BadPointerLoad msg ->
+    PP.text "type error when loading through pointer" PP.<$$>
+    PP.indent 2 (PP.text msg)
   StructuralMismatch llvmval setupval ty ->
     PP.text "could not match the following terms" PP.<$$>
     PP.indent 2 (PP.text $ show llvmval) PP.<$$>
@@ -940,7 +944,14 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
                           $ (cc^.ccLLVMContext)
 
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     v <- liftIO (Crucible.loadRaw sym mem ptr1 storTy alignment)
+     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy alignment)
+     (v, p1, p2, p3) <-
+       case res of
+         Left e  -> failure loc (BadPointerLoad e)
+         Right x -> return x
+     addAssert p1 (Crucible.SimError loc "Read from unallocated memory")
+     addAssert p2 (Crucible.SimError loc "Read from unaligned memory")
+     addAssert p3 (Crucible.SimError loc "Invalid memory load")
      matchArg sc cc loc prepost v memTy val
 
 
