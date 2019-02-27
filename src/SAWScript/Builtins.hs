@@ -467,15 +467,15 @@ simplifyGoal ss = withFirstGoal $ \goal -> do
   trm' <- io $ rewriteSharedTerm sc ss trm
   return ((), mempty, Just (goal { goalTerm = trm' }))
 
-goal_eval :: ProofScript ()
-goal_eval =
+goal_eval :: [String] -> ProofScript ()
+goal_eval unints =
   withFirstGoal $ \goal ->
   do sc <- getSharedContext
      t0 <- liftIO $ propToPredicate sc (goalTerm goal)
      SV.AIGProxy proxy <- SV.getProxy
      let gen = globalNonceGenerator
      sym <- liftIO $ Crucible.newSAWCoreBackend proxy sc gen
-     (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Solve sym sc Map.empty [] t0
+     (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym sc Map.empty unints t0
      t1 <- liftIO $ Crucible.toSC sym p
      t2 <- liftIO $ scEqTrue sc t1
      return ((), mempty, Just (goal { goalTerm = t2 }))
