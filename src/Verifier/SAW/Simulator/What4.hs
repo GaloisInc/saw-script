@@ -38,11 +38,11 @@
 
 
 module Verifier.SAW.Simulator.What4
-  (
-    w4Solve,
-    TypedExpr(..),
-    SValue,
-    Labeler(..)
+  ( w4Solve
+  , TypedExpr(..)
+  , SValue
+  , Labeler(..)
+  , w4Eval
   ) where
 
 
@@ -69,7 +69,7 @@ import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName)
+import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName, DeBruijnIndex)
 import Verifier.SAW.FiniteValue (FirstOrderType(..))
 
 import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
@@ -87,10 +87,13 @@ import Data.Parameterized.Context (Assignment)
 import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC (FunctorFC(fmapFC))
 
+-- what4
 import Verifier.SAW.Simulator.What4.SWord
 import Verifier.SAW.Simulator.What4.PosNat
 import Verifier.SAW.Simulator.What4.FirstOrder
 
+-- crucible-saw
+import qualified Lang.Crucible.Backend.SAWCore as CS
 
 ---------------------------------------------------------------------
 -- empty datatype to index (open) type families
@@ -607,6 +610,7 @@ flattenSValue args0@(nm, Some xs) v =
     VRecordValue elems        -> foldM flattenSValue args0 =<< traverse (force . snd) elems
     VVector xv                -> foldM flattenSValue args0 =<< traverse force xv
     VBool sb                  -> return (nm, Some (Ctx.extend xs sb))
+    VInt si                   -> return (nm, Some (Ctx.extend xs si))
     VWord (DBV sw)            -> return (nm, Some (Ctx.extend xs sw))
     VWord ZBV                 -> return args0
     VCtorApp i xv             -> foldM flattenSValue args' =<< traverse force xv
@@ -774,3 +778,239 @@ typedToSValue (TypedExpr ty expr) =
     BaseIntegerRepr      -> return $ VInt  expr
     (BaseBVRepr w)       -> return $ withKnownNat w $ VWord (DBV expr)
     _                    -> fail "Cannot handle"
+
+----------------------------------------------------------------------
+-- Evaluation through crucible-saw backend
+
+
+-- | Simplify a saw-core term by evaluating it through the saw backend
+-- of what4.
+w4Eval ::
+  forall n fs.
+  CS.SAWCoreBackend n fs -> SharedContext ->
+  Map Ident (SValue (CS.SAWCoreBackend n fs)) -> [String] -> Term ->
+  IO ([String], ([Maybe (Labeler (CS.SAWCoreBackend n fs))], SBool (CS.SAWCoreBackend n fs)))
+w4Eval sym sc ps unints t =
+  do modmap <- scGetModuleMap sc
+     ref <- newIORef Map.empty
+     let eval = w4EvalBasic sym sc modmap ps ref unints
+     ty <- eval =<< scTypeOf sc t
+
+     -- get the names of the arguments to the function
+     let argNames = map fst (fst (R.asLambdaList t))
+     let moreNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
+
+     -- and their types
+     argTs <- asPredType ty
+
+     -- construct symbolic expressions for the variables
+     vars' <-
+       give sym $
+       flip evalStateT 0 $
+       sequence (zipWith (newVarsForType ref) argTs (argNames ++ moreNames))
+
+     -- symbolically evaluate
+     bval <- eval t
+
+     -- apply and existentially quantify
+     let (bvs, vars) = unzip vars'
+     let vars'' = fmap ready vars
+     bval' <- applyAll bval vars''
+
+     prd <- case bval' of
+              VBool b -> return b
+              _ -> fail $ "solve: non-boolean result type. " ++ show bval'
+     return (argNames, (bvs, prd))
+
+-- | Simplify a saw-core term by evaluating it through the saw backend
+-- of what4.
+w4EvalBasic ::
+  forall n fs.
+  CS.SAWCoreBackend n fs ->
+  SharedContext ->
+  ModuleMap ->
+  Map Ident (SValue (CS.SAWCoreBackend n fs)) {- ^ additional primitives -} ->
+  IORef (SymFnCache (CS.SAWCoreBackend n fs)) {- ^ cache for uninterpreted function symbols -} ->
+  [String] {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
+  Term {- ^ term to simulate -} ->
+  IO (SValue (CS.SAWCoreBackend n fs))
+w4EvalBasic sym sc m addlPrims ref unints t =
+  do let unintSet = Set.fromList unints
+     let unint tf nm ty =
+           do trm <- scTermF sc tf
+              parseUninterpretedSAW sym sc ref trm nm Ctx.empty ty
+     let extcns tf ix nm ty =
+           do trm <- scTermF sc tf
+              parseUninterpretedSAW sym sc ref trm (nm ++ "_" ++ show ix) Ctx.empty ty
+     let uninterpreted tf nm ty
+           | Set.member nm unintSet = Just (unint tf nm ty)
+           | otherwise              = Nothing
+     cfg <- Sim.evalGlobal' m (give sym constMap `Map.union` addlPrims) extcns uninterpreted
+     Sim.evalSharedTerm cfg t
+
+-- | Given a constant nm of (saw-core) type ty, construct an
+-- uninterpreted constant with that type. The 'Term' argument should
+-- be an open term, which should have the designated return type when
+-- the local variables have the corresponding types from the
+-- 'Assignment'.
+parseUninterpretedSAW ::
+  forall n fs args.
+  CS.SAWCoreBackend n fs -> SharedContext ->
+  IORef (SymFnCache (CS.SAWCoreBackend n fs)) ->
+  Term {- ^ open saw-core term for function applied to arguments -} ->
+  String {- ^ name of uninterpreted function -} ->
+  Assignment (SymExpr (CS.SAWCoreBackend n fs)) args {- ^ arguments to uninterpreted function -} ->
+  SValue (CS.SAWCoreBackend n fs) {- ^ return type -} ->
+  IO (SValue (CS.SAWCoreBackend n fs))
+parseUninterpretedSAW sym sc ref trm nm args ty =
+  case ty of
+    VPiType t1 f
+      -> return $
+         strictFun $ \x -> do
+           (nm', Some args') <- flattenSValue (nm, Some args) x
+           (arg, i) <- mkArgTerm sc t1 x
+           trm1 <- incVars sc 0 i trm
+           trm' <- scApply sc trm1 arg
+           t2 <- f (ready x)
+           parseUninterpretedSAW sym sc ref trm' nm' args' t2
+
+    VBoolType
+      -> VBool <$> mkUninterpretedSAW sym ref trm nm args BaseBoolRepr
+
+    VIntType
+      -> VInt  <$> mkUninterpretedSAW sym ref trm nm args BaseIntegerRepr
+
+    -- 0 width bitvector is a constant
+    VVecType (VNat 0) VBoolType
+      -> return $ VWord ZBV
+
+    VVecType (VNat n) VBoolType
+      | Just (Some (PosNat w)) <- somePosNat n
+      -> (VWord . DBV) <$> mkUninterpretedSAW sym ref trm nm args (BaseBVRepr w)
+
+    VVecType (VNat n) ety
+      ->  do ety' <- termOfSValue sc ety
+             n' <- scNat sc (fromInteger n)
+             let mkElem i =
+                   do i' <- scNat sc (fromInteger i)
+                      trm' <- scAt sc n' ety' trm i'
+                      let nm' = nm ++ "_a" ++ show i
+                      parseUninterpretedSAW sym sc ref trm' nm' args ety
+             xs <- traverse mkElem [0 .. n-1]
+             return (VVector (V.fromList (map ready xs)))
+
+    VUnitType
+      -> return VUnit
+
+    VPairType ty1 ty2
+      -> do trm1 <- scPairLeft sc trm
+            trm2 <- scPairRight sc trm
+            x1 <- parseUninterpretedSAW sym sc ref trm1 (nm ++ "_L") args ty1
+            x2 <- parseUninterpretedSAW sym sc ref trm2 (nm ++ "_R") args ty2
+            return (VPair (ready x1) (ready x2))
+{-
+    VRecordType elem_tps
+      -> (VRecordValue <$>
+          mapM (\(f,tp) ->
+                 (f,) <$> ready <$>
+                 parseUninterpretedSAW sym ref (nm ++ "_" ++ f) args tp) elem_tps)
+-}
+
+    _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
+
+mkUninterpretedSAW ::
+  forall n fs args t.
+  CS.SAWCoreBackend n fs -> IORef (SymFnCache (CS.SAWCoreBackend n fs)) ->
+  Term -> String -> Assignment (SymExpr (CS.SAWCoreBackend n fs)) args -> BaseTypeRepr t ->
+  IO (SymExpr (CS.SAWCoreBackend n fs) t)
+mkUninterpretedSAW sym ref trm nm args ret =
+  do fn <- mkSymFn sym ref nm (fmapFC W.exprType args) ret
+     CS.sawRegisterSymFunInterp sym fn (\sc ts -> instantiateVarList sc 0 (reverse ts) trm)
+     W.applySymFn sym fn args
+
+-- | Given a type and va value encoded as 'SValue's, construct an open
+-- term that builds a term of that type from local variables with base
+-- types. The types of the local variables should match the argument
+-- types returned by 'flattenSValue'; variable 0 refers to the last
+-- argument. The returned 'DeBruijnIndex' is the number of local
+-- variables used, which should match the length of the argument
+-- assignment from 'flattenSValue'.
+mkArgTerm :: SharedContext -> SValue sym -> SValue sym -> IO (Term, DeBruijnIndex)
+mkArgTerm sc ty val =
+  case (ty, val) of
+    (VBoolType, VBool _) -> base
+    (VIntType, VInt _) -> base
+    -- 0-width bitvector is a constant
+    (_, VWord ZBV)
+      -> do z <- scNat sc 0
+            x <- scBvNat sc z z
+            return (x, 0)
+
+    (_, VWord (DBV _)) -> base
+
+    (VVecType _ ety, VVector vv)
+      -> do vs <- traverse force (V.toList vv)
+            (xs, i) <- mkArgTerms [ (ety, v) | v <- vs ]
+            ety' <- termOfSValue sc ety
+            x <- scVector sc ety' xs
+            return (x, i)
+
+    (VUnitType, VUnit)
+      -> do x <- scUnitValue sc
+            return (x, 0)
+
+    (VPairType ty1 ty2, VPair v1 v2)
+      -> do (x1, i1) <- mkArgTerm sc ty1 =<< force v1
+            (x2, i2) <- mkArgTerm sc ty2 =<< force v2
+            x1' <- incVars sc 0 i2 x1
+            x <- scPairValue sc x1' x2
+            return (x, i1 + i2)
+
+    (VRecordType tys, VRecordValue flds) | map fst tys == map fst flds
+      -> do let tags = map fst tys
+            vs <- traverse (force . snd) flds
+            (xs, i) <- mkArgTerms (zip (map snd tys) vs)
+            x <- scRecord sc (Map.fromList (zip tags xs))
+            return (x, i)
+
+    (_, VCtorApp i vv)
+      -> do xs <- traverse (termOfSValue sc <=< force) (V.toList vv)
+            x <- scCtorApp sc i xs
+            return (x, 0)
+
+    _ -> fail $ "could not create uninterpreted function argument of type " ++ show ty
+
+  where
+    base =
+      do x <- scLocalVar sc 0
+         return (x, 1)
+
+    mkArgTerms :: [(SValue sym, SValue sym)] -> IO ([Term], DeBruijnIndex)
+    mkArgTerms [] = return ([], 0)
+    mkArgTerms ((t, v) : rest) =
+      do (xs, i2) <- mkArgTerms rest
+         (x1, i1) <- mkArgTerm sc t v
+         x1' <- incVars sc 0 i2 x1
+         return (x1' : xs, i1 + i2)
+
+termOfSValue :: SharedContext -> SValue sym -> IO Term
+termOfSValue sc val =
+  case val of
+    VUnit -> scUnitValue sc
+    VBoolType -> scBoolType sc
+    VIntType -> scIntegerType sc
+    VUnitType -> scUnitType sc
+    VVecType (VNat n) a ->
+      do n' <- scNat sc (fromInteger n)
+         a' <- termOfSValue sc a
+         scVecType sc n' a'
+    VPairType a b
+      -> do a' <- termOfSValue sc a
+            b' <- termOfSValue sc b
+            scPairType sc a' b'
+    VRecordType flds
+      -> do flds' <- traverse (traverse (termOfSValue sc)) flds
+            scRecordType sc flds'
+    VNat n
+      -> scNat sc (fromInteger n)
+    _ -> fail $ "termOfSValue: " ++ show val

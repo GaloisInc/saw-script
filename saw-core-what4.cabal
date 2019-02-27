@@ -22,6 +22,7 @@ library
     mtl,
     saw-core,
     what4,
+    crucible-saw,
     transformers,
     vector,
     parameterized-utils >= 1.0.8 && < 1.1,
