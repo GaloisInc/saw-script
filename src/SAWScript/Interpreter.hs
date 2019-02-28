@@ -895,6 +895,15 @@ primitives = Map.fromList
     (pureVal simplifyGoal)
     [ "Apply the given simplifier rule set to the current goal." ]
 
+  , prim "goal_eval"           "ProofScript ()"
+    (pureVal (goal_eval []))
+    [ "Evaluate the proof goal to a first-order combination of primitives." ]
+
+  , prim "goal_eval_unint"     "[String] -> ProofScript ()"
+    (pureVal goal_eval)
+    [ "Evaluate the proof goal to a first-order combination of primitives."
+    , "Leave the given names, as defined with 'define', as uninterpreted." ]
+
   , prim "beta_reduce_goal"    "ProofScript ()"
     (pureVal beta_reduce_goal)
     [ "Reduce the current goal to beta-normal form." ]
@@ -1045,9 +1054,15 @@ primitives = Map.fromList
     (pureVal trivial)
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
-  , prim "w4"             "ProofScript SatResult"
+  , prim "w4"                  "ProofScript SatResult"
     (pureVal satWhat4_Z3)
     [ "Prove the current goal using What4 (Z3 backend)." ]
+
+  , prim "w4_unint_z3"         "[String] -> ProofScript SatResult"
+    (pureVal satWhat4_UnintZ3)
+    [ "Prove the current goal using What4 (Z3 backend). Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
 
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
@@ -1188,7 +1203,9 @@ primitives = Map.fromList
 
   , prim "java_var"            "String -> JavaType -> JavaSetup Term"
     (bicVal javaVar)
-    [ "Return a term corresponding to the initial value of the named Java"
+    [ "DEPRECATED"
+    , ""
+    , "Return a term corresponding to the initial value of the named Java"
     , "variable, which should have the given type. The returned term can be"
     , "used to construct more complex expressions. For example it can be used"
     , "with 'java_return' to describe the expected return value in terms"
@@ -1198,74 +1215,100 @@ primitives = Map.fromList
 
   , prim "java_class_var"      "String -> JavaType -> JavaSetup ()"
     (bicVal javaClassVar)
-    [ "Declare that the named Java variable should point to an object of the"
+    [ "DEPRECATED"
+    , ""
+    , "Declare that the named Java variable should point to an object of the"
     , "given class type."
     ]
 
   , prim "java_may_alias"      "[String] -> JavaSetup ()"
     (pureVal javaMayAlias)
-    [ "Indicate that the given set of Java variables are allowed to alias"
+    [ "DEPRECATED"
+    , ""
+    , "Indicate that the given set of Java variables are allowed to alias"
     , "each other."
     ]
 
   , prim "java_assert"         "Term -> JavaSetup ()"
     (pureVal javaAssert)
-    [ "Assert that the given term should evaluate to true in the initial"
+    [ "DEPRECATED"
+    , ""
+    , "Assert that the given term should evaluate to true in the initial"
     , "state of a Java method."
     ]
 
   , prim "java_assert_eq"      "String -> Term -> JavaSetup ()"
     (bicVal javaAssertEq)
-    [ "Assert that the given variable should have the given value in the"
+    [ "DEPRECATED"
+    , ""
+    , "Assert that the given variable should have the given value in the"
     , "initial state of a Java method."
     ]
 
   , prim "java_ensure_eq"      "String -> Term -> JavaSetup ()"
     (bicVal javaEnsureEq)
-    [ "Specify that the given Java variable should have a value equal to the"
+    [ "DEPRECATED"
+    , ""
+    , "Specify that the given Java variable should have a value equal to the"
     , "given term when execution finishes."
     ]
 
   , prim "java_modify"         "String -> JavaSetup ()"
     (pureVal javaModify)
-    [ "Indicate that a Java method may modify the named portion of the state." ]
+    [ "DEPRECATED"
+    , ""
+    , "Indicate that a Java method may modify the named portion of the state." ]
 
   , prim "java_return"         "Term -> JavaSetup ()"
     (pureVal javaReturn)
-    [ "Indicate the expected return value of a Java method." ]
+    [ "DEPRECATED"
+    , ""
+    , "Indicate the expected return value of a Java method." ]
 
   , prim "java_verify_tactic"  "ProofScript SatResult -> JavaSetup ()"
     (pureVal javaVerifyTactic)
-    [ "Use the given proof script to prove the specified properties about"
+    [ "DEPRECATED"
+    , ""
+    , "Use the given proof script to prove the specified properties about"
     , "a Java method."
     ]
 
   , prim "java_sat_branches"   "Bool -> JavaSetup ()"
     (pureVal javaSatBranches)
-    [ "Turn on or off satisfiability checking of branch conditions during"
+    [ "DEPRECATED"
+    , ""
+    , "Turn on or off satisfiability checking of branch conditions during"
     , "symbolic execution."
     ]
 
   , prim "java_no_simulate"    "JavaSetup ()"
     (pureVal javaNoSimulate)
-    [ "Skip symbolic simulation for this Java method." ]
+    [ "DEPRECATED"
+    , ""
+    , "Skip symbolic simulation for this Java method." ]
 
   , prim "java_allow_alloc"    "JavaSetup ()"
     (pureVal javaAllowAlloc)
-    [ "Allow allocation of new objects or arrays during simulation,"
+    [ "DEPRECATED"
+    , ""
+    , "Allow allocation of new objects or arrays during simulation,"
     , "as long as the behavior of the method can still be described"
     , "as a pure function."
     ]
 
    , prim "java_requires_class"  "String -> JavaSetup ()"
      (pureVal javaRequiresClass)
-     [ "Declare that the given method can only be executed if the given"
+     [ "DEPRECATED"
+     , ""
+     , "Declare that the given method can only be executed if the given"
      , "class has already been initialized."
      ]
 
   , prim "java_pure"           "JavaSetup ()"
     (pureVal javaPure)
-    [ "The empty specification for 'java_verify'. Equivalent to 'return ()'." ]
+    [ "DEPRECATED"
+    , ""
+    , "The empty specification for 'java_verify'. Equivalent to 'return ()'." ]
 
   , prim "java_load_class"     "String -> TopLevel JavaClass"
     (bicVal (const . CJ.loadJavaClass))
@@ -1276,7 +1319,9 @@ primitives = Map.fromList
   , prim "java_extract"
     "JavaClass -> String -> JavaSetup () -> TopLevel Term"
     (bicVal extractJava)
-    [ "Translate a Java method directly to a Term. The parameters of the"
+    [ "DEPRECATED"
+    , ""
+    , "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
     , "value will be the return value of the method. Only static methods"
     , "with scalar argument and return types are currently supported. For"
@@ -1299,7 +1344,9 @@ primitives = Map.fromList
   , prim "java_verify"
     "JavaClass -> String -> [JavaMethodSpec] -> JavaSetup () -> TopLevel JavaMethodSpec"
     (bicVal verifyJava)
-    [ "Verify a Java method against a method specification. The first two"
+    [ "DEPRECATED"
+    , ""
+    , "Verify a Java method against a method specification. The first two"
     , "arguments are the same as for 'java_extract' and 'java_symexec'."
     , "The list of JavaMethodSpec values in the third argument makes it"
     , "possible to use the results of previous verifications to take the"
@@ -1354,7 +1401,9 @@ primitives = Map.fromList
 
   , prim "llvm_var"            "String -> LLVMType -> LLVMSetup Term"
     (bicVal llvm_var)
-    [ "Return a term corresponding to the initial value of the named LLVM"
+    [ "DEPRECATED"
+    , ""
+    , "Return a term corresponding to the initial value of the named LLVM"
     , "variable, which should have the given type. The returned term can be"
     , "used to construct more complex expressions. For example it can be used"
     , "with 'llvm_return' to describe the expected return value in terms"
@@ -1363,7 +1412,9 @@ primitives = Map.fromList
 
   , prim "llvm_ptr"            "String -> LLVMType -> LLVMSetup ()"
     (bicVal llvm_ptr)
-    [ "Declare that the named LLVM variable should point to a value of the"
+    [ "DEPRECATED"
+    , ""
+    , "Declare that the named LLVM variable should point to a value of the"
     , "given type. This command makes the given variable visible later, so"
     , "the use of 'llvm_ptr \"p\" ...' is necessary before using, for"
     , "instance, 'llvm_ensure \"*p\" ...'."
@@ -1374,77 +1425,103 @@ primitives = Map.fromList
 
   , prim "llvm_assert"         "Term -> LLVMSetup ()"
     (bicVal llvm_assert)
-    [ "Assert that the given term should evaluate to true in the initial"
+    [ "DEPRECATED"
+    , ""
+    , "Assert that the given term should evaluate to true in the initial"
     , "state of an LLVM function."
     ]
 
   , prim "llvm_assert_eq"      "String -> Term -> LLVMSetup ()"
     (bicVal llvm_assert_eq)
-    [ "Specify the initial value of an LLVM variable."
+    [ "DEPRECATED"
+    , ""
+    , "Specify the initial value of an LLVM variable."
     ]
 
   , prim "llvm_assert_null"    "String -> LLVMSetup ()"
     (bicVal llvm_assert_null)
-    [ "Specify that the initial value of an LLVM pointer variable is NULL."
+    [ "DEPRECATED"
+    , ""
+    , "Specify that the initial value of an LLVM pointer variable is NULL."
     ]
 
   , prim "llvm_ensure_eq"      "String -> Term -> LLVMSetup ()"
     (bicVal (llvm_ensure_eq False))
-    [ "Specify that the LLVM variable should have a value equal to the"
+    [ "DEPRECATED"
+    , ""
+    , "Specify that the LLVM variable should have a value equal to the"
     , "given term when execution finishes."
     ]
 
   , prim "llvm_ensure_eq_post"      "String -> Term -> LLVMSetup ()"
     (bicVal (llvm_ensure_eq True))
-    [ "Specify that the LLVM variable should have a value equal to the"
+    [ "DEPRECATED"
+    , ""
+    , "Specify that the LLVM variable should have a value equal to the"
     , "given term when execution finishes, evaluating the expression in"
     , "the final state instead of the initial state."
     ]
 
   , prim "llvm_modify"         "String -> LLVMSetup ()"
     (bicVal llvm_modify)
-    [ "Specify that the LLVM variable should have a an arbitary, unspecified"
+    [ "DEPRECATED"
+    , ""
+    , "Specify that the LLVM variable should have a an arbitary, unspecified"
     , "value when execution finishes."
     ]
 
   , prim "llvm_allocates"         "String -> LLVMSetup ()"
     (pureVal llvm_allocates)
-    [ "Specify that the LLVM variable should be updated with a pointer to"
+    [ "DEPRECATED"
+    , ""
+    , "Specify that the LLVM variable should be updated with a pointer to"
     , "newly-allocated memory of whatever type the variable has been declared"
     , "to have."
     ]
 
   , prim "llvm_return"         "Term -> LLVMSetup ()"
     (bicVal llvm_return)
-    [ "Indicate the expected return value of an LLVM function."
+    [ "DEPRECATED"
+    , ""
+    , "Indicate the expected return value of an LLVM function."
     ]
 
   , prim "llvm_return_arbitrary" "LLVMSetup ()"
     (pureVal llvm_return_arbitrary)
-    [ "Indicate that an LLVM function returns an arbitrary, unspecified value."
+    [ "DEPRECATED"
+    , ""
+    , "Indicate that an LLVM function returns an arbitrary, unspecified value."
     ]
 
   , prim "llvm_verify_tactic"  "ProofScript SatResult -> LLVMSetup ()"
     (bicVal llvm_verify_tactic)
-    [ "Use the given proof script to prove the specified properties about"
+    [ "DEPRECATED"
+    , ""
+    , "Use the given proof script to prove the specified properties about"
     , "an LLVM function."
     ]
 
   , prim "llvm_sat_branches"   "Bool -> LLVMSetup ()"
     (pureVal llvm_sat_branches)
-    [ "Turn on or off satisfiability checking of branch conditions during"
+    [ "DEPRECATED"
+    , ""
+    , "Turn on or off satisfiability checking of branch conditions during"
     , "symbolic execution."
     ]
 
   , prim "llvm_simplify_addrs"  "Bool -> LLVMSetup ()"
     (pureVal llvm_simplify_addrs)
-    [ "Turn on or off simplification of address expressions before loads"
+    [ "DEPRECATED"
+    , ""
+    , "Turn on or off simplification of address expressions before loads"
     , "and stores."
     ]
 
   , prim "llvm_no_simulate"    "LLVMSetup ()"
     (pureVal llvm_no_simulate)
-    [ "Skip symbolic simulation for this LLVM method." ]
+    [ "DEPRECATED"
+    , ""
+    , "Skip symbolic simulation for this LLVM method." ]
 
   , prim "llvm_pure"           "LLVMSetup ()"
     (pureVal llvm_pure)
@@ -1485,7 +1562,9 @@ primitives = Map.fromList
   , prim "llvm_verify"
     "LLVMModule -> String -> [LLVMMethodSpec] -> LLVMSetup () -> TopLevel LLVMMethodSpec"
     (bicVal llvm_verify)
-    [ "Verify an LLVM function against a specification. The first two"
+    [ "DEPRECATED"
+    , ""
+    , "Verify an LLVM function against a specification. The first two"
     , "arguments are the same as for 'llvm_extract' and 'llvm_symexec'."
     , "The list of LLVMMethodSpec values in the third argument makes it"
     , "possible to use the results of previous verifications to take the"
@@ -1499,12 +1578,16 @@ primitives = Map.fromList
 
   , prim "llvm_spec_solvers"  "LLVMMethodSpec -> [String]"
     (\_ _ -> toValue llvm_spec_solvers)
-    [ "Extract a list of all the solvers used when verifying the given LLVM method spec."
+    [ "DEPRECATED"
+    , ""
+    , "Extract a list of all the solvers used when verifying the given LLVM method spec."
     ]
 
   , prim "llvm_spec_size"  "LLVMMethodSpec -> Int"
     (\_ _ -> toValue llvm_spec_size)
-    [ "Return a count of the combined size of all verification goals proved as part of the given method spec."
+    [ "DEPRECATED"
+    , ""
+    , "Return a count of the combined size of all verification goals proved as part of the given method spec."
     ]
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"

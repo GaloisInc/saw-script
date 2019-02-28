@@ -46,7 +46,6 @@ import qualified Lang.Crucible.Simulator as Crucible (RegValue, RegValue'(..), e
 import qualified Lang.Crucible.Simulator.Evaluation as Crucible (evalApp)
 
 -- what4
-import qualified What4.Interface as W4
 import qualified What4.Partial as W4
 
 -- crucible-jvm
@@ -243,7 +242,7 @@ toJVMType tp =
       do t' <- toJVMType t
          Just (J.ArrayType t')
     Cryptol.TVStream _tp' -> Nothing
-    Cryptol.TVTuple tps -> Nothing
+    Cryptol.TVTuple _tps -> Nothing
     Cryptol.TVRec _flds -> Nothing
     Cryptol.TVFun _ _ -> Nothing
 
@@ -275,7 +274,7 @@ refIsEqual sym ref1 ref2 =
     W4.Unassigned ->
       case ref2 of
         W4.Unassigned -> return (W4.truePred sym)
-        W4.PE p2 r2 -> W4.notPred sym p2
+        W4.PE p2 _r2 -> W4.notPred sym p2
     W4.PE p1 r1 ->
       case ref2 of
         W4.Unassigned -> W4.notPred sym p1

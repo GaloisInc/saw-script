@@ -78,13 +78,13 @@ satWhat4_solver :: forall st t ff.
   Term               {- ^ A proposition to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
   -- ^ (example/counter-example, solver statistics)
-satWhat4_solver solver sym _unints sc goal =
+satWhat4_solver solver sym unints sc goal =
 
   do
      -- convert goal to lambda term
      term <- propToPredicate sc goal
      -- symbolically evaluate
-     (t', argNames, (bvs,lit0)) <- prepWhat4 sym sc [] term
+     (t', argNames, (bvs,lit0)) <- prepWhat4 sym sc unints term
 
      lit <- notPred sym lit0
 
