@@ -180,13 +180,6 @@ tcLenFromThenTo_Nat x y z =
     (ite Nat (ltNat x z) 0
          (addNat (divNat (subNat x z) (subNat x y)) 1)); -- decreasing
 
-tcLenFromThen_Nat : Nat -> Nat -> Nat -> Nat;
-tcLenFromThen_Nat x y w =
-  tcLenFromThenTo_Nat x y (ite Nat (ltNat x y) (subNat (expNat 2 w) 1) 0);
-
-tcLenFromThen : Num -> Num -> Num -> Num;
-tcLenFromThen = ternaryNumFun tcLenFromThen_Nat TCInf;
-
 tcLenFromThenTo : Num -> Num -> Num -> Num;
 tcLenFromThenTo = ternaryNumFun tcLenFromThenTo_Nat TCInf;
 
@@ -1133,25 +1126,6 @@ ecAt n a i =
 ecAtBack : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a ->
             seq i Bool -> a;
 ecAtBack n a i xs = ecAt n a i (ecReverse n a xs);
-
--- Static word sequences
-ecFromThen : (first next bits len : Num) -> seq len (seq bits Bool);
-ecFromThen first next =
-  finNumRec
-    (\ (bits:Num) -> (len:Num) -> seq len (seq bits Bool))
-    (\ (bits:Nat) ->
-       finNumRec
-         (\ (len:Num) -> seq len (Vec bits Bool))
-         (\ (len:Nat) ->
-            gen len (Vec bits Bool)
-                (\ (i : Nat) ->
-                   bvAdd
-                     bits
-                     (bvNat bits (getFinNat first))
-                     (bvMul bits
-                            (bvSub bits (bvNat bits (getFinNat next))
-                                   (bvNat bits (getFinNat first)))
-                            (bvNat bits i)))));
 
 ecFromTo : (first last : Num) -> (a : sort 0) -> PLiteral a ->
             seq (tcAdd (TCNum 1) (tcSub last first)) a;

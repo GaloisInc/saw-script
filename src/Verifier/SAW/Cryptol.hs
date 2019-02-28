@@ -139,7 +139,6 @@ importTFun sc tf =
     C.TCMax           -> scGlobalDef sc "Cryptol.tcMax"
     C.TCCeilDiv       -> scGlobalDef sc "Cryptol.tcCeilDiv"
     C.TCCeilMod       -> scGlobalDef sc "Cryptol.tcCeilMod"
-    C.TCLenFromThen   -> scGlobalDef sc "Cryptol.tcLenFromThen"
     C.TCLenFromThenTo -> scGlobalDef sc "Cryptol.tcLenFromThenTo"
 
 importPC :: SharedContext -> C.PC -> IO Term
@@ -489,13 +488,6 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "!"             -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n,a,i} (fin n, fin i) => [n]a -> [i] -> a
     "update"        -> scGlobalDef sc "Cryptol.ecUpdate"      -- {a,b,c} (fin c) => [a]b -> [c] -> b -> [a]b
     "updateEnd"     -> scGlobalDef sc "Cryptol.ecUpdateEnd"   -- {a,b,c} (fin a, fin c) => [a]b -> [c] -> b -> [a]b
-    "fromThen"      -> scGlobalDef sc "Cryptol.ecFromThen"
-                               -- fromThen : {first,next,bits,len}
-                               --             ( fin first, fin next, fin bits
-                               --             , bits >= width first, bits >= width next
-                               --             , lengthFromThen first next bits == len
-                               --             )
-                               --          => [len] [bits]
     "fromTo"        -> scGlobalDef sc "Cryptol.ecFromTo"
                                -- fromTo : {first, last, bits}
                                --           ( fin last, fin bits, last >== first, bits >== width last)

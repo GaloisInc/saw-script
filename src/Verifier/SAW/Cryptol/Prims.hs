@@ -71,18 +71,6 @@ w4WordAsChar bv =
   case W4.bvAsUnsignedInteger bv of   -- or signed?
     Just i -> return $ toEnum $ fromInteger i
     Nothing -> fail "unable to interpret bitvector as character"
-    
---primitive tcLenFromThen_Nat :: Nat -> Nat -> Nat -> Nat;
-tcLenFromThen_Nat :: VMonad l => Value l
-tcLenFromThen_Nat =
-  natFun' "tcLenFromThen_Nat x" $ \x -> return $
-  natFun' "tcLenFromThen_Nat y" $ \y -> return $
-  natFun' "tcLenFromThen_Nat w" $ \w ->
-    case CryNat.nLenFromThen (CryNat.Nat $ fromIntegral x)
-                             (CryNat.Nat $ fromIntegral y)
-                             (CryNat.Nat $ fromIntegral w) of
-      Just (CryNat.Nat ans) -> return $ vNat $ fromIntegral ans
-      _ -> fail "tcLenFromThen_Nat: unable to calculate length"
 
 --primitive tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThenTo_Nat :: VMonad l => Value l
@@ -100,7 +88,6 @@ concretePrims :: Map Ident C.CValue
 concretePrims = Map.fromList
   [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is deprecated; don't use it")
   , ("Cryptol.cryError"            , cryError bvAsChar )
-  , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
 
@@ -108,7 +95,6 @@ bitblastPrims :: IsAIG l g => g s -> Map Ident (BB.BValue (l s))
 bitblastPrims g = Map.fromList
   [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is deprecated; don't use it")
   , ("Cryptol.cryError"            , cryError (aigWordAsChar g) )
-  , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
 
@@ -116,7 +102,6 @@ sbvPrims :: Map Ident SBV.SValue
 sbvPrims = Map.fromList
   [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is deprecated; don't use it")
   , ("Cryptol.cryError"            , cryError sbvWordAsChar )
-  , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
 
@@ -125,6 +110,5 @@ w4Prims :: W4.IsExprBuilder sym => Map Ident (W4.SValue sym)
 w4Prims = Map.fromList
   [ ("Cryptol.ecRandom"            , error "Cryptol.ecRandom is deprecated; don't use it")
   , ("Cryptol.cryError"            , cryError w4WordAsChar )
-  , ("Cryptol.tcLenFromThen_Nat"   , tcLenFromThen_Nat )
   , ("Cryptol.tcLenFromThenTo_Nat" , tcLenFromThenTo_Nat )
   ]
