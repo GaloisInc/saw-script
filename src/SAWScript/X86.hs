@@ -191,9 +191,7 @@ type CallHandler = Sym -> Macaw.LookupFunctionHandle Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
-proof :: (AIG.IsAIG l g) =>
-         AIG.Proxy l g ->
-         ArchitectureInfo X86_64 ->
+proof :: ArchitectureInfo X86_64 ->
          FilePath {- ^ ELF binary -} ->
          Maybe FilePath {- ^ Cryptol spec, if any -} ->
          [(ByteString,Integer,Unit)] ->
@@ -201,12 +199,12 @@ proof :: (AIG.IsAIG l g) =>
          {- ^ Funciton call handler; used only for OldStyle -} ->
          Fun ->
          IO (SharedContext,Integer,[Goal])
-proof proxy archi file mbCry globs mkCallMap fun =
+proof archi file mbCry globs mkCallMap fun =
   do sc  <- mkSharedContext
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
-     sym <- newSAWCoreBackend proxy sc globalNonceGenerator
+     sym <- newSAWCoreBackend sc globalNonceGenerator
      cenv <- loadCry sym mbCry
      callMap <- mkCallMap sym cenv
      mvar <- stToIO (mkMemVar halloc)

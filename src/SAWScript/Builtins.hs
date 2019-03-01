@@ -472,9 +472,8 @@ goal_eval =
   withFirstGoal $ \goal ->
   do sc <- getSharedContext
      t0 <- liftIO $ propToPredicate sc (goalTerm goal)
-     SV.AIGProxy proxy <- SV.getProxy
      let gen = globalNonceGenerator
-     sym <- liftIO $ Crucible.newSAWCoreBackend proxy sc gen
+     sym <- liftIO $ Crucible.newSAWCoreBackend sc gen
      (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Solve sym sc Map.empty [] t0
      t1 <- liftIO $ Crucible.toSC sym p
      t2 <- liftIO $ scEqTrue sc t1

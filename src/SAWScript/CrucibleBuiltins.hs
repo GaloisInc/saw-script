@@ -106,6 +106,7 @@ import qualified Lang.Crucible.CFG.Extension as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
@@ -560,7 +561,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
             args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
             let simCtx = cc^.ccLLVMSimContext
                 conf = W4.getConfiguration sym
-            checkSatOpt <- W4.getOptionSetting Crucible.sawCheckPathSat conf
+            checkSatOpt <- W4.getOptionSetting Crucible.checkPathSatisfiability conf
             _ <- W4.setOpt checkSatOpt checkSat
 
             let initExecState =
@@ -680,7 +681,6 @@ setupCrucibleContext ::
    TopLevel a
 setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
   halloc <- getHandleAlloc
-  AIGProxy proxy <- getProxy
   let ctx = mtrans^.Crucible.transContext
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
     let ?lc = ctx^.Crucible.llvmTypeCtx in
@@ -688,7 +688,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
       let gen = globalNonceGenerator
       let sc  = biSharedContext bic
       let verbosity = simVerbose opts
-      sym <- Crucible.newSAWCoreBackend proxy sc gen
+      sym <- Crucible.newSAWCoreBackend sc gen
 
       let cfg = W4.getConfiguration sym
       verbSetting <- W4.getOptionSetting W4.verbosity cfg

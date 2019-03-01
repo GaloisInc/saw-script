@@ -45,6 +45,7 @@ import SAWScript.Prover.SolverStats
 
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
+import qualified What4.Solver.Yices as Yices
 
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx, SymbolRepr, knownSymbol)
@@ -187,8 +188,8 @@ type GhostValue  = "GhostValue"
 type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
 type GhostGlobal = Crucible.GlobalVar GhostType
 
-instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n (B.Flags B.FloatReal)) GhostValue where
-  type Intrinsic (Crucible.SAWCoreBackend n (B.Flags B.FloatReal)) GhostValue ctx = TypedTerm
+instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue where
+  type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue ctx = TypedTerm
   muxIntrinsic sym _ _namerep _ctx prd thn els =
     do st <- readIORef (B.sbStateManager sym)
        let sc  = Crucible.saw_ctx st
@@ -253,7 +254,7 @@ data CrucibleSetupState wptr =
   ,_csCrucibleContext :: CrucibleContext wptr
   }
 
-type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator (B.Flags B.FloatReal)
+type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator (Yices.Connection Crucible.GlobalNonceGenerator) (B.Flags B.FloatReal)
 
 data CrucibleContext wptr =
   CrucibleContext
