@@ -233,10 +233,19 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList $ []
   , ("Vec",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Vec")
   ]
 
+cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
+cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
+
+  ++
+  [ ("Num_rec",               Skip) -- automatically defined
+  , ("unsafeAssert_same_Num", Skip) -- unsafe and unused
+  ]
+
 specialTreatmentMap :: Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
 specialTreatmentMap = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
-  [ ("Prelude", sawCorePreludeSpecialTreatmentMap)
+  [ ("Cryptol", cryptolPreludeSpecialTreatmentMap)
+  , ("Prelude", sawCorePreludeSpecialTreatmentMap)
   ]
 
 moduleRenamingMap :: Map.Map ModuleName ModuleName
@@ -244,14 +253,6 @@ moduleRenamingMap = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   over _2 (mkModuleName . (: [])) <$>
   [ ("Prelude", "SAWCorePrelude")
-  ]
-
-cryptolPreludeMap :: Map.Map String String
-cryptolPreludeMap = Map.fromList
-  [ ("repeat", "cryptolRepeat")
-  , ("take", "cryptolTake")
-  , ("drop", "cryptolDrop")
-  , ("/\\", "cryptolAnd")
   ]
 
 translateModuleName :: ModuleName -> ModuleName
@@ -453,8 +454,12 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
         (Coq.List . Vector.toList) <$> traverse go vec  -- TODO: special case bit vectors?
     StringLit s -> pure (Coq.Scope (Coq.StringLit s) "string")
     ExtCns (EC _ _ _) -> notSupported
+
     -- NOTE: The following requires the coq-extensible-records library, because
     -- Coq records are nominal rather than structural
+    -- In this library, record types are represented as:
+    -- (record (Fields FSNil))                         is the type of the empty record
+    -- (record (Fields (FSCons ("x" %e nat) FSNil)))   has one field "x" of type "nat"
     RecordType fs ->
       let makeField name typ = do
             typTerm <- go typ
@@ -469,7 +474,10 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
             fieldTerm <- makeField name typ
             return (Coq.App (Coq.Var "FScons") [fieldTerm, accum])
       in
-      foldM addField (Coq.Var "FSnil") fs
+      do
+        fields <- foldM addField (Coq.Var "FSnil") fs
+        return $ Coq.App (Coq.Var "record") [ Coq.App (Coq.Var "Fields") [fields] ]
+
     RecordValue fs ->
       let makeField name val = do
             valTerm <- go val
@@ -614,9 +622,7 @@ translateTerm t = withLocalEnvironment $ do -- traceTerm "translateTerm" t $
     (unwrapTermF -> Constant n body _) -> do
       configuration <- ask
       decls <- view declarations <$> get
-      if | n `Map.member` cryptolPreludeMap ->
-             Coq.Var <$> pure (cryptolPreludeMap Map.! n)
-         | not (traverseConsts configuration) || any (matchDecl n) decls -> Coq.Var <$> pure n
+      if | not (traverseConsts configuration) || any (matchDecl n) decls -> Coq.Var <$> pure n
          | otherwise -> do
              b <- go env body
              modify $ over declarations $ (mkDefinition n b :)
@@ -642,18 +648,22 @@ runMonadCoqTrans configuration m =
 
 -- Eventually, different modules will want different preambles, for now,
 -- hardcoded.
-preamble :: Doc
-preamble = vcat
+preamblePlus :: Doc -> Doc
+preamblePlus extraImports = vcat $
   [ "From Coq          Require Import Lists.List."
   , "From Coq          Require Import String."
   , "From Coq          Require Import Vectors.Vector."
-  -- , "From Records      Require Import Records."
   , "From CryptolToCoq Require Import Cryptol."
   , "From CryptolToCoq Require Import SAW."
+  , "From Records      Require Import Records."
+  , extraImports
   , ""
   , "Import ListNotations."
   , ""
   ]
+
+preamble :: Doc
+preamble = preamblePlus $ vcat []
 
 translateTermToDocWith :: TranslationConfiguration -> (Coq.Term -> Doc) -> Term -> Either (TranslationError Term) Doc
 translateTermToDocWith configuration _f t = do
