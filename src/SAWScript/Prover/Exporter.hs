@@ -1,4 +1,6 @@
+{-# Language OverloadedStrings #-}
 {-# Language ViewPatterns #-}
+
 module SAWScript.Prover.Exporter
   ( satWithExporter
   , adaptExporter
@@ -42,10 +44,12 @@ import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
+import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.Prelude (preludeModule)
 import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
 import Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Translation.Coq as Coq
+import Verifier.SAW.TypedAST (mkModuleName)
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.UntypedAST as Un
@@ -238,11 +242,19 @@ writeCoqSAWCorePrelude outputFile = do
 
 writeCoqCryptolPrelude :: FilePath -> IO ()
 writeCoqCryptolPrelude outputFile = do
-  sc  <- mkSharedContext
-  ()  <- scLoadPreludeModule sc
-  m   <- scFindModule sc nameOfCryptolPrelude
+  sc <- mkSharedContext
+  () <- scLoadPreludeModule sc
+  () <- scLoadCryptolModule sc
+  () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrelude"]))
+  m  <- scFindModule sc nameOfCryptolPrelude
   let doc = Coq.translateModule configuration m
-  writeFile outputFile (show . vcat $ [ Coq.preamble, doc ])
+  let extraPreamble = vcat $
+        [ "From CryptolToCoq Require Import SAWCorePrelude."
+        , "Import SAWCorePrelude."
+        ]
+  writeFile outputFile (show . vcat $ [ Coq.preamblePlus extraPreamble
+                                      , doc
+                                      ])
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
