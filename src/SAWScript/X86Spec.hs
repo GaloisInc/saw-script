@@ -982,7 +982,7 @@ mkGlobalMap rmap sym mem region off = sequence (addOffset <$> thisRegion)
   where
     thisRegion = join (findRegion <$> asNat region)
     findRegion r = Map.lookup (fromIntegral r) rmap
-    addOffset p = doPtrAddOffset sym Nothing mem p off
+    addOffset p = doPtrAddOffset sym mem p off
       where ?ptrWidth = knownNat
 
 
@@ -1226,4 +1226,4 @@ adjustPtr sym mem ptr amt
   | amt == 0  = return ptr
   | otherwise =
     do let ?ptrWidth = knownNat
-       doPtrAddOffset sym Nothing mem ptr =<< bvLit sym knownNat amt
+       doPtrAddOffset sym mem ptr =<< bvLit sym knownNat amt

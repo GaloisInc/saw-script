@@ -944,14 +944,7 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
                           $ (cc^.ccLLVMContext)
 
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     res  <- liftIO (Crucible.loadRawWithCondition sym mem ptr1 storTy alignment)
-     (v, p1, p2, p3) <-
-       case res of
-         Left e  -> failure loc (BadPointerLoad e)
-         Right x -> return x
-     addAssert p1 (Crucible.SimError loc "Read from unallocated memory")
-     addAssert p2 (Crucible.SimError loc "Read from unaligned memory")
-     addAssert p3 (Crucible.SimError loc "Invalid memory load")
+     v <- liftIO (Crucible.assertSafe sym =<< Crucible.loadRaw sym mem ptr1 storTy alignment)
      matchArg sc cc loc prepost v memTy val
 
 
