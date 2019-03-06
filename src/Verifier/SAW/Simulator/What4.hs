@@ -786,10 +786,10 @@ typedToSValue (TypedExpr ty expr) =
 -- | Simplify a saw-core term by evaluating it through the saw backend
 -- of what4.
 w4Eval ::
-  forall n fs.
-  CS.SAWCoreBackend n fs -> SharedContext ->
-  Map Ident (SValue (CS.SAWCoreBackend n fs)) -> [String] -> Term ->
-  IO ([String], ([Maybe (Labeler (CS.SAWCoreBackend n fs))], SBool (CS.SAWCoreBackend n fs)))
+  forall n solver fs.
+  CS.SAWCoreBackend n solver fs -> SharedContext ->
+  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) -> [String] -> Term ->
+  IO ([String], ([Maybe (Labeler (CS.SAWCoreBackend n solver fs))], SBool (CS.SAWCoreBackend n solver fs)))
 w4Eval sym sc ps unints t =
   do modmap <- scGetModuleMap sc
      ref <- newIORef Map.empty
@@ -825,15 +825,15 @@ w4Eval sym sc ps unints t =
 -- | Simplify a saw-core term by evaluating it through the saw backend
 -- of what4.
 w4EvalBasic ::
-  forall n fs.
-  CS.SAWCoreBackend n fs ->
+  forall n solver fs.
+  CS.SAWCoreBackend n solver fs ->
   SharedContext ->
   ModuleMap ->
-  Map Ident (SValue (CS.SAWCoreBackend n fs)) {- ^ additional primitives -} ->
-  IORef (SymFnCache (CS.SAWCoreBackend n fs)) {- ^ cache for uninterpreted function symbols -} ->
+  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) {- ^ additional primitives -} ->
+  IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) {- ^ cache for uninterpreted function symbols -} ->
   [String] {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
-  IO (SValue (CS.SAWCoreBackend n fs))
+  IO (SValue (CS.SAWCoreBackend n solver fs))
 w4EvalBasic sym sc m addlPrims ref unints t =
   do let unintSet = Set.fromList unints
      let unint tf nm ty =
@@ -854,14 +854,14 @@ w4EvalBasic sym sc m addlPrims ref unints t =
 -- the local variables have the corresponding types from the
 -- 'Assignment'.
 parseUninterpretedSAW ::
-  forall n fs args.
-  CS.SAWCoreBackend n fs -> SharedContext ->
-  IORef (SymFnCache (CS.SAWCoreBackend n fs)) ->
+  forall n solver fs args.
+  CS.SAWCoreBackend n solver fs -> SharedContext ->
+  IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) ->
   Term {- ^ open saw-core term for function applied to arguments -} ->
   String {- ^ name of uninterpreted function -} ->
-  Assignment (SymExpr (CS.SAWCoreBackend n fs)) args {- ^ arguments to uninterpreted function -} ->
-  SValue (CS.SAWCoreBackend n fs) {- ^ return type -} ->
-  IO (SValue (CS.SAWCoreBackend n fs))
+  Assignment (SymExpr (CS.SAWCoreBackend n solver fs)) args {- ^ arguments to uninterpreted function -} ->
+  SValue (CS.SAWCoreBackend n solver fs) {- ^ return type -} ->
+  IO (SValue (CS.SAWCoreBackend n solver fs))
 parseUninterpretedSAW sym sc ref trm nm args ty =
   case ty of
     VPiType t1 f
@@ -919,10 +919,10 @@ parseUninterpretedSAW sym sc ref trm nm args ty =
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
 
 mkUninterpretedSAW ::
-  forall n fs args t.
-  CS.SAWCoreBackend n fs -> IORef (SymFnCache (CS.SAWCoreBackend n fs)) ->
-  Term -> String -> Assignment (SymExpr (CS.SAWCoreBackend n fs)) args -> BaseTypeRepr t ->
-  IO (SymExpr (CS.SAWCoreBackend n fs) t)
+  forall n solver fs args t.
+  CS.SAWCoreBackend n solver fs -> IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) ->
+  Term -> String -> Assignment (SymExpr (CS.SAWCoreBackend n solver fs)) args -> BaseTypeRepr t ->
+  IO (SymExpr (CS.SAWCoreBackend n solver fs) t)
 mkUninterpretedSAW sym ref trm nm args ret =
   do fn <- mkSymFn sym ref nm (fmapFC W.exprType args) ret
      CS.sawRegisterSymFunInterp sym fn (\sc ts -> instantiateVarList sc 0 (reverse ts) trm)
