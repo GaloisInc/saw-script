@@ -2752,6 +2752,16 @@ crucible_equal : SetupValue -> SetupValue -> CrucibleSetup ()
 The use of `crucible_equal` can also sometimes lead to more efficient
 symbolic execution when the predicate of interest is an equality.
 
+## Assuming specifications
+
+When using [the assume_unsat tactic](#miscellaneous-tactics), Crucible still
+simulates the function. To skip simulation altogether, one can use
+
+~~~
+crucible_llvm_unsafe_assume_spec :
+  LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec
+~~~
+
 ## A Heap-Based Example
 
 To tie all of the command descriptions from the previous sections
