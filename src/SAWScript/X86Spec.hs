@@ -71,6 +71,7 @@ import Data.String
 import Control.Monad.Reader
 
 import qualified What4.Expr.Builder as B
+import qualified What4.Solver.Yices as Yices
 
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes
@@ -178,7 +179,7 @@ type Post = 'Post
 
 
 -- | The Crucible backend used for speicifcations.
-type Sym = SAWCoreBackend GlobalNonceGenerator (B.Flags B.FloatReal)
+type Sym = SAWCoreBackend GlobalNonceGenerator (Yices.Connection GlobalNonceGenerator) (B.Flags B.FloatReal)
 
 data Opts = Opts
   { optsSym :: Sym

@@ -693,10 +693,9 @@ setupCrucibleContext bic opts jclass =
   do halloc <- getHandleAlloc
      jc <- getJVMTrans
      cb <- getJavaCodebase
-     AIGProxy proxy <- getProxy
      let sc  = biSharedContext bic
      let gen = globalNonceGenerator
-     sym <- io $ Crucible.newSAWCoreBackend proxy sc gen
+     sym <- io $ Crucible.newSAWCoreBackend sc gen
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
      return CrucibleContext { _ccJVMClass = jclass
                             , _ccCodebase = cb

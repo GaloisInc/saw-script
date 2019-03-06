@@ -58,6 +58,7 @@ import qualified Lang.Crucible.Analysis.Postdom        as Crucible
 import qualified What4.Expr as W4
 import qualified What4.Config as W4
 import qualified What4.Interface as W4
+import qualified What4.Solver.Yices as Yices
 
 -- saw-core
 import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies, scAbstractExts)
@@ -124,7 +125,7 @@ prepareClassTopLevel bic str = do
 
 -----------------------------------------------------------------------
 
-type Sym = CrucibleSAW.SAWCoreBackend Nonce.GlobalNonceGenerator (W4.Flags W4.FloatReal)
+type Sym = CrucibleSAW.SAWCoreBackend Nonce.GlobalNonceGenerator (Yices.Connection Nonce.GlobalNonceGenerator) (W4.Flags W4.FloatReal)
 
 
 -- | Extract a JVM method to saw-core
@@ -150,11 +151,10 @@ crucible_java_extract bic opts c mname = do
   mapM_ (prepareClassTopLevel bic . J.unClassName) refs
 
   halloc <- getHandleAlloc
-  AIGProxy proxy <- getProxy
   ctx <- getJVMTrans
 
   io $ do -- only the IO monad, nothing else
-          sym <- CrucibleSAW.newSAWCoreBackend proxy sc gen
+          sym <- CrucibleSAW.newSAWCoreBackend sc gen
           CJ.setSimulatorVerbosity verbosity sym
 
           (CJ.JVMHandleInfo _m2 h) <- CJ.findMethodHandle ctx mcls meth

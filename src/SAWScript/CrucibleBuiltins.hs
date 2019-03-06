@@ -97,7 +97,8 @@ import qualified What4.Expr.Builder as W4
 import           What4.Utils.MonadST
 
 import qualified Lang.Crucible.Backend as Crucible
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
+import qualified Lang.Crucible.Backend.Online as Crucible
+import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.CFG.Core as Crucible
   (AnyCFG(..), CFG, TypeRepr(..), cfgHandle,
    asBaseType, AsBaseType(..), freshGlobalVar)
@@ -106,6 +107,7 @@ import qualified Lang.Crucible.CFG.Extension as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
+import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
@@ -244,7 +246,7 @@ verifyObligations :: CrucibleContext arch
 verifyObligations cc mspec tactic assumes asserts = do
   let sym = cc^.ccBackend
   st     <- io $ readIORef $ W4.sbStateManager sym
-  let sc  = Crucible.saw_ctx st
+  let sc  = CrucibleSAW.saw_ctx st
   assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
   let nm  = mspec^.csName
   stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
@@ -460,7 +462,7 @@ assertEqualVals ::
   LLVMVal ->
   IO Term
 assertEqualVals cc v1 v2 =
-  Crucible.toSC (cc^.ccBackend) =<< equalValsPred cc v1 v2
+  CrucibleSAW.toSC (cc^.ccBackend) =<< equalValsPred cc v1 v2
 
 --------------------------------------------------------------------------------
 
@@ -511,13 +513,13 @@ registerOverride ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                    ->
   CrucibleContext arch       ->
-  Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
+  Crucible.SimContext (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
   W4.ProgramLoc              ->
   [CrucibleMethodSpecIR]     ->
-  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
+  Crucible.OverrideSim (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
 registerOverride opts cc _ctx top_loc cs = do
   let sym = cc^.ccBackend
-  sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
+  sc <- CrucibleSAW.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
   let fsym = (head cs)^.csName
       llvmctx = cc^.ccLLVMContext
   liftIO $
@@ -559,9 +561,9 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
                 rty = Crucible.handleReturnType h
             args' <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
             let simCtx = cc^.ccLLVMSimContext
-                conf = W4.getConfiguration sym
-            checkSatOpt <- W4.getOptionSetting Crucible.sawCheckPathSat conf
-            _ <- W4.setOpt checkSatOpt checkSat
+            psatf <- Crucible.pathSatisfiabilityFeature sym
+                       (CrucibleSAW.considerSatisfiability sym)
+            let fs = if checkSat then [psatf] else []
 
             let initExecState =
                   Crucible.InitialState simCtx globals Crucible.defaultAbortHandler $
@@ -572,7 +574,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
                        preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
                        Crucible.addAssumptions sym (Seq.fromList preds)
                      Crucible.regValue <$> (Crucible.callCFG cfg args')
-            res <- Crucible.executeCrucible [] initExecState
+            res <- Crucible.executeCrucible (map Crucible.genericToExecutionFeature fs) initExecState
             case res of
               Crucible.FinishedResult _ pr ->
                 do Crucible.GlobalPair retval globals1 <-
@@ -661,8 +663,8 @@ verifyPoststate opts sc cc mspec env0 globals ret =
     sym = cc^.ccBackend
 
     verifyObligation (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError _loc err))) = do
-      hypTerm <- Crucible.toSC sym =<< W4.andAllOf sym (folded . Crucible.labeledPred) hyps
-      conclTerm  <- Crucible.toSC sym concl
+      hypTerm <- CrucibleSAW.toSC sym =<< W4.andAllOf sym (folded . Crucible.labeledPred) hyps
+      conclTerm  <- CrucibleSAW.toSC sym concl
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
 
@@ -680,7 +682,6 @@ setupCrucibleContext ::
    TopLevel a
 setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
   halloc <- getHandleAlloc
-  AIGProxy proxy <- getProxy
   let ctx = mtrans^.Crucible.transContext
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
     let ?lc = ctx^.Crucible.llvmTypeCtx in
@@ -688,7 +689,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
       let gen = globalNonceGenerator
       let sc  = biSharedContext bic
       let verbosity = simVerbose opts
-      sym <- Crucible.newSAWCoreBackend proxy sc gen
+      sym <- CrucibleSAW.newSAWCoreBackend sc gen
 
       let cfg = W4.getConfiguration sym
       verbSetting <- W4.getOptionSetting W4.verbosity cfg
@@ -696,7 +697,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
 
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
-                        bindings Crucible.llvmExtensionImpl Crucible.SAWCruciblePersonality
+                        bindings Crucible.llvmExtensionImpl CrucibleSAW.SAWCruciblePersonality
       mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
                =<< Crucible.initializeMemory sym ctx llvm_mod
 
@@ -740,14 +741,14 @@ setupArg :: SharedContext
 setupArg sc sym ecRef tp =
   case Crucible.asBaseType tp of
     Crucible.AsBaseType btp -> do
-       sc_tp <- Crucible.baseSCType sym sc btp
+       sc_tp <- CrucibleSAW.baseSCType sym sc btp
        i     <- scFreshGlobalVar sc
        ecs   <- readIORef ecRef
        let len = Seq.length ecs
        let ec = EC i ("arg_"++show len) sc_tp
        writeIORef ecRef (ecs Seq.|> ec)
        t     <- scFlatTermF sc (ExtCns ec)
-       elt   <- Crucible.bindSAWTerm sym btp t
+       elt   <- CrucibleSAW.bindSAWTerm sym btp t
        return (Crucible.RegEntry tp elt)
 
     Crucible.NotBaseType ->
@@ -806,7 +807,7 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
             gp <- getGlobalPair opts pr
             t <- Crucible.asSymExpr
                    (gp^.Crucible.gpValue)
-                   (Crucible.toSC sym)
+                   (CrucibleSAW.toSC sym)
                    (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
             t' <- scAbstractExts sc (toList ecs) t
             mkTypedTerm sc t'
