@@ -8,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -41,6 +42,7 @@ import           Data.List (tails)
 import           Data.IORef (readIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
@@ -56,6 +58,8 @@ import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
                    (TypeRepr(UnitRepr), GlobalVar)
+import qualified Lang.Crucible.CFG.Extension.Safety as Crucible
+import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
@@ -66,7 +70,7 @@ import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import qualified What4.Symbol as W4
---import qualified What4.Partial as W4
+import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
 import qualified SAWScript.CrucibleLLVM as Crucible
@@ -922,6 +926,7 @@ learnGhost sc cc loc prepost var expected =
 -- the CrucibleSetup block. First, load the value from the address
 -- indicated by 'ptr', and then match it against the pattern 'val'.
 learnPointsTo ::
+  forall arch md .
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                    ->
   SharedContext              ->
@@ -944,8 +949,16 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
                           $ (cc^.ccLLVMContext)
 
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     v <- liftIO (Crucible.assertSafe sym =<< Crucible.loadRaw sym mem ptr1 storTy alignment)
-     matchArg sc cc loc prepost v memTy val
+     res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
+     case res of
+       Crucible.PartLLVMVal assertion_tree res_val -> do
+         pred <- Crucible.treeToPredicate
+           (Proxy @(Crucible.LLVM arch))
+           sym
+           assertion_tree
+         addAssert pred $ Crucible.SimError loc "Invalid memory load"
+         matchArg sc cc loc prepost res_val memTy val
+       W4.Err err -> failure loc $ BadPointerLoad $ show err
 
 
 ------------------------------------------------------------------------
