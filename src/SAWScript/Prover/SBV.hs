@@ -70,7 +70,7 @@ satUnintSBV conf unints timeout sc term =
 
        SBV.Unknown {} -> fail "Prover returned Unknown"
 
-       SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
+       SBV.ProofError _ ls _ -> fail . unlines $ "Prover returned error: " : ls
 
 
 prepSBV ::
