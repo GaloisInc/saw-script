@@ -223,7 +223,12 @@ writeCoqModule inputFile outputFile = do
     case Coq.translateDefDoc configuration (unpackIdent . nameIdent $ name) t of
       Left e -> error $ show e
       Right doc -> return doc
-  writeFile outputFile (show . vcat $ [ Coq.preamble ] ++ tmDocs)
+  writeFile outputFile (show . vcat $ [ Coq.preamble
+                                      , "From CryptolToCoq Require Import SAWCorePrelude."
+                                      , "Import SAWCorePrelude."
+                                      , "From CryptolToCoq Require Import CryptolPrelude."
+                                      , "Import CryptolPrelude."
+                                      ] ++ tmDocs)
   -- putStrLn $ showCryptolModule cryptolModule
 
 nameOfSAWCorePrelude :: Un.ModuleName
@@ -249,7 +254,8 @@ writeCoqCryptolPrelude outputFile = do
   m  <- scFindModule sc nameOfCryptolPrelude
   let doc = Coq.translateModule configuration m
   let extraPreamble = vcat $
-        [ "From CryptolToCoq Require Import SAWCorePrelude."
+        [ "From CryptolToCoq Require Import Cryptol."
+        , "From CryptolToCoq Require Import SAWCorePrelude."
         , "Import SAWCorePrelude."
         ]
   writeFile outputFile (show . vcat $ [ Coq.preamblePlus extraPreamble
