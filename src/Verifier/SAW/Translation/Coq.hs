@@ -7,6 +7,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -30,6 +31,8 @@ import Control.Monad.Reader hiding (fail)
 import Control.Monad.State hiding (fail, state)
 import Data.List (intersperse)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
+import qualified Data.String.Interpolate as I
 import Prelude hiding (fail)
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
@@ -93,13 +96,90 @@ data SpecialTreatment = SpecialTreatment
   , identSpecialTreatment :: Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
   }
 
-data IdentSpecialTreatment
-  = MapsTo Ident  -- means "don't translate its definition, instead use provided"
-  | Rename String -- means "translate its definition, but rename it"
-  | Skip          -- means "don't translate its definition, no replacement"
+data DefSiteTreatment
+  = DefPreserve
+  | DefRename   (Maybe ModuleName) String -- optional module rename, then identifier itself
+  | DefReplace  String
+  | DefSkip
+
+data UseSiteTreatment
+  = UsePreserve
+  | UseRename   (Maybe ModuleName) String
+  | UseReplace  Coq.Term
+
+data IdentSpecialTreatment = IdentSpecialTreatment
+  { atDefSite :: DefSiteTreatment
+  , atUseSite :: UseSiteTreatment
+  }
+
+-- Use `mapsTo` for identifiers whose definition has a matching definition
+-- already on the Coq side.  As such, their definition can be skipped, and use
+-- sites can be replaced by the appropriate call.
+mapsTo :: ModuleName -> String -> IdentSpecialTreatment
+mapsTo targetModule targetName = IdentSpecialTreatment
+  { atDefSite = DefSkip
+  , atUseSite = UseRename (Just targetModule) targetName
+  }
+
+-- Use `realize` for axioms that can be realized, or for primitives that must be
+-- realized.  While some primitives can be written directly in a standalone Coq
+-- module, some primitives depend on code from the extracted module, and are
+-- depended upon by following code in the same module.  Such primitives can
+-- therefore *neither* be defined a priori, *nor* a posteriori, and must be
+-- realized where they were originally declared.
+realize :: String -> IdentSpecialTreatment
+realize code = IdentSpecialTreatment
+  { atDefSite = DefReplace code
+  , atUseSite = UsePreserve
+  }
+
+-- Use `rename` for identifiers whose definition can be translated, but has to
+-- be renamed.  This is useful for certain definitions whose name on the
+-- SAWCore/Cryptol side clashes with names on the Coq side.  For instance, `at`
+-- is a reserved Coq keyword, but is used as a function name in SAWCore Prelude.
+rename :: String -> IdentSpecialTreatment
+rename ident = IdentSpecialTreatment
+  { atDefSite = DefRename Nothing ident
+  , atUseSite = UseRename Nothing ident
+  }
+
+-- TODO: document me
+replace :: Coq.Term -> IdentSpecialTreatment
+replace term = IdentSpecialTreatment
+  { atDefSite = DefSkip
+  , atUseSite = UseReplace term
+  }
+
+-- Use `skip` for identifiers that are already defined in the appropriate module
+-- on the Coq side.
+skip :: IdentSpecialTreatment
+skip = IdentSpecialTreatment
+  { atDefSite = DefSkip
+  , atUseSite = UsePreserve
+  }
+
+-- data IdentSpecialTreatment
+--   = MapsTo  Ident    -- means "don't translate its definition, instead use provided"
+--   | Realize String   -- inserts the string in the file to realize a primitive in place
+--                      -- this is necessary when there is a primitive that depends
+--                      -- on some definitions, but that subsequent definitions
+--                      -- depend upon: thus is can not be defined in a separate file
+--                      -- without code duplication and needs to be realized in-place
+--   | Rename  String   -- means "translate its definition, but rename it"
+--   | Replace Coq.Term -- skip definition site, replace with term at use sites
+--   | Skip             -- means "don't translate its definition, no replacement"
 
 mkCoqIdent :: String -> String -> Ident
 mkCoqIdent coqModule coqIdent = mkIdent (mkModuleName [coqModule]) coqIdent
+
+sawDefinitionsModule :: ModuleName
+sawDefinitionsModule = mkModuleName ["SAW"]
+
+cryptolPreludeModule :: ModuleName
+cryptolPreludeModule = mkModuleName ["CryptolPrelude"]
+
+cryptolToCoqModule :: ModuleName
+cryptolToCoqModule = mkModuleName ["CryptolToCoq"]
 
 -- NOTE: while I initially did the mapping from SAW core names to the
 -- corresponding Coq construct here, it makes the job of translating SAW core
@@ -114,131 +194,151 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList $ []
 
   -- Unsafe SAW features
   ++
-  [ ("error",             MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "error")
-  , ("fix",               Skip)
-  , ("unsafeAssert",      Skip)
-  , ("unsafeCoerce",      Skip)
-  , ("unsafeCoerce_same", Skip)
+  [ ("error",             mapsTo sawDefinitionsModule "error")
+  , ("fix",               skip)
+  , ("unsafeAssert",      replace $ Coq.Var "_")
+  , ("unsafeCoerce",      skip)
+  , ("unsafeCoerce_same", skip)
   ]
 
   -- coercions
   ++
-  [ ("coerce",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "coerce")
-  , ("coerce__def",       Skip)
-  , ("coerce__eq",        Skip)
-  , ("rcoerce",           Skip)
+  [ ("coerce",            mapsTo sawDefinitionsModule "coerce")
+  , ("coerce__def",       skip)
+  , ("coerce__eq",        skip)
+  , ("rcoerce",           skip)
   ]
 
   -- Unit
   ++
-  [ ("Unit",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Unit")
-  , ("UnitType",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "UnitType")
-  , ("UnitType__rec",     MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "UnitType__rec")
+  [ ("Unit",              mapsTo sawDefinitionsModule "Unit")
+  , ("UnitType",          mapsTo sawDefinitionsModule "UnitType")
+  , ("UnitType__rec",     mapsTo sawDefinitionsModule "UnitType__rec")
   ]
 
   -- Records
   ++
-  [ ("EmptyType",         Skip)
-  , ("EmptyType__rec",    Skip)
-  , ("RecordType",        Skip)
-  , ("RecordType__rec",   Skip)
+  [ ("EmptyType",         skip)
+  , ("EmptyType__rec",    skip)
+  , ("RecordType",        skip)
+  , ("RecordType__rec",   skip)
   ]
 
   -- Decidable equality, does not make sense in Coq unless turned into a type
   -- class
   -- Apparently, this is not used much for Cryptol, so we can skip it.
   ++
-  [ ("eq",                Skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq")
-  , ("eq_bitvector",      Skip)
-  , ("eq_Bool",           Skip) -- MapsTo $ mkCoqIdent "CryptolToCow.SAW" "eq_Bool")
-  , ("eq_Nat",            Skip)
-  , ("eq_refl",           Skip) -- MapsTo $ mkCoqIdent "CryptolToCow.SAW" "eq_refl")
-  , ("eq_VecBool",        Skip)
-  , ("eq_VecVec",         Skip)
-  , ("ite_eq_cong_1",     Skip)
-  , ("ite_eq_cong_2",     Skip)
+  [ ("eq",                skip) -- MapsTo $ mkCoqIdent sawDefinitionsModule "eq")
+  , ("eq_bitvector",      skip)
+  , ("eq_Bool",           skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq_Bool")
+  , ("eq_Nat",            skip)
+  , ("eq_refl",           skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq_refl")
+  , ("eq_VecBool",        skip)
+  , ("eq_VecVec",         skip)
+  , ("ite_eq_cong_1",     skip)
+  , ("ite_eq_cong_2",     skip)
   ]
 
   -- Boolean
   ++
-  [ ("and",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "and")
-  , ("and__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "and__eq")
-  , ("Bool",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Bool")
-  , ("boolEq",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "boolEq")
-  , ("boolEq__eq",        MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "boolEq__eq")
-  , ("False",             MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "False")
-  , ("ite",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "ite")
-  , ("iteDep",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "iteDep")
-  , ("iteDep_True",       MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "iteDep_True")
-  , ("iteDep_False",      MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "iteDep_False")
-  , ("ite_bit",           Skip) -- FIXME: change this
-  , ("ite_eq_iteDep",     MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "ite_eq_iteDep")
-  , ("not",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "not")
-  , ("not__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "not__eq")
-  , ("or",                MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "or")
-  , ("or__eq",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "or__eq")
-  , ("True",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "True")
-  , ("xor",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "xor")
-  , ("xor__eq",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "xor__eq")
+  [ ("and",               mapsTo sawDefinitionsModule "and")
+  , ("and__eq",           mapsTo sawDefinitionsModule "and__eq")
+  , ("Bool",              mapsTo sawDefinitionsModule "Bool")
+  , ("boolEq",            mapsTo sawDefinitionsModule "boolEq")
+  , ("boolEq__eq",        mapsTo sawDefinitionsModule "boolEq__eq")
+  , ("False",             mapsTo sawDefinitionsModule "False")
+  , ("ite",               mapsTo sawDefinitionsModule "ite")
+  , ("iteDep",            mapsTo sawDefinitionsModule "iteDep")
+  , ("iteDep_True",       mapsTo sawDefinitionsModule "iteDep_True")
+  , ("iteDep_False",      mapsTo sawDefinitionsModule "iteDep_False")
+  , ("ite_bit",           skip) -- FIXME: change this
+  , ("ite_eq_iteDep",     mapsTo sawDefinitionsModule "ite_eq_iteDep")
+  , ("not",               mapsTo sawDefinitionsModule "not")
+  , ("not__eq",           mapsTo sawDefinitionsModule "not__eq")
+  , ("or",                mapsTo sawDefinitionsModule "or")
+  , ("or__eq",            mapsTo sawDefinitionsModule "or__eq")
+  , ("True",              mapsTo sawDefinitionsModule "True")
+  , ("xor",               mapsTo sawDefinitionsModule "xor")
+  , ("xor__eq",           mapsTo sawDefinitionsModule "xor__eq")
   ]
 
   -- Pairs
   ++
-  [ ("PairType",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "PairType")
-  , ("PairValue",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "PairValue")
-  , ("Pair__rec",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Pair__rec")
-  , ("fst",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "fst")
-  , ("snd",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "snd")
+  [ ("PairType",          mapsTo sawDefinitionsModule "PairType")
+  , ("PairValue",         mapsTo sawDefinitionsModule "PairValue")
+  , ("Pair__rec",         mapsTo sawDefinitionsModule "Pair__rec")
+  , ("fst",               mapsTo sawDefinitionsModule "fst")
+  , ("snd",               mapsTo sawDefinitionsModule "snd")
   ]
 
   -- Equality
   ++
-  [ ("Eq",                MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Eq")
-  , ("Eq__rec",           MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Eq__rec")
-  , ("Refl",              MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Refl")
+  [ ("Eq",                mapsTo sawDefinitionsModule "Eq")
+  , ("Eq__rec",           mapsTo sawDefinitionsModule "Eq__rec")
+  , ("Refl",              mapsTo sawDefinitionsModule "Refl")
   ]
 
   -- Strings
   ++
-  [ ("String",            MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "String")
+  [ ("String",            mapsTo sawDefinitionsModule "String")
   ]
 
   -- Utility functions
   ++
-  [ ("id",                MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "id")
+  [ ("id",                mapsTo sawDefinitionsModule "id")
   ]
 
   -- Natural numbers
   ++
-  [ ("divModNat",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "divModNat")
-  , ("Nat",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Nat")
-  , ("widthNat",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "widthNat")
-  , ("Zero",              MapsTo $ mkCoqIdent "CryptolToCoq"     "Zero")
-  , ("Succ",              MapsTo $ mkCoqIdent "CryptolToCoq"     "Succ")
+  [ ("divModNat",         mapsTo sawDefinitionsModule "divModNat")
+  , ("Nat",               mapsTo sawDefinitionsModule "Nat")
+  , ("widthNat",          mapsTo sawDefinitionsModule "widthNat")
+  , ("Zero",              mapsTo cryptolToCoqModule   "Zero")
+  , ("Succ",              mapsTo cryptolToCoqModule   "Succ")
   ]
 
   -- Vectors
   ++
-  [ ("at",                Rename "sawAt") -- `at` is a reserved keyword in Coq
-  , ("at_single",         Skip) -- is boring, could be proved on the Coq side
-  , ("atWithDefault",     MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "atWithDefault")
-  , ("coerceVec",         MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "coerceVec")
-  , ("EmptyVec",          MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "EmptyVec")
-  , ("eq_Vec",            Skip)
-  , ("foldr",             MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "foldr")
-  , ("gen",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "gen")
-  , ("take0",             Skip)
+  [ ("at",                rename "sawAt") -- `at` is a reserved keyword in Coq
+  , ("at_single",         skip) -- is boring, could be proved on the Coq side
+  , ("atWithDefault",     mapsTo sawDefinitionsModule "atWithDefault")
+  , ("coerceVec",         mapsTo sawDefinitionsModule "coerceVec")
+  , ("EmptyVec",          mapsTo sawDefinitionsModule "EmptyVec")
+  , ("eq_Vec",            skip)
+  , ("foldr",             mapsTo sawDefinitionsModule "foldr")
+  , ("gen",               mapsTo sawDefinitionsModule "gen")
+  , ("take0",             skip)
   -- cannot map directly to Vector.t because arguments are in a different order
-  , ("zip",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "zip")
-  , ("Vec",               MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "Vec")
+  , ("zip",               realize zipSnippet)
+  , ("Vec",               mapsTo sawDefinitionsModule "Vec")
   ]
+
+zipSnippet :: String
+zipSnippet = [I.i|
+Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b) : Vec (minNat m n) (a * b) :=
+  match
+    xs in Vector.t _ m'
+    return Vector.t _ (minNat m' n)
+  with
+  | Vector.nil _ => Vector.nil _
+  | Vector.cons _ x pm xs =>
+    match
+      ys in Vector.t _ n'
+      return Vector.t _ (minNat (S pm) n')
+    with
+    | Vector.nil _ => Vector.nil _
+    | Vector.cons _ y pm' ys => Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)
+    end
+  end
+.
+|]
 
 cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
 
   ++
-  [ ("Num_rec",               Skip) -- automatically defined
-  , ("unsafeAssert_same_Num", Skip) -- unsafe and unused
+  [ ("Num_rec",               mapsTo cryptolPreludeModule "Num_rect") -- automatically defined
+  , ("unsafeAssert_same_Num", skip) -- unsafe and unused
   ]
 
 specialTreatmentMap :: Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
@@ -252,27 +352,33 @@ moduleRenamingMap :: Map.Map ModuleName ModuleName
 moduleRenamingMap = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   over _2 (mkModuleName . (: [])) <$>
-  [ ("Prelude", "SAWCorePrelude")
+  [ ("Cryptol", "CryptolPrelude")
+  , ("Prelude", "SAWCorePrelude")
   ]
 
 translateModuleName :: ModuleName -> ModuleName
 translateModuleName mn =
   Map.findWithDefault mn mn moduleRenamingMap
 
-findSpecialTreatment :: Ident -> Maybe IdentSpecialTreatment
+findSpecialTreatment :: Ident -> IdentSpecialTreatment
 findSpecialTreatment ident =
   let moduleMap = Map.findWithDefault Map.empty (identModule ident) specialTreatmentMap in
-  Map.findWithDefault Nothing (identName ident) (Just <$> moduleMap)
+  let defaultTreatment =
+        IdentSpecialTreatment
+        { atDefSite = DefPreserve
+        , atUseSite = UsePreserve
+        }
+  in
+  Map.findWithDefault defaultTreatment (identName ident) moduleMap
 
 findIdentTranslation :: Ident -> Ident
 findIdentTranslation i =
-  case findSpecialTreatment i of
-  Nothing -> mkIdent (translateModuleName (identModule i)) (identName i)
-  Just st ->
-    case st of
-    MapsTo ident   -> ident
-    Rename newName -> mkIdent (translateModuleName (identModule i)) newName
-    Skip           -> i -- do we want a marker to indicate this will likely fail?
+  case atUseSite (findSpecialTreatment i) of
+    UsePreserve                         -> mkIdent translatedModuleName (identName i)
+    UseRename   targetModule targetName -> mkIdent (fromMaybe translatedModuleName targetModule) targetName
+    UseReplace  _                       -> error $ "This identifier should have been replaced already: " ++ show i
+  where
+    translatedModuleName = translateModuleName (identModule i)
 
 translateIdent :: Ident -> Coq.Ident
 translateIdent = show . findIdentTranslation
@@ -335,16 +441,14 @@ translateCtor inductiveParameters (Ctor {..}) = do
 
 translateDataType :: MonadCoqTrans m => DataType -> m Coq.Decl
 translateDataType (DataType {..}) =
-  case findSpecialTreatment dtName of
-  Just st ->
-    case st of
-    MapsTo ident -> pure $ mapped  dtName ident
-    Rename _     -> translate
-    Skip         -> pure $ skipped dtName
-  Nothing -> translate
+  case atDefSite (findSpecialTreatment dtName) of
+  DefPreserve              -> translateNamed $ identName dtName
+  DefRename   _ targetName -> translateNamed $ targetName
+  DefReplace  str          -> return $ Coq.Snippet str
+  DefSkip                  -> return $ skipped dtName
   where
-    translate = do
-      let inductiveName = identName dtName -- TODO: do we want qualified?
+    translateNamed name = do
+      let inductiveName = name
       let mkParam (s, t) = do
             t' <- translateTerm t
             modify $ over environment (s :)
@@ -383,29 +487,27 @@ skipped sawIdent =
 
 translateDef :: MonadCoqTrans m => Def -> m Coq.Decl
 translateDef (Def {..}) =
-  case findSpecialTreatment defIdent of
-  Just st ->
-    case st of
-    MapsTo ident -> pure $ mapped  defIdent ident
-    Rename _     -> translate
-    Skip         -> pure $ skipped defIdent
-  Nothing -> translate
+  case atDefSite (findSpecialTreatment defIdent) of
+  DefPreserve              -> translateNamed $ identName defIdent
+  DefRename   _ targetName -> translateNamed $ targetName
+  DefReplace  str          -> return $ Coq.Snippet str
+  DefSkip                  -> return $ skipped defIdent
   where
-    translate =
+    translateNamed name =
       case defQualifier of
       NoQualifier ->
         case defBody of
         Nothing   -> error "Terms should have a body (unless axiom/primitive)"
         Just body -> Coq.Definition
-                     <$> pure (translateIdentUnqualified defIdent)
+                     <$> pure name
                      <*> pure []
                      <*> (Just <$> translateTerm defType)
                      <*> translateTerm body
       AxiomQualifier -> Coq.Axiom
-                        <$> pure (translateIdentUnqualified defIdent)
+                        <$> pure name
                         <*> translateTerm defType
       PrimQualifier -> Coq.Axiom
-                       <$> pure (translateIdentUnqualified defIdent)
+                       <$> pure name
                        <*> translateTerm defType
 
 translateSort :: MonadCoqTrans m => Sort -> m Coq.Sort
@@ -611,9 +713,11 @@ translateTerm t = withLocalEnvironment $ do -- traceTerm "translateTerm" t $
                           _ -> badTerm
                       _ -> notSupported
                   _ -> badTerm
-                _ -> Coq.App <$> go env f
-                             <*> traverse (go env) args
-
+                _ ->
+                  case atUseSite (findSpecialTreatment i) of
+                  UseReplace replacement -> return replacement
+                  _ -> Coq.App <$> go env f
+                               <*> traverse (go env) args
            _ -> Coq.App <$> go env f
                         <*> traverse (go env) args
     (asLocalVar -> Just n)
@@ -635,6 +739,7 @@ translateTerm t = withLocalEnvironment $ do -- traceTerm "translateTerm" t $
     matchDecl _ (Coq.Comment _) = False
     matchDecl n (Coq.Definition n' _ _ _) = n == n'
     matchDecl n (Coq.InductiveDecl (Coq.Inductive n' _ _ _ _)) = n == n'
+    matchDecl _ (Coq.Snippet _) = False
     go env term = do
       modify $ set environment env
       translateTerm term
@@ -653,7 +758,6 @@ preamblePlus extraImports = vcat $
   [ "From Coq          Require Import Lists.List."
   , "From Coq          Require Import String."
   , "From Coq          Require Import Vectors.Vector."
-  , "From CryptolToCoq Require Import Cryptol."
   , "From CryptolToCoq Require Import SAW."
   , "From Records      Require Import Records."
   , extraImports

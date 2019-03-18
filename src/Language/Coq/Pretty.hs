@@ -108,6 +108,7 @@ ppDecl decl = case decl of
           [ppMaybeTy mty, text ":="]) <$>
      ppTerm body <> period) <> hardline
   InductiveDecl ind -> ppInductive ind
+  Snippet s -> text s
 
 ppConstructor :: Constructor -> Doc
 ppConstructor (Constructor {..}) =

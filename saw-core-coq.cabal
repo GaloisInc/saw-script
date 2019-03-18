@@ -19,6 +19,7 @@ library
     base == 4.*,
     cryptol-verifier,
     containers,
+    interpolate,
     lens,
     mtl,
     saw-core,

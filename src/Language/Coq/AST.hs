@@ -66,4 +66,5 @@ data Decl
   | Comment String
   | Definition Ident [Binder] (Maybe Type) Term
   | InductiveDecl Inductive
+  | Snippet String
   deriving (Show)
