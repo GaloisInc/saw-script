@@ -228,6 +228,9 @@ writeCoqModule inputFile outputFile = do
                                       , "Import SAWCorePrelude."
                                       , "From CryptolToCoq Require Import CryptolPrelude."
                                       , "Import CryptolPrelude."
+                                      , "From CryptolToCoq Require Import CryptolPreludeExtras."
+                                      , "Import CryptolPreludeExtras."
+                                      , ""
                                       ] ++ tmDocs)
   -- putStrLn $ showCryptolModule cryptolModule
 
