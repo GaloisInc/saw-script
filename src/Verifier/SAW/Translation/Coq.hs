@@ -756,13 +756,13 @@ runMonadCoqTrans configuration m =
 preamblePlus :: Doc -> Doc
 preamblePlus extraImports = vcat $
   [ "From Coq          Require Import Lists.List."
+  , "Import            ListNotations."
   , "From Coq          Require Import String."
   , "From Coq          Require Import Vectors.Vector."
   , "From CryptolToCoq Require Import SAW."
   , "From Records      Require Import Records."
-  , extraImports
   , ""
-  , "Import ListNotations."
+  , extraImports
   , ""
   ]
 
