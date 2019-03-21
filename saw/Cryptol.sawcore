@@ -1166,7 +1166,7 @@ ecInfFromThen a pa x y =
 
 -- Run-time error
 ecError : (a : sort 0) -> (len : Num) -> seq len (bitvector 8) -> a;
-ecError a len msg = error a "cryptol error"; -- FIXME: don't throw away message
+ecError a len msg = error a "encountered call to the Cryptol 'error' function"; -- FIXME: don't throw away message
 {-
 primitive cryError : (a : sort 0) -> (n : Nat) -> Vec n (bitvector 8) -> a;
 
