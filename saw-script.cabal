@@ -138,6 +138,7 @@ library
     SAWScript.CrucibleBuiltinsJVM
                   
     SAWScript.Heapster.Permissions
+    SAWScript.Heapster.CtxMonad
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite
