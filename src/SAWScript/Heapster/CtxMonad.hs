@@ -13,7 +13,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.Heapster.CtxMonad where
 
@@ -193,14 +193,14 @@ runCExpr :: CExpr a (BaseCtx ctx) -> a ctx
 runCExpr = unCExpr
 
 -- | Weaken the context of a contextual expression
-weakenExprPf :: ValidCType a => WeakensToPf ectx1 ectx2 ->
-                CExpr a ectx1 -> CExpr a ectx2
-weakenExprPf (WeakensToPf diff) (CExpr a) = CExpr $ extContext diff a
+cweakenPf :: ValidCType a => WeakensToPf ectx1 ectx2 ->
+             CExpr a ectx1 -> CExpr a ectx2
+cweakenPf (WeakensToPf diff) (CExpr a) = CExpr $ extContext diff a
 
 -- | Weaken the context of a contextual expression using 'WeakensTo'
-weakenExpr :: (ValidCType a, WeakensTo ectx1 ectx2) =>
-              CExpr a ectx1 -> CExpr a ectx2
-weakenExpr = weakenExprPf weakensTo
+cweaken :: (ValidCType a, WeakensTo ectx1 ectx2) =>
+           CExpr a ectx1 -> CExpr a ectx2
+cweaken = cweakenPf weakensTo
 
 -- | Helper function for 'clam'
 clamH :: (forall ctx s. Reifies s (Size ctx) =>
@@ -220,7 +220,7 @@ clam :: ValidCType a =>
           WeakensTo (ectx :<+>: '(ctx, s)) ectx' => CExpr a ectx') ->
          CExpr b (ectx :<+>: '(ctx, s))) ->
         CExpr (a :->: b) ectx
-clam f = clamH (\a -> f $ weakenExpr a)
+clam f = clamH (\a -> f $ cweaken a)
 
 -- | Apply a contextual function expression
 (@@) :: CExpr (a :->: b) ectx -> CExpr a ectx -> CExpr b ectx
@@ -230,23 +230,6 @@ clam f = clamH (\a -> f $ weakenExpr a)
 infixr 0 $$
 ($$) :: CExpr (a :->: b) ectx -> CExpr a ectx -> CExpr b ectx
 ($$) = (@@)
-
--- | Typeclass for lifting operators to contextual expressions
-class CExprOp eop where
-  type CExprOpType eop
-  cexprOp :: CExprOpType eop -> eop
-  cexprUnOp :: eop -> CExprOpType eop
-
-instance CExprOp (CExpr a ectx) where
-  type CExprOpType (CExpr a ectx) = a (CtxOfExprCtx ectx)
-  cexprOp = CExpr
-  cexprUnOp = unCExpr
-
-instance CExprOp eop => CExprOp (CExpr a ectx -> eop) where
-  type CExprOpType (CExpr a ectx -> eop) =
-    a (CtxOfExprCtx ectx) -> CExprOpType eop
-  cexprOp f = cexprOp . f . unCExpr
-  cexprUnOp f = cexprUnOp . f . CExpr
 
 cOp1 :: (forall ctx. a ctx -> b ctx) -> CExpr a ectx -> CExpr b ectx
 cOp1 f (CExpr a) = CExpr $ f a
@@ -258,7 +241,7 @@ cOp2 f (CExpr a) (CExpr b) = CExpr $ f a b
 
 -- | Build a contextual expression for a pair
 cpair :: CExpr a ectx -> CExpr b ectx -> CExpr (a :*: b) ectx
-cpair = cexprOp CPair
+cpair = cOp2 CPair
 
 -- | Pattern-match a contextual expression for a pair
 cunpair :: CExpr (a :*: b) ectx -> (CExpr a ectx, CExpr b ectx)
@@ -289,6 +272,7 @@ test2 = clam $ \x -> clam $ \y -> x
 ----------------------------------------------------------------------
 
 -- | Monads over contextual types
+infixl 1 >>>=
 class ValidCType1 m => CMonad (m :: (Ctx k -> *) -> Ctx k -> *) where
   creturn :: ValidCType a => CExpr a ectx -> CExpr (m a) ectx
   (>>>=) :: (ValidCType a, ValidCType b) =>
@@ -298,11 +282,12 @@ class ValidCType1 m => CMonad (m :: (Ctx k -> *) -> Ctx k -> *) where
 -- | Contextual monad transformers
 class CMonadTrans (t :: ((Ctx k -> *) -> Ctx k -> *) ->
                           ((Ctx k -> *) -> Ctx k -> *)) where
-  clift :: CMonad m => CExpr (m a) ectx -> CExpr (t m a) ectx
+  clift :: (CMonad m, ValidCType a) => CExpr (m a) ectx -> CExpr (t m a) ectx
 
 instance Monad m => CMonad ((:@:) m) where
   creturn = cOp1 (CApplyF . return)
   (>>>=) = cOp2 $ \m f -> CApplyF (unCApplyF m >>= unCApplyF . unCFun f noDiff)
+
 
 -- | The contextual continuation transformer
 newtype CContT res m a (ctx :: Ctx k) =
@@ -314,11 +299,57 @@ instance (ValidCType1 m, ValidCType res) =>
 
 instance (CMonad m, ValidCType res) => CMonad (CContT res m) where
   creturn a =
-    cOp1 CContT $ clam $ \k -> k @@ weakenExpr a
+    cOp1 CContT $ clam $ \k -> k @@ cweaken a
   m >>>= f =
     cOp1 CContT $ clam $ \k ->
-    (cOp1 unCContT $ weakenExpr m) $$ clam $ \a ->
-    (cOp1 unCContT $ weakenExpr f @@ a) @@ k
+    (cOp1 unCContT $ cweaken m) $$ clam $ \a ->
+    (cOp1 unCContT $ cweaken f @@ a) @@ k
+
+instance ValidCType res => CMonadTrans (CContT res) where
+  clift m = cOp1 CContT $ clam $ \k -> cweaken m >>>= k
+
+
+-- | Contextual monads that support shift and reset
+class CMonad m => CMonadShiftReset res m | m -> res where
+  cshift :: ValidCType a =>
+            CExpr ((a :->: m res) :->: m res) ectx -> CExpr (m a) ectx
+  creset :: CExpr (m res) ectx -> CExpr (m res) ectx
+
+instance (CMonad m, ValidCType res) => CMonadShiftReset res (CContT res m) where
+  cshift f =
+    cOp1 CContT $ clam $ \k ->
+    (cOp1 unCContT $ cweaken f @@ (clam $ \a -> clift $ k @@ a)) @@
+    (clam $ \res -> creturn res)
+  creset m =
+    cOp1 CContT $ clam $ \k ->
+    (cOp1 unCContT $ cweaken m) @@ (clam $ \res -> creturn res) >>>= k
+
+
+-- | The contextual state transformer
+newtype CStateT s m a (ctx :: Ctx k) =
+  CStateT { unCStateT :: (s :->: m (s :*: a)) ctx }
+
+instance (ValidCType1 m, ValidCType s) =>
+         ValidCType1 (CStateT s m) where
+  extContext1 diff (CStateT m) = CStateT $ extContext diff m
+
+instance (CMonad m, ValidCType s) => CMonad (CStateT s m) where
+  creturn a = cOp1 CStateT $ clam $ \s -> creturn (cpair s $ cweaken a)
+  m >>>= f =
+    cOp1 CStateT $ clam $ \s ->
+    (cOp1 unCStateT $ cweaken m) @@ s >>>=
+    clam (\(cunpair -> (s',a)) ->
+           (cOp1 unCStateT $ cweaken f @@ a) @@ s')
+
+
+-- | Contextual state monads
+class CMonad m => CMonadState s m where
+  cget :: CExpr (m s) ectx
+  cput :: CExpr s ectx -> CExpr (m CUnit) ectx
+
+instance (CMonad m, ValidCType s) => CMonadState s (CStateT s m) where
+  cget = cOp1 CStateT $ clam $ \s -> creturn (cpair s s)
+  cput s = cOp1 CStateT $ clam $ \_ -> creturn (cpair (cweaken s) cunit)
 
 
 ----------------------------------------------------------------------
