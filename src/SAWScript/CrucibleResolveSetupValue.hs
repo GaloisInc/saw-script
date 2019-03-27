@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -136,11 +137,8 @@ typeOfSetupValue' cc env nameEnv val =
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
           case toLLVMType dl (Cryptol.evalValType Map.empty ty) of
-            Nothing ->
-              fail $ unlines [ "typeOfSetupValue: non-representable type"
-                             , "  " ++ show (Cryptol.pp ty)
-                             ]
-            Just memTy -> return memTy
+            Left err -> fail (toLLVMTypeErrToString err)
+            Right memTy -> return memTy
         s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
                             , "instead got:"
                             , show (Cryptol.pp s)
@@ -350,9 +348,9 @@ resolveSAWTerm cc tp tm =
                         tm' <- scAt sc sz_tm tp_tm tm i_tm
                         resolveSAWTerm cc tp' tm'
            case toLLVMType dl tp' of
-             Nothing -> fail "resolveSAWTerm: invalid type"
-             Just mt -> do
-               gt <- Crucible.toStorableType mt
+             Left e -> fail ("In resolveSAWTerm: " ++ toLLVMTypeErrToString e)
+             Right memTy -> do
+               gt <- Crucible.toStorableType memTy
                Crucible.LLVMValArray gt . V.fromList <$> mapM f [ 0 .. (sz-1) ]
       Cryptol.TVStream _tp' ->
         fail "resolveSAWTerm: invalid infinite stream type"
@@ -362,8 +360,8 @@ resolveSAWTerm cc tp tm =
            vals <- zipWithM (resolveSAWTerm cc) tps tms
            storTy <-
              case toLLVMType dl tp of
-               Just memTy -> Crucible.toStorableType memTy
-               _ -> fail "resolveSAWTerm: invalid tuple type"
+               Left e -> fail ("In resolveSAWTerm: " ++ toLLVMTypeErrToString e)
+               Right memTy -> Crucible.toStorableType memTy
            fields <-
              case Crucible.storageTypeF storTy of
                Crucible.Struct fields -> return fields
@@ -377,26 +375,45 @@ resolveSAWTerm cc tp tm =
     sym = cc^.ccBackend
     dl = Crucible.llvmDataLayout (cc^.ccTypeCtx)
 
-toLLVMType :: Crucible.DataLayout -> Cryptol.TValue -> Maybe Crucible.MemType
+data ToLLVMTypeErr = NotYetSupported String | Impossible String
+
+toLLVMTypeErrToString :: ToLLVMTypeErr -> String
+toLLVMTypeErrToString =
+  \case
+    NotYetSupported ty ->
+      unwords [ "SAW doesn't yet support translating Cryptol's"
+              , ty
+              , "type(s) into crucible-llvm's type system."
+              ]
+    Impossible ty ->
+      unwords [ "User error: It's impossible to store Cryptol"
+              , ty
+              , "values in crucible-llvm's memory model."
+              ]
+
+toLLVMType ::
+  Crucible.DataLayout ->
+  Cryptol.TValue ->
+  Either ToLLVMTypeErr Crucible.MemType
 toLLVMType dl tp =
-    case tp of
-      Cryptol.TVBit -> Nothing -- FIXME
-      Cryptol.TVInteger -> Nothing
-      Cryptol.TVIntMod _ -> Nothing
-      Cryptol.TVSeq n Cryptol.TVBit
-        | n > 0 -> Just (Crucible.IntType (fromInteger n))
-        | otherwise -> Nothing
-      Cryptol.TVSeq n t -> do
-        t' <- toLLVMType dl t
-        let n' = fromIntegral n
-        Just (Crucible.ArrayType n' t')
-      Cryptol.TVStream _tp' -> Nothing
-      Cryptol.TVTuple tps -> do
-        tps' <- mapM (toLLVMType dl) tps
-        let si = Crucible.mkStructInfo dl False tps'
-        return (Crucible.StructType si)
-      Cryptol.TVRec _flds -> Nothing -- FIXME
-      Cryptol.TVFun _ _ -> Nothing
+  case tp of
+    Cryptol.TVBit -> Left (NotYetSupported "bit") -- FIXME
+    Cryptol.TVInteger -> Left (NotYetSupported "integer")
+    Cryptol.TVIntMod _ -> Left (NotYetSupported "integer (mod n)")
+    Cryptol.TVSeq n Cryptol.TVBit
+      | n > 0 -> Right (Crucible.IntType (fromInteger n))
+      | otherwise -> Left (Impossible "infinite sequence")
+    Cryptol.TVSeq n t -> do
+      t' <- toLLVMType dl t
+      let n' = fromIntegral n
+      Right (Crucible.ArrayType n' t')
+    Cryptol.TVStream _tp' -> Left (Impossible "stream")
+    Cryptol.TVTuple tps -> do
+      tps' <- mapM (toLLVMType dl) tps
+      let si = Crucible.mkStructInfo dl False tps'
+      return (Crucible.StructType si)
+    Cryptol.TVRec _flds -> Left (NotYetSupported "record")
+    Cryptol.TVFun _ _ -> Left (Impossible "function")
 
 -- FIXME: This struct-padding logic is already implemented in
 -- crucible-llvm. Reimplementing it here is error prone and harder to
