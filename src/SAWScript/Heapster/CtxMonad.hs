@@ -310,7 +310,7 @@ instance ValidCType res => CMonadTrans (CContT res) where
 
 
 -- | Contextual monads that support shift and reset
-class CMonad m => CMonadShiftReset res m | m -> res where
+class (ValidCType res, CMonad m) => CMonadShiftReset res m | m -> res where
   cshift :: ValidCType a =>
             CExpr ((a :->: m res) :->: m res) ectx -> CExpr (m a) ectx
   creset :: CExpr (m res) ectx -> CExpr (m res) ectx
@@ -341,6 +341,9 @@ instance (CMonad m, ValidCType s) => CMonad (CStateT s m) where
     clam (\(cunpair -> (s',a)) ->
            (cOp1 unCStateT $ cweaken f @@ a) @@ s')
 
+instance ValidCType s => CMonadTrans (CStateT s) where
+  clift m = cOp1 CStateT $ clam $ \s ->
+    cweaken m >>>= clam (\a -> creturn (cpair s a))
 
 -- | Contextual state monads
 class CMonad m => CMonadState s m where
@@ -350,6 +353,25 @@ class CMonad m => CMonadState s m where
 instance (CMonad m, ValidCType s) => CMonadState s (CStateT s m) where
   cget = cOp1 CStateT $ clam $ \s -> creturn (cpair s s)
   cput s = cOp1 CStateT $ clam $ \_ -> creturn (cpair (cweaken s) cunit)
+
+
+instance (ValidCType s, CMonadShiftReset res m) =>
+         CMonadShiftReset res (CStateT s m) where
+  -- FIXME: understand what shift does to the state...
+  cshift f =
+    cOp1 CStateT $ clam $ \s ->
+    cshift $ clam $ \k ->
+    (cOp1 unCStateT $ cweaken f $$ clam $ \a ->
+      cget >>>= clam (\s' -> clift (k @@ (cpair s' a)))) @@ s
+    >>>= clam (\(cunpair -> (_, res)) -> creturn res)
+
+  -- NOTE: reset throws away the inner state
+  creset m =
+    cOp1 CStateT $ clam $ \s ->
+    creset (cOp1 unCStateT (cweaken m) @@ s
+            >>>= clam (\(cunpair -> (_, res)) -> creturn res))
+    >>>= clam (\res -> creturn (cpair s res))
+
 
 
 ----------------------------------------------------------------------
