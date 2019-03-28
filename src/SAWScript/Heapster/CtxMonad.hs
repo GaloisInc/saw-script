@@ -6,6 +6,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeInType #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RankNTypes #-}
@@ -59,27 +60,43 @@ instance MonadError err (BackM err) where
 -- | A context-dependent type is a type that depends on a context
 type CType k = Ctx k -> *
 
--- | Class for "good" contextual types = can lift elements into extended
--- contexts. Having a separate typeclass, rather than just using
--- 'ExtendContext', ensures we do not pollute the namespace of the latter with
--- our incoherent instances below.
-class ValidCType a where
-  extContext :: Diff ctx ctx' -> a ctx -> a ctx'
+-- | Our notion of context embedding is a mapping from variables in one context
+-- to variables in another
+newtype Embedding ctx1 ctx2 =
+  Embedding { unEmbedding :: forall a. Index ctx1 a -> Index ctx2 a }
 
--- | Class for "good" unary contextual type constructors
-class ValidCType1 (f :: (Ctx k -> *) -> Ctx k -> *) where
-  extContext1 :: ValidCType a => Diff ctx ctx' -> f a ctx -> f a ctx'
+instance Cat.Category Embedding where
+  id = Embedding id
+  Embedding g . Embedding f = Embedding (g . f)
+
+-- | Make an embedding from a context into an extension of that context
+mkDiffEmbedding :: Diff ctx1 ctx2 -> Embedding ctx1 ctx2
+mkDiffEmbedding d = Embedding (extendIndex' d)
+
+-- | Make an embedding that adds one type to a context
+mkEmbedding1 :: Embedding ctx (ctx ::> a)
+mkEmbedding1 = Embedding skipIndex
+
+-- | A valid contextual type is one that can be mapped via 'Embedding's
+class ValidCType a where
+  mapContext :: Embedding ctx ctx' -> a ctx -> a ctx'
+
+-- | A valid unary contextual type function is one that maps valid contextual
+-- types to valid contextual types
+class ValidCType1 (f :: CType k -> CType k) where
+  mapContext1 :: ValidCType a => Embedding ctx ctx' -> f a ctx -> f a ctx'
 
 instance {-# INCOHERENT #-} (ValidCType1 f, ValidCType a) => ValidCType (f a) where
-  extContext = extContext1
+  mapContext = mapContext1
 
--- | Class for "good" binary contextual type constructors
-class ValidCType2 (f :: (Ctx k -> *) -> (Ctx k -> *) -> Ctx k -> *) where
-  extContext2 :: (ValidCType a, ValidCType b) =>
-                    Diff ctx ctx' -> f a b ctx -> f a b ctx'
+-- | A valid binary contextual type function is one that maps pairs of valid
+-- contextual types to a valid contextual types
+class ValidCType2 (f :: CType k -> CType k -> CType k) where
+  mapContext2 :: (ValidCType a, ValidCType b) =>
+                    Embedding ctx ctx' -> f a b ctx -> f a b ctx'
 
 instance {-# INCOHERENT #-} (ValidCType2 f, ValidCType a) => ValidCType1 (f a) where
-  extContext1 = extContext2
+  mapContext1 = mapContext2
 
 -- | Apply a type function to a contextual type
 infixl 2 :@:
@@ -87,102 +104,94 @@ newtype (:@:) (f :: * -> *) (b :: CType k) ctx =
   CApplyF { unCApplyF :: f (b ctx) }
 
 instance Functor f => ValidCType1 ((:@:) f) where
-  extContext1 diff = CApplyF . fmap (extContext diff) . unCApplyF
+  mapContext1 diff = CApplyF . fmap (mapContext diff) . unCApplyF
 
 -- | The pair type-in-context
 infixr 1 :*:
 data (:*:) a b (ctx :: Ctx k) = CPair (a ctx) (b ctx)
 
 instance ValidCType2 (:*:) where
-  extContext2 diff (CPair a b) =
-    CPair (extContext diff a) (extContext diff b)
+  mapContext2 diff (CPair a b) =
+    CPair (mapContext diff a) (mapContext diff b)
 
 -- | The unit type-in-context
 data CUnit (ctx :: Ctx k) = CUnit
 
 instance ValidCType CUnit where
-  extContext _ _ = CUnit
+  mapContext _ _ = CUnit
 
 -- | Lift a standard type to a contextual type that ignores its context
 newtype CConst a (ctx :: Ctx k) = CConst { unCConst :: a }
 
 instance ValidCType (CConst a) where
-  extContext _ (CConst a) = CConst a
+  mapContext _ (CConst a) = CConst a
 
--- | The function type-in-context, that can be applied in any extension of the
+-- | The function type-in-context, that can be applied in any embedding of the
 -- current context
 infixr 0 :->:
 newtype (:->:) a b (ctx :: Ctx k) =
-  CFun { unCFun :: forall ctx'. Diff ctx ctx' -> a ctx' -> b ctx' }
+  CFun { unCFun :: forall ctx'. Embedding ctx ctx' -> a ctx' -> b ctx' }
 
 instance ValidCType2 (:->:) where
-  extContext2 diff (CFun f) = CFun $ \diff' -> f (diff' Cat.. diff)
+  mapContext2 emb (CFun f) = CFun $ \emb' -> f (emb' Cat.. emb)
 
 
 ----------------------------------------------------------------------
 -- * Contextual expressions: expressions over contextual types
 ----------------------------------------------------------------------
 
--- | An "expression context" is a representation of contexts as sequences of
--- contexts that are to be appended. That is, the expression context
+-- | An "expression context" is a sequence
 --
--- > BaseCtx ctx :<+>: '(ctx1, sz1) :<+>: ... :<+>: '(ctxn, szn)
+-- > BaseCtx ctx0 :::> '(ctx1, emb1) :::> ... :::> '(ctxn, embn)
 --
--- represents the context
+-- of contexts bound at each contextual lambda (see 'clam') containing the
+-- current expression. That is the above expression context is used for the body
+-- of a contextual lambda that is nested @n@ levels deep.
 --
--- > ctx <+> ctx1 <+> ... <+> ctxn
---
--- This expression context is used to represent the context inside @n@
--- contextual lambdas (see 'clam'), each of which builds a function body that
--- can be called in an extension @cur_ctx <+> ctx@ of the current context
--- @cur_ctx@. By using type-level constructors in a representation, rather than
--- using the @n@-fold context append explicitly, we make things easier for GHC
--- (and so also for us).
---
--- The @sz@ type is a type-level variable that 'Reifies' a 'Size' object for
--- each context using type-level reflection. That is, an expression context is
--- intuitively a sequence of pairs of a context and its 'Size'.
---
--- Note that there are multiple different expression
--- contexts that represent the same underlying context, but that will not
--- actually be an issue here.
+-- Each @embi@ is a type-level variable that 'Reifies' and 'Embedding' from
+-- @ctx(i-1)@ to @ctxi@. This gives GHC enough information to automatically
+-- derive an embedding (using the 'WeakensTo' class, below) from any previous
+-- context to any later context in the list, which in turn allows us to weaken
+-- expressions without having to manually put in all the coercions.
 data ExprCtx k1 k2
   = BaseCtx (Ctx k1)
-  | ExprCtx k1 k2 :<+>: (Ctx k1, k2)
+  | ExprCtx k1 k2 :::> (Ctx k1, k2)
+
+-- | Defines the constraint required for type variable @emb@ in the expression
+-- context @ectx :::> (ctx, emb)@
+type ECtxEmb (ectx :: ExprCtx k *) (ctx :: Ctx k) (emb :: *) =
+  Reifies emb (Embedding (CtxOfExprCtx ectx) ctx)
 
 -- | Convert an expression context to the context it reprsents
 type family CtxOfExprCtx (ctx :: ExprCtx k *) :: Ctx k where
   CtxOfExprCtx (BaseCtx ctx) = ctx
-  CtxOfExprCtx (ectx :<+>: '(ctx, _)) = CtxOfExprCtx ectx <+> ctx
+  CtxOfExprCtx (_ :::> '(ctx, _)) = ctx
 
--- NOTE: cannot write this in the Unsafe representation of contexts; this is why
--- we need WeakensTo, below
--- flattenDiff :: Diff ectx1 ectx2 -> Diff (CtxOfExprCtx ectx1) (CtxOfExprCtx ectx2)
+-- | A "weakening" of expression contexts is an 'Embedding' from the
+-- 'CtxOfExprCtx' of one to that of the other
+newtype Weakening ectx1 ectx2 =
+  Weakening (Embedding (CtxOfExprCtx ectx1) (CtxOfExprCtx ectx2))
 
--- | Proof that @ectx1@ can be extended to @ectx2@
-newtype WeakensToPf ectx1 ectx2 =
-  WeakensToPf (Diff (CtxOfExprCtx ectx1) (CtxOfExprCtx ectx2))
+instance Cat.Category Weakening where
+  id = Weakening Cat.id
+  Weakening emb2 . Weakening emb1 = Weakening (emb2 Cat.. emb1)
 
--- | Any expression context weakens to itself
-weakensRefl :: WeakensToPf ectx ectx
-weakensRefl = WeakensToPf noDiff
+-- | One step of weakening
+weakening1 :: Reifies emb (Embedding (CtxOfExprCtx ectx) ctx) => Proxy emb ->
+              Weakening ectx (ectx :::> '(ctx, emb))
+weakening1 emb = Weakening $ reflect emb
 
--- | Add an extra context to the right of an existing weakening proof
-weakensCons :: Reifies s (Size ctx) => WeakensToPf ectx1 ectx2 -> Proxy s ->
-               WeakensToPf ectx1 (ectx2 :<+>: '(ctx, s))
-weakensCons (WeakensToPf diff) sz =
-  WeakensToPf $ appendDiff (reflect sz) Cat.. diff
-
--- | Typeclass version of 'WeakensToPf'
+-- | Typeclass version of 'Weakening'
 class WeakensTo ectx1 ectx2 where
-  weakensTo :: WeakensToPf ectx1 ectx2
+  weakensTo :: Weakening ectx1 ectx2
 
 instance WeakensTo ectx ectx where
-  weakensTo = weakensRefl
+  weakensTo = Cat.id
 
-instance {-# INCOHERENT #-} (WeakensTo ectx1 ectx2, Reifies s (Size ctx)) =>
-                            WeakensTo ectx1 (ectx2 :<+>: '(ctx, s)) where
-  weakensTo = weakensCons weakensTo Proxy
+instance {-# INCOHERENT #-} (WeakensTo ectx1 ectx2,
+                             Reifies emb (Embedding (CtxOfExprCtx ectx2) ctx)) =>
+                            WeakensTo ectx1 (ectx2 :::> '(ctx, emb)) where
+  weakensTo = weakening1 Proxy Cat.. weakensTo
 
 -- | A contextual expression of contextual type @a@ in expression context @ectx@
 newtype CExpr (a :: CType k) (ectx :: ExprCtx k *) =
@@ -193,9 +202,9 @@ runCExpr :: CExpr a (BaseCtx ctx) -> a ctx
 runCExpr = unCExpr
 
 -- | Weaken the context of a contextual expression
-cweakenPf :: ValidCType a => WeakensToPf ectx1 ectx2 ->
+cweakenPf :: ValidCType a => Weakening ectx1 ectx2 ->
              CExpr a ectx1 -> CExpr a ectx2
-cweakenPf (WeakensToPf diff) (CExpr a) = CExpr $ extContext diff a
+cweakenPf (Weakening diff) (CExpr a) = CExpr $ mapContext diff a
 
 -- | Weaken the context of a contextual expression using 'WeakensTo'
 cweaken :: (ValidCType a, WeakensTo ectx1 ectx2) =>
@@ -203,41 +212,43 @@ cweaken :: (ValidCType a, WeakensTo ectx1 ectx2) =>
 cweaken = cweakenPf weakensTo
 
 -- | Helper function for 'clam'
-clamH :: (forall ctx s. Reifies s (Size ctx) =>
-          CExpr a (ectx :<+>: '(ctx, s)) -> CExpr b (ectx :<+>: '(ctx, s))) ->
+clamH :: (forall ctx emb. Reifies emb (Embedding (CtxOfExprCtx ectx) ctx) =>
+          CExpr a (ectx :::> '(ctx, emb)) -> CExpr b (ectx :::> '(ctx, emb))) ->
          CExpr (a :->: b) ectx
 clamH f =
-  CExpr $ CFun $ \diff a ->
-  case diffIsAppend diff of
-    IsAppend (sz :: Size ctx'') ->
-      reify sz $ \(p :: Proxy s) ->
-      unCExpr $ f @ctx'' @s (CExpr a)
+  CExpr $ CFun $ \emb a ->
+  reify emb $ \(p :: Proxy emb) -> unCExpr $ f @_ @emb (CExpr a)
+
+-- | The type of a binding expression
+type CExprBinder a b ectx =
+  (forall ctx emb. ECtxEmb ectx ctx emb =>
+   (forall ectx'.
+    WeakensTo (ectx :::> '(ctx, emb)) ectx' => CExpr a ectx') ->
+   CExpr b (ectx :::> '(ctx, emb)))
 
 -- | Build an expression for a contextual function 
 clam :: ValidCType a =>
-        (forall ctx s. Reifies s (Size ctx) =>
-         (forall ectx'.
-          WeakensTo (ectx :<+>: '(ctx, s)) ectx' => CExpr a ectx') ->
-         CExpr b (ectx :<+>: '(ctx, s))) ->
+        CExprBinder a b ectx ->
         CExpr (a :->: b) ectx
 clam f = clamH (\a -> f $ cweaken a)
 
 -- | Apply a contextual function expression
 (@@) :: CExpr (a :->: b) ectx -> CExpr a ectx -> CExpr b ectx
-(CExpr f) @@ (CExpr arg) = CExpr $ unCFun f noDiff arg
+(CExpr f) @@ (CExpr arg) = CExpr $ unCFun f Cat.id arg
 
 -- | A version of '(@@)' with low precedence, to work like '($)'
 infixr 0 $$
 ($$) :: CExpr (a :->: b) ectx -> CExpr a ectx -> CExpr b ectx
 ($$) = (@@)
 
+-- | Lift a unary operation between contextual types to one on expressions
 cOp1 :: (forall ctx. a ctx -> b ctx) -> CExpr a ectx -> CExpr b ectx
 cOp1 f (CExpr a) = CExpr $ f a
 
+-- | Lift a binary operation between contextual types to one on expressions
 cOp2 :: (forall ctx. a ctx -> b ctx -> c ctx) ->
         CExpr a ectx -> CExpr b ectx -> CExpr c ectx
 cOp2 f (CExpr a) (CExpr b) = CExpr $ f a b
-
 
 -- | Build a contextual expression for a pair
 cpair :: CExpr a ectx -> CExpr b ectx -> CExpr (a :*: b) ectx
@@ -272,21 +283,38 @@ test2 = clam $ \x -> clam $ \y -> x
 ----------------------------------------------------------------------
 
 -- | Monads over contextual types
+class ValidCType1 m => CMonad (m :: CType k -> CType k) where
+  creturnFun :: ValidCType a => (a :->: m a) ctx
+  cbindFun :: (ValidCType a, ValidCType b) =>
+              (m a :->: (a :->: m b) :->: m b) ctx
+
+-- | Lift 'creturnFun' to an operation on expressions
+creturn :: (CMonad m, ValidCType a) => CExpr a ectx -> CExpr (m a) ectx
+creturn = (@@) (CExpr creturnFun)
+
+-- | Lift 'cbindFun' to an operation on expressions
 infixl 1 >>>=
-class ValidCType1 m => CMonad (m :: (Ctx k -> *) -> Ctx k -> *) where
-  creturn :: ValidCType a => CExpr a ectx -> CExpr (m a) ectx
-  (>>>=) :: (ValidCType a, ValidCType b) =>
-            CExpr (m a) ectx -> CExpr (a :->: m b) ectx -> CExpr (m b) ectx
+(>>>=) :: (CMonad m, ValidCType a, ValidCType b) =>
+          CExpr (m a) ectx ->
+          CExprBinder a (m b) ectx ->
+          CExpr (m b) ectx
+m >>>= f = CExpr cbindFun @@ m @@ clam f
 
 
 -- | Contextual monad transformers
-class CMonadTrans (t :: ((Ctx k -> *) -> Ctx k -> *) ->
-                          ((Ctx k -> *) -> Ctx k -> *)) where
-  clift :: (CMonad m, ValidCType a) => CExpr (m a) ectx -> CExpr (t m a) ectx
+class CMonadTrans (t :: (CType k -> CType k) -> CType k -> CType k) where
+  cliftFun :: (CMonad m, ValidCType a) => (m a :->: t m a) ectx
+
+-- | Lift 'cliftFun' to an operation on expressions
+clift :: (CMonadTrans t, CMonad m, ValidCType a) =>
+         CExpr (m a) ectx -> CExpr (t m a) ectx
+clift = (@@) (CExpr cliftFun)
 
 instance Monad m => CMonad ((:@:) m) where
-  creturn = cOp1 (CApplyF . return)
-  (>>>=) = cOp2 $ \m f -> CApplyF (unCApplyF m >>= unCApplyF . unCFun f noDiff)
+  creturnFun = runCExpr $ clam $ \x -> cOp1 (CApplyF . return) x
+  cbindFun = runCExpr $ clam $ \m -> clam $ \f ->
+    cOp2 (\m' f' ->
+           CApplyF (unCApplyF m' >>= unCApplyF . unCFun f' Cat.id)) m f
 
 
 -- | The contextual continuation transformer
@@ -295,34 +323,45 @@ newtype CContT res m a (ctx :: Ctx k) =
 
 instance (ValidCType1 m, ValidCType res) =>
          ValidCType1 (CContT res m) where
-  extContext1 diff (CContT m) = CContT $ extContext diff m
+  mapContext1 diff (CContT m) = CContT $ mapContext diff m
 
 instance (CMonad m, ValidCType res) => CMonad (CContT res m) where
-  creturn a =
-    cOp1 CContT $ clam $ \k -> k @@ cweaken a
-  m >>>= f =
+  creturnFun =
+    runCExpr $ clam $ \a -> cOp1 CContT $ clam $ \k -> k @@ a
+  cbindFun =
+    runCExpr $ clam $ \m -> clam $ \f ->
     cOp1 CContT $ clam $ \k ->
-    (cOp1 unCContT $ cweaken m) $$ clam $ \a ->
-    (cOp1 unCContT $ cweaken f @@ a) @@ k
+    (cOp1 unCContT m) $$ clam $ \a ->
+    cOp1 unCContT (f @@ a) @@ k
 
 instance ValidCType res => CMonadTrans (CContT res) where
-  clift m = cOp1 CContT $ clam $ \k -> cweaken m >>>= k
-
+  cliftFun =
+    runCExpr $ clam $ \m -> cOp1 CContT $ clam $ \k -> m >>>= \a -> k @@ a
 
 -- | Contextual monads that support shift and reset
 class (ValidCType res, CMonad m) => CMonadShiftReset res m | m -> res where
-  cshift :: ValidCType a =>
-            CExpr ((a :->: m res) :->: m res) ectx -> CExpr (m a) ectx
-  creset :: CExpr (m res) ectx -> CExpr (m res) ectx
+  cshiftFun :: ValidCType a => (((a :->: m res) :->: m res) :->: m a) ctx
+  cresetFun :: (m res :->: m res) ctx
+
+-- | Lift 'cshiftFun' to an operation on expressions
+cshift :: (CMonadShiftReset res m, ValidCType a) =>
+          CExpr ((a :->: m res) :->: m res) ectx -> CExpr (m a) ectx
+cshift = (@@) $ CExpr cshiftFun
+
+-- | Lift 'cresetFun' to an operation on expressions
+creset :: CMonadShiftReset res m => CExpr (m res) ectx -> CExpr (m res) ectx
+creset = (@@) $ CExpr cresetFun
 
 instance (CMonad m, ValidCType res) => CMonadShiftReset res (CContT res m) where
-  cshift f =
+  cshiftFun =
+    runCExpr $ clam $ \f ->
     cOp1 CContT $ clam $ \k ->
-    (cOp1 unCContT $ cweaken f @@ (clam $ \a -> clift $ k @@ a)) @@
+    cOp1 unCContT (f @@ (clam $ \a -> clift $ k @@ a)) @@
     (clam $ \res -> creturn res)
-  creset m =
+  cresetFun =
+    runCExpr $ clam $ \m ->
     cOp1 CContT $ clam $ \k ->
-    (cOp1 unCContT $ cweaken m) @@ (clam $ \res -> creturn res) >>>= k
+    cOp1 unCContT m @@ (clam $ \res -> creturn res) >>>= \a -> k @@ a
 
 
 -- | The contextual state transformer
@@ -331,132 +370,60 @@ newtype CStateT s m a (ctx :: Ctx k) =
 
 instance (ValidCType1 m, ValidCType s) =>
          ValidCType1 (CStateT s m) where
-  extContext1 diff (CStateT m) = CStateT $ extContext diff m
+  mapContext1 diff (CStateT m) = CStateT $ mapContext diff m
 
 instance (CMonad m, ValidCType s) => CMonad (CStateT s m) where
-  creturn a = cOp1 CStateT $ clam $ \s -> creturn (cpair s $ cweaken a)
-  m >>>= f =
+  creturnFun =
+    runCExpr $ clam $ \a ->
+    cOp1 CStateT $ clam $ \s -> creturn (cpair s a)
+  cbindFun =
+    runCExpr $ clam $ \m -> clam $ \f ->
     cOp1 CStateT $ clam $ \s ->
-    (cOp1 unCStateT $ cweaken m) @@ s >>>=
-    clam (\(cunpair -> (s',a)) ->
-           (cOp1 unCStateT $ cweaken f @@ a) @@ s')
+    cOp1 unCStateT m @@ s >>>= \(cunpair -> (s',a)) ->
+    (cOp1 unCStateT $ f @@ a) @@ s'
 
 instance ValidCType s => CMonadTrans (CStateT s) where
-  clift m = cOp1 CStateT $ clam $ \s ->
-    cweaken m >>>= clam (\a -> creturn (cpair s a))
+  cliftFun =
+    runCExpr $ clam $ \m ->
+    cOp1 CStateT $ clam $ \s ->
+    m >>>= \a -> creturn (cpair s a)
 
 -- | Contextual state monads
 class CMonad m => CMonadState s m where
-  cget :: CExpr (m s) ectx
-  cput :: CExpr s ectx -> CExpr (m CUnit) ectx
+  cgetFun :: (m s) ectx
+  cputFun :: (s :->: m CUnit) ectx
+
+-- | Lift 'cget' to an operation on expressions
+cget :: CMonadState s m => CExpr (m s) ectx
+cget = CExpr cgetFun
+
+-- | Lift 'cput' to an operation on expressions
+cput :: CMonadState s m => CExpr s ectx -> CExpr (m CUnit) ectx
+cput = (@@) $ CExpr cputFun
 
 instance (CMonad m, ValidCType s) => CMonadState s (CStateT s m) where
-  cget = cOp1 CStateT $ clam $ \s -> creturn (cpair s s)
-  cput s = cOp1 CStateT $ clam $ \_ -> creturn (cpair (cweaken s) cunit)
-
+  cgetFun =
+    runCExpr $ cOp1 CStateT $ clam $ \s -> creturn (cpair s s)
+  cputFun =
+    runCExpr $ clam $ \s ->
+    cOp1 CStateT $ clam $ \_ -> creturn (cpair s cunit)
 
 instance (ValidCType s, CMonadShiftReset res m) =>
          CMonadShiftReset res (CStateT s m) where
   -- FIXME: understand what shift does to the state...
-  cshift f =
+  cshiftFun =
+    runCExpr $ clam $ \f ->
     cOp1 CStateT $ clam $ \s ->
     cshift $ clam $ \k ->
-    (cOp1 unCStateT $ cweaken f $$ clam $ \a ->
-      cget >>>= clam (\s' -> clift (k @@ (cpair s' a)))) @@ s
-    >>>= clam (\(cunpair -> (_, res)) -> creturn res)
+    (cOp1 unCStateT $ f $$ clam $ \a ->
+      cget >>>= \s' ->
+      clift (k @@ (cpair s' a))) @@ s >>>= \(cunpair -> (_, res)) ->
+    creturn res
 
   -- NOTE: reset throws away the inner state
-  creset m =
+  cresetFun =
+    runCExpr $ clam $ \m ->
     cOp1 CStateT $ clam $ \s ->
-    creset (cOp1 unCStateT (cweaken m) @@ s
-            >>>= clam (\(cunpair -> (_, res)) -> creturn res))
-    >>>= clam (\res -> creturn (cpair s res))
-
-
-
-----------------------------------------------------------------------
--- * The contextual continuation monad
-----------------------------------------------------------------------
-{-
-
-
--- | The continuation transformer from ordinary to contextual monads
-newtype CtxContM res (m :: * -> *) a (ctx :: Ctx k) =
-  CtxContM { unCtxContM :: CtxFun a (CtxMapF m res) ctx -> CtxMapF m res ctx }
-
-instance Monad m => CtxMonad (CtxContM res m) where
-  returnC a = CtxContM $ \k -> applyCtxFun k noDiff a
-  m >>>= f =
-    CtxContM $ \k ->
-    unCtxContM m (CtxFun $ \diff a ->
-                   unCtxContM (f diff a) (extContext diff k))
-
--- | Lift a computation in @m@ into one in 'CtxContM res m'
-liftCtxContM :: Monad m => m (a ctx) -> CtxContM res m a ctx
-liftCtxContM m = CtxContM $ \k -> CtxMapF (m >>= unCtxMapF . applyCtxFun k noDiff)
-
--- | Contextual monads that support shift and reset
-class CtxMonad m => CtxMonadShiftReset res m | m -> res where
-  shiftC :: ((forall ctx'. Diff ctx ctx' ->
-              a ctx' -> m res ctx') -> m res ctx) -> m a ctx
-  resetC :: m res ctx -> m res ctx
-
-instance Monad m => CtxMonadShiftReset res (CtxContM res m) where
-  shiftC f =
-    CtxContM $ \k ->
-    unCtxContM (f (\diff a -> liftCtxContM $ unCtxMapF $ applyCtxFun k diff a))
-    (CtxFun $ \diff a -> CtxMapF $ return a)
-  resetC m =
-    CtxContM $ \k ->
-    CtxMapF $
-    (unCtxMapF $ unCtxContM m (CtxFun $ \_ -> CtxMapF . return)) >>=
-    (unCtxMapF . applyCtxFun k noDiff)
-
-
-----------------------------------------------------------------------
--- * The contextual state monad
-----------------------------------------------------------------------
-
--- | The contextual state monad
-newtype CtxStateT s m a (ctx :: Ctx k) =
-  CtxStateT { unCtxStateT :: s ctx -> m (CtxPair s a) ctx }
-
-instance CtxMonad m => CtxMonad (CtxStateT s m) where
-  returnC a = CtxStateT $ \s -> returnC (CtxPair s a)
-  m >>>= f =
-    CtxStateT $ \s -> unCtxStateT m s >>>= \diff (CtxPair s' a) ->
-    unCtxStateT (f diff a) s'
-
-instance ValidCType s => CtxMonadTrans (CtxStateT s) where
-  liftC m =
-    CtxStateT $ \s -> m >>>= \diff a ->
-    returnC (CtxPair (extContext diff s) a)
-
--- | Contextual monads with state
-class CtxMonadState s m | m -> s where
-  getC :: m s ctx
-  putC :: s ctx -> m CtxUnit ctx
-
-instance CtxMonad m => CtxMonadState s (CtxStateT s m) where
-  getC = CtxStateT $ \s -> returnC (CtxPair s s)
-  putC s = CtxStateT $ \_ -> returnC (CtxPair s CtxUnit)
-
-instance (ValidCType s, CtxMonadShiftReset res m) =>
-         CtxMonadShiftReset res (CtxStateT s m) where
-  -- FIXME: understand what shift does to the state...
-  shiftC f = CtxStateT $ \s -> 
-    shiftC $ \k ->
-    unCtxStateT (f $ \diff a ->
-                  CtxStateT $ \s' ->
-                  k diff (CtxPair s' a) >>>= \diff res ->
-                  returnC (CtxPair (extContext diff s') res)) s
-    >>>= \diff (CtxPair _ res) ->
-    returnC res
-
-  -- NOTE: reset throws away the inner state
-  resetC m =
-    CtxStateT $ \s ->
-    resetC (unCtxStateT m s >>>= \diff (CtxPair _ res) ->
-             returnC res) >>>= \diff res ->
-    returnC (CtxPair (extContext diff s) res)
--}
+    creset (cOp1 unCStateT m @@ s >>>= \(cunpair -> (_, res)) ->
+             creturn res) >>>= \res ->
+    creturn (cpair s res)
