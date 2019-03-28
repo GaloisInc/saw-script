@@ -135,6 +135,14 @@ newtype (:->:) a b (ctx :: Ctx k) =
 instance ValidCType2 (:->:) where
   mapContext2 emb (CFun f) = CFun $ \emb' -> f (emb' Cat.. emb)
 
+-- | Represents a contextual type inside a binding for another variable
+newtype CBind (tp :: k) (a :: CType k) (ctx :: Ctx k) =
+  CBind { unCBind :: a (ctx ::> tp) }
+
+instance ValidCType1 (CBind tp) where
+  mapContext1 emb (CBind a) =
+    error "FIXME: need a caseIndex for this!"
+
 
 ----------------------------------------------------------------------
 -- * Contextual expressions: expressions over contextual types
@@ -269,6 +277,13 @@ cconst = CExpr . CConst
 -- | Un-lift a contextual expression of lifted type to a normal value
 cunconst :: CExpr (CConst a) ectx -> a
 cunconst (CExpr (CConst a)) = a
+
+-- | Bind a variable in the context of an expression
+cbind :: (forall emb. ECtxEmb ectx ((CtxOfExprCtx ectx) ::> tp) emb =>
+          CExpr a (ectx :::> '((CtxOfExprCtx ectx) ::> tp, emb))) ->
+         CExpr (CBind tp a) ectx
+cbind e =
+  reify mkEmbedding1 $ \(p :: Proxy emb) -> CExpr $ CBind $ unCExpr (e @emb)
 
 test1 :: ValidCType a => CExpr (a :->: a) ectx
 test1 = clam $ \x -> x
