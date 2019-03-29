@@ -769,12 +769,10 @@ matchArg _sc cc loc prepost actual@(Crucible.LLVMValInt blk off) expectedTy setu
     SetupGlobal name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do let mem = cc^.ccLLVMEmptyMem
          sym  <- getSymInterface
-         Crucible.LLVMPointer blk' off' <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
-
-         p1 <- liftIO (W4.natEq sym blk blk')
-         p2 <- liftIO (W4.bvEq sym off off')
-         p  <- liftIO (W4.andPred sym p1 p2)
-         addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
+         ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
+         pred <- liftIO $
+           Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
+         addAssert pred (Crucible.SimError loc (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
 
     _ -> failure loc (StructuralMismatch actual setupval expectedTy)
 
