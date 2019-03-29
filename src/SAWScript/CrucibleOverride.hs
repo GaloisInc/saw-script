@@ -332,15 +332,30 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- all the override states that might apply, and compute the conjunction of all
   -- the preconditions.  We'll use these to perform symbolic branches between the
   -- various overrides.
-  branches <- case partitionEithers prestates of
-                (e, []) ->
-                  fail $ show $
-                    PP.text "All overrides failed during structural matching:" PP.<$$>
-                    PP.vcat (map (\x -> PP.text "*" PP.<> PP.indent 2 (ppOverrideFailure x)) e)
-                (_, ss) -> liftIO $
-                  forM ss $ \(cs,st) ->
-                    do precond <- W4.andAllOf sym (folded._1) (st^.osAsserts)
-                       return ( precond, cs, st )
+  branches <-
+    let prettyError methodSpec failureReason =
+                  PP.text "Name: "
+                  PP.<> PP.text (methodSpec ^. csName)
+          PP.<$$> PP.text "Argument types: "
+          PP.<$$> PP.indent 2 (PP.vcat (map (PP.text . show) (methodSpec ^. csArgs)))
+          PP.<$$> PP.text "Return type: "
+          PP.<> case methodSpec ^. csRet of
+                  Nothing  -> PP.text "<void>"
+                  Just ret -> PP.text (show ret)
+          PP.<$$> ppOverrideFailure failureReason
+    in
+      case partitionEithers prestates of
+          (errs, []) ->
+            fail $ show $
+              PP.text "All overrides failed during structural matching:" PP.<$$>
+              PP.vcat
+                (map (\(cs, err) ->
+                        PP.text "*" PP.<> PP.indent 2 (prettyError cs err))
+                     (zip css errs))
+          (_, ss) -> liftIO $
+            forM ss $ \(cs,st) ->
+              do precond <- W4.andAllOf sym (folded._1) (st^.osAsserts)
+                 return ( precond, cs, st )
 
   -- Now use crucible's symbolic branching machinery to select between the branches.
   -- Essentially, we are doing an n-way if statement on the precondition predicates
