@@ -135,13 +135,20 @@ newtype (:->:) a b (ctx :: Ctx k) =
 instance ValidCType2 (:->:) where
   mapContext2 emb (CFun f) = CFun $ \emb' -> f (emb' Cat.. emb)
 
+-- | The contextual type for a variable in the context
+newtype CVar (tp :: k) (ctx :: Ctx k) = CVar { unCVar :: Index ctx tp }
+
+instance ValidCType (CVar tp) where
+  mapContext (Embedding f) (CVar i) = CVar $ f i
+
 -- | Represents a contextual type inside a binding for another variable
 newtype CBind (tp :: k) (a :: CType k) (ctx :: Ctx k) =
-  CBind { unCBind :: a (ctx ::> tp) }
+  CBind { unCBind :: forall ctx'.
+                     Embedding ctx ctx' -> Size ctx' -> a (ctx' ::> tp) }
 
 instance ValidCType1 (CBind tp) where
-  mapContext1 emb (CBind a) =
-    error "FIXME: need a caseIndex for this!"
+  mapContext1 emb (CBind b) =
+    CBind $ \emb' sz -> b (emb' Cat.. emb) sz
 
 
 ----------------------------------------------------------------------
@@ -167,7 +174,7 @@ data ExprCtx k1 k2
 
 -- | Defines the constraint required for type variable @emb@ in the expression
 -- context @ectx :::> (ctx, emb)@
-type ECtxEmb (ectx :: ExprCtx k *) (ctx :: Ctx k) (emb :: *) =
+type EmbConstr (ectx :: ExprCtx k *) (ctx :: Ctx k) (emb :: *) =
   Reifies emb (Embedding (CtxOfExprCtx ectx) ctx)
 
 -- | Convert an expression context to the context it reprsents
@@ -185,7 +192,7 @@ instance Cat.Category Weakening where
   Weakening emb2 . Weakening emb1 = Weakening (emb2 Cat.. emb1)
 
 -- | One step of weakening
-weakening1 :: Reifies emb (Embedding (CtxOfExprCtx ectx) ctx) => Proxy emb ->
+weakening1 :: EmbConstr ectx ctx emb => Proxy emb ->
               Weakening ectx (ectx :::> '(ctx, emb))
 weakening1 emb = Weakening $ reflect emb
 
@@ -196,8 +203,7 @@ class WeakensTo ectx1 ectx2 where
 instance WeakensTo ectx ectx where
   weakensTo = Cat.id
 
-instance {-# INCOHERENT #-} (WeakensTo ectx1 ectx2,
-                             Reifies emb (Embedding (CtxOfExprCtx ectx2) ctx)) =>
+instance {-# INCOHERENT #-} (WeakensTo ectx1 ectx2, EmbConstr ectx2 ctx emb) =>
                             WeakensTo ectx1 (ectx2 :::> '(ctx, emb)) where
   weakensTo = weakening1 Proxy Cat.. weakensTo
 
@@ -220,7 +226,7 @@ cweaken :: (ValidCType a, WeakensTo ectx1 ectx2) =>
 cweaken = cweakenPf weakensTo
 
 -- | Helper function for 'clam'
-clamH :: (forall ctx emb. Reifies emb (Embedding (CtxOfExprCtx ectx) ctx) =>
+clamH :: (forall ctx emb. EmbConstr ectx ctx emb =>
           CExpr a (ectx :::> '(ctx, emb)) -> CExpr b (ectx :::> '(ctx, emb))) ->
          CExpr (a :->: b) ectx
 clamH f =
@@ -229,7 +235,7 @@ clamH f =
 
 -- | The type of a binding expression
 type CExprBinder a b ectx =
-  (forall ctx emb. ECtxEmb ectx ctx emb =>
+  (forall ctx emb. EmbConstr ectx ctx emb =>
    (forall ectx'.
     WeakensTo (ectx :::> '(ctx, emb)) ectx' => CExpr a ectx') ->
    CExpr b (ectx :::> '(ctx, emb)))
@@ -278,12 +284,13 @@ cconst = CExpr . CConst
 cunconst :: CExpr (CConst a) ectx -> a
 cunconst (CExpr (CConst a)) = a
 
+cbindH :: (CVar tp :->: a) ctx -> CBind tp a ctx
+cbindH f =
+  CBind $ \emb sz -> unCFun f (mkEmbedding1 Cat.. emb) (CVar $ nextIndex sz)
+
 -- | Bind a variable in the context of an expression
-cbind :: (forall emb. ECtxEmb ectx ((CtxOfExprCtx ectx) ::> tp) emb =>
-          CExpr a (ectx :::> '((CtxOfExprCtx ectx) ::> tp, emb))) ->
-         CExpr (CBind tp a) ectx
-cbind e =
-  reify mkEmbedding1 $ \(p :: Proxy emb) -> CExpr $ CBind $ unCExpr (e @emb)
+cbind :: CExprBinder (CVar tp) a ectx -> CExpr (CBind tp a) ectx
+cbind f = cOp1 cbindH (clam f)
 
 test1 :: ValidCType a => CExpr (a :->: a) ectx
 test1 = clam $ \x -> x
