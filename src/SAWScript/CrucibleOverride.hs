@@ -157,7 +157,8 @@ ppOverrideFailureReason rsn = case rsn of
   NonlinearPatternNotSupported ->
     PP.text "nonlinear pattern no supported"
   BadPointerLoad msg ->
-    PP.text "type error when loading through pointer" PP.<$$>
+    PP.text "type error when loading through pointer that " PP.<>
+    PP.text "appeared in the override's points-to precondition(s) " PP.<$$>
     PP.indent 2 (PP.text msg)
   StructuralMismatch llvmval setupval ty ->
     PP.text "could not match the following terms" PP.<$$>
@@ -347,11 +348,14 @@ methodSpecHandler opts sc cc top_loc css retTy = do
       case partitionEithers prestates of
           (errs, []) ->
             fail $ show $
-              PP.text "All overrides failed during structural matching:" PP.<$$>
-              PP.vcat
-                (map (\(cs, err) ->
-                        PP.text "*" PP.<> PP.indent 2 (prettyError cs err))
-                     (zip css errs))
+              PP.text "All overrides failed during structural matching:"
+              PP.<$$>
+                PP.vcat
+                  (map (\(cs, err) ->
+                          PP.text "*" PP.<> PP.indent 2 (prettyError cs err))
+                      (zip css errs))
+              PP.<$$> PP.text "Actual function return type: " PP.<>
+                        PP.text (show (retTy))
           (_, ss) -> liftIO $
             forM ss $ \(cs,st) ->
               do precond <- W4.andAllOf sym (folded._1) (st^.osAsserts)
