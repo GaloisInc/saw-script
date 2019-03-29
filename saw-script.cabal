@@ -27,6 +27,7 @@ library
     , ansi-wl-pprint
     , array
     , binary
+    , bimap
     , bytestring
     , containers
     , cryptol
