@@ -1,0 +1,24 @@
+m <- llvm_load_module "test1.bc";
+
+let ptr_to_fresh n ty = do {
+  p <- crucible_alloc ty;
+  x <- crucible_fresh_var n ty;
+  crucible_points_to p (crucible_term x);
+  return (p, x);
+};
+
+let add2_spec = do {
+  x <- crucible_fresh_var "x" (llvm_int 64);
+  crucible_execute_func [crucible_term x];
+  crucible_return (crucible_term {{ x + 2 }});
+};
+
+let breakpoint_add2_spec = do {
+  (px, x) <- ptr_to_fresh "x" (llvm_int 64);
+  crucible_execute_func [px];
+  crucible_return (crucible_term {{ x + 1 }});
+};
+
+breakpoint_add2 <- crucible_llvm_verify m "__breakpoint__add2" [] false breakpoint_add2_spec abc;
+crucible_llvm_verify m "add2" [breakpoint_add2] false add2_spec abc;
+
