@@ -52,7 +52,6 @@ module Verifier.SAW.Term.Functor
 
 import Control.Exception (assert)
 import Data.Bits
-import qualified Data.ByteString.UTF8 as BS
 import Data.Char
 #if !MIN_VERSION_base(4,8,0)
 import Data.Foldable (Foldable)
@@ -86,13 +85,13 @@ instance Hashable a => Hashable (Vector a) where
 
 -- Module Names ----------------------------------------------------------------
 
-newtype ModuleName = ModuleName BS.ByteString -- [String]
+newtype ModuleName = ModuleName Text -- [String]
   deriving (Eq, Ord, Generic)
 
 instance Hashable ModuleName -- automatically derived
 
 instance Show ModuleName where
-  show (ModuleName s) = BS.toString s
+  show (ModuleName s) = Text.unpack s
 
 isModNameChar :: Char -> Bool
 isModNameChar c = isIdChar c || c == '.'
@@ -100,13 +99,13 @@ isModNameChar c = isIdChar c || c == '.'
 instance Read ModuleName where
   readsPrec _ s =
     let (str1, str2) = break (not . isModNameChar) (dropWhile isSpace s) in
-    [(ModuleName (BS.fromString str1), str2)]
+    [(ModuleName (Text.pack str1), str2)]
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkModuleName :: [String] -> ModuleName
 mkModuleName [] = error "internal: mkModuleName given empty module name"
-mkModuleName nms = assert (Foldable.all isCtor nms) $ ModuleName (BS.fromString s)
+mkModuleName nms = assert (Foldable.all isCtor nms) $ ModuleName (Text.pack s)
   where s = intercalate "." (reverse nms)
 
 preludeName :: ModuleName
