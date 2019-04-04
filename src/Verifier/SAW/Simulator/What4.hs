@@ -146,7 +146,7 @@ prims =
   , Prims.bpMuxBool  = W.itePred sym
   , Prims.bpMuxWord  = bvIte     sym
   , Prims.bpMuxInt   = W.intIte  sym
-  , Prims.bpMuxExtra = extraFn
+  , Prims.bpMuxExtra = muxWhat4Extra
     -- Booleans
   , Prims.bpTrue   = W.truePred  sym
   , Prims.bpFalse  = W.falsePred sym
@@ -426,8 +426,15 @@ muxBVal :: forall sym. (Sym sym) =>
   SBool sym -> SValue sym -> SValue sym -> IO (SValue sym)
 muxBVal = Prims.muxValue prims
 
-extraFn :: SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
-extraFn _ _ _ = error "iteOp: malformed arguments (extraFn)"
+muxWhat4Extra ::
+  forall sym. (Sym sym) =>
+  SBool sym -> What4Extra sym -> What4Extra sym -> IO (What4Extra sym)
+muxWhat4Extra c x y =
+  do let f i = do xi <- lookupSStream (VExtra x) i
+                  yi <- lookupSStream (VExtra y) i
+                  muxBVal c xi yi
+     r <- newIORef Map.empty
+     return (SStream f r)
 
 
 -- | Lifts a strict mux operation to a lazy mux
