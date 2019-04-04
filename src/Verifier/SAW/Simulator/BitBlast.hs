@@ -288,7 +288,12 @@ muxInt :: a -> Integer -> Integer -> IO Integer
 muxInt _ x y = if x == y then return x else fail $ "muxBVal: VInt " ++ show (x, y)
 
 muxBExtra :: AIG.IsAIG l g => g s -> l s -> BExtra (l s) -> BExtra (l s) -> IO (BExtra (l s))
-muxBExtra _ _ _ _ = fail "Verifier.SAW.Simulator.BitBlast.iteOp: malformed arguments"
+muxBExtra be c x y =
+  do let f i = do xi <- lookupBStream (VExtra x) i
+                  yi <- lookupBStream (VExtra y) i
+                  muxBVal be c xi yi
+     r <- newIORef Map.empty
+     return (BStream f r)
 
 -- | Barrel-shifter algorithm. Takes a list of bits in big-endian order.
 genShift ::
