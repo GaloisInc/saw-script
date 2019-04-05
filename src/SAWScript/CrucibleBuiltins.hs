@@ -112,6 +112,7 @@ import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
+import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWScript.CrucibleLLVM as Crucible
@@ -197,7 +198,14 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      mem0 <- case Crucible.lookupGlobal mvar globals of
        Nothing   -> fail "internal error: LLVM Memory global not found"
        Just mem0 -> return mem0
-     let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem0
+     -- push a memory stack frame if starting from a breakpoint
+     let mem = if isJust (Crucible.testBreakpointFunction (methodSpec^.csName))
+           then mem0
+             { Crucible.memImplHeap = Crucible.pushStackFrameMem
+                 (Crucible.memImplHeap mem0)
+             }
+           else mem0
+     let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
 
      -- construct the initial state for verifications
      (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
