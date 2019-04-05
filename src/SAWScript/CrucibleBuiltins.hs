@@ -157,6 +157,14 @@ ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
 
+resolveSpecName :: String -> TopLevel (L.Symbol, Maybe String)
+resolveSpecName nm = if Crucible.testBreakpointFunction nm
+  then return
+    ( fromString (takeWhile (not . (== '#')) nm)
+    , Just (tail (dropWhile (not . (== '#')) nm))
+    )
+  else return (fromString nm, Nothing)
+
 crucible_llvm_verify ::
   BuiltinContext         ->
   Options                ->
@@ -170,13 +178,13 @@ crucible_llvm_verify ::
 crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
   setupCrucibleContext bic opts lm $ \cc -> do
      let sym = cc^.ccBackend
-     let nm' = fromString nm
+     (nm', parent) <- resolveSpecName nm
      let llmod = cc^.ccLLVMModule
 
      setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
 
-     st0 <- case initialCrucibleSetupState cc     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <*> pure setupLoc <|>
-                 initialCrucibleSetupStateDecl cc <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) <*> pure setupLoc of
+     st0 <- case initialCrucibleSetupState cc     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <*> pure setupLoc <*> pure parent <|>
+                 initialCrucibleSetupStateDecl cc <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) <*> pure setupLoc <*> pure parent of
                     Nothing -> fail $ unlines $
                       [ "Could not find function named " ++ show nm
                       ] ++ if simVerbose opts < 3
@@ -199,7 +207,7 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
        Nothing   -> fail "internal error: LLVM Memory global not found"
        Just mem0 -> return mem0
      -- push a memory stack frame if starting from a breakpoint
-     let mem = if isJust (Crucible.testBreakpointFunction (methodSpec^.csName))
+     let mem = if isJust (methodSpec^.csParentName)
            then mem0
              { Crucible.memImplHeap = Crucible.pushStackFrameMem
                  (Crucible.memImplHeap mem0)
@@ -238,11 +246,11 @@ crucible_llvm_unsafe_assume_spec ::
   TopLevel CrucibleMethodSpecIR
 crucible_llvm_unsafe_assume_spec bic opts lm nm setup =
   setupCrucibleContext bic opts lm $ \cc -> do
-    let nm' = fromString nm
+    (nm', parent) <- resolveSpecName nm
     let llmod = cc^.ccLLVMModule
     loc <- toW4Loc "_SAW_assume_spec" <$> getPosition
-    st0 <- case initialCrucibleSetupState cc     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <*> pure loc <|>
-                initialCrucibleSetupStateDecl cc <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) <*> pure loc of
+    st0 <- case initialCrucibleSetupState cc     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <*> pure loc <*> pure parent <|>
+                initialCrucibleSetupStateDecl cc <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) <*> pure loc <*> pure parent of
                    Nothing -> fail ("Could not find function named" ++ show nm)
                    Just (Left err) -> fail (show (ppSetupError err))
                    Just (Right st0) -> return st0
@@ -559,10 +567,13 @@ registerInvariantOverride
 registerInvariantOverride opts cc top_loc cs = do
   sc <- CrucibleSAW.saw_ctx <$>
     (liftIO $ readIORef $ W4.sbStateManager $ cc^.ccBackend)
-  let name = fromJust $ Crucible.testBreakpointFunction $ (head cs) ^. csName
+  let name = (head cs) ^. csName
+  parent <- case nub $ map (view csParentName) cs of
+    [Just unique_parent] -> return unique_parent
+    _ -> fail $ "Multiple parent functions for breakpoint: " ++ name
   liftIO $ printOutLn opts Info $ "Registering breakpoint `" ++ name ++ "`"
-  let breakpoint_name = Crucible.BreakpointName $ Text.pack name
-  withBreakpointCfgAndBlockId cc breakpoint_name $ \cfg breakpoint_block_id -> do
+  withBreakpointCfgAndBlockId cc name parent $ \cfg breakpoint_block_id -> do
+    let breakpoint_name = Crucible.BreakpointName $ Text.pack name
     let arg_types = Crucible.blockInputs $
           Crucible.getBlock breakpoint_block_id $
           Crucible.cfgBlockMap cfg
@@ -579,36 +590,38 @@ registerInvariantOverride opts cc top_loc cs = do
 withCfgAndBlockId
   :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
   => CrucibleContext arch
-  -> String
+  -> CrucibleMethodSpecIR
   -> (forall blocks init args ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> Crucible.BlockID blocks args -> IO a)
   -> IO a
-withCfgAndBlockId context name k = case Crucible.testBreakpointFunction name of
+withCfgAndBlockId context method_spec k = case method_spec ^. csParentName of
   Nothing -> do
-    let function = L.Symbol name
+    let function = L.Symbol $ method_spec ^. csName
     case Map.lookup function (Crucible.cfgMap (context ^. ccLLVMModuleTrans)) of
       Just (Crucible.AnyCFG cfg) -> k cfg (Crucible.cfgEntryBlockID cfg)
-      Nothing -> fail $ "Unexpected function name: " ++ name
-  Just breakpoint_name_string -> withBreakpointCfgAndBlockId
+      Nothing -> fail $ "Unexpected function name: " ++ (method_spec ^. csName)
+  Just parent -> withBreakpointCfgAndBlockId
     context
-    (Crucible.BreakpointName $ Text.pack breakpoint_name_string)
+    (method_spec ^. csName)
+    parent
     k
 
 withBreakpointCfgAndBlockId
   :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
   => CrucibleContext arch
-  -> Crucible.BreakpointName
-  -> ( forall blocks init args ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> Crucible.BlockID blocks args -> IO a)
+  -> String
+  -> String
+  -> (forall blocks init args ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> Crucible.BlockID blocks args -> IO a)
   -> IO a
-withBreakpointCfgAndBlockId context breakpoint_name k = do
-  let string_name = Text.unpack $ Crucible.breakpointNameText breakpoint_name
-  let function_id = L.Symbol string_name
+withBreakpointCfgAndBlockId context name parent k = do
+  let breakpoint_name = Crucible.BreakpointName $ Text.pack name
+  let function_id = L.Symbol parent
   case Map.lookup function_id (Crucible.cfgMap (context^.ccLLVMModuleTrans)) of
     Just (Crucible.AnyCFG cfg) -> do
       case Bimap.lookup breakpoint_name (Crucible.cfgBreakpoints cfg) of
         Just (Some breakpoint_block_id) -> k cfg breakpoint_block_id
-        Nothing -> fail $ "Unexpected breakpoint name: " ++ string_name
+        Nothing -> fail $ "Unexpected breakpoint name: " ++ name
     Nothing ->
-      fail $ "Unexpected parent function for breakpoint: " ++ string_name
+      fail $ "Unexpected parent function for breakpoint: " ++ name
 
 verifySimulate ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
@@ -623,7 +636,7 @@ verifySimulate ::
   Bool                          ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
-  withCfgAndBlockId cc (mspec ^. csName) $ \cfg entryId -> do
+  withCfgAndBlockId cc mspec $ \cfg entryId -> do
     let argTys = Crucible.blockInputs $
           Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
     let retTy = Crucible.handleReturnType $ Crucible.cfgHandle cfg
@@ -634,7 +647,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
                (CrucibleSAW.considerSatisfiability sym)
     let patSatGenExecFeature = if checkSat then [psatf] else []
     let (funcLemmas, invLemmas) = partition
-          (isNothing . Crucible.testBreakpointFunction . view csName)
+          (isNothing . view csParentName)
           lemmas
     invariantExecFeatures <- mapM
       (registerInvariantOverride opts cc top_loc)

@@ -15,12 +15,12 @@ let zero_inc_spec = do {
   crucible_return (crucible_term {{ r }});
 };
 
-let breakpoint_zero_inc_spec = do {
+let inv_spec = do {
   (px, x) <- ptr_to_fresh "x" (llvm_int 64);
   crucible_execute_func [px];
   crucible_return (crucible_term {{ x + 1 }});
 };
 
-breakpoint_zero_inc <- crucible_llvm_verify m "__breakpoint__zero_inc" [] false breakpoint_zero_inc_spec abc;
-crucible_llvm_verify m "zero_inc" [breakpoint_zero_inc] false zero_inc_spec abc;
+inv <- crucible_llvm_verify m "__breakpoint__inv#zero_inc" [] false inv_spec abc;
+crucible_llvm_verify m "zero_inc" [inv] false zero_inc_spec abc;
 

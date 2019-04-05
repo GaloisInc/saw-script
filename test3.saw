@@ -13,7 +13,7 @@ let count_n_spec = do {
   crucible_return (crucible_term n);
 };
 
-let breakpoint_count_n_spec = do {
+let inv_spec = do {
   (pn, n) <- ptr_to_fresh "n" (llvm_int 64);
   (pc, c) <- ptr_to_fresh "c" (llvm_int 64);
   (pi, i) <- ptr_to_fresh "i" (llvm_int 64);
@@ -22,7 +22,7 @@ let breakpoint_count_n_spec = do {
   crucible_return (crucible_term {{ c + (n - i) }});
 };
 
-breakpoint_count_n <- crucible_llvm_unsafe_assume_spec m "__breakpoint__count_n" breakpoint_count_n_spec;
-crucible_llvm_verify m "__breakpoint__count_n" [breakpoint_count_n] false breakpoint_count_n_spec abc;
-crucible_llvm_verify m "count_n" [breakpoint_count_n] false count_n_spec abc;
+inv <- crucible_llvm_unsafe_assume_spec m "__breakpoint__inv#count_n" inv_spec;
+crucible_llvm_verify m "__breakpoint__inv#count_n" [inv] false inv_spec abc;
+crucible_llvm_verify m "count_n" [inv] false count_n_spec abc;
 

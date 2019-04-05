@@ -7,7 +7,7 @@ let ptr_to_fresh n ty = do {
   return (p, x);
 };
 
-let len = 1000;
+let len = 100;
 
 let array_inc_spec = do {
   (pa, a) <- ptr_to_fresh "a" (llvm_array len (llvm_int 8));
@@ -15,7 +15,7 @@ let array_inc_spec = do {
   crucible_execute_func [pa, n];
 };
 
-let breakpoint_array_inc_spec = do {
+let inv_spec = do {
   (pa, a) <- ptr_to_fresh "a" (llvm_array len (llvm_int 8));
   ppa <- crucible_alloc (llvm_int 64);
   crucible_points_to ppa pa;
@@ -27,7 +27,7 @@ let breakpoint_array_inc_spec = do {
   crucible_execute_func [ppa, pn, pi];
 };
 
-breakpoint_array_inc <- crucible_llvm_unsafe_assume_spec m "__breakpoint__array_inc" breakpoint_array_inc_spec;
-crucible_llvm_verify m "__breakpoint__array_inc" [breakpoint_array_inc] false breakpoint_array_inc_spec abc;
-crucible_llvm_verify m "array_inc" [breakpoint_array_inc] false array_inc_spec abc;
+inv <- crucible_llvm_unsafe_assume_spec m "__breakpoint__inv#array_inc" inv_spec;
+crucible_llvm_verify m "__breakpoint__inv#array_inc" [inv] false inv_spec abc;
+crucible_llvm_verify m "array_inc" [inv] false array_inc_spec abc;
 

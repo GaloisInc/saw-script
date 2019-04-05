@@ -13,12 +13,12 @@ let add2_spec = do {
   crucible_return (crucible_term {{ x + 2 }});
 };
 
-let breakpoint_add2_spec = do {
+let inv_spec = do {
   (px, x) <- ptr_to_fresh "x" (llvm_int 64);
   crucible_execute_func [px];
   crucible_return (crucible_term {{ x + 1 }});
 };
 
-breakpoint_add2 <- crucible_llvm_verify m "__breakpoint__add2" [] false breakpoint_add2_spec abc;
-crucible_llvm_verify m "add2" [breakpoint_add2] false add2_spec abc;
+inv <- crucible_llvm_verify m "__breakpoint__inv#add2" [] false inv_spec abc;
+crucible_llvm_verify m "add2" [inv] false add2_spec abc;
 
