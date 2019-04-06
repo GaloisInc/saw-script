@@ -23,7 +23,6 @@ import Control.Exception(Exception(..),throwIO)
 import Control.Monad.ST(stToIO,RealWorld)
 import Control.Monad.IO.Class(liftIO)
 
-import qualified Data.AIG as AIG
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC

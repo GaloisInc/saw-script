@@ -97,7 +97,6 @@ import qualified What4.Expr.Builder as W4
 import           What4.Utils.MonadST
 
 import qualified Lang.Crucible.Backend as Crucible
-import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.CFG.Core as Crucible
   (AnyCFG(..), CFG, TypeRepr(..), cfgHandle,
