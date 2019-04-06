@@ -163,7 +163,8 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
 writeUnintSMTLib2 unints sc f t = do
   (_, _, l) <- prepSBV sc unints t
-  txt <- SBV.generateSMTBenchmark True l
+  let isSat = False -- term is a proof goal with universally-quantified variables
+  txt <- SBV.generateSMTBenchmark isSat l
   writeFile f txt
 
 writeCore :: FilePath -> Term -> IO ()

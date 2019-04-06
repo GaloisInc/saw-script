@@ -253,8 +253,8 @@ verifyObligations cc mspec tactic assumes asserts = do
     goal   <- io $ scImplies sc assume assert
     goal'  <- io $ scGeneralizeExts sc (getAllExts goal) =<< scEqTrue sc goal
     let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
-        proofgoal = ProofGoal Universal n "vc" goalname goal'
-    r      <- evalStateT tactic (startProof proofgoal)
+        proofgoal = ProofGoal n "vc" goalname goal'
+    r <- evalStateT tactic (startProof proofgoal)
     case r of
       Unsat stats -> return stats
       SatMulti stats vals -> do
