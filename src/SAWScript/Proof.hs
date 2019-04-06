@@ -15,26 +15,25 @@ import SAWScript.Prover.SolverStats
 -- or more lambdas which are interpreted as universal quantifiers.
 data Theorem = Theorem { thmTerm :: Term }
 
-data Quantification = Existential | Universal
-  deriving Eq
-
 -- | A ProofGoal is a term of type @sort n@, or a pi type of any arity
 -- with a @sort n@ result type. The abstracted arguments are treated
--- as either universally quantified. If the 'goalQuant' field is set
--- to 'Existential', then the entire goal is considered to be
--- logically negated, so it is as if the quantifiers are existential.
+-- as universally quantified.
 data ProofGoal =
   ProofGoal
-  { goalQuant :: Quantification
-  , goalNum  :: Int
+  { goalNum  :: Int
   , goalType :: String
   , goalName :: String
   , goalTerm :: Term
   }
 
+data Quantification = Existential | Universal
+  deriving Eq
+
 -- | Construct a 'ProofGoal' from a term of type @Bool@, or a function
 -- of any arity with a boolean result type. Any function arguments are
--- treated as quantified variables.
+-- treated as quantified variables. If the 'Quantification' argument
+-- is 'Existential', then the predicate is negated and turned into a
+-- universally-quantified goal.
 makeProofGoal ::
   SharedContext ->
   Quantification ->
@@ -45,7 +44,7 @@ makeProofGoal ::
   IO ProofGoal
 makeProofGoal sc quant gnum gtype gname t =
   do t' <- predicateToProp sc quant [] t
-     return (ProofGoal quant gnum gtype gname t')
+     return (ProofGoal gnum gtype gname t')
 
 -- | Convert a term with a function type of any arity into a pi type.
 -- Negate the term if the result type is @Bool@ and the quantification
