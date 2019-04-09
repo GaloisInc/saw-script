@@ -1,3 +1,4 @@
+enable_experimental;
 obj <- java_load_class "java.lang.Object";
 dyn <- java_load_class "Dyn";
 ifc <- java_load_class "Iface";

@@ -37,6 +37,7 @@ import Control.Monad (unless, (>=>))
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
+import Data.Set ( Set )
 import Data.Text (pack)
 import qualified Data.Vector as Vector
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
@@ -454,18 +455,20 @@ buildTopLevelEnv proxy opts =
                  , biJavaCodebase = jcb
                  , biBasicSS = ss
                  }
+           primsAvail = Set.fromList [Current]
        ce0 <- CEnv.initCryptolEnv sc
 
        jvmTrans <- CJ.mkInitialJVMContext halloc
 
        let rw0 = TopLevelRW
-                   { rwValues     = valueEnv opts bic
-                   , rwTypes      = primTypeEnv
+                   { rwValues     = valueEnv primsAvail opts bic
+                   , rwTypes      = primTypeEnv primsAvail
                    , rwTypedef    = Map.empty
-                   , rwDocs       = primDocEnv
+                   , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwJVMTrans   = jvmTrans
+                   , rwPrimsAvail = primsAvail
                    }
        return (bic, ro0, rw0)
 
@@ -483,6 +486,17 @@ processFile proxy opts file = do
   return ()
 
 -- Primitives ------------------------------------------------------------------
+
+add_primitives :: PrimitiveLifecycle -> BuiltinContext -> Options -> TopLevel ()
+add_primitives lc bic opts = do
+  rw <- getTopLevelRW
+  let lcs = Set.singleton lc
+  putTopLevelRW rw {
+    rwValues     = rwValues rw `Map.union` valueEnv lcs opts bic
+  , rwTypes      = rwTypes rw `Map.union` primTypeEnv lcs
+  , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
+  , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
+  }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -540,6 +554,7 @@ data Primitive
   = Primitive
     { primName :: SS.LName
     , primType :: SS.Schema
+    , primLife :: PrimitiveLifecycle
     , primDoc  :: [String]
     , primFn   :: Options -> BuiltinContext -> Value
     }
@@ -548,6 +563,7 @@ primitives :: Map SS.LName Primitive
 primitives = Map.fromList
   [ prim "return"              "{m, a} a -> m a"
     (pureVal VReturn)
+    Current
     [ "Yield a value in a command context. The command"
     , "    x <- return e"
     ,"will result in the same value being bound to 'x' as the command"
@@ -556,14 +572,17 @@ primitives = Map.fromList
 
   , prim "true"                "Bool"
     (pureVal True)
+    Current
     [ "A boolean value." ]
 
   , prim "false"               "Bool"
     (pureVal False)
+    Current
     [ "A boolean value." ]
 
   , prim "for"                 "{m, a, b} [a] -> (a -> m b) -> m [b]"
     (pureVal (VLambda . forValue))
+    Current
     [ "Apply the given command in sequence to the given list. Return"
     , "the list containing the result returned by the command at each"
     , "iteration."
@@ -571,38 +590,47 @@ primitives = Map.fromList
 
   , prim "run"                 "{a} TopLevel a -> a"
     (funVal1 (id :: TopLevel Value -> TopLevel Value))
+    Current
     [ "Evaluate a monadic TopLevel computation to produce a value." ]
 
   , prim "null"                "{a} [a] -> Bool"
     (pureVal (null :: [Value] -> Bool))
+    Current
     [ "Test whether a list value is empty." ]
 
   , prim "nth"                 "{a} [a] -> Int -> a"
     (funVal2 (nthPrim :: [Value] -> Int -> TopLevel Value))
+    Current
     [ "Look up the value at the given list position." ]
 
   , prim "head"                "{a} [a] -> a"
     (funVal1 (headPrim :: [Value] -> TopLevel Value))
+    Current
     [ "Get the first element from the list." ]
 
   , prim "tail"                "{a} [a] -> [a]"
     (funVal1 (tailPrim :: [Value] -> TopLevel [Value]))
+    Current
     [ "Drop the first element from a list." ]
 
   , prim "concat"              "{a} [a] -> [a] -> [a]"
     (pureVal ((++) :: [Value] -> [Value] -> [Value]))
+    Current
     [ "Concatenate two lists to yield a third." ]
 
   , prim "length"              "{a} [a] -> Int"
     (pureVal (length :: [Value] -> Int))
+    Current
     [ "Compute the length of a list." ]
 
   , prim "str_concat"          "String -> String -> String"
     (pureVal ((++) :: String -> String -> String))
+    Current
     [ "Concatenate two strings to yield a third." ]
 
   , prim "define"              "String -> Term -> TopLevel Term"
     (pureVal definePrim)
+    Current
     [ "Wrap a term with a name that allows its body to be hidden or"
     , "revealed. This can allow any sub-term to be treated as an"
     , "uninterpreted function during proofs."
@@ -610,27 +638,43 @@ primitives = Map.fromList
 
   , prim "include"             "String -> TopLevel ()"
     (pureVal include_value)
+    Current
     [ "Execute the given SAWScript file." ]
+
+  , prim "enable_deprecated"   "TopLevel ()"
+    (bicVal (add_primitives Deprecated))
+    Current
+    [ "Enable the use of deprecated commands." ]
+
+  , prim "enable_experimental" "TopLevel ()"
+    (bicVal (add_primitives Experimental))
+    Current
+    [ "Enable the use of experimental commands." ]
 
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
+    Current
     [ "Print all sawscript values in scope." ]
 
   , prim "set_ascii"           "Bool -> TopLevel ()"
     (pureVal set_ascii)
+    Current
     [ "Select whether to pretty-print arrays of 8-bit numbers as ascii strings." ]
 
   , prim "set_base"            "Int -> TopLevel ()"
     (pureVal set_base)
+    Current
     [ "Set the number base for pretty-printing numeric literals."
     , "Permissible values include 2, 8, 10, and 16." ]
 
   , prim "set_color"           "Bool -> TopLevel ()"
     (pureVal set_color)
+    Current
     [ "Select whether to pretty-print SAWCore terms using color." ]
 
   , prim "set_timeout"         "Int -> ProofScript ()"
     (pureVal set_timeout)
+    Current
     [ "Set the timeout, in milliseconds, for any automated prover at the"
     , "end of this proof script. Not that this is simply ignored for provers"
     , "that don't support timeouts, for now."
@@ -638,58 +682,71 @@ primitives = Map.fromList
 
   , prim "show"                "{a} a -> String"
     (funVal1 showPrim)
+    Current
     [ "Convert the value of the given expression to a string." ]
 
   , prim "print"               "{a} a -> TopLevel ()"
     (pureVal print_value)
+    Current
     [ "Print the value of the given expression." ]
 
   , prim "print_term"          "Term -> TopLevel ()"
     (pureVal print_term)
+    Current
     [ "Pretty-print the given term in SAWCore syntax." ]
 
   , prim "print_term_depth"    "Int -> Term -> TopLevel ()"
     (pureVal print_term_depth)
+    Current
     [ "Pretty-print the given term in SAWCore syntax up to a given depth." ]
 
   , prim "dump_file_AST"       "String -> TopLevel ()"
     (bicVal $ const $ \opts -> SAWScript.Import.loadFile opts >=> mapM_ print)
+    Current
     [ "Dump a pretty representation of the SAWScript AST for a file." ]
 
   , prim "parser_printer_roundtrip"       "String -> TopLevel ()"
     (bicVal $ const $
       \opts -> SAWScript.Import.loadFile opts >=>
                PP.putDoc . SS.prettyWholeModule)
+    Current
     [ "Parses the file as SAWScript and renders the resultant AST back to SAWScript concrete syntax." ]
 
   , prim "print_type"          "Term -> TopLevel ()"
     (pureVal print_type)
+    Current
     [ "Print the type of the given term." ]
 
   , prim "type"                "Term -> Type"
     (pureVal ttSchema)
+    Current
     [ "Return the type of the given term." ]
 
   , prim "show_term"           "Term -> String"
     (funVal1 show_term)
+    Current
     [ "Pretty-print the given term in SAWCore syntax, yielding a String." ]
 
   , prim "check_term"          "Term -> TopLevel ()"
     (pureVal check_term)
+    Current
     [ "Type-check the given term, printing an error message if ill-typed." ]
 
   , prim "term_size"           "Term -> Int"
     (pureVal scSharedSize)
+    Current
     [ "Return the size of the given term in the number of DAG nodes." ]
 
   , prim "term_tree_size"      "Term -> Int"
     (pureVal scTreeSize)
+    Current
     [ "Return the size of the given term in the number of nodes it would"
     , "have if treated as a tree instead of a DAG."
     ]
 
   , prim "abstract_symbolic"   "Term -> Term"
     (funVal1 abstractSymbolicPrim)
+    Current
     [ "Take a term containing symbolic variables of the form returned"
     , "by 'fresh_symbolic' and return a new lambda term in which those"
     , "variables have been replaced by parameter references."
@@ -697,18 +754,21 @@ primitives = Map.fromList
 
   , prim "fresh_symbolic"      "String -> Type -> TopLevel Term"
     (pureVal freshSymbolicPrim)
+    Current
     [ "Create a fresh symbolic variable of the given type. The given name"
     , "is used only for pretty-printing."
     ]
 
   , prim "lambda"              "Term -> Term -> Term"
     (funVal2 lambda)
+    Current
     [ "Take a 'fresh_symbolic' variable and another term containing that"
     , "variable, and return a new lambda abstraction over that variable."
     ]
 
   , prim "lambdas"             "[Term] -> Term -> Term"
     (funVal2 lambdas)
+    Current
     [ "Take a list of 'fresh_symbolic' variable and another term containing"
     , "those variables, and return a new lambda abstraction over the list of"
     , "variables."
@@ -716,49 +776,63 @@ primitives = Map.fromList
 
   , prim "sbv_uninterpreted"   "String -> Term -> TopLevel Uninterp"
     (pureVal sbvUninterpreted)
-    [ "Indicate that the given term should be used as the definition of the"
+    Deprecated
+    [ "DEPRECATED"
+    , ""
+    , "Indicate that the given term should be used as the definition of the"
     , "named function when loading an SBV file. This command returns an"
     , "object that can be passed to 'read_sbv'."
     ]
 
   , prim "check_convertible"  "Term -> Term -> TopLevel ()"
     (pureVal checkConvertiblePrim)
+    Current
     [ "Check if two terms are convertible." ]
 
   , prim "replace"             "Term -> Term -> Term -> TopLevel Term"
     (pureVal replacePrim)
+    Current
     [ "'replace x y z' rewrites occurences of term x into y inside the"
     , "term z.  x and y must be closed terms."
     ]
 
   , prim "hoist_ifs"            "Term -> TopLevel Term"
     (pureVal hoistIfsPrim)
+    Current
     [ "Hoist all if-then-else expressions as high as possible." ]
 
   , prim "read_bytes"          "String -> TopLevel Term"
     (pureVal readBytes)
+    Current
     [ "Read binary file as a value of type [n][8]." ]
 
   , prim "read_sbv"            "String -> [Uninterp] -> TopLevel Term"
     (pureVal readSBV)
-    [ "Read an SBV file produced by Cryptol 1, using the given set of"
+    Deprecated
+    [ "DEPRECATED"
+    , ""
+    , "Read an SBV file produced by Cryptol 1, using the given set of"
     , "overrides for any uninterpreted functions that appear in the file."
     ]
 
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
+    Current
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
   , prim "save_aig"            "String -> AIG -> TopLevel ()"
     (pureVal saveAIGPrim)
+    Current
     [ "Write an AIG to a file in binary AIGER format." ]
   , prim "save_aig_as_cnf"     "String -> AIG -> TopLevel ()"
     (pureVal saveAIGasCNFPrim)
+    Current
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
 
   , prim "dsec_print"                "Term -> Term -> TopLevel ()"
     (scVal dsecPrint)
+    Current
     [ "Use ABC's 'dsec' command to compare two terms as SAIGs."
     , "The terms must have a type as described in ':help write_saig',"
     , "i.e. of the form '(i, s) -> (o, s)'. Note that nothing is returned:"
@@ -769,26 +843,31 @@ primitives = Map.fromList
 
   , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
     (pureVal cecPrim)
+    Current
     [ "Perform a Combinatorial Equivalence Check between two AIGs."
     , "The AIGs must have the same number of inputs and outputs."
     ]
 
   , prim "bitblast"            "Term -> TopLevel AIG"
     (pureVal bbPrim)
+    Current
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
 
   , prim "read_aig"            "String -> TopLevel Term"
     (pureVal readAIGPrim)
+    Current
     [ "Read an AIG file in AIGER format and translate to a term." ]
 
   , prim "read_core"           "String -> TopLevel Term"
     (pureVal readCore)
+    Current
     [ "Read a term from a file in the SAWCore external format." ]
 
   , prim "write_aig"           "String -> Term -> TopLevel ()"
     (pureVal writeAIGPrim)
+    Current
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
     , "bits to a finite number of bits."
@@ -796,6 +875,7 @@ primitives = Map.fromList
 
   , prim "write_saig"          "String -> Term -> TopLevel ()"
     (pureVal writeSAIGPrim)
+    Current
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
     , "bits to a finite number of bits. The type must be of the form"
@@ -809,6 +889,7 @@ primitives = Map.fromList
 
   , prim "write_saig'"         "String -> Term -> Int -> TopLevel ()"
     (pureVal writeSAIGComputedPrim)
+    Current
     [ "Write out a representation of a term in binary AIGER format. The"
     , "term must be representable as a function from a finite number of"
     , "bits to a finite number of bits, '[m] -> [n]'. The int argument,"
@@ -823,24 +904,29 @@ primitives = Map.fromList
 
   , prim "write_cnf"           "String -> Term -> TopLevel ()"
     (scVal write_cnf)
+    Current
     [ "Write the given term to the named file in CNF format." ]
 
   , prim "write_smtlib2"       "String -> Term -> TopLevel ()"
     (scVal write_smtlib2)
+    Current
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
   , prim "write_core"          "String -> Term -> TopLevel ()"
     (pureVal writeCore)
+    Current
     [ "Write out a representation of a term in SAWCore external format." ]
 
   , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal (autoMatch stmtInterpreter :: FilePath -> FilePath -> TopLevel ()))
+    Current
     [ "Interactively decides how to align two modules of potentially heterogeneous"
     , "language and prints the result."
     ]
 
   , prim "prove"               "ProofScript SatResult -> Term -> TopLevel ProofResult"
     (pureVal provePrim)
+    Current
     [ "Use the given proof script to attempt to prove that a term is valid"
     , "(true for all inputs). Returns a proof result that can be analyzed"
     , "with 'caseProofResult' to determine whether it represents a successful"
@@ -849,6 +935,7 @@ primitives = Map.fromList
 
   , prim "prove_print"         "ProofScript SatResult -> Term -> TopLevel Theorem"
     (pureVal provePrintPrim)
+    Current
     [ "Use the given proof script to attempt to prove that a term is valid"
     , "(true for all inputs). Returns a Theorem if successful, and aborts"
     , "if unsuccessful."
@@ -856,6 +943,7 @@ primitives = Map.fromList
 
   , prim "sat"                 "ProofScript SatResult -> Term -> TopLevel SatResult"
     (pureVal satPrim)
+    Current
     [ "Use the given proof script to attempt to prove that a term is"
     , "satisfiable (true for any input). Returns a proof result that can"
     , "be analyzed with 'caseSatResult' to determine whether it represents"
@@ -864,6 +952,7 @@ primitives = Map.fromList
 
   , prim "sat_print"           "ProofScript SatResult -> Term -> TopLevel ()"
     (pureVal satPrintPrim)
+    Current
     [ "Use the given proof script to attempt to prove that a term is"
     , "satisfiable (true for any input). Returns nothing if successful, and"
     , "aborts if unsuccessful."
@@ -871,12 +960,14 @@ primitives = Map.fromList
 
   , prim "qc_print"            "Int -> Term -> TopLevel ()"
     (\a -> scVal (quickCheckPrintPrim a) a)
+    Current
     [ "Quick Check a term by applying it to a sequence of random inputs"
     , "and print the results. The 'Int' arg specifies how many tests to run."
     ]
 
   , prim "codegen"             "String -> [String] -> String -> Term -> TopLevel ()"
     (scVal codegenSBV)
+    Current
     [ "Generate straight-line C code for the given term using SBV."
     , ""
     , "First argument is directory path (\"\" for stdout) for generating files."
@@ -889,78 +980,95 @@ primitives = Map.fromList
 
   , prim "unfolding"           "[String] -> ProofScript ()"
     (pureVal unfoldGoal)
+    Current
     [ "Unfold the named subterm(s) within the current goal." ]
 
   , prim "simplify"            "Simpset -> ProofScript ()"
     (pureVal simplifyGoal)
+    Current
     [ "Apply the given simplifier rule set to the current goal." ]
 
   , prim "goal_eval"           "ProofScript ()"
     (pureVal (goal_eval []))
+    Current
     [ "Evaluate the proof goal to a first-order combination of primitives." ]
 
   , prim "goal_eval_unint"     "[String] -> ProofScript ()"
     (pureVal goal_eval)
+    Current
     [ "Evaluate the proof goal to a first-order combination of primitives."
     , "Leave the given names, as defined with 'define', as uninterpreted." ]
 
   , prim "beta_reduce_goal"    "ProofScript ()"
     (pureVal beta_reduce_goal)
+    Current
     [ "Reduce the current goal to beta-normal form." ]
 
   , prim "goal_apply"          "Theorem -> ProofScript ()"
     (pureVal goal_apply)
+    Current
     [ "Apply an introduction rule to the current goal. Depending on the"
     , "rule, this will result in zero or more new subgoals."
     ]
   , prim "goal_assume"         "ProofScript Theorem"
     (pureVal goal_assume)
+    Current
     [ "Convert the first hypothesis in the current proof goal into a"
     , "local Theorem."
     ]
   , prim "goal_insert"         "Theorem -> ProofScript ()"
     (pureVal goal_insert)
+    Current
     [ "Insert a Theorem as a new hypothesis in the current proof goal."
     ]
   , prim "goal_intro"          "String -> ProofScript Term"
     (pureVal goal_intro)
+    Current
     [ "Introduce a quantified variable in the current proof goal, returning"
     , "the variable as a Term."
     ]
   , prim "goal_when"           "String -> ProofScript () -> ProofScript ()"
     (pureVal goal_when)
+    Current
     [ "Run the given proof script only when the goal name contains"
     , "the given string."
     ]
   , prim "print_goal"          "ProofScript ()"
     (pureVal print_goal)
+    Current
     [ "Print the current goal that a proof script is attempting to prove." ]
 
   , prim "print_goal_depth"    "Int -> ProofScript ()"
     (pureVal print_goal_depth)
+    Current
     [ "Print the current goal that a proof script is attempting to prove,"
     , "limited to a maximum depth."
     ]
   , prim "print_goal_consts"   "ProofScript ()"
     (pureVal printGoalConsts)
+    Current
     [ "Print the list of unfoldable constants in the current proof goal."
     ]
   , prim "print_goal_size"     "ProofScript ()"
     (pureVal printGoalSize)
+    Current
     [ "Print the size of the goal in terms of both the number of DAG nodes"
     , "and the number of nodes it would have if represented as a tree."
     ]
 
   , prim "assume_valid"        "ProofScript ProofResult"
     (pureVal assumeValid)
+    Current
     [ "Assume the current goal is valid, completing the proof." ]
 
   , prim "assume_unsat"        "ProofScript SatResult"
     (pureVal assumeUnsat)
+    Current
     [ "Assume the current goal is unsatisfiable, completing the proof." ]
 
   , prim "quickcheck"          "Int -> ProofScript SatResult"
     (scVal quickcheckGoal)
+    Current
     [ "Quick Check the current goal by applying it to a sequence of random"
     , "inputs. Fail the proof script if the goal returns 'False' for any"
     , "of these inputs."
@@ -968,70 +1076,85 @@ primitives = Map.fromList
 
   , prim "abc"                 "ProofScript SatResult"
     (pureVal satABC)
+    Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
   , prim "boolector"           "ProofScript SatResult"
     (pureVal satBoolector)
+    Current
     [ "Use the Boolector theorem prover to prove the current goal." ]
 
   , prim "cvc4"                "ProofScript SatResult"
     (pureVal satCVC4)
+    Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
 
   , prim "z3"                  "ProofScript SatResult"
     (pureVal satZ3)
+    Current
     [ "Use the Z3 theorem prover to prove the current goal." ]
 
   , prim "mathsat"             "ProofScript SatResult"
     (pureVal satMathSAT)
+    Current
     [ "Use the MathSAT theorem prover to prove the current goal." ]
 
   , prim "yices"               "ProofScript SatResult"
     (pureVal satYices)
+    Current
     [ "Use the Yices theorem prover to prove the current goal." ]
 
   , prim "unint_z3"            "[String] -> ProofScript SatResult"
     (pureVal satUnintZ3)
+    Current
     [ "Use the Z3 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "unint_cvc4"            "[String] -> ProofScript SatResult"
     (pureVal satUnintCVC4)
+    Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "unint_yices"           "[String] -> ProofScript SatResult"
     (pureVal satUnintYices)
+    Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "offline_aig"         "String -> ProofScript SatResult"
     (pureVal satAIG)
+    Current
     [ "Write the current goal to the given file in AIGER format." ]
 
   , prim "offline_cnf"         "String -> ProofScript SatResult"
     (pureVal satCNF)
+    Current
     [ "Write the current goal to the given file in CNF format." ]
 
   , prim "offline_extcore"     "String -> ProofScript SatResult"
     (pureVal satExtCore)
+    Current
     [ "Write the current goal to the given file in SAWCore format." ]
 
   , prim "offline_smtlib2"     "String -> ProofScript SatResult"
     (pureVal satSMTLib2)
+    Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
   , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript SatResult"
     (pureVal satUnintSMTLib2)
+    Current
     [ "Write the current goal to the given file in SMT-Lib2 format,"
     , "leaving the listed functions uninterpreted."
     ]
 
   , prim "external_cnf_solver" "String -> [String] -> ProofScript SatResult"
     (pureVal (satExternal True))
+    Current
     [ "Use an external SAT solver supporting CNF to prove the current goal."
     , "The first argument is the executable name of the solver, and the"
     , "second is the list of arguments to pass to the solver. The string '%f'"
@@ -1040,6 +1163,7 @@ primitives = Map.fromList
 
   , prim "external_aig_solver" "String -> [String] -> ProofScript SatResult"
     (pureVal (satExternal False))
+    Current
     [ "Use an external SAT solver supporting AIG to prove the current goal."
     , "The first argument is the executable name of the solver, and the"
     , "second is the list of arguments to pass to the solver. The string '%f'"
@@ -1048,109 +1172,131 @@ primitives = Map.fromList
 
   , prim "rme"                 "ProofScript SatResult"
     (pureVal satRME)
+    Current
     [ "Prove the current goal by expansion to Reed-Muller Normal Form." ]
 
   , prim "trivial"             "ProofScript SatResult"
     (pureVal trivial)
+    Current
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
   , prim "w4"                  "ProofScript SatResult"
     (pureVal satWhat4_Z3)
+    Current
     [ "Prove the current goal using What4 (Z3 backend)." ]
 
   , prim "w4_unint_z3"         "[String] -> ProofScript SatResult"
     (pureVal satWhat4_UnintZ3)
+    Current
     [ "Prove the current goal using What4 (Z3 backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
+    Current
     [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"
     ,  "goals 'prop1' and 'prop2'." ]
 
   , prim "empty_ss"            "Simpset"
     (pureVal emptySimpset)
+    Current
     [ "The empty simplification rule set, containing no rules." ]
 
   , prim "cryptol_ss"          "() -> Simpset"
     (funVal1 (\() -> cryptolSimpset))
+    Current
     [ "A set of simplification rules that will expand definitions from the"
     , "Cryptol module."
     ]
 
   , prim "add_prelude_eqs"     "[String] -> Simpset -> Simpset"
     (funVal2 addPreludeEqs)
+    Current
     [ "Add the named equality rules from the Prelude module to the given"
     , "simplification rule set."
     ]
 
   , prim "add_cryptol_eqs"     "[String] -> Simpset -> Simpset"
     (funVal2 addCryptolEqs)
+    Current
     [ "Add the named equality rules from the Cryptol module to the given"
     , "simplification rule set."
     ]
 
   , prim "add_prelude_defs"    "[String] -> Simpset -> Simpset"
     (funVal2 add_prelude_defs)
+    Current
     [ "Add the named definitions from the Prelude module to the given"
     , "simplification rule set."
     ]
 
   , prim "add_cryptol_defs"    "[String] -> Simpset -> Simpset"
     (funVal2 add_cryptol_defs)
+    Current
     [ "Add the named definitions from the Cryptol module to the given"
     , "simplification rule set."
     ]
 
   , prim "basic_ss"            "Simpset"
     (bicVal $ \bic _ -> toValue $ biBasicSS bic)
+    Current
     [ "A basic rewriting simplification set containing some boolean identities"
     , "and conversions relating to bitvectors, natural numbers, and vectors."
     ]
 
   , prim "addsimp"             "Theorem -> Simpset -> Simpset"
     (pureVal addsimp)
+    Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
 
   , prim "addsimp'"            "Term -> Simpset -> Simpset"
     (pureVal addsimp')
+    Current
     [ "Add an arbitrary equality term to a given simplification rule set." ]
 
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
     (pureVal addsimps)
+    Current
     [ "Add proved equality theorems to a given simplification rule set." ]
 
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
     (pureVal addsimps')
+    Current
     [ "Add arbitrary equality terms to a given simplification rule set." ]
 
   , prim "rewrite"             "Simpset -> Term -> Term"
     (funVal2 rewritePrim)
+    Current
     [ "Rewrite a term using a specific simplification rule set, returning"
     , "the rewritten term."
     ]
 
   , prim "unfold_term"         "[String] -> Term -> Term"
     (funVal2 unfold_term)
+    Current
     [ "Unfold the definitions of the specified constants in the given term." ]
 
   , prim "beta_reduce_term"    "Term -> Term"
     (funVal1 beta_reduce_term)
+    Current
     [ "Reduce the given term to beta-normal form." ]
 
   , prim "cryptol_load"        "String -> TopLevel CryptolModule"
     (pureVal cryptol_load)
+    Current
     [ "Load the given file as a Cryptol module." ]
 
   , prim "cryptol_extract"     "CryptolModule -> String -> TopLevel Term"
     (pureVal CEnv.lookupCryptolModule)
+    Current
     [ "Load a single definition from a Cryptol module and translate it into"
     , "a 'Term'."
     ]
 
   , prim "cryptol_prims"       "() -> CryptolModule"
     (funVal1 (\() -> cryptol_prims))
+    Current
     [ "Return a Cryptol module containing extra primitive operations,"
     , "including array updates, truncate/extend, and signed comparisons."
     ]
@@ -1159,50 +1305,61 @@ primitives = Map.fromList
 
   , prim "java_bool"           "JavaType"
     (pureVal JavaBoolean)
+    Current
     [ "The Java type of booleans." ]
 
   , prim "java_byte"           "JavaType"
     (pureVal JavaByte)
+    Current
     [ "The Java type of bytes." ]
 
   , prim "java_char"           "JavaType"
     (pureVal JavaChar)
+    Current
     [ "The Java type of characters." ]
 
   , prim "java_short"          "JavaType"
     (pureVal JavaShort)
+    Current
     [ "The Java type of short integers." ]
 
   , prim "java_int"            "JavaType"
     (pureVal JavaInt)
+    Current
     [ "The standard Java integer type." ]
 
   , prim "java_long"           "JavaType"
     (pureVal JavaLong)
+    Current
     [ "The Java type of long integers." ]
 
   , prim "java_float"          "JavaType"
     (pureVal JavaFloat)
+    Current
     [ "The Java type of single-precision floating point values." ]
 
   , prim "java_double"         "JavaType"
     (pureVal JavaDouble)
+    Current
     [ "The Java type of double-precision floating point values." ]
 
   , prim "java_array"          "Int -> JavaType -> JavaType"
     (pureVal JavaArray)
+    Current
     [ "The Java type of arrays of a fixed number of elements of the given"
     , "type."
     ]
 
   , prim "java_class"          "String -> JavaType"
     (pureVal JavaClass)
+    Current
     [ "The Java type corresponding to the named class." ]
 
   --, prim "java_value"          "{a} String -> a"
 
   , prim "java_var"            "String -> JavaType -> JavaSetup Term"
     (bicVal javaVar)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Return a term corresponding to the initial value of the named Java"
@@ -1215,6 +1372,7 @@ primitives = Map.fromList
 
   , prim "java_class_var"      "String -> JavaType -> JavaSetup ()"
     (bicVal javaClassVar)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Declare that the named Java variable should point to an object of the"
@@ -1223,6 +1381,7 @@ primitives = Map.fromList
 
   , prim "java_may_alias"      "[String] -> JavaSetup ()"
     (pureVal javaMayAlias)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Indicate that the given set of Java variables are allowed to alias"
@@ -1231,6 +1390,7 @@ primitives = Map.fromList
 
   , prim "java_assert"         "Term -> JavaSetup ()"
     (pureVal javaAssert)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Assert that the given term should evaluate to true in the initial"
@@ -1239,6 +1399,7 @@ primitives = Map.fromList
 
   , prim "java_assert_eq"      "String -> Term -> JavaSetup ()"
     (bicVal javaAssertEq)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Assert that the given variable should have the given value in the"
@@ -1247,6 +1408,7 @@ primitives = Map.fromList
 
   , prim "java_ensure_eq"      "String -> Term -> JavaSetup ()"
     (bicVal javaEnsureEq)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Specify that the given Java variable should have a value equal to the"
@@ -1255,18 +1417,21 @@ primitives = Map.fromList
 
   , prim "java_modify"         "String -> JavaSetup ()"
     (pureVal javaModify)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Indicate that a Java method may modify the named portion of the state." ]
 
   , prim "java_return"         "Term -> JavaSetup ()"
     (pureVal javaReturn)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Indicate the expected return value of a Java method." ]
 
   , prim "java_verify_tactic"  "ProofScript SatResult -> JavaSetup ()"
     (pureVal javaVerifyTactic)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Use the given proof script to prove the specified properties about"
@@ -1275,6 +1440,7 @@ primitives = Map.fromList
 
   , prim "java_sat_branches"   "Bool -> JavaSetup ()"
     (pureVal javaSatBranches)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Turn on or off satisfiability checking of branch conditions during"
@@ -1283,12 +1449,14 @@ primitives = Map.fromList
 
   , prim "java_no_simulate"    "JavaSetup ()"
     (pureVal javaNoSimulate)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Skip symbolic simulation for this Java method." ]
 
   , prim "java_allow_alloc"    "JavaSetup ()"
     (pureVal javaAllowAlloc)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Allow allocation of new objects or arrays during simulation,"
@@ -1298,6 +1466,7 @@ primitives = Map.fromList
 
    , prim "java_requires_class"  "String -> JavaSetup ()"
      (pureVal javaRequiresClass)
+     Deprecated
      [ "DEPRECATED"
      , ""
      , "Declare that the given method can only be executed if the given"
@@ -1306,12 +1475,14 @@ primitives = Map.fromList
 
   , prim "java_pure"           "JavaSetup ()"
     (pureVal javaPure)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "The empty specification for 'java_verify'. Equivalent to 'return ()'." ]
 
   , prim "java_load_class"     "String -> TopLevel JavaClass"
     (bicVal (const . CJ.loadJavaClass))
+    Current
     [ "Load the named Java class and return a handle to it." ]
 
   --, prim "java_class_info"     "JavaClass -> TopLevel ()"
@@ -1319,6 +1490,7 @@ primitives = Map.fromList
   , prim "java_extract"
     "JavaClass -> String -> JavaSetup () -> TopLevel Term"
     (bicVal extractJava)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Translate a Java method directly to a Term. The parameters of the"
@@ -1331,7 +1503,10 @@ primitives = Map.fromList
   , prim "java_symexec"
     "JavaClass -> String -> [(String, Term)] -> [String] -> Bool -> TopLevel Term"
     (bicVal symexecJava)
-    [ "Symbolically execute a Java method and construct a Term corresponding"
+    Deprecated
+    [ "DEPRECATED"
+    , ""
+    , "Symbolically execute a Java method and construct a Term corresponding"
     , "to its result. The first list contains pairs of variable or field"
     , "names along with Terms specifying their initial (possibly symbolic)"
     , "values. The second list contains the names of the variables or fields"
@@ -1344,6 +1519,7 @@ primitives = Map.fromList
   , prim "java_verify"
     "JavaClass -> String -> [JavaMethodSpec] -> JavaSetup () -> TopLevel JavaMethodSpec"
     (bicVal verifyJava)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Verify a Java method against a method specification. The first two"
@@ -1366,6 +1542,7 @@ primitives = Map.fromList
 
   , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
     (bicVal CJ.crucible_java_extract)
+    Current
     [ "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
     , "value will be the return value of the method. Only methods with"
@@ -1374,33 +1551,40 @@ primitives = Map.fromList
 
   , prim "llvm_type"           "String -> LLVMType"
     (funVal1 llvm_type)
+    Current
     [ "Parse the given string as LLVM type syntax." ]
 
   , prim "llvm_int"            "Int -> LLVMType"
     (pureVal llvm_int)
+    Current
     [ "The type of LLVM integers, of the given bit width." ]
 
   , prim "llvm_float"          "LLVMType"
     (pureVal llvm_float)
+    Current
     [ "The type of single-precision floating point numbers in LLVM." ]
 
   , prim "llvm_double"         "LLVMType"
     (pureVal llvm_double)
+    Current
     [ "The type of double-precision floating point numbers in LLVM." ]
 
   , prim "llvm_array"          "Int -> LLVMType -> LLVMType"
     (pureVal llvm_array)
+    Current
     [ "The type of LLVM arrays with the given number of elements of the"
     , "given type."
     ]
 
   , prim "llvm_struct"         "String -> LLVMType"
     (pureVal llvm_struct)
+    Current
     [ "The type of an LLVM struct of the given name."
     ]
 
   , prim "llvm_var"            "String -> LLVMType -> LLVMSetup Term"
     (bicVal llvm_var)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Return a term corresponding to the initial value of the named LLVM"
@@ -1412,6 +1596,7 @@ primitives = Map.fromList
 
   , prim "llvm_ptr"            "String -> LLVMType -> LLVMSetup ()"
     (bicVal llvm_ptr)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Declare that the named LLVM variable should point to a value of the"
@@ -1425,6 +1610,7 @@ primitives = Map.fromList
 
   , prim "llvm_assert"         "Term -> LLVMSetup ()"
     (bicVal llvm_assert)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Assert that the given term should evaluate to true in the initial"
@@ -1433,6 +1619,7 @@ primitives = Map.fromList
 
   , prim "llvm_assert_eq"      "String -> Term -> LLVMSetup ()"
     (bicVal llvm_assert_eq)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Specify the initial value of an LLVM variable."
@@ -1440,6 +1627,7 @@ primitives = Map.fromList
 
   , prim "llvm_assert_null"    "String -> LLVMSetup ()"
     (bicVal llvm_assert_null)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Specify that the initial value of an LLVM pointer variable is NULL."
@@ -1447,6 +1635,7 @@ primitives = Map.fromList
 
   , prim "llvm_ensure_eq"      "String -> Term -> LLVMSetup ()"
     (bicVal (llvm_ensure_eq False))
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Specify that the LLVM variable should have a value equal to the"
@@ -1455,6 +1644,7 @@ primitives = Map.fromList
 
   , prim "llvm_ensure_eq_post"      "String -> Term -> LLVMSetup ()"
     (bicVal (llvm_ensure_eq True))
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Specify that the LLVM variable should have a value equal to the"
@@ -1464,6 +1654,7 @@ primitives = Map.fromList
 
   , prim "llvm_modify"         "String -> LLVMSetup ()"
     (bicVal llvm_modify)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Specify that the LLVM variable should have a an arbitary, unspecified"
@@ -1472,6 +1663,7 @@ primitives = Map.fromList
 
   , prim "llvm_allocates"         "String -> LLVMSetup ()"
     (pureVal llvm_allocates)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Specify that the LLVM variable should be updated with a pointer to"
@@ -1481,6 +1673,7 @@ primitives = Map.fromList
 
   , prim "llvm_return"         "Term -> LLVMSetup ()"
     (bicVal llvm_return)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Indicate the expected return value of an LLVM function."
@@ -1488,6 +1681,7 @@ primitives = Map.fromList
 
   , prim "llvm_return_arbitrary" "LLVMSetup ()"
     (pureVal llvm_return_arbitrary)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Indicate that an LLVM function returns an arbitrary, unspecified value."
@@ -1495,6 +1689,7 @@ primitives = Map.fromList
 
   , prim "llvm_verify_tactic"  "ProofScript SatResult -> LLVMSetup ()"
     (bicVal llvm_verify_tactic)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Use the given proof script to prove the specified properties about"
@@ -1503,6 +1698,7 @@ primitives = Map.fromList
 
   , prim "llvm_sat_branches"   "Bool -> LLVMSetup ()"
     (pureVal llvm_sat_branches)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Turn on or off satisfiability checking of branch conditions during"
@@ -1511,6 +1707,7 @@ primitives = Map.fromList
 
   , prim "llvm_simplify_addrs"  "Bool -> LLVMSetup ()"
     (pureVal llvm_simplify_addrs)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Turn on or off simplification of address expressions before loads"
@@ -1519,16 +1716,21 @@ primitives = Map.fromList
 
   , prim "llvm_no_simulate"    "LLVMSetup ()"
     (pureVal llvm_no_simulate)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Skip symbolic simulation for this LLVM method." ]
 
   , prim "llvm_pure"           "LLVMSetup ()"
     (pureVal llvm_pure)
-    [ "The empty specification for 'llvm_verify'. Equivalent to 'return ()'." ]
+    Deprecated
+    [ "DEPRECATED"
+    , ""
+    , "The empty specification for 'llvm_verify'. Equivalent to 'return ()'." ]
 
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"
     (pureVal llvm_load_module)
+    Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
   --, prim "llvm_module_info"    "LLVMModule -> TopLevel ()"
@@ -1536,7 +1738,10 @@ primitives = Map.fromList
   , prim "llvm_extract"
     "LLVMModule -> String -> LLVMSetup () -> TopLevel Term"
     (bicVal llvm_extract)
-    [ "Translate an LLVM function directly to a Term. The parameters of the"
+    Deprecated
+    [ "DEPRECATED"
+    , ""
+    , "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term will be the parameters of the LLVM function, and the return"
     , "value will be the return value of the functions. Only functions with"
     , "scalar argument and return types are currently supported. For more"
@@ -1546,7 +1751,10 @@ primitives = Map.fromList
   , prim "llvm_symexec"
     "LLVMModule -> String -> [(String, Int)] -> [(String, Term, Int)] -> [(String, Int)] -> Bool -> TopLevel Term"
     (bicVal llvm_symexec)
-    [ "Symbolically execute an LLVM function and construct a Term corresponding"
+    Deprecated
+    [ "DEPRECATED"
+    , ""
+    , "Symbolically execute an LLVM function and construct a Term corresponding"
     , "to its result. The first list describes what allocations should be"
     , "performed before execution. Each name given is allocated to point to"
     , "the given number of elements, of the appropriate type. The second list"
@@ -1562,6 +1770,7 @@ primitives = Map.fromList
   , prim "llvm_verify"
     "LLVMModule -> String -> [LLVMMethodSpec] -> LLVMSetup () -> TopLevel LLVMMethodSpec"
     (bicVal llvm_verify)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Verify an LLVM function against a specification. The first two"
@@ -1578,6 +1787,7 @@ primitives = Map.fromList
 
   , prim "llvm_spec_solvers"  "LLVMMethodSpec -> [String]"
     (\_ _ -> toValue llvm_spec_solvers)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Extract a list of all the solvers used when verifying the given LLVM method spec."
@@ -1585,6 +1795,7 @@ primitives = Map.fromList
 
   , prim "llvm_spec_size"  "LLVMMethodSpec -> Int"
     (\_ _ -> toValue llvm_spec_size)
+    Deprecated
     [ "DEPRECATED"
     , ""
     , "Return a count of the combined size of all verification goals proved as part of the given method spec."
@@ -1592,6 +1803,7 @@ primitives = Map.fromList
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
+    Current
     [ "Branch on the result of SAT solving."
     , ""
     , "Usage: caseSatResult <code to run if unsat> <code to run if sat>."
@@ -1608,6 +1820,7 @@ primitives = Map.fromList
 
   , prim "caseProofResult"     "{b} ProofResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseProofResultPrim)
+    Current
     [ "Branch on the result of proving."
     , ""
     , "Usage: caseProofResult <code to run if true> <code to run if false>."
@@ -1624,18 +1837,21 @@ primitives = Map.fromList
 
   , prim "undefined"           "{a} a"
     (\_ _ -> error "interpret: undefined")
+    Current
     [ "An undefined value of any type. Evaluating 'undefined' makes the"
     , "program crash."
     ]
 
   , prim "exit"                "Int -> TopLevel ()"
     (pureVal exitPrim)
+    Current
     [ "Exit SAWScript, returning the supplied exit code to the parent"
     , "process."
     ]
 
   , prim "fails"               "{a} TopLevel a -> TopLevel ()"
     (\_ _ -> toValue failsPrim)
+    Current
     [ "Run the given inner action and convert failure into success.  Fail"
     , "if the inner action does NOT raise an exception. This is primarily used"
     , "for unit testing purposes, to ensure that we can elicit expected"
@@ -1644,16 +1860,19 @@ primitives = Map.fromList
 
   , prim "time"                "{a} TopLevel a -> TopLevel a"
     (\_ _ -> toValue timePrim)
+    Current
     [ "Print the CPU time used by the given TopLevel command." ]
 
   , prim "with_time"           "{a} TopLevel a -> TopLevel (Int, a)"
     (\_ _ -> toValue withTimePrim)
+    Current
     [ "Run the given toplevel command.  Return the number of milliseconds"
     , "elapsed during the execution of the command and its result."
     ]
 
   , prim "exec"               "String -> [String] -> String -> TopLevel String"
     (\_ _ -> toValue readProcess)
+    Current
     [ "Execute an external process with the given executable"
     , "name, arguments, and standard input. Returns standard"
     , "output."
@@ -1661,31 +1880,37 @@ primitives = Map.fromList
 
   , prim "eval_bool"           "Term -> Bool"
     (funVal1 eval_bool)
+    Current
     [ "Evaluate a Cryptol term of type Bit to either 'true' or 'false'."
     ]
 
   , prim "eval_int"           "Term -> Int"
     (funVal1 eval_int)
+    Current
     [ "Evaluate a Cryptol term of type [n] and convert to a SAWScript Int."
     ]
 
   , prim "eval_size"          "Type -> Int"
     (funVal1 eval_size)
+    Current
     [ "Convert a Cryptol size type to a SAWScript Int."
     ]
 
   , prim "eval_list"           "Term -> [Term]"
     (funVal1 eval_list)
+    Current
     [ "Evaluate a Cryptol term of type [n]a to a list of terms."
     ]
 
   , prim "parse_core"         "String -> Term"
     (funVal1 parse_core)
+    Current
     [ "Parse a Term from a String in SAWCore syntax."
     ]
 
   , prim "prove_core"         "ProofScript SatResult -> String -> TopLevel Theorem"
     (pureVal prove_core)
+    Current
     [ "Use the given proof script to attempt to prove that a term is valid"
     , "(true for all inputs). The term is specified as a String containing"
     , "saw-core syntax. Returns a Theorem if successful, and aborts if"
@@ -1694,6 +1919,7 @@ primitives = Map.fromList
 
   , prim "core_axiom"         "String -> Theorem"
     (funVal1 core_axiom)
+    Current
     [ "Declare the given core expression as an axiomatic rewrite rule."
     , "The input string contains a proof goal in saw-core syntax. The"
     , "return value is a Theorem that may be added to a Simpset."
@@ -1701,29 +1927,34 @@ primitives = Map.fromList
 
   , prim "core_thm"           "String -> Theorem"
     (funVal1 core_thm)
+    Current
     [ "Create a theorem from the type of the given core expression." ]
 
   , prim "get_opt"            "Int -> String"
     (funVal1 get_opt)
+    Current
     [ "Get the nth command-line argument as a String. Index 0 returns"
     , "the program name; other parameters are numbered starting at 1."
     ]
 
   , prim "show_cfg"          "CFG -> String"
     (pureVal show_cfg)
+    Current
     [ "Pretty-print a control-flow graph."
     ]
 
     ---------------------------------------------------------------------
-    -- Experimental Crucible/LLVM interface
+    -- Crucible/LLVM interface
 
   , prim "crucible_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
     (bicVal crucible_llvm_cfg)
+    Current
     [ "Load a function from the given LLVM module into a Crucible CFG."
     ]
 
   , prim "crucible_llvm_extract"  "LLVMModule -> String -> TopLevel Term"
     (bicVal crucible_llvm_extract)
+    Current
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term will be the parameters of the LLVM function, and the return"
     , "value will be the return value of the functions. Only functions with"
@@ -1733,12 +1964,14 @@ primitives = Map.fromList
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
+    Current
     [ "Create a fresh variable for use within a Crucible specification. The"
     , "name is used only for pretty-printing."
     ]
 
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_alloc)
+    Current
     [ "Declare that an object of the given type should be allocated in a"
     , "Crucible specification. Before `crucible_execute_func`, this states"
     , "that the function expects the object to be allocated before it runs."
@@ -1748,6 +1981,7 @@ primitives = Map.fromList
 
   , prim "crucible_alloc_readonly" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_alloc_readonly)
+    Current
     [ "Declare that a read-only memory region of the given type should be"
     , "allocated in a Crucible specification. The function must not attempt"
     , "to write to this memory region. Unlike `crucible_alloc`, regions"
@@ -1757,6 +1991,7 @@ primitives = Map.fromList
 
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)
+    Current
     [ "Create a fresh pointer value for use in a Crucible specification."
     , "This works like `crucible_alloc` except that the pointer is not"
     , "required to point to allocated memory."
@@ -1764,6 +1999,7 @@ primitives = Map.fromList
 
   , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_expanded_val)
+    Current
     [ "Create a compound type entirely populated with fresh symbolic variables."
     , "Equivalent to allocating a new struct or array of the given type and"
     , "eplicitly setting each field or element to contain a fresh symbolic"
@@ -1772,6 +2008,7 @@ primitives = Map.fromList
 
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal (crucible_points_to True))
+    Current
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the given value (second argument)."
     , ""
@@ -1783,6 +2020,7 @@ primitives = Map.fromList
 
   , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal (crucible_points_to False))
+    Current
     [ "A variant of crucible_points_to that does not check for compatibility"
     , "between the pointer type and the value type. This may be useful when"
     , "reading or writing a prefix of larger array, for example."
@@ -1790,6 +2028,7 @@ primitives = Map.fromList
 
   , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal crucible_equal)
+    Current
     [ "State that two Crucible values should be equal. Can be used as either"
     , "a pre-condition or a post-condition. It is semantically equivalent to"
     , "a `crucible_precond` or `crucible_postcond` statement which is an"
@@ -1798,18 +2037,21 @@ primitives = Map.fromList
 
   , prim "crucible_precond" "Term -> CrucibleSetup ()"
     (pureVal crucible_precond)
+    Current
     [ "State that the given predicate is a pre-condition on execution of the"
     , "function being verified."
     ]
 
   , prim "crucible_postcond" "Term -> CrucibleSetup ()"
     (pureVal crucible_postcond)
+    Current
     [ "State that the given predicate is a post-condition of execution of the"
     , "function being verified."
     ]
 
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
     (bicVal crucible_execute_func)
+    Current
     [ "Specify the given list of values as the arguments of the function."
     ,  ""
     , "The crucible_execute_func statement also serves to separate the pre-state"
@@ -1821,6 +2063,7 @@ primitives = Map.fromList
 
   , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
     (bicVal crucible_return)
+    Current
     [ "Specify the given value as the return value of the function. A"
     , "crucible_return statement is required if and only if the function"
     , "has a non-void return type." ]
@@ -1828,6 +2071,7 @@ primitives = Map.fromList
   , prim "crucible_llvm_verify"
     "LLVMModule -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify)
+    Current
     [ "Verify the LLVM function named by the second parameter in the module"
     , "specified by the first. The third parameter lists the CrucibleMethodSpec"
     , "values returned by previous calls to use as overrides. The fourth (Bool)"
@@ -1840,6 +2084,7 @@ primitives = Map.fromList
   , prim "crucible_llvm_unsafe_assume_spec"
     "LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_unsafe_assume_spec)
+    Current
     [ "Return a CrucibleMethodSpec corresponding to a CrucibleSetup block,"
     , "as would be returned by llvm_verify but without performing any"
     , "verification."
@@ -1848,47 +2093,55 @@ primitives = Map.fromList
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
     (pureVal CIR.SetupArray)
+    Current
     [ "Create a SetupValue representing an array, with the given list of"
     , "values as elements. The list must be non-empty." ]
 
   , prim "crucible_struct"
     "[SetupValue] -> SetupValue"
     (pureVal (CIR.SetupStruct False))
+    Current
     [ "Create a SetupValue representing a struct, with the given list of"
     , "values as elements." ]
 
   , prim "crucible_packed_struct"
     "[SetupValue] -> SetupValue"
     (pureVal (CIR.SetupStruct True))
+    Current
     [ "Create a SetupValue representing a packed struct, with the given"
     , "list of values as elements." ]
 
   , prim "crucible_elem"
     "SetupValue -> Int -> SetupValue"
     (pureVal CIR.SetupElem)
+    Current
     [ "Turn a SetupValue representing a struct or array pointer into"
     , "a pointer to an element of the struct or array by field index." ]
 
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.SetupField)
+    Current
     [ "Turn a SetupValue representing a struct pointer into"
     , "a pointer to an element of the struct by field name." ]
 
   , prim "crucible_null"
     "SetupValue"
     (pureVal CIR.SetupNull)
+    Current
     [ "A SetupValue representing a null pointer value." ]
 
   , prim "crucible_global"
     "String -> SetupValue"
     (pureVal CIR.SetupGlobal)
+    Current
     [ "Return a SetupValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
 
   , prim "crucible_global_initializer"
     "String -> SetupValue"
     (pureVal CIR.SetupGlobalInitializer)
+    Current
     [ "Return a SetupValue representing the value of the initializer of a named"
     , "global. The String should be the name of a global value."
     , "Note that initializing global variables may be unsound in the presence"
@@ -1898,11 +2151,13 @@ primitives = Map.fromList
   , prim "crucible_term"
     "Term -> SetupValue"
     (pureVal CIR.SetupTerm)
+    Current
     [ "Construct a `SetupValue` from a `Term`." ]
 
   , prim "crucible_setup_val_to_term"
     " SetupValue -> TopLevel Term"
     (bicVal crucible_setup_val_to_typed_term)
+    Current
     [ "Convert from a setup value to a typed term. This can only be done for a"
     , "subset of setup values. Fails if a setup value is a global, variable or null."
     ]
@@ -1911,21 +2166,25 @@ primitives = Map.fromList
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
     (bicVal crucible_declare_ghost_state)
+    Current
     [ "Allocates a unique ghost variable." ]
 
   , prim "crucible_ghost_value"
     "Ghost -> Term -> CrucibleSetup ()"
     (bicVal crucible_ghost_value)
+    Current
     [ "Specifies the value of a ghost variable. This can be used"
     , "in the pre- and post- conditions of a setup block."]
 
   , prim "crucible_spec_solvers"  "CrucibleMethodSpec -> [String]"
     (\_ _ -> toValue crucible_spec_solvers)
+    Current
     [ "Extract a list of all the solvers used when verifying the given method spec."
     ]
 
   , prim "crucible_spec_size"  "CrucibleMethodSpec -> Int"
     (\_ _ -> toValue crucible_spec_size)
+    Current
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
     ]
@@ -1935,12 +2194,14 @@ primitives = Map.fromList
 
   , prim "jvm_fresh_var" "String -> JavaType -> JVMSetup Term"
     (bicVal jvm_fresh_var)
+    Experimental
     [ "Create a fresh variable for use within a Crucible specification. The"
     , "name is used only for pretty-printing."
     ]
 
   , prim "jvm_alloc_object" "String -> JVMSetup JVMValue"
     (bicVal jvm_alloc_object)
+    Experimental
     [ "Declare that an instance of the given class should be allocated in a"
     , "Crucible specification. Before `jvm_execute_func`, this states"
     , "that the function expects the object to be allocated before it runs."
@@ -1950,6 +2211,7 @@ primitives = Map.fromList
 
   , prim "jvm_alloc_array" "Int -> JavaType -> JVMSetup JVMValue"
     (bicVal jvm_alloc_array)
+    Experimental
     [ "Declare that an array of the given size and element type should be"
     , "allocated in a Crucible specification. Before `jvm_execute_func`, this"
     , "states that the function expects the array to be allocated before it"
@@ -1961,6 +2223,7 @@ primitives = Map.fromList
 
   , prim "jvm_field_is" "JVMValue -> String -> JVMValue -> JVMSetup ()"
     (bicVal (jvm_field_is True))
+    Experimental
     [ "Declare that the indicated object (first argument) has a field"
     , "(second argument) containing the given value (third argument)."
     , ""
@@ -1972,6 +2235,7 @@ primitives = Map.fromList
 
   , prim "jvm_elem_is" "JVMValue -> Int -> JVMValue -> JVMSetup ()"
     (bicVal (jvm_elem_is True))
+    Experimental
     [ "Declare that the indicated array (first argument) has an element"
     , "(second argument) containing the given value (third argument)."
     , ""
@@ -1983,18 +2247,21 @@ primitives = Map.fromList
 
   , prim "jvm_precond" "Term -> JVMSetup ()"
     (pureVal jvm_precond)
+    Experimental
     [ "State that the given predicate is a pre-condition on execution of the"
     , "function being verified."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"
     (pureVal jvm_postcond)
+    Experimental
     [ "State that the given predicate is a post-condition of execution of the"
     , "function being verified."
     ]
 
   , prim "jvm_execute_func" "[JVMValue] -> JVMSetup ()"
     (bicVal jvm_execute_func)
+    Experimental
     [ "Specify the given list of values as the arguments of the function."
     ,  ""
     , "The jvm_execute_func statement also serves to separate the pre-state"
@@ -2006,6 +2273,7 @@ primitives = Map.fromList
 
   , prim "jvm_return" "JVMValue -> JVMSetup ()"
     (bicVal jvm_return)
+    Experimental
     [ "Specify the given value as the return value of the function. A"
     , "jvm_return statement is required if and only if the function"
     , "has a non-void return type." ]
@@ -2013,6 +2281,7 @@ primitives = Map.fromList
   , prim "crucible_jvm_verify"
     "JavaClass -> String -> [JVMMethodSpec] -> Bool -> JVMSetup () -> ProofScript SatResult -> TopLevel JVMMethodSpec"
     (bicVal crucible_jvm_verify)
+    Experimental
     [ "Verify the JVM function named by the second parameter in the module"
     , "specified by the first. The third parameter lists the JVMMethodSpec"
     , "values returned by previous calls to use as overrides. The fourth (Bool)"
@@ -2025,6 +2294,7 @@ primitives = Map.fromList
   , prim "crucible_jvm_unsafe_assume_spec"
     "JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec"
     (bicVal crucible_jvm_unsafe_assume_spec)
+    Experimental
     [ "Return a JVMMethodSpec corresponding to a JVMSetup block,"
     , "as would be returned by jvm_verify but without performing any"
     , "verification."
@@ -2057,36 +2327,41 @@ primitives = Map.fromList
   , prim "jvm_null"
     "JVMValue"
     (pureVal JIR.SetupNull)
+    Experimental
     [ "A JVMValue representing a null pointer value." ]
 
   , prim "jvm_global"
     "String -> JVMValue"
     (pureVal JIR.SetupGlobal)
+    Experimental
     [ "Return a JVMValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
 
   , prim "jvm_term"
     "Term -> JVMValue"
     (pureVal JIR.SetupTerm)
+    Experimental
     [ "Construct a `JVMValue` from a `Term`." ]
 
     ---------------------------------------------------------------------
 
   , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
     (pureVal testMRSolver)
+    Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if two monadic terms are equal" ]
   ]
 
   where
-    prim :: String -> String -> (Options -> BuiltinContext -> Value) -> [String]
+    prim :: String -> String -> (Options -> BuiltinContext -> Value) -> PrimitiveLifecycle -> [String]
          -> (SS.LName, Primitive)
-    prim name ty fn doc = (qname, Primitive
-                                  { primName = qname
-                                  , primType = readSchema ty
-                                  , primDoc  = doc
-                                  , primFn   = fn
-                                  })
+    prim name ty fn lc doc = (qname, Primitive
+                                     { primName = qname
+                                     , primType = readSchema ty
+                                     , primDoc  = doc
+                                     , primFn   = fn
+                                     , primLife = lc
+                                     })
       where qname = qualify name
 
     pureVal :: forall t. IsValue t => t -> Options -> BuiltinContext -> Value
@@ -2109,19 +2384,27 @@ primitives = Map.fromList
               (BuiltinContext -> Options -> t) -> Options -> BuiltinContext -> Value
     bicVal f opts bic = toValue (f bic opts)
 
-primTypeEnv :: Map SS.LName SS.Schema
-primTypeEnv = fmap primType primitives
+filterAvail ::
+  Set PrimitiveLifecycle ->
+  Map SS.LName Primitive ->
+  Map SS.LName Primitive 
+filterAvail primsAvail =
+  Map.filter (\p -> primLife p `Set.member` primsAvail)
 
-valueEnv :: Options -> BuiltinContext -> Map SS.LName Value
-valueEnv opts bic = fmap f primitives
+primTypeEnv :: Set PrimitiveLifecycle -> Map SS.LName SS.Schema
+primTypeEnv primsAvail = fmap primType (filterAvail primsAvail primitives)
+
+valueEnv :: Set PrimitiveLifecycle -> Options -> BuiltinContext -> Map SS.LName Value
+valueEnv primsAvail opts bic = fmap f (filterAvail primsAvail primitives)
   where f p = (primFn p) opts bic
 
 -- | Map containing the formatted documentation string for each
 -- saw-script primitive.
-primDocEnv :: Map SS.Name String
-primDocEnv =
-  Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList primitives ]
+primDocEnv :: Set PrimitiveLifecycle -> Map SS.Name String
+primDocEnv primsAvail =
+  Map.fromList [ (getVal n, doc n p) | (n, p) <- Map.toList prims ]
     where
+      prims = filterAvail primsAvail primitives
       doc n p = unlines $
                 [ "Description"
                 , "-----------"

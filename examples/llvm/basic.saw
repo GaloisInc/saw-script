@@ -1,3 +1,4 @@
+enable_deprecated;
 let add_setup : LLVMSetup () = do {
     x <- llvm_var "x" (llvm_int 32);
     y <- llvm_var "y" (llvm_int 32);

@@ -1,3 +1,4 @@
+enable_deprecated;
 m <- llvm_load_module "basic.bc";
 add <- define "add" {{ \x y -> (x : [32]) + y }};
 x <- fresh_symbolic "x" {| [32] |};

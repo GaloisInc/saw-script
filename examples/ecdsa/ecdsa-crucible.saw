@@ -1,3 +1,4 @@
+enable_experimental;
 let ecc_class = "com.galois.ecc.P384ECC64";
 
 import "cryptol-spec/ecc.cry" as ecc;
@@ -635,7 +636,7 @@ p384_curve_base_simp <- do {
 print "Performing verification.";
 
 set_color true;
-set_unit_ov <- method' "set_unit" []
+set_unit_ov <- method "set_unit" []
   do {
     x <- jvm_alloc_array 12 java_int;
     jvm_execute_func [x];
@@ -643,7 +644,7 @@ set_unit_ov <- method' "set_unit" []
   }
   abc;
 
-set_zero_ov <- method' "set_zero" []
+set_zero_ov <- method "set_zero" []
   do {
     x <- jvm_alloc_array 12 java_int;
     jvm_execute_func [x];
@@ -651,7 +652,7 @@ set_zero_ov <- method' "set_zero" []
   }
   abc;
 
-is_zero_ov <- method' "is_zero" []
+is_zero_ov <- method "is_zero" []
   do {
     (px, x) <- ecdsa_arr384 "x";
     jvm_execute_func [px];
@@ -659,7 +660,7 @@ is_zero_ov <- method' "is_zero" []
   }
   abc;
 
-is_equal_ov <- method' "is_equal" []
+is_equal_ov <- method "is_equal" []
   do {
     (px, x) <- ecdsa_arr384 "x";
     (py, y) <- ecdsa_arr384 "y";
@@ -668,7 +669,7 @@ is_equal_ov <- method' "is_equal" []
   }
   abc;
 
-assign_ov <- method' "assign" []
+assign_ov <- method "assign" []
   do {
     px <- jvm_alloc_array 12 java_int;
     (py, y) <- ecdsa_arr384 "y";
@@ -677,7 +678,7 @@ assign_ov <- method' "assign" []
   }
   abc;
 
-ashift_ov <- method' "array_shift" []
+ashift_ov <- method "array_shift" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pr, r) <- ecdsa_arr384 "r";
@@ -687,7 +688,7 @@ ashift_ov <- method' "array_shift" []
   }
   abc;
 
-leq_ov <- method' "leq" []
+leq_ov <- method "leq" []
   do {
     (px, x) <- ecdsa_arr384 "x";
     (py, y) <- ecdsa_arr384 "y";
@@ -698,7 +699,7 @@ leq_ov <- method' "leq" []
   }
   abc;
 
-shr_ov <- method' "shr" []
+shr_ov <- method "shr" []
   do {
     pz <- jvm_alloc_array 12 java_int;
     c <- jvm_fresh_var "c" java_int;
@@ -710,7 +711,7 @@ shr_ov <- method' "shr" []
   abc;
 
 // Like shr_ov, but where 1st and 3rd arguments are the same.
-shr_ov2 <- method' "shr" []
+shr_ov2 <- method "shr" []
   do {
     c <- jvm_fresh_var "c" java_int;
     (px, x) <- ecdsa_arr384 "x";
@@ -720,7 +721,7 @@ shr_ov2 <- method' "shr" []
   }
   abc;
 
-dec_ov <- method' "decFieldPrime" []
+dec_ov <- method "decFieldPrime" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -731,7 +732,7 @@ dec_ov <- method' "decFieldPrime" []
   }
   abc;
 
-inc_ov <- method' "incFieldPrime" []
+inc_ov <- method "incFieldPrime" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -742,7 +743,7 @@ inc_ov <- method' "incFieldPrime" []
   }
   abc;
 
-dbl_ov <- method' "dbl" []
+dbl_ov <- method "dbl" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -756,7 +757,7 @@ dbl_ov <- method' "dbl" []
   abc;
 
 // Like dbl_ov, but with 1st and 2nd arguments the same.
-dbl_ov2 <- method' "dbl" []
+dbl_ov2 <- method "dbl" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -768,7 +769,7 @@ dbl_ov2 <- method' "dbl" []
   }
   abc;
 
-add_ov <- method' "add" []
+add_ov <- method "add" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -783,7 +784,7 @@ add_ov <- method' "add" []
   abc;
 
 // Like add_ov, but where the first 2 arguments are the same.
-add_ov2 <- method' "add" []
+add_ov2 <- method "add" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -797,7 +798,7 @@ add_ov2 <- method' "add" []
   abc;
 
 // Like add_ov, but where the 1st and 3rd arguments are the same.
-add_ov3 <- method' "add" []
+add_ov3 <- method "add" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -810,7 +811,7 @@ add_ov3 <- method' "add" []
   }
   abc;
 
-sub_ov <- method' "sub" []
+sub_ov <- method "sub" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -825,7 +826,7 @@ sub_ov <- method' "sub" []
   abc;
 
 // like sub_ov, but with 1st and 2nd arguments the same
-sub_ov2 <- method' "sub" []
+sub_ov2 <- method "sub" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -839,7 +840,7 @@ sub_ov2 <- method' "sub" []
   abc;
 
 // like sub_ov, but with 1st and 3nd arguments the same
-sub_ov3 <- method' "sub" []
+sub_ov3 <- method "sub" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -863,7 +864,7 @@ let equalNat_bvToNat2 =
 
 let ltNat_tac = simplify (addsimps [ltNat_bvToNat, equalNat_bvToNat1, equalNat_bvToNat2] empty_ss);
 
-mul_inner_ov <- method' "mul_inner" []
+mul_inner_ov <- method "mul_inner" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     azero <- jvm_fresh_var "azero" java_bool;
@@ -884,7 +885,7 @@ mul_inner_ov <- method' "mul_inner" []
     abc;
   };
 
-mul_ov <- method' "mul" [mul_inner_ov]
+mul_ov <- method "mul" [mul_inner_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pa, a) <- ecdsa_arr768 "a";
@@ -908,7 +909,7 @@ mul_ov <- method' "mul" [mul_inner_ov]
     abc;
   };
 
-sq_inner1_ov <- method' "sq_inner1" []
+sq_inner1_ov <- method "sq_inner1" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pa, a) <- jvm_fresh_array24 "a";
@@ -926,7 +927,7 @@ sq_inner1_ov <- method' "sq_inner1" []
     z3;
   };
 
-sq_inner2_ov <- method' "sq_inner2" []
+sq_inner2_ov <- method "sq_inner2" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pa, a) <- jvm_fresh_array24 "a";
@@ -945,7 +946,7 @@ sq_inner2_ov <- method' "sq_inner2" []
     z3;
   };
 
-sq_loop_ov <- method' "sq_loop" [mul_inner_ov]
+sq_loop_ov <- method "sq_loop" [mul_inner_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pa, a) <- jvm_fresh_array24 "a";
@@ -955,7 +956,7 @@ sq_loop_ov <- method' "sq_loop" [mul_inner_ov]
   }
   z3;
 
-sq_ov <- method' "sq" [sq_inner1_ov, sq_inner2_ov, sq_loop_ov, mul_inner_ov]
+sq_ov <- method "sq" [sq_inner1_ov, sq_inner2_ov, sq_loop_ov, mul_inner_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pa, a) <- ecdsa_arr768 "a";
@@ -965,7 +966,7 @@ sq_ov <- method' "sq" [sq_inner1_ov, sq_inner2_ov, sq_loop_ov, mul_inner_ov]
   }
   z3;
 
-mod_sub_ov <- method' "mod_sub" [sub_ov, add_ov2]
+mod_sub_ov <- method "mod_sub" [sub_ov, add_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pz, z) <- ecdsa_arr384 "z";
@@ -979,7 +980,7 @@ mod_sub_ov <- method' "mod_sub" [sub_ov, add_ov2]
   abc;
 
 // Like mod_sub_ov, but with 1st and 2nd arguments the same
-mod_sub_ov2 <- method' "mod_sub" [sub_ov2, add_ov2]
+mod_sub_ov2 <- method "mod_sub" [sub_ov2, add_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -991,7 +992,7 @@ mod_sub_ov2 <- method' "mod_sub" [sub_ov2, add_ov2]
   }
   abc;
 
-mod_half_ov <- method' "mod_half" [add_ov2, shr_ov2]
+mod_half_ov <- method "mod_half" [add_ov2, shr_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1017,7 +1018,7 @@ mod_div_ov <- method_skip "mod_div"
   }
   abc;
 
-group_add_ov <- method' "group_add" [add_ov, leq_ov, sub_ov2]
+group_add_ov <- method "group_add" [add_ov, leq_ov, sub_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pz, z) <- ecdsa_arr384 "z";
@@ -1031,7 +1032,7 @@ group_add_ov <- method' "group_add" [add_ov, leq_ov, sub_ov2]
   abc;
 
 // like group_add_ov, but 1st and 3rd arguments the same.
-group_add_ov3 <- method' "group_add" [add_ov3, leq_ov, sub_ov2]
+group_add_ov3 <- method "group_add" [add_ov3, leq_ov, sub_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1043,7 +1044,7 @@ group_add_ov3 <- method' "group_add" [add_ov3, leq_ov, sub_ov2]
   }
   abc;
 
-field_add_ov <- method' "field_add" [add_ov, leq_ov, dec_ov]
+field_add_ov <- method "field_add" [add_ov, leq_ov, dec_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -1057,7 +1058,7 @@ field_add_ov <- method' "field_add" [add_ov, leq_ov, dec_ov]
   abc;
 
 // Like field_add_ov, but 1st and 3rd arguments the same.
-field_add_ov3 <- method' "field_add" [add_ov3, leq_ov, dec_ov]
+field_add_ov3 <- method "field_add" [add_ov3, leq_ov, dec_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1069,7 +1070,7 @@ field_add_ov3 <- method' "field_add" [add_ov3, leq_ov, dec_ov]
   }
   abc;
 
-field_sub_ov <- method' "field_sub" [sub_ov, inc_ov]
+field_sub_ov <- method "field_sub" [sub_ov, inc_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -1083,7 +1084,7 @@ field_sub_ov <- method' "field_sub" [sub_ov, inc_ov]
   abc;
 
 // like field_sub_ov, but with 1st and 2nd arguments the same
-field_sub_ov2 <- method' "field_sub" [sub_ov2, inc_ov]
+field_sub_ov2 <- method "field_sub" [sub_ov2, inc_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1096,7 +1097,7 @@ field_sub_ov2 <- method' "field_sub" [sub_ov2, inc_ov]
   abc;
 
 // like field_sub_ov, but with 1st and 3nd arguments the same
-field_sub_ov3 <- method' "field_sub" [sub_ov3, inc_ov]
+field_sub_ov3 <- method "field_sub" [sub_ov3, inc_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1108,7 +1109,7 @@ field_sub_ov3 <- method' "field_sub" [sub_ov3, inc_ov]
   }
   abc;
 
-field_dbl_ov <- method' "field_dbl" [dbl_ov, leq_ov, dec_ov]
+field_dbl_ov <- method "field_dbl" [dbl_ov, leq_ov, dec_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -1121,7 +1122,7 @@ field_dbl_ov <- method' "field_dbl" [dbl_ov, leq_ov, dec_ov]
   abc;
 
 // Like field_dbl_ov, but with 1st and 2nd arguments the same.
-field_dbl_ov2 <- method' "field_dbl" [dbl_ov2, leq_ov, dec_ov]
+field_dbl_ov2 <- method "field_dbl" [dbl_ov2, leq_ov, dec_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1132,7 +1133,7 @@ field_dbl_ov2 <- method' "field_dbl" [dbl_ov2, leq_ov, dec_ov]
   }
   abc;
 
-field_dbl_dec_ov <- method' "field_dbl_dec" [field_sub_ov2]
+field_dbl_dec_ov <- method "field_dbl_dec" [field_sub_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pz, z) <- ecdsa_arr384 "z";
@@ -1144,7 +1145,7 @@ field_dbl_dec_ov <- method' "field_dbl_dec" [field_sub_ov2]
   }
   z3;
 
-field_red_ov <- method' "field_red" [inc_ov, leq_ov, dec_ov]
+field_red_ov <- method "field_red" [inc_ov, leq_ov, dec_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -1158,7 +1159,7 @@ field_red_ov <- method' "field_red" [inc_ov, leq_ov, dec_ov]
     quickcheck 100;
   };
 
-field_sq_ov <- method' "field_sq" [sq_ov, field_red_ov]
+field_sq_ov <- method "field_sq" [sq_ov, field_red_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -1197,7 +1198,7 @@ See https://github.com/GaloisInc/saw-script/issues/334)
 *********/
 
 // like field_sq_ov, but with 1st and 2nd arguments the same
-field_sq_ov2 <- method' "field_sq" [sq_ov, field_red_ov]
+field_sq_ov2 <- method "field_sq" [sq_ov, field_red_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1215,7 +1216,7 @@ field_sq_ov2 <- method' "field_sq" [sq_ov, field_red_ov]
     unint_z3 ["p384_field_mod", "p384_safe_product"];
   };
 
-field_mul_ov <- method' "field_mul" [mul_ov, field_red_ov]
+field_mul_ov <- method "field_mul" [mul_ov, field_red_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -1234,7 +1235,7 @@ field_mul_ov <- method' "field_mul" [mul_ov, field_red_ov]
   };
 
 // like field_mul_ov, but with 1st and 2nd arguments the same
-field_mul_ov2 <- method' "field_mul" [mul_ov, field_red_ov]
+field_mul_ov2 <- method "field_mul" [mul_ov, field_red_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1252,7 +1253,7 @@ field_mul_ov2 <- method' "field_mul" [mul_ov, field_red_ov]
   };
 
 // like field_mul_ov, but with 1st and 3rd arguments the same
-field_mul_ov3 <- method' "field_mul" [mul_ov, field_red_ov]
+field_mul_ov3 <- method "field_mul" [mul_ov, field_red_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1269,7 +1270,7 @@ field_mul_ov3 <- method' "field_mul" [mul_ov, field_red_ov]
     unint_z3 ["p384_field_mod", "p384_safe_product"];
   };
 
-group_red_aux_ov <- method' "group_red_aux" []
+group_red_aux_ov <- method "group_red_aux" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pr, r) <- ecdsa_arr384 "r";
@@ -1286,7 +1287,7 @@ group_red_aux_ov <- method' "group_red_aux" []
   //z3; //FIXME: This has problems due to a bug (in SBV?) where the wrong right-shift instruction is generated.
   assume_unsat;
 
-group_red_ov <- method' "group_red" [sub_ov2, group_red_aux_ov]
+group_red_ov <- method "group_red" [sub_ov2, group_red_aux_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pr, r) <- ecdsa_arr384 "r";
@@ -1301,7 +1302,7 @@ group_red_ov <- method' "group_red" [sub_ov2, group_red_aux_ov]
   //  simplify ss; unint_z3 ["group_red_aux_java"];
   //};
 
-group_mul_aux_ov <- method' "group_mul_aux" []
+group_mul_aux_ov <- method "group_mul_aux" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pr, r) <- ecdsa_arr384 "r";
@@ -1322,7 +1323,7 @@ group_mul_aux_ov <- method' "group_mul_aux" []
 
 // FIXME: If we have "field_add_ov" instead of "field_add_ov3" as an override,
 // then the error message we get is *very* unhelpful!
-field_mul3_ov <- method' "field_mul3" [field_add_ov3, field_dbl_ov]
+field_mul3_ov <- method "field_mul3" [field_add_ov3, field_dbl_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -1333,7 +1334,7 @@ field_mul3_ov <- method' "field_mul3" [field_add_ov3, field_dbl_ov]
   }
   (unint_z3 ["p384_field_add"]);
 
-field_mul4_ov <- method' "field_mul4" [field_dbl_ov, field_dbl_ov2]
+field_mul4_ov <- method "field_mul4" [field_dbl_ov, field_dbl_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -1345,7 +1346,7 @@ field_mul4_ov <- method' "field_mul4" [field_dbl_ov, field_dbl_ov2]
   (unint_z3 ["p384_field_add"]);
 
 // like field_mul4_ov, but with 1st and 2nd arguments the same
-field_mul4_ov2 <- method' "field_mul4" [field_dbl_ov, field_dbl_ov2]
+field_mul4_ov2 <- method "field_mul4" [field_dbl_ov, field_dbl_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1355,7 +1356,7 @@ field_mul4_ov2 <- method' "field_mul4" [field_dbl_ov, field_dbl_ov2]
   }
   (unint_z3 ["p384_field_add"]);
 
-field_mul8_ov <- method' "field_mul8" [field_dbl_ov, field_dbl_ov2]
+field_mul8_ov <- method "field_mul8" [field_dbl_ov, field_dbl_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     pz <- jvm_alloc_array 12 java_int;
@@ -1367,7 +1368,7 @@ field_mul8_ov <- method' "field_mul8" [field_dbl_ov, field_dbl_ov2]
   (unint_z3 ["p384_field_add"]);
 
 // like field_mul8_ov, but with 1st and 2nd arguments the same
-field_mul8_ov2 <- method' "field_mul8" [field_dbl_ov, field_dbl_ov2]
+field_mul8_ov2 <- method "field_mul8" [field_dbl_ov, field_dbl_ov2]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (px, x) <- ecdsa_arr384 "x";
@@ -1378,7 +1379,7 @@ field_mul8_ov2 <- method' "field_mul8" [field_dbl_ov, field_dbl_ov2]
   (unint_z3 ["p384_field_add"]);
 
 // TODO: compare with old version to see how to make this subproof work
-group_mul_ov <- method' "group_mul"
+group_mul_ov <- method "group_mul"
   [ set_zero_ov
   , group_red_ov
   , ashift_ov
@@ -1403,7 +1404,7 @@ group_mul_ov <- method' "group_mul"
     quickcheck 100;
   };
 
-ec_double_ov <- method' "ec_double"
+ec_double_ov <- method "ec_double"
   [ is_zero_ov
   , set_unit_ov
   , set_zero_ov
@@ -1441,7 +1442,7 @@ ec_double_ov <- method' "ec_double"
              ];
   };
 
-ec_full_add_ov <- method' "ec_full_add"
+ec_full_add_ov <- method "ec_full_add"
   [ is_zero_ov
   , assign_ov
   , set_unit_ov
@@ -1499,7 +1500,7 @@ p384_ec_full_sub_simp <-
 
 let ec_full_sub_ss = addsimps [p384_ec_full_sub_simp] ss;
 
-ec_full_sub_ov <- method' "ec_full_sub"
+ec_full_sub_ov <- method "ec_full_sub"
   [ is_zero_ov
   , sub_ov3
   , ec_full_add_ov
@@ -1524,7 +1525,7 @@ ec_full_sub_ov <- method' "ec_full_sub"
              ];
   };
 
-ec_mul_init_ov <- method' "ec_mul_init" [shr_ov, add_ov3, assign_ov, set_unit_ov, set_zero_ov]
+ec_mul_init_ov <- method "ec_mul_init" [shr_ov, add_ov3, assign_ov, set_unit_ov, set_zero_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pr, _) <- ecdsa_jacobian "r";
@@ -1541,7 +1542,7 @@ ec_mul_init_ov <- method' "ec_mul_init" [shr_ov, add_ov3, assign_ov, set_unit_ov
   }
   abc;
 
-ec_mul_aux_ov <- method' "ec_mul_aux"
+ec_mul_aux_ov <- method "ec_mul_aux"
   [ ec_double_ov
   , ec_full_add_ov
   , ec_full_sub_ov
@@ -1570,7 +1571,7 @@ ec_mul_aux_ov <- method' "ec_mul_aux"
     unint_z3 ["p384_ec_double", "p384_ec_full_add", "p384_ec_full_sub"];
   };
 
-ec_mul_ov <- method' "ec_mul" [ec_mul_init_ov, ec_mul_aux_ov]
+ec_mul_ov <- method "ec_mul" [ec_mul_init_ov, ec_mul_aux_ov]
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pd, d) <- ecdsa_arr384 "d";
@@ -1594,7 +1595,7 @@ ec_mul_ov <- method' "ec_mul" [ec_mul_init_ov, ec_mul_aux_ov]
     unint_z3 ["p384_ec_mul_aux", "p384_ec_mul_init"];
   };
 
-ec_twin_mul_aux_f_ov <- method' "ec_twin_mul_aux_f" []
+ec_twin_mul_aux_f_ov <- method "ec_twin_mul_aux_f" []
   do {
     t <- jvm_fresh_var "t" java_int;
     jvm_execute_func [jvm_term t];
@@ -1605,7 +1606,7 @@ ec_twin_mul_aux_f_ov <- method' "ec_twin_mul_aux_f" []
 let ec_twin_mul_aux1_ss =
   addsimps [p384_point_ops_add_simp, p384_point_ops_sub_simp] ss;
 
-ec_twin_mul_aux1_ov <- method' "ec_twin_mul_aux1"
+ec_twin_mul_aux1_ov <- method "ec_twin_mul_aux1"
   [ ec_double_ov
   , ec_full_sub_ov
   , ec_full_add_ov
@@ -1632,7 +1633,7 @@ ec_twin_mul_aux1_ov <- method' "ec_twin_mul_aux1"
     unint_z3 ["p384_ec_double", "p384_ec_full_add", "p384_ec_full_sub"];
   };
 
-ec_twin_mul_aux2_ov <- method' "ec_twin_mul_aux2" []
+ec_twin_mul_aux2_ov <- method "ec_twin_mul_aux2" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     c0 <- jvm_fresh_var "c0" java_int;
@@ -1683,7 +1684,7 @@ let twin_mul_init_ss =
            , p384_curve_norm_simp
            ] ss;
 
-ec_twin_mul_init_ov <- method' "ec_twin_mul_init"
+ec_twin_mul_init_ov <- method "ec_twin_mul_init"
   [ is_equal_ov
   , group_add_ov
   , ec_mul_ov
@@ -1751,7 +1752,7 @@ ec_twin_mul_init_ov <- method' "ec_twin_mul_init"
              ];
   };
 
-ec_twin_mul_ov <- method' "ec_twin_mul"
+ec_twin_mul_ov <- method "ec_twin_mul"
   [ assign_ov
   , is_equal_ov
   , set_unit_ov
@@ -1826,7 +1827,7 @@ ec_twin_mul_ov <- method' "ec_twin_mul"
              ];
   };
 
-method' "signHash"
+method "signHash"
   [ assign_ov
   , ec_mul_ov
   , mod_div_ov
@@ -1944,7 +1945,7 @@ method' "signHash"
              ];
   };
 
-method' "verifySignature"
+method "verifySignature"
   [ leq_ov
   , sub_ov2
   , mod_div_ov

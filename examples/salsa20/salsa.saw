@@ -1,3 +1,4 @@
+enable_deprecated;
 import "Salsa20.cry";
 
 let quarterround_setup : LLVMSetup() = do {

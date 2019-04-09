@@ -1,3 +1,4 @@
+enable_deprecated;
 import "../../doc/tutorial/code/ffs.cry";
 FFS <- java_load_class "FFS";
 java_ffs_imp <- java_extract FFS "ffs_imp" java_pure;
