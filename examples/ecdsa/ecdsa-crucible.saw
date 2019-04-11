@@ -362,12 +362,6 @@ let ecdsa_assign_affine (p : { ref : JVMValue, x : JVMValue, y : JVMValue }) a =
 
 ////////////////////////////////////////////////////////////
 
-// Define to be "java_no_simulate" to skip all but a chosen few proofs
-let maybe_skip = return ();
-//let maybe_skip = java_no_simulate;
-
-////////////////////////////////////////////////////////////
-
 c <- java_load_class ecc_class;
 
 let method_prove name specs setup tac =
@@ -385,7 +379,8 @@ let method_skip name _specs setup _tac =
   };
 
 let method = method_prove;
-let method' = method_assume;
+let method' = method_prove;
+//let method' = method_assume;
 //let method' = method_skip;
 
 let field_add_def = {{ p384_field::p384_field_add }};
@@ -1435,7 +1430,6 @@ ec_double_ov <- method' "ec_double"
   do {
     unfolding ["p384_ec_double"];
     simplify ss;
-    print_goal;
     unint_z3 [ "p384_field_add", "p384_field_mul"
              , "p384_field_sq", "p384_field_sub"
              ];
