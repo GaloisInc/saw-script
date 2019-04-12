@@ -51,10 +51,10 @@ import SAWScript.AutoMatch.Util
 
 import SAWScript.AutoMatch.Interaction
 import SAWScript.AutoMatch.JVM
-import SAWScript.AutoMatch.LLVM
+--import SAWScript.AutoMatch.LLVM
 import SAWScript.AutoMatch.Cryptol
 
-import SAWScript.LLVMBuiltins
+--import SAWScript.LLVMBuiltins
 --import SAWScript.JavaBuiltins
 import Language.JVM.Common (dotsToSlashes, mkClassName)
 
@@ -282,7 +282,7 @@ loadDecls (TaggedSourceFile lang path) = do
    AIGProxy proxy <- getProxy
    case lang of
       Cryptol -> io $ getDeclsCryptol path
-      LLVM    -> llvm_load_module path >>= io . getDeclsLLVM proxy sc
+      LLVM    -> fail "temporarily disabled" -- llvm_load_module path >>= io . getDeclsLLVM proxy sc
       JVM     -> loadJavaClassTopLevel (dropExtension path) >>= io . getDeclsJVM
    where
       loadJavaClassTopLevel cls = do
