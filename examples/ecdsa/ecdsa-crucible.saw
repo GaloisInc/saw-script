@@ -847,17 +847,6 @@ sub_ov3 <- method' "sub" []
   }
   abc;
 
-let ltNat_bvToNat =
-  core_axiom "(x : bitvector 32) -> (y : Nat) -> Eq Bool (ltNat (bvToNat 32 x) y) (or (ltNat 4294967295 y) (bvult 32 x (bvNat 32 y)))";
-
-let equalNat_bvToNat1 =
-  core_axiom "(x : bitvector 32) -> (y : Nat) -> Eq Bool (equalNat (bvToNat 32 x) y) (and (ltNat y 4294967296) (bvEq 32 x (bvNat 32 y)))";
-
-let equalNat_bvToNat2 =
-  core_axiom "(x : Nat) -> (y : bitvector 32) -> Eq Bool (equalNat x (bvToNat 32 y)) (and (ltNat x 4294967296) (bvEq 32 (bvNat 32 x) y))";
-
-let ltNat_tac = simplify (addsimps [ltNat_bvToNat, equalNat_bvToNat1, equalNat_bvToNat2] empty_ss);
-
 mul_inner_ov <- method' "mul_inner" []
   do {
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
@@ -875,7 +864,6 @@ mul_inner_ov <- method' "mul_inner" []
   }
   do {
     simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
-    ltNat_tac;
     abc;
   };
 
@@ -917,7 +905,6 @@ sq_inner1_ov <- method' "sq_inner1" []
   }
   do {
     simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
-    ltNat_tac;
     z3;
   };
 
@@ -936,7 +923,6 @@ sq_inner2_ov <- method' "sq_inner2" []
   }
   do {
     simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
-    ltNat_tac;
     z3;
   };
 
@@ -1311,7 +1297,6 @@ group_mul_aux_ov <- method' "group_mul_aux" []
     jvm_return (jvm_term {{ res.gra_b }});
   }
   do {
-    ltNat_tac;
     abc;
   };
 
