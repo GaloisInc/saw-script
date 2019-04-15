@@ -24,6 +24,7 @@ module Verifier.SAW.CryptolEnv
   , declareName
   , typeNoUser
   , schemaNoUser
+  , translateExpr
   , getNamingEnv
   , getAllIfaceDecls
   , InputText(..)
