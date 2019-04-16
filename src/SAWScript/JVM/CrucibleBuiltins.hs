@@ -67,6 +67,12 @@ import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 -- TODO: transition to Lang.JVM.Codebase from crucible-jvm
 import qualified Verifier.Java.Codebase as CB
 
+-- cryptol
+import qualified Cryptol.TypeCheck.Type as Cryptol
+
+-- cryptol-verifier
+import Verifier.SAW.Cryptol (importType, emptyEnv)
+
 -- what4
 import qualified What4.FunctionName as W4
 import qualified What4.Partial as W4
@@ -780,26 +786,21 @@ addCondition :: SetupCondition
              -> JVMSetup ()
 addCondition cond = currentState.csConditions %= (cond : )
 
--- | Returns logical type of actual type if it is an array or primitive
--- type, or an appropriately-sized bit vector for pointer types.
-logicTypeOfActual :: SharedContext -> JavaType -> IO (Maybe Term)
-logicTypeOfActual sc jty =
+-- | Returns Cryptol type of actual type if it is an array or
+-- primitive type.
+cryptolTypeOfActual :: JavaType -> Maybe Cryptol.Type
+cryptolTypeOfActual jty =
   case jty of
-    JavaBoolean -> Just <$> scBoolType sc
-    JavaByte    -> Just <$> scBitvector sc 8
-    JavaChar    -> Just <$> scBitvector sc 16
-    JavaShort   -> Just <$> scBitvector sc 16
-    JavaInt     -> Just <$> scBitvector sc 32
-    JavaLong    -> Just <$> scBitvector sc 64
-    JavaFloat   -> Just <$> scApplyPrelude_Float sc
-    JavaDouble  -> Just <$> scApplyPrelude_Double sc
-    JavaArray len ety ->
-      do mety' <- logicTypeOfActual sc ety
-         case mety' of
-           Just ety' -> do len' <- scNat sc (fromIntegral len)
-                           Just <$> scVecType sc len' ety'
-           Nothing   -> return Nothing
-    JavaClass _ -> return Nothing
+    JavaBoolean   -> Just Cryptol.tBit
+    JavaByte      -> Just $ Cryptol.tWord (Cryptol.tNum (8 :: Integer))
+    JavaChar      -> Just $ Cryptol.tWord (Cryptol.tNum (16 :: Integer))
+    JavaShort     -> Just $ Cryptol.tWord (Cryptol.tNum (16 :: Integer))
+    JavaInt       -> Just $ Cryptol.tWord (Cryptol.tNum (32 :: Integer))
+    JavaLong      -> Just $ Cryptol.tWord (Cryptol.tNum (64 :: Integer))
+    JavaFloat     -> Nothing
+    JavaDouble    -> Nothing
+    JavaArray n t -> Cryptol.tSeq (Cryptol.tNum n) <$> cryptolTypeOfActual t
+    JavaClass _   -> Nothing
 
 parseClassName :: String -> J.ClassName
 parseClassName cname = J.mkClassName (J.dotsToSlashes cname)
@@ -830,8 +831,7 @@ jvm_fresh_var bic _opts name jty =
   JVMSetupM $
   do cctx <- getCrucibleContext
      let sc = biSharedContext bic
-     mty <- liftIO $ logicTypeOfActual sc jty
-     case mty of
+     case cryptolTypeOfActual jty of
        Nothing -> fail $ "Unsupported type in jvm_fresh_var: " ++ show jty
        Just ty -> freshVariable sc name ty
 
@@ -840,10 +840,13 @@ jvm_fresh_var bic _opts name jty =
 freshVariable ::
   SharedContext {- ^ shared context -} ->
   String        {- ^ variable name  -} ->
-  Term          {- ^ variable type  -} ->
+  Cryptol.Type  {- ^ variable type  -} ->
   JVMSetup TypedTerm
-freshVariable sc name ty =
-  do tt <- liftIO (mkTypedTerm sc =<< scFreshGlobal sc name ty)
+freshVariable sc name cty =
+  do let schema = Cryptol.Forall [] [] cty
+     ty <- liftIO $ importType sc emptyEnv cty
+     var <- liftIO $ scFreshGlobal sc name ty
+     let tt = TypedTerm schema var
      currentState . csFreshVars %= cons tt
      return tt
 
