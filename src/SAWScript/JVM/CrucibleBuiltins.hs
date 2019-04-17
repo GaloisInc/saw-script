@@ -637,8 +637,11 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
 
 -- | Build a conjunction from a list of boolean terms.
 scAndList :: SharedContext -> [Term] -> IO Term
-scAndList sc []       = scBool sc True
-scAndList sc (x : xs) = foldM (scAnd sc) x xs
+scAndList sc = conj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just True
+    conj [] = scBool sc True
+    conj (x : xs) = foldM (scAnd sc) x xs
 
 --------------------------------------------------------------------------------
 
