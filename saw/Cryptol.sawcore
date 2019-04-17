@@ -254,9 +254,6 @@ pair_cong2 : (a : sort 0) -> (b : sort 0) -> (b' : sort 0) ->
 pair_cong2 a b b' eq_b =
   (eq_cong (sort 0) b b' eq_b (sort 0) (\ (x:sort 0) -> (a * x)));
 
-empty_cong : Eq (sort 0) #{} #{};
-empty_cong = Refl (sort 0) #{};
-
 axiom unsafeAssert_same_Num :
   (n : Num) -> Eq (Eq Num n n) (unsafeAssert Num n n) (Refl Num n);
 
@@ -379,9 +376,6 @@ seqBinary num a f =
 unitUnary : #() -> #();
 unitUnary _ = ();
 
-emptyUnary : #{} -> #{};
-emptyUnary _ = {};
-
 unitBinary : #() -> #() -> #();
 unitBinary _ _ = ();
 
@@ -392,9 +386,6 @@ pairBinary : (a b : sort 0) -> (a -> a -> a) -> (b -> b -> b)
            -> (a * b) -> (a * b) -> (a * b);
 pairBinary a b f g x12 y12 = (f (fst a b x12) (fst a b y12),
                               g (snd a b x12) (snd a b y12));
-
-emptyBinary : #{} -> #{} -> #{};
-emptyBinary _ _ = {};
 
 funBinary : (a b : sort 0) -> (b -> b -> b) -> (a -> b) -> (a -> b) -> (a -> b);
 funBinary a b op f g x = op (f x) (g x);
@@ -428,9 +419,6 @@ vecCmp n a f xs ys k =
 
 unitCmp : #() -> #() -> Bool -> Bool;
 unitCmp _ _ _ = False;
-
-emptyCmp : #{} -> #{} -> Bool -> Bool;
-emptyCmp _ _ _ = False;
 
 pairEq : (a b : sort 0) -> (a -> a -> Bool) -> (b -> b -> Bool) ->
   a * b -> a * b -> Bool;
@@ -549,14 +537,6 @@ PLogicPair a b pa pb =
   , or   = pairBinary a b pa.or  pb.or
   , xor  = pairBinary a b pa.xor pb.xor
   , not  = pairUnary a b pa.not pb.not
-  };
-
-PLogicEmpty : PLogic #{};
-PLogicEmpty =
-  { and  = emptyBinary
-  , or   = emptyBinary
-  , xor  = emptyBinary
-  , not  = emptyUnary
   };
 
 -- Arith class
@@ -716,21 +696,6 @@ PArithPair a b pa pb =
   , int = \ (i : Integer) -> (pa.int i, pb.int i)
   };
 
-PArithEmpty : PArith #{};
-PArithEmpty =
-  { add = emptyBinary
-  , sub = emptyBinary
-  , mul = emptyBinary
-  , div = emptyBinary
-  , mod = emptyBinary
-  , exp = emptyBinary
-  , lg2 = emptyUnary
-  , neg = emptyUnary
-  , sdiv = emptyBinary
-  , smod = emptyBinary
-  , int = \ (i : Integer) -> {}
-  };
-
 -- Cmp class
 
 PCmp : sort 0 -> sort 0;
@@ -781,9 +746,6 @@ PCmpPair a b pa pb =
   { eq  = pairEq a b pa.eq pb.eq
   , cmp = pairCmp a b pa.cmp pb.cmp };
 
-PCmpEmpty : PCmp #{};
-PCmpEmpty = { eq = \ (x y : #{}) -> True, cmp = emptyCmp };
-
 -- SignedCmp class
 
 PSignedCmp : sort 0 -> sort 0;
@@ -807,9 +769,6 @@ PSignedCmpUnit = { scmp = unitCmp };
 
 PSignedCmpPair : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp (a * b);
 PSignedCmpPair a b pa pb = { scmp = pairCmp a b pa.scmp pb.scmp };
-
-PSignedCmpEmpty : PSignedCmp #{};
-PSignedCmpEmpty = { scmp = emptyCmp };
 
 -- Literal class
 

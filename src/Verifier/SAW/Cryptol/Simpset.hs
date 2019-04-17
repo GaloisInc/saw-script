@@ -38,7 +38,6 @@ excludedNames =
   , "pair_cong1"
   , "pair_cong2"
   , "seq_cong1"
-  , "empty_cong"
   , "fun_cong"
   , "seq_TCNum"
   , "seq_TCInf"
