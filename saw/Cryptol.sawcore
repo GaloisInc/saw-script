@@ -792,6 +792,13 @@ PSignedCmp a = #{ scmp : a -> a -> Bool -> Bool };
 PSignedCmpVec : (n : Nat) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (Vec n a);
 PSignedCmpVec n a pa = { scmp = vecCmp n a pa.scmp };
 
+PSignedCmpSeq : (n : Num) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (seq n a);
+PSignedCmpSeq n =
+  Num#rec (\ (n:Num) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (seq n a))
+          (\ (n:Nat) -> PSignedCmpVec n)
+          (\ (a:sort 0) (pa : PSignedCmp a) -> error (PSignedCmp (Stream a)) "invalid SignedCmp instance")
+          n;
+
 PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec n Bool);
 PSignedCmpWord n = { scmp = bvSCmp n };
 

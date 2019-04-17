@@ -396,13 +396,10 @@ proveProp sc env prop =
         (C.pIsCmp -> Just (tIsRec' -> Just fm))
           -> do proveProp sc env (C.pCmp (C.tTuple (Map.elems fm)))
 
-        -- instance SignedCmp Bit
-        (C.pIsSignedCmp -> Just (C.tIsBit -> True))
-          -> do scGlobalApply sc "Cryptol.PSignedCmpBit" []
         -- instance (fin n) => SignedCmp [n]
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PSignedCmpSeqBool" [n']
+                scGlobalApply sc "Cryptol.PSignedCmpWord" [n']
         -- instance (fin n, SignedCmp a) => SignedCmp [n]a
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
