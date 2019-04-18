@@ -672,7 +672,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
     matchResult =
       case (ret, mspec ^. csRetValue) of
-        (Just (rty,r), Just expect) -> matchArg sc cc (mspec^.csLoc) PostState r rty expect
+        (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
         _ -> return ()
 
