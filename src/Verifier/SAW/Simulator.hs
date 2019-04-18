@@ -24,6 +24,7 @@ module Verifier.SAW.Simulator
   ( SimulatorConfig(..)
   , evalSharedTerm
   , evalGlobal
+  , evalGlobal'
   , noExtCns
   , checkPrimitives
   ) where
@@ -69,8 +70,8 @@ type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
 data SimulatorConfig l =
   SimulatorConfig
   { simGlobal :: Ident -> MValue l
-  , simExtCns :: VarIndex -> String -> Value l -> MValue l
-  , simUninterpreted :: String -> Value l -> Maybe (MValue l)
+  , simExtCns :: TermF Term -> VarIndex -> String -> Value l -> MValue l
+  , simUninterpreted :: TermF Term -> String -> Value l -> Maybe (MValue l)
   , simModMap :: ModuleMap
   }
 
@@ -130,7 +131,7 @@ evalTermF cfg lam recEval tf env =
                                   return $ VPiType v (\x -> lam t2 (x : env))
     LocalVar i              -> force (env !! i)
     Constant i t ty         -> do v <- recEval ty
-                                  maybe (recEval t) id (simUninterpreted cfg i v)
+                                  maybe (recEval t) id (simUninterpreted cfg tf i v)
     FTermF ftf              ->
       case ftf of
         GlobalDef ident     -> simGlobal cfg ident
@@ -165,7 +166,7 @@ evalTermF cfg lam recEval tf env =
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
         StringLit s         -> return $ VString s
         ExtCns ec           -> do v <- recEval (ecType ec)
-                                  simExtCns cfg (ecVarIndex ec) (ecName ec) v
+                                  simExtCns cfg tf (ecVarIndex ec) (ecName ec) v
   where
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
@@ -212,7 +213,32 @@ evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               (VarIndex -> String -> Value l -> MValue l) ->
               (String -> Value l -> Maybe (EvalM l (Value l))) ->
               EvalM l (SimulatorConfig l)
-evalGlobal modmap prims extcns uninterpreted = do
+evalGlobal modmap prims extcns uninterpreted =
+  evalGlobal' modmap prims (const extcns) (const uninterpreted)
+
+{-# SPECIALIZE evalGlobal' ::
+  Show (Extra l) =>
+  ModuleMap ->
+  Map Ident (ValueIn Id l) ->
+  (TermF Term -> VarIndex -> String -> ValueIn Id l -> MValueIn Id l) ->
+  (TermF Term -> String -> ValueIn Id l -> Maybe (MValueIn Id l)) ->
+  Id (SimulatorConfigIn Id l) #-}
+{-# SPECIALIZE evalGlobal' ::
+  Show (Extra l) =>
+  ModuleMap ->
+  Map Ident (ValueIn IO l) ->
+  (TermF Term -> VarIndex -> String -> ValueIn IO l -> MValueIn IO l) ->
+  (TermF Term -> String -> ValueIn IO l -> Maybe (MValueIn IO l)) ->
+  IO (SimulatorConfigIn IO l) #-}
+-- | A variant of 'evalGlobal' that lets the uninterpreted function
+-- symbol and external-constant callbacks have access to the 'TermF'.
+evalGlobal' ::
+  forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
+  ModuleMap -> Map Ident (Value l) ->
+  (TermF Term -> VarIndex -> String -> Value l -> MValue l) ->
+  (TermF Term -> String -> Value l -> Maybe (EvalM l (Value l))) ->
+  EvalM l (SimulatorConfig l)
+evalGlobal' modmap prims extcns uninterpreted = do
    checkPrimitives modmap prims
    mfix $ \cfg -> do
      thunks <- mapM delay (globals cfg)

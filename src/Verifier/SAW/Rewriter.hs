@@ -474,11 +474,13 @@ asPairRedex t =
        (x, y) <- R.asPairValue u
        return (if b then y else x)
 
-asRecordRedex :: (MonadFail m) => R.Recognizer m Term (Map FieldName Term, FieldName)
+asRecordRedex :: (MonadFail m) => R.Recognizer m Term Term
 asRecordRedex t =
     do (x, i) <- R.asRecordSelector t
        ts <- R.asRecordValue x
-       return (ts, i)
+       case Map.lookup i ts of
+         Just t' -> return t'
+         Nothing -> fail "Record field not found"
 
 -- | An iota redex is a recursor application whose main argument is a
 -- constructor application; specifically, this function recognizes
@@ -500,7 +502,7 @@ asIotaRedex t =
 reduceSharedTerm :: SharedContext -> Term -> Maybe (IO Term)
 reduceSharedTerm sc (asBetaRedex -> Just (_, _, body, arg)) = Just (instantiateVar sc 0 arg body)
 reduceSharedTerm _ (asPairRedex -> Just t) = Just (return t)
-reduceSharedTerm _ (asRecordRedex -> Just (m, i)) = fmap return (Map.lookup i m)
+reduceSharedTerm _ (asRecordRedex -> Just t) = Just (return t)
 reduceSharedTerm sc (asIotaRedex -> Just (d, params, p_ret, cs_fs, c, args)) =
   Just $ scReduceRecursor sc d params p_ret cs_fs c args
 reduceSharedTerm _ _ = Nothing
@@ -629,9 +631,12 @@ rewritingSharedContext sc ss = sc'
 
     rewriteTop :: TermF Term -> IO Term
     rewriteTop tf =
-      case reduceSharedTerm sc' t of
-        Nothing -> apply (Net.match_term ss t) t
-        Just io -> io
+      case asPairRedex t of
+        Just t' -> return t'
+        Nothing ->
+          case asRecordRedex t of
+            Just t' -> return t'
+            Nothing -> apply (Net.match_term ss t) t
       where t = Unshared tf
 
     apply :: [Either RewriteRule Conversion] ->

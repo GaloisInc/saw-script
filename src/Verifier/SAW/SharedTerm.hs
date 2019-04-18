@@ -1562,19 +1562,32 @@ scInstantiateExt sc vmap t0 = do
   commitChangeT (go t0)
 -}
 
+-- | Convert the given list of external constants to local variables,
+-- with the right-most mapping to local variable 0. If the term is
+-- open (i.e. it contains loose de Bruijn indices) then increment them
+-- accordingly.
+scExtsToLocals :: SharedContext -> [ExtCns Term] -> Term -> IO Term
+scExtsToLocals _ [] x = return x
+scExtsToLocals sc exts x = instantiateVars sc fn 0 x
+  where
+    m = Map.fromList [ (ecVarIndex ec, k) | (ec, k) <- zip (reverse exts) [0 ..] ]
+    fn l e =
+      case e of
+        Left ec ->
+          case Map.lookup (ecVarIndex ec) m of
+            Just k -> scLocalVar sc (l + k)
+            Nothing -> scFlatTermF sc (ExtCns ec)
+        Right i ->
+          scLocalVar sc (i + length exts)
+
 -- | Abstract over the given list of external constants by wrapping
 --   the given term with lambdas and replacing the external constant
 --   occurrences with the appropriate local variables.
 scAbstractExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
 scAbstractExts _ [] x = return x
 scAbstractExts sc exts x =
-   do ls <- sequence [ scTermF sc (LocalVar db) >>= \t -> return ( ecVarIndex ec, t )
-                     | ec <- reverse exts
-                     | db <- [0 .. ]
-                     ]
-      let m = Map.fromList ls
-      let lams = [ ( ecName ec, ecType ec ) | ec <- exts ]
-      scLambdaList sc lams =<< scInstantiateExt sc m =<< incVars sc 0 (length exts) x
+   do let lams = [ (ecName ec, ecType ec) | ec <- exts ]
+      scLambdaList sc lams =<< scExtsToLocals sc exts x
 
 -- | Generalize over the given list of external constants by wrapping
 -- the given term with foralls and replacing the external constant
@@ -1582,10 +1595,8 @@ scAbstractExts sc exts x =
 scGeneralizeExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
 scGeneralizeExts _ [] x = return x
 scGeneralizeExts sc exts x =
-  do ts <- traverse (scLocalVar sc) (reverse (take (length exts) [0 ..]))
-     let m = Map.fromList [ (ecVarIndex ec, t) | (ec, t) <- zip exts ts ]
-     let pis = [ (ecName ec, ecType ec) | ec <- exts ]
-     scPiList sc pis =<< scInstantiateExt sc m =<< incVars sc 0 (length exts) x
+  do let pis = [ (ecName ec, ecType ec) | ec <- exts ]
+     scPiList sc pis =<< scExtsToLocals sc exts x
 
 scUnfoldConstants :: SharedContext -> [String] -> Term -> IO Term
 scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0

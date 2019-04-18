@@ -183,8 +183,8 @@ constMap bp = Map.fromList
   , ("Prelude.expNat", expNatOp)
   , ("Prelude.widthNat", widthNatOp)
   , ("Prelude.natCase", natCaseOp)
-  , ("Prelude.equalNat", equalNatOp (bpBool bp))
-  , ("Prelude.ltNat", ltNatOp (bpBool bp))
+  , ("Prelude.equalNat", equalNatOp bp)
+  , ("Prelude.ltNat", ltNatOp bp)
   -- Integers
   , ("Prelude.Integer", VIntType)
   , ("Prelude.intAdd", intBinOp "intAdd" (bpIntAdd bp))
@@ -400,6 +400,34 @@ coerceOp =
 ------------------------------------------------------------
 -- Nat primitives
 
+-- | Return the number of bits necessary to represent the given value,
+-- which should be a value of type Nat.
+natSize :: BasePrims l -> Value l -> Int
+natSize bp val =
+  case val of
+    VNat n -> fromIntegral (widthNat (fromInteger n))
+    VToNat (VVector v) -> V.length v
+    VToNat (VWord w) -> bpBvSize bp w
+    _ -> error "natSize: expected Nat"
+
+-- | Convert the given value (which should be of type Nat) to a word
+-- of the given bit-width. The bit-width must be at least as large as
+-- that returned by @natSize@.
+natToWord :: (VMonad l, Show (Extra l)) => BasePrims l -> Int -> Value l -> MWord l
+natToWord bp w val =
+  case val of
+    VNat n -> bpBvLit bp w n
+    VToNat v ->
+      do x <- toWord (bpPack bp) v
+         let xsize = bpBvSize bp x
+         case compare xsize w of
+           GT -> error "natToWord: not enough bits"
+           EQ -> return x
+           LT -> -- zero-extend x to width w
+             do pad <- bpBvLit bp (w - xsize) 0
+                bpBvJoin bp pad x
+    _ -> error "natToWord: expected Nat"
+
 -- Succ :: Nat -> Nat;
 succOp :: VMonad l => Value l
 succOp =
@@ -463,18 +491,30 @@ widthNatOp =
   vNat (widthNat n)
 
 -- equalNat :: Nat -> Nat -> Bool;
-equalNatOp :: VMonad l => (Bool -> MBool l) -> Value l
-equalNatOp lit =
-  natFun' "equalNat1" $ \m -> return $
-  natFun' "equalNat2" $ \n ->
-  lit (m == n) >>= return . VBool
+equalNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
+equalNatOp bp =
+  strictFun $ \x -> return $
+  strictFun $ \y -> g x y
+  where
+    g (VNat i) (VNat j) = VBool <$> bpBool bp (i == j)
+    g v1 v2 =
+      do let w = max (natSize bp v1) (natSize bp v2)
+         x1 <- natToWord bp w v1
+         x2 <- natToWord bp w v2
+         VBool <$> bpBvEq bp x1 x2
 
 -- ltNat :: Nat -> Nat -> Bool;
-ltNatOp :: VMonad l => (Bool -> MBool l) -> Value l
-ltNatOp lit =
-  natFun' "ltNat1" $ \m -> return $
-  natFun' "ltNat2" $ \n ->
-  lit (m < n) >>= return . VBool
+ltNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
+ltNatOp bp =
+  strictFun $ \x -> return $
+  strictFun $ \y -> g x y
+  where
+    g (VNat i) (VNat j) = VBool <$> bpBool bp (i < j)
+    g v1 v2 =
+      do let w = max (natSize bp v1) (natSize bp v2)
+         x1 <- natToWord bp w v1
+         x2 <- natToWord bp w v2
+         VBool <$> bpBvult bp x1 x2
 
 -- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
 natCaseOp :: VMonad l => Value l
