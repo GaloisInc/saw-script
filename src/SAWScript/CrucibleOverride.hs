@@ -766,6 +766,18 @@ matchArg opts sc cc cs prepost (Crucible.LLVMValStruct xs) (Crucible.StructType 
                              (V.toList (Crucible.fiType <$> Crucible.siFields fields))
                              zs ]
 
+matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer n) = do
+  (globInitTy, globInitVal) <- resolveSetupValueLLVM opts cc sc cs g
+  sym <- getSymInterface
+  if expectedTy /= globInitTy
+  then failure (cs ^. csLoc) (StructuralMismatch actual g expectedTy)
+  else liftIO (Crucible.testEqual sym globInitVal actual) >>=
+    \case
+      Nothing -> failure (cs ^. csLoc) (BadEqualityComparison n)
+      Just pred_ ->
+        let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
+        in addAssert pred_ $ err ("global initializer equality " ++ stateCond prepost)
+
 matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
   case setupval of
     SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
@@ -785,18 +797,6 @@ matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy
          addAssert pred_ (Crucible.SimError (cs ^. csLoc) (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
 
     _ -> failure (cs ^. csLoc) (StructuralMismatch actual setupval expectedTy)
-
-matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer n) = do
-  (globInitTy, globInitVal) <- resolveSetupValueLLVM opts cc sc cs g
-  sym <- getSymInterface
-  if expectedTy /= globInitTy
-  then failure (cs ^. csLoc) (StructuralMismatch actual g expectedTy)
-  else liftIO (Crucible.testEqual sym globInitVal actual) >>=
-    \case
-      Nothing -> failure (cs ^. csLoc) (BadEqualityComparison n)
-      Just pred_ ->
-        let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
-        in addAssert pred_ $ err ("global initializer equality " ++ stateCond prepost)
 
 matchArg _opts _sc _cc cs _prepost actual expectedTy expected =
   failure (cs ^. csLoc) (StructuralMismatch actual expected expectedTy)
