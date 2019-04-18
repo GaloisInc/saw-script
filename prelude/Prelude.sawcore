@@ -1394,7 +1394,12 @@ primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
 composeM : (a b c: sort 0) -> (a -> CompM b) -> (b -> CompM c) -> a -> CompM c;
 composeM a b c f g x = bindM b c (f x) g;
 
+-- Raise an error in the computation monad
 primitive errorM : (a:sort 0) -> CompM a;
+
+-- Run the first computation, and, if it raises an error, catch the error and
+-- run the second computation
+primitive catchM : (a:sort 0) -> CompM a -> CompM a -> CompM a;
 
 -- Lists of input and output types for letRecM
 data InputOutputTypes : sort 1 where {
