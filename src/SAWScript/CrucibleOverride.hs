@@ -11,6 +11,7 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -35,6 +36,7 @@ import           Control.Lens
 import           Control.Exception as X
 import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
+import           Control.Monad.Error.Class (MonadError)
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
@@ -106,9 +108,8 @@ newtype OverrideMatcher arch mode a =
 
 instance Wrapped (OverrideMatcher arch mode a) where
 
-instance MonadState (OverrideState arch) (OverrideMatcher arch mode) where
-  get = OM get
-  put st = OM (put st)
+deriving instance MonadState (OverrideState arch) (OverrideMatcher arch mode)
+deriving instance MonadError (OverrideFailure arch) (OverrideMatcher arch mode)
 
 type AllocMap arch = Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
 
