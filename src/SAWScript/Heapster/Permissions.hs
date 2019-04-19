@@ -11,24 +11,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FunctionalDependencies #-}
 
-module SAWScript.Heapster.Permissions (
-  -- * Splitting expressions
-  SplittingExpr(..), 
-  -- * Splitting coercions
-  SplittingCoercion(..), splittingCoercionSource, splittingCoercionTarget,
-  coerceSplitting, meetSplittings,
-  -- * Permissions and permission sets
-  PermExpr(..), ValuePerm(..), LLVMPtrPerm(..), PermSet,
-  -- * Permission coercions
-  PermCoercion(..), permCoercionSource, permCoercionTarget,
-  coercePerm, meetPerms
-  ) where
+module SAWScript.Heapster.Permissions where
 
 import           Numeric.Natural
 import           Data.Kind
 import           Data.Parameterized.Ctx
 import           Data.Parameterized.Context
 import           Data.Parameterized.NatRepr
+import           Data.Parameterized.TraversableF
 
 import           Lang.Crucible.Types
 -- import           Lang.Crucible.LLVM.Types
@@ -38,7 +28,7 @@ import           Lang.Crucible.CFG.Core
 
 
 ----------------------------------------------------------------------
--- Splittings
+-- * Splittings
 ----------------------------------------------------------------------
 
 -- | Expressions that represent "fractions" of a write permission
@@ -86,7 +76,7 @@ meetSplittings = error "meetSplittings"
 
 
 ----------------------------------------------------------------------
--- Permissions and permission sets
+-- * Permissions and Permission Sets
 ----------------------------------------------------------------------
 
 -- | Expressions that are considered "pure" for use in permissions
@@ -126,7 +116,7 @@ type ValuePermType a = IntrinsicType "ValuePerm" (EmptyCtx ::> a)
 -- predicate" if you like).
 data ValuePerm (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
   -- | The trivial value perm
-  ValPerm_None :: ValuePerm ctx a
+  ValPerm_True :: ValuePerm ctx a
 
   -- | Says that a value is equal to a known static expression
   ValPerm_Eq :: PermExpr ctx a -> ValuePerm ctx a
@@ -150,15 +140,30 @@ data ValuePerm (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
   -- the memory pointed to has the given shape, and optionally we have
   -- permission to free the memory if we have write perms to @N@ words
   ValPerm_LLVMPtr :: (1 <= w) => NatRepr w ->
-                     [LLVMPtrPerm ctx w] -> Maybe (PermExpr ctx (BVType w)) ->
+                     [LLVMShapePerm ctx w] -> Maybe (PermExpr ctx (BVType w)) ->
                      ValuePerm ctx (LLVMPointerType w)
 
 
-data LLVMPtrPerm ctx w
-  = LLVMSinglePtr (PermExpr ctx (BVType w)) (SplittingExpr ctx)
-    (ValuePerm ctx (LLVMPointerType w))
-  | LLVMArrayPtr (PermExpr ctx (BVType w)) (PermExpr ctx (BVType w))
-    (SplittingExpr ctx) (ValuePerm ctx (LLVMPointerType w))
+data LLVMShapePerm ctx w
+  = LLVMFieldShapePerm (LLVMFieldPerm ctx w)
+  | LLVMArrayShapePerm (LLVMArrayPerm ctx w)
+
+data LLVMFieldPerm ctx w =
+  LLVMFieldPerm
+  {
+    llvmFieldOffset :: PermExpr ctx (BVType w),
+    llvmFieldSplitting :: SplittingExpr ctx,
+    llvmFieldPerm :: ValuePerm ctx (LLVMPointerType w)
+  }
+
+data LLVMArrayPerm ctx w =
+  LLVMArrayPerm
+  {
+    llvmArrayOffset :: PermExpr ctx (BVType w),
+    llvmArrayStride :: PermExpr ctx (BVType w),
+    llvmArrayLen :: PermExpr ctx (BVType w),
+    llvmArrayPtrPerm :: LLVMShapePerm ctx w
+  }
 
 
 -- | A permission set assigns value permissions to the variables in scope
@@ -166,48 +171,66 @@ type PermSet ctx = Assignment (ValuePerm ctx) ctx
 
 
 ----------------------------------------------------------------------
--- Permission coercions
+-- * Permission Set Eliminations
 ----------------------------------------------------------------------
 
--- | A coercion from one value permission to another. You can coerce a stronger
--- permission to a weaker one, and you can coerce both ways between permissions
--- that are equivalent.
---
--- These should intuitively be typed by the source and destination value
--- permissions, but this would be a little too complex to represent as a Haskell
--- GADT; however, you should /think/ of them as being typed anyway, as they are
--- typed when we convert them to SAW.
-data PermCoercion ctx a where
-  -- | The identity coercion, marked with its source (and target) perm
-  PCoerce_Id :: ValuePerm ctx a -> PermCoercion ctx a
+-- | An elimination path specififies a path to a subterm in a 'PermSet' at which
+-- eliminations are alllowed
+data ElimPath ctx a where
+  SimpleElimPath :: Index ctx a -> ElimPath ctx a
+  -- ^ A "simple" elimination path only allows eliminations at the top level of
+  -- a value perm, and so is just given by a variable
 
-  -- | Map a coercion on the body of a pointer perm to one on the pointer perm
-  -- itself
-  {-
-  PCoerce_LLVMPtr ::
-    (1 <= w) => NatRepr w -> PermExpr ctx (BVType w) -> SplittingExpr ctx ->
-    PermCoercion ctx (LLVMPointerType w) ->
-    PermCoercion ctx (LLVMPointerType w)
--}
-
--- FIXME: need more perm coercions
+  LLVMElimPath ::
+    Index ctx (LLVMPointerType w) -> [Int] -> ElimPath ctx (LLVMPointerType w)
+  -- ^ For LLVM permissions, eliminations are allowed under 0 or more field
+  -- permissions. The path component specifies the numeric position of each
+  -- field permission along the way in 'ValPerm_LLVMPtr' permission lists.
 
 
--- | Extract the source permission of a permission coercion
-permCoercionSource :: PermCoercion ctx a -> ValuePerm ctx a
-permCoercionSource (PCoerce_Id p) = p
+-- | Extract the value permission at a given path in a 'PermSet'
+permAtElimPath :: PermSet ctx -> ElimPath ctx a -> ValuePerm ctx a
+permAtElimPath permSet (SimpleElimPath var) = permSet ! var
+permAtElimPath permSet (LLVMElimPath var path) =
+  helper path (permSet ! var)
+  where
+    helper :: [Int] -> ValuePerm ctx (LLVMPointerType w) ->
+              ValuePerm ctx (LLVMPointerType w)
+    helper [] p = p
+    helper (i:is) (ValPerm_LLVMPtr _ ptr_perms _) =
+      case ptr_perms!!i of
+        LLVMFieldShapePerm (LLVMFieldPerm { llvmFieldPerm = p }) ->
+          helper is p
+        _ -> error "permAtElimPath"
+    helper _ _ = error "permAtElimPath"
 
--- | Extract the target permission of a permission coercion
-permCoercionTarget :: PermCoercion ctx a -> ValuePerm ctx a
-permCoercionTarget (PCoerce_Id p) = p
 
+-- | A permission elimination decomposes a permission set into some number of
+-- disjunctive possibilities; e.g., a permission set with a 'ValPerm_Or' could
+-- be decomposed into two permission sets, one with each of the left- and
+-- right-hand sides of the 'ValPerm_Or'. This creates a tree of disjunctive
+-- possibilities. At each leaf of this tree, an elimination contains an @f@,
+-- which in theory is indexed by the permission at that leaf; since we are not
+-- lifting the permissions to the type level, however, @f@ is actually only
+-- indexed by the context.
+data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
+  Elim_Leaf :: f ctx -> PermElim f ctx
+  -- ^ A leaf node in a permission elimination tree
 
--- | Attempt to coerce from one value permission to another, returning a
--- coercion proof if this is possible and 'Nothing' otherwise. For the logicians
--- out there, this is attempting to prove an implication.
-coercePerm :: ValuePerm ctx a -> ValuePerm ctx a -> Maybe (PermCoercion ctx a)
-coercePerm = error "coercePerm"
+  Elim_Or :: ElimPath ctx a -> PermElim f ctx -> PermElim f ctx ->
+             PermElim f ctx
+  -- ^ Eliminate a 'ValPerm_Or', replacing it with the left- and right-hand
+  -- sides in the two sub-eliminations
 
-meetPerms :: ValuePerm ctx a -> ValuePerm ctx a ->
-             Maybe (ValuePerm ctx a, PermCoercion ctx a, PermCoercion ctx a)
-meetPerms = error "meetPerms"
+  Elim_Ex :: ElimPath ctx a -> TypeRepr tp -> PermElim f (ctx ::> tp) ->
+             PermElim f ctx
+  -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists'
+
+  Elim_BindVar :: ElimPath ctx (LLVMPointerType w) ->
+                  PermElim f (ctx ::> LLVMPointerType w) -> PermElim f ctx
+  -- ^ Eliminate an arbitrary permission and replace it with @'ValPerm_Eq' x@,
+  -- where @x@ is a fresh variable that is given the permission that was
+  -- eliminated
+
+  Elim_Unroll :: ElimPath ctx a -> PermElim f ctx -> PermElim f ctx
+  -- ^ Unroll a recursive 'ValPerm_Mu' permission one time
