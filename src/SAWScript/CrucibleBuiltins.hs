@@ -59,16 +59,17 @@ module SAWScript.CrucibleBuiltins
 
 import           Control.Lens
 
-import           Control.Monad.State
 import           Control.Applicative
+import           Control.Monad.State
 import           Data.Foldable (for_, toList, find)
 import           Data.Function
 import           Data.IORef
-import           Data.List
+import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NonEmpty
+import           Data.Map (Map)
 import           Data.Maybe (fromMaybe)
 import           Data.Monoid ((<>))
 import           Data.String
-import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import           Data.Sequence (Seq)
@@ -78,10 +79,10 @@ import qualified Data.Vector as V
 import           Numeric.Natural
 import           System.IO
 
+import qualified Control.Monad.Trans.Maybe as MaybeT
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
-import qualified Control.Monad.Trans.Maybe as MaybeT
 
 import           Data.Parameterized.Classes
 
@@ -118,23 +119,23 @@ import qualified SAWScript.CrucibleLLVM as Crucible
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
-import Verifier.SAW.FiniteValue (ppFirstOrderValue)
-import Verifier.SAW.Prelude
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
-import Verifier.SAW.Recognizer
-import Verifier.SAW.TypedTerm
+import           Verifier.SAW.FiniteValue (ppFirstOrderValue)
+import           Verifier.SAW.Prelude
+import           Verifier.SAW.SharedTerm
+import           Verifier.SAW.TypedAST
+import           Verifier.SAW.Recognizer
+import           Verifier.SAW.TypedTerm
 
-import SAWScript.Proof
-import SAWScript.Prover.SolverStats
-import SAWScript.TopLevel
-import SAWScript.Value
-import SAWScript.Utils as SS
-import SAWScript.Options
+import           SAWScript.Proof
+import           SAWScript.Prover.SolverStats
+import           SAWScript.TopLevel
+import           SAWScript.Value
+import           SAWScript.Utils as SS
+import           SAWScript.Options
 
-import SAWScript.CrucibleMethodSpecIR
-import SAWScript.CrucibleOverride
-import SAWScript.CrucibleResolveSetupValue
+import           SAWScript.CrucibleMethodSpecIR
+import           SAWScript.CrucibleOverride
+import           SAWScript.CrucibleResolveSetupValue
 
 
 type MemImpl = Crucible.MemImpl Sym
@@ -510,16 +511,16 @@ ppGlobalPair cc gp =
 
 registerOverride ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
-  Options                    ->
-  CrucibleContext arch       ->
+  Options                       ->
+  CrucibleContext arch          ->
   Crucible.SimContext (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
-  W4.ProgramLoc              ->
-  [CrucibleMethodSpecIR]     ->
+  W4.ProgramLoc                 ->
+  NonEmpty CrucibleMethodSpecIR ->
   Crucible.OverrideSim (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
 registerOverride opts cc _ctx top_loc cs = do
   let sym = cc^.ccBackend
   sc <- CrucibleSAW.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
-  let fsym = (head cs)^.csName
+  let fsym = (NonEmpty.head cs)^.csName
       llvmctx = cc^.ccLLVMContext
   liftIO $
     printOutLn opts Info $ "Registering override for `" ++ fsym ++ "`"
@@ -567,8 +568,11 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
             let initExecState =
                   Crucible.InitialState simCtx globals Crucible.defaultAbortHandler $
                   Crucible.runOverrideSim rty $
-                  do mapM_ (registerOverride opts cc simCtx top_loc)
-                           (groupOn (view csName) lemmas)
+                  do case NonEmpty.nonEmpty lemmas of
+                       Nothing      -> pure ()
+                       Just lemmas' ->
+                         mapM_ (registerOverride opts cc simCtx top_loc)
+                               (groupOn (view csName) lemmas')
                      liftIO $ do
                        preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
                        Crucible.addAssumptions sym (Seq.fromList preds)
@@ -1271,9 +1275,9 @@ crucible_setup_val_to_typed_term bic _opt sval = do
 
 --------------------------------------------------------------------------------
 
--- | Sort a list of things and group them into equivalence classes.
+-- | Group into equivalence classes.
 groupOn ::
-  Ord b =>
+  (Ord b) =>
   (a -> b) {- ^ equivalence class projection -} ->
-  [a] -> [[a]]
-groupOn f = groupBy ((==) `on` f) . sortBy (compare `on` f)
+  NonEmpty a -> [NonEmpty a]
+groupOn f = NonEmpty.groupBy ((==) `on` f)

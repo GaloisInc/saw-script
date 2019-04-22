@@ -42,8 +42,10 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
 import           Control.Monad
 import           Data.Either (partitionEithers)
-import           Data.Foldable (for_, traverse_)
+import           Data.Foldable (for_, traverse_, toList)
 import           Data.List (tails)
+import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NonEmpty
 import           Data.IORef (readIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -340,7 +342,7 @@ methodSpecHandler ::
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   CrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
-  [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
+  NonEmpty CrucibleMethodSpecIR {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
@@ -376,7 +378,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                   Just ret -> PP.text (show ret)
           PP.<$$> ppOverrideFailure failureReason
     in
-      case partitionEithers prestates of
+      case partitionEithers (toList prestates) of
           (errs, []) ->
             fail $ show $
               PP.text "All overrides failed during structural matching:"
@@ -384,7 +386,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                 PP.vcat
                   (map (\(cs, err) ->
                           PP.text "*" PP.<> PP.indent 2 (prettyError cs err))
-                      (zip css errs))
+                      (zip (toList css) errs))
               PP.<$$> PP.text "Actual function return type: " PP.<>
                         PP.text (show (retTy))
           (_, ss) -> liftIO $
