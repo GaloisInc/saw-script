@@ -170,12 +170,15 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      let sym = cc^.ccBackend
      let nm' = fromString nm
      let llmod = cc^.ccLLVMModule
+     let stripSuffix (L.Symbol s) = L.Symbol (takeWhile (/= '.') s)
 
      setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
 
-     def <- case find (\d -> L.defName d == nm') (L.modDefines llmod) of
-              Just decl -> return decl
-              Nothing   -> fail $ unlines $
+     def <- case filter (\d -> stripSuffix (L.defName d) == nm') (L.modDefines llmod) of
+              [def] -> return def
+              (def:defs) | all (\d -> L.defBody d == L.defBody def) defs -> return def
+                         | otherwise -> fail $ "Multiple non-equal definitions for " ++ nm
+              []   -> fail $ unlines $
                 [ "Could not find function named " ++ show nm
                 ] ++ if simVerbose opts < 3
                      then [ "Run SAW with --sim-verbose=3 to see all function names" ]
