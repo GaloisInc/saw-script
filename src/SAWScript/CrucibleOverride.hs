@@ -340,6 +340,9 @@ partitionOWPs sym =
   in W4.partitionByPredsM (Just sym) $
        foldlMOf t (W4.andPred sym) (W4.truePred sym)
 
+bullets :: Char -> [PP.Doc] -> PP.Doc
+bullets c = PP.vcat . map (PP.hang 2 . (PP.text [c] PP.<+>))
+
 -- | Print a message about concrete failure of an override's preconditions
 --
 -- Assumes that the override it's being passed does have concretely failing
@@ -351,18 +354,9 @@ ppConcreteFailure :: forall arch sym.
 ppConcreteFailure owp =
   let (_, false, _) =
         W4.partitionLabeledPreds (Proxy :: Proxy sym) (owp ^. owpPreconditions)
-  in
-    PP.text "-" PP.<+>
-      PP.indent 2
-      (PP.vcat [ PP.text $ "Failed preconditions for override "
-               , PP.text $ "Name: " <> (owp ^. owpMethodSpec . csName)
-               , "Location: " <>
-                   PP.pretty
-                     (W4.plSourceLoc (owp ^. owpMethodSpec . csLoc))
-               ])
-        PP.<$$>
-        PP.vcat (map ((PP.text "*" PP.<+>) . Crucible.ppSimError)
-                     (false ^.. traverse . W4.labeledPredMsg))
+  in ppMethodSpec (owp ^. owpMethodSpec)
+     PP.<$$> bullets '*' (map Crucible.ppSimError
+                              (false ^.. traverse . W4.labeledPredMsg))
 
 -- | This function is responsible for implementing the \"override\" behavior
 --   of method specifications.  The main work done in this function to manage
@@ -418,15 +412,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- various overrides.
   branches <-
     let prettyError methodSpec failureReason =
-                  PP.text "Name: "
-                  PP.<> PP.text (methodSpec ^. csName)
-          PP.<$$> PP.text "Argument types: "
-          PP.<$$> PP.indent 2 (PP.vcat (map (PP.text . show) (methodSpec ^. csArgs)))
-          PP.<$$> PP.text "Return type: "
-          PP.<> case methodSpec ^. csRet of
-                  Nothing  -> PP.text "<void>"
-                  Just ret -> PP.text (show ret)
-          PP.<$$> ppOverrideFailure failureReason
+          ppMethodSpec methodSpec PP.<$$> ppOverrideFailure failureReason
     in
       case partitionEithers prestates of
           (errs, []) ->
@@ -494,12 +480,12 @@ methodSpecHandler opts sc cc top_loc css retTy = do
            )
          | (precond, cs, st) <- branches'
          ] ++
-         [ let fnName = case branches' of
-                         (_, cs, _) : _  -> cs^.csName
-                         _               -> "<unknown function>"
+         [ let fnName = case branches of
+                         owp : _  -> owp ^. owpMethodSpec . csName
+                         _        -> "<unknown function>"
 
                e = show $
-                 (PP.hcat $ map PP.text
+                 (PP.text $ unlines $
                    [ "No override specification applies for ", fnName, "."
                    , if not (null false)
                      then unwords $
@@ -508,7 +494,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                             ]
                      else ""
                    ])
-                 PP.<$$> PP.vcat (map ppConcreteFailure false)
+                 PP.<$$> bullets '-' (map ppConcreteFailure false)
 
 
            in

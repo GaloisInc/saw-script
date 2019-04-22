@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 {- |
 Module      : SAWScript.CrucibleMethodSpecIR
 Description : Provides type-checked representation for Crucible/LLVM function
@@ -31,17 +32,17 @@ import qualified Data.Map as Map
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
-import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
+import           Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
-import qualified Text.LLVM.AST as L
-import qualified Text.LLVM.PP as L
 import           Data.IORef
 import           Data.Monoid ((<>))
+import qualified Text.LLVM.AST as L
+import qualified Text.LLVM.PP as L
 
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as Crucible
 
-import SAWScript.Prover.SolverStats
+import           SAWScript.Prover.SolverStats
 
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
@@ -58,12 +59,13 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState
 --import qualified Lang.Crucible.LLVM.Translation as CL
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
+import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
 import qualified SAWScript.CrucibleLLVM as CL
 
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedTerm
-import SAWScript.Options
+import           Verifier.SAW.SharedTerm
+import           Verifier.SAW.TypedTerm
+import           SAWScript.Options
 
 newtype AllocIndex = AllocIndex Int
   deriving (Eq, Ord, Show)
@@ -180,13 +182,25 @@ data CrucibleMethodSpecIR' t =
   , _csSolverStats     :: SolverStats                 -- ^ statistics about the proof that produced this
   , _csLoc             :: ProgramLoc
   }
-  deriving (Show)
-
-type CrucibleMethodSpecIR = CrucibleMethodSpecIR' CL.MemType
+  deriving (Functor, Show)
 
 type GhostValue  = "GhostValue"
 type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
 type GhostGlobal = Crucible.GlobalVar GhostType
+
+makeLenses ''CrucibleMethodSpecIR'
+
+type CrucibleMethodSpecIR = CrucibleMethodSpecIR' CL.MemType
+
+ppMethodSpec :: CrucibleMethodSpecIR -> PP.Doc
+ppMethodSpec methodSpec =
+  PP.text "Name: " <> PP.text (methodSpec ^. csName)
+  PP.<$$> PP.text "Location: " <> PP.pretty (W4.plSourceLoc (methodSpec ^. csLoc))
+  PP.<$$> PP.text "Argument types: "
+  PP.<$$> PP.indent 2 (PP.vcat (map (PP.text . show) (methodSpec ^. csArgs)))
+  PP.<$$> PP.text "Return type: " <> case methodSpec ^. csRet of
+                                       Nothing  -> PP.text "<void>"
+                                       Just ret -> PP.text (show ret)
 
 instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue where
   type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue ctx = TypedTerm
@@ -198,7 +212,6 @@ instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.Fl
        res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
        return thn { ttTerm = res }
 
-makeLenses ''CrucibleMethodSpecIR'
 makeLenses ''StateSpec'
 
 csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex (ProgramLoc, CL.MemType)
