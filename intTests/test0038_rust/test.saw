@@ -1,0 +1,35 @@
+let f_spec : CrucibleSetup() = do {
+    // For unclear reasons, this struct:
+    //
+    //     struct BI { i: [[i32; 4]; 2] }
+    //
+    // maps to the LLVM type:
+    //
+    //     %BI = type { [0 x i32], [2 x [4 x i32]], [0 x i32] }
+    //
+    i <- crucible_fresh_var "w.i" (llvm_array 2 (llvm_array 4 (llvm_int 32)));
+    pw <- crucible_alloc (llvm_struct "BI");
+    crucible_points_to pw
+      (crucible_struct [ crucible_term {{ zero:[0][32] }}
+                        , crucible_term i
+                        , crucible_term {{ zero:[0][32] }}
+                        ]);
+
+    crucible_execute_func [pw];
+    crucible_points_to (crucible_elem pw 1) (crucible_term {{ zero:[2][4][32] }});
+
+    // TODO: The following fails with a "generic memory load error"
+    // crucible_points_to pw
+    //   (crucible_struct [ crucible_term {{ zero:[0][32] }}
+    //                    , crucible_term {{ zero:[2][4][32] }}
+    //                    , crucible_term {{ zero:[0][32] }}
+    //                    ]);
+};
+
+let main : TopLevel () = do {
+    structTest <- llvm_load_module "test.bc";
+
+    f_result <- crucible_llvm_verify structTest "f" [] false f_spec z3;
+
+    print "Done!";
+};
