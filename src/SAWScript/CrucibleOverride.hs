@@ -47,6 +47,7 @@ import           Data.List (tails)
 import           Data.IORef (readIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Maybe (fromMaybe, catMaybes)
 import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -63,6 +64,8 @@ import qualified Cryptol.Utils.PP as Cryptol
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
+import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
+import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
                    (TypeRepr(UnitRepr), GlobalVar)
 import qualified Lang.Crucible.CFG.Extension.Safety as Crucible
@@ -87,8 +90,8 @@ import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
-import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
+import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedAST
 --import           Verifier.SAW.Term.Pretty
 import           Verifier.SAW.Recognizer
@@ -315,9 +318,12 @@ failure loc e = OM (lift (throwE (OF loc e)))
 
 ------------------------------------------------------------------------
 
-data OverrideWithPreconditions arch sym =
+bullets :: Char -> [PP.Doc] -> PP.Doc
+bullets c = PP.vcat . map (PP.hang 2 . (PP.text [c] PP.<+>))
+
+data OverrideWithPreconditions arch =
   OverrideWithPreconditions
-    { _owpPreconditions :: [LabeledPred sym] -- ^ c.f. '_osAsserts'
+    { _owpPreconditions :: [LabeledPred Sym] -- ^ c.f. '_osAsserts'
     , _owpMethodSpec :: CrucibleMethodSpecIR
     , owpState :: OverrideState arch
     }
@@ -329,34 +335,65 @@ makeLenses ''OverrideWithPreconditions
 --   * Preconditions concretely succeed
 --   * Preconditions concretely fail
 --   * Preconditions are symbolic
-partitionOWPs :: forall arch sym.
-  W4.IsExprBuilder sym =>
-  sym ->
-  [OverrideWithPreconditions arch sym] ->
-  IO ([OverrideWithPreconditions arch sym], [OverrideWithPreconditions arch sym], [OverrideWithPreconditions arch sym])
-partitionOWPs sym =
-  let t :: Traversal' (OverrideWithPreconditions arch sym) (W4.Pred sym)
-      t = owpPreconditions . each . W4.labeledPred
+partitionOWPsConcrete :: forall arch.
+  Sym ->
+  [OverrideWithPreconditions arch] ->
+  IO ([OverrideWithPreconditions arch], [OverrideWithPreconditions arch], [OverrideWithPreconditions arch])
+partitionOWPsConcrete sym =
+  let traversal = owpPreconditions . each . W4.labeledPred
   in W4.partitionByPredsM (Just sym) $
-       foldlMOf t (W4.andPred sym) (W4.truePred sym)
+       foldlMOf traversal (W4.andPred sym) (W4.truePred sym)
 
-bullets :: Char -> [PP.Doc] -> PP.Doc
-bullets c = PP.vcat . map (PP.hang 2 . (PP.text [c] PP.<+>))
+-- | Like 'W4.partitionByPreds', but partitions on solver responses, not just
+--   concretized values.
+partitionBySymbolicPreds ::
+  (Foldable t) =>
+  Sym {- ^ solver connection -} ->
+  (a -> W4.Pred Sym) {- ^ how to extract predicates -} ->
+  t a ->
+  IO (Map Crucible.BranchResult [a])
+partitionBySymbolicPreds sym getPred =
+  let step mp a =
+        CrucibleSAW.considerSatisfiability sym Nothing (getPred a) <&> \k ->
+          Map.insertWith (++) k [a] mp
+  in foldM step Map.empty
+
+-- | Find individual preconditions that are symbolically false
+--
+-- We should probably be using unsat cores for this.
+findFalsePreconditions ::
+  Sym ->
+  OverrideWithPreconditions arch ->
+  IO [LabeledPred Sym]
+findFalsePreconditions sym owp =
+  fromMaybe [] . Map.lookup (Crucible.NoBranch False) <$>
+    partitionBySymbolicPreds sym (view W4.labeledPred) (owp ^. owpPreconditions)
+
+-- | Print a message about failure of an override's preconditions
+ppFailure ::
+  OverrideWithPreconditions arch ->
+  [LabeledPred Sym] ->
+  PP.Doc
+ppFailure owp false =
+  ppMethodSpec (owp ^. owpMethodSpec)
+     PP.<$$> bullets '*' (map Crucible.ppSimError
+                              (false ^.. traverse . W4.labeledPredMsg))
 
 -- | Print a message about concrete failure of an override's preconditions
 --
 -- Assumes that the override it's being passed does have concretely failing
 -- preconditions. Otherwise, the error won't make much sense.
-ppConcreteFailure :: forall arch sym.
-  W4.IsExprBuilder sym =>
-  OverrideWithPreconditions arch sym ->
-  PP.Doc
+ppConcreteFailure :: OverrideWithPreconditions arch -> PP.Doc
 ppConcreteFailure owp =
   let (_, false, _) =
-        W4.partitionLabeledPreds (Proxy :: Proxy sym) (owp ^. owpPreconditions)
-  in ppMethodSpec (owp ^. owpMethodSpec)
-     PP.<$$> bullets '*' (map Crucible.ppSimError
-                              (false ^.. traverse . W4.labeledPredMsg))
+        W4.partitionLabeledPreds (Proxy :: Proxy Sym) (owp ^. owpPreconditions)
+  in ppFailure owp false
+
+-- | Print a message about symbolic failure of an override's preconditions
+ppSymbolicFailure ::
+  (OverrideWithPreconditions arch, [LabeledPred Sym]) ->
+  PP.Doc
+ppSymbolicFailure = uncurry ppFailure
 
 -- | This function is responsible for implementing the \"override\" behavior
 --   of method specifications.  The main work done in this function to manage
@@ -432,7 +469,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- Now we do a second phase of simple compatibility checking: we check to see
   -- if any of the preconditions of the various overrides are concretely false.
   -- If so, there's no use in branching on them with @symbolicBranches@.
-  (true, false, unknown) <- liftIO $ partitionOWPs sym branches
+  (true, false, unknown) <- liftIO $ partitionOWPsConcrete sym branches
 
   -- Collapse the preconditions to a single predicate
   branches' <- liftIO $ forM (true ++ unknown) $
@@ -484,22 +521,37 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                          owp : _  -> owp ^. owpMethodSpec . csName
                          _        -> "<unknown function>"
 
-               e = show $
-                 (PP.text $ unlines $
-                   [ "No override specification applies for " ++ fnName ++ "."
-                   , if not (null false)
-                     then unwords $
-                            [ "The following overrides had some preconditions "
-                            , "that failed concretely:"
-                            ]
-                     else ""
-                   ])
-                 PP.<$$> bullets '-' (map ppConcreteFailure false)
-
+               e symFalse = show $
+                 PP.text
+                   ("No override specification applies for " ++ fnName ++ ".")
+                 PP.<$$>
+                   if null false
+                   then ""
+                   else PP.text (unwords
+                          [ "The following overrides had some preconditions "
+                          , "that failed concretely:"
+                          ]) PP.<$$> bullets '-' (map ppConcreteFailure false)
+                 PP.<$$>
+                   if null symFalse
+                   then ""
+                   else PP.text (unwords
+                          [ "The following overrides had some preconditions "
+                          , "that failed symbolically:"
+                          ]) PP.<$$> bullets '-' (map ppSymbolicFailure symFalse)
 
            in
            ( W4.truePred sym
-           , liftIO $ Crucible.addFailedAssertion sym (Crucible.GenericSimError e)
+           , liftIO $ do
+               -- Now that we're failing, do the additional work of figuring out
+               -- if any overrides had symbolically false preconditions
+               symFalse <- catMaybes <$> (forM unknown $ \owp ->
+                 findFalsePreconditions sym owp <&>
+                   \case
+                     [] -> Nothing
+                     ps -> Just (owp, ps))
+
+               Crucible.addFailedAssertion sym
+                 (Crucible.GenericSimError (e symFalse))
            , Just (W4.plSourceLoc top_loc)
            )
          ]))
