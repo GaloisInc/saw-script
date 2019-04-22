@@ -839,6 +839,21 @@ assignTerm sc cc loc prepost var val =
 
 ------------------------------------------------------------------------
 
+-- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
+notEqual ::
+  W4.IsExpr (W4.SymExpr sym) =>
+  PrePost ->
+  W4.ProgramLoc {- ^ where is the assertion from? -} ->
+  SetupValue {- ^ expected value -} ->
+  Crucible.LLVMVal sym {- ^ value from Crucible -} ->
+  Crucible.SimError
+notEqual cond loc expected actual =
+  Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
+    [ "Equality " ++ stateCond cond
+    , "Expected value: " ++ show (ppSetupValue expected)
+    , "Actual value: " ++ show (PP.pretty actual)
+    ]
+
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
   Options          {- ^ saw script print out opts -} ->
@@ -877,14 +892,7 @@ matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer n) = 
   else liftIO (Crucible.testEqual sym globInitVal actual) >>=
     \case
       Nothing -> failure (cs ^. csLoc) (BadEqualityComparison n)
-      Just pred_ ->
-        let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
-        in addAssert pred_ $ err $ unwords $
-             [ "global initializer equality"
-             , stateCond prepost -- either 'precondition' or 'postcondition'
-             , "for global"
-             , n
-             ]
+      Just pred_ -> addAssert pred_ $ notEqual prepost (cs ^. csLoc) g actual
 
 matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
   case setupval of
@@ -894,8 +902,7 @@ matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy
     SetupNull | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do sym <- getSymInterface
          p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
-         let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
-         addAssert p $ err $ ("null-equality " ++ stateCond prepost)
+         addAssert p $ notEqual prepost (cs ^. csLoc) setupval actual
 
     SetupGlobal name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do let mem = cc^.ccLLVMEmptyMem
@@ -903,13 +910,7 @@ matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy
          ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
          pred_ <- liftIO $
            Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
-         let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
-         addAssert pred_ $ err $ unwords
-           [ "global variable equality"
-           , stateCond prepost -- either 'precondition' or 'postcondition'
-           , "for global"
-           , name
-           ]
+         addAssert pred_ $ notEqual prepost (cs ^. csLoc) setupval actual
 
     _ -> failure (cs ^. csLoc) (StructuralMismatch actual setupval expectedTy)
 
