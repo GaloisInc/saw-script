@@ -486,7 +486,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
 
                e = show $
                  (PP.text $ unlines $
-                   [ "No override specification applies for ", fnName, "."
+                   [ "No override specification applies for " ++ fnName ++ "."
                    , if not (null false)
                      then unwords $
                             [ "The following overrides had some preconditions "
@@ -879,7 +879,12 @@ matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer n) = 
       Nothing -> failure (cs ^. csLoc) (BadEqualityComparison n)
       Just pred_ ->
         let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
-        in addAssert pred_ $ err ("global initializer equality " ++ stateCond prepost)
+        in addAssert pred_ $ err $ unwords $
+             [ "global initializer equality"
+             , stateCond prepost -- either 'precondition' or 'postcondition'
+             , "for global"
+             , n
+             ]
 
 matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
   case setupval of
@@ -889,7 +894,8 @@ matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy
     SetupNull | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do sym <- getSymInterface
          p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
-         addAssert p (Crucible.SimError (cs ^. csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost)))
+         let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
+         addAssert p $ err $ ("null-equality " ++ stateCond prepost)
 
     SetupGlobal name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do let mem = cc^.ccLLVMEmptyMem
@@ -897,7 +903,13 @@ matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy
          ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
          pred_ <- liftIO $
            Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
-         addAssert pred_ (Crucible.SimError (cs ^. csLoc) (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
+         let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
+         addAssert pred_ $ err $ unwords
+           [ "global variable equality"
+           , stateCond prepost -- either 'precondition' or 'postcondition'
+           , "for global"
+           , name
+           ]
 
     _ -> failure (cs ^. csLoc) (StructuralMismatch actual setupval expectedTy)
 
