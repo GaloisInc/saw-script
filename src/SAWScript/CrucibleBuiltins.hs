@@ -522,23 +522,29 @@ registerOverride ::
 registerOverride opts cc _ctx top_loc cs = do
   let sym = cc^.ccBackend
   sc <- CrucibleSAW.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
-  let fsym = (head cs)^.csName
+  let fstr = (head cs)^.csName
+      fsym = Text.pack fstr
       llvmctx = cc^.ccLLVMContext
+      matches (Crucible.LLVMHandleInfo _ h) =
+        Text.takeWhile (/= '.') (W4.functionName (Crucible.handleName h)) == fsym
   liftIO $
-    printOutLn opts Info $ "Registering override for `" ++ fsym ++ "`"
-  case Map.lookup (L.Symbol fsym) (llvmctx ^. Crucible.symbolMap) of
+    printOutLn opts Info $ "Registering override for `" ++ fstr ++ "`"
+  case filter matches (Map.elems (llvmctx ^. Crucible.symbolMap)) of
+    [] -> fail $ "Can't find declaration for `" ++ fstr ++ "`."
     -- LLVMHandleInfo constructor has two existential type arguments,
     -- which are bound here. h :: FnHandle args' ret'
-    Just (Crucible.LLVMHandleInfo _decl' h) -> do
+    his -> forM_ his $ \(Crucible.LLVMHandleInfo _ h) -> do
       -- TODO: check that decl' matches (csDefine cs)
       let retType = Crucible.handleReturnType h
+      let hName = Crucible.handleName h
+      liftIO $
+        printOutLn opts Info $ "  variant `" ++ show hName ++ "`"
       Crucible.bindFnHandle h
         $ Crucible.UseOverride
         $ Crucible.mkOverride'
-            (Crucible.handleName h)
+            hName
             retType
             (methodSpecHandler opts sc cc top_loc cs retType)
-    Nothing -> fail $ "Can't find declaration for `" ++ fsym ++ "`."
 
 --------------------------------------------------------------------------------
 
