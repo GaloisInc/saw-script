@@ -850,8 +850,10 @@ notEqual ::
 notEqual cond loc expected actual =
   Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
     [ "Equality " ++ stateCond cond
-    , "Expected value: " ++ show (ppSetupValue expected)
-    , "Actual value: " ++ show (PP.pretty actual)
+    , "Expected value: "
+    , show (ppSetupValue expected)
+    , "Actual value: "
+    , show (PP.pretty actual)
     ]
 
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
