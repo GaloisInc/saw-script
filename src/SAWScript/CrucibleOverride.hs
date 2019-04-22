@@ -538,6 +538,13 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                           [ "The following overrides had some preconditions "
                           , "that failed symbolically:"
                           ]) PP.<$$> bullets '-' (map ppSymbolicFailure symFalse)
+                 PP.<$$>
+                   if null false && null symFalse
+                   then PP.text $ unwords $
+                     [ "No overrides had any single concretely or symbolically"
+                     , "failing preconditions. This can mean that your override"
+                     , "has mutually inconsistent preconditions."
+                     ]
 
            in
            ( W4.truePred sym
