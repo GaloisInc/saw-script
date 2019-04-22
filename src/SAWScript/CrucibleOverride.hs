@@ -47,7 +47,6 @@ import           Data.List (tails)
 import           Data.IORef (readIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Maybe (catMaybes)
 import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -114,19 +113,7 @@ deriving instance MonadState (OverrideState arch) (OverrideMatcher arch mode)
 deriving instance MonadError (OverrideFailure arch) (OverrideMatcher arch mode)
 
 type AllocMap arch = Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
-
--- | A labeled assertion is a predicate together with:
---   1. A reason that it needs to be true
---   2. Its constant value, if any (computed via 'asConstantPred')
---
---   TODO: Consider merging with Crucible's @LabledPred@ type.
-data LabeledAssertion sym =
-  LabeledAssertion
-    { _labeledPred       :: W4.Pred sym
-    , _labeledLabel      :: Crucible.SimError
-    , _labeledConstValue :: Maybe Bool
-    }
-  deriving (Generic)
+type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
 data OverrideState arch = OverrideState
   { -- | Substitution for memory allocations
@@ -139,7 +126,7 @@ data OverrideState arch = OverrideState
   , _osFree :: Set VarIndex
 
     -- | Accumulated assertions
-  , _osAsserts :: [LabeledAssertion Sym]
+  , _osAsserts :: [LabeledPred Sym]
 
     -- | Accumulated assumptions
   , _osAssumes :: [W4.Pred Sym]
@@ -291,7 +278,7 @@ addAssert ::
   Crucible.SimError {- ^ reason   -} ->
   OverrideMatcher arch md ()
 addAssert p r =
-  OM (osAsserts %= cons (LabeledAssertion p r (W4.asConstantPred p)))
+  OM (osAsserts %= cons (W4.LabeledPred p r))
 
 addAssume ::
   W4.Pred Sym       {- ^ property -} ->
@@ -330,27 +317,52 @@ failure loc e = OM (lift (throwE (OF loc e)))
 
 data OverrideWithPreconditions arch sym =
   OverrideWithPreconditions
-    { _owpPreconditions :: [LabeledAssertion sym] -- ^ c.f. '_osAsserts'
+    { _owpPreconditions :: [LabeledPred sym] -- ^ c.f. '_osAsserts'
     , _owpMethodSpec :: CrucibleMethodSpecIR
-    , _owpState :: OverrideState arch
+    , owpState :: OverrideState arch
     }
   deriving (Generic)
 
--- | Are any of the preconditions concretely false?
-concretePreconditionFailure ::
-  OverrideWithPreconditions arch sym ->
-  Bool
-concretePreconditionFailure =
-  or . catMaybes . map (fmap not . _labeledConstValue) . _owpPreconditions
+makeLenses ''OverrideWithPreconditions
 
--- | Partition the preconditions of this override into three sets:
--- Concretely true, concretely false, and unknown/symbolic.
+-- | Partition into three groups:
+--   * Preconditions concretely succeed
+--   * Preconditions concretely fail
+--   * Preconditions are symbolic
+partitionOWPs :: forall arch sym.
+  W4.IsExprBuilder sym =>
+  sym ->
+  [OverrideWithPreconditions arch sym] ->
+  IO ([OverrideWithPreconditions arch sym], [OverrideWithPreconditions arch sym], [OverrideWithPreconditions arch sym])
+partitionOWPs sym =
+  let t :: Traversal' (OverrideWithPreconditions arch sym) (W4.Pred sym)
+      t = owpPreconditions . each . W4.labeledPred
+  in W4.partitionByPredsM (Just sym) $
+       foldlMOf t (W4.andPred sym) (W4.truePred sym)
+
+-- | Print a message about concrete failure of an override's preconditions
 --
--- This might be useful to generalize to an operation on @Pred@?
-partitionPreconditions ::
+-- Assumes that the override it's being passed does have concretely failing
+-- preconditions. Otherwise, the error won't make much sense.
+ppConcreteFailure :: forall arch sym.
+  W4.IsExprBuilder sym =>
   OverrideWithPreconditions arch sym ->
-  ([LabeledAssertion sym], [LabeledAssertion sym], [LabeledAssertion sym])
-partitionPreconditions = _
+  PP.Doc
+ppConcreteFailure owp =
+  let (_, false, _) =
+        W4.partitionLabeledPreds (Proxy :: Proxy sym) (owp ^. owpPreconditions)
+  in
+    PP.text "-" PP.<+>
+      PP.indent 2
+      (PP.vcat [ PP.text $ "Failed preconditions for override "
+               , PP.text $ "Name: " <> (owp ^. owpMethodSpec . csName)
+               , "Location: " <>
+                   PP.pretty
+                     (W4.plSourceLoc (owp ^. owpMethodSpec . csLoc))
+               ])
+        PP.<$$>
+        PP.vcat (map ((PP.text "*" PP.<+>) . Crucible.ppSimError)
+                     (false ^.. traverse . W4.labeledPredMsg))
 
 -- | This function is responsible for implementing the \"override\" behavior
 --   of method specifications.  The main work done in this function to manage
@@ -434,13 +446,12 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- Now we do a second phase of simple compatibility checking: we check to see
   -- if any of the preconditions of the various overrides are concretely false.
   -- If so, there's no use in branching on them with @symbolicBranches@.
-  let branches' :: [OverrideWithPreconditions arch Sym]
-      branches' = filter (not . concretePreconditionFailure) branches
+  (true, false, unknown) <- liftIO $ partitionOWPs sym branches
 
   -- Collapse the preconditions to a single predicate
-  branches'' <- liftIO $ forM branches $
-    \(OverrideWithPreconditions preconds cs st) -> 
-      W4.andAllOf sym (folded._1) (map _labeledPred preconds) <&>
+  branches' <- liftIO $ forM (true ++ unknown) $
+    \(OverrideWithPreconditions preconds cs st) ->
+      W4.andAllOf sym (folded . W4.labeledPred) preconds <&>
         \precond -> (precond, cs, st)
 
   -- Now use crucible's symbolic branching machinery to select between the branches.
@@ -481,20 +492,31 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
            , Just (W4.plSourceLoc (cs^.csLoc))
            )
-         | (precond, cs, st) <- branches''
+         | (precond, cs, st) <- branches'
          ] ++
-        [
+         [ let fnName = case branches' of
+                         (_, cs, _) : _  -> cs^.csName
+                         _               -> "<unknown function>"
 
-            let fnName = case branches'' of
-                           (_, cs, _) : _  -> cs^.csName
-                           _               -> "unknown function"
-            in
-            ( W4.truePred sym
-            , liftIO $ Crucible.addFailedAssertion sym (Crucible.GenericSimError $ "no override specification applies for " ++ fnName)
-            , Just (W4.plSourceLoc top_loc)
-            )
-        ]
-       ))
+               e = show $
+                 (PP.hcat $ map PP.text
+                   [ "No override specification applies for ", fnName, "."
+                   , if not (null false)
+                     then unwords $
+                            [ "The following overrides had some preconditions "
+                            , "that failed concretely:"
+                            ]
+                     else ""
+                   ])
+                 PP.<$$> PP.vcat (map ppConcreteFailure false)
+
+
+           in
+           ( W4.truePred sym
+           , liftIO $ Crucible.addFailedAssertion sym (Crucible.GenericSimError e)
+           , Just (W4.plSourceLoc top_loc)
+           )
+         ]))
      (Crucible.RegMap args)
 
 ------------------------------------------------------------------------
