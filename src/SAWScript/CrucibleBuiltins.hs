@@ -59,6 +59,7 @@ module SAWScript.CrucibleBuiltins
 
 import           Control.Lens
 
+import           Control.Monad.Catch
 import           Control.Monad.State
 import           Control.Applicative
 import           Data.Foldable (for_, toList, find)
@@ -79,7 +80,7 @@ import           Numeric.Natural
 import           System.IO
 
 import qualified Text.LLVM.AST as L
-import qualified Text.LLVM.PP as L (ppType)
+import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
@@ -139,6 +140,30 @@ import SAWScript.CrucibleResolveSetupValue
 
 type MemImpl = Crucible.MemImpl Sym
 
+data LLVMVerificationException
+  = MultipleStaticFunctions L.Symbol
+  | DefNotFound L.Symbol [L.Symbol]
+  | DeclNotFound L.Symbol [L.Symbol]
+  | SetupError SetupError
+
+displayVerifExceptionOpts :: Options -> LLVMVerificationException -> String
+displayVerifExceptionOpts _ (MultipleStaticFunctions (L.Symbol nm)) =
+  "Multiple non-equal definitions for `" ++ nm ++ "`."
+displayVerifExceptionOpts opts (DefNotFound (L.Symbol nm) nms) =
+  unlines $
+  [ "Could not find definition for function named `" ++ nm ++ "`."
+  ] ++ if simVerbose opts < 3
+       then [ "Run SAW with --sim-verbose=3 to see all function names" ]
+       else "Available function names:" : map (("  " ++) . show . L.ppSymbol) nms
+displayVerifExceptionOpts opts (DeclNotFound (L.Symbol nm) nms) =
+  unlines $
+  [ "Could not find declaration for function named `" ++ nm ++ "`."
+  ] ++ if simVerbose opts < 3
+       then [ "Run SAW with --sim-verbose=3 to see all function names" ]
+       else "Available function names:" : map (("  " ++) . show . L.ppSymbol) nms
+displayVerifExceptionOpts _ (SetupError e) =
+  "Error during simulation setup: " ++ show (ppSetupError e)
+
 show_cfg :: SAW_CFG -> String
 show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 show_cfg (JVM_CFG (Crucible.AnyCFG cfg)) = show cfg
@@ -155,6 +180,38 @@ ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
 
+-- Compare two LLVM function bodies ignoring metadata.
+equalBodies :: [L.BasicBlock] -> [L.BasicBlock] -> Bool
+equalBodies xs ys = all (uncurry equalBlocks) (zip xs ys)
+  where
+    equalBlocks b1 b2 = all (uncurry equalInsns) (zip (L.bbStmts b1) (L.bbStmts b2))
+    equalInsns (L.Result x i _) (L.Result x' i' _) = x == x' && i == i'
+    equalInsns (L.Effect (L.Call _ _ nm _) _) (L.Effect (L.Call _ _ nm' _) _)
+      | isMdFunction nm && isMdFunction nm' = True
+    equalInsns (L.Effect i _) (L.Effect i' _) = i == i'
+    equalInsns _ _ = False
+    isMdFunction (L.ValSymbol (L.Symbol nm)) = "llvm.dbg." `isPrefixOf` nm
+
+findDefMaybeStatic :: L.Module -> String -> Either LLVMVerificationException L.Define
+findDefMaybeStatic llmod nm = do
+  case filter (\d -> stripSuffix (L.defName d) == nm') (L.modDefines llmod) of
+    (def:_) -> Right def
+    {-}
+    (def:defs) | all (\d -> equalBodies (L.defBody d) (L.defBody def)) defs -> Right def
+               | otherwise -> Left $ MultipleStaticFunctions nm'-}
+    []   -> Left $ DefNotFound nm' $ map L.defName $ L.modDefines llmod
+  where
+    stripSuffix (L.Symbol s) = L.Symbol (takeWhile (/= '.') s)
+    nm' = fromString nm
+
+findDecl :: L.Module -> String -> Either LLVMVerificationException L.Declare
+findDecl llmod nm = do
+  case find (\d -> (L.decName d) == nm') (L.modDeclares llmod) of
+    Just decl -> Right decl
+    Nothing -> Left $ DeclNotFound nm' $ map L.decName $ L.modDeclares llmod
+  where
+    nm' = fromString nm
+
 crucible_llvm_verify ::
   BuiltinContext         ->
   Options                ->
@@ -168,22 +225,12 @@ crucible_llvm_verify ::
 crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
   setupCrucibleContext bic opts lm $ \cc -> do
      let sym = cc^.ccBackend
-     let nm' = fromString nm
      let llmod = cc^.ccLLVMModule
-     let stripSuffix (L.Symbol s) = L.Symbol (takeWhile (/= '.') s)
 
      setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
 
-     def <- case filter (\d -> stripSuffix (L.defName d) == nm') (L.modDefines llmod) of
-              [def] -> return def
-              (def:defs) | all (\d -> L.defBody d == L.defBody def) defs -> return def
-                         | otherwise -> fail $ "Multiple non-equal definitions for " ++ nm
-              []   -> fail $ unlines $
-                [ "Could not find function named " ++ show nm
-                ] ++ if simVerbose opts < 3
-                     then [ "Run SAW with --sim-verbose=3 to see all function names" ]
-                     else "Available function names:" :
-                            map (("  " ++) . show . L.defName) (L.modDefines llmod)
+     def <- either (fail . displayVerifExceptionOpts opts) return (findDefMaybeStatic llmod nm)
+
      st0 <- either (fail . show . ppSetupError) return (initialCrucibleSetupState cc def setupLoc)
 
      -- execute commands of the method spec
@@ -229,15 +276,17 @@ crucible_llvm_unsafe_assume_spec ::
   TopLevel CrucibleMethodSpecIR
 crucible_llvm_unsafe_assume_spec bic opts lm nm setup =
   setupCrucibleContext bic opts lm $ \cc -> do
-    let nm' = fromString nm
     let llmod = cc^.ccLLVMModule
     loc <- toW4Loc "_SAW_assume_spec" <$> getPosition
-    st0 <- case initialCrucibleSetupState cc     <$> find (\d -> L.defName d == nm') (L.modDefines  llmod) <*> pure loc <|>
-                initialCrucibleSetupStateDecl cc <$> find (\d -> L.decName d == nm') (L.modDeclares llmod) <*> pure loc of
-                   Nothing -> fail ("Could not find function named" ++ show nm)
-                   Just (Left err) -> fail (show (ppSetupError err))
-                   Just (Right st0) -> return st0
-    (view csMethodSpec) <$> execStateT (runCrucibleSetupM setup) st0
+    let edef = findDefMaybeStatic llmod nm
+    let edecl = findDecl llmod nm
+    est0 <- case (edef, edecl) of
+              (Right def, _) -> return $ initialCrucibleSetupState cc def loc
+              (_, Right decl) -> return $ initialCrucibleSetupStateDecl cc decl loc
+              (Left err, Left _) -> fail (displayVerifExceptionOpts opts err)
+    case est0 of
+      Left err -> fail (show (ppSetupError err))
+      Right st0 -> (view csMethodSpec) <$> execStateT (runCrucibleSetupM setup) st0
 
 verifyObligations :: CrucibleContext arch
                   -> CrucibleMethodSpecIR
