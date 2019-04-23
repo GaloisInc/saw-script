@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -116,11 +117,14 @@ module Verifier.SAW.SharedTerm
   , scPairType
   , scPairLeft
   , scPairRight
+  , scPairValueReduced
   , scTuple
   , scTupleType
   , scTupleSelector
+  , scTupleReduced
   , scVector
   , scVecType
+  , scVectorReduced
   , scUpdNatFun
   , scUpdBvFun
   , scGlobalApply
@@ -1164,6 +1168,45 @@ scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
 scGlobalApply sc i ts =
     do c <- scGlobalDef sc i
        scApplyAll sc c ts
+
+-- | An optimized variant of 'scPairValue' that will reduce pairs of
+-- the form @(x.L, x.R)@ to @x@.
+scPairValueReduced :: SharedContext -> Term -> Term -> IO Term
+scPairValueReduced sc x y =
+  case (unwrapTermF x, unwrapTermF y) of
+    (FTermF (PairLeft a), FTermF (PairRight b)) | a == b -> return a
+    _ -> scPairValue sc x y
+
+-- | An optimized variant of 'scPairTuple' that will reduce tuples of
+-- the form @(x.1, x.2, x.3)@ to @x@.
+scTupleReduced :: SharedContext -> [Term] -> IO Term
+scTupleReduced sc [] = scUnitValue sc
+scTupleReduced _ [t] = return t
+scTupleReduced sc (t : ts) = scPairValueReduced sc t =<< scTupleReduced sc ts
+
+-- | An optimized variant of 'scVector' that will reduce vectors of
+-- the form @[at x 0, at x 1, at x 2, at x 3]@ to just @x@.
+scVectorReduced :: SharedContext -> Term {- ^ element type -} -> [Term] {- ^ elements -} -> IO Term
+scVectorReduced sc ety xs =
+  case traverse asAt xs >>= asRedex of
+    Just x -> return x
+    Nothing -> scVector sc ety xs
+  where
+    asAny :: Term -> Maybe ()
+    asAny _ = Just ()
+
+    asAt :: Term -> Maybe (Term :*: Natural)
+    asAt = isGlobalDef "Prelude.at" @> asAny @> asAny @> return <@> asNat
+
+    asRedex :: [Term :*: Natural] -> Maybe Term
+    asRedex [] = Nothing
+    asRedex ((t :*: n) : ts) = if n == 0 then check t 0 ts else Nothing
+
+    check :: Term -> Natural -> [Term :*: Natural] -> Maybe Term
+    check t _ [] = Just t
+    check t n ((t' :*: n') : ts)
+      | t' == t && n' == n + 1 = check t n' ts
+      | otherwise = Nothing
 
 ------------------------------------------------------------
 -- Building terms using prelude functions
