@@ -62,10 +62,12 @@ import           Control.Lens
 import           Control.Monad.Catch
 import           Control.Monad.State
 import           Control.Applicative
+import           Data.Char (isDigit)
 import           Data.Foldable (for_, toList, find)
 import           Data.Function
 import           Data.IORef
 import           Data.List
+import qualified Data.List.NonEmpty as NE
 import           Data.Maybe (fromMaybe)
 import           Data.Monoid ((<>))
 import           Data.String
@@ -180,28 +182,21 @@ ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
 
--- Compare two LLVM function bodies ignoring metadata.
-equalBodies :: [L.BasicBlock] -> [L.BasicBlock] -> Bool
-equalBodies xs ys = all (uncurry equalBlocks) (zip xs ys)
+matchingStatics :: L.Symbol -> L.Symbol -> Bool
+matchingStatics (L.Symbol a) (L.Symbol b) = go a b
   where
-    equalBlocks b1 b2 = all (uncurry equalInsns) (zip (L.bbStmts b1) (L.bbStmts b2))
-    equalInsns (L.Result x i _) (L.Result x' i' _) = x == x' && i == i'
-    equalInsns (L.Effect (L.Call _ _ nm _) _) (L.Effect (L.Call _ _ nm' _) _)
-      | isMdFunction nm && isMdFunction nm' = True
-    equalInsns (L.Effect i _) (L.Effect i' _) = i == i'
-    equalInsns _ _ = False
-    isMdFunction (L.ValSymbol (L.Symbol nm)) = "llvm.dbg." `isPrefixOf` nm
+    go [] [] = True
+    go (x:xs) (y:ys) = x == y && go xs ys
+    go [] ('.':ds) = all isDigit ds
+    go ('.':ds) [] = all isDigit ds
+    go _ _ = False
 
-findDefMaybeStatic :: L.Module -> String -> Either LLVMVerificationException L.Define
+findDefMaybeStatic :: L.Module -> String -> Either LLVMVerificationException (NE.NonEmpty L.Define)
 findDefMaybeStatic llmod nm = do
-  case filter (\d -> stripSuffix (L.defName d) == nm') (L.modDefines llmod) of
-    (def:_) -> Right def
-    {-}
-    (def:defs) | all (\d -> equalBodies (L.defBody d) (L.defBody def)) defs -> Right def
-               | otherwise -> Left $ MultipleStaticFunctions nm'-}
-    []   -> Left $ DefNotFound nm' $ map L.defName $ L.modDefines llmod
+  case NE.nonEmpty (filter (\d -> matchingStatics (L.defName d) nm') (L.modDefines llmod)) of
+    Nothing -> Left $ DefNotFound nm' $ map L.defName $ L.modDefines llmod
+    Just defs -> Right defs
   where
-    stripSuffix (L.Symbol s) = L.Symbol (takeWhile (/= '.') s)
     nm' = fromString nm
 
 findDecl :: L.Module -> String -> Either LLVMVerificationException L.Declare
@@ -222,14 +217,13 @@ crucible_llvm_verify ::
   CrucibleSetupM ()      ->
   ProofScript SatResult  ->
   TopLevel CrucibleMethodSpecIR
-crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
-  setupCrucibleContext bic opts lm $ \cc -> do
+crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic = do
+  defs <- either (fail . displayVerifExceptionOpts opts) return (findDefMaybeStatic (modMod lm) nm)
+  specs <- forM defs $ \def -> setupCrucibleContext bic opts lm $ \cc -> do
      let sym = cc^.ccBackend
      let llmod = cc^.ccLLVMModule
 
      setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
-
-     def <- either (fail . displayVerifExceptionOpts opts) return (findDefMaybeStatic llmod nm)
 
      st0 <- either (fail . show . ppSetupError) return (initialCrucibleSetupState cc def setupLoc)
 
@@ -266,6 +260,7 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic =
      -- attempt to verify the proof obligations
      stats <- verifyObligations cc methodSpec tactic assumes asserts
      return (methodSpec & csSolverStats .~ stats)
+  return (NE.head specs)
 
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
@@ -281,7 +276,7 @@ crucible_llvm_unsafe_assume_spec bic opts lm nm setup =
     let edef = findDefMaybeStatic llmod nm
     let edecl = findDecl llmod nm
     est0 <- case (edef, edecl) of
-              (Right def, _) -> return $ initialCrucibleSetupState cc def loc
+              (Right defs, _) -> return $ initialCrucibleSetupState cc (NE.head defs) loc
               (_, Right decl) -> return $ initialCrucibleSetupStateDecl cc decl loc
               (Left err, Left _) -> fail (displayVerifExceptionOpts opts err)
     case est0 of
@@ -572,10 +567,10 @@ registerOverride opts cc _ctx top_loc cs = do
   let sym = cc^.ccBackend
   sc <- CrucibleSAW.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
   let fstr = (head cs)^.csName
-      fsym = Text.pack fstr
+      fsym = L.Symbol fstr
       llvmctx = cc^.ccLLVMContext
       matches (Crucible.LLVMHandleInfo _ h) =
-        Text.takeWhile (/= '.') (W4.functionName (Crucible.handleName h)) == fsym
+        matchingStatics (L.Symbol (Text.unpack (W4.functionName (Crucible.handleName h)))) fsym
   liftIO $
     printOutLn opts Info $ "Registering override for `" ++ fstr ++ "`"
   case filter matches (Map.elems (llvmctx ^. Crucible.symbolMap)) of
