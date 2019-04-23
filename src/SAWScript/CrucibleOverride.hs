@@ -85,6 +85,7 @@ import qualified SAWScript.CrucibleLLVM as Crucible
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
+import           Data.Parameterized.Some (Some(..))
 
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
@@ -144,7 +145,8 @@ data OverrideFailureReason arch
   | AmbiguousVars [TypedTerm]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
-  | BadReturnSpecification -- ^ type mismatch in return specification
+  | BadReturnSpecification (Some Crucible.TypeRepr)
+    -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
   | BadEqualityComparison String -- ^ Comparison on an undef value
   | BadPointerLoad PointsTo (AllocMap arch) String
@@ -168,8 +170,10 @@ ppOverrideFailureReason rsn = case rsn of
     (PP.indent 2 (ppTerm defaultPPOpts y))
   BadPointerCast ->
     PP.text "bad pointer cast"
-  BadReturnSpecification ->
-    PP.text "bad return specification"
+  BadReturnSpecification ty -> PP.vcat $ map PP.text $
+    [ "Spec had no return value, but the function returns a value of type:"
+    , show ty
+    ]
   NonlinearPatternNotSupported ->
     PP.text "nonlinear pattern no supported"
   BadEqualityComparison globName ->
@@ -700,7 +704,7 @@ computeReturnValue ::
 computeReturnValue _opts _cc _sc spec ty Nothing =
   case ty of
     Crucible.UnitRepr -> return ()
-    _ -> failure (spec^.csLoc) BadReturnSpecification
+    _ -> failure (spec^.csLoc) (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc sc spec ty (Just val) =
   do (_memTy, xval) <- resolveSetupValue opts cc sc spec ty val
