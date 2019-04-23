@@ -69,25 +69,17 @@ implementation */
 
 let jvm_array12_is ref x =
   do {
-    //let {{ [x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11] = val }};
-    jvm_elem_is ref 0 (jvm_term {{ x@0 }});
-    jvm_elem_is ref 1 (jvm_term {{ x@1 }});
-    jvm_elem_is ref 2 (jvm_term {{ x@2 }});
-    jvm_elem_is ref 3 (jvm_term {{ x@3 }});
-    jvm_elem_is ref 4 (jvm_term {{ x@4 }});
-    jvm_elem_is ref 5 (jvm_term {{ x@5 }});
-    jvm_elem_is ref 6 (jvm_term {{ x@6 }});
-    jvm_elem_is ref 7 (jvm_term {{ x@7 }});
-    jvm_elem_is ref 8 (jvm_term {{ x@8 }});
-    jvm_elem_is ref 9 (jvm_term {{ x@9 }});
-    jvm_elem_is ref 10 (jvm_term {{ x@10 }});
-    jvm_elem_is ref 11 (jvm_term {{ x@11 }});
+    let xs = eval_list x;
+    for [0,1,2,3,4,5,6,7,8,9,10,11]
+      (\i -> jvm_elem_is ref i (jvm_term (nth xs i)));
+    return ();
   };
 
 let jvm_array24_is ref x =
   do {
+    let xs = eval_list x;
     for [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
-      (\i -> jvm_elem_is ref i (jvm_term {{ x@(`i:[8]) }}));
+      (\i -> jvm_elem_is ref i (jvm_term (nth xs i)));
     return ();
   };
 

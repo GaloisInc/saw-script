@@ -675,8 +675,11 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
 
 -- | Build a conjunction from a list of boolean terms.
 scAndList :: SharedContext -> [Term] -> IO Term
-scAndList sc []       = scBool sc True
-scAndList sc (x : xs) = foldM (scAnd sc) x xs
+scAndList sc = conj . filter nontrivial
+  where
+    nontrivial x = asBool x /= Just True
+    conj [] = scBool sc True
+    conj (x : xs) = foldM (scAnd sc) x xs
 
 --------------------------------------------------------------------------------
 
@@ -727,7 +730,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
     matchResult =
       case (ret, mspec ^. csRetValue) of
-        (Just (rty,r), Just expect) -> matchArg sc cc (mspec^.csLoc) PostState r rty expect
+        (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
         _ -> return ()
 

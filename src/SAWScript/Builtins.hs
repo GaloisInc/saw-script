@@ -1128,7 +1128,9 @@ eval_list t = do
 
 -- | Default the values of the type variables in a typed term.
 defaultTypedTerm :: Options -> SharedContext -> C.SolverConfig -> TypedTerm -> IO TypedTerm
-defaultTypedTerm opts sc cfg (TypedTerm schema trm) = do
+defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
+  | null (C.sVars schema) = return tt
+  | otherwise = do
   mdefault <- C.withSolver cfg (\s -> C.defaultReplExpr s undefined schema)
   let inst = do (soln, _) <- mdefault
                 mapM (`lookup` soln) (C.sVars schema)
