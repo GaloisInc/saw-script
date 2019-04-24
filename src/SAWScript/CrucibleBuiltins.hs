@@ -182,6 +182,9 @@ ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
 
+-- | Determines whether one LLVM symbol is equivalent to another except
+-- for a numeric suffix. This can determine whether one symbol is the
+-- disambiguated name of a duplicated static function.
 matchingStatics :: L.Symbol -> L.Symbol -> Bool
 matchingStatics (L.Symbol a) (L.Symbol b) = go a b
   where
