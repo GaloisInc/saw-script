@@ -66,11 +66,14 @@ import           Data.Foldable (for_, toList, find)
 import           Data.Function
 import           Data.IORef
 import           Data.List
+import           Data.List.Extra (groupOn, nubOrd)
 import           Data.Maybe
 import           Data.Monoid ((<>))
 import           Data.String
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Set as Set
 import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
@@ -562,13 +565,14 @@ registerInvariantOverride
   => Options
   -> CrucibleContext arch
   -> W4.ProgramLoc
+  -> HashMap Crucible.SomeHandle [Crucible.BreakpointName]
   -> [CrucibleMethodSpecIR]
   -> IO (Crucible.ExecutionFeature (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp)
-registerInvariantOverride opts cc top_loc cs = do
+registerInvariantOverride opts cc top_loc all_breakpoints cs = do
   sc <- CrucibleSAW.saw_ctx <$>
     (liftIO $ readIORef $ W4.sbStateManager $ cc^.ccBackend)
   let name = (head cs) ^. csName
-  parent <- case nub $ map (view csParentName) cs of
+  parent <- case nubOrd $ map (view csParentName) cs of
     [Just unique_parent] -> return unique_parent
     _ -> fail $ "Multiple parent functions for breakpoint: " ++ name
   liftIO $ printOutLn opts Info $ "Registering breakpoint `" ++ name ++ "`"
@@ -584,8 +588,21 @@ registerInvariantOverride opts cc top_loc cs = do
       arg_types
       ret_type
       (methodSpecHandler opts sc cc top_loc cs ret_type)
+      all_breakpoints
 
 --------------------------------------------------------------------------------
+
+withCfg
+  :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+  => CrucibleContext arch
+  -> String
+  -> (forall blocks init ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> IO a)
+  -> IO a
+withCfg context name k = do
+  let function_id = L.Symbol name
+  case Map.lookup function_id (Crucible.cfgMap (context^.ccLLVMModuleTrans)) of
+    Just (Crucible.AnyCFG cfg) -> k cfg
+    Nothing -> fail $ "Unexpected function name: " ++ name
 
 withCfgAndBlockId
   :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
@@ -594,11 +611,8 @@ withCfgAndBlockId
   -> (forall blocks init args ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> Crucible.BlockID blocks args -> IO a)
   -> IO a
 withCfgAndBlockId context method_spec k = case method_spec ^. csParentName of
-  Nothing -> do
-    let function = L.Symbol $ method_spec ^. csName
-    case Map.lookup function (Crucible.cfgMap (context ^. ccLLVMModuleTrans)) of
-      Just (Crucible.AnyCFG cfg) -> k cfg (Crucible.cfgEntryBlockID cfg)
-      Nothing -> fail $ "Unexpected function name: " ++ (method_spec ^. csName)
+  Nothing -> withCfg context (method_spec ^. csName) $ \cfg ->
+    k cfg (Crucible.cfgEntryBlockID cfg)
   Just parent -> withBreakpointCfgAndBlockId
     context
     (method_spec ^. csName)
@@ -614,14 +628,10 @@ withBreakpointCfgAndBlockId
   -> IO a
 withBreakpointCfgAndBlockId context name parent k = do
   let breakpoint_name = Crucible.BreakpointName $ Text.pack name
-  let function_id = L.Symbol parent
-  case Map.lookup function_id (Crucible.cfgMap (context^.ccLLVMModuleTrans)) of
-    Just (Crucible.AnyCFG cfg) -> do
-      case Bimap.lookup breakpoint_name (Crucible.cfgBreakpoints cfg) of
-        Just (Some breakpoint_block_id) -> k cfg breakpoint_block_id
-        Nothing -> fail $ "Unexpected breakpoint name: " ++ name
-    Nothing ->
-      fail $ "Unexpected parent function for breakpoint: " ++ name
+  withCfg context parent $ \cfg ->
+    case Bimap.lookup breakpoint_name (Crucible.cfgBreakpoints cfg) of
+      Just (Some breakpoint_block_id) -> k cfg breakpoint_block_id
+      Nothing -> fail $ "Unexpected breakpoint name: " ++ name
 
 verifySimulate ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
@@ -649,8 +659,19 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
     let (funcLemmas, invLemmas) = partition
           (isNothing . view csParentName)
           lemmas
+
+    breakpoints <- forM (groupOn (view csParentName) invLemmas) $ \specs -> do
+      let parent = fromJust $ (head group) ^. csParentName
+      let breakpoint_names = nubOrd $
+            map (Crucible.BreakpointName . Text.pack . view csName) specs
+      withCfg cc parent $ \parent_cfg ->
+        return
+          ( Crucible.SomeHandle (Crucible.cfgHandle parent_cfg)
+          , breakpoint_names
+          )
+
     invariantExecFeatures <- mapM
-      (registerInvariantOverride opts cc top_loc)
+      (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
       (groupOn (view csName) invLemmas)
     let execFeatures = invariantExecFeatures ++
           (map Crucible.genericToExecutionFeature patSatGenExecFeature)
@@ -1356,12 +1377,3 @@ crucible_setup_val_to_typed_term bic _opt sval = do
   case mtt of
     Nothing -> fail $ "Could not convert a setup value to a term: " ++ show sval
     Just tt -> return tt
-
---------------------------------------------------------------------------------
-
--- | Sort a list of things and group them into equivalence classes.
-groupOn ::
-  Ord b =>
-  (a -> b) {- ^ equivalence class projection -} ->
-  [a] -> [[a]]
-groupOn f = groupBy ((==) `on` f) . sortBy (compare `on` f)

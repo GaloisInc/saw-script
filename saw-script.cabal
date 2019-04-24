@@ -40,6 +40,7 @@ library
     , either
     , exceptions
     , executable-path
+    , extra
     , directory
     , fgl
     , filepath
@@ -73,6 +74,7 @@ library
     , time
     , transformers
     , transformers-compat
+    , unordered-containers
     , utf8-string
     , what4 >= 0.4
     , vector
