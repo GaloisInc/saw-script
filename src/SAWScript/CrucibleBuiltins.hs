@@ -233,65 +233,65 @@ crucible_llvm_verify ::
   ProofScript SatResult  ->
   TopLevel CrucibleMethodSpecIR
 crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic = do
-  setupCrucibleContext bic opts lm $ \cc -> do
+  (nm', parent) <- resolveSpecName nm
+  let edef = findDefMaybeStatic (modMod lm) nm'
+  let edecl = findDecl (modMod lm) nm'
+  defOrDecls <- case (edef, edecl) of
+    (Right defs, _) -> return (NE.map Left defs)
+    (_, Right decl) -> return (Right decl NE.:| [])
+    (Left err, Left _) -> fail (displayVerifExceptionOpts opts err)
+  specs <- forM defOrDecls $ \defOrDecl -> setupCrucibleContext bic opts lm $ \cc -> do
     let sym = cc^.ccBackend
     let llmod = cc^.ccLLVMModule
-    (nm', parent) <- resolveSpecName nm
 
     setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
 
-    let edef = findDefMaybeStatic llmod nm'
-    let edecl = findDecl llmod nm'
-    est0 <- case (edef, edecl) of
-      (Right defs, _) -> return $
-        mapM (\def -> initialCrucibleSetupState cc def setupLoc parent) defs
-      (_, Right decl) -> return $
-        (\x -> x NE.:| []) <$> initialCrucibleSetupStateDecl cc decl setupLoc parent
-      (Left err, Left _) -> fail (displayVerifExceptionOpts opts err)
-    st0s <- either (fail . show . ppSetupError) return est0
+    let est0 = case defOrDecl of
+                 Left def -> initialCrucibleSetupState cc def setupLoc parent
+                 Right decl -> initialCrucibleSetupStateDecl cc decl setupLoc parent
+    st0 <- either (fail . show . ppSetupError) return est0
 
-    specs <- forM st0s $ \st0 -> do
-     -- execute commands of the method spec
-     liftIO $ W4.setCurrentProgramLoc sym setupLoc
-     methodSpec <- view csMethodSpec <$> execStateT (runCrucibleSetupM setup) st0
+    -- execute commands of the method spec
+    liftIO $ W4.setCurrentProgramLoc sym setupLoc
+    methodSpec <- view csMethodSpec <$> execStateT (runCrucibleSetupM setup) st0
 
-     -- set up the LLVM memory with a pristine heap
-     let globals = cc^.ccLLVMGlobals
-     let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
-     mem0 <- case Crucible.lookupGlobal mvar globals of
-       Nothing   -> fail "internal error: LLVM Memory global not found"
-       Just mem0 -> return mem0
-     -- push a memory stack frame if starting from a breakpoint
-     let mem = if isJust (methodSpec^.csParentName)
-           then mem0
-             { Crucible.memImplHeap = Crucible.pushStackFrameMem
-                 (Crucible.memImplHeap mem0)
-             }
-           else mem0
-     let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
+    -- set up the LLVM memory with a pristine heap
+    let globals = cc^.ccLLVMGlobals
+    let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
+    mem0 <- case Crucible.lookupGlobal mvar globals of
+      Nothing   -> fail "internal error: LLVM Memory global not found"
+      Just mem0 -> return mem0
+    -- push a memory stack frame if starting from a breakpoint
+    let mem = if isJust (methodSpec^.csParentName)
+              then mem0
+                { Crucible.memImplHeap = Crucible.pushStackFrameMem
+                  (Crucible.memImplHeap mem0)
+                }
+              else mem0
+    let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
 
-     -- construct the initial state for verifications
-     (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
+    -- construct the initial state for verifications
+    (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
 
-     -- save initial path conditions
-     frameIdent <- io $ Crucible.pushAssumptionFrame sym
+    -- save initial path conditions
+    frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
-     -- run the symbolic execution
-     top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
-     (ret, globals3)
-        <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
+    -- run the symbolic execution
+    top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
+    (ret, globals3)
+       <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
 
-     -- collect the proof obligations
-     asserts <- verifyPoststate opts (biSharedContext bic) cc
-                    methodSpec env globals3 ret
+    -- collect the proof obligations
+    asserts <- verifyPoststate opts (biSharedContext bic) cc
+                   methodSpec env globals3 ret
 
-     -- restore previous assumption state
-     _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+    -- restore previous assumption state
+    _ <- io $ Crucible.popAssumptionFrame sym frameIdent
 
-     -- attempt to verify the proof obligations
-     stats <- verifyObligations cc methodSpec tactic assumes asserts
-     return (methodSpec & csSolverStats .~ stats)
-    return (NE.head specs)
+    -- attempt to verify the proof obligations
+    stats <- verifyObligations cc methodSpec tactic assumes asserts
+    return (methodSpec & csSolverStats .~ stats)
+  return (NE.head specs)
 
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
