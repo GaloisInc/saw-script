@@ -128,13 +128,13 @@ instance ValidCType Size where
   mapContext diff sz = extSize sz diff
 
 -- | Represents a contextual type inside a binding for another variable
-newtype CBind (tp :: k) (a :: CType k) (ctx :: Ctx k) =
-  CBind { unCBind :: forall ctx'.
-                     Diff ctx ctx' -> Size ctx' -> a (ctx' ::> tp) }
+newtype CBindVar (tp :: k) (a :: CType k) (ctx :: Ctx k) =
+  CBindVar { unCBindVar :: forall ctx'.
+                           Diff ctx ctx' -> Size ctx' -> a (ctx' ::> tp) }
 
-instance ValidCType1 (CBind tp) where
-  mapContext1 diff (CBind b) =
-    CBind $ \diff' sz -> b (diff' Cat.. diff) sz
+instance ValidCType1 (CBindVar tp) where
+  mapContext1 diff (CBindVar b) =
+    CBindVar $ \diff' sz -> b (diff' Cat.. diff) sz
 
 
 ----------------------------------------------------------------------
@@ -278,17 +278,17 @@ cconst = CExpr . CConst
 cunconst :: CExpr (CConst a) ectx -> a
 cunconst (CExpr (CConst a)) = a
 
-cbindH :: (CVar tp :->: a) ctx -> CBind tp a ctx
-cbindH f =
-  CBind $ \diff sz -> unCFun f (extendRight diff) (CVar $ nextIndex sz)
+cbindVarH :: (CVar tp :->: a) ctx -> CBindVar tp a ctx
+cbindVarH f =
+  CBindVar $ \diff sz -> unCFun f (extendRight diff) (CVar $ nextIndex sz)
 
 -- | Bind a variable in the context of an expression
-cbind :: CExprBinder (CVar tp) a ectx -> CExpr (CBind tp a) ectx
-cbind f = cOp1 cbindH (clam f)
+cbindVar :: CExprBinder (CVar tp) a ectx -> CExpr (CBindVar tp a) ectx
+cbindVar f = cOp1 cbindVarH (clam f)
 
-uncbind :: CExpr Size ectx -> CExpr (CBind tp a) ectx ->
-           a (CtxOfExprCtx ectx ::> tp)
-uncbind (CExpr sz) (CExpr b) = unCBind b noDiff sz
+uncbindVar :: CExpr Size ectx -> CExpr (CBindVar tp a) ectx ->
+              a (CtxOfExprCtx ectx ::> tp)
+uncbindVar (CExpr sz) (CExpr b) = unCBindVar b noDiff sz
 
 test1 :: ValidCType a => CExpr (a :->: a) ectx
 test1 = clam $ \x -> x
@@ -304,35 +304,26 @@ test2 = clam $ \x -> clam $ \y -> x
 
 -- | Monads over contextual types
 class ValidCType1 m => CMonad (m :: CType k -> CType k) where
-  creturnFun :: ValidCType a => (a :->: m a) ctx
-  cbindFun :: (ValidCType a, ValidCType b) =>
-              (m a :->: (a :->: m b) :->: m b) ctx
+  creturn :: ValidCType a => CExpr (a :->: m a) ctx
+  cbind :: (ValidCType a, ValidCType b) =>
+           CExpr (m a :->: (a :->: m b) :->: m b) ctx
 
--- | Lift 'creturnFun' to an operation on expressions
-creturn :: (CMonad m, ValidCType a) => CExpr a ectx -> CExpr (m a) ectx
-creturn = (@@) (CExpr creturnFun)
-
--- | Lift 'cbindFun' to an operation on expressions
+-- | More traditional bind syntax for 'cbind'
 infixl 1 >>>=
 (>>>=) :: (CMonad m, ValidCType a, ValidCType b) =>
           CExpr (m a) ectx ->
           CExprBinder a (m b) ectx ->
           CExpr (m b) ectx
-m >>>= f = CExpr cbindFun @@ m @@ clam f
+m >>>= f = cbind @@ m @@ clam f
 
 
 -- | Contextual monad transformers
 class CMonadTrans (t :: (CType k -> CType k) -> CType k -> CType k) where
-  cliftFun :: (CMonad m, ValidCType a) => (m a :->: t m a) ectx
-
--- | Lift 'cliftFun' to an operation on expressions
-clift :: (CMonadTrans t, CMonad m, ValidCType a) =>
-         CExpr (m a) ectx -> CExpr (t m a) ectx
-clift = (@@) (CExpr cliftFun)
+  clift :: (CMonad m, ValidCType a) => CExpr (m a :->: t m a) ectx
 
 instance Monad m => CMonad ((:@:) m) where
-  creturnFun = runCExpr $ clam $ \x -> cOp1 (CApplyF . return) x
-  cbindFun = runCExpr $ clam $ \m -> clam $ \f ->
+  creturn = clam $ \x -> cOp1 (CApplyF . return) x
+  cbind = clam $ \m -> clam $ \f ->
     cOp2 (\m' f' ->
            CApplyF (unCApplyF m' >>= unCApplyF . unCFun f' Cat.id)) m f
 
@@ -346,42 +337,32 @@ instance (ValidCType1 m, ValidCType res) =>
   mapContext1 diff (CContT m) = CContT $ mapContext diff m
 
 instance (CMonad m, ValidCType res) => CMonad (CContT res m) where
-  creturnFun =
-    runCExpr $ clam $ \a -> cOp1 CContT $ clam $ \k -> k @@ a
-  cbindFun =
-    runCExpr $ clam $ \m -> clam $ \f ->
+  creturn =
+    clam $ \a -> cOp1 CContT $ clam $ \k -> k @@ a
+  cbind =
+    clam $ \m -> clam $ \f ->
     cOp1 CContT $ clam $ \k ->
     (cOp1 unCContT m) $$ clam $ \a ->
     cOp1 unCContT (f @@ a) @@ k
 
 instance ValidCType res => CMonadTrans (CContT res) where
-  cliftFun =
-    runCExpr $ clam $ \m -> cOp1 CContT $ clam $ \k -> m >>>= \a -> k @@ a
+  clift = clam $ \m -> cOp1 CContT $ clam $ \k -> m >>>= \a -> k @@ a
 
 -- | Contextual monads that support shift and reset
 class (ValidCType res, CMonad m) => CMonadShiftReset res m | m -> res where
-  cshiftFun :: ValidCType a => (((a :->: m res) :->: m res) :->: m a) ctx
-  cresetFun :: (m res :->: m res) ctx
-
--- | Lift 'cshiftFun' to an operation on expressions
-cshift :: (CMonadShiftReset res m, ValidCType a) =>
-          CExpr ((a :->: m res) :->: m res) ectx -> CExpr (m a) ectx
-cshift = (@@) $ CExpr cshiftFun
-
--- | Lift 'cresetFun' to an operation on expressions
-creset :: CMonadShiftReset res m => CExpr (m res) ectx -> CExpr (m res) ectx
-creset = (@@) $ CExpr cresetFun
+  cshift :: ValidCType a => CExpr (((a :->: m res) :->: m res) :->: m a) ctx
+  creset :: CExpr (m res :->: m res) ctx
 
 instance (CMonad m, ValidCType res) => CMonadShiftReset res (CContT res m) where
-  cshiftFun =
-    runCExpr $ clam $ \f ->
+  cshift =
+    clam $ \f ->
     cOp1 CContT $ clam $ \k ->
-    cOp1 unCContT (f @@ (clam $ \a -> clift $ k @@ a)) @@
-    (clam $ \res -> creturn res)
-  cresetFun =
-    runCExpr $ clam $ \m ->
+    cOp1 unCContT (f @@ (clam $ \a -> clift @@ (k @@ a))) @@
+    (clam $ \res -> creturn @@ res)
+  creset =
+    clam $ \m ->
     cOp1 CContT $ clam $ \k ->
-    cOp1 unCContT m @@ (clam $ \res -> creturn res) >>>= \a -> k @@ a
+    cOp1 unCContT m @@ (clam $ \res -> creturn @@ res) >>>= \a -> k @@ a
 
 
 -- | The contextual state transformer
@@ -393,57 +374,47 @@ instance (ValidCType1 m, ValidCType s) =>
   mapContext1 diff (CStateT m) = CStateT $ mapContext diff m
 
 instance (CMonad m, ValidCType s) => CMonad (CStateT s m) where
-  creturnFun =
-    runCExpr $ clam $ \a ->
-    cOp1 CStateT $ clam $ \s -> creturn (cpair s a)
-  cbindFun =
-    runCExpr $ clam $ \m -> clam $ \f ->
+  creturn =
+    clam $ \a -> cOp1 CStateT $ clam $ \s -> creturn @@ (cpair s a)
+  cbind =
+    clam $ \m -> clam $ \f ->
     cOp1 CStateT $ clam $ \s ->
     cOp1 unCStateT m @@ s >>>= \(cunpair -> (s',a)) ->
     (cOp1 unCStateT $ f @@ a) @@ s'
 
 instance ValidCType s => CMonadTrans (CStateT s) where
-  cliftFun =
-    runCExpr $ clam $ \m ->
+  clift =
+    clam $ \m ->
     cOp1 CStateT $ clam $ \s ->
-    m >>>= \a -> creturn (cpair s a)
+    m >>>= \a -> creturn @@ (cpair s a)
 
 -- | Contextual state monads
 class CMonad m => CMonadState s m where
-  cgetFun :: (m s) ectx
-  cputFun :: (s :->: m CUnit) ectx
-
--- | Lift 'cget' to an operation on expressions
-cget :: CMonadState s m => CExpr (m s) ectx
-cget = CExpr cgetFun
-
--- | Lift 'cput' to an operation on expressions
-cput :: CMonadState s m => CExpr s ectx -> CExpr (m CUnit) ectx
-cput = (@@) $ CExpr cputFun
+  cget :: CExpr (m s) ectx
+  cput :: CExpr (s :->: m CUnit) ectx
 
 instance (CMonad m, ValidCType s) => CMonadState s (CStateT s m) where
-  cgetFun =
-    runCExpr $ cOp1 CStateT $ clam $ \s -> creturn (cpair s s)
-  cputFun =
-    runCExpr $ clam $ \s ->
-    cOp1 CStateT $ clam $ \_ -> creturn (cpair s cunit)
+  cget =
+    cOp1 CStateT $ clam $ \s -> creturn @@ (cpair s s)
+  cput =
+    clam $ \s -> cOp1 CStateT $ clam $ \_ -> creturn @@ (cpair s cunit)
 
 instance (ValidCType s, CMonadShiftReset res m) =>
          CMonadShiftReset res (CStateT s m) where
   -- FIXME: understand what shift does to the state...
-  cshiftFun =
-    runCExpr $ clam $ \f ->
+  cshift =
+    clam $ \f ->
     cOp1 CStateT $ clam $ \s ->
-    cshift $ clam $ \k ->
+    cshift $$ clam $ \k ->
     (cOp1 unCStateT $ f $$ clam $ \a ->
       cget >>>= \s' ->
-      clift (k @@ (cpair s' a))) @@ s >>>= \(cunpair -> (_, res)) ->
-    creturn res
+      clift @@ (k @@ (cpair s' a))) @@ s >>>= \(cunpair -> (_, res)) ->
+    creturn @@ res
 
   -- NOTE: reset throws away the inner state
-  cresetFun =
-    runCExpr $ clam $ \m ->
+  creset =
+    clam $ \m ->
     cOp1 CStateT $ clam $ \s ->
-    creset (cOp1 unCStateT m @@ s >>>= \(cunpair -> (_, res)) ->
-             creturn res) >>>= \res ->
-    creturn (cpair s res)
+    creset @@ (cOp1 unCStateT m @@ s >>>= \(cunpair -> (_, res)) ->
+                creturn @@ res) >>>= \res ->
+    creturn @@ (cpair s res)
