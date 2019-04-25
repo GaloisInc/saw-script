@@ -174,6 +174,8 @@ type PermSet ctx = Assignment (ValuePerm ctx) ctx
 -- * Permission Set Eliminations
 ----------------------------------------------------------------------
 
+-- FIXME: remove ElimPath!
+
 -- | An elimination path specififies a path to a subterm in a 'PermSet' at which
 -- eliminations are alllowed
 data ElimPath ctx a where
@@ -214,23 +216,24 @@ permAtElimPath permSet (LLVMElimPath var path) =
 -- lifting the permissions to the type level, however, @f@ is actually only
 -- indexed by the context.
 data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
-  Elim_Leaf :: f ctx -> PermElim f ctx
-  -- ^ A leaf node in a permission elimination tree
+  Elim_Done :: f ctx -> PermElim f ctx
+  -- ^ No more elimination; i.e., a leaf node in a permission elimination tree
 
-  Elim_Or :: ElimPath ctx a -> PermElim f ctx -> PermElim f ctx ->
-             PermElim f ctx
+  Elim_Or :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
   -- ^ Eliminate a 'ValPerm_Or', replacing it with the left- and right-hand
   -- sides in the two sub-eliminations
 
-  Elim_Ex :: ElimPath ctx a -> TypeRepr tp -> PermElim f (ctx ::> tp) ->
-             PermElim f ctx
+  Elim_Exists :: TypeRepr tp -> PermElim f (ctx ::> tp) -> PermElim f ctx
   -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists'
 
-  Elim_BindVar :: ElimPath ctx (LLVMPointerType w) ->
-                  PermElim f (ctx ::> LLVMPointerType w) -> PermElim f ctx
-  -- ^ Eliminate an arbitrary permission and replace it with @'ValPerm_Eq' x@,
-  -- where @x@ is a fresh variable that is given the permission that was
-  -- eliminated
+  Elim_BindField :: PermElim f (ctx ::> LLVMPointerType w) -> PermElim f ctx
+  -- ^ Bind a fresh variable to contain the contents of a field in a pointer
+  -- permission. More specifically, replace an 'LLVMFieldShapePerm' containing
+  -- an arbitrary permission @p@ with one containing an @'ValPerm_Eq' x@
+  -- permission, where @x@ is a fresh variable that is given the permission @p@
 
-  Elim_Unroll :: ElimPath ctx a -> PermElim f ctx -> PermElim f ctx
+  Elim_Copy :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
+  -- ^ Copy the same permissions into two different elimination trees
+
+  Elim_Unroll :: PermElim f ctx -> PermElim f ctx
   -- ^ Unroll a recursive 'ValPerm_Mu' permission one time
