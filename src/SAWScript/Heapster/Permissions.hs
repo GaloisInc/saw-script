@@ -219,21 +219,26 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
   Elim_Done :: f ctx -> PermElim f ctx
   -- ^ No more elimination; i.e., a leaf node in a permission elimination tree
 
-  Elim_Or :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
-  -- ^ Eliminate a 'ValPerm_Or', replacing it with the left- and right-hand
-  -- sides in the two sub-eliminations
+  Elim_Or :: Index ctx a -> PermElim f ctx -> PermElim f ctx -> PermElim f ctx
+  -- ^ Eliminate a 'ValPerm_Or' on the given variable, replacing it with the
+  -- left- and right-hand sides in the two sub-eliminations
 
-  Elim_Exists :: TypeRepr tp -> PermElim f (ctx ::> tp) -> PermElim f ctx
-  -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists'
+  Elim_Exists :: Index ctx a -> TypeRepr tp -> PermElim f (ctx ::> tp) ->
+                 PermElim f ctx
+  -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists', on the given variable
 
-  Elim_BindField :: PermElim f (ctx ::> LLVMPointerType w) -> PermElim f ctx
+  Elim_BindField :: Index ctx (LLVMPointerType w) -> Int ->
+                    PermElim f (ctx ::> LLVMPointerType w) ->
+                    PermElim f ctx
   -- ^ Bind a fresh variable to contain the contents of a field in a pointer
   -- permission. More specifically, replace an 'LLVMFieldShapePerm' containing
   -- an arbitrary permission @p@ with one containing an @'ValPerm_Eq' x@
-  -- permission, where @x@ is a fresh variable that is given the permission @p@
+  -- permission, where @x@ is a fresh variable that is given the permission @p@.
+  -- The 'Int' argument says which 'LLVMFieldShapePerm' of the given variable to
+  -- perform this operation on.
 
   Elim_Copy :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
   -- ^ Copy the same permissions into two different elimination trees
 
-  Elim_Unroll :: PermElim f ctx -> PermElim f ctx
+  Elim_Unroll :: Index ctx a -> PermElim f ctx -> PermElim f ctx
   -- ^ Unroll a recursive 'ValPerm_Mu' permission one time
