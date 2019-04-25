@@ -1,3 +1,4 @@
+enable_deprecated;
 let get_setup = do {
     java_var "a" (java_array 4 java_int);
     j <- java_var "j" java_int;

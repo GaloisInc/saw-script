@@ -1,4 +1,5 @@
 // show that add(x,y) == add(y,x) for all x and y
+enable_deprecated;
 cadd <- java_load_class "Add";
 x <- fresh_symbolic "x" {| [32] |};
 y <- fresh_symbolic "y" {| [32] |};

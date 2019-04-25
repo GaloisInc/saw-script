@@ -38,6 +38,7 @@ import Control.Monad.Trans.Class (lift)
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
+import Data.Set ( Set )
 import qualified Text.LLVM    as L
 import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as PP
@@ -368,6 +369,15 @@ forValue (x : xs) f =
 
 -- TopLevel Monad --------------------------------------------------------------
 
+-- | Position in the life cycle of a primitive.
+data PrimitiveLifecycle
+  = Current         {- ^ Currently available in all modes. -}
+  | Deprecated      {- ^ Will be removed soon, and available only when
+                         requested. -}
+  | Experimental    {- ^ Will be made @Current@ soon, but available only by
+                         request at the moment. -}
+  deriving (Eq, Ord, Show)
+
 -- | TopLevel Read-Only Environment.
 data TopLevelRO =
   TopLevelRO
@@ -390,6 +400,7 @@ data TopLevelRW =
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
+  , rwPrimsAvail :: Set PrimitiveLifecycle
   }
 
 newtype TopLevel a = TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)

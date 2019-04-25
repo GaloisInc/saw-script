@@ -1,3 +1,4 @@
+enable_deprecated;
 let f_spec = do {
     llvm_ptr "x" (llvm_int 32);
     llvm_assert_null "x";
