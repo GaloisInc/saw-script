@@ -90,6 +90,8 @@ module SAWScript.CrucibleLLVM
   , mallocRaw
   , mallocConstRaw
   , assertSafe
+  , isZero
+  , testEqual
   , ppMem
   , packMemValue
   , unpackMemValue
@@ -166,7 +168,8 @@ import Lang.Crucible.LLVM.Translation
 import Lang.Crucible.LLVM.MemModel
   (Mem, MemImpl, doResolveGlobal, storeRaw, storeConstRaw, mallocRaw, mallocConstRaw,
    ppMem, packMemValue, unpackMemValue, buildDisjointRegionsAssertion,
-   doLoad, doStore, loadRaw, doPtrAddOffset, assertSafe, emptyMem, doMalloc,
+   doLoad, doStore, loadRaw, doPtrAddOffset, assertSafe, isZero, testEqual,
+   emptyMem, doMalloc,
    LLVMVal(..),
    LLVMPtr, HasPtrWidth, ptrToPtrVal, mkNullPointer, ptrIsNull, ppPtr, ptrEq,
    pattern LLVMPointerRepr, LLVMPointerType,

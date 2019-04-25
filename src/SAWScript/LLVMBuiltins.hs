@@ -314,7 +314,7 @@ prover vpopts sc ms script vs n g = do
   let exts = getAllExts g
   ppopts <- fmap rwPPOpts getTopLevelRW
   tt <- io $ scGeneralizeExts sc exts =<< scEqTrue sc g
-  let goal = ProofGoal Universal n "vc" (vsVCName vs) tt
+  let goal = ProofGoal n "vc" (vsVCName vs) tt
   r <- evalStateT script (startProof goal)
   case r of
     SV.Unsat stats -> do

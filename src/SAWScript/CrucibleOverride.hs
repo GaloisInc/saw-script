@@ -1,16 +1,19 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.CrucibleOverride
@@ -31,7 +34,9 @@ module SAWScript.CrucibleOverride
 
 import           Control.Lens
 import           Control.Exception as X
-import           Control.Monad.Trans.State
+import           Control.Monad.Trans.State hiding (get, put)
+import           Control.Monad.State.Class (MonadState(..))
+import           Control.Monad.Error.Class (MonadError)
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
@@ -45,7 +50,9 @@ import qualified Data.Map as Map
 import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
+import           Data.Typeable (Typeable)
 import qualified Data.Vector as V
+import           GHC.Generics (Generic, Generic1)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import qualified Text.LLVM.AST as L
@@ -78,6 +85,7 @@ import qualified SAWScript.CrucibleLLVM as Crucible
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
+import           Data.Parameterized.Some (Some(..))
 
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
@@ -96,12 +104,19 @@ import           SAWScript.Utils (handleException)
 -- the Crucible simulation in order to compute the variable substitution
 -- and side-conditions needed to proceed.
 newtype OverrideMatcher arch mode a =
-  OM (StateT (OverrideState arch) (ExceptT OverrideFailure IO) a)
-  deriving (Functor, Applicative, Monad, MonadIO)
+  OM (StateT (OverrideState arch) (ExceptT (OverrideFailure arch) IO) a)
+  deriving (Generic, Generic1, Functor, Applicative, Monad, MonadIO)
+
+instance Wrapped (OverrideMatcher arch mode a) where
+
+deriving instance MonadState (OverrideState arch) (OverrideMatcher arch mode)
+deriving instance MonadError (OverrideFailure arch) (OverrideMatcher arch mode)
+
+type AllocMap arch = Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
 
 data OverrideState arch = OverrideState
   { -- | Substitution for memory allocations
-    _setupValueSub :: Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
+    _setupValueSub :: AllocMap arch
 
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term
@@ -125,20 +140,23 @@ data OverrideState arch = OverrideState
   , _osLocation :: W4.ProgramLoc
   }
 
-data OverrideFailureReason
+data OverrideFailureReason arch
   = AmbiguousPointsTos [PointsTo]
   | AmbiguousVars [TypedTerm]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
-  | BadReturnSpecification -- ^ type mismatch in return specification
+  | BadReturnSpecification (Some Crucible.TypeRepr)
+    -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
-  | BadPointerLoad String -- ^ loadRaw failed due to type error
+  | BadEqualityComparison String -- ^ Comparison on an undef value
+  | BadPointerLoad PointsTo (AllocMap arch) String
+    -- ^ @loadRaw@ failed due to type error
   | StructuralMismatch (Crucible.LLVMVal Sym)
                        SetupValue
                        Crucible.MemType
                         -- ^ simulated value, specified value, specified type
 
-ppOverrideFailureReason :: OverrideFailureReason -> PP.Doc
+ppOverrideFailureReason :: forall arch. OverrideFailureReason arch -> PP.Doc
 ppOverrideFailureReason rsn = case rsn of
   AmbiguousPointsTos pts ->
     PP.text "ambiguous collection of points-to assertions" PP.<$$>
@@ -152,13 +170,22 @@ ppOverrideFailureReason rsn = case rsn of
     (PP.indent 2 (ppTerm defaultPPOpts y))
   BadPointerCast ->
     PP.text "bad pointer cast"
-  BadReturnSpecification ->
-    PP.text "bad return specification"
+  BadReturnSpecification ty -> PP.vcat $ map PP.text $
+    [ "Spec had no return value, but the function returns a value of type:"
+    , show ty
+    ]
   NonlinearPatternNotSupported ->
     PP.text "nonlinear pattern no supported"
-  BadPointerLoad msg ->
-    PP.text "type error when loading through pointer" PP.<$$>
-    PP.indent 2 (PP.text msg)
+  BadEqualityComparison globName ->
+    PP.text "global initializer containing `undef` compared for equality:" PP.<$$>
+    (PP.indent 2 (PP.text globName))
+  BadPointerLoad pointsTo allocMap msg ->
+    PP.text "type error when loading through pointer that " PP.<>
+    PP.text "appeared in the override's points-to precondition(s):" PP.<$$>
+    PP.indent 2 (PP.text "Precondition: " PP.<> ppPointsTo pointsTo) PP.<$$>
+    PP.indent 2 (PP.text "Allocations: "
+                 PP.<> ppAllocMap (Proxy :: Proxy arch) allocMap) PP.<$$>
+    PP.indent 2 (PP.text "Failure reason: " PP.<> PP.text msg)
   StructuralMismatch llvmval setupval ty ->
     PP.text "could not match the following terms" PP.<$$>
     PP.indent 2 (PP.text $ show llvmval) PP.<$$>
@@ -166,6 +193,12 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "with type" PP.<$$>
     PP.indent 2 (Crucible.ppMemType ty)
 
+
+ppAllocMap :: proxy arch -> AllocMap arch -> PP.Doc
+ppAllocMap _proxy allocMap = PP.vcat $
+  map
+    (\(idx, ptr) -> ppSetupValue (SetupVar idx) PP.<+> Crucible.ppPtr ptr)
+    (Map.toList allocMap)
 
 ppTypedTerm :: TypedTerm -> PP.Doc
 ppTypedTerm (TypedTerm tp tm) =
@@ -195,25 +228,25 @@ ppSetupValue setupval = case setupval of
   SetupGlobal nm -> PP.text ("global(" ++ nm ++ ")")
   SetupGlobalInitializer nm -> PP.text ("global_initializer(" ++ nm ++ ")")
 
-instance PP.Pretty OverrideFailureReason where
+instance PP.Pretty (OverrideFailureReason arch) where
   pretty = ppOverrideFailureReason
-instance Show OverrideFailureReason where
+instance Show (OverrideFailureReason arch) where
   show = show . PP.pretty
 
 
-data OverrideFailure = OF W4.ProgramLoc OverrideFailureReason
+data OverrideFailure arch = OF W4.ProgramLoc (OverrideFailureReason arch)
 
-ppOverrideFailure :: OverrideFailure -> PP.Doc
+ppOverrideFailure :: OverrideFailure arch -> PP.Doc
 ppOverrideFailure (OF loc rsn) =
   PP.text "at" PP.<+> PP.pretty (W4.plSourceLoc loc) PP.<$$>
   ppOverrideFailureReason rsn
 
-instance PP.Pretty OverrideFailure where
+instance PP.Pretty (OverrideFailure arch) where
   pretty = ppOverrideFailure
-instance Show OverrideFailure where
+instance Show (OverrideFailure arch) where
   show = show . PP.pretty
 
-instance Exception OverrideFailure
+instance Typeable arch => Exception (OverrideFailure arch)
 
 makeLenses ''OverrideState
 
@@ -275,7 +308,10 @@ writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)
 
 -- | Abort the current computation by raising the given 'OverrideFailure'
 -- exception.
-failure :: W4.ProgramLoc -> OverrideFailureReason -> OverrideMatcher arch md a
+failure ::
+  W4.ProgramLoc ->
+  OverrideFailureReason arch ->
+  OverrideMatcher arch md a
 failure loc e = OM (lift (throwE (OF loc e)))
 
 ------------------------------------------------------------------------
@@ -332,15 +368,33 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- all the override states that might apply, and compute the conjunction of all
   -- the preconditions.  We'll use these to perform symbolic branches between the
   -- various overrides.
-  branches <- case partitionEithers prestates of
-                (e, []) ->
-                  fail $ show $
-                    PP.text "All overrides failed during structural matching:" PP.<$$>
-                    PP.vcat (map (\x -> PP.text "*" PP.<> PP.indent 2 (ppOverrideFailure x)) e)
-                (_, ss) -> liftIO $
-                  forM ss $ \(cs,st) ->
-                    do precond <- W4.andAllOf sym (folded._1) (st^.osAsserts)
-                       return ( precond, cs, st )
+  branches <-
+    let prettyError methodSpec failureReason =
+                  PP.text "Name: "
+                  PP.<> PP.text (methodSpec ^. csName)
+          PP.<$$> PP.text "Argument types: "
+          PP.<$$> PP.indent 2 (PP.vcat (map (PP.text . show) (methodSpec ^. csArgs)))
+          PP.<$$> PP.text "Return type: "
+          PP.<> case methodSpec ^. csRet of
+                  Nothing  -> PP.text "<void>"
+                  Just ret -> PP.text (show ret)
+          PP.<$$> ppOverrideFailure failureReason
+    in
+      case partitionEithers prestates of
+          (errs, []) ->
+            fail $ show $
+              PP.text "All overrides failed during structural matching:"
+              PP.<$$>
+                PP.vcat
+                  (map (\(cs, err) ->
+                          PP.text "*" PP.<> PP.indent 2 (prettyError cs err))
+                      (zip css errs))
+              PP.<$$> PP.text "Actual function return type: " PP.<>
+                        PP.text (show (retTy))
+          (_, ss) -> liftIO $
+            forM ss $ \(cs,st) ->
+              do precond <- W4.andAllOf sym (folded._1) (st^.osAsserts)
+                 return ( precond, cs, st )
 
   -- Now use crucible's symbolic branching machinery to select between the branches.
   -- Essentially, we are doing an n-way if statement on the precondition predicates
@@ -426,7 +480,7 @@ methodSpecHandler_prestate opts sc cc args cs =
        -- todo: fail if list lengths mismatch
        xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
-       sequence_ [ matchArg sc cc (cs^.csLoc) PreState x y z | (x, y, z) <- xs]
+       sequence_ [ matchArg opts sc cc cs PreState x y z | (x, y, z) <- xs]
 
        learnCond opts sc cc cs PreState (cs^.csPreState)
 
@@ -599,11 +653,14 @@ matchPointsTos opts sc cc spec prepost = go False []
     go True delayed [] = go False [] delayed
 
     -- progress the next points-to in the work queue
-    go progress delayed (c:cs) =
+    go progress delayed (c@(PointsTo loc _ _):cs) =
       do ready <- checkPointsTo c
          if ready then
-           do learnPointsTo opts sc cc spec prepost c
-              go True delayed cs
+           do err <- learnPointsTo opts sc cc spec prepost c
+              allocMap <- use setupValueSub
+              case err of
+                Just msg -> failure loc $ BadPointerLoad c allocMap msg
+                Nothing  -> go True delayed cs
          else
            do go progress (c:delayed) cs
 
@@ -647,7 +704,7 @@ computeReturnValue ::
 computeReturnValue _opts _cc _sc spec ty Nothing =
   case ty of
     Crucible.UnitRepr -> return ()
-    _ -> failure (spec^.csLoc) BadReturnSpecification
+    _ -> failure (spec^.csLoc) (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc sc spec ty (Just val) =
   do (_memTy, xval) <- resolveSetupValue opts cc sc spec ty val
@@ -679,7 +736,7 @@ runOverrideMatcher ::
    Set VarIndex                {- ^ initial free variables          -} ->
    W4.ProgramLoc               {- ^ override location information   -} ->
    OverrideMatcher arch md a   {- ^ matching action                 -} ->
-   IO (Either OverrideFailure (a, OverrideState arch))
+   IO (Either (OverrideFailure arch) (a, OverrideState arch))
 runOverrideMatcher sym g a t free loc (OM m) = runExceptT (runStateT m (initialState sym g a t free loc))
 
 ------------------------------------------------------------------------
@@ -729,10 +786,11 @@ assignTerm sc cc loc prepost var val =
 
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
+  Options          {- ^ saw script print out opts -} ->
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   CrucibleContext arch {- ^ context for interacting with Crucible -} ->
-  W4.ProgramLoc ->
+  CrucibleMethodSpecIR {- ^ specification for current function override  -} ->
   PrePost                                                          ->
   Crucible.LLVMVal Sym
                      {- ^ concrete simulation value             -} ->
@@ -740,46 +798,56 @@ matchArg ::
   SetupValue         {- ^ expected specification value          -} ->
   OverrideMatcher arch md ()
 
-matchArg sc cc loc prepost actual expectedTy expected@(SetupTerm expectedTT)
+matchArg _opts sc cc cs prepost actual expectedTy expected@(SetupTerm expectedTT)
   | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
   , Right tval <- Cryptol.evalType mempty tyexpr
   = do sym      <- getSymInterface
        let failMsg = StructuralMismatch actual expected expectedTy
-       realTerm <- valueToSC sym loc failMsg tval actual
-       matchTerm sc cc loc prepost realTerm (ttTerm expectedTT)
+       realTerm <- valueToSC sym (cs ^. csLoc) failMsg tval actual
+       matchTerm sc cc (cs ^. csLoc) prepost realTerm (ttTerm expectedTT)
 
 -- match the fields of struct point-wise
-matchArg sc cc loc prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct _ zs) =
+matchArg opts sc cc cs prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct _ zs) =
   sequence_
-    [ matchArg sc cc loc prepost x y z
+    [ matchArg opts sc cc cs prepost x y z
        | ((_,x),y,z) <- zip3 (V.toList xs)
                              (V.toList (Crucible.fiType <$> Crucible.siFields fields))
                              zs ]
 
-matchArg _sc cc loc prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
+matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer n) = do
+  (globInitTy, globInitVal) <- resolveSetupValueLLVM opts cc sc cs g
+  sym <- getSymInterface
+  if expectedTy /= globInitTy
+  then failure (cs ^. csLoc) (StructuralMismatch actual g expectedTy)
+  else liftIO (Crucible.testEqual sym globInitVal actual) >>=
+    \case
+      Nothing -> failure (cs ^. csLoc) (BadEqualityComparison n)
+      Just pred_ ->
+        let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
+        in addAssert pred_ $ err ("global initializer equality " ++ stateCond prepost)
+
+matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
   case setupval of
     SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-      do assignVar cc loc var (Crucible.LLVMPointer blk off)
+      do assignVar cc (cs ^. csLoc) var (Crucible.LLVMPointer blk off)
 
     SetupNull | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do sym <- getSymInterface
          p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
-         addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost)))
+         addAssert p (Crucible.SimError (cs ^. csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost)))
 
     SetupGlobal name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do let mem = cc^.ccLLVMEmptyMem
          sym  <- getSymInterface
-         Crucible.LLVMPointer blk' off' <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
+         ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
+         pred_ <- liftIO $
+           Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
+         addAssert pred_ (Crucible.SimError (cs ^. csLoc) (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
 
-         p1 <- liftIO (W4.natEq sym blk blk')
-         p2 <- liftIO (W4.bvEq sym off off')
-         p  <- liftIO (W4.andPred sym p1 p2)
-         addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
+    _ -> failure (cs ^. csLoc) (StructuralMismatch actual setupval expectedTy)
 
-    _ -> failure loc (StructuralMismatch actual setupval expectedTy)
-
-matchArg _sc _cc loc _prepost actual expectedTy expected =
-  failure loc (StructuralMismatch actual expected expectedTy)
+matchArg _opts _sc _cc cs _prepost actual expectedTy expected =
+  failure (cs ^. csLoc) (StructuralMismatch actual expected expectedTy)
 
 ------------------------------------------------------------------------
 
@@ -803,7 +871,7 @@ zeroValueSC sc tp = case Crucible.storageTypeF tp of
 valueToSC ::
   Sym ->
   W4.ProgramLoc ->
-  OverrideFailureReason ->
+  OverrideFailureReason arch ->
   Cryptol.TValue ->
   Crucible.LLVMVal Sym  ->
   OverrideMatcher arch md Term
@@ -925,6 +993,8 @@ learnGhost sc cc loc prepost var expected =
 -- | Process a "points_to" statement from the precondition section of
 -- the CrucibleSetup block. First, load the value from the address
 -- indicated by 'ptr', and then match it against the pattern 'val'.
+--
+-- Returns a string on failure describing a concrete memory load failure.
 learnPointsTo ::
   forall arch md .
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
@@ -934,7 +1004,7 @@ learnPointsTo ::
   CrucibleMethodSpecIR       ->
   PrePost                    ->
   PointsTo                   ->
-  OverrideMatcher arch md ()
+  OverrideMatcher arch md (Maybe String)
 learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
   do let tyenv = csAllocations spec
          nameEnv = csTypeNames spec
@@ -952,13 +1022,13 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
      res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
      case res of
        Crucible.PartLLVMVal assertion_tree res_val -> do
-         pred <- Crucible.treeToPredicate
+         pred_ <- Crucible.treeToPredicate
            (Proxy @(Crucible.LLVM arch))
            sym
            assertion_tree
-         addAssert pred $ Crucible.SimError loc "Invalid memory load"
-         matchArg sc cc loc prepost res_val memTy val
-       W4.Err err -> failure loc $ BadPointerLoad $ show err
+         addAssert pred_ $ Crucible.SimError loc "Invalid memory load"
+         pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val
+       W4.Err err -> pure (Just (show err))
 
 
 ------------------------------------------------------------------------

@@ -38,7 +38,7 @@ extra-deps:
   - simple-smt-0.7.1
   - GraphSCC-1.0.4
   - monadLib-3.7.3
-  - sbv-8.0
+  - sbv-8.1
   - crackNum-2.3
   - panic-0.4.0.0
   - itanium-abi-0.1.1.0

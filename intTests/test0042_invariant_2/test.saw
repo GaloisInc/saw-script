@@ -1,4 +1,4 @@
-m <- llvm_load_module "test2.bc";
+m <- llvm_load_module "test.bc";
 
 let ptr_to_fresh n ty = do {
   p <- crucible_alloc ty;

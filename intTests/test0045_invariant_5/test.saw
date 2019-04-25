@@ -1,4 +1,4 @@
-m <- llvm_load_module "test5.bc";
+m <- llvm_load_module "test.bc";
 
 let ptr_to_fresh n ty = do {
   p <- crucible_alloc ty;
@@ -47,7 +47,11 @@ let inner_inv_spec = do {
 
 inner_inv <- crucible_llvm_unsafe_assume_spec m "__breakpoint__inner_inv#multiple_array_inc" inner_inv_spec;
 outer_inv <- crucible_llvm_unsafe_assume_spec m "__breakpoint__outer_inv#multiple_array_inc" outer_inv_spec;
+
 crucible_llvm_verify m "__breakpoint__inner_inv#multiple_array_inc" [inner_inv, outer_inv] false inner_inv_spec abc;
 crucible_llvm_verify m "__breakpoint__outer_inv#multiple_array_inc" [inner_inv, outer_inv] false outer_inv_spec abc;
 crucible_llvm_verify m "multiple_array_inc" [inner_inv, outer_inv] false multiple_array_inc_spec abc;
+
+crucible_llvm_verify m "__breakpoint__inner_inv#multiple_array_inc" [inner_inv] false inner_inv_spec abc;
+crucible_llvm_verify m "multiple_array_inc" [inner_inv] false multiple_array_inc_spec abc;
 
