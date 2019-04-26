@@ -13,13 +13,14 @@
 
 module SAWScript.Heapster.Permissions where
 
-import           Numeric.Natural
+import qualified Control.Lens                     as Lens
 import           Data.Kind
-import           Data.Type.Equality
-import           Data.Parameterized.Ctx
 import           Data.Parameterized.Context
+import           Data.Parameterized.Ctx
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.TraversableFC
+import           Data.Type.Equality
+import           Numeric.Natural
 
 import           Lang.Crucible.Types
 -- import           Lang.Crucible.LLVM.Types
@@ -189,21 +190,27 @@ type ExprPermSet ctx = [ExprPerm ctx]
 -- * Permission Set Eliminations
 ----------------------------------------------------------------------
 
--- | Replace permission @x:(p1 \/ p2)@ in a permission set with @x:p1@. It is an
--- error if the permission set assigns a non-disjunctive permission to @x@.
-elimOrLeft :: PermSet ctx -> Index ctx a -> PermSet ctx
-elimOrLeft perms x =
-  case perms ! x of
-    ValPerm_Or p1 _ -> update x p1 perms
-    _ -> error "elimOrLeft"
+-- | Replace permission @x:(p1 \/ p2)@ with @x:p1@. It is an error if the
+-- permission set assigns a non-disjunctive permission to @x@.
+elimOrLeftValuePerm :: ValuePerm ctx a -> ValuePerm ctx a
+elimOrLeftValuePerm (ValPerm_Or l _) = l
+elimOrLeftValuePerm _                = error "elimOrLeftValuePerm"
 
--- | Replace permission @x:(p1 \/ p2)@ in a permission set with @x:p2@. It is an
--- error if the permission set assigns a non-disjunctive permission to @x@.
+-- | Replace permission @x:(p1 \/ p2)@ with @x:p2@. It is an error if the
+-- permission set assigns a non-disjunctive permission to @x@.
+elimOrRightValuePerm :: ValuePerm ctx a -> ValuePerm ctx a
+elimOrRightValuePerm (ValPerm_Or _ r) = r
+elimOrRightValuePerm _                = error "elimOrRightValuePerm"
+
+-- | Lifts @elimOrLeftValuePerm@ to permissions sets (@PermSet@), targetting the
+-- permission at given index.
+elimOrLeft :: PermSet ctx -> Index ctx a -> PermSet ctx
+elimOrLeft perms x = Lens.over (ixF x) elimOrLeftValuePerm perms
+
+-- | Lifts @elimOrRightValuePerm@ to permission sets (@PermSet@), targetting the
+-- permission at given index.
 elimOrRight :: PermSet ctx -> Index ctx a -> PermSet ctx
-elimOrRight perms x =
-  case perms ! x of
-    ValPerm_Or _ p2 -> update x p2 perms
-    _ -> error "elimOrRight"
+elimOrRight perms x = Lens.over (ixF x) elimOrRightValuePerm perms
 
 -- | Replace permission @x:(exists z:tp.p)@ in a permission set with @x:p@,
 -- lifting all other permissions into the extended context @ctx ::> tp@. It is
