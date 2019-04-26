@@ -274,7 +274,10 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
 -- operate on the first permission in the 'ExprPermSet'.
 data PermIntro (ctx :: Ctx CrucibleType) where
   Intro_Done :: PermIntro ctx
-  -- ^ The final step of any introduction proof, that proves the empty @Pout@
+  -- ^ The final step of any introduction proof, of the form
+  --
+  -- >  --------------------------
+  -- >  Gamma | Pin |- empty | Pin
 
   Intro_Exists :: TypeRepr tp -> PermExpr ctx tp -> ValuePerm (ctx ::> tp) a ->
                   PermIntro ctx -> PermIntro ctx
@@ -294,9 +297,9 @@ data PermIntro (ctx :: Ctx CrucibleType) where
   Intro_OrR :: ValuePerm ctx a -> PermIntro ctx -> PermIntro ctx
   -- ^ @Intro_OrR p1 pf@ is the right disjunction introduction rule
   --
-  -- > pf = Gamma | Pin |- x:p2, Pout | Prem
+  -- > pf = Gamma | Pin |- e:p2, Pout | Prem
   -- > ---------------------------------------------
-  -- > Gamma | Pin |- x:(p1 \/ p2), Pout | Prem
+  -- > Gamma | Pin |- e:(p1 \/ p2), Pout | Prem
 
   Intro_True :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
   -- ^ Implements the rule
@@ -305,23 +308,53 @@ data PermIntro (ctx :: Ctx CrucibleType) where
   -- > ---------------------------------------------
   -- > Gamma | Pin |- e:true, Pout | Prem
 
-  Intro_Word :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
-  -- ^ @Intro_Word e pf@ where @e = x+off@ implements the rule
+  Intro_CastEq :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_Ptr e pf@ where @e = x+off@ implements the rule
+  --
+  -- > pf = Gamma | Pin, x:eq(e') |- (e'+off):p, Pout | Prem
+  -- > --------------------------------------------------
+  -- > Gamma | Pin, x:eq(e') |- e:p, Pout | Prem
+
+  Intro_Eq :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_Eq e pf@ implements the rule
+  --
+  -- > pf = Gamma | Pin |- Pout | Prem
+  -- > --------------------------------------------------
+  -- > Gamma | Pin |- e:eq(e), Pout | Prem
+
+  Intro_LLVMWord ::
+    (1 <= w) => NatRepr w -> PermExpr ctx (LLVMPointerType w) ->
+    PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_LLVMWord w e pf@ where @e = x+off@ implements the rule
   --
   -- > pf = Gamma | Pin, x:word |- Pout | Prem
   -- > ---------------------------------------------
   -- > Gamma | Pin, x:word |- e:word, Pout | Prem
 
-  Intro_Ptr :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
-  -- ^ @Intro_Ptr e pf@ where @e = x+off@ implements the rule
+  Intro_LLVMPtr ::
+    (1 <= w) => NatRepr w -> Index ctx (LLVMPointerType w) ->
+    PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_LLVMPtr x pf@ implements the rule
   --
-  -- > Gamma | Pin, x:ptr(shapes) |- Pout | Prem
+  -- > pf = Gamma | Pin, x:ptr(shapes) |- Pout | Prem
   -- > --------------------------------------------------
-  -- > Gamma | Pin, x:ptr(shapes) |- e:ptr(), Pout | Prem
+  -- > Gamma | Pin, x:ptr(shapes) |- x:ptr(), Pout | Prem
 
-  Intro_CastEq :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
-  -- ^ @Intro_Ptr e pf@ where @e = x+off@ implements the rule
+  Intro_LLVMPtr_Offset ::
+    (1 <= w) => NatRepr w -> Integer -> PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_LLVMPtr_Offset w off pf@ for a static offset @off@ implements
   --
-  -- > Gamma | Pin, x:eq(e') |- (e'+off):p, Pout | Prem
+  -- > pf = Gamma | Pin |- x:ptr (shapes + off), Pout | Prem
   -- > --------------------------------------------------
-  -- > Gamma | Pin, x:eq(e') |- e:p, Pout | Prem
+  -- > Gamma | Pin |- (x+off):ptr(shapes), Pout | Prem
+
+  Intro_LLVMField ::
+    (1 <= w) => NatRepr w -> Integer -> SplittingExpr ctx ->
+    ValuePerm ctx (LLVMPointerType w) ->
+    PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_LLVMField w off S p pf@ implements the rule
+  --
+  -- > pf = Gamma | Pin, x:ptr(shapes) |- e:p, x:ptr(shapes'), Pout | Prem
+  -- > --------------------------------------------------------------------
+  -- > Gamma | Pin, x:ptr(off |-> (S,eq(e)) * shapes)
+  -- >    |- x:ptr(off |-> (S,p) * shapes'), Pout | Prem
