@@ -15,10 +15,11 @@ module SAWScript.Heapster.Permissions where
 
 import           Numeric.Natural
 import           Data.Kind
+import           Data.Type.Equality
 import           Data.Parameterized.Ctx
 import           Data.Parameterized.Context
 import           Data.Parameterized.NatRepr
-import           Data.Parameterized.TraversableF
+import           Data.Parameterized.TraversableFC
 
 import           Lang.Crucible.Types
 -- import           Lang.Crucible.LLVM.Types
@@ -106,6 +107,9 @@ data PermExpr (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
     PermExpr ctx (BVType w)
 
 
+instance ExtendContext' PermExpr where
+  extendContext' = error "FIXME: extendContext'"
+
 -- | Crucible type for value permissions
 type ValuePermType a = IntrinsicType "ValuePerm" (EmptyCtx ::> a)
 
@@ -166,45 +170,54 @@ data LLVMArrayPerm ctx w =
   }
 
 
+instance ExtendContext' ValuePerm where
+  extendContext' = error "FIXME: extendContext'"
+
+
 -- | A permission set assigns value permissions to the variables in scope
 type PermSet ctx = Assignment (ValuePerm ctx) ctx
+
+-- | A pair of an expression of some type and a value permission for it
+data ExprPerm ctx where
+  ExprPerm :: PermExpr ctx a -> ValuePerm ctx a -> ExprPerm ctx
+
+-- | A permission set that assigns value permissions to expressions
+type ExprPermSet ctx = [ExprPerm ctx]
 
 
 ----------------------------------------------------------------------
 -- * Permission Set Eliminations
 ----------------------------------------------------------------------
 
--- FIXME: remove ElimPath!
+-- | Replace permission @x:(p1 \/ p2)@ in a permission set with @x:p1@. It is an
+-- error if the permission set assigns a non-disjunctive permission to @x@.
+elimOrLeft :: PermSet ctx -> Index ctx a -> PermSet ctx
+elimOrLeft perms x =
+  case perms ! x of
+    ValPerm_Or p1 _ -> update x p1 perms
+    _ -> error "elimOrLeft"
 
--- | An elimination path specififies a path to a subterm in a 'PermSet' at which
--- eliminations are alllowed
-data ElimPath ctx a where
-  SimpleElimPath :: Index ctx a -> ElimPath ctx a
-  -- ^ A "simple" elimination path only allows eliminations at the top level of
-  -- a value perm, and so is just given by a variable
+-- | Replace permission @x:(p1 \/ p2)@ in a permission set with @x:p2@. It is an
+-- error if the permission set assigns a non-disjunctive permission to @x@.
+elimOrRight :: PermSet ctx -> Index ctx a -> PermSet ctx
+elimOrRight perms x =
+  case perms ! x of
+    ValPerm_Or _ p2 -> update x p2 perms
+    _ -> error "elimOrRight"
 
-  LLVMElimPath ::
-    Index ctx (LLVMPointerType w) -> [Int] -> ElimPath ctx (LLVMPointerType w)
-  -- ^ For LLVM permissions, eliminations are allowed under 0 or more field
-  -- permissions. The path component specifies the numeric position of each
-  -- field permission along the way in 'ValPerm_LLVMPtr' permission lists.
-
-
--- | Extract the value permission at a given path in a 'PermSet'
-permAtElimPath :: PermSet ctx -> ElimPath ctx a -> ValuePerm ctx a
-permAtElimPath permSet (SimpleElimPath var) = permSet ! var
-permAtElimPath permSet (LLVMElimPath var path) =
-  helper path (permSet ! var)
-  where
-    helper :: [Int] -> ValuePerm ctx (LLVMPointerType w) ->
-              ValuePerm ctx (LLVMPointerType w)
-    helper [] p = p
-    helper (i:is) (ValPerm_LLVMPtr _ ptr_perms _) =
-      case ptr_perms!!i of
-        LLVMFieldShapePerm (LLVMFieldPerm { llvmFieldPerm = p }) ->
-          helper is p
-        _ -> error "permAtElimPath"
-    helper _ _ = error "permAtElimPath"
+-- | Replace permission @x:(exists z:tp.p)@ in a permission set with @x:p@,
+-- lifting all other permissions into the extended context @ctx ::> tp@. It is
+-- an error if the permission set assigns a non-existential permission to @x@.
+elimExists :: PermSet ctx -> Index ctx a -> TypeRepr tp -> PermSet (ctx ::> tp)
+elimExists perms x tp =
+  case perms ! x of
+    ValPerm_Exists tp' p ->
+      case testEquality tp tp' of
+        Just Refl ->
+          flip extend ValPerm_True $ update x p $
+          fmapFC (extendContext' (extendRight noDiff)) perms
+        Nothing -> error "elimExists"
+    _ -> error "elimExists"
 
 
 -- | A permission elimination decomposes a permission set into some number of
@@ -242,3 +255,73 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
 
   Elim_Unroll :: Index ctx a -> PermElim f ctx -> PermElim f ctx
   -- ^ Unroll a recursive 'ValPerm_Mu' permission one time
+
+
+----------------------------------------------------------------------
+-- * Permission Set Introduction Rules
+----------------------------------------------------------------------
+
+-- | The permission introduction rules define a judgment of the form
+--
+-- > Gamma | Pin |- Pout | Prem
+--
+-- that intuitively proves permission set @Pout@ from @Pin@, with the remainder
+-- permission set @Prem@ left over, all of which are relative to context
+-- @Gamma@. Note that Pout is an 'ExprPermSet', so it assigns permissions to
+-- expressions and not just variables, and it can also be empty. All of the
+-- rules are introduction rules, meaning they build up a proof of @Pout@ from
+-- smaller permissions. Also, most of the rules have the convention that they
+-- operate on the first permission in the 'ExprPermSet'.
+data PermIntro (ctx :: Ctx CrucibleType) where
+  Intro_Done :: PermIntro ctx
+  -- ^ The final step of any introduction proof, that proves the empty @Pout@
+
+  Intro_Exists :: TypeRepr tp -> PermExpr ctx tp -> ValuePerm (ctx ::> tp) a ->
+                  PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_Exists tp e' p pf@ is the existential introduction rule
+  --
+  -- > pf = Gamma | Pin |- e:[e'/z]p, Pout | Prem
+  -- > ---------------------------------------------
+  -- > Gamma | Pin |- e:(exists z:tp.p), Pout | Prem
+
+  Intro_OrL :: ValuePerm ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_OrL p2 pf@ is the left disjunction introduction rule
+  --
+  -- > pf = Gamma | Pin |- e:p1, Pout | Prem
+  -- > ---------------------------------------------
+  -- > Gamma | Pin |- e:(p1 \/ p2), Pout | Prem
+
+  Intro_OrR :: ValuePerm ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_OrR p1 pf@ is the right disjunction introduction rule
+  --
+  -- > pf = Gamma | Pin |- x:p2, Pout | Prem
+  -- > ---------------------------------------------
+  -- > Gamma | Pin |- x:(p1 \/ p2), Pout | Prem
+
+  Intro_True :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ Implements the rule
+  --
+  -- > Gamma | Pin |- Pout | Prem
+  -- > ---------------------------------------------
+  -- > Gamma | Pin |- e:true, Pout | Prem
+
+  Intro_Word :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_Word e pf@ where @e = x+off@ implements the rule
+  --
+  -- > pf = Gamma | Pin, x:word |- Pout | Prem
+  -- > ---------------------------------------------
+  -- > Gamma | Pin, x:word |- e:word, Pout | Prem
+
+  Intro_Ptr :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_Ptr e pf@ where @e = x+off@ implements the rule
+  --
+  -- > Gamma | Pin, x:ptr(shapes) |- Pout | Prem
+  -- > --------------------------------------------------
+  -- > Gamma | Pin, x:ptr(shapes) |- e:ptr(), Pout | Prem
+
+  Intro_CastEq :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_Ptr e pf@ where @e = x+off@ implements the rule
+  --
+  -- > Gamma | Pin, x:eq(e') |- (e'+off):p, Pout | Prem
+  -- > --------------------------------------------------
+  -- > Gamma | Pin, x:eq(e') |- e:p, Pout | Prem
