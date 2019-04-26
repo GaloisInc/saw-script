@@ -44,38 +44,6 @@ data SplittingExpr ctx
 -- | Crucible type for splitting expressions
 type SplittingType = IntrinsicType "Splitting" EmptyCtx
 
--- | A proof that one 'SplittingExpr' is greater than another
-data SplittingCoercion ctx where
-  -- | The identity splitting coercion
-  SCoerce_Id :: SplittingExpr ctx -> SplittingCoercion ctx
-
--- FIXME: need more splitting coercions
-
--- | Extract the source splitting expression of a splitting coercion
-splittingCoercionSource :: SplittingCoercion ctx -> SplittingExpr ctx
-splittingCoercionSource (SCoerce_Id spl) = spl
-
--- | Extract the target splitting expression of a splitting coercion
-splittingCoercionTarget :: SplittingCoercion ctx -> SplittingExpr ctx
-splittingCoercionTarget (SCoerce_Id spl) = spl
-
-
--- | Attempt to coerce from one splitting expression to another, returning a
--- coercion proof if this is possible and 'Nothing' otherwise. For the logicians
--- out there, this is attempting to prove an implication.
-coerceSplitting :: SplittingExpr ctx -> SplittingExpr ctx ->
-                   Maybe (SplittingCoercion ctx)
-coerceSplitting = error "coerceSplitting"
-
-
-
--- | Compute the greatest splitting expression that can be coerced to from two
--- input splitting expressions, if one exists
-meetSplittings :: SplittingExpr ctx -> SplittingExpr ctx ->
-                  (SplittingExpr ctx,
-                   SplittingCoercion ctx, SplittingCoercion ctx)
-meetSplittings = error "meetSplittings"
-
 
 ----------------------------------------------------------------------
 -- * Permissions and Permission Sets
