@@ -46,38 +46,53 @@ type SplittingType = IntrinsicType "Splitting" EmptyCtx
 
 
 ----------------------------------------------------------------------
--- * Permissions and Permission Sets
+-- * Expressions for Use in Permission Sets
 ----------------------------------------------------------------------
 
--- | Expressions that are considered "pure" for use in permissions
+-- | Expressions that are considered "pure" for use in permissions. Note that
+-- these are in a normal form, that makes them easier to analyze.
 data PermExpr (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
-  -- Variables
   PExpr_Var :: Index ctx a -> PermExpr ctx a
+  -- ^ A variable of any type
 
-  -- Natural numbers
   PExpr_NatLit :: Natural -> PermExpr ctx NatType
+  -- ^ A natural number literal
 
-  -- Bitvector operations
-  PExpr_BVLit :: (1 <= w) => NatRepr w -> Integer -> PermExpr ctx (BVType w)
+  PExpr_BV :: [BVFactor ctx w] -> Integer -> PermExpr ctx (BVType w)
+  -- ^ A bitvector expression is a linear expression in @N@ variables, i.e., sum
+  -- of constant times variable factors plus a constant
 
-  PExpr_BVAdd :: (1 <= w) => NatRepr w ->
-                 PermExpr ctx (BVType w) -> PermExpr ctx (BVType w) ->
-                 PermExpr ctx (BVType w)
+  PExpr_LLVMWord :: PermExpr ctx (BVType w) ->
+                    PermExpr ctx (LLVMPointerType w)
+  -- ^ An LLVM value that represents a word, i.e., whose region identifier is 0
 
-  -- LLVM pointer constructor and destructors
-  PExpr_LLVM_PointerExpr ::
-    (1 <= w) => NatRepr w -> PermExpr ctx NatType ->
-    PermExpr ctx (BVType w) -> PermExpr ctx (LLVMPointerType w)
-  PExpr_LLVM_PointerBlock ::
-    (1 <= w) => NatRepr w -> PermExpr ctx (LLVMPointerType w) ->
-    PermExpr ctx NatType
-  PExpr_LLVM_PointerOffset ::
-    (1 <= w) => NatRepr w -> PermExpr ctx (LLVMPointerType w) ->
-    PermExpr ctx (BVType w)
+  PExpr_LLVMOffset :: Index ctx (LLVMPointerType w) ->
+                      PermExpr ctx (BVType w) ->
+                      PermExpr ctx (LLVMPointerType w)
+  -- ^ An LLVM value built by adding an offset to an LLVM variable
 
+
+-- | A bitvector variable, possibly multiplied by a constant
+data BVFactor ctx w
+  = BVFactor Integer (Index ctx (BVType w))
+    -- ^ A variable of type @'BVType' w@ multiplied by a constant
 
 instance ExtendContext' PermExpr where
   extendContext' = error "FIXME: extendContext'"
+
+instance ExtendContext' BVFactor where
+  extendContext' = error "FIXME: extendContext'"
+
+-- | Replace occurrences of a variable with an expression. Note that this is not
+-- quite the same as substitution, which removes the variable from the context
+-- of the resulting expression.
+replaceVar :: Index ctx a -> PermExpr ctx a -> PermExpr ctx b -> PermExpr ctx b
+replaceVar = error "FIXME: replaceVar"
+
+
+----------------------------------------------------------------------
+-- * Permissions and Permission Sets
+----------------------------------------------------------------------
 
 -- | Crucible type for value permissions
 type ValuePermType a = IntrinsicType "ValuePerm" (EmptyCtx ::> a)
@@ -106,8 +121,8 @@ data ValuePerm (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
   -- | A value permission variable
   ValPerm_Var :: Index ctx (ValuePermType a) -> ValuePerm ctx a
 
-  -- | Says that an LLVM word is a bitvector, i.e., its block = 0
-  ValPerm_LLVMWord :: (1 <= w) => NatRepr w -> ValuePerm ctx (LLVMPointerType w)
+  -- | Says that a natural number is non-zero
+  ValPerm_Nat_Neq0 :: ValuePerm ctx NatType
 
   -- | Says that an LLVM word is a pointer, i.e., with a non-zero block, where
   -- the memory pointed to has the given shape, and optionally we have
@@ -215,15 +230,17 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
                  PermElim f ctx
   -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists', on the given variable
 
-  Elim_BindField :: Index ctx (LLVMPointerType w) -> Int ->
+  Elim_BindField :: Index ctx (LLVMPointerType w) ->
+                    Integer -> SplittingExpr ctx ->
                     PermElim f (ctx ::> LLVMPointerType w) ->
                     PermElim f ctx
   -- ^ Bind a fresh variable to contain the contents of a field in a pointer
   -- permission. More specifically, replace an 'LLVMFieldShapePerm' containing
   -- an arbitrary permission @p@ with one containing an @'ValPerm_Eq' x@
   -- permission, where @x@ is a fresh variable that is given the permission @p@.
-  -- The 'Int' argument says which 'LLVMFieldShapePerm' of the given variable to
-  -- perform this operation on.
+  -- The 'Integer' and 'SplittingExpr' arguments give the static offset and
+  -- splitting for the 'LLVMFieldShapePerm' of the given variable to perform
+  -- this operation on.
 
   Elim_Copy :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
   -- ^ Copy the same permissions into two different elimination trees
@@ -283,10 +300,12 @@ data PermIntro (ctx :: Ctx CrucibleType) where
   -- > ---------------------------------------------
   -- > Gamma | Pin |- e:true, Pout | Prem
 
-  Intro_CastEq :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
-  -- ^ @Intro_Ptr e pf@ where @e = x+off@ implements the rule
+  Intro_CastEq :: Index ctx a -> PermExpr ctx a -> PermIntro ctx ->
+                  PermIntro ctx
+  -- ^ @Intro_CastEq x e' pf@ implements the following rule, where the notation
+  -- @[x |-> e']e@ denotes a call to 'replaceVar':
   --
-  -- > pf = Gamma | Pin, x:eq(e') |- (e'+off):p, Pout | Prem
+  -- > pf = Gamma | Pin, x:eq(e') |- ([x |-> e']e):p, Pout | Prem
   -- > --------------------------------------------------
   -- > Gamma | Pin, x:eq(e') |- e:p, Pout | Prem
 
@@ -296,15 +315,6 @@ data PermIntro (ctx :: Ctx CrucibleType) where
   -- > pf = Gamma | Pin |- Pout | Prem
   -- > --------------------------------------------------
   -- > Gamma | Pin |- e:eq(e), Pout | Prem
-
-  Intro_LLVMWord ::
-    (1 <= w) => NatRepr w -> PermExpr ctx (LLVMPointerType w) ->
-    PermIntro ctx -> PermIntro ctx
-  -- ^ @Intro_LLVMWord w e pf@ where @e = x+off@ implements the rule
-  --
-  -- > pf = Gamma | Pin, x:word |- Pout | Prem
-  -- > ---------------------------------------------
-  -- > Gamma | Pin, x:word |- e:word, Pout | Prem
 
   Intro_LLVMPtr ::
     (1 <= w) => NatRepr w -> Index ctx (LLVMPointerType w) ->
