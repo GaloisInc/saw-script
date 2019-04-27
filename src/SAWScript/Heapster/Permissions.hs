@@ -62,6 +62,10 @@ data PermExpr (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
   -- ^ A bitvector expression is a linear expression in @N@ variables, i.e., sum
   -- of constant times variable factors plus a constant
 
+  PExpr_Struct :: CtxRepr args -> Assignment (PermExpr ctx) args ->
+                  PermExpr ctx (StructType args)
+  -- ^ A struct expression is an expression for each argument of the struct type
+
   PExpr_LLVMWord :: PermExpr ctx (BVType w) ->
                     PermExpr ctx (LLVMPointerType w)
   -- ^ An LLVM value that represents a word, i.e., whose region identifier is 0
