@@ -317,8 +317,7 @@ data PermIntro (ctx :: Ctx CrucibleType) where
   -- > Gamma | Pin |- e:eq(e), Pout | Prem
 
   Intro_LLVMPtr ::
-    (1 <= w) => NatRepr w -> Index ctx (LLVMPointerType w) ->
-    PermIntro ctx -> PermIntro ctx
+    Index ctx (LLVMPointerType w) -> PermIntro ctx -> PermIntro ctx
   -- ^ @Intro_LLVMPtr x pf@ implements the rule
   --
   -- > pf = Gamma | Pin, x:ptr(shapes) |- Pout | Prem
@@ -334,10 +333,9 @@ data PermIntro (ctx :: Ctx CrucibleType) where
   -- > Gamma | Pin |- (x+off):ptr(shapes), Pout | Prem
 
   Intro_LLVMField ::
-    (1 <= w) => NatRepr w -> Integer -> SplittingExpr ctx ->
-    ValuePerm ctx (LLVMPointerType w) ->
+    Integer -> SplittingExpr ctx -> ValuePerm ctx (LLVMPointerType w) ->
     PermIntro ctx -> PermIntro ctx
-  -- ^ @Intro_LLVMField w off S p pf@ implements the rule
+  -- ^ @Intro_LLVMField off S p pf@ implements the rule
   --
   -- > pf = Gamma | Pin, x:ptr(shapes) |- e:p, x:ptr(shapes'), Pout | Prem
   -- > --------------------------------------------------------------------
