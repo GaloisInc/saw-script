@@ -27,6 +27,7 @@ import           Lang.Crucible.Types
 import           Lang.Crucible.LLVM.MemModel
 -- import           Lang.Crucible.CFG.Expr
 import           Lang.Crucible.CFG.Core
+import           SAWScript.Heapster.CtxMonad
 
 
 ----------------------------------------------------------------------
@@ -40,6 +41,14 @@ data SplittingExpr ctx
   | SplExpr_R (SplittingExpr ctx)
   | SplExpr_Star (SplittingExpr ctx) (SplittingExpr ctx)
   | SplExpr_Var (Index ctx SplittingType)
+
+instance ApplyEmbedding SplittingExpr where
+  applyEmbedding _ SplExpr_All = SplExpr_All
+  applyEmbedding emb (SplExpr_L e) = SplExpr_L (applyEmbedding emb e)
+  applyEmbedding emb (SplExpr_R e) = SplExpr_R (applyEmbedding emb e)
+  applyEmbedding emb (SplExpr_Star e1 e2) =
+    SplExpr_Star (applyEmbedding emb e1) (applyEmbedding emb e2)
+  applyEmbedding emb (SplExpr_Var x) = SplExpr_Var (applyEmbedding' emb x)
 
 -- | Crucible type for splitting expressions
 type SplittingType = IntrinsicType "Splitting" EmptyCtx
@@ -251,6 +260,23 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
 
   Elim_Unroll :: Index ctx a -> PermElim f ctx -> PermElim f ctx
   -- ^ Unroll a recursive 'ValPerm_Mu' permission one time
+
+
+instance ApplyEmbedding f => ApplyEmbedding (PermElim f) where
+  applyEmbedding emb (Elim_Done f) = Elim_Done (applyEmbedding emb f)
+  applyEmbedding emb (Elim_Or x elim1 elim2) =
+    Elim_Or (applyEmbedding' emb x)
+    (applyEmbedding emb elim1) (applyEmbedding emb elim2)
+  applyEmbedding emb (Elim_Exists x tp elim) =
+    Elim_Exists (applyEmbedding' emb x) tp
+    (applyEmbedding (extendEmbeddingBoth emb) elim)
+  applyEmbedding emb (Elim_BindField x off spl elim) =
+    Elim_BindField (applyEmbedding' emb x) off (applyEmbedding emb spl)
+    (applyEmbedding (extendEmbeddingBoth emb) elim)
+  applyEmbedding emb (Elim_Copy elim1 elim2) =
+    Elim_Copy (applyEmbedding emb elim1) (applyEmbedding emb elim2)
+  applyEmbedding emb (Elim_Unroll x elim) =
+    Elim_Unroll (applyEmbedding' emb x) (applyEmbedding emb elim)
 
 
 ----------------------------------------------------------------------
