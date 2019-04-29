@@ -53,6 +53,14 @@ instance MonadError err (BackM err) where
   catchError m f = BackM $ \ks kf -> unBackM m ks (\err -> unBackM (f err) ks kf)
 
 
+-- FIXME HERE: we need a notion of weakening that satisfies this class
+
+class Cat.Category w => IsWeakening w where
+  weaken1 :: w ctx (ctx ::> tp)
+  weakenWeakening1 :: w ctx1 ctx2 -> w (ctx1 ::> tp) (ctx2 ::> tp)
+  weakenIndex :: w ctx1 ctx2 -> Index ctx1 a -> Index ctx2 a
+
+
 ----------------------------------------------------------------------
 -- * Contextual types: types that are relative to a type context
 ----------------------------------------------------------------------
