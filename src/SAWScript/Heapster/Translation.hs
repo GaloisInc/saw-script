@@ -41,6 +41,20 @@ import Verifier.SAW.Term.Functor
 -- function of type [[ ∏in ]] -> CompM [[ ∏out ]], where ∏in and ∏out are the
 -- respective input and output permission sets for judgment J.
 
+-- | Translate an 'Integer' to a SAW bitvector literal
+translateBVLit :: NatRepr w -> Integer -> OpenTerm
+translateBVLit w i =
+  applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
+  [typeTranslate'' w, natOpenTerm i]
+
+-- | Build an 'OpenTerm' for the sum of SAW bitvectors
+translateBVSum :: NatRepr w -> [OpenTerm] -> OpenTerm
+translateBVSum w [] = translateBVLit w 0
+translateBVSum _ [t] = t
+translateBVSum w (t:ts) =
+  applyOpenTermMulti (globalOpenTerm "Prelude.bvAdd")
+  [typeTranslate'' w, t, translateBVSum w ts]
+
 class TypeTranslate (f :: Ctx k -> k' -> *) where
   typeTranslate :: Assignment (Const OpenTerm) ctx -> f ctx a -> OpenTerm
 
@@ -49,6 +63,9 @@ class TypeTranslate (f :: Ctx k -> k' -> *) where
 
 class TypeTranslate'' (d :: *) where
   typeTranslate'' :: d -> OpenTerm
+
+instance TypeTranslate'' (NatRepr w) where
+  typeTranslate'' w = natOpenTerm $ intValue w
 
 instance TypeTranslate'' (TypeRepr a) where
   typeTranslate'' = \case
@@ -77,22 +94,23 @@ instance TypeTranslate'' (TypeRepr a) where
     SymbolicArrayRepr _ _  -> error "TODO"
     SymbolicStructRepr _   -> error "TODO"
 
+instance TypeTranslate PermVar where
+  typeTranslate ctx x = getConst $ pvGet ctx x
+
+instance TypeTranslate BVFactor where
+  typeTranslate ctx (BVFactor w i x) =
+    applyOpenTermMulti (globalOpenTerm "Prelude.bvMul")
+    [typeTranslate'' w, translateBVLit w i, typeTranslate ctx x]
+
 instance TypeTranslate PermExpr where
   typeTranslate ctx = \case
-    PExpr_Var i                  -> getConst $ ctx ! i
-    PExpr_NatLit n               -> natOpenTerm $ fromIntegral n
-    PExpr_BVLit w n              ->
-      let w' = natOpenTerm $ intValue w in
-      let n' = natOpenTerm n in
-      applyOpenTermMulti (globalOpenTerm "Prelude.bvNat") [w', n']
-    PExpr_BVAdd w e1 e2          ->
-      let w' = natOpenTerm $ intValue w in
-      let bv1 = typeTranslate ctx e1 in
-      let bv2 = typeTranslate ctx e2 in
-      applyOpenTermMulti (globalOpenTerm "Prelude.bvAdd") [w', bv1, bv2]
-    PExpr_LLVM_PointerExpr _ _ _ -> error "TODO"
-    PExpr_LLVM_PointerBlock _ _  -> error "TODO"
-    PExpr_LLVM_PointerOffset _ _ -> error "TODO"
+    PExpr_Var i                  -> getConst $ ctx `pvGet` i
+    PExpr_BV w factors const     ->
+      translateBVSum w (translateBVLit w const :
+                        map (typeTranslate ctx) factors)
+    PExpr_LLVMWord _ _ -> unitOpenTerm
+    PExpr_LLVMOffset _ _ _ -> unitOpenTerm
+    PExpr_Spl _ -> error "TODO"
 
 instance TypeTranslate ValuePerm where
   typeTranslate ctx = \case
@@ -109,14 +127,8 @@ instance TypeTranslate ValuePerm where
       ]
     ValPerm_Mu _           -> error "TODO"
     ValPerm_Var _index     -> error "TODO"
-    ValPerm_LLVMWord w     ->
-      let w' = natOpenTerm $ intValue w in
-      dataTypeOpenTerm "Prelude.bitvector" [w']
     ValPerm_LLVMPtr _ ps _ ->
-      let rs = typeTranslate ctx <$> ps in
-      let basePerm = dataTypeOpenTerm "Prelude.UnitType" [] in
-      let addPerm elt acc = dataTypeOpenTerm "Prelude.PairType" [elt, acc] in
-      foldr addPerm basePerm rs
+      tupleTypeOpenTerm (typeTranslate ctx <$> ps)
 
 instance TypeTranslate LLVMShapePerm where
   typeTranslate ctx = \case
@@ -181,8 +193,8 @@ class JudgmentTranslate' (f :: Ctx CrucibleType -> *) where
     f ctx ->                   -- ^ item being translated
     OpenTerm
 
-atIndex :: Index ctx a -> (f a -> f a) -> Assignment f ctx -> Assignment f ctx
-atIndex i = Lens.over (ixF i)
+atIndex :: PermVar ctx a -> (f a -> f a) -> Assignment f ctx -> Assignment f ctx
+atIndex x = Lens.over (pvLens x)
 
 instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
 
@@ -191,7 +203,7 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
     Elim_Done l -> judgmentTranslate' ctx pctx pmap outputType l
 
     Elim_Or index e1 e2 ->
-      let perm = pctx ! index in
+      let perm = pvGet pctx index in
       let (permL, permR) = case perm of
             ValPerm_Or p1 p2 -> (p1, p2)
             _                -> error "judgmentTranslate': `Elim_Or` expects `ValPerm_Or`"
@@ -229,7 +241,7 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       in
       lambdaOpenTerm "ve" outputType body
 
-    Elim_BindField index shapeIndex e -> error "TODO"
+    Elim_BindField _x _off _spl _elim -> error "TODO"
 
     Elim_Copy _e1 _e2 -> error "TODO"
 
@@ -237,7 +249,7 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
 
 permElim0 :: PermElim (Const OpenTerm) ('EmptyCtx '::> a)
 permElim0 =
-  Elim_Or baseIndex
+  Elim_Or (nextPermVar zeroSize)
   (Elim_Done (Const (globalOpenTerm "Prelude.Bool")))
   (Elim_Done (Const (globalOpenTerm "Prelude.Nat")))
 
