@@ -19,8 +19,10 @@ module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm, completeOpenTerm,
   -- * Basic operations for building open terms
-  closedOpenTerm, flatOpenTerm,
-  natOpenTerm, ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
+  closedOpenTerm, flatOpenTerm, natOpenTerm,
+  unitOpenTerm, unitTypeOpenTerm, pairOpenTerm, pairTypeOpenTerm,
+  tupleOpenTerm, tupleTypeOpenTerm,
+  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
   applyOpenTerm, applyOpenTermMulti, lambdaOpenTerm, piOpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM, completeOpenTermM,
@@ -56,9 +58,33 @@ flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
 flatOpenTerm ftf = OpenTerm $
   (sequence (fmap unOpenTerm ftf) >>= typeInferComplete)
 
--- | Build an 'OpenTermm' for a natural number literal
+-- | Build an 'OpenTerm' for a natural number literal
 natOpenTerm :: Natural -> OpenTerm
 natOpenTerm = flatOpenTerm . NatLit
+
+-- | The 'OpenTerm' for the unit value
+unitOpenTerm :: OpenTerm
+unitOpenTerm = flatOpenTerm UnitValue
+
+-- | The 'OpenTerm' for the unit type
+unitTypeOpenTerm :: OpenTerm
+unitTypeOpenTerm = flatOpenTerm UnitType
+
+-- | Build an 'OpenTerm' for a pair
+pairOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+pairOpenTerm t1 t2 = flatOpenTerm $ PairValue t1 t2
+
+-- | Build an 'OpenTerm' for a pair type
+pairTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+pairTypeOpenTerm t1 t2 = flatOpenTerm $ PairType t1 t2
+
+-- | Build a right-nested tuple as an 'OpenTerm'
+tupleOpenTerm :: [OpenTerm] -> OpenTerm
+tupleOpenTerm = foldr pairOpenTerm unitOpenTerm
+
+-- | Build a right-nested tuple type as an 'OpenTerm'
+tupleTypeOpenTerm :: [OpenTerm] -> OpenTerm
+tupleTypeOpenTerm = foldr pairTypeOpenTerm unitTypeOpenTerm
 
 -- | Build an 'OpenTerm' for a constructor applied to its arguments
 ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
