@@ -16,12 +16,13 @@ module SAWScript.Heapster.Translation (
   ) where
 
 import qualified Control.Lens as Lens
+-- import Data.Bits
 import Data.Functor.Const
 
 import Data.Parameterized.Classes
 import Data.Parameterized.Context
-import Data.Parameterized.NatRepr
-import Data.Parameterized.TraversableFC
+-- import Data.Parameterized.NatRepr
+-- import Data.Parameterized.TraversableFC
 import Lang.Crucible.Types
 import SAWScript.Heapster.Permissions
 import SAWScript.TopLevel
@@ -102,39 +103,57 @@ instance TypeTranslate BVFactor where
     applyOpenTermMulti (globalOpenTerm "Prelude.bvMul")
     [typeTranslate'' w, translateBVLit w i, typeTranslate ctx x]
 
+unitOpenTerm :: OpenTerm
+unitOpenTerm = globalOpenTerm "Unit"
+
+tupleTypeOpenTerm :: [OpenTerm] -> OpenTerm
+tupleTypeOpenTerm = foldr (\ e a -> applyOpenTermMulti (globalOpenTerm "Prelude.Pair") [e, a]) unitOpenTerm
+
 instance TypeTranslate PermExpr where
   typeTranslate ctx = \case
     PExpr_Var i                  -> getConst $ ctx `pvGet` i
-    PExpr_BV w factors const     ->
-      translateBVSum w (translateBVLit w const :
+    PExpr_BV w factors constant     ->
+      translateBVSum w (translateBVLit w constant :
                         map (typeTranslate ctx) factors)
     PExpr_LLVMWord _ _ -> unitOpenTerm
     PExpr_LLVMOffset _ _ _ -> unitOpenTerm
     PExpr_Spl _ -> error "TODO"
+    PExpr_Struct _ _ -> error "TODO"
 
 instance TypeTranslate ValuePerm where
   typeTranslate ctx = \case
+
     ValPerm_True           -> flatOpenTerm UnitType
+
     ValPerm_Eq _           -> flatOpenTerm UnitType
+
     ValPerm_Or p1 p2       ->
       let t1 = typeTranslate ctx p1 in
       let t2 = typeTranslate ctx p2 in
       dataTypeOpenTerm "Prelude.Either" [t1, t2]
+
     ValPerm_Exists t p     ->
       dataTypeOpenTerm
       "Prelude.Sigma"
       [ lambdaOpenTerm "x" (typeTranslate'' t) (\ x -> typeTranslate (extend ctx (Const x)) p)
       ]
+
     ValPerm_Mu _           -> error "TODO"
+
     ValPerm_Var _index     -> error "TODO"
+
+    ValPerm_Nat_Neq0       -> error "TODO"
+
     ValPerm_LLVMPtr _ ps _ ->
       tupleTypeOpenTerm (typeTranslate ctx <$> ps)
 
 instance TypeTranslate LLVMShapePerm where
   typeTranslate ctx = \case
+
     LLVMFieldShapePerm (LLVMFieldPerm {..}) -> typeTranslate ctx llvmFieldPerm
+
     LLVMArrayShapePerm (LLVMArrayPerm {..}) ->
-      let len = typeTranslate ctx llvmArrayLen in
+      let len = error "TODO" in -- typeTranslate ctx llvmArrayLen in -- FIXME: this does not make sense
       let types = typeTranslate ctx llvmArrayPtrPerm in
       dataTypeOpenTerm "Prelude.Vec" [types, len]
 
@@ -169,10 +188,6 @@ composeM a b c f g x = bindM b c (f x) g;
 primitive errorM : (a:sort 0) -> CompM a;
 -}
 
--- WANT: helpers to manipulate PermSet
-
--- WANT: a new type class kind of like `TypeTranslate`, but that gives back functions
-
 type OpenTermCtxt ctx = Assignment (Const OpenTerm) ctx
 
 -- | As we build a computational term for a given permission derivation, the term
@@ -183,15 +198,24 @@ type PermVariableMapping ctx = Assignment (Const OpenTerm) ctx
 
 class JudgmentTranslate' (f :: Ctx CrucibleType -> *) where
   judgmentTranslate' ::
-    OpenTermCtxt ctx ->        -- ^ this context maps type variables to a SAW value
-                               -- that depends on the type of the variable in question.
-                               -- e.g. for @BVType@, a SAW variable that has a bitvector type
-                               --      for @LLVMPointerType@, a @Unit@
-    PermSet ctx ->             -- ^ permission set
-    PermVariableMapping ctx -> -- ^ mapping to SAW variables, see @PermVariableMapping@
-    OpenTerm ->                -- ^ output type being built
-    f ctx ->                   -- ^ item being translated
+    OpenTermCtxt ctx ->
+    -- ^ Maps type variables to a SAW value that depends on the type of the
+    -- variable in question.  e.g. for @BVType@, a SAW variable that has a
+    -- bitvector type for @LLVMPointerType@, a @Unit@
+    PermSet ctx ->
+    -- ^ Associates to each index a value permission `p`
+    PermVariableMapping ctx ->
+    -- ^ Associates to each index a SAW variable, whose type is `[[p]]` for the
+    -- corresponding `p` in the permission set at that index
+    OpenTerm ->
+    -- ^ Output type being built, needed to build some terms that need to
+    -- explicitly state what type they return
+    f ctx ->
+    -- ^ Judgment being translated
     OpenTerm
+    -- ^ Returns a SAW term of type `[[Πin]] -> CompM [[Πout]]` where `Πin` is
+    -- the expected permission set coming "into" this judgment (left of
+    -- turnstile), and `Πout` the permission set coming "out"
 
 atIndex :: PermVar ctx a -> (f a -> f a) -> Assignment f ctx -> Assignment f ctx
 atIndex x = Lens.over (pvLens x)
@@ -228,10 +252,6 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       in
       lambdaOpenTerm "ve" outputType body
 
-    -- need to
-    -- extend assignment 1 is easy: extend from Unsafe
-    -- permset needs more work, need to map over all perms,
-    -- write `extPermSet`
     Elim_Exists index typ e ->
       let body ve =
             let ctx' = extend ctx (Const ve) in
@@ -241,9 +261,18 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       in
       lambdaOpenTerm "ve" outputType body
 
-    Elim_BindField _x _off _spl _elim -> error "TODO"
+    Elim_BindField index _ _ e ->
+      let body ve =
+            -- * introduce a fresh variable x, whose permission is that at index
+            -- * replace permission at index with [[ ValPerm_Eq x ]]
+            let ctx' = error "TODO" in
+            let pctx' = error "TODO" in
+            let pmap' = error "TODO" in
+            applyOpenTerm (judgmentTranslate' ctx' pctx' pmap' outputType e) ve
+      in
+      lambdaOpenTerm "ve" outputType body
 
-    Elim_Copy _e1 _e2 -> error "TODO"
+    Elim_Copy e1 e2 -> error "TODO"
 
     Elim_Unroll _p _e -> error "TODO"
 
