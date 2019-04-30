@@ -154,8 +154,9 @@ data PermExpr (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
 
 
 -- | A bitvector variable, possibly multiplied by a constant
-data BVFactor ctx w
-  = BVFactor Integer (PermVar ctx (BVType w))
+data BVFactor ctx w where
+  BVFactor :: (1 <= w) => NatRepr w -> Integer -> PermVar ctx (BVType w) ->
+              BVFactor ctx w
     -- ^ A variable of type @'BVType' w@ multiplied by a constant
 
 instance FreeVars SplittingExpr where
@@ -174,23 +175,24 @@ instance FreeVars' PermExpr where
   freeVars' (PExpr_Spl spl) = freeVars spl
 
 instance FreeVars' BVFactor where
-  freeVars' (BVFactor _ x) = [Some x]
+  freeVars' (BVFactor _ _ x) = [Some x]
 
 -- | Multiply a 'BVFactor' by a constant
 multFactor :: Integer -> BVFactor ctx w -> BVFactor ctx w
-multFactor i (BVFactor j x) = BVFactor (i*j) x
+multFactor i (BVFactor w j x) = BVFactor w (i*j) x
 
 -- | Convert a bitvector expression to a sum of factors plus a constant
-matchBVExpr :: PermExpr ctx (BVType w) -> ([BVFactor ctx w], Integer)
-matchBVExpr (PExpr_Var x) = ([BVFactor 1 x], 0)
-matchBVExpr (PExpr_BV _ factors const) = (factors, const)
+matchBVExpr :: (1 <= w) => NatRepr w -> PermExpr ctx (BVType w) ->
+               ([BVFactor ctx w], Integer)
+matchBVExpr w (PExpr_Var x) = ([BVFactor w 1 x], 0)
+matchBVExpr _ (PExpr_BV _ factors const) = (factors, const)
 
 -- | Add two bitvector expressions
-addBVExprs :: (1 <= w) => NatRepr  w ->
+addBVExprs :: (1 <= w) => NatRepr w ->
               PermExpr ctx (BVType w) -> PermExpr ctx (BVType w) ->
               PermExpr ctx (BVType w)
-addBVExprs w (matchBVExpr -> (factors1, const1)) (matchBVExpr ->
-                                                  (factors2, const2)) =
+addBVExprs w (matchBVExpr w -> (factors1, const1)) (matchBVExpr w ->
+                                                    (factors2, const2)) =
   PExpr_BV w (factors1 ++ factors2) (const1 + const2)
 
 -- | Build a "default" expression for a given type
@@ -221,8 +223,8 @@ class GenSubstable' f where
 
 genSubstFactor :: GenSubst ctx1 ctx2 -> BVFactor ctx1 w ->
                   ([BVFactor ctx2 w], Integer)
-genSubstFactor s f@(BVFactor i x) =
-  let (factors, const) = matchBVExpr (genSubstVar s x) in
+genSubstFactor s f@(BVFactor w i x) =
+  let (factors, const) = matchBVExpr w (genSubstVar s x) in
   (map (multFactor i) factors, const)
 
 instance GenSubstable' PermExpr where
