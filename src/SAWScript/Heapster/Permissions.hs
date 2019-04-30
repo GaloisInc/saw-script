@@ -130,7 +130,8 @@ data PermExpr (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
   PExpr_Var :: PermVar ctx a -> PermExpr ctx a
   -- ^ A variable of any type
 
-  PExpr_BV :: [BVFactor ctx w] -> Integer -> PermExpr ctx (BVType w)
+  PExpr_BV :: (1 <= w) => NatRepr w ->
+              [BVFactor ctx w] -> Integer -> PermExpr ctx (BVType w)
   -- ^ A bitvector expression is a linear expression in @N@ variables, i.e., sum
   -- of constant times variable factors plus a constant
 
@@ -138,11 +139,13 @@ data PermExpr (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
                   PermExpr ctx (StructType args)
   -- ^ A struct expression is an expression for each argument of the struct type
 
-  PExpr_LLVMWord :: PermExpr ctx (BVType w) ->
+  PExpr_LLVMWord :: (1 <= w) => NatRepr w ->
+                    PermExpr ctx (BVType w) ->
                     PermExpr ctx (LLVMPointerType w)
   -- ^ An LLVM value that represents a word, i.e., whose region identifier is 0
 
-  PExpr_LLVMOffset :: PermVar ctx (LLVMPointerType w) ->
+  PExpr_LLVMOffset :: (1 <= w) => NatRepr w ->
+                      PermVar ctx (LLVMPointerType w) ->
                       PermExpr ctx (BVType w) ->
                       PermExpr ctx (LLVMPointerType w)
   -- ^ An LLVM value built by adding an offset to an LLVM variable
@@ -164,10 +167,10 @@ instance FreeVars SplittingExpr where
 
 instance FreeVars' PermExpr where
   freeVars' (PExpr_Var x) = [Some x]
-  freeVars' (PExpr_BV factors const) = concatMap freeVars' factors
+  freeVars' (PExpr_BV _ factors const) = concatMap freeVars' factors
   freeVars' (PExpr_Struct args_ctx args) = foldMapFC freeVars' args
-  freeVars' (PExpr_LLVMWord expr) = freeVars' expr
-  freeVars' (PExpr_LLVMOffset x off) = Some x : freeVars' off
+  freeVars' (PExpr_LLVMWord _ expr) = freeVars' expr
+  freeVars' (PExpr_LLVMOffset _ x off) = Some x : freeVars' off
   freeVars' (PExpr_Spl spl) = freeVars spl
 
 instance FreeVars' BVFactor where
@@ -180,18 +183,19 @@ multFactor i (BVFactor j x) = BVFactor (i*j) x
 -- | Convert a bitvector expression to a sum of factors plus a constant
 matchBVExpr :: PermExpr ctx (BVType w) -> ([BVFactor ctx w], Integer)
 matchBVExpr (PExpr_Var x) = ([BVFactor 1 x], 0)
-matchBVExpr (PExpr_BV factors const) = (factors, const)
+matchBVExpr (PExpr_BV _ factors const) = (factors, const)
 
 -- | Add two bitvector expressions
-addBVExprs :: PermExpr ctx (BVType w) -> PermExpr ctx (BVType w) ->
+addBVExprs :: (1 <= w) => NatRepr  w ->
+              PermExpr ctx (BVType w) -> PermExpr ctx (BVType w) ->
               PermExpr ctx (BVType w)
-addBVExprs (matchBVExpr -> (factors1, const1)) (matchBVExpr ->
-                                                (factors2, const2)) =
-  PExpr_BV (factors1 ++ factors2) (const1 + const2)
+addBVExprs w (matchBVExpr -> (factors1, const1)) (matchBVExpr ->
+                                                  (factors2, const2)) =
+  PExpr_BV w (factors1 ++ factors2) (const1 + const2)
 
 -- | Build a "default" expression for a given type
 zeroOfType :: TypeRepr tp -> PermExpr ctx tp
-zeroOfType (BVRepr _) = PExpr_BV [] 0
+zeroOfType (BVRepr w) = PExpr_BV w [] 0
 zeroOfType (testEquality splittingTypeRepr -> Just Refl) =
   PExpr_Spl SplExpr_All
 zeroOfType _ = error "zeroOfType"
@@ -223,18 +227,18 @@ genSubstFactor s f@(BVFactor i x) =
 
 instance GenSubstable' PermExpr where
   genSubst' s (PExpr_Var x) = genSubstVar s x
-  genSubst' s (PExpr_BV factors const) =
+  genSubst' s (PExpr_BV w factors const) =
     let (factorss', consts') = unzip (map (genSubstFactor s) factors) in
-    PExpr_BV (concat factorss') (const + sum consts')
+    PExpr_BV w (concat factorss') (const + sum consts')
   genSubst' s (PExpr_Struct args_ctx args) =
     PExpr_Struct args_ctx $ fmapFC (genSubst' s) args
-  genSubst' s (PExpr_LLVMWord expr) = PExpr_LLVMWord $ genSubst' s expr
-  genSubst' s (PExpr_LLVMOffset x off) =
+  genSubst' s (PExpr_LLVMWord w expr) = PExpr_LLVMWord w $ genSubst' s expr
+  genSubst' s (PExpr_LLVMOffset w x off) =
     case genSubstVar s x of
-      PExpr_Var x' -> PExpr_LLVMOffset x' (genSubst' s off)
-      PExpr_LLVMWord bv -> PExpr_LLVMWord $ addBVExprs bv (genSubst' s off)
-      PExpr_LLVMOffset x' bv ->
-        PExpr_LLVMOffset x' $ addBVExprs bv (genSubst' s off)
+      PExpr_Var x' -> PExpr_LLVMOffset w x' (genSubst' s off)
+      PExpr_LLVMWord _ bv -> PExpr_LLVMWord w $ addBVExprs w bv (genSubst' s off)
+      PExpr_LLVMOffset _ x' bv ->
+        PExpr_LLVMOffset w x' $ addBVExprs w bv (genSubst' s off)
   genSubst' s (PExpr_Spl spl) = PExpr_Spl $ genSubst s spl
 
 {-
@@ -589,13 +593,14 @@ elimExists perms x tp =
 -- expressions that can be tested dynamically on (the translations of) those
 -- expressions
 data PermConstr ctx where
-  Constr_BVEq :: PermExpr ctx (BVType w) -> PermExpr ctx (BVType w) ->
+  Constr_BVEq :: (1 <= w) => NatRepr w ->
+                 PermExpr ctx (BVType w) -> PermExpr ctx (BVType w) ->
                  PermConstr ctx
   -- ^ Constraint stating that two bitvector values are equal
 
 instance Weakenable PermConstr where
-  weaken w (Constr_BVEq e1 e2) =
-    Constr_BVEq (weaken' w e1) (weaken' w e2)
+  weaken w (Constr_BVEq w' e1 e2) =
+    Constr_BVEq w' (weaken' w e1) (weaken' w e2)
 
 
 -- | A permission elimination decomposes a permission set into some number of
