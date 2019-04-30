@@ -136,9 +136,10 @@ library
     SAWScript.VerificationCheck
 
     SAWScript.CrucibleBuiltinsJVM
-                  
-    SAWScript.Heapster.Permissions
+
     SAWScript.Heapster.CtxMonad
+    SAWScript.Heapster.Permissions
+    SAWScript.Heapster.Translation
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite

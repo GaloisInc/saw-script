@@ -53,6 +53,7 @@ import SAWScript.CrucibleBuiltins
 import qualified Lang.Crucible.JVM.Translation as CJ
 import qualified SAWScript.CrucibleBuiltinsJVM as CJ
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
+import SAWScript.Heapster.Translation
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -1848,6 +1849,17 @@ primitives = Map.fromList
     (pureVal testMRSolver)
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if two monadic terms are equal" ]
+
+  , prim "test_type_translation"  "Int -> TopLevel Bool"
+    (pureVal testTypeTranslation)
+    [ "Test a given permission type translation of Heapster."
+    ]
+
+  , prim "test_judgment_translation"  "TopLevel Bool"
+    (pureVal testJudgmentTranslation)
+    [ "Test a given elimination translation of Heapster."
+    ]
+
   ]
 
   where
