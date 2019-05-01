@@ -139,6 +139,7 @@ library
 
     SAWScript.Heapster.CtxMonad
     SAWScript.Heapster.Permissions
+    SAWScript.Heapster.TypedCrucible
     SAWScript.Heapster.Translation
 
     SAWScript.Prover.Mode
