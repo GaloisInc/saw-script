@@ -16,6 +16,7 @@
 module SAWScript.Heapster.Permissions where
 
 import qualified Control.Lens                     as Lens
+import           Data.List
 import           Data.Kind
 import           Data.Proxy
 import           Data.Functor.Const
@@ -510,6 +511,21 @@ data LLVMArrayPerm ctx w =
     llvmArrayPtrPerm :: LLVMShapePerm ctx w
   }
 
+-- | Add a static offset to a pointer shape
+shapeAddOffset :: Integer -> LLVMShapePerm ctx w -> LLVMShapePerm ctx w
+shapeAddOffset off (LLVMFieldShapePerm shape) =
+  LLVMFieldShapePerm $ shape { llvmFieldOffset = off + llvmFieldOffset shape}
+shapeAddOffset off (LLVMArrayShapePerm shape) =
+  LLVMArrayShapePerm $ shape { llvmArrayOffset = off + llvmArrayOffset shape}
+
+-- | Test if a shape is a field with the given offset
+isLLVMFieldAt :: Integer -> LLVMShapePerm ctx w -> Bool
+isLLVMFieldAt _ (LLVMArrayShapePerm _) = False
+isLLVMFieldAt off (LLVMFieldShapePerm fld) = llvmFieldOffset fld == off
+
+splitLLVMFieldAt :: Integer -> SplittingExpr ctx -> [LLVMShapePerm ctx w] ->
+                    [LLVMShapePerm ctx w]
+splitLLVMFieldAt = error "FIXME: splitLLVMFieldAt"
 
 instance GenSubstable' ValuePerm where
   genSubst' _ ValPerm_True = ValPerm_True
@@ -674,6 +690,16 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
   -- ----------------------------------------------------------------------
   -- Gin | Pin, x:ptr(off |-> (S, p) * ps)  |- rets
 
+  Elim_SplitField :: PermVar ctx (LLVMPointerType w) ->
+                     Integer -> SplittingExpr ctx ->
+                     PermElim f ctx -> PermElim f ctx
+  -- ^ Implements the rule
+  --
+  -- pf = Gin | Pin, x:ptr(off |-> (Spl_L S, eq(e))
+  --                       * off |-> (Spl_R S, eq(e)) * shapes) |- rets
+  -- ---------------------------------------------------------------------------
+  -- Gin | Pin, x:ptr (off |-> (S, p))
+
   Elim_Copy :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
   -- ^ Copy the same permissions into two different elimination trees, where an
   -- 'Elim_Fail' in the first tree "calls" the second tree (sort of like a
@@ -705,6 +731,8 @@ instance Weakenable f => Weakenable (PermElim f) where
   weaken w (Elim_BindField x off spl elim) =
     Elim_BindField (weaken' w x) off (weaken w spl)
     (weaken (weakenWeakening1 w) elim)
+  weaken w (Elim_SplitField x off spl elim) =
+    Elim_SplitField (weaken' w x) off (weaken w spl) (weaken w elim)
   weaken w (Elim_Copy elim1 elim2) =
     Elim_Copy (weaken w elim1) (weaken w elim2)
   weaken w (Elim_Unroll x elim) =
@@ -996,18 +1024,93 @@ provePermImplH perms vars s (ExprPermSpec e (ValPerm_Exists tp p) : specs) =
   provePermImplH perms (extend vars tp) (consPartialSubst s)
   (ExprPermSpec e p : map weakenPermSpec1 specs)
 
+-- case for Pin, x:(p1 \/ p2) |- x:(either eq or LLVMPtr), specs
 provePermImplH perms vars s specs@(ExprPermSpec (PExpr_Var x) _ : _)
   | ValPerm_Or _ _ <- pvGet perms x
   = Elim_Or x
     (provePermImplH (elimOrLeft perms x) vars s specs)
     (provePermImplH (elimOrRight perms x) vars s specs)
 
+-- Pin, x:tp |- x:(.. same as below ..), specs
+-- ---------------------------------------------------------
+-- Pin, x:(exists x:tp.p) |- x:(either eq or LLVMPtr), specs
 provePermImplH perms vars s specs@(ExprPermSpec (PExpr_Var x) _ : _)
   | ValPerm_Exists tp _ <- pvGet perms x
   = Elim_Exists x tp $
     provePermImplH (elimExists perms x tp) vars
     (extendContext oneDiff s)
     (map (weakenPermSpecRight1 Proxy $ size vars) specs)
+
+-- Pin |- x:ptr(shapes+off), specs
+-- --------------------------------
+-- Pin |- (x+off):ptr(shapes), specs
+provePermImplH perms vars s (ExprPermSpec
+                             (PExpr_LLVMOffset w x (PExpr_BV _ [] off))
+                             (ValPerm_LLVMPtr _ shapes _)
+                             : specs) =
+  applyIntro (\_ -> Intro_LLVMPtr_Offset w off) $
+  provePermImplH perms vars s (ExprPermSpec (PExpr_Var x)
+                               (ValPerm_LLVMPtr w
+                                (map (shapeAddOffset off) shapes) Nothing)
+                               : specs)
+
+-- Pin, x:ptr(shapes) |- specs
+-- ------------------------------------
+-- Pin, x:ptr(shapes) |- x:ptr(), specs
+provePermImplH perms vars s (ExprPermSpec
+                             (PExpr_Var x) (ValPerm_LLVMPtr _ [] _)
+                             : specs)
+  | ValPerm_LLVMPtr _ _ _ <- pvGet perms x
+  = applyIntro (\diff -> Intro_LLVMPtr (extendContext' diff x)) $
+    provePermImplH perms vars s specs
+
+-- Pin, x:ptr(shapes) |- e:p, x:ptr(shapes'), specs
+-- ------------------------------------------------------
+-- Pin, x:ptr(off |-> (All,eq(e)) * shapes)
+--      |- x:ptr(off |-> (All,p) * shapes'), specs
+
+{-
+provePermImplH perms vars s (ExprPermSpec
+                             (PExpr_Var x)
+                             (ValPerm_LLVMPtr w
+                              (LLVMFieldShapePerm
+                               (LLVMFieldPerm off SplExpr_All p) : shapes)
+                              free)
+                             : specs)
+  | ValPerm_LLVMPtr _ shapes_l free_l <- pvGet perms x
+  , Just fld@(LLVMFieldShapePerm
+              (LLVMFieldPerm _ SplExpr_All (ValPerm_Eq e))) <-
+      find (isLLVMFieldAt off) shapes
+  = applyIntro (\diff -> Intro_LLVMField off SplExpr_All $
+                         extendContext' diff p) $
+    provePermImplH perms vars s specs
+    (ExprPermSpec (PExpr_Var x) (ValPerm_LLVMPtr w shapes free) : specs)
+
+-- Pin, x:ptr(off |-> (SplExpr_L S,eq(e)) * shapes)
+--      |- e:p, x:ptr(shapes'), specs               (setting z=SplExpr_R S)
+-- ------------------------------------------------------------------------
+-- Pin, x:ptr(off |-> (S,eq(e)) * shapes)
+--      |- x:ptr(off |-> (z,p) * shapes'), specs
+provePermImplH perms vars s (ExprPermSpec
+                             (PExpr_Var x)
+                             (ValPerm_LLVMPtr w
+                              (LLVMFieldShapePerm
+                               (LLVMFieldPerm off SplExpr_All p) : shapes)
+                              free)
+                             : specs)
+  | ValPerm_LLVMPtr _ shapes_l free_l <- pvGet perms x
+  , Just fld@(LLVMFieldShapePerm (LLVMFieldPerm _ spl (ValPerm_Eq e))) <-
+      find (isLLVMFieldAt off) shapes
+  = applyIntroWithSubst (size perms) (\diff s' ->
+                                       Intro_LLVMField off SplExpr_All $
+                                       subst' s' p) $
+    Elim_SplitField x off spl $
+    provePermImplH
+    (pvSet x (ValPerm_LLVMPtr w (splitLLVMFieldAt
+                                 off spl shapes_l) free_l) perms)
+    vars s
+    (ExprPermSpec (PExpr_Var x) (ValPerm_LLVMPtr w shapes free) : specs)
+-}
 
 
 -- | FIXME: documentation!
