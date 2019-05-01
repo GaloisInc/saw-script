@@ -42,23 +42,24 @@ import           Lang.Crucible.CFG.Core
 -- * Variables and Weakenings
 ----------------------------------------------------------------------
 
--- FIXME: these need to go into parameterized-utils
+-- FIXME: these need fast versions unsafe to go into parameterized-utils
 
 oneDiff :: Diff ctx (ctx ::> tp)
 oneDiff = extendRight noDiff
 
-subtractSizeLeft :: Size (ctx1 <+> ctx2) -> Size ctx1 -> p ctx2 -> Size ctx2
-subtractSizeLeft = error "FIXME: subtractSizeLeft"
+-- subtractSizeRight :: Size (ctx1 <+> ctx2) -> p ctx1 -> Size ctx2 -> Size ctx1
+-- subtractSizeRight sz12 p sz2 =
+--   case (viewSize sz12, viewSize sz2) of
+--     (_, ZeroSize) -> sz12
+--     (IncSize sz12', IncSize sz2') ->
+--       subtractSizeRight sz12' p sz2'
 
-subtractSizeRight :: Size (ctx1 <+> ctx2) -> p ctx1 -> Size ctx2 -> Size ctx1
-subtractSizeRight = error "FIXME: subtractSizeRight"
+-- caseIndexAppend :: Size ctx1 -> Size ctx2 -> Index (ctx1 <+> ctx2) a ->
+--                    Either (Index ctx1 a) (Index ctx2 a)
+-- caseIndexAppend = error "FIXME: caseIndexAppend"
 
-caseIndexAppend :: Size ctx1 -> p ctx2 -> Index (ctx1 <+> ctx2) a ->
-                   Either (Index ctx1 a) (Index ctx2 a)
-caseIndexAppend = error "FIXME: caseIndexAppend"
-
-extendIndexLeft :: Size ctx1 -> Index ctx2 a -> Index (ctx1 <+> ctx2) a
-extendIndexLeft = error "FIXME: extendIndexLeft"
+-- extendIndexLeft :: Size ctx1 -> Index ctx2 a -> Index (ctx1 <+> ctx2) a
+-- extendIndexLeft = error "FIXME: extendIndexLeft"
 
 
 -- | Our variables need to keep the 'Size' of the context around so that we can
@@ -293,13 +294,13 @@ class Weakenable' (f :: Ctx k -> k' -> *) where
 
 instance Weakenable Size where
   weaken (Weakening diff12 sz3) sz =
-    addSize (extSize (subtractSizeRight sz Proxy sz3) diff12) sz3
+    addSize (extSize (subtractSize sz Proxy sz3) diff12) sz3
 
 instance Weakenable' PermVar where
   weaken' w@(Weakening diff12 (sz3 :: Size c3)) (PermVar sz13 x) =
     PermVar (weaken w sz13) $
-    let sz1 = subtractSizeRight sz13 Proxy sz3 in
-    case caseIndexAppend sz1 (Proxy :: Proxy c3) x of
+    let sz1 = subtractSize sz13 Proxy sz3 in
+    case caseIndexAppend sz1 sz3 x of
       Left x1 -> extendIndex' (appendDiff sz3 Cat.. diff12) x1
       Right x3 -> extendIndexLeft (extSize sz1 diff12) x3
 
@@ -423,7 +424,7 @@ partialSubstVar :: PartialSubst vars ctx -> PermVar (ctx <+> vars) a ->
                    PermExpr (ctx <+> vars) a
 partialSubstVar (PartialSubst asgn :: PartialSubst vars ctx) pv@(PermVar sz x) =
   let sz_vars = size asgn in
-  let sz_ctx = (subtractSizeRight sz (Proxy :: Proxy ctx) sz_vars) in
+  let sz_ctx = (subtractSize sz (Proxy :: Proxy ctx) sz_vars) in
   case caseIndexAppend sz_ctx sz_vars x of
     Left _ -> PExpr_Var pv
     Right x' ->
