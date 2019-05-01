@@ -42,25 +42,8 @@ import           Lang.Crucible.CFG.Core
 -- * Variables and Weakenings
 ----------------------------------------------------------------------
 
--- FIXME: these need fast versions unsafe to go into parameterized-utils
-
 oneDiff :: Diff ctx (ctx ::> tp)
 oneDiff = extendRight noDiff
-
--- subtractSizeRight :: Size (ctx1 <+> ctx2) -> p ctx1 -> Size ctx2 -> Size ctx1
--- subtractSizeRight sz12 p sz2 =
---   case (viewSize sz12, viewSize sz2) of
---     (_, ZeroSize) -> sz12
---     (IncSize sz12', IncSize sz2') ->
---       subtractSizeRight sz12' p sz2'
-
--- caseIndexAppend :: Size ctx1 -> Size ctx2 -> Index (ctx1 <+> ctx2) a ->
---                    Either (Index ctx1 a) (Index ctx2 a)
--- caseIndexAppend = error "FIXME: caseIndexAppend"
-
--- extendIndexLeft :: Size ctx1 -> Index ctx2 a -> Index (ctx1 <+> ctx2) a
--- extendIndexLeft = error "FIXME: extendIndexLeft"
-
 
 -- | Our variables need to keep the 'Size' of the context around so that we can
 -- apply weakenings
