@@ -941,7 +941,8 @@ weakenPermSpec1 (ExprPermSpec e p) =
 
 partialSubstSpec :: PartialSubst vars ctx -> ExprPermSpec vars ctx ->
                     ExprPermSpec vars ctx
-partialSubstSpec = error "FIXME: partialSubstSpec"
+partialSubstSpec s (ExprPermSpec e p) =
+  ExprPermSpec e $ partialSubst' s p
 
 -- | A specification of a set expression permissions
 type ExprPermSetSpec vars ctx = [ExprPermSpec vars ctx]
