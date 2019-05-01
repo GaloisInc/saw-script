@@ -895,6 +895,11 @@ partialSubstSpec = error "FIXME: partialSubstSpec"
 -- | A specification of a set expression permissions
 type ExprPermSetSpec vars ctx = [ExprPermSpec vars ctx]
 
+-- | Return value for 'provePermImpl' and friends
+data ImplRet vars ctx =
+  ImplRet (Size vars) (PermSet ctx) (PermIntro ctx)
+  (PermSubst (ctx <+> vars) ctx)
+
 
 -- | Helper to test if a permission variable is an existential variable
 matchPSVar :: PermSet ctx -> PartialSubst vars ctx -> PermVar (ctx <+> vars) a ->
@@ -992,17 +997,18 @@ provePermImplH perms vars s (ExprPermSpec e (ValPerm_Exists tp p) : specs) =
   (ExprPermSpec e p : map weakenPermSpec1 specs)
 
 provePermImplH perms vars s specs@(ExprPermSpec (PExpr_Var x) _ : _)
-  | ValPerm_Exists tp p <- pvGet perms x
+  | ValPerm_Or _ _ <- pvGet perms x
+  = Elim_Or x
+    (provePermImplH (elimOrLeft perms x) vars s specs)
+    (provePermImplH (elimOrRight perms x) vars s specs)
+
+provePermImplH perms vars s specs@(ExprPermSpec (PExpr_Var x) _ : _)
+  | ValPerm_Exists tp _ <- pvGet perms x
   = Elim_Exists x tp $
-    provePermImplH (pvSet (extendContext' oneDiff x) p $
-                    extendPermSet perms ValPerm_True) vars
+    provePermImplH (elimExists perms x tp) vars
     (extendContext oneDiff s)
     (map (weakenPermSpecRight1 Proxy $ size vars) specs)
 
--- | Return value for 'provePermImpl'
-data ImplRet vars ctx =
-  ImplRet (Size vars) (PermSet ctx) (PermIntro ctx)
-  (PermSubst (ctx <+> vars) ctx)
 
 -- | FIXME: documentation!
 provePermImpl :: PermSet ctx -> CtxRepr vars -> ExprPermSetSpec vars ctx ->
