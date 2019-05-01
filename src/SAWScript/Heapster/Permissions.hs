@@ -52,6 +52,9 @@ data PermVar ctx a = PermVar (Size ctx) (Index ctx a)
 nextPermVar :: Size ctx -> PermVar (ctx ::> a) a
 nextPermVar sz = PermVar (incSize sz) (nextIndex sz)
 
+weakenPermVar1 :: PermVar ctx a -> PermVar (ctx ::> tp) a
+weakenPermVar1 (PermVar sz ix) = PermVar (incSize sz) (skipIndex ix)
+
 instance TestEquality (PermVar ctx) where
   testEquality (PermVar _ x) (PermVar _ y) = testEquality x y
 
@@ -145,6 +148,62 @@ data BVFactor ctx w where
               BVFactor ctx w
     -- ^ A variable of type @'BVType' w@ multiplied by a constant
 
+instance Eq (SplittingExpr ctx) where
+  SplExpr_All == SplExpr_All = True
+  SplExpr_All == _ = False
+
+  (SplExpr_L spl1) == (SplExpr_L spl2) = spl1 == spl2
+  (SplExpr_L _) == _ = False
+
+  (SplExpr_R spl1) == (SplExpr_R spl2) = spl1 == spl2
+  (SplExpr_R _) == _ = False
+
+  (SplExpr_Star spl1_l spl1_r) == (SplExpr_Star spl2_l spl2_r) =
+    spl1_l == spl2_l && spl1_r == spl2_r
+  (SplExpr_Star _ _) == _ = False
+
+  (SplExpr_Var x1) == (SplExpr_Var x2) = x1 == x2
+  (SplExpr_Var _) == _ = False
+
+
+instance Eq (PermExpr ctx a) where
+  (PExpr_Var x1) == (PExpr_Var x2) = x1 == x2
+  (PExpr_Var _) == _ = False
+
+  (PExpr_BV _ factors1 const1) == (PExpr_BV _ factors2 const2) =
+    const1 == const2 && eqFactors factors1 factors2
+    where
+      eqFactors :: [BVFactor ctx w] -> [BVFactor ctx w] -> Bool
+      eqFactors [] [] = True
+      eqFactors (f : factors1) factors2
+        | elem f factors2 = eqFactors factors1 (delete f factors2)
+      eqFactors _ _ = False
+  (PExpr_BV _ _ _) == _ = False
+
+  (PExpr_Struct _ args1) == (PExpr_Struct _ args2) = eqArgs args1 args2 where
+    eqArgs :: Assignment (PermExpr ctx) args ->
+              Assignment (PermExpr ctx) args -> Bool
+    eqArgs (viewAssign -> AssignEmpty) _ = True
+    eqArgs (viewAssign ->
+            AssignExtend args1' e1) (viewAssign -> AssignExtend args2' e2) =
+      eqArgs args1' args2' && e1 == e2
+  (PExpr_Struct _ _) == _ = False
+
+  (PExpr_LLVMWord _ e1) == (PExpr_LLVMWord _ e2) = e1 == e2
+  (PExpr_LLVMWord _ _) == _ = False
+
+  (PExpr_LLVMOffset _ x1 e1) == (PExpr_LLVMOffset _ x2 e2) =
+    x1 == x2 && e1 == e2
+  (PExpr_LLVMOffset _ _ _) == _ = False
+
+  (PExpr_Spl spl1) == (PExpr_Spl spl2) = spl1 == spl2
+  (PExpr_Spl _) == _ = False
+
+
+instance Eq (BVFactor ctx w) where
+  (BVFactor _ i1 x1) == (BVFactor _ i2 x2) = i1 == i2 && x1 == x2
+
+
 instance FreeVars SplittingExpr where
   freeVars SplExpr_All = []
   freeVars (SplExpr_L e) = freeVars e
@@ -174,6 +233,7 @@ matchBVExpr w (PExpr_Var x) = ([BVFactor w 1 x], 0)
 matchBVExpr _ (PExpr_BV _ factors const) = (factors, const)
 
 -- | Add two bitvector expressions
+-- FIXME: normalize factors with the same variable!
 addBVExprs :: (1 <= w) => NatRepr w ->
               PermExpr ctx (BVType w) -> PermExpr ctx (BVType w) ->
               PermExpr ctx (BVType w)
@@ -187,6 +247,45 @@ zeroOfType (BVRepr w) = PExpr_BV w [] 0
 zeroOfType (testEquality splittingTypeRepr -> Just Refl) =
   PExpr_Spl SplExpr_All
 zeroOfType _ = error "zeroOfType"
+
+-- | Lowering an expression (or other object) means attempting to move it from
+-- extended context @ctx1 <+> ctx2@ to context @ctx1@, returning 'Nothing' if it
+-- has any free variables from @ctx2@
+class Lowerable f where
+  lower :: Size ctx1 -> Size ctx2 -> f (ctx1 <+> ctx2) -> Maybe (f ctx1)
+
+class Lowerable' f where
+  lower' :: Size ctx1 -> Size ctx2 -> f (ctx1 <+> ctx2) a -> Maybe (f ctx1 a)
+
+instance Lowerable' PermVar where
+  lower' sz1 sz2 x =
+    case caseVarAppend sz1 sz2 x of
+      Left x' -> Just x'
+      Right _ -> Nothing
+
+instance Lowerable SplittingExpr where
+  lower _ _ SplExpr_All = Just SplExpr_All
+  lower sz1 sz2 (SplExpr_L spl) = SplExpr_L <$> lower sz1 sz2 spl
+  lower sz1 sz2 (SplExpr_R spl) = SplExpr_R <$> lower sz1 sz2 spl
+  lower sz1 sz2 (SplExpr_Star spl1 spl2) =
+    SplExpr_Star <$> lower sz1 sz2 spl1 <*> lower sz1 sz2 spl2
+  lower sz1 sz2 (SplExpr_Var x) = SplExpr_Var <$> lower' sz1 sz2 x
+
+instance Lowerable' PermExpr where
+  lower' sz1 sz2 (PExpr_Var x) =
+    PExpr_Var <$> lower' sz1 sz2 x
+  lower' sz1 sz2 (PExpr_BV w factors const) =
+    PExpr_BV w <$> mapM (lower' sz1 sz2) factors <*> return const
+  lower' sz1 sz2 (PExpr_Struct args_ctx args) =
+    PExpr_Struct args_ctx <$> traverseFC (lower' sz1 sz2) args
+  lower' sz1 sz2 (PExpr_LLVMWord w e) =
+    PExpr_LLVMWord w <$> lower' sz1 sz2 e
+  lower' sz1 sz2 (PExpr_LLVMOffset w x off) =
+    PExpr_LLVMOffset w <$> lower' sz1 sz2 x <*> lower' sz1 sz2 off
+  lower' sz1 sz2 (PExpr_Spl spl) = PExpr_Spl <$> lower sz1 sz2 spl
+
+instance Lowerable' BVFactor where
+  lower' sz1 sz2 (BVFactor w i x) = BVFactor w i <$> lower' sz1 sz2 x
 
 
 ----------------------------------------------------------------------
@@ -460,7 +559,7 @@ data ValuePerm (ctx :: Ctx CrucibleType) (a :: CrucibleType) where
   -- | A recursive / least fixed-point permission
   ValPerm_Mu :: ValuePerm (ctx ::> ValuePermType a) a -> ValuePerm ctx a
 
-  -- | A value permission variable
+  -- | A value permission variable, for use in recursive permissions
   ValPerm_Var :: PermVar ctx (ValuePermType a) -> ValuePerm ctx a
 
   -- | Says that a natural number is non-zero
@@ -746,6 +845,24 @@ instance Weakenable f => Weakenable (PermElim f) where
 instance Weakenable f => ExtendContext (PermElim f) where
   extendContext diff = weaken (weakeningOfDiff diff)
 
+-- | Helper type to make a 'PermSet' into a datatype
+newtype MkPermSet ctx = MkPermSet { unMkPermSet :: PermSet ctx }
+
+-- | Eliminate any disjunctions or existentials on a variable, returning the
+-- resulting permission set
+elimDisjuncts :: PermSet ctx -> PermVar ctx a ->
+                 PermElim MkPermSet ctx
+elimDisjuncts perms x = helper perms x (pvGet perms x) where
+  helper :: PermSet ctx -> PermVar ctx a -> ValuePerm ctx a ->
+            PermElim MkPermSet ctx
+  helper perms x (ValPerm_Or p1 p2) =
+    Elim_Or x (helper (elimOrLeft perms x) x p1)
+    (helper (elimOrRight perms x) x p2)
+  helper perms x (ValPerm_Exists tp p) =
+    Elim_Exists x tp $
+    helper (extendPermSet perms ValPerm_True) (weakenPermVar1 x) p
+  helper perms _ _ = Elim_Done $ MkPermSet perms
+
 
 ----------------------------------------------------------------------
 -- * Monads over Contextual Types
@@ -811,6 +928,52 @@ instance CtxMonad m => CtxMonadState s (CStateT s m) where
 -- * Permission Set Introduction Rules
 ----------------------------------------------------------------------
 
+-- | A proof that two expressions are equal, assuming any constraints in an
+-- input permission set; i.e., a judgment of the form
+--
+-- > Gamma | Pin |- e1 = e2
+data EqProof ctx a where
+  EqProof_Refl :: PermExpr ctx a -> EqProof ctx a
+  -- ^ A proof that any expression equals itself
+
+  EqProof_CastEq :: PermVar ctx a -> PermExpr ctx a -> EqProof ctx a ->
+                    EqProof ctx a
+  -- ^ @EqProof_CastEq x e1 pf@ implements the following rule:
+  --
+  -- > pf = Gamma | Pin, x:eq(e1) |- e1 = e2
+  -- > --------------------------------------------------
+  -- > Gamma | Pin, x:eq(e1) |- x = e2
+
+  EqProof_LLVMWord :: (1 <= w) => NatRepr w -> EqProof ctx (BVType w) ->
+                      EqProof ctx (LLVMPointerType w)
+  -- ^ The proof rule
+  --
+  -- Gamma | Pin |- e1 = e2
+  -- -------------------------
+  -- Gamma | Pin |- LLVMWord e1 = LLVMWord e2
+
+instance Weakenable' EqProof where
+  weaken' w (EqProof_Refl e) = EqProof_Refl $ weaken' w e
+  weaken' w (EqProof_CastEq x e pf) =
+    EqProof_CastEq (weaken' w x) (weaken' w e) (weaken' w pf)
+  weaken' w (EqProof_LLVMWord w' pf) = EqProof_LLVMWord w' $ weaken' w pf
+
+instance ExtendContext' EqProof where
+  extendContext' diff = weaken' (weakeningOfDiff diff)
+
+-- | Extract @e1@ from a proof that @e1 = e2@
+eqProofLHS :: EqProof ctx a -> PermExpr ctx a
+eqProofLHS (EqProof_Refl e) = e
+eqProofLHS (EqProof_CastEq x _ _) = PExpr_Var x
+eqProofLHS (EqProof_LLVMWord w pf) = PExpr_LLVMWord w $ eqProofLHS pf
+
+-- | Extract @e2@ from a proof that @e1 = e2@
+eqProofRHS :: EqProof ctx a -> PermExpr ctx a
+eqProofRHS (EqProof_Refl e) = e
+eqProofRHS (EqProof_CastEq _ _ pf) = eqProofRHS pf
+eqProofRHS (EqProof_LLVMWord w pf) = PExpr_LLVMWord w $ eqProofRHS pf
+
+
 -- | The permission introduction rules define a judgment of the form
 --
 -- > Gamma | Pin |- Pout | Prem
@@ -860,19 +1023,18 @@ data PermIntro (ctx :: Ctx CrucibleType) where
 
   Intro_CastEq :: PermVar ctx a -> PermExpr ctx a -> PermIntro ctx ->
                   PermIntro ctx
-  -- ^ @Intro_CastEq x e' pf@ implements the following rule, where the notation
-  -- @[x |-> e']e@ denotes a call to 'replaceVar':
+  -- ^ @Intro_CastEq x e' pf@ implements the following rule:
   --
-  -- > pf = Gamma | Pin, x:eq(e') |- ([x |-> e']e):p, Pout | Prem
+  -- > pf = Gamma | Pin, x:eq(e) |- e:p, Pout | Prem
   -- > --------------------------------------------------
-  -- > Gamma | Pin, x:eq(e') |- e:p, Pout | Prem
+  -- > Gamma | Pin, x:eq(e) |- x:p, Pout | Prem
 
-  Intro_Eq :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
-  -- ^ @Intro_Eq e pf@ implements the rule
+  Intro_Eq :: EqProof ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ @Intro_Eq eq_pf pf@ for @eq_pf :: e1 = e2@ implements the rule
   --
   -- > pf = Gamma | Pin |- Pout | Prem
   -- > --------------------------------------------------
-  -- > Gamma | Pin |- e:eq(e), Pout | Prem
+  -- > Gamma | Pin |- e1:eq(e2), Pout | Prem
 
   Intro_LLVMPtr ::
     PermVar ctx (LLVMPointerType w) -> PermIntro ctx -> PermIntro ctx
@@ -904,6 +1066,95 @@ data PermIntro (ctx :: Ctx CrucibleType) where
 
 
 ----------------------------------------------------------------------
+-- * Proving Equality of Permission Expressions
+----------------------------------------------------------------------
+
+-- | Test if a variable in an 'ExprPermSpec' is an existential variable
+matchSpecEVar :: PermSet ctx -> PartialSubst vars ctx ->
+                 PermVar (ctx <+> vars) a -> Maybe (PermVar vars a)
+matchSpecEVar perms s x =
+  case caseVarAppend (size perms) (partialSubstSize s) x of
+    Left _ -> Nothing
+    Right z -> Just z
+
+-- | Test if an expression in an 'ExprPermSpec' is constant, i.e., has no
+-- existential variables
+matchSpecConst :: PermSet ctx -> PartialSubst vars ctx ->
+                  PermExpr (ctx <+> vars) a -> Maybe (PermExpr ctx a)
+matchSpecConst perms s = lower' (size perms) (partialSubstSize s)
+
+-- | Return type for 'proveEq'
+data EqRet vars a ctx =
+  EqRet (PermSet ctx) (PartialSubst vars ctx) (EqProof ctx a)
+
+-- | Apply an 'EqProof' rule to an 'EqRet'
+applyEqProof :: (forall ctx'. Diff ctx ctx' ->
+                 EqProof ctx' a -> EqProof ctx' b) ->
+                PermElim (EqRet vars a) ctx ->
+                PermElim (EqRet vars b) ctx
+applyEqProof f =
+  cmap (\diff (EqRet perms s eq_pf) -> EqRet perms s (f diff eq_pf))
+
+-- FIXME HERE: change things so we *don't* apply a partial subst until we need
+-- to, which should be (only?) in proveEq
+
+-- | Build a proof that two expressions are equal, where the right-hand one can
+-- have free variables listed in @vars@
+proveEq :: PermSet ctx -> CtxRepr vars -> PartialSubst vars ctx ->
+           PermExpr ctx a -> PermExpr (ctx <+> vars) a ->
+           PermElim (EqRet vars a) ctx
+proveEq perms vars s e1 e2 =
+  proveEqH perms vars s e1 $ partialSubst' s e2
+
+-- | Helper for 'proveEq' that assumes the given partial substitution has
+-- already been applied
+proveEqH :: PermSet ctx -> CtxRepr vars -> PartialSubst vars ctx ->
+            PermExpr ctx a -> PermExpr (ctx <+> vars) a ->
+            PermElim (EqRet vars a) ctx
+
+-- Prove e=z by setting z=e
+proveEqH perms vars s e (PExpr_Var (matchSpecEVar perms s -> Just x)) =
+  Elim_Done $ EqRet perms (partialSubstSet s x e) (EqProof_Refl e)
+
+-- Prove LLVMWord w1=LLVMWord w2 by proving w1 = w2
+proveEqH perms vars s (PExpr_LLVMWord w e1) (PExpr_LLVMWord _ e2) =
+  applyEqProof (\_ -> EqProof_LLVMWord w) $
+  proveEqH perms vars s e1 e2
+
+-- Prove e=e by reflexivity
+proveEqH perms _vars s e1 (matchSpecConst perms s -> Just e2)
+  | e1 == e2 =
+    Elim_Done $ EqRet perms s $ EqProof_Refl e1
+
+-- Prove x=e2 when x:eq(e1) is in the context by proving e1=e2
+proveEqH perms vars s (PExpr_Var x) e2
+  | ValPerm_Eq e1 <- pvGet perms x
+  = applyEqProof (\diff -> EqProof_CastEq (extendContext' diff x)
+                           (extendContext' diff e1)) $
+    proveEq perms vars s e1 e2
+
+-- Prove x=e2 when x:(p1 \/ p2) is in perms by eliminating the disjunct
+proveEqH perms vars s (PExpr_Var x) e2
+  | ValPerm_Or _ _ <- pvGet perms x
+  = elimDisjuncts perms x >>>= \diff (MkPermSet perms') ->
+    proveEqH perms' vars (extendContext diff s)
+    (PExpr_Var $ extendContext' diff x)
+    (weaken' (Weakening diff (size vars)) e2)
+
+-- Prove x=e2 when x:exists z.p is in perms by eliminating the existential
+proveEqH perms vars s (PExpr_Var x) e2
+  | ValPerm_Exists _ _ <- pvGet perms x
+  = elimDisjuncts perms x >>>= \diff (MkPermSet perms') ->
+    proveEqH perms' vars (extendContext diff s)
+    (PExpr_Var $ extendContext' diff x)
+    (weaken' (Weakening diff (size vars)) e2)
+
+-- FIXME: need more rules!
+proveEqH _perms _vars _s _e1 _e2 =
+  Elim_Fail
+
+
+----------------------------------------------------------------------
 -- * Proving Permission Implication
 ----------------------------------------------------------------------
 
@@ -912,6 +1163,12 @@ data PermIntro (ctx :: Ctx CrucibleType) where
 data ExprPermSpec vars ctx where
   ExprPermSpec :: PermExpr ctx a -> ValuePerm (ctx <+> vars) a ->
                   ExprPermSpec vars ctx
+
+weakenPermSpecRight :: Diff ctx ctx' -> Size vars -> ExprPermSpec vars ctx ->
+                       ExprPermSpec vars ctx'
+weakenPermSpecRight diff sz_vars (ExprPermSpec (e :: PermExpr ctx a) p) =
+  ExprPermSpec (extendContext' diff e)
+  (weaken' (Weakening diff sz_vars) p)
 
 weakenPermSpecRight1 :: Proxy tp -> Size vars -> ExprPermSpec vars ctx ->
                         ExprPermSpec vars (ctx ::> tp)
@@ -923,11 +1180,6 @@ weakenPermSpec1 :: ExprPermSpec vars ctx -> ExprPermSpec (vars ::> tp) ctx
 weakenPermSpec1 (ExprPermSpec e p) =
   ExprPermSpec e $ extendContext' oneDiff p
 
-partialSubstSpec :: PartialSubst vars ctx -> ExprPermSpec vars ctx ->
-                    ExprPermSpec vars ctx
-partialSubstSpec s (ExprPermSpec e p) =
-  ExprPermSpec e $ partialSubst' s p
-
 -- | A specification of a set expression permissions
 type ExprPermSetSpec vars ctx = [ExprPermSpec vars ctx]
 
@@ -936,12 +1188,6 @@ data ImplRet vars ctx =
   ImplRet (Size vars) (PermSet ctx) (PermIntro ctx)
   (PermSubst (ctx <+> vars) ctx)
 
-
--- | Helper to test if a permission variable is an existential variable
-matchPSVar :: PermSet ctx -> PartialSubst vars ctx -> PermVar (ctx <+> vars) a ->
-              Either (PermVar ctx a) (PermVar vars a)
-matchPSVar perms s x =
-  caseVarAppend (size perms) (partialSubstSize s) x
 
 -- | Apply an introduction rule to an 'ImplRet'
 applyIntro :: (DiffFun PermIntro PermIntro ctx) ->
@@ -982,34 +1228,12 @@ provePermImplH perms vars s (ExprPermSpec e ValPerm_True : specs) =
   applyIntro (\diff -> Intro_True (extendContext' diff e)) $
   provePermImplH perms vars s specs
 
-provePermImplH perms vars s (ExprPermSpec e
-                             (ValPerm_Eq
-                              (PExpr_Var
-                               (matchPSVar perms s -> Right x))) : specs) =
+provePermImplH perms vars s (ExprPermSpec e1 (ValPerm_Eq e2) : specs) =
   -- Prove e:eq(var) by setting var=e
-  let s' = partialSubstSet s x e in
-  applyIntro (\diff -> Intro_Eq (extendContext' diff e)) $
-  provePermImplH perms vars s' $ map (partialSubstSpec s') specs
-
-{- FIXME: figure out how to do this simplification!
-provePermImplH perms vars s (ExprPermSpec
-                             (PExpr_LLVMWord _ e)
-                             (ValPerm_Eq
-                              (PExpr_LLVMWord _ e'
-                               (matchPSVar perms s -> Right x))) : specs) =
-  -- Prove (word e):eq(word e') by proving e:eq(e')
-  let s' = partialSubstSet s x e in
-  applyIntro (\diff -> Intro_Eq (extendContext' diff e)) $
-  provePermImplH perms vars s' $ map (partialSubstSpec s') specs
--}
-
-provePermImplH perms vars s (ExprPermSpec (PExpr_Var x)
-                             (ValPerm_Eq
-                              (PExpr_Var (matchPSVar perms s -> Left y))) : specs)
-  | x == y =
-    -- Prove x:eq(x)
-    applyIntro (\diff -> Intro_Eq (PExpr_Var $ extendContext' diff x)) $
-    provePermImplH perms vars s specs
+  proveEq perms vars s e1 e2 >>>= \diff (EqRet perms' s' eq_pf) ->
+  applyIntro (\diff' -> Intro_Eq (extendContext' diff' eq_pf)) $
+  provePermImplH perms' vars s' $
+  map (weakenPermSpecRight diff (size vars)) specs
 
 provePermImplH perms vars s (ExprPermSpec e (ValPerm_Or p1 p2) : specs) =
   -- To prove e:(p1 \/ p2) we try both branches with an Elim_Copy
@@ -1047,7 +1271,7 @@ provePermImplH perms vars s specs@(ExprPermSpec (PExpr_Var x) _ : _)
   = Elim_Exists x tp $
     provePermImplH (elimExists perms x tp) vars
     (extendContext oneDiff s)
-    (map (weakenPermSpecRight1 Proxy $ size vars) specs)
+    (map (weakenPermSpecRight oneDiff $ size vars) specs)
 
 -- Pin |- x:ptr(shapes+off), specs
 -- --------------------------------
@@ -1118,7 +1342,7 @@ provePermImplH perms vars s (ExprPermSpec
                               (LLVMFieldShapePerm
                                (LLVMFieldPerm off
                                 (SplExpr_Var
-                                 (matchPSVar perms s -> Right z)) p) : shapes)
+                                 (matchSpecEVar perms s -> Just z)) p) : shapes)
                               free)
                              : specs)
   | ValPerm_LLVMPtr _ shapes_l free_l <- pvGet perms x
@@ -1152,7 +1376,7 @@ provePermImplH perms vars s specs@(ExprPermSpec
      (weaken' mkWeakening1 p))
     vars
     (extendContext oneDiff s)
-    (map (weakenPermSpecRight1 Proxy $ size vars) specs)
+    (map (weakenPermSpecRight oneDiff $ size vars) specs)
 
 provePermImplH _perms _vars _s _specs =
   Elim_Fail
