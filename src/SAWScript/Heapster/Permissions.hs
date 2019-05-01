@@ -626,7 +626,18 @@ remLLVMFieldAt off (shape : shapes) =
   remLLVMFieldAt off shapes
 
 -- | Find the LLVM field at a given offset and split it, returning the right
--- half of the split permission and keeping the left in the shapes
+-- half of the split permission and keeping the left in the shapes; that is, it
+-- replaces
+--
+-- > x:ptr(off |-> (S, p) * shapes)
+--
+-- with
+--
+-- > x:ptr (off |-> (SplExpr_L S, p) * shapes)
+--
+-- Note that it is an error to call 'splitLLVMFieldAt' when @p@ is not a
+-- permission that can be duplicated, which currently is just an equality
+-- permission, but we do not check this condition now.
 splitLLVMFieldAt :: Integer -> [LLVMShapePerm ctx w] ->
                     Maybe (SplittingExpr ctx, ValuePerm ctx (LLVMPointerType w),
                            [LLVMShapePerm ctx w])
