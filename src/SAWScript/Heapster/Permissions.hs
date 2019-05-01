@@ -523,9 +523,30 @@ isLLVMFieldAt :: Integer -> LLVMShapePerm ctx w -> Bool
 isLLVMFieldAt _ (LLVMArrayShapePerm _) = False
 isLLVMFieldAt off (LLVMFieldShapePerm fld) = llvmFieldOffset fld == off
 
-splitLLVMFieldAt :: Integer -> SplittingExpr ctx -> [LLVMShapePerm ctx w] ->
-                    [LLVMShapePerm ctx w]
-splitLLVMFieldAt = error "FIXME: splitLLVMFieldAt"
+-- | Find the LLVM field at a given offset and remove it from the list of shapes
+remLLVMFieldAt :: Integer -> [LLVMShapePerm ctx w] ->
+                  Maybe (SplittingExpr ctx, ValuePerm ctx (LLVMPointerType w),
+                         [LLVMShapePerm ctx w])
+remLLVMFieldAt off [] = Nothing
+remLLVMFieldAt off (LLVMFieldShapePerm (LLVMFieldPerm off' spl p) : shapes)
+  | off' == off = Just (spl, p, shapes)
+remLLVMFieldAt off (shape : shapes) =
+  fmap (\(spl, p, shapes') -> (spl, p, shape:shapes')) $
+  remLLVMFieldAt off shapes
+
+-- | Find the LLVM field at a given offset and split it, returning the right
+-- half of the split permission and keeping the left in the shapes
+splitLLVMFieldAt :: Integer -> [LLVMShapePerm ctx w] ->
+                    Maybe (SplittingExpr ctx, ValuePerm ctx (LLVMPointerType w),
+                           [LLVMShapePerm ctx w])
+splitLLVMFieldAt off [] = Nothing
+splitLLVMFieldAt off (LLVMFieldShapePerm (LLVMFieldPerm off' spl p) : shapes)
+  | off' == off
+  = Just (SplExpr_R spl, p,
+          LLVMFieldShapePerm (LLVMFieldPerm off' (SplExpr_L spl) p) : shapes)
+splitLLVMFieldAt off (shape : shapes) =
+  fmap (\(spl, p, shapes') -> (spl, p, shape:shapes')) $
+  splitLLVMFieldAt off shapes
 
 instance GenSubstable' ValuePerm where
   genSubst' _ ValPerm_True = ValPerm_True
@@ -605,8 +626,8 @@ elimExists perms x tp =
     ValPerm_Exists tp' p ->
       case testEquality tp tp' of
         Just Refl ->
-          flip extend ValPerm_True $ pvSet x p $
-          fmapFC (extendContext' oneDiff) perms
+          pvSet (extendContext' oneDiff x) p $
+          extendPermSet perms ValPerm_True
         Nothing -> error "elimExists"
     _ -> error "elimExists"
 
@@ -876,6 +897,8 @@ data PermIntro (ctx :: Ctx CrucibleType) where
   -- > pf = Gamma | Pin, x:ptr(shapes) |- Pout | Prem
   -- > --------------------------------------------------
   -- > Gamma | Pin, x:ptr(shapes) |- x:ptr(), Pout | Prem
+  --
+  -- FIXME: this needs to handle the free length!
 
   Intro_LLVMPtr_Offset ::
     (1 <= w) => NatRepr w -> Integer -> PermIntro ctx -> PermIntro ctx
@@ -1058,18 +1081,29 @@ provePermImplH perms vars s (ExprPermSpec
 -- ------------------------------------
 -- Pin, x:ptr(shapes) |- x:ptr(), specs
 provePermImplH perms vars s (ExprPermSpec
-                             (PExpr_Var x) (ValPerm_LLVMPtr _ [] _)
+                             (PExpr_Var x) (ValPerm_LLVMPtr w [] free)
                              : specs)
-  | ValPerm_LLVMPtr _ _ _ <- pvGet perms x
-  = applyIntro (\diff -> Intro_LLVMPtr (extendContext' diff x)) $
+  | ValPerm_LLVMPtr _ _ free_l <- pvGet perms x
+  = (case (free_l, free) of
+        (_, Nothing) -> id
+        (Just freelen_l, Just freelen) ->
+          error "provePermImplH: cannot yet prove free perms"
+          -- FIXME: need to match the free vars of freelen to freelen_l;
+          -- maybe add a function
+          -- proveEq :: PermExpr ctx a -> PermExpr (ctx <+> vars) a ->
+          --            Elim (Product (PartialSubst vars) (PermExprFlip a))
+          -- that adds the necessary elims and returns the new partial subst and
+          -- the result of substituting into the right-hand expr
+          --
+          --Elim_Assert $ Constr_BVEq w freelen_l freelen
+    ) $
+    applyIntro (\diff -> Intro_LLVMPtr (extendContext' diff x)) $
     provePermImplH perms vars s specs
 
 -- Pin, x:ptr(shapes) |- e:p, x:ptr(shapes'), specs
 -- ------------------------------------------------------
 -- Pin, x:ptr(off |-> (All,eq(e)) * shapes)
 --      |- x:ptr(off |-> (All,p) * shapes'), specs
-
-{-
 provePermImplH perms vars s (ExprPermSpec
                              (PExpr_Var x)
                              (ValPerm_LLVMPtr w
@@ -1078,13 +1112,15 @@ provePermImplH perms vars s (ExprPermSpec
                               free)
                              : specs)
   | ValPerm_LLVMPtr _ shapes_l free_l <- pvGet perms x
-  , Just fld@(LLVMFieldShapePerm
-              (LLVMFieldPerm _ SplExpr_All (ValPerm_Eq e))) <-
-      find (isLLVMFieldAt off) shapes
-  = applyIntro (\diff -> Intro_LLVMField off SplExpr_All $
-                         extendContext' diff p) $
-    provePermImplH perms vars s specs
-    (ExprPermSpec (PExpr_Var x) (ValPerm_LLVMPtr w shapes free) : specs)
+  , Just (SplExpr_All, ValPerm_Eq e, shapes_l') <- remLLVMFieldAt off shapes_l
+  = applyIntroWithSubst (size perms) (\diff s' ->
+                                       Intro_LLVMField off SplExpr_All $
+                                       subst' s' p) $
+    provePermImplH
+    (pvSet x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
+    vars s
+    (ExprPermSpec e p :
+     ExprPermSpec (PExpr_Var x) (ValPerm_LLVMPtr w shapes free) : specs)
 
 -- Pin, x:ptr(off |-> (SplExpr_L S,eq(e)) * shapes)
 --      |- e:p, x:ptr(shapes'), specs               (setting z=SplExpr_R S)
@@ -1095,22 +1131,46 @@ provePermImplH perms vars s (ExprPermSpec
                              (PExpr_Var x)
                              (ValPerm_LLVMPtr w
                               (LLVMFieldShapePerm
-                               (LLVMFieldPerm off SplExpr_All p) : shapes)
+                               (LLVMFieldPerm off
+                                (SplExpr_Var
+                                 (matchPSVar perms s -> Right z)) p) : shapes)
                               free)
                              : specs)
   | ValPerm_LLVMPtr _ shapes_l free_l <- pvGet perms x
-  , Just fld@(LLVMFieldShapePerm (LLVMFieldPerm _ spl (ValPerm_Eq e))) <-
-      find (isLLVMFieldAt off) shapes
+  , Just (spl, ValPerm_Eq e, shapes_l') <- splitLLVMFieldAt off shapes_l
   = applyIntroWithSubst (size perms) (\diff s' ->
-                                       Intro_LLVMField off SplExpr_All $
-                                       subst' s' p) $
+                                       Intro_LLVMField off
+                                       (extendContext diff spl) (subst' s' p)) $
     Elim_SplitField x off spl $
     provePermImplH
-    (pvSet x (ValPerm_LLVMPtr w (splitLLVMFieldAt
-                                 off spl shapes_l) free_l) perms)
-    vars s
-    (ExprPermSpec (PExpr_Var x) (ValPerm_LLVMPtr w shapes free) : specs)
--}
+    (pvSet x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
+    vars
+    (partialSubstSet s z (PExpr_Spl spl))
+    (ExprPermSpec e p :
+     ExprPermSpec (PExpr_Var x) (ValPerm_LLVMPtr w shapes free) : specs)
+
+-- Pin, x:ptr(off |-> (S_l,eq(y)) * shapes), y:p_l
+--      |- x:ptr(off |-> (S,p) * shapes'), specs
+-- ------------------------------------------------------------------------
+-- Pin, x:ptr(off |-> (S_l,p_l) * shapes)
+--      |- x:ptr(off |-> (S,p) * shapes'), specs
+provePermImplH perms vars s specs@(ExprPermSpec
+                                   (PExpr_Var x)
+                                   (ValPerm_LLVMPtr w
+                                    (LLVMFieldShapePerm
+                                     (LLVMFieldPerm off _ _) : _) _) : _)
+  | ValPerm_LLVMPtr _ shapes_l free_l <- pvGet perms x
+  , Just (spl, p, shapes_l') <- remLLVMFieldAt off shapes_l
+  = Elim_BindField x off spl $
+    provePermImplH
+    (extendPermSet (pvSet x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
+     (weaken' mkWeakening1 p))
+    vars
+    (extendContext oneDiff s)
+    (map (weakenPermSpecRight1 Proxy $ size vars) specs)
+
+provePermImplH _perms _vars _s _specs =
+  Elim_Fail
 
 
 -- | FIXME: documentation!
