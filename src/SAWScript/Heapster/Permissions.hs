@@ -18,6 +18,7 @@ module SAWScript.Heapster.Permissions where
 import qualified Control.Lens                     as Lens
 import           Data.Kind
 import           Data.Proxy
+import           Data.Functor.Const
 import           Data.Parameterized.Some
 import           Data.Parameterized.Context
 import           Data.Parameterized.Ctx
@@ -373,6 +374,9 @@ instance Weakenable (PartialSubst vars) where
                PSElem Nothing -> PSElem Nothing)
     asgn
 
+instance ExtendContext (PartialSubst vars) where
+  extendContext diff ps = weaken (weakeningOfDiff diff) ps
+
 -- | Return the empty partial substitution
 emptyPartialSubst :: CtxRepr vars -> PartialSubst vars ctx
 emptyPartialSubst vars =
@@ -617,23 +621,42 @@ instance Weakenable PermConstr where
 -- FIXME: explain failures as empty disjunctive trees
 data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
   Elim_Done :: f ctx -> PermElim f ctx
-  -- ^ No more elimination; i.e., a leaf node in a permission elimination tree
+  -- ^ No more elimination; i.e., implements the rule
+  --
+  -- -------------------------------
+  -- Gin | Pin |- Pin
 
   Elim_Fail :: PermElim f ctx
-  -- ^ The empty tree, with no disjunctive possibilities
+  -- ^ The empty tree, with no disjunctive possibilities; i.e., implements the
+  -- rule
+  --
+  -- ------------------------------
+  -- Gin | Pin |- Pany
 
   Elim_Or :: PermVar ctx a -> PermElim f ctx -> PermElim f ctx -> PermElim f ctx
   -- ^ Eliminate a 'ValPerm_Or' on the given variable, replacing it with the
   -- left- and right-hand sides in the two sub-eliminations
+  --
+  -- pf1 = Gin | Pin, x:p1 |- GsPs1     pf2 = Gin | Pin, x:p2 |- GsPs2
+  -- -----------------------------------------------------------------
+  -- Gin | Pin, x:(p1 \/ p2) |- GsPs1, GsPs2
 
   Elim_Exists :: PermVar ctx a -> TypeRepr tp -> PermElim f (ctx ::> tp) ->
                  PermElim f ctx
   -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists', on the given variable
+  --
+  -- pf = Gin, z:tp | Pin, x:p, z:true |- rets
+  -- ------------------------------------------------------
+  -- Gin | x:(exists z:tp. p)  |- rets
 
   Elim_Assert :: PermConstr ctx -> PermElim f ctx -> PermElim f ctx
   -- ^ Assert that the two bitvector expressions are equal; i.e., this tree
   -- contains those disjunctive possibilities in the given tree when the given
   -- expressions are equal
+  --
+  -- pf = Gin | Pin, C  |- rets
+  -- ---------------------------
+  -- Gin | Pin |- rets
 
   Elim_BindField :: PermVar ctx (LLVMPointerType w) ->
                     Integer -> SplittingExpr ctx ->
@@ -646,12 +669,26 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
   -- The 'Integer' and 'SplittingExpr' arguments give the static offset and
   -- splitting for the 'LLVMFieldShapePerm' of the given variable to perform
   -- this operation on.
+  --
+  -- pf = Gin, y:LLVMPtr | Pin, y:p, x:ptr(off |-> (S, eq(y)) * ps) |- rets
+  -- ----------------------------------------------------------------------
+  -- Gin | Pin, x:ptr(off |-> (S, p) * ps)  |- rets
 
   Elim_Copy :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
-  -- ^ Copy the same permissions into two different elimination trees
+  -- ^ Copy the same permissions into two different elimination trees, where an
+  -- 'Elim_Fail' in the first tree "calls" the second tree (sort of like a
+  -- try-catch block for exceptions)
+  --
+  -- pf1 = Gin | Pin |- rets1    pf2 = Gin | Pin |- rets2
+  -- ----------------------------------------------------
+  -- Gin | Pin |- rets1, rets2
 
   Elim_Unroll :: PermVar ctx a -> PermElim f ctx -> PermElim f ctx
   -- ^ Unroll a recursive 'ValPerm_Mu' permission one time
+  --
+  -- pf = Gin | Pin, x:F(mu X.F) |- rets
+  -- -----------------------------------
+  -- Gin | Pin, x:(mu X.F) |- rets
 
 
 instance Weakenable f => Weakenable (PermElim f) where
@@ -676,40 +713,65 @@ instance Weakenable f => Weakenable (PermElim f) where
 instance Weakenable f => ExtendContext (PermElim f) where
   extendContext diff = weaken (weakeningOfDiff diff)
 
+
+----------------------------------------------------------------------
+-- * Monads over Contextual Types
+----------------------------------------------------------------------
+
 -- | A function that can be applied in any extension of @ctx@
 type DiffFun f g ctx = (forall ctx'. Diff ctx ctx' -> f ctx' -> g ctx')
-
--- | A binary function that can be applied in any extension of @ctx@
-type DiffFun2 f g h ctx =
-  (forall ctx'. Diff ctx ctx' -> f ctx' -> g ctx' -> h ctx')
 
 -- | Weaken a 'DiffFun'
 weakenDiffFun :: DiffFun f g ctx -> DiffFun f g (ctx ::> tp)
 weakenDiffFun f = \diff -> f (diff Cat.. oneDiff)
 
+class CtxMonad m where
+  creturn :: f ctx -> m f ctx
+  cbind :: m f ctx -> DiffFun f (m g) ctx -> m g ctx
+
+instance CtxMonad PermElim where
+  creturn = Elim_Done
+  cbind (Elim_Done x) f = f noDiff x
+  cbind Elim_Fail f = Elim_Fail
+  cbind (Elim_Or x elim1 elim2) f =
+    Elim_Or x (cbind elim1 f) (cbind elim2 f)
+  cbind (Elim_Exists x tp elim) f =
+    Elim_Exists x tp $ cbind elim (weakenDiffFun f)
+  cbind (Elim_Assert constr elim) f =
+    Elim_Assert constr $ cbind elim f
+  cbind (Elim_BindField x off spl elim) f =
+    Elim_BindField x off spl $ cbind elim (weakenDiffFun f)
+  cbind (Elim_Copy elim1 elim2) f =
+    Elim_Copy (cbind elim1 f) (cbind elim2 f)
+  cbind (Elim_Unroll x elim) f = Elim_Unroll x $ cbind elim f
+
+-- | More traditional bind syntax for 'cbind'
+infixl 1 >>>=
+(>>>=) :: CtxMonad m => m f ctx -> DiffFun f (m g) ctx -> m g ctx
+(>>>=) = cbind
+
 -- | Like @map@ or @fmap@ for permission eliminations
-mapElim :: DiffFun f g ctx -> PermElim f ctx -> PermElim g ctx
-mapElim f elim = bindElim elim (\diff -> returnElim . f diff)
+cmap :: CtxMonad m => DiffFun f g ctx -> m f ctx -> m g ctx
+cmap f m = cbind m (\diff -> creturn . f diff)
 
--- | Monadic return for 'PermElim'
-returnElim :: f x -> PermElim f x
-returnElim = Elim_Done
+newtype CStateT s m a ctx =
+  CStateT { unCStateT :: s ctx -> m (Product s a) ctx }
 
--- | The monadic bind for 'PermElim'
-bindElim :: PermElim f ctx -> DiffFun f (PermElim g) ctx -> PermElim g ctx
-bindElim (Elim_Done x) f = f noDiff x
-bindElim Elim_Fail f = Elim_Fail
-bindElim (Elim_Or x elim1 elim2) f =
-  Elim_Or x (bindElim elim1 f) (bindElim elim2 f)
-bindElim (Elim_Exists x tp elim) f =
-  Elim_Exists x tp $ bindElim elim (weakenDiffFun f)
-bindElim (Elim_Assert constr elim) f =
-  Elim_Assert constr $ bindElim elim f
-bindElim (Elim_BindField x off spl elim) f =
-  Elim_BindField x off spl $ bindElim elim (weakenDiffFun f)
-bindElim (Elim_Copy elim1 elim2) f =
-  Elim_Copy (bindElim elim1 f) (bindElim elim2 f)
-bindElim (Elim_Unroll x elim) f = Elim_Unroll x $ bindElim elim f
+instance CtxMonad m => CtxMonad (CStateT s m) where
+  creturn x = CStateT $ \s -> creturn (Pair s x)
+  cbind (CStateT m) f = CStateT $ \s ->
+    cbind (m s) $ \diff (Pair s' x) ->
+    unCStateT (f diff x) s'
+
+class CtxMonad m => CtxMonadState s m where
+  cget :: m s ctx
+  cput :: s ctx -> m (Const ()) ctx
+
+instance CtxMonad m => CtxMonadState s (CStateT s m) where
+  cget = CStateT $ \s -> creturn (Pair s s)
+  cput s = CStateT $ \_ -> creturn (Pair s (Const ()))
+
+-- FIXME: cbind is going to get really annoying; should use CtxMonad.hs!
 
 
 ----------------------------------------------------------------------
@@ -816,6 +878,12 @@ data ExprPermSpec vars ctx where
   ExprPermSpec :: PermExpr ctx a -> ValuePerm (ctx <+> vars) a ->
                   ExprPermSpec vars ctx
 
+weakenPermSpecRight1 :: Proxy tp -> Size vars -> ExprPermSpec vars ctx ->
+                        ExprPermSpec vars (ctx ::> tp)
+weakenPermSpecRight1 (_ :: Proxy tp) sz (ExprPermSpec (e :: PermExpr ctx a) p) =
+  ExprPermSpec (extendContext' oneDiff e)
+  (weaken' (Weakening (oneDiff :: Diff ctx (ctx ::> tp)) sz) p)
+
 weakenPermSpec1 :: ExprPermSpec vars ctx -> ExprPermSpec (vars ::> tp) ctx
 weakenPermSpec1 (ExprPermSpec e p) =
   ExprPermSpec e $ extendContext' oneDiff p
@@ -839,8 +907,8 @@ applyIntro :: (DiffFun PermIntro PermIntro ctx) ->
               PermElim (ImplRet vars) ctx ->
               PermElim (ImplRet vars) ctx
 applyIntro f =
-  mapElim (\diff (ImplRet vars perms intro s) ->
-            ImplRet vars perms (f diff intro) s)
+  cmap (\diff (ImplRet vars perms intro s) ->
+         ImplRet vars perms (f diff intro) s)
 
 applyIntroWithSubst :: Size ctx ->
                        (forall ctx'. Diff ctx ctx' ->
@@ -849,13 +917,13 @@ applyIntroWithSubst :: Size ctx ->
                        PermElim (ImplRet vars) ctx ->
                        PermElim (ImplRet vars) ctx
 applyIntroWithSubst sz_ctx f =
-  mapElim (\diff (ImplRet sz_vars perms intro s@(PermSubst _ asgn)) ->
-            let asgn' =
-                  generate sz_ctx (PExpr_Var . extendContext' diff . PermVar sz_ctx)
-                  <++>
-                  generate sz_vars (\x -> asgn ! extendIndexLeft (size perms) x) in
-            let s' = PermSubst (extSize sz_ctx diff) asgn' in
-            ImplRet sz_vars perms (f diff s' intro) s)
+  cmap (\diff (ImplRet sz_vars perms intro s@(PermSubst _ asgn)) ->
+         let asgn' =
+               generate sz_ctx (PExpr_Var . extendContext' diff . PermVar sz_ctx)
+               <++>
+               generate sz_vars (\x -> asgn ! extendIndexLeft (size perms) x) in
+         let s' = PermSubst (extSize sz_ctx diff) asgn' in
+         ImplRet sz_vars perms (f diff s' intro) s)
 
 -- | FIXME: documentation
 --
@@ -863,13 +931,16 @@ applyIntroWithSubst sz_ctx f =
 provePermImplH :: PermSet ctx -> CtxRepr vars -> PartialSubst vars ctx ->
                   ExprPermSetSpec vars ctx ->
                   PermElim (ImplRet vars) ctx
+
 provePermImplH perms vars s [] =
   Elim_Done $ ImplRet (partialSubstSize s) perms Intro_Done $
   completePartialSubst (size perms) vars s
+
 provePermImplH perms vars s (ExprPermSpec e ValPerm_True : specs) =
   -- Prove e:true for any e
   applyIntro (\diff -> Intro_True (extendContext' diff e)) $
   provePermImplH perms vars s specs
+
 provePermImplH perms vars s (ExprPermSpec e
                              (ValPerm_Eq
                               (PExpr_Var
@@ -878,6 +949,19 @@ provePermImplH perms vars s (ExprPermSpec e
   let s' = partialSubstSet s x e in
   applyIntro (\diff -> Intro_Eq (extendContext' diff e)) $
   provePermImplH perms vars s' $ map (partialSubstSpec s') specs
+
+{- FIXME: figure out how to do this simplification!
+provePermImplH perms vars s (ExprPermSpec
+                             (PExpr_LLVMWord _ e)
+                             (ValPerm_Eq
+                              (PExpr_LLVMWord _ e'
+                               (matchPSVar perms s -> Right x))) : specs) =
+  -- Prove (word e):eq(word e') by proving e:eq(e')
+  let s' = partialSubstSet s x e in
+  applyIntro (\diff -> Intro_Eq (extendContext' diff e)) $
+  provePermImplH perms vars s' $ map (partialSubstSpec s') specs
+-}
+
 provePermImplH perms vars s (ExprPermSpec (PExpr_Var x)
                              (ValPerm_Eq
                               (PExpr_Var (matchPSVar perms s -> Left y))) : specs)
@@ -885,6 +969,7 @@ provePermImplH perms vars s (ExprPermSpec (PExpr_Var x)
     -- Prove x:eq(x)
     applyIntro (\diff -> Intro_Eq (PExpr_Var $ extendContext' diff x)) $
     provePermImplH perms vars s specs
+
 provePermImplH perms vars s (ExprPermSpec e (ValPerm_Or p1 p2) : specs) =
   -- To prove e:(p1 \/ p2) we try both branches with an Elim_Copy
   Elim_Copy
@@ -892,10 +977,11 @@ provePermImplH perms vars s (ExprPermSpec e (ValPerm_Or p1 p2) : specs) =
    provePermImplH perms vars s (ExprPermSpec e p1 : specs))
   (applyIntroWithSubst (size perms) (\diff s' -> Intro_OrR (subst' s' p1)) $
    provePermImplH perms vars s (ExprPermSpec e p2 : specs))
+
 provePermImplH perms vars s (ExprPermSpec e (ValPerm_Exists tp p) : specs) =
   -- To prove e:(exists z:tp.p) we prove p in vars::>tp and then get the
   -- substitution for z
-  mapElim
+  cmap
   (\diff (ImplRet sz_vars perms' intro s') ->
     let (s'', z_val) = unconsPermSubst s' in
     let w = Weakening diff sz_vars in
@@ -905,6 +991,13 @@ provePermImplH perms vars s (ExprPermSpec e (ValPerm_Exists tp p) : specs) =
   provePermImplH perms (extend vars tp) (consPartialSubst s)
   (ExprPermSpec e p : map weakenPermSpec1 specs)
 
+provePermImplH perms vars s specs@(ExprPermSpec (PExpr_Var x) _ : _)
+  | ValPerm_Exists tp p <- pvGet perms x
+  = Elim_Exists x tp $
+    provePermImplH (pvSet (extendContext' oneDiff x) p $
+                    extendPermSet perms ValPerm_True) vars
+    (extendContext oneDiff s)
+    (map (weakenPermSpecRight1 Proxy $ size vars) specs)
 
 -- | Return value for 'provePermImpl'
 data ImplRet vars ctx =
