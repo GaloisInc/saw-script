@@ -719,15 +719,16 @@ extPermSet diff perms =
       generate sz_app (\_ -> ValPerm_True)
 
 -- | A permission on a single variable
-data VarPerm ctx a = VarPerm (PermVar ctx a) (ValuePerm ctx a)
+data VarPerm ctx where
+  VarPerm :: PermVar ctx a -> ValuePerm ctx a -> VarPerm ctx
 
-instance Weakenable' VarPerm where
-  weaken' w (VarPerm x p) = VarPerm (weaken' w x) (weaken' w p)
+instance Weakenable VarPerm where
+  weaken w (VarPerm x p) = VarPerm (weaken' w x) (weaken' w p)
 
-varPermsOfPermSet :: PermSet ctx -> [Some (VarPerm ctx)]
+varPermsOfPermSet :: PermSet ctx -> [VarPerm ctx]
 varPermsOfPermSet perms =
-  toListFC Some $ generate (size perms) $ \ix ->
-  VarPerm (PermVar (size perms) ix) (perms ! ix)
+  toListFC (\(Const p) -> p) $ generate (size perms) $ \ix ->
+  Const $ VarPerm (PermVar (size perms) ix) (perms ! ix)
 
 
 ----------------------------------------------------------------------
@@ -1098,7 +1099,7 @@ eqProofRHS (EqProof_LLVMWord w pf) = PExpr_LLVMWord w $ eqProofRHS pf
 -- smaller permissions. Also, most of the rules have the convention that they
 -- operate on the first permission in the 'ExprPermSet'.
 data PermIntro (ctx :: Ctx CrucibleType) where
-  Intro_Id :: [Some (VarPerm ctx)] -> PermIntro ctx
+  Intro_Id :: [VarPerm ctx] -> PermIntro ctx
   -- ^ The final step of any introduction proof, of the following form, where
   -- each @x@ can occur at most once:
   --
@@ -1180,7 +1181,7 @@ data PermIntro (ctx :: Ctx CrucibleType) where
 
 instance Weakenable PermIntro where
   weaken w (Intro_Id perms) =
-    Intro_Id $ map (\(Some p) -> Some $ weaken' w p) perms
+    Intro_Id $ map (weaken w) perms
   weaken w (Intro_Exists tp e p intro) =
     Intro_Exists tp (weaken' w e) (weaken' (weakenWeakening1 w) p)
     (weaken w intro)
