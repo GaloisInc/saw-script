@@ -187,6 +187,7 @@ importType sc env ty =
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
             C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
+            C.TCAbstract{} -> panic "importType TODO: abstract type"
         C.PC pc ->
           case pc of
             C.PLiteral -> -- we omit first argument to class Literal
@@ -1231,6 +1232,10 @@ exportValue ty v = case ty of
   -- functions
   TV.TVFun _aty _bty ->
     V.VFun (error "exportValue: TODO functions")
+
+  -- abstract types
+  TV.TVAbstract{} ->
+    error "exportValue: TODO abstract types"
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
