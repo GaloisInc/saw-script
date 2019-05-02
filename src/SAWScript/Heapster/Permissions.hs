@@ -892,6 +892,25 @@ elimDisjuncts perms x = helper perms x (pvGet perms x) where
     helper (extendPermSet perms ValPerm_True) (weakenPermVar1 x) p
   helper perms _ _ = Elim_Done $ MkPermSet perms
 
+-- | Like 'traverse' but for 'PermElim's
+traverseElim :: Applicative m =>
+                (forall ctx'. Diff ctx ctx' -> f ctx' -> m (g ctx')) ->
+                PermElim f ctx -> m (PermElim g ctx)
+traverseElim f (Elim_Done x) = Elim_Done <$> f noDiff x
+traverseElim f Elim_Fail = pure Elim_Fail
+traverseElim f (Elim_Or x elim1 elim2) =
+  Elim_Or x <$> traverseElim f elim1 <*> traverseElim f elim2
+traverseElim f (Elim_Exists x tp elim) =
+  Elim_Exists x tp <$> traverseElim (\diff -> f (diff Cat.. oneDiff)) elim
+traverseElim f (Elim_Assert constr elim) =
+  Elim_Assert constr <$> traverseElim f elim
+traverseElim f (Elim_BindField x off spl elim) =
+  Elim_BindField x off spl <$>
+  traverseElim (\diff -> f (diff Cat.. oneDiff)) elim
+traverseElim f (Elim_Catch elim1 elim2) =
+  Elim_Catch <$> traverseElim f elim1 <*> traverseElim f elim2
+traverseElim f (Elim_Unroll x elim) = Elim_Unroll x <$> traverseElim f elim
+
 
 ----------------------------------------------------------------------
 -- * Monads over Contextual Types
