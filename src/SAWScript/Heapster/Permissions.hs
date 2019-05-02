@@ -49,6 +49,9 @@ oneDiff = extendRight noDiff
 -- apply weakenings
 data PermVar ctx a = PermVar (Size ctx) (Index ctx a)
 
+indexOfPermVar :: PermVar ctx a -> Index ctx a
+indexOfPermVar (PermVar _ ix) = ix
+
 nextPermVar :: Size ctx -> PermVar (ctx ::> a) a
 nextPermVar sz = PermVar (incSize sz) (nextIndex sz)
 
