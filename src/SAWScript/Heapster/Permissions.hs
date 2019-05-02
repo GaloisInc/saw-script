@@ -427,6 +427,16 @@ weakenSubst sz' (PermSubst sz2 asgn) =
   generate sz' (\ix -> PExpr_Var $
                        PermVar (addSize sz2 sz') (extendIndexLeft sz2 ix))
 
+combineSubsts :: PermSubst ctx1 ctx -> PermSubst ctx2 ctx ->
+                 PermSubst (ctx1 <+> ctx2) ctx
+combineSubsts (PermSubst sz asgn1) (PermSubst _ asgn2) =
+  PermSubst sz (asgn1 <++> asgn2)
+
+substOfDiff :: Size ctx1 -> Diff ctx1 ctx2 -> PermSubst ctx1 ctx2
+substOfDiff sz1 diff =
+  let sz2 = extSize sz1 diff in
+  PermSubst sz2 $ generate sz1 (PExpr_Var . PermVar sz2 . extendContext' diff)
+
 unconsPermSubst :: PermSubst (ctx1 ::> a) ctx2 ->
                    (PermSubst ctx1 ctx2, PermExpr ctx2 a)
 unconsPermSubst (PermSubst sz asgn) =
@@ -500,10 +510,9 @@ partialSubstSize :: PartialSubst vars ctx -> Size vars
 partialSubstSize (PartialSubst asgn) = size asgn
 
 completePartialSubst :: Size ctx -> CtxRepr vars -> PartialSubst vars ctx ->
-                        PermSubst (ctx <+> vars) ctx
+                        PermSubst vars ctx
 completePartialSubst sz vars (PartialSubst asgn) =
   PermSubst sz $
-  generate sz (PExpr_Var . PermVar sz) <++>
   generate (size asgn) (\x ->
                          case asgn ! x of
                            PSElem (Just e) -> e
@@ -688,6 +697,7 @@ instance ExtendContext' ValuePerm where
 -- | A permission set assigns value permissions to the variables in scope
 type PermSet ctx = Assignment (ValuePerm ctx) ctx
 
+-- | Add a new variable with the given permission to a 'PermSet'
 extendPermSet :: PermSet ctx -> ValuePerm (ctx ::> a) a -> PermSet (ctx ::> a)
 extendPermSet perms p =
   extend (fmapFC (weaken' mkWeakening1) perms) p
@@ -995,73 +1005,73 @@ eqProofRHS (EqProof_LLVMWord w pf) = PExpr_LLVMWord w $ eqProofRHS pf
 
 -- | The permission introduction rules define a judgment of the form
 --
--- > Gamma | Pin |- Pout | Prem
+-- > Gamma | Pin |- Pout
 --
--- that intuitively proves permission set @Pout@ from @Pin@, with the remainder
--- permission set @Prem@ left over, all of which are relative to context
--- @Gamma@. Note that Pout is an 'PermSetSpec', so it assigns permissions to
--- expressions and not just variables, and it can also be empty. All of the
+-- that intuitively proves permission set @Pout@ from @Pin@, both of which are
+-- relative to context @Gamma@. Note that Pout is an 'PermSetSpec', so it
+-- assigns permissions to expressions and not just variables, and is also a list
+-- that can have multiple copies of the same variable or be empty. All of the
 -- rules are introduction rules, meaning they build up a proof of @Pout@ from
 -- smaller permissions. Also, most of the rules have the convention that they
 -- operate on the first permission in the 'ExprPermSet'.
 data PermIntro (ctx :: Ctx CrucibleType) where
-  Intro_Done :: PermIntro ctx
+  Intro_Id :: PermSet ctx -> PermIntro ctx
   -- ^ The final step of any introduction proof, of the form
   --
-  -- >  --------------------------
-  -- >  Gamma | Pin |- empty | Pin
+  -- >  -------------------
+  -- >  Gamma | Pin |- Pin
 
   Intro_Exists :: TypeRepr tp -> PermExpr ctx tp -> ValuePerm (ctx ::> tp) a ->
                   PermIntro ctx -> PermIntro ctx
   -- ^ @Intro_Exists tp e' p pf@ is the existential introduction rule
   --
-  -- > pf = Gamma | Pin |- e:[e'/z]p, Pout | Prem
-  -- > ---------------------------------------------
-  -- > Gamma | Pin |- e:(exists z:tp.p), Pout | Prem
+  -- > pf = Gamma | Pin |- e:[e'/z]p, Pout
+  -- > --------------------------------------
+  -- > Gamma | Pin |- e:(exists z:tp.p), Pout
 
   Intro_OrL :: ValuePerm ctx a -> PermIntro ctx -> PermIntro ctx
   -- ^ @Intro_OrL p2 pf@ is the left disjunction introduction rule
   --
-  -- > pf = Gamma | Pin |- e:p1, Pout | Prem
-  -- > ---------------------------------------------
-  -- > Gamma | Pin |- e:(p1 \/ p2), Pout | Prem
+  -- > pf = Gamma | Pin |- e:p1, Pout
+  -- > ---------------------------------
+  -- > Gamma | Pin |- e:(p1 \/ p2), Pout
 
   Intro_OrR :: ValuePerm ctx a -> PermIntro ctx -> PermIntro ctx
   -- ^ @Intro_OrR p1 pf@ is the right disjunction introduction rule
   --
-  -- > pf = Gamma | Pin |- e:p2, Pout | Prem
-  -- > ---------------------------------------------
-  -- > Gamma | Pin |- e:(p1 \/ p2), Pout | Prem
+  -- > pf = Gamma | Pin |- e:p2, Pout
+  -- > ---------------------------------
+  -- > Gamma | Pin |- e:(p1 \/ p2), Pout
 
   Intro_True :: PermExpr ctx a -> PermIntro ctx -> PermIntro ctx
   -- ^ Implements the rule
   --
-  -- > Gamma | Pin |- Pout | Prem
-  -- > ---------------------------------------------
-  -- > Gamma | Pin |- e:true, Pout | Prem
+  -- > Gamma | Pin |- Pout
+  -- > ---------------------------
+  -- > Gamma | Pin |- e:true, Pout
 
   Intro_CastEq :: PermVar ctx a -> PermExpr ctx a -> PermIntro ctx ->
                   PermIntro ctx
   -- ^ @Intro_CastEq x e' pf@ implements the following rule:
   --
-  -- > pf = Gamma | Pin, x:eq(e) |- e:p, Pout | Prem
-  -- > --------------------------------------------------
-  -- > Gamma | Pin, x:eq(e) |- x:p, Pout | Prem
+  -- > pf = Gamma | Pin, x:eq(e) |- e:p, Pout
+  -- > --------------------------------------
+  -- > Gamma | Pin, x:eq(e) |- x:p, Pout
 
   Intro_Eq :: EqProof ctx a -> PermIntro ctx -> PermIntro ctx
   -- ^ @Intro_Eq eq_pf pf@ for @eq_pf :: e1 = e2@ implements the rule
   --
-  -- > pf = Gamma | Pin |- Pout | Prem
-  -- > --------------------------------------------------
-  -- > Gamma | Pin |- e1:eq(e2), Pout | Prem
+  -- > pf = Gamma | Pin |- Pout
+  -- > ------------------------------
+  -- > Gamma | Pin |- e1:eq(e2), Pout
 
   Intro_LLVMPtr ::
     PermVar ctx (LLVMPointerType w) -> PermIntro ctx -> PermIntro ctx
   -- ^ @Intro_LLVMPtr x pf@ implements the rule
   --
-  -- > pf = Gamma | Pin, x:ptr(shapes) |- Pout | Prem
-  -- > --------------------------------------------------
-  -- > Gamma | Pin, x:ptr(shapes) |- x:ptr(), Pout | Prem
+  -- > pf = Gamma | Pin, x:ptr(shapes) |- Pout
+  -- > -------------------------------------------
+  -- > Gamma | Pin, x:ptr(shapes) |- x:ptr(), Pout
   --
   -- FIXME: this needs to handle the free length!
 
@@ -1069,19 +1079,19 @@ data PermIntro (ctx :: Ctx CrucibleType) where
     (1 <= w) => NatRepr w -> Integer -> PermIntro ctx -> PermIntro ctx
   -- ^ @Intro_LLVMPtr_Offset w off pf@ for a static offset @off@ implements
   --
-  -- > pf = Gamma | Pin |- x:ptr (shapes + off), Pout | Prem
-  -- > --------------------------------------------------
-  -- > Gamma | Pin |- (x+off):ptr(shapes), Pout | Prem
+  -- > pf = Gamma | Pin |- x:ptr (shapes + off), Pout
+  -- > ----------------------------------------------
+  -- > Gamma | Pin |- (x+off):ptr(shapes), Pout
 
   Intro_LLVMField ::
     Integer -> SplittingExpr ctx -> ValuePerm ctx (LLVMPointerType w) ->
     PermIntro ctx -> PermIntro ctx
   -- ^ @Intro_LLVMField off S p pf@ implements the rule
   --
-  -- > pf = Gamma | Pin, x:ptr(shapes) |- e:p, x:ptr(shapes'), Pout | Prem
-  -- > --------------------------------------------------------------------
+  -- > pf = Gamma | Pin, x:ptr(shapes) |- e:p, x:ptr(shapes'), Pout
+  -- > ------------------------------------------------------------
   -- > Gamma | Pin, x:ptr(off |-> (S,eq(e)) * shapes)
-  -- >    |- x:ptr(off |-> (S,p) * shapes'), Pout | Prem
+  -- >    |- x:ptr(off |-> (S,p) * shapes'), Pout
 
 
 ----------------------------------------------------------------------
@@ -1091,8 +1101,7 @@ data PermIntro (ctx :: Ctx CrucibleType) where
 {-
 FIXME HERE:
 - change intro rules to only have one conclusion
-- disjoin perm sets and intro rules
-- function perm specifications
+- disjoin and recombine perm sets and intro rules
 -}
 
 -- | A pair of an expression and a specifiation of a value permission for it,
@@ -1212,8 +1221,7 @@ proveEqH _perms _vars _s _e1 _e2 =
 
 -- | Return value for 'provePermImpl' and friends
 data ImplRet vars ctx =
-  ImplRet (Size vars) (PermSet ctx) (PermIntro ctx)
-  (PermSubst (ctx <+> vars) ctx)
+  ImplRet (Size vars) (PermSet ctx) (PermIntro ctx) (PermSubst vars ctx)
 
 
 -- | Apply an introduction rule to an 'ImplRet'
@@ -1231,12 +1239,8 @@ applyIntroWithSubst :: Size ctx ->
                        PermElim (ImplRet vars) ctx ->
                        PermElim (ImplRet vars) ctx
 applyIntroWithSubst sz_ctx f =
-  cmap (\diff (ImplRet sz_vars perms intro s@(PermSubst _ asgn)) ->
-         let asgn' =
-               generate sz_ctx (PExpr_Var . extendContext' diff . PermVar sz_ctx)
-               <++>
-               generate sz_vars (\x -> asgn ! extendIndexLeft (size perms) x) in
-         let s' = PermSubst (extSize sz_ctx diff) asgn' in
+  cmap (\diff (ImplRet sz_vars perms intro s) ->
+         let s' = combineSubsts (substOfDiff sz_ctx diff) s in
          ImplRet sz_vars perms (f diff s' intro) s)
 
 -- | FIXME: documentation
@@ -1247,7 +1251,7 @@ provePermImplH :: PermSet ctx -> CtxRepr vars -> PartialSubst vars ctx ->
                   PermElim (ImplRet vars) ctx
 
 provePermImplH perms vars s [] =
-  Elim_Done $ ImplRet (partialSubstSize s) perms Intro_Done $
+  Elim_Done $ ImplRet (partialSubstSize s) perms (Intro_Id perms) $
   completePartialSubst (size perms) vars s
 
 provePermImplH perms vars s (PermSpec _ e ValPerm_True : specs) =
@@ -1276,10 +1280,11 @@ provePermImplH perms vars s (PermSpec sz_vars e (ValPerm_Exists tp p) : specs) =
   cmap
   (\diff (ImplRet sz_vars' perms' intro s') ->
     let (s'', z_val) = unconsPermSubst s' in
-    let w = Weakening diff sz_vars' in
-    ImplRet sz_vars perms'
-    (Intro_Exists tp z_val (subst' (weakenSubst1 s'') $ weaken' w p) intro)
-    s'') $
+    let s_p =
+          combineSubsts (substOfDiff (size perms) (extendRight diff))
+          (weakenSubst1 s'') in
+    let p' = subst' s_p p in
+    ImplRet sz_vars perms' (Intro_Exists tp z_val p' intro) s'') $
   provePermImplH perms (extend vars tp) (consPartialSubst s)
   (PermSpec (incSize sz_vars) e p : map extPermSpecVars specs)
 
