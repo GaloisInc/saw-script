@@ -978,6 +978,14 @@ substPermSpec s (PermSpec sz_vars e p) =
 -- | A specification of a set expression permissions
 type PermSetSpec vars ctx = [PermSpec vars ctx]
 
+permSpecOfPerms :: Size vars -> Assignment (ValuePerm (ctx <+> vars)) ctx ->
+                   PermSetSpec vars ctx
+permSpecOfPerms sz_vars asgn =
+  let sz_ctx = size asgn in
+  toListFC (\(Const spec) -> spec) $
+  generate sz_ctx $ \ix ->
+  Const $ PermSpec sz_vars (PExpr_Var $ PermVar sz_ctx ix) (asgn ! ix)
+
 
 ----------------------------------------------------------------------
 -- * Permission Set Introduction Rules
@@ -1119,10 +1127,6 @@ data PermIntro (ctx :: Ctx CrucibleType) where
   -- > Gamma | Pin, x:ptr(off |-> (S,eq(e)) * shapes)
   -- >    |- x:ptr(off |-> (S,p) * shapes'), Pout
 
-
-----------------------------------------------------------------------
--- * Disjoining and Recombining Permission Sets
-----------------------------------------------------------------------
 
 ----------------------------------------------------------------------
 -- * Proving Equality of Permission Expressions
