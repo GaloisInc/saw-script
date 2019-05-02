@@ -833,10 +833,10 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
   -- ---------------------------------------------------------------------------
   -- Gin | Pin, x:ptr (off |-> (S, p))
 
-  Elim_Copy :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
+  Elim_Catch :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
   -- ^ Copy the same permissions into two different elimination trees, where an
-  -- 'Elim_Fail' in the first tree "calls" the second tree (sort of like a
-  -- try-catch block for exceptions)
+  -- 'Elim_Fail' in the first tree "calls" the second tree, just like a
+  -- try-catch block for exceptions. This implements the rule:
   --
   -- pf1 = Gin | Pin |- rets1    pf2 = Gin | Pin |- rets2
   -- ----------------------------------------------------
@@ -866,8 +866,8 @@ instance Weakenable f => Weakenable (PermElim f) where
     (weaken (weakenWeakening1 w) elim)
   weaken w (Elim_SplitField x off spl elim) =
     Elim_SplitField (weaken' w x) off (weaken w spl) (weaken w elim)
-  weaken w (Elim_Copy elim1 elim2) =
-    Elim_Copy (weaken w elim1) (weaken w elim2)
+  weaken w (Elim_Catch elim1 elim2) =
+    Elim_Catch (weaken w elim1) (weaken w elim2)
   weaken w (Elim_Unroll x elim) =
     Elim_Unroll (weaken' w x) (weaken w elim)
 
@@ -920,8 +920,8 @@ instance CtxMonad PermElim where
     Elim_Assert constr $ cbind elim f
   cbind (Elim_BindField x off spl elim) f =
     Elim_BindField x off spl $ cbind elim (weakenDiffFun f)
-  cbind (Elim_Copy elim1 elim2) f =
-    Elim_Copy (cbind elim1 f) (cbind elim2 f)
+  cbind (Elim_Catch elim1 elim2) f =
+    Elim_Catch (cbind elim1 f) (cbind elim2 f)
   cbind (Elim_Unroll x elim) f = Elim_Unroll x $ cbind elim f
 
 -- | More traditional bind syntax for 'cbind'
@@ -1271,8 +1271,8 @@ provePermImplH perms vars s (PermSpec _ e1 (ValPerm_Eq e2) : specs) =
   map (extendContext diff) specs
 
 provePermImplH perms vars s (PermSpec sz_vars e (ValPerm_Or p1 p2) : specs) =
-  -- To prove e:(p1 \/ p2) we try both branches with an Elim_Copy
-  Elim_Copy
+  -- To prove e:(p1 \/ p2) we try both branches with an Elim_Catch
+  Elim_Catch
   (applyIntroWithSubst (size perms) (\diff s' -> Intro_OrL (subst' s' p2)) $
    provePermImplH perms vars s (PermSpec sz_vars e p1 : specs))
   (applyIntroWithSubst (size perms) (\diff s' -> Intro_OrR (subst' s' p1)) $
