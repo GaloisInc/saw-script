@@ -189,17 +189,22 @@ type OpenTermCtxt ctx = Assignment (Const OpenTerm) ctx
 -- track of those.
 type PermVariableMapping ctx = Assignment (Const OpenTerm) ctx
 
+data JudgmentContext ctx = JudgmentContext
+  { typingContext :: OpenTermCtxt ctx
+  -- ^ Maps type variables to a SAW value that depends on the type of the
+  -- variable in question.  e.g. for @BVType@, a SAW variable that has a
+  -- bitvector type for @LLVMPointerType@, a @Unit@
+  , permissionSet :: PermSet ctx
+  -- ^ Associates to each index a value permission `p`
+  , permissionMap :: PermVariableMapping ctx
+  -- ^ Associates to each index a SAW variable, whose type is `[[p]]` for the
+  -- corresponding `p` in the permission set at that index
+  , catchHandlers :: [OpenTerm]
+  }
+
 class JudgmentTranslate' (f :: Ctx CrucibleType -> *) where
   judgmentTranslate' ::
-    OpenTermCtxt ctx ->
-    -- ^ Maps type variables to a SAW value that depends on the type of the
-    -- variable in question.  e.g. for @BVType@, a SAW variable that has a
-    -- bitvector type for @LLVMPointerType@, a @Unit@
-    PermSet ctx ->
-    -- ^ Associates to each index a value permission `p`
-    PermVariableMapping ctx ->
-    -- ^ Associates to each index a SAW variable, whose type is `[[p]]` for the
-    -- corresponding `p` in the permission set at that index
+    JudgmentContext ctx ->
     OpenTerm ->
     -- ^ Output type being built, needed to build some terms that need to
     -- explicitly state what type they return
@@ -221,25 +226,41 @@ nthOpenTerm n t = goLeft $ (iterate goRight t) !! n
 
 instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
 
-  judgmentTranslate' ctx pctx pmap outputType = \case
+  judgmentTranslate' jctx outputType = \case
 
-    Elim_Done l -> judgmentTranslate' ctx pctx pmap outputType l
+    Elim_Done l -> judgmentTranslate' jctx outputType l
+
+    Elim_Fail -> error "TODO"
 
     Elim_Or index e1 e2 ->
-      let var            = pvGet pmap index in
-      let perm           = pvGet pctx index in
+      let tL l =
+            judgmentTranslate'
+            (JudgmentContext { typingContext = typingContext jctx
+                             , permissionSet = elimOrLeft (permissionSet jctx) index
+                             , permissionMap = atIndex index (const $ Const l) (permissionMap jctx)
+                             , catchHandlers = catchHandlers jctx
+                             })
+            outputType e1
+      in
+      let tR r =
+            judgmentTranslate'
+            (JudgmentContext { typingContext = typingContext jctx
+                             , permissionSet = elimOrRight (permissionSet jctx) index
+                             , permissionMap = atIndex index (const $ Const r) (permissionMap jctx)
+                             , catchHandlers = catchHandlers jctx
+                             })
+            outputType e2
+      in
+      let var            = pvGet (permissionMap jctx) index in
+      let perm           = pvGet (permissionSet jctx) index in
       let (permL, permR) = case perm of
             ValPerm_Or p1 p2 -> (p1, p2)
             _                -> error "judgmentTranslate': `Elim_Or` expects `ValPerm_Or`"
       in
-      let permTypeL      = typeTranslate ctx permL in
-      let permTypeR      = typeTranslate ctx permR in
-      let pctxL          = elimOrLeft  pctx index in
-      let pctxR          = elimOrRight pctx index in
-      let pmapL l        = atIndex index (const $ Const l) pmap in
-      let pmapR r        = atIndex index (const $ Const r) pmap in
-      let bodyL l        = applyOpenTerm (judgmentTranslate' ctx pctxL (pmapL l) outputType e1) l in
-      let bodyR r        = applyOpenTerm (judgmentTranslate' ctx pctxR (pmapR r) outputType e2) r in
+      let permTypeL      = typeTranslate (typingContext jctx) permL in
+      let permTypeR      = typeTranslate (typingContext jctx) permR in
+      let bodyL l        = applyOpenTerm (tL l) l in
+      let bodyR r        = applyOpenTerm (tR r) r in
       applyOpenTermMulti (globalOpenTerm "Prelude.either")
       [ permTypeL                          -- a
       , permTypeR                          -- b
@@ -263,35 +284,41 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       --   Nothing -> error "TODO"
 
     Elim_BindField index offset _ e ->
-      let var      = pvGet pmap index in
-      let perm     = pvGet pctx index in
-      let permType = typeTranslate ctx perm in
+      let var      = pvGet (permissionMap jctx) index in
+      let perm     = pvGet (permissionSet jctx) index in
+      let permType = typeTranslate (typingContext jctx) perm in
       case perm of
       ValPerm_LLVMPtr w fields mp ->
-        let fieldIndex              =
-              fromMaybe
-              (error "judgmentTranslate': no permission found with the given offset")
-              (findIndex (isLLVMFieldAt offset) fields)
-        in
-        let ctx'                    = extend ctx (Const permType) in
         let (_, fieldPerm, fields') =
               fromMaybe
               (error "judgmentTranslate': no permission found with the given offset")
               (remLLVMFieldAt offset fields)
         in
         let perm'                   = ValPerm_LLVMPtr w fields' mp in
-        let pctx'                   =
-              extendPermSet (pvSet index perm' pctx) (extendContext' oneDiff fieldPerm)
+        let t fieldVar              =
+              judgmentTranslate'
+              (JudgmentContext { typingContext = extend (typingContext jctx) (Const permType)
+                               , permissionSet = extendPermSet
+                                                 (pvSet index perm' (permissionSet jctx))
+                                                 (extendContext' oneDiff fieldPerm)
+                               , permissionMap = extend (permissionMap jctx) (Const fieldVar)
+                               , catchHandlers = catchHandlers jctx
+                               })
+              outputType e
         in
-        let pmap' fieldVar          = extend pmap (Const fieldVar) in
+        let fieldIndex              =
+              fromMaybe
+              (error "judgmentTranslate': no permission found with the given offset")
+              (findIndex (isLLVMFieldAt offset) fields)
+        in
         applyOpenTerm
-        (lambdaOpenTerm "field" permType $
-         \ fieldVar -> judgmentTranslate' ctx' pctx' (pmap' fieldVar) outputType e
-        )
+        (lambdaOpenTerm "field" permType t)
         (nthOpenTerm fieldIndex (getConst var))
       _ -> error "judgmentTranslate': `Elim_BindField` expects `ValPerm_LLVMPtr`"
 
-    Elim_Catch e1 e2 -> error "TODO"
+    Elim_Catch e1 e2 ->
+      let t2 = judgmentTranslate' jctx outputType e2 in
+      judgmentTranslate' (jctx { catchHandlers = t2 : catchHandlers jctx }) outputType e1
 
     Elim_Unroll _p _e -> error "TODO"
 
@@ -302,7 +329,7 @@ permElim0 =
   (Elim_Done (Const (globalOpenTerm "Prelude.Nat")))
 
 instance JudgmentTranslate' (Const OpenTerm) where
-  judgmentTranslate' _ _ _ _ t = getConst t
+  judgmentTranslate' _ _ t = getConst t
 
 -- TODO: fix those tests
 testJudgmentTranslation :: TopLevel ()
@@ -311,9 +338,12 @@ testJudgmentTranslation = do
   io $ do
     t <- completeOpenTerm sc $
       judgmentTranslate'
-      (extend empty (Const (globalOpenTerm "Prelude.Either")))
-      (extend empty (ValPerm_Or ValPerm_True ValPerm_True))
-      (extend empty (Const (globalOpenTerm "Prelude.Vec")))
+      (JudgmentContext { typingContext = extend empty (Const (globalOpenTerm "Prelude.Either"))
+                       , permissionSet = extend empty (ValPerm_Or ValPerm_True ValPerm_True)
+                       , permissionMap = extend empty (Const (globalOpenTerm "Prelude.Vec"))
+                       , catchHandlers = []
+                       }
+      )
       (globalOpenTerm "Prelude.Bool")
       permElim0
     putStrLn $ show t
