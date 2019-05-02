@@ -710,6 +710,25 @@ extendPermSet :: PermSet ctx -> ValuePerm (ctx ::> a) a -> PermSet (ctx ::> a)
 extendPermSet perms p =
   extend (fmapFC (weaken' mkWeakening1) perms) p
 
+-- | Extend a permission set with true permissions for the new variables
+extPermSet :: Diff ctx ctx' -> PermSet ctx -> PermSet ctx'
+extPermSet diff perms =
+  case diffIsAppend diff of
+    IsAppend sz_app ->
+      fmapFC (extendContext' diff) perms <++>
+      generate sz_app (\_ -> ValPerm_True)
+
+-- | A permission on a single variable
+data VarPerm ctx a = VarPerm (PermVar ctx a) (ValuePerm ctx a)
+
+instance Weakenable' VarPerm where
+  weaken' w (VarPerm x p) = VarPerm (weaken' w x) (weaken' w p)
+
+varPermsOfPermSet :: PermSet ctx -> [Some (VarPerm ctx)]
+varPermsOfPermSet perms =
+  toListFC Some $ generate (size perms) $ \ix ->
+  VarPerm (PermVar (size perms) ix) (perms ! ix)
+
 
 ----------------------------------------------------------------------
 -- * Permission Set Eliminations
@@ -960,6 +979,9 @@ infixl 1 >>>=
 cmap :: CtxMonad m => DiffFun f g ctx -> m f ctx -> m g ctx
 cmap f m = cbind m (\diff -> creturn . f diff)
 
+cjoin :: CtxMonad m => m (m f) ctx -> m f ctx
+cjoin m = cbind m (\_ -> id)
+
 newtype CStateT s m a ctx =
   CStateT { unCStateT :: s ctx -> m (Product s a) ctx }
 
@@ -1076,11 +1098,12 @@ eqProofRHS (EqProof_LLVMWord w pf) = PExpr_LLVMWord w $ eqProofRHS pf
 -- smaller permissions. Also, most of the rules have the convention that they
 -- operate on the first permission in the 'ExprPermSet'.
 data PermIntro (ctx :: Ctx CrucibleType) where
-  Intro_Id :: PermSet ctx -> PermIntro ctx
-  -- ^ The final step of any introduction proof, of the form
+  Intro_Id :: [Some (VarPerm ctx)] -> PermIntro ctx
+  -- ^ The final step of any introduction proof, of the following form, where
+  -- each @x@ can occur at most once:
   --
-  -- >  -------------------
-  -- >  Gamma | Pin |- Pin
+  -- >  ---------------------------------------------------
+  -- >  Gamma | x1:p1, ..., xn:pn, Pin |- x1:p1, ..., xn:pn
 
   Intro_Exists :: TypeRepr tp -> PermExpr ctx tp -> ValuePerm (ctx ::> tp) a ->
                   PermIntro ctx -> PermIntro ctx
@@ -1153,6 +1176,30 @@ data PermIntro (ctx :: Ctx CrucibleType) where
   -- > ------------------------------------------------------------
   -- > Gamma | Pin, x:ptr(off |-> (S,eq(e)) * shapes)
   -- >    |- x:ptr(off |-> (S,p) * shapes'), Pout
+
+
+instance Weakenable PermIntro where
+  weaken w (Intro_Id perms) =
+    Intro_Id $ map (\(Some p) -> Some $ weaken' w p) perms
+  weaken w (Intro_Exists tp e p intro) =
+    Intro_Exists tp (weaken' w e) (weaken' (weakenWeakening1 w) p)
+    (weaken w intro)
+  weaken w (Intro_OrL p2 intro) = Intro_OrL (weaken' w p2) (weaken w intro)
+  weaken w (Intro_OrR p1 intro) = Intro_OrR (weaken' w p1) (weaken w intro)
+  weaken w (Intro_True e intro) = Intro_True (weaken' w e) (weaken w intro)
+  weaken w (Intro_CastEq x e intro) =
+    Intro_CastEq (weaken' w x) (weaken' w e) (weaken w intro)
+  weaken w (Intro_Eq eq_pf intro) =
+    Intro_Eq (weaken' w eq_pf) (weaken w intro)
+  weaken w (Intro_LLVMPtr x intro) =
+    Intro_LLVMPtr (weaken' w x) (weaken w intro)
+  weaken w (Intro_LLVMPtr_Offset w' off intro) =
+    Intro_LLVMPtr_Offset w' off (weaken w intro)
+  weaken w (Intro_LLVMField off spl p intro) =
+    Intro_LLVMField off (weaken w spl) (weaken' w p) (weaken w intro)
+
+instance ExtendContext PermIntro where
+  extendContext diff = weaken (Weakening diff zeroSize)
 
 
 ----------------------------------------------------------------------
@@ -1282,7 +1329,8 @@ provePermImplH :: PermSet ctx -> CtxRepr vars -> PartialSubst vars ctx ->
                   PermElim (ImplRet vars) ctx
 
 provePermImplH perms vars s [] =
-  Elim_Done $ ImplRet (partialSubstSize s) perms (Intro_Id perms) $
+  Elim_Done $ ImplRet (partialSubstSize s) perms
+  (Intro_Id $ varPermsOfPermSet perms) $
   completePartialSubst (size perms) vars s
 
 provePermImplH perms vars s (PermSpec _ e ValPerm_True : specs) =
