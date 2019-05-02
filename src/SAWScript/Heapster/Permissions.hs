@@ -954,6 +954,32 @@ instance CtxMonad m => CtxMonadState s (CStateT s m) where
 
 
 ----------------------------------------------------------------------
+-- * Permission Specifications
+----------------------------------------------------------------------
+
+-- | A pair of an expression and a specifiation of a value permission for it,
+-- i.e., a pattern over some free variables that must match this permission
+data PermSpec vars ctx where
+  PermSpec :: Size vars -> PermExpr ctx a -> ValuePerm (ctx <+> vars) a ->
+              PermSpec vars ctx
+
+instance ExtendContext (PermSpec vars) where
+  extendContext diff (PermSpec sz_vars (e :: PermExpr ctx a) p) =
+    PermSpec sz_vars (extendContext' diff e) (weaken' (Weakening diff sz_vars) p)
+
+extPermSpecVars :: PermSpec vars ctx -> PermSpec (vars ::> tp) ctx
+extPermSpecVars (PermSpec sz_vars e p) =
+  PermSpec (incSize sz_vars) e $ extendContext' oneDiff p
+
+substPermSpec :: PermSubst args ctx -> PermSpec vars args -> PermSpec vars ctx
+substPermSpec s (PermSpec sz_vars e p) =
+  PermSpec sz_vars (subst' s e) (subst' (weakenSubst sz_vars s) p)
+
+-- | A specification of a set expression permissions
+type PermSetSpec vars ctx = [PermSpec vars ctx]
+
+
+----------------------------------------------------------------------
 -- * Permission Set Introduction Rules
 ----------------------------------------------------------------------
 
@@ -1095,36 +1121,8 @@ data PermIntro (ctx :: Ctx CrucibleType) where
 
 
 ----------------------------------------------------------------------
--- * Permission Specifications
+-- * Disjoining and Recombining Permission Sets
 ----------------------------------------------------------------------
-
-{-
-FIXME HERE:
-- change intro rules to only have one conclusion
-- disjoin and recombine perm sets and intro rules
--}
-
--- | A pair of an expression and a specifiation of a value permission for it,
--- i.e., a pattern over some free variables that must match this permission
-data PermSpec vars ctx where
-  PermSpec :: Size vars -> PermExpr ctx a -> ValuePerm (ctx <+> vars) a ->
-              PermSpec vars ctx
-
-instance ExtendContext (PermSpec vars) where
-  extendContext diff (PermSpec sz_vars (e :: PermExpr ctx a) p) =
-    PermSpec sz_vars (extendContext' diff e) (weaken' (Weakening diff sz_vars) p)
-
-extPermSpecVars :: PermSpec vars ctx -> PermSpec (vars ::> tp) ctx
-extPermSpecVars (PermSpec sz_vars e p) =
-  PermSpec (incSize sz_vars) e $ extendContext' oneDiff p
-
-substPermSpec :: PermSubst args ctx -> PermSpec vars args -> PermSpec vars ctx
-substPermSpec s (PermSpec sz_vars e p) =
-  PermSpec sz_vars (subst' s e) (subst' (weakenSubst sz_vars s) p)
-
--- | A specification of a set expression permissions
-type PermSetSpec vars ctx = [PermSpec vars ctx]
-
 
 ----------------------------------------------------------------------
 -- * Proving Equality of Permission Expressions
@@ -1155,9 +1153,6 @@ applyEqProof :: (forall ctx'. Diff ctx ctx' ->
                 PermElim (EqRet vars b) ctx
 applyEqProof f =
   cmap (\diff (EqRet perms s eq_pf) -> EqRet perms s (f diff eq_pf))
-
--- FIXME HERE: change things so we *don't* apply a partial subst until we need
--- to, which should be (only?) in proveEq
 
 -- | Build a proof that two expressions are equal, where the right-hand one can
 -- have free variables listed in @vars@
@@ -1219,6 +1214,9 @@ proveEqH _perms _vars _s _e1 _e2 =
 -- * Proving Permission Implication
 ----------------------------------------------------------------------
 
+-- FIXME: double-check that we have applied our PartialSubst everywhere we need
+-- to before pattern-matching in provePermImplH
+
 -- | Return value for 'provePermImpl' and friends
 data ImplRet vars ctx =
   ImplRet (Size vars) (PermSet ctx) (PermIntro ctx) (PermSubst vars ctx)
@@ -1232,6 +1230,8 @@ applyIntro f =
   cmap (\diff (ImplRet vars perms intro s) ->
          ImplRet vars perms (f diff intro) s)
 
+-- | Apply an introduction rule to an 'ImplRet', also passing a helpful
+-- substitution for expressions in the original 'PermSpec'
 applyIntroWithSubst :: Size ctx ->
                        (forall ctx'. Diff ctx ctx' ->
                         PermSubst (ctx <+> vars) ctx' ->
