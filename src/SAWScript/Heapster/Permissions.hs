@@ -376,6 +376,21 @@ embeddingOfWeakening sz w =
   CtxEmbedding (weaken w sz)
   (generate sz (indexOfPermVar . weaken' w . PermVar sz))
 
+weakenAssignment :: (forall a. Index ctx' a -> f a) -> Weakening ctx ctx' ->
+                    Assignment f ctx -> Assignment f ctx'
+weakenAssignment f w@(Weakening (diff :: Diff ctx1 _) sz3) asgn =
+  let sz1 :: Size ctx1 = subtractSize (size asgn) Proxy sz3 in
+  case diffIsAppend diff of
+    IsAppend sz2 ->
+      generate sz1 (\ix -> asgn ! extendContext' (appendDiff sz3) ix)
+      <++>
+      generate sz2 (\ix ->
+                     f (extendContext' (appendDiff sz3) $
+                        extendIndexLeft sz1 ix))
+      <++>
+      generate sz3 (\ix -> asgn ! extendIndexLeft sz1 ix)
+
+
 class Weakenable (f :: Ctx k -> *) where
   weaken :: Weakening ctx1 ctx2 -> f ctx1 -> f ctx2
 
@@ -698,9 +713,21 @@ instance GenSubstable' LLVMArrayPerm where
 instance Weakenable' ValuePerm where
   weaken' w = genSubst' (genSubstOfWeakening w)
 
+instance ExtendContext' LLVMShapePerm where
+  extendContext' diff = genSubst' (genSubstOfDiff diff)
+
+instance ExtendContext' LLVMFieldPerm where
+  extendContext' diff = genSubst' (genSubstOfDiff diff)
+
+instance ExtendContext' LLVMArrayPerm where
+  extendContext' diff = genSubst' (genSubstOfDiff diff)
+
 instance ExtendContext' ValuePerm where
   extendContext' diff = weaken' (weakeningOfDiff diff)
 
+
+-- FIXME: make PermSet a newtype so that extPermSet can be extendContext and
+-- not be almost the same name as extendPermSet!
 
 -- | A permission set assigns value permissions to the variables in scope
 type PermSet ctx = Assignment (ValuePerm ctx) ctx
@@ -717,6 +744,11 @@ extPermSet diff perms =
     IsAppend sz_app ->
       fmapFC (extendContext' diff) perms <++>
       generate sz_app (\_ -> ValPerm_True)
+
+-- | Weaken a permission set with true permissions for the new variables
+weakenPermSet :: Weakening ctx ctx' -> PermSet ctx -> PermSet ctx'
+weakenPermSet w perms =
+  weakenAssignment (\_ -> ValPerm_True) w $ fmapFC (weaken' w) perms
 
 -- | A permission on a single variable
 data VarPerm ctx where
