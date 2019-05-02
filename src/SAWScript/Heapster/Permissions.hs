@@ -39,7 +39,7 @@ import           Lang.Crucible.CFG.Core
 
 
 ----------------------------------------------------------------------
--- * Variables and Weakenings
+-- * Variables for Use in Permissions
 ----------------------------------------------------------------------
 
 oneDiff :: Diff ctx (ctx ::> tp)
@@ -370,6 +370,11 @@ weakeningOfDiff diff = Weakening diff zeroSize
 
 genSubstOfDiff :: Diff ctx1 ctx2 -> GenSubst ctx1 ctx2
 genSubstOfDiff = genSubstOfWeakening . weakeningOfDiff
+
+embeddingOfWeakening :: Size ctx -> Weakening ctx ctx' -> CtxEmbedding ctx ctx'
+embeddingOfWeakening sz w =
+  CtxEmbedding (weaken w sz)
+  (generate sz (indexOfPermVar . weaken' w . PermVar sz))
 
 class Weakenable (f :: Ctx k -> *) where
   weaken :: Weakening ctx1 ctx2 -> f ctx1 -> f ctx2
