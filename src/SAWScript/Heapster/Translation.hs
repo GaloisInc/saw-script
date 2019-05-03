@@ -273,7 +273,56 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       , getConst var                       -- Either a b
       ]
 
-    Elim_Exists index typ e -> error "TODO"
+    Elim_Exists index typ e ->
+      let tFst = typeTranslate'' typ in
+      let tSnd = case pvGet (permissionSet jctx) index of
+            ValPerm_Exists _ pSnd ->
+              -- I believe we can reuse @tFst@ here, rather than using the
+              -- TypeRepr in @ValPerm_Exists@.
+              typeTranslate (extend (typingContext jctx) (Const tFst)) pSnd
+            _ -> error "judgmentTranslate': `Elim_Exists` expects a `ValPerm_Exists`"
+      in
+      let t varFst varSnd =
+            judgmentTranslate'
+            (JudgmentContext { typingContext =
+                               extend
+                               (pvSet index (Const tSnd) (typingContext jctx))
+                               (Const tFst)
+                             , permissionSet = elimExists (permissionSet jctx) index typ
+                             , permissionMap =
+                               extend
+                               (pvSet index (Const varSnd) (permissionMap jctx))
+                               (Const varFst)
+                             , catchHandler  = catchHandler jctx
+                             })
+            outputType e
+      in
+
+      applyOpenTermMulti (globalOpenTerm "Prelude.Sigma__rec")
+
+      -- (a : sort 0)
+      [ tFst
+
+      -- (b : a -> sort 0)
+      , tSnd
+
+      -- (p : Sigma a b -> sort 0)
+      , lambdaOpenTerm "sigma_unused"
+        (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma") [tFst, tSnd])
+        (\ _ -> outputType)
+
+      -- (f : (pa : a) -> (pb : b pa) -> p (exists a b pa pb))
+      , lambdaOpenTerm "sigmaFst" tFst
+        (\ varFst ->
+         lambdaOpenTerm "sigmaSnd" tSnd
+         (\ varSnd -> t varFst varSnd)
+        )
+
+      -- (u : Sigma a b)
+      , getConst $ pvGet (permissionMap jctx) index
+
+      ]
+
       -- let var   = pvGet pmap index in
       -- let perm  = pvGet pctx index in
       -- case pvGet pctx index of
