@@ -21,6 +21,7 @@ module SAWScript.Heapster.TypedCrucible where
 import           SAWScript.Heapster.Permissions
 
 import           Data.Type.Equality
+import           Data.Functor.Product
 import           Data.Parameterized.Context
 import           What4.ProgramLoc
 import qualified Control.Category as Cat
@@ -51,6 +52,9 @@ data TypedStmt ext ctx ctx' where
   DestructLLVMPtr :: (1 <= w) => NatRepr w -> Index ctx (LLVMPointerType w) ->
                      TypedStmt (LLVM arch) ctx (ctx ::> NatType ::> BVType w)
   -- ^ Destruct an LLVM value into its block and offset
+
+data TypedFnHandle ghosts init ret =
+  TypedFnHandle (CtxRepr ghosts) (FnHandle init ret)
 
 -- | All of our blocks have multiple entry points, for different inferred types,
 -- so a "typed" 'BlockID' is a normal Crucible 'BlockID' plus an 'Int'
@@ -154,6 +158,7 @@ data TypedStmtSeq ext blocks (ret :: CrucibleType) ctx where
 -- here.
 data TypedEntry ext blocks ret args where
   TypedEntry :: TypedEntryID blocks ghosts args -> CtxRepr args ->
+                PermSetSpec EmptyCtx (ghosts <+> args) ->
                 TypedStmtSeq ext blocks ret (ghosts <+> args) ->
                 TypedEntry ext blocks ret args
 
@@ -172,9 +177,9 @@ data TypedCFG
      (ghosts :: Ctx CrucibleType)
      (init :: Ctx CrucibleType)
      (ret :: CrucibleType)
-  = TypedCFG { tpcfgHandle :: FnHandle init ret
-             , tpcfgInputPerms :: PermSet init
-             , tpcfgOutputPerms :: PermSet (init ::> ret)
+  = TypedCFG { tpcfgHandle :: TypedFnHandle ghosts init ret
+             , tpcfgInputPerms :: PermSet (ghosts <+> init)
+             , tpcfgOutputPerms :: PermSet (ghosts <+> init ::> ret)
              , tpcfgBlockMap :: !(TypedBlockMap ext blocks ret)
              , tpcfgEntryBlockID :: !(TypedEntryID blocks ghosts init)
              }
@@ -281,6 +286,9 @@ class HasPerms f where
 hasCtx :: HasPerms f => f ctx -> CtxRepr ctx
 hasCtx = permSetCtx . hasPerms
 
+instance HasPerms PermSet where
+  hasPerms = id
+
 instance HasPerms (ImplRet vars) where
   hasPerms = implPermsRem
 
@@ -305,6 +313,9 @@ mapElimM f elim =
 
 getCurPerms :: PermCheckM blocks ret ctx (PermSet ctx)
 getCurPerms = envCurPerms <$> ask
+
+getCtx :: PermCheckM blocks ret ctx (CtxRepr ctx)
+getCtx = permSetCtx <$> getCurPerms
 
 getRetPerms :: PermCheckM blocks ret ctx (PermSetSpec EmptyCtx (ctx ::> ret))
 getRetPerms = envRetPerms <$> ask
@@ -356,7 +367,7 @@ data ExprPerms ret ctx =
 -- | Type-check a Crucible expression
 tcExpr :: Expr ext ctx tp ->
           PermCheckM blocks ret ctx (PermElim (ExprPerms tp) ctx)
-tcExpr _ = error "FIXME: tcExpr"
+tcExpr _ = error "FIXME HERE: tcExpr"
 
 
 ----------------------------------------------------------------------
@@ -380,26 +391,80 @@ typedElimStmt elim_stmts =
      return $ TypedElimStmt perms elim_stmts
 
 
--- FIXME: figure out how to "thin out" the input permissions to a jump target
+data VarPair ctx a = VarPair (PermVar ctx a) (PermVar ctx a)
 
--- | Type-check a 'JumpTarget', which has two cases:
+-- FIXME: figure out how to "thin out" the input permissions to a jump target
+buildInputSpecs :: PermSet ctx -> CtxRepr args ->
+                   Assignment (Reg ctx) args ->
+                   (PermSetSpec EmptyCtx (ctx <+> args), AnnotIntro ctx)
+buildInputSpecs perms args_ctx (args :: Assignment (Reg ctx) args) =
+  let sz_ctx = permSetSize perms
+      sz_args = size args
+      sz_ctx_args = addSize sz_ctx sz_args
+      args_xs :: [Some (Product (PermVar (ctx <+> args))
+                        (PermVar (ctx <+> args)))]
+      args_xs =
+        toListFC Some $
+        generate (size args) $ \ix ->
+        Pair (PermVar sz_ctx_args $ extendIndexLeft sz_ctx ix)
+        (PermVar sz_ctx_args $
+         extendIndex' (appendDiff sz_args) $ regIndex $ args ! ix)
+      perm_specs =
+        -- Build a list of permission specs arg:eq(x) for each arg |-> x in args
+        map (\(Some (Pair arg x)) ->
+              PermSpec zeroSize (PExpr_Var arg) (ValPerm_Eq $ PExpr_Var x))
+        args_xs
+        ++
+        -- Build a list of permissions x:p for all the permissions in perms
+        map (extendContext $ appendDiff (size args))
+        (permSpecOfPerms zeroSize (permSetAsgn perms)) in
+  (perm_specs
+  , AnnotIntro perms (map
+                      (substPermSpec
+                       (mkSubstMulti sz_ctx sz_args $
+                        fmapFC (PExpr_Var . PermVar sz_ctx . regIndex) args))
+                      perm_specs) $
+    foldrFC
+    (\x -> Intro_Eq (EqProof_Refl (PExpr_Var x)))
+    (Intro_Id $ varPermsOfPermSet perms)
+    (generate sz_ctx (\ix -> PermVar sz_ctx ix))
+  )
+
+
+-- | Type-check a 'JumpTarget' as follows:
 --
--- 1. The target has already been visited, so we build an elimination that tries
--- all of the possible entry points.
+-- 1. If the target block has not already been visited, add a new entry point
+-- with all the current variables as ghost inputs and all the current
+-- permissions as the permissions.
 --
--- 2. The target has not already been visited, so we add a new entry point with
--- the current permissions.
+-- 2. Otherwise, if the target block has already been visited, build an
+-- elimination that tries all of the possible entry points.
 tcJumpTarget :: JumpTarget blocks ctx ->
                 PermCheckM blocks ret ctx (PermElim (TypedJumpTarget blocks) ctx)
 tcJumpTarget (JumpTarget blkID args_ctx args) =
   blockNextEntryIndex blkID >>= \maybe_ix ->
   case maybe_ix of
     Just ix ->
-      do let entry = error "FIXME HERE"
+      do perms <- getCurPerms
+         retPerms <- getRetPerms
+         let ghosts = permSetCtx perms
+             diff_ctx_args =
+               appendDiff (size args_ctx) -- :: Diff ctx (ctx <+> args)
+             entryInfoID = TypedEntryID blkID ghosts ix
+             (entryInfoPermsIn, intro) = buildInputSpecs perms args_ctx args
+         entryInfoPermsOut <-
+           map (weaken $ Weakening diff_ctx_args $ incSize zeroSize) <$>
+           getRetPerms
+         let entry = BlockEntryInfo { .. }
          addBlockEntry entry
-         return $ Elim_Done $ error "FIXME HERE"
+         return $ Elim_Done $
+           TypedJumpTarget entryInfoID
+           (TypedArgs (ghosts <++> args_ctx)
+            (generate (size ghosts) (PermVar (size ghosts)) <++>
+             fmapFC (PermVar (size ghosts) . regIndex) args)
+            intro)
     Nothing ->
-      error "FIXME HERE"
+      error "FIXME HERE: cannot yet handle back edges!"
 
 -- | Type-check a sequence of statements. This includes type-checking for
 -- individual statements and termination statements, which are both easier to do

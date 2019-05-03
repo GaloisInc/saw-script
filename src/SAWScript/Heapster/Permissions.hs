@@ -451,6 +451,14 @@ idSubst sz = PermSubst sz $ generate sz $ \x -> PExpr_Var $ PermVar sz x
 mkSubst1 :: Size ctx -> PermExpr ctx a -> PermSubst (ctx ::> a) ctx
 mkSubst1 sz e = PermSubst sz $ extend (generate sz (PExpr_Var . PermVar sz)) e
 
+mkSubstMulti :: Size ctx1 -> Size ctx2 ->
+                Assignment (PermExpr ctx1) ctx2 ->
+                PermSubst (ctx1 <+> ctx2) ctx1
+mkSubstMulti sz1 sz2 asgn =
+  PermSubst sz1 $
+  generate sz1 (PExpr_Var . PermVar sz1) <++>
+  generate sz2 (asgn !)
+
 weakenSubst1 :: PermSubst ctx1 ctx2 -> PermSubst (ctx1 ::> tp) (ctx2 ::> tp)
 weakenSubst1 (PermSubst sz2 asgn) =
   PermSubst (incSize sz2) $
@@ -769,6 +777,13 @@ extendPermSet (PermSet ctx perms) tp p =
   PermSet (extend ctx tp) $
   extend (fmapFC (weaken' mkWeakening1) perms) p
 
+appendPermSet :: PermSet ctx -> CtxRepr ctx' ->
+                 Assignment (ValuePerm (ctx <+> ctx')) ctx' ->
+                 PermSet (ctx <+> ctx')
+appendPermSet (PermSet ctx asgn) ctx' asgn' =
+  PermSet (ctx <++> ctx')
+  (fmapFC (extendContext' $ appendDiff $ size ctx') asgn <++> asgn')
+
 {-
 -- | Extend a permission set with true permissions for the new variables
 extPermSet :: Diff ctx ctx' -> PermSet ctx -> PermSet ctx'
@@ -791,6 +806,9 @@ data VarPerm ctx where
 
 instance Weakenable VarPerm where
   weaken w (VarPerm x p) = VarPerm (weaken' w x) (weaken' w p)
+
+instance ExtendContext VarPerm where
+  extendContext diff = weaken (weakeningOfDiff diff)
 
 varPermsOfPermSet :: PermSet ctx -> [VarPerm ctx]
 varPermsOfPermSet perms =
@@ -1104,12 +1122,15 @@ instPermSpecVars s@(PermSubst sz_ctx _) (PermSpec _ e p) =
 type PermSetSpec vars ctx = [PermSpec vars ctx]
 
 permSpecOfPerms :: Size vars -> Assignment (ValuePerm (ctx <+> vars)) ctx ->
-                   PermSetSpec vars ctx
+                      PermSetSpec vars ctx
 permSpecOfPerms sz_vars asgn =
   let sz_ctx = size asgn in
   toListFC (\(Const spec) -> spec) $
   generate sz_ctx $ \ix ->
   Const $ PermSpec sz_vars (PExpr_Var $ PermVar sz_ctx ix) (asgn ! ix)
+
+permSpecOfPermSet :: PermSet ctx -> PermSetSpec EmptyCtx ctx
+permSpecOfPermSet perms = permSpecOfPerms zeroSize (permSetAsgn perms)
 
 
 ----------------------------------------------------------------------
@@ -1297,6 +1318,12 @@ instance Weakenable AnnotIntro where
 instance ExtendContext AnnotIntro where
   extendContext diff = weaken (Weakening diff zeroSize)
 -}
+
+-- | Build the identity introduction for a given permission set
+idIntro :: PermSet ctx -> AnnotIntro ctx
+idIntro perms =
+  AnnotIntro perms (permSpecOfPermSet perms) $
+  Intro_Id $ varPermsOfPermSet perms
 
 
 ----------------------------------------------------------------------
