@@ -930,11 +930,12 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
   -- permission, where @x@ is a fresh variable that is given the permission @p@.
   -- The 'Integer' and 'SplittingExpr' arguments give the static offset and
   -- splitting for the 'LLVMFieldShapePerm' of the given variable to perform
-  -- this operation on.
+  -- this operation on. Note that this rule is only valid when the leading
+  -- shapes (in @ps1@) contains only @eq@ permissions.
   --
-  -- pf = Gin, y:LLVMPtr | Pin, y:p, x:ptr(off |-> (S, eq(y)) * ps) |- rets
-  -- ----------------------------------------------------------------------
-  -- Gin | Pin, x:ptr(off |-> (S, p) * ps)  |- rets
+  -- pf = Gin, y:LLVMPtr | Pin, y:p, x:ptr(ps1 * off |-> (S, eq(y)) * ps2) |- rets
+  -- -----------------------------------------------------------------------------
+  -- Gin | Pin, x:ptr(ps1 * off |-> (S, p) * ps2)  |- rets
 
   Elim_SplitField :: PermVar ctx (LLVMPointerType w) ->
                      Integer -> SplittingExpr ctx ->
