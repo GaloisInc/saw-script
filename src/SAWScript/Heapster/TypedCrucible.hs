@@ -20,6 +20,7 @@ module SAWScript.Heapster.TypedCrucible where
 
 import           SAWScript.Heapster.Permissions
 
+import           Data.Type.Equality
 import           Data.Parameterized.Context
 import           What4.ProgramLoc
 import qualified Control.Category as Cat
@@ -52,8 +53,19 @@ data TypedStmt ext ctx ctx' where
 
 -- | All of our blocks have multiple entry points, for different inferred types,
 -- so a "typed" 'BlockID' is a normal Crucible 'BlockID' plus an 'Int'
--- specifying which entry point to that block
-data TypedBlockID blocks args = TypedBlockID (BlockID blocks args) Int
+-- specifying which entry point to that block. Each entry point also takes an
+-- extra set of "ghost" arguments, not existant in the original program, that
+-- are useful to express input and output permissions.
+data TypedBlockID blocks ghosts args =
+  TypedBlockID (BlockID blocks args) (CtxRepr ghosts) Int
+
+-- | Test if two 'TypedBlockID's are equal, returning a proof that their ghost
+-- arguments are equaal when they are
+typedBlockIDEq :: TypedBlockID blocks ghosts1 args ->
+                  TypedBlockID blocks ghosts2 args ->
+                  Maybe (ghosts1 :~: ghosts2)
+typedBlockIDEq (TypedBlockID id1 ghosts1 i1) (TypedBlockID id2 ghosts2 i2)
+  | id1 == id2 && i1 == i2 = testEquality ghosts1 ghosts2
 
 -- | A collection of arguments to a function or jump target, including
 -- introduction rules to prove the necessary permissions for those arguments
@@ -70,7 +82,8 @@ argsInputPerms (TypedArgs _ _ intro) = introInPerms intro
 
 -- | A target for jump and branch statements whose arguments have been typed
 data TypedJumpTarget blocks ctx where
-     TypedJumpTarget :: TypedBlockID blocks args -> TypedArgs args ctx ->
+     TypedJumpTarget :: TypedBlockID blocks ghosts args ->
+                        TypedArgs (ghosts <+> args) ctx ->
                         TypedJumpTarget blocks ctx
 
 targetInputPerms :: TypedJumpTarget blocks ctx -> PermSet ctx
@@ -124,31 +137,38 @@ data TypedStmtSeq ext blocks (ret :: CrucibleType) ctx where
   -- ^ Typed version of 'TermStmt'
 
 
--- | Typed version of a Crucible block ID. Note that all of our blocks
--- implicitly take the original function inputs as "ghost" arguments.
-data TypedBlock ext blocks init ret args
-  = TypedBlock (TypedBlockID blocks args) (CtxRepr args)
-    (TypedStmtSeq ext blocks ret (init <+> args))
+-- | Typed version of a Crucible block ID. Note that our blocks implicitly take
+-- extra "ghost" arguments, that are needed to express the input and output
+-- permissions.
+--
+-- FIXME: add a @ghostss@ type argument that associates a @ghosts@ type with
+-- each index of each block, rather than having @ghost@ existentially bound
+-- here.
+data TypedBlock ext blocks ret args where
+  TypedBlock :: TypedBlockID blocks ghosts args -> CtxRepr args ->
+                TypedStmtSeq ext blocks ret (ghosts <+> args) ->
+                TypedBlock ext blocks ret args
 
 -- | A list of typed blocks, one for each entry point of a given 'BlockID'
-newtype TypedBlockList ext blocks init ret args
-  = TypedBlockList [TypedBlock ext blocks init ret args]
+newtype TypedBlockList ext blocks ret args
+  = TypedBlockList [TypedBlock ext blocks ret args]
 
 -- | A map assigning a 'TypedBlockList' to each 'BlockID'
-type TypedBlockMap ext blocks init ret =
-  Assignment (TypedBlockList ext blocks init ret) blocks
+type TypedBlockMap ext blocks ret =
+  Assignment (TypedBlockList ext blocks ret) blocks
 
 -- | A typed Crucible CFG
 data TypedCFG
      (ext :: *)
      (blocks :: Ctx (Ctx CrucibleType))
+     (ghosts :: Ctx CrucibleType)
      (init :: Ctx CrucibleType)
      (ret :: CrucibleType)
   = TypedCFG { tpcfgHandle :: FnHandle init ret
              , tpcfgInputPerms :: PermSet init
              , tpcfgOutputPerms :: PermSet (init ::> ret)
-             , tpcfgBlockMap :: !(TypedBlockMap ext blocks init ret)
-             , tpcfgEntryBlockID :: !(TypedBlockID blocks init)
+             , tpcfgBlockMap :: !(TypedBlockMap ext blocks ret)
+             , tpcfgEntryBlockID :: !(TypedBlockID blocks ghosts init)
              }
 
 
@@ -156,87 +176,82 @@ data TypedCFG
 -- * Permission Type-Checking for Crucible
 ----------------------------------------------------------------------
 
-data PermCheckEnv init ret ctx =
+data PermCheckEnv ret ctx =
   PermCheckEnv
   {
-    curPerms :: PermSet ctx,
-    initDiff :: Diff init ctx
+    envCurPerms :: PermSet ctx,
+    envRetPerms :: PermSetSpec EmptyCtx (ctx ::> ret)
   }
 
-instance ExtendContext (PermCheckEnv init ret) where
-  extendContext diff (PermCheckEnv { .. }) =
-    let w = weakeningOfDiff diff in
-    PermCheckEnv
-    { curPerms = weakenPermSet w curPerms,
-      initDiff = diff Cat.. initDiff }
+instance Weakenable (PermCheckEnv ret) where
+  weaken w (PermCheckEnv { .. }) =
+    PermCheckEnv { envCurPerms = weakenPermSet w envCurPerms,
+                   envRetPerms = map (weaken (weakenWeakening1 w)) envRetPerms }
+
+instance ExtendContext (PermCheckEnv ret) where
+  extendContext diff = weaken (weakeningOfDiff diff)
+
 
 -- | Information about the current state of type-checking for a block
-data BlockTypeInfo blocks init ret args =
-  BlockTypeInfo
-  {
-    blockInfoID :: BlockID blocks args,
+data BlockTypeInfo blocks ret args where
+  BlockTypeInfo :: {
+    blockInfoID :: TypedBlockID blocks ghosts args,
     blockInfoArgs :: CtxRepr args,
     blockInfoVisited :: Bool,
-    blockInfoPerms :: [PermSetSpec EmptyCtx (init <+> args)]
-  }
+    blockInfoPermsIn :: PermSetSpec EmptyCtx (ghosts <+> args),
+    blockInfoPermsOut :: PermSetSpec EmptyCtx (ghosts <+> args ::> ret)
+  } -> BlockTypeInfo blocks ret args
 
-data PermCheckState blocks init ret =
+data PermCheckState blocks ret =
   PermCheckState
   {
-    stInit :: CtxRepr init,
-    stRetPerms :: PermSetSpec EmptyCtx (init ::> ret),
-    stTypedTargets :: Assignment (BlockTypeInfo blocks init ret) blocks
+    stTypedTargets :: Assignment (BlockTypeInfo blocks ret) blocks
   }
 
 -- | The monad for permission type-checking a function with inputs @init@ and
 -- return value @ret@ where the local context (where we are currently
 -- type-checking) is @ctx@
-newtype PermCheckM blocks init ret ctx a =
+newtype PermCheckM blocks ret ctx a =
   PermCheckM { unPermCheckM ::
-                 ReaderT (PermCheckEnv init ret ctx)
-                 (State (PermCheckState blocks init ret)) a }
+                 ReaderT (PermCheckEnv ret ctx)
+                 (State (PermCheckState blocks ret)) a }
   deriving (Functor, Applicative, Monad)
 
-instance MonadReader (PermCheckEnv init ret ctx)
-         (PermCheckM blocks init ret ctx) where
+instance MonadReader (PermCheckEnv ret ctx) (PermCheckM blocks ret ctx) where
   ask = PermCheckM ask
   local f (PermCheckM m) = PermCheckM $ local f m
 
-instance MonadState (PermCheckState blocks init ret)
-         (PermCheckM blocks init ret ctx) where
+instance MonadState (PermCheckState blocks ret) (PermCheckM blocks ret ctx) where
   get = PermCheckM get
   put s = PermCheckM $ put s
 
 -- | Run a computation with an updated permission set
-withPerms :: PermSet ctx -> PermCheckM blocks init ret ctx a ->
-             PermCheckM blocks init ret ctx a
-withPerms perms = local (\env -> env { curPerms = perms })
+withPerms :: PermSet ctx -> PermCheckM blocks ret ctx a ->
+             PermCheckM blocks ret ctx a
+withPerms perms = local (\env -> env { envCurPerms = perms })
 
 -- | Run a computation in an extended context
-inExtCtxM :: Diff ctx ctx' -> PermCheckM blocks init ret ctx' a ->
-             PermCheckM blocks init ret ctx a
+inExtCtxM :: Diff ctx ctx' -> PermCheckM blocks ret ctx' a ->
+             PermCheckM blocks ret ctx a
 inExtCtxM diff (PermCheckM m) =
   PermCheckM $ ReaderT $ \env -> runReaderT m $ extendContext diff env
 
 -- | Map a function over a permission elimination
 mapElimM :: (forall ctx'. Diff ctx ctx' -> f ctx' ->
-             PermCheckM blocks init ret ctx' (g ctx')) ->
+             PermCheckM blocks ret ctx' (g ctx')) ->
             PermElim f ctx ->
-            PermCheckM blocks init ret ctx (PermElim g ctx)
-mapElimM f elim =
-  traverseElim (\diff x -> inExtCtxM diff (f diff x)) elim
+            PermCheckM blocks ret ctx (PermElim g ctx)
+mapElimM f elim = traverseElim (\diff x -> inExtCtxM diff (f diff x)) elim
 
-getCurPerms :: PermCheckM blocks init ret ctx (PermSet ctx)
-getCurPerms = curPerms <$> ask
+getCurPerms :: PermCheckM blocks ret ctx (PermSet ctx)
+getCurPerms = envCurPerms <$> ask
 
-getRetPerms :: PermCheckM blocks init ret ctx (PermSetSpec EmptyCtx (ctx ::> ret))
-getRetPerms =
-  (initDiff <$> ask) >>= \diff ->
-  map (weaken $ Weakening diff $ incSize zeroSize) <$> stRetPerms <$> get
+getRetPerms :: PermCheckM blocks ret ctx (PermSetSpec EmptyCtx (ctx ::> ret))
+getRetPerms = envRetPerms <$> ask
 
 
 -- | "Type-check" a 'Reg' by converting it to a 'PermVar'
-tcReg :: Reg ctx a -> PermCheckM blocks init ret ctx (PermVar ctx a)
+tcReg :: Reg ctx a -> PermCheckM blocks ret ctx (PermVar ctx a)
 tcReg reg = PermVar <$> (size <$> getCurPerms) <*> return (regIndex reg)
 
 -- | The input and output permissions for an expression in the current branch of
@@ -246,7 +261,7 @@ data ExprPerms ret ctx =
 
 -- | Type-check a Crucible expression
 tcExpr :: Expr ext ctx tp ->
-          PermCheckM blocks init ret ctx (PermElim (ExprPerms tp) ctx)
+          PermCheckM blocks ret ctx (PermElim (ExprPerms tp) ctx)
 tcExpr _ = error "FIXME: tcExpr"
 
 
@@ -264,16 +279,22 @@ weakenStmtSeq sz w = applyEmbedding (embeddingOfWeakening sz w)
 -- | Smart constructor for 'TypedElimStmt', which avoids inserting an
 -- elimination for trivial eliminations
 typedElimStmt :: PermElim (TypedStmtSeq ext blocks ret) ctx ->
-                 PermCheckM blocks init ret ctx (TypedStmtSeq ext blocks ret ctx)
+                 PermCheckM blocks ret ctx (TypedStmtSeq ext blocks ret ctx)
 typedElimStmt (Elim_Done stmts) = return stmts
 typedElimStmt elim_stmts =
   do perms <- getCurPerms
      return $ TypedElimStmt perms elim_stmts
 
 
+-- FIXME HERE: type-check jump targets:
+--
+-- 1. If visited, try all N possible input perms
+--
+-- 2. If unvisited, need to infer some new input perms by starting with the
+-- argument vars and recursively adding any vars in their perms
+
 tcJumpTarget :: JumpTarget blocks ctx ->
-                PermCheckM blocks init ret ctx (PermElim
-                                                (TypedJumpTarget blocks) ctx)
+                PermCheckM blocks ret ctx (PermElim (TypedJumpTarget blocks) ctx)
 tcJumpTarget = error "FIXME: tcJumpTarget"
 
 -- | Type-check a sequence of statements. This includes type-checking for
@@ -281,7 +302,7 @@ tcJumpTarget = error "FIXME: tcJumpTarget"
 -- when we have the whole statement sequence there.
 tcStmtSeq :: TraverseExt ext =>
              StmtSeq ext blocks ret ctx ->
-             PermCheckM blocks init ret ctx (TypedStmtSeq ext blocks ret ctx)
+             PermCheckM blocks ret ctx (TypedStmtSeq ext blocks ret ctx)
 
 tcStmtSeq (ConsStmt l (SetReg tp expr) stmts') =
   do perms_elim <- tcExpr expr
