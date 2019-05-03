@@ -53,7 +53,8 @@ import SAWScript.CrucibleBuiltins
 import qualified Lang.Crucible.JVM.Translation as CJ
 import qualified SAWScript.CrucibleBuiltinsJVM as CJ
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
-import SAWScript.Heapster.Translation
+import SAWScript.Heapster.JudgmentTranslation
+import SAWScript.Heapster.TypeTranslation
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
