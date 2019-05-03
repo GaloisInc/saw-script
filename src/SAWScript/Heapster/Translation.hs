@@ -24,6 +24,7 @@ import           Data.Parameterized.Classes
 import           Data.Parameterized.Context
 import           Lang.Crucible.Types
 import           SAWScript.Heapster.Permissions
+import           SAWScript.Heapster.TypedCrucible
 import           SAWScript.TopLevel
 import           Verifier.SAW.OpenTerm
 import           Verifier.SAW.Term.Functor

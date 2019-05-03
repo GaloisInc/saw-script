@@ -24,6 +24,7 @@ import           Data.Type.Equality
 import           Data.Parameterized.Context
 import           What4.ProgramLoc
 import qualified Control.Category as Cat
+import qualified Control.Lens as Lens
 
 import           Control.Monad.State
 import           Control.Monad.Reader
@@ -56,15 +57,22 @@ data TypedStmt ext ctx ctx' where
 -- specifying which entry point to that block. Each entry point also takes an
 -- extra set of "ghost" arguments, not existant in the original program, that
 -- are useful to express input and output permissions.
-data TypedBlockID blocks ghosts args =
-  TypedBlockID (BlockID blocks args) (CtxRepr ghosts) Int
+data TypedEntryID blocks ghosts args =
+  TypedEntryID (BlockID blocks args) (CtxRepr ghosts) Int
 
--- | Test if two 'TypedBlockID's are equal, returning a proof that their ghost
+entryBlockID :: TypedEntryID blocks ghosts args -> BlockID blocks args
+entryBlockID (TypedEntryID blkID _ _) = blkID
+
+entryIndex :: TypedEntryID blocks ghosts args -> Int
+entryIndex (TypedEntryID _ _ ix) = ix
+
+
+-- | Test if two 'TypedEntryID's are equal, returning a proof that their ghost
 -- arguments are equaal when they are
-typedBlockIDEq :: TypedBlockID blocks ghosts1 args ->
-                  TypedBlockID blocks ghosts2 args ->
+typedBlockIDEq :: TypedEntryID blocks ghosts1 args ->
+                  TypedEntryID blocks ghosts2 args ->
                   Maybe (ghosts1 :~: ghosts2)
-typedBlockIDEq (TypedBlockID id1 ghosts1 i1) (TypedBlockID id2 ghosts2 i2)
+typedBlockIDEq (TypedEntryID id1 ghosts1 i1) (TypedEntryID id2 ghosts2 i2)
   | id1 == id2 && i1 == i2 = testEquality ghosts1 ghosts2
 
 -- | A collection of arguments to a function or jump target, including
@@ -72,26 +80,26 @@ typedBlockIDEq (TypedBlockID id1 ghosts1 i1) (TypedBlockID id2 ghosts2 i2)
 data TypedArgs args ctx =
   TypedArgs (CtxRepr args) (Assignment (PermVar ctx) args) (AnnotIntro ctx)
 
-instance ExtendContext (TypedArgs args) where
-  extendContext diff (TypedArgs args_ctx args intro) =
-    TypedArgs args_ctx (fmapFC (extendContext' diff) args)
-    (extendContext diff intro)
+instance WeakenableWithCtx (TypedArgs args) where
+  weakenWithCtx ctx w (TypedArgs args_ctx args intro) =
+    TypedArgs args_ctx (fmapFC (weaken' w) args)
+    (weakenWithCtx ctx w intro)
 
 argsInputPerms :: TypedArgs args ctx -> PermSet ctx
 argsInputPerms (TypedArgs _ _ intro) = introInPerms intro
 
 -- | A target for jump and branch statements whose arguments have been typed
 data TypedJumpTarget blocks ctx where
-     TypedJumpTarget :: TypedBlockID blocks ghosts args ->
+     TypedJumpTarget :: TypedEntryID blocks ghosts args ->
                         TypedArgs (ghosts <+> args) ctx ->
                         TypedJumpTarget blocks ctx
 
 targetInputPerms :: TypedJumpTarget blocks ctx -> PermSet ctx
 targetInputPerms (TypedJumpTarget _ args) = argsInputPerms args
 
-instance ExtendContext (TypedJumpTarget blocks) where
-  extendContext diff (TypedJumpTarget block args) =
-    TypedJumpTarget block $ extendContext diff args
+instance WeakenableWithCtx (TypedJumpTarget blocks) where
+  weakenWithCtx ctx w (TypedJumpTarget block args) =
+    TypedJumpTarget block $ weakenWithCtx ctx w args
 
 -- | Typed Crucible block termination statements
 data TypedTermStmt blocks (ret :: CrucibleType) (ctx :: Ctx CrucibleType) where
@@ -137,25 +145,25 @@ data TypedStmtSeq ext blocks (ret :: CrucibleType) ctx where
   -- ^ Typed version of 'TermStmt'
 
 
--- | Typed version of a Crucible block ID. Note that our blocks implicitly take
--- extra "ghost" arguments, that are needed to express the input and output
--- permissions.
+-- | A single, typed entrypoint to a Crucible block. Note that our blocks
+-- implicitly take extra "ghost" arguments, that are needed to express the input
+-- and output permissions.
 --
 -- FIXME: add a @ghostss@ type argument that associates a @ghosts@ type with
 -- each index of each block, rather than having @ghost@ existentially bound
 -- here.
-data TypedBlock ext blocks ret args where
-  TypedBlock :: TypedBlockID blocks ghosts args -> CtxRepr args ->
+data TypedEntry ext blocks ret args where
+  TypedEntry :: TypedEntryID blocks ghosts args -> CtxRepr args ->
                 TypedStmtSeq ext blocks ret (ghosts <+> args) ->
-                TypedBlock ext blocks ret args
+                TypedEntry ext blocks ret args
 
--- | A list of typed blocks, one for each entry point of a given 'BlockID'
-newtype TypedBlockList ext blocks ret args
-  = TypedBlockList [TypedBlock ext blocks ret args]
+-- | A typed Crucible block is a list of typed entrypoints to that block
+newtype TypedBlock ext blocks ret args
+  = TypedBlock [TypedEntry ext blocks ret args]
 
--- | A map assigning a 'TypedBlockList' to each 'BlockID'
+-- | A map assigning a 'TypedBlock' to each 'BlockID'
 type TypedBlockMap ext blocks ret =
-  Assignment (TypedBlockList ext blocks ret) blocks
+  Assignment (TypedBlock ext blocks ret) blocks
 
 -- | A typed Crucible CFG
 data TypedCFG
@@ -168,7 +176,7 @@ data TypedCFG
              , tpcfgInputPerms :: PermSet init
              , tpcfgOutputPerms :: PermSet (init ::> ret)
              , tpcfgBlockMap :: !(TypedBlockMap ext blocks ret)
-             , tpcfgEntryBlockID :: !(TypedBlockID blocks ghosts init)
+             , tpcfgEntryBlockID :: !(TypedEntryID blocks ghosts init)
              }
 
 
@@ -183,6 +191,20 @@ data PermCheckEnv ret ctx =
     envRetPerms :: PermSetSpec EmptyCtx (ctx ::> ret)
   }
 
+instance HasPerms (PermCheckEnv ret) where
+  hasPerms = envCurPerms
+
+weakenEnvSetPerms :: PermSet ctx' -> Weakening ctx ctx' ->
+                     PermCheckEnv ret ctx -> PermCheckEnv ret ctx'
+weakenEnvSetPerms perms w (PermCheckEnv { .. }) =
+  PermCheckEnv { envCurPerms = perms,
+                 envRetPerms = map (weaken (weakenWeakening1 w)) envRetPerms }
+
+instance WeakenableWithCtx (PermCheckEnv ret) where
+  weakenWithCtx ctx w env =
+    weakenEnvSetPerms (weakenWithCtx ctx w $ envCurPerms env) w env
+
+{-
 instance Weakenable (PermCheckEnv ret) where
   weaken w (PermCheckEnv { .. }) =
     PermCheckEnv { envCurPerms = weakenPermSet w envCurPerms,
@@ -190,22 +212,38 @@ instance Weakenable (PermCheckEnv ret) where
 
 instance ExtendContext (PermCheckEnv ret) where
   extendContext diff = weaken (weakeningOfDiff diff)
+-}
 
+extEnv1 :: TypeRepr tp -> PermCheckEnv ret ctx -> PermCheckEnv ret (ctx ::> tp)
+extEnv1 tp env =
+  weakenWithCtx (extend (hasCtx env) tp) mkWeakening1 env
+
+-- | Information about one entry point of a block
+data BlockEntryInfo blocks ret args where
+  BlockEntryInfo :: {
+    entryInfoID :: TypedEntryID blocks ghosts args,
+    entryInfoPermsIn :: PermSetSpec EmptyCtx (ghosts <+> args),
+    entryInfoPermsOut :: PermSetSpec EmptyCtx (ghosts <+> args ::> ret)
+  } -> BlockEntryInfo blocks ret args
+
+entryInfoBlockID :: BlockEntryInfo blocks ret args -> BlockID blocks args
+entryInfoBlockID (BlockEntryInfo entryID _ _) = entryBlockID entryID
+
+entryInfoIndex :: BlockEntryInfo blocks ret args -> Int
+entryInfoIndex (BlockEntryInfo entryID _ _) = entryIndex entryID
 
 -- | Information about the current state of type-checking for a block
-data BlockTypeInfo blocks ret args where
-  BlockTypeInfo :: {
-    blockInfoID :: TypedBlockID blocks ghosts args,
-    blockInfoArgs :: CtxRepr args,
+data BlockInfo blocks ret args =
+  BlockInfo
+  {
     blockInfoVisited :: Bool,
-    blockInfoPermsIn :: PermSetSpec EmptyCtx (ghosts <+> args),
-    blockInfoPermsOut :: PermSetSpec EmptyCtx (ghosts <+> args ::> ret)
-  } -> BlockTypeInfo blocks ret args
+    blockInfoEntries :: [BlockEntryInfo blocks ret args]
+  }
 
 data PermCheckState blocks ret =
   PermCheckState
   {
-    stTypedTargets :: Assignment (BlockTypeInfo blocks ret) blocks
+    stBlockInfo :: Assignment (BlockInfo blocks ret) blocks
   }
 
 -- | The monad for permission type-checking a function with inputs @init@ and
@@ -231,17 +269,39 @@ withPerms :: PermSet ctx -> PermCheckM blocks ret ctx a ->
 withPerms perms = local (\env -> env { envCurPerms = perms })
 
 -- | Run a computation in an extended context
-inExtCtxM :: Diff ctx ctx' -> PermCheckM blocks ret ctx' a ->
+inExtCtxM :: TypeRepr tp -> PermCheckM blocks ret (ctx ::> tp) a ->
              PermCheckM blocks ret ctx a
-inExtCtxM diff (PermCheckM m) =
-  PermCheckM $ ReaderT $ \env -> runReaderT m $ extendContext diff env
+inExtCtxM tp (PermCheckM m) =
+  PermCheckM $ ReaderT $ \env -> runReaderT m $ extEnv1 tp env
+
+-- | Type constructors from which we can extract a permission set
+class HasPerms f where
+  hasPerms :: f ctx -> PermSet ctx
+
+hasCtx :: HasPerms f => f ctx -> CtxRepr ctx
+hasCtx = permSetCtx . hasPerms
+
+instance HasPerms (ImplRet vars) where
+  hasPerms = implPermsRem
+
+instance HasPerms (TypedJumpTarget blocks) where
+  hasPerms = targetInputPerms
+
+instance HasPerms (ExprPerms ret) where
+  hasPerms (ExprPerms perms _) = perms
 
 -- | Map a function over a permission elimination
-mapElimM :: (forall ctx'. Diff ctx ctx' -> f ctx' ->
+mapElimM :: HasPerms f =>
+            (forall ctx'. Diff ctx ctx' -> f ctx' ->
              PermCheckM blocks ret ctx' (g ctx')) ->
             PermElim f ctx ->
             PermCheckM blocks ret ctx (PermElim g ctx)
-mapElimM f elim = traverseElim (\diff x -> inExtCtxM diff (f diff x)) elim
+mapElimM f elim =
+  PermCheckM $ ReaderT $ \env ->
+  traverseElim (\diff x ->
+                 runReaderT (unPermCheckM $ f diff x) $
+                 weakenEnvSetPerms (hasPerms x) (weakeningOfDiff diff) env)
+  elim
 
 getCurPerms :: PermCheckM blocks ret ctx (PermSet ctx)
 getCurPerms = envCurPerms <$> ask
@@ -249,10 +309,44 @@ getCurPerms = envCurPerms <$> ask
 getRetPerms :: PermCheckM blocks ret ctx (PermSetSpec EmptyCtx (ctx ::> ret))
 getRetPerms = envRetPerms <$> ask
 
+getBlockInfo :: BlockID blocks args ->
+                PermCheckM blocks ret ctx (BlockInfo blocks ret args)
+getBlockInfo blkID = (! blockIDIndex blkID) <$> stBlockInfo <$> get
+
+-- | Get the index for the next entrypoint for a block, returning 'Nothing' if
+-- this block has already been visited
+blockNextEntryIndex :: BlockID blocks args ->
+                       PermCheckM blocks ret ctx (Maybe Int)
+blockNextEntryIndex blkID =
+  getBlockInfo blkID >>= \info ->
+  if blockInfoVisited info then return Nothing else
+    return $ Just $ length $ blockInfoEntries info
+
+-- | Add a new entry point for a block, or raise an error if that block has
+-- already been visited
+addBlockEntry :: BlockEntryInfo blocks ret args ->
+                 PermCheckM blocks ret ctx ()
+addBlockEntry info =
+  modify $ \st ->
+  st { stBlockInfo =
+         Lens.over
+         (ixF $ blockIDIndex $ entryInfoBlockID info)
+         (\blkInfo ->
+           if blockInfoVisited blkInfo then
+             error "addBlockEntry: block already visited"
+           else
+             if entryInfoIndex info == length (blockInfoEntries blkInfo) then
+               blkInfo { blockInfoEntries =
+                           blockInfoEntries blkInfo ++ [info]}
+             else
+               error "addBlockEntry: incorrect index for newly-added entrypoint")
+         (stBlockInfo st)
+     }
+
 
 -- | "Type-check" a 'Reg' by converting it to a 'PermVar'
 tcReg :: Reg ctx a -> PermCheckM blocks ret ctx (PermVar ctx a)
-tcReg reg = PermVar <$> (size <$> getCurPerms) <*> return (regIndex reg)
+tcReg reg = PermVar <$> (permSetSize <$> getCurPerms) <*> return (regIndex reg)
 
 -- | The input and output permissions for an expression in the current branch of
 -- a permission elimination
@@ -286,16 +380,26 @@ typedElimStmt elim_stmts =
      return $ TypedElimStmt perms elim_stmts
 
 
--- FIXME HERE: type-check jump targets:
---
--- 1. If visited, try all N possible input perms
---
--- 2. If unvisited, need to infer some new input perms by starting with the
--- argument vars and recursively adding any vars in their perms
+-- FIXME: figure out how to "thin out" the input permissions to a jump target
 
+-- | Type-check a 'JumpTarget', which has two cases:
+--
+-- 1. The target has already been visited, so we build an elimination that tries
+-- all of the possible entry points.
+--
+-- 2. The target has not already been visited, so we add a new entry point with
+-- the current permissions.
 tcJumpTarget :: JumpTarget blocks ctx ->
                 PermCheckM blocks ret ctx (PermElim (TypedJumpTarget blocks) ctx)
-tcJumpTarget = error "FIXME: tcJumpTarget"
+tcJumpTarget (JumpTarget blkID args_ctx args) =
+  blockNextEntryIndex blkID >>= \maybe_ix ->
+  case maybe_ix of
+    Just ix ->
+      do let entry = error "FIXME HERE"
+         addBlockEntry entry
+         return $ Elim_Done $ error "FIXME HERE"
+    Nothing ->
+      error "FIXME HERE"
 
 -- | Type-check a sequence of statements. This includes type-checking for
 -- individual statements and termination statements, which are both easier to do
@@ -313,8 +417,8 @@ tcStmtSeq (ConsStmt l (SetReg tp expr) stmts') =
          TypedConsStmt l
          (TypedStmt perms_in perms_out
           (SetReg tp $ extendContext' diff expr)) <$>
-         (inExtCtxM oneDiff $ withPerms perms_out $
-          tcStmtSeq (weakenStmtSeq (incSize $ size perms)
+         (inExtCtxM tp $ withPerms perms_out $
+          tcStmtSeq (weakenStmtSeq (incSize $ permSetSize perms)
                      (weakenWeakening1 $ weakeningOfDiff diff) stmts')))
        perms_elim
      typedElimStmt typed_stmts_elim
@@ -335,7 +439,7 @@ tcStmtSeq (TermStmt l (Br reg tgt1 tgt2)) =
               (\diff2 typed_tgt2 ->
                 return $ TypedTermStmt l $
                 TypedBr (extendContext' (diff2 Cat.. diff1) x)
-                (extendContext diff2 typed_tgt1)
+                (extendWithCtx (hasCtx typed_tgt2) diff2 typed_tgt1)
                 typed_tgt2
                 )
               elim_tgt2)
@@ -346,7 +450,7 @@ tcStmtSeq (TermStmt l (Return reg)) =
   do perms <- getCurPerms
      retPerms <- getRetPerms
      x <- tcReg reg
-     let spec_s = mkSubst1 (size perms) (PExpr_Var x)
+     let spec_s = mkSubst1 (permSetSize perms) (PExpr_Var x)
          specs = map (substPermSpec spec_s) retPerms
          elim_intro = provePermImpl perms empty specs
      elim_stmts <-

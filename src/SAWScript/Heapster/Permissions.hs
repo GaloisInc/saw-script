@@ -404,6 +404,13 @@ class Weakenable (f :: Ctx k -> *) where
 class Weakenable' (f :: Ctx k -> k' -> *) where
   weaken' :: Weakening ctx1 ctx2 -> f ctx1 a -> f ctx2 a
 
+class WeakenableWithCtx f where
+  weakenWithCtx :: CtxRepr ctx2 -> Weakening ctx1 ctx2 -> f ctx1 -> f ctx2
+
+extendWithCtx :: WeakenableWithCtx f => CtxRepr ctx2 -> Diff ctx1 ctx2 ->
+                 f ctx1 -> f ctx2
+extendWithCtx ctx diff = weakenWithCtx ctx (weakeningOfDiff diff)
+
 instance Weakenable Size where
   weaken (Weakening diff12 sz3) sz =
     addSize (extSize (subtractSize sz Proxy sz3) diff12) sz3
@@ -733,17 +740,36 @@ instance ExtendContext' ValuePerm where
   extendContext' diff = weaken' (weakeningOfDiff diff)
 
 
--- FIXME: make PermSet a newtype so that extPermSet can be extendContext and
--- not be almost the same name as extendPermSet!
+-- | A permission set assigns value permissions to the variables in scope, and
+-- also knows the types of those variables
+data PermSet ctx =
+  PermSet { permSetCtx :: CtxRepr ctx,
+            permSetAsgn :: Assignment (ValuePerm ctx) ctx }
 
--- | A permission set assigns value permissions to the variables in scope
-type PermSet ctx = Assignment (ValuePerm ctx) ctx
+permSetSize :: PermSet ctx -> Size ctx
+permSetSize = size . permSetCtx
+
+getPermIx :: PermSet ctx -> Index ctx a -> ValuePerm ctx a
+getPermIx perms ix = permSetAsgn perms ! ix
+
+getPerm :: PermSet ctx -> PermVar ctx a -> ValuePerm ctx a
+getPerm perms x = getPermIx perms (indexOfPermVar x)
+
+setPerm :: PermVar ctx a -> ValuePerm ctx a -> PermSet ctx -> PermSet ctx
+setPerm x p (PermSet ctx asgn) = PermSet ctx $ pvSet x p asgn
+
+modifyPerm :: PermVar ctx a -> (ValuePerm ctx a -> ValuePerm ctx a) ->
+              PermSet ctx -> PermSet ctx
+modifyPerm x f (PermSet ctx asgn) = PermSet ctx $ pvModify x f asgn
 
 -- | Add a new variable with the given permission to a 'PermSet'
-extendPermSet :: PermSet ctx -> ValuePerm (ctx ::> a) a -> PermSet (ctx ::> a)
-extendPermSet perms p =
+extendPermSet :: PermSet ctx -> TypeRepr a -> ValuePerm (ctx ::> a) a ->
+                 PermSet (ctx ::> a)
+extendPermSet (PermSet ctx perms) tp p =
+  PermSet (extend ctx tp) $
   extend (fmapFC (weaken' mkWeakening1) perms) p
 
+{-
 -- | Extend a permission set with true permissions for the new variables
 extPermSet :: Diff ctx ctx' -> PermSet ctx -> PermSet ctx'
 extPermSet diff perms =
@@ -751,11 +777,13 @@ extPermSet diff perms =
     IsAppend sz_app ->
       fmapFC (extendContext' diff) perms <++>
       generate sz_app (\_ -> ValPerm_True)
+-}
 
--- | Weaken a permission set with true permissions for the new variables
-weakenPermSet :: Weakening ctx ctx' -> PermSet ctx -> PermSet ctx'
-weakenPermSet w perms =
-  weakenAssignment (\_ -> ValPerm_True) w $ fmapFC (weaken' w) perms
+instance WeakenableWithCtx PermSet where
+  weakenWithCtx ctx' w perms =
+    PermSet ctx' $
+    weakenAssignment (\_ -> ValPerm_True) w $ fmapFC (weaken' w) $
+    permSetAsgn perms
 
 -- | A permission on a single variable
 data VarPerm ctx where
@@ -766,8 +794,8 @@ instance Weakenable VarPerm where
 
 varPermsOfPermSet :: PermSet ctx -> [VarPerm ctx]
 varPermsOfPermSet perms =
-  toListFC (\(Const p) -> p) $ generate (size perms) $ \ix ->
-  Const $ VarPerm (PermVar (size perms) ix) (perms ! ix)
+  toListFC (\(Const p) -> p) $ generate (permSetSize perms) $ \ix ->
+  Const $ VarPerm (PermVar (permSetSize perms) ix) (getPermIx perms ix)
 
 
 ----------------------------------------------------------------------
@@ -789,24 +817,24 @@ elimOrRightValuePerm _                = error "elimOrRightValuePerm"
 -- | Lifts @elimOrLeftValuePerm@ to permissions sets (@PermSet@), targetting the
 -- permission at given index.
 elimOrLeft :: PermSet ctx -> PermVar ctx a -> PermSet ctx
-elimOrLeft perms x = pvModify x elimOrLeftValuePerm perms
+elimOrLeft perms x = modifyPerm x elimOrLeftValuePerm perms
 
 -- | Lifts @elimOrRightValuePerm@ to permission sets (@PermSet@), targetting the
 -- permission at given index.
 elimOrRight :: PermSet ctx -> PermVar ctx a -> PermSet ctx
-elimOrRight perms x = pvModify x elimOrRightValuePerm perms
+elimOrRight perms x = modifyPerm x elimOrRightValuePerm perms
 
 -- | Replace permission @x:(exists z:tp.p)@ in a permission set with @x:p@,
 -- lifting all other permissions into the extended context @ctx ::> tp@. It is
 -- an error if the permission set assigns a non-existential permission to @x@.
 elimExists :: PermSet ctx -> PermVar ctx a -> TypeRepr tp -> PermSet (ctx ::> tp)
 elimExists perms x tp =
-  case pvGet perms x of
+  case getPerm perms x of
     ValPerm_Exists tp' p ->
       case testEquality tp tp' of
         Just Refl ->
-          pvSet (extendContext' oneDiff x) p $
-          extendPermSet perms ValPerm_True
+          setPerm (extendContext' oneDiff x) p $
+          extendPermSet perms tp ValPerm_True
         Nothing -> error "elimExists"
     _ -> error "elimExists"
 
@@ -941,23 +969,20 @@ instance Weakenable f => Weakenable (PermElim f) where
 instance Weakenable f => ExtendContext (PermElim f) where
   extendContext diff = weaken (weakeningOfDiff diff)
 
--- | Helper type to make a 'PermSet' into a datatype
-newtype MkPermSet ctx = MkPermSet { unMkPermSet :: PermSet ctx }
-
 -- | Eliminate any disjunctions or existentials on a variable, returning the
 -- resulting permission set
 elimDisjuncts :: PermSet ctx -> PermVar ctx a ->
-                 PermElim MkPermSet ctx
-elimDisjuncts perms x = helper perms x (pvGet perms x) where
+                 PermElim PermSet ctx
+elimDisjuncts perms x = helper perms x (getPerm perms x) where
   helper :: PermSet ctx -> PermVar ctx a -> ValuePerm ctx a ->
-            PermElim MkPermSet ctx
+            PermElim PermSet ctx
   helper perms x (ValPerm_Or p1 p2) =
     Elim_Or x (helper (elimOrLeft perms x) x p1)
     (helper (elimOrRight perms x) x p2)
   helper perms x (ValPerm_Exists tp p) =
     Elim_Exists x tp $
-    helper (extendPermSet perms ValPerm_True) (weakenPermVar1 x) p
-  helper perms _ _ = Elim_Done $ MkPermSet perms
+    helper (extendPermSet perms tp ValPerm_True) (weakenPermVar1 x) p
+  helper perms _ _ = Elim_Done perms
 
 -- | Like 'traverse' but for 'PermElim's
 traverseElim :: Applicative m =>
@@ -1259,6 +1284,11 @@ data AnnotIntro ctx =
                introOutPerms :: PermSetSpec EmptyCtx ctx,
                introProof :: PermIntro ctx }
 
+instance WeakenableWithCtx AnnotIntro where
+  weakenWithCtx ctx w (AnnotIntro perms perms' pf) =
+    AnnotIntro (weakenWithCtx ctx w perms) (map (weaken w) perms') (weaken w pf)
+
+{-
 instance Weakenable AnnotIntro where
   weaken w (AnnotIntro perms_in perms_out intro) =
     AnnotIntro (weakenPermSet w perms_in)
@@ -1266,6 +1296,7 @@ instance Weakenable AnnotIntro where
 
 instance ExtendContext AnnotIntro where
   extendContext diff = weaken (Weakening diff zeroSize)
+-}
 
 
 ----------------------------------------------------------------------
@@ -1276,7 +1307,7 @@ instance ExtendContext AnnotIntro where
 matchSpecEVar :: PermSet ctx -> PartialSubst vars ctx ->
                  PermVar (ctx <+> vars) a -> Maybe (PermVar vars a)
 matchSpecEVar perms s x =
-  case caseVarAppend (size perms) (partialSubstSize s) x of
+  case caseVarAppend (permSetSize perms) (partialSubstSize s) x of
     Left _ -> Nothing
     Right z -> Just z
 
@@ -1284,7 +1315,7 @@ matchSpecEVar perms s x =
 -- existential variables
 matchSpecConst :: PermSet ctx -> PartialSubst vars ctx ->
                   PermExpr (ctx <+> vars) a -> Maybe (PermExpr ctx a)
-matchSpecConst perms s = lower' (size perms) (partialSubstSize s)
+matchSpecConst perms s = lower' (permSetSize perms) (partialSubstSize s)
 
 -- | Return type for 'proveEq'
 data EqRet vars a ctx =
@@ -1328,23 +1359,23 @@ proveEqH perms _vars s e1 (matchSpecConst perms s -> Just e2)
 
 -- Prove x=e2 when x:eq(e1) is in the context by proving e1=e2
 proveEqH perms vars s (PExpr_Var x) e2
-  | ValPerm_Eq e1 <- pvGet perms x
+  | ValPerm_Eq e1 <- getPerm perms x
   = applyEqProof (\diff -> EqProof_CastEq (extendContext' diff x)
                            (extendContext' diff e1)) $
     proveEq perms vars s e1 e2
 
 -- Prove x=e2 when x:(p1 \/ p2) is in perms by eliminating the disjunct
 proveEqH perms vars s (PExpr_Var x) e2
-  | ValPerm_Or _ _ <- pvGet perms x
-  = elimDisjuncts perms x >>>= \diff (MkPermSet perms') ->
+  | ValPerm_Or _ _ <- getPerm perms x
+  = elimDisjuncts perms x >>>= \diff perms' ->
     proveEqH perms' vars (extendContext diff s)
     (PExpr_Var $ extendContext' diff x)
     (weaken' (Weakening diff (size vars)) e2)
 
 -- Prove x=e2 when x:exists z.p is in perms by eliminating the existential
 proveEqH perms vars s (PExpr_Var x) e2
-  | ValPerm_Exists _ _ <- pvGet perms x
-  = elimDisjuncts perms x >>>= \diff (MkPermSet perms') ->
+  | ValPerm_Exists _ _ <- getPerm perms x
+  = elimDisjuncts perms x >>>= \diff perms' ->
     proveEqH perms' vars (extendContext diff s)
     (PExpr_Var $ extendContext' diff x)
     (weaken' (Weakening diff (size vars)) e2)
@@ -1395,7 +1426,7 @@ provePermImplH :: PermSet ctx -> CtxRepr vars -> PartialSubst vars ctx ->
                   PermElim (ImplHRet vars) ctx
 
 provePermImplH perms vars s [] =
-  Elim_Done $ ImplHRet perms (completePartialSubst (size perms) vars s) $
+  Elim_Done $ ImplHRet perms (completePartialSubst (permSetSize perms) vars s) $
   Intro_Id $ varPermsOfPermSet perms
 
 provePermImplH perms vars s (PermSpec _ e ValPerm_True : specs) =
@@ -1413,9 +1444,9 @@ provePermImplH perms vars s (PermSpec _ e1 (ValPerm_Eq e2) : specs) =
 provePermImplH perms vars s (PermSpec sz_vars e (ValPerm_Or p1 p2) : specs) =
   -- To prove e:(p1 \/ p2) we try both branches with an Elim_Catch
   Elim_Catch
-  (applyIntroWithSubst (size perms) (\diff s' -> Intro_OrL (subst' s' p2)) $
+  (applyIntroWithSubst (permSetSize perms) (\diff s' -> Intro_OrL (subst' s' p2)) $
    provePermImplH perms vars s (PermSpec sz_vars e p1 : specs))
-  (applyIntroWithSubst (size perms) (\diff s' -> Intro_OrR (subst' s' p1)) $
+  (applyIntroWithSubst (permSetSize perms) (\diff s' -> Intro_OrR (subst' s' p1)) $
    provePermImplH perms vars s (PermSpec sz_vars e p2 : specs))
 
 provePermImplH perms vars s (PermSpec sz_vars e (ValPerm_Exists tp p) : specs) =
@@ -1425,7 +1456,7 @@ provePermImplH perms vars s (PermSpec sz_vars e (ValPerm_Exists tp p) : specs) =
   (\diff (ImplHRet perms' s' intro) ->
     let (s'', z_val) = unconsPermSubst s' in
     let s_p =
-          combineSubsts (substOfDiff (size perms) (extendRight diff))
+          combineSubsts (substOfDiff (permSetSize perms) (extendRight diff))
           (weakenSubst1 s'') in
     let p' = subst' s_p p in
     ImplHRet perms' s'' (Intro_Exists tp z_val p' intro)) $
@@ -1434,7 +1465,7 @@ provePermImplH perms vars s (PermSpec sz_vars e (ValPerm_Exists tp p) : specs) =
 
 -- case for Pin, x:(p1 \/ p2) |- x:(either eq or LLVMPtr), specs
 provePermImplH perms vars s specs@(PermSpec _ (PExpr_Var x) _ : _)
-  | ValPerm_Or _ _ <- pvGet perms x
+  | ValPerm_Or _ _ <- getPerm perms x
   = Elim_Or x
     (provePermImplH (elimOrLeft perms x) vars s specs)
     (provePermImplH (elimOrRight perms x) vars s specs)
@@ -1443,7 +1474,7 @@ provePermImplH perms vars s specs@(PermSpec _ (PExpr_Var x) _ : _)
 -- ---------------------------------------------------------
 -- Pin, x:(exists x:tp.p) |- x:(either eq or LLVMPtr), specs
 provePermImplH perms vars s specs@(PermSpec _ (PExpr_Var x) _ : _)
-  | ValPerm_Exists tp _ <- pvGet perms x
+  | ValPerm_Exists tp _ <- getPerm perms x
   = Elim_Exists x tp $
     provePermImplH (elimExists perms x tp) vars
     (extendContext oneDiff s)
@@ -1468,7 +1499,7 @@ provePermImplH perms vars s (PermSpec sz_vars
 provePermImplH perms vars s (PermSpec _
                              (PExpr_Var x) (ValPerm_LLVMPtr w [] free)
                              : specs)
-  | ValPerm_LLVMPtr _ _ free_l <- pvGet perms x
+  | ValPerm_LLVMPtr _ _ free_l <- getPerm perms x
   = (case (free_l, free) of
         (_, Nothing) -> id
         (Just freelen_l, Just freelen) ->
@@ -1496,13 +1527,13 @@ provePermImplH perms vars s (PermSpec sz_vars
                                (LLVMFieldPerm off SplExpr_All p) : shapes)
                               free)
                              : specs)
-  | ValPerm_LLVMPtr _ shapes_l free_l <- pvGet perms x
+  | ValPerm_LLVMPtr _ shapes_l free_l <- getPerm perms x
   , Just (SplExpr_All, ValPerm_Eq e, shapes_l') <- remLLVMFieldAt off shapes_l
-  = applyIntroWithSubst (size perms) (\diff s' ->
-                                       Intro_LLVMField off SplExpr_All $
-                                       subst' s' p) $
+  = applyIntroWithSubst (permSetSize perms) (\diff s' ->
+                                              Intro_LLVMField off SplExpr_All $
+                                              subst' s' p) $
     provePermImplH
-    (pvSet x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
+    (setPerm x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
     vars s
     (PermSpec sz_vars e p :
      PermSpec sz_vars (PExpr_Var x) (ValPerm_LLVMPtr w shapes free) : specs)
@@ -1521,14 +1552,15 @@ provePermImplH perms vars s (PermSpec sz_vars
                                  (matchSpecEVar perms s -> Just z)) p) : shapes)
                               free)
                              : specs)
-  | ValPerm_LLVMPtr _ shapes_l free_l <- pvGet perms x
+  | ValPerm_LLVMPtr _ shapes_l free_l <- getPerm perms x
   , Just (spl, ValPerm_Eq e, shapes_l') <- splitLLVMFieldAt off shapes_l
-  = applyIntroWithSubst (size perms) (\diff s' ->
-                                       Intro_LLVMField off
-                                       (extendContext diff spl) (subst' s' p)) $
+  = applyIntroWithSubst (permSetSize perms) (\diff s' ->
+                                              Intro_LLVMField off
+                                              (extendContext diff spl)
+                                              (subst' s' p)) $
     Elim_SplitField x off spl $
     provePermImplH
-    (pvSet x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
+    (setPerm x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
     vars
     (partialSubstSet s z (PExpr_Spl spl))
     (PermSpec sz_vars e p :
@@ -1544,11 +1576,12 @@ provePermImplH perms vars s specs@(PermSpec _
                                    (ValPerm_LLVMPtr w
                                     (LLVMFieldShapePerm
                                      (LLVMFieldPerm off _ _) : _) _) : _)
-  | ValPerm_LLVMPtr _ shapes_l free_l <- pvGet perms x
+  | ValPerm_LLVMPtr _ shapes_l free_l <- getPerm perms x
   , Just (spl, p, shapes_l') <- remLLVMFieldAt off shapes_l
   = Elim_BindField x off spl $
     provePermImplH
-    (extendPermSet (pvSet x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
+    (extendPermSet (setPerm x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
+     (LLVMPointerRepr w)
      (weaken' mkWeakening1 p))
     vars
     (extendContext oneDiff s)
@@ -1578,7 +1611,7 @@ provePermImpl :: PermSet ctx -> CtxRepr vars -> PermSetSpec vars ctx ->
 provePermImpl perms vars specs =
   cmap (\diff (ImplHRet permsRem s intro) ->
          ImplRet permsRem s $
-         AnnotIntro (extPermSet diff perms)
+         AnnotIntro (extendWithCtx (permSetCtx permsRem) diff perms)
          (map (instPermSpecVars s . extendContext diff) specs)
          intro) $
   provePermImplH perms vars (emptyPartialSubst vars) specs
