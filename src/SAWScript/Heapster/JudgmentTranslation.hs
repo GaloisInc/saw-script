@@ -10,7 +10,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module SAWScript.Heapster.Translation (
+module SAWScript.Heapster.JudgmentTranslation (
   -- testJudgmentTranslation,
   ) where
 
