@@ -361,6 +361,13 @@ mkWeakening1 = weakeningOfDiff oneDiff
 weakenWeakening1 :: Weakening ctx1 ctx2 -> Weakening (ctx1 ::> tp) (ctx2 ::> tp)
 weakenWeakening1 (Weakening diff sz) = Weakening diff $ incSize sz
 
+-- FIXME: there should be a way to do this without traversing all of ctx'
+weakenWeakening :: Size ctx' -> Weakening ctx1 ctx2 ->
+                   Weakening (ctx1 <+> ctx') (ctx2 <+> ctx')
+weakenWeakening (viewSize -> ZeroSize) w = w
+weakenWeakening (viewSize -> IncSize sz) w =
+  weakenWeakening1 (weakenWeakening sz w)
+
 genSubstOfWeakening :: Weakening ctx1 ctx2 -> GenSubst ctx1 ctx2
 genSubstOfWeakening w =
   GenSubst (PExpr_Var . weaken' w) (genSubstOfWeakening $ weakenWeakening1 w)
@@ -891,7 +898,7 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
   -- pf = Gin | Pin, x:ptr(off |-> (Spl_L S, eq(e))
   --                       * off |-> (Spl_R S, eq(e)) * shapes) |- rets
   -- ---------------------------------------------------------------------------
-  -- Gin | Pin, x:ptr (off |-> (S, p))
+  -- Gin | Pin, x:ptr (off |-> (S, eq(e))) |- rets
 
   Elim_Catch :: PermElim f ctx -> PermElim f ctx -> PermElim f ctx
   -- ^ Copy the same permissions into two different elimination trees, where an
@@ -1045,6 +1052,10 @@ data PermSpec vars ctx where
   PermSpec :: Size vars -> PermExpr ctx a -> ValuePerm (ctx <+> vars) a ->
               PermSpec vars ctx
 
+instance Weakenable (PermSpec vars) where
+  weaken w (PermSpec sz_vars (e :: PermExpr ctx a) p) =
+    PermSpec sz_vars (weaken' w e) (weaken' (weakenWeakening sz_vars w) p)
+
 instance ExtendContext (PermSpec vars) where
   extendContext diff (PermSpec sz_vars (e :: PermExpr ctx a) p) =
     PermSpec sz_vars (extendContext' diff e) (weaken' (Weakening diff sz_vars) p)
@@ -1056,6 +1067,13 @@ extPermSpecVars (PermSpec sz_vars e p) =
 substPermSpec :: PermSubst args ctx -> PermSpec vars args -> PermSpec vars ctx
 substPermSpec s (PermSpec sz_vars e p) =
   PermSpec sz_vars (subst' s e) (subst' (weakenSubst sz_vars s) p)
+
+-- | Instantiate the existential variables in a 'PermSpec'
+instPermSpecVars :: PermSubst vars ctx -> PermSpec vars ctx ->
+                    PermSpec EmptyCtx ctx
+instPermSpecVars s@(PermSubst sz_ctx _) (PermSpec _ e p) =
+  PermSpec zeroSize e $
+  subst' (combineSubsts (idSubst sz_ctx) s) p
 
 -- | A specification of a set expression permissions
 type PermSetSpec vars ctx = [PermSpec vars ctx]
@@ -1234,6 +1252,21 @@ instance Weakenable PermIntro where
 instance ExtendContext PermIntro where
   extendContext diff = weaken (Weakening diff zeroSize)
 
+-- | An introduction rule annotated with the input permission set and output
+-- permission specs
+data AnnotIntro ctx =
+  AnnotIntro { introInPerms :: PermSet ctx,
+               introOutPerms :: PermSetSpec EmptyCtx ctx,
+               introProof :: PermIntro ctx }
+
+instance Weakenable AnnotIntro where
+  weaken w (AnnotIntro perms_in perms_out intro) =
+    AnnotIntro (weakenPermSet w perms_in)
+    (map (weaken w) perms_out) (weaken w intro)
+
+instance ExtendContext AnnotIntro where
+  extendContext diff = weaken (Weakening diff zeroSize)
+
 
 ----------------------------------------------------------------------
 -- * Proving Equality of Permission Expressions
@@ -1328,43 +1361,42 @@ proveEqH _perms _vars _s _e1 _e2 =
 -- FIXME: double-check that we have applied our PartialSubst everywhere we need
 -- to before pattern-matching in provePermImplH
 
--- | Return value for 'provePermImpl' and friends
-data ImplRet vars ctx =
-  ImplRet (Size vars) (PermSet ctx) (PermIntro ctx) (PermSubst vars ctx)
-
+-- | Helper type for building an 'ImplRet', but without annotations on the
+-- returned introduction proof; used by 'provePermImplH'
+data ImplHRet vars ctx =
+  ImplHRet (PermSet ctx) (PermSubst vars ctx) (PermIntro ctx)
 
 -- | Apply an introduction rule to an 'ImplRet'
 applyIntro :: (DiffFun PermIntro PermIntro ctx) ->
-              PermElim (ImplRet vars) ctx ->
-              PermElim (ImplRet vars) ctx
+              PermElim (ImplHRet vars) ctx ->
+              PermElim (ImplHRet vars) ctx
 applyIntro f =
-  cmap (\diff (ImplRet vars perms intro s) ->
-         ImplRet vars perms (f diff intro) s)
+  cmap (\diff (ImplHRet perms s intro) ->
+         ImplHRet perms s (f diff intro))
 
--- | Apply an introduction rule to an 'ImplRet', also passing a helpful
+-- | Apply an introduction rule to an 'ImplHRet', also passing a helpful
 -- substitution for expressions in the original 'PermSpec'
 applyIntroWithSubst :: Size ctx ->
                        (forall ctx'. Diff ctx ctx' ->
                         PermSubst (ctx <+> vars) ctx' ->
                         PermIntro ctx' -> PermIntro ctx') ->
-                       PermElim (ImplRet vars) ctx ->
-                       PermElim (ImplRet vars) ctx
+                       PermElim (ImplHRet vars) ctx ->
+                       PermElim (ImplHRet vars) ctx
 applyIntroWithSubst sz_ctx f =
-  cmap (\diff (ImplRet sz_vars perms intro s) ->
+  cmap (\diff (ImplHRet permsRem s intro) ->
          let s' = combineSubsts (substOfDiff sz_ctx diff) s in
-         ImplRet sz_vars perms (f diff s' intro) s)
+         ImplHRet permsRem s (f diff s' intro))
 
 -- | FIXME: documentation
 --
 -- Invariant: the returned 'PartialSubst' has already been applied to the spec
 provePermImplH :: PermSet ctx -> CtxRepr vars -> PartialSubst vars ctx ->
                   PermSetSpec vars ctx ->
-                  PermElim (ImplRet vars) ctx
+                  PermElim (ImplHRet vars) ctx
 
 provePermImplH perms vars s [] =
-  Elim_Done $ ImplRet (partialSubstSize s) perms
-  (Intro_Id $ varPermsOfPermSet perms) $
-  completePartialSubst (size perms) vars s
+  Elim_Done $ ImplHRet perms (completePartialSubst (size perms) vars s) $
+  Intro_Id $ varPermsOfPermSet perms
 
 provePermImplH perms vars s (PermSpec _ e ValPerm_True : specs) =
   -- Prove e:true for any e
@@ -1390,13 +1422,13 @@ provePermImplH perms vars s (PermSpec sz_vars e (ValPerm_Exists tp p) : specs) =
   -- To prove e:(exists z:tp.p) we prove p in vars::>tp and then get the
   -- substitution for z
   cmap
-  (\diff (ImplRet sz_vars' perms' intro s') ->
+  (\diff (ImplHRet perms' s' intro) ->
     let (s'', z_val) = unconsPermSubst s' in
     let s_p =
           combineSubsts (substOfDiff (size perms) (extendRight diff))
           (weakenSubst1 s'') in
     let p' = subst' s_p p in
-    ImplRet sz_vars perms' (Intro_Exists tp z_val p' intro) s'') $
+    ImplHRet perms' s'' (Intro_Exists tp z_val p' intro)) $
   provePermImplH perms (extend vars tp) (consPartialSubst s)
   (PermSpec (incSize sz_vars) e p : map extPermSpecVars specs)
 
@@ -1526,8 +1558,27 @@ provePermImplH _perms _vars _s _specs =
   Elim_Fail
 
 
+-- | Return value for 'provePermImpl'
+data ImplRet vars ctx =
+  ImplRet { implPermsRem :: PermSet ctx,
+            -- ^ The permissions that remain after proving the implication;
+            -- i.e., if we asked for a proof of @Pin |- Pout@ we actually got a
+            -- proof of @Pin |- Pout * Prem@
+
+            implSubst :: PermSubst vars ctx,
+            -- ^ The values of the existential variables that were in @Pout@
+
+            implIntro :: AnnotIntro ctx
+            -- ^ The introduction proof itself
+          }
+
 -- | FIXME: documentation!
 provePermImpl :: PermSet ctx -> CtxRepr vars -> PermSetSpec vars ctx ->
                  PermElim (ImplRet vars) ctx
 provePermImpl perms vars specs =
+  cmap (\diff (ImplHRet permsRem s intro) ->
+         ImplRet permsRem s $
+         AnnotIntro (extPermSet diff perms)
+         (map (instPermSpecVars s . extendContext diff) specs)
+         intro) $
   provePermImplH perms vars (emptyPartialSubst vars) specs
