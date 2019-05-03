@@ -11,164 +11,29 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module SAWScript.Heapster.Translation (
-  testJudgmentTranslation,
-  testTypeTranslation,
+  -- testJudgmentTranslation,
   ) where
 
-import qualified Control.Lens                   as Lens
+import qualified Control.Lens                     as Lens
 import           Data.Functor.Const
 import           Data.List
 import           Data.Maybe
 
-import           Data.Parameterized.Classes
+
 import           Data.Parameterized.Context
+import           Lang.Crucible.LLVM.MemModel
 import           Lang.Crucible.Types
 import           SAWScript.Heapster.Permissions
-import           SAWScript.Heapster.TypedCrucible
-import           SAWScript.TopLevel
+import           SAWScript.Heapster.TypeTranslation
 import           Verifier.SAW.OpenTerm
-import           Verifier.SAW.Term.Functor
 
--- | In this file, we are defining two levels of translation:
---
--- 1. The @TypeTranslate@ family of classes captures those translations from
--- permission types to SAW types.
---
--- 2. The @JudgmentTranslate@ family of classes captures those translations from
+-- | The @JudgmentTranslate@ family of classes captures translations from
 -- permission judgments to SAW functions.
 --
--- Overloading the [[ x ]] notation to mean either of those translations, we
--- will usually have, for a given permission judgment J, [[ J ]] be a SAW
+-- Overloading the [[ x ]] notation to mean either type or judgment translation,
+-- we will usually have, for a given permission judgment J, [[ J ]] be a SAW
 -- function of type [[ ∏in ]] -> CompM [[ ∏out ]], where ∏in and ∏out are the
 -- respective input and output permission sets for judgment J.
-
--- | Translate an 'Integer' to a SAW bitvector literal
-translateBVLit :: NatRepr w -> Integer -> OpenTerm
-translateBVLit w i =
-  applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
-  [typeTranslate'' w, natOpenTerm i]
-
--- | Build an 'OpenTerm' for the sum of SAW bitvectors
-translateBVSum :: NatRepr w -> [OpenTerm] -> OpenTerm
-translateBVSum w [] = translateBVLit w 0
-translateBVSum _ [t] = t
-translateBVSum w (t:ts) =
-  applyOpenTermMulti (globalOpenTerm "Prelude.bvAdd")
-  [typeTranslate'' w, t, translateBVSum w ts]
-
-class TypeTranslate (f :: Ctx k -> k' -> *) where
-  typeTranslate :: Assignment (Const OpenTerm) ctx -> f ctx a -> OpenTerm
-
--- class TypeTranslate' (f :: Ctx k -> *) where
---   typeTranslate' :: Assignment (Const OpenTerm) ctx -> f ctx -> OpenTerm
-
-class TypeTranslate'' (d :: *) where
-  typeTranslate'' :: d -> OpenTerm
-
-instance TypeTranslate'' (NatRepr w) where
-  typeTranslate'' w = natOpenTerm $ intValue w
-
-instance TypeTranslate'' (TypeRepr a) where
-  typeTranslate'' = \case
-    AnyRepr                -> error "TODO"
-    UnitRepr               -> dataTypeOpenTerm "Prelude.UnitType" []
-    BoolRepr               -> dataTypeOpenTerm "Prelude.Bool" []
-    NatRepr                -> dataTypeOpenTerm "Prelude.Nat" []
-    IntegerRepr            -> error "TODO"
-    RealValRepr            -> error "TODO"
-    ComplexRealRepr        -> error "TODO"
-    BVRepr _               -> error "TODO"
-    IntrinsicRepr _ _      -> error "TODO"
-    RecursiveRepr _ _      -> error "TODO"
-    FloatRepr _            -> error "TODO"
-    IEEEFloatRepr _        -> error "TODO"
-    CharRepr               -> error "TODO"
-    StringRepr             -> error "TODO"
-    FunctionHandleRepr _ _ -> error "TODO"
-    MaybeRepr _            -> error "TODO"
-    VectorRepr _           -> error "TODO"
-    StructRepr _           -> error "TODO"
-    VariantRepr _          -> error "TODO"
-    ReferenceRepr _        -> error "TODO"
-    WordMapRepr _ _        -> error "TODO"
-    StringMapRepr _        -> error "TODO"
-    SymbolicArrayRepr _ _  -> error "TODO"
-    SymbolicStructRepr _   -> error "TODO"
-
-instance TypeTranslate PermVar where
-  typeTranslate ctx x = getConst $ pvGet ctx x
-
-instance TypeTranslate BVFactor where
-  typeTranslate ctx (BVFactor w i x) =
-    applyOpenTermMulti (globalOpenTerm "Prelude.bvMul")
-    [typeTranslate'' w, translateBVLit w i, typeTranslate ctx x]
-
-instance TypeTranslate PermExpr where
-  typeTranslate ctx = \case
-    PExpr_Var i                  -> getConst $ ctx `pvGet` i
-    PExpr_BV w factors constant     ->
-      translateBVSum w (translateBVLit w constant :
-                        map (typeTranslate ctx) factors)
-    PExpr_LLVMWord _ _ -> unitOpenTerm
-    PExpr_LLVMOffset _ _ _ -> unitOpenTerm
-    PExpr_Spl _ -> error "TODO"
-    PExpr_Struct _ _ -> error "TODO"
-
-instance TypeTranslate ValuePerm where
-  typeTranslate ctx = \case
-
-    ValPerm_True           -> flatOpenTerm UnitType
-
-    ValPerm_Eq _           -> flatOpenTerm UnitType
-
-    ValPerm_Or p1 p2       ->
-      let t1 = typeTranslate ctx p1 in
-      let t2 = typeTranslate ctx p2 in
-      dataTypeOpenTerm "Prelude.Either" [t1, t2]
-
-    ValPerm_Exists t p     ->
-      dataTypeOpenTerm
-      "Prelude.Sigma"
-      [ lambdaOpenTerm "x" (typeTranslate'' t) (\ x -> typeTranslate (extend ctx (Const x)) p)
-      ]
-
-    ValPerm_Mu _           -> error "TODO"
-
-    ValPerm_Var _index     -> error "TODO"
-
-    ValPerm_Nat_Neq0       -> error "TODO"
-
-    ValPerm_LLVMPtr _ ps _ ->
-      tupleTypeOpenTerm (typeTranslate ctx <$> ps)
-
-instance TypeTranslate LLVMShapePerm where
-  typeTranslate ctx = \case
-
-    LLVMFieldShapePerm (LLVMFieldPerm {..}) -> typeTranslate ctx llvmFieldPerm
-
-    LLVMArrayShapePerm (LLVMArrayPerm {..}) ->
-      let len = error "TODO" in -- typeTranslate ctx llvmArrayLen in -- FIXME: this does not make sense
-      let types = typeTranslate ctx llvmArrayPtrPerm in
-      dataTypeOpenTerm "Prelude.Vec" [types, len]
-
-tests :: [(ValuePerm ctx a, OpenTerm)]
-tests =
-
-  [ ( ValPerm_True
-    , flatOpenTerm UnitType
-    )
-
-  ]
-
-testTypeTranslation :: Integer -> TopLevel ()
-testTypeTranslation i =
-  do sc <- getSharedContext
-     let (p, t) = (tests !! fromInteger i)
-     expected <- io $ completeOpenTerm sc $ t
-     obtained <- io $ completeOpenTerm sc $ typeTranslate empty p
-     if expected == obtained
-       then io $ putStrLn "Success!"
-       else io $ putStrLn $ "Error in testPermTranslation for test case " ++ show i
 
 {-
 primitive CompM : sort 0 -> sort 0;
@@ -217,15 +82,6 @@ class JudgmentTranslate' (f :: Ctx CrucibleType -> *) where
     -- the expected permission set coming "into" this judgment (left of
     -- turnstile), and `Πout` the permission set coming "out"
 
-atIndex :: PermVar ctx a -> (f a -> f a) -> Assignment f ctx -> Assignment f ctx
-atIndex x = Lens.over (pvLens x)
-
-nthOpenTerm :: Int -> OpenTerm -> OpenTerm
-nthOpenTerm n t = goLeft $ (iterate goRight t) !! n
-  where
-    goLeft  = applyOpenTerm (globalOpenTerm "Prelude.Pair_fst")
-    goRight = applyOpenTerm (globalOpenTerm "Prelude.Pair_snd")
-
 instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
 
   judgmentTranslate' jctx outputType = \case
@@ -255,7 +111,7 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
             outputType e2
       in
       let var            = pvGet (permissionMap jctx) index in
-      let perm           = pvGet (permissionSet jctx) index in
+      let perm           = pvGet (permSetAsgn $ permissionSet jctx) index in
       let (permL, permR) = case perm of
             ValPerm_Or p1 p2 -> (p1, p2)
             _                -> error "judgmentTranslate': `Elim_Or` expects `ValPerm_Or`"
@@ -275,7 +131,7 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
 
     Elim_Exists index typ e ->
       let tFst = typeTranslate'' typ in
-      let tSnd = case pvGet (permissionSet jctx) index of
+      let tSnd = case pvGet (permSetAsgn $ permissionSet jctx) index of
             ValPerm_Exists _ pSnd ->
               -- I believe we can reuse @tFst@ here, rather than using the
               -- TypeRepr in @ValPerm_Exists@.
@@ -323,22 +179,11 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
 
       ]
 
-      -- let var   = pvGet pmap index in
-      -- let perm  = pvGet pctx index in
-      -- case pvGet pctx index of
-      -- ValPerm_Exists typ' p ->
-      --   case testEquality typ typ' of
-      --   Just Refl ->
-      --     let ctx'  = extend ctx _ in
-      --     let pctx' = pvSet (extendContext' oneDiff _) _ $ extendPermSet pctx _ in
-      --     let pmap' = extend pmap _ in
-      --     judgmentTranslate' _ _ _ outputType e -- ctx' pctx' pmap' outputType e
-      --   Nothing -> error "TODO"
-
-    Elim_Assert bv e -> error "TODO"
+    Elim_Assert bv e ->
+      error "TODO"
 
     Elim_BindField index offset _ e ->
-      let perm     = pvGet (permissionSet jctx) index in
+      let perm     = pvGet (permSetAsgn $ permissionSet jctx) index in
       let permType = typeTranslate (typingContext jctx) perm in
       case perm of
       ValPerm_LLVMPtr w fields mp ->
@@ -347,7 +192,7 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
               (error "judgmentTranslate': no permission found with the given offset")
               (remLLVMFieldAt offset fields)
         in
-        let newPermVar = nextPermVar (size $ permissionSet jctx) in
+        let newPermVar = nextPermVar (permSetSize $ permissionSet jctx) in
         let newShapePerm = LLVMFieldShapePerm $ LLVMFieldPerm
               { llvmFieldOffset    = offset
               , llvmFieldSplitting = extendContext oneDiff fieldSplitting
@@ -363,11 +208,14 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
         let t fieldVar =
               judgmentTranslate'
               (JudgmentContext { typingContext = extend (typingContext jctx) (Const permType)
+                               -- * update at `index` with `perm'`
+                               -- * extend with `fieldPerm`
                                , permissionSet =
-                                 pvSet
-                                 (weakenPermVar1 index)
-                                 perm'
-                                 (extendPermSet (permissionSet jctx) (extendContext' oneDiff fieldPerm))
+                                 setPerm (weakenPermVar1 index) perm' $
+                                 extendPermSet
+                                 (permissionSet jctx)
+                                 (LLVMPointerRepr w)
+                                 (extendContext' oneDiff fieldPerm)
                                , permissionMap = extend (permissionMap jctx) (Const fieldVar)
                                , catchHandler  = catchHandler jctx
                                })
@@ -384,13 +232,64 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
         (nthOpenTerm fieldIndex (getConst var))
       _ -> error "judgmentTranslate': `Elim_BindField` expects `ValPerm_LLVMPtr`"
 
-    Elim_SplitField index offset _ e -> error "TODO"
+    Elim_SplitField index offset _ e ->
+      error "TODO"
 
     Elim_Catch e1 e2 ->
       let t2 = judgmentTranslate' jctx outputType e2 in
       judgmentTranslate' (jctx { catchHandler = Just t2 }) outputType e1
 
     Elim_Unroll _p _e -> error "TODO"
+
+instance JudgmentTranslate' AnnotIntro where
+
+  judgmentTranslate' jctx outputType (AnnotIntro {..}) = case introProof of
+
+    Intro_Id indices -> error "TODO"
+
+    Intro_Exists tp e' p pf -> error "TODO"
+
+    Intro_OrL p2 pf ->
+      let typLeft  = error "TODO" in
+      let typRight = error "TODO" in
+      applyOpenTermMulti (globalOpenTerm "Prelude.bindM")
+      -- a : sort 0
+      [ typLeft
+      -- b : sort 0
+      , typRight
+      -- x : CompM a
+      , judgmentTranslate' jctx outputType
+        (AnnotIntro { introInPerms  = error "TODO"
+                    , introOutPerms = error "TODO"
+                    , introProof    = pf
+                    }
+        )
+      -- y : a -> CompM b
+      , lambdaOpenTerm "l" typLeft (\ l -> ctorOpenTerm "Prelude.Left" [ typLeft, typRight, l ])
+      ]
+
+    Intro_OrR p1 pf -> error "TODO"
+
+    Intro_True e pf -> error "TODO"
+
+    Intro_CastEq x e' pf -> error "TODO"
+
+    Intro_Eq eq_pf pf -> error "TODO"
+
+    Intro_LLVMPtr x pf -> error "TODO"
+
+    Intro_LLVMPtr_Offset w off pf -> error "TODO"
+
+    Intro_LLVMField off s p pf -> error "TODO"
+
+atIndex :: PermVar ctx a -> (f a -> f a) -> Assignment f ctx -> Assignment f ctx
+atIndex x = Lens.over (pvLens x)
+
+nthOpenTerm :: Int -> OpenTerm -> OpenTerm
+nthOpenTerm n t = goLeft $ (iterate goRight t) !! n
+  where
+    goLeft  = applyOpenTerm (globalOpenTerm "Prelude.Pair_fst")
+    goRight = applyOpenTerm (globalOpenTerm "Prelude.Pair_snd")
 
 permElim0 :: PermElim (Const OpenTerm) ('EmptyCtx '::> a)
 permElim0 =
@@ -402,18 +301,22 @@ instance JudgmentTranslate' (Const OpenTerm) where
   judgmentTranslate' _ _ t = getConst t
 
 -- TODO: fix those tests
-testJudgmentTranslation :: TopLevel ()
-testJudgmentTranslation = do
-  sc <- getSharedContext
-  io $ do
-    t <- completeOpenTerm sc $
-      judgmentTranslate'
-      (JudgmentContext { typingContext = extend empty (Const (globalOpenTerm "Prelude.Either"))
-                       , permissionSet = extend empty (ValPerm_Or ValPerm_True ValPerm_True)
-                       , permissionMap = extend empty (Const (globalOpenTerm "Prelude.Vec"))
-                       , catchHandler  = Nothing
-                       }
-      )
-      (globalOpenTerm "Prelude.Bool")
-      permElim0
-    putStrLn $ show t
+-- testJudgmentTranslation :: TopLevel ()
+-- testJudgmentTranslation = do
+--   sc <- getSharedContext
+--   io $ do
+--     t <- completeOpenTerm sc $
+--       judgmentTranslate'
+--       -- FIXME: this Either not applied does not make sense!
+--       (JudgmentContext { typingContext = extend empty (Const (globalOpenTerm "Prelude.Either"))
+--                        , permissionSet =
+--                          extendPermSet (PermSet empty empty)
+--                          _
+--                          (ValPerm_Or ValPerm_True ValPerm_True)
+--                        , permissionMap = extend empty (Const (globalOpenTerm "Prelude.Vec"))
+--                        , catchHandler  = Nothing
+--                        }
+--       )
+--       (globalOpenTerm "Prelude.Bool")
+--       permElim0
+--     putStrLn $ show t
