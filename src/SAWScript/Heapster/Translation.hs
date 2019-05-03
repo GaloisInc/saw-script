@@ -273,23 +273,28 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       ]
 
     Elim_Exists index typ e ->
-
+      let tFst = typeTranslate'' typ in
+      let tSnd = case pvGet (permissionSet jctx) index of
+            ValPerm_Exists _ pSnd ->
+              -- I believe we can reuse @tFst@ here, rather than using the
+              -- TypeRepr in @ValPerm_Exists@.
+              typeTranslate (extend (typingContext jctx) (Const tFst)) pSnd
+            _ -> error "judgmentTranslate': `Elim_Exists` expects a `ValPerm_Exists`"
+      in
       let t varFst varSnd =
             judgmentTranslate'
-            (JudgmentContext { typingContext = extend (typingContext jctx) _
+            (JudgmentContext { typingContext =
+                               extend
+                               (pvSet index (Const tSnd) (typingContext jctx))
+                               (Const tFst)
                              , permissionSet = elimExists (permissionSet jctx) index typ
-                             , permissionMap = _
+                             , permissionMap =
+                               extend
+                               (pvSet index (Const varSnd) (permissionMap jctx))
+                               (Const varFst)
                              , catchHandler  = catchHandler jctx
                              })
             outputType e
-      in
-
-      let tFst = typeTranslate'' typ in
-
-      let tSnd = case pvGet (permissionSet jctx) index of
-            ValPerm_Exists tp' pSnd ->
-              typeTranslate (extend (typingContext jctx) (Const tFst)) pSnd
-            _ -> error "judgmentTranslate': `Elim_Exists` expects a `ValPerm_Exists`"
       in
 
       applyOpenTermMulti (globalOpenTerm "Prelude.Sigma__rec")
