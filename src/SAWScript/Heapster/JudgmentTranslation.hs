@@ -130,20 +130,20 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       ]
 
     Elim_Exists index typ e ->
-      let tFst = typeTranslate'' typ in
-      let tSnd = case pvGet (permSetAsgn $ permissionSet jctx) index of
+      let typFst = typeTranslate'' typ in
+      let typSnd = case pvGet (permSetAsgn $ permissionSet jctx) index of
             ValPerm_Exists _ pSnd ->
-              -- I believe we can reuse @tFst@ here, rather than using the
+              -- I believe we can reuse @typFst@ here, rather than using the
               -- TypeRepr in @ValPerm_Exists@.
-              typeTranslate (extend (typingContext jctx) (Const tFst)) pSnd
+              lambdaOpenTerm "a" typFst (\ a -> typeTranslate (extend (typingContext jctx) (Const a)) pSnd))
             _ -> error "judgmentTranslate': `Elim_Exists` expects a `ValPerm_Exists`"
       in
       let t varFst varSnd =
             judgmentTranslate'
             (JudgmentContext { typingContext =
                                extend
-                               (pvSet index (Const tSnd) (typingContext jctx))
-                               (Const tFst)
+                               (pvSet index (Const (applyOpenTerm typSnd varFst)) (typingContext jctx))
+                               (Const typFst)
                              , permissionSet = elimExists (permissionSet jctx) index typ
                              , permissionMap =
                                extend
@@ -157,18 +157,18 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       applyOpenTermMulti (globalOpenTerm "Prelude.Sigma__rec")
 
       -- (a : sort 0)
-      [ tFst
+      [ typFst
 
       -- (b : a -> sort 0)
       , tSnd
 
       -- (p : Sigma a b -> sort 0)
       , lambdaOpenTerm "sigma_unused"
-        (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma") [tFst, tSnd])
+        (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma") [typFst, tSnd])
         (\ _ -> outputType)
 
       -- (f : (pa : a) -> (pb : b pa) -> p (exists a b pa pb))
-      , lambdaOpenTerm "sigmaFst" tFst
+      , lambdaOpenTerm "sigmaFst" typFst
         (\ varFst ->
          lambdaOpenTerm "sigmaSnd" tSnd
          (\ varSnd -> t varFst varSnd)
@@ -179,7 +179,7 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
 
       ]
 
-    Elim_Assert bv e ->
+    Elim_Assert (Constr_BVEq w e1 e2) e ->
       error "TODO"
 
     Elim_BindField index offset _ e ->
@@ -227,19 +227,24 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
               (findIndex (isLLVMFieldAt offset) fields)
         in
         let var = pvGet (permissionMap jctx) index in
+        -- Change the translation of pointer shapes s.t. Eq permissions do not bring up () in type
+        -- [[ (0 |-> eq(x) * 4 |-> a * 8 |-> eq(y)) *  ]] = [[a]]
+        -- Assumption:
         applyOpenTerm
         (lambdaOpenTerm "field" permType t)
         (nthOpenTerm fieldIndex (getConst var))
       _ -> error "judgmentTranslate': `Elim_BindField` expects `ValPerm_LLVMPtr`"
 
     Elim_SplitField index offset _ e ->
+      let perm = pvGet (permSetAsgn $ permissionSet jctx) index in
       error "TODO"
 
     Elim_Catch e1 e2 ->
       let t2 = judgmentTranslate' jctx outputType e2 in
       judgmentTranslate' (jctx { catchHandler = Just t2 }) outputType e1
 
-    Elim_Unroll _p _e -> error "TODO"
+    Elim_Unroll _p _e ->
+      error "TODO"
 
 instance JudgmentTranslate' AnnotIntro where
 
