@@ -11,20 +11,20 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module SAWScript.Heapster.JudgmentTranslation (
-  -- testJudgmentTranslation,
+  testJudgmentTranslation,
   ) where
 
-import qualified Control.Lens                     as Lens
+import qualified Control.Lens                       as Lens
 import           Data.Functor.Const
 import           Data.List
 import           Data.Maybe
-
 
 import           Data.Parameterized.Context
 import           Lang.Crucible.LLVM.MemModel
 import           Lang.Crucible.Types
 import           SAWScript.Heapster.Permissions
 import           SAWScript.Heapster.TypeTranslation
+import           SAWScript.TopLevel
 import           Verifier.SAW.OpenTerm
 
 -- | The @JudgmentTranslate@ family of classes captures translations from
@@ -130,20 +130,20 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       ]
 
     Elim_Exists index typ e ->
-      let tFst = typeTranslate'' typ in
-      let tSnd = case pvGet (permSetAsgn $ permissionSet jctx) index of
+      let typFst = typeTranslate'' typ in
+      let typSnd = case pvGet (permSetAsgn $ permissionSet jctx) index of
             ValPerm_Exists _ pSnd ->
-              -- I believe we can reuse @tFst@ here, rather than using the
+              -- I believe we can reuse @typFst@ here, rather than using the
               -- TypeRepr in @ValPerm_Exists@.
-              typeTranslate (extend (typingContext jctx) (Const tFst)) pSnd
+              lambdaOpenTerm "a" typFst (\ a -> typeTranslate (extend (typingContext jctx) (Const a)) pSnd)
             _ -> error "judgmentTranslate': `Elim_Exists` expects a `ValPerm_Exists`"
       in
       let t varFst varSnd =
             judgmentTranslate'
             (JudgmentContext { typingContext =
                                extend
-                               (pvSet index (Const tSnd) (typingContext jctx))
-                               (Const tFst)
+                               (pvSet index (Const (applyOpenTerm typSnd varFst)) (typingContext jctx))
+                               (Const typFst)
                              , permissionSet = elimExists (permissionSet jctx) index typ
                              , permissionMap =
                                extend
@@ -157,20 +157,20 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
       applyOpenTermMulti (globalOpenTerm "Prelude.Sigma__rec")
 
       -- (a : sort 0)
-      [ tFst
+      [ typFst
 
       -- (b : a -> sort 0)
-      , tSnd
+      , typSnd
 
       -- (p : Sigma a b -> sort 0)
       , lambdaOpenTerm "sigma_unused"
-        (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma") [tFst, tSnd])
+        (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma") [typFst, typSnd])
         (\ _ -> outputType)
 
       -- (f : (pa : a) -> (pb : b pa) -> p (exists a b pa pb))
-      , lambdaOpenTerm "sigmaFst" tFst
+      , lambdaOpenTerm "sigmaFst" typFst
         (\ varFst ->
-         lambdaOpenTerm "sigmaSnd" tSnd
+         lambdaOpenTerm "sigmaSnd" typSnd
          (\ varSnd -> t varFst varSnd)
         )
 
@@ -179,7 +179,7 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
 
       ]
 
-    Elim_Assert bv e ->
+    Elim_Assert (Constr_BVEq w e1 e2) e ->
       error "TODO"
 
     Elim_BindField index offset _ e ->
@@ -227,19 +227,25 @@ instance JudgmentTranslate' f => JudgmentTranslate' (PermElim f) where
               (findIndex (isLLVMFieldAt offset) fields)
         in
         let var = pvGet (permissionMap jctx) index in
+        -- Change the translation of pointer shapes s.t. Eq permissions do not bring up () in type
+        -- [[ (0 |-> eq(x) * 4 |-> a * 8 |-> eq(y)) *  ]] = [[a]]
+        -- TODO: See changes in `Elim_BindField`, now `ps1` only contains `eq(...)` permissions and
+        -- we translate those to nothing instead of unit
         applyOpenTerm
         (lambdaOpenTerm "field" permType t)
         (nthOpenTerm fieldIndex (getConst var))
       _ -> error "judgmentTranslate': `Elim_BindField` expects `ValPerm_LLVMPtr`"
 
     Elim_SplitField index offset _ e ->
+      let perm = pvGet (permSetAsgn $ permissionSet jctx) index in
       error "TODO"
 
     Elim_Catch e1 e2 ->
       let t2 = judgmentTranslate' jctx outputType e2 in
       judgmentTranslate' (jctx { catchHandler = Just t2 }) outputType e1
 
-    Elim_Unroll _p _e -> error "TODO"
+    Elim_Unroll _p _e ->
+      error "TODO"
 
 instance JudgmentTranslate' AnnotIntro where
 
@@ -249,6 +255,7 @@ instance JudgmentTranslate' AnnotIntro where
 
     Intro_Exists tp e' p pf -> error "TODO"
 
+    -- [[pf]] is expecting an argument of type [[p1 \/ p2]]
     Intro_OrL p2 pf ->
       let typLeft  = error "TODO" in
       let typRight = error "TODO" in
@@ -301,22 +308,22 @@ instance JudgmentTranslate' (Const OpenTerm) where
   judgmentTranslate' _ _ t = getConst t
 
 -- TODO: fix those tests
--- testJudgmentTranslation :: TopLevel ()
--- testJudgmentTranslation = do
---   sc <- getSharedContext
---   io $ do
---     t <- completeOpenTerm sc $
---       judgmentTranslate'
---       -- FIXME: this Either not applied does not make sense!
---       (JudgmentContext { typingContext = extend empty (Const (globalOpenTerm "Prelude.Either"))
---                        , permissionSet =
---                          extendPermSet (PermSet empty empty)
---                          _
---                          (ValPerm_Or ValPerm_True ValPerm_True)
---                        , permissionMap = extend empty (Const (globalOpenTerm "Prelude.Vec"))
---                        , catchHandler  = Nothing
---                        }
---       )
---       (globalOpenTerm "Prelude.Bool")
---       permElim0
---     putStrLn $ show t
+testJudgmentTranslation :: TopLevel ()
+testJudgmentTranslation = do
+  sc <- getSharedContext
+  io $ do
+    t <- completeOpenTerm sc $
+      judgmentTranslate'
+      -- FIXME: this Either not applied does not make sense!
+      (JudgmentContext { typingContext = extend empty (Const (globalOpenTerm "Prelude.Either"))
+                       , permissionSet =
+                         extendPermSet (PermSet empty empty)
+                         (error "TODO")
+                         (ValPerm_Or ValPerm_True ValPerm_True)
+                       , permissionMap = extend empty (Const (globalOpenTerm "Prelude.Vec"))
+                       , catchHandler  = Nothing
+                       }
+      )
+      (globalOpenTerm "Prelude.Bool")
+      permElim0
+    putStrLn $ show t

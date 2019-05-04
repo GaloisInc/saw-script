@@ -13,6 +13,7 @@
 module SAWScript.Heapster.TypeTranslation (
   TypeTranslate(..),
   TypeTranslate''(..),
+  testTypeTranslation,
   ) where
 
 import           Data.Functor.Const
@@ -63,16 +64,16 @@ instance TypeTranslate'' (TypeRepr a) where
     IntegerRepr            -> error "TODO"
     RealValRepr            -> error "TODO"
     ComplexRealRepr        -> error "TODO"
-    BVRepr _               -> error "TODO"
+    BVRepr w               -> dataTypeOpenTerm "Prelude.bitvector" [typeTranslate'' w]
     IntrinsicRepr _ _      -> error "TODO"
     RecursiveRepr _ _      -> error "TODO"
-    FloatRepr _            -> error "TODO"
+    FloatRepr _            -> dataTypeOpenTerm "Prelude.Float" []
     IEEEFloatRepr _        -> error "TODO"
     CharRepr               -> error "TODO"
-    StringRepr             -> error "TODO"
+    StringRepr             -> dataTypeOpenTerm "Prelude.String" []
     FunctionHandleRepr _ _ -> error "TODO"
     MaybeRepr _            -> error "TODO"
-    VectorRepr _           -> error "TODO"
+    VectorRepr x           -> error "TODO"
     StructRepr _           -> error "TODO"
     VariantRepr _          -> error "TODO"
     ReferenceRepr _        -> error "TODO"
