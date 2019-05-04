@@ -13,6 +13,7 @@
 module SAWScript.Heapster.TypeTranslation (
   TypeTranslate(..),
   TypeTranslate''(..),
+  testTypeTranslation,
   ) where
 
 import           Data.Functor.Const
