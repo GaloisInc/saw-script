@@ -679,6 +679,40 @@ remLLVMFieldAt off (shape : shapes) =
   fmap (\(spl, p, shapes') -> (spl, p, shape:shapes')) $
   remLLVMFieldAt off shapes
 
+-- | Find the first non-eq LLVM field at or before @off@ and replace it with an
+-- @eq(z)@ permission for a fresh variable @z@, returning the old field perm
+bindFirstNonEqLLVMFieldUntil ::
+  Size ctx -> Integer -> [LLVMShapePerm ctx w] ->
+  Maybe (LLVMFieldPerm ctx w,
+         [LLVMShapePerm (ctx ::> LLVMPointerType w) w])
+bindFirstNonEqLLVMFieldUntil _ _ [] = Nothing
+bindFirstNonEqLLVMFieldUntil _ off (LLVMFieldShapePerm
+                                    (LLVMFieldPerm
+                                     { llvmFieldOffset = off',
+                                       llvmFieldPerm = ValPerm_Eq _ }) : _)
+  | off' == off
+  = error "bindFirstNonEqLLVMFieldUntil: field already has eq perms!"
+bindFirstNonEqLLVMFieldUntil sz off (shape@(LLVMFieldShapePerm
+                                            (LLVMFieldPerm
+                                             { llvmFieldPerm = ValPerm_Eq _ }))
+                                     : shapes) =
+  (\(p, shapes') -> (p, extendContext' oneDiff shape : shapes')) <$>
+  bindFirstNonEqLLVMFieldUntil sz off shapes
+bindFirstNonEqLLVMFieldUntil sz off (LLVMFieldShapePerm fld : shapes) =
+  Just
+  (fld,
+   LLVMFieldShapePerm
+   ((extendContext' oneDiff fld) { llvmFieldPerm =
+                                     ValPerm_Eq (PExpr_Var $
+                                                 PermVar (incSize sz) $
+                                                 nextIndex sz)}) :
+   map (extendContext' oneDiff) shapes)
+bindFirstNonEqLLVMFieldUntil sz off (shape@(LLVMArrayShapePerm { })
+                                     : shapes) =
+  (\(p, shapes') -> (p, extendContext' oneDiff shape : shapes')) <$>
+  bindFirstNonEqLLVMFieldUntil sz off shapes
+
+
 -- | Find the LLVM field at a given offset and split it, returning the right
 -- half of the split permission and keeping the left in the shapes; that is, it
 -- replaces
@@ -931,7 +965,8 @@ data PermElim (f :: Ctx CrucibleType -> *) (ctx :: Ctx CrucibleType) where
   -- The 'Integer' and 'SplittingExpr' arguments give the static offset and
   -- splitting for the 'LLVMFieldShapePerm' of the given variable to perform
   -- this operation on. Note that this rule is only valid when the leading
-  -- shapes (in @ps1@) contains only @eq@ permissions.
+  -- shapes (in @ps1@) contains only @eq@ permissions and @p@ is not an @eq@
+  -- permission.
   --
   -- pf = Gin, y:LLVMPtr | Pin, y:p, x:ptr(ps1 * off |-> (S, eq(y)) * ps2) |- rets
   -- -----------------------------------------------------------------------------
@@ -1605,15 +1640,20 @@ provePermImplH perms vars s specs@(PermSpec _
                                     (LLVMFieldShapePerm
                                      (LLVMFieldPerm off _ _) : _) _) : _)
   | ValPerm_LLVMPtr _ shapes_l free_l <- getPerm perms x
-  , Just (spl, p, shapes_l') <- remLLVMFieldAt off shapes_l
-  = Elim_BindField x off spl $
+  , Just (fld, shapes_l') <-
+      bindFirstNonEqLLVMFieldUntil (permSetSize perms) off shapes_l
+  = Elim_BindField x (llvmFieldOffset fld) (llvmFieldSplitting fld) $
     provePermImplH
-    (extendPermSet (setPerm x (ValPerm_LLVMPtr w shapes_l' free_l) perms)
-     (LLVMPointerRepr w)
-     (weaken' mkWeakening1 p))
+    (setPerm (extendContext' oneDiff x)
+     (ValPerm_LLVMPtr w shapes_l' $
+      fmap (extendContext' oneDiff) free_l)
+     (extendPermSet perms
+      (LLVMPointerRepr w)
+      (weaken' mkWeakening1 $ llvmFieldPerm fld)))
     vars
     (extendContext oneDiff s)
     (map (extendContext oneDiff) specs)
+
 
 provePermImplH _perms _vars _s _specs =
   Elim_Fail
