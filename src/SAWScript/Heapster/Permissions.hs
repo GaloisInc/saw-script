@@ -1158,7 +1158,7 @@ instPermSpecVars s@(PermSubst sz_ctx _) (PermSpec _ e p) =
 type PermSetSpec vars ctx = [PermSpec vars ctx]
 
 permSpecOfPerms :: Size vars -> Assignment (ValuePerm (ctx <+> vars)) ctx ->
-                      PermSetSpec vars ctx
+                   PermSetSpec vars ctx
 permSpecOfPerms sz_vars asgn =
   let sz_ctx = size asgn in
   toListFC (\(Const spec) -> spec) $
@@ -1167,6 +1167,9 @@ permSpecOfPerms sz_vars asgn =
 
 permSpecOfPermSet :: PermSet ctx -> PermSetSpec EmptyCtx ctx
 permSpecOfPermSet perms = permSpecOfPerms zeroSize (permSetAsgn perms)
+
+permSpecOfVarPerm :: VarPerm ctx -> PermSpec EmptyCtx ctx
+permSpecOfVarPerm (VarPerm x p) = PermSpec zeroSize (PExpr_Var x) p
 
 
 ----------------------------------------------------------------------
@@ -1360,6 +1363,11 @@ idIntro :: PermSet ctx -> AnnotIntro ctx
 idIntro perms =
   AnnotIntro perms (permSpecOfPermSet perms) $
   Intro_Id $ varPermsOfPermSet perms
+
+annotateIntro :: PermSet ctx -> PermSetSpec vars ctx ->
+                 PermSubst vars ctx -> PermIntro ctx -> AnnotIntro ctx
+annotateIntro perms outPerms s intro =
+  AnnotIntro perms (map (instPermSpecVars s) outPerms) intro
 
 
 ----------------------------------------------------------------------
@@ -1679,7 +1687,9 @@ provePermImpl :: PermSet ctx -> CtxRepr vars -> PermSetSpec vars ctx ->
 provePermImpl perms vars specs =
   cmap (\diff (ImplHRet permsRem s intro) ->
          ImplRet permsRem s $
-         AnnotIntro (extendWithCtx (permSetCtx permsRem) diff perms)
-         (map (instPermSpecVars s . extendContext diff) specs)
+         annotateIntro
+         (extendWithCtx (permSetCtx permsRem) diff perms)
+         (map (extendContext diff) specs)
+         s
          intro) $
   provePermImplH perms vars (emptyPartialSubst vars) specs

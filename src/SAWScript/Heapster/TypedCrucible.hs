@@ -62,13 +62,9 @@ data TypedFnHandle ghosts init ret =
 -- extra set of "ghost" arguments, not existant in the original program, that
 -- are useful to express input and output permissions.
 data TypedEntryID blocks ghosts args =
-  TypedEntryID (BlockID blocks args) (CtxRepr ghosts) Int
-
-entryBlockID :: TypedEntryID blocks ghosts args -> BlockID blocks args
-entryBlockID (TypedEntryID blkID _ _) = blkID
-
-entryIndex :: TypedEntryID blocks ghosts args -> Int
-entryIndex (TypedEntryID _ _ ix) = ix
+  TypedEntryID { entryBlockID :: BlockID blocks args,
+                 entryGhosts :: CtxRepr ghosts,
+                 entryIndex :: Int }
 
 
 -- | Test if two 'TypedEntryID's are equal, returning a proof that their ghost
@@ -158,7 +154,7 @@ data TypedStmtSeq ext blocks (ret :: CrucibleType) ctx where
 -- here.
 data TypedEntry ext blocks ret args where
   TypedEntry :: TypedEntryID blocks ghosts args -> CtxRepr args ->
-                PermSetSpec EmptyCtx (ghosts <+> args) ->
+                PermSet (ghosts <+> args) ->
                 TypedStmtSeq ext blocks ret (ghosts <+> args) ->
                 TypedEntry ext blocks ret args
 
@@ -227,7 +223,7 @@ extEnv1 tp env =
 data BlockEntryInfo blocks ret args where
   BlockEntryInfo :: {
     entryInfoID :: TypedEntryID blocks ghosts args,
-    entryInfoPermsIn :: PermSetSpec EmptyCtx (ghosts <+> args),
+    entryInfoPermsIn :: PermSet (ghosts <+> args),
     entryInfoPermsOut :: PermSetSpec EmptyCtx (ghosts <+> args ::> ret)
   } -> BlockEntryInfo blocks ret args
 
@@ -272,6 +268,12 @@ instance MonadState (PermCheckState blocks ret) (PermCheckM blocks ret ctx) wher
 withPerms :: PermSet ctx -> PermCheckM blocks ret ctx a ->
              PermCheckM blocks ret ctx a
 withPerms perms = local (\env -> env { envCurPerms = perms })
+
+localC :: (PermCheckEnv ret ctx -> PermCheckEnv ret ctx') ->
+          PermCheckM blocks ret ctx' a ->
+          PermCheckM blocks ret ctx a
+localC f (PermCheckM m) =
+  PermCheckM $ ReaderT $ \env -> runReaderT m $ f env
 
 -- | Run a computation in an extended context
 inExtCtxM :: TypeRepr tp -> PermCheckM blocks ret (ctx ::> tp) a ->
@@ -332,6 +334,17 @@ blockNextEntryIndex blkID =
   getBlockInfo blkID >>= \info ->
   if blockInfoVisited info then return Nothing else
     return $ Just $ length $ blockInfoEntries info
+
+-- | Mark a block as being visited
+setBlockVisited :: BlockID blocks args -> PermCheckM blocks ret ctx ()
+setBlockVisited blkID =
+  modify $ \st ->
+  st { stBlockInfo =
+         Lens.over
+         (ixF $ blockIDIndex blkID)
+         (\blkInfo -> blkInfo { blockInfoVisited = True })
+         (stBlockInfo st)
+     }
 
 -- | Add a new entry point for a block, or raise an error if that block has
 -- already been visited
@@ -396,11 +409,18 @@ data VarPair ctx a = VarPair (PermVar ctx a) (PermVar ctx a)
 -- FIXME: figure out how to "thin out" the input permissions to a jump target
 buildInputSpecs :: PermSet ctx -> CtxRepr args ->
                    Assignment (Reg ctx) args ->
-                   (PermSetSpec EmptyCtx (ctx <+> args), AnnotIntro ctx)
+                   (PermSet (ctx <+> args), AnnotIntro ctx)
 buildInputSpecs perms args_ctx (args :: Assignment (Reg ctx) args) =
   let sz_ctx = permSetSize perms
       sz_args = size args
       sz_ctx_args = addSize sz_ctx sz_args
+      inputPerms =
+        appendPermSet perms args_ctx $
+        generate (size args) $ \arg_ix ->
+        ValPerm_Eq $ PExpr_Var $ PermVar sz_ctx_args $ regIndex $
+        extendContext' (appendDiff sz_args) (args ! arg_ix)
+
+      {-
       args_xs :: [Some (Product (PermVar (ctx <+> args))
                         (PermVar (ctx <+> args)))]
       args_xs =
@@ -409,22 +429,37 @@ buildInputSpecs perms args_ctx (args :: Assignment (Reg ctx) args) =
         Pair (PermVar sz_ctx_args $ extendIndexLeft sz_ctx ix)
         (PermVar sz_ctx_args $
          extendIndex' (appendDiff sz_args) $ regIndex $ args ! ix)
-      perm_specs =
+      var_specs =
         -- Build a list of permission specs arg:eq(x) for each arg |-> x in args
         map (\(Some (Pair arg x)) ->
-              PermSpec zeroSize (PExpr_Var arg) (ValPerm_Eq $ PExpr_Var x))
+              VarPerm arg (ValPerm_Eq $ PExpr_Var x))
         args_xs
         ++
         -- Build a list of permissions x:p for all the permissions in perms
         map (extendContext $ appendDiff (size args))
-        (permSpecOfPerms zeroSize (permSetAsgn perms)) in
-  (perm_specs
-  , AnnotIntro perms (map
-                      (substPermSpec
-                       (mkSubstMulti sz_ctx sz_args $
-                        fmapFC (PExpr_Var . PermVar sz_ctx . regIndex) args))
-                      perm_specs) $
+        (varPermsOfPermSet perms)
+       -} in
+
+  (
+    inputPerms,
+
+    annotateIntro
+    perms
+    (permSpecOfPerms sz_args
+     (generate sz_ctx $ \ix ->
+       extendContext' (appendDiff $ size args) $ permSetAsgn perms ! ix)
+     ++
+     toListFC
+     (\arg_ix ->
+       let x = PermVar sz_ctx $ regIndex $ args ! arg_ix in
+       PermSpec sz_args
+       (PExpr_Var x)
+       (ValPerm_Eq $ PExpr_Var $ extendContext' (appendDiff $ size args) x))
+     (generate sz_args id)
+    )
+    (PermSubst sz_ctx $ fmapFC (PExpr_Var . PermVar sz_ctx . regIndex) args) $
     foldrFC
+    -- FIXME HERE: need to fetch the nth perm spec from the end to prove it
     (\x -> Intro_Eq (EqProof_Refl (PExpr_Var x)))
     (Intro_Id $ varPermsOfPermSet perms)
     (generate sz_ctx (\ix -> PermVar sz_ctx ix))
@@ -448,8 +483,7 @@ tcJumpTarget (JumpTarget blkID args_ctx args) =
       do perms <- getCurPerms
          retPerms <- getRetPerms
          let ghosts = permSetCtx perms
-             diff_ctx_args =
-               appendDiff (size args_ctx) -- :: Diff ctx (ctx <+> args)
+             diff_ctx_args = appendDiff (size args_ctx)
              entryInfoID = TypedEntryID blkID ghosts ix
              (entryInfoPermsIn, intro) = buildInputSpecs perms args_ctx args
          entryInfoPermsOut <-
@@ -469,7 +503,7 @@ tcJumpTarget (JumpTarget blkID args_ctx args) =
 -- | Type-check a sequence of statements. This includes type-checking for
 -- individual statements and termination statements, which are both easier to do
 -- when we have the whole statement sequence there.
-tcStmtSeq :: TraverseExt ext =>
+tcStmtSeq :: (TraverseExt ext, PrettyExt ext) =>
              StmtSeq ext blocks ret ctx ->
              PermCheckM blocks ret ctx (TypedStmtSeq ext blocks ret ctx)
 
@@ -487,6 +521,15 @@ tcStmtSeq (ConsStmt l (SetReg tp expr) stmts') =
                      (weakenWeakening1 $ weakeningOfDiff diff) stmts')))
        perms_elim
      typedElimStmt typed_stmts_elim
+
+tcStmtSeq (ConsStmt l stmt@(Assert _ _) stmts) =
+  do perms <- getCurPerms
+     TypedConsStmt l (TypedStmt perms perms stmt) <$> tcStmtSeq stmts
+
+tcStmtSeq (ConsStmt _l stmt _) =
+  do ctx <- getCtx
+     error ("tcStmtSeq: unsupported statemet:" ++
+            show (ppStmt (size ctx) stmt))
 
 tcStmtSeq (TermStmt l (Jump tgt)) =
   do typed_tgt_elim <- tcJumpTarget tgt
@@ -524,3 +567,52 @@ tcStmtSeq (TermStmt l (Return reg)) =
                   TypedReturn (extendContext' diff x) intro)
        elim_intro
      typedElimStmt elim_stmts
+
+tcStmtSeq (TermStmt l (ErrorStmt reg)) =
+  TypedTermStmt l <$> TypedErrorStmt <$> tcReg reg
+
+tcStmtSeq seq@(TermStmt _ _) =
+  do ctx <- getCtx
+     error ("tcStmtSeq: unsupported termination statement: "
+            -- FIXME: export ppStmtSeq!
+            -- ++ show (ppStmtSeq True (size ctx) seq)
+           )
+
+
+----------------------------------------------------------------------
+-- * Type-Checking Crucible CFGs
+----------------------------------------------------------------------
+
+{-
+data BlockEntryInfo blocks ret args where
+  BlockEntryInfo :: {
+    entryInfoID :: TypedEntryID blocks ghosts args,
+    entryInfoPermsIn :: PermSetSpec EmptyCtx (ghosts <+> args),
+    entryInfoPermsOut :: PermSetSpec EmptyCtx (ghosts <+> args ::> ret)
+  } -> BlockEntryInfo blocks ret args
+
+data TypedEntry ext blocks ret args where
+  TypedEntry :: TypedEntryID blocks ghosts args -> CtxRepr args ->
+                PermSetSpec EmptyCtx (ghosts <+> args) ->
+                TypedStmtSeq ext blocks ret (ghosts <+> args) ->
+                TypedEntry ext blocks ret args
+-}
+
+tcEntry :: (TraverseExt ext, PrettyExt ext) =>
+           Block ext blocks ret args ->
+           BlockEntryInfo blocks ret args ->
+           PermCheckM blocks ret EmptyCtx (TypedEntry ext blocks ret args)
+tcEntry blk (BlockEntryInfo { .. }) =
+  TypedEntry entryInfoID (blockInputs blk) entryInfoPermsIn <$>
+  localC (const $ PermCheckEnv {
+             envCurPerms = entryInfoPermsIn,
+             envRetPerms = entryInfoPermsOut})
+  (tcStmtSeq (error "FIXME HERE: extend the context of _blockStmts blk"))
+
+tcBlock :: (TraverseExt ext, PrettyExt ext) =>
+           Block ext blocks ret args ->
+           PermCheckM blocks ret EmptyCtx (TypedBlock ext blocks ret args)
+tcBlock blk =
+  do setBlockVisited $ blockID blk
+     entries <- blockInfoEntries <$> getBlockInfo (blockID blk)
+     TypedBlock <$> mapM (tcEntry blk) entries
