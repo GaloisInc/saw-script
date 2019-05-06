@@ -594,7 +594,7 @@ partialSubst' ps = genSubst' (genSubstOfPartialSubst ps)
 
 
 ----------------------------------------------------------------------
--- * Permissions and Permission Sets
+-- * Permissions
 ----------------------------------------------------------------------
 
 -- | Crucible type for value permissions
@@ -782,6 +782,10 @@ instance ExtendContext' ValuePerm where
   extendContext' diff = weaken' (weakeningOfDiff diff)
 
 
+----------------------------------------------------------------------
+-- * Permission sets
+----------------------------------------------------------------------
+
 -- | A permission set assigns value permissions to the variables in scope, and
 -- also knows the types of those variables
 data PermSet ctx =
@@ -803,6 +807,9 @@ setPerm x p (PermSet ctx asgn) = PermSet ctx $ pvSet x p asgn
 modifyPerm :: PermVar ctx a -> (ValuePerm ctx a -> ValuePerm ctx a) ->
               PermSet ctx -> PermSet ctx
 modifyPerm x f (PermSet ctx asgn) = PermSet ctx $ pvModify x f asgn
+
+emptyPermSet :: PermSet EmptyCtx
+emptyPermSet = PermSet empty empty
 
 -- | Add a new variable with the given permission to a 'PermSet'
 extendPermSet :: PermSet ctx -> TypeRepr a -> ValuePerm (ctx ::> a) a ->

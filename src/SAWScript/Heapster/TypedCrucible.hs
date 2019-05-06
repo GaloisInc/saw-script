@@ -37,6 +37,7 @@ import           Lang.Crucible.LLVM.Extension
 import           Lang.Crucible.LLVM.MemModel
 import           Lang.Crucible.CFG.Core
 import           Lang.Crucible.CFG.Extension
+import           Lang.Crucible.Analysis.Fixpoint.Components
 
 
 ----------------------------------------------------------------------
@@ -192,6 +193,9 @@ data PermCheckEnv ret ctx =
     envRetPerms :: PermSetSpec EmptyCtx (ctx ::> ret)
   }
 
+emptyPermCheckEnv :: PermCheckEnv ret EmptyCtx
+emptyPermCheckEnv = PermCheckEnv emptyPermSet []
+
 instance HasPerms (PermCheckEnv ret) where
   hasPerms = envCurPerms
 
@@ -234,50 +238,61 @@ entryInfoIndex :: BlockEntryInfo blocks ret args -> Int
 entryInfoIndex (BlockEntryInfo entryID _ _) = entryIndex entryID
 
 -- | Information about the current state of type-checking for a block
-data BlockInfo blocks ret args =
+data BlockInfo ext blocks ret args =
   BlockInfo
   {
     blockInfoVisited :: Bool,
-    blockInfoEntries :: [BlockEntryInfo blocks ret args]
+    blockInfoEntries :: [BlockEntryInfo blocks ret args],
+    blockInfoBlock :: Maybe (TypedBlock ext blocks ret args)
   }
 
-data PermCheckState blocks ret =
+data PermCheckState ext blocks ret =
   PermCheckState
   {
-    stBlockInfo :: Assignment (BlockInfo blocks ret) blocks
+    stBlockInfo :: Assignment (BlockInfo ext blocks ret) blocks
   }
+
+emptyPermCheckState :: Size blocks -> PermCheckState ext blocks ret
+emptyPermCheckState sz =
+  PermCheckState (generate sz (const $ BlockInfo False [] Nothing))
 
 -- | The monad for permission type-checking a function with inputs @init@ and
 -- return value @ret@ where the local context (where we are currently
 -- type-checking) is @ctx@
-newtype PermCheckM blocks ret ctx a =
+newtype PermCheckM ext blocks ret ctx a =
   PermCheckM { unPermCheckM ::
                  ReaderT (PermCheckEnv ret ctx)
-                 (State (PermCheckState blocks ret)) a }
+                 (State (PermCheckState ext blocks ret)) a }
   deriving (Functor, Applicative, Monad)
 
-instance MonadReader (PermCheckEnv ret ctx) (PermCheckM blocks ret ctx) where
+instance MonadReader (PermCheckEnv ret ctx) (PermCheckM ext blocks ret ctx) where
   ask = PermCheckM ask
   local f (PermCheckM m) = PermCheckM $ local f m
 
-instance MonadState (PermCheckState blocks ret) (PermCheckM blocks ret ctx) where
+instance MonadState (PermCheckState ext blocks ret)
+         (PermCheckM ext blocks ret ctx) where
   get = PermCheckM get
   put s = PermCheckM $ put s
 
+runPermCheckM :: Size blocks -> PermCheckM ext blocks ret EmptyCtx a -> a
+runPermCheckM sz m =
+  evalState (runReaderT (unPermCheckM m) emptyPermCheckEnv)
+  (emptyPermCheckState sz)
+
 -- | Run a computation with an updated permission set
-withPerms :: PermSet ctx -> PermCheckM blocks ret ctx a ->
-             PermCheckM blocks ret ctx a
+withPerms :: PermSet ctx -> PermCheckM ext blocks ret ctx a ->
+             PermCheckM ext blocks ret ctx a
 withPerms perms = local (\env -> env { envCurPerms = perms })
 
 localC :: (PermCheckEnv ret ctx -> PermCheckEnv ret ctx') ->
-          PermCheckM blocks ret ctx' a ->
-          PermCheckM blocks ret ctx a
+          PermCheckM ext blocks ret ctx' a ->
+          PermCheckM ext blocks ret ctx a
 localC f (PermCheckM m) =
   PermCheckM $ ReaderT $ \env -> runReaderT m $ f env
 
 -- | Run a computation in an extended context
-inExtCtxM :: TypeRepr tp -> PermCheckM blocks ret (ctx ::> tp) a ->
-             PermCheckM blocks ret ctx a
+inExtCtxM :: TypeRepr tp -> PermCheckM ext blocks ret (ctx ::> tp) a ->
+             PermCheckM ext blocks ret ctx a
 inExtCtxM tp (PermCheckM m) =
   PermCheckM $ ReaderT $ \env -> runReaderT m $ extEnv1 tp env
 
@@ -303,9 +318,9 @@ instance HasPerms (ExprPerms ret) where
 -- | Map a function over a permission elimination
 mapElimM :: HasPerms f =>
             (forall ctx'. Diff ctx ctx' -> f ctx' ->
-             PermCheckM blocks ret ctx' (g ctx')) ->
+             PermCheckM ext blocks ret ctx' (g ctx')) ->
             PermElim f ctx ->
-            PermCheckM blocks ret ctx (PermElim g ctx)
+            PermCheckM ext blocks ret ctx (PermElim g ctx)
 mapElimM f elim =
   PermCheckM $ ReaderT $ \env ->
   traverseElim (\diff x ->
@@ -313,63 +328,66 @@ mapElimM f elim =
                  weakenEnvSetPerms (hasPerms x) (weakeningOfDiff diff) env)
   elim
 
-getCurPerms :: PermCheckM blocks ret ctx (PermSet ctx)
+getCurPerms :: PermCheckM ext blocks ret ctx (PermSet ctx)
 getCurPerms = envCurPerms <$> ask
 
-getCtx :: PermCheckM blocks ret ctx (CtxRepr ctx)
+getCtx :: PermCheckM ext blocks ret ctx (CtxRepr ctx)
 getCtx = permSetCtx <$> getCurPerms
 
-getRetPerms :: PermCheckM blocks ret ctx (PermSetSpec EmptyCtx (ctx ::> ret))
+getRetPerms :: PermCheckM ext blocks ret ctx (PermSetSpec EmptyCtx (ctx ::> ret))
 getRetPerms = envRetPerms <$> ask
 
 getBlockInfo :: BlockID blocks args ->
-                PermCheckM blocks ret ctx (BlockInfo blocks ret args)
+                PermCheckM ext blocks ret ctx (BlockInfo ext blocks ret args)
 getBlockInfo blkID = (! blockIDIndex blkID) <$> stBlockInfo <$> get
 
 -- | Get the index for the next entrypoint for a block, returning 'Nothing' if
 -- this block has already been visited
 blockNextEntryIndex :: BlockID blocks args ->
-                       PermCheckM blocks ret ctx (Maybe Int)
+                       PermCheckM ext blocks ret ctx (Maybe Int)
 blockNextEntryIndex blkID =
   getBlockInfo blkID >>= \info ->
   if blockInfoVisited info then return Nothing else
     return $ Just $ length $ blockInfoEntries info
 
--- | Mark a block as being visited
-setBlockVisited :: BlockID blocks args -> PermCheckM blocks ret ctx ()
-setBlockVisited blkID =
+modifyBlockInfo :: BlockID blocks args ->
+                   (BlockInfo ext blocks ret args ->
+                    BlockInfo ext blocks ret args) ->
+                   PermCheckM ext blocks ret ctx ()
+modifyBlockInfo blkID f =
   modify $ \st ->
   st { stBlockInfo =
-         Lens.over
-         (ixF $ blockIDIndex blkID)
-         (\blkInfo -> blkInfo { blockInfoVisited = True })
-         (stBlockInfo st)
-     }
+         Lens.over (ixF $ blockIDIndex blkID) f (stBlockInfo st) }
+
+-- | Mark a block as being visited
+setBlockVisited :: BlockID blocks args -> PermCheckM ext blocks ret ctx ()
+setBlockVisited blkID =
+  modifyBlockInfo blkID (\blkInfo -> blkInfo { blockInfoVisited = True })
+
+setTypedBlock :: BlockID blocks args ->
+                 TypedBlock ext blocks ret args ->
+                 PermCheckM ext blocks ret ctx ()
+setTypedBlock blkID blk =
+  modifyBlockInfo blkID (\blkInfo -> blkInfo { blockInfoBlock = Just blk })
 
 -- | Add a new entry point for a block, or raise an error if that block has
 -- already been visited
 addBlockEntry :: BlockEntryInfo blocks ret args ->
-                 PermCheckM blocks ret ctx ()
+                 PermCheckM ext blocks ret ctx ()
 addBlockEntry info =
-  modify $ \st ->
-  st { stBlockInfo =
-         Lens.over
-         (ixF $ blockIDIndex $ entryInfoBlockID info)
-         (\blkInfo ->
-           if blockInfoVisited blkInfo then
-             error "addBlockEntry: block already visited"
-           else
-             if entryInfoIndex info == length (blockInfoEntries blkInfo) then
-               blkInfo { blockInfoEntries =
-                           blockInfoEntries blkInfo ++ [info]}
-             else
-               error "addBlockEntry: incorrect index for newly-added entrypoint")
-         (stBlockInfo st)
-     }
+  modifyBlockInfo (entryInfoBlockID info) $ \blkInfo ->
+  if blockInfoVisited blkInfo then
+    error "addBlockEntry: block already visited"
+  else
+    if entryInfoIndex info == length (blockInfoEntries blkInfo) then
+      blkInfo { blockInfoEntries =
+                  blockInfoEntries blkInfo ++ [info]}
+    else
+      error "addBlockEntry: incorrect index for newly-added entrypoint"
 
 
 -- | "Type-check" a 'Reg' by converting it to a 'PermVar'
-tcReg :: Reg ctx a -> PermCheckM blocks ret ctx (PermVar ctx a)
+tcReg :: Reg ctx a -> PermCheckM ext blocks ret ctx (PermVar ctx a)
 tcReg reg = PermVar <$> (permSetSize <$> getCurPerms) <*> return (regIndex reg)
 
 -- | The input and output permissions for an expression in the current branch of
@@ -379,7 +397,7 @@ data ExprPerms ret ctx =
 
 -- | Type-check a Crucible expression
 tcExpr :: Expr ext ctx tp ->
-          PermCheckM blocks ret ctx (PermElim (ExprPerms tp) ctx)
+          PermCheckM ext blocks ret ctx (PermElim (ExprPerms tp) ctx)
 tcExpr _ = error "FIXME HERE: tcExpr"
 
 
@@ -397,7 +415,7 @@ weakenStmtSeq sz w = applyEmbedding (embeddingOfWeakening sz w)
 -- | Smart constructor for 'TypedElimStmt', which avoids inserting an
 -- elimination for trivial eliminations
 typedElimStmt :: PermElim (TypedStmtSeq ext blocks ret) ctx ->
-                 PermCheckM blocks ret ctx (TypedStmtSeq ext blocks ret ctx)
+                 PermCheckM ext blocks ret ctx (TypedStmtSeq ext blocks ret ctx)
 typedElimStmt (Elim_Done stmts) = return stmts
 typedElimStmt elim_stmts =
   do perms <- getCurPerms
@@ -418,28 +436,7 @@ buildInputSpecs perms args_ctx (args :: Assignment (Reg ctx) args) =
         appendPermSet perms args_ctx $
         generate (size args) $ \arg_ix ->
         ValPerm_Eq $ PExpr_Var $ PermVar sz_ctx_args $ regIndex $
-        extendContext' (appendDiff sz_args) (args ! arg_ix)
-
-      {-
-      args_xs :: [Some (Product (PermVar (ctx <+> args))
-                        (PermVar (ctx <+> args)))]
-      args_xs =
-        toListFC Some $
-        generate (size args) $ \ix ->
-        Pair (PermVar sz_ctx_args $ extendIndexLeft sz_ctx ix)
-        (PermVar sz_ctx_args $
-         extendIndex' (appendDiff sz_args) $ regIndex $ args ! ix)
-      var_specs =
-        -- Build a list of permission specs arg:eq(x) for each arg |-> x in args
-        map (\(Some (Pair arg x)) ->
-              VarPerm arg (ValPerm_Eq $ PExpr_Var x))
-        args_xs
-        ++
-        -- Build a list of permissions x:p for all the permissions in perms
-        map (extendContext $ appendDiff (size args))
-        (varPermsOfPermSet perms)
-       -} in
-
+        extendContext' (appendDiff sz_args) (args ! arg_ix) in
   (
     inputPerms,
 
@@ -475,7 +472,8 @@ buildInputSpecs perms args_ctx (args :: Assignment (Reg ctx) args) =
 -- 2. Otherwise, if the target block has already been visited, build an
 -- elimination that tries all of the possible entry points.
 tcJumpTarget :: JumpTarget blocks ctx ->
-                PermCheckM blocks ret ctx (PermElim (TypedJumpTarget blocks) ctx)
+                PermCheckM ext blocks ret ctx (PermElim
+                                               (TypedJumpTarget blocks) ctx)
 tcJumpTarget (JumpTarget blkID args_ctx args) =
   blockNextEntryIndex blkID >>= \maybe_ix ->
   case maybe_ix of
@@ -505,7 +503,7 @@ tcJumpTarget (JumpTarget blkID args_ctx args) =
 -- when we have the whole statement sequence there.
 tcStmtSeq :: (TraverseExt ext, PrettyExt ext) =>
              StmtSeq ext blocks ret ctx ->
-             PermCheckM blocks ret ctx (TypedStmtSeq ext blocks ret ctx)
+             PermCheckM ext blocks ret ctx (TypedStmtSeq ext blocks ret ctx)
 
 tcStmtSeq (ConsStmt l (SetReg tp expr) stmts') =
   do perms_elim <- tcExpr expr
@@ -586,7 +584,7 @@ tcStmtSeq seq@(TermStmt _ _) =
 tcEntry :: (TraverseExt ext, PrettyExt ext) =>
            Block ext blocks ret args ->
            BlockEntryInfo blocks ret args ->
-           PermCheckM blocks ret EmptyCtx (TypedEntry ext blocks ret args)
+           PermCheckM ext blocks ret EmptyCtx (TypedEntry ext blocks ret args)
 tcEntry blk (BlockEntryInfo { .. }) =
   let sz_ghosts = size $ entryGhosts entryInfoID
       sz_args = size $ blockInputs blk in
@@ -602,8 +600,65 @@ tcEntry blk (BlockEntryInfo { .. }) =
 
 tcBlock :: (TraverseExt ext, PrettyExt ext) =>
            Block ext blocks ret args ->
-           PermCheckM blocks ret EmptyCtx (TypedBlock ext blocks ret args)
+           PermCheckM ext blocks ret EmptyCtx (TypedBlock ext blocks ret args)
 tcBlock blk =
   do setBlockVisited $ blockID blk
      entries <- blockInfoEntries <$> getBlockInfo (blockID blk)
      TypedBlock <$> mapM (tcEntry blk) entries
+
+{-
+data CFG (ext :: Type)
+         (blocks :: Ctx (Ctx CrucibleType))
+         (init :: Ctx CrucibleType)
+         (ret :: CrucibleType)
+   = CFG { cfgHandle :: FnHandle init ret
+         , cfgBlockMap :: !(BlockMap ext blocks ret)
+         , cfgEntryBlockID :: !(BlockID blocks init)
+         }
+
+data TypedCFG
+     (ext :: *)
+     (blocks :: Ctx (Ctx CrucibleType))
+     (ghosts :: Ctx CrucibleType)
+     (init :: Ctx CrucibleType)
+     (ret :: CrucibleType)
+  = TypedCFG { tpcfgHandle :: TypedFnHandle ghosts init ret
+             , tpcfgInputPerms :: PermSet (ghosts <+> init)
+             , tpcfgOutputPerms :: PermSet (ghosts <+> init ::> ret)
+             , tpcfgBlockMap :: !(TypedBlockMap ext blocks ret)
+             , tpcfgEntryBlockID :: !(TypedEntryID blocks ghosts init)
+             }
+-}
+
+tcCFG :: (TraverseExt ext, PrettyExt ext) =>
+         CtxRepr ghosts -> PermSet (ghosts <+> init) ->
+         PermSet (ghosts <+> init ::> ret) ->
+         CFG ext blocks init ret ->
+         TypedCFG ext blocks ghosts init ret
+tcCFG ghosts permsIn permsOut cfg =
+  runPermCheckM (size $ cfgBlockMap cfg) $
+  do mapM_ (visitComp $ cfgBlockMap cfg) $ cfgWeakTopologicalOrdering cfg
+     blockInfos <- stBlockInfo <$> get
+     let typedBlockMap =
+           fmapFC (\info ->
+                    case blockInfoBlock info of
+                      Just typed_blk -> typed_blk
+                      Nothing -> error "tcCFG: block not type-checked!")
+           blockInfos
+     return $ TypedCFG
+       { tpcfgHandle = TypedFnHandle ghosts $ cfgHandle cfg,
+         tpcfgInputPerms = permsIn,
+         tpcfgOutputPerms = permsOut,
+         tpcfgBlockMap = typedBlockMap,
+         tpcfgEntryBlockID =
+           TypedEntryID (cfgEntryBlockID cfg) ghosts 0 }
+       where
+         visitComp :: (TraverseExt ext, PrettyExt ext) =>
+                      BlockMap ext blocks ret ->
+                      WTOComponent (Some (BlockID blocks)) ->
+             PermCheckM ext blocks ret EmptyCtx ()
+         visitComp blkMap (Vertex (Some blkID)) = visitNode blkMap blkID
+         visitComp blkMap (SCC (Some blkID) comps) =
+           visitNode blkMap blkID >> mapM_ (visitComp blkMap) comps
+         visitNode blkMap blkID =
+           tcBlock (getBlock blkID blkMap) >>= setTypedBlock blkID
