@@ -12,6 +12,7 @@
 
 module SAWScript.Heapster.TypeTranslation (
   TypeTranslate(..),
+  TypeTranslate'(..),
   TypeTranslate''(..),
   testTypeTranslation,
   ) where
@@ -21,6 +22,7 @@ import           Data.Functor.Const
 import           Data.Parameterized.Context
 import           Lang.Crucible.Types
 import           SAWScript.Heapster.Permissions
+import           SAWScript.Heapster.ValueTranslation
 import           SAWScript.TopLevel
 import           Verifier.SAW.OpenTerm
 import           Verifier.SAW.Term.Functor
@@ -29,31 +31,14 @@ import           Verifier.SAW.Term.Functor
 -- permission types to SAW types.  The idea is to translate imperative
 -- structures into a functional version of their shape.
 
--- | Translate an 'Integer' to a SAW bitvector literal
-translateBVLit :: NatRepr w -> Integer -> OpenTerm
-translateBVLit w i =
-  applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
-  [typeTranslate'' w, natOpenTerm i]
-
--- | Build an 'OpenTerm' for the sum of SAW bitvectors
-translateBVSum :: NatRepr w -> [OpenTerm] -> OpenTerm
-translateBVSum w [] = translateBVLit w 0
-translateBVSum _ [t] = t
-translateBVSum w (t:ts) =
-  applyOpenTermMulti (globalOpenTerm "Prelude.bvAdd")
-  [typeTranslate'' w, t, translateBVSum w ts]
-
 class TypeTranslate (f :: Ctx k -> k' -> *) where
   typeTranslate :: Assignment (Const OpenTerm) ctx -> f ctx a -> OpenTerm
 
--- class TypeTranslate' (f :: Ctx k -> *) where
---   typeTranslate' :: Assignment (Const OpenTerm) ctx -> f ctx -> OpenTerm
+class TypeTranslate' (f :: Ctx k -> *) where
+  typeTranslate' :: Assignment (Const OpenTerm) ctx -> f ctx -> OpenTerm
 
 class TypeTranslate'' (d :: *) where
   typeTranslate'' :: d -> OpenTerm
-
-instance TypeTranslate'' (NatRepr w) where
-  typeTranslate'' w = natOpenTerm $ intValue w
 
 instance TypeTranslate'' (TypeRepr a) where
   typeTranslate'' = \case
@@ -64,7 +49,7 @@ instance TypeTranslate'' (TypeRepr a) where
     IntegerRepr            -> error "TODO"
     RealValRepr            -> error "TODO"
     ComplexRealRepr        -> error "TODO"
-    BVRepr w               -> dataTypeOpenTerm "Prelude.bitvector" [typeTranslate'' w]
+    BVRepr w               -> dataTypeOpenTerm "Prelude.bitvector" [valueTranslate'' w]
     IntrinsicRepr _ _      -> error "TODO"
     RecursiveRepr _ _      -> error "TODO"
     FloatRepr _            -> dataTypeOpenTerm "Prelude.Float" []
@@ -73,7 +58,7 @@ instance TypeTranslate'' (TypeRepr a) where
     StringRepr             -> dataTypeOpenTerm "Prelude.String" []
     FunctionHandleRepr _ _ -> error "TODO"
     MaybeRepr _            -> error "TODO"
-    VectorRepr x           -> error "TODO"
+    VectorRepr _           -> error "TODO"
     StructRepr _           -> error "TODO"
     VariantRepr _          -> error "TODO"
     ReferenceRepr _        -> error "TODO"
@@ -81,25 +66,6 @@ instance TypeTranslate'' (TypeRepr a) where
     StringMapRepr _        -> error "TODO"
     SymbolicArrayRepr _ _  -> error "TODO"
     SymbolicStructRepr _   -> error "TODO"
-
-instance TypeTranslate PermVar where
-  typeTranslate ctx x = getConst $ pvGet ctx x
-
-instance TypeTranslate BVFactor where
-  typeTranslate ctx (BVFactor w i x) =
-    applyOpenTermMulti (globalOpenTerm "Prelude.bvMul")
-    [typeTranslate'' w, translateBVLit w i, typeTranslate ctx x]
-
-instance TypeTranslate PermExpr where
-  typeTranslate ctx = \case
-    PExpr_Var i                  -> getConst $ ctx `pvGet` i
-    PExpr_BV w factors constant     ->
-      translateBVSum w (translateBVLit w constant :
-                        map (typeTranslate ctx) factors)
-    PExpr_LLVMWord _ _ -> unitOpenTerm
-    PExpr_LLVMOffset _ _ _ -> unitOpenTerm
-    PExpr_Spl _ -> error "TODO"
-    PExpr_Struct _ _ -> error "TODO"
 
 instance TypeTranslate ValuePerm where
   typeTranslate ctx = \case
@@ -114,9 +80,11 @@ instance TypeTranslate ValuePerm where
       dataTypeOpenTerm "Prelude.Either" [t1, t2]
 
     ValPerm_Exists t p     ->
+      let typA = typeTranslate'' t in
       dataTypeOpenTerm
       "Prelude.Sigma"
-      [ lambdaOpenTerm "x" (typeTranslate'' t) (\ x -> typeTranslate (extend ctx (Const x)) p)
+      [ typA
+      , lambdaOpenTerm "a" typA (\ a -> typeTranslate (extend ctx (Const a)) p)
       ]
 
     ValPerm_Mu _           -> error "TODO"
@@ -126,6 +94,7 @@ instance TypeTranslate ValuePerm where
     ValPerm_Nat_Neq0       -> error "TODO"
 
     ValPerm_LLVMPtr _ ps _ ->
+      -- TODO: Do we remove ValPerm_Eqs here?
       tupleTypeOpenTerm (typeTranslate ctx <$> ps)
 
 instance TypeTranslate LLVMShapePerm where
@@ -156,3 +125,10 @@ testTypeTranslation i =
      if expected == obtained
        then io $ putStrLn "Success!"
        else io $ putStrLn $ "Error in testPermTranslation for test case " ++ show i
+
+instance TypeTranslate' (PermSpec EmptyCtx) where
+  typeTranslate' ctx (PermSpec _ _ p) = typeTranslate ctx p
+
+instance TypeTranslate' PermSet where
+  typeTranslate' ctx ps =
+    tupleTypeOpenTerm $ map (typeTranslate' ctx) (permSpecOfPermSet ps)
