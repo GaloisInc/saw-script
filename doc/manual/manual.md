@@ -1,4 +1,4 @@
-# Overview
+## Overview ##
 
 The Software Analysis Workbench (SAW) is a tool for constructing
 mathematical models of the computational behavior of software,
@@ -18,18 +18,17 @@ that an algorithm specification in Cryptol is equivalent to an algorithm
 implementation in C or Java.
 
 The process of extracting models from programs, manipulating them,
-forming queries about them, and
-sending them to external provers is orchestrated using a special purpose
-language called SAWScript. SAWScript is a typed functional language with
-support for sequencing of imperative commmands.
+forming queries about them, and sending them to external provers is
+orchestrated using a special purpose language called SAWScript.
+SAWScript is a typed functional language with support for sequencing of
+imperative commmands.
 
 The rest of this document first describes how to use the SAW tool,
 `saw`, and outlines the structure of the SAWScript language and its
 relationship to Cryptol. It then presents the SAWScript commands that
-transform functional models and prove
-properties about them. Finally, it describes the specific commands
-available for constructing models from imperative programs in a variety
-of languages.
+transform functional models and prove properties about them. Finally, it
+describes the specific commands available for constructing models from
+imperative programs in a variety of languages.
 
 # Invoking SAW
 
@@ -65,7 +64,8 @@ command-line options:
 
 `-I, --interactive`
 
-  ~ Run interactively (with a REPL).
+  ~ Run interactively (with a REPL). This is the default if no other
+  arguments are specified.
 
 `-j path, --jars=path`
 
@@ -147,7 +147,9 @@ command, which takes the name of the file to be included as an argument.
 For example:
 
 ~~~~
-include "print.saw";
+sawscript> include "print.saw"
+Loading file "print.saw"
+3
 ~~~~
 
 ## Syntax
@@ -157,9 +159,10 @@ Cryptol, Haskell and ML. In particular, functions are applied by
 writing them next to their arguments rather than by using parentheses
 and commas. Rather than writing `f(x, y)`, write `f x y`.
 
-In SAWScript, all text from `//` until the end of a line is
-ignored. Additionally, all text between `/*` and `*/` is ignored,
-regardless of whether the line ends.
+Comments are written as in C and Java (among many other languages). All
+text from `//` until the end of a line is ignored. Additionally, all
+text between `/*` and `*/` is ignored, regardless of whether the line
+ends.
 
 ## Basic Types and Values
 
@@ -594,6 +597,28 @@ sawscript> print_term b
 Prelude.True
 sawscript> print (eval_bool b)
 true
+~~~~
+
+Finally, anything with sequence type in Cryptol can be translated into a
+list of `Term` values in SAWScript using the `eval_list : Term -> [Term]`
+function.
+
+~~~~
+sawscript> let l = {{ [0x01, 0x02, 0x03] }} 
+sawscript> print_term l
+let { x@1 = Prelude.Vec 8 Prelude.Bool
+      x@2 = Cryptol.PLiteralSeqBool (Cryptol.TCNum 8)
+    }
+ in [Cryptol.ecNumber (Cryptol.TCNum 1) x@1 x@2
+    ,Cryptol.ecNumber (Cryptol.TCNum 2) x@1 x@2
+    ,Cryptol.ecNumber (Cryptol.TCNum 3) x@1 x@2]
+sawscript> print (eval_list l)
+[Cryptol.ecNumber (Cryptol.TCNum 1) (Prelude.Vec 8 Prelude.Bool)
+  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))
+,Cryptol.ecNumber (Cryptol.TCNum 2) (Prelude.Vec 8 Prelude.Bool)
+  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))
+,Cryptol.ecNumber (Cryptol.TCNum 3) (Prelude.Vec 8 Prelude.Bool)
+  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))]
 ~~~~
 
 In addition to being able to extract integer and Boolean values from
@@ -1321,6 +1346,7 @@ The `trivial` tactic states that the current goal should be trivially
 true (i.e., the constant `True` or a function that immediately returns
 `True`). It fails if that is not the case.
 
+
 ## Proof Failure and Satisfying Assignments
 
 The `prove_print` and `sat_print` commands print out their essential
@@ -1391,6 +1417,20 @@ representing whether the two are equivalent. The `load_aig` and
 `save_aig` commands work with external representations of AIG data
 structures in the AIGER format. Finally, `save_aig_as_cnf` will write an
 AIG out in CNF format for input into a standard SAT solver.
+
+## More Advanced Proof Scripts
+
+TODO
+
+`goal_apply` is missing
+`goal_assume` is missing
+`goal_eval` is missing
+`goal_eval_unint` is missing
+`goal_insert` is missing
+`goal_intro` is missing
+`goal_when` is missing
+`hoist_ifs` is missing
+`split_goal` is missing
 
 # Symbolic Execution
 
@@ -1598,32 +1638,39 @@ making no other changes to the program state.
 
 In cases like this, a direct translation is possible, given only an
 identification of which code to execute. Two functions exist to handle
-such simple code:
+such simple code. The first, for LLVM is the more stable of the two:
 
 ~~~~
-java_extract : JavaClass -> String -> JavaSetup () -> TopLevel Term
-
-llvm_extract : LLVMModule -> String -> LLVMSetup () -> TopLevel Term
+crucible_llvm_extract : LLVMModule -> String -> TopLevel Term
 ~~~~
 
-The structure of these two functions is essentially identical. The first
-argument describes where to look for code (in either a Java class or an
-LLVM module, loaded as described in the previous section). The second
-argument is the name of the method or function to extract.
+A similar function exists for Java, but is more experimental.
 
-The third argument provides the ability to configure other aspects of
-the symbolic execution process. At the moment, only one option is available:
-pass in `java_pure` or `llvm_pure`, for Java and LLVM respectively, and
-the default extraction process is simply to set both arguments to fresh
-symbolic variables.
+~~~~
+crucible_java_extract : JavaClass -> String -> TopLevel Term
+~~~~
 
-When the `..._extract` functions complete, they return a `Term`
-corresponding to the value returned by the function or method.
+Because of its lack of maturity, it must be enabled by running the
+`enable_experimental` command beforehand.
+
+~~~~
+enable_experimental : TopLevel ()
+~~~~
+
+The structure of these two extraction functions is essentially
+identical. The first argument describes where to look for code (in
+either a Java class or an LLVM module, loaded as described in the
+previous section). The second argument is the name of the method or
+function to extract.
+
+When the extraction functions complete, they return a `Term`
+corresponding to the value returned by the function or method as a
+function of its arguments.
 
 These functions currently work only for code that takes some fixed
 number of integral parameters, returns an integral result, and does not
 access any dynamically-allocated memory (although temporary memory
-allocated during execution and not visible afterward is allowed).
+allocated during execution is allowed).
 
 # Creating Symbolic Variables
 
@@ -1777,623 +1824,18 @@ let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
           x2
 ~~~~
 
-# Monolithic Symbolic Execution
-
-In many cases, the inputs and outputs of a function are more complex
-than supported by the direct extraction process just described. In that
-case, it's necessary to provide more information. In particular,
-following the structure described earlier, we need:
-
-* For every pointer or object reference, how much storage space it
-  refers to.
-* A list of (potentially symbolic) values for some elements of the
-  initial program state.
-* A list of elements of the final program state to treat as outputs.
-
-This capability is provided by the following built-in functions:
-
-~~~~
-java_symexec : JavaClass ->
-               String ->
-               [(String, Term)] ->
-               [String] ->
-               Bool ->
-               TopLevel Term
-
-llvm_symexec : LLVMModule ->
-               String ->
-               [(String, Int)] ->
-               [(String, Term, Int)] ->
-               [(String, Int)] ->
-               Bool ->
-               TopLevel Term
-~~~~
-
-For both functions, the first two arguments are the same as for the
-direct extraction functions from the previous section, identifying what
-code to execute. The final argument for both indicates whether or not to
-do branch satisfiability checking.
-
-The remaining arguments are slightly different for the two functions,
-due to the differences between JVM and LLVM programs.
-
-For `java_symexec`, the third argument, of type `[(String, Term)]`,
-provides information to configure the initial state of the program. Each
-`String` is an expression describing a component of the state, such as
-the name of a parameter, or a field of an object. Each `Term` provides
-the initial value of that component (which may include symbolic
-variables returned by `fresh_symbolic`).
-
-The syntax of these expressions is as follows:
-
-  * Arguments to the method being analyzed can be referred to by name
-    (if the `.class` file contains debugging information, as it will
-    if compiled with `javac -g`). The expression referring to the
-    value of the argument `x` in the `max` example is simply `x`. For
-    Java methods that do not have debugging information, arguments can
-    be named positionally with `args[0]`, `args[1]` and so on. The name
-    `this` refers to the same implicit parameter as the keyword in Java.
-
-  * The expression form `pkg.C.f` refers to the static field `f` of
-    class `C` in package `pkg` (and deeper nesting of packages is
-    allowed).
-
-  * The expression `return` refers to the return value of the method
-    under analysis.
-
-  * For an expression `e` of object type, `e.f` refers to the instance
-    field `f` of the object described by `e`.
-
-  * The value of an expression of array type is the entire contents of
-    the array. There is currently no way to refer to individual
-    elements of an array.
-
-The fourth argument of `java_symexec` is a list of expressions
-describing the elements of the state to return as outputs. The returned
-`Term` will be of tuple type if this list contains more than one
-element, or simply the value of the one state element if the list
-contains only one. In addition to the expressions listed above, this
-list can contain the special variable `$safety`, which refers to a
-`Term` describing the conditions under which the result of symbolic
-execution is well-defined. It can be useful to obtain this `Term` and
-prove that it's always valid (that the program is always safe), or that
-it's valid under the expected preconditions.
-
-The `llvm_symexec` command uses an expression syntax similar to that for
-`java_symexec`, but not identical. The syntax is as follows:
-
-  * Arguments to the function being analyzed can be referred to by name
-    (if the name is reflected in the LLVM code, as it is with code
-    generated by some versions of Clang). The expression referring to
-    the value of the argument `x` in the `max` example is simply `x`.
-    For LLVM functions that do not have named arguments (such as those
-    generated by the Rust compiler), arguments can be
-    named positionally with `args[0]`, `args[1]` and so on.
-
-  * Global variables can be referred to directly by name.
-
-  * The expression `return` refers to the return value of the function
-    under analysis.
-
-  * For any valid expression `e` referring to something with pointer
-    type, the expression `*e` refers to the value pointed to. There are
-    some differences between this and the equivalent expression in C,
-    however. If, for instance, `e` has type `int *`, then `*e` will have
-    type `int`. If `e` referred to a pointer to an array, the C
-    expression `*e` would refer to the first element of that array. In
-    SAWScript, it refers to the entire contents of the array, and there
-    is no way to refer to individual elements of an array.
-
-  * For any valid expression `e` referring to a pointer to a `struct`,
-    the expression `e->n`, for some natural number `n`, refers to the
-    `n`th field of that `struct`. If the LLVM file contains debugging
-    information, the field names used in the original C types are also
-    allowed.
-
-  * For any valid expression `e` referring to a `struct` (directly, not
-    via pointer), the expression `e.n`, for some natural number `n`,
-    refers to the `n`th field of that `struct`. This is particularly
-    useful for fields of nested structs, even if the outer struct is
-    passed by pointer. As for indirect fields, names are allowed if
-    debugging information is present.
-
-In addition to the different expression language, the arguments are
-similar but not identical. The third argument, of type
-`[(String, Int)]`, indicates for each pointer how many elements it
-points to. Before execution, SAW will allocate the given number of
-elements of the static type of the given expression. The strings given
-here should be expressions identifying *pointers* rather than the values
-of those pointers.
-
-The fourth argument, of type `[(String, Term, Int)]`, indicates the
-initial values to write to the program state before execution. The
-elements of this list should include *value* expressions. For example,
-if a function has an argument named `p` of type `int *`, the allocation
-list might contain the element `("p", 1)`, whereas the initial values
-list might contain the element `("*p", v, 1)`, for some value `v`. The
-`Int` portion of each tuple indicates how large the term is: for a term
-with Cryptol type `[n]a`, the `Int` argument should be `n`. In the
-future we expect this value to be inferred.
-
-Finally, the fifth argument, of type `[(String, Int)]`, indicates the
-elements to read from the final state. For each entry, the `String`
-should be a value expression and the `Int` parameter indicates how many
-elements to read. The number of elements does not need to be the same as
-the number of elements allocated or written in the initial state.
-However, reading past the end of an object or reading a location that
-has not been initialized will lead to an error. In this list, the
-special name `$safety` works in the same way as for Java.
-
-## Examples
-
-The following code is a complete example of using the `java_symexec`
-function.
-
-~~~~
-// show that add(x,y) == add(y,x) for all x and y
-cadd <- java_load_class "Add";
-x <- fresh_symbolic "x" {| [32] |};
-y <- fresh_symbolic "y" {| [32] |};
-res <- java_symexec cadd "add" [("x", x), ("y", y)] ["return", "$safety"] true;
-let jadd = {{ res.0 }};
-let safe = {{ res.1 }};
-jadd' <- abstract_symbolic jadd;
-print_term jadd';
-print "Proving commutativity:";
-prove_print abc {{ \a b -> jadd' a b == jadd' b a }};
-print "Proving safety:";
-prove_print abc safe;
-print "Done.";
-~~~~
-
-This code first loads the `Add` class and creates two 32-bit symbolic
-variables, `x` and `y`. It then symbolically executes the `add` method
-with the symbolic variables just created as its two arguments,
-and returns the symbolic expression denoting the method's return value.
-
-Once the script has a `Term` in hand (the variable `ja`), it prints the
-term and then translates the version containing symbolic variables into a
-function that takes concrete values for those variables as arguments.
-Finally, it proves that the resulting function is commutative.
-
-Running this script through `saw` gives the following output:
-
-~~~~
-% saw -j <path to>rt.jar java_symexec.saw
-Loading file "java_symexec.saw"
-let { x0 = Prelude.Vec 32 Prelude.Bool;
-    }
- in \(x::x0) ->
-      \(y::x0) -> Prelude.bvAdd 32 x y
-Proving commutivity:
-Valid
-Proving safety:
-Valid
-Done.
-~~~~
-
-
-## Limitations
-
-Although the `symexec` functions are more flexible than the `extract`
-functions, they still have some limitations and assumptions.
-
-* When allocating memory for objects or arrays, each allocation is done
-  independently. There is currently no way to create data
-  structures that share sub-structures. No aliasing is possible.
-  Therefore, it is important to take into account that any proofs
-  performed on the results of symbolic execution will not necessarily
-  reflect the behavior of the code being analyzed if it is run in a
-  context where its inputs involve aliasing or overlapping memory
-  regions.
-
-* The sizes and pointer relationships between objects in the heap must
-  be specified before doing symbolic execution. Therefore, the results
-  may not reflect the behavior of the code when called with, for
-  example, arrays of different sizes.
-
-* In Java, any variables of class type are initialized to refer to an
-  object of that specific, statically-declared type, while in general
-  they may refer to objects of subtypes of that type. Therefore, the
-  code under analysis may behave differently when given parameters of
-  more specific types.
-
 # Specification-Based Verification
 
 The built-in functions described so far work by extracting models of
 code that can then be used for a variety of purposes, including proofs
 about the properties of the code.
 
-When the goal is to prove equivalence between some Java or LLVM code and
+When the goal is to prove equivalence between some LLVM or Java code and
 a specification, however, a more declarative approach is sometimes
-convenient. The following two functions allow for combined model
-extraction and verification.
-
-~~~~
-java_verify : JavaClass ->
-              String ->
-              [JavaMethodSpec] ->
-              JavaSetup () ->
-              TopLevel JavaMethodSpec
-
-llvm_verify : LLVMModule ->
-              String ->
-              [LLVMMethodSpec] ->
-              LLVMSetup () ->
-              TopLevel LLVMMethodSpec
-~~~~
-
-Like all of the functions for Java and LLVM analysis, the first two
-parameters indicate what code to analyze. The third parameter is used
-for compositional verification, as described in the next section. For
-now, we will use the empty list. The final parameter
-describes the specification of the code to be analyzed, comprised of
-commands of type `JavaSetup` or `LLVMSetup`. In most cases, this
-parameter will be a `do` block containing a sequence of commands of the
-appropriate type. Java and LLVM specifications are slightly different, but
-make use of largely the same set of concepts.
-
-* Several commands are available to configure the contents of the
-  initial state before symbolic execution.
-
-* Several commands are available to describe what to check in the final
-  state after symbolic execution.
-
-* One final command describes how to prove that the code under analysis
-  matches the specification.
-
-The following sections describe the details of configuring initial
-states, stating the expected properties of the final state, and proving
-that the final state actually satisfies those properties.
-
-## Configuring the Initial State
-
-The first step in configuring the initial state is to specify which
-program variables are important, and to specify the types of those variables
-more precisely. The symbolic execution system currently expects the layout
-of memory before symbolic execution to be completely specified. As in
-`llvm_symexec`, SAW needs information about how much space every pointer
-or reference variable points to. With one exception, SAW assumes
-that every pointer points to a distinct region of memory.
-
-Because of this structure, separate functions are used to describe
-variables with values of base types and variables of pointer type.
-
-For simple integer values, we use `java_var` or `llvm_var`.
-
-~~~~
-java_var : String -> JavaType -> JavaSetup Term
-
-llvm_var : String -> LLVMType -> LLVMSetup Term
-~~~~
-
-These functions both take a variable name and a type. The variable names
-use the same syntax described earlier for `java_symexec` and
-`llvm_symexec`. The types are built up using the following functions:
-
-~~~~
-java_bool : JavaType
-java_byte : JavaType
-java_char : JavaType
-java_short : JavaType
-java_int : JavaType
-java_long : JavaType
-java_float : JavaType
-java_double : JavaType
-java_class : String -> JavaType
-java_array : Int -> JavaType -> JavaType
-
-llvm_int : Int -> LLVMType
-llvm_array : Int -> LLVMType -> LLVMType
-llvm_struct : String -> LLVMType
-llvm_float : LLVMType
-llvm_double : LLVMType
-~~~~
-
-Most of these types are straightforward mappings to the standard Java
-and LLVM types. The one key difference is that arrays must have a fixed,
-concrete size. Therefore, all analysis results are valid only under the
-assumption that any arrays have the specific size indicated, and may not
-hold for other sizes. The `llvm_int` function also takes an `Int` parameter
-indicating the variable's bit width.
-
-LLVM types can also be specified in LLVM syntax directly by using the
-`llvm_type` function.
-
-~~~~
-llvm_type : String -> LLVMType
-~~~~
-
-For example, `llvm_type "i32"` yields the same result as `llvm_int 32`.
-
-The `Term` returned by `java_var` and `llvm_var` is a representation of
-the _initial value_ of the variable being declared. It can be used in
-any later expression.
-
-While `java_var` and `llvm_var` declare elements of the program state
-that have values representable in the logic of SAW, pointers and
-references exist only inside the simulator; they are not representable
-before or after symbolic execution. Different functions are used to declare
-variables of pointer or reference type.
-
-~~~~
-java_class_var : String -> JavaType -> JavaSetup ()
-
-llvm_ptr : String -> LLVMType -> LLVMSetup ()
-~~~~
-
-The first argument of each function is the name of the state element
-it refers to. For `java_class_var`, the second argument is the
-type of the object, which should always be the result of the
-`java_class` function called with an appropriate class name. Arrays in
-Java are treated as if they were values, rather than references, since
-their values are directly representable in SAWCore. For `llvm_ptr`, the
-second argument is the type of the value pointed to. Both functions
-return no useful value (the unit type `()`), since the values of
-pointers are not meaningful in SAWCore. In LLVM, arrays are represented
-as pointers; therefore, the pointer and the value pointed to must be
-declared separately.
-
-~~~~
-llvm_ptr "a" (llvm_array 10 (llvm_int 32));
-a <- llvm_var "*a" (llvm_array 10 (llvm_int 32));
-~~~~
-
-The `java_assert` and `llvm_assert` functions take a `Term` of boolean
-type as an argument, which states a condition that must be true in the
-initial state before the function under analysis executes. The term can
-refer to the initial values of any declared program variables.
-
-When the condition required of an initial state is that a variable
-always has a specific, concrete value, optimized forms of these
-functions are available. The `java_assert_eq` and `llvm_assert_eq`
-functions take two arguments: an expression naming a location in the
-program state, and a `Term` representing an initial value. These
-functions work as destructive updates in the state of the symbolic
-simulator, and can make branch conditions more likely to reduce to
-constants. This means that, although `..._assert` and `..._assert_eq`
-functions can be used to make semantically-equivalent statements, using
-the latter can make symbolic termination more likely.
-
-Finally, although the default configuration of the symbolic simulators
-in SAW is to make every pointer or reference refer to a fresh region of
-memory separate from all other pointers, it is possible to override this
-behavior for Java programs by declaring that a set of references can alias
-each other.
-
-~~~~
-java_may_alias : [String] -> JavaSetup ()
-~~~~
-
-This function takes a list of names referring to references, and
-declares that any element of this set may (or may not) alias any other.
-Because this is a may-alias relationship, the verification process
-involves a separate proof for each possible aliasing configuration. At
-the moment, LLVM heaps must be completely disjoint.
-
-Another precondition relevant only to Java concerns the set of classes
-that are initialized before execution of a particular method. To state
-that the proof of the method being specified assumes that a class `C`
-is already initialized, use `java_requires_class "C"`.
-
-~~~~
-java_requires_class : String -> JavaSetup ()
-~~~~
-
-During verification, the `java_requires_class` clause instructs the
-simulator to initialize the named class before executing the method to
-be verified.
-
-Finally, one more precondition is relevant only to LLVM programs. The
-`llvm_assert_null` function works like `llvm_assert_eq` except that it
-works only on pointer variables and assigns the implicit value `NULL`.
-
-~~~~
-llvm_assert_null : String -> LLVMSetup ()
-~~~~
-
-## Specifying the Final State
-
-The simplest statement about the expected final state of the method or
-function under analysis is a declaration of what value it should return
-(generally as a function of the variables declared as part of the
-initial state).
-
-~~~~
-java_return : Term -> JavaSetup ()
-
-llvm_return : Term -> LLVMSetup ()
-
-llvm_return_arbitrary : LLVMSetup ()
-~~~~
-
-The `llvm_return_arbitrary` command indicates that the function *does*
-return a value, but that we don't want to specify what value it returns.
-
-To account for side effects, the following two functions allow declaration
-of the final expected value that the program state should contain for a
-specific pvariable when execution finishes.
-
-~~~~
-java_ensure_eq : String -> Term -> JavaSetup ()
-
-llvm_ensure_eq : String -> Term -> LLVMSetup ()
-~~~~
-
-For the most part, these two functions may refer to the same set of
-variables used to set up the initial state. However, for functions that
-return pointers or objects, the special name `return` is also available.
-It can be used in `java_class_var` and `llvm_ptr` calls to declare the
-more specific object or array type of a return value, and in the
-`..._ensure_eq` function to declare the associated values. For LLVM
-arrays, the typical usage is as follows.
-
-~~~~
-llvm_ensure_eq "*return" v;
-~~~~
-
-The `return` expression is also useful for fields of returned objects or
-structs.
-
-~~~~
-java_ensure_eq "return.f" v;
-
-llvm_ensure_eq "return->0" v;
-~~~~
-
-Finally, for LLVM programs it is possible to state that the function
-being analyzed is expected to allocate a new object, stored in a given
-location.
-
-~~~~
-llvm_allocates : String -> LLVMSetup ()
-~~~~
-
-When executing an override containing `llvm_allocates`, the override
-allocates a new object of the appropriate type and stores a pointer to
-it in the given location.
-
-## Running Proofs
-
-Once the constraints on the initial and final states have been declared,
-what remains is to prove that the code under analysis actually meets
-these specifications. The goal of SAW is to automate this proof as much
-as possible, but some degree of input into the proof process is
-occasionally necessary, and can be provided with the following functions.
-
-~~~~
-java_verify_tactic : ProofScript SatResult -> JavaSetup ()
-
-llvm_verify_tactic : ProofScript SatResult -> LLVMSetup ()
-~~~~
-
-The proof script argument to these functions specifies how to
-perform the proof. If the setup block does not call one of these
-functions, SAW prints a warning message and skips the proof; this
-can sometimes be a useful behavior during debugging, or in compositional
-verification as described later.
-
-The process of verification checks all user-specified postconditions,
-and also checks that the safety condition (as referred to by `$safety`
-in `*_symexec`) is valid, and therefore that symbolic execution is
-always well defined (under the supplied pre-conditions).
-
-# Compositional Verification
-
-The primary advantage of the specification-based approach to
-verification is that it allows for compositional reasoning. That is,
-when proving properties of a given method or function, we can make use
-of properties we have already proved about its callees rather than
-analyzing them anew. This enables us to reason about much larger
-and more complex systems than otherwise possible.
-
-The `java_verify` and `llvm_verify` functions returns values of type
-`JavaMethodSpec` and `LLVMMethodSpec`, respectively. These values are
-opaque objects that internally contain both the information provided
-in the associated `JavaSetup` or `LLVMSetup` blocks and the
-results of the verification process.
-
-Any of these `MethodSpec` objects can be passed in via the third
-argument of the `..._verify` functions. For any function or method
-specified by one of these parameters, the simulator will not follow
-calls to the associated target. Instead, it will perform the following
-steps:
-
-* Check that all `..._assert` and `..._assert_eq` statements in the
-  specification are satisfied.
-* For Java programs, check that any aliasing is compatible with the
-  aliasing restrictions stated with `java_may_alias`.
-* For Java programs, check that all classes required by the target method
-  have already been initialized\.
-* Update the simulator state as described in the specification.
-
-Normally, a `MethodSpec` is the result of both simulation and
-proof of the target code. However, in some cases, it can be useful to
-use a `MethodSpec` to specify some code that either doesn't exist or is
-hard to prove. In those cases, the `java_no_simulate` or `llvm_no_simulate`
-function can be used to indicate not to even try to simulate the code
-being specified, and instead return a `MethodSpec` that is assumed to be
-correct. A `MethodSpec` with `*_no_simulate` can be used to provide a
-specification for a function or method that is declared but not defined
-within the code being analyzed.
-
-The default behavior of `java_verify` disallows allocation within the
-method being analyzed. This restriction makes it possible to reason
-about all possible effects of a method, since only effects specified
-with `java_ensure_eq` or `java_modify` are allowed. For many
-cryptographic applications, this behavior is ideal, because it is
-important to know whether, for instance, temporary variables storing key
-material have been cleared after use. Garbage on the heap that has been
-collected but not cleared could let confidential information leak. If
-allocation is not a concern in a particular application, the
-`java_allow_alloc` function makes allocation legal within the
-method being specified.
-
-# Controlling Symbolic Execution
-
-One other set of commands is available to control the symbolic execution
-process. These commands control the use of satisfiability checking to
-determine whether both paths are feasible when encountering branches in the
-program, which is particularly relevant for branches controlling the
-iteration of loops.
-
-~~~~
-java_sat_branches : Bool -> JavaSetup ()
-llvm_sat_branches : Bool -> LLVMSetup ()
-~~~~
-
-The `Bool` parameter has the same effect as the `Bool` parameter passed
-to `java_symexec` and `llvm_symexec`.
-
-Finally, in some cases, pointers in LLVM can become what look like
-complex symbolic values during symbolic simulation, even though they can
-be simplified down to constants. Using these complex pointers directly
-is slow, and simplifying them can greatly speed up symbolic execution of
-some programs. For other programs, however, the simplification is wasted
-effort. Therefore, the `llvm_simplify_addrs` command turns the
-simplification of pointer expressions on (with parameter `true`) or off
-(with parameter `false`).
-
-~~~~
-llvm_simplify_addrs : Bool -> LLVMSetup ()
-~~~~
-
-# LLVM Verification Using Crucible
-
-The verification commands presented for Java and LLVM so far use
-language-specific symbolic execution infrastructure. More recently, we
-have developed a new library for symbolic execution of imperative
-programs that is intended to be relatively agnostic to the specific
-source language in question. It exposes an intermediate representation
-based on control-flow graphs containing relatively simple instructions
-that can be used as the target of translation from a variety of source
-languages. We have successfully used it for LLVM, Matlab, and a variety
-of machine code ISAs, and have ongoing efforts to use it for several
-other languages.
-
-In addition to being language-agnostic, Crucible has a larger feature
-set and generally better performance than the previous symbolic
-execution engines for Java and LLVM.
-
-As an alternative to the LLVM verification commands presented earlier,
-an experimental set of commands for doing verification using Crucible
-also exist. At the moment, the key command is `crucible_llvm_verify`,
-with roughly similar functionality to `llvm_verify`. Counterparts of
-`llvm_extract` and `llvm_symexec` do not currently exist, but are
-planned.
-
-As with `llvm_verify`, `crucible_llvm_verify` requires a specification
-as input, describing what the function under analysis is intended to do.
-The mechanism for setting up a specification is similar to that for
-`llvm_verify`, but uses a slightly different set of commands.
-
-The most significant difference is that creating fresh symbolic values,
-describing allocation, and describing the initial value of allocated
-memory are distinct operations. This can sometimes result in more
-verbose specifications, but is more flexible and more amenable to
-abstraction. So, with a good set of common patterns encapsulated in
-functions, specifications can ultimately become more concise and
-understandable.
+convenient. The following sections describe an approach that combines
+model extraction and verification with respect to a specification. A
+verified specification can then be used as input to future
+verifications, allowing the proof process to be decomposed.
 
 ## Running a Verification
 
@@ -2401,29 +1843,43 @@ Verification with Crucible is controlled by the `crucible_llvm_verify`
 command.
 
 ~~~~
-crucible_llvm_verify : LLVMModule ->
-                       String ->
-                       [CrucibleMethodSpec] ->
-                       Bool ->
-                       CrucibleSetup () ->
-                       ProofScript SatResult ->
-                       TopLevel CrucibleMethodSpec
+crucible_llvm_verify :
+  LLVMModule ->
+  String ->
+  [CrucibleMethodSpec] ->
+  Bool ->
+  CrucibleSetup () ->
+  ProofScript SatResult ->
+  TopLevel CrucibleMethodSpec
 ~~~~
 
 The first two arguments specify the module and function name to verify,
 as with `llvm_verify`. The third argument specifies the list of
-already-verified specifications to use as overrides for compositional
-verification (though note that the types of specifications used by
-`llvm_verify` and `crucible_llvm_verify` are different, so they can't be
-used interchangeably). The fourth argument specifies whether to do path
-satisfiability checking, and the fifth gives the specification of the
-function to be verified. Finally, the last argument gives the proof
-script to use for verification (which is separated from the
-specification itself, unlike `llvm_verify`). The result is a proved
+already-verified specifications to use for compositional verification
+(described later; use `[]` for now). The fourth argument specifies
+whether to do path satisfiability checking, and the fifth gives the
+specification of the function to be verified. Finally, the last argument
+gives the proof script to use for verification (which is separated from
+the specification itself, unlike `llvm_verify`). The result is a proved
 specification that can be used to simplify verification of functions
 that call this one.
 
-Now we describe how to construct a value of type `CrucibleSetup ()`.
+A similar command for JVM programs is available if `enable_experimental`
+has been run.
+
+~~~~
+crucible_jvm_verify :
+  JavaClass ->
+  String ->
+  [JVMMethodSpec] ->
+  Bool ->
+  JVMSetup () ->
+  ProofScript SatResult ->
+  TopLevel JVMMethodSpec
+~~~~
+
+Now we describe how to construct a value of type `CrucibleSetup ()` (or
+`JVMSetup ()`).
 
 ## Structure of a Specification
 
@@ -2436,12 +1892,13 @@ A specifications for Crucible consists of three logical components:
 * A specification of the expected final value of the program state.
 
 These three portions of the specification are written in sequence within
-a `do` block of `CrucibleSetup` type. The command
-`crucible_execute_func` separates the specification of the initial state
-from the specification of the final state, and specifies the arguments
-to the function in terms of the initial state. Most of the commands
-available for state description will work either before or after
-`crucible_execute_func`, though with slightly different meaning.
+a `do` block of `CrucibleSetup` (or `JVMSetup`) type. The command
+`crucible_execute_func` (or `jvm_execute_func`) separates the
+specification of the initial state from the specification of the final
+state, and specifies the arguments to the function in terms of the
+initial state. Most of the commands available for state description will
+work either before or after `crucible_execute_func`, though with
+slightly different meaning.
 
 ## Creating Fresh Variables
 
@@ -2449,17 +1906,69 @@ In any case where you want to prove a property of a function for an
 entire class of inputs (perhaps all inputs) rather than concrete values,
 the initial values of at least some elements of the program state must
 contain fresh variables. These are created in a specification with the
-`crucible_fresh_var` command.
+`crucible_fresh_var` (or `jvm_fresh_var`) command.
 
 ~~~~
 crucible_fresh_var : String -> LLVMType -> CrucibleSetup Term
+
+jvm_fresh_var : String -> JavaType -> JVMSetup Term
 ~~~~
 
-The first parameter is a name, used only for presentation. It's possible
-(though not recommended) to create multiple variables with the same
-name, but SAW will distinguish between them internally. The second
-parameter is the LLVM type of the variable. The resulting `Term` can be
-used in various subsequent commands.
+The first parameter to both functions is a name, used only for
+presentation. It's possible (though not recommended) to create multiple
+variables with the same name, but SAW will distinguish between them
+internally. The second parameter is the LLVM (or Java) type of the
+variable. The resulting `Term` can be used in various subsequent
+commands.
+
+LLVM types are built with this set of functions:
+
+~~~~
+llvm_int : Int -> LLVMType
+llvm_array : Int -> LLVMType -> LLVMType
+llvm_struct : String -> LLVMType
+llvm_float : LLVMType
+llvm_double : LLVMType
+~~~~
+
+Java types are built up using the following functions:
+
+~~~~
+java_bool : JavaType
+java_byte : JavaType
+java_char : JavaType
+java_short : JavaType
+java_int : JavaType
+java_long : JavaType
+java_float : JavaType
+java_double : JavaType
+java_class : String -> JavaType
+java_array : Int -> JavaType -> JavaType
+~~~~
+
+Most of these types are straightforward mappings to the standard LLVM
+and Java types. The one key difference is that arrays must have a fixed,
+concrete size. Therefore, all analysis results are valid only under the
+assumption that any arrays have the specific size indicated, and may not
+hold for other sizes. The `llvm_int` function also takes an `Int`
+parameter indicating the variable's bit width.
+
+LLVM types can also be specified in LLVM syntax directly by using the
+`llvm_type` function.
+
+~~~~
+llvm_type : String -> LLVMType
+~~~~
+
+For example, `llvm_type "i32"` yields the same result as `llvm_int 32`.
+
+The most common use for creating fresh variables is to state that a
+particular function should have the specified behaviour for arbitrary
+initial values of the variables in question. Sometimes, however, it can
+be useful to specify that a function returns (or stores, more about this
+later) an arbitrary value, without specifying what that value should be.
+To express such a pattern, you can also run `crucible_fresh_var` from
+the post state (i.e., after `crucible_execute_func`).
 
 ## The SetupValue Type
 
@@ -2469,10 +1978,12 @@ values that can occur during symbolic execution, which includes both
 `Term` values, pointers, and composite types consisting of either of
 these (both structures and arrays).
 
-The `crucible_term` function creates a `SetupValue` from a `Term`:
+The `crucible_term` and `jvm_term` functions create a `SetupValue` or
+`JVMValue` from a `Term`:
 
 ~~~~
 crucible_term : Term -> SetupValue
+jvm_term : Term -> JVMValue
 ~~~~
 
 ## Executing
@@ -2487,19 +1998,19 @@ crucible_execute_func : [SetupValue] -> CrucibleSetup ()
 
 ## Return Values
 
-The `crucible_points_to` command can be used to specify changes to
-portions of the memory accessed by pointer. For return values, however,
-use the `crucible_return` command instead.
+To specify the value that should be returned by the function being
+verified use the `crucible_return` or `jvm_return` command.
 
 ~~~~
 crucible_return : SetupValue -> CrucibleSetup ()
+jvm_return : JVMValue -> JVMSetup ()
 ~~~~
 
 ## A First Simple Example
 
 The commands introuduced so far are sufficient to verify simple programs
 that do not use pointers (or that use them only internally). Consider,
-for instance the program that adds its two arguments together:
+for instance the C program that adds its two arguments together:
 
 ~~~~
 uint32_t add(uint32_t x, uint32_t y) {
@@ -2526,7 +2037,36 @@ m <- llvm_load_module "add.bc";
 add_ms <- crucible_llvm_verify m "add" [] false add_setup abc;
 ~~~~
 
-Now say we have a doubling function written in terms of `add`:
+## Compositional Verification
+
+The primary advantage of the specification-based approach to
+verification is that it allows for compositional reasoning. That is,
+when proving properties of a given method or function, we can make use
+of properties we have already proved about its callees rather than
+analyzing them anew. This enables us to reason about much larger
+and more complex systems than otherwise possible.
+
+The `crucible_llvm_verify` and `crucible_jvm_verify` functions returns
+values of type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively.
+These values are opaque objects that internally contain both the
+information provided in the associated `JVMSetup` or `CrucibleSetup`
+blocks and the results of the verification process.
+
+Any of these `MethodSpec` objects can be passed in via the third
+argument of the `..._verify` functions. For any function or method
+specified by one of these parameters, the simulator will not follow
+calls to the associated target. Instead, it will perform the following
+steps:
+
+* Check that all `crucible_points_to` and `crucible_precond` statements
+  (or the corresponding JVM statements) in the specification are
+  satisfied.
+
+* Update the simulator state and optionally construct a return value as
+  described in the specification.
+
+More concretely, building on the previous example, say we have a
+doubling function written in terms of `add`:
 
 ~~~~
 uint32_t dbl(uint32_t x) {
@@ -2534,7 +2074,7 @@ uint32_t dbl(uint32_t x) {
 }
 ~~~~
 
-It has a similar specification:
+It has a similar specification to `add`:
 
 ~~~~
 let dbl_setup = do {
@@ -2550,8 +2090,9 @@ And we can verify it using what we've already proved about `add`:
 crucible_llvm_verify m "dbl" [add_ms] false dbl_setup abc;
 ~~~~
 
-In this case, doing the verification compositionally doesn't save much,
-since the functions are so simple, but it illustrates the approach.
+In this case, doing the verification compositionally doesn't save
+computational effort, since the functions are so simple, but it
+illustrates the approach.
 
 ## Specifying Heap Layout
 
@@ -2572,19 +2113,45 @@ In the initial state, `crucible_alloc` specifies that the function
 expects a pointer to allocated space to exist. In the final state, it
 specifies that the function itself performs an allocation.
 
-It's also possible to construct fresh pointers that do not point to
-allocated memory (which can be useful for functions that manipulate
-pointers but not the values they point to):
+When using the experimental Java implementation, separate functions
+exist for specifying that arrays or objects are allocated:
+
+~~~~
+jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue
+jvm_alloc_object : String -> JVMSetup JVMValue
+~~~~
+
+The former specifies an array of the given concrete size, with elements
+of the given type. The latter specifies an object of the given class
+name.
+
+In LLVM, it's also possible to construct fresh pointers that do not
+point to allocated memory (which can be useful for functions that
+manipulate pointers but not the values they point to):
 
 ~~~~
 crucible_fresh_pointer : LLVMType -> CrucibleSetup SetupValue
 ~~~~
 
-The NULL pointer is called `crucible_null`:
+The NULL pointer is called `crucible_null` in LLVM and `jvm_null` in
+JVM:
 
 ~~~~
 crucible_null : SetupValue
+jvm_null : JVMValue
 ~~~~
+
+One final, slightly more obscure command is the following:
+
+~~~~
+crucible_alloc_readonly : LLVMType -> CrucibleSetup SetupValue
+~~~~
+
+This works like `crucible_alloc` except that writes to the space
+allocated are forbidden. This can be useful for specifying that a
+function should take as an argument a pointer to allocated space that it
+will not modify. Unlike `crucible_alloc`, regions allocated with
+`crucible_alloc_readonly` are allowed to alias other read-only regions.
 
 ## Specifying Heap Values
 
@@ -2610,6 +2177,19 @@ type of `SetupValue`).
 When used in the final state, `crucible_points_to` specifies that the
 given pointer *should* point to the given value when the function
 finishes.
+
+Occasionally, because C programs frequently reinterpret memory of one
+type as another through casts, it can be useful to specify that a
+pointer points to a value that does not agree with its static type.
+
+~~~~
+crucible_points_to_untyped : SetupValue -> SetupValue -> CrucibleSetup ()
+~~~~
+
+This function works like `crucible_points_to` but omits type checking.
+Rather than omitting type checking across the board, we introducted this
+additional function to make it clear when a type reinterpretation is
+intentional.
 
 ## Working with Compound Types
 
@@ -2642,6 +2222,36 @@ functions construct compound values from lists of element values.
 ~~~~
 crucible_array : [SetupValue] -> SetupValue
 crucible_struct : [SetupValue] -> SetupValue
+~~~~
+
+
+To specify an array or struct in which each element or field is
+symbolic, it would be possible, but tedious, to use a large combination
+of `crucible_fresh_var` and `crucible_elem` or `crucible_field`
+commands. However, the following function can simplify the common case
+where you want every element or field to have a fresh value.
+
+~~~~
+crucible_fresh_expanded_val : LLVMType -> CrucibleSetup SetupValue
+~~~~
+
+Finally, `crucible_struct` normally creates a `struct` whose layout
+obeys the alignment rules of the platform specified in the LLVM file
+being analyzed. Structs in LLVM can explicitly be "packed", however, so
+that every field immediately follows the previous in memory. The
+following command will create values of such types:
+
+~~~~
+crucible_packed_struct : [SetupValue] -> SetupValue
+~~~~
+
+In the experimental Java verification implementation, the following
+functions can be used to state the equivalent of a combination of
+`crucible_points_to` and either `crucible_elem` or `crucible_field`.
+
+~~~~
+jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()
+jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()
 ~~~~
 
 ## Global variables
@@ -2722,10 +2332,11 @@ f_spec <- crucible_llvm_verify m "f" [] true (do {
 }) abc;
 ~~~
 
-which initializes `x` to whatever it is initialized to in the C code
-at the beginning of verification. This specification is now safe for
-compositional verification: SAW won't rewrite a term with `f_spec`
-unless it can determine that `x` still has its initial value.
+which initializes `x` to whatever it is initialized to in the C code at
+the beginning of verification. This specification is now safe for
+compositional verification: SAW won't use the specification `f_spec`
+unless it can determine that `x` still has its initial value at the
+point of a call to `f`.
 
 ## Preconditions and Postconditions
 
@@ -2738,6 +2349,13 @@ values in scope at the time.
 ~~~~
 crucible_precond : Term -> CrucibleSetup ()
 crucible_postcond : Term -> CrucibleSetup ()
+~~~~
+
+Similar functions exist in the experimental JVM implementation:
+
+~~~~
+jvm_precond : Term -> JVMSetup ()
+jvm_postcond : Term -> JVMSetup ()
 ~~~~
 
 These two commands take `Term` arguments, and therefore cannot describe
@@ -2754,12 +2372,23 @@ symbolic execution when the predicate of interest is an equality.
 
 ## Assuming specifications
 
-When using [the assume_unsat tactic](#miscellaneous-tactics), Crucible still
-simulates the function. To skip simulation altogether, one can use
+Normally, a `MethodSpec` is the result of both simulation and proof of
+the target code. However, in some cases, it can be useful to use a
+`MethodSpec` to specify some code that either doesn't exist or is hard
+to prove. The previously-mentioned [the assume_unsat
+tactic](#miscellaneous-tactics) omits proof but does not preven
+simulation of the function. To skip simulation altogether, one can use:
 
 ~~~
 crucible_llvm_unsafe_assume_spec :
   LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec
+~~~
+
+Or, in the experimental JVM implementation:
+
+~~~
+crucible_jvm_unsafe_assume_spec :
+  JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec
 ~~~
 
 ## A Heap-Based Example
@@ -2862,3 +2491,12 @@ bit vector of length 32.
 
 The entire script can be found in the `dotprod_struct-crucible.saw` file
 alongside `dotprod_struct.c`.
+
+## Using Ghost State
+
+TODO: `crucible_declare_ghost_state` is missing
+TODO: `crucible_ghost_value` is missing
+
+# Notes
+
+TODO: `enable_deprecated` is missing

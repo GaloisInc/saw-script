@@ -17,39 +17,7 @@
 \renewcommand{\topfraction}{0.95}
 \renewcommand{\bottomfraction}{0.95}
 \renewcommand{\floatpagefraction}{0.35}
-\setcounter{totalnumber}{5}
 \definecolor{MyGray}{rgb}{0.9,0.9,0.9}
-\makeatletter
-\let\orig@item\item
-
-\def\item{%
-    \@ifnextchar{[}%
-        {\lstinline@item}%
-        {\orig@item}%
-}
-
-\begingroup
-\catcode`\]=\active
-\gdef\lstinline@item[{%
-    \setbox0\hbox\bgroup
-        \catcode`\]=\active
-        \let]\lstinline@item@end
-}
-\endgroup
-
-\def\lstinline@item@end{%
-    \egroup
-    \orig@item[\usebox0]%
-}
-
-\newenvironment{graybox}{%
-   \begin{lrbox}{\@tempboxa}\begin{minipage}{\columnwidth}}{\end{minipage}\end{lrbox}%
-   \colorbox{MyGray}{\usebox{\@tempboxa}}
-}
-\makeatother
-
-\setlength{\parskip}{0.6em}
-\setlength{\abovecaptionskip}{0.5em}
 
 \lstset{
          basicstyle=\ttfamily,
