@@ -50,6 +50,7 @@ import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
+import SAWScript.HeapsterBuiltins
 import qualified Lang.Crucible.JVM.Translation as CJ
 import qualified SAWScript.CrucibleBuiltinsJVM as CJ
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
@@ -1844,6 +1845,12 @@ primitives = Map.fromList
     (\_ _ -> toValue crucible_spec_size)
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
+    ]
+
+  , prim "heapster_extract"
+    "LLVMModule -> String -> TopLevel Term"
+    (bicVal heapster_extract)
+    [ "Translate an LLVM function to a Term using Heapster type-checking."
     ]
 
   , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
