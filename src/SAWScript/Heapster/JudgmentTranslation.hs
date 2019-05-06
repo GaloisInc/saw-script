@@ -24,6 +24,7 @@ import           Lang.Crucible.LLVM.MemModel
 import           Lang.Crucible.Types
 import           SAWScript.Heapster.Permissions
 import           SAWScript.Heapster.TypeTranslation
+import           SAWScript.Heapster.TypedCrucible
 import           SAWScript.TopLevel
 import           Verifier.SAW.OpenTerm
 
@@ -251,7 +252,7 @@ instance JudgmentTranslate' AnnotIntro where
 
   judgmentTranslate' jctx outputType (AnnotIntro {..}) = case introProof of
 
-    Intro_Id indices -> error "TODO"
+    Intro_Id x p intros -> error "TODO"
 
     Intro_Exists tp e' p pf -> error "TODO"
 
