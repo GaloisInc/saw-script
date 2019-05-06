@@ -583,31 +583,22 @@ tcStmtSeq seq@(TermStmt _ _) =
 -- * Type-Checking Crucible CFGs
 ----------------------------------------------------------------------
 
-{-
-data BlockEntryInfo blocks ret args where
-  BlockEntryInfo :: {
-    entryInfoID :: TypedEntryID blocks ghosts args,
-    entryInfoPermsIn :: PermSetSpec EmptyCtx (ghosts <+> args),
-    entryInfoPermsOut :: PermSetSpec EmptyCtx (ghosts <+> args ::> ret)
-  } -> BlockEntryInfo blocks ret args
-
-data TypedEntry ext blocks ret args where
-  TypedEntry :: TypedEntryID blocks ghosts args -> CtxRepr args ->
-                PermSetSpec EmptyCtx (ghosts <+> args) ->
-                TypedStmtSeq ext blocks ret (ghosts <+> args) ->
-                TypedEntry ext blocks ret args
--}
-
 tcEntry :: (TraverseExt ext, PrettyExt ext) =>
            Block ext blocks ret args ->
            BlockEntryInfo blocks ret args ->
            PermCheckM blocks ret EmptyCtx (TypedEntry ext blocks ret args)
 tcEntry blk (BlockEntryInfo { .. }) =
+  let sz_ghosts = size $ entryGhosts entryInfoID
+      sz_args = size $ blockInputs blk in
   TypedEntry entryInfoID (blockInputs blk) entryInfoPermsIn <$>
   localC (const $ PermCheckEnv {
              envCurPerms = entryInfoPermsIn,
              envRetPerms = entryInfoPermsOut})
-  (tcStmtSeq (error "FIXME HERE: extend the context of _blockStmts blk"))
+  (tcStmtSeq $
+   applyEmbedding (CtxEmbedding
+                   (addSize sz_ghosts sz_args)
+                   (generate sz_args (extendIndexLeft sz_ghosts)))
+   (blk Lens.^. blockStmts))
 
 tcBlock :: (TraverseExt ext, PrettyExt ext) =>
            Block ext blocks ret args ->
