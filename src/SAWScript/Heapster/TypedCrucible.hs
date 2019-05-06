@@ -456,9 +456,11 @@ buildInputSpecs perms args_ctx (args :: Assignment (Reg ctx) args) =
     )
     (PermSubst sz_ctx $ fmapFC (PExpr_Var . PermVar sz_ctx . regIndex) args) $
     foldrFC
-    -- FIXME HERE: need to fetch the nth perm spec from the end to prove it
-    (\x -> Intro_Eq (EqProof_Refl (PExpr_Var x)))
-    (Intro_Id $ varPermsOfPermSet perms)
+    (\x -> Intro_Id x (getPerm perms x))
+    (foldrFC
+     (\x -> Intro_Eq (EqProof_Refl (PExpr_Var x)))
+     Intro_Done
+     (generate sz_args (\ix -> PermVar sz_ctx (regIndex (args ! ix)))))
     (generate sz_ctx (\ix -> PermVar sz_ctx ix))
   )
 
