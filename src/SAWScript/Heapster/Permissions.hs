@@ -1241,12 +1241,18 @@ eqProofRHS (EqProof_LLVMWord w pf) = PExpr_LLVMWord w $ eqProofRHS pf
 -- smaller permissions. Also, most of the rules have the convention that they
 -- operate on the first permission in the 'ExprPermSet'.
 data PermIntro (ctx :: Ctx CrucibleType) where
-  Intro_Id :: [VarPerm ctx] -> PermIntro ctx
-  -- ^ The final step of any introduction proof, of the following form, where
-  -- each @x@ can occur at most once:
+  Intro_Done :: PermIntro ctx
+  -- ^ The final, trivial step of any introduction proof:
   --
   -- >  ---------------------------------------------------
-  -- >  Gamma | x1:p1, ..., xn:pn, Pin |- x1:p1, ..., xn:pn
+  -- >  Gamma | Pin |- empty
+
+  Intro_Id :: PermVar ctx a -> ValuePerm ctx a -> PermIntro ctx -> PermIntro ctx
+  -- ^ Implements the rule
+  --
+  -- >  Gamma | x:true, Pin |- Pout
+  -- >  ---------------------------------------------------
+  -- >  Gamma | x1:p, Pin |- x:p, Pout
 
   Intro_Exists :: TypeRepr tp -> PermExpr ctx tp -> ValuePerm (ctx ::> tp) a ->
                   PermIntro ctx -> PermIntro ctx
@@ -1322,8 +1328,9 @@ data PermIntro (ctx :: Ctx CrucibleType) where
 
 
 instance Weakenable PermIntro where
-  weaken w (Intro_Id perms) =
-    Intro_Id $ map (weaken w) perms
+  weaken _ Intro_Done = Intro_Done
+  weaken w (Intro_Id x p intro) =
+    Intro_Id (weaken' w x) (weaken' w p) (weaken w intro)
   weaken w (Intro_Exists tp e p intro) =
     Intro_Exists tp (weaken' w e) (weaken' (weakenWeakening1 w) p)
     (weaken w intro)
@@ -1366,10 +1373,11 @@ instance ExtendContext AnnotIntro where
 -}
 
 -- | Build the identity introduction for a given permission set
-idIntro :: PermSet ctx -> AnnotIntro ctx
+idIntro :: PermSet ctx -> PermIntro ctx
 idIntro perms =
-  AnnotIntro perms (permSpecOfPermSet perms) $
-  Intro_Id $ varPermsOfPermSet perms
+  let sz = permSetSize perms in
+  foldrFC (\ix -> Intro_Id (PermVar sz ix) (getPermIx perms ix)) Intro_Done
+  (generate sz id)
 
 annotateIntro :: PermSet ctx -> PermSetSpec vars ctx ->
                  PermSubst vars ctx -> PermIntro ctx -> AnnotIntro ctx
@@ -1497,15 +1505,13 @@ applyIntroWithSubst sz_ctx f =
          ImplHRet permsRem s (f diff s' intro))
 
 -- | FIXME: documentation
---
--- Invariant: the returned 'PartialSubst' has already been applied to the spec
 provePermImplH :: PermSet ctx -> CtxRepr vars -> PartialSubst vars ctx ->
                   PermSetSpec vars ctx ->
                   PermElim (ImplHRet vars) ctx
 
 provePermImplH perms vars s [] =
   Elim_Done $ ImplHRet perms (completePartialSubst (permSetSize perms) vars s) $
-  Intro_Id $ varPermsOfPermSet perms
+  idIntro perms
 
 provePermImplH perms vars s (PermSpec _ e ValPerm_True : specs) =
   -- Prove e:true for any e
