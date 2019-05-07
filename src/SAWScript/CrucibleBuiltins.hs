@@ -340,9 +340,13 @@ verifyObligations cc mspec tactic assumes asserts = do
         printOutLnTop Info (show stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
         opts <- sawPPOpts <$> rwPPOpts <$> getTopLevelRW
-        let showAssignment (name, val) = "  " ++ name ++ ": " ++ show (ppFirstOrderValue opts val)
-        mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
-        io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
+        if null vals then
+          printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
+        else
+          let showAssignment (name, val) = "  " ++ name ++ ": " ++ show (ppFirstOrderValue opts val) in
+          mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
+        printOutLnTop OnlyCounterExamples "----------------------------------"
+        fail "Proof failed." -- Mirroring behavior of llvm_verify
   printOutLnTop Info $ unwords ["Proof succeeded!", nm]
   return (mconcat stats)
 
