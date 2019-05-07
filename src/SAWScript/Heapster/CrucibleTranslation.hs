@@ -30,6 +30,7 @@ import           SAWScript.Heapster.Permissions
 import           SAWScript.Heapster.JudgmentTranslation
 import           SAWScript.Heapster.TypedCrucible
 import           SAWScript.Heapster.TypeTranslation
+import           SAWScript.Heapster.ValueTranslation
 import           SAWScript.TopLevel
 import           Verifier.SAW.OpenTerm
 
@@ -136,7 +137,7 @@ instance JudgmentTranslate' blocks (TypedStmtSeq ext blocks ret) where
   judgmentTranslate' info jctx outputType (TypedConsStmt _ stmt stmtSeq) =
     let typeBefore  = error "TODO" in
     let typeBetween = error "TODO" in
-    let typeAfter   = error "TODO" in
+    let typeAfter   = outputType in
     let stmt'       = translateTypedStmt jctx stmt in -- probably want to also pass [[typeBetween]]
     let jctx'       = error "TODO" in                 -- should this come from `translateTypedStmt`?
     let stmtSeq'    = judgmentTranslate' info jctx' outputType stmtSeq in
@@ -151,20 +152,55 @@ instance JudgmentTranslate' blocks (TypedStmtSeq ext blocks ret) where
   judgmentTranslate' info jctx outputType (TypedTermStmt _ termStmt) =
     judgmentTranslate' info jctx outputType termStmt
 
-instance JudgmentTranslate' blocks (TypedTermStmt blocks ret) where
-
-  judgmentTranslate' info jctx outputType (TypedJump tgt) = error "TODO"
-
-  judgmentTranslate' info jctx outputType (TypedBr cond tgt1 tgt2) = error "TODO"
-
-  judgmentTranslate' info jctx outputType (TypedReturn ret intros) = error "TODO"
-
-  judgmentTranslate' info jctx outputType (TypedErrorStmt err) = error "TODO"
-
 -- Should this function help in building a `JudgmentContext ctx'`?
 translateTypedStmt :: JudgmentContext ctx -> TypedStmt ext ctx ctx' -> OpenTerm
 translateTypedStmt jctx (TypedStmt pIn pOut stmt) = error "TODO"
 translateTypedStmt jctx (DestructLLVMPtr w index) = error "TODO"
+
+instance JudgmentTranslate' blocks (TypedTermStmt blocks ret) where
+
+  judgmentTranslate' info jctx outputType (TypedJump tgt) =
+    translateTypedJumpTarget info jctx tgt
+
+  judgmentTranslate' info jctx outputType (TypedBr cond tgt1 tgt2) =
+    let thenBranch = translateTypedJumpTarget info jctx tgt1 in
+    let elseBranch = translateTypedJumpTarget info jctx tgt2 in
+    error "TODO"
+
+  judgmentTranslate' info jctx outputType (TypedReturn ret intros) =
+    error "TODO"
+
+  judgmentTranslate' info jctx outputType (TypedErrorStmt err) =
+    error "TODO"
+
+translateTypedJumpTarget ::
+  BlocksInfo blocks ->
+  JudgmentContext ctx ->
+  TypedJumpTarget blocks ctx ->
+  OpenTerm
+translateTypedJumpTarget info jctx (TypedJumpTarget entryID args) =
+  let targetFunction = lookupBlock (entryPoints info) entryID in
+  let (TranslatedTypedArgs {..}) = translateTypedArgs jctx args in
+  error "TODO"
+
+data TranslatedTypedArgs ctx = TranslatedTypedArgs
+  { argsCtxt  :: Assignment (Const OpenTerm) ctx
+  , argsVars  :: [OpenTerm]
+  , argsPerms :: [OpenTerm]
+  , argsIntro :: OpenTerm
+  }
+
+translateTypedArgs ::
+  JudgmentContext ctx ->
+  TypedArgs ghostsAndArgs ctx ->
+  TranslatedTypedArgs ghostsAndArgs
+translateTypedArgs jctx (TypedArgs ctxRepr perms intros) =
+  TranslatedTypedArgs
+  { argsCtxt  = fmapFC (Const . typeTranslate'') ctxRepr
+  , argsVars  = toListFC (valueTranslate (typeEnvironment jctx)) perms
+  , argsPerms = toListFC (valueTranslate (permissionMap jctx)) perms
+  , argsIntro = introJudgmentTranslate' jctx intros
+  }
 
 -- TODO: For `Stmt`, for now, only need to deal with `SetReg`
 

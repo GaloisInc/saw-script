@@ -15,6 +15,7 @@
 
 module SAWScript.Heapster.JudgmentTranslation (
   BlocksInfo(..),
+  IntroJudgmentTranslate'(..),
   JudgmentContext(..),
   JudgmentTranslate'(..),
   ResolveEntryIDs,
@@ -94,16 +95,6 @@ class JudgmentTranslate' blocks (f :: Ctx CrucibleType -> *) | f -> blocks where
     OpenTerm ->
     -- ^ Output type being built, needed to build some terms that need to
     -- explicitly state what type they return
-    f ctx ->
-    -- ^ Judgment being translated
-    OpenTerm
-    -- ^ Returns a SAW term of type `[[Πin]] -> CompM [[Πout]]` where `Πin` is
-    -- the expected permission set coming "into" this judgment (left of
-    -- turnstile), and `Πout` the permission set coming "out"
-
-class IntroJudgmentTranslate' (f :: Ctx CrucibleType -> *) where
-  introJudgmentTranslate' ::
-    JudgmentContext ctx ->
     f ctx ->
     -- ^ Judgment being translated
     OpenTerm
@@ -294,6 +285,14 @@ elimPair typL typR typOut pair hdlr =
   , lambdaOpenTerm "l" typL (\ l -> lambdaOpenTerm "r" typR (\ r -> hdlr l r))
   , pair
   ]
+
+class IntroJudgmentTranslate' (f :: Ctx CrucibleType -> *) where
+  introJudgmentTranslate' ::
+    JudgmentContext ctx ->
+    f ctx ->
+    -- ^ Judgment being translated
+    OpenTerm
+    -- ^ A pure SAW function returning a tuple
 
 instance IntroJudgmentTranslate' AnnotIntro where
 

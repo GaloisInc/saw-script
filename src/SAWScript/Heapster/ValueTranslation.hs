@@ -20,9 +20,7 @@ import           Data.Functor.Const
 import           Data.Parameterized.Context
 import           Lang.Crucible.Types
 import           SAWScript.Heapster.Permissions
-import           SAWScript.TopLevel
 import           Verifier.SAW.OpenTerm
-import           Verifier.SAW.Term.Functor
 
 -- | Translate an 'Integer' to a SAW bitvector literal
 translateBVLit :: NatRepr w -> Integer -> OpenTerm
