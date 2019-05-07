@@ -1024,7 +1024,7 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
              dataLayout = Crucible.llvmDataLayout (cc^.ccTypeCtx)
              sz = Crucible.memTypeSize dataLayout memTy
          case W4.asNat blk of
-           Nothing -> pure (Just (PP.text (show err)))
+           Nothing -> pure (Just (PP.text "<Read from unknown allocation>"))
            Just blk' -> pure $ Just $
              let possibleAllocs =
                    Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
@@ -1046,10 +1046,12 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
                     ]
                   ])
                PP.<$$> PP.nest 2 (bullets (map Crucible.ppSomeAlloc possibleAllocs))
-               PP.<$$> PP.text (unwords [ "Here are the details on why reading"
-                                        , "from each matching write failed"
-                                        ])
-               PP.<$$> PP.text (show err)
+               -- This information tends to be overwhelming, but might be useful?
+               -- We should brainstorm about better ways of presenting it.
+               -- PP.<$$> PP.text (unwords [ "Here are the details on why reading"
+               --                          , "from each matching write failed"
+               --                          ])
+               -- PP.<$$> PP.text (show err)
 
   where bullets xs = PP.vcat [ PP.text "-" PP.<+> d | d <- xs ]
 
