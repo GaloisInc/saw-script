@@ -1113,6 +1113,22 @@ isInteger :: C.Type -> Bool
 isInteger (C.tIsSeq -> Just (C.tIsNum -> Just _, C.tIsBit -> True)) = True
 isInteger _ = False
 
+list_term :: [TypedTerm] -> TopLevel TypedTerm
+list_term [] = fail "list_term: invalid empty list"
+list_term tts@(tt0 : _) =
+  do sc <- getSharedContext
+     let schema = ttSchema tt0
+     unless (all (schema ==) (map ttSchema tts)) $
+       fail "list_term: non-uniform element types"
+     a <-
+       case schema of
+         C.Forall [] [] a -> return a
+         _ -> fail "list_term: not a monomorphic element type"
+     a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
+     trm <- io $ scVectorReduced sc a' (map ttTerm tts)
+     let n = C.tNum (length tts)
+     return (TypedTerm (C.tMono (C.tSeq n a)) trm)
+
 eval_list :: TypedTerm -> TopLevel [TypedTerm]
 eval_list t = do
   sc <- getSharedContext

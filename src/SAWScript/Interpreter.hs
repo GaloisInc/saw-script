@@ -1822,6 +1822,12 @@ primitives = Map.fromList
     [ "Evaluate a Cryptol term of type [n]a to a list of terms."
     ]
 
+  , prim "list_term"           "[Term] -> Term"
+    (funVal1 list_term)
+    [ "Make a Cryptol term of type [n]a from a list of terms of type a."
+    , "Function list_term is the inverse of function eval_list."
+    ]
+
   , prim "parse_core"         "String -> Term"
     (funVal1 parse_core)
     Current
