@@ -32,6 +32,7 @@ import System.Directory(makeRelativeToCurrentDirectory)
 import System.FilePath(makeRelative, isAbsolute, (</>), takeDirectory)
 import System.Time(TimeDiff(..), getClockTime, diffClockTimes, normalizeTimeDiff, toCalendarTime, formatCalendarTime)
 import System.Locale(defaultTimeLocale)
+import qualified System.IO.Error as IOE
 import System.Exit
 import Text.PrettyPrint.ANSI.Leijen hiding ((</>), (<$>))
 import Text.Printf
@@ -260,7 +261,15 @@ ordinal n | n < 0 = error "Only non-negative cardinals are supported."
 handleException :: Options -> CE.SomeException -> IO a
 handleException opts e
     | Just (_ :: ExitCode) <- CE.fromException e = CE.throw e
-    | otherwise = printOutLn opts Error (CE.displayException e) >> exitProofUnknown
+    | Just ioe <- CE.fromException e =
+         printOutLn opts Error (displayIOE ioe) >> exitProofUnknown
+    | otherwise =
+         printOutLn opts Error (CE.displayException e) >> exitProofUnknown
+
+ where
+ displayIOE ioe
+   | IOE.isUserError ioe = IOE.ioeGetErrorString ioe
+   | otherwise = CE.displayException ioe
 
 exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
 exitProofFalse = exitWith (ExitFailure 1)

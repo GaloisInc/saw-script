@@ -1,3 +1,4 @@
+enable_deprecated;
 c <- java_load_class "Double";
 t <- java_extract c "f" java_pure;
 print_term t;

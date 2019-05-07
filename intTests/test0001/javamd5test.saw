@@ -1,3 +1,4 @@
+enable_deprecated;
 import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.cry";
 
 

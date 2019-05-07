@@ -1,3 +1,4 @@
+enable_experimental;
 print "**Extracting reference term";
 j <- java_load_class "Stat";
 f_ref <- crucible_java_extract j "f_ref";

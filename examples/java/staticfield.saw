@@ -1,3 +1,4 @@
+enable_deprecated;
 let setx_spec : JavaSetup () = do {
     newx <- java_var "newx" java_int;
     java_var "sfield.StaticField.x" java_int;

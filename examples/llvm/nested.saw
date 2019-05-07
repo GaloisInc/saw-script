@@ -1,3 +1,4 @@
+enable_deprecated;
 let f_spec = do {
     llvm_ptr "p" (llvm_struct "struct.t");
     x <- llvm_var "p->0" (llvm_int 32);

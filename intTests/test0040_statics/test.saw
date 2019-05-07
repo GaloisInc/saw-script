@@ -1,0 +1,20 @@
+m <- llvm_load_module "static.bc";
+
+f_ov <- crucible_llvm_verify m "f" [] false do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    let xtm = crucible_term x;
+    crucible_execute_func [xtm];
+    crucible_return xtm;
+} abc;
+
+crucible_llvm_verify m "f1" [f_ov] false do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    crucible_execute_func [crucible_term x];
+    crucible_return (crucible_term {{ x + 1}});
+} abc;
+
+crucible_llvm_verify m "f2" [f_ov] false do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    crucible_execute_func [crucible_term x];
+    crucible_return (crucible_term {{ x - 1}});
+} abc;

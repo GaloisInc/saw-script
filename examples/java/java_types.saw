@@ -1,3 +1,4 @@
+enable_deprecated;
 set_base 16;
 
 c <- java_load_class "JavaTypes";

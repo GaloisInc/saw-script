@@ -1,3 +1,4 @@
+enable_deprecated;
 import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry" as chacha20;
 
 // -----------------------------------------------------------------------------
