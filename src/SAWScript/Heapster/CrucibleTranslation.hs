@@ -14,7 +14,7 @@
 {-# LANGUAGE TypeOperators #-}
 
 module SAWScript.Heapster.CrucibleTranslation (
-  BlockTranslate'(..),
+  JudgmentTranslate'(..),
   ) where
 
 import qualified Control.Lens                           as Lens
@@ -32,11 +32,6 @@ import           SAWScript.Heapster.TypedCrucible
 import           SAWScript.Heapster.TypeTranslation
 import           SAWScript.TopLevel
 import           Verifier.SAW.OpenTerm
-
-data SomeTypedEntryID blocks where
-  SomeTypedEntryID :: TypedEntryID blocks ghosts args -> SomeTypedEntryID blocks
-
-type ResolveEntryIDs blocks = [(SomeTypedEntryID blocks, OpenTerm)]
 
 -- TODO: I'm not sure this combinator can be written, because the `args` might
 -- be escaping its scope.  Anyway, there's a way of inverting the flow of the
@@ -113,7 +108,7 @@ translateTypedEntry info (TypedEntry id types perms stmtSeq) =
                 , catchHandler    = Nothing
                 }
      in
-     let t = blockTranslate' info jctx stmtSeq in
+     let t = judgmentTranslate' info jctx (error "TODO") stmtSeq in
      error "TODO"
     )
    )
@@ -132,39 +127,46 @@ buildLambdaAsgn = error "TODO"
 --    )
 --   )
 
-data BlocksInfo blocks = BlocksInfo
-  { entryPoints :: ResolveEntryIDs blocks
-  }
+instance JudgmentTranslate' blocks (TypedStmtSeq ext blocks ret) where
 
-class BlockTranslate' blocks f | f -> blocks where
-  blockTranslate' :: BlocksInfo blocks -> JudgmentContext ctx -> f ctx -> OpenTerm
+  judgmentTranslate' info jctx outputType (TypedElimStmt perms elim) =
+    let elim' = judgmentTranslate' info jctx outputType elim in
+    elim'
 
-instance BlockTranslate' blocks (TypedStmtSeq ext blocks ret) where
+  judgmentTranslate' info jctx outputType (TypedConsStmt _ stmt stmtSeq) =
+    let typeBefore  = error "TODO" in
+    let typeBetween = error "TODO" in
+    let typeAfter   = error "TODO" in
+    let stmt'       = translateTypedStmt jctx stmt in -- probably want to also pass [[typeBetween]]
+    let jctx'       = error "TODO" in                 -- should this come from `translateTypedStmt`?
+    let stmtSeq'    = judgmentTranslate' info jctx' outputType stmtSeq in
+    applyOpenTermMulti (globalOpenTerm "Prelude.composeM")
+    [ typeBefore
+    , typeBetween
+    , typeAfter
+    , stmt'
+    , stmtSeq'
+    ]
 
-  blockTranslate' info jctx (TypedElimStmt perms elim) =
-    error "TODO"
+  judgmentTranslate' info jctx outputType (TypedTermStmt _ termStmt) =
+    judgmentTranslate' info jctx outputType termStmt
 
-  blockTranslate' info jctx (TypedConsStmt loc stmt stmtSeq) =
-    error "TODO"
+instance JudgmentTranslate' blocks (TypedTermStmt blocks ret) where
 
-  blockTranslate' info jctx (TypedTermStmt loc termStmt) =
-    error "TODO"
+  judgmentTranslate' info jctx outputType (TypedJump tgt) = error "TODO"
 
-instance BlockTranslate' blocks (TypedTermStmt blocks ret) where
+  judgmentTranslate' info jctx outputType (TypedBr cond tgt1 tgt2) = error "TODO"
 
-  blockTranslate' info jctx (TypedJump tgt) = error "TODO"
+  judgmentTranslate' info jctx outputType (TypedReturn ret intros) = error "TODO"
 
-  blockTranslate' info jctx (TypedBr cond tgt1 tgt2) = error "TODO"
+  judgmentTranslate' info jctx outputType (TypedErrorStmt err) = error "TODO"
 
-  blockTranslate' info jctx (TypedReturn ret intros) = error "TODO"
-
-  blockTranslate' info jctx (TypedErrorStmt err) = error "TODO"
+-- Should this function help in building a `JudgmentContext ctx'`?
+translateTypedStmt :: JudgmentContext ctx -> TypedStmt ext ctx ctx' -> OpenTerm
+translateTypedStmt jctx (TypedStmt pIn pOut stmt) = error "TODO"
+translateTypedStmt jctx (DestructLLVMPtr w index) = error "TODO"
 
 -- TODO: For `Stmt`, for now, only need to deal with `SetReg`
-
-instance JudgmentTranslate' (TypedStmt ext ctx) where
-
-  judgmentTranslate' = error "TODO"
 
 lambdaPermSet ::
   CtxRepr ctx ->
