@@ -20,6 +20,7 @@ module SAWScript.Heapster.TypeTranslation (
 import           Data.Functor.Const
 
 import           Data.Parameterized.Context
+import           Data.Parameterized.TraversableFC
 import           Lang.Crucible.Types
 import           SAWScript.Heapster.Permissions
 import           SAWScript.Heapster.ValueTranslation
@@ -41,31 +42,33 @@ class TypeTranslate'' (d :: *) where
   typeTranslate'' :: d -> OpenTerm
 
 instance TypeTranslate'' (TypeRepr a) where
-  typeTranslate'' = \case
-    AnyRepr                -> error "TODO"
-    UnitRepr               -> dataTypeOpenTerm "Prelude.UnitType" []
-    BoolRepr               -> dataTypeOpenTerm "Prelude.Bool" []
-    NatRepr                -> dataTypeOpenTerm "Prelude.Nat" []
-    IntegerRepr            -> error "TODO"
-    RealValRepr            -> error "TODO"
-    ComplexRealRepr        -> error "TODO"
-    BVRepr w               -> dataTypeOpenTerm "Prelude.bitvector" [valueTranslate'' w]
-    IntrinsicRepr _ _      -> error "TODO"
-    RecursiveRepr _ _      -> error "TODO"
-    FloatRepr _            -> dataTypeOpenTerm "Prelude.Float" []
-    IEEEFloatRepr _        -> error "TODO"
-    CharRepr               -> error "TODO"
-    StringRepr             -> dataTypeOpenTerm "Prelude.String" []
-    FunctionHandleRepr _ _ -> error "TODO"
-    MaybeRepr _            -> error "TODO"
-    VectorRepr _           -> error "TODO"
-    StructRepr _           -> error "TODO"
-    VariantRepr _          -> error "TODO"
-    ReferenceRepr _        -> error "TODO"
-    WordMapRepr _ _        -> error "TODO"
-    StringMapRepr _        -> error "TODO"
-    SymbolicArrayRepr _ _  -> error "TODO"
-    SymbolicStructRepr _   -> error "TODO"
+  typeTranslate'' (AnyRepr)                = error "TODO"
+  typeTranslate'' (UnitRepr)               = dataTypeOpenTerm "Prelude.UnitType" []
+  typeTranslate'' (BoolRepr)               = dataTypeOpenTerm "Prelude.Bool" []
+  typeTranslate'' (NatRepr)                = dataTypeOpenTerm "Prelude.Nat" []
+  typeTranslate'' (IntegerRepr)            = error "TODO"
+  typeTranslate'' (RealValRepr)            = error "TODO"
+  typeTranslate'' (ComplexRealRepr)        = error "TODO"
+  typeTranslate'' (BVRepr w)               = dataTypeOpenTerm "Prelude.bitvector" [valueTranslate'' w]
+  typeTranslate'' (IntrinsicRepr _ _)      = error "TODO"
+  typeTranslate'' (RecursiveRepr _ _)      = error "TODO"
+  typeTranslate'' (FloatRepr _)            = dataTypeOpenTerm "Prelude.Float" []
+  typeTranslate'' (IEEEFloatRepr _)        = error "TODO"
+  typeTranslate'' (CharRepr)               = error "TODO"
+  typeTranslate'' (StringRepr)             = dataTypeOpenTerm "Prelude.String" []
+  typeTranslate'' (FunctionHandleRepr _ _) = error "TODO"
+  typeTranslate'' (MaybeRepr _)            = error "TODO"
+  typeTranslate'' (VectorRepr _)           = error "TODO"
+  typeTranslate'' (StructRepr _)           = error "TODO"
+  typeTranslate'' (VariantRepr _)          = error "TODO"
+  typeTranslate'' (ReferenceRepr _)        = error "TODO"
+  typeTranslate'' (WordMapRepr _ _)        = error "TODO"
+  typeTranslate'' (StringMapRepr _)        = error "TODO"
+  typeTranslate'' (SymbolicArrayRepr _ _)  = error "TODO"
+  typeTranslate'' (SymbolicStructRepr _)   = error "TODO"
+
+instance TypeTranslate'' (CtxRepr ctx) where
+  typeTranslate'' = tupleTypeOpenTerm . toListFC typeTranslate''
 
 instance TypeTranslate ValuePerm where
   typeTranslate ctx = \case

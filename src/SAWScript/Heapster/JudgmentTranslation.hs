@@ -61,13 +61,15 @@ type PermVariableMapping ctx = Assignment (Const OpenTerm) ctx
 data JudgmentContext ctx = JudgmentContext
   { typeEnvironment :: OpenTermCtxt ctx
   -- ^ Associates to every variable (of type `tp`) in scope a SAW variable of type `[[tp]]`
-  , permissionSet :: PermSet ctx
+  , permissionSet   :: PermSet ctx
   -- ^ Associates to every variable in scope a permission `p`
-  , permissionMap :: PermVariableMapping ctx
+  , permissionMap   :: PermVariableMapping ctx
   -- ^ Associates to every variable in scope a SAW variable of type `[[p]]` for
   -- the corresponding permission in `permissionSet`
-  , catchHandler  :: Maybe OpenTerm
+  , catchHandler    :: Maybe OpenTerm
   -- ^ Holds a `catch` handler whenever we are within a disjunctive judgment
+  -- Hmm, putting those here means parameterizing blocks, which seems annoying
+  -- , entryPoints  :: ResolveEntryIDs blocks
   }
 
 class JudgmentTranslate' (f :: Ctx CrucibleType -> *) where
