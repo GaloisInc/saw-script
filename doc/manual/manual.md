@@ -1,4 +1,4 @@
-## Overview ##
+## Overview
 
 The Software Analysis Workbench (SAW) is a tool for constructing
 mathematical models of the computational behavior of software,
@@ -604,7 +604,7 @@ list of `Term` values in SAWScript using the `eval_list : Term -> [Term]`
 function.
 
 ~~~~
-sawscript> let l = {{ [0x01, 0x02, 0x03] }} 
+sawscript> let l = {{ [0x01, 0x02, 0x03] }}
 sawscript> print_term l
 let { x@1 = Prelude.Vec 8 Prelude.Bool
       x@2 = Cryptol.PLiteralSeqBool (Cryptol.TCNum 8)
@@ -2263,9 +2263,9 @@ Pointers to global variables or functions can be accessed with
 crucible_global : String -> SetupValue
 ~~~~
 
-Like the pointers returned by `crucible_alloc`, however, these
-aren't initialized at the beginning of symbolic simulation. This is intentional
--- setting global variables may be unsound in the presence of 
+Like the pointers returned by `crucible_alloc`, however, these aren't
+initialized at the beginning of symbolic simulation. This is intentional
+-- setting global variables may be unsound in the presence of
 [compositional verification](#compositional-verification).
 
 To understand the issues surrounding global variables, consider the following C
@@ -2305,11 +2305,11 @@ g_spec <- crucible_llvm_verify m "g" [] true (do {
 }) abc;
 ~~~
 
-If globals were always initialized at the beginning of verification, both
-of these specs would be provable. However, the results wouldn't truly
-be compositional. For instance, it's not the case that 
-`f(g(z)) == z + 3` for all `z`, because both `f` and `g` modify the global
-variable `x` in a way that crosses function boundaries.
+If globals were always initialized at the beginning of verification,
+both of these specs would be provable. However, the results wouldn't
+truly be compositional. For instance, it's not the case that `f(g(z)) ==
+z + 3` for all `z`, because both `f` and `g` modify the global variable
+`x` in a way that crosses function boundaries.
 
 Instead, the specifications for `f` and `g` must make this reliance on the
 value of `x` explicit, e.g. one could write
