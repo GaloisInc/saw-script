@@ -1,51 +1,46 @@
 /*
- * Copyright (c) 2013-2016 Galois, Inc.
+ * Copyright (c) 2013-2019 Galois, Inc.
  * Distributed under the terms of the BSD3 license (see LICENSE file)
  */
-
-enable_deprecated;
 
 print "Importing Speck Cryptol";
 import "speck.cry";
 
-eq <- {{ \x (y, z) -> join x == z # y }};
-
-print "Extracting Speck 64/128 C encrypt & decrypt terms";
 l_64_128 <- llvm_load_module "speck-64-128.bc";
-xK_64_128 <- fresh_symbolic "xK" {| [27][32] |};
-io_64_128 <- fresh_symbolic "io" {| [2][32] |};
-allocs_64_128 <- [ ("io", 2), ("xK", 27) ];
-inputs_64_128 <- [ ("*xK", xK_64_128, 27), ("*io", io_64_128, 2) ];
-outputs_64_128 <- [ ("*io", 2) ];
-encrypt_64_128 <- llvm_symexec l_64_128 "speck_encrypt" allocs_64_128 inputs_64_128 outputs_64_128 true;
-decrypt_64_128 <- llvm_symexec l_64_128 "speck_decrypt" allocs_64_128 inputs_64_128 outputs_64_128 true;
-print "Proving Speck 64/128 C encrypt is equivalent to Cryptol specification";
-encrypt_64_128_thm <- abstract_symbolic {{ 
-  eq encrypt_64_128 (Speck64_128 (reverse (take`{4} xK_64_128)) (io_64_128@1 , io_64_128@0))
-}};
-prove_print abc encrypt_64_128_thm;
-print "Proving Speck 64/128 C decrypt is equivalent to Cryptol specification";
-decrypt_64_128_thm <- abstract_symbolic {{ 
-  eq decrypt_64_128 (Speck64_128' (reverse (take`{4} xK_64_128)) (io_64_128@1 , io_64_128@0))
-}};
-prove_print abc decrypt_64_128_thm;
-
-print "Extracting Speck 128/128 C encrypt & decrypt terms";
 l_128_128 <- llvm_load_module "speck-128-128.bc";
-xK_128_128 <- fresh_symbolic "xK" {| [32][64] |};
-io_128_128 <- fresh_symbolic "io" {| [2][64] |};
-allocs_128_128 <- [ ("io", 2), ("xK", 32) ];
-inputs_128_128 <- [ ("*xK", xK_128_128, 32), ("*io", io_128_128, 2) ];
-outputs_128_128 <- [ ("*io", 2) ];
-encrypt_128_128 <- llvm_symexec l_128_128 "speck_encrypt" allocs_128_128 inputs_128_128 outputs_128_128 true;
-decrypt_128_128 <- llvm_symexec l_128_128 "speck_decrypt" allocs_128_128 inputs_128_128 outputs_128_128 true;
-print "Proving Speck 128/128 C is equivalent to Cryptol specification";
-encrypt_128_128_thm <- abstract_symbolic {{ 
-  eq encrypt_128_128 (Speck128_128 (reverse (take`{2} xK_128_128)) (io_128_128@1 , io_128_128@0))
-}};
-prove_print abc encrypt_64_128_thm;
-print "Proving Speck 128/128 C decrypt is equivalent to Cryptol specification";
-decrypt_128_128_thm <- abstract_symbolic {{ 
-  eq decrypt_128_128 (Speck128_128' (reverse (take`{2} xK_128_128)) (io_128_128@1 , io_128_128@0))
-}};
-prove_print abc decrypt_128_128_thm;
+
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
+};
+
+let block_spec keyt wsz tn fn = do {
+  let msgt = llvm_array 2 (llvm_int wsz);
+  (key, keyp) <- ptr_to_fresh "key" keyt;
+  (msg, msgp) <- ptr_to_fresh "msg" msgt;
+  crucible_execute_func [msgp, keyp];
+  let res = {{ fn (reverse (take `{tn} key)) (msg@1, msg@0) }};
+  crucible_points_to msgp (crucible_term {{ split (res.1 # res.0) : [2][wsz] }});
+};
+
+let i32 = llvm_int 32;
+let i64 = llvm_int 64;
+let enc_64_128_spec = block_spec (llvm_array 44 i32) 32 4 {{ Speck64_128 }};
+let dec_64_128_spec = block_spec (llvm_array 44 i32) 32 4 {{ Speck64_128' }};
+let enc_128_128_spec = block_spec (llvm_array 68 i64) 64 2 {{ Speck128_128 }};
+let dec_128_128_spec = block_spec (llvm_array 68 i64) 64 2 {{ Speck128_128' }};
+
+print "Proving Speck 64/128 C encrypt & decrypt";
+crucible_llvm_verify l_64_128 "speck_encrypt" [] false enc_64_128_spec yices;
+crucible_llvm_verify l_64_128 "speck_decrypt" [] false dec_64_128_spec yices;
+
+print "Proving Speck 128/128 C encrypt & decrypt";
+crucible_llvm_verify l_128_128 "speck_encrypt" [] false enc_128_128_spec yices;
+crucible_llvm_verify l_128_128 "speck_decrypt" [] false dec_128_128_spec yices;
