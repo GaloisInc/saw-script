@@ -16,11 +16,11 @@
 module SAWScript.Heapster.JudgmentTranslation (
   BlocksInfo(..),
   IntroJudgmentTranslate'(..),
+  OpenTermCtxt,
   JudgmentContext(..),
   JudgmentTranslate'(..),
   ResolveEntryIDs,
   SomeTypedEntryID(..),
-  testJudgmentTranslation,
   ) where
 
 import qualified Control.Lens                       as Lens
@@ -34,7 +34,7 @@ import           Lang.Crucible.Types
 import           SAWScript.Heapster.Permissions
 import           SAWScript.Heapster.TypedCrucible
 import           SAWScript.Heapster.TypeTranslation
-import           SAWScript.TopLevel
+import           SAWScript.Heapster.ValueTranslation
 import           Verifier.SAW.OpenTerm
 
 -- | The @JudgmentTranslate@ family of classes captures translations from
@@ -44,20 +44,6 @@ import           Verifier.SAW.OpenTerm
 -- we will usually have, for a given permission judgment J, [[ J ]] be a SAW
 -- function of type [[ ∏in ]] -> CompM [[ ∏out ]], where ∏in and ∏out are the
 -- respective input and output permission sets for judgment J.
-
-{-
-primitive CompM : sort 0 -> sort 0;
-
-primitive returnM : (a:sort 0) -> a -> CompM a;
-primitive bindM : (a b:sort 0) -> CompM a -> (a -> CompM b) -> CompM b;
-
-composeM : (a b c: sort 0) -> (a -> CompM b) -> (b -> CompM c) -> a -> CompM c;
-composeM a b c f g x = bindM b c (f x) g;
-
-primitive errorM : (a:sort 0) -> CompM a;
--}
-
-type OpenTermCtxt ctx = Assignment (Const OpenTerm) ctx
 
 -- | As we build a computational term for a given permission derivation, the term
 -- being built introduces in context variables, at the SAW term level, that
@@ -149,13 +135,11 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
       , getConst var                       -- Either a b
       ]
 
-    Elim_Exists index typ e ->
-      let typFst = typeTranslate'' typ in
-      let typSnd = case pvGet (permSetAsgn $ permissionSet jctx) index of
-            ValPerm_Exists _ pSnd ->
-              -- I believe we can reuse @typFst@ here, rather than using the
-              -- TypeRepr in @ValPerm_Exists@.
-              lambdaOpenTerm "a" typFst (\ a -> typeTranslate (extend (typeEnvironment jctx) (Const a)) pSnd)
+    Elim_Exists index tp e ->
+      let (typFst, typSnd) = case pvGet (permSetAsgn $ permissionSet jctx) index of
+            ValPerm_Exists tp' pSnd ->
+              -- TODO: check that tp and tp' agree?
+              typeTranslateDependentPair (typeEnvironment jctx) tp' pSnd
             _ -> error "judgmentTranslate': `Elim_Exists` expects a `ValPerm_Exists`"
       in
       let t varFst varSnd =
@@ -164,7 +148,7 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
                                extend
                                (pvSet index (Const (applyOpenTerm typSnd varFst)) (typeEnvironment jctx))
                                (Const typFst)
-                             , permissionSet = elimExists (permissionSet jctx) index typ
+                             , permissionSet = elimExists (permissionSet jctx) index tp
                              , permissionMap =
                                extend
                                (pvSet index (Const varSnd) (permissionMap jctx))
@@ -199,7 +183,7 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
 
       ]
 
-    Elim_Assert (Constr_BVEq w e1 e2) e ->
+    Elim_Assert (Constr_BVEq _w _e1 _e2) _e ->
       error "TODO"
 
     Elim_BindField index offset _ e ->
@@ -256,8 +240,8 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
         (nthOpenTerm fieldIndex (getConst var))
       _ -> error "judgmentTranslate': `Elim_BindField` expects `ValPerm_LLVMPtr`"
 
-    Elim_SplitField index offset _ e ->
-      let perm = pvGet (permSetAsgn $ permissionSet jctx) index in
+    Elim_SplitField index _offset _ _e ->
+      let _perm = pvGet (permSetAsgn $ permissionSet jctx) index in
       error "TODO"
 
     Elim_Catch e1 e2 ->
@@ -267,9 +251,9 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
     Elim_Unroll _p _e ->
       error "TODO"
 
-isValPerm_Eq :: ValuePerm ctx a -> Bool
-isValPerm_Eq (ValPerm_Eq _) = True
-isValPerm_Eq _ = False
+-- isValPerm_Eq :: ValuePerm ctx a -> Bool
+-- isValPerm_Eq (ValPerm_Eq _) = True
+-- isValPerm_Eq _ = False
 
 elimPair ::
   OpenTerm ->                           -- ^ type of left element
@@ -279,7 +263,7 @@ elimPair ::
   (OpenTerm -> OpenTerm -> OpenTerm) -> -- ^ body (receives left and right)
   OpenTerm
 elimPair typL typR typOut pair hdlr =
-  applyOpenTermMulti (globalOpenTerm "Pair__rec")
+  applyOpenTermMulti (globalOpenTerm "Prelude.Pair__rec")
   [ typL, typR
   , lambdaOpenTerm "p" (pairTypeOpenTerm typL typR) typOut
   , lambdaOpenTerm "l" typL (\ l -> lambdaOpenTerm "r" typR (\ r -> hdlr l r))
@@ -294,87 +278,136 @@ class IntroJudgmentTranslate' (f :: Ctx CrucibleType -> *) where
     OpenTerm
     -- ^ A pure SAW function returning a tuple
 
+instance JudgmentTranslate' EmptyCtx AnnotIntro where
+  judgmentTranslate' _ jctx _ = introJudgmentTranslate' jctx
+
+-- | Takes apart a pair, applies a transformation to the left element, and
+-- re-packages the pair.  This comes up often because we represent permission
+-- sets as right-nested pairs, and often operate on the "head", that is, the
+-- outermost left tupled value.
+transformLeft ::
+  OpenTerm ->               -- ^ type of left element (before)
+  OpenTerm ->               -- ^ type of left element (after)
+  OpenTerm ->               -- ^ type of right element
+  OpenTerm ->               -- ^ pair
+  (OpenTerm -> OpenTerm) -> -- ^ transformation of left element
+  OpenTerm
+transformLeft typLBefore typLAfter typR pair transform =
+  elimPair typLBefore typR
+  (\ _ -> pairTypeOpenTerm typLAfter typR)
+  pair
+  (\ l r -> pairOpenTerm (transform l) r)
+
 instance IntroJudgmentTranslate' AnnotIntro where
 
   introJudgmentTranslate' jctx (AnnotIntro {..}) = case introProof of
 
-    Intro_Done -> unitOpenTerm
+    Intro_Done ->
+      if Data.List.null introOutPerms
+      then unitOpenTerm
+      else error $ "Intro_Done but the output permission set spec is not empty (length is " ++ show (length introOutPerms) ++ ")"
 
-    Intro_Id x p pf ->
+    Intro_Id x _p pf ->
+      -- TODO: check that the head of @introOutPerms@ matches @p@?
       let pf' =
             introJudgmentTranslate' jctx
             (AnnotIntro { introInPerms  = modifyPerm x (const ValPerm_True) introInPerms
-                        -- This is just a list, can drop the head
-                        , introOutPerms = error "TODO"
+                        , introOutPerms = tail introOutPerms
                         , introProof    = pf
                         })
       in
       tupleOpenTerm [ getConst (pvGet (permissionMap jctx) x), pf' ]
 
     Intro_Exists tp e' p pf ->
-      let typFst = typeTranslate'' tp in
-      let typSnd = error "TODO" in
+      let (typFst, typSnd) = typeTranslateDependentPair (typeEnvironment jctx) tp p in
       let pf' =
             introJudgmentTranslate' jctx
             (AnnotIntro { introInPerms  = introInPerms
-                        , introOutPerms = error "TODO"
+                        -- TODO: substitution?
+                        , introOutPerms = error "TODO" : tail introOutPerms
                         , introProof    = pf
                         })
       in
-      -- FIXME: ValPerm_Eq special case?
-      ctorOpenTerm "Prelude.exists"
-      [ typFst
-      , typSnd
-      , error "TODO"
-      , error "TODO"
-      ]
-
-    Intro_OrL p2 pf ->
-      case introOutPerms of
-      (PermSpec s e (ValPerm_Or p1 p2') : tl) ->
-        let typLeft  = typeTranslate (typeEnvironment jctx) p1 in
-        let typRight = typeTranslate (typeEnvironment jctx) p2' in
-        -- TODO: use `testEquality` to check p2 against p2'
-        ctorOpenTerm "Prelude.Left"
-        [ typLeft, typRight
-        , introJudgmentTranslate' jctx
-          (AnnotIntro { introInPerms  = introInPerms
-                      , introOutPerms = PermSpec s e p1 : tl
-                      , introProof    = pf
-                      }
-          )
-        ]
-      [] -> error "Intro_OrL: empty out permissions"
-      _  -> error "Intro_OrL: head permission is not ValPerm_Or"
-
-    Intro_OrR p1 pf ->
-      case introOutPerms of
-      (PermSpec s e (ValPerm_Or p1' p2) : tl) ->
-        let typLeft  = typeTranslate (typeEnvironment jctx) p1' in
-        let typRight = typeTranslate (typeEnvironment jctx) p2 in
-        ctorOpenTerm "Prelude.Right"
-        [ typLeft, typRight
-        , introJudgmentTranslate' jctx
-          (AnnotIntro { introInPerms  = introInPerms
-                      , introOutPerms = PermSpec s e p2 : tl
-                      , introProof    = pf
-                      }
-          )
-        ]
-      [] -> error "Intro_OrL: empty out permissions"
-      _  -> error "Intro_OrL: head permission is not ValPerm_Or"
-
-    Intro_True e pf ->
-      pairOpenTerm unitOpenTerm
-      (introJudgmentTranslate' jctx
-       (AnnotIntro { introInPerms  = introInPerms
-                   , introOutPerms = error "TODO"
-                   , introProof    = pf
-                   }
-       )
+      let (permTypFst, permTypSnd) =
+            case introOutPerms of
+            PermSpec _ _ (ValPerm_Exists tpIn pIn) : _ ->
+              -- TODO: check that we want `permissionMap` here
+              typeTranslateDependentPair (permissionMap jctx) tpIn pIn
+            _ -> error "Intro_Exists, but introOutPerms does not start with a ValPerm_Exists"
+      in
+      transformLeft
+      permTypSnd                                                                     -- typLBefore
+      (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma") [permTypFst, permTypSnd]) -- typLAfter
+      typSnd                                                                         -- typR
+      pf'                                                                            -- pair
+      (\ l ->
+       ctorOpenTerm "Prelude.exists"
+       [ typFst
+       , typSnd
+       , valueTranslate (typeEnvironment jctx) e'
+       , l
+       ]
       )
 
-    Intro_CastEq x e' pf ->
+    Intro_OrL _p2 pf ->
+      case introOutPerms of
+      PermSpec s e (ValPerm_Or p1 p2') : tl ->
+        -- TODO: check p2 against p2' with @testEquality@
+        let pf' =
+              introJudgmentTranslate' jctx
+              (AnnotIntro { introInPerms  = introInPerms
+                          , introOutPerms = PermSpec s e p1 : tl
+                          , introProof    = pf
+                          }
+              )
+        in
+        let typLeft  = typeTranslate (typeEnvironment jctx) p1 in
+        let typRight = typeTranslate (typeEnvironment jctx) p2' in
+        transformLeft
+        typLeft
+        (ctorOpenTerm "Prelude.Either" [typLeft, typRight])
+        (error "TODO") -- type of the remaining Pout
+        pf'
+        (\ l -> ctorOpenTerm "Prelude.Left" [ typLeft, typRight, l ])
+      [] -> error "Intro_OrL: empty out permissions"
+      _  -> error "Intro_OrL: head permission is not ValPerm_Or"
+
+    Intro_OrR _p1 pf ->
+      case introOutPerms of
+      PermSpec s e (ValPerm_Or p1' p2) : tl ->
+        -- TODO: check p1 against p1' with @testEquality@
+        let pf' =
+              introJudgmentTranslate' jctx
+              (AnnotIntro { introInPerms  = introInPerms
+                          , introOutPerms = PermSpec s e p2 : tl
+                          , introProof    = pf
+                          }
+              )
+        in
+        let typLeft  = typeTranslate (typeEnvironment jctx) p1' in
+        let typRight = typeTranslate (typeEnvironment jctx) p2 in
+        transformLeft
+        typRight
+        (ctorOpenTerm "Prelude.Either" [typLeft, typRight])
+        (error "TODO") -- type of the remaining Pout
+        pf'
+        (\ l -> ctorOpenTerm "Prelude.Right" [ typLeft, typRight, l ])
+      [] -> error "Intro_OrL: empty out permissions"
+      _  -> error "Intro_OrL: head permission is not ValPerm_Or"
+
+    Intro_True _e pf ->
+      let pf' =
+            introJudgmentTranslate' jctx
+            (AnnotIntro { introInPerms  = introInPerms
+                        , introOutPerms = tail introOutPerms
+                        , introProof    = pf
+                        }
+            )
+      in
+      -- TODO: check that the head of @introOutPerms@ matches "true"?
+      pairOpenTerm unitOpenTerm pf'
+
+    Intro_CastEq _x _e' pf ->
       introJudgmentTranslate' jctx
       (AnnotIntro { introInPerms  = introInPerms
                   , introOutPerms = introOutPerms
@@ -382,21 +415,23 @@ instance IntroJudgmentTranslate' AnnotIntro where
                   }
       )
 
-    Intro_Eq _ pf ->
-      pairOpenTerm unitOpenTerm
-      (introJudgmentTranslate' jctx
-       (AnnotIntro { introInPerms  = introInPerms
-                   , introOutPerms = error "TODO"
-                   , introProof    = pf
-                   }
-       )
-      )
+    Intro_Eq _eqProof pf ->
+      -- TODO: check the equality proof
+      let pf' =
+            introJudgmentTranslate' jctx
+            (AnnotIntro { introInPerms  = introInPerms
+                        , introOutPerms = tail introOutPerms
+                        , introProof    = pf
+                        }
+            )
+      in
+      pairOpenTerm unitOpenTerm pf'
 
     Intro_LLVMPtr _ pf ->
       pairOpenTerm unitOpenTerm
       (introJudgmentTranslate' jctx
        (AnnotIntro { introInPerms  = introInPerms
-                   , introOutPerms = error "TODO"
+                   , introOutPerms = tail introOutPerms
                    , introProof    = pf
                    }
        )
@@ -410,13 +445,13 @@ instance IntroJudgmentTranslate' AnnotIntro where
                   }
       )
 
-    Intro_LLVMField off s p pf ->
+    Intro_LLVMField _off _s _p pf ->
       -- from pf we get (e, (x, Pout))
       -- and we build   ((e, x), Pout)
       let eType                   = error "TODO" in
       let xType                   = error "TODO" in
       let pOutType                = error "TODO" in
-      let wholeInputType          = pairTypeOpenTerm xType (pairTypeOpenTerm eType pOutType) in
+      let _wholeInputType         = pairTypeOpenTerm xType (pairTypeOpenTerm eType pOutType) in
       let wholeOutputType         = pairTypeOpenTerm (pairTypeOpenTerm xType eType) pOutType in
 
       let makeResultPair e x pOut = pairOpenTerm (pairOpenTerm e x) pOut in
@@ -449,31 +484,3 @@ nthOpenTerm n t = goLeft $ (iterate goRight t) !! n
   where
     goLeft  = applyOpenTerm (globalOpenTerm "Prelude.Pair_fst")
     goRight = applyOpenTerm (globalOpenTerm "Prelude.Pair_snd")
-
-permElim0 :: PermElim (Const OpenTerm) ('EmptyCtx '::> a)
-permElim0 =
-  Elim_Or (nextPermVar zeroSize)
-  (Elim_Done (Const (globalOpenTerm "Prelude.Bool")))
-  (Elim_Done (Const (globalOpenTerm "Prelude.Nat")))
-
--- TODO: fix those tests
-testJudgmentTranslation :: TopLevel ()
-testJudgmentTranslation = do
-  sc <- getSharedContext
-  io $ do
-    putStrLn "Not implemented"
-    -- t <- completeOpenTerm sc $
-    --   judgmentTranslate' (error "TODO")
-    --   -- FIXME: this Either not applied does not make sense!
-    --   (JudgmentContext { typeEnvironment = extend empty (Const (globalOpenTerm "Prelude.Either"))
-    --                    , permissionSet =
-    --                      extendPermSet (PermSet empty empty)
-    --                      (error "TODO")
-    --                      (ValPerm_Or ValPerm_True ValPerm_True)
-    --                    , permissionMap = extend empty (Const (globalOpenTerm "Prelude.Vec"))
-    --                    , catchHandler  = Nothing
-    --                    }
-    --   )
-    --   (globalOpenTerm "Prelude.Bool")
-    --   permElim0
-    -- putStrLn $ show t

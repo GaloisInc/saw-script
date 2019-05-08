@@ -142,6 +142,7 @@ library
     SAWScript.Heapster.TypedCrucible
     SAWScript.Heapster.CrucibleTranslation
     SAWScript.Heapster.JudgmentTranslation
+    SAWScript.Heapster.JudgmentTranslation.Examples
     SAWScript.Heapster.TypeTranslation
     SAWScript.Heapster.ValueTranslation
     SAWScript.HeapsterBuiltins

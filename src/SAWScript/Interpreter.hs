@@ -54,7 +54,7 @@ import SAWScript.HeapsterBuiltins
 import qualified Lang.Crucible.JVM.Translation as CJ
 import qualified SAWScript.CrucibleBuiltinsJVM as CJ
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
-import SAWScript.Heapster.JudgmentTranslation
+import SAWScript.Heapster.JudgmentTranslation.Examples
 import SAWScript.Heapster.TypeTranslation
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr

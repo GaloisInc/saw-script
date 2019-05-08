@@ -15,6 +15,7 @@
 
 module SAWScript.Heapster.CrucibleTranslation (
   JudgmentTranslate'(..),
+  translateCFG,
   ) where
 
 import qualified Control.Lens                           as Lens
@@ -141,6 +142,7 @@ instance JudgmentTranslate' blocks (TypedStmtSeq ext blocks ret) where
     let stmt'       = translateTypedStmt jctx stmt in -- probably want to also pass [[typeBetween]]
     let jctx'       = error "TODO" in                 -- should this come from `translateTypedStmt`?
     let stmtSeq'    = judgmentTranslate' info jctx' outputType stmtSeq in
+    -- composeM : (a b c: sort 0) -> (a -> CompM b) -> (b -> CompM c) -> a -> CompM c;
     applyOpenTermMulti (globalOpenTerm "Prelude.composeM")
     [ typeBefore
     , typeBetween

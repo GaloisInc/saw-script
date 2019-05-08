@@ -11,10 +11,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module SAWScript.Heapster.TypeTranslation (
+  OpenTermCtxt,
   TypeTranslate(..),
   TypeTranslate'(..),
   TypeTranslate''(..),
   testTypeTranslation,
+  typeTranslateDependentPair,
   ) where
 
 import           Data.Functor.Const
@@ -22,6 +24,7 @@ import           Data.Functor.Const
 import           Data.Parameterized.Context
 import           Data.Parameterized.TraversableFC
 import           Lang.Crucible.Types
+import           SAWScript.CrucibleLLVM
 import           SAWScript.Heapster.Permissions
 import           SAWScript.Heapster.ValueTranslation
 import           SAWScript.TopLevel
@@ -32,11 +35,13 @@ import           Verifier.SAW.Term.Functor
 -- permission types to SAW types.  The idea is to translate imperative
 -- structures into a functional version of their shape.
 
+type OpenTermCtxt ctx = Assignment (Const OpenTerm) ctx
+
 class TypeTranslate (f :: Ctx k -> k' -> *) where
-  typeTranslate :: Assignment (Const OpenTerm) ctx -> f ctx a -> OpenTerm
+  typeTranslate :: OpenTermCtxt ctx -> f ctx a -> OpenTerm
 
 class TypeTranslate' (f :: Ctx k -> *) where
-  typeTranslate' :: Assignment (Const OpenTerm) ctx -> f ctx -> OpenTerm
+  typeTranslate' :: OpenTermCtxt ctx -> f ctx -> OpenTerm
 
 class TypeTranslate'' (d :: *) where
   typeTranslate'' :: d -> OpenTerm
@@ -49,7 +54,8 @@ instance TypeTranslate'' (TypeRepr a) where
   typeTranslate'' (IntegerRepr)            = error "TODO"
   typeTranslate'' (RealValRepr)            = error "TODO"
   typeTranslate'' (ComplexRealRepr)        = error "TODO"
-  typeTranslate'' (BVRepr w)               = dataTypeOpenTerm "Prelude.bitvector" [valueTranslate'' w]
+  typeTranslate'' (BVRepr w)               = applyOpenTerm (globalOpenTerm "Prelude.bitvector") (valueTranslate'' w)
+  typeTranslate'' (LLVMPointerRepr w)      = applyOpenTerm (globalOpenTerm "Prelude.bitvector") (valueTranslate'' w)
   typeTranslate'' (IntrinsicRepr _ _)      = error "TODO"
   typeTranslate'' (RecursiveRepr _ _)      = error "TODO"
   typeTranslate'' (FloatRepr _)            = dataTypeOpenTerm "Prelude.Float" []
@@ -70,6 +76,16 @@ instance TypeTranslate'' (TypeRepr a) where
 instance TypeTranslate'' (CtxRepr ctx) where
   typeTranslate'' = tupleTypeOpenTerm . toListFC typeTranslate''
 
+typeTranslateDependentPair ::
+  OpenTermCtxt ctx ->
+  TypeRepr tp ->
+  ValuePerm (ctx ::> tp) a ->
+  (OpenTerm, OpenTerm)
+typeTranslateDependentPair ctx tp p =
+  let typFst = typeTranslate'' tp in
+  let typSnd = lambdaOpenTerm "fst" typFst (\ fstVar -> typeTranslate (extend ctx (Const fstVar)) p) in
+  (typFst, typSnd)
+
 instance TypeTranslate ValuePerm where
   typeTranslate ctx = \case
 
@@ -83,12 +99,8 @@ instance TypeTranslate ValuePerm where
       dataTypeOpenTerm "Prelude.Either" [t1, t2]
 
     ValPerm_Exists t p     ->
-      let typA = typeTranslate'' t in
-      dataTypeOpenTerm
-      "Prelude.Sigma"
-      [ typA
-      , lambdaOpenTerm "a" typA (\ a -> typeTranslate (extend ctx (Const a)) p)
-      ]
+      let (typFst, typSnd) = typeTranslateDependentPair ctx t p in
+      dataTypeOpenTerm "Prelude.Sigma" [typFst, typSnd]
 
     ValPerm_Mu _           -> error "TODO"
 
@@ -97,7 +109,6 @@ instance TypeTranslate ValuePerm where
     ValPerm_Nat_Neq0       -> error "TODO"
 
     ValPerm_LLVMPtr _ ps _ ->
-      -- TODO: Do we remove ValPerm_Eqs here?
       tupleTypeOpenTerm (typeTranslate ctx <$> ps)
 
 instance TypeTranslate LLVMShapePerm where
