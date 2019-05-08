@@ -51,10 +51,10 @@ import SAWScript.AutoMatch.Util
 
 import SAWScript.AutoMatch.Interaction
 import SAWScript.AutoMatch.JVM
---import SAWScript.AutoMatch.LLVM
+import SAWScript.AutoMatch.LLVM
 import SAWScript.AutoMatch.Cryptol
 
---import SAWScript.LLVMBuiltins
+import SAWScript.LLVMBuiltins
 --import SAWScript.JavaBuiltins
 import Language.JVM.Common (dotsToSlashes, mkClassName)
 
@@ -282,7 +282,7 @@ loadDecls (TaggedSourceFile lang path) = do
    AIGProxy proxy <- getProxy
    case lang of
       Cryptol -> io $ getDeclsCryptol path
-      LLVM    -> fail "temporarily disabled" -- llvm_load_module path >>= io . getDeclsLLVM proxy sc
+      LLVM    -> llvm_load_module path >>= io . getDeclsLLVM proxy sc
       JVM     -> loadJavaClassTopLevel (dropExtension path) >>= io . getDeclsJVM
    where
       loadJavaClassTopLevel cls = do
@@ -399,20 +399,16 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                   [SAWScript.StmtBind Unknown (SAWScript.PVar boundName Nothing) Nothing
                      (SAWScript.Application
                         (SAWScript.Application
-                           (SAWScript.Application
-                              (SAWScript.Var . locate $ "llvm_extract")
-                              (SAWScript.Var loadedModule))
-                           (SAWScript.String function))
-                        (SAWScript.Var . locate $ "llvm_pure"))]
+                           (SAWScript.Var . locate $ "crucible_llvm_extract")
+                           (SAWScript.Var loadedModule))
+                        (SAWScript.String function))]
                JVM ->
                   [SAWScript.StmtBind Unknown (SAWScript.PVar boundName Nothing) Nothing
                      (SAWScript.Application
                         (SAWScript.Application
-                           (SAWScript.Application
-                              (SAWScript.Var . locate $ "java_extract")
-                              (SAWScript.Var loadedModule))
-                           (SAWScript.String function))
-                        (SAWScript.Var . locate $ "java_pure"))]
+                           (SAWScript.Var . locate $ "crucible_java_extract")
+                           (SAWScript.Var loadedModule))
+                        (SAWScript.String function))]
 
       equivalenceTheorem :: (String -> String) -> SAWScript.LName -> SAWScript.LName -> Assignments -> ScriptWriter s tp (SAWScript.LName)
       equivalenceTheorem prefix leftFunction rightFunction assigns = do

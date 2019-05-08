@@ -96,7 +96,7 @@ library
     SAWScript.AutoMatch.ArgMapping
     SAWScript.AutoMatch.Declaration
     SAWScript.AutoMatch.Cryptol
-    --SAWScript.AutoMatch.LLVM
+    SAWScript.AutoMatch.LLVM
     SAWScript.AutoMatch.JVM
     SAWScript.AutoMatch.Util
     SAWScript.Builtins
