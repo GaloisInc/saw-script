@@ -50,10 +50,10 @@ let inc_spec INC = do {
   crucible_return (crucible_term {{ 0 : [32] }});
 };
 
-print "Verifying 'inc_1' using 'llvm_verify':";
+print "Verifying 'inc_1' using 'crucible_llvm_verify':";
 crucible_llvm_verify m "inc" [] true (inc_spec {{ INC_1 }}) abc;
 print "";
 
-print "Verifying 'inc_2' using 'llvm_verify':";
+print "Verifying 'inc_2' using 'crucible_llvm_verify':";
 crucible_llvm_verify m "inc" [] true (inc_spec {{ INC_2 }}) abc;
 print "";
