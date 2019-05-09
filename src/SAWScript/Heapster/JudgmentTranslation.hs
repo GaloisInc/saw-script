@@ -267,17 +267,8 @@ elimPair ::
   OpenTerm ->                           -- ^ input pair
   (OpenTerm -> OpenTerm -> OpenTerm) -> -- ^ body (receives left and right)
   OpenTerm
-elimPair typL typR _typOut pair hdlr =
-  let recursor =
-        lambdaOpenTerm "fst" typL
-        (\ l ->
-         lambdaOpenTerm "snd" typR
-         (\ r ->
-          hdlr l r
-         )
-        )
-  in
-  applyOpenTermMulti recursor [fstOpenTerm pair, sndOpenTerm pair]
+elimPair _typL _typR _typOut pair hdlr =
+  hdlr (fstOpenTerm pair) (sndOpenTerm pair)
 
 class IntroJudgmentTranslate' (f :: Ctx CrucibleType -> *) where
   introJudgmentTranslate' ::
