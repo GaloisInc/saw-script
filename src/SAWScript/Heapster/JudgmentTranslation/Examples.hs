@@ -107,64 +107,62 @@ examplePermElimRight = Elim_Done rightAnnotIntro
       Intro_Exists (BVRepr (knownRepr :: NatRepr 64)) (PExpr_BV knownRepr [] 0) permOutRightInsideExists
       -- permInRight |- ValPerm_Eq (PExpr_LLVMWord knownRepr (PExpr_Var (nextPermVar (incSize zeroSize))))
       $ Intro_Eq (EqProof_Refl (PExpr_LLVMWord (knownRepr :: NatRepr 64) (PExpr_BV knownRepr [] 0)))
-      -- permInLeft |- permOut
+      -- permInRight |- permOut
       $ Intro_Done
 
 examplePermElim :: PermElim AnnotIntro ExampleContext
 examplePermElim = Elim_Or (nextPermVar zeroSize) leftBranch rightBranch
 
-  where
+permSetSpecOut :: PermSetSpec EmptyCtx ExampleContext
+permSetSpecOut =
+  [ PermSpec zeroSize (PExpr_Var (nextPermVar zeroSize)) permOut
+  ]
 
-    permSetSpecOut :: PermSetSpec EmptyCtx ExampleContext
-    permSetSpecOut =
-      [ PermSpec zeroSize (PExpr_Var (nextPermVar zeroSize)) permOut
-      ]
+-- permInLeft |- permOut
+leftBranch :: PermElim AnnotIntro ExampleContext
+leftBranch = Elim_Done leftAnnotIntro
 
-    -- permInLeft |- permOut
-    leftBranch :: PermElim AnnotIntro ExampleContext
-    leftBranch = Elim_Done leftAnnotIntro
+-- permInLeft |- permOut
+leftAnnotIntro :: AnnotIntro ExampleContext
+leftAnnotIntro = AnnotIntro
+  { introInPerms  = extendPermSet emptyPermSet knownRepr permInLeft
+  , introOutPerms = permSetSpecOut
+  , introProof    = leftIntro
+  }
 
-    -- permInLeft |- permOut
-    leftAnnotIntro :: AnnotIntro ExampleContext
-    leftAnnotIntro = AnnotIntro
-      { introInPerms  = extendPermSet emptyPermSet knownRepr permInLeft
-      , introOutPerms = permSetSpecOut
-      , introProof    = leftIntro
-      }
+-- permInLeft |- permOut
+leftIntro :: PermIntro ExampleContext
+leftIntro =
+  -- permInLeft |- permOut
+  Intro_OrL permOutRight
+  -- permInLeft |- permOutLeft
+  $ Intro_LLVMPtr (nextPermVar zeroSize)
+  -- permInLeft |- empty
+  $ Intro_Done
 
-    -- permInLeft |- permOut
-    leftIntro :: PermIntro ExampleContext
-    leftIntro =
-      -- permInLeft |- permOut
-      Intro_OrL permOutRight
-      -- permInLeft |- permOutLeft
-      $ Intro_LLVMPtr (nextPermVar zeroSize)
-      -- permInLeft |- empty
-      $ Intro_Done
+-- permInRight |- permOut
+rightBranch :: PermElim AnnotIntro ExampleContext
+rightBranch = Elim_Done rightAnnotIntro
 
-    -- permInRight |- permOut
-    rightBranch :: PermElim AnnotIntro ExampleContext
-    rightBranch = Elim_Done rightAnnotIntro
+-- permInRight |- permOut
+rightAnnotIntro :: AnnotIntro ExampleContext
+rightAnnotIntro = AnnotIntro
+  { introInPerms  = extendPermSet emptyPermSet knownRepr permInRight
+  , introOutPerms = permSetSpecOut
+  , introProof    = rightIntro
+  }
 
-    -- permInRight |- permOut
-    rightAnnotIntro :: AnnotIntro ExampleContext
-    rightAnnotIntro = AnnotIntro
-      { introInPerms  = extendPermSet emptyPermSet knownRepr permInRight
-      , introOutPerms = permSetSpecOut
-      , introProof    = rightIntro
-      }
-
-    -- permInRight |- permOut
-    rightIntro :: PermIntro ExampleContext
-    rightIntro =
-      -- permInRight |- permOut
-      Intro_OrR permOutLeft
-      -- permInRight |- permOutRight
-      $ Intro_Exists (BVRepr (knownRepr :: NatRepr 64)) (PExpr_BV knownRepr [] 0) permOutRightInsideExists
-      -- permInRight |- ValPerm_Eq (PExpr_LLVMWord knownRepr (PExpr_Var (nextPermVar (incSize zeroSize))))
-      $ Intro_Eq (EqProof_Refl (PExpr_LLVMWord (knownRepr :: NatRepr 64) (PExpr_BV knownRepr [] 0)))
-      -- permInRight |- permOut
-      $ Intro_Done
+-- permInRight |- permOut
+rightIntro :: PermIntro ExampleContext
+rightIntro =
+  -- permInRight |- permOut
+  Intro_OrR permOutLeft
+  -- permInRight |- permOutRight
+  $ Intro_Exists (BVRepr (knownRepr :: NatRepr 64)) (PExpr_BV knownRepr [] 0) permOutRightInsideExists
+  -- permInRight |- ValPerm_Eq (PExpr_LLVMWord knownRepr (PExpr_Var (nextPermVar (incSize zeroSize))))
+  $ Intro_Eq (EqProof_Refl (PExpr_LLVMWord (knownRepr :: NatRepr 64) (PExpr_BV knownRepr [] 0)))
+  -- permInRight |- permOut
+  $ Intro_Done
 
 emptyInfo :: BlocksInfo EmptyCtx
 emptyInfo = BlocksInfo { entryPoints = [] }
@@ -198,20 +196,27 @@ scaffold ::
 scaffold pIn pOut permElim =
   lambdaOpenTerm "v" (typeTranslate'' (LLVMPointerRepr (knownRepr :: NatRepr 64))) $ \ v ->
   let typeEnvironment :: Assignment (Const OpenTerm) ExampleContext = extend empty (Const v) in
-  lambdaOpenTerm "vp" (typeTranslate typeEnvironment permIn) $ \ vp ->
+  lambdaOpenTerm "vp" (typeTranslate typeEnvironment pIn) $ \ vp ->
   let jctx = JudgmentContext { typeEnvironment
                              , permissionSet   = extendPermSet emptyPermSet knownRepr pIn
                              , permissionMap   = extend empty (Const vp)
                              , catchHandler    = Nothing
                              }
   in
-  judgmentTranslate' emptyInfo jctx (typeTranslate typeEnvironment pOut) permElim
+  let permSetSpecOut = [PermSpec zeroSize (PExpr_Var $ nextPermVar zeroSize) pOut] in
+  judgmentTranslate' emptyInfo jctx (typeTranslatePermSetSpec typeEnvironment permSetSpecOut) permElim
 
 translateExamplePermElimLeft :: OpenTerm
 translateExamplePermElimLeft = scaffold permInLeft permOutLeft examplePermElimLeft
 
 translateExamplePermElimRight :: OpenTerm
 translateExamplePermElimRight = scaffold permInRight permOutRight examplePermElimRight
+
+translateExamplePermElimDisjOutL :: OpenTerm
+translateExamplePermElimDisjOutL = scaffold permInLeft permOut (Elim_Done leftAnnotIntro)
+
+translateExamplePermElimDisjOutR :: OpenTerm
+translateExamplePermElimDisjOutR = scaffold permInRight permOut (Elim_Done rightAnnotIntro)
 
 translateExamplePermElim :: OpenTerm
 translateExamplePermElim = scaffold permIn permOut examplePermElim
@@ -239,7 +244,11 @@ testJudgmentTranslation = do
     test $ lambdaOpenTerm "v" llvmPointerType $ \ v -> permOutTypeRight (extend empty (Const v))
     putStrLn "Testing translating examplePermElimRight"
     test $ translateExamplePermElimRight
-    putStrLn "Testing translating examplePermElim"
+    putStrLn "Testing translating examplePermElimDisjOutL"
+    test $ translateExamplePermElimDisjOutL
+    putStrLn "Testing translating examplePermElimDisjOutR"
+    test $ translateExamplePermElimDisjOutR
+    putStrLn "Testing translating examplePermElimDisj"
     test $ translateExamplePermElim
 
 -- EXAMPLE to write:

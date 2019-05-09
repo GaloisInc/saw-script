@@ -36,6 +36,7 @@ import           SAWScript.Heapster.TypedCrucible
 import           SAWScript.Heapster.TypeTranslation
 import           SAWScript.Heapster.ValueTranslation
 import           Verifier.SAW.OpenTerm
+import           Verifier.SAW.Term.Functor
 
 -- | The @JudgmentTranslate@ family of classes captures translations from
 -- permission judgments to SAW functions.
@@ -101,18 +102,18 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
       let tL l =
             judgmentTranslate' info
             (JudgmentContext { typeEnvironment = typeEnvironment jctx
-                             , permissionSet = elimOrLeft (permissionSet jctx) index
-                             , permissionMap = atIndex index (const $ Const l) (permissionMap jctx)
-                             , catchHandler  = catchHandler jctx
+                             , permissionSet   = elimOrLeft (permissionSet jctx) index
+                             , permissionMap   = atIndex index (const $ Const l) (permissionMap jctx)
+                             , catchHandler    = catchHandler jctx
                              })
             outputType e1
       in
       let tR r =
             judgmentTranslate' info
             (JudgmentContext { typeEnvironment = typeEnvironment jctx
-                             , permissionSet = elimOrRight (permissionSet jctx) index
-                             , permissionMap = atIndex index (const $ Const r) (permissionMap jctx)
-                             , catchHandler  = catchHandler jctx
+                             , permissionSet   = elimOrRight (permissionSet jctx) index
+                             , permissionMap   = atIndex index (const $ Const r) (permissionMap jctx)
+                             , catchHandler    = catchHandler jctx
                              })
             outputType e2
       in
@@ -124,14 +125,12 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
       in
       let permTypeL      = typeTranslate (typeEnvironment jctx) permL in
       let permTypeR      = typeTranslate (typeEnvironment jctx) permR in
-      let bodyL l        = applyOpenTerm (tL l) l in
-      let bodyR r        = applyOpenTerm (tR r) r in
       applyOpenTermMulti (globalOpenTerm "Prelude.either")
       [ permTypeL                          -- a
       , permTypeR                          -- b
       , outputType                         -- c
-      , lambdaOpenTerm "l" permTypeL bodyL -- a -> c
-      , lambdaOpenTerm "r" permTypeR bodyR -- b -> c
+      , lambdaOpenTerm "l" permTypeL tL -- a -> c
+      , lambdaOpenTerm "r" permTypeR tR -- b -> c
       , getConst var                       -- Either a b
       ]
 
@@ -255,6 +254,12 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
 -- isValPerm_Eq (ValPerm_Eq _) = True
 -- isValPerm_Eq _ = False
 
+fstOpenTerm :: OpenTerm -> OpenTerm
+fstOpenTerm p = flatOpenTerm $ PairLeft p
+
+sndOpenTerm :: OpenTerm -> OpenTerm
+sndOpenTerm p = flatOpenTerm $ PairRight p
+
 elimPair ::
   OpenTerm ->                           -- ^ type of left element
   OpenTerm ->                           -- ^ type of right element
@@ -262,13 +267,17 @@ elimPair ::
   OpenTerm ->                           -- ^ input pair
   (OpenTerm -> OpenTerm -> OpenTerm) -> -- ^ body (receives left and right)
   OpenTerm
-elimPair typL typR typOut pair hdlr =
-  applyOpenTermMulti (globalOpenTerm "Prelude.Pair__rec")
-  [ typL, typR
-  , lambdaOpenTerm "p" (pairTypeOpenTerm typL typR) typOut
-  , lambdaOpenTerm "l" typL (\ l -> lambdaOpenTerm "r" typR (\ r -> hdlr l r))
-  , pair
-  ]
+elimPair typL typR _typOut pair hdlr =
+  let recursor =
+        lambdaOpenTerm "fst" typL
+        (\ l ->
+         lambdaOpenTerm "snd" typR
+         (\ r ->
+          hdlr l r
+         )
+        )
+  in
+  applyOpenTermMulti recursor [fstOpenTerm pair, sndOpenTerm pair]
 
 class IntroJudgmentTranslate' (f :: Ctx CrucibleType -> *) where
   introJudgmentTranslate' ::
@@ -328,23 +337,31 @@ instance IntroJudgmentTranslate' AnnotIntro where
                         , introProof    = pf
                         })
       in
-      let (permTypFst, permTypSnd) =
-            case introOutPerms of
-            PermSpec _ _ (ValPerm_Exists tpIn pIn) : _ ->
-              -- TODO: check that we want `permissionMap` here
-              typeTranslateDependentPair (permissionMap jctx) tpIn pIn
-            _ -> error "Intro_Exists, but introOutPerms does not start with a ValPerm_Exists"
-      in
-      transformLeft
-      permTypSnd                                                                     -- typLBefore
-      (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma") [permTypFst, permTypSnd]) -- typLAfter
-      typSnd                                                                         -- typR
-      pf'                                                                            -- pair
+      -- let (permTypFst, permTypSnd) =
+      --       case introOutPerms of
+      --       PermSpec _ _ (ValPerm_Exists tpIn pIn) : _ ->
+      --         -- TODO: check that we want `permissionMap` here
+      --         typeTranslateDependentPair (permissionMap jctx) tpIn pIn
+      --       _ -> error "Intro_Exists, but introOutPerms does not start with a ValPerm_Exists"
+      -- in
+
+      -- In "right" example:
+      -- typFst is bitvector 64
+      -- typSnd is (\ fst -> ( (), () ))
+      -- pf'    is ( (), () )
+      -- [[e']] is bvNat 64 0
+
+      let varFst     = valueTranslate (typeEnvironment jctx) e' in
+      let typLBefore = applyOpenTerm typSnd varFst in
+      let typLAfter  = applyOpenTermMulti (globalOpenTerm "Prelude.Sigma") [typFst, typSnd] in
+      let typR       = typeTranslatePermSetSpec (typeEnvironment jctx) (tail introOutPerms) in
+
+      transformLeft typLBefore typLAfter typR pf'
       (\ l ->
        ctorOpenTerm "Prelude.exists"
        [ typFst
        , typSnd
-       , valueTranslate (typeEnvironment jctx) e'
+       , varFst
        , l
        ]
       )
@@ -366,7 +383,7 @@ instance IntroJudgmentTranslate' AnnotIntro where
         transformLeft
         typLeft
         (ctorOpenTerm "Prelude.Either" [typLeft, typRight])
-        (error "TODO") -- type of the remaining Pout
+        (typeTranslatePermSetSpec (typeEnvironment jctx) tl) -- type of the remaining Pout
         pf'
         (\ l -> ctorOpenTerm "Prelude.Left" [ typLeft, typRight, l ])
       [] -> error "Intro_OrL: empty out permissions"
@@ -389,7 +406,7 @@ instance IntroJudgmentTranslate' AnnotIntro where
         transformLeft
         typRight
         (ctorOpenTerm "Prelude.Either" [typLeft, typRight])
-        (error "TODO") -- type of the remaining Pout
+        (typeTranslatePermSetSpec (typeEnvironment jctx) tl) -- type of the remaining Pout
         pf'
         (\ l -> ctorOpenTerm "Prelude.Right" [ typLeft, typRight, l ])
       [] -> error "Intro_OrL: empty out permissions"
@@ -480,7 +497,19 @@ atIndex :: PermVar ctx a -> (f a -> f a) -> Assignment f ctx -> Assignment f ctx
 atIndex x = Lens.over (pvLens x)
 
 nthOpenTerm :: Int -> OpenTerm -> OpenTerm
-nthOpenTerm n t = goLeft $ (iterate goRight t) !! n
-  where
-    goLeft  = applyOpenTerm (globalOpenTerm "Prelude.Pair_fst")
-    goRight = applyOpenTerm (globalOpenTerm "Prelude.Pair_snd")
+nthOpenTerm n t = fstOpenTerm $ (iterate sndOpenTerm t) !! n
+
+-- let { x@1 = Prelude.bitvector 64
+--       x@2 = Prelude.bvNat 64 0
+--     }
+--  in \ (v : #(-empty-)) ->
+--       \ (vp : #(-empty-)) ->
+--         (\ (fst : (\(fst : x@1) -> #(-empty-)) x@2) ->
+--            \ (snd : #(-empty-)) ->
+--              (Prelude.exists x@1 (\(fst' : x@1) -> #(-empty-)) x@2 fst,snd))
+--           (-empty-)
+--           (-empty-)
+
+-- let fst = (-empty-) in
+-- let snd = (-empty-) in
+-- (Prelude.exists x@1 (\(fst' : x@1) -> #(-empty-)) x@2 fst,snd))

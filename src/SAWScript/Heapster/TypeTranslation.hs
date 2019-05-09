@@ -17,6 +17,7 @@ module SAWScript.Heapster.TypeTranslation (
   TypeTranslate''(..),
   testTypeTranslation,
   typeTranslateDependentPair,
+  typeTranslatePermSetSpec,
   ) where
 
 import           Data.Functor.Const
@@ -48,14 +49,14 @@ class TypeTranslate'' (d :: *) where
 
 instance TypeTranslate'' (TypeRepr a) where
   typeTranslate'' (AnyRepr)                = error "TODO"
-  typeTranslate'' (UnitRepr)               = dataTypeOpenTerm "Prelude.UnitType" []
+  typeTranslate'' (UnitRepr)               = unitTypeOpenTerm
   typeTranslate'' (BoolRepr)               = dataTypeOpenTerm "Prelude.Bool" []
   typeTranslate'' (NatRepr)                = dataTypeOpenTerm "Prelude.Nat" []
   typeTranslate'' (IntegerRepr)            = error "TODO"
   typeTranslate'' (RealValRepr)            = error "TODO"
   typeTranslate'' (ComplexRealRepr)        = error "TODO"
   typeTranslate'' (BVRepr w)               = applyOpenTerm (globalOpenTerm "Prelude.bitvector") (valueTranslate'' w)
-  typeTranslate'' (LLVMPointerRepr w)      = applyOpenTerm (globalOpenTerm "Prelude.bitvector") (valueTranslate'' w)
+  typeTranslate'' (LLVMPointerRepr w)      = unitTypeOpenTerm
   typeTranslate'' (IntrinsicRepr _ _)      = error "TODO"
   typeTranslate'' (RecursiveRepr _ _)      = error "TODO"
   typeTranslate'' (FloatRepr _)            = dataTypeOpenTerm "Prelude.Float" []
@@ -146,3 +147,6 @@ instance TypeTranslate' (PermSpec EmptyCtx) where
 instance TypeTranslate' PermSet where
   typeTranslate' ctx ps =
     tupleTypeOpenTerm $ map (typeTranslate' ctx) (permSpecOfPermSet ps)
+
+typeTranslatePermSetSpec :: OpenTermCtxt ctx -> PermSetSpec EmptyCtx ctx -> OpenTerm
+typeTranslatePermSetSpec ctx = tupleTypeOpenTerm . map (typeTranslate' ctx)
