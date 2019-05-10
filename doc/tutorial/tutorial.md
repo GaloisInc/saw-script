@@ -1,8 +1,3 @@
-% **SAWScript**
-% Galois, Inc. | 421 SW 6th Avenue, Suite 300 | Portland, OR 97204
-
-\newpage
-
 Introduction
 ============
 
@@ -18,25 +13,25 @@ analysis tasks.
 
 This tutorial introduces the details of the language by walking through
 several examples, and showing how simple verification tasks can be
-described. The complete examples are available in [the accompanying
-collection of code](saw-tutorial-code.tar.gz).  Most of the examples
-make use of inline specifications written in Cryptol, a language
-originally designed for high-level descriptions of cryptographic
-algorithms. For readers unfamiliar with Cryptol, various documents
-describing its use are available
+described. The complete examples are available [on
+GitHub](https://github.com/GaloisInc/saw-script/tree/master/doc/tutorial/code).
+Most of the examples make use of inline specifications written in
+Cryptol, a language originally designed for high-level descriptions of
+cryptographic algorithms. For readers unfamiliar with Cryptol, various
+documents describing its use are available
 [here](http://cryptol.net/documentation.html).
-
 
 Example: Find First Set
 =======================
 
-As a first example, we consider equivalence checking different implementations
-of the POSIX `ffs` function, which identifies the position of the first ``1``
-bit in a word. The function takes an integer as input, treated as a vector of
-bits, and returns another integer which indicates the index of the first bit
-set. This function can be implemented in several ways with different
-performance and code clarity tradeoffs, and we would like to show those
-different implementations are equivalent.
+As a first example, we consider equivalence checking different
+implementations of the POSIX `ffs` function, which identifies the
+position of the first ``1`` bit in a word. The function takes an integer
+as input, treated as a vector of bits, and returns another integer which
+indicates the index of the first bit set. This function can be
+implemented in several ways with different performance and code clarity
+tradeoffs, and we would like to show those different implementations are
+equivalent.
 
 Reference Implementation
 -------------------------
@@ -44,10 +39,9 @@ Reference Implementation
 One simple implementation takes the form of a loop with an index
 initialized to zero, and a mask initialized to have the least
 significant bit set. On each iteration, we increment the index, and
-shift the mask to the left. Then we can use a bitwise "and" operation
-to test the bit at the index indicated by the index variable. The
-following C code (which is also in the `code/ffs.c` file [accompanying
-this tutorial](saw-tutorial-code.tar.gz)) uses this approach.
+shift the mask to the left. Then we can use a bitwise "and" operation to
+test the bit at the index indicated by the index variable. The following
+C code (which is also in the `ffs.c` file on GitHub) uses this approach.
 
 ``` {.c}
 $include 9-17 code/ffs.c
@@ -60,11 +54,13 @@ could be as many as 32, depending on the input value. It's possible to
 implement the same algorithm with significantly fewer branches, and no
 backward branches.
 
+\newpage
+
 Optimized Implementations
 -------------------------
 
-An alternative implementation, taken by the following program (also in
-[`code/ffs.c`](saw-tutorial-code.tar.gz)), treats the bits of the input word in chunks, allowing
+An alternative implementation, taken by the following function (also in
+`ffs.c`), treats the bits of the input word in chunks, allowing
 sequences of zero bits to be skipped over more quickly.
 
 ``` {.c}
@@ -72,7 +68,7 @@ $include 19-26 code/ffs.c
 ```
 
 Another optimized version, in the following rather mysterious program
-(also in `code/ffs.c`), based on the `ffs` implementation in [musl
+(also in `ffs.c`), based on the `ffs` implementation in [musl
 libc](http://www.musl-libc.org/).
 
 ``` {.c}
@@ -90,10 +86,10 @@ implementations on all possible inputs.
 Buggy Implementation
 --------------------
 
-Finally, a buggy implementation which is correct on all but one
-possible input (also in `code/ffs.c`). Although contrived, this
-program represents a case where traditional testing -- as opposed
-to verification -- is unlikely to be helpful.
+Finally, a buggy implementation which is correct on all but one possible
+input (also in `ffs.c`). Although contrived, this program represents a
+case where traditional testing -- as opposed to verification -- is
+unlikely to be helpful.
 
 ``` {.c}
 $include 43-47 code/ffs.c
@@ -109,7 +105,14 @@ originally written in a higher-level language such as C, as in our
 example. Therefore, the C code must be translated to LLVM, using
 something like the following command:
 
-    > clang -c -emit-llvm -o ffs.bc ffs.c
+    > clang -g -c -emit-llvm -o ffs.bc ffs.c
+
+The `-g` flag instructs `clang` to include debugging information, which
+is useful in SAW to refer to variables and struct fields using the same
+names as in C. We have tested SAW successfully with versions of `clang`
+from 3.6 to 7.0. Please report it as a bug [on
+GitHub](https://github.com/GaloisInc/saw-script/issues) if SAW fails to
+parse any LLVM bitcode file.
 
 This command, and following command examples in this tutorial, can be
 run from the `code` directory accompanying the tutorial document. A
@@ -130,22 +133,19 @@ A SAWScript program is typically structured as a sequence of commands,
 potentially along with definitions of functions that abstract over
 commonly-used combinations of commands.
 
-The following script (in `code/ffs_llvm.saw`) is sufficient to
-automatically prove the equivalence of `ffs_ref` with `ffs_imp` and
-`ffs_musl`, and identify the bug in `ffs_bug`.
+The following script (in `ffs_llvm.saw`) is sufficient to automatically
+prove the equivalence of `ffs_ref` with `ffs_imp` and `ffs_musl`, and
+identify the bug in `ffs_bug`.
 
 ```
 $include all code/ffs_llvm.saw
 ```
 
 In this script, the `print` commands simply display text for the user.
-The `llvm_extract` command instructs the SAWScript interpreter to
-perform symbolic simulation of the given C function (e.g., `ffs_ref`)
+The `crucible_llvm_extract` command instructs the SAWScript interpreter
+to perform symbolic simulation of the given C function (e.g., `ffs_ref`)
 from a given bitcode file (e.g., `ffs.bc`), and return a term
-representing the semantics of the function. The final argument,
-`llvm_pure` indicates that the function to analyze is a "pure"
-function, which computes a scalar return value entirely as a function
-of its scalar parameters.
+representing the semantics of the function.
 
 The `let` statement then constructs a new term corresponding to the
 assertion of equality between two existing terms.  Arbitrary
@@ -158,12 +158,15 @@ The `abc` parameter indicates what
 theorem prover to use; SAWScript offers support for many other SAT and
 SMT solvers as well as user definable simplification tactics.
 
+TODO: mention `sat`, too.
+
 If the `saw` executable is in your PATH, you can run the script above with
 
     > saw ffs_llvm.saw
 
 producing the output
 
+TODO: update output
 ```
 Loading module Cryptol
 Loading file "ffs_llvm.saw"
@@ -182,6 +185,8 @@ Invalid: [x = 1052688]
 Done.
 ```
 
+TODO: use `set_base 16`?
+
 Note that `0x101010 = 1052688`, and so both explicitly searching for
 an input exhibiting the bug (with `sat`) and attempting to prove the
 false equivalence (with `prove`) exhibit the bug. Symmetrically, we
@@ -193,11 +198,12 @@ unsatisfiable. Indeed, this exactly what happens behind the scenes:
 Cross-Language Proofs
 ---------------------
 
+TODO: introduce new functions
+
 We can implement the FFS algorithm in Java with code almost identical
 to the C version.
 
-The reference version (in `code/FFS.java`) uses a loop, like the C
-version:
+The reference version (in `FFS.java`) uses a loop, like the C version:
 
 ``` {.java}
 $include 2-10 code/FFS.java
@@ -224,20 +230,30 @@ First, we compile the Java code to a JVM class file.
 
     > javac -g FFS.java
 
+Like with `clang`, the `-g` flag instructs `javac` to include debugging
+information, which can be useful to preserve variable names.
+
 Using `saw` with Java code requires a command-line option `-j` that
 locates the Java standard libraries. Run the code in this section with
 the command:
 
     > saw -j <path to rt.jar or classes.jar from JDK> ffs_compare.saw
 
-If you're using a Sun Java, you can find the standard libraries JAR by
+This path can also be specified in the `SAW_JDK_JAR` environment
+variable.
+
+For many versions of Java you can find the standard libraries JAR by
 grepping the output of `java -v`:
 
     > java -v 2>&1 | grep Opened
 
+Both Oracle JDK and OpenJDK versions 6 through 8 work well with SAW.
+From version 9 onward, the core libraries are no longer stored in a
+standard JAR file, making them inacessible to SAW. We're currently
+considering strategies for working with newer Java versions.
 
 Now we can do the proof both within and across languages (from
-`code/ffs_compare.saw`):
+`ffs_compare.saw`):
 
 ```
 $include all code/ffs_compare.saw
@@ -263,11 +279,10 @@ $include all code/double.c
 ```
 
 In this trivial example, an integer can be doubled either using
-multiplication or shifting. The following SAWScript program
-([`code/double.saw`](saw-tutorial-code.tar.gz)) verifies that the two
-are equivalent using both internal ABC, Yices, and CVC4 modes, and by
-exporting an SMT-Lib theorem to be checked later, by an external SAT
-solver.
+multiplication or shifting. The following SAWScript program (in
+`double.saw`) verifies that the two are equivalent using both internal
+ABC, Yices, and CVC4 modes, and by exporting an SMT-Lib theorem to be
+checked later, by an external SAT solver.
 
 ```
 $include all code/double.saw
@@ -287,7 +302,6 @@ either satisfiability or validity checking.
 
 The SMT-Lib export capabilities in SAWScript make use of the Haskell
 SBV package, and support ABC, Boolector, CVC4, MathSAT, Yices, and Z3.
-
 
 External SAT Solvers
 ====================
@@ -332,18 +346,10 @@ translated into a single mathematical model. SAWScript also has
 support for more compositional proofs, as well as proofs about
 functions that use heap data structures.
 
-<!--
-Compositional Cryptol Proofs
-----------------------------
-
-The simplest form of compositional reasoning within SAWScript involves
-treating sub-terms of models as uninterpreted functions.
-
-TODO
--->
-
 Compositional Imperative Proofs
 -------------------------------
+
+TODO: update this to use `crucible_jvm_verify`
 
 As a simple example of compositional reasoning on imperative programs,
 consider the following Java code.
@@ -459,216 +465,6 @@ And, finally, we can double-check that this is indeed a valid solution.
     sawscript> print {{ nq8 [3,1,6,2,5,7,4,0] }}
     True
 
-More Sophisticated Imperative Models
-====================================
-
-The analysis of JVM and LLVM programs presented so far have been
-relatively simple and automated. The `java_extract` and `llvm_extract`
-commands can extract models from simple methods or functions with
-minimal effort. For more complex code, however, more flexibility is
-necessary.
-
-The `java_symexec` and `llvm_symexec` commands provide greater control
-over the use of symbolic execution to generate models of JVM and LLVM
-programs. These two commands have similar structure, but slight
-differences due to the differences between the underlying languages.
-
-The shared structure is intuitively the following: both commands take
-parameters that set up the initial symbolic state of the program,
-before execution begins, and parameters that indicate which portions
-of the program state should be returned as output when execution
-completes.
-
-The initial state before symbolic execution typically includes unknown
-(symbolic) elements. To construct `Term` inputs that contain symbolic
-variables, you can start by using the `fresh_symbolic` command, which
-takes a name and a type as arguments, and returns a `Term`. A type can
-be written using Cryptol type syntax by enclosing it within `{|` `|}`.
-The name is used only for pretty-printing, and the type is used for
-later consistency checking. For example, consider the following
-command:
-
-    x <- fresh_symbolic "x" {| [32] |};
-
-This creates a new `Term` stored in the SAWScript variable `x` that is
-a 32-bit symbolic word.
-
-These symbolic variables are most commonly used by the more general
-Java and LLVM model extraction commands. The Java version of the
-command has the following signature:
-
-    java_symexec : JavaClass        // Java class object
-                -> String           // Java method name
-                -> [(String, Term)] // Initial state elements
-                -> [String]         // Final (output) state elements
-                -> Bool             // Check satisfiability of branches?
-                -> TopLevel Term    // Resulting Term
-
-This first two parameters are the same as for `java_extract`: the class
-object and the name of the method from that class to execute. The third
-parameter describes the initial state of execution. For each element of
-this list, SAWScript writes the value of the `Term` to the destination
-variable or field named by the `String`. Typically, the `Term` will
-either be directly the result of `fresh_symbolic` or an more complex
-expression containing such a result, though it is allowed to be a
-constant value. The syntax of destination follows Java syntax. For
-example, `o.f` describes field `f` of object `o`. The fourth parameter
-indicates which elements of the final state to return as output. The
-syntax of the strings in this list is the same as for the initial state
-description. The final parameter indicates whether to perform
-satisfiability checks on branch conditions. If this is `true`, SAW will
-use its internal version of ABC to check the satisfiability of each
-branch condition before executing the associated branch. If this is
-`false`, SAW will simply check whether the branch condition has a
-constant value.
-
-An example of using `java_symexec` on a simple function (using just
-scalar arguments and return values) appears in the
-[`code/java_symexec.saw`](saw-tutorial-code.tar.gz) file, quoted below.
-
-```
-$include all code/java_symexec.saw
-```
-
-This script uses `fresh_symbolic` to construct two fresh variables,
-`x` and `y`, and then passes them in as the initial values of the
-method parameters of the same name. It then uses the special name
-`return` to refer to the return value of the method in the output
-list. Finally, it uses the `abstract_symbolic` command to convert a
-`Term` containing symbolic variables into a function that takes the
-values of those variables as parameters. This last step exists partly
-to illustrate the use of `abstract_symbolic`, and partly because the
-`prove_print` command currently cannot process terms that contain
-symbolic variables (though we plan to adapt it to be able to in the
-near future).
-
-The LLVM version of the command has some additional complexities, due
-to the less structured nature of the LLVM memory model.
-
-    llvm_symexec : LLVMModule            // LLVM module object
-                -> String                // Function name
-                -> [(String, Int)]       // Initial allocations
-                -> [(String, Term, Int)] // Initial state element
-                -> [(String, Int)]       // Final state elements
-                -> Bool                  // Enable branch SAT checking
-                -> TopLevel Term         // Resulting Term
-
-The first two and last arguments of `llvm_extract` are symmetric with
-`java_extract`, specifying a module, function, and whether to
-SAT-check branch conditions.  However, while `java_extract` takes
-*two* input/output arguments, corresponding to initial values and
-results, `llvm_extract` takes *three* input/output arguments,
-corresponding to memory allocations, initial values, and
-results. Below, we first give an `llvm_extract` example for `add`,
-which is close to the corresponding `java_extract` example above, but
-does not make use of the unfamiliar initialization argument. We then
-give a second `llvm_extract` example for `dotprod`, which does use the
-initialization argument.
-
-In more detail, the input/output arguments of `llvm_symexec` are
-interpreted as follows. For the first list, SAWScript will initialize
-the pointer named by the given string to point to the number of
-elements indicated by the `Int`. For the second list, SAWScript will
-write to the given location with the given number of elements read
-from the given term. The name given in the initial assignment list
-should be written as an r-value, so if `"p"` appears in the allocation
-list then `"*p"` should appear in the initial assignment list. The
-third list describes the results, using the same convention: read $n$
-elements from the named location.
-
-The numbers given for a particular location in the three lists need
-not be the same. For instance, we might allocate 10 elements for
-pointer `p`, write 8 elements to `*p` at the beginning, and read 4
-elements from `*p` at the end. However, both the initialization and
-result sizes must be less than or equal to the allocation size.
-
-An example of using `llvm_symexec` on a function similar to the Java
-method just discussed appears in the `code/llvm_symexec.saw` file,
-quoted below.
-
-```
-$include all code/llvm_symexec.saw
-```
-
-This has largely the same structure as the Java example, except that
-the `llvm_symexec` command takes an extra argument, describing
-allocations (here the empty list `[]`),
-and the input and output descriptions take sizes as well
-as values, to compensate for the fact that LLVM does not track how
-much memory a given variable takes up. In simple scalar cases such as
-this one, the size argument will always be `1`. However, if an input
-or output parameter is an array, it will take on the corresponding
-size value. For instance, say an LLVM function takes as a parameter an
-array `a` containing 10 elements of type `uint32_t *`, which it reads
-and writes. We could then call `llvm_symexec` with an allocation
-argument of `[("a", 10)]`, and both input and output arguments of
-`[("*a", 10)]` (note the additional `*` in the latter).
-
-Concretely, consider a function to calculate the dot product of two
-vectors. We can define this operation functionally in Cryptol as
-follows (and as in `code/dotprod.cry`).
-
-```
-$include all code/dotprod.cry
-```
-
-This code uses a very functional style, and declares several generic,
-polymorphic functions. A more specialized implementation of dot
-product in C might look more like the following, from
-`code/dotprod.c`.
-
-``` {.c}
-$include all code/dotprod.c
-```
-
-Here, we have two arrays of 32-bit integers, which we assume to both
-contain `size` elements. We can prove the equivalence between the C
-and Cryptol dot product functions with the following SAWScript program
-(in `code/dotprod.saw`).
-
-```
-$include all code/dotprod.saw
-```
-
-The structure of this script is similar to the previous example, but
-has some additional complexities. First, we pass in an allocation list
-that declares that `x` and `y` each point to 12 elements of their
-respective types (both `uint32_t` in this case). Next, we state that
-the *values* pointed to by `x` and `y` are the (symbolic) values of
-`xs` and `ys` respectively, each of which consists of 12 elements.
-Finally, the `size` parameter is the constant `12`. Because the type
-of `t` is fixed after the `llvm_symexec` command has run, the Cryptol
-type checker can specialize the `dotprod` function to the appropriate
-type. ABC can then easily prove the equivalence between the C and
-Cryptol implementations.
-
-Using Additional Cryptol Primitives
-===================================
-
-SAWScript defines some Cryptol primitives that are not in scope by
-default, including signed comparisons (Cryptol’s comparisons are
-unsigned). Here is an example including the available operators and
-their use:
-
-```
-sawscript> let m = cryptol_prims ()
-sawscript> print m
-Symbols
-=======
-    trunc : {m, n} (fin m, fin n) => [m + n] -> [n]
-    uext : {m, n} (fin m, fin n) => [n] -> [m + n]
-    sgt : {n} (fin n) => [n] -> [n] -> Bit
-    sge : {n} (fin n) => [n] -> [n] -> Bit
-    slt : {n} (fin n) => [n] -> [n] -> Bit
-    sle : {n} (fin n) => [n] -> [n] -> Bit
-
-sawscript> print {{ m::sle 0xf 0x5 }}
-True
-```
-
-Note that `m::sle` (signed less-than-or-equal) is used in the Cryptol
-brackets. The `m::` is a module qualification.
-
 Other Examples
 ==============
 
@@ -730,127 +526,4 @@ Files in AIGER format can be produced and processed by several
 external tools, including ABC, Cryptol version 1, and various hardware
 synthesis and verification systems.
 
-<!---
-
-Reference
-=========
-
-Importing External Models
--------------------------
-
-`read_aig`
-`read_sbv`
-`read_core`
-
-Exporting SAWCore Models
-------------------------
-
-`write_aig`
-`write_smtlib2`
-`write_core`
-
-Constructing Model Terms
-------------------------
-
-```
-reverse            : {n, a} [n]a -> [n]a;
-
-eq                 : {a} a -> a -> Bit;
-ite                : {a} Bit -> a -> a -> a;
-
-not                : Bit -> Bit;
-conj               : Bit -> Bit -> Bit;
-disj               : Bit -> Bit -> Bit;
-
-get                : {n, a} [n]a -> Fin -> a;
-set                : {n, a} [n]a -> Fin -> a -> [n]a;
-
-bvEq               : {n} [n] -> [n] -> Bit;
-bvNot              : {n} [n] -> [n];
-bvAdd              : {n} [n] -> [n] -> [n];
-bvSub              : {n} [n] -> [n] -> [n];
-bvMul              : {n} [n] -> [n] -> [n];
-bvAnd              : {n} [n] -> [n] -> [n];
-bvOr               : {n} [n] -> [n] -> [n];
-bvXor              : {n} [n] -> [n] -> [n];
-bvShl              : {n} [n] -> Int -> [n];
-bvShr              : {n} [n] -> Int -> [n];
-
-bvuge              : {n} [n] -> [n] -> Bit;
-bvugt              : {n} [n] -> [n] -> Bit;
-bvule              : {n} [n] -> [n] -> Bit;
-bvult              : {n} [n] -> [n] -> Bit;
-bvsge              : {n} [n] -> [n] -> Bit;
-bvsgt              : {n} [n] -> [n] -> Bit;
-bvsle              : {n} [n] -> [n] -> Bit;
-bvslt              : {n} [n] -> [n] -> Bit;
-
-finval             : Int -> Int -> Fin;
-
-join               : {m, n, o, a} [m][n]a -> [o]a;
-split              : {m, n, o, a} [m]a -> [n][o]a;
-trunc              : {m, n} Int -> [m] -> [n];
-sext               : {m, n} Int -> [m] -> [n];
-uext               : {m, n} Int -> [m] -> [n];
-```
-
-Running Provers
----------------
-
-`prove`
-`prove_print`
-`sat`
-`sat_print`
-
-`caseProofResult`
-`caseSatResult`
-
-`simplify`
-`print_goal`
-`unfolding`
-
-`abc`
-`yices`
-
-TODO: implement the following
-`cnf_solver`
-`qbf_solver`
-`smtlib2_solver`
-
-Extracting Models from Programs
--------------------------------
-
-**Cryptol**
-
-`cryptol_module`
-`cryptol_extract`
-
-**Java**
-
-**LLVM**
-
-**Extra Proof Tactics**
-
-`offline_aig`
-`offline_smtlib2`
-`offline_extcore`
-
-Transforming Models
--------------------
-
-`rewrite`
-`empty_ss`
-`basic_ss`
-`addsimp`
-
-Miscellaneous
--------------
-
-`print`
-`print_term`
-`print_type`
-`show_term`
-`term_size`
-`term_tree_size`
-
--->
+TODO: any other examples?

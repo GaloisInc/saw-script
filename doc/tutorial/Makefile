@@ -24,6 +24,7 @@ HTMLARGS  = --css doc.css \
             -B tutorial-before.html \
 	    --toc \
             --standalone \
+            --metadata title="SAWScript Tutorial" \
             --self-contained
 
 all: ${TARGET}.pdf ${TARGET}.html ${TARBALL}
