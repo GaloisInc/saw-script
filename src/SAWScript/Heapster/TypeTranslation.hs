@@ -48,31 +48,31 @@ class TypeTranslate'' (d :: *) where
   typeTranslate'' :: d -> OpenTerm
 
 instance TypeTranslate'' (TypeRepr a) where
-  typeTranslate'' (AnyRepr)                = error "TODO"
+  typeTranslate'' (AnyRepr)                = error "TypeTranslate: Any"
   typeTranslate'' (UnitRepr)               = unitTypeOpenTerm
   typeTranslate'' (BoolRepr)               = dataTypeOpenTerm "Prelude.Bool" []
   typeTranslate'' (NatRepr)                = dataTypeOpenTerm "Prelude.Nat" []
-  typeTranslate'' (IntegerRepr)            = error "TODO"
-  typeTranslate'' (RealValRepr)            = error "TODO"
-  typeTranslate'' (ComplexRealRepr)        = error "TODO"
+  typeTranslate'' (IntegerRepr)            = error "TypeTranslate: IntegerRepr"
+  typeTranslate'' (RealValRepr)            = error "TypeTranslate: RealValRepr"
+  typeTranslate'' (ComplexRealRepr)        = error "TypeTranslate: ComplexRealRepr"
   typeTranslate'' (BVRepr w)               = applyOpenTerm (globalOpenTerm "Prelude.bitvector") (valueTranslate'' w)
-  typeTranslate'' (LLVMPointerRepr w)      = unitTypeOpenTerm
-  typeTranslate'' (IntrinsicRepr _ _)      = error "TODO"
-  typeTranslate'' (RecursiveRepr _ _)      = error "TODO"
+  typeTranslate'' (LLVMPointerRepr _)      = unitTypeOpenTerm
+  typeTranslate'' (IntrinsicRepr _ _)      = error "TypeTranslate: IntrinsicRepr (other than LLVMPointerRepr)"
+  typeTranslate'' (RecursiveRepr _ _)      = error "TypeTranslate: RecursiveRepr"
   typeTranslate'' (FloatRepr _)            = dataTypeOpenTerm "Prelude.Float" []
-  typeTranslate'' (IEEEFloatRepr _)        = error "TODO"
-  typeTranslate'' (CharRepr)               = error "TODO"
+  typeTranslate'' (IEEEFloatRepr _)        = error "TypeTranslate: IEEEFloatRepr"
+  typeTranslate'' (CharRepr)               = error "TypeTranslate: CharRepr"
   typeTranslate'' (StringRepr)             = dataTypeOpenTerm "Prelude.String" []
-  typeTranslate'' (FunctionHandleRepr _ _) = error "TODO"
-  typeTranslate'' (MaybeRepr _)            = error "TODO"
-  typeTranslate'' (VectorRepr _)           = error "TODO"
-  typeTranslate'' (StructRepr _)           = error "TODO"
-  typeTranslate'' (VariantRepr _)          = error "TODO"
-  typeTranslate'' (ReferenceRepr _)        = error "TODO"
-  typeTranslate'' (WordMapRepr _ _)        = error "TODO"
-  typeTranslate'' (StringMapRepr _)        = error "TODO"
-  typeTranslate'' (SymbolicArrayRepr _ _)  = error "TODO"
-  typeTranslate'' (SymbolicStructRepr _)   = error "TODO"
+  typeTranslate'' (FunctionHandleRepr _ _) = error "TypeTranslate: FunctionHandleRepr"
+  typeTranslate'' (MaybeRepr tp)           = applyOpenTerm (globalOpenTerm "Prelude.Maybe") (typeTranslate'' tp)
+  typeTranslate'' (VectorRepr _)           = error "TypeTranslate: VectorRepr (can't map to Vec without size)"
+  typeTranslate'' (StructRepr _)           = error "TypeTranslate: StructRepr"
+  typeTranslate'' (VariantRepr _)          = error "TypeTranslate: VariantRepr"
+  typeTranslate'' (ReferenceRepr _)        = error "TypeTranslate: ReferenceRepr"
+  typeTranslate'' (WordMapRepr _ _)        = error "TypeTranslate: WordMapRepr"
+  typeTranslate'' (StringMapRepr _)        = error "TypeTranslate: StringMapRepr"
+  typeTranslate'' (SymbolicArrayRepr _ _)  = error "TypeTranslate: SymbolicArrayRepr"
+  typeTranslate'' (SymbolicStructRepr _)   = error "TypeTranslate: SymbolicStructRepr"
 
 instance TypeTranslate'' (CtxRepr ctx) where
   typeTranslate'' = tupleTypeOpenTerm . toListFC typeTranslate''
@@ -103,11 +103,11 @@ instance TypeTranslate ValuePerm where
       let (typFst, typSnd) = typeTranslateDependentPair ctx t p in
       dataTypeOpenTerm "Prelude.Sigma" [typFst, typSnd]
 
-    ValPerm_Mu _           -> error "TODO"
+    ValPerm_Mu _           -> error "TODO: TypeTranslate ValPerm_Mu"
 
-    ValPerm_Var _index     -> error "TODO"
+    ValPerm_Var _index     -> error "TODO: TypeTranslate ValPerm_Var"
 
-    ValPerm_Nat_Neq0       -> error "TODO"
+    ValPerm_Nat_Neq0       -> error "TODO: TypeTranslate ValPerm_Nat_Neq0"
 
     ValPerm_LLVMPtr _ ps _ ->
       tupleTypeOpenTerm (typeTranslate ctx <$> ps)
@@ -118,7 +118,7 @@ instance TypeTranslate LLVMShapePerm where
     LLVMFieldShapePerm (LLVMFieldPerm {..}) -> typeTranslate ctx llvmFieldPerm
 
     LLVMArrayShapePerm (LLVMArrayPerm {..}) ->
-      let len = error "TODO" in -- typeTranslate ctx llvmArrayLen in -- FIXME: this does not make sense
+      let len = valueTranslate ctx llvmArrayLen in
       let types = typeTranslate ctx llvmArrayPtrPerm in
       dataTypeOpenTerm "Prelude.Vec" [types, len]
 
@@ -128,7 +128,6 @@ tests =
   [ ( ValPerm_True
     , flatOpenTerm UnitType
     )
-
   ]
 
 testTypeTranslation :: Integer -> TopLevel ()

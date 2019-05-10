@@ -183,7 +183,7 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
       ]
 
     Elim_Assert (Constr_BVEq _w _e1 _e2) _e ->
-      error "TODO"
+      error "Elim_Assert"
 
     Elim_BindField index offset _ e ->
       let perm     = pvGet (permSetAsgn $ permissionSet jctx) index in
@@ -241,14 +241,14 @@ instance JudgmentTranslate' blocks f => JudgmentTranslate' blocks (PermElim f) w
 
     Elim_SplitField index _offset _ _e ->
       let _perm = pvGet (permSetAsgn $ permissionSet jctx) index in
-      error "TODO"
+      error "TODO: Elim_SplitField"
 
     Elim_Catch e1 e2 ->
       let t2 = judgmentTranslate' info jctx outputType e2 in
       judgmentTranslate' info (jctx { catchHandler = Just t2 }) outputType e1
 
     Elim_Unroll _p _e ->
-      error "TODO"
+      error "TODO: Elim_Unroll"
 
 -- isValPerm_Eq :: ValuePerm ctx a -> Bool
 -- isValPerm_Eq (ValPerm_Eq _) = True
@@ -448,7 +448,7 @@ instance IntroJudgmentTranslate' AnnotIntro where
     Intro_LLVMPtr_Offset _ _ pf ->
       introJudgmentTranslate' jctx
       (AnnotIntro { introInPerms  = introInPerms
-                  , introOutPerms = error "TODO"
+                  , introOutPerms = introOutPerms
                   , introProof    = pf
                   }
       )
@@ -489,18 +489,3 @@ atIndex x = Lens.over (pvLens x)
 
 nthOpenTerm :: Int -> OpenTerm -> OpenTerm
 nthOpenTerm n t = fstOpenTerm $ (iterate sndOpenTerm t) !! n
-
--- let { x@1 = Prelude.bitvector 64
---       x@2 = Prelude.bvNat 64 0
---     }
---  in \ (v : #(-empty-)) ->
---       \ (vp : #(-empty-)) ->
---         (\ (fst : (\(fst : x@1) -> #(-empty-)) x@2) ->
---            \ (snd : #(-empty-)) ->
---              (Prelude.exists x@1 (\(fst' : x@1) -> #(-empty-)) x@2 fst,snd))
---           (-empty-)
---           (-empty-)
-
--- let fst = (-empty-) in
--- let snd = (-empty-) in
--- (Prelude.exists x@1 (\(fst' : x@1) -> #(-empty-)) x@2 fst,snd))
