@@ -5,16 +5,16 @@ mathematical models of the computational behavior of software,
 transforming these models, and proving properties about them.
 
 SAW can currently construct models of a subset of programs written in
-Cryptol, LLVM (and therefore C), and JVM (and therefore Java). The models
-take the form of typed functional programs, so in a sense SAW can be
-considered a translator from imperative programs to their functional
-equivalents. Various external proof tools, including a variety of SAT and
-SMT solvers, can be used to prove properties about SAW functional models.
-Models can be constructed from arbitrary Cryptol programs, and can typically
-be constructed from C and Java programs that have fixed-size inputs and
-outputs and that terminate after a fixed number of iterations of any loop
-(or a fixed number of recursive calls). One common use case is to verify
-that an algorithm specification in Cryptol is equivalent to an algorithm
+Cryptol, LLVM (and therefore C), and JVM (and therefore Java). The
+models take the form of typed functional programs, so in a sense SAW can
+be considered a translator from imperative programs to their functional
+equivalents. Various external proof tools, including a variety of SAT
+and SMT solvers, can be used to prove properties about the functional
+models. SAW can construct models from arbitrary Cryptol programs, and
+from C and Java programs that have fixed-size inputs and outputs and
+that terminate after a fixed number of iterations of any loop (or a
+fixed number of recursive calls). One common use case is to verify that
+an algorithm specification in Cryptol is equivalent to an algorithm
 implementation in C or Java.
 
 The process of extracting models from programs, manipulating them,
@@ -28,7 +28,7 @@ The rest of this document first describes how to use the SAW tool,
 relationship to Cryptol. It then presents the SAWScript commands that
 transform functional models and prove properties about them. Finally, it
 describes the specific commands available for constructing models from
-imperative programs in a variety of languages.
+imperative programs.
 
 # Invoking SAW
 
@@ -152,6 +152,11 @@ Loading file "print.saw"
 3
 ~~~~
 
+Typically, included files are used to import definitions, not perform
+side effects like printing. However, as you can see, if any commands
+with side effects occur at the top level of the imported file, those
+side effects will occur during import.
+
 ## Syntax
 
 The syntax of SAWScript is reminiscent of functional languages such as
@@ -195,10 +200,15 @@ The basic types available are similar to those in many other languages.
 * Strings of textual characters can be represented in the `String` type.
   For example, the value `"example"` has type `String`.
 
-* The "unit" type, written `()`, is essentially a placeholder. It has
-  only one value, also written `()`. Values of type `()` convey no
-  information. We will show in later sections several cases where this
-  is useful.
+* The "unit" type, written `()`, is essentially a placeholder, similar
+  to `void` in languages like C and Java. It has only one value, also
+  written `()`. Values of type `()` convey no information. We will show
+  in later sections several cases where this is useful.
+
+* Functions are given types that indicate what type they consume and
+  what type they produce. For example, the type `Int -> Bool` indicates
+  a function that takes an `Int` as input and produces a `Bool` as
+  output.
 
 SAWScript also includes some more specialized types that do not have
 straightforward counterparts in most other languages. These will appear
@@ -305,12 +315,13 @@ type mismatch: Bool -> t.0 and Int -> [Int]
 mismatched type constructors: Bool and Int
 ~~~~
 
-So far we have used two related terms, *function* and
-*command*, and we take these to mean slightly different things. A
-function is any value with a function type (e.g., `Int -> [Int]`). A
-command is a function where the result type is one of a specific set
-of special types. These special types are *parameterized* (like the list
-type), and allow us to restrict command usage to specific contexts.
+So far we have used two related terms, *function* and *command*, and we
+take these to mean slightly different things. A function is any value
+with a function type (e.g., `Int -> [Int]`). A command is any value with
+a special command type (e.g. `TopLevel ()`, as shown below). These
+special types allow us to restrict command usage to specific contexts,
+and are also *parameterized* (like the list type). Most but not all
+commands are also functions.
 
 The most important command type is the `TopLevel` type, indicating a
 command that can run at the top level (directly at the REPL, or as one
@@ -322,9 +333,8 @@ side effect (printing some text to the screen) but doesn't produce any
 information to use in the rest of the SAWScript program. This is the
 primary usage of the `()` type.
 
-It can sometimes be useful to bind a sequence of commands together in a
-unit. This can be accomplished with the `do { ... }` construct. For
-example:
+It can sometimes be useful to bind a sequence of commands together. This
+can be accomplished with the `do { ... }` construct. For example:
 
 ~~~~
 sawscript> let print_two = do { print "first"; print "second"; }
@@ -348,15 +358,15 @@ Using `<-` instead of `let` in the previous example yields:
 sawscript> print_two <- do { print "first"; print "second"; }
 first
 second
-sawscript> print_two
+sawscript> print print_two
 ()
 ~~~~
 
 Here, the `print` commands run first, and then `print_two` gets the
 value returned by the second `print` command, namely `()`. Any command
-listed alone at the REPL, the top level in a script, or inside a `do`
-block is treated as implicitly having a `<-` that binds its result to an
-unnamed variable (that is, discards it).
+run without using `<-` at either the top level of a script or within a
+`do` block discards its result. However, the REPL prints the result of
+any command run without using the `<-` operator.
 
 In some cases it can be useful to have more control over the value
 returned by a `do` block. The `return` command allows us to do this. For
@@ -365,15 +375,16 @@ before and after running some arbitrary command and then return the
 result of that command. We could write:
 
 ~~~~
-let run_with_message c =
+let run_with_message msg c =
   do {
     print "Starting.";
+    print msg;
     res <- c;
     print "Done.";
     return res;
   };
 
-x <- run_with_message (return 3);
+x <- run_with_message "Hello" (return 3);
 print x;
 ~~~~
 
@@ -384,6 +395,7 @@ something like:
 Loading module Cryptol
 Loading file "run.saw"
 Starting.
+Hello
 Done.
 3
 ~~~~
@@ -397,6 +409,9 @@ the end is the result of the `return` command passed in as an argument.
 Aside from the functions we have listed so far, there are a number of other
 operations for working with basic data structures and interacting
 with the operating system.
+
+TODO: put descriptions together with types in the following, and fix
+spacing
 
 The following functions work on lists:
 
@@ -519,6 +534,8 @@ within SAWScript as follows:
 sawscript> let t = {{ 0x22 + 0x33 }}
 sawscript> print t
 85
+sawscript> :type t
+Term
 ~~~~
 
 Although it printed out in the same way as an `Int`, it is important to
@@ -528,14 +545,13 @@ function.
 
 ~~~~
 sawscript> print_term t
-Cryptol.ecPlus
-  (Prelude.Vec 8 Prelude.Bool)
-  (Cryptol.OpsSeq
-     (Cryptol.TCNum 8)
-     Prelude.Bool
-     Cryptol.OpsBit)
-  (Prelude.bvNat 8 34)
-  (Prelude.bvNat 8 51)
+let { x@1 = Prelude.Vec 8 Prelude.Bool
+      x@2 = Cryptol.TCNum 8
+      x@3 = Cryptol.PLiteralSeqBool x@2
+    }
+ in Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool x@2)
+      (Cryptol.ecNumber (Cryptol.TCNum 34) x@1 x@3)
+      (Cryptol.ecNumber (Cryptol.TCNum 51) x@1 x@3)
 ~~~~
 
 For the moment, it's not important to understand what this output means.
@@ -553,7 +569,10 @@ its result. Therefore, the following will have the same result as the
 
 ~~~~
 sawscript> let s = show_term t
+sawscript> :type s
+String
 sawscript> print s
+<same as above>
 ~~~~
 
 Numbers are printed in decimal notation by default when printing terms,
@@ -626,18 +645,19 @@ Cryptol expressions, `Term` values can be injected into Cryptol
 expressions. When SAWScript evaluates a Cryptol expression between `{{`
 and `}}` delimiters, it does so with several extra bindings in scope:
 
-* Any value in scope of SAWScript type `Bool` is visible in Cryptol
-  expressions as a value of type `Bit`.
+* Any variable in scope that has SAWScript type `Bool` is visible in
+  Cryptol expressions as a value of type `Bit`.
 
-* Any value in scope of SAWScript type `Int` is visible in Cryptol
-  expressions as a *type variable*. Type variables can be demoted to
-  numeric bit vector values using the backtick (`` ` ``) operator.
+* Any variable in scope that has SAWScript type `Int` is visible in
+  Cryptol expressions as a *type variable*. Type variables can be
+  demoted to numeric bit vector values using the backtick (`` ` ``)
+  operator.
 
-* Any value in scope of SAWScript type `Term` is visible in Cryptol
-  expressions as a value with the Cryptol type corresponding to the
-  internal type of the term. The power of this conversion is that the
-  `Term` does not need to have originally been derived from a Cryptol
-  expression.
+* Any variable in scope that has SAWScript type `Term` is visible in
+  Cryptol expressions as a value with the Cryptol type corresponding to
+  the internal type of the term. The power of this conversion is that
+  the `Term` does not need to have originally been derived from a
+  Cryptol expression.
 
 In addition to these rules, bindings created at the Cryptol level,
 either from included files or inside Cryptol quoting brackets, are
@@ -652,12 +672,16 @@ SAWScript level:
 
 ~~~~
 sawscript> let n = 8
+sawscript> :type n
+Int
 sawscript> let {{ f (x : [n]) = x + 1 }}
+sawscript> :type {{ f }}
+Term
+sawscript> :type f
+
+<stdin>:1:1-1:2: unbound variable: "f" (<stdin>:1:1-1:2)
 sawscript> print {{ f 2 }}
 3
-sawscript> print (f 2)
-
-unbound variable: "f" (<stdin>:1:8)
 ~~~~
 
 If `f` was a binding of a SAWScript variable to a `Term` of function
@@ -665,6 +689,10 @@ type, we would get a different error:
 
 ~~~~
 sawscript> let f = {{ \(x : [n]) -> x + 1 }}
+sawscript> :type {{ f }}
+Term
+sawscript> :type f
+Term
 sawscript> print {{ f 2 }}
 3
 sawscript> print (f 2)
@@ -716,44 +744,8 @@ within later bracketed expressions.
 The `cryptol_load` command behaves similarly, but returns a
 `CryptolModule` instead. If any `CryptolModule` is in scope, its
 contents are available qualified with the name of the `CryptolModule`
-variable. To see how this works, consider the `cryptol_prims` function,
-of type `() -> CryptolModule`. This function returns a built-in module
-containing a collection of useful Cryptol definitions that are not
-available in the standard Cryptol Prelude.
-
-The definitions in this module include (in Cryptol syntax):
-
-~~~~
-trunc : {m, n} (fin m, fin n) => [m + n] -> [n]
-
-uext : {m, n} (fin m, fin n) => [n] -> [m + n]
-
-sgt : {n} (fin n) => [n] -> [n] -> Bit
-
-sge : {n} (fin n) => [n] -> [n] -> Bit
-
-slt : {n} (fin n) => [n] -> [n] -> Bit
-
-sle : {n} (fin n) => [n] -> [n] -> Bit
-~~~~
-
-These perform bit-vector operations of truncation (`trunc`), unsigned
-extension (`uext`), and signed comparison (`sgt`, `sge`, `slt`, and
-`sle`). These definitions are typically accessed through binding
-`cryptol_prims` to a local variable:
-
-~~~~
-sawscript> set_base 16
-sawscript> let m = cryptol_prims ()
-sawscript> let x = {{ (m::trunc 0x23) : [4] }}
-sawscript> print x
-0x3
-~~~~
-
-The 8-bit value `0x23` was truncated to a 4-bit value `0x3`.
-
-Finally, a specific definition can be extracted from a `CryptolModule`
-more explicitly using the `cryptol_extract` command:
+variable. A specific definition can be explicitly extracted from a
+`CryptolModule` using the `cryptol_extract` command:
 
 ~~~~
 cryptol_extract : CryptolModule -> String -> TopLevel Term
@@ -779,6 +771,8 @@ multiple ways:
     is an equality statement, and
   * as a term of _equality type_ with a body that encodes a proof that
     the equality in the type is valid.
+
+TODO: is the following paragraph too dense?
 
 Each of these forms is a `Term` of a different shape. In each case the
 term logically consists of two parts, each of which may contain
@@ -806,8 +800,8 @@ statement in Cryptol:
 ~~~~
 
 Interpreting this as a rewrite rule, it says that for any 8-bit vector
-(call it `y` for now), we can replace `y * 2` with `y << 1`. Applying
-this rule to the earlier expression would then yield:
+(call it `y` for now), we can replace `y * 2` with `y << 1`. Using this
+rule to rewrite the earlier expression would then yield:
 
 ~~~~
  \(x:[8]) -> (x << 1) + 1
@@ -873,44 +867,35 @@ that the `Term`s don't get too cluttered. First, we declare the term
 to be transformed:
 
 ~~~~
-sawscript> let term = rewrite (cryptol_ss ()) {{ \(x:[8]) -> (x * 2) + 1 }};
-sawscript> print_term term;
-\(x::Prelude.Vec 8 Prelude.Bool) ->
-  Prelude.bvAdd 8
-    (Prelude.bvMul 8 x
-       (Prelude.bvNat 8 2))
+sawscript> let term = rewrite (cryptol_ss ()) {{ \(x:[8]) -> (x * 2) + 1 }}
+sawscript> print_term term
+\(x : Prelude.Vec 8 Prelude.Bool) ->
+  Prelude.bvAdd 8 (Prelude.bvMul 8 x (Prelude.bvNat 8 2))
     (Prelude.bvNat 8 1)
 ~~~~
 
 Next, we declare the rewrite rule:
 
 ~~~~
-sawscript> let rule = rewrite (cryptol_ss ()) {{ \(y:[8]) -> (y * 2) == (y << 1) }};
-sawscript> print_term rule;
-let { x0 = Prelude.Vec 8 Prelude.Bool;
+sawscript> let rule = rewrite (cryptol_ss ()) {{ \(y:[8]) -> (y * 2) == (y << 1) }}
+sawscript> print_term rule
+let { x@1 = Prelude.Vec 8 Prelude.Bool
     }
- in \(y::x0) ->
-      Prelude.eq x0
-        (Prelude.bvMul 8 y
-           (Prelude.bvNat 8 2))
-        (Prelude.bvShiftL 8 Prelude.Bool
-           1
-           Prelude.False
-           y
+ in \(y : x@1) ->
+      Cryptol.ecEq x@1 (Cryptol.PCmpWord 8)
+        (Prelude.bvMul 8 y (Prelude.bvNat 8 2))
+        (Prelude.bvShiftL 8 Prelude.Bool 1 Prelude.False y
            (Prelude.bvNat 1 1))
 ~~~~
 
 Finally, we apply the rule to the target term:
 
 ~~~~
-sawscript> let result = rewrite (addsimp' rule empty_ss) term;
-sawscript> print_term result;
-\(x::Prelude.Vec 8 Prelude.Bool) ->
+sawscript> let result = rewrite (addsimp' rule empty_ss) term
+sawscript> print_term result
+\(x : Prelude.Vec 8 Prelude.Bool) ->
   Prelude.bvAdd 8
-    (Prelude.bvShiftL 8 Prelude.Bool
-       1
-       Prelude.False
-       x
+    (Prelude.bvShiftL 8 Prelude.Bool 1 Prelude.False x
        (Prelude.bvNat 1 1))
     (Prelude.bvNat 8 1)
 ~~~~
@@ -932,11 +917,11 @@ addsimp : Theorem -> Simpset -> Simpset
 addsimps : [Theorem] -> Simpset -> Simpset
 ~~~~
 
-A `Theorem` is essentially a `Term` that is proven correct in some
-way. In general, a `Theorem` can be any statement, and may not be useful
-as a rewrite rule. However, if it has the shape described earlier, it
-can be used for rewriting. In the "Proofs about Terms" section, we'll
-describe how to construct `Theorem` values from `Term` values.
+A `Theorem` is essentially a `Term` that is proven correct in some way.
+In general, a `Theorem` can be any statement, and may not be useful as a
+rewrite rule. However, if it has an appropriate shape it can be used for
+rewriting. In the ["Proofs about Terms"](#proofs-about-terms) section,
+we'll describe how to construct `Theorem` values from `Term` values.
 
 In the absence of user-constructed `Theorem` values, there are some
 additional built-in rules that are not included in either `basic_ss` and
@@ -987,13 +972,15 @@ For example:
 ~~~~
 sawscript> let t = {{ 0x22 }}
 sawscript> print_term t
-Prelude.bvNat 8 34
+Cryptol.ecNumber (Cryptol.TCNum 34) (Prelude.Vec 8 Prelude.Bool)
+  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))
 sawscript> t' <- define "t" t
 sawscript> print_term t'
 t
 sawscript> let t'' = unfold_term ["t"] t'
 sawscript> print_term t''
-Prelude.bvNat 8 34
+Cryptol.ecNumber (Cryptol.TCNum 34) (Prelude.Vec 8 Prelude.Bool)
+  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))
 ~~~~
 
 This process of folding and unfolding is useful both to make large terms
@@ -1007,10 +994,11 @@ expressions. Consider the following example:
 ~~~~
 sawscript> let t = {{ 0x22 }}
 sawscript> print_term t
-Prelude.bvNat 8 34
+Cryptol.ecNumber (Cryptol.TCNum 34) (Prelude.Vec 8 Prelude.Bool)
+  (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))
 sawscript> let {{ t' = 0x22 }}
 sawscript> print_term {{ t' }}
-t
+t'
 ~~~~
 
 This illustrates that a bare expression in Cryptol braces gets
@@ -1161,15 +1149,17 @@ For example, combining `prove_print` with `abc`:
 sawscript> t <- prove_print abc {{ \(x:[8]) -> x+x == x*2 }}
 Valid
 sawscript> t
-Theorem (let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
-      x1 = Cryptol.ePArith x0;
+Theorem (let { x@1 = Prelude.Vec 8 Prelude.Bool
+      x@2 = Cryptol.TCNum 8
+      x@3 = Cryptol.PArithSeqBool x@2
     }
- in \(x::Prelude.Vec 8 Prelude.Bool) ->
-      Cryptol.ecEq x0
-        (Cryptol.ePCmp x0)
-        (Cryptol.ecPlus x0 x1 x x)
-        (Cryptol.ecMul x0 x1 x
-           (Prelude.bvNat 8 2)))
+ in (x : x@1)
+-> Prelude.EqTrue
+     (Cryptol.ecEq x@1 (Cryptol.PCmpSeqBool x@2)
+        (Cryptol.ecPlus x@1 x@3 x x)
+        (Cryptol.ecMul x@1 x@3 x
+           (Cryptol.ecNumber (Cryptol.TCNum 2) x@1
+              (Cryptol.PLiteralSeqBool x@2)))))
 ~~~~
 
 Similarly, `sat_print` will show that the function returns `True` for
@@ -1237,14 +1227,15 @@ beta_reduce_goal : ProofScript ()
 unfolding : [String] -> ProofScript ()
 ~~~~
 
-The `beta_reduce_goal` tactic takes any sub-expression of the form `(\x
--> t) v` and replaces it with a transformed version of `t` in which all
-instances of `x` are replaced by `v`.
+The `beta_reduce_goal` tactic works like `beta_reduce_term` but on the
+current goal. It takes any sub-expression of the form `(\x -> t) v` and
+replaces it with a transformed version of `t` in which all instances of
+`x` are replaced by `v`.
 
 The `unfolding` tactic works like `unfold_term` but on the current goal.
 Using `unfolding` is mostly valuable for proofs based entirely on
-rewriting, since default behavior for automated provers is to unfold
-everything before sending a goal to a prover. However, with Z3 and CVC4,
+rewriting, since the default behavior for automated provers is to unfold
+everything before sending a goal to a prover. However, with some provers
 it is possible to indicate that specific named subterms should be
 represented as uninterpreted functions.
 
@@ -1280,10 +1271,10 @@ external_cnf_solver : String -> [String] -> ProofScript SatResult
 The `external_aig_solver` function supports theorem provers that can
 take input as a single-output AIGER file. The first argument is the name
 of the executable to run. The second argument is the list of
-command-line parameters to pass to that executable. Within this list,
-any element that consists of `%f` on its own is replaced with the name
-of the temporary AIGER file generated for the proof goal. The output
-from the solver is expected to be in DIMACS solution format.
+command-line parameters to pass to that executable. Any element of this
+list equal to `"%f"` will be replaced with the name of the temporary
+AIGER file generated for the proof goal. The output from the solver is
+expected to be in DIMACS solution format.
 
 The `external_cnf_solver` function works similarly but for SAT solvers
 that take input in DIMACS CNF format and produce output in DIMACS
@@ -1310,7 +1301,7 @@ offline_unint_smtlib2 : [String] -> String -> ProofScript SatResult
 
 These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
 formats, respectively. The shared representation for SAWCore is
-described [in the `saw-script` repository](../extcore.txt). The
+described [in the `saw-script` repository](../extcore.md). The
 `offline_unint_smtlib2` command represents the folded subterms listed in
 its first argument as uninterpreted functions.
 
@@ -1332,9 +1323,10 @@ trivial : ProofScript SatResult
 The `assume_unsat` and `assume_valid` tactics indicate that the current
 goal should be considered unsatisfiable or valid, depending on whether
 the proof script is checking satisfiability or validity. At the moment,
-`java_verify` and `llvm_verify` run their proofs in the a
-satisfiability-checking context, so `assume_unsat` is currently the
-appropriate tactic. This is likely to change in the future.
+`crucible_java_verify` and `crucible_llvm_verify` (described below) run
+their proofs in the a satisfiability-checking context, so `assume_unsat`
+is currently the appropriate tactic. This is likely to change in the
+future.
 
 The `quickcheck` tactic runs the goal on the given number of random
 inputs, and succeeds if the result of evaluation is always `True`. This
@@ -1527,13 +1519,13 @@ require more information from the user.
 
 # Symbolic Termination
 
-In the previous section we described the process of executing multiple
-branches and merging the results when encountering a conditional
-statement in the program. When a program contains loops, the branch that
-chooses to continue or terminate a loop could go either way. Therefore,
-without a bit more information, the most obvious implementation of
-symbolic execution would never terminate when executing programs that
-contain loops.
+Above we described the process of executing multiple branches and
+merging the results when encountering a conditional statement in the
+program. When a program contains loops, the branch that chooses to
+continue or terminate a loop could go either way. Therefore, without a
+bit more information, the most obvious implementation of symbolic
+execution would never terminate when executing programs that contain
+loops.
 
 The solution to this problem is to analyze the branch condition whenever
 considering multiple branches. If the condition for one branch can never
@@ -1589,7 +1581,7 @@ a branch may be feasible. However, each form of analysis allows branch
 satisfiability checking to be turned on if needed, in which case
 functions like `f` above will terminate.
 
-Now, we examine the details of the specific commands available to
+Next, we examine the details of the specific commands available to
 analyze JVM and LLVM programs.
 
 # Loading Code
@@ -1610,14 +1602,15 @@ Loading Java code is slightly more complex, because of the more
 structured nature of Java packages. First, when running `saw`, two flags
 control where to look for classes. The `-j` flag takes the name of a JAR
 file as an argument and adds the contents of that file to the class
-database. The `-c` flag takes the name of a directory as an argument
-and adds all class files found in that directory (and its
-subdirectories) to the class database. By default, the current directory
-is included in the class path. However, the Java runtime and standard library
-(usually called `rt.jar`) is generally required for any non-trivial Java
-code, and can be installed in a wide variety of different locations.
-Therefore, for most Java analysis, you must provide a `-j` argument
-specifying where to find this file.
+database. The `-c` flag takes the name of a directory as an argument and
+adds all class files found in that directory (and its subdirectories) to
+the class database. By default, the current directory is included in the
+class path. However, the Java runtime and standard library (usually
+called `rt.jar`) is generally required for any non-trivial Java code,
+and can be installed in a wide variety of different locations.
+Therefore, for most Java analysis, you must provide the `-j` argument or
+the `SAW_JDK_JAR` environment variable to specify where to find this
+file.
 
 Once the class path is configured, you can pass the name of a class to
 the `java_load_class` function.
@@ -1628,6 +1621,8 @@ java_load_class : String -> TopLevel JavaClass
 
 The resulting `JavaClass` can be passed into the various functions
 described below to perform analysis of specific Java methods.
+
+TODO: version info
 
 # Direct Extraction
 
@@ -1650,8 +1645,8 @@ A similar function exists for Java, but is more experimental.
 crucible_java_extract : JavaClass -> String -> TopLevel Term
 ~~~~
 
-Because of its lack of maturity, it must be enabled by running the
-`enable_experimental` command beforehand.
+Because of its lack of maturity, it (and later Java-related commands)
+must be enabled by running the `enable_experimental` command beforehand.
 
 ~~~~
 enable_experimental : TopLevel ()
@@ -1734,21 +1729,17 @@ variable.
 sawscript> x <- fresh_symbolic "x" {| [8] |}
 sawscript> let t = {{ x + x }}
 sawscript> print_term t
-let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+let { x@1 = Prelude.Vec 8 Prelude.Bool
     }
- in Cryptol.ecPlus x0
-      (Cryptol.ePArith x0)
+ in Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool (Cryptol.TCNum 8))
       x
       x
 sawscript> let f = abstract_symbolic t
 sawscript> print_term f
-let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+let { x@1 = Prelude.Vec 8 Prelude.Bool
     }
- in \(x::Prelude.Vec 8 Prelude.Bool) ->
-      Cryptol.ecPlus x0
-        (Cryptol.ePArith x0)
-        x
-        x
+ in \(x : x@1) ->
+      Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool (Cryptol.TCNum 8)) x x
 ~~~~
 
 If there are multiple symbolic variables in the `Term` passed to
@@ -1765,13 +1756,10 @@ and the second is a `Term` that would be passed to `abstract_symbolic`.
 ~~~~
 sawscript> let f = lambda x t
 sawscript> print_term f
-let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
+let { x@1 = Prelude.Vec 8 Prelude.Bool
     }
- in \(x::Prelude.Vec 8 Prelude.Bool) ->
-      Cryptol.ecPlus x0
-        (Cryptol.ePArith x0)
-        x
-        x
+ in \(x : x@1) ->
+      Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool (Cryptol.TCNum 8)) x x
 ~~~~
 
 For `Term`s with more than one symbolic variable, `lambdas` allows you
@@ -1783,11 +1771,9 @@ sawscript> x1 <- fresh_symbolic "x1" {| [8] |}
 sawscript> x2 <- fresh_symbolic "x2" {| [8] |}
 sawscript> let t = {{ x1 + x2 }}
 sawscript> print_term t
-let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
-      x1 = Prelude.Vec 8 Prelude.Bool;
+let { x@1 = Prelude.Vec 8 Prelude.Bool
     }
- in Cryptol.ecPlus x0
-      (Cryptol.ePArith x0)
+ in Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool (Cryptol.TCNum 8))
       x1
       x2
 ~~~~
@@ -1797,14 +1783,11 @@ We can turn `t` into a function that takes `x1` followed by `x2`:
 ~~~~
 sawscript> let f1 = lambdas [x1, x2] t
 sawscript> print_term f1
-let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
-      x1 = Prelude.Vec 8 Prelude.Bool;
+let { x@1 = Prelude.Vec 8 Prelude.Bool
     }
- in \(x1::x1) ->
-      \(x2::x1) ->
-        Cryptol.ecPlus x0
-          (Cryptol.ePArith x0)
-          x1
+ in \(x1 : x@1) ->
+      \(x2 : x@1) ->
+        Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool (Cryptol.TCNum 8)) x1
           x2
 ~~~~
 
@@ -1813,16 +1796,15 @@ Or we can turn `t` into a function that takes `x2` followed by `x1`:
 ~~~~
 sawscript> let f1 = lambdas [x2, x1] t
 sawscript> print_term f1
-let { x0 = Cryptol.TCSeq (Cryptol.TCNum 8) Cryptol.TCBit;
-      x1 = Prelude.Vec 8 Prelude.Bool;
+let { x@1 = Prelude.Vec 8 Prelude.Bool
     }
- in \(x2::x1) ->
-      \(x1::x1) ->
-        Cryptol.ecPlus x0
-          (Cryptol.ePArith x0)
-          x1
+ in \(x2 : x@1) ->
+      \(x1 : x@1) ->
+        Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool (Cryptol.TCNum 8)) x1
           x2
 ~~~~
+
+TODO: use for a proof?
 
 # Specification-Based Verification
 
@@ -1839,7 +1821,7 @@ verifications, allowing the proof process to be decomposed.
 
 ## Running a Verification
 
-Verification with Crucible is controlled by the `crucible_llvm_verify`
+Verification of LLVM is controlled by the `crucible_llvm_verify`
 command.
 
 ~~~~
@@ -1859,8 +1841,7 @@ already-verified specifications to use for compositional verification
 (described later; use `[]` for now). The fourth argument specifies
 whether to do path satisfiability checking, and the fifth gives the
 specification of the function to be verified. Finally, the last argument
-gives the proof script to use for verification (which is separated from
-the specification itself, unlike `llvm_verify`). The result is a proved
+gives the proof script to use for verification. The result is a proved
 specification that can be used to simplify verification of functions
 that call this one.
 
@@ -1898,7 +1879,7 @@ specification of the initial state from the specification of the final
 state, and specifies the arguments to the function in terms of the
 initial state. Most of the commands available for state description will
 work either before or after `crucible_execute_func`, though with
-slightly different meaning.
+slightly different meaning, as described below.
 
 ## Creating Fresh Variables
 
@@ -1906,7 +1887,8 @@ In any case where you want to prove a property of a function for an
 entire class of inputs (perhaps all inputs) rather than concrete values,
 the initial values of at least some elements of the program state must
 contain fresh variables. These are created in a specification with the
-`crucible_fresh_var` (or `jvm_fresh_var`) command.
+`crucible_fresh_var` (or `jvm_fresh_var`) command rather than
+`fresh_symbolic`.
 
 ~~~~
 crucible_fresh_var : String -> LLVMType -> CrucibleSetup Term
@@ -1970,7 +1952,7 @@ later) an arbitrary value, without specifying what that value should be.
 To express such a pattern, you can also run `crucible_fresh_var` from
 the post state (i.e., after `crucible_execute_func`).
 
-## The SetupValue Type
+## The SetupValue and JVMValue Types
 
 Many specifications require reasoning about both pure values and about
 the configuration of the heap. The `SetupValue` type corresponds to
@@ -1985,6 +1967,8 @@ The `crucible_term` and `jvm_term` functions create a `SetupValue` or
 crucible_term : Term -> SetupValue
 jvm_term : Term -> JVMValue
 ~~~~
+
+TODO: what types does this work with?
 
 ## Executing
 
@@ -2013,6 +1997,7 @@ that do not use pointers (or that use them only internally). Consider,
 for instance the C program that adds its two arguments together:
 
 ~~~~
+#include <stdint.h>
 uint32_t add(uint32_t x, uint32_t y) {
     return x + y;
 }
@@ -2046,7 +2031,7 @@ of properties we have already proved about its callees rather than
 analyzing them anew. This enables us to reason about much larger
 and more complex systems than otherwise possible.
 
-The `crucible_llvm_verify` and `crucible_jvm_verify` functions returns
+The `crucible_llvm_verify` and `crucible_jvm_verify` functions return
 values of type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively.
 These values are opaque objects that internally contain both the
 information provided in the associated `JVMSetup` or `CrucibleSetup`
@@ -2183,7 +2168,8 @@ type as another through casts, it can be useful to specify that a
 pointer points to a value that does not agree with its static type.
 
 ~~~~
-crucible_points_to_untyped : SetupValue -> SetupValue -> CrucibleSetup ()
+crucible_points_to_untyped :
+  SetupValue -> SetupValue -> CrucibleSetup ()
 ~~~~
 
 This function works like `crucible_points_to` but omits type checking.
@@ -2215,7 +2201,7 @@ crucible_field : SetupValue -> String -> SetupValue
 
 Either of these functions can be used with `crucible_points_to` to
 specify the value of a particular array element or `struct` field.
-Sometimes, however, it is more convenient to specify all array elemnts
+Sometimes, however, it is more convenient to specify all array elements
 or field values at onces. The `crucible_array` and `crucible_struct`
 functions construct compound values from lists of element values.
 
@@ -2235,7 +2221,7 @@ where you want every element or field to have a fresh value.
 crucible_fresh_expanded_val : LLVMType -> CrucibleSetup SetupValue
 ~~~~
 
-Finally, `crucible_struct` normally creates a `struct` whose layout
+The `crucible_struct` function normally creates a `struct` whose layout
 obeys the alignment rules of the platform specified in the LLVM file
 being analyzed. Structs in LLVM can explicitly be "packed", however, so
 that every field immediately follows the previous in memory. The
@@ -2311,8 +2297,15 @@ truly be compositional. For instance, it's not the case that `f(g(z)) ==
 z + 3` for all `z`, because both `f` and `g` modify the global variable
 `x` in a way that crosses function boundaries.
 
-Instead, the specifications for `f` and `g` must make this reliance on the
-value of `x` explicit, e.g. one could write
+To talk about the static initializer of a global variable, we can use
+the following function:
+
+~~~~
+crucible_global_initializer : String -> SetupValue
+~~~~
+
+Given this function, the specifications for `f` and `g` can make this
+reliance on the initial value of `x` explicit:
 
 <!-- This should (partially) match intTests/test0036_globals/test.saw -->
 ~~~
@@ -2343,7 +2336,7 @@ point of a call to `f`.
 Sometimes a function is only well-defined under certain conditions, or
 sometimes you may be interested in certain initial conditions that give
 rise to specific final conditions. For these cases, you can specify an
-arbitrary predicate as a pre-condition or post-condition, using any
+arbitrary predicate as a precondition or post-condition, using any
 values in scope at the time.
 
 ~~~~
@@ -2375,8 +2368,8 @@ symbolic execution when the predicate of interest is an equality.
 Normally, a `MethodSpec` is the result of both simulation and proof of
 the target code. However, in some cases, it can be useful to use a
 `MethodSpec` to specify some code that either doesn't exist or is hard
-to prove. The previously-mentioned [the assume_unsat
-tactic](#miscellaneous-tactics) omits proof but does not preven
+to prove. The previously-mentioned [`assume_unsat`
+tactic](#miscellaneous-tactics) omits proof but does not prevent
 simulation of the function. To skip simulation altogether, one can use:
 
 ~~~
@@ -2492,11 +2485,18 @@ bit vector of length 32.
 The entire script can be found in the `dotprod_struct-crucible.saw` file
 alongside `dotprod_struct.c`.
 
+Running this script results in the following:
+
+~~~~
+Loading file "dotprod_struct.saw"
+Proof succeeded! dotprod_struct
+Registering override for `dotprod_struct`
+  variant `dotprod_struct`
+Symbolic simulation completed with side conditions.
+Proof succeeded! dotprod_wrap
+~~~~
+
 ## Using Ghost State
 
 TODO: `crucible_declare_ghost_state` is missing
 TODO: `crucible_ghost_value` is missing
-
-# Notes
-
-TODO: `enable_deprecated` is missing
