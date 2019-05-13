@@ -9,7 +9,7 @@
 module SAWScript.Heapster.Pretty where
 
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
-import qualified Text.PrettyPrint.ANSI.Leijen as PPL ((<$>))
+import qualified Text.PrettyPrint.ANSI.Leijen as PPL ((<$>),empty)
 import Data.Proxy
 import Data.Parameterized.Context
 import Data.Parameterized.Ctx
@@ -93,15 +93,12 @@ instance CtxPretty' PermExpr where
   cpretty' (PExpr_Var x) = cpretty' x
   cpretty' (PExpr_BV _w factors i) =
     foldM (\pp factor -> binaryOpM "+" (cpretty' factor) (return pp))
-    (text $ show i)
+    (integer i)
     factors
   cpretty' (PExpr_Struct _ args) =
     do pps <- mapM id $ toListFC cpretty' args
-       return (text "struct" <+> parens (align $ helper pps))
-         where
-           helper [] = text ""
-           helper [p] = p
-           helper (p:ps) = p <> text "," PPL.<$> helper ps
+       return (text "struct" <+>
+               align (encloseSep lparen rparen comma pps))
   cpretty' (PExpr_LLVMWord _w bv_expr) =
     do pp <- cpretty' bv_expr
        return $ hang 2 (text "llvmWord" <+> parens pp)
@@ -111,4 +108,56 @@ instance CtxPretty' PermExpr where
 
 instance CtxPretty' BVFactor where
   cpretty' (BVFactor _ i x) =
-    binaryOpM "*" (return $ text $ show i) (cpretty' x)
+    binaryOpM "*" (return $ integer i) (cpretty' x)
+
+instance CtxPretty' ValuePerm where
+  cpretty' ValPerm_True = return $ text "true"
+  cpretty' (ValPerm_Eq e) =
+    do e_p <- parensIf True (cpretty' e)
+       return (text "eq" <+> e_p)
+  cpretty' (ValPerm_Or p1 p2) =
+    let need_parens =
+          case p1 of
+            ValPerm_Or _ _ -> True
+            ValPerm_Exists _ _ -> True
+            ValPerm_Mu _ -> True
+            _ -> False in
+    binaryOpM "\\/" (parensIf need_parens $ cpretty' p1) (cpretty' p2)
+  cpretty' (ValPerm_Exists tp p) =
+    -- FIXME: add variable names to ValPerm_Exists
+    do let x = "x"
+       p_p <- withVarM (StringF x) $ cpretty' p
+       return $ hang 2
+         (text "exists" PPL.<$>
+          text x <+> colon <+> align (pretty tp) <> dot PPL.<$>
+          p_p)
+  cpretty' (ValPerm_Mu p) =
+    -- FIXME: add Mu permission names
+    do let x = "X"
+       p_p <- withVarM (StringF x) $ cpretty' p
+       return $ hang 2 (text "mu" <+> text x <> dot PPL.<$> p_p)
+  cpretty' (ValPerm_Var x) = cpretty' x
+  cpretty' ValPerm_Nat_Neq0 = return $ text "neq0"
+  cpretty' (ValPerm_LLVMPtr _ shapes maybe_free_expr) =
+    do pps <- mapM cpretty' shapes
+       free_p <-
+         case maybe_free_expr of
+           Just e -> brackets <$> cpretty' e
+           Nothing -> return PPL.empty
+       return (text "ptr" <> free_p <+>
+               align (encloseSep lparen rparen comma pps))
+
+instance CtxPretty' LLVMShapePerm where
+  cpretty' (LLVMFieldShapePerm shape) = cpretty' shape
+  cpretty' (LLVMArrayShapePerm shape) = cpretty' shape
+
+instance CtxPretty' LLVMFieldPerm where
+  cpretty' (LLVMFieldPerm {..}) =
+    do spl_p <- cpretty llvmFieldSplitting
+       p_p <- cpretty' llvmFieldPerm
+       return $ hang 2 $
+         integer llvmFieldOffset <+> text "|->" PPL.<$>
+         parens (spl_p <> comma <> p_p)
+
+instance CtxPretty' LLVMArrayPerm where
+  cpretty' fld = error "FIXME HERE: cpretty' of LLVMArrayPerm"
