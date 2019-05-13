@@ -24,6 +24,7 @@ module Verifier.SAW.Term.Pretty
   , depthPPOpts
   , ppNat
   , ppTerm
+  , ppTermInCtx
   , showTerm
   , scPrettyTerm
   , scPrettyTermInCtx
@@ -627,6 +628,14 @@ ppTerm opts = ppTermWithNames opts emptySAWNamingEnv
 -- | Pretty-print a term, but only to a maximum depth
 ppTermDepth :: Int -> Term -> SawDoc
 ppTermDepth depth t = ppTerm (depthPPOpts depth) t
+
+-- | Like 'ppTerm', but also supply a context of bound names, where the most
+-- recently-bound variable is listed first in the context
+ppTermInCtx :: PPOpts -> [LocalName] -> Term -> SawDoc
+ppTermInCtx opts ctx trm =
+  runPPM opts emptySAWNamingEnv $
+  flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
+  ppTermWithMemoTable PrecNone True trm
 
 renderSawDoc :: PPOpts -> SawDoc -> String
 renderSawDoc ppOpts doc =
