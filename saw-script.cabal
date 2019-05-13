@@ -140,6 +140,7 @@ library
     SAWScript.Heapster.CtxMonad
     SAWScript.Heapster.Permissions
     SAWScript.Heapster.Pretty
+    SAWScript.Heapster.Parser
     SAWScript.Heapster.TypedCrucible
     SAWScript.Heapster.CrucibleTranslation
     SAWScript.Heapster.JudgmentTranslation
