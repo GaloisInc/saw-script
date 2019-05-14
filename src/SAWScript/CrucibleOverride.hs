@@ -391,10 +391,14 @@ ppConcreteFailure owp =
   in ppFailure owp false
 
 -- | Print a message about symbolic failure of an override's preconditions
+--
+-- TODO: Needs additional testing. Are these messages useful?
+{-
 ppSymbolicFailure ::
   (OverrideWithPreconditions arch, [LabeledPred Sym]) ->
   PP.Doc
 ppSymbolicFailure = uncurry ppFailure
+-}
 
 -- | This function is responsible for implementing the \"override\" behavior
 --   of method specifications.  The main work done in this function to manage
@@ -532,6 +536,9 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                           [ "The following overrides had some preconditions "
                           , "that failed concretely:"
                           ]) PP.<$$> bullets '-' (map ppConcreteFailure false)
+                 -- See comment on ppSymbolicFailure: needs more testing to
+                 -- decide if it's useful.
+                 {-
                  PP.<$$>
                    if null symFalse
                    then ""
@@ -539,6 +546,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                           [ "The following overrides had some preconditions "
                           , "that failed symbolically:"
                           ]) PP.<$$> bullets '-' (map ppSymbolicFailure symFalse)
+                 -}
                  PP.<$$>
                    if null false && null symFalse
                    then PP.text (unwords
