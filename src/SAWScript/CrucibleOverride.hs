@@ -6,6 +6,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
@@ -526,35 +527,42 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                          owp : _  -> owp ^. owpMethodSpec . csName
                          _        -> "<unknown function>"
 
-               e symFalse = show $
+               e _symFalse = show $
                  PP.text
                    ("No override specification applies for " ++ fnName ++ ".")
                  PP.<$$>
-                   if not (null false)
-                   then ""
-                   else PP.text (unwords
-                          [ "The following overrides had some preconditions "
+                   if | not (null false) ->
+                        PP.text (unwords
+                          [ "The following overrides had some preconditions"
                           , "that failed concretely:"
                           ]) PP.<$$> bullets '-' (map ppConcreteFailure false)
-                 -- See comment on ppSymbolicFailure: needs more testing to
-                 -- decide if it's useful.
-                 {-
-                 PP.<$$>
-                   if not (null symFalse)
-                   then ""
-                   else PP.text (unwords
+                      -- See comment on ppSymbolicFailure: both of the following
+                      -- need more examination to see if they're useful.
+                      {-
+                      | not (null symFalse) ->
+                        PP.text (unwords
                           [ "The following overrides had some preconditions "
                           , "that failed symbolically:"
                           ]) PP.<$$> bullets '-' (map ppSymbolicFailure symFalse)
-                 -}
-                 PP.<$$>
-                   if null false && null symFalse
-                   then PP.text (unwords
-                     [ "No overrides had any single concretely or symbolically"
-                     , "failing preconditions. This can mean that your override"
-                     , "has mutually inconsistent preconditions."
-                     ])
-                   else PP.empty
+                      | null false && null symFalse ->
+                        PP.text (unwords
+                          [ "No overrides had any single concretely or"
+                          , "symbolically failing preconditions. This can mean"
+                          , "that your override has mutually inconsistent"
+                          , "preconditions."
+                          ])
+                        PP.<$$>
+                      -}
+                      | simVerbose opts < 3 ->
+                        PP.text $ unwords
+                          [ "Run SAW with --sim-verbose=3 to see a description"
+                          , "of each override."
+                          ]
+                      | otherwise ->
+                        PP.text "Here are the descriptions of each override:"
+                        PP.<$$>
+                        bullets '-'
+                          (branches ^.. each . owpMethodSpec . to ppMethodSpec)
            in ( W4.truePred sym
               , liftIO $ do
                   -- Now that we're failing, do the additional work of figuring out
