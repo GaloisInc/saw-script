@@ -85,6 +85,7 @@ import           System.IO
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
 import           Data.Parameterized.Classes
@@ -93,6 +94,7 @@ import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some
 
+import qualified What4.Concrete as W4
 import qualified What4.Config as W4
 import qualified What4.FunctionName as W4
 import qualified What4.LabeledPred as W4
@@ -532,14 +534,15 @@ setupPrePointsTos :: forall arch.
   [MS.PointsTo (LLVM arch)]                 ->
   MemImpl                    ->
   IO MemImpl
-setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
-  where
-    tyenv   = MS.csAllocations mspec
-    nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
+setupPrePointsTos mspec cc env pts mem0 = do
+  let tyenv   = MS.csAllocations mspec
+  let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
+  smt_array_memory_model_enabled <- W4.getOpt =<< W4.getOptionSetting
+    enableSMTArrayMemoryModel
+    (W4.getConfiguration $ cc ^. ccBackend)
 
-    go :: MemImpl -> MS.PointsTo (LLVM arch) -> IO MemImpl
-    go mem (LLVMPointsTo _loc ptr val) =
-      do val' <- resolveSetupVal cc env tyenv nameEnv val
+  let go :: MemImpl -> MS.PointsTo (LLVM arch) -> IO MemImpl
+      go mem (LLVMPointsTo _loc ptr val) = do
          ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
          ptr'' <- case ptr' of
            Crucible.LLVMValInt blk off
@@ -552,8 +555,29 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
          storTy <- Crucible.toStorableType memTy
          let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
          let sym = cc^.ccBackend
-         mem' <- Crucible.storeConstRaw sym mem ptr'' storTy alignment val'
-         return mem'
+         case val of
+          SetupTerm tm
+            | Crucible.storageTypeSize storTy > 16
+            , smt_array_memory_model_enabled -> do
+              arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
+              arr <- CrucibleSAW.bindSAWTerm
+                sym
+                (W4.BaseArrayRepr
+                  (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
+                  (W4.BaseBVRepr (knownNat @8)))
+                arr_tm
+              sz <- W4.bvLit
+                sym
+                ?ptrWidth
+                (fromIntegral $ Crucible.storageTypeSize storTy)
+              mem' <- Crucible.doArrayConstStore sym mem ptr'' alignment arr sz
+              return mem'
+          _ -> do
+            val' <- resolveSetupVal cc env tyenv nameEnv val
+            mem' <- Crucible.storeConstRaw sym mem ptr'' storTy alignment val'
+            return mem'
+
+  liftIO $ foldM go mem0 pts
 
 -- | Sets up globals (ghost variable), and collects boolean terms
 -- that should be assumed to be true.
@@ -907,6 +931,7 @@ setupLLVMCrucibleContext ::
 setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
   halloc <- getHandleAlloc
   let ctx = mtrans^.Crucible.transContext
+  smt_array_memory_model_enabled <- gets rwSMTArrayMemoryModel
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
     let ?lc = ctx^.Crucible.llvmTypeCtx in
     action =<< (io $ do
@@ -918,6 +943,14 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
       let cfg = W4.getConfiguration sym
       verbSetting <- W4.getOptionSetting W4.verbosity cfg
       _ <- W4.setOpt verbSetting (toInteger verbosity)
+
+      W4.extendConfig
+        [ W4.opt
+            enableSMTArrayMemoryModel
+            (W4.ConcreteBool smt_array_memory_model_enabled)
+            (PP.text "Enable SMT array memory model")
+        ]
+        cfg
 
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
