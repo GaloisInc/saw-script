@@ -501,8 +501,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
 
     go :: MemImpl -> PointsTo -> IO MemImpl
     go mem (PointsTo _loc ptr val) =
-      do val' <- resolveSetupVal cc env tyenv nameEnv val
-         ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
+      do ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
          ptr'' <- case ptr' of
            Crucible.LLVMValInt blk off
              | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth
@@ -514,8 +513,26 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
          storTy <- Crucible.toStorableType memTy
          let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
          let sym = cc^.ccBackend
-         mem' <- Crucible.storeConstRaw sym mem ptr'' storTy alignment val'
-         return mem'
+         case val of
+          SetupTerm tm
+            | Crucible.storageTypeSize storTy > 16 -> do
+              arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
+              arr <- CrucibleSAW.bindSAWTerm
+                sym
+                (W4.BaseArrayRepr
+                  (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
+                  (W4.BaseBVRepr (knownNat @8)))
+                arr_tm
+              sz <- W4.bvLit
+                sym
+                ?ptrWidth
+                (fromIntegral $ Crucible.storageTypeSize storTy)
+              mem' <- Crucible.doArrayConstStore sym mem ptr'' alignment arr sz
+              return mem'
+          _ -> do
+            val' <- resolveSetupVal cc env tyenv nameEnv val
+            mem' <- Crucible.storeConstRaw sym mem ptr'' storTy alignment val'
+            return mem'
 
 -- | Sets up globals (ghost variable), and collects boolean terms
 -- that should be assumed to be true.
