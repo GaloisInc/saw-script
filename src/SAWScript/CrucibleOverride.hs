@@ -530,7 +530,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                  PP.text
                    ("No override specification applies for " ++ fnName ++ ".")
                  PP.<$$>
-                   if null false
+                   if not (null false)
                    then ""
                    else PP.text (unwords
                           [ "The following overrides had some preconditions "
@@ -540,7 +540,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                  -- decide if it's useful.
                  {-
                  PP.<$$>
-                   if null symFalse
+                   if not (null symFalse)
                    then ""
                    else PP.text (unwords
                           [ "The following overrides had some preconditions "
