@@ -9,10 +9,12 @@
 
 module SAWScript.Heapster.Parser where
 
+import Data.Functor.Product
 import Data.Type.Equality
 import Text.Parsec
 -- import Text.ParserCombinators.Parsec
 import Control.Monad.Identity
+import Control.Monad.Reader
 
 import Data.Parameterized.Some
 import Data.Parameterized.Context
@@ -25,9 +27,25 @@ import Lang.Crucible.LLVM.MemModel
 import SAWScript.Heapster.Permissions
 import SAWScript.Heapster.Pretty
 
+data Typed f a = Typed (TypeRepr a) (f a)
 type ParserEnv ctx = Assignment (Typed StringF) ctx
 
-data Typed f a = Typed (TypeRepr a) (f a)
+extendPEnv :: ParserEnv ctx -> String -> TypeRepr tp -> ParserEnv (ctx ::> tp)
+extendPEnv env x tp = extend env (Typed tp (StringF x))
+
+integer :: Stream s Identity Char => PermParseM s Integer
+integer = read <$> many1 digit
+
+parseNatRepr :: Stream s Identity Char =>
+                PermParseM s (Some (Product NatRepr (LeqProof 1)))
+parseNatRepr =
+  do i <- integer
+     case someNat i of
+       Just (Some w)
+         | Left leq <- decideLeq knownNat w -> return (Some (Pair w leq))
+       Just _ -> unexpected "Zero bitvector width not allowed"
+       Nothing -> error "parseNatRepr: unexpected negative bitvector width"
+
 
 lookupVar :: String -> ParserEnv ctx ->
              Maybe (Some (Typed (PermVar ctx)))
@@ -41,79 +59,221 @@ lookupVar x (viewAssign -> AssignExtend asgn' _) =
        Some (Typed tp x) -> return $ Some $ Typed tp $ weakenPermVar1 x
 
 
-type PermParseM s ctx = Parsec s (ParserEnv ctx)
+type PermParseM s = Parsec s ()
 
-parseVar :: Stream s Identity Char =>
-            PermParseM s ctx (Some (Typed (PermVar ctx)))
-parseVar =
+{-
+
+withVar :: String -> TypeRepr tp -> PermParseM s (ctx ::> tp) a ->
+           PermParseM s ctx a
+withVar x tp m = ReaderT $ \env ->
+  runReaderT m $ extend env (Typed tp $ StringF x)
+-}
+
+parseIdent :: Stream s Identity Char => PermParseM s String
+parseIdent =
   do spaces
      c <- letter
      cs <- many (alphaNum <|> char '_' <|> char '\'')
-     let str = c:cs
-     env <- getState
+     return (c:cs)
+
+parseVar :: Stream s Identity Char => ParserEnv ctx ->
+            PermParseM s (Some (Typed (PermVar ctx)))
+parseVar env =
+  do str <- parseIdent
      case lookupVar str env of
        Just x -> return x
        Nothing -> unexpected ("Unknown variable: " ++ str)
 
-parseVarOfType :: Stream s Identity Char =>
-                  TypeRepr a -> PermParseM s ctx (PermVar ctx a)
-parseVarOfType a =
-  do some_x <- parseVar
+parseVarOfType :: Stream s Identity Char => ParserEnv ctx ->
+                  TypeRepr a -> PermParseM s (PermVar ctx a)
+parseVarOfType env a =
+  do some_x <- parseVar env
      case some_x of
        Some (Typed b x)
          | Just Refl <- testEquality a b -> return x
        _ -> unexpected "Variable has incorrect type"
 
 parseInParens :: Stream s Identity Char =>
-                 PermParseM s ctx a -> PermParseM s ctx a
+                 PermParseM s a -> PermParseM s a
 parseInParens m =
   do spaces >> char '('
      ret <- m
      spaces >> char ')'
      return ret
 
-parseSplittingAtomic :: Stream s Identity Char =>
-                        PermParseM s ctx (SplittingExpr ctx)
-parseSplittingAtomic =
-  spaces >>
-  ((parseInParens parseSplitting) <|>
-   (char 'W' >> return SplExpr_All) <|>
-   (SplExpr_Var <$> parseVarOfType splittingTypeRepr))
+parseStructFieldTypes :: Stream s Identity Char =>
+                         PermParseM s (Some (Assignment TypeRepr))
+parseStructFieldTypes =
+  helper <$> reverse <$> sepBy parseType (spaces >> char ',')
+  where
+    helper :: [Some TypeRepr] -> Some (Assignment TypeRepr)
+    helper [] = Some empty
+    helper (Some tp:tps) =
+      case helper tps of
+        Some asgn -> Some $ extend asgn tp
 
-parseSplitting :: Stream s Identity Char => PermParseM s ctx (SplittingExpr ctx)
-parseSplitting =
-  do spl1 <- parseSplittingAtomic
+parseType :: Stream s Identity Char => PermParseM s (Some TypeRepr)
+parseType =
+  spaces >>
+  ((string "S" >> return (Some splittingTypeRepr)) <|>
+   (do string "bv"
+       space >> spaces
+       w <- parseNatRepr
+       case w of
+         Some (Pair w LeqProof) -> return (Some $ BVRepr w)) <|>
+   (do string "llvmptr"
+       space >> spaces
+       w <- parseNatRepr
+       case w of
+         Some (Pair w LeqProof) -> return (Some $ BVRepr w)) <|>
+   (do string "struct"
+       some_fld_tps <- parseInParens (parseStructFieldTypes)
+       case some_fld_tps of
+         Some fld_tps -> return $ Some $ StructRepr fld_tps) <?>
+   "Cannot parse type")
+
+parseSplittingAtomic :: Stream s Identity Char => ParserEnv ctx ->
+                        PermParseM s (SplittingExpr ctx)
+parseSplittingAtomic env =
+  spaces >>
+  ((parseInParens $ parseSplitting env) <|>
+   (char 'W' >> return SplExpr_All) <|>
+   (SplExpr_Var <$> parseVarOfType env splittingTypeRepr))
+
+parseSplitting :: Stream s Identity Char => ParserEnv ctx ->
+                  PermParseM s (SplittingExpr ctx)
+parseSplitting env =
+  do spl1 <- parseSplittingAtomic env
      spaces
      (char 'L' >> return (SplExpr_L spl1)) <|>
        (char 'R' >> return (SplExpr_R spl1)) <|>
        (do _ <- char '*'
-           spl2 <- parseSplitting
+           spl2 <- parseSplitting env
            return $ SplExpr_Star spl1 spl2)
 
-parseBVExpr :: Stream s Identity Char => NatRepr w ->
-               PermParseM s ctx (PermExpr ctx (BVType w))
-parseBVExpr = error "FIXME HERE: parseBVExpr"
+parseBVExpr :: (1 <= w, Stream s Identity Char) =>
+               ParserEnv ctx -> NatRepr w ->
+               PermParseM s (PermExpr ctx (BVType w))
+parseBVExpr env w =
+  do spaces
+     expr1 <-
+       try (do i <- integer
+               spaces >> char '*' >> spaces
+               x <- parseVarOfType env (BVRepr w)
+               return $ PExpr_BV w [BVFactor w i x] 0) <|>
+       try (do x <- parseVarOfType env (BVRepr w)
+               spaces >> char '*' >> spaces
+               i <- integer
+               return $ PExpr_BV w [BVFactor w i x] 0) <|>
+       (do i <- integer
+           return $ PExpr_BV w [] i) <|>
+       (PExpr_Var <$> parseVarOfType env (BVRepr w))
+     try (spaces >> char '+' >> spaces >>
+          (addBVExprs w expr1 <$> parseBVExpr env w)) <|>
+       return expr1
 
-parseStructFields :: Stream s Identity Char => CtxRepr args ->
-                     PermParseM s ctx (Assignment (PermExpr ctx) args)
-parseStructFields = error "FIXME HERE: parseStructFields"
+parseStructFields :: Stream s Identity Char => ParserEnv ctx -> CtxRepr args ->
+                     PermParseM s (Assignment (PermExpr ctx) args)
+parseStructFields _ (viewAssign -> AssignEmpty) = return empty
+parseStructFields env (viewAssign ->
+                   AssignExtend (viewAssign -> AssignEmpty) tp) =
+  extend empty <$> parseExpr env tp
+parseStructFields env (viewAssign -> AssignExtend tps' tp) =
+  do args' <- parseStructFields env tps'
+     spaces >> char ','
+     arg <- parseExpr env tp
+     return $ extend args' arg
 
-parseExpr :: Stream s Identity Char => TypeRepr a ->
-             PermParseM s ctx (PermExpr ctx a)
-parseExpr (BVRepr w) = parseBVExpr w
-parseExpr tp@(StructRepr fld_tps) =
+parseExpr :: Stream s Identity Char => ParserEnv ctx -> TypeRepr a ->
+             PermParseM s (PermExpr ctx a)
+parseExpr env (BVRepr w) = parseBVExpr env w
+parseExpr env tp@(StructRepr fld_tps) =
   spaces >>
   ((string "struct" >>
-    parseInParens (PExpr_Struct fld_tps <$> parseStructFields fld_tps)) <|>
-   (PExpr_Var <$> parseVarOfType tp))
-parseExpr tp@(LLVMPointerRepr w) =
+    parseInParens (PExpr_Struct fld_tps <$> parseStructFields env fld_tps)) <|>
+   (PExpr_Var <$> parseVarOfType env tp))
+parseExpr env tp@(LLVMPointerRepr w) =
   spaces >>
-  ((string "llvm" >> (PExpr_LLVMWord w <$> parseInParens (parseBVExpr w))) <|>
-   (do x <- parseVarOfType tp
+  ((string "llvmword" >>
+    (PExpr_LLVMWord w <$> parseInParens (parseBVExpr env w))) <|>
+   (do x <- parseVarOfType env tp
        try (do spaces >> char '+' >> spaces
-               off <- parseBVExpr w
+               off <- parseBVExpr env w
                return $ PExpr_LLVMOffset w x off) <|>
          return (PExpr_Var x)))
-parseExpr (testEquality splittingTypeRepr -> Just Refl) =
-  PExpr_Spl <$> parseSplitting
-parseExpr tp = error ("parseExpr: unexpected expression type: " ++ show tp)
+parseExpr env (testEquality splittingTypeRepr -> Just Refl) =
+  PExpr_Spl <$> parseSplitting env
+parseExpr env tp =
+  spaces >>
+  ((PExpr_Var <$> parseVarOfType env tp) <?>
+   ("Unexpected non-variable expression of type " ++ show tp))
+
+
+parseLLVMShape :: (1 <= w, Stream s Identity Char) =>
+                  ParserEnv ctx -> NatRepr w ->
+                  PermParseM s (LLVMShapePerm ctx w)
+parseLLVMShape env w =
+  do spaces
+     llvmFieldOffset <- integer
+     spaces
+     string "|->"
+     spaces >> char '('
+     llvmFieldSplitting <- parseSplitting env
+     spaces >> char ','
+     llvmFieldPerm <- parseValPerm env (LLVMPointerRepr w)
+     spaces >> char ')'
+     return $ LLVMFieldShapePerm $ LLVMFieldPerm { .. }
+
+-- FIXME HERE: add support for array permissions!
+
+
+parseValPermH :: Stream s Identity Char => ParserEnv ctx -> TypeRepr a ->
+                 PermParseM s (ValuePerm ctx a)
+parseValPermH env tp =
+  do spaces
+     p1 <-
+       (parseInParens (parseValPerm env tp)) <|>
+       (string "true" >> return ValPerm_True) <|>
+       (string "eq" >> parseInParens (ValPerm_Eq <$> parseExpr env tp)) <|>
+       (do string "exists" >> spaces
+           var <- parseIdent
+           spaces >> char ':'
+           some_tp' <- parseType
+           spaces >> char '.'
+           case some_tp' of
+             Some tp' ->
+               do p <- parseValPerm (extendPEnv env var tp') tp
+                  return $ ValPerm_Exists tp' p) <|>
+       (do string "mu" >> spaces
+           var <- parseIdent
+           spaces >> char '.'
+           ValPerm_Mu <$>
+             parseValPerm (extendPEnv env var (valuePermRepr tp)) tp) <|>
+       (ValPerm_Var <$> parseVarOfType env (valuePermRepr tp))
+     spaces
+     try (string "\\/" >> (ValPerm_Or p1 <$> parseValPerm env tp)) <|>
+       return p1
+
+parseValPerm :: Stream s Identity Char => ParserEnv ctx -> TypeRepr a ->
+                PermParseM s (ValuePerm ctx a)
+parseValPerm env tp@(LLVMPointerRepr w) =
+  (do string "llvmptr"
+      spaces
+      maybe_free <-
+        try (do char '['
+                e <- parseExpr env (BVRepr w)
+                spaces >> char ']'
+                return $ Just e) <|>
+        return Nothing
+      shapes <-
+        parseInParens (sepBy (parseLLVMShape env w) (spaces >> char '*'))
+      return $ ValPerm_LLVMPtr w shapes maybe_free) <|>
+  parseValPermH env tp
+parseValPerm env tp = parseValPermH env tp
+
+
+{-
+parsePermSet :: Stream s Identity Char => ParserEnv ctx ->
+                PermParseM s (PermSet ctx)
+parsePermSet env =
+-}

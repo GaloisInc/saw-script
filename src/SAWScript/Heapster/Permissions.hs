@@ -600,6 +600,8 @@ partialSubst' ps = genSubst' (genSubstOfPartialSubst ps)
 -- | Crucible type for value permissions
 type ValuePermType a = IntrinsicType "ValuePerm" (EmptyCtx ::> a)
 
+valuePermRepr :: TypeRepr a -> TypeRepr (ValuePermType a)
+valuePermRepr a = IntrinsicRepr knownSymbol (extend empty a)
 
 -- | A value permission is a permission to do something with a value, such as
 -- use it as a pointer. This also includes a limited set of predicates on values
