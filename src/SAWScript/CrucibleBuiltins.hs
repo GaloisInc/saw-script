@@ -98,6 +98,7 @@ import           Data.Parameterized.Some
 
 import qualified What4.Config as W4
 import qualified What4.FunctionName as W4
+import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
@@ -340,9 +341,13 @@ verifyObligations cc mspec tactic assumes asserts = do
         printOutLnTop Info (show stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
         opts <- sawPPOpts <$> rwPPOpts <$> getTopLevelRW
-        let showAssignment (name, val) = "  " ++ name ++ ": " ++ show (ppFirstOrderValue opts val)
-        mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
-        io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
+        if null vals then
+          printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
+        else
+          let showAssignment (name, val) = "  " ++ name ++ ": " ++ show (ppFirstOrderValue opts val) in
+          mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
+        printOutLnTop OnlyCounterExamples "----------------------------------"
+        fail "Proof failed." -- Mirroring behavior of llvm_verify
   printOutLnTop Info $ unwords ["Proof succeeded!", nm]
   return (mconcat stats)
 
@@ -828,7 +833,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
      st <- case matchPost of
              Left err      -> fail (show err)
              Right (_, st) -> return st
-     io $ for_ (view osAsserts st) $ \(p, r) ->
+     io $ for_ (view osAsserts st) $ \(W4.LabeledPred p r) ->
        Crucible.addAssertion sym (Crucible.LabeledPred p r)
 
      obligations <- io $ Crucible.getProofObligations sym
@@ -909,26 +914,36 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
 
 --------------------------------------------------------------------------------
 
-setupArg :: SharedContext
+setupArg :: forall tp. SharedContext
          -> Sym
          -> IORef (Seq (ExtCns Term))
          -> Crucible.TypeRepr tp
          -> IO (Crucible.RegEntry Sym tp)
 setupArg sc sym ecRef tp =
-  case Crucible.asBaseType tp of
-    Crucible.AsBaseType btp -> do
+  case (Crucible.asBaseType tp, tp) of
+    (Crucible.AsBaseType btp, _) -> do
        sc_tp <- CrucibleSAW.baseSCType sym sc btp
-       i     <- scFreshGlobalVar sc
-       ecs   <- readIORef ecRef
-       let len = Seq.length ecs
-       let ec = EC i ("arg_"++show len) sc_tp
-       writeIORef ecRef (ecs Seq.|> ec)
-       t     <- scFlatTermF sc (ExtCns ec)
+       t     <- freshGlobal sc_tp
        elt   <- CrucibleSAW.bindSAWTerm sym btp t
        return (Crucible.RegEntry tp elt)
 
-    Crucible.NotBaseType ->
+    (Crucible.NotBaseType, Crucible.LLVMPointerRepr w) -> do
+       sc_tp <- scBitvector sc (natValue w)
+       t     <- freshGlobal sc_tp
+       elt   <- CrucibleSAW.bindSAWTerm sym (Crucible.BaseBVRepr w) t
+       elt'  <- Crucible.llvmPointer_bv sym elt
+       return (Crucible.RegEntry tp elt')
+
+    (Crucible.NotBaseType, _) ->
       fail $ unwords ["Crucible extraction currently only supports Crucible base types", show tp]
+  where
+    freshGlobal sc_tp = do
+      i     <- scFreshGlobalVar sc
+      ecs   <- readIORef ecRef
+      let len = Seq.length ecs
+      let ec = EC i ("arg_"++show len) sc_tp
+      writeIORef ecRef (ecs Seq.|> ec)
+      scFlatTermF sc (ExtCns ec)
 
 setupArgs :: SharedContext
           -> Sym
@@ -968,7 +983,6 @@ runCFG simCtx globals h cfg args = do
                  (Crucible.regValue <$> (Crucible.callCFG cfg args))
   Crucible.executeCrucible [] initExecState
 
-
 extractFromLLVMCFG :: Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
    Options -> SharedContext -> CrucibleContext arch -> Crucible.AnyCFG (Crucible.LLVM arch) -> IO TypedTerm
 extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
@@ -981,10 +995,15 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
       case res of
         Crucible.FinishedResult _ pr -> do
             gp <- getGlobalPair opts pr
-            t <- Crucible.asSymExpr
-                   (gp^.Crucible.gpValue)
-                   (CrucibleSAW.toSC sym)
-                   (fail $ unwords ["Unexpected return type:", show (Crucible.regType (gp^.Crucible.gpValue))])
+            let regv = gp^.Crucible.gpValue
+                rt = Crucible.regType regv
+                rv = Crucible.regValue regv
+            t <- case rt of
+                   Crucible.LLVMPointerRepr _ -> do
+                     bv <- Crucible.projectLLVM_bv sym rv
+                     CrucibleSAW.toSC sym bv
+                   Crucible.BVRepr _ -> CrucibleSAW.toSC sym rv
+                   _ -> fail $ unwords ["Unexpected return type:", show rt]
             t' <- scAbstractExts sc (toList ecs) t
             mkTypedTerm sc t'
         Crucible.AbortedResult _ ar -> do

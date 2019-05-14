@@ -6,6 +6,7 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
@@ -46,6 +47,7 @@ import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Maybe (fromMaybe, catMaybes)
 import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -61,6 +63,8 @@ import qualified Cryptol.Utils.PP as Cryptol
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
+import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
+import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible
                    (TypeRepr(UnitRepr), GlobalVar)
 import qualified Lang.Crucible.CFG.Extension.Safety as Crucible
@@ -71,10 +75,12 @@ import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified What4.BaseTypes as W4
+import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
-import qualified What4.Symbol as W4
+import qualified What4.LabeledPred as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
+import qualified What4.Symbol as W4
 
 import qualified SAWScript.CrucibleLLVM as Crucible
 
@@ -83,8 +89,8 @@ import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some(..))
 
-import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
+import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
@@ -108,6 +114,7 @@ deriving instance MonadState (OverrideState arch) (OverrideMatcher arch mode)
 deriving instance MonadError OverrideFailure (OverrideMatcher arch mode)
 
 type AllocMap arch = Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
+type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
 data OverrideState arch = OverrideState
   { -- | Substitution for memory allocations
@@ -120,7 +127,7 @@ data OverrideState arch = OverrideState
   , _osFree :: Set VarIndex
 
     -- | Accumulated assertions
-  , _osAsserts :: [(W4.Pred Sym, Crucible.SimError)]
+  , _osAsserts :: [LabeledPred Sym]
 
     -- | Accumulated assumptions
   , _osAssumes :: [W4.Pred Sym]
@@ -266,7 +273,8 @@ addAssert ::
   W4.Pred Sym       {- ^ property -} ->
   Crucible.SimError {- ^ reason   -} ->
   OverrideMatcher arch md ()
-addAssert p r = OM (osAsserts %= cons (p,r))
+addAssert p r =
+  OM (osAsserts %= cons (W4.LabeledPred p r))
 
 addAssume ::
   W4.Pred Sym       {- ^ property -} ->
@@ -302,6 +310,87 @@ failure ::
 failure loc e = OM (lift (throwE (OF loc e)))
 
 ------------------------------------------------------------------------
+
+bullets :: Char -> [PP.Doc] -> PP.Doc
+bullets c = PP.vcat . map (PP.hang 2 . (PP.text [c] PP.<+>))
+
+data OverrideWithPreconditions arch =
+  OverrideWithPreconditions
+    { _owpPreconditions :: [LabeledPred Sym] -- ^ c.f. '_osAsserts'
+    , _owpMethodSpec :: CrucibleMethodSpecIR
+    , owpState :: OverrideState arch
+    }
+  deriving (Generic)
+
+makeLenses ''OverrideWithPreconditions
+
+-- | Partition into three groups:
+--   * Preconditions concretely succeed
+--   * Preconditions concretely fail
+--   * Preconditions are symbolic
+partitionOWPsConcrete :: forall arch.
+  Sym ->
+  [OverrideWithPreconditions arch] ->
+  IO ([OverrideWithPreconditions arch], [OverrideWithPreconditions arch], [OverrideWithPreconditions arch])
+partitionOWPsConcrete sym =
+  let traversal = owpPreconditions . each . W4.labeledPred
+  in W4.partitionByPredsM (Just sym) $
+       foldlMOf traversal (W4.andPred sym) (W4.truePred sym)
+
+-- | Like 'W4.partitionByPreds', but partitions on solver responses, not just
+--   concretized values.
+partitionBySymbolicPreds ::
+  (Foldable t) =>
+  Sym {- ^ solver connection -} ->
+  (a -> W4.Pred Sym) {- ^ how to extract predicates -} ->
+  t a ->
+  IO (Map Crucible.BranchResult [a])
+partitionBySymbolicPreds sym getPred =
+  let step mp a =
+        CrucibleSAW.considerSatisfiability sym Nothing (getPred a) <&> \k ->
+          Map.insertWith (++) k [a] mp
+  in foldM step Map.empty
+
+-- | Find individual preconditions that are symbolically false
+--
+-- We should probably be using unsat cores for this.
+findFalsePreconditions ::
+  Sym ->
+  OverrideWithPreconditions arch ->
+  IO [LabeledPred Sym]
+findFalsePreconditions sym owp =
+  fromMaybe [] . Map.lookup (Crucible.NoBranch False) <$>
+    partitionBySymbolicPreds sym (view W4.labeledPred) (owp ^. owpPreconditions)
+
+-- | Print a message about failure of an override's preconditions
+ppFailure ::
+  OverrideWithPreconditions arch ->
+  [LabeledPred Sym] ->
+  PP.Doc
+ppFailure owp false =
+  ppMethodSpec (owp ^. owpMethodSpec)
+     PP.<$$> bullets '*' (map Crucible.ppSimError
+                              (false ^.. traverse . W4.labeledPredMsg))
+
+-- | Print a message about concrete failure of an override's preconditions
+--
+-- Assumes that the override it's being passed does have concretely failing
+-- preconditions. Otherwise, the error won't make much sense.
+ppConcreteFailure :: OverrideWithPreconditions arch -> PP.Doc
+ppConcreteFailure owp =
+  let (_, false, _) =
+        W4.partitionLabeledPreds (Proxy :: Proxy Sym) (owp ^. owpPreconditions)
+  in ppFailure owp false
+
+-- | Print a message about symbolic failure of an override's preconditions
+--
+-- TODO: Needs additional testing. Are these messages useful?
+{-
+ppSymbolicFailure ::
+  (OverrideWithPreconditions arch, [LabeledPred Sym]) ->
+  PP.Doc
+ppSymbolicFailure = uncurry ppFailure
+-}
 
 -- | This function is responsible for implementing the \"override\" behavior
 --   of method specifications.  The main work done in this function to manage
@@ -357,15 +446,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- various overrides.
   branches <-
     let prettyError methodSpec failureReason =
-                  PP.text "Name: "
-                  PP.<> PP.text (methodSpec ^. csName)
-          PP.<$$> PP.text "Argument types: "
-          PP.<$$> PP.indent 2 (PP.vcat (map (PP.text . show) (methodSpec ^. csArgs)))
-          PP.<$$> PP.text "Return type: "
-          PP.<> case methodSpec ^. csRet of
-                  Nothing  -> PP.text "<void>"
-                  Just ret -> PP.text (show ret)
-          PP.<$$> ppOverrideFailure failureReason
+          ppMethodSpec methodSpec PP.<$$> ppOverrideFailure failureReason
     in
       case partitionEithers prestates of
           (errs, []) ->
@@ -380,8 +461,18 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                         PP.text (show (retTy))
           (_, ss) -> liftIO $
             forM ss $ \(cs,st) ->
-              do precond <- W4.andAllOf sym (folded._1) (st^.osAsserts)
-                 return ( precond, cs, st )
+              return (OverrideWithPreconditions (st^.osAsserts) cs st)
+
+  -- Now we do a second phase of simple compatibility checking: we check to see
+  -- if any of the preconditions of the various overrides are concretely false.
+  -- If so, there's no use in branching on them with @symbolicBranches@.
+  (true, false, unknown) <- liftIO $ partitionOWPsConcrete sym branches
+
+  -- Collapse the preconditions to a single predicate
+  branches' <- liftIO $ forM (true ++ unknown) $
+    \(OverrideWithPreconditions preconds cs st) ->
+      W4.andAllOf sym (folded . W4.labeledPred) preconds <&>
+        \precond -> (precond, cs, st)
 
   -- Now use crucible's symbolic branching machinery to select between the branches.
   -- Essentially, we are doing an n-way if statement on the precondition predicates
@@ -421,20 +512,63 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
            , Just (W4.plSourceLoc (cs^.csLoc))
            )
-         | (precond, cs, st) <- branches
+         | (precond, cs, st) <- branches'
          ] ++
-        [
+         [ let fnName = case branches of
+                         owp : _  -> owp ^. owpMethodSpec . csName
+                         _        -> "<unknown function>"
 
-            let fnName = case branches of
-                           (_, cs, _) : _  -> cs^.csName
-                           _               -> "unknown function"
-            in
-            ( W4.truePred sym
-            , liftIO $ Crucible.addFailedAssertion sym (Crucible.GenericSimError $ "no override specification applies for " ++ fnName)
-            , Just (W4.plSourceLoc top_loc)
-            )
-        ]
-       ))
+               e _symFalse = show $
+                 PP.text
+                   ("No override specification applies for " ++ fnName ++ ".")
+                 PP.<$$>
+                   if | not (null false) ->
+                        PP.text (unwords
+                          [ "The following overrides had some preconditions"
+                          , "that failed concretely:"
+                          ]) PP.<$$> bullets '-' (map ppConcreteFailure false)
+                      -- See comment on ppSymbolicFailure: both of the following
+                      -- need more examination to see if they're useful.
+                      {-
+                      | not (null symFalse) ->
+                        PP.text (unwords
+                          [ "The following overrides had some preconditions "
+                          , "that failed symbolically:"
+                          ]) PP.<$$> bullets '-' (map ppSymbolicFailure symFalse)
+                      | null false && null symFalse ->
+                        PP.text (unwords
+                          [ "No overrides had any single concretely or"
+                          , "symbolically failing preconditions. This can mean"
+                          , "that your override has mutually inconsistent"
+                          , "preconditions."
+                          ])
+                        PP.<$$>
+                      -}
+                      | simVerbose opts < 3 ->
+                        PP.text $ unwords
+                          [ "Run SAW with --sim-verbose=3 to see a description"
+                          , "of each override."
+                          ]
+                      | otherwise ->
+                        PP.text "Here are the descriptions of each override:"
+                        PP.<$$>
+                        bullets '-'
+                          (branches ^.. each . owpMethodSpec . to ppMethodSpec)
+           in ( W4.truePred sym
+              , liftIO $ do
+                  -- Now that we're failing, do the additional work of figuring out
+                  -- if any overrides had symbolically false preconditions
+                  symFalse <- catMaybes <$> (forM unknown $ \owp ->
+                    findFalsePreconditions sym owp <&>
+                      \case
+                        [] -> Nothing
+                        ps -> Just (owp, ps))
+
+                  Crucible.addFailedAssertion sym
+                    (Crucible.GenericSimError (e symFalse))
+              , Just (W4.plSourceLoc top_loc)
+              )
+         ]))
      (Crucible.RegMap args)
 
 ------------------------------------------------------------------------
@@ -772,6 +906,23 @@ assignTerm sc cc loc prepost var val =
 
 ------------------------------------------------------------------------
 
+-- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
+notEqual ::
+  W4.IsExpr (W4.SymExpr sym) =>
+  PrePost ->
+  W4.ProgramLoc {- ^ where is the assertion from? -} ->
+  SetupValue {- ^ expected value -} ->
+  Crucible.LLVMVal sym {- ^ value from Crucible -} ->
+  Crucible.SimError
+notEqual cond loc expected actual =
+  Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
+    [ "Equality " ++ stateCond cond
+    , "Expected value: "
+    , show (ppSetupValue expected)
+    , "Actual value: "
+    , show (PP.pretty actual)
+    ]
+
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
   Options          {- ^ saw script print out opts -} ->
@@ -810,9 +961,7 @@ matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer n) = 
   else liftIO (Crucible.testEqual sym globInitVal actual) >>=
     \case
       Nothing -> failure (cs ^. csLoc) (BadEqualityComparison n)
-      Just pred_ ->
-        let err = Crucible.SimError (cs ^. csLoc) . Crucible.AssertFailureSimError
-        in addAssert pred_ $ err ("global initializer equality " ++ stateCond prepost)
+      Just pred_ -> addAssert pred_ $ notEqual prepost (cs ^. csLoc) g actual
 
 matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
   case setupval of
@@ -822,7 +971,7 @@ matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy
     SetupNull | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do sym <- getSymInterface
          p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
-         addAssert p (Crucible.SimError (cs ^. csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost)))
+         addAssert p $ notEqual prepost (cs ^. csLoc) setupval actual
 
     SetupGlobal name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do let mem = cc^.ccLLVMEmptyMem
@@ -830,7 +979,7 @@ matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy
          ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
          pred_ <- liftIO $
            Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
-         addAssert pred_ (Crucible.SimError (cs ^. csLoc) (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
+         addAssert pred_ $ notEqual prepost (cs ^. csLoc) setupval actual
 
     _ -> failure (cs ^. csLoc) (StructuralMismatch actual setupval expectedTy)
 
