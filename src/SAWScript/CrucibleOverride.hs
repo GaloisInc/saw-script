@@ -78,7 +78,6 @@ import qualified What4.BaseTypes as W4
 import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
-import qualified What4.Symbol as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Symbol as W4
@@ -542,27 +541,26 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                           ]) PP.<$$> bullets '-' (map ppSymbolicFailure symFalse)
                  PP.<$$>
                    if null false && null symFalse
-                   then PP.text $ unwords $
+                   then PP.text (unwords
                      [ "No overrides had any single concretely or symbolically"
                      , "failing preconditions. This can mean that your override"
                      , "has mutually inconsistent preconditions."
-                     ]
+                     ])
+                   else PP.empty
+           in ( W4.truePred sym
+              , liftIO $ do
+                  -- Now that we're failing, do the additional work of figuring out
+                  -- if any overrides had symbolically false preconditions
+                  symFalse <- catMaybes <$> (forM unknown $ \owp ->
+                    findFalsePreconditions sym owp <&>
+                      \case
+                        [] -> Nothing
+                        ps -> Just (owp, ps))
 
-           in
-           ( W4.truePred sym
-           , liftIO $ do
-               -- Now that we're failing, do the additional work of figuring out
-               -- if any overrides had symbolically false preconditions
-               symFalse <- catMaybes <$> (forM unknown $ \owp ->
-                 findFalsePreconditions sym owp <&>
-                   \case
-                     [] -> Nothing
-                     ps -> Just (owp, ps))
-
-               Crucible.addFailedAssertion sym
-                 (Crucible.GenericSimError (e symFalse))
-           , Just (W4.plSourceLoc top_loc)
-           )
+                  Crucible.addFailedAssertion sym
+                    (Crucible.GenericSimError (e symFalse))
+              , Just (W4.plSourceLoc top_loc)
+              )
          ]))
      (Crucible.RegMap args)
 
