@@ -1834,8 +1834,8 @@ primitives = Map.fromList
     (bicVal crucible_llvm_unsafe_assume_spec)
     Current
     [ "Return a CrucibleMethodSpec corresponding to a CrucibleSetup block,"
-    , "as would be returned by llvm_verify but without performing any"
-    , "verification."
+    , "as would be returned by crucible_llvm_verify but without performing"
+    , "any verification."
     ]
 
   , prim "crucible_array"
