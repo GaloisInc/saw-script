@@ -173,6 +173,7 @@ type StateSpec = StateSpec' (ProgramLoc, CL.MemType)
 data CrucibleMethodSpecIR' t =
   CrucibleMethodSpec
   { _csName            :: String
+  , _csParentName      :: Maybe String
   , _csArgs            :: [t]
   , _csRet             :: Maybe t
   , _csPreState        :: StateSpec -- ^ state before the function runs
@@ -389,34 +390,37 @@ initialDefCrucibleMethodSpecIR ::
   (?lc :: CL.TypeContext) =>
   L.Define ->
   ProgramLoc ->
+  Maybe String ->
   Either SetupError CrucibleMethodSpecIR
-initialDefCrucibleMethodSpecIR def loc = do
+initialDefCrucibleMethodSpecIR def loc parent = do
   args <- resolveArgs (L.typedType <$> L.defArgs def)
   ret <- resolveRetTy (L.defRetType def)
   let L.Symbol nm = L.defName def
-  return CrucibleMethodSpec
-    {_csName            = nm
-    ,_csArgs            = args
-    ,_csRet             = ret
-    ,_csPreState        = initialStateSpec
-    ,_csPostState       = initialStateSpec
-    ,_csArgBindings     = Map.empty
-    ,_csRetValue        = Nothing
-    ,_csSolverStats     = mempty
-    ,_csLoc             = loc
-    }
+  return $ makeCrucibleMethodSpecIR nm args ret loc parent
 
 initialDeclCrucibleMethodSpecIR ::
   (?lc :: CL.TypeContext) =>
   L.Declare ->
   ProgramLoc ->
+  Maybe String ->
   Either SetupError CrucibleMethodSpecIR
-initialDeclCrucibleMethodSpecIR dec loc = do
+initialDeclCrucibleMethodSpecIR dec loc parent = do
   args <- resolveArgs (L.decArgs dec)
   ret <- resolveRetTy (L.decRetType dec)
   let L.Symbol nm = L.decName dec
-  return CrucibleMethodSpec
+  return $ makeCrucibleMethodSpecIR nm args ret loc parent
+
+makeCrucibleMethodSpecIR ::
+  String ->
+  [CL.MemType] ->
+  Maybe CL.MemType ->
+  ProgramLoc ->
+  Maybe String ->
+  CrucibleMethodSpecIR
+makeCrucibleMethodSpecIR nm args ret loc parent = do
+  CrucibleMethodSpec
     {_csName            = nm
+    ,_csParentName      = parent
     ,_csArgs            = args
     ,_csRet             = ret
     ,_csPreState        = initialStateSpec
@@ -432,9 +436,10 @@ initialCrucibleSetupState ::
   CrucibleContext wptr ->
   L.Define ->
   ProgramLoc ->
+  Maybe String ->
   Either SetupError (CrucibleSetupState wptr)
-initialCrucibleSetupState cc def loc = do
-  ms <- initialDefCrucibleMethodSpecIR def loc
+initialCrucibleSetupState cc def loc parent = do
+  ms <- initialDefCrucibleMethodSpecIR def loc parent
   return CrucibleSetupState
     { _csVarCounter      = AllocIndex 0
     , _csPrePost         = PreState
@@ -448,9 +453,10 @@ initialCrucibleSetupStateDecl ::
   CrucibleContext wptr ->
   L.Declare ->
   ProgramLoc ->
+  Maybe String ->
   Either SetupError (CrucibleSetupState wptr)
-initialCrucibleSetupStateDecl cc dec loc = do
-  ms <- initialDeclCrucibleMethodSpecIR dec loc
+initialCrucibleSetupStateDecl cc dec loc parent = do
+  ms <- initialDeclCrucibleMethodSpecIR dec loc parent
   return CrucibleSetupState
     { _csVarCounter      = AllocIndex 0
     , _csPrePost         = PreState

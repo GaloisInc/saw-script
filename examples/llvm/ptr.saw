@@ -1,3 +1,4 @@
+enable_deprecated;
 let add_setup : LLVMSetup () = do {
     llvm_ptr "x" (llvm_int 32);
     llvm_ptr "y" (llvm_int 32);

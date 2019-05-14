@@ -1,3 +1,4 @@
+enable_deprecated;
 let clear_setup : LLVMSetup () = do {
     g <- llvm_var "g" (llvm_int 32);
     llvm_ensure_eq "g" {{ 0 : [32] }};

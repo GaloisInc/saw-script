@@ -1,3 +1,4 @@
+enable_deprecated;
 c <- llvm_load_module "side.bc";
 
 let side_spec = do {

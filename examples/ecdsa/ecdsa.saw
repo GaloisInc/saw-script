@@ -1,3 +1,4 @@
+enable_deprecated;
 let ecc_class = "com.galois.ecc.P384ECC64";
 
 import "cryptol-spec/ecc.cry" as ecc;

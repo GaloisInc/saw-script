@@ -1,3 +1,4 @@
+enable_deprecated;
 let {{ t (x : [32]) = drop`{1} x : [31] }};
 
 // Common declarations of all the globals used by the various proofs

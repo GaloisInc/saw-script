@@ -1,3 +1,4 @@
+enable_deprecated;
 let alloc_spec = do {
     java_var "dst" (java_array 10 java_int);
     src <- java_var "src" (java_array 10 java_int);
