@@ -98,6 +98,7 @@ import           Data.Parameterized.Some
 
 import qualified What4.Config as W4
 import qualified What4.FunctionName as W4
+import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
@@ -832,7 +833,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
      st <- case matchPost of
              Left err      -> fail (show err)
              Right (_, st) -> return st
-     io $ for_ (view osAsserts st) $ \(p, r) ->
+     io $ for_ (view osAsserts st) $ \(W4.LabeledPred p r) ->
        Crucible.addAssertion sym (Crucible.LabeledPred p r)
 
      obligations <- io $ Crucible.getProofObligations sym
