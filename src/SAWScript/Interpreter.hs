@@ -911,14 +911,12 @@ primitives = Map.fromList
     Current
     [ "Write out a representation of a term in SAWCore external format." ]
 
-    {-
   , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal (autoMatch stmtInterpreter :: FilePath -> FilePath -> TopLevel ()))
     Current
     [ "Interactively decides how to align two modules of potentially heterogeneous"
     , "language and prints the result."
     ]
-    -}
 
   , prim "prove"               "ProofScript SatResult -> Term -> TopLevel ProofResult"
     (pureVal provePrim)
