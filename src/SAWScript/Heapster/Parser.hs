@@ -11,7 +11,7 @@ module SAWScript.Heapster.Parser where
 
 import Data.Type.Equality
 import Text.Parsec
-import Text.ParserCombinators.Parsec
+-- import Text.ParserCombinators.Parsec
 import Control.Monad.Identity
 
 import Data.Parameterized.Some
@@ -20,6 +20,7 @@ import Data.Parameterized.Ctx
 import Data.Parameterized.TraversableFC
 
 import Lang.Crucible.Types
+import Lang.Crucible.LLVM.MemModel
 
 import SAWScript.Heapster.Permissions
 import SAWScript.Heapster.Pretty
@@ -63,14 +64,19 @@ parseVarOfType a =
          | Just Refl <- testEquality a b -> return x
        _ -> unexpected "Variable has incorrect type"
 
+parseInParens :: Stream s Identity Char =>
+                 PermParseM s ctx a -> PermParseM s ctx a
+parseInParens m =
+  do spaces >> char '('
+     ret <- m
+     spaces >> char ')'
+     return ret
+
 parseSplittingAtomic :: Stream s Identity Char =>
                         PermParseM s ctx (SplittingExpr ctx)
 parseSplittingAtomic =
   spaces >>
-  ((do _ <- char '('
-       spl <- parseSplitting
-       _ <- char ')'
-       return spl) <|>
+  ((parseInParens parseSplitting) <|>
    (char 'W' >> return SplExpr_All) <|>
    (SplExpr_Var <$> parseVarOfType splittingTypeRepr))
 
@@ -83,3 +89,31 @@ parseSplitting =
        (do _ <- char '*'
            spl2 <- parseSplitting
            return $ SplExpr_Star spl1 spl2)
+
+parseBVExpr :: Stream s Identity Char => NatRepr w ->
+               PermParseM s ctx (PermExpr ctx (BVType w))
+parseBVExpr = error "FIXME HERE: parseBVExpr"
+
+parseStructFields :: Stream s Identity Char => CtxRepr args ->
+                     PermParseM s ctx (Assignment (PermExpr ctx) args)
+parseStructFields = error "FIXME HERE: parseStructFields"
+
+parseExpr :: Stream s Identity Char => TypeRepr a ->
+             PermParseM s ctx (PermExpr ctx a)
+parseExpr (BVRepr w) = parseBVExpr w
+parseExpr tp@(StructRepr fld_tps) =
+  spaces >>
+  ((string "struct" >>
+    parseInParens (PExpr_Struct fld_tps <$> parseStructFields fld_tps)) <|>
+   (PExpr_Var <$> parseVarOfType tp))
+parseExpr tp@(LLVMPointerRepr w) =
+  spaces >>
+  ((string "llvm" >> (PExpr_LLVMWord w <$> parseInParens (parseBVExpr w))) <|>
+   (do x <- parseVarOfType tp
+       try (do spaces >> char '+' >> spaces
+               off <- parseBVExpr w
+               return $ PExpr_LLVMOffset w x off) <|>
+         return (PExpr_Var x)))
+parseExpr (testEquality splittingTypeRepr -> Just Refl) =
+  PExpr_Spl <$> parseSplitting
+parseExpr tp = error ("parseExpr: unexpected expression type: " ++ show tp)
