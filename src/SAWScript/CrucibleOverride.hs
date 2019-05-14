@@ -44,7 +44,6 @@ import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
-import           Data.IORef (readIORef)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Proxy
@@ -71,11 +70,9 @@ import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
---import qualified Lang.Crucible.Types as Crucible
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.Expr.Builder as W4
 import qualified What4.Symbol as W4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
@@ -90,7 +87,6 @@ import           Data.Parameterized.Some (Some(..))
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
---import           Verifier.SAW.Term.Pretty
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
@@ -599,25 +595,27 @@ enforceDisjointness cc loc ss =
      -- Ensure that all RW regions are disjoint from each other, and
      -- that all RW regions are disjoint from all RO regions.
      sequence_
-        [ do c <- liftIO
-                $ Crucible.buildDisjointRegionsAssertion
+        [ do c <- liftIO $
+               do W4.setCurrentProgramLoc sym ploc
+                  psz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl pty))
+                  W4.setCurrentProgramLoc sym qloc
+                  qsz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl qty))
+                  W4.setCurrentProgramLoc sym loc
+                  Crucible.buildDisjointRegionsAssertion
                     sym Crucible.PtrWidth
-                    p (sz pty)
-                    q (sz qty)
+                    p psz
+                    q qsz
              addAssert c a
 
         | let dl = Crucible.llvmDataLayout (cc^.ccTypeCtx)
 
-              sz p = W4.BVExpr
-                       Crucible.PtrWidth
-                       (Crucible.bytesToInteger (Crucible.memTypeSize dl p))
-                       W4.initializationLoc
-
               a = Crucible.SimError loc $
                     Crucible.AssertFailureSimError "Memory regions not disjoint"
-        , ((_ploc,pty),p):ps <- tails memsRW
-        , ((_qloc,qty),q)    <- ps ++ memsRO
+
+        , ((ploc,pty),p):ps <- tails memsRW
+        , ((qloc,qty),q)    <- ps ++ memsRO
         ]
+
 
 ------------------------------------------------------------------------
 
@@ -877,13 +875,13 @@ valueToSC ::
   OverrideMatcher arch md Term
 valueToSC sym _loc _failMsg _ts (Crucible.LLVMValZero gtp)
   = liftIO $
-     do sc <- (Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym))
+     do sc <- Crucible.sawBackendSharedContext sym
         zeroValueSC sc gtp
 
 valueToSC sym loc failMsg (Cryptol.TVTuple tys) (Crucible.LLVMValStruct vals)
   | length tys == length vals
   = do terms <- traverse (\(ty, tm) -> valueToSC sym loc failMsg ty (snd tm)) (zip tys (V.toList vals))
-       sc    <- liftIO (Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym))
+       sc <- liftIO $ Crucible.sawBackendSharedContext sym
        liftIO $ scTuple sc terms
 
 valueToSC sym loc failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt base off) =
@@ -905,8 +903,8 @@ valueToSC sym loc failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt 
 valueToSC sym loc failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals)
   | toInteger (length vals) == n
   = do terms <- V.toList <$> traverse (valueToSC sym loc failMsg cryty) vals
-       sc    <- liftIO (Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym))
-       t     <- liftIO (typeToSC sc ty)
+       sc <- liftIO $ Crucible.sawBackendSharedContext sym
+       t <- liftIO (typeToSC sc ty)
        liftIO (scVector sc t terms)
 
 valueToSC _ _ _ _ Crucible.LLVMValFloat{} =
