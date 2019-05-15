@@ -45,7 +45,7 @@ parseNatRepr =
 
 
 data Typed f a = Typed (TypeRepr a) (f a)
-type ParserEnv ctx = Assignment (Typed StringF) ctx
+type ParserEnv = Assignment (Typed StringF)
 
 extendPEnv :: ParserEnv ctx -> String -> TypeRepr tp -> ParserEnv (ctx ::> tp)
 extendPEnv env x tp = extend env (Typed tp (StringF x))
@@ -298,3 +298,19 @@ parsePermSet env =
        case MapF.lookup x perms of
          Just p -> p
          Nothing -> ValPerm_True
+
+parseCtx :: Stream s Identity Char => ParserEnv ctx ->
+            PermParseM s (Some ParserEnv)
+parseCtx env =
+  do spaces
+     x <- parseIdent
+     case lookupVar x env of
+       Nothing -> return ()
+       Just _ -> unexpected ("Variable " ++ x ++ " occurs twice")
+     spaces >> char ':'
+     some_tp <- parseType
+     spaces
+     case some_tp of
+       Some tp ->
+         let env' = extendPEnv env x tp in
+         (char ',' >> parseCtx env') <|> return (Some env')
