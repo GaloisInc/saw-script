@@ -47,6 +47,9 @@ parseNatRepr =
 data Typed f a = Typed (TypeRepr a) (f a)
 type ParserEnv = Assignment (Typed StringF)
 
+ctxOfEnv :: ParserEnv ctx -> CtxRepr ctx
+ctxOfEnv = fmapFC (\(Typed tp _) -> tp)
+
 extendPEnv :: ParserEnv ctx -> String -> TypeRepr tp -> ParserEnv (ctx ::> tp)
 extendPEnv env x tp = extend env (Typed tp (StringF x))
 
@@ -293,7 +296,7 @@ parsePermSet :: Stream s Identity Char => ParserEnv ctx ->
                 PermParseM s (PermSet ctx)
 parsePermSet env =
   do perms <- parseVarPerms env MapF.empty
-     return $ PermSet (fmapFC (\(Typed tp _) -> tp) env) $
+     return $ PermSet (ctxOfEnv env) $
        generatePermVar (size env) $ \x ->
        case MapF.lookup x perms of
          Just p -> p
@@ -314,3 +317,25 @@ parseCtx env =
        Some tp ->
          let env' = extendPEnv env x tp in
          (char ',' >> parseCtx env') <|> return (Some env')
+
+parsePermsInCtx1 :: String -> String ->
+                    Either ParseError (Some (Product CtxRepr PermSet))
+parsePermsInCtx1 ctx_str perms_str =
+  case parse (parseCtx empty) "input" ctx_str of
+    Left err -> Left err
+    Right (Some env) ->
+      case parse (parsePermSet env) "input" perms_str of
+        Left err -> Left err
+        Right permSet -> Right $ Some (Pair (ctxOfEnv env) permSet)
+
+parsePermsInCtx2 :: String -> String -> String ->
+                    Either ParseError (Some
+                                       (Product CtxRepr
+                                        (Product PermSet PermSet)))
+parsePermsInCtx2 ctx_str perms1_str perms2_str =
+  do some_env <- parse (parseCtx empty) "input" ctx_str
+     case some_env of
+       Some env ->
+         do permSet1 <- parse (parsePermSet env) "input" perms1_str
+            permSet2 <- parse (parsePermSet env) "input" perms2_str
+            return $ Some $ Pair (ctxOfEnv env) (Pair permSet1 permSet2)
