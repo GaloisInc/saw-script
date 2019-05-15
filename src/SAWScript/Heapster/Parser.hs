@@ -20,6 +20,8 @@ import Data.Parameterized.Some
 import Data.Parameterized.Context
 import Data.Parameterized.Ctx
 import Data.Parameterized.TraversableFC
+import Data.Parameterized.Map (MapF)
+import qualified Data.Parameterized.Map as MapF
 
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.MemModel
@@ -27,11 +29,6 @@ import Lang.Crucible.LLVM.MemModel
 import SAWScript.Heapster.Permissions
 import SAWScript.Heapster.Pretty
 
-data Typed f a = Typed (TypeRepr a) (f a)
-type ParserEnv ctx = Assignment (Typed StringF) ctx
-
-extendPEnv :: ParserEnv ctx -> String -> TypeRepr tp -> ParserEnv (ctx ::> tp)
-extendPEnv env x tp = extend env (Typed tp (StringF x))
 
 integer :: Stream s Identity Char => PermParseM s Integer
 integer = read <$> many1 digit
@@ -47,6 +44,17 @@ parseNatRepr =
        Nothing -> error "parseNatRepr: unexpected negative bitvector width"
 
 
+data Typed f a = Typed (TypeRepr a) (f a)
+type ParserEnv ctx = Assignment (Typed StringF) ctx
+
+extendPEnv :: ParserEnv ctx -> String -> TypeRepr tp -> ParserEnv (ctx ::> tp)
+extendPEnv env x tp = extend env (Typed tp (StringF x))
+
+lookupVarName :: ParserEnv ctx -> PermVar ctx a -> String
+lookupVarName env (PermVar _ ix) =
+  case env ! ix of
+    Typed _ (StringF nm) -> nm
+
 lookupVar :: String -> ParserEnv ctx ->
              Maybe (Some (Typed (PermVar ctx)))
 lookupVar _ (viewAssign -> AssignEmpty) = Nothing
@@ -60,14 +68,6 @@ lookupVar x (viewAssign -> AssignExtend asgn' _) =
 
 
 type PermParseM s = Parsec s ()
-
-{-
-
-withVar :: String -> TypeRepr tp -> PermParseM s (ctx ::> tp) a ->
-           PermParseM s ctx a
-withVar x tp m = ReaderT $ \env ->
-  runReaderT m $ extend env (Typed tp $ StringF x)
--}
 
 parseIdent :: Stream s Identity Char => PermParseM s String
 parseIdent =
@@ -272,8 +272,29 @@ parseValPerm env tp@(LLVMPointerRepr w) =
 parseValPerm env tp = parseValPermH env tp
 
 
-{-
+parseVarPerms :: Stream s Identity Char => ParserEnv ctx ->
+                 MapF (PermVar ctx) (ValuePerm ctx) ->
+                 PermParseM s (MapF (PermVar ctx) (ValuePerm ctx))
+parseVarPerms env perms =
+  do spaces
+     some_x <- parseVar env
+     spaces >> char ':'
+     case some_x of
+       Some (Typed tp x) ->
+         do if MapF.member x perms then
+              unexpected ("Variable " ++ lookupVarName env x ++ " occurs twice")
+              else return ()
+            p <- parseValPerm env tp
+            let perms' = MapF.insert x p perms
+            spaces
+            (char ',' >> parseVarPerms env perms') <|> return perms'
+
 parsePermSet :: Stream s Identity Char => ParserEnv ctx ->
                 PermParseM s (PermSet ctx)
 parsePermSet env =
--}
+  do perms <- parseVarPerms env MapF.empty
+     return $ PermSet (fmapFC (\(Typed tp _) -> tp) env) $
+       generatePermVar (size env) $ \x ->
+       case MapF.lookup x perms of
+         Just p -> p
+         Nothing -> ValPerm_True

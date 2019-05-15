@@ -58,11 +58,18 @@ nextPermVar sz = PermVar (incSize sz) (nextIndex sz)
 weakenPermVar1 :: PermVar ctx a -> PermVar (ctx ::> tp) a
 weakenPermVar1 (PermVar sz ix) = PermVar (incSize sz) (skipIndex ix)
 
+generatePermVar :: Size ctx -> (forall tp . PermVar ctx tp -> f tp) ->
+                   Assignment f ctx
+generatePermVar sz f = generate sz (f . PermVar sz)
+
 instance TestEquality (PermVar ctx) where
   testEquality (PermVar _ x) (PermVar _ y) = testEquality x y
 
 instance Eq (PermVar ctx a) where
   (PermVar _ x) == (PermVar _ y) = x == y
+
+instance OrdF (PermVar ctx) where
+  compareF (PermVar _ ix1) (PermVar _ ix2) = compareF ix1 ix2
 
 instance ExtendContext' PermVar where
   extendContext' diff (PermVar sz x) =
