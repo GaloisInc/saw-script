@@ -59,13 +59,10 @@ module SAWScript.CrucibleBuiltins
 
 import           Control.Lens
 
-import           Control.Monad.Catch
 import           Control.Monad.State
-import           Control.Applicative
 import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
 import           Data.Foldable (for_, toList, find)
-import           Data.Function
 import           Data.IORef
 import           Data.List
 import           Data.List.Extra (groupOn, nubOrd)
@@ -114,7 +111,6 @@ import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.Breakpoint as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
-import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
@@ -304,6 +300,7 @@ crucible_llvm_unsafe_assume_spec ::
 crucible_llvm_unsafe_assume_spec bic opts lm nm setup =
   setupCrucibleContext bic opts lm $ \cc -> do
     let llmod = cc^.ccLLVMModule
+    let globals = cc^.ccLLVMGlobals
     (nm', parent) <- resolveSpecName nm
     loc <- toW4Loc "_SAW_assume_spec" <$> getPosition
     let edef = findDefMaybeStatic llmod nm'
@@ -314,7 +311,14 @@ crucible_llvm_unsafe_assume_spec bic opts lm nm setup =
               (Left err, Left _) -> fail (displayVerifExceptionOpts opts err)
     case est0 of
       Left err -> fail (show (ppSetupError err))
-      Right st0 -> (view csMethodSpec) <$> execStateT (runCrucibleSetupM setup) st0
+      Right st0 -> do
+        mspec <- (view csMethodSpec) <$> execStateT (runCrucibleSetupM setup) st0
+        -- TODO: In addition to the return type, we should probably check the
+        -- argument types.
+        --
+        -- Is `resolveArguments` appropriate? Or even `verifyPrestate`?
+        liftIO $ checkSpecReturnType cc mspec
+        pure mspec
 
 verifyObligations :: CrucibleContext arch
                   -> CrucibleMethodSpecIR
@@ -351,6 +355,35 @@ verifyObligations cc mspec tactic assumes asserts = do
   printOutLnTop Info $ unwords ["Proof succeeded!", nm]
   return (mconcat stats)
 
+-- | Check that the specified return value has the expected type
+--
+-- The expected type is inferred from the LLVM module.
+checkSpecReturnType ::
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  CrucibleContext arch ->
+  CrucibleMethodSpecIR ->
+  IO ()
+checkSpecReturnType cc mspec =
+  case (mspec^.csRetValue, mspec^.csRet) of
+    (Just _, Nothing) ->
+         fail $ unlines
+           [ "Could not resolve return type of " ++ mspec^.csName
+           , "Raw type: " ++ show (mspec^.csRet)
+           ]
+    (Just sv, Just retTy) -> do
+      retTy' <-
+        typeOfSetupValue cc
+          (csAllocations mspec) -- map allocation indices to allocations
+          (mspec^.csPreState.csVarTypeNames) -- map alloc indices to var names
+          sv
+      -- The following check is even more strict than checkRegisterCompatibility
+      unless (retTy == retTy') $ fail $ unlines
+        [ "Incompatible types for return value when verifying " ++ mspec^.csName
+        , "Expected: " ++ show retTy
+        , "but given value of type: " ++ show retTy'
+        ]
+    (Nothing, _) -> return ()
+
 -- | Evaluate the precondition part of a Crucible method spec:
 --
 -- * Allocate heap space for each 'crucible_alloc' statement.
@@ -384,6 +417,8 @@ verifyPrestate cc mspec globals = do
   let tyenv   = csAllocations mspec
   let nameEnv = mspec^.csPreState.csVarTypeNames
 
+  checkSpecReturnType cc mspec
+
   let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
   liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
@@ -403,23 +438,6 @@ verifyPrestate cc mspec globals = do
   let globals1 = Crucible.insertGlobal lvar mem''' globals
   (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec^.csPreState.csConditions)
   args <- resolveArguments cc mspec env
-
-  -- Check the type of the return setup value
-  case (mspec^.csRetValue, mspec^.csRet) of
-    (Just _, Nothing) ->
-         fail $ unlines
-           [ "Could not resolve return type of " ++ mspec^.csName
-           , "Raw type: " ++ show (mspec^.csRet)
-           ]
-    (Just sv, Just retTy) ->
-      do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
-         b <- liftIO $ checkRegisterCompatibility retTy retTy'
-         unless b $ fail $ unlines
-           [ "Incompatible types for return value when verifying " ++ mspec^.csName
-           , "Expected: " ++ show retTy
-           , "but given value of type: " ++ show retTy'
-           ]
-    (Nothing, _) -> return ()
 
   return (args, cs, env, globals2)
 
