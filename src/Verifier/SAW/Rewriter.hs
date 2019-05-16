@@ -529,7 +529,7 @@ rewriteSharedTerm sc ss t0 =
     apply :: (?cache :: Cache IO TermIndex Term) =>
              [Either RewriteRule Conversion] -> Term -> IO Term
     apply [] t = return t
-    apply (Left (RewriteRule {lhs, rhs}) : rules) t = do
+    apply (Left (RewriteRule {ctxt, lhs, rhs}) : rules) t = do
       result <- scMatch sc lhs t
       case result of
         Nothing -> apply rules t
@@ -539,6 +539,10 @@ rewriteSharedTerm sc ss t0 =
             -- reflexive rules into simp sets in the first place.
             do putStrLn $ "rewriteSharedTerm: skipping reflexive rule " ++
                           "(THE IMPOSSIBLE HAPPENED!): " ++ scPrettyTerm defaultPPOpts lhs
+               apply rules t
+          | Map.keys inst /= take (length ctxt) [0 ..] ->
+            do putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
+                 ++ scPrettyTerm defaultPPOpts lhs
                apply rules t
           | otherwise ->
             do -- putStrLn "REWRITING:"
