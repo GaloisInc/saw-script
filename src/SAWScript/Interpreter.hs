@@ -77,7 +77,6 @@ import qualified Verifier.SAW.CryptolEnv as CEnv
 
 import qualified Verifier.Java.Codebase as JCB
 import qualified Verifier.Java.SAWBackend as JavaSAW
-import qualified Verifier.LLVM.Backend.SAW as LLVMSAW
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
@@ -419,7 +418,6 @@ buildTopLevelEnv proxy opts =
        sc0 <- mkSharedContext
        CryptolSAW.scLoadPreludeModule sc0
        JavaSAW.scLoadJavaModule sc0
-       LLVMSAW.scLoadLLVMModule sc0
        CryptolSAW.scLoadCryptolModule sc0
        scLoadModule sc0 (emptyModule mn)
        cryptol_mod <- scFindModule sc0 $ mkModuleName ["Cryptol"]
@@ -1544,182 +1542,10 @@ primitives = Map.fromList
     [ "The type of an LLVM struct of the given name."
     ]
 
-  , prim "llvm_var"            "String -> LLVMType -> LLVMSetup Term"
-    (bicVal llvm_var)
-    Deprecated
-    [ "Return a term corresponding to the initial value of the named LLVM"
-    , "variable, which should have the given type. The returned term can be"
-    , "used to construct more complex expressions. For example it can be used"
-    , "with 'llvm_return' to describe the expected return value in terms"
-    , "of the initial value of a variable."
-    ]
-
-  , prim "llvm_ptr"            "String -> LLVMType -> LLVMSetup ()"
-    (bicVal llvm_ptr)
-    Deprecated
-    [ "Declare that the named LLVM variable should point to a value of the"
-    , "given type. This command makes the given variable visible later, so"
-    , "the use of 'llvm_ptr \"p\" ...' is necessary before using, for"
-    , "instance, 'llvm_ensure \"*p\" ...'."
-    ]
-
-  --, prim "llvm_may_alias"      "[String] -> LLVMSetup ()"
-  --  (bicVal llvmMayAlias)
-
-  , prim "llvm_assert"         "Term -> LLVMSetup ()"
-    (bicVal llvm_assert)
-    Deprecated
-    [ "Assert that the given term should evaluate to true in the initial"
-    , "state of an LLVM function."
-    ]
-
-  , prim "llvm_assert_eq"      "String -> Term -> LLVMSetup ()"
-    (bicVal llvm_assert_eq)
-    Deprecated
-    [ "Specify the initial value of an LLVM variable."
-    ]
-
-  , prim "llvm_assert_null"    "String -> LLVMSetup ()"
-    (bicVal llvm_assert_null)
-    Deprecated
-    [ "Specify that the initial value of an LLVM pointer variable is NULL."
-    ]
-
-  , prim "llvm_ensure_eq"      "String -> Term -> LLVMSetup ()"
-    (bicVal (llvm_ensure_eq False))
-    Deprecated
-    [ "Specify that the LLVM variable should have a value equal to the"
-    , "given term when execution finishes."
-    ]
-
-  , prim "llvm_ensure_eq_post"      "String -> Term -> LLVMSetup ()"
-    (bicVal (llvm_ensure_eq True))
-    Deprecated
-    [ "Specify that the LLVM variable should have a value equal to the"
-    , "given term when execution finishes, evaluating the expression in"
-    , "the final state instead of the initial state."
-    ]
-
-  , prim "llvm_modify"         "String -> LLVMSetup ()"
-    (bicVal llvm_modify)
-    Deprecated
-    [ "Specify that the LLVM variable should have a an arbitary, unspecified"
-    , "value when execution finishes."
-    ]
-
-  , prim "llvm_allocates"         "String -> LLVMSetup ()"
-    (pureVal llvm_allocates)
-    Deprecated
-    [ "Specify that the LLVM variable should be updated with a pointer to"
-    , "newly-allocated memory of whatever type the variable has been declared"
-    , "to have."
-    ]
-
-  , prim "llvm_return"         "Term -> LLVMSetup ()"
-    (bicVal llvm_return)
-    Deprecated
-    [ "Indicate the expected return value of an LLVM function."
-    ]
-
-  , prim "llvm_return_arbitrary" "LLVMSetup ()"
-    (pureVal llvm_return_arbitrary)
-    Deprecated
-    [ "Indicate that an LLVM function returns an arbitrary, unspecified value."
-    ]
-
-  , prim "llvm_verify_tactic"  "ProofScript SatResult -> LLVMSetup ()"
-    (bicVal llvm_verify_tactic)
-    Deprecated
-    [ "Use the given proof script to prove the specified properties about"
-    , "an LLVM function."
-    ]
-
-  , prim "llvm_sat_branches"   "Bool -> LLVMSetup ()"
-    (pureVal llvm_sat_branches)
-    Deprecated
-    [ "Turn on or off satisfiability checking of branch conditions during"
-    , "symbolic execution."
-    ]
-
-  , prim "llvm_simplify_addrs"  "Bool -> LLVMSetup ()"
-    (pureVal llvm_simplify_addrs)
-    Deprecated
-    [ "Turn on or off simplification of address expressions before loads"
-    , "and stores."
-    ]
-
-  , prim "llvm_no_simulate"    "LLVMSetup ()"
-    (pureVal llvm_no_simulate)
-    Deprecated
-    [ "Skip symbolic simulation for this LLVM method." ]
-
-  , prim "llvm_pure"           "LLVMSetup ()"
-    (pureVal llvm_pure)
-    Deprecated
-    [ "The empty specification for 'llvm_verify'. Equivalent to 'return ()'." ]
-
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"
     (pureVal llvm_load_module)
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
-
-  --, prim "llvm_module_info"    "LLVMModule -> TopLevel ()"
-
-  , prim "llvm_extract"
-    "LLVMModule -> String -> LLVMSetup () -> TopLevel Term"
-    (bicVal llvm_extract)
-    Deprecated
-    [ "Translate an LLVM function directly to a Term. The parameters of the"
-    , "Term will be the parameters of the LLVM function, and the return"
-    , "value will be the return value of the functions. Only functions with"
-    , "scalar argument and return types are currently supported. For more"
-    , "flexibility, see 'llvm_symexec' or 'llvm_verify'."
-    ]
-
-  , prim "llvm_symexec"
-    "LLVMModule -> String -> [(String, Int)] -> [(String, Term, Int)] -> [(String, Int)] -> Bool -> TopLevel Term"
-    (bicVal llvm_symexec)
-    Deprecated
-    [ "Symbolically execute an LLVM function and construct a Term corresponding"
-    , "to its result. The first list describes what allocations should be"
-    , "performed before execution. Each name given is allocated to point to"
-    , "the given number of elements, of the appropriate type. The second list"
-    , "contains pairs of variables or expressions along with Terms specifying"
-    , "their initial (possibly symbolic) values, and the number of elements"
-    , "that the term should contain. The third list contains the names of the"
-    , "variables or expressions to treat as outputs, along with the number of"
-    , "elements to read from those locations. Finally, the Bool argument sets"
-    , "branch satisfiability checking on or off. The resulting Term will be of"
-    , "tuple type, with as many elements as there are names in the output list."
-    ]
-
-  , prim "llvm_verify"
-    "LLVMModule -> String -> [LLVMMethodSpec] -> LLVMSetup () -> TopLevel LLVMMethodSpec"
-    (bicVal llvm_verify)
-    Deprecated
-    [ "Verify an LLVM function against a specification. The first two"
-    , "arguments are the same as for 'llvm_extract' and 'llvm_symexec'."
-    , "The list of LLVMMethodSpec values in the third argument makes it"
-    , "possible to use the results of previous verifications to take the"
-    , "place of actual execution when encountering a function call. The last"
-    , "parameter is a setup block, containing a sequence of commands of type"
-    , "'LLVMSetup a' that configure the symbolic simulator and specify the"
-    , "types of variables in scope, the expected results of execution, and"
-    , "the tactics to use to verify that the function produces the expected"
-    , "results."
-    ]
-
-  , prim "llvm_spec_solvers"  "LLVMMethodSpec -> [String]"
-    (\_ _ -> toValue llvm_spec_solvers)
-    Deprecated
-    [ "Extract a list of all the solvers used when verifying the given LLVM method spec."
-    ]
-
-  , prim "llvm_spec_size"  "LLVMMethodSpec -> Int"
-    (\_ _ -> toValue llvm_spec_size)
-    Deprecated
-    [ "Return a count of the combined size of all verification goals proved as part of the given method spec."
-    ]
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
@@ -2006,8 +1832,8 @@ primitives = Map.fromList
     (bicVal crucible_llvm_unsafe_assume_spec)
     Current
     [ "Return a CrucibleMethodSpec corresponding to a CrucibleSetup block,"
-    , "as would be returned by llvm_verify but without performing any"
-    , "verification."
+    , "as would be returned by crucible_llvm_verify but without performing"
+    , "any verification."
     ]
 
   , prim "crucible_array"

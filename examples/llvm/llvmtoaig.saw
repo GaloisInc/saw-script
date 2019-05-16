@@ -1,6 +1,5 @@
-enable_deprecated;
 m <- llvm_load_module "double.bc";
-t <- llvm_extract m "f" llvm_pure;
+t <- crucible_llvm_extract m "f";
 print "Type:";
 print_type t;
 print "Writing llvm_f.aig";

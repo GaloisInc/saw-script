@@ -1,46 +1,59 @@
-enable_deprecated;
 import "test.cry";
 m <- llvm_load_module "tmp/test.bc";
 
-// Verify using 'llvm_verify'.
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
+};
+
+// Verify using 'crucible_llvm_verify'.
 
 // The argument 'INC' specifies which 'alg' enum to test.
 let inc_spec INC = do {
-  llvm_ptr "st" (llvm_struct "struct.st");
 
-  alg0 <- llvm_var "st->0" (llvm_int 32);
+  stp <- crucible_alloc (llvm_struct "struct.st");
+
   // The union is represented by the largest element type,
   // i.e. 'inc_2_st'. The inner '.0' dereferences the union itself.
-  x0 <- llvm_var "((st->1).0).0" (llvm_int 32);
-  y0 <- llvm_var "((st->1).0).1" (llvm_int 32);
+  x0 <- crucible_fresh_var "((st->1).0).0" (llvm_int 32);
+  y0 <- crucible_fresh_var "((st->1).0).1" (llvm_int 32);
 
-  llvm_assert_eq "st->0" {{ INC }};
+  crucible_points_to (crucible_elem stp 0) (crucible_term {{ INC }});
+  crucible_points_to (crucible_elem (crucible_elem (crucible_elem stp 1) 0) 0) (crucible_term x0);
+  crucible_points_to (crucible_elem (crucible_elem (crucible_elem stp 1) 0) 1) (crucible_term y0);
+
+  crucible_execute_func [stp];
 
   // We construct an 'inc_2_st' here independent of 'INC', since we
   // need to account for all of the bits in the union field 'inc_st',
   // and 'inc_1_st' only has half the bits.
   let inc_2_st0 = {{ { x = x0, y = y0 } }};
   let st0 = {{
-    { alg = alg0
+    { alg = INC
     , bits = inc_2_st_to_bits inc_2_st0
     }
   }};
   let st1 = {{ inc st0 }};
   let inc_2_st1 = {{ bits_to_inc_2_st st1.bits }};
 
-  llvm_ensure_eq "st->0" {{ st1.alg }};
-  llvm_ensure_eq "((st->1).0).0" {{ inc_2_st1.x }};
-  llvm_ensure_eq "((st->1).0).1" {{ inc_2_st1.y }};
-  llvm_return {{ 0 : [32] }};
+  crucible_points_to (crucible_elem stp 0) (crucible_term {{ st1.alg }});
+  crucible_points_to (crucible_elem (crucible_elem (crucible_elem stp 1) 0) 0) (crucible_term {{ inc_2_st1.x }});
+  crucible_points_to (crucible_elem (crucible_elem (crucible_elem stp 1) 0) 1) (crucible_term {{ inc_2_st1.y }});
 
-  llvm_sat_branches true;
-  llvm_verify_tactic abc;
+  crucible_return (crucible_term {{ 0 : [32] }});
 };
 
-print "Verifying 'inc_1' using 'llvm_verify':";
-llvm_verify m "inc" [] (inc_spec {{ INC_1 }});
+print "Verifying 'inc_1' using 'crucible_llvm_verify':";
+crucible_llvm_verify m "inc" [] true (inc_spec {{ INC_1 }}) abc;
 print "";
 
-print "Verifying 'inc_2' using 'llvm_verify':";
-llvm_verify m "inc" [] (inc_spec {{ INC_2 }});
+print "Verifying 'inc_2' using 'crucible_llvm_verify':";
+crucible_llvm_verify m "inc" [] true (inc_spec {{ INC_2 }}) abc;
 print "";

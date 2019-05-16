@@ -1,4 +1,4 @@
-int add(int *x, int *y) {
+unsigned int add(unsigned int *x, unsigned int *y) {
     return *x + *y;
 }
 
