@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
@@ -87,6 +88,8 @@ import qualified Data.HashMap.Strict as HMap
 import GHC.Generics (Generic)
 import Text.PrettyPrint.ANSI.Leijen (Doc)
 
+import qualified Language.Haskell.TH.Syntax as TH
+
 import Prelude hiding (all, foldr, sum)
 
 import Verifier.SAW.Term.Functor
@@ -155,7 +158,7 @@ data DefQualifier
   = NoQualifier
   | PrimQualifier
   | AxiomQualifier
- deriving (Eq, Show, Read, Generic)
+ deriving (Eq, Show, Generic, TH.Lift)
 
 instance Hashable DefQualifier -- automatically derived
 

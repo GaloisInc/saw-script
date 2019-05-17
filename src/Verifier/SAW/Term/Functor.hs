@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
@@ -70,6 +71,9 @@ import Data.Word
 import GHC.Generics (Generic)
 import GHC.Exts (IsString(..))
 
+import qualified Language.Haskell.TH.Syntax as TH
+import Instances.TH.Lift () -- for instance TH.Lift Text
+
 import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.Utils (internalError)
 
@@ -86,20 +90,12 @@ instance Hashable a => Hashable (Vector a) where
 -- Module Names ----------------------------------------------------------------
 
 newtype ModuleName = ModuleName Text -- [String]
-  deriving (Eq, Ord, Generic)
+  deriving (Eq, Ord, Generic, TH.Lift)
 
 instance Hashable ModuleName -- automatically derived
 
 instance Show ModuleName where
   show (ModuleName s) = Text.unpack s
-
-isModNameChar :: Char -> Bool
-isModNameChar c = isIdChar c || c == '.'
-
-instance Read ModuleName where
-  readsPrec _ s =
-    let (str1, str2) = break (not . isModNameChar) (dropWhile isSpace s) in
-    [(ModuleName (Text.pack str1), str2)]
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
@@ -173,7 +169,7 @@ isIdChar c = isAlphaNum c || (c == '_') || (c == '\'')
 data Sort
   = TypeSort Integer
   | PropSort
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, TH.Lift)
 
 -- Prop is the lowest sort
 instance Ord Sort where
@@ -186,14 +182,6 @@ instance Hashable Sort -- automatically derived
 instance Show Sort where
   showsPrec p (TypeSort i) = showParen (p >= 10) (showString "sort " . shows i)
   showsPrec _ PropSort = showString "Prop"
-
-instance Read Sort where
-  readsPrec p str_in =
-    flip (readParen False) (dropWhile isSpace str_in) $ \str ->
-    if take 5 str == "sort " then
-      map (\(i,str') -> (TypeSort i, str')) (readsPrec p (drop 5 str))
-    else if take 4 str == "Prop" then [(PropSort, drop 4 str)]
-         else []
 
 -- | Create sort @Type i@ for the given integer @i@
 mkSort :: Integer -> Sort

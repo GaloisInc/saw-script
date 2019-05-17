@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -44,6 +45,8 @@ module Verifier.SAW.UntypedAST
 import Control.Applicative ((<$>))
 #endif
 
+import qualified Language.Haskell.TH.Syntax as TH
+
 import Verifier.SAW.Position
 import Verifier.SAW.TypedAST
   ( ModuleName, mkModuleName
@@ -76,13 +79,13 @@ data Term
     -- | Vector literal.
   | VecLit Pos [Term]
   | BadTerm Pos
- deriving (Show,Read)
+ deriving (Show, TH.Lift)
 
 -- | A pattern used for matching a variable.
 data TermVar
   = TermVar (PosPair String)
   | UnusedVar Pos
-  deriving (Eq, Ord, Show, Read)
+  deriving (Eq, Ord, Show, TH.Lift)
 
 -- | Return the 'String' name associated with a 'TermVar'
 termVarString :: TermVar -> String
@@ -124,7 +127,8 @@ badTerm :: Pos -> Term
 badTerm = BadTerm
 
 -- | A constructor declaration of the form @c (x1 :: tp1) .. (xn :: tpn) :: tp@
-data CtorDecl = Ctor (PosPair String) TermCtx Term deriving (Show,Read)
+data CtorDecl = Ctor (PosPair String) TermCtx Term
+  deriving (Show, TH.Lift)
 
 -- | A top-level declaration in a saw-core file
 data Decl
@@ -138,7 +142,7 @@ data Decl
      -- ^ A declaration of a term having a definition, with variables
    | TypedDef (PosPair String) [(TermVar, Term)] Term Term
      -- ^ A definition of something with a specific type, with parameters
-  deriving (Show,Read)
+  deriving (Show, TH.Lift)
 
 -- | A set of constraints on what 'String' names to import from a module
 data ImportConstraint
@@ -146,7 +150,7 @@ data ImportConstraint
     -- ^ Only import the given names
   | HidingImports [String]
     -- ^ Import all but the given names
- deriving (Eq, Ord, Show, Read)
+ deriving (Eq, Ord, Show, TH.Lift)
 
 -- | An import declaration
 data Import = Import { importModName :: PosPair ModuleName
@@ -154,7 +158,7 @@ data Import = Import { importModName :: PosPair ModuleName
                      , importConstraints :: Maybe ImportConstraint
                        -- ^ The constraints on what to import
                      }
-            deriving (Show, Read)
+            deriving (Show, TH.Lift)
 
 -- | Test whether a 'String' name satisfies the constraints of an 'Import'
 nameSatsConstraint :: Maybe ImportConstraint -> String -> Bool
@@ -167,7 +171,8 @@ nameSatsConstraint (Just (HidingImports ns)) n = notElem n ns
 -- * A name for the module;
 -- * A list of imports; AND
 -- * A list of top-level declarations
-data Module = Module (PosPair ModuleName) [Import] [Decl] deriving (Show, Read)
+data Module = Module (PosPair ModuleName) [Import] [Decl]
+  deriving (Show, TH.Lift)
 
 moduleName :: Module -> ModuleName
 moduleName (Module (PosPair _ mnm) _ _) = mnm

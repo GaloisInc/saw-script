@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveLift #-}
 
 {- |
 Module      : Verifier.SAW.Position
@@ -18,6 +19,7 @@ module Verifier.SAW.Position
   , PosPair(..)
   ) where
 
+import qualified Language.Haskell.TH.Syntax as TH
 import System.FilePath (makeRelative)
 
 data Pos = Pos { -- | Base directory to use for pretty printing purposes
@@ -26,7 +28,7 @@ data Pos = Pos { -- | Base directory to use for pretty printing purposes
                , posLine  :: !Int
                , posCol   :: !Int
                }
-  deriving (Show,Read)
+  deriving (Show, TH.Lift)
 
 posTuple :: Pos -> (Int,Int,FilePath)
 posTuple x = (posLine x, posCol x, posPath x)
@@ -53,7 +55,7 @@ class Positioned v where
   pos :: v -> Pos
 
 data PosPair v = PosPair { _pos :: !Pos, val :: !v }
-  deriving (Eq, Ord, Functor, Show, Read)
+  deriving (Eq, Ord, Functor, Show, TH.Lift)
 
 instance Positioned (PosPair v) where
   pos (PosPair p _) = p
