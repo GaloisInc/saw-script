@@ -230,6 +230,28 @@ crucible_llvm_verify ::
   ProofScript SatResult  ->
   TopLevel CrucibleMethodSpecIR
 crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic = do
+  createMethodSpec (Just (lemmas, checkSat, tactic)) bic opts lm nm setup
+
+crucible_llvm_unsafe_assume_spec ::
+  BuiltinContext   ->
+  Options          ->
+  LLVMModule       ->
+  String          {- ^ Name of the function -} ->
+  CrucibleSetupM () {- ^ Boundary specification -} ->
+  TopLevel CrucibleMethodSpecIR
+crucible_llvm_unsafe_assume_spec = createMethodSpec Nothing
+
+-- | The real work of 'crucible_llvm_verify' and 'crucible_llvm_unsafe_assume_spec'.
+createMethodSpec ::
+  Maybe ([CrucibleMethodSpecIR], Bool, ProofScript SatResult)
+  {- ^ If verifying, provide lemmas, branch sat checking, tactic -} ->
+  BuiltinContext   ->
+  Options          ->
+  LLVMModule       ->
+  String            {- ^ Name of the function -} ->
+  CrucibleSetupM () {- ^ Boundary specification -} ->
+  TopLevel CrucibleMethodSpecIR
+createMethodSpec verificationArgs bic opts lm nm setup = do
   (nm', parent) <- resolveSpecName nm
   let edef = findDefMaybeStatic (modMod lm) nm'
   let edecl = findDecl (modMod lm) nm'
@@ -252,6 +274,8 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic = do
     liftIO $ W4.setCurrentProgramLoc sym setupLoc
     methodSpec <- view csMethodSpec <$> execStateT (runCrucibleSetupM setup) st0
 
+    void $ io $ checkSpecReturnType cc methodSpec
+
     -- set up the LLVM memory with a pristine heap
     let globals = cc^.ccLLVMGlobals
     let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
@@ -268,57 +292,36 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic = do
     let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
 
     -- construct the initial state for verifications
-    (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
+    (args, assumes, env, globals2) <-
+      io $ verifyPrestate cc methodSpec globals1
 
-    -- save initial path conditions
-    frameIdent <- io $ Crucible.pushAssumptionFrame sym
+    case verificationArgs of
+      -- If we're just admitting, don't do anything
+      Nothing -> return methodSpec
 
-    -- run the symbolic execution
-    top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
-    (ret, globals3)
-       <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
+      -- If we're verifying, actually perform the verification
+      Just (lemmas, checkSat, tactic) -> do
 
-    -- collect the proof obligations
-    asserts <- verifyPoststate opts (biSharedContext bic) cc
-                   methodSpec env globals3 ret
+        -- save initial path conditions
+        frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
-    -- restore previous assumption state
-    _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+        -- run the symbolic execution
+        top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
+        (ret, globals3)
+          <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
 
-    -- attempt to verify the proof obligations
-    stats <- verifyObligations cc methodSpec tactic assumes asserts
-    return (methodSpec & csSolverStats .~ stats)
+        -- collect the proof obligations
+        asserts <- verifyPoststate opts (biSharedContext bic) cc
+                      methodSpec env globals3 ret
+
+        -- restore previous assumption state
+        _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+
+        -- attempt to verify the proof obligations
+        stats <- verifyObligations cc methodSpec tactic assumes asserts
+        return (methodSpec & csSolverStats .~ stats)
+
   return (NE.head specs)
-
-crucible_llvm_unsafe_assume_spec ::
-  BuiltinContext   ->
-  Options          ->
-  LLVMModule       ->
-  String          {- ^ Name of the function -} ->
-  CrucibleSetupM () {- ^ Boundary specification -} ->
-  TopLevel CrucibleMethodSpecIR
-crucible_llvm_unsafe_assume_spec bic opts lm nm setup =
-  setupCrucibleContext bic opts lm $ \cc -> do
-    let llmod = cc^.ccLLVMModule
-    let globals = cc^.ccLLVMGlobals
-    (nm', parent) <- resolveSpecName nm
-    loc <- toW4Loc "_SAW_assume_spec" <$> getPosition
-    let edef = findDefMaybeStatic llmod nm'
-    let edecl = findDecl llmod nm'
-    est0 <- case (edef, edecl) of
-              (Right defs, _) -> return $ initialCrucibleSetupState cc (NE.head defs) loc parent
-              (_, Right decl) -> return $ initialCrucibleSetupStateDecl cc decl loc parent
-              (Left err, Left _) -> fail (displayVerifExceptionOpts opts err)
-    case est0 of
-      Left err -> fail (show (ppSetupError err))
-      Right st0 -> do
-        mspec <- (view csMethodSpec) <$> execStateT (runCrucibleSetupM setup) st0
-        -- TODO: In addition to the return type, we should probably check the
-        -- argument types.
-        --
-        -- Is `resolveArguments` appropriate? Or even `verifyPrestate`?
-        liftIO $ checkSpecReturnType cc mspec
-        pure mspec
 
 verifyObligations :: CrucibleContext arch
                   -> CrucibleMethodSpecIR
@@ -416,8 +419,6 @@ verifyPrestate cc mspec globals = do
   let tyenvRO = mspec^.csPreState.csConstAllocs
   let tyenv   = csAllocations mspec
   let nameEnv = mspec^.csPreState.csVarTypeNames
-
-  checkSpecReturnType cc mspec
 
   let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
   liftIO $ W4.setCurrentProgramLoc sym prestateLoc
