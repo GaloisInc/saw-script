@@ -42,6 +42,7 @@ library
     random,
     template-haskell,
     text,
+    th-lift-instances,
     tf-random,
     transformers,
     transformers-compat,

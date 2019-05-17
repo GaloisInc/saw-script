@@ -37,6 +37,7 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (qAddDependentFile)
 #endif
 import System.Directory
+import qualified Language.Haskell.TH.Syntax as TH (lift)
 
 import qualified Verifier.SAW.UntypedAST as Un
 import qualified Verifier.SAW.Grammar as Un
@@ -87,7 +88,7 @@ defineModuleFromFile decNameStr path = do
   m <- lift $ runIO $ readModuleFromFile path
   let decName = mkName decNameStr
   moduleTp <- lift $ [t| Un.Module |]
-  body <- lift $ [e| read $(stringE $ show m) |]
+  body <- lift $ TH.lift m
   addDecs [ SigD decName moduleTp
           , FunD decName [ Clause [] (NormalB body) [] ]]
   return m
@@ -140,7 +141,7 @@ declareTypedNameFun sc_fun mnm nm apply_p tp =
   let th_nm = (if apply_p then "scApply" else "sc") ++ show mnm ++ "_" ++ nm in
   declareTermApplyFun th_nm (length $ fst $ Un.asPiList tp) $ \sc ts ->
   [| $(sc_fun) $(varE sc)
-   (mkIdent (read $(stringE (show mnm))) $(stringE nm))
+   (mkIdent mnm $(stringE nm))
    $(ts) |]
 
 -- | Declare a Haskell function
