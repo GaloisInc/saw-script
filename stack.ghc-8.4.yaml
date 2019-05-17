@@ -40,7 +40,14 @@ extra-deps:
   - sbv-8.1
   - monad-supply-0.7
   - panic-0.4.0.0
-  - itanium-abi-0.1.1.0
+  - itanium-abi-0.1.1.1
   - boomerang-1.4.5.6
+  - th-abstraction-0.3.1.0
+  - microlens-th-0.4.2.3
+  - deriving-compat-0.5.6
+  - bifunctors-5.5.4
+  - generic-deriving-1.12.4
+  - invariant-0.5.3
+  - lens-4.17.1
 resolver: lts-12.26
 allow-newer: true
