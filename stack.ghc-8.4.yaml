@@ -49,5 +49,6 @@ extra-deps:
   - generic-deriving-1.12.4
   - invariant-0.5.3
   - lens-4.17.1
+  - th-lift-0.8.0.1
 resolver: lts-12.26
 allow-newer: true
