@@ -24,14 +24,14 @@ documents describing its use are available
 Example: Find First Set
 =======================
 
-As a first example, we consider equivalence checking different
-implementations of the POSIX `ffs` function, which identifies the
-position of the first ``1`` bit in a word. The function takes an integer
-as input, treated as a vector of bits, and returns another integer which
-indicates the index of the first bit set. This function can be
-implemented in several ways with different performance and code clarity
-tradeoffs, and we would like to show those different implementations are
-equivalent.
+As a first example, we consider showing the equivalence of several quite
+different implementations of the POSIX `ffs` function, which identifies
+the position of the first ``1`` bit in a word. The function takes an
+integer as input, treated as a vector of bits, and returns another
+integer which indicates the index of the first bit set (zero being the
+least significant). This function can be implemented in several ways
+with different performance and code clarity tradeoffs, and we would like
+to show those different implementations are equivalent.
 
 Reference Implementation
 -------------------------
@@ -54,10 +54,8 @@ could be as many as 32, depending on the input value. It's possible to
 implement the same algorithm with significantly fewer branches, and no
 backward branches.
 
-\newpage
-
-Optimized Implementations
--------------------------
+Alternative Implementations
+---------------------------
 
 An alternative implementation, taken by the following function (also in
 `ffs.c`), treats the bits of the input word in chunks, allowing
@@ -79,31 +77,27 @@ These optimized versions are much less obvious than the reference
 implementation. They might be faster, but how do we gain confidence
 that they calculate the same results as the reference implementation?
 
-SAWScript allows us to state these problems concisely, and to quickly
-and automatically prove the equivalence of the reference and optimized
-implementations on all possible inputs.
-
-Buggy Implementation
---------------------
-
-Finally, a buggy implementation which is correct on all but one possible
-input (also in `ffs.c`). Although contrived, this program represents a
-case where traditional testing -- as opposed to verification -- is
-unlikely to be helpful.
+Finally, consider a buggy implementation which is correct on all but one
+possible input (also in `ffs.c`). Although contrived, this program
+represents a case where traditional testing -- as opposed to
+verification -- is unlikely to be helpful.
 
 ``` {.c}
 $include 43-47 code/ffs.c
 ```
 
-SAWScript allows us to quickly identify an input exhibiting the bug.
+SAWScript allows us to state these problems concisely, and to quickly
+and automatically 1) prove the equivalence of the reference and
+optimized implementations on all possible inputs, and 2) find an input
+exhibiting the bug in the third version.
 
 Generating LLVM Code
 --------------------
 
-The SAWScript interpreter can analyze LLVM code, but most programs are
-originally written in a higher-level language such as C, as in our
-example. Therefore, the C code must be translated to LLVM, using
-something like the following command:
+SAW can analyze LLVM code, but most programs are originally written in a
+higher-level language such as C, as in our example. Therefore, the C
+code must be translated to LLVM, using something like the following
+command:
 
     > clang -g -c -emit-llvm -o ffs.bc ffs.c
 
@@ -115,12 +109,15 @@ GitHub](https://github.com/GaloisInc/saw-script/issues) if SAW fails to
 parse any LLVM bitcode file.
 
 This command, and following command examples in this tutorial, can be
-run from the `code` directory accompanying the tutorial document. A
-`Makefile` also exists in that directory, providing quick shortcuts
+run from the `code` directory [on
+GitHub](https://github.com/GaloisInc/saw-script/tree/master/doc/tutorial/code).
+A `Makefile` also exists in that directory, providing quick shortcuts
 for tasks like this. For instance, we can get the same effect as the
-previous command by doing:
+previous command by running:
 
     > make ffs.bc
+
+\newpage
 
 Equivalence Proof
 -----------------
@@ -153,12 +150,15 @@ Cryptol expressions can be embedded within SAWScript; to distinguish
 Cryptol code from SAWScript commands, the Cryptol code is placed
 within double brackets `{{` and `}}`.
 
-The `prove` command can verify the validity of such an assertion.
-The `abc` parameter indicates what
-theorem prover to use; SAWScript offers support for many other SAT and
-SMT solvers as well as user definable simplification tactics.
+The `prove` command can verify the validity of such an assertion, or
+produce a counter-example that invalidates it. The `abc` parameter
+indicates what theorem prover to use; SAWScript offers support for many
+other SAT and SMT solvers as well as user definable simplification
+tactics.
 
-TODO: mention `sat`, too.
+Similarly, the `sat` command works in the opposite direction to `prove`.
+It attempts to find a value for which the given assertion is true, and
+fails if there is no such value.
 
 If the `saw` executable is in your PATH, you can run the script above with
 
@@ -166,9 +166,7 @@ If the `saw` executable is in your PATH, you can run the script above with
 
 producing the output
 
-TODO: update output
 ```
-Loading module Cryptol
 Loading file "ffs_llvm.saw"
 Extracting reference term: ffs_ref
 Extracting implementation term: ffs_imp
@@ -179,26 +177,23 @@ Valid
 Proving equivalence: ffs_ref == ffs_musl
 Valid
 Finding bug via sat search: ffs_ref != ffs_bug
-Sat: [x = 1052688]
+Sat: [x = 0x101010]
 Finding bug via failed proof: ffs_ref == ffs_bug
-Invalid: [x = 1052688]
+prove: 1 unsolved subgoal(s)
+Invalid: [x = 0x101010]
 Done.
 ```
 
-TODO: use `set_base 16`?
-
-Note that `0x101010 = 1052688`, and so both explicitly searching for
-an input exhibiting the bug (with `sat`) and attempting to prove the
-false equivalence (with `prove`) exhibit the bug. Symmetrically, we
-could use `sat` to prove the equivalence of `ffs_ref` and `ffs_imp`,
-by checking that the corresponding disequality is
-unsatisfiable. Indeed, this exactly what happens behind the scenes:
-`prove abc <goal>` is essentially `not (sat abc (not <goal>))`.
+Note that both explicitly searching for an input exhibiting the bug
+(with `sat`) and attempting to prove the false equivalence (with
+`prove`) exhibit the bug. Symmetrically, we could use `sat` to prove the
+equivalence of `ffs_ref` and `ffs_imp`, by checking that the
+corresponding disequality is unsatisfiable. Indeed, this exactly what
+happens behind the scenes: `prove abc <goal>` is essentially `not (sat
+abc (not <goal>))`.
 
 Cross-Language Proofs
 ---------------------
-
-TODO: introduce new functions
 
 We can implement the FFS algorithm in Java with code almost identical
 to the C version.
@@ -259,6 +254,10 @@ Now we can do the proof both within and across languages (from
 $include all code/ffs_compare.saw
 ```
 
+Here, the `crucible_java_extract` function works like
+`crucible_llvm_extract`, but on a Java class and method name. The
+`prove_print` command works similarly to the `prove` followed by `print`
+combination used for the LLVM example above.
 
 Using SMT-Lib Solvers
 =====================
@@ -266,7 +265,7 @@ Using SMT-Lib Solvers
 The examples presented so far have used the internal proof system
 provided by SAWScript, based primarily on a version of the ABC tool
 from UC Berkeley linked into the `saw` executable. However, there is
-internal support for other proof tools -- such as Yices and CVC4 as
+internal support for other proof tools -- such as Yices and Z3 as
 illustrated in the next example -- and more general support for
 exporting models representing theorems as goals in the SMT-Lib
 language. These exported goals can then be solved using an external
@@ -281,7 +280,7 @@ $include all code/double.c
 In this trivial example, an integer can be doubled either using
 multiplication or shifting. The following SAWScript program (in
 `double.saw`) verifies that the two are equivalent using both internal
-ABC, Yices, and CVC4 modes, and by exporting an SMT-Lib theorem to be
+ABC, Yices, and Z3 modes, and by exporting an SMT-Lib theorem to be
 checked later, by an external SAT solver.
 
 ```
@@ -303,10 +302,12 @@ either satisfiability or validity checking.
 The SMT-Lib export capabilities in SAWScript make use of the Haskell
 SBV package, and support ABC, Boolector, CVC4, MathSAT, Yices, and Z3.
 
+\newpage
+
 External SAT Solvers
 ====================
 
-In addition to the `abc`, `cvc4`, and `yices` proof tactics used
+In addition to the `abc`, `z3`, and `yices` proof tactics used
 above, SAWScript can also invoke arbitrary external SAT solvers
 that read CNF files and produce results according to the SAT
 competition
@@ -349,8 +350,6 @@ functions that use heap data structures.
 Compositional Imperative Proofs
 -------------------------------
 
-TODO: update this to use `crucible_jvm_verify`
-
 As a simple example of compositional reasoning on imperative programs,
 consider the following Java code.
 
@@ -363,7 +362,9 @@ function then calls `add` to double its argument. While it would be easy
 to prove that `dbl` doubles its argument by following the call to `add`,
 it's also possible in SAWScript to prove something about `add` first,
 and then use the results of that proof in the proof of `dbl`, as in the
-following SAWScript code ([`code/java_add.saw`](saw-tutorial-code.tar.gz)).
+following SAWScript code (`java_add.saw` on GitHub).
+
+\newpage
 
 ````
 $include all code/java_add.saw
@@ -376,24 +377,23 @@ This can be run as follows:
 In this example, the definitions of `add_spec` and `dbl_spec` provide
 extra information about how to configure the symbolic simulator when
 analyzing Java code. In this case, the setup blocks provide explicit
-descriptions of the implicit configuration used by `java_extract`
-(used in the earlier Java FFS example and in the next section). The
-`java_var` commands instruct the simulator to create fresh symbolic
-inputs to correspond to the Java variables `x` and `y`. Then, the
-`java_return` commands indicate the expected return value of the each
-method, in terms of existing models (which can be written inline).
+descriptions of the implicit configuration used by
+`crucible_java_extract` (used in the earlier Java FFS example and in the
+next section). The `jvm_fresh_var` commands instruct the simulator to
+create fresh symbolic inputs to correspond to the Java variables `x` and
+`y`. Then, the `jvm_return` commands indicate the expected return value
+of the each method, in terms of existing models (which can be written
+inline). Because Java methods can operate on references, as well, which
+do not exist in Cryptol, Cryptol expressions must be translated to JVM
+values with `jvm_term`.
 
-Finally, the `java_verify_tactic` command indicates what method to use
-to prove that the Java methods do indeed return the expected value. In
-this case, we use ABC.
-
-To make use of these setup blocks, the `java_verify` command analyzes
-the method corresponding to the class and method name provided, using
-the setup block passed in as a parameter. It then returns an object that
-describes the proof it has just performed. This object can be passed
-into later instances of `java_verify` to indicate that calls to the
-analyzed method do not need to be followed, and the previous proof about
-that method can be used instead of re-analyzing it.
+To make use of these setup blocks, the `crucible_jvm_verify` command
+analyzes the method corresponding to the class and method name provided,
+using the setup block passed in as a parameter. It then returns an
+object that describes the proof it has just performed. This object can
+be passed into later instances of `java_verify` to indicate that calls
+to the analyzed method do not need to be followed, and the previous
+proof about that method can be used instead of re-analyzing it.
 
 Interactive Interpreter
 =======================
@@ -408,6 +408,8 @@ SAWScript with no arguments:
 The REPL can evaluate any command that would appear at the top level
 of a standalone script, or in the `main` function, as well as a few
 special commands that start with a colon:
+
+\newpage
 
     :env     display the current sawscript environment
     :type    check the type of an expression
@@ -436,15 +438,7 @@ equivalence verification.
 
 First, we can load a model of the `nQueens` term from the Cryptol file.
 
-    > saw
-       ___  __ _ _ _ _
-      / __|/ _' | | | |
-      \__ \ (_| | | | |
-      |___/\__,_|\_,_/
-
     sawscript> m <- cryptol_load "NQueens.cry"
-    Loading module Cryptol
-    Loading module Main
     sawscript> let nq8 = {{ m::nQueens`{8} }}
 
 Once we've extracted this model, we can try it on a specific
@@ -458,7 +452,7 @@ This particular configuration didn't work, but we can use the
 satisfiability checking tools to automatically find one that does.
 
     sawscript> sat_print abc nq8
-    Sat [3,1,6,2,5,7,4,0]
+    Sat [qs = [3, 1, 6, 2, 5, 7, 4, 0]]
 
 And, finally, we can double-check that this is indeed a valid solution.
 
@@ -468,18 +462,20 @@ And, finally, we can double-check that this is indeed a valid solution.
 Other Examples
 ==============
 
-The `code` directory contains a few additional examples not mentioned
-so far. These remaining examples don't cover significant new material,
-but help fill in some extra use cases that are similar, but not
-identical to those already covered.
+The `code` directory [on
+GitHub](https://github.com/GaloisInc/saw-script/tree/master/doc/tutorial/code)
+contains a few additional examples not mentioned so far. These remaining
+examples don't cover significant new material, but help fill in some
+extra use cases that are similar, but not identical to those already
+covered.
 
 Java Equivalence Checking
 -------------------------
 
 The previous examples showed comparison between two different LLVM
 implementations, and cross-language comparisons between Cryptol, Java,
-and LLVM. The script in [`code/ffs_java.saw`](saw-tutorial-code.tar.gz)
-compares two different Java implementations, instead.
+and LLVM. The script in `ffs_java.saw` compares two different Java
+implementations, instead.
 
 ````
 $include all code/ffs_java.saw
@@ -509,7 +505,7 @@ $include all code/ffs_gen_aig.saw
 ````
 
 Conversely, the `read_aig` command can construct an internal term from
-an existing AIG file, as shown in `code/ffs_compare_aig.saw`.
+an existing AIG file, as shown in `ffs_compare_aig.saw`.
 
 ````
 $include all code/ffs_compare_aig.saw
@@ -525,5 +521,3 @@ second:
 Files in AIGER format can be produced and processed by several
 external tools, including ABC, Cryptol version 1, and various hardware
 synthesis and verification systems.
-
-TODO: any other examples?

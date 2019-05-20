@@ -19,7 +19,7 @@ PDFARGS   = -H tutorial-head.tex \
             --listings \
             -V documentclass:galois-whitepaper \
             -V fontsize:12 \
-            --pdf-engine=pdflatex
+            --pdf-engine=xelatex
 HTMLARGS  = --css doc.css \
             -B tutorial-before.html \
 	    --toc \
