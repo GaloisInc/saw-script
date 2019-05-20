@@ -175,7 +175,7 @@ constMap bp = Map.fromList
   -- Nat
   , ("Prelude.Succ", succOp)
   , ("Prelude.addNat", addNatOp)
-  , ("Prelude.subNat", subNatOp)
+  , ("Prelude.subNat", subNatOp bp)
   , ("Prelude.mulNat", mulNatOp)
   , ("Prelude.minNat", minNatOp)
   , ("Prelude.maxNat", maxNatOp)
@@ -442,11 +442,20 @@ addNatOp =
   vNat (m + n)
 
 -- subNat :: Nat -> Nat -> Nat;
-subNatOp :: VMonad l => Value l
-subNatOp =
-  natFun' "subNat1" $ \m -> return $
-  natFun' "subNat2" $ \n -> return $
-  vNat (if m < n then 0 else m - n)
+subNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
+subNatOp bp =
+  strictFun $ \x -> return $
+  strictFun $ \y -> g x y
+  where
+    g (VNat i) (VNat j) = return $ VNat (if i < j then 0 else i - j)
+    g v1 v2 =
+      do let w = max (natSize bp v1) (natSize bp v2)
+         x1 <- natToWord bp w v1
+         x2 <- natToWord bp w v2
+         lt <- bpBvult bp x1 x2
+         z <- bpBvLit bp w 0
+         d <- bpBvSub bp x1 x2
+         VToNat . VWord <$> bpMuxWord bp lt z d
 
 -- mulNat :: Nat -> Nat -> Nat;
 mulNatOp :: VMonad l => Value l
