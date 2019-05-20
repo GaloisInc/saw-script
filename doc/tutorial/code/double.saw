@@ -9,7 +9,7 @@ print r;
 r <- prove yices thm;
 print r;
 
-r <- prove cvc4 thm;
+r <- prove z3 thm;
 print r;
 
 let thm_neg = {{ \x -> ~(thm x) }};

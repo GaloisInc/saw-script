@@ -1,3 +1,5 @@
+set_base 16;
+
 print "Extracting reference term: ffs_ref";
 l <- llvm_load_module "ffs.bc";
 ffs_ref <- crucible_llvm_extract l "ffs_ref";
