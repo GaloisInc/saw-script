@@ -1824,6 +1824,7 @@ primitives = Map.fromList
 
   , prim "list_term"           "[Term] -> Term"
     (funVal1 list_term)
+    Current
     [ "Make a Cryptol term of type [n]a from a list of terms of type a."
     , "Function list_term is the inverse of function eval_list."
     ]
