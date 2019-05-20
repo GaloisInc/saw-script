@@ -153,10 +153,27 @@ data OverrideFailureReason
   | BadEqualityComparison String -- ^ Comparison on an undef value
   | BadPointerLoad PointsTo PP.Doc
     -- ^ @loadRaw@ failed due to type error
-  | StructuralMismatch (Crucible.LLVMVal Sym)
-                       SetupValue
-                       Crucible.MemType
-                        -- ^ simulated value, specified value, specified type
+  | StructuralMismatch
+      PP.Doc
+      SetupValue
+      (Maybe Crucible.MemType)
+      Crucible.MemType
+    -- ^ pretty-printed simulated value (LLVMVal), specified value, type
+    -- of specified value, specified type
+
+mkStructuralMismatch ::
+  (W4.IsExpr (W4.SymExpr sym)) =>
+  CrucibleContext arch ->
+  CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
+  Crucible.LLVMVal sym {- ^ the value from the simulator -} ->
+  SetupValue           {- ^ the value from the spec -} ->
+  Crucible.MemType     {- ^ the expected type -} ->
+  OverrideFailureReason
+mkStructuralMismatch cc spec llvmval setupval memTy =
+  let tyenv = csAllocations spec
+      nameEnv = csTypeNames spec
+      maybeTy = typeOfSetupValue cc tyenv nameEnv setupval
+  in StructuralMismatch (PP.pretty llvmval) setupval maybeTy memTy
 
 ppOverrideFailureReason :: OverrideFailureReason -> PP.Doc
 ppOverrideFailureReason rsn = case rsn of
@@ -186,12 +203,13 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "appeared in the override's points-to precondition(s):" PP.<$$>
     PP.text "Precondition:" PP.<+> ppPointsTo pointsTo PP.<$$>
     PP.text "Failure reason: " PP.<$$> msg -- this can be long
-  StructuralMismatch llvmval setupval ty ->
-    PP.text "could not match the following terms" PP.<$$>
-    PP.indent 2 (PP.text $ show llvmval) PP.<$$>
-    PP.indent 2 (ppSetupValue setupval) PP.<$$>
-    PP.text "with type" PP.<$$>
-    PP.indent 2 (Crucible.ppMemType ty)
+  StructuralMismatch ppllvmval setupval setupvalTy ty ->
+    PP.text "could not match the following terms with type:" PP.<$$>
+    PP.vcat (map (PP.indent 2)
+              [ PP.text "Type:" PP.<+> Crucible.ppMemType ty
+              , PP.text "Simulator value:" PP.<+> ppllvmval
+              , PP.text "Specified value:" PP.<+> ppSetupValue setupval
+              ] ++ maybe [] ((:[]) . Crucible.ppMemType) setupvalTy)
 
 
 ppTypedTerm :: TypedTerm -> PP.Doc
@@ -941,7 +959,7 @@ matchArg _opts sc cc cs prepost actual expectedTy expected@(SetupTerm expectedTT
   | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
   , Right tval <- Cryptol.evalType mempty tyexpr
   = do sym      <- getSymInterface
-       let failMsg = StructuralMismatch actual expected expectedTy
+       let failMsg = mkStructuralMismatch cc cs actual expected expectedTy
        realTerm <- valueToSC sym (cs ^. csLoc) failMsg tval actual
        matchTerm sc cc (cs ^. csLoc) prepost realTerm (ttTerm expectedTT)
 
@@ -957,7 +975,7 @@ matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer n) = 
   (globInitTy, globInitVal) <- resolveSetupValueLLVM opts cc sc cs g
   sym <- getSymInterface
   if expectedTy /= globInitTy
-  then failure (cs ^. csLoc) (StructuralMismatch actual g expectedTy)
+  then failure (cs ^. csLoc) (mkStructuralMismatch cc cs actual g expectedTy)
   else liftIO (Crucible.testEqual sym globInitVal actual) >>=
     \case
       Nothing -> failure (cs ^. csLoc) (BadEqualityComparison n)
@@ -981,10 +999,11 @@ matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy
            Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
          addAssert pred_ $ notEqual prepost (cs ^. csLoc) setupval actual
 
-    _ -> failure (cs ^. csLoc) (StructuralMismatch actual setupval expectedTy)
+    _ -> failure (cs ^. csLoc)
+                 (mkStructuralMismatch cc cs actual setupval expectedTy)
 
-matchArg _opts _sc _cc cs _prepost actual expectedTy expected =
-  failure (cs ^. csLoc) (StructuralMismatch actual expected expectedTy)
+matchArg _opts _sc cc cs _prepost actual expectedTy expected =
+  failure (cs ^. csLoc) (mkStructuralMismatch cc cs actual expected expectedTy)
 
 ------------------------------------------------------------------------
 
