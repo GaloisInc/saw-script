@@ -721,9 +721,7 @@ contents are available qualified with the name of the `CryptolModule`
 variable. A specific definition can be explicitly extracted from a
 `CryptolModule` using the `cryptol_extract` command:
 
-~~~~
-cryptol_extract : CryptolModule -> String -> TopLevel Term
-~~~~
+* `cryptol_extract : CryptolModule -> String -> TopLevel Term`
 
 # Transforming Term Values
 
@@ -740,24 +738,22 @@ Rewriting a `Term` consists of applying one or more *rewrite rules* to
 it, resulting in a new `Term`. A rewrite rule in SAW can be specified in
 multiple ways:
 
-  * as the definition of a function that can be unfolded,
-  * as a term of Boolean type (or a function returning a Boolean) that
-    is an equality statement, and
-  * as a term of _equality type_ with a body that encodes a proof that
-    the equality in the type is valid.
+  1. as the definition of a function that can be unfolded,
+  1. as a term of Boolean type (or a function returning a Boolean) that
+  is an equality statement, and
+  1. as a term of _equality type_ with a body that encodes a proof that
+  the equality in the type is valid.
 
-TODO: is the following paragraph too dense?
-
-Each of these forms is a `Term` of a different shape. In each case the
-term logically consists of two parts, each of which may contain
-variables (bound by enclosing lambda expressions). By thinking of the
-variables as holes that may match any sub-term, the two parts of each
-term can both be seen as *patterns*. The left-hand pattern describes a
-term to match (which may be a sub-term of the full term being
-rewritten), and the right-hand pattern describes a term to replace it
-with. Any variable in the right-hand pattern must also appear in the
-left-hand pattern and will be instantiated with whatever sub-term
-matched that variable in the original term.
+In each case the term logically consists of two sides and describes a
+way to transform the left side into the right side. Each side may
+contain variables (bound by enclosing lambda expressions) and is
+therefore a *pattern* which can match any term in which each variable
+represents an arbitrary sub-term. The left-hand pattern describes a term
+to match (which may be a sub-term of the full term being rewritten), and
+the right-hand pattern describes a term to replace it with. Any variable
+in the right-hand pattern must also appear in the left-hand pattern and
+will be instantiated with whatever sub-term matched that variable in the
+original term.
 
 For example, say we have the following Cryptol function:
 
@@ -767,7 +763,7 @@ For example, say we have the following Cryptol function:
 
 We might for some reason want to replace multiplication by a power of
 two with a shift. We can describe this replacement using an equality
-statement in Cryptol:
+statement in Cryptol (a rule of form 2 above):
 
 ~~~~
 \(y:[8]) -> (y * 2) == (y << 1)
@@ -801,19 +797,15 @@ available to the automated provers.
 In practical use, rewrite rules can be aggregated into `Simpset`
 values in SAWScript. A few pre-defined `Simpset` values exist:
 
-TODO: listify
-~~~
-empty_ss : Simpset
-basic_ss : Simpset
-cryptol_ss : () -> Simpset
-~~~
+* `empty_ss : Simpset` is the empty set of rules. Rewriting with it
+should have no effect, but it is useful as an argument to some of the
+functions that construct larger `Simpset` values.
 
-The first is the empty set of rules. Rewriting with it should have no
-effect, but it is useful as an argument to some of the functions that
-construct larger `Simpset` values. The `basic_ss` constant is a
-collection of rules that are useful in most proof scripts. The
-`cryptol_ss` value includes a collection of Cryptol-specific rules. Some of
-these simplify away the abstractions introduced in the
+* `basic_ss : Simpset` is a collection of rules that are useful in most
+proof scripts.
+
+* `cryptol_ss : () -> Simpset` includes a collection of Cryptol-specific
+rules. Some of these simplify away the abstractions introduced in the
 translation from Cryptol to SAWCore, which can be useful when proving
 equivalence between Cryptol and non-Cryptol code. Leaving these
 abstractions in place is appropriate when comparing only Cryptol code,
@@ -881,12 +873,11 @@ The primary interface to rewriting uses the `Theorem` type instead of
 the `Term` type, as shown in the signatures for `addsimp` and
 `addsimps`.
 
-TODO: listify
-~~~~
-addsimp : Theorem -> Simpset -> Simpset
+* `addsimp : Theorem -> Simpset -> Simpset` adds a single `Theorem` to a
+`Simpset`.
 
-addsimps : [Theorem] -> Simpset -> Simpset
-~~~~
+* `addsimps : [Theorem] -> Simpset -> Simpset` adds several `Theorem`
+values to a `Simpset`.
 
 A `Theorem` is essentially a `Term` that is proven correct in some way.
 In general, a `Theorem` can be any statement, and may not be useful as a
@@ -896,37 +887,28 @@ we'll describe how to construct `Theorem` values from `Term` values.
 
 In the absence of user-constructed `Theorem` values, there are some
 additional built-in rules that are not included in either `basic_ss` and
-`cryptol_ss` because they are not always beneficial, but that can sometimes
-be helpful or essential.
+`cryptol_ss` because they are not always beneficial, but that can
+sometimes be helpful or essential. The `cryptol_ss` simpset includes
+rewrite rules to unfold all definitions in the `Cryptol` SAWCore module,
+but does not include any of the terms of equality type.
 
-TODO: listify
-~~~~
-add_cryptol_eqs : [String] -> Simpset -> Simpset
+* `add_cryptol_eqs : [String] -> Simpset -> Simpset` adds the terms of
+equality type with the given names from the SAWCore `Cryptol` module to
+the given `Simpset`.
 
-add_prelude_defs : [String] -> Simpset -> Simpset
+* `add_prelude_defs : [String] -> Simpset -> Simpset` adds unfolding
+rules from the SAWCore `Prelude` module to a `Simpset`.
 
-add_prelude_eqs : [String] -> Simpset -> Simpset
-~~~~
-
-The `cryptol_ss` simpset includes rewrite rules to unfold all
-definitions in the `Cryptol` SAWCore module, but does not include any of
-the terms of equality type. The `add_cryptol_eqs` function adds the
-terms of equality type with the given names to the given `Simpset`. The
-`add_prelude_defs` and `add_prelude_eqs` functions add definition
-unfolding rules and equality-typed terms, respectively, from the SAWCore
-`Prelude` module.
+* `add_prelude_eqs : [String] -> Simpset -> Simpset` adds equality-typed
+term from the SAWCore `Prelude` module to a `Simpset`.
 
 Finally, it's possible to construct a theorem from an arbitrary SAWCore
 expression (rather than a Cryptol expression), using the `core_axiom`
 function.
 
-TODO: listify
-~~~~
-core_axiom : String -> Theorem
-~~~~
-
-Any `Theorem` introduced by this function is assumed to be correct, so
-use it with caution.
+* `core_axiom : String -> Theorem` creates a `Theorem` from a `String`
+in SAWCore syntax. Any `Theorem` introduced by this function is assumed
+to be correct, so use it with caution.
 
 ## Folding and Unfolding
 
@@ -934,12 +916,9 @@ A SAWCore term can be given a name using the `define` function, and is
 then by default printed as that name alone. A named subterm can be
 "unfolded" so that the original definition appears again.
 
-TODO: listify
-~~~~
-define : String -> Term -> TopLevel Term
+* `define : String -> Term -> TopLevel Term`
 
-unfold_term : [String] -> Term -> Term
-~~~~
+* `unfold_term : [String] -> Term -> Term`
 
 For example:
 
@@ -988,55 +967,38 @@ unfolded as needed.
 In addition to the `Term` transformation functions described so far, a
 variety of others also exist.
 
-TODO: listify
-~~~~
-beta_reduce_term : Term -> Term
-
-replace : Term -> Term -> Term -> TopLevel Term
-~~~~
-
-The `beta_reduce_term` function takes any sub-expression of the form
+* `beta_reduce_term : Term -> Term` takes any sub-expression of the form
 `(\x -> t) v` in the given `Term` and replaces it with a transformed
 version of `t` in which all instances of `x` are replaced by `v`.
 
-The `replace` function replaces arbitrary subterms. A call to `replace x
-y t` replaces any instance of `x` inside `t` with `y`.
+* `replace : Term -> Term -> Term -> TopLevel Term` replaces arbitrary
+subterms. A call to `replace x y t` replaces any instance of `x` inside
+`t` with `y`.
 
 Assessing the size of a term can be particularly useful during benchmarking.
 SAWScript provides two mechanisms for this.
 
-TODO: listify
-~~~~
-term_size : Term -> Int
+* `term_size : Term -> Int` calculates the number of nodes in the
+Directed Acyclic Graph (DAG) representation of a `Term` used internally
+by SAW. This is the most appropriate way of determining the resource use
+of a particular term.
 
-term_tree_size : Term -> Int
-~~~~
-
-The first, `term_size`, calculates the number of nodes in the Directed
-Acyclic Graph (DAG) representation of a `Term` used internally by SAW.
-This is the most appropriate way of determining the resource use of a
-particular term. The second, `term_tree_size`, calculates how large a
-`Term` would be if it were represented by a tree instead of a DAG. This
-can, in general, be much, much larger than the number returned by
-`term_size`, and serves primarily as a way of assessing, for a specific
-term, how much benefit there is to the term sharing used by the DAG
-representation.
+* `term_tree_size : Term -> Int` calculates how large a `Term` would be
+if it were represented by a tree instead of a DAG. This can, in general,
+be much, much larger than the number returned by `term_size`, and serves
+primarily as a way of assessing, for a specific term, how much benefit
+there is to the term sharing used by the DAG representation.
 
 Finally, there are a few commands related to the internal SAWCore type of a
 `Term`.
 
-TODO: listify
-~~~~
-check_term : Term -> TopLevel ()
+* `check_term : Term -> TopLevel ()` checks that the internal structure
+of a `Term` is well-formed and that it passes all of the rules of the
+SAWCore type checker.
 
-type : Term -> Type
-~~~~
-
-The `check_term` command checks that the internal structure of a `Term`
-is well-formed and that it passes all of the rules of the SAWCore type
-checker. The `type` function returns the type of a particular `Term`,
-which can then be used to, for example, construct a new fresh variable
-with `fresh_symbolic`.
+* `type : Term -> Type` returns the type of a particular `Term`, which
+can then be used to, for example, construct a new fresh variable with
+`fresh_symbolic`.
 
 ## Loading and Storing Terms
 
@@ -1044,42 +1006,33 @@ Most frequently, `Term` values in SAWScript come from Cryptol, JVM, or
 LLVM programs, or some transformation thereof. However, it is also
 possible to obtain them from various other sources.
 
-TODO: listify
-~~~~
-parse_core : String -> Term
+* `parse_core : String -> Term` parses a `String` containing a term in
+SAWCore syntax, returning a `Term`.
 
-read_aig : String -> TopLevel Term
-
-read_bytes : String -> TopLevel Term
-
-read_core : String -> TopLevel Term
-~~~~
-
-The `parse_core` function parses a `String` containing a term in SAWCore
-syntax, returning a `Term`. The `read_core` command is similar, but
+* `read_core : String -> TopLevel Term` is like `parse_core`, but
 obtains the text from the given file and expects it to be in the simpler
 SAWCore external representation format, rather than the human-readable
-syntax shown so far. The `read_aig` command returns a `Term`
-representation of an And-Inverter-Graph (AIG) file in AIGER format. The
-`read_bytes` command reads a constant sequence of bytes from a file and
-represents it as a `Term`. Its result will always have Cryptol type
-`[n][8]` for some `n`.
+syntax shown so far.
+
+* `read_aig : String -> TopLevel Term` returns a `Term` representation
+of an And-Inverter-Graph (AIG) file in AIGER format.
+
+* `read_bytes : String -> TopLevel Term` reads a constant sequence of
+bytes from a file and represents it as a `Term`. Its result will always
+have Cryptol type `[n][8]` for some `n`.
 
 It is also possible to write `Term` values into files in various
 formats, including: AIGER (`write_aig`), CNF (`write_cnf`), SAWCore
 external representation (`write_core`), and SMT-Lib version 2
 (`write_smtlib2`).
 
-TODO: listify
-~~~~
-write_aig : String -> Term -> TopLevel ()
+* `write_aig : String -> Term -> TopLevel ()`
 
-write_cnf : String -> Term -> TopLevel ()
+* `write_cnf : String -> Term -> TopLevel ()`
 
-write_core : String -> Term -> TopLevel ()
+* `write_core : String -> Term -> TopLevel ()`
 
-write_smtlib2 : String -> Term -> TopLevel ()
-~~~~
+* `write_smtlib2 : String -> Term -> TopLevel ()`
 
 # Proofs about Terms
 
@@ -1092,31 +1045,20 @@ Whether proving small lemmas (in the form of rewrite rules) or a
 top-level theorem, the process builds on the idea of a *proof script*
 that is run by one of the top level proof commands.
 
-TODO: listify
-~~~~
-prove_print : ProofScript SatResult -> Term -> TopLevel Theorem
+* `prove_print : ProofScript SatResult -> Term -> TopLevel Theorem`
+takes a proof script (which we'll describe next) and a `Term`. The
+`Term` should be of function type with a return value of `Bool` (`Bit`
+at the Cryptol level). It will then use the proof script to attempt to
+show that the `Term` returns `True` for all possible inputs. If it is
+successful, it will print `Valid` and return a `Theorem`. If not, it
+will abort.
 
-sat_print : ProofScript SatResult -> Term -> TopLevel ()
-~~~~
+* `sat_print : ProofScript SatResult -> Term -> TopLevel ()` is similar
+except that it looks for a *single* value for which the `Term` evaluates
+to `True` and prints out that value, returning nothing.
 
-The `prove_print` command takes a proof script (which we'll describe
-next) and a `Term`. The `Term` should be of function type with a return
-value of `Bool` (`Bit` at the Cryptol level). It will then use the proof
-script to attempt to show that the `Term` returns `True` for all
-possible inputs. If it is successful, it will print `Valid` and return
-a `Theorem`. If not, it will abort.
-
-The `sat_print` command is similar except that it looks for a *single*
-value for which the `Term` evaluates to `True` and prints out that
-value, returning nothing.
-
-A similar command to `prove_print`, `prove_core`, can produce a `Theorem`
-from a string containing a SAWCore term.
-
-TODO: listify
-~~~~
-prove_core : ProofScript SatResult -> String -> TopLevel Theorem
-~~~~
+* `prove_core : ProofScript SatResult -> String -> TopLevel Theorem`
+proves and returns a `Theorem` from a string in SAWCore syntax.
 
 ## Automated Tactics
 
@@ -1169,23 +1111,17 @@ During development of a proof, it can be useful to print various
 information about the current goal. The following tactics are useful in
 that context.
 
-TODO: listify
-~~~~
-print_goal : ProofScript ()
+* `print_goal : ProofScript ()` prints the entire goal in SAWCore
+syntax.
 
-print_goal_consts : ProofScript ()
+* `print_goal_consts : ProofScript ()` takes an integer argument, `n`,
+and prints the goal up to depth `n`. Any elided subterms are printed
+with a `...` notation.
 
-print_goal_depth : Int -> ProofScript ()
+* `print_goal_depth : Int -> ProofScript ()` prints a list of the names
+of subterms that are folded in the current goal.
 
-print_goal_size : ProofScript ()
-~~~~
-
-The `print_goal` tactic prints the entire goal in SAWCore syntax. The
-`print_goal_depth` is intended for especially large goals. It takes an
-integer argument, `n`, and prints the goal up to depth `n`. Any elided
-subterms are printed with a `...` notation. The `print_goal_consts`
-tactic prints a list of the names of subterms that are folded in the
-current goal, and `print_goal_size` prints the number of nodes in the
+* `print_goal_size : ProofScript ()` prints the number of nodes in the
 DAG representation of the goal.
 
 ## Rewriting in Proof Scripts
@@ -1210,33 +1146,25 @@ but avoids expanding or simplifying the given names.
 Some useful transformations are not easily specified using equality
 statements, and instead have special tactics.
 
-TODO: listify
-~~~~
-beta_reduce_goal : ProofScript ()
+* `beta_reduce_goal : ProofScript ()` works like `beta_reduce_term` but
+on the current goal. It takes any sub-expression of the form `(\x -> t)
+v` and replaces it with a transformed version of `t` in which all
+instances of `x` are replaced by `v`.
 
-unfolding : [String] -> ProofScript ()
-~~~~
+* `unfolding : [String] -> ProofScript ()` works like `unfold_term` but
+on the current goal.
 
-The `beta_reduce_goal` tactic works like `beta_reduce_term` but on the
-current goal. It takes any sub-expression of the form `(\x -> t) v` and
-replaces it with a transformed version of `t` in which all instances of
-`x` are replaced by `v`.
+Using `unfolding` is mostly valuable for proofs
+based entirely on rewriting, since the default behavior for automated
+provers is to unfold everything before sending a goal to a prover.
+However, with some provers it is possible to indicate that specific
+named subterms should be represented as uninterpreted functions.
 
-The `unfolding` tactic works like `unfold_term` but on the current goal.
-Using `unfolding` is mostly valuable for proofs based entirely on
-rewriting, since the default behavior for automated provers is to unfold
-everything before sending a goal to a prover. However, with some provers
-it is possible to indicate that specific named subterms should be
-represented as uninterpreted functions.
+* `unint_cvc4 : [String] -> ProofScript SatResult`
 
-TODO: listify
-~~~~
-unint_cvc4 : [String] -> ProofScript SatResult
+* `unint_yices : [String] -> ProofScript SatResult`
 
-unint_yices : [String] -> ProofScript SatResult
-
-unint_z3 : [String] -> ProofScript SatResult
-~~~~
+* `unint_z3 : [String] -> ProofScript SatResult`
 
 The list of `String` arguments in these cases indicates the names of the
 subterms to leave folded, and therefore present as uninterpreted
@@ -1253,24 +1181,17 @@ In addition to the built-in automated provers already discussed, SAW
 supports more generic interfaces to other arbitrary theorem provers
 supporting specific interfaces.
 
-TODO: listify
-~~~~
-external_aig_solver : String -> [String] -> ProofScript SatResult
+* `external_aig_solver : String -> [String] -> ProofScript SatResult`
+supports theorem provers that can take input as a single-output AIGER
+file. The first argument is the name of the executable to run. The
+second argument is the list of command-line parameters to pass to that
+executable. Any element of this list equal to `"%f"` will be replaced
+with the name of the temporary AIGER file generated for the proof goal.
+The output from the solver is expected to be in DIMACS solution format.
 
-external_cnf_solver : String -> [String] -> ProofScript SatResult
-~~~~
-
-The `external_aig_solver` function supports theorem provers that can
-take input as a single-output AIGER file. The first argument is the name
-of the executable to run. The second argument is the list of
-command-line parameters to pass to that executable. Any element of this
-list equal to `"%f"` will be replaced with the name of the temporary
-AIGER file generated for the proof goal. The output from the solver is
-expected to be in DIMACS solution format.
-
-The `external_cnf_solver` function works similarly but for SAT solvers
-that take input in DIMACS CNF format and produce output in DIMACS
-solution format.
+* `external_cnf_solver : String -> [String] -> ProofScript SatResult`
+works similarly but for SAT solvers that take input in DIMACS CNF format
+and produce output in DIMACS solution format.
 
 ## Offline Provers
 
@@ -1279,18 +1200,15 @@ until a later time, there are functions to write the current goal to a
 file in various formats, and then assume that the goal is valid through
 the rest of the script.
 
-TODO: listify
-~~~~
-offline_aig : String -> ProofScript SatResult
+* `offline_aig : String -> ProofScript SatResult`
 
-offline_cnf : String -> ProofScript SatResult
+* `offline_cnf : String -> ProofScript SatResult`
 
-offline_extcore : String -> ProofScript SatResult
+* `offline_extcore : String -> ProofScript SatResult`
 
-offline_smtlib2 : String -> ProofScript SatResult
+* `offline_smtlib2 : String -> ProofScript SatResult`
 
-offline_unint_smtlib2 : [String] -> String -> ProofScript SatResult
-~~~~
+* `offline_unint_smtlib2 : [String] -> String -> ProofScript SatResult`
 
 These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
 formats, respectively. The shared representation for SAWCore is
@@ -1303,34 +1221,25 @@ its first argument as uninterpreted functions.
 Some proofs can be completed using unsound placeholders, or using
 techniques that do not require significant computation.
 
-TODO: listify
-~~~~
-assume_unsat : ProofScript SatResult
+* `assume_unsat : ProofScript SatResult` indicates that the current goal
+should be assumed to be unsatisfiable. At the moment,
+`crucible_jvm_verify` and `crucible_llvm_verify` (described below) run
+their proofs in the a satisfiability-checking (negated) context, so
+`assume_unsat` indicates that the property being checked should be
+assumed to be true. This is likely to change in the future.
 
-assume_valid : ProofScript ProofResult
+* `assume_valid : ProofScript ProofResult` indicates that the current
+goal should be assumed to be valid.
 
-quickcheck : Int -> ProofScript SatResult
+* `quickcheck : Int -> ProofScript SatResult` runs the goal on the given
+number of random inputs, and succeeds if the result of evaluation is
+always `True`. This is unsound, but can be helpful during proof
+development, or as a way to provide some evidence for the validity of a
+specification believed to be true but difficult or infeasible to prove.
 
-trivial : ProofScript SatResult
-~~~~
-
-The `assume_unsat` and `assume_valid` tactics indicate that the current
-goal should be considered unsatisfiable or valid, depending on whether
-the proof script is checking satisfiability or validity. At the moment,
-`crucible_java_verify` and `crucible_llvm_verify` (described below) run
-their proofs in the a satisfiability-checking context, so `assume_unsat`
-is currently the appropriate tactic. This is likely to change in the
-future.
-
-The `quickcheck` tactic runs the goal on the given number of random
-inputs, and succeeds if the result of evaluation is always `True`. This
-is unsound, but can be helpful during proof development, or as a way to
-provide some evidence for the validity of a specification believed to be
-true but difficult or infeasible to prove.
-
-The `trivial` tactic states that the current goal should be trivially
-true (i.e., the constant `True` or a function that immediately returns
-`True`). It fails if that is not the case.
+* `trivial : ProofScript SatResult` states that the current goal should
+be trivially true (i.e., the constant `True` or a function that
+immediately returns `True`). It fails if that is not the case.
 
 ## Multiple Goals
 
@@ -1373,26 +1282,18 @@ In the case of `ProofResult`, a statement may be valid or there may be a
 counter-example. In the case of `SatResult`, there may be a satisfying
 assignment or the statement may be unsatisfiable.
 
-TODO: listify
-~~~~
-prove : ProofScript SatResult -> Term -> TopLevel ProofResult
+* `prove : ProofScript SatResult -> Term -> TopLevel ProofResult`
 
-sat : ProofScript SatResult -> Term -> TopLevel SatResult
-~~~~
+* `sat : ProofScript SatResult -> Term -> TopLevel SatResult`
 
 To operate on these new types, SAWScript includes a pair of functions:
 
-TODO: listify
-~~~~
-caseProofResult : {b} ProofResult -> b -> (Term -> b) -> b
+* `caseProofResult : {b} ProofResult -> b -> (Term -> b) -> b` takes a
+`ProofResult`, a value to return in the case that the statement is
+valid, and a function to run on the counter-example, if there is one.
 
-caseSatResult : {b} SatResult -> b -> (Term -> b) -> b
-~~~~
-
-The `caseProofResult` function takes a `ProofResult`, a value to return
-in the case that the statement is valid, and a function to run on the
-counter-example, if there is one. The `caseSatResult` function has the
-same shape: it returns its first argument if the result represents an
+* `caseSatResult : {b} SatResult -> b -> (Term -> b) -> b` has the same
+shape: it returns its first argument if the result represents an
 unsatisfiable statement, or its second argument applied to a satisfying
 assignment if it finds one.
 
@@ -1410,27 +1311,21 @@ particularly equivalence checking on AIGs.
 To take advantage of this capability, a handful of built-in commands can
 operate on AIGs.
 
-TODO: listify
-~~~~
-bitblast : Term -> TopLevel AIG
+* `bitblast : Term -> TopLevel AIG` represents a `Term` as an `AIG` by
+"blasting" all of its primitive operations (things like bit-vector
+addition) down to the level of individual bits.
 
-cec : AIG -> AIG -> TopLevel ProofResult
+* `cec : AIG -> AIG -> TopLevel ProofResult` compares two `AIG` values,
+returning a `ProofResult` representing whether the two are equivalent.
 
-load_aig : String -> TopLevel AIG
+* `load_aig : String -> TopLevel AIG` loads an `AIG` from an external
+AIGER file.
 
-save_aig : String -> AIG -> TopLevel ()
+* `save_aig : String -> AIG -> TopLevel ()` saves an `AIG` to an
+external AIGER file.
 
-save_aig_as_cnf : String -> AIG -> TopLevel ()
-~~~~
-
-The `bitblast` command represents a `Term` as an `AIG` by "blasting" all
-of its primitive operations (things like bit-vector addition) down to
-the level of individual bits. The `cec` command, for Combinational
-Equivalence Check, will compare two AIGs, returning a `ProofResult`
-representing whether the two are equivalent. The `load_aig` and
-`save_aig` commands work with external representations of AIG data
-structures in the AIGER format. Finally, `save_aig_as_cnf` will write an
-AIG out in CNF format for input into a standard SAT solver.
+* `save_aig_as_cnf : String -> AIG -> TopLevel ()` writes an `AIG` out
+in CNF format for input into a standard SAT solver.
 
 # Symbolic Execution
 
@@ -1599,12 +1494,17 @@ The first step in analyzing any code is to load it into the system.
 To load LLVM code, simply provide the location of a valid bitcode file
 to the `llvm_load_module` function.
 
-~~~~
-llvm_load_module : String -> TopLevel LLVMModule
-~~~~
+* `llvm_load_module : String -> TopLevel LLVMModule`
 
 The resulting `LLVMModule` can be passed into the various functions
 described below to perform analysis of specific LLVM functions.
+
+The LLVM bitcode parser should generally work with LLVM versions between
+3.5 and 7.0, though it may be incomplete for some versions. Debug
+metadata has changed somewhat throughout that version range, so is the
+most likely case of incompleteness. We aim to support every version
+after 3.5, however, so report any parsing failures as [on
+GitHub](https://github.com/GaloisInc/saw-script/issues).
 
 Loading Java code is slightly more complex, because of the more
 structured nature of Java packages. First, when running `saw`, two flags
@@ -1623,14 +1523,15 @@ file.
 Once the class path is configured, you can pass the name of a class to
 the `java_load_class` function.
 
-~~~~
-java_load_class : String -> TopLevel JavaClass
-~~~~
+* `java_load_class : String -> TopLevel JavaClass`
 
 The resulting `JavaClass` can be passed into the various functions
 described below to perform analysis of specific Java methods.
 
-TODO: version info
+Java class files from any JDK newer than version 6 should work. However,
+JDK version 9 and newer do not contain a JAR file containing the
+standard libraries, and therefore do not currently work with SAW. We are
+investigating the best way to resolve this issue.
 
 # Direct Extraction
 
@@ -1643,22 +1544,16 @@ In cases like this, a direct translation is possible, given only an
 identification of which code to execute. Two functions exist to handle
 such simple code. The first, for LLVM is the more stable of the two:
 
-~~~~
-crucible_llvm_extract : LLVMModule -> String -> TopLevel Term
-~~~~
+* `crucible_llvm_extract : LLVMModule -> String -> TopLevel Term`
 
 A similar function exists for Java, but is more experimental.
 
-~~~~
-crucible_java_extract : JavaClass -> String -> TopLevel Term
-~~~~
+* `crucible_java_extract : JavaClass -> String -> TopLevel Term`
 
 Because of its lack of maturity, it (and later Java-related commands)
 must be enabled by running the `enable_experimental` command beforehand.
 
-~~~~
-enable_experimental : TopLevel ()
-~~~~
+* `enable_experimental : TopLevel ()`
 
 The structure of these two extraction functions is essentially
 identical. The first argument describes where to look for code (in
@@ -1685,16 +1580,11 @@ more complex code, however, it can be necessary (or more natural) to
 specifically introduce fresh variables and indicate what portions of the
 program state they correspond to.
 
-The function `fresh_symbolic` is responsible for creating new variables
-in this context.
-
-~~~~
-fresh_symbolic : String -> Type -> TopLevel Term
-~~~~
-
-The first argument is a name used for pretty-printing of terms and
-counter-examples. In many cases it makes sense for this to be the same
-as the name used within SAWScript, as in the following:
+* `fresh_symbolic : String -> Type -> TopLevel Term` is responsible for
+creating new variables in this context. The first argument is a name
+used for pretty-printing of terms and counter-examples. In many cases it
+makes sense for this to be the same as the name used within SAWScript,
+as in the following:
 
 ~~~~
 x <- fresh_symbolic "x" ty;
@@ -1719,20 +1609,11 @@ variables that are *bound* by an enclosing lambda expression. Given a
 `Term` with free symbolic variables, we can construct a lambda term that
 binds them in several ways.
 
-TODO: listify
-~~~~
-abstract_symbolic : Term -> Term
-
-lambda : Term -> Term -> Term
-
-lambdas : [Term] -> Term -> Term
-~~~~
-
-The `abstract_symbolic` function is the simplest, but gives you the
-least control. It finds all symbolic variables in the `Term` and
-constructs a lambda expression binding each one, in some order. The
-result is a function of some number of arguments, one for each symbolic
-variable.
+* `abstract_symbolic : Term -> Term` finds all symbolic variables in the
+`Term` and constructs a lambda expression binding each one, in some
+order. The result is a function of some number of arguments, one for
+each symbolic variable. It is the simplest but least flexible way to
+bind symbolic variables.
 
 ~~~~
 sawscript> x <- fresh_symbolic "x" {| [8] |}
@@ -1757,10 +1638,11 @@ In some cases (such as when a proof is the immediate next step, and it's
 expected to succeed) the order isn't important. In others, it's nice to
 have more control over the order.
 
-The building block for controlled binding is `lambda`. It takes two
-terms: the one to transform, and the portion of the term to abstract
-over. Generally, the first `Term` is one obtained from `fresh_symbolic`
-and the second is a `Term` that would be passed to `abstract_symbolic`.
+* `lambda : Term -> Term -> Term` is the building block for controlled
+binding. It takes two terms: the one to transform, and the portion of
+the term to abstract over. Generally, the first `Term` is one obtained
+from `fresh_symbolic` and the second is a `Term` that would be passed to
+`abstract_symbolic`.
 
 ~~~~
 sawscript> let f = lambda x t
@@ -1771,9 +1653,9 @@ let { x@1 = Prelude.Vec 8 Prelude.Bool
       Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool (Cryptol.TCNum 8)) x x
 ~~~~
 
-For `Term`s with more than one symbolic variable, `lambdas` allows you
-to list the order in which they should be bound. Consider, for example,
-a `Term` which adds two symbolic variables:
+* `lambdas : [Term] -> Term -> Term` allows you to list the order in which
+symbolic variables should be bound. Consider, for example, a `Term`
+which adds two symbolic variables:
 
 ~~~~
 sawscript> x1 <- fresh_symbolic "x1" {| [8] |}
@@ -1812,8 +1694,6 @@ let { x@1 = Prelude.Vec 8 Prelude.Bool
         Cryptol.ecPlus x@1 (Cryptol.PArithSeqBool (Cryptol.TCNum 8)) x1
           x2
 ~~~~
-
-TODO: use for a proof?
 
 # Specification-Based Verification
 
@@ -1896,15 +1776,12 @@ In any case where you want to prove a property of a function for an
 entire class of inputs (perhaps all inputs) rather than concrete values,
 the initial values of at least some elements of the program state must
 contain fresh variables. These are created in a specification with the
-`crucible_fresh_var` (or `jvm_fresh_var`) command rather than
+`crucible_fresh_var` and `jvm_fresh_var` commands rather than
 `fresh_symbolic`.
 
-TODO: listify
-~~~~
-crucible_fresh_var : String -> LLVMType -> CrucibleSetup Term
+* `crucible_fresh_var : String -> LLVMType -> CrucibleSetup Term`
 
-jvm_fresh_var : String -> JavaType -> JVMSetup Term
-~~~~
+* `jvm_fresh_var : String -> JavaType -> JVMSetup Term`
 
 The first parameter to both functions is a name, used only for
 presentation. It's possible (though not recommended) to create multiple
@@ -1915,30 +1792,24 @@ commands.
 
 LLVM types are built with this set of functions:
 
-TODO: listify
-~~~~
-llvm_int : Int -> LLVMType
-llvm_array : Int -> LLVMType -> LLVMType
-llvm_struct : String -> LLVMType
-llvm_float : LLVMType
-llvm_double : LLVMType
-~~~~
+* `llvm_int : Int -> LLVMType`
+* `llvm_array : Int -> LLVMType -> LLVMType`
+* `llvm_struct : String -> LLVMType`
+* `llvm_float : LLVMType`
+* `llvm_double : LLVMType`
 
 Java types are built up using the following functions:
 
-TODO: listify
-~~~~
-java_bool : JavaType
-java_byte : JavaType
-java_char : JavaType
-java_short : JavaType
-java_int : JavaType
-java_long : JavaType
-java_float : JavaType
-java_double : JavaType
-java_class : String -> JavaType
-java_array : Int -> JavaType -> JavaType
-~~~~
+* `java_bool : JavaType`
+* `java_byte : JavaType`
+* `java_char : JavaType`
+* `java_short : JavaType`
+* `java_int : JavaType`
+* `java_long : JavaType`
+* `java_float : JavaType`
+* `java_double : JavaType`
+* `java_class : String -> JavaType`
+* `java_array : Int -> JavaType -> JavaType`
 
 Most of these types are straightforward mappings to the standard LLVM
 and Java types. The one key difference is that arrays must have a fixed,
@@ -1950,10 +1821,7 @@ parameter indicating the variable's bit width.
 LLVM types can also be specified in LLVM syntax directly by using the
 `llvm_type` function.
 
-TODO: listify
-~~~~
-llvm_type : String -> LLVMType
-~~~~
+* `llvm_type : String -> LLVMType`
 
 For example, `llvm_type "i32"` yields the same result as `llvm_int 32`.
 
@@ -1976,13 +1844,8 @@ these (both structures and arrays).
 The `crucible_term` and `jvm_term` functions create a `SetupValue` or
 `JVMValue` from a `Term`:
 
-TODO: listify
-~~~~
-crucible_term : Term -> SetupValue
-jvm_term : Term -> JVMValue
-~~~~
-
-TODO: what types does this work with?
+* `crucible_term : Term -> SetupValue`
+* `jvm_term : Term -> JVMValue`
 
 ## Executing
 
@@ -1990,20 +1853,15 @@ Once the initial state has been configured, the `crucible_execute_func`
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.
 
-~~~~
-crucible_execute_func : [SetupValue] -> CrucibleSetup ()
-~~~~
+* `crucible_execute_func : [SetupValue] -> CrucibleSetup ()`
 
 ## Return Values
 
 To specify the value that should be returned by the function being
 verified use the `crucible_return` or `jvm_return` command.
 
-TODO: listify
-~~~~
-crucible_return : SetupValue -> CrucibleSetup ()
-jvm_return : JVMValue -> JVMSetup ()
-~~~~
+* `crucible_return : SetupValue -> CrucibleSetup ()`
+* `jvm_return : JVMValue -> JVMSetup ()`
 
 ## A First Simple Example
 
@@ -2101,10 +1959,7 @@ point to allocated memory before they are called. The `crucible_alloc`
 command allows you to specify that a function expects a particular
 pointer to refer to an allocated region appropriate for a specific type.
 
-TODO: listify
-~~~~
-crucible_alloc : LLVMType -> CrucibleSetup SetupValue
-~~~~
+* `crucible_alloc : LLVMType -> CrucibleSetup SetupValue`
 
 This command returns a `SetupValue` consisting of a pointer to the
 allocated space, which can be used wherever a pointer-valued
@@ -2117,40 +1972,27 @@ specifies that the function itself performs an allocation.
 When using the experimental Java implementation, separate functions
 exist for specifying that arrays or objects are allocated:
 
-TODO: listify
-~~~~
-jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue
-jvm_alloc_object : String -> JVMSetup JVMValue
-~~~~
+* `jvm_alloc_array : Int -> JavaType -> JVMSetup JVMValue` specifies an
+array of the given concrete size, with elements of the given type.
 
-The former specifies an array of the given concrete size, with elements
-of the given type. The latter specifies an object of the given class
-name.
+* `jvm_alloc_object : String -> JVMSetup JVMValue` specifies an object
+of the given class name.
 
 In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
 
-TODO: listify
-~~~~
-crucible_fresh_pointer : LLVMType -> CrucibleSetup SetupValue
-~~~~
+* `crucible_fresh_pointer : LLVMType -> CrucibleSetup SetupValue`
 
 The NULL pointer is called `crucible_null` in LLVM and `jvm_null` in
 JVM:
 
-TODO: listify
-~~~~
-crucible_null : SetupValue
-jvm_null : JVMValue
-~~~~
+* `crucible_null : SetupValue`
+* `jvm_null : JVMValue`
 
 One final, slightly more obscure command is the following:
 
-TODO: listify
-~~~~
-crucible_alloc_readonly : LLVMType -> CrucibleSetup SetupValue
-~~~~
+* `crucible_alloc_readonly : LLVMType -> CrucibleSetup SetupValue`
 
 This works like `crucible_alloc` except that writes to the space
 allocated are forbidden. This can be useful for specifying that a
@@ -2170,14 +2012,11 @@ appropriate. In most cases, however, it's more useful to state that a
 pointer points to some specific (usually symbolic) value, which you can
 do with the `crucible_points_to` command.
 
-~~~~
-crucible_points_to : SetupValue -> SetupValue -> CrucibleSetup ()
-~~~~
-
-This command takes two `SetupValue` arguments, the first of which must
-be a pointer, and states that the memory specified by that pointer
-should contain the value given in the second argument (which may be any
-type of `SetupValue`).
+* `crucible_points_to : SetupValue -> SetupValue -> CrucibleSetup ()`
+takes two `SetupValue` arguments, the first of which must be a pointer,
+and states that the memory specified by that pointer should contain the
+value given in the second argument (which may be any type of
+`SetupValue`).
 
 When used in the final state, `crucible_points_to` specifies that the
 given pointer *should* point to the given value when the function
@@ -2187,37 +2026,25 @@ Occasionally, because C programs frequently reinterpret memory of one
 type as another through casts, it can be useful to specify that a
 pointer points to a value that does not agree with its static type.
 
-~~~~
-crucible_points_to_untyped :
-  SetupValue -> SetupValue -> CrucibleSetup ()
-~~~~
-
-This function works like `crucible_points_to` but omits type checking.
-Rather than omitting type checking across the board, we introducted this
-additional function to make it clear when a type reinterpretation is
-intentional.
+* `crucible_points_to_untyped : SetupValue -> SetupValue ->
+CrucibleSetup ()` works like `crucible_points_to` but omits type
+checking. Rather than omitting type checking across the board, we
+introducted this additional function to make it clear when a type
+reinterpretation is intentional.
 
 ## Working with Compound Types
 
 The commands mentioned so far give us no way to specify the values of
 compound types (arrays or `struct`s). Compound values can be dealt with
-either piecewise or in their entirety. To access them piecewise, the
-`crucible_elem` function yields a pointer to an internal element of a
-compound value.
+either piecewise or in their entirety.
 
-~~~~
-crucible_elem : SetupValue -> Int -> SetupValue
-~~~~
+* `crucible_elem : SetupValue -> Int -> SetupValue` yields a pointer to
+an internal element of a compound value. For arrays, the `Int` parameter
+is the array index. For `struct` values, it is the field index.
 
-For arrays, the `Int` parameter is the array index. For `struct` values,
-it is the field index. For `struct` values, it can be more convenient to
-use field names. If debugging information is available in the bitcode
-file, the `crucible_field` function yields a pointer to a particular
-named field:
-
-~~~~
-crucible_field : SetupValue -> String -> SetupValue
-~~~~
+* `crucible_field : SetupValue -> String -> SetupValue` yields a pointer
+to a particular named `struct` field, if debugging information is
+available in the bitcode
 
 Either of these functions can be used with `crucible_points_to` to
 specify the value of a particular array element or `struct` field.
@@ -2225,12 +2052,8 @@ Sometimes, however, it is more convenient to specify all array elements
 or field values at onces. The `crucible_array` and `crucible_struct`
 functions construct compound values from lists of element values.
 
-TODO: listify
-~~~~
-crucible_array : [SetupValue] -> SetupValue
-crucible_struct : [SetupValue] -> SetupValue
-~~~~
-
+* `crucible_array : [SetupValue] -> SetupValue`
+* `crucible_struct : [SetupValue] -> SetupValue`
 
 To specify an array or struct in which each element or field is
 symbolic, it would be possible, but tedious, to use a large combination
@@ -2238,9 +2061,7 @@ of `crucible_fresh_var` and `crucible_elem` or `crucible_field`
 commands. However, the following function can simplify the common case
 where you want every element or field to have a fresh value.
 
-~~~~
-crucible_fresh_expanded_val : LLVMType -> CrucibleSetup SetupValue
-~~~~
+* `crucible_fresh_expanded_val : LLVMType -> CrucibleSetup SetupValue`
 
 The `crucible_struct` function normally creates a `struct` whose layout
 obeys the alignment rules of the platform specified in the LLVM file
@@ -2248,33 +2069,29 @@ being analyzed. Structs in LLVM can explicitly be "packed", however, so
 that every field immediately follows the previous in memory. The
 following command will create values of such types:
 
-~~~~
-crucible_packed_struct : [SetupValue] -> SetupValue
-~~~~
+* `crucible_packed_struct : [SetupValue] -> SetupValue`
 
 In the experimental Java verification implementation, the following
 functions can be used to state the equivalent of a combination of
 `crucible_points_to` and either `crucible_elem` or `crucible_field`.
 
-TODO: listify
-~~~~
-jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()
-jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()
-~~~~
+* `jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()` specifies
+the value of an array element.
+
+* `jvm_field_is : JVMValue -> String -> JVMValue -> JVMSetup ()`
+specifies the name of an object field.
 
 ## Global variables
 
 Pointers to global variables or functions can be accessed with
 `crucible_global`:
 
-~~~~
-crucible_global : String -> SetupValue
-~~~~
+* `crucible_global : String -> SetupValue`
 
 Like the pointers returned by `crucible_alloc`, however, these aren't
-initialized at the beginning of symbolic simulation. This is intentional
--- setting global variables may be unsound in the presence of
-[compositional verification](#compositional-verification).
+initialized at the beginning of symbolic -- setting global variables may
+be unsound in the presence of [compositional
+verification](#compositional-verification).
 
 To understand the issues surrounding global variables, consider the following C
 code:
@@ -2319,12 +2136,10 @@ truly be compositional. For instance, it's not the case that `f(g(z)) ==
 z + 3` for all `z`, because both `f` and `g` modify the global variable
 `x` in a way that crosses function boundaries.
 
-To talk about the static initializer of a global variable, we can use
-the following function:
+To deal with this, we can use the following function:
 
-~~~~
-crucible_global_initializer : String -> SetupValue
-~~~~
+* `crucible_global_initializer : String -> SetupValue` returns the value
+  of the constant global initializer for the named global variable.
 
 Given this function, the specifications for `f` and `g` can make this
 reliance on the initial value of `x` explicit:
@@ -2361,29 +2176,17 @@ rise to specific final conditions. For these cases, you can specify an
 arbitrary predicate as a precondition or post-condition, using any
 values in scope at the time.
 
-TODO: listify
-~~~~
-crucible_precond : Term -> CrucibleSetup ()
-crucible_postcond : Term -> CrucibleSetup ()
-~~~~
-
-Similar functions exist in the experimental JVM implementation:
-
-TODO: listify
-~~~~
-jvm_precond : Term -> JVMSetup ()
-jvm_postcond : Term -> JVMSetup ()
-~~~~
+* `crucible_precond : Term -> CrucibleSetup ()`
+* `crucible_postcond : Term -> CrucibleSetup ()`
+* `jvm_precond : Term -> JVMSetup ()`
+* `jvm_postcond : Term -> JVMSetup ()`
 
 These two commands take `Term` arguments, and therefore cannot describe
 the values of pointers. The `crucible_equal` command states that two
 `SetupValue`s should be equal, and can be used in either the initial or
 the final state.
 
-TODO: listify
-~~~~
-crucible_equal : SetupValue -> SetupValue -> CrucibleSetup ()
-~~~~
+* `crucible_equal : SetupValue -> SetupValue -> CrucibleSetup ()`
 
 The use of `crucible_equal` can also sometimes lead to more efficient
 symbolic execution when the predicate of interest is an equality.
@@ -2540,18 +2343,13 @@ thought of as additional global state that is visible only to the
 verifier. Ghost state with a given name can be declared at the top level
 with the following function:
 
-TODO: listify
-~~~~
-crucible_declare_ghost_state : String -> TopLevel Ghost
-~~~~
+* `crucible_declare_ghost_state : String -> TopLevel Ghost`
 
 Ghost state variables do not initially have any particluar type, and can
 store data of any type. Given an existing ghost variable the following
 function can be used to specify its value:
 
-~~~~
-crucible_ghost_value : Ghost -> Term -> CrucibleSetup ()
-~~~~
+* `crucible_ghost_value : Ghost -> Term -> CrucibleSetup ()`
 
 Currently, this function can only be used for LLVM verification, though
 that will likely be generalized in the future. It can be used in either
