@@ -51,7 +51,6 @@ import qualified Data.AIG as AIG
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Utils as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
-import qualified SAWScript.LLVMMethodSpecIR as LIR
 import qualified SAWScript.CrucibleLLVM as Crucible
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import qualified SAWScript.JVM.CrucibleMethodSpecIR as JCIR
@@ -108,9 +107,7 @@ data Value
   | VSimpset Simpset
   | VTheorem Theorem
   | VJavaSetup (JavaSetup Value)
-  | VLLVMSetup (LLVMSetup Value)
   | VJavaMethodSpec JIR.JavaMethodSpecIR
-  | VLLVMMethodSpec LIR.LLVMMethodSpecIR
   -----
   | VCrucibleSetup !(CrucibleSetupM Value)
   | VCrucibleMethodSpec CIR.CrucibleMethodSpecIR
@@ -291,11 +288,9 @@ showsPrecValue opts p v =
       showString "Theorem " .
       showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
-    VLLVMSetup {} -> showString "<<LLVM Setup>>"
     VCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VCrucibleSetupValue x -> shows x
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
-    VLLVMMethodSpec {} -> showString "<<LLVM MethodSpec>>"
     VCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
@@ -486,19 +481,6 @@ data JavaSetupState
 
 type JavaSetup a = StateT JavaSetupState TopLevel a
 
-data LLVMSetupState
-  = LLVMSetupState {
-      lsSpec          :: LIR.LLVMMethodSpecIR
-    , lsContext       :: SharedContext
-    , lsTactic        :: ValidationPlan
-    , lsSimulate      :: Bool
-    , lsSatBranches   :: Bool
-    , lsSimplifyAddrs :: Bool
-    , lsModule        :: LLVMModule
-    }
-
-type LLVMSetup a = StateT LLVMSetupState TopLevel a
-
 type CrucibleSetup arch a =
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
 
@@ -620,18 +602,6 @@ instance FromValue a => FromValue (StateT JavaSetupState TopLevel a) where
       m2 <- lift $ applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue JavaSetup"
-
-instance IsValue a => IsValue (StateT LLVMSetupState TopLevel a) where
-    toValue m = VLLVMSetup (fmap toValue m)
-
-instance FromValue a => FromValue (StateT LLVMSetupState TopLevel a) where
-    fromValue (VLLVMSetup m) = fmap fromValue m
-    fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind m1 v2) = do
-      v1 <- fromValue m1
-      m2 <- lift $ applyValue v2 v1
-      fromValue m2
-    fromValue _ = error "fromValue LLVMSetup"
 
 ---------------------------------------------------------------------------------
 instance IsValue a => IsValue (CrucibleSetupM a) where
@@ -772,13 +742,6 @@ instance FromValue JIR.JavaMethodSpecIR where
     fromValue (VJavaMethodSpec ms) = ms
     fromValue _ = error "fromValue JavaMethodSpec"
 
-instance IsValue LIR.LLVMMethodSpecIR where
-    toValue ms = VLLVMMethodSpec ms
-
-instance FromValue LIR.LLVMMethodSpecIR where
-    fromValue (VLLVMMethodSpec ms) = ms
-    fromValue _ = error "fromValue LLVMMethodSpec"
-
 instance IsValue JavaType where
     toValue t = VJavaType t
 
@@ -853,7 +816,6 @@ addTrace str val =
     VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
     VJavaSetup     m -> VJavaSetup     (addTrace str `fmap` addTraceStateT str m)
-    VLLVMSetup     m -> VLLVMSetup     (addTrace str `fmap` addTraceStateT str m)
     VCrucibleSetup (CrucibleSetupM m) -> VCrucibleSetup (CrucibleSetupM (addTrace str `fmap` addTraceStateT str m))
     VBind v1 v2      -> VBind          (addTrace str v1) (addTrace str v2)
     _                -> val

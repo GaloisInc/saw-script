@@ -399,20 +399,16 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                   [SAWScript.StmtBind Unknown (SAWScript.PVar boundName Nothing) Nothing
                      (SAWScript.Application
                         (SAWScript.Application
-                           (SAWScript.Application
-                              (SAWScript.Var . locate $ "llvm_extract")
-                              (SAWScript.Var loadedModule))
-                           (SAWScript.String function))
-                        (SAWScript.Var . locate $ "llvm_pure"))]
+                           (SAWScript.Var . locate $ "crucible_llvm_extract")
+                           (SAWScript.Var loadedModule))
+                        (SAWScript.String function))]
                JVM ->
                   [SAWScript.StmtBind Unknown (SAWScript.PVar boundName Nothing) Nothing
                      (SAWScript.Application
                         (SAWScript.Application
-                           (SAWScript.Application
-                              (SAWScript.Var . locate $ "java_extract")
-                              (SAWScript.Var loadedModule))
-                           (SAWScript.String function))
-                        (SAWScript.Var . locate $ "java_pure"))]
+                           (SAWScript.Var . locate $ "crucible_java_extract")
+                           (SAWScript.Var loadedModule))
+                        (SAWScript.String function))]
 
       equivalenceTheorem :: (String -> String) -> SAWScript.LName -> SAWScript.LName -> Assignments -> ScriptWriter s tp (SAWScript.LName)
       equivalenceTheorem prefix leftFunction rightFunction assigns = do

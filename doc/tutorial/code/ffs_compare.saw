@@ -1,12 +1,11 @@
-enable_deprecated;
 import "ffs.cry";
 j <- java_load_class "FFS";
-java_ffs_ref <- java_extract j "ffs_ref" java_pure;
-java_ffs_imp <- java_extract j "ffs_imp" java_pure;
+java_ffs_ref <- crucible_java_extract j "ffs_ref";
+java_ffs_imp <- crucible_java_extract j "ffs_imp";
 
 l <- llvm_load_module "ffs.bc";
-c_ffs_ref <- llvm_extract l "ffs_ref" llvm_pure;
-c_ffs_imp <- llvm_extract l "ffs_imp" llvm_pure;
+c_ffs_ref <- crucible_llvm_extract l "ffs_ref";
+c_ffs_imp <- crucible_llvm_extract l "ffs_imp";
 
 print "java ref <-> java imp";
 let thm1 = {{ \x -> java_ffs_ref x == java_ffs_imp x }};

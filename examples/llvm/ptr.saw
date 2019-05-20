@@ -1,33 +1,39 @@
-enable_deprecated;
-let add_setup : LLVMSetup () = do {
-    llvm_ptr "x" (llvm_int 32);
-    llvm_ptr "y" (llvm_int 32);
-    x <- llvm_var "*x" (llvm_int 32);
-    y <- llvm_var "*y" (llvm_int 32);
-    llvm_return {{ x + y : [32] }};
-    llvm_verify_tactic abc;
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
 };
 
-let clear_setup : LLVMSetup () = do {
-    llvm_ptr "a" (llvm_array 10 (llvm_int 32));
-    a <- llvm_var "*a" (llvm_array 10 (llvm_int 32));
-    llvm_ensure_eq "*a" {{ zero : [10][32] }};
-    llvm_verify_tactic abc;
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
 };
 
-let copy_setup : LLVMSetup () = do {
-    llvm_ptr "a" (llvm_array 10 (llvm_int 32));
-    llvm_ptr "b" (llvm_array 10 (llvm_int 32));
-    a <- llvm_var "*a" (llvm_array 10 (llvm_int 32));
-    b <- llvm_var "*b" (llvm_array 10 (llvm_int 32));
-    llvm_ensure_eq "*a" {{ b }};
-    llvm_verify_tactic abc;
+let add_setup = do {
+    (x, xp) <- ptr_to_fresh "x" (llvm_int 32);
+    (y, yp) <- ptr_to_fresh "y" (llvm_int 32);
+    crucible_execute_func [xp, yp];
+    crucible_return (crucible_term {{ x + y : [32] }});
+};
+
+let clear_setup = do {
+    (a, ap) <- ptr_to_fresh "a" (llvm_array 10 (llvm_int 32));
+    crucible_execute_func [ap];
+    crucible_points_to ap (crucible_term {{ zero : [10][32] }}); 
+};
+
+let copy_setup = do {
+    (a, ap) <- ptr_to_fresh "a" (llvm_array 10 (llvm_int 32));
+    (b, bp) <- ptr_to_fresh "b" (llvm_array 10 (llvm_int 32));
+    crucible_execute_func [ap, bp];
+    crucible_points_to ap (crucible_term b);
 };
 
 let main : TopLevel () = do {
     m <- llvm_load_module "ptr.bc";
-    add_ms <- llvm_verify m "add" [] add_setup;
-    clear_ms <- llvm_verify m "clear" [] clear_setup;
-    copy_ms <- llvm_verify m "copy" [] copy_setup;
+    add_ms <- crucible_llvm_verify m "add" [] false add_setup abc;
+    clear_ms <- crucible_llvm_verify m "clear" [] false clear_setup abc;
+    copy_ms <- crucible_llvm_verify m "copy" [] false copy_setup abc;
     print "Done.";
 };

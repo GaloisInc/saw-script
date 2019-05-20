@@ -1,20 +1,31 @@
-enable_deprecated;
 c <- llvm_load_module "side.bc";
 
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
+};
+
 let side_spec = do {
-  a <- llvm_ptr "a" (llvm_int 32);
-  llvm_return {{ a }};
-  llvm_ensure_eq "*a" {{ 0:[32] }};
-  llvm_verify_tactic abc;
+  (a, ap) <- ptr_to_fresh "a" (llvm_int 32);
+  crucible_execute_func [ap];
+  crucible_points_to ap (crucible_term {{ 0:[32] }});
+  crucible_return (crucible_term {{ a }});
   };
 
-side_proof <- llvm_verify c "side_effect" [] side_spec;
+side_proof <- crucible_llvm_verify c "side_effect" [] false side_spec abc;
 
 let foo_spec = do {
-  x <- llvm_var "x" (llvm_int 32);
-  llvm_return {{ x }};
-  llvm_verify_tactic abc;
+  x <- crucible_fresh_var "x" (llvm_int 32);
+  crucible_execute_func [crucible_term x];
+  crucible_return (crucible_term {{ x }});
   };
 
-bad <- llvm_verify c "foo" [side_proof] foo_spec;
+bad <- crucible_llvm_verify c "foo" [side_proof] false foo_spec abc;
 print "Done.";
