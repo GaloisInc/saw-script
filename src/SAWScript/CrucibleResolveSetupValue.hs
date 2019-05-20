@@ -241,8 +241,18 @@ resolveSetupVal cc env tyenv nameEnv val =
       return $ Crucible.LLVMValArray tp vals
     SetupField v n ->
       case resolveSetupFieldIndex cc tyenv nameEnv v n of
-        Nothing -> fail ("Unable to resolve field name: " ++ show n)
         Just i  -> resolveSetupVal cc env tyenv nameEnv (SetupElem v i)
+        Nothing ->
+          -- Show the user what fields were available (if any)
+          let msg = "Unable to resolve field name: " ++ show n
+          in
+            fail $
+              case resolveSetupValueInfo cc tyenv nameEnv v of
+                L.Pointer (L.Structure xs) -> unlines $
+                  [ msg
+                  , "The following field names were found for this struct:"
+                  ] ++ map ("- "++) [n' | (n', _, _) <- xs]
+                _ -> unlines [msg, "No field names were found for this struct"]
     SetupElem v i ->
       do memTy <- typeOfSetupValue cc tyenv nameEnv v
          let msg = "resolveSetupVal: crucible_elem requires pointer to struct or array"
