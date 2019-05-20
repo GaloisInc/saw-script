@@ -914,9 +914,9 @@ executeAllocation ::
 executeAllocation opts cc (var, (loc, alloc)) =
   do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show alloc]
      let jc = cc^.ccJVMContext
+     let halloc = cc^.ccHandleAllocator
      sym <- getSymInterface
      globals <- OM (use overrideGlobals)
-     halloc <- error "halloc"
      (ptr, globals') <-
        case alloc of
          AllocObject cname -> liftIO $ doAllocateObject sym halloc jc cname globals
