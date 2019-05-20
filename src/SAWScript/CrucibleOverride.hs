@@ -154,12 +154,18 @@ data OverrideFailureReason
   | BadPointerLoad PointsTo PP.Doc
     -- ^ @loadRaw@ failed due to type error
   | StructuralMismatch
-      PP.Doc
-      SetupValue
+      (Either LLVMVal PP.Doc)
+      (Either SetupValue PP.Doc)
       (Maybe Crucible.MemType)
       Crucible.MemType
-    -- ^ pretty-printed simulated value (LLVMVal), specified value, type
-    -- of specified value, specified type
+    -- ^
+    -- * raw or pretty-printed simulated value
+    -- * raw or pretty-printed specified value
+    -- * type of specified value
+    -- * specified type
+    --
+    -- When available, supply the @Right@ values with the @Pretty@ instance
+    -- for @LLVMVal@ and 'ppSetupValueWithNames', respectively.
 
 mkStructuralMismatch ::
   (W4.IsExpr (W4.SymExpr sym)) =>
@@ -173,7 +179,11 @@ mkStructuralMismatch cc spec llvmval setupval memTy =
   let tyenv = csAllocations spec
       nameEnv = csTypeNames spec
       maybeTy = typeOfSetupValue cc tyenv nameEnv setupval
-  in StructuralMismatch (PP.pretty llvmval) setupval maybeTy memTy
+      names = fmap (\(L.Ident str) -> PP.text str) nameEnv
+  in StructuralMismatch (Right (PP.pretty llvmval))
+                        (Right (ppSetupValueWithNames names setupval))
+                        maybeTy
+                        memTy
 
 ppOverrideFailureReason :: OverrideFailureReason -> PP.Doc
 ppOverrideFailureReason rsn = case rsn of
@@ -203,13 +213,18 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "appeared in the override's points-to precondition(s):" PP.<$$>
     PP.text "Precondition:" PP.<+> ppPointsTo pointsTo PP.<$$>
     PP.text "Failure reason: " PP.<$$> msg -- this can be long
-  StructuralMismatch ppllvmval setupval setupvalTy ty ->
-    PP.text "could not match the following terms with type:" PP.<$$>
-    PP.vcat (map (PP.indent 2)
-              [ PP.text "Type:" PP.<+> Crucible.ppMemType ty
-              , PP.text "Simulator value:" PP.<+> ppllvmval
-              , PP.text "Specified value:" PP.<+> ppSetupValue setupval
-              ] ++ maybe [] ((:[]) . Crucible.ppMemType) setupvalTy)
+  StructuralMismatch llvmval setupval setupvalTy ty ->
+    PP.text "could not match the following terms with expected type:" PP.<$$>
+    PP.vcat (map (PP.indent 2) $
+              [ PP.text "expected type:" PP.<+> Crucible.ppMemType ty
+              , PP.text "simulator value:" PP.<+>
+                  either (PP.text . show) id llvmval
+              , PP.text "specified value:" PP.<+>
+                  either ppSetupValue id setupval
+              ] ++ let msg memty =
+                         [PP.text "type of specified value:"
+                          PP.<+> Crucible.ppMemType memty]
+                   in maybe [] msg setupvalTy)
 
 
 ppTypedTerm :: TypedTerm -> PP.Doc
@@ -226,19 +241,31 @@ commaList :: [PP.Doc] -> PP.Doc
 commaList []     = PP.empty
 commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
 
+-- | Printing of 'SetupValue', parameterized over printing of 'SetupVar' terms.
+ppSetupValue_ :: (AllocIndex -> PP.Doc) -> SetupValue -> PP.Doc
+ppSetupValue_ ppSetupVar =
+  \case
+    SetupTerm tm   -> ppTypedTerm tm
+    SetupVar i     -> ppSetupVar i
+    SetupNull      -> PP.text "NULL"
+    SetupStruct packed vs
+      | packed     -> PP.angles (PP.braces (commaList (map pp vs)))
+      | otherwise  -> PP.braces (commaList (map pp vs))
+    SetupArray vs  -> PP.brackets (commaList (map pp vs))
+    SetupElem v i  -> PP.parens (pp v) PP.<> PP.text ("." ++ show i)
+    SetupField v f -> PP.parens (pp v) PP.<> PP.text ("." ++ f)
+    SetupGlobal nm -> PP.text ("global(" ++ nm ++ ")")
+    SetupGlobalInitializer nm -> PP.text ("global_initializer(" ++ nm ++ ")")
+  where pp = ppSetupValue_ ppSetupVar
+
 ppSetupValue :: SetupValue -> PP.Doc
-ppSetupValue setupval = case setupval of
-  SetupTerm tm   -> ppTypedTerm tm
-  SetupVar i     -> PP.text ("@" ++ show i)
-  SetupNull      -> PP.text "NULL"
-  SetupStruct packed vs
-    | packed     -> PP.angles (PP.braces (commaList (map ppSetupValue vs)))
-    | otherwise  -> PP.braces (commaList (map ppSetupValue vs))
-  SetupArray vs  -> PP.brackets (commaList (map ppSetupValue vs))
-  SetupElem v i  -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ show i)
-  SetupField v f -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ f)
-  SetupGlobal nm -> PP.text ("global(" ++ nm ++ ")")
-  SetupGlobalInitializer nm -> PP.text ("global_initializer(" ++ nm ++ ")")
+ppSetupValue = ppSetupValue_ (\i -> PP.text ("@" ++ show i))
+
+-- | Like 'ppSetupValue', but replace allocation indices with names when
+--   they are available in the map.
+ppSetupValueWithNames :: Map AllocIndex PP.Doc -> SetupValue -> PP.Doc
+ppSetupValueWithNames allocIndexNames = ppSetupValue_ $ \i ->
+  fromMaybe (PP.text ("@" ++ show i)) (Map.lookup i allocIndexNames)
 
 instance PP.Pretty OverrideFailureReason where
   pretty = ppOverrideFailureReason
