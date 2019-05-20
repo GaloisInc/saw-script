@@ -121,6 +121,7 @@ resolveSetupFieldIndexOrFail ::
   m Int                           {- ^ field index       -}
 resolveSetupFieldIndexOrFail cc env nameEnv v n =
   case resolveSetupFieldIndex cc env nameEnv v n of
+    Just i  -> pure i
     Nothing ->
       let msg = "Unable to resolve field name: " ++ show n
       in
