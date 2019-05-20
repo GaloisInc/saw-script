@@ -17,6 +17,8 @@ module SAWScript.CrucibleResolveSetupValue
 
 import Control.Lens
 import Control.Monad (zipWithM, foldM)
+import qualified Control.Monad.Fail as Fail
+import Control.Monad.Fail (MonadFail)
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
 import Data.IORef
@@ -109,8 +111,30 @@ resolveSetupFieldIndex cc env nameEnv v n =
   where
     lc = cc^.ccTypeCtx
 
+resolveSetupFieldIndexOrFail ::
+  MonadFail m =>
+  CrucibleContext wptr            {- ^ crucible context  -} ->
+  Map AllocIndex (W4.ProgramLoc, Crucible.MemType) {- ^ allocation types  -} ->
+  Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
+  SetupValue                      {- ^ pointer to struct -} ->
+  String                          {- ^ field name        -} ->
+  m Int                           {- ^ field index       -}
+resolveSetupFieldIndexOrFail cc env nameEnv v n =
+  case resolveSetupFieldIndex cc env nameEnv v n of
+    Nothing ->
+      let msg = "Unable to resolve field name: " ++ show n
+      in
+        fail $
+          -- Show the user what fields were available (if any)
+          case resolveSetupValueInfo cc env nameEnv v of
+            L.Pointer (L.Structure xs) -> unlines $
+              [ msg
+              , "The following field names were found for this struct:"
+              ] ++ map ("- "++) [n' | (n', _, _) <- xs]
+            _ -> unlines [msg, "No field names were found for this struct"]
+
 typeOfSetupValue ::
-  Monad m =>
+  MonadFail m =>
   CrucibleContext wptr ->
   Map AllocIndex (W4.ProgramLoc, Crucible.MemType) ->
   Map AllocIndex Crucible.Ident ->
@@ -121,7 +145,7 @@ typeOfSetupValue cc env nameEnv val =
      typeOfSetupValue' cc env nameEnv val
 
 typeOfSetupValue' :: forall m wptr.
-  Monad m =>
+  MonadFail m =>
   CrucibleContext wptr ->
   Map AllocIndex (W4.ProgramLoc, Crucible.MemType) ->
   Map AllocIndex Crucible.Ident ->
@@ -153,10 +177,9 @@ typeOfSetupValue' cc env nameEnv val =
          _memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          -- TODO: check that all memTys are compatible with memTy
          return (Crucible.ArrayType (fromIntegral (length (v:vs))) memTy)
-    SetupField v n ->
-      case resolveSetupFieldIndex cc env nameEnv v n of
-        Nothing -> fail ("Unable to resolve field name: " ++ show n)
-        Just i  -> typeOfSetupValue' cc env nameEnv (SetupElem v i)
+    SetupField v n -> do
+      i <- resolveSetupFieldIndexOrFail cc env nameEnv v n
+      typeOfSetupValue' cc env nameEnv (SetupElem v i)
     SetupElem v i ->
       do memTy <- typeOfSetupValue cc env nameEnv v
          let msg = "typeOfSetupValue: crucible_elem requires pointer to struct or array"
@@ -239,20 +262,9 @@ resolveSetupVal cc env tyenv nameEnv val =
       vals <- V.mapM (resolveSetupVal cc env tyenv nameEnv) (V.fromList vs)
       let tp = typeOfLLVMVal dl (V.head vals)
       return $ Crucible.LLVMValArray tp vals
-    SetupField v n ->
-      case resolveSetupFieldIndex cc tyenv nameEnv v n of
-        Just i  -> resolveSetupVal cc env tyenv nameEnv (SetupElem v i)
-        Nothing ->
-          -- Show the user what fields were available (if any)
-          let msg = "Unable to resolve field name: " ++ show n
-          in
-            fail $
-              case resolveSetupValueInfo cc tyenv nameEnv v of
-                L.Pointer (L.Structure xs) -> unlines $
-                  [ msg
-                  , "The following field names were found for this struct:"
-                  ] ++ map ("- "++) [n' | (n', _, _) <- xs]
-                _ -> unlines [msg, "No field names were found for this struct"]
+    SetupField v n -> do
+      i <- resolveSetupFieldIndexOrFail cc tyenv nameEnv v n
+      resolveSetupVal cc env tyenv nameEnv (SetupElem v i)
     SetupElem v i ->
       do memTy <- typeOfSetupValue cc tyenv nameEnv v
          let msg = "resolveSetupVal: crucible_elem requires pointer to struct or array"
