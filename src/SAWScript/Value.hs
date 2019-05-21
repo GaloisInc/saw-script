@@ -29,6 +29,7 @@ import Data.Semigroup ((<>))
 import Control.Applicative (Applicative)
 #endif
 import Control.Monad.ST
+import Control.Monad.Fail (MonadFail)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -399,7 +400,7 @@ data TopLevelRW =
   }
 
 newtype TopLevel a = TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
-  deriving (Functor, Applicative, Monad, MonadIO)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadFail)
 
 runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
 runTopLevel (TopLevel m) = runStateT . runReaderT m
