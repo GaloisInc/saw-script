@@ -34,7 +34,7 @@ is on your PATH.
 
 ## Manual Installation
 
-To build SAWScript and related utilities (CSS, LSS, JSS) from source:
+To build SAWScript and related utilities from source:
 
   * Ensure that you have the
     [Stack](https://github.com/commercialhaskell/stack) program on your
@@ -121,8 +121,7 @@ downloaded dependencies include:
 
 * `deps/cryptol-verifier/`: [Cryptol Symbolic Simulator (CSS)](https://github.com/GaloisInc/cryptol-verifier)
 * `deps/jvm-verifier/`:     [Java Symbolic Simulator (JSS)](https://github.com/GaloisInc/jvm-verifier)
-* `deps/llvm-verifier/`:    [LLVM Symbolic Simulator (LSS)](https://github.com/GaloisInc/llvm-verifier)
-* `deps/saw-core/`:         [SAWCore intermediate language](https://github.com/GaloisInc/saw-core), used by CSS, JSS, LSS and SAWScript
+* `deps/saw-core/`:         [SAWCore intermediate language](https://github.com/GaloisInc/saw-core), used by CSS, JSS, and SAWScript
 * `deps/cryptol/`:          [Cryptol](https://github.com/GaloisInc/cryptol)
 * `deps/abcBridge/`:        [Haskell bindings for ABC](https://github.com/GaloisInc/abcBridge)
 
