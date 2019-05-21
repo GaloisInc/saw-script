@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -145,7 +146,10 @@ module Verifier.SAW.SharedTerm
   , scTypeOfGlobal
     -- ** Prelude operations
   , scAppend
+  , scJoin
+  , scSplit
   , scGet
+  , scAtWithDefault
   , scAt
   , scNot
   , scAnd
@@ -1187,25 +1191,27 @@ scTupleReduced sc (t : ts) = scPairValueReduced sc t =<< scTupleReduced sc ts
 -- | An optimized variant of 'scVector' that will reduce vectors of
 -- the form @[at x 0, at x 1, at x 2, at x 3]@ to just @x@.
 scVectorReduced :: SharedContext -> Term {- ^ element type -} -> [Term] {- ^ elements -} -> IO Term
-scVectorReduced sc ety xs =
-  case traverse asAt xs >>= asRedex of
-    Just x -> return x
-    Nothing -> scVector sc ety xs
+scVectorReduced sc ety xs
+  | (hd : _) <- xs
+  , Just ((arr_sz :*: arr_tm) :*: 0) <- asAtOrBvAt hd
+  , fromIntegral (length xs) == arr_sz
+  , iall (\i x -> asAtOrBvAt x == Just ((arr_sz :*: arr_tm) :*: fromIntegral i)) xs =
+    return arr_tm
+  | otherwise = scVector sc ety xs
   where
     asAny :: Term -> Maybe ()
     asAny _ = Just ()
 
-    asAt :: Term -> Maybe (Term :*: Natural)
-    asAt = isGlobalDef "Prelude.at" @> asAny @> asAny @> return <@> asNat
+    asAt :: Term -> Maybe ((Natural :*: Term) :*: Natural)
+    asAt = ((isGlobalDef "Prelude.at" @> asNat) <@> (asAny @> return)) <@> asNat
 
-    asRedex :: [Term :*: Natural] -> Maybe Term
-    asRedex [] = Nothing
-    asRedex ((t :*: n) : ts) = if n == 0 then check t 0 ts else Nothing
+    asBvAt :: Term -> Maybe ((Natural :*: Term) :*: Natural)
+    asBvAt = ((isGlobalDef "Prelude.bvAt" @> asNat) <@> (asAny @> asAny @> return)) <@> asUnsignedBvLit
 
-    check :: Term -> Natural -> [Term :*: Natural] -> Maybe Term
-    check t _ [] = Just t
-    check t n ((t' :*: n') : ts)
-      | t' == t && n' == n + 1 = check t n' ts
+    asAtOrBvAt :: Term -> Maybe ((Natural :*: Term) :*: Natural)
+    asAtOrBvAt term
+      | res@Just{} <- asAt term = res
+      | res@Just{} <- asBvAt term = res
       | otherwise = Nothing
 
 ------------------------------------------------------------
@@ -1258,6 +1264,14 @@ scAppend :: SharedContext -> Term -> Term -> Term ->
             Term -> Term -> IO Term
 scAppend sc t m n x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
 
+-- | join  : (m n : Nat) -> (a : sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
+scJoin :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scJoin sc m n a v = scGlobalApply sc "Prelude.join" [m, n, a, v]
+
+-- | split : (m n : Nat) -> (a : sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+scSplit :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scSplit sc m n a v = scGlobalApply sc "Prelude.split" [m, n, a, v]
+
 -- | slice :: (e :: sort 1) -> (i n o :: Nat) -> Vec (addNat (addNat i n) o) e -> Vec n e;
 scSlice :: SharedContext -> Term -> Term ->
            Term -> Term -> Term -> IO Term
@@ -1272,6 +1286,10 @@ scGet sc n e v i = scGlobalApply sc (mkIdent preludeName "get") [n, e, v, i]
 scBvAt :: SharedContext -> Term -> Term ->
          Term -> Term -> Term -> IO Term
 scBvAt sc n a i xs idx = scGlobalApply sc (mkIdent preludeName "bvAt") [n, a, i, xs, idx]
+
+-- | atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
+scAtWithDefault :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scAtWithDefault sc n a v xs idx = scGlobalApply sc (mkIdent preludeName "atWithDefault") [n, a, v, xs, idx]
 
 -- | at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
 scAt :: SharedContext -> Term -> Term ->
