@@ -167,23 +167,19 @@ data OverrideFailureReason
     -- When available, supply the @Right@ values with the @Pretty@ instance
     -- for @LLVMVal@ and 'ppSetupValueWithNames', respectively.
 
-mkStructuralMismatch ::
-  (W4.IsExpr (W4.SymExpr sym)) =>
-  CrucibleContext arch ->
-  CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
-  Crucible.LLVMVal sym {- ^ the value from the simulator -} ->
-  SetupValue           {- ^ the value from the spec -} ->
-  Crucible.MemType     {- ^ the expected type -} ->
-  OverrideFailureReason
-mkStructuralMismatch cc spec llvmval setupval memTy =
-  let tyenv = csAllocations spec
-      nameEnv = csTypeNames spec
-      maybeTy = typeOfSetupValue cc tyenv nameEnv setupval
-      names = fmap (\(L.Ident str) -> PP.text str) nameEnv
-  in StructuralMismatch (Right (PP.pretty llvmval))
-                        (Right (ppSetupValueWithNames names setupval))
-                        maybeTy
-                        memTy
+data OverrideFailure = OF W4.ProgramLoc OverrideFailureReason
+
+ppOverrideFailure :: OverrideFailure -> PP.Doc
+ppOverrideFailure (OF loc rsn) =
+  PP.text "at" PP.<+> PP.pretty (W4.plSourceLoc loc) PP.<$$>
+  ppOverrideFailureReason rsn
+
+instance PP.Pretty OverrideFailure where
+  pretty = ppOverrideFailure
+instance Show OverrideFailure where
+  show = show . PP.pretty
+
+instance Exception OverrideFailure
 
 ppOverrideFailureReason :: OverrideFailureReason -> PP.Doc
 ppOverrideFailureReason rsn = case rsn of
@@ -241,53 +237,64 @@ commaList :: [PP.Doc] -> PP.Doc
 commaList []     = PP.empty
 commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
 
--- | Printing of 'SetupValue', parameterized over printing of 'SetupVar' terms.
-ppSetupValue_ :: (AllocIndex -> PP.Doc) -> SetupValue -> PP.Doc
-ppSetupValue_ ppSetupVar =
-  \case
-    SetupTerm tm   -> ppTypedTerm tm
-    SetupVar i     -> ppSetupVar i
-    SetupNull      -> PP.text "NULL"
-    SetupStruct packed vs
-      | packed     -> PP.angles (PP.braces (commaList (map pp vs)))
-      | otherwise  -> PP.braces (commaList (map pp vs))
-    SetupArray vs  -> PP.brackets (commaList (map pp vs))
-    SetupElem v i  -> PP.parens (pp v) PP.<> PP.text ("." ++ show i)
-    SetupField v f -> PP.parens (pp v) PP.<> PP.text ("." ++ f)
-    SetupGlobal nm -> PP.text ("global(" ++ nm ++ ")")
-    SetupGlobalInitializer nm -> PP.text ("global_initializer(" ++ nm ++ ")")
-  where pp = ppSetupValue_ ppSetupVar
-
+-- | Note that most 'SetupValue' concepts (like allocation indices)
+--   are implementation details and won't be familiar to users.
+--   Consider using 'resolveSetupValue' and printing an 'LLVMVal'
+--   with @PP.pretty@ instead.
 ppSetupValue :: SetupValue -> PP.Doc
-ppSetupValue = ppSetupValue_ (\i -> PP.text ("@" ++ show i))
-
--- | Like 'ppSetupValue', but replace allocation indices with names when
---   they are available in the map.
-ppSetupValueWithNames :: Map AllocIndex PP.Doc -> SetupValue -> PP.Doc
-ppSetupValueWithNames allocIndexNames = ppSetupValue_ $ \i ->
-  fromMaybe (PP.text ("@" ++ show i)) (Map.lookup i allocIndexNames)
+ppSetupValue setupval = case setupval of
+  SetupTerm tm   -> ppTypedTerm tm
+  SetupVar i     -> PP.text ("@" ++ show i)
+  SetupNull      -> PP.text "NULL"
+  SetupStruct packed vs
+    | packed     -> PP.angles (PP.braces (commaList (map ppSetupValue vs)))
+    | otherwise  -> PP.braces (commaList (map ppSetupValue vs))
+  SetupArray vs  -> PP.brackets (commaList (map ppSetupValue vs))
+  SetupElem v i  -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ show i)
+  SetupField v f -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ f)
+  SetupGlobal nm -> PP.text ("global(" ++ nm ++ ")")
+  SetupGlobalInitializer nm -> PP.text ("global_initializer(" ++ nm ++ ")")
 
 instance PP.Pretty OverrideFailureReason where
   pretty = ppOverrideFailureReason
 instance Show OverrideFailureReason where
   show = show . PP.pretty
 
-
-data OverrideFailure = OF W4.ProgramLoc OverrideFailureReason
-
-ppOverrideFailure :: OverrideFailure -> PP.Doc
-ppOverrideFailure (OF loc rsn) =
-  PP.text "at" PP.<+> PP.pretty (W4.plSourceLoc loc) PP.<$$>
-  ppOverrideFailureReason rsn
-
-instance PP.Pretty OverrideFailure where
-  pretty = ppOverrideFailure
-instance Show OverrideFailure where
-  show = show . PP.pretty
-
-instance Exception OverrideFailure
-
 makeLenses ''OverrideState
+
+-- | An override packaged together with its preconditions, labeled with some
+--   human-readable info about each condition.
+data OverrideWithPreconditions arch =
+  OverrideWithPreconditions
+    { _owpPreconditions :: [LabeledPred Sym] -- ^ c.f. '_osAsserts'
+    , _owpMethodSpec :: CrucibleMethodSpecIR
+    , owpState :: OverrideState arch
+    }
+  deriving (Generic)
+
+makeLenses ''OverrideWithPreconditions
+
+-- | Try to translate the spec\'s 'SetupValue' into an 'LLVMVal', pretty-print
+--   the 'LLVMVal'.
+mkStructuralMismatch ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), W4.IsExpr (W4.SymExpr sym)) =>
+  Options              {- ^ output/verbosity options -} ->
+  CrucibleContext arch ->
+  SharedContext {- ^ context for constructing SAW terms -} ->
+  CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
+  Crucible.LLVMVal sym {- ^ the value from the simulator -} ->
+  SetupValue           {- ^ the value from the spec -} ->
+  Crucible.MemType     {- ^ the expected type -} ->
+  OverrideMatcher arch w OverrideFailureReason
+mkStructuralMismatch opts cc sc spec llvmval setupval memTy =
+  -- resolveSetupValue is only partial in the face of other user errors or
+  -- exceptions, so it's okay if it fails while preparing this message
+  resolveSetupValueLLVM opts cc sc spec setupval <&> \(setupMemTy, setupLLVMVal) ->
+    StructuralMismatch
+      (Right (PP.pretty llvmval))
+      (Right (PP.pretty setupLLVMVal))
+      (Just setupMemTy)
+      memTy
 
 ------------------------------------------------------------------------
 
@@ -358,16 +365,6 @@ failure loc e = OM (lift (throwE (OF loc e)))
 
 bullets :: Char -> [PP.Doc] -> PP.Doc
 bullets c = PP.vcat . map (PP.hang 2 . (PP.text [c] PP.<+>))
-
-data OverrideWithPreconditions arch =
-  OverrideWithPreconditions
-    { _owpPreconditions :: [LabeledPred Sym] -- ^ c.f. '_osAsserts'
-    , _owpMethodSpec :: CrucibleMethodSpecIR
-    , owpState :: OverrideState arch
-    }
-  deriving (Generic)
-
-makeLenses ''OverrideWithPreconditions
 
 -- | Partition into three groups:
 --   * Preconditions concretely succeed
@@ -982,11 +979,11 @@ matchArg ::
   SetupValue         {- ^ expected specification value          -} ->
   OverrideMatcher arch md ()
 
-matchArg _opts sc cc cs prepost actual expectedTy expected@(SetupTerm expectedTT)
+matchArg opts sc cc cs prepost actual expectedTy expected@(SetupTerm expectedTT)
   | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
   , Right tval <- Cryptol.evalType mempty tyexpr
   = do sym      <- getSymInterface
-       let failMsg = mkStructuralMismatch cc cs actual expected expectedTy
+       failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
        realTerm <- valueToSC sym (cs ^. csLoc) failMsg tval actual
        matchTerm sc cc (cs ^. csLoc) prepost realTerm (ttTerm expectedTT)
 
@@ -1002,13 +999,14 @@ matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer n) = 
   (globInitTy, globInitVal) <- resolveSetupValueLLVM opts cc sc cs g
   sym <- getSymInterface
   if expectedTy /= globInitTy
-  then failure (cs ^. csLoc) (mkStructuralMismatch cc cs actual g expectedTy)
+  then failure (cs ^. csLoc) =<<
+         mkStructuralMismatch opts cc sc cs actual g expectedTy
   else liftIO (Crucible.testEqual sym globInitVal actual) >>=
     \case
       Nothing -> failure (cs ^. csLoc) (BadEqualityComparison n)
       Just pred_ -> addAssert pred_ $ notEqual prepost (cs ^. csLoc) g actual
 
-matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
+matchArg opts sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
   case setupval of
     SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do assignVar cc (cs ^. csLoc) var (Crucible.LLVMPointer blk off)
@@ -1026,11 +1024,12 @@ matchArg _opts _sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy
            Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
          addAssert pred_ $ notEqual prepost (cs ^. csLoc) setupval actual
 
-    _ -> failure (cs ^. csLoc)
-                 (mkStructuralMismatch cc cs actual setupval expectedTy)
+    _ -> failure (cs ^. csLoc) =<<
+           mkStructuralMismatch opts cc sc cs actual setupval expectedTy
 
-matchArg _opts _sc cc cs _prepost actual expectedTy expected =
-  failure (cs ^. csLoc) (mkStructuralMismatch cc cs actual expected expectedTy)
+matchArg opts sc cc cs _prepost actual expectedTy expected = do
+  failure (cs ^. csLoc) =<<
+    mkStructuralMismatch opts cc sc cs actual expected expectedTy
 
 ------------------------------------------------------------------------
 
