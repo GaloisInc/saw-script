@@ -41,7 +41,7 @@ import System.Directory
 import qualified System.Environment
 import qualified System.Exit as Exit
 import System.IO
-import System.IO.Temp (withSystemTempFile)
+import System.IO.Temp (withSystemTempFile, emptySystemTempFile)
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
@@ -1318,3 +1318,33 @@ testMRSolver i1 i2 =
      case res of
        Just err -> io $ putStrLn $ Prover.showMRFailure err
        Nothing -> io $ putStrLn "Success!"
+
+parseSharpSATResult :: String -> Maybe Integer
+parseSharpSATResult s = parse (lines s)
+  where
+    parse (h : n : _) | "# solutions" `isPrefixOf` h = readMaybe n
+    parse (_ : rest) = parse rest
+    parse [] = Nothing
+
+sharpSAT :: TypedTerm -> TopLevel Integer
+sharpSAT t = do
+  sc <- getSharedContext
+  tmp <- io $ emptySystemTempFile "sharpSAT-input"
+  Prover.write_cnf sc tmp t
+  (_ec, out, _err) <- io $ readProcessWithExitCode "sharpSAT" [tmp] ""
+  io $ removeFile tmp
+  case parseSharpSATResult out of
+    Nothing -> fail $ "Garbled result from sharpSAT\n\n" ++ out
+    Just n -> return n
+
+approxmc :: TypedTerm -> TopLevel ()
+approxmc t = do
+  sc <- getSharedContext
+  tmp <- io $ emptySystemTempFile "approxmc-input"
+  Prover.write_cnf sc tmp t
+  (_ec, out, _err) <- io $ readProcessWithExitCode "approxmc" [tmp] ""
+  io $ removeFile tmp
+  let msg = filter ("[appmc] Number of solutions is" `isPrefixOf`) (lines out)
+  case msg of
+    [l] -> io $ putStrLn l
+    _ -> fail $ "Garbled result from approxmc\n\n" ++ out
