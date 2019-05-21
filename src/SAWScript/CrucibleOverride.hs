@@ -210,13 +210,13 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "Precondition:" PP.<+> ppPointsTo pointsTo PP.<$$>
     PP.text "Failure reason: " PP.<$$> msg -- this can be long
   StructuralMismatch llvmval setupval setupvalTy ty ->
-    PP.text "could not match the following terms with expected type:" PP.<$$>
+    PP.text "could not match specified value with actual value:" PP.<$$>
     PP.vcat (map (PP.indent 2) $
-              [ PP.text "expected type:" PP.<+> Crucible.ppMemType ty
-              , PP.text "simulator value:" PP.<+>
+              [ PP.text "actual (simulator) value:" PP.<+>
                   either (PP.text . show) id llvmval
               , PP.text "specified value:" PP.<+>
                   either ppSetupValue id setupval
+              , PP.text "type of actual value:" PP.<+> Crucible.ppMemType ty
               ] ++ let msg memty =
                          [PP.text "type of specified value:"
                           PP.<+> Crucible.ppMemType memty]
