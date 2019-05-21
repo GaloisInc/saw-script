@@ -25,9 +25,6 @@
 [submodule "deps/llvm-pretty-bc-parser"]
 	path = deps/llvm-pretty-bc-parser
 	url = https://github.com/GaloisInc/llvm-pretty-bc-parser.git
-[submodule "deps/llvm-verifier"]
-	path = deps/llvm-verifier
-	url = https://github.com/GaloisInc/llvm-verifier.git
 [submodule "deps/parameterized-utils"]
 	path = deps/parameterized-utils
 	url = https://github.com/GaloisInc/parameterized-utils.git
