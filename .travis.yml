@@ -18,7 +18,7 @@ git:
 matrix:
   include:
     - env: CABALVER="2.4" GHCVER="8.6.5"
-      compiler: ": #GHC 8.6.3"
+      compiler: ": #GHC 8.6.5"
       addons: {apt: {packages: [cabal-install-2.4,ghc-8.6.5], sources: [hvr-ghc]}}
     - env: CABALVER="2.4" GHCVER="8.4.4"
       compiler: ": #GHC 8.4.4"
