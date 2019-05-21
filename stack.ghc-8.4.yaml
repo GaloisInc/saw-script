@@ -33,12 +33,11 @@ extra-deps:
   - IfElse-0.85
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
-  - simple-smt-0.7.1
+  - simple-smt-0.9.4
   - GraphSCC-1.0.4
-  - monadLib-3.7.3
-  - sbv-8.1
-  - monad-supply-0.7
-  - panic-0.4.0.0
+  - monadLib-3.9
+  - sbv-8.2
+  - panic-0.4.0.1
   - itanium-abi-0.1.1.1
   - boomerang-1.4.5.6
   - th-abstraction-0.3.1.0

@@ -33,14 +33,20 @@ extra-deps:
   - IfElse-0.85
   - fgl-visualize-0.1.0.1
   - dotgen-0.4.2
-  - monad-supply-0.7
-  - simple-smt-0.7.1
+  - simple-smt-0.9.4
   - GraphSCC-1.0.4
-  - monadLib-3.7.3
-  - sbv-8.1
-  - crackNum-2.3
-  - panic-0.4.0.0
-  - itanium-abi-0.1.1.0
+  - monadLib-3.9
+  - sbv-8.2
+  - panic-0.4.0.1
+  - itanium-abi-0.1.1.1
   - boomerang-1.4.5.6
-resolver: lts-11.22
+  - th-abstraction-0.3.1.0
+  - microlens-th-0.4.2.3
+  - deriving-compat-0.5.6
+  - bifunctors-5.5.4
+  - generic-deriving-1.12.4
+  - invariant-0.5.3
+  - lens-4.17.1
+  - th-lift-0.8.0.1
+resolver: lts-13.22
 allow-newer: true
