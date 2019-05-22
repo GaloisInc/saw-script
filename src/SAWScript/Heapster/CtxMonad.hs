@@ -20,6 +20,7 @@
 module SAWScript.Heapster.CtxMonad where
 
 import           Control.Monad.Except
+import           Control.Monad.Identity
 import qualified Control.Category as Cat
 import           Data.Type.Equality
 import           Data.Kind
@@ -115,6 +116,21 @@ weakenVar (Weakening1 diff12 sz3) sz23 (CVar ix) =
     Right ix3 -> extendIndexLeft (extSize sz1 diff12) ix3
 weakenVar (WeakeningComp w1 w2) sz x =
   weakenVar w2 sz $ weakenVar w1 (unweakenSize w2 sz) x
+
+unweakenVar :: Weakening ctx1 ctx2 -> Size ctx2 -> CVar a ctx2 ->
+               Maybe (CVar a ctx1)
+unweakenVar WeakeningNil _ x = Just x
+unweakenVar (Weakening1 diff12 sz3) sz23 (CVar ix) =
+  let sz2 = subtractSize sz23 Proxy sz3
+      sz1 = unextSize sz2 diff12 in
+  CVar <$>
+  case (caseIndexAppend sz2 sz3 ix, diffIsAppend diff12) of
+    (Left ix2, IsAppend sz2') ->
+      case caseIndexAppend sz1 sz2' ix2 of
+        Left ix1 -> Just $ extendIndex' (appendDiff sz3) ix1
+        Right _ -> Nothing
+unweakenVar (WeakeningComp w1 w2) sz x =
+  unweakenVar w2 sz x >>= unweakenVar w1 (unweakenSize w2 sz)
 
 
 ----------------------------------------------------------------------
@@ -403,6 +419,9 @@ instance Monad m => CMonad ((:@:) m) where
     cOp2 (\m' f' ->
            CApplyF (unCApplyF m' >>= unCApplyF . unCFun f' Cat.id)) m f
 
+
+-- | The identity contextual monad
+type CIdentity = ((:@:) Identity)
 
 -- | The contextual continuation transformer
 newtype CContT res m a (ctx :: Ctx k) =
