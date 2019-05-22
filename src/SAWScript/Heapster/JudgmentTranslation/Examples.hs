@@ -226,6 +226,7 @@ testJudgmentTranslation = do
   sc <- getSharedContext
   io $ do
     let test term = putStrLn . showTerm =<< completeOpenTerm sc term
+    {-
     putStrLn "Testing llvmPointerType"
     test llvmPointerType
     putStrLn "Testing permInType"
@@ -244,11 +245,12 @@ testJudgmentTranslation = do
     test $ lambdaOpenTerm "v" llvmPointerType $ \ v -> permOutTypeRight (extend empty (Const v))
     putStrLn "Testing translating examplePermElimRight"
     test $ translateExamplePermElimRight
-    putStrLn "Testing translating examplePermElimDisjOutL"
+    putStrLn "\nTranslating (ptr(0 |-> (W,true)) |- (ptr() \\/ exists x.eq(x))"
     test $ translateExamplePermElimDisjOutL
-    putStrLn "Testing translating examplePermElimDisjOutR"
+    putStrLn "\nTranslating (eq(0) |- (ptr() \\/ exists x.eq(x))"
     test $ translateExamplePermElimDisjOutR
-    putStrLn "Testing translating examplePermElimDisj"
+    -}
+    putStrLn "\nTranslating x:(ptr(0 |-> (W,true)) \\/ eq(0)) |- x:(ptr() \\/ exists y.eq(y))"
     test $ translateExamplePermElim
 
 -- EXAMPLE to write:
