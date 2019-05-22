@@ -9,6 +9,9 @@ cabal.sandbox.config
 .*.swp
 .*.swo
 
+**/*.a
+**/*.o
+
 Dockerfile*
 
 **/.git
