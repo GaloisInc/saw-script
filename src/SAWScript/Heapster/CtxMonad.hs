@@ -58,9 +58,15 @@ instance MonadError err (BackM err) where
 -- * Weakenings on contexts
 ----------------------------------------------------------------------
 
+-- FIXME HERE: move to Unsafe.hs
+-- | Extend the size by a given difference.
+unextSize :: Size r -> Diff l r -> Size l
+unextSize = error "FIXME HERE: unextSize"
+
+
 -- | Our variables need to keep the 'Size' of the context around so that we can
 -- apply weakenings
-data CVar a ctx = CVar (Size ctx) (Index ctx a)
+newtype CVar a ctx = CVar (Index ctx a)
 
 -- | A weakening is a sequence of 'Diff's on a prefix of the context
 data Weakening ctx1 ctx2 where
@@ -91,16 +97,24 @@ weakenSize (Weakening1 diff12 sz3) sz13 =
   addSize (extSize sz1 diff12) sz3
 weakenSize (WeakeningComp w1 w2) sz = weakenSize w2 $ weakenSize w1 sz
 
-weakenVar :: Weakening ctx1 ctx2 -> CVar a ctx1 -> CVar a ctx2
-weakenVar WeakeningNil x = x
-weakenVar (Weakening1 diff12 sz3) (CVar sz13 ix) =
-  let sz1 = subtractSize sz13 Proxy sz3
-      sz23 = addSize (extSize sz1 diff12) sz3 in
-  CVar sz23 $
+unweakenSize :: Weakening ctx1 ctx2 -> Size ctx2 -> Size ctx1
+unweakenSize WeakeningNil sz = sz
+unweakenSize (Weakening1 diff12 sz3) sz23 =
+  let sz2 = subtractSize sz23 Proxy sz3 in
+  addSize (unextSize sz2 diff12) sz3
+unweakenSize (WeakeningComp w1 w2) sz = unweakenSize w1 $ unweakenSize w2 sz
+
+weakenVar :: Weakening ctx1 ctx2 -> Size ctx2 -> CVar a ctx1 -> CVar a ctx2
+weakenVar WeakeningNil _ x = x
+weakenVar (Weakening1 diff12 sz3) sz23 (CVar ix) =
+  let sz2 = subtractSize sz23 Proxy sz3
+      sz1 = unextSize sz2 diff12 in
+  CVar $
   case caseIndexAppend sz1 sz3 ix of
     Left ix1 -> extendIndex' (appendDiff sz3 Cat.. diff12) ix1
     Right ix3 -> extendIndexLeft (extSize sz1 diff12) ix3
-weakenVar (WeakeningComp w1 w2) x = weakenVar w2 $ weakenVar w1 x
+weakenVar (WeakeningComp w1 w2) sz x =
+  weakenVar w2 sz $ weakenVar w1 (unweakenSize w2 sz) x
 
 
 ----------------------------------------------------------------------
@@ -112,12 +126,12 @@ type CType k = Ctx k -> *
 
 -- | A valid contextual type is one that can be mapped via context extensions
 class Weakenable a where
-  weaken :: Weakening ctx ctx' -> a ctx -> a ctx'
+  weaken :: Weakening ctx ctx' -> Size ctx' -> a ctx -> a ctx'
 
 -- | A valid unary contextual type function is one that maps valid contextual
 -- types to valid contextual types
 class Weakenable1 (f :: CType k -> CType k) where
-  weaken1 :: Weakenable a => Weakening ctx ctx' -> f a ctx -> f a ctx'
+  weaken1 :: Weakenable a => Weakening ctx ctx' -> Size ctx' -> f a ctx -> f a ctx'
 
 instance {-# INCOHERENT #-} (Weakenable1 f, Weakenable a) => Weakenable (f a) where
   weaken = weaken1
@@ -126,10 +140,13 @@ instance {-# INCOHERENT #-} (Weakenable1 f, Weakenable a) => Weakenable (f a) wh
 -- contextual types to a valid contextual types
 class Weakenable2 (f :: CType k -> CType k -> CType k) where
   weaken2 :: (Weakenable a, Weakenable b) =>
-                 Weakening ctx ctx' -> f a b ctx -> f a b ctx'
+                 Weakening ctx ctx' -> Size ctx' -> f a b ctx -> f a b ctx'
 
 instance {-# INCOHERENT #-} (Weakenable2 f, Weakenable a) => Weakenable1 (f a) where
   weaken1 = weaken2
+
+instance Weakenable (CVar a) where
+  weaken = weakenVar
 
 -- | Apply a type function to a contextual type
 infixl 2 :@:
@@ -137,27 +154,33 @@ newtype (:@:) (f :: * -> *) (b :: CType k) ctx =
   CApplyF { unCApplyF :: f (b ctx) }
 
 instance Functor f => Weakenable1 ((:@:) f) where
-  weaken1 diff = CApplyF . fmap (weaken diff) . unCApplyF
+  weaken1 w sz = CApplyF . fmap (weaken w sz) . unCApplyF
 
 -- | The pair type-in-context
 infixr 1 :*:
 data (:*:) a b (ctx :: Ctx k) = CPair (a ctx) (b ctx)
 
 instance Weakenable2 (:*:) where
-  weaken2 diff (CPair a b) =
-    CPair (weaken diff a) (weaken diff b)
+  weaken2 w sz (CPair a b) =
+    CPair (weaken w sz a) (weaken w sz b)
+
+cpairFst :: (a :*: b) ctx -> a ctx
+cpairFst (CPair a _) = a
+
+cpairSnd :: (a :*: b) ctx -> b ctx
+cpairSnd (CPair _ b) = b
 
 -- | The unit type-in-context
 data CUnit (ctx :: Ctx k) = CUnit
 
 instance Weakenable CUnit where
-  weaken _ _ = CUnit
+  weaken _ _ _ = CUnit
 
 -- | Lift a standard type to a contextual type that ignores its context
 newtype CConst a (ctx :: Ctx k) = CConst { unCConst :: a }
 
 instance Weakenable (CConst a) where
-  weaken _ (CConst a) = CConst a
+  weaken _ _ (CConst a) = CConst a
 
 -- | The function type-in-context, that can be applied in any extension of the
 -- current context
@@ -166,16 +189,15 @@ newtype (:->:) a b (ctx :: Ctx k) =
   CFun { unCFun :: forall ctx'. Weakening ctx ctx' -> a ctx' -> b ctx' }
 
 instance Weakenable2 (:->:) where
-  weaken2 diff (CFun f) = CFun $ \diff' -> f (diff' Cat.. diff)
+  weaken2 w _ (CFun f) = CFun $ \w' -> f (w' Cat.. w)
 
 -- | Represents a contextual type inside a binding for another variable
-newtype CBindVar (tp :: k) (a :: CType k) (ctx :: Ctx k) =
-  CBindVar { unCBindVar :: forall ctx'.
-                           Weakening ctx ctx' -> Size ctx' -> a (ctx' ::> tp) }
+newtype CNabla (tp :: k) (a :: CType k) (ctx :: Ctx k) =
+  CNabla { unCNabla :: a (ctx ::> tp) }
 
-instance Weakenable1 (CBindVar tp) where
-  weaken1 w (CBindVar b) =
-    CBindVar $ \w' sz -> b (w' Cat.. w) sz
+instance Weakenable1 (CNabla tp) where
+  weaken1 w sz (CNabla b) =
+    CNabla $ weaken (weakenWeakening1 w) (incSize sz) b
 
 
 ----------------------------------------------------------------------
@@ -245,16 +267,17 @@ instance {-# INCOHERENT #-} (WeakensTo ectx1 ectx2, WConstr ectx2 ctx sz) =>
 
 -- | A contextual expression of contextual type @a@ in expression context @ectx@
 newtype CExpr (a :: CType k) (ectx :: ExprCtx k *) =
-  CExpr { unCExpr :: (a (CtxOfExprCtx ectx)) }
+  CExpr { unCExpr :: Size (CtxOfExprCtx ectx) -> (a (CtxOfExprCtx ectx)) }
 
 -- | Extract a contextual value from a top-level contextual expression
-runCExpr :: CExpr a (BaseCtx ctx) -> a ctx
-runCExpr = unCExpr
+runCExpr :: Size ctx -> CExpr a (BaseCtx ctx) -> a ctx
+runCExpr sz (CExpr f) = f sz
 
 -- | Weaken the context of a contextual expression
 cweakenPf :: Weakenable a => EWeakening ectx1 ectx2 ->
              CExpr a ectx1 -> CExpr a ectx2
-cweakenPf (EWeakening w) (CExpr a) = CExpr $ weaken w a
+cweakenPf (EWeakening w) (CExpr f) =
+  CExpr $ \sz -> weaken w sz $ f $ unweakenSize w sz
 
 -- | Weaken the context of a contextual expression using 'WeakensTo'
 cweaken :: (Weakenable a, WeakensTo ectx1 ectx2) =>
@@ -266,9 +289,9 @@ clamH :: (forall ctx w. WConstr ectx ctx w =>
           CExpr a (ectx :<+>: '(ctx, w)) -> CExpr b (ectx :<+>: '(ctx, w))) ->
          CExpr (a :->: b) ectx
 clamH f =
-  CExpr $ CFun $ \(w :: Weakening _ ctx) a ->
+  CExpr $ \sz -> CFun $ \(w :: Weakening _ ctx) a ->
   reify w $ \(p :: Proxy w) ->
-  unCExpr $ f @ctx @w (CExpr a)
+  unCExpr (f @ctx @w (CExpr $ const a)) (weakenSize w sz)
 
 -- | The type of a binding expression
 type CExprBinder a b ectx =
@@ -283,7 +306,7 @@ clam f = clamH (\a -> f $ cweaken a)
 
 -- | Apply a contextual function expression
 (@@) :: CExpr (a :->: b) ectx -> CExpr a ectx -> CExpr b ectx
-(CExpr f) @@ (CExpr arg) = CExpr $ unCFun f Cat.id arg
+(CExpr f) @@ (CExpr arg) = CExpr $ \sz -> unCFun (f sz) Cat.id (arg sz)
 
 -- | A version of '(@@)' with low precedence, to work like '($)'
 infixr 0 $$
@@ -292,47 +315,55 @@ infixr 0 $$
 
 -- | Lift a unary operation between contextual types to one on expressions
 cOp1 :: (forall ctx. a ctx -> b ctx) -> CExpr a ectx -> CExpr b ectx
-cOp1 f (CExpr a) = CExpr $ f a
+cOp1 f (CExpr a) = CExpr (f . a)
 
 -- | Lift a binary operation between contextual types to one on expressions
 cOp2 :: (forall ctx. a ctx -> b ctx -> c ctx) ->
         CExpr a ectx -> CExpr b ectx -> CExpr c ectx
-cOp2 f (CExpr a) (CExpr b) = CExpr $ f a b
+cOp2 f (CExpr a) (CExpr b) = CExpr $ \sz -> f (a sz) (b sz)
 
 -- | Build a contextual expression for a pair
 cpair :: CExpr a ectx -> CExpr b ectx -> CExpr (a :*: b) ectx
 cpair = cOp2 CPair
 
 -- | Pattern-match a contextual expression for a pair
+{- NOTE: we could define this, but it would duplicate the body of the CExpr!
 cunpair :: CExpr (a :*: b) ectx -> (CExpr a ectx, CExpr b ectx)
 cunpair (CExpr (CPair a b)) = (CExpr a, CExpr b)
+-}
+
+cfst :: CExpr (a :*: b) ectx -> CExpr a ectx
+cfst = cOp1 cpairFst
+
+csnd :: CExpr (a :*: b) ectx -> CExpr b ectx
+csnd = cOp1 cpairSnd
 
 -- | Build a contextual unit expression
 cunit :: CExpr CUnit ectx
-cunit = CExpr CUnit
+cunit = CExpr $ const CUnit
 
 -- | Lift an element of a standard type to a contextual expression
 cconst :: a -> CExpr (CConst a) ectx
-cconst = CExpr . CConst
+cconst a = CExpr $ const $ CConst a
 
+{-
 -- | Un-lift a contextual expression of lifted type to a normal value
 cunconst :: CExpr (CConst a) ectx -> a
 cunconst (CExpr (CConst a)) = a
-
-{-
-cbindVarH :: (CVar tp :->: a) ctx -> CBindVar tp a ctx
-cbindVarH f =
-  CBindVar $ \w sz -> unCFun f w (CVar (incSize sz) $ nextIndex sz)
-
--- | Bind a variable in the context of an expression
-cbindVar :: CExprBinder (CVar tp) a ectx -> CExpr (CBindVar tp a) ectx
-cbindVar f = cOp1 cbindVarH (clam f)
 -}
 
+cnuH :: Size ctx -> (CVar tp :->: a) ctx -> CNabla tp a ctx
+cnuH sz f =
+  CNabla $ unCFun f mkWeakening1 (CVar $ nextIndex sz)
+
+-- | Bind a variable in the context of an expression
+cnu :: CExprBinder (CVar tp) a ectx -> CExpr (CNabla tp a) ectx
+cnu f = CExpr $ \sz -> cnuH sz (unCExpr (clam f) sz)
+
 {-
-uncbindVar :: CExpr Size ectx -> CExpr (CBindVar tp a) ectx ->
+uncbindVar :: CExpr Size ectx -> CExpr (CNabla tp a) ectx ->
               a (CtxOfExprCtx ectx ::> tp)
-uncbindVar (CExpr sz) (CExpr b) = unCBindVar b noDiff sz
+uncbindVar (CExpr sz) (CExpr b) = unCNabla b noDiff sz
 -}
 
 test1 :: Weakenable a => CExpr (a :->: a) ectx
@@ -379,7 +410,7 @@ newtype CContT res m a (ctx :: Ctx k) =
 
 instance (Weakenable1 m, Weakenable res) =>
          Weakenable1 (CContT res m) where
-  weaken1 diff (CContT m) = CContT $ weaken diff m
+  weaken1 w sz (CContT m) = CContT $ weaken w sz m
 
 instance (CMonad m, Weakenable res) => CMonad (CContT res m) where
   creturn =
@@ -416,7 +447,7 @@ newtype CStateT s m a (ctx :: Ctx k) =
 
 instance (Weakenable1 m, Weakenable s) =>
          Weakenable1 (CStateT s m) where
-  weaken1 diff (CStateT m) = CStateT $ weaken diff m
+  weaken1 w sz (CStateT m) = CStateT $ weaken w sz m
 
 instance (CMonad m, Weakenable s) => CMonad (CStateT s m) where
   creturn =
@@ -424,8 +455,8 @@ instance (CMonad m, Weakenable s) => CMonad (CStateT s m) where
   cbind =
     clam $ \m -> clam $ \f ->
     cOp1 CStateT $ clam $ \s ->
-    cOp1 unCStateT m @@ s >>>= \(cunpair -> (s',a)) ->
-    (cOp1 unCStateT $ f @@ a) @@ s'
+    cOp1 unCStateT m @@ s >>>= \s'a ->
+    (cOp1 unCStateT $ f @@ (csnd s'a)) @@ (cfst s'a)
 
 instance Weakenable s => CMonadTrans (CStateT s) where
   clift =
@@ -453,13 +484,13 @@ instance (Weakenable s, CMonadShiftReset res m) =>
     cshift $$ clam $ \k ->
     (cOp1 unCStateT $ f $$ clam $ \a ->
       cget >>>= \s' ->
-      clift @@ (k @@ (cpair s' a))) @@ s >>>= \(cunpair -> (_, res)) ->
-    creturn @@ res
+      clift @@ (k @@ (cpair s' a))) @@ s >>>= \s_res ->
+    creturn @@ (csnd s_res)
 
   -- NOTE: reset throws away the inner state
   creset =
     clam $ \m ->
     cOp1 CStateT $ clam $ \s ->
-    creset @@ (cOp1 unCStateT m @@ s >>>= \(cunpair -> (_, res)) ->
-                creturn @@ res) >>>= \res ->
-    creturn @@ (cpair s res)
+    creset @@ (cOp1 unCStateT m @@ s >>>= \s_res ->
+                creturn @@ (csnd s_res)) >>>= \res' ->
+    creturn @@ (cpair s res')
