@@ -16,7 +16,7 @@ RUN cabal v2-build
 WORKDIR /home/saw
 RUN mkdir -p rootfs/usr/local/bin \
     && cp /usr/local/bin/z3 rootfs/usr/local/bin/z3 \
-    && cp saw-script/dist-newstyle/build/*-linux/ghc-*/saw-script-*/build/saw/saw rootfs/usr/local/bin/saw
+    && cp dist-newstyle/build/*-linux/ghc-*/saw-script-*/build/saw/saw rootfs/usr/local/bin/saw
 USER root
 RUN chown -R root:root /home/saw/rootfs
 
