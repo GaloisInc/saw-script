@@ -1044,7 +1044,7 @@ valueToSC sym loc failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals
   = do terms <- V.toList <$> traverse (valueToSC sym loc failMsg cryty) vals
        sc <- liftIO $ Crucible.sawBackendSharedContext sym
        t <- liftIO (typeToSC sc ty)
-       liftIO (scVector sc t terms)
+       liftIO (scVectorReduced sc t terms)
 
 valueToSC _ _ _ _ Crucible.LLVMValFloat{} =
   fail  "valueToSC: Real not supported"

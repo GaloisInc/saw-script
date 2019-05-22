@@ -1,5 +1,5 @@
 enable_deprecated;
 c <- java_load_class "Double";
-t <- java_extract c "f" java_pure;
+t <- crucible_java_extract c "f";
 print_term t;
 write_aig "java_f.aig" t;

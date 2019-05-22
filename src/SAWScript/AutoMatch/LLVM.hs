@@ -8,9 +8,7 @@ import Control.Monad.State hiding (mapM)
 import Control.Monad.Free
 
 import qualified Data.AIG as AIG
-import Text.LLVM hiding (parseDataLayout, Array, Double, Float, FloatType, Void)
-import Verifier.LLVM.Codebase hiding ( Global, ppSymbol, ppIdent, globalSym, globalType )
-import Verifier.LLVM.Backend.SAW
+import Text.LLVM
 import Verifier.SAW.SharedTerm
 
 import SAWScript.Value
@@ -33,19 +31,13 @@ getDeclsLLVM ::
   SharedContext ->
   LLVMModule ->
   IO (Interaction (Maybe [Decl]))
-getDeclsLLVM proxy sc (LLVMModule file mdl _) =
-
-  let dataLayout = parseDataLayout $ modDataLayout mdl
-      symbols = map defName (modDefines mdl)
-  in do
-    (sbe, _mem, _scLLVM) <- createSAWBackend' proxy dataLayout sc
-    (warnings, cb) <- mkCodebase sbe dataLayout mdl
+getDeclsLLVM proxy sc (LLVMModule file mdl _) = do
+    let symStr (Symbol s) = s
     return $ do
-      forM_ warnings $ liftF . flip Warning () . show
       let (untranslateable, translations) =
-            partitionEithers . for symbols $ \(Symbol name) ->
-               maybe (Left name) Right $
-                  symDefineToDecl =<< lookupDefine (Symbol name) cb
+            partitionEithers . for (modDefines mdl) $ \def ->
+               maybe (Left (symStr (defName def))) Right $
+                  symDefineToDecl def
 
       when (not . null $ untranslateable) $ do
          separator ThinSep
@@ -57,19 +49,15 @@ getDeclsLLVM proxy sc (LLVMModule file mdl _) =
    where
 
       symDefineToDecl symDefine =
-         let Symbol name = sdName symDefine
-             args = mapM (\(Ident an, at) -> Arg an <$> memTypeToStdType at) $ sdArgs symDefine
-             retType = memTypeToStdType =<< sdRetType symDefine
+         let Symbol name = defName symDefine
+             tidName (Typed _ (Ident n)) = n
+             args = mapM (\tid -> Arg (tidName tid) <$> memTypeToStdType (typedType tid)) $ defArgs symDefine
+             retType = memTypeToStdType (defRetType symDefine)
          in Decl name <$> retType <*> args
 
       memTypeToStdType t = case t of
-         IntType 8  -> Just $ bitSeqType 8
-         IntType 16 -> Just $ bitSeqType 16
-         IntType 32 -> Just $ bitSeqType 32
-         IntType 64 -> Just $ bitSeqType 64
-         FloatType  -> Nothing -- We don't support floating point types
-         DoubleType -> Nothing -- We don't support floating point types
-         PtrType (MemType _memType) -> Nothing
-            --memTypeToStdType memType -- TODO: Support pointers
-         ArrayType _size _memType -> Nothing -- TODO: Support arrays
+         PrimType (Integer 8)  -> Just $ bitSeqType 8
+         PrimType (Integer 16) -> Just $ bitSeqType 16
+         PrimType (Integer 32) -> Just $ bitSeqType 32
+         PrimType (Integer 64) -> Just $ bitSeqType 64
          _ -> Nothing

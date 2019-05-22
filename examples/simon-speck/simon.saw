@@ -1,51 +1,48 @@
 /*
- * Copyright (c) 2013-2016 Galois, Inc.
+ * Copyright (c) 2013-2019 Galois, Inc.
  * Distributed under the terms of the BSD3 license (see LICENSE file)
  */
-
-enable_deprecated;
 
 print "Importing Simon Cryptol";
 import "simon.cry";
 
-eq <- {{ \x (y, z) -> join x == y # z }};
-
-print "Extracting Simon 64/128 C encrypt & decrypt terms";
 l_64_128 <- llvm_load_module "simon-64-128.bc";
-key_64_128 <- fresh_symbolic "key" {| [44][32] |};
-io_64_128 <- fresh_symbolic "io" {| [2][32] |};
-allocs_64_128 <- [ ("text", 2), ("crypt", 2), ("key", 44) ];
-inputs_64_128 <- [ ("*text", io_64_128, 2), ("*crypt", io_64_128, 2), ("*key", key_64_128, 44) ];
-outputs_64_128 <- [ ("*crypt", 2) ];
-encrypt_64_128 <- llvm_symexec l_64_128 "Encrypt" allocs_64_128 inputs_64_128 outputs_64_128 true;
-decrypt_64_128 <- llvm_symexec l_64_128 "Decrypt" allocs_64_128 inputs_64_128 outputs_64_128 true;
-print "Proving Simon 64/128 C encrypt is equivalent to Cryptol specification";
-encrypt_64_128_thm <- abstract_symbolic {{ 
-  eq encrypt_64_128 (Simon64_128 (reverse (take`{4} key_64_128)) (io_64_128@0 , io_64_128@1))
-}} ;
-prove_print abc encrypt_64_128_thm;
-print "Proving Simon 64/128 C decrypt is equivalent to Cryptol specification";
-decrypt_64_128_thm <- abstract_symbolic {{ 
-  eq decrypt_64_128 (Simon64_128' (reverse (take`{4} key_64_128)) (io_64_128@0 , io_64_128@1))
-}} ;
-prove_print abc decrypt_64_128_thm;
-
-print "Extracting Simon 128/128 C encrypt & decrypt terms";
 l_128_128 <- llvm_load_module "simon-128-128.bc";
-key_128_128 <- fresh_symbolic "key" {| [68][64] |};
-io_128_128 <- fresh_symbolic "io" {| [2][64] |};
-allocs_128_128 <- [ ("text", 2), ("crypt", 2), ("key", 68) ];
-inputs_128_128 <- [ ("*text", io_128_128, 2), ("*crypt", io_128_128, 2), ("*key", key_128_128, 68) ];
-outputs_128_128 <- [ ("*crypt", 2) ];
-encrypt_128_128 <- llvm_symexec l_128_128 "Encrypt" allocs_128_128 inputs_128_128 outputs_128_128 true;
-decrypt_128_128 <- llvm_symexec l_128_128 "Decrypt" allocs_128_128 inputs_128_128 outputs_128_128 true;
-print "Proving Simon 128/128 C encrypt is equivalent to Cryptol specification";
-encrypt_128_128_thm <- abstract_symbolic {{ 
-  eq encrypt_128_128 (Simon128_128 (reverse (take`{2} key_128_128)) (io_128_128@0 , io_128_128@1))
-}} ;
-prove_print abc encrypt_128_128_thm;
-print "Proving Simon 128/128 C decrypt is equivalent to Cryptol specification";
-decrypt_128_128_thm <- abstract_symbolic {{ 
-  eq decrypt_128_128 (Simon128_128' (reverse (take`{2} key_128_128)) (io_128_128@0 , io_128_128@1))
-}} ;
-prove_print abc decrypt_128_128_thm;
+
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
+};
+
+let block_spec keyt wsz tn fn = do {
+  let msgt = llvm_array 2 (llvm_int wsz);
+  (key, keyp) <- ptr_to_fresh "key" keyt;
+  (msg, msgp) <- ptr_to_fresh "msg" msgt;
+  cryptp <- crucible_alloc msgt;
+  crucible_points_to (crucible_global "z") (crucible_global_initializer "z");
+  crucible_execute_func [msgp, cryptp, keyp];
+  let res = {{ fn (reverse (take `{tn} key)) (msg@0, msg@1) }};
+  crucible_points_to cryptp (crucible_term {{ split (res.0 # res.1) : [2][wsz] }});
+};
+
+let i32 = llvm_int 32;
+let i64 = llvm_int 64;
+let enc_64_128_spec = block_spec (llvm_array 44 i32) 32 4 {{ Simon64_128 }};
+let dec_64_128_spec = block_spec (llvm_array 44 i32) 32 4 {{ Simon64_128' }};
+let enc_128_128_spec = block_spec (llvm_array 68 i64) 64 2 {{ Simon128_128 }};
+let dec_128_128_spec = block_spec (llvm_array 68 i64) 64 2 {{ Simon128_128' }};
+
+print "Proving Simon 64/128 C encrypt & decrypt";
+crucible_llvm_verify l_64_128 "Encrypt" [] true enc_64_128_spec abc;
+crucible_llvm_verify l_64_128 "Decrypt" [] true dec_64_128_spec abc;
+
+print "Proving Simon 128/128 C encrypt & decrypt";
+crucible_llvm_verify l_128_128 "Encrypt" [] true enc_128_128_spec abc;
+crucible_llvm_verify l_128_128 "Decrypt" [] true dec_128_128_spec abc;

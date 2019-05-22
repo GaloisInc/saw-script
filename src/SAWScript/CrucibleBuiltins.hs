@@ -59,13 +59,10 @@ module SAWScript.CrucibleBuiltins
 
 import           Control.Lens
 
-import           Control.Monad.Catch
 import           Control.Monad.State
-import           Control.Applicative
 import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
 import           Data.Foldable (for_, toList, find)
-import           Data.Function
 import           Data.IORef
 import           Data.List
 import           Data.List.Extra (groupOn, nubOrd)
@@ -114,7 +111,6 @@ import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.Breakpoint as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
-import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
@@ -234,6 +230,28 @@ crucible_llvm_verify ::
   ProofScript SatResult  ->
   TopLevel CrucibleMethodSpecIR
 crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic = do
+  createMethodSpec (Just (lemmas, checkSat, tactic)) bic opts lm nm setup
+
+crucible_llvm_unsafe_assume_spec ::
+  BuiltinContext   ->
+  Options          ->
+  LLVMModule       ->
+  String          {- ^ Name of the function -} ->
+  CrucibleSetupM () {- ^ Boundary specification -} ->
+  TopLevel CrucibleMethodSpecIR
+crucible_llvm_unsafe_assume_spec = createMethodSpec Nothing
+
+-- | The real work of 'crucible_llvm_verify' and 'crucible_llvm_unsafe_assume_spec'.
+createMethodSpec ::
+  Maybe ([CrucibleMethodSpecIR], Bool, ProofScript SatResult)
+  {- ^ If verifying, provide lemmas, branch sat checking, tactic -} ->
+  BuiltinContext   ->
+  Options          ->
+  LLVMModule       ->
+  String            {- ^ Name of the function -} ->
+  CrucibleSetupM () {- ^ Boundary specification -} ->
+  TopLevel CrucibleMethodSpecIR
+createMethodSpec verificationArgs bic opts lm nm setup = do
   (nm', parent) <- resolveSpecName nm
   let edef = findDefMaybeStatic (modMod lm) nm'
   let edecl = findDecl (modMod lm) nm'
@@ -256,6 +274,8 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic = do
     liftIO $ W4.setCurrentProgramLoc sym setupLoc
     methodSpec <- view csMethodSpec <$> execStateT (runCrucibleSetupM setup) st0
 
+    void $ io $ checkSpecReturnType cc methodSpec
+
     -- set up the LLVM memory with a pristine heap
     let globals = cc^.ccLLVMGlobals
     let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
@@ -272,49 +292,36 @@ crucible_llvm_verify bic opts lm nm lemmas checkSat setup tactic = do
     let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
 
     -- construct the initial state for verifications
-    (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
+    (args, assumes, env, globals2) <-
+      io $ verifyPrestate cc methodSpec globals1
 
-    -- save initial path conditions
-    frameIdent <- io $ Crucible.pushAssumptionFrame sym
+    case verificationArgs of
+      -- If we're just admitting, don't do anything
+      Nothing -> return methodSpec
 
-    -- run the symbolic execution
-    top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
-    (ret, globals3)
-       <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
+      -- If we're verifying, actually perform the verification
+      Just (lemmas, checkSat, tactic) -> do
 
-    -- collect the proof obligations
-    asserts <- verifyPoststate opts (biSharedContext bic) cc
-                   methodSpec env globals3 ret
+        -- save initial path conditions
+        frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
-    -- restore previous assumption state
-    _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+        -- run the symbolic execution
+        top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
+        (ret, globals3)
+          <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
 
-    -- attempt to verify the proof obligations
-    stats <- verifyObligations cc methodSpec tactic assumes asserts
-    return (methodSpec & csSolverStats .~ stats)
+        -- collect the proof obligations
+        asserts <- verifyPoststate opts (biSharedContext bic) cc
+                      methodSpec env globals3 ret
+
+        -- restore previous assumption state
+        _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+
+        -- attempt to verify the proof obligations
+        stats <- verifyObligations cc methodSpec tactic assumes asserts
+        return (methodSpec & csSolverStats .~ stats)
+
   return (NE.head specs)
-
-crucible_llvm_unsafe_assume_spec ::
-  BuiltinContext   ->
-  Options          ->
-  LLVMModule       ->
-  String          {- ^ Name of the function -} ->
-  CrucibleSetupM () {- ^ Boundary specification -} ->
-  TopLevel CrucibleMethodSpecIR
-crucible_llvm_unsafe_assume_spec bic opts lm nm setup =
-  setupCrucibleContext bic opts lm $ \cc -> do
-    let llmod = cc^.ccLLVMModule
-    (nm', parent) <- resolveSpecName nm
-    loc <- toW4Loc "_SAW_assume_spec" <$> getPosition
-    let edef = findDefMaybeStatic llmod nm'
-    let edecl = findDecl llmod nm'
-    est0 <- case (edef, edecl) of
-              (Right defs, _) -> return $ initialCrucibleSetupState cc (NE.head defs) loc parent
-              (_, Right decl) -> return $ initialCrucibleSetupStateDecl cc decl loc parent
-              (Left err, Left _) -> fail (displayVerifExceptionOpts opts err)
-    case est0 of
-      Left err -> fail (show (ppSetupError err))
-      Right st0 -> (view csMethodSpec) <$> execStateT (runCrucibleSetupM setup) st0
 
 verifyObligations :: CrucibleContext arch
                   -> CrucibleMethodSpecIR
@@ -350,6 +357,35 @@ verifyObligations cc mspec tactic assumes asserts = do
         fail "Proof failed." -- Mirroring behavior of llvm_verify
   printOutLnTop Info $ unwords ["Proof succeeded!", nm]
   return (mconcat stats)
+
+-- | Check that the specified return value has the expected type
+--
+-- The expected type is inferred from the LLVM module.
+checkSpecReturnType ::
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  CrucibleContext arch ->
+  CrucibleMethodSpecIR ->
+  IO ()
+checkSpecReturnType cc mspec =
+  case (mspec^.csRetValue, mspec^.csRet) of
+    (Just _, Nothing) ->
+         fail $ unlines
+           [ "Could not resolve return type of " ++ mspec^.csName
+           , "Raw type: " ++ show (mspec^.csRet)
+           ]
+    (Just sv, Just retTy) -> do
+      retTy' <-
+        typeOfSetupValue cc
+          (csAllocations mspec) -- map allocation indices to allocations
+          (mspec^.csPreState.csVarTypeNames) -- map alloc indices to var names
+          sv
+      -- The following check is even more strict than checkRegisterCompatibility
+      unless (retTy == retTy') $ fail $ unlines
+        [ "Incompatible types for return value when verifying " ++ mspec^.csName
+        , "Expected: " ++ show retTy
+        , "but given value of type: " ++ show retTy'
+        ]
+    (Nothing, _) -> return ()
 
 -- | Evaluate the precondition part of a Crucible method spec:
 --
@@ -403,23 +439,6 @@ verifyPrestate cc mspec globals = do
   let globals1 = Crucible.insertGlobal lvar mem''' globals
   (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec^.csPreState.csConditions)
   args <- resolveArguments cc mspec env
-
-  -- Check the type of the return setup value
-  case (mspec^.csRetValue, mspec^.csRet) of
-    (Just _, Nothing) ->
-         fail $ unlines
-           [ "Could not resolve return type of " ++ mspec^.csName
-           , "Raw type: " ++ show (mspec^.csRet)
-           ]
-    (Just sv, Just retTy) ->
-      do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
-         b <- liftIO $ checkRegisterCompatibility retTy retTy'
-         unless b $ fail $ unlines
-           [ "Incompatible types for return value when verifying " ++ mspec^.csName
-           , "Expected: " ++ show retTy
-           , "but given value of type: " ++ show retTy'
-           ]
-    (Nothing, _) -> return ()
 
   return (args, cs, env, globals2)
 

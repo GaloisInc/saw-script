@@ -3,7 +3,6 @@ CLANG?=/usr/local/opt/llvm/bin/clang
 CLANGCMD=${CLANG} -emit-llvm -DFULL_UNROLL
 LLVM_LINK?=/usr/local/opt/llvm/bin/llvm-link
 SAW?=../../bin/saw
-LSS?=../../bin/lss
 DEPS?=../../deps
 CRYPTOL?=${DEPS}/cryptol
 CRYPTOLPATH?=${CRYPTOL}/examples
@@ -13,10 +12,9 @@ SRCDIR=openssl-${OPENSSL_VERSION}
 TARBALL=${SRCDIR}.tar.gz
 
 CFLAGS=-I${SRCDIR}/include \
-       -I${SRCDIR}/crypto/aes \
-       -I../../deps/llvm-verifier/sym-api
+       -I${SRCDIR}/crypto/aes
 
-all: aes_ref.aig
+all: aes.log
 
 ${TARBALL}:
 	wget http://openssl.org/source/${TARBALL}
@@ -42,15 +40,10 @@ aes_wrap.bc: aes_wrap.c ${SRCDIR}/crypto/aes/aes_core.o
 aes_all.bc: aes_wrap.bc ${SRCDIR}/crypto/aes/aes_core.o
 	${LLVM_LINK} -o $@ $^
 
-aes_imp.aig: aes_all.bc
-	@echo "The next step may take about a minute."
-	time ${LSS} $<
-
 export CRYPTOLPATH := ${CRYPTOLPATH}
-aes_ref.aig: aes_imp.aig aes.saw
-	${SAW} aes.saw
+aes.log: aes_all.bc aes.saw
+	${SAW} aes.saw 2>&1 | tee $@
 
 clean:
 	rm -rf ${SRCDIR}
 	rm -f aes_wrap.bc aes_all.bc
-	rm -f aes_imp.aig aes_ref.aig

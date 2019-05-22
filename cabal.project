@@ -12,7 +12,6 @@ packages:
     deps/saw-core-what4
     deps/cryptol-verifier
     deps/jvm-verifier
-    deps/llvm-verifier
     deps/crucible/what4
     deps/crucible/what4-abc
     deps/crucible/crucible
