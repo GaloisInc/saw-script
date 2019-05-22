@@ -59,7 +59,7 @@ instance MonadError err (BackM err) where
 ----------------------------------------------------------------------
 
 -- FIXME HERE: move to Unsafe.hs
--- | Extend the size by a given difference.
+-- | The opposite of 'extSize': unextend a size by a given difference.
 unextSize :: Size r -> Diff l r -> Size l
 unextSize = error "FIXME HERE: unextSize"
 
