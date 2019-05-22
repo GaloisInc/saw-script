@@ -27,4 +27,5 @@ RUN apt-get update \
 COPY --from=build /home/saw/rootfs /
 RUN useradd -m saw && chown -R saw:saw /home/saw
 USER saw
+ENV LANG C.UTF-8
 ENTRYPOINT ["/usr/local/bin/saw"]
