@@ -207,6 +207,9 @@ newtype (:->:) a b (ctx :: Ctx k) =
 instance Weakenable2 (:->:) where
   weaken2 w _ (CFun f) = CFun $ \w' -> f (w' Cat.. w)
 
+instance Weakenable (a :->: b) where
+  weaken w _ (CFun f) = CFun $ \w' -> f (w' Cat.. w)
+
 -- | Represents a contextual type inside a binding for another variable
 newtype CNabla (tp :: k) (a :: CType k) (ctx :: Ctx k) =
   CNabla { unCNabla :: a (ctx ::> tp) }
@@ -395,10 +398,10 @@ test2 = clam $ \x -> clam $ \y -> x
 ----------------------------------------------------------------------
 
 -- | Monads over contextual types
-class Weakenable1 m => CMonad (m :: CType k -> CType k) where
-  creturn :: Weakenable a => CExpr (a :->: m a) ctx
+class CMonad (m :: CType k -> CType k) where
+  creturn :: Weakenable a => CExpr a ctx -> CExpr (m a) ctx
   cbind :: (Weakenable a, Weakenable b) =>
-           CExpr (m a :->: (a :->: m b) :->: m b) ctx
+           CExpr (m a) ctx -> CExpr (a :->: m b) ctx -> CExpr (m b) ctx
 
 -- | More traditional bind syntax for 'cbind'
 infixl 1 >>>=
@@ -406,19 +409,19 @@ infixl 1 >>>=
           CExpr (m a) ectx ->
           CExprBinder a (m b) ectx ->
           CExpr (m b) ectx
-m >>>= f = cbind @@ m @@ clam f
+m >>>= f = cbind m $ clam f
 
 
 -- | Contextual monad transformers
 class CMonadTrans (t :: (CType k -> CType k) -> CType k -> CType k) where
-  clift :: (CMonad m, Weakenable a) => CExpr (m a :->: t m a) ectx
+  clift :: (CMonad m, Weakenable1 m, Weakenable a) =>
+           CExpr (m a) ectx -> CExpr (t m a) ectx
 
 instance Monad m => CMonad ((:@:) m) where
-  creturn = clam $ \x -> cOp1 (CApplyF . return) x
-  cbind = clam $ \m -> clam $ \f ->
+  creturn x = cOp1 (CApplyF . return) x
+  cbind m f =
     cOp2 (\m' f' ->
            CApplyF (unCApplyF m' >>= unCApplyF . unCFun f' Cat.id)) m f
-
 
 -- | The identity contextual monad
 type CIdentity = ((:@:) Identity)
@@ -427,37 +430,37 @@ type CIdentity = ((:@:) Identity)
 newtype CContT res m a (ctx :: Ctx k) =
   CContT { unCContT :: ((a :->: m res) :->: m res) ctx }
 
-instance (Weakenable1 m, Weakenable res) =>
-         Weakenable1 (CContT res m) where
+instance Weakenable1 (CContT res m) where
   weaken1 w sz (CContT m) = CContT $ weaken w sz m
 
-instance (CMonad m, Weakenable res) => CMonad (CContT res m) where
-  creturn =
-    clam $ \a -> cOp1 CContT $ clam $ \k -> k @@ a
-  cbind =
-    clam $ \m -> clam $ \f ->
+instance Weakenable (CContT res m a) where
+  weaken w sz (CContT m) = CContT $ weaken w sz m
+
+instance (Weakenable1 m, CMonad m, Weakenable res) => CMonad (CContT res m) where
+  creturn a = cOp1 CContT $ clam $ \k -> k @@ cweaken a
+  cbind m f =
     cOp1 CContT $ clam $ \k ->
-    (cOp1 unCContT m) $$ clam $ \a ->
-    cOp1 unCContT (f @@ a) @@ k
+    (cOp1 unCContT $ cweaken m) $$ clam $ \a ->
+    cOp1 unCContT (cweaken f @@ a) @@ k
 
 instance Weakenable res => CMonadTrans (CContT res) where
-  clift = clam $ \m -> cOp1 CContT $ clam $ \k -> m >>>= \a -> k @@ a
+  clift m = cOp1 CContT $ clam $ \k -> cweaken m >>>= \a -> k @@ a
 
 -- | Contextual monads that support shift and reset
 class (Weakenable res, CMonad m) => CMonadShiftReset res m | m -> res where
-  cshift :: Weakenable a => CExpr (((a :->: m res) :->: m res) :->: m a) ctx
-  creset :: CExpr (m res :->: m res) ctx
+  cshift :: Weakenable a =>
+            CExpr ((a :->: m res) :->: m res) ctx -> CExpr (m a) ctx
+  creset :: CExpr (m res) ctx -> CExpr (m res) ctx
 
-instance (CMonad m, Weakenable res) => CMonadShiftReset res (CContT res m) where
-  cshift =
-    clam $ \f ->
+instance (CMonad m, Weakenable1 m, Weakenable res) =>
+         CMonadShiftReset res (CContT res m) where
+  cshift f =
     cOp1 CContT $ clam $ \k ->
-    cOp1 unCContT (f @@ (clam $ \a -> clift @@ (k @@ a))) @@
-    (clam $ \res -> creturn @@ res)
-  creset =
-    clam $ \m ->
+    cOp1 unCContT (cweaken f @@ (clam $ \a -> clift (k @@ a))) @@
+    (clam $ \res -> creturn res)
+  creset m =
     cOp1 CContT $ clam $ \k ->
-    cOp1 unCContT m @@ (clam $ \res -> creturn @@ res) >>>= \a -> k @@ a
+    cOp1 unCContT (cweaken m) @@ (clam $ \res -> creturn res) >>>= \a -> k @@ a
 
 
 -- | The contextual state transformer
@@ -468,48 +471,43 @@ instance (Weakenable1 m, Weakenable s) =>
          Weakenable1 (CStateT s m) where
   weaken1 w sz (CStateT m) = CStateT $ weaken w sz m
 
-instance (CMonad m, Weakenable s) => CMonad (CStateT s m) where
-  creturn =
-    clam $ \a -> cOp1 CStateT $ clam $ \s -> creturn @@ (cpair s a)
-  cbind =
-    clam $ \m -> clam $ \f ->
+instance (CMonad m, Weakenable1 m, Weakenable s) => CMonad (CStateT s m) where
+  creturn a = cOp1 CStateT $ clam $ \s -> creturn (cpair s $ cweaken a)
+  cbind m f =
     cOp1 CStateT $ clam $ \s ->
-    cOp1 unCStateT m @@ s >>>= \s'a ->
-    (cOp1 unCStateT $ f @@ (csnd s'a)) @@ (cfst s'a)
+    cOp1 unCStateT (cweaken m) @@ s >>>= \s'a ->
+    (cOp1 unCStateT $ cweaken f @@ (csnd s'a)) @@ (cfst s'a)
 
 instance Weakenable s => CMonadTrans (CStateT s) where
-  clift =
-    clam $ \m ->
+  clift m =
     cOp1 CStateT $ clam $ \s ->
-    m >>>= \a -> creturn @@ (cpair s a)
+    cweaken m >>>= \a -> creturn (cpair s a)
 
 -- | Contextual state monads
 class CMonad m => CMonadState s m where
   cget :: CExpr (m s) ectx
-  cput :: CExpr (s :->: m CUnit) ectx
+  cput :: CExpr s ectx -> CExpr (m CUnit) ectx
 
-instance (CMonad m, Weakenable s) => CMonadState s (CStateT s m) where
+instance (CMonad m, Weakenable1 m, Weakenable s) =>
+         CMonadState s (CStateT s m) where
   cget =
-    cOp1 CStateT $ clam $ \s -> creturn @@ (cpair s s)
-  cput =
-    clam $ \s -> cOp1 CStateT $ clam $ \_ -> creturn @@ (cpair s cunit)
+    cOp1 CStateT $ clam $ \s -> creturn (cpair s s)
+  cput s = cOp1 CStateT $ clam $ \_ -> creturn (cpair (cweaken s) cunit)
 
-instance (Weakenable s, CMonadShiftReset res m) =>
+instance (Weakenable s, Weakenable1 m, CMonadShiftReset res m) =>
          CMonadShiftReset res (CStateT s m) where
   -- FIXME: understand what shift does to the state...
-  cshift =
-    clam $ \f ->
+  cshift f =
     cOp1 CStateT $ clam $ \s ->
-    cshift $$ clam $ \k ->
-    (cOp1 unCStateT $ f $$ clam $ \a ->
+    cshift $ clam $ \k ->
+    (cOp1 unCStateT $ cweaken f $$ clam $ \a ->
       cget >>>= \s' ->
-      clift @@ (k @@ (cpair s' a))) @@ s >>>= \s_res ->
-    creturn @@ (csnd s_res)
+      clift (k @@ (cpair s' a))) @@ s >>>= \s_res ->
+    creturn (csnd s_res)
 
   -- NOTE: reset throws away the inner state
-  creset =
-    clam $ \m ->
+  creset m =
     cOp1 CStateT $ clam $ \s ->
-    creset @@ (cOp1 unCStateT m @@ s >>>= \s_res ->
-                creturn @@ (csnd s_res)) >>>= \res' ->
-    creturn @@ (cpair s res')
+    creset (cOp1 unCStateT (cweaken m) @@ s >>>= \s_res ->
+             creturn (csnd s_res)) >>>= \res' ->
+    creturn (cpair s res')
