@@ -487,7 +487,7 @@ tcJumpTarget (JumpTarget blkID args_ctx args) =
              entryInfoID = TypedEntryID blkID ghosts ix
              (entryInfoPermsIn, intro) = buildInputSpecs perms args_ctx args
          entryInfoPermsOut <-
-           map (weaken $ Weakening diff_ctx_args $ incSize zeroSize) <$>
+           map (weaken $ Weakening1 diff_ctx_args $ incSize zeroSize) <$>
            getRetPerms
          let entry = BlockEntryInfo { .. }
          addBlockEntry entry

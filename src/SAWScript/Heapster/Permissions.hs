@@ -355,18 +355,33 @@ instance GenSubstable SplittingExpr where
       PExpr_Spl spl -> spl
 
 
--- | A weakening is a 'Diff' on a prefix of the context
+-- | A weakening is a sequence of 'Diff's on a prefix of the context
 data Weakening ctx1 ctx2 where
-  Weakening :: Diff c1 c2 -> Size c3 -> Weakening (c1 <+> c3) (c2 <+> c3)
+  WeakeningNil :: Weakening ctx ctx
+  Weakening1 :: Diff c1 c2 -> Size c3 -> Weakening (c1 <+> c3) (c2 <+> c3)
+  WeakeningComp :: Weakening ctx1 ctx2 -> Weakening ctx2 ctx3 ->
+                   Weakening ctx1 ctx3
 
 identityWeakening :: Weakening ctx ctx
-identityWeakening = Weakening noDiff zeroSize
+identityWeakening = WeakeningNil
+
+composeWeakenings :: Weakening ctx1 ctx2 -> Weakening ctx2 ctx3 ->
+                     Weakening ctx1 ctx3
+composeWeakenings WeakeningNil w = w
+composeWeakenings w WeakeningNil = w
+composeWeakenings w1 w2 = WeakeningComp w1 w2
+
+weakeningOfDiff :: Diff ctx1 ctx2 -> Weakening ctx1 ctx2
+weakeningOfDiff diff = Weakening1 diff zeroSize
 
 mkWeakening1 :: Weakening ctx (ctx ::> tp)
 mkWeakening1 = weakeningOfDiff oneDiff
 
 weakenWeakening1 :: Weakening ctx1 ctx2 -> Weakening (ctx1 ::> tp) (ctx2 ::> tp)
-weakenWeakening1 (Weakening diff sz) = Weakening diff $ incSize sz
+weakenWeakening1 WeakeningNil = WeakeningNil
+weakenWeakening1 (Weakening1 d sz) = Weakening1 d (incSize sz)
+weakenWeakening1 (WeakeningComp w1 w2) =
+  WeakeningComp (weakenWeakening1 w1) (weakenWeakening1 w2)
 
 -- FIXME: there should be a way to do this without traversing all of ctx'
 weakenWeakening :: Size ctx' -> Weakening ctx1 ctx2 ->
@@ -379,9 +394,6 @@ genSubstOfWeakening :: Weakening ctx1 ctx2 -> GenSubst ctx1 ctx2
 genSubstOfWeakening w =
   GenSubst (PExpr_Var . weaken' w) (genSubstOfWeakening $ weakenWeakening1 w)
 
-weakeningOfDiff :: Diff ctx1 ctx2 -> Weakening ctx1 ctx2
-weakeningOfDiff diff = Weakening diff zeroSize
-
 genSubstOfDiff :: Diff ctx1 ctx2 -> GenSubst ctx1 ctx2
 genSubstOfDiff = genSubstOfWeakening . weakeningOfDiff
 
@@ -390,20 +402,23 @@ embeddingOfWeakening sz w =
   CtxEmbedding (weaken w sz)
   (generate sz (indexOfPermVar . weaken' w . PermVar sz))
 
-weakenAssignment :: (forall a. Index ctx' a -> f a) -> Weakening ctx ctx' ->
+weakenAssignment :: (forall a. PermVar ctx' a -> f a) -> Weakening ctx ctx' ->
                     Assignment f ctx -> Assignment f ctx'
-weakenAssignment f w@(Weakening (diff :: Diff ctx1 _) sz3) asgn =
+weakenAssignment _ WeakeningNil asgn = asgn
+weakenAssignment f w@(Weakening1 (diff :: Diff ctx1 _) sz3) asgn =
   let sz1 :: Size ctx1 = subtractSize (size asgn) Proxy sz3 in
   case diffIsAppend diff of
-    IsAppend sz2 ->
+    IsAppend sz2' ->
       generate sz1 (\ix -> asgn ! extendContext' (appendDiff sz3) ix)
       <++>
-      generate sz2 (\ix ->
-                     f (extendContext' (appendDiff sz3) $
-                        extendIndexLeft sz1 ix))
+      generate sz2' (\ix ->
+                      f (PermVar (addSize (addSize sz1 sz2') sz3) $
+                         extendContext' (appendDiff sz3) $
+                         extendIndexLeft sz1 ix))
       <++>
       generate sz3 (\ix -> asgn ! extendIndexLeft sz1 ix)
-
+weakenAssignment f (WeakeningComp w1 w2) asgn =
+  weakenAssignment f w2 $ weakenAssignment (f . weaken' w2) w1 asgn
 
 class Weakenable (f :: Ctx k -> *) where
   weaken :: Weakening ctx1 ctx2 -> f ctx1 -> f ctx2
@@ -419,16 +434,20 @@ extendWithCtx :: WeakenableWithCtx f => CtxRepr ctx2 -> Diff ctx1 ctx2 ->
 extendWithCtx ctx diff = weakenWithCtx ctx (weakeningOfDiff diff)
 
 instance Weakenable Size where
-  weaken (Weakening diff12 sz3) sz =
+  weaken WeakeningNil sz = sz
+  weaken (Weakening1 diff12 sz3) sz =
     addSize (extSize (subtractSize sz Proxy sz3) diff12) sz3
+  weaken (WeakeningComp w1 w2) sz = weaken w2 $ weaken w1 sz
 
 instance Weakenable' PermVar where
-  weaken' w@(Weakening diff12 (sz3 :: Size c3)) (PermVar sz13 x) =
+  weaken' WeakeningNil x = x
+  weaken' w@(Weakening1 diff12 (sz3 :: Size c3)) (PermVar sz13 x) =
     PermVar (weaken w sz13) $
     let sz1 = subtractSize sz13 Proxy sz3 in
     case caseIndexAppend sz1 sz3 x of
       Left x1 -> extendIndex' (appendDiff sz3 Cat.. diff12) x1
       Right x3 -> extendIndexLeft (extSize sz1 diff12) x3
+  weaken' (WeakeningComp w1 w2) x = weaken' w2 $ weaken' w1 x
 
 instance Weakenable' PermExpr where
   weaken' w = genSubst' (genSubstOfWeakening w)
@@ -1153,7 +1172,7 @@ instance Weakenable (PermSpec vars) where
 
 instance ExtendContext (PermSpec vars) where
   extendContext diff (PermSpec sz_vars (e :: PermExpr ctx a) p) =
-    PermSpec sz_vars (extendContext' diff e) (weaken' (Weakening diff sz_vars) p)
+    PermSpec sz_vars (extendContext' diff e) (weaken' (Weakening1 diff sz_vars) p)
 
 extPermSpecVars :: PermSpec vars ctx -> PermSpec (vars ::> tp) ctx
 extPermSpecVars (PermSpec sz_vars e p) =
@@ -1358,7 +1377,7 @@ instance Weakenable PermIntro where
     Intro_LLVMField off (weaken w spl) (weaken' w p) (weaken w intro)
 
 instance ExtendContext PermIntro where
-  extendContext diff = weaken (Weakening diff zeroSize)
+  extendContext diff = weaken (Weakening1 diff zeroSize)
 
 -- | An introduction rule annotated with the input permission set and output
 -- permission specs
@@ -1465,7 +1484,7 @@ proveEqH perms vars s (PExpr_Var x) e2
   = elimDisjuncts perms x >>>= \diff perms' ->
     proveEqH perms' vars (extendContext diff s)
     (PExpr_Var $ extendContext' diff x)
-    (weaken' (Weakening diff (size vars)) e2)
+    (weaken' (Weakening1 diff (size vars)) e2)
 
 -- Prove x=e2 when x:exists z.p is in perms by eliminating the existential
 proveEqH perms vars s (PExpr_Var x) e2
@@ -1473,7 +1492,7 @@ proveEqH perms vars s (PExpr_Var x) e2
   = elimDisjuncts perms x >>>= \diff perms' ->
     proveEqH perms' vars (extendContext diff s)
     (PExpr_Var $ extendContext' diff x)
-    (weaken' (Weakening diff (size vars)) e2)
+    (weaken' (Weakening1 diff (size vars)) e2)
 
 -- FIXME: need more rules!
 proveEqH _perms _vars _s _e1 _e2 =
