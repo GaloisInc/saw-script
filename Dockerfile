@@ -12,7 +12,7 @@ ADD saw-script.tar.gz /home/saw
 RUN chown -R saw:saw /home/saw/saw-script
 USER saw
 WORKDIR /home/saw/saw-script
-RUN cp cabal.project.GHC-8.6.freeze cabal.project.freeze
+RUN cp cabal.project.freeze cabal.project.freeze
 RUN cabal v2-build
 WORKDIR /home/saw
 RUN mkdir -p rootfs/usr/local/bin \

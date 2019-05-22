@@ -41,6 +41,5 @@ script:
   - git submodule init
   - git submodule update
   - (cd deps/abcBridge && git submodule init && git submodule update)
-  - cp cabal.project.GHC-${GHCVER}.freeze cabal.project.freeze
   - cabal v2-update
   - cabal v2-build -j --disable-optimization
