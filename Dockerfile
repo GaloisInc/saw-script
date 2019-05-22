@@ -7,12 +7,10 @@ RUN apt-get update \
     && unzip z3*.zip \
     && mv z3-*/bin/z3 /usr/local/bin
 RUN useradd -m saw
-RUN su -c '/opt/cabal/bin/cabal v2-update' saw
-ADD saw-script.tar.gz /home/saw
-RUN chown -R saw:saw /home/saw/saw-script
 USER saw
-WORKDIR /home/saw/saw-script
-RUN cp cabal.project.freeze cabal.project.freeze
+WORKDIR /home/saw
+RUN cabal v2-update
+ADD . /home/saw
 RUN cabal v2-build
 WORKDIR /home/saw
 RUN mkdir -p rootfs/usr/local/bin \
