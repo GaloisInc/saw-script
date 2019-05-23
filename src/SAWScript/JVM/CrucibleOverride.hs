@@ -81,7 +81,7 @@ import qualified Lang.Crucible.Utils.MuxTree as Crucible (toMuxTree)
 import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 
 -- crucible-jvm
-import qualified Lang.Crucible.JVM.Translation as CJ
+import qualified Lang.Crucible.JVM as CJ
 
 -- parameterized-utils
 import           Data.Parameterized.Classes ((:~:)(..), testEquality, knownRepr, ixF)

@@ -52,7 +52,7 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic){-, IntrinsicMuxFn(IntrinsicMuxFn)-})
 
 -- crucible-jvm
-import qualified Lang.Crucible.JVM.Translation as CJ
+import qualified Lang.Crucible.JVM as CJ
 
 -- jvm-verifier
 -- TODO: transition to Lang.JVM.Codebase from crucible-jvm

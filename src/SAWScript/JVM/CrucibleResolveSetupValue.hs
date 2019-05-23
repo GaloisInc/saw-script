@@ -49,7 +49,7 @@ import qualified Lang.Crucible.Simulator.Evaluation as Crucible (evalApp)
 import qualified What4.Partial as W4
 
 -- crucible-jvm
-import qualified Lang.Crucible.JVM.Translation as CJ
+import qualified Lang.Crucible.JVM as CJ
 
 -- sbv
 import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord, toBool)

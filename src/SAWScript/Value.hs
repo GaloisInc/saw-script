@@ -86,8 +86,8 @@ import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.LLVM.MemModel as Crucible (HasPtrWidth)
 
-import           Lang.Crucible.JVM.Translation (JVM)
-import qualified Lang.Crucible.JVM.Translation as CJ
+import           Lang.Crucible.JVM (JVM)
+import qualified Lang.Crucible.JVM as CJ
 
 -- Values ----------------------------------------------------------------------
 

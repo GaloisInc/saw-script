@@ -51,7 +51,7 @@ import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
-import qualified Lang.Crucible.JVM.Translation as CJ
+import qualified Lang.Crucible.JVM as CJ
 import qualified SAWScript.CrucibleBuiltinsJVM as CJ
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
