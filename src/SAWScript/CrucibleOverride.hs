@@ -214,9 +214,9 @@ ppOverrideFailureReason rsn = case rsn of
     PP.vcat (map (PP.indent 2) $
               [ PP.text "actual (simulator) value:" PP.<+>
                   either (PP.text . show) id llvmval
-              , PP.text "specified value:" PP.<+>
+              , PP.text "specified value:         " PP.<+>
                   either ppSetupValue id setupval
-              , PP.text "type of actual value:" PP.<+> Crucible.ppMemType ty
+              , PP.text "type of actual value:   " PP.<+> Crucible.ppMemType ty
               ] ++ let msg memty =
                          [PP.text "type of specified value:"
                           PP.<+> Crucible.ppMemType memty]
