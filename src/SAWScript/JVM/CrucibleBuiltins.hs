@@ -94,8 +94,7 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 -- crucible-jvm
-import qualified Lang.Crucible.JVM.Translation as CJ
-import qualified Lang.Crucible.JVM.ClassRefs as CJ (classRefs)
+import qualified Lang.Crucible.JVM as CJ
 
 -- parameterized-utils
 import           Data.Parameterized.Classes

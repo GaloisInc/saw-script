@@ -77,9 +77,8 @@ import qualified SAWScript.Utils as J
 import qualified "jvm-verifier" Verifier.Java.Codebase as JCB
 
 -- crucible-jvm
-import           Lang.Crucible.JVM.Translation(IsCodebase(..))
-import qualified Lang.Crucible.JVM.Translation as CJ
-import qualified Lang.Crucible.JVM.ClassRefs as CJ
+import           Lang.Crucible.JVM (IsCodebase(..))
+import qualified Lang.Crucible.JVM as CJ
 
 import Debug.Trace
 
