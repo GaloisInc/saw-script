@@ -11,11 +11,12 @@ data Version
   deriving (Eq, Ord, Show)
 
 parseVersion :: String -> Version
-parseVersion = Version . reverse . catMaybes . map readMaybe . go [[]]
+parseVersion = Version . fixup . go [[]]
   where
     go (n : ns) (c : cs) | '0' <= c && c <= '9' = go ((c : n) : ns) cs
     go (n : ns) ('.' : cs) = go ([] : n : ns) cs
     go ns _ = ns
+    fixup = reverse . catMaybes . map (readMaybe . reverse)
 
 prettyVersion :: Version -> String
 prettyVersion (Version xs) = intercalate "." (map show xs)
