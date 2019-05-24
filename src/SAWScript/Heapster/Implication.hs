@@ -77,8 +77,11 @@ varPerms (PermVar _ ix) = multiPermSetIso . ixF' ix
 -- | A location in a 'MultiPermSet' of a specific permission on a variable
 data PermLoc ctx a = PermLoc (PermVar ctx a) Int
 
+instance Weakenable' PermLoc where
+  weaken' w (PermLoc x i) = PermLoc (weaken' w x) i
+
 weaken1PermLoc :: PermLoc ctx a -> PermLoc (ctx ::> tp) a
-weaken1PermLoc (PermLoc x i) = PermLoc (weakenPermVar1 x) i
+weaken1PermLoc = weaken' mkWeakening1
 
 varPerm :: PermLoc ctx a -> Lens' (MultiPermSet ctx) (ValuePerm ctx a)
 varPerm (PermLoc x i) =
@@ -138,14 +141,16 @@ data PermImpl (f :: Ctx CrucibleType -> Data.Kind.*) (ctx :: Ctx CrucibleType) w
   -- -----------------------------------------------------------------
   -- Gin | Pin, x:(p1 \/ p2) |- GsPs1, GsPs2
 
-  Impl_IntroOrL :: PermLoc ctx a -> PermImpl f ctx -> PermImpl f ctx
+  Impl_IntroOrL :: PermLoc ctx a -> ValuePerm ctx a -> PermImpl f ctx ->
+                   PermImpl f ctx
   -- ^ @Impl_IntroOrL x p2 pf@ is the left disjunction introduction rule
   --
   -- > pf = Gamma | Pin |- x:p1, Pout
   -- > ---------------------------------
   -- > Gamma | Pin |- x:(p1 \/ p2), Pout
 
-  Impl_IntroOrR :: PermLoc ctx a -> PermImpl f ctx -> PermImpl f ctx
+  Impl_IntroOrR :: PermLoc ctx a -> ValuePerm ctx a -> PermImpl f ctx ->
+                   PermImpl f ctx
   -- ^ @Impl_IntroOrR x p1 pf@ is the right disjunction introduction rule
   --
   -- > pf = Gamma | Pin |- x:p2, Pout
@@ -221,21 +226,9 @@ permsIntroExists l tp _e p =
 -- * Permission Implication Monad
 ----------------------------------------------------------------------
 
-{-
-data ImplState ctx =
-  ImplState { implCtx :: CtxRepr ctx,
-              implPerms :: MultiPermSet ctx }
-
-extendImplState :: ImplState ctx -> TypeRepr tp -> ImplState (ctx ::> tp)
-extendImplState (ImplState {..}) tp =
-  ImplState { implCtx = extend implCtx tp,
-              implPerms = extendMultiPerms implPerms }
--}
-
 class ImplState s where
   weakenImplState1 :: s ctx -> TypeRepr tp -> s (ctx ::> tp)
-  getImplPerms :: s ctx -> MultiPermSet ctx
-  setImplPerms :: s ctx -> MultiPermSet ctx -> s ctx
+  implStatePerms :: Lens' (s ctx) (MultiPermSet ctx)
 
 -- | The contextual continuation state transformer
 newtype CCST s fin fout ctx m a =
@@ -280,6 +273,10 @@ cstate f = CCST $ \w s k ->
   let (a, s') = f w s in
   k identityWeakening s a
 
+cmodify :: (forall ctx'. Weakening ctx ctx' -> s ctx' -> s ctx') ->
+           CCST s f f ctx m ()
+cmodify f = cstate (\w s -> ((), f w s))
+
 {-
 lookupType :: PermVar ctx a -> CCST f f ctx (TypeRepr a)
 lookupType x =
@@ -300,6 +297,16 @@ cmapCont f (CCST m) =
   CCST $ \w s k ->
   f w <$> (m w s $ \w' s' a -> k w' s' a)
 
+cmapCont2 :: Monad m =>
+             (forall ctx'. Weakening ctx ctx' ->
+              fout1 ctx' -> fout2 ctx' -> fout' ctx') ->
+             CCST s fin fout1 ctx m a -> CCST s fin fout2 ctx m a ->
+             CCST s fin fout' ctx m a
+cmapCont2 f (CCST m1) (CCST m2) =
+  CCST $ \w s k ->
+  f w <$> (m1 w s $ \w' s' a -> k w' s' a) <*>
+  (m2 w s $ \w' s' a -> k w' s' a)
+
 cmapContIn :: Monad m =>
               (forall ctx'. Weakening ctx ctx' -> fin' ctx' -> fin ctx') ->
               CCST s fin fout ctx m a -> CCST s fin' fout ctx m a
@@ -313,3 +320,51 @@ cmapContBind tp f (CCST m) =
   CCST $ \w s k ->
   f w <$> (m (weakenWeakening1 w) (weakenImplState1 s tp) $ \w' s' a ->
             k (composeWeakenings mkWeakening1 w') s' a)
+
+
+----------------------------------------------------------------------
+-- * Monadic Proof Operations
+----------------------------------------------------------------------
+
+introOrLM :: (Monad m, ImplState s) =>
+             PermLoc ctx a -> ValuePerm ctx a ->
+             CCST s (PermImpl f) (PermImpl f) ctx m ()
+introOrLM l p2 =
+  cmapCont (\w -> Impl_IntroOrL (weaken' w l) (weaken' w p2)) $
+  cmodify (\w -> over implStatePerms $
+                 permsIntroOrL (weaken' w l) (weaken' w p2))
+
+introOrRM :: (Monad m, ImplState s) =>
+             PermLoc ctx a -> ValuePerm ctx a ->
+             CCST s (PermImpl f) (PermImpl f) ctx m ()
+introOrRM l p1 =
+  cmapCont (\w -> Impl_IntroOrR (weaken' w l) (weaken' w p1)) $
+  cmodify (\w -> over implStatePerms $
+                 permsIntroOrR (weaken' w l) (weaken' w p1))
+
+introExistsM :: (Monad m, ImplState s) =>
+                PermLoc ctx a -> TypeRepr tp -> PermExpr ctx tp ->
+                ValuePerm (ctx ::> tp) a ->
+                CCST s (PermImpl f) (PermImpl f) ctx m ()
+introExistsM l tp e p =
+  cmapCont (\w -> Impl_IntroExists (weaken' w l) tp (weaken' w e)
+                  (weaken' (weakenWeakening1 w) p)) $
+  cmodify (\w -> over implStatePerms $
+                 permsIntroExists (weaken' w l) tp (weaken' w e)
+                 (weaken' (weakenWeakening1 w) p))
+
+elimOrM :: (Monad m, ImplState s) =>
+           PermLoc ctx a -> CCST s (PermImpl f) (PermImpl f) ctx m ()
+elimOrM l =
+  cmapCont2 (\w -> Impl_ElimOr (weaken' w l))
+  (cmodify (\w -> over implStatePerms (fst . permsElimOr (weaken' w l))))
+  (cmodify (\w -> over implStatePerms (snd . permsElimOr (weaken' w l))))
+
+{- FIXME HERE NOW: write this!
+elimExistsM :: (Monad m, ImplState s) =>
+               PermLoc ctx a -> TypeRepr tp ->
+               CCST s (PermImpl f) (PermImpl f) ctx m ()
+elimExistsM l tp =
+  cmapContBind (\w -> Impl_ElimExists (weaken' w l) tp) $
+  cmodify (\w -> over implStatePerms (fst . permsElimOr (weaken' w l)))
+-}
