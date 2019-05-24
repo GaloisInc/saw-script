@@ -17,6 +17,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module SAWScript.Heapster.Implication where
 
@@ -107,44 +108,28 @@ modifyVarPerm perms l f = over (varPerm l) f perms
 
 
 ----------------------------------------------------------------------
--- * Multi-Valued Permission Sets with Existentials
+-- * Permission Sets with Existentials
 ----------------------------------------------------------------------
 
--- | A set of 0 or more permissions for each variable in scope
-data ExMultiPermSet vars ctx =
-  ExMultiPermSet
+-- | A set of permissions with existentially quantified variables
+data ExPermSet vars ctx =
+  ExPermSet
   { exPermSetVars :: Size vars,
-    _exPermSetPerms :: Assignment (ValuePerms (ctx <+> vars)) ctx }
+    _exPermSetPerms :: Assignment (ValuePerm (ctx <+> vars)) ctx }
 
-instance Weakenable (ExMultiPermSet vars) where
-  weaken w (ExMultiPermSet sz asgn) =
-    ExMultiPermSet sz $ weakenAssignment (\_ -> ValuePerms []) w $
+instance Weakenable (ExPermSet vars) where
+  weaken w (ExPermSet sz asgn) =
+    ExPermSet sz $ weakenAssignment (\_ -> ValPerm_True) w $
     fmapFC (weaken' $ weakenWeakening sz w) asgn
 
-exPermSetPerms :: Lens' (ExMultiPermSet vars ctx)
-                  (Assignment (ValuePerms (ctx <+> vars)) ctx)
+exPermSetPerms :: Lens' (ExPermSet vars ctx)
+                  (Assignment (ValuePerm (ctx <+> vars)) ctx)
 exPermSetPerms =
   lens _exPermSetPerms (\eperms perms -> eperms { _exPermSetPerms = perms })
 
-exVarPerms :: PermVar ctx a ->
-              Lens' (ExMultiPermSet vars ctx) [ValuePerm (ctx <+> vars) a]
-exVarPerms (PermVar _ ix) = exPermSetPerms . ixF' ix . valuePermsIso
-
-exVarPerm :: PermLoc ctx a ->
-             Lens' (ExMultiPermSet vars ctx) (ValuePerm (ctx <+> vars) a)
-exVarPerm (PermLoc x i) =
-  -- FIXME: there should be a nicer way of doing this...
-  lens
-  (\perms ->
-    case perms ^? (exVarPerms x . element i) of
-      Just p -> p
-      Nothing -> error ("exVarPerm: no permission at position " ++ show i))
-  (\perms p ->
-    over (exVarPerms x)
-    (\ps ->
-      if i < length ps then (element i .~ p) ps else
-        error ("exVarPerm: no permission at position " ++ show i))
-    perms)
+exVarPerm :: PermVar ctx a ->
+             Lens' (ExPermSet vars ctx) (ValuePerm (ctx <+> vars) a)
+exVarPerm (PermVar _ ix) = exPermSetPerms . ixF' ix
 
 
 ----------------------------------------------------------------------
@@ -186,17 +171,17 @@ data PermImpl (f :: Ctx CrucibleType -> Data.Kind.*) (ctx :: Ctx CrucibleType) w
                    PermImpl f ctx
   -- ^ @Impl_IntroOrL x p2 pf@ is the left disjunction introduction rule
   --
-  -- > pf = Gamma | Pin |- x:p1, Pout
-  -- > ---------------------------------
-  -- > Gamma | Pin |- x:(p1 \/ p2), Pout
+  -- > pf = Gamma | Pin, x:(p1 \/ p2) |- Pout
+  -- > --------------------------------------
+  -- > Gamma | Pin, x:p1 |- rets
 
   Impl_IntroOrR :: PermLoc ctx a -> ValuePerm ctx a -> PermImpl f ctx ->
                    PermImpl f ctx
   -- ^ @Impl_IntroOrR x p1 pf@ is the right disjunction introduction rule
   --
-  -- > pf = Gamma | Pin |- x:p2, Pout
-  -- > ---------------------------------
-  -- > Gamma | Pin |- x:(p1 \/ p2), Pout
+  -- > pf = Gamma | Pin, x:(p1 \/ p2) |- Pout
+  -- > --------------------------------------
+  -- > Gamma | Pin, x:p2 |- rets
 
   Impl_ElimExists :: PermLoc ctx a -> TypeRepr tp -> PermImpl f (ctx ::> tp) ->
                      PermImpl f ctx
@@ -211,9 +196,9 @@ data PermImpl (f :: Ctx CrucibleType -> Data.Kind.*) (ctx :: Ctx CrucibleType) w
                       PermImpl f ctx -> PermImpl f ctx
   -- ^ @Intro_Exists x tp e p pf@ is the existential introduction rule
   --
-  -- > pf = Gamma | Pin |- x:[e'/z]p, Pout
-  -- > --------------------------------------
-  -- > Gamma | Pin |- x:(exists z:tp.p), Pout
+  -- > pf = Gamma | Pin, x:(exists z:tp.p) |- Pout
+  -- > -------------------------------------------
+  -- > Gamma | Pin, x:[e'/z]p |- Pout
 
 
 ----------------------------------------------------------------------
@@ -439,3 +424,51 @@ elimOrsExistsM x =
     ValPerm_Exists tp _ ->
       elimExistsM (weaken' w x) tp >> elimOrsExistsM (weaken' w x)
     _ -> return ()
+
+
+----------------------------------------------------------------------
+-- * Proving Implications
+----------------------------------------------------------------------
+
+data Intros vars ctx where
+  Intros_Done :: Intros vars ctx
+  Intros_OrL :: PermVar ctx a -> ValuePerm (ctx <+> vars) a ->
+                Intros vars ctx -> Intros vars ctx
+  Intros_OrR :: PermVar ctx a -> ValuePerm (ctx <+> vars) a ->
+                Intros vars ctx -> Intros vars ctx
+  Intros_Exists :: PermVar ctx a -> TypeRepr tp ->
+                   ValuePerm (ctx <+> vars ::> tp) a ->
+                   Intros vars ctx -> Intros (vars ::> tp) ctx
+
+weakenIntros :: Size vars -> Weakening ctx ctx' -> Intros vars ctx ->
+                 Intros vars ctx'
+weakenIntros _ _ Intros_Done = Intros_Done
+weakenIntros sz w (Intros_OrL x p2 intros) =
+  Intros_OrL (weaken' w x) (weaken' (weakenWeakening sz w) p2)
+  (weakenIntros sz w intros)
+weakenIntros sz w (Intros_OrR x p1 intros) =
+  Intros_OrR (weaken' w x) (weaken' (weakenWeakening sz w) p1)
+  (weakenIntros sz w intros)
+weakenIntros sz w (Intros_Exists x tp p intros) =
+  Intros_Exists (weaken' w x) tp
+  (weaken' (weakenWeakening sz w) p)
+  (weakenIntros (decSize sz) w intros)
+
+data ImplState vars ctx =
+  ImplState { _implStatePerms :: MultiPermSet ctx,
+              _implStateVars :: CtxRepr vars,
+              _implStatePSubst :: PartialSubst vars ctx,
+              _implStateIntros :: Intros vars ctx }
+makeLenses ''ImplState
+
+instance Weakenable (ImplState vars) where
+  weaken w (ImplState {..}) =
+    ImplState { _implStatePerms = weaken w _implStatePerms,
+                _implStateVars = _implStateVars,
+                _implStatePSubst = weaken w _implStatePSubst,
+                _implStateIntros =
+                  weakenIntros (size _implStateVars) w _implStateIntros }
+
+instance PermState (ImplState vars) where
+  weakenPermState1 s _ = weaken mkWeakening1 s
+  permStatePerms = implStatePerms
