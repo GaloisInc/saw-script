@@ -81,6 +81,9 @@ data PermLoc ctx a = PermLoc (PermVar ctx a) Int
 instance Weakenable' PermLoc where
   weaken' w (PermLoc x i) = PermLoc (weaken' w x) i
 
+varLoc0 :: PermVar ctx a -> PermLoc ctx a
+varLoc0 x = PermLoc x 0
+
 weaken1PermLoc :: PermLoc ctx a -> PermLoc (ctx ::> tp) a
 weaken1PermLoc = weaken' mkWeakening1
 
@@ -427,7 +430,7 @@ elimOrsExistsM x =
 
 
 ----------------------------------------------------------------------
--- * Proving Implications
+-- * Introduction Proof Steps for Permission Implications
 ----------------------------------------------------------------------
 
 data Intros vars ctx where
@@ -472,3 +475,18 @@ instance Weakenable (ImplState vars) where
 instance PermState (ImplState vars) where
   weakenPermState1 s _ = weaken mkWeakening1 s
   permStatePerms = implStatePerms
+
+applyIntros :: (Monad m, PermState s) =>
+               PermSubst (ctx <+> vars) ctx -> Intros vars ctx ->
+               CCST s (PermImpl f) (PermImpl f) ctx m ()
+applyIntros _ Intros_Done = return ()
+applyIntros s (Intros_OrL x p2 intros) =
+  introOrLM (varLoc0 x) (subst' s p2) >>
+  applyIntros s intros
+applyIntros s (Intros_OrR x p1 intros) =
+  introOrRM (varLoc0 x) (subst' s p1) >>
+  applyIntros s intros
+applyIntros s (Intros_Exists x tp p intros) =
+  let (s', e) = unconsPermSubst s in
+  introExistsM (varLoc0 x) tp e (subst' (weakenSubst1 s') p) >>
+  applyIntros s' intros
