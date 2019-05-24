@@ -49,8 +49,8 @@ getZ3Version = do
 
 checkYicesVersion :: IO ()
 checkYicesVersion = do
-  v <- getYicesVersion
-  case v of
+  mv <- getYicesVersion
+  case mv of
     Just v | v < Version [2,6,1] ->
       fail $ unlines
         [ "Yices version " ++ prettyVersion v ++ " is not supported."

@@ -261,21 +261,6 @@ addAssume ::
   OverrideMatcher ()
 addAssume p = OM (osAssumes %= cons p)
 
-readGlobal ::
-  Crucible.GlobalVar tp ->
-  OverrideMatcher (Crucible.RegValue Sym tp)
-readGlobal k =
-  do mb <- OM (uses overrideGlobals (Crucible.lookupGlobal k))
-     case mb of
-       Nothing -> fail ("No such global: " ++ show k)
-       Just v  -> return v
-
-writeGlobal ::
-  Crucible.GlobalVar    tp ->
-  Crucible.RegValue Sym tp ->
-  OverrideMatcher ()
-writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)
-
 ------------------------------------------------------------------------
 
 -- | Abort the current computation by raising the given 'OverrideFailure'

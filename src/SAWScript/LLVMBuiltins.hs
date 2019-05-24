@@ -22,46 +22,16 @@ module SAWScript.LLVMBuiltins where
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative hiding (many)
 #endif
-import Control.Lens
-import Control.Monad.State hiding (mapM)
 import Control.Monad.ST (stToIO)
-import Control.Monad.Trans.Except
-import Data.Function (on)
-import Data.List (find, partition, sortBy, groupBy)
-import Data.Maybe (fromMaybe)
-import qualified Data.Map as Map
-import qualified Data.Set as Set
 import Data.String
-import qualified Data.Vector as V
-import Text.Parsec as P
 
-import Text.LLVM (modDataLayout)
 import qualified Text.LLVM.AST as LLVM
 import qualified Data.LLVM.BitCode as LLVM
-import qualified Text.LLVM.PP as LLVM
-import qualified Text.LLVM.DebugUtils as DU
 import qualified Text.LLVM.Parser as LLVM (parseType)
 
-import Verifier.SAW.Cryptol (exportFirstOrderValue)
-import Verifier.SAW.FiniteValue (FirstOrderValue)
-import Verifier.SAW.Recognizer (asExtCns)
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedTerm
-import Verifier.SAW.CryptolEnv (schemaNoUser)
-
-import qualified SAWScript.CongruenceClosure as CC
-import SAWScript.Builtins
-import SAWScript.Options as Opt
-import SAWScript.Proof
-import SAWScript.Prover.SolverStats
-import SAWScript.Utils
 import SAWScript.Value as SV
 
 import qualified SAWScript.CrucibleLLVM as Crucible (translateModule)
-import qualified Cryptol.Eval.Monad as Cryptol (runEval)
-import qualified Cryptol.Eval.Value as Cryptol (ppValue)
-import qualified Cryptol.TypeCheck.AST as Cryptol
-import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
 llvm_load_module :: FilePath -> TopLevel LLVMModule
 llvm_load_module file =

@@ -102,7 +102,6 @@ import           Data.Parameterized.Nonce
 import qualified Data.Parameterized.Context as Ctx
 
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
-import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
