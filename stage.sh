@@ -1,11 +1,14 @@
 #!/bin/bash
 set -e
 
-while getopts "c" opt; do
+while getopts "cr" opt; do
     case $opt in
         c)
             # Remove './tmp', including all previous releases, before staging.
             clean="true"
+            ;;
+        r)
+            release="true"
             ;;
         \?)
             echo "Invalid option: -$OPTARG" >&2
@@ -21,7 +24,11 @@ VERSION=`grep Version saw-script.cabal | awk '{print $2}'`
 # Warn if 'SYSTEM_DESC' is not defined. The 'SYSTEM_DESC' env var is
 # defined as part of the Jenkins node configuration on the Linux
 # nodes.
-RELEASE=saw-${VERSION}-${DATE}-${SYSTEM_DESC:-SYSTEM_DESC-IS-NOT-DEFINED}
+if [ -n "$release" ] ; then
+  RELEASE=saw-${VERSION}-${SYSTEM_DESC:-SYSTEM_DESC-IS-NOT-DEFINED}
+else
+  RELEASE=saw-${VERSION}-${DATE}-${SYSTEM_DESC:-SYSTEM_DESC-IS-NOT-DEFINED}
+fi
 TARGET=tmp/release/$RELEASE
 
 if [ -n "$clean" ]; then
