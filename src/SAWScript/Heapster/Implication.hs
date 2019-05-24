@@ -283,19 +283,16 @@ lookupType x =
   cstate $ \w s -> (implCtx s ! indexOfPermVar (weaken' w x), s)
 -}
 
-withState :: PermVar ctx tp ->
-             (forall ctx'.
-              Weakening ctx ctx' -> s ctx' -> CCST s fin fout ctx' m a) ->
-             CCST s fin fout ctx m a
-withState x f =
-  CCST $ \w s k -> unCCST (f w s) identityWeakening s k
+cwithState :: (forall ctx'.
+               Weakening ctx ctx' -> s ctx' -> CCST s fin fout ctx' m a) ->
+              CCST s fin fout ctx m a
+cwithState f = CCST $ \w s k -> unCCST (f w s) identityWeakening s k
 
 cmapCont :: Monad m =>
             (forall ctx'. Weakening ctx ctx' -> fout ctx' -> fout' ctx') ->
             CCST s fin fout ctx m a -> CCST s fin fout' ctx m a
 cmapCont f (CCST m) =
-  CCST $ \w s k ->
-  f w <$> (m w s $ \w' s' a -> k w' s' a)
+  CCST $ \w s k -> f w <$> (m w s $ \w' s' a -> k w' s' a)
 
 cmapCont2 :: Monad m =>
              (forall ctx'. Weakening ctx ctx' ->
@@ -321,13 +318,13 @@ cmapContBind tp f (CCST m) =
   f w <$> (m (weakenWeakening1 w) (weakenImplState1 s tp) $ \w' s' a ->
             k (composeWeakenings mkWeakening1 w') s' a)
 
-cmapContBind' ::
+cmapContStateBind ::
   Monad m =>
   (forall ctx'. Weakening ctx ctx' -> fout (ctx' ::> tp) -> fout' ctx') ->
   (forall ctx'. Weakening ctx ctx' -> s ctx' -> s (ctx' ::> tp)) ->
   CCST s fin fout (ctx ::> tp) m a ->
   CCST s fin fout' ctx m a
-cmapContBind' fret fs (CCST m) =
+cmapContStateBind fret fs (CCST m) =
   CCST $ \w s k ->
   fret w <$> (m (weakenWeakening1 w) (fs w s) $ \w' s' a ->
                k (composeWeakenings mkWeakening1 w') s' a)
@@ -375,9 +372,21 @@ elimExistsM :: (Monad m, ImplState s) =>
                PermLoc ctx a -> TypeRepr tp ->
                CCST s (PermImpl f) (PermImpl f) ctx m ()
 elimExistsM l tp =
-  cmapContBind' (\w -> Impl_ElimExists (weaken' w l) tp)
+  cmapContStateBind (\w -> Impl_ElimExists (weaken' w l) tp)
   (\w s ->
     set implStatePerms
     (permsElimExists (weaken' w l) tp $ s^.implStatePerms)
     (weakenImplState1 s tp))
   (return ())
+
+-- | Eliminate disjunctives and existentials on a variable
+elimOrsExistsM :: (Monad m, ImplState s) =>
+                  PermLoc ctx a -> CCST s (PermImpl f) (PermImpl f) ctx m ()
+elimOrsExistsM x =
+  cwithState $ \w s ->
+  case s^.(implStatePerms . varPerm (weaken' w x)) of
+    ValPerm_Or _ _ ->
+      elimOrM (weaken' w x) >>>= \() -> elimOrsExistsM (weaken' w x)
+    ValPerm_Exists tp _ ->
+      elimExistsM (weaken' w x) tp >>>= \() -> elimOrsExistsM (weaken' w x)
+    _ -> return ()
