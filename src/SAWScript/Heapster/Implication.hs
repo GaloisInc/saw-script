@@ -321,6 +321,17 @@ cmapContBind tp f (CCST m) =
   f w <$> (m (weakenWeakening1 w) (weakenImplState1 s tp) $ \w' s' a ->
             k (composeWeakenings mkWeakening1 w') s' a)
 
+cmapContBind' ::
+  Monad m =>
+  (forall ctx'. Weakening ctx ctx' -> fout (ctx' ::> tp) -> fout' ctx') ->
+  (forall ctx'. Weakening ctx ctx' -> s ctx' -> s (ctx' ::> tp)) ->
+  CCST s fin fout (ctx ::> tp) m a ->
+  CCST s fin fout' ctx m a
+cmapContBind' fret fs (CCST m) =
+  CCST $ \w s k ->
+  fret w <$> (m (weakenWeakening1 w) (fs w s) $ \w' s' a ->
+               k (composeWeakenings mkWeakening1 w') s' a)
+
 
 ----------------------------------------------------------------------
 -- * Monadic Proof Operations
@@ -360,11 +371,13 @@ elimOrM l =
   (cmodify (\w -> over implStatePerms (fst . permsElimOr (weaken' w l))))
   (cmodify (\w -> over implStatePerms (snd . permsElimOr (weaken' w l))))
 
-{- FIXME HERE NOW: write this!
 elimExistsM :: (Monad m, ImplState s) =>
                PermLoc ctx a -> TypeRepr tp ->
                CCST s (PermImpl f) (PermImpl f) ctx m ()
 elimExistsM l tp =
-  cmapContBind (\w -> Impl_ElimExists (weaken' w l) tp) $
-  cmodify (\w -> over implStatePerms (fst . permsElimOr (weaken' w l)))
--}
+  cmapContBind' (\w -> Impl_ElimExists (weaken' w l) tp)
+  (\w s ->
+    set implStatePerms
+    (permsElimExists (weaken' w l) tp $ s^.implStatePerms)
+    (weakenImplState1 s tp))
+  (return ())
