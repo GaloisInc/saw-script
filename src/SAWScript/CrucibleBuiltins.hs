@@ -131,6 +131,7 @@ import Verifier.SAW.TypedTerm
 
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import SAWScript.Prover.Versions
 import SAWScript.TopLevel
 import SAWScript.Value
 import SAWScript.Utils as SS
@@ -742,6 +743,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
     psatf <- Crucible.pathSatisfiabilityFeature sym
                (CrucibleSAW.considerSatisfiability sym)
     let patSatGenExecFeature = if checkSat then [psatf] else []
+    when checkSat checkYicesVersion
     let (funcLemmas, invLemmas) = partition
           (isNothing . view csParentName)
           lemmas
