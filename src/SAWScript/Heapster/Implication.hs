@@ -71,8 +71,8 @@ weaken1MultiPerms (MultiPermSet asgn) =
 multiPermSetIso :: Iso' (MultiPermSet ctx) (Assignment (ValuePerms ctx) ctx)
 multiPermSetIso = iso unMultiPermSet MultiPermSet
 
-varPerms :: PermVar ctx a -> Lens' (MultiPermSet ctx) (ValuePerms ctx a)
-varPerms (PermVar _ ix) = multiPermSetIso . ixF' ix
+varPerms :: PermVar ctx a -> Lens' (MultiPermSet ctx) [ValuePerm ctx a]
+varPerms (PermVar _ ix) = multiPermSetIso . ixF' ix . valuePermsIso
 
 -- | A location in a 'MultiPermSet' of a specific permission on a variable
 data PermLoc ctx a = PermLoc (PermVar ctx a) Int
@@ -88,11 +88,11 @@ varPerm (PermLoc x i) =
   -- FIXME: there should be a nicer way of doing this...
   lens
   (\perms ->
-    case perms ^? (varPerms x . valuePermsIso . element i) of
+    case perms ^? (varPerms x . element i) of
       Just p -> p
       Nothing -> error ("varPerm: no permission at position " ++ show i))
   (\perms p ->
-    over (varPerms x . valuePermsIso)
+    over (varPerms x)
     (\ps ->
       if i < length ps then (element i .~ p) ps else
         error ("varPerm: no permission at position " ++ show i))
@@ -104,6 +104,47 @@ modifyVarPerm :: MultiPermSet ctx -> PermLoc ctx a ->
                  MultiPermSet ctx
 modifyVarPerm perms l f = over (varPerm l) f perms
 -}
+
+
+----------------------------------------------------------------------
+-- * Multi-Valued Permission Sets with Existentials
+----------------------------------------------------------------------
+
+-- | A set of 0 or more permissions for each variable in scope
+data ExMultiPermSet vars ctx =
+  ExMultiPermSet
+  { exPermSetVars :: Size vars,
+    _exPermSetPerms :: Assignment (ValuePerms (ctx <+> vars)) ctx }
+
+instance Weakenable (ExMultiPermSet vars) where
+  weaken w (ExMultiPermSet sz asgn) =
+    ExMultiPermSet sz $ weakenAssignment (\_ -> ValuePerms []) w $
+    fmapFC (weaken' $ weakenWeakening sz w) asgn
+
+exPermSetPerms :: Lens' (ExMultiPermSet vars ctx)
+                  (Assignment (ValuePerms (ctx <+> vars)) ctx)
+exPermSetPerms =
+  lens _exPermSetPerms (\eperms perms -> eperms { _exPermSetPerms = perms })
+
+exVarPerms :: PermVar ctx a ->
+              Lens' (ExMultiPermSet vars ctx) [ValuePerm (ctx <+> vars) a]
+exVarPerms (PermVar _ ix) = exPermSetPerms . ixF' ix . valuePermsIso
+
+exVarPerm :: PermLoc ctx a ->
+             Lens' (ExMultiPermSet vars ctx) (ValuePerm (ctx <+> vars) a)
+exVarPerm (PermLoc x i) =
+  -- FIXME: there should be a nicer way of doing this...
+  lens
+  (\perms ->
+    case perms ^? (exVarPerms x . element i) of
+      Just p -> p
+      Nothing -> error ("exVarPerm: no permission at position " ++ show i))
+  (\perms p ->
+    over (exVarPerms x)
+    (\ps ->
+      if i < length ps then (element i .~ p) ps else
+        error ("exVarPerm: no permission at position " ++ show i))
+    perms)
 
 
 ----------------------------------------------------------------------
@@ -226,9 +267,9 @@ permsIntroExists l tp _e p =
 -- * Permission Implication Monad
 ----------------------------------------------------------------------
 
-class ImplState s where
-  weakenImplState1 :: s ctx -> TypeRepr tp -> s (ctx ::> tp)
-  implStatePerms :: Lens' (s ctx) (MultiPermSet ctx)
+class PermState s where
+  weakenPermState1 :: s ctx -> TypeRepr tp -> s (ctx ::> tp)
+  permStatePerms :: Lens' (s ctx) (MultiPermSet ctx)
 
 -- | The contextual continuation state transformer
 newtype CCST s fin fout ctx m a =
@@ -288,6 +329,14 @@ cwithState :: (forall ctx'.
               CCST s fin fout ctx m a
 cwithState f = CCST $ \w s k -> unCCST (f w s) identityWeakening s k
 
+cchangeState :: (forall ctx'. Weakening ctx ctx' -> s ctx' -> s' ctx') ->
+                (forall ctx'. Weakening ctx ctx' -> s' ctx' -> s ctx') ->
+                CCST s' fin fout ctx m a ->
+                CCST s fin fout ctx m a
+cchangeState sto sfrom (CCST m) =
+  CCST $ \w s k ->
+  m w (sto w s) $ \w' s' a -> k w' (sfrom (composeWeakenings w w') s') a
+
 cmapCont :: Monad m =>
             (forall ctx'. Weakening ctx ctx' -> fout ctx' -> fout' ctx') ->
             CCST s fin fout ctx m a -> CCST s fin fout' ctx m a
@@ -309,13 +358,13 @@ cmapContIn :: Monad m =>
               CCST s fin fout ctx m a -> CCST s fin' fout ctx m a
 cmapContIn f m = m >>>= \a -> cmapCont f (return a)
 
-cmapContBind :: (Monad m, ImplState s) => TypeRepr tp ->
+cmapContBind :: (Monad m, PermState s) => TypeRepr tp ->
                 (forall ctx'. Weakening ctx ctx' ->
                  fout (ctx' ::> tp) -> fout' ctx') ->
                 CCST s fin fout (ctx ::> tp) m a -> CCST s fin fout' ctx m a
 cmapContBind tp f (CCST m) =
   CCST $ \w s k ->
-  f w <$> (m (weakenWeakening1 w) (weakenImplState1 s tp) $ \w' s' a ->
+  f w <$> (m (weakenWeakening1 w) (weakenPermState1 s tp) $ \w' s' a ->
             k (composeWeakenings mkWeakening1 w') s' a)
 
 cmapContStateBind ::
@@ -334,59 +383,59 @@ cmapContStateBind fret fs (CCST m) =
 -- * Monadic Proof Operations
 ----------------------------------------------------------------------
 
-introOrLM :: (Monad m, ImplState s) =>
+introOrLM :: (Monad m, PermState s) =>
              PermLoc ctx a -> ValuePerm ctx a ->
              CCST s (PermImpl f) (PermImpl f) ctx m ()
 introOrLM l p2 =
   cmapCont (\w -> Impl_IntroOrL (weaken' w l) (weaken' w p2)) $
-  cmodify (\w -> over implStatePerms $
+  cmodify (\w -> over permStatePerms $
                  permsIntroOrL (weaken' w l) (weaken' w p2))
 
-introOrRM :: (Monad m, ImplState s) =>
+introOrRM :: (Monad m, PermState s) =>
              PermLoc ctx a -> ValuePerm ctx a ->
              CCST s (PermImpl f) (PermImpl f) ctx m ()
 introOrRM l p1 =
   cmapCont (\w -> Impl_IntroOrR (weaken' w l) (weaken' w p1)) $
-  cmodify (\w -> over implStatePerms $
+  cmodify (\w -> over permStatePerms $
                  permsIntroOrR (weaken' w l) (weaken' w p1))
 
-introExistsM :: (Monad m, ImplState s) =>
+introExistsM :: (Monad m, PermState s) =>
                 PermLoc ctx a -> TypeRepr tp -> PermExpr ctx tp ->
                 ValuePerm (ctx ::> tp) a ->
                 CCST s (PermImpl f) (PermImpl f) ctx m ()
 introExistsM l tp e p =
   cmapCont (\w -> Impl_IntroExists (weaken' w l) tp (weaken' w e)
                   (weaken' (weakenWeakening1 w) p)) $
-  cmodify (\w -> over implStatePerms $
+  cmodify (\w -> over permStatePerms $
                  permsIntroExists (weaken' w l) tp (weaken' w e)
                  (weaken' (weakenWeakening1 w) p))
 
-elimOrM :: (Monad m, ImplState s) =>
+elimOrM :: (Monad m, PermState s) =>
            PermLoc ctx a -> CCST s (PermImpl f) (PermImpl f) ctx m ()
 elimOrM l =
   cmapCont2 (\w -> Impl_ElimOr (weaken' w l))
-  (cmodify (\w -> over implStatePerms (fst . permsElimOr (weaken' w l))))
-  (cmodify (\w -> over implStatePerms (snd . permsElimOr (weaken' w l))))
+  (cmodify (\w -> over permStatePerms (fst . permsElimOr (weaken' w l))))
+  (cmodify (\w -> over permStatePerms (snd . permsElimOr (weaken' w l))))
 
-elimExistsM :: (Monad m, ImplState s) =>
+elimExistsM :: (Monad m, PermState s) =>
                PermLoc ctx a -> TypeRepr tp ->
                CCST s (PermImpl f) (PermImpl f) ctx m ()
 elimExistsM l tp =
   cmapContStateBind (\w -> Impl_ElimExists (weaken' w l) tp)
   (\w s ->
-    set implStatePerms
-    (permsElimExists (weaken' w l) tp $ s^.implStatePerms)
-    (weakenImplState1 s tp))
+    set permStatePerms
+    (permsElimExists (weaken' w l) tp $ s^.permStatePerms)
+    (weakenPermState1 s tp))
   (return ())
 
 -- | Eliminate disjunctives and existentials on a variable
-elimOrsExistsM :: (Monad m, ImplState s) =>
+elimOrsExistsM :: (Monad m, PermState s) =>
                   PermLoc ctx a -> CCST s (PermImpl f) (PermImpl f) ctx m ()
 elimOrsExistsM x =
   cwithState $ \w s ->
-  case s^.(implStatePerms . varPerm (weaken' w x)) of
+  case s^.(permStatePerms . varPerm (weaken' w x)) of
     ValPerm_Or _ _ ->
-      elimOrM (weaken' w x) >>>= \() -> elimOrsExistsM (weaken' w x)
+      elimOrM (weaken' w x) >> elimOrsExistsM (weaken' w x)
     ValPerm_Exists tp _ ->
-      elimExistsM (weaken' w x) tp >>>= \() -> elimOrsExistsM (weaken' w x)
+      elimExistsM (weaken' w x) tp >> elimOrsExistsM (weaken' w x)
     _ -> return ()
