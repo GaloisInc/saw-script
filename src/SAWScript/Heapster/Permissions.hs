@@ -561,6 +561,12 @@ consPartialSubst :: PartialSubst vars ctx ->
 consPartialSubst (PartialSubst asgn) =
   PartialSubst $ extend asgn $ PSElem Nothing
 
+unconsPartialSubst :: PartialSubst (vars ::> a) ctx ->
+                      (PartialSubst vars ctx, Maybe (PermExpr ctx a))
+unconsPartialSubst (PartialSubst (viewAssign ->
+                                  AssignExtend asgn (PSElem maybe_e))) =
+  (PartialSubst asgn, maybe_e)
+
 partialSubstGet :: PartialSubst vars ctx -> PermVar vars a -> PSElem ctx a
 partialSubstGet (PartialSubst asgn) pv = pvGet asgn pv
 
