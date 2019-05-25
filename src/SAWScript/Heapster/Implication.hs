@@ -111,83 +111,87 @@ modifyVarPerm perms l f = over (varPerm l) f perms
 
 
 ----------------------------------------------------------------------
--- * Permission Sets with Existentials
-----------------------------------------------------------------------
-
--- | A set of permissions with existentially quantified variables
-data ExPermSet vars ctx =
-  ExPermSet
-  { exPermSetVars :: Size vars,
-    _exPermSetPerms :: Assignment (ValuePerm (ctx <+> vars)) ctx }
-
-instance Weakenable (ExPermSet vars) where
-  weaken w (ExPermSet sz asgn) =
-    ExPermSet sz $ weakenAssignment (\_ -> ValPerm_True) w $
-    fmapFC (weaken' $ weakenWeakening sz w) asgn
-
-exPermSetPerms :: Lens' (ExPermSet vars ctx)
-                  (Assignment (ValuePerm (ctx <+> vars)) ctx)
-exPermSetPerms =
-  lens _exPermSetPerms (\eperms perms -> eperms { _exPermSetPerms = perms })
-
-exVarPerm :: PermVar ctx a ->
-             Lens' (ExPermSet vars ctx) (ValuePerm (ctx <+> vars) a)
-exVarPerm (PermVar _ ix) = exPermSetPerms . ixF' ix
-
-
-----------------------------------------------------------------------
 -- * Permission Implications
 ----------------------------------------------------------------------
 
-data PermImpl (f :: Ctx CrucibleType -> Data.Kind.*) (ctx :: Ctx CrucibleType) where
-  Impl_Done :: f ctx -> PermImpl f ctx
-  -- ^ No more elimination; i.e., implements the rule
+-- | A @'PermImpl' f rhs ctx@ is a proof tree of the judgment
+--
+-- > Gamma | P |- (Gamma1 | R1 * P1) \/ ... \/ (Gamman | Rn * Pn)
+--
+-- where each @Gamma@ is a context, @P@ is a permission set (as in
+-- 'MultiPermSet'), and @R@ is a sequence of @x:p@ permissions (i.e., a
+-- different representation of a permission set). The @ctx@ argument captures
+-- the initial @Gamma@ at the Haskell type level. Each leaf of the tree is a
+-- proof of one of the disjuncts, where the context @Gammai@ contains the
+-- variables bound (by, e.g., existential elimination rules) on the path to the
+-- leaf and the permissions @Ri * Pi@ are relative to this extended context,
+-- i.e., to the context @Gamma '<+>' Gammai@. Also at each leaf is an element of
+-- the type @f (Gamma '<+>' Gammai)@.
+--
+-- The @Ri@ permissions represent all the permissions that have been discharged
+-- by the 'Impl_Discharge' rule along the path to the leaf. These @Ri@ must all
+-- be substitution instances of the same permission sequence @R@ (not shown),
+-- whose shape is determined by the @rhs@ argument.
+data PermImpl f rhs ctx where
+  Impl_Done :: f ctx -> PermImpl f rhs ctx
+  -- ^ The proof is finished; i.e., implements the rule
   --
-  -- -------------------------------
-  -- Gin | Pin |- Pin
+  -- > -------------------------------
+  -- > Gin | Pin |- . | . * Pin
 
-  Impl_Fail :: PermImpl f ctx
+  Impl_Fail :: PermImpl f rhs ctx
   -- ^ The empty tree, with no disjunctive possibilities; i.e., implements the
   -- rule
   --
-  -- ------------------------------
-  -- Gin | Pin |- Pany
+  -- > ------------------------------
+  -- > Gin | Pin |- anything
 
-  Impl_Catch :: PermImpl f ctx -> PermImpl f ctx -> PermImpl f ctx
+  Impl_Catch :: PermImpl f rhs ctx -> PermImpl f rhs ctx -> PermImpl f rhs ctx
   -- ^ Copy the same permissions into two different elimination trees, where an
   -- 'Impl_Fail' in the first tree "calls" the second tree, just like a
   -- try-catch block for exceptions. This implements the rule:
   --
-  -- pf1 = Gin | Pin |- rets1    pf2 = Gin | Pin |- rets2
-  -- ----------------------------------------------------
-  -- Gin | Pin |- rets1, rets2
+  -- > pf1 = Gin | Pin |- rets1    pf2 = Gin | Pin |- rets2
+  -- > ----------------------------------------------------
+  -- > Gin | Pin |- rets1, rets2
 
-  Impl_ElimOr :: PermLoc ctx a -> PermImpl f ctx -> PermImpl f ctx -> PermImpl f ctx
+  Impl_Discharge :: PermLoc ctx a -> PermImpl f rhs ctx ->
+                    PermImpl f (rhs ::> a) ctx
+  -- ^ Discharge a right-hand side proof obligation by removing it from the
+  -- permisison set on the left; i.e., implements the rule
+  --
+  -- > Gin | Pin |- rets
+  -- > ----------------------------------------------------
+  -- > Gin | x:p, Pin |- x:p * rets
+
+  Impl_ElimOr :: PermLoc ctx a -> PermImpl f rhs ctx -> PermImpl f rhs ctx ->
+                 PermImpl f rhs ctx
   -- ^ Eliminate a 'ValPerm_Or' on the given variable, replacing it with the
   -- left- and right-hand sides in the two sub-eliminations
   --
-  -- pf1 = Gin | Pin, x:p1 |- GsPs1     pf2 = Gin | Pin, x:p2 |- GsPs2
-  -- -----------------------------------------------------------------
-  -- Gin | Pin, x:(p1 \/ p2) |- GsPs1, GsPs2
+  -- > pf1 = Gin | Pin, x:p1 |- GsPs1     pf2 = Gin | Pin, x:p2 |- GsPs2
+  -- > -----------------------------------------------------------------
+  -- > Gin | Pin, x:(p1 \/ p2) |- GsPs1, GsPs2
 
-  Impl_IntroOrL :: PermLoc ctx a -> ValuePerm ctx a -> PermImpl f ctx ->
-                   PermImpl f ctx
+  Impl_IntroOrL :: PermLoc ctx a -> ValuePerm ctx a -> PermImpl f rhs ctx ->
+                   PermImpl f rhs ctx
   -- ^ @Impl_IntroOrL x p2 pf@ is the left disjunction introduction rule
   --
   -- > pf = Gamma | Pin, x:(p1 \/ p2) |- Pout
   -- > --------------------------------------
   -- > Gamma | Pin, x:p1 |- rets
 
-  Impl_IntroOrR :: PermLoc ctx a -> ValuePerm ctx a -> PermImpl f ctx ->
-                   PermImpl f ctx
+  Impl_IntroOrR :: PermLoc ctx a -> ValuePerm ctx a -> PermImpl f rhs ctx ->
+                   PermImpl f rhs ctx
   -- ^ @Impl_IntroOrR x p1 pf@ is the right disjunction introduction rule
   --
   -- > pf = Gamma | Pin, x:(p1 \/ p2) |- Pout
   -- > --------------------------------------
   -- > Gamma | Pin, x:p2 |- rets
 
-  Impl_ElimExists :: PermLoc ctx a -> TypeRepr tp -> PermImpl f (ctx ::> tp) ->
-                     PermImpl f ctx
+  Impl_ElimExists :: PermLoc ctx a -> TypeRepr tp ->
+                     PermImpl f rhs (ctx ::> tp) ->
+                     PermImpl f rhs ctx
   -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists', on the given variable
   --
   -- pf = Gin, z:tp | Pin, x:p |- rets
@@ -196,7 +200,7 @@ data PermImpl (f :: Ctx CrucibleType -> Data.Kind.*) (ctx :: Ctx CrucibleType) w
 
   Impl_IntroExists :: PermLoc ctx a -> TypeRepr tp -> PermExpr ctx tp ->
                       ValuePerm (ctx ::> tp) a ->
-                      PermImpl f ctx -> PermImpl f ctx
+                      PermImpl f rhs ctx -> PermImpl f rhs ctx
   -- ^ @Intro_Exists x tp e p pf@ is the existential introduction rule
   --
   -- > pf = Gamma | Pin, x:(exists z:tp.p) |- Pout
@@ -221,6 +225,14 @@ exPermBody tp (ValPerm_Exists tp' p)
   | Just Refl <- testEquality tp tp' = p
 exPermBody _ _ = error "exPermBody"
 
+
+permsDelete :: PermLoc ctx a -> MultiPermSet ctx -> MultiPermSet ctx
+permsDelete (PermLoc x i) =
+  over (varPerms x) $ \ps ->
+  if length ps > i then
+    Prelude.take i ps ++ drop (i+1) ps
+  else
+    error ("permsDelete: no permission at position " ++ show i)
 
 permsElimOr :: PermLoc ctx a -> MultiPermSet ctx ->
                (MultiPermSet ctx, MultiPermSet ctx)
@@ -373,7 +385,7 @@ cmapContStateBind fret fs (CCST m) =
 
 introOrLM :: (Monad m, PermState s) =>
              PermLoc ctx a -> ValuePerm ctx a ->
-             CCST s (PermImpl f) (PermImpl f) ctx m ()
+             CCST s (PermImpl f rhs) (PermImpl f rhs) ctx m ()
 introOrLM l p2 =
   cmapCont (\w -> Impl_IntroOrL (weaken' w l) (weaken' w p2)) $
   cmodify (\w -> over permStatePerms $
@@ -381,7 +393,7 @@ introOrLM l p2 =
 
 introOrRM :: (Monad m, PermState s) =>
              PermLoc ctx a -> ValuePerm ctx a ->
-             CCST s (PermImpl f) (PermImpl f) ctx m ()
+             CCST s (PermImpl f rhs) (PermImpl f rhs) ctx m ()
 introOrRM l p1 =
   cmapCont (\w -> Impl_IntroOrR (weaken' w l) (weaken' w p1)) $
   cmodify (\w -> over permStatePerms $
@@ -390,7 +402,7 @@ introOrRM l p1 =
 introExistsM :: (Monad m, PermState s) =>
                 PermLoc ctx a -> TypeRepr tp -> PermExpr ctx tp ->
                 ValuePerm (ctx ::> tp) a ->
-                CCST s (PermImpl f) (PermImpl f) ctx m ()
+                CCST s (PermImpl f rhs) (PermImpl f rhs) ctx m ()
 introExistsM l tp e p =
   cmapCont (\w -> Impl_IntroExists (weaken' w l) tp (weaken' w e)
                   (weaken' (weakenWeakening1 w) p)) $
@@ -399,7 +411,7 @@ introExistsM l tp e p =
                  (weaken' (weakenWeakening1 w) p))
 
 elimOrM :: (Monad m, PermState s) =>
-           PermLoc ctx a -> CCST s (PermImpl f) (PermImpl f) ctx m ()
+           PermLoc ctx a -> CCST s (PermImpl f rhs) (PermImpl f rhs) ctx m ()
 elimOrM l =
   cmapCont2 (\w -> Impl_ElimOr (weaken' w l))
   (cmodify (\w -> over permStatePerms (fst . permsElimOr (weaken' w l))))
@@ -407,7 +419,7 @@ elimOrM l =
 
 elimExistsM :: (Monad m, PermState s) =>
                PermLoc ctx a -> TypeRepr tp ->
-               CCST s (PermImpl f) (PermImpl f) ctx m ()
+               CCST s (PermImpl f rhs) (PermImpl f rhs) ctx m ()
 elimExistsM l tp =
   cmapContStateBind (\w -> Impl_ElimExists (weaken' w l) tp)
   (\w s ->
@@ -418,7 +430,7 @@ elimExistsM l tp =
 
 -- | Eliminate disjunctives and existentials on a variable
 elimOrsExistsM :: (Monad m, PermState s) =>
-                  PermLoc ctx a -> CCST s (PermImpl f) (PermImpl f) ctx m ()
+                  PermLoc ctx a -> CCST s (PermImpl f rhs) (PermImpl f rhs) ctx m ()
 elimOrsExistsM x =
   cwithState $ \w s ->
   case s^.(permStatePerms . varPerm (weaken' w x)) of
@@ -433,60 +445,114 @@ elimOrsExistsM x =
 -- * Introduction Proof Steps for Permission Implications
 ----------------------------------------------------------------------
 
-data Intros vars ctx where
-  Intros_Done :: Intros vars ctx
-  Intros_OrL :: PermVar ctx a -> ValuePerm (ctx <+> vars) a ->
-                Intros vars ctx -> Intros vars ctx
-  Intros_OrR :: PermVar ctx a -> ValuePerm (ctx <+> vars) a ->
-                Intros vars ctx -> Intros vars ctx
-  Intros_Exists :: PermVar ctx a -> TypeRepr tp ->
-                   ValuePerm (ctx <+> vars ::> tp) a ->
-                   Intros vars ctx -> Intros (vars ::> tp) ctx
+data Intros vars ctx a where
+  Intros_Done :: Intros vars ctx a
+  Intros_OrL :: ValuePerm (ctx <+> vars) a ->
+                Intros vars ctx a -> Intros vars ctx a
+  Intros_OrR :: ValuePerm (ctx <+> vars) a ->
+                Intros vars ctx a -> Intros vars ctx a
+  Intros_Exists :: TypeRepr tp -> ValuePerm (ctx <+> vars ::> tp) a ->
+                   Intros vars ctx a -> Intros (vars ::> tp) ctx a
 
-weakenIntros :: Size vars -> Weakening ctx ctx' -> Intros vars ctx ->
-                 Intros vars ctx'
+-- FIXME HERE: just take in a Weakening (ctx <+> vars) (ctx' <+> vars)
+weakenIntros :: Size vars -> Weakening ctx ctx' -> Intros vars ctx a ->
+                Intros vars ctx' a
 weakenIntros _ _ Intros_Done = Intros_Done
-weakenIntros sz w (Intros_OrL x p2 intros) =
-  Intros_OrL (weaken' w x) (weaken' (weakenWeakening sz w) p2)
-  (weakenIntros sz w intros)
-weakenIntros sz w (Intros_OrR x p1 intros) =
-  Intros_OrR (weaken' w x) (weaken' (weakenWeakening sz w) p1)
-  (weakenIntros sz w intros)
-weakenIntros sz w (Intros_Exists x tp p intros) =
-  Intros_Exists (weaken' w x) tp
-  (weaken' (weakenWeakening sz w) p)
+weakenIntros sz w (Intros_OrL p2 intros) =
+  Intros_OrL (weaken' (weakenWeakening sz w) p2) (weakenIntros sz w intros)
+weakenIntros sz w (Intros_OrR p1 intros) =
+  Intros_OrR (weaken' (weakenWeakening sz w) p1) (weakenIntros sz w intros)
+weakenIntros sz w (Intros_Exists tp p intros) =
+  Intros_Exists tp (weaken' (weakenWeakening sz w) p)
   (weakenIntros (decSize sz) w intros)
+
+
+partialSubstForce :: PartialSubst vars ctx -> ValuePerm (ctx <+> vars) a ->
+                     Maybe (ValuePerm ctx a)
+partialSubstForce = error "FIXME HERE: partialSubstForce"
+
+partialSubstForce1 :: PartialSubst vars ctx ->
+                      ValuePerm (ctx <+> vars ::> tp) a ->
+                      Maybe (ValuePerm (ctx ::> tp) a)
+partialSubstForce1 = error "FIXME HERE: partialSubstForce1"
+
+applyIntros :: (Monad m, PermState s) =>
+               PermLoc ctx a ->
+               PartialSubst vars ctx -> Intros vars ctx a ->
+               CCST s (PermImpl f rhs) (PermImpl f rhs) ctx m ()
+applyIntros _ _ Intros_Done = return ()
+applyIntros l s (Intros_OrL p2 intros) =
+  case partialSubstForce s p2 of
+    Just p2' -> introOrLM l p2' >> applyIntros l s intros
+    Nothing -> error "applyIntros: not enough variables instantiated!"
+applyIntros l s (Intros_OrR p1 intros) =
+  case partialSubstForce s p1 of
+    Just p1' -> introOrRM l p1' >> applyIntros l s intros
+    Nothing -> error "applyIntros: not enough variables instantiated!"
+applyIntros l s (Intros_Exists tp p intros) =
+  case unconsPartialSubst s of
+    (s', Just e)
+      | Just p' <- partialSubstForce1 s' p ->
+        introExistsM l tp e p' >> applyIntros l s' intros
+    _ -> error "applyIntros: not enough variables instantiated!"
+
+
+-- | A single permission @x:p@ where @p@ is relative to an existentially
+-- quantified context @vars@ of variables
+data ExVarPerm vars ctx a =
+  ExVarPerm (Size vars) (PermVar ctx a) (ValuePerm (ctx <+> vars) a)
+
+instance Weakenable' (ExVarPerm vars) where
+  weaken' w (ExVarPerm sz x p) =
+    ExVarPerm sz (weaken' w x) (weaken' (weakenWeakening sz w) p)
+
+data ExVarPerms vars rhs ctx where
+  EVPNil :: ExVarPerms vars EmptyCtx ctx
+  EVPCons :: ExVarPerm vars ctx a -> ExVarPerms vars rhs ctx ->
+             ExVarPerms vars (rhs ::> a) ctx
+
+instance Weakenable (ExVarPerms vars rhs) where
+  weaken _ EVPNil = EVPNil
+  weaken w (EVPCons p ps) = EVPCons (weaken' w p) (weaken w ps)
 
 data ImplState vars ctx =
   ImplState { _implStatePerms :: MultiPermSet ctx,
               _implStateVars :: CtxRepr vars,
-              _implStatePSubst :: PartialSubst vars ctx,
-              _implStateIntros :: Intros vars ctx }
+              _implStatePSubst :: PartialSubst vars ctx }
 makeLenses ''ImplState
 
 instance Weakenable (ImplState vars) where
   weaken w (ImplState {..}) =
     ImplState { _implStatePerms = weaken w _implStatePerms,
                 _implStateVars = _implStateVars,
-                _implStatePSubst = weaken w _implStatePSubst,
-                _implStateIntros =
-                  weakenIntros (size _implStateVars) w _implStateIntros }
+                _implStatePSubst = weaken w _implStatePSubst }
 
 instance PermState (ImplState vars) where
   weakenPermState1 s _ = weaken mkWeakening1 s
   permStatePerms = implStatePerms
 
-applyIntros :: (Monad m, PermState s) =>
-               PermSubst (ctx <+> vars) ctx -> Intros vars ctx ->
-               CCST s (PermImpl f) (PermImpl f) ctx m ()
-applyIntros _ Intros_Done = return ()
-applyIntros s (Intros_OrL x p2 intros) =
-  introOrLM (varLoc0 x) (subst' s p2) >>
-  applyIntros s intros
-applyIntros s (Intros_OrR x p1 intros) =
-  introOrRM (varLoc0 x) (subst' s p1) >>
-  applyIntros s intros
-applyIntros s (Intros_Exists x tp p intros) =
-  let (s', e) = unconsPermSubst s in
-  introExistsM (varLoc0 x) tp e (subst' (weakenSubst1 s') p) >>
-  applyIntros s' intros
+
+proveImpl :: (Monad m, PermState s) =>
+             CtxRepr vars -> ExVarPerms vars rhs ctx ->
+             CCST s (PermImpl f rhs) (PermImpl f rhs) ctx m ()
+proveImpl = error "FIXME HERE: proveImpl"
+
+{-
+proveImplH :: ExVarPerms vars rhs ctx ->
+              CCST (ImplState vars) (PermImpl f rhs) (PermImpl f rhs) ctx m ()
+proveImplH
+
+proveVarImpl :: ExVarPerm vars ctx a ->
+-}
+
+{-
+FIXME HERE NOW:
+- don't need intros in the current state, but instead need them as an argument to
+  proveVarImpl
+- add a rule to PermImpl that "cancels out" one perm on the RHS using one on
+  the LHS
+  + The translation consumes these rules by using them as vars to pass to the
+    function that needs them
+- Replace ExPermSet with a list [ExVarPerm vars ctx], which we will prove one at
+  a time using proveVarImpl
+-}
