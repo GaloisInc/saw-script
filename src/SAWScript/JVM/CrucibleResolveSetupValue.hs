@@ -15,8 +15,6 @@ module SAWScript.JVM.CrucibleResolveSetupValue
   , resolveSAWPred
   -- , resolveSetupFieldIndex
   , equalValsPred
-  , refIsNull
-  , refIsEqual
   ) where
 
 import Control.Lens
@@ -254,44 +252,9 @@ equalValsPred ::
 equalValsPred cc v1 v2 = go (v1, v2)
   where
   go :: (JVMVal, JVMVal) -> IO (W4.Pred Sym)
-  go (RVal r1, RVal r2) = refIsEqual sym r1 r2
+  go (RVal r1, RVal r2) = CJ.refIsEqual sym r1 r2
   go (IVal i1, IVal i2) = W4.bvEq sym i1 i2
   go (LVal l1, LVal l2) = W4.bvEq sym l1 l2
   go _ = return (W4.falsePred sym)
 
   sym = cc^.ccBackend
-
-
-refIsNull :: Sym -> JVMRefVal -> IO (W4.Pred Sym)
-refIsNull sym ref =
-  case ref of
-    W4.PE p _ -> W4.notPred sym p
-    W4.Unassigned -> return (W4.truePred sym)
-
-refIsEqual :: Sym -> JVMRefVal -> JVMRefVal -> IO (W4.Pred Sym)
-refIsEqual sym ref1 ref2 =
-  case ref1 of
-    W4.Unassigned ->
-      case ref2 of
-        W4.Unassigned -> return (W4.truePred sym)
-        W4.PE p2 _r2 -> W4.notPred sym p2
-    W4.PE p1 r1 ->
-      case ref2 of
-        W4.Unassigned -> W4.notPred sym p1
-        W4.PE p2 r2 ->
-          do n1 <- W4.notPred sym p1
-             n2 <- W4.notPred sym p2
-             n <- W4.andPred sym n1 n2
-             p <- W4.andPred sym p1 p2
-             e <- doAppJVM sym (Crucible.ReferenceEq W4.knownRepr (Crucible.RV r1) (Crucible.RV r2))
-             W4.orPred sym n =<< W4.andPred sym p e
-
--- TODO: move to crucible-jvm?
-doAppJVM ::
-  Crucible.IsSymInterface sym =>
-  sym -> Crucible.App CJ.JVM (Crucible.RegValue' sym) tp -> IO (Crucible.RegValue sym tp)
-doAppJVM sym =
-  Crucible.evalApp sym CJ.jvmIntrinsicTypes out
-    (Crucible.extensionEval CJ.jvmExtensionImpl sym CJ.jvmIntrinsicTypes out) (return . Crucible.unRV)
-  where
-    out _verbosity = putStrLn -- FIXME: use verbosity

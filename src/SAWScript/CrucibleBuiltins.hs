@@ -179,8 +179,14 @@ ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
   text "Infeasible branch"
 ppAbortedResult cc (Crucible.AbortedExec abt gp) = do
   Crucible.ppAbortExecReason abt <$$> ppGlobalPair cc gp
-ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
-  text "Aborted branch"
+ppAbortedResult cc (Crucible.AbortedBranch _pred trueBranch falseBranch) =
+  vcat
+    [ text "Both branches aborted after a symbolic branch"
+    , text "Message from the true branch:"
+    , indent 4 (ppAbortedResult cc trueBranch)
+    , text "Message from the false branch:"
+    , indent 4 (ppAbortedResult cc falseBranch)
+    ]
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
 
@@ -380,8 +386,9 @@ checkSpecReturnType cc mspec =
           (csAllocations mspec) -- map allocation indices to allocations
           (mspec^.csPreState.csVarTypeNames) -- map alloc indices to var names
           sv
-      -- The following check is even more strict than checkRegisterCompatibility
-      unless (retTy == retTy') $ fail $ unlines
+      -- This check is too lax, see saw-script#443
+      b <- checkRegisterCompatibility retTy retTy'
+      unless b $ fail $ unlines
         [ "Incompatible types for return value when verifying " ++ mspec^.csName
         , "Expected: " ++ show retTy
         , "but given value of type: " ++ show retTy'

@@ -143,7 +143,7 @@ ppAbortedResult _ (Crucible.AbortedExit ec) =
 allClassRefs :: CB.Codebase -> J.ClassName -> IO (Set J.ClassName)
 allClassRefs cb c0 = go seen0 [c0]
   where
-    seen0 = Set.fromList (map J.mkClassName CJ.initClasses)
+    seen0 = Set.fromList CJ.initClasses
     go seen [] = return seen
     go seen (c : cs) =
       do -- putStrLn $ "allClassRefs: " ++ show (J.unClassName c)
@@ -193,7 +193,7 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      -- allocate all of the handles/static vars that are referenced
      -- (directly or indirectly) by this class
      allRefs <- io $ Set.toList <$> allClassRefs cb (J.className cls)
-     let refs = map J.mkClassName CJ.initClasses ++ allRefs -- ++ superRefs
+     let refs = CJ.initClasses ++ allRefs -- ++ superRefs
      mapM_ (prepareClassTopLevel bic . J.unClassName) refs
 
      cc <- setupCrucibleContext bic opts cls
@@ -428,18 +428,17 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
            RVal ref -> return ref
            _ -> liftIO $ Crucible.addFailedAssertion sym msg
 
-    -- TODO: factor out some OverrideSim functions for jvm field/array updates to put in the crucible-jvm package
     doPointsTo :: Crucible.SymGlobalState Sym -> PointsTo -> IO (Crucible.SymGlobalState Sym)
     doPointsTo mem pt =
       case pt of
         PointsToField _loc lhs fld rhs ->
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
-             doFieldStore sym mem lhs' fld rhs'
+             CJ.doFieldStore sym mem lhs' fld (injectJVMVal sym rhs')
         PointsToElem _loc lhs idx rhs ->
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
-             doArrayStore sym mem lhs' idx rhs'
+             CJ.doArrayStore sym mem lhs' idx (injectJVMVal sym rhs')
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -485,8 +484,8 @@ doAlloc ::
   StateT (Crucible.SymGlobalState Sym) IO JVMRefVal
 doAlloc cc alloc =
   case alloc of
-    AllocObject cname -> StateT (doAllocateObject sym halloc jc cname)
-    AllocArray len ty -> StateT (doAllocateArray sym halloc jc len ty)
+    AllocObject cname -> StateT (CJ.doAllocateObject sym halloc jc cname)
+    AllocArray len ty -> StateT (CJ.doAllocateArray sym halloc jc len ty)
   where
     sym = cc^.ccBackend
     halloc = cc^.ccHandleAllocator
@@ -566,9 +565,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = []
-          let bindings = CJ.mkDelayedBindings jc verbosity
-          let simctx   = Crucible.initSimContext sym CJ.jvmIntrinsicTypes halloc stdout
-                         bindings CJ.jvmExtensionImpl Crucible.SAWCruciblePersonality
+          let simctx = CJ.jvmSimContext sym halloc stdout jc verbosity Crucible.SAWCruciblePersonality
           let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
           let overrideSim =
@@ -720,7 +717,7 @@ setupGlobalState sym jc =
   do classTab <- setupDynamicClassTable sym jc
      let classTabVar = CJ.dynamicClassTable jc
      let globals0 = Crucible.insertGlobal classTabVar classTab Crucible.emptyGlobals
-     let declareGlobal var = Crucible.insertGlobal var unassignedJVMValue
+     let declareGlobal var = Crucible.insertGlobal var CJ.unassignedJVMValue
      return $ foldr declareGlobal globals0 (Map.elems (CJ.staticFields jc))
 
 setupDynamicClassTable :: Sym -> CJ.JVMContext -> IO (Crucible.RegValue Sym CJ.JVMClassTableType)
