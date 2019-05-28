@@ -17,7 +17,6 @@ module SAWScript.CrucibleResolveSetupValue
 
 import Control.Lens
 import Control.Monad (zipWithM, foldM)
-import qualified Control.Monad.Fail as Fail
 import Control.Monad.Fail (MonadFail)
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
