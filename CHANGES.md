@@ -29,7 +29,7 @@
 * LLVM bitcode format support is greatly improved. Versions 3.5 to 7.0
   are known to be mostly well-supported. We consider parsing failures
   with any version newer than 3.5 to be a bug, so please report them on
-  GitHub.
+  [GitHub](https://github.com/GaloisInc/saw-script/issues/new).
 
 * Greatly improved error messages throughout.
 
@@ -41,6 +41,10 @@
 * New proof script commands allow multiple goals and related proof
   tactics. See the
   [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#multiple-goals).
+
+* Can be built with Docker, and will be available on DockerHub.
+
+* Includes an Emacs mode.
 
 # Version 0.2-dev
 
