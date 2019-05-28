@@ -28,17 +28,11 @@ module SAWScript.JVM.CrucibleOverride
   , valueToSC
   , termId
   , injectJVMVal
-  , doAllocateObject
-  , doAllocateArray
-  , doFieldStore
-  , doArrayStore
   , decodeJVMVal
-  , unassignedJVMValue
   ) where
 
 import           Control.Lens
 import           Control.Exception as X
-import           Control.Monad.ST (RealWorld, stToIO)
 import           Control.Monad.Trans.State
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
@@ -49,11 +43,8 @@ import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Maybe (fromMaybe)
 import           Data.Set (Set)
 import qualified Data.Set as Set
-import qualified Data.Text as Text
-import qualified Data.Vector as V
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 -- cryptol
@@ -64,18 +55,12 @@ import qualified Cryptol.Utils.PP as Cryptol
 -- what4
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible ( TypeRepr(UnitRepr) )
-import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, freshRefCell)
 import qualified Lang.Crucible.Simulator as Crucible
-import qualified Lang.Crucible.Simulator.EvalStmt as EvalStmt (readRef, alterRef)
-import qualified Lang.Crucible.Simulator.GlobalState as Crucible
-import qualified Lang.Crucible.Types as Crucible
-import qualified Lang.Crucible.Utils.MuxTree as Crucible (toMuxTree)
 
 -- crucible-saw
 import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
@@ -84,7 +69,7 @@ import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.JVM as CJ
 
 -- parameterized-utils
-import           Data.Parameterized.Classes ((:~:)(..), testEquality, knownRepr, ixF)
+import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
 -- import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.TraversableFC as Ctx
@@ -522,7 +507,7 @@ enforceDisjointness _cc loc ss =
 
      -- Ensure that all regions are disjoint from each other.
      sequence_
-        [ do c <- liftIO $ W4.notPred sym =<< refIsEqual sym p q
+        [ do c <- liftIO $ W4.notPred sym =<< CJ.refIsEqual sym p q
              addAssert c a
 
         | let a = Crucible.SimError loc $
@@ -674,7 +659,7 @@ assignVar cc loc var ref =
   do old <- OM (setupValueSub . at var <<.= Just ref)
      let sym = cc^.ccBackend
      for_ old $ \ref' ->
-       do p <- liftIO (refIsEqual sym ref ref')
+       do p <- liftIO (CJ.refIsEqual sym ref ref')
           addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased pointers"))
 
 ------------------------------------------------------------------------
@@ -725,7 +710,7 @@ matchArg _sc cc loc prepost actual@(RVal ref) expectedTy setupval =
 
     SetupNull ->
       do sym <- getSymInterface
-         p   <- liftIO (refIsNull sym ref)
+         p   <- liftIO (CJ.refIsNull sym ref)
          addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost)))
 
     SetupGlobal name ->
@@ -733,7 +718,7 @@ matchArg _sc cc loc prepost actual@(RVal ref) expectedTy setupval =
          sym  <- getSymInterface
          ref' <- liftIO $ doResolveGlobal sym mem name
 
-         p  <- liftIO (refIsEqual sym ref ref')
+         p  <- liftIO (CJ.refIsEqual sym ref ref')
          addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
 
     _ -> failure loc (StructuralMismatch actual setupval expectedTy)
@@ -828,7 +813,8 @@ learnPointsTo opts sc cc spec prepost pt =
          rval <- asRVal loc ptr'
          sym <- getSymInterface
          globals <- OM (use overrideGlobals)
-         v <- liftIO $ doFieldLoad sym loc globals ty rval fname
+         dyn <- liftIO $ CJ.doFieldLoad sym globals rval fname
+         v <- liftIO $ projectJVMVal sym ty ("field load " ++ fname ++ ", " ++ show loc) dyn
          matchArg sc cc loc prepost v ty val
 
     PointsToElem loc ptr idx val ->
@@ -839,7 +825,8 @@ learnPointsTo opts sc cc spec prepost pt =
          rval <- asRVal loc ptr'
          sym <- getSymInterface
          globals <- OM (use overrideGlobals)
-         v <- liftIO $ doArrayLoad sym loc globals ty rval idx
+         dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
+         v <- liftIO $ projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) dyn
          matchArg sc cc loc prepost v ty val
 
 
@@ -904,8 +891,8 @@ executeAllocation opts cc (var, (loc, alloc)) =
      globals <- OM (use overrideGlobals)
      (ptr, globals') <-
        case alloc of
-         AllocObject cname -> liftIO $ doAllocateObject sym halloc jc cname globals
-         AllocArray len elemTy -> liftIO $ doAllocateArray sym halloc jc len elemTy globals
+         AllocObject cname -> liftIO $ CJ.doAllocateObject sym halloc jc cname globals
+         AllocArray len elemTy -> liftIO $ CJ.doAllocateArray sym halloc jc len elemTy globals
      OM (overrideGlobals .= globals')
      assignVar cc loc var ptr
 
@@ -943,8 +930,9 @@ executePointsTo opts sc cc spec pt =
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
          sym <- getSymInterface
+         let dyn = injectJVMVal sym val'
          globals <- OM (use overrideGlobals)
-         globals' <- liftIO $ doFieldStore sym globals rval fname val'
+         globals' <- liftIO $ CJ.doFieldStore sym globals rval fname dyn
          OM (overrideGlobals .= globals')
 
     PointsToElem loc ptr idx val ->
@@ -952,8 +940,9 @@ executePointsTo opts sc cc spec pt =
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
          sym <- getSymInterface
+         let dyn = injectJVMVal sym val'
          globals <- OM (use overrideGlobals)
-         globals' <- liftIO $ doArrayStore sym globals rval idx val'
+         globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
 
 ------------------------------------------------------------------------
@@ -1087,198 +1076,6 @@ asRVal :: W4.ProgramLoc -> JVMVal -> OverrideMatcher JVMRefVal
 asRVal _ (RVal ptr) = return ptr
 asRVal loc _ = failure loc BadPointerCast
 
-------------------------------------------------------------------------
--- JVM OverrideSim operations
-
-doFieldStore ::
-  Sym ->
-  Crucible.SymGlobalState Sym ->
-  JVMRefVal ->
-  String {- ^ field name -} ->
-  JVMVal ->
-  IO (Crucible.SymGlobalState Sym)
-doFieldStore sym globals ref fname val =
-  do let msg1 = Crucible.GenericSimError "Field store: null reference"
-     ref' <- Crucible.readPartExpr sym ref msg1
-     obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
-     let msg2 = Crucible.GenericSimError "Field store: object is not a class instance"
-     inst <- Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i1of2)) msg2
-     let tab = Crucible.unRV (inst Ctx.! Ctx.i1of2)
-     let tab' = Map.insert (Text.pack fname) (W4.justPartExpr sym (injectJVMVal sym val)) tab
-     let inst' = Control.Lens.set (ixF Ctx.i1of2) (Crucible.RV tab') inst
-     let obj' = Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of2 inst')
-     EvalStmt.alterRef sym CJ.jvmIntrinsicTypes objectRepr ref' (W4.justPartExpr sym obj') globals
-
-doArrayStore ::
-  Sym ->
-  Crucible.SymGlobalState Sym ->
-  JVMRefVal ->
-  Int {- ^ array index -} ->
-  JVMVal ->
-  IO (Crucible.SymGlobalState Sym)
-doArrayStore sym globals ref idx val =
-  do let msg1 = Crucible.GenericSimError "Array store: null reference"
-     ref' <- Crucible.readPartExpr sym ref msg1
-     obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
-     let msg2 = Crucible.GenericSimError "Object is not an array"
-     arr <- Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i2of2)) msg2
-     let vec = Crucible.unRV (arr Ctx.! Ctx.i2of3)
-     let vec' = vec V.// [(idx, injectJVMVal sym val)]
-     let arr' = Control.Lens.set (ixF Ctx.i2of3) (Crucible.RV vec') arr
-     let obj' = Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i2of2 arr')
-     EvalStmt.alterRef sym CJ.jvmIntrinsicTypes objectRepr ref' (W4.justPartExpr sym obj') globals
-
-doFieldLoad ::
-  Sym ->
-  W4.ProgramLoc ->
-  Crucible.SymGlobalState Sym ->
-  J.Type -> JVMRefVal -> String {- ^ field name -} -> IO JVMVal
-doFieldLoad sym loc globals ty ref fname =
-  do let msg1 = Crucible.GenericSimError "Field load: null reference"
-     ref' <- Crucible.readPartExpr sym ref msg1
-     obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
-     let msg2 = Crucible.GenericSimError "Field load: object is not a class instance"
-     inst <- Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i1of2)) msg2
-     let tab = Crucible.unRV (inst Ctx.! Ctx.i1of2)
-     let msg3 = Crucible.GenericSimError $ "Field load: field not found: " ++ fname
-     let key = Text.pack fname
-     val <- Crucible.readPartExpr sym (fromMaybe W4.Unassigned (Map.lookup key tab)) msg3
-     projectJVMVal sym ty ("field load " ++ fname ++ ", " ++ show loc) val
-
-doArrayLoad ::
-  Sym ->
-  W4.ProgramLoc ->
-  Crucible.SymGlobalState Sym ->
-  J.Type -> JVMRefVal -> Int {- ^ array index -} -> IO JVMVal
-doArrayLoad sym loc globals ty ref idx =
-  do let msg1 = Crucible.GenericSimError "Array load: null reference"
-     ref' <- Crucible.readPartExpr sym ref msg1
-     obj <- EvalStmt.readRef sym CJ.jvmIntrinsicTypes objectRepr ref' globals
-     -- TODO: define a 'projectVariant' function in the OverrideSim monad
-     let msg2 = Crucible.GenericSimError "Array load: object is not an array"
-     arr <- Crucible.readPartExpr sym (Crucible.unVB (Crucible.unroll obj Ctx.! Ctx.i2of2)) msg2
-     let vec = Crucible.unRV (arr Ctx.! Ctx.i2of3)
-     let msg3 = Crucible.GenericSimError $ "Array load: index out of bounds: " ++ show idx
-     val <-
-       case vec V.!? idx of
-         Just val -> return val
-         Nothing -> Crucible.addFailedAssertion sym msg3
-     projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) val
-
-doAllocateObject ::
-  Sym ->
-  Crucible.HandleAllocator RealWorld ->
-  CJ.JVMContext ->
-  J.ClassName ->
-  Crucible.SymGlobalState Sym ->
-  IO (JVMRefVal, Crucible.SymGlobalState Sym)
-doAllocateObject sym halloc jc cname globals =
-  do cls <- getJVMClassByName sym globals jc cname
-     let fieldIds = fieldsOfClassName jc cname
-     let pval = W4.justPartExpr sym unassignedJVMValue
-     let fields = Map.fromList [ (CJ.fieldIdText f, pval) | f <- fieldIds ]
-     let inst = Ctx.Empty Ctx.:> Crucible.RV fields Ctx.:> Crucible.RV cls
-     let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
-     let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i1of2 inst)
-     ref <- stToIO (Crucible.freshRefCell halloc objectRepr)
-     let globals' = Crucible.updateRef ref (W4.justPartExpr sym obj) globals
-     return (W4.justPartExpr sym (Crucible.toMuxTree sym ref), globals')
-
-doAllocateArray ::
-  Sym ->
-  Crucible.HandleAllocator RealWorld ->
-  CJ.JVMContext -> Int -> J.Type ->
-  Crucible.SymGlobalState Sym ->
-  IO (JVMRefVal, Crucible.SymGlobalState Sym)
-doAllocateArray sym halloc jc len elemTy globals =
-  do len' <- liftIO $ W4.bvLit sym CJ.w32 (toInteger len)
-     let vec = V.replicate len unassignedJVMValue
-     rep <- makeJVMTypeRep sym globals jc elemTy
-     let arr = Ctx.Empty Ctx.:> Crucible.RV len' Ctx.:> Crucible.RV vec Ctx.:> Crucible.RV rep
-     let repr = Ctx.Empty Ctx.:> instanceRepr Ctx.:> arrayRepr
-     let obj = Crucible.RolledType (Crucible.injectVariant sym repr Ctx.i2of2 arr)
-     ref <- stToIO (Crucible.freshRefCell halloc objectRepr)
-     let globals' = Crucible.updateRef ref (W4.justPartExpr sym obj) globals
-     return (W4.justPartExpr sym (Crucible.toMuxTree sym ref), globals')
-
 doResolveGlobal :: Sym -> () -> String -> IO JVMRefVal
 doResolveGlobal _sym _mem _name = fail "doResolveGlobal: FIXME"
 -- FIXME: replace () with whatever type we need to look up global/static references
-
--- | Lookup the data structure associated with a class.
-getJVMClassByName ::
-  Sym ->
-  Crucible.SymGlobalState Sym ->
-  CJ.JVMContext ->
-  J.ClassName ->
-  IO (Crucible.RegValue Sym CJ.JVMClassType)
-getJVMClassByName sym globals jc cname =
-  do let key = CJ.classNameText cname
-     let msg1 = Crucible.GenericSimError "Class table not found"
-     let msg2 = Crucible.GenericSimError $ "Class was not found in class table: " ++ J.unClassName cname
-     classtab <-
-       case Crucible.lookupGlobal (CJ.dynamicClassTable jc) globals of
-         Just x -> return x
-         Nothing -> Crucible.addFailedAssertion sym msg1
-     let pcls = fromMaybe W4.Unassigned (Map.lookup key classtab)
-     Crucible.readPartExpr sym pcls msg2
-
-objectRepr :: Crucible.TypeRepr CJ.JVMObjectType
-objectRepr = knownRepr
-
-arrayRepr :: Crucible.TypeRepr CJ.JVMArrayType
-arrayRepr = knownRepr
-
-instanceRepr :: Crucible.TypeRepr CJ.JVMInstanceType
-instanceRepr = knownRepr
-
--- | A degenerate value of the variant type, where every branch is
--- unassigned. This is used to model uninitialized array elements.
-unassignedJVMValue :: Crucible.RegValue sym CJ.JVMValueType
-unassignedJVMValue =
-  Ctx.fmapFC (\_ -> Crucible.VB W4.Unassigned) (knownRepr :: Crucible.CtxRepr CJ.JVMValueCtx)
-
-mkFieldId :: J.Class -> J.Field -> J.FieldId
-mkFieldId c f = J.FieldId (J.className c) (J.fieldName f) (J.fieldType f)
-
--- | Find the fields not just in this class, but also in the super classes.
-fieldsOfClass :: CJ.JVMContext -> J.Class -> [J.FieldId]
-fieldsOfClass jc cls =
-  case J.superClass cls of
-    Nothing -> fields
-    Just super -> fields ++ fieldsOfClassName jc super
-  where
-    fields = map (mkFieldId cls) (J.classFields cls)
-
-fieldsOfClassName :: CJ.JVMContext -> J.ClassName -> [J.FieldId]
-fieldsOfClassName jc cname =
-  case Map.lookup cname (CJ.classTable jc) of
-    Just cls -> fieldsOfClass jc cls
-    Nothing -> []
-
--- | Given a JVM type, generate a runtime value for its representation.
-makeJVMTypeRep ::
-  Sym ->
-  Crucible.SymGlobalState Sym ->
-  CJ.JVMContext ->
-  J.Type ->
-  IO (Crucible.RegValue Sym CJ.JVMTypeRepType)
-makeJVMTypeRep sym globals jc ty =
-  case ty of
-    J.ArrayType ety ->
-      do ety' <- makeJVMTypeRep sym globals jc ety
-         return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i1of3 ety')
-    J.ClassType _cn ->
-      primTypeRep 8 -- FIXME: temporary hack
-    J.BooleanType -> primTypeRep 0
-    J.ByteType    -> primTypeRep 1
-    J.CharType    -> primTypeRep 2
-    J.DoubleType  -> primTypeRep 3
-    J.FloatType   -> primTypeRep 4
-    J.IntType     -> primTypeRep 5
-    J.LongType    -> primTypeRep 6
-    J.ShortType   -> primTypeRep 7
-  where
-    primTypeRep n =
-      do n' <- W4.bvLit sym CJ.w32 n
-         return $ Crucible.RolledType (Crucible.injectVariant sym knownRepr Ctx.i3of3 n')
