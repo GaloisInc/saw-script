@@ -526,7 +526,7 @@ ltNatOp bp =
          VBool <$> bpBvult bp x1 x2
 
 -- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
-natCaseOp :: VMonad l => Value l
+natCaseOp :: (VMonad l, Show (Extra l)) => Value l
 natCaseOp =
   constFun $
   VFun $ \z -> return $
@@ -544,7 +544,7 @@ vecTypeOp :: VMonad l => Value l
 vecTypeOp = pureFun $ \n -> pureFun $ \a -> VVecType n a
 
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
-genOp :: VMonadLazy l => Value l
+genOp :: (VMonadLazy l, Show (Extra l)) => Value l
 genOp =
   natFun' "gen1" $ \n -> return $
   constFun $
@@ -667,7 +667,7 @@ dropOp bp =
     _ -> error $ "dropOp: " ++ show v
 
 -- append :: (m n :: Nat) -> (a :: sort 0) -> Vec m a -> Vec n a -> Vec (addNat m n) a;
-appendOp :: VMonad l => BasePrims l -> Value l
+appendOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 appendOp bp =
   constFun $
   constFun $
@@ -676,7 +676,7 @@ appendOp bp =
   strictFun $ \ys ->
   appV bp xs ys
 
-appV :: VMonad l => BasePrims l -> Value l -> Value l -> MValue l
+appV :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l -> Value l -> MValue l
 appV bp xs ys =
   case (xs, ys) of
     (VVector xv, _) | V.null xv -> return ys
@@ -685,10 +685,10 @@ appV bp xs ys =
     (VVector xv, VVector yv) -> return $ VVector ((V.++) xv yv)
     (VVector xv, VWord yw) -> liftM (\yv -> VVector ((V.++) xv (fmap (ready . VBool) yv))) (bpUnpack bp yw)
     (VWord xw, VVector yv) -> liftM (\xv -> VVector ((V.++) (fmap (ready . VBool) xv) yv)) (bpUnpack bp xw)
-    _ -> fail "Verifier.SAW.Simulator.Prims.appendOp"
+    _ -> fail $ "Verifier.SAW.Simulator.Prims.appendOp: " ++ show xs ++ ", " ++ show ys
 
 -- join  :: (m n :: Nat) -> (a :: sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
-joinOp :: VMonad l => BasePrims l -> Value l
+joinOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 joinOp bp =
   constFun $
   constFun $
@@ -701,7 +701,7 @@ joinOp bp =
     _ -> error "Verifier.SAW.Simulator.Prims.joinOp"
 
 -- split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
-splitOp :: (VMonad l) => BasePrims l -> Value l
+splitOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 splitOp bp =
   natFun $ \(fromIntegral -> m) -> return $
   natFun $ \(fromIntegral -> n) -> return $
@@ -1179,7 +1179,7 @@ muxValue bp b = value
     thunk x y = delay $ do x' <- force x; y' <- force y; value x' y'
 
 -- fix :: (a :: sort 0) -> (a -> a) -> a;
-fixOp :: (VMonadLazy l, MonadFix (EvalM l)) => Value l
+fixOp :: (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) => Value l
 fixOp =
   constFun $
   strictFun $ \f ->

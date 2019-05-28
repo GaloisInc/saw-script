@@ -199,12 +199,12 @@ valRecordProj v@(VRecordValue _) fld =
   "valRecordProj: record field not found: " ++ fld ++ " in value: " ++ show v
 valRecordProj v _ = fail $ "valRecordProj: not a record value: " ++ show v
 
-apply :: VMonad l => Value l -> Thunk l -> MValue l
+apply :: (VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
 apply (VPiType _ f) x = f x
-apply _ _ = fail "Not a function value"
+apply v _x = fail $ "Not a function value: " ++ show v
 
-applyAll :: VMonad l => Value l -> [Thunk l] -> MValue l
+applyAll :: (VMonad l, Show (Extra l)) => Value l -> [Thunk l] -> MValue l
 applyAll = foldM apply
 
 asFiniteTypeValue :: Value l -> Maybe FiniteType

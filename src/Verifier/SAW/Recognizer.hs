@@ -11,6 +11,7 @@ Lightweight calculus for composing patterns as functions.
 
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -43,6 +44,8 @@ module Verifier.SAW.Recognizer
   , asRecursorApp
   , isDataType
   , asNat
+  , asBvLit
+  , asUnsignedBvLit
   , asStringLit
   , asLambda
   , asLambdaList
@@ -267,6 +270,20 @@ asNat (unwrapTermF -> FTermF (NatLit i)) = return $ fromInteger i
 asNat (asCtor -> Just (c, [])) | c == "Prelude.Zero" = return 0
 asNat (asCtor -> Just (c, [asNat -> Just i])) | c == "Prelude.Succ" = return (i+1)
 asNat _ = fail "not Nat"
+
+asBvLit :: (MonadFail f) => Recognizer f Term (Natural, Natural)
+asBvLit term
+  | Just (ctor, [n_term, v_term]) <- asCtor term
+  , ctor == "Prelude.scBvNat"
+  , Just n <- asNat n_term
+  , Just v <- asNat v_term =
+    return (n, v)
+  | otherwise = fail "not a bitvector literal"
+
+asUnsignedBvLit :: (MonadFail f) => Recognizer f Term Natural
+asUnsignedBvLit term = do
+  (n, v) <- asBvLit term
+  return $ mod v (2 ^ n)
 
 asStringLit :: (MonadFail f) => Recognizer f Term String
 asStringLit t = do StringLit i <- asFTermF t; return i
