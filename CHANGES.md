@@ -26,6 +26,9 @@
     * Ghost state is supported in LLVM verification, allowing reasoning
       about certain complex or unavailable code.
     
+    * Verification of LLVM works for a larger subset of the language,
+      which particularly improves support for C++.
+    
 * LLVM bitcode format support is greatly improved. Versions 3.5 to 7.0
   are known to be mostly well-supported. We consider parsing failures
   with any version newer than 3.5 to be a bug, so please report them on
