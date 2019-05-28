@@ -143,7 +143,7 @@ ppAbortedResult _ (Crucible.AbortedExit ec) =
 allClassRefs :: CB.Codebase -> J.ClassName -> IO (Set J.ClassName)
 allClassRefs cb c0 = go seen0 [c0]
   where
-    seen0 = Set.fromList (map J.mkClassName CJ.initClasses)
+    seen0 = Set.fromList CJ.initClasses
     go seen [] = return seen
     go seen (c : cs) =
       do -- putStrLn $ "allClassRefs: " ++ show (J.unClassName c)
@@ -193,7 +193,7 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      -- allocate all of the handles/static vars that are referenced
      -- (directly or indirectly) by this class
      allRefs <- io $ Set.toList <$> allClassRefs cb (J.className cls)
-     let refs = map J.mkClassName CJ.initClasses ++ allRefs -- ++ superRefs
+     let refs = CJ.initClasses ++ allRefs -- ++ superRefs
      mapM_ (prepareClassTopLevel bic . J.unClassName) refs
 
      cc <- setupCrucibleContext bic opts cls
