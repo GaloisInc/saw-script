@@ -1000,30 +1000,30 @@ primitives = Map.fromList
 
   , prim "goal_apply"          "Theorem -> ProofScript ()"
     (pureVal goal_apply)
-    Current
+    Experimental
     [ "Apply an introduction rule to the current goal. Depending on the"
     , "rule, this will result in zero or more new subgoals."
     ]
   , prim "goal_assume"         "ProofScript Theorem"
     (pureVal goal_assume)
-    Current
+    Experimental
     [ "Convert the first hypothesis in the current proof goal into a"
     , "local Theorem."
     ]
   , prim "goal_insert"         "Theorem -> ProofScript ()"
     (pureVal goal_insert)
-    Current
+    Experimental
     [ "Insert a Theorem as a new hypothesis in the current proof goal."
     ]
   , prim "goal_intro"          "String -> ProofScript Term"
     (pureVal goal_intro)
-    Current
+    Experimental
     [ "Introduce a quantified variable in the current proof goal, returning"
     , "the variable as a Term."
     ]
   , prim "goal_when"           "String -> ProofScript () -> ProofScript ()"
     (pureVal goal_when)
-    Current
+    Experimental
     [ "Run the given proof script only when the goal name contains"
     , "the given string."
     ]
@@ -1188,7 +1188,7 @@ primitives = Map.fromList
 
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
-    Current
+    Experimental
     [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"
     ,  "goals 'prop1' and 'prop2'." ]
 
