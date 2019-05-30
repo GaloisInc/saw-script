@@ -277,6 +277,15 @@ makeLenses ''OverrideWithPreconditions
 ------------------------------------------------------------------------
 -- Translating SAW values to Crucible values for good error messages
 
+ppLLVMVal ::
+  CrucibleContext arch ->
+  LLVMVal ->
+  OverrideMatcher arch w PP.Doc
+ppLLVMVal cc val = do
+  sym <- getSymInterface
+  mem <- readGlobal (Crucible.llvmMemVar (cc^.ccLLVMContext))
+  liftIO $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplGlobalMap mem) val
+
 -- | Resolve a 'SetupValue' into a 'LLVMVal' and pretty-print it
 ppSetupValueAsLLVMVal ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
@@ -330,6 +339,32 @@ ppPointsToAsLLVMVal opts cc sc spec (PointsTo loc setupVal1 setupVal2) = do
                  , PP.text "Assertion made at:" PP.<+>
                    PP.pretty (W4.plSourceLoc loc)
                  ]
+
+-- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
+notEqual ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  PrePost ->
+  Options              {- ^ output/verbosity options -} ->
+  W4.ProgramLoc        {- ^ where is the assertion from? -} ->
+  CrucibleContext arch ->
+  SharedContext {- ^ context for constructing SAW terms -} ->
+  CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
+  SetupValue           {- ^ the value from the spec -} ->
+  Crucible.LLVMVal Sym {- ^ the value from the simulator -} ->
+  OverrideMatcher arch w Crucible.SimError
+notEqual cond opts loc cc sc spec expected actual = do
+  prettyLLVMVal      <- ppLLVMVal cc actual
+  prettySetupLLVMVal <- ppSetupValueAsLLVMVal opts cc sc spec expected
+  pure $
+    Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
+      [ "Equality " ++ stateCond cond
+      , "Expected value (as a SAW value): "
+      , show (ppSetupValue expected)
+      , "Expected value (as a Crucible value): "
+      , show prettySetupLLVMVal
+      , "Actual value: "
+      , show prettyLLVMVal
+      ]
 
 ------------------------------------------------------------------------
 
@@ -984,41 +1019,6 @@ assignTerm sc cc loc prepost var val =
 
 
 ------------------------------------------------------------------------
-
-ppLLVMVal ::
-  CrucibleContext arch ->
-  LLVMVal ->
-  OverrideMatcher arch w PP.Doc
-ppLLVMVal cc val = do
-  sym <- getSymInterface
-  mem <- readGlobal (Crucible.llvmMemVar (cc^.ccLLVMContext))
-  liftIO $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplGlobalMap mem) val
-
--- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
-notEqual ::
-  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  PrePost ->
-  Options              {- ^ output/verbosity options -} ->
-  W4.ProgramLoc        {- ^ where is the assertion from? -} ->
-  CrucibleContext arch ->
-  SharedContext {- ^ context for constructing SAW terms -} ->
-  CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
-  SetupValue           {- ^ the value from the spec -} ->
-  Crucible.LLVMVal Sym {- ^ the value from the simulator -} ->
-  OverrideMatcher arch w Crucible.SimError
-notEqual cond opts loc cc sc spec expected actual = do
-  prettyLLVMVal      <- ppLLVMVal cc actual
-  prettySetupLLVMVal <- ppSetupValueAsLLVMVal opts cc sc spec expected
-  pure $
-    Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
-      [ "Equality " ++ stateCond cond
-      , "Expected value (as a SAW value): "
-      , show (ppSetupValue expected)
-      , "Expected value (as a Crucible value): "
-      , show prettySetupLLVMVal
-      , "Actual value: "
-      , show prettyLLVMVal
-      ]
 
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
