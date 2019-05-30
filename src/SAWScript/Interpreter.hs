@@ -1186,6 +1186,20 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
+  , prim "w4_unint_yices"         "[String] -> ProofScript SatResult"
+    (pureVal satWhat4_UnintYices)
+    Current
+    [ "Prove the current goal using What4 (Yices backend). Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "w4_unint_cvc4"         "[String] -> ProofScript SatResult"
+    (pureVal satWhat4_UnintCVC4)
+    Current
+    [ "Prove the current goal using What4 (CVC4 backend). Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
     Experimental
