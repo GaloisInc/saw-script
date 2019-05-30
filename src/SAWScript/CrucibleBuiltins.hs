@@ -283,31 +283,30 @@ createMethodSpec verificationArgs bic opts lm nm setup = do
 
     void $ io $ checkSpecReturnType cc methodSpec
 
-    -- set up the LLVM memory with a pristine heap
-    let globals = cc^.ccLLVMGlobals
-    let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
-    mem0 <- case Crucible.lookupGlobal mvar globals of
-      Nothing   -> fail "internal error: LLVM Memory global not found"
-      Just mem0 -> return mem0
-    -- push a memory stack frame if starting from a breakpoint
-    let mem = if isJust (methodSpec^.csParentName)
-              then mem0
-                { Crucible.memImplHeap = Crucible.pushStackFrameMem
-                  (Crucible.memImplHeap mem0)
-                }
-              else mem0
-    let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
-
-    -- construct the initial state for verifications
-    (args, assumes, env, globals2) <-
-      io $ verifyPrestate cc methodSpec globals1
-
     case verificationArgs of
       -- If we're just admitting, don't do anything
       Nothing -> return methodSpec
 
       -- If we're verifying, actually perform the verification
       Just (lemmas, checkSat, tactic) -> do
+        -- set up the LLVM memory with a pristine heap
+        let globals = cc^.ccLLVMGlobals
+        let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
+        mem0 <- case Crucible.lookupGlobal mvar globals of
+          Nothing   -> fail "internal error: LLVM Memory global not found"
+          Just mem0 -> return mem0
+        -- push a memory stack frame if starting from a breakpoint
+        let mem = if isJust (methodSpec^.csParentName)
+                  then mem0
+                    { Crucible.memImplHeap = Crucible.pushStackFrameMem
+                      (Crucible.memImplHeap mem0)
+                    }
+                  else mem0
+        let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
+
+        -- construct the initial state for verifications
+        (args, assumes, env, globals2) <-
+          io $ verifyPrestate cc methodSpec globals1
 
         -- save initial path conditions
         frameIdent <- io $ Crucible.pushAssumptionFrame sym
