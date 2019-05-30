@@ -151,7 +151,7 @@ data OverrideFailureReason
     -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
   | BadEqualityComparison String -- ^ Comparison on an undef value
-  | BadPointerLoad PointsTo PP.Doc
+  | BadPointerLoad (Either PointsTo PP.Doc) PP.Doc
     -- ^ @loadRaw@ failed due to type error
   | StructuralMismatch
       (Either LLVMVal PP.Doc)
@@ -207,8 +207,9 @@ ppOverrideFailureReason rsn = case rsn of
   BadPointerLoad pointsTo msg ->
     PP.text "error when loading through pointer that" PP.<+>
     PP.text "appeared in the override's points-to precondition(s):" PP.<$$>
-    PP.text "Precondition:" PP.<+> ppPointsTo pointsTo PP.<$$>
-    PP.text "Failure reason: " PP.<$$> msg -- this can be long
+    PP.text "Precondition:" PP.<$$>
+      PP.indent 2 (either ppPointsTo id pointsTo) PP.<$$>
+    PP.text "Failure reason: " PP.<$$> PP.indent 2 msg -- this can be long
   StructuralMismatch llvmval setupval setupvalTy ty ->
     PP.text "could not match specified value with actual value:" PP.<$$>
     PP.vcat (map (PP.indent 2) $
@@ -230,7 +231,7 @@ ppTypedTerm (TypedTerm tp tm) =
 
 ppPointsTo :: PointsTo -> PP.Doc
 ppPointsTo (PointsTo _loc ptr val) =
-  ppSetupValue ptr PP.<+> PP.text "|->" PP.<+> ppSetupValue val
+  ppSetupValue ptr PP.<+> PP.text "points to" PP.<+> ppSetupValue val
 
 commaList :: [PP.Doc] -> PP.Doc
 commaList []     = PP.empty
@@ -273,6 +274,22 @@ data OverrideWithPreconditions arch =
 
 makeLenses ''OverrideWithPreconditions
 
+------------------------------------------------------------------------
+-- Translating SAW values to Crucible values for good error messages
+
+-- | Resolve a 'SetupValue' into a 'LLVMVal' and pretty-print it
+ppSetupValueAsLLVMVal ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  Options              {- ^ output/verbosity options -} ->
+  CrucibleContext arch ->
+  SharedContext {- ^ context for constructing SAW terms -} ->
+  CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
+  SetupValue ->
+  OverrideMatcher arch w PP.Doc
+ppSetupValueAsLLVMVal opts cc sc spec setupval = do
+  (_memTy, llvmval) <- resolveSetupValueLLVM opts cc sc spec setupval
+  ppLLVMVal cc llvmval
+
 -- | Try to translate the spec\'s 'SetupValue' into an 'LLVMVal', pretty-print
 --   the 'LLVMVal'.
 mkStructuralMismatch ::
@@ -286,8 +303,6 @@ mkStructuralMismatch ::
   Crucible.MemType     {- ^ the expected type -} ->
   OverrideMatcher arch w OverrideFailureReason
 mkStructuralMismatch opts cc sc spec llvmval setupval memTy = do
-  -- resolveSetupValue is only partial in the face of other user errors or
-  -- exceptions, so it's okay if it fails while preparing this message
   (setupMemTy, setupLLVMVal) <- resolveSetupValueLLVM opts cc sc spec setupval
   prettyLLVMVal      <- ppLLVMVal cc llvmval
   prettySetupLLVMVal <- ppLLVMVal cc setupLLVMVal
@@ -296,6 +311,25 @@ mkStructuralMismatch opts cc sc spec llvmval setupval memTy = do
             (Right prettySetupLLVMVal)
             (Just setupMemTy)
             memTy
+
+-- | Instead of using 'ppPointsTo', which prints 'SetupValue', translate
+--   expressions to 'LLVMVal'.
+ppPointsToAsLLVMVal ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  Options              {- ^ output/verbosity options -} ->
+  CrucibleContext arch ->
+  SharedContext {- ^ context for constructing SAW terms -} ->
+  CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
+  PointsTo ->
+  OverrideMatcher arch w PP.Doc
+ppPointsToAsLLVMVal opts cc sc spec (PointsTo loc setupVal1 setupVal2) = do
+  pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec setupVal1
+  pretty2 <- ppSetupValueAsLLVMVal opts cc sc spec setupVal2
+  pure $ PP.vcat [ PP.text "Pointer:" PP.<+> pretty1
+                 , PP.text "Pointee:" PP.<+> pretty2
+                 , PP.text "Assertion made at:" PP.<+>
+                   PP.pretty (W4.plSourceLoc loc)
+                 ]
 
 ------------------------------------------------------------------------
 
@@ -824,7 +858,9 @@ matchPointsTos opts sc cc spec prepost = go False []
          if ready then
            do err <- learnPointsTo opts sc cc spec prepost c
               case err of
-                Just msg -> failure loc $ BadPointerLoad c msg
+                Just msg -> do
+                  doc <- ppPointsToAsLLVMVal opts cc sc spec c
+                  failure loc (BadPointerLoad (Right doc) msg)
                 Nothing  -> go True delayed cs
          else
            do go progress (c:delayed) cs
@@ -971,9 +1007,8 @@ notEqual ::
   Crucible.LLVMVal Sym {- ^ the value from the simulator -} ->
   OverrideMatcher arch w Crucible.SimError
 notEqual cond opts loc cc sc spec expected actual = do
-  (_setupMemTy, setupLLVMVal) <- resolveSetupValueLLVM opts cc sc spec expected
   prettyLLVMVal      <- ppLLVMVal cc actual
-  prettySetupLLVMVal <- ppLLVMVal cc setupLLVMVal
+  prettySetupLLVMVal <- ppSetupValueAsLLVMVal opts cc sc spec expected
   pure $
     Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
       [ "Equality " ++ stateCond cond
