@@ -102,6 +102,10 @@ varPerm (PermLoc x i) =
         error ("varPerm: no permission at position " ++ show i))
     perms)
 
+allLocsForVar :: MultiPermSet ctx -> PermVar ctx a -> [PermLoc ctx a]
+allLocsForVar perms x =
+  map (PermLoc x) [0 .. length (perms ^. varPerms x) - 1]
+
 {-
 modifyVarPerm :: MultiPermSet ctx -> PermLoc ctx a ->
                  (ValuePerm ctx a -> ValuePerm ctx a) ->
@@ -306,6 +310,11 @@ infixl 1 >>>=
   m w s $ \w' s' a ->
   unCCST (f a) (composeWeakenings w w') s' $ \w'' -> k (composeWeakenings w' w'')
 
+infixl 1 >>>
+(>>>) :: CCST s f2 f3 ctx m () -> CCST s f1 f2 ctx m b ->
+          CCST s f1 f3 ctx m b
+m1 >>> m2 = m1 >>>= \_ -> m2
+
 instance Functor (CCST s f f ctx m) where
   fmap f m = m >>= return . f
 
@@ -455,7 +464,7 @@ elimExistsM l tp =
     (weakenPermState1 s tp))
   (return ())
 
--- | Eliminate disjunctives and existentials on a variable
+-- | Eliminate disjunctives and existentials at a specific location
 elimOrsExistsM :: (Monad m, PermState s) =>
                   PermLoc ctx a -> CCST s (PermImpl f ls) (PermImpl f ls) ctx m ()
 elimOrsExistsM x =
@@ -466,6 +475,13 @@ elimOrsExistsM x =
     ValPerm_Exists tp _ ->
       elimExistsM (weaken' w x) tp >> elimOrsExistsM (weaken' w x)
     _ -> return ()
+
+-- | Eliminate all disjunctives and existentials on a variable
+elimAllOrsExistsM :: (Monad m, PermState s) => PermVar ctx a ->
+                     CCST s (PermImpl f ls) (PermImpl f ls) ctx m ()
+elimAllOrsExistsM x =
+  cwithState $ \w s ->
+  mapM_ elimOrsExistsM $ allLocsForVar (s ^. permStatePerms) (weaken' w x)
 
 introTrueM :: (Monad m, PermState s) =>
               PermVar ctx a ->
@@ -507,7 +523,7 @@ partialSubstForce = error "FIXME HERE: partialSubstForce"
 partialSubstForce1 :: PartialSubst vars ctx ->
                       ValuePerm (ctx <+> vars ::> tp) a ->
                       Maybe (ValuePerm (ctx ::> tp) a)
-partialSubstForce1 = error "FIXME HERE: partialSubstForce1"
+partialSubstForce1 s p = error "FIXME HERE: partialSubstForce1"
 
 applyIntros :: (Monad m, PermState s) =>
                PermVar ctx a ->
@@ -541,12 +557,12 @@ instance Weakenable' (VarExPerm vars) where
 
 data VarExPerms vars ps ctx where
   EVPNil :: VarExPerms vars EmptyCtx ctx
-  EVPCons :: VarExPerm vars ctx p -> VarExPerms vars ps ctx ->
+  EVPCons :: VarExPerms vars ps ctx -> VarExPerm vars ctx p ->
              VarExPerms vars (ps ::> p) ctx
 
 instance Weakenable (VarExPerms vars ps) where
   weaken _ EVPNil = EVPNil
-  weaken w (EVPCons p ps) = EVPCons (weaken' w p) (weaken w ps)
+  weaken w (EVPCons ps p) = EVPCons (weaken w ps) (weaken' w p)
 
 data ImplState vars ctx =
   ImplState { _implStatePerms :: MultiPermSet ctx,
@@ -563,6 +579,21 @@ instance Weakenable (ImplState vars) where
 instance PermState (ImplState vars) where
   weakenPermState1 s _ = weaken mkWeakening1 s
   permStatePerms = implStatePerms
+
+implStateExtVars :: TypeRepr tp -> ImplState vars ctx ->
+                    ImplState (vars ::> tp) ctx
+implStateExtVars tp (ImplState {..}) =
+  ImplState { _implStatePerms = _implStatePerms,
+              _implStateVars = extend _implStateVars tp,
+              _implStatePSubst = consPartialSubst _implStatePSubst }
+
+implStateUnextVars :: ImplState (vars ::> tp) ctx -> ImplState vars ctx
+implStateUnextVars (ImplState {..}) =
+  case viewAssign _implStateVars of
+    AssignExtend vars' _ ->
+      ImplState { _implStatePerms = _implStatePerms,
+                  _implStateVars = vars',
+                  _implStatePSubst = fst $ unconsPartialSubst _implStatePSubst }
 
 partialSubstForceM :: Size vars -> ValuePerm (ctx <+> vars) a ->
                       (forall ctx'. Weakening ctx ctx' ->
@@ -581,10 +612,11 @@ proveImpl :: (Monad m, PermState s) =>
              CCST s (PermImpl f ls) (PermImpl f EmptyCtx) ctx m ()
 proveImpl = error "FIXME HERE: proveImpl"
 
-proveImplH :: Monad m => VarExPerms vars ls ctx ->
-              CCST (ImplState vars) (PermImpl f ls) (PermImpl f EmptyCtx) ctx m ()
-proveImplH EVPNil = return ()
-proveImplH (EVPCons p ps) = proveImplH ps >>>= \_ -> proveVarImpl p
+proveVarsImpl :: Monad m => VarExPerms vars ls ctx ->
+                 CCST (ImplState vars) (PermImpl f ls)
+                 (PermImpl f EmptyCtx) ctx m ()
+proveVarsImpl EVPNil = return ()
+proveVarsImpl (EVPCons ps p) = proveVarsImpl ps >>> proveVarImpl p
 
 
 proveVarImpl ::
@@ -600,6 +632,17 @@ proveVarImpl (VarExPerm sz x (ValPerm_Or p1 p2)) =
   (proveVarImpl (VarExPerm sz x p2) >>>= \_ ->
     partialSubstForceM sz p1 $ \w p1' ->
     introOrRM (weaken' w x) p1')
+proveVarImpl (VarExPerm sz x (ValPerm_Exists tp p)) =
+  cchangeState (\_ -> implStateExtVars tp) (\_ -> implStateUnextVars)
+  (proveVarImpl (VarExPerm (incSize sz) x p) >>>= \_ ->
+    cwithState $ \w s ->
+    let (s', maybe_e) = unconsPartialSubst (s ^. implStatePSubst)
+        e = case maybe_e of
+          Just e -> e
+          Nothing -> zeroOfType tp in
+    case partialSubstForce1 s' (weaken' (weakenWeakening (incSize sz) w) p) of
+      Just p' -> introExistsM (weaken' w x) tp e p'
+      _ -> error "proveVarImpl: not enough variables instantiated!")
 
 {-
 FIXME HERE NOW:
