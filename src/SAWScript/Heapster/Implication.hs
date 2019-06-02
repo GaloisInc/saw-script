@@ -21,6 +21,7 @@
 
 module SAWScript.Heapster.Implication where
 
+import Data.List
 import Data.Kind
 import Data.Functor.Const
 import Data.Functor.Product
@@ -63,6 +64,9 @@ instance Weakenable MultiPermSet where
   weaken w (MultiPermSet asgn) =
     MultiPermSet $ weakenAssignment (\_ -> ValuePerms []) w $
     fmapFC (weaken' w) asgn
+
+multiPermSetSize :: MultiPermSet ctx -> Size ctx
+multiPermSetSize = size . unMultiPermSet
 
 -- | Weaken a 'MultiPermSet'
 weaken1MultiPerms :: MultiPermSet ctx -> MultiPermSet (ctx ::> tp)
@@ -219,11 +223,57 @@ data PermImpl f ls ctx where
 
   Impl_IntroTrue :: PermVar ctx a -> PermImpl f (ls ::> a) ctx ->
                     PermImpl f ls ctx
-  -- ^ "Push" a true permission onto the stack of distinguished permissions:
+  -- ^ Introduce a true permission onto the stack of distinguished permissions:
   --
   -- > Gin | Pl,x:true * Pin |- rets
   -- > -----------------------------
   -- > Gin | Pl * Pin |- rets
+
+  Impl_IntroEqRefl :: PermVar ctx a -> PermImpl f (ls ::> a) ctx ->
+                      PermImpl f ls ctx
+  -- ^ Introduce a proof that @x:eq(x)@:
+  --
+  -- > Gin | Pl,x:eq(x) * Pin |- rets
+  -- > -----------------------------
+  -- > Gin | Pl * Pin |- rets
+
+  Impl_IntroEqCopy :: PermLoc ctx a -> PermImpl f (ls ::> a) ctx ->
+                      PermImpl f ls ctx
+  -- ^ Copy a proof that @x:eq(e)@ from the normal permissions to the stack:
+  --
+  -- > Gin | Pl,x:eq(e) * Pin,x:eq(e) |- rets
+  -- > --------------------------------------
+  -- > Gin | Pl * Pin,x:eq(e) |- rets
+
+  Impl_AssertEqBV :: PermVar ctx (BVType w) -> PermExpr ctx (BVType w) ->
+                     PermImpl f (ls ::> BVType w) ctx ->
+                     PermImpl f ls ctx
+  -- ^ Introduce a proof that @x:eq(e)@ at bitvector type (which becomes a
+  -- dynamic check that @x=e@):
+  --
+  -- > Gin | Pl,x:eq(e) * Pin |- rets
+  -- > -----------------------------
+  -- > Gin | Pl * Pin |- rets
+
+  Impl_IntroCastLLVMWord ::
+    PermVar ctx (BVType w) -> PermExpr ctx (BVType w) ->
+    PermImpl f (ls ::> LLVMPointerType w) ctx ->
+    PermImpl f (ls ::> LLVMPointerType w) ctx
+  -- ^ Cast a proof that @x:eq(word(e1))@ to one that @x:eq(word(e2))@ with a
+  -- dynamic check that @e1=e2@:
+  --
+  -- > Gin | Pl,x:eq(word(e2)) * Pin |- rets
+  -- > -------------------------------------
+  -- > Gin | Pl,x:eq(word(e1)) * Pin |- rets
+
+  Impl_IntroCast :: PermVar ctx a -> PermVar ctx a ->
+                    PermImpl f (ls ::> a) ctx ->
+                    PermImpl f (ls ::> a ::> a) ctx
+  -- ^ Cast a proof of @y:p@ to one of @x:p@ using @x:eq(y)@:
+  --
+  -- > Gin | Pl,x:p * Pin |- rets
+  -- > ----------------------------------
+  -- > Gin | Pl,x:eq(y),y:p * Pin |- rets
 
 
 ----------------------------------------------------------------------
@@ -408,6 +458,9 @@ cmapContStateBind fret fs (CCST m) =
 -- * Monadic Proof Operations
 ----------------------------------------------------------------------
 
+implFailM :: Monad m => CCST s g (PermImpl f ls) ctx m ()
+implFailM = cmapCont (\_ _ -> Impl_Fail) (return () :: CCST s g g ctx m ())
+
 implDoneM :: Monad m => CCST s f (PermImpl f ls) ctx m ()
 implDoneM = cmapCont (\_ -> Impl_Done) (return ())
 
@@ -488,6 +541,24 @@ introTrueM :: (Monad m, PermState s) =>
               CCST s (PermImpl f (ls ::> a)) (PermImpl f ls) ctx m ()
 introTrueM x =
   cmapCont (\w -> Impl_IntroTrue (weaken' w x)) $ return ()
+
+introEqReflM :: (Monad m, PermState s) =>
+                PermVar ctx a ->
+                CCST s (PermImpl f (ls ::> a)) (PermImpl f ls) ctx m ()
+introEqReflM x =
+  cmapCont (\w -> Impl_IntroEqRefl (weaken' w x)) $ return ()
+
+introEqCopyM :: (Monad m, PermState s) =>
+                PermLoc ctx a ->
+                CCST s (PermImpl f (ls ::> a)) (PermImpl f ls) ctx m ()
+introEqCopyM x = error "FIXME HERE: introEqCopyM"
+
+introCastLLVMWordEq :: (Monad m, PermState s) =>
+                       PermVar ctx (LLVMPointerType w) ->
+                       PermExpr ctx (BVType w) -> PermExpr ctx (BVType w) ->
+                       CCST s (PermImpl f (ls ::> LLVMPointerType w))
+                       (PermImpl f (ls ::> LLVMPointerType w)) ctx m ()
+introCastLLVMWordEq = error "FIXME HERE: introCastLLVMWordEq"
 
 
 ----------------------------------------------------------------------
@@ -595,17 +666,113 @@ implStateUnextVars (ImplState {..}) =
                   _implStateVars = vars',
                   _implStatePSubst = fst $ unconsPartialSubst _implStatePSubst }
 
-partialSubstForceM :: Size vars -> ValuePerm (ctx <+> vars) a ->
+partialSubstForceM :: ValuePerm (ctx <+> vars) a ->
                       (forall ctx'. Weakening ctx ctx' ->
                        ValuePerm ctx' a ->
                        CCST (ImplState vars) f f ctx' m ()) ->
                       CCST (ImplState vars) f f ctx m ()
-partialSubstForceM sz p f =
+partialSubstForceM p f =
   cwithState $ \w s ->
   case partialSubstForce (s ^. implStatePSubst)
-       (weaken' (weakenWeakening sz w) p) of
+       (weaken' (weakenWeakening (size (s ^. implStateVars)) w) p) of
     Just p' -> f w p'
     Nothing -> error "partialSubstForceM" -- FIXME: better error message!
+
+setExVarM :: PermVar vars a -> PermExpr ctx a ->
+             CCST (ImplState vars) f f ctx m ()
+setExVarM z e =
+  cmodify $ \w ->
+  over implStatePSubst $ \ps ->
+  partialSubstSet ps z (weaken' w e)
+
+implStateSizes :: ImplState vars ctx -> (Size ctx, Size vars)
+implStateSizes s =
+  (multiPermSetSize (s ^. implStatePerms),
+   partialSubstSize (s ^. implStatePSubst))
+
+getImplSizesM :: (forall ctx'. Weakening ctx ctx' ->
+                  Size ctx' -> Size vars ->
+                  CCST (ImplState vars) fin fout ctx' m ret) ->
+                 CCST (ImplState vars) fin fout ctx m ret
+getImplSizesM f =
+  cwithState $ \w s ->
+  f w (fst $ implStateSizes s) (snd $ implStateSizes s)
+
+matchExVarM :: PermVar (ctx <+> vars) a ->
+               (forall ctx'. Weakening ctx ctx' ->
+                Either (PermVar ctx' a) (PermVar vars a) ->
+                CCST (ImplState vars) fin fout ctx' m ret) ->
+               CCST (ImplState vars) fin fout ctx m ret
+matchExVarM x f =
+  getImplSizesM $ \w sz1 sz2 ->
+  f w $ caseVarAppend sz1 sz2 (weaken' (weakenWeakening sz2 w) x)
+
+-- | Prove an @x:eq(e)@ permission from some @x:ps@ permissions in context
+proveVarEq ::
+  Monad m =>
+  Size ctx -> Size vars ->
+  PermVar ctx a -> [ValuePerm ctx a] -> PermExpr (ctx <+> vars) a ->
+  CCST (ImplState vars) (PermImpl f (ls ::> a)) (PermImpl f ls) ctx m ()
+
+-- Prove x:eq(x) by reflexivity
+proveVarEq sz1 sz2 x ps (lower' sz1 sz2 -> Just (PExpr_Var y))
+  | x == y
+  = introEqReflM x
+
+-- Prove x:eq(e) |- x:eq(e) introEqCopyM
+proveVarEq sz1 sz2 x ps (lower' sz1 sz2 -> Just e)
+  | Just i <- findIndex (\p -> case p of
+                            ValPerm_Eq e' | e == e' -> True
+                            _ -> False) ps
+  = introEqCopyM (PermLoc x i)
+
+-- Prove x:eq(word(e')) |- x:eq(word(e)) by asserting e'=e
+proveVarEq sz1 sz2 x ps (lower' sz1 sz2 -> Just (PExpr_LLVMWord _ e))
+  | Just i <- findIndex isEqPerm ps
+  , ValPerm_Eq (PExpr_LLVMWord _ e') <- ps !! i
+  = introEqCopyM (PermLoc x i) >>>= \_ -> introCastLLVMWordEq x e' e
+
+-- Prove x:eq(z) for evar z by setting z=x
+proveVarEq sz1 sz2 x ps (PExpr_Var (caseVarAppend sz1 sz2 -> Right z)) =
+  setExVarM z (PExpr_Var x) >>>= \_ -> introEqReflM x
+
+-- Otherwise give up!
+proveVarEq _ _ _ _ _ = implFailM
+
+
+proveVarImpl ::
+  Monad m => VarExPerm vars ctx a ->
+  CCST (ImplState vars) (PermImpl f (ls ::> a)) (PermImpl f ls) ctx m ()
+proveVarImpl (VarExPerm _ x ValPerm_True) =
+  introTrueM x
+proveVarImpl (VarExPerm sz x (ValPerm_Or p1 p2)) =
+  implCatchM
+  (proveVarImpl (VarExPerm sz x p1) >>>= \_ ->
+    partialSubstForceM p2 $ \w p2' ->
+    introOrLM (weaken' w x) p2')
+  (proveVarImpl (VarExPerm sz x p2) >>>= \_ ->
+    partialSubstForceM p1 $ \w p1' ->
+    introOrRM (weaken' w x) p1')
+proveVarImpl (VarExPerm sz x (ValPerm_Exists tp p)) =
+  cchangeState (\_ -> implStateExtVars tp) (\_ -> implStateUnextVars)
+  (proveVarImpl (VarExPerm (incSize sz) x p) >>>= \_ ->
+    cwithState $ \w s ->
+    let (s', maybe_e) = unconsPartialSubst (s ^. implStatePSubst)
+        e = case maybe_e of
+          Just e -> e
+          Nothing -> zeroOfType tp in
+    case partialSubstForce1 s' (weaken' (weakenWeakening (incSize sz) w) p) of
+      Just p' -> introExistsM (weaken' w x) tp e p'
+      _ -> error "proveVarImpl: not enough variables instantiated!")
+proveVarImpl (VarExPerm sz x (ValPerm_Eq e)) =
+  elimAllOrsExistsM x >>>= \_ ->
+  cwithState $ \w s ->
+  proveVarEq
+  (fst $ implStateSizes s) (snd $ implStateSizes s)
+  (weaken' w x) (s ^. implStatePerms . varPerms (weaken' w x))
+  (partialSubst' (s ^. implStatePSubst)
+   (weaken' (weakenWeakening sz w) e))
+
 
 proveImpl :: (Monad m, PermState s) =>
              CtxRepr vars -> VarExPerms vars ls ctx ->
@@ -619,30 +786,6 @@ proveVarsImpl EVPNil = return ()
 proveVarsImpl (EVPCons ps p) = proveVarsImpl ps >>> proveVarImpl p
 
 
-proveVarImpl ::
-  Monad m => VarExPerm vars ctx a ->
-  CCST (ImplState vars) (PermImpl f (ls ::> a)) (PermImpl f ls) ctx m ()
-proveVarImpl (VarExPerm _ x ValPerm_True) =
-  introTrueM x
-proveVarImpl (VarExPerm sz x (ValPerm_Or p1 p2)) =
-  implCatchM
-  (proveVarImpl (VarExPerm sz x p1) >>>= \_ ->
-    partialSubstForceM sz p2 $ \w p2' ->
-    introOrLM (weaken' w x) p2')
-  (proveVarImpl (VarExPerm sz x p2) >>>= \_ ->
-    partialSubstForceM sz p1 $ \w p1' ->
-    introOrRM (weaken' w x) p1')
-proveVarImpl (VarExPerm sz x (ValPerm_Exists tp p)) =
-  cchangeState (\_ -> implStateExtVars tp) (\_ -> implStateUnextVars)
-  (proveVarImpl (VarExPerm (incSize sz) x p) >>>= \_ ->
-    cwithState $ \w s ->
-    let (s', maybe_e) = unconsPartialSubst (s ^. implStatePSubst)
-        e = case maybe_e of
-          Just e -> e
-          Nothing -> zeroOfType tp in
-    case partialSubstForce1 s' (weaken' (weakenWeakening (incSize sz) w) p) of
-      Just p' -> introExistsM (weaken' w x) tp e p'
-      _ -> error "proveVarImpl: not enough variables instantiated!")
 
 {-
 FIXME HERE NOW:

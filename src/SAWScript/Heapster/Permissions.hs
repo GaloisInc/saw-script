@@ -690,6 +690,10 @@ data LLVMArrayPerm ctx w =
     llvmArrayPtrPerm :: LLVMShapePerm ctx w
   }
 
+isEqPerm :: ValuePerm ctx a -> Bool
+isEqPerm (ValPerm_Eq _) = True
+isEqPerm _ = False
+
 -- | Add a static offset to a pointer shape
 shapeAddOffset :: Integer -> LLVMShapePerm ctx w -> LLVMShapePerm ctx w
 shapeAddOffset off (LLVMFieldShapePerm shape) =
