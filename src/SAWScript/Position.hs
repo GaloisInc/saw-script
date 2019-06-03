@@ -9,6 +9,8 @@ Stability   : provisional
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module SAWScript.Position where
@@ -19,7 +21,11 @@ import Data.List (intercalate)
 import GHC.Generics (Generic)
 import System.Directory (makeRelativeToCurrentDirectory)
 import System.FilePath (makeRelative, isAbsolute, (</>), takeDirectory)
+import qualified Data.Text as Text
 import qualified Text.PrettyPrint.ANSI.Leijen as PP hiding ((</>), (<$>))
+
+import qualified What4.ProgramLoc as W4
+import qualified What4.FunctionName as W4
 
 -- Pos ------------------------------------------------------------------------
 
@@ -90,6 +96,17 @@ instance Show Pos where
   show Unknown               = "unknown"
   show (PosInternal s)       = "[internal:" ++ s ++ "]"
   show PosREPL               = "REPL"
+  
+
+toW4Loc :: Text.Text -> Pos -> W4.ProgramLoc
+toW4Loc fnm =
+  \case
+    Unknown -> mkLoc fnm W4.InternalPos
+    PosREPL -> mkLoc (fnm <> " <REPL>") W4.InternalPos
+    PosInternal nm -> mkLoc (fnm <> " " <> Text.pack nm) W4.InternalPos
+    Range file sl sc _el _ec ->
+      mkLoc fnm (W4.SourcePos (Text.pack file) sl sc)
+  where mkLoc nm = W4.mkProgramLoc (W4.functionNameFromText nm)
 
 -- Positioned -----------------------------------------------------------------
 

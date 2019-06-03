@@ -45,7 +45,7 @@ import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
-import qualified SAWScript.Utils as SS
+import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
@@ -251,10 +251,10 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
   where
   (file,ln,col) =
     case locatedPos l of
-      Range f sl sc _ _ -> (f,sl, sc)
-      PosInternal s -> (s,1,1)
-      PosREPL       -> ("<interactive>", 1, 1)
-      Unknown       -> ("Unknown", 1, 1)
+      SS.Range f sl sc _ _ -> (f,sl, sc)
+      SS.PosInternal s -> (s,1,1)
+      SS.PosREPL       -> ("<interactive>", 1, 1)
+      SS.Unknown       -> ("Unknown", 1, 1)
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl _ pat mt expr) = do
@@ -281,10 +281,10 @@ interpretStmts env stmts =
     case stmts of
       [] -> fail "empty block"
       [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
-      SS.StmtBind _ pat _ e : ss ->
+      SS.StmtBind pos pat _ e : ss ->
           do v1 <- interpret env e
              let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
-             bindValue v1 (VLambda f)
+             bindValue pos v1 (VLambda f)
       SS.StmtLet _ bs : ss -> interpret env (SS.Let bs (SS.Block ss))
       SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
@@ -309,13 +309,13 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
         SS.PWild t -> (Nothing, t)
         SS.PVar x t -> (Just x, t)
         _ -> (Nothing, Nothing)
-  let it = SS.Located "it" "it" PosREPL
+  let it = SS.Located "it" "it" SS.PosREPL
   let lname = maybe it id mx
   let ctx = SS.tContext SS.TopLevel
   let expr' = case mt of
                 Nothing -> expr
                 Just t -> SS.TSig expr (SS.tBlock ctx t)
-  let decl = SS.Decl (getPos expr) pat Nothing expr'
+  let decl = SS.Decl (SS.getPos expr) pat Nothing expr'
   rw <- getTopLevelRW
   let opts = rwPPOpts rw
 
@@ -392,7 +392,7 @@ interpretFile file = do
   mapM_ stmtWithPrint stmts
   where
     stmtWithPrint s = do let withPos str = unlines $
-                                           ("[output] at " ++ show (getPos s) ++ ": ") :
+                                           ("[output] at " ++ show (SS.getPos s) ++ ": ") :
                                              map (\l -> "\t"  ++ l) (lines str)
                          showLoc <- printShowPos <$> getOptions
                          if showLoc
@@ -405,7 +405,7 @@ interpretFile file = do
 interpretMain :: TopLevel ()
 interpretMain = do
   rw <- getTopLevelRW
-  let mainName = Located "main" "main" (PosInternal "entry")
+  let mainName = Located "main" "main" (SS.PosInternal "entry")
   case Map.lookup mainName (rwValues rw) of
     Nothing -> return () -- fail "No 'main' defined"
     Just v -> fromValue v
@@ -2154,7 +2154,7 @@ primitives = Map.fromList
 filterAvail ::
   Set PrimitiveLifecycle ->
   Map SS.LName Primitive ->
-  Map SS.LName Primitive 
+  Map SS.LName Primitive
 filterAvail primsAvail =
   Map.filter (\p -> primLife p `Set.member` primsAvail)
 
@@ -2186,4 +2186,4 @@ primDocEnv primsAvail =
                 ] ++ primDoc p
 
 qualify :: String -> Located SS.Name
-qualify s = Located s s (PosInternal "coreEnv")
+qualify s = Located s s (SS.PosInternal "coreEnv")
