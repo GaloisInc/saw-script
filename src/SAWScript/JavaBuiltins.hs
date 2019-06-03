@@ -50,6 +50,7 @@ import SAWScript.JavaUtils
 
 import SAWScript.Builtins
 import SAWScript.Options
+import SAWScript.Position (Pos(..), renderDoc)
 import SAWScript.Proof
 import SAWScript.Utils
 import SAWScript.Value as SS

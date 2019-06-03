@@ -79,6 +79,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
+import SAWScript.Position
 import SAWScript.Utils
 
 import qualified Cryptol.TypeCheck.AST as Cryptol

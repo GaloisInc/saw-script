@@ -8,7 +8,7 @@ Stability   : provisional
 {-# LANGUAGE DeriveFunctor #-}
 module SAWScript.Token where
 
-import SAWScript.Utils
+import SAWScript.Position (Positioned(..))
 
 data Token p = TVar      { tokPos :: p, tokStr :: String                               }
              | TQVar     { tokPos :: p, tokStr :: String, tokVars :: ([String],String) }

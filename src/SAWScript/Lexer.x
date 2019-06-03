@@ -14,6 +14,7 @@ module SAWScript.Lexer
   ) where
 
 import SAWScript.Token
+import SAWScript.Position
 import SAWScript.Utils
 
 import Numeric
