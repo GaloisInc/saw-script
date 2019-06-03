@@ -18,7 +18,7 @@ module SAWScript.MGU
        ) where
 
 import SAWScript.AST
-import SAWScript.Utils (Pos(..), Positioned(..))
+import SAWScript.Position (Pos(..), Positioned(..))
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative

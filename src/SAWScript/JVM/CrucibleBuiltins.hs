@@ -111,6 +111,7 @@ import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
 import SAWScript.Value
 import SAWScript.Utils as SS
+import qualified SAWScript.Position as SS
 import SAWScript.Options
 import SAWScript.CrucibleBuiltinsJVM (prepareClassTopLevel)
 
@@ -507,7 +508,7 @@ registerOverride opts cc _ctx top_loc cs =
      let c0 = head cs
      let cname = c0^.csClassName
      let mname = c0^.csMethodName
-     let pos = PosInternal "registerOverride"
+     let pos = SS.PosInternal "registerOverride"
      sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
 
      (mcls, meth) <- liftIO $ findMethod cb pos mname =<< lookupClass cb pos cname
@@ -547,7 +548,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
      let mname = mspec^.csMethodName
      let verbosity = simVerbose opts
      let personality = Crucible.SAWCruciblePersonality
-     let pos = PosInternal "verifySimulate"
+     let pos = SS.PosInternal "verifySimulate"
      let halloc = cc^.ccHandleAllocator
 
      -- executeCrucibleJVM

@@ -1,3 +1,6 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {- |
 Module      : SAWScript.Value
 Description : Value datatype for SAW-Script interpreter.
@@ -24,18 +27,22 @@ Stability   : provisional
 
 module SAWScript.Value where
 
+import Prelude hiding (fail)
+
 import Data.Semigroup ((<>))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
 import Control.Monad.ST
-import Control.Monad.Fail (MonadFail)
+import Control.Monad.Fail (MonadFail(..))
+import Control.Monad.Except (ExceptT(..), MonadError)
+import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
 import Control.Monad.State (StateT(..), get, gets, put)
-import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
@@ -46,10 +53,12 @@ import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 import Data.Typeable
+import GHC.Generics (Generic, Generic1)
 
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
+import qualified SAWScript.Position as SS
 import qualified SAWScript.Utils as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.CrucibleLLVM as Crucible

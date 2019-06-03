@@ -123,6 +123,7 @@ library
     SAWScript.Parser
     SAWScript.PathVC
     SAWScript.Proof
+    SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
     SAWScript.SAWCorePrimitives

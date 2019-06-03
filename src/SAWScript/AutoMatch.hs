@@ -39,7 +39,7 @@ import qualified Cryptol.Parser.Position as Cryptol
 import qualified Cryptol.Utils.PP        as Cryptol
 import qualified Cryptol.Utils.Ident     as Cryptol (packIdent)
 import SAWScript.Builtins
---import SAWScript.Options
+import SAWScript.Position
 import SAWScript.Utils
 import SAWScript.TopLevel
 import SAWScript.Value

@@ -134,7 +134,7 @@ import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Versions
 import SAWScript.TopLevel
 import SAWScript.Value
-import SAWScript.Utils as SS
+import SAWScript.Position as SS
 import SAWScript.Options
 
 import SAWScript.CrucibleMethodSpecIR

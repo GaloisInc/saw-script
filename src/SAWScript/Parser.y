@@ -21,6 +21,7 @@ import Data.Text (pack)
 import SAWScript.Token
 import SAWScript.Lexer
 import SAWScript.AST
+import SAWScript.Position
 import SAWScript.Utils
 
 import qualified Cryptol.Parser.AST as P

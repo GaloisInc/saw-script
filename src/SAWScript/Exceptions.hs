@@ -3,8 +3,8 @@ module SAWScript.Exceptions (TypeErrors(..), failTypecheck) where
 
 import Control.Exception
 
+import SAWScript.Position (Pos(..), Positioned(..))
 import SAWScript.Utils
-
 
 newtype TypeErrors = TypeErrors [(Pos, String)]
 
