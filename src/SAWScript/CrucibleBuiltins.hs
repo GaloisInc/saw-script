@@ -68,7 +68,6 @@ import           Data.List
 import           Data.List.Extra (groupOn, nubOrd)
 import qualified Data.List.NonEmpty as NE
 import           Data.Maybe
-import           Data.Monoid ((<>))
 import           Data.String
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -270,7 +269,8 @@ createMethodSpec verificationArgs bic opts lm nm setup = do
     let sym = cc^.ccBackend
     let llmod = cc^.ccLLVMModule
 
-    setupLoc <- toW4Loc "_SAW_verify_prestate" <$> getPosition
+    pos <- getPosition
+    let setupLoc = toW4Loc "_SAW_verify_prestate" pos
 
     let est0 = case defOrDecl of
                  Left def -> initialCrucibleSetupState cc def setupLoc parent
@@ -279,6 +279,7 @@ createMethodSpec verificationArgs bic opts lm nm setup = do
 
     -- execute commands of the method spec
     liftIO $ W4.setCurrentProgramLoc sym setupLoc
+
     methodSpec <- view csMethodSpec <$> execStateT (runCrucibleSetupM setup) st0
 
     void $ io $ checkSpecReturnType cc methodSpec
@@ -1225,7 +1226,7 @@ crucible_fresh_expanded_val ::
 crucible_fresh_expanded_val bic _opts lty = CrucibleSetupM $
   do let sc = biSharedContext bic
      lty' <- memTypeForLLVMType bic lty
-     loc <- toW4Loc "crucible_fresh_expanded_val" <$> lift getPosition
+     loc <- getW4Position "crucible_fresh_expanded_val"
      constructExpandedSetupValue sc loc lty'
 
 
@@ -1292,7 +1293,7 @@ crucible_alloc ::
   CrucibleSetupM SetupValue
 crucible_alloc _bic _opt lty = CrucibleSetupM $
   do let ?dl = Crucible.llvmDataLayout ?lc
-     loc <- toW4Loc "crucible_alloc" <$> lift getPosition
+     loc <- getW4Position "crucible_alloc"
      memTy <- case Crucible.liftMemType lty of
        Right s -> return s
        Left err -> fail $ unlines [ "unsupported type in crucible_alloc: " ++ show (L.ppType lty)
@@ -1314,7 +1315,7 @@ crucible_alloc_readonly ::
   CrucibleSetupM SetupValue
 crucible_alloc_readonly _bic _opt lty = CrucibleSetupM $
   do let ?dl = Crucible.llvmDataLayout ?lc
-     loc <- toW4Loc "crucible_alloc_readonly" <$> lift getPosition
+     loc <- getW4Position "crucible_alloc_readonly"
      memTy <- case Crucible.liftMemType lty of
        Right s -> return s
        Left err -> fail $ unlines [ "unsupported type in crucible_alloc: " ++ show (L.ppType lty)
@@ -1335,7 +1336,7 @@ crucible_fresh_pointer ::
   CrucibleSetupM SetupValue
 crucible_fresh_pointer bic _opt lty = CrucibleSetupM $
   do memTy <- memTypeForLLVMType bic lty
-     loc <- toW4Loc "crucible_fresh_pointer" <$> lift getPosition
+     loc <- getW4Position "crucible_fresh_pointer"
      constructFreshPointer (llvmTypeAlias lty) loc memTy
 
 constructFreshPointer :: Maybe Crucible.Ident -> W4.ProgramLoc -> Crucible.MemType -> CrucibleSetup arch SetupValue
@@ -1357,7 +1358,7 @@ crucible_points_to ::
   CrucibleSetupM ()
 crucible_points_to typed _bic _opt ptr val = CrucibleSetupM $
   do cc <- getCrucibleContext
-     loc <- toW4Loc "crucible_points_to" <$> lift getPosition
+     loc <- getW4Position "crucible_points_to"
      Crucible.llvmPtrWidth (cc^.ccLLVMContext) $ \wptr -> Crucible.withPtrWidth wptr $
        do let ?lc = cc^.ccTypeCtx
           st <- get
@@ -1382,12 +1383,6 @@ crucible_points_to typed _bic _opt ptr val = CrucibleSetupM $
           when typed (checkMemTypeCompatibility lhsTy valTy)
           addPointsTo (PointsTo loc ptr val)
 
-toW4Loc :: Text.Text -> SS.Pos -> W4.ProgramLoc
-toW4Loc fnm SS.Unknown          = W4.mkProgramLoc (W4.functionNameFromText fnm) W4.InternalPos
-toW4Loc fnm SS.PosREPL          = W4.mkProgramLoc (W4.functionNameFromText (fnm <> " <REPL>")) W4.InternalPos
-toW4Loc fnm (SS.PosInternal nm) = W4.mkProgramLoc (W4.functionNameFromText (fnm <> " " <> fromString nm)) W4.InternalPos
-toW4Loc fnm (SS.Range file sl sc _el _ec) = W4.mkProgramLoc (W4.functionNameFromText fnm) (W4.SourcePos (fromString file) sl sc)
-
 crucible_equal ::
   BuiltinContext ->
   Options        ->
@@ -1407,7 +1402,7 @@ crucible_equal _bic _opt val1 val2 = CrucibleSetupM $
        , show ty1
        , show ty2
        ]
-     loc <- toW4Loc "crucible_equal" <$> lift getPosition
+     loc <- getW4Position "crucible_equal"
      addCondition (SetupCond_Equal loc val1 val2)
 
 crucible_precond ::
@@ -1417,7 +1412,7 @@ crucible_precond p = CrucibleSetupM $ do
   st <- get
   when (st^.csPrePost == PostState) $
     fail "attempt to use `crucible_precond` in post state"
-  loc <- toW4Loc "crucible_precond" <$> lift getPosition
+  loc <- getW4Position "crucible_precond"
   addCondition (SetupCond_Pred loc p)
 
 crucible_postcond ::
@@ -1427,7 +1422,7 @@ crucible_postcond p = CrucibleSetupM $ do
   st <- get
   when (st^.csPrePost == PreState) $
     fail "attempt to use `crucible_postcond` in pre state"
-  loc <- toW4Loc "crucible_postcond" <$> lift getPosition
+  loc <- getW4Position "crucible_postcond"
   addCondition (SetupCond_Pred loc p)
 
 crucible_execute_func :: BuiltinContext
@@ -1472,7 +1467,7 @@ crucible_ghost_value ::
   TypedTerm                           ->
   CrucibleSetupM ()
 crucible_ghost_value _bic _opt ghost val = CrucibleSetupM $
-  do loc <- toW4Loc "crucible_ghost_value" <$> lift getPosition
+  do loc <- getW4Position "crucible_ghost_value"
      addCondition (SetupCond_Ghost loc ghost val)
 
 crucible_spec_solvers :: CrucibleMethodSpecIR -> [String]

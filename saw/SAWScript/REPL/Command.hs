@@ -32,7 +32,7 @@ module SAWScript.REPL.Command (
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
-import SAWScript.Utils (getPos)
+import SAWScript.Position (getPos)
 
 import Cryptol.Parser (ParseError())
 import Cryptol.Utils.PP
