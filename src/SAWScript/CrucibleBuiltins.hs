@@ -576,6 +576,21 @@ assertEqualVals cc v1 v2 =
 
 --------------------------------------------------------------------------------
 
+doAllocWithMutability ::
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  Crucible.Mutability        ->
+  CrucibleContext arch       ->
+  (W4.ProgramLoc, Crucible.MemType) ->
+  StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
+doAllocWithMutability mut cc (loc, tp) = StateT $ \mem ->
+  do let sym = cc^.ccBackend
+     let dl = Crucible.llvmDataLayout ?lc
+     sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
+     let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
+     let l = show loc
+     liftIO $
+       Crucible.doMalloc sym Crucible.HeapAlloc Crucible.Mutable l mem sz alignment
+
 -- | Allocate space on the LLVM heap to store a value of the given
 -- type. Returns the pointer to the allocated memory.
 doAlloc ::
@@ -583,12 +598,7 @@ doAlloc ::
   CrucibleContext arch       ->
   (W4.ProgramLoc, Crucible.MemType) ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAlloc cc (_loc,tp) = StateT $ \mem ->
-  do let sym = cc^.ccBackend
-     let dl = Crucible.llvmDataLayout ?lc
-     sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
-     Crucible.mallocRaw sym mem sz alignment
+doAlloc = doAllocWithMutability Crucible.Mutable
 
 -- | Allocate read-only space on the LLVM heap to store a value of the
 -- given type. Returns the pointer to the allocated memory.
@@ -597,12 +607,7 @@ doAllocConst ::
   CrucibleContext arch       ->
   (W4.ProgramLoc, Crucible.MemType) ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAllocConst cc (_loc,tp) = StateT $ \mem ->
-  do let sym = cc^.ccBackend
-     let dl = Crucible.llvmDataLayout ?lc
-     sz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl tp))
-     let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
-     Crucible.mallocConstRaw sym mem sz alignment
+doAllocConst = doAllocWithMutability Crucible.Immutable
 
 --------------------------------------------------------------------------------
 
