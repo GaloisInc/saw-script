@@ -138,20 +138,20 @@ library
 
     SAWScript.CrucibleBuiltinsJVM
 
-    SAWScript.Heapster.Permissions2
-    SAWScript.Heapster.CtxMonad
-    SAWScript.Heapster.CtxPermImpl
-    SAWScript.Heapster.Implication
     SAWScript.Heapster.Permissions
-    SAWScript.Heapster.Pretty
-    SAWScript.Heapster.Parser
-    SAWScript.Heapster.TypedCrucible
-    SAWScript.Heapster.CrucibleTranslation
-    SAWScript.Heapster.JudgmentTranslation
-    SAWScript.Heapster.JudgmentTranslation.Examples
-    SAWScript.Heapster.TypeTranslation
-    SAWScript.Heapster.ValueTranslation
-    SAWScript.HeapsterBuiltins
+    -- SAWScript.Heapster.CtxMonad
+    -- SAWScript.Heapster.CtxPermImpl
+    -- SAWScript.Heapster.Implication
+    -- SAWScript.Heapster.Permissions
+    -- SAWScript.Heapster.Pretty
+    -- SAWScript.Heapster.Parser
+    -- SAWScript.Heapster.TypedCrucible
+    -- SAWScript.Heapster.CrucibleTranslation
+    -- SAWScript.Heapster.JudgmentTranslation
+    -- SAWScript.Heapster.JudgmentTranslation.Examples
+    -- SAWScript.Heapster.TypeTranslation
+    -- SAWScript.Heapster.ValueTranslation
+    -- SAWScript.HeapsterBuiltins
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite

@@ -50,12 +50,12 @@ import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.CrucibleBuiltins
-import SAWScript.HeapsterBuiltins
+-- import SAWScript.HeapsterBuiltins
 import qualified Lang.Crucible.JVM.Translation as CJ
 import qualified SAWScript.CrucibleBuiltinsJVM as CJ
 import qualified SAWScript.CrucibleMethodSpecIR as CIR
-import SAWScript.Heapster.JudgmentTranslation.Examples
-import SAWScript.Heapster.TypeTranslation
+-- import SAWScript.Heapster.JudgmentTranslation.Examples
+-- import SAWScript.Heapster.TypeTranslation
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -1847,16 +1847,17 @@ primitives = Map.fromList
     , "the given method spec."
     ]
 
+  , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
+    (pureVal testMRSolver)
+    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
+    , " to ask if two monadic terms are equal" ]
+
+{-
   , prim "heapster_extract"
     "LLVMModule -> String -> TopLevel Term"
     (bicVal heapster_extract)
     [ "Translate an LLVM function to a Term using Heapster type-checking."
     ]
-
-  , prim "test_mr_solver"  "Int -> Int -> TopLevel Bool"
-    (pureVal testMRSolver)
-    [ "Call the monadic-recursive solver (that's MR. Solver to you)"
-    , " to ask if two monadic terms are equal" ]
 
   , prim "test_type_translation"  "Int -> TopLevel Bool"
     (pureVal testTypeTranslation)
@@ -1867,6 +1868,7 @@ primitives = Map.fromList
     (pureVal testJudgmentTranslation)
     [ "Test a given elimination translation of Heapster."
     ]
+-}
 
   ]
 
