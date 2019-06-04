@@ -98,7 +98,7 @@ import           Verifier.SAW.TypedTerm
 import           SAWScript.CrucibleMethodSpecIR
 import           SAWScript.CrucibleResolveSetupValue
 import           SAWScript.Options
-import           SAWScript.Utils (handleException)
+import           SAWScript.Utils (bullets, handleException)
 
 -- | The 'OverrideMatcher' type provides the operations that are needed
 -- to match a specification's arguments with the arguments provided by
@@ -432,9 +432,6 @@ failure ::
 failure loc e = OM (lift (throwE (OF loc e)))
 
 ------------------------------------------------------------------------
-
-bullets :: Char -> [PP.Doc] -> PP.Doc
-bullets c = PP.vcat . map (PP.hang 2 . (PP.text [c] PP.<+>))
 
 -- | Partition into three groups:
 --   * Preconditions concretely succeed
@@ -1270,7 +1267,7 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
            assertion_tree
          addAssert pred_ $ Crucible.SimError loc "Invalid memory load"
          pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val
-       W4.Err err -> do
+       W4.Err _err -> do
          -- When we have a concrete failure, we do a little more computation to
          -- try and find out why.
          let (blk, _offset) = Crucible.llvmPointerView ptr1
@@ -1298,15 +1295,13 @@ learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
                     , "possibly matching allocation(s):"
                     ]
                   ])
-               PP.<$$> PP.nest 2 (bullets (map Crucible.ppSomeAlloc possibleAllocs))
+               PP.<$$> bullets '-' (map Crucible.ppSomeAlloc possibleAllocs)
                -- This information tends to be overwhelming, but might be useful?
                -- We should brainstorm about better ways of presenting it.
                -- PP.<$$> PP.text (unwords [ "Here are the details on why reading"
                --                          , "from each matching write failed"
                --                          ])
                -- PP.<$$> PP.text (show err)
-
-  where bullets xs = PP.vcat [ PP.text "-" PP.<+> d | d <- xs ]
 
 ------------------------------------------------------------------------
 

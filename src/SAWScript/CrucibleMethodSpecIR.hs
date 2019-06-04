@@ -62,10 +62,11 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
 import qualified SAWScript.CrucibleLLVM as CL
+import           SAWScript.Options
+import           SAWScript.Utils (bullets)
 
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
-import           SAWScript.Options
 
 newtype AllocIndex = AllocIndex Int
   deriving (Eq, Ord, Show)
@@ -198,7 +199,7 @@ ppMethodSpec methodSpec =
   PP.text "Name: " <> PP.text (methodSpec ^. csName)
   PP.<$$> PP.text "Location: " <> PP.pretty (W4.plSourceLoc (methodSpec ^. csLoc))
   PP.<$$> PP.text "Argument types: "
-  PP.<$$> PP.indent 2 (PP.vcat (map (PP.text . show) (methodSpec ^. csArgs)))
+  PP.<$$> bullets '-' (map (PP.text . show) (methodSpec ^. csArgs))
   PP.<$$> PP.text "Return type: " <> case methodSpec ^. csRet of
                                        Nothing  -> PP.text "<void>"
                                        Just ret -> PP.text (show ret)

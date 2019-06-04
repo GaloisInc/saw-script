@@ -79,7 +79,7 @@ import Verifier.SAW.TypedAST (ppTerm, defaultPPOpts)
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.CongruenceClosure (CCSet)
 import SAWScript.JavaExpr
-import SAWScript.Position (Pos(..), Positioned(..))
+import SAWScript.Position (Pos(..))
 import SAWScript.Utils
 
 -- ExprActualTypeMap {{{1
