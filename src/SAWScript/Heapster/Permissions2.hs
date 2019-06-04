@@ -23,6 +23,7 @@ module SAWScript.Heapster.Permissions2 where
 import Data.List
 import Data.Binding.Hobbits
 import GHC.TypeLits
+import Control.Monad.Identity
 
 import Data.Binding.Hobbits.NameMap (NameMap)
 import qualified Data.Binding.Hobbits.NameMap as NameMap
@@ -33,6 +34,25 @@ import Data.Parameterized.NatRepr
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.CFG.Core
+
+
+----------------------------------------------------------------------
+-- * Monads that Support Name-Binding
+----------------------------------------------------------------------
+
+-- FIXME HERE: need an Applicative instead of a monad here!
+class Monad m => MonadBind m where
+  mbM :: NuMatching a => Mb ctx (m a) -> m (Mb ctx a)
+
+nuM :: (MonadBind m, NuMatching b) => (Name a -> m b) -> m (Binding a b)
+nuM = mbM . nu
+
+instance MonadBind Identity where
+  mbM = Identity . fmap runIdentity
+
+instance MonadBind Maybe where
+  mbM [nuP| Just x |] = return x
+  mbM [nuP| Nothing |] = Nothing
 
 
 ----------------------------------------------------------------------
@@ -260,8 +280,100 @@ $(mkNuMatching [t| forall w . LLVMPtrPerm w |])
 
 
 ----------------------------------------------------------------------
+-- * Contexts of Crucible Types
+----------------------------------------------------------------------
+
+-- | Workaround for the fact that Hobbits currently only support name and
+-- bindings of kind star
+data CruType a where
+  CruType :: TypeRepr a -> (CruType (PermExpr a))
+
+-- | A context of Crucible types
+newtype CruCtx ctx = CruCtx { unCruCtx :: MapRList CruType ctx }
+
+-- | The empty context
+emptyCruCtx :: CruCtx RNil
+emptyCruCtx = CruCtx empty
+
+-- | Add an element to the end of a context
+extCruCtx :: CruCtx ctx -> TypeRepr a -> CruCtx (ctx :> PermExpr a)
+extCruCtx (CruCtx tps) tp = CruCtx (tps :>: CruType tp)
+
+
+----------------------------------------------------------------------
 -- * Substitutions
 ----------------------------------------------------------------------
+
+-- | Defines a substitution type @s@ that supports substituting into expression
+-- and permission variables in a given monad @m@
+class MonadBind m => SubstVar s m | s -> m where
+  extSubst :: s ctx -> PermExpr a -> s (ctx :> PermExpr a)
+  substExprVar :: s ctx -> Mb ctx (PermVar a) -> m (PermExpr a)
+  substPermVar :: s ctx -> Mb ctx (Name (ValuePerm a)) -> m (ValuePerm a)
+
+-- | Says that substitution type @s@ supports substituting into type @a@ in
+-- monad @m@
+class SubstVar s m => Substable s a m where
+  subst :: s ctx -> Mb ctx a -> m a
+
+instance SubstVar s m => Substable s SplittingExpr m where
+  subst s [nuP| SplExpr_All |] = return SplExpr_All
+  subst s [nuP| SplExpr_L spl |] = SplExpr_L <$> subst s spl
+  subst s [nuP| SplExpr_R spl |] = SplExpr_R <$> subst s spl
+  subst s [nuP| SplExpr_Star spl1 spl2 |] =
+    SplExpr_Star <$> subst s spl1 <*> subst s spl2
+  subst s [nuP| SplExpr_Var x |] =
+    substExprVar s x >>= \e ->
+    case e of
+      PExpr_Var y -> return $ SplExpr_Var y
+      PExpr_Spl spl -> return spl
+
+-- | Helper function to substitute into 'BVFactor's
+substBVFactor :: SubstVar s m => s ctx -> Mb ctx (BVFactor w) ->
+                 m (PermExpr (BVType w))
+substBVFactor s [nuP| BVFactor i x |] =
+  multExpr (mbLift i) <$> substExprVar s x
+
+instance SubstVar s m => Substable s (PermExpr a) m where
+  subst s [nuP| PExpr_Var x |] = substExprVar s x
+  subst s [nuP| PExpr_BV factors off |] =
+    foldr addBVExprs (PExpr_BV [] (mbLift off)) <$>
+    mapM (substBVFactor s) (mbList factors)
+  subst s [nuP| PExpr_Struct args |] =
+    PExpr_Struct <$> subst s args
+  subst s [nuP| PExpr_LLVMWord e |] =
+    PExpr_LLVMWord <$> subst s e
+  subst s [nuP| PExpr_LLVMOffset x off |] =
+    addLLVMOffset <$> substExprVar s x <*> subst s off
+  subst s [nuP| PExpr_Spl spl |] =
+    PExpr_Spl <$> subst s spl
+
+instance SubstVar s m => Substable s (PermExprs as) m where
+  subst s [nuP| PExprs_Nil |] = return PExprs_Nil
+  subst s [nuP| PExprs_Cons es e |] = PExprs_Cons <$> subst s es <*> subst s e
+
+instance SubstVar s m => Substable s (ValuePerm a) m where
+  subst s [nuP| ValPerm_True |] = return ValPerm_True
+  subst s [nuP| ValPerm_Eq e |] = ValPerm_Eq <$> subst s e
+  subst s [nuP| ValPerm_Or p1 p2 |] = ValPerm_Or <$> subst s p1 <*> subst s p2
+  subst s [nuP| ValPerm_Exists p |] =
+    ValPerm_Exists <$>
+    nuM (\x -> subst (extSubst s $ PExpr_Var x) $ mbCombine p)
+  subst s [nuP| ValPerm_Mu p |] =
+    ValPerm_Mu <$> mbM (fmap (subst s) $ mbSwap p)
+  subst s [nuP| ValPerm_Var x |] = substPermVar s x
+  subst s [nuP| ValPerm_LLVMPtr p |] = ValPerm_LLVMPtr <$> subst s p
+
+instance SubstVar s m => Substable s (LLVMPtrPerm a) m where
+  subst s [nuP| LLVMFieldPerm off spl p |] =
+    LLVMFieldPerm <$> subst s off <*> subst s spl <*> subst s p
+  subst s [nuP| LLVMArrayPerm off len stride spl p |] =
+    LLVMArrayPerm <$> subst s off <*> subst s len <*>
+    return (mbLift stride) <*> subst s spl <*> subst s p
+  subst s [nuP| LLVMStarPerm p1 p2 |] =
+    LLVMStarPerm <$> subst s p1 <*> subst s p2
+  subst s [nuP| LLVMFreePerm len |] = LLVMFreePerm <$> subst s len
+
 
 -- | Workaround for the fact that Hobbits currently only support name and
 -- bindings of kind star
@@ -279,9 +391,6 @@ newtype PermSubst ctx =
 emptySubst :: PermSubst RNil
 emptySubst = PermSubst empty
 
-extSubst :: PermSubst ctx -> PermExpr a -> PermSubst (ctx :> PermExpr a)
-extSubst (PermSubst elems) e = PermSubst $ elems :>: SubstElem e
-
 substLookup :: PermSubst ctx -> Member ctx (PermExpr a) -> PermExpr a
 substLookup (PermSubst m) memb = unSubstElem $ mapRListLookup memb m
 
@@ -289,66 +398,43 @@ noPermsInSubst :: PermSubst ctx -> Member ctx (ValuePerm a) -> b
 noPermsInSubst (PermSubst elems) memb =
   case mapRListLookup memb elems of { }
 
-substVar :: PermSubst ctx -> Mb ctx (Name (PermExpr a)) -> PermExpr a
-substVar s x =
-  case mbNameBoundP x of
-    Left memb -> substLookup s memb
-    Right y -> PExpr_Var y
-
-substBVFactor :: PermSubst ctx -> Mb ctx (BVFactor w) -> PermExpr (BVType w)
-substBVFactor s [nuP| BVFactor i x |] = multExpr (mbLift i) (substVar s x)
-
-class Substable a where
-  subst :: PermSubst ctx -> Mb ctx a -> a
-
-instance Substable SplittingExpr where
-  subst s [nuP| SplExpr_All |] = SplExpr_All
-  subst s [nuP| SplExpr_L spl |] = SplExpr_L $ subst s spl
-  subst s [nuP| SplExpr_R spl |] = SplExpr_R $ subst s spl
-  subst s [nuP| SplExpr_Star spl1 spl2 |] =
-    SplExpr_Star (subst s spl1) (subst s spl2)
-  subst s [nuP| SplExpr_Var x |] =
-    case substVar s x of
-      PExpr_Var y -> SplExpr_Var y
-      PExpr_Spl spl -> spl
-
-instance Substable (PermExpr a) where
-  subst s [nuP| PExpr_Var x |] = substVar s x
-  subst s [nuP| PExpr_BV factors off |] =
-    foldr addBVExprs (PExpr_BV [] (mbLift off)) $
-    map (substBVFactor s) $ mbList factors
-  subst s [nuP| PExpr_Struct args |] =
-    PExpr_Struct (subst s args)
-  subst s [nuP| PExpr_LLVMWord e |] =
-    PExpr_LLVMWord (subst s e)
-  subst s [nuP| PExpr_LLVMOffset x off |] =
-    addLLVMOffset (substVar s x) (subst s off)
-  subst s [nuP| PExpr_Spl spl |] =
-    PExpr_Spl (subst s spl)
-
-instance Substable (PermExprs as) where
-  subst s [nuP| PExprs_Nil |] = PExprs_Nil
-  subst s [nuP| PExprs_Cons es e |] = PExprs_Cons (subst s es) (subst s e)
-
-instance Substable (ValuePerm a) where
-  subst s [nuP| ValPerm_True |] = ValPerm_True
-  subst s [nuP| ValPerm_Eq e |] = ValPerm_Eq $ subst s e
-  subst s [nuP| ValPerm_Or p1 p2 |] = ValPerm_Or (subst s p1) (subst s p2)
-  subst s [nuP| ValPerm_Exists p |] =
-    ValPerm_Exists $ nu $ \x -> subst (extSubst s $ PExpr_Var x) $ mbCombine p
-  subst s [nuP| ValPerm_Mu p |] =
-    ValPerm_Mu $ fmap (subst s) $ mbSwap p
-  subst s [nuP| ValPerm_Var x |] =
+instance SubstVar PermSubst Identity where
+  extSubst (PermSubst elems) e = PermSubst $ elems :>: SubstElem e
+  substExprVar s x =
+    case mbNameBoundP x of
+      Left memb -> return $ substLookup s memb
+      Right y -> return $ PExpr_Var y
+  substPermVar s x =
     case mbNameBoundP x of
       Left memb -> noPermsInSubst s memb
-      Right y -> ValPerm_Var y
-  subst s [nuP| ValPerm_LLVMPtr p |] = ValPerm_LLVMPtr $ subst s p
+      Right y -> return $ ValPerm_Var y
 
-instance Substable (LLVMPtrPerm a) where
-  subst s [nuP| LLVMFieldPerm off spl p |] =
-    LLVMFieldPerm (subst s off) (subst s spl) (subst s p)
-  subst s [nuP| LLVMArrayPerm off len stride spl p |] =
-    LLVMArrayPerm (subst s off) (subst s len) (mbLift stride)
-    (subst s spl) (subst s p)
-  subst s [nuP| LLVMStarPerm p1 p2 |] = LLVMStarPerm (subst s p1) (subst s p2)
-  subst s [nuP| LLVMFreePerm len |] = LLVMFreePerm (subst s len)
+-- | An element of a partial substitution = maybe an expression
+data PSubstElem a where
+  PSE_Just :: PermExpr a -> PSubstElem (PermExpr a)
+  PSE_Nothing :: PSubstElem (PermExpr a)
+
+-- | Partial substitutions assign expressions to some of the bound names in a
+-- context
+newtype PartialSubst ctx =
+  PartialSubst { unPartialSubst :: MapRList PSubstElem ctx }
+
+-- | Build an empty partial substitution for a given set of variables, i.e., the
+-- partial substitution that assigns no expressions to those variables
+emptyPSubst :: CruCtx ctx -> PartialSubst ctx
+emptyPSubst = PartialSubst . mapMapRList (\(CruType _) -> PSE_Nothing) . unCruCtx
+
+{-
+instance SubstVar PartialSubst Identity where
+  extSubst (PermSubst elems) e = PermSubst $ elems :>: SubstElem e
+  substExprVar s x =
+    case mbNameBoundP x of
+      Left memb -> return $ substLookup s memb
+      Right y -> return $ PExpr_Var y
+  substPermVar s x =
+    case mbNameBoundP x of
+      Left memb -> noPermsInSubst s memb
+      Right y -> return $ ValPerm_Var y
+
+consPartialSubst :: PartialSubst ctx -> PartialSubst (ctx :> a)
+-}
