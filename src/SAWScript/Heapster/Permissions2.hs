@@ -40,7 +40,7 @@ import Lang.Crucible.CFG.Core
 -- * Monads that Support Name-Binding
 ----------------------------------------------------------------------
 
--- FIXME HERE: need an Applicative instead of a monad here!
+-- FIXME HERE: move this to Hobbits!
 class Monad m => MonadBind m where
   mbM :: NuMatching a => Mb ctx (m a) -> m (Mb ctx a)
 
@@ -301,7 +301,7 @@ extCruCtx (CruCtx tps) tp = CruCtx (tps :>: CruType tp)
 
 
 ----------------------------------------------------------------------
--- * Substitutions
+-- * Generalized Substitution
 ----------------------------------------------------------------------
 
 -- | Defines a substitution type @s@ that supports substituting into expression
@@ -311,18 +311,18 @@ class MonadBind m => SubstVar s m | s -> m where
   substExprVar :: s ctx -> Mb ctx (PermVar a) -> m (PermExpr a)
   substPermVar :: s ctx -> Mb ctx (Name (ValuePerm a)) -> m (ValuePerm a)
 
--- | Says that substitution type @s@ supports substituting into type @a@ in
--- monad @m@
+-- | Generalized notion of substitution, which says that substitution type @s@
+-- supports substituting into type @a@ in monad @m@
 class SubstVar s m => Substable s a m where
-  subst :: s ctx -> Mb ctx a -> m a
+  genSubst :: s ctx -> Mb ctx a -> m a
 
 instance SubstVar s m => Substable s SplittingExpr m where
-  subst s [nuP| SplExpr_All |] = return SplExpr_All
-  subst s [nuP| SplExpr_L spl |] = SplExpr_L <$> subst s spl
-  subst s [nuP| SplExpr_R spl |] = SplExpr_R <$> subst s spl
-  subst s [nuP| SplExpr_Star spl1 spl2 |] =
-    SplExpr_Star <$> subst s spl1 <*> subst s spl2
-  subst s [nuP| SplExpr_Var x |] =
+  genSubst s [nuP| SplExpr_All |] = return SplExpr_All
+  genSubst s [nuP| SplExpr_L spl |] = SplExpr_L <$> genSubst s spl
+  genSubst s [nuP| SplExpr_R spl |] = SplExpr_R <$> genSubst s spl
+  genSubst s [nuP| SplExpr_Star spl1 spl2 |] =
+    SplExpr_Star <$> genSubst s spl1 <*> genSubst s spl2
+  genSubst s [nuP| SplExpr_Var x |] =
     substExprVar s x >>= \e ->
     case e of
       PExpr_Var y -> return $ SplExpr_Var y
@@ -335,45 +335,51 @@ substBVFactor s [nuP| BVFactor i x |] =
   multExpr (mbLift i) <$> substExprVar s x
 
 instance SubstVar s m => Substable s (PermExpr a) m where
-  subst s [nuP| PExpr_Var x |] = substExprVar s x
-  subst s [nuP| PExpr_BV factors off |] =
+  genSubst s [nuP| PExpr_Var x |] = substExprVar s x
+  genSubst s [nuP| PExpr_BV factors off |] =
     foldr addBVExprs (PExpr_BV [] (mbLift off)) <$>
     mapM (substBVFactor s) (mbList factors)
-  subst s [nuP| PExpr_Struct args |] =
-    PExpr_Struct <$> subst s args
-  subst s [nuP| PExpr_LLVMWord e |] =
-    PExpr_LLVMWord <$> subst s e
-  subst s [nuP| PExpr_LLVMOffset x off |] =
-    addLLVMOffset <$> substExprVar s x <*> subst s off
-  subst s [nuP| PExpr_Spl spl |] =
-    PExpr_Spl <$> subst s spl
+  genSubst s [nuP| PExpr_Struct args |] =
+    PExpr_Struct <$> genSubst s args
+  genSubst s [nuP| PExpr_LLVMWord e |] =
+    PExpr_LLVMWord <$> genSubst s e
+  genSubst s [nuP| PExpr_LLVMOffset x off |] =
+    addLLVMOffset <$> substExprVar s x <*> genSubst s off
+  genSubst s [nuP| PExpr_Spl spl |] =
+    PExpr_Spl <$> genSubst s spl
 
 instance SubstVar s m => Substable s (PermExprs as) m where
-  subst s [nuP| PExprs_Nil |] = return PExprs_Nil
-  subst s [nuP| PExprs_Cons es e |] = PExprs_Cons <$> subst s es <*> subst s e
+  genSubst s [nuP| PExprs_Nil |] = return PExprs_Nil
+  genSubst s [nuP| PExprs_Cons es e |] =
+    PExprs_Cons <$> genSubst s es <*> genSubst s e
 
 instance SubstVar s m => Substable s (ValuePerm a) m where
-  subst s [nuP| ValPerm_True |] = return ValPerm_True
-  subst s [nuP| ValPerm_Eq e |] = ValPerm_Eq <$> subst s e
-  subst s [nuP| ValPerm_Or p1 p2 |] = ValPerm_Or <$> subst s p1 <*> subst s p2
-  subst s [nuP| ValPerm_Exists p |] =
+  genSubst s [nuP| ValPerm_True |] = return ValPerm_True
+  genSubst s [nuP| ValPerm_Eq e |] = ValPerm_Eq <$> genSubst s e
+  genSubst s [nuP| ValPerm_Or p1 p2 |] =
+    ValPerm_Or <$> genSubst s p1 <*> genSubst s p2
+  genSubst s [nuP| ValPerm_Exists p |] =
     ValPerm_Exists <$>
-    nuM (\x -> subst (extSubst s $ PExpr_Var x) $ mbCombine p)
-  subst s [nuP| ValPerm_Mu p |] =
-    ValPerm_Mu <$> mbM (fmap (subst s) $ mbSwap p)
-  subst s [nuP| ValPerm_Var x |] = substPermVar s x
-  subst s [nuP| ValPerm_LLVMPtr p |] = ValPerm_LLVMPtr <$> subst s p
+    nuM (\x -> genSubst (extSubst s $ PExpr_Var x) $ mbCombine p)
+  genSubst s [nuP| ValPerm_Mu p |] =
+    ValPerm_Mu <$> mbM (fmap (genSubst s) $ mbSwap p)
+  genSubst s [nuP| ValPerm_Var x |] = substPermVar s x
+  genSubst s [nuP| ValPerm_LLVMPtr p |] = ValPerm_LLVMPtr <$> genSubst s p
 
 instance SubstVar s m => Substable s (LLVMPtrPerm a) m where
-  subst s [nuP| LLVMFieldPerm off spl p |] =
-    LLVMFieldPerm <$> subst s off <*> subst s spl <*> subst s p
-  subst s [nuP| LLVMArrayPerm off len stride spl p |] =
-    LLVMArrayPerm <$> subst s off <*> subst s len <*>
-    return (mbLift stride) <*> subst s spl <*> subst s p
-  subst s [nuP| LLVMStarPerm p1 p2 |] =
-    LLVMStarPerm <$> subst s p1 <*> subst s p2
-  subst s [nuP| LLVMFreePerm len |] = LLVMFreePerm <$> subst s len
+  genSubst s [nuP| LLVMFieldPerm off spl p |] =
+    LLVMFieldPerm <$> genSubst s off <*> genSubst s spl <*> genSubst s p
+  genSubst s [nuP| LLVMArrayPerm off len stride spl p |] =
+    LLVMArrayPerm <$> genSubst s off <*> genSubst s len <*>
+    return (mbLift stride) <*> genSubst s spl <*> genSubst s p
+  genSubst s [nuP| LLVMStarPerm p1 p2 |] =
+    LLVMStarPerm <$> genSubst s p1 <*> genSubst s p2
+  genSubst s [nuP| LLVMFreePerm len |] = LLVMFreePerm <$> genSubst s len
 
+
+----------------------------------------------------------------------
+-- * Expression Substitutions
+----------------------------------------------------------------------
 
 -- | Workaround for the fact that Hobbits currently only support name and
 -- bindings of kind star
@@ -409,10 +415,23 @@ instance SubstVar PermSubst Identity where
       Left memb -> noPermsInSubst s memb
       Right y -> return $ ValPerm_Var y
 
+-- | Wrapper function to apply a substitution to an expression type
+subst :: Substable PermSubst a Identity => PermSubst ctx -> Mb ctx a -> a
+subst s mb = runIdentity $ genSubst s mb
+
+
+----------------------------------------------------------------------
+-- * Partial Substitutions
+----------------------------------------------------------------------
+
 -- | An element of a partial substitution = maybe an expression
 data PSubstElem a where
   PSE_Just :: PermExpr a -> PSubstElem (PermExpr a)
   PSE_Nothing :: PSubstElem (PermExpr a)
+
+unPSubstElem :: PSubstElem (PermExpr a) -> Maybe (PermExpr a)
+unPSubstElem (PSE_Just e) = Just e
+unPSubstElem PSE_Nothing = Nothing
 
 -- | Partial substitutions assign expressions to some of the bound names in a
 -- context
@@ -424,17 +443,37 @@ newtype PartialSubst ctx =
 emptyPSubst :: CruCtx ctx -> PartialSubst ctx
 emptyPSubst = PartialSubst . mapMapRList (\(CruType _) -> PSE_Nothing) . unCruCtx
 
-{-
-instance SubstVar PartialSubst Identity where
-  extSubst (PermSubst elems) e = PermSubst $ elems :>: SubstElem e
+-- | Extend a partial substitution with an unassigned variable
+extPSubst :: PartialSubst ctx -> PartialSubst (ctx :> PermExpr a)
+extPSubst (PartialSubst elems) = PartialSubst $ elems :>: PSE_Nothing
+
+-- | Look up an optional expression in a partial substitution
+psubstLookup :: PartialSubst ctx -> Member ctx (PermExpr a) ->
+                Maybe (PermExpr a)
+psubstLookup (PartialSubst m) memb = unPSubstElem $ mapRListLookup memb m
+
+-- | "Proof" that there are no permissions in a partial substitution
+noPermsInPSubst :: PartialSubst ctx -> Member ctx (ValuePerm a) -> b
+noPermsInPSubst (PartialSubst elems) memb =
+  case mapRListLookup memb elems of { }
+
+instance SubstVar PartialSubst Maybe where
+  extSubst (PartialSubst elems) e = PartialSubst $ elems :>: PSE_Just e
   substExprVar s x =
     case mbNameBoundP x of
-      Left memb -> return $ substLookup s memb
+      Left memb -> psubstLookup s memb
       Right y -> return $ PExpr_Var y
   substPermVar s x =
     case mbNameBoundP x of
-      Left memb -> noPermsInSubst s memb
+      Left memb -> noPermsInPSubst s memb
       Right y -> return $ ValPerm_Var y
 
-consPartialSubst :: PartialSubst ctx -> PartialSubst (ctx :> a)
--}
+-- | Wrapper function to apply a partial substitution to an expression type
+psubst :: Substable PartialSubst a Maybe => PartialSubst ctx -> Mb ctx a ->
+          Maybe a
+psubst s mb = genSubst s mb
+
+
+----------------------------------------------------------------------
+-- * Partial Substitutions
+----------------------------------------------------------------------
