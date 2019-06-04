@@ -84,6 +84,7 @@ library
     , flexdis86
     , elf-edit
     , reflection
+    , hobbits >= 1.2.5
 
   hs-source-dirs: src
 
@@ -137,6 +138,7 @@ library
 
     SAWScript.CrucibleBuiltinsJVM
 
+    SAWScript.Heapster.Permissions2
     SAWScript.Heapster.CtxMonad
     SAWScript.Heapster.CtxPermImpl
     SAWScript.Heapster.Implication
