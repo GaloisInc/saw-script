@@ -38,10 +38,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
 -- crucible
-import qualified Lang.Crucible.Backend as Crucible (IsSymInterface)
-import qualified Lang.Crucible.CFG.Expr as Crucible (App(..))
-import qualified Lang.Crucible.Simulator as Crucible (RegValue, RegValue'(..), extensionEval)
-import qualified Lang.Crucible.Simulator.Evaluation as Crucible (evalApp)
+import qualified Lang.Crucible.Simulator as Crucible (RegValue)
 
 -- what4
 import qualified What4.Partial as W4

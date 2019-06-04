@@ -10,6 +10,7 @@ Stability   : provisional
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
+
 module SAWScript.Utils where
 
 #if !MIN_VERSION_base(4,8,0)
@@ -31,7 +32,7 @@ import System.Time(TimeDiff(..), getClockTime, diffClockTimes, normalizeTimeDiff
 import System.Locale(defaultTimeLocale)
 import qualified System.IO.Error as IOE
 import System.Exit
-import Text.PrettyPrint.ANSI.Leijen hiding ((</>), (<$>))
+import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 import Text.Printf
 import Numeric(showFFloat)
 
@@ -39,6 +40,9 @@ import qualified Verifier.Java.Codebase as JSS
 
 import SAWScript.Options
 import SAWScript.Position
+
+bullets :: Char -> [PP.Doc] -> PP.Doc
+bullets c = PP.vcat . map (PP.hang 2 . (PP.text [c] PP.<+>))
 
 data SSMode = Verify | Blif | CBlif deriving (Eq, Show, Data, Typeable)
 

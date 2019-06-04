@@ -31,7 +31,7 @@ getDeclsLLVM ::
   SharedContext ->
   LLVMModule ->
   IO (Interaction (Maybe [Decl]))
-getDeclsLLVM proxy sc (LLVMModule file mdl _) = do
+getDeclsLLVM _proxy _sc (LLVMModule file mdl _) = do
     let symStr (Symbol s) = s
     return $ do
       let (untranslateable, translations) =
