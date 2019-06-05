@@ -335,6 +335,14 @@ isEqPerm :: ValuePerm a -> Bool
 isEqPerm (ValPerm_Eq _) = True
 isEqPerm _ = False
 
+-- | Test if a permission is an @eq(e)@ inside 0 or more existentials or
+-- disjunctions
+isNestedEqPerm :: ValuePerm a -> Bool
+isNestedEqPerm (ValPerm_Eq _) = True
+isNestedEqPerm (ValPerm_Or p1 p2) = isNestedEqPerm p1 || isNestedEqPerm p2
+isNestedEqPerm (ValPerm_Exists p) = mbLift $ fmap isNestedEqPerm p
+isNestedEqPerm _ = False
+
 -- | Extract @p1@ from a permission of the form @p1 \/ p2@
 orPermLeft :: ValuePerm a -> ValuePerm a
 orPermLeft (ValPerm_Or p _) = p
@@ -393,6 +401,9 @@ class MonadBind m => SubstVar s m | s -> m where
 -- supports substituting into type @a@ in monad @m@
 class SubstVar s m => Substable s a m where
   genSubst :: s ctx -> Mb ctx a -> m a
+
+instance (Substable s a m, NuMatching a) => Substable s (Mb ctx a) m where
+  genSubst s mbmb = mbM $ fmap (genSubst s) (mbSwap mbmb)
 
 instance SubstVar s m => Substable s SplittingExpr m where
   genSubst s [nuP| SplExpr_All |] = return SplExpr_All
@@ -583,6 +594,12 @@ instance SubstVar PartialSubst Maybe where
 partialSubst :: Substable PartialSubst a Maybe => PartialSubst ctx ->
                 Mb ctx a -> Maybe a
 partialSubst s mb = genSubst s mb
+
+-- | Apply a partial substitution, raising an error (with the given string) if
+-- this fails
+partialSubstForce :: Substable PartialSubst a Maybe => PartialSubst ctx ->
+                     Mb ctx a -> String -> a
+partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
 
 
 ----------------------------------------------------------------------

@@ -348,19 +348,29 @@ instance PermState (ImplState vars) where
 -- | The implication monad is the permission monad that uses 'ImplState'
 type ImplM vars = PermM (ImplState vars)
 
-gchangeStateM :: (s1 -> s2) -> (s2 -> s1) -> PermM s2 rin rout a ->
+-- | Run a permissions computation with a different state type @s2@ inside one
+-- with state type @s1@, using a lens-like pair of a getter function to extract
+-- out the starting inner @s2@ state from the outer @s1@ state and an update
+-- function to update the resulting outer @s1@ state with the final inner @s2@
+-- state. (We do not use a lens here because we do not actually require these
+-- functions to form a lens, and in fact 'withExtVarsM' below uses a pair of
+-- functions that is not a lens.)
+withAltStateM :: (s1 -> s2) -> (s1 -> s2 -> s1) -> PermM s2 rin rout a ->
                  PermM s1 rin rout a
-gchangeStateM f12 f21 (PermM m) =
+withAltStateM s_get s_update (PermM m) =
   gget >>>= \s ->
-  PermM (glift (runGenStateT m (f12 s))) >>>= \(a, s') ->
-  put (f21 s') >>>
+  PermM (glift (runGenStateT m (s_get s))) >>>= \(a, s') ->
+  put (s_update s s') >>>
   greturn a
 
+-- | Run an implication computation with one more existential variable,
+-- returning the optional expression it was bound to in the current partial
+-- substitution when it is done
 withExtVarsM :: KnownRepr TypeRepr tp =>
                 ImplM (vars :> PermExpr tp) rin rout a ->
                 ImplM vars rin rout (a, Maybe (PermExpr tp))
 withExtVarsM m =
-  gchangeStateM extImplState unextImplState $
+  withAltStateM extImplState (const unextImplState) $
   (m >>>= \a ->
     getPSubst >>>= \psubst ->
     greturn (a, psubstLookup psubst Member_Base))
@@ -368,13 +378,13 @@ withExtVarsM m =
 -- | Run an 'ImplM' computation inside a 'PermM' computation with a possibly
 -- different state type
 runImplM :: PermState s => CruCtx vars ->
-            ImplM vars rin rout a -> PermM s rin rout (PermSubst vars, a)
-runImplM vars (PermM m) =
-  get >>>= \s ->
-  PermM $ glift (runGenStateT m
-                 (mkImplState vars $ s ^. permStatePerms)) >>>= \(a, s') ->
-  put (set permStatePerms (s' ^. implStatePerms) s) >>>
-  greturn (completePSubst vars (s' ^. implStatePSubst), a)
+            ImplM vars rin rout a -> PermM s rin rout (a, PermSubst vars)
+runImplM vars m =
+  withAltStateM (\s -> mkImplState vars (s ^. permStatePerms))
+  (\s s' -> set permStatePerms (s' ^. implStatePerms) s)
+  (m >>>= \a ->
+    getPSubst >>>= \psubst ->
+    greturn (a, completePSubst vars psubst))
 
 -- FIXME: enable RebindableSyntax so we can write the above like this?
 {-
@@ -586,6 +596,13 @@ proveVarEqH x [nuP| PExpr_LLVMWord mb_e |] perms psubst
                   ValPerm_Eq (PExpr_LLVMWord e') -> True) x perms
   = introEqCopyM l >>> introCastLLVMWordEq (locVar l) e e'
 
+-- Try to eliminate disjuncts and existentials to expose a new eq(e) perm; we
+-- then recursively call proveVarEq (not proveVarEqH) because the permissions
+-- have changed
+proveVarEqH x p perms _
+  | (l, _) : _ <- findPerms isNestedEqPerm x perms
+  = elimOrsExistsM l >>> proveVarEq x p
+
 -- Otherwise give up!
 proveVarEqH _ _ _ _ = implFailM
 
@@ -606,15 +623,24 @@ proveVarImpl x [nuP| ValPerm_Or p1 p2 |] =
   implCatchM
   (proveVarImpl x p1 >>>
    getPSubst >>>= \psubst ->
-   introOrLM x (fromMaybe (error "proveVarImpl: partial subst incomplete") $
-                partialSubst psubst p2))
+   introOrLM x (partialSubstForce psubst p2
+                "proveVarImpl: incomplete psubst: introOrL"))
   (proveVarImpl x p2 >>>
    getPSubst >>>= \psubst ->
-   introOrRM x (fromMaybe (error "proveVarImpl: partial subst incomplete") $
-                partialSubst psubst p1))
+   introOrRM x (partialSubstForce psubst p1
+                "proveVarImpl: incomplete psubst: introOrR"))
   
 -- Prove x:exists (z:tp).p by proving x:p in an extended vars context
--- proveVarImpl x [nuP| ValPerm_Exists p |] =
+proveVarImpl x [nuP| ValPerm_Exists p |] =
+  withExtVarsM (proveVarImpl x $ mbCombine p) >>>= \((), maybe_e) ->
+  let e = fromMaybe (zeroOfType knownRepr) maybe_e in
+  getPSubst >>>= \psubst ->
+  introExistsM x knownRepr e (partialSubstForce psubst p
+                              "proveFarImpl: incompletepsubst: introExists")
+
+-- Prove x:eq(e) by calling proveVarEq
+proveVarImpl x [nuP| ValPerm_Eq e |] = proveVarEq x e
+
 
 data ReqPerm vars a where
   ReqPerm :: ExprVar a -> Mb vars (ValuePerm a) -> ReqPerm vars (PermExpr a)
