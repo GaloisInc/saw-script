@@ -178,11 +178,16 @@ ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
   text "Infeasible branch"
 ppAbortedResult cc (Crucible.AbortedExec abt gp) = do
   Crucible.ppAbortExecReason abt <$$> ppGlobalPair cc gp
-ppAbortedResult cc (Crucible.AbortedBranch predicate trueBranch falseBranch) =
+ppAbortedResult cc (Crucible.AbortedBranch _predicate trueBranch falseBranch) =
   vcat
     [ text "Both branches aborted after a symbolic branch."
-    , text "Branch condition:"
-    , indent 2 (text (show predicate))
+    -- TODO: These conditions can be large, symbolic SAWCore predicates, so they
+    -- aren't really helpful to show. It would be nice if Crucible tracked the
+    -- source location associated with the branch, then we could print that.
+    -- See https://github.com/GaloisInc/crucible/issues/260
+
+    -- , text "Branch condition:"
+    -- , indent 2 (text (show predicate))
     , text "Message from the true branch:"
     , indent 2 (ppAbortedResult cc trueBranch)
     , text "Message from the false branch:"
