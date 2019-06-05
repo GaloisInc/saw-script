@@ -178,13 +178,15 @@ ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
   text "Infeasible branch"
 ppAbortedResult cc (Crucible.AbortedExec abt gp) = do
   Crucible.ppAbortExecReason abt <$$> ppGlobalPair cc gp
-ppAbortedResult cc (Crucible.AbortedBranch _pred trueBranch falseBranch) =
+ppAbortedResult cc (Crucible.AbortedBranch predicate trueBranch falseBranch) =
   vcat
-    [ text "Both branches aborted after a symbolic branch"
+    [ text "Both branches aborted after a symbolic branch."
+    , text "Branch condition:"
+    , indent 2 (text (show predicate))
     , text "Message from the true branch:"
-    , indent 4 (ppAbortedResult cc trueBranch)
+    , indent 2 (ppAbortedResult cc trueBranch)
     , text "Message from the false branch:"
-    , indent 4 (ppAbortedResult cc falseBranch)
+    , indent 2 (ppAbortedResult cc falseBranch)
     ]
 ppAbortedResult _ (Crucible.AbortedExit ec) =
   text "Branch exited:" <+> text (show ec)
