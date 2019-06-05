@@ -139,9 +139,9 @@ library
     SAWScript.CrucibleBuiltinsJVM
 
     SAWScript.Heapster.Permissions
+    SAWScript.Heapster.Implication
     -- SAWScript.Heapster.CtxMonad
     -- SAWScript.Heapster.CtxPermImpl
-    -- SAWScript.Heapster.Implication
     -- SAWScript.Heapster.Permissions
     -- SAWScript.Heapster.Pretty
     -- SAWScript.Heapster.Parser

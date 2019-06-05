@@ -30,7 +30,7 @@ import Control.Lens hiding ((:>))
 import Data.Binding.Hobbits.NameMap (NameMap)
 import qualified Data.Binding.Hobbits.NameMap as NameMap
 
-import Data.Parameterized.Context hiding ((:>), empty)
+import Data.Parameterized.Context hiding ((:>), empty, take)
 import Data.Parameterized.NatRepr
 
 import Lang.Crucible.Types
@@ -55,6 +55,14 @@ instance MonadBind Identity where
 instance MonadBind Maybe where
   mbM [nuP| Just x |] = return x
   mbM [nuP| Nothing |] = Nothing
+
+-- | A version of 'MonadBind' that does not require a 'NuMatching' instance on
+-- the element type of the multi-binding in the monad
+class MonadBind m => MonadStrongBind m where
+  strongMbM :: Mb ctx (m a) -> m (Mb ctx a)
+
+instance MonadStrongBind Identity where
+  strongMbM = Identity . fmap runIdentity
 
 
 ----------------------------------------------------------------------
@@ -283,6 +291,45 @@ $(mkNuMatching [t| forall a . ValuePerm a |])
 $(mkNuMatching [t| forall w . LLVMPtrPerm w |])
 
 
+instance (Eq (ValuePerm a)) where
+  ValPerm_True == ValPerm_True = True
+  ValPerm_True == _ = False
+  (ValPerm_Eq e1) == (ValPerm_Eq e2) = e1 == e2
+  (ValPerm_Eq _) == _ = False
+  (ValPerm_Or p1 p1') == (ValPerm_Or p2 p2') = p1 == p2 && p1' == p2'
+  (ValPerm_Or _ _) == _ = False
+  (ValPerm_Exists (p1 :: Binding (PermExpr a1) _)) ==
+    (ValPerm_Exists (p2 :: Binding (PermExpr a2) _)) =
+    case testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2) of
+      Just Refl ->
+        mbLift $
+        nuWithElim (\_ (_ :>: p1' :>: p2') -> p1' == p2')
+        (MNil :>: p1 :>: p2)
+  (ValPerm_Exists _) == _ = False
+  (ValPerm_Mu p1) == (ValPerm_Mu p2) =
+    mbLift $
+    nuWithElim (\_ (_ :>: p1' :>: p2') -> p1' == p2') (MNil :>: p1 :>: p2)
+  (ValPerm_Mu _) == _ = False
+  (ValPerm_Var x1) == (ValPerm_Var x2) = x1 == x2
+  (ValPerm_Var _) == _ = False
+  (ValPerm_LLVMPtr ptr1) == (ValPerm_LLVMPtr ptr2) = ptr1 == ptr2
+  (ValPerm_LLVMPtr _) == _ = False
+
+instance (Eq (LLVMPtrPerm w)) where
+  (LLVMFieldPerm off1 spl1 p1) == (LLVMFieldPerm off2 spl2 p2) =
+    off1 == off2 && spl1 == spl2 && p1 == p2
+  (LLVMFieldPerm _ _ _) == _ = False
+  (LLVMArrayPerm off1 len1 stride1 spl1 p1) ==
+    (LLVMArrayPerm off2 len2 stride2 spl2 p2) =
+    off1 == off2 && len1 == len2 && stride1 == stride2 &&
+    spl1 == spl2 && p1 == p2
+  (LLVMArrayPerm _ _ _ _ _) == _ = False
+  (LLVMStarPerm p1 p1') == (LLVMStarPerm p2 p2') = p1 == p2 && p1' == p2'
+  (LLVMStarPerm _ _) == _ = False
+  (LLVMFreePerm e1) == (LLVMFreePerm e2) = e1 == e2
+  (LLVMFreePerm _) == _ = False
+
+
 -- | Test if a permission is an equality permission
 isEqPerm :: ValuePerm a -> Bool
 isEqPerm (ValPerm_Eq _) = True
@@ -325,6 +372,10 @@ emptyCruCtx = CruCtx empty
 -- | Add an element to the end of a context
 extCruCtx :: KnownRepr TypeRepr a => CruCtx ctx -> CruCtx (ctx :> PermExpr a)
 extCruCtx (CruCtx tps) = CruCtx (tps :>: CruType)
+
+-- | Remove an element from the end of a context
+unextCruCtx :: CruCtx (ctx :> PermExpr a) -> CruCtx ctx
+unextCruCtx (CruCtx (tps :>: _)) = CruCtx tps
 
 
 ----------------------------------------------------------------------
@@ -470,9 +521,42 @@ newtype PartialSubst ctx =
 emptyPSubst :: CruCtx ctx -> PartialSubst ctx
 emptyPSubst = PartialSubst . mapMapRList (\CruType -> PSE_Nothing) . unCruCtx
 
+-- | FIXME: should be in Hobbits!
+modifyMapRList :: Member ctx a -> (f a -> f a) ->
+                  MapRList f ctx -> MapRList f ctx
+modifyMapRList Member_Base f (elems :>: elem) = elems :>: f elem
+modifyMapRList (Member_Step memb) f (elems :>: elem) =
+  modifyMapRList memb f elems :>: elem
+
+-- | Set the expression associated with a variable in a partial substitution. It
+-- is an error if it is already set.
+psubstSet :: Member ctx (PermExpr a) -> PermExpr a -> PartialSubst ctx ->
+             PartialSubst ctx
+psubstSet memb e (PartialSubst elems) =
+  PartialSubst $
+  modifyMapRList memb
+  (\pse -> case pse of
+      PSE_Nothing -> PSE_Just e
+      PSE_Just _ -> error "psubstSet: value already set for variable")
+  elems
+
 -- | Extend a partial substitution with an unassigned variable
 extPSubst :: PartialSubst ctx -> PartialSubst (ctx :> PermExpr a)
 extPSubst (PartialSubst elems) = PartialSubst $ elems :>: PSE_Nothing
+
+-- | Shorten a partial substitution
+unextPSubst :: PartialSubst (ctx :> PermExpr a) -> PartialSubst ctx
+unextPSubst (PartialSubst (elems :>: _)) = PartialSubst elems
+
+-- | Complete a partial substitution into a total substitution, filling in zero
+-- values using 'zeroOfType' if necessary
+completePSubst :: CruCtx vars -> PartialSubst vars -> PermSubst vars
+completePSubst (CruCtx tps) (PartialSubst elems) =
+  PermSubst $
+  mapMapRList2 (\CruType pse ->
+                 SubstElem $
+                 fromMaybe (zeroOfType knownRepr) (unPSubstElem pse))
+  tps elems
 
 -- | Look up an optional expression in a partial substitution
 psubstLookup :: PartialSubst ctx -> Member ctx (PermExpr a) ->
@@ -496,9 +580,9 @@ instance SubstVar PartialSubst Maybe where
       Right y -> return $ ValPerm_Var y
 
 -- | Wrapper function to apply a partial substitution to an expression type
-psubst :: Substable PartialSubst a Maybe => PartialSubst ctx -> Mb ctx a ->
-          Maybe a
-psubst s mb = genSubst s mb
+partialSubst :: Substable PartialSubst a Maybe => PartialSubst ctx ->
+                Mb ctx a -> Maybe a
+partialSubst s mb = genSubst s mb
 
 
 ----------------------------------------------------------------------
@@ -527,6 +611,9 @@ varPerms x =
 -- | A location in a 'PermSet' of a specific permission on a variable
 data PermLoc a = PermLoc (ExprVar a) Int
 
+locVar :: PermLoc a -> ExprVar a
+locVar (PermLoc x _) = x
+
 -- | The lens for the permission at a specific location in a 'PermSet'
 varPerm :: PermLoc a -> Lens' PermSet (ValuePerm a)
 varPerm (PermLoc x i) =
@@ -544,14 +631,40 @@ varPerm (PermLoc x i) =
         error ("varPerm: no permission at position " ++ show i))
     perms)
 
--- | Find all permissions of the form @x:eq(e)@ in a permission set, returning
--- both locations and the associated expressions for each such permission
-findEqPerms :: ExprVar a -> PermSet -> [(PermLoc a, PermExpr a)]
+-- | Get all the currently meaningful locations for a variable
+allLocsForVar :: PermSet -> ExprVar a -> [PermLoc a]
+allLocsForVar perms x =
+  map (PermLoc x) [0 .. length (perms ^. varPerms x) - 1]
+
+
+-- | Delete the given permission at a specific location, making sure that that
+-- permission is indeed the permission at that location. Move all permissions
+-- for the same variable that have higher indices to have one lower index; i.e.,
+-- if variable @x@ has permissions @p0, p1, p2, ...@ and we delete @pi@, then
+-- @p(i+1)@ becomes @pi@, @p(i+2)@ becomes @p(i+1)@, etc.
+permDelete :: PermLoc a -> ValuePerm a -> PermSet -> PermSet
+permDelete (PermLoc x i) p =
+  over (varPerms x) $ \perms ->
+  if i >= length perms then error "permDelete: index out of range" else
+    if perms !! i == p then
+      take i perms ++ drop (i+1) perms
+    else error "permDelete: permissions not equal"
+
+-- | Find all permissions in a list that satisfies a predicate, and return both
+-- the permissions and their locations
+findPerms :: (ValuePerm a -> Bool) -> ExprVar a -> [ValuePerm a] ->
+             [(PermLoc a, ValuePerm a)]
+findPerms f x perms =
+  map (\i -> (PermLoc x i, perms !! i)) $ findIndices f perms
+
+-- | Find all permissions of the form @x:eq(e)@ in a list of permissions,
+-- returning both locations and the associated expressions for each such
+-- permission
+findEqPerms :: ExprVar a -> [ValuePerm a] -> [(PermLoc a, PermExpr a)]
 findEqPerms x perms =
-  map (\i ->
-        case perms ^. varPerm (PermLoc x i) of
-          ValPerm_Eq e -> (PermLoc x i, e)) $
-  findIndices isEqPerm $ perms ^. varPerms x
+  map (\(l, p) -> case p of
+          ValPerm_Eq e -> (l, e)) $
+  findPerms isEqPerm x perms
 
 -- | Replace an or permission at a given location with its left disjunct
 permsElimOrLeft :: PermLoc a -> PermSet -> PermSet
