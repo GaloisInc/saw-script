@@ -1368,7 +1368,9 @@ executeAllocation opts cc (var, (loc, memTy)) =
      mem <- readGlobal memVar
      sz <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger w)
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     (ptr, mem') <- liftIO (Crucible.mallocRaw sym mem sz alignment)
+     let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
+     (ptr, mem') <- liftIO $
+       Crucible.doMalloc sym Crucible.HeapAlloc Crucible.Mutable l mem sz alignment
      writeGlobal memVar mem'
      assignVar cc loc var ptr
 
