@@ -471,6 +471,19 @@ findFalsePreconditions sym owp =
   fromMaybe [] . Map.lookup (Crucible.NoBranch False) <$>
     partitionBySymbolicPreds sym (view W4.labeledPred) (owp ^. owpPreconditions)
 
+-- | Is this group of predicates collectively unsatisfiable?
+unsatPreconditions ::
+  Sym {- ^ solver connection -} ->
+  Fold s (W4.Pred Sym) {- ^ how to extract predicates -} ->
+  s {- ^ a container full of predicates -}->
+  IO Bool
+unsatPreconditions sym container getPreds = do
+  conj <- W4.andAllOf sym container getPreds
+  CrucibleSAW.considerSatisfiability sym Nothing conj >>=
+    \case
+      Crucible.NoBranch False -> pure True
+      _ -> pure False
+
 -- | Print a message about failure of an override's preconditions
 ppFailure ::
   OverrideWithPreconditions arch ->
@@ -627,42 +640,57 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                          owp : _  -> owp ^. owpMethodSpec . csName
                          _        -> "<unknown function>"
 
-               e _symFalse = show $
-                 PP.text
-                   ("No override specification applies for " ++ fnName ++ ".")
-                 PP.<$$>
-                   if | not (null false) ->
-                        PP.text (unwords
-                          [ "The following overrides had some preconditions"
-                          , "that failed concretely:"
-                          ]) PP.<$$> bullets '-' (map ppConcreteFailure false)
-                      -- See comment on ppSymbolicFailure: both of the following
-                      -- need more examination to see if they're useful.
-                      {-
-                      | not (null symFalse) ->
-                        PP.text (unwords
-                          [ "The following overrides had some preconditions "
-                          , "that failed symbolically:"
-                          ]) PP.<$$> bullets '-' (map ppSymbolicFailure symFalse)
+               e symFalse unsat = show $ PP.vcat $ concat
+                 [ [ PP.text $
+                     "No override specification applies for " ++ fnName ++ "."
+                   ]
+                 , if | not (null false) ->
+                        [ PP.text (unwords
+                            [ "The following overrides had some preconditions"
+                            , "that failed concretely:"
+                            ]) PP.<$$> bullets '-' (map ppConcreteFailure false)
+                        ]
+                      -- See comment on ppSymbolicFailure: this needs more
+                      -- examination to see if it's useful.
+                      -- | not (null symFalse) ->
+                      --   [ PP.text (unwords
+                      --       [ "The following overrides had some preconditions "
+                      --       , "that failed symbolically:"
+                      --       ]) PP.<$$> bullets '-' (map ppSymbolicFailure symFalse)
+                      --   ]
+
+                      -- Note that we only print these in case no override had
+                      -- individually (concretely or symbolically) false
+                      -- preconditions.
+                      | not (null unsat) && null false && null symFalse ->
+                        [ PP.text (unwords
+                          [ "The conjunction of these overrides' preconditions"
+                          , "was unsatisfiable, meaning your override can never"
+                          , "apply. You probably have unintentionally specified"
+                          , "mutually exclusive/inconsistent preconditions."
+                          ]) PP.<$$>
+                          bullets '-' (unsat ^.. each . owpMethodSpec . to ppMethodSpec)
+                        ]
                       | null false && null symFalse ->
-                        PP.text (unwords
-                          [ "No overrides had any single concretely or"
-                          , "symbolically failing preconditions. This can mean"
-                          , "that your override has mutually inconsistent"
-                          , "preconditions."
-                          ])
-                        PP.<$$>
-                      -}
-                      | simVerbose opts < 3 ->
-                        PP.text $ unwords
+                        [ PP.text (unwords
+                            [ "No overrides had any single concretely or"
+                            , "symbolically failing preconditions."
+                            ])
+                        ]
+                      | otherwise -> []
+                 , if | simVerbose opts < 3 ->
+                        [ PP.text $ unwords
                           [ "Run SAW with --sim-verbose=3 to see a description"
                           , "of each override."
                           ]
+                        ]
                       | otherwise ->
-                        PP.text "Here are the descriptions of each override:"
-                        PP.<$$>
-                        bullets '-'
-                          (branches ^.. each . owpMethodSpec . to ppMethodSpec)
+                        [ PP.text "Here are the descriptions of each override:"
+                          PP.<$$>
+                          bullets '-'
+                            (branches ^.. each . owpMethodSpec . to ppMethodSpec)
+                        ]
+                 ]
            in ( W4.truePred sym
               , liftIO $ do
                   -- Now that we're failing, do the additional work of figuring out
@@ -673,8 +701,13 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                         [] -> Nothing
                         ps -> Just (owp, ps))
 
+                  unsat <-
+                    filterM
+                      (unsatPreconditions sym (owpPreconditions . each . W4.labeledPred))
+                      branches
+
                   Crucible.addFailedAssertion sym
-                    (Crucible.GenericSimError (e symFalse))
+                    (Crucible.GenericSimError (e symFalse unsat))
               , Just (W4.plSourceLoc top_loc)
               )
          ]))
