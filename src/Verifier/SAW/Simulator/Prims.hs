@@ -1166,6 +1166,8 @@ muxValue bp b = value
     value (VExtra x)        (VExtra y)        = VExtra <$> bpMuxExtra bp b x y
     value x@(VWord _)       y                 = toVector (bpUnpack bp) x >>= \xv -> value (VVector xv) y
     value x                 y@(VWord _)       = toVector (bpUnpack bp) y >>= \yv -> value x (VVector yv)
+    value x@(VNat _)        y                 = nat x y
+    value x@(VToNat _)      y                 = nat x y
     value x                 y                 =
       fail $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y
@@ -1177,6 +1179,13 @@ muxValue bp b = value
 
     thunk :: Thunk l -> Thunk l -> EvalM l (Thunk l)
     thunk x y = delay $ do x' <- force x; y' <- force y; value x' y'
+
+    nat :: Value l -> Value l -> MValue l
+    nat v1 v2 =
+      do let w = max (natSize bp v1) (natSize bp v2)
+         x1 <- natToWord bp w v1
+         x2 <- natToWord bp w v2
+         VToNat . VWord <$> bpMuxWord bp b x1 x2
 
 -- fix :: (a :: sort 0) -> (a -> a) -> a;
 fixOp :: (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) => Value l
