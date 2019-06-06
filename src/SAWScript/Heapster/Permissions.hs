@@ -343,6 +343,18 @@ isNestedEqPerm (ValPerm_Or p1 p2) = isNestedEqPerm p1 || isNestedEqPerm p2
 isNestedEqPerm (ValPerm_Exists p) = mbLift $ fmap isNestedEqPerm p
 isNestedEqPerm _ = False
 
+-- | Test if a permission is an @x:ptr(free(e))@ inside 0 or more existentials,
+-- disjunctions, or LLVM stars
+isNestedFreePerm :: ValuePerm (LLVMPointerType w) -> Bool
+isNestedFreePerm (ValPerm_Or p1 p2) =
+  isNestedFreePerm p1 || isNestedFreePerm p2
+isNestedFreePerm (ValPerm_Exists p) = mbLift $ fmap isNestedFreePerm p
+isNestedFreePerm (ValPerm_LLVMPtr (LLVMStarPerm p1 p2)) =
+  isNestedFreePerm (ValPerm_LLVMPtr p1) ||
+  isNestedFreePerm (ValPerm_LLVMPtr p2)
+isNestedFreePerm (ValPerm_LLVMPtr (LLVMFreePerm _)) = True
+isNestedFreePerm _ = False
+
 -- | Extract @p1@ from a permission of the form @p1 \/ p2@
 orPermLeft :: ValuePerm a -> ValuePerm a
 orPermLeft (ValPerm_Or p _) = p
@@ -626,10 +638,7 @@ varPerms x =
   (\(PermSet nmap) ps -> PermSet $ NameMap.insert x (PermsList ps) nmap)
 
 -- | A location in a 'PermSet' of a specific permission on a variable
-data PermLoc a = PermLoc (ExprVar a) Int
-
-locVar :: PermLoc a -> ExprVar a
-locVar (PermLoc x _) = x
+data PermLoc a = PermLoc { locVar :: ExprVar a, locIndex :: Int }
 
 -- | The lens for the permission at a specific location in a 'PermSet'
 varPerm :: PermLoc a -> Lens' PermSet (ValuePerm a)
@@ -654,6 +663,11 @@ allLocsForVar perms x =
   map (PermLoc x) [0 .. length (perms ^. varPerms x) - 1]
 
 
+-- | Add a permission for a variable @x@ to the end of the list of permissions
+-- for @x@, i.e., at a new index
+permAdd :: ExprVar a -> ValuePerm a -> PermSet -> PermSet
+permAdd x p = over (varPerms x) (++ [p])
+
 -- | Delete the given permission at a specific location, making sure that that
 -- permission is indeed the permission at that location. Move all permissions
 -- for the same variable that have higher indices to have one lower index; i.e.,
@@ -673,6 +687,15 @@ findPerms :: (ValuePerm a -> Bool) -> ExprVar a -> [ValuePerm a] ->
              [(PermLoc a, ValuePerm a)]
 findPerms f x perms =
   map (\i -> (PermLoc x i, perms !! i)) $ findIndices f perms
+
+-- | Find the first permission in a list that satisfies a predicate, and return
+-- both the permission and its location
+findPerm :: (ValuePerm a -> Bool) -> ExprVar a -> [ValuePerm a] ->
+             Maybe (PermLoc a, ValuePerm a)
+findPerm f x perms =
+  case findPerms f x perms of
+    ret : _ -> Just ret
+    [] -> Nothing
 
 -- | Find all permissions of the form @x:eq(e)@ in a list of permissions,
 -- returning both locations and the associated expressions for each such

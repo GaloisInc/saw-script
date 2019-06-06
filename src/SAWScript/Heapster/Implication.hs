@@ -193,6 +193,47 @@ data PermImpl r ls where
   -- > -------------------------------------
   -- > Gin | Pl,x:eq(word(e1)) * Pin |- rets
 
+  Impl_ElimLLVMStar :: PermLoc (LLVMPointerType w) -> PermImpl r ls ->
+                       PermImpl r ls
+  -- ^ Eliminate an @x:ptr(p1 * p2)@ into @x:ptr(p1)@ and @x:ptr(p2)@, putting
+  -- the latter into a new location for @x@:
+  --
+  -- > Gin | Pl * Pin, x:ptr(p1), x:ptr(p2) |- rets
+  -- > --------------------------------------------
+  -- > Gin | Pl * Pin, x:ptr(p1 * p2) |- rets
+
+  Impl_IntroLLVMStar ::
+    ExprVar (LLVMPointerType w) ->
+    PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
+    PermImpl r (ls :> PermExpr (LLVMPointerType w)
+                :> PermExpr (LLVMPointerType w))
+  -- ^ Combine proofs of @x:ptr(p1)@ and @x:ptr(p2)@ on the top of the
+  -- permission stack into a proof of @x:ptr(p1 * p2)@:
+  --
+  -- > Gin | Pl, x:ptr(p1 * p2) * Pin |- rets
+  -- > --------------------------------------------
+  -- > Gin | Pl, x:ptr(p1), x:ptr(p2) * Pin |- rets
+
+  Impl_IntroLLVMFree :: PermLoc (LLVMPointerType w) ->
+                        PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
+                        PermImpl r ls
+  -- ^ Copy a proof of @x:ptr(free(e))@ to the top of the stack:
+  --
+  -- > Gin | Pl, x:ptr(free(e)) * Pin, x:ptr(free(e)) |- rets
+  -- > ------------------------------------------------------
+  -- > Gin | Pl * Pin, x:ptr(free(e)) |- rets
+
+  Impl_CastLLVMFree :: ExprVar (LLVMPointerType w) ->
+                       PermExpr (BVType w) -> PermExpr (BVType w) ->
+                       PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
+                       PermImpl r (ls :> PermExpr (LLVMPointerType w))
+  -- ^ Cast a proof of @x:ptr(free(e1))@ on the top of the stack to one of
+  -- @x:ptr(free(e2))@:
+  --
+  -- > Gin | Pl, x:ptr(free(e2)) * Pin |- rets
+  -- > ---------------------------------------
+  -- > Gin | Pl, x:ptr(free(e1)) * Pin |- rets
+
 
 ----------------------------------------------------------------------
 -- * Generalized Monads
@@ -397,7 +438,7 @@ runImplM vars m =
 
 
 ----------------------------------------------------------------------
--- * Permission Operations in a Permission Monad
+-- * Permissions Operations in a Permission Monad
 ----------------------------------------------------------------------
 
 -- | Look up the current partial substitution
@@ -543,6 +584,44 @@ introCastLLVMWordEq ::
 introCastLLVMWordEq x e1 e2 = gmapRet (Impl_IntroCastLLVMWord x e1 e2)
 
 
+-- | Eliminate an @x:ptr(p1 * p2)@ into @x:ptr(p1)@ and @x:ptr(p2)@, putting
+-- the latter into a new location for @x@
+elimLLVMStarM :: PermState s => PermLoc (LLVMPointerType w) ->
+                 PermM s (PermImpl r ls) (PermImpl r ls) ()
+elimLLVMStarM l =
+  gmapRet (Impl_ElimLLVMStar l) >>>
+  getPerm l >>>= \p ->
+  case p of
+    ValPerm_LLVMPtr (LLVMStarPerm p1 p2) ->
+      modify (set (permStatePerms . varPerm l) (ValPerm_LLVMPtr p1) .
+              over permStatePerms (permAdd (locVar l) (ValPerm_LLVMPtr p2)))
+    _ -> error "elimLLVMStar: not an LLVMStar permission!"
+
+-- | Combine proofs of @x:ptr(p1)@ and @x:ptr(p2)@ on the top of the
+-- permission stack into a proof of @x:ptr(p1 * p2)@
+introLLVMStarM ::
+  PermState s => ExprVar (LLVMPointerType w) ->
+  PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
+  (PermImpl r (ls :> PermExpr (LLVMPointerType w)
+               :> PermExpr (LLVMPointerType w))) ()
+introLLVMStarM x = gmapRet (Impl_IntroLLVMStar x)
+
+
+-- | Copy a proof of @x:ptr(free(e))@ to the top of the stack
+introLLVMFreeM :: PermState s => PermLoc (LLVMPointerType w) ->
+                  PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
+                  (PermImpl r ls) ()
+introLLVMFreeM l = gmapRet (Impl_IntroLLVMFree l)
+
+-- | Cast a proof of @x:ptr(free(e1))@ on the top of the stack to one of
+-- @x:ptr(free(e2))@
+castLLVMFreeM :: PermState s => ExprVar (LLVMPointerType w) ->
+                 PermExpr (BVType w) -> PermExpr (BVType w) ->
+                 PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
+                 (PermImpl r (ls :> PermExpr (LLVMPointerType w))) ()
+castLLVMFreeM x e1 e2 = gmapRet (Impl_CastLLVMFree x e1 e2)
+
+
 ----------------------------------------------------------------------
 -- * Proving Equality Permissions
 ----------------------------------------------------------------------
@@ -629,17 +708,39 @@ proveVarImpl x [nuP| ValPerm_Or p1 p2 |] =
    getPSubst >>>= \psubst ->
    introOrRM x (partialSubstForce psubst p1
                 "proveVarImpl: incomplete psubst: introOrR"))
-  
+
 -- Prove x:exists (z:tp).p by proving x:p in an extended vars context
 proveVarImpl x [nuP| ValPerm_Exists p |] =
   withExtVarsM (proveVarImpl x $ mbCombine p) >>>= \((), maybe_e) ->
   let e = fromMaybe (zeroOfType knownRepr) maybe_e in
   getPSubst >>>= \psubst ->
   introExistsM x knownRepr e (partialSubstForce psubst p
-                              "proveFarImpl: incompletepsubst: introExists")
+                              "proveFarImpl: incomplete psubst: introExists")
 
 -- Prove x:eq(e) by calling proveVarEq
 proveVarImpl x [nuP| ValPerm_Eq e |] = proveVarEq x e
+
+-- Prove x:ptr(p1 * p2) by proving x:ptr(p1) and x:ptr(p2) and then combining
+-- the two proofs
+proveVarImpl x [nuP| ValPerm_LLVMPtr (LLVMStarPerm p1 p2) |] =
+  proveVarImpl x (fmap ValPerm_LLVMPtr p1) >>>
+  proveVarImpl x (fmap ValPerm_LLVMPtr p2) >>>
+  introLLVMStarM x
+
+-- Prove x:ptr(free(e))
+proveVarImpl x p@([nuP| ValPerm_LLVMPtr (LLVMFreePerm mb_e) |]) =
+  getPerms x >>>= \perms ->
+  getPSubst >>>= \psubst ->
+  case findPerm isNestedFreePerm x perms of
+    Just (l, ValPerm_Or _ _) -> elimOrsExistsM l >>> proveVarImpl x p
+    Just (l, ValPerm_Exists _) -> elimOrsExistsM l >>> proveVarImpl x p
+    Just (l, ValPerm_LLVMPtr (LLVMStarPerm _ _)) ->
+      elimLLVMStarM l >>> proveVarImpl x p
+    Just (l, ValPerm_LLVMPtr (LLVMFreePerm e')) ->
+      let e = partialSubstForce psubst mb_e
+            "proveVarImpl: incomplete psubst: introLLVMFree" in
+      introLLVMFreeM l >>> castLLVMFreeM (locVar l) e' e
+    _ -> implFailM
 
 
 data ReqPerm vars a where
