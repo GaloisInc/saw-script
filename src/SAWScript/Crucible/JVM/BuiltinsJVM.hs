@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.CrucibleBuiltinsJVM
+Module      : SAWScript.Crucible.JVM.BuiltinsJVM
 Description : crucible-jvm specific code
 Maintainer  : sweirich@galois.com
 Stability   : provisional
@@ -18,7 +18,7 @@ Stability   : provisional
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 
-module SAWScript.CrucibleBuiltinsJVM
+module SAWScript.Crucible.JVM.BuiltinsJVM
        (
          loadJavaClass           -- java_load_class: reads a class from the codebase
        , prepareClassTopLevel
@@ -68,7 +68,7 @@ import Verifier.SAW.TypedTerm(TypedTerm, mkTypedTerm)
 import SAWScript.Builtins(fixPos)
 import SAWScript.Value
 import SAWScript.Options(Options,simVerbose)
-import SAWScript.CrucibleBuiltins(setupArg, setupArgs, getGlobalPair, runCFG)
+import SAWScript.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, runCFG)
 
 -- jvm-verifier
 import qualified Language.JVM.Common as J

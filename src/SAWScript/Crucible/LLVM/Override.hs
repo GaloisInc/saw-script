@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.Crucible.LLVM.Override
+Description : Override matching and application for LLVM
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -17,7 +24,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SAWScript.CrucibleOverride
+module SAWScript.Crucible.LLVM.Override
   ( OverrideMatcher(..)
   , runOverrideMatcher
 
@@ -82,7 +89,7 @@ import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Symbol as W4
 
-import qualified SAWScript.CrucibleLLVM as Crucible
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.TraversableFC as Ctx
@@ -95,8 +102,8 @@ import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
-import           SAWScript.CrucibleMethodSpecIR
-import           SAWScript.CrucibleResolveSetupValue
+import           SAWScript.Crucible.LLVM.MethodSpecIR
+import           SAWScript.Crucible.LLVM.ResolveSetupValue
 import           SAWScript.Options
 import           SAWScript.Utils (bullets, handleException)
 

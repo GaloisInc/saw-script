@@ -31,7 +31,7 @@ import qualified Text.LLVM.Parser as LLVM (parseType)
 
 import SAWScript.Value as SV
 
-import qualified SAWScript.CrucibleLLVM as Crucible (translateModule)
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible (translateModule)
 
 llvm_load_module :: FilePath -> TopLevel LLVMModule
 llvm_load_module file =

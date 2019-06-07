@@ -1,6 +1,6 @@
 {- |
-Module      : SAWScript.CrucibleBuiltins
-Description : Implementations of Crucible-related SAW-Script primitives.
+Module      : SAWScript.Crucible.JVM.Builtins
+Description : Implementations of crucible-jvm-related SAW-Script primitives.
 License     : BSD3
 Maintainer  : atomb
 Stability   : provisional
@@ -28,7 +28,7 @@ Stability   : provisional
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
 
 
-module SAWScript.JVM.CrucibleBuiltins
+module SAWScript.Crucible.JVM.Builtins
     ( crucible_jvm_verify
     , crucible_jvm_unsafe_assume_spec
     , jvm_return
@@ -113,14 +113,14 @@ import SAWScript.Value
 import SAWScript.Utils as SS
 import qualified SAWScript.Position as SS
 import SAWScript.Options
-import SAWScript.CrucibleBuiltinsJVM (prepareClassTopLevel)
+import SAWScript.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 
 import SAWScript.JavaExpr (JavaType(..))
 
-import SAWScript.JVM.CrucibleMethodSpecIR
-import SAWScript.JVM.CrucibleOverride
-import SAWScript.JVM.CrucibleResolveSetupValue
-import SAWScript.CrucibleBuiltinsJVM ()
+import SAWScript.Crucible.JVM.MethodSpecIR
+import SAWScript.Crucible.JVM.Override
+import SAWScript.Crucible.JVM.ResolveSetupValue
+import SAWScript.Crucible.JVM.BuiltinsJVM ()
 
 ppAbortedResult :: CrucibleContext
                 -> Crucible.AbortedResult Sym a

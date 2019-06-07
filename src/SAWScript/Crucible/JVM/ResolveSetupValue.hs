@@ -1,10 +1,17 @@
+{- |
+Module      : SAWScript.Crucible.JVM.ResolveSetupValue
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
+
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 
-module SAWScript.JVM.CrucibleResolveSetupValue
+module SAWScript.Crucible.JVM.ResolveSetupValue
   ( JVMVal(..)
   , JVMRefVal
   , resolveSetupVal
@@ -55,7 +62,7 @@ import qualified Language.JVM.Parser as J
 
 --import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Prover.Rewrite
-import SAWScript.JVM.CrucibleMethodSpecIR
+import SAWScript.Crucible.JVM.MethodSpecIR
 
 --import qualified SAWScript.LLVMBuiltins as LB
 

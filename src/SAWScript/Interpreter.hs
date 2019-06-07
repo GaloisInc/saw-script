@@ -50,10 +50,10 @@ import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
-import SAWScript.CrucibleBuiltins
+import SAWScript.Crucible.LLVM.Builtins
 import qualified Lang.Crucible.JVM as CJ
-import qualified SAWScript.CrucibleBuiltinsJVM as CJ
-import qualified SAWScript.CrucibleMethodSpecIR as CIR
+import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -80,8 +80,8 @@ import qualified Verifier.Java.SAWBackend as JavaSAW
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
-import SAWScript.JVM.CrucibleBuiltins
-import qualified SAWScript.JVM.CrucibleMethodSpecIR as JIR
+import SAWScript.Crucible.JVM.Builtins
+import qualified SAWScript.Crucible.JVM.MethodSpecIR as JIR
 
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Utils.Ident as T (packIdent, packModName)

@@ -1,10 +1,18 @@
+{- |
+Module      : SAWScript.Crucible.LLVM.ResolveSetupValue
+Description : Turn SetupValues back into LLVMVals
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
+
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
-module SAWScript.CrucibleResolveSetupValue
+module SAWScript.Crucible.LLVM.ResolveSetupValue
   ( LLVMVal, LLVMPtr
   , resolveSetupVal
   , typeOfLLVMVal
@@ -44,7 +52,7 @@ import qualified What4.ProgramLoc   as W4
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Backend.SAWCore  as Crucible
-import qualified SAWScript.CrucibleLLVM         as Crucible
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -56,7 +64,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
 import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
 import SAWScript.Prover.Rewrite
-import SAWScript.CrucibleMethodSpecIR
+import SAWScript.Crucible.LLVM.MethodSpecIR
 
 --import qualified SAWScript.LLVMBuiltins as LB
 

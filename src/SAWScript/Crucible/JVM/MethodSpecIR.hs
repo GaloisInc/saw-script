@@ -1,8 +1,7 @@
 {- |
-Module      : SAWScript.CrucibleMethodSpecIR
-Description : Provides type-checked representation for Crucible/LLVM function
-              specifications and function for creating it from AST
-              representation.
+Module      : SAWScript.Crucible.JVM.MethodSpecIR
+Description : Provides type-checked representation for Crucible/JVM function
+              specifications and functions for creating it from a SAWscript AST.
 Maintainer  : atomb
 Stability   : provisional
 -}
@@ -23,7 +22,7 @@ Stability   : provisional
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
-module SAWScript.JVM.CrucibleMethodSpecIR where
+module SAWScript.Crucible.JVM.MethodSpecIR where
 
 import           Data.Map (Map)
 import qualified Data.Map as Map

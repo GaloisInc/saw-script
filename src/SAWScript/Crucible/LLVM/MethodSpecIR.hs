@@ -1,13 +1,14 @@
-{-# LANGUAGE DeriveFunctor #-}
 {- |
-Module      : SAWScript.CrucibleMethodSpecIR
+Module      : SAWScript.Crucible.LLVM.MethodSpecIR
 Description : Provides type-checked representation for Crucible/LLVM function
               specifications and function for creating it from AST
               representation.
 Maintainer  : atomb
 Stability   : provisional
 -}
+
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE Rank2Types #-}
@@ -24,7 +25,7 @@ Stability   : provisional
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
-module SAWScript.CrucibleMethodSpecIR where
+module SAWScript.Crucible.LLVM.MethodSpecIR where
 
 import           Data.List (isPrefixOf)
 import           Data.Map (Map)
@@ -61,7 +62,7 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
-import qualified SAWScript.CrucibleLLVM as CL
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import           SAWScript.Options
 import           SAWScript.Utils (bullets)
 

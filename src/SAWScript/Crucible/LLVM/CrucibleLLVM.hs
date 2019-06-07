@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.CrucibleLLVM
+Module      : SAWScript.Crucible.LLVM.CrucibleLLVM
 Description : Re-exports from the crucible-llvm package
 License     : BSD3
 Maintainer  : huffman
@@ -11,7 +11,7 @@ This module collects declarations from various modules in the
 -}
 {-# LANGUAGE PatternSynonyms #-}
 
-module SAWScript.CrucibleLLVM
+module SAWScript.Crucible.LLVM.CrucibleLLVM
   (
     -- * Re-exports from "Lang.Crucible.LLVM"
     llvmGlobals
