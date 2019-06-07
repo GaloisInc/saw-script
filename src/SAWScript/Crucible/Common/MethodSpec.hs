@@ -1,4 +1,3 @@
-{-# LANGUAGE DataKinds #-}
 {- |
 Module      : SAWScript.Crucible.Common.MethodSpec
 Description : Language-neutral method specifications
@@ -11,6 +10,8 @@ language-) specific code. This technique is described in the paper \"Trees That
 Grow\", and is prevalent across the Crucible codebase.
 -}
 
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -19,6 +20,7 @@ Grow\", and is prevalent across the Crucible codebase.
 
 module SAWScript.Crucible.Common.MethodSpec where
 
+import           Data.Constraint (Constraint)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (Void(..), absurd)
@@ -26,10 +28,11 @@ import           Control.Monad.ST (RealWorld)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
-
 import           Data.IORef
 import           Data.Monoid ((<>))
 import           Data.Type.Equality (TestEquality(..), (:~:)(..))
+import           Data.Kind (Type)
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 -- what4
 import qualified What4.Expr.Builder as B
@@ -45,6 +48,10 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic){-, IntrinsicMuxFn(IntrinsicMuxFn)-})
 
+import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
+import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
+import qualified Cryptol.Utils.PP as Cryptol
+
 -- Language extension tags
 import           Lang.Crucible.LLVM.Extension (LLVM(..), X86)
 import           Lang.Crucible.JVM.Types (JVM)
@@ -54,7 +61,7 @@ import           Verifier.SAW.SharedTerm as SAWVerifier
 
 import           SAWScript.Options
 
-import SAWScript.Crucible.Common
+import           SAWScript.Crucible.Common
 
 
 --------------------------------------------------------------------------------
@@ -117,28 +124,52 @@ data SetupValue ext where
   -- | This represents the value of a global's initializer.
   SetupGlobalInitializer :: HasSetupGlobalInitializer ext -> String -> SetupValue ext
 
-deriving instance ( Show (HasSetupStruct ext)
-                  , Show (HasSetupArray ext)
-                  , Show (HasSetupElem ext)
-                  , Show (HasSetupField ext)
-                  , Show (HasSetupGlobalInitializer ext)
-                  ) => Show (SetupValue ext)
+type SetupValueHas (c :: Type -> Constraint) ext =
+  ( c (HasSetupStruct ext)
+  , c (HasSetupArray ext)
+  , c (HasSetupElem ext)
+  , c (HasSetupField ext)
+  , c (HasSetupGlobalInitializer ext)
+  )
 
--- TypedTerm is neither Eq nor Ord
+deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
+-- TypedTerm is neither Data, Eq nor Ord
+-- deriving instance ( SetupValueHas Data ext
+--                   , SetupValueHas Typeable ext
+--                   , Typeable ext
+--                   ) => Data (SetupValue ext)
+-- deriving instance (SetupValueHas Eq ext) => Eq (SetupValue ext)
+-- deriving instance (SetupValueHas Ord ext) => Ord (SetupValue ext)
 
--- deriving instance ( Eq (HasSetupStruct ext)
---                   , Eq (HasSetupArray ext)
---                   , Eq (HasSetupElem ext)
---                   , Eq (HasSetupField ext)
---                   , Eq (HasSetupGlobalInitializer ext)
---                   ) => Eq (SetupValue ext)
+-- | Note that most 'SetupValue' concepts (like allocation indices)
+--   are implementation details and won't be familiar to users.
+--   Consider using 'resolveSetupValue' and printing an 'LLVMVal'
+--   with @PP.pretty@ instead.
+ppSetupValue :: SetupValue ext -> PP.Doc
+ppSetupValue setupval = case setupval of
+  SetupTerm tm   -> ppTypedTerm tm
+  SetupVar i     -> PP.text ("@" ++ show i)
+  SetupNull      -> PP.text "NULL"
+  SetupStruct _ packed vs
+    | packed     -> PP.angles (PP.braces (commaList (map ppSetupValue vs)))
+    | otherwise  -> PP.braces (commaList (map ppSetupValue vs))
+  SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
+  SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ show i)
+  SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ f)
+  SetupGlobal nm -> PP.text ("global(" ++ nm ++ ")")
+  SetupGlobalInitializer _ nm -> PP.text ("global_initializer(" ++ nm ++ ")")
+  where
+    commaList :: [PP.Doc] -> PP.Doc
+    commaList []     = PP.empty
+    commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
 
--- deriving instance ( Ord (HasSetupStruct ext)
---                   , Ord (HasSetupArray ext)
---                   , Ord (HasSetupElem ext)
---                   , Ord (HasSetupField ext)
---                   , Ord (HasSetupGlobalInitializer ext)
---                   ) => Ord (SetupValue ext)
+    ppTypedTerm :: TypedTerm -> PP.Doc
+    ppTypedTerm (TypedTerm tp tm) =
+      ppTerm defaultPPOpts tm
+      PP.<+> PP.text ":" PP.<+>
+      PP.text (show (Cryptol.ppPrec 0 tp))
+
+
 
 setupToTypedTerm ::
   ExtRepr ext {-^ Which language/syntax extension are we using? -} ->
@@ -202,25 +233,11 @@ setupToTerm ext opts sc sv =
 
 --------------------------------------------------------------------------------
 
+data SetupCondition ext where
+  SetupCond_Equal :: ProgramLoc -> SetupValue ext -> SetupValue ext -> SetupCondition ext
+  SetupCond_Pred :: ProgramLoc -> TypedTerm -> SetupCondition ext
+
 {-
-setupToTypedTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO TypedTerm
-setupToTypedTerm opts sc sv =
-  case sv of
-    SetupTerm term -> return term
-    _ -> do t <- setupToTerm opts sc sv
-            lift $ mkTypedTerm sc t
-
--- | Convert a setup value to a SAW-Core term. This is a partial
--- function, as certain setup values ---SetupVar, SetupNull and
--- SetupGlobal--- don't have semantics outside of the symbolic
--- simulator.
-setupToTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO Term
-setupToTerm _opts _sc sv =
-  case sv of
-    SetupTerm term -> return (ttTerm term)
-    _ -> MaybeT $ return Nothing
-
-
 data SetupCondition where
   SetupCond_Equal :: ProgramLoc -> SetupValue -> SetupValue -> SetupCondition
   SetupCond_Pred :: ProgramLoc -> TypedTerm -> SetupCondition
