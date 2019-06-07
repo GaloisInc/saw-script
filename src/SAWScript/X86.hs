@@ -69,7 +69,7 @@ import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHan
 
 
 -- Crucible LLVM
-import SAWScript.CrucibleLLVM
+import SAWScript.Crucible.LLVM.CrucibleLLVM
   (Mem, ppPtr, pattern LLVMPointer, bytesToInteger)
 import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
 import Lang.Crucible.LLVM.MemModel (mkMemVar)
@@ -629,4 +629,3 @@ statusBlock msg m =
      a <- m
      sayOK
      return a
-

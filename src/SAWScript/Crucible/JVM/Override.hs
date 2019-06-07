@@ -1,3 +1,11 @@
+{- |
+Module      : SAWScript.Crucible.JVM.Override
+Description : Override matching and application for JVM
+License     : BSD3
+Maintainer  : atomb
+Stability   : provisional
+-}
+
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -14,7 +22,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module SAWScript.JVM.CrucibleOverride
+module SAWScript.Crucible.JVM.Override
   ( OverrideMatcher(..)
   , runOverrideMatcher
 
@@ -82,8 +90,8 @@ import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
 --import           SAWScript.JavaExpr (JavaType(..))
-import           SAWScript.JVM.CrucibleMethodSpecIR
-import           SAWScript.JVM.CrucibleResolveSetupValue
+import           SAWScript.Crucible.JVM.MethodSpecIR
+import           SAWScript.Crucible.JVM.ResolveSetupValue
 import           SAWScript.Options
 import           SAWScript.Utils (handleException)
 

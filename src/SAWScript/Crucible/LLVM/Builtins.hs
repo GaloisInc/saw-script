@@ -1,5 +1,5 @@
 {- |
-Module      : SAWScript.CrucibleBuiltins
+Module      : SAWScript.Crucible.LLVM.Builtins
 Description : Implementations of Crucible-related SAW-Script primitives.
 License     : BSD3
 Maintainer  : atomb
@@ -26,7 +26,7 @@ Stability   : provisional
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
 
 
-module SAWScript.CrucibleBuiltins
+module SAWScript.Crucible.LLVM.Builtins
     ( show_cfg
     , crucible_llvm_cfg
     , crucible_llvm_extract
@@ -116,7 +116,7 @@ import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
-import qualified SAWScript.CrucibleLLVM as Crucible
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
@@ -136,9 +136,9 @@ import SAWScript.Value
 import SAWScript.Position as SS
 import SAWScript.Options
 
-import SAWScript.CrucibleMethodSpecIR
-import SAWScript.CrucibleOverride
-import SAWScript.CrucibleResolveSetupValue
+import SAWScript.Crucible.LLVM.Override
+import SAWScript.Crucible.LLVM.ResolveSetupValue
+import SAWScript.Crucible.LLVM.MethodSpecIR
 
 
 type MemImpl = Crucible.MemImpl Sym

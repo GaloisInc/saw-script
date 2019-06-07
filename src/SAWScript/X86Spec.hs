@@ -88,7 +88,7 @@ import What4.Interface
 import What4.ProgramLoc
 
 import Lang.Crucible.FunctionHandle
-import SAWScript.CrucibleLLVM
+import SAWScript.Crucible.LLVM.CrucibleLLVM
   ( EndianForm(LittleEndian)
   , MemImpl, doLoad, doPtrAddOffset, emptyMem
   , AllocType(HeapAlloc, GlobalAlloc), Mutability(..), Mem

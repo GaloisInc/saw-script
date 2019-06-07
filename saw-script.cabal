@@ -101,11 +101,6 @@ library
     SAWScript.AutoMatch.Util
     SAWScript.Builtins
     SAWScript.CongruenceClosure
-    SAWScript.CrucibleBuiltins
-    SAWScript.CrucibleLLVM
-    SAWScript.CrucibleOverride
-    SAWScript.CrucibleResolveSetupValue
-    SAWScript.CrucibleMethodSpecIR
     SAWScript.Exceptions
     SAWScript.Import
     SAWScript.ImportAIG
@@ -134,12 +129,17 @@ library
     SAWScript.Value
     SAWScript.VerificationCheck
 
-    SAWScript.CrucibleBuiltinsJVM
+    SAWScript.Crucible.LLVM.Builtins
+    SAWScript.Crucible.LLVM.CrucibleLLVM
+    SAWScript.Crucible.LLVM.Override
+    SAWScript.Crucible.LLVM.MethodSpecIR
+    SAWScript.Crucible.LLVM.ResolveSetupValue
 
-    SAWScript.JVM.CrucibleBuiltins
-    SAWScript.JVM.CrucibleMethodSpecIR
-    SAWScript.JVM.CrucibleOverride
-    SAWScript.JVM.CrucibleResolveSetupValue
+    SAWScript.Crucible.JVM.Builtins
+    SAWScript.Crucible.JVM.BuiltinsJVM
+    SAWScript.Crucible.JVM.MethodSpecIR
+    SAWScript.Crucible.JVM.Override
+    SAWScript.Crucible.JVM.ResolveSetupValue
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite
