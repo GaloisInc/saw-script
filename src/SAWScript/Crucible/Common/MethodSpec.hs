@@ -43,8 +43,7 @@ import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
-  (SAWCoreBackend, toSC, SAWCruciblePersonality)
+import qualified Lang.Crucible.Backend.SAWCore as Crucible (SAWCruciblePersonality)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 
@@ -189,6 +188,8 @@ setupToTypedTerm ext opts sc sv =
     SetupTerm term -> return term
     _ -> do t <- setupToTerm ext opts sc sv
             lift $ mkTypedTerm sc t
+
+-- TODO: Should probably go ahead and make this fully language-specific?
 
 -- | Convert a setup value to a SAW-Core term. This is a partial
 -- function, as certain setup values ---SetupVar, SetupNull and
@@ -358,11 +359,12 @@ makeLenses ''LLVMCrucibleContext
 --------------------------------------------------------------------------------
 -- *** Extension-specific information
 
+-- Is this LLVM-specific? what could we do for java?
 data AllocSpecLLVM =
   AllocSpecLLVM
     { allocSpecMut   :: CL.Mutability
     , allocSpecType  :: CL.MemType
-    , allocSpecBytes :: CL.Bytes
+    -- , allocSpecBytes :: CL.Bytes
     } -- TODO: deriving
 
 type JIdent = String -- FIXME(huffman): what to put here?
@@ -461,9 +463,9 @@ data CrucibleMethodSpecIR ext =
   , _csPreState        :: StateSpec ext -- ^ state before the function runs
   , _csPostState       :: StateSpec ext -- ^ state after the function runs
   , _csArgBindings     :: Map Integer (ExtType ext, SetupValue ext) -- ^ function arguments
-  , _csRetValue        :: Maybe (SetupValue ext)            -- ^ function return value
-  , _csSolverStats     :: SolverStats                 -- ^ statistics about the proof that produced this
-  , _csLoc             :: ProgramLoc
+  , _csRetValue        :: Maybe (SetupValue ext) -- ^ function return value
+  , _csSolverStats     :: SolverStats -- ^ statistics about the proof that produced this
+  , _csLoc             :: ProgramLoc -- ^ where in the SAWscript was this spec?
   }
 
 makeLenses ''CrucibleMethodSpecIR
