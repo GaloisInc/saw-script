@@ -6,12 +6,20 @@ Maintainer  : langston
 Stability   : provisional
 -}
 
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RankNTypes #-}
 
 module SAWScript.Crucible.Common
-  ( ppAbortedResult
+  ( AllocIndex(..)
+  , nextAllocIndex
+  , PrePost(..)
+  , ppAbortedResult
   , Sym
   ) where
+
+import           Data.Data (Data)
+import           GHC.Generics (Generic)
 
 import           Lang.Crucible.Simulator.ExecutionTree (AbortedResult(..), GlobalPair)
 import           Lang.Crucible.Simulator.CallFrame (SimFrame)
@@ -23,7 +31,20 @@ import qualified What4.Expr as W4
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
+-- | The symbolic backend we use for SAW verification
 type Sym = SAWCoreBackend Nonce.GlobalNonceGenerator (Yices.Connection Nonce.GlobalNonceGenerator) (W4.Flags W4.FloatReal)
+
+-- | How many allocations have we made in this method spec?
+newtype AllocIndex = AllocIndex Int
+  deriving (Data, Eq, Generic, Ord, Show)
+
+nextAllocIndex :: AllocIndex -> AllocIndex
+nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
+
+-- | Are we writing preconditions or postconditions?
+data PrePost
+  = PreState | PostState
+  deriving (Data, Eq, Generic, Ord, Show)
 
 ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc)
                 -> AbortedResult Sym ext

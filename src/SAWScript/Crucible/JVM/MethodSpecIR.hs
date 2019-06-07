@@ -64,10 +64,7 @@ import Verifier.SAW.TypedTerm
 import SAWScript.Options
 import SAWScript.Prover.SolverStats
 
-import SAWScript.Crucible.Common (Sym)
-
-newtype AllocIndex = AllocIndex Int
-  deriving (Eq, Ord, Show)
+import SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
 
 nextAllocIndex :: AllocIndex -> AllocIndex
 nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
@@ -95,10 +92,6 @@ setupToTerm _opts _sc sv =
   case sv of
     SetupTerm term -> return (ttTerm term)
     _ -> MaybeT $ return Nothing
-
-data PrePost
-  = PreState | PostState
-  deriving (Eq, Show)
 
 
 data PointsTo

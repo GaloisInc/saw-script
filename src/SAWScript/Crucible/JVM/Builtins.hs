@@ -118,7 +118,7 @@ import SAWScript.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 import SAWScript.JavaExpr (JavaType(..))
 
 import qualified SAWScript.Crucible.Common as Common
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
 
 import SAWScript.Crucible.JVM.MethodSpecIR
 import SAWScript.Crucible.JVM.Override

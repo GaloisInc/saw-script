@@ -63,6 +63,8 @@ import Text.LLVM.DebugUtils as L
 import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
 import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
+import           SAWScript.Crucible.Common (AllocIndex(..), Sym)
+
 import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.LLVM.MethodSpecIR
 

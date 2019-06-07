@@ -41,13 +41,11 @@ import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 
 import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.Nonce as Crucible
 
 import           SAWScript.Prover.SolverStats
 
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
-import qualified What4.Solver.Yices as Yices
 
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx, SymbolRepr, knownSymbol)
@@ -62,18 +60,13 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
+import           SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import           SAWScript.Options
 import           SAWScript.Utils (bullets)
 
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
-
-newtype AllocIndex = AllocIndex Int
-  deriving (Eq, Ord, Show)
-
-nextAllocIndex :: AllocIndex -> AllocIndex
-nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
 
 -- | From the manual: "The SetupValue type corresponds to values that can occur
 -- during symbolic execution, which includes both Term values, pointers, and
@@ -133,11 +126,6 @@ setupToTerm opts sc sv =
           MaybeT $ return Nothing
     -- SetupVar, SetupNull, SetupGlobal
     _ -> MaybeT $ return Nothing
-
-data PrePost
-  = PreState | PostState
-  deriving (Eq, Show)
-
 
 data PointsTo = PointsTo ProgramLoc SetupValue SetupValue
   deriving (Show)
@@ -269,8 +257,6 @@ data CrucibleSetupState wptr =
   ,_csMethodSpec      :: CrucibleMethodSpecIR
   ,_csCrucibleContext :: CrucibleContext wptr
   }
-
-type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator (Yices.Connection Crucible.GlobalNonceGenerator) (B.Flags B.FloatReal)
 
 data CrucibleContext wptr =
   CrucibleContext

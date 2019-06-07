@@ -137,6 +137,7 @@ import SAWScript.Position as SS
 import SAWScript.Options
 
 import qualified SAWScript.Crucible.Common as Common
+import           SAWScript.Crucible.Common (AllocIndex(..), nextAllocIndex, PrePost(..), Sym)
 
 import SAWScript.Crucible.LLVM.Override
 import SAWScript.Crucible.LLVM.ResolveSetupValue
