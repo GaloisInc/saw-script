@@ -37,29 +37,20 @@ import           Data.Kind (Type)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 -- what4
-import           What4.ProgramLoc (ProgramLoc)
+import           What4.ProgramLoc (ProgramLoc(plSourceLoc))
 
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
-import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
-import qualified Lang.Crucible.Backend.SAWCore as Crucible (SAWCruciblePersonality)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
-import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 
 import qualified Cryptol.Utils.PP as Cryptol
-
--- LLVM
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
-import qualified Text.LLVM.AST as L
 
 -- JVM
 import qualified Lang.Crucible.JVM as CJ
 import qualified Language.JVM.Parser as J
 import qualified Verifier.Java.Codebase as CB
 
--- Language extension tags
-import           Lang.Crucible.LLVM.Extension (LLVM)
 import           Lang.Crucible.JVM.Types (JVM)
 
 import           Verifier.SAW.TypedTerm as SAWVerifier
@@ -67,6 +58,7 @@ import           Verifier.SAW.SharedTerm as SAWVerifier
 
 import           SAWScript.Options
 import           SAWScript.Prover.SolverStats
+import           SAWScript.Utils (bullets)
 
 import           SAWScript.Crucible.Common
 
@@ -339,47 +331,27 @@ data JVMCrucibleContext =
   , _jccHandleAllocator :: Crucible.HandleAllocator RealWorld
   }
 
-type instance CrucibleContext (LLVM arch) = LLVMCrucibleContext arch
-data LLVMCrucibleContext arch =
-  LLVMCrucibleContext
-  { _llccLLVMModule      :: L.Module
-  , _llccLLVMModuleTrans :: CL.ModuleTranslation arch
-  , _llccBackend         :: Sym
-  , _llccLLVMEmptyMem    :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , _llccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (LLVM arch)
-  , _llccLLVMGlobals     :: Crucible.SymGlobalState Sym
-  }
-
 makeLenses ''JVMCrucibleContext
-makeLenses ''LLVMCrucibleContext
 
 --------------------------------------------------------------------------------
 -- *** Extension-specific information
 
--- Is this LLVM-specific? what could we do for java?
-data AllocSpecLLVM =
-  AllocSpecLLVM
-    { allocSpecMut   :: CL.Mutability
-    , allocSpecType  :: CL.MemType
-    -- , allocSpecBytes :: CL.Bytes
-    } -- TODO: deriving
-
-type JIdent = String -- FIXME(huffman): what to put here?
+-- type JIdent = String -- FIXME(huffman): what to put here?
 
 -- | How to specify allocations in this syntax extension
-type family AllocSpec ext where
-  AllocSpec (LLVM arch) = AllocSpecLLVM
-  AllocSpec JVM = ()
+type family AllocSpec ext :: Type
+  -- AllocSpec (LLVM arch) = AllocSpecLLVM
+  -- AllocSpec JVM = ()
 
 -- | The type of identifiers for types in this syntax extension
-type family TypeName ext where
-  TypeName (LLVM arch) = CL.Ident
-  TypeName JVM = JIdent
+type family TypeName ext :: Type
+  -- TypeName (LLVM arch) = CL.Ident
+  -- TypeName JVM = JIdent
 
 -- | The type of types of the syntax extension we're dealing with
-type family ExtType ext where
-  ExtType (LLVM arch) = CL.MemType
-  ExtType JVM = J.Type
+type family ExtType ext :: Type
+  -- ExtType (LLVM arch) = CL.MemType
+  -- ExtType JVM = J.Type
 
 --------------------------------------------------------------------------------
 -- *** StateSpec
@@ -399,8 +371,26 @@ deriving instance ( SetupValueHas Show ext
 
 -- | TODO: documentation
 data PointsTo ext
-  = PointsToField ProgramLoc (SetupValue ext) String (SetupValue ext)
+  = PointsTo ProgramLoc (SetupValue ext) (SetupValue ext)
+  | PointsToField ProgramLoc (SetupValue ext) String (SetupValue ext)
   | PointsToElem ProgramLoc (SetupValue ext) Int (SetupValue ext)
+
+ppPointsTo :: PointsTo ext -> PP.Doc
+ppPointsTo =
+  \case
+    PointsTo _loc ptr val ->
+      ppSetupValue ptr
+      PP.<+> PP.text "points to"
+      PP.<+> ppSetupValue val
+    PointsToField _loc ptr fld val ->
+      ppSetupValue ptr <> PP.text "." <> PP.text fld
+      PP.<+> PP.text "points to"
+      PP.<+> ppSetupValue val
+    PointsToElem _loc ptr idx val ->
+      ppSetupValue ptr <> PP.text "[" <> PP.text (show idx) <> PP.text "]"
+      PP.<+> PP.text "points to"
+      PP.<+> ppSetupValue val
+
 
 deriving instance (SetupValueHas Show ext) => Show (PointsTo ext)
 
@@ -435,26 +425,20 @@ initialStateSpec =  StateSpec
 --------------------------------------------------------------------------------
 -- *** Method specs
 
-data LLVMMethod =
-  LLVMMethod
-    { llvmMethodName   :: String
-    , llvmMethodParent :: Maybe String -- ^ Something to do with breakpoints...
-    } deriving (Eq, Ord, Show) -- TODO: deriving
-
 data JVMMethod =
   JVMMethod
     { jvmMethodName  :: String
     , jvmMethodClass :: J.ClassName
     } deriving (Eq, Ord, Show) -- TODO: deriving
 
--- | The type of types of the syntax extension we're dealing with
-type family Method ext where
-  Method (LLVM arch) = LLVMMethod
-  Method JVM = J.ClassName
+-- | How to identify methods in a codebase
+type family MethodId ext :: Type
+  -- Method (LLVM arch) = LLVMMethod
+  -- Method JVM = J.ClassName
 
 data CrucibleMethodSpecIR ext =
   CrucibleMethodSpec
-  { _csMethod          :: Method ext
+  { _csMethod          :: MethodId ext
   , _csArgs            :: [ExtType ext]
   , _csRet             :: Maybe (ExtType ext)
   , _csPreState        :: StateSpec ext -- ^ state before the function runs
@@ -467,6 +451,21 @@ data CrucibleMethodSpecIR ext =
 
 makeLenses ''CrucibleMethodSpecIR
 
+ppMethodSpec ::
+  ( PP.Pretty (MethodId ext)
+  , PP.Pretty (ExtType ext)
+  ) =>
+  CrucibleMethodSpecIR ext ->
+  PP.Doc
+ppMethodSpec methodSpec =
+  PP.text "Name: " <> PP.pretty (methodSpec ^. csMethod)
+  PP.<$$> PP.text "Location: " <> PP.pretty (plSourceLoc (methodSpec ^. csLoc))
+  PP.<$$> PP.text "Argument types: "
+  PP.<$$> bullets '-' (map PP.pretty (methodSpec ^. csArgs))
+  PP.<$$> PP.text "Return type: " <> case methodSpec ^. csRet of
+                                       Nothing  -> PP.text "<void>"
+                                       Just ret -> PP.pretty ret
+
 csAllocations :: CrucibleMethodSpecIR ext -> Map AllocIndex (AllocSpec ext)
 csAllocations
   = Map.unions
@@ -476,6 +475,25 @@ csTypeNames :: CrucibleMethodSpecIR ext -> Map AllocIndex (TypeName ext)
 csTypeNames
   = Map.unions
   . toListOf ((csPreState <> csPostState) . csVarTypeNames)
+
+makeCrucibleMethodSpecIR ::
+  MethodId ext ->
+  [ExtType ext] ->
+  Maybe (ExtType ext) ->
+  ProgramLoc ->
+  CrucibleMethodSpecIR ext
+makeCrucibleMethodSpecIR meth args ret loc = do
+  CrucibleMethodSpec
+    {_csMethod          = meth
+    ,_csArgs            = args
+    ,_csRet             = ret
+    ,_csPreState        = initialStateSpec
+    ,_csPostState       = initialStateSpec
+    ,_csArgBindings     = Map.empty
+    ,_csRetValue        = Nothing
+    ,_csSolverStats     = mempty
+    ,_csLoc             = loc
+    }
 
 --------------------------------------------------------------------------------
 -- *** CrucibleSetupState
@@ -491,3 +509,16 @@ data CrucibleSetupState ext =
   }
 
 makeLenses ''CrucibleSetupState
+
+makeCrucibleSetupState ::
+  CrucibleContext ext ->
+  CrucibleMethodSpecIR ext ->
+  CrucibleSetupState ext
+makeCrucibleSetupState cc mspec =
+  CrucibleSetupState
+    { _csVarCounter      = AllocIndex 0
+    , _csPrePost         = PreState
+    , _csResolvedState   = emptyResolvedState
+    , _csMethodSpec      = mspec
+    , _csCrucibleContext = cc
+    }

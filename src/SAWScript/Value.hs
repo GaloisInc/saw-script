@@ -63,6 +63,7 @@ import qualified Data.AIG as AIG
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
+import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 import qualified SAWScript.Crucible.JVM.MethodSpecIR as JCIR
@@ -126,8 +127,8 @@ data Value
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   -----
   | VCrucibleSetup !(CrucibleSetupM Value)
-  | VCrucibleMethodSpec CIR.CrucibleMethodSpecIR
-  | VCrucibleSetupValue CIR.SetupValue
+  | VCrucibleMethodSpec (Some CMS.CrucibleMethodSpecIR)
+  | VCrucibleSetupValue (Some CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
   | VJVMMethodSpec JCIR.CrucibleMethodSpecIR
@@ -143,7 +144,7 @@ data Value
   | VUninterp Uninterp
   | VAIG AIGNetwork
   | VCFG SAW_CFG
-  | VGhostVar CIR.GhostGlobal
+  | VGhostVar CMS.GhostGlobal
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -311,7 +312,7 @@ showsPrecValue opts p v =
       showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
     VCrucibleSetup{} -> showString "<<Crucible Setup>>"
-    VCrucibleSetupValue x -> shows x
+    VCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
     VCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VJavaType {} -> showString "<<Java type>>"
@@ -508,12 +509,10 @@ data JavaSetupState
 
 type JavaSetup a = StateT JavaSetupState TopLevel a
 
-type CrucibleSetup arch a =
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  StateT (CIR.CrucibleSetupState arch) TopLevel a
+type CrucibleSetup ext a = StateT (CMS.CrucibleSetupState ext) TopLevel a
 
 data CrucibleSetupM a =
-  CrucibleSetupM { runCrucibleSetupM :: forall arch. CrucibleSetup arch a }
+  CrucibleSetupM { runCrucibleSetupM :: forall ext. CrucibleSetup ext a }
 
 instance Functor CrucibleSetupM where
   fmap f (CrucibleSetupM m) = CrucibleSetupM (fmap f m)
@@ -662,12 +661,12 @@ instance FromValue a => FromValue (JVMSetupM a) where
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
-instance IsValue CIR.SetupValue where
-  toValue v = VCrucibleSetupValue v
+instance IsValue (CMS.SetupValue ext) where
+  toValue v = VCrucibleSetupValue (Some v)
 
-instance FromValue CIR.SetupValue where
-  fromValue (VCrucibleSetupValue v) = v
-  fromValue _ = error "fromValue Crucible.SetupValue"
+-- instance FromValue (CMS.SetupValue ext) where
+--   fromValue (VCrucibleSetupValue (Some v)) = v
+--   fromValue _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue JCIR.SetupValue where
   toValue v = VJVMSetupValue v
@@ -683,12 +682,12 @@ instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
-instance IsValue CIR.CrucibleMethodSpecIR where
-    toValue t = VCrucibleMethodSpec t
+instance IsValue (CMS.CrucibleMethodSpecIR ext) where
+    toValue t = VCrucibleMethodSpec (Some t)
 
-instance FromValue CIR.CrucibleMethodSpecIR where
-    fromValue (VCrucibleMethodSpec t) = t
-    fromValue _ = error "fromValue CrucibleMethodSpecIR"
+-- instance FromValue (CMS.CrucibleMethodSpecIR ext) where
+--     fromValue (VCrucibleMethodSpec (Some t)) = t
+--     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
 instance IsValue JCIR.CrucibleMethodSpecIR where
     toValue t = VJVMMethodSpec t
@@ -832,10 +831,10 @@ instance FromValue SatResult where
    fromValue (VSatResult r) = r
    fromValue v = error $ "fromValue SatResult: " ++ show v
 
-instance IsValue CIR.GhostGlobal where
+instance IsValue CMS.GhostGlobal where
   toValue = VGhostVar
 
-instance FromValue CIR.GhostGlobal where
+instance FromValue CMS.GhostGlobal where
   fromValue (VGhostVar r) = r
   fromValue v = error ("fromValue GlobalVar: " ++ show v)
 
