@@ -28,11 +28,15 @@ import Data.Maybe
 import Data.List
 import Data.Kind as Kind
 import Data.Functor.Product
+import GHC.TypeLits
 import Control.Lens hiding ((:>))
 import Control.Monad
 import Data.Functor.Identity
+import Control.Applicative hiding (empty)
+import qualified Control.Applicative as Applicative
 import Control.Monad.Trans
 import Control.Monad.State
+import Control.Monad.Trans.Maybe
 
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.MemModel
@@ -59,7 +63,7 @@ import SAWScript.Heapster.Permissions
 -- FIXME: explain that @Pl@ is like a stack, and that intro rules apply to the
 -- top of the stack
 data PermImpl r ls where
-  Impl_Done :: a -> PermImpl r ls
+  Impl_Done :: r -> PermImpl r ls
   -- ^ The proof is finished; i.e., implements the rule
   --
   -- > -------------------------------
@@ -234,6 +238,30 @@ data PermImpl r ls where
   -- > ---------------------------------------
   -- > Gin | Pl, x:ptr(free(e1)) * Pin |- rets
 
+  Impl_ElimLLVMField ::
+    PermLoc (LLVMPointerType w) ->
+    Binding (PermExpr (LLVMPointerType w)) (PermImpl r ls) ->
+    PermImpl r ls
+  -- ^ Eliminate a field permission @x:ptr((off,S) |-> p)@ into a permission
+  -- @x:ptr((off,S) |-> eq(y))@ that the field contains a fresh variable @y@ and
+  -- a permission @y:p@ on @y@:
+  --
+  -- > Gin | Pl * Pin, x:ptr((off,S) |-> eq(y)), y:p |- rets
+  -- > -----------------------------------------------------
+  -- > Gin | Pl * Pin, x:ptr((off,S) |-> p) |- rets
+
+  Impl_IntroLLVMField ::
+    ExprVar (LLVMPointerType w) ->
+    PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
+    PermImpl r (ls :> PermExpr (LLVMPointerType w)
+                :> PermExpr (LLVMPointerType w))
+  -- ^ Combine proofs of @x:ptr((off,S) |-> eq(y))@ and @y:p@ on the top of the
+  -- permission stack into a proof of @x:ptr((off,S) |-> p)@:
+  --
+  -- > Gin | Pl, x:ptr((off,S) |-> p) * Pin |- rets
+  -- > -----------------------------------------------------
+  -- > Gin | Pl, x:ptr((off,S) |-> eq(y)), y:p * Pin |- rets
+
 
 ----------------------------------------------------------------------
 -- * Generalized Monads
@@ -342,6 +370,84 @@ instance GenMonad m => GenMonad (GenStateT s m) where
   gopenBinding b = glift $ gopenBinding b
 
 
+-- | Transformer for pattern-matching in a generalized monad; although it itself
+-- is a monad transformer, it is not a generalized transformer, because it only
+-- supports a restricted form of the @>>>=@ operator
+newtype MatchT m rin rout a =
+  MatchT
+  { unMatchT ::
+      (a -> m rin rout () -> m rin rout ()) -> m rin rout () -> m rin rout () }
+
+instance Functor (MatchT m rin rout) where
+  fmap f m = m >>= return . f
+
+instance Applicative (MatchT m rin rout) where
+  pure = return
+  (<*>) = ap
+
+instance Monad (MatchT m rin rout) where
+  return a = MatchT $ \ks kf -> ks a kf
+  (MatchT m) >>= f =
+    MatchT $ \ks kf -> m (\a kf' -> unMatchT (f a) ks kf') kf
+
+instance Alternative (MatchT m rin rout) where
+  empty = MatchT $ \_ kf -> kf
+  (MatchT m1) <|> (MatchT m2) = MatchT $ \ks kf -> m1 ks (m2 ks kf)
+
+instance MonadPlus (MatchT m r r) where
+  mzero = Applicative.empty
+  mplus = (<|>)
+
+{-
+instance GenMonadT MatchT where
+  glift m = MatchT $ \ks kf -> m >>>= \a -> ks a kf
+-}
+
+{-
+instance GenMonad m => GenMonad (MatchT m) where
+  greturn a = MatchT $ \ks kf -> ks a kf
+  (MatchT m) >>>= f =
+    MatchT $ \ks kf -> m (\a -> unMatchT (f a) ks kf) kf
+  gmapRet f = glift $ gmapRet f
+  gparallel (MatchT m1) (MatchT m2) =
+    MatchT $ \ks kf -> gparallel (m1 ks kf) (m2 ks kf)
+  gopenBinding b =glift $ gopenBinding b
+-}
+
+-- FIXME: this may not be useful...
+matchBind :: MatchT m rin rout a -> (a -> MatchT m rin rout b) ->
+             MatchT m rin rout b
+matchBind (MatchT m) f =
+  MatchT $ \ks kf -> m (\a kf' -> unMatchT (f a) ks kf') kf
+
+-- | Pattern-match on the result of a computation with an optional value,
+-- calling the given function if the value is there and giving up on the current
+-- match case otherwise
+matchCase :: GenMonad m => m rout rout (Maybe a) ->
+             (a -> MatchT m rin rout b) -> MatchT m rin rout b
+matchCase m f =
+  MatchT $ \ks kf -> m >>>= maybe kf (\a -> unMatchT (f a) ks kf)
+
+-- | A pure case that does not use any monadic effects
+matchPure :: GenMonad m => a -> Matcher a b ->
+             (b -> MatchT m rin rout c) -> MatchT m rin rout c
+matchPure a matcher = matchCase (greturn (matcher a))
+
+-- | Build a pattern-matching computation that always succeeds and runs the
+-- given computation as its result
+matchBody :: m rin rout () -> MatchT m rin rout a
+matchBody m = MatchT $ \_ _ -> m
+
+-- | Give up on the current pattern-matching case
+matchFail :: MatchT m rin rout a
+matchFail = MatchT $ \_ kf -> kf
+
+-- | Run a pattern-matching computation, using the given underlying computation
+-- as the default case
+runMatchT :: m rin rout () -> MatchT m rin rout () -> m rin rout ()
+runMatchT kf (MatchT f) = f (\() m -> m) kf
+
+
 ----------------------------------------------------------------------
 -- * Permission Implication Monad
 ----------------------------------------------------------------------
@@ -387,7 +493,9 @@ instance PermState (ImplState vars) where
   permStatePerms = implStatePerms
 
 -- | The implication monad is the permission monad that uses 'ImplState'
-type ImplM vars = PermM (ImplState vars)
+type ImplM vars r ls1 ls2 =
+  PermM (ImplState vars) (PermImpl r ls1) (PermImpl r ls2)
+
 
 -- | Run a permissions computation with a different state type @s2@ inside one
 -- with state type @s1@, using a lens-like pair of a getter function to extract
@@ -408,8 +516,8 @@ withAltStateM s_get s_update (PermM m) =
 -- returning the optional expression it was bound to in the current partial
 -- substitution when it is done
 withExtVarsM :: KnownRepr TypeRepr tp =>
-                ImplM (vars :> PermExpr tp) rin rout a ->
-                ImplM vars rin rout (a, Maybe (PermExpr tp))
+                ImplM (vars :> PermExpr tp) r ls1 ls2 a ->
+                ImplM vars r ls1 ls2 (a, Maybe (PermExpr tp))
 withExtVarsM m =
   withAltStateM extImplState (const unextImplState) $
   (m >>>= \a ->
@@ -419,7 +527,8 @@ withExtVarsM m =
 -- | Run an 'ImplM' computation inside a 'PermM' computation with a possibly
 -- different state type
 runImplM :: PermState s => CruCtx vars ->
-            ImplM vars rin rout a -> PermM s rin rout (a, PermSubst vars)
+            ImplM vars r ls1 ls2 a ->
+            PermM s (PermImpl r ls1) (PermImpl r ls2) (a, PermSubst vars)
 runImplM vars m =
   withAltStateM (\s -> mkImplState vars (s ^. permStatePerms))
   (\s s' -> set permStatePerms (s' ^. implStatePerms) s)
@@ -427,26 +536,26 @@ runImplM vars m =
     getPSubst >>>= \psubst ->
     greturn (a, completePSubst vars psubst))
 
--- FIXME: enable RebindableSyntax so we can write the above like this?
-{-
-  do s <- get
-     (a, s') <-
-       PermM $ glift $ runGenStateT m (mkImplState vars $ s ^. permStatePerms)
-     put (set permStatePerms (s' ^. implStatePerms) s)
-     return a
--}
-
 
 ----------------------------------------------------------------------
 -- * Permissions Operations in a Permission Monad
 ----------------------------------------------------------------------
 
 -- | Look up the current partial substitution
-getPSubst :: ImplM vars r r (PartialSubst vars)
+getPSubst :: ImplM vars r ls ls (PartialSubst vars)
 getPSubst = view implStatePSubst <$> gget
 
+-- | Apply the current partial substitution to an expression, raising an error
+-- with the given string if the partial substitution is not complete enough
+partialSubstForceM :: Substable PartialSubst a Maybe => Mb vars a -> String ->
+                      ImplM vars r ls ls a
+partialSubstForceM mb_e msg =
+  getPSubst >>>= \psubst ->
+  greturn (partialSubstForce psubst mb_e msg)
+
 -- | Modify the current partial substitution
-modifyPSubst :: (PartialSubst vars -> PartialSubst vars) -> ImplM vars r r ()
+modifyPSubst :: (PartialSubst vars -> PartialSubst vars) ->
+                ImplM vars r ls ls ()
 modifyPSubst f = modify (over implStatePSubst f)
 
 -- | Look up the current permissions for a variable
@@ -463,7 +572,7 @@ getPerm :: PermState s => PermLoc a -> PermM s r r (ValuePerm a)
 getPerm l = view (permStatePerms . varPerm l) <$> gget
 
 -- | Terminate the current proof branch with a failure
-implFailM :: PermM s rany (PermImpl rin ls) ()
+implFailM :: PermM s rany (PermImpl r ls) ()
 implFailM = gmapRet (const Impl_Fail)
 
 -- | Finish the current proof branch successfully with an 'Impl_Done'
@@ -607,6 +716,21 @@ introLLVMStarM ::
 introLLVMStarM x = gmapRet (Impl_IntroLLVMStar x)
 
 
+-- | Eliminate disjunctives, existentials, and stars at a specific location
+elimOrsExistsStarsM :: PermState s => PermLoc a ->
+                       PermM s (PermImpl r ls) (PermImpl r ls) ()
+elimOrsExistsStarsM l =
+  getPerm l >>>= \p ->
+  case p of
+    ValPerm_Or _ _ -> elimOrM l >>> elimOrsExistsStarsM l
+    ValPerm_Exists (_ :: Binding (PermExpr a) _) ->
+      elimExistsM l (knownRepr :: TypeRepr a) >>> elimOrsExistsStarsM l
+    ValPerm_LLVMPtr (LLVMStarPerm _ _) ->
+      -- FIXME HERE: need to also eliminate the new RHS perm!
+      elimLLVMStarM l >>> elimOrsExistsStarsM l
+    _ -> return ()
+
+
 -- | Copy a proof of @x:ptr(free(e))@ to the top of the stack
 introLLVMFreeM :: PermState s => PermLoc (LLVMPointerType w) ->
                   PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
@@ -621,11 +745,166 @@ castLLVMFreeM :: PermState s => ExprVar (LLVMPointerType w) ->
                  (PermImpl r (ls :> PermExpr (LLVMPointerType w))) ()
 castLLVMFreeM x e1 e2 = gmapRet (Impl_CastLLVMFree x e1 e2)
 
+-- | Eliminate an @x:ptr((off,S) |-> p)@ into @x:ptr((off,S) |-> eq(y))@ and
+-- @y:p@ for a fresh variable @y@, returning the fresh variable @y@
+elimLLVMFieldM :: PermState s => PermLoc (LLVMPointerType w) ->
+                  PermM s (PermImpl r ls) (PermImpl r ls)
+                  (ExprVar (LLVMPointerType w))
+elimLLVMFieldM l =
+  getPerm l >>>= \p ->
+  case p of
+    ValPerm_LLVMPtr (LLVMFieldPerm {..}) ->
+      gmapRet (Impl_ElimLLVMField l) >>>
+      gopenBinding (nu $ \y -> y) >>>= \(y, _) ->
+      modify (set (permStatePerms . varPerm l)
+              (setLLVMFieldPerm p (ValPerm_Eq (PExpr_Var y))) .
+              set (permStatePerms . varPerms y) [llvmFieldPerm]) >>>
+      greturn y
+    _ ->
+      error "elimLLVMFieldM: not an LLVM field permission!"
+
+-- | Combine proofs of @x:ptr(p1)@ and @x:ptr(p2)@ on the top of the
+-- permission stack into a proof of @x:ptr(p1 * p2)@
+introLLVMFieldM ::
+  PermState s => ExprVar (LLVMPointerType w) ->
+  PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
+  (PermImpl r (ls :> PermExpr (LLVMPointerType w)
+               :> PermExpr (LLVMPointerType w))) ()
+introLLVMFieldM x = gmapRet (Impl_IntroLLVMField x)
+
+
+----------------------------------------------------------------------
+-- * Pattern-Matching Monadic Operations
+----------------------------------------------------------------------
+
+-- | The type of a pattern-matching computation over 'ImplM'
+type ImplMatch vars r ls1 ls2 =
+  MatchT (PermM (ImplState vars)) (PermImpl r ls1) (PermImpl r ls2)
+
+type ImplMatcher vars a =
+  forall r ls1 ls2.
+  (a -> ImplMatch vars r ls1 ls2 ()) -> ImplMatch vars r ls1 ls2 ()
+
+-- | Run a pattern-matching computation, calling 'implFailM' on failure
+implMatchM :: ImplMatch vars r ls1 ls2 () -> ImplM vars r ls1 ls2 ()
+implMatchM = runMatchT implFailM
+
+-- | Test whether substituting the current partial substitution into an object
+-- succeeds
+matchGround :: Substable PartialSubst a Maybe => (Mb vars a) ->
+               ImplMatcher vars a
+matchGround a =
+  matchCase (getPSubst >>>= \psubst -> greturn (partialSubst psubst a))
+
+-- | Test if an expression-in-binding is a variable that is unassigned in the
+-- current partial substitution
+matchUnassignedVar :: Mb vars (PermExpr a) ->
+                      ImplMatcher vars (Member vars (PermExpr a))
+{-
+                      (Member vars (PermExpr a) -> ImplMatch vars rin rout ()) ->
+                      ImplMatch vars rin rout ()
+-}
+matchUnassignedVar mb_e =
+  matchCase
+  (getPSubst >>>= \psubst ->
+   case mb_e of
+     ([nuP| PExpr_Var z |])
+       | Left memb <- mbNameBoundP z
+       , Nothing <- psubstLookup psubst memb ->
+         greturn $ Just memb
+     _ -> greturn Nothing)
+
+-- | Test if a splitting-in-binding is a variable that is unassigned in the
+-- current partial substitution
+matchUnassignedSplVar ::
+  Mb vars SplittingExpr ->
+  ImplMatcher vars (Member vars (PermExpr SplittingType))
+matchUnassignedSplVar mb_spl =
+  matchCase
+  (getPSubst >>>= \psubst ->
+    case mb_spl of
+      [nuP| SplExpr_Var z |]
+        | Left memb <- mbNameBoundP z
+        , Nothing <- psubstLookup psubst memb ->
+          greturn $ Just memb
+      _ -> greturn Nothing)
+
+-- | Test if a splitting-in-binding is the complete splitting
+matchSplAll :: Mb vars SplittingExpr -> ImplMatcher vars ()
+matchSplAll [nuP| SplExpr_All |] f = f ()
+matchSplAll _ _ = matchFail
+
+-- | Find all permissions on a variable that match a 'Matcher', returning the
+-- matched values and also locations of those permissions
+matchPerms :: ExprVar a -> Matcher (ValuePerm a) r ->
+              ImplMatcher vars [(PermLoc a, r)]
+matchPerms x matcher =
+  matchCase
+  (gget >>>= \s ->
+    greturn $ Just $ permFindAll matcher x (s ^. implStatePerms))
+
+-- | Find the first permission on a variable that matches a 'Matcher', returning
+-- the matched value and also location of the permission
+matchPerm :: ExprVar a -> Matcher (ValuePerm a) r ->
+             ImplMatcher vars (PermLoc a, r)
+matchPerm x matcher =
+  matchCase
+  (gget >>>= \s -> greturn $ permFind matcher x (s ^. implStatePerms))
+
 
 ----------------------------------------------------------------------
 -- * Proving Equality Permissions
 ----------------------------------------------------------------------
 
+proveVarEq :: ExprVar a -> Mb vars (PermExpr a) ->
+              ImplM vars r (ls :> PermExpr a) ls ()
+proveVarEq x mb_e =
+  implMatchM $
+
+  -- Prove x:eq(z) for evar z by setting z=x
+  (matchUnassignedVar mb_e $ \memb ->
+    matchBody $
+    modifyPSubst (psubstSet memb (PExpr_Var x)) >>> introEqReflM x)
+  <|>
+
+  -- Prove x:eq(x) using introEqReflM
+  (matchGround mb_e $ \e ->
+    matchPure e (matchEq (PExpr_Var x)) $ \_ ->
+    matchBody $ introEqReflM x)
+  <|>
+
+  -- Prove x:eq(e) |- x:eq(e) using introEqCopyM
+  (matchPerm x (matchEqPerm >=> matchEq (PExpr_Var x)) $ \(l, _) ->
+    matchBody $ introEqCopyM l)
+  <|>
+
+  (case mb_e of
+      [nuP| PExpr_LLVMWord mb_e' |] ->
+        -- Prove x:eq(word(x_e)) |- x:eq(word(z)) by setting z=x_e
+        (matchUnassignedVar mb_e' $ \memb ->
+          matchPerm x (matchEqPerm >=> matchLLVMWordExpr) $ \(l, x_e) ->
+          matchBody $
+          modifyPSubst (psubstSet memb x_e) >>> introEqCopyM l)
+        <|>
+
+        -- Prove x:eq(word(x_e)) |- x:eq(word(e)) by first proving
+        -- x:eq(word(x_e)) and then casting e to e'
+        (matchGround mb_e' $ \e ->
+          matchPerm x (matchEqPerm >=> matchLLVMWordExpr) $ \(l, x_e) ->
+          matchBody $
+          introEqCopyM l >>> introCastLLVMWordEq x x_e e)
+
+      _ -> matchFail)
+  <|>
+
+  -- Try to eliminate disjuncts and existentials to expose a new eq(e) perm; we
+  -- then recursively call proveVarEq (not proveVarEqH) because the permissions
+  -- have changed
+  (matchPerm x matchNestedEqPerm $ \(l, ()) ->
+   matchBody $ elimOrsExistsM l >>> proveVarEq x mb_e)
+
+
+{-
 -- | Build a proof on the top of the stack that @x:eq(e)@
 proveVarEq :: ExprVar a -> Mb vars (PermExpr a) ->
               ImplM vars (PermImpl r (ls :> PermExpr a)) (PermImpl r ls) ()
@@ -661,30 +940,80 @@ proveVarEqH x mb_e perms psubst
 proveVarEqH x [nuP| PExpr_LLVMWord (PExpr_Var z) |] perms psubst
   | Left memb <- mbNameBoundP z
   , Nothing <- psubstLookup psubst memb
-  , (l, ValPerm_Eq (PExpr_LLVMWord e')) : _ <-
-    findPerms (\p -> case p of
-                  ValPerm_Eq (PExpr_LLVMWord e') -> True) x perms
+  , Just (l, ValPerm_Eq (PExpr_LLVMWord e')) <-
+      findPerm isEqLLVMWordPerm x perms
   = modifyPSubst (psubstSet memb e') >>> introEqCopyM l
 
 -- Prove x:eq(word(e)) |- x:eq(word(e')) by first proving x:eq(word(e)) and then
 -- casting e to e'
 proveVarEqH x [nuP| PExpr_LLVMWord mb_e |] perms psubst
   | Just e <- partialSubst psubst mb_e
-  , (l, ValPerm_Eq (PExpr_LLVMWord e')) : _ <-
-    findPerms (\p -> case p of
-                  ValPerm_Eq (PExpr_LLVMWord e') -> True) x perms
+  , Just (l, ValPerm_Eq (PExpr_LLVMWord e')) <-
+      findPerm isEqLLVMWordPerm x perms
   = introEqCopyM l >>> introCastLLVMWordEq (locVar l) e e'
 
 -- Try to eliminate disjuncts and existentials to expose a new eq(e) perm; we
 -- then recursively call proveVarEq (not proveVarEqH) because the permissions
 -- have changed
 proveVarEqH x p perms _
-  | (l, _) : _ <- findPerms isNestedEqPerm x perms
+  | Just (l, _) <- findPerm isNestedEqPerm x perms
   = elimOrsExistsM l >>> proveVarEq x p
 
 -- Otherwise give up!
 proveVarEqH _ _ _ _ = implFailM
+-}
 
+
+----------------------------------------------------------------------
+-- * Proving Field Permissions
+----------------------------------------------------------------------
+
+proveVarField :: (1 <= w, KnownNat w) =>
+                 ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+                 Mb vars SplittingExpr ->
+                 Mb vars (ValuePerm (LLVMPointerType w)) ->
+                 ImplM vars r (ls :> PermExpr (LLVMPointerType w)) ls ()
+proveVarField x off mb_spl mb_p =
+  implMatchM $
+
+  -- Prove x:ptr((off,All) |-> p1) |- x:ptr((off,All) |-> p2) by first
+  -- eliminating the LHS to x:ptr((off,All) |-> eq(y)), y:p1 for fresh y,
+  -- proving x:ptr((off,All) |-> eq(y)),y:p1 |- x:ptr((off,All) |-> eq(y)),y:p2,
+  -- and then re-combining the RHS into x:ptr((off,All) |-> p2)
+  (matchPerm x (matchPtrPerm $ matchFieldPtrPermOff off) $ \(l, (spl1, p1)) ->
+    matchSplAll mb_spl $ \() ->
+    matchBody $
+    elimLLVMFieldM l >>>= \y ->
+    implPushM l (ValPerm_LLVMPtr
+                 (LLVMFieldPerm off spl1 (ValPerm_Eq (PExpr_Var y)))) >>>
+    proveVarImpl y mb_p >>>
+    introLLVMFieldM x)
+
+{-
+proveVarField :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+                 Mb vars SplittingExpr ->
+                 Mb vars (ValuePerm (LLVMPointerType w)) ->
+                 ImplM vars r (ls :> PermExpr (LLVMPointerType w)) ls ()
+proveVarField x off mb_spl mb_p =
+  getPerms x >>>= \perms ->
+  proveVarFieldH x off mb_spl mb_p perms
+
+
+proveVarFieldH :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+                  Mb vars SplittingExpr ->
+                  Mb vars (ValuePerm (LLVMPointerType w)) ->
+                  [ValuePerm (LLVMPointerType w)] ->
+                  ImplM vars r (ls :> PermExpr (LLVMPointerType w)) ls ()
+
+-- Prove x:ptr((off,All) |-> p1) |- x:ptr((off,All) |-> p2) by first eliminating
+-- the LHS to x:ptr((off,All) |-> eq(y)), y:p1 for a fresh variable y, then
+-- proving x:ptr((off,All) |-> eq(y)),y:p1 |- x:ptr((off,All) |-> eq(y)),y:p2,
+-- and then re-combining the RHS into x:ptr((off,All) |-> p2)
+proveVarFieldH x off mb_spl mb_p perms
+  | Just (l, ValPerm_LLVMPtr (LLVMFieldPerm _ spl' p')) <-
+      findPerm (isFieldPtrPermOff off) perms
+  = error "FIXME HERE NOW"
+-}      
 
 ----------------------------------------------------------------------
 -- * Proving Permission Implications
@@ -692,7 +1021,7 @@ proveVarEqH _ _ _ _ = implFailM
 
 -- | Prove @x:p@, where @p@ may have existentially-quantified variables in it
 proveVarImpl :: ExprVar a -> Mb vars (ValuePerm a) ->
-                ImplM vars (PermImpl r (ls :> PermExpr a)) (PermImpl r ls) ()
+                ImplM vars r (ls :> PermExpr a) ls ()
 
 -- Prove x:true vacuously
 proveVarImpl x [nuP| ValPerm_True |] = introTrueM x
@@ -701,21 +1030,18 @@ proveVarImpl x [nuP| ValPerm_True |] = introTrueM x
 proveVarImpl x [nuP| ValPerm_Or p1 p2 |] =
   implCatchM
   (proveVarImpl x p1 >>>
-   getPSubst >>>= \psubst ->
-   introOrLM x (partialSubstForce psubst p2
-                "proveVarImpl: incomplete psubst: introOrL"))
+   partialSubstForceM p2
+   "proveVarImpl: incomplete psubst: introOrL" >>>= introOrLM x)
   (proveVarImpl x p2 >>>
-   getPSubst >>>= \psubst ->
-   introOrRM x (partialSubstForce psubst p1
-                "proveVarImpl: incomplete psubst: introOrR"))
+   partialSubstForceM p2
+   "proveVarImpl: incomplete psubst: introOrR" >>>= introOrRM x)
 
 -- Prove x:exists (z:tp).p by proving x:p in an extended vars context
 proveVarImpl x [nuP| ValPerm_Exists p |] =
   withExtVarsM (proveVarImpl x $ mbCombine p) >>>= \((), maybe_e) ->
   let e = fromMaybe (zeroOfType knownRepr) maybe_e in
-  getPSubst >>>= \psubst ->
-  introExistsM x knownRepr e (partialSubstForce psubst p
-                              "proveFarImpl: incomplete psubst: introExists")
+  partialSubstForceM p "proveVarImpl: incomplete psubst: introExists" >>>=
+  introExistsM x knownRepr e
 
 -- Prove x:eq(e) by calling proveVarEq
 proveVarImpl x [nuP| ValPerm_Eq e |] = proveVarEq x e
@@ -729,24 +1055,31 @@ proveVarImpl x [nuP| ValPerm_LLVMPtr (LLVMStarPerm p1 p2) |] =
 
 -- Prove x:ptr(free(e))
 proveVarImpl x p@([nuP| ValPerm_LLVMPtr (LLVMFreePerm mb_e) |]) =
-  getPerms x >>>= \perms ->
-  getPSubst >>>= \psubst ->
-  case findPerm isNestedFreePerm x perms of
-    Just (l, ValPerm_Or _ _) -> elimOrsExistsM l >>> proveVarImpl x p
-    Just (l, ValPerm_Exists _) -> elimOrsExistsM l >>> proveVarImpl x p
-    Just (l, ValPerm_LLVMPtr (LLVMStarPerm _ _)) ->
-      elimLLVMStarM l >>> proveVarImpl x p
-    Just (l, ValPerm_LLVMPtr (LLVMFreePerm e')) ->
-      let e = partialSubstForce psubst mb_e
-            "proveVarImpl: incomplete psubst: introLLVMFree" in
-      introLLVMFreeM l >>> castLLVMFreeM (locVar l) e' e
-    _ -> implFailM
+  implMatchM $
+
+  -- Prove x:ptr(free(e')) |- x:ptr(free(e)) by first proving x:ptr(free(e'))
+  -- and then casting e' to e
+  (matchPerm x (matchPtrPerm matchFreePtrPerm) $ \(l, e') ->
+    matchGround mb_e $ \e ->
+    matchBody $ introLLVMFreeM l >>> castLLVMFreeM x e' e)
+  <|>
+
+  -- If there are any x:ptr(free(e')) perms under existentials, ors, and/or
+  -- stars, eliminate them
+  (matchPerm x (matchInExsOrsStars matchFreePtrPerm) $ \(l,_) ->
+    matchBody $ elimOrsExistsStarsM l >>> proveVarImpl x p)
+
+-- Prove x:ptr((off,spl) |-> p)
+proveVarImpl x [nuP| ValPerm_LLVMPtr
+                   (LLVMFieldPerm mb_off mb_spl mb_p) |] =
+  partialSubstForceM mb_off
+  "proveVarImpl: incomplete psubst: LLVM field" >>>= \off ->
+  proveVarField x off mb_spl mb_p
 
 
 data ReqPerm vars a where
   ReqPerm :: ExprVar a -> Mb vars (ValuePerm a) -> ReqPerm vars (PermExpr a)
 
-proveVarsImpl :: MapRList (ReqPerm vars) ls ->
-                 ImplM vars (PermImpl r ls) (PermImpl r RNil) ()
+proveVarsImpl :: MapRList (ReqPerm vars) ls -> ImplM vars r ls RNil ()
 proveVarsImpl MNil = return ()
 proveVarsImpl (reqs :>: ReqPerm x p) = proveVarsImpl reqs >>> proveVarImpl x p

@@ -17,6 +17,8 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module SAWScript.Heapster.Permissions where
 
@@ -24,6 +26,7 @@ import Data.Maybe
 import Data.List
 import Data.Binding.Hobbits
 import GHC.TypeLits
+import Control.Applicative hiding (empty)
 import Control.Monad.Identity
 import Control.Lens hiding ((:>))
 
@@ -330,31 +333,6 @@ instance (Eq (LLVMPtrPerm w)) where
   (LLVMFreePerm _) == _ = False
 
 
--- | Test if a permission is an equality permission
-isEqPerm :: ValuePerm a -> Bool
-isEqPerm (ValPerm_Eq _) = True
-isEqPerm _ = False
-
--- | Test if a permission is an @eq(e)@ inside 0 or more existentials or
--- disjunctions
-isNestedEqPerm :: ValuePerm a -> Bool
-isNestedEqPerm (ValPerm_Eq _) = True
-isNestedEqPerm (ValPerm_Or p1 p2) = isNestedEqPerm p1 || isNestedEqPerm p2
-isNestedEqPerm (ValPerm_Exists p) = mbLift $ fmap isNestedEqPerm p
-isNestedEqPerm _ = False
-
--- | Test if a permission is an @x:ptr(free(e))@ inside 0 or more existentials,
--- disjunctions, or LLVM stars
-isNestedFreePerm :: ValuePerm (LLVMPointerType w) -> Bool
-isNestedFreePerm (ValPerm_Or p1 p2) =
-  isNestedFreePerm p1 || isNestedFreePerm p2
-isNestedFreePerm (ValPerm_Exists p) = mbLift $ fmap isNestedFreePerm p
-isNestedFreePerm (ValPerm_LLVMPtr (LLVMStarPerm p1 p2)) =
-  isNestedFreePerm (ValPerm_LLVMPtr p1) ||
-  isNestedFreePerm (ValPerm_LLVMPtr p2)
-isNestedFreePerm (ValPerm_LLVMPtr (LLVMFreePerm _)) = True
-isNestedFreePerm _ = False
-
 -- | Extract @p1@ from a permission of the form @p1 \/ p2@
 orPermLeft :: ValuePerm a -> ValuePerm a
 orPermLeft (ValPerm_Or p _) = p
@@ -370,6 +348,13 @@ exPermBody :: TypeRepr tp -> ValuePerm a -> Binding (PermExpr tp) (ValuePerm a)
 exPermBody tp (ValPerm_Exists (p :: Binding (PermExpr tp') (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
+
+-- | Set the permission inside an 'LLVMFieldPerm'
+setLLVMFieldPerm :: ValuePerm (LLVMPointerType w) ->
+                    ValuePerm (LLVMPointerType w) ->
+                    ValuePerm (LLVMPointerType w)
+setLLVMFieldPerm (ValPerm_LLVMPtr (LLVMFieldPerm {..})) p =
+  ValPerm_LLVMPtr (LLVMFieldPerm {llvmFieldPerm = p, ..})
 
 
 ----------------------------------------------------------------------
@@ -681,6 +666,138 @@ permDelete (PermLoc x i) p =
       take i perms ++ drop (i+1) perms
     else error "permDelete: permissions not equal"
 
+-- | Find all permissions on a given variable for which the supplied function
+-- returns a 'Just' value, returning the 'PermLoc' and associated value for each
+permFindAll :: Matcher (ValuePerm a) b -> ExprVar a -> PermSet ->
+               [(PermLoc a, b)]
+permFindAll f x perms =
+  mapMaybe (\(i, p) -> (PermLoc x i,) <$> f p) $
+  zip [0 ..] (perms ^. varPerms x)
+
+-- | Find the first permission on a given variable for which the supplied
+-- function returns a 'Just' value, returning the 'PermLoc' and associated value
+permFind :: Matcher (ValuePerm a) b -> ExprVar a -> PermSet ->
+            Maybe (PermLoc a, b)
+permFind f x perms = listToMaybe $ permFindAll f x perms
+
+-- | Replace an or permission at a given location with its left disjunct
+permsElimOrLeft :: PermLoc a -> PermSet -> PermSet
+permsElimOrLeft l = over (varPerm l) orPermLeft
+
+-- | Replace an or permission at a given location with its right disjunct
+permsElimOrRight :: PermLoc a -> PermSet -> PermSet
+permsElimOrRight l = over (varPerm l) orPermRight
+
+-- | Replace an existential permission at a given location with its body
+permsElimExists :: PermLoc a -> TypeRepr tp -> PermSet ->
+                   Binding (PermExpr tp) PermSet
+permsElimExists l tp perms =
+  nuWithElim1
+  (\_ p_body -> set (varPerm l) p_body perms)
+  (exPermBody tp $ perms ^. varPerm l)
+
+
+----------------------------------------------------------------------
+-- * Matching Functions for Inspecting Permissions
+----------------------------------------------------------------------
+
+-- | The type of a matcher, that matches on an object of type @a@ and maybe
+-- produces a @b@
+type Matcher a b = a -> Maybe b
+
+-- | Build a matcher that ignores a value
+matchIgnore :: Matcher a ()
+matchIgnore = const $ return ()
+
+-- | Build a matcher that tests equality
+matchEq :: Eq a => a -> Matcher a a
+matchEq a1 a2 | a1 == a2 = return a2
+matchEq _ _ = Nothing
+
+-- | Test if a permission is an equality permission
+matchEqPerm :: Matcher (ValuePerm a) (PermExpr a)
+matchEqPerm (ValPerm_Eq e) = Just e
+matchEqPerm _ = Nothing
+
+-- | Test is an expression is an LLVM word
+matchLLVMWordExpr :: Matcher (PermExpr (LLVMPointerType w)) (PermExpr (BVType w))
+matchLLVMWordExpr (PExpr_LLVMWord e) = Just e
+matchLLVMWordExpr _ = Nothing
+
+-- | Test if a permission is an equality permission to a @word(e)@ expression
+matchEqLLVMWordPerm :: Matcher (ValuePerm (LLVMPointerType w))
+                       (PermExpr (BVType w))
+matchEqLLVMWordPerm = matchEqPerm >=> matchLLVMWordExpr
+
+-- | Test if a permission satisfies a predicate inside 0 or more existentials or
+-- disjunctions
+matchInExsOrs :: Liftable r => Matcher (ValuePerm a) r ->
+                 Matcher (ValuePerm a) r
+matchInExsOrs f p | Just b <- f p = Just b
+matchInExsOrs f (ValPerm_Or p1 p2) = matchInExsOrs f p1 <|> matchInExsOrs f p2
+matchInExsOrs f (ValPerm_Exists p) = mbLift $ fmap (matchInExsOrs f) p
+matchInExsOrs _ _ = Nothing
+
+-- | Test if a permission is an @eq(e)@ inside 0 or more existentials or
+-- disjunctions; does not return the contents of the @eq(e)@ perm, as it may be
+-- under some number of name-bindings
+matchNestedEqPerm :: Matcher (ValuePerm a) ()
+matchNestedEqPerm = matchInExsOrs (matchEqPerm >=> matchIgnore)
+
+-- | Test if a permission is an LLVM pointer permission satisfying the given
+-- predicate
+matchPtrPerm :: Matcher (LLVMPtrPerm w) r ->
+                Matcher (ValuePerm (LLVMPointerType w)) r
+matchPtrPerm f (ValPerm_LLVMPtr pp) = f pp
+matchPtrPerm _ _ = Nothing
+
+-- | Test if a pointer permission satisfies the given predicate inside 0 or more
+-- stars
+matchInPtrStars :: Matcher (LLVMPtrPerm w) r -> Matcher (LLVMPtrPerm w) r
+matchInPtrStars f p | Just b <- f p = Just b
+matchInPtrStars f (LLVMStarPerm p1 p2) =
+  matchInPtrStars f p1 <|> matchInPtrStars f p2
+matchInPtrStars _ _ = Nothing
+
+-- | Test if a permission satisfies a predicate on 'LLVMPtrPerm's inside 0 or
+-- more existentials, disjunctions, and stars; does not return the contents, as
+-- these may be under name-bindings
+matchInExsOrsStars :: Matcher (LLVMPtrPerm w) r ->
+                      Matcher (ValuePerm (LLVMPointerType w)) ()
+matchInExsOrsStars f =
+  matchInExsOrs (matchPtrPerm (matchInPtrStars f) >=> matchIgnore)
+
+-- | Test if a pointer permission is a free permission
+matchFreePtrPerm :: Matcher (LLVMPtrPerm w) (PermExpr (BVType w))
+matchFreePtrPerm (LLVMFreePerm e) = Just e
+matchFreePtrPerm _ = Nothing
+
+-- | Test if a permission is an @x:ptr(free(e))@ inside 0 or more existentials,
+-- disjunctions, or LLVM stars
+matchNestedFreePerm :: Matcher (ValuePerm (LLVMPointerType w)) ()
+matchNestedFreePerm = matchInExsOrsStars (matchFreePtrPerm >=> matchIgnore)
+
+-- | Test if a pointer permission is a field permission
+matchFieldPtrPerm :: Matcher (LLVMPtrPerm w)
+                     (PermExpr (BVType w),
+                      SplittingExpr, ValuePerm (LLVMPointerType w))
+matchFieldPtrPerm (LLVMFieldPerm off spl p) = Just (off, spl, p)
+matchFieldPtrPerm _ = Nothing
+
+-- | Test if a pointer permission is a field permission with a specific offset
+matchFieldPtrPermOff :: PermExpr (BVType w) ->
+                        Matcher (LLVMPtrPerm w) (SplittingExpr,
+                                                 ValuePerm (LLVMPointerType w))
+matchFieldPtrPermOff off (LLVMFieldPerm off' spl p)
+  | off == off' = Just (spl, p)
+matchFieldPtrPermOff _ _ = Nothing
+
+
+-- FIXME HERE: remove these!
+isEqPerm :: ValuePerm a -> Bool
+isEqPerm (ValPerm_Eq _) = True
+isEqPerm _ = False
+
 -- | Find all permissions in a list that satisfies a predicate, and return both
 -- the permissions and their locations
 findPerms :: (ValuePerm a -> Bool) -> ExprVar a -> [ValuePerm a] ->
@@ -704,20 +821,4 @@ findEqPerms :: ExprVar a -> [ValuePerm a] -> [(PermLoc a, PermExpr a)]
 findEqPerms x perms =
   map (\(l, p) -> case p of
           ValPerm_Eq e -> (l, e)) $
-  findPerms isEqPerm x perms
-
--- | Replace an or permission at a given location with its left disjunct
-permsElimOrLeft :: PermLoc a -> PermSet -> PermSet
-permsElimOrLeft l = over (varPerm l) orPermLeft
-
--- | Replace an or permission at a given location with its right disjunct
-permsElimOrRight :: PermLoc a -> PermSet -> PermSet
-permsElimOrRight l = over (varPerm l) orPermRight
-
--- | Replace an existential permission at a given location with its body
-permsElimExists :: PermLoc a -> TypeRepr tp -> PermSet ->
-                   Binding (PermExpr tp) PermSet
-permsElimExists l tp perms =
-  nuWithElim1
-  (\_ p_body -> set (varPerm l) p_body perms)
-  (exPermBody tp $ perms ^. varPerm l)
+  findPerms (isJust . matchEqPerm) x perms
