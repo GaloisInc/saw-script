@@ -130,6 +130,7 @@ library
     SAWScript.VerificationCheck
 
     SAWScript.Crucible.Common
+    SAWScript.Crucible.Common.MethodSpec
 
     SAWScript.Crucible.LLVM.Builtins
     SAWScript.Crucible.LLVM.CrucibleLLVM
