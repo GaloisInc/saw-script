@@ -12,11 +12,13 @@ Grow\", and is prevalent across the Crucible codebase.
 
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module SAWScript.Crucible.Common.MethodSpec where
@@ -31,14 +33,12 @@ import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
 import           Data.Monoid ((<>))
-import           Data.Type.Equality (TestEquality(..), (:~:)(..))
 import           Data.Kind (Type)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 -- what4
 import           What4.ProgramLoc (ProgramLoc)
 
-import           Data.Parameterized.NatRepr (NatRepr(..))
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
@@ -59,7 +59,7 @@ import qualified Language.JVM.Parser as J
 import qualified Verifier.Java.Codebase as CB
 
 -- Language extension tags
-import           Lang.Crucible.LLVM.Extension (LLVM, X86)
+import           Lang.Crucible.LLVM.Extension (LLVM)
 import           Lang.Crucible.JVM.Types (JVM)
 
 import           Verifier.SAW.TypedTerm as SAWVerifier
@@ -77,43 +77,37 @@ import           SAWScript.Crucible.Common
 --
 -- While Crucible supports extensibly adding and simulating new languages, we can
 -- exhaustively enumerate all the languages SAW supports verifying.
-data ExtRepr ext where
-  ExtJVM :: ExtRepr JVM
-  ExtLLVM :: NatRepr n -> ExtRepr (LLVM (X86 n))
+-- data ExtRepr ext where
+--   ExtJVM :: ExtRepr JVM
+--   ExtLLVM :: NatRepr n -> ExtRepr (LLVM (X86 n))
 
-instance TestEquality ExtRepr where
-  testEquality (ExtLLVM n) (ExtLLVM m) =
-    case testEquality n m of
-      Just Refl -> Just Refl
-      Nothing -> Nothing
-  testEquality ExtJVM ExtJVM = Just Refl
-  testEquality _ _ = Nothing
+-- instance TestEquality ExtRepr where
+--   testEquality (ExtLLVM n) (ExtLLVM m) =
+--     case testEquality n m of
+--       Just Refl -> Just Refl
+--       Nothing -> Nothing
+--   testEquality ExtJVM ExtJVM = Just Refl
+--   testEquality _ _ = Nothing
 
 --------------------------------------------------------------------------------
 -- ** SetupValue
 
+-- | An injective type family mapping type-level booleans to types
+type family BoolToType (b :: Bool) = (t :: Type) | t -> b where
+  HasSetupStruct 'True  = ()
+  HasSetupStruct 'False = Void
+
+type B b = BoolToType b
+
  -- The following type families describe what SetupValues are legal for which
  -- languages.
-
-type family HasSetupStruct ext where
-  HasSetupStruct (LLVM arch) = ()
-  HasSetupStruct JVM = Void
-
-type family HasSetupArray ext where
-  HasSetupArray (LLVM arch) = ()
-  HasSetupArray JVM = Void
-
-type family HasSetupElem ext where
-  HasSetupElem (LLVM arch) = ()
-  HasSetupElem JVM = Void
-
-type family HasSetupField ext where
-  HasSetupField (LLVM arch) = ()
-  HasSetupField JVM = Void
-
-type family HasSetupGlobalInitializer ext where
-  HasSetupGlobalInitializer (LLVM arch) = ()
-  HasSetupGlobalInitializer JVM = Void
+type family HasSetupNull ext :: Bool
+type family HasSetupStruct ext :: Bool
+type family HasSetupArray ext :: Bool
+type family HasSetupElem ext :: Bool
+type family HasSetupField ext :: Bool
+type family HasSetupGlobal ext :: Bool
+type family HasSetupGlobalInitializer ext :: Bool
 
 -- | From the manual: \"The SetupValue type corresponds to values that can occur
 -- during symbolic execution, which includes both 'Term' values, pointers, and
@@ -121,26 +115,33 @@ type family HasSetupGlobalInitializer ext where
 data SetupValue ext where
   SetupVar    :: AllocIndex -> SetupValue ext
   SetupTerm   :: TypedTerm -> SetupValue ext
-  SetupNull   :: SetupValue ext
+  SetupNull   :: B (HasSetupNull ext) -> SetupValue ext
   -- | If the 'Bool' is 'True', it's a (LLVM) packed struct
-  SetupStruct :: HasSetupStruct ext -> Bool -> [SetupValue ext] -> SetupValue ext
-  SetupArray  :: HasSetupArray ext -> [SetupValue ext] -> SetupValue ext
-  SetupElem   :: HasSetupElem ext -> SetupValue ext -> Int -> SetupValue ext
-  SetupField  :: HasSetupField ext -> SetupValue ext -> String -> SetupValue ext
+  SetupStruct :: B (HasSetupStruct ext) -> Bool -> [SetupValue ext] -> SetupValue ext
+  SetupArray  :: B (HasSetupArray ext) -> [SetupValue ext] -> SetupValue ext
+  SetupElem   :: B (HasSetupElem ext) -> SetupValue ext -> Int -> SetupValue ext
+  SetupField  :: B (HasSetupField ext) -> SetupValue ext -> String -> SetupValue ext
   -- | A pointer to a global variable
-  SetupGlobal :: String -> SetupValue ext
+  SetupGlobal :: B (HasSetupGlobal ext) -> String -> SetupValue ext
   -- | This represents the value of a global's initializer.
-  SetupGlobalInitializer :: HasSetupGlobalInitializer ext -> String -> SetupValue ext
+  SetupGlobalInitializer ::
+    B (HasSetupGlobalInitializer ext) -> String -> SetupValue ext
 
+-- | This constraint can be solved for any ext so long as '()' and 'Void' have
+--   the constraint. Unfortunately, GHC can't (yet?) reason over the equations
+--   in our closed type family, and realize that
 type SetupValueHas (c :: Type -> Constraint) ext =
-  ( c (HasSetupStruct ext)
-  , c (HasSetupArray ext)
-  , c (HasSetupElem ext)
-  , c (HasSetupField ext)
-  , c (HasSetupGlobalInitializer ext)
+  ( c (B (HasSetupNull ext))
+  , c (B (HasSetupStruct ext))
+  , c (B (HasSetupArray ext))
+  , c (B (HasSetupElem ext))
+  , c (B (HasSetupField ext))
+  , c (B (HasSetupGlobal ext))
+  , c (B (HasSetupGlobalInitializer ext))
   )
 
 deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
+
 -- TypedTerm is neither Data, Eq nor Ord
 -- deriving instance ( SetupValueHas Data ext
 --                   , SetupValueHas Typeable ext
@@ -157,14 +158,14 @@ ppSetupValue :: SetupValue ext -> PP.Doc
 ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
   SetupVar i     -> PP.text ("@" ++ show i)
-  SetupNull      -> PP.text "NULL"
+  SetupNull _    -> PP.text "NULL"
   SetupStruct _ packed vs
     | packed     -> PP.angles (PP.braces (commaList (map ppSetupValue vs)))
     | otherwise  -> PP.braces (commaList (map ppSetupValue vs))
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
   SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ show i)
   SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ f)
-  SetupGlobal nm -> PP.text ("global(" ++ nm ++ ")")
+  SetupGlobal _ nm -> PP.text ("global(" ++ nm ++ ")")
   SetupGlobalInitializer _ nm -> PP.text ("global_initializer(" ++ nm ++ ")")
   where
     commaList :: [PP.Doc] -> PP.Doc
@@ -178,15 +179,14 @@ ppSetupValue setupval = case setupval of
       PP.text (show (Cryptol.ppPrec 0 tp))
 
 setupToTypedTerm ::
-  ExtRepr ext {-^ Which language/syntax extension are we using? -} ->
   Options {-^ Printing options -} ->
   SharedContext ->
   SetupValue ext ->
   MaybeT IO TypedTerm
-setupToTypedTerm ext opts sc sv =
+setupToTypedTerm opts sc sv =
   case sv of
     SetupTerm term -> return term
-    _ -> do t <- setupToTerm ext opts sc sv
+    _ -> do t <- setupToTerm opts sc sv
             lift $ mkTypedTerm sc t
 
 -- TODO: Should probably go ahead and make this fully language-specific?
@@ -196,22 +196,20 @@ setupToTypedTerm ext opts sc sv =
 -- SetupGlobal--- don't have semantics outside of the symbolic
 -- simulator.
 setupToTerm ::
-  ExtRepr ext {-^ Which language/syntax extension are we using? -} ->
   Options ->
   SharedContext ->
   SetupValue ext ->
   MaybeT IO Term
-setupToTerm ext opts sc sv =
-  case (ext, sv) of
-    (_, SetupTerm term) -> return (ttTerm term)
+setupToTerm opts sc =
+  \case
+    SetupTerm term -> return (ttTerm term)
 
-    -- LLVM-specific cases
-    (ExtLLVM _ptrWidth, SetupStruct () _ fields) ->
-      do ts <- mapM (setupToTerm ext opts sc) fields
+    SetupStruct _ _ fields ->
+      do ts <- mapM (setupToTerm opts sc) fields
          lift $ scTuple sc ts
 
-    (ExtLLVM _ptrWidth, SetupArray () elems@(_:_)) ->
-      do ts@(t:_) <- mapM (setupToTerm ext opts sc) elems
+    SetupArray _ elems@(_:_) ->
+      do ts@(t:_) <- mapM (setupToTerm opts sc) elems
          typt <- lift $ scTypeOf sc t
          vec <- lift $ scVector sc typt ts
          typ <- lift $ scTypeOf sc vec
@@ -219,19 +217,19 @@ setupToTerm ext opts sc sv =
          lift $ printOutLn opts Info $ show typ
          return vec
 
-    (ExtLLVM _ptrWidth, SetupElem () base ind) ->
+    SetupElem _ base ind ->
       case base of
-        SetupArray () elems@(e:_) ->
+        SetupArray _ elems@(e:_) ->
           do let intToNat = fromInteger . toInteger
-             art <- setupToTerm ext opts sc base
+             art <- setupToTerm opts sc base
              ixt <- lift $ scNat sc $ intToNat ind
              lent <- lift $ scNat sc $ intToNat $ length elems
-             et <- setupToTerm ext opts sc e
+             et <- setupToTerm opts sc e
              typ <- lift $ scTypeOf sc et
              lift $ scAt sc lent typ art ixt
 
-        SetupStruct () _ fs ->
-          do st <- setupToTerm ext opts sc base
+        SetupStruct _ _ fs ->
+          do st <- setupToTerm opts sc base
              lift $ scTupleSelector sc st ind (length fs)
 
         _ -> MaybeT $ return Nothing
@@ -242,12 +240,12 @@ setupToTerm ext opts sc sv =
 --------------------------------------------------------------------------------
 -- ** Ghost state
 
--- TODO: These are really language-independent, and should be made so!
+-- TODO: This is language-independent, it should be always-true rather than a
+-- toggle.
+
 -- TODO: documentation
 
-type family HasGhostState ext where
-  HasGhostState (LLVM arch) = ()
-  HasGhostState JVM = Void
+type family HasGhostState ext :: Bool
 
 type GhostValue  = "GhostValue"
 type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
@@ -293,7 +291,7 @@ markResolved val0 rs = go [] val0
     go path val =
       case val of
         SetupVar n      -> rs {_rsAllocs = Map.alter (ins path) n (_rsAllocs rs) }
-        SetupGlobal c   -> rs {_rsGlobals = Map.alter (ins path) c (_rsGlobals rs)}
+        SetupGlobal _ c -> rs {_rsGlobals = Map.alter (ins path) c (_rsGlobals rs)}
         SetupElem _ v i -> go (i : path) v
         _               -> rs
 
@@ -311,7 +309,7 @@ testResolved val0 rs = go [] val0
     go path val =
       case val of
         SetupVar n      -> test path (Map.lookup n (_rsAllocs rs))
-        SetupGlobal c   -> test path (Map.lookup c (_rsGlobals rs))
+        SetupGlobal _ c -> test path (Map.lookup c (_rsGlobals rs))
         SetupElem _ v i -> go (i : path) v
         _               -> False
 
@@ -329,11 +327,9 @@ testResolved val0 rs = go [] val0
 --------------------------------------------------------------------------------
 -- *** CrucibleContext
 
--- | TODO: What do we say this is??
-type family CrucibleContext ext a where
-  CrucibleContext (LLVM arch) wptr = LLVMCrucibleContext wptr
-  CrucibleContext JVM _ = JVMCrucibleContext
+type family CrucibleContext ext :: Type
 
+type instance CrucibleContext JVM = JVMCrucibleContext
 data JVMCrucibleContext =
   JVMCrucibleContext
   { _jccJVMClass       :: J.Class
@@ -343,13 +339,14 @@ data JVMCrucibleContext =
   , _jccHandleAllocator :: Crucible.HandleAllocator RealWorld
   }
 
-data LLVMCrucibleContext wptr =
+type instance CrucibleContext (LLVM arch) = LLVMCrucibleContext arch
+data LLVMCrucibleContext arch =
   LLVMCrucibleContext
   { _llccLLVMModule      :: L.Module
-  , _llccLLVMModuleTrans :: CL.ModuleTranslation wptr
+  , _llccLLVMModuleTrans :: CL.ModuleTranslation arch
   , _llccBackend         :: Sym
   , _llccLLVMEmptyMem    :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , _llccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM wptr)
+  , _llccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (LLVM arch)
   , _llccLLVMGlobals     :: Crucible.SymGlobalState Sym
   }
 
@@ -390,14 +387,14 @@ type family ExtType ext where
 data SetupCondition ext where
   SetupCond_Equal    :: ProgramLoc -> SetupValue ext -> SetupValue ext -> SetupCondition ext
   SetupCond_Pred     :: ProgramLoc -> TypedTerm -> SetupCondition ext
-  SetupCond_Ghost    :: HasGhostState ext ->
+  SetupCond_Ghost    :: B (HasGhostState ext) ->
                         ProgramLoc ->
                         GhostGlobal ->
                         TypedTerm ->
                         SetupCondition ext
 
 deriving instance ( SetupValueHas Show ext
-                  , Show (HasGhostState ext)
+                  , Show (B (HasGhostState ext))
                   ) => Show (SetupCondition ext)
 
 -- | TODO: documentation
@@ -484,13 +481,13 @@ csTypeNames
 -- *** CrucibleSetupState
 
 -- | The type of state kept in the 'CrucibleSetup' monad
-data CrucibleSetupState ext a =
+data CrucibleSetupState ext =
   CrucibleSetupState
   { _csVarCounter      :: !AllocIndex
   , _csPrePost         :: PrePost
   , _csResolvedState   :: ResolvedState
   , _csMethodSpec      :: CrucibleMethodSpecIR ext
-  , _csCrucibleContext :: CrucibleContext ext a
+  , _csCrucibleContext :: CrucibleContext ext
   }
 
 makeLenses ''CrucibleSetupState

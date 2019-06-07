@@ -30,7 +30,7 @@ library
     , bimap
     , bytestring
     , containers
-    , constraints
+    , constraints >= 0.6
     , cryptol
     , cryptol-verifier
     , crucible >= 0.4
