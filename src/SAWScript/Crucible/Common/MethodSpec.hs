@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {- |
 Module      : SAWScript.Crucible.Common.MethodSpec
 Description : Language-neutral method specifications
@@ -28,11 +29,13 @@ import           Control.Lens
 
 import           Data.IORef
 import           Data.Monoid ((<>))
+import           Data.Type.Equality (TestEquality(..), (:~:)(..))
 
 -- what4
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
+import           Data.Parameterized.NatRepr (NatRepr(..))
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
@@ -43,14 +46,36 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic){-, IntrinsicMuxFn(IntrinsicMuxFn)-})
 
 -- Language extension tags
-import           Lang.Crucible.LLVM.Extension (LLVM)
+import           Lang.Crucible.LLVM.Extension (LLVM(..), X86)
 import           Lang.Crucible.JVM.Types (JVM)
 
-import           Verifier.SAW.TypedTerm
+import           Verifier.SAW.TypedTerm as SAWVerifier
+import           Verifier.SAW.SharedTerm as SAWVerifier
 
 import           SAWScript.Options
 
 import SAWScript.Crucible.Common
+
+
+--------------------------------------------------------------------------------
+
+-- | A singleton type representing a language extension
+--
+-- While Crucible supports extensibly adding and simulating new languages, we can
+-- exhaustively enumerate all the languages SAW supports verifying.
+data ExtRepr ext where
+  ExtJVM :: ExtRepr JVM
+  ExtLLVM :: NatRepr n -> ExtRepr (LLVM (X86 n))
+
+instance TestEquality ExtRepr where
+  testEquality (ExtLLVM n) (ExtLLVM m) =
+    case testEquality n m of
+      Just Refl -> Just Refl
+      Nothing -> Nothing
+  testEquality ExtJVM ExtJVM = Just Refl
+  testEquality _ _ = Nothing
+
+--------------------------------------------------------------------------------
 
  -- The following type families describe what SetupValues are legal for which
  -- languages.
@@ -75,6 +100,9 @@ type family HasSetupGlobalInitializer ext where
   HasSetupGlobalInitializer (LLVM arch) = ()
   HasSetupGlobalInitializer JVM = Void
 
+-- | From the manual: \"The SetupValue type corresponds to values that can occur
+-- during symbolic execution, which includes both 'Term' values, pointers, and
+-- composite types consisting of either of these (both structures and arrays).\"
 data SetupValue ext where
   SetupVar    :: AllocIndex -> SetupValue ext
   SetupTerm   :: TypedTerm -> SetupValue ext
@@ -112,24 +140,67 @@ deriving instance ( Show (HasSetupStruct ext)
 --                   , Ord (HasSetupGlobalInitializer ext)
 --                   ) => Ord (SetupValue ext)
 
--- | From the manual: "The SetupValue type corresponds to values that can occur
--- during symbolic execution, which includes both Term values, pointers, and
--- composite types consisting of either of these (both structures and arrays)."
-{-
-data SetupValue where
-  SetupVar               :: AllocIndex -> SetupValue
-  SetupTerm              :: TypedTerm -> SetupValue
-  SetupStruct            :: Bool -> [SetupValue] -> SetupValue -- True = packed
-  SetupArray             :: [SetupValue] -> SetupValue
-  SetupElem              :: SetupValue -> Int -> SetupValue
-  SetupField             :: SetupValue -> String -> SetupValue
-  SetupNull              :: SetupValue
-  -- | A pointer to a global variable
-  SetupGlobal            :: String -> SetupValue
-  -- | This represents the value of a global's initializer.
-  SetupGlobalInitializer :: String -> SetupValue
-  deriving (Show)
--}
+setupToTypedTerm ::
+  ExtRepr ext {-^ Which language/syntax extension are we using? -} ->
+  Options {-^ Printing options -} ->
+  SharedContext ->
+  SetupValue ext ->
+  MaybeT IO TypedTerm
+setupToTypedTerm ext opts sc sv =
+  case sv of
+    SetupTerm term -> return term
+    _ -> do t <- setupToTerm ext opts sc sv
+            lift $ mkTypedTerm sc t
+
+-- | Convert a setup value to a SAW-Core term. This is a partial
+-- function, as certain setup values ---SetupVar, SetupNull and
+-- SetupGlobal--- don't have semantics outside of the symbolic
+-- simulator.
+setupToTerm ::
+  ExtRepr ext {-^ Which language/syntax extension are we using? -} ->
+  Options ->
+  SharedContext ->
+  SetupValue ext ->
+  MaybeT IO Term
+setupToTerm ext opts sc sv =
+  case (ext, sv) of
+    (_, SetupTerm term) -> return (ttTerm term)
+
+    -- LLVM-specific cases
+    (ExtLLVM _ptrWidth, SetupStruct () _ fields) ->
+      do ts <- mapM (setupToTerm ext opts sc) fields
+         lift $ scTuple sc ts
+
+    (ExtLLVM _ptrWidth, SetupArray () elems@(_:_)) ->
+      do ts@(t:_) <- mapM (setupToTerm ext opts sc) elems
+         typt <- lift $ scTypeOf sc t
+         vec <- lift $ scVector sc typt ts
+         typ <- lift $ scTypeOf sc vec
+         lift $ printOutLn opts Info $ show vec
+         lift $ printOutLn opts Info $ show typ
+         return vec
+
+    (ExtLLVM _ptrWidth, SetupElem () base ind) ->
+      case base of
+        SetupArray () elems@(e:_) ->
+          do let intToNat = fromInteger . toInteger
+             art <- setupToTerm ext opts sc base
+             ixt <- lift $ scNat sc $ intToNat ind
+             lent <- lift $ scNat sc $ intToNat $ length elems
+             et <- setupToTerm ext opts sc e
+             typ <- lift $ scTypeOf sc et
+             lift $ scAt sc lent typ art ixt
+
+        SetupStruct () _ fs ->
+          do st <- setupToTerm ext opts sc base
+             lift $ scTupleSelector sc st ind (length fs)
+
+        _ -> MaybeT $ return Nothing
+
+    -- SetupVar, SetupNull, SetupGlobal
+    _ -> MaybeT $ return Nothing
+
+--------------------------------------------------------------------------------
 
 {-
 setupToTypedTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO TypedTerm
