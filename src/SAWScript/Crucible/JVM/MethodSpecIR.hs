@@ -34,12 +34,9 @@ import           Control.Lens
 import           Data.IORef
 import           Data.Monoid ((<>))
 
-import qualified Data.Parameterized.Nonce as Crucible
-
 -- what4
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
-import qualified What4.Solver.Yices as Yices
 
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
@@ -66,6 +63,8 @@ import Verifier.SAW.TypedTerm
 
 import SAWScript.Options
 import SAWScript.Prover.SolverStats
+
+import SAWScript.Crucible.Common (Sym)
 
 newtype AllocIndex = AllocIndex Int
   deriving (Eq, Ord, Show)
@@ -228,8 +227,6 @@ data CrucibleSetupState =
   , _csMethodSpec      :: CrucibleMethodSpecIR
   , _csCrucibleContext :: CrucibleContext
   }
-
-type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator (Yices.Connection Crucible.GlobalNonceGenerator) (B.Flags B.FloatReal)
 
 data CrucibleContext =
   CrucibleContext

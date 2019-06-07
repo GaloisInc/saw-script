@@ -136,6 +136,8 @@ import SAWScript.Value
 import SAWScript.Position as SS
 import SAWScript.Options
 
+import qualified SAWScript.Crucible.Common as Common
+
 import SAWScript.Crucible.LLVM.Override
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import SAWScript.Crucible.LLVM.MethodSpecIR
@@ -170,31 +172,6 @@ displayVerifExceptionOpts _ (SetupError e) =
 show_cfg :: SAW_CFG -> String
 show_cfg (LLVM_CFG (Crucible.AnyCFG cfg)) = show cfg
 show_cfg (JVM_CFG (Crucible.AnyCFG cfg)) = show cfg
-
-ppAbortedResult :: CrucibleContext arch
-                -> Crucible.AbortedResult Sym a
-                -> Doc
-ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
-  text "Infeasible branch"
-ppAbortedResult cc (Crucible.AbortedExec abt gp) = do
-  Crucible.ppAbortExecReason abt <$$> ppGlobalPair cc gp
-ppAbortedResult cc (Crucible.AbortedBranch _predicate trueBranch falseBranch) =
-  vcat
-    [ text "Both branches aborted after a symbolic branch."
-    -- TODO: These conditions can be large, symbolic SAWCore predicates, so they
-    -- aren't really helpful to show. It would be nice if Crucible tracked the
-    -- source location associated with the branch, then we could print that.
-    -- See https://github.com/GaloisInc/crucible/issues/260
-
-    -- , text "Branch condition:"
-    -- , indent 2 (text (show predicate))
-    , text "Message from the true branch:"
-    , indent 2 (ppAbortedResult cc trueBranch)
-    , text "Message from the false branch:"
-    , indent 2 (ppAbortedResult cc falseBranch)
-    ]
-ppAbortedResult _ (Crucible.AbortedExit ec) =
-  text "Branch exited:" <+> text (show ec)
 
 -- | Determines whether one LLVM symbol is equivalent to another except
 -- for a numeric suffix. This can determine whether one symbol is the
@@ -617,6 +594,11 @@ doAllocConst ::
 doAllocConst = doAllocWithMutability Crucible.Immutable
 
 --------------------------------------------------------------------------------
+
+ppAbortedResult :: CrucibleContext arch
+                -> Crucible.AbortedResult Sym a
+                -> Doc
+ppAbortedResult cc = Common.ppAbortedResult (ppGlobalPair cc)
 
 ppGlobalPair :: CrucibleContext arch
              -> Crucible.GlobalPair Sym a

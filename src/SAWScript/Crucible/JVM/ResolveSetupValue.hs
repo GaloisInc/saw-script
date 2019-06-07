@@ -60,6 +60,8 @@ import qualified Data.SBV.Dynamic as SBV (svAsInteger, svAsBool)
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
+import SAWScript.Crucible.Common (Sym)
+
 --import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.JVM.MethodSpecIR

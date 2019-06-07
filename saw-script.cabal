@@ -129,6 +129,8 @@ library
     SAWScript.Value
     SAWScript.VerificationCheck
 
+    SAWScript.Crucible.Common
+
     SAWScript.Crucible.LLVM.Builtins
     SAWScript.Crucible.LLVM.CrucibleLLVM
     SAWScript.Crucible.LLVM.Override

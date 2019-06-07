@@ -117,22 +117,19 @@ import SAWScript.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 
 import SAWScript.JavaExpr (JavaType(..))
 
+import qualified SAWScript.Crucible.Common as Common
+import           SAWScript.Crucible.Common (Sym)
+
 import SAWScript.Crucible.JVM.MethodSpecIR
 import SAWScript.Crucible.JVM.Override
 import SAWScript.Crucible.JVM.ResolveSetupValue
 import SAWScript.Crucible.JVM.BuiltinsJVM ()
 
+-- TODO: something useful with the global pair?
 ppAbortedResult :: CrucibleContext
                 -> Crucible.AbortedResult Sym a
                 -> Doc
-ppAbortedResult _ (Crucible.AbortedExec Crucible.InfeasibleBranch _) =
-  text "Infeasible branch"
-ppAbortedResult cc (Crucible.AbortedExec abt gp) = do
-  Crucible.ppAbortExecReason abt -- <$$> ppGlobalPair cc gp
-ppAbortedResult _ (Crucible.AbortedBranch _ _ _) =
-  text "Aborted branch"
-ppAbortedResult _ (Crucible.AbortedExit ec) =
-  text "Branch exited:" <+> text (show ec)
+ppAbortedResult _cc = Common.ppAbortedResult (\_gp -> mempty)
 
 -- FIXME: We need a better way to identify a set of class names to
 -- load. This function has two problems: First, unless we put in a
