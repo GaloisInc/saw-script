@@ -659,7 +659,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                         ]
                       -- See comment on ppSymbolicFailure: this needs more
                       -- examination to see if it's useful.
-                      -- | not (null symFalse) ->
+                      -- - | not (null symFalse) ->
                       --   [ PP.text (unwords
                       --       [ "The following overrides had some preconditions "
                       --       , "that failed symbolically:"
