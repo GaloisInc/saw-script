@@ -15,56 +15,64 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module SAWScript.Crucible.Common.MethodSpec where
 
 import           Data.Constraint (Constraint)
+import           Data.List (isPrefixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Void (Void(..), absurd)
+import           Data.Void (Void)
 import           Control.Monad.ST (RealWorld)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
-import           Data.IORef
 import           Data.Monoid ((<>))
 import           Data.Type.Equality (TestEquality(..), (:~:)(..))
 import           Data.Kind (Type)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 -- what4
-import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
 import           Data.Parameterized.NatRepr (NatRepr(..))
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
-  (SAWCoreBackend, saw_ctx, toSC)
+  (SAWCoreBackend, toSC, SAWCruciblePersonality)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
-import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
-  (IntrinsicClass(Intrinsic, muxIntrinsic){-, IntrinsicMuxFn(IntrinsicMuxFn)-})
+import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 
-import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
-import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
 import qualified Cryptol.Utils.PP as Cryptol
 
+-- LLVM
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
+import qualified Text.LLVM.AST as L
+
+-- JVM
+import qualified Lang.Crucible.JVM as CJ
+import qualified Language.JVM.Parser as J
+import qualified Verifier.Java.Codebase as CB
+
 -- Language extension tags
-import           Lang.Crucible.LLVM.Extension (LLVM(..), X86)
+import           Lang.Crucible.LLVM.Extension (LLVM, X86)
 import           Lang.Crucible.JVM.Types (JVM)
 
 import           Verifier.SAW.TypedTerm as SAWVerifier
 import           Verifier.SAW.SharedTerm as SAWVerifier
 
 import           SAWScript.Options
+import           SAWScript.Prover.SolverStats
 
 import           SAWScript.Crucible.Common
 
-
 --------------------------------------------------------------------------------
+-- ** ExtRepr
 
 -- | A singleton type representing a language extension
 --
@@ -83,6 +91,7 @@ instance TestEquality ExtRepr where
   testEquality _ _ = Nothing
 
 --------------------------------------------------------------------------------
+-- ** SetupValue
 
  -- The following type families describe what SetupValues are legal for which
  -- languages.
@@ -169,8 +178,6 @@ ppSetupValue setupval = case setupval of
       PP.<+> PP.text ":" PP.<+>
       PP.text (show (Cryptol.ppPrec 0 tp))
 
-
-
 setupToTypedTerm ::
   ExtRepr ext {-^ Which language/syntax extension are we using? -} ->
   Options {-^ Printing options -} ->
@@ -232,51 +239,256 @@ setupToTerm ext opts sc sv =
     _ -> MaybeT $ return Nothing
 
 --------------------------------------------------------------------------------
+-- ** Ghost state
+
+-- TODO: These are really language-independent, and should be made so!
+-- TODO: documentation
+
+type family HasGhostState ext where
+  HasGhostState (LLVM arch) = ()
+  HasGhostState JVM = Void
+
+type GhostValue  = "GhostValue"
+type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
+type GhostGlobal = Crucible.GlobalVar GhostType
+
+--------------------------------------------------------------------------------
+-- ** Pre- and post-conditions
+
+--------------------------------------------------------------------------------
+-- *** ResolvedState
+
+-- | A datatype to keep track of which parts of the simulator state
+-- have been initialized already. For each allocation unit or global,
+-- we keep a list of element-paths that identify the initialized
+-- sub-components.
+data ResolvedState =
+  ResolvedState
+  { _rsAllocs :: Map AllocIndex [[Int]]
+  , _rsGlobals :: Map String [[Int]]
+  }
+
+-- | A datatype to keep track of which parts of the simulator state
+-- have been initialized already. For each allocation unit or global,
+-- we keep a list of element-paths that identify the initialized
+-- sub-components.
+-- data ResolvedState =
+--   ResolvedState
+--   { _rsAllocs :: Map AllocIndex [Either String Int]
+--   , _rsGlobals :: Map String [Either String Int]
+--   }
+
+emptyResolvedState :: ResolvedState
+emptyResolvedState = ResolvedState Map.empty Map.empty
+
+-- | Record the initialization of the pointer represented by the given
+-- SetupValue.
+markResolved ::
+  SetupValue ext ->
+  ResolvedState ->
+  ResolvedState
+markResolved val0 rs = go [] val0
+  where
+    go path val =
+      case val of
+        SetupVar n      -> rs {_rsAllocs = Map.alter (ins path) n (_rsAllocs rs) }
+        SetupGlobal c   -> rs {_rsGlobals = Map.alter (ins path) c (_rsGlobals rs)}
+        SetupElem _ v i -> go (i : path) v
+        _               -> rs
+
+    ins path Nothing = Just [path]
+    ins path (Just paths) = Just (path : paths)
+
+-- | Test whether the pointer represented by the given SetupValue has
+-- been initialized already.
+testResolved ::
+  SetupValue ext ->
+  ResolvedState ->
+  Bool
+testResolved val0 rs = go [] val0
+  where
+    go path val =
+      case val of
+        SetupVar n      -> test path (Map.lookup n (_rsAllocs rs))
+        SetupGlobal c   -> test path (Map.lookup c (_rsGlobals rs))
+        SetupElem _ v i -> go (i : path) v
+        _               -> False
+
+    test _ Nothing = False
+    test path (Just paths) = any (`isPrefixOf` path) paths
+
+
+-- intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
+-- intrinsics =
+--   MapF.insert
+--     (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)
+--     Crucible.IntrinsicMuxFn
+--     CL.llvmIntrinsicTypes
+
+--------------------------------------------------------------------------------
+-- *** CrucibleContext
+
+-- | TODO: What do we say this is??
+type family CrucibleContext ext a where
+  CrucibleContext (LLVM arch) wptr = LLVMCrucibleContext wptr
+  CrucibleContext JVM _ = JVMCrucibleContext
+
+data JVMCrucibleContext =
+  JVMCrucibleContext
+  { _jccJVMClass       :: J.Class
+  , _jccCodebase       :: CB.Codebase
+  , _jccJVMContext     :: CJ.JVMContext
+  , _jccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
+  , _jccHandleAllocator :: Crucible.HandleAllocator RealWorld
+  }
+
+data LLVMCrucibleContext wptr =
+  LLVMCrucibleContext
+  { _llccLLVMModule      :: L.Module
+  , _llccLLVMModuleTrans :: CL.ModuleTranslation wptr
+  , _llccBackend         :: Sym
+  , _llccLLVMEmptyMem    :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
+  , _llccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM wptr)
+  , _llccLLVMGlobals     :: Crucible.SymGlobalState Sym
+  }
+
+makeLenses ''JVMCrucibleContext
+makeLenses ''LLVMCrucibleContext
+
+--------------------------------------------------------------------------------
+-- *** Extension-specific information
+
+data AllocSpecLLVM =
+  AllocSpecLLVM
+    { allocSpecMut   :: CL.Mutability
+    , allocSpecType  :: CL.MemType
+    , allocSpecBytes :: CL.Bytes
+    } -- TODO: deriving
+
+type JIdent = String -- FIXME(huffman): what to put here?
+
+-- | How to specify allocations in this syntax extension
+type family AllocSpec ext where
+  AllocSpec (LLVM arch) = AllocSpecLLVM
+  AllocSpec JVM = ()
+
+-- | The type of identifiers for types in this syntax extension
+type family TypeName ext where
+  TypeName (LLVM arch) = CL.Ident
+  TypeName JVM = JIdent
+
+-- | The type of types of the syntax extension we're dealing with
+type family ExtType ext where
+  ExtType (LLVM arch) = CL.MemType
+  ExtType JVM = J.Type
+
+--------------------------------------------------------------------------------
+-- *** StateSpec
 
 data SetupCondition ext where
-  SetupCond_Equal :: ProgramLoc -> SetupValue ext -> SetupValue ext -> SetupCondition ext
-  SetupCond_Pred :: ProgramLoc -> TypedTerm -> SetupCondition ext
+  SetupCond_Equal    :: ProgramLoc -> SetupValue ext -> SetupValue ext -> SetupCondition ext
+  SetupCond_Pred     :: ProgramLoc -> TypedTerm -> SetupCondition ext
+  SetupCond_Ghost    :: HasGhostState ext ->
+                        ProgramLoc ->
+                        GhostGlobal ->
+                        TypedTerm ->
+                        SetupCondition ext
 
-{-
-data SetupCondition where
-  SetupCond_Equal :: ProgramLoc -> SetupValue -> SetupValue -> SetupCondition
-  SetupCond_Pred :: ProgramLoc -> TypedTerm -> SetupCondition
-  deriving (Show)
+deriving instance ( SetupValueHas Show ext
+                  , Show (HasGhostState ext)
+                  ) => Show (SetupCondition ext)
 
-data PointsTo
-  = PointsToField ProgramLoc SetupValue String SetupValue
-  | PointsToElem ProgramLoc SetupValue Int SetupValue
-  deriving (Show)
+-- | TODO: documentation
+data PointsTo ext
+  = PointsToField ProgramLoc (SetupValue ext) String (SetupValue ext)
+  | PointsToElem ProgramLoc (SetupValue ext) Int (SetupValue ext)
+
+deriving instance (SetupValueHas Show ext) => Show (PointsTo ext)
 
 -- | Verification state (either pre- or post-) specification
-data StateSpec' t = StateSpec
-  { _csAllocs        :: Map AllocIndex t
+data StateSpec ext = StateSpec
+  { _csAllocs        :: Map AllocIndex (AllocSpec ext)
     -- ^ allocated pointers
-  , _csPointsTos     :: [PointsTo]
+  , _csFreshPointers :: Map AllocIndex (AllocSpec ext)
+    -- ^ symbolic pointers
+  , _csPointsTos     :: [PointsTo ext]
     -- ^ points-to statements
-  , _csConditions    :: [SetupCondition]
-    -- ^ equalities and propositions
+  , _csConditions    :: [SetupCondition ext]
+    -- ^ equality, propositions, and ghost-variable conditions
   , _csFreshVars     :: [TypedTerm]
     -- ^ fresh variables created in this state
-  , _csVarTypeNames  :: Map AllocIndex JIdent
+  , _csVarTypeNames  :: Map AllocIndex (TypeName ext)
     -- ^ names for types of variables, for diagnostics
   }
-  deriving (Show)
 
-type StateSpec = StateSpec' (ProgramLoc, Allocation)
+makeLenses ''StateSpec
 
-data CrucibleMethodSpecIR' t =
+initialStateSpec :: StateSpec ext
+initialStateSpec =  StateSpec
+  { _csAllocs        = Map.empty
+  , _csFreshPointers = Map.empty
+  , _csPointsTos     = []
+  , _csConditions    = []
+  , _csFreshVars     = []
+  , _csVarTypeNames  = Map.empty
+  }
+
+--------------------------------------------------------------------------------
+-- *** Method specs
+
+data LLVMMethod =
+  LLVMMethod
+    { llvmMethodName   :: String
+    , llvmMethodParent :: Maybe String -- ^ Something to do with breakpoints...
+    } deriving (Eq, Ord, Show) -- TODO: deriving
+
+data JVMMethod =
+  JVMMethod
+    { jvmMethodName  :: String
+    , jvmMethodClass :: J.ClassName
+    } deriving (Eq, Ord, Show) -- TODO: deriving
+
+-- | The type of types of the syntax extension we're dealing with
+type family Method ext where
+  Method (LLVM arch) = LLVMMethod
+  Method JVM = J.ClassName
+
+data CrucibleMethodSpecIR ext =
   CrucibleMethodSpec
-  { _csClassName       :: J.ClassName
-  , _csMethodName      :: String
-  , _csArgs            :: [t]
-  , _csRet             :: Maybe t
-  , _csPreState        :: StateSpec -- ^ state before the function runs
-  , _csPostState       :: StateSpec -- ^ state after the function runs
-  , _csArgBindings     :: Map Integer (t, SetupValue) -- ^ function arguments
-  , _csRetValue        :: Maybe SetupValue            -- ^ function return value
+  { _csMethod          :: Method ext
+  , _csArgs            :: [ExtType ext]
+  , _csRet             :: Maybe (ExtType ext)
+  , _csPreState        :: StateSpec ext -- ^ state before the function runs
+  , _csPostState       :: StateSpec ext -- ^ state after the function runs
+  , _csArgBindings     :: Map Integer (ExtType ext, SetupValue ext) -- ^ function arguments
+  , _csRetValue        :: Maybe (SetupValue ext)            -- ^ function return value
   , _csSolverStats     :: SolverStats                 -- ^ statistics about the proof that produced this
   , _csLoc             :: ProgramLoc
   }
-  deriving (Show)
--}
+
+makeLenses ''CrucibleMethodSpecIR
+
+csAllocations :: CrucibleMethodSpecIR ext -> Map AllocIndex (AllocSpec ext)
+csAllocations
+  = Map.unions
+  . toListOf ((csPreState <> csPostState) . csAllocs)
+
+csTypeNames :: CrucibleMethodSpecIR ext -> Map AllocIndex (TypeName ext)
+csTypeNames
+  = Map.unions
+  . toListOf ((csPreState <> csPostState) . csVarTypeNames)
+
+--------------------------------------------------------------------------------
+-- *** CrucibleSetupState
+
+-- | The type of state kept in the 'CrucibleSetup' monad
+data CrucibleSetupState ext a =
+  CrucibleSetupState
+  { _csVarCounter      :: !AllocIndex
+  , _csPrePost         :: PrePost
+  , _csResolvedState   :: ResolvedState
+  , _csMethodSpec      :: CrucibleMethodSpecIR ext
+  , _csCrucibleContext :: CrucibleContext ext a
+  }
+
+makeLenses ''CrucibleSetupState
