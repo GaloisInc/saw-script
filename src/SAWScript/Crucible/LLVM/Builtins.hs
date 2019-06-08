@@ -1422,9 +1422,9 @@ crucible_execute_func :: BuiltinContext
                       -> CrucibleSetupM ()
 crucible_execute_func _bic _opt args = CrucibleSetupM $ do
   let ?dl   = Crucible.llvmDataLayout ?lc
-  tps <- use (csMethodSpec.csArgs)
-  csPrePost .= PostState
-  csMethodSpec.csArgBindings .= Map.fromList [ (i, (t,a))
+  tps <- use (MS.csMethodSpec . MS.csArgs)
+  MS.csPrePost .= PostState
+  MS.csMethodSpec . MS.csArgBindings .= Map.fromList [ (i, (t,a))
                                              | i <- [0..]
                                              | a <- args
                                              | t <- tps

@@ -65,7 +65,6 @@ import qualified SAWScript.Position as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 import qualified SAWScript.Crucible.JVM.MethodSpecIR as JCIR
 import qualified Verifier.Java.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
@@ -96,7 +95,6 @@ import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
-import qualified Lang.Crucible.LLVM.MemModel as Crucible (HasPtrWidth)
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
@@ -126,9 +124,9 @@ data Value
   | VJavaSetup (JavaSetup Value)
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   -----
-  | VCrucibleSetup !(CrucibleSetupM Value)
-  | VCrucibleMethodSpec (Some CMS.CrucibleMethodSpecIR)
-  | VCrucibleSetupValue (Some CMS.SetupValue)
+  | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
+  | VLLVMCrucibleMethodSpec (SomeLLVM CMS.CrucibleMethodSpecIR)
+  | VLLVMCrucibleSetupValue (SomeLLVM CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
   | VJVMMethodSpec JCIR.CrucibleMethodSpecIR
@@ -311,10 +309,10 @@ showsPrecValue opts p v =
       showString "Theorem " .
       showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
-    VCrucibleSetup{} -> showString "<<Crucible Setup>>"
-    VCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
+    VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
+    VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
-    VCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
+    VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
@@ -511,19 +509,23 @@ type JavaSetup a = StateT JavaSetupState TopLevel a
 
 type CrucibleSetup ext a = StateT (CMS.CrucibleSetupState ext) TopLevel a
 
-data CrucibleSetupM a =
-  CrucibleSetupM { runCrucibleSetupM :: forall ext. CrucibleSetup ext a }
+data SomeLLVM t = forall arch. SomeLLVM (t (Crucible.LLVM arch))
 
-instance Functor CrucibleSetupM where
-  fmap f (CrucibleSetupM m) = CrucibleSetupM (fmap f m)
+data LLVMCrucibleSetupM a =
+  LLVMCrucibleSetupM
+    { runLLVMCrucibleSetupM :: forall arch. CrucibleSetup (Crucible.LLVM arch) a }
 
-instance Applicative CrucibleSetupM where
-  pure x = CrucibleSetupM (pure x)
-  CrucibleSetupM f <*> CrucibleSetupM m = CrucibleSetupM (f <*> m)
+instance Functor LLVMCrucibleSetupM where
+  fmap f (LLVMCrucibleSetupM m) = LLVMCrucibleSetupM (fmap f m)
 
-instance Monad CrucibleSetupM where
+instance Applicative LLVMCrucibleSetupM where
+  pure x = LLVMCrucibleSetupM (pure x)
+  LLVMCrucibleSetupM f <*> LLVMCrucibleSetupM m = LLVMCrucibleSetupM (f <*> m)
+
+instance Monad LLVMCrucibleSetupM where
   return = pure
-  CrucibleSetupM m >>= f = CrucibleSetupM (m >>= runCrucibleSetupM . f)
+  LLVMCrucibleSetupM m >>= f =
+    LLVMCrucibleSetupM (m >>= runLLVMCrucibleSetupM . f)
 
 -- | This gets more accurate locations than @lift (lift getPosition)@ because
 --   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
@@ -636,17 +638,17 @@ instance FromValue a => FromValue (StateT JavaSetupState TopLevel a) where
     fromValue _ = error "fromValue JavaSetup"
 
 ---------------------------------------------------------------------------------
-instance IsValue a => IsValue (CrucibleSetupM a) where
-    toValue m = VCrucibleSetup (fmap toValue m)
+instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
+    toValue m = VLLVMCrucibleSetup (fmap toValue m)
 
-instance FromValue a => FromValue (CrucibleSetupM a) where
-    fromValue (VCrucibleSetup m) = fmap fromValue m
+instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
+    fromValue (VLLVMCrucibleSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind pos m1 v2) = CrucibleSetupM $ do
+    fromValue (VBind pos m1 v2) = LLVMCrucibleSetupM $ do
       -- TODO: Should both of these be run with the new position?
-      v1 <- underStateT (withPosition pos) (runCrucibleSetupM (fromValue m1))
+      v1 <- underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m1))
       m2 <- lift $ applyValue v2 v1
-      underStateT (withPosition pos) (runCrucibleSetupM (fromValue m2))
+      underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m2))
     fromValue _ = error "fromValue CrucibleSetup"
 
 instance IsValue a => IsValue (JVMSetupM a) where
@@ -661,11 +663,11 @@ instance FromValue a => FromValue (JVMSetupM a) where
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
-instance IsValue (CMS.SetupValue ext) where
-  toValue v = VCrucibleSetupValue (Some v)
+instance IsValue (CMS.SetupValue (Crucible.LLVM arch)) where
+  toValue v = VLLVMCrucibleSetupValue (SomeLLVM v)
 
 -- instance FromValue (CMS.SetupValue ext) where
---   fromValue (VCrucibleSetupValue (Some v)) = v
+--   fromValue (VLLVMCrucibleSetupValue (Some v)) = v
 --   fromValue _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue JCIR.SetupValue where
@@ -682,11 +684,11 @@ instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
-instance IsValue (CMS.CrucibleMethodSpecIR ext) where
-    toValue t = VCrucibleMethodSpec (Some t)
+instance IsValue (CMS.CrucibleMethodSpecIR (Crucible.LLVM arch)) where
+    toValue t = VLLVMCrucibleMethodSpec (SomeLLVM t)
 
 -- instance FromValue (CMS.CrucibleMethodSpecIR ext) where
---     fromValue (VCrucibleMethodSpec (Some t)) = t
+--     fromValue (VLLVMCrucibleMethodSpec (Some t)) = t
 --     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
 instance IsValue JCIR.CrucibleMethodSpecIR where
@@ -859,7 +861,7 @@ addTrace str val =
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
     VJavaSetup     m -> VJavaSetup     (addTrace str `fmap` addTraceStateT str m)
     VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
-    VCrucibleSetup (CrucibleSetupM m) -> VCrucibleSetup $ CrucibleSetupM $
+    VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
         addTrace str `fmap` underStateT (addTraceTopLevel str) m
     _                -> val
 
