@@ -188,7 +188,7 @@ data PermImpl r ls where
   -- > -----------------------------
   -- > Gin | Pl * Pin |- rets
 
-  Impl_IntroCastLLVMWord ::
+  Impl_CastLLVMWord ::
     ExprVar (LLVMPointerType w) -> PermExpr (BVType w) -> PermExpr (BVType w) ->
     PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
     PermImpl r (ls :> PermExpr (LLVMPointerType w))
@@ -209,12 +209,12 @@ data PermImpl r ls where
   -- > -------------------------------------------
   -- > Gin | Pl * Pin, x:ptr(pps) |- rets
 
-  Impl_IntroCastLLVMPtr :: ExprVar (LLVMPointerType w) ->
-                           PermExpr (BVType w) ->
-                           ExprVar (LLVMPointerType w) ->
-                           PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
-                           PermImpl r (ls :> PermExpr (LLVMPointerType w)
-                                       :> PermExpr (LLVMPointerType w))
+  Impl_CastLLVMPtr :: ExprVar (LLVMPointerType w) ->
+                      PermExpr (BVType w) ->
+                      ExprVar (LLVMPointerType w) ->
+                      PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
+                      PermImpl r (ls :> PermExpr (LLVMPointerType w)
+                                  :> PermExpr (LLVMPointerType w))
   -- ^ Cast a @y:ptr(pps)@ on the top of the stack to @x:ptr(pps - off)@ using a
   -- proof of @x:eq(y+off)@ just below it on the stack:
   --
@@ -256,23 +256,12 @@ data PermImpl r ls where
   -- > -----------------------------------------------------------------
   -- > Gin | Pl * Pin, x:ptr(pps1, (off,S) |-> p, pps2) |- rets
 
-  Impl_IntroLLVMField ::
-    ExprVar (LLVMPointerType w) -> Int -> SplittingExpr ->
+  Impl_IntroLLVMFieldAll ::
+    ExprVar (LLVMPointerType w) -> Int ->
     PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
     PermImpl r (ls :> PermExpr (LLVMPointerType w))
-  -- ^ Move the splitting @spl@ portion of a field permission, which should
-  -- contain an equals permission, into the pointer permission on the top of the
-  -- stack; either the remaining permission in @Pin@ should have splitting
-  -- @spl_rem@ satisfying @spl_in = spl * spl_rem@ or @spl@ should be the whole
-  -- of @spl_in@ and no more permission should remain:
-  --
-  -- > Gin | Pl, x:ptr(pps, x:ptr((off,spl) |-> eq(y)))
-  -- >       * Pin, x:ptr(pps1, (off,spl_rem) |-> eq(y), pps2) |- rets
-  -- > ---------------------------------------------------------------
-  -- > Gin | Pl, x:ptr(pps)
-  -- >       * Pin, x:ptr(pps1, (off,spl_in) |-> eq(y), pps2) |- rets
-  --
-  -- OR
+  -- ^ Move a field permission, which should contain an equals permission, into
+  -- the pointer permission on the top of the stack:
   --
   -- > Gin | Pl, x:ptr(pps, x:ptr((off,spl) |-> eq(y)))
   -- >       * Pin, x:ptr(pps1, pps2) |- rets
@@ -280,8 +269,22 @@ data PermImpl r ls where
   -- > Gin | Pl, x:ptr(pps)
   -- >       * Pin, x:ptr(pps1, (off,spl) |-> eq(y), pps2) |- rets
 
-  Impl_IntroLLVMFieldPerm ::
-    ExprVar (LLVMPointerType w) -> Int -> ExprVar (LLVMPointerType w) ->
+  Impl_IntroLLVMFieldSplit ::
+    ExprVar (LLVMPointerType w) -> Int -> SplittingExpr ->
+    PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
+    PermImpl r (ls :> PermExpr (LLVMPointerType w))
+  -- ^ Move a field permission of the form @(off,spl) |-> eq(e)@ into two
+  -- copies, keeping the left half in the current permission set and pushing the
+  -- right half onto the stack:
+  --
+  -- > Gin | Pl, x:ptr(pps, x:ptr((off,right spl) |-> eq(y)))
+  -- >       * Pin, x:ptr(pps1, (off,left spl) |-> eq(y), pps2) |- rets
+  -- > ---------------------------------------------------------------
+  -- > Gin | Pl, x:ptr(pps)
+  -- >       * Pin, x:ptr(pps1, (off,spl) |-> eq(y), pps2) |- rets
+
+  Impl_IntroLLVMFieldContents ::
+    ExprVar (LLVMPointerType w) -> ExprVar (LLVMPointerType w) ->
     PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
     PermImpl r (ls :> PermExpr (LLVMPointerType w)
                 :> PermExpr (LLVMPointerType w))
@@ -588,9 +591,18 @@ modifyPSubst :: (PartialSubst vars -> PartialSubst vars) ->
                 ImplM vars r ls ls ()
 modifyPSubst f = modify (over implStatePSubst f)
 
--- | Look up the current permission at a specific location
+-- | Set the value for an existential variable in the current substitution,
+-- raising an error if it is already set
+setVarM :: Member vars (PermExpr a) -> PermExpr a -> ImplM vars r ls ls ()
+setVarM x e = modifyPSubst (psubstSet x e)
+
+-- | Look up the current permission for a given variable
 getPerm :: PermState s => ExprVar a -> PermM s r r (ValuePerm a)
 getPerm x = view (permStatePerms . varPerm x) <$> gget
+
+-- | Set the current permission for a given variable
+setPerm :: PermState s => ExprVar a -> ValuePerm a -> PermM s r r ()
+setPerm x p = modify $ set (permStatePerms . varPerm x) p
 
 -- | Get the pointer permissions for a variable @x@, assuming @x@ has LLVM
 -- pointer permissions
@@ -714,12 +726,12 @@ introAssertBVEq x e = gmapRet (Impl_AssertBVEq x e)
 
 -- | Cast a proof of @x:eq(LLVMWord(e1))@ to @x:eq(LLVMWord(e2))@ on the top of
 -- the stack
-introCastLLVMWordEq ::
+castLLVMWordEq ::
   PermState s => ExprVar (LLVMPointerType w) ->
   PermExpr (BVType w) -> PermExpr (BVType w) ->
   PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
   (PermImpl r (ls :> PermExpr (LLVMPointerType w))) ()
-introCastLLVMWordEq x e1 e2 = gmapRet (Impl_IntroCastLLVMWord x e1 e2)
+castLLVMWordEq x e1 e2 = gmapRet (Impl_CastLLVMWord x e1 e2)
 
 
 -- | Prove an empty @x:ptr()@ permission from any @x:ptr(pps)@ permissionx
@@ -730,13 +742,13 @@ introLLVMPtrM x = gmapRet (Impl_IntroLLVMPtr x)
 
 -- | Cast a @y:ptr(pps)@ on the top of the stack to @x:ptr(pps - off)@ using a
 -- proof of @x:eq(y+off)@ just below it on the stack
-introCastLLVMPtrM :: PermState s =>
-                     ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
-                     ExprVar (LLVMPointerType w) ->
-                     PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
-                     (PermImpl r (ls :> PermExpr (LLVMPointerType w)
-                              :> PermExpr (LLVMPointerType w))) ()
-introCastLLVMPtrM y off x = gmapRet (Impl_IntroCastLLVMPtr y off x)
+castLLVMPtrM :: PermState s =>
+                ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+                ExprVar (LLVMPointerType w) ->
+                PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
+                (PermImpl r (ls :> PermExpr (LLVMPointerType w)
+                             :> PermExpr (LLVMPointerType w))) ()
+castLLVMPtrM y off x = gmapRet (Impl_CastLLVMPtr y off x)
 
 
 -- | Copy a proof of @x:ptr(free(e))@, from the current permission
@@ -765,6 +777,10 @@ elimLLVMFieldM x i =
   getPerm x >>>= \p ->
   case p of
     ValPerm_LLVMPtr pps
+      | LLVMFieldPerm { llvmFieldPerm =
+                          ValPerm_Eq (PExpr_Var y) } <- pps !! i ->
+        -- If the p permission is already of the form eq(y), just return y
+        greturn y
       | LLVMFieldPerm {..} <- pps !! i ->
         gmapRet (Impl_ElimLLVMField x i) >>>
         gopenBinding (nu $ \y -> y) >>>= \(y, _) ->
@@ -772,29 +788,57 @@ elimLLVMFieldM x i =
               set (element i)
               (LLVMFieldPerm { llvmFieldPerm = ValPerm_Eq (PExpr_Var y), .. })
               pps in
-        modify (set (permStatePerms . varPerm x) (ValPerm_LLVMPtr pps') .
-                set (permStatePerms . varPerm y) llvmFieldPerm) >>>
-      greturn y
+        setPerm x (ValPerm_LLVMPtr pps') >>>
+        setPerm y llvmFieldPerm >>>
+        greturn y
     _ ->
       error "elimLLVMFieldM: not an LLVM field permission!"
 
--- | Move the splitting @spl@ portion of a field permission to the @x:ptr(pps)@
--- permission on the top of of the stack
-introLLVMFieldM ::
+-- | Move a field permission of the form @(off,All) |-> eq(e)@ to the
+-- @x:ptr(pps)@ permission on the top of of the stack
+introLLVMFieldAllM ::
+  PermState s => ExprVar (LLVMPointerType w) -> Int ->
+  PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
+  (PermImpl r (ls :> PermExpr (LLVMPointerType w))) ()
+introLLVMFieldAllM x i =
+  getPerm x >>>= \p ->
+  case p of
+    ValPerm_LLVMPtr pps
+      | i < length pps
+      , LLVMFieldPerm _ SplExpr_All (ValPerm_Eq _) <- pps !! i ->
+        gmapRet (Impl_IntroLLVMFieldAll x i) >>>
+        setPerm x (ValPerm_LLVMPtr $ deleteNth i pps)
+    _ -> error "introLLVMFieldAllM"
+
+-- | Split a field permission @(off,spl) |-> eq(e)@ into two, leaving the left
+-- half in the current permission stack and moving the right half to the top of
+-- of the stack
+introLLVMFieldSplitM ::
   PermState s => ExprVar (LLVMPointerType w) -> Int -> SplittingExpr ->
   PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
   (PermImpl r (ls :> PermExpr (LLVMPointerType w))) ()
-introLLVMFieldM x i spl = gmapRet (Impl_IntroLLVMField x i spl)
+introLLVMFieldSplitM x i spl =
+  getPerm x >>>= \p ->
+  case p of
+    ValPerm_LLVMPtr pps
+      | i < length pps
+      , LLVMFieldPerm off spl' (ValPerm_Eq e) <- pps !! i
+      , spl' == spl ->
+        gmapRet (Impl_IntroLLVMFieldSplit x i spl) >>>
+        setPerm x (ValPerm_LLVMPtr $
+                   set (element i)
+                   (LLVMFieldPerm off (SplExpr_L spl) (ValPerm_Eq e)) pps)
+    _ -> error "introLLVMFieldSplitM"
 
 -- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of
 -- the permission stack into a proof of @x:ptr(pps,(off,spl |-> p))@
-introLLVMFieldPermM ::
-  PermState s => ExprVar (LLVMPointerType w) -> Int ->
+introLLVMFieldContentsM ::
+  PermState s => ExprVar (LLVMPointerType w) ->
   ExprVar (LLVMPointerType w) ->
   PermM s (PermImpl r (ls :> PermExpr (LLVMPointerType w)))
   (PermImpl r (ls :> PermExpr (LLVMPointerType w)
                :> PermExpr (LLVMPointerType w))) ()
-introLLVMFieldPermM x i y = gmapRet (Impl_IntroLLVMFieldPerm x i y)
+introLLVMFieldContentsM x y = gmapRet (Impl_IntroLLVMFieldContents x y)
 
 
 ----------------------------------------------------------------------
@@ -919,7 +963,7 @@ proveVarEq x mb_e =
         (matchGround mb_e' $ \e ->
           matchPerm x (matchEqPerm >=> matchLLVMWordExpr) $ \(l, x_e) ->
           matchBody $
-          introEqCopyM l >>> introCastLLVMWordEq x x_e e)
+          introEqCopyM l >>> castLLVMWordEq x x_e e)
 
       _ -> matchFail)
   <|>
@@ -949,7 +993,7 @@ proveVarEqH :: ExprVar a -> ValuePerm a -> PartialSubst vars ->
 proveVarEqH x _ psubst [nuP| PExpr_Var z |]
   | Left memb <- mbNameBoundP z
   , Nothing <- psubstLookup psubst memb
-  = modifyPSubst (psubstSet memb (PExpr_Var x)) >>> introEqReflM x
+  = setVarM memb (PExpr_Var x) >>> introEqReflM x
 
 -- Prove x:eq(x) by reflexivity
 proveVarEqH x _ psubst mb_e
@@ -968,14 +1012,14 @@ proveVarEqH x (ValPerm_Eq
                (PExpr_LLVMWord e)) psubst [nuP| PExpr_LLVMWord (PExpr_Var z) |]
   | Left memb <- mbNameBoundP z
   , Nothing <- psubstLookup psubst memb
-  = modifyPSubst (psubstSet memb e) >>> introEqCopyM x (PExpr_LLVMWord e)
+  = setVarM memb e >>> introEqCopyM x (PExpr_LLVMWord e)
 
 -- Prove x:eq(word(e')) |- x:eq(word(e)) by first proving x:eq(word(e')) and
 -- then casting e' to e
 proveVarEqH x (ValPerm_Eq
                (PExpr_LLVMWord e')) psubst [nuP| PExpr_LLVMWord mb_e |]
   | Just e <- partialSubst psubst mb_e
-  = introEqCopyM x (PExpr_LLVMWord e') >>> introCastLLVMWordEq x e' e
+  = introEqCopyM x (PExpr_LLVMWord e') >>> castLLVMWordEq x e' e
 
 -- Eliminate disjunctive and/or existential permissions
 proveVarEqH x (ValPerm_Or _ _) _ mb_e =
@@ -993,34 +1037,34 @@ proveVarEqH _ _ _ _ = implFailM
 -- * Proving Field Permissions
 ----------------------------------------------------------------------
 
-{-
-proveVarField :: (1 <= w, KnownNat w) =>
-                 ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
-                 Mb vars SplittingExpr ->
-                 Mb vars (ValuePerm (LLVMPointerType w)) ->
-                 ImplM vars r (ls :> PermExpr (LLVMPointerType w)) ls ()
-proveVarField x off mb_spl mb_p =
-  implMatchM $
-
-  -- Prove x:ptr((off,All) |-> p1) |- x:ptr((off,All) |-> p2) by first
-  -- eliminating the LHS to x:ptr((off,All) |-> eq(y)), y:p1 for fresh y,
-  -- proving x:ptr((off,All) |-> eq(y)),y:p1 |- x:ptr((off,All) |-> eq(y)),y:p2,
-  -- and then re-combining the RHS into x:ptr((off,All) |-> p2)
-  (matchPerm x (matchPtrPerm $ matchFieldPtrPermOff off) $ \(l, (spl1, p1)) ->
-    matchSplAll mb_spl $ \() ->
-    matchBody $
-    elimLLVMFieldM l >>>= \y ->
-    implPushM l (ValPerm_LLVMPtr
-                 (LLVMFieldPerm off spl1 (ValPerm_Eq (PExpr_Var y)))) >>>
-    proveVarImpl y mb_p >>>
-    introLLVMFieldM x)
--}
-
 proveVarField :: ExprVar (LLVMPointerType w) -> [LLVMPtrPerm w] ->
                  PermExpr (BVType w) -> Mb vars SplittingExpr ->
                  Mb vars (ValuePerm (LLVMPointerType w)) ->
                  ImplM vars r (ls :> PermExpr (LLVMPointerType w))
                  (ls :> PermExpr (LLVMPointerType w)) ()
+proveVarField x pps off [nuP| SplExpr_All |] mb_p
+  | Just (i, (x_spl, x_p)) <- findFieldPerm off pps =
+    case x_spl of
+      SplExpr_All ->
+        elimLLVMFieldM x i >>>= \y ->
+        introLLVMFieldAllM x i >>>
+        proveVarImpl y mb_p >>>
+        introLLVMFieldContentsM x y
+      _ ->
+        -- If we need All and we have less than All, we fail, because, if there
+        -- is some other permission with All that matches off, then the current
+        -- permissions should be unsatisfiable anyway, so it shouldn't matter
+        implFailM
+
+proveVarField x pps off [nuP| SplExpr_Var z |] mb_p
+  | Just (i, (x_spl, x_p)) <- findFieldPerm off pps
+  , Left memb <- mbNameBoundP z =
+    elimLLVMFieldM x i >>>= \y ->
+    introLLVMFieldSplitM x i x_spl >>>
+    setVarM memb (PExpr_Spl $ SplExpr_R x_spl) >>>
+    proveVarImpl y mb_p >>>
+    introLLVMFieldContentsM x y
+
 proveVarField x pps off mb_spl mb_p =
   error "FIXME HERE: proveVarField"
 
@@ -1124,7 +1168,7 @@ proveVarImpl x [nuP| ValPerm_LLVMPtr mb_pps |] =
       -- result
       introEqCopyM x (PExpr_Var y) >>>
       proveVarImpl y (fmap ValPerm_LLVMPtr mb_pps) >>>
-      introCastLLVMPtrM y (intBVExpr 0) x
+      castLLVMPtrM y (intBVExpr 0) x
 
     ValPerm_Eq (PExpr_LLVMOffset y off) ->
       -- If we have x:eq(y+off) on the left, prove y:ptr(pps+off) and then cast
@@ -1132,7 +1176,7 @@ proveVarImpl x [nuP| ValPerm_LLVMPtr mb_pps |] =
       introEqCopyM x (PExpr_LLVMOffset y off) >>>
       proveVarImpl y (fmap (ValPerm_LLVMPtr .
                             map (offsetLLVMPtrPerm off)) mb_pps) >>>
-      introCastLLVMPtrM y off x
+      castLLVMPtrM y off x
 
     _ ->
       -- Otherwise fail

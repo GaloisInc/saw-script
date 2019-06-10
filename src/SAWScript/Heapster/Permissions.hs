@@ -373,42 +373,171 @@ setLLVMFieldPerm (ValPerm_LLVMPtr (LLVMFieldPerm {..})) p =
   ValPerm_LLVMPtr (LLVMFieldPerm {llvmFieldPerm = p, ..})
 -}
 
+
+----------------------------------------------------------------------
+-- * Matching Functions for Inspecting Permissions
+----------------------------------------------------------------------
+
+-- | The type of a matcher, that matches on an object of type @a@ and maybe
+-- produces a @b@
+type Matcher a b = a -> Maybe b
+
+-- | Delete the nth element of a list
+deleteNth :: Int -> [a] -> [a]
+deleteNth i xs | i >= length xs = error "deleteNth"
+deleteNth i xs = take i xs ++ drop (i+1) xs
+
+-- | Find all indices in a list for which the supplied
+-- function @f@ returns @'Just' b@ for some @b@, also returning the @b@s
+findMatches :: Matcher a b -> [a] -> [(Int, b)]
+findMatches f = mapMaybe (\(i,a) -> (i,) <$> f a) . zip [0 ..]
+
 -- | Find the first index in a list of an element for which the supplied
 -- function @f@ returns @'Just' b@ for some @b@, also returning @b@
-findIndexMatch :: (a -> Maybe b) -> [a] -> Maybe (Int, b)
-findIndexMatch f = foldr (\(i, a) rest -> case f a of
-                             Just b -> Just (i, b)
-                             _ -> rest) Nothing . zip [0 ..]
+findMatch :: Matcher a b -> [a] -> Maybe (Int, b)
+findMatch f = listToMaybe . findMatches f
+
+-- | Test if a pointer permission is a free permission
+matchFreePtrPerm :: Matcher (LLVMPtrPerm w) (PermExpr (BVType w))
+matchFreePtrPerm (LLVMFreePerm e) = Just e
+matchFreePtrPerm _ = Nothing
+
+-- | Test if a pointer permission is a field permission
+matchFieldPtrPerm :: Matcher (LLVMPtrPerm w)
+                     (PermExpr (BVType w),
+                      SplittingExpr, ValuePerm (LLVMPointerType w))
+matchFieldPtrPerm (LLVMFieldPerm off spl p) = Just (off, spl, p)
+matchFieldPtrPerm _ = Nothing
+
+-- | Test if a pointer permission is a field permission with a specific offset
+matchFieldPtrPermOff :: PermExpr (BVType w) ->
+                        Matcher (LLVMPtrPerm w) (SplittingExpr,
+                                                 ValuePerm (LLVMPointerType w))
+matchFieldPtrPermOff off (LLVMFieldPerm off' spl p)
+  | off == off' = Just (spl, p)
+matchFieldPtrPermOff _ _ = Nothing
+
+-- | Test if a pointer permission is an array permission
+matchArrayPtrPerm :: Matcher (LLVMPtrPerm w)
+                     (PermExpr (BVType w), PermExpr (BVType w), Integer,
+                      SplittingExpr, LLVMPtrPerm w)
+matchArrayPtrPerm (LLVMArrayPerm off len stride spl pp) =
+  Just (off, len, stride, spl, pp)
+matchArrayPtrPerm _ = Nothing
 
 -- | Find the first 'LLVMFreePerm' in a list of pointer permissions, returning
 -- its index in the list and the expression it contains if found
 findFreePerm :: [LLVMPtrPerm w] -> Maybe (Int, PermExpr (BVType w))
-findFreePerm = findIndexMatch (\p -> case p of
-                                  LLVMFreePerm e -> Just e
-                                  _ -> Nothing)
+findFreePerm = findMatch matchFreePtrPerm
 
 -- | Find all fields in a list of pointer permissions, returning their contents
 -- and their indices
 findFieldPerms :: [LLVMPtrPerm w] ->
-                  [(Int, PermExpr (BVType w), SplittingExpr,
-                    ValuePerm (LLVMPointerType w))]
-findFieldPerms =
-  mapMaybe (\(i,p) -> case p of
-               LLVMFieldPerm off spl p' -> Just (i, off, spl, p')
-               _ -> Nothing) .
-  zip [0 ..]
+                  [(Int, (PermExpr (BVType w), SplittingExpr,
+                          ValuePerm (LLVMPointerType w)))]
+findFieldPerms = findMatches matchFieldPtrPerm
+
+-- | Find a field in a list of pointer permissions with a specific offset
+findFieldPerm :: PermExpr (BVType w) -> [LLVMPtrPerm w] ->
+                 Maybe (Int, (SplittingExpr, ValuePerm (LLVMPointerType w)))
+findFieldPerm off = findMatch (matchFieldPtrPermOff off)
 
 -- | Find all arrays in a list of pointer permissions, returning their contents
 -- and their indices
 findArrayPerms :: [LLVMPtrPerm w] ->
-                  [(Int, PermExpr (BVType w), PermExpr (BVType w),
-                    Integer, SplittingExpr, LLVMPtrPerm w)]
-findArrayPerms =
-  mapMaybe (\(i,p) -> case p of
-               LLVMArrayPerm off len stride spl p' ->
-                 Just (i, off, len, stride, spl, p')
-               _ -> Nothing) .
-  zip [0 ..]
+                  [(Int, (PermExpr (BVType w), PermExpr (BVType w),
+                          Integer, SplittingExpr, LLVMPtrPerm w))]
+findArrayPerms = findMatches matchArrayPtrPerm
+
+-- FIXME HERE: remove, or at least reevaluate, these!
+{-
+-- | Build a matcher that ignores a value
+matchIgnore :: Matcher a ()
+matchIgnore = const $ return ()
+
+-- | Build a matcher that tests equality
+matchEq :: Eq a => a -> Matcher a a
+matchEq a1 a2 | a1 == a2 = return a2
+matchEq _ _ = Nothing
+
+-- | Test if a permission is an equality permission
+matchEqPerm :: Matcher (ValuePerm a) (PermExpr a)
+matchEqPerm (ValPerm_Eq e) = Just e
+matchEqPerm _ = Nothing
+
+-- | Test is an expression is an LLVM word
+matchLLVMWordExpr :: Matcher (PermExpr (LLVMPointerType w)) (PermExpr (BVType w))
+matchLLVMWordExpr (PExpr_LLVMWord e) = Just e
+matchLLVMWordExpr _ = Nothing
+
+-- | Test if a permission is an equality permission to a @word(e)@ expression
+matchEqLLVMWordPerm :: Matcher (ValuePerm (LLVMPointerType w))
+                       (PermExpr (BVType w))
+matchEqLLVMWordPerm = matchEqPerm >=> matchLLVMWordExpr
+
+-- | Test if a permission satisfies a predicate inside 0 or more existentials or
+-- disjunctions
+matchInExsOrs :: Liftable r => Matcher (ValuePerm a) r ->
+                 Matcher (ValuePerm a) r
+matchInExsOrs f p | Just b <- f p = Just b
+matchInExsOrs f (ValPerm_Or p1 p2) = matchInExsOrs f p1 <|> matchInExsOrs f p2
+matchInExsOrs f (ValPerm_Exists p) = mbLift $ fmap (matchInExsOrs f) p
+matchInExsOrs _ _ = Nothing
+
+-- | Test if a permission is an @eq(e)@ inside 0 or more existentials or
+-- disjunctions; does not return the contents of the @eq(e)@ perm, as it may be
+-- under some number of name-bindings
+matchNestedEqPerm :: Matcher (ValuePerm a) ()
+matchNestedEqPerm = matchInExsOrs (matchEqPerm >=> matchIgnore)
+
+-- | Test if a permission is an LLVM pointer permission satisfying the given
+-- predicate
+matchPtrPerm :: Matcher (LLVMPtrPerm w) r ->
+                Matcher (ValuePerm (LLVMPointerType w)) r
+matchPtrPerm f (ValPerm_LLVMPtr pp) = f pp
+matchPtrPerm _ _ = Nothing
+
+-- | Test if a pointer permission satisfies the given predicate inside 0 or more
+-- stars
+matchInPtrStars :: Matcher (LLVMPtrPerm w) r -> Matcher (LLVMPtrPerm w) r
+matchInPtrStars f p | Just b <- f p = Just b
+matchInPtrStars f (LLVMStarPerm p1 p2) =
+  matchInPtrStars f p1 <|> matchInPtrStars f p2
+matchInPtrStars _ _ = Nothing
+
+-- | Test if a permission satisfies a predicate on 'LLVMPtrPerm's inside 0 or
+-- more existentials, disjunctions, and stars; does not return the contents, as
+-- these may be under name-bindings
+matchInExsOrsStars :: Matcher (LLVMPtrPerm w) r ->
+                      Matcher (ValuePerm (LLVMPointerType w)) ()
+matchInExsOrsStars f =
+  matchInExsOrs (matchPtrPerm (matchInPtrStars f) >=> matchIgnore)
+
+-- | Test if a pointer permission is a free permission
+matchFreePtrPerm :: Matcher (LLVMPtrPerm w) (PermExpr (BVType w))
+matchFreePtrPerm (LLVMFreePerm e) = Just e
+matchFreePtrPerm _ = Nothing
+
+-- | Test if a permission is an @x:ptr(free(e))@ inside 0 or more existentials,
+-- disjunctions, or LLVM stars
+matchNestedFreePerm :: Matcher (ValuePerm (LLVMPointerType w)) ()
+matchNestedFreePerm = matchInExsOrsStars (matchFreePtrPerm >=> matchIgnore)
+
+-- | Test if a pointer permission is a field permission
+matchFieldPtrPerm :: Matcher (LLVMPtrPerm w)
+                     (PermExpr (BVType w),
+                      SplittingExpr, ValuePerm (LLVMPointerType w))
+matchFieldPtrPerm (LLVMFieldPerm off spl p) = Just (off, spl, p)
+matchFieldPtrPerm _ = Nothing
+
+-- | Test if a pointer permission is a field permission with a specific offset
+matchFieldPtrPermOff :: PermExpr (BVType w) ->
+                        Matcher (LLVMPtrPerm w) (SplittingExpr,
+                                                 ValuePerm (LLVMPointerType w))
+matchFieldPtrPermOff off (LLVMFieldPerm off' spl p)
+  | off == off' = Just (spl, p)
+matchFieldPtrPermOff _ _ = Nothing
+-}
 
 
 ----------------------------------------------------------------------
@@ -689,103 +818,3 @@ permsElimExists x tp perms =
   nuWithElim1
   (\_ p_body -> set (varPerm x) p_body perms)
   (exPermBody tp $ perms ^. varPerm x)
-
-
-----------------------------------------------------------------------
--- * Matching Functions for Inspecting Permissions
-----------------------------------------------------------------------
-
--- FIXME HERE: remove, or at least reevaluate, these!
-
-{-
--- | The type of a matcher, that matches on an object of type @a@ and maybe
--- produces a @b@
-type Matcher a b = a -> Maybe b
-
--- | Build a matcher that ignores a value
-matchIgnore :: Matcher a ()
-matchIgnore = const $ return ()
-
--- | Build a matcher that tests equality
-matchEq :: Eq a => a -> Matcher a a
-matchEq a1 a2 | a1 == a2 = return a2
-matchEq _ _ = Nothing
-
--- | Test if a permission is an equality permission
-matchEqPerm :: Matcher (ValuePerm a) (PermExpr a)
-matchEqPerm (ValPerm_Eq e) = Just e
-matchEqPerm _ = Nothing
-
--- | Test is an expression is an LLVM word
-matchLLVMWordExpr :: Matcher (PermExpr (LLVMPointerType w)) (PermExpr (BVType w))
-matchLLVMWordExpr (PExpr_LLVMWord e) = Just e
-matchLLVMWordExpr _ = Nothing
-
--- | Test if a permission is an equality permission to a @word(e)@ expression
-matchEqLLVMWordPerm :: Matcher (ValuePerm (LLVMPointerType w))
-                       (PermExpr (BVType w))
-matchEqLLVMWordPerm = matchEqPerm >=> matchLLVMWordExpr
-
--- | Test if a permission satisfies a predicate inside 0 or more existentials or
--- disjunctions
-matchInExsOrs :: Liftable r => Matcher (ValuePerm a) r ->
-                 Matcher (ValuePerm a) r
-matchInExsOrs f p | Just b <- f p = Just b
-matchInExsOrs f (ValPerm_Or p1 p2) = matchInExsOrs f p1 <|> matchInExsOrs f p2
-matchInExsOrs f (ValPerm_Exists p) = mbLift $ fmap (matchInExsOrs f) p
-matchInExsOrs _ _ = Nothing
-
--- | Test if a permission is an @eq(e)@ inside 0 or more existentials or
--- disjunctions; does not return the contents of the @eq(e)@ perm, as it may be
--- under some number of name-bindings
-matchNestedEqPerm :: Matcher (ValuePerm a) ()
-matchNestedEqPerm = matchInExsOrs (matchEqPerm >=> matchIgnore)
-
--- | Test if a permission is an LLVM pointer permission satisfying the given
--- predicate
-matchPtrPerm :: Matcher (LLVMPtrPerm w) r ->
-                Matcher (ValuePerm (LLVMPointerType w)) r
-matchPtrPerm f (ValPerm_LLVMPtr pp) = f pp
-matchPtrPerm _ _ = Nothing
-
--- | Test if a pointer permission satisfies the given predicate inside 0 or more
--- stars
-matchInPtrStars :: Matcher (LLVMPtrPerm w) r -> Matcher (LLVMPtrPerm w) r
-matchInPtrStars f p | Just b <- f p = Just b
-matchInPtrStars f (LLVMStarPerm p1 p2) =
-  matchInPtrStars f p1 <|> matchInPtrStars f p2
-matchInPtrStars _ _ = Nothing
-
--- | Test if a permission satisfies a predicate on 'LLVMPtrPerm's inside 0 or
--- more existentials, disjunctions, and stars; does not return the contents, as
--- these may be under name-bindings
-matchInExsOrsStars :: Matcher (LLVMPtrPerm w) r ->
-                      Matcher (ValuePerm (LLVMPointerType w)) ()
-matchInExsOrsStars f =
-  matchInExsOrs (matchPtrPerm (matchInPtrStars f) >=> matchIgnore)
-
--- | Test if a pointer permission is a free permission
-matchFreePtrPerm :: Matcher (LLVMPtrPerm w) (PermExpr (BVType w))
-matchFreePtrPerm (LLVMFreePerm e) = Just e
-matchFreePtrPerm _ = Nothing
-
--- | Test if a permission is an @x:ptr(free(e))@ inside 0 or more existentials,
--- disjunctions, or LLVM stars
-matchNestedFreePerm :: Matcher (ValuePerm (LLVMPointerType w)) ()
-matchNestedFreePerm = matchInExsOrsStars (matchFreePtrPerm >=> matchIgnore)
-
--- | Test if a pointer permission is a field permission
-matchFieldPtrPerm :: Matcher (LLVMPtrPerm w)
-                     (PermExpr (BVType w),
-                      SplittingExpr, ValuePerm (LLVMPointerType w))
-matchFieldPtrPerm (LLVMFieldPerm off spl p) = Just (off, spl, p)
-matchFieldPtrPerm _ = Nothing
-
--- | Test if a pointer permission is a field permission with a specific offset
-matchFieldPtrPermOff :: PermExpr (BVType w) ->
-                        Matcher (LLVMPtrPerm w) (SplittingExpr,
-                                                 ValuePerm (LLVMPointerType w))
-matchFieldPtrPermOff off (LLVMFieldPerm off' spl p)
-  | off == off' = Just (spl, p)
-matchFieldPtrPermOff _ _ = Nothing
--}
