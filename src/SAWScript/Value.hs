@@ -63,6 +63,7 @@ import qualified Data.AIG as AIG
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
+import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 import qualified SAWScript.Crucible.JVM.MethodSpecIR as JCIR
@@ -125,8 +126,8 @@ data Value
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
-  | VLLVMCrucibleMethodSpec (SomeLLVM CMS.CrucibleMethodSpecIR)
-  | VLLVMCrucibleSetupValue (SomeLLVM CMS.SetupValue)
+  | VLLVMCrucibleMethodSpec (AnyLLVM CMS.CrucibleMethodSpecIR)
+  | VLLVMCrucibleSetupValue (AnyLLVM CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
   | VJVMMethodSpec JCIR.CrucibleMethodSpecIR
@@ -507,13 +508,21 @@ data JavaSetupState
 
 type JavaSetup a = StateT JavaSetupState TopLevel a
 
-type CrucibleSetup ext a = StateT (CMS.CrucibleSetupState ext) TopLevel a
+type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
-data SomeLLVM t = forall arch. SomeLLVM (t (Crucible.LLVM arch))
+-- | Stuff that's polymorphic in the underlying LLVM architecture
+data AnyLLVM t =
+  AnyLLVM { getAnyLLVM :: forall arch. t (Crucible.LLVM arch) }
+
+-- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
+--   specifications should be polymorphic in the underlying architecture
+type LLVMCrucibleMethodSpecIR = AnyLLVM CMS.CrucibleMethodSpecIR
 
 data LLVMCrucibleSetupM a =
   LLVMCrucibleSetupM
-    { runLLVMCrucibleSetupM :: forall arch. CrucibleSetup (Crucible.LLVM arch) a }
+    { runLLVMCrucibleSetupM ::
+        forall arch. Setup.CrucibleSetupT (Crucible.LLVM arch) TopLevel a
+    }
 
 instance Functor LLVMCrucibleSetupM where
   fmap f (LLVMCrucibleSetupM m) = LLVMCrucibleSetupM (fmap f m)
@@ -663,8 +672,8 @@ instance FromValue a => FromValue (JVMSetupM a) where
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
-instance IsValue (CMS.SetupValue (Crucible.LLVM arch)) where
-  toValue v = VLLVMCrucibleSetupValue (SomeLLVM v)
+instance IsValue (AnyLLVM CMS.SetupValue) where
+  toValue (AnyLLVM v) = VLLVMCrucibleSetupValue (AnyLLVM v)
 
 -- instance FromValue (CMS.SetupValue ext) where
 --   fromValue (VLLVMCrucibleSetupValue (Some v)) = v
@@ -684,8 +693,8 @@ instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
-instance IsValue (CMS.CrucibleMethodSpecIR (Crucible.LLVM arch)) where
-    toValue t = VLLVMCrucibleMethodSpec (SomeLLVM t)
+instance IsValue (AnyLLVM CMS.CrucibleMethodSpecIR) where
+    toValue (AnyLLVM t) = VLLVMCrucibleMethodSpec (AnyLLVM t)
 
 -- instance FromValue (CMS.CrucibleMethodSpecIR ext) where
 --     fromValue (VLLVMCrucibleMethodSpec (Some t)) = t

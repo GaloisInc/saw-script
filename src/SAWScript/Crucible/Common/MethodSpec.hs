@@ -494,31 +494,3 @@ makeCrucibleMethodSpecIR meth args ret loc = do
     ,_csSolverStats     = mempty
     ,_csLoc             = loc
     }
-
---------------------------------------------------------------------------------
--- *** CrucibleSetupState
-
--- | The type of state kept in the 'CrucibleSetup' monad
-data CrucibleSetupState ext =
-  CrucibleSetupState
-  { _csVarCounter      :: !AllocIndex
-  , _csPrePost         :: PrePost
-  , _csResolvedState   :: ResolvedState
-  , _csMethodSpec      :: CrucibleMethodSpecIR ext
-  , _csCrucibleContext :: CrucibleContext ext
-  }
-
-makeLenses ''CrucibleSetupState
-
-makeCrucibleSetupState ::
-  CrucibleContext ext ->
-  CrucibleMethodSpecIR ext ->
-  CrucibleSetupState ext
-makeCrucibleSetupState cc mspec =
-  CrucibleSetupState
-    { _csVarCounter      = AllocIndex 0
-    , _csPrePost         = PreState
-    , _csResolvedState   = emptyResolvedState
-    , _csMethodSpec      = mspec
-    , _csCrucibleContext = cc
-    }

@@ -35,8 +35,6 @@ import           Data.Monoid ((<>))
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 
-import qualified Data.Parameterized.Map as MapF
-
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
@@ -50,6 +48,7 @@ import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic))
 import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 
@@ -79,6 +78,12 @@ data LLVMMethodId =
     } deriving (Eq, Ord, Show) -- TODO: deriving
 
 makeLenses ''LLVMMethodId
+
+csName :: Lens' (MS.CrucibleMethodSpecIR (CL.LLVM arch)) String
+csName = MS.csMethod . llvmMethodName
+
+csParentName :: Lens' (MS.CrucibleMethodSpecIR (CL.LLVM arch)) (Maybe String)
+csParentName = MS.csMethod . llvmMethodParent
 
 instance PP.Pretty LLVMMethodId where
   pretty = PP.text . view llvmMethodName
@@ -216,10 +221,10 @@ initialCrucibleSetupState ::
   L.Define ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError (MS.CrucibleSetupState (CL.LLVM arch))
+  Either SetupError (Setup.CrucibleSetupState (CL.LLVM arch))
 initialCrucibleSetupState cc def loc parent = do
   ms <- initialDefCrucibleMethodSpecIR def loc parent
-  return $ MS.makeCrucibleSetupState cc ms
+  return $ Setup.makeCrucibleSetupState cc ms
 
 initialCrucibleSetupStateDecl ::
   (?lc :: CL.TypeContext) =>
@@ -227,7 +232,7 @@ initialCrucibleSetupStateDecl ::
   L.Declare ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError (MS.CrucibleSetupState (CL.LLVM arch))
+  Either SetupError (Setup.CrucibleSetupState (CL.LLVM arch))
 initialCrucibleSetupStateDecl cc dec loc parent = do
   ms <- initialDeclCrucibleMethodSpecIR dec loc parent
-  return $ MS.makeCrucibleSetupState cc ms
+  return $ Setup.makeCrucibleSetupState cc ms
