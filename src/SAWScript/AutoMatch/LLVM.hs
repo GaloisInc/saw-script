@@ -11,6 +11,8 @@ import qualified Data.AIG as AIG
 import Text.LLVM
 import Verifier.SAW.SharedTerm
 
+import SAWScript.Crucible.LLVM.MethodSpecIR (LLVMModule(..))
+
 import SAWScript.Value
 
 --import Data.Maybe

@@ -28,12 +28,13 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.MethodSpecIR where
 
 import           Control.Lens
-import           Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
-
 import           Data.IORef
 import           Data.Monoid ((<>))
+import           Data.Type.Equality (TestEquality(..), (:~:)(Refl))
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
+import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
+import qualified Text.PrettyPrint.HughesPJ as PP
 
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.TraversableF (FunctorF(..), FoldableF(..))
@@ -49,10 +50,6 @@ import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx, SymbolRepr, knownSymbol)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
---import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
---import qualified Lang.Crucible.LLVM.Translation as CL
-import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
-  (IntrinsicClass(Intrinsic, muxIntrinsic))
 import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
@@ -78,6 +75,9 @@ type instance MS.HasGhostState (CL.LLVM arch) = 'True
 type instance MS.TypeName ext = CL.Ident
 type instance MS.ExtType (CL.LLVM arch) = CL.MemType
 
+--------------------------------------------------------------------------------
+-- *** LLVMMethodId
+
 data LLVMMethodId =
   LLVMMethodId
     { _llvmMethodName   :: String
@@ -92,13 +92,16 @@ csName = MS.csMethod . llvmMethodName
 csParentName :: Lens' (MS.CrucibleMethodSpecIR (CL.LLVM arch)) (Maybe String)
 csParentName = MS.csMethod . llvmMethodParent
 
-instance PP.Pretty LLVMMethodId where
-  pretty = PP.text . view llvmMethodName
+instance PPL.Pretty LLVMMethodId where
+  pretty = PPL.text . view llvmMethodName
 
-instance PP.Pretty CL.MemType where
+instance PPL.Pretty CL.MemType where
   pretty = CL.ppMemType
 
 type instance MS.MethodId (CL.LLVM _) = LLVMMethodId
+
+--------------------------------------------------------------------------------
+-- *** LLVMAllocSpec
 
 -- Is this LLVM-specific? what could we do for java?
 data LLVMAllocSpec =
@@ -112,6 +115,52 @@ data LLVMAllocSpec =
 makeLenses ''LLVMAllocSpec
 
 type instance MS.AllocSpec (CL.LLVM _) = LLVMAllocSpec
+
+--------------------------------------------------------------------------------
+-- *** LLVMModule
+
+data LLVMModule arch =
+  LLVMModule
+  { modName :: String
+  , modMod :: L.Module
+  , modTrans :: CL.ModuleTranslation arch
+  }
+
+instance TestEquality LLVMModule where
+  testEquality (LLVMModule nm1 lm1 mt1) (LLVMModule nm2 lm2 mt2) =
+    case testEquality mt1 mt2 of
+      Nothing -> Nothing
+      r@(Just Refl) ->
+        if nm1 == nm2 && lm1 == lm2
+        then r
+        else Nothing
+
+type instance MS.Codebase (CL.LLVM arch) = LLVMModule arch
+
+showLLVMModule :: LLVMModule arch -> String
+showLLVMModule (LLVMModule name m _) =
+  unlines [ "Module: " ++ name
+          , "Types:"
+          , showParts L.ppTypeDecl (L.modTypes m)
+          , "Globals:"
+          , showParts ppGlobal' (L.modGlobals m)
+          , "External references:"
+          , showParts L.ppDeclare (L.modDeclares m)
+          , "Definitions:"
+          , showParts ppDefine' (L.modDefines m)
+          ]
+  where
+    showParts pp xs = unlines $ map (show . PP.nest 2 . pp) xs
+    ppGlobal' g =
+      L.ppSymbol (L.globalSym g) PP.<+> PP.char '=' PP.<+>
+      L.ppGlobalAttrs (L.globalAttrs g) PP.<+>
+      L.ppType (L.globalType g)
+    ppDefine' d =
+      L.ppMaybe L.ppLinkage (L.defLinkage d) PP.<+>
+      L.ppType (L.defRetType d) PP.<+>
+      L.ppSymbol (L.defName d) PP.<>
+      L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
+      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.defGC d)
 
 --------------------------------------------------------------------------------
 -- ** Ghost state
@@ -166,15 +215,15 @@ data SetupError
   = InvalidReturnType L.Type
   | InvalidArgTypes [L.Type]
 
-ppSetupError :: SetupError -> PP.Doc
+ppSetupError :: SetupError -> PPL.Doc
 ppSetupError (InvalidReturnType t) =
-  text "Can't lift return type" <+>
-  text (show (L.ppType t)) <+>
-  text "to a Crucible type."
+  PPL.text "Can't lift return type" PPL.<+>
+  PPL.text (show (L.ppType t)) PPL.<+>
+  PPL.text "to a Crucible type."
 ppSetupError (InvalidArgTypes ts) =
-  text "Can't lift argument types " <+>
-  encloseSep lparen rparen comma (map (text . show . L.ppType) ts) <+>
-  text "to Crucible types."
+  PPL.text "Can't lift argument types " PPL.<+>
+  PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.text . show . L.ppType) ts) PPL.<+>
+  PPL.text "to Crucible types."
 
 resolveArgs ::
   (?lc :: CL.TypeContext) =>
@@ -247,7 +296,7 @@ initialCrucibleSetupStateDecl cc dec loc parent = do
 --------------------------------------------------------------------------------
 -- ** AnyLLVM/SomeLLVM
 
--- TODO: Is this really the right place for these?
+-- TODO: Upstream to crucible-llvm
 
 -- | Universal/polymorphic quantification over an 'LLVMArch'
 data AnyLLVM t =
@@ -264,3 +313,12 @@ constAnyLLVM a = AnyLLVM (Const a)
 
 -- | Existential quantification over an 'LLVMArch'
 data SomeLLVM t = forall arch. SomeLLVM { getSomeLLVM :: t (CL.LLVM arch) }
+
+
+-- Constructors for 'SetupValue' which are architecture-polymorphic
+
+anySetupArray :: [AnyLLVM MS.SetupValue] -> AnyLLVM MS.SetupValue
+anySetupArray svs = AnyLLVM (MS.SetupArray () $ map getAnyLLVM svs)
+
+anySetupStruct :: Bool -> [AnyLLVM MS.SetupValue] -> AnyLLVM MS.SetupValue
+anySetupStruct b svs = AnyLLVM (MS.SetupStruct () b $ map getAnyLLVM svs)

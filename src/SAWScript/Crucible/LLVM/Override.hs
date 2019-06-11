@@ -45,6 +45,7 @@ import           Control.Exception as X
 import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
+import           Control.Monad.Fail (MonadFail)
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
@@ -118,7 +119,7 @@ import           SAWScript.Utils (bullets, handleException)
 -- and side-conditions needed to proceed.
 newtype OverrideMatcher arch mode a =
   OM (StateT (OverrideState arch) (ExceptT (OverrideFailure arch) IO) a)
-  deriving (Generic, Generic1, Functor, Applicative, Monad, MonadIO)
+  deriving (Generic, Generic1, Functor, Applicative, Monad, MonadFail, MonadIO)
 
 instance Wrapped (OverrideMatcher arch mode a) where
 

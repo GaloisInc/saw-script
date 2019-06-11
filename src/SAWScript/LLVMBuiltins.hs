@@ -33,15 +33,16 @@ import qualified Text.LLVM.Parser as LLVM (parseType)
 import SAWScript.Value as SV
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible (translateModule)
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule(..))
 
-llvm_load_module :: FilePath -> TopLevel (Some LLVMModule)
+llvm_load_module :: FilePath -> TopLevel (Some CMS.LLVMModule)
 llvm_load_module file =
   io (LLVM.parseBitCodeFromFile file) >>= \case
     Left err -> fail (LLVM.formatError err)
     Right llvm_mod -> do
       halloc <- getHandleAlloc
       Some mtrans <- io $ stToIO $ Crucible.translateModule halloc llvm_mod
-      return (Some (LLVMModule file llvm_mod mtrans))
+      return (Some (CMS.LLVMModule file llvm_mod mtrans))
 
 llvm_type :: String -> TopLevel LLVM.Type
 llvm_type str =

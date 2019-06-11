@@ -117,6 +117,7 @@ import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import           Lang.Crucible.LLVM.Extension (LLVMArch, LLVM)
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
+import qualified Lang.Crucible.LLVM.Run as Crucible (withPtrWidthOf)
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
@@ -226,8 +227,9 @@ crucible_llvm_verify ::
   ProofScript SatResult  ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_verify bic opts (Some lm) nm lemmas checkSat setup tactic = do
-  lemmas' <- checkModuleCompatibility lemmas
-  createMethodSpec (Just (lemmas, checkSat, tactic)) bic opts lm nm setup
+  lemmas' <- checkModuleCompatibility lm lemmas
+  SomeLLVM <$>
+    createMethodSpec (Just (lemmas', checkSat, tactic)) bic opts lm nm setup
 
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
@@ -237,15 +239,23 @@ crucible_llvm_unsafe_assume_spec ::
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_unsafe_assume_spec bic opts (Some lm) nm setup =
-  createMethodSpec Nothing bic opts lm nm setup
+  SomeLLVM <$> createMethodSpec Nothing bic opts lm nm setup
 
+-- | Check that all the overrides/lemmas were actually from this module
 checkModuleCompatibility ::
-  TestEquality MS.CrucibleMethodSpecIR
   MonadFail m =>
-  MS.CrucibleMethodSpecIR ext ->
+  LLVMModule arch ->
   [SomeLLVM MS.CrucibleMethodSpecIR] ->
-  m [MS.CrucibleMethodSpecIR ext]
-checkModuleCompatibility initial rest = _
+  m [MS.CrucibleMethodSpecIR (LLVM arch)]
+checkModuleCompatibility llvmModule = foldM step []
+  where step accum (SomeLLVM lemma) =
+          case testEquality (lemma ^. MS.csCodebase) llvmModule of
+            Nothing -> fail $ unlines
+              [ "Failed to apply an override that was verified against a"
+              , "different LLVM module"
+              ]
+            Just Refl -> pure (lemma:accum)
+
 
 -- | The real work of 'crucible_llvm_verify' and 'crucible_llvm_unsafe_assume_spec'.
 createMethodSpec ::
@@ -268,76 +278,78 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
 
   let ?lc = mtrans ^. Crucible.transContext . Crucible.llvmTypeCtx
 
-  fmap NE.head $ forM defOrDecls $ \defOrDecl -> do
-    setupLLVMCrucibleContext bic opts lm $ \(cc :: LLVMCrucibleContext arch) -> do
-      let sym = cc^.ccBackend
-      let llmod = cc^.ccLLVMModule
+  Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \ptrW ->
+    fmap NE.head $ forM defOrDecls $ \defOrDecl -> do
+      setupLLVMCrucibleContext bic opts lm $ \(cc :: LLVMCrucibleContext arch') -> do
+        let sym = cc^.ccBackend
+        let llmod = cc^.ccLLVMModule
 
-      pos <- getPosition
-      let setupLoc = toW4Loc "_SAW_verify_prestate" pos
+        pos <- getPosition
+        let setupLoc = toW4Loc "_SAW_verify_prestate" pos
 
-      let est0 = case defOrDecl of
-                  Left def -> initialCrucibleSetupState cc def setupLoc parent
-                  Right decl -> initialCrucibleSetupStateDecl cc decl setupLoc parent
-      st0 <- either (fail . show . ppSetupError) return est0
+        let est0 = case defOrDecl of
+                    Left def -> initialCrucibleSetupState cc def setupLoc parent
+                    Right decl -> initialCrucibleSetupStateDecl cc decl setupLoc parent
+        st0 <- either (fail . show . ppSetupError) return est0
 
-      -- execute commands of the method spec
-      liftIO $ W4.setCurrentProgramLoc sym setupLoc
+        -- execute commands of the method spec
+        liftIO $ W4.setCurrentProgramLoc sym setupLoc
 
-      let run :: forall arch.
-            (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-            StateT (Setup.CrucibleSetupState (LLVM arch)) TopLevel ()
-          run = runLLVMCrucibleSetupM setup
-          n :: TopLevel (Setup.CrucibleSetupState (LLVM arch))
-          n = execStateT run st0
-      methodSpec <- view Setup.csMethodSpec <$> n
-        -- execStateT (runLLVMCrucibleSetupM setup) st0
+        let run :: forall arch.
+              (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch')) =>
+              StateT (Setup.CrucibleSetupState (LLVM arch')) TopLevel ()
+            run = runLLVMCrucibleSetupM setup
+            n :: TopLevel (Setup.CrucibleSetupState (LLVM arch'))
+            n = execStateT run st0
+        methodSpec <- view Setup.csMethodSpec <$> n
+          -- execStateT (runLLVMCrucibleSetupM setup) st0
 
-      void $ io $ checkSpecReturnType cc methodSpec
+        void $ io $ checkSpecReturnType cc methodSpec
 
-      case verificationArgs of
-        -- If we're just admitting, don't do anything
-        Nothing -> return methodSpec
+        case verificationArgs of
+          -- If we're just admitting, don't do anything
+          Nothing -> return methodSpec
 
-        -- If we're verifying, actually perform the verification
-        Just (lemmas, checkSat, tactic) -> do
-          -- set up the LLVM memory with a pristine heap
-          let globals = cc^.ccLLVMGlobals
-          let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
-          mem0 <- case Crucible.lookupGlobal mvar globals of
-            Nothing   -> fail "internal error: LLVM Memory global not found"
-            Just mem0 -> return mem0
-          -- push a memory stack frame if starting from a breakpoint
-          let mem = if isJust (methodSpec^.csParentName)
-                    then mem0
-                      { Crucible.memImplHeap = Crucible.pushStackFrameMem
-                        (Crucible.memImplHeap mem0)
-                      }
-                    else mem0
-          let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
+          -- If we're verifying, actually perform the verification
+          Just (lemmas, checkSat, tactic) -> do
+            -- set up the LLVM memory with a pristine heap
+            let globals = cc^.ccLLVMGlobals
+            let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
+            mem0 <- case Crucible.lookupGlobal mvar globals of
+              Nothing   -> fail "internal error: LLVM Memory global not found"
+              Just mem0 -> return mem0
+            -- push a memory stack frame if starting from a breakpoint
+            let mem = if isJust (methodSpec^.csParentName)
+                      then mem0
+                        { Crucible.memImplHeap = Crucible.pushStackFrameMem
+                          (Crucible.memImplHeap mem0)
+                        }
+                      else mem0
+            let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
 
-          -- construct the initial state for verifications
-          (args, assumes, env, globals2) <-
-            io $ verifyPrestate cc methodSpec globals1
+            -- construct the initial state for verifications
+            (args, assumes, env, globals2) <-
+              io $ verifyPrestate cc methodSpec globals1
 
-          -- save initial path conditions
-          frameIdent <- io $ Crucible.pushAssumptionFrame sym
+            -- save initial path conditions
+            frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
-          -- run the symbolic execution
-          top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
-          (ret, globals3)
-            <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
+            -- run the symbolic execution
+            top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
+            (ret, globals3)
+              <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
 
-          -- collect the proof obligations
-          asserts <- verifyPoststate opts (biSharedContext bic) cc
-                        methodSpec env globals3 ret
+            -- collect the proof obligations
+            asserts <- verifyPoststate opts (biSharedContext bic) cc
+                          methodSpec env globals3 ret
 
-          -- restore previous assumption state
-          _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+            -- restore previous assumption state
+            _ <- io $ Crucible.popAssumptionFrame sym frameIdent
 
-          -- attempt to verify the proof obligations
-          stats <- verifyObligations cc methodSpec tactic assumes asserts
-          return (methodSpec & MS.csSolverStats .~ stats)
+            -- attempt to verify the proof obligations
+            stats <- verifyObligations cc methodSpec tactic assumes asserts
+            return (methodSpec & MS.csSolverStats .~ stats)
+
 
 verifyObligations :: LLVMCrucibleContext arch
                   -> MS.CrucibleMethodSpecIR (LLVM arch)
@@ -786,7 +798,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
         do Crucible.GlobalPair retval globals1 <-
              case pr of
                Crucible.TotalRes gp -> return gp
-               Crucible.PartialRes _ gp _ ->
+               Crucible.PartialRes _ _ gp _ ->
                  do printOutLn opts Info "Symbolic simulation completed with side conditions."
                     return gp
            let ret_ty = mspec ^. MS.csRet
@@ -880,82 +892,72 @@ verifyPoststate opts sc cc mspec env0 globals ret =
     matchResult =
       case (ret, mspec ^. MS.csRetValue) of
         (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
-        (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected crucible_return specification"
+        (Nothing     , Just _ )     ->
+          fail "verifyPoststate: unexpected crucible_return specification"
         _ -> return ()
 
 --------------------------------------------------------------------------------
 
-mkLLVMCrucibleContext ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  BuiltinContext ->
-  Options ->
-  Some LLVMModule ->
-  TopLevel (LLVMCrucibleContext arch)
-mkLLVMCrucibleContext bic opts (LLVMModule _ llvm_mod mtrans) = do
-  halloc <- getHandleAlloc
-  let ctx = mtrans^.Crucible.transContext
-  let ?lc = ctx^.Crucible.llvmTypeCtx
-  Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $ io $ do
-    let gen = globalNonceGenerator
-    let sc  = biSharedContext bic
-    let verbosity = simVerbose opts
-    sym <- CrucibleSAW.newSAWCoreBackend sc gen
+-- mkLLVMCrucibleContext ::
+--   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+--   BuiltinContext ->
+--   Options ->
+--   Some LLVMModule ->
+--   TopLevel (LLVMCrucibleContext arch)
+-- mkLLVMCrucibleContext bic opts (Some (LLVMModule _ llvm_mod mtrans)) = do
+--   halloc <- getHandleAlloc
+--   let ctx = mtrans^.Crucible.transContext
+--   let ?lc = ctx^.Crucible.llvmTypeCtx
+--   io $ Crucible.withPtrWidthOf mtrans $ do
+--     let gen = globalNonceGenerator
+--     let sc  = biSharedContext bic
+--     let verbosity = simVerbose opts
+--     sym <- CrucibleSAW.newSAWCoreBackend sc gen
 
-    let cfg = W4.getConfiguration sym
-    verbSetting <- W4.getOptionSetting W4.verbosity cfg
-    _ <- W4.setOpt verbSetting (toInteger verbosity)
+--     let cfg = W4.getConfiguration sym
+--     verbSetting <- W4.getOptionSetting W4.verbosity cfg
+--     _ <- W4.setOpt verbSetting (toInteger verbosity)
 
-    let bindings = Crucible.fnBindingsFromList []
-    let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
-                      bindings Crucible.llvmExtensionImpl CrucibleSAW.SAWCruciblePersonality
-    mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
-              =<< Crucible.initializeMemory sym ctx llvm_mod
+--     let bindings = Crucible.fnBindingsFromList []
+--     let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
+--                       bindings Crucible.llvmExtensionImpl CrucibleSAW.SAWCruciblePersonality
+--     mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
+--               =<< Crucible.initializeMemory sym ctx llvm_mod
 
-    let globals  = Crucible.llvmGlobals ctx mem
+--     let globals  = Crucible.llvmGlobals ctx mem
 
-    let setupMem = do
-            -- register the callable override functions
-            _llvmctx' <- Crucible.register_llvm_overrides llvm_mod ctx
+--     let setupMem = do
+--             -- register the callable override functions
+--             _llvmctx' <- Crucible.register_llvm_overrides llvm_mod ctx
 
-            -- register all the functions defined in the LLVM module
-            mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
+--             -- register all the functions defined in the LLVM module
+--             mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
 
-    let initExecState =
-          Crucible.InitialState simctx globals Crucible.defaultAbortHandler $
-          Crucible.runOverrideSim Crucible.UnitRepr setupMem
-    res <- Crucible.executeCrucible [] initExecState
-    (lglobals, lsimctx) <-
-        case res of
-          Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
-          Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
-          _ -> fail "simulator initialization failed!"
+--     let initExecState =
+--           Crucible.InitialState simctx globals Crucible.defaultAbortHandler $
+--           Crucible.runOverrideSim Crucible.UnitRepr setupMem
+--     res <- Crucible.executeCrucible [] initExecState
+--     (lglobals, lsimctx) <-
+--         case res of
+--           Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
+--           Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
+--           _ -> fail "simulator initialization failed!"
 
-    return
-        LLVMCrucibleContext{ _ccLLVMModuleTrans = mtrans
-                            , _ccLLVMModule = llvm_mod
-                            , _ccBackend = sym
-                            , _ccLLVMEmptyMem = mem
-                            , _ccLLVMSimContext = lsimctx
-                            , _ccLLVMGlobals = lglobals
-                            }
-
-setupLLVMCrucibleContext' ::
-  BuiltinContext ->
-  Options ->
-  Some LLVMModule ->
-  (LLVMCrucibleContext arch -> TopLevel a) ->
-  TopLevel a
-setupLLVMCrucibleContext' bic opts (Some mod) action = do
-  case testLeq (knownNat @16) _ of
-    Just LeqProof -> setupLLVMCrucibleContext bic opts mod action
-    Nothing -> _
+--     return
+--         LLVMCrucibleContext{ _ccLLVMModuleTrans = mtrans
+--                             , _ccLLVMModule = llvm_mod
+--                             , _ccBackend = sym
+--                             , _ccLLVMEmptyMem = mem
+--                             , _ccLLVMSimContext = lsimctx
+--                             , _ccLLVMGlobals = lglobals
+--                             }
 
 setupLLVMCrucibleContext ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   BuiltinContext ->
   Options ->
   LLVMModule arch ->
-  (LLVMCrucibleContext arch -> TopLevel a) ->
+  ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+   LLVMCrucibleContext arch -> TopLevel a) ->
   TopLevel a
 setupLLVMCrucibleContext bic opts (LLVMModule _ llvm_mod mtrans) action = do
   halloc <- getHandleAlloc
@@ -994,7 +996,8 @@ setupLLVMCrucibleContext bic opts (LLVMModule _ llvm_mod mtrans) action = do
       (lglobals, lsimctx) <-
           case res of
             Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
-            Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
+            Crucible.FinishedResult st (Crucible.PartialRes _ _ gp _) ->
+              return (gp^.Crucible.gpGlobals, st)
             _ -> fail "simulator initialization failed!"
 
       return
@@ -1059,7 +1062,7 @@ getGlobalPair ::
 getGlobalPair opts pr =
   case pr of
     Crucible.TotalRes gp -> return gp
-    Crucible.PartialRes _ gp _ -> do
+    Crucible.PartialRes _ _ gp _ -> do
       printOutLn opts Info "Symbolic simulation completed with side conditions."
       return gp
 
@@ -1118,7 +1121,7 @@ crucible_llvm_extract ::
   Some LLVMModule ->
   String ->
   TopLevel TypedTerm
-crucible_llvm_extract bic opts lm fn_name = do
+crucible_llvm_extract bic opts (Some lm) fn_name = do
   let ctx = lm ^. to modTrans . Crucible.transContext
   let ?lc = ctx^.Crucible.llvmTypeCtx
   setupLLVMCrucibleContext bic opts lm $ \cc ->
@@ -1132,7 +1135,7 @@ crucible_llvm_cfg ::
   Some LLVMModule ->
   String ->
   TopLevel SAW_CFG
-crucible_llvm_cfg bic opts lm fn_name = do
+crucible_llvm_cfg bic opts (Some lm) fn_name = do
   let ctx = lm ^. to modTrans . Crucible.transContext
   let ?lc = ctx^.Crucible.llvmTypeCtx
   setupLLVMCrucibleContext bic opts lm $ \cc ->

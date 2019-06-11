@@ -34,6 +34,7 @@ import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
+import Data.Coerce (coerce)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -1861,21 +1862,21 @@ primitives = Map.fromList
 
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
-    (pureVal (CMS.SetupArray ()))
+    (pureVal CIR.anySetupArray)
     Current
     [ "Create a SetupValue representing an array, with the given list of"
     , "values as elements. The list must be non-empty." ]
 
   , prim "crucible_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal (CMS.SetupStruct () False))
+    (pureVal (CIR.anySetupStruct False))
     Current
     [ "Create a SetupValue representing a struct, with the given list of"
     , "values as elements." ]
 
   , prim "crucible_packed_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal (CMS.SetupStruct () True))
+    (pureVal (CIR.anySetupStruct True))
     Current
     [ "Create a SetupValue representing a packed struct, with the given"
     , "list of values as elements." ]
@@ -2152,6 +2153,7 @@ primitives = Map.fromList
     bicVal :: forall t. IsValue t =>
               (BuiltinContext -> Options -> t) -> Options -> BuiltinContext -> Value
     bicVal f opts bic = toValue (f bic opts)
+
 
 filterAvail ::
   Set PrimitiveLifecycle ->

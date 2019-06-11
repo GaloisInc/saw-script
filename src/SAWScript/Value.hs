@@ -56,6 +56,7 @@ import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
+import Data.Parameterized.Nonce (NonceGenerator)
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
 
@@ -139,7 +140,7 @@ data Value
   | VLLVMType LLVM.Type
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
-  | VLLVMModule (Some LLVMModule)
+  | VLLVMModule (Some CMSLLVM.LLVMModule)
   | VSatResult SatResult
   | VProofResult ProofResult
   | VUninterp Uninterp
@@ -162,38 +163,6 @@ data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      , biBasicSS       :: Simpset
                                      }
   deriving Generic
-
-data LLVMModule arch =
-  LLVMModule
-  { modName :: String
-  , modMod :: L.Module
-  , modTrans :: Crucible.ModuleTranslation arch
-  }
-
-showLLVMModule :: LLVMModule arch -> String
-showLLVMModule (LLVMModule name m _) =
-  unlines [ "Module: " ++ name
-          , "Types:"
-          , showParts L.ppTypeDecl (L.modTypes m)
-          , "Globals:"
-          , showParts ppGlobal' (L.modGlobals m)
-          , "External references:"
-          , showParts L.ppDeclare (L.modDeclares m)
-          , "Definitions:"
-          , showParts ppDefine' (L.modDefines m)
-          ]
-  where
-    showParts pp xs = unlines $ map (show . PP.nest 2 . pp) xs
-    ppGlobal' g =
-      L.ppSymbol (L.globalSym g) PP.<+> PP.char '=' PP.<+>
-      L.ppGlobalAttrs (L.globalAttrs g) PP.<+>
-      L.ppType (L.globalType g)
-    ppDefine' d =
-      L.ppMaybe L.ppLinkage (L.defLinkage d) PP.<+>
-      L.ppType (L.defRetType d) PP.<+>
-      L.ppSymbol (L.defName d) PP.<>
-      L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
-      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.defGC d)
 
 data ProofResult
   = Valid SolverStats
@@ -319,7 +288,7 @@ showsPrecValue opts p v =
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
-    VLLVMModule (Some m) -> showString (showLLVMModule m)
+    VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
     VSatResult r -> showsSatResult opts r
@@ -404,6 +373,7 @@ data TopLevelRO =
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator RealWorld
+  , roNonceGen      :: Some (NonceGenerator (ST RealWorld))
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   }
@@ -673,9 +643,9 @@ instance FromValue a => FromValue (JVMSetupM a) where
 instance IsValue (CMSLLVM.AnyLLVM CMS.SetupValue) where
   toValue (CMSLLVM.AnyLLVM v) = VLLVMCrucibleSetupValue (CMSLLVM.AnyLLVM v)
 
--- instance FromValue (CMS.SetupValue ext) where
---   fromValue (VLLVMCrucibleSetupValue (Some v)) = v
---   fromValue _ = error "fromValue Crucible.SetupValue"
+instance FromValue (CMSLLVM.AnyLLVM CMS.SetupValue) where
+  fromValue (VLLVMCrucibleSetupValue v) = v
+  fromValue _ = error "fromValue Crucible.SetupValue"
 
 instance IsValue JCIR.SetupValue where
   toValue v = VJVMSetupValue v
@@ -819,15 +789,15 @@ instance FromValue JSS.Class where
     fromValue (VJavaClass c) = c
     fromValue _ = error "fromValue JavaClass"
 
-instance IsValue (Some LLVMModule) where
+instance IsValue (Some CMSLLVM.LLVMModule) where
     toValue m = VLLVMModule m
 
-instance IsValue (LLVMModule arch) where
+instance IsValue (CMSLLVM.LLVMModule arch) where
     toValue m = VLLVMModule (Some m)
 
-instance FromValue (Some LLVMModule) where
+instance FromValue (Some CMSLLVM.LLVMModule) where
     fromValue (VLLVMModule m) = m
-    fromValue _ = error "fromValue LLVMModule"
+    fromValue _ = error "fromValue CMSLLVM.LLVMModule"
 
 instance IsValue ProofResult where
    toValue r = VProofResult r

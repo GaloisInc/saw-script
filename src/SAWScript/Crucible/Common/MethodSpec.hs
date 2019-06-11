@@ -316,17 +316,17 @@ testResolved val0 rs = go [] val0
 
 type family CrucibleContext ext :: Type
 
-type instance CrucibleContext JVM = JVMCrucibleContext
-data JVMCrucibleContext =
-  JVMCrucibleContext
-  { _jccJVMClass       :: J.Class
-  , _jccCodebase       :: CB.Codebase
-  , _jccJVMContext     :: CJ.JVMContext
-  , _jccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
-  , _jccHandleAllocator :: Crucible.HandleAllocator RealWorld
-  }
+-- type instance CrucibleContext JVM = JVMCrucibleContext
+-- data JVMCrucibleContext =
+--   JVMCrucibleContext
+--   { _jccJVMClass       :: J.Class
+--   , _jccCodebase       :: CB.Codebase
+--   , _jccJVMContext     :: CJ.JVMContext
+--   , _jccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
+--   , _jccHandleAllocator :: Crucible.HandleAllocator RealWorld
+--   }
 
-makeLenses ''JVMCrucibleContext
+-- makeLenses ''JVMCrucibleContext
 
 --------------------------------------------------------------------------------
 -- *** Extension-specific information
@@ -431,6 +431,11 @@ type family MethodId ext :: Type
   -- Method (LLVM arch) = LLVMMethod
   -- Method JVM = J.ClassName
 
+-- | A body of code in which a method resides
+--
+-- Examples: An 'LLVMModule', a Java 'Codebase'
+type family Codebase ext :: Type
+
 data CrucibleMethodSpecIR ext =
   CrucibleMethodSpec
   { _csMethod          :: MethodId ext
@@ -441,6 +446,7 @@ data CrucibleMethodSpecIR ext =
   , _csArgBindings     :: Map Integer (ExtType ext, SetupValue ext) -- ^ function arguments
   , _csRetValue        :: Maybe (SetupValue ext) -- ^ function return value
   , _csSolverStats     :: SolverStats -- ^ statistics about the proof that produced this
+  , _csCodebase        :: Codebase ext -- ^ the codebase this spec was verified against
   , _csLoc             :: ProgramLoc -- ^ where in the SAWscript was this spec?
   }
 
