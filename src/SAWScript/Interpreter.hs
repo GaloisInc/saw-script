@@ -53,7 +53,9 @@ import qualified SAWScript.Import
 import SAWScript.Crucible.LLVM.Builtins
 import qualified Lang.Crucible.JVM as CJ
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
+import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
+import qualified SAWScript.Crucible.Common.Setup.Builtins as CSetup
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -1803,21 +1805,21 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_precond" "Term -> CrucibleSetup ()"
-    (pureVal crucible_precond)
+    (pureVal CSetup.crucible_precond)
     Current
     [ "State that the given predicate is a pre-condition on execution of the"
     , "function being verified."
     ]
 
   , prim "crucible_postcond" "Term -> CrucibleSetup ()"
-    (pureVal crucible_postcond)
+    (pureVal CSetup.crucible_postcond)
     Current
     [ "State that the given predicate is a post-condition of execution of the"
     , "function being verified."
     ]
 
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
-    (bicVal crucible_execute_func)
+    (bicVal CSetup.crucible_execute_func)
     Current
     [ "Specify the given list of values as the arguments of the function."
     ,  ""
@@ -1829,7 +1831,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
-    (bicVal crucible_return)
+    (bicVal CSetup.crucible_return)
     Current
     [ "Specify the given value as the return value of the function. A"
     , "crucible_return statement is required if and only if the function"
@@ -1859,55 +1861,55 @@ primitives = Map.fromList
 
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
-    (pureVal CIR.SetupArray)
+    (pureVal (CMS.SetupArray ()))
     Current
     [ "Create a SetupValue representing an array, with the given list of"
     , "values as elements. The list must be non-empty." ]
 
   , prim "crucible_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal (CIR.SetupStruct False))
+    (pureVal (CMS.SetupStruct () False))
     Current
     [ "Create a SetupValue representing a struct, with the given list of"
     , "values as elements." ]
 
   , prim "crucible_packed_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal (CIR.SetupStruct True))
+    (pureVal (CMS.SetupStruct () True))
     Current
     [ "Create a SetupValue representing a packed struct, with the given"
     , "list of values as elements." ]
 
   , prim "crucible_elem"
     "SetupValue -> Int -> SetupValue"
-    (pureVal CIR.SetupElem)
+    (pureVal CMS.SetupElem)
     Current
     [ "Turn a SetupValue representing a struct or array pointer into"
     , "a pointer to an element of the struct or array by field index." ]
 
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
-    (pureVal CIR.SetupField)
+    (pureVal CMS.SetupField)
     Current
     [ "Turn a SetupValue representing a struct pointer into"
     , "a pointer to an element of the struct by field name." ]
 
   , prim "crucible_null"
     "SetupValue"
-    (pureVal CIR.SetupNull)
+    (pureVal CMS.SetupNull)
     Current
     [ "A SetupValue representing a null pointer value." ]
 
   , prim "crucible_global"
     "String -> SetupValue"
-    (pureVal CIR.SetupGlobal)
+    (pureVal CMS.SetupGlobal)
     Current
     [ "Return a SetupValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
 
   , prim "crucible_global_initializer"
     "String -> SetupValue"
-    (pureVal CIR.SetupGlobalInitializer)
+    (pureVal CMS.SetupGlobalInitializer)
     Current
     [ "Return a SetupValue representing the value of the initializer of a named"
     , "global. The String should be the name of a global value."
@@ -1917,7 +1919,7 @@ primitives = Map.fromList
 
   , prim "crucible_term"
     "Term -> SetupValue"
-    (pureVal CIR.SetupTerm)
+    (pureVal CMS.SetupTerm)
     Current
     [ "Construct a `SetupValue` from a `Term`." ]
 

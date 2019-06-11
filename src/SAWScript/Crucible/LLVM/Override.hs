@@ -1380,9 +1380,9 @@ executeAllocation ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->
   LLVMCrucibleContext arch          ->
-  (AllocIndex, AllocSpecLLVM) ->
+  (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher arch RW ()
-executeAllocation opts cc (var, AllocSpecLLVM mut memTy sz loc) =
+executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      {-

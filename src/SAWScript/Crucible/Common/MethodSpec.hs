@@ -40,7 +40,9 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           What4.ProgramLoc (ProgramLoc(plSourceLoc))
 
 import qualified Lang.Crucible.Types as Crucible
-  (IntrinsicType, EmptyCtx)
+  (IntrinsicType, EmptyCtx, SymbolRepr, knownSymbol)
+import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
+  (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
@@ -308,13 +310,6 @@ testResolved val0 rs = go [] val0
     test _ Nothing = False
     test path (Just paths) = any (`isPrefixOf` path) paths
 
-
--- intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
--- intrinsics =
---   MapF.insert
---     (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)
---     Crucible.IntrinsicMuxFn
---     CL.llvmIntrinsicTypes
 
 --------------------------------------------------------------------------------
 -- *** CrucibleContext

@@ -35,6 +35,9 @@ import           Data.Monoid ((<>))
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 
+import qualified Data.Parameterized.Map as MapF
+import           Data.Parameterized.TraversableF (FunctorF(..), FoldableF(..))
+
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
@@ -42,6 +45,10 @@ import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
+import qualified Lang.Crucible.Types as Crucible
+  (IntrinsicType, EmptyCtx, SymbolRepr, knownSymbol)
+import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
+  (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
 --import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
 --import qualified Lang.Crucible.LLVM.Translation as CL
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
@@ -94,17 +101,17 @@ instance PP.Pretty CL.MemType where
 type instance MS.MethodId (CL.LLVM _) = LLVMMethodId
 
 -- Is this LLVM-specific? what could we do for java?
-data AllocSpecLLVM =
-  AllocSpecLLVM
+data LLVMAllocSpec =
+  LLVMAllocSpec
     { _allocSpecMut   :: CL.Mutability
     , _allocSpecType  :: CL.MemType
     , _allocSpecBytes :: CL.Bytes
     , _allocSpecLoc   :: ProgramLoc
     } -- TODO: deriving
 
-makeLenses ''AllocSpecLLVM
+makeLenses ''LLVMAllocSpec
 
-type instance MS.AllocSpec (CL.LLVM _) = AllocSpecLLVM
+type instance MS.AllocSpec (CL.LLVM _) = LLVMAllocSpec
 
 --------------------------------------------------------------------------------
 -- ** Ghost state
@@ -145,12 +152,12 @@ ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
 --------------------------------------------------------------------------------
 -- ** ???
 
--- intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
--- intrinsics =
---   MapF.insert
---     (Crucible.knownSymbol :: Crucible.SymbolRepr MS.GhostValue)
---     Crucible.IntrinsicMuxFn
---     CL.llvmIntrinsicTypes
+intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
+intrinsics =
+  MapF.insert
+    (Crucible.knownSymbol :: Crucible.SymbolRepr MS.GhostValue)
+    Crucible.IntrinsicMuxFn
+    CL.llvmIntrinsicTypes
 
 -------------------------------------------------------------------------------
 -- ** Initial CrucibleSetupMethodSpec
@@ -236,3 +243,24 @@ initialCrucibleSetupStateDecl ::
 initialCrucibleSetupStateDecl cc dec loc parent = do
   ms <- initialDeclCrucibleMethodSpecIR dec loc parent
   return $ Setup.makeCrucibleSetupState cc ms
+
+--------------------------------------------------------------------------------
+-- ** AnyLLVM/SomeLLVM
+
+-- TODO: Is this really the right place for these?
+
+-- | Universal/polymorphic quantification over an 'LLVMArch'
+data AnyLLVM t =
+  AnyLLVM { getAnyLLVM :: forall arch. t (CL.LLVM arch) }
+
+instance FunctorF AnyLLVM where
+  fmapF nat (AnyLLVM a) = AnyLLVM (nat a)
+
+instance FoldableF AnyLLVM where
+  foldMapF tom (AnyLLVM x) = tom x
+
+constAnyLLVM :: a -> AnyLLVM (Const a)
+constAnyLLVM a = AnyLLVM (Const a)
+
+-- | Existential quantification over an 'LLVMArch'
+data SomeLLVM t = forall arch. SomeLLVM { getSomeLLVM :: t (CL.LLVM arch) }

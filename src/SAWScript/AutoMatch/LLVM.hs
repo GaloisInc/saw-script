@@ -29,7 +29,7 @@ getDeclsLLVM ::
   (AIG.IsAIG l g) =>
   AIG.Proxy l g ->
   SharedContext ->
-  LLVMModule ->
+  LLVMModule arch ->
   IO (Interaction (Maybe [Decl]))
 getDeclsLLVM _proxy _sc (LLVMModule file mdl _) = do
     let symStr (Symbol s) = s

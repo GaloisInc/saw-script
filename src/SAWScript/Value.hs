@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 {- |
 Module      : SAWScript.Value
 Description : Value datatype for SAW-Script interpreter.
@@ -65,6 +66,7 @@ import qualified SAWScript.Position as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 import qualified SAWScript.Crucible.JVM.MethodSpecIR as JCIR
 import qualified Verifier.Java.Codebase as JSS
@@ -126,8 +128,8 @@ data Value
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
-  | VLLVMCrucibleMethodSpec (AnyLLVM CMS.CrucibleMethodSpecIR)
-  | VLLVMCrucibleSetupValue (AnyLLVM CMS.SetupValue)
+  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR)
+  | VLLVMCrucibleSetupValue (CMSLLVM.AnyLLVM CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
   | VJVMMethodSpec JCIR.CrucibleMethodSpecIR
@@ -137,7 +139,7 @@ data Value
   | VLLVMType LLVM.Type
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
-  | VLLVMModule LLVMModule
+  | VLLVMModule (Some LLVMModule)
   | VSatResult SatResult
   | VProofResult ProofResult
   | VUninterp Uninterp
@@ -161,14 +163,14 @@ data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      }
   deriving Generic
 
-data LLVMModule =
+data LLVMModule arch =
   LLVMModule
   { modName :: String
   , modMod :: L.Module
-  , modTrans :: Some Crucible.ModuleTranslation
+  , modTrans :: Crucible.ModuleTranslation arch
   }
 
-showLLVMModule :: LLVMModule -> String
+showLLVMModule :: LLVMModule arch -> String
 showLLVMModule (LLVMModule name m _) =
   unlines [ "Module: " ++ name
           , "Types:"
@@ -317,7 +319,7 @@ showsPrecValue opts p v =
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
-    VLLVMModule m -> showString (showLLVMModule m)
+    VLLVMModule (Some m) -> showString (showLLVMModule m)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
     VSatResult r -> showsSatResult opts r
@@ -510,22 +512,18 @@ type JavaSetup a = StateT JavaSetupState TopLevel a
 
 type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
--- | Stuff that's polymorphic in the underlying LLVM architecture
-data AnyLLVM t =
-  AnyLLVM { getAnyLLVM :: forall arch. t (Crucible.LLVM arch) }
-
 -- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
 --   specifications should be polymorphic in the underlying architecture
-type LLVMCrucibleMethodSpecIR = AnyLLVM CMS.CrucibleMethodSpecIR
+-- type LLVMCrucibleMethodSpecIR = CMSLLVM.AnyLLVM CMS.CrucibleMethodSpecIR
 
 data LLVMCrucibleSetupM a =
   LLVMCrucibleSetupM
     { runLLVMCrucibleSetupM ::
-        forall arch. Setup.CrucibleSetupT (Crucible.LLVM arch) TopLevel a
+        forall arch.
+        (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+        CrucibleSetup (Crucible.LLVM arch) a
     }
-
-instance Functor LLVMCrucibleSetupM where
-  fmap f (LLVMCrucibleSetupM m) = LLVMCrucibleSetupM (fmap f m)
+  deriving Functor
 
 instance Applicative LLVMCrucibleSetupM where
   pure x = LLVMCrucibleSetupM (pure x)
@@ -672,8 +670,8 @@ instance FromValue a => FromValue (JVMSetupM a) where
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
-instance IsValue (AnyLLVM CMS.SetupValue) where
-  toValue (AnyLLVM v) = VLLVMCrucibleSetupValue (AnyLLVM v)
+instance IsValue (CMSLLVM.AnyLLVM CMS.SetupValue) where
+  toValue (CMSLLVM.AnyLLVM v) = VLLVMCrucibleSetupValue (CMSLLVM.AnyLLVM v)
 
 -- instance FromValue (CMS.SetupValue ext) where
 --   fromValue (VLLVMCrucibleSetupValue (Some v)) = v
@@ -693,8 +691,8 @@ instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
-instance IsValue (AnyLLVM CMS.CrucibleMethodSpecIR) where
-    toValue (AnyLLVM t) = VLLVMCrucibleMethodSpec (AnyLLVM t)
+instance IsValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+    toValue (CMSLLVM.SomeLLVM t) = VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM t)
 
 -- instance FromValue (CMS.CrucibleMethodSpecIR ext) where
 --     fromValue (VLLVMCrucibleMethodSpec (Some t)) = t
@@ -821,10 +819,13 @@ instance FromValue JSS.Class where
     fromValue (VJavaClass c) = c
     fromValue _ = error "fromValue JavaClass"
 
-instance IsValue LLVMModule where
+instance IsValue (Some LLVMModule) where
     toValue m = VLLVMModule m
 
-instance FromValue LLVMModule where
+instance IsValue (LLVMModule arch) where
+    toValue m = VLLVMModule (Some m)
+
+instance FromValue (Some LLVMModule) where
     fromValue (VLLVMModule m) = m
     fromValue _ = error "fromValue LLVMModule"
 
