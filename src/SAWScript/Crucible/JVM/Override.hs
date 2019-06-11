@@ -89,6 +89,8 @@ import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
+import           SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
+
 --import           SAWScript.JavaExpr (JavaType(..))
 import           SAWScript.Crucible.JVM.MethodSpecIR
 import           SAWScript.Crucible.JVM.ResolveSetupValue

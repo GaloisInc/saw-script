@@ -34,12 +34,9 @@ import           Control.Lens
 import           Data.IORef
 import           Data.Monoid ((<>))
 
-import qualified Data.Parameterized.Nonce as Crucible
-
 -- what4
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
-import qualified What4.Solver.Yices as Yices
 
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
@@ -67,8 +64,7 @@ import Verifier.SAW.TypedTerm
 import SAWScript.Options
 import SAWScript.Prover.SolverStats
 
-newtype AllocIndex = AllocIndex Int
-  deriving (Eq, Ord, Show)
+import SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
 
 nextAllocIndex :: AllocIndex -> AllocIndex
 nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
@@ -96,10 +92,6 @@ setupToTerm _opts _sc sv =
   case sv of
     SetupTerm term -> return (ttTerm term)
     _ -> MaybeT $ return Nothing
-
-data PrePost
-  = PreState | PostState
-  deriving (Eq, Show)
 
 
 data PointsTo
@@ -228,8 +220,6 @@ data CrucibleSetupState =
   , _csMethodSpec      :: CrucibleMethodSpecIR
   , _csCrucibleContext :: CrucibleContext
   }
-
-type Sym = Crucible.SAWCoreBackend Crucible.GlobalNonceGenerator (Yices.Connection Crucible.GlobalNonceGenerator) (B.Flags B.FloatReal)
 
 data CrucibleContext =
   CrucibleContext

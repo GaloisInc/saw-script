@@ -124,8 +124,6 @@ prepareClassTopLevel bic str = do
 
 -----------------------------------------------------------------------
 
-type Sym = CrucibleSAW.SAWCoreBackend Nonce.GlobalNonceGenerator (Yices.Connection Nonce.GlobalNonceGenerator) (W4.Flags W4.FloatReal)
-
 
 -- | Extract a JVM method to saw-core
 --
