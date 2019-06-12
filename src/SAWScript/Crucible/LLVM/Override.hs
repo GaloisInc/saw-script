@@ -1017,7 +1017,11 @@ assignVar cc loc var val =
   do old <- OM (setupValueSub . at var <<.= Just val)
      for_ old $ \val' ->
        do p <- liftIO (equalValsPred cc (Crucible.ptrToPtrVal val') (Crucible.ptrToPtrVal val))
-          addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased pointers"))
+          addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines
+            [ "The following pointers had to alias, but they didn't:"
+            , "  " ++ show (Crucible.ppPtr val)
+            , "  " ++ show (Crucible.ppPtr val')
+            ]
 
 ------------------------------------------------------------------------
 
