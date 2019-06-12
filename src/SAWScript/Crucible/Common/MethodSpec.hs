@@ -257,19 +257,12 @@ type GhostGlobal = Crucible.GlobalVar GhostType
 -- sub-components.
 data ResolvedState =
   ResolvedState
-  { _rsAllocs :: Map AllocIndex [[Int]]
-  , _rsGlobals :: Map String [[Int]]
-  }
+    { _rsAllocs :: Map AllocIndex [[Either String Int]]
+    , _rsGlobals :: Map String [[Either String Int]]
+    }
+  deriving (Eq, Ord, Show)
 
--- | A datatype to keep track of which parts of the simulator state
--- have been initialized already. For each allocation unit or global,
--- we keep a list of element-paths that identify the initialized
--- sub-components.
--- data ResolvedState =
---   ResolvedState
---   { _rsAllocs :: Map AllocIndex [Either String Int]
---   , _rsGlobals :: Map String [Either String Int]
---   }
+makeLenses ''ResolvedState
 
 emptyResolvedState :: ResolvedState
 emptyResolvedState = ResolvedState Map.empty Map.empty
@@ -278,16 +271,18 @@ emptyResolvedState = ResolvedState Map.empty Map.empty
 -- SetupValue.
 markResolved ::
   SetupValue ext ->
+  Either String Int ->
   ResolvedState ->
   ResolvedState
-markResolved val0 rs = go [] val0
+markResolved val0 path0 rs = go [path0] val0
   where
     go path val =
       case val of
-        SetupVar n      -> rs {_rsAllocs = Map.alter (ins path) n (_rsAllocs rs) }
-        SetupGlobal _ c -> rs {_rsGlobals = Map.alter (ins path) c (_rsGlobals rs)}
-        SetupElem _ v i -> go (i : path) v
-        _               -> rs
+        SetupVar n         -> rs & rsAllocs %~ Map.alter (ins path) n
+        SetupGlobal _ name -> rs & rsGlobals %~ Map.alter (ins path) name
+        SetupElem _ v idx  -> go (Right idx : path) v
+        SetupField _ v fld -> go (Left fld : path) v
+        _                  -> rs
 
     ins path Nothing = Just [path]
     ins path (Just paths) = Just (path : paths)
@@ -302,10 +297,11 @@ testResolved val0 rs = go [] val0
   where
     go path val =
       case val of
-        SetupVar n      -> test path (Map.lookup n (_rsAllocs rs))
-        SetupGlobal _ c -> test path (Map.lookup c (_rsGlobals rs))
-        SetupElem _ v i -> go (i : path) v
-        _               -> False
+        SetupVar n         -> test path (Map.lookup n (_rsAllocs rs))
+        SetupGlobal _ c    -> test path (Map.lookup c (_rsGlobals rs))
+        SetupElem _ v idx  -> go (Right idx : path) v
+        SetupField _ v fld -> go (Left fld : path) v
+        _                  -> False
 
     test _ Nothing = False
     test path (Just paths) = any (`isPrefixOf` path) paths
@@ -316,37 +312,17 @@ testResolved val0 rs = go [] val0
 
 type family CrucibleContext ext :: Type
 
--- type instance CrucibleContext JVM = JVMCrucibleContext
--- data JVMCrucibleContext =
---   JVMCrucibleContext
---   { _jccJVMClass       :: J.Class
---   , _jccCodebase       :: CB.Codebase
---   , _jccJVMContext     :: CJ.JVMContext
---   , _jccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
---   , _jccHandleAllocator :: Crucible.HandleAllocator RealWorld
---   }
-
--- makeLenses ''JVMCrucibleContext
-
 --------------------------------------------------------------------------------
 -- *** Extension-specific information
 
--- type JIdent = String -- FIXME(huffman): what to put here?
-
 -- | How to specify allocations in this syntax extension
 type family AllocSpec ext :: Type
-  -- AllocSpec (LLVM arch) = AllocSpecLLVM
-  -- AllocSpec JVM = ()
 
 -- | The type of identifiers for types in this syntax extension
 type family TypeName ext :: Type
-  -- TypeName (LLVM arch) = CL.Ident
-  -- TypeName JVM = JIdent
 
 -- | The type of types of the syntax extension we're dealing with
 type family ExtType ext :: Type
-  -- ExtType (LLVM arch) = CL.MemType
-  -- ExtType JVM = J.Type
 
 --------------------------------------------------------------------------------
 -- *** StateSpec
@@ -410,7 +386,7 @@ makeLenses ''StateSpec
 initialStateSpec :: StateSpec ext
 initialStateSpec =  StateSpec
   { _csAllocs        = Map.empty
-  , _csFreshPointers = Map.empty
+  , _csFreshPointers = Map.empty -- TODO: this is LLVM-specific
   , _csPointsTos     = []
   , _csConditions    = []
   , _csFreshVars     = []
@@ -428,8 +404,6 @@ data JVMMethod =
 
 -- | How to identify methods in a codebase
 type family MethodId ext :: Type
-  -- Method (LLVM arch) = LLVMMethod
-  -- Method JVM = J.ClassName
 
 -- | A body of code in which a method resides
 --

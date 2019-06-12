@@ -62,17 +62,17 @@ import           Verifier.SAW.TypedTerm
 --------------------------------------------------------------------------------
 -- ** Language features
 
-type instance MS.HasSetupNull (CL.LLVM arch) = 'True
-type instance MS.HasSetupStruct (CL.LLVM arch) = 'True
-type instance MS.HasSetupArray (CL.LLVM arch) = 'True
-type instance MS.HasSetupElem (CL.LLVM arch) = 'True
-type instance MS.HasSetupField (CL.LLVM arch) = 'True
-type instance MS.HasSetupGlobal (CL.LLVM arch) = 'True
-type instance MS.HasSetupGlobalInitializer (CL.LLVM arch) = 'True
+type instance MS.HasSetupNull (CL.LLVM _) = 'True
+type instance MS.HasSetupStruct (CL.LLVM _) = 'True
+type instance MS.HasSetupArray (CL.LLVM _) = 'True
+type instance MS.HasSetupElem (CL.LLVM _) = 'True
+type instance MS.HasSetupField (CL.LLVM _) = 'True
+type instance MS.HasSetupGlobal (CL.LLVM _) = 'True
+type instance MS.HasSetupGlobalInitializer (CL.LLVM _) = 'True
 
-type instance MS.HasGhostState (CL.LLVM arch) = 'True
+type instance MS.HasGhostState (CL.LLVM _) = 'True
 
-type instance MS.TypeName ext = CL.Ident
+type instance MS.TypeName (CL.LLVM arch) = CL.Ident
 type instance MS.ExtType (CL.LLVM arch) = CL.MemType
 
 --------------------------------------------------------------------------------
@@ -95,6 +95,7 @@ csParentName = MS.csMethod . llvmMethodParent
 instance PPL.Pretty LLVMMethodId where
   pretty = PPL.text . view llvmMethodName
 
+-- TODO: upstream
 instance PPL.Pretty CL.MemType where
   pretty = CL.ppMemType
 
@@ -304,8 +305,6 @@ initialCrucibleSetupStateDecl cc dec loc parent = do
 
 --------------------------------------------------------------------------------
 -- ** AnyLLVM/SomeLLVM
-
--- TODO: Upstream to crucible-llvm
 
 -- | Universal/polymorphic quantification over an 'LLVMArch'
 data AnyLLVM t =

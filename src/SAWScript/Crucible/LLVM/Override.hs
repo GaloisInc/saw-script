@@ -52,7 +52,6 @@ import           Control.Monad.IO.Class
 import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
-import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe (fromMaybe, catMaybes)
