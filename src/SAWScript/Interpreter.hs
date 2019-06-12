@@ -50,10 +50,6 @@ import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
-import SAWScript.Crucible.LLVM.Builtins
-import qualified Lang.Crucible.JVM as CJ
-import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -80,9 +76,15 @@ import qualified Verifier.Java.SAWBackend as JavaSAW
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
-import SAWScript.Crucible.JVM.Builtins
-import qualified SAWScript.Crucible.JVM.MethodSpecIR as JIR
+-- Crucible
+import qualified Lang.Crucible.JVM as CJ
+import qualified SAWScript.Crucible.Common.MethodSpec as CMS
+import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
+import           SAWScript.Crucible.LLVM.Builtins
+import           SAWScript.Crucible.JVM.Builtins
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
+-- Cryptol
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
@@ -2093,20 +2095,20 @@ primitives = Map.fromList
 -}
   , prim "jvm_null"
     "JVMValue"
-    (pureVal JIR.SetupNull)
+    (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
     Experimental
     [ "A JVMValue representing a null pointer value." ]
 
   , prim "jvm_global"
     "String -> JVMValue"
-    (pureVal JIR.SetupGlobal)
+    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue CJ.JVM))
     Experimental
     [ "Return a JVMValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
 
   , prim "jvm_term"
     "Term -> JVMValue"
-    (pureVal JIR.SetupTerm)
+    (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
     Experimental
     [ "Construct a `JVMValue` from a `Term`." ]
 

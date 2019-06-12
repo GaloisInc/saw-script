@@ -48,13 +48,6 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 import qualified Cryptol.Utils.PP as Cryptol
 
--- JVM
-import qualified Lang.Crucible.JVM as CJ
-import qualified Language.JVM.Parser as J
-import qualified Verifier.Java.Codebase as CB
-
-import           Lang.Crucible.JVM.Types (JVM)
-
 import           Verifier.SAW.TypedTerm as SAWVerifier
 import           Verifier.SAW.SharedTerm as SAWVerifier
 
@@ -166,11 +159,11 @@ ppSetupValue setupval = case setupval of
     commaList []     = PP.empty
     commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
 
-    ppTypedTerm :: TypedTerm -> PP.Doc
-    ppTypedTerm (TypedTerm tp tm) =
-      ppTerm defaultPPOpts tm
-      PP.<+> PP.text ":" PP.<+>
-      PP.text (show (Cryptol.ppPrec 0 tp))
+ppTypedTerm :: TypedTerm -> PP.Doc
+ppTypedTerm (TypedTerm tp tm) =
+  ppTerm defaultPPOpts tm
+  PP.<+> PP.text ":" PP.<+>
+  PP.text (show (Cryptol.ppPrec 0 tp))
 
 setupToTypedTerm ::
   Options {-^ Printing options -} ->
@@ -271,10 +264,10 @@ emptyResolvedState = ResolvedState Map.empty Map.empty
 -- SetupValue.
 markResolved ::
   SetupValue ext ->
-  Either String Int ->
+  [Either String Int] {-^ path within this object (if any) -} ->
   ResolvedState ->
   ResolvedState
-markResolved val0 path0 rs = go [path0] val0
+markResolved val0 path0 rs = go path0 val0
   where
     go path val =
       case val of
@@ -291,9 +284,10 @@ markResolved val0 path0 rs = go [path0] val0
 -- been initialized already.
 testResolved ::
   SetupValue ext ->
+  [Either String Int] {-^ path within this object (if any) -} ->
   ResolvedState ->
   Bool
-testResolved val0 rs = go [] val0
+testResolved val0 path0 rs = go path0 val0
   where
     go path val =
       case val of
@@ -395,12 +389,6 @@ initialStateSpec =  StateSpec
 
 --------------------------------------------------------------------------------
 -- *** Method specs
-
-data JVMMethod =
-  JVMMethod
-    { jvmMethodName  :: String
-    , jvmMethodClass :: J.ClassName
-    } deriving (Eq, Ord, Show) -- TODO: deriving
 
 -- | How to identify methods in a codebase
 type family MethodId ext :: Type

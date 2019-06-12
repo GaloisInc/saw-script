@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveFunctor #-}
 {- |
 Module      : SAWScript.Value
 Description : Value datatype for SAW-Script interpreter.
@@ -9,11 +8,11 @@ Stability   : provisional
 {-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
@@ -129,8 +128,8 @@ data Value
   | VLLVMCrucibleSetupValue (CMSLLVM.AnyLLVM CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
-  | VJVMMethodSpec JCIR.CrucibleMethodSpecIR
-  | VJVMSetupValue JCIR.SetupValue
+  | VJVMMethodSpec !(CMS.CrucibleMethodSpecIR CJ.JVM)
+  | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
   | VJavaType JavaType
   | VLLVMType LLVM.Type
@@ -505,22 +504,12 @@ getW4Position :: Text -> CrucibleSetup arch ProgramLoc
 getW4Position s = SS.toW4Loc s <$> lift (asks roPosition)
 
 --
-type JVMSetup a =
-  StateT JCIR.CrucibleSetupState TopLevel a
 
-data JVMSetupM a =
-  JVMSetupM { runJVMSetupM :: JVMSetup a }
+type JVMSetup = CrucibleSetup CJ.JVM
 
-instance Functor JVMSetupM where
-  fmap f (JVMSetupM m) = JVMSetupM (fmap f m)
+newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
+  deriving (Applicative, Functor, Monad)
 
-instance Applicative JVMSetupM where
-  pure x = JVMSetupM (pure x)
-  JVMSetupM f <*> JVMSetupM m = JVMSetupM (f <*> m)
-
-instance Monad JVMSetupM where
-  return = pure
-  JVMSetupM m >>= f = JVMSetupM (m >>= runJVMSetupM . f)
 --
 type ProofScript a = StateT ProofState TopLevel a
 
@@ -642,10 +631,10 @@ instance FromValue (CMSLLVM.AnyLLVM CMS.SetupValue) where
   fromValue (VLLVMCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
-instance IsValue JCIR.SetupValue where
+instance IsValue (CMS.SetupValue CJ.JVM) where
   toValue v = VJVMSetupValue v
 
-instance FromValue JCIR.SetupValue where
+instance FromValue (CMS.SetupValue CJ.JVM) where
   fromValue (VJVMSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
@@ -663,10 +652,10 @@ instance FromValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
     fromValue (VLLVMCrucibleMethodSpec mir) = mir
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
-instance IsValue JCIR.CrucibleMethodSpecIR where
+instance IsValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
     toValue t = VJVMMethodSpec t
 
-instance FromValue JCIR.CrucibleMethodSpecIR where
+instance FromValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
     fromValue (VJVMMethodSpec t) = t
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 

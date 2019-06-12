@@ -83,7 +83,7 @@ type instance MS.HasGhostState CJ.JVM = 'False
 
 type JIdent = String -- FIXME(huffman): what to put here?
 
-type instance MS.TypeName ext = JIdent
+type instance MS.TypeName CJ.JVM = JIdent
 
 type instance MS.ExtType CJ.JVM = J.Type
 
@@ -99,8 +99,11 @@ data JVMMethodId =
 
 makeLenses ''JVMMethodId
 
+csMethodName :: Simple Lens (MS.CrucibleMethodSpecIR CJ.JVM) String
+csMethodName = MS.csMethod . jvmMethodName
+
 instance PPL.Pretty JVMMethodId where
-  pretty (JVMMethodId methName className) = PPL.text "TODO"
+  pretty (JVMMethodId _methName _className) = PPL.text "TODO"
 
 type instance MS.MethodId CJ.JVM = JVMMethodId
 
@@ -119,7 +122,8 @@ allocationType alloc =
     AllocArray _len ty -> J.ArrayType ty
 
 
-type instance MS.AllocSpec CJ.JVM = Allocation
+-- TODO: We should probably use a more structured datatype (record), like in LLVM
+type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
 
 --------------------------------------------------------------------------------
 -- *** JVMModule

@@ -96,7 +96,7 @@ instance Show Pos where
   show Unknown               = "unknown"
   show (PosInternal s)       = "[internal:" ++ s ++ "]"
   show PosREPL               = "REPL"
-  
+
 
 toW4Loc :: Text.Text -> Pos -> W4.ProgramLoc
 toW4Loc fnm =
