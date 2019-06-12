@@ -207,6 +207,20 @@ ccTypeCtx :: Simple Lens (LLVMCrucibleContext arch) CL.TypeContext
 ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
 
 --------------------------------------------------------------------------------
+-- ** PointsTo
+
+type instance MS.PointsTo (CL.LLVM arch) = LLVMPointsTo arch
+
+data LLVMPointsTo arch =
+  LLVMPointsTo ProgramLoc (MS.SetupValue (CL.LLVM arch)) (MS.SetupValue (CL.LLVM arch))
+
+ppPointsTo :: LLVMPointsTo arch -> PPL.Doc
+ppPointsTo (LLVMPointsTo _loc ptr val) =
+  MS.ppSetupValue ptr
+  PPL.<+> PPL.text "points to"
+  PPL.<+> MS.ppSetupValue val
+
+--------------------------------------------------------------------------------
 -- ** ???
 
 intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)

@@ -126,7 +126,6 @@ import SAWScript.Crucible.JVM.ResolveSetupValue
 import SAWScript.Crucible.JVM.BuiltinsJVM ()
 
 type SetupValue = MS.SetupValue CJ.JVM
-type PointsTo = MS.PointsTo CJ.JVM
 type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
 
@@ -414,7 +413,7 @@ setupPrePointsTos ::
   CrucibleMethodSpecIR     ->
   JVMCrucibleContext          ->
   Map AllocIndex JVMRefVal ->
-  [PointsTo]               ->
+  [JVMPointsTo]               ->
   Crucible.SymGlobalState Sym ->
   IO (Crucible.SymGlobalState Sym)
 setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
@@ -431,14 +430,14 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
            RVal ref -> return ref
            _ -> liftIO $ Crucible.addFailedAssertion sym msg
 
-    doPointsTo :: Crucible.SymGlobalState Sym -> PointsTo -> IO (Crucible.SymGlobalState Sym)
+    doPointsTo :: Crucible.SymGlobalState Sym -> JVMPointsTo -> IO (Crucible.SymGlobalState Sym)
     doPointsTo mem pt =
       case pt of
-        MS.PointsToField _loc lhs fld rhs ->
+        JVMPointsToField _loc lhs fld rhs ->
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
              CJ.doFieldStore sym mem lhs' fld (injectJVMVal sym rhs')
-        MS.PointsToElem _loc lhs idx rhs ->
+        JVMPointsToElem _loc lhs idx rhs ->
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
              CJ.doArrayStore sym mem lhs' idx (injectJVMVal sym rhs')
@@ -889,7 +888,7 @@ jvm_field_is typed _bic _opt ptr fname val =
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
      valTy <- typeOfSetupValue cc env nameEnv val
      --when typed (checkMemTypeCompatibility lhsTy valTy)
-     Setup.addPointsTo (MS.PointsToField loc ptr fname val)
+     Setup.addPointsTo (JVMPointsToField loc ptr fname val)
 
 jvm_elem_is ::
   Bool {- ^ whether to check type compatibility -} ->
@@ -911,7 +910,7 @@ jvm_elem_is typed _bic _opt ptr idx val =
        else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
          nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     Setup.addPointsTo (MS.PointsToElem loc ptr idx val)
+     Setup.addPointsTo (JVMPointsToElem loc ptr idx val)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do

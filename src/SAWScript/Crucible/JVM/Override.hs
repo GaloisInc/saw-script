@@ -59,7 +59,6 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 -- cryptol
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
-import qualified Cryptol.Utils.PP as Cryptol
 
 -- what4
 import qualified What4.BaseTypes as W4
@@ -104,7 +103,6 @@ import qualified Language.JVM.Parser as J
 
 -- A few convenient synonyms
 type SetupValue = MS.SetupValue CJ.JVM
-type PointsTo = MS.PointsTo CJ.JVM
 type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
 type StateSpec = MS.StateSpec CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
@@ -144,7 +142,7 @@ data OverrideState = OverrideState
   }
 
 data OverrideFailureReason
-  = AmbiguousPointsTos [PointsTo]
+  = AmbiguousPointsTos [JVMPointsTo]
   | AmbiguousVars [TypedTerm]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
@@ -160,7 +158,7 @@ ppOverrideFailureReason :: OverrideFailureReason -> PP.Doc
 ppOverrideFailureReason rsn = case rsn of
   AmbiguousPointsTos pts ->
     PP.text "ambiguous collection of points-to assertions" PP.<$$>
-    (PP.indent 2 $ PP.vcat (map MS.ppPointsTo pts))
+    (PP.indent 2 $ PP.vcat (map ppPointsTo pts))
   AmbiguousVars vs ->
     PP.text "ambiguous collection of variables" PP.<$$>
     (PP.indent 2 $ PP.vcat (map MS.ppTypedTerm vs))
@@ -527,14 +525,14 @@ matchPointsTos ::
   JVMCrucibleContext  {- ^ simulator context     -}     ->
   CrucibleMethodSpecIR                               ->
   PrePost                                            ->
-  [PointsTo]       {- ^ points-tos                -} ->
+  [JVMPointsTo]       {- ^ points-tos                -} ->
   OverrideMatcher ()
 matchPointsTos opts sc cc spec prepost = go False []
   where
     go ::
       Bool       {- progress indicator -} ->
-      [PointsTo] {- delayed conditions -} ->
-      [PointsTo] {- queued conditions  -} ->
+      [JVMPointsTo] {- delayed conditions -} ->
+      [JVMPointsTo] {- queued conditions  -} ->
       OverrideMatcher ()
 
     -- all conditions processed, success
@@ -556,9 +554,9 @@ matchPointsTos opts sc cc spec prepost = go False []
            do go progress (c:delayed) cs
 
     -- determine if a precondition is ready to be checked
-    checkPointsTo :: PointsTo -> OverrideMatcher Bool
-    checkPointsTo (MS.PointsToField _loc p _ _) = checkSetupValue p
-    checkPointsTo (MS.PointsToElem _loc p _ _) = checkSetupValue p
+    checkPointsTo :: JVMPointsTo -> OverrideMatcher Bool
+    checkPointsTo (JVMPointsToField _loc p _ _) = checkSetupValue p
+    checkPointsTo (JVMPointsToElem _loc p _ _) = checkSetupValue p
 
     checkSetupValue :: SetupValue -> OverrideMatcher Bool
     checkSetupValue v =
@@ -569,14 +567,15 @@ matchPointsTos opts sc cc spec prepost = go False []
     setupVars :: SetupValue -> Set AllocIndex
     setupVars v =
       case v of
-        MS.SetupVar    i        -> Set.singleton i
-        MS.SetupTerm   _        -> Set.empty
-        MS.SetupNull ()         -> Set.empty
-        MS.SetupGlobal () _     -> Set.empty
-        MS.SetupStruct void _ _ -> absurd void
-        MS.SetupArray  void _   -> absurd void
-        MS.SetupElem void _ _   -> absurd void
-        MS.SetupField void _ _  -> absurd void
+        MS.SetupVar i                     -> Set.singleton i
+        MS.SetupTerm _                    -> Set.empty
+        MS.SetupNull ()                   -> Set.empty
+        MS.SetupGlobal () _               -> Set.empty
+        MS.SetupStruct empty _ _          -> absurd empty
+        MS.SetupArray empty _             -> absurd empty
+        MS.SetupElem empty _ _            -> absurd empty
+        MS.SetupField empty _ _           -> absurd empty
+        MS.SetupGlobalInitializer empty _ -> absurd empty
 
 
 ------------------------------------------------------------------------
@@ -786,6 +785,7 @@ learnSetupCondition ::
   OverrideMatcher ()
 learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal loc val1 val2)  = learnEqual opts sc cc spec loc prepost val1 val2
 learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred loc tm)         = learnPred sc cc loc prepost (ttTerm tm)
+learnSetupCondition _opts _ _ _ _ (MS.SetupCond_Ghost empty _ _ _) = absurd empty
 
 ------------------------------------------------------------------------
 
@@ -798,12 +798,12 @@ learnPointsTo ::
   JVMCrucibleContext            ->
   CrucibleMethodSpecIR       ->
   PrePost                    ->
-  PointsTo                   ->
+  JVMPointsTo                   ->
   OverrideMatcher ()
 learnPointsTo opts sc cc spec prepost pt =
   case pt of
 
-    MS.PointsToField loc ptr fname val ->
+    JVMPointsToField loc ptr fname val ->
       do let tyenv = MS.csAllocations spec
          let nameEnv = MS.csTypeNames spec
          ty <- typeOfSetupValue cc tyenv nameEnv val
@@ -815,7 +815,7 @@ learnPointsTo opts sc cc spec prepost pt =
          v <- liftIO $ projectJVMVal sym ty ("field load " ++ fname ++ ", " ++ show loc) dyn
          matchArg sc cc loc prepost v ty val
 
-    MS.PointsToElem loc ptr idx val ->
+    JVMPointsToElem loc ptr idx val ->
       do let tyenv = MS.csAllocations spec
          let nameEnv = MS.csTypeNames spec
          ty <- typeOfSetupValue cc tyenv nameEnv val
@@ -907,6 +907,7 @@ executeSetupCondition ::
   OverrideMatcher ()
 executeSetupCondition opts sc cc spec (MS.SetupCond_Equal _loc val1 val2) = executeEqual opts sc cc spec val1 val2
 executeSetupCondition _opts sc cc _    (MS.SetupCond_Pred _loc tm)        = executePred sc cc tm
+executeSetupCondition _ _ _ _    (MS.SetupCond_Ghost empty _ _ _)        = absurd empty
 
 ------------------------------------------------------------------------
 
@@ -918,12 +919,12 @@ executePointsTo ::
   SharedContext              ->
   JVMCrucibleContext            ->
   CrucibleMethodSpecIR       ->
-  PointsTo                   ->
+  JVMPointsTo                   ->
   OverrideMatcher ()
 executePointsTo opts sc cc spec pt =
   case pt of
 
-    MS.PointsToField loc ptr fname val ->
+    JVMPointsToField loc ptr fname val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
@@ -933,7 +934,7 @@ executePointsTo opts sc cc spec pt =
          globals' <- liftIO $ CJ.doFieldStore sym globals rval fname dyn
          OM (overrideGlobals .= globals')
 
-    MS.PointsToElem loc ptr idx val ->
+    JVMPointsToElem loc ptr idx val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
@@ -986,10 +987,15 @@ instantiateSetupValue ::
   IO SetupValue
 instantiateSetupValue sc s v =
   case v of
-    MS.SetupVar _        -> return v
-    MS.SetupTerm tt      -> MS.SetupTerm <$> doTerm tt
-    MS.SetupNull ()      -> return v
-    MS.SetupGlobal () _  -> return v
+    MS.SetupVar _                     -> return v
+    MS.SetupTerm tt                   -> MS.SetupTerm <$> doTerm tt
+    MS.SetupNull ()                   -> return v
+    MS.SetupGlobal () _               -> return v
+    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupArray empty _             -> absurd empty
+    MS.SetupElem empty _ _            -> absurd empty
+    MS.SetupField empty _ _           -> absurd empty
+    MS.SetupGlobalInitializer empty _ -> absurd empty
   where
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
 

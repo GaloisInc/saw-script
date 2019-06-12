@@ -532,7 +532,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM go mem0 pts
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
     go :: MemImpl -> MS.PointsTo (LLVM arch) -> IO MemImpl
-    go mem (MS.PointsTo _loc ptr val) =
+    go mem (LLVMPointsTo _loc ptr val) =
       do val' <- resolveSetupVal cc env tyenv nameEnv val
          ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
          ptr'' <- case ptr' of
@@ -1450,7 +1450,7 @@ crucible_points_to typed _bic _opt (AnyLLVM ptr) (AnyLLVM val) = LLVMCrucibleSet
             _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
           valTy <- typeOfSetupValue cc env nameEnv val
           when typed (checkMemTypeCompatibility lhsTy valTy)
-          Setup.addPointsTo (MS.PointsTo loc ptr val)
+          Setup.addPointsTo (LLVMPointsTo loc ptr val)
 
 crucible_equal ::
   BuiltinContext ->

@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {- |
 Module      : SAWScript.Crucible.JVM.MethodSpecIR
 Description : Provides type-checked representation for Crucible/JVM function
@@ -26,26 +27,13 @@ module SAWScript.Crucible.JVM.MethodSpecIR where
 
 import           Control.Lens
 import           Control.Monad.ST (RealWorld)
-import           Control.Monad.Trans (lift)
-import           Control.Monad.Trans.Maybe
-import           Data.IORef
-import           Data.Map (Map)
 import           Data.Monoid ((<>))
-import qualified Data.Map as Map
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 
 -- what4
-import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
-import qualified Lang.Crucible.Types as Crucible
-  (IntrinsicType, EmptyCtx)
-import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
-  (SAWCoreBackend, saw_ctx, toSC)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
-import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
-  (IntrinsicClass(Intrinsic, muxIntrinsic){-, IntrinsicMuxFn(IntrinsicMuxFn)-})
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
@@ -57,14 +45,7 @@ import qualified Verifier.Java.Codebase as CB
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
--- saw-core
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedTerm
-
-import SAWScript.Options
-import SAWScript.Prover.SolverStats
-
-import           SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
+import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
@@ -124,6 +105,27 @@ allocationType alloc =
 
 -- TODO: We should probably use a more structured datatype (record), like in LLVM
 type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
+
+--------------------------------------------------------------------------------
+-- *** PointsTo
+
+type instance MS.PointsTo CJ.JVM = JVMPointsTo
+
+data JVMPointsTo
+  = JVMPointsToField ProgramLoc (MS.SetupValue CJ.JVM) String (MS.SetupValue CJ.JVM)
+  | JVMPointsToElem ProgramLoc (MS.SetupValue CJ.JVM) Int (MS.SetupValue CJ.JVM)
+
+ppPointsTo :: JVMPointsTo -> PPL.Doc
+ppPointsTo =
+  \case
+    JVMPointsToField _loc ptr fld val ->
+      MS.ppSetupValue ptr <> PPL.text "." <> PPL.text fld
+      PPL.<+> PPL.text "points to"
+      PPL.<+> MS.ppSetupValue val
+    JVMPointsToElem _loc ptr idx val ->
+      MS.ppSetupValue ptr <> PPL.text "[" <> PPL.text (show idx) <> PPL.text "]"
+      PPL.<+> PPL.text "points to"
+      PPL.<+> MS.ppSetupValue val
 
 --------------------------------------------------------------------------------
 -- *** JVMModule

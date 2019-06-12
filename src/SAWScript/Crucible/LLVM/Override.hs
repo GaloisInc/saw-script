@@ -197,7 +197,7 @@ ppOverrideFailureReason :: OverrideFailureReason arch -> PP.Doc
 ppOverrideFailureReason rsn = case rsn of
   AmbiguousPointsTos pts ->
     PP.text "ambiguous collection of points-to assertions" PP.<$$>
-    (PP.indent 2 $ PP.vcat (map MS.ppPointsTo pts))
+    (PP.indent 2 $ PP.vcat (map ppPointsTo pts))
   AmbiguousVars vs ->
     PP.text "ambiguous collection of variables" PP.<$$>
     (PP.indent 2 $ PP.vcat (map ppTypedTerm vs))
@@ -220,7 +220,7 @@ ppOverrideFailureReason rsn = case rsn of
     PP.text "error when loading through pointer that" PP.<+>
     PP.text "appeared in the override's points-to precondition(s):" PP.<$$>
     PP.text "Precondition:" PP.<$$>
-      PP.indent 2 (either MS.ppPointsTo id pointsTo) PP.<$$>
+      PP.indent 2 (either ppPointsTo id pointsTo) PP.<$$>
     PP.text "Failure reason: " PP.<$$> PP.indent 2 msg -- this can be long
   StructuralMismatch llvmval setupval setupvalTy ty ->
     PP.text "could not match specified value with actual value:" PP.<$$>
@@ -317,7 +317,7 @@ ppPointsToAsLLVMVal ::
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   PointsTo (LLVM arch) ->
   OverrideMatcher arch w PP.Doc
-ppPointsToAsLLVMVal opts cc sc spec (PointsTo loc setupVal1 setupVal2) = do
+ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc setupVal1 setupVal2) = do
   pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec setupVal1
   pretty2 <- ppSetupValueAsLLVMVal opts cc sc spec setupVal2
   pure $ PP.vcat [ PP.text "Pointer:" PP.<+> pretty1
@@ -911,7 +911,7 @@ matchPointsTos opts sc cc spec prepost = go False []
     go True delayed [] = go False [] delayed
 
     -- progress the next points-to in the work queue
-    go progress delayed (c@(PointsTo loc _ _):cs) =
+    go progress delayed (c@(LLVMPointsTo loc _ _):cs) =
       do ready <- checkPointsTo c
          if ready then
            do err <- learnPointsTo opts sc cc spec prepost c
@@ -925,7 +925,7 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- determine if a precondition is ready to be checked
     checkPointsTo :: PointsTo (LLVM arch) -> OverrideMatcher arch md Bool
-    checkPointsTo (PointsTo _loc p _) = checkSetupValue p
+    checkPointsTo (LLVMPointsTo _loc p _) = checkSetupValue p
 
     checkSetupValue :: SetupValue (Crucible.LLVM arch) -> OverrideMatcher arch md Bool
     checkSetupValue v =
@@ -1275,7 +1275,7 @@ learnPointsTo ::
   PrePost                    ->
   PointsTo (LLVM arch)       ->
   OverrideMatcher arch md (Maybe PP.Doc)
-learnPointsTo opts sc cc spec prepost (PointsTo loc ptr val) =
+learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
   do let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
@@ -1451,7 +1451,7 @@ executePointsTo ::
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
   PointsTo (LLVM arch)       ->
   OverrideMatcher arch RW ()
-executePointsTo opts sc cc spec (PointsTo _loc ptr val) =
+executePointsTo opts sc cc spec (LLVMPointsTo _loc ptr val) =
   do (_, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
      sym    <- getSymInterface
 

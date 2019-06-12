@@ -44,7 +44,6 @@ import qualified Lang.Crucible.Types as Crucible
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
-import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 import qualified Cryptol.Utils.PP as Cryptol
 
@@ -56,25 +55,6 @@ import           SAWScript.Prover.SolverStats
 import           SAWScript.Utils (bullets)
 
 import           SAWScript.Crucible.Common
-
---------------------------------------------------------------------------------
--- ** ExtRepr
-
--- | A singleton type representing a language extension
---
--- While Crucible supports extensibly adding and simulating new languages, we can
--- exhaustively enumerate all the languages SAW supports verifying.
--- data ExtRepr ext where
---   ExtJVM :: ExtRepr JVM
---   ExtLLVM :: NatRepr n -> ExtRepr (LLVM (X86 n))
-
--- instance TestEquality ExtRepr where
---   testEquality (ExtLLVM n) (ExtLLVM m) =
---     case testEquality n m of
---       Just Refl -> Just Refl
---       Nothing -> Nothing
---   testEquality ExtJVM ExtJVM = Just Refl
---   testEquality _ _ = Nothing
 
 --------------------------------------------------------------------------------
 -- ** SetupValue
@@ -129,11 +109,7 @@ type SetupValueHas (c :: Type -> Constraint) ext =
 
 deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 
--- TypedTerm is neither Data, Eq nor Ord
--- deriving instance ( SetupValueHas Data ext
---                   , SetupValueHas Typeable ext
---                   , Typeable ext
---                   ) => Data (SetupValue ext)
+-- TypedTerm is neither Eq nor Ord
 -- deriving instance (SetupValueHas Eq ext) => Eq (SetupValue ext)
 -- deriving instance (SetupValueHas Ord ext) => Ord (SetupValue ext)
 
@@ -175,8 +151,6 @@ setupToTypedTerm opts sc sv =
     SetupTerm term -> return term
     _ -> do t <- setupToTerm opts sc sv
             lift $ mkTypedTerm sc t
-
--- TODO: Should probably go ahead and make this fully language-specific?
 
 -- | Convert a setup value to a SAW-Core term. This is a partial
 -- function, as certain setup values ---SetupVar, SetupNull and
@@ -302,12 +276,9 @@ testResolved val0 path0 rs = go path0 val0
 
 
 --------------------------------------------------------------------------------
--- *** CrucibleContext
+-- *** Extension-specific information
 
 type family CrucibleContext ext :: Type
-
---------------------------------------------------------------------------------
--- *** Extension-specific information
 
 -- | How to specify allocations in this syntax extension
 type family AllocSpec ext :: Type
@@ -317,6 +288,9 @@ type family TypeName ext :: Type
 
 -- | The type of types of the syntax extension we're dealing with
 type family ExtType ext :: Type
+
+-- | The type of points-to assertions
+type family PointsTo ext :: Type
 
 --------------------------------------------------------------------------------
 -- *** StateSpec
@@ -333,31 +307,6 @@ data SetupCondition ext where
 deriving instance ( SetupValueHas Show ext
                   , Show (B (HasGhostState ext))
                   ) => Show (SetupCondition ext)
-
--- | TODO: documentation
-data PointsTo ext
-  = PointsTo ProgramLoc (SetupValue ext) (SetupValue ext)
-  | PointsToField ProgramLoc (SetupValue ext) String (SetupValue ext)
-  | PointsToElem ProgramLoc (SetupValue ext) Int (SetupValue ext)
-
-ppPointsTo :: PointsTo ext -> PP.Doc
-ppPointsTo =
-  \case
-    PointsTo _loc ptr val ->
-      ppSetupValue ptr
-      PP.<+> PP.text "points to"
-      PP.<+> ppSetupValue val
-    PointsToField _loc ptr fld val ->
-      ppSetupValue ptr <> PP.text "." <> PP.text fld
-      PP.<+> PP.text "points to"
-      PP.<+> ppSetupValue val
-    PointsToElem _loc ptr idx val ->
-      ppSetupValue ptr <> PP.text "[" <> PP.text (show idx) <> PP.text "]"
-      PP.<+> PP.text "points to"
-      PP.<+> ppSetupValue val
-
-
-deriving instance (SetupValueHas Show ext) => Show (PointsTo ext)
 
 -- | Verification state (either pre- or post-) specification
 data StateSpec ext = StateSpec

@@ -28,6 +28,7 @@ import Control.Lens
 import Data.IORef
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Void (absurd)
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
@@ -114,8 +115,11 @@ typeOfSetupValue _cc env _nameEnv val =
       return (J.ClassType (J.mkClassName "java/lang/Object"))
     MS.SetupGlobal () name ->
       fail ("typeOfSetupValue: unimplemented jvm_global: " ++ name)
-    -- MS.SetupArray void _ ->
-    -- MS.SetupStruct void _ ->
+    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupArray empty _             -> absurd empty
+    MS.SetupElem empty _ _            -> absurd empty
+    MS.SetupField empty _ _           -> absurd empty
+    MS.SetupGlobalInitializer empty _ -> absurd empty
 
 -- | Translate a SetupValue into a Crucible JVM value, resolving
 -- references
@@ -136,6 +140,11 @@ resolveSetupVal cc env _tyenv _nameEnv val =
       return (RVal (W4.maybePartExpr sym Nothing))
     MS.SetupGlobal () name ->
       fail $ "resolveSetupVal: unimplemented jvm_global: " ++ name
+    MS.SetupStruct empty _ _          -> absurd empty
+    MS.SetupArray empty _             -> absurd empty
+    MS.SetupElem empty _ _            -> absurd empty
+    MS.SetupField empty _ _           -> absurd empty
+    MS.SetupGlobalInitializer empty _ -> absurd empty
   where
     sym = cc^.jccBackend
 
