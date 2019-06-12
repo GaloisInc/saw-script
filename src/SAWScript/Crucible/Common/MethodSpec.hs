@@ -482,8 +482,9 @@ makeCrucibleMethodSpecIR ::
   [ExtType ext] ->
   Maybe (ExtType ext) ->
   ProgramLoc ->
+  Codebase ext ->
   CrucibleMethodSpecIR ext
-makeCrucibleMethodSpecIR meth args ret loc = do
+makeCrucibleMethodSpecIR meth args ret loc code = do
   CrucibleMethodSpec
     {_csMethod          = meth
     ,_csArgs            = args
@@ -494,4 +495,5 @@ makeCrucibleMethodSpecIR meth args ret loc = do
     ,_csRetValue        = Nothing
     ,_csSolverStats     = mempty
     ,_csLoc             = loc
+    ,_csCodebase        = code
     }

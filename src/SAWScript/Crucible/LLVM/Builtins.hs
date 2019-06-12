@@ -271,8 +271,8 @@ createMethodSpec ::
   TopLevel (MS.CrucibleMethodSpecIR (LLVM arch))
 createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup = do
   (nm', parent) <- resolveSpecName nm
-  let edef = findDefMaybeStatic (modMod lm) nm'
-  let edecl = findDecl (modMod lm) nm'
+  let edef = findDefMaybeStatic (lm ^. modAST) nm'
+  let edecl = findDecl (lm ^. modAST) nm'
   defOrDecls <- case (edef, edecl) of
     (Right defs, _) -> return (NE.map Left defs)
     (_, Right decl) -> return (Right decl NE.:| [])
@@ -289,9 +289,10 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
         pos <- getPosition
         let setupLoc = toW4Loc "_SAW_verify_prestate" pos
 
-        let est0 = case defOrDecl of
-                    Left def -> initialCrucibleSetupState cc def setupLoc parent
-                    Right decl -> initialCrucibleSetupStateDecl cc decl setupLoc parent
+        let est0 =
+              case defOrDecl of
+                Left def -> initialCrucibleSetupState cc def setupLoc parent
+                Right decl -> initialCrucibleSetupStateDecl cc decl setupLoc parent
         st0 <- either (fail . show . ppSetupError) return est0
 
         -- execute commands of the method spec
@@ -902,7 +903,7 @@ setupLLVMCrucibleContext ::
   ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
    LLVMCrucibleContext arch -> TopLevel a) ->
   TopLevel a
-setupLLVMCrucibleContext bic opts (LLVMModule _ llvm_mod mtrans) action = do
+setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
   halloc <- getHandleAlloc
   let ctx = mtrans^.Crucible.transContext
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
@@ -944,8 +945,7 @@ setupLLVMCrucibleContext bic opts (LLVMModule _ llvm_mod mtrans) action = do
             _ -> fail "simulator initialization failed!"
 
       return
-         LLVMCrucibleContext{ _ccLLVMModuleTrans = mtrans
-                            , _ccLLVMModule = llvm_mod
+         LLVMCrucibleContext{ _ccLLVMModule = lm
                             , _ccBackend = sym
                             , _ccLLVMEmptyMem = mem
                             , _ccLLVMSimContext = lsimctx
@@ -1065,7 +1065,7 @@ crucible_llvm_extract ::
   String ->
   TopLevel TypedTerm
 crucible_llvm_extract bic opts (Some lm) fn_name = do
-  let ctx = lm ^. to modTrans . Crucible.transContext
+  let ctx = lm ^. modTrans . Crucible.transContext
   let ?lc = ctx^.Crucible.llvmTypeCtx
   setupLLVMCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
@@ -1079,7 +1079,7 @@ crucible_llvm_cfg ::
   String ->
   TopLevel SAW_CFG
 crucible_llvm_cfg bic opts (Some lm) fn_name = do
-  let ctx = lm ^. to modTrans . Crucible.transContext
+  let ctx = lm ^. modTrans . Crucible.transContext
   let ?lc = ctx^.Crucible.llvmTypeCtx
   setupLLVMCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of

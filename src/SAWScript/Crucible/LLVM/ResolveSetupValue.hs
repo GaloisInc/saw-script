@@ -218,7 +218,7 @@ typeOfSetupValue' cc env nameEnv val =
       return (Crucible.PtrType Crucible.VoidType)
     -- A global and its initializer have the same type.
     SetupGlobal () name -> do
-      let m = cc^.ccLLVMModule
+      let m = cc ^. ccLLVMModuleAST
           tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
                 [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
                 [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]

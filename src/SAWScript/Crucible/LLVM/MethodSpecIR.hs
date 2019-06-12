@@ -121,10 +121,12 @@ type instance MS.AllocSpec (CL.LLVM _) = LLVMAllocSpec
 
 data LLVMModule arch =
   LLVMModule
-  { modName :: String
-  , modMod :: L.Module
-  , modTrans :: CL.ModuleTranslation arch
+  { _modName :: String
+  , _modAST :: L.Module
+  , _modTrans :: CL.ModuleTranslation arch
   }
+
+makeLenses ''LLVMModule
 
 instance TestEquality LLVMModule where
   testEquality (LLVMModule nm1 lm1 mt1) (LLVMModule nm2 lm2 mt2) =
@@ -182,8 +184,7 @@ type instance MS.CrucibleContext (CL.LLVM arch) = LLVMCrucibleContext arch
 
 data LLVMCrucibleContext arch =
   LLVMCrucibleContext
-  { _ccLLVMModule      :: L.Module
-  , _ccLLVMModuleTrans :: CL.ModuleTranslation arch
+  { _ccLLVMModule      :: LLVMModule arch
   , _ccBackend         :: Sym
   , _ccLLVMEmptyMem    :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
   , _ccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM arch)
@@ -192,10 +193,16 @@ data LLVMCrucibleContext arch =
 
 makeLenses ''LLVMCrucibleContext
 
-ccLLVMContext :: Simple Lens (LLVMCrucibleContext wptr) (CL.LLVMContext wptr)
+ccLLVMModuleAST :: Simple Lens (LLVMCrucibleContext arch) L.Module
+ccLLVMModuleAST = ccLLVMModule . modAST
+
+ccLLVMModuleTrans :: Simple Lens (LLVMCrucibleContext arch) (CL.ModuleTranslation arch)
+ccLLVMModuleTrans = ccLLVMModule . modTrans
+
+ccLLVMContext :: Simple Lens (LLVMCrucibleContext arch) (CL.LLVMContext arch)
 ccLLVMContext = ccLLVMModuleTrans . CL.transContext
 
-ccTypeCtx :: Simple Lens (LLVMCrucibleContext wptr) CL.TypeContext
+ccTypeCtx :: Simple Lens (LLVMCrucibleContext arch) CL.TypeContext
 ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
 
 --------------------------------------------------------------------------------
@@ -247,29 +254,31 @@ resolveRetTy ty = do
 
 initialDefCrucibleMethodSpecIR ::
   (?lc :: CL.TypeContext) =>
+  LLVMModule arch ->
   L.Define ->
   ProgramLoc ->
   Maybe String ->
   Either SetupError (MS.CrucibleMethodSpecIR (CL.LLVM arch))
-initialDefCrucibleMethodSpecIR def loc parent = do
+initialDefCrucibleMethodSpecIR llvmModule def loc parent = do
   args <- resolveArgs (L.typedType <$> L.defArgs def)
   ret <- resolveRetTy (L.defRetType def)
   let L.Symbol nm = L.defName def
   let methId = LLVMMethodId nm parent
-  return $ MS.makeCrucibleMethodSpecIR methId args ret loc
+  return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule
 
 initialDeclCrucibleMethodSpecIR ::
   (?lc :: CL.TypeContext) =>
+  LLVMModule arch ->
   L.Declare ->
   ProgramLoc ->
   Maybe String ->
   Either SetupError (MS.CrucibleMethodSpecIR (CL.LLVM arch))
-initialDeclCrucibleMethodSpecIR dec loc parent = do
+initialDeclCrucibleMethodSpecIR llvmModule dec loc parent = do
   args <- resolveArgs (L.decArgs dec)
   ret <- resolveRetTy (L.decRetType dec)
   let L.Symbol nm = L.decName dec
   let methId = LLVMMethodId nm parent
-  return $ MS.makeCrucibleMethodSpecIR methId args ret loc
+  return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule
 
 initialCrucibleSetupState ::
   (?lc :: CL.TypeContext) =>
@@ -279,7 +288,7 @@ initialCrucibleSetupState ::
   Maybe String ->
   Either SetupError (Setup.CrucibleSetupState (CL.LLVM arch))
 initialCrucibleSetupState cc def loc parent = do
-  ms <- initialDefCrucibleMethodSpecIR def loc parent
+  ms <- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def loc parent
   return $ Setup.makeCrucibleSetupState cc ms
 
 initialCrucibleSetupStateDecl ::
@@ -290,7 +299,7 @@ initialCrucibleSetupStateDecl ::
   Maybe String ->
   Either SetupError (Setup.CrucibleSetupState (CL.LLVM arch))
 initialCrucibleSetupStateDecl cc dec loc parent = do
-  ms <- initialDeclCrucibleMethodSpecIR dec loc parent
+  ms <- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec loc parent
   return $ Setup.makeCrucibleSetupState cc ms
 
 --------------------------------------------------------------------------------
