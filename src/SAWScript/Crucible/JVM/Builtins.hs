@@ -119,6 +119,7 @@ import           SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
+import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
 import SAWScript.Crucible.JVM.MethodSpecIR
 import SAWScript.Crucible.JVM.Override
 import SAWScript.Crucible.JVM.ResolveSetupValue
@@ -127,7 +128,6 @@ import SAWScript.Crucible.JVM.BuiltinsJVM ()
 type SetupValue = MS.SetupValue CJ.JVM
 type PointsTo = MS.PointsTo CJ.JVM
 type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
--- type StateSpec = MS.StateSpec CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
 
 -- TODO: something useful with the global pair?
@@ -914,43 +914,21 @@ jvm_elem_is typed _bic _opt ptr idx val =
      Setup.addPointsTo (MS.PointsToElem loc ptr idx val)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
-jvm_precond p =
-  JVMSetupM $
-  do st <- get
-     when (st ^. Setup.csPrePost == PostState) $
-       fail "attempt to use `jvm_precond` in post state"
-     loc <- SS.toW4Loc "jvm_precond" <$> lift getPosition
-     Setup.addCondition (MS.SetupCond_Pred loc p)
+jvm_precond term = JVMSetupM $ do
+  loc <- SS.toW4Loc "jvm_precond" <$> lift getPosition
+  Setup.crucible_precond loc term
 
 jvm_postcond :: TypedTerm -> JVMSetupM ()
-jvm_postcond p =
-  JVMSetupM $
-  do st <- get
-     when (st ^. Setup.csPrePost == PreState) $
-       fail "attempt to use `jvm_postcond` in pre state"
-     loc <- SS.toW4Loc "jvm_postcond" <$> lift getPosition
-     Setup.addCondition (MS.SetupCond_Pred loc p)
+jvm_postcond term = JVMSetupM $ do
+  loc <- SS.toW4Loc "jvm_postcond" <$> lift getPosition
+  Setup.crucible_postcond loc term
 
 jvm_execute_func :: BuiltinContext -> Options -> [SetupValue] -> JVMSetupM ()
-jvm_execute_func _bic _opt args =
-  JVMSetupM $
-  do tps <- use (Setup.csMethodSpec . MS.csArgs)
-     Setup.csPrePost .= PostState
-     Setup.csMethodSpec . MS.csArgBindings .= Map.fromList [ (i, (t,a))
-                                                | i <- [0..]
-                                                | a <- args
-                                                | t <- tps
-                                                ]
+jvm_execute_func bic opts args = JVMSetupM $
+  Setup.crucible_execute_func bic opts args
 
-jvm_return ::
-  BuiltinContext -> Options -> SetupValue -> JVMSetupM ()
-jvm_return _bic _opt retval =
-  JVMSetupM $
-  do ret <- use (Setup.csMethodSpec . MS.csRetValue)
-     case ret of
-       Just _ -> fail "jvm_return: duplicate return value specification"
-       Nothing -> Setup.csMethodSpec . MS.csRetValue .= Just retval
-
+jvm_return :: BuiltinContext -> Options -> SetupValue -> JVMSetupM ()
+jvm_return bic opts retVal = JVMSetupM $ Setup.crucible_return bic opts retVal
 
 --------------------------------------------------------------------------------
 
