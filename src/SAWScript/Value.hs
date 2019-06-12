@@ -373,7 +373,6 @@ data TopLevelRO =
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
   , roHandleAlloc   :: Crucible.HandleAllocator RealWorld
-  , roNonceGen      :: Some (NonceGenerator (ST RealWorld))
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   }
