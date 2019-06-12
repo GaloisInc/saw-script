@@ -34,7 +34,6 @@ import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
-import Data.Coerce (coerce)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -54,9 +53,7 @@ import qualified SAWScript.Import
 import SAWScript.Crucible.LLVM.Builtins
 import qualified Lang.Crucible.JVM as CJ
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
-import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
-import qualified SAWScript.Crucible.Common.Setup.Builtins as CSetup
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins

@@ -51,12 +51,8 @@ import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text)
-import qualified Text.LLVM    as L
-import qualified Text.LLVM.PP as L
-import qualified Text.PrettyPrint.HughesPJ as PP
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
-import Data.Parameterized.Nonce (NonceGenerator)
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
 
