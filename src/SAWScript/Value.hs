@@ -662,11 +662,11 @@ instance FromValue SAW_CFG where
     fromValue _ = error "fromValue CFG"
 
 instance IsValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
-    toValue (CMSLLVM.SomeLLVM t) = VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM t)
+    toValue mir = VLLVMCrucibleMethodSpec mir
 
--- instance FromValue (CMS.CrucibleMethodSpecIR ext) where
---     fromValue (VLLVMCrucibleMethodSpec (Some t)) = t
---     fromValue _ = error "fromValue CrucibleMethodSpecIR"
+instance FromValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+    fromValue (VLLVMCrucibleMethodSpec mir) = mir
+    fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
 instance IsValue JCIR.CrucibleMethodSpecIR where
     toValue t = VJVMMethodSpec t

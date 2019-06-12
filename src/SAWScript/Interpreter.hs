@@ -1806,21 +1806,21 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_precond" "Term -> CrucibleSetup ()"
-    (pureVal CSetup.crucible_precond)
+    (pureVal crucible_precond)
     Current
     [ "State that the given predicate is a pre-condition on execution of the"
     , "function being verified."
     ]
 
   , prim "crucible_postcond" "Term -> CrucibleSetup ()"
-    (pureVal CSetup.crucible_postcond)
+    (pureVal crucible_postcond)
     Current
     [ "State that the given predicate is a post-condition of execution of the"
     , "function being verified."
     ]
 
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
-    (bicVal CSetup.crucible_execute_func)
+    (bicVal crucible_execute_func)
     Current
     [ "Specify the given list of values as the arguments of the function."
     ,  ""
@@ -1832,7 +1832,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
-    (bicVal CSetup.crucible_return)
+    (bicVal crucible_return)
     Current
     [ "Specify the given value as the return value of the function. A"
     , "crucible_return statement is required if and only if the function"
@@ -1883,34 +1883,34 @@ primitives = Map.fromList
 
   , prim "crucible_elem"
     "SetupValue -> Int -> SetupValue"
-    (pureVal CMS.SetupElem)
+    (pureVal CIR.anySetupElem)
     Current
     [ "Turn a SetupValue representing a struct or array pointer into"
     , "a pointer to an element of the struct or array by field index." ]
 
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
-    (pureVal CMS.SetupField)
+    (pureVal CIR.anySetupField)
     Current
     [ "Turn a SetupValue representing a struct pointer into"
     , "a pointer to an element of the struct by field name." ]
 
   , prim "crucible_null"
     "SetupValue"
-    (pureVal CMS.SetupNull)
+    (pureVal CIR.anySetupNull)
     Current
     [ "A SetupValue representing a null pointer value." ]
 
   , prim "crucible_global"
     "String -> SetupValue"
-    (pureVal CMS.SetupGlobal)
+    (pureVal CIR.anySetupGlobal)
     Current
     [ "Return a SetupValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
 
   , prim "crucible_global_initializer"
     "String -> SetupValue"
-    (pureVal CMS.SetupGlobalInitializer)
+    (pureVal CIR.anySetupGlobalInitializer)
     Current
     [ "Return a SetupValue representing the value of the initializer of a named"
     , "global. The String should be the name of a global value."
@@ -1920,7 +1920,7 @@ primitives = Map.fromList
 
   , prim "crucible_term"
     "Term -> SetupValue"
-    (pureVal CMS.SetupTerm)
+    (pureVal CIR.anySetupTerm)
     Current
     [ "Construct a `SetupValue` from a `Term`." ]
 

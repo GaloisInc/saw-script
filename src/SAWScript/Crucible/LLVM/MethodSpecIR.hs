@@ -317,8 +317,27 @@ data SomeLLVM t = forall arch. SomeLLVM { getSomeLLVM :: t (CL.LLVM arch) }
 
 -- Constructors for 'SetupValue' which are architecture-polymorphic
 
+anySetupTerm :: TypedTerm -> AnyLLVM MS.SetupValue
+anySetupTerm typedTerm = AnyLLVM (MS.SetupTerm typedTerm)
+
 anySetupArray :: [AnyLLVM MS.SetupValue] -> AnyLLVM MS.SetupValue
-anySetupArray svs = AnyLLVM (MS.SetupArray () $ map getAnyLLVM svs)
+anySetupArray vals = AnyLLVM (MS.SetupArray () $ map getAnyLLVM vals)
 
 anySetupStruct :: Bool -> [AnyLLVM MS.SetupValue] -> AnyLLVM MS.SetupValue
-anySetupStruct b svs = AnyLLVM (MS.SetupStruct () b $ map getAnyLLVM svs)
+anySetupStruct b vals = AnyLLVM (MS.SetupStruct () b $ map getAnyLLVM vals)
+
+anySetupElem :: AnyLLVM MS.SetupValue -> Int -> AnyLLVM MS.SetupValue
+anySetupElem val idx = AnyLLVM (MS.SetupElem () (getAnyLLVM val) idx)
+
+anySetupField :: AnyLLVM MS.SetupValue -> String -> AnyLLVM MS.SetupValue
+anySetupField val field = AnyLLVM (MS.SetupField () (getAnyLLVM val) field)
+
+anySetupNull :: AnyLLVM MS.SetupValue
+anySetupNull = AnyLLVM (MS.SetupNull ())
+
+anySetupGlobal :: String -> AnyLLVM MS.SetupValue
+anySetupGlobal globalName = AnyLLVM (MS.SetupGlobal () globalName)
+
+anySetupGlobalInitializer :: String -> AnyLLVM MS.SetupValue
+anySetupGlobalInitializer globalName =
+  AnyLLVM (MS.SetupGlobalInitializer () globalName)
