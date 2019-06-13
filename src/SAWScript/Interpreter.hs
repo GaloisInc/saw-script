@@ -2117,6 +2117,22 @@ primitives = Map.fromList
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if two monadic terms are equal" ]
+
+    ---------------------------------------------------------------------
+
+  , prim "sharpSAT"  "Term -> TopLevel Integer"
+    (pureVal sharpSAT)
+    Current
+    [ "Use the sharpSAT solver to count the number of solutions to the CNF"
+    , "representation of the given Term."
+    ]
+
+  , prim "approxmc"  "Term -> TopLevel String"
+    (pureVal approxmc)
+    Current
+    [ "Use the approxmc solver to approximate the number of solutions to the"
+    , "CNF representation of the given Term."
+    ]
   ]
 
   where
