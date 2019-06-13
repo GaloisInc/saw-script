@@ -83,45 +83,6 @@ makeCrucibleSetupState cc mspec =
 
 type CrucibleSetupT ext = StateT (CrucibleSetupState ext)
 
--- newtype CrucibleSetupT ext m a =
---   CrucibleSetupT
---     { unCrucibleSetupT :: StateT (CrucibleSetupState ext) m a }
---   deriving ( Applicative
---            , Functor
---            , Generic
---            , Generic1
---            , Monad
---            , MonadFail
---            , MonadIO
---            )
-
--- deriving instance Monad m =>
---   MonadState (CrucibleSetupState ext) (CrucibleSetupT ext m)
-
--- instance MonadTrans (CrucibleSetupT ext) where
---   lift = CrucibleSetupT . lift
-
--- execCrucibleSetupT ::
---   Monad m =>
---   CrucibleSetupT ext m a ->
---   CrucibleSetupState ext ->
---   m (CrucibleSetupState ext)
--- execCrucibleSetupT (CrucibleSetupT action) = execStateT action
-
--- runCrucibleSetupT ::
---   Monad m =>
---   CrucibleSetupT ext m a ->
---   CrucibleSetupState ext ->
---   m (a, CrucibleSetupState ext)
--- runCrucibleSetupT (CrucibleSetupT action) = runStateT action
-
--- underCrucibleSetupT ::
---   (forall b. m b -> m b) ->
---   CrucibleSetupT ext m a ->
---   CrucibleSetupT ext m a
--- underCrucibleSetupT doUnder action = CrucibleSetupT $ StateT $ \s ->
---   doUnder (runStateT (unCrucibleSetupT action) s)
-
 --------------------------------------------------------------------------------
 -- ** State operations
 
