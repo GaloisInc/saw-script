@@ -22,7 +22,7 @@ des pt keys = (swap (split last)) @@ FPz
         iv  = [ round (k, split lr)
               | k  <- keys
               | lr <- [pt'] # iv ]
-        last = iv @ (width keys - 1)
+        last = iv @ (length keys - 1)
 
 round : ([48],[2][32]) -> [64]
 round (k, [l, r]) = r # (l ^ f (r, k))

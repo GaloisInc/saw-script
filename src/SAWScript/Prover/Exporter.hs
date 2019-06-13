@@ -36,6 +36,7 @@ import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
+import SAWScript.Proof (predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
@@ -152,11 +153,13 @@ write_cnf sc f (TypedTerm schema t) = do
 writeSMTLib2 :: SharedContext -> FilePath -> Term -> IO ()
 writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
 
--- | As above, but check that the type is monomorphic and boolean.
+-- | Write a @Term@ representing a predicate (i.e. a monomorphic
+-- function returning a boolean) to an SMT-Lib version 2 file.
 write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> IO ()
 write_smtlib2 sc f (TypedTerm schema t) = do
   checkBooleanSchema schema
-  writeSMTLib2 sc f t
+  p <- predicateToProp sc Universal [] t
+  writeSMTLib2 sc f p
 
 -- | Write a @Term@ representing a theorem to an SMT-Lib version
 -- 2 file, treating some constants as uninterpreted.

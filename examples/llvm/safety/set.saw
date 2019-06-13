@@ -35,4 +35,4 @@ let set_good_spec n = do {
 m <- llvm_load_module "set.bc";
 
 crucible_llvm_verify m "set" [] false (set_good_spec 10) abc;
-crucible_llvm_verify m "set" [] false (set_bad_spec 10) abc;
+fails (crucible_llvm_verify m "set" [] false (set_bad_spec 10) abc);

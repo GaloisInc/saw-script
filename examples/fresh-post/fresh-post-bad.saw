@@ -12,4 +12,4 @@ let bad_spec : CrucibleSetup () = do {
 
 m <- llvm_load_module "source.bc";
 whoknows <- crucible_llvm_unsafe_assume_spec m "whoknows" whoknows_spec;
-crucible_llvm_verify m "bad" [whoknows] false bad_spec abc;
+fails (crucible_llvm_verify m "bad" [whoknows] false bad_spec abc);
