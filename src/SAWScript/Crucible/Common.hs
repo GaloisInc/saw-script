@@ -9,10 +9,7 @@ Stability   : provisional
 {-# LANGUAGE RankNTypes #-}
 
 module SAWScript.Crucible.Common
-  ( AllocIndex(..)
-  , nextAllocIndex
-  , PrePost(..)
-  , ppAbortedResult
+  ( ppAbortedResult
   , Sym
   ) where
 
@@ -29,18 +26,6 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
 -- | The symbolic backend we use for SAW verification
 type Sym = SAWCoreBackend Nonce.GlobalNonceGenerator (Yices.Connection Nonce.GlobalNonceGenerator) (W4.Flags W4.FloatReal)
-
--- | How many allocations have we made in this method spec?
-newtype AllocIndex = AllocIndex Int
-  deriving (Eq, Ord, Show)
-
-nextAllocIndex :: AllocIndex -> AllocIndex
-nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
-
--- | Are we writing preconditions or postconditions?
-data PrePost
-  = PreState | PostState
-  deriving (Eq, Ord, Show)
 
 ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc)
                 -> AbortedResult Sym ext

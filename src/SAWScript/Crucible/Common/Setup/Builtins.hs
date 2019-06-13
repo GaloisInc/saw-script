@@ -23,7 +23,6 @@ import           Verifier.SAW.TypedTerm (TypedTerm)
 import           SAWScript.Options (Options)
 import           SAWScript.Value
 
-import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.Setup.Type
 
@@ -39,7 +38,7 @@ crucible_precond ::
   CrucibleSetupT ext m ()
 crucible_precond loc p = do
   st <- get
-  when (st ^. csPrePost == PostState) $
+  when (st ^. csPrePost == MS.PostState) $
     fail "attempt to use `crucible_precond` in post state"
   addCondition (MS.SetupCond_Pred loc p)
 
@@ -50,7 +49,7 @@ crucible_postcond ::
   CrucibleSetupT ext m ()
 crucible_postcond loc p = do
   st <- get
-  when (st ^. csPrePost == PreState) $
+  when (st ^. csPrePost == MS.PreState) $
     fail "attempt to use `crucible_postcond` in pre state"
   addCondition (MS.SetupCond_Pred loc p)
 
@@ -74,7 +73,7 @@ crucible_execute_func ::
   CrucibleSetupT ext m ()
 crucible_execute_func _bic _opt args = do
   tps <- use (csMethodSpec . MS.csArgs)
-  csPrePost .= PostState
+  csPrePost .= MS.PostState
   csMethodSpec . MS.csArgBindings .= Map.fromList [ (i, (t,a))
                                                   | i <- [0..]
                                                   | a <- args

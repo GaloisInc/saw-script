@@ -56,6 +56,18 @@ import           SAWScript.Utils (bullets)
 
 import           SAWScript.Crucible.Common
 
+-- | How many allocations have we made in this method spec?
+newtype AllocIndex = AllocIndex Int
+  deriving (Eq, Ord, Show)
+
+nextAllocIndex :: AllocIndex -> AllocIndex
+nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
+
+-- | Are we writing preconditions or postconditions?
+data PrePost
+  = PreState | PostState
+  deriving (Eq, Ord, Show)
+
 --------------------------------------------------------------------------------
 -- ** SetupValue
 

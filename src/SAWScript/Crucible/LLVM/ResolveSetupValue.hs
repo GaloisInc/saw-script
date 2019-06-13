@@ -47,7 +47,6 @@ import           Data.Parameterized.NatRepr
 import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
 import qualified What4.Expr.Builder as W4
-import qualified What4.ProgramLoc   as W4
 
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
@@ -63,8 +62,8 @@ import Text.LLVM.DebugUtils as L
 import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
 import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
-import           SAWScript.Crucible.Common (AllocIndex(..), Sym)
-import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..))
+import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
 
 import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.LLVM.MethodSpecIR

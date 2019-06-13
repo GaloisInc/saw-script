@@ -320,6 +320,7 @@ initialCrucibleSetupStateDecl cc dec loc parent = do
 --------------------------------------------------------------------------------
 -- ** AnyLLVM/SomeLLVM
 
+
 -- | Universal/polymorphic quantification over an 'LLVMArch'
 data AnyLLVM t =
   AnyLLVM { getAnyLLVM :: forall arch. t (CL.LLVM arch) }

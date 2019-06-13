@@ -40,8 +40,6 @@ import           GHC.Generics (Generic, Generic1)
 import           Control.Lens
 import           Control.Monad.State (MonadState, StateT(..), runStateT, execStateT)
 import           Control.Monad.IO.Class (MonadIO(liftIO))
-import           Control.Monad.Fail (MonadFail)
-import           Control.Monad.Trans.Class (MonadTrans(lift))
 
 import           Verifier.SAW.TypedTerm (TypedTerm, mkTypedTerm)
 import           Verifier.SAW.SharedTerm (Term, SharedContext, scFreshGlobal)
@@ -58,8 +56,8 @@ import qualified SAWScript.Crucible.Common.MethodSpec as MS
 -- | The type of state kept in the 'CrucibleSetup' monad
 data CrucibleSetupState ext =
   CrucibleSetupState
-  { _csVarCounter      :: !AllocIndex
-  , _csPrePost         :: PrePost
+  { _csVarCounter      :: !MS.AllocIndex
+  , _csPrePost         :: !MS.PrePost
   , _csResolvedState   :: MS.ResolvedState
   , _csMethodSpec      :: MS.CrucibleMethodSpecIR ext
   , _csCrucibleContext :: MS.CrucibleContext ext
@@ -73,8 +71,8 @@ makeCrucibleSetupState ::
   CrucibleSetupState ext
 makeCrucibleSetupState cc mspec =
   CrucibleSetupState
-    { _csVarCounter      = AllocIndex 0
-    , _csPrePost         = PreState
+    { _csVarCounter      = MS.AllocIndex 0
+    , _csPrePost         = MS.PreState
     , _csResolvedState   = MS.emptyResolvedState
     , _csMethodSpec      = mspec
     , _csCrucibleContext = cc
@@ -129,8 +127,8 @@ type CrucibleSetupT ext = StateT (CrucibleSetupState ext)
 
 currentState :: Lens' (CrucibleSetupState ext) (MS.StateSpec ext)
 currentState f x = case x^. csPrePost of
-  PreState  -> csMethodSpec (MS.csPreState f) x
-  PostState -> csMethodSpec (MS.csPostState f) x
+  MS.PreState  -> csMethodSpec (MS.csPreState f) x
+  MS.PostState -> csMethodSpec (MS.csPostState f) x
 
 addPointsTo :: Monad m => MS.PointsTo ext -> CrucibleSetupT ext m ()
 addPointsTo pt = currentState . MS.csPointsTos %= (pt : )
