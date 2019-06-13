@@ -104,14 +104,14 @@ type instance MS.MethodId (CL.LLVM _) = LLVMMethodId
 --------------------------------------------------------------------------------
 -- *** LLVMAllocSpec
 
--- Is this LLVM-specific? what could we do for java?
 data LLVMAllocSpec =
   LLVMAllocSpec
     { _allocSpecMut   :: CL.Mutability
     , _allocSpecType  :: CL.MemType
     , _allocSpecBytes :: CL.Bytes
     , _allocSpecLoc   :: ProgramLoc
-    } -- TODO: deriving
+    }
+  deriving (Eq, Show)
 
 makeLenses ''LLVMAllocSpec
 

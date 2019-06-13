@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 {- |
 Module      : SAWScript.Crucible.JVM.MethodSpecIR
 Description : Provides type-checked representation for Crucible/JVM function
@@ -7,20 +6,23 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module SAWScript.Crucible.JVM.MethodSpecIR where
@@ -128,54 +130,9 @@ ppPointsTo =
       PPL.<+> MS.ppSetupValue val
 
 --------------------------------------------------------------------------------
--- *** JVMModule
-
--- data JVMModule arch =
---   JVMModule
---   { _modName :: String
---   , _modAST :: L.Module
---   , _modTrans :: CL.ModuleTranslation arch
---   }
-
--- makeLenses ''JVMModule
+-- *** JVMCrucibleContext
 
 type instance MS.Codebase CJ.JVM = CB.Codebase
-
-{-
--- | Represent `CrucibleMethodSpecIR` as a function term in SAW-Core.
-methodSpecToTerm :: SharedContext -> CrucibleMethodSpecIR -> MaybeT IO Term
-methodSpecToTerm sc spec =
-      -- 1. fill in the post-state user variable holes with final
-      -- symbolic state
-  let _ppts = _csPointsTos $ _csPostState $ instantiateUserVars spec
-      -- 2. get the free variables in post points to's (note: these
-      -- should be contained in variables bound by pre-points-tos)
-
-      -- 3. abstract the free variables in each post-points-to
-
-      -- 4. put every abstracted post-points-to in a tuple
-
-      -- 5. Create struct type with fields being names of free variables
-
-      -- 6. Create a lambda term bound to a struct-typed variable that returns the tuple
-  in lift $ scLambda sc undefined undefined undefined
-
--- | Rewrite the `csPostPointsTos` to substitute the elements of the
--- final symbolic state for the fresh variables created by the user in
--- the post-state.
-instantiateUserVars :: CrucibleMethodSpecIR -> CrucibleMethodSpecIR
-instantiateUserVars _spec = undefined
--}
-
--- -- | A datatype to keep track of which parts of the simulator state
--- -- have been initialized already. For each allocation unit or global,
--- -- we keep a list of element-paths that identify the initialized
--- -- sub-components.
--- data ResolvedState =
---   ResolvedState
---   { _rsAllocs :: Map AllocIndex [Either String Int]
---   , _rsGlobals :: Map String [Either String Int]
---   }
 
 data JVMCrucibleContext =
   JVMCrucibleContext
@@ -217,3 +174,31 @@ initialCrucibleSetupState cc method loc =
       (J.className $ cc ^. jccJVMClass)
       method
       loc
+
+--------------------------------------------------------------------------------
+
+{-
+-- | Represent `CrucibleMethodSpecIR` as a function term in SAW-Core.
+methodSpecToTerm :: SharedContext -> CrucibleMethodSpecIR -> MaybeT IO Term
+methodSpecToTerm sc spec =
+      -- 1. fill in the post-state user variable holes with final
+      -- symbolic state
+  let _ppts = _csPointsTos $ _csPostState $ instantiateUserVars spec
+      -- 2. get the free variables in post points to's (note: these
+      -- should be contained in variables bound by pre-points-tos)
+
+      -- 3. abstract the free variables in each post-points-to
+
+      -- 4. put every abstracted post-points-to in a tuple
+
+      -- 5. Create struct type with fields being names of free variables
+
+      -- 6. Create a lambda term bound to a struct-typed variable that returns the tuple
+  in lift $ scLambda sc undefined undefined undefined
+
+-- | Rewrite the `csPostPointsTos` to substitute the elements of the
+-- final symbolic state for the fresh variables created by the user in
+-- the post-state.
+instantiateUserVars :: CrucibleMethodSpecIR -> CrucibleMethodSpecIR
+instantiateUserVars _spec = undefined
+-}
