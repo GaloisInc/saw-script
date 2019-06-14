@@ -595,7 +595,7 @@ assertEqualVals cc v1 v2 =
 
 --------------------------------------------------------------------------------
 
--- TODO: ignores sz arg?
+-- TODO: combine with/move to executeAllocation?
 doAlloc ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch       ->
@@ -604,12 +604,11 @@ doAlloc ::
 doAlloc cc (LLVMAllocSpec mut memTy sz loc) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
-     sz <- W4.bvLit sym Crucible.PtrWidth $
-       Crucible.bytesToInteger (Crucible.memTypeSize dl memTy)
+     sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger sz
      let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
      let l = show (W4.plSourceLoc loc)
      liftIO $
-       Crucible.doMalloc sym Crucible.HeapAlloc Crucible.Mutable l mem sz alignment
+       Crucible.doMalloc sym Crucible.HeapAlloc Crucible.Mutable l mem sz' alignment
 
 --------------------------------------------------------------------------------
 

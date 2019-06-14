@@ -44,13 +44,7 @@ module SAWScript.Crucible.LLVM.Override
 
 import           Control.Lens
 import           Control.Exception as X
-import           Control.Monad.Trans.State hiding (get, put)
-import           Control.Monad.State.Class (MonadState(..))
-import           Control.Monad.Error.Class (MonadError)
-import           Control.Monad.Fail (MonadFail)
-import           Control.Monad.Trans.Except
-import           Control.Monad.Trans.Class
-import           Control.Monad.IO.Class
+import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
@@ -60,27 +54,23 @@ import           Data.Maybe (fromMaybe, catMaybes)
 import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
-import           Data.Typeable (Typeable)
 import qualified Data.Vector as V
-import           GHC.Generics (Generic, Generic1)
+import           GHC.Generics (Generic)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
-import qualified Cryptol.Utils.PP as Cryptol
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.Backend.Online as Crucible
-import qualified Lang.Crucible.CFG.Core as Crucible
-                   (TypeRepr(UnitRepr), GlobalVar)
+import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
 import qualified Lang.Crucible.CFG.Extension.Safety as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
-import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
@@ -96,7 +86,6 @@ import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 import           SAWScript.Crucible.LLVM.CrucibleLLVM (LLVM)
 
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
-import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some(..))
 
@@ -107,7 +96,7 @@ import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
 import           SAWScript.Crucible.Common (Sym)
-import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..), PointsTo(..))
+import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..), PointsTo)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
 import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
@@ -117,7 +106,6 @@ import           SAWScript.Crucible.LLVM.ResolveSetupValue
 import           SAWScript.Options
 import           SAWScript.Utils (bullets, handleException)
 
-type AllocMap arch = Map MS.AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
 type instance Pointer (LLVM arch) = LLVMPtr (Crucible.ArchWidth arch)
@@ -782,21 +770,6 @@ computeReturnValue opts cc sc spec ty (Just val) =
 
 ------------------------------------------------------------------------
 
--- | Forget the type indexes and length of the arguments.
-assignmentToList ::
-  Ctx.Assignment (Crucible.RegEntry sym) ctx ->
-  [Crucible.AnyValue sym]
-assignmentToList = Ctx.toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x y)
-
-------------------------------------------------------------------------
-
-getSymInterface :: OverrideMatcher (LLVM arch) md Sym
-getSymInterface = OM (use syminterface)
-
-------------------------------------------------------------------------
-
-------------------------------------------------------------------------
-
 -- | Assign the given pointer value to the given allocation index in
 -- the current substitution. If there is already a binding for this
 -- index, then add a pointer-equality constraint.
@@ -1184,7 +1157,6 @@ executeAllocation ::
   OverrideMatcher (LLVM arch) RW ()
 executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
   do let sym = cc^.ccBackend
-     let dl = Crucible.llvmDataLayout ?lc
      {-
      memTy <- case Crucible.asMemType symTy of
                 Just memTy -> return memTy
@@ -1192,13 +1164,12 @@ executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
                 -}
      liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
-     let w = Crucible.memTypeSize dl memTy
      mem <- readGlobal memVar
-     sz <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger w)
+     sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger sz)
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
      (ptr, mem') <- liftIO $
-       Crucible.doMalloc sym Crucible.HeapAlloc Crucible.Mutable l mem sz alignment
+       Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
      writeGlobal memVar mem'
      assignVar cc loc var ptr
 

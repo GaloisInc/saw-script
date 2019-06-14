@@ -43,10 +43,7 @@ module SAWScript.Crucible.JVM.Override
 
 import           Control.Lens
 import           Control.Exception as X
-import           Control.Monad.Trans.State
-import           Control.Monad.Trans.Except
-import           Control.Monad.Trans.Class
-import           Control.Monad.IO.Class
+import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
@@ -82,8 +79,6 @@ import qualified Lang.Crucible.JVM as CJ
 -- parameterized-utils
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
--- import qualified Data.Parameterized.Map as MapF
-import qualified Data.Parameterized.TraversableFC as Ctx
 import           Data.Parameterized.Some (Some(Some))
 
 -- saw-core
@@ -140,10 +135,10 @@ mkStructuralMismatch opts cc sc spec jvmval setupval jty = do
   (setupTy, setupJVal) <- resolveSetupValueJVM opts cc sc spec setupval
   pure $ StructuralMismatch
             (ppJVMVal jvmval)
-            (MS.ppSetupValue setupval)
+            (ppJVMVal setupJVal)
             (Just setupTy)
             jty
- 
+
 
 ------------------------------------------------------------------------
 
@@ -508,14 +503,6 @@ computeReturnValue opts cc sc spec ty (Just val) =
            Just Refl -> return r
            Nothing -> fail_
 
-
-------------------------------------------------------------------------
-
--- | Forget the type indexes and length of the arguments.
-assignmentToList ::
-  Ctx.Assignment (Crucible.RegEntry sym) ctx ->
-  [Crucible.AnyValue sym]
-assignmentToList = Ctx.toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x y)
 
 ------------------------------------------------------------------------
 

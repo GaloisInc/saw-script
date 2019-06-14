@@ -45,6 +45,8 @@ module SAWScript.Crucible.Common.Override
   , writeGlobal
   , failure
   , getSymInterface
+  --
+  , assignmentToList
   ) where
 
 import qualified Control.Exception as X
@@ -58,41 +60,26 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
 import           Data.Kind (Type)
 import           Data.Map (Map)
-import qualified Data.Map as Map
 import           Data.Set (Set)
-import qualified Data.Set as Set
 import           Data.Typeable (Typeable)
 import           GHC.Generics (Generic, Generic1)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
-import           Data.Parameterized.Some (Some(Some))
-
-import qualified Cryptol.Utils.PP as Cryptol
+import qualified Data.Parameterized.Context as Ctx
+import           Data.Parameterized.Some (Some)
+import           Data.Parameterized.TraversableFC (toListFC)
 
 import           Verifier.SAW.SharedTerm as SAWVerifier
 import           Verifier.SAW.TypedTerm as SAWVerifier
 
-import qualified Lang.Crucible.Backend as Crucible
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
-import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
-import qualified Lang.Crucible.Backend.Online as Crucible
-import qualified Lang.Crucible.CFG.Core as Crucible
-                   (TypeRepr(UnitRepr), GlobalVar)
-import qualified Lang.Crucible.CFG.Extension.Safety as Crucible
-import qualified Lang.Crucible.LLVM.MemModel as Crucible
-import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
+import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr, GlobalVar)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
-import qualified What4.BaseTypes as W4
-import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
-import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
-import qualified What4.Symbol as W4
-import qualified What4.LabeledPred as W4
 
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
@@ -324,3 +311,11 @@ failure loc e = OM (lift (throwE (OF loc e)))
 
 getSymInterface :: OverrideMatcher ext md Sym
 getSymInterface = OM (use syminterface)
+
+------------------------------------------------------------------------
+
+-- | Forget the type indexes and length of the arguments.
+assignmentToList ::
+  Ctx.Assignment (Crucible.RegEntry sym) ctx ->
+  [Crucible.AnyValue sym]
+assignmentToList = toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x y)
