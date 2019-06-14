@@ -86,7 +86,8 @@ csMethodName :: Simple Lens (MS.CrucibleMethodSpecIR CJ.JVM) String
 csMethodName = MS.csMethod . jvmMethodName
 
 instance PPL.Pretty JVMMethodId where
-  pretty (JVMMethodId _methName _className) = PPL.text "TODO"
+  pretty (JVMMethodId methName className) =
+    PPL.text (concat [J.unClassName className ,".", methName])
 
 type instance MS.MethodId CJ.JVM = JVMMethodId
 
