@@ -674,8 +674,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
      st <- case matchPost of
              Left err      -> fail (show err)
              Right (_, st) -> return st
-     io $ for_ (view osAsserts st) $ \(p, r) ->
-       Crucible.addAssertion sym (Crucible.LabeledPred p r)
+     io $ for_ (view osAsserts st) $ \assert -> Crucible.addAssertion sym assert
 
      obligations <- io $ Crucible.getProofObligations sym
      io $ Crucible.clearProofObligations sym
@@ -692,7 +691,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
     matchResult =
       case (ret, mspec ^. MS.csRetValue) of
-        (Just (rty,r), Just expect) -> matchArg sc cc (mspec ^. MS.csLoc) PostState r rty expect
+        (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected jvm_return specification"
         _ -> return ()
 

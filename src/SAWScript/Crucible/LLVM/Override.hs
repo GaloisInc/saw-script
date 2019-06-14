@@ -110,7 +110,8 @@ import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..), PointsTo(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
-import           SAWScript.Crucible.Common.Override
+import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
+import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
 import           SAWScript.Crucible.LLVM.MethodSpecIR
 import           SAWScript.Crucible.LLVM.ResolveSetupValue
 import           SAWScript.Options
@@ -141,7 +142,7 @@ ppLLVMVal ::
   LLVMVal ->
   OverrideMatcher (LLVM arch) w PP.Doc
 ppLLVMVal cc val = do
-  sym <- getSymInterface
+  sym <- Ov.getSymInterface
   mem <- readGlobal (Crucible.llvmMemVar (cc^.ccLLVMContext))
   liftIO $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplGlobalMap mem) val
 
@@ -527,7 +528,7 @@ methodSpecHandler_prestate ::
 methodSpecHandler_prestate opts sc cc args cs =
     do let expectedArgTypes = Map.elems (cs ^. MS.csArgBindings)
 
-       sym <- getSymInterface
+       sym <- Ov.getSymInterface
 
        let aux (memTy, setupVal) (Crucible.AnyValue tyrep val) =
              do storTy <- Crucible.toStorableType memTy
@@ -656,7 +657,7 @@ enforceDisjointness ::
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointness cc loc ss =
-  do sym <- getSymInterface
+  do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub)
      let memsRW = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
          memsRO = Map.elems $ Map.intersectionWith (,) _ sub
@@ -860,7 +861,7 @@ matchArg ::
 matchArg opts sc cc cs prepost actual expectedTy expected@(SetupTerm expectedTT)
   | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
   , Right tval <- Cryptol.evalType mempty tyexpr
-  = do sym      <- getSymInterface
+  = do sym      <- Ov.getSymInterface
        failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
        realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
        matchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
@@ -875,7 +876,7 @@ matchArg opts sc cc cs prepost (Crucible.LLVMValStruct xs) (Crucible.StructType 
 
 matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer () n) = do
   (globInitTy, globInitVal) <- resolveSetupValueLLVM opts cc sc cs g
-  sym <- getSymInterface
+  sym <- Ov.getSymInterface
   if expectedTy /= globInitTy
   then failure (cs ^. MS.csLoc) =<<
          mkStructuralMismatch opts cc sc cs actual g expectedTy
@@ -892,14 +893,14 @@ matchArg opts sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy s
       do assignVar cc (cs ^. MS.csLoc) var (Crucible.LLVMPointer blk off)
 
     SetupNull () | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-      do sym <- getSymInterface
+      do sym <- Ov.getSymInterface
          p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
          addAssert p =<<
            notEqual prepost opts (cs ^. MS.csLoc) cc sc cs setupval actual
 
     SetupGlobal () name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do let mem = cc^.ccLLVMEmptyMem
-         sym  <- getSymInterface
+         sym  <- Ov.getSymInterface
          ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
          pred_ <- liftIO $
            Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
@@ -1079,7 +1080,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
      storTy <- Crucible.toStorableType memTy
-     sym    <- getSymInterface
+     sym    <- Ov.getSymInterface
 
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ (cc^.ccLLVMContext)
@@ -1248,7 +1249,7 @@ executePointsTo ::
   OverrideMatcher (LLVM arch) RW ()
 executePointsTo opts sc cc spec (LLVMPointsTo _loc ptr val) =
   do (_, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
-     sym    <- getSymInterface
+     sym    <- Ov.getSymInterface
 
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
@@ -1365,6 +1366,6 @@ resolveSetupValue ::
   OverrideMatcher (LLVM arch) md (Crucible.MemType, Crucible.RegValue Sym tp)
 resolveSetupValue opts cc sc spec tp sval =
   do (memTy, lval) <- resolveSetupValueLLVM opts cc sc spec sval
-     sym <- getSymInterface
+     sym <- Ov.getSymInterface
      val <- liftIO $ Crucible.unpackMemValue sym tp lval
      return (memTy, val)
