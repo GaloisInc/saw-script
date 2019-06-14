@@ -57,6 +57,7 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 import qualified Data.Vector as V
+import           Data.Void (absurd)
 import           System.IO
 
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
@@ -115,7 +116,8 @@ import SAWScript.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 import SAWScript.JavaExpr (JavaType(..))
 
 import qualified SAWScript.Crucible.Common as Common
-import           SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
+import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
@@ -466,6 +468,8 @@ setupPrestateConditions mspec cc env = aux []
     aux acc (MS.SetupCond_Pred loc tm : xs) =
       let lp = Crucible.LabeledPred (ttTerm tm) (Crucible.AssumptionReason loc "precondition") in
       aux (lp:acc) xs
+
+    aux _ (MS.SetupCond_Ghost empty_ _ _ _ : _) = absurd empty_
 
 --------------------------------------------------------------------------------
 
@@ -847,7 +851,7 @@ jvm_alloc_object ::
 jvm_alloc_object _bic _opt cname =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_alloc_object" <$> lift getPosition
-     n <- Setup.csVarCounter <<%= Common.nextAllocIndex
+     n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?=
        (loc, AllocObject (parseClassName cname))
      return (MS.SetupVar n)
@@ -861,7 +865,7 @@ jvm_alloc_array ::
 jvm_alloc_array _bic _opt len ety =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_alloc_array" <$> lift getPosition
-     n <- Setup.csVarCounter <<%= Common.nextAllocIndex
+     n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= (loc, AllocArray len (typeOfJavaType ety))
      return (MS.SetupVar n)
 

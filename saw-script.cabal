@@ -132,6 +132,7 @@ library
 
     SAWScript.Crucible.Common
     SAWScript.Crucible.Common.MethodSpec
+    SAWScript.Crucible.Common.Override
     SAWScript.Crucible.Common.Setup.Builtins
     SAWScript.Crucible.Common.Setup.Type
 

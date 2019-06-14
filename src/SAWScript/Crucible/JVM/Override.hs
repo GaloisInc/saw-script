@@ -6,20 +6,22 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.Crucible.JVM.Override
@@ -54,7 +56,7 @@ import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Void (absurd)
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 -- cryptol
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
@@ -64,6 +66,7 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
+import           What4.LabeledPred (labeledPred)
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
@@ -81,6 +84,7 @@ import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
 -- import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.TraversableFC as Ctx
+import           Data.Parameterized.Some (Some(Some))
 
 -- saw-core
 import           Verifier.SAW.SharedTerm
@@ -89,7 +93,10 @@ import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
-import           SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
+import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
+import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
+import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
 
 --import           SAWScript.JavaExpr (JavaType(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -107,147 +114,36 @@ type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
 type StateSpec = MS.StateSpec CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
 
--- | The 'OverrideMatcher' type provides the operations that are needed
--- to match a specification's arguments with the arguments provided by
--- the Crucible simulation in order to compute the variable substitution
--- and side-conditions needed to proceed.
-newtype OverrideMatcher a =
-  OM (StateT OverrideState (ExceptT OverrideFailure IO) a)
-  deriving (Functor, Applicative, Monad, MonadIO)
+-- TODO: upstream me
+instance PPL.Pretty J.Type where
+  pretty = PPL.text . show
 
-data OverrideState = OverrideState
-  { -- | Substitution for memory allocations
-    _setupValueSub :: Map AllocIndex JVMRefVal
+type instance Pointer CJ.JVM = JVMRefVal
 
-    -- | Substitution for SAW Core external constants
-  , _termSub :: Map VarIndex Term
+-- TODO: Improve?
+ppJVMVal :: JVMVal -> PPL.Doc
+ppJVMVal = PPL.text . show
 
-    -- | Free variables available for unification
-  , _osFree :: Set VarIndex
-
-    -- | Accumulated assertions
-  , _osAsserts :: [(W4.Pred Sym, Crucible.SimError)]
-
-    -- | Accumulated assumptions
-  , _osAssumes :: [W4.Pred Sym]
-
-    -- | Symbolic simulation state
-  , _syminterface :: Sym
-
-    -- | Global variables
-  , _overrideGlobals :: Crucible.SymGlobalState Sym
-
-    -- | Source location to associated with this override
-  , _osLocation :: W4.ProgramLoc
-  }
-
-data OverrideFailureReason
-  = AmbiguousPointsTos [JVMPointsTo]
-  | AmbiguousVars [TypedTerm]
-  | BadTermMatch Term Term -- ^ simulated and specified terms did not match
-  | BadPointerCast -- ^ Pointer required to process points-to
-  | BadReturnSpecification -- ^ type mismatch in return specification
-  | NonlinearPatternNotSupported
-  | BadPointerLoad String -- ^ loadRaw failed due to type error
-  | StructuralMismatch JVMVal
-                       SetupValue
-                       J.Type
-                        -- ^ simulated value, specified value, specified type
-
-ppOverrideFailureReason :: OverrideFailureReason -> PP.Doc
-ppOverrideFailureReason rsn = case rsn of
-  AmbiguousPointsTos pts ->
-    PP.text "ambiguous collection of points-to assertions" PP.<$$>
-    (PP.indent 2 $ PP.vcat (map ppPointsTo pts))
-  AmbiguousVars vs ->
-    PP.text "ambiguous collection of variables" PP.<$$>
-    (PP.indent 2 $ PP.vcat (map MS.ppTypedTerm vs))
-  BadTermMatch x y ->
-    PP.text "terms do not match" PP.<$$>
-    (PP.indent 2 (ppTerm defaultPPOpts x)) PP.<$$>
-    (PP.indent 2 (ppTerm defaultPPOpts y))
-  BadPointerCast ->
-    PP.text "bad pointer cast"
-  BadReturnSpecification ->
-    PP.text "bad return specification"
-  NonlinearPatternNotSupported ->
-    PP.text "nonlinear pattern no supported"
-  BadPointerLoad msg ->
-    PP.text "type error when loading through pointer" PP.<$$>
-    PP.indent 2 (PP.text msg)
-  StructuralMismatch llvmval setupval ty ->
-    PP.text "could not match the following terms" PP.<$$>
-    PP.indent 2 (PP.text $ show llvmval) PP.<$$>
-    PP.indent 2 (MS.ppSetupValue setupval) PP.<$$>
-    PP.text "with type" PP.<$$>
-    PP.indent 2 (PP.text (show ty))
-
-instance PP.Pretty OverrideFailureReason where
-  pretty = ppOverrideFailureReason
-
-instance Show OverrideFailureReason where
-  show = show . PP.pretty
-
-data OverrideFailure = OF W4.ProgramLoc OverrideFailureReason
-
-ppOverrideFailure :: OverrideFailure -> PP.Doc
-ppOverrideFailure (OF loc rsn) =
-  PP.text "at" PP.<+> PP.pretty (W4.plSourceLoc loc) PP.<$$>
-  ppOverrideFailureReason rsn
-
-instance PP.Pretty OverrideFailure where
-  pretty = ppOverrideFailure
-
-instance Show OverrideFailure where
-  show = show . PP.pretty
-
-instance Exception OverrideFailure
-
-makeLenses ''OverrideState
-
-------------------------------------------------------------------------
-
--- | The initial override matching state starts with an empty substitution
--- and no assertions or assumptions.
-initialState ::
-  Sym                           {- ^ simulator                       -} ->
-  Crucible.SymGlobalState Sym   {- ^ initial global variables        -} ->
-  Map AllocIndex JVMRefVal      {- ^ initial allocation substitution -} ->
-  Map VarIndex Term             {- ^ initial term substitution       -} ->
-  Set VarIndex                  {- ^ initial free terms              -} ->
-  W4.ProgramLoc                 {- ^ location information for the override -} ->
-  OverrideState
-initialState sym globals allocs terms free loc =
-  OverrideState
-  { _osAsserts       = []
-  , _osAssumes       = []
-  , _syminterface    = sym
-  , _overrideGlobals = globals
-  , _termSub         = terms
-  , _osFree          = free
-  , _setupValueSub   = allocs
-  , _osLocation      = loc
-  }
-
-------------------------------------------------------------------------
-
-addAssert ::
-  W4.Pred Sym       {- ^ property -} ->
-  Crucible.SimError {- ^ reason   -} ->
-  OverrideMatcher ()
-addAssert p r = OM (osAsserts %= cons (p,r))
-
-addAssume ::
-  W4.Pred Sym       {- ^ property -} ->
-  OverrideMatcher ()
-addAssume p = OM (osAssumes %= cons p)
-
-------------------------------------------------------------------------
-
--- | Abort the current computation by raising the given 'OverrideFailure'
--- exception.
-failure :: W4.ProgramLoc -> OverrideFailureReason -> OverrideMatcher a
-failure loc e = OM (lift (throwE (OF loc e)))
+ 
+-- | Try to translate the spec\'s 'SetupValue' into an 'LLVMVal', pretty-print
+--   the 'LLVMVal'.
+mkStructuralMismatch ::
+  Options              {- ^ output/verbosity options -} ->
+  JVMCrucibleContext ->
+  SharedContext {- ^ context for constructing SAW terms -} ->
+  CrucibleMethodSpecIR {- ^ for name and typing environments -} ->
+  JVMVal {- ^ the value from the simulator -} ->
+  SetupValue {- ^ the value from the spec -} ->
+  J.Type     {- ^ the expected type -} ->
+  OverrideMatcher CJ.JVM w (OverrideFailureReason CJ.JVM)
+mkStructuralMismatch opts cc sc spec jvmval setupval jty = do
+  (setupTy, setupJVal) <- resolveSetupValueJVM opts cc sc spec setupval
+  pure $ StructuralMismatch
+            (ppJVMVal jvmval)
+            (MS.ppSetupValue setupval)
+            (Just setupTy)
+            jty
+ 
 
 ------------------------------------------------------------------------
 
@@ -305,11 +201,11 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   branches <- case partitionEithers prestates of
                 (e, []) ->
                   fail $ show $
-                    PP.text "All overrides failed during structural matching:" PP.<$$>
-                    PP.vcat (map (\x -> PP.text "*" PP.<> PP.indent 2 (ppOverrideFailure x)) e)
+                    PPL.text "All overrides failed during structural matching:" PPL.<$$>
+                    PPL.vcat (map (\x -> PPL.text "*" PPL.<> PPL.indent 2 (ppOverrideFailure x)) e)
                 (_, ss) -> liftIO $
                   forM ss $ \(cs,st) ->
-                    do precond <- W4.andAllOf sym (folded._1) (st^.osAsserts)
+                    do precond <- W4.andAllOf sym (folded.labeledPred) (st^.osAsserts)
                        return ( precond, cs, st )
 
   -- Now use crucible's symbolic branching machinery to select between the branches.
@@ -374,14 +270,14 @@ methodSpecHandler opts sc cc top_loc css retTy = do
 --   substitutions for the setup value variables, and computing precondition
 --   predicates.
 methodSpecHandler_prestate ::
-  forall ctx.
+  forall ctx w.
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   JVMCrucibleContext          {- ^ context for interacting with Crucible        -} ->
   Ctx.Assignment (Crucible.RegEntry Sym) ctx
                            {- ^ the arguments to the function -} ->
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 methodSpecHandler_prestate opts sc cc args cs =
   do let expectedArgTypes = Map.elems (cs ^. MS.csArgBindings)
      let aux ::
@@ -395,7 +291,7 @@ methodSpecHandler_prestate opts sc cc args cs =
      -- todo: fail if list lengths mismatch
      xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
-     sequence_ [ matchArg sc cc (cs ^. MS.csLoc) PreState x y z | (x, y, z) <- xs]
+     sequence_ [ matchArg opts sc cc cs PreState x y z | (x, y, z) <- xs]
 
      learnCond opts sc cc cs PreState (cs ^. MS.csPreState)
 
@@ -405,13 +301,13 @@ methodSpecHandler_prestate opts sc cc args cs =
 --   which involves writing values into memory, computing the return value,
 --   and computing postcondition predicates.
 methodSpecHandler_poststate ::
-  forall ret.
+  forall ret w.
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   JVMCrucibleContext          {- ^ context for interacting with Crucible        -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
-  OverrideMatcher (Crucible.RegValue Sym ret)
+  OverrideMatcher CJ.JVM w (Crucible.RegValue Sym ret)
 methodSpecHandler_poststate opts sc cc retTy cs =
   do executeCond opts sc cc cs (cs ^. MS.csPostState)
      computeReturnValue opts cc sc cs retTy (cs ^. MS.csRetValue)
@@ -424,7 +320,7 @@ learnCond ::
   CrucibleMethodSpecIR ->
   PrePost ->
   StateSpec ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 learnCond opts sc cc cs prepost ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
@@ -436,7 +332,7 @@ learnCond opts sc cc cs prepost ss =
 -- | Verify that all of the fresh variables for the given
 -- state spec have been "learned". If not, throws
 -- 'AmbiguousVars' exception.
-enforceCompleteSubstitution :: W4.ProgramLoc -> StateSpec -> OverrideMatcher ()
+enforceCompleteSubstitution :: W4.ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
 enforceCompleteSubstitution loc ss =
 
   do sub <- OM (use termSub)
@@ -466,7 +362,7 @@ executeCond ::
   JVMCrucibleContext ->
   CrucibleMethodSpecIR ->
   StateSpec ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 executeCond opts sc cc cs ss =
   do refreshTerms sc ss
      traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
@@ -479,7 +375,7 @@ executeCond opts sc cc cs ss =
 refreshTerms ::
   SharedContext {- ^ shared context -} ->
   StateSpec     {- ^ current phase spec -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 refreshTerms sc ss =
   do extension <- Map.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
      OM (termSub %= Map.union extension)
@@ -495,9 +391,9 @@ refreshTerms sc ss =
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint.
 enforceDisjointness ::
-  JVMCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher ()
+  JVMCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
 enforceDisjointness _cc loc ss =
-  do sym <- getSymInterface
+  do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub)
      let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
 
@@ -526,14 +422,14 @@ matchPointsTos ::
   CrucibleMethodSpecIR                               ->
   PrePost                                            ->
   [JVMPointsTo]       {- ^ points-tos                -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 matchPointsTos opts sc cc spec prepost = go False []
   where
     go ::
       Bool       {- progress indicator -} ->
       [JVMPointsTo] {- delayed conditions -} ->
       [JVMPointsTo] {- queued conditions  -} ->
-      OverrideMatcher ()
+      OverrideMatcher CJ.JVM w ()
 
     -- all conditions processed, success
     go _ [] [] = return ()
@@ -554,11 +450,11 @@ matchPointsTos opts sc cc spec prepost = go False []
            do go progress (c:delayed) cs
 
     -- determine if a precondition is ready to be checked
-    checkPointsTo :: JVMPointsTo -> OverrideMatcher Bool
+    checkPointsTo :: JVMPointsTo -> OverrideMatcher CJ.JVM w Bool
     checkPointsTo (JVMPointsToField _loc p _ _) = checkSetupValue p
     checkPointsTo (JVMPointsToElem _loc p _ _) = checkSetupValue p
 
-    checkSetupValue :: SetupValue -> OverrideMatcher Bool
+    checkSetupValue :: SetupValue -> OverrideMatcher CJ.JVM w Bool
     checkSetupValue v =
       do m <- OM (use setupValueSub)
          return (all (`Map.member` m) (setupVars v))
@@ -587,29 +483,30 @@ computeReturnValue ::
   CrucibleMethodSpecIR  {- ^ method specification                   -} ->
   Crucible.TypeRepr ret {- ^ representation of function return type -} ->
   Maybe SetupValue      {- ^ optional symbolic return value         -} ->
-  OverrideMatcher (Crucible.RegValue Sym ret)
+  OverrideMatcher CJ.JVM w (Crucible.RegValue Sym ret)
                         {- ^ concrete return value                  -}
 
 computeReturnValue _opts _cc _sc spec ty Nothing =
   case ty of
     Crucible.UnitRepr -> return ()
-    _ -> failure (spec ^. MS.csLoc) BadReturnSpecification
+    _ -> failure (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc sc spec ty (Just val) =
   do (_memTy, val') <- resolveSetupValueJVM opts cc sc spec val
+     let fail_ = failure (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
      case val' of
        IVal i ->
          case testEquality ty CJ.intRepr of
            Just Refl -> return i
-           Nothing -> failure (spec ^. MS.csLoc) BadReturnSpecification
+           Nothing -> fail_
        LVal l ->
          case testEquality ty CJ.longRepr of
            Just Refl -> return l
-           Nothing -> failure (spec ^. MS.csLoc) BadReturnSpecification
+           Nothing -> fail_
        RVal r ->
          case testEquality ty CJ.refRepr of
            Just Refl -> return r
-           Nothing -> failure (spec ^. MS.csLoc) BadReturnSpecification
+           Nothing -> fail_
 
 
 ------------------------------------------------------------------------
@@ -622,26 +519,6 @@ assignmentToList = Ctx.toListFC (\(Crucible.RegEntry x y) -> Crucible.AnyValue x
 
 ------------------------------------------------------------------------
 
-getSymInterface :: OverrideMatcher Sym
-getSymInterface = OM (use syminterface)
-
-------------------------------------------------------------------------
-
--- | "Run" function for OverrideMatcher. The final result and state
--- are returned. The state will contain the updated globals and substitutions
-runOverrideMatcher ::
-  Sym                         {- ^ simulator                       -} ->
-  Crucible.SymGlobalState Sym {- ^ initial global variables        -} ->
-  Map AllocIndex JVMRefVal    {- ^ initial allocation substitution -} ->
-  Map VarIndex Term           {- ^ initial term substitution       -} ->
-  Set VarIndex                {- ^ initial free variables          -} ->
-  W4.ProgramLoc               {- ^ override location information   -} ->
-  OverrideMatcher a           {- ^ matching action                 -} ->
-  IO (Either OverrideFailure (a, OverrideState))
-runOverrideMatcher sym g a t free loc (OM m) = runExceptT (runStateT m (initialState sym g a t free loc))
-
-------------------------------------------------------------------------
-
 -- | Assign the given pointer value to the given allocation index in
 -- the current substitution. If there is already a binding for this
 -- index, then add a pointer-equality constraint.
@@ -650,7 +527,7 @@ assignVar ::
   W4.ProgramLoc ->
   AllocIndex {- ^ variable index -} ->
   JVMRefVal  {- ^ concrete value -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 
 assignVar cc loc var ref =
   do old <- OM (setupValueSub . at var <<.= Just ref)
@@ -669,7 +546,7 @@ assignTerm ::
   PrePost                                                          ->
   VarIndex {- ^ external constant index -} ->
   Term     {- ^ value                   -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 
 assignTerm sc cc loc prepost var val =
   do mb <- OM (use (termSub . at var))
@@ -683,55 +560,58 @@ assignTerm sc cc loc prepost var val =
 
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
+  Options          {- ^ saw script print out opts -} ->
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   JVMCrucibleContext    {- ^ context for interacting with Crucible -} ->
-  W4.ProgramLoc ->
+  CrucibleMethodSpecIR {- ^ specification for current function override  -} ->
   PrePost                                                          ->
   JVMVal             {- ^ concrete simulation value             -} ->
   J.Type             {- ^ expected memory type                  -} ->
   SetupValue         {- ^ expected specification value          -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 
-matchArg sc cc loc prepost actual expectedTy expected@(MS.SetupTerm expectedTT)
+matchArg opts sc cc cs prepost actual expectedTy expected@(MS.SetupTerm expectedTT)
   | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
   , Right tval <- Cryptol.evalType mempty tyexpr
-  = do sym <- getSymInterface
-       let failMsg = StructuralMismatch actual expected expectedTy
-       realTerm <- valueToSC sym loc failMsg tval actual
-       matchTerm sc cc loc prepost realTerm (ttTerm expectedTT)
+  = do sym <- Ov.getSymInterface
+       failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+       realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
+       matchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
 
-matchArg _sc cc loc prepost actual@(RVal ref) expectedTy setupval =
+matchArg opts sc cc cs prepost actual@(RVal ref) expectedTy setupval =
   case setupval of
     MS.SetupVar var ->
-      do assignVar cc loc var ref
+      do assignVar cc (cs ^. MS.csLoc) var ref
 
     MS.SetupNull () ->
-      do sym <- getSymInterface
+      do sym <- Ov.getSymInterface
          p   <- liftIO (CJ.refIsNull sym ref)
-         addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost)))
+         addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost)))
 
     MS.SetupGlobal () name ->
       do let mem = () -- FIXME cc^.ccLLVMEmptyMem
-         sym  <- getSymInterface
+         sym  <- Ov.getSymInterface
          ref' <- liftIO $ doResolveGlobal sym mem name
 
          p  <- liftIO (CJ.refIsEqual sym ref ref')
-         addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
+         addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
 
-    _ -> failure loc (StructuralMismatch actual setupval expectedTy)
+    _ -> failure (cs ^. MS.csLoc) =<<
+           mkStructuralMismatch opts cc sc cs actual setupval expectedTy
 
-matchArg _sc _cc loc _prepost actual expectedTy expected =
-  failure loc (StructuralMismatch actual expected expectedTy)
+matchArg opts sc cc cs _prepost actual expectedTy expected =
+  failure (cs ^. MS.csLoc) =<<
+    mkStructuralMismatch opts cc sc cs actual expected expectedTy
 
 ------------------------------------------------------------------------
 
 valueToSC ::
   Sym ->
   W4.ProgramLoc ->
-  OverrideFailureReason ->
+  OverrideFailureReason CJ.JVM ->
   Cryptol.TValue ->
   JVMVal ->
-  OverrideMatcher Term
+  OverrideMatcher CJ.JVM w Term
 valueToSC sym _ _ Cryptol.TVBit (IVal x) =
   do b <- liftIO $ W4.bvIsNonzero sym x
       -- TODO: assert that x is 0 or 1
@@ -756,7 +636,7 @@ matchTerm ::
   PrePost                                                       ->
   Term            {- ^ exported concrete term                -} ->
   Term            {- ^ expected specification term           -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 
 matchTerm _ _ _ _ real expect | real == expect = return ()
 matchTerm sc cc loc prepost real expect =
@@ -782,7 +662,7 @@ learnSetupCondition ::
   CrucibleMethodSpecIR       ->
   PrePost                    ->
   SetupCondition             ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal loc val1 val2)  = learnEqual opts sc cc spec loc prepost val1 val2
 learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred loc tm)         = learnPred sc cc loc prepost (ttTerm tm)
 learnSetupCondition _opts _ _ _ _ (MS.SetupCond_Ghost empty _ _ _) = absurd empty
@@ -799,33 +679,29 @@ learnPointsTo ::
   CrucibleMethodSpecIR       ->
   PrePost                    ->
   JVMPointsTo                   ->
-  OverrideMatcher ()
-learnPointsTo opts sc cc spec prepost pt =
+  OverrideMatcher CJ.JVM w ()
+learnPointsTo opts sc cc spec prepost pt = do
+  let tyenv = MS.csAllocations spec
+  let nameEnv = MS.csTypeNames spec
+  sym <- Ov.getSymInterface
+  globals <- OM (use overrideGlobals)
   case pt of
 
     JVMPointsToField loc ptr fname val ->
-      do let tyenv = MS.csAllocations spec
-         let nameEnv = MS.csTypeNames spec
-         ty <- typeOfSetupValue cc tyenv nameEnv val
+      do ty <- typeOfSetupValue cc tyenv nameEnv val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
-         sym <- getSymInterface
-         globals <- OM (use overrideGlobals)
          dyn <- liftIO $ CJ.doFieldLoad sym globals rval fname
          v <- liftIO $ projectJVMVal sym ty ("field load " ++ fname ++ ", " ++ show loc) dyn
-         matchArg sc cc loc prepost v ty val
+         matchArg opts sc cc spec prepost v ty val
 
     JVMPointsToElem loc ptr idx val ->
-      do let tyenv = MS.csAllocations spec
-         let nameEnv = MS.csTypeNames spec
-         ty <- typeOfSetupValue cc tyenv nameEnv val
+      do ty <- typeOfSetupValue cc tyenv nameEnv val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
-         sym <- getSymInterface
-         globals <- OM (use overrideGlobals)
          dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
          v <- liftIO $ projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) dyn
-         matchArg sc cc loc prepost v ty val
+         matchArg opts sc cc spec prepost v ty val
 
 
 ------------------------------------------------------------------------
@@ -845,7 +721,7 @@ learnEqual ::
   PrePost                                          ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 learnEqual opts sc cc spec loc prepost v1 v2 =
   do (_, val1) <- resolveSetupValueJVM opts cc sc spec v1
      (_, val2) <- resolveSetupValueJVM opts cc sc spec v2
@@ -861,7 +737,7 @@ learnPred ::
   W4.ProgramLoc                                                       ->
   PrePost                                                             ->
   Term             {- ^ the precondition to learn                  -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 learnPred sc cc loc prepost t =
   do s <- OM (use termSub)
      u <- liftIO $ scInstantiateExt sc s t
@@ -880,12 +756,12 @@ executeAllocation ::
   Options                        ->
   JVMCrucibleContext                ->
   (AllocIndex, (W4.ProgramLoc, Allocation)) ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 executeAllocation opts cc (var, (loc, alloc)) =
   do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show alloc]
      let jc = cc^.jccJVMContext
      let halloc = cc^.jccHandleAllocator
-     sym <- getSymInterface
+     sym <- Ov.getSymInterface
      globals <- OM (use overrideGlobals)
      (ptr, globals') <-
        case alloc of
@@ -904,7 +780,7 @@ executeSetupCondition ::
   JVMCrucibleContext            ->
   CrucibleMethodSpecIR       ->
   SetupCondition             ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 executeSetupCondition opts sc cc spec (MS.SetupCond_Equal _loc val1 val2) = executeEqual opts sc cc spec val1 val2
 executeSetupCondition _opts sc cc _    (MS.SetupCond_Pred _loc tm)        = executePred sc cc tm
 executeSetupCondition _ _ _ _    (MS.SetupCond_Ghost empty _ _ _)        = absurd empty
@@ -920,17 +796,17 @@ executePointsTo ::
   JVMCrucibleContext            ->
   CrucibleMethodSpecIR       ->
   JVMPointsTo                   ->
-  OverrideMatcher ()
-executePointsTo opts sc cc spec pt =
+  OverrideMatcher CJ.JVM w ()
+executePointsTo opts sc cc spec pt = do
+  sym <- Ov.getSymInterface
+  globals <- OM (use overrideGlobals)
   case pt of
 
     JVMPointsToField loc ptr fname val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
-         sym <- getSymInterface
          let dyn = injectJVMVal sym val'
-         globals <- OM (use overrideGlobals)
          globals' <- liftIO $ CJ.doFieldStore sym globals rval fname dyn
          OM (overrideGlobals .= globals')
 
@@ -938,9 +814,7 @@ executePointsTo opts sc cc spec pt =
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
          (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
          rval <- asRVal loc ptr'
-         sym <- getSymInterface
          let dyn = injectJVMVal sym val'
-         globals <- OM (use overrideGlobals)
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
 
@@ -956,7 +830,7 @@ executeEqual ::
   CrucibleMethodSpecIR                             ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 executeEqual opts sc cc spec v1 v2 =
   do (_, val1) <- resolveSetupValueJVM opts cc sc spec v1
      (_, val2) <- resolveSetupValueJVM opts cc sc spec v2
@@ -969,7 +843,7 @@ executePred ::
   SharedContext   ->
   JVMCrucibleContext ->
   TypedTerm        {- ^ the term to assert as a postcondition -} ->
-  OverrideMatcher ()
+  OverrideMatcher CJ.JVM w ()
 executePred sc cc tt =
   do s <- OM (use termSub)
      t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
@@ -1007,7 +881,7 @@ resolveSetupValueJVM ::
   SharedContext        ->
   CrucibleMethodSpecIR ->
   SetupValue           ->
-  OverrideMatcher (J.Type, JVMVal)
+  OverrideMatcher CJ.JVM w (J.Type, JVMVal)
 resolveSetupValueJVM opts cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
@@ -1076,7 +950,7 @@ decodeJVMVal ty v =
 
 ------------------------------------------------------------------------
 
-asRVal :: W4.ProgramLoc -> JVMVal -> OverrideMatcher JVMRefVal
+asRVal :: W4.ProgramLoc -> JVMVal -> OverrideMatcher CJ.JVM w JVMRefVal
 asRVal _ (RVal ptr) = return ptr
 asRVal loc _ = failure loc BadPointerCast
 

@@ -230,8 +230,7 @@ type GhostGlobal = Crucible.GlobalVar GhostType
 --------------------------------------------------------------------------------
 -- *** ResolvedState
 
--- | A datatype to keep track of which parts of the simulator state
--- have been initialized already. For each allocation unit or global,
+-- | A datatype to keep track of which parts of the simulator state -- have been initialized already. For each allocation unit or global,
 -- we keep a list of element-paths that identify the initialized
 -- sub-components.
 data ResolvedState =

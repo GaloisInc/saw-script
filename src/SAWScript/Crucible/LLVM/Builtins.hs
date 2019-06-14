@@ -141,7 +141,8 @@ import SAWScript.Position as SS
 import SAWScript.Options
 
 import qualified SAWScript.Crucible.Common as Common
-import           SAWScript.Crucible.Common (AllocIndex(..), nextAllocIndex, PrePost(..), Sym)
+import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..))
 import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
@@ -151,6 +152,7 @@ import SAWScript.Crucible.LLVM.Override
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
+instance MonadFail (Crucible.OverrideSim z x p args ret v) where fail = error -- TODO: remove
 
 type MemImpl = Crucible.MemImpl Sym
 

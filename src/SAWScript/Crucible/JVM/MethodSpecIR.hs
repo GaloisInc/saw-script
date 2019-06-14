@@ -129,6 +129,9 @@ ppPointsTo =
       PPL.<+> PPL.text "points to"
       PPL.<+> MS.ppSetupValue val
 
+instance PPL.Pretty JVMPointsTo where
+  pretty = ppPointsTo
+
 --------------------------------------------------------------------------------
 -- *** JVMCrucibleContext
 

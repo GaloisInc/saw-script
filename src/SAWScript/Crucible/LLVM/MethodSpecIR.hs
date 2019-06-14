@@ -54,7 +54,7 @@ import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
-import           SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
+import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 
 import           Verifier.SAW.SharedTerm
@@ -220,6 +220,9 @@ ppPointsTo (LLVMPointsTo _loc ptr val) =
   MS.ppSetupValue ptr
   PPL.<+> PPL.text "points to"
   PPL.<+> MS.ppSetupValue val
+
+instance PPL.Pretty (LLVMPointsTo arch) where
+  pretty = ppPointsTo
 
 --------------------------------------------------------------------------------
 -- ** ???
