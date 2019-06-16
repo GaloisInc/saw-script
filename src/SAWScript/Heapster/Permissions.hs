@@ -192,56 +192,115 @@ instance Eq (BVFactor w) where
   (BVFactor i1 x1) == (BVFactor i2 x2) = i1 == i2 && x1 == x2
 
 
--- | Build a bitvector expression from an integer
-intBVExpr :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w)
-intBVExpr i = PExpr_BV [] i
-
--- | Multiply a 'BVFactor' by a constant
-multBVFactor :: Integer -> BVFactor w -> BVFactor w
-multBVFactor i (BVFactor j x) = BVFactor (i*j) x
-
--- | Multiply a bitvector expression by a constant
-multBVExpr :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w) ->
-              PermExpr (BVType w)
-multBVExpr i (PExpr_Var x) = PExpr_BV [BVFactor i x] 0
-multBVExpr i (PExpr_BV factors off) =
-  PExpr_BV (map (multBVFactor i) factors) (i*off)
-
--- | Negate a bitvector expression
-negateBVExpr :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                PermExpr (BVType w)
-negateBVExpr = multBVExpr (-1)
-
--- | Convert a bitvector expression to a sum of factors plus a constant
-matchBVExpr :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-               ([BVFactor w], Integer)
-matchBVExpr (PExpr_Var x) = ([BVFactor 1 x], 0)
-matchBVExpr (PExpr_BV factors const) = (factors, const)
-
--- | Add two bitvector expressions
--- FIXME: normalize factors with the same variable!
-addBVExprs :: (1 <= w, KnownNat w) =>
-              PermExpr (BVType w) -> PermExpr (BVType w) ->
-              PermExpr (BVType w)
-addBVExprs (matchBVExpr -> (factors1, const1)) (matchBVExpr ->
-                                                (factors2, const2)) =
-  PExpr_BV (factors1 ++ factors2) (const1 + const2)
-
--- | Add a word expression to an LLVM pointer expression
-addLLVMOffset :: (1 <= w, KnownNat w) =>
-                 PermExpr (LLVMPointerType w) -> PermExpr (BVType w) ->
-                 PermExpr (LLVMPointerType w)
-addLLVMOffset (PExpr_Var x) off = PExpr_LLVMOffset x off
-addLLVMOffset (PExpr_LLVMWord e) off = PExpr_LLVMWord $ addBVExprs e off
-addLLVMOffset (PExpr_LLVMOffset x e) off =
-  PExpr_LLVMOffset x $ addBVExprs e off
-
 -- | Build a "default" expression for a given type
 zeroOfType :: TypeRepr tp -> PermExpr tp
 zeroOfType (BVRepr w) = withKnownNat w $ PExpr_BV [] 0
 zeroOfType (testEquality splittingTypeRepr -> Just Refl) =
   PExpr_Spl SplExpr_All
 zeroOfType _ = error "zeroOfType"
+
+
+----------------------------------------------------------------------
+-- * Operations on Bitvector Expressions
+----------------------------------------------------------------------
+
+-- | Normalize a bitvector expression, so that every variable has at most one
+-- factor and the factors are sorted by variable name. NOTE: we shouldn't
+-- actually have to call this if we always construct our expressions with the
+-- combinators below.
+bvNormalize :: PermExpr (BVType w) -> PermExpr (BVType w)
+bvNormalize e@(PExpr_Var _) = e
+bvNormalize (PExpr_BV factors off) =
+  PExpr_BV
+  (norm (sortBy (\(BVFactor _ x) (BVFactor _ y) -> compare x y) factors))
+  off
+  where
+    norm [] = []
+    norm ((BVFactor i1 x1) : (BVFactor i2 x2) : factors')
+      | x1 == x2 = norm ((BVFactor (i1+i2) x1) : factors')
+    norm (f : factors') = f : norm factors'
+
+-- | Merge two normalized / sorted lists of 'BVFactor's
+bvMergeFactors :: [BVFactor w] -> [BVFactor w] -> [BVFactor w]
+bvMergeFactors factors1 [] = factors1
+bvMergeFactors [] factors2 = factors2
+bvMergeFactors ((BVFactor i1 x1):factors1) ((BVFactor i2 x2):factors2)
+  | x1 == x2 = (BVFactor (i1+i2) x1) : bvMergeFactors factors1 factors2
+bvMergeFactors (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2)
+  | x1 < x2 = f1 : bvMergeFactors factors1 (f2 : factors2)
+bvMergeFactors (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2) =
+  f2 : bvMergeFactors (f1 : factors1) factors2
+
+-- | Convert a bitvector expression to a sum of factors plus a constant
+bvMatch :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+           ([BVFactor w], Integer)
+bvMatch (PExpr_Var x) = ([BVFactor 1 x], 0)
+bvMatch (PExpr_BV factors const) = (factors, const)
+
+-- | Test whether two bitvector expressions are semantically equal, assuming
+-- they are both in normal form
+bvEq :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
+bvEq e1 e2 = toVar e1 == toVar e2 where
+  toVar (PExpr_BV [BVFactor 1 x] 0) = (PExpr_Var x)
+  toVar e = e
+
+-- | Test whether two bitvector expressions are potentially unifiable, i.e.,
+-- whether some substitution to the variables could make them equal. This is
+-- currently an overapproximation, meaning that some expressions are marked as
+-- "could" equal when they actually cannot. Specifically, for now, any
+-- non-constant expression on either side yields 'True'.
+bvCouldEqual :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
+bvCouldEqual (PExpr_BV [] off1) (PExpr_BV [] off2) = off1 == off2
+bvCouldEqual _ _ = True
+
+-- | Build a bitvector expression from an integer
+bvInt :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w)
+bvInt i = PExpr_BV [] i
+
+-- | Add two bitvector expressions
+bvAdd :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> PermExpr (BVType w) ->
+         PermExpr (BVType w)
+bvAdd (bvMatch -> (factors1, const1)) (bvMatch -> (factors2, const2)) =
+  PExpr_BV (bvMergeFactors factors1 factors2) (const1 + const2)
+
+-- | Multiply a bitvector expression by a constant
+bvMult :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w) ->
+          PermExpr (BVType w)
+bvMult i (PExpr_Var x) = PExpr_BV [BVFactor i x] 0
+bvMult i (PExpr_BV factors off) =
+  PExpr_BV (map (\(BVFactor j x) -> BVFactor (i*j) x) factors) (i*off)
+
+-- | Negate a bitvector expression
+bvNegate :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> PermExpr (BVType w)
+bvNegate = bvMult (-1)
+
+-- | Integer division on bitvector expressions, truncating any factors @i*x@
+-- where @i@ is not a multiple of the divisor to zero
+bvDiv :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
+         PermExpr (BVType w)
+bvDiv (bvMatch -> (factors, off)) n =
+  PExpr_BV (mapMaybe (\(BVFactor i x) ->
+                       if rem i n == 0 then Just (BVFactor (div i n) x)
+                       else Nothing) factors)
+  (div off n)
+
+-- | Integer Modulus on bitvector expressions, where any factors @i*x@ with @i@
+-- not a multiple of the divisor are included in the modulus
+bvMod :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
+         PermExpr (BVType w)
+bvMod (bvMatch -> (factors, off)) n =
+  PExpr_BV (mapMaybe (\f@(BVFactor i _) ->
+                       if rem i n /= 0 then Just f else Nothing) factors)
+  (mod off n)
+
+-- | Add a word expression to an LLVM pointer expression
+addLLVMOffset :: (1 <= w, KnownNat w) =>
+                 PermExpr (LLVMPointerType w) -> PermExpr (BVType w) ->
+                 PermExpr (LLVMPointerType w)
+addLLVMOffset (PExpr_Var x) off = PExpr_LLVMOffset x off
+addLLVMOffset (PExpr_LLVMWord e) off = PExpr_LLVMWord $ bvAdd e off
+addLLVMOffset (PExpr_LLVMOffset x e) off =
+  PExpr_LLVMOffset x $ bvAdd e off
 
 
 ----------------------------------------------------------------------
@@ -359,9 +418,9 @@ exPermBody _ _ = error "exPermBody"
 offsetLLVMPtrPerm :: (1 <= w, KnownNat w) =>
                      PermExpr (BVType w) -> LLVMPtrPerm w -> LLVMPtrPerm w
 offsetLLVMPtrPerm off (LLVMFieldPerm {..}) =
-  LLVMFieldPerm { llvmFieldOffset = addBVExprs llvmFieldOffset off, ..}
+  LLVMFieldPerm { llvmFieldOffset = bvAdd llvmFieldOffset off, ..}
 offsetLLVMPtrPerm off (LLVMArrayPerm {..}) =
-  LLVMArrayPerm { llvmArrayOffset = addBVExprs llvmArrayOffset off, ..}
+  LLVMArrayPerm { llvmArrayOffset = bvAdd llvmArrayOffset off, ..}
 offsetLLVMPtrPerm _ (LLVMFreePerm e) = LLVMFreePerm e
 
 {- FIXME: remove
@@ -601,12 +660,12 @@ instance SubstVar s m => Substable s SplittingExpr m where
 substBVFactor :: SubstVar s m => s ctx -> Mb ctx (BVFactor w) ->
                  m (PermExpr (BVType w))
 substBVFactor s [nuP| BVFactor i x |] =
-  multBVExpr (mbLift i) <$> substExprVar s x
+  bvMult (mbLift i) <$> substExprVar s x
 
 instance SubstVar s m => Substable s (PermExpr a) m where
   genSubst s [nuP| PExpr_Var x |] = substExprVar s x
   genSubst s [nuP| PExpr_BV factors off |] =
-    foldr addBVExprs (PExpr_BV [] (mbLift off)) <$>
+    foldr bvAdd (PExpr_BV [] (mbLift off)) <$>
     mapM (substBVFactor s) (mbList factors)
   genSubst s [nuP| PExpr_Struct args |] =
     PExpr_Struct <$> genSubst s args

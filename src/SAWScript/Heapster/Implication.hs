@@ -1042,6 +1042,8 @@ proveVarField :: ExprVar (LLVMPointerType w) -> [LLVMPtrPerm w] ->
                  Mb vars (ValuePerm (LLVMPointerType w)) ->
                  ImplM vars r (ls :> PermExpr (LLVMPointerType w))
                  (ls :> PermExpr (LLVMPointerType w)) ()
+
+-- Case for x:ptr((off,All) |-> p) |- x:ptr((off,All) |-> p)
 proveVarField x pps off [nuP| SplExpr_All |] mb_p
   | Just (i, (x_spl, x_p)) <- findFieldPerm off pps =
     case x_spl of
@@ -1056,6 +1058,7 @@ proveVarField x pps off [nuP| SplExpr_All |] mb_p
         -- permissions should be unsatisfiable anyway, so it shouldn't matter
         implFailM
 
+-- Case for x:ptr((off,spl) |-> p) |- x:ptr((off,z) |-> p), setting z=R(spl)
 proveVarField x pps off [nuP| SplExpr_Var z |] mb_p
   | Just (i, (x_spl, x_p)) <- findFieldPerm off pps
   , Left memb <- mbNameBoundP z =
@@ -1068,22 +1071,6 @@ proveVarField x pps off [nuP| SplExpr_Var z |] mb_p
 proveVarField x pps off mb_spl mb_p =
   error "FIXME HERE: proveVarField"
 
-{-
-proveVarFieldH :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
-                  Mb vars SplittingExpr ->
-                  Mb vars (ValuePerm (LLVMPointerType w)) ->
-                  [ValuePerm (LLVMPointerType w)] ->
-                  ImplM vars r (ls :> PermExpr (LLVMPointerType w)) ls ()
-
--- Prove x:ptr((off,All) |-> p1) |- x:ptr((off,All) |-> p2) by first eliminating
--- the LHS to x:ptr((off,All) |-> eq(y)), y:p1 for a fresh variable y, then
--- proving x:ptr((off,All) |-> eq(y)),y:p1 |- x:ptr((off,All) |-> eq(y)),y:p2,
--- and then re-combining the RHS into x:ptr((off,All) |-> p2)
-proveVarFieldH x off mb_spl mb_p perms
-  | Just (l, ValPerm_LLVMPtr (LLVMFieldPerm _ spl' p')) <-
-      findPerm (isFieldPtrPermOff off) perms
-  = error "FIXME HERE NOW"
--}      
 
 ----------------------------------------------------------------------
 -- * Proving LLVM Pointer Permissions
@@ -1168,7 +1155,7 @@ proveVarImpl x [nuP| ValPerm_LLVMPtr mb_pps |] =
       -- result
       introEqCopyM x (PExpr_Var y) >>>
       proveVarImpl y (fmap ValPerm_LLVMPtr mb_pps) >>>
-      castLLVMPtrM y (intBVExpr 0) x
+      castLLVMPtrM y (bvInt 0) x
 
     ValPerm_Eq (PExpr_LLVMOffset y off) ->
       -- If we have x:eq(y+off) on the left, prove y:ptr(pps+off) and then cast
