@@ -64,7 +64,7 @@ import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
-import qualified SAWScript.Crucible.JVM.MethodSpecIR as JCIR
+import qualified SAWScript.Crucible.JVM.MethodSpecIR ()
 import qualified Verifier.Java.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)

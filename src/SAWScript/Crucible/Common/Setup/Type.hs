@@ -9,7 +9,6 @@ Stability   : provisional
 
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
@@ -35,16 +34,13 @@ module SAWScript.Crucible.Common.Setup.Type
   , freshVariable
   ) where
 
-import           Data.Coerce (coerce)
-import           GHC.Generics (Generic, Generic1)
 import           Control.Lens
-import           Control.Monad.State (MonadState, StateT(..), runStateT, execStateT)
+import           Control.Monad.State (StateT)
 import           Control.Monad.IO.Class (MonadIO(liftIO))
 
 import           Verifier.SAW.TypedTerm (TypedTerm, mkTypedTerm)
 import           Verifier.SAW.SharedTerm (Term, SharedContext, scFreshGlobal)
 
-import           SAWScript.Crucible.Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 
 --------------------------------------------------------------------------------

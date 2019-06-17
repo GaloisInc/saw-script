@@ -46,15 +46,13 @@ import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
-import qualified Lang.Crucible.Types as Crucible
-  (IntrinsicType, EmptyCtx, SymbolRepr, knownSymbol)
+import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
 import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
-import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 
 import           Verifier.SAW.SharedTerm

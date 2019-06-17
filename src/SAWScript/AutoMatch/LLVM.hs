@@ -13,8 +13,6 @@ import Verifier.SAW.SharedTerm
 
 import SAWScript.Crucible.LLVM.MethodSpecIR (LLVMModule(..))
 
-import SAWScript.Value
-
 --import Data.Maybe
 import Data.Either
 #if !MIN_VERSION_base(4,8,0)
