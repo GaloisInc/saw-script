@@ -1242,7 +1242,6 @@ crucible_fresh_var bic _opts name lty = LLVMCrucibleSetupM $ do
     Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
     Just ty -> Setup.freshVariable sc name ty
 
-
 -- | Use the given LLVM type to compute a setup value that
 -- covers expands all of the struct, array, and pointer
 -- components of the LLVM type. Only the primitive types
@@ -1260,8 +1259,52 @@ crucible_fresh_expanded_val bic _opts lty = LLVMCrucibleSetupM $
      let ?lc = cctx ^. ccTypeCtx
      lty' <- memTypeForLLVMType bic lty
      loc <- getW4Position "crucible_fresh_expanded_val"
-     -- constructExpandedSetupValue sc loc lty'
-     undefined -- TODO
+     constructExpandedSetupValue cctx sc loc lty'
+
+-- | See 'crucible_fresh_expanded_val'
+--
+-- This is the recursively-called worker function.
+constructExpandedSetupValue ::
+  (?lc :: Crucible.TypeContext) =>
+  LLVMCrucibleContext arch ->
+  SharedContext ->
+  W4.ProgramLoc ->
+  Crucible.MemType {- ^ LLVM mem type -} ->
+  CrucibleSetup (LLVM arch) (AnyLLVM SetupValue)
+constructExpandedSetupValue cc sc loc t = do
+  case t of
+    Crucible.IntType w ->
+      do ty <- liftIO (logicTypeForInt sc w)
+         fv <- Setup.freshVariable sc "" ty
+         pure $ AnyLLVM (SetupTerm fv)
+
+    Crucible.StructType si -> do
+      fields <- toList <$>
+         traverse (constructExpandedSetupValue cc sc loc)
+                  (Crucible.siFieldTypes si)
+      -- FIXME: should this always be unpacked?
+      pure $ AnyLLVM $ SetupStruct () False $ map getAnyLLVM fields
+
+    Crucible.PtrType symTy ->
+      case Crucible.asMemType symTy of
+        Right memTy -> constructFreshPointer (symTypeAlias symTy) loc memTy
+        Left err -> fail $ unlines [ "lhs not a valid pointer type: " ++ show symTy
+                                   , "Details:"
+                                   , err
+                                   ]
+
+    Crucible.ArrayType n memTy -> do
+      elements_ <-
+        replicateM (fromIntegral n) (constructExpandedSetupValue cc sc loc memTy)
+      pure $ AnyLLVM $ SetupArray () $ map getAnyLLVM elements_
+
+    Crucible.FloatType      -> failUnsupportedType "Float"
+    Crucible.DoubleType     -> failUnsupportedType "Double"
+    Crucible.MetadataType   -> failUnsupportedType "Metadata"
+    Crucible.VecType{}      -> failUnsupportedType "Vec"
+    Crucible.X86_FP80Type{} -> failUnsupportedType "X86_FP80"
+  where failUnsupportedType tyName = fail $ unwords
+          ["crucible_fresh_expanded_var: " ++ tyName ++ " not supported"]
 
 
 memTypeForLLVMType ::
@@ -1276,48 +1319,6 @@ memTypeForLLVMType _bic lty =
                                   , "Details:"
                                   , err
                                   ]
-
--- | See 'crucible_fresh_expanded_val'
---
--- This is the recursively-called worker function.
-constructExpandedSetupValue ::
-  SharedContext    {- ^ shared context             -} ->
-  W4.ProgramLoc ->
-  Crucible.MemType {- ^ LLVM mem type              -} ->
-  CrucibleSetup (LLVM arch) (SetupValue (LLVM arch))
-                   {- ^ fresh expanded setup value -}
-constructExpandedSetupValue sc loc t = do
-  cctx <- getLLVMCrucibleContext
-  let ?lc = cctx ^. ccTypeCtx
-  case t of
-    Crucible.IntType w ->
-      do ty <- liftIO (logicTypeForInt sc w)
-         SetupTerm <$> Setup.freshVariable sc "" ty
-
-    Crucible.StructType si ->
-       -- FIXME: should this always be unpacked?
-       SetupStruct () False . toList <$>
-         traverse (constructExpandedSetupValue sc loc) (Crucible.siFieldTypes si)
-
-    Crucible.PtrType symTy ->
-      case Crucible.asMemType symTy of
-        Right memTy ->
-          getAnyLLVM <$> constructFreshPointer (symTypeAlias symTy) loc memTy
-        Left err -> fail $ unlines [ "lhs not a valid pointer type: " ++ show symTy
-                                   , "Details:"
-                                   , err
-                                   ]
-
-    Crucible.ArrayType n memTy ->
-       SetupArray () <$> replicateM (fromIntegral n) (constructExpandedSetupValue sc loc memTy)
-
-    Crucible.FloatType      -> failUnsupportedType "Float"
-    Crucible.DoubleType     -> failUnsupportedType "Double"
-    Crucible.MetadataType   -> failUnsupportedType "Metadata"
-    Crucible.VecType{}      -> failUnsupportedType "Vec"
-    Crucible.X86_FP80Type{} -> failUnsupportedType "X86_FP80"
-  where failUnsupportedType tyName = fail $ unwords
-          ["crucible_fresh_expanded_var: " ++ tyName ++ " not supported"]
 
 llvmTypeAlias :: L.Type -> Maybe Crucible.Ident
 llvmTypeAlias (L.Alias i) = Just i
