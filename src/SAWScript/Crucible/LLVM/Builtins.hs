@@ -19,6 +19,7 @@ Stability   : provisional
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
@@ -1175,18 +1176,18 @@ crucible_postcond term = LLVMCrucibleSetupM $ do
 crucible_return ::
   BuiltinContext ->
   Options ->
-  AnyLLVM MS.SetupValue ->
+  AllLLVM MS.SetupValue ->
   LLVMCrucibleSetupM ()
 crucible_return bic opts val = LLVMCrucibleSetupM $ do
-  Setup.crucible_return bic opts (getAnyLLVM val)
+  Setup.crucible_return bic opts (getAllLLVM val)
 
 crucible_execute_func ::
   BuiltinContext ->
   Options ->
-  [AnyLLVM MS.SetupValue] ->
+  [AllLLVM MS.SetupValue] ->
   LLVMCrucibleSetupM ()
 crucible_execute_func bic opts args =
-  LLVMCrucibleSetupM $ Setup.crucible_execute_func bic opts (map getAnyLLVM args)
+  LLVMCrucibleSetupM $ Setup.crucible_execute_func bic opts (map getAllLLVM args)
 
 getLLVMCrucibleContext :: CrucibleSetup (LLVM arch) (LLVMCrucibleContext arch)
 getLLVMCrucibleContext = view Setup.csCrucibleContext <$> get
@@ -1251,7 +1252,7 @@ crucible_fresh_expanded_val ::
   BuiltinContext {- ^ context                -} ->
   Options        {- ^ options                -} ->
   L.Type         {- ^ variable type          -} ->
-  LLVMCrucibleSetupM (AnyLLVM SetupValue)
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
                  {- ^ elaborated setup value -}
 crucible_fresh_expanded_val bic _opts lty = LLVMCrucibleSetupM $
   do let sc = biSharedContext bic
@@ -1270,20 +1271,20 @@ constructExpandedSetupValue ::
   SharedContext ->
   W4.ProgramLoc ->
   Crucible.MemType {- ^ LLVM mem type -} ->
-  CrucibleSetup (LLVM arch) (AnyLLVM SetupValue)
+  CrucibleSetup (LLVM arch) (AllLLVM SetupValue)
 constructExpandedSetupValue cc sc loc t = do
   case t of
     Crucible.IntType w ->
       do ty <- liftIO (logicTypeForInt sc w)
          fv <- Setup.freshVariable sc "" ty
-         pure $ AnyLLVM (SetupTerm fv)
+         pure $ mkAllLLVM (SetupTerm fv)
 
     Crucible.StructType si -> do
       fields <- toList <$>
          traverse (constructExpandedSetupValue cc sc loc)
                   (Crucible.siFieldTypes si)
       -- FIXME: should this always be unpacked?
-      pure $ AnyLLVM $ SetupStruct () False $ map getAnyLLVM fields
+      pure $ mkAllLLVM $ SetupStruct () False $ map getAllLLVM fields
 
     Crucible.PtrType symTy ->
       case Crucible.asMemType symTy of
@@ -1296,7 +1297,7 @@ constructExpandedSetupValue cc sc loc t = do
     Crucible.ArrayType n memTy -> do
       elements_ <-
         replicateM (fromIntegral n) (constructExpandedSetupValue cc sc loc memTy)
-      pure $ AnyLLVM $ SetupArray () $ map getAnyLLVM elements_
+      pure $ mkAllLLVM $ SetupArray () $ map getAllLLVM elements_
 
     Crucible.FloatType      -> failUnsupportedType "Float"
     Crucible.DoubleType     -> failUnsupportedType "Double"
@@ -1333,7 +1334,7 @@ crucible_alloc_internal ::
   Options        ->
   L.Type  ->
   LLVMAllocSpec  ->
-  CrucibleSetup (Crucible.LLVM arch) (AnyLLVM SetupValue)
+  CrucibleSetup (Crucible.LLVM arch) (AllLLVM SetupValue)
 crucible_alloc_internal _bic _opt lty spec = do
   cctx <- getLLVMCrucibleContext
   let ?lc = cctx ^. ccTypeCtx
@@ -1345,14 +1346,14 @@ crucible_alloc_internal _bic _opt lty spec = do
   case llvmTypeAlias lty of
     Just i -> Setup.currentState . MS.csVarTypeNames.at n ?= i
     Nothing -> return ()
-  return (AnyLLVM (SetupVar n))
+  return (mkAllLLVM (SetupVar n))
 
 -- TODO: deduplicate with alloc_readonly
 crucible_alloc ::
   BuiltinContext ->
   Options        ->
   L.Type         ->
-  LLVMCrucibleSetupM (AnyLLVM SetupValue)
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
 crucible_alloc bic opts lty = LLVMCrucibleSetupM $ do
   cctx <- getLLVMCrucibleContext
   let ?lc = cctx ^. ccTypeCtx
@@ -1371,7 +1372,7 @@ crucible_alloc_readonly ::
   BuiltinContext ->
   Options        ->
   L.Type         ->
-  LLVMCrucibleSetupM (AnyLLVM SetupValue)
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
 crucible_alloc_readonly bic opts lty = LLVMCrucibleSetupM $ do
   cctx <- getLLVMCrucibleContext
   let ?lc = cctx ^. ccTypeCtx
@@ -1391,7 +1392,7 @@ crucible_fresh_pointer ::
   BuiltinContext ->
   Options        ->
   L.Type         ->
-  LLVMCrucibleSetupM (AnyLLVM SetupValue)
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
 crucible_fresh_pointer bic _opt lty = LLVMCrucibleSetupM $
   do memTy <- memTypeForLLVMType bic lty
      loc <- getW4Position "crucible_fresh_pointer"
@@ -1401,7 +1402,7 @@ constructFreshPointer ::
   Maybe Crucible.Ident ->
   W4.ProgramLoc ->
   Crucible.MemType ->
-  CrucibleSetup (LLVM arch) (AnyLLVM SetupValue)
+  CrucibleSetup (LLVM arch) (AllLLVM SetupValue)
 constructFreshPointer mid loc memTy = do
   cctx <- getLLVMCrucibleContext
   let ?lc = cctx ^. ccTypeCtx
@@ -1418,16 +1419,17 @@ constructFreshPointer mid loc memTy = do
   case mid of
     Just i -> Setup.currentState . MS.csVarTypeNames.at n ?= i
     Nothing -> return ()
-  return (AnyLLVM (SetupVar n))
+  return (mkAllLLVM (SetupVar n))
 
 crucible_points_to ::
   Bool {- ^ whether to check type compatibility -} ->
   BuiltinContext ->
   Options        ->
-  AnyLLVM SetupValue     ->
-  AnyLLVM SetupValue     ->
+  AllLLVM SetupValue     ->
+  AllLLVM SetupValue     ->
   LLVMCrucibleSetupM ()
-crucible_points_to typed _bic _opt (AnyLLVM ptr) (AnyLLVM val) = LLVMCrucibleSetupM $
+crucible_points_to typed _bic _opt (getAllLLVM -> ptr) (getAllLLVM -> val) =
+  LLVMCrucibleSetupM $
   do cc <- getLLVMCrucibleContext
      loc <- getW4Position "crucible_points_to"
      Crucible.llvmPtrWidth (cc^.ccLLVMContext) $ \wptr -> Crucible.withPtrWidth wptr $
@@ -1457,10 +1459,10 @@ crucible_points_to typed _bic _opt (AnyLLVM ptr) (AnyLLVM val) = LLVMCrucibleSet
 crucible_equal ::
   BuiltinContext ->
   Options        ->
-  AnyLLVM SetupValue ->
-  AnyLLVM SetupValue ->
+  AllLLVM SetupValue ->
+  AllLLVM SetupValue ->
   LLVMCrucibleSetupM ()
-crucible_equal _bic _opt (AnyLLVM val1) (AnyLLVM val2) = LLVMCrucibleSetupM $
+crucible_equal _bic _opt (getAllLLVM -> val1) (getAllLLVM -> val2) = LLVMCrucibleSetupM $
   do cc <- getLLVMCrucibleContext
      st <- get
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
@@ -1508,9 +1510,9 @@ crucible_spec_size (SomeLLVM mir) =
 crucible_setup_val_to_typed_term ::
   BuiltinContext ->
   Options ->
-  AnyLLVM SetupValue ->
+  AllLLVM SetupValue ->
   TopLevel TypedTerm
-crucible_setup_val_to_typed_term bic _opt (AnyLLVM sval) = do
+crucible_setup_val_to_typed_term bic _opt (getAllLLVM -> sval) = do
   opts <- getOptions
   mtt <- io $ MaybeT.runMaybeT $ MS.setupToTypedTerm opts (biSharedContext bic) sval
   case mtt of

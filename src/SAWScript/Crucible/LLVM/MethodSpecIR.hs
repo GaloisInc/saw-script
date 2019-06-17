@@ -19,6 +19,7 @@ Stability   : provisional
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -31,6 +32,7 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.MethodSpecIR where
 
 import           Control.Lens
+import           Data.Functor.Compose (Compose(..))
 import           Data.IORef
 import           Data.Monoid ((<>))
 import           Data.Type.Equality (TestEquality(..), (:~:)(Refl))
@@ -39,8 +41,9 @@ import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 import qualified Text.PrettyPrint.HughesPJ as PP
 
+import           Data.Parameterized.All (All(All))
+import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.TraversableF (FunctorF(..), FoldableF(..))
 
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
@@ -336,49 +339,79 @@ initialCrucibleSetupStateDecl cc dec loc parent = do
   return $ Setup.makeCrucibleSetupState cc ms
 
 --------------------------------------------------------------------------------
--- ** AnyLLVM/SomeLLVM
+-- ** AllLLVM/SomeLLVM
 
+--------------------------------------------------------------------------------
+-- *** AllLLVM
 
 -- | Universal/polymorphic quantification over an 'LLVMArch'
-data AnyLLVM t =
-  AnyLLVM { getAnyLLVM :: forall arch. t (CL.LLVM arch) }
+--
+-- The following type synonym and associated constructor/destructor are
+-- equivalent to this definition:
+-- @
+-- data AllLLVM t =
+--   MkAllLLVM { getAllLLVM :: forall arch. t (CL.LLVM arch) }
+-- @
+-- But they preserve the instances from 'All' and 'Compose'.
+type AllLLVM t = All (Compose t CL.LLVM)
 
-instance FunctorF AnyLLVM where
-  fmapF nat (AnyLLVM a) = AnyLLVM (nat a)
+-- This doesn't work :(
+--
+-- pattern AllLLVM :: (forall arch. t (CL.LLVM arch)) -> AllLLVM t
+-- pattern AllLLVM x = All (Compose x)
 
-instance FoldableF AnyLLVM where
-  foldMapF tom (AnyLLVM x) = tom x
+mkAllLLVM :: forall t. (forall arch. t (CL.LLVM arch)) -> AllLLVM t
+mkAllLLVM x = All (Compose x)
 
-constAnyLLVM :: a -> AnyLLVM (Const a)
-constAnyLLVM a = AnyLLVM (Const a)
-
--- | Existential quantification over an 'LLVMArch'
-data SomeLLVM t = forall arch. SomeLLVM { getSomeLLVM :: t (CL.LLVM arch) }
-
+getAllLLVM :: forall t. AllLLVM t -> (forall arch. t (CL.LLVM arch))
+getAllLLVM (All (Compose x)) = x
 
 -- Constructors for 'SetupValue' which are architecture-polymorphic
 
-anySetupTerm :: TypedTerm -> AnyLLVM MS.SetupValue
-anySetupTerm typedTerm = AnyLLVM (MS.SetupTerm typedTerm)
+anySetupTerm :: TypedTerm -> AllLLVM MS.SetupValue
+anySetupTerm typedTerm = mkAllLLVM (MS.SetupTerm typedTerm)
 
-anySetupArray :: [AnyLLVM MS.SetupValue] -> AnyLLVM MS.SetupValue
-anySetupArray vals = AnyLLVM (MS.SetupArray () $ map getAnyLLVM vals)
+anySetupArray :: [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
+anySetupArray vals = mkAllLLVM (MS.SetupArray () $ map getAllLLVM vals)
 
-anySetupStruct :: Bool -> [AnyLLVM MS.SetupValue] -> AnyLLVM MS.SetupValue
-anySetupStruct b vals = AnyLLVM (MS.SetupStruct () b $ map getAnyLLVM vals)
+anySetupStruct :: Bool -> [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
+anySetupStruct b vals = mkAllLLVM (MS.SetupStruct () b $ map getAllLLVM vals)
 
-anySetupElem :: AnyLLVM MS.SetupValue -> Int -> AnyLLVM MS.SetupValue
-anySetupElem val idx = AnyLLVM (MS.SetupElem () (getAnyLLVM val) idx)
+anySetupElem :: AllLLVM MS.SetupValue -> Int -> AllLLVM MS.SetupValue
+anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)
 
-anySetupField :: AnyLLVM MS.SetupValue -> String -> AnyLLVM MS.SetupValue
-anySetupField val field = AnyLLVM (MS.SetupField () (getAnyLLVM val) field)
+anySetupField :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
+anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)
 
-anySetupNull :: AnyLLVM MS.SetupValue
-anySetupNull = AnyLLVM (MS.SetupNull ())
+anySetupNull :: AllLLVM MS.SetupValue
+anySetupNull = mkAllLLVM (MS.SetupNull ())
 
-anySetupGlobal :: String -> AnyLLVM MS.SetupValue
-anySetupGlobal globalName = AnyLLVM (MS.SetupGlobal () globalName)
+anySetupGlobal :: String -> AllLLVM MS.SetupValue
+anySetupGlobal globalName = mkAllLLVM (MS.SetupGlobal () globalName)
 
-anySetupGlobalInitializer :: String -> AnyLLVM MS.SetupValue
+anySetupGlobalInitializer :: String -> AllLLVM MS.SetupValue
 anySetupGlobalInitializer globalName =
-  AnyLLVM (MS.SetupGlobalInitializer () globalName)
+  mkAllLLVM (MS.SetupGlobalInitializer () globalName)
+
+--------------------------------------------------------------------------------
+-- *** SomeLLVM
+
+-- | Existential quantification over an 'LLVMArch'
+--
+-- The following type synonym and associated constructor/destructor are
+-- equivalent to this definition:
+-- @
+-- data SomeLLVM t = forall arch. MkSomeLLVM (t (CL.LLVM arch))
+-- @
+-- But they preserve the instances from 'Some' and 'Compose'.
+type SomeLLVM t = Some (Compose t CL.LLVM)
+
+pattern SomeLLVM :: t (CL.LLVM arch) -> SomeLLVM t
+pattern SomeLLVM x = Some (Compose x)
+{-# COMPLETE SomeLLVM #-}
+
+mkSomeLLVM :: t (CL.LLVM arch) -> SomeLLVM t
+mkSomeLLVM x = Some (Compose x)
+
+getSomeLLVM :: forall t. (forall arch. t (CL.LLVM arch)) -> AllLLVM t
+getSomeLLVM x = All (Compose x)

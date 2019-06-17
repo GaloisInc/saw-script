@@ -125,7 +125,7 @@ data Value
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
   | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR)
-  | VLLVMCrucibleSetupValue (CMSLLVM.AnyLLVM CMS.SetupValue)
+  | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
   | VJVMMethodSpec !(CMS.CrucibleMethodSpecIR CJ.JVM)
@@ -478,7 +478,7 @@ type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
 -- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
 --   specifications should be polymorphic in the underlying architecture
--- type LLVMCrucibleMethodSpecIR = CMSLLVM.AnyLLVM CMS.CrucibleMethodSpecIR
+-- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
 
 data LLVMCrucibleSetupM a =
   LLVMCrucibleSetupM
@@ -624,10 +624,10 @@ instance FromValue a => FromValue (JVMSetupM a) where
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
-instance IsValue (CMSLLVM.AnyLLVM CMS.SetupValue) where
-  toValue (CMSLLVM.AnyLLVM v) = VLLVMCrucibleSetupValue (CMSLLVM.AnyLLVM v)
+instance IsValue (CMSLLVM.AllLLVM CMS.SetupValue) where
+  toValue = VLLVMCrucibleSetupValue
 
-instance FromValue (CMSLLVM.AnyLLVM CMS.SetupValue) where
+instance FromValue (CMSLLVM.AllLLVM CMS.SetupValue) where
   fromValue (VLLVMCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
