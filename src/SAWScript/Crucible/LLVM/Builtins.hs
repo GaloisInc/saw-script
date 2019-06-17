@@ -153,8 +153,6 @@ import SAWScript.Crucible.LLVM.Override
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
-instance MonadFail (Crucible.OverrideSim z x p args ret v) where fail = error -- TODO: remove
-
 type MemImpl = Crucible.MemImpl Sym
 
 data LLVMVerificationException

@@ -87,7 +87,7 @@ data LLVMMethodId =
   LLVMMethodId
     { _llvmMethodName   :: String
     , _llvmMethodParent :: Maybe String -- ^ Something to do with breakpoints...
-    } deriving (Eq, Ord, Show) -- TODO: deriving
+    } deriving (Eq, Ord, Show)
 
 makeLenses ''LLVMMethodId
 
@@ -99,10 +99,6 @@ csParentName = MS.csMethod . llvmMethodParent
 
 instance PPL.Pretty LLVMMethodId where
   pretty = PPL.text . view llvmMethodName
-
--- TODO: upstream
-instance PPL.Pretty CL.MemType where
-  pretty = CL.ppMemType
 
 type instance MS.MethodId (CL.LLVM _) = LLVMMethodId
 
