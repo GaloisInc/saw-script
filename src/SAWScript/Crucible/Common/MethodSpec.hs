@@ -73,8 +73,8 @@ data PrePost
 
 -- | An injective type family mapping type-level booleans to types
 type family BoolToType (b :: Bool) = (t :: Type) | t -> b where
-  HasSetupStruct 'True  = ()
-  HasSetupStruct 'False = Void
+  BoolToType 'True  = ()
+  BoolToType 'False = Void
 
 type B b = BoolToType b
 
