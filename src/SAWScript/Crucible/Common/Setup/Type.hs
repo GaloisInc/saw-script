@@ -1,5 +1,4 @@
 {- |
-
 Module      : SAWScript.Crucible.Common.Setup.Type
 Description : The CrucibleSetup monad
 License     : BSD3
@@ -25,9 +24,6 @@ module SAWScript.Crucible.Common.Setup.Type
   , makeCrucibleSetupState
   --
   , CrucibleSetupT
-  -- , runCrucibleSetupT
-  -- , execCrucibleSetupT
-  -- , underCrucibleSetupT
   , currentState
   , addPointsTo
   , addCondition

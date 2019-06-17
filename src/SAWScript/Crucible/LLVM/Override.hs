@@ -48,6 +48,7 @@ import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
+import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe (fromMaybe, catMaybes)
@@ -561,7 +562,7 @@ learnCond opts sc cc cs prepost ss = do
   let loc = cs ^. MS.csLoc
   matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
   traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
-  -- enforceDisjointness cc loc ss -- TODO
+  enforceDisjointness loc ss
   enforceCompleteSubstitution loc ss
 
 
@@ -633,47 +634,43 @@ refreshTerms sc ss =
 
 ------------------------------------------------------------------------
 
--- TODO
-{-
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint. Read-only allocations are
 -- allowed to alias other read-only allocations, however.
 enforceDisjointness ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointness cc loc ss =
+enforceDisjointness loc ss =
   do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub)
-     let memsRW = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
-         memsRO = Map.elems $ Map.intersectionWith (,) _ sub
+     let (allocsRW, allocsRO) = Map.partition (view isMut) (view MS.csAllocs ss)
+         memsRW = Map.elems $ Map.intersectionWith (,) allocsRW sub
+         memsRO = Map.elems $ Map.intersectionWith (,) allocsRO sub
 
      -- Ensure that all RW regions are disjoint from each other, and
      -- that all RW regions are disjoint from all RO regions.
      sequence_
         [ do c <- liftIO $
                do W4.setCurrentProgramLoc sym ploc
-                  psz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl pty))
+                  psz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger psz
                   W4.setCurrentProgramLoc sym qloc
-                  qsz <- W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger (Crucible.memTypeSize dl qty))
+                  qsz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger qsz
                   W4.setCurrentProgramLoc sym loc
                   Crucible.buildDisjointRegionsAssertion
                     sym Crucible.PtrWidth
-                    p psz
-                    q qsz
+                    p psz'
+                    q qsz'
              addAssert c a
 
-        | let dl = Crucible.llvmDataLayout (cc^.ccTypeCtx)
-
-              a = Crucible.SimError loc $
+        | -- TODO: Improve this message by showing the regions
+          let a = Crucible.SimError loc $
                     Crucible.AssertFailureSimError "Memory regions not disjoint"
 
-        , ((ploc,pty),p):ps <- tails memsRW
-        , ((qloc,qty),q)    <- ps ++ memsRO
+        , (LLVMAllocSpec _mut _pty psz ploc, p) : ps <- tails memsRW
+        , (LLVMAllocSpec _mut _qty qsz qloc, q) <- ps ++ memsRO
         ]
--}
 
 ------------------------------------------------------------------------
 

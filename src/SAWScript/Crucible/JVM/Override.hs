@@ -108,18 +108,16 @@ type SetupValue = MS.SetupValue CJ.JVM
 type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
 type StateSpec = MS.StateSpec CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
-
--- TODO: upstream me
-instance PPL.Pretty J.Type where
-  pretty = PPL.text . show
-
 type instance Pointer CJ.JVM = JVMRefVal
 
 -- TODO: Improve?
 ppJVMVal :: JVMVal -> PPL.Doc
 ppJVMVal = PPL.text . show
 
- 
+instance PPL.Pretty JVMVal where
+  pretty = ppJVMVal
+
+
 -- | Try to translate the spec\'s 'SetupValue' into an 'LLVMVal', pretty-print
 --   the 'LLVMVal'.
 mkStructuralMismatch ::

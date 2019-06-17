@@ -9,20 +9,23 @@ Stability   : provisional
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module SAWScript.Crucible.LLVM.MethodSpecIR where
@@ -115,6 +118,19 @@ data LLVMAllocSpec =
 makeLenses ''LLVMAllocSpec
 
 type instance MS.AllocSpec (CL.LLVM _) = LLVMAllocSpec
+
+mutIso :: Iso' CL.Mutability Bool
+mutIso =
+  iso
+    (\case
+      CL.Mutable -> True
+      CL.Immutable -> False)
+    (\case
+      True -> CL.Mutable
+      False -> CL.Immutable)
+
+isMut :: Lens' LLVMAllocSpec Bool
+isMut = allocSpecMut . mutIso
 
 --------------------------------------------------------------------------------
 -- *** LLVMModule
