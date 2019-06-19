@@ -1758,6 +1758,13 @@ primitives = Map.fromList
     , "read-only regions."
     ]
 
+  , prim "crucible_alloc_with_size" "Int -> LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_alloc_with_size)
+    Experimental
+    [ "Like `crucible_alloc`, but with a user-specified size (given in bytes)."
+    , "The specified size must be greater than the size of the LLVM type."
+    ]
+
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)
     Current

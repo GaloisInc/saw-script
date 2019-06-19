@@ -48,6 +48,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_fresh_var
     , crucible_alloc
     , crucible_alloc_readonly
+    , crucible_alloc_with_size
     , crucible_fresh_expanded_val
 
     --
@@ -1327,6 +1328,8 @@ symTypeAlias :: Crucible.SymType -> Maybe Crucible.Ident
 symTypeAlias (Crucible.Alias i) = Just i
 symTypeAlias _ = Nothing
 
+-- | Does the hard work for 'crucible_alloc', 'crucible_alloc_with_size',
+--   'crucible_alloc_readonly', etc.
 crucible_alloc_internal ::
   BuiltinContext ->
   Options        ->
@@ -1337,7 +1340,7 @@ crucible_alloc_internal _bic _opt lty spec = do
   cctx <- getLLVMCrucibleContext
   let ?lc = cctx ^. ccTypeCtx
   let ?dl = Crucible.llvmDataLayout ?lc
-  loc <- getW4Position "crucible_alloc"
+  loc <- getW4Position "crucible_alloc_internal"
   n <- Setup.csVarCounter <<%= nextAllocIndex
   Setup.currentState . MS.csAllocs . at n ?= spec
   -- TODO: refactor
@@ -1346,45 +1349,70 @@ crucible_alloc_internal _bic _opt lty spec = do
     Nothing -> return ()
   return (mkAllLLVM (SetupVar n))
 
--- TODO: deduplicate with alloc_readonly
+crucible_alloc_with_mutability_and_size ::
+  Crucible.Mutability    ->
+  Maybe (Crucible.Bytes) ->
+  BuiltinContext   ->
+  Options          ->
+  L.Type           ->
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
+crucible_alloc_with_mutability_and_size mut sz bic opts lty = LLVMCrucibleSetupM $ do
+  cctx <- getLLVMCrucibleContext
+  loc <- getW4Position "crucible_alloc"
+  memTy <- memTypeForLLVMType bic lty
+
+  let memTySize =
+        let ?lc = cctx ^. ccTypeCtx
+            ?dl = Crucible.llvmDataLayout ?lc
+        in Crucible.memTypeSize ?dl memTy
+
+  sz' <-
+    case sz of
+      Just sz_ -> do
+        when (sz_ < memTySize) $ fail $ unlines
+          [ "User error: manually-specified allocation size was less than needed"
+          , "Needed for this type: " ++ show memTySize
+          , "Specified: " ++ show sz_
+          ]
+        pure sz_
+      Nothing -> pure (Crucible.toBytes memTySize)
+
+  crucible_alloc_internal bic opts lty $
+      LLVMAllocSpec { _allocSpecMut = mut
+                    , _allocSpecType = memTy
+                    , _allocSpecBytes = sz'
+                    , _allocSpecLoc = loc
+                    }
+
 crucible_alloc ::
   BuiltinContext ->
   Options        ->
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-crucible_alloc bic opts lty = LLVMCrucibleSetupM $ do
-  cctx <- getLLVMCrucibleContext
-  let ?lc = cctx ^. ccTypeCtx
-  let ?dl = Crucible.llvmDataLayout ?lc
-  loc <- getW4Position "crucible_alloc"
-  memTy <- memTypeForLLVMType bic lty
-  let sz = Crucible.memTypeSize ?dl memTy
-  crucible_alloc_internal bic opts lty $
-      LLVMAllocSpec { _allocSpecMut = Crucible.Mutable
-                    , _allocSpecType = memTy
-                    , _allocSpecBytes = sz
-                    , _allocSpecLoc = loc
-                    }
+crucible_alloc =
+  crucible_alloc_with_mutability_and_size Crucible.Mutable Nothing
 
 crucible_alloc_readonly ::
   BuiltinContext ->
   Options        ->
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-crucible_alloc_readonly bic opts lty = LLVMCrucibleSetupM $ do
-  cctx <- getLLVMCrucibleContext
-  let ?lc = cctx ^. ccTypeCtx
-  let ?dl = Crucible.llvmDataLayout ?lc
-  loc <- getW4Position "crucible_alloc_readonly"
-  memTy <- memTypeForLLVMType bic lty
-  let sz = Crucible.memTypeSize ?dl memTy
-  crucible_alloc_internal bic opts lty $
-      LLVMAllocSpec { _allocSpecMut = Crucible.Mutable
-                    , _allocSpecType = memTy
-                    , _allocSpecBytes = sz
-                    , _allocSpecLoc = loc
-                    }
+crucible_alloc_readonly =
+  crucible_alloc_with_mutability_and_size Crucible.Immutable Nothing
 
+crucible_alloc_with_size ::
+  BuiltinContext ->
+  Options        ->
+  Int {-^ allocation size (in bytes) -} ->
+  L.Type         ->
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
+crucible_alloc_with_size bic opts sz lty =
+  crucible_alloc_with_mutability_and_size
+    Crucible.Mutable
+    (Just (Crucible.toBytes sz))
+    bic
+    opts
+    lty
 
 crucible_fresh_pointer ::
   BuiltinContext ->
@@ -1516,4 +1544,3 @@ crucible_setup_val_to_typed_term bic _opt (getAllLLVM -> sval) = do
   case mtt of
     Nothing -> fail $ "Could not convert a setup value to a term: " ++ show sval
     Just tt -> return tt
-
