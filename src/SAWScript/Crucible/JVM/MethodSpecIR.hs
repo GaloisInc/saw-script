@@ -6,46 +6,36 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module SAWScript.Crucible.JVM.MethodSpecIR where
 
-import           Data.Map (Map)
-import qualified Data.Map as Map
-import           Control.Monad.ST (RealWorld)
-import           Control.Monad.Trans.Maybe
-import           Control.Monad.Trans (lift)
 import           Control.Lens
-
-import           Data.IORef
+import           Control.Monad.ST (RealWorld)
 import           Data.Monoid ((<>))
+import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 
 -- what4
-import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
-import qualified Lang.Crucible.Types as Crucible
-  (IntrinsicType, EmptyCtx)
-import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
-  (SAWCoreBackend, saw_ctx, toSC)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
-import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
-  (IntrinsicClass(Intrinsic, muxIntrinsic){-, IntrinsicMuxFn(IntrinsicMuxFn)-})
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
@@ -57,57 +47,57 @@ import qualified Verifier.Java.Codebase as CB
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
--- saw-core
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedTerm
+import           SAWScript.Crucible.Common (Sym)
+import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
-import SAWScript.Options
-import SAWScript.Prover.SolverStats
+--------------------------------------------------------------------------------
+-- ** Language features
 
-import SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
+type instance MS.HasSetupNull CJ.JVM = 'True
+type instance MS.HasSetupGlobal CJ.JVM = 'True
+type instance MS.HasSetupStruct CJ.JVM = 'False
+type instance MS.HasSetupArray CJ.JVM = 'False
+type instance MS.HasSetupElem CJ.JVM = 'False
+type instance MS.HasSetupField CJ.JVM = 'False
+type instance MS.HasSetupGlobalInitializer CJ.JVM = 'False
 
-nextAllocIndex :: AllocIndex -> AllocIndex
-nextAllocIndex (AllocIndex n) = AllocIndex (n + 1)
+type instance MS.HasGhostState CJ.JVM = 'False
 
-data SetupValue where
-  SetupVar    :: AllocIndex -> SetupValue
-  SetupTerm   :: TypedTerm -> SetupValue
-  SetupNull   :: SetupValue
-  SetupGlobal :: String -> SetupValue
-  deriving (Show)
+type JIdent = String -- FIXME(huffman): what to put here?
 
-setupToTypedTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO TypedTerm
-setupToTypedTerm opts sc sv =
-  case sv of
-    SetupTerm term -> return term
-    _ -> do t <- setupToTerm opts sc sv
-            lift $ mkTypedTerm sc t
+type instance MS.TypeName CJ.JVM = JIdent
 
--- | Convert a setup value to a SAW-Core term. This is a partial
--- function, as certain setup values ---SetupVar, SetupNull and
--- SetupGlobal--- don't have semantics outside of the symbolic
--- simulator.
-setupToTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO Term
-setupToTerm _opts _sc sv =
-  case sv of
-    SetupTerm term -> return (ttTerm term)
-    _ -> MaybeT $ return Nothing
+type instance MS.ExtType CJ.JVM = J.Type
 
+--------------------------------------------------------------------------------
+-- *** JVMMethodId
 
-data PointsTo
-  = PointsToField ProgramLoc SetupValue String SetupValue
-  | PointsToElem ProgramLoc SetupValue Int SetupValue
-  deriving (Show)
+data JVMMethodId =
+  JVMMethodId
+    { _jvmMethodName :: String
+    , _jvmClassName  :: J.ClassName
+    }
+  deriving (Eq, Ord, Show)
 
-data SetupCondition where
-  SetupCond_Equal :: ProgramLoc -> SetupValue -> SetupValue -> SetupCondition
-  SetupCond_Pred :: ProgramLoc -> TypedTerm -> SetupCondition
-  deriving (Show)
+makeLenses ''JVMMethodId
+
+csMethodName :: Simple Lens (MS.CrucibleMethodSpecIR CJ.JVM) String
+csMethodName = MS.csMethod . jvmMethodName
+
+instance PPL.Pretty JVMMethodId where
+  pretty (JVMMethodId methName className) =
+    PPL.text (concat [J.unClassName className ,".", methName])
+
+type instance MS.MethodId CJ.JVM = JVMMethodId
+
+--------------------------------------------------------------------------------
+-- *** Allocation
 
 data Allocation
   = AllocObject J.ClassName
   | AllocArray Int J.Type
-  deriving (Show)
+  deriving (Eq, Ord, Show)
 
 allocationType :: Allocation -> J.Type
 allocationType alloc =
@@ -115,69 +105,83 @@ allocationType alloc =
     AllocObject cname -> J.ClassType cname
     AllocArray _len ty -> J.ArrayType ty
 
-type JIdent = String -- FIXME: what to put here?
 
--- | Verification state (either pre- or post-) specification
-data StateSpec' t = StateSpec
-  { _csAllocs        :: Map AllocIndex t
-    -- ^ allocated pointers
-  , _csPointsTos     :: [PointsTo]
-    -- ^ points-to statements
-  , _csConditions    :: [SetupCondition]
-    -- ^ equalities and propositions
-  , _csFreshVars     :: [TypedTerm]
-    -- ^ fresh variables created in this state
-  , _csVarTypeNames  :: Map AllocIndex JIdent
-    -- ^ names for types of variables, for diagnostics
+-- TODO: We should probably use a more structured datatype (record), like in LLVM
+type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
+
+--------------------------------------------------------------------------------
+-- *** PointsTo
+
+type instance MS.PointsTo CJ.JVM = JVMPointsTo
+
+data JVMPointsTo
+  = JVMPointsToField ProgramLoc (MS.SetupValue CJ.JVM) String (MS.SetupValue CJ.JVM)
+  | JVMPointsToElem ProgramLoc (MS.SetupValue CJ.JVM) Int (MS.SetupValue CJ.JVM)
+
+ppPointsTo :: JVMPointsTo -> PPL.Doc
+ppPointsTo =
+  \case
+    JVMPointsToField _loc ptr fld val ->
+      MS.ppSetupValue ptr <> PPL.text "." <> PPL.text fld
+      PPL.<+> PPL.text "points to"
+      PPL.<+> MS.ppSetupValue val
+    JVMPointsToElem _loc ptr idx val ->
+      MS.ppSetupValue ptr <> PPL.text "[" <> PPL.text (show idx) <> PPL.text "]"
+      PPL.<+> PPL.text "points to"
+      PPL.<+> MS.ppSetupValue val
+
+instance PPL.Pretty JVMPointsTo where
+  pretty = ppPointsTo
+
+--------------------------------------------------------------------------------
+-- *** JVMCrucibleContext
+
+type instance MS.Codebase CJ.JVM = CB.Codebase
+
+data JVMCrucibleContext =
+  JVMCrucibleContext
+  { _jccJVMClass       :: J.Class
+  , _jccCodebase       :: CB.Codebase
+  , _jccJVMContext     :: CJ.JVMContext
+  , _jccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
+  , _jccHandleAllocator :: Crucible.HandleAllocator RealWorld
   }
-  deriving (Show)
 
-type StateSpec = StateSpec' (ProgramLoc, Allocation)
+makeLenses ''JVMCrucibleContext
 
-data CrucibleMethodSpecIR' t =
-  CrucibleMethodSpec
-  { _csClassName       :: J.ClassName
-  , _csMethodName      :: String
-  , _csArgs            :: [t]
-  , _csRet             :: Maybe t
-  , _csPreState        :: StateSpec -- ^ state before the function runs
-  , _csPostState       :: StateSpec -- ^ state after the function runs
-  , _csArgBindings     :: Map Integer (t, SetupValue) -- ^ function arguments
-  , _csRetValue        :: Maybe SetupValue            -- ^ function return value
-  , _csSolverStats     :: SolverStats                 -- ^ statistics about the proof that produced this
-  , _csLoc             :: ProgramLoc
-  }
-  deriving (Show)
+type instance MS.CrucibleContext CJ.JVM = JVMCrucibleContext
 
-type CrucibleMethodSpecIR = CrucibleMethodSpecIR' J.Type
+--------------------------------------------------------------------------------
 
-type GhostValue  = "GhostValue"
-type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
-type GhostGlobal = Crucible.GlobalVar GhostType
+initialDefCrucibleMethodSpecIR ::
+  CB.Codebase ->
+  J.ClassName ->
+  J.Method ->
+  ProgramLoc ->
+  MS.CrucibleMethodSpecIR CJ.JVM
+initialDefCrucibleMethodSpecIR cb cname method loc =
+  let methId = JVMMethodId (J.methodName method) cname
+      retTy = J.methodReturnType method
+      argTys = thisType ++ J.methodParameterTypes method
+  in MS.makeCrucibleMethodSpecIR methId argTys retTy loc cb
+  where thisType = if J.methodIsStatic method then [] else [J.ClassType cname]
 
-instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue where
-  type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue ctx = TypedTerm
-  muxIntrinsic sym _ _namerep _ctx prd thn els =
-    do st <- readIORef (B.sbStateManager sym)
-       let sc  = Crucible.saw_ctx st
-       prd' <- Crucible.toSC sym prd
-       typ  <- scTypeOf sc (ttTerm thn)
-       res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
-       return thn { ttTerm = res }
+initialCrucibleSetupState ::
+  JVMCrucibleContext ->
+  J.Method ->
+  ProgramLoc ->
+  Setup.CrucibleSetupState CJ.JVM
+initialCrucibleSetupState cc method loc =
+  Setup.makeCrucibleSetupState cc $
+    initialDefCrucibleMethodSpecIR
+      (cc ^. jccCodebase)
+      (J.className $ cc ^. jccJVMClass)
+      method
+      loc
 
-makeLenses ''CrucibleMethodSpecIR'
-makeLenses ''StateSpec'
+--------------------------------------------------------------------------------
 
-csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex (ProgramLoc, Allocation)
-csAllocations
-  = Map.unions
-  . toListOf ((csPreState <> csPostState) . csAllocs)
-
-csTypeNames :: CrucibleMethodSpecIR -> Map AllocIndex JIdent
-csTypeNames
-  = Map.unions
-  . toListOf ((csPreState <> csPostState) . csVarTypeNames)
-
+{-
 -- | Represent `CrucibleMethodSpecIR` as a function term in SAW-Core.
 methodSpecToTerm :: SharedContext -> CrucibleMethodSpecIR -> MaybeT IO Term
 methodSpecToTerm sc spec =
@@ -201,126 +205,4 @@ methodSpecToTerm sc spec =
 -- the post-state.
 instantiateUserVars :: CrucibleMethodSpecIR -> CrucibleMethodSpecIR
 instantiateUserVars _spec = undefined
-
--- | A datatype to keep track of which parts of the simulator state
--- have been initialized already. For each allocation unit or global,
--- we keep a list of element-paths that identify the initialized
--- sub-components.
-data ResolvedState =
-  ResolvedState
-  { _rsAllocs :: Map AllocIndex [Either String Int]
-  , _rsGlobals :: Map String [Either String Int]
-  }
-
-data CrucibleSetupState =
-  CrucibleSetupState
-  { _csVarCounter      :: !AllocIndex
-  , _csPrePost         :: PrePost
-  , _csResolvedState   :: ResolvedState
-  , _csMethodSpec      :: CrucibleMethodSpecIR
-  , _csCrucibleContext :: CrucibleContext
-  }
-
-data CrucibleContext =
-  CrucibleContext
-  { _ccJVMClass       :: J.Class
-  , _ccCodebase       :: CB.Codebase
-  , _ccJVMContext     :: CJ.JVMContext
-  , _ccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
-  , _ccHandleAllocator :: Crucible.HandleAllocator RealWorld
-  }
-
-makeLenses ''CrucibleContext
-makeLenses ''CrucibleSetupState
-makeLenses ''ResolvedState
-
---------------------------------------------------------------------------------
-
-emptyResolvedState :: ResolvedState
-emptyResolvedState = ResolvedState Map.empty Map.empty
-
--- | Record the initialization of the pointer represented by the given
--- SetupValue.
-markResolved ::
-  SetupValue ->
-  Either String Int ->
-  ResolvedState ->
-  ResolvedState
-markResolved val0 path0 rs = go path0 val0
-  where
-    go path val =
-      case val of
-        SetupVar n    -> rs {_rsAllocs = Map.alter (ins path) n (_rsAllocs rs) }
-        SetupGlobal c -> rs {_rsGlobals = Map.alter (ins path) c (_rsGlobals rs)}
-        -- SetupElem v i -> go (i : path) v
-        _             -> rs
-
-    ins path Nothing = Just [path]
-    ins path (Just paths) = Just (path : paths)
-
--- | Test whether the pointer represented by the given SetupValue has
--- been initialized already.
-testResolved ::
-  SetupValue ->
-  Either String Int ->
-  ResolvedState ->
-  Bool
-testResolved val0 path0 rs = go path0 val0
-  where
-    go path val =
-      case val of
-        SetupVar n    -> test path (Map.lookup n (_rsAllocs rs))
-        SetupGlobal c -> test path (Map.lookup c (_rsGlobals rs))
-        -- SetupElem v i -> go (i : path) v
-        _             -> False
-
-    test _ Nothing = False
-    test path (Just paths) = path `elem` paths -- any (`isPrefixOf` path) paths
-
--------------------------------------------------------------------------------
-
-initialStateSpec :: StateSpec
-initialStateSpec =  StateSpec
-  { _csAllocs        = Map.empty
-  , _csPointsTos     = []
-  , _csConditions    = []
-  , _csFreshVars     = []
-  , _csVarTypeNames  = Map.empty
-  }
-
-initialDefCrucibleMethodSpecIR ::
-  J.ClassName ->
-  J.Method ->
-  ProgramLoc ->
-  CrucibleMethodSpecIR
-initialDefCrucibleMethodSpecIR cname method loc =
-  CrucibleMethodSpec
-    { _csClassName       = cname
-    , _csMethodName      = J.methodName method
-    , _csArgs            = thisType ++ J.methodParameterTypes method
-    , _csRet             = J.methodReturnType method
-    , _csPreState        = initialStateSpec
-    , _csPostState       = initialStateSpec
-    , _csArgBindings     = Map.empty
-    , _csRetValue        = Nothing
-    , _csSolverStats     = mempty
-    , _csLoc             = loc
-    }
-  where
-    thisType = if J.methodIsStatic method then [] else [J.ClassType cname]
-
-initialCrucibleSetupState ::
-  CrucibleContext ->
-  J.Method ->
-  ProgramLoc ->
-  CrucibleSetupState
-initialCrucibleSetupState cc method loc =
-  CrucibleSetupState
-    { _csVarCounter      = AllocIndex 0
-    , _csPrePost         = PreState
-    , _csResolvedState   = emptyResolvedState
-    , _csMethodSpec      = initialDefCrucibleMethodSpecIR cname method loc
-    , _csCrucibleContext = cc
-    }
-  where
-    cname = J.className (cc^.ccJVMClass)
+-}

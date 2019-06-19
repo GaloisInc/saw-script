@@ -50,10 +50,6 @@ import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
-import SAWScript.Crucible.LLVM.Builtins
-import qualified Lang.Crucible.JVM as CJ
-import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -80,9 +76,15 @@ import qualified Verifier.Java.SAWBackend as JavaSAW
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
-import SAWScript.Crucible.JVM.Builtins
-import qualified SAWScript.Crucible.JVM.MethodSpecIR as JIR
+-- Crucible
+import qualified Lang.Crucible.JVM as CJ
+import qualified SAWScript.Crucible.Common.MethodSpec as CMS
+import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
+import           SAWScript.Crucible.LLVM.Builtins
+import           SAWScript.Crucible.JVM.Builtins
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
+-- Cryptol
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
@@ -1859,55 +1861,55 @@ primitives = Map.fromList
 
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
-    (pureVal CIR.SetupArray)
+    (pureVal CIR.anySetupArray)
     Current
     [ "Create a SetupValue representing an array, with the given list of"
     , "values as elements. The list must be non-empty." ]
 
   , prim "crucible_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal (CIR.SetupStruct False))
+    (pureVal (CIR.anySetupStruct False))
     Current
     [ "Create a SetupValue representing a struct, with the given list of"
     , "values as elements." ]
 
   , prim "crucible_packed_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal (CIR.SetupStruct True))
+    (pureVal (CIR.anySetupStruct True))
     Current
     [ "Create a SetupValue representing a packed struct, with the given"
     , "list of values as elements." ]
 
   , prim "crucible_elem"
     "SetupValue -> Int -> SetupValue"
-    (pureVal CIR.SetupElem)
+    (pureVal CIR.anySetupElem)
     Current
     [ "Turn a SetupValue representing a struct or array pointer into"
     , "a pointer to an element of the struct or array by field index." ]
 
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
-    (pureVal CIR.SetupField)
+    (pureVal CIR.anySetupField)
     Current
     [ "Turn a SetupValue representing a struct pointer into"
     , "a pointer to an element of the struct by field name." ]
 
   , prim "crucible_null"
     "SetupValue"
-    (pureVal CIR.SetupNull)
+    (pureVal CIR.anySetupNull)
     Current
     [ "A SetupValue representing a null pointer value." ]
 
   , prim "crucible_global"
     "String -> SetupValue"
-    (pureVal CIR.SetupGlobal)
+    (pureVal CIR.anySetupGlobal)
     Current
     [ "Return a SetupValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
 
   , prim "crucible_global_initializer"
     "String -> SetupValue"
-    (pureVal CIR.SetupGlobalInitializer)
+    (pureVal CIR.anySetupGlobalInitializer)
     Current
     [ "Return a SetupValue representing the value of the initializer of a named"
     , "global. The String should be the name of a global value."
@@ -1917,7 +1919,7 @@ primitives = Map.fromList
 
   , prim "crucible_term"
     "Term -> SetupValue"
-    (pureVal CIR.SetupTerm)
+    (pureVal CIR.anySetupTerm)
     Current
     [ "Construct a `SetupValue` from a `Term`." ]
 
@@ -2093,20 +2095,20 @@ primitives = Map.fromList
 -}
   , prim "jvm_null"
     "JVMValue"
-    (pureVal JIR.SetupNull)
+    (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
     Experimental
     [ "A JVMValue representing a null pointer value." ]
 
   , prim "jvm_global"
     "String -> JVMValue"
-    (pureVal JIR.SetupGlobal)
+    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue CJ.JVM))
     Experimental
     [ "Return a JVMValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
 
   , prim "jvm_term"
     "Term -> JVMValue"
-    (pureVal JIR.SetupTerm)
+    (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
     Experimental
     [ "Construct a `JVMValue` from a `Term`." ]
 
@@ -2166,6 +2168,7 @@ primitives = Map.fromList
     bicVal :: forall t. IsValue t =>
               (BuiltinContext -> Options -> t) -> Options -> BuiltinContext -> Value
     bicVal f opts bic = toValue (f bic opts)
+
 
 filterAvail ::
   Set PrimitiveLifecycle ->

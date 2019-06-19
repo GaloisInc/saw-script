@@ -9,192 +9,181 @@ Stability   : provisional
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module SAWScript.Crucible.LLVM.MethodSpecIR where
 
-import           Data.List (isPrefixOf)
-import           Data.Map (Map)
-import qualified Data.Map as Map
-import           Control.Monad.Trans.Maybe
-import           Control.Monad.Trans (lift)
 import           Control.Lens
-import           Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
-
+import           Data.Functor.Compose (Compose(..))
 import           Data.IORef
 import           Data.Monoid ((<>))
+import           Data.Type.Equality (TestEquality(..), (:~:)(Refl))
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
+import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
+import qualified Text.PrettyPrint.HughesPJ as PP
 
+import           Data.Parameterized.All (All(All))
+import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Map as MapF
-
-import           SAWScript.Prover.SolverStats
 
 import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
-import qualified Lang.Crucible.Types as Crucible
-  (IntrinsicType, EmptyCtx, SymbolRepr, knownSymbol)
-import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
---import qualified Lang.Crucible.LLVM.MemModel as CL (MemImpl)
---import qualified Lang.Crucible.LLVM.Translation as CL
+import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
   (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
-import qualified What4.ProgramLoc as W4 (plSourceLoc)
+import           SAWScript.Crucible.Common (Sym)
+import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
-import           SAWScript.Crucible.Common (AllocIndex(..), PrePost(..), Sym)
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
-import           SAWScript.Options
-import           SAWScript.Utils (bullets)
 
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
 
--- | From the manual: "The SetupValue type corresponds to values that can occur
--- during symbolic execution, which includes both Term values, pointers, and
--- composite types consisting of either of these (both structures and arrays)."
-data SetupValue where
-  SetupVar               :: AllocIndex -> SetupValue
-  SetupTerm              :: TypedTerm -> SetupValue
-  SetupStruct            :: Bool -> [SetupValue] -> SetupValue -- True = packed
-  SetupArray             :: [SetupValue] -> SetupValue
-  SetupElem              :: SetupValue -> Int -> SetupValue
-  SetupField             :: SetupValue -> String -> SetupValue
-  SetupNull              :: SetupValue
-  -- | A pointer to a global variable
-  SetupGlobal            :: String -> SetupValue
-  -- | This represents the value of a global's initializer.
-  SetupGlobalInitializer :: String -> SetupValue
-  deriving (Show)
+--------------------------------------------------------------------------------
+-- ** Language features
 
-setupToTypedTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO TypedTerm
-setupToTypedTerm opts sc sv =
-  case sv of
-    SetupTerm term -> return term
-    _ -> do t <- setupToTerm opts sc sv
-            lift $ mkTypedTerm sc t
+type instance MS.HasSetupNull (CL.LLVM _) = 'True
+type instance MS.HasSetupStruct (CL.LLVM _) = 'True
+type instance MS.HasSetupArray (CL.LLVM _) = 'True
+type instance MS.HasSetupElem (CL.LLVM _) = 'True
+type instance MS.HasSetupField (CL.LLVM _) = 'True
+type instance MS.HasSetupGlobal (CL.LLVM _) = 'True
+type instance MS.HasSetupGlobalInitializer (CL.LLVM _) = 'True
 
--- | Convert a setup value to a SAW-Core term. This is a partial
--- function, as certain setup values ---SetupVar, SetupNull and
--- SetupGlobal--- don't have semantics outside of the symbolic
--- simulator.
-setupToTerm :: Options -> SharedContext -> SetupValue -> MaybeT IO Term
-setupToTerm opts sc sv =
-  let intToNat = fromInteger . toInteger
-  in case sv of
-    SetupTerm term -> return (ttTerm term)
-    SetupStruct _ fields ->
-      do ts <- mapM (setupToTerm opts sc) fields
-         lift $ scTuple sc ts
-    SetupArray elems@(_:_) -> do ts@(t:_) <- mapM (setupToTerm opts sc) elems
-                                 typt <- lift $ scTypeOf sc t
-                                 vec <- lift $ scVector sc typt ts
-                                 typ <- lift $ scTypeOf sc vec
-                                 lift $ printOutLn opts Info $ show vec
-                                 lift $ printOutLn opts Info $ show typ
-                                 return vec
-    SetupElem base ind ->
-      case base of
-        SetupArray elems@(e:_) -> do art <- setupToTerm opts sc base
-                                     ixt <- lift $ scNat sc $ intToNat ind
-                                     lent <- lift $ scNat sc $ intToNat $ length elems
-                                     et <- setupToTerm opts sc e
-                                     typ <- lift $ scTypeOf sc et
-                                     lift $ scAt sc lent typ art ixt
-        SetupStruct _ fs ->
-          do st <- setupToTerm opts sc base
-             lift $ scTupleSelector sc st ind (length fs)
-        _ ->
-          MaybeT $ return Nothing
-    -- SetupVar, SetupNull, SetupGlobal
-    _ -> MaybeT $ return Nothing
+type instance MS.HasGhostState (CL.LLVM _) = 'True
 
-data PointsTo = PointsTo ProgramLoc SetupValue SetupValue
-  deriving (Show)
+type instance MS.TypeName (CL.LLVM arch) = CL.Ident
+type instance MS.ExtType (CL.LLVM arch) = CL.MemType
 
-data SetupCondition where
-  SetupCond_Equal    :: ProgramLoc ->SetupValue -> SetupValue -> SetupCondition
-  SetupCond_Pred     :: ProgramLoc -> TypedTerm -> SetupCondition
-  SetupCond_Ghost    :: ProgramLoc ->
-                        GhostGlobal ->
-                        TypedTerm ->
-                        SetupCondition
-  deriving (Show)
+--------------------------------------------------------------------------------
+-- *** LLVMMethodId
 
--- | Verification state (either pre- or post-) specification
-data StateSpec' t = StateSpec
-  { _csAllocs        :: Map AllocIndex t
-    -- ^ allocated pointers
-  , _csConstAllocs   :: Map AllocIndex t
-    -- ^ allocated read-only pointers
-  , _csFreshPointers :: Map AllocIndex t
-    -- ^ symbolic pointers
-  , _csPointsTos     :: [PointsTo]
-    -- ^ points-to statements
-  , _csConditions    :: [SetupCondition]
-    -- ^ equality, propositions, and ghost-variable conditions
-  , _csFreshVars     :: [TypedTerm]
-    -- ^ fresh variables created in this state
-  , _csVarTypeNames  :: Map AllocIndex CL.Ident
-    -- ^ names for types of variables, for diagnostics
+data LLVMMethodId =
+  LLVMMethodId
+    { _llvmMethodName   :: String
+    , _llvmMethodParent :: Maybe String -- ^ Something to do with breakpoints...
+    } deriving (Eq, Ord, Show)
+
+makeLenses ''LLVMMethodId
+
+csName :: Lens' (MS.CrucibleMethodSpecIR (CL.LLVM arch)) String
+csName = MS.csMethod . llvmMethodName
+
+csParentName :: Lens' (MS.CrucibleMethodSpecIR (CL.LLVM arch)) (Maybe String)
+csParentName = MS.csMethod . llvmMethodParent
+
+instance PPL.Pretty LLVMMethodId where
+  pretty = PPL.text . view llvmMethodName
+
+type instance MS.MethodId (CL.LLVM _) = LLVMMethodId
+
+--------------------------------------------------------------------------------
+-- *** LLVMAllocSpec
+
+data LLVMAllocSpec =
+  LLVMAllocSpec
+    { _allocSpecMut   :: CL.Mutability
+    , _allocSpecType  :: CL.MemType
+    , _allocSpecBytes :: CL.Bytes
+    , _allocSpecLoc   :: ProgramLoc
+    }
+  deriving (Eq, Show)
+
+makeLenses ''LLVMAllocSpec
+
+type instance MS.AllocSpec (CL.LLVM _) = LLVMAllocSpec
+
+mutIso :: Iso' CL.Mutability Bool
+mutIso =
+  iso
+    (\case
+      CL.Mutable -> True
+      CL.Immutable -> False)
+    (\case
+      True -> CL.Mutable
+      False -> CL.Immutable)
+
+isMut :: Lens' LLVMAllocSpec Bool
+isMut = allocSpecMut . mutIso
+
+--------------------------------------------------------------------------------
+-- *** LLVMModule
+
+data LLVMModule arch =
+  LLVMModule
+  { _modName :: String
+  , _modAST :: L.Module
+  , _modTrans :: CL.ModuleTranslation arch
   }
-  deriving (Show)
 
-type StateSpec = StateSpec' (ProgramLoc, CL.MemType)
+makeLenses ''LLVMModule
 
-data CrucibleMethodSpecIR' t =
-  CrucibleMethodSpec
-  { _csName            :: String
-  , _csParentName      :: Maybe String
-  , _csArgs            :: [t]
-  , _csRet             :: Maybe t
-  , _csPreState        :: StateSpec -- ^ state before the function runs
-  , _csPostState       :: StateSpec -- ^ state after the function runs
-  , _csArgBindings     :: Map Integer (t, SetupValue) -- ^ function arguments
-  , _csRetValue        :: Maybe SetupValue            -- ^ function return value
-  , _csSolverStats     :: SolverStats                 -- ^ statistics about the proof that produced this
-  , _csLoc             :: ProgramLoc
-  }
-  deriving (Functor, Show)
+instance TestEquality LLVMModule where
+  testEquality (LLVMModule nm1 lm1 mt1) (LLVMModule nm2 lm2 mt2) =
+    case testEquality mt1 mt2 of
+      Nothing -> Nothing
+      r@(Just Refl) ->
+        if nm1 == nm2 && lm1 == lm2
+        then r
+        else Nothing
 
-type GhostValue  = "GhostValue"
-type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
-type GhostGlobal = Crucible.GlobalVar GhostType
+type instance MS.Codebase (CL.LLVM arch) = LLVMModule arch
 
-makeLenses ''CrucibleMethodSpecIR'
+showLLVMModule :: LLVMModule arch -> String
+showLLVMModule (LLVMModule name m _) =
+  unlines [ "Module: " ++ name
+          , "Types:"
+          , showParts L.ppTypeDecl (L.modTypes m)
+          , "Globals:"
+          , showParts ppGlobal' (L.modGlobals m)
+          , "External references:"
+          , showParts L.ppDeclare (L.modDeclares m)
+          , "Definitions:"
+          , showParts ppDefine' (L.modDefines m)
+          ]
+  where
+    showParts pp xs = unlines $ map (show . PP.nest 2 . pp) xs
+    ppGlobal' g =
+      L.ppSymbol (L.globalSym g) PP.<+> PP.char '=' PP.<+>
+      L.ppGlobalAttrs (L.globalAttrs g) PP.<+>
+      L.ppType (L.globalType g)
+    ppDefine' d =
+      L.ppMaybe L.ppLinkage (L.defLinkage d) PP.<+>
+      L.ppType (L.defRetType d) PP.<+>
+      L.ppSymbol (L.defName d) PP.<>
+      L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
+      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.defGC d)
 
-type CrucibleMethodSpecIR = CrucibleMethodSpecIR' CL.MemType
+--------------------------------------------------------------------------------
+-- ** Ghost state
 
-ppMethodSpec :: CrucibleMethodSpecIR -> PP.Doc
-ppMethodSpec methodSpec =
-  PP.text "Name: " <> PP.text (methodSpec ^. csName)
-  PP.<$$> PP.text "Location: " <> PP.pretty (W4.plSourceLoc (methodSpec ^. csLoc))
-  PP.<$$> PP.text "Argument types: "
-  PP.<$$> bullets '-' (map (PP.text . show) (methodSpec ^. csArgs))
-  PP.<$$> PP.text "Return type: " <> case methodSpec ^. csRet of
-                                       Nothing  -> PP.text "<void>"
-                                       Just ret -> PP.text (show ret)
-
-instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue where
-  type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue ctx = TypedTerm
+instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue where
+  type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue ctx = TypedTerm
   muxIntrinsic sym _ _namerep _ctx prd thn els =
     do st <- readIORef (B.sbStateManager sym)
        let sc  = Crucible.saw_ctx st
@@ -203,145 +192,77 @@ instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.Fl
        res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
        return thn { ttTerm = res }
 
-makeLenses ''StateSpec'
+--------------------------------------------------------------------------------
+-- ** CrucibleContext
 
-csAllocations :: CrucibleMethodSpecIR -> Map AllocIndex (ProgramLoc, CL.MemType)
-csAllocations
-  = Map.unions
-  . toListOf ((csPreState <> csPostState) . (csAllocs <> csConstAllocs <> csFreshPointers))
+type instance MS.CrucibleContext (CL.LLVM arch) = LLVMCrucibleContext arch
 
-csTypeNames :: CrucibleMethodSpecIR -> Map AllocIndex CL.Ident
-csTypeNames
-  = Map.unions
-  . toListOf ((csPreState <> csPostState) . (csVarTypeNames))
-
--- | Represent `CrucibleMethodSpecIR` as a function term in SAW-Core.
-methodSpecToTerm :: SharedContext -> CrucibleMethodSpecIR -> MaybeT IO Term
-methodSpecToTerm sc spec =
-      -- 1. fill in the post-state user variable holes with final
-      -- symbolic state
-  let _ppts = _csPointsTos $ _csPostState $ instantiateUserVars spec
-      -- 2. get the free variables in post points to's (note: these
-      -- should be contained in variables bound by pre-points-tos)
-
-      -- 3. abstract the free variables in each post-points-to
-
-      -- 4. put every abstracted post-points-to in a tuple
-
-      -- 5. Create struct type with fields being names of free variables
-
-      -- 6. Create a lambda term bound to a struct-typed variable that returns the tuple
-  in lift $ scLambda sc undefined undefined undefined
-
--- | Rewrite the `csPostPointsTos` to substitute the elements of the
--- final symbolic state for the fresh variables created by the user in
--- the post-state.
-instantiateUserVars :: CrucibleMethodSpecIR -> CrucibleMethodSpecIR
-instantiateUserVars _spec = undefined
-
--- | A datatype to keep track of which parts of the simulator state
--- have been initialized already. For each allocation unit or global,
--- we keep a list of element-paths that identify the initialized
--- sub-components.
-data ResolvedState =
-  ResolvedState
-  {_rsAllocs :: Map AllocIndex [[Int]]
-  ,_rsGlobals :: Map String [[Int]]
-  }
-
-data CrucibleSetupState wptr =
-  CrucibleSetupState
-  {_csVarCounter      :: !AllocIndex
-  ,_csPrePost         :: PrePost
-  ,_csResolvedState   :: ResolvedState
-  ,_csMethodSpec      :: CrucibleMethodSpecIR
-  ,_csCrucibleContext :: CrucibleContext wptr
-  }
-
-data CrucibleContext wptr =
-  CrucibleContext
-  { _ccLLVMModule      :: L.Module
-  , _ccLLVMModuleTrans :: CL.ModuleTranslation wptr
+data LLVMCrucibleContext arch =
+  LLVMCrucibleContext
+  { _ccLLVMModule      :: LLVMModule arch
   , _ccBackend         :: Sym
   , _ccLLVMEmptyMem    :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
-  , _ccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM wptr)
+  , _ccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM arch)
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   }
 
-makeLenses ''CrucibleContext
-makeLenses ''CrucibleSetupState
-makeLenses ''ResolvedState
+makeLenses ''LLVMCrucibleContext
 
-ccLLVMContext :: Simple Lens (CrucibleContext wptr) (CL.LLVMContext wptr)
+ccLLVMModuleAST :: Simple Lens (LLVMCrucibleContext arch) L.Module
+ccLLVMModuleAST = ccLLVMModule . modAST
+
+ccLLVMModuleTrans :: Simple Lens (LLVMCrucibleContext arch) (CL.ModuleTranslation arch)
+ccLLVMModuleTrans = ccLLVMModule . modTrans
+
+ccLLVMContext :: Simple Lens (LLVMCrucibleContext arch) (CL.LLVMContext arch)
 ccLLVMContext = ccLLVMModuleTrans . CL.transContext
 
-ccTypeCtx :: Simple Lens (CrucibleContext wptr) CL.TypeContext
+ccTypeCtx :: Simple Lens (LLVMCrucibleContext arch) CL.TypeContext
 ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
 
 --------------------------------------------------------------------------------
+-- ** PointsTo
 
-emptyResolvedState :: ResolvedState
-emptyResolvedState = ResolvedState Map.empty Map.empty
+type instance MS.PointsTo (CL.LLVM arch) = LLVMPointsTo arch
 
--- | Record the initialization of the pointer represented by the given
--- SetupValue.
-markResolved ::
-  SetupValue ->
-  ResolvedState ->
-  ResolvedState
-markResolved val0 rs = go [] val0
-  where
-    go path val =
-      case val of
-        SetupVar n    -> rs {_rsAllocs = Map.alter (ins path) n (_rsAllocs rs) }
-        SetupGlobal c -> rs {_rsGlobals = Map.alter (ins path) c (_rsGlobals rs)}
-        SetupElem v i -> go (i : path) v
-        _             -> rs
+data LLVMPointsTo arch =
+  LLVMPointsTo ProgramLoc (MS.SetupValue (CL.LLVM arch)) (MS.SetupValue (CL.LLVM arch))
 
-    ins path Nothing = Just [path]
-    ins path (Just paths) = Just (path : paths)
+ppPointsTo :: LLVMPointsTo arch -> PPL.Doc
+ppPointsTo (LLVMPointsTo _loc ptr val) =
+  MS.ppSetupValue ptr
+  PPL.<+> PPL.text "points to"
+  PPL.<+> MS.ppSetupValue val
 
--- | Test whether the pointer represented by the given SetupValue has
--- been initialized already.
-testResolved ::
-  SetupValue ->
-  ResolvedState ->
-  Bool
-testResolved val0 rs = go [] val0
-  where
-    go path val =
-      case val of
-        SetupVar n    -> test path (Map.lookup n (_rsAllocs rs))
-        SetupGlobal c -> test path (Map.lookup c (_rsGlobals rs))
-        SetupElem v i -> go (i : path) v
-        _             -> False
+instance PPL.Pretty (LLVMPointsTo arch) where
+  pretty = ppPointsTo
 
-    test _ Nothing = False
-    test path (Just paths) = any (`isPrefixOf` path) paths
-
+--------------------------------------------------------------------------------
+-- ** ???
 
 intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)
 intrinsics =
   MapF.insert
-    (Crucible.knownSymbol :: Crucible.SymbolRepr GhostValue)
+    (Crucible.knownSymbol :: Crucible.SymbolRepr MS.GhostValue)
     Crucible.IntrinsicMuxFn
     CL.llvmIntrinsicTypes
 
 -------------------------------------------------------------------------------
+-- ** Initial CrucibleSetupMethodSpec
 
 data SetupError
   = InvalidReturnType L.Type
   | InvalidArgTypes [L.Type]
 
-ppSetupError :: SetupError -> PP.Doc
+ppSetupError :: SetupError -> PPL.Doc
 ppSetupError (InvalidReturnType t) =
-  text "Can't lift return type" <+>
-  text (show (L.ppType t)) <+>
-  text "to a Crucible type."
+  PPL.text "Can't lift return type" PPL.<+>
+  PPL.text (show (L.ppType t)) PPL.<+>
+  PPL.text "to a Crucible type."
 ppSetupError (InvalidArgTypes ts) =
-  text "Can't lift argument types " <+>
-  encloseSep lparen rparen comma (map (text . show . L.ppType) ts) <+>
-  text "to Crucible types."
+  PPL.text "Can't lift argument types " PPL.<+>
+  PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.text . show . L.ppType) ts) PPL.<+>
+  PPL.text "to Crucible types."
 
 resolveArgs ::
   (?lc :: CL.TypeContext) =>
@@ -363,92 +284,130 @@ resolveRetTy ty = do
   -- TODO: should the error message be propagated?
   either (\_ -> Left (InvalidReturnType ty)) Right ret
 
-initialStateSpec :: StateSpec
-initialStateSpec =  StateSpec
-  { _csAllocs        = Map.empty
-  , _csConstAllocs   = Map.empty
-  , _csFreshPointers = Map.empty
-  , _csPointsTos     = []
-  , _csConditions    = []
-  , _csFreshVars     = []
-  , _csVarTypeNames  = Map.empty
-  }
-
 initialDefCrucibleMethodSpecIR ::
   (?lc :: CL.TypeContext) =>
+  LLVMModule arch ->
   L.Define ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError CrucibleMethodSpecIR
-initialDefCrucibleMethodSpecIR def loc parent = do
+  Either SetupError (MS.CrucibleMethodSpecIR (CL.LLVM arch))
+initialDefCrucibleMethodSpecIR llvmModule def loc parent = do
   args <- resolveArgs (L.typedType <$> L.defArgs def)
   ret <- resolveRetTy (L.defRetType def)
   let L.Symbol nm = L.defName def
-  return $ makeCrucibleMethodSpecIR nm args ret loc parent
+  let methId = LLVMMethodId nm parent
+  return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule
 
 initialDeclCrucibleMethodSpecIR ::
   (?lc :: CL.TypeContext) =>
+  LLVMModule arch ->
   L.Declare ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError CrucibleMethodSpecIR
-initialDeclCrucibleMethodSpecIR dec loc parent = do
+  Either SetupError (MS.CrucibleMethodSpecIR (CL.LLVM arch))
+initialDeclCrucibleMethodSpecIR llvmModule dec loc parent = do
   args <- resolveArgs (L.decArgs dec)
   ret <- resolveRetTy (L.decRetType dec)
   let L.Symbol nm = L.decName dec
-  return $ makeCrucibleMethodSpecIR nm args ret loc parent
-
-makeCrucibleMethodSpecIR ::
-  String ->
-  [CL.MemType] ->
-  Maybe CL.MemType ->
-  ProgramLoc ->
-  Maybe String ->
-  CrucibleMethodSpecIR
-makeCrucibleMethodSpecIR nm args ret loc parent = do
-  CrucibleMethodSpec
-    {_csName            = nm
-    ,_csParentName      = parent
-    ,_csArgs            = args
-    ,_csRet             = ret
-    ,_csPreState        = initialStateSpec
-    ,_csPostState       = initialStateSpec
-    ,_csArgBindings     = Map.empty
-    ,_csRetValue        = Nothing
-    ,_csSolverStats     = mempty
-    ,_csLoc             = loc
-    }
+  let methId = LLVMMethodId nm parent
+  return $ MS.makeCrucibleMethodSpecIR methId args ret loc llvmModule
 
 initialCrucibleSetupState ::
   (?lc :: CL.TypeContext) =>
-  CrucibleContext wptr ->
+  LLVMCrucibleContext arch ->
   L.Define ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError (CrucibleSetupState wptr)
+  Either SetupError (Setup.CrucibleSetupState (CL.LLVM arch))
 initialCrucibleSetupState cc def loc parent = do
-  ms <- initialDefCrucibleMethodSpecIR def loc parent
-  return CrucibleSetupState
-    { _csVarCounter      = AllocIndex 0
-    , _csPrePost         = PreState
-    , _csResolvedState   = emptyResolvedState
-    , _csMethodSpec      = ms
-    , _csCrucibleContext = cc
-    }
+  ms <- initialDefCrucibleMethodSpecIR (cc ^. ccLLVMModule) def loc parent
+  return $ Setup.makeCrucibleSetupState cc ms
 
 initialCrucibleSetupStateDecl ::
   (?lc :: CL.TypeContext) =>
-  CrucibleContext wptr ->
+  LLVMCrucibleContext arch ->
   L.Declare ->
   ProgramLoc ->
   Maybe String ->
-  Either SetupError (CrucibleSetupState wptr)
+  Either SetupError (Setup.CrucibleSetupState (CL.LLVM arch))
 initialCrucibleSetupStateDecl cc dec loc parent = do
-  ms <- initialDeclCrucibleMethodSpecIR dec loc parent
-  return CrucibleSetupState
-    { _csVarCounter      = AllocIndex 0
-    , _csPrePost         = PreState
-    , _csResolvedState   = emptyResolvedState
-    , _csMethodSpec      = ms
-    , _csCrucibleContext = cc
-    }
+  ms <- initialDeclCrucibleMethodSpecIR (cc ^. ccLLVMModule) dec loc parent
+  return $ Setup.makeCrucibleSetupState cc ms
+
+--------------------------------------------------------------------------------
+-- ** AllLLVM/SomeLLVM
+
+--------------------------------------------------------------------------------
+-- *** AllLLVM
+
+-- | Universal/polymorphic quantification over an 'LLVMArch'
+--
+-- The following type synonym and associated constructor/destructor are
+-- equivalent to this definition:
+-- @
+-- data AllLLVM t =
+--   MkAllLLVM { getAllLLVM :: forall arch. t (CL.LLVM arch) }
+-- @
+-- But they preserve the instances from 'All' and 'Compose'.
+type AllLLVM t = All (Compose t CL.LLVM)
+
+-- This doesn't work :(
+--
+-- pattern AllLLVM :: (forall arch. t (CL.LLVM arch)) -> AllLLVM t
+-- pattern AllLLVM x = All (Compose x)
+
+mkAllLLVM :: forall t. (forall arch. t (CL.LLVM arch)) -> AllLLVM t
+mkAllLLVM x = All (Compose x)
+
+getAllLLVM :: forall t. AllLLVM t -> (forall arch. t (CL.LLVM arch))
+getAllLLVM (All (Compose x)) = x
+
+-- Constructors for 'SetupValue' which are architecture-polymorphic
+
+anySetupTerm :: TypedTerm -> AllLLVM MS.SetupValue
+anySetupTerm typedTerm = mkAllLLVM (MS.SetupTerm typedTerm)
+
+anySetupArray :: [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
+anySetupArray vals = mkAllLLVM (MS.SetupArray () $ map getAllLLVM vals)
+
+anySetupStruct :: Bool -> [AllLLVM MS.SetupValue] -> AllLLVM MS.SetupValue
+anySetupStruct b vals = mkAllLLVM (MS.SetupStruct () b $ map getAllLLVM vals)
+
+anySetupElem :: AllLLVM MS.SetupValue -> Int -> AllLLVM MS.SetupValue
+anySetupElem val idx = mkAllLLVM (MS.SetupElem () (getAllLLVM val) idx)
+
+anySetupField :: AllLLVM MS.SetupValue -> String -> AllLLVM MS.SetupValue
+anySetupField val field = mkAllLLVM (MS.SetupField () (getAllLLVM val) field)
+
+anySetupNull :: AllLLVM MS.SetupValue
+anySetupNull = mkAllLLVM (MS.SetupNull ())
+
+anySetupGlobal :: String -> AllLLVM MS.SetupValue
+anySetupGlobal globalName = mkAllLLVM (MS.SetupGlobal () globalName)
+
+anySetupGlobalInitializer :: String -> AllLLVM MS.SetupValue
+anySetupGlobalInitializer globalName =
+  mkAllLLVM (MS.SetupGlobalInitializer () globalName)
+
+--------------------------------------------------------------------------------
+-- *** SomeLLVM
+
+-- | Existential quantification over an 'LLVMArch'
+--
+-- The following type synonym and associated constructor/destructor are
+-- equivalent to this definition:
+-- @
+-- data SomeLLVM t = forall arch. MkSomeLLVM (t (CL.LLVM arch))
+-- @
+-- But they preserve the instances from 'Some' and 'Compose'.
+type SomeLLVM t = Some (Compose t CL.LLVM)
+
+pattern SomeLLVM :: t (CL.LLVM arch) -> SomeLLVM t
+pattern SomeLLVM x = Some (Compose x)
+{-# COMPLETE SomeLLVM #-}
+
+mkSomeLLVM :: t (CL.LLVM arch) -> SomeLLVM t
+mkSomeLLVM x = Some (Compose x)
+
+getSomeLLVM :: forall t. (forall arch. t (CL.LLVM arch)) -> AllLLVM t
+getSomeLLVM x = All (Compose x)

@@ -11,7 +11,7 @@ import qualified Data.AIG as AIG
 import Text.LLVM
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Value
+import SAWScript.Crucible.LLVM.MethodSpecIR (LLVMModule(..))
 
 --import Data.Maybe
 import Data.Either
@@ -29,7 +29,7 @@ getDeclsLLVM ::
   (AIG.IsAIG l g) =>
   AIG.Proxy l g ->
   SharedContext ->
-  LLVMModule ->
+  LLVMModule arch ->
   IO (Interaction (Maybe [Decl]))
 getDeclsLLVM _proxy _sc (LLVMModule file mdl _) = do
     let symStr (Symbol s) = s

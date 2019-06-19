@@ -30,6 +30,7 @@ library
     , bimap
     , bytestring
     , containers
+    , constraints >= 0.6
     , cryptol
     , cryptol-verifier
     , crucible >= 0.4
@@ -130,6 +131,10 @@ library
     SAWScript.VerificationCheck
 
     SAWScript.Crucible.Common
+    SAWScript.Crucible.Common.MethodSpec
+    SAWScript.Crucible.Common.Override
+    SAWScript.Crucible.Common.Setup.Builtins
+    SAWScript.Crucible.Common.Setup.Type
 
     SAWScript.Crucible.LLVM.Builtins
     SAWScript.Crucible.LLVM.CrucibleLLVM
