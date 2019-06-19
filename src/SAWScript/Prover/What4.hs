@@ -95,7 +95,7 @@ satWhat4_solver solver sym unints sc goal =
                              (scSharedSize t')
 
      -- log to stdout
-     let logger _ str = putStr str
+     let logger _ str = putStrLn str
      let logData = defaultLogData { logCallbackVerbose = logger
                                   , logReason = "SAW proof" }
 
