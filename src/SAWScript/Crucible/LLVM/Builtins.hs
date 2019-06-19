@@ -798,7 +798,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
         do Crucible.GlobalPair retval globals1 <-
              case pr of
                Crucible.TotalRes gp -> return gp
-               Crucible.PartialRes _ gp _ ->
+               Crucible.PartialRes _ _ gp _ ->
                  do printOutLn opts Info "Symbolic simulation completed with side conditions."
                     return gp
            let ret_ty = mspec^.csRet
@@ -938,7 +938,7 @@ setupCrucibleContext bic opts (LLVMModule _ llvm_mod (Some mtrans)) action = do
       (lglobals, lsimctx) <-
           case res of
             Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
-            Crucible.FinishedResult st (Crucible.PartialRes _ gp _) -> return (gp^.Crucible.gpGlobals, st)
+            Crucible.FinishedResult st (Crucible.PartialRes _ _ gp _) -> return (gp^.Crucible.gpGlobals, st)
             _ -> fail "simulator initialization failed!"
 
       return
@@ -1004,7 +1004,7 @@ getGlobalPair ::
 getGlobalPair opts pr =
   case pr of
     Crucible.TotalRes gp -> return gp
-    Crucible.PartialRes _ gp _ -> do
+    Crucible.PartialRes _ _ gp _ -> do
       printOutLn opts Info "Symbolic simulation completed with side conditions."
       return gp
 

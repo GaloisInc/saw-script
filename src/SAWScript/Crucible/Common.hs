@@ -53,7 +53,7 @@ ppAbortedResult _ (AbortedExec InfeasibleBranch _) =
   PP.text "Infeasible branch"
 ppAbortedResult ppGP (AbortedExec abt gp) = do
   ppAbortExecReason abt PP.<$$> ppGP gp
-ppAbortedResult ppGP (AbortedBranch _predicate trueBranch falseBranch) =
+ppAbortedResult ppGP (AbortedBranch _predicate _loc trueBranch falseBranch) =
   PP.vcat
     [ PP.text "Both branches aborted after a symbolic branch."
     -- TODO: These conditions can be large, symbolic SAWCore predicates, so they
