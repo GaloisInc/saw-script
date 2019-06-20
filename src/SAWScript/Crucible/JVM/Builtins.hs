@@ -118,6 +118,7 @@ import SAWScript.JavaExpr (JavaType(..))
 import qualified SAWScript.Crucible.Common as Common
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
+import           SAWScript.Crucible.Common.Override (SetupVarSub(..))
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
@@ -218,7 +219,8 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      globals1 <- liftIO $ setupGlobalState sym jc
 
      -- construct the initial state for verifications
-     (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
+     (args, assumes, env, globals2) <-
+       io $ verifyPrestate cc methodSpec globals1
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
@@ -311,7 +313,7 @@ verifyPrestate ::
   Crucible.SymGlobalState Sym ->
   IO ([(J.Type, JVMVal)],
       [Crucible.LabeledPred Term Crucible.AssumptionReason],
-      Map AllocIndex JVMRefVal,
+      Map AllocIndex (SetupVarSub CJ.JVM),
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals0 =
   do let sym = cc^.jccBackend
@@ -327,11 +329,12 @@ verifyPrestate cc mspec globals0 =
      --let Just mem = Crucible.lookupGlobal lvar globals
 
      -- Allocate objects in memory for each 'jvm_alloc'
-     (env, globals1) <- runStateT (traverse (doAlloc cc . snd) preallocs) globals0
+     (env, globals1) <- runStateT (traverse (doAlloc cc) preallocs) globals0
+     let env' = view svsJVMRef <$> env -- without source locations
 
-     globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
-     cs <- setupPrestateConditions mspec cc env (mspec ^. MS.csPreState . MS.csConditions)
-     args <- resolveArguments cc mspec env
+     globals2 <- setupPrePointsTos mspec cc env' (mspec ^. MS.csPreState . MS.csPointsTos) globals1
+     cs <- setupPrestateConditions mspec cc env' (mspec ^. MS.csPreState . MS.csConditions)
+     args <- resolveArguments cc mspec env'
 
      -- Check the type of the return setup value
      case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
@@ -486,12 +489,14 @@ assertEqualVals cc v1 v2 =
 
 doAlloc ::
   JVMCrucibleContext ->
-  Allocation ->
-  StateT (Crucible.SymGlobalState Sym) IO JVMRefVal
-doAlloc cc alloc =
-  case alloc of
-    AllocObject cname -> StateT (CJ.doAllocateObject sym halloc jc cname)
-    AllocArray len ty -> StateT (CJ.doAllocateArray sym halloc jc len ty)
+  (W4.ProgramLoc, Allocation) ->
+  StateT (Crucible.SymGlobalState Sym) IO (SetupVarSub CJ.JVM)
+doAlloc cc (loc, alloc) = do
+  ref <-
+    case alloc of
+      AllocObject cname -> StateT (CJ.doAllocateObject sym halloc jc cname)
+      AllocArray len ty -> StateT (CJ.doAllocateArray sym halloc jc len ty)
+  pure (SetupVarSub (JVMPointer ref) loc)
   where
     sym = cc^.jccBackend
     halloc = cc^.jccHandleAllocator
@@ -651,7 +656,7 @@ verifyPoststate ::
   SharedContext                     {- ^ saw core context                             -} ->
   JVMCrucibleContext                   {- ^ crucible context                             -} ->
   CrucibleMethodSpecIR              {- ^ specification                                -} ->
-  Map AllocIndex JVMRefVal          {- ^ allocation substitution                      -} ->
+  Map AllocIndex (SetupVarSub CJ.JVM)  {- ^ allocation substitution                      -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
   Maybe (J.Type, JVMVal)            {- ^ optional return value                        -} ->
   TopLevel [(String, Term)]         {- ^ generated labels and verification conditions -}

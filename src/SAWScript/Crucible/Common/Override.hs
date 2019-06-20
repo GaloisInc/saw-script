@@ -29,6 +29,9 @@ module SAWScript.Crucible.Common.Override
   , syminterface
   , setupValueSub
   , termSub
+  , SetupVarSub(..)
+  , svsPtr
+  , svsLoc
   --
   , OverrideFailureReason(..)
   , ppOverrideFailureReason
@@ -85,15 +88,40 @@ import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
 
 --------------------------------------------------------------------------------
+-- ** Pointers/SetupVarSub
+
+type family Pointer ext :: Type
+
+-- | The data describing an assertion about the value of a 'MS.SetupVar'
+data SetupVarSub ext
+  = SetupVarSub
+      { _svsPtr :: Pointer ext
+        -- ^ The actual pointer this 'MS.SetupVar' must equal.
+      , _svsLoc :: W4.ProgramLoc
+      }
+
+deriving instance (Eq (Pointer ext)) => Eq (SetupVarSub ext)
+deriving instance (Ord (Pointer ext)) => Ord (SetupVarSub ext)
+deriving instance (Show (Pointer ext)) => Show (SetupVarSub ext)
+
+instance PP.Pretty (Pointer ext) => PP.Pretty (SetupVarSub ext) where
+  pretty (SetupVarSub ptr loc) =
+    PP.text "Pointer value assignment:" PP.<$$>
+    (PP.indent 2 $ PP.vcat $
+      [ PP.text "Pointer value:" PP.<+> PP.pretty ptr
+      , PP.text "Assigned at:  " PP.<+> PP.pretty (W4.plSourceLoc loc)
+      ])
+
+makeLenses ''SetupVarSub
+
+--------------------------------------------------------------------------------
 -- ** OverrideState
 
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
-type family Pointer ext :: Type
-
 data OverrideState ext = OverrideState
   { -- | Substitution for memory allocations
-    _setupValueSub :: Map AllocIndex (Pointer ext)
+    _setupValueSub :: Map AllocIndex (SetupVarSub ext)
 
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term
@@ -124,7 +152,7 @@ makeLenses ''OverrideState
 initialState ::
   Sym                           {- ^ simulator                      -} ->
   Crucible.SymGlobalState Sym   {- ^ initial global variables       -} ->
-  Map AllocIndex (Pointer ext) {- ^ initial allocation substituion -} ->
+  Map AllocIndex (SetupVarSub ext) {- ^ initial allocation substituion -} ->
   Map VarIndex Term             {- ^ initial term substituion       -} ->
   Set VarIndex                  {- ^ initial free terms             -} ->
   W4.ProgramLoc                 {- ^ location information for the override -} ->
@@ -238,7 +266,7 @@ instance ( PP.Pretty (ExtType ext)
 
 instance ( PP.Pretty (ExtType ext)
          , PP.Pretty (MS.PointsTo ext)
-         , Typeable ext 
+         , Typeable ext
          ) => X.Exception (OverrideFailure ext)
 
 --------------------------------------------------------------------------------
@@ -265,7 +293,7 @@ deriving instance MonadError (OverrideFailure ext) (OverrideMatcher ext rorw)
 runOverrideMatcher ::
    Sym                         {- ^ simulator                       -} ->
    Crucible.SymGlobalState Sym {- ^ initial global variables        -} ->
-   Map AllocIndex (Pointer ext) {- ^ initial allocation substitution -} ->
+   Map AllocIndex (SetupVarSub ext) {- ^ initial allocation substitution -} ->
    Map VarIndex Term           {- ^ initial term substitution       -} ->
    Set VarIndex                {- ^ initial free variables          -} ->
    W4.ProgramLoc               {- ^ override location information   -} ->

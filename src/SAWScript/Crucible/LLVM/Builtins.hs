@@ -147,6 +147,7 @@ import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..))
+import           SAWScript.Crucible.Common.Override (SetupVarSub(..))
 import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
@@ -450,7 +451,7 @@ verifyPrestate ::
   Crucible.SymGlobalState Sym ->
   IO ([(Crucible.MemType, LLVMVal)],
       [Crucible.LabeledPred Term Crucible.AssumptionReason],
-      Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)),
+      Map AllocIndex (SetupVarSub (LLVM arch)),
       Crucible.SymGlobalState Sym)
 verifyPrestate cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
@@ -468,16 +469,17 @@ verifyPrestate cc mspec globals = do
   (env1, mem') <- runStateT (traverse (doAlloc cc) tyenv) mem
 
   env2 <- Map.traverseWithKey
-            (\k _ -> executeFreshPointer cc k)
+            (\k spec -> executeFreshPointer cc (spec ^. allocSpecLoc) k)
             (mspec ^. MS.csPreState . MS.csFreshPointers)
-  let env = Map.unions [env1, env2]
+  let envSub = Map.unions [env1, env2]
+  let env = view svsLLVMPointer <$> envSub
 
   mem'' <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem'
   let globals1 = Crucible.insertGlobal lvar mem'' globals
   (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec ^. MS.csPreState . MS.csConditions)
   args <- resolveArguments cc mspec env
 
-  return (args, cs, env, globals2)
+  return (args, cs, envSub, globals2)
 
 -- | Check two MemTypes for register compatiblity.  This is a stricter
 --   check than the memory compatiblity check that is done for points-to
@@ -610,15 +612,16 @@ doAlloc ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch       ->
   LLVMAllocSpec ->
-  StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
+  StateT MemImpl IO (SetupVarSub (Crucible.LLVM arch))
 doAlloc cc (LLVMAllocSpec mut memTy sz loc) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger sz
      let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
      let l = show (W4.plSourceLoc loc)
-     liftIO $
+     (ptr, mem') <- liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc Crucible.Mutable l mem sz' alignment
+     pure (SetupVarSub (LLVMPointer ptr) loc, mem')
 
 --------------------------------------------------------------------------------
 
@@ -859,7 +862,7 @@ verifyPoststate ::
   SharedContext                     {- ^ saw core context                             -} ->
   LLVMCrucibleContext arch              {- ^ crucible context                             -} ->
   MS.CrucibleMethodSpecIR (LLVM arch)              {- ^ specification                                -} ->
-  Map AllocIndex (LLVMPtr wptr)     {- ^ allocation substitution                      -} ->
+  Map AllocIndex (SetupVarSub (LLVM arch))  {- ^ allocation substitution -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
   Maybe (Crucible.MemType, LLVMVal) {- ^ optional return value                        -} ->
   TopLevel [(String, Term)]         {- ^ generated labels and verification conditions -}
@@ -900,7 +903,8 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
     matchResult =
       case (ret, mspec ^. MS.csRetValue) of
-        (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
+        (Just (rty,r), Just expect) ->
+          matchArg opts sc cc mspec PostState Nothing r rty expect
         (Nothing     , Just _ )     ->
           fail "verifyPoststate: unexpected crucible_return specification"
         _ -> return ()

@@ -7,6 +7,7 @@ Stability   : provisional
 -}
 
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -27,6 +28,9 @@ Stability   : provisional
 module SAWScript.Crucible.JVM.Override
   ( OverrideMatcher(..)
   , runOverrideMatcher
+
+  , JVMPointer(..)
+  , svsJVMRef
 
   , setupValueSub
   , osAsserts
@@ -53,6 +57,7 @@ import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Void (absurd)
+import           GHC.Generics (Generic)
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 -- cryptol
@@ -108,7 +113,6 @@ type SetupValue = MS.SetupValue CJ.JVM
 type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
 type StateSpec = MS.StateSpec CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
-type instance Pointer CJ.JVM = JVMRefVal
 
 -- TODO: Improve?
 ppJVMVal :: JVMVal -> PPL.Doc
@@ -116,6 +120,28 @@ ppJVMVal = PPL.text . show
 
 instance PPL.Pretty JVMVal where
   pretty = ppJVMVal
+
+------------------------------------------------------------------------
+
+-- | This @newtype@ wrapper provides a 'PPL.Pretty' instance
+newtype JVMPointer
+  = JVMPointer
+      { getJVMPointer :: JVMRefVal
+      }
+  deriving (Generic) -- for Wrapped
+
+instance Wrapped JVMPointer where
+
+svsJVMRef :: Lens' (SetupVarSub CJ.JVM) JVMRefVal
+svsJVMRef = svsPtr . _Wrapped'
+
+type instance Pointer CJ.JVM
+  = JVMPointer
+
+instance PPL.Pretty JVMPointer where
+  pretty (JVMPointer _ptr) = PPL.text "<JVM reference value>" -- TODO: improve?
+
+------------------------------------------------------------------------
 
 
 -- | Try to translate the spec\'s 'SetupValue' into an 'LLVMVal', pretty-print
@@ -392,7 +418,10 @@ enforceDisjointness _cc loc ss =
 
      -- Ensure that all regions are disjoint from each other.
      sequence_
-        [ do c <- liftIO $ W4.notPred sym =<< CJ.refIsEqual sym p q
+        [ do c <- liftIO $ W4.notPred sym =<<
+               CJ.refIsEqual sym
+                 (p ^. svsJVMRef)
+                 (q ^. svsJVMRef)
              addAssert c a
 
         | let a = Crucible.SimError loc $
@@ -515,11 +544,17 @@ assignVar ::
   OverrideMatcher CJ.JVM w ()
 
 assignVar cc loc var ref =
-  do old <- OM (setupValueSub . at var <<.= Just ref)
+  do let sub = SetupVarSub (JVMPointer ref) loc
+     old <- OM (setupValueSub . at var <<.= Just sub)
      let sym = cc ^. jccBackend
-     for_ old $ \ref' ->
+     for_ old $ \sub'@(SetupVarSub (JVMPointer ref') _loc') ->
        do p <- liftIO (CJ.refIsEqual sym ref ref')
-          addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased pointers"))
+          addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
+            [ "Conflicting constraints on the following pointers, which were"
+            , "required to alias, but didn't:"
+            , show (PPL.pretty sub)
+            , show (PPL.pretty sub')
+            ]
 
 ------------------------------------------------------------------------
 
@@ -868,7 +903,7 @@ resolveSetupValueJVM ::
   SetupValue           ->
   OverrideMatcher CJ.JVM w (J.Type, JVMVal)
 resolveSetupValueJVM opts cc sc spec sval =
-  do m <- OM (use setupValueSub)
+  do m <- fmap (view svsJVMRef) <$> OM (use setupValueSub)
      s <- OM (use termSub)
      let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
