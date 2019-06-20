@@ -306,10 +306,16 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
 
         case verificationArgs of
           -- If we're just admitting, don't do anything
-          Nothing -> return methodSpec
+          Nothing -> do
+            printOutLnTop Info $
+              unwords ["Assume override", (methodSpec ^. csName) ]
+            return methodSpec
 
           -- If we're verifying, actually perform the verification
           Just (lemmas, checkSat, tactic) -> do
+            printOutLnTop Info $
+              unwords ["Verifying", (methodSpec ^. csName) , "..."]
+
             -- set up the LLVM memory with a pristine heap
             let globals = cc^.ccLLVMGlobals
             let mvar = Crucible.llvmMemVar (cc^.ccLLVMContext)
@@ -333,6 +339,8 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
             frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
             -- run the symbolic execution
+            printOutLnTop Info $
+              unwords ["Simulating", (methodSpec ^. csName) , "..."]
             top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
             (ret, globals3)
               <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
@@ -345,6 +353,8 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
             _ <- io $ Crucible.popAssumptionFrame sym frameIdent
 
             -- attempt to verify the proof obligations
+            printOutLnTop Info $
+              unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
             stats <- verifyObligations cc methodSpec tactic assumes asserts
             return (methodSpec & MS.csSolverStats .~ stats)
 

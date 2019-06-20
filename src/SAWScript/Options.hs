@@ -11,6 +11,7 @@ Stability   : provisional
 module SAWScript.Options where
 
 import Data.Char (toLower)
+import Data.Time
 import System.Console.GetOpt
 import System.Environment
 import System.FilePath
@@ -61,7 +62,9 @@ defaultOptions
 
 printOutWith :: Verbosity -> Verbosity -> String -> IO ()
 printOutWith setting level msg
-    | setting >= level = putStr msg
+    | setting >= level = do
+      t <- formatTime defaultTimeLocale "%T.%3q" <$> getCurrentTime
+      putStr $ "[" ++ t ++ "] " ++ msg
     | otherwise        = return ()
 
 printOutLn :: Options -> Verbosity -> String -> IO ()

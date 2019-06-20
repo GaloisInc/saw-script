@@ -331,6 +331,8 @@ methodSpecHandler ::
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc top_loc css retTy = do
+  liftIO $ printOutLn opts Info $ unwords
+    ["Matching override", ((head css)^.csName), "..."]
   sym <- Crucible.getSymInterface
   Crucible.RegMap args <- Crucible.getOverrideArgs
 
@@ -350,6 +352,8 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- all the override states that might apply, and compute the conjunction of all
   -- the preconditions.  We'll use these to perform symbolic branches between the
   -- various overrides.
+  liftIO $ printOutLn opts Info $ unwords
+    ["Branching on override", ((head css)^.csName), "..."]
   branches <-
     let prettyError methodSpec failureReason =
           MS.ppMethodSpec methodSpec PP.<$$> ppOverrideFailure failureReason
@@ -393,7 +397,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   --
   -- We add a final default branch that simply fails unless some previous override
   -- branch has already succeeded.
-  Crucible.regValue <$> Crucible.callOverride
+  res <- Crucible.regValue <$> Crucible.callOverride
      (Crucible.mkOverride' "overrideBranches" retTy
        (Crucible.symbolicBranches Crucible.emptyRegMap $
          [ ( precond
@@ -496,6 +500,9 @@ methodSpecHandler opts sc cc top_loc css retTy = do
               )
          ]))
      (Crucible.RegMap args)
+  liftIO $ printOutLn opts Info $
+    unwords ["Applied override!", ((head css)^.csName)]
+  return res
 
 ------------------------------------------------------------------------
 
