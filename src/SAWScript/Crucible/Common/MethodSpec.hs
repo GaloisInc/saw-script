@@ -392,7 +392,7 @@ ppMethodSpec methodSpec =
 csAllocations :: CrucibleMethodSpecIR ext -> Map AllocIndex (AllocSpec ext)
 csAllocations
   = Map.unions
-  . toListOf ((csPreState <> csPostState) . csAllocs)
+  . toListOf ((csPreState <> csPostState) . (csAllocs <> csFreshPointers))
 
 csTypeNames :: CrucibleMethodSpecIR ext -> Map AllocIndex (TypeName ext)
 csTypeNames
