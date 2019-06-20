@@ -211,7 +211,7 @@ writeCoqModule inputFile outputFile = do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
-  sym <- newSAWCoreBackend AIG.basicProxy sc globalNonceGenerator
+  sym <- newSAWCoreBackend sc globalNonceGenerator
   ctx <- sawBackendSharedContext sym
   env <- initCryptolEnv ctx
   cm  <- loadCryptolModule ctx env inputFile
