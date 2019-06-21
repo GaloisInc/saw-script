@@ -618,7 +618,7 @@ doAlloc cc (LLVMAllocSpec mut memTy sz loc) = StateT $ \mem ->
      let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
      let l = show (W4.plSourceLoc loc)
      liftIO $
-       Crucible.doMalloc sym Crucible.HeapAlloc Crucible.Mutable l mem sz' alignment
+       Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
 
 --------------------------------------------------------------------------------
 
