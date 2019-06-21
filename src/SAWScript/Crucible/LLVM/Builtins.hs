@@ -455,7 +455,6 @@ verifyPrestate ::
 verifyPrestate cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
   let sym = cc^.ccBackend
-  let tyenv   = MS.csAllocations mspec
   let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
   let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
@@ -465,7 +464,9 @@ verifyPrestate cc mspec globals = do
   let Just mem = Crucible.lookupGlobal lvar globals
 
   -- Allocate LLVM memory for each 'crucible_alloc'
-  (env1, mem') <- runStateT (traverse (doAlloc cc) tyenv) mem
+  (env1, mem') <- runStateT
+    (traverse (doAlloc cc)  $ mspec ^. MS.csPreState . MS.csAllocs)
+    mem
 
   env2 <- Map.traverseWithKey
             (\k _ -> executeFreshPointer cc k)
