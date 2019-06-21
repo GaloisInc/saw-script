@@ -490,6 +490,7 @@ typeOfLLVMVal _dl val =
     Crucible.LLVMValStruct flds -> Crucible.mkStructType (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
     Crucible.LLVMValZero tp     -> tp
+    Crucible.LLVMValUndef tp    -> tp
   where
     fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
 
