@@ -2115,7 +2115,7 @@ primitives = Map.fromList
 
   , prim "jvm_term"
     "Term -> JVMValue"
-    (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
+    (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue CJ.JVM))
     Experimental
     [ "Construct a `JVMValue` from a `Term`." ]
 
