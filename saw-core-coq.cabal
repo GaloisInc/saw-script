@@ -29,4 +29,8 @@ library
      Language.Coq.AST
      Language.Coq.Pretty
      Verifier.SAW.Translation.Coq
+     Verifier.SAW.Translation.Coq.Module
+     Verifier.SAW.Translation.Coq.Monad
+     Verifier.SAW.Translation.Coq.Term
+     Verifier.SAW.Translation.Coq.SpecialTreatment
   ghc-options: -Wall -Werror
