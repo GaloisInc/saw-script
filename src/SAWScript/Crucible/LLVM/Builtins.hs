@@ -23,10 +23,6 @@ Stability   : provisional
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-{-# OPTIONS_GHC -fno-warn-unused-local-binds #-}
-{-# OPTIONS_GHC -fno-warn-unused-matches #-}
-
-
 module SAWScript.Crucible.LLVM.Builtins
     ( show_cfg
     , crucible_execute_func
@@ -282,11 +278,10 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
 
   let ?lc = mtrans ^. Crucible.transContext . Crucible.llvmTypeCtx
 
-  Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \ptrW ->
+  Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \_ ->
     fmap NE.head $ forM defOrDecls $ \defOrDecl -> do
       setupLLVMCrucibleContext bic opts lm $ \cc -> do
         let sym = cc^.ccBackend
-        let llmod = cc^.ccLLVMModule
 
         pos <- getPosition
         let setupLoc = toW4Loc "_SAW_verify_prestate" pos
@@ -455,8 +450,6 @@ verifyPrestate ::
 verifyPrestate cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
   let sym = cc^.ccBackend
-  let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
-
   let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
   liftIO $ W4.setCurrentProgramLoc sym prestateLoc
 
@@ -606,13 +599,13 @@ assertEqualVals cc v1 v2 =
 
 --------------------------------------------------------------------------------
 
--- TODO: combine with/move to executeAllocation?
+-- TODO(langston): combine with/move to executeAllocation
 doAlloc ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch       ->
   LLVMAllocSpec ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAlloc cc (LLVMAllocSpec mut memTy sz loc) = StateT $ \mem ->
+doAlloc cc (LLVMAllocSpec mut _memTy sz loc) = StateT $ \mem ->
   do let sym = cc^.ccBackend
      let dl = Crucible.llvmDataLayout ?lc
      sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger sz
@@ -804,13 +797,9 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
              Crucible.regValue <$> (Crucible.callBlock cfg entryId args')
     res <- Crucible.executeCrucible execFeatures initExecState
     case res of
-      Crucible.FinishedResult _ pr ->
+      Crucible.FinishedResult _ partialResult ->
         do Crucible.GlobalPair retval globals1 <-
-             case pr of
-               Crucible.TotalRes gp -> return gp
-               Crucible.PartialRes _ _ gp _ ->
-                 do printOutLn opts Info "Symbolic simulation completed with side conditions."
-                    return gp
+             getGlobalPair opts partialResult
            let ret_ty = mspec ^. MS.csRet
            retval' <- case ret_ty of
              Nothing -> return Nothing
@@ -1351,7 +1340,6 @@ crucible_alloc_internal _bic _opt lty spec = do
   cctx <- getLLVMCrucibleContext
   let ?lc = cctx ^. ccTypeCtx
   let ?dl = Crucible.llvmDataLayout ?lc
-  loc <- getW4Position "crucible_alloc_internal"
   n <- Setup.csVarCounter <<%= nextAllocIndex
   Setup.currentState . MS.csAllocs . at n ?= spec
   -- TODO: refactor

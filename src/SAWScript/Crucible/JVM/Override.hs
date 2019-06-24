@@ -24,6 +24,8 @@ Stability   : provisional
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
+{-# OPTIONS_GHC -Wno-orphans #-} -- Pretty JVMVal
+
 module SAWScript.Crucible.JVM.Override
   ( OverrideMatcher(..)
   , runOverrideMatcher

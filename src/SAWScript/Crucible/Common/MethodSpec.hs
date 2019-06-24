@@ -28,7 +28,6 @@ import           Data.List (isPrefixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (Void)
-import           Control.Monad.ST (RealWorld)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
@@ -40,9 +39,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           What4.ProgramLoc (ProgramLoc(plSourceLoc))
 
 import qualified Lang.Crucible.Types as Crucible
-  (IntrinsicType, EmptyCtx, SymbolRepr, knownSymbol)
-import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
-  (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
+  (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
 
 import qualified Cryptol.Utils.PP as Cryptol
@@ -53,8 +50,6 @@ import           Verifier.SAW.SharedTerm as SAWVerifier
 import           SAWScript.Options
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Utils (bullets)
-
-import           SAWScript.Crucible.Common
 
 -- | How many allocations have we made in this method spec?
 newtype AllocIndex = AllocIndex Int
