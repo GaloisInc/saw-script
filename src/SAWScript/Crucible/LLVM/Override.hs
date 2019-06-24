@@ -1064,43 +1064,43 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
 
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
      res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
+     let summarizeBadLoad =
+          let dataLayout = Crucible.llvmDataLayout (cc^.ccTypeCtx)
+              sz = Crucible.memTypeSize dataLayout memTy
+          in map (PP.text . unwords)
+             [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
+             , [ "in the ", stateCond prepost, "of an override" ]
+             , [ "Tried to read something of size:"
+               , show (Crucible.bytesToInteger sz)
+               ]
+             , [ "And type:", show (Crucible.ppMemType memTy) ]
+             ]
      case res of
        Crucible.PartLLVMVal assertion_tree res_val -> do
          pred_ <- Crucible.treeToPredicate
            (Proxy @(Crucible.LLVM arch))
            sym
            assertion_tree
-         addAssert pred_ $ Crucible.SimError loc "Invalid memory load"
+         addAssert pred_ $ Crucible.SimError loc $
+           Crucible.AssertFailureSimError $ show $ PP.vcat $ summarizeBadLoad
          pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val
        W4.Err _err -> do
          -- When we have a concrete failure, we do a little more computation to
          -- try and find out why.
          let (blk, _offset) = Crucible.llvmPointerView ptr1
-             dataLayout = Crucible.llvmDataLayout (cc^.ccTypeCtx)
-             sz = Crucible.memTypeSize dataLayout memTy
-         case W4.asNat blk of
-           Nothing -> pure (Just (PP.text "<Read from unknown allocation>"))
-           Just blk' -> pure $ Just $
-             let possibleAllocs =
-                   Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
-             in
-               PP.vcat
-                 (map (PP.text . unwords)
-                  [ [ "When reading through pointer"
-                    , show (Crucible.ppPtr ptr1)
-                    ]
-                  , [ "Tried to read something of size:"
-                    , show (Crucible.bytesToInteger sz)
-                    ]
-                  , [ "And type:"
-                    , show (Crucible.ppMemType memTy)
-                    ]
-                  , [ "Found"
+         pure $ Just $ PP.vcat . (summarizeBadLoad ++) $
+           case W4.asNat blk of
+             Nothing -> [PP.text "<Read from unknown allocation>"]
+             Just blk' ->
+               let possibleAllocs =
+                     Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
+               in [ PP.text $ unwords
+                    [ "Found"
                     , show (length possibleAllocs)
                     , "possibly matching allocation(s):"
                     ]
-                  ])
-               PP.<$$> bullets '-' (map Crucible.ppSomeAlloc possibleAllocs)
+                  , bullets '-' (map Crucible.ppSomeAlloc possibleAllocs)
+                  ]
                -- This information tends to be overwhelming, but might be useful?
                -- We should brainstorm about better ways of presenting it.
                -- PP.<$$> PP.text (unwords [ "Here are the details on why reading"
