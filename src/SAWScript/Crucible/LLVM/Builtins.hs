@@ -651,7 +651,7 @@ registerOverride opts cc _ctx top_loc cs = do
       matches (Crucible.LLVMHandleInfo _ h) =
         matchingStatics (L.Symbol (Text.unpack (W4.functionName (Crucible.handleName h)))) fsym
   liftIO $
-    printOutLn opts Info $ "Registering override for `" ++ fstr ++ "`"
+    printOutLn opts Info $ "Registering overrides for `" ++ fstr ++ "`"
   case filter matches (Map.elems (llvmctx ^. Crucible.symbolMap)) of
     [] -> fail $ "Couldn't find declaration for `" ++ fstr ++ "` when registering override for it."
     -- LLVMHandleInfo constructor has two existential type arguments,
