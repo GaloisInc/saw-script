@@ -40,6 +40,7 @@ module SAWScript.Crucible.LLVM.Override
   , methodSpecHandler
   , valueToSC
   , termId
+  , storePointsToValue
 
   , enableSMTArrayMemoryModel
   ) where
@@ -1226,12 +1227,9 @@ executePointsTo ::
   PointsTo (LLVM arch)       ->
   OverrideMatcher (LLVM arch) RW ()
 executePointsTo opts sc cc spec (LLVMPointsTo _loc ptr val) =
-  do (_, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
-     sym    <- Ov.getSymInterface
-
+  do (_, ptr') <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
-     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     mem  <- readGlobal memVar
+     mem <- readGlobal memVar
 
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
@@ -1239,37 +1237,52 @@ executePointsTo opts sc cc spec (LLVMPointsTo _loc ptr val) =
      s <- OM (use termSub)
      let tyenv = MS.csAllocations spec
      let nameEnv = MS.csTypeNames spec
-     memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
-     storTy <- Crucible.toStorableType memTy
      val' <- liftIO $ instantiateSetupValue sc s val
 
-     smt_array_memory_model_enabled <- liftIO $ W4.getOpt
-      =<< W4.getOptionSetting
-        enableSMTArrayMemoryModel
-        (W4.getConfiguration sym)
+     mem' <- liftIO $ storePointsToValue opts cc m tyenv nameEnv mem ptr' val'
+     writeGlobal memVar mem'
 
-     mem'' <- case val' of
-      SetupTerm tm
-        | Crucible.storageTypeSize storTy > 16
-        , smt_array_memory_model_enabled -> do
-          arr_tm <- liftIO $
-            memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
-          arr <- liftIO $ Crucible.bindSAWTerm
-            sym
-            (W4.BaseArrayRepr
-              (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
-              (W4.BaseBVRepr (W4.knownNat @8)))
-            arr_tm
-          sz <- liftIO $ W4.bvLit
-            sym
-            ?ptrWidth
-            (fromIntegral $ Crucible.storageTypeSize storTy)
-          liftIO $ Crucible.doArrayStore sym mem ptr1 alignment arr sz
-      _ -> do
-        val'' <- liftIO $ resolveSetupVal cc m tyenv nameEnv val' `X.catch` handleException opts
-        liftIO $ Crucible.storeRaw sym mem ptr1 storTy alignment val''
+storePointsToValue ::
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  Options ->
+  LLVMCrucibleContext arch ->
+  Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
+  Map AllocIndex (MS.AllocSpec (LLVM arch)) ->
+  Map AllocIndex (MS.TypeName (LLVM arch)) ->
+  Crucible.MemImpl Sym ->
+  LLVMPtr (Crucible.ArchWidth arch) ->
+  SetupValue (Crucible.LLVM arch) ->
+  IO (Crucible.MemImpl Sym)
+storePointsToValue opts cc env tyenv nameEnv mem ptr val = do
+  let sym = cc ^. ccBackend
 
-     writeGlobal memVar mem''
+  let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+  memTy <- typeOfSetupValue cc tyenv nameEnv val
+  storTy <- Crucible.toStorableType memTy
+
+  smt_array_memory_model_enabled <- W4.getOpt
+    =<< W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)
+
+  case val of
+    SetupTerm tm
+      | Crucible.storageTypeSize storTy > 16
+      , smt_array_memory_model_enabled -> do
+        arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
+        arr <- Crucible.bindSAWTerm
+          sym
+          (W4.BaseArrayRepr
+            (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
+            (W4.BaseBVRepr (W4.knownNat @8)))
+          arr_tm
+        sz <- W4.bvLit
+          sym
+          ?ptrWidth
+          (fromIntegral $ Crucible.storageTypeSize storTy)
+        Crucible.doArrayConstStore sym mem ptr alignment arr sz
+    _ -> do
+      val' <- X.handle (handleException opts) $
+        resolveSetupVal cc env tyenv nameEnv val
+      Crucible.storeConstRaw sym mem ptr storTy alignment val'
 
 
 ------------------------------------------------------------------------

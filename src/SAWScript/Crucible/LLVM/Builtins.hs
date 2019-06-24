@@ -331,7 +331,7 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
 
             -- construct the initial state for verifications
             (args, assumes, env, globals2) <-
-              io $ verifyPrestate cc methodSpec globals1
+              io $ verifyPrestate opts cc methodSpec globals1
 
             -- save initial path conditions
             frameIdent <- io $ Crucible.pushAssumptionFrame sym
@@ -442,6 +442,7 @@ checkSpecReturnType cc mspec =
 -- memory).
 verifyPrestate ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  Options ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   Crucible.SymGlobalState Sym ->
@@ -449,7 +450,7 @@ verifyPrestate ::
       [Crucible.LabeledPred Term Crucible.AssumptionReason],
       Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)),
       Crucible.SymGlobalState Sym)
-verifyPrestate cc mspec globals = do
+verifyPrestate opts cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
   let sym = cc^.ccBackend
   let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
@@ -468,7 +469,7 @@ verifyPrestate cc mspec globals = do
             (mspec ^. MS.csPreState . MS.csFreshPointers)
   let env = Map.unions [env1, env2]
 
-  mem'' <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem'
+  mem'' <- setupPrePointsTos mspec opts cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem'
   let globals1 = Crucible.insertGlobal lvar mem'' globals
   (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec ^. MS.csPreState . MS.csConditions)
   args <- resolveArguments cc mspec env
@@ -529,55 +530,27 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
 setupPrePointsTos :: forall arch.
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
+  Options ->
   LLVMCrucibleContext arch       ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   [MS.PointsTo (LLVM arch)]                 ->
   MemImpl                    ->
   IO MemImpl
-setupPrePointsTos mspec cc env pts mem0 = do
-  let tyenv   = MS.csAllocations mspec
-  let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
-  smt_array_memory_model_enabled <- W4.getOpt =<< W4.getOptionSetting
-    enableSMTArrayMemoryModel
-    (W4.getConfiguration $ cc ^. ccBackend)
+setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
+  where
+    tyenv   = MS.csAllocations mspec
+    nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-  let go :: MemImpl -> MS.PointsTo (LLVM arch) -> IO MemImpl
-      go mem (LLVMPointsTo _loc ptr val) = do
-         ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
+    go :: MemImpl -> MS.PointsTo (LLVM arch) -> IO MemImpl
+    go mem (LLVMPointsTo _loc ptr val) =
+      do ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
          ptr'' <- case ptr' of
            Crucible.LLVMValInt blk off
              | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth
              -> return (Crucible.LLVMPointer blk off)
            _ -> fail "Non-pointer value found in points-to assertion"
-         -- In case the types are different (from crucible_points_to_untyped)
-         -- then the store type should be determined by the rhs.
-         memTy <- typeOfSetupValue cc tyenv nameEnv val
-         storTy <- Crucible.toStorableType memTy
-         let alignment = Crucible.noAlignment -- default to byte-aligned (FIXME)
-         let sym = cc^.ccBackend
-         case val of
-          SetupTerm tm
-            | Crucible.storageTypeSize storTy > 16
-            , smt_array_memory_model_enabled -> do
-              arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
-              arr <- CrucibleSAW.bindSAWTerm
-                sym
-                (W4.BaseArrayRepr
-                  (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
-                  (W4.BaseBVRepr (knownNat @8)))
-                arr_tm
-              sz <- W4.bvLit
-                sym
-                ?ptrWidth
-                (fromIntegral $ Crucible.storageTypeSize storTy)
-              mem' <- Crucible.doArrayConstStore sym mem ptr'' alignment arr sz
-              return mem'
-          _ -> do
-            val' <- resolveSetupVal cc env tyenv nameEnv val
-            mem' <- Crucible.storeConstRaw sym mem ptr'' storTy alignment val'
-            return mem'
 
-  liftIO $ foldM go mem0 pts
+         storePointsToValue opts cc env tyenv nameEnv mem ptr'' val
 
 -- | Sets up globals (ghost variable), and collects boolean terms
 -- that should be assumed to be true.
