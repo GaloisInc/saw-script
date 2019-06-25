@@ -1184,6 +1184,12 @@ executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
      (ptr, mem') <- liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
      writeGlobal memVar mem'
+
+     let (blk, _offset) = Crucible.llvmPointerView ptr
+     case W4.asNat blk of
+       Just 0 -> fail "Internal error: doMalloc returned a non-pointer integer"
+       _ -> pure ()
+
      assignVar cc loc var ptr
 
 ------------------------------------------------------------------------
