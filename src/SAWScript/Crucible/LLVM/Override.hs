@@ -786,7 +786,11 @@ assignVar ::
   OverrideMatcher (LLVM arch) md ()
 
 assignVar cc loc var val =
-  do old <- OM (setupValueSub . at var <<.= Just val)
+  do let (blk, _offset) = Crucible.llvmPointerView val
+     case W4.asNat blk of
+       Just 0 -> fail "Internal error: assignVar called with an integer argument"
+       _ -> pure ()
+     old <- OM (setupValueSub . at var <<.= Just val)
      for_ old $ \val' ->
        do p <- liftIO (equalValsPred cc (Crucible.ptrToPtrVal val') (Crucible.ptrToPtrVal val))
           addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines
@@ -1051,8 +1055,14 @@ learnPointsTo ::
 learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
   do let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
+
      memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
      (_memTy, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
+
+     let (blk, _offset) = Crucible.llvmPointerView ptr1
+     case W4.asNat blk of
+       Just 0 -> fail "Internal error: learnPointsTo called with an integer argument"
+       _ -> pure ()
 
      -- In case the types are different (from crucible_points_to_untyped)
      -- then the load type should be determined by the rhs.
@@ -1087,7 +1097,6 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
        W4.Err _err -> do
          -- When we have a concrete failure, we do a little more computation to
          -- try and find out why.
-         let (blk, _offset) = Crucible.llvmPointerView ptr1
          pure $ Just $ PP.vcat . (summarizeBadLoad ++) $
            case W4.asNat blk of
              Nothing -> [PP.text "<Read from unknown allocation>"]
