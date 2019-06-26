@@ -871,7 +871,14 @@ matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer () n)
 matchArg opts sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
   case setupval of
     SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-      do assignVar cc (cs ^. MS.csLoc) var (Crucible.LLVMPointer blk off)
+      do case W4.asNat blk of
+           Just 0 -> fail $ unwords $
+             [ "Internal error: matchArg called with integer argument in"
+             , stateCond prepost
+             ]
+
+           _ -> pure ()
+         assignVar cc (cs ^. MS.csLoc) var (Crucible.LLVMPointer blk off)
 
     SetupNull () | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do sym <- Ov.getSymInterface
