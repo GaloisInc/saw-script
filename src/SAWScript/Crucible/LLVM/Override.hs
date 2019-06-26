@@ -872,9 +872,13 @@ matchArg opts sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy s
   case setupval of
     SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
       do case W4.asNat blk of
-           Just 0 -> fail $ unwords $
-             [ "Internal error: matchArg called with integer argument in"
-             , stateCond prepost
+           Just 0 -> fail $ unlines $
+             [ unwords
+               [ "Internal error: matchArg called with integer argument in"
+               , stateCond prepost
+               ]
+             , "Argument 1: " ++ show (PP.pretty actual)
+             , "Argument 2: " ++ show setupval
              ]
 
            _ -> pure ()
@@ -1191,12 +1195,6 @@ executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
      (ptr, mem') <- liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
      writeGlobal memVar mem'
-
-     let (blk, _offset) = Crucible.llvmPointerView ptr
-     case W4.asNat blk of
-       Just 0 -> fail "Internal error: doMalloc returned a non-pointer integer"
-       _ -> pure ()
-
      assignVar cc loc var ptr
 
 ------------------------------------------------------------------------
