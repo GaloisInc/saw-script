@@ -22,12 +22,11 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Verifier.SAW.Translation.Coq.Module where
+module Verifier.SAW.Translation.Coq.SAWModule where
 
-import           Control.Lens                                  (makeLenses, over, view)
+import           Control.Lens                                  (makeLenses)
 import qualified Control.Monad.Except                          as Except
 import           Control.Monad.Reader                          hiding (fail)
-import           Control.Monad.State                           hiding (fail, state)
 import           Prelude                                       hiding (fail)
 import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
 
@@ -41,9 +40,7 @@ import           Verifier.SAW.Translation.Coq.SpecialTreatment
 import qualified Verifier.SAW.Translation.Coq.Term             as TermTranslation
 
 data TranslationState = TranslationState
-  { _alreadyTranslated :: [Ident]
-  , _globalEnvironment :: [String]
-  , _localEnvironment  :: [String]
+  { _localEnvironment  :: [String]
   }
   deriving (Show)
 makeLenses ''TranslationState
@@ -55,7 +52,7 @@ runModuleTranslationMonad ::
   (forall m. ModuleTranslationMonad m => m a) ->
   Either (TranslationError Term) (a, TranslationState)
 runModuleTranslationMonad configuration =
-  runTranslationMonad configuration (TranslationState [] [] [])
+  runTranslationMonad configuration (TranslationState [])
 
 dropPi :: Coq.Term -> Coq.Term
 dropPi (Coq.Pi (_ : t) r) = Coq.Pi t r
@@ -67,7 +64,7 @@ translateCtor ::
   [Coq.Binder] -> -- list of parameters to drop from `ctorType`
   Ctor -> m Coq.Constructor
 translateCtor inductiveParameters (Ctor {..}) = do
-  let constructorName = TermTranslation.translateIdentUnqualified ctorName
+  constructorName <- TermTranslation.translateIdentUnqualified ctorName
   constructorType <-
     -- Unfortunately, `ctorType` qualifies the inductive type's name in the
     -- return type.
@@ -83,7 +80,7 @@ translateCtor inductiveParameters (Ctor {..}) = do
 
 translateDataType :: ModuleTranslationMonad m => DataType -> m Coq.Decl
 translateDataType (DataType {..}) =
-  case atDefSite (findSpecialTreatment dtName) of
+  atDefSite <$> findSpecialTreatment dtName >>= \case
   DefPreserve              -> translateNamed $ identName dtName
   DefRename   _ targetName -> translateNamed $ targetName
   DefReplace  str          -> return $ Coq.Snippet str
@@ -96,11 +93,9 @@ translateDataType (DataType {..}) =
         mkParam :: ModuleTranslationMonad m => (String, Term) -> m Coq.Binder
         mkParam (s, t) = do
           t' <- liftTermTranslationMonad (TermTranslation.translateTerm t)
-          modify $ over globalEnvironment (s :)
           return $ Coq.Binder s (Just t')
       let mkIndex (s, t) = do
             t' <- liftTermTranslationMonad (TermTranslation.translateTerm t)
-            modify $ over globalEnvironment (s :)
             let s' = case s of
                   "_" -> Nothing
                   _   -> Just s
@@ -117,10 +112,10 @@ translateDataType (DataType {..}) =
         , inductiveConstructors
         }
 
-translateModuleDecl :: ModuleTranslationMonad m => ModuleDecl -> m Coq.Decl
-translateModuleDecl = \case
-  TypeDecl dataType -> translateDataType dataType
-  DefDecl definition -> translateDef definition
+-- translateModuleDecl :: ModuleTranslationMonad m => ModuleDecl -> m Coq.Decl
+-- translateModuleDecl = \case
+--   TypeDecl dataType -> translateDataType dataType
+--   DefDecl definition -> translateDef definition
 
 _mapped :: Ident -> Ident -> Coq.Decl
 _mapped sawIdent newIdent =
@@ -132,12 +127,8 @@ skipped sawIdent =
 
 translateDef :: ModuleTranslationMonad m => Def -> m Coq.Decl
 translateDef (Def {..}) = do
-  identsToSkip <- view alreadyTranslated <$> get
-  if elem defIdent identsToSkip
-    then return $ skipped defIdent
-    else do
-    modify (over alreadyTranslated (defIdent :))
-    translateAccordingly (atDefSite (findSpecialTreatment defIdent))
+  specialTreatment <- findSpecialTreatment defIdent
+  translateAccordingly (atDefSite specialTreatment)
 
   where
 
@@ -171,7 +162,7 @@ liftTermTranslationMonad ::
   (forall m. ModuleTranslationMonad m => m a)
 liftTermTranslationMonad n = do
   configuration <- ask
-  let r = TermTranslation.runTermTranslationMonad configuration n
+  let r = TermTranslation.runTermTranslationMonad configuration [] n
   case r of
     Left  e      -> Except.throwError e
     Right (a, _) -> do

@@ -17,6 +17,7 @@ library
   build-depends:
     ansi-wl-pprint,
     base == 4.*,
+    cryptol,
     cryptol-verifier,
     containers,
     interpolate,
@@ -29,7 +30,8 @@ library
      Language.Coq.AST
      Language.Coq.Pretty
      Verifier.SAW.Translation.Coq
-     Verifier.SAW.Translation.Coq.Module
+     Verifier.SAW.Translation.Coq.CryptolModule
+     Verifier.SAW.Translation.Coq.SAWModule
      Verifier.SAW.Translation.Coq.Monad
      Verifier.SAW.Translation.Coq.Term
      Verifier.SAW.Translation.Coq.SpecialTreatment

@@ -24,17 +24,15 @@ Portability : portable
 
 module Verifier.SAW.Translation.Coq.SpecialTreatment where
 
-import Control.Lens (_1, _2, over)
-import qualified Data.Map as Map
-import qualified Data.String.Interpolate as I
-import Prelude hiding (fail)
+import           Control.Lens                       (_1, _2, over)
+import           Control.Monad.Reader               (ask)
+import qualified Data.Map                           as Map
+import           Prelude                            hiding (fail)
 
-import qualified Language.Coq.AST as Coq
-import Verifier.SAW.SharedTerm
--- import Verifier.SAW.Term.CtxTerm
-import Verifier.SAW.Term.Functor
---import Verifier.SAW.Term.Pretty
--- import qualified Verifier.SAW.UntypedAST as Un
+import qualified Language.Coq.AST                   as Coq
+import           Verifier.SAW.SharedTerm
+import           Verifier.SAW.Translation.Coq.Monad
+import           Verifier.SAW.Term.Functor
 
 data SpecialTreatment = SpecialTreatment
   { moduleRenaming        :: Map.Map ModuleName String
@@ -61,7 +59,7 @@ moduleRenamingMap :: Map.Map ModuleName ModuleName
 moduleRenamingMap = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   over _2 (mkModuleName . (: [])) <$>
-  [ ("Cryptol", "CryptolPrelude")
+  [ ("Cryptol", "CryptolPrimitives")
   , ("Prelude", "SAWCorePrelude")
   ]
 
@@ -69,16 +67,19 @@ translateModuleName :: ModuleName -> ModuleName
 translateModuleName mn =
   Map.findWithDefault mn mn moduleRenamingMap
 
-findSpecialTreatment :: Ident -> IdentSpecialTreatment
-findSpecialTreatment ident =
-  let moduleMap = Map.findWithDefault Map.empty (identModule ident) specialTreatmentMap in
+findSpecialTreatment ::
+  TranslationConfigurationMonad m =>
+  Ident -> m IdentSpecialTreatment
+findSpecialTreatment ident = do
+  configuration <- ask
+  let moduleMap =
+        Map.findWithDefault Map.empty (identModule ident) (specialTreatmentMap configuration)
   let defaultTreatment =
         IdentSpecialTreatment
         { atDefSite = DefPreserve
         , atUseSite = UsePreserve
         }
-  in
-  Map.findWithDefault defaultTreatment (identName ident) moduleMap
+  pure $ Map.findWithDefault defaultTreatment (identName ident) moduleMap
 
 -- Use `mapsTo` for identifiers whose definition has a matching definition
 -- already on the Coq side.  As such, their definition can be skipped, and use
@@ -129,8 +130,14 @@ skip = IdentSpecialTreatment
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAW"]
 
-cryptolPreludeModule :: ModuleName
-cryptolPreludeModule = mkModuleName ["CryptolPrelude"]
+sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
+sawVectorDefinitionsModule (TranslationConfiguration {..}) =
+  if translateVectorsAsCoqVectors
+  then mkModuleName ["SAWVectorsAsCoqVectors"]
+  else mkModuleName ["SAWVectorsAsCoqLists"]
+
+cryptolPrimitivesModule :: ModuleName
+cryptolPrimitivesModule = mkModuleName ["CryptolPrimitives"]
 
 cryptolToCoqModule :: ModuleName
 cryptolToCoqModule = mkModuleName ["CryptolToCoq"]
@@ -139,15 +146,15 @@ cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
 
   ++
-  [ ("Num_rec",               mapsTo cryptolPreludeModule "Num_rect") -- automatically defined
+  [ ("Num_rec",               mapsTo cryptolPrimitivesModule "Num_rect") -- automatically defined
   , ("unsafeAssert_same_Num", skip) -- unsafe and unused
   ]
 
-specialTreatmentMap :: Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
-specialTreatmentMap = Map.fromList $
+specialTreatmentMap :: TranslationConfiguration -> Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
+specialTreatmentMap configuration = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   [ ("Cryptol", cryptolPreludeSpecialTreatmentMap)
-  , ("Prelude", sawCorePreludeSpecialTreatmentMap)
+  , ("Prelude", sawCorePreludeSpecialTreatmentMap configuration)
   ]
 
 -- NOTE: while I initially did the mapping from SAW core names to the
@@ -158,8 +165,10 @@ specialTreatmentMap = Map.fromList $
 -- during this translation (it is sometimes impossible, for instance, `at` is a
 -- reserved keyword in Coq), so that primitives' and axioms' types can be
 -- copy-pasted as is on the Coq side.
-sawCorePreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
-sawCorePreludeSpecialTreatmentMap = Map.fromList $ []
+sawCorePreludeSpecialTreatmentMap :: TranslationConfiguration -> Map.Map String IdentSpecialTreatment
+sawCorePreludeSpecialTreatmentMap configuration =
+  let vectorsModule = sawVectorDefinitionsModule configuration in
+  Map.fromList $ []
 
   -- Unsafe SAW features
   ++
@@ -270,35 +279,24 @@ sawCorePreludeSpecialTreatmentMap = Map.fromList $ []
   ++
   [ ("at",                rename "sawAt") -- `at` is a reserved keyword in Coq
   , ("at_single",         skip) -- is boring, could be proved on the Coq side
-  , ("atWithDefault",     mapsTo sawDefinitionsModule "atWithDefault")
-  , ("coerceVec",         mapsTo sawDefinitionsModule "coerceVec")
-  , ("EmptyVec",          mapsTo sawDefinitionsModule "EmptyVec")
+  , ("atWithDefault",     mapsTo vectorsModule "atWithDefault")
+  , ("coerceVec",         mapsTo vectorsModule "coerceVec")
+  , ("EmptyVec",          mapsTo vectorsModule "EmptyVec")
   , ("eq_Vec",            skip)
-  , ("foldr",             mapsTo sawDefinitionsModule "foldr")
-  , ("gen",               mapsTo sawDefinitionsModule "gen")
+  , ("foldr",             mapsTo vectorsModule "foldr")
+  , ("gen",               mapsTo vectorsModule "gen")
   , ("take0",             skip)
   -- cannot map directly to Vector.t because arguments are in a different order
-  , ("zip",               realize zipSnippet)
-  , ("Vec",               mapsTo sawDefinitionsModule "Vec")
+  , ("zip",               mapsTo vectorsModule "zip")
+  , ("Vec",               mapsTo vectorsModule "Vec")
   ]
 
-zipSnippet :: String
-zipSnippet = [I.i|
-Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
-  : Vec (minNat m n) (a * b) :=
-  match
-    xs in Vector.t _ m'
-    return Vector.t _ (minNat m' n)
-  with
-  | Vector.nil _ => Vector.nil _
-  | Vector.cons _ x pm xs =>
-    match
-      ys in Vector.t _ n'
-      return Vector.t _ (minNat (S pm) n')
-    with
-    | Vector.nil _ => Vector.nil _
-    | Vector.cons _ y pm' ys => Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)
-    end
-  end
-.
-|]
+constantsRenamingMap :: Map.Map String String
+constantsRenamingMap =
+  Map.fromList
+  [ ("/\\", "and")
+  ]
+
+translateConstant :: String -> String
+translateConstant c =
+  Map.findWithDefault c c constantsRenamingMap

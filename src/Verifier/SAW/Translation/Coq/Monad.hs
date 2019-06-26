@@ -50,10 +50,14 @@ data TranslationConfiguration = TranslationConfiguration
   , traverseConsts               :: Bool
   }
 
+type TranslationConfigurationMonad m =
+  ( MonadReader TranslationConfiguration m
+  )
+
 type TranslationMonad s m =
   ( Except.MonadError (TranslationError Term)  m
-  , MonadReader       TranslationConfiguration m
-  , MonadState        s                        m
+  , TranslationConfigurationMonad m
+  , MonadState s m
   )
 
 runTranslationMonad ::
