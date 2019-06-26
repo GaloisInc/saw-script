@@ -933,26 +933,27 @@ primitives = Map.fromList
     , "filename to write to standard output."
     ]
 
-  , prim "write_coq_module"    "String -> String -> TopLevel ()"
-    (pureVal writeCoqModule)
+  , prim "write_coq_cryptol_module" "String -> String -> TopLevel ()"
+    (pureVal writeCoqCryptolModule)
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax for"
-    , "Coq. The first argument is the filename to use, the second is the module"
-    , "to export."
+    , "Coq. The first argument is the filename to export, the second is the"
+    , "filename to use as output."
     ]
 
   , prim "write_coq_sawcore_prelude" "String -> TopLevel ()"
     (pureVal writeCoqSAWCorePrelude)
     Experimental
     [ "Write out a representation of the SAW Core prelude in Gallina syntax for"
-    , "Coq. The first argument is the filename to use."
+    , "Coq. The first argument is the filename to use as output."
     ]
 
-  , prim "write_coq_cryptol_prelude" "String -> TopLevel ()"
-    (pureVal writeCoqCryptolPrelude)
+  , prim "write_coq_cryptol_primitives" "String -> TopLevel ()"
+    (pureVal writeCoqCryptolPrimitives)
     Experimental
-    [ "Write out a representation of the Cryptol prelude in Gallina syntax for"
-    , "Coq. The first argument is the filename to use."
+    [ "Write out a representation of cryptol-verifier's Cryptol.sawcore in"
+    , "Gallina syntax for Coq. The first argument is the filename to use as"
+    , "output."
     ]
 
   , prim "auto_match" "String -> String -> TopLevel ()"
