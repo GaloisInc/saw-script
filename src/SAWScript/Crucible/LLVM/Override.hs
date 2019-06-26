@@ -1003,7 +1003,7 @@ matchTerm sc cc loc prepost real expect =
               ]
   where prettyTerm term =
           let pretty_ = show (ppTerm defaultPPOpts term)
-          in if len pretty_ < 200 then pretty_ else "<term omitted due to size>"
+          in if length pretty_ < 200 then pretty_ else "<term omitted due to size>"
 
 
 ------------------------------------------------------------------------
