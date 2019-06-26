@@ -996,7 +996,15 @@ matchTerm sc cc loc prepost real expect =
        _ ->
          do t <- liftIO $ scEq sc real expect
             p <- liftIO $ resolveSAWPred cc t
-            addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost)))
+            addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
+              [ "Literal equality " ++ stateCond prepost
+              , "Expected term: " ++ prettyTerm expect
+              , "Actual term:   " ++ prettyTerm real
+              ]
+  where prettyTerm term =
+          let pretty_ = show (ppTerm defaultPPOpts term)
+          in if length pretty_ < 200 then pretty_ else "<term omitted due to size>"
+
 
 ------------------------------------------------------------------------
 
