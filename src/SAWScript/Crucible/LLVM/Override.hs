@@ -332,7 +332,12 @@ methodSpecHandler ::
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc top_loc css retTy = do
   liftIO $ printOutLn opts Info $ unwords
-    ["Matching override", ((head css)^.csName), "..."]
+    [ "Matching"
+    , show (length css)
+    , "overrides of "
+    , ((head css)^.csName)
+    , "..."
+    ]
   sym <- Crucible.getSymInterface
   Crucible.RegMap args <- Crucible.getOverrideArgs
 
@@ -352,8 +357,6 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- all the override states that might apply, and compute the conjunction of all
   -- the preconditions.  We'll use these to perform symbolic branches between the
   -- various overrides.
-  liftIO $ printOutLn opts Info $ unwords
-    ["Branching on override", ((head css)^.csName), "..."]
   branches <-
     let prettyError methodSpec failureReason =
           MS.ppMethodSpec methodSpec PP.<$$> ppOverrideFailure failureReason
@@ -397,6 +400,13 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   --
   -- We add a final default branch that simply fails unless some previous override
   -- branch has already succeeded.
+  liftIO $ printOutLn opts Info $ unwords
+    [ "Branching on"
+    , show (length branches')
+    , "override variants of"
+    , ((head css)^.csName)
+    , "..."
+    ]
   res <- Crucible.regValue <$> Crucible.callOverride
      (Crucible.mkOverride' "overrideBranches" retTy
        (Crucible.symbolicBranches Crucible.emptyRegMap $
@@ -669,13 +679,14 @@ enforceDisjointness loc ss =
                     sym Crucible.PtrWidth
                     p psz'
                     q qsz'
-             addAssert c a
+             addAssert c $ Crucible.SimError loc $
+               Crucible.AssertFailureSimError $
+                 "Memory regions not disjoint: "
+                   ++ "(base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ show psz ++ ")"
+                   ++ " and "
+                   ++ "(base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ show qsz ++ ")"
 
-        | -- TODO: Improve this message by showing the regions
-          let a = Crucible.SimError loc $
-                    Crucible.AssertFailureSimError "Memory regions not disjoint"
-
-        , (LLVMAllocSpec _mut _pty psz ploc, p) : ps <- tails memsRW
+        | (LLVMAllocSpec _mut _pty psz ploc, p) : ps <- tails memsRW
         , (LLVMAllocSpec _mut _qty qsz qloc, q) <- ps ++ memsRO
         ]
 

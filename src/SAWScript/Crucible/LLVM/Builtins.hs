@@ -64,9 +64,10 @@ import           Control.Monad.Fail (MonadFail(..))
 import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
 import           Data.Foldable (for_, toList, find)
+import           Data.Function
 import           Data.IORef
 import           Data.List
-import           Data.List.Extra (groupOn, nubOrd)
+import           Data.List.Extra (nubOrd)
 import qualified Data.List.NonEmpty as NE
 import           Data.Maybe
 import           Data.String
@@ -1543,3 +1544,12 @@ crucible_setup_val_to_typed_term bic _opt (getAllLLVM -> sval) = do
   case mtt of
     Nothing -> fail $ "Could not convert a setup value to a term: " ++ show sval
     Just tt -> return tt
+
+--------------------------------------------------------------------------------
+
+-- | Sort a list of things and group them into equivalence classes.
+groupOn ::
+  Ord b =>
+  (a -> b) {- ^ equivalence class projection -} ->
+  [a] -> [[a]]
+groupOn f = groupBy ((==) `on` f) . sortBy (compare `on` f)
