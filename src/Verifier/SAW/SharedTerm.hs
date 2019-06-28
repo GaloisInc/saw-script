@@ -1203,10 +1203,10 @@ scVectorReduced sc ety xs
     asAny _ = Just ()
 
     asAt :: Term -> Maybe ((Natural :*: Term) :*: Natural)
-    asAt = ((isGlobalDef "Prelude.at" @> asNat) <@> (asAny @> return)) <@> asNat
+    asAt = (((isGlobalDef "Prelude.at" @> asNat) <@ asAny) <@> return) <@> asNat
 
     asBvAt :: Term -> Maybe ((Natural :*: Term) :*: Natural)
-    asBvAt = ((isGlobalDef "Prelude.bvAt" @> asNat) <@> (asAny @> asAny @> return)) <@> asUnsignedBvLit
+    asBvAt = ((((isGlobalDef "Prelude.bvAt" @> asNat) <@ asAny) <@ asAny) <@> return) <@> asUnsignedConcreteBv
 
     asAtOrBvAt :: Term -> Maybe ((Natural :*: Term) :*: Natural)
     asAtOrBvAt term

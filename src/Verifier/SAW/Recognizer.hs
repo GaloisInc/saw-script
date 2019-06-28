@@ -25,7 +25,7 @@ module Verifier.SAW.Recognizer
   , asGlobalDef
   , isGlobalDef
   , asApp
-  , (<@>), (@>)
+  , (<@>), (@>), (<@)
   , asApplyAll
   , asPairType
   , asPairValue
@@ -44,8 +44,8 @@ module Verifier.SAW.Recognizer
   , asRecursorApp
   , isDataType
   , asNat
-  , asBvLit
-  , asUnsignedBvLit
+  , asBvNat
+  , asUnsignedConcreteBv
   , asStringLit
   , asLambda
   , asLambdaList
@@ -271,18 +271,12 @@ asNat (asCtor -> Just (c, [])) | c == "Prelude.Zero" = return 0
 asNat (asCtor -> Just (c, [asNat -> Just i])) | c == "Prelude.Succ" = return (i+1)
 asNat _ = fail "not Nat"
 
-asBvLit :: (MonadFail f) => Recognizer f Term (Natural, Natural)
-asBvLit term
-  | Just (ctor, [n_term, v_term]) <- asCtor term
-  , ctor == "Prelude.scBvNat"
-  , Just n <- asNat n_term
-  , Just v <- asNat v_term =
-    return (n, v)
-  | otherwise = fail "not a bitvector literal"
+asBvNat :: (MonadFail f) => Recognizer f Term (Natural :*: Natural)
+asBvNat = (isGlobalDef "Prelude.bvNat" @> asNat) <@> asNat
 
-asUnsignedBvLit :: (MonadFail f) => Recognizer f Term Natural
-asUnsignedBvLit term = do
-  (n, v) <- asBvLit term
+asUnsignedConcreteBv :: (MonadFail f) => Recognizer f Term Natural
+asUnsignedConcreteBv term = do
+  (n :*: v) <- asBvNat term
   return $ mod v (2 ^ n)
 
 asStringLit :: (MonadFail f) => Recognizer f Term String
