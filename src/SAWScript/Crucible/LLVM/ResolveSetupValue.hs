@@ -6,6 +6,7 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -21,16 +22,20 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , resolveSAWPred
   , resolveSetupFieldIndex
   , equalValsPred
+  , memArrayToSawCoreTerm
   ) where
 
 import Control.Lens
-import Control.Monad (zipWithM, foldM)
+import Control.Monad
+import qualified Control.Monad.Fail as Fail
 import Control.Monad.Fail (MonadFail)
+import Control.Monad.State
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
 import Data.IORef
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import           Data.Vector (Vector)
 import qualified Data.Vector as V
 
 import qualified Text.LLVM.AST as L
@@ -57,6 +62,7 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.Term.Functor
 import Text.LLVM.DebugUtils as L
 
 import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
@@ -448,6 +454,17 @@ toLLVMType dl tp =
     Cryptol.TVRec _flds -> Left (NotYetSupported "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
 
+toLLVMStorageType ::
+  forall w .
+  Crucible.HasPtrWidth w =>
+  Crucible.DataLayout ->
+  Cryptol.TValue ->
+  IO Crucible.StorageType
+toLLVMStorageType data_layout cryptol_type =
+  case toLLVMType data_layout cryptol_type of
+    Left e -> fail $ toLLVMTypeErrToString e
+    Right memory_type -> Crucible.toStorableType @_ @w memory_type
+
 -- FIXME: This struct-padding logic is already implemented in
 -- crucible-llvm. Reimplementing it here is error prone and harder to
 -- maintain.
@@ -522,3 +539,116 @@ equalValsPred cc v1 v2 = go (v1, v2)
   go _ = return (W4.falsePred sym)
 
   sym = cc^.ccBackend
+
+memArrayToSawCoreTerm ::
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  LLVMCrucibleContext arch ->
+  Crucible.EndianForm ->
+  TypedTerm ->
+  IO Term
+memArrayToSawCoreTerm crucible_context endianess typed_term = do
+  let sym = crucible_context ^. ccBackend
+  let data_layout = Crucible.llvmDataLayout $ crucible_context ^. ccTypeCtx
+  saw_context <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+
+  let setBytes :: Cryptol.TValue -> Term -> Crucible.Bytes -> StateT (Vector Term) IO ()
+      setBytes cryptol_type saw_term offset = case cryptol_type of
+        Cryptol.TVSeq size Cryptol.TVBit
+          | (byte_count, 0) <- quotRem (fromInteger size) 8 ->
+            if byte_count > 1
+              then forM_ [0 .. (byte_count - 1)] $ \byte_index -> do
+                bit_type_term <- liftIO $ importType
+                  saw_context
+                  emptyEnv
+                  (Cryptol.tValTy Cryptol.TVBit)
+                byte_index_term <- liftIO $ scNat saw_context $ byte_index * 8
+                byte_size_term <- liftIO $ scNat saw_context 8
+                remaining_bits_size_term <- liftIO $ scNat saw_context $
+                  (byte_count - byte_index - 1) * 8
+                saw_byte_term <- liftIO $ scSlice
+                  saw_context
+                  bit_type_term
+                  byte_index_term
+                  byte_size_term
+                  remaining_bits_size_term
+                  saw_term
+
+                let byte_storage_index = case endianess of
+                      Crucible.BigEndian -> byte_index
+                      Crucible.LittleEndian -> byte_count - byte_index - 1
+                let vector_index = (fromIntegral offset) + (fromIntegral byte_storage_index)
+                modify' $ \vector -> vector V.// [(vector_index, saw_byte_term)]
+            else
+              modify' $ \vector -> vector V.// [(fromIntegral offset, saw_term)]
+          | otherwise -> fail $ "unexpected bit count: " ++ show size
+
+        Cryptol.TVSeq size element_cryptol_type -> do
+          element_storage_size <- liftIO $
+            Crucible.storageTypeSize <$> toLLVMStorageType
+              data_layout
+              element_cryptol_type
+
+          forM_ [0 .. (size - 1)] $ \element_index -> do
+            size_term <- liftIO $ scNat saw_context $ fromInteger size
+            elem_type_term <- liftIO $ importType
+              saw_context
+              emptyEnv
+              (Cryptol.tValTy element_cryptol_type)
+            index_term <- liftIO $ scNat saw_context $ fromInteger element_index
+            inner_saw_term <- liftIO $ scAt
+              saw_context
+              size_term
+              elem_type_term
+              saw_term index_term
+            setBytes
+              element_cryptol_type
+              inner_saw_term
+              (offset + (fromInteger element_index) * element_storage_size)
+
+        Cryptol.TVTuple tuple_element_cryptol_types -> do
+          (Crucible.Struct field_storage_types) <- liftIO $
+            Crucible.storageTypeF <$> toLLVMStorageType data_layout cryptol_type
+
+          V.forM_ (V.izipWith (,,) field_storage_types (V.fromList tuple_element_cryptol_types)) $
+            \(field_index, field_storage_type, tuple_element_cryptol_type) -> do
+              inner_saw_term <- liftIO $ scTupleSelector
+                saw_context
+                saw_term
+                (field_index + 1)
+                (length tuple_element_cryptol_types)
+              setBytes
+                tuple_element_cryptol_type
+                inner_saw_term
+                (offset + (Crucible.fieldOffset field_storage_type))
+
+        _ -> fail $ "unexpected cryptol type: " ++ show cryptol_type
+
+  case ttSchema typed_term of
+    Cryptol.Forall [] [] cryptol_type -> do
+      let evaluated_type = (Cryptol.evalValType Map.empty cryptol_type)
+      storage_size <- Crucible.storageTypeSize <$> toLLVMStorageType
+        data_layout
+        evaluated_type
+      padding_byte_term <- scBvConst saw_context 8 0xff
+
+      byte_terms <- execStateT (setBytes evaluated_type (ttTerm typed_term) 0)
+        (V.replicate (fromIntegral storage_size) padding_byte_term)
+      byte_array_type_term <- importType saw_context emptyEnv $ Cryptol.tValTy $
+        Cryptol.TVSeq
+          (fromIntegral storage_size)
+          (Cryptol.TVSeq 8 Cryptol.TVBit)
+      vector_term <- scVectorReduced
+        saw_context
+        byte_array_type_term
+        (V.toList byte_terms)
+
+      storage_size_term <- scNat saw_context $ fromIntegral storage_size
+      ptr_width_term <- scNat saw_context $ natValue ?ptrWidth
+      scGlobalApply saw_context (parseIdent "Prelude.bvAt")
+        [ storage_size_term
+        , byte_array_type_term
+        , ptr_width_term
+        , vector_term
+        ]
+
+    _ -> fail $ "expected monomorphic typed term: " ++ show typed_term

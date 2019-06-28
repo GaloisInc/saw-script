@@ -469,6 +469,7 @@ buildTopLevelEnv proxy opts =
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
+                   , rwSMTArrayMemoryModel = False
                    }
        return (bic, ro0, rw0)
 
@@ -497,6 +498,11 @@ add_primitives lc bic opts = do
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
+
+enable_smt_array_memory_model :: TopLevel ()
+enable_smt_array_memory_model = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSMTArrayMemoryModel = True }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -650,6 +656,11 @@ primitives = Map.fromList
     (bicVal (add_primitives Experimental))
     Current
     [ "Enable the use of experimental commands." ]
+
+  , prim "enable_smt_array_memory_model" "TopLevel ()"
+    (pureVal enable_smt_array_memory_model)
+    Current
+    [ "Enable the SMT array memory model." ]
 
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
