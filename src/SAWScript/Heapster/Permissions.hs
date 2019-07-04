@@ -1044,6 +1044,32 @@ castLLVMPtr y off x perms =
         pushPerm x (ValPerm_LLVMPtr $ map (offsetLLVMPtrPerm off) pps) perms''
     _ -> error "castLLVMPtr"
 
+-- | Copy an LLVM free permission @free(e)@ from the current
+-- @x:ptr(pps1,free(e),pps2)@ permission into the @x:ptr(pps)@ permission on the
+-- top of the stack, where the 'Int' index gives the size of @pps1@
+introLLVMFree :: ExprVar (LLVMPointerType w) -> Int ->
+                 PermSet (ps :> LLVMPointerType w) ->
+                 PermSet (ps :> LLVMPointerType w)
+introLLVMFree x i perms =
+  case perms ^. (varPerm x . llvmPtrPerm i) of
+    pp_i@(LLVMFreePerm _) ->
+      over (varPerm x) (deleteLLVMPtrPerm i) $
+      over (topDistPerm x) (addLLVMPtrPerm pp_i)
+      perms
+    _ -> error "introLLVMFree"
+
+-- | Cast a proof of @x:ptr(pps1, free(e1), pps2)@ on the top of the stack to
+-- one of @x:ptr(pps1, free(e2), pps2)@
+castLLVMFree :: ExprVar (LLVMPointerType w) -> Int ->
+                PermExpr (BVType w) -> PermExpr (BVType w) ->
+                PermSet (ps :> LLVMPointerType w) ->
+                PermSet (ps :> LLVMPointerType w)
+castLLVMFree x i e1 e2 =
+  over (varPerm x . llvmPtrPerm i) $ \pp_i ->
+  case pp_i of
+    LLVMFreePerm e | e == e1 -> LLVMFreePerm e2
+    _ -> error "castLLVMFree"
+
 -- | Move a field permission of the form @(off,All) |-> p@, which should be
 -- the @i@th 'LVMPtrPerm' associated with @x@, into the @x:ptr(pps)@ permission
 -- on the top of of the stack, resulting in the permission of the form
@@ -1096,3 +1122,20 @@ introLLVMFieldContents x y perms =
             LLVMFieldPerm { llvmFieldPerm = y_perm, .. }
       _ -> error "introLLVMFieldContents")
   perms'
+
+-- | Eliminate a permission @x:ptr(pps1,(off,S) |-> p,pps2)@ into permissions
+-- @x:ptr(pps1,(off,S) |-> eq(y),pps2)@ and @y:p@ for a fresh variable @y@. If
+-- the permissions for @x@ are already of this form, just return @y@.
+elimLLVMFieldContents :: ExprVar (LLVMPointerType w) -> Int -> PermSet ps ->
+                         Either (ExprVar (LLVMPointerType w))
+                         (Binding (PermExpr (LLVMPointerType w)) (PermSet ps))
+elimLLVMFieldContents x i perms =
+  case perms ^. (varPerm x . llvmPtrPerm i) of
+    LLVMFieldPerm {llvmFieldPerm = ValPerm_Eq (PExpr_Var y), ..} ->
+      Left y
+    LLVMFieldPerm {..} ->
+      Right $ nu $ \y ->
+      set (varPerm y) llvmFieldPerm $
+      set (varPerm x . llvmPtrPerm i)
+      (LLVMFieldPerm {llvmFieldPerm = ValPerm_Eq (PExpr_Var y), ..}) $
+      perms
