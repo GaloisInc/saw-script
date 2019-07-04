@@ -423,6 +423,54 @@ offsetLLVMPtrPerm off (LLVMArrayPerm {..}) =
   LLVMArrayPerm { llvmArrayOffset = bvAdd llvmArrayOffset off, ..}
 offsetLLVMPtrPerm _ (LLVMFreePerm e) = LLVMFreePerm e
 
+-- | Lens for the pointer permissions of an LLVM pointer permission
+llvmPtrPerms :: Lens' (ValuePerm (LLVMPointerType w)) [LLVMPtrPerm w]
+llvmPtrPerms =
+  lens
+  (\p -> case p of
+      ValPerm_LLVMPtr pps -> pps
+      _ -> error "llvmPtrPerms: not an LLVM pointer permission")
+  (\p pps ->
+    case p of
+      ValPerm_LLVMPtr _ -> ValPerm_LLVMPtr pps
+      _ -> error "llvmPtrPerms: not an LLVM pointer permission")
+
+-- | Lens for the @i@th pointer permission of an LLVM pointer permission
+llvmPtrPerm :: Int -> Lens' (ValuePerm (LLVMPointerType w)) (LLVMPtrPerm w)
+llvmPtrPerm i =
+  lens
+  (\p -> if i >= length (p ^. llvmPtrPerms) then
+           error "llvmPtrPerm: index out of bounds"
+         else (p ^. llvmPtrPerms) !! i)
+  (\p pp ->
+    -- FIXME: there has got to be a nicer, more lens-like way to do this
+    let pps = p ^. llvmPtrPerms in
+    if i >= length pps then
+      error "llvmPtrPerm: index out of bounds"
+    else set llvmPtrPerms (take i pps ++ (pp : drop (i+1) pps)) p)
+
+-- | Add a new 'LLVMPtrPerm' to the end of the list of those contained in the
+-- 'llvmPtrPerms' of a permission
+addLLVMPtrPerm :: LLVMPtrPerm w -> ValuePerm (LLVMPointerType w) ->
+                  ValuePerm (LLVMPointerType w)
+addLLVMPtrPerm pp = over llvmPtrPerms (++ [pp])
+
+-- | Delete the 'LLVMPtrPerm' at the given index from the list of those
+-- contained in the 'llvmPtrPerms' of a permission
+deleteLLVMPtrPerm :: Int -> ValuePerm (LLVMPointerType w) ->
+                     ValuePerm (LLVMPointerType w)
+deleteLLVMPtrPerm i =
+  over llvmPtrPerms (\pps ->
+                      if i >= length pps then
+                        error "deleteLLVMPtrPerm: index out of bounds"
+                      else take i pps ++ drop (i+1) pps)
+
+-- | Return the index of the last 'LLVMPtrPerm' of a permission
+lastLLVMPtrPermIndex :: ValuePerm (LLVMPointerType w) -> Int
+lastLLVMPtrPermIndex p =
+  let len = length (p ^. llvmPtrPerms) in
+  if len > 0 then len - 1 else error "lastLLVMPtrPerms: no pointer perms!"
+
 {- FIXME: remove
 -- | Set the permission inside an 'LLVMFieldPerm'
 setLLVMFieldPerm :: ValuePerm (LLVMPointerType w) ->
@@ -724,6 +772,9 @@ newtype PermSubst ctx =
 emptySubst :: PermSubst RNil
 emptySubst = PermSubst empty
 
+singletonSubst :: PermExpr a -> PermSubst ('RNil :> PermExpr a)
+singletonSubst e = PermSubst (empty :>: SubstElem e)
+
 substLookup :: PermSubst ctx -> Member ctx (PermExpr a) -> PermExpr a
 substLookup (PermSubst m) memb = unSubstElem $ mapRListLookup memb m
 
@@ -849,31 +900,199 @@ partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
 data PSetElem (a :: *) where
   PSetElem :: ValuePerm a -> PSetElem (PermExpr a)
 
--- | A permission set associates permissions with expression variables
-newtype PermSet = PermSet { unPermSet :: NameMap PSetElem }
+-- | A variable and its permission
+data VarAndPerm a = VarAndPerm (ExprVar a) (ValuePerm a)
+
+-- | Lens for the 'ValuePerm' in a 'VarAndPerm', checking that the variable is
+-- the one that is expected
+varAndPermPerm :: ExprVar a -> Lens' (VarAndPerm a) (ValuePerm a)
+varAndPermPerm x =
+  lens
+  (\(VarAndPerm x' p) ->
+    if x == x' then p else error "varAndPermPerm: incorrect variable")
+  (\(VarAndPerm x' p) p' ->
+    if x == x' then VarAndPerm x p' else
+      error "varAndPermPerm: incorrect variable")
+
+-- | A permission set associates permissions with expression variables, and also
+-- has a stack of "distinguished permissions" that are used for intro rules
+data PermSet ps = PermSet { unPermSet :: NameMap PSetElem,
+                            distPerms :: MapRList VarAndPerm ps }
 
 -- | The lens for the permissions associated with a given variable
-varPerm :: ExprVar a -> Lens' PermSet (ValuePerm a)
+varPerm :: ExprVar a -> Lens' (PermSet ps) (ValuePerm a)
 varPerm x =
   lens
-  (\(PermSet nmap) ->
+  (\(PermSet nmap _) ->
     case NameMap.lookup x nmap of
       Just (PSetElem p) -> p
       Nothing -> ValPerm_True)
-  (\(PermSet nmap) p -> PermSet $ NameMap.insert x (PSetElem p) nmap)
+  (\(PermSet nmap ps) p -> PermSet (NameMap.insert x (PSetElem p) nmap) ps)
+
+-- | The lens for a particular distinguished variable and permission
+distVarAndPerm :: Member ps a -> Lens' (PermSet ps) (VarAndPerm a)
+distVarAndPerm memb =
+  lens
+  (\(PermSet _ ps) -> mapRListLookup memb ps)
+  (\(PermSet nmap ps) v_and_p -> PermSet nmap $ mapRListSet memb v_and_p ps)
+
+-- | The lens for a particular distinguished perm, checking that it is indeed
+-- associated with the given variable
+distPerm :: Member ps a -> ExprVar a -> Lens' (PermSet ps) (ValuePerm a)
+distPerm memb x = distVarAndPerm memb . varAndPermPerm x
+
+-- | The lens for the distinguished perm at the top of the stack, checking that
+-- it has the given variable
+topDistPerm :: ExprVar a -> Lens' (PermSet (ps :> a)) (ValuePerm a)
+topDistPerm x = distPerm Member_Base x
+
+-- | Push a new distinguished permission onto the top of the stack
+pushPerm :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet (ps :> a)
+pushPerm x p (PermSet nmap ps) = PermSet nmap (ps :>: VarAndPerm x p)
+
+-- | Pop the top distinguished permission off of the stack
+popPerm :: ExprVar a -> PermSet (ps :> a) -> (PermSet ps, ValuePerm a)
+popPerm x (PermSet nmap (ps :>: v_and_p)) =
+  (PermSet nmap ps, v_and_p ^. varAndPermPerm x)
+
+-- | Introduce a proof of @x:true@ onto the top of the stack
+introTrue :: ExprVar a -> PermSet ps -> PermSet (ps :> a)
+introTrue x = pushPerm x ValPerm_True
+
+-- | Apply the left or-introduction rule to the top of the permission stack,
+-- changing it from @x:p1@ to @x:(p1 \/ p2)@
+introOrL :: ExprVar a -> ValuePerm a -> PermSet (ps :> a) -> PermSet (ps :> a)
+introOrL x p2 = over (topDistPerm x) (\p1 -> ValPerm_Or p1 p2)
+
+-- | Apply the right or-introduction rule to the top of the permission stack,
+-- changing it from @x:p2@ to @x:(p1 \/ p2)@
+introOrR :: ExprVar a -> ValuePerm a -> PermSet (ps :> a) -> PermSet (ps :> a)
+introOrR x p1 = over (topDistPerm x) (\p2 -> ValPerm_Or p1 p2)
+
+-- | Apply existential introduction to the top of the permission stack, changing
+-- it from @[e/x]p@ to @exists (x:tp).p@
+introExists :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
+               Binding (PermExpr tp) (ValuePerm a) ->
+               PermSet (ps :> a) -> PermSet (ps :> a)
+introExists x e p_body =
+  over (topDistPerm x) $ \p_old ->
+  if p_old == subst (singletonSubst e) p_body then ValPerm_Exists p_body else
+    error "introExists: permission on the top of the stack does not match"
 
 -- | Replace an or permission for a given variable with its left disjunct
-permsElimOrLeft :: ExprVar a -> PermSet -> PermSet
-permsElimOrLeft x = over (varPerm x) orPermLeft
+elimOrLeft :: ExprVar a -> PermSet ps -> PermSet ps
+elimOrLeft x = over (varPerm x) orPermLeft
 
 -- | Replace an or permission for a given variable with its right disjunct
-permsElimOrRight :: ExprVar a -> PermSet -> PermSet
-permsElimOrRight x = over (varPerm x) orPermRight
+elimOrRight :: ExprVar a -> PermSet ps -> PermSet ps
+elimOrRight x = over (varPerm x) orPermRight
 
 -- | Replace an existential permission for a given variable with its body
-permsElimExists :: ExprVar a -> TypeRepr tp -> PermSet ->
-                   Binding (PermExpr tp) PermSet
-permsElimExists x tp perms =
+elimExists :: ExprVar a -> TypeRepr tp -> PermSet ps ->
+              Binding (PermExpr tp) (PermSet ps)
+elimExists x tp perms =
   nuWithElim1
   (\_ p_body -> set (varPerm x) p_body perms)
   (exPermBody tp $ perms ^. varPerm x)
+
+-- | Introduce a proof of @x:eq(x)@ onto the top of the stack
+introEqRefl :: ExprVar a -> PermSet ps -> PermSet (ps :> a)
+introEqRefl x = pushPerm x (ValPerm_Eq (PExpr_Var x))
+
+-- | Copy an @x:eq(e)@ permission to the top of the stack
+introEqCopy :: ExprVar a -> PermExpr a -> PermSet ps -> PermSet (ps :> a)
+introEqCopy x e perms =
+  case perms ^. varPerm x of
+    ValPerm_Eq e' | e' == e -> pushPerm x (ValPerm_Eq e) perms
+    _ -> error "introEqCopy: unexpected existing permission on variable"
+
+-- | Cast a proof of @x:eq(LLVMWord(e1))@ to @x:eq(LLVMWord(e2))@ on the top of
+-- the stack
+castLLVMWordEq :: ExprVar (LLVMPointerType w) ->
+                  PermExpr (BVType w) -> PermExpr (BVType w) ->
+                  PermSet (ps :> LLVMPointerType w) ->
+                  PermSet (ps :> LLVMPointerType w)
+castLLVMWordEq x e1 e2 =
+  over (topDistPerm x) $ \p ->
+  case p of
+    ValPerm_Eq (PExpr_LLVMWord e1')
+      | bvEq e1' e1 -> ValPerm_Eq (PExpr_LLVMWord e2)
+    _ -> error "castLLVMWordEq: unexpected existing permission"
+
+-- | Prove an empty @x:ptr()@ permission from any @x:ptr(pps)@ permission
+introLLVMPtr :: ExprVar (LLVMPointerType w) -> PermSet ps ->
+                PermSet (ps :> LLVMPointerType w)
+introLLVMPtr x perms =
+  case perms ^. varPerm x of
+    ValPerm_LLVMPtr _ -> pushPerm x (ValPerm_LLVMPtr []) perms
+    _ -> error "introLLVMPtr: no LLVMptr permission"
+
+-- | Cast a @y:ptr(pps)@ on the top of the stack to @x:ptr(pps - off)@ using a
+-- proof of @x:eq(y+off)@ just below it on the stack
+castLLVMPtr :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+               ExprVar (LLVMPointerType w) ->
+               PermSet (ps :> LLVMPointerType w :> LLVMPointerType w) ->
+               PermSet (ps :> LLVMPointerType w)
+castLLVMPtr y off x perms =
+  let (perms', y_ptr_perm) = popPerm y perms
+      (perms'', x_eq_perm) = popPerm x perms' in
+  case (y_ptr_perm, x_eq_perm) of
+    (p@(ValPerm_LLVMPtr _), ValPerm_Eq (PExpr_Var y'))
+      | y' == y -> pushPerm x p perms''
+    (ValPerm_LLVMPtr pps, ValPerm_Eq (PExpr_LLVMOffset y' off))
+      | y' == y ->
+        pushPerm x (ValPerm_LLVMPtr $ map (offsetLLVMPtrPerm off) pps) perms''
+    _ -> error "castLLVMPtr"
+
+-- | Move a field permission of the form @(off,All) |-> p@, which should be
+-- the @i@th 'LVMPtrPerm' associated with @x@, into the @x:ptr(pps)@ permission
+-- on the top of of the stack, resulting in the permission of the form
+-- @x:ptr(pps, (off,All) |-> p)@ on the top of the stack.
+introLLVMFieldAll :: ExprVar (LLVMPointerType w) -> Int ->
+                     PermSet (ps :> LLVMPointerType w) ->
+                     PermSet (ps :> LLVMPointerType w)
+introLLVMFieldAll x i perms =
+  case perms ^. (varPerm x . llvmPtrPerm i) of
+    pp_i@(LLVMFieldPerm _ SplExpr_All _) ->
+      over (varPerm x) (deleteLLVMPtrPerm i) $
+      over (topDistPerm x) (addLLVMPtrPerm pp_i)
+      perms
+    _ -> error "introLLVMFieldAll"
+
+-- | Split a field permission @(off,spl) |-> eq(e)@ into two, leaving the left
+-- half in the current permission stack and moving the right half to the top of
+-- of the stack
+introLLVMFieldSplit :: ExprVar (LLVMPointerType w) -> Int -> SplittingExpr ->
+                       PermSet (ps :> LLVMPointerType w) ->
+                       PermSet (ps :> LLVMPointerType w)
+introLLVMFieldSplit x i spl perms =
+  case perms ^. (varPerm x . llvmPtrPerm i) of
+    pp_i@(LLVMFieldPerm {..})
+      | llvmFieldSplitting == spl
+      , ValPerm_Eq _ <- llvmFieldPerm ->
+        set (varPerm x . llvmPtrPerm i) (LLVMFieldPerm
+                                         { llvmFieldSplitting =
+                                           SplExpr_L spl, ..}) $
+        over (topDistPerm x) (addLLVMPtrPerm $
+                              LLVMFieldPerm
+                              { llvmFieldSplitting = SplExpr_R spl, ..})
+        perms
+    _ -> error "introLLVMFieldSplit"
+
+-- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of
+-- the permission stack into a proof of @x:ptr(pps,(off,spl |-> p))@
+introLLVMFieldContents :: ExprVar (LLVMPointerType w) ->
+                          ExprVar (LLVMPointerType w) ->
+                          PermSet (ps :> LLVMPointerType w
+                                   :> LLVMPointerType w) ->
+                          PermSet (ps :> LLVMPointerType w)
+introLLVMFieldContents x y perms =
+  let (perms', y_perm) = popPerm y perms
+      i = lastLLVMPtrPermIndex (perms ^. topDistPerm x) in
+  over (topDistPerm x . llvmPtrPerm i)
+  (\pp -> case pp of
+      LLVMFieldPerm {..}
+        | ValPerm_Eq (PExpr_Var y') <- llvmFieldPerm , y' == y ->
+            LLVMFieldPerm { llvmFieldPerm = y_perm, .. }
+      _ -> error "introLLVMFieldContents")
+  perms'

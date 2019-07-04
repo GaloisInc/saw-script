@@ -28,6 +28,7 @@ import Data.Maybe
 import Data.List
 import Data.Kind as Kind
 import Data.Functor.Product
+import Data.Functor.Compose
 import GHC.TypeLits
 import Control.Lens hiding ((:>))
 import Control.Monad
@@ -106,8 +107,8 @@ data PermImpl r ls where
   -- > Gin | Pin, x:(p1 \/ p2) |- GsPs1, GsPs2
 
   Impl_IntroOrL :: ExprVar a -> ValuePerm a ->
-                   PermImpl r (ls :> PermExpr a) ->
-                   PermImpl r (ls :> PermExpr a)
+                   PermImpl r (ls :> a) ->
+                   PermImpl r (ls :> a)
   -- ^ @Impl_IntroOrL x p2 pf@ applies left disjunction introduction to the top
   -- permission on the stack:
   --
@@ -116,8 +117,8 @@ data PermImpl r ls where
   -- > Gamma | Pl, x:p1 * Pin |- rets
 
   Impl_IntroOrR :: ExprVar a -> ValuePerm a ->
-                   PermImpl r (ls :> PermExpr a) ->
-                   PermImpl r (ls :> PermExpr a)
+                   PermImpl r (ls :> a) ->
+                   PermImpl r (ls :> a)
   -- ^ @Impl_IntroOrR x p1 pf@ applies right disjunction introduction to the top
   -- permission on the stack:
   --
@@ -134,10 +135,10 @@ data PermImpl r ls where
   -- ------------------------------------------------------
   -- Gin | x:(exists z:tp. p)  |- rets
 
-  Impl_IntroExists :: ExprVar a -> TypeRepr tp -> PermExpr tp ->
+  Impl_IntroExists :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
                       Binding (PermExpr tp) (ValuePerm a) ->
-                      PermImpl r (ls :> PermExpr a) ->
-                      PermImpl r (ls :> PermExpr a)
+                      PermImpl r (ls :> a) ->
+                      PermImpl r (ls :> a)
   -- ^ @Intro_Exists x tp e p pf@ applies existential introduction to the top
   -- permission on the stack:
   --
@@ -145,8 +146,7 @@ data PermImpl r ls where
   -- > ------------------------------------------------
   -- > Gamma | Pl, x:[e'/z]p * Pin |- Pout
 
-  Impl_IntroTrue :: ExprVar a -> PermImpl r (ls :> PermExpr a) ->
-                    PermImpl r ls
+  Impl_IntroTrue :: ExprVar a -> PermImpl r (ls :> a) -> PermImpl r ls
   -- ^ Introduce a true permission onto the stack of distinguished permissions:
   --
   -- > Gin | Pl,x:true * Pin |- rets
@@ -154,15 +154,15 @@ data PermImpl r ls where
   -- > Gin | Pl * Pin |- rets
 
   Impl_IntroCast :: ExprVar a -> ExprVar a ->
-                    PermImpl r (ls :> PermExpr a) ->
-                    PermImpl r (ls :> PermExpr a :> PermExpr a)
+                    PermImpl r (ls :> a) ->
+                    PermImpl r (ls :> a :> a)
   -- ^ Cast a proof of @y:p@ to one of @x:p@ using @x:eq(y)@:
   --
   -- > Gin | Pl,x:p * Pin |- rets
   -- > ----------------------------------
   -- > Gin | Pl,x:eq(y),y:p * Pin |- rets
 
-  Impl_IntroEqRefl :: ExprVar a -> PermImpl r (ls :> PermExpr a) ->
+  Impl_IntroEqRefl :: ExprVar a -> PermImpl r (ls :> a) ->
                       PermImpl r ls
   -- ^ Introduce a proof that @x:eq(x)@:
   --
@@ -171,7 +171,7 @@ data PermImpl r ls where
   -- > Gin | Pl * Pin |- rets
 
   Impl_IntroEqCopy :: ExprVar a -> PermExpr a ->
-                      PermImpl r (ls :> PermExpr a) -> PermImpl r ls
+                      PermImpl r (ls :> a) -> PermImpl r ls
   -- ^ Copy a proof that @x:eq(e)@ from the normal permissions to the stack:
   --
   -- > Gin | Pl,x:eq(e) * Pin,x:eq(e) |- rets
@@ -179,7 +179,7 @@ data PermImpl r ls where
   -- > Gin | Pl * Pin,x:eq(e) |- rets
 
   Impl_AssertBVEq :: ExprVar (BVType w) -> PermExpr (BVType w) ->
-                     PermImpl r (ls :> PermExpr (BVType w)) ->
+                     PermImpl r (ls :> (BVType w)) ->
                      PermImpl r ls
   -- ^ Introduce a proof that @x:eq(e)@ at bitvector type (which becomes a
   -- dynamic check that @x=e@):
@@ -190,8 +190,8 @@ data PermImpl r ls where
 
   Impl_CastLLVMWord ::
     ExprVar (LLVMPointerType w) -> PermExpr (BVType w) -> PermExpr (BVType w) ->
-    PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
-    PermImpl r (ls :> PermExpr (LLVMPointerType w))
+    PermImpl r (ls :> (LLVMPointerType w)) ->
+    PermImpl r (ls :> (LLVMPointerType w))
   -- ^ Cast a proof that @x:eq(word(e1))@ to one that @x:eq(word(e2))@ with a
   -- dynamic check that @e1=e2@:
   --
@@ -200,7 +200,7 @@ data PermImpl r ls where
   -- > Gin | Pl,x:eq(word(e1)) * Pin |- rets
 
   Impl_IntroLLVMPtr :: ExprVar (LLVMPointerType w) ->
-                       PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
+                       PermImpl r (ls :> (LLVMPointerType w)) ->
                        PermImpl r ls
   -- ^ Prove an empty pointer permission @x:ptr()@ from any pointer permission
   -- @x:ptr(pps)@ on the left:
@@ -212,9 +212,9 @@ data PermImpl r ls where
   Impl_CastLLVMPtr :: ExprVar (LLVMPointerType w) ->
                       PermExpr (BVType w) ->
                       ExprVar (LLVMPointerType w) ->
-                      PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
-                      PermImpl r (ls :> PermExpr (LLVMPointerType w)
-                                  :> PermExpr (LLVMPointerType w))
+                      PermImpl r (ls :> (LLVMPointerType w)) ->
+                      PermImpl r (ls :> (LLVMPointerType w)
+                                  :> (LLVMPointerType w))
   -- ^ Cast a @y:ptr(pps)@ on the top of the stack to @x:ptr(pps - off)@ using a
   -- proof of @x:eq(y+off)@ just below it on the stack:
   --
@@ -223,8 +223,8 @@ data PermImpl r ls where
   -- > Gin | Pl, x:eq(y+off),y:ptr(pps) * Pin |- rets
 
   Impl_IntroLLVMFree :: ExprVar (LLVMPointerType w) -> Int ->
-                        PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
-                        PermImpl r (ls :> PermExpr (LLVMPointerType w))
+                        PermImpl r (ls :> (LLVMPointerType w)) ->
+                        PermImpl r (ls :> (LLVMPointerType w))
   -- ^ Copy a free pointer permission to the pointer permission on the top of
   -- the stack, using the 'Int' as the index into the pointer perms in @Pin@,
   -- i.e., the length of @pps1@:
@@ -235,8 +235,8 @@ data PermImpl r ls where
 
   Impl_CastLLVMFree :: ExprVar (LLVMPointerType w) ->
                        PermExpr (BVType w) -> PermExpr (BVType w) ->
-                       PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
-                       PermImpl r (ls :> PermExpr (LLVMPointerType w))
+                       PermImpl r (ls :> (LLVMPointerType w)) ->
+                       PermImpl r (ls :> (LLVMPointerType w))
   -- ^ Cast a proof of @x:ptr(free(e1))@ on the top of the stack to one of
   -- @x:ptr(free(e2))@:
   --
@@ -258,8 +258,8 @@ data PermImpl r ls where
 
   Impl_IntroLLVMFieldAll ::
     ExprVar (LLVMPointerType w) -> Int ->
-    PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
-    PermImpl r (ls :> PermExpr (LLVMPointerType w))
+    PermImpl r (ls :> (LLVMPointerType w)) ->
+    PermImpl r (ls :> (LLVMPointerType w))
   -- ^ Move a field permission, which should contain an equals permission, into
   -- the pointer permission on the top of the stack:
   --
@@ -271,8 +271,8 @@ data PermImpl r ls where
 
   Impl_IntroLLVMFieldSplit ::
     ExprVar (LLVMPointerType w) -> Int -> SplittingExpr ->
-    PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
-    PermImpl r (ls :> PermExpr (LLVMPointerType w))
+    PermImpl r (ls :> (LLVMPointerType w)) ->
+    PermImpl r (ls :> (LLVMPointerType w))
   -- ^ Move a field permission of the form @(off,spl) |-> eq(e)@ into two
   -- copies, keeping the left half in the current permission set and pushing the
   -- right half onto the stack:
@@ -285,9 +285,8 @@ data PermImpl r ls where
 
   Impl_IntroLLVMFieldContents ::
     ExprVar (LLVMPointerType w) -> ExprVar (LLVMPointerType w) ->
-    PermImpl r (ls :> PermExpr (LLVMPointerType w)) ->
-    PermImpl r (ls :> PermExpr (LLVMPointerType w)
-                :> PermExpr (LLVMPointerType w))
+    PermImpl r (ls :> (LLVMPointerType w)) ->
+    PermImpl r (ls :> (LLVMPointerType w) :> (LLVMPointerType w))
   -- ^ Combine proofs of @x:ptr((off,S) |-> eq(y))@ and @y:p@ on the top of the
   -- permission stack into a proof of @x:ptr((off,S) |-> p)@:
   --
@@ -307,17 +306,20 @@ data PermImpl r ls where
 -- Note that a generalized monad @m@ should always be a standard monad when the
 -- input and output types are the same; i.e., @m r r@ should always be a
 -- monad. I do not know a nice way to encode this in Haskell, however...
-class GenMonad (m :: Kind.* -> Kind.* -> Kind.* -> Kind.*) where
+class GenMonad (m :: k -> k -> Kind.* -> Kind.*) where
   -- | Generalized return
   greturn :: a -> m r r a
   -- | Generalized bind, that passes the output of @f@ to the input of @m@
   (>>>=) :: m r2 r3 a -> (a -> m r1 r2 b) -> m r1 r3 b
+
+  {-
   -- | Insert a mapping function from the input to the output
   gmapRet :: (rin -> rout) -> m rin rout ()
   -- | Run two computations in parallel, combining their output at the end
   gparallel :: m r1 r2 a -> m r1 r3 a -> m r1 (r2, r3) a
   -- | FIXME: explain this one
   gopenBinding :: Binding a b -> m r (Binding a r) (Name a, b)
+  -}
 
 infixl 1 >>>=
 infixl 1 >>>
@@ -325,23 +327,26 @@ infixl 1 >>>
 (>>>) :: GenMonad m => m r2 r3 () -> m r1 r2 a -> m r1 r3 a
 m1 >>> m2 = m1 >>>= \() -> m2
 
-class GenMonadT (t :: (Kind.* -> Kind.* -> Kind.* -> Kind.*) ->
-                Kind.* -> Kind.* -> Kind.* -> Kind.*) where
+class GenMonadT (t :: (k -> k -> Kind.* -> Kind.*) ->
+                k -> k -> Kind.* -> Kind.*) where
   glift :: GenMonad m => m rin rout a -> t m rin rout a
 
 -- | The generalized continuation transformer, which can have different types
 -- for the input vs output continuations
-newtype GenContT (m :: Kind.* -> Kind.*) rin rout a =
-  GenContT { unGenContT :: (a -> m rin) -> m rout }
+newtype GenContT (r :: k -> Kind.*) (m :: Kind.* -> Kind.*) pin pout a =
+  GenContT { unGenContT :: (a -> m (r pin)) -> m (r pout) }
 
-instance Functor (GenContT m r r) where
+liftGenContT :: Monad m => m a -> GenContT r m p p a
+liftGenContT m = GenContT $ \k -> m >>= k
+
+instance Functor (GenContT r m p p) where
   fmap f m = m >>= return . f
 
-instance Applicative (GenContT m r r) where
+instance Applicative (GenContT r m p p) where
   pure = return
   (<*>) = ap
 
-instance Monad (GenContT m r r) where
+instance Monad (GenContT r m p p) where
   return x = GenContT $ \k -> k x
   GenContT m >>= f = GenContT $ \k -> m $ \a -> unGenContT (f a) k
 
@@ -350,59 +355,147 @@ instance MonadTrans (GenContT r r) where
   lift m = GenContT $ \k -> m >>= \a -> k a
 -}
 
-instance MonadStrongBind m => GenMonad (GenContT m) where
+instance GenMonad (GenContT r m) where
   greturn x = GenContT $ \k -> k x
-  (GenContT m) >>>= f =
-    GenContT $ \k -> m $ \a -> unGenContT (f a) k
+  (GenContT m) >>>= f = GenContT $ \k -> m $ \a -> unGenContT (f a) k
+
+  {-
   gmapRet f = GenContT $ \k -> fmap f $ k ()
   gparallel (GenContT m1) (GenContT m2) =
     GenContT $ \k -> (\x y -> (x,y)) <$> m1 k <*> m2 k
   gopenBinding b =
     GenContT $ \k -> strongMbM $ nuWithElim1 (\nm b_body -> k (nm, b_body)) b
+  -}
 
--- | The generalized state monad. We use 'StateT' underneath to take advantage
--- of some of its methods
-newtype GenStateT s (m :: Kind.* -> Kind.* -> Kind.* -> Kind.*) rin rout a =
-  GenStateT { unGenStateT :: StateT s (m rin rout) a }
+-- | This is like shift, but where the current continuation need not be in a
+-- monad; this is useful for dealing with name-binding operations
+--
+-- FIXME: remove this...?
+gcaptureCC :: ((a -> m (r p1)) -> m (r p2)) -> GenContT r m p1 p2 a
+gcaptureCC f = GenContT f
 
-runGenStateT :: GenStateT s m rin rout a -> s -> m rin rout (a, s)
-runGenStateT m s = runStateT (unGenStateT m) s
+class GenMonad m => GenMonadShift r m | m -> r where
+  gshift :: ((a -> m p1 p1 (r p2)) -> m p3 p4 (r p3)) -> m p2 p4 a
+
+instance Monad m => GenMonadShift r (GenContT r m) where
+  gshift f = GenContT $ \k -> unGenContT (f (\a -> liftGenContT (k a))) return
+
+-- | FIXME: The shift for GenStateT does not quite fit...
+gshiftSt :: GenMonadShift r m =>
+            ((a -> s p2 -> GenStateT s m p1 p1 (r p2)) ->
+             GenStateT s m p3 p4 (r p3)) ->
+            GenStateT s m p2 p4 a
+gshiftSt f = GenStateT $ \s4 ->
+  gshift $ \k ->
+  unGenStateT (f $ \a s2 -> liftGenStateT id (k (a, s2))) s4 >>>= \(r, _) ->
+  greturn r
+
+-- | The generalized state monad
+newtype GenStateT s (m :: k -> k -> Kind.* -> Kind.*) p1 p2 a =
+  GenStateT { unGenStateT :: s p2 -> m p1 p2 (a, s p1) }
+
+runGenStateT :: GenStateT s m p1 p2 a -> s p2 -> m p1 p2 (a, s p1)
+runGenStateT m s = unGenStateT m s
 
 -- | Helper to tell GHC how to type-check
-gget :: (GenMonad m, MonadState s (m r r)) => m r r s
-gget = get
+gget :: GenMonad m => GenStateT s m p p (s p)
+gget = GenStateT $ \s -> greturn (s, s)
 
-instance Functor (m r r) => Functor (GenStateT s m r r) where
-  fmap f (GenStateT m) = GenStateT $ fmap f m
+instance Monad (m r r) => Functor (GenStateT s m r r) where
+  fmap f m = m >>= return . f
 
 instance Monad (m r r) => Applicative (GenStateT s m r r) where
   pure = return
   (<*>) = ap
 
 instance Monad (m r r) => Monad (GenStateT s m r r) where
-  return = GenStateT . return
+  return x = GenStateT $ \s -> return (x, s)
   (GenStateT m) >>= f =
-    GenStateT $ m >>= unGenStateT . f
+    GenStateT $ \s -> m s >>= \(a, s') -> unGenStateT (f a) s'
 
-instance Monad (m r r) => MonadState s (GenStateT s m r r) where
-  get = GenStateT get
-  put s = GenStateT $ put s
+instance Monad (m p p) => MonadState (s p) (GenStateT s m p p) where
+  get = GenStateT $ \s -> return (s, s)
+  put s = GenStateT $ \_ -> return ((), s)
 
+-- NOTE: lift only works for p1 = p2
+{-
 instance GenMonadT (GenStateT s) where
-  glift m = GenStateT $ StateT $ \s -> m >>>= \a -> greturn (a, s)
+  glift m = GenStateT $ \s -> m >>>= \a -> greturn (a, s)
+-}
 
 instance GenMonad m => GenMonad (GenStateT s m) where
-  greturn x = GenStateT $ StateT $ \s -> greturn (x, s)
-  (GenStateT (StateT m)) >>>= f =
-    GenStateT $ StateT $ \s -> m s >>>= \(a, s') ->
-    runStateT (unGenStateT $ f a) s'
+  greturn x = GenStateT $ \s -> greturn (x, s)
+  (GenStateT m) >>>= f =
+    GenStateT $ \s -> m s >>>= \(a, s') -> unGenStateT (f a) s'
+  {-
   gmapRet f = glift $ gmapRet f
   gparallel m1 m2 =
     GenStateT $ StateT $ \s ->
     gparallel (runGenStateT m1 s) (runGenStateT m2 s)
   gopenBinding b = glift $ gopenBinding b
+  -}
 
 
+-- | FIXME: documentation
+liftGenStateT :: GenMonad m => (s p2 -> s p1) -> m p1 p2 a ->
+                 GenStateT s m p1 p2 a
+liftGenStateT f m = GenStateT $ \s -> m >>>= \a -> greturn (a, f s)
+
+-- | Run a generalized state computation with a different state type @s2@ inside
+-- one with state type @s1@, using a lens-like pair of a getter function to
+-- extract out the starting inner @s2@ state from the outer @s1@ state and an
+-- update function to update the resulting outer @s1@ state with the final inner
+-- @s2@ state.
+withAltStateM :: GenMonad m => (s1 p2 -> s2 p2) -> (s1 p2 -> s2 p1 -> s1 p1) ->
+                 GenStateT s2 m p1 p2 a -> GenStateT s1 m p1 p2 a
+withAltStateM s_get s_update (GenStateT m) =
+  GenStateT $ \s ->
+  m (s_get s) >>>= \(a, s') ->
+  greturn (a, s_update s s')
+
+-- | FIXME: remove this...?
+gcaptureCCMapState :: (s p2 -> s p1) -> ((a -> m (r p1)) -> m (r p2)) ->
+                      GenStateT s (GenContT r m) p1 p2 a
+gcaptureCCMapState f_st f_k = liftGenStateT f_st $ gcaptureCC f_k
+
+-- | FIXME: documentation
+gmapRetAndState :: Monad m => (s p2 -> s p1) -> (r p1 -> r p2) ->
+                   GenStateT s (GenContT r m) p1 p2 ()
+gmapRetAndState f_st f_ret =
+  gget >>>= \s1 ->
+  gshiftSt $ \k ->
+  k () (f_st s1) >>>= \r ->
+  greturn (f_ret r)
+  -- gcaptureCCMapState f_st (\k -> f_ret <$> k ())
+
+-- | Name-binding in the generzlied continuation monad (FIXME: explain)
+class GenMonad m => GenMonadBind r m | m -> r where
+  gmbM :: (Mb ctx (r p2) -> r p2) -> Mb ctx (m p1 p2 a) -> m p1 p2 a
+
+instance MonadStrongBind m => GenMonadBind r (GenContT r m) where
+  gmbM f_ret mb_m =
+    GenContT $ \k ->
+    f_ret <$> strongMbM (fmap (\m -> unGenContT m k) mb_m)
+
+instance GenMonadBind r m => GenMonadBind r (GenStateT s m) where
+  gmbM f_ret mb_m =
+    GenStateT $ \s ->
+    gmbM f_ret $ fmap (\m -> unGenStateT m s) mb_m
+
+-- | Running generalized computations in "parallel"
+class GenMonad m => GenMonadPar r m | m -> r where
+  gparallel :: (r p2 -> r p2 -> r p2) -> m p1 p2 a -> m p1 p2 a -> m p1 p2 a
+
+instance Monad m => GenMonadPar r (GenContT r m) where
+  gparallel f (GenContT m1) (GenContT m2) =
+    GenContT $ \k -> f <$> m1 k <*> m2 k
+
+instance GenMonadPar r m => GenMonadPar r (GenStateT s m) where
+  gparallel f m1 m2 =
+    GenStateT $ \s ->
+    gparallel f (runGenStateT m1 s) (runGenStateT m2 s)
+
+{-
 -- | Transformer for pattern-matching in a generalized monad; although it itself
 -- is a monad transformer, it is not a generalized transformer, because it only
 -- supports a restricted form of the @>>>=@ operator
@@ -479,12 +572,14 @@ matchFail = MatchT $ \_ kf -> kf
 -- as the default case
 runMatchT :: m rin rout () -> MatchT m rin rout () -> m rin rout ()
 runMatchT kf (MatchT f) = f (\() m -> m) kf
+-}
 
 
 ----------------------------------------------------------------------
 -- * Permission Implication Monad
 ----------------------------------------------------------------------
 
+{-
 -- | State type @s@ is a permission state type iff it contains a permission set
 class PermState s where
   permStatePerms :: Lens' s PermSet
@@ -498,64 +593,55 @@ deriving instance (Applicative (PermM s r r))
 deriving instance (Monad (PermM s r r))
 deriving instance (GenMonad (PermM s))
 deriving instance (MonadState s (PermM s r r))
+-}
 
-data ImplState vars =
-  ImplState { _implStatePerms :: PermSet,
+data ImplState vars ps =
+  ImplState { _implStatePerms :: PermSet ps,
               _implStateVars :: CruCtx vars,
               _implStatePSubst :: PartialSubst vars }
 makeLenses ''ImplState
 
-mkImplState :: CruCtx vars -> PermSet -> ImplState vars
+mkImplState :: CruCtx vars -> PermSet ps -> ImplState vars ps
 mkImplState vars perms =
   ImplState { _implStateVars = vars,
               _implStatePerms = perms,
               _implStatePSubst = emptyPSubst vars }
 
-extImplState :: KnownRepr TypeRepr tp => ImplState vars ->
-                ImplState (vars :> PermExpr tp)
+extImplState :: KnownRepr TypeRepr tp => ImplState vars ps ->
+                ImplState (vars :> PermExpr tp) ps
 extImplState s =
   s { _implStateVars = extCruCtx (_implStateVars s),
       _implStatePSubst = extPSubst (_implStatePSubst s) }
 
-unextImplState :: ImplState (vars :> PermExpr a) -> ImplState vars
+unextImplState :: ImplState (vars :> PermExpr a) ps -> ImplState vars ps
 unextImplState s =
   s { _implStateVars = unextCruCtx (_implStateVars s),
       _implStatePSubst = unextPSubst (_implStatePSubst s) }
 
+{-
 instance PermState (ImplState vars) where
   permStatePerms = implStatePerms
+-}
 
 -- | The implication monad is the permission monad that uses 'ImplState'
-type ImplM vars r ls1 ls2 =
-  PermM (ImplState vars) (PermImpl r ls1) (PermImpl r ls2)
+type ImplM vars r ps_out ps_in =
+  GenStateT (ImplState vars) (GenContT (PermImpl r) Identity) ps_out ps_in
 
-
--- | Run a permissions computation with a different state type @s2@ inside one
--- with state type @s1@, using a lens-like pair of a getter function to extract
--- out the starting inner @s2@ state from the outer @s1@ state and an update
--- function to update the resulting outer @s1@ state with the final inner @s2@
--- state. (We do not use a lens here because we do not actually require these
--- functions to form a lens, and in fact 'withExtVarsM' below uses a pair of
--- functions that is not a lens.)
-withAltStateM :: (s1 -> s2) -> (s1 -> s2 -> s1) -> PermM s2 rin rout a ->
-                 PermM s1 rin rout a
-withAltStateM s_get s_update (PermM m) =
-  gget >>>= \s ->
-  PermM (glift (runGenStateT m (s_get s))) >>>= \(a, s') ->
-  put (s_update s s') >>>
-  greturn a
 
 -- | Run an implication computation with one more existential variable,
 -- returning the optional expression it was bound to in the current partial
 -- substitution when it is done
 withExtVarsM :: KnownRepr TypeRepr tp =>
-                ImplM (vars :> PermExpr tp) r ls1 ls2 a ->
-                ImplM vars r ls1 ls2 (a, Maybe (PermExpr tp))
+                ImplM (vars :> PermExpr tp) r ps1 ps2 a ->
+                ImplM vars r ps1 ps2 (a, Maybe (PermExpr tp))
 withExtVarsM m =
   withAltStateM extImplState (const unextImplState) $
   (m >>>= \a ->
     getPSubst >>>= \psubst ->
     greturn (a, psubstLookup psubst Member_Base))
+
+
+{- FIXME: figure out our run method
 
 -- | Run an 'ImplM' computation inside a 'PermM' computation with a possibly
 -- different state type
@@ -568,42 +654,58 @@ runImplM vars m =
   (m >>>= \a ->
     getPSubst >>>= \psubst ->
     greturn (a, completePSubst vars psubst))
-
+-}
 
 ----------------------------------------------------------------------
 -- * Permissions Operations in a Permission Monad
 ----------------------------------------------------------------------
 
 -- | Look up the current partial substitution
-getPSubst :: ImplM vars r ls ls (PartialSubst vars)
+getPSubst :: ImplM vars r ps ps (PartialSubst vars)
 getPSubst = view implStatePSubst <$> gget
 
 -- | Apply the current partial substitution to an expression, raising an error
 -- with the given string if the partial substitution is not complete enough
 partialSubstForceM :: Substable PartialSubst a Maybe => Mb vars a -> String ->
-                      ImplM vars r ls ls a
+                      ImplM vars r ps ps a
 partialSubstForceM mb_e msg =
   getPSubst >>>= \psubst ->
   greturn (partialSubstForce psubst mb_e msg)
 
 -- | Modify the current partial substitution
 modifyPSubst :: (PartialSubst vars -> PartialSubst vars) ->
-                ImplM vars r ls ls ()
+                ImplM vars r ps ps ()
 modifyPSubst f = modify (over implStatePSubst f)
 
 -- | Set the value for an existential variable in the current substitution,
 -- raising an error if it is already set
-setVarM :: Member vars (PermExpr a) -> PermExpr a -> ImplM vars r ls ls ()
+setVarM :: Member vars (PermExpr a) -> PermExpr a -> ImplM vars r ps ps ()
 setVarM x e = modifyPSubst (psubstSet x e)
 
+-- | Get the current 'PermSet'
+getPerms :: ImplM vars r ps ps (PermSet ps)
+getPerms = view implStatePerms <$> gget
+
 -- | Look up the current permission for a given variable
-getPerm :: PermState s => ExprVar a -> PermM s r r (ValuePerm a)
-getPerm x = view (permStatePerms . varPerm x) <$> gget
+getPerm :: ExprVar a -> ImplM vars r ps ps (ValuePerm a)
+getPerm x = view (implStatePerms . varPerm x) <$> gget
+
+-- | Set the current 'PermSet'
+setPerms :: PermSet ps -> ImplM vars r ps ps ()
+setPerms perms = modify $ set (implStatePerms) perms
 
 -- | Set the current permission for a given variable
-setPerm :: PermState s => ExprVar a -> ValuePerm a -> PermM s r r ()
-setPerm x p = modify $ set (permStatePerms . varPerm x) p
+setPerm :: ExprVar a -> ValuePerm a -> ImplM vars r ps ps ()
+setPerm x p = modify $ set (implStatePerms . varPerm x) p
 
+-- | Map the final return value and the current permissions
+gmapRetAndPerms :: (PermSet ps2 -> PermSet ps1) ->
+                   (PermImpl r ps1 -> PermImpl r ps2) ->
+                   ImplM vars r ps1 ps2 ()
+gmapRetAndPerms f_perms f_impl =
+  gmapRetAndState (over implStatePerms f_perms) f_impl
+
+{-
 -- | Get the pointer permissions for a variable @x@, assuming @x@ has LLVM
 -- pointer permissions
 getLLVMPtrPerms :: PermState s => ExprVar (LLVMPointerType w) ->
@@ -613,14 +715,18 @@ getLLVMPtrPerms x =
   case p of
     ValPerm_LLVMPtr pps -> greturn pps
     _ -> error "getLLVMPtrPerms"
+-}
 
 -- | Terminate the current proof branch with a failure
-implFailM :: PermM s rany (PermImpl r ls) ()
-implFailM = gmapRet (const Impl_Fail)
+implFailM :: ImplM vars r ps_any ps ()
+implFailM =
+  gmapRetAndState (const $ error "implFailM: unreachable") (const Impl_Fail)
 
+{- FIXME: this should be part of the run method for ImplM...?
 -- | Finish the current proof branch successfully with an 'Impl_Done'
-implDoneM :: PermM s r (PermImpl r ls) ()
-implDoneM = gmapRet Impl_Done
+implDoneM :: ImplM vars r ps ps ()
+implDoneM = gmapRetAndState id Impl_Done
+-}
 
 {-
 -- | Push a permission from the permission set to the permission stack
@@ -633,58 +739,58 @@ implPushM l p =
 
 -- | Produce a branching proof tree, that performs the first implication and, if
 -- that one fails, falls back on the second
-implCatchM :: PermM s rany (PermImpl r ls) () ->
-              PermM s rany (PermImpl r ls) () ->
-              PermM s rany (PermImpl r ls) ()
+implCatchM :: ImplM vars r ps1 ps2 () -> ImplM vars r ps1 ps2 () ->
+              ImplM vars r ps1 ps2 ()
 implCatchM m1 m2 =
+  -- FIXME: figure out the "right" way to write this with shift and reset!
+  GenStateT $ \s -> GenContT $ \k ->
+  Impl_Catch <$> (unGenContT (unGenStateT m1 s) k)
+  <*> (unGenContT (unGenStateT m2 s) k)
+  {-
   gmapRet (\(impl1, impl2) -> Impl_Catch impl1 impl2) >>>
   gparallel m1 m2
+  -}
 
 -- | Apply the left or-introduction rule to the top of the permission stack,
 -- changing it from @x:p1@ to @x:(p1 \/ p2)@
-introOrLM :: PermState s => ExprVar a -> ValuePerm a ->
-             PermM s (PermImpl r (ls :> PermExpr a))
-             (PermImpl r (ls :> PermExpr a)) ()
-introOrLM x p2 = gmapRet (Impl_IntroOrL x p2)
+introOrLM :: ExprVar a -> ValuePerm a -> ImplM vars r (ps :> a) (ps :> a) ()
+introOrLM x p2 = gmapRetAndPerms (introOrL x p2) (Impl_IntroOrL x p2)
 
 -- | Apply the right or-introduction rule to the top of the permission stack,
 -- changing it from @x:p2@ to @x:(p1 \/ p2)@
-introOrRM :: ExprVar a -> ValuePerm a ->
-             PermM s (PermImpl r (ls :> PermExpr a))
-             (PermImpl r (ls :> PermExpr a)) ()
-introOrRM x p1 = gmapRet (Impl_IntroOrR x p1)
+introOrRM :: ExprVar a -> ValuePerm a -> ImplM vars r (ps :> a) (ps :> a) ()
+introOrRM x p1 = gmapRetAndPerms (introOrR x p1) (Impl_IntroOrR x p1)
 
 -- | Apply existential introduction to the top of the permission stack, changing
 -- it from @[e/x]p@ to @exists (x:tp).p@
 --
 -- FIXME: is there some way we could "type-check" this, to ensure that the
 -- permission on the top of the stack really equals @[e/x]p@?
-introExistsM :: ExprVar a -> TypeRepr tp -> PermExpr tp ->
+introExistsM :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
                 Binding (PermExpr tp) (ValuePerm a) ->
-                PermM s (PermImpl r (ls :> PermExpr a))
-                (PermImpl r (ls :> PermExpr a)) ()
-introExistsM x tp e p_body = gmapRet (Impl_IntroExists x tp e p_body)
+                ImplM vars r (ps :> a) (ps :> a) ()
+introExistsM x e p_body =
+  gmapRetAndPerms (introExists x e p_body) (Impl_IntroExists x e p_body)
 
 -- | Eliminate a disjunctive permission @x:(p1 \/ p2)@, building proof trees
 -- that proceed with both @x:p1@ and @x:p2@
-elimOrM :: PermState s => ExprVar a ->
-           PermM s (PermImpl r ls) (PermImpl r ls) ()
+elimOrM :: ExprVar a -> ImplM vars r ps ps ()
 elimOrM x =
-  gmapRet (\(impl1, impl2) -> Impl_ElimOr x impl1 impl2) >>>
-  gparallel
-  (modify (over (permStatePerms . varPerm x) orPermLeft))
-  (modify (over (permStatePerms . varPerm x) orPermRight))
+  gparallel (\impl1 impl2 -> Impl_ElimOr x impl1 impl2)
+  (modify (over (implStatePerms . varPerm x) orPermLeft))
+  (modify (over (implStatePerms . varPerm x) orPermRight))
 
 -- | Eliminate an existential permission @x:(exists (y:tp).p)@ in the current
 -- permission set
-elimExistsM :: PermState s => ExprVar a -> TypeRepr tp ->
-               PermM s (PermImpl r ls) (PermImpl r ls) ()
+elimExistsM :: ExprVar a -> TypeRepr tp -> ImplM vars r ps ps ()
 elimExistsM x tp =
-  gget >>>= \s ->
-  gmapRet (Impl_ElimExists x tp) >>>
-  gopenBinding (exPermBody tp $
-                s ^. permStatePerms . varPerm x) >>>= \(nm, p_body) ->
-  put (set (permStatePerms . varPerm x) p_body s)
+  getPerms >>>= \perms ->
+  gmbM (Impl_ElimExists x tp) $
+  flip nuWithElim1 (elimExists x tp perms) $ \_nm perms' ->
+  setPerms perms'
+
+
+{- FIXME HERE NOW: finish switching to new approach!
 
 -- | Eliminate disjunctives and existentials at a specific location
 elimOrsExistsM :: PermState s => ExprVar a ->
@@ -1182,3 +1288,4 @@ data ReqPerm vars a where
 proveVarsImpl :: MapRList (ReqPerm vars) ls -> ImplM vars r ls RNil ()
 proveVarsImpl MNil = return ()
 proveVarsImpl (reqs :>: ReqPerm x p) = proveVarsImpl reqs >>> proveVarImpl x p
+-}
