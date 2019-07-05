@@ -222,14 +222,17 @@ bvNormalize (PExpr_BV factors off) =
 
 -- | Merge two normalized / sorted lists of 'BVFactor's
 bvMergeFactors :: [BVFactor w] -> [BVFactor w] -> [BVFactor w]
-bvMergeFactors factors1 [] = factors1
-bvMergeFactors [] factors2 = factors2
-bvMergeFactors ((BVFactor i1 x1):factors1) ((BVFactor i2 x2):factors2)
-  | x1 == x2 = (BVFactor (i1+i2) x1) : bvMergeFactors factors1 factors2
-bvMergeFactors (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2)
-  | x1 < x2 = f1 : bvMergeFactors factors1 (f2 : factors2)
-bvMergeFactors (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2) =
-  f2 : bvMergeFactors (f1 : factors1) factors2
+bvMergeFactors fs1 fs2 =
+  filter (\(BVFactor i _) -> i /= 0) $ helper fs1 fs2
+  where
+    helper factors1 [] = factors1
+    helper [] factors2 = factors2
+    helper ((BVFactor i1 x1):factors1) ((BVFactor i2 x2):factors2)
+      | x1 == x2 = (BVFactor (i1+i2) x1) : helper factors1 factors2
+    helper (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2)
+      | x1 < x2 = f1 : helper factors1 (f2 : factors2)
+    helper (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2) =
+      f2 : helper (f1 : factors1) factors2
 
 -- | Convert a bitvector expression to a sum of factors plus a constant
 bvMatch :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
@@ -244,13 +247,29 @@ bvEq e1 e2 = toVar e1 == toVar e2 where
   toVar (PExpr_BV [BVFactor 1 x] 0) = (PExpr_Var x)
   toVar e = e
 
+-- | Test whether a bitvector @e@ could equal @0@, i.e., whether the equation
+-- @e=0@ has any solutions.
+--
+-- NOTE: this is an overapproximation, meaning that it may return 'True' for
+-- complex expressions that technically cannot unify with @0@.
+bvZeroable :: PermExpr (BVType w) -> Bool
+bvZeroable (PExpr_Var _) = True
+bvZeroable (PExpr_BV _ 0) = True
+bvZeroable (PExpr_BV [] _) = False
+bvZeroable (PExpr_BV _ _) =
+  -- NOTE: there are cases that match this pattern but are still not solvable,
+  -- like 8*x + 3 = 0.
+  True
+
 -- | Test whether two bitvector expressions are potentially unifiable, i.e.,
--- whether some substitution to the variables could make them equal. This is
--- currently an overapproximation, meaning that some expressions are marked as
--- "could" equal when they actually cannot. Specifically, for now, any
--- non-constant expression on either side yields 'True'.
+-- whether some substitution to the variables could make them equal. This is an
+-- overapproximation, meaning that some expressions are marked as "could" equal
+-- when they actually cannot.
 bvCouldEqual :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
-bvCouldEqual (PExpr_BV [] off1) (PExpr_BV [] off2) = off1 == off2
+bvCouldEqual e1@(PExpr_BV _ _) e2 =
+  -- NOTE: we can only call bvSub when at least one side matches PExpr_BV
+  bvZeroable (bvSub e1 e2)
+bvCouldEqual e1 e2@(PExpr_BV _ _) = bvZeroable (bvSub e1 e2)
 bvCouldEqual _ _ = True
 
 -- | Build a bitvector expression from an integer
@@ -273,6 +292,11 @@ bvMult i (PExpr_BV factors off) =
 -- | Negate a bitvector expression
 bvNegate :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> PermExpr (BVType w)
 bvNegate = bvMult (-1)
+
+-- | Subtract one bitvector expression from another
+bvSub :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> PermExpr (BVType w) ->
+         PermExpr (BVType w)
+bvSub e1 e2 = bvAdd e1 (bvNegate e2)
 
 -- | Integer division on bitvector expressions, truncating any factors @i*x@
 -- where @i@ is not a multiple of the divisor to zero
