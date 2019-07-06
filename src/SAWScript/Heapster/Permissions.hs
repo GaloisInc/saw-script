@@ -417,19 +417,24 @@ data ValuePerm (a :: CrucibleType) where
 
 -- | A permission to the memory referenced by an LLVM pointer
 data LLVMPtrPerm w
-  = LLVMFieldPerm { llvmFieldOffset :: PermExpr (BVType w),
-                    llvmFieldSplitting :: SplittingExpr,
-                    llvmFieldPerm :: ValuePerm (LLVMPointerType w) }
-  | LLVMArrayPerm { llvmArrayOffset :: PermExpr (BVType w),
-                    llvmArrayLen :: PermExpr (BVType w),
-                    llvmArrayStride :: Integer,
-                    llvmArraySplitting :: SplittingExpr,
-                    llvmArrayPtrPerms :: [LLVMPtrPerm w] }
-  | LLVMFreePerm (PermExpr (BVType w))
+  = LLVMPP_Field (LLVMFieldPerm w)
+  | LLVMPP_Array (LLVMArrayPerm w)
+  | LLVMPP_Free (PermExpr (BVType w))
+  deriving Eq
 
+data LLVMFieldPerm w =
+  LLVMFieldPerm { llvmFieldOffset :: PermExpr (BVType w),
+                  llvmFieldSplitting :: SplittingExpr,
+                  llvmFieldPerm :: ValuePerm (LLVMPointerType w) }
+  deriving Eq
 
-$(mkNuMatching [t| forall a . ValuePerm a |])
-$(mkNuMatching [t| forall w . LLVMPtrPerm w |])
+data LLVMArrayPerm w =
+  LLVMArrayPerm { llvmArrayOffset :: PermExpr (BVType w),
+                  llvmArrayLen :: PermExpr (BVType w),
+                  llvmArrayStride :: Integer,
+                  llvmArraySplitting :: SplittingExpr,
+                  llvmArrayFields :: [LLVMFieldPerm w] }
+  deriving Eq
 
 
 instance (Eq (ValuePerm a)) where
@@ -456,6 +461,7 @@ instance (Eq (ValuePerm a)) where
   (ValPerm_LLVMPtr pps1) == (ValPerm_LLVMPtr pps2) = pps1 == pps2
   (ValPerm_LLVMPtr _) == _ = False
 
+{-
 instance (Eq (LLVMPtrPerm w)) where
   (LLVMFieldPerm off1 spl1 p1) == (LLVMFieldPerm off2 spl2 p2) =
     off1 == off2 && spl1 == spl2 && p1 == p2
@@ -465,8 +471,15 @@ instance (Eq (LLVMPtrPerm w)) where
     off1 == off2 && len1 == len2 && stride1 == stride2 &&
     spl1 == spl2 && ps1 == ps2
   (LLVMArrayPerm _ _ _ _ _) == _ = False
-  (LLVMFreePerm e1) == (LLVMFreePerm e2) = e1 == e2
-  (LLVMFreePerm _) == _ = False
+  (LLVMPP_Free e1) == (LLVMPP_Free e2) = e1 == e2
+  (LLVMPP_Free _) == _ = False
+-}
+
+
+$(mkNuMatching [t| forall a . ValuePerm a |])
+$(mkNuMatching [t| forall w . LLVMPtrPerm w |])
+$(mkNuMatching [t| forall w . LLVMFieldPerm w |])
+$(mkNuMatching [t| forall w . LLVMArrayPerm w |])
 
 
 -- | Extract @p1@ from a permission of the form @p1 \/ p2@
@@ -488,11 +501,23 @@ exPermBody _ _ = error "exPermBody"
 -- | Add an offset to a pointer permission
 offsetLLVMPtrPerm :: (1 <= w, KnownNat w) =>
                      PermExpr (BVType w) -> LLVMPtrPerm w -> LLVMPtrPerm w
-offsetLLVMPtrPerm off (LLVMFieldPerm {..}) =
+offsetLLVMPtrPerm off (LLVMPP_Field fp) =
+  LLVMPP_Field $ offsetLLVMFieldPerm off fp
+offsetLLVMPtrPerm off (LLVMPP_Array ap) =
+  LLVMPP_Array $ offsetLLVMArrayPerm off ap
+offsetLLVMPtrPerm _ (LLVMPP_Free e) = LLVMPP_Free e
+
+-- | Add an offset to a field permission
+offsetLLVMFieldPerm :: (1 <= w, KnownNat w) =>
+                     PermExpr (BVType w) -> LLVMFieldPerm w -> LLVMFieldPerm w
+offsetLLVMFieldPerm off (LLVMFieldPerm {..}) =
   LLVMFieldPerm { llvmFieldOffset = bvAdd llvmFieldOffset off, ..}
-offsetLLVMPtrPerm off (LLVMArrayPerm {..}) =
+
+-- | Add an offset to an array permission
+offsetLLVMArrayPerm :: (1 <= w, KnownNat w) =>
+                     PermExpr (BVType w) -> LLVMArrayPerm w -> LLVMArrayPerm w
+offsetLLVMArrayPerm off (LLVMArrayPerm {..}) =
   LLVMArrayPerm { llvmArrayOffset = bvAdd llvmArrayOffset off, ..}
-offsetLLVMPtrPerm _ (LLVMFreePerm e) = LLVMFreePerm e
 
 -- | Lens for the pointer permissions of an LLVM pointer permission
 llvmPtrPerms :: Lens' (ValuePerm (LLVMPointerType w)) [LLVMPtrPerm w]
@@ -577,54 +602,44 @@ findMatch f = listToMaybe . findMatches f
 
 -- | Test if a pointer permission is a free permission
 matchFreePtrPerm :: Matcher (LLVMPtrPerm w) (PermExpr (BVType w))
-matchFreePtrPerm (LLVMFreePerm e) = Just e
+matchFreePtrPerm (LLVMPP_Free e) = Just e
 matchFreePtrPerm _ = Nothing
 
 -- | Test if a pointer permission is a field permission
-matchFieldPtrPerm :: Matcher (LLVMPtrPerm w)
-                     (PermExpr (BVType w),
-                      SplittingExpr, ValuePerm (LLVMPointerType w))
-matchFieldPtrPerm (LLVMFieldPerm off spl p) = Just (off, spl, p)
+matchFieldPtrPerm :: Matcher (LLVMPtrPerm w) (LLVMFieldPerm w)
+matchFieldPtrPerm (LLVMPP_Field fp) = Just fp
 matchFieldPtrPerm _ = Nothing
 
 -- | Test if a pointer permission is a field permission with a specific offset
 matchFieldPtrPermOff :: PermExpr (BVType w) ->
-                        Matcher (LLVMPtrPerm w) (SplittingExpr,
-                                                 ValuePerm (LLVMPointerType w))
-matchFieldPtrPermOff off (LLVMFieldPerm off' spl p)
-  | off == off' = Just (spl, p)
+                        Matcher (LLVMPtrPerm w) (LLVMFieldPerm w)
+matchFieldPtrPermOff off (LLVMPP_Field fp)
+  | off == llvmFieldOffset fp = Just fp
 matchFieldPtrPermOff _ _ = Nothing
 
 -- | Test if a pointer permission is an array permission
-matchArrayPtrPerm :: Matcher (LLVMPtrPerm w)
-                     (PermExpr (BVType w), PermExpr (BVType w), Integer,
-                      SplittingExpr, [LLVMPtrPerm w])
-matchArrayPtrPerm (LLVMArrayPerm off len stride spl pps) =
-  Just (off, len, stride, spl, pps)
+matchArrayPtrPerm :: Matcher (LLVMPtrPerm w) (LLVMArrayPerm w)
+matchArrayPtrPerm (LLVMPP_Array ap) = Just ap
 matchArrayPtrPerm _ = Nothing
 
--- | Find the first 'LLVMFreePerm' in a list of pointer permissions, returning
+-- | Find the first 'LLVMPP_Free' in a list of pointer permissions, returning
 -- its index in the list and the expression it contains if found
 findFreePerm :: [LLVMPtrPerm w] -> Maybe (Int, PermExpr (BVType w))
 findFreePerm = findMatch matchFreePtrPerm
 
 -- | Find all fields in a list of pointer permissions, returning their contents
 -- and their indices
-findFieldPerms :: [LLVMPtrPerm w] ->
-                  [(Int, (PermExpr (BVType w), SplittingExpr,
-                          ValuePerm (LLVMPointerType w)))]
+findFieldPerms :: [LLVMPtrPerm w] -> [(Int, LLVMFieldPerm w)]
 findFieldPerms = findMatches matchFieldPtrPerm
 
 -- | Find a field in a list of pointer permissions with a specific offset
 findFieldPerm :: PermExpr (BVType w) -> [LLVMPtrPerm w] ->
-                 Maybe (Int, (SplittingExpr, ValuePerm (LLVMPointerType w)))
+                 Maybe (Int, LLVMFieldPerm w)
 findFieldPerm off = findMatch (matchFieldPtrPermOff off)
 
 -- | Find all arrays in a list of pointer permissions, returning their contents
 -- and their indices
-findArrayPerms :: [LLVMPtrPerm w] ->
-                  [(Int, (PermExpr (BVType w), PermExpr (BVType w),
-                          Integer, SplittingExpr, [LLVMPtrPerm w]))]
+findArrayPerms :: [LLVMPtrPerm w] -> [(Int, LLVMArrayPerm w)]
 findArrayPerms = findMatches matchArrayPtrPerm
 
 
@@ -639,21 +654,22 @@ findArrayPerms = findMatches matchArrayPtrPerm
 -- to each constructor is a 'Bool' that is 'True' for a definite match and
 -- 'False' for a potential one.
 data LLVMFieldMatch w
-  = FieldMatchField Bool Int
+  = FieldMatchField Bool Int (LLVMFieldPerm w)
     -- ^ Represents another field permission @(off',S') |-> p'@ at the index
     -- given by the 'Int' argument. The constraint for a definite match is that
     -- @off'=off@.
-  | FieldMatchArray Bool Int (PermExpr (BVType w)) Integer
+  | FieldMatchArray Bool Int (LLVMArrayPerm w) (PermExpr (BVType w)) Int
     -- ^ Represents an array permission @(off',<len,*stride,S') |-> pps@ at the
-    -- given index. The expression gives the index @ix@ into the array, while
-    -- the 'Integer' gives the offset @k@ into the particular array cell at this
-    -- index, i.e., it gives the offset needed into @pps@, which must satisfy
-    -- @k<stride@. The constraint for a definite match is @e < len@.
+    -- given index. The expression argument gives the index @ix@ into the array,
+    -- which equals @(off - off')/stride@. The final 'Int' argument gives the
+    -- index into the @pps@ list of the individual field in the @ix@ array cell
+    -- whose offset equals @(off - off')%stride@, which must be a static
+    -- constant. The constraint for a definite match is @ix < len@.
 
 -- | Test if a field match is a definite match
 fieldMatchDefinite :: LLVMFieldMatch w -> Bool
-fieldMatchDefinite (FieldMatchField b _) = b
-fieldMatchDefinite (FieldMatchArray b _ _ _) = b
+fieldMatchDefinite (FieldMatchField b _ _) = b
+fieldMatchDefinite (FieldMatchArray b _ _ _ _) = b
 
 -- | Find all field matches for a given offset @off@ in a list of pointer perms
 findFieldMatches :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
@@ -661,19 +677,21 @@ findFieldMatches :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
 findFieldMatches off pps =
   flip mapMaybe (zip pps [0..]) $ \(pp, i) ->
   case pp of
-    LLVMFieldPerm {..}
-      | bvCouldEqual off llvmFieldOffset ->
-        Just (FieldMatchField (bvEq off llvmFieldOffset) i)
-    LLVMFieldPerm _ _ _ -> Nothing
-    LLVMArrayPerm {..} ->
+    LLVMPP_Field fp
+      | bvCouldEqual off (llvmFieldOffset fp) ->
+        Just (FieldMatchField (bvEq off $ llvmFieldOffset fp) i fp)
+    LLVMPP_Field _ -> Nothing
+    LLVMPP_Array ap@(LLVMArrayPerm {..}) ->
       -- In order to index into an array, off must be a multiple of the stride
       -- plus a known, constant offset into the array cell. That is, the value
       -- (off - off')%stride must be a constant.
       do let arr_off = bvSub off llvmArrayOffset -- offset from start of array
          k <- bvMatchConst (bvMod arr_off llvmArrayStride)
-         let ix = bvDiv arr_off llvmArrayStride -- index into array
-         if bvCouldBeLt ix llvmArrayLen then
-           return $ FieldMatchArray (bvLt ix llvmArrayLen) i ix k
+         fld_i <- findIndex (\fld ->
+                              llvmFieldOffset fld == bvInt k) llvmArrayFields
+         let arr_ix = bvDiv arr_off llvmArrayStride -- index into array
+         if bvCouldBeLt arr_ix llvmArrayLen then
+           return $ FieldMatchArray (bvLt arr_ix llvmArrayLen) i ap arr_ix fld_i
            else Nothing
 
 
@@ -743,7 +761,7 @@ matchInExsOrsStars f =
 
 -- | Test if a pointer permission is a free permission
 matchFreePtrPerm :: Matcher (LLVMPtrPerm w) (PermExpr (BVType w))
-matchFreePtrPerm (LLVMFreePerm e) = Just e
+matchFreePtrPerm (LLVMPP_Free e) = Just e
 matchFreePtrPerm _ = Nothing
 
 -- | Test if a permission is an @x:ptr(free(e))@ inside 0 or more existentials,
@@ -865,13 +883,19 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
     ValPerm_LLVMPtr <$> mapM (genSubst s) (mbList pps)
 
 instance SubstVar s m => Substable s (LLVMPtrPerm a) m where
+  genSubst s [nuP| LLVMPP_Field fp |] = LLVMPP_Field <$> genSubst s fp
+  genSubst s [nuP| LLVMPP_Array ap |] = LLVMPP_Array <$> genSubst s ap
+  genSubst s [nuP| LLVMPP_Free len |] = LLVMPP_Free <$> genSubst s len
+
+instance SubstVar s m => Substable s (LLVMFieldPerm a) m where
   genSubst s [nuP| LLVMFieldPerm off spl p |] =
     LLVMFieldPerm <$> genSubst s off <*> genSubst s spl <*> genSubst s p
+
+instance SubstVar s m => Substable s (LLVMArrayPerm a) m where
   genSubst s [nuP| LLVMArrayPerm off len stride spl pps |] =
     LLVMArrayPerm <$> genSubst s off <*> genSubst s len <*>
     return (mbLift stride) <*> genSubst s spl <*>
     mapM (genSubst s) (mbList pps)
-  genSubst s [nuP| LLVMFreePerm len |] = LLVMFreePerm <$> genSubst s len
 
 
 ----------------------------------------------------------------------
@@ -1174,7 +1198,7 @@ introLLVMFree :: ExprVar (LLVMPointerType w) -> Int ->
                  PermSet (ps :> LLVMPointerType w)
 introLLVMFree x i perms =
   case perms ^. (varPerm x . llvmPtrPerm i) of
-    pp_i@(LLVMFreePerm _) ->
+    pp_i@(LLVMPP_Free _) ->
       over (varPerm x) (deleteLLVMPtrPerm i) $
       over (topDistPerm x) (addLLVMPtrPerm pp_i)
       perms
@@ -1189,7 +1213,7 @@ castLLVMFree :: ExprVar (LLVMPointerType w) -> Int ->
 castLLVMFree x i e1 e2 =
   over (varPerm x . llvmPtrPerm i) $ \pp_i ->
   case pp_i of
-    LLVMFreePerm e | e == e1 -> LLVMFreePerm e2
+    LLVMPP_Free e | e == e1 -> LLVMPP_Free e2
     _ -> error "castLLVMFree"
 
 -- | Move a field permission of the form @(off,All) |-> p@, which should be
@@ -1201,7 +1225,7 @@ introLLVMFieldAll :: ExprVar (LLVMPointerType w) -> Int ->
                      PermSet (ps :> LLVMPointerType w)
 introLLVMFieldAll x i perms =
   case perms ^. (varPerm x . llvmPtrPerm i) of
-    pp_i@(LLVMFieldPerm _ SplExpr_All _) ->
+    pp_i@(LLVMPP_Field (LLVMFieldPerm _ SplExpr_All _)) ->
       over (varPerm x) (deleteLLVMPtrPerm i) $
       over (topDistPerm x) (addLLVMPtrPerm pp_i)
       perms
@@ -1215,15 +1239,15 @@ introLLVMFieldSplit :: ExprVar (LLVMPointerType w) -> Int -> SplittingExpr ->
                        PermSet (ps :> LLVMPointerType w)
 introLLVMFieldSplit x i spl perms =
   case perms ^. (varPerm x . llvmPtrPerm i) of
-    pp_i@(LLVMFieldPerm {..})
-      | llvmFieldSplitting == spl
-      , ValPerm_Eq _ <- llvmFieldPerm ->
-        set (varPerm x . llvmPtrPerm i) (LLVMFieldPerm
-                                         { llvmFieldSplitting =
-                                           SplExpr_L spl, ..}) $
+    pp_i@(LLVMPP_Field fp)
+      | llvmFieldSplitting fp == spl
+      , ValPerm_Eq _ <- llvmFieldPerm fp ->
+        set (varPerm x . llvmPtrPerm i) (LLVMPP_Field $
+                                         fp { llvmFieldSplitting =
+                                              SplExpr_L spl }) $
         over (topDistPerm x) (addLLVMPtrPerm $
-                              LLVMFieldPerm
-                              { llvmFieldSplitting = SplExpr_R spl, ..})
+                              LLVMPP_Field $
+                              fp { llvmFieldSplitting = SplExpr_R spl })
         perms
     _ -> error "introLLVMFieldSplit"
 
@@ -1239,9 +1263,9 @@ introLLVMFieldContents x y perms =
       i = lastLLVMPtrPermIndex (perms ^. topDistPerm x) in
   over (topDistPerm x . llvmPtrPerm i)
   (\pp -> case pp of
-      LLVMFieldPerm {..}
-        | ValPerm_Eq (PExpr_Var y') <- llvmFieldPerm , y' == y ->
-            LLVMFieldPerm { llvmFieldPerm = y_perm, .. }
+      LLVMPP_Field fp
+        | ValPerm_Eq (PExpr_Var y') <- llvmFieldPerm fp , y' == y ->
+            LLVMPP_Field $ fp { llvmFieldPerm = y_perm }
       _ -> error "introLLVMFieldContents")
   perms'
 
@@ -1253,11 +1277,12 @@ elimLLVMFieldContents :: ExprVar (LLVMPointerType w) -> Int -> PermSet ps ->
                          (Binding (PermExpr (LLVMPointerType w)) (PermSet ps))
 elimLLVMFieldContents x i perms =
   case perms ^. (varPerm x . llvmPtrPerm i) of
-    LLVMFieldPerm {llvmFieldPerm = ValPerm_Eq (PExpr_Var y), ..} ->
-      Left y
-    LLVMFieldPerm {..} ->
+    LLVMPP_Field fp
+      | ValPerm_Eq (PExpr_Var y) <- llvmFieldPerm fp -> Left y
+    LLVMPP_Field fp ->
       Right $ nu $ \y ->
-      set (varPerm y) llvmFieldPerm $
+      set (varPerm y) (llvmFieldPerm fp) $
       set (varPerm x . llvmPtrPerm i)
-      (LLVMFieldPerm {llvmFieldPerm = ValPerm_Eq (PExpr_Var y), ..}) $
+      (LLVMPP_Field $ fp {llvmFieldPerm = ValPerm_Eq (PExpr_Var y) }) $
       perms
+    _ -> error "elimLLVMFieldContents"

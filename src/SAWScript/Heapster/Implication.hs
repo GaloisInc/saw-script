@@ -701,6 +701,17 @@ getLLVMPtrPerms x =
 getTopDistPerm :: ExprVar a -> ImplM vars r (ps :> a) (ps :> a) (ValuePerm a)
 getTopDistPerm x = view (implStatePerms . topDistPerm x) <$> gget
 
+-- | Get the index of the last 'LLVMPtrPerm' in the @x:ptr(pps)@ permission on
+-- the top of the stack
+getTopPermLastLLVMIx :: ExprVar (LLVMPointerType w) ->
+                        ImplM vars r (ps :> LLVMPointerType w)
+                        (ps :> LLVMPointerType w) Int
+getTopPermLastLLVMIx x =
+  getTopDistPerm x >>>= \p ->
+  let ret = length (p ^. llvmPtrPerms) - 1 in
+  if ret >= 0 then greturn ret else
+    error "getTopPermLastLLVMIx"
+
 -- | Set the current 'PermSet'
 setPerms :: PermSet ps -> ImplM vars r ps ps ()
 setPerms perms = modify $ set (implStatePerms) perms
@@ -849,16 +860,12 @@ castLLVMPtrM y off x =
 
 -- | Copy an LLVM free permission @free(e)@ from the current
 -- @x:ptr(pps1,free(e),pps2)@ permission into the @x:ptr(pps)@ permission on the
--- top of the stack, where the 'Int' index gives the size of @pps1@. Return the
--- index of the new @free@ in the pointer permission on the top of the stack.
+-- top of the stack, where the 'Int' index gives the size of @pps1@.
 introLLVMFreeM :: ExprVar (LLVMPointerType w) -> Int ->
                   ImplM vars r (ps :> LLVMPointerType w)
-                  (ps :> LLVMPointerType w) Int
+                  (ps :> LLVMPointerType w) ()
 introLLVMFreeM x i =
-  
-  gmapRetAndPerms (introLLVMFree x i) (Impl_IntroLLVMFree x i) >>>
-  getTopDistPerm x >>>= \p ->
-  greturn (length (p ^. llvmPtrPerms) - 1)
+  gmapRetAndPerms (introLLVMFree x i) (Impl_IntroLLVMFree x i)
 
 -- | Cast a proof of @x:ptr(pps1, free(e1), pps2)@ on the top of the stack to
 -- one of @x:ptr(pps1, free(e2), pps2)@
@@ -911,6 +918,23 @@ elimLLVMFieldContentsM x i =
       flip nuWithElim1 mb_perms' $ \y perms' ->
       setPerms perms' >>> greturn y
 
+
+divideLLVMArrayM :: ExprVar (LLVMPointerType w) -> Int -> PermExpr (BVType w) ->
+                    ImplM vars r ps ps ()
+divideLLVMArrayM x i arr_ix =
+  error "FIXME HERE NOW"
+
+indexLLVMArrayM :: ExprVar (LLVMPointerType w) -> Int ->
+                   ImplM vars r ps ps [(Int, LLVMFieldPerm w)]
+indexLLVMArrayM x i =
+  error "FIXME HERE NOW"
+
+castLLVMFieldOffsetM :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+                        PermExpr (BVType w) ->
+                        ImplM vars r (ps :> LLVMPointerType w)
+                        (ps :> LLVMPointerType w) ()
+castLLVMFieldOffsetM x off off' =
+  error "FIXME HERE NOW"
 
 {- FIXME: remove these if we no longer need them!
 
@@ -1064,13 +1088,48 @@ proveVarEqH _ _ _ _ = implFailM
 -- | Attempt to prove @x:ptr(pps', off |-> (S,p))@ on the top of the stack from
 -- the current permissions @x:ptr(pps)@ for @x@, assuming that @x:ptr(pps')@ is
 -- already on the top of the stack.
+--
+-- FIXME: update this documentation
 proveVarField :: ExprVar (LLVMPointerType w) -> LLVMFieldMatch w ->
-                 PermExpr (BVType w) -> Mb vars SplittingExpr ->
-                 Mb vars (ValuePerm (LLVMPointerType w)) ->
+                 PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
                  ImplM vars r (ps :> LLVMPointerType w)
                  (ps :> LLVMPointerType w) ()
 
-proveVarField = error "FIXME HERE NOW"
+-- Case for x:ptr((off',All) |-> p') |- x:ptr((off,All) |-> p)
+proveVarField x (FieldMatchField
+                 is_def i fp) off [nuP| LLVMFieldPerm _ SplExpr_All mb_p |]
+  | SplExpr_All <- llvmFieldSplitting fp =
+    -- NOTE: If we need "All" and don't have it, we fail, because we have set
+    -- things up to ensure that we cannot "piece together" an All from multiple
+    -- different pointer permissions: specifically, we make sure that the
+    -- pointer permissions in the permission have overlapping splittings. That
+    -- is why this case requires the splitting in fp to be "All".
+    elimLLVMFieldContentsM x i >>>= \y ->
+    introLLVMFieldAllM x i >>>
+    proveVarImpl y mb_p >>>
+    introLLVMFieldContentsM x y >>>
+    if is_def then greturn () else
+      castLLVMFieldOffsetM x (llvmFieldOffset fp) off
+
+-- Case for x:ptr((off',spl') |-> p') |- x:ptr((off,z) |-> p), setting z=R(spl')
+proveVarField x (FieldMatchField
+                 is_def i fp) off [nuP| LLVMFieldPerm _ (SplExpr_Var z) mb_p |]
+  | Left memb <- mbNameBoundP z =
+    elimLLVMFieldContentsM x i >>>= \y ->
+    introLLVMFieldSplitM x i (llvmFieldSplitting fp) >>>
+    setVarM memb (PExpr_Spl $ SplExpr_R $ llvmFieldSplitting fp) >>>
+    proveVarImpl y mb_p >>>
+    introLLVMFieldContentsM x y >>>
+    if is_def then greturn () else
+      castLLVMFieldOffsetM x (llvmFieldOffset fp) off
+
+proveVarField x (FieldMatchArray _ i ap arr_ix fld_i) off mb_fld =
+  (if bvEq off (llvmArrayOffset ap) then greturn () else
+     divideLLVMArrayM x i arr_ix) >>>
+  indexLLVMArrayM x i >>>= \is_flds ->
+  proveVarField x (FieldMatchField True (fst (is_flds !! fld_i))
+                   (snd (is_flds !! fld_i))) off mb_fld
+
 
 {-
 
@@ -1120,26 +1179,29 @@ proveVarPtrPerms x [] = greturn ()
 
 -- Prove x:ptr(free(e')) |- x:ptr(free(e)) (where e' is not necessarily distinct
 -- from e) by first proving x:ptr(free(e')) and then casting e' to e (if needed)
-proveVarPtrPerms x ([nuP| LLVMFreePerm mb_e |] : mb_pps') =
+proveVarPtrPerms x ([nuP| LLVMPP_Free mb_e |] : mb_pps') =
   partialSubstForceM mb_e
   "proveVarPtrPerms: incomplete psubst: LLVM free size" >>>= \e ->
   getLLVMPtrPerms x >>>= \pps ->
   case findFreePerm pps of
     Just (i, e') ->
-      introLLVMFreeM x i >>>= \i_x -> castLLVMFreeM x i_x e' e >>>
+      introLLVMFreeM x i >>>
+      getTopPermLastLLVMIx x >>>= \i_x ->
+      castLLVMFreeM x i_x e' e >>>
       proveVarPtrPerms x mb_pps'
     _ -> implFailM
 
-proveVarPtrPerms x ([nuP| LLVMFieldPerm mb_off mb_spl mb_p |] : mb_pps') =
+proveVarPtrPerms x ([nuP| LLVMPP_Field mb_fp@(LLVMFieldPerm mb_off _ _) |]
+                    : mb_pps') =
   partialSubstForceM mb_off
   "proveVarPtrPerms: incomplete psubst: LLVM field offset" >>>= \off ->
   getLLVMPtrPerms x >>>= \pps ->
   let matches = findFieldMatches off pps in
   (case find fieldMatchDefinite matches of
-      Just match -> proveVarField x match off mb_spl mb_p
+      Just match -> proveVarField x match off mb_fp
       Nothing ->
         foldr (\match rest ->
-                implCatchM (proveVarField x match off mb_spl mb_p) rest)
+                implCatchM (proveVarField x match off mb_fp) rest)
         implFailM
         matches) >>>
   proveVarPtrPerms x mb_pps'
