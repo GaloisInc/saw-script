@@ -1061,11 +1061,18 @@ proveVarEqH _ _ _ _ = implFailM
 -- * Proving Field Permissions
 ----------------------------------------------------------------------
 
-proveVarField :: ExprVar (LLVMPointerType w) -> [LLVMPtrPerm w] ->
+-- | Attempt to prove @x:ptr(pps', off |-> (S,p))@ on the top of the stack from
+-- the current permissions @x:ptr(pps)@ for @x@, assuming that @x:ptr(pps')@ is
+-- already on the top of the stack.
+proveVarField :: ExprVar (LLVMPointerType w) -> LLVMFieldMatch w ->
                  PermExpr (BVType w) -> Mb vars SplittingExpr ->
                  Mb vars (ValuePerm (LLVMPointerType w)) ->
                  ImplM vars r (ps :> LLVMPointerType w)
                  (ps :> LLVMPointerType w) ()
+
+proveVarField = error "FIXME HERE NOW"
+
+{-
 
 -- Case for x:ptr((off,All) |-> p) |- x:ptr((off,All) |-> p)
 proveVarField x pps off [nuP| SplExpr_All |] mb_p
@@ -1095,12 +1102,15 @@ proveVarField x pps off [nuP| SplExpr_Var z |] mb_p
 proveVarField x pps off mb_spl mb_p =
   error "FIXME HERE: proveVarField"
 
+-}
+
+
 ----------------------------------------------------------------------
 -- * Proving LLVM Pointer Permissions
 ----------------------------------------------------------------------
 
 -- FIXME: documentation; note that we expect x:ptr(pps)
-proveVarPtrPerms :: ExprVar (LLVMPointerType w) ->
+proveVarPtrPerms :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
                     [Mb vars (LLVMPtrPerm w)] ->
                     ImplM vars r (ps :> LLVMPointerType w)
                     (ps :> LLVMPointerType w) ()
@@ -1124,7 +1134,14 @@ proveVarPtrPerms x ([nuP| LLVMFieldPerm mb_off mb_spl mb_p |] : mb_pps') =
   partialSubstForceM mb_off
   "proveVarPtrPerms: incomplete psubst: LLVM field offset" >>>= \off ->
   getLLVMPtrPerms x >>>= \pps ->
-  proveVarField x pps off mb_spl mb_p >>>
+  let matches = findFieldMatches off pps in
+  (case find fieldMatchDefinite matches of
+      Just match -> proveVarField x match off mb_spl mb_p
+      Nothing ->
+        foldr (\match rest ->
+                implCatchM (proveVarField x match off mb_spl mb_p) rest)
+        implFailM
+        matches) >>>
   proveVarPtrPerms x mb_pps'
 
 proveVarPtrPerms _ _ = error "FIXME HERE: proveVarPtrPerms"

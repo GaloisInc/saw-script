@@ -23,6 +23,7 @@
 module SAWScript.Heapster.Permissions where
 
 import Data.Maybe
+import Data.Bits
 import Data.List
 import Data.Binding.Hobbits
 import GHC.TypeLits
@@ -129,7 +130,8 @@ data PermExprs (as :: Ctx CrucibleType) where
 data BVFactor w where
   BVFactor :: (1 <= w, KnownNat w) => Integer -> ExprVar (BVType w) ->
               BVFactor w
-    -- ^ A variable of type @'BVType' w@ multiplied by a constant
+    -- ^ A variable of type @'BVType' w@ multiplied by a constant @i@, which
+    -- should be in the range @0 <= i < 2^w@
 
 
 $(mkNuMatching [t| SplittingExpr |])
@@ -204,6 +206,20 @@ zeroOfType _ = error "zeroOfType"
 -- * Operations on Bitvector Expressions
 ----------------------------------------------------------------------
 
+-- | Normalize a factor so that its coefficient is between @0@ and @(2^w)-1@
+normalizeFactor :: BVFactor w -> BVFactor w
+normalizeFactor f@(BVFactor i x) =
+  BVFactor (i `mod` (shiftL 1 $ fromInteger $ natVal f)) x
+
+-- | Smart constructor for 'BVFactor'
+bvFactor :: (1 <= w, KnownNat w) => Integer -> ExprVar (BVType w) ->
+            BVFactor w
+bvFactor i x = normalizeFactor $ BVFactor i x
+
+-- | Build a 'BVFactor' for a variable
+varFactor :: (1 <= w, KnownNat w) => ExprVar (BVType w) -> BVFactor w
+varFactor = BVFactor 1
+
 -- | Normalize a bitvector expression, so that every variable has at most one
 -- factor and the factors are sorted by variable name. NOTE: we shouldn't
 -- actually have to call this if we always construct our expressions with the
@@ -216,19 +232,22 @@ bvNormalize (PExpr_BV factors off) =
   off
   where
     norm [] = []
+    norm ((BVFactor 0 _) : factors') = norm factors'
     norm ((BVFactor i1 x1) : (BVFactor i2 x2) : factors')
-      | x1 == x2 = norm ((BVFactor (i1+i2) x1) : factors')
-    norm (f : factors') = f : norm factors'
+      | x1 == x2 = norm ((bvFactor (i1+i2) x1) : factors')
+    norm (f : factors') = normalizeFactor f : norm factors'
 
 -- | Merge two normalized / sorted lists of 'BVFactor's
 bvMergeFactors :: [BVFactor w] -> [BVFactor w] -> [BVFactor w]
 bvMergeFactors fs1 fs2 =
-  filter (\(BVFactor i _) -> i /= 0) $ helper fs1 fs2
+  filter (\(BVFactor i _) -> i /= 0) $
+  helper fs1 fs2
   where
     helper factors1 [] = factors1
     helper [] factors2 = factors2
     helper ((BVFactor i1 x1):factors1) ((BVFactor i2 x2):factors2)
-      | x1 == x2 = (BVFactor (i1+i2) x1) : helper factors1 factors2
+      | x1 == x2
+      = bvFactor (i1+i2) x1 : helper factors1 factors2
     helper (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2)
       | x1 < x2 = f1 : helper factors1 (f2 : factors2)
     helper (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2) =
@@ -237,8 +256,13 @@ bvMergeFactors fs1 fs2 =
 -- | Convert a bitvector expression to a sum of factors plus a constant
 bvMatch :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
            ([BVFactor w], Integer)
-bvMatch (PExpr_Var x) = ([BVFactor 1 x], 0)
+bvMatch (PExpr_Var x) = ([varFactor x], 0)
 bvMatch (PExpr_BV factors const) = (factors, const)
+
+-- | Test if a bitvector expression is a constant value
+bvMatchConst :: PermExpr (BVType w) -> Maybe Integer
+bvMatchConst (PExpr_BV [] const) = Just const
+bvMatchConst _ = Nothing
 
 -- | Test whether two bitvector expressions are semantically equal, assuming
 -- they are both in normal form
@@ -246,6 +270,14 @@ bvEq :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvEq e1 e2 = toVar e1 == toVar e2 where
   toVar (PExpr_BV [BVFactor 1 x] 0) = (PExpr_Var x)
   toVar e = e
+
+-- | Test whether a bitvector expression is less than another for all
+-- substitutions to the free variables. This is an underapproximation, meaning
+-- that it could return 'False' in cases where it is actually 'True'. The
+-- current algorithm only returns 'True' for constant expressions @k1 < k2@.
+bvLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
+bvLt (PExpr_BV [] k1) (PExpr_BV [] k2) = k1 < k2
+bvLt _ _ = False
 
 -- | Test whether a bitvector @e@ could equal @0@, i.e., whether the equation
 -- @e=0@ has any solutions.
@@ -272,6 +304,15 @@ bvCouldEqual e1@(PExpr_BV _ _) e2 =
 bvCouldEqual e1 e2@(PExpr_BV _ _) = bvZeroable (bvSub e1 e2)
 bvCouldEqual _ _ = True
 
+-- | Test whether a bitvector expression could potentially be less than another,
+-- for some substitution to the free variables. This is an overapproximation,
+-- meaning that some expressions are marked as "could" be less than when they
+-- actually cannot. The current algorithm returns 'True' in all cases except
+-- constant expressions @k1 >= k2@.
+bvCouldBeLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
+bvCouldBeLt (PExpr_BV [] k1) (PExpr_BV [] k2) = k1 < k2
+bvCouldBeLt _ _ = True
+
 -- | Build a bitvector expression from an integer
 bvInt :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w)
 bvInt i = PExpr_BV [] i
@@ -285,15 +326,18 @@ bvAdd (bvMatch -> (factors1, const1)) (bvMatch -> (factors2, const2)) =
 -- | Multiply a bitvector expression by a constant
 bvMult :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w) ->
           PermExpr (BVType w)
-bvMult i (PExpr_Var x) = PExpr_BV [BVFactor i x] 0
+bvMult i (PExpr_Var x) = PExpr_BV [bvFactor i x] 0
 bvMult i (PExpr_BV factors off) =
-  PExpr_BV (map (\(BVFactor j x) -> BVFactor (i*j) x) factors) (i*off)
+  PExpr_BV (map (\(BVFactor j x) -> bvFactor (i*j) x) factors) (i*off)
 
 -- | Negate a bitvector expression
 bvNegate :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> PermExpr (BVType w)
 bvNegate = bvMult (-1)
 
 -- | Subtract one bitvector expression from another
+--
+-- FIXME: this would be more efficient if we did not use 'bvNegate', which could
+-- make very large 'Integer's for negative numbers wrapped around to be positive
 bvSub :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> PermExpr (BVType w) ->
          PermExpr (BVType w)
 bvSub e1 e2 = bvAdd e1 (bvNegate e2)
@@ -304,7 +348,10 @@ bvDiv :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
          PermExpr (BVType w)
 bvDiv (bvMatch -> (factors, off)) n =
   PExpr_BV (mapMaybe (\(BVFactor i x) ->
-                       if rem i n == 0 then Just (BVFactor (div i n) x)
+                       if mod i n == 0 then
+                         -- NOTE: if i is in range then so is i/n, so we do not
+                         -- need to normalize the resulting BVFactor
+                         Just (BVFactor (div i n) x)
                        else Nothing) factors)
   (div off n)
 
@@ -314,7 +361,7 @@ bvMod :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> Integer ->
          PermExpr (BVType w)
 bvMod (bvMatch -> (factors, off)) n =
   PExpr_BV (mapMaybe (\f@(BVFactor i _) ->
-                       if rem i n /= 0 then Just f else Nothing) factors)
+                       if mod i n /= 0 then Just f else Nothing) factors)
   (mod off n)
 
 -- | Add a word expression to an LLVM pointer expression
@@ -377,7 +424,7 @@ data LLVMPtrPerm w
                     llvmArrayLen :: PermExpr (BVType w),
                     llvmArrayStride :: Integer,
                     llvmArraySplitting :: SplittingExpr,
-                    llvmArrayPtrPerm :: LLVMPtrPerm w }
+                    llvmArrayPtrPerms :: [LLVMPtrPerm w] }
   | LLVMFreePerm (PermExpr (BVType w))
 
 
@@ -413,10 +460,10 @@ instance (Eq (LLVMPtrPerm w)) where
   (LLVMFieldPerm off1 spl1 p1) == (LLVMFieldPerm off2 spl2 p2) =
     off1 == off2 && spl1 == spl2 && p1 == p2
   (LLVMFieldPerm _ _ _) == _ = False
-  (LLVMArrayPerm off1 len1 stride1 spl1 p1) ==
-    (LLVMArrayPerm off2 len2 stride2 spl2 p2) =
+  (LLVMArrayPerm off1 len1 stride1 spl1 ps1) ==
+    (LLVMArrayPerm off2 len2 stride2 spl2 ps2) =
     off1 == off2 && len1 == len2 && stride1 == stride2 &&
-    spl1 == spl2 && p1 == p2
+    spl1 == spl2 && ps1 == ps2
   (LLVMArrayPerm _ _ _ _ _) == _ = False
   (LLVMFreePerm e1) == (LLVMFreePerm e2) = e1 == e2
   (LLVMFreePerm _) == _ = False
@@ -551,9 +598,9 @@ matchFieldPtrPermOff _ _ = Nothing
 -- | Test if a pointer permission is an array permission
 matchArrayPtrPerm :: Matcher (LLVMPtrPerm w)
                      (PermExpr (BVType w), PermExpr (BVType w), Integer,
-                      SplittingExpr, LLVMPtrPerm w)
-matchArrayPtrPerm (LLVMArrayPerm off len stride spl pp) =
-  Just (off, len, stride, spl, pp)
+                      SplittingExpr, [LLVMPtrPerm w])
+matchArrayPtrPerm (LLVMArrayPerm off len stride spl pps) =
+  Just (off, len, stride, spl, pps)
 matchArrayPtrPerm _ = Nothing
 
 -- | Find the first 'LLVMFreePerm' in a list of pointer permissions, returning
@@ -577,8 +624,58 @@ findFieldPerm off = findMatch (matchFieldPtrPermOff off)
 -- and their indices
 findArrayPerms :: [LLVMPtrPerm w] ->
                   [(Int, (PermExpr (BVType w), PermExpr (BVType w),
-                          Integer, SplittingExpr, LLVMPtrPerm w))]
+                          Integer, SplittingExpr, [LLVMPtrPerm w]))]
 findArrayPerms = findMatches matchArrayPtrPerm
+
+
+-- | A field match represents a pointer permission that could be used to prove a
+-- field permission @off |-> (S,p)@.
+--
+-- In order to be used, each match case (that is, each constructor here) has a
+-- constraint on @off@ that must hold. The match case is a /definite/ match if
+-- the constraint holds under all possible substitutions for the free variables
+-- of the pointer permissions involved (i.e., the one being proved and the one
+-- used to prove it), and otherwise is a /potential/ match. The first argument
+-- to each constructor is a 'Bool' that is 'True' for a definite match and
+-- 'False' for a potential one.
+data LLVMFieldMatch w
+  = FieldMatchField Bool Int
+    -- ^ Represents another field permission @(off',S') |-> p'@ at the index
+    -- given by the 'Int' argument. The constraint for a definite match is that
+    -- @off'=off@.
+  | FieldMatchArray Bool Int (PermExpr (BVType w)) Integer
+    -- ^ Represents an array permission @(off',<len,*stride,S') |-> pps@ at the
+    -- given index. The expression gives the index @ix@ into the array, while
+    -- the 'Integer' gives the offset @k@ into the particular array cell at this
+    -- index, i.e., it gives the offset needed into @pps@, which must satisfy
+    -- @k<stride@. The constraint for a definite match is @e < len@.
+
+-- | Test if a field match is a definite match
+fieldMatchDefinite :: LLVMFieldMatch w -> Bool
+fieldMatchDefinite (FieldMatchField b _) = b
+fieldMatchDefinite (FieldMatchArray b _ _ _) = b
+
+-- | Find all field matches for a given offset @off@ in a list of pointer perms
+findFieldMatches :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                    [LLVMPtrPerm w] -> [LLVMFieldMatch w]
+findFieldMatches off pps =
+  flip mapMaybe (zip pps [0..]) $ \(pp, i) ->
+  case pp of
+    LLVMFieldPerm {..}
+      | bvCouldEqual off llvmFieldOffset ->
+        Just (FieldMatchField (bvEq off llvmFieldOffset) i)
+    LLVMFieldPerm _ _ _ -> Nothing
+    LLVMArrayPerm {..} ->
+      -- In order to index into an array, off must be a multiple of the stride
+      -- plus a known, constant offset into the array cell. That is, the value
+      -- (off - off')%stride must be a constant.
+      do let arr_off = bvSub off llvmArrayOffset -- offset from start of array
+         k <- bvMatchConst (bvMod arr_off llvmArrayStride)
+         let ix = bvDiv arr_off llvmArrayStride -- index into array
+         if bvCouldBeLt ix llvmArrayLen then
+           return $ FieldMatchArray (bvLt ix llvmArrayLen) i ix k
+           else Nothing
+
 
 -- FIXME HERE: remove, or at least reevaluate, these!
 {-
@@ -770,9 +867,10 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
 instance SubstVar s m => Substable s (LLVMPtrPerm a) m where
   genSubst s [nuP| LLVMFieldPerm off spl p |] =
     LLVMFieldPerm <$> genSubst s off <*> genSubst s spl <*> genSubst s p
-  genSubst s [nuP| LLVMArrayPerm off len stride spl p |] =
+  genSubst s [nuP| LLVMArrayPerm off len stride spl pps |] =
     LLVMArrayPerm <$> genSubst s off <*> genSubst s len <*>
-    return (mbLift stride) <*> genSubst s spl <*> genSubst s p
+    return (mbLift stride) <*> genSubst s spl <*>
+    mapM (genSubst s) (mbList pps)
   genSubst s [nuP| LLVMFreePerm len |] = LLVMFreePerm <$> genSubst s len
 
 
