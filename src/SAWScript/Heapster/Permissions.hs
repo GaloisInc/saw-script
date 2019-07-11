@@ -1286,3 +1286,64 @@ elimLLVMFieldContents x i perms =
       (LLVMPP_Field $ fp {llvmFieldPerm = ValPerm_Eq (PExpr_Var y) }) $
       perms
     _ -> error "elimLLVMFieldContents"
+
+-- | Divide an array permission @x:ptr((off,*stride,<len,S) |-> p)@ into two
+-- arrays, one of length @e@ starting at @off@ and one of length @len-e@
+-- starting at offset @off+e*stride@. The latter permission (at offset
+-- @off+e*stride@) stays at the same index, while the former (at the original
+-- offset) is moved to the end of the field permissions for @x@.
+divideLLVMArray :: ExprVar (LLVMPointerType w) -> Int -> PermExpr (BVType w) ->
+                   PermSet ps -> PermSet ps
+divideLLVMArray x i e perms =
+  case (perms ^. varPerm x, perms ^. (varPerm x . llvmPtrPerm i)) of
+    (ValPerm_LLVMPtr _, LLVMPP_Array ap) ->
+      -- The match on perms ^. varPerm x is to get the 1 <= w instance
+      set (varPerm x . llvmPtrPerm i)
+      (LLVMPP_Array $
+       ap { llvmArrayLen = bvSub (llvmArrayLen ap) e,
+            llvmArrayOffset =
+              bvAdd (llvmArrayOffset ap) (bvMult (llvmArrayStride ap) e) }) $
+      over (varPerm x) (addLLVMPtrPerm $
+                        LLVMPP_Array $ ap { llvmArrayLen = e }) $
+      perms
+    _ -> error "divideLLVMArray"
+
+-- | Perform an array indexing of the first cell of an array, by separating an
+-- array permission @x:ptr((off,*stride,<len,S) |-> pps)@ into one array cell,
+-- containing a copy of the pointer permissions @pps@ starting at offset @off@,
+-- along with the remaining array @x:ptr((off+1,*stride,<len,S) |-> -- pps)@.
+-- Return the new permission set along with the indices of the new @pps@ pointer
+-- permissions.
+indexLLVMArray :: ExprVar (LLVMPointerType w) -> Int -> PermSet ps ->
+                  (PermSet ps, [(Int, LLVMFieldPerm w)])
+indexLLVMArray x i perms =
+  case (perms ^. varPerm x, perms ^. (varPerm x . llvmPtrPerm i)) of
+    (ValPerm_LLVMPtr _, LLVMPP_Array ap) ->
+      -- The match on perms ^. varPerm x is to get the 1 <= w instance
+      let new_fps =
+            map (offsetLLVMFieldPerm (llvmArrayOffset ap)) (llvmArrayFields ap) in
+      (set (varPerm x . llvmPtrPerm i)
+       (LLVMPP_Array $ ap { llvmArrayOffset =
+                            bvAdd (llvmArrayOffset ap) (bvInt 1)}) $
+       over (varPerm x . llvmPtrPerms) (++ map LLVMPP_Field new_fps) $
+       perms
+      ,
+      zip [length (perms ^. (varPerm x . llvmPtrPerms)) ..] new_fps)
+    _ -> error "indexLLVMArray"
+
+-- | Cast the the offset of the last pointer permission at the top of the stack,
+-- going from @(off,S) |-> p@ to @(off',S) |-> p@, assuming that we know (or can
+-- assert) that @off=off'.
+castLLVMFieldOffset :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+                       PermExpr (BVType w) ->
+                       PermSet (ps :> LLVMPointerType w) ->
+                       PermSet (ps :> LLVMPointerType w)
+castLLVMFieldOffset x off off' perms =
+  let i = lastLLVMPtrPermIndex (perms ^. topDistPerm x) in
+  over (topDistPerm x . llvmPtrPerm i)
+  (\p -> case p of
+      LLVMPP_Field fp
+        | llvmFieldOffset fp `bvEq` off ->
+            LLVMPP_Field (fp { llvmFieldOffset = off' })
+      _ -> error "castLLVMFieldOffset")
+  perms

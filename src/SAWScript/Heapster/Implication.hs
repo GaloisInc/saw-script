@@ -294,6 +294,41 @@ data PermImpl r ls where
   -- > -----------------------------------------------------
   -- > Gin | Pl, x:ptr((off,S) |-> eq(y)), y:p * Pin |- rets
 
+  Impl_DivideLLVMArray :: ExprVar (LLVMPointerType w) -> Int ->
+                          PermExpr (BVType w) -> PermImpl r ps -> PermImpl r ps
+  -- ^ Divide an array permission @x:ptr((off,*stride,<len,S) |-> p)@ into two
+  -- arrays, one of length @e@ starting at @off@ and one of length @len-e@
+  -- starting at offset @off+e*stride@:
+  --
+  -- > Gin | Pl * Pin, x:ptr(pps1, (off+e*stride,*stride,<e,S) |-> fps,
+  -- >                       pps2, (off,*stride,<len-e, S) |-> fps) |- rets
+  -- > -----------------------------------------------------------------------
+  -- > Gin | Pl * Pin, x:ptr(pps1, (off,*stride,<len,S) |-> fps, pps2) |- rets
+
+  Impl_IndexLLVMArray :: ExprVar (LLVMPointerType w) -> Int ->
+                         PermImpl r ps -> PermImpl r ps
+  -- ^ Perform an array indexing of the first cell of an array, by separating an
+  -- array permission @x:ptr((off,*stride,<len,S) |-> pps)@ into one array cell,
+  -- containing a copy of the pointer permissions @pps@ starting at offset
+  -- @off@, along with the remaining array @x:ptr((off+1,*stride,<len,S) |->
+  -- pps)@:
+  --
+  -- > Gin | Pl * Pin, x:ptr(pps1, (off+1,*stride,<e,S) |-> fps,
+  -- >                       pps2, fps + off) |- rets
+  -- > -----------------------------------------------------------------------
+  -- > Gin | Pl * Pin, x:ptr(pps1, (off,*stride,<len,S) |-> fps, pps2) |- rets
+
+  Impl_CastLLVMFieldOffsetM :: ExprVar (LLVMPointerType w) ->
+                               PermExpr (BVType w) -> PermExpr (BVType w) ->
+                               PermImpl r (ps :> LLVMPointerType w) ->
+                               PermImpl r (ps :> LLVMPointerType w)
+  -- ^ Assert that @off = off'@ at bitvector type, and cast the last field perm
+  -- at the top of the stack from @(off,S) |-> p@ to @(off',S) |-> p@:
+  --
+  -- > Gin | Pl * Pin, x:ptr(pps, (off',S) |-> p) |- rets
+  -- > -----------------------------------------------------------------------
+  -- > Gin | Pl * Pin, x:ptr(pps, (off,S) |-> p) |- rets
+
 
 ----------------------------------------------------------------------
 -- * Generalized Monads
@@ -918,26 +953,42 @@ elimLLVMFieldContentsM x i =
       flip nuWithElim1 mb_perms' $ \y perms' ->
       setPerms perms' >>> greturn y
 
-
+-- | Divide an array permission @x:ptr((off,*stride,<len,S) |-> p)@ into two
+-- arrays, one of length @e@ starting at @off@ and one of length @len-e@
+-- starting at offset @off+e*stride@. The latter permission (at offset
+-- @off+e*stride@) stays at the same index, while the former (at the original
+-- offset) is moved to the end of the field permissions for @x@.
 divideLLVMArrayM :: ExprVar (LLVMPointerType w) -> Int -> PermExpr (BVType w) ->
                     ImplM vars r ps ps ()
 divideLLVMArrayM x i arr_ix =
-  error "FIXME HERE NOW"
+  gmapRetAndPerms (divideLLVMArray x i arr_ix) (Impl_DivideLLVMArray x i arr_ix)
 
+-- | Perform an array indexing of the first cell of an array, by separating an
+-- array permission @x:ptr((off,*stride,<len,S) |-> pps)@ into one array cell,
+-- containing a copy of the pointer permissions @pps@ starting at offset @off@,
+-- along with the remaining array @x:ptr((off+1,*stride,<len,S) |->
+-- pps)@. Return the new permission set along with the indices of the new @pps@
+-- pointer permissions.
 indexLLVMArrayM :: ExprVar (LLVMPointerType w) -> Int ->
                    ImplM vars r ps ps [(Int, LLVMFieldPerm w)]
 indexLLVMArrayM x i =
-  error "FIXME HERE NOW"
+  getPerms >>>= \perms ->
+  gmapRetAndPerms (const $ fst $
+                   indexLLVMArray x i perms) (Impl_IndexLLVMArray x i) >>>
+  greturn (snd $ indexLLVMArray x i perms)
 
+-- | Assert that @off = off'@ at bitvector type, and cast the last pointer
+-- permission at the top of the stack from @(off,S) |-> p@ to @(off',S) |-> p@
 castLLVMFieldOffsetM :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
                         PermExpr (BVType w) ->
                         ImplM vars r (ps :> LLVMPointerType w)
                         (ps :> LLVMPointerType w) ()
 castLLVMFieldOffsetM x off off' =
-  error "FIXME HERE NOW"
+  gmapRetAndPerms (castLLVMFieldOffset x off off')
+  (Impl_CastLLVMFieldOffsetM x off off')
+
 
 {- FIXME: remove these if we no longer need them!
-
 ----------------------------------------------------------------------
 -- * Pattern-Matching Monadic Operations
 ----------------------------------------------------------------------
@@ -1131,39 +1182,6 @@ proveVarField x (FieldMatchArray _ i ap arr_ix fld_i) off mb_fld =
                    (snd (is_flds !! fld_i))) off mb_fld
 
 
-{-
-
--- Case for x:ptr((off,All) |-> p) |- x:ptr((off,All) |-> p)
-proveVarField x pps off [nuP| SplExpr_All |] mb_p
-  | Just (i, (x_spl, x_p)) <- findFieldPerm off pps =
-    case x_spl of
-      SplExpr_All ->
-        elimLLVMFieldContentsM x i >>>= \y ->
-        introLLVMFieldAllM x i >>>
-        proveVarImpl y mb_p >>>
-        introLLVMFieldContentsM x y
-      _ ->
-        -- If we need All and we have less than All, we fail, because, if there
-        -- is some other permission with All that matches off, then the current
-        -- permissions should be unsatisfiable anyway, so it shouldn't matter
-        implFailM
-
--- Case for x:ptr((off,spl) |-> p) |- x:ptr((off,z) |-> p), setting z=R(spl)
-proveVarField x pps off [nuP| SplExpr_Var z |] mb_p
-  | Just (i, (x_spl, x_p)) <- findFieldPerm off pps
-  , Left memb <- mbNameBoundP z =
-    elimLLVMFieldContentsM x i >>>= \y ->
-    introLLVMFieldSplitM x i x_spl >>>
-    setVarM memb (PExpr_Spl $ SplExpr_R x_spl) >>>
-    proveVarImpl y mb_p >>>
-    introLLVMFieldContentsM x y
-
-proveVarField x pps off mb_spl mb_p =
-  error "FIXME HERE: proveVarField"
-
--}
-
-
 ----------------------------------------------------------------------
 -- * Proving LLVM Pointer Permissions
 ----------------------------------------------------------------------
@@ -1206,7 +1224,8 @@ proveVarPtrPerms x ([nuP| LLVMPP_Field mb_fp@(LLVMFieldPerm mb_off _ _) |]
         matches) >>>
   proveVarPtrPerms x mb_pps'
 
-proveVarPtrPerms _ _ = error "FIXME HERE: proveVarPtrPerms"
+proveVarPtrPerms _ _ =
+  error "FIXME HERE: proveVarPtrPerms: arrays not yet supported"
 
 
 ----------------------------------------------------------------------
