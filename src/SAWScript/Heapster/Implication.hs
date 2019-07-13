@@ -402,6 +402,13 @@ instance GenMonad (GenContT r m) where
     GenContT $ \k -> strongMbM $ nuWithElim1 (\nm b_body -> k (nm, b_body)) b
   -}
 
+-- | Change the return type constructor @r@ by mapping the new input type to the
+-- old and mapping the old output type to the new
+withAltContM :: Functor m => (r2 pin -> r1 pin) -> (r1 pout -> r2 pout) ->
+                GenContT r1 m pin pout a -> GenContT r2 m pin pout a
+withAltContM f_in f_out (GenContT m) =
+  GenContT $ \k -> fmap f_out (m (fmap f_in . k))
+
 -- | This is like shift, but where the current continuation need not be in a
 -- monad; this is useful for dealing with name-binding operations
 --
