@@ -126,7 +126,7 @@ data PermImpl r ls where
   -- > -------------------------------------------
   -- > Gamma | Pl, x:p2 * Pin |- rets
 
-  Impl_ElimExists :: ExprVar a -> TypeRepr tp ->
+  Impl_ElimExists :: KnownRepr TypeRepr tp => ExprVar a ->
                      Binding (PermExpr tp) (PermImpl r ls) ->
                      PermImpl r ls
   -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists', on the given variable
@@ -329,6 +329,8 @@ data PermImpl r ls where
   -- > -----------------------------------------------------------------------
   -- > Gin | Pl * Pin, x:ptr(pps, (off,S) |-> p) |- rets
 
+$(mkNuMatching [t| forall r ps. NuMatching r => PermImpl r ps |])
+
 
 ----------------------------------------------------------------------
 -- * Generalized Monads
@@ -511,15 +513,18 @@ gmapRetAndState f_st f_ret =
   -- gcaptureCCMapState f_st (\k -> f_ret <$> k ())
 
 -- | Name-binding in the generzlied continuation monad (FIXME: explain)
-class GenMonad m => GenMonadBind r m | m -> r where
-  gmbM :: (Mb ctx (r p2) -> r p2) -> Mb ctx (m p1 p2 a) -> m p1 p2 a
+class GenMonad m => GenMonadBind r p1 p2 m | m -> r where
+  gmbM :: (Mb ctx (r p2) -> r p2) ->
+          Mb ctx (m p1 p2 a) -> m p1 p2 a
 
-instance MonadStrongBind m => GenMonadBind r (GenContT r m) where
+instance (MonadBind m, NuMatching (r p2)) =>
+         GenMonadBind r p1 p2 (GenContT r m) where
   gmbM f_ret mb_m =
     GenContT $ \k ->
-    f_ret <$> strongMbM (fmap (\m -> unGenContT m k) mb_m)
+    f_ret <$> mbM (fmap (\m -> unGenContT m k) mb_m)
 
-instance GenMonadBind r m => GenMonadBind r (GenStateT s m) where
+instance (GenMonadBind r p1 p2 m) =>
+         GenMonadBind r p1 p2 (GenStateT s m) where
   gmbM f_ret mb_m =
     GenStateT $ \s ->
     gmbM f_ret $ fmap (\m -> unGenStateT m s) mb_m
@@ -834,15 +839,16 @@ elimOrM x =
 
 -- | Eliminate an existential permission @x:(exists (y:tp).p)@ in the current
 -- permission set
-elimExistsM :: ExprVar a -> TypeRepr tp -> ImplM vars r ps ps ()
-elimExistsM x tp =
+elimExistsM :: (KnownRepr TypeRepr tp, NuMatching r) => ExprVar a -> f tp ->
+               ImplM vars r ps ps ()
+elimExistsM x (_ :: f tp) =
   getPerms >>>= \perms ->
-  gmbM (Impl_ElimExists x tp) $
-  flip nuWithElim1 (elimExists x tp perms) $ \_nm perms' ->
+  gmbM (Impl_ElimExists x) $
+  flip nuWithElim1 (elimExists x (knownRepr :: TypeRepr tp) perms) $ \_nm perms' ->
   setPerms perms'
 
 -- | Eliminate disjunctives and existentials for a specific variable
-elimOrsExistsM :: ExprVar a -> ImplM vars r ps ps ()
+elimOrsExistsM :: NuMatching r => ExprVar a -> ImplM vars r ps ps ()
 elimOrsExistsM x =
   getPerm x >>>= \p ->
   case p of
@@ -949,7 +955,7 @@ introLLVMFieldContentsM x y =
 -- | Eliminate a permission @x:ptr(pps1,(off,S) |-> p,pps2)@ into permissions
 -- @x:ptr(pps1,(off,S) |-> eq(y),pps2)@ and @y:p@ for a fresh variable @y@,
 -- returning the fresh variable @y@
-elimLLVMFieldContentsM :: ExprVar (LLVMPointerType w) -> Int ->
+elimLLVMFieldContentsM :: NuMatching r => ExprVar (LLVMPointerType w) -> Int ->
                           ImplM vars r ps ps (ExprVar (LLVMPointerType w))
 elimLLVMFieldContentsM x i =
   getPerms >>>= \perms ->
@@ -1083,7 +1089,7 @@ matchPerm x matcher =
 ----------------------------------------------------------------------
 
 -- | Build a proof on the top of the stack that @x:eq(e)@
-proveVarEq :: ExprVar a -> Mb vars (PermExpr a) ->
+proveVarEq :: NuMatching r => ExprVar a -> Mb vars (PermExpr a) ->
               ImplM vars r (ps :> a) ps ()
 proveVarEq x mb_e =
   getPerm x >>>= \perm ->
@@ -1091,8 +1097,8 @@ proveVarEq x mb_e =
   proveVarEqH x perm psubst mb_e
 
 -- | Main helper function for 'proveVarEq'
-proveVarEqH :: ExprVar a -> ValuePerm a -> PartialSubst vars ->
-               Mb vars (PermExpr a) ->
+proveVarEqH :: NuMatching r => ExprVar a -> ValuePerm a ->
+               PartialSubst vars -> Mb vars (PermExpr a) ->
                ImplM vars r (ps :> a) ps ()
 
 -- Prove x:eq(z) for evar z by setting z=x
@@ -1148,7 +1154,8 @@ proveVarEqH _ _ _ _ = implFailM
 -- already on the top of the stack.
 --
 -- FIXME: update this documentation
-proveVarField :: ExprVar (LLVMPointerType w) -> LLVMFieldMatch w ->
+proveVarField :: NuMatching r => ExprVar (LLVMPointerType w) ->
+                 LLVMFieldMatch w ->
                  PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
                  ImplM vars r (ps :> LLVMPointerType w)
                  (ps :> LLVMPointerType w) ()
@@ -1194,7 +1201,8 @@ proveVarField x (FieldMatchArray _ i ap arr_ix fld_i) off mb_fld =
 ----------------------------------------------------------------------
 
 -- FIXME: documentation; note that we expect x:ptr(pps)
-proveVarPtrPerms :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
+proveVarPtrPerms :: (1 <= w, KnownNat w, NuMatching r) =>
+                    ExprVar (LLVMPointerType w) ->
                     [Mb vars (LLVMPtrPerm w)] ->
                     ImplM vars r (ps :> LLVMPointerType w)
                     (ps :> LLVMPointerType w) ()
@@ -1240,7 +1248,7 @@ proveVarPtrPerms _ _ =
 ----------------------------------------------------------------------
 
 -- | Prove @x:p@, where @p@ may have existentially-quantified variables in it
-proveVarImpl :: ExprVar a -> Mb vars (ValuePerm a) ->
+proveVarImpl :: NuMatching r => ExprVar a -> Mb vars (ValuePerm a) ->
                 ImplM vars r (ps :> a) ps ()
 
 -- Prove x:true vacuously
@@ -1307,6 +1315,7 @@ proveVarImpl _ [nuP| ValPerm_Var _ |] = implFailM
 data ReqPerm vars a where
   ReqPerm :: ExprVar a -> Mb vars (ValuePerm a) -> ReqPerm vars a
 
-proveVarsImpl :: MapRList (ReqPerm vars) ls -> ImplM vars r ls RNil ()
+proveVarsImpl :: NuMatching r => MapRList (ReqPerm vars) ls ->
+                 ImplM vars r ls RNil ()
 proveVarsImpl MNil = return ()
 proveVarsImpl (reqs :>: ReqPerm x p) = proveVarsImpl reqs >>> proveVarImpl x p
