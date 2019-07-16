@@ -32,7 +32,8 @@ import Data.Binding.Hobbits
 import GHC.TypeLits
 import Control.Applicative hiding (empty)
 import Control.Monad.Identity
-import Control.Lens hiding ((:>))
+import Control.Monad.State
+import Control.Lens hiding ((:>), Index)
 
 import Data.Binding.Hobbits.NameMap (NameMap)
 import qualified Data.Binding.Hobbits.NameMap as NameMap
@@ -49,7 +50,28 @@ import Lang.Crucible.CFG.Core
 -- * Monads that Support Name-Binding
 ----------------------------------------------------------------------
 
--- FIXME HERE: move this to Hobbits!
+-- FIXME HERE: move all of the below to Hobbits!
+
+-- | A reification of an object of type @a@ at type level
+data ReifiesObj a = forall s. Reifies s a => ReifiesObj (Proxy s)
+
+$(mkNuMatching [t| forall a. Proxy a |])
+$(mkNuMatching [t| forall a. ReifiesObj a |])
+
+-- | Build a 'ReifiesObj' containing a value
+mkReifiesObj :: a -> ReifiesObj a
+mkReifiesObj a = reify a ReifiesObj
+
+-- | Project out the value contained in a 'ReifiesObj'
+projReifiesObj :: ReifiesObj a -> a
+projReifiesObj (ReifiesObj prx) = reflect prx
+
+-- | Builds an 'MbTypeRepr' proof for use in a 'NuMatching' instance. This proof
+-- is unsafe because it does no renaming of fresh names, so should only be used
+-- for types that are guaranteed not to contain any 'Name' or 'Mb' values.
+unsafeMbTypeRepr :: MbTypeRepr a
+unsafeMbTypeRepr = isoMbTypeRepr mkReifiesObj projReifiesObj
+
 class Monad m => MonadBind m where
   mbM :: NuMatching a => Mb ctx (m a) -> m (Mb ctx a)
 
@@ -70,6 +92,20 @@ class MonadBind m => MonadStrongBind m where
 
 instance MonadStrongBind Identity where
   strongMbM = Identity . fmap runIdentity
+
+-- | State types that can incorporate name-bindings
+class NuMatching s => BindState s where
+  bindState :: Mb ctx s -> s
+
+instance (MonadBind m, BindState s) => MonadBind (StateT s m) where
+  mbM mb_m = StateT $ \s ->
+    mbM (fmap (\m -> runStateT m s) mb_m) >>= \mb_as ->
+    return (fmap fst mb_as, bindState (fmap snd mb_as))
+
+instance (MonadStrongBind m, BindState s) => MonadStrongBind (StateT s m) where
+  strongMbM mb_m = StateT $ \s ->
+    strongMbM (fmap (\m -> runStateT m s) mb_m) >>= \mb_as ->
+    return (fmap fst mb_as, bindState (fmap snd mb_as))
 
 
 ----------------------------------------------------------------------
@@ -96,8 +132,25 @@ type family RListToCtxCtx (ctx :: RList (RList k)) :: Ctx (Ctx k) where
   RListToCtxCtx RNil = EmptyCtx
   RListToCtxCtx (ctx' :> c) = RListToCtxCtx ctx' ::> RListToCtx c
 
-withKnownType :: TypeRepr tp -> (KnownRepr TypeRepr tp => r) -> r
-withKnownType = error "FIXME HERE: write withKnownType!"
+-- | Representation types that support the 'withKnownRepr' operation
+class WithKnownRepr f where
+  withKnownRepr :: f a -> (KnownRepr f a => r) -> r
+
+instance WithKnownRepr NatRepr where
+  withKnownRepr = withKnownNat
+
+instance WithKnownRepr BaseTypeRepr where
+  withKnownRepr = error "FIXME HERE: write withKnownBaseType!"
+
+instance WithKnownRepr TypeRepr where
+  withKnownRepr = error "FIXME HERE: write withKnownType!"
+
+instance WithKnownRepr CtxRepr where
+  withKnownRepr = error "FIXME HERE: write withKnownCtx!"
+
+instance WithKnownRepr (Index ctx) where
+  withKnownRepr = error "FIXME HERE: write withKnownIndex!"
+
 
 -- | A 'TypeRepr' that has been promoted to a constraint; this is necessary in
 -- order to make a 'NuMatching' instance for it, as part of the representation
@@ -116,7 +169,7 @@ $(mkNuMatching [t| forall ctx. CruCtx ctx |])
 
 -- | Build a 'CruType' from a 'TypeRepr'
 mkCruType :: TypeRepr a -> CruType a
-mkCruType tp = withKnownType tp CruType
+mkCruType tp = withKnownRepr tp CruType
 
 -- | Build a 'CruCtx' from a 'CtxRepr'
 mkCruCtx :: CtxRepr ctx -> CruCtx (CtxToRList ctx)
