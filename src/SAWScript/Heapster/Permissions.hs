@@ -6,6 +6,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -25,6 +26,8 @@ module SAWScript.Heapster.Permissions where
 import Data.Maybe
 import Data.Bits
 import Data.List
+import Data.Proxy
+import Data.Reflection
 import Data.Binding.Hobbits
 import GHC.TypeLits
 import Control.Applicative hiding (empty)
@@ -70,11 +73,81 @@ instance MonadStrongBind Identity where
 
 
 ----------------------------------------------------------------------
+-- * Contexts of Crucible Types
+----------------------------------------------------------------------
+
+-- | Convert a Crucible 'Ctx' to a Hobbits 'RList'
+type family CtxToRList (ctx :: Ctx k) :: RList k where
+  CtxToRList EmptyCtx = RNil
+  CtxToRList (ctx' ::> x) = CtxToRList ctx' :> x
+
+-- | Convert a Hobbits 'RList' to a Crucible 'Ctx'
+type family RListToCtx (ctx :: RList k) :: Ctx k where
+  RListToCtx RNil = EmptyCtx
+  RListToCtx (ctx' :> x) = RListToCtx ctx' ::> x
+
+-- | Convert a Crucible context of contexts to a Hobbits one
+type family CtxCtxToRList (ctx :: Ctx (Ctx k)) :: RList (RList k) where
+  CtxCtxToRList EmptyCtx = RNil
+  CtxCtxToRList (ctx' ::> c) = CtxCtxToRList ctx' :> CtxToRList c
+
+-- | Convert a Hobbits context of contexts to a Crucible one
+type family RListToCtxCtx (ctx :: RList (RList k)) :: Ctx (Ctx k) where
+  RListToCtxCtx RNil = EmptyCtx
+  RListToCtxCtx (ctx' :> c) = RListToCtxCtx ctx' ::> RListToCtx c
+
+withKnownType :: TypeRepr tp -> (KnownRepr TypeRepr tp => r) -> r
+withKnownType = error "FIXME HERE: write withKnownType!"
+
+-- | A 'TypeRepr' that has been promoted to a constraint; this is necessary in
+-- order to make a 'NuMatching' instance for it, as part of the representation
+-- of 'TypeRepr' is hidden (and also this way is faster)
+data CruType a where
+  CruType :: KnownRepr TypeRepr a => CruType a
+
+-- | A context of Crucible types. NOTE: we do not use 'MapRList' here, because
+-- we do not yet have a nice way to define the 'NuMatching' instance we want...
+data CruCtx ctx where
+  CruCtxNil :: CruCtx RNil
+  CruCtxCons :: CruCtx ctx -> CruType a -> CruCtx (ctx :> a)
+
+$(mkNuMatching [t| forall a. CruType a |])
+$(mkNuMatching [t| forall ctx. CruCtx ctx |])
+
+-- | Build a 'CruType' from a 'TypeRepr'
+mkCruType :: TypeRepr a -> CruType a
+mkCruType tp = withKnownType tp CruType
+
+-- | Build a 'CruCtx' from a 'CtxRepr'
+mkCruCtx :: CtxRepr ctx -> CruCtx (CtxToRList ctx)
+mkCruCtx ctx = case viewAssign ctx of
+  AssignEmpty -> CruCtxNil
+  AssignExtend ctx' tp -> CruCtxCons (mkCruCtx ctx') (mkCruType tp)
+
+-- | The empty context
+emptyCruCtx :: CruCtx RNil
+emptyCruCtx = CruCtxNil
+
+-- | Add an element to the end of a context
+extCruCtx :: KnownRepr TypeRepr a => CruCtx ctx -> CruCtx (ctx :> a)
+extCruCtx ctx = CruCtxCons ctx CruType
+
+-- | Remove an element from the end of a context
+unextCruCtx :: CruCtx (ctx :> a) -> CruCtx ctx
+unextCruCtx (CruCtxCons ctx _) = ctx
+
+
+----------------------------------------------------------------------
 -- * Expressions for Permissions
 ----------------------------------------------------------------------
 
 -- | The Haskell type of expression variables
-type ExprVar a = Name (PermExpr a)
+type ExprVar (a :: CrucibleType) = Name a
+
+-- | Map a context of 'CrucibleType's to 'PermExpr' Haskell types
+type family ExprVarCtx (as :: RList CrucibleType) :: RList * where
+  ExprVarCtx RNil = RNil
+  ExprVarCtx (as :> a) = ExprVarCtx as :> PermExpr a
 
 -- | Expressions that represent "fractions" of a write permission
 data SplittingExpr
@@ -399,7 +472,7 @@ data ValuePerm (a :: CrucibleType) where
 
   -- | An existential binding of a value in a value permission
   ValPerm_Exists :: KnownRepr TypeRepr a =>
-                    Binding (PermExpr a) (ValuePerm b) ->
+                    Binding a (ValuePerm b) ->
                     ValuePerm b
 
   -- | A recursive / least fixed-point permission
@@ -444,8 +517,8 @@ instance (Eq (ValuePerm a)) where
   (ValPerm_Eq _) == _ = False
   (ValPerm_Or p1 p1') == (ValPerm_Or p2 p2') = p1 == p2 && p1' == p2'
   (ValPerm_Or _ _) == _ = False
-  (ValPerm_Exists (p1 :: Binding (PermExpr a1) _)) ==
-    (ValPerm_Exists (p2 :: Binding (PermExpr a2) _)) =
+  (ValPerm_Exists (p1 :: Binding a1 _)) ==
+    (ValPerm_Exists (p2 :: Binding a2 _)) =
     case testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2) of
       Just Refl ->
         mbLift $
@@ -493,8 +566,8 @@ orPermRight (ValPerm_Or _ p) = p
 orPermRight _ = error "orPermRight"
 
 -- | Extract the body @p@ from a permission of the form @exists (x:tp).p@
-exPermBody :: TypeRepr tp -> ValuePerm a -> Binding (PermExpr tp) (ValuePerm a)
-exPermBody tp (ValPerm_Exists (p :: Binding (PermExpr tp') (ValuePerm a)))
+exPermBody :: TypeRepr tp -> ValuePerm a -> Binding tp (ValuePerm a)
+exPermBody tp (ValPerm_Exists (p :: Binding tp' (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
 
@@ -787,39 +860,13 @@ matchFieldPtrPermOff _ _ = Nothing
 
 
 ----------------------------------------------------------------------
--- * Contexts of Crucible Types
-----------------------------------------------------------------------
-
--- | FIXME: 'CruType' should have kind @'CrucibleType' -> *@ instead of @* -> *@
--- as it does here; this is a workaround for the fact that Hobbits currently
--- only supports name and bindings of kind star
-data CruType a where
-  CruType :: KnownRepr TypeRepr a => (CruType (PermExpr a))
-
--- | A context of Crucible types
-newtype CruCtx ctx = CruCtx { unCruCtx :: MapRList CruType ctx }
-
--- | The empty context
-emptyCruCtx :: CruCtx RNil
-emptyCruCtx = CruCtx empty
-
--- | Add an element to the end of a context
-extCruCtx :: KnownRepr TypeRepr a => CruCtx ctx -> CruCtx (ctx :> PermExpr a)
-extCruCtx (CruCtx tps) = CruCtx (tps :>: CruType)
-
--- | Remove an element from the end of a context
-unextCruCtx :: CruCtx (ctx :> PermExpr a) -> CruCtx ctx
-unextCruCtx (CruCtx (tps :>: _)) = CruCtx tps
-
-
-----------------------------------------------------------------------
 -- * Generalized Substitution
 ----------------------------------------------------------------------
 
 -- | Defines a substitution type @s@ that supports substituting into expression
 -- and permission variables in a given monad @m@
 class MonadBind m => SubstVar s m | s -> m where
-  extSubst :: s ctx -> PermExpr a -> s (ctx :> PermExpr a)
+  extSubst :: s ctx -> PermExpr a -> s (ctx :> a)
   substExprVar :: s ctx -> Mb ctx (ExprVar a) -> m (PermExpr a)
   substPermVar :: s ctx -> Mb ctx (PermVar a) -> m (ValuePerm a)
 
@@ -902,41 +949,37 @@ instance SubstVar s m => Substable s (LLVMArrayPerm a) m where
 -- * Expression Substitutions
 ----------------------------------------------------------------------
 
--- | Workaround for the fact that Hobbits currently only support name and
--- bindings of kind star
-data SubstElem (a :: *) where
-  SubstElem :: PermExpr a -> SubstElem (PermExpr a)
-
-unSubstElem :: SubstElem (PermExpr a) -> PermExpr a
-unSubstElem (SubstElem e) = e
-
 -- | A substitution assigns a permission expression to each bound name in a
 -- name-binding context
 newtype PermSubst ctx =
-  PermSubst { unPermSubst :: MapRList SubstElem ctx }
+  PermSubst { unPermSubst :: MapRList PermExpr ctx }
 
 emptySubst :: PermSubst RNil
 emptySubst = PermSubst empty
 
-singletonSubst :: PermExpr a -> PermSubst ('RNil :> PermExpr a)
-singletonSubst e = PermSubst (empty :>: SubstElem e)
+consSubst :: PermSubst ctx -> PermExpr a -> PermSubst (ctx :> a)
+consSubst (PermSubst elems) e = PermSubst (elems :>: e)
 
-substLookup :: PermSubst ctx -> Member ctx (PermExpr a) -> PermExpr a
-substLookup (PermSubst m) memb = unSubstElem $ mapRListLookup memb m
+singletonSubst :: PermExpr a -> PermSubst (RNil :> a)
+singletonSubst e = PermSubst (empty :>: e)
 
-noPermsInSubst :: PermSubst ctx -> Member ctx (ValuePerm a) -> b
-noPermsInSubst (PermSubst elems) memb =
-  case mapRListLookup memb elems of { }
+substLookup :: PermSubst ctx -> Member ctx a -> PermExpr a
+substLookup (PermSubst m) memb = mapRListLookup memb m
+
+noPermsInCruCtx :: forall (ctx :: RList CrucibleType) (a :: CrucibleType) b.
+                   Member ctx (ValuePerm a) -> b
+noPermsInCruCtx (Member_Step ctx) = noPermsInCruCtx ctx
+-- No case for Member_Base
 
 instance SubstVar PermSubst Identity where
-  extSubst (PermSubst elems) e = PermSubst $ elems :>: SubstElem e
+  extSubst (PermSubst elems) e = PermSubst $ elems :>: e
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> return $ substLookup s memb
       Right y -> return $ PExpr_Var y
   substPermVar s x =
     case mbNameBoundP x of
-      Left memb -> noPermsInSubst s memb
+      Left memb -> noPermsInCruCtx memb
       Right y -> return $ ValPerm_Var y
 
 -- | Wrapper function to apply a substitution to an expression type
@@ -949,13 +992,7 @@ subst s mb = runIdentity $ genSubst s mb
 ----------------------------------------------------------------------
 
 -- | An element of a partial substitution = maybe an expression
-data PSubstElem a where
-  PSE_Just :: PermExpr a -> PSubstElem (PermExpr a)
-  PSE_Nothing :: PSubstElem (PermExpr a)
-
-unPSubstElem :: PSubstElem (PermExpr a) -> Maybe (PermExpr a)
-unPSubstElem (PSE_Just e) = Just e
-unPSubstElem PSE_Nothing = Nothing
+newtype PSubstElem a = PSubstElem { unPSubstElem :: Maybe (PermExpr a) }
 
 -- | Partial substitutions assign expressions to some of the bound names in a
 -- context
@@ -965,7 +1002,10 @@ newtype PartialSubst ctx =
 -- | Build an empty partial substitution for a given set of variables, i.e., the
 -- partial substitution that assigns no expressions to those variables
 emptyPSubst :: CruCtx ctx -> PartialSubst ctx
-emptyPSubst = PartialSubst . mapMapRList (\CruType -> PSE_Nothing) . unCruCtx
+emptyPSubst = PartialSubst . helper where
+  helper :: CruCtx ctx -> MapRList PSubstElem ctx
+  helper CruCtxNil = MNil
+  helper (CruCtxCons ctx' _) = helper ctx' :>: PSubstElem Nothing
 
 -- | FIXME: should be in Hobbits!
 modifyMapRList :: Member ctx a -> (f a -> f a) ->
@@ -976,53 +1016,48 @@ modifyMapRList (Member_Step memb) f (elems :>: elem) =
 
 -- | Set the expression associated with a variable in a partial substitution. It
 -- is an error if it is already set.
-psubstSet :: Member ctx (PermExpr a) -> PermExpr a -> PartialSubst ctx ->
+psubstSet :: Member ctx a -> PermExpr a -> PartialSubst ctx ->
              PartialSubst ctx
 psubstSet memb e (PartialSubst elems) =
   PartialSubst $
   modifyMapRList memb
   (\pse -> case pse of
-      PSE_Nothing -> PSE_Just e
-      PSE_Just _ -> error "psubstSet: value already set for variable")
+      PSubstElem Nothing -> PSubstElem $ Just e
+      PSubstElem (Just _) -> error "psubstSet: value already set for variable")
   elems
 
 -- | Extend a partial substitution with an unassigned variable
-extPSubst :: PartialSubst ctx -> PartialSubst (ctx :> PermExpr a)
-extPSubst (PartialSubst elems) = PartialSubst $ elems :>: PSE_Nothing
+extPSubst :: PartialSubst ctx -> PartialSubst (ctx :> a)
+extPSubst (PartialSubst elems) = PartialSubst $ elems :>: PSubstElem Nothing
 
 -- | Shorten a partial substitution
-unextPSubst :: PartialSubst (ctx :> PermExpr a) -> PartialSubst ctx
+unextPSubst :: PartialSubst (ctx :> a) -> PartialSubst ctx
 unextPSubst (PartialSubst (elems :>: _)) = PartialSubst elems
 
 -- | Complete a partial substitution into a total substitution, filling in zero
 -- values using 'zeroOfType' if necessary
 completePSubst :: CruCtx vars -> PartialSubst vars -> PermSubst vars
-completePSubst (CruCtx tps) (PartialSubst elems) =
-  PermSubst $
-  mapMapRList2 (\CruType pse ->
-                 SubstElem $
-                 fromMaybe (zeroOfType knownRepr) (unPSubstElem pse))
-  tps elems
+completePSubst ctx (PartialSubst pselems) = PermSubst $ helper ctx pselems where
+  helper :: CruCtx vars -> MapRList PSubstElem vars -> MapRList PermExpr vars
+  helper _ MNil = MNil
+  helper (CruCtxCons ctx' CruType) (pselems' :>: pse) =
+    helper ctx' pselems' :>:
+    (fromMaybe (zeroOfType knownRepr) (unPSubstElem pse))
 
 -- | Look up an optional expression in a partial substitution
-psubstLookup :: PartialSubst ctx -> Member ctx (PermExpr a) ->
-                Maybe (PermExpr a)
+psubstLookup :: PartialSubst ctx -> Member ctx a -> Maybe (PermExpr a)
 psubstLookup (PartialSubst m) memb = unPSubstElem $ mapRListLookup memb m
 
--- | "Proof" that there are no permissions in a partial substitution
-noPermsInPSubst :: PartialSubst ctx -> Member ctx (ValuePerm a) -> b
-noPermsInPSubst (PartialSubst elems) memb =
-  case mapRListLookup memb elems of { }
-
 instance SubstVar PartialSubst Maybe where
-  extSubst (PartialSubst elems) e = PartialSubst $ elems :>: PSE_Just e
+  extSubst (PartialSubst elems) e =
+    PartialSubst $ elems :>: PSubstElem (Just e)
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> psubstLookup s memb
       Right y -> return $ PExpr_Var y
   substPermVar s x =
     case mbNameBoundP x of
-      Left memb -> noPermsInPSubst s memb
+      Left memb -> noPermsInCruCtx memb
       Right y -> return $ ValPerm_Var y
 
 -- | Wrapper function to apply a partial substitution to an expression type
@@ -1040,11 +1075,6 @@ partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
 ----------------------------------------------------------------------
 -- * Permission Sets
 ----------------------------------------------------------------------
-
--- | FIXME: workaround for the fact that Hobbits only support name types of kind
--- star
-data PSetElem (a :: *) where
-  PSetElem :: ValuePerm a -> PSetElem (PermExpr a)
 
 -- | A stack of variables and their permissions
 data PermStack ps where
@@ -1074,7 +1104,7 @@ nthVarPerm (Member_Step memb') x = pstackTail . nthVarPerm memb' x
 
 -- | A permission set associates permissions with expression variables, and also
 -- has a stack of "distinguished permissions" that are used for intro rules
-data PermSet ps = PermSet { _varPermMap :: NameMap PSetElem,
+data PermSet ps = PermSet { _varPermMap :: NameMap ValuePerm,
                             _distPerms :: PermStack ps }
 
 makeLenses ''PermSet
@@ -1089,9 +1119,9 @@ varPerm x =
   lens
   (\(PermSet nmap _) ->
     case NameMap.lookup x nmap of
-      Just (PSetElem p) -> p
+      Just p -> p
       Nothing -> ValPerm_True)
-  (\(PermSet nmap ps) p -> PermSet (NameMap.insert x (PSetElem p) nmap) ps)
+  (\(PermSet nmap ps) p -> PermSet (NameMap.insert x p nmap) ps)
 
 -- | The lens for a particular distinguished perm, checking that it is indeed
 -- associated with the given variable
@@ -1129,7 +1159,7 @@ introOrR x p1 = over (topDistPerm x) (\p2 -> ValPerm_Or p1 p2)
 -- | Apply existential introduction to the top of the permission stack, changing
 -- it from @[e/x]p@ to @exists (x:tp).p@
 introExists :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
-               Binding (PermExpr tp) (ValuePerm a) ->
+               Binding tp (ValuePerm a) ->
                PermSet (ps :> a) -> PermSet (ps :> a)
 introExists x e p_body =
   over (topDistPerm x) $ \p_old ->
@@ -1145,8 +1175,7 @@ elimOrRight :: ExprVar a -> PermSet ps -> PermSet ps
 elimOrRight x = over (varPerm x) orPermRight
 
 -- | Replace an existential permission for a given variable with its body
-elimExists :: ExprVar a -> TypeRepr tp -> PermSet ps ->
-              Binding (PermExpr tp) (PermSet ps)
+elimExists :: ExprVar a -> TypeRepr tp -> PermSet ps -> Binding tp (PermSet ps)
 elimExists x tp perms =
   nuWithElim1
   (\_ p_body -> set (varPerm x) p_body perms)
@@ -1285,7 +1314,7 @@ introLLVMFieldContents x y perms =
 -- the permissions for @x@ are already of this form, just return @y@.
 elimLLVMFieldContents :: ExprVar (LLVMPointerType w) -> Int -> PermSet ps ->
                          Either (ExprVar (LLVMPointerType w))
-                         (Binding (PermExpr (LLVMPointerType w)) (PermSet ps))
+                         (Binding (LLVMPointerType w) (PermSet ps))
 elimLLVMFieldContents x i perms =
   case perms ^. (varPerm x . llvmPtrPerm i) of
     LLVMPP_Field fp

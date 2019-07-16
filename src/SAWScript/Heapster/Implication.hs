@@ -127,7 +127,7 @@ data PermImpl r ls where
   -- > Gamma | Pl, x:p2 * Pin |- rets
 
   Impl_ElimExists :: KnownRepr TypeRepr tp => ExprVar a ->
-                     Binding (PermExpr tp) (PermImpl r ls) ->
+                     Binding tp (PermImpl r ls) ->
                      PermImpl r ls
   -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists', on the given variable
   --
@@ -136,7 +136,7 @@ data PermImpl r ls where
   -- Gin | x:(exists z:tp. p)  |- rets
 
   Impl_IntroExists :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
-                      Binding (PermExpr tp) (ValuePerm a) ->
+                      Binding tp (ValuePerm a) ->
                       PermImpl r (ls :> a) ->
                       PermImpl r (ls :> a)
   -- ^ @Intro_Exists x tp e p pf@ applies existential introduction to the top
@@ -246,7 +246,7 @@ data PermImpl r ls where
 
   Impl_ElimLLVMFieldContents ::
     ExprVar (LLVMPointerType w) -> Int ->
-    Binding (PermExpr (LLVMPointerType w)) (PermImpl r ls) ->
+    Binding (LLVMPointerType w) (PermImpl r ls) ->
     PermImpl r ls
   -- ^ Eliminate a field permission @x:ptr((off,S) |-> p)@ into a permission
   -- @x:ptr((off,S) |-> eq(y))@ that the field contains a fresh variable @y@ and
@@ -655,12 +655,12 @@ mkImplState vars perms =
               _implStatePSubst = emptyPSubst vars }
 
 extImplState :: KnownRepr TypeRepr tp => ImplState vars ps ->
-                ImplState (vars :> PermExpr tp) ps
+                ImplState (vars :> tp) ps
 extImplState s =
   s { _implStateVars = extCruCtx (_implStateVars s),
       _implStatePSubst = extPSubst (_implStatePSubst s) }
 
-unextImplState :: ImplState (vars :> PermExpr a) ps -> ImplState vars ps
+unextImplState :: ImplState (vars :> a) ps -> ImplState vars ps
 unextImplState s =
   s { _implStateVars = unextCruCtx (_implStateVars s),
       _implStatePSubst = unextPSubst (_implStatePSubst s) }
@@ -679,7 +679,7 @@ type ImplM vars r ps_out ps_in =
 -- returning the optional expression it was bound to in the current partial
 -- substitution when it is done
 withExtVarsM :: KnownRepr TypeRepr tp =>
-                ImplM (vars :> PermExpr tp) r ps1 ps2 a ->
+                ImplM (vars :> tp) r ps1 ps2 a ->
                 ImplM vars r ps1 ps2 (a, Maybe (PermExpr tp))
 withExtVarsM m =
   withAltStateM extImplState (const unextImplState) $
@@ -726,7 +726,7 @@ modifyPSubst f = modify (over implStatePSubst f)
 
 -- | Set the value for an existential variable in the current substitution,
 -- raising an error if it is already set
-setVarM :: Member vars (PermExpr a) -> PermExpr a -> ImplM vars r ps ps ()
+setVarM :: Member vars a -> PermExpr a -> ImplM vars r ps ps ()
 setVarM x e = modifyPSubst (psubstSet x e)
 
 -- | Get the current 'PermSet'
@@ -824,7 +824,7 @@ introOrRM x p1 = gmapRetAndPerms (introOrR x p1) (Impl_IntroOrR x p1)
 -- FIXME: is there some way we could "type-check" this, to ensure that the
 -- permission on the top of the stack really equals @[e/x]p@?
 introExistsM :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
-                Binding (PermExpr tp) (ValuePerm a) ->
+                Binding tp (ValuePerm a) ->
                 ImplM vars r (ps :> a) (ps :> a) ()
 introExistsM x e p_body =
   gmapRetAndPerms (introExists x e p_body) (Impl_IntroExists x e p_body)
@@ -853,7 +853,7 @@ elimOrsExistsM x =
   getPerm x >>>= \p ->
   case p of
     ValPerm_Or _ _ -> elimOrM x >>> elimOrsExistsM x
-    ValPerm_Exists (_ :: Binding (PermExpr a) _) ->
+    ValPerm_Exists (_ :: Binding a _) ->
       elimExistsM x (knownRepr :: TypeRepr a) >>> elimOrsExistsM x
     _ -> return ()
 
