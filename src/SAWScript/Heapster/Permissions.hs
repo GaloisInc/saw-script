@@ -1129,41 +1129,41 @@ partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
 -- * Permission Sets
 ----------------------------------------------------------------------
 
--- | A stack of variables and their permissions
-data PermStack ps where
-  PStackNil :: PermStack RNil
-  PStackCons :: PermStack ps -> ExprVar a -> ValuePerm a ->
-                PermStack (ps :> a)
+-- | A list of "distinguished" permissions to named variables
+data DistPerms ps where
+  DistPermsNil :: DistPerms RNil
+  DistPermsCons :: DistPerms ps -> ExprVar a -> ValuePerm a ->
+                   DistPerms (ps :> a)
 
--- | Lens for the top permission in a 'PermStack' stack
-pstackHead :: ExprVar a -> Lens' (PermStack (ps :> a)) (ValuePerm a)
-pstackHead x =
-  lens (\(PStackCons _ y p) ->
-         if x == y then p else error "pstackHead: incorrect variable name!")
-  (\(PStackCons pstk y _) p ->
-    if x == y then PStackCons pstk y p else
-      error "pstackHead: incorrect variable name!")
+-- | Lens for the top permission in a 'DistPerms' stack
+distPermsHead :: ExprVar a -> Lens' (DistPerms (ps :> a)) (ValuePerm a)
+distPermsHead x =
+  lens (\(DistPermsCons _ y p) ->
+         if x == y then p else error "distPermsHead: incorrect variable name!")
+  (\(DistPermsCons pstk y _) p ->
+    if x == y then DistPermsCons pstk y p else
+      error "distPermsHead: incorrect variable name!")
 
--- | The lens for the tail of a 'PermStack' stack
-pstackTail :: Lens' (PermStack (ps :> a)) (PermStack ps)
-pstackTail =
-  lens (\(PStackCons pstk _ _) -> pstk)
-  (\(PStackCons _ x p) pstk -> PStackCons pstk x p)
+-- | The lens for the tail of a 'DistPerms' stack
+distPermsTail :: Lens' (DistPerms (ps :> a)) (DistPerms ps)
+distPermsTail =
+  lens (\(DistPermsCons pstk _ _) -> pstk)
+  (\(DistPermsCons _ x p) pstk -> DistPermsCons pstk x p)
 
--- | The lens for the nth permission in a 'PermStack' stack
-nthVarPerm :: Member ps a -> ExprVar a -> Lens' (PermStack ps) (ValuePerm a)
-nthVarPerm Member_Base x = pstackHead x
-nthVarPerm (Member_Step memb') x = pstackTail . nthVarPerm memb' x
+-- | The lens for the nth permission in a 'DistPerms' stack
+nthVarPerm :: Member ps a -> ExprVar a -> Lens' (DistPerms ps) (ValuePerm a)
+nthVarPerm Member_Base x = distPermsHead x
+nthVarPerm (Member_Step memb') x = distPermsTail . nthVarPerm memb' x
 
 -- | A permission set associates permissions with expression variables, and also
 -- has a stack of "distinguished permissions" that are used for intro rules
 data PermSet ps = PermSet { _varPermMap :: NameMap ValuePerm,
-                            _distPerms :: PermStack ps }
+                            _distPerms :: DistPerms ps }
 
 makeLenses ''PermSet
 
 -- NOTE: these instances would require a NuMatching instance for NameMap...
--- $(mkNuMatching [t| forall ps. PermStack ps |])
+-- $(mkNuMatching [t| forall ps. DistPerms ps |])
 -- $(mkNuMatching [t| forall ps. PermSet ps |])
 
 -- | The lens for the permissions associated with a given variable
@@ -1184,16 +1184,16 @@ distPerm memb x = distPerms . nthVarPerm memb x
 -- | The lens for the distinguished perm at the top of the stack, checking that
 -- it has the given variable
 topDistPerm :: ExprVar a -> Lens' (PermSet (ps :> a)) (ValuePerm a)
-topDistPerm x = distPerms . pstackHead x
+topDistPerm x = distPerms . distPermsHead x
 
 -- | Push a new distinguished permission onto the top of the stack
 pushPerm :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet (ps :> a)
-pushPerm x p (PermSet nmap ps) = PermSet nmap (PStackCons ps x p)
+pushPerm x p (PermSet nmap ps) = PermSet nmap (DistPermsCons ps x p)
 
 -- | Pop the top distinguished permission off of the stack
 popPerm :: ExprVar a -> PermSet (ps :> a) -> (PermSet ps, ValuePerm a)
 popPerm x (PermSet nmap pstk) =
-  (PermSet nmap (pstk ^. pstackTail), pstk ^. pstackHead x)
+  (PermSet nmap (pstk ^. distPermsTail), pstk ^. distPermsHead x)
 
 -- | Introduce a proof of @x:true@ onto the top of the stack
 introTrue :: ExprVar a -> PermSet ps -> PermSet (ps :> a)

@@ -1311,11 +1311,21 @@ proveVarImpl _ [nuP| ValPerm_Mu _ |] = implFailM
 -- We do not yet handle permission variables
 proveVarImpl _ [nuP| ValPerm_Var _ |] = implFailM
 
+-- | A list of distinguished permissions with existential variables
+data ExDistPerms vars ps where
+  ExDistPermsNil :: ExDistPerms vars RNil
+  ExDistPermsCons :: ExDistPerms vars ps -> ExprVar a -> Mb vars (ValuePerm a) ->
+                     ExDistPerms vars (ps :> a)
 
-data ReqPerm vars a where
-  ReqPerm :: ExprVar a -> Mb vars (ValuePerm a) -> ReqPerm vars a
+-- | Existentially quantify a list of distinguished permissions over the empty
+-- set of existential variables
+distPermsToExDistPerms :: DistPerms ps -> ExDistPerms RNil ps
+distPermsToExDistPerms DistPermsNil = ExDistPermsNil
+distPermsToExDistPerms (DistPermsCons ps x p) =
+  ExDistPermsCons (distPermsToExDistPerms ps) x (emptyMb p)
 
-proveVarsImpl :: NuMatching r => MapRList (ReqPerm vars) ls ->
-                 ImplM vars r ls RNil ()
-proveVarsImpl MNil = return ()
-proveVarsImpl (reqs :>: ReqPerm x p) = proveVarsImpl reqs >>> proveVarImpl x p
+-- | Prove a list of existentially-quantified distinguished permissions
+proveVarsImpl :: NuMatching r => ExDistPerms vars as ->
+                 ImplM vars r as RNil ()
+proveVarsImpl ExDistPermsNil = return ()
+proveVarsImpl (ExDistPermsCons ps x p) = proveVarsImpl ps >>> proveVarImpl x p
