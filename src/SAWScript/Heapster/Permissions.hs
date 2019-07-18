@@ -158,6 +158,10 @@ instance WithKnownRepr (Index ctx) where
 data CruType a where
   CruType :: KnownRepr TypeRepr a => CruType a
 
+instance TestEquality CruType where
+  testEquality (CruType :: CruType a1) (CruType :: CruType a2) =
+    testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
+
 -- | A context of Crucible types. NOTE: we do not use 'MapRList' here, because
 -- we do not yet have a nice way to define the 'NuMatching' instance we want...
 data CruCtx ctx where
@@ -166,6 +170,14 @@ data CruCtx ctx where
 
 $(mkNuMatching [t| forall a. CruType a |])
 $(mkNuMatching [t| forall ctx. CruCtx ctx |])
+
+instance TestEquality CruCtx where
+  testEquality CruCtxNil CruCtxNil = Just Refl
+  testEquality (CruCtxCons ctx1 tp1) (CruCtxCons ctx2 tp2)
+    | Just Refl <- testEquality ctx1 ctx2
+    , Just Refl <- testEquality tp1 tp2
+    = Just Refl
+  testEquality _ _ = Nothing
 
 -- | Build a 'CruType' from a 'TypeRepr'
 mkCruType :: TypeRepr a -> CruType a
@@ -1135,6 +1147,10 @@ data DistPerms ps where
   DistPermsCons :: DistPerms ps -> ExprVar a -> ValuePerm a ->
                    DistPerms (ps :> a)
 
+$(mkNuMatching [t| forall ps. DistPerms ps |])
+
+type MbDistPerms ps = Mb ps (DistPerms ps)
+
 -- | Lens for the top permission in a 'DistPerms' stack
 distPermsHead :: ExprVar a -> Lens' (DistPerms (ps :> a)) (ValuePerm a)
 distPermsHead x =
@@ -1162,8 +1178,7 @@ data PermSet ps = PermSet { _varPermMap :: NameMap ValuePerm,
 
 makeLenses ''PermSet
 
--- NOTE: these instances would require a NuMatching instance for NameMap...
--- $(mkNuMatching [t| forall ps. DistPerms ps |])
+-- NOTE: this instance would require a NuMatching instance for NameMap...
 -- $(mkNuMatching [t| forall ps. PermSet ps |])
 
 -- | The lens for the permissions associated with a given variable

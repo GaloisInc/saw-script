@@ -1317,6 +1317,8 @@ data ExDistPerms vars ps where
   ExDistPermsCons :: ExDistPerms vars ps -> ExprVar a -> Mb vars (ValuePerm a) ->
                      ExDistPerms vars (ps :> a)
 
+$(mkNuMatching [t| forall vars ps. ExDistPerms vars ps |])
+
 -- | Existentially quantify a list of distinguished permissions over the empty
 -- set of existential variables
 distPermsToExDistPerms :: DistPerms ps -> ExDistPerms RNil ps
