@@ -63,6 +63,10 @@ import SAWScript.Heapster.Permissions
 --
 -- FIXME: explain that @Pl@ is like a stack, and that intro rules apply to the
 -- top of the stack
+--
+-- FIXME: it would be nice to have PermImpl r ps_out ps_in, where ps_out is
+-- guaranteed to be the stack shape at any Impl_Done, but this would make our
+-- generalized monad below more complicated...
 data PermImpl r ls where
   Impl_Done :: r -> PermImpl r ls
   -- ^ The proof is finished; i.e., implements the rule
