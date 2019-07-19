@@ -170,7 +170,7 @@ data TypedArgs args where
 data TypedJumpTarget blocks where
      TypedJumpTarget ::
        TypedEntryID blocks args ghosts ->
-       PermImpl (TypedArgs (ghosts :++: args)) (ghosts :++: args) ->
+       PermImpl (TypedArgs (ghosts :++: args)) RNil ->
        TypedJumpTarget blocks
 
 
@@ -212,49 +212,49 @@ data TypedStmt ext rets where
 
 
 -- | Typed Crucible block termination statements
-data TypedTermStmt blocks inits (ret :: CrucibleType) where
+data TypedTermStmt blocks (ret :: CrucibleType) where
   -- | Jump to the given jump target
-  TypedJump :: TypedJumpTarget blocks -> TypedTermStmt blocks inits ret
+  TypedJump :: TypedJumpTarget blocks -> TypedTermStmt blocks ret
 
   -- | Branch on condition: if true, jump to the first jump target, and
   -- otherwise jump to the second jump target
   TypedBr :: TypedReg BoolType ->
              TypedJumpTarget blocks ->
              TypedJumpTarget blocks ->
-             TypedTermStmt blocks inits ret
+             TypedTermStmt blocks ret
 
   -- | Return from function, providing the return value and also proof that the
   -- current permissions the required return permissions
-  TypedReturn :: PermImpl (TypedReg ret) (inits :> ret) ->
-                 TypedTermStmt blocks inits ret
+  TypedReturn :: PermImpl (TypedReg ret) RNil ->
+                 TypedTermStmt blocks ret
 
   -- | Block ends with an error
-  TypedErrorStmt :: TypedReg StringType -> TypedTermStmt blocks inits ret
+  TypedErrorStmt :: TypedReg StringType -> TypedTermStmt blocks ret
 
 
 -- | A typed sequence of Crucible statements
-data TypedStmtSeq ext blocks inits (ret :: CrucibleType) where
+data TypedStmtSeq ext blocks (ret :: CrucibleType) where
   -- | A permission implication step, which modifies the current permission
   -- set. This can include pattern-matches and/or assertion failures.
-  TypedImplStmt :: PermImpl (TypedStmtSeq ext blocks inits ret) RNil ->
-                   TypedStmtSeq ext blocks inits ret
+  TypedImplStmt :: PermImpl (TypedStmtSeq ext blocks ret) RNil ->
+                   TypedStmtSeq ext blocks ret
 
   -- | Typed version of 'ConsStmt', which binds new variables for the return
   -- value(s) of each statement
   TypedConsStmt :: ProgramLoc ->
                    TypedStmt ext rets ->
-                   Mb (ExprVarCtx rets) (TypedStmtSeq ext blocks inits ret) ->
-                   TypedStmtSeq ext blocks inits ret
+                   Mb (ExprVarCtx rets) (TypedStmtSeq ext blocks ret) ->
+                   TypedStmtSeq ext blocks ret
 
   -- | Typed version of 'TermStmt', which terminates the current block
   TypedTermStmt :: ProgramLoc ->
-                   TypedTermStmt blocks inits ret ->
-                   TypedStmtSeq ext blocks inits ret
+                   TypedTermStmt blocks ret ->
+                   TypedStmtSeq ext blocks ret
 
 $(mkNuMatching [t| forall ext rets. NuMatchingExtC ext => TypedStmt ext rets |])
-$(mkNuMatching [t| forall blocks inits ret. TypedTermStmt blocks inits ret |])
-$(mkNuMatching [t| forall ext blocks inits ret.
-                NuMatchingExtC ext => TypedStmtSeq ext blocks inits ret |])
+$(mkNuMatching [t| forall blocks ret. TypedTermStmt blocks ret |])
+$(mkNuMatching [t| forall ext blocks ret.
+                NuMatchingExtC ext => TypedStmtSeq ext blocks ret |])
 
 
 ----------------------------------------------------------------------
@@ -268,20 +268,20 @@ $(mkNuMatching [t| forall ext blocks inits ret.
 -- FIXME: add a @ghostss@ type argument that associates a @ghosts@ type with
 -- each index of each block, rather than having @ghost@ existentially bound
 -- here.
-data TypedEntry ext blocks inits ret args where
+data TypedEntry ext blocks ret args where
   TypedEntry ::
     TypedEntryID blocks ghosts args -> CruCtx args ->
     MbDistPerms (ghosts :++: args) ->
-    Mb (ghosts :++: args) (TypedStmtSeq ext blocks inits ret) ->
-    TypedEntry ext blocks inits ret args
+    Mb (ghosts :++: args) (TypedStmtSeq ext blocks ret) ->
+    TypedEntry ext blocks ret args
 
 -- | A typed Crucible block is a list of typed entrypoints to that block
-newtype TypedBlock ext blocks inits ret args
-  = TypedBlock [TypedEntry ext blocks inits ret args]
+newtype TypedBlock ext blocks ret args
+  = TypedBlock [TypedEntry ext blocks ret args]
 
 -- | A map assigning a 'TypedBlock' to each 'BlockID'
-type TypedBlockMap ext blocks inits ret =
-  MapRList (TypedBlock ext blocks inits ret) blocks
+type TypedBlockMap ext blocks ret =
+  MapRList (TypedBlock ext blocks ret) blocks
 
 -- | A typed Crucible CFG
 data TypedCFG
@@ -293,7 +293,7 @@ data TypedCFG
   = TypedCFG { tpcfgHandle :: TypedFnHandle ghosts inits ret
              , tpcfgInputPerms :: MbDistPerms (ghosts :++: inits)
              , tpcfgOutputPerms :: MbDistPerms (ghosts :++: inits :> ret)
-             , tpcfgBlockMap :: TypedBlockMap ext blocks inits ret
+             , tpcfgBlockMap :: TypedBlockMap ext blocks ret
              , tpcfgEntryBlockID :: TypedEntryID blocks inits ghosts
              }
 
@@ -312,33 +312,33 @@ data PermCheckState inits ret =
   }
 
 -- | The information needed to type-check a single entrypoint of a block
-data BlockEntryInfo blocks inits ret args where
+data BlockEntryInfo blocks ret args where
   BlockEntryInfo :: {
     entryInfoID :: TypedEntryID blocks args ghosts,
     entryInfoPermsIn :: MbDistPerms (ghosts :++: args),
     entryInfoPermsOut :: MbDistPerms (ghosts :++: args :> ret)
-  } -> BlockEntryInfo blocks inits ret args
+  } -> BlockEntryInfo blocks ret args
 
 -- | Extract the 'BlockID' from entrypoint info
-entryInfoBlockID :: BlockEntryInfo blocks inits ret args -> Member blocks args
+entryInfoBlockID :: BlockEntryInfo blocks ret args -> Member blocks args
 entryInfoBlockID (BlockEntryInfo entryID _ _) = entryBlockID entryID
 
 -- | Extract the entry id from entrypoint info
-entryInfoIndex :: BlockEntryInfo blocks inits ret args -> Int
+entryInfoIndex :: BlockEntryInfo blocks ret args -> Int
 entryInfoIndex (BlockEntryInfo entryID _ _) = entryIndex entryID
 
 -- | Information about the current state of type-checking for a block
-data BlockInfo ext blocks inits ret args =
+data BlockInfo ext blocks ret args =
   BlockInfo
   {
     blockInfoVisited :: Bool,
-    blockInfoEntries :: [BlockEntryInfo blocks inits ret args],
-    blockInfoBlock :: Maybe (TypedBlock ext blocks inits ret args)
+    blockInfoEntries :: [BlockEntryInfo blocks ret args],
+    blockInfoBlock :: Maybe (TypedBlock ext blocks ret args)
   }
 
 
-data TopPermCheckState ext blocks inits ret =
+data TopPermCheckState ext blocks ret =
   TopPermCheckState
   {
-    stBlockInfo :: Closed (MapRList (BlockInfo ext blocks inits ret) blocks)
+    stBlockInfo :: Closed (MapRList (BlockInfo ext blocks ret) blocks)
   }
