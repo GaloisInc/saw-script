@@ -17,12 +17,14 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ConstraintKinds #-}
 
 module SAWScript.Heapster.TypedCrucible where
 
 import Data.Text
 import Data.Type.Equality
+import Data.Functor.Identity
 import GHC.TypeLits
 -- import Data.Functor.Product
 -- import Data.Parameterized.Context
@@ -303,13 +305,23 @@ data TypedCFG
 ----------------------------------------------------------------------
 
 -- | The local state maintained while type-checking is the current permission
--- set and the permissions required on return from the entire function
-data PermCheckState inits ret =
+-- set and the permissions required on return from the entire function. The type
+-- argument @tp@ defines the current return type of the 'PermCheckM'
+-- continuation monad, needed to use this as a state type for 'GenStateT', and
+-- indicates the current AST construct from above that we are building; the
+-- state type ignores this type.
+data PermCheckState args ret tp =
   PermCheckState
   {
-    pcheckStCurPerms :: PermSet RNil,
-    pcheckStRetPerms :: Binding ret (DistPerms (inits :> ret))
+    stCurPerms :: PermSet RNil,
+    stRetPerms :: Binding ret (DistPerms (args :> ret))
   }
+
+-- | Like the 'set' method of a lens, but allows the @tp@ argument to change
+setSTCurPerms :: PermSet RNil -> PermCheckState args ret tp1 ->
+                 PermCheckState args ret tp2
+setSTCurPerms perms (PermCheckState {..}) =
+  PermCheckState { stCurPerms = perms, .. }
 
 -- | The information needed to type-check a single entrypoint of a block
 data BlockEntryInfo blocks ret args where
@@ -336,9 +348,42 @@ data BlockInfo ext blocks ret args =
     blockInfoBlock :: Maybe (TypedBlock ext blocks ret args)
   }
 
-
+-- | Top-level state, maintained outside of permission-checking single blocks
 data TopPermCheckState ext blocks ret =
   TopPermCheckState
   {
     stBlockInfo :: Closed (MapRList (BlockInfo ext blocks ret) blocks)
   }
+
+$(mkNuMatching [t| forall ext blocks ret. TopPermCheckState ext blocks ret |])
+
+instance BindState (TopPermCheckState ext blocks ret) where
+  bindState [nuP| TopPermCheckState i |] = TopPermCheckState (mbLift i)
+
+-- | The top-level monad for permission-checking CFGs
+type TopPermCheckM ext blocks ret =
+  State (TopPermCheckState ext blocks ret)
+
+-- | The generalized monad for permission-checking
+type PermCheckM ext blocks args ret =
+  GenStateT (PermCheckState args ret)
+  (GenContT Identity (TopPermCheckM ext blocks ret))
+
+top_get :: PermCheckM ext blocks args ret tp tp (TopPermCheckState ext blocks ret)
+top_get = error "FIXME HERE"
+
+-- | Run an implication computation inside a permission-checking computation
+runImplM :: (PermImpl tp RNil -> tp) -> CruCtx vars ->
+            ImplM vars tp RNil RNil a ->
+            PermCheckM ext blocks args ret tp tp a
+runImplM f_impl vars m =
+  top_get >>>= \top_st ->
+  gget >>>= \st ->
+  liftGenStateT id
+  (withAltContM (Identity . Impl_Done . runIdentity . flip evalState top_st)
+   (\(implm :: Identity (PermImpl tp RNil)) -> case runIdentity implm of
+       Impl_Done x -> return $ Identity x
+       impl -> return $ Identity $ f_impl impl) $
+   runGenStateT m (mkImplState vars $ stCurPerms st)) >>>= \(a, impl_st) ->
+  modify (setSTCurPerms (_implStatePerms impl_st)) >>>
+  greturn a

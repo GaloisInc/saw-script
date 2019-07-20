@@ -410,10 +410,11 @@ instance GenMonad (GenContT r m) where
 
 -- | Change the return type constructor @r@ by mapping the new input type to the
 -- old and mapping the old output type to the new
-withAltContM :: Functor m => (r2 pin -> r1 pin) -> (r1 pout -> r2 pout) ->
-                GenContT r1 m pin pout a -> GenContT r2 m pin pout a
+withAltContM :: (m2 (r2 pin2) -> m1 (r1 pin1)) ->
+                (m1 (r1 pout1) -> m2 (r2 pout2)) ->
+                GenContT r1 m1 pin1 pout1 a -> GenContT r2 m2 pin2 pout2 a
 withAltContM f_in f_out (GenContT m) =
-  GenContT $ \k -> fmap f_out (m (fmap f_in . k))
+  GenContT $ \k -> f_out (m (f_in . k))
 
 -- | This is like shift, but where the current continuation need not be in a
 -- monad; this is useful for dealing with name-binding operations
@@ -516,7 +517,7 @@ gmapRetAndState f_st f_ret =
   greturn (f_ret r)
   -- gcaptureCCMapState f_st (\k -> f_ret <$> k ())
 
--- | Name-binding in the generzlied continuation monad (FIXME: explain)
+-- | Name-binding in the generalized continuation monad (FIXME: explain)
 class GenMonad m => GenMonadBind r p1 p2 m | m -> r where
   gmbM :: (Mb ctx (r p2) -> r p2) ->
           Mb ctx (m p1 p2 a) -> m p1 p2 a
