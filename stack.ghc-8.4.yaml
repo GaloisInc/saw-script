@@ -14,6 +14,7 @@ packages:
   - deps/jvm-verifier/
   - deps/crucible/what4/
   - deps/crucible/what4-abc/
+  - deps/crucible/what4-limp/
   - deps/crucible/crucible/
   - deps/crucible/crucible-jvm/
   - deps/crucible/crucible-llvm/
@@ -51,5 +52,6 @@ extra-deps:
   - config-schema-1.0.0.0
   - config-value-0.6.3.1
   - simple-get-opt-0.3
+  - limp-0.3.2.3
 resolver: lts-12.26
 allow-newer: true

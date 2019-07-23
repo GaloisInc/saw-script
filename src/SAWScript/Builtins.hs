@@ -17,6 +17,7 @@ Stability   : provisional
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module SAWScript.Builtins where
 
@@ -31,10 +32,12 @@ import qualified Control.Exception as Ex
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
+import Data.IORef(newIORef)
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid ((<>))
+import Data.Reflection (give)
 import Data.Time.Clock
 import Data.Typeable
 import System.Directory
@@ -48,6 +51,7 @@ import Text.Read (readMaybe)
 
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
+import Verifier.SAW.Cryptol.Prims (w4Prims)
 
 -- saw-core
 import Verifier.SAW.Grammar (parseSAWTerm)
@@ -94,6 +98,15 @@ import qualified Data.SBV.Dynamic as SBV
 
 -- aig
 import qualified Data.AIG as AIG
+
+-- limp
+import qualified Numeric.Limp.Canon as LIMPC
+import qualified Numeric.Limp.Canon.Pretty as LIMPC
+import qualified Numeric.Limp.Program as LIMP
+import qualified Numeric.Limp.Rep as LIMP
+import qualified What4.Expr.Builder as What4
+import qualified What4.Interface as What4
+import qualified What4.Solver.LIMP as LIMP
 
 -- cryptol
 import qualified Cryptol.ModuleSystem.Env as C (meSolverConfig)
@@ -1349,3 +1362,38 @@ approxmc t = do
   case msg of
     [l] -> io $ putStrLn l
     _ -> fail $ "Garbled result from approxmc\n\n" ++ out
+
+mkOptimizationProblem ::
+  forall sym t. (What4.IsSymExprBuilder sym, What4.SymExpr sym ~ What4.Expr t) =>
+  sym ->
+  SharedContext ->
+  Map.Map Ident (W4Sim.SValue sym) ->
+  Term ->
+  Term ->
+  IO (LIMP.Program LIMP.ZVar LIMP.RVar LIMP.IntDouble)
+mkOptimizationProblem sym sc ps obj constr = give sym $ do
+  modmap <- scGetModuleMap sc
+  ref <- newIORef Map.empty
+  let eval = W4Sim.w4SolveBasic modmap ps ref []
+  objSVal <- eval obj
+  constrSVal <- eval constr
+  objExpr <- case objSVal of
+               Concrete.VInt i -> return i
+               _ -> fail "Objective is not of integral type."
+  constrExpr <- case constrSVal of
+                  Concrete.VBool b -> return b
+                  _ -> fail "Constraint expression is not of Boolean type."
+  let bounds = [] -- TODO
+  let elp = LIMP.makeLinearProgram LIMP.Maximise objExpr constrExpr bounds
+  case elp of
+    Left err -> fail $ unlines $ [ "Error translating Term to linear program:"
+                                 , show (LIMP.ppTranslationError err)
+                                 ]
+    Right lp -> return lp
+
+maximize_offline :: FilePath -> Term -> Term -> TopLevel ()
+maximize_offline f obj constr = do
+  sc <- getSharedContext
+  sym <- liftIO $ Crucible.newSAWCoreBackend sc globalNonceGenerator
+  lp <- io $ mkOptimizationProblem sym sc w4Prims obj constr
+  io $ writeFile f (LIMPC.ppr show show (LIMPC.program lp))

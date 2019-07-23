@@ -2153,6 +2153,15 @@ primitives = Map.fromList
     [ "Use the approxmc solver to approximate the number of solutions to the"
     , "CNF representation of the given Term."
     ]
+
+  , prim "maximize_offline"  "String -> Term -> Term -> TopLevel ()"
+    (pureVal maximize_offline)
+    Current
+    [ "Write an optimization problem to the given file that maximizes the first"
+    , "argument (of integral type) according to the constraints in the second"
+    , "argument (of boolean type). The file is in the LP format supported by"
+    , "many (M)ILP solvers."
+    ]
   ]
 
   where
