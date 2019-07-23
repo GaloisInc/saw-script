@@ -25,9 +25,10 @@ module SAWScript.Heapster.TypedCrucible where
 import Data.Text
 import Data.Type.Equality
 import Data.Functor.Identity
-import GHC.TypeLits
+import Data.Functor.Const
 -- import Data.Functor.Product
 -- import Data.Parameterized.Context
+import GHC.TypeLits
 import What4.ProgramLoc
 
 import Control.Monad.State
@@ -132,6 +133,12 @@ $(mkNuMatching [t| forall ext f tp.
 -- * Typed Jump Targets and Function Handles
 ----------------------------------------------------------------------
 
+-- FIXME HERE NOW: migrate real PermImpl to have in and out ps
+data FakePermImpl (r :: RList CrucibleType -> *) ps_in = FakePermImpl
+
+$(mkNuMatching [t| forall r ps_out ps_in. FakePermImpl r ps_in |])
+
+
 -- | During type-checking, we convert Crucible registers to variables
 newtype TypedReg tp = TypedReg { unTypedReg :: ExprVar tp }
 
@@ -169,11 +176,11 @@ data TypedArgs args where
 
 -- | A typed target for jump and branch statements, including arguments and a
 -- proof of the required permissions on those arguments
-data TypedJumpTarget blocks where
+data TypedJumpTarget blocks ps_in where
      TypedJumpTarget ::
        TypedEntryID blocks args ghosts ->
-       PermImpl (TypedArgs (ghosts :++: args)) RNil ->
-       TypedJumpTarget blocks
+       FakePermImpl (Const (TypedArgs (ghosts :++: args))) ps_in ->
+       TypedJumpTarget blocks ps_in
 
 
 $(mkNuMatching [t| forall tp. TypedReg tp |])
@@ -189,7 +196,7 @@ $(mkNuMatching [t| forall ext tp. NuMatchingExtC ext => TypedExpr ext tp |])
 $(mkNuMatching [t| forall ghosts args ret. TypedFnHandle ghosts args ret |])
 $(mkNuMatching [t| forall blocks ghosts args. TypedEntryID blocks args ghosts |])
 $(mkNuMatching [t| forall args. TypedArgs args |])
-$(mkNuMatching [t| forall blocks. TypedJumpTarget blocks |])
+$(mkNuMatching [t| forall blocks ps_in. TypedJumpTarget blocks ps_in |])
 
 
 ----------------------------------------------------------------------
@@ -198,65 +205,79 @@ $(mkNuMatching [t| forall blocks. TypedJumpTarget blocks |])
 
 -- | Typed Crucible statements with the given Crucible syntax extension and the
 -- given set of return values
-data TypedStmt ext rets where
+data TypedStmt ext rets ps_out ps_in where
   -- | Assign the value of a register
-  TypedSetReg :: TypeRepr tp -> TypedExpr ext tp -> TypedStmt ext (RNil :> tp)
-
-  -- | Assign a register via a statement in a syntax extension
-  ExtendAssign :: StmtExtension ext TypedReg tp -> TypedStmt ext (RNil :> tp)
+  TypedSetReg :: TypeRepr tp -> TypedExpr ext tp ->
+                 TypedStmt ext (RNil :> tp) (RNil :> tp) RNil
 
   -- | Assert a boolean condition, printing the given string on failure
-  TypedAssert :: TypedReg BoolType -> TypedReg StringType -> TypedStmt ext RNil
+  TypedAssert :: TypedReg BoolType -> TypedReg StringType ->
+                 TypedStmt ext RNil RNil RNil
+
+  -- FIXME: add Alignment to loads and stores
+  TypedLLVMLoad :: (TypedReg (LLVMPointerType w)) ->
+                   TypedStmt (LLVM arch) (RNil :> LLVMPointerType w)
+                   (RNil :> LLVMPointerType w :> LLVMPointerType w)
+                   (RNil :> LLVMPointerType w)
+
+  TypedLLVMStore :: (TypedReg (LLVMPointerType w)) ->
+                    (TypedReg (LLVMPointerType w)) ->
+                    TypedStmt (LLVM arch) (RNil :> LLVMPointerType w)
+                    (RNil :> LLVMPointerType w)
+                    (RNil :> LLVMPointerType w)
 
   -- | Destruct an LLVM value into its block and offset
   DestructLLVMPtr :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
                      TypedStmt (LLVM arch) (RNil :> NatType :> BVType w)
+                     (RNil :> LLVMPointerType w)
+                     (RNil :> LLVMPointerType w)
 
 
 -- | Typed Crucible block termination statements
-data TypedTermStmt blocks (ret :: CrucibleType) where
+data TypedTermStmt blocks ret ps_in where
   -- | Jump to the given jump target
-  TypedJump :: TypedJumpTarget blocks -> TypedTermStmt blocks ret
+  TypedJump :: TypedJumpTarget blocks ps_in -> TypedTermStmt blocks ret ps_in
 
   -- | Branch on condition: if true, jump to the first jump target, and
   -- otherwise jump to the second jump target
   TypedBr :: TypedReg BoolType ->
-             TypedJumpTarget blocks ->
-             TypedJumpTarget blocks ->
-             TypedTermStmt blocks ret
+             TypedJumpTarget blocks ps_in ->
+             TypedJumpTarget blocks ps_in ->
+             TypedTermStmt blocks ret ps_in
 
   -- | Return from function, providing the return value and also proof that the
   -- current permissions the required return permissions
-  TypedReturn :: PermImpl (TypedReg ret) RNil ->
-                 TypedTermStmt blocks ret
+  TypedReturn :: FakePermImpl (Const (TypedReg ret)) ps_in ->
+                 TypedTermStmt blocks ret ps_in
 
   -- | Block ends with an error
-  TypedErrorStmt :: TypedReg StringType -> TypedTermStmt blocks ret
+  TypedErrorStmt :: TypedReg StringType -> TypedTermStmt blocks ret ps_in
 
 
 -- | A typed sequence of Crucible statements
-data TypedStmtSeq ext blocks (ret :: CrucibleType) where
+data TypedStmtSeq ext blocks ret ps_in where
   -- | A permission implication step, which modifies the current permission
   -- set. This can include pattern-matches and/or assertion failures.
-  TypedImplStmt :: PermImpl (TypedStmtSeq ext blocks ret) RNil ->
-                   TypedStmtSeq ext blocks ret
+  TypedImplStmt :: FakePermImpl (TypedStmtSeq ext blocks ret) ps_in ->
+                   TypedStmtSeq ext blocks ret ps_in
 
   -- | Typed version of 'ConsStmt', which binds new variables for the return
   -- value(s) of each statement
   TypedConsStmt :: ProgramLoc ->
-                   TypedStmt ext rets ->
-                   Mb (ExprVarCtx rets) (TypedStmtSeq ext blocks ret) ->
-                   TypedStmtSeq ext blocks ret
+                   TypedStmt ext rets ps_next ps_in ->
+                   Mb (ExprVarCtx rets) (TypedStmtSeq ext blocks ret ps_next) ->
+                   TypedStmtSeq ext blocks ret ps_in
 
   -- | Typed version of 'TermStmt', which terminates the current block
   TypedTermStmt :: ProgramLoc ->
-                   TypedTermStmt blocks ret ->
-                   TypedStmtSeq ext blocks ret
+                   TypedTermStmt blocks ret ps_in ->
+                   TypedStmtSeq ext blocks ret ps_in
 
-$(mkNuMatching [t| forall ext rets. NuMatchingExtC ext => TypedStmt ext rets |])
-$(mkNuMatching [t| forall blocks ret. TypedTermStmt blocks ret |])
-$(mkNuMatching [t| forall ext blocks ret.
-                NuMatchingExtC ext => TypedStmtSeq ext blocks ret |])
+$(mkNuMatching [t| forall ext rets  ps_out ps_in. NuMatchingExtC ext =>
+                TypedStmt ext rets ps_out ps_in |])
+$(mkNuMatching [t| forall blocks ret ps_in. TypedTermStmt blocks ret ps_in |])
+$(mkNuMatching [t| forall ext blocks ret ps_in.
+                NuMatchingExtC ext => TypedStmtSeq ext blocks ret ps_in |])
 
 
 ----------------------------------------------------------------------
@@ -274,7 +295,7 @@ data TypedEntry ext blocks ret args where
   TypedEntry ::
     TypedEntryID blocks ghosts args -> CruCtx args ->
     MbDistPerms (ghosts :++: args) ->
-    Mb (ghosts :++: args) (TypedStmtSeq ext blocks ret) ->
+    Mb (ghosts :++: args) (TypedStmtSeq ext blocks ret (ghosts :++: args)) ->
     TypedEntry ext blocks ret args
 
 -- | A typed Crucible block is a list of typed entrypoints to that block
