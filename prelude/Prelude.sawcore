@@ -1087,6 +1087,9 @@ primitive bvPopcount : (n : Nat) -> bitvector n -> bitvector n;
 primitive bvCountLeadingZeros : (n : Nat) -> bitvector n -> bitvector n;
 primitive bvCountTrailingZeros : (n : Nat) -> bitvector n -> bitvector n;
 
+-- Universal quantification over bitvectors
+primitive bvForall : (n : Nat) -> (bitvector n -> Bool) -> Bool;
+
 bvCarry : (n : Nat) -> bitvector n -> bitvector n -> Bool;
 bvCarry n x y = bvult n (bvAdd n x y) x;
 

@@ -157,6 +157,7 @@ module Verifier.SAW.SharedTerm
   , scImplies
   , scXor
   , scBoolEq
+  , scBvForall
   , scIte
   , scSingle
   , scSlice
@@ -1253,6 +1254,9 @@ scXor sc x y = scGlobalApply sc "Prelude.xor" [x,y]
 
 scBoolEq :: SharedContext -> Term -> Term -> IO Term
 scBoolEq sc x y = scGlobalApply sc "Prelude.boolEq" [x,y]
+
+scBvForall :: SharedContext -> Term -> Term -> IO Term
+scBvForall sc w f = scGlobalApply sc "Prelude.bvForall" [w, f]
 
 -- ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext -> Term -> Term ->

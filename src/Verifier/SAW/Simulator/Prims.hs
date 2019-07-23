@@ -102,6 +102,7 @@ data BasePrims l =
   , bpBvPopcount           :: VWord l -> MWord l
   , bpBvCountLeadingZeros  :: VWord l -> MWord l
   , bpBvCountTrailingZeros :: VWord l -> MWord l
+  , bpBvForall             :: Natural -> (VWord l -> MBool l) -> MBool l
     -- Integer operations
   , bpIntAdd :: VInt l -> VInt l -> MInt l
   , bpIntSub :: VInt l -> VInt l -> MInt l
@@ -165,6 +166,9 @@ constMap bp = Map.fromList
   , ("Prelude.bvPopcount", wordUnOp (bpPack bp) (bpBvPopcount bp))
   , ("Prelude.bvCountLeadingZeros", wordUnOp (bpPack bp) (bpBvCountLeadingZeros bp))
   , ("Prelude.bvCountTrailingZeros", wordUnOp (bpPack bp) (bpBvCountTrailingZeros bp))
+  , ("Prelude.bvForall", natFun $ \n ->
+        pure . strictFun $ fmap VBool . bpBvForall bp n . toWordPred
+    )
 
 {-
   -- Shifts
@@ -284,6 +288,10 @@ toWord :: (VMonad l, Show (Extra l)) => Pack l -> Value l -> MWord l
 toWord _ (VWord w) = return w
 toWord pack (VVector vv) = pack =<< V.mapM (liftM toBool . force) vv
 toWord _ x = fail $ unwords ["Verifier.SAW.Simulator.toWord", show x]
+
+toWordPred :: (VMonad l, Show (Extra l)) => Value l -> VWord l -> MBool l
+toWordPred (VFun f) = fmap toBool . f . ready . VWord
+toWordPred x = error $ unwords ["Verifier.SAW.Simulator.toWordPred", show x]
 
 toBits :: (VMonad l, Show (Extra l)) => Unpack l -> Value l ->
                                                   EvalM l (Vector (VBool l))

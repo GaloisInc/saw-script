@@ -194,6 +194,7 @@ prims =
   , Prims.bpBvPopcount = pure1 RMEV.popcount
   , Prims.bpBvCountLeadingZeros = pure1 RMEV.countLeadingZeros
   , Prims.bpBvCountTrailingZeros = pure1 RMEV.countTrailingZeros
+  , Prims.bpBvForall = error "bvForall unimplemented for backend"
     -- Integer operations
   , Prims.bpIntAdd = pure2 (+)
   , Prims.bpIntSub = pure2 (-)
