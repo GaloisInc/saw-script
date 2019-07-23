@@ -226,6 +226,7 @@ prims be =
   , Prims.bpBvPopcount = AIG.popCount be
   , Prims.bpBvCountLeadingZeros = AIG.countLeadingZeros be
   , Prims.bpBvCountTrailingZeros = AIG.countTrailingZeros be
+  , Prims.bpBvForall = error "bvForall unimplemented for backend"
 
     -- Integer operations
   , Prims.bpIntAdd = pure2 (+)
