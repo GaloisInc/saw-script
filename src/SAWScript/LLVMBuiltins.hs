@@ -22,7 +22,6 @@ module SAWScript.LLVMBuiltins where
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative hiding (many)
 #endif
-import Control.Monad.ST (stToIO)
 import Data.String
 import Data.Parameterized.Some
 
@@ -41,7 +40,7 @@ llvm_load_module file =
     Left err -> fail (LLVM.formatError err)
     Right llvm_mod -> do
       halloc <- getHandleAlloc
-      Some mtrans <- io $ stToIO $ Crucible.translateModule halloc llvm_mod
+      Some mtrans <- io $ Crucible.translateModule halloc llvm_mod
       return (Some (CMS.LLVMModule file llvm_mod mtrans))
 
 llvm_type :: String -> TopLevel LLVM.Type
