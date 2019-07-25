@@ -20,7 +20,7 @@ module SAWScript.X86
 
 import Control.Lens (toListOf, folded, (^.))
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad.ST(stToIO,RealWorld)
+import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class(liftIO)
 
 import           Data.ByteString (ByteString)
@@ -147,7 +147,7 @@ data Options = Options
   , backend :: Sym
     -- ^ The Crucible backend to use.
 
-  , allocator :: HandleAllocator RealWorld
+  , allocator :: HandleAllocator
     -- ^ The handle allocator used to allocate @memvar@
 
   , memvar :: GlobalVar Mem
@@ -191,7 +191,7 @@ proof archi file mbCry globs fun =
      scLoadCryptolModule sc
      sym <- newSAWCoreBackend sc globalNonceGenerator
      cenv <- loadCry sym mbCry
-     mvar <- stToIO (mkMemVar halloc)
+     mvar <- mkMemVar halloc
      proofWithOptions Options
        { fileName = file
        , function = fun
@@ -497,9 +497,9 @@ makeCFG ::
 makeCFG opts elf name addr =
   do (_,Some funInfo) <- stToIO $ analyzeFunction quiet addr UserRequest empty
      -- writeFile "MACAW.cfg" (show (pretty funInfo))
-     baseVar <- stToIO  $ freshGlobalVar (allocator opts) baseName knownRepr
+     baseVar <- freshGlobalVar (allocator opts) baseName knownRepr
      let memBaseVarMap = Map.singleton 1 baseVar
-     stToIO $ mkFunCFG x86 (allocator opts) memBaseVarMap cruxName posFn funInfo
+     mkFunCFG x86 (allocator opts) memBaseVarMap cruxName posFn funInfo
   where
   txtName   = decodeUtf8 name
   cruxName  = functionNameFromText txtName

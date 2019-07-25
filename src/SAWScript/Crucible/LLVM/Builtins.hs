@@ -102,7 +102,6 @@ import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
-import           What4.Utils.MonadST
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
@@ -1518,7 +1517,7 @@ crucible_declare_ghost_state ::
   TopLevel Value
 crucible_declare_ghost_state _bic _opt name =
   do allocator <- getHandleAlloc
-     global <- liftIO (liftST (Crucible.freshGlobalVar allocator (Text.pack name) knownRepr))
+     global <- liftIO (Crucible.freshGlobalVar allocator (Text.pack name) knownRepr)
      return (VGhostVar global)
 
 crucible_ghost_value ::

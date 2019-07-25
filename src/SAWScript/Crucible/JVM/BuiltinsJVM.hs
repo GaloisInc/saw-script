@@ -116,7 +116,7 @@ prepareClassTopLevel bic str = do
 
      -- add handles/global variables for this class
      halloc <- getHandleAlloc
-     ctx <- io $ stToIO $ execStateT (CJ.extendJVMContext halloc c) ctx0
+     ctx <- io $ execStateT (CJ.extendJVMContext halloc c) ctx0
 
      -- update ctx
      addJVMTrans ctx

@@ -28,7 +28,6 @@ Stability   : provisional
 module SAWScript.Crucible.JVM.MethodSpecIR where
 
 import           Control.Lens
-import           Control.Monad.ST (RealWorld)
 import           Data.Monoid ((<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 
@@ -144,7 +143,7 @@ data JVMCrucibleContext =
   , _jccCodebase       :: CB.Codebase
   , _jccJVMContext     :: CJ.JVMContext
   , _jccBackend        :: Sym -- This is stored inside field _ctxSymInterface of Crucible.SimContext; why do we need another one?
-  , _jccHandleAllocator :: Crucible.HandleAllocator RealWorld
+  , _jccHandleAllocator :: Crucible.HandleAllocator
   }
 
 makeLenses ''JVMCrucibleContext
