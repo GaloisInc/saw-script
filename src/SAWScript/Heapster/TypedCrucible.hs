@@ -25,7 +25,7 @@ module SAWScript.Heapster.TypedCrucible where
 import Data.Text
 import Data.Type.Equality
 import Data.Functor.Identity
-import Data.Functor.Const
+-- import Data.Functor.Const
 -- import Data.Functor.Product
 -- import Data.Parameterized.Context
 import GHC.TypeLits
@@ -157,17 +157,17 @@ instance TestEquality (TypedEntryID blocks args) where
   testEquality _ _ = Nothing
 
 -- | A collection of arguments to a function or jump target
-data TypedArgs args where
-  TypedArgsNil :: TypedArgs RNil
-  TypedArgsCons :: KnownRepr TypeRepr a => TypedArgs args -> TypedReg a ->
-                   TypedArgs (args :> a)
+data TypedArgs args ps where
+  TypedArgsNil :: TypedArgs RNil ps
+  TypedArgsCons :: KnownRepr TypeRepr a => TypedArgs args ps -> TypedReg a ->
+                   TypedArgs (args :> a) ps
 
 -- | A typed target for jump and branch statements, including arguments and a
 -- proof of the required permissions on those arguments
 data TypedJumpTarget blocks ps_in where
      TypedJumpTarget ::
        TypedEntryID blocks args ghosts ->
-       PermImpl (Const (TypedArgs (ghosts :++: args))) ps_in ->
+       PermImpl (TypedArgs (ghosts :++: args)) ps_in ->
        TypedJumpTarget blocks ps_in
 
 
@@ -183,7 +183,11 @@ type NuMatchingExtC ext =
 $(mkNuMatching [t| forall ext tp. NuMatchingExtC ext => TypedExpr ext tp |])
 $(mkNuMatching [t| forall ghosts args ret. TypedFnHandle ghosts args ret |])
 $(mkNuMatching [t| forall blocks ghosts args. TypedEntryID blocks args ghosts |])
-$(mkNuMatching [t| forall args. TypedArgs args |])
+$(mkNuMatching [t| forall args ps. TypedArgs args ps |])
+
+instance NuMatchingAny1 (TypedArgs args) where
+  nuMatchingAny1Proof = nuMatchingProof
+
 $(mkNuMatching [t| forall blocks ps_in. TypedJumpTarget blocks ps_in |])
 
 
@@ -221,6 +225,10 @@ data TypedStmt ext rets ps_out ps_in where
                      (RNil :> LLVMPointerType w)
 
 
+-- | Typed return argument
+data TypedRet ret ps = TypedRet (TypedReg ret)
+
+
 -- | Typed Crucible block termination statements
 data TypedTermStmt blocks ret ps_in where
   -- | Jump to the given jump target
@@ -234,8 +242,8 @@ data TypedTermStmt blocks ret ps_in where
              TypedTermStmt blocks ret ps_in
 
   -- | Return from function, providing the return value and also proof that the
-  -- current permissions the required return permissions
-  TypedReturn :: PermImpl (Const (TypedReg ret)) ps_in ->
+  -- current permissions imply the required return permissions
+  TypedReturn :: PermImpl (TypedRet ret) ps_in ->
                  TypedTermStmt blocks ret ps_in
 
   -- | Block ends with an error
@@ -263,9 +271,17 @@ data TypedStmtSeq ext blocks ret ps_in where
 
 $(mkNuMatching [t| forall ext rets  ps_out ps_in. NuMatchingExtC ext =>
                 TypedStmt ext rets ps_out ps_in |])
+$(mkNuMatching [t| forall ret ps. TypedRet ret ps |])
+
+instance NuMatchingAny1 (TypedRet ret) where
+  nuMatchingAny1Proof = nuMatchingProof
+
 $(mkNuMatching [t| forall blocks ret ps_in. TypedTermStmt blocks ret ps_in |])
 $(mkNuMatching [t| forall ext blocks ret ps_in.
                 NuMatchingExtC ext => TypedStmtSeq ext blocks ret ps_in |])
+
+instance NuMatchingExtC ext => NuMatchingAny1 (TypedStmtSeq ext blocks ret) where
+  nuMatchingAny1Proof = nuMatchingProof
 
 
 ----------------------------------------------------------------------
@@ -369,18 +385,22 @@ instance BindState (TopPermCheckState ext blocks ret) where
 type TopPermCheckM ext blocks ret =
   State (TopPermCheckState ext blocks ret)
 
--- | The generalized monad for permission-checking statements
-type PermCheckM ext blocks args ret =
+-- | The generalized monad for permission-checking
+type PermCheckM r ext blocks args ret =
   GenStateT (PermCheckState args ret)
-  (GenContT (TypedStmtSeq ext blocks ret) (TopPermCheckM ext blocks ret))
+  (GenContT r (TopPermCheckM ext blocks ret))
 
-top_get :: PermCheckM ext blocks args ret ps ps (TopPermCheckState ext blocks ret)
+type StmtPermCheckM ext blocks args ret =
+  PermCheckM (TypedStmtSeq ext blocks ret) ext blocks args ret
+
+top_get :: PermCheckM r ext blocks args ret ps ps (TopPermCheckState ext blocks ret)
 top_get = error "FIXME HERE"
 
+{-
 -- | Run an implication computation inside a permission-checking computation
-runImplM :: (PermImpl tp RNil -> tp) -> CruCtx vars ->
-            ImplM vars tp RNil RNil a ->
-            PermCheckM ext blocks args ret tp tp a
+runImplM :: (forall ps. PermImpl r ps -> r ps) -> CruCtx vars ->
+            ImplM vars tp ps_out ps_in a ->
+            PermCheckM r ext blocks args ret ps_out ps_in a
 runImplM f_impl vars m =
   top_get >>>= \top_st ->
   gget >>>= \st ->
@@ -392,3 +412,4 @@ runImplM f_impl vars m =
    runGenStateT m (mkImplState vars $ stCurPerms st)) >>>= \(a, impl_st) ->
   modify (setSTCurPerms (_implStatePerms impl_st)) >>>
   greturn a
+-}
