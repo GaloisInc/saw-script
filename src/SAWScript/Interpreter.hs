@@ -948,8 +948,8 @@ primitives = Map.fromList
     , "Coq. The first argument is the filename to use as output."
     ]
 
-  , prim "write_coq_cryptol_primitives" "String -> TopLevel ()"
-    (pureVal writeCoqCryptolPrimitives)
+  , prim "write_coq_cryptol_primitives_for_sawcore" "String -> TopLevel ()"
+    (pureVal writeCoqCryptolPrimitivesForSAWCore)
     Experimental
     [ "Write out a representation of cryptol-verifier's Cryptol.sawcore in"
     , "Gallina syntax for Coq. The first argument is the filename to use as"
