@@ -329,6 +329,10 @@ translateTerm t = withLocalLocalEnvironment $ do -- traceTerm "translateTerm" t 
                       , defaultValueT
                       ]
               _ -> badTerm
+            -- NOTE: there is currently one instance of `fix` that will trigger
+            -- `notSupported`.  It is used in `Cryptol.cry` when translating
+            -- `iterate`, which generates an infinite stream of nested
+            -- applications of a given function.
             _ -> notSupported
           _ -> badTerm
         _ ->
@@ -379,7 +383,7 @@ defaultTermForType typ = do
       falseT <- translateIdent (mkIdent preludeName "False")
       return $ Coq.Var falseT
 
-    _ -> Except.throwError $ NotSupported typ
+    _ -> Except.throwError $ CannotCreateDefaultValue typ
 
 translateTermToDocWith ::
   TranslationConfiguration ->

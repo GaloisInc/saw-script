@@ -30,6 +30,7 @@ data TranslationError a
   | NotType a
   | LocalVarOutOfBounds a
   | BadTerm a
+  | CannotCreateDefaultValue a
 
 instance {-# OVERLAPPING #-} Show (TranslationError Term) where
   show = showError showTerm
@@ -44,6 +45,7 @@ showError printer err = case err of
   NotType a      -> "Expecting a type term: " ++ printer a
   LocalVarOutOfBounds a -> "Local variable reference is out of bounds: " ++ printer a
   BadTerm a -> "Malformed term: " ++ printer a
+  CannotCreateDefaultValue a -> "Unable to generate a default value of the given type: " ++ printer a
 
 data TranslationConfiguration = TranslationConfiguration
   { translateVectorsAsCoqVectors :: Bool -- ^ when `False`, translate vectors as Coq lists
