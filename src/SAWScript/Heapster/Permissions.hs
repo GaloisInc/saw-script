@@ -52,6 +52,9 @@ import Lang.Crucible.CFG.Core
 
 -- FIXME HERE: move all of the below to Hobbits!
 
+type RNil = 'RNil
+type (:>) = '(:>)
+
 -- | A reification of an object of type @a@ at type level
 data ReifiesObj a = forall s. Reifies s a => ReifiesObj (Proxy s)
 
