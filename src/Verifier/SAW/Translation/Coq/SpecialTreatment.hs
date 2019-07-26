@@ -27,6 +27,7 @@ module Verifier.SAW.Translation.Coq.SpecialTreatment where
 import           Control.Lens                       (_1, _2, over)
 import           Control.Monad.Reader               (ask)
 import qualified Data.Map                           as Map
+import           Data.String.Interpolate            (i)
 import           Prelude                            hiding (fail)
 
 import qualified Language.Coq.AST                   as Coq
@@ -286,8 +287,11 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("foldr",             mapsTo vectorsModule "foldr")
   , ("gen",               mapsTo vectorsModule "gen")
   , ("take0",             skip)
+  -- zip must be realized in-place because it both depends on definitions and is
+  -- used by other definitions in the same file, so it can neither be pre- nor
+  -- post-defined.
+  , ("zip",               realize zipSnippet)
   -- cannot map directly to Vector.t because arguments are in a different order
-  , ("zip",               mapsTo vectorsModule "zip")
   , ("Vec",               mapsTo vectorsModule "Vec")
   ]
 
@@ -300,3 +304,24 @@ constantsRenamingMap =
 translateConstant :: String -> String
 translateConstant c =
   Map.findWithDefault c c constantsRenamingMap
+
+zipSnippet :: String
+zipSnippet = [i|
+Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
+  : Vec (minNat m n) (a * b) :=
+  match
+    xs in Vector.t _ m'
+    return Vector.t _ (minNat m' n)
+  with
+  | Vector.nil _ => Vector.nil _
+  | Vector.cons _ x pm xs =>
+    match
+      ys in Vector.t _ n'
+      return Vector.t _ (minNat (S pm) n')
+    with
+    | Vector.nil _ => Vector.nil _
+    | Vector.cons _ y pm' ys => Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)
+    end
+  end
+.
+|]
