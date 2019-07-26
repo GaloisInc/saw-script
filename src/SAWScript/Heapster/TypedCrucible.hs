@@ -102,17 +102,11 @@ instance NuMatching RoundingMode where
   nuMatchingProof = unsafeMbTypeRepr
 
 
-class NuMatchingAny1 (f :: k -> *) where
-  nuMatchingAny1Proof :: MbTypeRepr (f a)
-
 instance NuMatchingAny1 BaseTypeRepr where
   nuMatchingAny1Proof = nuMatchingProof
 
 instance NuMatchingAny1 TypeRepr where
   nuMatchingAny1Proof = nuMatchingProof
-
-instance {-# INCOHERENT #-} NuMatchingAny1 f => NuMatching (f a) where
-  nuMatchingProof = nuMatchingAny1Proof
 
 instance NuMatchingAny1 f => NuMatching (Assignment f ctx) where
   nuMatchingProof =
@@ -132,12 +126,6 @@ $(mkNuMatching [t| forall ext f tp.
 ----------------------------------------------------------------------
 -- * Typed Jump Targets and Function Handles
 ----------------------------------------------------------------------
-
--- FIXME HERE NOW: migrate real PermImpl to have in and out ps
-data FakePermImpl (r :: RList CrucibleType -> *) ps_in = FakePermImpl
-
-$(mkNuMatching [t| forall r ps_out ps_in. FakePermImpl r ps_in |])
-
 
 -- | During type-checking, we convert Crucible registers to variables
 newtype TypedReg tp = TypedReg { unTypedReg :: ExprVar tp }
@@ -179,7 +167,7 @@ data TypedArgs args where
 data TypedJumpTarget blocks ps_in where
      TypedJumpTarget ::
        TypedEntryID blocks args ghosts ->
-       FakePermImpl (Const (TypedArgs (ghosts :++: args))) ps_in ->
+       PermImpl (Const (TypedArgs (ghosts :++: args))) ps_in ->
        TypedJumpTarget blocks ps_in
 
 
@@ -247,7 +235,7 @@ data TypedTermStmt blocks ret ps_in where
 
   -- | Return from function, providing the return value and also proof that the
   -- current permissions the required return permissions
-  TypedReturn :: FakePermImpl (Const (TypedReg ret)) ps_in ->
+  TypedReturn :: PermImpl (Const (TypedReg ret)) ps_in ->
                  TypedTermStmt blocks ret ps_in
 
   -- | Block ends with an error
@@ -258,7 +246,7 @@ data TypedTermStmt blocks ret ps_in where
 data TypedStmtSeq ext blocks ret ps_in where
   -- | A permission implication step, which modifies the current permission
   -- set. This can include pattern-matches and/or assertion failures.
-  TypedImplStmt :: FakePermImpl (TypedStmtSeq ext blocks ret) ps_in ->
+  TypedImplStmt :: PermImpl (TypedStmtSeq ext blocks ret) ps_in ->
                    TypedStmtSeq ext blocks ret ps_in
 
   -- | Typed version of 'ConsStmt', which binds new variables for the return
@@ -326,21 +314,17 @@ data TypedCFG
 ----------------------------------------------------------------------
 
 -- | The local state maintained while type-checking is the current permission
--- set and the permissions required on return from the entire function. The type
--- argument @tp@ defines the current return type of the 'PermCheckM'
--- continuation monad, needed to use this as a state type for 'GenStateT', and
--- indicates the current AST construct from above that we are building; the
--- state type ignores this type.
-data PermCheckState args ret tp =
+-- set and the permissions required on return from the entire function.
+data PermCheckState args ret ps =
   PermCheckState
   {
-    stCurPerms :: PermSet RNil,
+    stCurPerms :: PermSet ps,
     stRetPerms :: Binding ret (DistPerms (args :> ret))
   }
 
--- | Like the 'set' method of a lens, but allows the @tp@ argument to change
-setSTCurPerms :: PermSet RNil -> PermCheckState args ret tp1 ->
-                 PermCheckState args ret tp2
+-- | Like the 'set' method of a lens, but allows the @ps@ argument to change
+setSTCurPerms :: PermSet ps2 -> PermCheckState args ret ps1 ->
+                 PermCheckState args ret ps2
 setSTCurPerms perms (PermCheckState {..}) =
   PermCheckState { stCurPerms = perms, .. }
 
@@ -385,12 +369,12 @@ instance BindState (TopPermCheckState ext blocks ret) where
 type TopPermCheckM ext blocks ret =
   State (TopPermCheckState ext blocks ret)
 
--- | The generalized monad for permission-checking
+-- | The generalized monad for permission-checking statements
 type PermCheckM ext blocks args ret =
   GenStateT (PermCheckState args ret)
-  (GenContT Identity (TopPermCheckM ext blocks ret))
+  (GenContT (TypedStmtSeq ext blocks ret) (TopPermCheckM ext blocks ret))
 
-top_get :: PermCheckM ext blocks args ret tp tp (TopPermCheckState ext blocks ret)
+top_get :: PermCheckM ext blocks args ret ps ps (TopPermCheckState ext blocks ret)
 top_get = error "FIXME HERE"
 
 -- | Run an implication computation inside a permission-checking computation
