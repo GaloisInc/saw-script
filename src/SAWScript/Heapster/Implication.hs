@@ -512,6 +512,17 @@ withAltStateM s_get s_update (GenStateT m) =
   m (s_get s) >>>= \(a, s') ->
   greturn (a, s_update s s')
 
+-- | FIXME: document
+withAltContStateM :: (m2 (r2 pin) -> m1 (r1 pin)) ->
+                     (m1 (r1 pout) -> m2 (r2 pout)) ->
+                     (s2 pout -> s1 pout) -> (s2 pout -> s1 pin -> s2 pin) ->
+                     GenStateT s1 (GenContT r1 m1) pin pout a ->
+                     GenStateT s2 (GenContT r2 m2) pin pout a
+withAltContStateM f_in f_out s_get s_update (GenStateT m) =
+  GenStateT $ \s ->
+  withAltContM f_in f_out (m (s_get s)) >>>= \(a, s') ->
+  greturn (a, s_update s s')
+
 -- | FIXME: remove this...?
 gcaptureCCMapState :: (s p2 -> s p1) -> ((a -> m (r p1)) -> m (r p2)) ->
                       GenStateT s (GenContT r m) p1 p2 a

@@ -396,20 +396,15 @@ type StmtPermCheckM ext blocks args ret =
 top_get :: PermCheckM r ext blocks args ret ps ps (TopPermCheckState ext blocks ret)
 top_get = error "FIXME HERE"
 
-{-
 -- | Run an implication computation inside a permission-checking computation
 runImplM :: (forall ps. PermImpl r ps -> r ps) -> CruCtx vars ->
-            ImplM vars tp ps_out ps_in a ->
+            ImplM vars r ps_out ps_in a ->
             PermCheckM r ext blocks args ret ps_out ps_in a
 runImplM f_impl vars m =
   top_get >>>= \top_st ->
-  gget >>>= \st ->
-  liftGenStateT id
-  (withAltContM (Identity . Impl_Done . runIdentity . flip evalState top_st)
-   (\(implm :: Identity (PermImpl tp RNil)) -> case runIdentity implm of
-       Impl_Done x -> return $ Identity x
-       impl -> return $ Identity $ f_impl impl) $
-   runGenStateT m (mkImplState vars $ stCurPerms st)) >>>= \(a, impl_st) ->
-  modify (setSTCurPerms (_implStatePerms impl_st)) >>>
-  greturn a
--}
+  withAltContStateM
+  (Identity . Impl_Done . flip evalState top_st)
+  (return . f_impl . runIdentity)
+  (mkImplState vars . stCurPerms)
+  (\st implSt -> st { stCurPerms = _implStatePerms implSt })
+  m
