@@ -1217,6 +1217,13 @@ popPerm x (PermSet nmap pstk) =
 introTrue :: ExprVar a -> PermSet ps -> PermSet (ps :> a)
 introTrue x = pushPerm x ValPerm_True
 
+-- | Recombine an @x:true@ proof on the top of the stack by dropping it
+recombineTrue :: ExprVar a -> PermSet (ps :> a) -> PermSet ps
+recombineTrue x perms =
+  case popPerm x perms of
+    (perms', ValPerm_True) -> perms'
+    _ -> error "recombineTrue"
+
 -- | Apply the left or-introduction rule to the top of the permission stack,
 -- changing it from @x:p1@ to @x:(p1 \/ p2)@
 introOrL :: ExprVar a -> ValuePerm a -> PermSet (ps :> a) -> PermSet (ps :> a)

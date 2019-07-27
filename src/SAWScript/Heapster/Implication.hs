@@ -157,6 +157,13 @@ data PermImpl r ps where
   -- > -----------------------------
   -- > Gin | Pl * Pin |- rets
 
+  Impl_RecombineTrue :: ExprVar a -> PermImpl r ps -> PermImpl r (ps :> a)
+  -- ^ "Recombine" a true proof on the top of the stack by dropping it
+  --
+  -- > Gin | Pl * Pin |- rets
+  -- > -----------------------------
+  -- > Gin | Pl,x:true * Pin |- rets
+
   Impl_IntroCast :: ExprVar a -> ExprVar a ->
                     PermImpl r (ps :> a) ->
                     PermImpl r (ps :> a :> a)
@@ -770,6 +777,10 @@ getLLVMPtrPerms :: ExprVar (LLVMPointerType w) ->
 getLLVMPtrPerms x =
   view (implStatePerms . varPerm x . llvmPtrPerms) <$> gget
 
+-- | Get the distinguished permission stack
+getDistPerms :: ImplM vars r ps ps (DistPerms ps)
+getDistPerms = view (implStatePerms . distPerms) <$> gget
+
 -- | Get the top permission in the stack
 getTopDistPerm :: ExprVar a -> ImplM vars r (ps :> a) (ps :> a) (ValuePerm a)
 getTopDistPerm x = view (implStatePerms . topDistPerm x) <$> gget
@@ -886,6 +897,10 @@ elimOrsExistsM x =
 -- | Introduce a proof of @x:true@ onto the top of the stack
 introTrueM :: ExprVar a -> ImplM vars r (ps :> a) ps ()
 introTrueM x = gmapRetAndPerms (introTrue x) (Impl_IntroTrue x)
+
+-- | Recombine an @x:true@ proof on the top of the stack by dropping it
+recombineTrueM :: ExprVar a -> ImplM vars r ps (ps :> a) ()
+recombineTrueM x = gmapRetAndPerms (recombineTrue x) (Impl_RecombineTrue x)
 
 -- | Introduce a proof of @x:eq(x)@ onto the top of the stack
 introEqReflM :: ExprVar a -> ImplM vars r (ps :> a) ps ()
@@ -1357,3 +1372,24 @@ proveVarsImpl :: NuMatchingAny1 r => ExDistPerms vars as ->
                  ImplM vars r as RNil ()
 proveVarsImpl ExDistPermsNil = return ()
 proveVarsImpl (ExDistPermsCons ps x p) = proveVarsImpl ps >>> proveVarImpl x p
+
+
+----------------------------------------------------------------------
+-- * Recombining Permissions
+----------------------------------------------------------------------
+
+-- | Recombine the distinguished permission @p_dist@ on @x@ back into the
+-- existing permission @p@ on @x@
+recombinePerm :: ExprVar a -> ValuePerm a -> ValuePerm a ->
+                 ImplM RNil r as (as :> a) ()
+recombinePerm x ValPerm_True _ = recombineTrueM x
+recombinePerm _ _ _ = error "FIXME HERE: finish recombinePerm!"
+
+-- | Recombine the distinguished permissions back into the permission set
+recombinePerms :: ImplM RNil r RNil as ()
+recombinePerms =
+  getDistPerms >>>= \stack ->
+  case stack of
+    DistPermsNil -> greturn ()
+    DistPermsCons _ x p_dist ->
+      getPerm x >>>= \p_x -> recombinePerm x p_dist p_x >>> recombinePerms
