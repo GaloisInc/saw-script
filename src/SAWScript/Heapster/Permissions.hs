@@ -212,11 +212,6 @@ unextCruCtx (CruCtxCons ctx _) = ctx
 -- | The Haskell type of expression variables
 type ExprVar (a :: CrucibleType) = Name a
 
--- | Map a context of 'CrucibleType's to 'PermExpr' Haskell types
-type family ExprVarCtx (as :: RList CrucibleType) :: RList * where
-  ExprVarCtx RNil = RNil
-  ExprVarCtx (as :> a) = ExprVarCtx as :> PermExpr a
-
 -- | Expressions that represent "fractions" of a write permission
 data SplittingExpr
   = SplExpr_All

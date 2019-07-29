@@ -35,6 +35,8 @@ import Control.Monad.State
 import Control.Monad.Reader
 
 import Data.Parameterized.Context hiding ((:>), empty, take)
+-- import qualified Data.Parameterized.Context as C
+import Data.Parameterized.TraversableFC
 
 -- import Data.Parameterized.TraversableFC
 import Lang.Crucible.FunctionHandle
@@ -197,10 +199,11 @@ $(mkNuMatching [t| forall blocks ps_in. TypedJumpTarget blocks ps_in |])
 
 -- | Typed Crucible statements with the given Crucible syntax extension and the
 -- given set of return values
-data TypedStmt ext rets ps_out ps_in where
-  -- | Assign the value of a register
+data TypedStmt ext (rets :: RList CrucibleType) ps_out ps_in where
+  -- | Assign a pure value to a register, where pure here means that its
+  -- translation to SAW will be pure (i.e., no LLVM pointer operations)
   TypedSetReg :: TypeRepr tp -> TypedExpr ext tp ->
-                 TypedStmt ext (RNil :> tp) (RNil :> tp) RNil
+                 TypedStmt ext (RNil :> tp) RNil RNil
 
   -- | Assert a boolean condition, printing the given string on failure
   TypedAssert :: TypedReg BoolType -> TypedReg StringType ->
@@ -261,7 +264,7 @@ data TypedStmtSeq ext blocks ret ps_in where
   -- value(s) of each statement
   TypedConsStmt :: ProgramLoc ->
                    TypedStmt ext rets ps_next ps_in ->
-                   Mb (ExprVarCtx rets) (TypedStmtSeq ext blocks ret ps_next) ->
+                   Mb rets (TypedStmtSeq ext blocks ret ps_next) ->
                    TypedStmtSeq ext blocks ret ps_in
 
   -- | Typed version of 'TermStmt', which terminates the current block
@@ -390,6 +393,7 @@ type PermCheckM r ext blocks args ret =
   GenStateT (PermCheckState args ret)
   (GenContT r (TopPermCheckM ext blocks ret))
 
+-- | The generalized monad for permission-checking statements
 type StmtPermCheckM ext blocks args ret =
   PermCheckM (TypedStmtSeq ext blocks ret) ext blocks args ret
 
@@ -408,3 +412,42 @@ runImplM f_impl vars m =
   (mkImplState vars . stCurPerms)
   (\st implSt -> st { stCurPerms = _implStatePerms implSt })
   m
+
+
+----------------------------------------------------------------------
+-- * Permission Checking for Expressions and Statements
+----------------------------------------------------------------------
+
+-- | The constraints for a Crucible syntax extension that supports permission
+-- checking
+type PermCheckExtC ext = (NuMatchingExtC ext, IsSyntaxExtension ext)
+
+-- | A translation of a Crucible context to 'TypedReg's that exist in the local
+-- Hobbits context
+type CtxTrans ctx = Assignment TypedReg ctx
+
+-- | Translate a Crucible register by looking it up in the translated context
+tcReg :: CtxTrans ctx -> Reg ctx tp -> TypedReg tp
+tcReg ctx (Reg ix) = ctx ! ix
+
+-- | Translate a Crucible expression
+tcExpr :: PermCheckExtC ext => CtxTrans ctx -> Expr ext ctx tp ->
+          StmtPermCheckM ext blocks args ret ps ps (TypedExpr ext tp)
+tcExpr ctx (App (RollRecursive _ _ _)) =
+  error "FIXME HERE: tcExpr: RollRecursive"
+tcExpr ctx (App (UnrollRecursive _ _ _)) =
+  error "FIXME HERE: tcExpr: UnrollRecursive"
+tcExpr ctx (App app) =
+  greturn $ TypedExpr $ fmapFC (tcReg ctx) app
+
+-- | Translate a Crucible statement sequence, starting and ending with an empty
+-- stack of distinguished permissions
+tcStmtSeq :: PermCheckExtC ext => CtxTrans ctx ->
+             StmtSeq ext blocks reg ctx ->
+             StmtPermCheckM ext (CtxCtxToRList blocks) args ret RNil RNil
+             ()
+tcStmtSeq ctx (ConsStmt loc (SetReg tp e) stmts) =
+  tcExpr ctx e >>>= \typed_e ->
+  gmbM (TypedConsStmt loc (TypedSetReg tp typed_e)) $
+  nu $ \x ->
+  tcStmtSeq (extend ctx $ TypedReg x) stmts
