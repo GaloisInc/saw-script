@@ -357,9 +357,16 @@ $(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
 -- * Generalized Monads
 ----------------------------------------------------------------------
 
+type family Fst (p :: (k1,k2)) :: k1 where
+  Fst '(x,_) = x
+
+type family Snd (p :: (k1,k2)) :: k2 where
+  Snd '(_,y) = y
+
+
 -- | A generalized monad has additional "input" and "output" types, that
 -- sequence together "backwards" through the generalized bind operation. Mostly
--- this is to support 'GenContT', below.
+-- this is to support 'GenContM', below.
 --
 -- Note that a generalized monad @m@ should always be a standard monad when the
 -- input and output types are the same; i.e., @m r r@ should always be a
@@ -370,290 +377,214 @@ class GenMonad (m :: k -> k -> Kind.* -> Kind.*) where
   -- | Generalized bind, that passes the output of @f@ to the input of @m@
   (>>>=) :: m r2 r3 a -> (a -> m r1 r2 b) -> m r1 r3 b
 
-  {-
-  -- | Insert a mapping function from the input to the output
-  gmapRet :: (rin -> rout) -> m rin rout ()
-  -- | Run two computations in parallel, combining their output at the end
-  gparallel :: m r1 r2 a -> m r1 r3 a -> m r1 (r2, r3) a
-  -- | FIXME: explain this one
-  gopenBinding :: Binding a b -> m r (Binding a r) (Name a, b)
-  -}
-
 infixl 1 >>>=
 infixl 1 >>>
 
 (>>>) :: GenMonad m => m r2 r3 () -> m r1 r2 a -> m r1 r3 a
 m1 >>> m2 = m1 >>>= \() -> m2
 
-class GenMonadT (t :: (k -> k -> Kind.* -> Kind.*) ->
-                k -> k -> Kind.* -> Kind.*) where
-  glift :: GenMonad m => m rin rout a -> t m rin rout a
+class GenMonadT (t :: (k1 -> k1 -> Kind.* -> Kind.*) ->
+                 k2 -> k2 -> Kind.* -> Kind.*) p1 p2 q1 q2 | t q1 q2 -> p1 p2 where
+  glift :: GenMonad m => m p1 p2 a -> t m q1 q2 a
+
 
 -- | The generalized continuation transformer, which can have different types
 -- for the input vs output continuations
-newtype GenContT (r :: k -> Kind.*) (m :: Kind.* -> Kind.*) pin pout a =
-  GenContT { unGenContT :: (a -> m (r pin)) -> m (r pout) }
+newtype GenContM (r :: k -> Kind.*) pin pout a =
+  GenContM { unGenContM :: (a -> r pin) -> r pout }
 
-liftGenContT :: Monad m => m a -> GenContT r m p p a
-liftGenContT m = GenContT $ \k -> m >>= k
+liftGenContM :: Monad m => m a -> GenContM m p p a
+liftGenContM m = GenContM $ \k -> m >>= k
 
-instance Functor (GenContT r m p p) where
+instance Functor (GenContM r p p) where
   fmap f m = m >>= return . f
 
-instance Applicative (GenContT r m p p) where
+instance Applicative (GenContM r p p) where
   pure = return
   (<*>) = ap
 
-instance Monad (GenContT r m p p) where
-  return x = GenContT $ \k -> k x
-  GenContT m >>= f = GenContT $ \k -> m $ \a -> unGenContT (f a) k
+instance Monad (GenContM r p p) where
+  return x = GenContM $ \k -> k x
+  GenContM m >>= f = GenContM $ \k -> m $ \a -> unGenContM (f a) k
 
-{-
-instance MonadTrans (GenContT r r) where
-  lift m = GenContT $ \k -> m >>= \a -> k a
--}
-
-instance GenMonad (GenContT r m) where
-  greturn x = GenContT $ \k -> k x
-  (GenContT m) >>>= f = GenContT $ \k -> m $ \a -> unGenContT (f a) k
-
-  {-
-  gmapRet f = GenContT $ \k -> fmap f $ k ()
-  gparallel (GenContT m1) (GenContT m2) =
-    GenContT $ \k -> (\x y -> (x,y)) <$> m1 k <*> m2 k
-  gopenBinding b =
-    GenContT $ \k -> strongMbM $ nuWithElim1 (\nm b_body -> k (nm, b_body)) b
-  -}
+instance GenMonad (GenContM r) where
+  greturn x = GenContM $ \k -> k x
+  (GenContM m) >>>= f = GenContM $ \k -> m $ \a -> unGenContM (f a) k
 
 -- | Change the return type constructor @r@ by mapping the new input type to the
 -- old and mapping the old output type to the new
-withAltContM :: (m2 (r2 pin2) -> m1 (r1 pin1)) ->
-                (m1 (r1 pout1) -> m2 (r2 pout2)) ->
-                GenContT r1 m1 pin1 pout1 a -> GenContT r2 m2 pin2 pout2 a
-withAltContM f_in f_out (GenContT m) =
-  GenContT $ \k -> f_out (m (f_in . k))
+withAltContM :: (r2 pin2 -> r1 pin1) -> (r1 pout1 -> r2 pout2) ->
+                GenContM r1 pin1 pout1 a -> GenContM r2 pin2 pout2 a
+withAltContM f_in f_out (GenContM m) =
+  GenContM $ \k -> f_out (m (f_in . k))
 
--- | This is like shift, but where the current continuation need not be in a
--- monad; this is useful for dealing with name-binding operations
---
--- FIXME: remove this...?
-gcaptureCC :: ((a -> m (r p1)) -> m (r p2)) -> GenContT r m p1 p2 a
-gcaptureCC f = GenContT f
+
+-- | Typeclass for generalized monads that allow a pure capture of the CC
+class GenMonad m => GenMonadCaptureCC r m p1 p2 | m -> r where
+  gcaptureCC :: ((a -> r p1) -> r p2) -> m p1 p2 a
+
+instance GenMonadCaptureCC r (GenContM r) p1 p2 where
+  gcaptureCC f = GenContM f
+
+newtype ComposeSnd f p = ComposeSnd { getComposeSnd :: f (Snd p) }
+
+instance (GenMonadCaptureCC r m (Snd p1) (Snd p2), Fst p1 ~ Fst p2) =>
+         GenMonadCaptureCC (ComposeSnd r) (GenStateT s m) p1 p2 where
+  gcaptureCC f =
+    glift $ gcaptureCC (getComposeSnd . f . (\k -> ComposeSnd . k))
+
+-- | Name-binding in the generalized continuation monad (FIXME: explain)
+gopenBinding :: (GenMonadCaptureCC r m p1 p2, TypeCtx ctx) =>
+                (Mb ctx (r p1) -> r p2) -> Mb ctx a ->
+                m p1 p2 (MapRList Name ctx, a)
+gopenBinding f_ret mb_a =
+  gcaptureCC $ \k ->
+  f_ret $ flip nuMultiWithElim1 mb_a $ \names a ->
+  k (names, a)
+
+gopenBinding1 :: GenMonadCaptureCC r m p1 p2 =>
+                 (Binding a (r p1) -> r p2) -> Binding a b ->
+                 m p1 p2 (Name a, b)
+gopenBinding1 f_ret mb_b =
+  gopenBinding f_ret mb_b >>>= \(_ :>: nm, b) -> greturn (nm,b)
+
 
 class GenMonad m => GenMonadShift r m | m -> r where
   gshift :: ((a -> m p1 p1 (r p2)) -> m p3 p4 (r p3)) -> m p2 p4 a
 
-instance Monad m => GenMonadShift r (GenContT r m) where
-  gshift f = GenContT $ \k -> unGenContT (f (\a -> liftGenContT (k a))) return
+instance GenMonadShift r (GenContM r) where
+  gshift f = GenContM $ \k -> unGenContM (f (\a -> greturn (k a))) id
 
--- | FIXME: The shift for GenStateT does not quite fit...
-gshiftSt :: GenMonadShift r m =>
-            ((a -> s p2 -> GenStateT s m p1 p1 (r p2)) ->
-             GenStateT s m p3 p4 (r p3)) ->
-            GenStateT s m p2 p4 a
-gshiftSt f = GenStateT $ \s4 ->
-  gshift $ \k ->
-  unGenStateT (f $ \a s2 -> liftGenStateT id (k (a, s2))) s4 >>>= \(r, _) ->
-  greturn r
 
--- | The generalized state monad
+-- | Running generalized computations in "parallel"
+class GenMonad m => GenMonadPar r m p1 p2 | m -> r where
+  gparallel :: (r p2 -> r p2 -> r p2) -> m p1 p2 a -> m p1 p2 a -> m p1 p2 a
+
+instance GenMonadPar r (GenContM r) p1 p2 where
+  gparallel f (GenContM m1) (GenContM m2) =
+    GenContM $ \k -> f (m1 k) (m2 k)
+
+instance (GenMonadPar r m (Snd p1) (Snd p2), Fst p1 ~ Fst p2) =>
+         GenMonadPar (ComposeSnd r) (GenStateT s m) p1 p2 where
+  gparallel f m1 m2 =
+    GenStateT $ \s ->
+    gparallel (\x y -> getComposeSnd $ f (ComposeSnd x) (ComposeSnd y))
+    (runGenStateT m1 s) (runGenStateT m2 s)
+
+
+-- | The generalized state monad. Don't get confused: the parameters are
+-- reversed, so @p2@ is the /input/ state param type and @p1@ is the /output/.
 newtype GenStateT s (m :: k -> k -> Kind.* -> Kind.*) p1 p2 a =
-  GenStateT { unGenStateT :: s p2 -> m p1 p2 (a, s p1) }
+  GenStateT { runGenStateT :: s (Fst p2) -> m (Snd p1) (Snd p2) (a, s (Fst p1)) }
 
-runGenStateT :: GenStateT s m p1 p2 a -> s p2 -> m p1 p2 (a, s p1)
-runGenStateT m s = unGenStateT m s
-
--- | Helper to tell GHC how to type-check
-gget :: GenMonad m => GenStateT s m p p (s p)
-gget = GenStateT $ \s -> greturn (s, s)
-
-instance Monad (m r r) => Functor (GenStateT s m r r) where
+instance Monad (m (Snd p) (Snd p)) => Functor (GenStateT s m p p) where
   fmap f m = m >>= return . f
 
-instance Monad (m r r) => Applicative (GenStateT s m r r) where
+instance Monad (m (Snd p) (Snd p)) => Applicative (GenStateT s m p p) where
   pure = return
   (<*>) = ap
 
-instance Monad (m r r) => Monad (GenStateT s m r r) where
+instance Monad (m (Snd p) (Snd p)) => Monad (GenStateT s m p p) where
   return x = GenStateT $ \s -> return (x, s)
   (GenStateT m) >>= f =
-    GenStateT $ \s -> m s >>= \(a, s') -> unGenStateT (f a) s'
+    GenStateT $ \s -> m s >>= \(a, s') -> runGenStateT (f a) s'
 
-instance Monad (m p p) => MonadState (s p) (GenStateT s m p p) where
-  get = GenStateT $ \s -> return (s, s)
-  put s = GenStateT $ \_ -> return ((), s)
-
--- NOTE: lift only works for p1 = p2
-{-
-instance GenMonadT (GenStateT s) where
+instance (Snd q1 ~ p1, Snd q2 ~ p2, Fst q1 ~ Fst q2) =>
+         GenMonadT (GenStateT s) p1 p2 q1 q2 where
   glift m = GenStateT $ \s -> m >>>= \a -> greturn (a, s)
--}
 
 instance GenMonad m => GenMonad (GenStateT s m) where
   greturn x = GenStateT $ \s -> greturn (x, s)
   (GenStateT m) >>>= f =
-    GenStateT $ \s -> m s >>>= \(a, s') -> unGenStateT (f a) s'
-  {-
-  gmapRet f = glift $ gmapRet f
-  gparallel m1 m2 =
-    GenStateT $ StateT $ \s ->
-    gparallel (runGenStateT m1 s) (runGenStateT m2 s)
-  gopenBinding b = glift $ gopenBinding b
-  -}
-
+    GenStateT $ \s -> m s >>>= \(a, s') -> runGenStateT (f a) s'
 
 -- | FIXME: documentation
-liftGenStateT :: GenMonad m => (s p2 -> s p1) -> m p1 p2 a ->
-                 GenStateT s m p1 p2 a
-liftGenStateT f m = GenStateT $ \s -> m >>>= \a -> greturn (a, f s)
+gliftGenStateT :: (GenMonad m) =>
+                  m p (Snd p2) a -> GenStateT s m '(Fst p2, p) p2 a
+gliftGenStateT m = glift m
 
 -- | Run a generalized state computation with a different state type @s2@ inside
 -- one with state type @s1@, using a lens-like pair of a getter function to
 -- extract out the starting inner @s2@ state from the outer @s1@ state and an
 -- update function to update the resulting outer @s1@ state with the final inner
 -- @s2@ state.
-withAltStateM :: GenMonad m => (s1 p2 -> s2 p2) -> (s1 p2 -> s2 p1 -> s1 p1) ->
+withAltStateM :: GenMonad m => (s1 (Fst p2) -> s2 (Fst p2)) ->
+                 (s1 (Fst p2) -> s2 (Fst p1) -> s1 (Fst p1)) ->
                  GenStateT s2 m p1 p2 a -> GenStateT s1 m p1 p2 a
-withAltStateM s_get s_update (GenStateT m) =
-  GenStateT $ \s ->
-  m (s_get s) >>>= \(a, s') ->
-  greturn (a, s_update s s')
+withAltStateM s_get s_update (m :: GenStateT s2 m p1 p2 a) =
+  gget >>>= \s ->
+  gliftGenStateT (runGenStateT m $ s_get s) >>>= \(a,s') ->
+  -- (glift (runGenStateT m $ s_get s)
+  --  :: GenStateT _ m '(Fst p2,Snd p1) p2 _) >>>= \(a,s') ->
+  gput (s_update s s') >>>
+  greturn a
+
+
+instance (Monad (m (Snd p) (Snd p)), p' ~ Fst p) =>
+         MonadState (s p') (GenStateT s m p p) where
+  get = GenStateT $ \s -> return (s, s)
+  put s = GenStateT $ \_ -> return ((), s)
+
+class GenMonad m => GenMonadGet s m p | m p -> s where
+  gget :: m p p s
+
+class GenMonad m => GenMonadPut s m p1 p2 | m p1 p2 -> s where
+  gput :: s -> m p1 p2 ()
+
+instance (GenMonad m, sp ~ Fst p) => GenMonadGet (s sp) (GenStateT s m) p where
+  gget = GenStateT $ \s -> greturn (s, s)
+
+instance (GenMonad m, sp ~ Fst p1, Snd p1 ~ Snd p2) =>
+         GenMonadPut (s sp) (GenStateT s m) p1 p2 where
+  gput s = GenStateT $ \_ -> greturn ((), s)
+
+gmodify :: (GenMonadGet s1 m p2, GenMonadPut s2 m p1 p2) =>
+           (s1 -> s2) -> m p1 p2 ()
+gmodify f =
+  gget >>>= \s -> gput (f s)
+
+{-
+class GenMonad m =>
+      GenMonadState (s :: sk -> Type) (m :: k -> k -> Type -> Type) | m -> s where
+  type GStateParam m (p :: k) :: sk
+  gget :: m p p (s (GStateParam m p))
+  gput :: s (GStateParam m p) -> m p p ()
+
+instance GenMonad m => GenMonadState s (GenStateT s m) where
+  type GStateParam (GenStateT s m) p = Fst p
+  gget = GenStateT $ \s -> greturn (s, s)
+  gput s = GenStateT $ \_ -> greturn ((), s)
+-}
+
+
+type GenStateContM s r p1 q1 p2 q2 =
+  GenStateT s (GenContM r) '(p1,q1) '(p2,q2)
 
 -- | FIXME: document
-withAltContStateM :: (m2 (r2 pin) -> m1 (r1 pin)) ->
-                     (m1 (r1 pout) -> m2 (r2 pout)) ->
+withAltContStateM :: (r2 qin -> r1 qin) -> (r1 qout -> r2 qout) ->
                      (s2 pout -> s1 pout) -> (s2 pout -> s1 pin -> s2 pin) ->
-                     GenStateT s1 (GenContT r1 m1) pin pout a ->
-                     GenStateT s2 (GenContT r2 m2) pin pout a
-withAltContStateM f_in f_out s_get s_update (GenStateT m) =
-  GenStateT $ \s ->
-  withAltContM f_in f_out (m (s_get s)) >>>= \(a, s') ->
-  greturn (a, s_update s s')
+                     GenStateContM s1 r1 pin qin pout qout a ->
+                     GenStateContM s2 r2 pin qin pout qout a
+withAltContStateM f_in f_out s_get s_update m =
+  gget >>>= \s ->
+  gliftGenStateT (withAltContM f_in f_out $
+                  runGenStateT m $ s_get s) >>>= \(a,s') ->
+  gput (s_update s s') >>>
+  greturn a
 
--- | FIXME: remove this...?
-gcaptureCCMapState :: (s p2 -> s p1) -> ((a -> m (r p1)) -> m (r p2)) ->
-                      GenStateT s (GenContT r m) p1 p2 a
-gcaptureCCMapState f_st f_k = liftGenStateT f_st $ gcaptureCC f_k
+gmapRet :: (r q1 -> r q2) -> GenStateContM s r p q1 p q2 ()
+gmapRet f_ret =
+  gcaptureCC $ \k -> ComposeSnd $ f_ret $ getComposeSnd $ k ()
 
 -- | FIXME: documentation
-gmapRetAndState :: Monad m => (s p2 -> s p1) -> (r p1 -> r p2) ->
-                   GenStateT s (GenContT r m) p1 p2 ()
+gmapRetAndState :: (s p2 -> s p1) -> (r q1 -> r q2) ->
+                   GenStateContM s r p1 q1 p2 q2 ()
 gmapRetAndState f_st f_ret =
-  gget >>>= \s1 ->
-  gshiftSt $ \k ->
-  k () (f_st s1) >>>= \r ->
-  greturn (f_ret r)
-  -- gcaptureCCMapState f_st (\k -> f_ret <$> k ())
+  gmodify f_st >>> gmapRet f_ret
 
--- | Name-binding in the generalized continuation monad (FIXME: explain)
-class GenMonad m => GenMonadBind r p1 p2 m | m -> r where
-  gmbM :: (Mb ctx (r p2) -> r p2) ->
-          Mb ctx (m p1 p2 a) -> m p1 p2 a
-
-instance (MonadBind m, NuMatching (r p2)) =>
-         GenMonadBind r p1 p2 (GenContT r m) where
-  gmbM f_ret mb_m =
-    GenContT $ \k ->
-    f_ret <$> mbM (fmap (\m -> unGenContT m k) mb_m)
-
-instance (GenMonadBind r p1 p2 m) =>
-         GenMonadBind r p1 p2 (GenStateT s m) where
-  gmbM f_ret mb_m =
-    GenStateT $ \s ->
-    gmbM f_ret $ fmap (\m -> unGenStateT m s) mb_m
-
--- | Running generalized computations in "parallel"
-class GenMonad m => GenMonadPar r m | m -> r where
-  gparallel :: (r p2 -> r p2 -> r p2) -> m p1 p2 a -> m p1 p2 a -> m p1 p2 a
-
-instance Monad m => GenMonadPar r (GenContT r m) where
-  gparallel f (GenContT m1) (GenContT m2) =
-    GenContT $ \k -> f <$> m1 k <*> m2 k
-
-instance GenMonadPar r m => GenMonadPar r (GenStateT s m) where
-  gparallel f m1 m2 =
-    GenStateT $ \s ->
-    gparallel f (runGenStateT m1 s) (runGenStateT m2 s)
 
 {-
--- | Transformer for pattern-matching in a generalized monad; although it itself
--- is a monad transformer, it is not a generalized transformer, because it only
--- supports a restricted form of the @>>>=@ operator
-newtype MatchT m rin rout a =
-  MatchT
-  { unMatchT ::
-      (a -> m rin rout () -> m rin rout ()) -> m rin rout () -> m rin rout () }
-
-instance Functor (MatchT m rin rout) where
-  fmap f m = m >>= return . f
-
-instance Applicative (MatchT m rin rout) where
-  pure = return
-  (<*>) = ap
-
-instance Monad (MatchT m rin rout) where
-  return a = MatchT $ \ks kf -> ks a kf
-  (MatchT m) >>= f =
-    MatchT $ \ks kf -> m (\a kf' -> unMatchT (f a) ks kf') kf
-
-instance Alternative (MatchT m rin rout) where
-  empty = MatchT $ \_ kf -> kf
-  (MatchT m1) <|> (MatchT m2) = MatchT $ \ks kf -> m1 ks (m2 ks kf)
-
-instance MonadPlus (MatchT m r r) where
-  mzero = Applicative.empty
-  mplus = (<|>)
-
-{-
-instance GenMonadT MatchT where
-  glift m = MatchT $ \ks kf -> m >>>= \a -> ks a kf
--}
-
-{-
-instance GenMonad m => GenMonad (MatchT m) where
-  greturn a = MatchT $ \ks kf -> ks a kf
-  (MatchT m) >>>= f =
-    MatchT $ \ks kf -> m (\a -> unMatchT (f a) ks kf) kf
-  gmapRet f = glift $ gmapRet f
-  gparallel (MatchT m1) (MatchT m2) =
-    MatchT $ \ks kf -> gparallel (m1 ks kf) (m2 ks kf)
-  gopenBinding b =glift $ gopenBinding b
--}
-
--- FIXME: this may not be useful...
-matchBind :: MatchT m rin rout a -> (a -> MatchT m rin rout b) ->
-             MatchT m rin rout b
-matchBind (MatchT m) f =
-  MatchT $ \ks kf -> m (\a kf' -> unMatchT (f a) ks kf') kf
-
--- | Pattern-match on the result of a computation with an optional value,
--- calling the given function if the value is there and giving up on the current
--- match case otherwise
-matchCase :: GenMonad m => m rout rout (Maybe a) ->
-             (a -> MatchT m rin rout b) -> MatchT m rin rout b
-matchCase m f =
-  MatchT $ \ks kf -> m >>>= maybe kf (\a -> unMatchT (f a) ks kf)
-
--- | A pure case that does not use any monadic effects
-matchPure :: GenMonad m => a -> (a -> Maybe b) ->
-             (b -> MatchT m rin rout c) -> MatchT m rin rout c
-matchPure a matcher = matchCase (greturn (matcher a))
-
--- | Build a pattern-matching computation that always succeeds and runs the
--- given computation as its result
-matchBody :: m rin rout () -> MatchT m rin rout a
-matchBody m = MatchT $ \_ _ -> m
-
--- | Give up on the current pattern-matching case
-matchFail :: MatchT m rin rout a
-matchFail = MatchT $ \_ kf -> kf
-
--- | Run a pattern-matching computation, using the given underlying computation
--- as the default case
-runMatchT :: m rin rout () -> MatchT m rin rout () -> m rin rout ()
-runMatchT kf (MatchT f) = f (\() m -> m) kf
--}
-
+FIXME HERE NOW: uncomment the below!
 
 ----------------------------------------------------------------------
 -- * Permission Implication Monad
@@ -1393,3 +1324,4 @@ recombinePerms =
     DistPermsNil -> greturn ()
     DistPermsCons _ x p_dist ->
       getPerm x >>>= \p_x -> recombinePerm x p_dist p_x >>> recombinePerms
+-}
