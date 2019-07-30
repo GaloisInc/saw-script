@@ -384,7 +384,8 @@ infixl 1 >>>
 m1 >>> m2 = m1 >>>= \() -> m2
 
 class GenMonadT (t :: (k1 -> k1 -> Kind.* -> Kind.*) ->
-                 k2 -> k2 -> Kind.* -> Kind.*) p1 p2 q1 q2 | t q1 q2 -> p1 p2 where
+                 k2 -> k2 -> Kind.* -> Kind.*) p1 p2 q1 q2 |
+  t q1 q2 -> p1 p2 , t q1 p2 -> q2 p1 , t p1 q2 -> p2 q1 where
   glift :: GenMonad m => m p1 p2 a -> t m q1 q2 a
 
 
@@ -420,30 +421,32 @@ withAltContM f_in f_out (GenContM m) =
 
 
 -- | Typeclass for generalized monads that allow a pure capture of the CC
-class GenMonad m => GenMonadCaptureCC r m p1 p2 | m -> r where
-  gcaptureCC :: ((a -> r p1) -> r p2) -> m p1 p2 a
+class GenMonad m => GenMonadCaptureCC rin rout m p1 p2 |
+  m p1 -> rin , m p2 -> rout , m p1 rout -> p2 , m p2 rin -> p1 where
+  gcaptureCC :: ((a -> rin) -> rout) -> m p1 p2 a
 
-instance GenMonadCaptureCC r (GenContM r) p1 p2 where
+instance GenMonadCaptureCC (r p1) (r p2) (GenContM r) p1 p2 where
   gcaptureCC f = GenContM f
 
-newtype ComposeSnd f p = ComposeSnd { getComposeSnd :: f (Snd p) }
+instance GenMonadCaptureCC rin rout m q1 q2 =>
+         GenMonadCaptureCC rin rout (GenStateT s m) '(p,q1) '(p,q2) where
+  gcaptureCC f = glift $ gcaptureCC f
 
-instance (GenMonadCaptureCC r m (Snd p1) (Snd p2), Fst p1 ~ Fst p2) =>
-         GenMonadCaptureCC (ComposeSnd r) (GenStateT s m) p1 p2 where
-  gcaptureCC f =
-    glift $ gcaptureCC (getComposeSnd . f . (\k -> ComposeSnd . k))
+gmapRet :: GenMonadCaptureCC rin rout m p1 p2 => (rin -> rout) -> m p1 p2 ()
+gmapRet f_ret =
+  gcaptureCC $ \k -> f_ret $ k ()
 
 -- | Name-binding in the generalized continuation monad (FIXME: explain)
-gopenBinding :: (GenMonadCaptureCC r m p1 p2, TypeCtx ctx) =>
-                (Mb ctx (r p1) -> r p2) -> Mb ctx a ->
+gopenBinding :: (GenMonadCaptureCC rin rout m p1 p2, TypeCtx ctx) =>
+                (Mb ctx rin -> rout) -> Mb ctx a ->
                 m p1 p2 (MapRList Name ctx, a)
 gopenBinding f_ret mb_a =
   gcaptureCC $ \k ->
   f_ret $ flip nuMultiWithElim1 mb_a $ \names a ->
   k (names, a)
 
-gopenBinding1 :: GenMonadCaptureCC r m p1 p2 =>
-                 (Binding a (r p1) -> r p2) -> Binding a b ->
+gopenBinding1 :: GenMonadCaptureCC rin rout m p1 p2 =>
+                 (Binding a rin -> rout) -> Binding a b ->
                  m p1 p2 (Name a, b)
 gopenBinding1 f_ret mb_b =
   gopenBinding f_ret mb_b >>>= \(_ :>: nm, b) -> greturn (nm,b)
@@ -457,25 +460,29 @@ instance GenMonadShift r (GenContM r) where
 
 
 -- | Running generalized computations in "parallel"
-class GenMonad m => GenMonadPar r m p1 p2 | m -> r where
-  gparallel :: (r p2 -> r p2 -> r p2) -> m p1 p2 a -> m p1 p2 a -> m p1 p2 a
+class GenMonad m => GenMonadPar r m p1 p2 | m p1 p2 -> r where
+  gparallel :: (r -> r -> r) -> m p1 p2 a -> m p1 p2 a -> m p1 p2 a
 
-instance GenMonadPar r (GenContM r) p1 p2 where
+instance GenMonadPar (r p2) (GenContM r) p1 p2 where
   gparallel f (GenContM m1) (GenContM m2) =
     GenContM $ \k -> f (m1 k) (m2 k)
 
-instance (GenMonadPar r m (Snd p1) (Snd p2), Fst p1 ~ Fst p2) =>
-         GenMonadPar (ComposeSnd r) (GenStateT s m) p1 p2 where
+instance GenMonadPar r m q1 q2 =>
+         GenMonadPar r (GenStateT s m) '(p1,q1) '(p2,q2) where
   gparallel f m1 m2 =
     GenStateT $ \s ->
-    gparallel (\x y -> getComposeSnd $ f (ComposeSnd x) (ComposeSnd y))
-    (runGenStateT m1 s) (runGenStateT m2 s)
-
+    gparallel f
+    (unGenStateT m1 s) (unGenStateT m2 s)
 
 -- | The generalized state monad. Don't get confused: the parameters are
 -- reversed, so @p2@ is the /input/ state param type and @p1@ is the /output/.
 newtype GenStateT s (m :: k -> k -> Kind.* -> Kind.*) p1 p2 a =
-  GenStateT { runGenStateT :: s (Fst p2) -> m (Snd p1) (Snd p2) (a, s (Fst p1)) }
+  GenStateT { unGenStateT :: s (Fst p2) -> m (Snd p1) (Snd p2) (a, s (Fst p1)) }
+
+-- | This version of 'unGenStateT' tells GHC to make the parameters into actual
+-- type-level pairs, i.e., it makes GHC reason extensionally about pairs
+runGenStateT :: GenStateT s m '(p1,q1) '(p2,q2) a -> s p2 -> m q1 q2 (a, s p1)
+runGenStateT = unGenStateT
 
 instance Monad (m (Snd p) (Snd p)) => Functor (GenStateT s m p p) where
   fmap f m = m >>= return . f
@@ -487,20 +494,19 @@ instance Monad (m (Snd p) (Snd p)) => Applicative (GenStateT s m p p) where
 instance Monad (m (Snd p) (Snd p)) => Monad (GenStateT s m p p) where
   return x = GenStateT $ \s -> return (x, s)
   (GenStateT m) >>= f =
-    GenStateT $ \s -> m s >>= \(a, s') -> runGenStateT (f a) s'
+    GenStateT $ \s -> m s >>= \(a, s') -> unGenStateT (f a) s'
 
-instance (Snd q1 ~ p1, Snd q2 ~ p2, Fst q1 ~ Fst q2) =>
-         GenMonadT (GenStateT s) p1 p2 q1 q2 where
+instance GenMonadT (GenStateT s) q1 q2 '(p,q1) '(p,q2) where
   glift m = GenStateT $ \s -> m >>>= \a -> greturn (a, s)
 
 instance GenMonad m => GenMonad (GenStateT s m) where
   greturn x = GenStateT $ \s -> greturn (x, s)
   (GenStateT m) >>>= f =
-    GenStateT $ \s -> m s >>>= \(a, s') -> runGenStateT (f a) s'
+    GenStateT $ \s -> m s >>>= \(a, s') -> unGenStateT (f a) s'
 
 -- | FIXME: documentation
 gliftGenStateT :: (GenMonad m) =>
-                  m p (Snd p2) a -> GenStateT s m '(Fst p2, p) p2 a
+                  m q1 q2 a -> GenStateT s m '(p, q1) '(p, q2) a
 gliftGenStateT m = glift m
 
 -- | Run a generalized state computation with a different state type @s2@ inside
@@ -508,12 +514,13 @@ gliftGenStateT m = glift m
 -- extract out the starting inner @s2@ state from the outer @s1@ state and an
 -- update function to update the resulting outer @s1@ state with the final inner
 -- @s2@ state.
-withAltStateM :: GenMonad m => (s1 (Fst p2) -> s2 (Fst p2)) ->
-                 (s1 (Fst p2) -> s2 (Fst p1) -> s1 (Fst p1)) ->
-                 GenStateT s2 m p1 p2 a -> GenStateT s1 m p1 p2 a
-withAltStateM s_get s_update (m :: GenStateT s2 m p1 p2 a) =
+withAltStateM :: GenMonad m => (s1 p2 -> s2 p2) ->
+                 (s1 p2 -> s2 p1 -> s1 p1) ->
+                 GenStateT s2 m '(p1,q1) '(p2,q2) a ->
+                 GenStateT s1 m '(p1,q1) '(p2,q2) a
+withAltStateM s_get s_update m =
   gget >>>= \s ->
-  gliftGenStateT (runGenStateT m $ s_get s) >>>= \(a,s') ->
+  glift (runGenStateT m $ s_get s) >>>= \(a,s') ->
   -- (glift (runGenStateT m $ s_get s)
   --  :: GenStateT _ m '(Fst p2,Snd p1) p2 _) >>>= \(a,s') ->
   gput (s_update s s') >>>
@@ -531,11 +538,11 @@ class GenMonad m => GenMonadGet s m p | m p -> s where
 class GenMonad m => GenMonadPut s m p1 p2 | m p1 p2 -> s where
   gput :: s -> m p1 p2 ()
 
-instance (GenMonad m, sp ~ Fst p) => GenMonadGet (s sp) (GenStateT s m) p where
+instance GenMonad m => GenMonadGet (s p) (GenStateT s m) '(p,q) where
   gget = GenStateT $ \s -> greturn (s, s)
 
-instance (GenMonad m, sp ~ Fst p1, Snd p1 ~ Snd p2) =>
-         GenMonadPut (s sp) (GenStateT s m) p1 p2 where
+instance GenMonad m =>
+         GenMonadPut (s p1) (GenStateT s m) '(p1,q) '(p2,q) where
   gput s = GenStateT $ \_ -> greturn ((), s)
 
 gmodify :: (GenMonadGet s1 m p2, GenMonadPut s2 m p1 p2) =>
@@ -557,34 +564,28 @@ instance GenMonad m => GenMonadState s (GenStateT s m) where
 -}
 
 
+-- | The generalized state-continuation monad
 type GenStateContM s r p1 q1 p2 q2 =
   GenStateT s (GenContM r) '(p1,q1) '(p2,q2)
 
--- | FIXME: document
+-- | Change both the state and return types for the state-continuation monad
 withAltContStateM :: (r2 qin -> r1 qin) -> (r1 qout -> r2 qout) ->
                      (s2 pout -> s1 pout) -> (s2 pout -> s1 pin -> s2 pin) ->
                      GenStateContM s1 r1 pin qin pout qout a ->
                      GenStateContM s2 r2 pin qin pout qout a
 withAltContStateM f_in f_out s_get s_update m =
   gget >>>= \s ->
-  gliftGenStateT (withAltContM f_in f_out $
-                  runGenStateT m $ s_get s) >>>= \(a,s') ->
+  glift (withAltContM f_in f_out $
+         runGenStateT m $ s_get s) >>>= \(a,s') ->
   gput (s_update s s') >>>
   greturn a
 
-gmapRet :: (r q1 -> r q2) -> GenStateContM s r p q1 p q2 ()
-gmapRet f_ret =
-  gcaptureCC $ \k -> ComposeSnd $ f_ret $ getComposeSnd $ k ()
-
--- | FIXME: documentation
+-- | Map both the state and return types for the state-continuation monad
 gmapRetAndState :: (s p2 -> s p1) -> (r q1 -> r q2) ->
                    GenStateContM s r p1 q1 p2 q2 ()
 gmapRetAndState f_st f_ret =
   gmodify f_st >>> gmapRet f_ret
 
-
-{-
-FIXME HERE NOW: uncomment the below!
 
 ----------------------------------------------------------------------
 -- * Permission Implication Monad
@@ -636,7 +637,8 @@ instance PermState (ImplState vars) where
 
 -- | The implication monad is the permission monad that uses 'ImplState'
 type ImplM vars r ps_out ps_in =
-  GenStateT (ImplState vars) (GenContT (PermImpl r) Identity) ps_out ps_in
+  GenStateT (ImplState vars) (GenContM (PermImpl r))
+  '(ps_out,ps_out) '(ps_in,ps_in)
 
 
 -- | Run an implication computation with one more existential variable,
@@ -686,7 +688,7 @@ partialSubstForceM mb_e msg =
 -- | Modify the current partial substitution
 modifyPSubst :: (PartialSubst vars -> PartialSubst vars) ->
                 ImplM vars r ps ps ()
-modifyPSubst f = modify (over implStatePSubst f)
+modifyPSubst f = gmodify (over implStatePSubst f)
 
 -- | Set the value for an existential variable in the current substitution,
 -- raising an error if it is already set
@@ -766,11 +768,13 @@ implPushM l p =
 -- that one fails, falls back on the second
 implCatchM :: ImplM vars r ps1 ps2 () -> ImplM vars r ps1 ps2 () ->
               ImplM vars r ps1 ps2 ()
-implCatchM m1 m2 =
+implCatchM m1 m2 = gparallel Impl_Catch m1 m2
   -- FIXME: figure out the "right" way to write this with shift and reset!
+  {-
   GenStateT $ \s -> GenContT $ \k ->
   Impl_Catch <$> (unGenContT (unGenStateT m1 s) k)
   <*> (unGenContT (unGenStateT m2 s) k)
+  -}
   {-
   gmapRet (\(impl1, impl2) -> Impl_Catch impl1 impl2) >>>
   gparallel m1 m2
@@ -811,8 +815,8 @@ elimExistsM :: (KnownRepr TypeRepr tp, NuMatchingAny1 r) => ExprVar a -> f tp ->
                ImplM vars r ps ps ()
 elimExistsM x (_ :: f tp) =
   getPerms >>>= \perms ->
-  gmbM (Impl_ElimExists x) $
-  flip nuWithElim1 (elimExists x (knownRepr :: TypeRepr tp) perms) $ \_nm perms' ->
+  gopenBinding1 (Impl_ElimExists x) (elimExists x (knownRepr :: TypeRepr tp)
+                                     perms) >>>= \(_nm, perms') ->
   setPerms perms'
 
 -- | Eliminate disjunctives and existentials for a specific variable
@@ -934,8 +938,7 @@ elimLLVMFieldContentsM x i =
   case elimLLVMFieldContents x i perms of
     Left y -> greturn y
     Right mb_perms' ->
-      gmbM (Impl_ElimLLVMFieldContents x i) $
-      flip nuWithElim1 mb_perms' $ \y perms' ->
+      gopenBinding1 (Impl_ElimLLVMFieldContents x i) mb_perms' >>>= \(y,perms') ->
       setPerms perms' >>> greturn y
 
 -- | Divide an array permission @x:ptr((off,*stride,<len,S) |-> p)@ into two
@@ -971,89 +974,6 @@ castLLVMFieldOffsetM :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
 castLLVMFieldOffsetM x off off' =
   gmapRetAndPerms (castLLVMFieldOffset x off off')
   (Impl_CastLLVMFieldOffsetM x off off')
-
-
-{- FIXME: remove these if we no longer need them!
-----------------------------------------------------------------------
--- * Pattern-Matching Monadic Operations
-----------------------------------------------------------------------
-
-{- FIXME: use or remove these!
--- | The type of a pattern-matching computation over 'ImplM'
-type ImplMatch vars r ls1 ls2 =
-  MatchT (PermM (ImplState vars)) (PermImpl r ls1) (PermImpl r ls2)
-
-type ImplMatcher vars a =
-  forall r ls1 ls2.
-  (a -> ImplMatch vars r ls1 ls2 ()) -> ImplMatch vars r ls1 ls2 ()
-
--- | Run a pattern-matching computation, calling 'implFailM' on failure
-implMatchM :: ImplMatch vars r ls1 ls2 () -> ImplM vars r ls1 ls2 ()
-implMatchM = runMatchT implFailM
-
--- | Test whether substituting the current partial substitution into an object
--- succeeds
-matchGround :: Substable PartialSubst a Maybe => (Mb vars a) ->
-               ImplMatcher vars a
-matchGround a =
-  matchCase (getPSubst >>>= \psubst -> greturn (partialSubst psubst a))
-
--- | Test if an expression-in-binding is a variable that is unassigned in the
--- current partial substitution
-matchUnassignedVar :: Mb vars (PermExpr a) ->
-                      ImplMatcher vars (Member vars (PermExpr a))
-{-
-                      (Member vars (PermExpr a) -> ImplMatch vars rin rout ()) ->
-                      ImplMatch vars rin rout ()
--}
-matchUnassignedVar mb_e =
-  matchCase
-  (getPSubst >>>= \psubst ->
-   case mb_e of
-     ([nuP| PExpr_Var z |])
-       | Left memb <- mbNameBoundP z
-       , Nothing <- psubstLookup psubst memb ->
-         greturn $ Just memb
-     _ -> greturn Nothing)
-
--- | Test if a splitting-in-binding is a variable that is unassigned in the
--- current partial substitution
-matchUnassignedSplVar ::
-  Mb vars SplittingExpr ->
-  ImplMatcher vars (Member vars (PermExpr SplittingType))
-matchUnassignedSplVar mb_spl =
-  matchCase
-  (getPSubst >>>= \psubst ->
-    case mb_spl of
-      [nuP| SplExpr_Var z |]
-        | Left memb <- mbNameBoundP z
-        , Nothing <- psubstLookup psubst memb ->
-          greturn $ Just memb
-      _ -> greturn Nothing)
-
--- | Test if a splitting-in-binding is the complete splitting
-matchSplAll :: Mb vars SplittingExpr -> ImplMatcher vars ()
-matchSplAll [nuP| SplExpr_All |] f = f ()
-matchSplAll _ _ = matchFail
-
--- | Find all permissions on a variable that match a 'Matcher', returning the
--- matched values and also locations of those permissions
-matchPerms :: ExprVar a -> Matcher (ValuePerm a) r ->
-              ImplMatcher vars [(PermLoc a, r)]
-matchPerms x matcher =
-  matchCase
-  (gget >>>= \s ->
-    greturn $ Just $ permFindAll matcher x (s ^. implStatePerms))
-
--- | Find the first permission on a variable that matches a 'Matcher', returning
--- the matched value and also location of the permission
-matchPerm :: ExprVar a -> Matcher (ValuePerm a) r ->
-             ImplMatcher vars (PermLoc a, r)
-matchPerm x matcher =
-  matchCase
-  (gget >>>= \s -> greturn $ permFind matcher x (s ^. implStatePerms))
--}
--}
 
 
 ----------------------------------------------------------------------
@@ -1324,4 +1244,3 @@ recombinePerms =
     DistPermsNil -> greturn ()
     DistPermsCons _ x p_dist ->
       getPerm x >>>= \p_x -> recombinePerm x p_dist p_x >>> recombinePerms
--}
