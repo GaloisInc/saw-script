@@ -164,15 +164,15 @@ mkStructuralMismatch ::
   SetupValue (Crucible.LLVM arch)           {- ^ the value from the spec -} ->
   Crucible.MemType     {- ^ the expected type -} ->
   OverrideMatcher (LLVM arch) w (OverrideFailureReason (LLVM arch))
-mkStructuralMismatch opts cc sc spec llvmval setupval memTy = do
-  (setupMemTy, setupLLVMVal) <- resolveSetupValueLLVM opts cc sc spec setupval
-  prettyLLVMVal      <- ppLLVMVal cc llvmval
-  prettySetupLLVMVal <- ppLLVMVal cc setupLLVMVal
-  pure $ StructuralMismatch
-            prettyLLVMVal
-            prettySetupLLVMVal
-            (Just setupMemTy)
-            memTy
+mkStructuralMismatch _opts cc _sc spec llvmval setupval memTy =
+  let tyEnv = MS.csAllocations spec
+      nameEnv = MS.csTypeNames spec
+      maybeTy = typeOfSetupValue cc tyEnv nameEnv setupval
+  in pure $ StructuralMismatch
+              (PP.pretty llvmval)
+              (MS.ppSetupValue setupval)
+              maybeTy
+              memTy
 
 -- | Instead of using 'ppPointsTo', which prints 'SetupValue', translate
 --   expressions to 'LLVMVal'.
