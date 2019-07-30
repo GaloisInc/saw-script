@@ -207,7 +207,11 @@ typeOfSetupValue' cc env nameEnv val =
                  case memTy' of
                    Crucible.ArrayType n memTy''
                      | fromIntegral i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
-                     | otherwise -> fail $ "typeOfSetupValue: array type index out of bounds: " ++ show (i, n)
+                     | otherwise -> fail $ unlines $
+                         [ "typeOfSetupValue: Array type index out of bounds: "
+                         , "  Index:        " ++ show i
+                         , "  Array length: " ++ show n
+                         ]
                    Crucible.StructType si ->
                      case Crucible.siFieldInfo si i of
                        Just fi -> return (Crucible.PtrType (Crucible.MemType (Crucible.fiType fi)))
