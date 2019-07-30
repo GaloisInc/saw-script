@@ -2153,6 +2153,42 @@ primitives = Map.fromList
     [ "Use the approxmc solver to approximate the number of solutions to the"
     , "CNF representation of the given Term."
     ]
+
+  , prim "incremental_yices"  "{a} IncrementalSat a -> TopLevel a"
+    (pureVal incremental_yices)
+    Experimental
+    [ "Run an incremental SAT computation with Yices."
+    ]
+
+  , prim "push"  "IncrementalSat ()"
+    (pureVal push)
+    Experimental
+    [ "Push a new frame in an incremental SAT computation."
+    ]
+
+  , prim "pop"  "IncrementalSat ()"
+    (pureVal pop)
+    Experimental
+    [ "Pop a frame in an incremental SAT computation."
+    ]
+
+  , prim "assert"  "Term -> IncrementalSat ()"
+    (pureVal assert)
+    Experimental
+    [ "Assert an expression in an incremental SAT computation."
+    ]
+
+  , prim "check"  "IncrementalSat SatResult"
+    (pureVal check)
+    Experimental
+    [ "Check the current context of an incremental SAT computation."
+    ]
+
+  , prim "incremental_toplevel"  "{a} TopLevel a -> IncrementalSat a"
+    (\_ _ -> toValue incremental_toplevel)
+    Experimental
+    [ "Run a TopLevel computation within an incremental SAT computation."
+    ]
   ]
 
   where

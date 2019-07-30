@@ -17,6 +17,7 @@ Stability   : provisional
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE TypeApplications #-}
 
 module SAWScript.Builtins where
 
@@ -130,6 +131,14 @@ import qualified SAWScript.Prover.ABC as Prover
 import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
 import qualified SAWScript.Prover.MRSolver as Prover
+
+import qualified What4.Config as W4
+import qualified What4.Expr.Builder as W4
+import qualified What4.Interface as W4
+import qualified What4.Protocol.Online as W4
+import qualified What4.Protocol.SMTWriter as W4
+import qualified What4.SatResult as W4
+import qualified What4.Solver.Yices as W4
 
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do
@@ -1349,3 +1358,54 @@ approxmc t = do
   case msg of
     [l] -> io $ putStrLn l
     _ -> fail $ "Garbled result from approxmc\n\n" ++ out
+
+incremental_yices :: SV.IncrementalSat SV.Value -> TopLevel SV.Value
+incremental_yices a = do
+  sym <- liftIO $ W4.newExprBuilder Prover.St globalNonceGenerator
+  io $ W4.extendConfig W4.yicesOptions (W4.getConfiguration sym)
+  let fs = W4.yicesDefaultFeatures
+  p <- io $ W4.startSolverProcess fs Nothing sym
+  let st = SV.IncSatState
+           { SV.incProver = p
+           , SV.incSym = sym
+           , SV.incArgs = []
+           }
+  res <- evalStateT a st
+  io $ W4.shutdownSolverProcess p
+  return res
+
+push :: SV.IncrementalSat ()
+push = do
+  p <- SV.incProver <$> get
+  liftIO $ W4.push p
+
+pop :: SV.IncrementalSat ()
+pop = do
+  p <- SV.incProver <$> get
+  liftIO $ W4.pop p
+
+assert :: Term -> SV.IncrementalSat ()
+assert t = do
+  p <- SV.incProver <$> get
+  sym <- SV.incSym <$> get
+  sc <- lift getSharedContext
+  args <- liftIO $ do
+    (_, argNames, (bvs,lit)) <- Prover.prepWhat4 sym sc [] t
+    W4.assume (W4.solverConn p) lit
+    return (zip bvs argNames)
+  modify (\s -> s { SV.incArgs = args ++ SV.incArgs s })
+
+check :: SV.IncrementalSat SV.SatResult
+check = do
+  p <- SV.incProver <$> get
+  res <- liftIO $ W4.checkAndGetModel p "check in IncrementalSat block"
+  args <- SV.incArgs <$> get
+  case res of
+    W4.Unsat _ -> return $ SV.Unsat mempty
+    W4.Sat gndEvalFcn -> do
+      mvals <- liftIO $ mapM (Prover.getValues gndEvalFcn) args
+      return $ SV.SatMulti mempty (catMaybes mvals)
+    W4.Unknown -> fail "solver returned unknown"
+
+incremental_toplevel :: TopLevel SV.Value -> SV.IncrementalSat SV.Value
+incremental_toplevel = lift

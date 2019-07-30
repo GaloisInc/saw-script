@@ -50,6 +50,7 @@ import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text)
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
+import Data.Parameterized.Nonce
 import Data.Parameterized.Some
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
@@ -97,7 +98,12 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
 
+import qualified Verifier.SAW.Simulator.What4 as W4
+import qualified SAWScript.Prover.What4 as Prover
+import qualified What4.Expr.Builder as W4
 import           What4.ProgramLoc (ProgramLoc)
+import qualified What4.Protocol.Online as W4
+import qualified What4.Solver.Yices as Yices
 
 -- Values ----------------------------------------------------------------------
 
@@ -117,6 +123,7 @@ data Value
     -- operations in these monads can fail at runtime.
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
+  | VIncrementalSat (IncrementalSat Value)
   | VSimpset Simpset
   | VTheorem Theorem
   | VJavaSetup (JavaSetup Value)
@@ -295,6 +302,7 @@ showsPrecValue opts p v =
     VJVMSetup _      -> showString "<<JVM Setup>>"
     VJVMMethodSpec _ -> showString "<<JVM MethodSpec>>"
     VJVMSetupValue x -> shows x
+    VIncrementalSat _ -> showString "<<Incremental SAT computation>>"
   where
     opts' = sawPPOpts opts
 
@@ -512,6 +520,16 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
 
 --
 type ProofScript a = StateT ProofState TopLevel a
+
+
+type IncSym = W4.ExprBuilder GlobalNonceGenerator Prover.St ()
+data IncSatState = IncSatState
+  { incProver :: W4.SolverProcess GlobalNonceGenerator (Yices.Connection GlobalNonceGenerator)
+  , incSym :: IncSym
+  , incArgs :: [(Maybe (W4.Labeler IncSym), String)]
+  }
+
+type IncrementalSat a = StateT IncSatState TopLevel a
 
 -- IsValue class ---------------------------------------------------------------
 
@@ -803,6 +821,18 @@ instance IsValue CMS.GhostGlobal where
 instance FromValue CMS.GhostGlobal where
   fromValue (VGhostVar r) = r
   fromValue v = error ("fromValue GlobalVar: " ++ show v)
+
+instance IsValue a => IsValue (StateT IncSatState TopLevel a) where
+    toValue m = VIncrementalSat (fmap toValue m)
+
+instance FromValue a => FromValue (StateT IncSatState TopLevel a) where
+    fromValue (VIncrementalSat m) = fmap fromValue m
+    fromValue (VReturn v) = return (fromValue v)
+    fromValue (VBind _pos m1 v2) = do
+      v1 <- fromValue m1
+      m2 <- lift $ applyValue v2 v1
+      fromValue m2
+    fromValue _ = error "fromValue IncrementalSat"
 
 -- Error handling --------------------------------------------------------------
 

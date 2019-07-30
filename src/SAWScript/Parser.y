@@ -60,6 +60,7 @@ import Control.Exception
   'JavaSetup'    { TReserved _ "JavaSetup"      }
   'LLVMSetup'    { TReserved _ "LLVMSetup"      }
   'ProofScript'  { TReserved _ "ProofScript"    }
+  'IncrementalSat' { TReserved _ "IncrementalSat" }
   'TopLevel'     { TReserved _ "TopLevel"       }
   'CrucibleSetup'{ TReserved _ "CrucibleSetup"  }
   'Bool'         { TReserved _ "Bool"           }
@@ -231,6 +232,7 @@ Context :: { Type }
  | 'JavaSetup'                          { tContext JavaSetup      }
  | 'LLVMSetup'                          { tContext LLVMSetup      }
  | 'ProofScript'                        { tContext ProofScript    }
+ | 'IncrementalSat'                     { tContext IncrementalSat }
  | 'TopLevel'                           { tContext TopLevel       }
  | 'CrucibleSetup'                      { tContext CrucibleSetup  }
  | name                                 { tVar (tokStr $1)        }

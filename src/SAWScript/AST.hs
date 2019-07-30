@@ -179,6 +179,7 @@ data Context
   | ProofScript
   | TopLevel
   | CrucibleSetup
+  | IncrementalSat
   deriving (Eq,Show)
 
 data Type
@@ -394,6 +395,7 @@ instance PrettyPrint Context where
     JavaSetup    -> PP.text "JavaSetup"
     LLVMSetup    -> PP.text "LLVMSetup"
     ProofScript  -> PP.text "ProofScript"
+    IncrementalSat -> PP.text "IncrementalSat"
     TopLevel     -> PP.text "TopLevel"
     CrucibleSetup-> PP.text "CrucibleSetup"
 
