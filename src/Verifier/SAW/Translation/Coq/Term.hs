@@ -358,7 +358,7 @@ translateTerm t = withLocalLocalEnvironment $ do -- traceTerm "translateTerm" t 
     _ -> {- trace "translateTerm fallthrough" -} notSupported
   where
     badTerm      = Except.throwError $ BadTerm t
-    notSupported = Except.throwError $ NotSupported t
+    notSupported = return (Coq.App (Coq.Var "error") [Coq.StringLit "Not supported"])
     go env term  = do
       modify $ set localEnvironment env
       translateTerm term
@@ -383,7 +383,11 @@ defaultTermForType typ = do
       falseT <- translateIdent (mkIdent preludeName "False")
       return $ Coq.Var falseT
 
-    _ -> Except.throwError $ CannotCreateDefaultValue typ
+    _ ->
+      return $ Coq.App (Coq.Var "error")
+      [Coq.StringLit ("Could not generate default value of type " ++ showTerm typ)]
+
+    -- _ -> Except.throwError $ CannotCreateDefaultValue typ
 
 translateTermToDocWith ::
   TranslationConfiguration ->

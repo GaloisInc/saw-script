@@ -129,13 +129,13 @@ skip = IdentSpecialTreatment
   }
 
 sawDefinitionsModule :: ModuleName
-sawDefinitionsModule = mkModuleName ["SAW"]
+sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
   if translateVectorsAsCoqVectors
-  then mkModuleName ["SAWVectorsAsCoqVectors"]
-  else mkModuleName ["SAWVectorsAsCoqLists"]
+  then mkModuleName ["SAWCoreVectorsAsCoqVectors"]
+  else mkModuleName ["SAWCoreVectorsAsCoqLists"]
 
 cryptolPrimitivesModule :: ModuleName
 cryptolPrimitivesModule = mkModuleName ["CryptolPrimitives"]

@@ -1,0 +1,8 @@
+*.aux
+*.coqdeps.d
+*.glob
+*.vo
+/default.nix
+/Makefile
+/Makefile.conf
+/saw

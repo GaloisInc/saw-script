@@ -116,7 +116,7 @@ translateSAWCorePrelude = do
 
     liftIO $ do
       putStrLn "From Coq.Strings  Require Import String."
-      putStrLn "From CryptolToCoq Require Import SAW."
+      putStrLn "From CryptolToCoq Require Import SAWCoreScaffolding."
       putStrLn ""
 
     doc <- translateModule configuration prelude

@@ -108,7 +108,7 @@ preamblePlus configuration extraImports = vcat $
   , "Import            ListNotations."
   , "From Coq          Require Import String."
   , "From Coq          Require Import Vectors.Vector."
-  , "From CryptolToCoq Require Import SAW."
+  , "From CryptolToCoq Require Import SAWCoreScaffolding."
   , sawVectors
   , "From Records      Require Import Records."
   , ""
@@ -119,8 +119,8 @@ preamblePlus configuration extraImports = vcat $
     sawVectors :: Doc
     sawVectors =
       if translateVectorsAsCoqVectors configuration
-      then "From CryptolToCoq Require Import SAWVectorsAsCoqVectors."
-      else "From CryptolToCoq Require Import SAWVectorsAsCoqLists."
+      then "From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors."
+      else "From CryptolToCoq Require Import SAWCoreVectorsAsCoqLists."
 
 preamble :: TranslationConfiguration -> Doc
 preamble configuration = preamblePlus configuration $ vcat []
