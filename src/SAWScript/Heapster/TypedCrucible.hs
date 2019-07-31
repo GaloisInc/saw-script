@@ -22,15 +22,19 @@
 
 module SAWScript.Heapster.TypedCrucible where
 
+import Data.Maybe
 import Data.Text
 import Data.Type.Equality
 import Data.Functor.Identity
+import Data.Functor.Compose
 -- import Data.Functor.Const
 -- import Data.Functor.Product
 -- import Data.Parameterized.Context
+import Data.Kind
 import GHC.TypeLits
 import What4.ProgramLoc
 
+import Control.Lens hiding ((:>),Index)
 import Control.Monad.State
 import Control.Monad.Reader
 
@@ -200,6 +204,7 @@ $(mkNuMatching [t| forall blocks ps_in. TypedJumpTarget blocks ps_in |])
 -- | Typed Crucible statements with the given Crucible syntax extension and the
 -- given set of return values
 data TypedStmt ext (rets :: RList CrucibleType) ps_out ps_in where
+
   -- | Assign a pure value to a register, where pure here means that its
   -- translation to SAW will be pure (i.e., no LLVM pointer operations)
   TypedSetReg :: TypeRepr tp -> TypedExpr ext tp ->
@@ -332,20 +337,30 @@ data TypedCFG
 -- * Monad(s) for Permission Checking
 ----------------------------------------------------------------------
 
+-- | A translation of a Crucible context to 'TypedReg's that exist in the local
+-- Hobbits context
+type CtxTrans ctx = Assignment TypedReg ctx
+
 -- | The local state maintained while type-checking is the current permission
 -- set and the permissions required on return from the entire function.
-data PermCheckState args ret ps =
+data PermCheckState args ret ps_ctx =
   PermCheckState
   {
-    stCurPerms :: PermSet ps,
+    stCurPerms :: PermSet (Fst ps_ctx),
+    stCtx :: CtxTrans (Snd ps_ctx),
     stRetPerms :: Binding ret (DistPerms (args :> ret))
   }
 
 -- | Like the 'set' method of a lens, but allows the @ps@ argument to change
-setSTCurPerms :: PermSet ps2 -> PermCheckState args ret ps1 ->
-                 PermCheckState args ret ps2
+setSTCurPerms :: PermSet ps2 -> PermCheckState args ret '(ps1,ctx) ->
+                 PermCheckState args ret '(ps2,ctx)
 setSTCurPerms perms (PermCheckState {..}) =
   PermCheckState { stCurPerms = perms, .. }
+
+modifySTCurPerms :: (PermSet ps1 -> PermSet ps2) ->
+                    PermCheckState args ret '(ps1,ctx) ->
+                    PermCheckState args ret '(ps2,ctx)
+modifySTCurPerms f_perms st = setSTCurPerms (f_perms $ stCurPerms st) st
 
 -- | The information needed to type-check a single entrypoint of a block
 data BlockEntryInfo blocks ret args where
@@ -376,7 +391,8 @@ data BlockInfo ext blocks ret args =
 data TopPermCheckState ext blocks ret =
   TopPermCheckState
   {
-    stBlockInfo :: Closed (MapRList (BlockInfo ext blocks ret) blocks)
+    stBlockInfo ::
+      Closed (MapRList (BlockInfo ext blocks ret) blocks)
   }
 
 $(mkNuMatching [t| forall ext blocks ret. TopPermCheckState ext blocks ret |])
@@ -388,30 +404,72 @@ instance BindState (TopPermCheckState ext blocks ret) where
 type TopPermCheckM ext blocks ret =
   State (TopPermCheckState ext blocks ret)
 
+{-
+-- | A datakind for the type-level parameters needed to define blocks, including
+-- the @ext@, @blocks@, @ret@ and @args@ arguments
+data BlkParams =
+  BlkParams Type (RList (RList CrucibleType)) CrucibleType (RList CrucibleType)
+
+type family BlkExt (args :: BlkParams) :: Type where
+  BlkExt ('BlkParams ext _ _ _) = ext
+
+type family BlkBlocks (args :: BlkParams) :: (RList (RList CrucibleType)) where
+  BlkBlocks ('BlkParams _ blocks _ _) = blocks
+
+type family BlkRet (args :: BlkParams) :: CrucibleType where
+  BlkRet ('BlkParams _ _ ret _) = ret
+
+type family BlkArgs (args :: BlkParams) :: RList CrucibleType where
+  BlkArgs ('BlkParams _ _ _ args) = args
+-}
+
 -- | The generalized monad for permission-checking
-type PermCheckM r ext blocks args ret =
+type PermCheckM r ext blocks ret args ps1 ctx1 ps2 ctx2 =
   GenStateT (PermCheckState args ret)
-  (GenContT r (TopPermCheckM ext blocks ret))
+  (GenContM (Compose (TopPermCheckM ext blocks ret) r))
+  '( '(ps1, ctx1), ps1) '( '(ps2, ctx2), ps2)
+
 
 -- | The generalized monad for permission-checking statements
-type StmtPermCheckM ext blocks args ret =
-  PermCheckM (TypedStmtSeq ext blocks ret) ext blocks args ret
+type StmtPermCheckM ext blocks ret args ps1 ctx1 ps2 ctx2 =
+  PermCheckM (TypedStmtSeq ext blocks ret) ext blocks ret args ps1 ctx1 ps2 ctx2
 
-top_get :: PermCheckM r ext blocks args ret ps ps (TopPermCheckState ext blocks ret)
+-- | Get the current top-level state
+top_get :: PermCheckM r ext blocks ret args ps ctx ps ctx
+           (TopPermCheckState ext blocks ret)
 top_get = error "FIXME HERE"
+
+-- | Get the current Crucible context translation
+getCtx :: PermCheckM r ext blocks ret args ps ctx ps ctx (CtxTrans ctx)
+getCtx = stCtx <$> gget
+
+-- | Add a variable to the current Crucible context translation
+addCtxName :: ExprVar tp ->
+              PermCheckM r ext blocks ret args ps (ctx ::> tp) ps ctx ()
+addCtxName x =
+  gmodify (\(PermCheckState {..}) ->
+            PermCheckState { stCtx = extend stCtx (TypedReg x), ..})
+
+-- | Smart constructor for applying a function on 'PermImpl's
+applyImplFun :: (PermImpl r ps -> r ps) -> PermImpl r ps -> r ps
+applyImplFun _ (Impl_Done r) = r
+applyImplFun f impl = f impl
 
 -- | Run an implication computation inside a permission-checking computation
 runImplM :: (forall ps. PermImpl r ps -> r ps) -> CruCtx vars ->
             ImplM vars r ps_out ps_in a ->
-            PermCheckM r ext blocks args ret ps_out ps_in a
+            PermCheckM r ext blocks ret args ps_out ctx ps_in ctx a
 runImplM f_impl vars m =
   top_get >>>= \top_st ->
-  withAltContStateM
-  (Identity . Impl_Done . flip evalState top_st)
-  (return . f_impl . runIdentity)
-  (mkImplState vars . stCurPerms)
-  (\st implSt -> st { stCurPerms = _implStatePerms implSt })
-  m
+  gget >>>= \st ->
+  gcaptureCC
+  (\k ->
+    Compose $ return $ applyImplFun f_impl $
+    unGenContM (runGenStateT m (mkImplState vars $ stCurPerms st))
+    (Impl_Done . flip evalState top_st . getCompose . k)
+    ) >>>= \(a, implSt) ->
+  gput (setSTCurPerms (implSt ^. implStatePerms) st) >>>
+  greturn a
 
 
 ----------------------------------------------------------------------
@@ -422,32 +480,67 @@ runImplM f_impl vars m =
 -- checking
 type PermCheckExtC ext = (NuMatchingExtC ext, IsSyntaxExtension ext)
 
--- | A translation of a Crucible context to 'TypedReg's that exist in the local
--- Hobbits context
-type CtxTrans ctx = Assignment TypedReg ctx
-
 -- | Translate a Crucible register by looking it up in the translated context
-tcReg :: CtxTrans ctx -> Reg ctx tp -> TypedReg tp
-tcReg ctx (Reg ix) = ctx ! ix
+tcReg :: Reg ctx tp ->
+         PermCheckM r ext blocks args ret ps ctx ps ctx (TypedReg tp)
+tcReg (Reg ix) = (! ix) <$> getCtx
 
 -- | Translate a Crucible expression
-tcExpr :: PermCheckExtC ext => CtxTrans ctx -> Expr ext ctx tp ->
-          StmtPermCheckM ext blocks args ret ps ps (TypedExpr ext tp)
-tcExpr ctx (App (RollRecursive _ _ _)) =
+tcExpr :: PermCheckExtC ext => Expr ext ctx tp ->
+          StmtPermCheckM ext blocks args ret ps ctx ps ctx (TypedExpr ext tp)
+tcExpr (App (RollRecursive _ _ _)) =
   error "FIXME HERE: tcExpr: RollRecursive"
-tcExpr ctx (App (UnrollRecursive _ _ _)) =
+tcExpr (App (UnrollRecursive _ _ _)) =
   error "FIXME HERE: tcExpr: UnrollRecursive"
-tcExpr ctx (App app) =
-  greturn $ TypedExpr $ fmapFC (tcReg ctx) app
+tcExpr (App app) =
+  TypedExpr <$> traverseFC tcReg app
 
--- | Translate a Crucible statement sequence, starting and ending with an empty
--- stack of distinguished permissions
-tcStmtSeq :: PermCheckExtC ext => CtxTrans ctx ->
-             StmtSeq ext blocks reg ctx ->
-             StmtPermCheckM ext (CtxCtxToRList blocks) args ret RNil RNil
-             ()
+-- | Translate a 'TypedExpr' to a permission expression, if possible
+exprToPermExpr :: TypedExpr ext tp -> Maybe (PermExpr tp)
+exprToPermExpr _ = error "FIXME HERE: exprToPermExpr!"
+
+-- | Emit a statement in the current statement sequence, where the supplied
+-- function says how that statement modifies the current permissions, given the
+-- freshly-bound names for the return values. Return those freshly-bound names
+-- for the return values.
+emitStmt :: TypeCtx rets => ProgramLoc ->
+            (MapRList Name rets -> PermSet ps_in -> PermSet ps_out) ->
+            TypedStmt ext rets ps_out ps_in ->
+            StmtPermCheckM ext blocks args ret ps_out ctx ps_in ctx
+            (MapRList Name rets)
+emitStmt loc f_perms stmt =
+  gopenBinding
+  (Compose . (TypedConsStmt loc stmt <$>) . strongMbM . fmap getCompose)
+  (nuMulti typeCtxProxies $ \vars -> ()) >>>= \(ns, ()) ->
+  gmodify (modifySTCurPerms $ f_perms ns) >>>
+  greturn ns
+
+
+-- | Typecheck a statement and emit it in the current statement sequence,
+-- starting and ending with an empty stack of distinguished permissions
+tcEmitStmt :: PermCheckExtC ext => ProgramLoc -> Stmt ext ctx ctx' ->
+              StmtPermCheckM ext blocks args ret RNil ctx' RNil ctx ()
+tcEmitStmt loc (SetReg tp e) =
+  tcExpr e >>>= \typed_e ->
+  emitStmt loc (\(_ :>: x) ->
+                 -- If typed_e corresponds to a permission expresion expr, add
+                 -- permission x:eq(expr); otherwise add x:true
+                 set (varPerm x) (fromMaybe ValPerm_True
+                                  (ValPerm_Eq <$> exprToPermExpr typed_e)))
+  (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
+  addCtxName x
+tcEmitStmt _ _ = error "FIXME HERE: tcEmitStmt!"
+
+{- FIXME HERE NOW: do not know the output context!
+-- | Translate and emit a Crucible statement sequence, starting and ending with
+-- an empty stack of distinguished permissions
+tcEmitStmtSeq :: PermCheckExtC ext => CtxTrans ctx ->
+                 StmtSeq ext blocks reg ctx ->
+                 StmtPermCheckM ext blocks args ret RNil RNil
+                 ()
 tcStmtSeq ctx (ConsStmt loc (SetReg tp e) stmts) =
   tcExpr ctx e >>>= \typed_e ->
   gmbM (TypedConsStmt loc (TypedSetReg tp typed_e)) $
   nu $ \x ->
   tcStmtSeq (extend ctx $ TypedReg x) stmts
+-}
