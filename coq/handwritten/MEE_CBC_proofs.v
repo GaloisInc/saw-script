@@ -514,11 +514,70 @@ Proof.
   }
 Qed.
 
-Definition split_fixpoint :
-    forall (m n : Nat) (a : Type), Vec (mulNat m n) a -> Vec m (Vec n a).
-Admitted.
+Fixpoint split_fixpoint m n a {struct m} : Vec (mulNat m n) a -> Vec m (Vec n a).
+Proof.
+  intros v.
+  induction m.
+  {
+    apply nil.
+  }
+  {
+    apply cons.
+    {
+      simpl in v.
+      eapply SAWCorePrelude.take.
+      apply v.
+    }
+    {
+      apply split_fixpoint.
+      eapply SAWCorePrelude.drop.
+      apply v.
+    }
+  }
+Defined.
+
+Theorem sawAt_drop T m n (v : Vec (addNat n m) T) i:
+    sawAt _ _ (SAWCorePrelude.drop _ _ _ v) i =
+    sawAt _ _ v (n + i)%nat.
+Proof.
+  induction n.
+  {
+    simpl.
+    unfold SAWCorePrelude.drop.
+    rewrite gen_sawAt.
+    reflexivity.
+  }
+  {
+    simpl in v.
+    apply @Vector.caseS' with (v := v).
+    intros h t.
+    simpl.
+    setoid_rewrite sawAt_S.
+    rewrite <- IHn.
+    f_equal.
+  }
+Qed.
 
 Lemma rewrite_split m n a v : split m n a v = split_fixpoint m n a v.
+Proof.
+  induction m.
+  {
+    reflexivity.
+  }
+  {
+    unfold split.
+    simpl.
+    f_equal.
+    {
+      rewrite <- IHm.
+      unfold split.
+      apply gen_domain_eq.
+      intros i I.
+      apply gen_domain_eq.
+      intros j J.
+      admit.
+    }
+  }
 Admitted.
 
 Lemma join_split s n (v : Byte [TCNum s * TCNum n]) :
@@ -544,6 +603,97 @@ Theorem ecJoin_ecSplit m n v : ecJoin m n Byte (ecSplit m n Byte v) = v.
   }
 Admitted.
 
+Theorem fin_seq_concat_cons T m n h a b :
+    fin_seq_concat T (S m) n (cons T h m a) b =
+    cons T h (addNat m n) (fin_seq_concat T m n a b).
+Proof.
+  unfold fin_seq_concat.
+  unfold eq_rect_r.
+  simpl.
+  unfold f_equal_nat.
+  rewrite eq_sym_map_distr.
+  destruct (eq_sym _).
+  simpl.
+  reflexivity.
+Qed.
+
+Theorem rewrite_fin_seq_concat T m n a b :
+    existT (Vector.t T) (addNat m n) (fin_seq_concat T m n a b) =
+    existT (Vector.t T) (m + n)%nat (Vector.append a b).
+Proof.
+  induction a.
+  {
+    compute.
+    reflexivity.
+  }
+  {
+    simpl.
+    dependent rewrite <- IHa.
+    f_equal.
+    rewrite fin_seq_concat_cons.
+    reflexivity.
+  }
+Qed.
+
+Theorem sawAt_fin_seq_concat_left T m n a :
+    forall b i,
+    i < m ->
+    sawAt (addNat m n) T (fin_seq_concat T m n a b) i = sawAt m T a i.
+Proof.
+  induction a as [ | h m t]; intros b i I.
+  {
+    omega.
+  }
+  {
+    rewrite fin_seq_concat_cons.
+    destruct i.
+    {
+      simpl.
+      rewrite !sawAt_zero.
+      reflexivity.
+    }
+    {
+      simpl.
+      rewrite !sawAt_S.
+      apply IHt.
+      omega.
+    }
+  }
+Qed.
+
+Theorem take_fin_seq_concat T m n a b :
+    take (TCNum m) (TCNum n) T (fin_seq_concat T m n a b) = a.
+Proof.
+  induction a as [ | h m t ].
+  {
+    unfold take.
+    unfold fin_seq_concat.
+    simpl.
+    unfold SAWCorePrelude.take.
+    simpl.
+    reflexivity.
+  }
+  {
+    unfold take.
+    simpl.
+    unfold SAWCorePrelude.take.
+    simpl.
+    rewrite fin_seq_concat_cons.
+    rewrite sawAt_zero.
+    f_equal.
+    setoid_rewrite sawAt_S.
+    pose proof (sawAt_fin_seq_concat_left _ _ _ t b).
+    rewrite gen_domain_eq with (g := fun i => sawAt _ _ t i).
+    {
+      apply gen_sawAt.
+    }
+    {
+      intros i I.
+      now apply sawAt_fin_seq_concat_left.
+    }
+  }
+Qed.
+
 Theorem pad_unpad n p b msg tag :
     pad_preconditions   n p b ->
     (* NOTE: those are the exact same as `pad_preconditions`, redundant *)
@@ -559,10 +709,35 @@ Proof.
   rewrite rewriteRepeat.
   f_equal.
   {
-
-
     rewrite rewrite_ecCat_TCNum.
     rewrite rewrite_ecCat.
+    rewrite ecJoin_ecSplit.
+    unfold coerce.
+
+    unfold seq_cong1.
+    unfold eq_cong.
+    unfold Eq__rec.
+    unfold identity_rect.
+
+    Theorem plus_minus a b : a + b - a = b.
+    Admitted.
+
+    pattern (TCNum n + (TCNum 16 * (TCNum 2 + TCNum b) - TCNum n)).
+
+    setoid_rewrite plus_minus.
+
+    Axiom rewrite_sawUnsafeAssert : forall T x, sawUnsafeAssert T x x = identity_refl x.
+
+    unfold sawUnsafeAssert.
+
+    pattern (seq_cong1 (TCNum 16 * (TCNum 2 + TCNum b))) at 1.
+    remember (TCNum 16 * (TCNum 2 + TCNum b) - TCNum n) as n1.
+    cbn.
+    unfold coerce.
+    destruct seq_cong1.
+
+
+    simpl.
     destruct (TCNum 32 + TCNum p).
     admit.
   }

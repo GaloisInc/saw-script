@@ -10,6 +10,7 @@ From Records      Require Import Records.
 
 From CryptolToCoq Require Import SAWCorePrelude.
 Import SAWCorePrelude.
+From CryptolToCoq Require Import CryptolScaffolding.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
 Import CryptolPrimitives.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra.

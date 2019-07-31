@@ -17,4 +17,4 @@ Proof.
     simpl.
     intuition.
   }
-Qed.
+Defined.
