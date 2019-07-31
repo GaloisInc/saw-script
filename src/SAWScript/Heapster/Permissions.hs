@@ -337,9 +337,14 @@ zeroOfType (testEquality splittingTypeRepr -> Just Refl) =
   PExpr_Spl SplExpr_All
 zeroOfType _ = error "zeroOfType"
 
+-- | Extract a 'SplittingExpr' from an expression of type 'SplittingType'
+splittingOfExpr :: PermExpr SplittingType -> SplittingExpr
+splittingOfExpr (PExpr_Var x) = SplExpr_Var x
+splittingOfExpr (PExpr_Spl spl) = spl
+
 
 ----------------------------------------------------------------------
--- * Operations on Bitvector Expressions
+-- * Operations on Bitvector and LLVM Pointer Expressions
 ----------------------------------------------------------------------
 
 -- | Normalize a factor so that its coefficient is between @0@ and @(2^w)-1@
@@ -633,6 +638,28 @@ exPermBody :: TypeRepr tp -> ValuePerm a -> Binding tp (ValuePerm a)
 exPermBody tp (ValPerm_Exists (p :: Binding tp' (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
+
+-- | Create a permission to read an arbitrary value from offset 0 of an LLVM
+-- pointer
+llvmReadPerm :: (1 <= w, KnownNat w) =>
+                Mb (RNil :> SplittingType :> LLVMPointerType w)
+                (ValuePerm (LLVMPointerType w))
+llvmReadPerm =
+  nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: spl :>: x) ->
+  ValPerm_LLVMPtr
+  [LLVMPP_Field $ LLVMFieldPerm { llvmFieldOffset = bvInt 0,
+                                  llvmFieldSplitting = SplExpr_Var spl,
+                                  llvmFieldPerm = ValPerm_Eq (PExpr_Var x) }]
+
+-- | Create a permission to write to offset 0 of an LLVM pointer
+llvmWritePerm :: (1 <= w, KnownNat w) =>
+                 Binding (LLVMPointerType w) (ValuePerm (LLVMPointerType w))
+llvmWritePerm =
+  nu $ \x ->
+  ValPerm_LLVMPtr
+  [LLVMPP_Field $ LLVMFieldPerm { llvmFieldOffset = bvInt 0,
+                                  llvmFieldSplitting = SplExpr_All,
+                                  llvmFieldPerm = ValPerm_Eq (PExpr_Var x) }]
 
 -- | Add an offset to a pointer permission
 offsetLLVMPtrPerm :: (1 <= w, KnownNat w) =>
