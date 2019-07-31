@@ -526,7 +526,7 @@ type IncSym = W4.ExprBuilder GlobalNonceGenerator Prover.St ()
 data IncSatState = IncSatState
   { incProver :: W4.SolverProcess GlobalNonceGenerator (Yices.Connection GlobalNonceGenerator)
   , incSym :: IncSym
-  , incArgs :: [(Maybe (W4.Labeler IncSym), String)]
+  , incArgs :: M.Map String (Maybe (W4.Labeler IncSym))
   }
 
 type IncrementalSat a = StateT IncSatState TopLevel a

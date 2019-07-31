@@ -37,6 +37,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid ((<>))
 import Data.Time.Clock
+import Data.Tuple (swap)
 import Data.Typeable
 import System.Directory
 import qualified System.Environment
@@ -1368,7 +1369,7 @@ incremental_yices a = do
   let st = SV.IncSatState
            { SV.incProver = p
            , SV.incSym = sym
-           , SV.incArgs = []
+           , SV.incArgs = Map.empty
            }
   res <- evalStateT a st
   io $ W4.shutdownSolverProcess p
@@ -1392,8 +1393,8 @@ assert t = do
   args <- liftIO $ do
     (_, argNames, (bvs,lit)) <- Prover.prepWhat4 sym sc [] t
     W4.assume (W4.solverConn p) lit
-    return (zip bvs argNames)
-  modify (\s -> s { SV.incArgs = args ++ SV.incArgs s })
+    return (zip argNames bvs)
+  modify (\s -> s { SV.incArgs = foldr (\(n, bv) -> Map.insert n bv) (SV.incArgs s) args })
 
 check :: SV.IncrementalSat SV.SatResult
 check = do
@@ -1403,7 +1404,7 @@ check = do
   case res of
     W4.Unsat _ -> return $ SV.Unsat mempty
     W4.Sat gndEvalFcn -> do
-      mvals <- liftIO $ mapM (Prover.getValues gndEvalFcn) args
+      mvals <- liftIO $ mapM (Prover.getValues gndEvalFcn . swap) (Map.toList args)
       return $ SV.SatMulti mempty (catMaybes mvals)
     W4.Unknown -> fail "solver returned unknown"
 

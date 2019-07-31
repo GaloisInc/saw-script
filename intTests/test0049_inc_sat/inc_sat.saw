@@ -1,0 +1,21 @@
+enable_experimental;
+
+let script = do {
+  push;
+  assert {{ \(x:[32]) (y:[32]) -> x > y /\ y > x }};
+  res0 <- check;
+  pop;
+  push;
+  assert {{ \(x:[32]) (y:[32]) -> x > y }};
+  res1 <- check;
+  pop;
+  push;
+  assert {{ \(x:[32]) (y:[32]) -> y > x }};
+  res2 <- check;
+  pop;
+  incremental_toplevel (caseSatResult res0 (print "inconsistent") print);
+  incremental_toplevel (caseSatResult res1 undefined print);
+  incremental_toplevel (caseSatResult res2 undefined print);
+};
+
+incremental_yices script;
