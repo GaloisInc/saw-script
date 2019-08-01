@@ -220,7 +220,6 @@ writeCoqCryptolModule inputFile outputFile = do
       (show . vcat $ [ Coq.preamble coqTranslationConfiguration
                      , "From CryptolToCoq Require Import SAWCorePrelude."
                      , "Import SAWCorePrelude."
-                     , "From CryptolToCoq Require Import CryptolScaffolding."
                      , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
                      , "Import CryptolPrimitives."
                      , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
@@ -253,7 +252,6 @@ writeCoqCryptolPrimitivesForSAWCore outputFile = do
   let extraPreamble = vcat $
         [ "From CryptolToCoq Require Import SAWCorePrelude."
         , "Import SAWCorePrelude."
-        , "From CryptolToCoq Require Import CryptolScaffolding."
         ]
   writeFile outputFile (show . vcat $ [ Coq.preamblePlus coqTranslationConfiguration extraPreamble
                                       , doc
