@@ -230,19 +230,39 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_out ps_in where
                  TypedStmt ext RNil RNil RNil
 
   -- FIXME: add Alignment to loads and stores
-  TypedLLVMLoad :: (TypedReg (LLVMPointerType w)) ->
+  TypedLLVMLoad :: w ~ ArchWidth arch =>
+                   (TypedReg (LLVMPointerType w)) ->
                    TypedStmt (LLVM arch) (RNil :> LLVMPointerType w)
                    (RNil :> LLVMPointerType w :> LLVMPointerType w)
                    (RNil :> LLVMPointerType w)
 
-  TypedLLVMStore :: (TypedReg (LLVMPointerType w)) ->
+  TypedLLVMStore :: w ~ ArchWidth arch =>
+                    (TypedReg (LLVMPointerType w)) ->
                     (TypedReg (LLVMPointerType w)) ->
                     TypedStmt (LLVM arch) (RNil :> LLVMPointerType w)
                     (RNil :> LLVMPointerType w)
                     (RNil :> LLVMPointerType w)
 
+  -- | Allocate an object of the given size on the given LLVM frame
+  TypedAlloca :: w ~ ArchWidth arch =>
+                 TypedReg (LLVMFrameType w) -> TypedReg (BVType w) ->
+                 TypedStmt (LLVM arch) (RNil :> LLVMPointerType w)
+                 (RNil :> LLVMPointerType w) RNil
+
+  -- | Create a new LLVM frame
+  TypedLLVMCreateFrame :: w ~ ArchWidth arch =>
+                          TypedStmt (LLVM arch) (RNil :> LLVMFrameType w)
+                          RNil RNil
+
+  -- | Delete an LLVM frame and deallocate all memory objects allocated in it,
+  -- whose permissions are given by the supplied 'DistPerms' object
+  TypedLLVMDeleteFrame :: w ~ ArchWidth arch =>
+                          TypedReg (LLVMFrameType w) -> DistPerms ps ->
+                          TypedStmt (LLVM arch) RNil RNil ps
+
   -- | Destruct an LLVM value into its block and offset
-  DestructLLVMPtr :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
+  DestructLLVMPtr :: (w ~ ArchWidth arch, 1 <= w, KnownNat w) =>
+                     TypedReg (LLVMPointerType w) ->
                      TypedStmt (LLVM arch) (RNil :> NatType :> BVType w)
                      (RNil :> LLVMPointerType w)
                      (RNil :> LLVMPointerType w)
@@ -388,12 +408,16 @@ type CtxTrans ctx = Assignment TypedReg ctx
 addCtxName :: CtxTrans ctx -> ExprVar tp -> CtxTrans (ctx ::> tp)
 addCtxName ctx x = extend ctx (TypedReg x)
 
+data SomeLLVMFrame where
+  SomeLLVMFrame :: ExprVar (LLVMFrameType w) -> SomeLLVMFrame
+
 -- | The local state maintained while type-checking is the current permission
 -- set and the permissions required on return from the entire function.
 data PermCheckState args ret ps =
   PermCheckState
   {
     stCurPerms :: PermSet ps,
+    stFrame :: Maybe SomeLLVMFrame,
     stRetPerms :: Binding ret (DistPerms (args :> ret))
   }
 
@@ -600,7 +624,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg (LLVMPointerRepr w) _ _)
   | Just Refl <- testEquality w (archWidth arch)
   = let treg = tcReg ctx reg in
     runImplM TypedImplStmt (extCruCtx $ extCruCtx emptyCruCtx)
-    (proveVarImpl (typedRegVar treg) llvmReadPerm) >>>= \_ ->
+    (proveVarImpl (typedRegVar treg) llvmExRead0Perm) >>>= \_ ->
     (emitStmt loc (llvmLoadPermFun treg) (TypedLLVMLoad treg)) >>>= \(_ :>: y) ->
     runImplM TypedImplStmt emptyCruCtx recombinePerms >>>= \_ ->
     greturn (addCtxName ctx y)

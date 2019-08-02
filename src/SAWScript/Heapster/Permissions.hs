@@ -228,6 +228,8 @@ type SplittingType = IntrinsicType "Splitting" EmptyCtx
 splittingTypeRepr :: TypeRepr SplittingType
 splittingTypeRepr = knownRepr
 
+-- | Crucible type for LLVM stack frame objects
+type LLVMFrameType w = IntrinsicType "LLVM_frame" (EmptyCtx ::> BVType w)
 
 -- | Expressions that are considered "pure" for use in permissions. Note that
 -- these are in a normal form, that makes them easier to analyze.
@@ -555,6 +557,16 @@ data ValuePerm (a :: CrucibleType) where
   ValPerm_LLVMPtr :: (1 <= w, KnownNat w) =>
                      [LLVMPtrPerm w] -> ValuePerm (LLVMPointerType w)
 
+  -- | Permission to allocate (via @alloca@) on an LLVM stack frame, and
+  -- permission to delete that stack frame if we have exclusive permissions to
+  -- all the given LLVM pointer objects
+  ValPerm_LLVMFrame :: (1 <= w, KnownNat w) =>
+                       LLVMFramePerm w ->
+                       ValuePerm (LLVMFrameType w)
+
+-- | A frame permission is a list of the pointers and corresponding sizes that
+-- have been allocated in the frame, which are required in order to delete it
+type LLVMFramePerm w = [(ExprVar (LLVMPointerType w), Integer)]
 
 -- | A permission to the memory referenced by an LLVM pointer
 data LLVMPtrPerm w
@@ -601,6 +613,8 @@ instance (Eq (ValuePerm a)) where
   (ValPerm_Var _) == _ = False
   (ValPerm_LLVMPtr pps1) == (ValPerm_LLVMPtr pps2) = pps1 == pps2
   (ValPerm_LLVMPtr _) == _ = False
+  (ValPerm_LLVMFrame ptrs1) == (ValPerm_LLVMFrame ptrs2) = ptrs1 == ptrs2
+  (ValPerm_LLVMFrame _) == _ = False
 
 {-
 instance (Eq (LLVMPtrPerm w)) where
@@ -639,22 +653,22 @@ exPermBody tp (ValPerm_Exists (p :: Binding tp' (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
 
--- | Create a permission to read an arbitrary value from offset 0 of an LLVM
--- pointer
-llvmReadPerm :: (1 <= w, KnownNat w) =>
-                Mb (RNil :> SplittingType :> LLVMPointerType w)
-                (ValuePerm (LLVMPointerType w))
-llvmReadPerm =
+-- | Create an existential permission to read an arbitrary value from offset 0
+-- of an LLVM pointer
+llvmExRead0Perm :: (1 <= w, KnownNat w) =>
+                   Mb (RNil :> SplittingType :> LLVMPointerType w)
+                   (ValuePerm (LLVMPointerType w))
+llvmExRead0Perm =
   nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: spl :>: x) ->
   ValPerm_LLVMPtr
   [LLVMPP_Field $ LLVMFieldPerm { llvmFieldOffset = bvInt 0,
                                   llvmFieldSplitting = SplExpr_Var spl,
                                   llvmFieldPerm = ValPerm_Eq (PExpr_Var x) }]
 
--- | Create a permission to write to offset 0 of an LLVM pointer
-llvmWritePerm :: (1 <= w, KnownNat w) =>
-                 Binding (LLVMPointerType w) (ValuePerm (LLVMPointerType w))
-llvmWritePerm =
+-- | Create an existential permission to write to offset 0 of an LLVM pointer
+llvmExWrite0Perm :: (1 <= w, KnownNat w) =>
+                    Binding (LLVMPointerType w) (ValuePerm (LLVMPointerType w))
+llvmExWrite0Perm =
   nu $ \x ->
   ValPerm_LLVMPtr
   [LLVMPP_Field $ LLVMFieldPerm { llvmFieldOffset = bvInt 0,
@@ -738,6 +752,34 @@ setLLVMFieldPerm :: ValuePerm (LLVMPointerType w) ->
 setLLVMFieldPerm (ValPerm_LLVMPtr (LLVMFieldPerm {..})) p =
   ValPerm_LLVMPtr (LLVMFieldPerm {llvmFieldPerm = p, ..})
 -}
+
+-- | Create exclusive LLVM pointer permissions for a given number of bytes, of
+-- the form @x:ptr((0,All) |-> true * ... * (sz-8*w,All) |-> true)@, where @w@
+-- is the pointer width in bits
+llvmPtrPermOfSize :: (1 <= w, KnownNat w) => Integer ->
+                     ValuePerm (LLVMPointerType w)
+llvmPtrPermOfSize sz = helper Proxy sz where
+  helper :: (1 <= w, KnownNat w) => Proxy w -> Integer ->
+            ValuePerm (LLVMPointerType w)
+  helper w sz
+    | (8*sz) `mod` natVal w /= 0 =
+      error "llvmPtrPermOfSize: size not a multiple of pointer width!"
+  helper w sz =
+    let num_ptrs = (8*sz) `div` natVal w in
+    ValPerm_LLVMPtr $ flip map [0 .. num_ptrs - 1] $ \i ->
+    LLVMPP_Field $ LLVMFieldPerm
+    { llvmFieldOffset = bvInt (8 * i * natVal w),
+      llvmFieldSplitting = SplExpr_All,
+      llvmFieldPerm = ValPerm_True }
+
+-- | Create a list of pointer permissions needed in order to deallocate a frame
+-- that has the given frame permissions
+llvmFrameDeletionPerms :: (1 <= w, KnownNat w) => LLVMFramePerm w ->
+                          Some DistPerms
+llvmFrameDeletionPerms [] = Some DistPermsNil
+llvmFrameDeletionPerms ((x,sz):fperm')
+  | Some del_perms <- llvmFrameDeletionPerms fperm'
+  = Some $ DistPermsCons del_perms x (llvmPtrPermOfSize sz)
 
 
 ----------------------------------------------------------------------
@@ -1172,6 +1214,15 @@ data DistPerms ps where
   DistPermsCons :: DistPerms ps -> ExprVar a -> ValuePerm a ->
                    DistPerms (ps :> a)
 
+instance TestEquality DistPerms where
+  testEquality DistPermsNil DistPermsNil = Just Refl
+  testEquality (DistPermsCons ps1 x1 p1) (DistPermsCons ps2 x2 p2)
+    | Just Refl <- testEquality ps1 ps2
+    , Just Refl <- testEquality x1 x2
+    , p1 == p2
+    = Just Refl
+  testEquality _ _ = Nothing
+
 $(mkNuMatching [t| forall ps. DistPerms ps |])
 
 type MbDistPerms ps = Mb ps (DistPerms ps)
@@ -1225,6 +1276,11 @@ distPerm memb x = distPerms . nthVarPerm memb x
 -- it has the given variable
 topDistPerm :: ExprVar a -> Lens' (PermSet (ps :> a)) (ValuePerm a)
 topDistPerm x = distPerms . distPermsHead x
+
+-- | Modify the distinguished permission stack of a 'PermSet'
+modifyDistPerms :: (DistPerms ps1 -> DistPerms ps2) ->
+                   PermSet ps1 -> PermSet ps2
+modifyDistPerms f (PermSet perms dperms) = PermSet perms $ f dperms
 
 -- | Push a new distinguished permission onto the top of the stack
 pushPerm :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet (ps :> a)
@@ -1487,3 +1543,16 @@ castLLVMFieldOffset x off off' perms =
             LLVMPP_Field (fp { llvmFieldOffset = off' })
       _ -> error "castLLVMFieldOffset")
   perms
+
+-- | Delete an llvm frame and its associated permissions for the pointer objects
+-- that were allocated in that frame, assuming that those are the permissions
+-- that are in the distinguished permission stack
+deleteLLVMFrame :: ExprVar (LLVMFrameType w) -> PermSet ps -> PermSet RNil
+deleteLLVMFrame frame perms =
+  case perms ^. varPerm frame of
+    ValPerm_LLVMFrame fperm
+      | Some del_perms <- llvmFrameDeletionPerms fperm
+      , Just Refl <- testEquality del_perms (perms ^. distPerms) ->
+        set (varPerm frame) ValPerm_True $
+        modifyDistPerms (const DistPermsNil) perms
+    _ -> error "deleteLLVMFrame"
