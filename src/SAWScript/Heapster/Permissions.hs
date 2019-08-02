@@ -182,6 +182,16 @@ instance TestEquality CruCtx where
     = Just Refl
   testEquality _ _ = Nothing
 
+instance KnownRepr CruCtx RNil where
+  knownRepr = CruCtxNil
+
+instance KnownRepr TypeRepr tp => KnownRepr CruType tp where
+  knownRepr = CruType
+
+instance (KnownRepr CruCtx tps, KnownRepr CruType tp) =>
+         KnownRepr CruCtx (tps :> tp) where
+  knownRepr = CruCtxCons knownRepr knownRepr
+
 -- | Build a 'CruType' from a 'TypeRepr'
 mkCruType :: TypeRepr a -> CruType a
 mkCruType tp = withKnownRepr tp CruType
@@ -653,6 +663,25 @@ exPermBody tp (ValPerm_Exists (p :: Binding tp' (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
 
+-- | Create a field pointer permission with offset 0 and @eq(e)@ permissions
+llvmFieldPerm0Eq :: (1 <= w, KnownNat w) => SplittingExpr ->
+                    PermExpr (LLVMPointerType w) -> LLVMPtrPerm w
+llvmFieldPerm0Eq spl e =
+  LLVMPP_Field $ LLVMFieldPerm { llvmFieldOffset = bvInt 0,
+                                 llvmFieldSplitting = spl,
+                                 llvmFieldPerm = ValPerm_Eq e }
+
+-- | Test if a pointer permission is of the form @ptr((0,spl) |-> p)@ and return
+-- @spl@ and @p@ if so
+llvmPtrIsField0 :: (1 <= w, KnownNat w) => LLVMPtrPerm w ->
+                   Maybe (SplittingExpr, ValuePerm (LLVMPointerType w))
+llvmPtrIsField0 pp =
+  case pp of
+    LLVMPP_Field (LLVMFieldPerm {..})
+      | llvmFieldOffset `bvEq` bvInt 0 ->
+        return (llvmFieldSplitting, llvmFieldPerm)
+    _ -> Nothing
+
 -- | Create an existential permission to read an arbitrary value from offset 0
 -- of an LLVM pointer
 llvmExRead0Perm :: (1 <= w, KnownNat w) =>
@@ -660,20 +689,13 @@ llvmExRead0Perm :: (1 <= w, KnownNat w) =>
                    (ValuePerm (LLVMPointerType w))
 llvmExRead0Perm =
   nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: spl :>: x) ->
-  ValPerm_LLVMPtr
-  [LLVMPP_Field $ LLVMFieldPerm { llvmFieldOffset = bvInt 0,
-                                  llvmFieldSplitting = SplExpr_Var spl,
-                                  llvmFieldPerm = ValPerm_Eq (PExpr_Var x) }]
+  ValPerm_LLVMPtr [llvmFieldPerm0Eq (SplExpr_Var spl) (PExpr_Var x)]
 
 -- | Create an existential permission to write to offset 0 of an LLVM pointer
 llvmExWrite0Perm :: (1 <= w, KnownNat w) =>
                     Binding (LLVMPointerType w) (ValuePerm (LLVMPointerType w))
 llvmExWrite0Perm =
-  nu $ \x ->
-  ValPerm_LLVMPtr
-  [LLVMPP_Field $ LLVMFieldPerm { llvmFieldOffset = bvInt 0,
-                                  llvmFieldSplitting = SplExpr_All,
-                                  llvmFieldPerm = ValPerm_Eq (PExpr_Var x) }]
+  nu $ \x -> ValPerm_LLVMPtr [llvmFieldPerm0Eq SplExpr_All (PExpr_Var x)]
 
 -- | Add an offset to a pointer permission
 offsetLLVMPtrPerm :: (1 <= w, KnownNat w) =>
@@ -744,17 +766,8 @@ lastLLVMPtrPermIndex p =
   let len = length (p ^. llvmPtrPerms) in
   if len > 0 then len - 1 else error "lastLLVMPtrPerms: no pointer perms!"
 
-{- FIXME: remove
--- | Set the permission inside an 'LLVMFieldPerm'
-setLLVMFieldPerm :: ValuePerm (LLVMPointerType w) ->
-                    ValuePerm (LLVMPointerType w) ->
-                    ValuePerm (LLVMPointerType w)
-setLLVMFieldPerm (ValPerm_LLVMPtr (LLVMFieldPerm {..})) p =
-  ValPerm_LLVMPtr (LLVMFieldPerm {llvmFieldPerm = p, ..})
--}
-
 -- | Create exclusive LLVM pointer permissions for a given number of bytes, of
--- the form @x:ptr((0,All) |-> true * ... * (sz-8*w,All) |-> true)@, where @w@
+-- the form @x:ptr((0,All) |-> true * ... * (sz-w/8,All) |-> true)@, where @w@
 -- is the pointer width in bits
 llvmPtrPermOfSize :: (1 <= w, KnownNat w) => Integer ->
                      ValuePerm (LLVMPointerType w)

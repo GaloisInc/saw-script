@@ -239,15 +239,15 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_out ps_in where
   TypedLLVMStore :: w ~ ArchWidth arch =>
                     (TypedReg (LLVMPointerType w)) ->
                     (TypedReg (LLVMPointerType w)) ->
-                    TypedStmt (LLVM arch) (RNil :> LLVMPointerType w)
+                    TypedStmt (LLVM arch) (RNil :> UnitType)
                     (RNil :> LLVMPointerType w)
                     (RNil :> LLVMPointerType w)
 
   -- | Allocate an object of the given size on the given LLVM frame
-  TypedAlloca :: w ~ ArchWidth arch =>
-                 TypedReg (LLVMFrameType w) -> TypedReg (BVType w) ->
-                 TypedStmt (LLVM arch) (RNil :> LLVMPointerType w)
-                 (RNil :> LLVMPointerType w) RNil
+  TypedLLVMAlloca :: w ~ ArchWidth arch =>
+                     TypedReg (LLVMFrameType w) -> Integer ->
+                     TypedStmt (LLVM arch) (RNil :> LLVMPointerType w)
+                     (RNil :> LLVMPointerType w) RNil
 
   -- | Create a new LLVM frame
   TypedLLVMCreateFrame :: w ~ ArchWidth arch =>
@@ -283,13 +283,34 @@ llvmLoadPermFun :: (1 <= w, KnownNat w) => (TypedReg (LLVMPointerType w)) ->
                    StmtPermFun (RNil :> LLVMPointerType w)
                    (RNil :> LLVMPointerType w :> LLVMPointerType w)
                    (RNil :> LLVMPointerType w)
-llvmLoadPermFun x (_ :>: ret) perms =
-  case perms ^. topDistPerm (typedRegVar x) ^. llvmPtrPerm 0 of
-    LLVMPP_Field (LLVMFieldPerm {..})
-      | llvmFieldOffset `bvEq` bvInt 0
-      , ValPerm_Eq e <- llvmFieldPerm ->
-        pushPerm ret (ValPerm_Eq e) perms
+llvmLoadPermFun (TypedReg x) (_ :>: ret) perms =
+  case llvmPtrIsField0 (perms ^. topDistPerm x ^. llvmPtrPerm 0) of
+    Just (_, ValPerm_Eq e) -> pushPerm ret (ValPerm_Eq e) perms
     _ -> error "llvmLoadPermFun"
+
+-- | Take in write permission @p:ptr((0,All) |-> _)@ and return the permission
+-- @p:ptr((0,All) |-> eq(val))@, where @val@ is the value being stored
+llvmStorePermFun :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
+                    TypedReg (LLVMPointerType w) ->
+                    StmtPermFun (RNil :> UnitType) (RNil :> LLVMPointerType w)
+                    (RNil :> LLVMPointerType w)
+llvmStorePermFun (TypedReg p) (TypedReg val) _ =
+  over (topDistPerm p . llvmPtrPerm 0) $ \pp ->
+  case llvmPtrIsField0 pp of
+    Just (SplExpr_All, _) -> llvmFieldPerm0Eq SplExpr_All (PExpr_Var val)
+    _ -> error "llvmLoadPermFun"
+
+-- | Take in permissions @fp:frame(xs_lens)@ for the given frame pointer @fp@
+-- and return permissions @fp:frame((ret,sz):xs_lens)@ and permissions
+-- @ret:ptr((0,All) |-> true * .. * (sz - w/8,All) |-> true)@
+llvmAllocaPermFun :: TypedReg (LLVMFrameType w) -> Integer ->
+                     StmtPermFun (RNil :> LLVMPointerType w)
+                     (RNil :> LLVMPointerType w) RNil
+llvmAllocaPermFun (TypedReg fp) sz (_ :>: ret) perms =
+  case perms ^. varPerm fp of
+    ValPerm_LLVMFrame frm ->
+      set (varPerm fp) (ValPerm_LLVMFrame ((ret,sz):frm)) $
+      pushPerm ret (llvmPtrPermOfSize sz) perms
 
 
 ----------------------------------------------------------------------
@@ -409,7 +430,7 @@ addCtxName :: CtxTrans ctx -> ExprVar tp -> CtxTrans (ctx ::> tp)
 addCtxName ctx x = extend ctx (TypedReg x)
 
 data SomeLLVMFrame where
-  SomeLLVMFrame :: ExprVar (LLVMFrameType w) -> SomeLLVMFrame
+  SomeLLVMFrame :: NatRepr w -> TypedReg (LLVMFrameType w) -> SomeLLVMFrame
 
 -- | The local state maintained while type-checking is the current permission
 -- set and the permissions required on return from the entire function.
@@ -508,6 +529,10 @@ top_get :: PermCheckM r ext blocks ret args ps ps
            (TopPermCheckState ext blocks ret)
 top_get = error "FIXME HERE"
 
+-- | Get the current frame pointer
+getFramePtr :: PermCheckM r ext blocks ret args ps ps (Maybe SomeLLVMFrame)
+getFramePtr = gget >>>= \st -> greturn (stFrame st)
+
 -- | Smart constructor for applying a function on 'PermImpl's
 applyImplFun :: (PermImpl r ps -> r ps) -> PermImpl r ps -> r ps
 applyImplFun _ (Impl_Done r) = r
@@ -529,6 +554,27 @@ runImplM f_impl vars m =
     ) >>>= \(a, implSt) ->
   gput (setSTCurPerms (implSt ^. implStatePerms) st) >>>
   greturn (completePSubst vars (implSt ^. implStatePSubst), a)
+
+-- | Recombine any outstanding distinguished permissions back into the main
+-- permission set, in the context of type-checking statements
+stmtRecombinePerms :: StmtPermCheckM ext blocks ret args RNil ps_in ()
+stmtRecombinePerms =
+  runImplM TypedImplStmt emptyCruCtx recombinePerms >>>= \_ ->
+  greturn ()
+
+-- | Prove permissions in the context of type-checking statements
+stmtProvePerm :: (PermCheckExtC ext, KnownRepr CruCtx vars) =>
+                 TypedReg a -> Mb vars (ValuePerm a) ->
+                 StmtPermCheckM ext blocks ret args
+                 (ps :> a) ps (PermSubst vars)
+stmtProvePerm (TypedReg x) mb_p =
+  runImplM TypedImplStmt knownRepr (proveVarImpl x mb_p) >>>= \(s,_) ->
+  greturn s
+
+-- | Try to prove that a register equals a constant integer
+resolveInteger :: TypedReg (BVType w) ->
+                  StmtPermCheckM ext blocks ret args ps ps (Maybe Integer)
+resolveInteger = error "FIXME HERE: resolveInteger"
 
 
 ----------------------------------------------------------------------
@@ -620,21 +666,52 @@ tcEmitLLVMStmt ::
   CtxTrans ctx -> ProgramLoc -> LLVMStmt (ArchWidth arch) (Reg ctx) tp ->
   StmtPermCheckM (LLVM arch) blocks args ret RNil RNil (CtxTrans (ctx ::> tp))
 
+-- Type-check a load of an LLVM pointer
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg (LLVMPointerRepr w) _ _)
   | Just Refl <- testEquality w (archWidth arch)
   = let treg = tcReg ctx reg in
-    runImplM TypedImplStmt (extCruCtx $ extCruCtx emptyCruCtx)
-    (proveVarImpl (typedRegVar treg) llvmExRead0Perm) >>>= \_ ->
+    stmtProvePerm treg llvmExRead0Perm >>>= \_ ->
     (emitStmt loc (llvmLoadPermFun treg) (TypedLLVMLoad treg)) >>>= \(_ :>: y) ->
-    runImplM TypedImplStmt emptyCruCtx recombinePerms >>>= \_ ->
+    stmtRecombinePerms >>>
     greturn (addCtxName ctx y)
 
+-- Type-check a load of a value that can be cast from an LLVM pointer, by
+-- loading an LLVM pointer and then performing the cast
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp storage _)
   | bytesToBits (storageTypeSize storage) <= natValue (archWidth arch)
   = error "FIXME HERE NOW: call tcEmitLLVMStmt with LLVMPointerRepr (ArchWidth arch) and then coerce to tp!"
 
+-- We canot yet handle other loads
 tcEmitLLVMStmt _ _ _ (LLVM_Load _ _ _ _ _) =
   error "FIXME: tcEmitLLVMStmt cannot yet handle loads larger than the size of LLVM pointers"
+
+-- Type-check a store of an LLVM pointer
+tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr (LLVMPointerRepr w) _ _ val)
+  | Just Refl <- testEquality w (archWidth arch)
+  = let tptr = tcReg ctx ptr
+        tval = tcReg ctx val in
+    stmtProvePerm tptr llvmExWrite0Perm >>>= \_ ->
+    (emitStmt loc (llvmStorePermFun tptr tval)
+     (TypedLLVMStore tptr tval)) >>>= \(_ :>: y) ->
+    stmtRecombinePerms >>>
+    greturn (addCtxName ctx y)
+
+-- Type-check an alloca instruction
+tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _)
+  | Just Refl <- testEquality w (archWidth arch)
+  = let sz_treg = tcReg ctx sz_reg in
+    getFramePtr >>>= \maybe_fp ->
+    resolveInteger sz_treg >>>= \maybe_sz ->
+    case (maybe_fp, maybe_sz) of
+      (Just (SomeLLVMFrame w' fp), Just sz)
+        | Just Refl <- testEquality w w' ->
+          (emitStmt loc (llvmAllocaPermFun fp sz)
+           (TypedLLVMAlloca fp sz)) >>>= \(_ :>: y) ->
+          stmtRecombinePerms >>>
+          greturn (addCtxName ctx y)
+      _ ->
+        error "FIXME HERE NOW: need failure computation"
+
 
 tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME HERE NOW: tcEmitLLVMStmt"
 
