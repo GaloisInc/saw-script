@@ -239,9 +239,18 @@ data TypedLLVMStmt wptr ret ps_out ps_in where
                        TypedReg (BVType w) ->
                        TypedLLVMStmt wptr (LLVMPointerType w) RNil RNil
 
-  -- | Destruct an LLVM word into its bitvector value
+  -- | Assert that an LLVM pointer is a word, and return 0 (this is the typed
+  -- version of 'LLVM_PointerBlock' on words)
+  AssertLLVMWord :: (1 <= w, KnownNat w) =>
+                    TypedReg (LLVMPointerType w) ->
+                    TypedLLVMStmt wptr NatType
+                    (RNil :> LLVMPointerType w)
+                    (RNil :> LLVMPointerType w)
+
+  -- | Destruct an LLVM word into its bitvector value, which should equal the
+  -- given expression
   DestructLLVMWord :: (1 <= w, KnownNat w) =>
-                      TypedReg (LLVMPointerType w) ->
+                      TypedReg (LLVMPointerType w) -> PermExpr (BVType w) ->
                       TypedLLVMStmt wptr (BVType w)
                       (RNil :> LLVMPointerType w)
                       (RNil :> LLVMPointerType w)
@@ -285,9 +294,8 @@ type StmtPermFun rets ps_out ps_in =
 nullPermFun :: StmtPermFun rets RNil RNil
 nullPermFun = const id
 
--- | If the expression corresponds to a permission expresion @expr@, add
--- permission @x:eq(expr)@; otherwise add @x:true@
-eqPermFun :: PermExpr tp -> StmtPermFun (RNil :> tp) RNil RNil
+-- | Add permission @x:eq(expr)@
+eqPermFun :: PermExpr tp -> StmtPermFun (RNil :> tp) ps ps
 eqPermFun e (_ :>: x) = set (varPerm x) (ValPerm_Eq e)
 
 -- | Take in permission @x:ptr((0,spl) |-> eq(e))@ and return that permission
@@ -373,6 +381,7 @@ data TypedStmtSeq ext blocks ret ps_in where
   TypedTermStmt :: ProgramLoc ->
                    TypedTermStmt blocks ret ps_in ->
                    TypedStmtSeq ext blocks ret ps_in
+
 
 $(mkNuMatching [t| forall wptr tp ps_out ps_in.
                 TypedLLVMStmt wptr tp ps_out ps_in |])
@@ -686,18 +695,44 @@ tcEmitLLVMSetExpr ::
   (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) => Proxy arch ->
   CtxTrans ctx -> ProgramLoc -> LLVMExtensionExpr arch (Reg ctx) tp ->
   StmtPermCheckM (LLVM arch) blocks args ret RNil RNil (CtxTrans (ctx ::> tp))
-tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerExpr w blk_reg off_reg)
-  | Just Refl <- testEquality w (archWidth arch)
-  = let toff_reg = tcReg ctx off_reg
-        tblk_reg = tcReg ctx blk_reg in
-    resolveConstant tblk_reg >>>= \maybe_const ->
-    case maybe_const of
-      Just 0 ->
-        emitLLVMStmt loc
-        (eqPermFun $ PExpr_LLVMWord $ PExpr_Var $ typedRegVar toff_reg)
-        (ConstructLLVMWord toff_reg) >>>= \x ->
-        greturn $ addCtxName ctx x
-      _ -> stmtFailM
+
+-- Type-check a pointer-building expression, which is only valid when the block
+-- = 0, i.e., when building a word
+tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerExpr w blk_reg off_reg) =
+  let toff_reg = tcReg ctx off_reg
+      tblk_reg = tcReg ctx blk_reg in
+  resolveConstant tblk_reg >>>= \maybe_const ->
+  case maybe_const of
+    Just 0 ->
+      withKnownNat w $
+      emitLLVMStmt loc
+      (eqPermFun $ PExpr_LLVMWord $ PExpr_Var $ typedRegVar toff_reg)
+      (ConstructLLVMWord toff_reg) >>>= \x ->
+      greturn $ addCtxName ctx x
+    _ -> stmtFailM
+
+-- Type-check the LLVM pointer destructor that gets the block, which is only
+-- valid on LLVM words, i.e., when the block = 0
+tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerBlock w ptr_reg) =
+  let tptr_reg = tcReg ctx ptr_reg in
+  withKnownNat w $
+  stmtProvePerm tptr_reg llvmExEqWord >>>= \_ ->
+  emitLLVMStmt loc
+  (eqPermFun $ PExpr_Nat 0) (AssertLLVMWord tptr_reg) >>>= \x ->
+  stmtRecombinePerms >>>
+  greturn (addCtxName ctx x)
+
+-- Type-check the LLVM pointer destructor that gets the offset, which is only
+-- valid on LLVM words, i.e., when the block = 0
+tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerOffset w ptr_reg) =
+  let tptr_reg = tcReg ctx ptr_reg in
+  withKnownNat w $
+  stmtProvePerm tptr_reg llvmExEqWord >>>= \subst ->
+  let e = substLookup subst Member_Base in
+  emitLLVMStmt loc
+  (eqPermFun e) (DestructLLVMWord tptr_reg e) >>>= \x ->
+  stmtRecombinePerms >>>
+  greturn (addCtxName ctx x)
 
 
 -- | Typecheck a statement and emit it in the current statement sequence,
