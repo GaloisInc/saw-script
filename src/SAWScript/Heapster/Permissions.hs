@@ -247,6 +247,9 @@ data PermExpr (a :: CrucibleType) where
   PExpr_Var :: ExprVar a -> PermExpr a
   -- ^ A variable of any type
 
+  PExpr_Nat :: Integer -> PermExpr NatType
+  -- ^ A literal natural number
+
   PExpr_BV :: (1 <= w, KnownNat w) =>
               [BVFactor w] -> Integer -> PermExpr (BVType w)
   -- ^ A bitvector expression is a linear expression in @N@ variables, i.e., sum
@@ -308,6 +311,9 @@ instance Eq SplittingExpr where
 instance Eq (PermExpr a) where
   (PExpr_Var x1) == (PExpr_Var x2) = x1 == x2
   (PExpr_Var _) == _ = False
+
+  (PExpr_Nat n1) == (PExpr_Nat n2) = n1 == n2
+  (PExpr_Nat _) == _ = False
 
   (PExpr_BV factors1 const1) == (PExpr_BV factors2 const2) =
     const1 == const2 && eqFactors factors1 factors2
@@ -662,6 +668,11 @@ exPermBody :: TypeRepr tp -> ValuePerm a -> Binding tp (ValuePerm a)
 exPermBody tp (ValPerm_Exists (p :: Binding tp' (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
+
+-- | Existential permission @x:eq(word(e))@ for some @e@
+llvmExEqWord :: (1 <= w, KnownNat w) =>
+                Binding (BVType w) (ValuePerm (LLVMPointerType w))
+llvmExEqWord = nu $ \e -> ValPerm_Eq (PExpr_LLVMWord $ PExpr_Var e)
 
 -- | Create a field pointer permission with offset 0 and @eq(e)@ permissions
 llvmFieldPerm0Eq :: (1 <= w, KnownNat w) => SplittingExpr ->
@@ -1043,6 +1054,7 @@ substBVFactor s [nuP| BVFactor i x |] =
 
 instance SubstVar s m => Substable s (PermExpr a) m where
   genSubst s [nuP| PExpr_Var x |] = substExprVar s x
+  genSubst _ [nuP| PExpr_Nat n |] = return $ PExpr_Nat $ mbLift n
   genSubst s [nuP| PExpr_BV factors off |] =
     foldr bvAdd (PExpr_BV [] (mbLift off)) <$>
     mapM (substBVFactor s) (mbList factors)
