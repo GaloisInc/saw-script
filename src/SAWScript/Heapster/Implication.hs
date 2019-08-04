@@ -586,6 +586,12 @@ gmapRetAndState :: (s p2 -> s p1) -> (r q1 -> r q2) ->
 gmapRetAndState f_st f_ret =
   gmodify f_st >>> gmapRet f_ret
 
+-- | Abort the current state-continuation computation and just return an @r q2@
+--
+-- FIXME: figure out how to write this with something like 'gcaptureCC'...?
+gabortM :: r q2 -> GenStateContM s r p1 q1 p2 q2 a
+gabortM ret = GenStateT $ \_ -> GenContM $ \_ -> ret
+
 
 ----------------------------------------------------------------------
 -- * Permission Implication Monad
@@ -745,9 +751,8 @@ gmapRetAndPerms f_perms f_impl =
   gmapRetAndState (over implStatePerms f_perms) f_impl
 
 -- | Terminate the current proof branch with a failure
-implFailM :: ImplM vars r ps_any ps ()
-implFailM =
-  gmapRetAndState (const $ error "implFailM: unreachable") (const Impl_Fail)
+implFailM :: ImplM vars r ps_any ps a
+implFailM = gabortM Impl_Fail
 
 {- FIXME: this should be part of the run method for ImplM...?
 -- | Finish the current proof branch successfully with an 'Impl_Done'
