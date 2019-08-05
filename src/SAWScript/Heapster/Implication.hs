@@ -51,6 +51,8 @@ import SAWScript.Heapster.Permissions
 -- * Permission Implications
 ----------------------------------------------------------------------
 
+-- FIXME: add error messages to Impl_Fail, for debugging by the user
+
 -- | A @'PermImpl' r ls@ is a proof tree of the judgment
 --
 -- > Gamma | Pl * P |- (Gamma1 | Pl1 * P1) \/ ... \/ (Gamman | Pln * Pn)
