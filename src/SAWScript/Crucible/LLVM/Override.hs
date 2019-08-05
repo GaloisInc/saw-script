@@ -850,61 +850,67 @@ matchArg ::
   SetupValue (Crucible.LLVM arch)         {- ^ expected specification value          -} ->
   OverrideMatcher (LLVM arch) md ()
 
-matchArg opts sc cc cs prepost actual expectedTy expected@(SetupTerm expectedTT)
-  | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
-  , Right tval <- Cryptol.evalType mempty tyexpr
-  = do sym      <- Ov.getSymInterface
-       failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
-       realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
-       matchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
+matchArg opts sc cc cs prepost actual expectedTy expected =
+  case (actual, expectedTy, expected) of
+    (_, _, SetupTerm expectedTT)
+      | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
+      , Right tval <- Cryptol.evalType mempty tyexpr
+        -> do sym      <- Ov.getSymInterface
+              failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
+              realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
+              matchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
 
--- match the fields of struct point-wise
-matchArg opts sc cc cs prepost (Crucible.LLVMValStruct xs) (Crucible.StructType fields) (SetupStruct () _ zs) =
-  sequence_
-    [ matchArg opts sc cc cs prepost x y z
-       | ((_,x),y,z) <- zip3 (V.toList xs)
-                             (V.toList (Crucible.fiType <$> Crucible.siFields fields))
-                             zs ]
+    -- match the fields of struct point-wise
+    (Crucible.LLVMValStruct xs, Crucible.StructType fields, SetupStruct () _ zs) ->
+      sequence_
+        [ matchArg opts sc cc cs prepost x y z
+        | ((_,x),y,z) <- zip3 (V.toList xs)
+                              (V.toList (Crucible.fiType <$> Crucible.siFields fields))
+                              zs ]
 
-matchArg opts sc cc cs prepost actual expectedTy g@(SetupGlobalInitializer () n) = do
-  (globInitTy, globInitVal) <- resolveSetupValueLLVM opts cc sc cs g
-  sym <- Ov.getSymInterface
-  if expectedTy /= globInitTy
-  then failure (cs ^. MS.csLoc) =<<
-         mkStructuralMismatch opts cc sc cs actual g expectedTy
-  else liftIO (Crucible.testEqual sym globInitVal actual) >>=
-    \case
-      Nothing -> failure (cs ^. MS.csLoc) (BadEqualityComparison n)
-      Just pred_ ->
-        addAssert pred_ =<<
-          notEqual prepost opts (cs ^. MS.csLoc) cc sc cs g actual
+    (_, Crucible.PtrType _, SetupElem () _ _) -> resolveAndMatch
+    (_, Crucible.PtrType _, SetupField () _ _) -> resolveAndMatch
+    (_, _, SetupGlobalInitializer () _) -> resolveAndMatch
 
-matchArg opts sc cc cs prepost actual@(Crucible.LLVMValInt blk off) expectedTy setupval =
-  case setupval of
-    SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-      do assignVar cc (cs ^. MS.csLoc) var (Crucible.LLVMPointer blk off)
+    (Crucible.LLVMValInt blk off, _, _) ->
+      case expected of
+        SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
+          do assignVar cc (cs ^. MS.csLoc) var (Crucible.LLVMPointer blk off)
 
-    SetupNull () | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-      do sym <- Ov.getSymInterface
-         p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
-         addAssert p =<<
-           notEqual prepost opts (cs ^. MS.csLoc) cc sc cs setupval actual
+        SetupNull () | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
+          do sym <- Ov.getSymInterface
+             p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
+             addAssert p =<<
+               notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
 
-    SetupGlobal () name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-      do let mem = cc^.ccLLVMEmptyMem
-         sym  <- Ov.getSymInterface
-         ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
-         pred_ <- liftIO $
-           Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
-         addAssert pred_ =<<
-           notEqual prepost opts (cs ^. MS.csLoc) cc sc cs setupval actual
+        SetupGlobal () name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
+          do let mem = cc^.ccLLVMEmptyMem
+             sym  <- Ov.getSymInterface
+             ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
+             pred_ <- liftIO $
+               Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
+             addAssert pred_ =<<
+               notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
+
+        _ -> failure (cs ^. MS.csLoc) =<<
+              mkStructuralMismatch opts cc sc cs actual expected expectedTy
 
     _ -> failure (cs ^. MS.csLoc) =<<
-           mkStructuralMismatch opts cc sc cs actual setupval expectedTy
+           mkStructuralMismatch opts cc sc cs actual expected expectedTy
 
-matchArg opts sc cc cs _prepost actual expectedTy expected = do
-  failure (cs ^. MS.csLoc) =<<
-    mkStructuralMismatch opts cc sc cs actual expected expectedTy
+  where
+    resolveAndMatch = do
+      (ty, val) <- resolveSetupValueLLVM opts cc sc cs expected
+      sym  <- Ov.getSymInterface
+      if expectedTy /= ty
+      then failure (cs ^. MS.csLoc) =<<
+            mkStructuralMismatch opts cc sc cs actual expected expectedTy
+      else liftIO (Crucible.testEqual sym val actual) >>=
+        \case
+          Nothing -> failure (cs ^. MS.csLoc) BadEqualityComparison
+          Just pred_ ->
+            addAssert pred_ =<<
+              notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
 
 ------------------------------------------------------------------------
 
