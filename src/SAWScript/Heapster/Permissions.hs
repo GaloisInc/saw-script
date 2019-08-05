@@ -247,6 +247,9 @@ data PermExpr (a :: CrucibleType) where
   PExpr_Var :: ExprVar a -> PermExpr a
   -- ^ A variable of any type
 
+  PExpr_Unit :: PermExpr UnitType
+  -- ^ A unit literal
+
   PExpr_Nat :: Integer -> PermExpr NatType
   -- ^ A literal natural number
 
@@ -311,6 +314,9 @@ instance Eq SplittingExpr where
 instance Eq (PermExpr a) where
   (PExpr_Var x1) == (PExpr_Var x2) = x1 == x2
   (PExpr_Var _) == _ = False
+
+  PExpr_Unit == PExpr_Unit = True
+  PExpr_Unit == _ = False
 
   (PExpr_Nat n1) == (PExpr_Nat n2) = n1 == n2
   (PExpr_Nat _) == _ = False
@@ -1054,6 +1060,7 @@ substBVFactor s [nuP| BVFactor i x |] =
 
 instance SubstVar s m => Substable s (PermExpr a) m where
   genSubst s [nuP| PExpr_Var x |] = substExprVar s x
+  genSubst _ [nuP| PExpr_Unit |] = return $ PExpr_Unit
   genSubst _ [nuP| PExpr_Nat n |] = return $ PExpr_Nat $ mbLift n
   genSubst s [nuP| PExpr_BV factors off |] =
     foldr bvAdd (PExpr_BV [] (mbLift off)) <$>
@@ -1573,11 +1580,10 @@ castLLVMFieldOffset x off off' perms =
 -- that were allocated in that frame, assuming that those are the permissions
 -- that are in the distinguished permission stack
 deleteLLVMFrame :: ExprVar (LLVMFrameType w) -> PermSet ps -> PermSet RNil
-deleteLLVMFrame frame perms =
-  case perms ^. varPerm frame of
-    ValPerm_LLVMFrame fperm
-      | Some del_perms <- llvmFrameDeletionPerms fperm
-      , Just Refl <- testEquality del_perms (perms ^. distPerms) ->
-        set (varPerm frame) ValPerm_True $
-        modifyDistPerms (const DistPermsNil) perms
-    _ -> error "deleteLLVMFrame"
+deleteLLVMFrame frame perms
+  | ValPerm_LLVMFrame fperm <- perms ^. varPerm frame
+  , Some del_perms <- llvmFrameDeletionPerms fperm
+  , Just Refl <- testEquality del_perms (perms ^. distPerms)
+  = set (varPerm frame) ValPerm_True $
+    modifyDistPerms (const DistPermsNil) perms
+deleteLLVMFrame _ _ = error "deleteLLVMFrame"

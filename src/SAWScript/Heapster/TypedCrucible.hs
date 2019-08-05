@@ -38,7 +38,7 @@ import Control.Lens hiding ((:>),Index)
 import Control.Monad.State
 import Control.Monad.Reader
 
-import Data.Parameterized.Context hiding ((:>), empty, take)
+import Data.Parameterized.Context hiding ((:>), empty, take, view)
 -- import qualified Data.Parameterized.Context as C
 import Data.Parameterized.TraversableFC
 
@@ -276,8 +276,9 @@ data TypedLLVMStmt wptr ret ps_out ps_in where
   TypedLLVMCreateFrame :: TypedLLVMStmt wptr (LLVMFrameType wptr) RNil RNil
 
   -- | Delete an LLVM frame and deallocate all memory objects allocated in it,
-  -- whose permissions are given by the supplied 'DistPerms' object
-  TypedLLVMDeleteFrame :: TypedReg (LLVMFrameType wptr) -> DistPerms ps ->
+  -- assuming that the current distinguished permissions @ps@ correspond to the
+  -- write permissions to all those objects allocated on the frame
+  TypedLLVMDeleteFrame :: TypedReg (LLVMFrameType wptr) ->
                           TypedLLVMStmt wptr UnitType RNil ps
 
 
@@ -332,6 +333,19 @@ llvmAllocaPermFun (TypedReg fp) sz (_ :>: ret) perms =
     ValPerm_LLVMFrame frm ->
       set (varPerm fp) (ValPerm_LLVMFrame ((ret,sz):frm)) $
       pushPerm ret (llvmPtrPermOfSize sz) perms
+
+-- | Add permissions to allocate on the newly-created frame
+llvmCreateFramePermFun :: (1 <= w, KnownNat w) =>
+                          StmtPermFun (RNil :> LLVMFrameType w) RNil RNil
+llvmCreateFramePermFun (_ :>: fp) =
+  set (varPerm fp) (ValPerm_LLVMFrame [])
+
+-- | Ensure that the current distinguished permissions equal those required to
+-- delete the given frame, and then delete those distinguished permissions and
+-- the frame permissions
+llvmDeleteFramePermFun :: TypedReg (LLVMFrameType wptr) ->
+                          StmtPermFun (RNil :> UnitType) RNil ps
+llvmDeleteFramePermFun (TypedReg fp) _  = deleteLLVMFrame fp
 
 
 ----------------------------------------------------------------------
@@ -453,28 +467,35 @@ type CtxTrans ctx = Assignment TypedReg ctx
 addCtxName :: CtxTrans ctx -> ExprVar tp -> CtxTrans (ctx ::> tp)
 addCtxName ctx x = extend ctx (TypedReg x)
 
+data PermCheckExtState ext where
+  -- | The extension-specific state for LLVM is the current frame pointer, if it
+  -- exists
+  PermCheckExtState_LLVM :: Maybe (TypedReg (LLVMFrameType (ArchWidth arch))) ->
+                            PermCheckExtState (LLVM arch)
+  PermCheckExtState_Unit :: PermCheckExtState ()
+
 data SomeLLVMFrame where
   SomeLLVMFrame :: NatRepr w -> TypedReg (LLVMFrameType w) -> SomeLLVMFrame
 
 -- | The local state maintained while type-checking is the current permission
 -- set and the permissions required on return from the entire function.
-data PermCheckState args ret ps =
+data PermCheckState ext args ret ps =
   PermCheckState
   {
     stCurPerms :: PermSet ps,
-    stFrame :: Maybe SomeLLVMFrame,
+    stExtState :: PermCheckExtState ext,
     stRetPerms :: Binding ret (DistPerms (args :> ret))
   }
 
 -- | Like the 'set' method of a lens, but allows the @ps@ argument to change
-setSTCurPerms :: PermSet ps2 -> PermCheckState args ret ps1 ->
-                 PermCheckState args ret ps2
+setSTCurPerms :: PermSet ps2 -> PermCheckState ext args ret ps1 ->
+                 PermCheckState ext args ret ps2
 setSTCurPerms perms (PermCheckState {..}) =
   PermCheckState { stCurPerms = perms, .. }
 
 modifySTCurPerms :: (PermSet ps1 -> PermSet ps2) ->
-                    PermCheckState args ret ps1 ->
-                    PermCheckState args ret ps2
+                    PermCheckState ext args ret ps1 ->
+                    PermCheckState ext args ret ps2
 modifySTCurPerms f_perms st = setSTCurPerms (f_perms $ stCurPerms st) st
 
 -- | The information needed to type-check a single entrypoint of a block
@@ -540,7 +561,7 @@ type family BlkArgs (args :: BlkParams) :: RList CrucibleType where
 
 -- | The generalized monad for permission-checking
 type PermCheckM r ext blocks ret args ps1 ps2 =
-  GenStateContM (PermCheckState args ret)
+  GenStateContM (PermCheckState ext args ret)
   (Compose (TopPermCheckM ext blocks ret) r)
   ps1 ps1 ps2 ps2
 
@@ -553,9 +574,23 @@ top_get :: PermCheckM r ext blocks ret args ps ps
            (TopPermCheckState ext blocks ret)
 top_get = error "FIXME HERE"
 
--- | Get the current frame pointer
-getFramePtr :: PermCheckM r ext blocks ret args ps ps (Maybe SomeLLVMFrame)
-getFramePtr = gget >>>= \st -> greturn (stFrame st)
+getVarPerm :: ExprVar a -> PermCheckM r ext blocks ret args ps ps (ValuePerm a)
+getVarPerm x = view (varPerm x) <$> stCurPerms <$> gget
+
+getRegPerm :: TypedReg a -> PermCheckM r ext blocks ret args ps ps (ValuePerm a)
+getRegPerm (TypedReg x) = getVarPerm x
+
+-- | Get the current frame pointer on LLVM architectures
+getFramePtr :: PermCheckM r (LLVM arch) blocks ret args ps ps
+               (Maybe (TypedReg (LLVMFrameType (ArchWidth arch))))
+getFramePtr = gget >>>= \st -> case stExtState st of
+  PermCheckExtState_LLVM maybe_fp -> greturn maybe_fp
+
+setFramePtr :: TypedReg (LLVMFrameType (ArchWidth arch)) ->
+               PermCheckM r (LLVM arch) blocks ret args ps ps ()
+setFramePtr fp =
+  gmodify (\st -> st { stExtState = PermCheckExtState_LLVM (Just fp) })
+
 
 -- | Failure in the statement permission-checking monad
 stmtFailM :: StmtPermCheckM ext blocks ret args ps_out ps_in a
@@ -772,22 +807,42 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr (LLVMPointerRepr w) _ _ val)
     stmtRecombinePerms >>>
     greturn (addCtxName ctx y)
 
--- Type-check an alloca instruction
-tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _)
-  | Just Refl <- testEquality w (archWidth arch)
-  = let sz_treg = tcReg ctx sz_reg in
-    getFramePtr >>>= \maybe_fp ->
-    resolveConstant sz_treg >>>= \maybe_sz ->
-    case (maybe_fp, maybe_sz) of
-      (Just (SomeLLVMFrame w' fp), Just sz)
-        | Just Refl <- testEquality w w' ->
-          (emitLLVMStmt loc (llvmAllocaPermFun fp sz)
-           (TypedLLVMAlloca fp sz)) >>>= \y ->
-          stmtRecombinePerms >>>
-          greturn (addCtxName ctx y)
-      _ ->
-        stmtFailM
+-- FIXME HERE: handle stores of values that can be converted to/from pointers
 
+-- Type-check an alloca instruction
+tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
+  let sz_treg = tcReg ctx sz_reg in
+  getFramePtr >>>= \maybe_fp ->
+  resolveConstant sz_treg >>>= \maybe_sz ->
+  case (maybe_fp, maybe_sz) of
+    (Just fp, Just sz) ->
+      (emitLLVMStmt loc (llvmAllocaPermFun fp sz)
+       (TypedLLVMAlloca fp sz)) >>>= \y ->
+      stmtRecombinePerms >>>
+      greturn (addCtxName ctx y)
+    _ ->
+      stmtFailM
+
+-- Type-check a push frame instruction
+tcEmitLLVMStmt arch ctx loc (LLVM_PushFrame _) =
+  emitLLVMStmt loc llvmCreateFramePermFun TypedLLVMCreateFrame >>>= \fp ->
+  setFramePtr (TypedReg fp) >>>
+  emitStmt loc (eqPermFun PExpr_Unit)
+  (TypedSetReg knownRepr $ TypedExpr EmptyApp) >>>= \(_ :>: y) ->
+  greturn (addCtxName ctx y)
+
+-- Type-check a pop frame instruction
+tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
+  getFramePtr >>>= \maybe_fp ->
+  maybe (greturn ValPerm_True) getRegPerm maybe_fp >>>= \fp_perm ->
+  case (maybe_fp, fp_perm) of
+    (Just fp, ValPerm_LLVMFrame fperms)
+      | Some del_perms <- llvmFrameDeletionPerms fperms ->
+        emitLLVMStmt loc (llvmDeleteFramePermFun fp)
+        (TypedLLVMDeleteFrame fp) >>>= \y ->
+        gmodify (\st -> st { stExtState = PermCheckExtState_LLVM Nothing }) >>>
+        greturn (addCtxName ctx y)
+    _ -> stmtFailM
 
 tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME HERE NOW: tcEmitLLVMStmt"
 
