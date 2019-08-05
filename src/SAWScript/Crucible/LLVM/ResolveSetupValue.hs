@@ -199,18 +199,18 @@ typeOfSetupValue' cc env nameEnv val =
       typeOfSetupValue' cc env nameEnv (SetupElem () v i)
     SetupElem () v i ->
       do memTy <- typeOfSetupValue cc env nameEnv v
-         let msg = "typeOfSetupValue: crucible_elem requires pointer to struct or array"
+         let msg = "typeOfSetupValue: crucible_elem requires pointer to struct or array, found " ++ show memTy
          case memTy of
            Crucible.PtrType symTy ->
              case let ?lc = lc in Crucible.asMemType symTy of
                Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
-                     | fromIntegral i < n -> return (Crucible.PtrType (Crucible.MemType memTy''))
-                     | otherwise -> fail $ unlines $
-                         [ "typeOfSetupValue: Array type index out of bounds: "
-                         , "  Index:        " ++ show i
-                         , "  Array length: " ++ show n
+                     | fromIntegral i <= n -> return (Crucible.PtrType (Crucible.MemType memTy''))
+                     | otherwise -> fail $ unwords $
+                         [ "typeOfSetupValue: array type index out of bounds"
+                         , "(index: " ++ show i ++ ")"
+                         , "(array length: " ++ show n ++ ")"
                          ]
                    Crucible.StructType si ->
                      case Crucible.siFieldInfo si i of
@@ -288,14 +288,14 @@ resolveSetupVal cc env tyenv nameEnv val =
       resolveSetupVal cc env tyenv nameEnv (SetupElem () v i)
     SetupElem () v i ->
       do memTy <- typeOfSetupValue cc tyenv nameEnv v
-         let msg = "resolveSetupVal: crucible_elem requires pointer to struct or array"
+         let msg = "resolveSetupVal: crucible_elem requires pointer to struct or array, found " ++ show memTy
          delta <- case memTy of
            Crucible.PtrType symTy ->
              case let ?lc = lc in Crucible.asMemType symTy of
                Right memTy' ->
                  case memTy' of
                    Crucible.ArrayType n memTy''
-                     | fromIntegral i < n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
+                     | fromIntegral i <= n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
                    Crucible.StructType si ->
                      case Crucible.siFieldOffset si i of
                        Just d -> return d
