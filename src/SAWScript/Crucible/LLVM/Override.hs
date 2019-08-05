@@ -872,7 +872,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
     (_, Crucible.PtrType _, SetupField () _ _) -> resolveAndMatch
     (_, _, SetupGlobalInitializer () _) -> resolveAndMatch
 
-    ((Crucible.LLVMValInt blk off), _, _) ->
+    (Crucible.LLVMValInt blk off, _, _) ->
       case expected of
         SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
           do assignVar cc (cs ^. MS.csLoc) var (Crucible.LLVMPointer blk off)
@@ -891,6 +891,9 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
                Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
              addAssert pred_ =<<
                notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
+
+        _ -> failure (cs ^. MS.csLoc) =<<
+              mkStructuralMismatch opts cc sc cs actual expected expectedTy
 
     _ -> failure (cs ^. MS.csLoc) =<<
            mkStructuralMismatch opts cc sc cs actual expected expectedTy
