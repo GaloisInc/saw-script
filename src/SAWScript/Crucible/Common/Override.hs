@@ -151,7 +151,7 @@ data OverrideFailureReason ext
   | BadReturnSpecification (Some Crucible.TypeRepr)
     -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
-  | BadEqualityComparison String -- ^ Comparison on an undef value
+  | BadEqualityComparison -- ^ Comparison on an undef value
   | BadPointerLoad (Either (MS.PointsTo ext) PP.Doc) PP.Doc
     -- ^ @loadRaw@ failed due to type error
   | StructuralMismatch PP.Doc PP.Doc (Maybe (ExtType ext)) (ExtType ext)
@@ -194,9 +194,8 @@ ppOverrideFailureReason rsn = case rsn of
     ]
   NonlinearPatternNotSupported ->
     PP.text "nonlinear pattern not supported"
-  BadEqualityComparison globName ->
-    PP.text "global initializer containing `undef` compared for equality:" PP.<$$>
-    (PP.indent 2 (PP.text globName))
+  BadEqualityComparison ->
+    PP.text "value containing `undef` compared for equality"
   BadPointerLoad pointsTo msg ->
     PP.text "error when loading through pointer that" PP.<+>
     PP.text "appeared in the override's points-to precondition(s):" PP.<$$>
