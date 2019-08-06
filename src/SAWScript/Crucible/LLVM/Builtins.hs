@@ -63,7 +63,7 @@ import           Control.Monad.State hiding (fail)
 import           Control.Monad.Fail (MonadFail(..))
 import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
-import           Data.Foldable (for_, toList, find)
+import           Data.Foldable (toList, find)
 import           Data.Function
 import           Data.IORef
 import           Data.List
@@ -98,7 +98,6 @@ import           Data.Parameterized.Some
 import qualified What4.Concrete as W4
 import qualified What4.Config as W4
 import qualified What4.FunctionName as W4
-import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
@@ -863,14 +862,20 @@ verifyPoststate opts sc cc mspec env0 globals ret =
                                     (view (MS.csPostState . MS.csFreshVars) mspec))
      matchPost <- io $
           runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
-           do matchResult
+           do -- Assert that the function returned the correct value
+              retAsserts <- matchResult
+              liftIO $ mapM_ (Crucible.addAssertion sym) retAsserts
+              -- Assert other post-state conditions (equalities, points-to)
               learnCond opts sc cc mspec PostState (mspec ^. MS.csPostState)
 
      st <- case matchPost of
              Left err      -> fail (show err)
              Right (_, st) -> return st
-     io $ for_ (view osAsserts st) $ \(W4.LabeledPred p r) ->
-       Crucible.addAssertion sym (Crucible.LabeledPred p r)
+
+     -- TODO: Use the fact that we know that these are assertions about arguments
+     -- from `crucible_execute_func` to provide better error messages
+     io $ mapM_ (mapM_ (Crucible.addAssertion sym)) (view osArgAsserts st)
+     io $ mapM_ (Crucible.addAssertion sym) (view osAsserts st)
 
      obligations <- io $ Crucible.getProofObligations sym
      io $ Crucible.clearProofObligations sym
@@ -890,7 +895,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
         (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
         (Nothing     , Just _ )     ->
           fail "verifyPoststate: unexpected crucible_return specification"
-        _ -> return ()
+        _ -> return []
 
 --------------------------------------------------------------------------------
 

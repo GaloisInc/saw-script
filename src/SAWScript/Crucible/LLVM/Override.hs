@@ -33,6 +33,7 @@ module SAWScript.Crucible.LLVM.Override
   , setupValueSub
   , executeFreshPointer
   , osAsserts
+  , osArgAsserts
   , termSub
 
   , learnCond
@@ -54,7 +55,7 @@ import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Maybe (fromMaybe, catMaybes)
+import           Data.Maybe (fromMaybe, catMaybes, maybeToList)
 import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -548,7 +549,9 @@ methodSpecHandler_prestate opts sc cc args cs =
        -- todo: fail if list lengths mismatch
        xs <- liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
-       sequence_ [ matchArg opts sc cc cs PreState x y z | (x, y, z) <- xs]
+       argAsserts <- forM xs $ \(actual, expectedType, expected) ->
+         matchArg opts sc cc cs PreState actual expectedType expected
+       osArgAsserts .= argAsserts
 
        learnCond opts sc cc cs PreState (cs ^. MS.csPreState)
 
@@ -582,7 +585,13 @@ learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWi
 learnCond opts sc cc cs prepost ss = do
   let loc = cs ^. MS.csLoc
   matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
-  traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
+
+  asserts <- catMaybes <$>
+    traverse
+      (learnSetupCondition opts sc cc cs prepost)
+      (ss ^. MS.csConditions)
+  osAsserts %= (asserts ++)
+
   enforceDisjointness loc ss
   enforceCompleteSubstitution loc ss
 
@@ -820,14 +829,13 @@ assignTerm ::
   PrePost                                                          ->
   VarIndex {- ^ external constant index -} ->
   Term     {- ^ value                   -} ->
-  OverrideMatcher (LLVM arch) md ()
+  OverrideMatcher (LLVM arch) md (Maybe (LabeledPred Sym))
 
 assignTerm sc cc loc prepost var val =
   do mb <- OM (use (termSub . at var))
      case mb of
-       Nothing -> OM (termSub . at var ?= val)
-       Just old ->
-         matchTerm sc cc loc prepost val old
+       Nothing -> OM (termSub . at var ?= val) >> pure Nothing
+       Just old -> matchTerm sc cc loc prepost val old
 
 --          do t <- liftIO $ scEq sc old val
 --             p <- liftIO $ resolveSAWPred cc t
@@ -835,6 +843,7 @@ assignTerm sc cc loc prepost var val =
 
 
 ------------------------------------------------------------------------
+
 
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
@@ -848,7 +857,7 @@ matchArg ::
                      {- ^ concrete simulation value             -} ->
   Crucible.MemType   {- ^ expected memory type                  -} ->
   SetupValue (Crucible.LLVM arch)         {- ^ expected specification value          -} ->
-  OverrideMatcher (LLVM arch) md ()
+  OverrideMatcher (LLVM arch) md [LabeledPred Sym]
 
 matchArg opts sc cc cs prepost actual expectedTy expected =
   case (actual, expectedTy, expected) of
@@ -858,11 +867,12 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
         -> do sym      <- Ov.getSymInterface
               failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
               realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
-              matchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
+              maybeToList <$>
+                matchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
 
     -- match the fields of struct point-wise
     (Crucible.LLVMValStruct xs, Crucible.StructType fields, SetupStruct () _ zs) ->
-      sequence_
+      concat <$> sequence
         [ matchArg opts sc cc cs prepost x y z
         | ((_,x),y,z) <- zip3 (V.toList xs)
                               (V.toList (Crucible.fiType <$> Crucible.siFields fields))
@@ -872,25 +882,28 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
     (_, Crucible.PtrType _, SetupField () _ _) -> resolveAndMatch
     (_, _, SetupGlobalInitializer () _) -> resolveAndMatch
 
-    (Crucible.LLVMValInt blk off, _, _) ->
+    (Crucible.LLVMValInt blk off, _, _) -> maybeToList <$>
+
       case expected of
         SetupVar var | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
           do assignVar cc (cs ^. MS.csLoc) var (Crucible.LLVMPointer blk off)
+             return Nothing
 
         SetupNull () | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
           do sym <- Ov.getSymInterface
-             p   <- liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
-             addAssert p =<<
-               notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
+             lp <- W4.LabeledPred
+               <$> liftIO (Crucible.ptrIsNull sym Crucible.PtrWidth (Crucible.LLVMPointer blk off))
+               <*> notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
+             return (Just lp)
 
         SetupGlobal () name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
           do let mem = cc^.ccLLVMEmptyMem
              sym  <- Ov.getSymInterface
              ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
-             pred_ <- liftIO $
-               Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2
-             addAssert pred_ =<<
-               notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
+             lp <- W4.LabeledPred
+               <$> liftIO (Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2)
+               <*> notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
+             return (Just lp)
 
         _ -> failure (cs ^. MS.csLoc) =<<
               mkStructuralMismatch opts cc sc cs actual expected expectedTy
@@ -909,7 +922,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
         \case
           Nothing -> failure (cs ^. MS.csLoc) BadEqualityComparison
           Just pred_ ->
-            addAssert pred_ =<<
+            (:[]) . W4.LabeledPred pred_ <$>
               notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
 
 ------------------------------------------------------------------------
@@ -1004,9 +1017,9 @@ matchTerm ::
   PrePost                                                       ->
   Term            {- ^ exported concrete term                -} ->
   Term            {- ^ expected specification term           -} ->
-  OverrideMatcher (LLVM arch) md ()
+  OverrideMatcher (LLVM arch) md (Maybe (LabeledPred Sym))
 
-matchTerm _ _ _ _ real expect | real == expect = return ()
+matchTerm _ _ _ _ real expect | real == expect = return Nothing
 matchTerm sc cc loc prepost real expect =
   do free <- OM (use osFree)
      case unwrapTermF expect of
@@ -1017,7 +1030,8 @@ matchTerm sc cc loc prepost real expect =
        _ ->
          do t <- liftIO $ scEq sc real expect
             p <- liftIO $ resolveSAWPred cc t
-            addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
+            return $ Just $ W4.LabeledPred p $
+              Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
               [ "Literal equality " ++ stateCond prepost
               , "Expected term: " ++ prettyTerm expect
               , "Actual term:   " ++ prettyTerm real
@@ -1039,9 +1053,9 @@ learnSetupCondition ::
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
   PrePost                    ->
   MS.SetupCondition (LLVM arch) ->
-  OverrideMatcher (LLVM arch) md ()
-learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal loc val1 val2)  = learnEqual opts sc cc spec loc prepost val1 val2
-learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred loc tm)         = learnPred sc cc loc prepost (ttTerm tm)
+  OverrideMatcher (LLVM arch) md (Maybe (LabeledPred Sym))
+learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal loc val1 val2)  = Just <$> learnEqual opts sc cc spec loc prepost val1 val2
+learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred loc tm)         = Just <$> learnPred sc cc loc prepost (ttTerm tm)
 learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Ghost () loc var val)   = learnGhost sc cc loc prepost var val
 
 
@@ -1055,7 +1069,7 @@ learnGhost ::
   PrePost                                                ->
   MS.GhostGlobal                                            ->
   TypedTerm                                              ->
-  OverrideMatcher (LLVM arch) md ()
+  OverrideMatcher (LLVM arch) md (Maybe (LabeledPred Sym))
 learnGhost sc cc loc prepost var expected =
   do actual <- readGlobal var
      matchTerm sc cc loc prepost (ttTerm actual) (ttTerm expected)
@@ -1155,13 +1169,14 @@ learnEqual ::
   PrePost                                          ->
   SetupValue (Crucible.LLVM arch)       {- ^ first value to compare  -} ->
   SetupValue (Crucible.LLVM arch)       {- ^ second value to compare -} ->
-  OverrideMatcher (LLVM arch) md ()
+  OverrideMatcher (LLVM arch) md (LabeledPred Sym)
 learnEqual opts sc cc spec loc prepost v1 v2 = do
   (_, val1) <- resolveSetupValueLLVM opts cc sc spec v1
   (_, val2) <- resolveSetupValueLLVM opts cc sc spec v2
   p         <- liftIO (equalValsPred cc val1 val2)
   let name = "equality " ++ stateCond prepost
-  addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError name))
+  return $
+    W4.LabeledPred p (Crucible.SimError loc (Crucible.AssertFailureSimError name))
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -1171,12 +1186,13 @@ learnPred ::
   W4.ProgramLoc                                                       ->
   PrePost                                                             ->
   Term             {- ^ the precondition to learn                  -} ->
-  OverrideMatcher (LLVM arch) md ()
+  OverrideMatcher (LLVM arch) md (LabeledPred Sym)
 learnPred sc cc loc prepost t =
   do s <- OM (use termSub)
      u <- liftIO $ scInstantiateExt sc s t
      p <- liftIO $ resolveSAWPred cc u
-     addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost)))
+     return $
+       W4.LabeledPred p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost)))
 
 ------------------------------------------------------------------------
 
