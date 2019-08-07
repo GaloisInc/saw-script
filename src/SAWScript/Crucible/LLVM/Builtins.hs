@@ -878,6 +878,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
              Right (_, st) -> return st
 
      io $ mapM_ (Crucible.addAssertion sym) (st ^. osAsserts)
+     when (not (null (st ^. osArgAsserts))) $ fail "verifyPoststate: impossible"
 
      obligations <- io $ Crucible.getProofObligations sym
      io $ Crucible.clearProofObligations sym
