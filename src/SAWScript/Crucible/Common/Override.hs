@@ -108,7 +108,7 @@ data OverrideState ext = OverrideState
     -- | Assertions about the values of function arguments
     --
     -- These come from @crucible_execute_func@.
-  , _osArgAsserts :: [[LabeledPred Sym]]
+  , _osArgAsserts :: [[W4.LabeledPred (W4.Pred Sym) PP.Doc]]
 
     -- | Accumulated assumptions
   , _osAssumes :: [W4.Pred Sym]

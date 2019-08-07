@@ -864,7 +864,12 @@ verifyPoststate opts sc cc mspec env0 globals ret =
           runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
            do -- Assert that the function returned the correct value
               retAsserts <- matchResult
-              liftIO $ mapM_ (Crucible.addAssertion sym) retAsserts
+              liftIO $ forM_ retAsserts $
+                Crucible.addAssertion sym . labelWithSimError poststateLoc
+                  (\doc -> unlines [ "When checking a crucible_return statement:"
+                                   , show doc
+                                   ])
+
               -- Assert other post-state conditions (equalities, points-to)
               learnCond opts sc cc mspec PostState (mspec ^. MS.csPostState)
 
@@ -872,9 +877,15 @@ verifyPoststate opts sc cc mspec env0 globals ret =
              Left err      -> fail (show err)
              Right (_, st) -> return st
 
-     -- TODO: Use the fact that we know that these are assertions about arguments
-     -- from `crucible_execute_func` to provide better error messages
-     io $ mapM_ (mapM_ (Crucible.addAssertion sym)) (view osArgAsserts st)
+     -- Assert that the arguments got the values specified in execute_func
+     io $ forM_ (zip ([1..] :: [Int]) (view osArgAsserts st)) $ \(n, asserts) ->
+       forM_ asserts $ Crucible.addAssertion sym .
+          labelWithSimError poststateLoc (\doc ->
+            unlines [ "In argument #" ++ show n ++
+                      "to a crucible_execute_func statement:"
+                    , show doc
+                    ])
+
      io $ mapM_ (Crucible.addAssertion sym) (view osAsserts st)
 
      obligations <- io $ Crucible.getProofObligations sym
