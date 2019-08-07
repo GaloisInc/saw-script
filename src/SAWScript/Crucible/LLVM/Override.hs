@@ -1063,7 +1063,8 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ (cc^.ccLLVMContext)
 
-     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
+     let ?lc = cc^.ccTypeCtx
+     let alignment = Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) memTy
      res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
      let summarizeBadLoad =
           let dataLayout = Crucible.llvmDataLayout (cc^.ccTypeCtx)
@@ -1157,10 +1158,10 @@ doAlloc ::
   LLVMAllocSpec ->
   Crucible.MemImpl Sym ->
   IO (LLVMPtr (Crucible.ArchWidth arch), Crucible.MemImpl Sym)
-doAlloc cc (LLVMAllocSpec mut _memTy sz loc) mem =
+doAlloc cc (LLVMAllocSpec mut memTy sz loc) mem =
   do let sym = cc^.ccBackend
      sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger sz
-     let alignment = Crucible.noAlignment -- FIXME? max alignment?
+     let alignment = Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) memTy
      let l = show (W4.plSourceLoc loc)
      Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
 
@@ -1254,9 +1255,10 @@ storePointsToValue ::
 storePointsToValue opts cc env tyenv nameEnv mem ptr val = do
   let sym = cc ^. ccBackend
 
-  let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
   memTy <- typeOfSetupValue cc tyenv nameEnv val
   storTy <- Crucible.toStorableType memTy
+  let ?lc = cc^.ccTypeCtx
+  let alignment = Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) memTy
 
   smt_array_memory_model_enabled <- W4.getOpt
     =<< W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)
