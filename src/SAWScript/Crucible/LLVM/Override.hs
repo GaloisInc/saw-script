@@ -29,7 +29,9 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.Override
   ( OverrideMatcher(..)
   , runOverrideMatcher
+
   , labelWithSimError
+  , labelWithArgNum
 
   , setupValueSub
   , executeFreshPointer
@@ -127,6 +129,14 @@ labelWithSimError ::
 labelWithSimError loc conv lp =
   lp & W4.labeledPredMsg
      %~ (Crucible.SimError loc . Crucible.AssertFailureSimError . conv)
+
+-- | Label '_osArgAssert' with which argument of 'crucible_execute_func' they're from
+labelWithArgNum :: W4.ProgramLoc -> [[LabeledPred' Sym]] -> [LabeledPred Sym]
+labelWithArgNum loc asserts =
+  foldMap (\(n, as) -> map (helper n) as) (zip [1..] asserts)
+  where helper :: Int -> LabeledPred' Sym -> LabeledPred Sym
+        helper n = labelWithSimError loc $ \doc -> unlines
+          ["In argument #" ++ show n ++ "to crucible_execute_func:", show doc]
 
 ------------------------------------------------------------------------
 
@@ -381,19 +391,20 @@ methodSpecHandler opts sc cc top_loc css retTy = do
           MS.ppMethodSpec methodSpec PP.<$$> ppOverrideFailure failureReason
     in
       case partitionEithers prestates of
-          (errs, []) ->
-            fail $ show $
-              PP.text "All overrides failed during structural matching:"
-              PP.<$$>
-                PP.vcat
-                  (map (\(cs, err) ->
-                          PP.text "*" PP.<> PP.indent 2 (prettyError cs err))
-                      (zip css errs))
-              PP.<$$> PP.text "Actual function return type: " PP.<>
-                        PP.text (show (retTy))
-          (_, ss) -> liftIO $
-            forM ss $ \(cs,st) ->
-              return (OverrideWithPreconditions (st^.osAsserts) cs st)
+        (errs, []) ->
+          fail $ show $
+            PP.text "All overrides failed during structural matching:"
+            PP.<$$>
+              PP.vcat
+                (map (\(cs, err) ->
+                        PP.text "*" PP.<> PP.indent 2 (prettyError cs err))
+                    (zip css errs))
+            PP.<$$> PP.text "Actual function return type: " PP.<>
+                      PP.text (show (retTy))
+        (_, ss) -> liftIO $
+          forM ss $ \(cs,st) ->
+            let asserts = (st^.osAsserts) ++ labelWithArgNum top_loc (st ^. osArgAsserts)
+            in return (OverrideWithPreconditions asserts cs st)
 
   -- Now we do a second phase of simple compatibility checking: we check to see
   -- if any of the preconditions of the various overrides are concretely false.

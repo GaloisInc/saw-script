@@ -878,14 +878,8 @@ verifyPoststate opts sc cc mspec env0 globals ret =
              Right (_, st) -> return st
 
      -- Assert that the arguments got the values specified in execute_func
-     io $ forM_ (zip ([1..] :: [Int]) (view osArgAsserts st)) $ \(n, asserts) ->
-       forM_ asserts $ Crucible.addAssertion sym .
-          labelWithSimError poststateLoc (\doc ->
-            unlines [ "In argument #" ++ show n ++
-                      "to a crucible_execute_func statement:"
-                    , show doc
-                    ])
-
+     io $ mapM_ (Crucible.addAssertion sym)
+                (labelWithArgNum poststateLoc $ view osArgAsserts st)
      io $ mapM_ (Crucible.addAssertion sym) (view osAsserts st)
 
      obligations <- io $ Crucible.getProofObligations sym
