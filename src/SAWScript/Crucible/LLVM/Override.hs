@@ -136,7 +136,7 @@ labelWithArgNum loc asserts =
   foldMap (\(n, as) -> map (helper n) as) (zip [1..] asserts)
   where helper :: Int -> LabeledPred' Sym -> LabeledPred Sym
         helper n = labelWithSimError loc $ \doc -> unlines
-          ["In argument #" ++ show n ++ "to crucible_execute_func:", show doc]
+          ["In argument #" ++ show n ++ " to crucible_execute_func:", show doc]
 
 ------------------------------------------------------------------------
 
