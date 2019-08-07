@@ -35,6 +35,7 @@ module SAWScript.Crucible.LLVM.Override
   , osAsserts
   , termSub
 
+  , doAlloc
   , learnCond
   , matchArg
   , methodSpecHandler
@@ -1278,29 +1279,32 @@ invalidateMutableAllocs cc cs = do
 
 ------------------------------------------------------------------------
 
--- | Perform an allocation as indicated by a 'crucible_alloc'
--- statement from the postcondition section.
+-- | Perform an allocation as indicated by a 'crucible_alloc' statement
+doAlloc ::
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  LLVMCrucibleContext arch       ->
+  LLVMAllocSpec ->
+  Crucible.MemImpl Sym ->
+  IO (LLVMPtr (Crucible.ArchWidth arch), Crucible.MemImpl Sym)
+doAlloc cc (LLVMAllocSpec mut _memTy sz loc) mem =
+  do let sym = cc^.ccBackend
+     sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger sz
+     let alignment = Crucible.noAlignment -- FIXME? max alignment?
+     let l = show (W4.plSourceLoc loc)
+     Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
+
+-- | Perform an allocation as indicated by a 'crucible_alloc' statement
 executeAllocation ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->
   LLVMCrucibleContext arch          ->
   (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher (LLVM arch) RW ()
-executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
-  do let sym = cc^.ccBackend
-     {-
-     memTy <- case Crucible.asMemType symTy of
-                Just memTy -> return memTy
-                Nothing    -> fail "executAllocation: failed to resolve type"
-                -}
-     liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
+executeAllocation opts cc (var, spec@(LLVMAllocSpec _mut memTy _sz loc)) =
+  do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
      mem <- readGlobal memVar
-     sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger sz)
-     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
-     (ptr, mem') <- liftIO $
-       Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
+     (ptr, mem') <- liftIO $ doAlloc cc spec mem
      writeGlobal memVar mem'
      assignVar cc loc var ptr
 
