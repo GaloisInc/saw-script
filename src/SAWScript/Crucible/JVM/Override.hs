@@ -31,7 +31,7 @@ module SAWScript.Crucible.JVM.Override
   , runOverrideMatcher
 
   , setupValueSub
-  , osAsserts
+  , omAsserts
   , termSub
 
   , learnCond
@@ -200,7 +200,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                     PPL.vcat (map (\x -> PPL.text "*" PPL.<> PPL.indent 2 (ppOverrideFailure x)) e)
                 (_, ss) -> liftIO $
                   forM ss $ \(cs,st) ->
-                    do precond <- W4.andAllOf sym (folded.labeledPred) (st^.osAsserts)
+                    do precond <- W4.andAllOf sym (folded.labeledPred) (st^.omAsserts)
                        return ( precond, cs, st )
 
   -- Now use crucible's symbolic branching machinery to select between the branches.
@@ -224,8 +224,8 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                 res <- liftIO $ runOverrideMatcher sym g
                    (st^.setupValueSub)
                    (st^.termSub)
-                   (st^.osFree)
-                   (st^.osLocation)
+                   (st^.omFree)
+                   top_loc
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
                   Left (OF loc rsn)  ->
@@ -233,13 +233,13 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                     liftIO $ Crucible.abortExecBecause
                       (Crucible.AssumedFalse (Crucible.AssumptionReason loc (show rsn)))
                   Right (ret,st') ->
-                    do liftIO $ forM_ (st'^.osAssumes) $ \asum ->
+                    do liftIO $ forM_ (st'^.omAssumes) $ \asum ->
                          Crucible.addAssumption (cc ^. jccBackend)
                             (Crucible.LabeledPred asum
-                              (Crucible.AssumptionReason (st^.osLocation) "override postcondition"))
-                       Crucible.writeGlobals (st'^.overrideGlobals)
+                              (Crucible.AssumptionReason top_loc "override postcondition"))
+                       Crucible.writeGlobals (st'^.omGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc (cs ^. MS.csLoc))
+           , Just (W4.plSourceLoc top_loc)
            )
          | (precond, cs, st) <- branches
          ] ++
@@ -627,7 +627,7 @@ matchTerm ::
 
 matchTerm _ _ _ _ real expect | real == expect = return ()
 matchTerm sc cc loc prepost real expect =
-  do free <- OM (use osFree)
+  do free <- OM (use omFree)
      case unwrapTermF expect of
        FTermF (ExtCns ec)
          | Set.member (ecVarIndex ec) free ->
@@ -671,7 +671,7 @@ learnPointsTo opts sc cc spec prepost pt = do
   let tyenv = MS.csAllocations spec
   let nameEnv = MS.csTypeNames spec
   sym <- Ov.getSymInterface
-  globals <- OM (use overrideGlobals)
+  globals <- OM (use omGlobals)
   case pt of
 
     JVMPointsToField loc ptr fname val ->
@@ -749,12 +749,12 @@ executeAllocation opts cc (var, (loc, alloc)) =
      let jc = cc^.jccJVMContext
      let halloc = cc^.jccHandleAllocator
      sym <- Ov.getSymInterface
-     globals <- OM (use overrideGlobals)
+     globals <- OM (use omGlobals)
      (ptr, globals') <-
        case alloc of
          AllocObject cname -> liftIO $ CJ.doAllocateObject sym halloc jc cname globals
          AllocArray len elemTy -> liftIO $ CJ.doAllocateArray sym halloc jc len elemTy globals
-     OM (overrideGlobals .= globals')
+     OM (omGlobals .= globals')
      assignVar cc loc var ptr
 
 ------------------------------------------------------------------------
@@ -786,7 +786,7 @@ executePointsTo ::
   OverrideMatcher CJ.JVM w ()
 executePointsTo opts sc cc spec pt = do
   sym <- Ov.getSymInterface
-  globals <- OM (use overrideGlobals)
+  globals <- OM (use omGlobals)
   case pt of
 
     JVMPointsToField loc ptr fname val ->
@@ -795,7 +795,7 @@ executePointsTo opts sc cc spec pt = do
          rval <- asRVal loc ptr'
          let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doFieldStore sym globals rval fname dyn
-         OM (overrideGlobals .= globals')
+         OM (omGlobals .= globals')
 
     JVMPointsToElem loc ptr idx val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
@@ -803,7 +803,7 @@ executePointsTo opts sc cc spec pt = do
          rval <- asRVal loc ptr'
          let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
-         OM (overrideGlobals .= globals')
+         OM (omGlobals .= globals')
 
 ------------------------------------------------------------------------
 
