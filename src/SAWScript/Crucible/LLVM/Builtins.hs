@@ -877,10 +877,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
              Left err      -> fail (show err)
              Right (_, st) -> return st
 
-     -- Assert that the arguments got the values specified in execute_func
-     io $ mapM_ (Crucible.addAssertion sym)
-                (labelWithArgNum poststateLoc $ view osArgAsserts st)
-     io $ mapM_ (Crucible.addAssertion sym) (view osAsserts st)
+     io $ mapM_ (Crucible.addAssertion sym) (st ^. osAsserts)
 
      obligations <- io $ Crucible.getProofObligations sym
      io $ Crucible.clearProofObligations sym

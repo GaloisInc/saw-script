@@ -31,7 +31,6 @@ module SAWScript.Crucible.LLVM.Override
   , runOverrideMatcher
 
   , labelWithSimError
-  , labelWithArgNum
 
   , setupValueSub
   , executeFreshPointer
@@ -130,13 +129,15 @@ labelWithSimError loc conv lp =
   lp & W4.labeledPredMsg
      %~ (Crucible.SimError loc . Crucible.AssertFailureSimError . conv)
 
--- | Label '_osArgAssert' with which argument of 'crucible_execute_func' they're from
-labelWithArgNum :: W4.ProgramLoc -> [[LabeledPred' Sym]] -> [LabeledPred Sym]
-labelWithArgNum loc asserts =
-  foldMap (\(n, as) -> map (helper n) as) (zip [1..] asserts)
-  where helper :: Int -> LabeledPred' Sym -> LabeledPred Sym
-        helper n = labelWithSimError loc $ \doc -> unlines
-          ["In argument #" ++ show n ++ " to crucible_execute_func:", show doc]
+-- | Retrieve pre-state assertions, ready to be passed to 'Crucible.addAssertion'
+prestateAsserts :: OverrideState (LLVM arch) -> [LabeledPred Sym]
+prestateAsserts os = (os ^. osAsserts) ++ labelWithArgNum (os ^. osArgAsserts)
+  where
+    labelWithArgNum asserts =
+      foldMap (\(n, as) -> map (helper n) as) (zip [1..] asserts)
+      where helper :: Int -> LabeledPred' Sym -> LabeledPred Sym
+            helper n = labelWithSimError (os ^. osLocation) $ \doc -> unlines
+              ["In argument #" ++ show n ++ " to crucible_execute_func:", show doc]
 
 ------------------------------------------------------------------------
 
@@ -403,8 +404,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                       PP.text (show (retTy))
         (_, ss) -> liftIO $
           forM ss $ \(cs,st) ->
-            let asserts = (st^.osAsserts) ++ labelWithArgNum top_loc (st ^. osArgAsserts)
-            in return (OverrideWithPreconditions asserts cs st)
+            return (OverrideWithPreconditions (prestateAsserts st) cs st)
 
   -- Now we do a second phase of simple compatibility checking: we check to see
   -- if any of the preconditions of the various overrides are concretely false.
