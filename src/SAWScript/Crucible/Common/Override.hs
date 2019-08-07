@@ -22,6 +22,7 @@ module SAWScript.Crucible.Common.Override
   ( Pointer
   , OverrideState(..)
   , osAsserts
+  , osArgAsserts
   , osAssumes
   , osFree
   , osLocation
@@ -104,6 +105,11 @@ data OverrideState ext = OverrideState
     -- | Accumulated assertions
   , _osAsserts :: [LabeledPred Sym]
 
+    -- | Assertions about the values of function arguments
+    --
+    -- These come from @crucible_execute_func@.
+  , _osArgAsserts :: [[W4.LabeledPred (W4.Pred Sym) PP.Doc]]
+
     -- | Accumulated assumptions
   , _osAssumes :: [W4.Pred Sym]
 
@@ -131,6 +137,7 @@ initialState ::
   OverrideState ext
 initialState sym globals allocs terms free loc = OverrideState
   { _osAsserts       = []
+  , _osArgAsserts    = []
   , _osAssumes       = []
   , _syminterface    = sym
   , _overrideGlobals = globals
