@@ -19,7 +19,6 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , typeOfLLVMVal
   , typeOfSetupValue
   , resolveTypedTerm
-  , resolveSAWPred
   , resolveSetupFieldIndex
   , equalValsPred
   , memArrayToSawCoreTerm
@@ -27,7 +26,6 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
 
 import Control.Lens
 import Control.Monad
-import qualified Control.Monad.Fail as Fail
 import Control.Monad.Fail (MonadFail)
 import Control.Monad.State
 import Data.Foldable (toList)
@@ -342,13 +340,6 @@ resolveTypedTerm cc tm =
     Cryptol.Forall [] [] ty ->
       resolveSAWTerm cc (Cryptol.evalValType Map.empty ty) (ttTerm tm)
     _ -> fail "resolveSetupVal: expected monomorphic term"
-
-resolveSAWPred ::
-  LLVMCrucibleContext arch ->
-  Term ->
-  IO (W4.Pred Sym)
-resolveSAWPred cc tm =
-  Crucible.bindSAWTerm (cc^.ccBackend) W4.BaseBoolRepr tm
 
 resolveSAWTerm ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
