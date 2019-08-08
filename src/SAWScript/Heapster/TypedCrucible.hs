@@ -165,17 +165,19 @@ instance TestEquality (TypedEntryID blocks args) where
   testEquality _ _ = Nothing
 
 -- | A collection of arguments to a function or jump target
-data TypedArgs args ps where
-  TypedArgsNil :: TypedArgs RNil ps
-  TypedArgsCons :: KnownRepr TypeRepr a => TypedArgs args ps -> TypedReg a ->
-                   TypedArgs (args :> a) ps
+data TypedArgs args where
+  TypedArgsNil :: TypedArgs RNil
+  TypedArgsCons :: KnownRepr TypeRepr a => TypedArgs args -> TypedReg a ->
+                   TypedArgs (args :> a)
 
 -- | A typed target for jump and branch statements, including arguments and a
 -- proof of the required permissions on those arguments
-data TypedJumpTarget blocks ps_in where
+data TypedJumpTarget blocks ps where
      TypedJumpTarget ::
        TypedEntryID blocks args ghosts ->
-       PermImpl (TypedArgs (ghosts :++: args)) ps_in ->
+       CruCtx (ghosts :++: args) ->
+       TypedArgs (ghosts :++: args) ->
+       DistPerms (ghosts :++: args) ->
        TypedJumpTarget blocks ps_in
 
 
@@ -192,12 +194,11 @@ type NuMatchingExtC ext =
 $(mkNuMatching [t| forall ext tp. NuMatchingExtC ext => TypedExpr ext tp |])
 $(mkNuMatching [t| forall ghosts args ret. TypedFnHandle ghosts args ret |])
 $(mkNuMatching [t| forall blocks ghosts args. TypedEntryID blocks args ghosts |])
-$(mkNuMatching [t| forall args ps. TypedArgs args ps |])
-
-instance NuMatchingAny1 (TypedArgs args) where
-  nuMatchingAny1Proof = nuMatchingProof
-
+$(mkNuMatching [t| forall args. TypedArgs args |])
 $(mkNuMatching [t| forall blocks ps_in. TypedJumpTarget blocks ps_in |])
+
+instance NuMatchingAny1 (TypedJumpTarget blocks) where
+  nuMatchingAny1Proof = nuMatchingProof
 
 $(mkNuMatching [t| AVXOp1 |])
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => ExtX86 f tp |])
@@ -353,19 +354,20 @@ llvmDeleteFramePermFun (TypedReg fp) _  = deleteLLVMFrame fp
 ----------------------------------------------------------------------
 
 -- | Typed return argument
-data TypedRet ret ps = TypedRet (TypedReg ret)
+data TypedRet ret ps = TypedRet (TypedReg ret) (DistPerms ps)
 
 
 -- | Typed Crucible block termination statements
 data TypedTermStmt blocks ret ps_in where
   -- | Jump to the given jump target
-  TypedJump :: TypedJumpTarget blocks ps_in -> TypedTermStmt blocks ret ps_in
+  TypedJump :: PermImpl (TypedJumpTarget blocks) ps_in ->
+               TypedTermStmt blocks ret ps_in
 
   -- | Branch on condition: if true, jump to the first jump target, and
   -- otherwise jump to the second jump target
   TypedBr :: TypedReg BoolType ->
-             TypedJumpTarget blocks ps_in ->
-             TypedJumpTarget blocks ps_in ->
+             PermImpl (TypedJumpTarget blocks) ps_in ->
+             PermImpl (TypedJumpTarget blocks) ps_in ->
              TypedTermStmt blocks ret ps_in
 
   -- | Return from function, providing the return value and also proof that the
@@ -427,7 +429,7 @@ instance NuMatchingExtC ext => NuMatchingAny1 (TypedStmtSeq ext blocks ret) wher
 -- here.
 data TypedEntry ext blocks ret args where
   TypedEntry ::
-    TypedEntryID blocks ghosts args -> CruCtx args ->
+    TypedEntryID blocks args ghosts -> CruCtx args ->
     MbDistPerms (ghosts :++: args) ->
     Mb (ghosts :++: args) (TypedStmtSeq ext blocks ret (ghosts :++: args)) ->
     TypedEntry ext blocks ret args
@@ -466,6 +468,24 @@ type CtxTrans ctx = Assignment TypedReg ctx
 -- | Add a variable to the current Crucible context translation
 addCtxName :: CtxTrans ctx -> ExprVar tp -> CtxTrans (ctx ::> tp)
 addCtxName ctx x = extend ctx (TypedReg x)
+
+-- | GADT telling us that @ext@ is a syntax extension we can handle
+data ExtRepr ext where
+  ExtRepr_Unit :: ExtRepr ()
+  ExtRepr_LLVM :: (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) =>
+                  ExtRepr (LLVM arch)
+
+instance KnownRepr ExtRepr () where
+  knownRepr = ExtRepr_Unit
+
+instance (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) =>
+         KnownRepr ExtRepr (LLVM arch) where
+  knownRepr = ExtRepr_LLVM
+
+-- | The constraints for a Crucible syntax extension that supports permission
+-- checking
+type PermCheckExtC ext =
+  (NuMatchingExtC ext, IsSyntaxExtension ext, KnownRepr ExtRepr ext)
 
 data PermCheckExtState ext where
   -- | The extension-specific state for LLVM is the current frame pointer, if it
@@ -560,46 +580,52 @@ type family BlkArgs (args :: BlkParams) :: RList CrucibleType where
 -}
 
 -- | The generalized monad for permission-checking
-type PermCheckM r ext blocks ret args ps1 ps2 =
-  GenStateContM (PermCheckState ext args ret)
-  (Compose (TopPermCheckM ext blocks ret) r)
-  ps1 ps1 ps2 ps2
+type PermCheckM ext blocks ret args r1 ps1 r2 ps2 =
+  GenStateContM (PermCheckState ext args ret ps1)
+  (TopPermCheckM ext blocks ret r1)
+  (PermCheckState ext args ret ps2)
+  (TopPermCheckM ext blocks ret r2)
 
 -- | The generalized monad for permission-checking statements
 type StmtPermCheckM ext blocks ret args ps1 ps2 =
-  PermCheckM (TypedStmtSeq ext blocks ret) ext blocks ret args ps1 ps2
+  PermCheckM ext blocks ret args
+   (TypedStmtSeq ext blocks ret ps1) ps1
+   (TypedStmtSeq ext blocks ret ps2) ps2
 
 -- | Get the current top-level state
-top_get :: PermCheckM r ext blocks ret args ps ps
+top_get :: PermCheckM ext blocks ret args r ps r ps
            (TopPermCheckState ext blocks ret)
-top_get = error "FIXME HERE"
+top_get = gcaptureCC $ \k -> get >>= k
 
 lookupBlockInfo :: BlockID blocks args' ->
-                   PermCheckM r ext (CtxCtxToRList blocks) ret args ps ps
+                   PermCheckM ext (CtxCtxToRList blocks) ret args r ps r ps
                    (BlockInfo ext (CtxCtxToRList blocks) ret (CtxToRList args'))
 lookupBlockInfo = error "FIXME HERE"
 
-getVarPerm :: ExprVar a -> PermCheckM r ext blocks ret args ps ps (ValuePerm a)
+
+getVarPerm :: ExprVar a ->
+              PermCheckM ext blocks ret args r ps r ps (ValuePerm a)
 getVarPerm x = view (varPerm x) <$> stCurPerms <$> gget
 
-getRegPerm :: TypedReg a -> PermCheckM r ext blocks ret args ps ps (ValuePerm a)
+getRegPerm :: TypedReg a ->
+              PermCheckM ext blocks ret args r ps r ps (ValuePerm a)
 getRegPerm (TypedReg x) = getVarPerm x
 
 -- | Get the current frame pointer on LLVM architectures
-getFramePtr :: PermCheckM r (LLVM arch) blocks ret args ps ps
+getFramePtr :: PermCheckM (LLVM arch) blocks ret args r ps r ps
                (Maybe (TypedReg (LLVMFrameType (ArchWidth arch))))
 getFramePtr = gget >>>= \st -> case stExtState st of
   PermCheckExtState_LLVM maybe_fp -> greturn maybe_fp
 
 setFramePtr :: TypedReg (LLVMFrameType (ArchWidth arch)) ->
-               PermCheckM r (LLVM arch) blocks ret args ps ps ()
+               PermCheckM (LLVM arch) blocks ret args r ps r ps ()
 setFramePtr fp =
   gmodify (\st -> st { stExtState = PermCheckExtState_LLVM (Just fp) })
 
-
 -- | Failure in the statement permission-checking monad
-stmtFailM :: StmtPermCheckM ext blocks ret args ps_out ps_in a
-stmtFailM = gabortM (Compose $ return $ TypedImplStmt Impl_Fail)
+stmtFailM :: PermCheckM ext blocks ret args r1 ps1
+             (TypedStmtSeq ext blocks ret ps2) ps2 a
+stmtFailM = gabortM (return $ TypedImplStmt Impl_Fail)
 
 -- | Smart constructor for applying a function on 'PermImpl's
 applyImplFun :: (PermImpl r ps -> r ps) -> PermImpl r ps -> r ps
@@ -608,19 +634,18 @@ applyImplFun f impl = f impl
 
 -- | Embed an implication computation inside a permission-checking computation
 embedImplM :: (forall ps. PermImpl r ps -> r ps) -> CruCtx vars ->
-            ImplM vars r ps_out ps_in a ->
-            PermCheckM r ext blocks ret args ps_out ps_in
-            (PermSubst vars, a)
+              ImplM vars r ps_out ps_in a ->
+              PermCheckM ext blocks ret args (r ps_out) ps_out (r ps_in) ps_in
+              (PermSubst vars, a)
 embedImplM f_impl vars m =
   top_get >>>= \top_st ->
   gget >>>= \st ->
-  gcaptureCC
-  (\k ->
-    Compose $ return $ applyImplFun f_impl $
-    runGenContM (runGenStateT m (mkImplState vars $ stCurPerms st))
-    (Impl_Done . flip evalState top_st . getCompose . k)
-    ) >>>= \(a, implSt) ->
+  gmapRet (return . applyImplFun f_impl) >>>
+  gput (mkImplState vars $ stCurPerms st) >>>
+  m >>>= \a ->
+  gget >>>= \implSt ->
   gput (setSTCurPerms (implSt ^. implStatePerms) st) >>>
+  gmapRet (Impl_Done . flip evalState top_st) >>>
   greturn (completePSubst vars (implSt ^. implStatePSubst), a)
 
 -- | Recombine any outstanding distinguished permissions back into the main
@@ -653,31 +678,13 @@ resolveConstant = error "FIXME HERE: resolveConstant"
 archWidth :: KnownNat (ArchWidth arch) => f arch -> NatRepr (ArchWidth arch)
 archWidth _ = knownNat
 
--- | GADT telling us that @ext@ is a syntax extension we can handle
-data ExtRepr ext where
-  ExtRepr_Unit :: ExtRepr ()
-  ExtRepr_LLVM :: (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) =>
-                  ExtRepr (LLVM arch)
-
-instance KnownRepr ExtRepr () where
-  knownRepr = ExtRepr_Unit
-
-instance (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) =>
-         KnownRepr ExtRepr (LLVM arch) where
-  knownRepr = ExtRepr_LLVM
-
--- | The constraints for a Crucible syntax extension that supports permission
--- checking
-type PermCheckExtC ext =
-  (NuMatchingExtC ext, IsSyntaxExtension ext, KnownRepr ExtRepr ext)
-
 -- | Translate a Crucible register by looking it up in the translated context
 tcReg :: CtxTrans ctx -> Reg ctx tp -> TypedReg tp
 tcReg ctx (Reg ix) = ctx ! ix
 
 -- | Type-check a sequence of Crucible arguments into a 'TypedArgs' list
 tcArgs :: CtxTrans ctx -> CtxRepr args -> Assignment (Reg ctx) args ->
-          TypedArgs (CtxToRList args) ps
+          TypedArgs (CtxToRList args)
 tcArgs _ _ (viewAssign -> AssignEmpty) = TypedArgsNil
 tcArgs ctx (viewAssign ->
             AssignExtend arg_tps' tp) (viewAssign -> AssignExtend args' reg) =
@@ -690,11 +697,12 @@ exprToPermExpr _ = error "FIXME HERE: exprToPermExpr!"
 
 -- | Translate a Crucible expression
 tcExpr :: PermCheckExtC ext => CtxTrans ctx -> Expr ext ctx tp ->
-          StmtPermCheckM ext blocks args ret ps ps (TypedExpr ext tp)
+          StmtPermCheckM ext blocks ret args ps ps (TypedExpr ext tp)
 tcExpr ctx (App (ExtensionApp e_ext :: App ext (Reg ctx) tp))
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = error "tcExpr: unexpected LLVM expression"
 tcExpr ctx (App app) = greturn $ TypedExpr $ fmapFC (tcReg ctx) app
+
 
 -- | Emit a statement in the current statement sequence, where the supplied
 -- function says how that statement modifies the current permissions, given the
@@ -703,11 +711,11 @@ tcExpr ctx (App app) = greturn $ TypedExpr $ fmapFC (tcReg ctx) app
 emitStmt :: TypeCtx rets => ProgramLoc ->
             StmtPermFun rets ps_out ps_in ->
             TypedStmt ext rets ps_out ps_in ->
-            StmtPermCheckM ext blocks args ret ps_out ps_in
+            StmtPermCheckM ext blocks ret args ps_out ps_in
             (MapRList Name rets)
 emitStmt loc f_perms stmt =
   gopenBinding
-  (Compose . (TypedConsStmt loc stmt <$>) . strongMbM . fmap getCompose)
+  ((TypedConsStmt loc stmt <$>) . strongMbM)
   (nuMulti typeCtxProxies $ \vars -> ()) >>>= \(ns, ()) ->
   gmodify (modifySTCurPerms $ f_perms ns) >>>
   greturn ns
@@ -716,7 +724,7 @@ emitStmt loc f_perms stmt =
 emitLLVMStmt :: ProgramLoc ->
                 StmtPermFun (RNil :> tp) ps_out ps_in ->
                 TypedLLVMStmt (ArchWidth arch) tp ps_out ps_in ->
-                StmtPermCheckM (LLVM arch) blocks args ret ps_out ps_in (Name tp)
+                StmtPermCheckM (LLVM arch) blocks ret args ps_out ps_in (Name tp)
 emitLLVMStmt loc f_perms stmt =
   emitStmt loc f_perms (TypedLLVMStmt stmt) >>>= \(_ :>: n) -> greturn n
 
@@ -725,7 +733,7 @@ emitLLVMStmt loc f_perms stmt =
 -- starting and ending with an empty stack of distinguished permissions
 tcEmitStmt :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
               Stmt ext ctx ctx' ->
-              StmtPermCheckM ext blocks args ret RNil RNil (CtxTrans ctx')
+              StmtPermCheckM ext blocks ret args RNil RNil (CtxTrans ctx')
 tcEmitStmt ctx loc (SetReg tp e) =
   tcExpr ctx e >>>= \typed_e ->
   let perm_f = maybe nullPermFun eqPermFun (exprToPermExpr typed_e) in
@@ -743,7 +751,7 @@ tcEmitStmt _ _ _ = error "FIXME: tcEmitStmt!"
 tcEmitLLVMSetExpr ::
   (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) => Proxy arch ->
   CtxTrans ctx -> ProgramLoc -> LLVMExtensionExpr arch (Reg ctx) tp ->
-  StmtPermCheckM (LLVM arch) blocks args ret RNil RNil (CtxTrans (ctx ::> tp))
+  StmtPermCheckM (LLVM arch) blocks ret args RNil RNil (CtxTrans (ctx ::> tp))
 
 -- Type-check a pointer-building expression, which is only valid when the block
 -- = 0, i.e., when building a word
@@ -789,7 +797,7 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerOffset w ptr_reg) =
 tcEmitLLVMStmt ::
   (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) => Proxy arch ->
   CtxTrans ctx -> ProgramLoc -> LLVMStmt (ArchWidth arch) (Reg ctx) tp ->
-  StmtPermCheckM (LLVM arch) blocks args ret RNil RNil (CtxTrans (ctx ::> tp))
+  StmtPermCheckM (LLVM arch) blocks ret args RNil RNil (CtxTrans (ctx ::> tp))
 
 -- Type-check a load of an LLVM pointer
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg (LLVMPointerRepr w) _ _)
@@ -867,24 +875,30 @@ tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME: tcEmitLLVMStmt"
 -- * Permission Checking for Jump Targets
 ----------------------------------------------------------------------
 
-{-
 tcJumpTarget :: CtxTrans ctx -> JumpTarget blocks ctx ->
-                StmtPermCheckM ext (CtxCtxToRList blocks) args ret RNil RNil
-                (TypedJumpTarget blocks RNil)
+                StmtPermCheckM ext (CtxCtxToRList blocks) ret args RNil RNil
+                (PermImpl (TypedJumpTarget (CtxCtxToRList blocks)) RNil)
 tcJumpTarget ctx (JumpTarget blkID _ args) =
   lookupBlockInfo blkID >>>= \blkInfo ->
   if blockInfoVisited blkInfo then
     error "Cannot handle backwards jumps (FIXME)"
   else
-    
+    error "FIXME HERE NOW"
 
 
+{-
 FIXME HERE NOW: Put DistPerms into TypedArgs? How does translation work?
 - get all args with perms
 - add eq perms for the real args
 - make a PermImpl that pushes all these perms into the dist perms
 - create a TypedArgs from this
 -}
+
+tcTermStmt :: PermCheckExtC ext => CtxTrans ctx ->
+              TermStmt blocks ret ctx ->
+              StmtPermCheckM ext (CtxCtxToRList blocks) ret args ps ps
+              (TypedTermStmt (CtxCtxToRList blocks) ret ps)
+tcTermStmt = error "FIXME HERE NOW"
 
 
 ----------------------------------------------------------------------
@@ -894,11 +908,17 @@ FIXME HERE NOW: Put DistPerms into TypedArgs? How does translation work?
 -- | Translate and emit a Crucible statement sequence, starting and ending with
 -- an empty stack of distinguished permissions
 tcEmitStmtSeq :: PermCheckExtC ext => CtxTrans ctx ->
-                 StmtSeq ext blocks reg ctx ->
-                 StmtPermCheckM ext (CtxCtxToRList blocks) args ret RNil RNil ()
+                 StmtSeq ext blocks ret ctx ->
+                 PermCheckM ext (CtxCtxToRList blocks) ret args
+                 () RNil
+                 (TypedStmtSeq ext (CtxCtxToRList blocks) ret RNil) RNil
+                 ()
 tcEmitStmtSeq ctx (ConsStmt loc stmt stmts) =
   tcEmitStmt ctx loc stmt >>>= \ctx' ->
   tcEmitStmtSeq ctx' stmts
 
+tcEmitStmtSeq ctx (TermStmt loc tstmt) =
+  tcTermStmt ctx tstmt >>>= \typed_tstmt ->
+  gmapRet (const $ return $ TypedTermStmt loc typed_tstmt)
 
 -- NOW: check jump targets and termination statements, and then whole CFGs

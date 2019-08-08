@@ -393,45 +393,46 @@ class GenMonadT (t :: (k1 -> k1 -> Kind.* -> Kind.*) ->
 
 -- | The generalized continuation transformer, which can have different types
 -- for the input vs output continuations
-newtype GenContM (r :: k -> Kind.*) pin pout a =
-  GenContM { runGenContM :: (a -> r pin) -> r pout }
+newtype GenContM rin rout a =
+  GenContM { runGenContM :: (a -> rin) -> rout }
 
-liftGenContM :: Monad m => m a -> GenContM m p p a
+liftGenContM :: Monad m => m a -> GenContM (m b) (m b) a
 liftGenContM m = GenContM $ \k -> m >>= k
 
-instance Functor (GenContM r p p) where
+instance Functor (GenContM r r) where
   fmap f m = m >>= return . f
 
-instance Applicative (GenContM r p p) where
+instance Applicative (GenContM r r) where
   pure = return
   (<*>) = ap
 
-instance Monad (GenContM r p p) where
+instance Monad (GenContM r r) where
   return x = GenContM $ \k -> k x
   GenContM m >>= f = GenContM $ \k -> m $ \a -> runGenContM (f a) k
 
-instance GenMonad (GenContM r) where
+instance GenMonad GenContM where
   greturn x = GenContM $ \k -> k x
   (GenContM m) >>>= f = GenContM $ \k -> m $ \a -> runGenContM (f a) k
 
+{-
 -- | Change the return type constructor @r@ by mapping the new input type to the
 -- old and mapping the old output type to the new
 withAltContM :: (r2 pin2 -> r1 pin1) -> (r1 pout1 -> r2 pout2) ->
                 GenContM r1 pin1 pout1 a -> GenContM r2 pin2 pout2 a
 withAltContM f_in f_out (GenContM m) =
   GenContM $ \k -> f_out (m (f_in . k))
-
+-}
 
 -- | Typeclass for generalized monads that allow a pure capture of the CC
 class GenMonad m => GenMonadCaptureCC rin rout m p1 p2 |
   m p1 -> rin , m p2 -> rout , m p1 rout -> p2 , m p2 rin -> p1 where
   gcaptureCC :: ((a -> rin) -> rout) -> m p1 p2 a
 
-instance GenMonadCaptureCC (r p1) (r p2) (GenContM r) p1 p2 where
+instance GenMonadCaptureCC r1 r2 GenContM r1 r2 where
   gcaptureCC f = GenContM f
 
 instance GenMonadCaptureCC rin rout m q1 q2 =>
-         GenMonadCaptureCC rin rout (GenStateT s m) '(p,q1) '(p,q2) where
+         GenMonadCaptureCC rin rout (GenStateT m) '(s,q1) '(s,q2) where
   gcaptureCC f = glift $ gcaptureCC f
 
 gmapRet :: GenMonadCaptureCC rin rout m p1 p2 => (rin -> rout) -> m p1 p2 ()
@@ -454,23 +455,25 @@ gopenBinding1 f_ret mb_b =
   gopenBinding f_ret mb_b >>>= \(_ :>: nm, b) -> greturn (nm,b)
 
 
+{-
 class GenMonad m => GenMonadShift r m | m -> r where
   gshift :: ((a -> m p1 p1 (r p2)) -> m p3 p4 (r p3)) -> m p2 p4 a
 
 instance GenMonadShift r (GenContM r) where
   gshift f = GenContM $ \k -> runGenContM (f (\a -> greturn (k a))) id
+-}
 
 
 -- | Running generalized computations in "parallel"
 class GenMonad m => GenMonadPar r m p1 p2 | m p1 p2 -> r where
   gparallel :: (r -> r -> r) -> m p1 p2 a -> m p1 p2 a -> m p1 p2 a
 
-instance GenMonadPar (r p2) (GenContM r) p1 p2 where
+instance GenMonadPar r2 GenContM r1 r2 where
   gparallel f (GenContM m1) (GenContM m2) =
     GenContM $ \k -> f (m1 k) (m2 k)
 
 instance GenMonadPar r m q1 q2 =>
-         GenMonadPar r (GenStateT s m) '(p1,q1) '(p2,q2) where
+         GenMonadPar r (GenStateT m) '(s1,q1) '(s2,q2) where
   gparallel f m1 m2 =
     GenStateT $ \s ->
     gparallel f
@@ -478,37 +481,37 @@ instance GenMonadPar r m q1 q2 =>
 
 -- | The generalized state monad. Don't get confused: the parameters are
 -- reversed, so @p2@ is the /input/ state param type and @p1@ is the /output/.
-newtype GenStateT s (m :: k -> k -> Kind.* -> Kind.*) p1 p2 a =
-  GenStateT { unGenStateT :: s (Fst p2) -> m (Snd p1) (Snd p2) (a, s (Fst p1)) }
+newtype GenStateT (m :: k -> k -> Kind.* -> Kind.*) p1 p2 a =
+  GenStateT { unGenStateT :: Fst p2 -> m (Snd p1) (Snd p2) (a, Fst p1) }
 
 -- | This version of 'unGenStateT' tells GHC to make the parameters into actual
 -- type-level pairs, i.e., it makes GHC reason extensionally about pairs
-runGenStateT :: GenStateT s m '(p1,q1) '(p2,q2) a -> s p2 -> m q1 q2 (a, s p1)
+runGenStateT :: GenStateT m '(s1,q1) '(s2,q2) a -> s2 -> m q1 q2 (a, s1)
 runGenStateT = unGenStateT
 
-instance Monad (m (Snd p) (Snd p)) => Functor (GenStateT s m p p) where
+instance Monad (m (Snd p) (Snd p)) => Functor (GenStateT m p p) where
   fmap f m = m >>= return . f
 
-instance Monad (m (Snd p) (Snd p)) => Applicative (GenStateT s m p p) where
+instance Monad (m (Snd p) (Snd p)) => Applicative (GenStateT m p p) where
   pure = return
   (<*>) = ap
 
-instance Monad (m (Snd p) (Snd p)) => Monad (GenStateT s m p p) where
+instance Monad (m (Snd p) (Snd p)) => Monad (GenStateT m p p) where
   return x = GenStateT $ \s -> return (x, s)
   (GenStateT m) >>= f =
     GenStateT $ \s -> m s >>= \(a, s') -> unGenStateT (f a) s'
 
-instance GenMonadT (GenStateT s) q1 q2 '(p,q1) '(p,q2) where
+instance GenMonadT GenStateT q1 q2 '(s,q1) '(s,q2) where
   glift m = GenStateT $ \s -> m >>>= \a -> greturn (a, s)
 
-instance GenMonad m => GenMonad (GenStateT s m) where
+instance GenMonad m => GenMonad (GenStateT m) where
   greturn x = GenStateT $ \s -> greturn (x, s)
   (GenStateT m) >>>= f =
     GenStateT $ \s -> m s >>>= \(a, s') -> unGenStateT (f a) s'
 
 -- | FIXME: documentation
 gliftGenStateT :: (GenMonad m) =>
-                  m q1 q2 a -> GenStateT s m '(p, q1) '(p, q2) a
+                  m q1 q2 a -> GenStateT m '(s, q1) '(s, q2) a
 gliftGenStateT m = glift m
 
 -- | Run a generalized state computation with a different state type @s2@ inside
@@ -516,21 +519,19 @@ gliftGenStateT m = glift m
 -- extract out the starting inner @s2@ state from the outer @s1@ state and an
 -- update function to update the resulting outer @s1@ state with the final inner
 -- @s2@ state.
-withAltStateM :: GenMonad m => (s1 p2 -> s2 p2) ->
-                 (s1 p2 -> s2 p1 -> s1 p1) ->
-                 GenStateT s2 m '(p1,q1) '(p2,q2) a ->
-                 GenStateT s1 m '(p1,q1) '(p2,q2) a
+withAltStateM :: GenMonad m => (s2' -> s2) -> (s2' -> s1 -> s1') ->
+                 GenStateT m '(s1,q1) '(s2,q2) a ->
+                 GenStateT m '(s1',q1) '(s2',q2) a
 withAltStateM s_get s_update m =
   gget >>>= \s ->
-  glift (runGenStateT m $ s_get s) >>>= \(a,s') ->
-  -- (glift (runGenStateT m $ s_get s)
-  --  :: GenStateT _ m '(Fst p2,Snd p1) p2 _) >>>= \(a,s') ->
+  gput (s_get s) >>>
+  m >>>= \a ->
+  gget >>>= \s' ->
   gput (s_update s s') >>>
   greturn a
 
-
-instance (Monad (m (Snd p) (Snd p)), p' ~ Fst p) =>
-         MonadState (s p') (GenStateT s m p p) where
+instance (Monad (m (Snd p) (Snd p)), s ~ Fst p) =>
+         MonadState s (GenStateT m p p) where
   get = GenStateT $ \s -> return (s, s)
   put s = GenStateT $ \_ -> return ((), s)
 
@@ -540,11 +541,11 @@ class GenMonad m => GenMonadGet s m p | m p -> s where
 class GenMonad m => GenMonadPut s m p1 p2 | m p1 p2 -> s where
   gput :: s -> m p1 p2 ()
 
-instance GenMonad m => GenMonadGet (s p) (GenStateT s m) '(p,q) where
+instance GenMonad m => GenMonadGet s (GenStateT m) '(s,q) where
   gget = GenStateT $ \s -> greturn (s, s)
 
 instance GenMonad m =>
-         GenMonadPut (s p1) (GenStateT s m) '(p1,q) '(p2,q) where
+         GenMonadPut s1 (GenStateT m) '(s1,q) '(s2,q) where
   gput s = GenStateT $ \_ -> greturn ((), s)
 
 gmodify :: (GenMonadGet s1 m p2, GenMonadPut s2 m p1 p2) =>
@@ -567,9 +568,9 @@ instance GenMonad m => GenMonadState s (GenStateT s m) where
 
 
 -- | The generalized state-continuation monad
-type GenStateContM s r p1 q1 p2 q2 =
-  GenStateT s (GenContM r) '(p1,q1) '(p2,q2)
+type GenStateContM s1 r1 s2 r2 = GenStateT GenContM '(s1,r1) '(s2,r2)
 
+{-
 -- | Change both the state and return types for the state-continuation monad
 withAltContStateM :: (r2 qin -> r1 qin) -> (r1 qout -> r2 qout) ->
                      (s2 pout -> s1 pout) -> (s2 pout -> s1 pin -> s2 pin) ->
@@ -581,17 +582,18 @@ withAltContStateM f_in f_out s_get s_update m =
          runGenStateT m $ s_get s) >>>= \(a,s') ->
   gput (s_update s s') >>>
   greturn a
+-}
 
 -- | Map both the state and return types for the state-continuation monad
-gmapRetAndState :: (s p2 -> s p1) -> (r q1 -> r q2) ->
-                   GenStateContM s r p1 q1 p2 q2 ()
+gmapRetAndState :: (s2 -> s1) -> (r1 -> r2) -> GenStateContM s1 r1 s2 r2 ()
 gmapRetAndState f_st f_ret =
   gmodify f_st >>> gmapRet f_ret
 
--- | Abort the current state-continuation computation and just return an @r q2@
+-- | Abort the current state-continuation computation and just return an @r2@
 --
--- FIXME: figure out how to write this with something like 'gcaptureCC'...?
-gabortM :: r q2 -> GenStateContM s r p1 q1 p2 q2 a
+-- FIXME: figure out how to write this with something like 'gcaptureCC'...? The
+-- problem is that 'gcaptureCC' will not allow us to change the state type...
+gabortM :: r2 -> GenStateContM s1 r1 s2 r2 a
 gabortM ret = GenStateT $ \_ -> GenContM $ \_ -> ret
 
 
@@ -645,21 +647,8 @@ instance PermState (ImplState vars) where
 
 -- | The implication monad is the permission monad that uses 'ImplState'
 type ImplM vars r ps_out ps_in =
-  GenStateT (ImplState vars) (GenContM (PermImpl r))
-  '(ps_out,ps_out) '(ps_in,ps_in)
-
-
--- | Run an implication computation with one more existential variable,
--- returning the optional expression it was bound to in the current partial
--- substitution when it is done
-withExtVarsM :: KnownRepr TypeRepr tp =>
-                ImplM (vars :> tp) r ps1 ps2 a ->
-                ImplM vars r ps1 ps2 (a, Maybe (PermExpr tp))
-withExtVarsM m =
-  withAltStateM extImplState (const unextImplState) $
-  (m >>>= \a ->
-    getPSubst >>>= \psubst ->
-    greturn (a, psubstLookup psubst Member_Base))
+  GenStateContM (ImplState vars ps_out) (PermImpl r ps_out)
+  (ImplState vars ps_in) (PermImpl r ps_in)
 
 
 -- | Run an 'ImplM' computation by passing it a @vars@ context, a starting
@@ -695,6 +684,18 @@ modifyPSubst f = gmodify (over implStatePSubst f)
 -- raising an error if it is already set
 setVarM :: Member vars a -> PermExpr a -> ImplM vars r ps ps ()
 setVarM x e = modifyPSubst (psubstSet x e)
+
+-- | Run an implication computation with one more existential variable,
+-- returning the optional expression it was bound to in the current partial
+-- substitution when it is done
+withExtVarsM :: KnownRepr TypeRepr tp =>
+                ImplM (vars :> tp) r ps1 ps2 a ->
+                ImplM vars r ps1 ps2 (a, Maybe (PermExpr tp))
+withExtVarsM m =
+  withAltStateM extImplState (const unextImplState) $
+  (m >>>= \a ->
+    getPSubst >>>= \psubst ->
+    greturn (a, psubstLookup psubst Member_Base))
 
 -- | Get the current 'PermSet'
 getPerms :: ImplM vars r ps ps (PermSet ps)
