@@ -50,7 +50,6 @@ import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
-import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -64,8 +63,8 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
 -- what4
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
+import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
-import           What4.LabeledPred (labeledPred)
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
@@ -85,15 +84,12 @@ import           Data.Parameterized.Some (Some(Some))
 
 -- saw-core
 import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.Prelude (scEq)
-import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common (Sym, labelWithSimError)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
-import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
-import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
+import           SAWScript.Crucible.Common.Override
 
 --import           SAWScript.JavaExpr (JavaType(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -200,7 +196,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                     PPL.vcat (map (\x -> PPL.text "*" PPL.<> PPL.indent 2 (ppOverrideFailure x)) e)
                 (_, ss) -> liftIO $
                   forM ss $ \(cs,st) ->
-                    do precond <- W4.andAllOf sym (folded.labeledPred) (st^.osAsserts)
+                    do precond <- W4.andAllOf sym (folded . W4.labeledPred) (st^.osAsserts)
                        return ( precond, cs, st )
 
   -- Now use crucible's symbolic branching machinery to select between the branches.
@@ -388,7 +384,7 @@ refreshTerms sc ss =
 enforceDisjointness ::
   JVMCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
 enforceDisjointness _cc loc ss =
-  do sym <- Ov.getSymInterface
+  do sym <- getSymInterface
      sub <- OM (use setupValueSub)
      let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
 
@@ -525,23 +521,19 @@ assignVar cc loc var ref =
 
 ------------------------------------------------------------------------
 
-
-assignTerm ::
-  SharedContext      {- ^ context for constructing SAW terms    -} ->
-  JVMCrucibleContext    {- ^ context for interacting with Crucible -} ->
+matchTerm' ::
+  SharedContext   {- ^ context for constructing SAW terms    -} ->
   W4.ProgramLoc ->
-  PrePost                                                          ->
-  VarIndex {- ^ external constant index -} ->
-  Term     {- ^ value                   -} ->
+  Sym                                                           ->
+  PrePost                                                       ->
+  Term            {- ^ exported concrete term                -} ->
+  Term            {- ^ expected specification term           -} ->
   OverrideMatcher CJ.JVM w ()
-
-assignTerm sc cc loc prepost var val =
-  do mb <- OM (use (termSub . at var))
-     case mb of
-       Nothing -> OM (termSub . at var ?= val)
-       Just old ->
-         matchTerm sc cc loc prepost val old
-
+matchTerm' sc loc sym prepost real expect = do
+  mlp <- matchTerm sc sym prepost real expect
+  case labelWithSimError loc show <$> mlp of
+    Nothing -> return ()
+    Just (W4.LabeledPred p doc) -> addAssert p doc
 
 ------------------------------------------------------------------------
 
@@ -560,10 +552,10 @@ matchArg ::
 matchArg opts sc cc cs prepost actual expectedTy expected@(MS.SetupTerm expectedTT)
   | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
   , Right tval <- Cryptol.evalType mempty tyexpr
-  = do sym <- Ov.getSymInterface
+  = do sym <- getSymInterface
        failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
        realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
-       matchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
+       matchTerm' sc (cs ^. MS.csLoc) (cc^.jccBackend) prepost realTerm (ttTerm expectedTT)
 
 matchArg opts sc cc cs prepost actual@(RVal ref) expectedTy setupval =
   case setupval of
@@ -571,13 +563,13 @@ matchArg opts sc cc cs prepost actual@(RVal ref) expectedTy setupval =
       do assignVar cc (cs ^. MS.csLoc) var ref
 
     MS.SetupNull () ->
-      do sym <- Ov.getSymInterface
+      do sym <- getSymInterface
          p   <- liftIO (CJ.refIsNull sym ref)
          addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost)))
 
     MS.SetupGlobal () name ->
       do let mem = () -- FIXME cc^.ccLLVMEmptyMem
-         sym  <- Ov.getSymInterface
+         sym  <- getSymInterface
          ref' <- liftIO $ doResolveGlobal sym mem name
 
          p  <- liftIO (CJ.refIsEqual sym ref ref')
@@ -616,30 +608,6 @@ valueToSC _sym loc failMsg _tval _val =
 
 ------------------------------------------------------------------------
 
-matchTerm ::
-  SharedContext   {- ^ context for constructing SAW terms    -} ->
-  JVMCrucibleContext {- ^ context for interacting with Crucible -} ->
-  W4.ProgramLoc ->
-  PrePost                                                       ->
-  Term            {- ^ exported concrete term                -} ->
-  Term            {- ^ expected specification term           -} ->
-  OverrideMatcher CJ.JVM w ()
-
-matchTerm _ _ _ _ real expect | real == expect = return ()
-matchTerm sc cc loc prepost real expect =
-  do free <- OM (use osFree)
-     case unwrapTermF expect of
-       FTermF (ExtCns ec)
-         | Set.member (ecVarIndex ec) free ->
-         do assignTerm sc cc loc prepost (ecVarIndex ec) real
-
-       _ ->
-         do t <- liftIO $ scEq sc real expect
-            p <- liftIO $ resolveBoolTerm (cc ^. jccBackend) t
-            addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost)))
-
-------------------------------------------------------------------------
-
 -- | Use the current state to learn about variable assignments based on
 -- preconditions for a procedure specification.
 learnSetupCondition ::
@@ -670,7 +638,7 @@ learnPointsTo ::
 learnPointsTo opts sc cc spec prepost pt = do
   let tyenv = MS.csAllocations spec
   let nameEnv = MS.csTypeNames spec
-  sym <- Ov.getSymInterface
+  sym <- getSymInterface
   globals <- OM (use overrideGlobals)
   case pt of
 
@@ -692,10 +660,6 @@ learnPointsTo opts sc cc spec prepost pt = do
 
 
 ------------------------------------------------------------------------
-
-stateCond :: PrePost -> String
-stateCond PreState = "precondition"
-stateCond PostState = "postcondition"
 
 -- | Process a "crucible_equal" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -748,7 +712,7 @@ executeAllocation opts cc (var, (loc, alloc)) =
   do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show alloc]
      let jc = cc^.jccJVMContext
      let halloc = cc^.jccHandleAllocator
-     sym <- Ov.getSymInterface
+     sym <- getSymInterface
      globals <- OM (use overrideGlobals)
      (ptr, globals') <-
        case alloc of
@@ -785,7 +749,7 @@ executePointsTo ::
   JVMPointsTo                   ->
   OverrideMatcher CJ.JVM w ()
 executePointsTo opts sc cc spec pt = do
-  sym <- Ov.getSymInterface
+  sym <- getSymInterface
   globals <- OM (use overrideGlobals)
   case pt of
 
@@ -836,29 +800,6 @@ executePred sc cc tt =
      t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
      p <- liftIO $ resolveBoolTerm (cc ^. jccBackend) t
      addAssume p
-
-------------------------------------------------------------------------
-
--- | Map the given substitution over all 'SetupTerm' constructors in
--- the given 'SetupValue'.
-instantiateSetupValue ::
-  SharedContext     ->
-  Map VarIndex Term ->
-  SetupValue        ->
-  IO SetupValue
-instantiateSetupValue sc s v =
-  case v of
-    MS.SetupVar _                     -> return v
-    MS.SetupTerm tt                   -> MS.SetupTerm <$> doTerm tt
-    MS.SetupNull ()                   -> return v
-    MS.SetupGlobal () _               -> return v
-    MS.SetupStruct empty _ _          -> absurd empty
-    MS.SetupArray empty _             -> absurd empty
-    MS.SetupElem empty _ _            -> absurd empty
-    MS.SetupField empty _ _           -> absurd empty
-    MS.SetupGlobalInitializer empty _ -> absurd empty
-  where
-    doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
 
 ------------------------------------------------------------------------
 

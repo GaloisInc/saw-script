@@ -11,18 +11,38 @@ Stability   : provisional
 module SAWScript.Crucible.Common
   ( ppAbortedResult
   , Sym
+  , LabeledPred
+  , LabeledPred'
+  , labelWithSimError
   ) where
 
+import           Control.Lens
 import           Lang.Crucible.Simulator.ExecutionTree (AbortedResult(..), GlobalPair)
 import           Lang.Crucible.Simulator.CallFrame (SimFrame)
+import qualified Lang.Crucible.Simulator.SimError as Crucible
 import           Lang.Crucible.Backend (AbortExecReason(..), ppAbortExecReason)
 import           Lang.Crucible.Backend.SAWCore (SAWCoreBackend)
 import qualified Data.Parameterized.Nonce as Nonce
 import qualified What4.Solver.Yices as Yices
 import qualified What4.Expr as W4
-import qualified What4.ProgramLoc as W4 (plSourceLoc)
+import qualified What4.Interface as W4 (Pred)
+import qualified What4.ProgramLoc as W4
+import qualified What4.LabeledPred as W4
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
+
+type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
+type LabeledPred' sym = W4.LabeledPred (W4.Pred sym) PP.Doc
+
+-- | Convert a predicate with a 'PP.Doc' label to one with a 'Crucible.SimError'
+labelWithSimError ::
+  W4.ProgramLoc ->
+  (PP.Doc -> String) ->
+  LabeledPred' Sym ->
+  LabeledPred Sym
+labelWithSimError loc conv lp =
+  lp & W4.labeledPredMsg
+     %~ (Crucible.SimError loc . Crucible.AssertFailureSimError . conv)
 
 -- | The symbolic backend we use for SAW verification
 type Sym = SAWCoreBackend Nonce.GlobalNonceGenerator (Yices.Connection Nonce.GlobalNonceGenerator) (W4.Flags W4.FloatReal)

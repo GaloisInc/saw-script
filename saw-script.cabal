@@ -163,6 +163,10 @@ library
     SAWScript.X86
     SAWScript.X86Spec
 
+  other-modules:
+    SAWScript.Crucible.Common.Override.Monad
+    SAWScript.Crucible.Common.Override.Operations
+
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
     ghc-options: -Wno-redundant-constraints
