@@ -394,7 +394,7 @@ class GenMonadT (t :: (k1 -> k1 -> Kind.* -> Kind.*) ->
 -- | The generalized continuation transformer, which can have different types
 -- for the input vs output continuations
 newtype GenContM (r :: k -> Kind.*) pin pout a =
-  GenContM { unGenContM :: (a -> r pin) -> r pout }
+  GenContM { runGenContM :: (a -> r pin) -> r pout }
 
 liftGenContM :: Monad m => m a -> GenContM m p p a
 liftGenContM m = GenContM $ \k -> m >>= k
@@ -408,11 +408,11 @@ instance Applicative (GenContM r p p) where
 
 instance Monad (GenContM r p p) where
   return x = GenContM $ \k -> k x
-  GenContM m >>= f = GenContM $ \k -> m $ \a -> unGenContM (f a) k
+  GenContM m >>= f = GenContM $ \k -> m $ \a -> runGenContM (f a) k
 
 instance GenMonad (GenContM r) where
   greturn x = GenContM $ \k -> k x
-  (GenContM m) >>>= f = GenContM $ \k -> m $ \a -> unGenContM (f a) k
+  (GenContM m) >>>= f = GenContM $ \k -> m $ \a -> runGenContM (f a) k
 
 -- | Change the return type constructor @r@ by mapping the new input type to the
 -- old and mapping the old output type to the new
@@ -458,7 +458,7 @@ class GenMonad m => GenMonadShift r m | m -> r where
   gshift :: ((a -> m p1 p1 (r p2)) -> m p3 p4 (r p3)) -> m p2 p4 a
 
 instance GenMonadShift r (GenContM r) where
-  gshift f = GenContM $ \k -> unGenContM (f (\a -> greturn (k a))) id
+  gshift f = GenContM $ \k -> runGenContM (f (\a -> greturn (k a))) id
 
 
 -- | Running generalized computations in "parallel"
@@ -662,20 +662,13 @@ withExtVarsM m =
     greturn (a, psubstLookup psubst Member_Base))
 
 
-{- FIXME: figure out our run method
+-- | Run an 'ImplM' computation by passing it a @vars@ context, a starting
+-- permission set, and an @r@
+runImplM :: CruCtx vars -> PermSet ps_in -> r ps_out ->
+            ImplM vars r ps_out ps_in () -> PermImpl r ps_in
+runImplM vars perms r m =
+  runGenContM (runGenStateT m (mkImplState vars perms)) (const $ Impl_Done r)
 
--- | Run an 'ImplM' computation inside a 'PermM' computation with a possibly
--- different state type
-runImplM :: PermState s => CruCtx vars ->
-            ImplM vars r ls1 ls2 a ->
-            PermM s (PermImpl r ls1) (PermImpl r ls2) (a, PermSubst vars)
-runImplM vars m =
-  withAltStateM (\s -> mkImplState vars (s ^. permStatePerms))
-  (\s s' -> set permStatePerms (s' ^. implStatePerms) s)
-  (m >>>= \a ->
-    getPSubst >>>= \psubst ->
-    greturn (a, completePSubst vars psubst))
--}
 
 ----------------------------------------------------------------------
 -- * Permissions Operations in a Permission Monad
