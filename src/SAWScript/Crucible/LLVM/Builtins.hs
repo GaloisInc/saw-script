@@ -253,9 +253,10 @@ crucible_llvm_array_size_profile ::
   LLVMCrucibleSetupM () ->
   TopLevel [Crucible.Profile]
 crucible_llvm_array_size_profile bic opts (Some lm) nm setup = do
-  cell <- io $ newIORef []
+  cell <- io $ newIORef Map.empty
   void $ createMethodSpec (Just ([], False, undefined)) (Just cell) bic opts lm nm setup
-  io $ readIORef cell
+  profiles <- io $ readIORef cell
+  pure $ Map.toList profiles
 
 -- | Check that all the overrides/lemmas were actually from this module
 checkModuleCompatibility ::
@@ -277,7 +278,7 @@ checkModuleCompatibility llvmModule = foldM step []
 createMethodSpec ::
   Maybe ([MS.CrucibleMethodSpecIR (LLVM arch)], Bool, ProofScript SatResult)
   {- ^ If verifying, provide lemmas, branch sat checking, tactic -} ->
-  Maybe (IORef [Crucible.Profile]) ->
+  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
   BuiltinContext   ->
   Options          ->
   LLVMModule arch ->
@@ -765,7 +766,7 @@ verifySimulate ::
   [MS.CrucibleMethodSpecIR (LLVM arch)]        ->
   Crucible.SymGlobalState Sym   ->
   Bool                          ->
-  Maybe (IORef [Crucible.Profile]) ->
+  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat asp =
   withCfgAndBlockId cc mspec $ \cfg entryId -> do
