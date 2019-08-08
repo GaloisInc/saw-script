@@ -8,17 +8,16 @@ Stability   : provisional
 
 module SAWScript.Crucible.Common.Override
   (
-
   -- * "SAWScript.Crucible.Common.Override.Monad"
     Pointer
-  , OverrideState(..)
-  , osAsserts
-  , osArgAsserts
-  , osAssumes
-  , osFree
-  , osLocation
-  , overrideGlobals
-  , syminterface
+  , OverrideMatcherRW(..)
+  , omAsserts
+  , omArgAsserts
+  , omAssumes
+  , omFree
+  , omLocation
+  , omGlobals
+  , omSymInterface
   , setupValueSub
   , termSub
   --

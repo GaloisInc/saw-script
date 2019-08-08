@@ -69,7 +69,7 @@ matchTerm ::
   OverrideMatcher ext md (Maybe (LabeledPred' Sym))
 matchTerm _ _ _ real expect | real == expect = return Nothing
 matchTerm sc sym prepost real expect =
-  do free <- OM (use osFree)
+  do free <- OM (use omFree)
      case SAWVerifier.unwrapTermF expect of
        FTermF (ExtCns ec)
          | Set.member (ecVarIndex ec) free ->
