@@ -12,19 +12,16 @@ module SAWScript.Crucible.LLVM.Boilerplate
   , llvm_boilerplate
   ) where
 
-import System.IO (FilePath, IOMode(..), stderr, withFile)
+import System.IO
 
-import Control.Monad.Catch (MonadThrow, throwM, try)
-import Control.Monad.IO.Class (liftIO)
 import Control.Exception (Exception)
+import Control.Monad.Catch
+import Control.Monad.IO.Class
 
-import Data.Bifunctor (first, second)
-import Data.Foldable (Foldable, any, elem)
-import Data.Traversable (Traversable, mapM)
-import Data.Maybe (isJust)
-import Data.Tuple (swap)
-import Data.List (nub)
-import Data.Parameterized.Some (Some, viewSome)
+import Data.Bifunctor
+import Data.Maybe
+import Data.Tuple
+import Data.List
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
@@ -33,29 +30,33 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Graph as Graph
 
+import Data.Parameterized.Some
+
 import qualified Text.LLVM as LLVM
 
 import SAWScript.Value
-import SAWScript.Crucible.LLVM.MethodSpecIR (LLVMModule(..))
+import SAWScript.Crucible.LLVM.MethodSpecIR
 
 import qualified Lang.Crucible.LLVM.TypeContext as Crucible
 import qualified Lang.Crucible.LLVM.MemType as Crucible
 
-import Lang.Crucible.LLVM.ArraySizeProfile (Profile)
+import Lang.Crucible.LLVM.ArraySizeProfile
 
-newtype BPException = BPException Text
+newtype BPException
+  = BPException Text
   deriving Show
 instance Exception BPException
 
-data BPType = BPVoid
-            | BPInt Int
-            | BPFloat
-            | BPDouble
-            | BPAlias Text
-            | BPPointer BPType
-            | BPArray Text BPType
-            | BPStruct [BPType]
-            deriving Show
+data BPType
+  = BPVoid
+  | BPInt Int
+  | BPFloat
+  | BPDouble
+  | BPAlias Text
+  | BPPointer BPType
+  | BPArray Text BPType
+  | BPStruct [BPType]
+  deriving (Show, Eq, Ord)
 
 -- Tuple of argument type, possibly buffer size in bytes,
 -- possibly argument name from debug symbols

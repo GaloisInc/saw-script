@@ -798,9 +798,8 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat asp =
       (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
       (groupOn (view csName) invLemmas)
 
-    additionalFeatures <- case asp of
-      Nothing -> pure []
-      Just cell -> (:[]) <$> Crucible.arraySizeProfile (cc ^. ccLLVMContext) cell
+    additionalFeatures <- mapM (Crucible.arraySizeProfile (cc ^. ccLLVMContext))
+                          $ maybeToList asp
 
     let execFeatures = invariantExecFeatures ++
                        map Crucible.genericToExecutionFeature patSatGenExecFeature ++
