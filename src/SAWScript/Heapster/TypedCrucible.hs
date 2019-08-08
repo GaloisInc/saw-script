@@ -574,6 +574,11 @@ top_get :: PermCheckM r ext blocks ret args ps ps
            (TopPermCheckState ext blocks ret)
 top_get = error "FIXME HERE"
 
+lookupBlockInfo :: BlockID blocks args' ->
+                   PermCheckM r ext (CtxCtxToRList blocks) ret args ps ps
+                   (BlockInfo ext (CtxCtxToRList blocks) ret (CtxToRList args'))
+lookupBlockInfo = error "FIXME HERE"
+
 getVarPerm :: ExprVar a -> PermCheckM r ext blocks ret args ps ps (ValuePerm a)
 getVarPerm x = view (varPerm x) <$> stCurPerms <$> gget
 
@@ -601,18 +606,18 @@ applyImplFun :: (PermImpl r ps -> r ps) -> PermImpl r ps -> r ps
 applyImplFun _ (Impl_Done r) = r
 applyImplFun f impl = f impl
 
--- | Run an implication computation inside a permission-checking computation
-runImplM :: (forall ps. PermImpl r ps -> r ps) -> CruCtx vars ->
+-- | Embed an implication computation inside a permission-checking computation
+embedImplM :: (forall ps. PermImpl r ps -> r ps) -> CruCtx vars ->
             ImplM vars r ps_out ps_in a ->
             PermCheckM r ext blocks ret args ps_out ps_in
             (PermSubst vars, a)
-runImplM f_impl vars m =
+embedImplM f_impl vars m =
   top_get >>>= \top_st ->
   gget >>>= \st ->
   gcaptureCC
   (\k ->
     Compose $ return $ applyImplFun f_impl $
-    unGenContM (runGenStateT m (mkImplState vars $ stCurPerms st))
+    runGenContM (runGenStateT m (mkImplState vars $ stCurPerms st))
     (Impl_Done . flip evalState top_st . getCompose . k)
     ) >>>= \(a, implSt) ->
   gput (setSTCurPerms (implSt ^. implStatePerms) st) >>>
@@ -622,7 +627,7 @@ runImplM f_impl vars m =
 -- permission set, in the context of type-checking statements
 stmtRecombinePerms :: StmtPermCheckM ext blocks ret args RNil ps_in ()
 stmtRecombinePerms =
-  runImplM TypedImplStmt emptyCruCtx recombinePerms >>>= \_ ->
+  embedImplM TypedImplStmt emptyCruCtx recombinePerms >>>= \_ ->
   greturn ()
 
 -- | Prove permissions in the context of type-checking statements
@@ -631,7 +636,7 @@ stmtProvePerm :: (PermCheckExtC ext, KnownRepr CruCtx vars) =>
                  StmtPermCheckM ext blocks ret args
                  (ps :> a) ps (PermSubst vars)
 stmtProvePerm (TypedReg x) mb_p =
-  runImplM TypedImplStmt knownRepr (proveVarImpl x mb_p) >>>= \(s,_) ->
+  embedImplM TypedImplStmt knownRepr (proveVarImpl x mb_p) >>>= \(s,_) ->
   greturn s
 
 -- | Try to prove that a register equals a constant integer
@@ -669,6 +674,15 @@ type PermCheckExtC ext =
 -- | Translate a Crucible register by looking it up in the translated context
 tcReg :: CtxTrans ctx -> Reg ctx tp -> TypedReg tp
 tcReg ctx (Reg ix) = ctx ! ix
+
+-- | Type-check a sequence of Crucible arguments into a 'TypedArgs' list
+tcArgs :: CtxTrans ctx -> CtxRepr args -> Assignment (Reg ctx) args ->
+          TypedArgs (CtxToRList args) ps
+tcArgs _ _ (viewAssign -> AssignEmpty) = TypedArgsNil
+tcArgs ctx (viewAssign ->
+            AssignExtend arg_tps' tp) (viewAssign -> AssignExtend args' reg) =
+  withKnownRepr tp $
+  TypedArgsCons (tcArgs ctx arg_tps' args') (tcReg ctx reg)
 
 -- | Translate a 'TypedExpr' to a permission expression, if possible
 exprToPermExpr :: TypedExpr ext tp -> Maybe (PermExpr tp)
@@ -722,7 +736,7 @@ tcEmitStmt ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = tcEmitLLVMStmt Proxy ctx loc stmt_ext
 
-tcEmitStmt _ _ _ = error "FIXME HERE: tcEmitStmt!"
+tcEmitStmt _ _ _ = error "FIXME: tcEmitStmt!"
 
 
 -- | Translate a Crucible assignment of an LLVM expression
@@ -790,7 +804,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg (LLVMPointerRepr w) _ _)
 -- loading an LLVM pointer and then performing the cast
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp storage _)
   | bytesToBits (storageTypeSize storage) <= natValue (archWidth arch)
-  = error "FIXME HERE NOW: call tcEmitLLVMStmt with LLVMPointerRepr (ArchWidth arch) and then coerce to tp!"
+  = error "FIXME HERE: call tcEmitLLVMStmt with LLVMPointerRepr (ArchWidth arch) and then coerce to tp!"
 
 -- We canot yet handle other loads
 tcEmitLLVMStmt _ _ _ (LLVM_Load _ _ _ _ _) =
@@ -844,8 +858,38 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
         greturn (addCtxName ctx y)
     _ -> stmtFailM
 
-tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME HERE NOW: tcEmitLLVMStmt"
+tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME: tcEmitLLVMStmt"
 
+-- FIXME HERE: need to handle PtrEq, PtrLe, PtrAddOffset, and PtrSubtract
+
+
+----------------------------------------------------------------------
+-- * Permission Checking for Jump Targets
+----------------------------------------------------------------------
+
+{-
+tcJumpTarget :: CtxTrans ctx -> JumpTarget blocks ctx ->
+                StmtPermCheckM ext (CtxCtxToRList blocks) args ret RNil RNil
+                (TypedJumpTarget blocks RNil)
+tcJumpTarget ctx (JumpTarget blkID _ args) =
+  lookupBlockInfo blkID >>>= \blkInfo ->
+  if blockInfoVisited blkInfo then
+    error "Cannot handle backwards jumps (FIXME)"
+  else
+    
+
+
+FIXME HERE NOW: Put DistPerms into TypedArgs? How does translation work?
+- get all args with perms
+- add eq perms for the real args
+- make a PermImpl that pushes all these perms into the dist perms
+- create a TypedArgs from this
+-}
+
+
+----------------------------------------------------------------------
+-- * Permission Checking for Sequences of Statements
+----------------------------------------------------------------------
 
 -- | Translate and emit a Crucible statement sequence, starting and ending with
 -- an empty stack of distinguished permissions
@@ -855,3 +899,6 @@ tcEmitStmtSeq :: PermCheckExtC ext => CtxTrans ctx ->
 tcEmitStmtSeq ctx (ConsStmt loc stmt stmts) =
   tcEmitStmt ctx loc stmt >>>= \ctx' ->
   tcEmitStmtSeq ctx' stmts
+
+
+-- NOW: check jump targets and termination statements, and then whole CFGs
