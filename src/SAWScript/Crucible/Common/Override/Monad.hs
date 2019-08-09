@@ -43,6 +43,7 @@ module SAWScript.Crucible.Common.Override.Monad
   , addAssert
   , addAssume
   , readGlobal
+  , tryReadGlobal
   , writeGlobal
   , failure
   , getSymInterface
@@ -300,14 +301,17 @@ addAssume ::
   OverrideMatcher ext rorw ()
 addAssume p = OM (omAssumes %= cons p)
 
+tryReadGlobal ::
+  Crucible.GlobalVar tp ->
+  OverrideMatcher ext rorw (Maybe (Crucible.RegValue Sym tp))
+tryReadGlobal k = OM (uses omGlobals (Crucible.lookupGlobal k))
+
 readGlobal ::
   Crucible.GlobalVar tp ->
   OverrideMatcher ext rorw (Crucible.RegValue Sym tp)
 readGlobal k =
-  do mb <- OM (uses omGlobals (Crucible.lookupGlobal k))
-     case mb of
-       Nothing -> fail ("No such global: " ++ show k)
-       Just v  -> return v
+  tryReadGlobal k >>=
+  maybe (fail ("No such global: " ++ show k)) return
 
 writeGlobal ::
   Crucible.GlobalVar    tp ->

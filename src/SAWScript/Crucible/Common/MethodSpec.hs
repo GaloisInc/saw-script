@@ -13,17 +13,22 @@ Grow\", and is prevalent across the Crucible codebase.
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module SAWScript.Crucible.Common.MethodSpec where
 
 import           Data.Constraint (Constraint)
+import           Data.IORef (readIORef)
 import           Data.List (isPrefixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -37,10 +42,15 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 -- what4
 import           What4.ProgramLoc (ProgramLoc(plSourceLoc))
+import qualified What4.Expr.Builder as B
 
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)
+import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
+  (IntrinsicClass(Intrinsic, muxIntrinsic))
+import qualified Lang.Crucible.Backend.SAWCore as Crucible
+  (SAWCoreBackend, saw_ctx, toSC)
 
 import qualified Cryptol.Utils.PP as Cryptol
 
@@ -208,16 +218,19 @@ setupToTerm opts sc =
 --------------------------------------------------------------------------------
 -- ** Ghost state
 
--- TODO: This is language-independent, it should be always-true rather than a
--- toggle.
-
--- TODO: documentation
-
-type family HasGhostState ext :: Bool
-
 type GhostValue  = "GhostValue"
 type GhostType   = Crucible.IntrinsicType GhostValue Crucible.EmptyCtx
 type GhostGlobal = Crucible.GlobalVar GhostType
+
+instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue where
+  type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) GhostValue ctx = TypedTerm
+  muxIntrinsic sym _ _namerep _ctx prd thn els =
+    do st <- readIORef (B.sbStateManager sym)
+       let sc  = Crucible.saw_ctx st
+       prd' <- Crucible.toSC sym prd
+       typ  <- scTypeOf sc (ttTerm thn)
+       res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
+       return thn { ttTerm = res }
 
 --------------------------------------------------------------------------------
 -- ** Pre- and post-conditions
@@ -304,15 +317,10 @@ type family PointsTo ext :: Type
 data SetupCondition ext where
   SetupCond_Equal    :: ProgramLoc -> SetupValue ext -> SetupValue ext -> SetupCondition ext
   SetupCond_Pred     :: ProgramLoc -> TypedTerm -> SetupCondition ext
-  SetupCond_Ghost    :: B (HasGhostState ext) ->
-                        ProgramLoc ->
-                        GhostGlobal ->
-                        TypedTerm ->
-                        SetupCondition ext
 
-deriving instance ( SetupValueHas Show ext
-                  , Show (B (HasGhostState ext))
-                  ) => Show (SetupCondition ext)
+data GhostCondition = GhostCondition ProgramLoc GhostGlobal TypedTerm
+
+deriving instance (SetupValueHas Show ext) => Show (SetupCondition ext)
 
 -- | Verification state (either pre- or post-) specification
 data StateSpec ext = StateSpec
@@ -323,7 +331,9 @@ data StateSpec ext = StateSpec
   , _csPointsTos     :: [PointsTo ext]
     -- ^ points-to statements
   , _csConditions    :: [SetupCondition ext]
-    -- ^ equality, propositions, and ghost-variable conditions
+    -- ^ equality conditions and propositions
+  , _csGhostConditions :: [GhostCondition]
+    -- ^ conditions about values of ghost variables
   , _csFreshVars     :: [TypedTerm]
     -- ^ fresh variables created in this state
   , _csVarTypeNames  :: Map AllocIndex (TypeName ext)
@@ -334,12 +344,13 @@ makeLenses ''StateSpec
 
 initialStateSpec :: StateSpec ext
 initialStateSpec =  StateSpec
-  { _csAllocs        = Map.empty
-  , _csFreshPointers = Map.empty -- TODO: this is LLVM-specific
-  , _csPointsTos     = []
-  , _csConditions    = []
-  , _csFreshVars     = []
-  , _csVarTypeNames  = Map.empty
+  { _csAllocs          = Map.empty
+  , _csFreshPointers   = Map.empty -- TODO: this is LLVM-specific
+  , _csPointsTos       = []
+  , _csConditions      = []
+  , _csGhostConditions = []
+  , _csFreshVars       = []
+  , _csVarTypeNames    = Map.empty
   }
 
 --------------------------------------------------------------------------------

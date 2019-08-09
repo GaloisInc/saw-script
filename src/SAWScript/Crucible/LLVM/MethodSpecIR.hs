@@ -27,13 +27,11 @@ Stability   : provisional
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module SAWScript.Crucible.LLVM.MethodSpecIR where
 
 import           Control.Lens
 import           Data.Functor.Compose (Compose(..))
-import           Data.IORef
 import           Data.Monoid ((<>))
 import           Data.Type.Equality (TestEquality(..), (:~:)(Refl))
 import qualified Text.LLVM.AST as L
@@ -45,16 +43,15 @@ import           Data.Parameterized.All (All(All))
 import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Map as MapF
 
-import qualified What4.Expr.Builder as B
 import           What4.ProgramLoc (ProgramLoc)
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
-  (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
+  (SAWCruciblePersonality)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
 import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
 import qualified Lang.Crucible.Simulator.Intrinsics as Crucible
-  (IntrinsicClass(Intrinsic, muxIntrinsic), IntrinsicMuxFn(IntrinsicMuxFn))
+  (IntrinsicMuxFn(IntrinsicMuxFn))
 import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
@@ -74,8 +71,6 @@ type instance MS.HasSetupElem (CL.LLVM _) = 'True
 type instance MS.HasSetupField (CL.LLVM _) = 'True
 type instance MS.HasSetupGlobal (CL.LLVM _) = 'True
 type instance MS.HasSetupGlobalInitializer (CL.LLVM _) = 'True
-
-type instance MS.HasGhostState (CL.LLVM _) = 'True
 
 type instance MS.TypeName (CL.LLVM arch) = CL.Ident
 type instance MS.ExtType (CL.LLVM arch) = CL.MemType
@@ -178,19 +173,6 @@ showLLVMModule (LLVMModule name m _) =
       L.ppSymbol (L.defName d) PP.<>
       L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
       L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.defGC d)
-
---------------------------------------------------------------------------------
--- ** Ghost state
-
-instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue where
-  type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue ctx = TypedTerm
-  muxIntrinsic sym _ _namerep _ctx prd thn els =
-    do st <- readIORef (B.sbStateManager sym)
-       let sc  = Crucible.saw_ctx st
-       prd' <- Crucible.toSC sym prd
-       typ  <- scTypeOf sc (ttTerm thn)
-       res  <- scIte sc typ prd' (ttTerm thn) (ttTerm els)
-       return thn { ttTerm = res }
 
 --------------------------------------------------------------------------------
 -- ** CrucibleContext

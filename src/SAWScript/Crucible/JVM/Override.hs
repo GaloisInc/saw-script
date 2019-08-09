@@ -318,6 +318,7 @@ learnCond opts sc cc cs prepost ss =
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      enforceDisjointness cc loc ss
      enforceCompleteSubstitution loc ss
+     matchGhostVariablesOM sc prepost (ss ^. MS.csGhostConditions)
 
 
 -- | Verify that all of the fresh variables for the given
@@ -359,6 +360,7 @@ executeCond opts sc cc cs ss =
      traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
      traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
      traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
+     writeGhostVariablesOM sc (ss ^. MS.csGhostConditions)
 
 
 -- | Allocate fresh variables for all of the "fresh" vars
@@ -620,7 +622,6 @@ learnSetupCondition ::
   OverrideMatcher CJ.JVM w ()
 learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal loc val1 val2)  = learnEqual opts sc cc spec loc prepost val1 val2
 learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred loc tm)         = learnPred sc cc loc prepost (ttTerm tm)
-learnSetupCondition _opts _ _ _ _ (MS.SetupCond_Ghost empty _ _ _) = absurd empty
 
 ------------------------------------------------------------------------
 
@@ -734,7 +735,6 @@ executeSetupCondition ::
   OverrideMatcher CJ.JVM w ()
 executeSetupCondition opts sc cc spec (MS.SetupCond_Equal _loc val1 val2) = executeEqual opts sc cc spec val1 val2
 executeSetupCondition _opts sc cc _    (MS.SetupCond_Pred _loc tm)        = executePred sc cc tm
-executeSetupCondition _ _ _ _    (MS.SetupCond_Ghost empty _ _ _)        = absurd empty
 
 ------------------------------------------------------------------------
 

@@ -27,6 +27,7 @@ module SAWScript.Crucible.Common.Setup.Type
   , currentState
   , addPointsTo
   , addCondition
+  , addGhostCondition
   , freshVariable
   ) where
 
@@ -88,6 +89,9 @@ addPointsTo pt = currentState . MS.csPointsTos %= (pt : )
 
 addCondition :: Monad m => MS.SetupCondition ext -> CrucibleSetupT ext m ()
 addCondition cond = currentState . MS.csConditions %= (cond : )
+
+addGhostCondition :: Monad m => MS.GhostCondition -> CrucibleSetupT ext m ()
+addGhostCondition cond = currentState . MS.csGhostConditions %= (cond : )
 
 -- | Allocated a fresh variable and record this allocation in the
 -- setup state.

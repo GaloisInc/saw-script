@@ -27,6 +27,7 @@ Stability   : provisional
 module SAWScript.Crucible.JVM.Builtins
     ( crucible_jvm_verify
     , crucible_jvm_unsafe_assume_spec
+    , jvm_ghost_value
     , jvm_return
     , jvm_execute_func
     , jvm_postcond
@@ -53,7 +54,6 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 import qualified Data.Vector as V
-import           Data.Void (absurd)
 import           System.IO
 
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
@@ -115,7 +115,9 @@ import qualified SAWScript.Crucible.Common as Common
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 
+import           SAWScript.Crucible.Common.Builtins (crucible_ghost_value)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
+import           SAWScript.Crucible.Common.Override (writeGhostVariables)
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
 import SAWScript.Crucible.JVM.MethodSpecIR
@@ -214,7 +216,9 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      globals1 <- liftIO $ setupGlobalState sym jc
 
      -- construct the initial state for verifications
-     (args, assumes, env, globals2) <- io $ verifyPrestate cc methodSpec globals1
+     sc <- getSharedContext
+     (args, assumes, env, globals2) <-
+       io $ verifyPrestate sc cc methodSpec globals1
 
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
@@ -302,6 +306,7 @@ verifyObligations cc mspec tactic assumes asserts =
 -- Returns a tuple of (arguments, preconditions, pointer values,
 -- memory).
 verifyPrestate ::
+  SharedContext ->
   JVMCrucibleContext ->
   CrucibleMethodSpecIR ->
   Crucible.SymGlobalState Sym ->
@@ -309,7 +314,7 @@ verifyPrestate ::
       [Crucible.LabeledPred Term Crucible.AssumptionReason],
       Map AllocIndex JVMRefVal,
       Crucible.SymGlobalState Sym)
-verifyPrestate cc mspec globals0 =
+verifyPrestate sc cc mspec globals0 =
   do let sym = cc^.jccBackend
      let preallocs = mspec ^. MS.csPreState . MS.csAllocs
      let tyenv = MS.csAllocations mspec
@@ -327,6 +332,8 @@ verifyPrestate cc mspec globals0 =
      globals2 <- setupPrePointsTos mspec cc env (mspec ^. MS.csPreState . MS.csPointsTos) globals1
      cs <- setupPrestateConditions mspec cc env (mspec ^. MS.csPreState . MS.csConditions)
      args <- resolveArguments cc mspec env
+     globals3 <-
+       writeGhostVariables sc Map.empty (mspec ^. MS.csPreState . MS.csGhostConditions) globals2
 
      -- Check the type of the return setup value
      case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
@@ -345,7 +352,7 @@ verifyPrestate cc mspec globals0 =
               ]
        (Nothing, _) -> return ()
 
-     return (args, cs, env, globals2)
+     return (args, cs, env, globals3)
 
 -- | Check two Types for register compatibility.
 checkRegisterCompatibility :: J.Type -> J.Type -> IO Bool
@@ -463,8 +470,6 @@ setupPrestateConditions mspec cc env = aux []
     aux acc (MS.SetupCond_Pred loc tm : xs) =
       let lp = Crucible.LabeledPred (ttTerm tm) (Crucible.AssumptionReason loc "precondition") in
       aux (lp:acc) xs
-
-    aux _ (MS.SetupCond_Ghost empty_ _ _ _ : _) = absurd empty_
 
 --------------------------------------------------------------------------------
 
@@ -665,6 +670,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
      matchPost <- io $
           runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
            do matchResult
+              -- Assert other post-state conditions (equalities, points-to, ghost state)
               learnCond opts sc cc mspec PostState (mspec ^. MS.csPostState)
 
      st <- case matchPost of
@@ -921,6 +927,15 @@ jvm_execute_func bic opts args = JVMSetupM $
 
 jvm_return :: BuiltinContext -> Options -> SetupValue -> JVMSetupM ()
 jvm_return bic opts retVal = JVMSetupM $ Setup.crucible_return bic opts retVal
+
+jvm_ghost_value ::
+  BuiltinContext                      ->
+  Options                             ->
+  MS.GhostGlobal                      ->
+  TypedTerm                           ->
+  JVMSetupM ()
+jvm_ghost_value _bic _opt ghost val = JVMSetupM $
+  crucible_ghost_value ghost val
 
 --------------------------------------------------------------------------------
 

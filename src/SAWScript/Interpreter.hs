@@ -78,6 +78,7 @@ import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
 -- Crucible
 import qualified Lang.Crucible.JVM as CJ
+import           SAWScript.Crucible.Common.Builtins (crucible_declare_ghost_state)
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
@@ -1956,12 +1957,21 @@ primitives = Map.fromList
     Current
     [ "Allocates a unique ghost variable." ]
 
-  , prim "crucible_ghost_value"
+  , prim "crucible_llvm_ghost_value"
     "Ghost -> Term -> CrucibleSetup ()"
-    (bicVal crucible_ghost_value)
+    (bicVal crucible_llvm_ghost_value)
     Current
     [ "Specifies the value of a ghost variable. This can be used"
-    , "in the pre- and post- conditions of a setup block."]
+    , "in the pre- and post- conditions of a setup block."
+    ]
+
+  , prim "jvm_ghost_value"
+    "Ghost -> Term -> JVMSetup ()"
+    (bicVal jvm_ghost_value)
+    Current
+    [ "Specifies the value of a ghost variable. This can be used"
+    , "in the pre- and post- conditions of a setup block."
+    ]
 
   , prim "crucible_spec_solvers"  "CrucibleMethodSpec -> [String]"
     (\_ _ -> toValue crucible_spec_solvers)

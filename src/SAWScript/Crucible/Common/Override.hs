@@ -45,6 +45,12 @@ module SAWScript.Crucible.Common.Override
   , assignTerm
   , matchTerm
   , instantiateSetupValue
+  -- ** Ghost state
+  , matchGhost
+  , matchGhostVariablesOM
+  , writeGhost
+  , writeGhostVariables
+  , writeGhostVariablesOM
   ) where
 
 import SAWScript.Crucible.Common.Override.Monad

@@ -607,6 +607,7 @@ learnCond opts sc cc cs prepost ss = do
 
   enforceDisjointness loc ss
   enforceCompleteSubstitution loc ss
+  matchGhostVariablesOM sc prepost (ss ^. MS.csGhostConditions)
 
 
 -- | Verify that all of the fresh variables for the given
@@ -657,6 +658,7 @@ executeCond opts sc cc cs ss = do
   traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
   traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
   traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
+  writeGhostVariablesOM sc (ss ^. MS.csGhostConditions)
 
 
 -- | Allocate fresh variables for all of the "fresh" vars
@@ -1013,24 +1015,6 @@ learnSetupCondition ::
   OverrideMatcher (LLVM arch) md (Maybe (LabeledPred Sym))
 learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal loc val1 val2)  = Just <$> learnEqual opts sc cc spec loc prepost val1 val2
 learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred loc tm)         = Just <$> learnPred sc cc loc prepost (ttTerm tm)
-learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Ghost () loc var val)   = learnGhost sc cc loc prepost var val
-
-
-------------------------------------------------------------------------
-
--- TODO(lb): make this language-independent!
-learnGhost ::
-  SharedContext                                          ->
-  LLVMCrucibleContext arch                                  ->
-  W4.ProgramLoc                                          ->
-  PrePost                                                ->
-  MS.GhostGlobal                                            ->
-  TypedTerm                                              ->
-  OverrideMatcher (LLVM arch) md (Maybe (LabeledPred Sym))
-learnGhost sc cc loc prepost var expected =
-  do actual <- readGlobal var
-     maybeAssert <-  matchTerm sc (cc^.ccBackend) prepost (ttTerm actual) (ttTerm expected)
-     pure $ fmap (labelWithSimError loc show) maybeAssert
 
 ------------------------------------------------------------------------
 
@@ -1197,20 +1181,6 @@ executeSetupCondition opts sc cc spec =
     MS.SetupCond_Equal _loc val1 val2 ->
       executeEqual opts sc cc spec val1 val2
     MS.SetupCond_Pred _loc tm -> executePred sc cc tm
-    MS.SetupCond_Ghost () _loc var val -> executeGhost sc var val
-
-------------------------------------------------------------------------
-
--- TODO(lb): make this language independent!
-executeGhost ::
-  SharedContext ->
-  MS.GhostGlobal ->
-  TypedTerm ->
-  OverrideMatcher (LLVM arch) RW ()
-executeGhost sc var val =
-  do s <- OM (use termSub)
-     t <- liftIO (ttTermLens (scInstantiateExt sc s) val)
-     writeGlobal var t
 
 ------------------------------------------------------------------------
 

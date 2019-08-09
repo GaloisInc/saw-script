@@ -35,8 +35,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_setup_val_to_typed_term
     , crucible_spec_size
     , crucible_spec_solvers
-    , crucible_ghost_value
-    , crucible_declare_ghost_state
+    , crucible_llvm_ghost_value
     , crucible_equal
     , crucible_points_to
     , crucible_fresh_pointer
@@ -140,11 +139,12 @@ import SAWScript.Position as SS
 import SAWScript.Options
 
 import qualified SAWScript.Crucible.Common as Common
+import           SAWScript.Crucible.Common.Builtins (crucible_ghost_value)
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..))
-import           SAWScript.Crucible.Common.Override (resolveSAWPred)
+import           SAWScript.Crucible.Common.Override (resolveSAWPred, writeGhostVariables)
 import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
@@ -330,8 +330,9 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
             let globals1 = Crucible.llvmGlobals (cc^.ccLLVMContext) mem
 
             -- construct the initial state for verifications
+            sc <- getSharedContext
             (args, assumes, env, globals2) <-
-              io $ verifyPrestate opts cc methodSpec globals1
+              io $ verifyPrestate opts sc cc methodSpec globals1
 
             -- save initial path conditions
             frameIdent <- io $ Crucible.pushAssumptionFrame sym
@@ -443,6 +444,7 @@ checkSpecReturnType cc mspec =
 verifyPrestate ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   Options ->
+  SharedContext ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   Crucible.SymGlobalState Sym ->
@@ -450,7 +452,7 @@ verifyPrestate ::
       [Crucible.LabeledPred Term Crucible.AssumptionReason],
       Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)),
       Crucible.SymGlobalState Sym)
-verifyPrestate opts cc mspec globals = do
+verifyPrestate opts sc cc mspec globals = do
   let ?lc = cc^.ccTypeCtx
   let sym = cc^.ccBackend
   let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
@@ -471,8 +473,10 @@ verifyPrestate opts cc mspec globals = do
 
   mem'' <- setupPrePointsTos mspec opts cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem'
   let globals1 = Crucible.insertGlobal lvar mem'' globals
-  (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec ^. MS.csPreState . MS.csConditions)
+  cs <- setupPrestateConditions mspec cc env (mspec ^. MS.csPreState . MS.csConditions)
   args <- resolveArguments cc mspec env
+  globals2 <-
+    writeGhostVariables sc Map.empty (mspec ^. MS.csPreState . MS.csGhostConditions) globals1
 
   return (args, cs, env, globals2)
 
@@ -561,29 +565,25 @@ setupPrestateConditions ::
   MS.CrucibleMethodSpecIR (LLVM arch)        ->
   LLVMCrucibleContext arch        ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
-  Crucible.SymGlobalState Sym ->
   [MS.SetupCondition (LLVM arch)]            ->
-  IO (Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term Crucible.AssumptionReason])
+  IO [Crucible.LabeledPred Term Crucible.AssumptionReason]
 setupPrestateConditions mspec cc env = aux []
   where
     tyenv   = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-    aux acc globals [] = return (globals, acc)
+    aux acc [] = return acc
 
-    aux acc globals (MS.SetupCond_Equal loc val1 val2 : xs) =
+    aux acc (MS.SetupCond_Equal loc val1 val2 : xs) =
       do val1' <- resolveSetupVal cc env tyenv nameEnv val1
          val2' <- resolveSetupVal cc env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
          let lp = Crucible.LabeledPred t (Crucible.AssumptionReason loc "equality precondition")
-         aux (lp:acc) globals xs
+         aux (lp:acc) xs
 
-    aux acc globals (MS.SetupCond_Pred loc tm : xs) =
+    aux acc (MS.SetupCond_Pred loc tm : xs) =
       let lp = Crucible.LabeledPred (ttTerm tm) (Crucible.AssumptionReason loc "precondition") in
-      aux (lp:acc) globals xs
-
-    aux acc globals (MS.SetupCond_Ghost () _loc var val : xs) =
-      aux acc (Crucible.insertGlobal var val globals) xs
+      aux (lp:acc) xs
 
 --------------------------------------------------------------------------------
 
@@ -856,7 +856,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
                                    , show doc
                                    ])
 
-              -- Assert other post-state conditions (equalities, points-to)
+              -- Assert other post-state conditions (equalities, points-to, ghost state)
               learnCond opts sc cc mspec PostState (mspec ^. MS.csPostState)
 
      st <- case matchPost of
@@ -1504,25 +1504,14 @@ crucible_equal _bic _opt (getAllLLVM -> val1) (getAllLLVM -> val2) = LLVMCrucibl
      loc <- getW4Position "crucible_equal"
      Setup.addCondition (MS.SetupCond_Equal loc val1 val2)
 
-crucible_declare_ghost_state ::
-  BuiltinContext ->
-  Options        ->
-  String         ->
-  TopLevel Value
-crucible_declare_ghost_state _bic _opt name =
-  do allocator <- getHandleAlloc
-     global <- liftIO (Crucible.freshGlobalVar allocator (Text.pack name) knownRepr)
-     return (VGhostVar global)
-
-crucible_ghost_value ::
+crucible_llvm_ghost_value ::
   BuiltinContext                      ->
   Options                             ->
-  MS.GhostGlobal                         ->
+  MS.GhostGlobal                      ->
   TypedTerm                           ->
   LLVMCrucibleSetupM ()
-crucible_ghost_value _bic _opt ghost val = LLVMCrucibleSetupM $
-  do loc <- getW4Position "crucible_ghost_value"
-     Setup.addCondition (MS.SetupCond_Ghost () loc ghost val)
+crucible_llvm_ghost_value _bic _opt ghost val = LLVMCrucibleSetupM $
+  crucible_ghost_value ghost val
 
 crucible_spec_solvers :: SomeLLVM (MS.CrucibleMethodSpecIR) -> [String]
 crucible_spec_solvers (SomeLLVM mir) =

@@ -61,8 +61,6 @@ type instance MS.HasSetupElem CJ.JVM = 'False
 type instance MS.HasSetupField CJ.JVM = 'False
 type instance MS.HasSetupGlobalInitializer CJ.JVM = 'False
 
-type instance MS.HasGhostState CJ.JVM = 'False
-
 type JIdent = String -- FIXME(huffman): what to put here?
 
 type instance MS.TypeName CJ.JVM = JIdent
