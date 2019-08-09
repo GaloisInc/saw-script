@@ -896,9 +896,21 @@ FIXME HERE NOW: Put DistPerms into TypedArgs? How does translation work?
 
 tcTermStmt :: PermCheckExtC ext => CtxTrans ctx ->
               TermStmt blocks ret ctx ->
-              StmtPermCheckM ext (CtxCtxToRList blocks) ret args ps ps
-              (TypedTermStmt (CtxCtxToRList blocks) ret ps)
-tcTermStmt = error "FIXME HERE NOW"
+              StmtPermCheckM ext (CtxCtxToRList blocks) ret args RNil RNil
+              (TypedTermStmt (CtxCtxToRList blocks) ret RNil)
+tcTermStmt ctx (Jump tgt) =
+  TypedJump <$> tcJumpTarget ctx tgt
+tcTermStmt ctx (Br reg tgt1 tgt2) =
+  TypedBr (tcReg ctx reg) <$> tcJumpTarget ctx tgt1 <*> tcJumpTarget ctx tgt2
+tcTermStmt ctx (Return reg) =
+  let treg = tcReg ctx reg in
+  gget >>>= \st ->
+  let ret_perms =
+        varSubst (singletonVarSubst $ typedRegVar treg) (stRetPerms st) in
+  greturn $ TypedReturn $
+  runImplM CruCtxNil (stCurPerms st) (TypedRet treg ret_perms) $
+  proveVarsImpl $ distPermsToExDistPerms ret_perms
+tcTermStmt ctx (ErrorStmt reg) = greturn $ TypedErrorStmt $ tcReg ctx reg
 
 
 ----------------------------------------------------------------------
