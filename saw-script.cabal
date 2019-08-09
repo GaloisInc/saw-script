@@ -131,6 +131,7 @@ library
     SAWScript.VerificationCheck
 
     SAWScript.Crucible.Common
+    SAWScript.Crucible.Common.Builtins
     SAWScript.Crucible.Common.MethodSpec
     SAWScript.Crucible.Common.Override
     SAWScript.Crucible.Common.Setup.Builtins
