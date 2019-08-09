@@ -1028,7 +1028,7 @@ matchFieldPtrPermOff _ _ = Nothing
 -- | Defines a substitution type @s@ that supports substituting into expression
 -- and permission variables in a given monad @m@
 class MonadBind m => SubstVar s m | s -> m where
-  extSubst :: s ctx -> PermExpr a -> s (ctx :> a)
+  extSubst :: s ctx -> ExprVar a -> s (ctx :> a)
   substExprVar :: s ctx -> Mb ctx (ExprVar a) -> m (PermExpr a)
   substPermVar :: s ctx -> Mb ctx (PermVar a) -> m (ValuePerm a)
 
@@ -1086,7 +1086,7 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
     ValPerm_Or <$> genSubst s p1 <*> genSubst s p2
   genSubst s [nuP| ValPerm_Exists p |] =
     ValPerm_Exists <$>
-    nuM (\x -> genSubst (extSubst s $ PExpr_Var x) $ mbCombine p)
+    nuM (\x -> genSubst (extSubst s x) $ mbCombine p)
   genSubst s [nuP| ValPerm_Mu p |] =
     ValPerm_Mu <$> mbM (fmap (genSubst s) $ mbSwap p)
   genSubst s [nuP| ValPerm_Var x |] = substPermVar s x
@@ -1136,7 +1136,7 @@ noPermsInCruCtx (Member_Step ctx) = noPermsInCruCtx ctx
 -- No case for Member_Base
 
 instance SubstVar PermSubst Identity where
-  extSubst (PermSubst elems) e = PermSubst $ elems :>: e
+  extSubst (PermSubst elems) x = PermSubst $ elems :>: PExpr_Var x
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> return $ substLookup s memb
@@ -1149,6 +1149,47 @@ instance SubstVar PermSubst Identity where
 -- | Wrapper function to apply a substitution to an expression type
 subst :: Substable PermSubst a Identity => PermSubst ctx -> Mb ctx a -> a
 subst s mb = runIdentity $ genSubst s mb
+
+
+----------------------------------------------------------------------
+-- * Variable Substitutions
+----------------------------------------------------------------------
+
+newtype VarSubstElem a = VarSubstElem { unVarSubstElem :: ExprVar a }
+
+-- | Like a substitution but assigns variables instead of arbitrary expressions
+-- to bound variables
+newtype PermVarSubst ctx =
+  PermVarSubst { unPermVarSubst :: MapRList VarSubstElem ctx }
+
+singletonVarSubst :: ExprVar a -> PermVarSubst (RNil :> a)
+singletonVarSubst x = PermVarSubst (empty :>: VarSubstElem x)
+
+varSubstLookup :: PermVarSubst ctx -> Member ctx a -> ExprVar a
+varSubstLookup (PermVarSubst m) memb =
+  unVarSubstElem $ mapRListLookup memb m
+
+varSubstVar :: PermVarSubst ctx -> Mb ctx (ExprVar a) -> ExprVar a
+varSubstVar s mb_x =
+  case mbNameBoundP mb_x of
+    Left memb -> varSubstLookup s memb
+    Right x -> x
+
+instance SubstVar PermVarSubst Identity where
+  extSubst (PermVarSubst elems) x = PermVarSubst $ elems :>: VarSubstElem x
+  substExprVar s x =
+    case mbNameBoundP x of
+      Left memb -> return $ PExpr_Var $ varSubstLookup s memb
+      Right y -> return $ PExpr_Var y
+  substPermVar s x =
+    case mbNameBoundP x of
+      Left memb -> noPermsInCruCtx memb
+      Right y -> return $ ValPerm_Var y
+
+-- | Wrapper function to apply a renamionmg to an expression type
+varSubst :: Substable PermVarSubst a Identity => PermVarSubst ctx ->
+            Mb ctx a -> a
+varSubst s mb = runIdentity $ genSubst s mb
 
 
 ----------------------------------------------------------------------
@@ -1213,8 +1254,8 @@ psubstLookup :: PartialSubst ctx -> Member ctx a -> Maybe (PermExpr a)
 psubstLookup (PartialSubst m) memb = unPSubstElem $ mapRListLookup memb m
 
 instance SubstVar PartialSubst Maybe where
-  extSubst (PartialSubst elems) e =
-    PartialSubst $ elems :>: PSubstElem (Just e)
+  extSubst (PartialSubst elems) x =
+    PartialSubst $ elems :>: PSubstElem (Just $ PExpr_Var x)
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> psubstLookup s memb
@@ -1256,6 +1297,13 @@ instance TestEquality DistPerms where
   testEquality _ _ = Nothing
 
 $(mkNuMatching [t| forall ps. DistPerms ps |])
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (DistPerms ps) m where
+  genSubst s [nuP| DistPermsNil |] = return DistPermsNil
+  genSubst s [nuP| DistPermsCons dperms' x p |] =
+    DistPermsCons <$> genSubst s dperms' <*>
+    return (varSubstVar s x) <*> genSubst s p
 
 type MbDistPerms ps = Mb ps (DistPerms ps)
 
