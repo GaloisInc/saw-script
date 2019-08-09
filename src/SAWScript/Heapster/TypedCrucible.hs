@@ -38,6 +38,8 @@ import Control.Lens hiding ((:>),Index)
 import Control.Monad.State
 import Control.Monad.Reader
 
+import Text.PrettyPrint.ANSI.Leijen (pretty)
+
 import Data.Parameterized.Context hiding ((:>), empty, take, view)
 -- import qualified Data.Parameterized.Context as C
 import Data.Parameterized.TraversableFC
@@ -911,6 +913,9 @@ tcTermStmt ctx (Return reg) =
   runImplM CruCtxNil (stCurPerms st) (TypedRet treg ret_perms) $
   proveVarsImpl $ distPermsToExDistPerms ret_perms
 tcTermStmt ctx (ErrorStmt reg) = greturn $ TypedErrorStmt $ tcReg ctx reg
+tcTermStmt _ tstmt =
+  error ("tcTermStmt: unhandled termination statement: "
+         ++ show (pretty tstmt))
 
 
 ----------------------------------------------------------------------
@@ -928,9 +933,12 @@ tcEmitStmtSeq :: PermCheckExtC ext => CtxTrans ctx ->
 tcEmitStmtSeq ctx (ConsStmt loc stmt stmts) =
   tcEmitStmt ctx loc stmt >>>= \ctx' ->
   tcEmitStmtSeq ctx' stmts
-
 tcEmitStmtSeq ctx (TermStmt loc tstmt) =
   tcTermStmt ctx tstmt >>>= \typed_tstmt ->
   gmapRet (const $ return $ TypedTermStmt loc typed_tstmt)
 
--- NOW: check jump targets and termination statements, and then whole CFGs
+-- FIXME HERE NOW:
+-- + type-check CFGs
+-- + translate -> SAW
+-- + handle function calls and a function call context
+-- + top-level interface / add to interpreter
