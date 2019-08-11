@@ -39,6 +39,7 @@ import Data.Binding.Hobbits.NameMap (NameMap)
 import qualified Data.Binding.Hobbits.NameMap as NameMap
 
 import Data.Parameterized.Context hiding ((:>), empty, take)
+import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.NatRepr
 
 import Lang.Crucible.Types
@@ -134,6 +135,17 @@ type family CtxCtxToRList (ctx :: Ctx (Ctx k)) :: RList (RList k) where
 type family RListToCtxCtx (ctx :: RList (RList k)) :: Ctx (Ctx k) where
   RListToCtxCtx RNil = EmptyCtx
   RListToCtxCtx (ctx' :> c) = RListToCtxCtx ctx' ::> RListToCtx c
+
+-- | Convert a Crucible 'Assignment' to a Hobbits 'MapRList'
+assignToRList :: Assignment f ctx -> MapRList f (CtxToRList ctx)
+assignToRList asgn = case viewAssign asgn of
+  AssignEmpty -> MNil
+  AssignExtend asgn' f -> assignToRList asgn' :>: f
+
+-- | Convert a Hobbits 'MapRList' to a Crucible 'Assignment'
+rlistToAssign :: MapRList f ctx -> Assignment f (RListToCtx ctx)
+rlistToAssign MNil = Ctx.empty
+rlistToAssign (rlist :>: f) = extend (rlistToAssign rlist) f
 
 -- | Representation types that support the 'withKnownRepr' operation
 class WithKnownRepr f where

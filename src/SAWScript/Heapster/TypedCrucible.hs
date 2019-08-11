@@ -41,7 +41,7 @@ import Control.Monad.Reader
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 
 import Data.Parameterized.Context hiding ((:>), empty, take, view)
--- import qualified Data.Parameterized.Context as C
+import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
 
 -- import Data.Parameterized.TraversableFC
@@ -118,10 +118,19 @@ instance NuMatchingAny1 BaseTypeRepr where
 instance NuMatchingAny1 TypeRepr where
   nuMatchingAny1Proof = nuMatchingProof
 
+$(mkNuMatching [t| forall f ctx . NuMatchingAny1 f => AssignView f ctx |])
+
+viewToAssign :: AssignView f ctx -> Assignment f ctx
+viewToAssign AssignEmpty = Ctx.empty
+viewToAssign (AssignExtend asgn' f) = extend asgn' f
+
 instance NuMatchingAny1 f => NuMatching (Assignment f ctx) where
   nuMatchingProof =
-    error "FIXME HERE"
-    -- isoMbTypeRepr assignToMapRList mapRListToAssign
+    -- FIXME: inefficient to map a whole Assignment step by step to ViewAssigns,
+    -- freshen each element, and then map back to the Assignment again; maybe we
+    -- need to figure out how to use the TraversableFC instance for Assignment
+    -- here?
+    isoMbTypeRepr viewAssign viewToAssign
 
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => BaseTerm f tp |])
 
