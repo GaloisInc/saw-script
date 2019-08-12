@@ -35,7 +35,7 @@ import Control.Monad.Identity
 import Control.Monad.State
 import Control.Lens hiding ((:>), Index)
 
-import Data.Binding.Hobbits.NameMap (NameMap)
+import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
 import qualified Data.Binding.Hobbits.NameMap as NameMap
 
 import Data.Parameterized.Context hiding ((:>), empty, take)
@@ -225,6 +225,11 @@ extCruCtx ctx = CruCtxCons ctx CruType
 -- | Remove an element from the end of a context
 unextCruCtx :: CruCtx (ctx :> a) -> CruCtx ctx
 unextCruCtx (CruCtxCons ctx _) = ctx
+
+-- | Append two contexts
+appendCruCtx :: CruCtx ctx1 -> CruCtx ctx2 -> CruCtx (ctx1 :++: ctx2)
+appendCruCtx ctx1 CruCtxNil = ctx1
+appendCruCtx ctx1 (CruCtxCons ctx2 tp) = CruCtxCons (appendCruCtx ctx1 ctx2) tp
 
 
 ----------------------------------------------------------------------
@@ -1319,6 +1324,12 @@ instance SubstVar PermVarSubst m =>
 
 type MbDistPerms ps = Mb ps (DistPerms ps)
 
+-- | Append two lists of distringuished permissions
+appendDistPerms :: DistPerms ps1 -> DistPerms ps2 -> DistPerms (ps1 :++: ps2)
+appendDistPerms ps1 DistPermsNil = ps1
+appendDistPerms ps1 (DistPermsCons ps2 x p) =
+  DistPermsCons (appendDistPerms ps1 ps2) x p
+
 -- | Lens for the top permission in a 'DistPerms' stack
 distPermsHead :: ExprVar a -> Lens' (DistPerms (ps :> a)) (ValuePerm a)
 distPermsHead x =
@@ -1373,6 +1384,23 @@ topDistPerm x = distPerms . distPermsHead x
 modifyDistPerms :: (DistPerms ps1 -> DistPerms ps2) ->
                    PermSet ps1 -> PermSet ps2
 modifyDistPerms f (PermSet perms dperms) = PermSet perms $ f dperms
+
+-- | Get all the permissions in the permission set as a sequence of
+-- distinguished permissions
+getAllPerms :: PermSet ps -> Some DistPerms
+getAllPerms perms = helper (NameMap.assocs $ perms ^. varPermMap) where
+  helper :: [NameAndElem ValuePerm] -> Some DistPerms
+  helper [] = Some DistPermsNil
+  helper (NameAndElem x p : xps) =
+    case helper xps of
+      Some ps -> Some $ DistPermsCons ps x p
+
+-- | Delete permission @x:p@ from the permission set, assuming @x@ has precisely
+-- permissions @p@, replacing it with @x:true@
+deletePerm :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet ps
+deletePerm x p =
+  over (varPerm x) $ \p' ->
+  if p' == p then ValPerm_True else error "deletePerm"
 
 -- | Push a new distinguished permission onto the top of the stack
 pushPerm :: ExprVar a -> ValuePerm a -> PermSet ps -> PermSet (ps :> a)

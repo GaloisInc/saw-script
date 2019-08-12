@@ -165,7 +165,7 @@ data TypedFnHandle ghosts args ret =
 -- point to that block. Each entry point also takes an extra set of "ghost"
 -- arguments, not extant in the original program, that are needed to express
 -- input and output permissions.
-data TypedEntryID blocks args ghosts =
+data TypedEntryID (blocks :: RList (RList CrucibleType)) args ghosts =
   TypedEntryID { entryBlockID :: Member blocks args,
                  entryGhosts :: CruCtx ghosts,
                  entryIndex :: Int }
@@ -180,6 +180,12 @@ data TypedArgs args where
   TypedArgsNil :: TypedArgs RNil
   TypedArgsCons :: KnownRepr TypeRepr a => TypedArgs args -> TypedReg a ->
                    TypedArgs (args :> a)
+
+appendTypedArgs :: TypedArgs args1 -> TypedArgs args2 ->
+                   TypedArgs (args1 :++: args2)
+appendTypedArgs args1 TypedArgsNil = args1
+appendTypedArgs args1 (TypedArgsCons args2 arg) =
+  TypedArgsCons (appendTypedArgs args1 args2) arg
 
 -- | A typed target for jump and branch statements, including arguments and a
 -- proof of the required permissions on those arguments
@@ -613,6 +619,10 @@ lookupBlockInfo :: BlockID blocks args' ->
                    (BlockInfo ext (CtxCtxToRList blocks) ret (CtxToRList args'))
 lookupBlockInfo = error "FIXME HERE"
 
+mkNewBlockEntry :: BlockID blocks args' -> CruCtx ghosts ->
+                   PermCheckM ext (CtxCtxToRList blocks) ret args r ps r ps
+                   (TypedEntryID (CtxCtxToRList blocks) (CtxToRList args') ghosts)
+mkNewBlockEntry blkID ghost_tps = error "FIXME HERE"
 
 getVarPerm :: ExprVar a ->
               PermCheckM ext blocks ret args r ps r ps (ValuePerm a)
@@ -886,19 +896,42 @@ tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME: tcEmitLLVMStmt"
 -- * Permission Checking for Jump Targets
 ----------------------------------------------------------------------
 
+getGhostTypes :: DistPerms ghosts ->
+                 StmtPermCheckM ext blocks ret args ps ps (CruCtx ghosts)
+getGhostTypes _ =
+  error "FIXME HERE NOW: emitStmt needs to add var types to the current state!"
+
+distPermsToArgs :: DistPerms ps -> TypedArgs ps
+distPermsToArgs = error "FIXME HERE NOW"
+
+argEqPerms :: TypedArgs ps -> DistPerms ps
+argEqPerms = error "FIXME HERE NOW"
+
 tcJumpTarget :: CtxTrans ctx -> JumpTarget blocks ctx ->
                 StmtPermCheckM ext (CtxCtxToRList blocks) ret args RNil RNil
                 (PermImpl (TypedJumpTarget (CtxCtxToRList blocks)) RNil)
-tcJumpTarget ctx (JumpTarget blkID _ args) =
+tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
+  gget >>>= \st ->
   lookupBlockInfo blkID >>>= \blkInfo ->
   if blockInfoVisited blkInfo then
     error "Cannot handle backwards jumps (FIXME)"
   else
-    error "FIXME HERE NOW"
-
+    case getAllPerms (stCurPerms st) of
+      Some ghost_perms ->
+        getGhostTypes ghost_perms >>>= \ghost_tps ->
+        mkNewBlockEntry blkID ghost_tps >>>= \entryID ->
+        let ctx_t = appendCruCtx ghost_tps (mkCruCtx arg_tps)
+            real_args_t = tcArgs ctx arg_tps args
+            args_t = appendTypedArgs (distPermsToArgs ghost_perms) real_args_t
+            perms = appendDistPerms ghost_perms (argEqPerms real_args_t)
+            target_t = TypedJumpTarget entryID ctx_t args_t perms in
+        greturn $
+        runImplM CruCtxNil (stCurPerms st) target_t
+        (implPushDelMultiM ghost_perms >>>
+         error "FIXME HERE NOW: prove eq perms for args")
 
 {-
-FIXME HERE NOW: Put DistPerms into TypedArgs? How does translation work?
+FIXME HERE NOW: add these comments to the above:
 - get all args with perms
 - add eq perms for the real args
 - make a PermImpl that pushes all these perms into the dist perms

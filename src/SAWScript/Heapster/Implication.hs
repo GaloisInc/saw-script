@@ -92,16 +92,15 @@ data PermImpl r ps where
   -- > --------------------------------------------------------------
   -- > Gin | Pl * Pin |- rets1, rets2
 
-{-
-  Impl_Push :: PermLoc a -> ValuePerm a -> PermImpl r (ps :> PermExpr a) ->
-               PermImpl r ps
-  -- ^ "Push" a permission from the input permission set to the stack of
-  -- distinguished permissions:
+  Impl_PushDel :: ExprVar a -> ValuePerm a -> PermImpl r (ps :> a) ->
+                  PermImpl r ps
+  -- ^ "Push" all of the permissions in the permission set for a variable, which
+  -- should be equal to the supplied permission, after deleting those
+  -- permissions from the input permission set:
   --
   -- > Gin | Pl,x:p * Pin |- rets
   -- > ---------------------------
   -- > Gin | Pl * Pin, x:p |- rets
--}
 
   Impl_ElimOr :: ExprVar a -> PermImpl r ps -> PermImpl r ps ->
                  PermImpl r ps
@@ -756,30 +755,24 @@ implDoneM :: ImplM vars r ps ps ()
 implDoneM = gmapRetAndState id Impl_Done
 -}
 
-{-
--- | Push a permission from the permission set to the permission stack
-implPushM :: PermState s => PermLoc a -> ValuePerm a ->
-             PermM s (PermImpl r (ls :> PermExpr a)) (PermImpl r ls) ()
-implPushM l p =
-  gmapRet (Impl_Push l p) >>>
-  modify (over permStatePerms $ permDelete l p)
--}
+-- | "Push" all of the permissions in the permission set for a variable, which
+-- should be equal to the supplied permission, after deleting those permissions
+-- from the input permission set. This is like a simple "proof" of @x:p@.
+implPushDelM :: ExprVar a -> ValuePerm a -> ImplM vars r (ps :> a) ps ()
+implPushDelM x p =
+  gmapRetAndPerms (pushPerm x p . deletePerm x p) (Impl_PushDel x p)
+
+-- | Call 'implPushDelM' for multiple @x:p@ permissions
+implPushDelMultiM :: DistPerms ps -> ImplM vars r ps RNil ()
+implPushDelMultiM DistPermsNil = greturn ()
+implPushDelMultiM (DistPermsCons ps x p) =
+  implPushDelMultiM ps >>> implPushDelM x p
 
 -- | Produce a branching proof tree, that performs the first implication and, if
 -- that one fails, falls back on the second
 implCatchM :: ImplM vars r ps1 ps2 () -> ImplM vars r ps1 ps2 () ->
               ImplM vars r ps1 ps2 ()
 implCatchM m1 m2 = gparallel Impl_Catch m1 m2
-  -- FIXME: figure out the "right" way to write this with shift and reset!
-  {-
-  GenStateT $ \s -> GenContT $ \k ->
-  Impl_Catch <$> (unGenContT (unGenStateT m1 s) k)
-  <*> (unGenContT (unGenStateT m2 s) k)
-  -}
-  {-
-  gmapRet (\(impl1, impl2) -> Impl_Catch impl1 impl2) >>>
-  gparallel m1 m2
-  -}
 
 -- | Apply the left or-introduction rule to the top of the permission stack,
 -- changing it from @x:p1@ to @x:(p1 \/ p2)@
