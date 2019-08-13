@@ -1065,12 +1065,32 @@ ecReverse =
 
 ecTranspose : (m n : Num) -> (a : sort 0) -> seq m (seq n a) ->
                seq n (seq m a);
-ecTranspose =
-  finNumRec2
-    (\ (m:Num) -> \ (n:Num) -> (a:sort 0) -> seq m (seq n a) ->
-       seq n (seq m a))
-    transpose;
-
+ecTranspose m n a =
+  Num#rec
+    (\ (m : Num) -> seq m (seq n a) -> seq n (seq m a))
+    (\ (m : Nat) ->
+      Num#rec
+        (\ (n : Num) -> Vec m (seq n a) -> seq n (Vec m a))
+        (\ (n : Nat) -> transpose m n a)
+        (\ (xss : Vec m (Stream a)) ->
+          MkStream (Vec m a) (\ (i : Nat) ->
+            gen m a (\ (j : Nat) ->
+              streamGet a (at m (Stream a) xss j) i)))
+        n
+    )
+    ( Num#rec
+        (\ (n : Num) -> Stream (seq n a) -> seq n (Stream a))
+        (\ (n : Nat) -> \ (xss : Stream (Vec n a)) ->
+          gen n (Stream a) (\ (i : Nat) ->
+            MkStream a (\ (j : Nat) ->
+              at n a (streamGet (Vec n a) xss j) i)))
+        (\ (xss : Stream (Stream a)) ->
+          MkStream (Stream a) (\ (i : Nat) ->
+            MkStream a (\ (j : Nat) ->
+              streamGet a (streamGet (Stream a) xss j) i)))
+        n
+    )
+    m;
 
 ecAt : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a -> seq i Bool -> a;
 ecAt n a i =
