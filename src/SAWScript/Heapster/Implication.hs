@@ -1218,6 +1218,14 @@ proveVarsImpl :: NuMatchingAny1 r => ExDistPerms vars as ->
 proveVarsImpl ExDistPermsNil = return ()
 proveVarsImpl (ExDistPermsCons ps x p) = proveVarsImpl ps >>> proveVarImpl x p
 
+-- | Like 'proveVarsImpl' but the starting permission set need not be empty, and
+-- so is appended to
+proveVarsImplAppend :: NuMatchingAny1 r => ExDistPerms vars ps' ->
+                       ImplM vars r (ps :++: ps') ps ()
+proveVarsImplAppend ExDistPermsNil = return ()
+proveVarsImplAppend (ExDistPermsCons ps x p) =
+  proveVarsImplAppend ps >>> proveVarImpl x p
+
 
 ----------------------------------------------------------------------
 -- * Recombining Permissions

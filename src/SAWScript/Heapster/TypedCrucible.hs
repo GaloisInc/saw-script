@@ -178,25 +178,12 @@ instance TestEquality (TypedEntryID blocks args) where
     | memb1 == memb2 && i1 == i2 = testEquality ghosts1 ghosts2
   testEquality _ _ = Nothing
 
--- | A collection of arguments to a function or jump target
-data TypedArgs args where
-  TypedArgsNil :: TypedArgs RNil
-  TypedArgsCons :: KnownRepr TypeRepr a => TypedArgs args -> TypedReg a ->
-                   TypedArgs (args :> a)
-
-appendTypedArgs :: TypedArgs args1 -> TypedArgs args2 ->
-                   TypedArgs (args1 :++: args2)
-appendTypedArgs args1 TypedArgsNil = args1
-appendTypedArgs args1 (TypedArgsCons args2 arg) =
-  TypedArgsCons (appendTypedArgs args1 args2) arg
-
--- | A typed target for jump and branch statements, including arguments and a
--- proof of the required permissions on those arguments
+-- | A typed target for jump and branch statements, where the arguments
+-- (including ghost arguments) are given with their permissions as a 'DistPerms'
 data TypedJumpTarget blocks ps where
      TypedJumpTarget ::
        TypedEntryID blocks args ghosts ->
        CruCtx (ghosts :++: args) ->
-       TypedArgs (ghosts :++: args) ->
        DistPerms (ghosts :++: args) ->
        TypedJumpTarget blocks ps_in
 
@@ -214,7 +201,6 @@ type NuMatchingExtC ext =
 $(mkNuMatching [t| forall ext tp. NuMatchingExtC ext => TypedExpr ext tp |])
 $(mkNuMatching [t| forall ghosts args ret. TypedFnHandle ghosts args ret |])
 $(mkNuMatching [t| forall blocks ghosts args. TypedEntryID blocks args ghosts |])
-$(mkNuMatching [t| forall args. TypedArgs args |])
 $(mkNuMatching [t| forall blocks ps_in. TypedJumpTarget blocks ps_in |])
 
 instance NuMatchingAny1 (TypedJumpTarget blocks) where
@@ -784,6 +770,7 @@ tcReg :: CtxTrans ctx -> Reg ctx tp -> TypedReg tp
 tcReg ctx (Reg ix) = ctx ! ix
 
 -- | Type-check a sequence of Crucible arguments into a 'TypedArgs' list
+{-
 tcArgs :: CtxTrans ctx -> CtxRepr args -> Assignment (Reg ctx) args ->
           TypedArgs (CtxToRList args)
 tcArgs _ _ (viewAssign -> AssignEmpty) = TypedArgsNil
@@ -791,6 +778,7 @@ tcArgs ctx (viewAssign ->
             AssignExtend arg_tps' tp) (viewAssign -> AssignExtend args' reg) =
   withKnownRepr tp $
   TypedArgsCons (tcArgs ctx arg_tps' args') (tcReg ctx reg)
+-}
 
 -- | Type-check a Crucibe block id into a 'Member' proof
 tcBlockID :: BlockID cblocks args ->
@@ -999,17 +987,14 @@ distPermTypes DistPermsNil = greturn CruCtxNil
 distPermTypes (DistPermsCons ps x _) =
   CruCtxCons <$> distPermTypes ps <*> getVarType x
 
-distPermsToArgs :: DistPerms ps -> TypedArgs ps
-distPermsToArgs = error "FIXME HERE NOW"
+argsToEqPerms :: CtxTrans ctx -> Assignment (Reg ctx) args ->
+                 DistPerms (CtxToRList args)
+argsToEqPerms _ (viewAssign -> AssignEmpty) = DistPermsNil
+argsToEqPerms ctx (viewAssign -> AssignExtend args reg) =
+  let x = typedRegVar (tcReg ctx reg) in
+  DistPermsCons (argsToEqPerms ctx args) x (ValPerm_Eq $ PExpr_Var x)
 
-argEqPerms :: TypedArgs ps -> DistPerms ps
-argEqPerms = error "FIXME HERE NOW"
-
-proveArgEqPerms :: TypedArgs ps -> ImplM vars r (ps' :++: ps) ps' ()
-proveArgEqPerms TypedArgsNil = greturn ()
-proveArgEqPerms (TypedArgsCons args reg) =
-  proveArgEqPerms args >>> introEqReflM (typedRegVar reg)
-
+-- | Type-check a Crucible jump target
 tcJumpTarget :: CtxTrans ctx -> JumpTarget cblocks ctx ->
                 StmtPermCheckM ext cblocks blocks ret args RNil RNil
                 (PermImpl (TypedJumpTarget blocks) RNil)
@@ -1038,10 +1023,9 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         -- arguments, and then permissions. These are all used to build the
         -- TypedJumpTarget.
         let ctx_t = appendCruCtx ghost_tps (mkCruCtx arg_tps)
-            real_args_t = tcArgs ctx arg_tps args
-            args_t = appendTypedArgs (distPermsToArgs ghost_perms) real_args_t
-            perms = appendDistPerms ghost_perms (argEqPerms real_args_t)
-            target_t = TypedJumpTarget entryID ctx_t args_t perms in
+            arg_eq_perms = argsToEqPerms ctx args
+            perms = appendDistPerms ghost_perms arg_eq_perms
+            target_t = TypedJumpTarget entryID ctx_t perms in
 
         -- Finally, build the PermImpl that proves all the required permissions
         -- from the current permission set. This proof just copies the existing
@@ -1049,7 +1033,8 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         -- that each "real" argument register equals itself.
         greturn $
         runImplM CruCtxNil (stCurPerms st) target_t
-        (implPushDelMultiM ghost_perms >>> proveArgEqPerms args_t)
+        (implPushDelMultiM ghost_perms >>>
+         proveVarsImplAppend (distPermsToExDistPerms arg_eq_perms))
 
 {-
 FIXME HERE NOW: add these comments to the above:
