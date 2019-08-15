@@ -136,6 +136,9 @@ type family RListToCtxCtx (ctx :: RList (RList k)) :: Ctx (Ctx k) where
   RListToCtxCtx RNil = EmptyCtx
   RListToCtxCtx (ctx' :> c) = RListToCtxCtx ctx' ::> RListToCtx c
 
+ctxCtxToRListId :: f ctx -> ctx :~: RListToCtxCtx (CtxCtxToRList ctx)
+ctxCtxToRListId _ = error "FIXME HERE NOW: uncomment that ->" -- unsafeCoerce Refl
+
 -- | Convert a Crucible 'Assignment' to a Hobbits 'MapRList'
 assignToRList :: Assignment f ctx -> MapRList f (CtxToRList ctx)
 assignToRList asgn = case viewAssign asgn of
@@ -177,6 +180,9 @@ instance TestEquality CruType where
   testEquality (CruType :: CruType a1) (CruType :: CruType a2) =
     testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
 
+instance Closable (CruType a) where
+  toClosed CruType = $(mkClosed [| CruType |])
+
 -- | A context of Crucible types. NOTE: we do not use 'MapRList' here, because
 -- we do not yet have a nice way to define the 'NuMatching' instance we want...
 data CruCtx ctx where
@@ -185,6 +191,11 @@ data CruCtx ctx where
 
 $(mkNuMatching [t| forall a. CruType a |])
 $(mkNuMatching [t| forall ctx. CruCtx ctx |])
+
+instance Closable (CruCtx ctx) where
+  toClosed CruCtxNil = $(mkClosed [| CruCtxNil |])
+  toClosed (CruCtxCons ctx a) =
+    $(mkClosed [| CruCtxCons |]) `clApply` toClosed ctx `clApply` toClosed a
 
 instance TestEquality CruCtx where
   testEquality CruCtxNil CruCtxNil = Just Refl
