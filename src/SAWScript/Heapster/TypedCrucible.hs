@@ -40,6 +40,9 @@ import Control.Monad.Reader
 
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 
+import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
+import qualified Data.Binding.Hobbits.NameMap as NameMap
+
 import Data.Parameterized.Context hiding ((:>), empty, take, view)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
@@ -521,7 +524,8 @@ data PermCheckState ext args ret ps =
   {
     stCurPerms :: PermSet ps,
     stExtState :: PermCheckExtState ext,
-    stRetPerms :: Binding ret (DistPerms (args :> ret))
+    stRetPerms :: Binding ret (DistPerms (args :> ret)),
+    stVarTypes :: NameMap CruType
   }
 
 -- | Like the 'set' method of a lens, but allows the @ps@ argument to change
@@ -692,10 +696,31 @@ getFramePtr :: PermCheckM (LLVM arch) cblocks blocks ret args r ps r ps
 getFramePtr = gget >>>= \st -> case stExtState st of
   PermCheckExtState_LLVM maybe_fp -> greturn maybe_fp
 
+-- | Set the current frame pointer on LLVM architectures
 setFramePtr :: TypedReg (LLVMFrameType (ArchWidth arch)) ->
                PermCheckM (LLVM arch) cblocks blocks ret args r ps r ps ()
 setFramePtr fp =
   gmodify (\st -> st { stExtState = PermCheckExtState_LLVM (Just fp) })
+
+-- | Look up the type of a free variable, or raise an error if it is unknown
+getVarType :: ExprVar a ->
+              PermCheckM ext cblocks blocks ret args r ps r ps (CruType a)
+getVarType x =
+  maybe (error "getVarType") id <$> NameMap.lookup x <$> stVarTypes <$> gget
+
+-- | Remember the type of a free variable
+setVarType :: ExprVar a -> CruType a ->
+              PermCheckM ext cblocks blocks ret args r ps r ps ()
+setVarType x tp =
+  gmodify $ \st ->
+  st { stVarTypes = NameMap.insert x tp (stVarTypes st) }
+
+-- | Remember the types of a sequence of free variables
+setVarTypes :: MapRList Name tps -> CruCtx tps ->
+               PermCheckM ext cblocks blocks ret args r ps r ps ()
+setVarTypes _ CruCtxNil = greturn ()
+setVarTypes (xs :>: x) (CruCtxCons tps tp) =
+  setVarTypes xs tps >>> setVarType x tp
 
 -- | Failure in the statement permission-checking monad
 stmtFailM :: PermCheckM ext cblocks blocks ret args r1 ps1
@@ -767,6 +792,7 @@ tcArgs ctx (viewAssign ->
   withKnownRepr tp $
   TypedArgsCons (tcArgs ctx arg_tps' args') (tcReg ctx reg)
 
+-- | Type-check a Crucibe block id into a 'Member' proof
 tcBlockID :: BlockID cblocks args ->
              StmtPermCheckM ext cblocks blocks ret args' ps ps
              (Member blocks (CtxToRList args))
@@ -791,26 +817,28 @@ tcExpr ctx (App app) = greturn $ TypedExpr $ fmapFC (tcReg ctx) app
 -- function says how that statement modifies the current permissions, given the
 -- freshly-bound names for the return values. Return those freshly-bound names
 -- for the return values.
-emitStmt :: TypeCtx rets => ProgramLoc ->
+emitStmt :: TypeCtx rets => CruCtx rets -> ProgramLoc ->
             StmtPermFun rets ps_out ps_in ->
             TypedStmt ext rets ps_out ps_in ->
             StmtPermCheckM ext cblocks blocks ret args ps_out ps_in
             (MapRList Name rets)
-emitStmt loc f_perms stmt =
+emitStmt tps loc f_perms stmt =
   gopenBinding
   ((TypedConsStmt loc stmt <$>) . strongMbM)
   (nuMulti typeCtxProxies $ \vars -> ()) >>>= \(ns, ()) ->
+  setVarTypes ns tps >>>
   gmodify (modifySTCurPerms $ f_perms ns) >>>
   greturn ns
 
 -- | Call emitStmt with a 'TypedLLVMStmt'
-emitLLVMStmt :: ProgramLoc ->
+emitLLVMStmt :: TypeRepr tp -> ProgramLoc ->
                 StmtPermFun (RNil :> tp) ps_out ps_in ->
                 TypedLLVMStmt (ArchWidth arch) tp ps_out ps_in ->
                 StmtPermCheckM (LLVM arch) cblocks blocks ret args ps_out ps_in
                 (Name tp)
-emitLLVMStmt loc f_perms stmt =
-  emitStmt loc f_perms (TypedLLVMStmt stmt) >>>= \(_ :>: n) -> greturn n
+emitLLVMStmt tp loc f_perms stmt =
+  emitStmt (singletonCruCtx tp)
+  loc f_perms (TypedLLVMStmt stmt) >>>= \(_ :>: n) -> greturn n
 
 
 -- | Typecheck a statement and emit it in the current statement sequence,
@@ -822,7 +850,8 @@ tcEmitStmt :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
 tcEmitStmt ctx loc (SetReg tp e) =
   tcExpr ctx e >>>= \typed_e ->
   let perm_f = maybe nullPermFun eqPermFun (exprToPermExpr typed_e) in
-  emitStmt loc perm_f (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
+  emitStmt (singletonCruCtx tp) loc
+  perm_f (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
   greturn $ addCtxName ctx x
 
 tcEmitStmt ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
@@ -848,7 +877,7 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerExpr w blk_reg off_reg) =
   case maybe_const of
     Just 0 ->
       withKnownNat w $
-      emitLLVMStmt loc
+      emitLLVMStmt knownRepr loc
       (eqPermFun $ PExpr_LLVMWord $ PExpr_Var $ typedRegVar toff_reg)
       (ConstructLLVMWord toff_reg) >>>= \x ->
       greturn $ addCtxName ctx x
@@ -860,7 +889,7 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerBlock w ptr_reg) =
   let tptr_reg = tcReg ctx ptr_reg in
   withKnownNat w $
   stmtProvePerm tptr_reg llvmExEqWord >>>= \_ ->
-  emitLLVMStmt loc
+  emitLLVMStmt knownRepr loc
   (eqPermFun $ PExpr_Nat 0) (AssertLLVMWord tptr_reg) >>>= \x ->
   stmtRecombinePerms >>>
   greturn (addCtxName ctx x)
@@ -872,7 +901,7 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerOffset w ptr_reg) =
   withKnownNat w $
   stmtProvePerm tptr_reg llvmExEqWord >>>= \subst ->
   let e = substLookup subst Member_Base in
-  emitLLVMStmt loc
+  emitLLVMStmt knownRepr loc
   (eqPermFun e) (DestructLLVMWord tptr_reg e) >>>= \x ->
   stmtRecombinePerms >>>
   greturn (addCtxName ctx x)
@@ -891,7 +920,8 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg (LLVMPointerRepr w) _ _)
   | Just Refl <- testEquality w (archWidth arch)
   = let treg = tcReg ctx reg in
     stmtProvePerm treg llvmExRead0Perm >>>= \_ ->
-    (emitLLVMStmt loc (llvmLoadPermFun treg) (TypedLLVMLoad treg)) >>>= \y ->
+    (emitLLVMStmt knownRepr loc
+     (llvmLoadPermFun treg) (TypedLLVMLoad treg)) >>>= \y ->
     stmtRecombinePerms >>>
     greturn (addCtxName ctx y)
 
@@ -911,7 +941,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr (LLVMPointerRepr w) _ _ val)
   = let tptr = tcReg ctx ptr
         tval = tcReg ctx val in
     stmtProvePerm tptr llvmExWrite0Perm >>>= \_ ->
-    (emitLLVMStmt loc (llvmStorePermFun tptr tval)
+    (emitLLVMStmt knownRepr loc (llvmStorePermFun tptr tval)
      (TypedLLVMStore tptr tval)) >>>= \y ->
     stmtRecombinePerms >>>
     greturn (addCtxName ctx y)
@@ -925,7 +955,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
   resolveConstant sz_treg >>>= \maybe_sz ->
   case (maybe_fp, maybe_sz) of
     (Just fp, Just sz) ->
-      (emitLLVMStmt loc (llvmAllocaPermFun fp sz)
+      (emitLLVMStmt knownRepr loc (llvmAllocaPermFun fp sz)
        (TypedLLVMAlloca fp sz)) >>>= \y ->
       stmtRecombinePerms >>>
       greturn (addCtxName ctx y)
@@ -934,9 +964,9 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
 
 -- Type-check a push frame instruction
 tcEmitLLVMStmt arch ctx loc (LLVM_PushFrame _) =
-  emitLLVMStmt loc llvmCreateFramePermFun TypedLLVMCreateFrame >>>= \fp ->
+  emitLLVMStmt knownRepr loc llvmCreateFramePermFun TypedLLVMCreateFrame >>>= \fp ->
   setFramePtr (TypedReg fp) >>>
-  emitStmt loc (eqPermFun PExpr_Unit)
+  emitStmt knownRepr loc (eqPermFun PExpr_Unit)
   (TypedSetReg knownRepr $ TypedExpr EmptyApp) >>>= \(_ :>: y) ->
   greturn (addCtxName ctx y)
 
@@ -947,7 +977,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
   case (maybe_fp, fp_perm) of
     (Just fp, ValPerm_LLVMFrame fperms)
       | Some del_perms <- llvmFrameDeletionPerms fperms ->
-        emitLLVMStmt loc (llvmDeleteFramePermFun fp)
+        emitLLVMStmt knownRepr loc (llvmDeleteFramePermFun fp)
         (TypedLLVMDeleteFrame fp) >>>= \y ->
         gmodify (\st -> st { stExtState = PermCheckExtState_LLVM Nothing }) >>>
         greturn (addCtxName ctx y)
@@ -962,11 +992,12 @@ tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME: tcEmitLLVMStmt"
 -- * Permission Checking for Jump Targets
 ----------------------------------------------------------------------
 
-getGhostTypes :: DistPerms ghosts ->
+distPermTypes :: DistPerms tps ->
                  StmtPermCheckM ext cblocks blocks ret args ps ps
-                 (CruCtx ghosts)
-getGhostTypes _ =
-  error "FIXME HERE NOW: emitStmt needs to add var types to the current state!"
+                 (CruCtx tps)
+distPermTypes DistPermsNil = greturn CruCtxNil
+distPermTypes (DistPermsCons ps x _) =
+  CruCtxCons <$> distPermTypes ps <*> getVarType x
 
 distPermsToArgs :: DistPerms ps -> TypedArgs ps
 distPermsToArgs = error "FIXME HERE NOW"
@@ -998,7 +1029,7 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         -- Get the types of all variables we hold permissions on, and then use
         -- these to make a new entrypoint into the given block, whose ghost
         -- arguments are all those that we hold permissions on
-        getGhostTypes ghost_perms >>>= \ghost_tps ->
+        distPermTypes ghost_perms >>>= \ghost_tps ->
         insNewBlockEntry memb ghost_tps
         (error "FIXME HERE NOW") (error "FIXME HERE NOW") >>>= \entryID ->
 

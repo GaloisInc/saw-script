@@ -176,6 +176,10 @@ instance WithKnownRepr (Index ctx) where
 data CruType a where
   CruType :: KnownRepr TypeRepr a => CruType a
 
+-- | Extract the 'TypeRepr' from a 'CruType'
+unCruType :: CruType a -> TypeRepr a
+unCruType CruType = knownRepr
+
 instance TestEquality CruType where
   testEquality (CruType :: CruType a1) (CruType :: CruType a2) =
     testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
@@ -228,6 +232,10 @@ mkCruCtx ctx = case viewAssign ctx of
 -- | The empty context
 emptyCruCtx :: CruCtx RNil
 emptyCruCtx = CruCtxNil
+
+-- | Build a singleton crucible context
+singletonCruCtx :: TypeRepr tp -> CruCtx (RNil :> tp)
+singletonCruCtx tp = CruCtxCons CruCtxNil (mkCruType tp)
 
 -- | Add an element to the end of a context
 extCruCtx :: KnownRepr TypeRepr a => CruCtx ctx -> CruCtx (ctx :> a)
