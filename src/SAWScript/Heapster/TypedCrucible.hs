@@ -503,6 +503,8 @@ data PermCheckExtState ext where
 data SomeLLVMFrame where
   SomeLLVMFrame :: NatRepr w -> TypedReg (LLVMFrameType w) -> SomeLLVMFrame
 
+newtype RetPerms ret ps = RetPerms { unRetPerms :: Binding ret (DistPerms ps) }
+
 -- | The local state maintained while type-checking is the current permission
 -- set and the permissions required on return from the entire function.
 data PermCheckState ext args ret ps =
@@ -510,7 +512,7 @@ data PermCheckState ext args ret ps =
   {
     stCurPerms :: PermSet ps,
     stExtState :: PermCheckExtState ext,
-    stRetPerms :: Binding ret (DistPerms (args :> ret)),
+    stRetPerms :: Some (RetPerms ret),
     stVarTypes :: NameMap CruType
   }
 
@@ -530,7 +532,7 @@ data BlockEntryInfo blocks ret args where
   BlockEntryInfo :: {
     entryInfoID :: TypedEntryID blocks args ghosts,
     entryInfoPermsIn :: MbDistPerms (ghosts :++: args),
-    entryInfoPermsOut :: MbDistPerms (ghosts :++: args :> ret)
+    entryInfoPermsOut :: Mb (ghosts :++: args) (RetPerms ret ret_ps)
   } -> BlockEntryInfo blocks ret args
 
 -- | Extract the 'BlockID' from entrypoint info
@@ -554,7 +556,7 @@ data BlockInfo ext blocks ret args =
 -- | Add a new 'BlockEntryInfo' to a 'BlockInfo' and return its 'TypedEntryID'.
 -- This assumes that the block has not been visited; if it has, it is an error.
 blockInfoAddEntry :: CruCtx ghosts -> MbDistPerms (ghosts :++: args) ->
-                     MbDistPerms (ghosts :++: args :> ret) ->
+                     Mb (ghosts :++: args) (RetPerms ret ret_ps) ->
                      BlockInfo ext blocks ret args ->
                      (BlockInfo ext blocks ret args,
                       TypedEntryID blocks args ghosts)
@@ -570,7 +572,7 @@ type BlockInfoMap ext blocks ret = MapRList (BlockInfo ext blocks ret) blocks
 
 blockInfoMapAddEntry :: Member blocks args -> CruCtx ghosts ->
                         MbDistPerms (ghosts :++: args) ->
-                        MbDistPerms (ghosts :++: args :> ret) ->
+                        Mb (ghosts :++: args) (RetPerms ret ret_ps) ->
                         BlockInfoMap ext blocks ret ->
                         (BlockInfoMap ext blocks ret,
                          TypedEntryID blocks args ghosts)
@@ -653,7 +655,7 @@ lookupBlockInfo memb =
 
 insNewBlockEntry :: Member blocks args -> CruCtx ghosts ->
                     Closed (MbDistPerms (ghosts :++: args)) ->
-                    Closed (MbDistPerms (ghosts :++: args :> ret)) ->
+                    Closed (Mb (ghosts :++: args) (RetPerms ret ret_ps)) ->
                     PermCheckM ext cblocks blocks ret args_in r ps r ps
                     (TypedEntryID blocks args ghosts)
 insNewBlockEntry memb ghost_tps perms_in perms_ret =
@@ -693,6 +695,12 @@ getVarType :: ExprVar a ->
               PermCheckM ext cblocks blocks ret args r ps r ps (CruType a)
 getVarType x =
   maybe (error "getVarType") id <$> NameMap.lookup x <$> stVarTypes <$> gget
+
+-- | Look up the types of multiple free variables
+getVarTypes :: MapRList Name tps ->
+               PermCheckM ext cblocks blocks ret args r ps r ps (CruCtx tps)
+getVarTypes MNil = greturn CruCtxNil
+getVarTypes (xs :>: x) = CruCtxCons <$> getVarTypes xs <*> getVarType x
 
 -- | Remember the type of a free variable
 setVarType :: ExprVar a -> CruType a ->
@@ -980,19 +988,48 @@ tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME: tcEmitLLVMStmt"
 -- * Permission Checking for Jump Targets
 ----------------------------------------------------------------------
 
-distPermTypes :: DistPerms tps ->
-                 StmtPermCheckM ext cblocks blocks ret args ps ps
-                 (CruCtx tps)
-distPermTypes DistPermsNil = greturn CruCtxNil
-distPermTypes (DistPermsCons ps x _) =
-  CruCtxCons <$> distPermTypes ps <*> getVarType x
-
 argsToEqPerms :: CtxTrans ctx -> Assignment (Reg ctx) args ->
                  DistPerms (CtxToRList args)
 argsToEqPerms _ (viewAssign -> AssignEmpty) = DistPermsNil
 argsToEqPerms ctx (viewAssign -> AssignExtend args reg) =
   let x = typedRegVar (tcReg ctx reg) in
   DistPermsCons (argsToEqPerms ctx args) x (ValPerm_Eq $ PExpr_Var x)
+
+class AbstractNames a where
+  abstractNames :: MapRList Name ctx -> a -> Maybe (Closed (Mb ctx a))
+
+instance AbstractNames (DistPerms ps) where
+  abstractNames = error "FIXME HERE NOW"
+
+instance AbstractNames a => AbstractNames (Mb ctx a) where
+  abstractNames = error "FIXME HERE NOW"
+
+instance Closable (Proxy a) where
+  toClosed Proxy = $(mkClosed [| Proxy |])
+
+closedProxies :: MapRList f args -> Closed (MapRList Proxy args)
+closedProxies MNil = $(mkClosed [| MNil |])
+closedProxies (args :>: _) =
+  $(mkClosed [| (:>:) |]) `clApply` closedProxies args
+  `clApply` $(mkClosed [| Proxy |])
+
+abstractPermsIn :: MapRList Name ghosts -> MapRList f args ->
+                   DistPerms (ghosts :++: args) ->
+                   Closed (MbDistPerms (ghosts :++: args))
+abstractPermsIn xs args perms =
+  $(mkClosed [| \args -> mbCombine . fmap (nuMulti args . const) |])
+  `clApply` closedProxies args
+  `clApply` maybe (error "abstractPermsIn") id (abstractNames xs perms)
+
+abstractPermsRet :: MapRList Name ghosts -> MapRList f args ->
+                    RetPerms ret ret_ps ->
+                    Closed (Mb (ghosts :++: args) (RetPerms ret ret_ps))
+abstractPermsRet xs args (RetPerms mb_perms) =
+  $(mkClosed [| \args -> fmap RetPerms . mbCombine
+                         . fmap (nuMulti args . const) |])
+  `clApply` closedProxies args
+  `clApply` maybe (error "abstractPermsRet") id (abstractNames xs mb_perms)
+
 
 -- | Type-check a Crucible jump target
 tcJumpTarget :: CtxTrans ctx -> JumpTarget cblocks ctx ->
@@ -1009,14 +1046,12 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
   else
     -- If not, we can make a new entrypoint that takes all of the current
     -- permissions as input
-    case getAllPerms (stCurPerms st) of
-      Some ghost_perms ->
+    case (getAllPerms (stCurPerms st), stRetPerms st) of
+      (Some ghost_perms, Some ret_perms) ->
         -- Get the types of all variables we hold permissions on, and then use
         -- these to make a new entrypoint into the given block, whose ghost
         -- arguments are all those that we hold permissions on
-        distPermTypes ghost_perms >>>= \ghost_tps ->
-        insNewBlockEntry memb ghost_tps
-        (error "FIXME HERE NOW") (error "FIXME HERE NOW") >>>= \entryID ->
+        getVarTypes (distPermsVars ghost_perms) >>>= \ghost_tps ->
 
         -- Translate the "real" arguments into TypedArgs, and then form the
         -- append of (ghosts :++: real_args) for the types, the actual
@@ -1024,8 +1059,15 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         -- TypedJumpTarget.
         let ctx_t = appendCruCtx ghost_tps (mkCruCtx arg_tps)
             arg_eq_perms = argsToEqPerms ctx args
-            perms = appendDistPerms ghost_perms arg_eq_perms
-            target_t = TypedJumpTarget entryID ctx_t perms in
+            perms = appendDistPerms ghost_perms arg_eq_perms in        
+
+        insNewBlockEntry memb ghost_tps
+        (abstractPermsIn (distPermsVars ghost_perms)
+         (distPermsVars arg_eq_perms) perms)
+        (abstractPermsRet (distPermsVars ghost_perms)
+         (distPermsVars arg_eq_perms) ret_perms) >>>= \entryID ->
+
+        let target_t = TypedJumpTarget entryID ctx_t perms in
 
         -- Finally, build the PermImpl that proves all the required permissions
         -- from the current permission set. This proof just copies the existing
@@ -1044,6 +1086,7 @@ FIXME HERE NOW: add these comments to the above:
 - create a TypedArgs from this
 -}
 
+
 tcTermStmt :: PermCheckExtC ext => CtxTrans ctx ->
               TermStmt cblocks ret ctx ->
               StmtPermCheckM ext cblocks blocks ret args RNil RNil
@@ -1055,11 +1098,13 @@ tcTermStmt ctx (Br reg tgt1 tgt2) =
 tcTermStmt ctx (Return reg) =
   let treg = tcReg ctx reg in
   gget >>>= \st ->
-  let ret_perms =
-        varSubst (singletonVarSubst $ typedRegVar treg) (stRetPerms st) in
-  greturn $ TypedReturn $
-  runImplM CruCtxNil (stCurPerms st) (TypedRet treg ret_perms) $
-  proveVarsImpl $ distPermsToExDistPerms ret_perms
+  case stRetPerms st of
+    Some (RetPerms mb_ret_perms) ->
+      let ret_perms =
+            varSubst (singletonVarSubst $ typedRegVar treg) mb_ret_perms in
+      greturn $ TypedReturn $
+      runImplM CruCtxNil (stCurPerms st) (TypedRet treg ret_perms) $
+      proveVarsImpl $ distPermsToExDistPerms ret_perms
 tcTermStmt ctx (ErrorStmt reg) = greturn $ TypedErrorStmt $ tcReg ctx reg
 tcTermStmt _ tstmt =
   error ("tcTermStmt: unhandled termination statement: "
@@ -1087,6 +1132,7 @@ tcEmitStmtSeq ctx (TermStmt loc tstmt) =
 
 {-
 -- FIXME HERE NOW:
+-- + type-check block entrypoints
 -- + type-check CFGs
 -- + translate -> SAW
 -- + handle function calls and a function call context

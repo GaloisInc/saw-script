@@ -1343,6 +1343,11 @@ instance SubstVar PermVarSubst m =>
 
 type MbDistPerms ps = Mb ps (DistPerms ps)
 
+-- | Extract the variables in a 'DistPerms'
+distPermsVars :: DistPerms ps -> MapRList Name ps
+distPermsVars DistPermsNil = MNil
+distPermsVars (DistPermsCons ps x _) = distPermsVars ps :>: x
+
 -- | Append two lists of distringuished permissions
 appendDistPerms :: DistPerms ps1 -> DistPerms ps2 -> DistPerms (ps1 :++: ps2)
 appendDistPerms ps1 DistPermsNil = ps1
