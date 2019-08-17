@@ -30,6 +30,7 @@ import Data.Proxy
 import Data.Reflection
 import Data.Binding.Hobbits
 import GHC.TypeLits
+import Data.Kind
 import Control.Applicative hiding (empty)
 import Control.Monad.Identity
 import Control.Monad.State
@@ -135,9 +136,6 @@ type family CtxCtxToRList (ctx :: Ctx (Ctx k)) :: RList (RList k) where
 type family RListToCtxCtx (ctx :: RList (RList k)) :: Ctx (Ctx k) where
   RListToCtxCtx RNil = EmptyCtx
   RListToCtxCtx (ctx' :> c) = RListToCtxCtx ctx' ::> RListToCtx c
-
-ctxCtxToRListId :: f ctx -> ctx :~: RListToCtxCtx (CtxCtxToRList ctx)
-ctxCtxToRListId _ = error "FIXME HERE NOW: uncomment that ->" -- unsafeCoerce Refl
 
 -- | Convert a Crucible 'Assignment' to a Hobbits 'MapRList'
 assignToRList :: Assignment f ctx -> MapRList f (CtxToRList ctx)
@@ -1248,20 +1246,13 @@ emptyPSubst = PartialSubst . helper where
   helper CruCtxNil = MNil
   helper (CruCtxCons ctx' _) = helper ctx' :>: PSubstElem Nothing
 
--- | FIXME: should be in Hobbits!
-modifyMapRList :: Member ctx a -> (f a -> f a) ->
-                  MapRList f ctx -> MapRList f ctx
-modifyMapRList Member_Base f (elems :>: elem) = elems :>: f elem
-modifyMapRList (Member_Step memb) f (elems :>: elem) =
-  modifyMapRList memb f elems :>: elem
-
 -- | Set the expression associated with a variable in a partial substitution. It
 -- is an error if it is already set.
 psubstSet :: Member ctx a -> PermExpr a -> PartialSubst ctx ->
              PartialSubst ctx
 psubstSet memb e (PartialSubst elems) =
   PartialSubst $
-  modifyMapRList memb
+  mapRListModify memb
   (\pse -> case pse of
       PSubstElem Nothing -> PSubstElem $ Just e
       PSubstElem (Just _) -> error "psubstSet: value already set for variable")
@@ -1311,6 +1302,229 @@ partialSubst s mb = genSubst s mb
 partialSubstForce :: Substable PartialSubst a Maybe => PartialSubst ctx ->
                      Mb ctx a -> String -> a
 partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
+
+
+----------------------------------------------------------------------
+-- * Abstracting Out Variables
+----------------------------------------------------------------------
+
+instance Closable (Proxy a) where
+  toClosed Proxy = $(mkClosed [| Proxy |])
+
+instance Closable Integer where
+  toClosed i = error "FIXME HERE NOW: move to Hobbits"
+
+mbMbApply :: Mb (ctx1 :: RList k1) (Mb (ctx2 :: RList k2) (a -> b)) ->
+             Mb ctx1 (Mb ctx2 a) -> Mb ctx1 (Mb ctx2 b)
+mbMbApply = mbApply . (fmap mbApply)
+
+clMbMbApplyM :: Monad m =>
+                m (Closed (Mb (ctx1 :: RList k1)
+                           (Mb (ctx2 :: RList k2) (a -> b)))) ->
+                m (Closed (Mb ctx1 (Mb ctx2 a))) ->
+                m (Closed (Mb ctx1 (Mb ctx2 b)))
+clMbMbApplyM fm am =
+  (\f a -> $(mkClosed [| mbMbApply |]) `clApply` f `clApply` a) <$> fm <*> am
+
+absVarsReturnH :: Monad m => MapRList f1 (ctx1 :: RList k1) ->
+                  MapRList f2 (ctx2 :: RList k2) ->
+                  Closed a -> m (Closed (Mb ctx1 (Mb ctx2 a)))
+absVarsReturnH fs1 fs2 cl_a =
+  return ( $(mkClosed [| \prxs1 prxs2 a ->
+                        nuMulti prxs1 (const $ nuMulti prxs2 $ const a) |])
+           `clApply` closedProxies fs1 `clApply` closedProxies fs2
+           `clApply` cl_a)
+
+closedProxies :: MapRList f args -> Closed (MapRList Proxy args)
+closedProxies MNil = $(mkClosed [| MNil |])
+closedProxies (args :>: _) =
+  $(mkClosed [| (:>:) |]) `clApply` closedProxies args
+  `clApply` $(mkClosed [| Proxy |])
+
+nameMember :: forall (ctx :: RList k) (a :: k).
+              MapRList Name ctx -> Name a -> Maybe (Member ctx a)
+nameMember MNil _ = Nothing
+nameMember (_ :>: n1) n2 | Just Refl <- cmpName n1 n2 = Just Member_Base
+nameMember (ns :>: _) n = fmap Member_Step $ nameMember ns n
+
+class AbstractVars a where
+  abstractPEVars :: MapRList Name (pctx :: RList Type) ->
+                    MapRList Name (ectx :: RList CrucibleType) -> a ->
+                    Maybe (Closed (Mb pctx (Mb ectx a)))
+
+abstractVars :: AbstractVars a =>
+                MapRList Name (ctx :: RList CrucibleType) -> a ->
+                Maybe (Closed (Mb ctx a))
+abstractVars ns a =
+  fmap (clApply $(mkClosed [| elimEmptyMb |])) $ abstractPEVars MNil ns a
+
+instance AbstractVars (Name (a :: CrucibleType)) where
+  abstractPEVars ns1 ns2 (n :: Name a)
+    | Just memb <- nameMember ns2 n
+    = return ( $(mkClosed
+                 [| \prxs1 prxs2 memb ->
+                   nuMulti prxs1 (const $ nuMulti prxs2 (mapRListLookup memb)) |])
+               `clApply` closedProxies ns1 `clApply` closedProxies ns2
+               `clApply` toClosed memb)
+  abstractPEVars _ _ _ = Nothing
+
+instance AbstractVars (Name (a :: Type)) where
+  abstractPEVars ns1 ns2 (n :: Name a)
+    | Just memb <- nameMember ns1 n
+    = return ( $(mkClosed
+                 [| \prxs1 prxs2 memb ->
+                   nuMulti prxs1 $ \ns ->
+                   nuMulti prxs2 (const $ mapRListLookup memb ns) |])
+               `clApply` closedProxies ns1 `clApply` closedProxies ns2
+               `clApply` toClosed memb)
+  abstractPEVars _ _ _ = Nothing
+
+instance AbstractVars a => AbstractVars (Mb (ctx :: RList CrucibleType) a) where
+  abstractPEVars ns1 ns2 mb =
+    mbLift $
+    nuMultiWithElim1
+    (\ns a ->
+      clApply ( $(mkClosed [| \prxs -> fmap (mbSeparate prxs) |])
+                `clApply` closedProxies ns) <$>
+      abstractPEVars ns1 (appendMapRList ns2 ns) a)
+    mb
+
+instance AbstractVars a => AbstractVars (Mb (ctx :: RList Type) a) where
+  abstractPEVars ns1 ns2 mb =
+    mbLift $
+    nuMultiWithElim1
+    (\ns a ->
+      clApply ( $(mkClosed [| \prxs -> fmap mbSwap . mbSeparate prxs |])
+                `clApply` closedProxies ns) <$>
+      abstractPEVars (appendMapRList ns1 ns) ns2 a)
+    mb
+
+instance AbstractVars Integer where
+  abstractPEVars ns1 ns2 i = absVarsReturnH ns1 ns2 (toClosed i)
+
+instance AbstractVars a => AbstractVars [a] where
+  abstractPEVars ns1 ns2 [] =
+    absVarsReturnH ns1 ns2 $(mkClosed [| [] |])
+  abstractPEVars ns1 ns2 (a:as) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| (:) |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 a
+    `clMbMbApplyM` abstractPEVars ns1 ns2 as
+
+instance AbstractVars SplittingExpr where
+  abstractPEVars ns1 ns2 SplExpr_All =
+    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_All |])
+  abstractPEVars ns1 ns2 (SplExpr_L spl) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_L |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
+  abstractPEVars ns1 ns2 (SplExpr_R spl) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_R |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
+  abstractPEVars ns1 ns2 (SplExpr_Star spl1 spl2) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_Star |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 spl1
+    `clMbMbApplyM` abstractPEVars ns1 ns2 spl2
+  abstractPEVars ns1 ns2 (SplExpr_Var x) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_Var |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 x
+
+instance AbstractVars (PermExpr a) where
+  abstractPEVars ns1 ns2 (PExpr_Var x) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Var |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 x
+  abstractPEVars ns1 ns2 PExpr_Unit =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Unit |])
+  abstractPEVars ns1 ns2 (PExpr_Nat i) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Nat |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 i
+  abstractPEVars ns1 ns2 (PExpr_BV factors k) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_BV |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 factors
+    `clMbMbApplyM` abstractPEVars ns1 ns2 k
+  abstractPEVars ns1 ns2 (PExpr_Struct es) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Struct |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 es
+  abstractPEVars ns1 ns2 (PExpr_LLVMWord e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_LLVMWord |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+  abstractPEVars ns1 ns2 (PExpr_LLVMOffset x e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_LLVMOffset |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 x
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+  abstractPEVars ns1 ns2 (PExpr_Spl spl) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Spl |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
+
+instance AbstractVars (PermExprs as) where
+  abstractPEVars ns1 ns2 PExprs_Nil =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExprs_Nil |])
+  abstractPEVars ns1 ns2 (PExprs_Cons es e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExprs_Cons |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 es
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+
+instance AbstractVars (BVFactor w) where
+  abstractPEVars ns1 ns2 (BVFactor i x) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| BVFactor |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 i
+    `clMbMbApplyM` abstractPEVars ns1 ns2 x
+
+instance AbstractVars (ValuePerm a) where
+  abstractPEVars ns1 ns2 ValPerm_True =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_True |])
+  abstractPEVars ns1 ns2 (ValPerm_Eq e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Eq |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+  abstractPEVars ns1 ns2 (ValPerm_Or p1 p2) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Or |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p1
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p2
+  abstractPEVars ns1 ns2 (ValPerm_Exists p) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Exists |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p
+  abstractPEVars ns1 ns2 (ValPerm_Mu p) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Mu |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p
+  abstractPEVars ns1 ns2 (ValPerm_Var x) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Var |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 x
+  abstractPEVars ns1 ns2 (ValPerm_LLVMPtr pps) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_LLVMPtr |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 pps
+
+instance AbstractVars (LLVMPtrPerm w) where
+  abstractPEVars ns1 ns2 (LLVMPP_Field fp) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| LLVMPP_Field |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 fp
+  abstractPEVars ns1 ns2 (LLVMPP_Array ap) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| LLVMPP_Array |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ap
+  abstractPEVars ns1 ns2 (LLVMPP_Free e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| LLVMPP_Free |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+
+instance AbstractVars (LLVMFieldPerm w) where
+  abstractPEVars ns1 ns2 (LLVMFieldPerm off spl p) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| LLVMFieldPerm |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 off
+    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p
+
+instance AbstractVars (LLVMArrayPerm w) where
+  abstractPEVars ns1 ns2 (LLVMArrayPerm off len str spl flds) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| LLVMArrayPerm |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 off
+    `clMbMbApplyM` abstractPEVars ns1 ns2 len
+    `clMbMbApplyM` abstractPEVars ns1 ns2 str
+    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
+    `clMbMbApplyM` abstractPEVars ns1 ns2 flds
+
+instance AbstractVars (DistPerms ps) where
+  abstractPEVars ns1 ns2 DistPermsNil =
+    absVarsReturnH ns1 ns2 $(mkClosed [| DistPermsNil |])
+  abstractPEVars ns1 ns2 (DistPermsCons perms x p) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| DistPermsCons |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 perms
+    `clMbMbApplyM` abstractPEVars ns1 ns2 x `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 
 ----------------------------------------------------------------------

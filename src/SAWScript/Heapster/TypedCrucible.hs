@@ -450,7 +450,7 @@ type TypedBlockMap ext blocks ret =
 
 -- | A typed Crucible CFG
 data TypedCFG
-     (ext :: *)
+     (ext :: Type)
      (blocks :: RList (RList CrucibleType))
      (ghosts :: RList CrucibleType)
      (inits :: RList CrucibleType)
@@ -503,7 +503,8 @@ data PermCheckExtState ext where
 data SomeLLVMFrame where
   SomeLLVMFrame :: NatRepr w -> TypedReg (LLVMFrameType w) -> SomeLLVMFrame
 
-newtype RetPerms ret ps = RetPerms { unRetPerms :: Binding ret (DistPerms ps) }
+newtype RetPerms (ret :: CrucibleType) ps =
+  RetPerms { unRetPerms :: Binding ret (DistPerms ps) }
 
 -- | The local state maintained while type-checking is the current permission
 -- set and the permissions required on return from the entire function.
@@ -995,40 +996,22 @@ argsToEqPerms ctx (viewAssign -> AssignExtend args reg) =
   let x = typedRegVar (tcReg ctx reg) in
   DistPermsCons (argsToEqPerms ctx args) x (ValPerm_Eq $ PExpr_Var x)
 
-class AbstractNames a where
-  abstractNames :: MapRList Name ctx -> a -> Maybe (Closed (Mb ctx a))
-
-instance AbstractNames (DistPerms ps) where
-  abstractNames = error "FIXME HERE NOW"
-
-instance AbstractNames a => AbstractNames (Mb ctx a) where
-  abstractNames = error "FIXME HERE NOW"
-
-instance Closable (Proxy a) where
-  toClosed Proxy = $(mkClosed [| Proxy |])
-
-closedProxies :: MapRList f args -> Closed (MapRList Proxy args)
-closedProxies MNil = $(mkClosed [| MNil |])
-closedProxies (args :>: _) =
-  $(mkClosed [| (:>:) |]) `clApply` closedProxies args
-  `clApply` $(mkClosed [| Proxy |])
-
-abstractPermsIn :: MapRList Name ghosts -> MapRList f args ->
-                   DistPerms (ghosts :++: args) ->
+abstractPermsIn :: MapRList Name (ghosts :: RList CrucibleType) ->
+                   MapRList f args -> DistPerms (ghosts :++: args) ->
                    Closed (MbDistPerms (ghosts :++: args))
 abstractPermsIn xs args perms =
   $(mkClosed [| \args -> mbCombine . fmap (nuMulti args . const) |])
   `clApply` closedProxies args
-  `clApply` maybe (error "abstractPermsIn") id (abstractNames xs perms)
+  `clApply` maybe (error "abstractPermsIn") id (abstractVars xs perms)
 
-abstractPermsRet :: MapRList Name ghosts -> MapRList f args ->
-                    RetPerms ret ret_ps ->
+abstractPermsRet :: MapRList Name (ghosts :: RList CrucibleType) ->
+                    MapRList f args -> RetPerms ret ret_ps ->
                     Closed (Mb (ghosts :++: args) (RetPerms ret ret_ps))
 abstractPermsRet xs args (RetPerms mb_perms) =
   $(mkClosed [| \args -> fmap RetPerms . mbCombine
                          . fmap (nuMulti args . const) |])
   `clApply` closedProxies args
-  `clApply` maybe (error "abstractPermsRet") id (abstractNames xs mb_perms)
+  `clApply` maybe (error "abstractPermsRet") id (abstractVars xs mb_perms)
 
 
 -- | Type-check a Crucible jump target
