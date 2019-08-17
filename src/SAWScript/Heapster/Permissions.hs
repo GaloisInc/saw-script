@@ -1308,12 +1308,6 @@ partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
 -- * Abstracting Out Variables
 ----------------------------------------------------------------------
 
-instance Closable (Proxy a) where
-  toClosed Proxy = $(mkClosed [| Proxy |])
-
-instance Closable Integer where
-  toClosed i = error "FIXME HERE NOW: move to Hobbits"
-
 mbMbApply :: Mb (ctx1 :: RList k1) (Mb (ctx2 :: RList k2) (a -> b)) ->
              Mb ctx1 (Mb ctx2 a) -> Mb ctx1 (Mb ctx2 b)
 mbMbApply = mbApply . (fmap mbApply)
