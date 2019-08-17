@@ -1022,10 +1022,12 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
   gget >>>= \st ->
   tcBlockID blkID >>>= \memb ->
   lookupBlockInfo memb >>>= \blkInfo ->
+
   -- First test if we have already visited the given block
   if blockInfoVisited blkInfo then
     -- If so, then this is a reverse jump, i.e., a loop
     error "Cannot handle reverse jumps (FIXME)"
+
   else
     -- If not, we can make a new entrypoint that takes all of the current
     -- permissions as input
@@ -1036,20 +1038,22 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         -- arguments are all those that we hold permissions on
         getVarTypes (distPermsVars ghost_perms) >>>= \ghost_tps ->
 
-        -- Translate the "real" arguments into TypedArgs, and then form the
-        -- append of (ghosts :++: real_args) for the types, the actual
-        -- arguments, and then permissions. These are all used to build the
-        -- TypedJumpTarget.
+        -- Translate each "real" argument x into an eq(x) permission, and then
+        -- form the append of (ghosts :++: real_args) for the types and the
+        -- permissions. These are all used to build the TypedJumpTarget.
         let ctx_t = appendCruCtx ghost_tps (mkCruCtx arg_tps)
             arg_eq_perms = argsToEqPerms ctx args
             perms = appendDistPerms ghost_perms arg_eq_perms in        
 
+        -- Insert a new block entrypoint that has all the permissions we
+        -- constructed above as input permissions
         insNewBlockEntry memb ghost_tps
         (abstractPermsIn (distPermsVars ghost_perms)
          (distPermsVars arg_eq_perms) perms)
         (abstractPermsRet (distPermsVars ghost_perms)
          (distPermsVars arg_eq_perms) ret_perms) >>>= \entryID ->
 
+        -- Build the typed jump target for this jump target
         let target_t = TypedJumpTarget entryID ctx_t perms in
 
         -- Finally, build the PermImpl that proves all the required permissions
@@ -1061,15 +1065,8 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         (implPushDelMultiM ghost_perms >>>
          proveVarsImplAppend (distPermsToExDistPerms arg_eq_perms))
 
-{-
-FIXME HERE NOW: add these comments to the above:
-- get all args with perms
-- add eq perms for the real args
-- make a PermImpl that pushes all these perms into the dist perms
-- create a TypedArgs from this
--}
 
-
+-- | Type-check a termination statement
 tcTermStmt :: PermCheckExtC ext => CtxTrans ctx ->
               TermStmt cblocks ret ctx ->
               StmtPermCheckM ext cblocks blocks ret args RNil RNil
