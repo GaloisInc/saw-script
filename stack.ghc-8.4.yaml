@@ -43,6 +43,6 @@ extra-deps:
   - itanium-abi-0.1.1.0
   - boomerang-1.4.5.6
   - git: git@github.com:eddywestbrook/hobbits.git
-    commit: 40fc43591ac791dd557b59c76073b846447b852b
+    commit: 661045f461ba29f1a767a46987df98d63078aa9e
 resolver: lts-12.26
 allow-newer: true
