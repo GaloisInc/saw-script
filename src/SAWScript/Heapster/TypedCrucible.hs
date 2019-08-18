@@ -471,6 +471,12 @@ data TypedCFG
 -- Hobbits context
 type CtxTrans ctx = Assignment TypedReg ctx
 
+-- | Build a Crucible context translation from a set of variables
+mkCtxTrans :: Assignment f ctx -> MapRList Name (CtxToRList ctx) -> CtxTrans ctx
+mkCtxTrans (viewAssign -> AssignEmpty) _ = Ctx.empty
+mkCtxTrans (viewAssign -> AssignExtend ctx' _) (ns :>: n) =
+  extend (mkCtxTrans ctx' ns) (TypedReg n)
+
 -- | Add a variable to the current Crucible context translation
 addCtxName :: CtxTrans ctx -> ExprVar tp -> CtxTrans (ctx ::> tp)
 addCtxName ctx x = extend ctx (TypedReg x)
@@ -493,16 +499,20 @@ instance (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) =>
 type PermCheckExtC ext =
   (NuMatchingExtC ext, IsSyntaxExtension ext, KnownRepr ExtRepr ext)
 
+-- | Extension-specific state
 data PermCheckExtState ext where
   -- | The extension-specific state for LLVM is the current frame pointer, if it
   -- exists
+  PermCheckExtState_Unit :: PermCheckExtState ()
   PermCheckExtState_LLVM :: Maybe (TypedReg (LLVMFrameType (ArchWidth arch))) ->
                             PermCheckExtState (LLVM arch)
-  PermCheckExtState_Unit :: PermCheckExtState ()
 
-data SomeLLVMFrame where
-  SomeLLVMFrame :: NatRepr w -> TypedReg (LLVMFrameType w) -> SomeLLVMFrame
+-- | Create a default empty extension-specific state object
+emptyPermCheckExtState :: ExtRepr ext -> PermCheckExtState ext
+emptyPermCheckExtState ExtRepr_Unit = PermCheckExtState_Unit
+emptyPermCheckExtState ExtRepr_LLVM = PermCheckExtState_LLVM Nothing
 
+-- | Permissions needed on return from a function
 newtype RetPerms (ret :: CrucibleType) ps =
   RetPerms { unRetPerms :: Binding ret (DistPerms ps) }
 
@@ -532,17 +542,18 @@ modifySTCurPerms f_perms st = setSTCurPerms (f_perms $ stCurPerms st) st
 data BlockEntryInfo blocks ret args where
   BlockEntryInfo :: {
     entryInfoID :: TypedEntryID blocks args ghosts,
+    entryInfoArgs :: CruCtx args,
     entryInfoPermsIn :: MbDistPerms (ghosts :++: args),
     entryInfoPermsOut :: Mb (ghosts :++: args) (RetPerms ret ret_ps)
   } -> BlockEntryInfo blocks ret args
 
 -- | Extract the 'BlockID' from entrypoint info
 entryInfoBlockID :: BlockEntryInfo blocks ret args -> Member blocks args
-entryInfoBlockID (BlockEntryInfo entryID _ _) = entryBlockID entryID
+entryInfoBlockID (BlockEntryInfo entryID _ _ _) = entryBlockID entryID
 
 -- | Extract the entry id from entrypoint info
 entryInfoIndex :: BlockEntryInfo blocks ret args -> Int
-entryInfoIndex (BlockEntryInfo entryID _ _) = entryIndex entryID
+entryInfoIndex (BlockEntryInfo entryID _ _ _) = entryIndex entryID
 
 -- | Information about the current state of type-checking for a block
 data BlockInfo ext blocks ret args =
@@ -556,31 +567,32 @@ data BlockInfo ext blocks ret args =
 
 -- | Add a new 'BlockEntryInfo' to a 'BlockInfo' and return its 'TypedEntryID'.
 -- This assumes that the block has not been visited; if it has, it is an error.
-blockInfoAddEntry :: CruCtx ghosts -> MbDistPerms (ghosts :++: args) ->
+blockInfoAddEntry :: CruCtx args -> CruCtx ghosts ->
+                     MbDistPerms (ghosts :++: args) ->
                      Mb (ghosts :++: args) (RetPerms ret ret_ps) ->
                      BlockInfo ext blocks ret args ->
                      (BlockInfo ext blocks ret args,
                       TypedEntryID blocks args ghosts)
-blockInfoAddEntry ghosts perms_in perms_out info =
+blockInfoAddEntry args ghosts perms_in perms_out info =
   if blockInfoVisited info then error "blockInfoAddEntry" else
     let entries = blockInfoEntries info
         entryID = TypedEntryID (blockInfoMember info) ghosts (length entries) in
     (info { blockInfoEntries =
-              entries ++ [BlockEntryInfo entryID perms_in perms_out] },
+              entries ++ [BlockEntryInfo entryID args perms_in perms_out] },
      entryID)
 
 type BlockInfoMap ext blocks ret = MapRList (BlockInfo ext blocks ret) blocks
 
-blockInfoMapAddEntry :: Member blocks args -> CruCtx ghosts ->
+blockInfoMapAddEntry :: Member blocks args -> CruCtx args -> CruCtx ghosts ->
                         MbDistPerms (ghosts :++: args) ->
                         Mb (ghosts :++: args) (RetPerms ret ret_ps) ->
                         BlockInfoMap ext blocks ret ->
                         (BlockInfoMap ext blocks ret,
                          TypedEntryID blocks args ghosts)
-blockInfoMapAddEntry memb ghosts perms_in perms_out blkMap =
+blockInfoMapAddEntry memb args ghosts perms_in perms_out blkMap =
   let blkInfo = mapRListLookup memb blkMap
       (blkInfo', entryID) =
-        blockInfoAddEntry ghosts perms_in perms_out blkInfo in
+        blockInfoAddEntry args ghosts perms_in perms_out blkInfo in
   (mapRListSet memb blkInfo' blkMap, entryID)
 
 newtype BlockIDTrans blocks args =
@@ -637,6 +649,19 @@ type StmtPermCheckM ext cblocks blocks ret args ps1 ps2 =
    (TypedStmtSeq ext blocks ret ps1) ps1
    (TypedStmtSeq ext blocks ret ps2) ps2
 
+runPermCheckM :: KnownRepr ExtRepr ext =>
+                 PermSet ps_in -> RetPerms ret ret_ps ->
+                 PermCheckM ext cblocks blocks ret args () ps_out r ps_in () ->
+                 TopPermCheckM ext cblocks blocks ret r
+runPermCheckM perms ret_perms m =
+  let st = PermCheckState {
+        stCurPerms = perms,
+        stExtState = emptyPermCheckExtState knownRepr,
+        stRetPerms = Some ret_perms,
+        stVarTypes = NameMap.empty } in
+  runGenContM (runGenStateT m st) (const $ return ())
+
+
 -- | Get the current top-level state
 top_get :: PermCheckM ext cblocks blocks ret args r ps r ps
            (TopPermCheckState ext cblocks blocks ret)
@@ -654,16 +679,17 @@ lookupBlockInfo memb =
   top_get >>>= \top_st ->
   greturn (mapRListLookup memb $ unClosed $ stBlockInfo top_st)
 
-insNewBlockEntry :: Member blocks args -> CruCtx ghosts ->
+insNewBlockEntry :: Member blocks args -> CruCtx args -> CruCtx ghosts ->
                     Closed (MbDistPerms (ghosts :++: args)) ->
                     Closed (Mb (ghosts :++: args) (RetPerms ret ret_ps)) ->
                     PermCheckM ext cblocks blocks ret args_in r ps r ps
                     (TypedEntryID blocks args ghosts)
-insNewBlockEntry memb ghost_tps perms_in perms_ret =
+insNewBlockEntry memb arg_tps ghost_tps perms_in perms_ret =
   top_get >>>= \top_st ->
   let cl_blkMap_entryID =
         $(mkClosed [| blockInfoMapAddEntry |])
-        `clApply` toClosed memb `clApply` toClosed ghost_tps
+        `clApply` toClosed memb `clApply` toClosed arg_tps
+        `clApply` toClosed ghost_tps
         `clApply` perms_in `clApply` perms_ret `clApply` 
         stBlockInfo top_st in
   top_put (top_st { stBlockInfo =
@@ -1047,7 +1073,7 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
 
         -- Insert a new block entrypoint that has all the permissions we
         -- constructed above as input permissions
-        insNewBlockEntry memb ghost_tps
+        insNewBlockEntry memb (mkCruCtx arg_tps) ghost_tps
         (abstractPermsIn (distPermsVars ghost_perms)
          (distPermsVars arg_eq_perms) perms)
         (abstractPermsRet (distPermsVars ghost_perms)
@@ -1092,7 +1118,7 @@ tcTermStmt _ tstmt =
 
 
 ----------------------------------------------------------------------
--- * Permission Checking for Sequences of Statements
+-- * Permission Checking for Blocks and Sequences of Statements
 ----------------------------------------------------------------------
 
 -- | Translate and emit a Crucible statement sequence, starting and ending with
@@ -1109,6 +1135,46 @@ tcEmitStmtSeq ctx (ConsStmt loc stmt stmts) =
 tcEmitStmtSeq ctx (TermStmt loc tstmt) =
   tcTermStmt ctx tstmt >>>= \typed_tstmt ->
   gmapRet (const $ return $ TypedTermStmt loc typed_tstmt)
+
+-- | Type-check a single block entrypoint
+tcEntry :: PermCheckExtC ext => Block ext cblocks ret args ->
+           BlockEntryInfo blocks ret (CtxToRList args) ->
+           TopPermCheckM ext cblocks blocks ret
+           (TypedEntry ext blocks ret (CtxToRList args))
+tcEntry blk (BlockEntryInfo {..}) =
+  fmap (TypedEntry entryInfoID entryInfoArgs entryInfoPermsIn) $
+  strongMbM $
+  flip nuMultiWithElim (MNil :>: entryInfoPermsIn :>:
+                        entryInfoPermsOut) $ \ns (_ :>: perms :>: ret_perms) ->
+  runPermCheckM (distPermSet $ runIdentity perms) (runIdentity ret_perms) $
+  let ctx =
+        mkCtxTrans (blockInputs blk) $ snd $
+        splitMapRList (entryGhosts entryInfoID) (ctxToMap $ entryInfoArgs) ns in
+  stmtRecombinePerms >>>
+  setVarTypes ns (appendCruCtx (entryGhosts entryInfoID) entryInfoArgs) >>>
+  tcEmitStmtSeq ctx (blk ^. blockStmts)
+
+{-
+data TypedEntry ext blocks ret args where
+  TypedEntry ::
+    TypedEntryID blocks args ghosts -> CruCtx args ->
+    MbDistPerms (ghosts :++: args) ->
+    Mb (ghosts :++: args) (TypedStmtSeq ext blocks ret (ghosts :++: args)) ->
+    TypedEntry ext blocks ret args
+
+data BlockEntryInfo blocks ret args where
+  BlockEntryInfo :: {
+    entryInfoID :: TypedEntryID blocks args ghosts,
+    entryInfoArgs :: CruCtx args,
+    entryInfoPermsIn :: MbDistPerms (ghosts :++: args),
+    entryInfoPermsOut :: Mb (ghosts :++: args) (RetPerms ret ret_ps)
+  } -> BlockEntryInfo blocks ret args
+
+data TypedEntryID (blocks :: RList (RList CrucibleType)) args ghosts =
+  TypedEntryID { entryBlockID :: Member blocks args,
+                 entryGhosts :: CruCtx ghosts,
+                 entryIndex :: Int }
+-}
 
 {-
 -- FIXME HERE NOW:

@@ -248,6 +248,10 @@ appendCruCtx :: CruCtx ctx1 -> CruCtx ctx2 -> CruCtx (ctx1 :++: ctx2)
 appendCruCtx ctx1 CruCtxNil = ctx1
 appendCruCtx ctx1 (CruCtxCons ctx2 tp) = CruCtxCons (appendCruCtx ctx1 ctx2) tp
 
+ctxToMap :: CruCtx ctx -> MapRList CruType ctx
+ctxToMap CruCtxNil = MNil
+ctxToMap (CruCtxCons ctx tp) = ctxToMap ctx :>: tp
+
 
 ----------------------------------------------------------------------
 -- * Expressions for Permissions
@@ -1588,6 +1592,10 @@ data PermSet ps = PermSet { _varPermMap :: NameMap ValuePerm,
                             _distPerms :: DistPerms ps }
 
 makeLenses ''PermSet
+
+-- | Build a 'PermSet' with only distinguished permissions
+distPermSet :: DistPerms ps -> PermSet ps
+distPermSet perms = PermSet NameMap.empty perms
 
 -- NOTE: this instance would require a NuMatching instance for NameMap...
 -- $(mkNuMatching [t| forall ps. PermSet ps |])
