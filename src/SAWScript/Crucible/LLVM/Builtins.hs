@@ -144,7 +144,6 @@ import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..))
-import           SAWScript.Crucible.Common.Override (resolveSAWPred)
 import qualified SAWScript.Crucible.Common.Setup.Builtins as Setup
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
@@ -789,7 +788,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
           do mapM_ (registerOverride opts cc simCtx top_loc)
                    (groupOn (view csName) funcLemmas)
              liftIO $ do
-               preds <- (traverse . Crucible.labeledPred) (resolveSAWPred (cc ^. ccBackend)) assumes
+               preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
                Crucible.addAssumptions sym (Seq.fromList preds)
              Crucible.regValue <$> (Crucible.callBlock cfg entryId args')
     res <- Crucible.executeCrucible execFeatures initExecState
