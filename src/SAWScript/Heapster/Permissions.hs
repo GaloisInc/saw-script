@@ -112,6 +112,21 @@ instance (MonadStrongBind m, BindState s) => MonadStrongBind (StateT s m) where
     strongMbM (fmap (\m -> runStateT m s) mb_m) >>= \mb_as ->
     return (fmap fst mb_as, bindState (fmap snd mb_as))
 
+-- | A monad whose effects are closed
+class Monad m => MonadClosed m where
+  closedM :: Closed (m a) -> m (Closed a)
+
+instance MonadClosed Identity where
+  closedM = Identity . clApply $(mkClosed [| runIdentity |])
+
+instance (MonadClosed m, Closable s) => MonadClosed (StateT s m) where
+  closedM clm =
+    do s <- get
+       cl_a_s <- lift $ closedM ($(mkClosed [| runStateT |]) `clApply` clm
+                                 `clApply` toClosed s)
+       put (snd $ unClosed cl_a_s)
+       return ($(mkClosed [| fst |]) `clApply` cl_a_s)
+
 
 ----------------------------------------------------------------------
 -- * Contexts of Crucible Types

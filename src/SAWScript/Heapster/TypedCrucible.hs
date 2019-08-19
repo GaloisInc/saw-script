@@ -114,7 +114,6 @@ instance NuMatching (FloatInfoRepr fi) where
 instance NuMatching RoundingMode where
   nuMatchingProof = unsafeMbTypeRepr
 
-
 instance NuMatchingAny1 BaseTypeRepr where
   nuMatchingAny1Proof = nuMatchingProof
 
@@ -143,6 +142,12 @@ instance NuMatchingAny1 f => NuMatchingAny1 (BaseTerm f) where
 $(mkNuMatching [t| forall ext f tp.
                 (NuMatchingAny1 f, NuMatchingAny1 (ExprExtension ext f)) =>
                 App ext f tp |])
+
+-- | A Crucible block can never contain any Hobbits names, but "proving" that
+-- would require introspection of opaque types like 'Index', and would also be
+-- inefficient, so we just use 'unsafeClose'
+closeCruBlock :: Block ext cblocks ret args -> Closed (Block ext cblocks ret args)
+closeCruBlock = unsafeClose
 
 
 ----------------------------------------------------------------------
@@ -559,11 +564,16 @@ entryInfoIndex (BlockEntryInfo entryID _ _ _) = entryIndex entryID
 data BlockInfo ext blocks ret args =
   BlockInfo
   {
-    blockInfoVisited :: Bool,
     blockInfoMember :: Member blocks args,
     blockInfoEntries :: [BlockEntryInfo blocks ret args],
     blockInfoBlock :: Maybe (TypedBlock ext blocks ret args)
   }
+
+-- | Test if a block has been type-checked yet, which is true iff its
+-- translation has been stored in its info yet
+blockInfoVisited :: BlockInfo ext blocks ret args -> Bool
+blockInfoVisited (BlockInfo { blockInfoBlock = Just _ }) = True
+blockInfoVisited _ = False
 
 -- | Add a new 'BlockEntryInfo' to a 'BlockInfo' and return its 'TypedEntryID'.
 -- This assumes that the block has not been visited; if it has, it is an error.
@@ -583,6 +593,9 @@ blockInfoAddEntry args ghosts perms_in perms_out info =
 
 type BlockInfoMap ext blocks ret = MapRList (BlockInfo ext blocks ret) blocks
 
+-- | Add a new 'BlockEntryInfo' to a block info map, returning the newly updated
+-- map and the new 'TypedEntryID'. This assumes that the block has not been
+-- visited; if it has, it is an error.
 blockInfoMapAddEntry :: Member blocks args -> CruCtx args -> CruCtx ghosts ->
                         MbDistPerms (ghosts :++: args) ->
                         Mb (ghosts :++: args) (RetPerms ret ret_ps) ->
@@ -595,6 +608,20 @@ blockInfoMapAddEntry memb args ghosts perms_in perms_out blkMap =
         blockInfoAddEntry args ghosts perms_in perms_out blkInfo in
   (mapRListSet memb blkInfo' blkMap, entryID)
 
+-- | Set the 'TypedBlock' for a given block id, thereby marking it as
+-- visited. It is an error if it is already set.
+blockInfoMapSetBlock :: Member blocks args -> TypedBlock ext blocks ret args ->
+                        BlockInfoMap ext blocks ret ->
+                        BlockInfoMap ext blocks ret
+blockInfoMapSetBlock memb blk =
+  mapRListModify memb $ \info ->
+  if blockInfoVisited info then
+    error "blockInfoMapSetBlock: block already set"
+  else
+    info { blockInfoBlock = Just blk }
+
+
+-- | The translation of a Crucible block id
 newtype BlockIDTrans blocks args =
   BlockIDTrans { unBlockIDTrans :: Member blocks (CtxToRList args) }
 
@@ -609,9 +636,21 @@ data TopPermCheckState ext cblocks blocks ret =
 $(mkNuMatching [t| forall ext cblocks blocks ret.
                 TopPermCheckState ext cblocks blocks ret |])
 
+instance Closable (TopPermCheckState ext cblocks blocks ret) where
+  toClosed (TopPermCheckState {..}) =
+    $(mkClosed [| TopPermCheckState |]) `clApplyCl` stBlockTrans
+    `clApplyCl` stBlockInfo
+
 instance BindState (TopPermCheckState ext cblocks blocks ret) where
   bindState [nuP| TopPermCheckState bt i |] =
     TopPermCheckState (mbLift bt) (mbLift i)
+
+-- | Look up a Crucible block id in a top-level perm-checking state
+stLookupBlockID :: BlockID cblocks args ->
+                   TopPermCheckState ext cblocks blocks ret ->
+                   Member blocks (CtxToRList args)
+stLookupBlockID (BlockID ix) st=
+  unBlockIDTrans $ unClosed (stBlockTrans st) Ctx.! ix
 
 -- | The top-level monad for permission-checking CFGs
 type TopPermCheckM ext cblocks blocks ret =
@@ -819,9 +858,7 @@ tcArgs ctx (viewAssign ->
 tcBlockID :: BlockID cblocks args ->
              StmtPermCheckM ext cblocks blocks ret args' ps ps
              (Member blocks (CtxToRList args))
-tcBlockID (BlockID ix) =
-  top_get >>>= \top_st ->
-  greturn (unBlockIDTrans $ unClosed (stBlockTrans top_st) Ctx.! ix)
+tcBlockID blkID = stLookupBlockID blkID <$> top_get
 
 -- | Translate a 'TypedExpr' to a permission expression, if possible
 exprToPermExpr :: TypedExpr ext tp -> Maybe (PermExpr tp)
@@ -1137,11 +1174,11 @@ tcEmitStmtSeq ctx (TermStmt loc tstmt) =
   gmapRet (const $ return $ TypedTermStmt loc typed_tstmt)
 
 -- | Type-check a single block entrypoint
-tcEntry :: PermCheckExtC ext => Block ext cblocks ret args ->
-           BlockEntryInfo blocks ret (CtxToRList args) ->
-           TopPermCheckM ext cblocks blocks ret
-           (TypedEntry ext blocks ret (CtxToRList args))
-tcEntry blk (BlockEntryInfo {..}) =
+tcBlockEntry :: PermCheckExtC ext => Block ext cblocks ret args ->
+                BlockEntryInfo blocks ret (CtxToRList args) ->
+                TopPermCheckM ext cblocks blocks ret
+                (TypedEntry ext blocks ret (CtxToRList args))
+tcBlockEntry blk (BlockEntryInfo {..}) =
   fmap (TypedEntry entryInfoID entryInfoArgs entryInfoPermsIn) $
   strongMbM $
   flip nuMultiWithElim (MNil :>: entryInfoPermsIn :>:
@@ -1154,31 +1191,30 @@ tcEntry blk (BlockEntryInfo {..}) =
   setVarTypes ns (appendCruCtx (entryGhosts entryInfoID) entryInfoArgs) >>>
   tcEmitStmtSeq ctx (blk ^. blockStmts)
 
-{-
-data TypedEntry ext blocks ret args where
-  TypedEntry ::
-    TypedEntryID blocks args ghosts -> CruCtx args ->
-    MbDistPerms (ghosts :++: args) ->
-    Mb (ghosts :++: args) (TypedStmtSeq ext blocks ret (ghosts :++: args)) ->
-    TypedEntry ext blocks ret args
+-- | Type-check a Crucible block and add it to a block info map
+tcAddBlock :: PermCheckExtC ext => Block ext cblocks ret args ->
+              BlockInfoMap ext blocks ret ->
+              TopPermCheckM ext cblocks blocks ret (BlockInfoMap ext blocks ret)
+tcAddBlock blk info_map =
+  do memb <- stLookupBlockID (blockID blk) <$> get
+     blk_t <- TypedBlock <$> mapM (tcBlockEntry blk)
+       (blockInfoEntries $ mapRListLookup memb info_map)
+     return $ blockInfoMapSetBlock memb blk_t info_map
 
-data BlockEntryInfo blocks ret args where
-  BlockEntryInfo :: {
-    entryInfoID :: TypedEntryID blocks args ghosts,
-    entryInfoArgs :: CruCtx args,
-    entryInfoPermsIn :: MbDistPerms (ghosts :++: args),
-    entryInfoPermsOut :: Mb (ghosts :++: args) (RetPerms ret ret_ps)
-  } -> BlockEntryInfo blocks ret args
+-- | Type-check a Crucible block and put its translation into the 'BlockInfo'
+-- for that block
+tcEmitBlock :: PermCheckExtC ext => Block ext cblocks ret args ->
+               TopPermCheckM ext cblocks blocks ret ()
+tcEmitBlock blk =
+  do st <- get
+     clMap <- closedM ( $(mkClosed [| tcAddBlock |])
+                        `clApply` unsafeClose blk
+                        `clApply` stBlockInfo st)
+     put (st { stBlockInfo = clMap })
 
-data TypedEntryID (blocks :: RList (RList CrucibleType)) args ghosts =
-  TypedEntryID { entryBlockID :: Member blocks args,
-                 entryGhosts :: CruCtx ghosts,
-                 entryIndex :: Int }
--}
 
 {-
 -- FIXME HERE NOW:
--- + type-check block entrypoints
 -- + type-check CFGs
 -- + translate -> SAW
 -- + handle function calls and a function call context
