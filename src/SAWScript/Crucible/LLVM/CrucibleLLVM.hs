@@ -42,7 +42,6 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
     -- * Re-exports from "Lang.Crucible.LLVM.MemType"
   , SymType(MemType, Alias, VoidType)
   , MemType(..)
-  , memTypeAlign
   , memTypeSize
   , fiOffset
   , fiType
@@ -149,7 +148,7 @@ import Lang.Crucible.LLVM.Intrinsics
 import Lang.Crucible.LLVM.MemType
   (SymType(MemType, Alias, VoidType),
    MemType(..),
-   Ident, memTypeAlign, memTypeSize, fiOffset, fiType,
+   Ident, memTypeSize, fiOffset, fiType,
    siFields, siFieldInfo, siFieldOffset, siFieldTypes, siIsPacked,
    mkStructInfo, ppMemType)
 
