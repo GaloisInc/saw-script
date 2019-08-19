@@ -87,7 +87,7 @@ import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common (Sym, labelWithSimError)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
 import           SAWScript.Crucible.Common.Override
 
@@ -521,6 +521,22 @@ assignVar cc loc var ref =
 
 ------------------------------------------------------------------------
 
+matchTerm' ::
+  SharedContext   {- ^ context for constructing SAW terms    -} ->
+  W4.ProgramLoc ->
+  Sym                                                           ->
+  PrePost                                                       ->
+  Term            {- ^ exported concrete term                -} ->
+  Term            {- ^ expected specification term           -} ->
+  OverrideMatcher CJ.JVM w ()
+matchTerm' sc loc sym prepost real expect = do
+  mlp <- matchTerm sc sym prepost real expect
+  case labelWithSimError loc show <$> mlp of
+    Nothing -> return ()
+    Just (W4.LabeledPred p doc) -> addAssert p doc
+
+------------------------------------------------------------------------
+
 -- | Match the value of a function argument with a symbolic 'SetupValue'.
 matchArg ::
   Options          {- ^ saw script print out opts -} ->
@@ -539,7 +555,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected@(MS.SetupTerm expected
   = do sym <- getSymInterface
        failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
        realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
-       matchTerm sc (cc^.jccBackend) (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
+       matchTerm' sc (cs ^. MS.csLoc) (cc^.jccBackend) prepost realTerm (ttTerm expectedTT)
 
 matchArg opts sc cc cs prepost actual@(RVal ref) expectedTy setupval =
   case setupval of
