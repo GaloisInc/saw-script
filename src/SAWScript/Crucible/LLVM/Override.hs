@@ -34,10 +34,11 @@ module SAWScript.Crucible.LLVM.Override
 
   , setupValueSub
   , executeFreshPointer
-  , omAsserts
-  , omArgAsserts
+  , osAsserts
+  , osArgAsserts
   , termSub
 
+  , doAlloc
   , learnCond
   , matchArg
   , methodSpecHandler
@@ -130,16 +131,13 @@ labelWithSimError loc conv lp =
      %~ (Crucible.SimError loc . Crucible.AssertFailureSimError . conv)
 
 -- | Retrieve pre-state assertions, ready to be passed to 'Crucible.addAssertion'
-prestateAsserts ::
-  W4.ProgramLoc ->
-  OverrideMatcherRW (LLVM arch) ->
-  [LabeledPred Sym]
-prestateAsserts loc omrw = (omrw ^. omAsserts) ++ labelWithArgNum (omrw ^. omArgAsserts)
+prestateAsserts :: OverrideState (LLVM arch) -> [LabeledPred Sym]
+prestateAsserts os = (os ^. osAsserts) ++ labelWithArgNum (os ^. osArgAsserts)
   where
     labelWithArgNum asserts =
       foldMap (\(n, as) -> map (helper n) as) (zip [1..] asserts)
       where helper :: Int -> LabeledPred' Sym -> LabeledPred Sym
-            helper n = labelWithSimError loc $ \doc -> unlines
+            helper n = labelWithSimError (os ^. osLocation) $ \doc -> unlines
               ["In argument #" ++ show n ++ " to crucible_execute_func:", show doc]
 
 ------------------------------------------------------------------------
@@ -150,9 +148,9 @@ type instance Pointer (LLVM arch) = LLVMPtr (Crucible.ArchWidth arch)
 --   human-readable info about each condition.
 data OverrideWithPreconditions arch =
   OverrideWithPreconditions
-    { _owpPreconditions :: [LabeledPred Sym] -- ^ c.f. '_omAsserts'
+    { _owpPreconditions :: [LabeledPred Sym] -- ^ c.f. '_osAsserts'
     , _owpMethodSpec :: MS.CrucibleMethodSpecIR (LLVM arch)
-    , owpState :: OverrideMatcherRW (LLVM arch)
+    , owpState :: OverrideState (LLVM arch)
     }
   deriving (Generic)
 
@@ -406,8 +404,8 @@ methodSpecHandler opts sc cc top_loc css retTy = do
             PP.<$$> PP.text "Actual function return type: " PP.<>
                       PP.text (show (retTy))
         (_, ss) -> liftIO $
-          forM ss $ \(cs, omrw) ->
-            return (OverrideWithPreconditions (prestateAsserts top_loc omrw) cs omrw)
+          forM ss $ \(cs,st) ->
+            return (OverrideWithPreconditions (prestateAsserts st) cs st)
 
   -- Now we do a second phase of simple compatibility checking: we check to see
   -- if any of the preconditions of the various overrides are concretely false.
@@ -416,9 +414,9 @@ methodSpecHandler opts sc cc top_loc css retTy = do
 
   -- Collapse the preconditions to a single predicate
   branches' <- liftIO $ forM (true ++ unknown) $
-    \(OverrideWithPreconditions preconds cs omrw) ->
+    \(OverrideWithPreconditions preconds cs st) ->
       W4.andAllOf sym (folded . W4.labeledPred) preconds <&>
-        \precond -> (precond, cs, omrw)
+        \precond -> (precond, cs, st)
 
   -- Now use crucible's symbolic branching machinery to select between the branches.
   -- Essentially, we are doing an n-way if statement on the precondition predicates
@@ -446,26 +444,26 @@ methodSpecHandler opts sc cc top_loc css retTy = do
          [ ( precond
            , do g <- Crucible.readGlobals
                 res <- liftIO $ runOverrideMatcher sym g
-                   (omrw^.setupValueSub)
-                   (omrw^.termSub)
-                   (omrw^.omFree)
-                   top_loc
+                   (st^.setupValueSub)
+                   (st^.termSub)
+                   (st^.osFree)
+                   (st^.osLocation)
                    (methodSpecHandler_poststate opts sc cc retTy cs)
                 case res of
                   Left (OF loc rsn)  ->
                     -- TODO, better pretty printing for reasons
                     liftIO $ Crucible.abortExecBecause
                       (Crucible.AssumedFalse (Crucible.AssumptionReason loc (show rsn)))
-                  Right (ret,omrw') ->
-                    do liftIO $ forM_ (omrw'^.omAssumes) $ \asum ->
+                  Right (ret,st') ->
+                    do liftIO $ forM_ (st'^.osAssumes) $ \asum ->
                          Crucible.addAssumption (cc^.ccBackend)
                             (Crucible.LabeledPred asum
-                              (Crucible.AssumptionReason top_loc "override postcondition"))
-                       Crucible.writeGlobals (omrw'^.omGlobals)
+                              (Crucible.AssumptionReason (st^.osLocation) "override postcondition"))
+                       Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc top_loc)
+           , Just (W4.plSourceLoc (cs ^. MS.csLoc))
            )
-         | (precond, cs, omrw) <- branches'
+         | (precond, cs, st) <- branches'
          ] ++
          [ let fnName = case branches of
                          owp : _  -> owp ^. owpMethodSpec . MS.csMethod . llvmMethodName
@@ -579,7 +577,7 @@ methodSpecHandler_prestate opts sc cc args cs =
 
        argAsserts <- forM xs $ \(actual, expectedType, expected) ->
          matchArg opts sc cc cs PreState actual expectedType expected
-       omArgAsserts .= argAsserts
+       osArgAsserts .= argAsserts
 
        learnCond opts sc cc cs PreState (cs ^. MS.csPreState)
 
@@ -618,7 +616,7 @@ learnCond opts sc cc cs prepost ss = do
     traverse
       (learnSetupCondition opts sc cc cs prepost)
       (ss ^. MS.csConditions)
-  omAsserts %= (asserts ++)
+  osAsserts %= (asserts ++)
 
   enforceDisjointness loc ss
   enforceCompleteSubstitution loc ss
@@ -1046,7 +1044,7 @@ matchTerm ::
 
 matchTerm _ _ _ real expect | real == expect = return Nothing
 matchTerm sc cc prepost real expect =
-  do free <- OM (use omFree)
+  do free <- OM (use osFree)
      case unwrapTermF expect of
        FTermF (ExtCns ec)
          | Set.member (ecVarIndex ec) free ->
@@ -1221,29 +1219,32 @@ learnPred sc cc loc prepost t =
 
 ------------------------------------------------------------------------
 
--- | Perform an allocation as indicated by a 'crucible_alloc'
--- statement from the postcondition section.
+-- | Perform an allocation as indicated by a 'crucible_alloc' statement
+doAlloc ::
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  LLVMCrucibleContext arch       ->
+  LLVMAllocSpec ->
+  Crucible.MemImpl Sym ->
+  IO (LLVMPtr (Crucible.ArchWidth arch), Crucible.MemImpl Sym)
+doAlloc cc (LLVMAllocSpec mut _memTy sz loc) mem =
+  do let sym = cc^.ccBackend
+     sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger sz
+     let alignment = Crucible.noAlignment -- FIXME? max alignment?
+     let l = show (W4.plSourceLoc loc)
+     Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
+
+-- | Perform an allocation as indicated by a 'crucible_alloc' statement
 executeAllocation ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->
   LLVMCrucibleContext arch          ->
   (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher (LLVM arch) RW ()
-executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
-  do let sym = cc^.ccBackend
-     {-
-     memTy <- case Crucible.asMemType symTy of
-                Just memTy -> return memTy
-                Nothing    -> fail "executAllocation: failed to resolve type"
-                -}
-     liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
+executeAllocation opts cc (var, spec@(LLVMAllocSpec _mut memTy _sz loc)) =
+  do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
      mem <- readGlobal memVar
-     sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger sz)
-     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
-     (ptr, mem') <- liftIO $
-       Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
+     (ptr, mem') <- liftIO $ doAlloc cc spec mem
      writeGlobal memVar mem'
      assignVar cc loc var ptr
 

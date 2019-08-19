@@ -670,7 +670,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
      st <- case matchPost of
              Left err      -> fail (show err)
              Right (_, st) -> return st
-     io $ for_ (view omAsserts st) $ \assert -> Crucible.addAssertion sym assert
+     io $ for_ (view osAsserts st) $ \assert -> Crucible.addAssertion sym assert
 
      obligations <- io $ Crucible.getProofObligations sym
      io $ Crucible.clearProofObligations sym
