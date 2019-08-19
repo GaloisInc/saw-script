@@ -19,12 +19,12 @@ import Control.Lens
 import           Control.Monad.IO.Class (liftIO)
 import           Data.Map (Map)
 import qualified Data.Set as Set
+import qualified Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
 import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
-import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified What4.Interface as W4
-import qualified What4.ProgramLoc as W4
+import qualified What4.LabeledPred as W4
 
 import qualified Verifier.SAW.SharedTerm as SAWVerifier
 import           Verifier.SAW.SharedTerm (Term, SharedContext)
@@ -34,7 +34,7 @@ import           Verifier.SAW.Term.Functor (TermF(..), ExtCns(..), VarIndex)
 import           Verifier.SAW.Term.Functor (FlatTermF(ExtCns))
 import           Verifier.SAW.Prelude (scEq)
 
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common (Sym, LabeledPred')
 import           SAWScript.Crucible.Common.MethodSpec (PrePost(..), SetupValue(..))
 import           SAWScript.Crucible.Common.Override.Monad
 
@@ -48,39 +48,37 @@ resolveSAWPred sym tm = CrucibleSAW.bindSAWTerm sym W4.BaseBoolRepr tm
 assignTerm ::
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   Sym                                                              ->
-  W4.ProgramLoc                                                    ->
   PrePost                                                          ->
   VarIndex {- ^ external constant index -} ->
   Term     {- ^ value                   -} ->
-  OverrideMatcher env md ()
+  OverrideMatcher env md (Maybe (LabeledPred' Sym))
 
-assignTerm sc cc loc prepost var val =
+assignTerm sc cc prepost var val =
   do mb <- OM (use (termSub . at var))
      case mb of
-       Nothing -> OM (termSub . at var ?= val)
-       Just old -> matchTerm sc cc loc prepost val old
+       Nothing -> OM (termSub . at var ?= val) >> pure Nothing
+       Just old -> matchTerm sc cc prepost val old
 
 
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
   Sym                                                           ->
-  W4.ProgramLoc                                                    ->
   PrePost                                                       ->
   Term            {- ^ exported concrete term                -} ->
   Term            {- ^ expected specification term           -} ->
-  OverrideMatcher ext md ()
-matchTerm _ _ _ _ real expect | real == expect = return ()
-matchTerm sc sym loc prepost real expect =
+  OverrideMatcher ext md (Maybe (LabeledPred' Sym))
+matchTerm _ _ _ real expect | real == expect = return Nothing
+matchTerm sc sym prepost real expect =
   do free <- OM (use omFree)
      case SAWVerifier.unwrapTermF expect of
        FTermF (ExtCns ec)
          | Set.member (ecVarIndex ec) free ->
-         do assignTerm sc sym loc prepost (ecVarIndex ec) real
+         do assignTerm sc sym prepost (ecVarIndex ec) real
 
        _ ->
          do t <- liftIO $ scEq sc real expect
             p <- liftIO $ resolveSAWPred sym t
-            addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
+            return $ Just $ W4.LabeledPred p $ PP.vcat $ map PP.text
               [ "Literal equality " ++ stateCond prepost
               , "Expected term: " ++ prettyTerm expect
               , "Actual term:   " ++ prettyTerm real
