@@ -44,6 +44,7 @@ import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.CFG.Core
 
 import Data.Binding.Hobbits
+import SAWScript.Heapster.CruUtil
 import SAWScript.Heapster.Permissions
 
 
@@ -340,15 +341,6 @@ data PermImpl r ps where
   -- > Gin | Pl * Pin, x:ptr(pps, (off',S) |-> p) |- rets
   -- > -----------------------------------------------------------------------
   -- > Gin | Pl * Pin, x:ptr(pps, (off,S) |-> p) |- rets
-
-
--- | Typeclass for lifting the 'NuMatching' constraint to functors on arbitrary
--- kinds that do not require any constraints on their input types
-class NuMatchingAny1 (f :: k -> Type) where
-  nuMatchingAny1Proof :: MbTypeRepr (f a)
-
-instance {-# INCOHERENT #-} NuMatchingAny1 f => NuMatching (f a) where
-  nuMatchingProof = nuMatchingAny1Proof
 
 
 $(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])

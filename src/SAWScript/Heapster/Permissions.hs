@@ -44,8 +44,11 @@ import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.NatRepr
 
 import Lang.Crucible.Types
+import Lang.Crucible.FunctionHandle
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.CFG.Core
+
+import SAWScript.Heapster.CruUtil
 
 
 ----------------------------------------------------------------------
@@ -56,26 +59,6 @@ import Lang.Crucible.CFG.Core
 
 type RNil = 'RNil
 type (:>) = '(:>)
-
--- | A reification of an object of type @a@ at type level
-data ReifiesObj a = forall s. Reifies s a => ReifiesObj (Proxy s)
-
-$(mkNuMatching [t| forall a. Proxy a |])
-$(mkNuMatching [t| forall a. ReifiesObj a |])
-
--- | Build a 'ReifiesObj' containing a value
-mkReifiesObj :: a -> ReifiesObj a
-mkReifiesObj a = reify a ReifiesObj
-
--- | Project out the value contained in a 'ReifiesObj'
-projReifiesObj :: ReifiesObj a -> a
-projReifiesObj (ReifiesObj prx) = reflect prx
-
--- | Builds an 'MbTypeRepr' proof for use in a 'NuMatching' instance. This proof
--- is unsafe because it does no renaming of fresh names, so should only be used
--- for types that are guaranteed not to contain any 'Name' or 'Mb' values.
-unsafeMbTypeRepr :: MbTypeRepr a
-unsafeMbTypeRepr = isoMbTypeRepr mkReifiesObj projReifiesObj
 
 class Monad m => MonadBind m where
   mbM :: NuMatching a => Mb ctx (m a) -> m (Mb ctx a)
@@ -126,146 +109,6 @@ instance (MonadClosed m, Closable s) => MonadClosed (StateT s m) where
                                  `clApply` toClosed s)
        put (snd $ unClosed cl_a_s)
        return ($(mkClosed [| fst |]) `clApply` cl_a_s)
-
-
-----------------------------------------------------------------------
--- * Contexts of Crucible Types
-----------------------------------------------------------------------
-
--- | Convert a Crucible 'Ctx' to a Hobbits 'RList'
-type family CtxToRList (ctx :: Ctx k) :: RList k where
-  CtxToRList EmptyCtx = RNil
-  CtxToRList (ctx' ::> x) = CtxToRList ctx' :> x
-
--- | Convert a Hobbits 'RList' to a Crucible 'Ctx'
-type family RListToCtx (ctx :: RList k) :: Ctx k where
-  RListToCtx RNil = EmptyCtx
-  RListToCtx (ctx' :> x) = RListToCtx ctx' ::> x
-
--- | Convert a Crucible context of contexts to a Hobbits one
-type family CtxCtxToRList (ctx :: Ctx (Ctx k)) :: RList (RList k) where
-  CtxCtxToRList EmptyCtx = RNil
-  CtxCtxToRList (ctx' ::> c) = CtxCtxToRList ctx' :> CtxToRList c
-
--- | Convert a Hobbits context of contexts to a Crucible one
-type family RListToCtxCtx (ctx :: RList (RList k)) :: Ctx (Ctx k) where
-  RListToCtxCtx RNil = EmptyCtx
-  RListToCtxCtx (ctx' :> c) = RListToCtxCtx ctx' ::> RListToCtx c
-
--- | Convert a Crucible 'Assignment' to a Hobbits 'MapRList'
-assignToRList :: Assignment f ctx -> MapRList f (CtxToRList ctx)
-assignToRList asgn = case viewAssign asgn of
-  AssignEmpty -> MNil
-  AssignExtend asgn' f -> assignToRList asgn' :>: f
-
--- | Convert a Hobbits 'MapRList' to a Crucible 'Assignment'
-rlistToAssign :: MapRList f ctx -> Assignment f (RListToCtx ctx)
-rlistToAssign MNil = Ctx.empty
-rlistToAssign (rlist :>: f) = extend (rlistToAssign rlist) f
-
--- | Representation types that support the 'withKnownRepr' operation
-class WithKnownRepr f where
-  withKnownRepr :: f a -> (KnownRepr f a => r) -> r
-
-instance WithKnownRepr NatRepr where
-  withKnownRepr = withKnownNat
-
-instance WithKnownRepr BaseTypeRepr where
-  withKnownRepr = error "FIXME HERE: write withKnownBaseType!"
-
-instance WithKnownRepr TypeRepr where
-  withKnownRepr = error "FIXME HERE: write withKnownType!"
-
-instance WithKnownRepr CtxRepr where
-  withKnownRepr = error "FIXME HERE: write withKnownCtx!"
-
-instance WithKnownRepr (Index ctx) where
-  withKnownRepr = error "FIXME HERE: write withKnownIndex!"
-
-
--- | A 'TypeRepr' that has been promoted to a constraint; this is necessary in
--- order to make a 'NuMatching' instance for it, as part of the representation
--- of 'TypeRepr' is hidden (and also this way is faster)
-data CruType a where
-  CruType :: KnownRepr TypeRepr a => CruType a
-
--- | Extract the 'TypeRepr' from a 'CruType'
-unCruType :: CruType a -> TypeRepr a
-unCruType CruType = knownRepr
-
-instance TestEquality CruType where
-  testEquality (CruType :: CruType a1) (CruType :: CruType a2) =
-    testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
-
-instance Closable (CruType a) where
-  toClosed CruType = $(mkClosed [| CruType |])
-
--- | A context of Crucible types. NOTE: we do not use 'MapRList' here, because
--- we do not yet have a nice way to define the 'NuMatching' instance we want...
-data CruCtx ctx where
-  CruCtxNil :: CruCtx RNil
-  CruCtxCons :: CruCtx ctx -> CruType a -> CruCtx (ctx :> a)
-
-$(mkNuMatching [t| forall a. CruType a |])
-$(mkNuMatching [t| forall ctx. CruCtx ctx |])
-
-instance Closable (CruCtx ctx) where
-  toClosed CruCtxNil = $(mkClosed [| CruCtxNil |])
-  toClosed (CruCtxCons ctx a) =
-    $(mkClosed [| CruCtxCons |]) `clApply` toClosed ctx `clApply` toClosed a
-
-instance TestEquality CruCtx where
-  testEquality CruCtxNil CruCtxNil = Just Refl
-  testEquality (CruCtxCons ctx1 tp1) (CruCtxCons ctx2 tp2)
-    | Just Refl <- testEquality ctx1 ctx2
-    , Just Refl <- testEquality tp1 tp2
-    = Just Refl
-  testEquality _ _ = Nothing
-
-instance KnownRepr CruCtx RNil where
-  knownRepr = CruCtxNil
-
-instance KnownRepr TypeRepr tp => KnownRepr CruType tp where
-  knownRepr = CruType
-
-instance (KnownRepr CruCtx tps, KnownRepr CruType tp) =>
-         KnownRepr CruCtx (tps :> tp) where
-  knownRepr = CruCtxCons knownRepr knownRepr
-
--- | Build a 'CruType' from a 'TypeRepr'
-mkCruType :: TypeRepr a -> CruType a
-mkCruType tp = withKnownRepr tp CruType
-
--- | Build a 'CruCtx' from a 'CtxRepr'
-mkCruCtx :: CtxRepr ctx -> CruCtx (CtxToRList ctx)
-mkCruCtx ctx = case viewAssign ctx of
-  AssignEmpty -> CruCtxNil
-  AssignExtend ctx' tp -> CruCtxCons (mkCruCtx ctx') (mkCruType tp)
-
--- | The empty context
-emptyCruCtx :: CruCtx RNil
-emptyCruCtx = CruCtxNil
-
--- | Build a singleton crucible context
-singletonCruCtx :: TypeRepr tp -> CruCtx (RNil :> tp)
-singletonCruCtx tp = CruCtxCons CruCtxNil (mkCruType tp)
-
--- | Add an element to the end of a context
-extCruCtx :: KnownRepr TypeRepr a => CruCtx ctx -> CruCtx (ctx :> a)
-extCruCtx ctx = CruCtxCons ctx CruType
-
--- | Remove an element from the end of a context
-unextCruCtx :: CruCtx (ctx :> a) -> CruCtx ctx
-unextCruCtx (CruCtxCons ctx _) = ctx
-
--- | Append two contexts
-appendCruCtx :: CruCtx ctx1 -> CruCtx ctx2 -> CruCtx (ctx1 :++: ctx2)
-appendCruCtx ctx1 CruCtxNil = ctx1
-appendCruCtx ctx1 (CruCtxCons ctx2 tp) = CruCtxCons (appendCruCtx ctx1 ctx2) tp
-
-ctxToMap :: CruCtx ctx -> MapRList CruType ctx
-ctxToMap CruCtxNil = MNil
-ctxToMap (CruCtxCons ctx tp) = ctxToMap ctx :>: tp
 
 
 ----------------------------------------------------------------------
@@ -327,6 +170,9 @@ data PermExpr (a :: CrucibleType) where
   PExpr_Spl :: SplittingExpr -> PermExpr SplittingType
   -- ^ An expression that represents a permission splitting
 
+  PExpr_Fun :: FnHandle args ret -> PermExpr (FunctionHandleType args ret)
+  -- ^ A literal function pointer
+
 
 -- | A sequence of permission expressions
 data PermExprs (as :: Ctx CrucibleType) where
@@ -345,6 +191,7 @@ $(mkNuMatching [t| SplittingExpr |])
 $(mkNuMatching [t| forall a . PermExpr a |])
 $(mkNuMatching [t| forall a . BVFactor a |])
 $(mkNuMatching [t| forall as . PermExprs as |])
+
 
 instance Eq SplittingExpr where
   SplExpr_All == SplExpr_All = True
@@ -396,6 +243,9 @@ instance Eq (PermExpr a) where
 
   (PExpr_Spl spl1) == (PExpr_Spl spl2) = spl1 == spl2
   (PExpr_Spl _) == _ = False
+
+  (PExpr_Fun fh1) == (PExpr_Fun fh2) = fh1 == fh2
+  (PExpr_Fun _) == _ = False
 
 
 instance Eq (PermExprs as) where
@@ -582,6 +432,14 @@ bvMod (bvMatch -> (factors, off)) n =
                        if mod i n /= 0 then Just f else Nothing) factors)
   (mod off n)
 
+-- | Convert an LLVM pointer expression to a variable + optional offset, if this
+-- is possible
+asLLVMOffset :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
+                Maybe (ExprVar (LLVMPointerType w), PermExpr (BVType w))
+asLLVMOffset (PExpr_Var x) = Just (x, bvInt 0)
+asLLVMOffset (PExpr_LLVMOffset x off) = Just (x, off)
+asLLVMOffset _ = Nothing
+
 -- | Add a word expression to an LLVM pointer expression
 addLLVMOffset :: (1 <= w, KnownNat w) =>
                  PermExpr (LLVMPointerType w) -> PermExpr (BVType w) ->
@@ -639,9 +497,22 @@ data ValuePerm (a :: CrucibleType) where
                        LLVMFramePerm w ->
                        ValuePerm (LLVMFrameType w)
 
+  -- | A function permission
+  ValPerm_Fun :: FunPerm ghosts args ret ->
+                 ValuePerm (FunctionHandleType args ret)
+
+
+-- | A sequence of value permissions
+data ValuePerms as where
+  ValPerms_Nil :: ValuePerms RNil
+  ValPerms_Cons :: ValuePerms as -> ValuePerm a -> ValuePerms (as :> a)
+
+-- | A binding of 0 or more variables, each with permissions
+type MbValuePerms ctx = Mb ctx (ValuePerms ctx)
+
 -- | A frame permission is a list of the pointers and corresponding sizes that
 -- have been allocated in the frame, which are required in order to delete it
-type LLVMFramePerm w = [(ExprVar (LLVMPointerType w), Integer)]
+type LLVMFramePerm w = [(PermExpr (LLVMPointerType w), Integer)]
 
 -- | A permission to the memory referenced by an LLVM pointer
 data LLVMPtrPerm w
@@ -665,6 +536,41 @@ data LLVMArrayPerm w =
   deriving Eq
 
 
+-- | A function permission is a set of input and output permissions inside a
+-- context of ghost variables that must be solved for when the function is
+-- called
+data FunPerm ghosts args ret where
+  FunPerm :: KnownRepr CruCtx ghosts => Proxy args ->
+             MbValuePerms (ghosts :++: CtxToRList args) ->
+             MbValuePerms (ghosts :++: CtxToRList args :> ret) ->
+             FunPerm ghosts args ret
+
+
+-- | A list of "distinguished" permissions to named variables
+-- FIXME: just call these VarsAndPerms or something like that...
+data DistPerms ps where
+  DistPermsNil :: DistPerms RNil
+  DistPermsCons :: DistPerms ps -> ExprVar a -> ValuePerm a ->
+                   DistPerms (ps :> a)
+
+type MbDistPerms ps = Mb ps (DistPerms ps)
+
+instance TestEquality DistPerms where
+  testEquality DistPermsNil DistPermsNil = Just Refl
+  testEquality (DistPermsCons ps1 x1 p1) (DistPermsCons ps2 x2 p2)
+    | Just Refl <- testEquality ps1 ps2
+    , Just Refl <- testEquality x1 x2
+    , p1 == p2
+    = Just Refl
+  testEquality _ _ = Nothing
+
+
+-- FIXME: move to Hobbits!
+instance Eq a => Eq (Mb ctx a) where
+  mb1 == mb2 =
+    mbLift $ nuMultiWithElim (\_ (_ :>: a1 :>: a2) ->
+                               a1 == a2) (MNil :>: mb1 :>: mb2)
+
 instance (Eq (ValuePerm a)) where
   ValPerm_True == ValPerm_True = True
   ValPerm_True == _ = False
@@ -672,13 +578,10 @@ instance (Eq (ValuePerm a)) where
   (ValPerm_Eq _) == _ = False
   (ValPerm_Or p1 p1') == (ValPerm_Or p2 p2') = p1 == p2 && p1' == p2'
   (ValPerm_Or _ _) == _ = False
-  (ValPerm_Exists (p1 :: Binding a1 _)) ==
-    (ValPerm_Exists (p2 :: Binding a2 _)) =
-    case testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2) of
-      Just Refl ->
-        mbLift $
-        nuWithElim (\_ (_ :>: p1' :>: p2') -> p1' == p2')
-        (MNil :>: p1 :>: p2)
+  (ValPerm_Exists (p1 :: Binding a1 _)) == (ValPerm_Exists (p2 :: Binding a2 _))
+    | Just Refl <-
+        testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
+    = p1 == p2
   (ValPerm_Exists _) == _ = False
   (ValPerm_Mu p1) == (ValPerm_Mu p2) =
     mbLift $
@@ -690,6 +593,29 @@ instance (Eq (ValuePerm a)) where
   (ValPerm_LLVMPtr _) == _ = False
   (ValPerm_LLVMFrame ptrs1) == (ValPerm_LLVMFrame ptrs2) = ptrs1 == ptrs2
   (ValPerm_LLVMFrame _) == _ = False
+  (ValPerm_Fun fperm1) == (ValPerm_Fun fperm2)
+    | Just Refl <- funPermEq fperm1 fperm2 = True
+  (ValPerm_Fun _) == _ = False
+
+instance Eq (ValuePerms as) where
+  ValPerms_Nil == ValPerms_Nil = True
+  (ValPerms_Cons ps1 p1) == (ValPerms_Cons ps2 p2) =
+    ps1 == ps2 && p1 == p2
+
+-- | Test if function permissions with different ghost argument lists are equal
+funPermEq :: FunPerm ghosts1 args ret -> FunPerm ghosts2 args ret ->
+             Maybe (ghosts1 :~: ghosts2)
+funPermEq (FunPerm _ perms_in1 perms_out1 :: FunPerm ghosts1 args ret)
+  (FunPerm _ perms_in2 perms_out2 :: FunPerm ghosts2 args ret)
+  | Just Refl <-
+      testEquality (knownRepr :: CruCtx ghosts1) (knownRepr :: CruCtx ghosts2)
+  , perms_in1 == perms_in2 && perms_out1 == perms_out2
+  = Just Refl
+funPermEq _ _ = Nothing
+
+instance Eq (FunPerm ghosts args ret) where
+  fperm1 == fperm2 = isJust (funPermEq fperm1 fperm2)
+
 
 {-
 instance (Eq (LLVMPtrPerm w)) where
@@ -707,9 +633,12 @@ instance (Eq (LLVMPtrPerm w)) where
 
 
 $(mkNuMatching [t| forall a . ValuePerm a |])
+$(mkNuMatching [t| forall as. ValuePerms as |])
 $(mkNuMatching [t| forall w . LLVMPtrPerm w |])
 $(mkNuMatching [t| forall w . LLVMFieldPerm w |])
 $(mkNuMatching [t| forall w . LLVMArrayPerm w |])
+$(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
+$(mkNuMatching [t| forall ps. DistPerms ps |])
 
 
 -- | Extract @p1@ from a permission of the form @p1 \/ p2@
@@ -839,30 +768,78 @@ lastLLVMPtrPermIndex p =
 -- | Create exclusive LLVM pointer permissions for a given number of bytes, of
 -- the form @x:ptr((0,All) |-> true * ... * (sz-w/8,All) |-> true)@, where @w@
 -- is the pointer width in bits
-llvmPtrPermOfSize :: (1 <= w, KnownNat w) => Integer ->
-                     ValuePerm (LLVMPointerType w)
-llvmPtrPermOfSize sz = helper Proxy sz where
-  helper :: (1 <= w, KnownNat w) => Proxy w -> Integer ->
-            ValuePerm (LLVMPointerType w)
+llvmPtrPermsOfSize :: (1 <= w, KnownNat w) => Integer -> [LLVMPtrPerm w]
+llvmPtrPermsOfSize sz = helper Proxy sz where
+  helper :: (1 <= w, KnownNat w) => Proxy w -> Integer -> [LLVMPtrPerm w]
   helper w sz
     | (8*sz) `mod` natVal w /= 0 =
       error "llvmPtrPermOfSize: size not a multiple of pointer width!"
   helper w sz =
     let num_ptrs = (8*sz) `div` natVal w in
-    ValPerm_LLVMPtr $ flip map [0 .. num_ptrs - 1] $ \i ->
+    flip map [0 .. num_ptrs - 1] $ \i ->
     LLVMPP_Field $ LLVMFieldPerm
     { llvmFieldOffset = bvInt (8 * i * natVal w),
       llvmFieldSplitting = SplExpr_All,
       llvmFieldPerm = ValPerm_True }
 
+-- | Create an exclusive LLVM pointer permission for a given number of bytes, of
+-- the form @x:ptr((0,All) |-> true * ... * (sz-w/8,All) |-> true)@, where @w@
+-- is the pointer width in bits
+llvmPtrPermOfSize :: (1 <= w, KnownNat w) => Integer ->
+                     ValuePerm (LLVMPointerType w)
+llvmPtrPermOfSize = ValPerm_LLVMPtr . llvmPtrPermsOfSize
+
 -- | Create a list of pointer permissions needed in order to deallocate a frame
--- that has the given frame permissions
+-- that has the given frame permissions. If any of the required permissions are
+-- unsatisfiable to the point that we cannot construct them (because they
+-- require pointer permissions to an LLVM word), return 'Nothing'.
 llvmFrameDeletionPerms :: (1 <= w, KnownNat w) => LLVMFramePerm w ->
-                          Some DistPerms
-llvmFrameDeletionPerms [] = Some DistPermsNil
-llvmFrameDeletionPerms ((x,sz):fperm')
-  | Some del_perms <- llvmFrameDeletionPerms fperm'
-  = Some $ DistPermsCons del_perms x (llvmPtrPermOfSize sz)
+                          Maybe (Some DistPerms)
+llvmFrameDeletionPerms [] = Just $ Some DistPermsNil
+llvmFrameDeletionPerms ((asLLVMOffset -> Just (x,off), sz):fperm')
+  | Just (Some del_perms) <- llvmFrameDeletionPerms fperm' =
+    Just $ Some $ DistPermsCons del_perms x $ ValPerm_LLVMPtr $
+    map (offsetLLVMPtrPerm off) $ llvmPtrPermsOfSize sz
+llvmFrameDeletionPerms _ = Nothing
+
+valuePermsToDistPerms :: MapRList Name ps -> ValuePerms ps -> DistPerms ps
+valuePermsToDistPerms MNil _ = DistPermsNil
+valuePermsToDistPerms (ns :>: n) (ValPerms_Cons ps p) =
+  DistPermsCons (valuePermsToDistPerms ns ps) n p
+
+mbValuePermsToDistPerms :: MbValuePerms ps -> MbDistPerms ps
+mbValuePermsToDistPerms = nuMultiWithElim1 valuePermsToDistPerms
+
+-- | Extract the variables in a 'DistPerms'
+distPermsVars :: DistPerms ps -> MapRList Name ps
+distPermsVars DistPermsNil = MNil
+distPermsVars (DistPermsCons ps x _) = distPermsVars ps :>: x
+
+-- | Append two lists of distringuished permissions
+appendDistPerms :: DistPerms ps1 -> DistPerms ps2 -> DistPerms (ps1 :++: ps2)
+appendDistPerms ps1 DistPermsNil = ps1
+appendDistPerms ps1 (DistPermsCons ps2 x p) =
+  DistPermsCons (appendDistPerms ps1 ps2) x p
+
+-- | Lens for the top permission in a 'DistPerms' stack
+distPermsHead :: ExprVar a -> Lens' (DistPerms (ps :> a)) (ValuePerm a)
+distPermsHead x =
+  lens (\(DistPermsCons _ y p) ->
+         if x == y then p else error "distPermsHead: incorrect variable name!")
+  (\(DistPermsCons pstk y _) p ->
+    if x == y then DistPermsCons pstk y p else
+      error "distPermsHead: incorrect variable name!")
+
+-- | The lens for the tail of a 'DistPerms' stack
+distPermsTail :: Lens' (DistPerms (ps :> a)) (DistPerms ps)
+distPermsTail =
+  lens (\(DistPermsCons pstk _ _) -> pstk)
+  (\(DistPermsCons _ x p) pstk -> DistPermsCons pstk x p)
+
+-- | The lens for the nth permission in a 'DistPerms' stack
+nthVarPerm :: Member ps a -> ExprVar a -> Lens' (DistPerms ps) (ValuePerm a)
+nthVarPerm Member_Base x = distPermsHead x
+nthVarPerm (Member_Step memb') x = distPermsTail . nthVarPerm memb' x
 
 
 ----------------------------------------------------------------------
@@ -1090,6 +1067,15 @@ class MonadBind m => SubstVar s m | s -> m where
 class SubstVar s m => Substable s a m where
   genSubst :: s ctx -> Mb ctx a -> m a
 
+instance SubstVar s m => Substable s Integer m where
+  genSubst _ mb_i = return $ mbLift mb_i
+
+instance (NuMatching a, Substable s a m) => Substable s [a] m where
+  genSubst s as = mapM (genSubst s) (mbList as)
+
+instance (Substable s a m, Substable s b m) => Substable s (a,b) m where
+  genSubst s ab = (,) <$> genSubst s (fmap fst ab) <*> genSubst s (fmap snd ab)
+
 instance (Substable s a m, NuMatching a) => Substable s (Mb ctx a) m where
   genSubst s mbmb = mbM $ fmap (genSubst s) (mbSwap mbmb)
 
@@ -1126,6 +1112,8 @@ instance SubstVar s m => Substable s (PermExpr a) m where
     addLLVMOffset <$> substExprVar s x <*> genSubst s off
   genSubst s [nuP| PExpr_Spl spl |] =
     PExpr_Spl <$> genSubst s spl
+  genSubst _ [nuP| PExpr_Fun fh |] =
+    return $ PExpr_Fun $ mbLift fh
 
 instance SubstVar s m => Substable s (PermExprs as) m where
   genSubst s [nuP| PExprs_Nil |] = return PExprs_Nil
@@ -1138,6 +1126,8 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
   genSubst s [nuP| ValPerm_Or p1 p2 |] =
     ValPerm_Or <$> genSubst s p1 <*> genSubst s p2
   genSubst s [nuP| ValPerm_Exists p |] =
+    -- FIXME: maybe we don't need extSubst at all, but can just use the
+    -- Substable instance for Mb ctx a from above
     ValPerm_Exists <$>
     nuM (\x -> genSubst (extSubst s x) $ mbCombine p)
   genSubst s [nuP| ValPerm_Mu p |] =
@@ -1145,6 +1135,15 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
   genSubst s [nuP| ValPerm_Var x |] = substPermVar s x
   genSubst s [nuP| ValPerm_LLVMPtr pps |] =
     ValPerm_LLVMPtr <$> mapM (genSubst s) (mbList pps)
+  genSubst s [nuP| ValPerm_LLVMFrame fp |] =
+    ValPerm_LLVMFrame <$> genSubst s fp
+  genSubst s [nuP| ValPerm_Fun fperm |] =
+    ValPerm_Fun <$> genSubst s fperm
+
+instance SubstVar s m => Substable s (ValuePerms as) m where
+  genSubst s [nuP| ValPerms_Nil |] = return ValPerms_Nil
+  genSubst s [nuP| ValPerms_Cons ps p |] =
+    ValPerms_Cons <$> genSubst s ps <*> genSubst s p
 
 instance SubstVar s m => Substable s (LLVMPtrPerm a) m where
   genSubst s [nuP| LLVMPP_Field fp |] = LLVMPP_Field <$> genSubst s fp
@@ -1160,6 +1159,17 @@ instance SubstVar s m => Substable s (LLVMArrayPerm a) m where
     LLVMArrayPerm <$> genSubst s off <*> genSubst s len <*>
     return (mbLift stride) <*> genSubst s spl <*>
     mapM (genSubst s) (mbList pps)
+
+instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
+  genSubst s [nuP| FunPerm prx perms_in perms_out |] =
+    FunPerm (mbLift prx) <$> genSubst s perms_in <*> genSubst s perms_out
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (DistPerms ps) m where
+  genSubst s [nuP| DistPermsNil |] = return DistPermsNil
+  genSubst s [nuP| DistPermsCons dperms' x p |] =
+    DistPermsCons <$> genSubst s dperms' <*>
+    return (varSubstVar s x) <*> genSubst s p
 
 
 ----------------------------------------------------------------------
@@ -1423,6 +1433,12 @@ instance AbstractVars a => AbstractVars [a] where
     `clMbMbApplyM` abstractPEVars ns1 ns2 a
     `clMbMbApplyM` abstractPEVars ns1 ns2 as
 
+instance (AbstractVars a, AbstractVars b) => AbstractVars (a,b) where
+  abstractPEVars ns1 ns2 (a,b) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| (,) |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 a
+    `clMbMbApplyM` abstractPEVars ns1 ns2 b
+
 instance AbstractVars SplittingExpr where
   abstractPEVars ns1 ns2 SplExpr_All =
     absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_All |])
@@ -1466,6 +1482,8 @@ instance AbstractVars (PermExpr a) where
   abstractPEVars ns1 ns2 (PExpr_Spl spl) =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Spl |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 spl
+  abstractPEVars ns1 ns2 (PExpr_Fun fh) =
+    absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_Fun |]) `clApply` toClosed fh)
 
 instance AbstractVars (PermExprs as) where
   abstractPEVars ns1 ns2 PExprs_Nil =
@@ -1503,6 +1521,20 @@ instance AbstractVars (ValuePerm a) where
   abstractPEVars ns1 ns2 (ValPerm_LLVMPtr pps) =
     absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_LLVMPtr |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 pps
+  abstractPEVars ns1 ns2 (ValPerm_LLVMFrame fp) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_LLVMFrame |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 fp
+  abstractPEVars ns1 ns2 (ValPerm_Fun fperm) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Fun |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 fperm
+
+instance AbstractVars (ValuePerms as) where
+  abstractPEVars ns1 ns2 ValPerms_Nil =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerms_Nil |])
+  abstractPEVars ns1 ns2 (ValPerms_Cons ps p) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerms_Cons |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ps
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 instance AbstractVars (LLVMPtrPerm w) where
   abstractPEVars ns1 ns2 (LLVMPP_Field fp) =
@@ -1539,67 +1571,17 @@ instance AbstractVars (DistPerms ps) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms
     `clMbMbApplyM` abstractPEVars ns1 ns2 x `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
+instance AbstractVars (FunPerm ghosts args ret) where
+  abstractPEVars ns1 ns2 (FunPerm prx perms_in perms_out) =
+    absVarsReturnH ns1 ns2
+    ($(mkClosed [| FunPerm |]) `clApply` toClosed prx)
+    `clMbMbApplyM` abstractPEVars ns1 ns2 perms_in
+    `clMbMbApplyM` abstractPEVars ns1 ns2 perms_out
+
 
 ----------------------------------------------------------------------
 -- * Permission Sets
 ----------------------------------------------------------------------
-
--- | A list of "distinguished" permissions to named variables
-data DistPerms ps where
-  DistPermsNil :: DistPerms RNil
-  DistPermsCons :: DistPerms ps -> ExprVar a -> ValuePerm a ->
-                   DistPerms (ps :> a)
-
-instance TestEquality DistPerms where
-  testEquality DistPermsNil DistPermsNil = Just Refl
-  testEquality (DistPermsCons ps1 x1 p1) (DistPermsCons ps2 x2 p2)
-    | Just Refl <- testEquality ps1 ps2
-    , Just Refl <- testEquality x1 x2
-    , p1 == p2
-    = Just Refl
-  testEquality _ _ = Nothing
-
-$(mkNuMatching [t| forall ps. DistPerms ps |])
-
-instance SubstVar PermVarSubst m =>
-         Substable PermVarSubst (DistPerms ps) m where
-  genSubst s [nuP| DistPermsNil |] = return DistPermsNil
-  genSubst s [nuP| DistPermsCons dperms' x p |] =
-    DistPermsCons <$> genSubst s dperms' <*>
-    return (varSubstVar s x) <*> genSubst s p
-
-type MbDistPerms ps = Mb ps (DistPerms ps)
-
--- | Extract the variables in a 'DistPerms'
-distPermsVars :: DistPerms ps -> MapRList Name ps
-distPermsVars DistPermsNil = MNil
-distPermsVars (DistPermsCons ps x _) = distPermsVars ps :>: x
-
--- | Append two lists of distringuished permissions
-appendDistPerms :: DistPerms ps1 -> DistPerms ps2 -> DistPerms (ps1 :++: ps2)
-appendDistPerms ps1 DistPermsNil = ps1
-appendDistPerms ps1 (DistPermsCons ps2 x p) =
-  DistPermsCons (appendDistPerms ps1 ps2) x p
-
--- | Lens for the top permission in a 'DistPerms' stack
-distPermsHead :: ExprVar a -> Lens' (DistPerms (ps :> a)) (ValuePerm a)
-distPermsHead x =
-  lens (\(DistPermsCons _ y p) ->
-         if x == y then p else error "distPermsHead: incorrect variable name!")
-  (\(DistPermsCons pstk y _) p ->
-    if x == y then DistPermsCons pstk y p else
-      error "distPermsHead: incorrect variable name!")
-
--- | The lens for the tail of a 'DistPerms' stack
-distPermsTail :: Lens' (DistPerms (ps :> a)) (DistPerms ps)
-distPermsTail =
-  lens (\(DistPermsCons pstk _ _) -> pstk)
-  (\(DistPermsCons _ x p) pstk -> DistPermsCons pstk x p)
-
--- | The lens for the nth permission in a 'DistPerms' stack
-nthVarPerm :: Member ps a -> ExprVar a -> Lens' (DistPerms ps) (ValuePerm a)
-nthVarPerm Member_Base x = distPermsHead x
-nthVarPerm (Member_Step memb') x = distPermsTail . nthVarPerm memb' x
 
 -- | A permission set associates permissions with expression variables, and also
 -- has a stack of "distinguished permissions" that are used for intro rules
@@ -1925,7 +1907,7 @@ castLLVMFieldOffset x off off' perms =
 deleteLLVMFrame :: ExprVar (LLVMFrameType w) -> PermSet ps -> PermSet RNil
 deleteLLVMFrame frame perms
   | ValPerm_LLVMFrame fperm <- perms ^. varPerm frame
-  , Some del_perms <- llvmFrameDeletionPerms fperm
+  , Just (Some del_perms) <- llvmFrameDeletionPerms fperm
   , Just Refl <- testEquality del_perms (perms ^. distPerms)
   = set (varPerm frame) ValPerm_True $
     modifyDistPerms (const DistPermsNil) perms

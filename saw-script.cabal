@@ -138,6 +138,7 @@ library
 
     SAWScript.CrucibleBuiltinsJVM
 
+    SAWScript.Heapster.CruUtil
     SAWScript.Heapster.Permissions
     SAWScript.Heapster.Implication
     SAWScript.Heapster.TypedCrucible
