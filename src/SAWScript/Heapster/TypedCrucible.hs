@@ -40,6 +40,7 @@ import Control.Monad.Reader
 
 import Text.PrettyPrint.ANSI.Leijen (pretty)
 
+import Data.Binding.Hobbits
 import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
 import qualified Data.Binding.Hobbits.NameMap as NameMap
 
@@ -59,7 +60,6 @@ import Lang.Crucible.CFG.Core
 import Lang.Crucible.CFG.Extension
 import Lang.Crucible.Analysis.Fixpoint.Components
 
-import Data.Binding.Hobbits
 import SAWScript.Heapster.CruUtil
 import SAWScript.Heapster.Permissions
 import SAWScript.Heapster.Implication
