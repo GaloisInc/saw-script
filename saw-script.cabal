@@ -142,6 +142,7 @@ library
     SAWScript.Heapster.Permissions
     SAWScript.Heapster.Implication
     SAWScript.Heapster.TypedCrucible
+    SAWScript.Heapster.SAWTranslation
     -- SAWScript.Heapster.CtxMonad
     -- SAWScript.Heapster.CtxPermImpl
     -- SAWScript.Heapster.Permissions
