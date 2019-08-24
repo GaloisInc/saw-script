@@ -79,8 +79,9 @@ newtype TypedExpr ext tp = TypedExpr (App ext TypedReg tp)
 -- | A "typed" function handle is a normal function handle along with an index
 -- of which typing of that function handle we are using, in case there are
 -- multiples (just like 'TypedEntryID', below)
-data TypedFnHandle ghosts args ret =
-  TypedFnHandle (CruCtx ghosts) (FnHandle (RListToCtx args) ret) Int
+data TypedFnHandle ghosts args ret where
+  TypedFnHandle :: CruCtx ghosts -> FnHandle cargs ret -> Int ->
+                   TypedFnHandle ghosts (CtxToRList cargs) ret
 
 -- | All of our blocks have multiple entry points, for different inferred types,
 -- so a "typed" 'BlockID' is a normal Crucible 'BlockID' (which is just an index
@@ -376,8 +377,8 @@ data TypedCFG
      (inits :: RList CrucibleType)
      (ret :: CrucibleType)
   = TypedCFG { tpcfgHandle :: TypedFnHandle ghosts inits ret
-             , tpcfgInputPerms :: MbDistPerms (ghosts :++: inits)
-             , tpcfgOutputPerms :: MbDistPerms (ghosts :++: inits :> ret)
+             , tpcfgInputPerms :: MbValuePerms (ghosts :++: inits)
+             , tpcfgOutputPerms :: MbValuePerms (ghosts :++: inits :> ret)
              , tpcfgBlockMap :: TypedBlockMap ext blocks ret
              , tpcfgEntryBlockID :: TypedEntryID blocks inits ghosts
              }
@@ -1181,13 +1182,25 @@ tcCFG :: PermCheckExtC ext => CFG ext blocks inits ret ->
 tcCFG cfg [clP| FunPerm _ perms_in perms_out :: FunPerm ghosts args ret |] =
   flip evalState (emptyTopPermCheckState (cfgBlockMap cfg)) $
   do init_memb <- stLookupBlockID (cfgEntryBlockID cfg) <$> get
-     insNewBlockEntry init_memb (mkCruCtx $ handleArgTypes $ cfgHandle cfg)
+     init_entry <-
+       insNewBlockEntry init_memb (mkCruCtx $ handleArgTypes $ cfgHandle cfg)
        (knownRepr :: CruCtx ghosts)
        ($(mkClosed [| mbValuePermsToDistPerms |]) `clApply` perms_in)
        ($(mkClosed [| makeRetPerms
                     . mbValuePermsToDistPerms |]) `clApply` perms_out)
      mapM_ (visit cfg) (cfgWeakTopologicalOrdering cfg)
-     error "FIXME HERE NOW: build and return TypedCFG"
+     final_st <- get
+     return $ TypedCFG
+       { tpcfgHandle =
+           -- FIXME: figure out the index for the TypedFnHandle
+           TypedFnHandle (knownRepr :: CruCtx ghosts) (cfgHandle cfg) 0
+       , tpcfgInputPerms = unClosed perms_in
+       , tpcfgOutputPerms = unClosed perms_out
+       , tpcfgBlockMap =
+           mapMapRList
+           (maybe (error "tcCFG: unvisited block!") id . blockInfoBlock)
+           (unClosed $ stBlockInfo final_st)
+       , tpcfgEntryBlockID = init_entry }
   where
     visit :: PermCheckExtC ext => CFG ext cblocks inits ret ->
              WTOComponent (Some (BlockID cblocks)) ->
