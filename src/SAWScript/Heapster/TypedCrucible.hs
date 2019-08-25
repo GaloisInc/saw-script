@@ -104,7 +104,7 @@ instance TestEquality (TypedEntryID blocks args) where
 data TypedJumpTarget blocks ps where
      TypedJumpTarget ::
        TypedEntryID blocks args ghosts ->
-       CruCtx (ghosts :++: args) ->
+       CruCtx args ->
        DistPerms (ghosts :++: args) ->
        TypedJumpTarget blocks ps_in
 
@@ -1061,8 +1061,7 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         -- Translate each "real" argument x into an eq(x) permission, and then
         -- form the append of (ghosts :++: real_args) for the types and the
         -- permissions. These are all used to build the TypedJumpTarget.
-        let ctx_t = appendCruCtx ghost_tps (mkCruCtx arg_tps)
-            arg_eq_perms = argsToEqPerms ctx args
+        let arg_eq_perms = argsToEqPerms ctx args
             perms = appendDistPerms ghost_perms arg_eq_perms in        
 
         -- Insert a new block entrypoint that has all the permissions we
@@ -1075,7 +1074,7 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
           (distPermsVars arg_eq_perms) ret_perms)) >>>= \entryID ->
 
         -- Build the typed jump target for this jump target
-        let target_t = TypedJumpTarget entryID ctx_t perms in
+        let target_t = TypedJumpTarget entryID (mkCruCtx arg_tps) perms in
 
         -- Finally, build the PermImpl that proves all the required permissions
         -- from the current permission set. This proof just copies the existing
