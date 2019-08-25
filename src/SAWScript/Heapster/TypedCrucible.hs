@@ -89,7 +89,8 @@ data TypedFnHandle ghosts args ret where
 -- point to that block. Each entry point also takes an extra set of "ghost"
 -- arguments, not extant in the original program, that are needed to express
 -- input and output permissions.
-data TypedEntryID (blocks :: RList (RList CrucibleType)) args ghosts =
+data TypedEntryID (blocks :: RList (RList CrucibleType))
+     (args :: RList CrucibleType) ghosts =
   TypedEntryID { entryBlockID :: Member blocks args,
                  entryGhosts :: CruCtx ghosts,
                  entryIndex :: Int }
