@@ -57,7 +57,7 @@ import SAWScript.Heapster.TypedCrucible
 
 
 ----------------------------------------------------------------------
--- * Monads for SAW Translation
+-- * The Pure Translation Monad
 ----------------------------------------------------------------------
 
 -- | The result of translating a pure expression at 'CrucibleType' @a@
@@ -77,6 +77,21 @@ data PureTransRes (a :: CrucibleType) where
 -- | A context mapping bound names to their type-level SAW translations
 type PureTransCtx (ctx :: RList CrucibleType) = MapRList PureTransRes ctx
 
+-- | Map a pure translation result to an 'OpenTerm' or 'Nothing' if it has no
+-- pure content, i.e., if it is a splitting or LLVM value
+pureResToTerm :: PureTransRes a -> Maybe OpenTerm
+pureResToTerm PTrans_LLVM = Nothing
+pureResToTerm PTrans_Spl = Nothing
+pureResToTerm (PTrans_Other t) = Just t
+
+-- | Map a context of pure translations to a list of 'OpenTerm's, dropping the
+-- "invisible" ones that are always translated to unit
+pureCtxToTerms :: PureTransCtx ctx -> [OpenTerm]
+pureCtxToTerms MNil = []
+pureCtxToTerms (ctx :>: (pureResToTerm -> Just t)) = pureCtxToTerms ctx ++ [t]
+pureCtxToTerms (ctx :>: _) = pureCtxToTerms ctx
+
+
 -- | The type translation monad = a reader monad for 'PureTransCtx'
 type PureTransM ctx = Reader (PureTransCtx ctx)
 
@@ -85,92 +100,6 @@ type PureTransM ctx = Reader (PureTransCtx ctx)
 inExtPureTransM :: PureTransRes tp -> PureTransM (ctx :> tp) a ->
                    PureTransM ctx a
 inExtPureTransM tp_trans m = runReader m <$> (:>: tp_trans) <$> ask
-
-
--- | The result of translating an impure expression at 'CrucibleType' @a@
-data ImpTransRes (a :: CrucibleType) where
-  -- | LLVM pointer permissions can be broken into multiple SAW terms, one for
-  -- each pointer permission
-  ITrans_LLVMPtr :: [OpenTerm] -> ImpTransRes (LLVMPointerType w)
-
-  -- | The @true@ permission translated to unit, i.e., nothing
-  ITrans_True :: ImpTransRes a
-
-  -- | An @eq(e)@ permission is also translated to unit
-  ITrans_Eq :: ImpTransRes a
-
-  -- | Any other permissions are just SAW terms
-  ITrans_Any :: OpenTerm -> ImpTransRes a
-
--- | A context mapping bound names to their perm translations
-type ImpTransCtx (ctx :: RList CrucibleType) = MapRList ImpTransRes ctx
-
-
--- | A mapping from a block entrypoint to its corresponding SAW variable that is
--- bound to its translation
-data TypedEntryTrans ext blocks ret args =
-  TypedEntryTrans (TypedEntry ext blocks ret args) OpenTerm
-
--- | A mapping from a block to the SAW functions for each entrypoint
-data TypedBlockTrans ext blocks ret args =
-  TypedBlockTrans [TypedEntryTrans ext blocks ret args]
-
--- | A mapping from all block entrypoints to their SAW translations
-type TypedBlockMapTrans ext blocks ret args =
-  MapRList (TypedBlockTrans ext blocks ret) blocks
-
--- | Translate an entrypoint ID by looking up its SAW function
-translateTypedEntryID :: TypedEntryID blocks args ghosts ->
-                         TypedBlockMapTrans ext blocks ret args ->
-                         OpenTerm
-translateTypedEntryID entryID blkMap =
-  let TypedBlockTrans entries = mapRListLookup (entryBlockID entryID) blkMap in
-  foldr (\(TypedEntryTrans entry trm) rest ->
-          case entry of
-            TypedEntry entryID' _ _ _
-              | Just Refl <- testEquality entryID entryID' -> trm
-            _ -> rest)
-  (error "translateTypedEntryID")
-  entries
-
-
--- | Contextual info for a permission-level translation
-data ImpTransInfo ext blocks ret args ctx =
-  ImpTransInfo
-  {
-    itiExprCtx :: PureTransCtx ctx,
-    itiPermSet :: Mb ctx (PermSet RNil),
-    itiPermCtx :: ImpTransCtx ctx,
-    itiBlockTrans :: TypedBlockMapTrans ext blocks ret args,
-    itiCatchHandler :: Maybe OpenTerm
-  }
-
-permTransInfoExtend :: PureTransRes tp -> ValuePerm tp -> ImpTransRes tp ->
-                       ImpTransInfo ext blocks ret args ctx ->
-                       ImpTransInfo ext blocks ret args (ctx :> tp)
-permTransInfoExtend tp_trans p perm_trans (ImpTransInfo {..}) =
-  ImpTransInfo
-  { itiExprCtx = itiExprCtx :>: tp_trans
-  , itiPermCtx = itiPermCtx :>: perm_trans
-  , itiPermSet =
-      mbCombine $
-      fmap (\perms -> nu (\n -> set (varPerm n) p perms)) itiPermSet
-  , .. }
-
--- | The monad for permission-level translation
-type ImpTransM ext blocks ret args ctx =
-  Reader (ImpTransInfo ext blocks ret args ctx)
-
--- | Embed a pure translation into an impure translation
-embedPureM :: PureTransM ctx a -> ImpTransM ext blocks ret args ctx a
-embedPureM m = ask >>= return . runReader m . itiExprCtx
-
--- | Run an 'ImpTransM' computation in an extended context
-inExtImpTransM :: PureTransRes tp -> ValuePerm tp -> ImpTransRes tp ->
-                  ImpTransM ext blocks ret args (ctx :> tp) a ->
-                  ImpTransM ext blocks ret args ctx a
-inExtImpTransM tp_trans p perm_trans m =
-  runReader m <$> permTransInfoExtend tp_trans p perm_trans <$> ask
 
 -- | Build a lambda in a translation monad
 lambdaTransM :: String -> OpenTerm -> (OpenTerm -> Reader r OpenTerm) ->
@@ -192,7 +121,7 @@ piTransM x tp body_m =
 ----------------------------------------------------------------------
 
 -- | The typeclass for the pure translation
-class PureTranslate a res where
+class PureTranslate a res | a -> res where
   ptranslate :: Mb ctx a -> PureTransM ctx res
 
 instance PureTranslate (NatRepr n) OpenTerm where
@@ -259,10 +188,9 @@ instance PureTranslate (ExprVar a) (PureTransRes a) where
 instance PureTranslate (PermExpr a) (PureTransRes a) where
   ptranslate = error "FIXME HERE NOW"
 
-{-
-instance PureTranslate (PermExprs as) (PureTransCtx (CtxToRList as)) where
+instance ress ~ (CtxToRList as) =>
+         PureTranslate (PermExprs as) (PureTransCtx ress) where
   ptranslate = error "FIXME HERE NOW"
--}
 
 instance PureTranslate (BVFactor w) OpenTerm where
   ptranslate = error "FIXME HERE NOW"
@@ -277,27 +205,169 @@ instance PureTranslate (ValuePerms a) [OpenTerm] where
 
 
 ----------------------------------------------------------------------
+-- * The Impure Translation Monad
+----------------------------------------------------------------------
+
+-- | The result of translating an impure expression at 'CrucibleType' @a@
+data ImpTransRes (a :: CrucibleType) where
+  -- | LLVM pointer permissions can be broken into multiple SAW terms, one for
+  -- each pointer permission
+  ITrans_LLVMPtr :: [OpenTerm] -> ImpTransRes (LLVMPointerType w)
+
+  -- | The @true@ permission translated to unit, i.e., nothing
+  ITrans_True :: ImpTransRes a
+
+  -- | An @eq(e)@ permission is also translated to unit
+  ITrans_Eq :: ImpTransRes a
+
+  -- | Any other permissions are just SAW terms. Note that this can include LLVM
+  -- pointer permissions that have not yet been broken into multiple SAW terms.
+  ITrans_Other :: OpenTerm -> ImpTransRes a
+
+-- | A context mapping bound names to their perm translations
+type ImpTransCtx (ctx :: RList CrucibleType) = MapRList ImpTransRes ctx
+
+
+-- | Map an impure translation result to an 'OpenTerm'
+impureResToTerm :: ImpTransRes a -> OpenTerm
+impureResToTerm (ITrans_LLVMPtr ts) = tupleOpenTerm ts
+impureResToTerm ITrans_True = unitOpenTerm
+impureResToTerm ITrans_Eq = unitOpenTerm
+impureResToTerm (ITrans_Other t) = t
+
+-- | Map a context of pure translations to a list of 'OpenTerm's, dropping the
+-- "invisible" ones that are always translated to unit
+impureCtxToTerms :: ImpTransCtx ctx -> [OpenTerm]
+impureCtxToTerms MNil = []
+impureCtxToTerms (ctx :>: res) = impureCtxToTerms ctx ++ [impureResToTerm res]
+
+
+-- | A mapping from a block entrypoint to its corresponding SAW variable that is
+-- bound to its translation
+data TypedEntryTrans ext blocks ret args =
+  TypedEntryTrans (TypedEntry ext blocks ret args) OpenTerm
+
+-- | A mapping from a block to the SAW functions for each entrypoint
+data TypedBlockTrans ext blocks ret args =
+  TypedBlockTrans [TypedEntryTrans ext blocks ret args]
+
+-- | A mapping from all block entrypoints to their SAW translations
+type TypedBlockMapTrans ext blocks ret =
+  MapRList (TypedBlockTrans ext blocks ret) blocks
+
+-- | Translate an entrypoint ID by looking up its SAW function
+translateTypedEntryID :: TypedEntryID blocks args ghosts ->
+                         TypedBlockMapTrans ext blocks ret ->
+                         OpenTerm
+translateTypedEntryID entryID blkMap =
+  let TypedBlockTrans entries = mapRListLookup (entryBlockID entryID) blkMap in
+  foldr (\(TypedEntryTrans entry trm) rest ->
+          case entry of
+            TypedEntry entryID' _ _ _
+              | Just Refl <- testEquality entryID entryID' -> trm
+            _ -> rest)
+  (error "translateTypedEntryID")
+  entries
+
+
+-- | Contextual info for a permission-level translation
+data ImpTransInfo ext blocks ret args ps ctx =
+  ImpTransInfo
+  {
+    itiExprCtx :: PureTransCtx ctx,
+    itiPermSet :: Mb ctx (PermSet ps),
+    itiPermCtx :: ImpTransCtx ctx,
+    itiBlockTrans :: TypedBlockMapTrans ext blocks ret,
+    itiCatchHandler :: Maybe OpenTerm
+  }
+
+permTransInfoExtend :: PureTransRes tp -> ValuePerm tp -> ImpTransRes tp ->
+                       ImpTransInfo ext blocks ret args ps ctx ->
+                       ImpTransInfo ext blocks ret args ps (ctx :> tp)
+permTransInfoExtend tp_trans p perm_trans (ImpTransInfo {..}) =
+  ImpTransInfo
+  { itiExprCtx = itiExprCtx :>: tp_trans
+  , itiPermCtx = itiPermCtx :>: perm_trans
+  , itiPermSet =
+      mbCombine $
+      fmap (\perms -> nu (\n -> set (varPerm n) p perms)) itiPermSet
+  , .. }
+
+-- | The monad for permission-level translation
+type ImpTransM ext blocks ret args ps ctx =
+  Reader (ImpTransInfo ext blocks ret args ps ctx)
+
+-- | Embed a pure translation into an impure translation
+embedPureM :: PureTransM ctx a -> ImpTransM ext blocks ret args ps ctx a
+embedPureM m = ask >>= return . runReader m . itiExprCtx
+
+-- | Run an 'ImpTransM' computation in an extended context
+inExtImpTransM :: PureTransRes tp -> ValuePerm tp -> ImpTransRes tp ->
+                  ImpTransM ext blocks ret args ps (ctx :> tp) a ->
+                  ImpTransM ext blocks ret args ps ctx a
+inExtImpTransM tp_trans p perm_trans m =
+  runReader m <$> permTransInfoExtend tp_trans p perm_trans <$> ask
+
+-- | Apply the translation of a function-like construct (i.e., a
+-- 'TypedJumpTarget' or 'TypedFnHandle') to the pure plus impure translations of
+-- its arguments
+translateApply :: OpenTerm -> PureTransCtx tps -> ImpTransCtx tps ->
+                  OpenTerm
+translateApply f p_args i_args =
+  applyOpenTermMulti f (pureCtxToTerms p_args ++ impureCtxToTerms i_args)
+
+
+----------------------------------------------------------------------
 -- * The Impure Translation
 ----------------------------------------------------------------------
 
 -- | The typeclass for the impure translation
-class ImpureTranslate a res ext blocks ret args where
-  itranslate :: Mb ctx a -> ImpTransM ext blocks ret args ctx res
+class ImpureTranslate a res ext blocks ret args ps | a -> res where
+  itranslate :: Mb ctx a -> ImpTransM ext blocks ret args ps ctx res
 
 -- | The typeclass for the impure translation of a functor at any type to an
 -- 'OpenTerm'
-class ImpureTranslate1 f ext blocks ret args where
-  itranslate1 :: Mb ctx (f a) -> ImpTransM ext blocks ret args ctx OpenTerm
+class ImpureTranslate1 f ext blocks ret args ps where
+  itranslate1 :: Mb ctx (f a) -> ImpTransM ext blocks ret args ps ctx OpenTerm
 
-instance ImpureTranslate1 f ext blocks ret args =>
-         ImpureTranslate (PermImpl f ps) OpenTerm ext blocks ret args where
+instance ImpureTranslate1 f ext blocks ret args ps =>
+         ImpureTranslate (PermImpl f ps) OpenTerm ext blocks ret args ps where
   itranslate = error "FIXME HERE NOW"
 
-instance ImpureTranslate (TypedReg a) (ImpTransRes a) ext blocks ret args where
+instance ImpureTranslate (TypedReg tp) (ImpTransRes tp)
+         ext blocks ret args ps where
   itranslate = error "FIXME HERE NOW"
+
+instance ImpureTranslate (TypedExpr ext tp) (ImpTransRes tp)
+         ext blocks ret args ps where
+  itranslate = error "FIXME HERE NOW"
+
+instance ImpureTranslate (TypedEntryID blocks args' ghosts) OpenTerm
+         ext blocks ret args ps where
+  itranslate mb_entryID =
+    translateTypedEntryID (mbLift mb_entryID) <$> itiBlockTrans <$> ask
+
+-- A sequence of distinguished permissions on variables translates to a list of
+-- pure translations of the variables and impure translations of the permissions
+-- on them
+instance ImpureTranslate (DistPerms tps) (PureTransCtx tps, ImpTransCtx tps)
+         ext blocks ret args ps where
+  itranslate [nuP| DistPermsNil |] = return (MNil, MNil)
+  itranslate [nuP| DistPermsCons perms x _ |] =
+    do (p_trs,i_trs) <- itranslate perms
+       p_tr <- embedPureM $ ptranslate x
+       i_tr <- itranslate (fmap TypedReg x)
+       return (p_trs :>: p_tr, i_trs :>: i_tr)
+
+instance ImpureTranslate (TypedJumpTarget blocks ps) OpenTerm
+         ext blocks ret args ps where
+  itranslate [nuP| TypedJumpTarget entryID _ perms |] =
+    do f <- itranslate entryID
+       (p_args, i_args) <- itranslate perms
+       return $ translateApply f p_args i_args
 
 {-
 FIXME HERE NOW:
 - Need something special for TypedStmt to bind vars; maybe just do seqs?
-- Need ImpTranslate for all the other typed Crucible constructs
+- ImpTranslate for statement sequences, blocks / entrypoints, and CFGs
 -}

@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeOperators #-}
@@ -236,6 +237,9 @@ instance TestEquality CruType where
   testEquality (CruType :: CruType a1) (CruType :: CruType a2) =
     testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
 
+instance Liftable (CruType a) where
+  mbLift [nuP| CruType |] = CruType
+
 instance Closable (CruType a) where
   toClosed CruType = $(mkClosed [| CruType |])
 
@@ -247,6 +251,10 @@ data CruCtx ctx where
 
 $(mkNuMatching [t| forall a. CruType a |])
 $(mkNuMatching [t| forall ctx. CruCtx ctx |])
+
+instance Liftable (CruCtx ctx) where
+  mbLift [nuP| CruCtxNil |] = CruCtxNil
+  mbLift [nuP| CruCtxCons ctx a |] = CruCtxCons (mbLift ctx) (mbLift a)
 
 instance Closable (CruCtx ctx) where
   toClosed CruCtxNil = $(mkClosed [| CruCtxNil |])

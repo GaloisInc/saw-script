@@ -107,7 +107,7 @@ data TypedJumpTarget blocks ps where
        TypedEntryID blocks args ghosts ->
        CruCtx args ->
        DistPerms (ghosts :++: args) ->
-       TypedJumpTarget blocks ps_in
+       TypedJumpTarget blocks (ghosts :++: args)
 
 
 $(mkNuMatching [t| forall tp. TypedReg tp |])
@@ -139,6 +139,12 @@ instance NuMatchingAny1 f => NuMatchingAny1 (LLVMExtensionExpr arch f) where
 {-
 $(mkNuMatching [t| forall w f tp. NuMatchingAny1 f => LLVMStmt w f tp |])
 -}
+
+instance Liftable (TypedEntryID blocks args ghosts) where
+  mbLift [nuP| TypedEntryID entryBlockID entryGhosts entryIndex |] =
+    TypedEntryID { entryBlockID = mbLift entryBlockID,
+                   entryGhosts = mbLift entryGhosts,
+                   entryIndex = mbLift entryIndex }
 
 
 ----------------------------------------------------------------------
