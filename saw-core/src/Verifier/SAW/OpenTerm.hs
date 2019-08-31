@@ -23,7 +23,7 @@ module Verifier.SAW.OpenTerm (
   unitOpenTerm, unitTypeOpenTerm, pairOpenTerm, pairTypeOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
-  applyOpenTerm, applyOpenTermMulti, lambdaOpenTerm, piOpenTerm,
+  applyOpenTerm, applyOpenTermMulti, lambdaOpenTerm, piOpenTerm, letOpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM, completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
@@ -152,6 +152,12 @@ piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
      body <- bindOpenTerm x tp body_f
      typeInferComplete $ Pi x tp body
+
+-- | Build a let expression as an 'OpenTerm'. This is equivalent to
+-- > 'applyOpenTerm' ('lambdaOpenTerm' x tp body) rhs
+letOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> (OpenTerm -> OpenTerm) ->
+               OpenTerm
+letOpenTerm x tp rhs body_f = applyOpenTerm (lambdaOpenTerm x tp body_f) rhs
 
 -- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
 -- is just the type-checking monad, but we give it a new name to keep this
