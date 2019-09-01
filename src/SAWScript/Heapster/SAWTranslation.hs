@@ -99,7 +99,7 @@ type PureTransM ctx = Reader (PureTransCtx ctx)
 -- | Run a 'PureTransM' computation in an extended context
 inExtPureTransM :: PureTransRes tp -> PureTransM (ctx :> tp) a ->
                    PureTransM ctx a
-inExtPureTransM tp_trans m = runReader m <$> (:>: tp_trans) <$> ask
+inExtPureTransM tp_trans = withReader (:>: tp_trans)
 
 -- | Build a lambda in a translation monad
 lambdaTransM :: String -> OpenTerm -> (OpenTerm -> Reader r OpenTerm) ->
@@ -114,6 +114,13 @@ piTransM :: String -> OpenTerm -> (OpenTerm -> Reader r OpenTerm) ->
 piTransM x tp body_m =
   do r <- ask
      return $ piOpenTerm x tp (\x -> runReader (body_m x) r)
+
+-- | Build a let-binding in a translation monad
+letTransM :: String -> OpenTerm -> OpenTerm ->
+             (OpenTerm -> Reader r OpenTerm) -> Reader r OpenTerm
+letTransM x tp rhs body_m =
+  do r <- ask
+     return $ letOpenTerm x tp rhs (\x -> runReader (body_m x) r)
 
 
 ----------------------------------------------------------------------
@@ -299,14 +306,14 @@ type ImpTransM ext blocks ret args ps ctx =
 
 -- | Embed a pure translation into an impure translation
 embedPureM :: PureTransM ctx a -> ImpTransM ext blocks ret args ps ctx a
-embedPureM m = ask >>= return . runReader m . itiExprCtx
+embedPureM = withReader itiExprCtx
 
 -- | Run an 'ImpTransM' computation in an extended context
 inExtImpTransM :: PureTransRes tp -> ValuePerm tp -> ImpTransRes tp ->
                   ImpTransM ext blocks ret args ps (ctx :> tp) a ->
                   ImpTransM ext blocks ret args ps ctx a
-inExtImpTransM tp_trans p perm_trans m =
-  runReader m <$> permTransInfoExtend tp_trans p perm_trans <$> ask
+inExtImpTransM tp_trans p perm_trans =
+  withReader $ permTransInfoExtend tp_trans p perm_trans
 
 -- | Apply the translation of a function-like construct (i.e., a
 -- 'TypedJumpTarget' or 'TypedFnHandle') to the pure plus impure translations of
