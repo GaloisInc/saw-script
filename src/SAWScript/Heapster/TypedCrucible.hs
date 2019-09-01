@@ -255,7 +255,7 @@ llvmStorePermFun (TypedReg p) (TypedReg val) _ =
   over (topDistPerm p . llvmPtrPerm 0) $ \pp ->
   case llvmPtrIsField0 pp of
     Just (SplExpr_All, _) -> llvmFieldPerm0Eq SplExpr_All (PExpr_Var val)
-    _ -> error "llvmLoadPermFun"
+    _ -> error "llvmStorePermFun"
 
 -- | Take in permissions @fp:frame(xs_lens)@ for the given frame pointer @fp@
 -- and return permissions @fp:frame((ret,sz):xs_lens)@ and permissions
