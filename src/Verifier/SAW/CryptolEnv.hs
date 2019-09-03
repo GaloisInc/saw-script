@@ -165,9 +165,8 @@ initCryptolEnv sc = do
 
   -- Load Cryptol prelude
   (_, modEnv) <-
-    liftModuleM modEnv1 $ do
-      path <- MB.findModule preludeName
-      MB.loadModuleByPath path
+    liftModuleM modEnv1 $
+      MB.loadModuleFrom (MM.FromModule preludeName)
 
   -- Generate SAWCore translations for all values in scope
   termEnv <- genTermEnv sc modEnv
@@ -355,10 +354,11 @@ importModule ::
   IO CryptolEnv
 importModule sc env src as imps = do
   let modEnv = eModuleEnv env
-  path <- case src of
-            Left path -> return path
-            Right mn -> fst `fmap` liftModuleM modEnv (MB.findModule mn)
-  (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
+  (m, modEnv') <-
+    liftModuleM modEnv $
+    case src of
+      Left path -> MB.loadModuleByPath path
+      Right mn -> snd <$> MB.loadModuleFrom (MM.FromModule mn)
   checkNotParametrized m
 
   -- Regenerate SharedTerm environment. TODO: preserve old
