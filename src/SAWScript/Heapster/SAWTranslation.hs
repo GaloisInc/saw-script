@@ -103,6 +103,10 @@ inExtPureTransM :: ExprTrans tp -> PureTransM (ctx :> tp) a ->
                    PureTransM ctx a
 inExtPureTransM tp_trans = withReader (:>: tp_trans)
 
+-- | Apply terms inside translation monads
+applyTransM :: Reader r OpenTerm -> Reader r OpenTerm -> Reader r OpenTerm
+applyTransM m1 m2 = applyOpenTerm <$> m1 <*> m2
+
 -- | Build a lambda in a translation monad
 lambdaTransM :: String -> OpenTerm -> (OpenTerm -> Reader r OpenTerm) ->
                 Reader r OpenTerm
@@ -253,14 +257,19 @@ data LLVMPermTrans ctx w
 type PermTransCtx ctx ps = MapRList (PermTrans ctx) ps
 
 
--- | Map a perm translation result to an 'OpenTerm'
-permTransToTerm :: PermTrans ctx a -> Maybe OpenTerm
-permTransToTerm PTrans_True = Nothing
-permTransToTerm (PTrans_Eq _) = Nothing
-permTransToTerm (PTrans_LLVMPtr pts) =
+-- | Map a perm translation result to an 'OpenTerm' if it has one
+permTransToMaybeTerm :: PermTrans ctx a -> Maybe OpenTerm
+permTransToMaybeTerm PTrans_True = Nothing
+permTransToMaybeTerm (PTrans_Eq _) = Nothing
+permTransToMaybeTerm (PTrans_LLVMPtr pts) =
   Just $ tupleOpenTerm $ catMaybes $ map llvmPermTransToTerm pts
-permTransToTerm (PTrans_LLVMFrame _) = Nothing
-permTransToTerm (PTrans_Other _ t) = Just t
+permTransToMaybeTerm (PTrans_LLVMFrame _) = Nothing
+permTransToMaybeTerm (PTrans_Other _ t) = Just t
+
+-- | Map a perm translation result to an 'OpenTerm', returning a unit term if it
+-- does not have a term
+permTransToTerm :: PermTrans ctx a -> OpenTerm
+permTransToTerm = fromMaybe unitOpenTerm . permTransToMaybeTerm
 
 -- | Map a translation of an LLVM pointer perm to an 'OpenTerm'
 llvmPermTransToTerm :: LLVMPermTrans ctx w -> Maybe OpenTerm
@@ -272,7 +281,8 @@ llvmPermTransToTerm (LLVMPermTrans_Free _) = Nothing
 -- "invisible" ones that are always translated to unit
 permCtxToTerms :: PermTransCtx ctx ps -> [OpenTerm]
 permCtxToTerms =
-  catMaybes . mapRListToList . mapMapRList (Constant.Constant . permTransToTerm)
+  catMaybes . mapRListToList .
+  mapMapRList (Constant.Constant . permTransToMaybeTerm)
 
 -- | Extract out the permission of a permission translation result
 permTransPerm :: PermTrans ctx a -> Mb ctx (ValuePerm a)
@@ -354,7 +364,8 @@ data ImpTransInfo ext blocks ret args ps ctx =
     itiPermCtx :: PermTransCtx ctx ctx,
     itiPermStack :: PermTransCtx ctx ps,
     itiBlockTrans :: TypedBlockMapTrans ext blocks ret,
-    itiCatchHandler :: Maybe OpenTerm
+    itiCatchHandler :: Maybe OpenTerm,
+    itiReturnType :: OpenTerm
   }
 
 extPermTransInfo :: ExprTrans tp -> PermTrans (ctx :> tp) tp ->
@@ -389,6 +400,57 @@ translateApply :: OpenTerm -> ExprTransCtx tps -> PermTransCtx ctx tps ->
                   OpenTerm
 translateApply f p_args i_args =
   applyOpenTermMulti f (exprCtxToTerms p_args ++ permCtxToTerms i_args)
+
+
+----------------------------------------------------------------------
+-- * Translating Permission Implication Constructs
+----------------------------------------------------------------------
+
+-- | FIXME: figure out a better name and move to Hobbits
+mbMap2 :: (a -> b -> c) -> Mb ctx a -> Mb ctx b -> Mb ctx c
+mbMap2 f mb1 mb2 = fmap f mb1 `mbApply` mb2
+
+-- | Apply left or-introduction to a permission translation by applying the
+-- @Left@ constructor in SAW
+introOrLTrans :: Mb ctx (ValuePerm a) -> PermTrans ctx a ->
+                 ImpTransM ext blocks ret args ps ctx (PermTrans ctx a)
+introOrLTrans p1 pt =
+  do tp1 <- embedPureM $ ptranslate p1
+     tp2 <- embedPureM $ ptranslate (permTransPerm pt)
+     return $
+       PTrans_Other (mbMap2 ValPerm_Or p1 $ permTransPerm pt)
+       (ctorOpenTerm "Prelude.Left" [tp1, tp2, permTransToTerm pt])
+
+-- | Apply right or-introduction to a permission translation by applying the
+-- @Right@ constructor in SAW
+introOrRTrans :: Mb ctx (ValuePerm a) -> PermTrans ctx a ->
+                 ImpTransM ext blocks ret args ps ctx (PermTrans ctx a)
+introOrRTrans p2 pt =
+  do tp1 <- embedPureM $ ptranslate (permTransPerm pt)
+     tp2 <- embedPureM $ ptranslate p2
+     return $
+       PTrans_Other (mbMap2 ValPerm_Or (permTransPerm pt) p2)
+       (ctorOpenTerm "Prelude.Right" [tp1, tp2, permTransToTerm pt])
+
+-- | Translate an or-elimination to the @either@ elimination rule
+elimOrTrans :: PermTrans ctx a ->
+               (PermTrans ctx a ->
+                ImpTransM ext blocks ret args ps ctx OpenTerm) ->
+               (PermTrans ctx a ->
+                ImpTransM ext blocks ret args ps ctx OpenTerm) ->
+               ImpTransM ext blocks ret args ps ctx OpenTerm
+elimOrTrans (PTrans_Other mb_p t) f1 f2 =
+  do let mb_p1 = fmap orPermLeft mb_p
+         mb_p2 = fmap orPermRight mb_p
+     tp1 <- embedPureM $ ptranslate mb_p1
+     tp2 <- embedPureM $ ptranslate mb_p2
+     ret_tp <- itiReturnType <$> ask
+     return (applyOpenTermMulti (globalOpenTerm "Prelud.either")
+             [tp1, tp2, ret_tp])
+       `applyTransM`
+       lambdaTransM "x_left" tp1 (\t1 -> f1 $ PTrans_Other mb_p1 t1)
+       `applyTransM`
+       lambdaTransM "x_right" tp2 (\t2 -> f2 $ PTrans_Other mb_p2 t2)
 
 
 ----------------------------------------------------------------------
