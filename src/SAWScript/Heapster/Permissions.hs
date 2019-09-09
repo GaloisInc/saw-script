@@ -34,7 +34,7 @@ import Data.Kind
 import Control.Applicative hiding (empty)
 import Control.Monad.Identity
 import Control.Monad.State
-import Control.Lens hiding ((:>), Index)
+import Control.Lens hiding ((:>), Index, Empty)
 
 import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
 import qualified Data.Binding.Hobbits.NameMap as NameMap
@@ -134,8 +134,25 @@ type SplittingType = IntrinsicType "Splitting" EmptyCtx
 splittingTypeRepr :: TypeRepr SplittingType
 splittingTypeRepr = knownRepr
 
+pattern SplittingRepr <-
+  IntrinsicRepr (testEquality (knownSymbol :: SymbolRepr "Splitting") ->
+                 Just Refl)
+  Empty
+  where SplittingRepr = IntrinsicRepr knownSymbol Empty
+
 -- | Crucible type for LLVM stack frame objects
 type LLVMFrameType w = IntrinsicType "LLVM_frame" (EmptyCtx ::> BVType w)
+
+-- | Pattern for building/desctructing LLVM frame types
+pattern LLVMFrameRepr :: () => (1 <= w, ty ~ LLVMFrameType w) =>
+                         NatRepr w -> TypeRepr ty
+pattern LLVMFrameRepr w <-
+  IntrinsicRepr (testEquality (knownSymbol :: SymbolRepr "LLVM_frame") ->
+                 Just Refl)
+  (viewAssign -> AssignExtend Empty (BVRepr w))
+  where
+    LLVMFrameRepr w = IntrinsicRepr knownSymbol (extend Empty (BVRepr w))
+
 
 -- | Expressions that are considered "pure" for use in permissions. Note that
 -- these are in a normal form, that makes them easier to analyze.
