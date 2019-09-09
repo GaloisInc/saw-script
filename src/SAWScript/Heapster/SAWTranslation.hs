@@ -68,6 +68,9 @@ data ExprTrans (a :: CrucibleType) where
   -- their "values" are empty, i.e., the unit type
   ETrans_LLVM :: ExprTrans (LLVMPointerType w)
 
+  -- | Frames are also translated to unit
+  ETrans_LLVMFrame :: ExprTrans (LLVMFrameType w)
+
   -- | Splittings are also translated to unit
   ETrans_Spl :: ExprTrans SplittingType
 
@@ -79,18 +82,30 @@ data ExprTrans (a :: CrucibleType) where
 -- | A context mapping bound names to their type-level SAW translations
 type ExprTransCtx (ctx :: RList CrucibleType) = MapRList ExprTrans ctx
 
+-- | Build the correct 'ExprTrans' from an 'OpenTerm' given its type
+mkExprTrans :: KnownRepr TypeRepr a => OpenTerm -> ExprTrans a
+mkExprTrans = helper knownRepr where
+  helper :: TypeRepr a -> OpenTerm -> ExprTrans a
+  helper (LLVMPointerRepr _) _ = ETrans_LLVM
+  helper SplittingRepr _ = ETrans_Spl
+  helper (LLVMFrameRepr _) _ = ETrans_LLVMFrame
+  helper _ t = ETrans_Other t
+
 -- | Map an expression translation result to an 'OpenTerm' or 'Nothing' if it
 -- has no pure content, i.e., if it is a splitting or LLVM value
-exprTransToTerm :: ExprTrans a -> Maybe OpenTerm
-exprTransToTerm ETrans_LLVM = Nothing
-exprTransToTerm ETrans_Spl = Nothing
-exprTransToTerm (ETrans_Other t) = Just t
+exprTransToMaybeTerm :: ExprTrans a -> Maybe OpenTerm
+exprTransToMaybeTerm ETrans_LLVM = Nothing
+exprTransToMaybeTerm ETrans_Spl = Nothing
+exprTransToMaybeTerm (ETrans_Other t) = Just t
+
+exprTransToTerm :: ExprTrans a -> OpenTerm
+exprTransToTerm = fromMaybe unitOpenTerm . exprTransToMaybeTerm
 
 -- | Map a context of pure translations to a list of 'OpenTerm's, dropping the
 -- "invisible" ones that are always translated to unit
 exprCtxToTerms :: ExprTransCtx ctx -> [OpenTerm]
 exprCtxToTerms MNil = []
-exprCtxToTerms (ctx :>: (exprTransToTerm -> Just t)) = exprCtxToTerms ctx ++ [t]
+exprCtxToTerms (ctx :>: (exprTransToMaybeTerm -> Just t)) = exprCtxToTerms ctx ++ [t]
 exprCtxToTerms (ctx :>: _) = exprCtxToTerms ctx
 
 
@@ -451,6 +466,24 @@ elimOrTrans (PTrans_Other mb_p t) f1 f2 =
        lambdaTransM "x_left" tp1 (\t1 -> f1 $ PTrans_Other mb_p1 t1)
        `applyTransM`
        lambdaTransM "x_right" tp2 (\t2 -> f2 $ PTrans_Other mb_p2 t2)
+elimOrTrans _ _ _ = error "elimOrTrans"
+
+-- | Translate an exists-introduction to a @Sigma@ introduction
+introExistsTrans :: KnownRepr TypeRepr tp => Mb ctx (PermExpr tp) ->
+                    Mb ctx (Binding tp (ValuePerm a)) ->
+                    PermTrans ctx a ->
+                    ImpTransM ext blocks ret args ps ctx (PermTrans ctx a)
+introExistsTrans (mb_e :: Mb ctx (PermExpr tp)) mb_p_body (PTrans_Other mb_p t)
+  | mb_p == mbMap2 (\e p_body ->
+                     subst (singletonSubst e) p_body) mb_e mb_p_body =
+    do tp <- embedPureM $ ptranslate (fmap (const (knownRepr :: TypeRepr tp)) mb_e)
+       tp_f <- embedPureM $ lambdaTransM "x_introEx" tp $ \x ->
+         inExtPureTransM (mkExprTrans x) (ptranslate $ mbCombine mb_p_body)
+       e <- exprTransToTerm <$> embedPureM (ptranslate mb_e)
+       return $
+         PTrans_Other (fmap ValPerm_Exists mb_p_body) $
+         ctorOpenTerm "Prelude.exists" [tp, tp_f, e, t]
+introExistsTrans _ _ _ = error "introExistsTrans"
 
 
 ----------------------------------------------------------------------
