@@ -83,8 +83,8 @@ data ExprTrans (a :: CrucibleType) where
 type ExprTransCtx (ctx :: RList CrucibleType) = MapRList ExprTrans ctx
 
 -- | Build the correct 'ExprTrans' from an 'OpenTerm' given its type
-mkExprTrans :: KnownRepr TypeRepr a => OpenTerm -> ExprTrans a
-mkExprTrans = helper knownRepr where
+mkExprTrans :: TypeRepr a -> OpenTerm -> ExprTrans a
+mkExprTrans = helper where
   helper :: TypeRepr a -> OpenTerm -> ExprTrans a
   helper (LLVMPointerRepr _) _ = ETrans_LLVM
   helper SplittingRepr _ = ETrans_Spl
@@ -242,7 +242,7 @@ instance PureTranslate (ValuePerms a) [OpenTerm] where
 -- emits an element of the SAW type @'ptranslate' p@.
 data PermTrans ctx (a :: CrucibleType) where
   -- | The @true@ permission translated to unit, i.e., nothing
-  PTrans_True :: TypeCtx ctx => PermTrans ctx a
+  PTrans_True :: MapRList Proxy ctx -> PermTrans ctx a
 
   -- | An @eq(e)@ permission is also translated to unit
   PTrans_Eq :: Mb ctx (PermExpr a) -> PermTrans ctx a
@@ -272,9 +272,15 @@ data LLVMPermTrans ctx w
 type PermTransCtx ctx ps = MapRList (PermTrans ctx) ps
 
 
+-- | Build a 'PermTrans' from a permission and its term
+mkPermTrans :: Mb ctx (ValuePerm a) -> OpenTerm -> PermTrans ctx a
+mkPermTrans p@[nuP| ValPerm_True |] _ = PTrans_True (mbToProxy p)
+mkPermTrans [nuP| ValPerm_Eq mb_e |] _ = PTrans_Eq mb_e
+mkPermTrans mb_p t = PTrans_Other mb_p t
+
 -- | Map a perm translation result to an 'OpenTerm' if it has one
 permTransToMaybeTerm :: PermTrans ctx a -> Maybe OpenTerm
-permTransToMaybeTerm PTrans_True = Nothing
+permTransToMaybeTerm (PTrans_True _) = Nothing
 permTransToMaybeTerm (PTrans_Eq _) = Nothing
 permTransToMaybeTerm (PTrans_LLVMPtr pts) =
   Just $ tupleOpenTerm $ catMaybes $ map llvmPermTransToTerm pts
@@ -301,7 +307,7 @@ permCtxToTerms =
 
 -- | Extract out the permission of a permission translation result
 permTransPerm :: PermTrans ctx a -> Mb ctx (ValuePerm a)
-permTransPerm PTrans_True = pure ValPerm_True
+permTransPerm (PTrans_True prxs) = nuMulti prxs $ const ValPerm_True
 permTransPerm (PTrans_Eq e) = fmap ValPerm_Eq e
 permTransPerm (PTrans_LLVMPtr ts) =
   fmap ValPerm_LLVMPtr $ sequenceA $ map llvmPermTransPerm ts
@@ -317,7 +323,7 @@ extMb = mbCombine . fmap (nu . const)
 
 -- | Extend the context of a permission translation result
 extPermTrans :: PermTrans ctx a -> PermTrans (ctx :> tp) a
-extPermTrans PTrans_True = PTrans_True
+extPermTrans (PTrans_True prxs) = PTrans_True (prxs :>: Proxy)
 extPermTrans (PTrans_Eq e) = PTrans_Eq $ extMb e
 extPermTrans (PTrans_LLVMPtr pts) = PTrans_LLVMPtr $ map extLLVMPermTrans pts
 extPermTrans (PTrans_Other p t) = PTrans_Other (extMb p) t
@@ -460,12 +466,10 @@ elimOrTrans (PTrans_Other mb_p t) f1 f2 =
      tp1 <- embedPureM $ ptranslate mb_p1
      tp2 <- embedPureM $ ptranslate mb_p2
      ret_tp <- itiReturnType <$> ask
-     return (applyOpenTermMulti (globalOpenTerm "Prelud.either")
-             [tp1, tp2, ret_tp])
-       `applyTransM`
-       lambdaTransM "x_left" tp1 (\t1 -> f1 $ PTrans_Other mb_p1 t1)
-       `applyTransM`
-       lambdaTransM "x_right" tp2 (\t2 -> f2 $ PTrans_Other mb_p2 t2)
+     f1trans <- lambdaTransM "x_left" tp1 (f1 . mkPermTrans mb_p1)
+     f2trans <- lambdaTransM "x_right" tp2 (f2 . mkPermTrans mb_p2)
+     return (applyOpenTermMulti (globalOpenTerm "Prelude.either")
+             [tp1, tp2, ret_tp, f1trans, f2trans])
 elimOrTrans _ _ _ = error "elimOrTrans"
 
 -- | Translate an exists-introduction to a @Sigma@ introduction
@@ -473,17 +477,43 @@ introExistsTrans :: KnownRepr TypeRepr tp => Mb ctx (PermExpr tp) ->
                     Mb ctx (Binding tp (ValuePerm a)) ->
                     PermTrans ctx a ->
                     ImpTransM ext blocks ret args ps ctx (PermTrans ctx a)
-introExistsTrans (mb_e :: Mb ctx (PermExpr tp)) mb_p_body (PTrans_Other mb_p t)
-  | mb_p == mbMap2 (\e p_body ->
-                     subst (singletonSubst e) p_body) mb_e mb_p_body =
-    do tp <- embedPureM $ ptranslate (fmap (const (knownRepr :: TypeRepr tp)) mb_e)
-       tp_f <- embedPureM $ lambdaTransM "x_introEx" tp $ \x ->
-         inExtPureTransM (mkExprTrans x) (ptranslate $ mbCombine mb_p_body)
+introExistsTrans (mb_e :: Mb ctx (PermExpr tp)) mb_p_body pt
+  | permTransPerm pt
+    == mbMap2 (\e p_body ->
+                subst (singletonSubst e) p_body) mb_e mb_p_body =
+    do let mb_p = permTransPerm pt
+           t = permTransToTerm pt
+       let tp = knownRepr :: TypeRepr tp
+       tp_trans <- embedPureM $ ptranslate (fmap (const tp) mb_e)
+       tp_f <- embedPureM $ lambdaTransM "x_introEx" tp_trans $ \x ->
+         inExtPureTransM (mkExprTrans tp x) (ptranslate $ mbCombine mb_p_body)
        e <- exprTransToTerm <$> embedPureM (ptranslate mb_e)
        return $
          PTrans_Other (fmap ValPerm_Exists mb_p_body) $
-         ctorOpenTerm "Prelude.exists" [tp, tp_f, e, t]
+         ctorOpenTerm "Prelude.exists" [tp_trans, tp_f, e, t]
 introExistsTrans _ _ _ = error "introExistsTrans"
+
+-- | Translate an existential elimination into a @Sigma@ elimination
+elimExistsTrans :: KnownRepr TypeRepr tp =>
+                   PermTrans ctx a ->
+                   (PermTrans (ctx :> tp) a ->
+                    ImpTransM ext blocks ret args ps (ctx :> tp) OpenTerm) ->
+                   ImpTransM ext blocks ret args ps ctx OpenTerm
+elimExistsTrans (PTrans_Other mb_p t) f =
+  do let tp1 = knownRepr
+         mb_p_body = mbCombine $ fmap (exPermBody tp1) mb_p
+     tp1_trans <- embedPureM $ ptranslate $ fmap (const tp1) mb_p
+     tp2_trans <- embedPureM $ lambdaTransM "x_fst" tp1_trans $ \x ->
+       inExtPureTransM (mkExprTrans tp1 x) $ ptranslate mb_p_body
+     ret_tp <- itiReturnType <$> ask
+     let ret_tp_f = lambdaOpenTerm "x_fst" tp1_trans (const ret_tp)
+     f_trans <- lambdaTransM "x_fst" tp1_trans $ \x1 ->
+       lambdaTransM "x_snd" (applyOpenTerm tp2_trans x1) $ \x2 ->
+       inExtImpTransM (mkExprTrans tp1 x1) (PTrans_True (mbToProxy mb_p_body)) $
+       f (mkPermTrans mb_p_body x2)
+     return $ applyOpenTermMulti (globalOpenTerm "Prelude.Sigma__rec")
+       [tp1_trans, tp2_trans, ret_tp_f, f_trans, t]
+elimExistsTrans _ _ = error "elimExistsTrans"
 
 
 ----------------------------------------------------------------------
