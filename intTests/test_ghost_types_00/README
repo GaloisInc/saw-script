@@ -1,0 +1,3 @@
+This test examines the use of ghost state where the SAW spec mistakenly
+specifies that the ghost state contains values of different types at different
+points in program execution.
