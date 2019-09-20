@@ -1,0 +1,2 @@
+This test examines the use of ghost state where only one of two overrides for
+the same function actually modifies the ghost state.
