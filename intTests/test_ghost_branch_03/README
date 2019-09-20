@@ -1,0 +1,6 @@
+This test examines the use of ghost state where the SAW spec mistakenly
+specifies that the ghost state contains values of different types along
+different branches.
+
+The error message is an internal message from saw-verifier and should be
+improved/this case should be ruled out, see #543.
