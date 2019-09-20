@@ -1,2 +1,5 @@
 This test examines the use of ghost state where only one of two overrides for
 the same function actually modifies the ghost state.
+
+It causes Crucible to panic, the fix is that SAW should implement global
+variables differently, see #524.
