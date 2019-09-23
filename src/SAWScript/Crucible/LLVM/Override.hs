@@ -50,7 +50,7 @@ import           Control.Exception as X
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
 import           Data.Either (partitionEithers)
-import           Data.Foldable (for_, traverse_)
+import           Data.Foldable (for_, traverse_, toList)
 import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -74,6 +74,7 @@ import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
 import qualified Lang.Crucible.CFG.Extension.Safety as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
+import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
@@ -302,6 +303,27 @@ ppSymbolicFailure ::
 ppSymbolicFailure = uncurry ppFailure
 -}
 
+-- | Pretty-print the arguments passed to an override
+ppArgs ::
+  forall arch args.
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  Sym ->
+  LLVMCrucibleContext arch            {- ^ context for interacting with Crucible        -} ->
+  MS.CrucibleMethodSpecIR (LLVM arch) {- ^ specification for current function override  -} ->
+  Crucible.RegMap Sym args            {- ^ arguments from the simulator -} ->
+  IO [PP.Doc]
+ppArgs sym cc cs (Crucible.RegMap args) = do
+  let expectedArgTypes = map fst (Map.elems (cs ^. MS.csArgBindings))
+  let aux memTy (Crucible.AnyValue tyrep val) =
+        do storTy <- Crucible.toStorableType memTy
+           llvmval <- Crucible.packMemValue sym storTy tyrep val
+           return (llvmval, memTy)
+  case Crucible.lookupGlobal (Crucible.llvmMemVar (cc^.ccLLVMContext)) (cc^.ccLLVMGlobals) of
+    Nothing -> fail "Internal error: Couldn't find LLVM memory variable"
+    Just mem -> do
+      traverse (Crucible.ppLLVMValWithGlobals sym (Crucible.memImplGlobalMap mem) . fst) =<<
+        liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
+
 -- | This function is responsible for implementing the \"override\" behavior
 --   of method specifications.  The main work done in this function to manage
 --   the process of selecting between several possible different override
@@ -330,16 +352,18 @@ methodSpecHandler ::
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
-  [MS.CrucibleMethodSpecIR (LLVM arch)]   {- ^ specification for current function override  -} ->
+  [MS.CrucibleMethodSpecIR (LLVM arch)]
+    {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc top_loc css retTy = do
+  let fnName = head css ^. csName
   liftIO $ printOutLn opts Info $ unwords
     [ "Matching"
     , show (length css)
     , "overrides of "
-    , ((head css)^.csName)
+    , fnName
     , "..."
     ]
   sym <- Crucible.getSymInterface
@@ -362,20 +386,23 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   -- the preconditions.  We'll use these to perform symbolic branches between the
   -- various overrides.
   branches <-
-    let prettyError methodSpec failureReason =
-          MS.ppMethodSpec methodSpec PP.<$$> ppOverrideFailure failureReason
+    let prettyError methodSpec failureReason = do
+          prettyArgs <- liftIO $ ppArgs sym cc methodSpec (Crucible.RegMap args)
+          pure $
+            MS.ppMethodSpec methodSpec
+            PP.<$$> "Arguments:"
+            PP.<$$> bullets '-' prettyArgs
+            PP.<$$> ppOverrideFailure failureReason
     in
-      case partitionEithers prestates of
-          (errs, []) ->
+      case partitionEithers (toList prestates) of
+          (errs, []) -> do
+            msgs <-
+              mapM (\(cs, err) ->
+                      (PP.text "*" PP.<>) . PP.indent 2 <$> prettyError cs err)
+                   (zip (toList css) errs)
             fail $ show $
               PP.text "All overrides failed during structural matching:"
-              PP.<$$>
-                PP.vcat
-                  (map (\(cs, err) ->
-                          PP.text "*" PP.<> PP.indent 2 (prettyError cs err))
-                      (zip css errs))
-              PP.<$$> PP.text "Actual function return type: " PP.<>
-                        PP.text (show (retTy))
+              PP.<$$> PP.vcat msgs
           (_, ss) -> liftIO $
             forM ss $ \(cs,st) ->
               return (OverrideWithPreconditions (st^.osAsserts) cs st)
@@ -408,7 +435,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
     [ "Branching on"
     , show (length branches')
     , "override variants of"
-    , ((head css)^.csName)
+    , fnName
     , "..."
     ]
   res <- Crucible.regValue <$> Crucible.callOverride
@@ -438,13 +465,12 @@ methodSpecHandler opts sc cc top_loc css retTy = do
            )
          | (precond, cs, st) <- branches'
          ] ++
-         [ let fnName = case branches of
-                         owp : _  -> owp ^. owpMethodSpec . MS.csMethod . llvmMethodName
-                         _        -> "<unknown function>"
-
-               e symFalse unsat = show $ PP.vcat $ concat
+         [ let e prettyArgs symFalse unsat = show $ PP.vcat $ concat
                  [ [ PP.text $
                      "No override specification applies for " ++ fnName ++ "."
+                   ]
+                 , [ PP.text "Arguments:"
+                   , bullets '-' prettyArgs
                    ]
                  , if | not (null false) ->
                         [ PP.text (unwords
@@ -503,19 +529,21 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                         [] -> Nothing
                         ps -> Just (owp, ps))
 
+                  prettyArgs <-
+                    ppArgs sym cc (head css) (Crucible.RegMap args)
+
                   unsat <-
                     filterM
                       (unsatPreconditions sym (owpPreconditions . each . W4.labeledPred))
                       branches
 
                   Crucible.addFailedAssertion sym
-                    (Crucible.GenericSimError (e symFalse unsat))
+                    (Crucible.GenericSimError (e prettyArgs symFalse unsat))
               , Just (W4.plSourceLoc top_loc)
               )
          ]))
      (Crucible.RegMap args)
-  liftIO $ printOutLn opts Info $
-    unwords ["Applied override!", ((head css)^.csName)]
+  liftIO $ printOutLn opts Info $ unwords ["Applied override!", fnName]
   return res
 
 ------------------------------------------------------------------------
