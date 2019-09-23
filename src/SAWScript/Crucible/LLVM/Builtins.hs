@@ -69,6 +69,7 @@ import           Data.IORef
 import           Data.List
 import           Data.List.Extra (nubOrd)
 import qualified Data.List.NonEmpty as NE
+import           Data.List.NonEmpty (NonEmpty)
 import           Data.Maybe
 import           Data.String
 import           Data.Map (Map)
@@ -194,7 +195,7 @@ matchingStatics (L.Symbol a) (L.Symbol b) = go a b
     go ('.':ds) [] = all isDigit ds
     go _ _ = False
 
-findDefMaybeStatic :: L.Module -> String -> Either LLVMVerificationException (NE.NonEmpty L.Define)
+findDefMaybeStatic :: L.Module -> String -> Either LLVMVerificationException (NonEmpty L.Define)
 findDefMaybeStatic llmod nm = do
   case NE.nonEmpty (filter (\d -> matchingStatics (L.defName d) nm') (L.modDefines llmod)) of
     Nothing -> Left $ DefNotFound nm' $ map L.defName $ L.modDefines llmod
@@ -637,12 +638,12 @@ registerOverride ::
   LLVMCrucibleContext arch       ->
   Crucible.SimContext (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
   W4.ProgramLoc              ->
-  [MS.CrucibleMethodSpecIR (LLVM arch)]     ->
+  NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch)) ->
   Crucible.OverrideSim (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
 registerOverride opts cc _ctx top_loc cs = do
   let sym = cc^.ccBackend
   sc <- CrucibleSAW.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
-  let fstr = (head cs)^.csName
+  let fstr = (NE.head cs)^.csName
       fsym = L.Symbol fstr
       llvmctx = cc^.ccLLVMContext
       matches (Crucible.LLVMHandleInfo _ h) =
@@ -672,13 +673,13 @@ registerInvariantOverride
   -> LLVMCrucibleContext arch
   -> W4.ProgramLoc
   -> HashMap Crucible.SomeHandle [Crucible.BreakpointName]
-  -> [MS.CrucibleMethodSpecIR (LLVM arch)]
+  -> NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch))
   -> IO (Crucible.ExecutionFeature (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp)
 registerInvariantOverride opts cc top_loc all_breakpoints cs = do
   sc <- CrucibleSAW.saw_ctx <$>
     (liftIO $ readIORef $ W4.sbStateManager $ cc^.ccBackend)
-  let name = (head cs) ^. csName
-  parent <- case nubOrd $ map (view csParentName) cs of
+  let name = (NE.head cs) ^. csName
+  parent <- case nubOrd $ map (view csParentName) (toList cs) of
     [Just unique_parent] -> return unique_parent
     _ -> fail $ "Multiple parent functions for breakpoint: " ++ name
   liftIO $ printOutLn opts Info $ "Registering breakpoint `" ++ name ++ "`"
@@ -777,17 +778,25 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
           , breakpoint_names
           )
 
-    invariantExecFeatures <- mapM
-      (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
-      (groupOn (view csName) invLemmas)
+    let whenNonEmpty lst action =
+          case NE.nonEmpty lst of
+            Nothing -> pure mempty
+            Just neList -> action neList
+
+    invariantExecFeatures <-
+      whenNonEmpty invLemmas $ \neLemmas ->
+        mapM
+          (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
+          (groupOnNonEmpty (view csName) neLemmas)
     let execFeatures = invariantExecFeatures ++
           (map Crucible.genericToExecutionFeature patSatGenExecFeature)
 
     let initExecState =
           Crucible.InitialState simCtx globals Crucible.defaultAbortHandler $
           Crucible.runOverrideSim retTy $
-          do mapM_ (registerOverride opts cc simCtx top_loc)
-                   (groupOn (view csName) funcLemmas)
+          do void $ whenNonEmpty funcLemmas $ \neLemmas ->
+                mapM_ (registerOverride opts cc simCtx top_loc)
+                      (groupOnNonEmpty (view csName) neLemmas)
              liftIO $ do
                preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
                Crucible.addAssumptions sym (Seq.fromList preds)
@@ -1558,3 +1567,10 @@ groupOn ::
   (a -> b) {- ^ equivalence class projection -} ->
   [a] -> [[a]]
 groupOn f = groupBy ((==) `on` f) . sortBy (compare `on` f)
+
+-- | 'groupOn' for non-empty lists
+groupOnNonEmpty ::
+  (Ord b) =>
+  (a -> b) {- ^ equivalence class projection -} ->
+  NonEmpty a -> [NonEmpty a]
+groupOnNonEmpty f = NE.groupBy ((==) `on` f)

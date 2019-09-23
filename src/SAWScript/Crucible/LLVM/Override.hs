@@ -52,6 +52,8 @@ import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
 import           Data.List (tails)
+import           Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe (fromMaybe, catMaybes)
@@ -352,13 +354,13 @@ methodSpecHandler ::
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
-  [MS.CrucibleMethodSpecIR (LLVM arch)]
+  NonEmpty (MS.CrucibleMethodSpecIR (LLVM arch))
     {- ^ specification for current function override  -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc top_loc css retTy = do
-  let fnName = head css ^. csName
+  let fnName = NE.head css ^. csName
   liftIO $ printOutLn opts Info $ unwords
     [ "Matching"
     , show (length css)
@@ -530,7 +532,7 @@ methodSpecHandler opts sc cc top_loc css retTy = do
                         ps -> Just (owp, ps))
 
                   prettyArgs <-
-                    ppArgs sym cc (head css) (Crucible.RegMap args)
+                    ppArgs sym cc (NE.head css) (Crucible.RegMap args)
 
                   unsat <-
                     filterM
