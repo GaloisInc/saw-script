@@ -1,0 +1,3 @@
+let {{ mulcomm (x:[8]) y = x * y == y * x }};
+write_cnf "mulcomm1.cnf" {{ \x y -> ~(mulcomm x y) }};
+prove (offline_cnf "mulcomm2") {{ mulcomm }};
