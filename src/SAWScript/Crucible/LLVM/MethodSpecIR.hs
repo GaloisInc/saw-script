@@ -32,6 +32,7 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.MethodSpecIR where
 
 import           Control.Lens
+import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
 import           Data.IORef
 import           Data.Monoid ((<>))
@@ -40,6 +41,8 @@ import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 import qualified Text.PrettyPrint.HughesPJ as PP
+
+import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import           Data.Parameterized.All (All(All))
 import           Data.Parameterized.Some (Some(Some))
@@ -185,7 +188,12 @@ showLLVMModule (LLVMModule name m _) =
 instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue where
   type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue ctx = TypedTerm
   muxIntrinsic sym _ _namerep _ctx prd thn els =
-    do st <- readIORef (B.sbStateManager sym)
+    do when (ttSchema thn /= ttSchema els) $ fail $ unlines $
+         [ "Attempted to mux ghost variables of different types:"
+         , show (Cryptol.pp (ttSchema thn))
+         , show (Cryptol.pp (ttSchema els))
+         ]
+       st <- readIORef (B.sbStateManager sym)
        let sc  = Crucible.saw_ctx st
        prd' <- Crucible.toSC sym prd
        typ  <- scTypeOf sc (ttTerm thn)
