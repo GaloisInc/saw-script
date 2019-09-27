@@ -58,6 +58,7 @@ import           Data.Maybe (fromMaybe, catMaybes)
 import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
+import           Data.Text (pack)
 import qualified Data.Vector as V
 import           GHC.Generics (Generic)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -74,6 +75,7 @@ import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
 import qualified Lang.Crucible.CFG.Extension.Safety as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
+import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
@@ -631,6 +633,44 @@ executeCond opts sc cc cs ss = do
             (\k _memty -> executeFreshPointer cc k)
             (ss ^. MS.csFreshPointers)
   OM (setupValueSub %= Map.union ptrs)
+
+  liftIO . mapM_ print $ cs ^. MS.csPreState . MS.csAllocs
+
+  sym <- use syminterface
+  mem <- readGlobal . Crucible.llvmMemVar $ cc ^. ccLLVMContext
+  sub <- use setupValueSub
+
+  let mutableAllocs = Map.filter (view isMut) $ cs ^. MS.csPreState . MS.csAllocs
+      allocPtrs =
+        (\(ptr, spec) ->
+           ( ptr
+           , _allocSpecBytes spec
+           , "state of memory allocated in precondition not described in postcondition"
+           )
+        ) <$> Map.elems (Map.intersectionWith (,) sub mutableAllocs)
+      LLVMModule _ _ mtrans = cc ^. ccLLVMModule
+      mutableGlobals = Map.toList . Map.filter (not . L.gaConstant . L.globalAttrs . fst) $ Crucible.globalInitMap mtrans
+
+  globalPtrs <- liftIO . fmap catMaybes . forM mutableGlobals $ \(s@(L.Symbol st), (_, emt)) ->
+    case emt of
+      Left _ -> pure Nothing
+      Right (mt, _) -> do
+        ptr <- Crucible.doResolveGlobal sym mem s
+        pure $ Just
+          ( ptr
+          , Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
+          , mconcat [ "state of mutable global variable \""
+                    , pack st
+                    , "\" not described in postcondition"
+                    ]
+          )
+
+  mem' <- foldM (\m (ptr, sz, msg) ->
+                    liftIO $ Crucible.doInvalidate sym ?ptrWidth m ptr msg
+                      =<< W4.bvLit sym ?ptrWidth (Crucible.bytesToInteger sz)
+                ) mem $ allocPtrs ++ globalPtrs
+
+  writeGlobal (Crucible.llvmMemVar $ cc ^. ccLLVMContext) mem'
 
   traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
   traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
