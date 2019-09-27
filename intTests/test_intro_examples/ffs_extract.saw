@@ -1,0 +1,10 @@
+m <- llvm_load_module "ffs.bc";
+
+ffs_imp_correct <- crucible_llvm_extract m "ffs_imp_correct";
+ffs_bug_correct <- crucible_llvm_extract m "ffs_bug_correct";
+
+set_base 16;
+print "Proving ffs_imp_correct always returns true...";
+prove_print abc {{ \x -> ffs_imp_correct x != 0 }};
+print "Failing to prove ffs_bug_correct always returns true...";
+prove_print abc {{ \x -> ffs_bug_correct x != 0 }};
