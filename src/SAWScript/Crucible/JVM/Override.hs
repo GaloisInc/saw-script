@@ -618,6 +618,7 @@ valueToSC _sym loc failMsg _tval _val =
 
 ------------------------------------------------------------------------
 
+-- | NOTE: The two 'Term' arguments must have the same type.
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
   JVMCrucibleContext {- ^ context for interacting with Crucible -} ->
