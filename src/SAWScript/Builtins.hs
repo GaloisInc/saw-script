@@ -938,6 +938,15 @@ check_term t = do
   ty <- io $ scTypeCheckError sc t
   printOutLnTop Info (scPrettyTerm opts ty)
 
+check_goal :: ProofScript ()
+check_goal =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "ProofScript failed: no subgoal"
+    (ProofGoal _num _ty _name prop) : gs ->
+      do check_term prop
+         return ((), ProofState goals concl stats timeout)
+
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
 

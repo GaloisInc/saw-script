@@ -743,6 +743,11 @@ primitives = Map.fromList
     Current
     [ "Type-check the given term, printing an error message if ill-typed." ]
 
+  , prim "check_goal"          "ProofScript ()"
+    (pureVal check_goal)
+    Current
+    [ "Type-check the current proof goal, printing an error message if ill-typed." ]
+
   , prim "term_size"           "Term -> Int"
     (pureVal scSharedSize)
     Current
