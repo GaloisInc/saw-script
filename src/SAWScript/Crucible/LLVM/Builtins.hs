@@ -472,24 +472,36 @@ verifyPrestate opts cc mspec globals = do
 
   mem'' <-
     foldM (\m (LLVMAllocGlobal _ symbol@(L.Symbol name)) -> do
-              print name
               let LLVMModule _ _ mtrans = cc ^. ccLLVMModule
                   gimap = Crucible.globalInitMap mtrans
               case Map.lookup symbol gimap of
                 Just (g, Right (mt, _)) -> do
-                  when (L.gaConstant $ L.globalAttrs g) $ fail "global isn't mutable"
+                  when (L.gaConstant $ L.globalAttrs g) . fail $ mconcat
+                    [ "Global variable \""
+                    , name
+                    , "\" is not mutable"
+                    ]
                   let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
                   sz' <- W4.bvLit sym ?ptrWidth $ Crucible.bytesToInteger sz
                   alignment <-
                     case L.globalAlign g of
                       Just a | a > 0 ->
                         case Crucible.toAlignment $ Crucible.toBytes a of
-                          Nothing -> fail $ "Invalid alignemnt: " ++ show a ++ "\n  " ++ "specified for global: " ++ show (L.globalSym g)
+                          Nothing -> fail $ mconcat
+                            [ "Global variable \""
+                            , name
+                            , "\" has invalid alignment: "
+                            , show a
+                            ]
                           Just al -> return al
                       _ -> pure $ Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) mt
                   (ptr, m') <- Crucible.doMalloc sym Crucible.GlobalAlloc Crucible.Mutable name m sz' alignment
                   pure $ Crucible.registerGlobal m' [symbol] ptr
-                _ -> fail "global doesn't exist"
+                _ -> fail $ mconcat
+                  [ "Global variable \""
+                  , name
+                  , "\" does not exist"
+                  ]
           ) mem' $ mspec ^. MS.csGlobalAllocs
 
   mem''' <- setupPrePointsTos mspec opts cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem''
