@@ -45,6 +45,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_alloc
     , crucible_alloc_readonly
     , crucible_alloc_with_size
+    , crucible_alloc_global
     , crucible_fresh_expanded_val
 
     --
@@ -469,10 +470,32 @@ verifyPrestate opts cc mspec globals = do
             (mspec ^. MS.csPreState . MS.csFreshPointers)
   let env = Map.unions [env1, env2]
 
-  mem'' <- setupPrePointsTos mspec opts cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem'
-  let globals1 = Crucible.insertGlobal lvar mem'' globals
-  (globals2,cs) <- setupPrestateConditions mspec cc env globals1 (mspec ^. MS.csPreState . MS.csConditions)
-  args <- resolveArguments cc mspec env
+  mem'' <-
+    foldM (\m (LLVMAllocGlobal _ symbol@(L.Symbol name)) -> do
+              print name
+              let LLVMModule _ _ mtrans = cc ^. ccLLVMModule
+                  gimap = Crucible.globalInitMap mtrans
+              case Map.lookup symbol gimap of
+                Just (g, Right (mt, _)) -> do
+                  when (L.gaConstant $ L.globalAttrs g) $ fail "global isn't mutable"
+                  let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
+                  sz' <- W4.bvLit sym ?ptrWidth $ Crucible.bytesToInteger sz
+                  alignment <-
+                    case L.globalAlign g of
+                      Just a | a > 0 ->
+                        case Crucible.toAlignment $ Crucible.toBytes a of
+                          Nothing -> fail $ "Invalid alignemnt: " ++ show a ++ "\n  " ++ "specified for global: " ++ show (L.globalSym g)
+                          Just al -> return al
+                      _ -> pure $ Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) mt
+                  (ptr, m') <- Crucible.doMalloc sym Crucible.GlobalAlloc Crucible.Mutable name m sz' alignment
+                  pure $ Crucible.registerGlobal m' [symbol] ptr
+                _ -> fail "global doesn't exist"
+          ) mem' $ mspec ^. MS.csGlobalAllocs
+
+  mem''' <- setupPrePointsTos mspec opts cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem''
+  let globals1 = Crucible.insertGlobal lvar mem''' globals
+  (globals2,cs) <- setupPrestateConditions mspec cc mem''' env globals1 (mspec ^. MS.csPreState . MS.csConditions)
+  args <- resolveArguments cc mem''' mspec env
 
   return (args, cs, env, globals2)
 
@@ -492,10 +515,11 @@ checkRegisterCompatibility mt mt' =
 resolveArguments ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch       ->
+  Crucible.MemImpl Sym ->
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   IO [(Crucible.MemType, LLVMVal)]
-resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
+resolveArguments cc mem mspec env = mapM resolveArg [0..(nArgs-1)]
   where
     nArgs = toInteger (length (mspec ^. MS.csArgs))
     tyenv = MS.csAllocations mspec
@@ -518,7 +542,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
         Just (mt, sv) -> do
           mt' <- typeOfSetupValue cc tyenv nameEnv sv
           checkArgTy i mt mt'
-          v <- resolveSetupVal cc env tyenv nameEnv sv
+          v <- resolveSetupVal cc mem env tyenv nameEnv sv
           return (mt, v)
         Nothing -> fail $ unwords ["Argument", show i, "unspecified when verifying", show nm]
 
@@ -543,7 +567,7 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
 
     go :: MemImpl -> MS.PointsTo (LLVM arch) -> IO MemImpl
     go mem (LLVMPointsTo _loc ptr val) =
-      do ptr' <- resolveSetupVal cc env tyenv nameEnv ptr
+      do ptr' <- resolveSetupVal cc mem env tyenv nameEnv ptr
          ptr'' <- case ptr' of
            Crucible.LLVMValInt blk off
              | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth
@@ -558,11 +582,12 @@ setupPrestateConditions ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   MS.CrucibleMethodSpecIR (LLVM arch)        ->
   LLVMCrucibleContext arch        ->
+  Crucible.MemImpl Sym ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   Crucible.SymGlobalState Sym ->
   [MS.SetupCondition (LLVM arch)]            ->
   IO (Crucible.SymGlobalState Sym, [Crucible.LabeledPred Term Crucible.AssumptionReason])
-setupPrestateConditions mspec cc env = aux []
+setupPrestateConditions mspec cc mem env = aux []
   where
     tyenv   = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
@@ -570,8 +595,8 @@ setupPrestateConditions mspec cc env = aux []
     aux acc globals [] = return (globals, acc)
 
     aux acc globals (MS.SetupCond_Equal loc val1 val2 : xs) =
-      do val1' <- resolveSetupVal cc env tyenv nameEnv val1
-         val2' <- resolveSetupVal cc env tyenv nameEnv val2
+      do val1' <- resolveSetupVal cc mem env tyenv nameEnv val1
+         val2' <- resolveSetupVal cc mem env tyenv nameEnv val2
          t     <- assertEqualVals cc val1' val2'
          let lp = Crucible.LabeledPred t (Crucible.AssumptionReason loc "equality precondition")
          aux (lp:acc) globals xs
@@ -929,7 +954,7 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
       let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
                         bindings Crucible.llvmExtensionImpl CrucibleSAW.SAWCruciblePersonality
       mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
-               =<< Crucible.initializeMemory sym ctx llvm_mod
+               =<< Crucible.initializeMemoryConstGlobals sym ctx llvm_mod
 
       let globals  = Crucible.llvmGlobals ctx mem
 
@@ -1418,6 +1443,16 @@ crucible_alloc_with_size bic opts sz lty =
     bic
     opts
     lty
+
+crucible_alloc_global ::
+  BuiltinContext ->
+  Options        ->
+  String         ->
+  LLVMCrucibleSetupM ()
+crucible_alloc_global _bic _opts name = LLVMCrucibleSetupM $
+  do cc <- getLLVMCrucibleContext
+     loc <- getW4Position "crucible_alloc_global"
+     Setup.addAllocGlobal . LLVMAllocGlobal loc $ L.Symbol name
 
 crucible_fresh_pointer ::
   BuiltinContext ->

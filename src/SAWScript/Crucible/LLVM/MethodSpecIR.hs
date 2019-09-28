@@ -238,6 +238,21 @@ instance PPL.Pretty (LLVMPointsTo arch) where
   pretty = ppPointsTo
 
 --------------------------------------------------------------------------------
+-- ** AllocGlobal
+
+type instance MS.AllocGlobal (CL.LLVM arch) = LLVMAllocGlobal arch
+
+data LLVMAllocGlobal arch = LLVMAllocGlobal ProgramLoc L.Symbol
+
+ppAllocGlobal :: LLVMAllocGlobal arch -> PPL.Doc
+ppAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =
+  PPL.text "allocate global"
+  PPL.<+> PPL.text name
+
+instance PPL.Pretty (LLVMAllocGlobal arch) where
+  pretty = ppAllocGlobal
+
+--------------------------------------------------------------------------------
 -- ** ???
 
 intrinsics :: MapF.MapF Crucible.SymbolRepr (Crucible.IntrinsicMuxFn Sym)

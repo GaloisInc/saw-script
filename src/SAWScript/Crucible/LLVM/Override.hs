@@ -677,12 +677,12 @@ executeCond opts sc cc cs ss = do
            )
         ) <$> Map.elems (Map.intersectionWith (,) sub mutableAllocs)
       LLVMModule _ _ mtrans = cc ^. ccLLVMModule
-      mutableGlobals = Map.toList . Map.filter (not . L.gaConstant . L.globalAttrs . fst) $ Crucible.globalInitMap mtrans
+      gimap = Crucible.globalInitMap mtrans
+      mutableGlobals = cs ^. MS.csGlobalAllocs
 
-  globalPtrs <- liftIO . fmap catMaybes . forM mutableGlobals $ \(s@(L.Symbol st), (_, emt)) ->
-    case emt of
-      Left _ -> pure Nothing
-      Right (mt, _) -> do
+  globalPtrs <- liftIO . fmap catMaybes . forM mutableGlobals $ \(LLVMAllocGlobal _ s@(L.Symbol st)) ->
+    case Map.lookup s gimap of
+      Just (_, Right (mt, _)) -> do
         ptr <- Crucible.doResolveGlobal sym mem s
         pure $ Just
           ( ptr
@@ -692,6 +692,7 @@ executeCond opts sc cc cs ss = do
                     , "\" not described in postcondition"
                     ]
           )
+      _ -> pure Nothing
 
   mem' <- foldM (\m (ptr, sz, msg) ->
                     liftIO $ Crucible.doInvalidate sym ?ptrWidth m ptr msg
@@ -1374,7 +1375,7 @@ storePointsToValue opts cc env tyenv nameEnv mem ptr val = do
         Crucible.doArrayConstStore sym mem ptr alignment arr sz
     _ -> do
       val' <- X.handle (handleException opts) $
-        resolveSetupVal cc env tyenv nameEnv val
+        resolveSetupVal cc mem env tyenv nameEnv val
       Crucible.storeConstRaw sym mem ptr storTy alignment val'
 
 
@@ -1463,11 +1464,12 @@ resolveSetupValueLLVM ::
 resolveSetupValueLLVM opts cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
+     mem <- readGlobal (Crucible.llvmMemVar (cc^.ccLLVMContext))
      let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
-     lval  <- liftIO $ resolveSetupVal cc m tyenv nameEnv sval' `X.catch` handleException opts
+     lval  <- liftIO $ resolveSetupVal cc mem m tyenv nameEnv sval' `X.catch` handleException opts
      return (memTy, lval)
 
 resolveSetupValue ::
