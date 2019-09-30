@@ -360,6 +360,21 @@ bvCountLeadingZeros = bvUn W.bvCountLeadingZeros
 bvCountTrailingZeros :: SWordUn
 bvCountTrailingZeros = bvUn W.bvCountTrailingZeros
 
+bvForall :: W.IsSymExprBuilder sym =>
+  sym -> Natural -> (SWord sym -> IO (Pred sym)) -> IO (Pred sym)
+bvForall sym n f =
+  case W.userSymbol "i" of
+    Left err -> fail $ show err
+    Right indexSymbol ->
+      case mkNatRepr n of
+        Some w
+          | Just LeqProof <- testLeq (knownNat @1) w ->
+            withKnownNat w $ do
+              i <- W.freshBoundVar sym indexSymbol $ W.BaseBVRepr w
+              body <- f . DBV $ W.varExpr sym i
+              W.forallPred sym i body
+          | otherwise -> f ZBV
+
 -- | Unsigned bitvector division.
 --
 --   The result is undefined when @y@ is zero,

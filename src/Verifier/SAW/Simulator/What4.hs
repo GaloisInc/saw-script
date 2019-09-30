@@ -116,7 +116,7 @@ type instance Extra (What4 sym) = What4Extra sym
 type SValue sym = Value (What4 sym)
 
 -- Constraint
-type Sym sym = (Given sym, IsExprBuilder sym)
+type Sym sym = (Given sym, IsSymExprBuilder sym)
 
 ---------------------------------------------------------------------
 
@@ -196,6 +196,7 @@ prims =
   , Prims.bpBvPopcount = bvPopcount sym
   , Prims.bpBvCountLeadingZeros = bvCountLeadingZeros sym
   , Prims.bpBvCountTrailingZeros = bvCountTrailingZeros sym
+  , Prims.bpBvForall = bvForall sym
     -- Integer operations
   , Prims.bpIntAbs = W.intAbs sym
   , Prims.bpIntAdd = W.intAdd sym
@@ -260,7 +261,7 @@ toWord (VVector vv) = do
   bvPack (given :: sym) vec2
 toWord x            = fail $ unwords ["Verifier.SAW.Simulator.What4.toWord", show x]
 
-wordFun :: (IsExprBuilder sym, Given sym) =>
+wordFun :: (Sym sym) =>
            (SWord sym -> IO (SValue sym)) -> SValue sym
 wordFun f = strictFun (\x -> f =<< toWord x)
 
