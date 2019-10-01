@@ -67,6 +67,9 @@ import Control.Applicative
 import Control.Monad.State as ST
 import Numeric.Natural (Natural)
 
+import Data.Reflection (Given(..), give)
+
+-- saw-core
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
@@ -75,12 +78,11 @@ import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName, DeBruijnIndex)
 import Verifier.SAW.FiniteValue (FirstOrderType(..))
 
+-- what4
 import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
                                  IsExprBuilder,IsSymExprBuilder)
 import qualified What4.Interface as W
 import           What4.BaseTypes
-
-import Data.Reflection (Given(..), give)
 
 -- parameterized-utils
 import qualified Data.Parameterized.Context as Ctx
@@ -90,13 +92,13 @@ import Data.Parameterized.Context (Assignment)
 import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC (FunctorFC(fmapFC))
 
--- what4
+-- crucible-saw
+import qualified Lang.Crucible.Backend.SAWCore as CS
+
+-- saw-core-what4
 import Verifier.SAW.Simulator.What4.SWord
 import Verifier.SAW.Simulator.What4.PosNat
 import Verifier.SAW.Simulator.What4.FirstOrder
-
--- crucible-saw
-import qualified Lang.Crucible.Backend.SAWCore as CS
 
 ---------------------------------------------------------------------
 -- empty datatype to index (open) type families
