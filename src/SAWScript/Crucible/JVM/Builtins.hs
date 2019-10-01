@@ -523,7 +523,7 @@ registerOverride opts cc _ctx top_loc cs =
               $ Crucible.mkOverride'
                   (Crucible.handleName h)
                   retType
-                  (methodSpecHandler opts sc cc top_loc cs retType)
+                  (methodSpecHandler opts sc cc top_loc cs h)
 
 
 --------------------------------------------------------------------------------
@@ -566,7 +566,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals _checkSat =
      res <-
        do let feats = []
           let simctx = CJ.jvmSimContext sym halloc stdout jc verbosity Crucible.SAWCruciblePersonality
-          let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler
+          let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h)
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
           let overrideSim =
                 do liftIO $ putStrLn "registering standard overrides"
