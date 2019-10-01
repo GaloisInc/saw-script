@@ -70,6 +70,7 @@ import           What4.LabeledPred (labeledPred)
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible ( TypeRepr(UnitRepr) )
+import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 
 -- crucible-saw
@@ -170,10 +171,10 @@ methodSpecHandler ::
   JVMCrucibleContext          {- ^ context for interacting with Crucible        -} ->
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
-  Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
+  Crucible.FnHandle args ret {- ^ a handle for the function -} ->
   Crucible.OverrideSim (CrucibleSAW.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
      (Crucible.RegValue Sym ret)
-methodSpecHandler opts sc cc top_loc css retTy = do
+methodSpecHandler opts sc cc top_loc css h = do
   sym <- Crucible.getSymInterface
   Crucible.RegMap args <- Crucible.getOverrideArgs
 
@@ -216,7 +217,8 @@ methodSpecHandler opts sc cc top_loc css retTy = do
   --
   -- We add a final default branch that simply fails unless some previous override
   -- branch has already succeeded.
-  Crucible.regValue <$> Crucible.callOverride
+  let retTy = Crucible.handleReturnType h
+  Crucible.regValue <$> Crucible.callOverride h
      (Crucible.mkOverride' "overrideBranches" retTy
        (Crucible.symbolicBranches Crucible.emptyRegMap $
          [ ( precond
