@@ -470,6 +470,7 @@ buildTopLevelEnv proxy opts =
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
+                   , rwProfilingFile = Nothing
                    }
        return (bic, ro0, rw0)
 
@@ -503,6 +504,16 @@ enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwSMTArrayMemoryModel = True }
+
+enable_crucible_profiling :: FilePath -> TopLevel ()
+enable_crucible_profiling f = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProfilingFile = Just f }
+
+disable_crucible_profiling :: TopLevel ()
+disable_crucible_profiling = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProfilingFile = Nothing }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -2153,6 +2164,18 @@ primitives = Map.fromList
     [ "Use the approxmc solver to approximate the number of solutions to the"
     , "CNF representation of the given Term."
     ]
+
+  , prim "enable_crucible_profiling" "String -> TopLevel ()"
+    (pureVal enable_crucible_profiling)
+    Current
+    [ "Record profiling information from symbolic execution and solver"
+    , "invocation to the given directory."
+    ]
+
+  , prim "disable_crucible_profiling" "TopLevel ()"
+    (pureVal disable_crucible_profiling)
+    Current
+    ["Stop recording profiling information."]
   ]
 
   where
