@@ -11,17 +11,22 @@ Stability   : provisional
 module SAWScript.Crucible.Common
   ( ppAbortedResult
   , Sym
+  , setupProfiling
   ) where
 
+import           Lang.Crucible.Simulator (GenericExecutionFeature)
 import           Lang.Crucible.Simulator.ExecutionTree (AbortedResult(..), GlobalPair)
 import           Lang.Crucible.Simulator.CallFrame (SimFrame)
-import           Lang.Crucible.Backend (AbortExecReason(..), ppAbortExecReason)
+import           Lang.Crucible.Simulator.Profiling
+import           Lang.Crucible.Backend (AbortExecReason(..), ppAbortExecReason, IsSymInterface)
 import           Lang.Crucible.Backend.SAWCore (SAWCoreBackend)
 import qualified Data.Parameterized.Nonce as Nonce
 import qualified What4.Solver.Yices as Yices
 import qualified What4.Expr as W4
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath ((</>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
 -- | The symbolic backend we use for SAW verification
@@ -46,3 +51,25 @@ ppAbortedResult ppGP (AbortedBranch loc _predicate trueBranch falseBranch) =
     ]
 ppAbortedResult _ (AbortedExit ec) =
   PP.text "Branch exited:" PP.<+> PP.text (show ec)
+
+setupProfiling ::
+  IsSymInterface sym =>
+  sym -> String -> Maybe FilePath ->
+  IO (IO (), [GenericExecutionFeature sym])
+setupProfiling _ _ Nothing = return (return (), [])
+setupProfiling sym profSource (Just dir) =
+  do tbl <- newProfilingTable
+
+     createDirectoryIfMissing True dir
+
+     startRecordingSolverEvents sym tbl
+
+     let profOutFile = dir </> "report_data.js"
+         saveProf = writeProfileReport profOutFile "Crucible profile" profSource
+         profOpts = ProfilingOptions
+                      { periodicProfileInterval = 5
+                      , periodicProfileAction = saveProf
+                      }
+
+     pfs <- profilingFeature tbl (Just profOpts)
+     return (saveProf tbl, [pfs])
