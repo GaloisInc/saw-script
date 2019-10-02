@@ -280,11 +280,13 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
 
   let ?lc = mtrans ^. Crucible.transContext . Crucible.llvmTypeCtx
 
+  profFile <- rwProfilingFile <$> getTopLevelRW
   Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \_ ->
     fmap NE.head $ forM defOrDecls $ \defOrDecl -> do
       setupLLVMCrucibleContext bic opts lm $ \cc -> do
         let sym = cc^.ccBackend
 
+        (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_llvm_verify" profFile
         pos <- getPosition
         let setupLoc = toW4Loc "_SAW_verify_prestate" pos
 
@@ -341,7 +343,7 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
               unwords ["Simulating", (methodSpec ^. csName) , "..."]
             top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
             (ret, globals3)
-              <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
+              <- io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat
 
             -- collect the proof obligations
             asserts <- verifyPoststate opts (biSharedContext bic) cc
@@ -354,6 +356,7 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
             printOutLnTop Info $
               unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
             stats <- verifyObligations cc methodSpec tactic assumes asserts
+            io $ writeFinalProfile
             return (methodSpec & MS.csSolverStats .~ stats)
 
 
@@ -746,6 +749,7 @@ verifySimulate ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                       ->
   LLVMCrucibleContext arch          ->
+  [Crucible.GenericExecutionFeature Sym] ->
   MS.CrucibleMethodSpecIR (LLVM arch)          ->
   [(Crucible.MemType, LLVMVal)] ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
@@ -754,7 +758,7 @@ verifySimulate ::
   Crucible.SymGlobalState Sym   ->
   Bool                          ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat =
   withCfgAndBlockId cc mspec $ \cfg entryId -> do
     let argTys = Crucible.blockInputs $
           Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
@@ -784,7 +788,7 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
       (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
       (groupOn (view csName) invLemmas)
     let execFeatures = invariantExecFeatures ++
-          (map Crucible.genericToExecutionFeature patSatGenExecFeature)
+          (map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs))
 
     let initExecState =
           Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
