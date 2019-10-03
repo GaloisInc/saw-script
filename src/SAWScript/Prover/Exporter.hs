@@ -14,6 +14,7 @@ module SAWScript.Prover.Exporter
   , write_smtlib2
   , writeUnintSMTLib2
   , writeCore
+  , write_verilog
 
     -- * Misc
   , bitblastPrim
@@ -23,9 +24,14 @@ import Data.Foldable(toList)
 
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.AIG as AIG
+import qualified Data.Map as Map
 import qualified Data.SBV.Dynamic as SBV
 
 import Cryptol.Utils.PP(pretty)
+
+import Data.Parameterized.Nonce(globalNonceGenerator)
+
+import qualified Lang.Crucible.Backend.SAWCore as Crucible (newSAWCoreBackend, toSC)
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
@@ -33,10 +39,11 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
+import qualified Verifier.SAW.Simulator.What4 as W4Sim
 
 
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
-import SAWScript.Proof (predicateToProp, Quantification(..))
+import SAWScript.Proof (predicateToProp, Quantification(..), propToPredicate)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
@@ -173,6 +180,15 @@ writeUnintSMTLib2 unints sc f t = do
 writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)
 
+write_verilog :: FilePath -> Term -> TopLevel ()
+write_verilog path t = do
+  sc <- getSharedContext
+  let gen = globalNonceGenerator
+  sym <- liftIO $ Crucible.newSAWCoreBackend sc gen
+  let unints = []
+  (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym sc Map.empty unints t
+  liftIO $ print p
+  return ()
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)

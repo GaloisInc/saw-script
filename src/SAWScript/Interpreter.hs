@@ -940,6 +940,11 @@ primitives = Map.fromList
     Current
     [ "Write out a representation of a term in SAWCore external format." ]
 
+  , prim "write_verilog"       "String -> Term -> TopLevel ()"
+    (pureVal write_verilog)
+    Current
+    [ "Write out a representation of a term in Verilog format." ]
+
   , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal (autoMatch stmtInterpreter :: FilePath -> FilePath -> TopLevel ()))
     Current
