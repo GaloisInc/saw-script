@@ -75,7 +75,7 @@ import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName, DeBruijnIndex)
+import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName)
 import Verifier.SAW.FiniteValue (FirstOrderType(..))
 
 -- what4
@@ -850,10 +850,10 @@ w4EvalBasic ::
 w4EvalBasic sym sc m addlPrims ref unints t =
   do let unintSet = Set.fromList unints
      let unint tf nm ty =
-           do trm <- scTermF sc tf
+           do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym sc ref trm nm Ctx.empty ty
      let extcns tf ix nm ty =
-           do trm <- scTermF sc tf
+           do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym sc ref trm (nm ++ "_" ++ show ix) Ctx.empty ty
      let uninterpreted tf nm ty
            | Set.member nm unintSet = Just (unint tf nm ty)
@@ -870,7 +870,7 @@ parseUninterpretedSAW ::
   forall n solver fs args.
   CS.SAWCoreBackend n solver fs -> SharedContext ->
   IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) ->
-  Term {- ^ open saw-core term for function applied to arguments -} ->
+  ArgTerm {- ^ representation of function applied to arguments -} ->
   String {- ^ name of uninterpreted function -} ->
   Assignment (SymExpr (CS.SAWCoreBackend n solver fs)) args {- ^ arguments to uninterpreted function -} ->
   SValue (CS.SAWCoreBackend n solver fs) {- ^ return type -} ->
@@ -881,9 +881,8 @@ parseUninterpretedSAW sym sc ref trm nm args ty =
       -> return $
          strictFun $ \x -> do
            (nm', Some args') <- flattenSValue (nm, Some args) x
-           (arg, i) <- mkArgTerm sc t1 x
-           trm1 <- incVars sc 0 i trm
-           trm' <- scApply sc trm1 arg
+           arg <- mkArgTerm sc t1 x
+           let trm' = ArgTermApply trm arg
            t2 <- f (ready x)
            parseUninterpretedSAW sym sc ref trm' nm' args' t2
 
@@ -903,10 +902,8 @@ parseUninterpretedSAW sym sc ref trm nm args ty =
 
     VVecType (VNat n) ety
       ->  do ety' <- termOfSValue sc ety
-             n' <- scNat sc (fromInteger n)
              let mkElem i =
-                   do i' <- scNat sc (fromInteger i)
-                      trm' <- scAt sc n' ety' trm i'
+                   do let trm' = ArgTermAt n ety' trm i
                       let nm' = nm ++ "_a" ++ show i
                       parseUninterpretedSAW sym sc ref trm' nm' args ety
              xs <- traverse mkElem [0 .. n-1]
@@ -916,8 +913,8 @@ parseUninterpretedSAW sym sc ref trm nm args ty =
       -> return VUnit
 
     VPairType ty1 ty2
-      -> do trm1 <- scPairLeft sc trm
-            trm2 <- scPairRight sc trm
+      -> do let trm1 = ArgTermPairLeft trm
+            let trm2 = ArgTermPairRight trm
             x1 <- parseUninterpretedSAW sym sc ref trm1 (nm ++ "_L") args ty1
             x2 <- parseUninterpretedSAW sym sc ref trm2 (nm ++ "_R") args ty2
             return (VPair (ready x1) (ready x2))
@@ -934,77 +931,131 @@ parseUninterpretedSAW sym sc ref trm nm args ty =
 mkUninterpretedSAW ::
   forall n solver fs args t.
   CS.SAWCoreBackend n solver fs -> IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) ->
-  Term -> String -> Assignment (SymExpr (CS.SAWCoreBackend n solver fs)) args -> BaseTypeRepr t ->
+  ArgTerm -> String -> Assignment (SymExpr (CS.SAWCoreBackend n solver fs)) args -> BaseTypeRepr t ->
   IO (SymExpr (CS.SAWCoreBackend n solver fs) t)
 mkUninterpretedSAW sym ref trm nm args ret =
   do fn <- mkSymFn sym ref nm (fmapFC W.exprType args) ret
-     CS.sawRegisterSymFunInterp sym fn (\sc ts -> instantiateVarList sc 0 (reverse ts) trm)
+     CS.sawRegisterSymFunInterp sym fn (reconstructArgTerm trm)
      W.applySymFn sym fn args
 
--- | Given a type and va value encoded as 'SValue's, construct an open
--- term that builds a term of that type from local variables with base
--- types. The types of the local variables should match the argument
--- types returned by 'flattenSValue'; variable 0 refers to the last
--- argument. The returned 'DeBruijnIndex' is the number of local
--- variables used, which should match the length of the argument
--- assignment from 'flattenSValue'.
-mkArgTerm :: SharedContext -> SValue sym -> SValue sym -> IO (Term, DeBruijnIndex)
+-- | An 'ArgTerm' is a description of how to reassemble a saw-core
+-- term from a list of the atomic components it is composed of.
+data ArgTerm
+  = ArgTermVar
+  | ArgTermBVZero -- ^ scBvNat 0 0
+  | ArgTermVector Term [ArgTerm] -- ^ element type, elements
+  | ArgTermUnit
+  | ArgTermPair ArgTerm ArgTerm
+  | ArgTermRecord [(String, ArgTerm)]
+  | ArgTermConst Term
+  | ArgTermApply ArgTerm ArgTerm
+  | ArgTermAt Integer Term ArgTerm Integer
+    -- ^ length, element type, list, index
+  | ArgTermPairLeft ArgTerm
+  | ArgTermPairRight ArgTerm
+
+-- | Reassemble a saw-core term from an 'ArgTerm' and a list of parts.
+-- The length of the list should be equal to the number of
+-- 'ArgTermVar' constructors in the 'ArgTerm'.
+reconstructArgTerm :: ArgTerm -> SharedContext -> [Term] -> IO Term
+reconstructArgTerm atrm sc ts =
+  do (t, unused) <- parse atrm ts
+     unless (null unused) $ fail "reconstructArgTerm: too many function arguments"
+     return t
+  where
+    parse :: ArgTerm -> [Term] -> IO (Term, [Term])
+    parse at ts0 =
+      case at of
+        ArgTermVar ->
+          case ts0 of
+            x : ts1 -> return (x, ts1)
+            [] -> fail "reconstructArgTerm: too few function arguments"
+        ArgTermBVZero ->
+          do z <- scNat sc 0
+             x <- scBvNat sc z z
+             return (x, ts0)
+        ArgTermVector ty ats ->
+          do (xs, ts1) <- parseList ats ts0
+             x <- scVector sc ty xs
+             return (x, ts1)
+        ArgTermUnit ->
+          do x <- scUnitValue sc
+             return (x, ts0)
+        ArgTermPair at1 at2 ->
+          do (x1, ts1) <- parse at1 ts0
+             (x2, ts2) <- parse at2 ts1
+             x <- scPairValue sc x1 x2
+             return (x, ts2)
+        ArgTermRecord flds ->
+          do let (tags, ats) = unzip flds
+             (xs, ts1) <- parseList ats ts0
+             x <- scRecord sc (Map.fromList (zip tags xs))
+             return (x, ts1)
+        ArgTermConst x ->
+          do return (x, ts0)
+        ArgTermApply at1 at2 ->
+          do (x1, ts1) <- parse at1 ts0
+             (x2, ts2) <- parse at2 ts1
+             x <- scApply sc x1 x2
+             return (x, ts2)
+        ArgTermAt n ty at1 i ->
+          do n' <- scNat sc (fromInteger n)
+             (x1, ts1) <- parse at1 ts0
+             i' <- scNat sc (fromInteger i)
+             x <- scAt sc n' ty x1 i'
+             return (x, ts1)
+        ArgTermPairLeft at1 ->
+          do (x1, ts1) <- parse at1 ts0
+             x <- scPairLeft sc x1
+             return (x, ts1)
+        ArgTermPairRight at1 ->
+          do (x1, ts1) <- parse at1 ts0
+             x <- scPairRight sc x1
+             return (x, ts1)
+
+    parseList :: [ArgTerm] -> [Term] -> IO ([Term], [Term])
+    parseList [] ts0 = return ([], ts0)
+    parseList (at : ats) ts0 =
+      do (x, ts1) <- parse at ts0
+         (xs, ts2) <- parseList ats ts1
+         return (x : xs, ts2)
+
+-- | Given a type and value encoded as 'SValue's, construct an
+-- 'ArgTerm' that builds a term of that type from local variables with
+-- base types. The number of 'ArgTermVar' constructors should match
+-- the number of arguments returned by 'flattenSValue'.
+mkArgTerm :: SharedContext -> SValue sym -> SValue sym -> IO ArgTerm
 mkArgTerm sc ty val =
   case (ty, val) of
-    (VBoolType, VBool _) -> base
-    (VIntType, VInt _) -> base
-    -- 0-width bitvector is a constant
-    (_, VWord ZBV)
-      -> do z <- scNat sc 0
-            x <- scBvNat sc z z
-            return (x, 0)
+    (VBoolType, VBool _) -> return ArgTermVar
+    (VIntType, VInt _)   -> return ArgTermVar
+    (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
+    (_, VWord (DBV _))   -> return ArgTermVar
+    (VUnitType, VUnit)   -> return ArgTermUnit
 
-    (_, VWord (DBV _)) -> base
+    (VVecType _ ety, VVector vv) ->
+      do vs <- traverse force (V.toList vv)
+         xs <- traverse (mkArgTerm sc ety) vs
+         ety' <- termOfSValue sc ety
+         return (ArgTermVector ety' xs)
 
-    (VVecType _ ety, VVector vv)
-      -> do vs <- traverse force (V.toList vv)
-            (xs, i) <- mkArgTerms [ (ety, v) | v <- vs ]
-            ety' <- termOfSValue sc ety
-            x <- scVector sc ety' xs
-            return (x, i)
+    (VPairType ty1 ty2, VPair v1 v2) ->
+      do x1 <- mkArgTerm sc ty1 =<< force v1
+         x2 <- mkArgTerm sc ty2 =<< force v2
+         return (ArgTermPair x1 x2)
 
-    (VUnitType, VUnit)
-      -> do x <- scUnitValue sc
-            return (x, 0)
+    (VRecordType tys, VRecordValue flds) | map fst tys == map fst flds ->
+      do let tags = map fst tys
+         vs <- traverse (force . snd) flds
+         xs <- sequence [ mkArgTerm sc t v | (t, v) <- zip (map snd tys) vs ]
+         return (ArgTermRecord (zip tags xs))
 
-    (VPairType ty1 ty2, VPair v1 v2)
-      -> do (x1, i1) <- mkArgTerm sc ty1 =<< force v1
-            (x2, i2) <- mkArgTerm sc ty2 =<< force v2
-            x1' <- incVars sc 0 i2 x1
-            x <- scPairValue sc x1' x2
-            return (x, i1 + i2)
-
-    (VRecordType tys, VRecordValue flds) | map fst tys == map fst flds
-      -> do let tags = map fst tys
-            vs <- traverse (force . snd) flds
-            (xs, i) <- mkArgTerms (zip (map snd tys) vs)
-            x <- scRecord sc (Map.fromList (zip tags xs))
-            return (x, i)
-
-    (_, VCtorApp i vv)
-      -> do xs <- traverse (termOfSValue sc <=< force) (V.toList vv)
-            x <- scCtorApp sc i xs
-            return (x, 0)
+    (_, VCtorApp i vv) ->
+      do xs <- traverse (termOfSValue sc <=< force) (V.toList vv)
+         x <- scCtorApp sc i xs
+         return (ArgTermConst x)
 
     _ -> fail $ "could not create uninterpreted function argument of type " ++ show ty
-
-  where
-    base =
-      do x <- scLocalVar sc 0
-         return (x, 1)
-
-    mkArgTerms :: [(SValue sym, SValue sym)] -> IO ([Term], DeBruijnIndex)
-    mkArgTerms [] = return ([], 0)
-    mkArgTerms ((t, v) : rest) =
-      do (xs, i2) <- mkArgTerms rest
-         (x1, i1) <- mkArgTerm sc t v
-         x1' <- incVars sc 0 i2 x1
-         return (x1' : xs, i1 + i2)
 
 termOfSValue :: SharedContext -> SValue sym -> IO Term
 termOfSValue sc val =
