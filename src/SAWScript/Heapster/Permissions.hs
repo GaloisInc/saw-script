@@ -118,27 +118,23 @@ instance (MonadClosed m, Closable s) => MonadClosed (StateT s m) where
 -- | The Haskell type of expression variables
 type ExprVar (a :: CrucibleType) = Name a
 
--- | Expressions that represent "fractions" of a write permission
-data SplittingExpr
-  = SplExpr_All
-  | SplExpr_L SplittingExpr
-  | SplExpr_R SplittingExpr
-  | SplExpr_Star SplittingExpr SplittingExpr
-  | SplExpr_Var (ExprVar SplittingType)
+-- | Crucible type for lifetimes; we give them a Crucible type so they can be
+-- existentially bound in the same way as other Crucible objects
+type LifetimeType = IntrinsicType "Lifetime" EmptyCtx
 
--- | Crucible type for splitting expressions; we give them a Crucible type so
--- they can be existentially bound in the same way as other Crucible objects
-type SplittingType = IntrinsicType "Splitting" EmptyCtx
+-- | The object-level representation of 'LifetimeType'
+lifetimeTypeRepr :: TypeRepr LifetimeType
+lifetimeTypeRepr = knownRepr
 
--- | The object-level representation of 'SplittingType'
-splittingTypeRepr :: TypeRepr SplittingType
-splittingTypeRepr = knownRepr
-
-pattern SplittingRepr <-
-  IntrinsicRepr (testEquality (knownSymbol :: SymbolRepr "Splitting") ->
+-- | Pattern for building/destructing lifetime types
+pattern LifetimeRepr <-
+  IntrinsicRepr (testEquality (knownSymbol :: SymbolRepr "Lifetime") ->
                  Just Refl)
   Empty
-  where SplittingRepr = IntrinsicRepr knownSymbol Empty
+  where LifetimeRepr = IntrinsicRepr knownSymbol Empty
+
+-- | A lifetime is an expression of type 'LifetimeType'
+type Lifetime = PermExpr LifetimeType
 
 -- | Crucible type for LLVM stack frame objects
 type LLVMFrameType w = IntrinsicType "LLVM_frame" (EmptyCtx ::> BVType w)
@@ -174,6 +170,9 @@ data PermExpr (a :: CrucibleType) where
   PExpr_Struct :: PermExprs args -> PermExpr (StructType args)
   -- ^ A struct expression is an expression for each argument of the struct type
 
+  PExpr_Always :: PermExpr LifetimeType
+  -- ^ The @always@ lifetime that is always current
+
   PExpr_LLVMWord :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
                     PermExpr (LLVMPointerType w)
   -- ^ An LLVM value that represents a word, i.e., whose region identifier is 0
@@ -183,9 +182,6 @@ data PermExpr (a :: CrucibleType) where
                       PermExpr (BVType w) ->
                       PermExpr (LLVMPointerType w)
   -- ^ An LLVM value built by adding an offset to an LLVM variable
-
-  PExpr_Spl :: SplittingExpr -> PermExpr SplittingType
-  -- ^ An expression that represents a permission splitting
 
   PExpr_Fun :: FnHandle args ret -> PermExpr (FunctionHandleType args ret)
   -- ^ A literal function pointer
@@ -204,28 +200,9 @@ data BVFactor w where
     -- should be in the range @0 <= i < 2^w@
 
 
-$(mkNuMatching [t| SplittingExpr |])
 $(mkNuMatching [t| forall a . PermExpr a |])
 $(mkNuMatching [t| forall a . BVFactor a |])
 $(mkNuMatching [t| forall as . PermExprs as |])
-
-
-instance Eq SplittingExpr where
-  SplExpr_All == SplExpr_All = True
-  SplExpr_All == _ = False
-
-  (SplExpr_L spl1) == (SplExpr_L spl2) = spl1 == spl2
-  (SplExpr_L _) == _ = False
-
-  (SplExpr_R spl1) == (SplExpr_R spl2) = spl1 == spl2
-  (SplExpr_R _) == _ = False
-
-  (SplExpr_Star spl1_l spl1_r) == (SplExpr_Star spl2_l spl2_r) =
-    spl1_l == spl2_l && spl1_r == spl2_r
-  (SplExpr_Star _ _) == _ = False
-
-  (SplExpr_Var x1) == (SplExpr_Var x2) = x1 == x2
-  (SplExpr_Var _) == _ = False
 
 
 instance Eq (PermExpr a) where
@@ -251,15 +228,15 @@ instance Eq (PermExpr a) where
   (PExpr_Struct args1) == (PExpr_Struct args2) = args1 == args2 where
   (PExpr_Struct _) == _ = False
 
+  PExpr_Always == PExpr_Always = True
+  PExpr_Always == _ = False
+
   (PExpr_LLVMWord e1) == (PExpr_LLVMWord e2) = e1 == e2
   (PExpr_LLVMWord _) == _ = False
 
   (PExpr_LLVMOffset x1 e1) == (PExpr_LLVMOffset x2 e2) =
     x1 == x2 && e1 == e2
   (PExpr_LLVMOffset _ _) == _ = False
-
-  (PExpr_Spl spl1) == (PExpr_Spl spl2) = spl1 == spl2
-  (PExpr_Spl _) == _ = False
 
   (PExpr_Fun fh1) == (PExpr_Fun fh2) = fh1 == fh2
   (PExpr_Fun _) == _ = False
@@ -277,14 +254,8 @@ instance Eq (BVFactor w) where
 -- | Build a "default" expression for a given type
 zeroOfType :: TypeRepr tp -> PermExpr tp
 zeroOfType (BVRepr w) = withKnownNat w $ PExpr_BV [] 0
-zeroOfType (testEquality splittingTypeRepr -> Just Refl) =
-  PExpr_Spl SplExpr_All
+zeroOfType LifetimeRepr = PExpr_Always
 zeroOfType _ = error "zeroOfType"
-
--- | Extract a 'SplittingExpr' from an expression of type 'SplittingType'
-splittingOfExpr :: PermExpr SplittingType -> SplittingExpr
-splittingOfExpr (PExpr_Var x) = SplExpr_Var x
-splittingOfExpr (PExpr_Spl spl) = spl
 
 
 ----------------------------------------------------------------------
@@ -335,7 +306,7 @@ bvMergeFactors fs1 fs2 =
       = bvFactor (i1+i2) x1 : helper factors1 factors2
     helper (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2)
       | x1 < x2 = f1 : helper factors1 (f2 : factors2)
-    helper (f1@(BVFactor _ x1):factors1) (f2@(BVFactor _ x2):factors2) =
+    helper (f1@(BVFactor _ _):factors1) (f2@(BVFactor _ _):factors2) =
       f2 : helper (f1 : factors1) factors2
 
 -- | Convert a bitvector expression to a sum of factors plus a constant
@@ -476,13 +447,49 @@ addLLVMOffset (PExpr_LLVMOffset x e) off =
 -- variables cannot be bound as expressions and vice-versa.
 type PermVar a = Name (ValuePerm a)
 
+-- | An atomic permission is a value permission that is not one of the compound
+-- constructs in the 'ValuePerm' type; i.e., not a disjunction, existential,
+-- recursive, or equals permission. These are the permissions that we can put
+-- together with separating conjuctions.
+data AtomicPerm (a :: CrucibleType) where
+  -- | Gives permissions to a single field pointed to by an LLVM pointer
+  Perm_LLVMField :: (1 <= w, KnownNat w) => LLVMFieldPerm w ->
+                    AtomicPerm (LLVMPointerType w)
+
+  -- | Gives permissions to an array pointer to by an LLVM pointer
+  Perm_LLVMArray :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                    AtomicPerm (LLVMPointerType w)
+
+  -- | Says that we have permission to free the memory pointed at by this
+  -- pointer if we have write permission to @e@ bytes
+  Perm_LLVMFree :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                   AtomicPerm (LLVMPointerType w)
+
+  -- | Permission to allocate (via @alloca@) on an LLVM stack frame, and
+  -- permission to delete that stack frame if we have exclusive permissions to
+  -- all the given LLVM pointer objects
+  Perm_LLVMFrame :: (1 <= w, KnownNat w) => LLVMFramePerm w ->
+                    AtomicPerm (LLVMFrameType w)
+
+  -- | Ownership permission for a lifetime, including an assertion that it is
+  -- still current and permission to end that lifetime and get back the given
+  -- permissions
+  Perm_LOwned :: [SomeExprAndPerm] -> AtomicPerm LifetimeType
+
+  -- | Assertion that a lifetime is current during another lifetime, i.e., that
+  -- it contains that other lifetime
+  Perm_LContains :: PermExpr LifetimeType -> AtomicPerm LifetimeType
+
+  -- | A function permission
+  Perm_Fun :: FunPerm ghosts args ret ->
+              AtomicPerm (FunctionHandleType args ret)
+
+
 -- | A value permission is a permission to do something with a value, such as
 -- use it as a pointer. This also includes a limited set of predicates on values
 -- (you can think about this as "permission to assume the value satisfies this
 -- predicate" if you like).
 data ValuePerm (a :: CrucibleType) where
-  -- | The trivial value perm
-  ValPerm_True :: ValuePerm a
 
   -- | Says that a value is equal to a known static expression
   ValPerm_Eq :: PermExpr a -> ValuePerm a
@@ -495,71 +502,82 @@ data ValuePerm (a :: CrucibleType) where
                     Binding a (ValuePerm b) ->
                     ValuePerm b
 
-  -- | A recursive / least fixed-point permission
-  ValPerm_Mu :: Binding (ValuePerm a) (ValuePerm a) -> ValuePerm a
+  -- | A recursive / least fixed-point permission, which is modified by a
+  -- read-write modality
+  ValPerm_Mu :: RWModality -> Binding (ValuePerm a) (ValuePerm a) ->
+                ValuePerm a
 
   -- | A value permission variable, for use in recursive permissions
   ValPerm_Var :: PermVar a -> ValuePerm a
 
-  -- | Says that an LLVM word is a pointer, i.e., with a non-zero block, where
-  -- the memory pointed to has the given shape, and optionally we have
-  -- permission to free the memory if we have write perms to @N@ words
-  ValPerm_LLVMPtr :: (1 <= w, KnownNat w) =>
-                     [LLVMPtrPerm w] -> ValuePerm (LLVMPointerType w)
+  -- | A separating conjuction of 0 or more atomic permissions, where 0
+  -- permissions is the trivially true permission
+  ValPerm_Conj :: [AtomicPerm a] -> ValuePerm a
 
-  -- | Permission to allocate (via @alloca@) on an LLVM stack frame, and
-  -- permission to delete that stack frame if we have exclusive permissions to
-  -- all the given LLVM pointer objects
-  ValPerm_LLVMFrame :: (1 <= w, KnownNat w) =>
-                       LLVMFramePerm w ->
-                       ValuePerm (LLVMFrameType w)
 
-  -- | A function permission
-  ValPerm_Fun :: FunPerm ghosts args ret ->
-                 ValuePerm (FunctionHandleType args ret)
-
+-- | The vacuously true permission is the conjunction of 0 atomic permissions
+pattern ValPerm_True :: ValuePerm a
+pattern ValPerm_True = ValPerm_Conj []
 
 -- | A sequence of value permissions
 data ValuePerms as where
   ValPerms_Nil :: ValuePerms RNil
   ValPerms_Cons :: ValuePerms as -> ValuePerm a -> ValuePerms (as :> a)
 
+-- | An expression with a permission of some unknown type
+data SomeExprAndPerm where
+  SomeExprAndPerm :: KnownRepr TypeRepr a => PermExpr a -> ValuePerm a ->
+                     SomeExprAndPerm
+
 -- | A binding of 0 or more variables, each with permissions
 type MbValuePerms ctx = Mb ctx (ValuePerms ctx)
 
--- | A frame permission is a list of the pointers and corresponding sizes that
--- have been allocated in the frame, which are required in order to delete it
+-- | A frame permission is a list of the pointers that have been allocated in
+-- the frame and their corresponding allocation sizes in bytes. Write
+-- permissions of the given sizes are required to these pointers in order to
+-- delete the frame.
 type LLVMFramePerm w = [(PermExpr (LLVMPointerType w), Integer)]
 
--- | A permission to the memory referenced by an LLVM pointer
-data LLVMPtrPerm w
-  = LLVMPP_Field (LLVMFieldPerm w)
-  | LLVMPP_Array (LLVMArrayPerm w)
-  | LLVMPP_Free (PermExpr (BVType w))
-  deriving Eq
+-- | An LLVM pointer permission is an 'AtomicPerm' of type 'LLVMPointerType'
+type LLVMPtrPerm w = AtomicPerm (LLVMPointerType w)
 
+-- | A permission for a pointer to a specific field
 data LLVMFieldPerm w =
-  LLVMFieldPerm { llvmFieldOffset :: PermExpr (BVType w),
-                  llvmFieldSplitting :: SplittingExpr,
-                  llvmFieldPerm :: ValuePerm (LLVMPointerType w) }
+  LLVMFieldPerm { llvmFieldRW :: RWModality,
+                  -- ^ Whether this is a read or write permission
+                  llvmFieldOffset :: PermExpr (BVType w),
+                  -- ^ The offset from the pointer where this field lives
+                  llvmFieldPerm :: ValuePerm (LLVMPointerType w)
+                  -- ^ The permissions we get for the value read from this field
+                }
   deriving Eq
 
+-- | FIXME: describe array permissions
 data LLVMArrayPerm w =
   LLVMArrayPerm { llvmArrayOffset :: PermExpr (BVType w),
                   llvmArrayLen :: PermExpr (BVType w),
+                  -- ^ The number of array blocks
                   llvmArrayStride :: Integer,
-                  llvmArraySplitting :: SplittingExpr,
+                  -- ^ The array stride in bytes
                   llvmArrayFields :: [LLVMFieldPerm w] }
+  deriving Eq
+
+-- | Whether a permission allows reads or writes; reads are always temporary
+-- with the given lifetime
+data RWModality
+  = Write
+  | Read (PermExpr LifetimeType)
   deriving Eq
 
 
 -- | A function permission is a set of input and output permissions inside a
 -- context of ghost variables that must be solved for when the function is
--- called
+-- called. One ghost variable is always a lifetime that represents the lifetime
+-- of the function call.
 data FunPerm ghosts args ret where
   FunPerm :: KnownRepr CruCtx ghosts => Proxy args ->
-             MbValuePerms (ghosts :++: CtxToRList args) ->
-             MbValuePerms (ghosts :++: CtxToRList args :> ret) ->
+             MbValuePerms (ghosts :> LifetimeType :++: CtxToRList args) ->
+             MbValuePerms (ghosts :> LifetimeType :++: CtxToRList args :> ret) ->
              FunPerm ghosts args ret
 
 
@@ -588,9 +606,7 @@ instance Eq a => Eq (Mb ctx a) where
     mbLift $ nuMultiWithElim (\_ (_ :>: a1 :>: a2) ->
                                a1 == a2) (MNil :>: mb1 :>: mb2)
 
-instance (Eq (ValuePerm a)) where
-  ValPerm_True == ValPerm_True = True
-  ValPerm_True == _ = False
+instance Eq (ValuePerm a) where
   (ValPerm_Eq e1) == (ValPerm_Eq e2) = e1 == e2
   (ValPerm_Eq _) == _ = False
   (ValPerm_Or p1 p1') == (ValPerm_Or p2 p2') = p1 == p2 && p1' == p2'
@@ -600,24 +616,45 @@ instance (Eq (ValuePerm a)) where
         testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
     = p1 == p2
   (ValPerm_Exists _) == _ = False
-  (ValPerm_Mu p1) == (ValPerm_Mu p2) =
-    mbLift $
-    nuWithElim (\_ (_ :>: p1' :>: p2') -> p1' == p2') (MNil :>: p1 :>: p2)
-  (ValPerm_Mu _) == _ = False
+  (ValPerm_Mu rw1 p1) == (ValPerm_Mu rw2 p2) =
+    rw1 == rw2 &&
+    mbLift
+    (nuWithElim (\_ (_ :>: p1' :>: p2') -> p1' == p2') (MNil :>: p1 :>: p2))
+  (ValPerm_Mu _ _) == _ = False
   (ValPerm_Var x1) == (ValPerm_Var x2) = x1 == x2
   (ValPerm_Var _) == _ = False
-  (ValPerm_LLVMPtr pps1) == (ValPerm_LLVMPtr pps2) = pps1 == pps2
-  (ValPerm_LLVMPtr _) == _ = False
-  (ValPerm_LLVMFrame ptrs1) == (ValPerm_LLVMFrame ptrs2) = ptrs1 == ptrs2
-  (ValPerm_LLVMFrame _) == _ = False
-  (ValPerm_Fun fperm1) == (ValPerm_Fun fperm2)
+  (ValPerm_Conj aps1) == (ValPerm_Conj aps2) = aps1 == aps2
+  (ValPerm_Conj _) == _ = False
+
+instance Eq (AtomicPerm a) where
+  (Perm_LLVMField fp1) == (Perm_LLVMField fp2) = fp1 == fp2
+  (Perm_LLVMField _) == _ = False
+  (Perm_LLVMArray ap1) == (Perm_LLVMArray ap2) = ap1 == ap2
+  (Perm_LLVMArray _) == _ = False
+  (Perm_LLVMFree e1) == (Perm_LLVMFree e2) = e1 == e2
+  (Perm_LLVMFree _) == _ = False
+  (Perm_LLVMFrame frame1) == (Perm_LLVMFrame frame2) = frame1 == frame2
+  (Perm_LLVMFrame _) == _ = False
+  (Perm_LOwned perms1) == (Perm_LOwned perms2) = perms1 == perms2
+  (Perm_LOwned _) == _ = False
+  (Perm_LContains e1) == (Perm_LContains e2) = e1 == e2
+  (Perm_LContains _) == _ = False
+  (Perm_Fun fperm1) == (Perm_Fun fperm2)
     | Just Refl <- funPermEq fperm1 fperm2 = True
-  (ValPerm_Fun _) == _ = False
+  (Perm_Fun _) == _ = False
 
 instance Eq (ValuePerms as) where
   ValPerms_Nil == ValPerms_Nil = True
   (ValPerms_Cons ps1 p1) == (ValPerms_Cons ps2 p2) =
     ps1 == ps2 && p1 == p2
+
+instance Eq SomeExprAndPerm where
+  (SomeExprAndPerm (e1 :: PermExpr a1) p1) ==
+    (SomeExprAndPerm (e2 :: PermExpr a2) p2)
+    | Just Refl <-
+        testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
+    = e1 == e2 && p1 == p2
+  _ == _ = False
 
 -- | Test if function permissions with different ghost argument lists are equal
 funPermEq :: FunPerm ghosts1 args ret -> FunPerm ghosts2 args ret ->
@@ -634,27 +671,14 @@ instance Eq (FunPerm ghosts args ret) where
   fperm1 == fperm2 = isJust (funPermEq fperm1 fperm2)
 
 
-{-
-instance (Eq (LLVMPtrPerm w)) where
-  (LLVMFieldPerm off1 spl1 p1) == (LLVMFieldPerm off2 spl2 p2) =
-    off1 == off2 && spl1 == spl2 && p1 == p2
-  (LLVMFieldPerm _ _ _) == _ = False
-  (LLVMArrayPerm off1 len1 stride1 spl1 ps1) ==
-    (LLVMArrayPerm off2 len2 stride2 spl2 ps2) =
-    off1 == off2 && len1 == len2 && stride1 == stride2 &&
-    spl1 == spl2 && ps1 == ps2
-  (LLVMArrayPerm _ _ _ _ _) == _ = False
-  (LLVMPP_Free e1) == (LLVMPP_Free e2) = e1 == e2
-  (LLVMPP_Free _) == _ = False
--}
-
-
+$(mkNuMatching [t| forall a . AtomicPerm a |])
 $(mkNuMatching [t| forall a . ValuePerm a |])
 $(mkNuMatching [t| forall as. ValuePerms as |])
-$(mkNuMatching [t| forall w . LLVMPtrPerm w |])
 $(mkNuMatching [t| forall w . LLVMFieldPerm w |])
 $(mkNuMatching [t| forall w . LLVMArrayPerm w |])
+$(mkNuMatching [t| RWModality |])
 $(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
+$(mkNuMatching [t| SomeExprAndPerm |])
 $(mkNuMatching [t| forall ps. DistPerms ps |])
 
 
@@ -680,73 +704,87 @@ llvmExEqWord :: (1 <= w, KnownNat w) =>
 llvmExEqWord = nu $ \e -> ValPerm_Eq (PExpr_LLVMWord $ PExpr_Var e)
 
 -- | Create a field pointer permission with offset 0 and @eq(e)@ permissions
-llvmFieldPerm0Eq :: (1 <= w, KnownNat w) => SplittingExpr ->
-                    PermExpr (LLVMPointerType w) -> LLVMPtrPerm w
-llvmFieldPerm0Eq spl e =
-  LLVMPP_Field $ LLVMFieldPerm { llvmFieldOffset = bvInt 0,
-                                 llvmFieldSplitting = spl,
-                                 llvmFieldPerm = ValPerm_Eq e }
+-- with the given read-write modality
+llvmFieldPerm0Eq :: (1 <= w, KnownNat w) =>
+                    RWModality -> PermExpr (LLVMPointerType w) ->
+                    LLVMPtrPerm w
+llvmFieldPerm0Eq rw e =
+  Perm_LLVMField $ LLVMFieldPerm { llvmFieldRW = rw,
+                                   llvmFieldOffset = bvInt 0,
+                                   llvmFieldPerm = ValPerm_Eq e }
 
--- | Test if a pointer permission is of the form @ptr((0,spl) |-> p)@ and return
--- @spl@ and @p@ if so
-llvmPtrIsField0 :: (1 <= w, KnownNat w) => LLVMPtrPerm w ->
-                   Maybe (SplittingExpr, ValuePerm (LLVMPointerType w))
-llvmPtrIsField0 pp =
-  case pp of
-    LLVMPP_Field (LLVMFieldPerm {..})
-      | llvmFieldOffset `bvEq` bvInt 0 ->
-        return (llvmFieldSplitting, llvmFieldPerm)
-    _ -> Nothing
+-- | Create an existential permission to read or write an arbitrary value from
+-- offset 0 of an LLVM pointer dependeing on the modality, i.e., create the
+-- permission @exists x.[RW]ptr (0 |-> eq(x))@
+llvmExFieldPerm0Eq :: (1 <= w, KnownNat w) => RWModality ->
+                      Binding (LLVMPointerType w) (ValuePerm (LLVMPointerType w))
+llvmExFieldPerm0Eq rw =
+  nu $ \x -> ValPerm_Conj [llvmFieldPerm0Eq rw (PExpr_Var x)]
 
--- | Create an existential permission to read an arbitrary value from offset 0
--- of an LLVM pointer
-llvmExRead0Perm :: (1 <= w, KnownNat w) =>
-                   Mb (RNil :> SplittingType :> LLVMPointerType w)
-                   (ValuePerm (LLVMPointerType w))
-llvmExRead0Perm =
-  nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: spl :>: x) ->
-  ValPerm_LLVMPtr [llvmFieldPerm0Eq (SplExpr_Var spl) (PExpr_Var x)]
+-- | Create a field write permission with offset 0 and @true@ permissions
+llvmFieldPerm0True :: (1 <= w, KnownNat w) => LLVMFieldPerm w
+llvmFieldPerm0True =
+  LLVMFieldPerm { llvmFieldRW = Write,
+                  llvmFieldOffset = bvInt 0,
+                  llvmFieldPerm = ValPerm_True }
 
--- | Create an existential permission to write to offset 0 of an LLVM pointer
-llvmExWrite0Perm :: (1 <= w, KnownNat w) =>
-                    Binding (LLVMPointerType w) (ValuePerm (LLVMPointerType w))
-llvmExWrite0Perm =
-  nu $ \x -> ValPerm_LLVMPtr [llvmFieldPerm0Eq SplExpr_All (PExpr_Var x)]
+-- | Create the array ponter perm @array(0,<len,*(w/8) |-> [ptr(0 |-> true)])@
+-- of given size @sz@ in bytes, assuming the size is a multiple of @w/8@, where
+-- @len@ is calculated as @sz*8/w@
+llvmArrayPtrPermOfSize :: (1 <= w, KnownNat w) => Integer -> LLVMPtrPerm w
+llvmArrayPtrPermOfSize = helper Proxy where
+  helper :: (1 <= w, KnownNat w) => Proxy w -> Integer -> LLVMPtrPerm w
+  helper w sz
+    | (8*sz) `mod` natVal w /= 0 =
+      error "llvmArrayPtrPermOfSize: size not a multiple of pointer width!"
+  helper w sz =
+    let w_bytes = natVal w `div` 8 in
+    Perm_LLVMArray $ LLVMArrayPerm { llvmArrayOffset = bvInt 0,
+                                     llvmArrayLen = bvInt (sz `div` w_bytes),
+                                     llvmArrayStride = w_bytes,
+                                     llvmArrayFields = [llvmFieldPerm0True] }
 
--- | Add an offset to a pointer permission
-offsetLLVMPtrPerm :: (1 <= w, KnownNat w) =>
-                     PermExpr (BVType w) -> LLVMPtrPerm w -> LLVMPtrPerm w
-offsetLLVMPtrPerm off (LLVMPP_Field fp) =
-  LLVMPP_Field $ offsetLLVMFieldPerm off fp
-offsetLLVMPtrPerm off (LLVMPP_Array ap) =
-  LLVMPP_Array $ offsetLLVMArrayPerm off ap
-offsetLLVMPtrPerm _ (LLVMPP_Free e) = LLVMPP_Free e
+-- | Like 'llvmArrayPtrPermOfSize', but return a 'ValuePerm' instead of a
+-- pointer perm
+llvmArrayPermOfSize :: (1 <= w, KnownNat w) => Integer ->
+                       ValuePerm (LLVMPointerType w)
+llvmArrayPermOfSize sz = ValPerm_Conj [llvmArrayPtrPermOfSize sz]
+
+-- | Add an offset to an LLVM pointer permission
+offsetLLVMAtomicPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                        LLVMPtrPerm w -> LLVMPtrPerm w
+offsetLLVMAtomicPerm off (Perm_LLVMField fp) =
+  Perm_LLVMField $ offsetLLVMFieldPerm off fp
+offsetLLVMAtomicPerm off (Perm_LLVMArray ap) =
+  Perm_LLVMArray $ offsetLLVMArrayPerm off ap
+offsetLLVMAtomicPerm _ (Perm_LLVMFree e) = Perm_LLVMFree e
 
 -- | Add an offset to a field permission
 offsetLLVMFieldPerm :: (1 <= w, KnownNat w) =>
-                     PermExpr (BVType w) -> LLVMFieldPerm w -> LLVMFieldPerm w
+                       PermExpr (BVType w) -> LLVMFieldPerm w -> LLVMFieldPerm w
 offsetLLVMFieldPerm off (LLVMFieldPerm {..}) =
   LLVMFieldPerm { llvmFieldOffset = bvAdd llvmFieldOffset off, ..}
 
 -- | Add an offset to an array permission
 offsetLLVMArrayPerm :: (1 <= w, KnownNat w) =>
-                     PermExpr (BVType w) -> LLVMArrayPerm w -> LLVMArrayPerm w
+                       PermExpr (BVType w) -> LLVMArrayPerm w -> LLVMArrayPerm w
 offsetLLVMArrayPerm off (LLVMArrayPerm {..}) =
   LLVMArrayPerm { llvmArrayOffset = bvAdd llvmArrayOffset off, ..}
 
--- | Lens for the pointer permissions of an LLVM pointer permission
+-- | Lens for the LLVM pointer permissions in a 'ValPerm_Conj'; it is an error
+-- to use this lens with a value permission not of this form
 llvmPtrPerms :: Lens' (ValuePerm (LLVMPointerType w)) [LLVMPtrPerm w]
 llvmPtrPerms =
   lens
   (\p -> case p of
-      ValPerm_LLVMPtr pps -> pps
-      _ -> error "llvmPtrPerms: not an LLVM pointer permission")
+      ValPerm_Conj pps -> pps
+      _ -> error "llvmPtrPerms: not a conjuction of atomic permissions")
   (\p pps ->
     case p of
-      ValPerm_LLVMPtr _ -> ValPerm_LLVMPtr pps
-      _ -> error "llvmPtrPerms: not an LLVM pointer permission")
+      ValPerm_Conj _ -> ValPerm_Conj pps
+      _ -> error "llvmPtrPerms: not a conjuction of atomic permissions")
 
--- | Lens for the @i@th pointer permission of an LLVM pointer permission
+-- | Lens for the @i@th LLVM pointer permission of a 'ValPerm_Conj'
 llvmPtrPerm :: Int -> Lens' (ValuePerm (LLVMPointerType w)) (LLVMPtrPerm w)
 llvmPtrPerm i =
   lens
@@ -782,42 +820,18 @@ lastLLVMPtrPermIndex p =
   let len = length (p ^. llvmPtrPerms) in
   if len > 0 then len - 1 else error "lastLLVMPtrPerms: no pointer perms!"
 
--- | Create exclusive LLVM pointer permissions for a given number of bytes, of
--- the form @x:ptr((0,All) |-> true * ... * (sz-w/8,All) |-> true)@, where @w@
--- is the pointer width in bits
-llvmPtrPermsOfSize :: (1 <= w, KnownNat w) => Integer -> [LLVMPtrPerm w]
-llvmPtrPermsOfSize sz = helper Proxy sz where
-  helper :: (1 <= w, KnownNat w) => Proxy w -> Integer -> [LLVMPtrPerm w]
-  helper w sz
-    | (8*sz) `mod` natVal w /= 0 =
-      error "llvmPtrPermOfSize: size not a multiple of pointer width!"
-  helper w sz =
-    let num_ptrs = (8*sz) `div` natVal w in
-    flip map [0 .. num_ptrs - 1] $ \i ->
-    LLVMPP_Field $ LLVMFieldPerm
-    { llvmFieldOffset = bvInt (8 * i * natVal w),
-      llvmFieldSplitting = SplExpr_All,
-      llvmFieldPerm = ValPerm_True }
-
--- | Create an exclusive LLVM pointer permission for a given number of bytes, of
--- the form @x:ptr((0,All) |-> true * ... * (sz-w/8,All) |-> true)@, where @w@
--- is the pointer width in bits
-llvmPtrPermOfSize :: (1 <= w, KnownNat w) => Integer ->
-                     ValuePerm (LLVMPointerType w)
-llvmPtrPermOfSize = ValPerm_LLVMPtr . llvmPtrPermsOfSize
-
 -- | Create a list of pointer permissions needed in order to deallocate a frame
--- that has the given frame permissions. If any of the required permissions are
--- unsatisfiable to the point that we cannot construct them (because they
--- require pointer permissions to an LLVM word), return 'Nothing'.
+-- that has the given frame permissions. It is an error if any of the required
+-- permissions are for LLVM words instead of pointers.
 llvmFrameDeletionPerms :: (1 <= w, KnownNat w) => LLVMFramePerm w ->
-                          Maybe (Some DistPerms)
-llvmFrameDeletionPerms [] = Just $ Some DistPermsNil
+                          Some DistPerms
+llvmFrameDeletionPerms [] = Some DistPermsNil
 llvmFrameDeletionPerms ((asLLVMOffset -> Just (x,off), sz):fperm')
-  | Just (Some del_perms) <- llvmFrameDeletionPerms fperm' =
-    Just $ Some $ DistPermsCons del_perms x $ ValPerm_LLVMPtr $
-    map (offsetLLVMPtrPerm off) $ llvmPtrPermsOfSize sz
-llvmFrameDeletionPerms _ = Nothing
+  | Some del_perms <- llvmFrameDeletionPerms fperm' =
+    Some $ DistPermsCons del_perms x $ ValPerm_Conj
+    [offsetLLVMAtomicPerm off $ llvmArrayPtrPermOfSize sz]
+llvmFrameDeletionPerms _ =
+  error "llvmFrameDeletionPerms: unexpected LLVM word allocated in frame"
 
 valuePermsToDistPerms :: MapRList Name ps -> ValuePerms ps -> DistPerms ps
 valuePermsToDistPerms MNil _ = DistPermsNil
@@ -884,27 +898,27 @@ findMatch f = listToMaybe . findMatches f
 
 -- | Test if a pointer permission is a free permission
 matchFreePtrPerm :: Matcher (LLVMPtrPerm w) (PermExpr (BVType w))
-matchFreePtrPerm (LLVMPP_Free e) = Just e
+matchFreePtrPerm (Perm_LLVMFree e) = Just e
 matchFreePtrPerm _ = Nothing
 
 -- | Test if a pointer permission is a field permission
 matchFieldPtrPerm :: Matcher (LLVMPtrPerm w) (LLVMFieldPerm w)
-matchFieldPtrPerm (LLVMPP_Field fp) = Just fp
+matchFieldPtrPerm (Perm_LLVMField fp) = Just fp
 matchFieldPtrPerm _ = Nothing
 
 -- | Test if a pointer permission is a field permission with a specific offset
 matchFieldPtrPermOff :: PermExpr (BVType w) ->
                         Matcher (LLVMPtrPerm w) (LLVMFieldPerm w)
-matchFieldPtrPermOff off (LLVMPP_Field fp)
+matchFieldPtrPermOff off (Perm_LLVMField fp)
   | off == llvmFieldOffset fp = Just fp
 matchFieldPtrPermOff _ _ = Nothing
 
 -- | Test if a pointer permission is an array permission
 matchArrayPtrPerm :: Matcher (LLVMPtrPerm w) (LLVMArrayPerm w)
-matchArrayPtrPerm (LLVMPP_Array ap) = Just ap
+matchArrayPtrPerm (Perm_LLVMArray ap) = Just ap
 matchArrayPtrPerm _ = Nothing
 
--- | Find the first 'LLVMPP_Free' in a list of pointer permissions, returning
+-- | Find the first 'Perm_LLVMFree' in a list of pointer permissions, returning
 -- its index in the list and the expression it contains if found
 findFreePerm :: [LLVMPtrPerm w] -> Maybe (Int, PermExpr (BVType w))
 findFreePerm = findMatch matchFreePtrPerm
@@ -926,7 +940,7 @@ findArrayPerms = findMatches matchArrayPtrPerm
 
 
 -- | A field match represents a pointer permission that could be used to prove a
--- field permission @off |-> (S,p)@.
+-- field permission @ptr(off |-> p)@.
 --
 -- In order to be used, each match case (that is, each constructor here) has a
 -- constraint on @off@ that must hold. The match case is a /definite/ match if
@@ -937,7 +951,7 @@ findArrayPerms = findMatches matchArrayPtrPerm
 -- 'False' for a potential one.
 data LLVMFieldMatch w
   = FieldMatchField Bool Int (LLVMFieldPerm w)
-    -- ^ Represents another field permission @(off',S') |-> p'@ at the index
+    -- ^ Represents another field permission @ptr(off' |-> p')@ at the index
     -- given by the 'Int' argument. The constraint for a definite match is that
     -- @off'=off@.
   | FieldMatchArray Bool Int (LLVMArrayPerm w) (PermExpr (BVType w)) Int
@@ -957,13 +971,13 @@ fieldMatchDefinite (FieldMatchArray b _ _ _ _) = b
 findFieldMatches :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
                     [LLVMPtrPerm w] -> [LLVMFieldMatch w]
 findFieldMatches off pps =
-  flip mapMaybe (zip pps [0..]) $ \(pp, i) ->
+  flip mapMaybe (zip pps [0::Int ..]) $ \(pp, i) ->
   case pp of
-    LLVMPP_Field fp
+    Perm_LLVMField fp
       | bvCouldEqual off (llvmFieldOffset fp) ->
         Just (FieldMatchField (bvEq off $ llvmFieldOffset fp) i fp)
-    LLVMPP_Field _ -> Nothing
-    LLVMPP_Array ap@(LLVMArrayPerm {..}) ->
+    Perm_LLVMField _ -> Nothing
+    Perm_LLVMArray ap@(LLVMArrayPerm {..}) ->
       -- In order to index into an array, off must be a multiple of the stride
       -- plus a known, constant offset into the array cell. That is, the value
       -- (off - off')%stride must be a constant.
@@ -1043,7 +1057,7 @@ matchInExsOrsStars f =
 
 -- | Test if a pointer permission is a free permission
 matchFreePtrPerm :: Matcher (LLVMPtrPerm w) (PermExpr (BVType w))
-matchFreePtrPerm (LLVMPP_Free e) = Just e
+matchFreePtrPerm (Perm_LLVMFree e) = Just e
 matchFreePtrPerm _ = Nothing
 
 -- | Test if a permission is an @x:ptr(free(e))@ inside 0 or more existentials,
@@ -1096,18 +1110,6 @@ instance (Substable s a m, Substable s b m) => Substable s (a,b) m where
 instance (Substable s a m, NuMatching a) => Substable s (Mb ctx a) m where
   genSubst s mbmb = mbM $ fmap (genSubst s) (mbSwap mbmb)
 
-instance SubstVar s m => Substable s SplittingExpr m where
-  genSubst s [nuP| SplExpr_All |] = return SplExpr_All
-  genSubst s [nuP| SplExpr_L spl |] = SplExpr_L <$> genSubst s spl
-  genSubst s [nuP| SplExpr_R spl |] = SplExpr_R <$> genSubst s spl
-  genSubst s [nuP| SplExpr_Star spl1 spl2 |] =
-    SplExpr_Star <$> genSubst s spl1 <*> genSubst s spl2
-  genSubst s [nuP| SplExpr_Var x |] =
-    substExprVar s x >>= \e ->
-    case e of
-      PExpr_Var y -> return $ SplExpr_Var y
-      PExpr_Spl spl -> return spl
-
 -- | Helper function to substitute into 'BVFactor's
 substBVFactor :: SubstVar s m => s ctx -> Mb ctx (BVFactor w) ->
                  m (PermExpr (BVType w))
@@ -1123,12 +1125,11 @@ instance SubstVar s m => Substable s (PermExpr a) m where
     mapM (substBVFactor s) (mbList factors)
   genSubst s [nuP| PExpr_Struct args |] =
     PExpr_Struct <$> genSubst s args
+  genSubst s [nuP| PExpr_Always |] = return PExpr_Always
   genSubst s [nuP| PExpr_LLVMWord e |] =
     PExpr_LLVMWord <$> genSubst s e
   genSubst s [nuP| PExpr_LLVMOffset x off |] =
     addLLVMOffset <$> substExprVar s x <*> genSubst s off
-  genSubst s [nuP| PExpr_Spl spl |] =
-    PExpr_Spl <$> genSubst s spl
   genSubst _ [nuP| PExpr_Fun fh |] =
     return $ PExpr_Fun $ mbLift fh
 
@@ -1137,8 +1138,20 @@ instance SubstVar s m => Substable s (PermExprs as) m where
   genSubst s [nuP| PExprs_Cons es e |] =
     PExprs_Cons <$> genSubst s es <*> genSubst s e
 
+instance SubstVar s m => Substable s (AtomicPerm a) m where
+  genSubst s [nuP| Perm_LLVMField fp |] = Perm_LLVMField <$> genSubst s fp
+  genSubst s [nuP| Perm_LLVMArray ap |] = Perm_LLVMArray <$> genSubst s ap
+  genSubst s [nuP| Perm_LLVMFree e |] = Perm_LLVMFree <$> genSubst s e
+  genSubst s [nuP| Perm_LLVMFrame fp |] =
+    Perm_LLVMFrame <$> genSubst s fp
+  genSubst s [nuP| Perm_LOwned es_and_ps |] =
+    Perm_LOwned <$> mapM (genSubst s) (mbList es_and_ps)
+  genSubst s [nuP| Perm_LContains e |] =
+    Perm_LContains <$> genSubst s e
+  genSubst s [nuP| Perm_Fun fperm |] =
+    Perm_Fun <$> genSubst s fperm
+
 instance SubstVar s m => Substable s (ValuePerm a) m where
-  genSubst s [nuP| ValPerm_True |] = return ValPerm_True
   genSubst s [nuP| ValPerm_Eq e |] = ValPerm_Eq <$> genSubst s e
   genSubst s [nuP| ValPerm_Or p1 p2 |] =
     ValPerm_Or <$> genSubst s p1 <*> genSubst s p2
@@ -1147,35 +1160,39 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
     -- Substable instance for Mb ctx a from above
     ValPerm_Exists <$>
     nuM (\x -> genSubst (extSubst s x) $ mbCombine p)
-  genSubst s [nuP| ValPerm_Mu p |] =
-    ValPerm_Mu <$> mbM (fmap (genSubst s) $ mbSwap p)
+  genSubst s [nuP| ValPerm_Mu rw p |] =
+    ValPerm_Mu <$> genSubst s rw
+    <*> mbM (fmap (genSubst s) $ mbSwap p)
   genSubst s [nuP| ValPerm_Var x |] = substPermVar s x
-  genSubst s [nuP| ValPerm_LLVMPtr pps |] =
-    ValPerm_LLVMPtr <$> mapM (genSubst s) (mbList pps)
-  genSubst s [nuP| ValPerm_LLVMFrame fp |] =
-    ValPerm_LLVMFrame <$> genSubst s fp
-  genSubst s [nuP| ValPerm_Fun fperm |] =
-    ValPerm_Fun <$> genSubst s fperm
+  genSubst s [nuP| ValPerm_Conj aps |] =
+    ValPerm_Conj <$> mapM (genSubst s) (mbList aps)
 
 instance SubstVar s m => Substable s (ValuePerms as) m where
   genSubst s [nuP| ValPerms_Nil |] = return ValPerms_Nil
   genSubst s [nuP| ValPerms_Cons ps p |] =
     ValPerms_Cons <$> genSubst s ps <*> genSubst s p
 
+instance SubstVar s m => Substable s RWModality m where
+  genSubst s [nuP| Write |] = return Write
+  genSubst s [nuP| Read e |] = Read <$> genSubst s e
+
+instance SubstVar s m => Substable s SomeExprAndPerm m where
+  genSubst s [nuP| SomeExprAndPerm e p |] =
+    SomeExprAndPerm <$> genSubst s e <*> genSubst s p
+
 instance SubstVar s m => Substable s (LLVMPtrPerm a) m where
-  genSubst s [nuP| LLVMPP_Field fp |] = LLVMPP_Field <$> genSubst s fp
-  genSubst s [nuP| LLVMPP_Array ap |] = LLVMPP_Array <$> genSubst s ap
-  genSubst s [nuP| LLVMPP_Free len |] = LLVMPP_Free <$> genSubst s len
+  genSubst s [nuP| Perm_LLVMField fp |] = Perm_LLVMField <$> genSubst s fp
+  genSubst s [nuP| Perm_LLVMArray ap |] = Perm_LLVMArray <$> genSubst s ap
+  genSubst s [nuP| Perm_LLVMFree len |] = Perm_LLVMFree <$> genSubst s len
 
 instance SubstVar s m => Substable s (LLVMFieldPerm a) m where
   genSubst s [nuP| LLVMFieldPerm off spl p |] =
     LLVMFieldPerm <$> genSubst s off <*> genSubst s spl <*> genSubst s p
 
 instance SubstVar s m => Substable s (LLVMArrayPerm a) m where
-  genSubst s [nuP| LLVMArrayPerm off len stride spl pps |] =
+  genSubst s [nuP| LLVMArrayPerm off len stride pps |] =
     LLVMArrayPerm <$> genSubst s off <*> genSubst s len <*>
-    return (mbLift stride) <*> genSubst s spl <*>
-    mapM (genSubst s) (mbList pps)
+    return (mbLift stride) <*> mapM (genSubst s) (mbList pps)
 
 instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
   genSubst s [nuP| FunPerm prx perms_in perms_out |] =
@@ -1456,23 +1473,6 @@ instance (AbstractVars a, AbstractVars b) => AbstractVars (a,b) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 a
     `clMbMbApplyM` abstractPEVars ns1 ns2 b
 
-instance AbstractVars SplittingExpr where
-  abstractPEVars ns1 ns2 SplExpr_All =
-    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_All |])
-  abstractPEVars ns1 ns2 (SplExpr_L spl) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_L |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
-  abstractPEVars ns1 ns2 (SplExpr_R spl) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_R |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
-  abstractPEVars ns1 ns2 (SplExpr_Star spl1 spl2) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_Star |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 spl1
-    `clMbMbApplyM` abstractPEVars ns1 ns2 spl2
-  abstractPEVars ns1 ns2 (SplExpr_Var x) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| SplExpr_Var |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 x
-
 instance AbstractVars (PermExpr a) where
   abstractPEVars ns1 ns2 (PExpr_Var x) =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Var |])
@@ -1496,9 +1496,6 @@ instance AbstractVars (PermExpr a) where
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_LLVMOffset |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 x
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
-  abstractPEVars ns1 ns2 (PExpr_Spl spl) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Spl |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
   abstractPEVars ns1 ns2 (PExpr_Fun fh) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_Fun |]) `clApply` toClosed fh)
 
@@ -1516,9 +1513,30 @@ instance AbstractVars (BVFactor w) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 i
     `clMbMbApplyM` abstractPEVars ns1 ns2 x
 
+instance AbstractVars (AtomicPerm a) where
+  abstractPEVars ns1 ns2 (Perm_LLVMField fp) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMField |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 fp
+  abstractPEVars ns1 ns2 (Perm_LLVMArray ap) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMArray |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ap
+  abstractPEVars ns1 ns2 (Perm_LLVMFree e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFree |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+  abstractPEVars ns1 ns2 (Perm_LLVMFrame fp) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFrame |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 fp
+  abstractPEVars ns1 ns2 (Perm_LOwned eps) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LOwned |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 eps
+  abstractPEVars ns1 ns2 (Perm_LContains e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LContains |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+  abstractPEVars ns1 ns2 (Perm_Fun fperm) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_Fun |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 fperm
+
 instance AbstractVars (ValuePerm a) where
-  abstractPEVars ns1 ns2 ValPerm_True =
-    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_True |])
   abstractPEVars ns1 ns2 (ValPerm_Eq e) =
     absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Eq |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
@@ -1529,21 +1547,13 @@ instance AbstractVars (ValuePerm a) where
   abstractPEVars ns1 ns2 (ValPerm_Exists p) =
     absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Exists |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 p
-  abstractPEVars ns1 ns2 (ValPerm_Mu p) =
+  abstractPEVars ns1 ns2 (ValPerm_Mu rw p) =
     absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Mu |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 rw
     `clMbMbApplyM` abstractPEVars ns1 ns2 p
   abstractPEVars ns1 ns2 (ValPerm_Var x) =
     absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Var |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 x
-  abstractPEVars ns1 ns2 (ValPerm_LLVMPtr pps) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_LLVMPtr |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 pps
-  abstractPEVars ns1 ns2 (ValPerm_LLVMFrame fp) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_LLVMFrame |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 fp
-  abstractPEVars ns1 ns2 (ValPerm_Fun fperm) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Fun |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 fperm
 
 instance AbstractVars (ValuePerms as) where
   abstractPEVars ns1 ns2 ValPerms_Nil =
@@ -1553,31 +1563,43 @@ instance AbstractVars (ValuePerms as) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 ps
     `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
+instance AbstractVars RWModality where
+  abstractPEVars ns1 ns2 Write =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Write |])
+  abstractPEVars ns1 ns2 (Read e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Read |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+
+instance AbstractVars SomeExprAndPerm where
+  abstractPEVars ns1 ns2 (SomeExprAndPerm e p) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| SomeExprAndPerm |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p
+
 instance AbstractVars (LLVMPtrPerm w) where
-  abstractPEVars ns1 ns2 (LLVMPP_Field fp) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| LLVMPP_Field |])
+  abstractPEVars ns1 ns2 (Perm_LLVMField fp) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMField |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 fp
-  abstractPEVars ns1 ns2 (LLVMPP_Array ap) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| LLVMPP_Array |])
+  abstractPEVars ns1 ns2 (Perm_LLVMArray ap) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMArray |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 ap
-  abstractPEVars ns1 ns2 (LLVMPP_Free e) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| LLVMPP_Free |])
+  abstractPEVars ns1 ns2 (Perm_LLVMFree e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFree |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
 
 instance AbstractVars (LLVMFieldPerm w) where
-  abstractPEVars ns1 ns2 (LLVMFieldPerm off spl p) =
+  abstractPEVars ns1 ns2 (LLVMFieldPerm rw off p) =
     absVarsReturnH ns1 ns2 $(mkClosed [| LLVMFieldPerm |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 rw
     `clMbMbApplyM` abstractPEVars ns1 ns2 off
-    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
     `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 instance AbstractVars (LLVMArrayPerm w) where
-  abstractPEVars ns1 ns2 (LLVMArrayPerm off len str spl flds) =
+  abstractPEVars ns1 ns2 (LLVMArrayPerm off len str flds) =
     absVarsReturnH ns1 ns2 $(mkClosed [| LLVMArrayPerm |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 off
     `clMbMbApplyM` abstractPEVars ns1 ns2 len
     `clMbMbApplyM` abstractPEVars ns1 ns2 str
-    `clMbMbApplyM` abstractPEVars ns1 ns2 spl
     `clMbMbApplyM` abstractPEVars ns1 ns2 flds
 
 instance AbstractVars (DistPerms ps) where
@@ -1665,7 +1687,8 @@ popPerm :: ExprVar a -> PermSet (ps :> a) -> (PermSet ps, ValuePerm a)
 popPerm x (PermSet nmap pstk) =
   (PermSet nmap (pstk ^. distPermsTail), pstk ^. distPermsHead x)
 
--- | Introduce a proof of @x:true@ onto the top of the stack
+-- | Introduce a proof of @x:true@ onto the top of the stack, which is the same
+-- as a proof of an empty conjunction @x:ValPerm_Conj[]@
 introTrue :: ExprVar a -> PermSet ps -> PermSet (ps :> a)
 introTrue x = pushPerm x ValPerm_True
 
@@ -1735,15 +1758,7 @@ castLLVMWordEq x e1 e2 =
       | bvEq e1' e1 -> ValPerm_Eq (PExpr_LLVMWord e2)
     _ -> error "castLLVMWordEq: unexpected existing permission"
 
--- | Prove an empty @x:ptr()@ permission from any @x:ptr(pps)@ permission
-introLLVMPtr :: ExprVar (LLVMPointerType w) -> PermSet ps ->
-                PermSet (ps :> LLVMPointerType w)
-introLLVMPtr x perms =
-  case perms ^. varPerm x of
-    ValPerm_LLVMPtr _ -> pushPerm x (ValPerm_LLVMPtr []) perms
-    _ -> error "introLLVMPtr: no LLVMptr permission"
-
--- | Cast a @y:ptr(pps)@ on the top of the stack to @x:ptr(pps - off)@ using a
+-- | Cast a @y:pps@ on the top of the stack to @x:(pps - off)@ using a
 -- proof of @x:eq(y+off)@ just below it on the stack
 castLLVMPtr :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
                ExprVar (LLVMPointerType w) ->
@@ -1753,11 +1768,11 @@ castLLVMPtr y off x perms =
   let (perms', y_ptr_perm) = popPerm y perms
       (perms'', x_eq_perm) = popPerm x perms' in
   case (y_ptr_perm, x_eq_perm) of
-    (p@(ValPerm_LLVMPtr _), ValPerm_Eq (PExpr_Var y'))
+    (p@(ValPerm_Conj _), ValPerm_Eq (PExpr_Var y'))
       | y' == y -> pushPerm x p perms''
-    (ValPerm_LLVMPtr pps, ValPerm_Eq (PExpr_LLVMOffset y' off))
+    (ValPerm_Conj pps, ValPerm_Eq (PExpr_LLVMOffset y' off))
       | y' == y ->
-        pushPerm x (ValPerm_LLVMPtr $ map (offsetLLVMPtrPerm off) pps) perms''
+        pushPerm x (ValPerm_Conj $ map (offsetLLVMAtomicPerm off) pps) perms''
     _ -> error "castLLVMPtr"
 
 -- | Copy an LLVM free permission @free(e)@ from the current
@@ -1768,7 +1783,7 @@ introLLVMFree :: ExprVar (LLVMPointerType w) -> Int ->
                  PermSet (ps :> LLVMPointerType w)
 introLLVMFree x i perms =
   case perms ^. (varPerm x . llvmPtrPerm i) of
-    pp_i@(LLVMPP_Free _) ->
+    pp_i@(Perm_LLVMFree _) ->
       over (varPerm x) (deleteLLVMPtrPerm i) $
       over (topDistPerm x) (addLLVMPtrPerm pp_i)
       perms
@@ -1783,43 +1798,27 @@ castLLVMFree :: ExprVar (LLVMPointerType w) -> Int ->
 castLLVMFree x i e1 e2 =
   over (varPerm x . llvmPtrPerm i) $ \pp_i ->
   case pp_i of
-    LLVMPP_Free e | e == e1 -> LLVMPP_Free e2
+    Perm_LLVMFree e | e == e1 -> Perm_LLVMFree e2
     _ -> error "castLLVMFree"
 
--- | Move a field permission of the form @(off,All) |-> p@, which should be
--- the @i@th 'LVMPtrPerm' associated with @x@, into the @x:ptr(pps)@ permission
--- on the top of of the stack, resulting in the permission of the form
--- @x:ptr(pps, (off,All) |-> p)@ on the top of the stack.
-introLLVMFieldAll :: ExprVar (LLVMPointerType w) -> Int ->
-                     PermSet (ps :> LLVMPointerType w) ->
-                     PermSet (ps :> LLVMPointerType w)
-introLLVMFieldAll x i perms =
+-- | Move or copy a field permission of the form @(rw,off) |-> p@, which should
+-- be the @i@th 'LVMPtrPerm' associated with @x@, into the @x:ptr(pps)@
+-- permission on the top of of the stack, resulting in the permission of the
+-- form @x:ptr(pps, (rw,off) |-> p)@ on the top of the stack. If it is a write
+-- permission, it is moved, i.e., deleted from its original position, while if
+-- it is a read permission, it is copied.
+introLLVMField :: ExprVar (LLVMPointerType w) -> Int ->
+                  PermSet (ps :> LLVMPointerType w) ->
+                  PermSet (ps :> LLVMPointerType w)
+introLLVMField x i perms =
   case perms ^. (varPerm x . llvmPtrPerm i) of
-    pp_i@(LLVMPP_Field (LLVMFieldPerm _ SplExpr_All _)) ->
+    pp_i@(Perm_LLVMField (LLVMFieldPerm Write _ _)) ->
       over (varPerm x) (deleteLLVMPtrPerm i) $
       over (topDistPerm x) (addLLVMPtrPerm pp_i)
       perms
-    _ -> error "introLLVMFieldAll"
-
--- | Split a field permission @(off,spl) |-> eq(e)@ into two, leaving the left
--- half in the current permission stack and moving the right half to the top of
--- of the stack
-introLLVMFieldSplit :: ExprVar (LLVMPointerType w) -> Int -> SplittingExpr ->
-                       PermSet (ps :> LLVMPointerType w) ->
-                       PermSet (ps :> LLVMPointerType w)
-introLLVMFieldSplit x i spl perms =
-  case perms ^. (varPerm x . llvmPtrPerm i) of
-    pp_i@(LLVMPP_Field fp)
-      | llvmFieldSplitting fp == spl
-      , ValPerm_Eq _ <- llvmFieldPerm fp ->
-        set (varPerm x . llvmPtrPerm i) (LLVMPP_Field $
-                                         fp { llvmFieldSplitting =
-                                              SplExpr_L spl }) $
-        over (topDistPerm x) (addLLVMPtrPerm $
-                              LLVMPP_Field $
-                              fp { llvmFieldSplitting = SplExpr_R spl })
-        perms
-    _ -> error "introLLVMFieldSplit"
+    pp_i@(Perm_LLVMField (LLVMFieldPerm (Read _) _ _)) ->
+      over (topDistPerm x) (addLLVMPtrPerm pp_i) perms
+    _ -> error "introLLVMField"
 
 -- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of
 -- the permission stack into a proof of @x:ptr(pps,(off,spl |-> p))@
@@ -1833,9 +1832,9 @@ introLLVMFieldContents x y perms =
       i = lastLLVMPtrPermIndex (perms ^. topDistPerm x) in
   over (topDistPerm x . llvmPtrPerm i)
   (\pp -> case pp of
-      LLVMPP_Field fp
+      Perm_LLVMField fp
         | ValPerm_Eq (PExpr_Var y') <- llvmFieldPerm fp , y' == y ->
-            LLVMPP_Field $ fp { llvmFieldPerm = y_perm }
+            Perm_LLVMField $ fp { llvmFieldPerm = y_perm }
       _ -> error "introLLVMFieldContents")
   perms'
 
@@ -1847,17 +1846,17 @@ elimLLVMFieldContents :: ExprVar (LLVMPointerType w) -> Int -> PermSet ps ->
                          (Binding (LLVMPointerType w) (PermSet ps))
 elimLLVMFieldContents x i perms =
   case perms ^. (varPerm x . llvmPtrPerm i) of
-    LLVMPP_Field fp
+    Perm_LLVMField fp
       | ValPerm_Eq (PExpr_Var y) <- llvmFieldPerm fp -> Left y
-    LLVMPP_Field fp ->
+    Perm_LLVMField fp ->
       Right $ nu $ \y ->
       set (varPerm y) (llvmFieldPerm fp) $
       set (varPerm x . llvmPtrPerm i)
-      (LLVMPP_Field $ fp {llvmFieldPerm = ValPerm_Eq (PExpr_Var y) }) $
+      (Perm_LLVMField $ fp {llvmFieldPerm = ValPerm_Eq (PExpr_Var y) }) $
       perms
     _ -> error "elimLLVMFieldContents"
 
--- | Divide an array permission @x:ptr((off,*stride,<len,S) |-> p)@ into two
+-- | Divide an array permission @x:ptr((rw,off,*stride,<len) |-> p)@ into two
 -- arrays, one of length @e@ starting at @off@ and one of length @len-e@
 -- starting at offset @off+e*stride@. The latter permission (at offset
 -- @off+e*stride@) stays at the same index, while the former (at the original
@@ -1865,16 +1864,15 @@ elimLLVMFieldContents x i perms =
 divideLLVMArray :: ExprVar (LLVMPointerType w) -> Int -> PermExpr (BVType w) ->
                    PermSet ps -> PermSet ps
 divideLLVMArray x i e perms =
-  case (perms ^. varPerm x, perms ^. (varPerm x . llvmPtrPerm i)) of
-    (ValPerm_LLVMPtr _, LLVMPP_Array ap) ->
-      -- The match on perms ^. varPerm x is to get the 1 <= w instance
+  case perms ^. (varPerm x . llvmPtrPerm i) of
+    Perm_LLVMArray ap ->
       set (varPerm x . llvmPtrPerm i)
-      (LLVMPP_Array $
+      (Perm_LLVMArray $
        ap { llvmArrayLen = bvSub (llvmArrayLen ap) e,
             llvmArrayOffset =
               bvAdd (llvmArrayOffset ap) (bvMult (llvmArrayStride ap) e) }) $
       over (varPerm x) (addLLVMPtrPerm $
-                        LLVMPP_Array $ ap { llvmArrayLen = e }) $
+                        Perm_LLVMArray $ ap { llvmArrayLen = e }) $
       perms
     _ -> error "divideLLVMArray"
 
@@ -1887,15 +1885,14 @@ divideLLVMArray x i e perms =
 indexLLVMArray :: ExprVar (LLVMPointerType w) -> Int -> PermSet ps ->
                   (PermSet ps, [(Int, LLVMFieldPerm w)])
 indexLLVMArray x i perms =
-  case (perms ^. varPerm x, perms ^. (varPerm x . llvmPtrPerm i)) of
-    (ValPerm_LLVMPtr _, LLVMPP_Array ap) ->
-      -- The match on perms ^. varPerm x is to get the 1 <= w instance
+  case perms ^. (varPerm x . llvmPtrPerm i) of
+    Perm_LLVMArray ap ->
       let new_fps =
             map (offsetLLVMFieldPerm (llvmArrayOffset ap)) (llvmArrayFields ap) in
       (set (varPerm x . llvmPtrPerm i)
-       (LLVMPP_Array $ ap { llvmArrayOffset =
+       (Perm_LLVMArray $ ap { llvmArrayOffset =
                             bvAdd (llvmArrayOffset ap) (bvInt 1)}) $
-       over (varPerm x . llvmPtrPerms) (++ map LLVMPP_Field new_fps) $
+       over (varPerm x . llvmPtrPerms) (++ map Perm_LLVMField new_fps) $
        perms
       ,
       zip [length (perms ^. (varPerm x . llvmPtrPerms)) ..] new_fps)
@@ -1912,11 +1909,14 @@ castLLVMFieldOffset x off off' perms =
   let i = lastLLVMPtrPermIndex (perms ^. topDistPerm x) in
   over (topDistPerm x . llvmPtrPerm i)
   (\p -> case p of
-      LLVMPP_Field fp
+      Perm_LLVMField fp
         | llvmFieldOffset fp `bvEq` off ->
-            LLVMPP_Field (fp { llvmFieldOffset = off' })
+            Perm_LLVMField (fp { llvmFieldOffset = off' })
       _ -> error "castLLVMFieldOffset")
   perms
+
+{-
+FIXME: remove this...?
 
 -- | Delete an llvm frame and its associated permissions for the pointer objects
 -- that were allocated in that frame, assuming that those are the permissions
@@ -1924,8 +1924,9 @@ castLLVMFieldOffset x off off' perms =
 deleteLLVMFrame :: ExprVar (LLVMFrameType w) -> PermSet ps -> PermSet RNil
 deleteLLVMFrame frame perms
   | ValPerm_LLVMFrame fperm <- perms ^. varPerm frame
-  , Just (Some del_perms) <- llvmFrameDeletionPerms fperm
+  , Some del_perms <- llvmFrameDeletionPerms fperm
   , Just Refl <- testEquality del_perms (perms ^. distPerms)
   = set (varPerm frame) ValPerm_True $
     modifyDistPerms (const DistPermsNil) perms
 deleteLLVMFrame _ _ = error "deleteLLVMFrame"
+-}
