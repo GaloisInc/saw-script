@@ -1107,6 +1107,13 @@ primitives = Map.fromList
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
+  , prim "abc_external"        "ProofScript SatResult"
+    (pureVal satABCExternal)
+    Current
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal."
+    ]
+
   , prim "boolector"           "ProofScript SatResult"
     (pureVal satBoolector)
     Current

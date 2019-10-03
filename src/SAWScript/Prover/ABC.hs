@@ -1,4 +1,4 @@
-module SAWScript.Prover.ABC (satABC) where
+module SAWScript.Prover.ABC (satABC, satABCExternal) where
 
 
 import qualified Data.AIG as AIG
@@ -64,3 +64,21 @@ getModel argNames shapes satRes =
 
     AIG.SatUnknown -> fail "Unknown result from ABC"
 
+
+-- | Check the satisfiability of a @Term@ using ABC as an external
+-- process.
+satABCExternal ::
+  SharedContext ->
+  Term ->
+  IO (Maybe [(String,FirstOrderValue)], SolverStats)
+satABCExternal sc goal =
+  do t0 <- propToPredicate sc goal
+     TypedTerm schema t <-
+        (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
+     checkBooleanSchema schema
+     tp <- scWhnf sc =<< scTypeOf sc t
+     let (args, _) = asPiList tp
+         argNames = map fst args
+     print t
+     let stats = solverStats "ABCExternal" (scSharedSize t0)
+     return (Nothing, stats)
