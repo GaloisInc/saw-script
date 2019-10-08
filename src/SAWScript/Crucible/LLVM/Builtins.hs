@@ -296,11 +296,13 @@ createMethodSpec verificationArgs asp bic opts lm@(LLVMModule _ _ mtrans) nm set
 
   let ?lc = mtrans ^. Crucible.transContext . Crucible.llvmTypeCtx
 
+  profFile <- rwProfilingFile <$> getTopLevelRW
   Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \_ ->
     fmap NE.head $ forM defOrDecls $ \defOrDecl -> do
       setupLLVMCrucibleContext bic opts lm $ \cc -> do
         let sym = cc^.ccBackend
 
+        (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_llvm_verify" profFile
         pos <- getPosition
         let setupLoc = toW4Loc "_SAW_verify_prestate" pos
 
@@ -357,7 +359,7 @@ createMethodSpec verificationArgs asp bic opts lm@(LLVMModule _ _ mtrans) nm set
               unwords ["Simulating", (methodSpec ^. csName) , "..."]
             top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
             (ret, globals3)
-              <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat asp
+              <- io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp
 
             -- collect the proof obligations
             asserts <- verifyPoststate opts (biSharedContext bic) cc
@@ -370,6 +372,7 @@ createMethodSpec verificationArgs asp bic opts lm@(LLVMModule _ _ mtrans) nm set
             printOutLnTop Info $
               unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
             stats <- verifyObligations cc methodSpec tactic assumes asserts
+            io $ writeFinalProfile
             return (methodSpec & MS.csSolverStats .~ stats)
 
 
@@ -680,7 +683,7 @@ registerOverride opts cc _ctx top_loc cs = do
         $ Crucible.mkOverride'
             hName
             retType
-            (methodSpecHandler opts sc cc top_loc cs retType)
+            (methodSpecHandler opts sc cc top_loc cs h)
 
 registerInvariantOverride
   :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
@@ -700,16 +703,19 @@ registerInvariantOverride opts cc top_loc all_breakpoints cs = do
   liftIO $ printOutLn opts Info $ "Registering breakpoint `" ++ name ++ "`"
   withBreakpointCfgAndBlockId cc name parent $ \cfg breakpoint_block_id -> do
     let breakpoint_name = Crucible.BreakpointName $ Text.pack name
+    let h = Crucible.cfgHandle cfg
     let arg_types = Crucible.blockInputs $
           Crucible.getBlock breakpoint_block_id $
           Crucible.cfgBlockMap cfg
-    let ret_type = Crucible.handleReturnType $ Crucible.cfgHandle cfg
+    let ret_type = Crucible.handleReturnType h
+    let halloc = Crucible.simHandleAllocator (cc ^. ccLLVMSimContext)
+    hInvariant <- Crucible.mkHandle' halloc (W4.plFunction top_loc) arg_types ret_type
     Crucible.breakAndReturn
       cfg
       breakpoint_name
       arg_types
       ret_type
-      (methodSpecHandler opts sc cc top_loc cs ret_type)
+      (methodSpecHandler opts sc cc top_loc cs hInvariant)
       all_breakpoints
 
 --------------------------------------------------------------------------------
@@ -759,6 +765,7 @@ verifySimulate ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                       ->
   LLVMCrucibleContext arch          ->
+  [Crucible.GenericExecutionFeature Sym] ->
   MS.CrucibleMethodSpecIR (LLVM arch)          ->
   [(Crucible.MemType, LLVMVal)] ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
@@ -768,7 +775,7 @@ verifySimulate ::
   Bool                          ->
   Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat asp =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp =
   withCfgAndBlockId cc mspec $ \cfg entryId -> do
     let argTys = Crucible.blockInputs $
           Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
@@ -802,11 +809,11 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat asp =
                           $ maybeToList asp
 
     let execFeatures = invariantExecFeatures ++
-                       map Crucible.genericToExecutionFeature patSatGenExecFeature ++
+                       map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs) ++
                        additionalFeatures
 
     let initExecState =
-          Crucible.InitialState simCtx globals Crucible.defaultAbortHandler $
+          Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
           Crucible.runOverrideSim retTy $
           do mapM_ (registerOverride opts cc simCtx top_loc)
                    (groupOn (view csName) funcLemmas)
@@ -949,7 +956,7 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
 
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
-                        bindings Crucible.llvmExtensionImpl CrucibleSAW.SAWCruciblePersonality
+                        bindings (Crucible.llvmExtensionImpl Crucible.defaultMemOptions) CrucibleSAW.SAWCruciblePersonality
       mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
                =<< Crucible.initializeMemory sym ctx llvm_mod
 
@@ -963,7 +970,7 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
 
       let initExecState =
-            Crucible.InitialState simctx globals Crucible.defaultAbortHandler $
+            Crucible.InitialState simctx globals Crucible.defaultAbortHandler Crucible.UnitRepr $
             Crucible.runOverrideSim Crucible.UnitRepr setupMem
       res <- Crucible.executeCrucible [] initExecState
       (lglobals, lsimctx) <-
@@ -1048,7 +1055,7 @@ runCFG ::
   IO (Crucible.ExecResult p sym ext (Crucible.RegEntry sym a))
 runCFG simCtx globals h cfg args = do
   let initExecState =
-        Crucible.InitialState simCtx globals Crucible.defaultAbortHandler $
+        Crucible.InitialState simCtx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h) $
         Crucible.runOverrideSim (Crucible.handleReturnType h)
                  (Crucible.regValue <$> (Crucible.callCFG cfg args))
   Crucible.executeCrucible [] initExecState

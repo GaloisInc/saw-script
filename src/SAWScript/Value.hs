@@ -387,6 +387,7 @@ data TopLevelRW =
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
   , rwPrimsAvail :: Set PrimitiveLifecycle
   , rwSMTArrayMemoryModel :: Bool
+  , rwProfilingFile :: Maybe FilePath
   }
 
 newtype TopLevel a =

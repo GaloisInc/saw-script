@@ -203,6 +203,9 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      pos <- getPosition
      let loc = SS.toW4Loc "_SAW_verify_prestate" pos
 
+     profFile <- rwProfilingFile <$> getTopLevelRW
+     (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_jvm_verify" profFile
+
      (_cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let st0 = initialCrucibleSetupState cc method loc
 
@@ -222,7 +225,7 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      -- run the symbolic execution
      top_loc <- SS.toW4Loc "crucible_jvm_verify" <$> getPosition
      (ret, globals3) <-
-       io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
+       io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat
 
      -- collect the proof obligations
      asserts <- verifyPoststate opts (biSharedContext bic) cc
@@ -233,6 +236,7 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
 
      -- attempt to verify the proof obligations
      stats <- verifyObligations cc methodSpec tactic assumes asserts
+     io $ writeFinalProfile
      return (methodSpec & MS.csSolverStats .~ stats)
 
 
@@ -523,7 +527,7 @@ registerOverride opts cc _ctx top_loc cs =
               $ Crucible.mkOverride'
                   (Crucible.handleName h)
                   retType
-                  (methodSpecHandler opts sc cc top_loc cs retType)
+                  (methodSpecHandler opts sc cc top_loc cs h)
 
 
 --------------------------------------------------------------------------------
@@ -531,6 +535,7 @@ registerOverride opts cc _ctx top_loc cs =
 verifySimulate ::
   Options                       ->
   JVMCrucibleContext               ->
+  [Crucible.GenericExecutionFeature Sym] ->
   CrucibleMethodSpecIR          ->
   [(a, JVMVal)]                 ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
@@ -539,7 +544,7 @@ verifySimulate ::
   Crucible.SymGlobalState Sym   ->
   Bool {- ^ path sat checking -} ->
   IO (Maybe (J.Type, JVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc mspec args assumes top_loc lemmas globals _checkSat =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
   do let jc = cc^.jccJVMContext
      let cb = cc^.jccCodebase
      let sym = cc^.jccBackend
@@ -564,9 +569,9 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals _checkSat =
      (CJ.JVMHandleInfo _ h) <- CJ.findMethodHandle jc mcls meth
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
-       do let feats = []
+       do let feats = pfs
           let simctx = CJ.jvmSimContext sym halloc stdout jc verbosity Crucible.SAWCruciblePersonality
-          let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler
+          let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h)
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
           let overrideSim =
                 do liftIO $ putStrLn "registering standard overrides"
