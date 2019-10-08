@@ -470,41 +470,10 @@ verifyPrestate opts cc mspec globals = do
             (mspec ^. MS.csPreState . MS.csFreshPointers)
   let env = Map.unions [env1, env2]
 
-  mem'' <-
-    foldM (\m (LLVMAllocGlobal _ symbol@(L.Symbol name)) -> do
-              let LLVMModule _ _ mtrans = cc ^. ccLLVMModule
-                  gimap = Crucible.globalInitMap mtrans
-              case Map.lookup symbol gimap of
-                Just (g, Right (mt, _)) -> do
-                  when (L.gaConstant $ L.globalAttrs g) . fail $ mconcat
-                    [ "Global variable \""
-                    , name
-                    , "\" is not mutable"
-                    ]
-                  let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
-                  sz' <- W4.bvLit sym ?ptrWidth $ Crucible.bytesToInteger sz
-                  alignment <-
-                    case L.globalAlign g of
-                      Just a | a > 0 ->
-                        case Crucible.toAlignment $ Crucible.toBytes a of
-                          Nothing -> fail $ mconcat
-                            [ "Global variable \""
-                            , name
-                            , "\" has invalid alignment: "
-                            , show a
-                            ]
-                          Just al -> return al
-                      _ -> pure $ Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) mt
-                  (ptr, m') <- Crucible.doMalloc sym Crucible.GlobalAlloc Crucible.Mutable name m sz' alignment
-                  pure $ Crucible.registerGlobal m' [symbol] ptr
-                _ -> fail $ mconcat
-                  [ "Global variable \""
-                  , name
-                  , "\" does not exist"
-                  ]
-          ) mem' $ mspec ^. MS.csGlobalAllocs
+  mem'' <- setupGlobalAllocs cc (mspec ^. MS.csGlobalAllocs) mem'
 
   mem''' <- setupPrePointsTos mspec opts cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem''
+
   let globals1 = Crucible.insertGlobal lvar mem''' globals
   (globals2,cs) <- setupPrestateConditions mspec cc mem''' env globals1 (mspec ^. MS.csPreState . MS.csConditions)
   args <- resolveArguments cc mem''' mspec env
@@ -559,6 +528,51 @@ resolveArguments cc mem mspec env = mapM resolveArg [0..(nArgs-1)]
         Nothing -> fail $ unwords ["Argument", show i, "unspecified when verifying", show nm]
 
 --------------------------------------------------------------------------------
+
+-- | For each "crucible_global_alloc" in the method specification, allocate and
+-- register the appropriate memory.
+setupGlobalAllocs :: forall arch.
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  LLVMCrucibleContext arch ->
+  [MS.AllocGlobal (LLVM arch)] ->
+  MemImpl ->
+  IO MemImpl
+setupGlobalAllocs cc allocs mem0 = foldM go mem0 allocs
+  where
+    sym = cc ^. ccBackend
+
+    go :: MemImpl -> MS.AllocGlobal (LLVM arch) -> IO MemImpl
+    go mem (LLVMAllocGlobal _ symbol@(L.Symbol name)) = do
+      let LLVMModule _ _ mtrans = cc ^. ccLLVMModule
+          gimap = Crucible.globalInitMap mtrans
+      case Map.lookup symbol gimap of
+        Just (g, Right (mt, _)) -> do
+          when (L.gaConstant $ L.globalAttrs g) . fail $ mconcat
+            [ "Global variable \""
+            , name
+            , "\" is not mutable"
+            ]
+          let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
+          sz' <- W4.bvLit sym ?ptrWidth $ Crucible.bytesToInteger sz
+          alignment <-
+            case L.globalAlign g of
+              Just a | a > 0 ->
+                case Crucible.toAlignment $ Crucible.toBytes a of
+                  Nothing -> fail $ mconcat
+                    [ "Global variable \""
+                    , name
+                    , "\" has invalid alignment: "
+                    , show a
+                    ]
+                  Just al -> return al
+              _ -> pure $ Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) mt
+          (ptr, mem') <- Crucible.doMalloc sym Crucible.GlobalAlloc Crucible.Mutable name mem sz' alignment
+          pure $ Crucible.registerGlobal mem' [symbol] ptr
+        _ -> fail $ mconcat
+          [ "Global variable \""
+          , name
+          , "\" does not exist"
+          ]
 
 -- | For each points-to constraint in the pre-state section of the
 -- function spec, write the given value to the address of the given

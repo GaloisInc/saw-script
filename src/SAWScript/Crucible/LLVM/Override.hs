@@ -662,47 +662,11 @@ executeCond opts sc cc cs ss = do
             (ss ^. MS.csFreshPointers)
   OM (setupValueSub %= Map.union ptrs)
 
-  sym <- use syminterface
-  mem <- readGlobal . Crucible.llvmMemVar $ cc ^. ccLLVMContext
-  sub <- use setupValueSub
-
-  let mutableAllocs = Map.filter (view isMut) $ cs ^. MS.csPreState . MS.csAllocs
-      allocPtrs =
-        (\(ptr, spec) ->
-           ( ptr
-           , _allocSpecBytes spec
-           , "state of memory allocated in precondition not described in postcondition"
-           )
-        ) <$> Map.elems (Map.intersectionWith (,) sub mutableAllocs)
-      LLVMModule _ _ mtrans = cc ^. ccLLVMModule
-      gimap = Crucible.globalInitMap mtrans
-      mutableGlobals = cs ^. MS.csGlobalAllocs
-
-  globalPtrs <- liftIO . fmap catMaybes . forM mutableGlobals $ \(LLVMAllocGlobal _ s@(L.Symbol st)) ->
-    case Map.lookup s gimap of
-      Just (_, Right (mt, _)) -> do
-        ptr <- Crucible.doResolveGlobal sym mem s
-        pure $ Just
-          ( ptr
-          , Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
-          , mconcat [ "state of mutable global variable \""
-                    , pack st
-                    , "\" not described in postcondition"
-                    ]
-          )
-      _ -> pure Nothing
-
-  mem' <- foldM (\m (ptr, sz, msg) ->
-                    liftIO $ Crucible.doInvalidate sym ?ptrWidth m ptr msg
-                      =<< W4.bvLit sym ?ptrWidth (Crucible.bytesToInteger sz)
-                ) mem $ allocPtrs ++ globalPtrs
-
-  writeGlobal (Crucible.llvmMemVar $ cc ^. ccLLVMContext) mem'
+  invalidateMutableAllocs cc cs
 
   traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
   traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
   traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
-
 
 -- | Allocate fresh variables for all of the "fresh" vars
 -- used in this phase and add them to the term substitution.
@@ -1247,6 +1211,54 @@ learnPred sc cc loc prepost t =
      u <- liftIO $ scInstantiateExt sc s t
      p <- liftIO $ resolveSAWPred cc u
      addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost)))
+
+------------------------------------------------------------------------
+
+-- | Invalidate all mutable memory that was allocated in the method spec
+-- precondition, either through explicit calls to "crucible_alloc" or to
+-- "crucible_alloc_global".
+invalidateMutableAllocs ::
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  OverrideMatcher (LLVM arch) RW ()
+invalidateMutableAllocs cc cs = do
+  sym <- use syminterface
+  mem <- readGlobal . Crucible.llvmMemVar $ cc ^. ccLLVMContext
+  sub <- use setupValueSub
+
+  let mutableAllocs = Map.filter (view isMut) $ cs ^. MS.csPreState . MS.csAllocs
+      allocPtrs =
+        (\(ptr, spec) ->
+           ( ptr
+           , _allocSpecBytes spec
+           , "state of memory allocated in precondition not described in postcondition"
+           )
+        ) <$> Map.elems (Map.intersectionWith (,) sub mutableAllocs)
+      LLVMModule _ _ mtrans = cc ^. ccLLVMModule
+      gimap = Crucible.globalInitMap mtrans
+      mutableGlobals = cs ^. MS.csGlobalAllocs
+
+  globalPtrs <- liftIO . fmap catMaybes . forM mutableGlobals $ \(LLVMAllocGlobal _ s@(L.Symbol st)) ->
+    case Map.lookup s gimap of
+      Just (_, Right (mt, _)) -> do
+        ptr <- Crucible.doResolveGlobal sym mem s
+        pure $ Just
+          ( ptr
+          , Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
+          , mconcat [ "state of mutable global variable \""
+                    , pack st
+                    , "\" not described in postcondition"
+                    ]
+          )
+      _ -> pure Nothing
+
+  mem' <- foldM (\m (ptr, sz, msg) ->
+                    liftIO $ Crucible.doInvalidate sym ?ptrWidth m ptr msg
+                      =<< W4.bvLit sym ?ptrWidth (Crucible.bytesToInteger sz)
+                ) mem $ allocPtrs ++ globalPtrs
+
+  writeGlobal (Crucible.llvmMemVar $ cc ^. ccLLVMContext) mem'
 
 ------------------------------------------------------------------------
 
