@@ -991,7 +991,6 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
       return
          LLVMCrucibleContext{ _ccLLVMModule = lm
                             , _ccBackend = sym
-                            , _ccLLVMEmptyMem = mem
                             , _ccLLVMSimContext = lsimctx
                             , _ccLLVMGlobals = lglobals
                             }

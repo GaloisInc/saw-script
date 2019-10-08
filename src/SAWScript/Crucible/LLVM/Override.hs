@@ -662,8 +662,6 @@ executeCond opts sc cc cs ss = do
             (ss ^. MS.csFreshPointers)
   OM (setupValueSub %= Map.union ptrs)
 
-  liftIO . mapM_ print $ cs ^. MS.csPreState . MS.csAllocs
-
   sym <- use syminterface
   mem <- readGlobal . Crucible.llvmMemVar $ cc ^. ccLLVMContext
   sub <- use setupValueSub
@@ -919,7 +917,11 @@ matchArg ::
   SetupValue (Crucible.LLVM arch)         {- ^ expected specification value          -} ->
   OverrideMatcher (LLVM arch) md ()
 
-matchArg opts sc cc cs prepost actual expectedTy expected =
+matchArg opts sc cc cs prepost actual expectedTy expected = do
+  let mvar = Crucible.llvmMemVar $ cc ^. ccLLVMContext
+  mem <- case Crucible.lookupGlobal mvar $ cc ^. ccLLVMGlobals of
+    Nothing -> fail "internal error: LLVM Memory global not found"
+    Just mem -> pure mem
   case (actual, expectedTy, expected) of
     (_, _, SetupTerm expectedTT)
       | Cryptol.Forall [] [] tyexpr <- ttSchema expectedTT
@@ -953,8 +955,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected =
                notEqual prepost opts (cs ^. MS.csLoc) cc sc cs expected actual
 
         SetupGlobal () name | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth ->
-          do let mem = cc^.ccLLVMEmptyMem
-             sym  <- Ov.getSymInterface
+          do sym  <- Ov.getSymInterface
              ptr2 <- liftIO $ Crucible.doResolveGlobal sym mem (L.Symbol name)
              pred_ <- liftIO $
                Crucible.ptrEq sym Crucible.PtrWidth (Crucible.LLVMPointer blk off) ptr2

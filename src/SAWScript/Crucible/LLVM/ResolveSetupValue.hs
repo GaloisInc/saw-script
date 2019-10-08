@@ -265,7 +265,7 @@ resolveSetupVal :: forall arch.
   Map AllocIndex Crucible.Ident ->
   SetupValue (Crucible.LLVM arch) ->
   IO LLVMVal
-resolveSetupVal cc mem env tyenv nameEnv val =
+resolveSetupVal cc mem env tyenv nameEnv val = do
   case val of
     SetupVar i
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
@@ -322,7 +322,7 @@ resolveSetupVal cc mem env tyenv nameEnv val =
         Just (_, Left e) -> fail e
         Just (_, Right (_, Just v)) ->
           let ?lc = lc
-          in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) sym (cc^.ccLLVMEmptyMem) v
+          in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) sym mem v
         Just (_, Right (_, Nothing)) ->
           fail $ "resolveSetupVal: global has no initializer: " ++ name
         Nothing ->
