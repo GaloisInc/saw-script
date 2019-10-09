@@ -138,6 +138,7 @@ library
     SAWScript.Crucible.Common.Setup.Type
 
     SAWScript.Crucible.LLVM.Builtins
+    SAWScript.Crucible.LLVM.Boilerplate
     SAWScript.Crucible.LLVM.CrucibleLLVM
     SAWScript.Crucible.LLVM.Override
     SAWScript.Crucible.LLVM.MethodSpecIR
