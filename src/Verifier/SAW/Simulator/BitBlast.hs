@@ -425,52 +425,30 @@ bitBlastBasic :: AIG.IsAIG l g
               => g s
               -> ModuleMap
               -> PrimMap l g
+              -> Map VarIndex (BValue (l s))
               -> Term
               -> IO (BValue (l s))
-bitBlastBasic be m addlPrims t = do
+bitBlastBasic be m addlPrims ecMap t = do
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
-         (const (bitBlastExtCns be))
+         (bitBlastExtCns ecMap)
          (const (const Nothing))
   Sim.evalSharedTerm cfg t
 
-bitBlastExtCns :: AIG.IsAIG l g => g s -> String -> BValue (l s) -> IO (BValue (l s))
-bitBlastExtCns be name v =
-  case asFiniteTypeValue v of
-    Just ft -> newVars be ft
-    Nothing -> fail $ "Verifier.SAW.Simulator.BitBlast: variable " ++ show name
-               ++ " has non-finite type " ++ show v
+bitBlastExtCns ::
+  Map VarIndex (BValue (l s)) -> VarIndex -> String -> BValue (l s) ->
+  IO (BValue (l s))
+bitBlastExtCns ecMap idx name _v =
+  case Map.lookup idx ecMap of
+    Just var -> return var
+    Nothing -> fail $
+      "Verifier.SAW.Simulator.BitBlast: can't translate variable " ++
+      show name ++ "(index: " ++ show idx ++ ")"
 
-asPredType :: SharedContext -> Term -> IO [Term]
-asPredType sc t = do
-  t' <- scWhnf sc t
-  case t' of
-    (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
-    (R.asBoolType -> Just ())    -> return []
-    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: "
-                                    ++ scPrettyTerm defaultPPOpts t'
-
-withBitBlastedPred :: AIG.IsAIG l g => AIG.Proxy l g ->
-  SharedContext ->
-  PrimMap l g ->
-  Term ->
-  (forall s. g s -> l s -> [FiniteType] -> IO a) -> IO a
-withBitBlastedPred proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
-  ty <- scTypeOf sc t
-  argTs <- asPredType sc ty
-  shapes <- traverse (asFiniteType sc) argTs
-  vars <- traverse (newVars' be) shapes
-  modmap <- scGetModuleMap sc
-  bval <- bitBlastBasic be modmap addlPrims t
-  bval' <- applyAll bval vars
-  case bval' of
-    VBool l -> c be l shapes
-    _ -> fail "Verifier.SAW.Simulator.BitBlast.bitBlast: non-boolean result type."
-
-asAIGType :: SharedContext -> Term -> IO [Term]
+asAIGType :: SharedContext -> Term -> IO [(String, Term)]
 asAIGType sc t = do
   t' <- scWhnf sc t
   case t' of
-    (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asAIGType sc t2
+    (R.asPi -> Just (n, t1, t2)) -> ((n, t1) :) <$> asAIGType sc t2
     (R.asBoolType -> Just ())    -> return []
     (R.asVecType -> Just _)      -> return []
     (R.asTupleType -> Just _)    -> return []
@@ -478,20 +456,52 @@ asAIGType sc t = do
     _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.adAIGType: invalid AIG type: "
                                     ++ scPrettyTerm defaultPPOpts t'
 
+bitBlastTerm ::
+  AIG.IsAIG l g =>
+  g s ->
+  SharedContext ->
+  PrimMap l g ->
+  Term ->
+  IO (BValue (l s), [(String, FiniteType)])
+bitBlastTerm be sc addlPrims t = do
+  ty <- scTypeOf sc t
+  args <- asAIGType sc ty
+  let ecs = getAllExts t
+  argShapes <- traverse (asFiniteType sc) (map snd args)
+  ecShapes <- traverse (asFiniteType sc) (map ecType ecs)
+  argVars <- traverse (newVars' be) argShapes
+  ecVars <- traverse (newVars be) ecShapes
+  let ecMap = Map.fromList $ zip (map ecVarIndex ecs) ecVars
+  modmap <- scGetModuleMap sc
+  bval <- bitBlastBasic be modmap addlPrims ecMap t
+  bval' <- applyAll bval argVars
+  let names =  map fst args ++ map ecName ecs
+      shapes = argShapes ++ ecShapes
+  return (bval', zip names shapes)
+
+-- | Bitblast a predicate and apply a function to the result. Supports
+-- @ExtCns@ subterms.
+withBitBlastedPred :: AIG.IsAIG l g => AIG.Proxy l g ->
+  SharedContext ->
+  PrimMap l g ->
+  Term ->
+  (forall s. g s -> l s -> [(String, FiniteType)] -> IO a) -> IO a
+withBitBlastedPred proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
+  (bval, args) <- bitBlastTerm be sc addlPrims t
+  case bval of
+    VBool l -> c be l args
+    _ -> fail "Verifier.SAW.Simulator.BitBlast.bitBlast: non-boolean result type."
+
+-- | Bitblast a term and apply a function to the result. Does not
+-- support @ExtCns@ subterms.
 withBitBlastedTerm :: AIG.IsAIG l g => AIG.Proxy l g ->
   SharedContext ->
   PrimMap l g ->
   Term ->
   (forall s. g s -> LitVector (l s) -> IO a) -> IO a
 withBitBlastedTerm proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
-  ty <- scTypeOf sc t
-  argTs <- asAIGType sc ty
-  shapes <- traverse (asFiniteType sc) argTs
-  vars <- traverse (newVars' be) shapes
-  modmap <- scGetModuleMap sc
-  bval <- bitBlastBasic be modmap addlPrims t
-  bval' <- applyAll bval vars
-  v <- flattenBValue bval'
+  (bval, _) <- bitBlastTerm be sc addlPrims t
+  v <- flattenBValue bval
   c be v
 
 asFiniteType :: SharedContext -> Term -> IO FiniteType
