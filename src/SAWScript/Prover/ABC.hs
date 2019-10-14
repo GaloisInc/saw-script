@@ -14,7 +14,7 @@ import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
 import SAWScript.Prover.Util
-         (liftCexBB, bindAllExts, checkBooleanSchema)
+         (liftCexBB, checkBooleanSchema)
 
 -- | Bit-blast a @Term@ representing a theorem and check its
 -- satisfiability using ABC.
@@ -26,36 +26,32 @@ satABC ::
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
 satABC proxy sc goal =
   do t0 <- propToPredicate sc goal
-     TypedTerm schema t <-
-        (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
+     TypedTerm schema t <- (rewriteEqs sc t0 >>= mkTypedTerm sc)
      checkBooleanSchema schema
      tp <- scWhnf sc =<< scTypeOf sc t
-     let (args, _) = asPiList tp
-         argNames = map fst args
      BBSim.withBitBlastedPred proxy sc bitblastPrimitives t $
       \be lit0 shapes ->
          do let lit = AIG.not lit0
-            satRes <- getModel argNames shapes =<< AIG.checkSat be lit
+            satRes <- getModel shapes =<< AIG.checkSat be lit
             let stats = solverStats "ABC" (scSharedSize t0)
             return (satRes, stats)
 
 
 getModel ::
   Show name =>
-  [name] ->
-  [FiniteType] ->
+  [(name, FiniteType)] ->
   AIG.SatResult ->
   IO (Maybe [(name, FirstOrderValue)])
-getModel argNames shapes satRes =
+getModel shapes satRes =
   case satRes of
     AIG.Unsat -> return Nothing
 
     AIG.Sat cex -> do
-      case liftCexBB shapes cex of
+      case liftCexBB (map snd shapes) cex of
         Left err -> fail ("Can't parse counterexample: " ++ err)
         Right vs
 
-          | length argNames == length vs ->
+          | length shapes == length vs ->
             return (Just (zip argNames (map toFirstOrderValue vs)))
 
           | otherwise ->
@@ -63,4 +59,5 @@ getModel argNames shapes satRes =
                              , show argNames, show vs]
 
     AIG.SatUnknown -> fail "Unknown result from ABC"
+  where argNames = map fst shapes
 
