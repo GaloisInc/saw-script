@@ -82,6 +82,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
+import           SAWScript.Crucible.LLVM.Boilerplate
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
@@ -470,6 +471,7 @@ buildTopLevelEnv proxy opts =
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
+                   , rwProfilingFile = Nothing
                    }
        return (bic, ro0, rw0)
 
@@ -503,6 +505,16 @@ enable_smt_array_memory_model :: TopLevel ()
 enable_smt_array_memory_model = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwSMTArrayMemoryModel = True }
+
+enable_crucible_profiling :: FilePath -> TopLevel ()
+enable_crucible_profiling f = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProfilingFile = Just f }
+
+disable_crucible_profiling :: TopLevel ()
+disable_crucible_profiling = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProfilingFile = Nothing }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -742,6 +754,11 @@ primitives = Map.fromList
     (pureVal check_term)
     Current
     [ "Type-check the given term, printing an error message if ill-typed." ]
+
+  , prim "check_goal"          "ProofScript ()"
+    (pureVal check_goal)
+    Current
+    [ "Type-check the current proof goal, printing an error message if ill-typed." ]
 
   , prim "term_size"           "Term -> Int"
     (pureVal scSharedSize)
@@ -1574,6 +1591,16 @@ primitives = Map.fromList
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
+  , prim "llvm_boilerplate_info" "LLVMModule -> [Profile] -> TopLevel ()"
+    (pureVal llvm_boilerplate_info)
+    Experimental
+    [ "Print information from an LLVM module relevant to boilerplate generation." ]
+
+  , prim "llvm_boilerplate" "String -> LLVMModule -> [Profile] -> TopLevel ()"
+    (pureVal llvm_boilerplate)
+    Experimental
+    [ "Generate boilerplate for the definitions in an LLVM module." ]
+
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
     Current
@@ -1882,6 +1909,17 @@ primitives = Map.fromList
     , "any verification."
     ]
 
+  , prim "crucible_llvm_array_size_profile"
+    "LLVMModule -> String -> CrucibleSetup () -> TopLevel [Profile]"
+    (bicVal crucible_llvm_array_size_profile)
+    Experimental
+    [ "Symbolically execute the function named by the second parameter in"
+    , "the module specified by the first. The third parameter may be used"
+    , "to specify arguments. Returns profiles specifying the sizes of buffers"
+    , "referred to by pointer arguments for the function and all other functions"
+    , "it calls (recursively), to be passed to llvm_boilerplate."
+    ]
+
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
     (pureVal CIR.anySetupArray)
@@ -2158,6 +2196,18 @@ primitives = Map.fromList
     [ "Use the approxmc solver to approximate the number of solutions to the"
     , "CNF representation of the given Term."
     ]
+
+  , prim "enable_crucible_profiling" "String -> TopLevel ()"
+    (pureVal enable_crucible_profiling)
+    Current
+    [ "Record profiling information from symbolic execution and solver"
+    , "invocation to the given directory."
+    ]
+
+  , prim "disable_crucible_profiling" "TopLevel ()"
+    (pureVal disable_crucible_profiling)
+    Current
+    ["Stop recording profiling information."]
   ]
 
   where

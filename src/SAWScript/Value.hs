@@ -48,7 +48,7 @@ import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
-import Data.Text (Text)
+import Data.Text (Text, pack, unpack)
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 import Data.Typeable
@@ -107,6 +107,7 @@ data Value
   | VInteger Integer
   | VArray [Value]
   | VTuple [Value]
+  | VMaybe (Maybe Value)
   | VRecord (Map SS.Name Value)
   | VLambda (Value -> TopLevel Value)
   | VTerm TypedTerm
@@ -258,6 +259,8 @@ showsPrecValue opts p v =
     VInteger n -> shows n
     VArray vs -> showBrackets $ commaSep $ map (showsPrecValue opts 0) vs
     VTuple vs -> showParen True $ commaSep $ map (showsPrecValue opts 0) vs
+    VMaybe (Just v') -> showString "(Just " . showsPrecValue opts 0 v' . showString ")"
+    VMaybe Nothing -> showString "Nothing"
     VRecord m -> showBraces $ commaSep $ map showFld (M.toList m)
                    where
                      showFld (n, fv) =
@@ -384,6 +387,7 @@ data TopLevelRW =
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
   , rwPrimsAvail :: Set PrimitiveLifecycle
   , rwSMTArrayMemoryModel :: Bool
+  , rwProfilingFile :: Maybe FilePath
   }
 
 newtype TopLevel a =
@@ -562,6 +566,15 @@ instance FromValue a => FromValue [a] where
 instance IsValue a => IsValue (IO a) where
     toValue action = toValue (io action)
 
+instance IsValue a => IsValue (Maybe a) where
+  toValue (Just x) = VMaybe . Just $ toValue x
+  toValue Nothing = VMaybe Nothing
+
+instance FromValue a => FromValue (Maybe a) where
+  fromValue (VMaybe (Just v)) = Just $ fromValue v
+  fromValue (VMaybe Nothing) = Nothing
+  fromValue _ = error "fromValue Maybe"
+
 instance IsValue a => IsValue (TopLevel a) where
     toValue action = VTopLevel (fmap toValue action)
 
@@ -693,6 +706,13 @@ instance IsValue String where
 instance FromValue String where
     fromValue (VString n) = n
     fromValue _ = error "fromValue String"
+
+instance IsValue Text where
+    toValue n = VString $ unpack n
+
+instance FromValue Text where
+    fromValue (VString n) = pack n
+    fromValue _ = error "fromValue Text"
 
 instance IsValue Integer where
     toValue n = VInteger n

@@ -32,6 +32,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_llvm_cfg
     , crucible_llvm_extract
     , crucible_llvm_verify
+    , crucible_llvm_array_size_profile
     , crucible_setup_val_to_typed_term
     , crucible_spec_size
     , crucible_spec_solvers
@@ -116,6 +117,7 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
+import qualified Lang.Crucible.LLVM.ArraySizeProfile as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import           Lang.Crucible.LLVM.Extension (LLVM)
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
@@ -232,7 +234,7 @@ crucible_llvm_verify ::
 crucible_llvm_verify bic opts (Some lm) nm lemmas checkSat setup tactic = do
   lemmas' <- checkModuleCompatibility lm lemmas
   SomeLLVM <$>
-    createMethodSpec (Just (lemmas', checkSat, tactic)) bic opts lm nm setup
+    createMethodSpec (Just (lemmas', checkSat, tactic)) Nothing bic opts lm nm setup
 
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
@@ -242,7 +244,20 @@ crucible_llvm_unsafe_assume_spec ::
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_unsafe_assume_spec bic opts (Some lm) nm setup =
-  SomeLLVM <$> createMethodSpec Nothing bic opts lm nm setup
+  SomeLLVM <$> createMethodSpec Nothing Nothing bic opts lm nm setup
+
+crucible_llvm_array_size_profile ::
+  BuiltinContext ->
+  Options ->
+  Some LLVMModule ->
+  String ->
+  LLVMCrucibleSetupM () ->
+  TopLevel [Crucible.Profile]
+crucible_llvm_array_size_profile bic opts (Some lm) nm setup = do
+  cell <- io $ newIORef Map.empty
+  void $ createMethodSpec (Just ([], False, undefined)) (Just cell) bic opts lm nm setup
+  profiles <- io $ readIORef cell
+  pure $ Map.toList profiles
 
 -- | Check that all the overrides/lemmas were actually from this module
 checkModuleCompatibility ::
@@ -264,13 +279,14 @@ checkModuleCompatibility llvmModule = foldM step []
 createMethodSpec ::
   Maybe ([MS.CrucibleMethodSpecIR (LLVM arch)], Bool, ProofScript SatResult)
   {- ^ If verifying, provide lemmas, branch sat checking, tactic -} ->
+  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
   BuiltinContext   ->
   Options          ->
   LLVMModule arch ->
   String            {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   TopLevel (MS.CrucibleMethodSpecIR (LLVM arch))
-createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup = do
+createMethodSpec verificationArgs asp bic opts lm@(LLVMModule _ _ mtrans) nm setup = do
   (nm', parent) <- resolveSpecName nm
   let edef = findDefMaybeStatic (lm ^. modAST) nm'
   let edecl = findDecl (lm ^. modAST) nm'
@@ -281,11 +297,13 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
 
   let ?lc = mtrans ^. Crucible.transContext . Crucible.llvmTypeCtx
 
+  profFile <- rwProfilingFile <$> getTopLevelRW
   Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \_ ->
     fmap NE.head $ forM defOrDecls $ \defOrDecl -> do
       setupLLVMCrucibleContext bic opts lm $ \cc -> do
         let sym = cc^.ccBackend
 
+        (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_llvm_verify" profFile
         pos <- getPosition
         let setupLoc = toW4Loc "_SAW_verify_prestate" pos
 
@@ -342,7 +360,7 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
               unwords ["Simulating", (methodSpec ^. csName) , "..."]
             top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
             (ret, globals3)
-              <- io $ verifySimulate opts cc methodSpec args assumes top_loc lemmas globals2 checkSat
+              <- io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp
 
             -- collect the proof obligations
             asserts <- verifyPoststate opts (biSharedContext bic) cc
@@ -355,6 +373,7 @@ createMethodSpec verificationArgs bic opts lm@(LLVMModule _ _ mtrans) nm setup =
             printOutLnTop Info $
               unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
             stats <- verifyObligations cc methodSpec tactic assumes asserts
+            io $ writeFinalProfile
             return (methodSpec & MS.csSolverStats .~ stats)
 
 
@@ -715,7 +734,7 @@ registerOverride opts cc _ctx top_loc cs = do
         $ Crucible.mkOverride'
             hName
             retType
-            (methodSpecHandler opts sc cc top_loc cs retType)
+            (methodSpecHandler opts sc cc top_loc cs h)
 
 registerInvariantOverride
   :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
@@ -735,16 +754,19 @@ registerInvariantOverride opts cc top_loc all_breakpoints cs = do
   liftIO $ printOutLn opts Info $ "Registering breakpoint `" ++ name ++ "`"
   withBreakpointCfgAndBlockId cc name parent $ \cfg breakpoint_block_id -> do
     let breakpoint_name = Crucible.BreakpointName $ Text.pack name
+    let h = Crucible.cfgHandle cfg
     let arg_types = Crucible.blockInputs $
           Crucible.getBlock breakpoint_block_id $
           Crucible.cfgBlockMap cfg
-    let ret_type = Crucible.handleReturnType $ Crucible.cfgHandle cfg
+    let ret_type = Crucible.handleReturnType h
+    let halloc = Crucible.simHandleAllocator (cc ^. ccLLVMSimContext)
+    hInvariant <- Crucible.mkHandle' halloc (W4.plFunction top_loc) arg_types ret_type
     Crucible.breakAndReturn
       cfg
       breakpoint_name
       arg_types
       ret_type
-      (methodSpecHandler opts sc cc top_loc cs ret_type)
+      (methodSpecHandler opts sc cc top_loc cs hInvariant)
       all_breakpoints
 
 --------------------------------------------------------------------------------
@@ -794,6 +816,7 @@ verifySimulate ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
   Options                       ->
   LLVMCrucibleContext arch          ->
+  [Crucible.GenericExecutionFeature Sym] ->
   MS.CrucibleMethodSpecIR (LLVM arch)          ->
   [(Crucible.MemType, LLVMVal)] ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
@@ -801,8 +824,9 @@ verifySimulate ::
   [MS.CrucibleMethodSpecIR (LLVM arch)]        ->
   Crucible.SymGlobalState Sym   ->
   Bool                          ->
+  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
-verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
+verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp =
   withCfgAndBlockId cc mspec $ \cfg entryId -> do
     let argTys = Crucible.blockInputs $
           Crucible.getBlock entryId $ Crucible.cfgBlockMap cfg
@@ -831,11 +855,16 @@ verifySimulate opts cc mspec args assumes top_loc lemmas globals checkSat =
     invariantExecFeatures <- mapM
       (registerInvariantOverride opts cc top_loc (HashMap.fromList breakpoints))
       (groupOn (view csName) invLemmas)
+
+    additionalFeatures <- mapM (Crucible.arraySizeProfile (cc ^. ccLLVMContext))
+                          $ maybeToList asp
+
     let execFeatures = invariantExecFeatures ++
-          (map Crucible.genericToExecutionFeature patSatGenExecFeature)
+                       map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs) ++
+                       additionalFeatures
 
     let initExecState =
-          Crucible.InitialState simCtx globals Crucible.defaultAbortHandler $
+          Crucible.InitialState simCtx globals Crucible.defaultAbortHandler retTy $
           Crucible.runOverrideSim retTy $
           do mapM_ (registerOverride opts cc simCtx top_loc)
                    (groupOn (view csName) funcLemmas)
@@ -978,7 +1007,7 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
 
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
-                        bindings Crucible.llvmExtensionImpl CrucibleSAW.SAWCruciblePersonality
+                        bindings (Crucible.llvmExtensionImpl Crucible.defaultMemOptions) CrucibleSAW.SAWCruciblePersonality
       mem <- Crucible.populateConstGlobals sym (Crucible.globalInitMap mtrans)
                =<< Crucible.initializeMemoryConstGlobals sym ctx llvm_mod
 
@@ -992,7 +1021,7 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
              mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
 
       let initExecState =
-            Crucible.InitialState simctx globals Crucible.defaultAbortHandler $
+            Crucible.InitialState simctx globals Crucible.defaultAbortHandler Crucible.UnitRepr $
             Crucible.runOverrideSim Crucible.UnitRepr setupMem
       res <- Crucible.executeCrucible [] initExecState
       (lglobals, lsimctx) <-
@@ -1076,7 +1105,7 @@ runCFG ::
   IO (Crucible.ExecResult p sym ext (Crucible.RegEntry sym a))
 runCFG simCtx globals h cfg args = do
   let initExecState =
-        Crucible.InitialState simCtx globals Crucible.defaultAbortHandler $
+        Crucible.InitialState simCtx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h) $
         Crucible.runOverrideSim (Crucible.handleReturnType h)
                  (Crucible.regValue <$> (Crucible.callCFG cfg args))
   Crucible.executeCrucible [] initExecState

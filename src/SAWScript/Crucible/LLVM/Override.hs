@@ -74,6 +74,7 @@ import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
 import qualified Lang.Crucible.CFG.Extension.Safety as Crucible
+import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
@@ -356,10 +357,10 @@ methodSpecHandler ::
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
   [MS.CrucibleMethodSpecIR (LLVM arch)]
     {- ^ specification for current function override  -} ->
-  Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
+  Crucible.FnHandle args ret {- ^ the handle for this function -} ->
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
-methodSpecHandler opts sc cc top_loc css retTy = do
+methodSpecHandler opts sc cc top_loc css h = do
   let fnName = head css ^. csName
   liftIO $ printOutLn opts Info $ unwords
     [ "Matching"
@@ -440,7 +441,8 @@ methodSpecHandler opts sc cc top_loc css retTy = do
     , fnName
     , "..."
     ]
-  res <- Crucible.regValue <$> Crucible.callOverride
+  let retTy = Crucible.handleReturnType h
+  res <- Crucible.regValue <$> Crucible.callOverride h
      (Crucible.mkOverride' "overrideBranches" retTy
        (Crucible.symbolicBranches Crucible.emptyRegMap $
          [ ( precond
