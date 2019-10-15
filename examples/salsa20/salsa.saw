@@ -60,8 +60,14 @@ let salsa20_djb_setup = do {
 };
 
 let salsa20_expansion_32 = do {
-    (k, pk) <- ptr_to_fresh "k" (llvm_array 32 (llvm_int 8));
-    (n, pn) <- ptr_to_fresh "n" (llvm_array 16 (llvm_int 8));
+    // (k, pk) <- ptr_to_fresh "k" (llvm_array 32 (llvm_int 8));
+    // (n, pn) <- ptr_to_fresh "n" (llvm_array 16 (llvm_int 8));
+    k <- crucible_fresh_var "k" (llvm_array 32 (llvm_int 8));
+    pk <- crucible_alloc_readonly (llvm_array 32 (llvm_int 8));
+    crucible_points_to pk (crucible_term k);
+    n <- crucible_fresh_var "n" (llvm_array 16 (llvm_int 8));
+    pn <- crucible_alloc_readonly (llvm_array 16 (llvm_int 8));
+    crucible_points_to pn (crucible_term n);
     pks <- crucible_alloc (llvm_array 64 (llvm_int 8));
     crucible_execute_func [pk, pn, pks];
     let rks = {{ Salsa20_expansion`{a=2}(k, n)}};
