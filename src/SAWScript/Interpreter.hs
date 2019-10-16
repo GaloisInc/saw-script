@@ -1969,9 +1969,7 @@ primitives = Map.fromList
     Current
     [ "Return a SetupValue representing the value of the initializer of a named"
     , "global. The String should be the name of a global value."
-    , "Note that initializing global variables may be unsound in the presence"
-    , "of compositional verification (see GaloisInc/saw-script#203)."
-    ] -- TODO: There should be a section in the manual about global-unsoundness.
+    ]
 
   , prim "crucible_term"
     "Term -> SetupValue"
