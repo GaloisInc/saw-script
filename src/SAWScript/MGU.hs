@@ -473,7 +473,11 @@ inferE (ln, expr) = case expr of
     do env <- TI $ asks typeEnv
        case M.lookup x env of
          Nothing -> do
-           recordError $ "unbound variable: " ++ show x
+           recordError $ unlines
+             [ "Unbound variable: " ++ show x
+             , "Note that some built-in commands are available only after running"
+             , "either `enable_deprecated` or `enable_experimental`."
+             ]
            t <- newType
            return (Var x, t)
          Just (Forall as t) -> do
