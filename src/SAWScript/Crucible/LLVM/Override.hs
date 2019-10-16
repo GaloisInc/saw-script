@@ -1234,7 +1234,11 @@ invalidateMutableAllocs cc cs = do
         (\(ptr, spec) ->
            ( ptr
            , _allocSpecBytes spec
-           , "state of memory allocated in precondition not described in postcondition"
+           , mconcat
+             [ "state of memory allocated in precondition (at "
+             , pack . show . W4.plSourceLoc $ spec ^. allocSpecLoc
+             , ") not described in postcondition"
+             ]
            )
         ) <$> Map.elems (Map.intersectionWith (,) sub mutableAllocs)
       LLVMModule _ _ mtrans = cc ^. ccLLVMModule
@@ -1248,10 +1252,11 @@ invalidateMutableAllocs cc cs = do
         pure $ Just
           ( ptr
           , Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
-          , mconcat [ "state of mutable global variable \""
-                    , pack st
-                    , "\" not described in postcondition"
-                    ]
+          , mconcat
+            [ "state of mutable global variable \""
+            , pack st
+            , "\" not described in postcondition"
+            ]
           )
       _ -> pure Nothing
 
