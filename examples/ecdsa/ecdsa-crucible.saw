@@ -383,10 +383,11 @@ print "Proving and registering rewrite rules.";
 let cry_ss = cryptol_ss ();
 let ss0 = add_prelude_eqs [ "bvShiftL_bvShl"
                           , "bvShiftR_bvShr"
-                          ] cry_ss;
+                          ]
+          (add_prelude_defs ["bvAt"] cry_ss);
 
 let crule t = rewrite ss0 t;
-let prove_rule t = prove_print abc (rewrite ss0 t);
+let prove_rule t = prove_print yices (rewrite ss0 t);
 
 let ss1 = add_prelude_eqs
   [ "ite_not"
@@ -445,7 +446,7 @@ ite24 <- prove_rule {{
   else [y0,y1,y2,y3,y4,y5,y6,y7,y8,y9,y10,y11,y12,y13,y14,y15,y16,y17,y18,y19,y20,y21,y22,y23])
   }};
 
-at12 <- prove_core abc "(x : Vec 12 (Vec 32 Bool)) -> EqTrue (eq (Vec 12 (Vec 32 Bool)) [at 12 (Vec 32 Bool) x 0, at 12 (Vec 32 Bool) x 1, at 12 (Vec 32 Bool) x 2, at 12 (Vec 32 Bool) x 3, at 12 (Vec 32 Bool) x 4, at 12 (Vec 32 Bool) x 5, at 12 (Vec 32 Bool) x 6, at 12 (Vec 32 Bool) x 7, at 12 (Vec 32 Bool) x 8, at 12 (Vec 32 Bool) x 9, at 12 (Vec 32 Bool) x 10, at 12 (Vec 32 Bool) x 11] x)";
+at12 <- prove_core yices "(x : Vec 12 (Vec 32 Bool)) -> EqTrue (eq (Vec 12 (Vec 32 Bool)) [at 12 (Vec 32 Bool) x 0, at 12 (Vec 32 Bool) x 1, at 12 (Vec 32 Bool) x 2, at 12 (Vec 32 Bool) x 3, at 12 (Vec 32 Bool) x 4, at 12 (Vec 32 Bool) x 5, at 12 (Vec 32 Bool) x 6, at 12 (Vec 32 Bool) x 7, at 12 (Vec 32 Bool) x 8, at 12 (Vec 32 Bool) x 9, at 12 (Vec 32 Bool) x 10, at 12 (Vec 32 Bool) x 11] x)";
 
 at24 <- prove_rule {{
   \(x:[24][32]) ->
@@ -454,6 +455,8 @@ at24 <- prove_rule {{
   , x @ 0x0c, x @ 0x0d, x @ 0x0e, x @ 0x0f, x @ 0x10, x @ 0x11
   , x @ 0x12, x @ 0x13, x @ 0x14, x @ 0x15, x @ 0x16, x @ 0x17
   ] == x }};
+
+print at24;
 
 ec_join_split   <- prove_rule {{ \x -> ec_join (ec_split x) == x }};
 ec_join_split_768 <- prove_rule {{ \x -> ec_join768 (ec_split768 x) == x }};
@@ -466,6 +469,8 @@ let sq_java_elim = crule {{ \(a:[768]) -> \(x:[384]) ->
                      mul_java::sq_java (a, x) == p384_field::p384_safe_product (x, x) }};
 
 let basic_simps  = [ ec_join_split
+                   , ec_join_split_768
+                   , ec_split_join_768
                    , at12, at24
                    ];
 let ss3 = addsimps basic_simps ss2;
@@ -483,7 +488,7 @@ p384_point_ops_add_simp <- do {
   //print "Proving rewrite rule:";
   //print_term t';
   prove_print do {
-    unint_z3
+    unint_yices
       [ "p384_ec_double", "p384_field_add", "p384_field_mul", "p384_field_neg"
       , "p384_field_sq", "p384_field_sub", "p384_group_field", "p384_is_field_val"
       , "p384_mod_div", "p384_mod_half", "p384_prime" ];
@@ -497,7 +502,7 @@ p384_point_ops_sub_simp <- do {
   //print "Proving rewrite rule:";
   //print_term t';
   prove_print do {
-    unint_z3
+    unint_yices
       [ "p384_ec_double", "p384_field_add", "p384_field_mul", "p384_field_neg"
       , "p384_field_sq", "p384_field_sub", "p384_group_field", "p384_is_field_val"
       , "p384_mod_div", "p384_mod_half", "p384_prime" ];
@@ -512,7 +517,7 @@ p384_point_ops_field_mul_simp <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print z3 t;
+  prove_print yices t;
 };
 p384_point_ops_field_sq_simp <- do {
   let {{ thm x = p384_ec_point_ops::p384_point_ops.field.sq x ==
@@ -522,7 +527,7 @@ p384_point_ops_field_sq_simp <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print z3 t;
+  prove_print yices t;
 };
 p384_point_ops_field_mul_simp2 <- do {
   let {{ thm x = ecc::p384_curve.point_ops.field.mul x ==
@@ -532,7 +537,7 @@ p384_point_ops_field_mul_simp2 <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print z3 t;
+  prove_print yices t;
 };
 p384_point_ops_field_sq_simp2 <- do {
   let {{ thm x = ecc::p384_curve.point_ops.field.sq x ==
@@ -542,7 +547,7 @@ p384_point_ops_field_sq_simp2 <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print z3 t;
+  prove_print yices t;
 };
 
 p384_curve_field_mul_simp <- do {
@@ -551,7 +556,7 @@ p384_curve_field_mul_simp <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print (unint_z3 ["p384_group_mul"]) t;
+  prove_print (unint_yices ["p384_group_mul"]) t;
 };
 
 p384_curve_field_sq_simp <- do {
@@ -560,7 +565,7 @@ p384_curve_field_sq_simp <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print (unint_z3 ["p384_mod_mul"]) t;
+  prove_print (unint_yices ["p384_mod_mul"]) t;
 };
 p384_curve_field_div_simp <- do {
   let {{ thm x y = ecc::p384_curve.point_ops.group_field.div (x,y) ==
@@ -568,7 +573,7 @@ p384_curve_field_div_simp <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print (unint_z3 ["p384_mod_div"]) t;
+  prove_print (unint_yices ["p384_mod_div"]) t;
 };
 p384_curve_twin_mul_simp <- do {
   let {{ thm x = ecc::p384_curve.twin_mul x ==
@@ -576,7 +581,7 @@ p384_curve_twin_mul_simp <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print (unint_z3 ["p384_ec_twin_mul"]) t;
+  prove_print (unint_yices ["p384_ec_twin_mul"]) t;
 };
 p384_curve_is_equal_simp <- do {
   let {{ thm x y = ecc::p384_curve.point_ops.group_field.is_equal (x, y) ==
@@ -584,7 +589,7 @@ p384_curve_is_equal_simp <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print z3 t;
+  prove_print yices t;
 };
 p384_curve_is_val_simp <- do {
   let {{ thm x = ecc::p384_curve.point_ops.group_field.is_val x ==
@@ -592,7 +597,7 @@ p384_curve_is_val_simp <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print z3 t;
+  prove_print yices t;
 };
 p384_curve_norm_simp <- do {
   let {{ thm x = ecc::p384_curve.point_ops.group_field.norm x ==
@@ -602,21 +607,21 @@ p384_curve_norm_simp <- do {
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print z3 t;
+  prove_print yices t;
 };
 p384_curve_field_zero_simp <- do {
   let {{ thm = ecc::p384_curve.point_ops.group_field.field_zero == 0 }};
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print z3 t;
+  prove_print yices t;
 };
 p384_curve_base_simp <- do {
   let {{ thm = ecc::p384_curve.base == ecc::p384_base }};
   let t = unfold_term ["thm"] {{ thm }};
   let t = rewrite ss0 t;
   //print_term t;
-  prove_print z3 t;
+  prove_print yices t;
 };
 
 
@@ -629,7 +634,7 @@ set_unit_ov <- method "set_unit" []
     jvm_execute_func [x];
     ecdsa_assign_arr384 x {{ 1 }};
   }
-  abc;
+  yices;
 
 set_zero_ov <- method "set_zero" []
   do {
@@ -637,7 +642,7 @@ set_zero_ov <- method "set_zero" []
     jvm_execute_func [x];
     ecdsa_assign_arr384 x {{ 0 }};
   }
-  abc;
+  yices;
 
 is_zero_ov <- method "is_zero" []
   do {
@@ -645,7 +650,7 @@ is_zero_ov <- method "is_zero" []
     jvm_execute_func [px];
     jvm_return (jvm_term {{ bool (x == 0) }});
   }
-  abc;
+  yices;
 
 is_equal_ov <- method "is_equal" []
   do {
@@ -695,7 +700,7 @@ shr_ov <- method "shr" []
     //java_may_alias [ "z", "x" ];
     ecdsa_assign_arr384 pz {{ (ec_extend c << 383) || (x >> 1) }};
   }
-  abc;
+  yices;
 
 // Like shr_ov, but where 1st and 3rd arguments are the same.
 shr_ov2 <- method "shr" []
@@ -706,7 +711,7 @@ shr_ov2 <- method "shr" []
     //java_may_alias [ "z", "x" ];
     ecdsa_assign_arr384 px {{ (ec_extend c << 383) || (x >> 1) }};
   }
-  abc;
+  yices;
 
 dec_ov <- method "decFieldPrime" []
   do {
@@ -717,7 +722,7 @@ dec_ov <- method "decFieldPrime" []
     ecdsa_assign_arr384 px {{ r.rslt }};
     jvm_return (jvm_term {{ r.carrybits }});
   }
-  abc;
+  yices;
 
 inc_ov <- method "incFieldPrime" []
   do {
@@ -728,7 +733,7 @@ inc_ov <- method "incFieldPrime" []
     ecdsa_assign_arr384 px {{ r.rslt }};
     jvm_return (jvm_term {{ r.carrybits }});
   }
-  abc;
+  yices;
 
 dbl_ov <- method "dbl" []
   do {
@@ -768,7 +773,7 @@ add_ov <- method "add" []
     ecdsa_assign_arr384 pz {{ z }};
     jvm_return (jvm_term {{ if (z < x) && (z < y) then (1:[32]) else (0:[32]) }});
   }
-  abc;
+  yices;
 
 // Like add_ov, but where the first 2 arguments are the same.
 add_ov2 <- method "add" []
@@ -782,7 +787,7 @@ add_ov2 <- method "add" []
     ecdsa_assign_arr384 px {{ z }};
     jvm_return (jvm_term {{ if (z < x) && (z < y) then (1:[32]) else (0:[32]) }});
   }
-  abc;
+  yices;
 
 // Like add_ov, but where the 1st and 3rd arguments are the same.
 add_ov3 <- method "add" []
@@ -796,7 +801,7 @@ add_ov3 <- method "add" []
     ecdsa_assign_arr384 py {{ z }};
     jvm_return (jvm_term {{ if (z < x) && (z < y) then (1:[32]) else (0:[32]) }});
   }
-  abc;
+  yices;
 
 sub_ov <- method "sub" []
   do {
@@ -810,7 +815,7 @@ sub_ov <- method "sub" []
     ecdsa_assign_arr384 pz {{ z }};
     jvm_return (jvm_term {{ if (x >= y) then (0:[32]) else (0xffffffff:[32]) }});
   }
-  abc;
+  yices;
 
 // like sub_ov, but with 1st and 2nd arguments the same
 sub_ov2 <- method "sub" []
@@ -824,7 +829,7 @@ sub_ov2 <- method "sub" []
     ecdsa_assign_arr384 px {{ z }};
     jvm_return (jvm_term {{ if (x >= y) then (0:[32]) else (0xffffffff:[32]) }});
   }
-  abc;
+  yices;
 
 // like sub_ov, but with 1st and 3nd arguments the same
 sub_ov3 <- method "sub" []
@@ -838,7 +843,7 @@ sub_ov3 <- method "sub" []
     ecdsa_assign_arr384 py {{ z }};
     jvm_return (jvm_term {{ if (x >= y) then (0:[32]) else (0xffffffff:[32]) }});
   }
-  abc;
+  yices;
 
 let ltNat_bvToNat =
   core_axiom "(x : bitvector 32) -> (y : Nat) -> Eq Bool (ltNat (bvToNat 32 x) y) (or (ltNat 4294967295 y) (bvult 32 x (bvNat 32 y)))";
@@ -866,10 +871,7 @@ mul_inner_ov <- method "mul_inner" []
     jvm_array24_is pa {{ res.mji_a }};
     jvm_return (jvm_term {{ res.mji_d }});
   }
-  do {
-    simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
-    abc;
-  };
+  yices;
 
 mul_ov <- method "mul" [mul_inner_ov]
   do {
@@ -881,19 +883,7 @@ mul_ov <- method "mul" [mul_inner_ov]
     jvm_execute_func [this, pa, px, py];
     ecdsa_assign_arr768 pa {{ mul_java::mul_java (a, x, y) }};
   }
-  do {
-    simplify
-      (addsimps [at24, ec_split_join_768]
-      (add_prelude_eqs
-        [ "and_True1", "and_True2"
-        , "and_False1", "and_False2"
-        , "or_False1", "or_False2"
-        , "not_True", "not_False", "not_not"
-        ]
-      cry_ss));
-    //print_goal;
-    abc;
-  };
+  yices;
 
 sq_inner1_ov <- method "sq_inner1" []
   do {
@@ -907,10 +897,7 @@ sq_inner1_ov <- method "sq_inner1" []
     jvm_array24_is pa {{ res.mji_a }};
     jvm_return (jvm_term {{ res.mji_d }});
   }
-  do {
-    simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
-    z3;
-  };
+  abc;
 
 sq_inner2_ov <- method "sq_inner2" []
   do {
@@ -925,10 +912,7 @@ sq_inner2_ov <- method "sq_inner2" []
     jvm_array24_is pa {{ res.mji_a }};
     jvm_return (jvm_term {{ res.mji_d }});
   }
-  do {
-    simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
-    z3;
-  };
+  abc;
 
 sq_loop_ov <- method "sq_loop" [mul_inner_ov]
   do {
@@ -938,7 +922,7 @@ sq_loop_ov <- method "sq_loop" [mul_inner_ov]
     jvm_execute_func [this, pa, px];
     jvm_array24_is pa {{ mul_java::sq_java_loop (a, x) }};
   }
-  z3;
+  yices;
 
 sq_ov <- method "sq" [sq_inner1_ov, sq_inner2_ov, sq_loop_ov, mul_inner_ov]
   do {
@@ -948,7 +932,7 @@ sq_ov <- method "sq" [sq_inner1_ov, sq_inner2_ov, sq_loop_ov, mul_inner_ov]
     jvm_execute_func [this, pa, px];
     ecdsa_assign_arr768 pa {{ mul_java::sq_java (a, x) }};
   }
-  z3;
+  yices;
 
 mod_sub_ov <- method "mod_sub" [sub_ov, add_ov2]
   do {
@@ -1013,7 +997,7 @@ group_add_ov <- method "group_add" [add_ov, leq_ov, sub_ov2]
     //java_may_alias ["z", "x", "y"];
     ecdsa_assign_arr384 pz {{ p384_field::p384_mod_add (group_order, x, y) }};
   }
-  abc;
+  yices;
 
 // like group_add_ov, but 1st and 3rd arguments the same.
 group_add_ov3 <- method "group_add" [add_ov3, leq_ov, sub_ov2]
@@ -1026,7 +1010,7 @@ group_add_ov3 <- method "group_add" [add_ov3, leq_ov, sub_ov2]
     //java_may_alias ["z", "x", "y"];
     ecdsa_assign_arr384 py {{ p384_field::p384_mod_add (group_order, x, y) }};
   }
-  abc;
+  yices;
 
 field_add_ov <- method "field_add" [add_ov, leq_ov, dec_ov]
   do {
@@ -1039,7 +1023,7 @@ field_add_ov <- method "field_add" [add_ov, leq_ov, dec_ov]
     jvm_execute_func [this, pz, px, py];
     ecdsa_assign_arr384 pz {{ p384_field::p384_field_add (x, y) }};
   }
-  abc;
+  yices;
 
 // Like field_add_ov, but 1st and 3rd arguments the same.
 field_add_ov3 <- method "field_add" [add_ov3, leq_ov, dec_ov]
@@ -1052,7 +1036,7 @@ field_add_ov3 <- method "field_add" [add_ov3, leq_ov, dec_ov]
     jvm_execute_func [this, py, px, py];
     ecdsa_assign_arr384 py {{ p384_field::p384_field_add (x, y) }};
   }
-  abc;
+  yices;
 
 field_sub_ov <- method "field_sub" [sub_ov, inc_ov]
   do {
@@ -1065,7 +1049,7 @@ field_sub_ov <- method "field_sub" [sub_ov, inc_ov]
     jvm_execute_func [this, pz, px, py];
     ecdsa_assign_arr384 pz {{ p384_field::p384_field_sub (x, y) }};
   }
-  abc;
+  yices;
 
 // like field_sub_ov, but with 1st and 2nd arguments the same
 field_sub_ov2 <- method "field_sub" [sub_ov2, inc_ov]
@@ -1078,7 +1062,7 @@ field_sub_ov2 <- method "field_sub" [sub_ov2, inc_ov]
     jvm_execute_func [this, px, px, py];
     ecdsa_assign_arr384 px {{ p384_field::p384_field_sub (x, y) }};
   }
-  abc;
+  yices;
 
 // like field_sub_ov, but with 1st and 3nd arguments the same
 field_sub_ov3 <- method "field_sub" [sub_ov3, inc_ov]
@@ -1091,7 +1075,7 @@ field_sub_ov3 <- method "field_sub" [sub_ov3, inc_ov]
     jvm_execute_func [this, py, px, py];
     ecdsa_assign_arr384 py {{ p384_field::p384_field_sub (x, y) }};
   }
-  abc;
+  yices;
 
 field_dbl_ov <- method "field_dbl" [dbl_ov, leq_ov, dec_ov]
   do {
@@ -1103,7 +1087,7 @@ field_dbl_ov <- method "field_dbl" [dbl_ov, leq_ov, dec_ov]
     jvm_execute_func [this, pz, px];
     ecdsa_assign_arr384 pz {{ p384_field::p384_field_add (x, x) }};
   }
-  abc;
+  yices;
 
 // Like field_dbl_ov, but with 1st and 2nd arguments the same.
 field_dbl_ov2 <- method "field_dbl" [dbl_ov2, leq_ov, dec_ov]
@@ -1115,7 +1099,7 @@ field_dbl_ov2 <- method "field_dbl" [dbl_ov2, leq_ov, dec_ov]
     jvm_execute_func [this, px, px];
     ecdsa_assign_arr384 px {{ p384_field::p384_field_add (x, x) }};
   }
-  abc;
+  yices;
 
 field_dbl_dec_ov <- method "field_dbl_dec" [field_sub_ov2]
   do {
@@ -1127,7 +1111,7 @@ field_dbl_dec_ov <- method "field_dbl_dec" [field_sub_ov2]
     ecdsa_assign_arr384 pz
       {{ p384_field::p384_field_sub (p384_field::p384_field_sub (z, x), x) }};
   }
-  z3;
+  yices;
 
 field_red_ov <- method "field_red" [inc_ov, leq_ov, dec_ov]
   do {
@@ -1138,10 +1122,7 @@ field_red_ov <- method "field_red" [inc_ov, leq_ov, dec_ov]
     jvm_execute_func [this, pz, pa];
     ecdsa_assign_arr384 pz {{ p384_field::p384_field_mod a }};
   }
-  do {
-    simplify ss;
-    quickcheck 100;
-  };
+  yices;
 
 field_sq_ov <- method "field_sq" [sq_ov, field_red_ov]
   do {
@@ -1156,30 +1137,11 @@ field_sq_ov <- method "field_sq" [sq_ov, field_red_ov]
     ecdsa_assign_arr384 pz {{ p384_field::p384_field_sq x }};
   }
   do {
-    unfolding ["p384_field_sq", "p384_field_mul"];
+    unfolding ["p384_field_sq"];
+    unfolding ["p384_field_mul"];
     simplify ss;
-    //print_goal;
-    unint_z3 ["p384_field_mod", "p384_safe_product"];
+    trivial;
   };
-/*********
-FIXME: We get the following error message, unless we comment out the
-"ecdsa_uses_field_prime" line in field_red_ov.
-
-Abort due to false assumption:
-  no override specification applies for field_red
-  in overrideBranches at /Users/huffman/Work/saw-script/examples/ecdsa/ecdsa.saw:1604:16
-  When calling overrideBranches
-  When calling com/galois/ecc/P384ECC64.field_red
-  In com/galois/ecc/NIST64.field_sq at internal
-  When calling field_sq
-finish invoke:com/galois/ecc/NIST64/field_red
-Symbolic simulation completed with side conditions.
-Proof succeeded! field_sq
-
-(I think the message is actually spurious; it is suppressed if you lower the simulator verbosity.
-It just means that crucible couldn't *statically* determine that an override matched.
-See https://github.com/GaloisInc/saw-script/issues/334)
-*********/
 
 // like field_sq_ov, but with 1st and 2nd arguments the same
 field_sq_ov2 <- method "field_sq" [sq_ov, field_red_ov]
@@ -1194,10 +1156,10 @@ field_sq_ov2 <- method "field_sq" [sq_ov, field_red_ov]
     ecdsa_assign_arr384 px {{ p384_field::p384_field_sq x }};
   }
   do {
-    unfolding ["p384_field_sq", "p384_field_mul"];
+    unfolding ["p384_field_sq"];
+    unfolding ["p384_field_mul"];
     simplify ss;
-    //print_goal;
-    unint_z3 ["p384_field_mod", "p384_safe_product"];
+    trivial;
   };
 
 field_mul_ov <- method "field_mul" [mul_ov, field_red_ov]
@@ -1215,7 +1177,7 @@ field_mul_ov <- method "field_mul" [mul_ov, field_red_ov]
   do {
     unfolding ["p384_field_mul"];
     simplify ss;
-    unint_z3 ["p384_field_mod", "p384_safe_product"];
+    trivial;
   };
 
 // like field_mul_ov, but with 1st and 2nd arguments the same
@@ -1233,7 +1195,7 @@ field_mul_ov2 <- method "field_mul" [mul_ov, field_red_ov]
   do {
     unfolding ["p384_field_mul"];
     simplify ss;
-    unint_z3 ["p384_field_mod", "p384_safe_product"];
+    trivial;
   };
 
 // like field_mul_ov, but with 1st and 3rd arguments the same
@@ -1251,7 +1213,7 @@ field_mul_ov3 <- method "field_mul" [mul_ov, field_red_ov]
   do {
     unfolding ["p384_field_mul"];
     simplify ss;
-    unint_z3 ["p384_field_mod", "p384_safe_product"];
+    trivial;
   };
 
 group_red_aux_ov <- method "group_red_aux" []
@@ -1268,8 +1230,7 @@ group_red_aux_ov <- method "group_red_aux" []
     ecdsa_assign_arr384 pr {{ res.gra_r }};
     jvm_return (jvm_term {{ res.gra_b }});
   }
-  //z3; //FIXME: This has problems due to a bug (in SBV?) where the wrong right-shift instruction is generated.
-  assume_unsat;
+  abc;
 
 group_red_ov <- method "group_red" [sub_ov2, group_red_aux_ov]
   do {
@@ -1280,11 +1241,15 @@ group_red_ov <- method "group_red" [sub_ov2, group_red_aux_ov]
     jvm_execute_func [this, pr, jvm_term c];
     ecdsa_assign_arr384 pr {{ mul_java::p384_group_red (group_order, r, c) }};
   }
-  (quickcheck 10);
-  //do {
-  //  unfolding ["p384_group_red"];
-  //  simplify ss; unint_z3 ["group_red_aux_java"];
-  //};
+  (unint_yices ["group_red_aux_java"]);
+  /*
+  do {
+    unfolding ["p384_group_red"];
+    simplify ss;
+    print_goal;
+    unint_yices ["group_red_aux_java"];
+  };
+  */
 
 group_mul_aux_ov <- method "group_mul_aux" []
   do {
@@ -1300,9 +1265,16 @@ group_mul_aux_ov <- method "group_mul_aux" []
     ecdsa_assign_arr384 pr {{ res.gra_r }};
     jvm_return (jvm_term {{ res.gra_b }});
   }
+  yices;
+  /*
   do {
-    abc;
+    unfolding ["group_mul_aux_java"];
+    simplify ss;
+    print_goal;
+    assume_unsat;
   };
+  */
+
 
 // FIXME: If we have "field_add_ov" instead of "field_add_ov3" as an override,
 // then the error message we get is *very* unhelpful!
@@ -1315,7 +1287,9 @@ field_mul3_ov <- method "field_mul3" [field_add_ov3, field_dbl_ov]
     jvm_execute_func [this, pz, px];
     ecdsa_assign_arr384 pz {{ app3 field_add_def x }};
   }
-  (unint_z3 ["p384_field_add"]);
+  do {
+    unint_yices ["p384_mod_add"];
+  };
 
 field_mul4_ov <- method "field_mul4" [field_dbl_ov, field_dbl_ov2]
   do {
@@ -1326,7 +1300,9 @@ field_mul4_ov <- method "field_mul4" [field_dbl_ov, field_dbl_ov2]
     jvm_execute_func [this, pz, px];
     ecdsa_assign_arr384 pz {{ app4 field_add_def x }};
   }
-  (unint_z3 ["p384_field_add"]);
+  do {
+    unint_yices ["p384_mod_add"];
+  };
 
 // like field_mul4_ov, but with 1st and 2nd arguments the same
 field_mul4_ov2 <- method "field_mul4" [field_dbl_ov, field_dbl_ov2]
@@ -1337,7 +1313,9 @@ field_mul4_ov2 <- method "field_mul4" [field_dbl_ov, field_dbl_ov2]
     jvm_execute_func [this, px, px];
     ecdsa_assign_arr384 px {{ app4 field_add_def x }};
   }
-  (unint_z3 ["p384_field_add"]);
+  do {
+    unint_yices ["p384_mod_add"];
+  };
 
 field_mul8_ov <- method "field_mul8" [field_dbl_ov, field_dbl_ov2]
   do {
@@ -1348,7 +1326,9 @@ field_mul8_ov <- method "field_mul8" [field_dbl_ov, field_dbl_ov2]
     jvm_execute_func [this, pz, px];
     ecdsa_assign_arr384 pz {{ app8 field_add_def x }};
   }
-  (unint_z3 ["p384_field_add"]);
+  do {
+    unint_yices ["p384_mod_add"];
+  };
 
 // like field_mul8_ov, but with 1st and 2nd arguments the same
 field_mul8_ov2 <- method "field_mul8" [field_dbl_ov, field_dbl_ov2]
@@ -1359,7 +1339,9 @@ field_mul8_ov2 <- method "field_mul8" [field_dbl_ov, field_dbl_ov2]
     jvm_execute_func [this, px, px];
     ecdsa_assign_arr384 px {{ app8 field_add_def x }};
   }
-  (unint_z3 ["p384_field_add"]);
+  do {
+    unint_yices ["p384_mod_add"];
+  };
 
 // TODO: compare with old version to see how to make this subproof work
 group_mul_ov <- method "group_mul"
@@ -1382,9 +1364,10 @@ group_mul_ov <- method "group_mul"
   do {
     unfolding ["p384_group_mul"];
     simplify ss;
+    print_goal_consts;
     //print_goal;
+    assume_unsat; // TODO
     //unint_z3 ["p384_group_red", "group_mul_aux_java"]; // this yields a counterexample (?)
-    quickcheck 100;
   };
 
 ec_double_ov <- method "ec_double"
@@ -1419,9 +1402,10 @@ ec_double_ov <- method "ec_double"
   do {
     unfolding ["p384_ec_double"];
     simplify ss;
-    unint_z3 [ "p384_field_add", "p384_field_mul"
-             , "p384_field_sq", "p384_field_sub"
-             ];
+    print_goal_consts;
+    unint_yices [ "p384_field_add", "p384_field_mul"
+                , "p384_field_sub"
+                ];
   };
 
 ec_full_add_ov <- method "ec_full_add"
@@ -1454,9 +1438,10 @@ ec_full_add_ov <- method "ec_full_add"
   do {
     unfolding ["p384_ec_full_add"];
     simplify ss;
-    unint_z3 [ "p384_field_add", "p384_field_sub", "p384_field_mul"
-             , "p384_full_add", "p384_mod_half", "p384_ec_double"
-             ];
+    print_goal_consts;
+    unint_yices [ "p384_field_add", "p384_field_sub", "p384_field_mul"
+                , "p384_full_add", "p384_mod_half", "p384_ec_double"
+                ];
   };
 
 p384_ec_full_sub_simp <-
@@ -1472,8 +1457,8 @@ p384_ec_full_sub_simp <-
       unfolding
         [ "p384_ec_full_sub", "ec_full_sub", "p384_point_ops", "p384_field"
         , "p384_ec_full_add", "ec_full_add", "ec_add" ];
-      //print_goal_consts; // keep all remaining consts abstract for z3
-      unint_z3
+      //print_goal_consts; // keep all remaining consts abstract for yices
+      unint_yices
         [ "p384_ec_double", "p384_field_add", "p384_field_mul", "p384_field_neg"
         , "p384_field_sq", "p384_field_sub", "p384_group_field", "p384_is_field_val"
         , "p384_mod_div", "p384_mod_half", "p384_prime" ];
@@ -1501,10 +1486,11 @@ ec_full_sub_ov <- method "ec_full_sub"
     simplify ec_full_sub_ss;
     unfolding ["p384_field_neg"];
     simplify ec_full_sub_ss;
-    unint_z3 [ "p384_ec_full_add", "p384_ec_double", "p384_field_add"
-             , "p384_field_sub", "p384_field_mul"
-             , "p384_full_add", "p384_mod_half"
-             ];
+    print_goal_consts;
+    unint_yices [ "p384_ec_full_add", "p384_ec_double", "p384_field_add"
+                , "p384_field_sub", "p384_field_mul"
+                , "p384_full_add", "p384_mod_half"
+                ];
   };
 
 ec_mul_init_ov <- method "ec_mul_init" [shr_ov, add_ov3, assign_ov, set_unit_ov, set_zero_ov]
@@ -1522,7 +1508,7 @@ ec_mul_init_ov <- method "ec_mul_init" [shr_ov, add_ov3, assign_ov, set_unit_ov,
     ecdsa_assign_jacobian pr {{ res.r }};
     ecdsa_assign_arr384 ph {{ res.h }};
   }
-  abc;
+  yices;
 
 ec_mul_aux_ov <- method "ec_mul_aux"
   [ ec_double_ov
@@ -1550,6 +1536,7 @@ ec_mul_aux_ov <- method "ec_mul_aux"
   do {
     unfolding ["p384_ec_mul_aux"];
     simplify ss;
+    print_goal_consts;
     unint_z3 ["p384_ec_double", "p384_ec_full_add", "p384_ec_full_sub"];
   };
 
@@ -1569,12 +1556,15 @@ ec_mul_ov <- method "ec_mul" [ec_mul_init_ov, ec_mul_aux_ov]
     //java_modify "this.h";
   }
   do {
-    print_goal_size;
+    //print_goal_size;
     simplify ss;
     unfolding ["p384_ec_mul"];
+    print_goal_consts;
     beta_reduce_goal;
+    //print_goal_consts;
     //print_goal;
-    unint_z3 ["p384_ec_mul_aux", "p384_ec_mul_init"];
+    assume_unsat;
+    //unint_yices ["p384_ec_mul_aux", "p384_ec_mul_init"];
   };
 
 ec_twin_mul_aux_f_ov <- method "ec_twin_mul_aux_f" []
@@ -1612,6 +1602,9 @@ ec_twin_mul_aux1_ov <- method "ec_twin_mul_aux1"
   do {
     unfolding ["p384_ec_twin_mul_aux1", "ec_twin_mul_aux1"];
     simplify ec_twin_mul_aux1_ss;
+    unfolding ["p384_point_ops"];
+    simplify ec_twin_mul_aux1_ss;
+    //print_goal_consts;
     unint_z3 ["p384_ec_double", "p384_ec_full_add", "p384_ec_full_sub"];
   };
 
@@ -1722,6 +1715,7 @@ ec_twin_mul_init_ov <- method "ec_twin_mul_init"
   do {
     unfolding [ "p384_ec_twin_mul_init" ];
     simplify twin_mul_init_ss;
+    print_goal_consts;
     unint_z3 [ "p384_ec_full_add"
              , "p384_ec_full_sub"
              , "p384_ec_mul"
@@ -1803,10 +1797,14 @@ ec_twin_mul_ov <- method "ec_twin_mul"
     unfolding ["p384_ec_twin_mul"];
     beta_reduce_goal;
     simplify ss;
+    print_goal_consts;
+    assume_unsat;
     // TODO: see if some rules from twin_mul_init_ss can help.
+    /*
     unint_z3 [ "p384_ec_twin_mul_init", "p384_ec_twin_mul_aux1"
              , "p384_ec_twin_mul_aux2", "p384_ec_twin_mul_aux_f"
              ];
+             */
   };
 
 method "signHash"
@@ -1918,6 +1916,7 @@ method "signHash"
   do {
     unfolding [ "p384_ecdsa_sign" ];
     simplify ss;
+    print_goal_consts;
     unint_z3 [ "p384_ec_mul"
              , "p384_field_mul"
              , "p384_field_sq"
@@ -2023,6 +2022,7 @@ method "verifySignature"
   do {
     unfolding [ "p384_ecdsa_public_verify", "ecdsa_public_verify_imp" ];
     simplify twin_mul_init_ss;
+    print_goal_consts;
     let ufs = [ "p384_ec_twin_mul"
               , "p384_field_mul"
               , "p384_field_sq"
