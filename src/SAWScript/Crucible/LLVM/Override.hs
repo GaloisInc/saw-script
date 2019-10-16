@@ -1245,7 +1245,7 @@ invalidateMutableAllocs cc cs = do
       gimap = Crucible.globalInitMap mtrans
       mutableGlobals = cs ^. MS.csGlobalAllocs
 
-  globalPtrs <- liftIO . fmap catMaybes . forM mutableGlobals $ \(LLVMAllocGlobal _ s@(L.Symbol st)) ->
+  globalPtrs <- liftIO . fmap catMaybes . forM mutableGlobals $ \(LLVMAllocGlobal loc s@(L.Symbol st)) ->
     case Map.lookup s gimap of
       Just (_, Right (mt, _)) -> do
         ptr <- Crucible.doResolveGlobal sym mem s
@@ -1255,7 +1255,9 @@ invalidateMutableAllocs cc cs = do
           , mconcat
             [ "state of mutable global variable \""
             , pack st
-            , "\" not described in postcondition"
+            , "\" (allocated at "
+            , pack . show $ W4.plSourceLoc loc
+            , ") not described in postcondition"
             ]
           )
       _ -> pure Nothing
