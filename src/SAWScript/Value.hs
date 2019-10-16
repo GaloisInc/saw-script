@@ -7,53 +7,63 @@ Stability   : provisional
 -}
 {-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DataKinds #-}
 
 module SAWScript.Value where
+
+import Prelude hiding (fail)
 
 import Data.Semigroup ((<>))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
-import Control.Monad.ST
+import Control.Lens
+import Control.Monad.Fail (MonadFail(..))
+import Control.Monad.Except (ExceptT(..), runExceptT)
+import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT(..), ask, asks, local)
-import Control.Monad.State (StateT(..), get, gets, put)
-import Control.Monad.Trans.Class (lift)
+import Control.Monad.State (MonadState, StateT(..), get, gets, put)
+import Control.Monad.Trans.Class (MonadTrans(lift))
 import Data.List ( intersperse )
 import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
-import qualified Text.LLVM    as L
-import qualified Text.LLVM.PP as L
-import qualified Text.PrettyPrint.HughesPJ as PP
+import Data.Text (Text, pack, unpack)
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 import Data.Typeable
+import GHC.Generics (Generic, Generic1)
 
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
-import qualified SAWScript.Utils as SS
+import qualified SAWScript.Position as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
-import qualified SAWScript.CrucibleLLVM as Crucible
-import qualified SAWScript.CrucibleMethodSpecIR as CIR
-import qualified SAWScript.JVM.CrucibleMethodSpecIR as JCIR
+import qualified SAWScript.Crucible.Common.Setup.Type as Setup
+import qualified SAWScript.Crucible.Common.MethodSpec as CMS
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
+import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
+import qualified SAWScript.Crucible.JVM.MethodSpecIR ()
 import qualified Verifier.Java.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
@@ -83,10 +93,11 @@ import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
-import qualified Lang.Crucible.LLVM.MemModel as Crucible (HasPtrWidth)
 
-import           Lang.Crucible.JVM.Translation (JVM)
-import qualified Lang.Crucible.JVM.Translation as CJ
+import           Lang.Crucible.JVM (JVM)
+import qualified Lang.Crucible.JVM as CJ
+
+import           What4.ProgramLoc (ProgramLoc)
 
 -- Values ----------------------------------------------------------------------
 
@@ -96,12 +107,15 @@ data Value
   | VInteger Integer
   | VArray [Value]
   | VTuple [Value]
+  | VMaybe (Maybe Value)
   | VRecord (Map SS.Name Value)
   | VLambda (Value -> TopLevel Value)
   | VTerm TypedTerm
   | VType Cryptol.Schema
   | VReturn Value -- Returned value in unspecified monad
-  | VBind Value Value -- Monadic bind in unspecified monad
+  | VBind SS.Pos Value Value
+    -- ^ Monadic bind in unspecified monad. Requires a source position because
+    -- operations in these monads can fail at runtime.
   | VTopLevel (TopLevel Value)
   | VProofScript (ProofScript Value)
   | VSimpset Simpset
@@ -109,25 +123,25 @@ data Value
   | VJavaSetup (JavaSetup Value)
   | VJavaMethodSpec JIR.JavaMethodSpecIR
   -----
-  | VCrucibleSetup !(CrucibleSetupM Value)
-  | VCrucibleMethodSpec CIR.CrucibleMethodSpecIR
-  | VCrucibleSetupValue CIR.SetupValue
+  | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
+  | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR)
+  | VLLVMCrucibleSetupValue (CMSLLVM.AllLLVM CMS.SetupValue)
   -----
   | VJVMSetup !(JVMSetupM Value)
-  | VJVMMethodSpec JCIR.CrucibleMethodSpecIR
-  | VJVMSetupValue JCIR.SetupValue
+  | VJVMMethodSpec !(CMS.CrucibleMethodSpecIR CJ.JVM)
+  | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
   | VJavaType JavaType
   | VLLVMType LLVM.Type
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
-  | VLLVMModule LLVMModule
+  | VLLVMModule (Some CMSLLVM.LLVMModule)
   | VSatResult SatResult
   | VProofResult ProofResult
   | VUninterp Uninterp
   | VAIG AIGNetwork
   | VCFG SAW_CFG
-  | VGhostVar CIR.GhostGlobal
+  | VGhostVar CMS.GhostGlobal
 
 data AIGNetwork where
   AIGNetwork :: (Typeable l, Typeable g, AIG.IsAIG l g) => AIG.Network l g -> AIGNetwork
@@ -139,37 +153,11 @@ data SAW_CFG where
   LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> SAW_CFG
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
-data LLVMModule =
-  LLVMModule
-  { modName :: String
-  , modMod :: L.Module
-  , modTrans :: Some Crucible.ModuleTranslation
-  }
-
-showLLVMModule :: LLVMModule -> String
-showLLVMModule (LLVMModule name m _) =
-  unlines [ "Module: " ++ name
-          , "Types:"
-          , showParts L.ppTypeDecl (L.modTypes m)
-          , "Globals:"
-          , showParts ppGlobal' (L.modGlobals m)
-          , "External references:"
-          , showParts L.ppDeclare (L.modDeclares m)
-          , "Definitions:"
-          , showParts ppDefine' (L.modDefines m)
-          ]
-  where
-    showParts pp xs = unlines $ map (show . PP.nest 2 . pp) xs
-    ppGlobal' g =
-      L.ppSymbol (L.globalSym g) PP.<+> PP.char '=' PP.<+>
-      L.ppGlobalAttrs (L.globalAttrs g) PP.<+>
-      L.ppType (L.globalType g)
-    ppDefine' d =
-      L.ppMaybe L.ppLinkage (L.defLinkage d) PP.<+>
-      L.ppType (L.defRetType d) PP.<+>
-      L.ppSymbol (L.defName d) PP.<>
-      L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
-      L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.defGC d)
+data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
+                                     , biJavaCodebase  :: JSS.Codebase
+                                     , biBasicSS       :: Simpset
+                                     }
+  deriving Generic
 
 data ProofResult
   = Valid SolverStats
@@ -271,6 +259,8 @@ showsPrecValue opts p v =
     VInteger n -> shows n
     VArray vs -> showBrackets $ commaSep $ map (showsPrecValue opts 0) vs
     VTuple vs -> showParen True $ commaSep $ map (showsPrecValue opts 0) vs
+    VMaybe (Just v') -> showString "(Just " . showsPrecValue opts 0 v' . showString ")"
+    VMaybe Nothing -> showString "Nothing"
     VRecord m -> showBraces $ commaSep $ map showFld (M.toList m)
                    where
                      showFld (n, fv) =
@@ -288,14 +278,14 @@ showsPrecValue opts p v =
       showString "Theorem " .
       showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
-    VCrucibleSetup{} -> showString "<<Crucible Setup>>"
-    VCrucibleSetupValue x -> shows x
+    VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
+    VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
-    VCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
+    VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
-    VLLVMModule m -> showString (showLLVMModule m)
+    VLLVMModule (Some m) -> showString (CMSLLVM.showLLVMModule m)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
     VSatResult r -> showsSatResult opts r
@@ -347,19 +337,19 @@ applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
 applyValue _ _ = fail "applyValue"
 
-thenValue :: Value -> Value -> Value
-thenValue v1 v2 = VBind v1 (VLambda (const (return v2)))
+thenValue :: SS.Pos -> Value -> Value -> Value
+thenValue pos v1 v2 = VBind pos v1 (VLambda (const (return v2)))
 
-bindValue :: Value -> Value -> TopLevel Value
-bindValue v1 v2 = return (VBind v1 v2)
+bindValue :: SS.Pos -> Value -> Value -> TopLevel Value
+bindValue pos v1 v2 = return (VBind pos v1 v2)
 
 forValue :: [Value] -> Value -> TopLevel Value
 forValue [] _ = return $ VReturn (VArray [])
 forValue (x : xs) f =
   do m1 <- applyValue f x
      m2 <- forValue xs f
-     bindValue m1 (VLambda $ \v1 ->
-       bindValue m2 (VLambda $ \v2 ->
+     bindValue (SS.PosInternal "<for>") m1 (VLambda $ \v1 ->
+       bindValue (SS.PosInternal "<for>") m2 (VLambda $ \v2 ->
          return $ VReturn (VArray (v1 : fromValue v2))))
 
 -- TopLevel Monad --------------------------------------------------------------
@@ -379,7 +369,7 @@ data TopLevelRO =
   { roSharedContext :: SharedContext
   , roJavaCodebase  :: JSS.Codebase
   , roOptions       :: Options
-  , roHandleAlloc   :: Crucible.HandleAllocator RealWorld
+  , roHandleAlloc   :: Crucible.HandleAllocator
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   }
@@ -396,13 +386,20 @@ data TopLevelRW =
   , rwJVMTrans :: CJ.JVMContext
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
   , rwPrimsAvail :: Set PrimitiveLifecycle
+  , rwSMTArrayMemoryModel :: Bool
+  , rwProfilingFile :: Maybe FilePath
   }
 
-newtype TopLevel a = TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
-  deriving (Functor, Applicative, Monad, MonadIO)
+newtype TopLevel a =
+  TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
+  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadFail)
+
+deriving instance MonadReader TopLevelRO TopLevel
+deriving instance MonadState TopLevelRW TopLevel
+instance Wrapped (TopLevel a) where
 
 runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
-runTopLevel (TopLevel m) = runStateT . runReaderT m
+runTopLevel (TopLevel m) ro rw = runStateT (runReaderT m ro) rw
 
 io :: IO a -> TopLevel a
 io = liftIO
@@ -438,7 +435,7 @@ printOutTop v s =
     do opts <- getOptions
        io $ printOutFn opts v s
 
-getHandleAlloc :: TopLevel (Crucible.HandleAllocator RealWorld)
+getHandleAlloc :: TopLevel Crucible.HandleAllocator
 getHandleAlloc = TopLevel (asks roHandleAlloc)
 
 getTopLevelRO :: TopLevel TopLevelRO
@@ -481,40 +478,42 @@ data JavaSetupState
 
 type JavaSetup a = StateT JavaSetupState TopLevel a
 
-type CrucibleSetup arch a =
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) => StateT (CIR.CrucibleSetupState arch) TopLevel a
+type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
-data CrucibleSetupM a =
-  CrucibleSetupM { runCrucibleSetupM :: forall arch. CrucibleSetup arch a }
+-- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
+--   specifications should be polymorphic in the underlying architecture
+-- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
 
-instance Functor CrucibleSetupM where
-  fmap f (CrucibleSetupM m) = CrucibleSetupM (fmap f m)
+data LLVMCrucibleSetupM a =
+  LLVMCrucibleSetupM
+    { runLLVMCrucibleSetupM ::
+        forall arch.
+        (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+        CrucibleSetup (Crucible.LLVM arch) a
+    }
+  deriving Functor
 
-instance Applicative CrucibleSetupM where
-  pure x = CrucibleSetupM (pure x)
-  CrucibleSetupM f <*> CrucibleSetupM m = CrucibleSetupM (f <*> m)
+instance Applicative LLVMCrucibleSetupM where
+  pure x = LLVMCrucibleSetupM (pure x)
+  LLVMCrucibleSetupM f <*> LLVMCrucibleSetupM m = LLVMCrucibleSetupM (f <*> m)
 
-instance Monad CrucibleSetupM where
+instance Monad LLVMCrucibleSetupM where
   return = pure
-  CrucibleSetupM m >>= f = CrucibleSetupM (m >>= runCrucibleSetupM . f)
+  LLVMCrucibleSetupM m >>= f =
+    LLVMCrucibleSetupM (m >>= runLLVMCrucibleSetupM . f)
+
+-- | This gets more accurate locations than @lift (lift getPosition)@ because
+--   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
+getW4Position :: Text -> CrucibleSetup arch ProgramLoc
+getW4Position s = SS.toW4Loc s <$> lift (asks roPosition)
 
 --
-type JVMSetup a =
-  StateT JCIR.CrucibleSetupState TopLevel a
 
-data JVMSetupM a =
-  JVMSetupM { runJVMSetupM :: JVMSetup a }
+type JVMSetup = CrucibleSetup CJ.JVM
 
-instance Functor JVMSetupM where
-  fmap f (JVMSetupM m) = JVMSetupM (fmap f m)
+newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
+  deriving (Applicative, Functor, Monad)
 
-instance Applicative JVMSetupM where
-  pure x = JVMSetupM (pure x)
-  JVMSetupM f <*> JVMSetupM m = JVMSetupM (f <*> m)
-
-instance Monad JVMSetupM where
-  return = pure
-  JVMSetupM m >>= f = JVMSetupM (m >>= runJVMSetupM . f)
 --
 type ProofScript a = StateT ProofState TopLevel a
 
@@ -567,13 +566,22 @@ instance FromValue a => FromValue [a] where
 instance IsValue a => IsValue (IO a) where
     toValue action = toValue (io action)
 
+instance IsValue a => IsValue (Maybe a) where
+  toValue (Just x) = VMaybe . Just $ toValue x
+  toValue Nothing = VMaybe Nothing
+
+instance FromValue a => FromValue (Maybe a) where
+  fromValue (VMaybe (Just v)) = Just $ fromValue v
+  fromValue (VMaybe Nothing) = Nothing
+  fromValue _ = error "fromValue Maybe"
+
 instance IsValue a => IsValue (TopLevel a) where
     toValue action = VTopLevel (fmap toValue action)
 
 instance FromValue a => FromValue (TopLevel a) where
     fromValue (VTopLevel action) = fmap fromValue action
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind m1 v2) = do
+    fromValue (VBind _pos m1 v2) = do
       v1 <- fromValue m1
       m2 <- applyValue v2 v1
       fromValue m2
@@ -585,7 +593,7 @@ instance IsValue a => IsValue (StateT ProofState TopLevel a) where
 instance FromValue a => FromValue (StateT ProofState TopLevel a) where
     fromValue (VProofScript m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind m1 v2) = do
+    fromValue (VBind _pos m1 v2) = do
       v1 <- fromValue m1
       m2 <- lift $ applyValue v2 v1
       fromValue m2
@@ -597,23 +605,24 @@ instance IsValue a => IsValue (StateT JavaSetupState TopLevel a) where
 instance FromValue a => FromValue (StateT JavaSetupState TopLevel a) where
     fromValue (VJavaSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind m1 v2) = do
+    fromValue (VBind _pos m1 v2) = do
       v1 <- fromValue m1
       m2 <- lift $ applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue JavaSetup"
 
 ---------------------------------------------------------------------------------
-instance IsValue a => IsValue (CrucibleSetupM a) where
-    toValue m = VCrucibleSetup (fmap toValue m)
+instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
+    toValue m = VLLVMCrucibleSetup (fmap toValue m)
 
-instance FromValue a => FromValue (CrucibleSetupM a) where
-    fromValue (VCrucibleSetup m) = fmap fromValue m
+instance FromValue a => FromValue (LLVMCrucibleSetupM a) where
+    fromValue (VLLVMCrucibleSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind m1 v2) = CrucibleSetupM $ do
-      v1 <- runCrucibleSetupM (fromValue m1)
+    fromValue (VBind pos m1 v2) = LLVMCrucibleSetupM $ do
+      -- TODO: Should both of these be run with the new position?
+      v1 <- underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m1))
       m2 <- lift $ applyValue v2 v1
-      runCrucibleSetupM (fromValue m2)
+      underStateT (withPosition pos) (runLLVMCrucibleSetupM (fromValue m2))
     fromValue _ = error "fromValue CrucibleSetup"
 
 instance IsValue a => IsValue (JVMSetupM a) where
@@ -622,23 +631,23 @@ instance IsValue a => IsValue (JVMSetupM a) where
 instance FromValue a => FromValue (JVMSetupM a) where
     fromValue (VJVMSetup m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind m1 v2) = JVMSetupM $ do
+    fromValue (VBind _pos m1 v2) = JVMSetupM $ do
       v1 <- runJVMSetupM (fromValue m1)
       m2 <- lift $ applyValue v2 v1
       runJVMSetupM (fromValue m2)
     fromValue _ = error "fromValue JVMSetup"
 
-instance IsValue CIR.SetupValue where
-  toValue v = VCrucibleSetupValue v
+instance IsValue (CMSLLVM.AllLLVM CMS.SetupValue) where
+  toValue = VLLVMCrucibleSetupValue
 
-instance FromValue CIR.SetupValue where
-  fromValue (VCrucibleSetupValue v) = v
+instance FromValue (CMSLLVM.AllLLVM CMS.SetupValue) where
+  fromValue (VLLVMCrucibleSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
-instance IsValue JCIR.SetupValue where
+instance IsValue (CMS.SetupValue CJ.JVM) where
   toValue v = VJVMSetupValue v
 
-instance FromValue JCIR.SetupValue where
+instance FromValue (CMS.SetupValue CJ.JVM) where
   fromValue (VJVMSetupValue v) = v
   fromValue _ = error "fromValue Crucible.SetupValue"
 
@@ -649,17 +658,17 @@ instance FromValue SAW_CFG where
     fromValue (VCFG t) = t
     fromValue _ = error "fromValue CFG"
 
-instance IsValue CIR.CrucibleMethodSpecIR where
-    toValue t = VCrucibleMethodSpec t
+instance IsValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+    toValue mir = VLLVMCrucibleMethodSpec mir
 
-instance FromValue CIR.CrucibleMethodSpecIR where
-    fromValue (VCrucibleMethodSpec t) = t
+instance FromValue (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR) where
+    fromValue (VLLVMCrucibleMethodSpec mir) = mir
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
-instance IsValue JCIR.CrucibleMethodSpecIR where
+instance IsValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
     toValue t = VJVMMethodSpec t
 
-instance FromValue JCIR.CrucibleMethodSpecIR where
+instance FromValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
     fromValue (VJVMMethodSpec t) = t
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
@@ -697,6 +706,13 @@ instance IsValue String where
 instance FromValue String where
     fromValue (VString n) = n
     fromValue _ = error "fromValue String"
+
+instance IsValue Text where
+    toValue n = VString $ unpack n
+
+instance FromValue Text where
+    fromValue (VString n) = pack n
+    fromValue _ = error "fromValue Text"
 
 instance IsValue Integer where
     toValue n = VInteger n
@@ -777,12 +793,15 @@ instance FromValue JSS.Class where
     fromValue (VJavaClass c) = c
     fromValue _ = error "fromValue JavaClass"
 
-instance IsValue LLVMModule where
+instance IsValue (Some CMSLLVM.LLVMModule) where
     toValue m = VLLVMModule m
 
-instance FromValue LLVMModule where
+instance IsValue (CMSLLVM.LLVMModule arch) where
+    toValue m = VLLVMModule (Some m)
+
+instance FromValue (Some CMSLLVM.LLVMModule) where
     fromValue (VLLVMModule m) = m
-    fromValue _ = error "fromValue LLVMModule"
+    fromValue _ = error "fromValue CMSLLVM.LLVMModule"
 
 instance IsValue ProofResult where
    toValue r = VProofResult r
@@ -798,14 +817,23 @@ instance FromValue SatResult where
    fromValue (VSatResult r) = r
    fromValue v = error $ "fromValue SatResult: " ++ show v
 
-instance IsValue CIR.GhostGlobal where
+instance IsValue CMS.GhostGlobal where
   toValue = VGhostVar
 
-instance FromValue CIR.GhostGlobal where
+instance FromValue CMS.GhostGlobal where
   fromValue (VGhostVar r) = r
   fromValue v = error ("fromValue GlobalVar: " ++ show v)
 
 -- Error handling --------------------------------------------------------------
+
+underStateT :: (forall b. m b -> m b) -> StateT s m a -> StateT s m a
+underStateT doUnder action = StateT $ \s -> doUnder (runStateT action s)
+
+underReaderT :: (forall b. m b -> m b) -> ReaderT s m a -> ReaderT s m a
+underReaderT doUnder action = ReaderT $ \env -> doUnder (runReaderT action env)
+
+underExceptT :: (forall b. m b -> m b) -> ExceptT s m a -> ExceptT s m a
+underExceptT doUnder action = ExceptT $ doUnder (runExceptT action)
 
 -- | Implement stack tracing by adding error handlers that rethrow
 -- user errors, prepended with the given string.
@@ -816,8 +844,9 @@ addTrace str val =
     VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
     VJavaSetup     m -> VJavaSetup     (addTrace str `fmap` addTraceStateT str m)
-    VCrucibleSetup (CrucibleSetupM m) -> VCrucibleSetup (CrucibleSetupM (addTrace str `fmap` addTraceStateT str m))
-    VBind v1 v2      -> VBind          (addTrace str v1) (addTrace str v2)
+    VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
+    VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
+        addTrace str `fmap` underStateT (addTraceTopLevel str) m
     _                -> val
 
 -- | Wrap an action with a handler that catches and rethrows user
@@ -830,18 +859,15 @@ addTraceIO str action = X.catchJust p action h
     p e = if IOError.isUserError e then Just (init (drop 12 (show e))) else Nothing
     h msg = X.throwIO (IOError.userError (str ++ ":\n" ++ msg))
 
--- | Similar to addTraceIO, but for the TopLevel monad.
-addTraceTopLevel :: String -> TopLevel a -> TopLevel a
-addTraceTopLevel str action =
-  TopLevel $ ReaderT $ \ro -> StateT $ \rw ->
-    addTraceIO str (runTopLevel action ro rw)
-
--- | Similar to addTraceIO, but for state monads built from TopLevel.
+-- | Similar to 'addTraceIO', but for state monads built from 'TopLevel'.
 addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
-addTraceStateT str action =
-  StateT $ \s -> addTraceTopLevel str (runStateT action s)
+addTraceStateT str = underStateT (addTraceTopLevel str)
 
-data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
-                                     , biJavaCodebase  :: JSS.Codebase
-                                     , biBasicSS       :: Simpset
-                                     }
+-- | Similar to 'addTraceIO', but for reader monads built from 'TopLevel'.
+addTraceReaderT :: String -> ReaderT s TopLevel a -> ReaderT s TopLevel a
+addTraceReaderT str = underReaderT (addTraceTopLevel str)
+
+-- | Similar to 'addTraceIO', but for the 'TopLevel' monad.
+addTraceTopLevel :: String -> TopLevel a -> TopLevel a
+addTraceTopLevel str action = action & _Wrapped' %~
+  underReaderT (underStateT (liftIO . addTraceIO str))

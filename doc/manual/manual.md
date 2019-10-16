@@ -1246,7 +1246,8 @@ immediately returns `True`). It fails if that is not the case.
 The proof scripts shown so far all have a single implicit goal. As in
 many other interactive provers, however, SAWScript proofs can have
 multiple goals. The following commands can introduce or work with
-multiple goals.
+multiple goals. These are experimental and can be used only after
+`enable_experimental` has been called.
 
 * `goal_apply : Theorem -> ProofScript ()` will apply a given
 introduction rule to the current goal. This will result in zero or more

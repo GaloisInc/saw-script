@@ -17,23 +17,23 @@ git:
 
 matrix:
   include:
-    - env: CABALVER="2.4" GHCVER="8.6.3"
-      compiler: ": #GHC 8.6.3"
-      addons: {apt: {packages: [cabal-install-2.4,ghc-8.6.3], sources: [hvr-ghc]}}
-    - env: CABALVER="2.4" GHCVER="8.4.3"
-      compiler: ": #GHC 8.4.3"
-      addons: {apt: {packages: [cabal-install-2.4,ghc-8.4.3], sources: [hvr-ghc]}}
-    - os: osx
-      env: CABALVER="2.4" GHCVER="8.6.3"
-      compiler: ": #GHC 8.6.3"
+    - env: CABALVER="2.4" GHCVER="8.6.5"
+      compiler: ": #GHC 8.6.5"
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.6.5], sources: [hvr-ghc]}}
+    - env: CABALVER="2.4" GHCVER="8.4.4"
+      compiler: ": #GHC 8.4.4"
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.4.4], sources: [hvr-ghc]}}
+#    - os: osx
+#      env: CABALVER="2.4" GHCVER="8.6.5"
+#      compiler: ": #GHC 8.6.5"
 
 before_install:
-  - if [[ $TRAVIS_OS_NAME == 'osx' ]];
-    then
-        brew update;
-        brew install ghc;
-        brew install cabal-install;
-    fi
+#  - if [[ $TRAVIS_OS_NAME == 'osx' ]];
+#    then
+#        brew update;
+#        brew install ghc;
+#        brew install cabal-install;
+#    fi
   - unset CC
   - export PATH=/opt/ghc/bin:$HOME/.cabal/bin:$PATH
 
@@ -41,5 +41,5 @@ script:
   - git submodule init
   - git submodule update
   - (cd deps/abcBridge && git submodule init && git submodule update)
-  - cabal update
-  - cabal new-build -j --disable-optimization
+  - cabal v2-update
+  - cabal v2-build -j --disable-optimization

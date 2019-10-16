@@ -1,11 +1,14 @@
 #!/bin/bash
 set -e
 
-while getopts "c" opt; do
+while getopts "cr" opt; do
     case $opt in
         c)
             # Remove './tmp', including all previous releases, before staging.
             clean="true"
+            ;;
+        r)
+            release="true"
             ;;
         \?)
             echo "Invalid option: -$OPTARG" >&2
@@ -21,7 +24,11 @@ VERSION=`grep Version saw-script.cabal | awk '{print $2}'`
 # Warn if 'SYSTEM_DESC' is not defined. The 'SYSTEM_DESC' env var is
 # defined as part of the Jenkins node configuration on the Linux
 # nodes.
-RELEASE=saw-${VERSION}-${DATE}-${SYSTEM_DESC:-SYSTEM_DESC-IS-NOT-DEFINED}
+if [ -n "$release" ] ; then
+  RELEASE=saw-${VERSION}-${SYSTEM_DESC:-SYSTEM_DESC-IS-NOT-DEFINED}
+else
+  RELEASE=saw-${VERSION}-${DATE}-${SYSTEM_DESC:-SYSTEM_DESC-IS-NOT-DEFINED}
+fi
 TARGET=tmp/release/$RELEASE
 
 if [ -n "$clean" ]; then
@@ -46,11 +53,7 @@ fi
 cp deps/abcBridge/abc-build/copyright.txt     ${TARGET}/ABC_LICENSE
 cp LICENSE                                    ${TARGET}/LICENSE
 cp README.md                                  ${TARGET}/README.md
-cp "$BIN"/bcdump                              ${TARGET}/bin
 cp "$BIN"/cryptol                             ${TARGET}/bin
-cp "$BIN"/jss                                 ${TARGET}/bin
-cp "$BIN"/llvm-disasm                         ${TARGET}/bin
-cp "$BIN"/lss                                 ${TARGET}/bin
 cp "$BIN"/saw                                 ${TARGET}/bin
 cp doc/extcore.md                             ${TARGET}/doc
 cp doc/tutorial/sawScriptTutorial.pdf         ${TARGET}/doc/tutorial.pdf
@@ -59,8 +62,6 @@ cp -r doc/tutorial/code                       ${TARGET}/doc
 cp deps/jvm-verifier/support/galois.jar       ${TARGET}/lib
 cp -r deps/cryptol/lib/*                      ${TARGET}/lib
 cp -r examples/*                              ${TARGET}/examples
-cp deps/llvm-verifier/sym-api/*.h             ${TARGET}/include
-cp deps/llvm-verifier/sym-api/*.c             ${TARGET}/lib
 
 cd tmp/release
 if [ "${OS}" == "Windows_NT" ]; then

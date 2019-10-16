@@ -30,6 +30,7 @@ import Control.Applicative
 
 import System.FilePath
 
+import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Nonce as Nonce
 import           Data.Parameterized.Nonce (NonceGenerator, withSTNonceGenerator)
 
@@ -39,7 +40,7 @@ import qualified Cryptol.Parser.Position as Cryptol
 import qualified Cryptol.Utils.PP        as Cryptol
 import qualified Cryptol.Utils.Ident     as Cryptol (packIdent)
 import SAWScript.Builtins
---import SAWScript.Options
+import SAWScript.Position
 import SAWScript.Utils
 import SAWScript.TopLevel
 import SAWScript.Value
@@ -282,7 +283,9 @@ loadDecls (TaggedSourceFile lang path) = do
    AIGProxy proxy <- getProxy
    case lang of
       Cryptol -> io $ getDeclsCryptol path
-      LLVM    -> llvm_load_module path >>= io . getDeclsLLVM proxy sc
+      LLVM    -> do
+        Some m <- llvm_load_module path
+        io $ getDeclsLLVM proxy sc m
       JVM     -> loadJavaClassTopLevel (dropExtension path) >>= io . getDeclsJVM
    where
       loadJavaClassTopLevel cls = do

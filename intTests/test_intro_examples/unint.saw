@@ -1,0 +1,14 @@
+let {{ f x y = (x : [8]) + y }};
+let {{ g x y = 2 * (f x y) }};
+let {{ h x y = (f x y) + (f x y) }};
+let {{ prop x y = g x y == h x y }};
+let {{ prop2 x y = h x y == 2*x + 2*y }};
+
+print "Proving prop fully unfolded:";
+prove_print yices {{ prop }};
+print "Proving prop with f uninterpreted:";
+prove_print (unint_yices ["f"]) {{ prop }};
+print "Proving prop2 fully unfolded:";
+prove_print yices {{ prop2 }};
+print "Proving prop2 with f uninterpreted (should fail):";
+prove_print (unint_yices ["f"]) {{ prop2 }};

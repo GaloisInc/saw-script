@@ -57,7 +57,6 @@ module SAWScript.X86Spec
 
 import GHC.TypeLits(KnownNat)
 import GHC.Natural(Natural)
-import GHC.IO (stToIO)
 import Data.Kind(Type)
 import Control.Lens (view, (^.), over)
 import Control.Monad(foldM,zipWithM,join)
@@ -88,7 +87,7 @@ import What4.Interface
 import What4.ProgramLoc
 
 import Lang.Crucible.FunctionHandle
-import SAWScript.CrucibleLLVM
+import SAWScript.Crucible.LLVM.CrucibleLLVM
   ( EndianForm(LittleEndian)
   , MemImpl, doLoad, doPtrAddOffset, emptyMem
   , AllocType(HeapAlloc, GlobalAlloc), Mutability(..), Mem
@@ -1047,7 +1046,7 @@ setupGlobals opts gs fs s
                                       -- liftIO $ putStrLn ("EXIT " ++ _f)
                                       return (stateRegs st1)
                             let halloc = simHandleAllocator (st ^. stateContext)
-                            h <- stToIO $ mkHandle halloc fname
+                            h <- mkHandle halloc fname
                             let addBinding = over (stateContext . functionBindings)
                                                (insertHandleMap h (UseOverride o))
                             return (h, addBinding st)

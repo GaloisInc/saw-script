@@ -20,7 +20,7 @@ module SAWScript.X86
 
 import Control.Lens (toListOf, folded, (^.))
 import Control.Exception(Exception(..),throwIO)
-import Control.Monad.ST(stToIO,RealWorld)
+import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class(liftIO)
 
 import           Data.ByteString (ByteString)
@@ -37,7 +37,6 @@ import           Data.Maybe(mapMaybe)
 import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
 
 import Data.Parameterized.Some(Some(..))
-import Data.Parameterized.Classes(knownRepr)
 import Data.Parameterized.Context(EmptyCtx,(::>),singleton)
 import Data.Parameterized.Nonce(globalNonceGenerator)
 
@@ -51,7 +50,7 @@ import What4.ProgramLoc(ProgramLoc,Position(OtherPos))
 -- Crucible
 import Lang.Crucible.Analysis.Postdom (postdomInfo)
 import Lang.Crucible.CFG.Core(SomeCFG(..), TypeRepr(..), cfgHandle)
-import Lang.Crucible.CFG.Common(freshGlobalVar,GlobalVar)
+import Lang.Crucible.CFG.Common(GlobalVar)
 import Lang.Crucible.Simulator.RegMap(regValue, RegMap(..), RegEntry(..))
 import Lang.Crucible.Simulator.RegValue(RegValue'(..))
 import Lang.Crucible.Simulator.GlobalState(insertGlobal,emptyGlobals)
@@ -69,7 +68,7 @@ import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHan
 
 
 -- Crucible LLVM
-import SAWScript.CrucibleLLVM
+import SAWScript.Crucible.LLVM.CrucibleLLVM
   (Mem, ppPtr, pattern LLVMPointer, bytesToInteger)
 import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
 import Lang.Crucible.LLVM.MemModel (mkMemVar)
@@ -147,7 +146,7 @@ data Options = Options
   , backend :: Sym
     -- ^ The Crucible backend to use.
 
-  , allocator :: HandleAllocator RealWorld
+  , allocator :: HandleAllocator
     -- ^ The handle allocator used to allocate @memvar@
 
   , memvar :: GlobalVar Mem
@@ -191,7 +190,7 @@ proof archi file mbCry globs fun =
      scLoadCryptolModule sc
      sym <- newSAWCoreBackend sc globalNonceGenerator
      cenv <- loadCry sym mbCry
-     mvar <- stToIO (mkMemVar halloc)
+     mvar <- mkMemVar halloc
      proofWithOptions Options
        { fileName = file
        , function = fun
@@ -272,8 +271,7 @@ getRelevant elf =
 
   where
   -- XXX: What options do we want?
-  opts = LoadOptions { loadRegionIndex    = Just 0
-                     , loadRegionBaseOffset = 0
+  opts = LoadOptions { loadOffset = Just 0
                      }
 
 
@@ -461,7 +459,7 @@ doSim opts elf sfs name (globs,overs) st checkPost =
        let initGlobals = insertGlobal mvar (stateMem st) emptyGlobals
 
        executeCrucible []
-         $ InitialState ctx initGlobals defaultAbortHandler
+         $ InitialState ctx initGlobals defaultAbortHandler macawStructRepr
          $ runOverrideSim macawStructRepr
          $ do let args :: RegMap Sym (MacawFunctionArgs X86_64)
                   args = RegMap (singleton (RegEntry macawStructRepr
@@ -497,14 +495,10 @@ makeCFG ::
 makeCFG opts elf name addr =
   do (_,Some funInfo) <- stToIO $ analyzeFunction quiet addr UserRequest empty
      -- writeFile "MACAW.cfg" (show (pretty funInfo))
-     baseVar <- stToIO  $ freshGlobalVar (allocator opts) baseName knownRepr
-     let memBaseVarMap = Map.singleton 1 baseVar
-     stToIO $ mkFunCFG x86 (allocator opts) memBaseVarMap cruxName posFn funInfo
+     mkFunCFG x86 (allocator opts) cruxName posFn funInfo
   where
   txtName   = decodeUtf8 name
   cruxName  = functionNameFromText txtName
-  baseName  = Text.append "mem_base_" txtName
-
   empty = emptyDiscoveryState (memory elf) (funSymMap elf) (archInfo opts)
 
 
@@ -629,4 +623,3 @@ statusBlock msg m =
      a <- m
      sayOK
      return a
-

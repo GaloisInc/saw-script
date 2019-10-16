@@ -1,5 +1,5 @@
 Name:          saw-script
-Version:       0.2
+Version:       0.3
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
 Build-type:    Custom
@@ -30,6 +30,7 @@ library
     , bimap
     , bytestring
     , containers
+    , constraints >= 0.6
     , cryptol
     , cryptol-verifier
     , crucible >= 0.4
@@ -101,11 +102,6 @@ library
     SAWScript.AutoMatch.Util
     SAWScript.Builtins
     SAWScript.CongruenceClosure
-    SAWScript.CrucibleBuiltins
-    SAWScript.CrucibleLLVM
-    SAWScript.CrucibleOverride
-    SAWScript.CrucibleResolveSetupValue
-    SAWScript.CrucibleMethodSpecIR
     SAWScript.Exceptions
     SAWScript.Import
     SAWScript.ImportAIG
@@ -123,6 +119,7 @@ library
     SAWScript.Parser
     SAWScript.PathVC
     SAWScript.Proof
+    SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
     SAWScript.SAWCorePrimitives
@@ -133,12 +130,24 @@ library
     SAWScript.Value
     SAWScript.VerificationCheck
 
-    SAWScript.CrucibleBuiltinsJVM
+    SAWScript.Crucible.Common
+    SAWScript.Crucible.Common.MethodSpec
+    SAWScript.Crucible.Common.Override
+    SAWScript.Crucible.Common.Setup.Builtins
+    SAWScript.Crucible.Common.Setup.Type
 
-    SAWScript.JVM.CrucibleBuiltins
-    SAWScript.JVM.CrucibleMethodSpecIR
-    SAWScript.JVM.CrucibleOverride
-    SAWScript.JVM.CrucibleResolveSetupValue
+    SAWScript.Crucible.LLVM.Builtins
+    SAWScript.Crucible.LLVM.Boilerplate
+    SAWScript.Crucible.LLVM.CrucibleLLVM
+    SAWScript.Crucible.LLVM.Override
+    SAWScript.Crucible.LLVM.MethodSpecIR
+    SAWScript.Crucible.LLVM.ResolveSetupValue
+
+    SAWScript.Crucible.JVM.Builtins
+    SAWScript.Crucible.JVM.BuiltinsJVM
+    SAWScript.Crucible.JVM.MethodSpecIR
+    SAWScript.Crucible.JVM.Override
+    SAWScript.Crucible.JVM.ResolveSetupValue
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite
@@ -150,6 +159,7 @@ library
     SAWScript.Prover.ABC
     SAWScript.Prover.What4
     SAWScript.Prover.Exporter
+    SAWScript.Prover.Versions
 
     SAWScript.X86
     SAWScript.X86Spec

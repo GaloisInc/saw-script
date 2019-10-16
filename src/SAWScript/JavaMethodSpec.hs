@@ -65,6 +65,7 @@ import SAWScript.JavaMethodSpecIR
 import SAWScript.JavaMethodSpec.Evaluator
 import SAWScript.JavaUtils
 import SAWScript.PathVC
+import SAWScript.Position (Pos(..))
 import SAWScript.Value (TopLevel, TopLevelRW(rwPPOpts), getTopLevelRW, io, printOutTop, printOutLnTop)
 import SAWScript.VerificationCheck
 

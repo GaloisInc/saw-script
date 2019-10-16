@@ -41,7 +41,7 @@ import System.Directory
 import qualified System.Environment
 import qualified System.Exit as Exit
 import System.IO
-import System.IO.Temp (withSystemTempFile)
+import System.IO.Temp (withSystemTempFile, emptySystemTempFile)
 import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
@@ -68,6 +68,8 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (scRunTestsTFIO, scTestableType)
 import Verifier.SAW.TypedAST
+
+import SAWScript.Position
 
 -- cryptol-verifier
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -115,7 +117,6 @@ import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
 import SAWScript.TopLevel
-import SAWScript.Utils
 import SAWScript.SAWCorePrimitives( bitblastPrimitives, sbvPrimitives, concretePrimitives )
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
@@ -937,6 +938,15 @@ check_term t = do
   ty <- io $ scTypeCheckError sc t
   printOutLnTop Info (scPrettyTerm opts ty)
 
+check_goal :: ProofScript ()
+check_goal =
+  StateT $ \(ProofState goals concl stats timeout) ->
+  case goals of
+    [] -> fail "ProofScript failed: no subgoal"
+    (ProofGoal _num _ty _name prop) : gs ->
+      do check_term prop
+         return ((), ProofState goals concl stats timeout)
+
 fixPos :: Pos
 fixPos = PosInternal "FIXME"
 
@@ -1112,6 +1122,22 @@ eval_int t = do
 isInteger :: C.Type -> Bool
 isInteger (C.tIsSeq -> Just (C.tIsNum -> Just _, C.tIsBit -> True)) = True
 isInteger _ = False
+
+list_term :: [TypedTerm] -> TopLevel TypedTerm
+list_term [] = fail "list_term: invalid empty list"
+list_term tts@(tt0 : _) =
+  do sc <- getSharedContext
+     let schema = ttSchema tt0
+     unless (all (schema ==) (map ttSchema tts)) $
+       fail "list_term: non-uniform element types"
+     a <-
+       case schema of
+         C.Forall [] [] a -> return a
+         _ -> fail "list_term: not a monomorphic element type"
+     a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
+     trm <- io $ scVectorReduced sc a' (map ttTerm tts)
+     let n = C.tNum (length tts)
+     return (TypedTerm (C.tMono (C.tSeq n a)) trm)
 
 eval_list :: TypedTerm -> TopLevel [TypedTerm]
 eval_list t = do
@@ -1302,3 +1328,33 @@ testMRSolver i1 i2 =
      case res of
        Just err -> io $ putStrLn $ Prover.showMRFailure err
        Nothing -> io $ putStrLn "Success!"
+
+parseSharpSATResult :: String -> Maybe Integer
+parseSharpSATResult s = parse (lines s)
+  where
+    parse (h : n : _) | "# solutions" `isPrefixOf` h = readMaybe n
+    parse (_ : rest) = parse rest
+    parse [] = Nothing
+
+sharpSAT :: TypedTerm -> TopLevel Integer
+sharpSAT t = do
+  sc <- getSharedContext
+  tmp <- io $ emptySystemTempFile "sharpSAT-input"
+  Prover.write_cnf sc tmp t
+  (_ec, out, _err) <- io $ readProcessWithExitCode "sharpSAT" [tmp] ""
+  io $ removeFile tmp
+  case parseSharpSATResult out of
+    Nothing -> fail $ "Garbled result from sharpSAT\n\n" ++ out
+    Just n -> return n
+
+approxmc :: TypedTerm -> TopLevel ()
+approxmc t = do
+  sc <- getSharedContext
+  tmp <- io $ emptySystemTempFile "approxmc-input"
+  Prover.write_cnf sc tmp t
+  (_ec, out, _err) <- io $ readProcessWithExitCode "approxmc" [tmp] ""
+  io $ removeFile tmp
+  let msg = filter ("[appmc] Number of solutions is" `isPrefixOf`) (lines out)
+  case msg of
+    [l] -> io $ putStrLn l
+    _ -> fail $ "Garbled result from approxmc\n\n" ++ out

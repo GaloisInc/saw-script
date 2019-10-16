@@ -45,15 +45,11 @@ import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
-import qualified SAWScript.Utils as SS
+import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
-import SAWScript.CrucibleBuiltins
-import qualified Lang.Crucible.JVM.Translation as CJ
-import qualified SAWScript.CrucibleBuiltinsJVM as CJ
-import qualified SAWScript.CrucibleMethodSpecIR as CIR
 import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
@@ -80,9 +76,16 @@ import qualified Verifier.Java.SAWBackend as JavaSAW
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
-import SAWScript.JVM.CrucibleBuiltins
-import qualified SAWScript.JVM.CrucibleMethodSpecIR as JIR
+-- Crucible
+import qualified Lang.Crucible.JVM as CJ
+import qualified SAWScript.Crucible.Common.MethodSpec as CMS
+import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
+import           SAWScript.Crucible.LLVM.Builtins
+import           SAWScript.Crucible.JVM.Builtins
+import           SAWScript.Crucible.LLVM.Boilerplate
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
+-- Cryptol
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
@@ -251,10 +254,10 @@ locToInput l = CEnv.InputText { CEnv.inpText = getVal l
   where
   (file,ln,col) =
     case locatedPos l of
-      Range f sl sc _ _ -> (f,sl, sc)
-      PosInternal s -> (s,1,1)
-      PosREPL       -> ("<interactive>", 1, 1)
-      Unknown       -> ("Unknown", 1, 1)
+      SS.Range f sl sc _ _ -> (f,sl, sc)
+      SS.PosInternal s -> (s,1,1)
+      SS.PosREPL       -> ("<interactive>", 1, 1)
+      SS.Unknown       -> ("Unknown", 1, 1)
 
 interpretDecl :: LocalEnv -> SS.Decl -> TopLevel LocalEnv
 interpretDecl env (SS.Decl _ pat mt expr) = do
@@ -281,10 +284,10 @@ interpretStmts env stmts =
     case stmts of
       [] -> fail "empty block"
       [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
-      SS.StmtBind _ pat _ e : ss ->
+      SS.StmtBind pos pat _ e : ss ->
           do v1 <- interpret env e
              let f v = interpretStmts (bindPatternLocal pat Nothing v env) ss
-             bindValue v1 (VLambda f)
+             bindValue pos v1 (VLambda f)
       SS.StmtLet _ bs : ss -> interpret env (SS.Let bs (SS.Block ss))
       SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
@@ -309,13 +312,13 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
         SS.PWild t -> (Nothing, t)
         SS.PVar x t -> (Just x, t)
         _ -> (Nothing, Nothing)
-  let it = SS.Located "it" "it" PosREPL
+  let it = SS.Located "it" "it" SS.PosREPL
   let lname = maybe it id mx
   let ctx = SS.tContext SS.TopLevel
   let expr' = case mt of
                 Nothing -> expr
                 Just t -> SS.TSig expr (SS.tBlock ctx t)
-  let decl = SS.Decl (getPos expr) pat Nothing expr'
+  let decl = SS.Decl (SS.getPos expr) pat Nothing expr'
   rw <- getTopLevelRW
   let opts = rwPPOpts rw
 
@@ -392,7 +395,7 @@ interpretFile file = do
   mapM_ stmtWithPrint stmts
   where
     stmtWithPrint s = do let withPos str = unlines $
-                                           ("[output] at " ++ show (getPos s) ++ ": ") :
+                                           ("[output] at " ++ show (SS.getPos s) ++ ": ") :
                                              map (\l -> "\t"  ++ l) (lines str)
                          showLoc <- printShowPos <$> getOptions
                          if showLoc
@@ -405,7 +408,7 @@ interpretFile file = do
 interpretMain :: TopLevel ()
 interpretMain = do
   rw <- getTopLevelRW
-  let mainName = Located "main" "main" (PosInternal "entry")
+  let mainName = Located "main" "main" (SS.PosInternal "entry")
   case Map.lookup mainName (rwValues rw) of
     Nothing -> return () -- fail "No 'main' defined"
     Just v -> fromValue v
@@ -467,6 +470,8 @@ buildTopLevelEnv proxy opts =
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
+                   , rwSMTArrayMemoryModel = False
+                   , rwProfilingFile = Nothing
                    }
        return (bic, ro0, rw0)
 
@@ -495,6 +500,21 @@ add_primitives lc bic opts = do
   , rwDocs       = rwDocs rw `Map.union` primDocEnv lcs
   , rwPrimsAvail = Set.insert lc (rwPrimsAvail rw)
   }
+
+enable_smt_array_memory_model :: TopLevel ()
+enable_smt_array_memory_model = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSMTArrayMemoryModel = True }
+
+enable_crucible_profiling :: FilePath -> TopLevel ()
+enable_crucible_profiling f = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProfilingFile = Just f }
+
+disable_crucible_profiling :: TopLevel ()
+disable_crucible_profiling = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProfilingFile = Nothing }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -649,6 +669,11 @@ primitives = Map.fromList
     Current
     [ "Enable the use of experimental commands." ]
 
+  , prim "enable_smt_array_memory_model" "TopLevel ()"
+    (pureVal enable_smt_array_memory_model)
+    Current
+    [ "Enable the SMT array memory model." ]
+
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
     Current
@@ -729,6 +754,11 @@ primitives = Map.fromList
     (pureVal check_term)
     Current
     [ "Type-check the given term, printing an error message if ill-typed." ]
+
+  , prim "check_goal"          "ProofScript ()"
+    (pureVal check_goal)
+    Current
+    [ "Type-check the current proof goal, printing an error message if ill-typed." ]
 
   , prim "term_size"           "Term -> Int"
     (pureVal scSharedSize)
@@ -1000,30 +1030,30 @@ primitives = Map.fromList
 
   , prim "goal_apply"          "Theorem -> ProofScript ()"
     (pureVal goal_apply)
-    Current
+    Experimental
     [ "Apply an introduction rule to the current goal. Depending on the"
     , "rule, this will result in zero or more new subgoals."
     ]
   , prim "goal_assume"         "ProofScript Theorem"
     (pureVal goal_assume)
-    Current
+    Experimental
     [ "Convert the first hypothesis in the current proof goal into a"
     , "local Theorem."
     ]
   , prim "goal_insert"         "Theorem -> ProofScript ()"
     (pureVal goal_insert)
-    Current
+    Experimental
     [ "Insert a Theorem as a new hypothesis in the current proof goal."
     ]
   , prim "goal_intro"          "String -> ProofScript Term"
     (pureVal goal_intro)
-    Current
+    Experimental
     [ "Introduce a quantified variable in the current proof goal, returning"
     , "the variable as a Term."
     ]
   , prim "goal_when"           "String -> ProofScript () -> ProofScript ()"
     (pureVal goal_when)
-    Current
+    Experimental
     [ "Run the given proof script only when the goal name contains"
     , "the given string."
     ]
@@ -1186,9 +1216,23 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
+  , prim "w4_unint_yices"         "[String] -> ProofScript SatResult"
+    (pureVal satWhat4_UnintYices)
+    Current
+    [ "Prove the current goal using What4 (Yices backend). Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "w4_unint_cvc4"         "[String] -> ProofScript SatResult"
+    (pureVal satWhat4_UnintCVC4)
+    Current
+    [ "Prove the current goal using What4 (CVC4 backend). Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
-    Current
+    Experimental
     [ "Split a goal of the form 'Prelude.and prop1 prop2' into two separate"
     ,  "goals 'prop1' and 'prop2'." ]
 
@@ -1547,6 +1591,16 @@ primitives = Map.fromList
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
+  , prim "llvm_boilerplate_info" "LLVMModule -> [Profile] -> TopLevel ()"
+    (pureVal llvm_boilerplate_info)
+    Experimental
+    [ "Print information from an LLVM module relevant to boilerplate generation." ]
+
+  , prim "llvm_boilerplate" "String -> LLVMModule -> [Profile] -> TopLevel ()"
+    (pureVal llvm_boilerplate)
+    Experimental
+    [ "Generate boilerplate for the definitions in an LLVM module." ]
+
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
     Current
@@ -1648,6 +1702,13 @@ primitives = Map.fromList
     [ "Evaluate a Cryptol term of type [n]a to a list of terms."
     ]
 
+  , prim "list_term"           "[Term] -> Term"
+    (funVal1 list_term)
+    Current
+    [ "Make a Cryptol term of type [n]a from a list of terms of type a."
+    , "Function list_term is the inverse of function eval_list."
+    ]
+
   , prim "parse_core"         "String -> Term"
     (funVal1 parse_core)
     Current
@@ -1733,6 +1794,13 @@ primitives = Map.fromList
     , "to write to this memory region. Unlike `crucible_alloc`, regions"
     , "allocated with `crucible_alloc_readonly` are allowed to alias other"
     , "read-only regions."
+    ]
+
+  , prim "crucible_alloc_with_size" "Int -> LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_alloc_with_size)
+    Experimental
+    [ "Like `crucible_alloc`, but with a user-specified size (given in bytes)."
+    , "The specified size must be greater than the size of the LLVM type."
     ]
 
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
@@ -1836,57 +1904,68 @@ primitives = Map.fromList
     , "any verification."
     ]
 
+  , prim "crucible_llvm_array_size_profile"
+    "LLVMModule -> String -> CrucibleSetup () -> TopLevel [Profile]"
+    (bicVal crucible_llvm_array_size_profile)
+    Experimental
+    [ "Symbolically execute the function named by the second parameter in"
+    , "the module specified by the first. The third parameter may be used"
+    , "to specify arguments. Returns profiles specifying the sizes of buffers"
+    , "referred to by pointer arguments for the function and all other functions"
+    , "it calls (recursively), to be passed to llvm_boilerplate."
+    ]
+
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
-    (pureVal CIR.SetupArray)
+    (pureVal CIR.anySetupArray)
     Current
     [ "Create a SetupValue representing an array, with the given list of"
     , "values as elements. The list must be non-empty." ]
 
   , prim "crucible_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal (CIR.SetupStruct False))
+    (pureVal (CIR.anySetupStruct False))
     Current
     [ "Create a SetupValue representing a struct, with the given list of"
     , "values as elements." ]
 
   , prim "crucible_packed_struct"
     "[SetupValue] -> SetupValue"
-    (pureVal (CIR.SetupStruct True))
+    (pureVal (CIR.anySetupStruct True))
     Current
     [ "Create a SetupValue representing a packed struct, with the given"
     , "list of values as elements." ]
 
   , prim "crucible_elem"
     "SetupValue -> Int -> SetupValue"
-    (pureVal CIR.SetupElem)
+    (pureVal CIR.anySetupElem)
     Current
     [ "Turn a SetupValue representing a struct or array pointer into"
     , "a pointer to an element of the struct or array by field index." ]
 
   , prim "crucible_field"
     "SetupValue -> String -> SetupValue"
-    (pureVal CIR.SetupField)
+    (pureVal CIR.anySetupField)
     Current
     [ "Turn a SetupValue representing a struct pointer into"
     , "a pointer to an element of the struct by field name." ]
 
   , prim "crucible_null"
     "SetupValue"
-    (pureVal CIR.SetupNull)
+    (pureVal CIR.anySetupNull)
     Current
     [ "A SetupValue representing a null pointer value." ]
 
   , prim "crucible_global"
     "String -> SetupValue"
-    (pureVal CIR.SetupGlobal)
+    (pureVal CIR.anySetupGlobal)
     Current
     [ "Return a SetupValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
 
   , prim "crucible_global_initializer"
     "String -> SetupValue"
-    (pureVal CIR.SetupGlobalInitializer)
+    (pureVal CIR.anySetupGlobalInitializer)
     Current
     [ "Return a SetupValue representing the value of the initializer of a named"
     , "global. The String should be the name of a global value."
@@ -1896,7 +1975,7 @@ primitives = Map.fromList
 
   , prim "crucible_term"
     "Term -> SetupValue"
-    (pureVal CIR.SetupTerm)
+    (pureVal CIR.anySetupTerm)
     Current
     [ "Construct a `SetupValue` from a `Term`." ]
 
@@ -2072,20 +2151,20 @@ primitives = Map.fromList
 -}
   , prim "jvm_null"
     "JVMValue"
-    (pureVal JIR.SetupNull)
+    (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
     Experimental
     [ "A JVMValue representing a null pointer value." ]
 
   , prim "jvm_global"
     "String -> JVMValue"
-    (pureVal JIR.SetupGlobal)
+    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue CJ.JVM))
     Experimental
     [ "Return a JVMValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
 
   , prim "jvm_term"
     "Term -> JVMValue"
-    (pureVal JIR.SetupTerm)
+    (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue CJ.JVM))
     Experimental
     [ "Construct a `JVMValue` from a `Term`." ]
 
@@ -2096,6 +2175,34 @@ primitives = Map.fromList
     Experimental
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if two monadic terms are equal" ]
+
+    ---------------------------------------------------------------------
+
+  , prim "sharpSAT"  "Term -> TopLevel Integer"
+    (pureVal sharpSAT)
+    Current
+    [ "Use the sharpSAT solver to count the number of solutions to the CNF"
+    , "representation of the given Term."
+    ]
+
+  , prim "approxmc"  "Term -> TopLevel String"
+    (pureVal approxmc)
+    Current
+    [ "Use the approxmc solver to approximate the number of solutions to the"
+    , "CNF representation of the given Term."
+    ]
+
+  , prim "enable_crucible_profiling" "String -> TopLevel ()"
+    (pureVal enable_crucible_profiling)
+    Current
+    [ "Record profiling information from symbolic execution and solver"
+    , "invocation to the given directory."
+    ]
+
+  , prim "disable_crucible_profiling" "TopLevel ()"
+    (pureVal disable_crucible_profiling)
+    Current
+    ["Stop recording profiling information."]
   ]
 
   where
@@ -2130,10 +2237,11 @@ primitives = Map.fromList
               (BuiltinContext -> Options -> t) -> Options -> BuiltinContext -> Value
     bicVal f opts bic = toValue (f bic opts)
 
+
 filterAvail ::
   Set PrimitiveLifecycle ->
   Map SS.LName Primitive ->
-  Map SS.LName Primitive 
+  Map SS.LName Primitive
 filterAvail primsAvail =
   Map.filter (\p -> primLife p `Set.member` primsAvail)
 
@@ -2165,4 +2273,4 @@ primDocEnv primsAvail =
                 ] ++ primDoc p
 
 qualify :: String -> Located SS.Name
-qualify s = Located s s (PosInternal "coreEnv")
+qualify s = Located s s (SS.PosInternal "coreEnv")
