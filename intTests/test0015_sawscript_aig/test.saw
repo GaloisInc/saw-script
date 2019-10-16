@@ -9,13 +9,12 @@ write_aig "tmp/yy.aig"    {{ \(x:[8]) -> \(y:[8]) -> y + y }};
 write_aig "tmp/2y.aig"    {{ \(x:[8]) -> \(y:[8]) -> 2 * y }};
 
 // The code below is very similar to '../test0012_jss_aig/test.saw'
-// and '../test0014_lss_aig/test.saw'.
 
 // Many of these Cryptol functions have types more specific than
 // necessary. The point is to document the behavior of SAWScript
 // AIG generation.
 let {{
-  // Arguments are reversed, compared to LSS and JSS.
+  // Arguments are reversed, compared to JSS.
 
   run_pred : ([16] -> [1]) -> [8] -> [8] -> [1]
   run_pred f x y = f (((zero # x) <<< 8) + (zero # y))
