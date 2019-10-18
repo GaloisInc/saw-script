@@ -486,12 +486,11 @@ w4SolveBasic ::
 w4SolveBasic m addlPrims ref unints t =
   do let unintSet = Set.fromList unints
      let sym = given :: sym
-     let uninterpreted nm ty
-           | Set.member nm unintSet = Just $ parseUninterpreted sym ref nm Ctx.empty ty
-           | otherwise              = Nothing
-     cfg <- Sim.evalGlobal m (constMap `Map.union` addlPrims)
-            (\ix nm -> parseUninterpreted sym ref (nm ++ "_" ++ show ix) Ctx.empty)
-            uninterpreted
+     let extcns (EC ix nm ty) = parseUninterpreted sym ref (nm ++ "_" ++ show ix) Ctx.empty ty
+     let uninterpreted ec
+           | Set.member (ecName ec) unintSet = Just (extcns ec)
+           | otherwise                       = Nothing
+     cfg <- Sim.evalGlobal m (constMap `Map.union` addlPrims) extcns uninterpreted
      Sim.evalSharedTerm cfg t
 
 
@@ -849,15 +848,12 @@ w4EvalBasic ::
   IO (SValue (CS.SAWCoreBackend n solver fs))
 w4EvalBasic sym sc m addlPrims ref unints t =
   do let unintSet = Set.fromList unints
-     let unint tf nm ty =
-           do trm <- ArgTermConst <$> scTermF sc tf
-              parseUninterpretedSAW sym sc ref trm nm Ctx.empty ty
-     let extcns tf ix nm ty =
+     let extcns tf (EC ix nm ty) =
            do trm <- ArgTermConst <$> scTermF sc tf
               parseUninterpretedSAW sym sc ref trm (nm ++ "_" ++ show ix) Ctx.empty ty
-     let uninterpreted tf nm ty
-           | Set.member nm unintSet = Just (unint tf nm ty)
-           | otherwise              = Nothing
+     let uninterpreted tf ec
+           | Set.member (ecName ec) unintSet = Just (extcns tf ec)
+           | otherwise                       = Nothing
      cfg <- Sim.evalGlobal' m (give sym constMap `Map.union` addlPrims) extcns uninterpreted
      Sim.evalSharedTerm cfg t
 
