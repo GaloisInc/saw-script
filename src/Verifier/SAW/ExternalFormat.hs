@@ -77,7 +77,7 @@ scWriteExternal t0 =
         Lambda s t e   -> unwords ["Lam", s, show t, show e]
         Pi s t e       -> unwords ["Pi", s, show t, show e]
         LocalVar i     -> unwords ["Var", show i]
-        Constant x e t -> unwords ["Constant", x, show e, show t]
+        Constant ec e  -> unwords ["Constant", show (ecVarIndex ec), ecName ec, show (ecType ec), show e]
         FTermF ftf     ->
           case ftf of
             GlobalDef ident     -> unwords ["Global", show ident]
@@ -129,7 +129,7 @@ scReadExternal sc input =
         ["Lam", x, t, e]    -> Lambda x (read t) (read e)
         ["Pi", s, t, e]     -> Pi s (read t) (read e)
         ["Var", i]          -> LocalVar (read i)
-        ["Constant",x,e,t]  -> Constant x (read e) (read t)
+        ["Constant",i,x,t,e]-> Constant (EC (read i) x (read t)) (read e)
         ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
         ["Unit"]            -> FTermF UnitValue
         ["UnitT"]           -> FTermF UnitType

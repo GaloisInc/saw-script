@@ -434,7 +434,7 @@ ppTermF prec (Pi x tp body) =
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
 ppTermF _ (LocalVar x) = (text <$> varLookupM x) >>= maybeColorM dullgreen
-ppTermF _ (Constant str _ _) = maybeColorM dullblue $ text str
+ppTermF _ (Constant ec _) = maybeColorM dullblue $ text $ ecName ec
 
 
 -- | Internal function to recursively pretty-print a term

@@ -372,7 +372,7 @@ instance TypeInfer (TermF TypedTerm) where
          else
          error ("Context = " ++ show ctx)
          -- throwTCError (DanglingVar (i - length ctx))
-  typeInfer (Constant n (TypedTerm _ tp) (TypedTerm req_tp req_tp_sort)) =
+  typeInfer (Constant (EC _ n (TypedTerm req_tp req_tp_sort)) (TypedTerm _ tp)) =
     do void (ensureSort req_tp_sort)
        -- NOTE: we do the subtype check here, rather than call checkSubtype, so
        -- that we can throw the custom BadConstType error on failure

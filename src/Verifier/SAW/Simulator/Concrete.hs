@@ -50,7 +50,7 @@ evalSharedTerm :: ModuleMap -> Map Ident CValue -> Term -> CValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           Sim.noExtCns (const (const Nothing))
+           Sim.noExtCns (const Nothing)
     Sim.evalSharedTerm cfg t
 
 ------------------------------------------------------------

@@ -57,7 +57,7 @@ evalSharedTerm :: ModuleMap -> Map Ident RValue -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           Sim.noExtCns (const (const Nothing))
+           Sim.noExtCns (const Nothing)
     Sim.evalSharedTerm cfg t
 
 ------------------------------------------------------------
@@ -358,8 +358,8 @@ bitBlastBasic :: ModuleMap
               -> RValue
 bitBlastBasic m addlPrims t = runIdentity $ do
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-         (\_varidx name _ty -> error ("RME: unsupported ExtCns: " ++ name))
-         (const (const Nothing))
+         (\ec -> error ("RME: unsupported ExtCns: " ++ ecName ec))
+         (const Nothing)
   Sim.evalSharedTerm cfg t
 
 asPredType :: SharedContext -> Term -> IO [Term]

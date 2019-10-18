@@ -306,8 +306,8 @@ asLocalVar :: (MonadFail m) => Recognizer m Term DeBruijnIndex
 asLocalVar (unwrapTermF -> LocalVar i) = return i
 asLocalVar _ = fail "not a local variable"
 
-asConstant :: (MonadFail m) => Recognizer m Term (String, Term, Term)
-asConstant (unwrapTermF -> Constant s x t) = return (s, x, t)
+asConstant :: (MonadFail m) => Recognizer m Term (ExtCns Term, Term)
+asConstant (unwrapTermF -> Constant ec t) = return (ec, t)
 asConstant _ = fail "asConstant: not a defined constant"
 
 asExtCns :: (MonadFail m) => Recognizer m Term (ExtCns Term)

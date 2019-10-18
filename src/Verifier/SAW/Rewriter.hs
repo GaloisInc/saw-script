@@ -299,7 +299,7 @@ ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
-ruleOfProp (unwrapTermF -> Constant _ body _) = ruleOfProp body
+ruleOfProp (unwrapTermF -> Constant _ body) = ruleOfProp body
 ruleOfProp (R.asEq -> Just (_, x, y)) =
   RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asEqTrue -> Just body) = ruleOfProp body
@@ -519,7 +519,7 @@ rewriteSharedTerm sc ss t0 =
     rewriteAll STApp{ stAppIndex = tidx, stAppTermF = tf } =
         useCache ?cache tidx (traverseTF rewriteAll tf >>= scTermF sc >>= rewriteTop)
     traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
-    traverseTF _ tf@(Constant _ _ _) = pure tf
+    traverseTF _ tf@(Constant {}) = pure tf
     traverseTF f tf = traverse f tf
     rewriteTop :: (?cache :: Cache IO TermIndex Term) => Term -> IO Term
     rewriteTop t =
@@ -785,8 +785,8 @@ doHoistIfs sc ss hoistCache itePat = go
 
        goF :: Term -> TermF Term -> IO (HoistIfs s)
 
-       goF t (LocalVar _)     = return (t, [])
-       goF t (Constant _ _ _) = return (t, [])
+       goF t (LocalVar _)  = return (t, [])
+       goF t (Constant {}) = return (t, [])
 
        goF _ (FTermF ftf) = do
                 (ftf', conds) <- runWriterT $ traverse WriterT $ (fmap go ftf)
