@@ -1,0 +1,15 @@
+enable_experimental;
+Test_class <- java_load_class "RefArray";
+let test1_spec : JVMSetup() = do {
+  x <- jvm_fresh_var "x" java_int;
+  jvm_execute_func [jvm_term x];
+  jvm_return (jvm_term x);
+};
+let test2_spec : JVMSetup() = do {
+  x <- jvm_fresh_var "x" java_int;
+  r <- jvm_alloc_object "RefArray";
+  jvm_execute_func [r, jvm_term x];
+  jvm_return (jvm_term x);
+};
+crucible_jvm_verify Test_class "test1" [] false test1_spec abc;
+crucible_jvm_verify Test_class "test2" [] false test2_spec abc;

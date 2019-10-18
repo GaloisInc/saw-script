@@ -7,12 +7,9 @@ module DES where
 
 import Cipher
 
-// DES API
-DES : Cipher 64 64
-DES = 
-    { encrypt key pt = des pt (expandKey key)
-    , decrypt key ct = des ct (reverse (expandKey key))
-    }
+encrypt key pt = des pt (expandKey key)
+
+decrypt key ct = des ct (reverse (expandKey key))
 
 // Encryption 
 
