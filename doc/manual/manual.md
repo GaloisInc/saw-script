@@ -1501,7 +1501,7 @@ The resulting `LLVMModule` can be passed into the various functions
 described below to perform analysis of specific LLVM functions.
 
 The LLVM bitcode parser should generally work with LLVM versions between
-3.5 and 7.0, though it may be incomplete for some versions. Debug
+3.5 and 9.0, though it may be incomplete for some versions. Debug
 metadata has changed somewhat throughout that version range, so is the
 most likely case of incompleteness. We aim to support every version
 after 3.5, however, so report any parsing failures as [on
@@ -1533,6 +1533,29 @@ Java class files from any JDK newer than version 6 should work. However,
 JDK version 9 and newer do not contain a JAR file containing the
 standard libraries, and therefore do not currently work with SAW. We are
 investigating the best way to resolve this issue.
+
+## Notes on Compiling Code for SAW
+
+SAW will generally be able to load arbitrary LLVM bitcode and JVM
+bytecode files, but several guidelines can be help make verification
+easier or more likely to succeed. For generating LLVM with `clang`, it
+can be helpful to:
+
+* Turn on debugging symbols with `-g` so that SAW can find source
+locations of functions, names of variables, etc.
+
+* Optimize with `-O1` so that the generated bitcode more closely matches
+the C/C++ source, making the results more comprehensible.
+
+* Use `-fno-threadsafe-statics` to prevent `clang` from emitting
+unnecessary pthread code.
+
+* Link all relevant bitcode with `llvm-link` (including, *e.g.*, the C++
+  standard library when analyzing C++ code).
+
+For Java, the only compilation flag that tends to be valuable is `-g` to
+retain information about the names of function arguments and local
+variables.
 
 # Direct Extraction
 
