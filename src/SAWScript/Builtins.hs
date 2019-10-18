@@ -595,9 +595,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   let (vars, concl) = asPiList (goalTerm g)
   t0 <- scLambdaList sc vars =<< asEqTrue concl
   t <- rewriteEqs sc t0
-  tp <- scWhnf sc =<< scTypeOf sc t
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
-      argNames = map fst (fst (asPiList tp))
   (path, fh) <- openTempFile "." cnfName
   hClose fh -- Yuck. TODO: allow writeCNF et al. to work on handles.
   let args' = map replaceFileName args
@@ -619,7 +617,8 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   case (sls, vls) of
     (["s SATISFIABLE"], _) -> do
       let bs = parseDimacsSolution variables vls
-      let r = liftCexBB shapes bs
+      let r = liftCexBB (map snd shapes) bs
+          argNames = map fst shapes
       case r of
         Left msg -> fail $ "Can't parse counterexample: " ++ msg
         Right vs
