@@ -66,6 +66,7 @@ import qualified Text.LLVM.AST as L
 
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
+import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
@@ -1027,6 +1028,7 @@ typeToSC sc t =
 
 ------------------------------------------------------------------------
 
+-- | NOTE: The two 'Term' arguments must have the same type.
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
   LLVMCrucibleContext arch {- ^ context for interacting with Crucible -} ->
@@ -1088,6 +1090,11 @@ learnGhost ::
   OverrideMatcher (LLVM arch) md ()
 learnGhost sc cc loc prepost var expected =
   do actual <- readGlobal var
+     when (ttSchema actual /= ttSchema expected) $ fail $ unlines $
+       [ "Ghost variable had the wrong type:"
+       , "- Expected: " ++ show (Cryptol.pp (ttSchema expected))
+       , "- Actual:   " ++ show (Cryptol.pp (ttSchema actual))
+       ]
      matchTerm sc cc loc prepost (ttTerm actual) (ttTerm expected)
 
 ------------------------------------------------------------------------
