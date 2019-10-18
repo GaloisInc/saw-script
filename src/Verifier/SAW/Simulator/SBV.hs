@@ -533,12 +533,11 @@ muxSbvExtra c x y =
 sbvSolveBasic :: ModuleMap -> Map Ident SValue -> [String] -> Term -> IO SValue
 sbvSolveBasic m addlPrims unints t = do
   let unintSet = Set.fromList unints
-  let uninterpreted nm ty
+  let uninterpreted (EC _ nm ty)
         | Set.member nm unintSet = Just $ parseUninterpreted [] nm ty
         | otherwise              = Nothing
-  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-         (\ix nm -> parseUninterpreted [] (nm ++ "#" ++ show ix))
-         uninterpreted
+  let extcns (EC ix nm ty) = parseUninterpreted [] (nm ++ "#" ++ show ix) ty
+  cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted
   Sim.evalSharedTerm cfg t
 
 parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue
