@@ -656,7 +656,7 @@ scWhnf sc t0 =
     go xs                     (asDataType -> Just (c,args))     = do args' <- mapM memo args
                                                                      t' <- scDataTypeApp sc c args'
                                                                      foldM reapply t' xs
-    go xs                     (asConstant -> Just (_,body,_))   = do go xs body
+    go xs                     (asConstant -> Just (_,body))     = do go xs body
     go xs                     t                                 = foldM reapply t xs
 
     reapply :: Term -> WHNFElim -> IO Term
@@ -697,8 +697,8 @@ scConvertibleEval sc eval unfoldConst tm1 tm2 = do
 
        goF :: Cache IO TermIndex Term -> TermF Term -> TermF Term -> IO Bool
 
-       goF c (Constant _ _ x) y | unfoldConst = join (goF c <$> whnf c x <*> return y)
-       goF c x (Constant _ _ y) | unfoldConst = join (goF c <$> return x <*> whnf c y)
+       goF c (Constant _ x) y | unfoldConst = join (goF c <$> whnf c x <*> return y)
+       goF c x (Constant _ y) | unfoldConst = join (goF c <$> return x <*> whnf c y)
 
        goF c (FTermF ftf1) (FTermF ftf2) =
                case zipWithFlatTermF (go c) ftf1 ftf2 of
@@ -794,7 +794,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
-        Constant _ t _ -> memo t
+        Constant ec _ -> memo (ecType ec)
     ftermf :: FlatTermF Term
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
@@ -914,7 +914,7 @@ instantiateVars sc f initialLevel t0 =
     go' l (LocalVar i)
       | i < l     = scTermF sc (LocalVar i)
       | otherwise = f l (Right i)
-    go' _ tf@(Constant _ _ _) = scTermF sc tf
+    go' _ tf@(Constant {}) = scTermF sc tf
 
 -- | @incVars k j t@ increments free variables at least @k@ by @j@.
 -- e.g., incVars 1 2 (C ?0 ?1) = C ?0 ?3
@@ -1016,7 +1016,7 @@ betaNormalize sc t0 =
     go3 (STApp{ stAppTermF = tf }) = scTermF sc =<< traverseTF go tf
 
     traverseTF :: (a -> IO a) -> TermF a -> IO (TermF a)
-    traverseTF _ tf@(Constant _ _ _) = pure tf
+    traverseTF _ tf@(Constant {}) = pure tf
     traverseTF f tf = traverse f tf
 
 
@@ -1165,7 +1165,8 @@ scConstant sc name rhs ty =
      let ecs = getAllExts rhs
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
-     t <- scTermF sc (Constant name rhs' ty')
+     i <- scFreshGlobalVar sc
+     t <- scTermF sc (Constant (EC i name ty') rhs')
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
@@ -1568,8 +1569,8 @@ getAllExtSet t = snd $ getExtCns (Set.empty, Set.empty) t
             (Set.insert idx is, Set.insert ec a)
           getExtCns (is, a) (Unshared (FTermF (ExtCns ec))) =
             (is, Set.insert ec a)
-          getExtCns acc (STApp{ stAppTermF = Constant _ _ _ }) = acc
-          getExtCns acc (Unshared (Constant _ _ _)) = acc
+          getExtCns acc (STApp{ stAppTermF = Constant {} }) = acc
+          getExtCns acc (Unshared (Constant {})) = acc
           getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = tf'}) =
             foldl' getExtCns (Set.insert idx is, a) tf'
           getExtCns acc (Unshared tf') =
@@ -1585,7 +1586,7 @@ getConstantSet t = snd $ go (Set.empty, Map.empty) t
 
     termf acc@(idxs, names) tf =
       case tf of
-        Constant n ty body -> (idxs, Map.insert n (ty, body) names)
+        Constant (EC _ n ty) body -> (idxs, Map.insert n (ty, body) names)
         _ -> foldl' go acc tf
 
 -- | Instantiate some of the external constants
@@ -1680,13 +1681,13 @@ scUnfoldConstantSet sc b names t0 = do
   let go :: Term -> IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant name rhs _
+          Constant (EC _ name _) rhs
             | Set.member name names == b -> go rhs
             | otherwise                  -> return t
           _ -> Unshared <$> traverse go tf
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
-          Constant name rhs _
+          Constant (EC _ name _) rhs
             | Set.member name names == b -> go rhs
             | otherwise         -> return t
           _ -> scTermF sc =<< traverse go tf
@@ -1704,13 +1705,13 @@ scUnfoldConstantSet' sc b names t0 = do
   let go :: Term -> ChangeT IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant name rhs _
+          Constant (EC _ name _) rhs
             | Set.member name names == b -> taint (go rhs)
             | otherwise                  -> pure t
           _ -> whenModified t (return . Unshared) (traverse go tf)
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =
         case tf of
-          Constant name rhs _
+          Constant (EC _ name _) rhs
             | Set.member name names == b -> taint (go rhs)
             | otherwise                  -> pure t
           _ -> useChangeCache tcache idx $

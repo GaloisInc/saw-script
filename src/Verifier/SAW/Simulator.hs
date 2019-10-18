@@ -70,8 +70,8 @@ type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
 data SimulatorConfig l =
   SimulatorConfig
   { simGlobal :: Ident -> MValue l
-  , simExtCns :: TermF Term -> VarIndex -> String -> Value l -> MValue l
-  , simUninterpreted :: TermF Term -> String -> Value l -> Maybe (MValue l)
+  , simExtCns :: TermF Term -> ExtCns (Value l) -> MValue l
+  , simUninterpreted :: TermF Term -> ExtCns (Value l) -> Maybe (MValue l)
   , simModMap :: ModuleMap
   }
 
@@ -130,8 +130,8 @@ evalTermF cfg lam recEval tf env =
     Pi _ t1 t2              -> do v <- recEval t1
                                   return $ VPiType v (\x -> lam t2 (x : env))
     LocalVar i              -> force (env !! i)
-    Constant i t ty         -> do v <- recEval ty
-                                  maybe (recEval t) id (simUninterpreted cfg tf i v)
+    Constant ec t           -> do ec' <- traverse recEval ec
+                                  maybe (recEval t) id (simUninterpreted cfg tf ec')
     FTermF ftf              ->
       case ftf of
         GlobalDef ident     -> simGlobal cfg ident
@@ -165,8 +165,8 @@ evalTermF cfg lam recEval tf env =
         NatLit n            -> return $ VNat n
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
         StringLit s         -> return $ VString s
-        ExtCns ec           -> do v <- recEval (ecType ec)
-                                  simExtCns cfg tf (ecVarIndex ec) (ecName ec) v
+        ExtCns ec           -> do ec' <- traverse recEval ec
+                                  simExtCns cfg tf ec'
   where
     recEvalDelay :: Term -> EvalM l (Thunk l)
     recEvalDelay = delay . recEval
@@ -198,20 +198,20 @@ evalTypedDef cfg = evalDef (evalTerm cfg)
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (ValueIn Id l) ->
-  (VarIndex -> String -> ValueIn Id l -> MValueIn Id l) ->
-  (String -> ValueIn Id l -> Maybe (MValueIn Id l)) ->
+  (ExtCns (ValueIn Id l) -> MValueIn Id l) ->
+  (ExtCns (ValueIn Id l) -> Maybe (MValueIn Id l)) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (ValueIn IO l) ->
-  (VarIndex -> String -> ValueIn IO l -> MValueIn IO l) ->
-  (String -> ValueIn IO l -> Maybe (MValueIn IO l)) ->
+  (ExtCns (ValueIn IO l) -> MValueIn IO l) ->
+  (ExtCns (ValueIn IO l) -> Maybe (MValueIn IO l)) ->
   IO (SimulatorConfigIn IO l) #-}
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               ModuleMap -> Map Ident (Value l) ->
-              (VarIndex -> String -> Value l -> MValue l) ->
-              (String -> Value l -> Maybe (EvalM l (Value l))) ->
+              (ExtCns (Value l) -> MValue l) ->
+              (ExtCns (Value l) -> Maybe (EvalM l (Value l))) ->
               EvalM l (SimulatorConfig l)
 evalGlobal modmap prims extcns uninterpreted =
   evalGlobal' modmap prims (const extcns) (const uninterpreted)
@@ -220,23 +220,23 @@ evalGlobal modmap prims extcns uninterpreted =
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (ValueIn Id l) ->
-  (TermF Term -> VarIndex -> String -> ValueIn Id l -> MValueIn Id l) ->
-  (TermF Term -> String -> ValueIn Id l -> Maybe (MValueIn Id l)) ->
+  (TermF Term -> ExtCns (ValueIn Id l) -> MValueIn Id l) ->
+  (TermF Term -> ExtCns (ValueIn Id l) -> Maybe (MValueIn Id l)) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (ValueIn IO l) ->
-  (TermF Term -> VarIndex -> String -> ValueIn IO l -> MValueIn IO l) ->
-  (TermF Term -> String -> ValueIn IO l -> Maybe (MValueIn IO l)) ->
+  (TermF Term -> ExtCns (ValueIn IO l) -> MValueIn IO l) ->
+  (TermF Term -> ExtCns (ValueIn IO l) -> Maybe (MValueIn IO l)) ->
   IO (SimulatorConfigIn IO l) #-}
 -- | A variant of 'evalGlobal' that lets the uninterpreted function
 -- symbol and external-constant callbacks have access to the 'TermF'.
 evalGlobal' ::
   forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
   ModuleMap -> Map Ident (Value l) ->
-  (TermF Term -> VarIndex -> String -> Value l -> MValue l) ->
-  (TermF Term -> String -> Value l -> Maybe (EvalM l (Value l))) ->
+  (TermF Term -> ExtCns (Value l) -> MValue l) ->
+  (TermF Term -> ExtCns (Value l) -> Maybe (EvalM l (Value l))) ->
   EvalM l (SimulatorConfig l)
 evalGlobal' modmap prims extcns uninterpreted = do
    checkPrimitives modmap prims
@@ -268,8 +268,8 @@ evalGlobal' modmap prims extcns uninterpreted = do
     vCtor ident xs (unwrapTermF -> (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
-noExtCns :: VMonad l => VarIndex -> String -> Value l -> MValue l
-noExtCns _ name _ = fail $ "evalTermF ExtCns unimplemented (" ++ name ++ ")"
+noExtCns :: VMonad l => ExtCns (Value l) -> MValue l
+noExtCns ec = fail $ "evalTermF ExtCns unimplemented (" ++ ecName ec ++ ")"
 
 
 -- | Check that all the primitives declared in the given module
@@ -449,7 +449,7 @@ mkMemoLocal cfg memoClosed t env = go memoClosed t
         Lambda _ t1 _   -> go memo t1
         Pi _ t1 _       -> go memo t1
         LocalVar _      -> return memo
-        Constant _ t1 _ -> go memo t1
+        Constant _ t1   -> go memo t1
 
 {-# SPECIALIZE evalLocalTermF ::
   Show (Extra l) =>

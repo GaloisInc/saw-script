@@ -368,8 +368,8 @@ data TermF e
       -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.
-    | Constant String !e !e
-      -- ^ An abstract constant packaged with its definition and type.
+    | Constant !(ExtCns e) !e
+      -- ^ An abstract constant packaged with its type and definition.
       -- The body and type should be closed terms.
   deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
 
@@ -418,7 +418,7 @@ alphaEquiv = term
     termf (Lambda _ t1 u1) (Lambda _ t2 u2) = term t1 t2 && term u1 u2
     termf (Pi _ t1 u1) (Pi _ t2 u2) = term t1 t2 && term u1 u2
     termf (LocalVar i1) (LocalVar i2) = i1 == i2
-    termf (Constant x1 t1 _) (Constant x2 t2 _) = x1 == x2 && term t1 t2
+    termf (Constant x1 _) (Constant x2 _) = ecVarIndex x1 == ecVarIndex x2
     termf _ _ = False
 
     ftermf :: FlatTermF Term -> FlatTermF Term -> Bool
@@ -436,7 +436,7 @@ instance Net.Pattern Term where
 termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant d _ _            -> Net.Atom (Text.pack d)
+      Constant ec _             -> Net.Atom (Text.pack (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
       FTermF (GlobalDef d)      -> Net.Atom (identBaseName d)
       FTermF (Sort s)           -> Net.Atom (Text.pack ('*' : show s))
@@ -509,7 +509,7 @@ freesTermF tf =
       Lambda _name tp rhs -> unionBitSets tp (decrBitSet rhs)
       Pi _name lhs rhs -> unionBitSets lhs (decrBitSet rhs)
       LocalVar i -> singletonBitSet i
-      Constant _ _ _ -> emptyBitSet -- assume rhs is a closed term
+      Constant {} -> emptyBitSet -- assume rhs is a closed term
 
 -- | Return a bitset containing indices of all free local variables
 looseVars :: Term -> BitSet
