@@ -431,13 +431,13 @@ bitBlastBasic :: AIG.IsAIG l g
 bitBlastBasic be m addlPrims ecMap t = do
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
          (bitBlastExtCns ecMap)
-         (const (const Nothing))
+         (const Nothing)
   Sim.evalSharedTerm cfg t
 
 bitBlastExtCns ::
-  Map VarIndex (BValue (l s)) -> VarIndex -> String -> BValue (l s) ->
+  Map VarIndex (BValue (l s)) -> ExtCns (BValue (l s)) ->
   IO (BValue (l s))
-bitBlastExtCns ecMap idx name _v =
+bitBlastExtCns ecMap (EC idx name _v) =
   case Map.lookup idx ecMap of
     Just var -> return var
     Nothing -> fail $
