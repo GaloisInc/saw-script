@@ -429,12 +429,14 @@ bitBlastBasic :: AIG.IsAIG l g
               -> IO (BValue (l s))
 bitBlastBasic be m addlPrims t = do
   cfg <- Sim.evalGlobal m (Map.union (beConstMap be) (addlPrims be))
-         (const (bitBlastExtCns be))
-         (const (const Nothing))
+         (bitBlastExtCns be)
+         (const Nothing)
   Sim.evalSharedTerm cfg t
 
-bitBlastExtCns :: AIG.IsAIG l g => g s -> String -> BValue (l s) -> IO (BValue (l s))
-bitBlastExtCns be name v =
+-- FIXME: we should use a cache so that we re-use the same variables
+-- for the same extcns, just in case hash-consing is not used.
+bitBlastExtCns :: AIG.IsAIG l g => g s -> ExtCns (BValue (l s)) -> IO (BValue (l s))
+bitBlastExtCns be (EC _ix name v) =
   case asFiniteTypeValue v of
     Just ft -> newVars be ft
     Nothing -> fail $ "Verifier.SAW.Simulator.BitBlast: variable " ++ show name
