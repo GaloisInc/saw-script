@@ -54,6 +54,364 @@ import SAWScript.Heapster.Permissions
 
 -- FIXME: add error messages to Impl_Fail, for debugging by the user
 
+-- | A simple implication is an implication that does not introduce any
+-- variables or act on the 'varPermMap' part of a permission set. (Compare to
+-- the more general 'PermImpl'.) It has the form
+--
+-- > P1 * ... * Pn -o P1' * ... * Pm'
+--
+-- where the types of @P1@ through @Pn@ are given by the first type argument
+-- @ps_in@ and those of @P1'@ through @Pm'@ are given by the second, @ps_out@.
+data SimplImpl ps_in ps_out where
+  Simpl_Drop :: ExprVar a -> ValuePerm a -> SimplImpl (RNil :> a) RNil
+  -- ^ Drop a permission, i.e., forget about it:
+  --
+  -- > x:p -o .
+
+  SImpl_IntroOrL :: ExprVar a -> ValuePerm a -> ValuePerm a ->
+                    SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ @SImpl_IntroOrL x p1 p2@ applies left disjunction introduction:
+  --
+  -- > x:p1 -o x:(p1 \/ p2)
+
+  SImpl_IntroOrR :: ExprVar a -> ValuePerm a -> ValuePerm a ->
+                    SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ @SImpl_IntroOrR x p1 p2 pf@ applies right disjunction introduction:
+  --
+  -- > x:p2 -o x:(p1 \/ p2)
+
+  SImpl_IntroExists :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
+                       Binding tp (ValuePerm a) ->
+                       SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ @SImpl_IntroExists x e p@ applies existential introduction:
+  --
+  -- > x:[e/z]p -o x:(exists z.p)
+
+  SImpl_Cast :: ExprVar a -> ExprVar a -> ValuePerm a ->
+                SimplImpl (RNil :> a :> a) (RNil :> a)
+  -- ^ Cast a proof of @y:p@ to one of @x:p@ using @x:eq(y)@:
+  --
+  -- > x:eq(y) * y:p -o x:p
+
+  SImpl_IntroEqRefl :: ExprVar a -> SimplImpl RNil (RNil :> a)
+  -- ^ Introduce a proof that @x:eq(x)@:
+  --
+  -- > . -o x:eq(x)
+
+  SImpl_IntroConj :: ExprVar a -> SimplImpl RNil (RNil :> a)
+  -- ^ Introduce an empty conjunction on @x@, i.e.:
+  --
+  -- > . -o x:true
+
+  SImpl_ExtractConj :: ExprVar a -> [AtomicPerm a] -> Int ->
+                       SimplImpl (RNil :> a) (RNil :> a :> a)
+  -- ^ Extract the @i@th atomic permission out of a conjunct, putting it below
+  -- that conjunct on the stack:
+  --
+  -- > x:(p1 * ... * pn) -o x:pi * x:(p1 * ... p(i-1) * ... * pn)
+
+  SImpl_CopyConj :: ExprVar a -> [AtomicPerm a] -> Int ->
+                    SimplImpl (RNil :> a) (RNil :> a :> a)
+  -- ^ Copy the @i@th atomic permission out of a conjunct, assuming it is
+  -- copyable, putting it below that conjunct on the stack:
+  --
+  -- > x:(p1 * ... * pn) -o x:pi * x:(p1 * ... * pn)
+
+  SImpl_InsertConj :: ExprVar a -> AtomicPerm a -> [AtomicPerm a] -> Int ->
+                      SimplImpl (RNil :> a :> a) (RNil :> a)
+  -- ^ Insert an atomic permission below the top of the stack at the @i@th
+  -- position in the conjunct on the top of the stack:
+  --
+  -- > x:p * x:(p1 * ... * pn)
+  -- >   -o x:(p1 * ... * p(i-1) * p * pi * ... * pn)
+
+  SImpl_CastLLVMWord ::
+    ExprVar (LLVMPointerType w) ->
+    PermExpr (BVType w) -> PermExpr (BVType w) ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Cast a proof of @x:eq(word(e1))@ to one of @x:eq(word(e2))@ using an
+  -- equality permission @e1=e2@ on top of the stack:
+  --
+  -- > x:eq(word(e1)) * x:prop(e1=e2) -o x:eq(word(e2))
+
+  SImpl_CastLLVMPtr ::
+    ExprVar (LLVMPointerType w) -> [AtomicPerm (LLVMPointerType w)] ->
+    PermExpr (BVType w) -> ExprVar (LLVMPointerType w) ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Cast a conjunction @y:(p1 * ... * pn)@ of LLVM type on the top of the
+  -- stack to @x:(p1 - off * ... * pn - off)@ using a proof of @x:eq(y+off)@
+  -- just below it on the stack:
+  --
+  -- > x:eq(y+off) * y:(p1 * ... * pn) -o x:(p1 - off * ... * pn - off)
+
+  SImpl_CastLLVMFree ::
+    ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+    PermExpr (BVType w) ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Cast a proof of @x:free(e1)@ to one of @x:free(e2)@ using an equality
+  -- permission @e1=e2@ on top of the stack:
+  --
+  -- > x:free(e1) * x:prop(e1=e2) -o x:free(e2)
+
+  SImpl_CastLLVMFieldOffset ::
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w -> PermExpr (BVType w) ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Cast the offset of a field permission from @off@ to @off'@ using an
+  -- equality permission @off=off'@ on the top of the stack:
+  --
+  -- > x:ptr((rw,off) |-> p) * x:prop(off=offf') -o x:ptr((rw,off') |-> p)
+
+  SImpl_IntroLLVMFieldContents ::
+    ExprVar (LLVMPointerType w) -> ExprVar (LLVMPointerType w) ->
+    SimplImpl (RNil :> (LLVMPointerType w) :> (LLVMPointerType w))
+    (RNil :> (LLVMPointerType w))
+  -- ^ Combine proofs of @x:ptr((rw,off) |-> eq(y))@ and @y:p@ on the top of the
+  -- permission stack into a proof of @x:ptr((rw,off) |-> p)@:
+  --
+  -- > x:ptr((rw,off) |-> eq(y)) * y:p -o x:ptr((rw,off) |-> p)
+
+  Simpl_AddLLVMFieldLifetime ::
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w -> PermExpr LifetimeType ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+  -- ^ Add a lifetime to a field permission:
+  --
+  -- > x:[ls]ptr((rw,off) |-> p) -o [l,ls]x:ptr((rw,off) |-> p)
+
+  Simpl_RemoveLLVMFieldLifetime ::
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w -> PermExpr LifetimeType ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+  -- ^ Remove a lifetime from a field permission if it is contained by another
+  -- lifetime already on this field:
+  --
+  -- > x:[l,ls]ptr((rw,off) |-> p) * li:lcontains(l) -o [ls]x:ptr((rw,off) |-> p)
+
+  Simpl_DemoteLLVMFieldWrite ::
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+  -- ^ Demote an LLVM field permission from write to read:
+  --
+  -- > x:[ls]ptr((W,off) |-> p) -o [ls]x:ptr((R,off) |-> p)
+
+  Simpl_CastLLVMFieldOffset ::
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w -> PermExpr (BVType w) ->
+    SimplImpl (RNil :> LLVMPointerType w :> LifetimeType)
+    (RNil :> LLVMPointerType w)
+  -- ^ Cast the offset of an LLVM field permission below the top of the stack
+  -- cusing an equality permission on the top of the stack:
+  --
+  -- > x:[ls]ptr((rw,off) |-> p) * x:prop(off=off')
+  -- >   -o [ls]x:ptr((rw,off') |-> p)
+
+  Simpl_ShrinkLLVMArray ::
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
+    PermExpr (BVType w) -> PermExpr (BVType w) ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Shrink the range of an array permission to the given offset and length,
+  -- using a range subset permission on the top of the stack:
+  --
+  -- > x:array(off,<len,*stride,fps,bs) * x:prop([off',len') <= [off,len))
+  -- >   -o x:array(off',<len',*stride,fps,bs)
+
+  Simpl_LLVMArrayBorrow ::
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
+    PermExpr (BVType w) -> PermExpr (BVType w) ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w :> LLVMPointerType w)
+  -- ^ Borrow a range of an array permission at the given offset and length,
+  -- adding a borrow to the original array permission and putting the new array
+  -- permission just below the top of the stack. Requires a conjunction of
+  -- propositional permissions stating that the given offset and length form a
+  -- subset of the original offset and length and do not overlap with any of the
+  -- existing borrows.
+  --
+  -- > x:array(off,<len,*stride,fps,bs)
+  -- > * x:(prop([off',len') <= [off,len)) * disjoint(bs,[off',len')))
+  -- >   -o x:array(off',<len',*stride,fps,[])
+  -- >      * x:array(off,<len,*stride,fps,[off',len'):bs)
+
+  Simpl_LLVMArrayReturn ::
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
+    PermExpr (BVType w) -> PermExpr (BVType w) ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Return a borrowed range of an array permission, undoing a borrow:
+  --
+  -- > x:array(off',<len',*stride,fps,[])
+  -- > * x:array(off,<len,*stride,fps,[off',len'):bs)
+  -- >   -o x:array(off,<len,*stride,fps,bs)
+
+  Simpl_LLVMArrayIndex ::
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
+    PermExpr (BVType w) -> Int ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Extract out the @j@th field permission of the @i@th element of an array
+  -- permission, where @j@ is a static 'Int' and @i@ is an expression. Requires
+  -- a proposition permission on the top of the stack stating that @i@ is in the
+  -- range of the array and that the specified field permission does not overlap
+  -- with any of the existing borrows:
+  --
+  -- > x:array(off,<len,*stride,fps,bs)
+  -- > * x:(prop(i \in [off,len)) * disjoint(bs,i*stride+j))
+  -- >   -o x:(fp_j + offset i*stride)
+
+  Simpl_LLVMArrayIndexBorrow ::
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
+    PermExpr (BVType w) -> Int ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Borrow the @j@th field permission of the @i@th element of an array
+  -- permission, where @j@ is a static 'Int' and @i@ is an expression. Requires
+  -- a proposition permission on the top of the stack stating that @i@ is in the
+  -- range of the array and that the specified field permission does not overlap
+  -- with any of the existing borrows, and adds a borrow of the given field:
+  --
+  -- > x:array(off,<len,*stride,fps,bs)
+  -- > * x:(prop(i \in [off,len)) * disjoint(bs,i*stride+j))
+  -- >   -o x:(fp_j + offset i*stride)
+  -- >      * x:array(off,<len,*stride,fps,(i*stride+j):bs)
+
+  Simpl_LLVMArrayIndexReturn ::
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
+    PermExpr (BVType w) -> Int ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Return the @j@th field permission of the @i@th element of an array
+  -- permission, where @j@ is a static 'Int' and @i@ is an expression, undoing a
+  -- borrow:
+  --
+  -- > x:(fp_j + offset i*stride)
+  -- > * x:array(off,<len,*stride,fps,(i*stride+j):bs)
+  -- >   -o x:array(off,<len,*stride,fps,bs)
+
+  Simpl_LLVMArrayContents ::
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> [LLVMFieldPerm w] ->
+    IsLLVMPointerTypeList w f_ps ->
+    PermImpl ((:~:) f_ps) f_ps ->
+    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
+  -- ^ FIXME HERE: describe this rule
+
+  Simpl_SplitLifetime ::
+    ExprVar a -> ValuePerm a -> PermExpr LifetimeType ->
+    SimplImpl (RNil :> a :> LifetimeType)
+    (RNil :> a :> LifetimeType)
+  -- ^ Save a permission for later by adding the current lifetime to its type
+  -- and storing the permission in the current lifetime for retrieval later:
+  --
+  -- > x:p * l:lowned(ps) -o x:[l]p * l:lowned(x:p, ps)
+
+  Simpl_LContainsRefl :: ExprVar LifetimeType ->
+                         SimplImpl RNil (RNil :> LifetimeType)
+  -- ^ Reflexivity for @lcontains@ proofs:
+  --
+  -- > . -o l:lcontains(l)
+
+  Simpl_LContainsAlways :: ExprVar LifetimeType ->
+                           SimplImpl RNil (RNil :> LifetimeType)
+  -- ^ Every lifetime is contained by @always@:
+  --
+  -- > . -o always:lcontains(l)
+
+  Simpl_LContainsTrans :: ExprVar LifetimeType -> ExprVar LifetimeType ->
+                          ExprVar LifetimeType ->
+                          SimplImpl (RNil :> LifetimeType :> LifetimeType)
+                          (RNil :> LifetimeType)
+  -- ^ Transitively combine @lcontains@ proofs:
+  --
+  -- > l1:lcontains(l2) * l2:lcontains(l3) -o l1:lcontains(l3)
+
+  Simpl_FoldMu :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
+                  SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ Fold a mu permission:
+  --
+  -- > x:[mu X.p / X]p -o x:(mu X.p)
+
+  Simpl_UnfoldMu :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
+                    SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ Unfold a mu permission:
+  --
+  -- > x:(mu X.p) -o x:[mu X.p / X]p
+
+  Simpl_Mu ::
+    ExprVar (LLVMPointerType w) -> Binding (ValuePerm a) (ValuePerm a) ->
+    PermImpl ((:~:) (RNil :> a)) (RNil :> a) ->
+    SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ FIXME HERE: describe this rule
+
+
+data PermImpl1 ps_in ps_outs where
+  Impl1_Fail :: PermImpl1 ps RNil
+
+  Impl1_Catch :: PermImpl1 ps (RNil :> '(RNil, ps) :> '(RNil, ps))
+
+  Impl1_Push :: ExprVar a -> ValuePerm a ->
+                PermImpl1 ps (RNil :> '(RNil, ps :> a))
+
+  Impl1_Pop :: ExprVar a -> ValuePerm a ->
+               PermImpl1 (ps :> a) (RNil :> '(RNil, ps))
+
+  Impl1_ElimOr :: ExprVar a -> ValuePerm a -> ValuePerm a ->
+                  PermImpl1 (ps :> a)
+                  (RNil :> '(RNil, ps :> a) :> '(RNil, ps :> a))
+
+  Impl1_ElimExists :: KnownRepr TypeRepr tp => ExprVar a ->
+                      Binding tp (ValuePerm a) ->
+                      PermImpl1 (ps :> a) (RNil :> '(RNil :> tp, ps :> a))
+
+  Impl1_Simpl :: SimplImpl ps_in ps_out ->
+                 PermImpl1 ps_in (RNil :> '(RNil, ps_out))
+
+  Impl1_ElimLLVMFieldContents ::
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
+    PermImpl1 (ps :> LLVMPointerType w)
+    (RNil :> '(RNil :> LLVMPointerType w, ps :> LLVMPointerType w))
+
+  Impl1_TryProveBVProp ::
+    ExprVar (LLVMPointerType w) -> BVProp w ->
+    PermImpl1 ps (RNil :> '(RNil, ps :> LLVMPointerType w) :> '(RNil, ps))
+
+
+data PermImpl r ps where
+  PermImpl_Done :: r ps -> PermImpl r ps
+  PermImpl_Step :: PermImpl1 ps_in ps_outs ->
+                   MapRList (MbPermImpl r) ps_outs ->
+                   PermImpl r ps_in
+
+
+type family Fst (p :: (k1,k2)) :: k1 where
+  Fst '(x,_) = x
+
+type family Snd (p :: (k1,k2)) :: k2 where
+  Snd '(_,y) = y
+
+newtype MbPermImpl r bs_ps =
+  MbPermImpl { unMbPermImpl :: Mb (Fst bs_ps) (PermImpl r (Snd bs_ps)) }
+
+type IsLLVMPointerTypeList w ps = MapRList ((:~:) (LLVMPointerType w)) ps
+
+simplImplIn :: SimplImpl ps_in ps_out -> MapRList ValuePerm ps_in
+simplImplIn = error "FIXME HERE NOW"
+
+simplImplOut :: SimplImpl ps_in ps_out -> MapRList ValuePerm ps_out
+simplImplOut = error "FIXME HERE NOW"
+
+applySimplImpl :: Proxy ps -> SimplImpl ps_in ps_out ->
+                  PermSet (ps :++: ps_in) -> PermSet (ps :++: ps_out)
+applySimplImpl = error "FIXME HERE NOW"
+
+
+newtype MbPermSet bs_ps = MbPermSet (Mb (Fst bs_ps) (PermSet (Snd bs_ps)))
+
+applyImpl1 :: PermImpl1 ps_in ps_outs -> PermSet ps_in ->
+              MapRList MbPermSet ps_outs
+applyImpl1 = error "FIXME HERE NOW"
+
+
 -- | A @'PermImpl' r ls@ is a proof tree of the judgment
 --
 -- > Gamma | Pl * P |- (Gamma1 | Pl1 * P1) \/ ... \/ (Gamman | Pln * Pn)
@@ -70,7 +428,9 @@ import SAWScript.Heapster.Permissions
 -- FIXME: it would be nice to have PermImpl r ps_out ps_in, where ps_out is
 -- guaranteed to be the stack shape at any Impl_Done, but this would make our
 -- generalized monad below more complicated...
-data PermImpl r ps where
+
+{-
+data PermImpl (r :: Ctx CrucibleType -> Type) ps where
   Impl_Done :: r ps -> PermImpl r ps
   -- ^ The proof is finished; i.e., implements the rule
   --
@@ -93,8 +453,8 @@ data PermImpl r ps where
   -- > --------------------------------------------------------------
   -- > Gin | Pl * Pin |- rets1, rets2
 
-  Impl_PushDel :: ExprVar a -> ValuePerm a -> PermImpl r (ps :> a) ->
-                  PermImpl r ps
+  Impl_Push :: ExprVar a -> ValuePerm a -> PermImpl r (ps :> a) ->
+               PermImpl r ps
   -- ^ "Push" all of the permissions in the permission set for a variable, which
   -- should be equal to the supplied permission, after deleting those
   -- permissions from the input permission set:
@@ -103,259 +463,86 @@ data PermImpl r ps where
   -- > ---------------------------
   -- > Gin | Pl * Pin, x:p |- rets
 
-  Impl_ElimOr :: ExprVar a -> PermImpl r ps -> PermImpl r ps ->
-                 PermImpl r ps
-  -- ^ Eliminate a 'ValPerm_Or' on the given variable, replacing it with the
+  Impl_Pop :: ExprVar a -> ValuePerm a -> PermImpl r ps ->
+              PermImpl r (ps :> a)
+  -- ^ "Pop" an @x:p@ permission from the top of the permission stack back to
+  -- the primary permission for @x@, assuming that the primary permission for
+  -- @x@ is currently equal to @true@
+  --
+  -- > Gin | Pl * Pin, x:p |- rets
+  -- > ----------------------------------
+  -- > Gin | Pl,x:p * Pin, x:true |- rets
+
+  Impl_ElimOr :: ExprVar a -> PermImpl r (ps :> a) -> PermImpl r (ps :> a) ->
+                 PermImpl r (ps :> a)
+  -- ^ Eliminate a 'ValPerm_Or' on the top of the stack, replacing it with the
   -- left- and right-hand sides in the two sub-eliminations
   --
-  -- > pf1 = Gin | Pin, x:p1 |- GsPs1     pf2 = Gin | Pin, x:p2 |- GsPs2
-  -- > -----------------------------------------------------------------
-  -- > Gin | Pin, x:(p1 \/ p2) |- GsPs1, GsPs2
-
-  Impl_IntroOrL :: ExprVar a -> ValuePerm a ->
-                   PermImpl r (ps :> a) ->
-                   PermImpl r (ps :> a)
-  -- ^ @Impl_IntroOrL x p2 pf@ applies left disjunction introduction to the top
-  -- permission on the stack:
-  --
-  -- > pf = Gamma | Pl, x:(p1 \/ p2) * Pin |- Pout
-  -- > -------------------------------------------
-  -- > Gamma | Pl, x:p1 * Pin |- rets
-
-  Impl_IntroOrR :: ExprVar a -> ValuePerm a ->
-                   PermImpl r (ps :> a) ->
-                   PermImpl r (ps :> a)
-  -- ^ @Impl_IntroOrR x p1 pf@ applies right disjunction introduction to the top
-  -- permission on the stack:
-  --
-  -- > pf = Gamma | Pl, x:(p1 \/ p2) * Pin |- Pout
-  -- > -------------------------------------------
-  -- > Gamma | Pl, x:p2 * Pin |- rets
+  -- > pf1 = Gin | Pl, x:p1 * Pin |- GsPs1  pf2 = Gin | Pl, x:p2 * Pin |- GsPs2
+  -- > -------------------------------------------------------------------------
+  -- > Gin | Pl, x:(p1 \/ p2) * Pin |- GsPs1, GsPs2
 
   Impl_ElimExists :: KnownRepr TypeRepr tp => ExprVar a ->
                      Binding tp (PermImpl r ps) ->
                      PermImpl r ps
   -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists', on the given variable
   --
-  -- pf = Gin, z:tp | Pin, x:p |- rets
+  -- pf = Gin, z:tp | Pl, x:p * Pin |- rets
   -- ------------------------------------------------------
-  -- Gin | x:(exists z:tp. p)  |- rets
-
-  Impl_IntroExists :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
-                      Binding tp (ValuePerm a) ->
-                      PermImpl r (ps :> a) ->
-                      PermImpl r (ps :> a)
-  -- ^ @Intro_Exists x tp e p pf@ applies existential introduction to the top
-  -- permission on the stack:
-  --
-  -- > pf = Gamma | Pl, x:(exists z:tp.p) * Pin |- Pout
-  -- > ------------------------------------------------
-  -- > Gamma | Pl, x:[e'/z]p * Pin |- Pout
-
-  Impl_IntroTrue :: ExprVar a -> PermImpl r (ps :> a) -> PermImpl r ps
-  -- ^ Introduce a true permission onto the stack of distinguished permissions:
-  --
-  -- > Gin | Pl,x:true * Pin |- rets
-  -- > -----------------------------
-  -- > Gin | Pl * Pin |- rets
-
-  Impl_RecombineTrue :: ExprVar a -> PermImpl r ps -> PermImpl r (ps :> a)
-  -- ^ "Recombine" a true proof on the top of the stack by dropping it
-  --
-  -- > Gin | Pl * Pin |- rets
-  -- > -----------------------------
-  -- > Gin | Pl,x:true * Pin |- rets
-
-  Impl_IntroCast :: ExprVar a -> ExprVar a ->
-                    PermImpl r (ps :> a) ->
-                    PermImpl r (ps :> a :> a)
-  -- ^ Cast a proof of @y:p@ to one of @x:p@ using @x:eq(y)@:
-  --
-  -- > Gin | Pl,x:p * Pin |- rets
-  -- > ----------------------------------
-  -- > Gin | Pl,x:eq(y),y:p * Pin |- rets
-
-  Impl_IntroEqRefl :: ExprVar a -> PermImpl r (ps :> a) ->
-                      PermImpl r ps
-  -- ^ Introduce a proof that @x:eq(x)@:
-  --
-  -- > Gin | Pl,x:eq(x) * Pin |- rets
-  -- > -----------------------------
-  -- > Gin | Pl * Pin |- rets
-
-  Impl_IntroEqCopy :: ExprVar a -> PermExpr a ->
-                      PermImpl r (ps :> a) -> PermImpl r ps
-  -- ^ Copy a proof that @x:eq(e)@ from the normal permissions to the stack:
-  --
-  -- > Gin | Pl,x:eq(e) * Pin,x:eq(e) |- rets
-  -- > --------------------------------------
-  -- > Gin | Pl * Pin,x:eq(e) |- rets
-
-  Impl_AssertBVEq :: ExprVar (BVType w) -> PermExpr (BVType w) ->
-                     PermImpl r (ps :> (BVType w)) ->
-                     PermImpl r ps
-  -- ^ Introduce a proof that @x:eq(e)@ at bitvector type (which becomes a
-  -- dynamic check that @x=e@):
-  --
-  -- > Gin | Pl,x:eq(e) * Pin |- rets
-  -- > -----------------------------
-  -- > Gin | Pl * Pin |- rets
-
-  Impl_CastLLVMWord ::
-    ExprVar (LLVMPointerType w) -> PermExpr (BVType w) -> PermExpr (BVType w) ->
-    PermImpl r (ps :> (LLVMPointerType w)) ->
-    PermImpl r (ps :> (LLVMPointerType w))
-  -- ^ Cast a proof that @x:eq(word(e1))@ to one that @x:eq(word(e2))@ with a
-  -- dynamic check that @e1=e2@:
-  --
-  -- > Gin | Pl,x:eq(word(e2)) * Pin |- rets
-  -- > -------------------------------------
-  -- > Gin | Pl,x:eq(word(e1)) * Pin |- rets
-
-  Impl_IntroLLVMPtr :: ExprVar (LLVMPointerType w) ->
-                       PermImpl r (ps :> (LLVMPointerType w)) ->
-                       PermImpl r ps
-  -- ^ Prove an empty pointer permission @x:ptr()@ from any pointer permission
-  -- @x:ptr(pps)@ on the left:
-  --
-  -- > Gin | Pl, x:ptr() * Pin, x:ptr(pps) |- rets
-  -- > -------------------------------------------
-  -- > Gin | Pl * Pin, x:ptr(pps) |- rets
-
-  Impl_CastLLVMPtr :: ExprVar (LLVMPointerType w) ->
-                      PermExpr (BVType w) ->
-                      ExprVar (LLVMPointerType w) ->
-                      PermImpl r (ps :> (LLVMPointerType w)) ->
-                      PermImpl r (ps :> (LLVMPointerType w)
-                                  :> (LLVMPointerType w))
-  -- ^ Cast a @y:ptr(pps)@ on the top of the stack to @x:ptr(pps - off)@ using a
-  -- proof of @x:eq(y+off)@ just below it on the stack:
-  --
-  -- > Gin | Pl, x:ptr(pps - off) * Pin, x:ptr(pps) |- rets
-  -- > ----------------------------------------------------
-  -- > Gin | Pl, x:eq(y+off),y:ptr(pps) * Pin |- rets
-
-  Impl_IntroLLVMFree :: ExprVar (LLVMPointerType w) -> Int ->
-                        PermImpl r (ps :> (LLVMPointerType w)) ->
-                        PermImpl r (ps :> (LLVMPointerType w))
-  -- ^ Copy a free pointer permission to the pointer permission on the top of
-  -- the stack, using the 'Int' as the index into the pointer perms in @Pin@,
-  -- i.e., the length of @pps1@:
-  --
-  -- > Gin | Pl, x:ptr(pps, free(e)) * Pin, x:ptr(pps1, free(e), pps2) |- rets
-  -- > -----------------------------------------------------------------------
-  -- > Gin | Pl, x:ptr(pps) * Pin, x:ptr(pps1, free(e), pps2) |- rets
-
-  Impl_CastLLVMFree :: ExprVar (LLVMPointerType w) -> Int ->
-                       PermExpr (BVType w) -> PermExpr (BVType w) ->
-                       PermImpl r (ps :> (LLVMPointerType w)) ->
-                       PermImpl r (ps :> (LLVMPointerType w))
-  -- ^ Cast a proof of @x:ptr(free(e1))@ on the top of the stack to one of
-  -- @x:ptr(free(e2))@:
-  --
-  -- > Gin | Pl, x:ptr(pps1, free(e2), pps2) * Pin |- rets
-  -- > ---------------------------------------------------
-  -- > Gin | Pl, x:ptr(pps1, free(e1), pps2) * Pin |- rets
+  -- Gin | Pl, x:(exists z:tp. p) * Pin |- rets
 
   Impl_ElimLLVMFieldContents ::
-    ExprVar (LLVMPointerType w) -> Int ->
-    Binding (LLVMPointerType w) (PermImpl r ps) ->
-    PermImpl r ps
-  -- ^ Eliminate a field permission @x:ptr((off,S) |-> p)@ into a permission
-  -- @x:ptr((off,S) |-> eq(y))@ that the field contains a fresh variable @y@ and
+    ExprVar (LLVMPointerType w) ->
+    Binding (LLVMPointerType w) (PermImpl r (ps :> LLVMPointerType w :>
+                                             LLVMPointerType w)) ->
+    PermImpl r (ps :> LLVMPointerType w)
+  -- ^ Eliminate a field permission @x:ptr((rw,off) |-> p)@ into a permission
+  -- @x:ptr((rw,off) |-> eq(y))@ that the field contains a fresh variable @y@ and
   -- a permission @y:p@ on @y@:
   --
-  -- > Gin | Pl * Pin, x:ptr(pps1, (off,S) |-> eq(y), pps2), y:p |- rets
+  -- > Gin | Pl, x:ptr(pps1, (rw,off) |-> eq(y), pps2), y:p * Pin |- rets
   -- > -----------------------------------------------------------------
-  -- > Gin | Pl * Pin, x:ptr(pps1, (off,S) |-> p, pps2) |- rets
+  -- > Gin | Pl, x:ptr(pps1, (rw,off) |-> p, pps2) * Pin |- rets
 
-  Impl_IntroLLVMFieldAll ::
-    ExprVar (LLVMPointerType w) -> Int ->
-    PermImpl r (ps :> (LLVMPointerType w)) ->
-    PermImpl r (ps :> (LLVMPointerType w))
-  -- ^ Move a field permission, which should contain an equals permission, into
-  -- the pointer permission on the top of the stack:
+  Impl_TryProveBVProp :: ExprVar (LLVMPointerType w) -> BVProp w ->
+                         PermImpl r (ps :> LLVMPointerType w) ->
+                         PermImpl r ps
+                         PermImpl r ps
+  -- ^ Try to prove a bitvector proposition using a dynamic check, passing a
+  -- proof of that proposition to the left branch on success and calling the
+  -- right branch on failure:
   --
-  -- > Gin | Pl, x:ptr(pps, x:ptr((off,spl) |-> eq(y)))
-  -- >       * Pin, x:ptr(pps1, pps2) |- rets
-  -- > ---------------------------------------------------------------
-  -- > Gin | Pl, x:ptr(pps)
-  -- >       * Pin, x:ptr(pps1, (off,spl) |-> eq(y), pps2) |- rets
+  -- > Gin | Pl,x:prop(p) * Pin |- rets      Gin | Pl * Pin |- rets
+  -- > ------------------------------------------------------------
+  -- > Gin | Pl * Pin |- rets
 
-  Impl_IntroLLVMFieldSplit ::
-    ExprVar (LLVMPointerType w) -> Int -> SplittingExpr ->
-    PermImpl r (ps :> (LLVMPointerType w)) ->
-    PermImpl r (ps :> (LLVMPointerType w))
-  -- ^ Move a field permission of the form @(off,spl) |-> eq(e)@ into two
-  -- copies, keeping the left half in the current permission set and pushing the
-  -- right half onto the stack:
+  Impl_IntroLLVMArrayContents ::
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
+    LLVMFieldPerms w f_ps ->
+    PermImpl UnitF f_ps ->
+    PermImpl r (ps :> LLVMPointerType w) ->
+    PermImpl r (ps :> LLVMPointerType w)
+  -- ^ Prove one array permission from another by proving that the fields of the
+  -- first imply those of the second:
   --
-  -- > Gin | Pl, x:ptr(pps, x:ptr((off,right spl) |-> eq(y)))
-  -- >       * Pin, x:ptr(pps1, (off,left spl) |-> eq(y), pps2) |- rets
-  -- > ---------------------------------------------------------------
-  -- > Gin | Pl, x:ptr(pps)
-  -- >       * Pin, x:ptr(pps1, (off,spl) |-> eq(y), pps2) |- rets
 
-  Impl_IntroLLVMFieldContents ::
-    ExprVar (LLVMPointerType w) -> ExprVar (LLVMPointerType w) ->
-    PermImpl r (ps :> (LLVMPointerType w)) ->
-    PermImpl r (ps :> (LLVMPointerType w) :> (LLVMPointerType w))
-  -- ^ Combine proofs of @x:ptr((off,S) |-> eq(y))@ and @y:p@ on the top of the
-  -- permission stack into a proof of @x:ptr((off,S) |-> p)@:
+  Impl_Simpl :: Proxy ps -> SimplImpl ps_in ps_out ->
+                PermImpl r (ps :++: ps_out) ->
+                PermImpl r (ps :++: ps_in)
+  -- ^ Apply a simple implication to the top permissions on the stack:
   --
-  -- > Gin | Pl, x:ptr((off,S) |-> p) * Pin |- rets
-  -- > -----------------------------------------------------
-  -- > Gin | Pl, x:ptr((off,S) |-> eq(y)), y:p * Pin |- rets
-
-  Impl_DivideLLVMArray :: ExprVar (LLVMPointerType w) -> Int ->
-                          PermExpr (BVType w) -> PermImpl r ps -> PermImpl r ps
-  -- ^ Divide an array permission @x:ptr((off,*stride,<len,S) |-> p)@ into two
-  -- arrays, one of length @e@ starting at @off@ and one of length @len-e@
-  -- starting at offset @off+e*stride@:
-  --
-  -- > Gin | Pl * Pin, x:ptr(pps1, (off+e*stride,*stride,<e,S) |-> fps,
-  -- >                       pps2, (off,*stride,<len-e, S) |-> fps) |- rets
-  -- > -----------------------------------------------------------------------
-  -- > Gin | Pl * Pin, x:ptr(pps1, (off,*stride,<len,S) |-> fps, pps2) |- rets
-
-  Impl_IndexLLVMArray :: ExprVar (LLVMPointerType w) -> Int ->
-                         PermImpl r ps -> PermImpl r ps
-  -- ^ Perform an array indexing of the first cell of an array, by separating an
-  -- array permission @x:ptr((off,*stride,<len,S) |-> pps)@ into one array cell,
-  -- containing a copy of the pointer permissions @pps@ starting at offset
-  -- @off@, along with the remaining array @x:ptr((off+1,*stride,<len,S) |->
-  -- pps)@:
-  --
-  -- > Gin | Pl * Pin, x:ptr(pps1, (off+1,*stride,<e,S) |-> fps,
-  -- >                       pps2, fps + off) |- rets
-  -- > -----------------------------------------------------------------------
-  -- > Gin | Pl * Pin, x:ptr(pps1, (off,*stride,<len,S) |-> fps, pps2) |- rets
-
-  Impl_CastLLVMFieldOffsetM :: ExprVar (LLVMPointerType w) ->
-                               PermExpr (BVType w) -> PermExpr (BVType w) ->
-                               PermImpl r (ps :> LLVMPointerType w) ->
-                               PermImpl r (ps :> LLVMPointerType w)
-  -- ^ Assert that @off = off'@ at bitvector type, and cast the last field perm
-  -- at the top of the stack from @(off,S) |-> p@ to @(off',S) |-> p@:
-  --
-  -- > Gin | Pl * Pin, x:ptr(pps, (off',S) |-> p) |- rets
-  -- > -----------------------------------------------------------------------
-  -- > Gin | Pl * Pin, x:ptr(pps, (off,S) |-> p) |- rets
+  -- > Gin | Pl,ps_out * Pin |- rets      ps_in -o ps_out
+  -- > --------------------------------------------------
+  -- > Gin | Pl,ps_in * Pin |- rets
 
 
+$(mkNuMatching [t| forall ps_in ps_out. SimplImpl ps_in ps_out |])
 $(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
 
 
 ----------------------------------------------------------------------
 -- * Generalized Monads
 ----------------------------------------------------------------------
-
-type family Fst (p :: (k1,k2)) :: k1 where
-  Fst '(x,_) = x
-
-type family Snd (p :: (k1,k2)) :: k2 where
-  Snd '(_,y) = y
-
 
 -- | A generalized monad has additional "input" and "output" types, that
 -- sequence together "backwards" through the generalized bind operation. Mostly
@@ -592,33 +779,24 @@ gabortM ret = GenStateT $ \_ -> GenContM $ \_ -> ret
 -- * Permission Implication Monad
 ----------------------------------------------------------------------
 
-{-
--- | State type @s@ is a permission state type iff it contains a permission set
-class PermState s where
-  permStatePerms :: Lens' s PermSet
-
--- | The general monad for manipulating permissions
-newtype PermM s rin rout a =
-  PermM { unPermM :: GenStateT s (GenContT Identity) rin rout a }
-
-deriving instance (Functor (PermM s r r))
-deriving instance (Applicative (PermM s r r))
-deriving instance (Monad (PermM s r r))
-deriving instance (GenMonad (PermM s))
-deriving instance (MonadState s (PermM s r r))
--}
-
 data ImplState vars ps =
   ImplState { _implStatePerms :: PermSet ps,
               _implStateVars :: CruCtx vars,
-              _implStatePSubst :: PartialSubst vars }
+              _implStatePSubst :: PartialSubst vars,
+              _implStateLifetimes :: [ExprVar LifetimeType]
+              -- ^ Stack of active lifetimes, where the first element is the
+              -- current lifetime (we should have an @lowned@ permission for it)
+              -- and each lifetime contains (i.e., has an @lcontains@ permission
+              -- for) the next lifetime in the stack
+            }
 makeLenses ''ImplState
 
 mkImplState :: CruCtx vars -> PermSet ps -> ImplState vars ps
 mkImplState vars perms =
   ImplState { _implStateVars = vars,
               _implStatePerms = perms,
-              _implStatePSubst = emptyPSubst vars }
+              _implStatePSubst = emptyPSubst vars,
+              _implStateLifetimes = [] }
 
 extImplState :: KnownRepr TypeRepr tp => ImplState vars ps ->
                 ImplState (vars :> tp) ps
@@ -630,11 +808,6 @@ unextImplState :: ImplState (vars :> a) ps -> ImplState vars ps
 unextImplState s =
   s { _implStateVars = unextCruCtx (_implStateVars s),
       _implStatePSubst = unextPSubst (_implStatePSubst s) }
-
-{-
-instance PermState (ImplState vars) where
-  permStatePerms = implStatePerms
--}
 
 -- | The implication monad is the permission monad that uses 'ImplState'
 type ImplM vars r ps_out ps_in =
@@ -688,6 +861,25 @@ withExtVarsM m =
     getPSubst >>>= \psubst ->
     greturn (a, psubstLookup psubst Member_Base))
 
+-- | Get the current lifetime
+getCurLifetime :: ImplM vars r ps ps (ExprVar LifetimeType)
+getCurLifetime =
+  (view implStateLifetimes <$> gget) >>>= \ls ->
+  case ls of
+    l:_ -> greturn l
+    [] -> error "getCurLifetime: no current lifetime!"
+
+-- | Push a lifetime onto the lifetimes stack
+pushLifetime :: ExprVar LifetimeType -> ImplM vars r ps ps ()
+pushLifetime l = gmodify (over implStateLifetimes (l:))
+
+-- | Pop a lifetime off of the lifetimes stack
+popLifetime :: ImplM vars r ps ps (ExprVar LifetimeType)
+popLifetime =
+  getCurLifetime >>>= \l ->
+  gmodify (over implStateLifetimes tail) >>>
+  greturn l
+
 -- | Get the current 'PermSet'
 getPerms :: ImplM vars r ps ps (PermSet ps)
 getPerms = view implStatePerms <$> gget
@@ -711,6 +903,8 @@ getDistPerms = view (implStatePerms . distPerms) <$> gget
 getTopDistPerm :: ExprVar a -> ImplM vars r (ps :> a) (ps :> a) (ValuePerm a)
 getTopDistPerm x = view (implStatePerms . topDistPerm x) <$> gget
 
+{-
+
 -- | Get the index of the last 'LLVMPtrPerm' in the @x:ptr(pps)@ permission on
 -- the top of the stack
 getTopPermLastLLVMIx :: ExprVar (LLVMPointerType w) ->
@@ -721,6 +915,7 @@ getTopPermLastLLVMIx x =
   let ret = length (p ^. llvmPtrPerms) - 1 in
   if ret >= 0 then greturn ret else
     error "getTopPermLastLLVMIx"
+-}
 
 -- | Set the current 'PermSet'
 setPerms :: PermSet ps -> ImplM vars r ps ps ()
@@ -750,15 +945,32 @@ implDoneM = gmapRetAndState id Impl_Done
 -- | "Push" all of the permissions in the permission set for a variable, which
 -- should be equal to the supplied permission, after deleting those permissions
 -- from the input permission set. This is like a simple "proof" of @x:p@.
-implPushDelM :: ExprVar a -> ValuePerm a -> ImplM vars r (ps :> a) ps ()
-implPushDelM x p =
-  gmapRetAndPerms (pushPerm x p . deletePerm x p) (Impl_PushDel x p)
+implPushM :: ExprVar a -> ValuePerm a -> ImplM vars r (ps :> a) ps ()
+implPushM x p =
+  gmapRetAndPerms (pushPerm x p . deletePerm x p) (Impl_Push x p)
 
--- | Call 'implPushDelM' for multiple @x:p@ permissions
-implPushDelMultiM :: DistPerms ps -> ImplM vars r ps RNil ()
-implPushDelMultiM DistPermsNil = greturn ()
-implPushDelMultiM (DistPermsCons ps x p) =
-  implPushDelMultiM ps >>> implPushDelM x p
+-- | Call 'implPushM' for multiple @x:p@ permissions
+implPushMultiM :: DistPerms ps -> ImplM vars r ps RNil ()
+implPushMultiM DistPermsNil = greturn ()
+implPushMultiM (DistPermsCons ps x p) =
+  implPushMultiM ps >>> implPushM x p
+
+-- | Pop a permission from the top of the stack back to the primary permission
+-- for a variable, assuming that the primary permission for that variable is
+-- empty, i.e., is the @true@ permission
+implPopM :: ExprVar a -> ValuePerm a -> ImplM vars r ps (ps :> a) ()
+implPopM x p =
+  gmapRetAndPerms
+  (\ps -> let (ps', p') = popPerm x ps in
+    if p == p' then
+      setVarPerm x p' ps'
+    else error "implPopM: current and expected permissions don't agree!")
+  (Impl_Pop x p)
+
+-- | Drop a permission from the top of the stack
+implDropM :: ExprVar a -> ValuePerm a -> ImplM vars r ps (ps :> a) ()
+implDropM x p =
+  gmapRetAndPerms (dropPerm x) (Impl_Simpl Proxy $ Simpl_Drop x p)
 
 -- | Produce a branching proof tree, that performs the first implication and, if
 -- that one fails, falls back on the second
@@ -766,15 +978,31 @@ implCatchM :: ImplM vars r ps1 ps2 () -> ImplM vars r ps1 ps2 () ->
               ImplM vars r ps1 ps2 ()
 implCatchM m1 m2 = gparallel Impl_Catch m1 m2
 
+-- FIXME: maybe this isn't useful...
+-- | Apply a simple implication rule to the top permissions on the stack
+implSimplM :: TypeCtx ps_in => Proxy ps -> SimplImpl ps_in ps_out ->
+              (DistPerms ps_in -> DistPerms ps_out) ->
+              ImplM vars r (ps :++: ps_out) (ps :++: ps_in) ()
+implSimplM prx simpl f =
+  gmapRetAndPerms
+  (modifyDistPerms $ \ps ->
+    let (ps1, ps2) = splitDistPerms prx ps in
+    appendDistPerms ps1 (f ps2))
+  (Impl_Simpl prx simpl)
+
 -- | Apply the left or-introduction rule to the top of the permission stack,
 -- changing it from @x:p1@ to @x:(p1 \/ p2)@
-introOrLM :: ExprVar a -> ValuePerm a -> ImplM vars r (ps :> a) (ps :> a) ()
-introOrLM x p2 = gmapRetAndPerms (introOrL x p2) (Impl_IntroOrL x p2)
+introOrLM :: ExprVar a -> ValuePerm a -> ValuePerm a ->
+             ImplM vars r (ps :> a) (ps :> a) ()
+introOrLM x p1 p2 =
+  gmapRetAndPerms (introOrL x p2) (Impl_Simpl Proxy $ SImpl_IntroOrL x p1 p2)
 
 -- | Apply the right or-introduction rule to the top of the permission stack,
 -- changing it from @x:p2@ to @x:(p1 \/ p2)@
-introOrRM :: ExprVar a -> ValuePerm a -> ImplM vars r (ps :> a) (ps :> a) ()
-introOrRM x p1 = gmapRetAndPerms (introOrR x p1) (Impl_IntroOrR x p1)
+introOrRM :: ExprVar a -> ValuePerm a -> ValuePerm a ->
+             ImplM vars r (ps :> a) (ps :> a) ()
+introOrRM x p1 p2 =
+  gmapRetAndPerms (introOrR x p1) (Impl_Simpl Proxy $ SImpl_IntroOrR x p1 p2)
 
 -- | Apply existential introduction to the top of the permission stack, changing
 -- it from @[e/x]p@ to @exists (x:tp).p@
@@ -785,11 +1013,12 @@ introExistsM :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
                 Binding tp (ValuePerm a) ->
                 ImplM vars r (ps :> a) (ps :> a) ()
 introExistsM x e p_body =
-  gmapRetAndPerms (introExists x e p_body) (Impl_IntroExists x e p_body)
+  gmapRetAndPerms (introExists x e p_body)
+  (Impl_Simpl Proxy $ SImpl_IntroExists x e p_body)
 
 -- | Eliminate a disjunctive permission @x:(p1 \/ p2)@, building proof trees
 -- that proceed with both @x:p1@ and @x:p2@
-elimOrM :: ExprVar a -> ImplM vars r ps ps ()
+elimOrM :: ExprVar a -> ImplM vars r (ps :> a) (ps :> a) ()
 elimOrM x =
   gparallel (\impl1 impl2 -> Impl_ElimOr x impl1 impl2)
   (modify (over (implStatePerms . varPerm x) orPermLeft))
@@ -798,51 +1027,65 @@ elimOrM x =
 -- | Eliminate an existential permission @x:(exists (y:tp).p)@ in the current
 -- permission set
 elimExistsM :: (KnownRepr TypeRepr tp, NuMatchingAny1 r) => ExprVar a -> f tp ->
-               ImplM vars r ps ps ()
+               ImplM vars r (ps :> a) (ps :> a) ()
 elimExistsM x (_ :: f tp) =
   getPerms >>>= \perms ->
   gopenBinding1 (Impl_ElimExists x) (elimExists x (knownRepr :: TypeRepr tp)
                                      perms) >>>= \(_nm, perms') ->
   setPerms perms'
 
--- | Eliminate disjunctives and existentials for a specific variable
-elimOrsExistsM :: NuMatchingAny1 r => ExprVar a -> ImplM vars r ps ps ()
+-- | Eliminate disjunctives and existentials on the top of the stack and return
+-- the resulting permission
+elimOrsExistsM :: NuMatchingAny1 r => ExprVar a ->
+                  ImplM vars r (ps :> a) (ps :> a) (ValuePerm a)
 elimOrsExistsM x =
-  getPerm x >>>= \p ->
+  getTopDistPerm x >>>= \p ->
   case p of
     ValPerm_Or _ _ -> elimOrM x >>> elimOrsExistsM x
     ValPerm_Exists (_ :: Binding a _) ->
       elimExistsM x (knownRepr :: TypeRepr a) >>> elimOrsExistsM x
-    _ -> return ()
+    _ -> greturn p
 
--- | Introduce a proof of @x:true@ onto the top of the stack
-introTrueM :: ExprVar a -> ImplM vars r (ps :> a) ps ()
-introTrueM x = gmapRetAndPerms (introTrue x) (Impl_IntroTrue x)
-
--- | Recombine an @x:true@ proof on the top of the stack by dropping it
-recombineTrueM :: ExprVar a -> ImplM vars r ps (ps :> a) ()
-recombineTrueM x = gmapRetAndPerms (recombineTrue x) (Impl_RecombineTrue x)
+-- | Introduce a proof of @x:true@ onto the top of the stack, which is the same
+-- as an empty conjunction
+introConjM :: ExprVar a -> ImplM vars r (ps :> a) ps ()
+introConjM x =
+  gmapRetAndPerms (introConj x) (Impl_Simpl Proxy $ SImpl_IntroConj x)
 
 -- | Introduce a proof of @x:eq(x)@ onto the top of the stack
 introEqReflM :: ExprVar a -> ImplM vars r (ps :> a) ps ()
-introEqReflM x = gmapRetAndPerms (introEqRefl x) (Impl_IntroEqRefl x)
+introEqReflM x =
+  gmapRetAndPerms (introEqRefl x)
+  (Impl_Simpl Proxy $ SImpl_IntroEqRefl x)
 
--- | Copy an @x:eq(e)@ permission to the top of the stack
-introEqCopyM :: ExprVar a -> PermExpr a -> ImplM vars r (ps :> a) ps ()
+-- | Copy an @x:eq(e)@ permission on the top of the stack
+introEqCopyM :: ExprVar a -> PermExpr a ->
+                ImplM vars r (ps :> a :> a) (ps :> a) ()
 introEqCopyM x e =
-  getPerm x >>>= \p ->
-  case p of
-    ValPerm_Eq e'
-      | e' == e -> gmapRetAndPerms (introEqCopy x e) (Impl_IntroEqCopy x e)
-    ValPerm_Eq _ -> error "introEqCopyM: incorrect expression!"
-    _ -> error "introEqCopyM: not an eq(e) proof!"
+  gmapRetAndPerms (introEqCopy x e) (Impl_Simpl Proxy $ SImpl_CopyEq x e)
 
--- | Assert that @x = e@ at bitvector type, and push an @x:eq(e)@ permission to
--- the top of the stack
-introAssertBVEq :: ExprVar (BVType w) -> PermExpr (BVType w) ->
-                   ImplM vars r (ps :> BVType w) ps ()
-introAssertBVEq x e =
-  gmapRetAndPerms (pushPerm x (ValPerm_Eq e)) (Impl_AssertBVEq x e)
+-- | Cast a @y:p@ perm on the top of the stack to an @x:p@ perm using an
+-- @x:eq(y)@ just below it on the stack
+introCastM :: ExprVar a -> ExprVar a -> ValuePerm a ->
+              ImplM vars r (ps :> a) (ps :> a :> a) ()
+introCastM x y p =
+  gmapRetAndPerms (castVarPerm x y p) (Impl_Simpl Proxy $ SImpl_Cast x y p)
+
+-- | Delete the @i@th atomic permission in the conjunct on the top of the stack,
+-- assuming that conjunction contains the given atomic permissions, and put the
+-- extracted atomic permission just below the top of the stack
+implExtractConjM :: ExprVar a -> [AtomicPerm a] -> Int ->
+                    ImplM vars r (ps :> a :> a) (ps :> a) ()
+implExtractConjM x ps i =
+  gmapRetAndPerms (extractConj x ps i)
+  (Impl_Simpl Proxy $ SImpl_ExtractConj x ps i)
+
+-- | Combine the two conjunctive permissions on the top of the stack
+implCombineConjM :: ExprVar a -> [AtomicPerm a] -> [AtomicPerm a] ->
+                    ImplM vars r (ps :> a) (ps :> a :> a) ()
+implCombineConjM x ps1 ps2 =
+  gmapRetAndPerms (combineConj x ps1 ps2)
+  (Impl_Simpl Proxy $ SImpl_CombineConj x ps1 ps2)
 
 -- | Cast a proof of @x:eq(LLVMWord(e1))@ to @x:eq(LLVMWord(e2))@ on the top of
 -- the stack
@@ -850,13 +1093,8 @@ castLLVMWordEqM ::
   ExprVar (LLVMPointerType w) -> PermExpr (BVType w) -> PermExpr (BVType w) ->
   ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 castLLVMWordEqM x e1 e2 =
-  gmapRetAndPerms (castLLVMWordEq x e1 e2) (Impl_CastLLVMWord x e1 e2)
+  gmapRetAndPerms (castLLVMWordEq x e1 e2) (Impl_TryCastLLVMWord x e1 e2)
 
-
--- | Prove an empty @x:ptr()@ permission from any @x:ptr(pps)@ permissionx
-introLLVMPtrM :: ExprVar (LLVMPointerType w) ->
-                 ImplM vars r (ps :> LLVMPointerType w) ps ()
-introLLVMPtrM x = gmapRetAndPerms (introLLVMPtr x) (Impl_IntroLLVMPtr x)
 
 -- | Cast a @y:ptr(pps)@ on the top of the stack to @x:ptr(pps - off)@ using a
 -- proof of @x:eq(y+off)@ just below it on the stack
@@ -865,8 +1103,18 @@ castLLVMPtrM :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
                 ImplM vars r (ps :> LLVMPointerType w)
                 (ps :> LLVMPointerType w :> LLVMPointerType w) ()
 castLLVMPtrM y off x =
-  gmapRetAndPerms (castLLVMPtr y off x) (Impl_CastLLVMPtr y off x)
+  gmapRetAndPerms (castLLVMPtr y off x)
+  (Impl_Simpl Proxy $ SImpl_CastLLVMPtr y off x)
 
+introCopyLLVMFreeM :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+                      ImplM vars r (ps :> LLVMPointerType w :> LLVMPointerType w)
+                      (ps :> LLVMPointerType w) ()
+introCopyLLVMFreeM x e =
+  gmapRetAndPerms (copyLLVMFree x e)
+  (Impl_Simpl Proxy $ SImpl_CopyLLVMFree x e)
+
+
+{-
 
 -- | Copy an LLVM free permission @free(e)@ from the current
 -- @x:ptr(pps1,free(e),pps2)@ permission into the @x:ptr(pps)@ permission on the
@@ -960,73 +1208,84 @@ castLLVMFieldOffsetM :: ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
 castLLVMFieldOffsetM x off off' =
   gmapRetAndPerms (castLLVMFieldOffset x off off')
   (Impl_CastLLVMFieldOffsetM x off off')
-
+-}
 
 ----------------------------------------------------------------------
 -- * Proving Equality Permissions
 ----------------------------------------------------------------------
 
--- | Build a proof on the top of the stack that @x:eq(e)@
-proveVarEq :: NuMatchingAny1 r => ExprVar a -> Mb vars (PermExpr a) ->
-              ImplM vars r (ps :> a) ps ()
-proveVarEq x mb_e =
-  getPerm x >>>= \perm ->
+-- | Build a proof on the top of the stack that @x:eq(e)@. Assume that all @x@
+-- permissions are on the top of the stack and given by argument @p@, and pop
+-- them back to the primary permission for @x@ at the end of the proof.
+proveVarEq :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+              Mb vars (PermExpr a) -> ImplM vars r (ps :> a) (ps :> a) ()
+proveVarEq x p mb_e =
   getPSubst >>>= \psubst ->
-  proveVarEqH x perm psubst mb_e
+  proveVarEqH x p psubst mb_e
 
 -- | Main helper function for 'proveVarEq'
 proveVarEqH :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
                PartialSubst vars -> Mb vars (PermExpr a) ->
-               ImplM vars r (ps :> a) ps ()
+               ImplM vars r (ps :> a) (ps :> a) ()
 
 -- Prove x:eq(z) for evar z by setting z=x
-proveVarEqH x _ psubst [nuP| PExpr_Var z |]
+proveVarEqH x p psubst [nuP| PExpr_Var z |]
   | Left memb <- mbNameBoundP z
   , Nothing <- psubstLookup psubst memb
-  = setVarM memb (PExpr_Var x) >>> introEqReflM x
+  = setVarM memb (PExpr_Var x) >>> implPopM x p >>> introEqReflM x
 
 -- Prove x:eq(x) by reflexivity
-proveVarEqH x _ psubst mb_e
+proveVarEqH x p psubst mb_e
   | Just (PExpr_Var y) <- partialSubst psubst mb_e
   , x == y
-  = introEqReflM x
+  = implPopM x p >>> introEqReflM x
 
 -- Prove x:eq(e) |- x:eq(e) using introEqCopyM
-proveVarEqH x (ValPerm_Eq e) psubst mb_e
+proveVarEqH x p@(ValPerm_Eq e) psubst mb_e
   | Just e' <- partialSubst psubst mb_e
   , e' == e
-  = introEqCopyM x e
+  = introEqCopyM x e >>> implPopM x p
 
 -- Prove x:eq(word(e)) |- x:eq(word(z)) by setting z=e
-proveVarEqH x (ValPerm_Eq
-               (PExpr_LLVMWord e)) psubst [nuP| PExpr_LLVMWord (PExpr_Var z) |]
+proveVarEqH x p@(ValPerm_Eq
+                 (PExpr_LLVMWord e)) psubst [nuP| PExpr_LLVMWord (PExpr_Var z) |]
   | Left memb <- mbNameBoundP z
   , Nothing <- psubstLookup psubst memb
-  = setVarM memb e >>> introEqCopyM x (PExpr_LLVMWord e)
+  = setVarM memb e >>> introEqCopyM x (PExpr_LLVMWord e) >>> implPopM x p
 
 -- Prove x:eq(word(e')) |- x:eq(word(e)) by first proving x:eq(word(e')) and
 -- then casting e' to e
-proveVarEqH x (ValPerm_Eq
-               (PExpr_LLVMWord e')) psubst [nuP| PExpr_LLVMWord mb_e |]
-  | Just e <- partialSubst psubst mb_e
-  = introEqCopyM x (PExpr_LLVMWord e') >>> castLLVMWordEqM x e' e
+proveVarEqH x p@(ValPerm_Eq
+                 (PExpr_LLVMWord e')) psubst [nuP| PExpr_LLVMWord mb_e |]
+  | Just e <- partialSubst psubst mb_e =
+    introEqCopyM x (PExpr_LLVMWord e') >>> implPopM x p >>>
+    castLLVMWordEqM x e' e
 
 -- Eliminate disjunctive and/or existential permissions
 proveVarEqH x (ValPerm_Or _ _) _ mb_e =
-  elimOrsExistsM x >>> proveVarEq x mb_e
+  elimOrsExistsM x >>>= \p -> proveVarEq x p mb_e
 
 -- Eliminate disjunctive and/or existential permissions
 proveVarEqH x (ValPerm_Exists _) _ mb_e =
-  elimOrsExistsM x >>> proveVarEq x mb_e
+  elimOrsExistsM x >>>= \p -> proveVarEq x p mb_e
 
 -- Otherwise give up!
 proveVarEqH _ _ _ _ = implFailM
-
 
 ----------------------------------------------------------------------
 -- * Proving Field Permissions
 ----------------------------------------------------------------------
 
+-- | FIXME: documentation
+proveVarFieldImpl :: NuMatchingAny1 r => ExprVar (LLVMPointerType w) ->
+                     [LLVMPtrPerm w] -> LLVMFieldMatch w ->
+                     PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
+                     ImplM vars r (ps :> LLVMPointerType w)
+                     (ps :> LLVMPointerType w) ()
+proveVarFieldImpl x ps match off mb_fp = error "FIXME HERE NOW"
+
+
+{-
 -- | Attempt to prove @x:ptr(pps', off |-> (S,p))@ on the top of the stack from
 -- the current permissions @x:ptr(pps)@ for @x@, assuming that @x:ptr(pps')@ is
 -- already on the top of the stack.
@@ -1072,122 +1331,181 @@ proveVarField x (FieldMatchArray _ i ap arr_ix fld_i) off mb_fld =
   indexLLVMArrayM x i >>>= \is_flds ->
   proveVarField x (FieldMatchField True (fst (is_flds !! fld_i))
                    (snd (is_flds !! fld_i))) off mb_fld
+-}
 
 
 ----------------------------------------------------------------------
--- * Proving LLVM Pointer Permissions
+-- * Proving Atomic Permissions
 ----------------------------------------------------------------------
 
--- FIXME: documentation; note that we expect x:ptr(pps)
-proveVarPtrPerms :: (1 <= w, KnownNat w, NuMatchingAny1 r) =>
-                    ExprVar (LLVMPointerType w) ->
-                    [Mb vars (LLVMPtrPerm w)] ->
-                    ImplM vars r (ps :> LLVMPointerType w)
-                    (ps :> LLVMPointerType w) ()
+proveVarAtomicImpl :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
+                      Mb vars (AtomicPerm a) ->
+                      ImplM vars r (ps :> a) (ps :> a) ()
 
--- If the required permissions are empty, we are done!
-proveVarPtrPerms x [] = greturn ()
+proveVarAtomicImpl x ps [nuP| Perm_LLVMField mb_fp |] =
+  partialSubstForceM (fmap llvmFieldOffset mb_fp)
+  "proveVarPtrPerms: incomplete psubst: LLVM field offset" >>>= \off ->
+  let matches = findFieldMatches off ps in
+  case find fieldMatchDefinite matches of
+    Just match -> proveVarFieldImpl x ps match off mb_fp
+    Nothing ->
+      foldr (\match rest ->
+              implCatchM (proveVarFieldImpl x ps match off mb_fp) rest)
+      implFailM
+      matches
 
--- Prove x:ptr(free(e')) |- x:ptr(free(e)) (where e' is not necessarily distinct
--- from e) by first proving x:ptr(free(e')) and then casting e' to e (if needed)
-proveVarPtrPerms x ([nuP| LLVMPP_Free mb_e |] : mb_pps') =
+proveVarAtomicImpl _x _ps [nuP| Perm_LLVMArray mb_ap |] =
+  partialSubstForceM (fmap llvmArrayOffset mb_ap)
+  "proveVarPtrPerms: incomplete psubst: LLVM array offset" >>>= \_off ->
+  error "FIXME HERE NOW: prove array perms!"
+-- IDEA: maybe an "array match" is a sequence of perms in order that we use to
+-- prove the array perm... or possibly a tree of options?
+
+proveVarAtomicImpl x ps [nuP| Perm_LLVMFree mb_e |] =
   partialSubstForceM mb_e
-  "proveVarPtrPerms: incomplete psubst: LLVM free size" >>>= \e ->
-  getLLVMPtrPerms x >>>= \pps ->
-  case findFreePerm pps of
+  "proveVarAtomicImpl: incomplete psubst: LLVM free size" >>>= \e ->
+  case findFreePerm ps of
     Just (i, e') ->
-      introLLVMFreeM x i >>>
-      getTopPermLastLLVMIx x >>>= \i_x ->
-      castLLVMFreeM x i_x e' e >>>
-      proveVarPtrPerms x mb_pps'
+      let ps' = take i ps ++ drop (i+1) ps in
+      implExtractConjM x ps i >>>
+      implPopM x (ValPerm_Conj ps') >>>
+      introCopyLLVMFreeM x e' >>>
+      implPushM x (ValPerm_Conj ps') >>>
+      implCombineConjM x [Perm_LLVMFree e'] ps' >>>
+      implPopM x (ValPerm_Conj (e' : ps')) >>>
+      castLLVMFreeM x e' e
     _ -> implFailM
 
-proveVarPtrPerms x ([nuP| LLVMPP_Field mb_fp@(LLVMFieldPerm mb_off _ _) |]
-                    : mb_pps') =
-  partialSubstForceM mb_off
-  "proveVarPtrPerms: incomplete psubst: LLVM field offset" >>>= \off ->
-  getLLVMPtrPerms x >>>= \pps ->
-  let matches = findFieldMatches off pps in
-  (case find fieldMatchDefinite matches of
-      Just match -> proveVarField x match off mb_fp
-      Nothing ->
-        foldr (\match rest ->
-                implCatchM (proveVarField x match off mb_fp) rest)
-        implFailM
-        matches) >>>
-  proveVarPtrPerms x mb_pps'
+proveVarAtomicImpl _x _ps [nuP| Perm_LLVMFrame _mb_fp |] =
+  error "FIXME HERE NOW: prove frame perms!"
 
-proveVarPtrPerms _ _ =
-  error "FIXME HERE: proveVarPtrPerms: arrays not yet supported"
+proveVarAtomicImpl _x _ps [nuP| Perm_LOwned _mb_ps |] =
+  error "FIXME HERE NOW: prove lowned perms!"
+-- IDEA: have a case for an existential var of type PermSetType
+
+proveVarAtomicImpl _x _ps [nuP| Perm_LContains _mb_l |] =
+  error "FIXME HERE NOW: prove lcontains perms!"
+-- IDEA: go through the lifetime stack
+
+proveVarAtomicImpl _x _ps [nuP| Perm_Fun _mb_fun_perm |] =
+  error "FIXME HERE NOW: prove fun perms!"
+-- IDEA: for function variables we just need to find an equal fun perm; for
+-- function constants (which will show up in the eq(e) |- fun_perm case) we will
+-- need an environment to look up function types and we will need a SimplImpl
+-- rule that just asserts those types and we can look them up at translation
+-- time
+
+
+proveVarConjImpl :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
+                    Mb vars [AtomicPerm a] ->
+                    ImplM vars r (ps :> a) (ps :> a) ()
+proveVarConjImpl x ps [nuP| [] |] = implPopM x p >>> introConjM x
+proveVarConjImpl x ps [nuP| mb_p : mb_ps |] =
+  proveVarAtomicImpl x ps mb_p >>>
+  proveVarImpl x (fmap ValPerm_Conj mb_ps) >>>
+  partialSubstForceM mb_p
+  "Incomplete psubst: mb_p in proveVarConjImpl" >>>= \p ->
+  partialSubstForceM mb_ps
+  "Incomplete psubst: mb_ps in proveVarConjImpl" >>>= \ps ->
+  implCombineConjM x [p] ps
 
 
 ----------------------------------------------------------------------
 -- * Proving Permission Implications
 ----------------------------------------------------------------------
 
--- | Prove @x:p@, where @p@ may have existentially-quantified variables in it
+-- | Prove @x:p'@, where @p@ may have existentially-quantified variables in it
 proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
                 ImplM vars r (ps :> a) ps ()
+proveVarImpl x mb_p =
+  getPerm x >>>= \p ->
+  implPushM x p >>>
+  proveVarImplH x p mb_p
 
--- Prove x:true vacuously
-proveVarImpl x [nuP| ValPerm_True |] = introTrueM x
+-- | Prove @x:p'@ assuming that the primary permissions for @x@ have all been
+-- pushed to the top of the stack and are equal to @p@. Pop the remaining
+-- permissions for @x@ back to its primary permission when we are finished.
+proveVarImplH :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+                 Mb vars (ValuePerm a) ->
+                 ImplM vars r (ps :> a) (ps :> a) ()
+
+-- Eliminate any disjunctions and existentials on the left
+proveVarImplH x (ValPerm_Or _ _) mb_p =
+  elimOrsExistsM x >>>= \p -> proveVarImplH x p mb_p
+
+-- Eliminate any disjunctions and existentials on the left
+proveVarImplH x (ValPerm_Exists _) mb_p =
+  elimOrsExistsM x >>>= \p -> proveVarImplH x p mb_p
 
 -- Prove x:(p1 \/ p2) by trying to prove x:p1 and x:p2 in two branches
-proveVarImpl x [nuP| ValPerm_Or p1 p2 |] =
+proveVarImplH x p [nuP| ValPerm_Or mb_p1 mb_p2 |] =
   implCatchM
-  (proveVarImpl x p1 >>>
-   partialSubstForceM p2
-   "proveVarImpl: incomplete psubst: introOrL" >>>= introOrLM x)
-  (proveVarImpl x p2 >>>
-   partialSubstForceM p2
-   "proveVarImpl: incomplete psubst: introOrR" >>>= introOrRM x)
+  (proveVarImplH x p mb_p1 >>>
+   partialSubstForceM mb_p1
+   "proveVarImpl: incomplete psubst: introOrL" >>>= \p1 ->
+    partialSubstForceM mb_p2
+   "proveVarImpl: incomplete psubst: introOrL"  >>>= \p2 ->
+    introOrLM x p1 p2)
+  (proveVarImplH x p mb_p2 >>>
+   partialSubstForceM mb_p1
+   "proveVarImpl: incomplete psubst: introOrR" >>>= \p1 ->
+    partialSubstForceM mb_p2
+    "proveVarImpl: incomplete psubst: introOrR"  >>>= \p2 ->
+    introOrRM x p1 p2)
 
 -- Prove x:exists (z:tp).p by proving x:p in an extended vars context
-proveVarImpl x [nuP| ValPerm_Exists p |] =
-  withExtVarsM (proveVarImpl x $ mbCombine p) >>>= \((), maybe_e) ->
+proveVarImplH x p [nuP| ValPerm_Exists mb_p |] =
+  withExtVarsM (proveVarImplH x p $ mbCombine mb_p) >>>= \((), maybe_e) ->
   let e = fromMaybe (zeroOfType knownRepr) maybe_e in
-  partialSubstForceM p "proveVarImpl: incomplete psubst: introExists" >>>=
+  partialSubstForceM mb_p "proveVarImpl: incomplete psubst: introExists" >>>=
   introExistsM x e
 
 -- Prove x:eq(e) by calling proveVarEq; note that we do not eliminate
 -- disjunctive permissions because some trivial equalities do not require any eq
 -- permissions on the left
-proveVarImpl x [nuP| ValPerm_Eq e |] = proveVarEq x e
+proveVarImplH x p [nuP| ValPerm_Eq e |] = proveVarEq x p e
 
--- Prove x:ptr(pps) by eliminating non-atomic permissions and case-splitting on
--- what is left
-proveVarImpl x [nuP| ValPerm_LLVMPtr mb_pps |] =
-  elimOrsExistsM x >>> getPerm x >>>= \x_p ->
-  case x_p of
-    ValPerm_LLVMPtr _ ->
-      -- If we have x:ptr(x_pps) on the left, introduce x:ptr() on the stack and
-      -- then prove the individual pointer perms by calling proveVarPtrPerms
-      introLLVMPtrM x >>> proveVarPtrPerms x (mbList mb_pps)
+-- Prove an empty conjunction trivially
+proveVarImplH x p [nuP| ValPerm_Conj [] |] = implPopM x p >>> introConjM x
 
-    ValPerm_Eq (PExpr_Var y) ->
-      -- If we have x:eq(y) on the left, prove y:ptr(pps) and then cast the
-      -- result
-      introEqCopyM x (PExpr_Var y) >>>
-      proveVarImpl y (fmap ValPerm_LLVMPtr mb_pps) >>>
-      castLLVMPtrM y (bvInt 0) x
+-- Prove x:p from x:eq(y) by first proving y:p and then casting
+proveVarImplH x p@(ValPerm_Eq (PExpr_Var y)) mb_p =
+  introEqCopyM x (PExpr_Var y) >>>
+  implPopM x p >>>
+  proveVarImpl y mb_p >>>
+  partialSubstForceM mb_p1
+  "proveVarImpl: incomplete psubst: introCast" >>>= \p' ->
+  introCastM x y p'
 
-    ValPerm_Eq (PExpr_LLVMOffset y off) ->
-      -- If we have x:eq(y+off) on the left, prove y:ptr(pps+off) and then cast
-      -- the result
-      introEqCopyM x (PExpr_LLVMOffset y off) >>>
-      proveVarImpl y (fmap (ValPerm_LLVMPtr .
-                            map (offsetLLVMPtrPerm off)) mb_pps) >>>
-      castLLVMPtrM y off x
+-- Prove x:(p1 * .. * pn) from x:eq(y+off) by proving y:(p1 + off * ...) and
+-- then casting the result
+proveVarImplH x p@(ValPerm_Eq
+                   e@(PExpr_LLVMOffset y off)) [nuP| ValPerm_Conj mb_ps |] =
+  introEqCopyM x e >>>
+  implPopM x p >>>
+  proveVarImpl y (nuWithElim1
+                  (\_ ps -> ValPerm_Conj $ map (offsetLLVMAtomicPerm off) ps)
+                  mb_ps) >>>
+  castLLVMPtrM y off x
 
-    _ ->
-      -- Otherwise fail
-      implFailM
+-- If x:eq(LLVMword(e)) then we cannot prove any pointer permissions for it
+proveVarImplH x (ValPerm_Eq (PExpr_LLVMWord _)) [nuP| ValPerm_Conj _ |] =
+  implFailM
+
+proveVarImplH _ (ValPerm_Eq _) [nuP| ValPerm_Conj _ |] =
+  error "FIXME HERE NOW: finish the proveVarImplH cases for x:eq(e) |- x:pps"
+
+proveVarImplH x (ValPerm_Conj ps) [nuP| ValPerm_Conj mb_ps |] =
+  proveVarConjImpl x ps $ mbList mb_ps
 
 -- We do not yet handle mu
-proveVarImpl _ [nuP| ValPerm_Mu _ |] = implFailM
+proveVarImplH _ _ [nuP| ValPerm_Mu _ |] = implFailM
 
 -- We do not yet handle permission variables
-proveVarImpl _ [nuP| ValPerm_Var _ |] = implFailM
+proveVarImplH _ _ [nuP| ValPerm_Var _ |] = implFailM
+
+-- Fail if nothing else matched
+proveVarImplH _ _ _ = implFailM
 
 -- | A list of distinguished permissions with existential variables
 data ExDistPerms vars ps where
@@ -1223,6 +1541,9 @@ proveVarsImplAppend (ExDistPermsCons ps x p) =
 -- * Recombining Permissions
 ----------------------------------------------------------------------
 
+{-
+
+
 -- | Recombine the distinguished permission @p_dist@ on @x@ back into the
 -- existing permission @p@ on @x@
 recombinePerm :: ExprVar a -> ValuePerm a -> ValuePerm a ->
@@ -1238,3 +1559,5 @@ recombinePerms =
     DistPermsNil -> greturn ()
     DistPermsCons _ x p_dist ->
       getPerm x >>>= \p_x -> recombinePerm x p_dist p_x >>> recombinePerms
+-}
+-}
