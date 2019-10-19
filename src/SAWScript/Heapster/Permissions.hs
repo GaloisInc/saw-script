@@ -567,7 +567,7 @@ data LLVMFieldPerm w =
                   -- permission to be usable
                   llvmFieldOffset :: PermExpr (BVType w),
                   -- ^ The offset from the pointer in bytes of this field
-                  llvmFieldPerm :: ValuePerm (LLVMPointerType w)
+                  llvmFieldContents :: ValuePerm (LLVMPointerType w)
                   -- ^ The permissions we get for the value read from this field
                 }
   deriving Eq
@@ -761,13 +761,13 @@ llvmExEqWord = nu $ \e -> ValPerm_Eq (PExpr_LLVMWord $ PExpr_Var e)
 
 -- | Create a field pointer permission with offset 0 and @eq(e)@ permissions
 -- with the given read-write modality
-llvmFieldPerm0Eq :: (1 <= w, KnownNat w) =>
+llvmFieldContents0Eq :: (1 <= w, KnownNat w) =>
                     RWModality -> PermExpr (LLVMPointerType w) ->
                     LLVMPtrPerm w
-llvmFieldPerm0Eq rw e =
+llvmFieldContents0Eq rw e =
   Perm_LLVMField $ LLVMFieldPerm { llvmFieldRW = rw,
                                    llvmFieldOffset = bvInt 0,
-                                   llvmFieldPerm = ValPerm_Eq e }
+                                   llvmFieldContents = ValPerm_Eq e }
 
 -- | Create an existential permission to read or write an arbitrary value from
 -- offset 0 of an LLVM pointer dependeing on the modality, i.e., create the
@@ -775,16 +775,16 @@ llvmFieldPerm0Eq rw e =
 llvmExFieldPerm0Eq :: (1 <= w, KnownNat w) => RWModality ->
                       Binding (LLVMPointerType w) (ValuePerm (LLVMPointerType w))
 llvmExFieldPerm0Eq rw =
-  nu $ \x -> ValPerm_Conj [llvmFieldPerm0Eq rw (PExpr_Var x)]
+  nu $ \x -> ValPerm_Conj [llvmFieldContents0Eq rw (PExpr_Var x)]
 -}
 
 -- | Create a field write permission with offset 0 and @true@ permissions
-llvmFieldPerm0True :: (1 <= w, KnownNat w) => LLVMFieldPerm w
-llvmFieldPerm0True =
+llvmFieldContents0True :: (1 <= w, KnownNat w) => LLVMFieldPerm w
+llvmFieldContents0True =
   LLVMFieldPerm { llvmFieldRW = Write,
                   llvmFieldLifetimes = [],
                   llvmFieldOffset = bvInt 0,
-                  llvmFieldPerm = ValPerm_True }
+                  llvmFieldContents = ValPerm_True }
 
 -- | Create the array ponter perm @array(0,<len,*1 |-> [ptr(0 |-> true)])@ of
 -- size @len@ words of width @w@
@@ -793,7 +793,7 @@ llvmArrayPtrPermOfSize len =
   Perm_LLVMArray $ LLVMArrayPerm { llvmArrayOffset = bvInt 0,
                                    llvmArrayLen = bvInt len,
                                    llvmArrayStride = 1,
-                                   llvmArrayFields = [llvmFieldPerm0True],
+                                   llvmArrayFields = [llvmFieldContents0True],
                                    llvmArrayBorrows = [] }
 
 -- | Like 'llvmArrayPtrPermOfSize', but return a 'ValuePerm' instead of a
@@ -977,7 +977,7 @@ atomicPermIsCopyable (Perm_LLVMField
                       (LLVMFieldPerm { llvmFieldRW = Write })) = False
 atomicPermIsCopyable (Perm_LLVMField
                       (LLVMFieldPerm { llvmFieldRW = Read,
-                                       llvmFieldPerm = p })) =
+                                       llvmFieldContents = p })) =
   permIsCopyable p
 atomicPermIsCopyable (Perm_LLVMArray
                       (LLVMArrayPerm { llvmArrayFields = fps })) =
@@ -1574,6 +1574,10 @@ nameMember MNil _ = Nothing
 nameMember (_ :>: n1) n2 | Just Refl <- cmpName n1 n2 = Just Member_Base
 nameMember (ns :>: _) n = fmap Member_Step $ nameMember ns n
 
+-- | Class for types that support abstracting out all permission and expression
+-- variables. If the abstraction succeeds, we get a closed element of the type
+-- inside a binding for those permission and expression variables that are free
+-- in the original input.
 class AbstractVars a where
   abstractPEVars :: MapRList Name (pctx :: RList Type) ->
                     MapRList Name (ectx :: RList CrucibleType) -> a ->
@@ -2087,8 +2091,8 @@ introLLVMFieldContents x y perms =
   over (topDistPerm x . llvmPtrPerm i)
   (\pp -> case pp of
       Perm_LLVMField fp
-        | ValPerm_Eq (PExpr_Var y') <- llvmFieldPerm fp , y' == y ->
-            Perm_LLVMField $ fp { llvmFieldPerm = y_perm }
+        | ValPerm_Eq (PExpr_Var y') <- llvmFieldContents fp , y' == y ->
+            Perm_LLVMField $ fp { llvmFieldContents = y_perm }
       _ -> error "introLLVMFieldContents")
   perms'
 
@@ -2101,12 +2105,12 @@ elimLLVMFieldContents :: ExprVar (LLVMPointerType w) -> Int -> PermSet ps ->
 elimLLVMFieldContents x i perms =
   case perms ^. (varPerm x . llvmPtrPerm i) of
     Perm_LLVMField fp
-      | ValPerm_Eq (PExpr_Var y) <- llvmFieldPerm fp -> Left y
+      | ValPerm_Eq (PExpr_Var y) <- llvmFieldContents fp -> Left y
     Perm_LLVMField fp ->
       Right $ nu $ \y ->
-      set (varPerm y) (llvmFieldPerm fp) $
+      set (varPerm y) (llvmFieldContents fp) $
       set (varPerm x . llvmPtrPerm i)
-      (Perm_LLVMField $ fp {llvmFieldPerm = ValPerm_Eq (PExpr_Var y) }) $
+      (Perm_LLVMField $ fp { llvmFieldContents = ValPerm_Eq (PExpr_Var y) }) $
       perms
     _ -> error "elimLLVMFieldContents"
 
