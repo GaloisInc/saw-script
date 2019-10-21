@@ -43,6 +43,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , SymType(MemType, Alias, VoidType)
   , MemType(..)
   , memTypeSize
+  , memTypeAlign
   , fiOffset
   , fiType
   , siFields
@@ -63,7 +64,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , liftRetType
     -- * Re-exports from "Lang.Crucible.LLVM.Globals"
   , GlobalInitializerMap
-  , initializeMemory
+  , initializeMemoryConstGlobals
   , makeGlobalMap
   , populateConstGlobals
     -- * Re-exports from "Lang.Crucible.LLVM.Translation"
@@ -148,7 +149,7 @@ import Lang.Crucible.LLVM.Intrinsics
 import Lang.Crucible.LLVM.MemType
   (SymType(MemType, Alias, VoidType),
    MemType(..),
-   Ident, memTypeSize, fiOffset, fiType,
+   Ident, memTypeSize, memTypeAlign, fiOffset, fiType,
    siFields, siFieldInfo, siFieldOffset, siFieldTypes, siIsPacked,
    mkStructInfo, ppMemType)
 
@@ -158,7 +159,7 @@ import Lang.Crucible.LLVM.TypeContext
 import qualified Lang.Crucible.LLVM.TypeContext as TyCtx
 
 import Lang.Crucible.LLVM.Globals
-  (GlobalInitializerMap, initializeMemory, makeGlobalMap, populateConstGlobals)
+  (GlobalInitializerMap, initializeMemoryConstGlobals, makeGlobalMap, populateConstGlobals)
 
 import Lang.Crucible.LLVM.Translation
   (llvmMemVar, symbolMap, LLVMHandleInfo(LLVMHandleInfo),

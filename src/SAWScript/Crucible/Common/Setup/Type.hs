@@ -26,6 +26,7 @@ module SAWScript.Crucible.Common.Setup.Type
   , CrucibleSetupT
   , currentState
   , addPointsTo
+  , addAllocGlobal
   , addCondition
   , freshVariable
   ) where
@@ -85,6 +86,9 @@ currentState f x = case x^. csPrePost of
 
 addPointsTo :: Monad m => MS.PointsTo ext -> CrucibleSetupT ext m ()
 addPointsTo pt = currentState . MS.csPointsTos %= (pt : )
+
+addAllocGlobal :: Monad m => MS.AllocGlobal ext -> CrucibleSetupT ext m ()
+addAllocGlobal ag = csMethodSpec . MS.csGlobalAllocs %= (ag : )
 
 addCondition :: Monad m => MS.SetupCondition ext -> CrucibleSetupT ext m ()
 addCondition cond = currentState . MS.csConditions %= (cond : )

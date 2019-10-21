@@ -1,6 +1,7 @@
 m <- llvm_load_module "./test.bc";
 
 let init_global name = do {
+  crucible_alloc_global name;
   crucible_points_to (crucible_global name)
                      (crucible_global_initializer name);
 };

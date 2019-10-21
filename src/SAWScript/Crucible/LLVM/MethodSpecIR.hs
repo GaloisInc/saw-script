@@ -209,7 +209,6 @@ data LLVMCrucibleContext arch =
   LLVMCrucibleContext
   { _ccLLVMModule      :: LLVMModule arch
   , _ccBackend         :: Sym
-  , _ccLLVMEmptyMem    :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
   , _ccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM arch)
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   }
@@ -244,6 +243,21 @@ ppPointsTo (LLVMPointsTo _loc ptr val) =
 
 instance PPL.Pretty (LLVMPointsTo arch) where
   pretty = ppPointsTo
+
+--------------------------------------------------------------------------------
+-- ** AllocGlobal
+
+type instance MS.AllocGlobal (CL.LLVM arch) = LLVMAllocGlobal arch
+
+data LLVMAllocGlobal arch = LLVMAllocGlobal ProgramLoc L.Symbol
+
+ppAllocGlobal :: LLVMAllocGlobal arch -> PPL.Doc
+ppAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =
+  PPL.text "allocate global"
+  PPL.<+> PPL.text name
+
+instance PPL.Pretty (LLVMAllocGlobal arch) where
+  pretty = ppAllocGlobal
 
 --------------------------------------------------------------------------------
 -- ** ???
