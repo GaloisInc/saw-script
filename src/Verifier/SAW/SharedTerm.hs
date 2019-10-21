@@ -794,7 +794,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
           | otherwise      -> fail $ "Dangling bound variable: " ++ show (i - length env)
-        Constant ec _ -> memo (ecType ec)
+        Constant ec _ -> return (ecType ec)
     ftermf :: FlatTermF Term
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
