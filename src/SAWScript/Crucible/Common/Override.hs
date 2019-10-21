@@ -124,7 +124,7 @@ makeLenses ''OverrideState
 initialState ::
   Sym                           {- ^ simulator                      -} ->
   Crucible.SymGlobalState Sym   {- ^ initial global variables       -} ->
-  Map AllocIndex (Pointer ext) {- ^ initial allocation substituion -} ->
+  Map AllocIndex (Pointer ext)  {- ^ initial allocation substituion -} ->
   Map VarIndex Term             {- ^ initial term substituion       -} ->
   Set VarIndex                  {- ^ initial free terms             -} ->
   W4.ProgramLoc                 {- ^ location information for the override -} ->

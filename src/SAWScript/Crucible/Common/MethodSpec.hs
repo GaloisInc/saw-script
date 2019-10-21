@@ -298,6 +298,9 @@ type family ExtType ext :: Type
 -- | The type of points-to assertions
 type family PointsTo ext :: Type
 
+-- | The type of global allocations
+type family AllocGlobal ext :: Type
+
 --------------------------------------------------------------------------------
 -- *** StateSpec
 
@@ -362,6 +365,7 @@ data CrucibleMethodSpecIR ext =
   , _csPostState       :: StateSpec ext -- ^ state after the function runs
   , _csArgBindings     :: Map Integer (ExtType ext, SetupValue ext) -- ^ function arguments
   , _csRetValue        :: Maybe (SetupValue ext) -- ^ function return value
+  , _csGlobalAllocs    :: [AllocGlobal ext] -- ^ globals allocated
   , _csSolverStats     :: SolverStats -- ^ statistics about the proof that produced this
   , _csCodebase        :: Codebase ext -- ^ the codebase this spec was verified against
   , _csLoc             :: ProgramLoc -- ^ where in the SAWscript was this spec?
@@ -410,6 +414,7 @@ makeCrucibleMethodSpecIR meth args ret loc code = do
     ,_csPostState       = initialStateSpec
     ,_csArgBindings     = Map.empty
     ,_csRetValue        = Nothing
+    ,_csGlobalAllocs    = []
     ,_csSolverStats     = mempty
     ,_csLoc             = loc
     ,_csCodebase        = code

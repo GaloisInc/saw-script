@@ -1835,6 +1835,11 @@ primitives = Map.fromList
     , "The specified size must be greater than the size of the LLVM type."
     ]
 
+  , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
+    (bicVal crucible_alloc_global)
+    Current
+    []
+
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)
     Current
