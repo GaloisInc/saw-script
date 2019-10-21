@@ -65,7 +65,7 @@ import           Control.Monad.State hiding (fail)
 import           Control.Monad.Fail (MonadFail(..))
 import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
-import           Data.Foldable (for_, toList, find)
+import           Data.Foldable (for_, toList, find, fold)
 import           Data.Function
 import           Data.IORef
 import           Data.List
@@ -1153,6 +1153,17 @@ crucible_llvm_extract ::
 crucible_llvm_extract bic opts (Some lm) fn_name = do
   let ctx = lm ^. modTrans . Crucible.transContext
   let ?lc = ctx^.Crucible.llvmTypeCtx
+  let edef = findDefMaybeStatic (lm ^. modAST) fn_name
+  case edef of
+    Right defs -> do
+      let defTypes = fold $
+                     NE.map (map L.typedType . L.defArgs) defs <>
+                     NE.map (\d -> [L.defRetType d]) defs
+      when (any L.isPointer defTypes) $
+        fail "Pointer types are not supported by `crucible_llvm_extract`."
+      when (any L.isAlias defTypes) $
+        fail "Type aliases are not supported by `crucible_llvm_extract`."
+    Left err -> fail (displayVerifExceptionOpts opts err)
   setupLLVMCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]

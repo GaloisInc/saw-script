@@ -697,7 +697,7 @@ primitives = Map.fromList
 
   , prim "set_timeout"         "Int -> ProofScript ()"
     (pureVal set_timeout)
-    Current
+    Experimental
     [ "Set the timeout, in milliseconds, for any automated prover at the"
     , "end of this proof script. Not that this is simply ignored for provers"
     , "that don't support timeouts, for now."
