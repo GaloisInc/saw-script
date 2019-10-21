@@ -43,7 +43,7 @@
 * Improved error messages in general.
 
 * Fixed various additional bugs, including #211, #455, #479, #484, #493,
-  #496, #511, #521, #522, #534(?), #563
+  #496, #511, #521, #522, #534, #563
 
 # Version 0.3
 
