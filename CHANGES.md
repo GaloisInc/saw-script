@@ -5,7 +5,13 @@
   function that neglected to mention an effect that the function in fact
   caused could be successfully verified. When verifying a caller of that
   function, only the effects mentioned in the specification would be
-  used.
+  used. The fix for this issue may break some proof scripts: any pointer
+  mentioned using `crucible_points_to` in the initial state of a
+  specification but not in the final state will be assigned a final
+  value of "invalid", and any subsequent reads from the pointer will
+  fail. To fix this issue, make sure that every specification you use
+  provides a final value for every pointer it touches (which in many
+  cases will be the same as its initial value).
 
 * Added an experimental command, `llvm_boilerplate`, that emits skeleton
   function specifications for every function defined in an LLVM module.
