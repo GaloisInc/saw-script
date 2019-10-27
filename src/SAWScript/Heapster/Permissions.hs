@@ -1342,11 +1342,6 @@ instance SubstVar s m => Substable s SomeExprAndPerm m where
   genSubst s [nuP| SomeExprAndPerm e p |] =
     SomeExprAndPerm <$> genSubst s e <*> genSubst s p
 
-instance SubstVar s m => Substable s (LLVMPtrPerm a) m where
-  genSubst s [nuP| Perm_LLVMField fp |] = Perm_LLVMField <$> genSubst s fp
-  genSubst s [nuP| Perm_LLVMArray ap |] = Perm_LLVMArray <$> genSubst s ap
-  genSubst s [nuP| Perm_LLVMFree len |] = Perm_LLVMFree <$> genSubst s len
-
 instance SubstVar s m => Substable s (LLVMFieldPerm w) m where
   genSubst s [nuP| LLVMFieldPerm rw ls off p |] =
     LLVMFieldPerm <$> return (mbLift rw) <*> genSubst s ls <*>
