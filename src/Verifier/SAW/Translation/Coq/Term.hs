@@ -306,6 +306,11 @@ translateTerm t = withLocalLocalEnvironment $ do -- traceTerm "translateTerm" t 
           case args of
           [_ty, c, tt, ft] ->
             Coq.If <$> go env c <*> go env tt <*> go env ft
+          -- This happens when the initial code is:
+          -- (if b then f else g) arg1 arg2
+          _ty : c : tt : ft : rest -> do
+            ite <- Coq.If <$> go env c <*> go env tt <*> go env ft
+            Coq.App ite <$> mapM (go env) rest
           _ -> badTerm
         -- NOTE: the following works for something like CBC, because computing
         -- the n-th block only requires n steps of recursion

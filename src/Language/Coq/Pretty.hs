@@ -78,7 +78,10 @@ ppTerm e =
     App f args ->
       -- FIXME: super conservative parenthesizing because precedence is not
       -- implemented
-      parens (hsep (ppTerm f : map (parens . ppTerm) args))
+      -- NOTE: parens around f, because (App (If c a b) d) must print as
+      -- ((if c then a else b) d)
+      -- or else the d is applied to b only...
+      parens (hsep (parens (ppTerm f) : map (parens . ppTerm) args))
     Sort s ->
       ppSort s
     Var x ->
