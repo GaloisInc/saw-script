@@ -345,7 +345,7 @@ translateTerm t = withLocalLocalEnvironment $ do -- traceTerm "translateTerm" t 
       | n < length env -> Coq.Var <$> pure (env !! n)
       | otherwise -> Except.throwError $ LocalVarOutOfBounds t
 
-    (unwrapTermF -> Constant n body _) -> do
+    (unwrapTermF -> Constant n body) -> do
       configuration <- ask
       let renamed = translateConstant n
       alreadyTranslatedDecls <- view allDeclarations <$> get

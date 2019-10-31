@@ -301,9 +301,11 @@ constantsRenamingMap =
   [ ("/\\", "and")
   ]
 
-translateConstant :: String -> String
-translateConstant c =
-  Map.findWithDefault c c constantsRenamingMap
+-- TODO: Now that ExtCns contains a unique identifier, it might make sense
+-- to check those here to avoid some captures?
+translateConstant :: ExtCns e -> String
+translateConstant (EC {..}) =
+  Map.findWithDefault ecName ecName constantsRenamingMap
 
 zipSnippet :: String
 zipSnippet = [i|
