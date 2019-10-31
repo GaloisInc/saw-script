@@ -705,7 +705,7 @@ setupCrucibleContext bic opts jclass =
      cb <- getJavaCodebase
      let sc  = biSharedContext bic
      let gen = globalNonceGenerator
-     sym <- io $ Crucible.newSAWCoreBackend sc gen
+     sym <- io $ Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
      return JVMCrucibleContext { _jccJVMClass = jclass
                                , _jccCodebase = cb

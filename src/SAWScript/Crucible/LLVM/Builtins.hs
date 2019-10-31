@@ -991,7 +991,7 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
       let gen = globalNonceGenerator
       let sc  = biSharedContext bic
       let verbosity = simVerbose opts
-      sym <- CrucibleSAW.newSAWCoreBackend sc gen
+      sym <- CrucibleSAW.newSAWCoreBackend W4.FloatRealRepr sc gen
 
       let cfg = W4.getConfiguration sym
       verbSetting <- W4.getOptionSetting W4.verbosity cfg
