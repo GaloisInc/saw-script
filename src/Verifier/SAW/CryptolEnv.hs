@@ -293,8 +293,8 @@ genTermEnv sc modEnv = do
 
 --------------------------------------------------------------------------------
 
-checkNotParametrized :: T.Module -> IO ()
-checkNotParametrized m =
+checkNotParameterized :: T.Module -> IO ()
+checkNotParameterized m =
   when (T.isParametrizedModule m) $
     fail $ unlines [ "Cannot load parameterized modules directly."
                    , "Either use a ` import, or make a module instantiation."
@@ -306,7 +306,7 @@ loadCryptolModule :: SharedContext -> CryptolEnv -> FilePath
 loadCryptolModule sc env path = do
   let modEnv = eModuleEnv env
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
-  checkNotParametrized m
+  checkNotParameterized m
 
   let ifaceDecls = getAllIfaceDecls modEnv'
   (types, modEnv'') <- liftModuleM modEnv' $ do
@@ -359,7 +359,7 @@ importModule sc env src as imps = do
     case src of
       Left path -> MB.loadModuleByPath path
       Right mn -> snd <$> MB.loadModuleFrom (MM.FromModule mn)
-  checkNotParametrized m
+  checkNotParameterized m
 
   -- Regenerate SharedTerm environment. TODO: preserve old
   -- values, only translate decls from new module.
