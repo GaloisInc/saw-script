@@ -237,50 +237,44 @@ runInferOutput out =
 
 -- Translate -------------------------------------------------------------------
 
+mkCryEnv :: CryptolEnv -> IO C.Env
+mkCryEnv env =
+  do let modEnv = eModuleEnv env
+     let ifaceDecls = getAllIfaceDecls modEnv
+     (types, _) <-
+       liftModuleM modEnv $
+       do prims <- MB.getPrimMap
+          -- noIfaceParams because we don't support translating functors yet
+          TM.inpVars `fmap` MB.genInferInput P.emptyRange prims
+            MI.noIfaceParams ifaceDecls
+     let types' = Map.union (eExtraTypes env) types
+     let terms = eTermEnv env
+     let cryEnv = C.emptyEnv
+           { C.envE = fmap (\t -> (t, 0)) terms
+           , C.envC = types'
+           }
+     return cryEnv
+
 translateExpr :: SharedContext -> CryptolEnv -> T.Expr -> IO Term
-translateExpr sc env expr = do
-  let modEnv = eModuleEnv env
-  let ifaceDecls = getAllIfaceDecls modEnv
-  (types, _) <- liftModuleM modEnv $ do
-    prims <- MB.getPrimMap
-    -- noIfaceParams because we don't support translating functors yet
-    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims
-                                              MI.noIfaceParams ifaceDecls
-  let types' = Map.union (eExtraTypes env) types
-  let terms = eTermEnv env
-  let cryEnv = C.emptyEnv
-        { C.envE = fmap (\t -> (t, 0)) terms
-        , C.envC = types'
-        }
-  C.importExpr sc cryEnv expr
+translateExpr sc env expr =
+  do cryEnv <- mkCryEnv env
+     C.importExpr sc cryEnv expr
 
 translateDeclGroups :: SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
-translateDeclGroups sc env dgs = do
-  let modEnv = eModuleEnv env
-  let ifaceDecls = getAllIfaceDecls modEnv
-  (types, _) <- liftModuleM modEnv $ do
-    prims <- MB.getPrimMap
-    -- noIfaceParams because we don't support translating functors yet
-    TM.inpVars `fmap` MB.genInferInput P.emptyRange prims MI.noIfaceParams
-                                                          ifaceDecls
-  let types' = Map.union (eExtraTypes env) types
-  let terms = eTermEnv env
-  let cryEnv = C.emptyEnv
-        { C.envE = fmap (\t -> (t, 0)) terms
-        , C.envC = types'
-        }
-  cryEnv' <- C.importTopLevelDeclGroups sc cryEnv dgs
-  termEnv' <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv')
+translateDeclGroups sc env dgs =
+  do cryEnv <- mkCryEnv env
+     cryEnv' <- C.importTopLevelDeclGroups sc cryEnv dgs
+     termEnv' <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv')
 
-  let decls = concatMap T.groupDecls dgs
-  let names = map T.dName decls
-  let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
-  let addName name = MR.shadowing (MN.singletonE (P.mkUnqual (MN.nameIdent name)) name)
-  return env
-        { eExtraNames = foldr addName (eExtraNames env) names
-        , eExtraTypes = Map.union (eExtraTypes env) newTypes
-        , eTermEnv = termEnv'
-        }
+     let decls = concatMap T.groupDecls dgs
+     let names = map T.dName decls
+     let newTypes = Map.fromList [ (T.dName d, T.dSignature d) | d <- decls ]
+     let addName name = MR.shadowing (MN.singletonE (P.mkUnqual (MN.nameIdent name)) name)
+     return env
+           { eExtraNames = foldr addName (eExtraNames env) names
+           , eExtraTypes = Map.union (eExtraTypes env) newTypes
+           , eTermEnv = termEnv'
+           }
 
 -- | Translate all declarations in all loaded modules to SAWCore terms
 genTermEnv :: SharedContext -> ME.ModuleEnv -> IO (Map T.Name Term)
@@ -314,13 +308,19 @@ loadCryptolModule sc env path = do
     TM.inpVars `fmap` MB.genInferInput P.emptyRange prims MI.noIfaceParams ifaceDecls
 
   -- Regenerate SharedTerm environment.
-  let oldTermEnv = eTermEnv env
-  newTermEnv <- genTermEnv sc modEnv''
+  oldCryEnv <- mkCryEnv env
+  let oldModNames = map ME.lmName $ ME.lmLoadedModules $ ME.meLoadedModules modEnv
+  let isNew m' = T.mName m' `notElem` oldModNames
+  let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv''
+  let newDeclGroups = concatMap T.mDecls newModules
+  newCryEnv <- C.importTopLevelDeclGroups sc oldCryEnv newDeclGroups
+  newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
+
   let names = MEx.eBinds (T.mExports m) -- :: Set T.Name
   let tm' = Map.filterWithKey (\k _ -> Set.member k names) $
             Map.intersectionWith TypedTerm types newTermEnv
   let env' = env { eModuleEnv = modEnv''
-                 , eTermEnv = Map.union newTermEnv oldTermEnv
+                 , eTermEnv = newTermEnv
                  }
   let sm' = Map.filterWithKey (\k _ -> Set.member k (MEx.eTypes (T.mExports m))) (T.mTySyns m)
   return (CryptolModule sm' tm', env')
@@ -361,14 +361,18 @@ importModule sc env src as imps = do
       Right mn -> snd <$> MB.loadModuleFrom (MM.FromModule mn)
   checkNotParameterized m
 
-  -- Regenerate SharedTerm environment. TODO: preserve old
-  -- values, only translate decls from new module.
-  let oldTermEnv = eTermEnv env
-  newTermEnv <- genTermEnv sc modEnv'
+  -- Regenerate SharedTerm environment.
+  oldCryEnv <- mkCryEnv env
+  let oldModNames = map ME.lmName $ ME.lmLoadedModules $ ME.meLoadedModules modEnv
+  let isNew m' = T.mName m' `notElem` oldModNames
+  let newModules = filter isNew $ map ME.lmModule $ ME.lmLoadedModules $ ME.meLoadedModules modEnv'
+  let newDeclGroups = concatMap T.mDecls newModules
+  newCryEnv <- C.importTopLevelDeclGroups sc oldCryEnv newDeclGroups
+  newTermEnv <- traverse (\(t, j) -> incVars sc 0 j t) (C.envE newCryEnv)
 
   return env { eImports = P.Import (T.mName m) as imps : eImports env
              , eModuleEnv = modEnv'
-             , eTermEnv = Map.union newTermEnv oldTermEnv }
+             , eTermEnv = newTermEnv }
 
 bindIdent :: Ident -> CryptolEnv -> (T.Name, CryptolEnv)
 bindIdent ident env = (name, env')
