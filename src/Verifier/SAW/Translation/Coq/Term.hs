@@ -27,8 +27,8 @@ module Verifier.SAW.Translation.Coq.Term where
 import           Control.Lens                                  (Getter, makeLenses, over, set, to, view)
 import qualified Control.Monad.Except                          as Except
 import qualified Control.Monad.Fail                            as Fail
-import           Control.Monad.Reader                          hiding (fail)
-import           Control.Monad.State                           hiding (fail, state)
+import           Control.Monad.Reader                          hiding (fail, fix)
+import           Control.Monad.State                           hiding (fail, fix, state)
 import           Data.List                                     (intersperse)
 import           Data.Maybe                                    (fromMaybe)
 import           Prelude                                       hiding (fail)
@@ -85,13 +85,14 @@ type TermTranslationMonad m = TranslationMonad TranslationState m
 runTermTranslationMonad ::
   TranslationConfiguration ->
   [String] ->
+  [String] ->
   (forall m. TermTranslationMonad m => m a) ->
   Either (TranslationError Term) (a, TranslationState)
-runTermTranslationMonad configuration globalDecls =
+runTermTranslationMonad configuration globalDecls localEnv =
   runTranslationMonad configuration
   (TranslationState { _globalDeclarations = globalDecls
-                    , _localDeclarations = []
-                    , _localEnvironment  = []
+                    , _localDeclarations  = []
+                    , _localEnvironment   = localEnv
                     })
 
 findIdentTranslation ::
@@ -256,33 +257,28 @@ translateParams ((n, ty):ps) = do
   ps' <- translateParams ps
   return (Coq.Binder n (Just ty') : ps')
 
-translatePiParams :: TermTranslationMonad m => [(String, Term)] -> m [Coq.PiBinder]
-translatePiParams [] = return []
-translatePiParams ((n, ty):ps) = do
-  ty' <- translateTerm ty
-  modify $ over localEnvironment (n :)
-  ps' <- translatePiParams ps
-  let n' = if n == "_" then Nothing else Just n
-  return (Coq.PiBinder n' ty' : ps')
+translatePi :: TermTranslationMonad m => [(String, Term)] -> Term -> m Coq.Term
+translatePi binders body = withLocalLocalEnvironment $ do
+  bindersT <- forM binders $ \ (b, bType) -> do
+    bTypeT <- translateTerm bType
+    modify $ over localEnvironment (b :)
+    let n = if b == "_" then Nothing else Just b
+    return (Coq.PiBinder n bTypeT)
+  bodyT <- translateTerm body
+  return $ Coq.Pi bindersT bodyT
 
 -- env is innermost first order
 translateTerm :: TermTranslationMonad m => Term -> m Coq.Term
-translateTerm t = withLocalLocalEnvironment $ do -- traceTerm "translateTerm" t $
+translateTerm t = withLocalLocalEnvironment $ do
+  -- traceTerm "translateTerm" t
   env <- view localEnvironment <$> get
   case t of
 
     (asFTermF -> Just tf)  -> flatTermFToExpr (go env) tf
 
-    (asPi -> Just _) -> do
-      paramTerms <- translatePiParams params
-      Coq.Pi <$> pure paramTerms
-                 -- env is in innermost first (reverse) binder order
-                 <*> go ((reverse paramNames) ++ env) e
-        where
-          -- params are in normal, outermost first, order
-          (params, e) = asPiList t
-          -- param names are in normal, outermost first, order
-          paramNames = map fst $ params
+    (asPi -> Just _) -> translatePi params e
+      where
+        (params, e) = asPiList t
 
     (asLambda -> Just _) -> do
       paramTerms <- translateParams params
@@ -304,42 +300,75 @@ translateTerm t = withLocalLocalEnvironment $ do -- traceTerm "translateTerm" t 
         case i of
         "Prelude.ite" ->
           case args of
-          [_ty, c, tt, ft] ->
-            Coq.If <$> go env c <*> go env tt <*> go env ft
-          -- This happens when the initial code is:
+          -- `rest` can be non-empty in examples like:
           -- (if b then f else g) arg1 arg2
           _ty : c : tt : ft : rest -> do
             ite <- Coq.If <$> go env c <*> go env tt <*> go env ft
-            Coq.App ite <$> mapM (go env) rest
+            case rest of
+              [] -> return ite
+              _  -> Coq.App ite <$> mapM (go env) rest
           _ -> badTerm
         -- NOTE: the following works for something like CBC, because computing
         -- the n-th block only requires n steps of recursion
         -- FIXME: (pun not intended) better conditions for when this is safe to do
         "Prelude.fix" ->
           case args of
-          [resultType, lambda] ->
+          []  -> notSupported "call to Prelude.fix with no argument"
+          [_] -> notSupported "call to Prelude.fix with 1 argument"
+          resultType : lambda : rest ->
             case resultType of
             -- TODO: check that 'n' is finite
             (asSeq -> Just (n, _)) ->
               case lambda of
+
               (asLambda -> Just (x, seqType, body)) | seqType == resultType ->
                   do
                     len <- go env n
                     expr <- go (x:env) body
                     seqTypeT <- go env seqType
                     defaultValueT <- defaultTermForType resultType
-                    return $ Coq.App (Coq.Var "iter")
-                      [ len
-                      , Coq.Lambda [Coq.Binder x (Just seqTypeT)] expr
-                      , defaultValueT
-                      ]
+                    let iter =
+                          Coq.App (Coq.Var "iter")
+                          [ len
+                          , Coq.Lambda [Coq.Binder x (Just seqTypeT)] expr
+                          , defaultValueT
+                          ]
+                    case rest of
+                      [] -> return iter
+                      _  -> notSupported "THIS" -- Coq.App iter <$> mapM (go env) rest
               _ -> badTerm
             -- NOTE: there is currently one instance of `fix` that will trigger
             -- `notSupported`.  It is used in `Cryptol.cry` when translating
             -- `iterate`, which generates an infinite stream of nested
             -- applications of a given function.
-            _ -> notSupported
-          _ -> badTerm
+
+            (asPiList -> (pis, afterPis)) ->
+              -- NOTE: this will output some code, but it is likely that Coq
+              -- will reject it for not being structurally recursive.
+              case lambda of
+              (asLambdaList -> ((recFn, _) : binders, body)) -> do
+                let (_binderPis, otherPis) = splitAt (length binders) pis
+                (bindersT, typeT, bodyT) <- withLocalLocalEnvironment $ do
+                  -- this is very ugly...
+                  modify $ over localEnvironment (recFn :)
+                  bindersT <- mapM
+                    (\ (b, bType) -> do
+                      env' <- view localEnvironment <$> get
+                      bTypeT <- go env' bType
+                      modify $ over localEnvironment (b :)
+                      return $ Coq.Binder b (Just bTypeT)
+                    )
+                    binders
+                  typeT <- translatePi otherPis afterPis
+                  env' <- view localEnvironment <$> get
+                  bodyT <- go env' body
+                  return (bindersT, typeT, bodyT)
+                let fix = Coq.Fix recFn bindersT typeT bodyT
+                case rest of
+                  [] -> return fix
+                  _  -> notSupported "THAT" -- Coq.App fix <$> mapM (go env) rest
+              _ -> notSupported "call to Prelude.fix without lambda"
+
         _ ->
           atUseSite <$> findSpecialTreatment i >>= \case
           UseReplace replacement -> return replacement
@@ -360,11 +389,11 @@ translateTerm t = withLocalLocalEnvironment $ do -- traceTerm "translateTerm" t 
              b <- go env body
              modify $ over localDeclarations $ (mkDefinition renamed b :)
              Coq.Var <$> pure renamed
-    _ -> {- trace "translateTerm fallthrough" -} notSupported
+    _ -> {- trace "translateTerm fallthrough" -} notSupported $ "Unhandled : " ++ showTerm t
   where
-    badTerm      = Except.throwError $ BadTerm t
-    notSupported = return (Coq.App (Coq.Var "error") [Coq.StringLit "Not supported"])
-    go env term  = do
+    badTerm          = Except.throwError $ BadTerm t
+    notSupported lbl = return (Coq.App (Coq.Var "error") [Coq.StringLit ("Not supported: " ++ lbl)])
+    go env term      = do
       modify $ set localEnvironment env
       translateTerm term
 
@@ -397,11 +426,12 @@ defaultTermForType typ = do
 translateTermToDocWith ::
   TranslationConfiguration ->
   [String] ->
+  [String] ->
   (Coq.Term -> Doc) ->
   Term ->
   Either (TranslationError Term) Doc
-translateTermToDocWith configuration globalDecls _f t = do
-  (_term, state) <- runTermTranslationMonad configuration globalDecls (translateTerm t)
+translateTermToDocWith configuration globalDecls localEnv _f t = do
+  (_term, state) <- runTermTranslationMonad configuration globalDecls localEnv (translateTerm t)
   let decls = view localDeclarations state
   return
     $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls)
@@ -414,4 +444,4 @@ translateDefDoc ::
   Coq.Ident -> Term ->
   Either (TranslationError Term) Doc
 translateDefDoc configuration globalDecls name =
-  translateTermToDocWith configuration globalDecls (\ term -> Coq.ppDecl (mkDefinition name term))
+  translateTermToDocWith configuration globalDecls [name] (\ term -> Coq.ppDecl (mkDefinition name term))

@@ -66,6 +66,9 @@ ppTerm e =
   case e of
     Lambda bs t ->
       parens (text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm t)
+    Fix ident binders returnType body ->
+      parens (text "fix" <+> text ident <+> ppBinders binders <+> text ":"
+             <+> ppTerm returnType <+> text ":=" <+> ppTerm body)
     Pi bs t ->
       ppPi bs <+> ppTerm t
     Let x bs mty t body ->

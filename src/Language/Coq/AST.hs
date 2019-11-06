@@ -19,6 +19,7 @@ data Sort
 
 data Term
   = Lambda [Binder] Term
+  | Fix Ident [Binder] Term Term
   | Pi [PiBinder] Term
   | Let Ident [Binder] (Maybe Type) Term Term
   | If Term Term Term

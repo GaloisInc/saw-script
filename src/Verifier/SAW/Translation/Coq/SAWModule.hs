@@ -162,7 +162,7 @@ liftTermTranslationMonad ::
   (forall m. ModuleTranslationMonad m => m a)
 liftTermTranslationMonad n = do
   configuration <- ask
-  let r = TermTranslation.runTermTranslationMonad configuration [] n
+  let r = TermTranslation.runTermTranslationMonad configuration [] [] n
   case r of
     Left  e      -> Except.throwError e
     Right (a, _) -> do
