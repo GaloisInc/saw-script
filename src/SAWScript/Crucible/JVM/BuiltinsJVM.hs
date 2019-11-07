@@ -151,7 +151,7 @@ crucible_java_extract bic opts c mname = do
   ctx <- getJVMTrans
 
   io $ do -- only the IO monad, nothing else
-          sym <- CrucibleSAW.newSAWCoreBackend sc gen
+          sym <- CrucibleSAW.newSAWCoreBackend W4.FloatRealRepr sc gen
           CJ.setSimulatorVerbosity verbosity sym
 
           (CJ.JVMHandleInfo _m2 h) <- CJ.findMethodHandle ctx mcls meth

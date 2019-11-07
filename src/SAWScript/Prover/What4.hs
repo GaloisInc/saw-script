@@ -48,7 +48,7 @@ satWhat4_sym :: SolverAdapter St
              -> IO (Maybe [(String, FirstOrderValue)], SolverStats)
 satWhat4_sym solver un sc t = do
   -- TODO: get rid of GlobalNonceGenerator ???
-  sym <- B.newExprBuilder St globalNonceGenerator
+  sym <- B.newExprBuilder B.FloatRealRepr St globalNonceGenerator
   satWhat4_solver solver sym un sc t
 
 

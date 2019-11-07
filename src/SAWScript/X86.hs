@@ -42,6 +42,7 @@ import Data.Parameterized.Nonce(globalNonceGenerator)
 
 -- What4
 import What4.Interface(asNat,asUnsignedBV)
+import What4.Expr(FloatModeRepr(..))
 import qualified What4.Interface as W4
 import qualified What4.Config as W4
 import What4.FunctionName(functionNameFromText)
@@ -188,7 +189,7 @@ proof archi file mbCry globs fun =
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
-     sym <- newSAWCoreBackend sc globalNonceGenerator
+     sym <- newSAWCoreBackend FloatRealRepr sc globalNonceGenerator
      cenv <- loadCry sym mbCry
      mvar <- mkMemVar halloc
      proofWithOptions Options
