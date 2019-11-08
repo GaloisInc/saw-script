@@ -335,7 +335,7 @@ translateTerm t = withLocalLocalEnvironment $ do
                           ]
                     case rest of
                       [] -> return iter
-                      _  -> notSupported "THIS" -- Coq.App iter <$> mapM (go env) rest
+                      _  -> Coq.App iter <$> mapM (go env) rest
               _ -> badTerm
             -- NOTE: there is currently one instance of `fix` that will trigger
             -- `notSupported`.  It is used in `Cryptol.cry` when translating
