@@ -58,6 +58,8 @@ import SAWScript.Prover.Util
 import SAWScript.Prover.SBV(prepSBV)
 import SAWScript.Value
 
+import qualified What4.Expr.Builder as W4
+
 
 satWithExporter ::
   (SharedContext -> FilePath -> Term -> IO ()) ->
@@ -207,7 +209,7 @@ writeCoqCryptolModule inputFile outputFile = do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
-  sym <- newSAWCoreBackend sc globalNonceGenerator
+  sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
   ctx <- sawBackendSharedContext sym
   env <- initCryptolEnv ctx
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule

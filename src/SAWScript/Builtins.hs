@@ -46,6 +46,8 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
+import What4.Expr(FloatModeRepr(..))
+
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
 
@@ -472,7 +474,7 @@ goal_eval unints =
   do sc <- getSharedContext
      t0 <- liftIO $ propToPredicate sc (goalTerm goal)
      let gen = globalNonceGenerator
-     sym <- liftIO $ Crucible.newSAWCoreBackend sc gen
+     sym <- liftIO $ Crucible.newSAWCoreBackend FloatRealRepr sc gen
      (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym sc Map.empty unints t0
      t1 <- liftIO $ Crucible.toSC sym p
      t2 <- liftIO $ scEqTrue sc t1

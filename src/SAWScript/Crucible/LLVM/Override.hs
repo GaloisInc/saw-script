@@ -1293,7 +1293,8 @@ doAlloc cc (LLVMAllocSpec mut _memTy sz loc) mem =
      let l = show (W4.plSourceLoc loc)
      Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
 
--- | Perform an allocation as indicated by a 'crucible_alloc' statement
+-- | Perform an allocation as indicated by a 'crucible_alloc'
+-- statement from the postcondition section.
 executeAllocation ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->

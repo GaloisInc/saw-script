@@ -91,12 +91,16 @@ import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
+-- parameterized-utils
 import           Data.Parameterized.Classes
-
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Nonce
 import           Data.Parameterized.Some
 
+-- cryptol
+import qualified Cryptol.TypeCheck.Type as Cryptol
+
+-- what4
 import qualified What4.Concrete as W4
 import qualified What4.Config as W4
 import qualified What4.FunctionName as W4
@@ -105,6 +109,7 @@ import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 
+-- crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.CFG.Core as Crucible
@@ -117,6 +122,7 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
+-- crucible-llvm
 import qualified Lang.Crucible.LLVM.ArraySizeProfile as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import           Lang.Crucible.LLVM.Extension (LLVM)
@@ -125,16 +131,18 @@ import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
+-- parameterized-utils
 import qualified Data.Parameterized.TraversableFC as Ctx
 import qualified Data.Parameterized.Context as Ctx
 
+-- saw-core
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
-import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
 
+-- saw-script
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Versions
@@ -976,7 +984,7 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
       let gen = globalNonceGenerator
       let sc  = biSharedContext bic
       let verbosity = simVerbose opts
-      sym <- CrucibleSAW.newSAWCoreBackend sc gen
+      sym <- CrucibleSAW.newSAWCoreBackend W4.FloatRealRepr sc gen
 
       let cfg = W4.getConfiguration sym
       verbSetting <- W4.getOptionSetting W4.verbosity cfg
@@ -1272,37 +1280,28 @@ crucible_execute_func bic opts args =
 getLLVMCrucibleContext :: CrucibleSetup (LLVM arch) (LLVMCrucibleContext arch)
 getLLVMCrucibleContext = view Setup.csCrucibleContext <$> get
 
--- | Returns logical type of actual type if it is an array or primitive
+-- | Returns Cryptol type of actual type if it is an array or primitive
 -- type, or an appropriately-sized bit vector for pointer types.
-logicTypeOfActual :: Crucible.DataLayout -> SharedContext -> Crucible.MemType
-                  -> IO (Maybe Term)
-logicTypeOfActual _ sc (Crucible.IntType w) = Just <$> logicTypeForInt sc w
-logicTypeOfActual _ sc Crucible.FloatType = Just <$> scApplyPrelude_Float sc
-logicTypeOfActual _ sc Crucible.DoubleType = Just <$> scApplyPrelude_Double sc
-logicTypeOfActual dl sc (Crucible.ArrayType n ty) = do
-  melTyp <- logicTypeOfActual dl sc ty
-  case melTyp of
-    Just elTyp -> do
-      lTm <- scNat sc (fromIntegral n)
-      Just <$> scVecType sc lTm elTyp
-    Nothing -> return Nothing
-logicTypeOfActual dl sc (Crucible.PtrType _) = do
-  bType <- scBoolType sc
-  lTm <- scNat sc (fromIntegral (Crucible.ptrBitwidth dl))
-  Just <$> scVecType sc lTm bType
-logicTypeOfActual dl sc (Crucible.StructType si) = do
-  let memtypes = V.toList (Crucible.siFieldTypes si)
-  melTyps <- traverse (logicTypeOfActual dl sc) memtypes
-  case sequence melTyps of
-    Just elTyps -> Just <$> scTupleType sc elTyps
-    Nothing -> return Nothing
-logicTypeOfActual _ _ t = fail (show t) -- return Nothing
-
-logicTypeForInt :: SharedContext -> Natural -> IO Term
-logicTypeForInt sc w =
-  do bType <- scBoolType sc
-     lTm <- scNat sc (fromIntegral w)
-     scVecType sc lTm bType
+cryptolTypeOfActual :: Crucible.DataLayout -> Crucible.MemType -> Maybe Cryptol.Type
+cryptolTypeOfActual dl mt =
+  case mt of
+    Crucible.IntType w ->
+      return $ Cryptol.tWord (Cryptol.tNum w)
+    Crucible.FloatType ->
+      Nothing -- FIXME: update when Cryptol gets float types
+    Crucible.DoubleType ->
+      Nothing -- FIXME: update when Cryptol gets float types
+    Crucible.ArrayType n ty ->
+      do cty <- cryptolTypeOfActual dl ty
+         return $ Cryptol.tSeq (Cryptol.tNum n) cty
+    Crucible.PtrType _ ->
+      return $ Cryptol.tWord (Cryptol.tNum (Crucible.ptrBitwidth dl))
+    Crucible.StructType si ->
+      do let memtypes = V.toList (Crucible.siFieldTypes si)
+         ctys <- traverse (cryptolTypeOfActual dl) memtypes
+         return $ Cryptol.tTuple ctys
+    _ ->
+      Nothing
 
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
@@ -1312,16 +1311,16 @@ crucible_fresh_var ::
   String                  {- ^ variable name    -} ->
   L.Type                  {- ^ variable type    -} ->
   LLVMCrucibleSetupM TypedTerm {- ^ fresh typed term -}
-crucible_fresh_var bic _opts name lty = LLVMCrucibleSetupM $ do
-  cctx <- getLLVMCrucibleContext
-  let ?lc = cctx ^. ccTypeCtx
-  lty' <- memTypeForLLVMType bic lty
-  let sc = biSharedContext bic
-  let dl = Crucible.llvmDataLayout (cctx^.ccTypeCtx)
-  mty <- liftIO $ logicTypeOfActual dl sc lty'
-  case mty of
-    Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
-    Just ty -> Setup.freshVariable sc name ty
+crucible_fresh_var bic _opts name lty =
+  LLVMCrucibleSetupM $
+  do cctx <- getLLVMCrucibleContext
+     let ?lc = cctx ^. ccTypeCtx
+     lty' <- memTypeForLLVMType bic lty
+     let sc = biSharedContext bic
+     let dl = Crucible.llvmDataLayout (cctx^.ccTypeCtx)
+     case cryptolTypeOfActual dl lty' of
+       Nothing -> fail $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
+       Just cty -> Setup.freshVariable sc name cty
 
 -- | Use the given LLVM type to compute a setup value that
 -- covers expands all of the struct, array, and pointer
@@ -1355,8 +1354,8 @@ constructExpandedSetupValue ::
 constructExpandedSetupValue cc sc loc t = do
   case t of
     Crucible.IntType w ->
-      do ty <- liftIO (logicTypeForInt sc w)
-         fv <- Setup.freshVariable sc "" ty
+      do let cty = Cryptol.tWord (Cryptol.tNum w)
+         fv <- Setup.freshVariable sc "" cty
          pure $ mkAllLLVM (SetupTerm fv)
 
     Crucible.StructType si -> do
@@ -1500,8 +1499,7 @@ crucible_alloc_global ::
   String         ->
   LLVMCrucibleSetupM ()
 crucible_alloc_global _bic _opts name = LLVMCrucibleSetupM $
-  do cc <- getLLVMCrucibleContext
-     loc <- getW4Position "crucible_alloc_global"
+  do loc <- getW4Position "crucible_alloc_global"
      Setup.addAllocGlobal . LLVMAllocGlobal loc $ L.Symbol name
 
 crucible_fresh_pointer ::
