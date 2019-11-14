@@ -1,3 +1,4 @@
+enable_experimental;
 j <- java_load_class "Dyn";
 a <- java_load_class "Arr";
 

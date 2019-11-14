@@ -1,89 +1,106 @@
 import "Salsa20.cry";
 
-let quarterround_setup : LLVMSetup() = do {
-    llvm_ptr "y0" (llvm_int 32);
-    llvm_ptr "y1" (llvm_int 32);
-    llvm_ptr "y2" (llvm_int 32);
-    llvm_ptr "y3" (llvm_int 32);
-    y0 <- llvm_var "*y0" (llvm_int 32);
-    y1 <- llvm_var "*y1" (llvm_int 32);
-    y2 <- llvm_var "*y2" (llvm_int 32);
-    y3 <- llvm_var "*y3" (llvm_int 32);
-    let ys = {{ [y0, y1, y2, y3] }};
-
-    llvm_ensure_eq "*y0" {{ (quarterround ys)@0 }};
-    llvm_ensure_eq "*y1" {{ (quarterround ys)@1 }};
-    llvm_ensure_eq "*y2" {{ (quarterround ys)@2 }};
-    llvm_ensure_eq "*y3" {{ (quarterround ys)@3 }};
-    llvm_verify_tactic abc;
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p (crucible_term v);
+    return p;
 };
 
-let rowround_setup : LLVMSetup() = do {
-    llvm_ptr "y" (llvm_array 16 (llvm_int 32));
-    row <- llvm_var "*y" (llvm_array 16 (llvm_int 32));
-    llvm_ensure_eq "*y" {{ rowround row }};
-    llvm_verify_tactic abc;
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty x;
+    return (x, p);
 };
 
-let columnround_setup : LLVMSetup() = do {
-    llvm_ptr "x" (llvm_array 16 (llvm_int 32));
-    column <- llvm_var "*x" (llvm_array 16 (llvm_int 32));
-    llvm_ensure_eq "*x" {{ columnround column }};
-    llvm_verify_tactic abc;
+let oneptr_update_func n ty f = do {
+    (x, p) <- ptr_to_fresh n ty;
+    crucible_execute_func [p];
+    crucible_points_to p (crucible_term {{ f x }});
 };
 
-let doubleround_setup : LLVMSetup() = do {
-    llvm_ptr "x" (llvm_array 16 (llvm_int 32));
-    arr <- llvm_var "*x" (llvm_array 16 (llvm_int 32));
-    llvm_ensure_eq "*x" {{ doubleround arr }};
-    llvm_verify_tactic abc;
+let quarterround_setup : CrucibleSetup () = do {
+    //ys <- crucible_fresh_var "ys" (llvm_array 4 (llvm_int 32));
+    y0 <- crucible_fresh_var "y0" (llvm_int 32);
+    y1 <- crucible_fresh_var "y1" (llvm_int 32);
+    y2 <- crucible_fresh_var "y2" (llvm_int 32);
+    y3 <- crucible_fresh_var "y3" (llvm_int 32);
+    p0 <- alloc_init (llvm_int 32) {{ y0 }};
+    p1 <- alloc_init (llvm_int 32) {{ y1 }};
+    p2 <- alloc_init (llvm_int 32) {{ y2 }};
+    p3 <- alloc_init (llvm_int 32) {{ y3 }};
+
+    crucible_execute_func [p0, p1, p2, p3];
+
+    let zs = {{ quarterround [y0,y1,y2,y3] }};
+    crucible_points_to p0 (crucible_term {{ zs@0 }});
+    crucible_points_to p1 (crucible_term {{ zs@1 }});
+    crucible_points_to p2 (crucible_term {{ zs@2 }});
+    crucible_points_to p3 (crucible_term {{ zs@3 }});
 };
 
-let salsa20_setup : LLVMSetup() = do {
-    llvm_ptr "seq" (llvm_array 64 (llvm_int 8));
-    block <- llvm_var "*seq" (llvm_array 64 (llvm_int 8));
-    llvm_ensure_eq "*seq" {{ Salsa20 block }};
-    llvm_verify_tactic abc;
+let rowround_setup =
+  oneptr_update_func "y" (llvm_array 16 (llvm_int 32)) {{ rowround }};
+
+let columnround_setup =
+  oneptr_update_func "x" (llvm_array 16 (llvm_int 32)) {{ columnround }};
+
+let doubleround_setup =
+  oneptr_update_func "x" (llvm_array 16 (llvm_int 32)) {{ doubleround }};
+
+let salsa20_setup =
+  oneptr_update_func "seq" (llvm_array 64 (llvm_int 8)) {{ Salsa20 }};
+
+let salsa20_djb_setup = do {
+    (input, ip) <- ptr_to_fresh "input" (llvm_array 16 (llvm_int 32));
+    (_, op) <- ptr_to_fresh "output" (llvm_array 64 (llvm_int 8));
+    crucible_execute_func [op, ip];
+    crucible_points_to op (crucible_term {{
+        Salsa20 (join [ littleendian_inverse x | x <- input ])
+    }});
 };
 
-let salsa20_expansion_32 : LLVMSetup() = do {
-    llvm_ptr "k" (llvm_array 32 (llvm_int 8));
-    llvm_ptr "n" (llvm_array 16 (llvm_int 8));
-    llvm_ptr "keystream" (llvm_array 64 (llvm_int 8));
-    key <-      llvm_var "*k" (llvm_array 32 (llvm_int 8));
-    n <-        llvm_var "*n" (llvm_array 16 (llvm_int 8));
-    keystream <-llvm_var "*keystream" (llvm_array 64 (llvm_int 8));
-    llvm_ensure_eq "*keystream" {{ Salsa20_expansion`{a=2}(key, n)}};
-    llvm_verify_tactic abc;
+let salsa20_expansion_32 = do {
+    // (k, pk) <- ptr_to_fresh "k" (llvm_array 32 (llvm_int 8));
+    // (n, pn) <- ptr_to_fresh "n" (llvm_array 16 (llvm_int 8));
+    k <- crucible_fresh_var "k" (llvm_array 32 (llvm_int 8));
+    pk <- crucible_alloc_readonly (llvm_array 32 (llvm_int 8));
+    crucible_points_to pk (crucible_term k);
+    n <- crucible_fresh_var "n" (llvm_array 16 (llvm_int 8));
+    pn <- crucible_alloc_readonly (llvm_array 16 (llvm_int 8));
+    crucible_points_to pn (crucible_term n);
+    pks <- crucible_alloc (llvm_array 64 (llvm_int 8));
+    crucible_execute_func [pk, pn, pks];
+    let rks = {{ Salsa20_expansion`{a=2}(k, n)}};
+    crucible_points_to pks (crucible_term rks);
 };
 
 let s20_encrypt32 n = do {
-    llvm_ptr "key" (llvm_array 32 (llvm_int 8));
-    llvm_ptr "nonce" (llvm_array 8 (llvm_int 8));
-    llvm_ptr "buf" (llvm_array n (llvm_int 8));
-    key <-      llvm_var "*key" (llvm_array 32 (llvm_int 8));
-    v <-        llvm_var "*nonce" (llvm_array 8 (llvm_int 8));
-    m <-        llvm_var "*buf" (llvm_array n (llvm_int 8));
-    buflen <-   llvm_var "buflen" (llvm_int 32);
-    si <-       llvm_var "si" (llvm_int 32);
-    llvm_assert_eq "buflen" {{ `n : [32] }};
-    llvm_assert_eq "si" {{ 0 : [32] }};
-    llvm_ensure_eq "*buf" {{ Salsa20_encrypt (key, v, m) }};
-    llvm_return {{ 0 : [32] }};
-    llvm_sat_branches true;
-    llvm_verify_tactic abc;
+    (key, pkey) <- ptr_to_fresh "key" (llvm_array 32 (llvm_int 8));
+    (v, pv) <- ptr_to_fresh "nonce" (llvm_array 8 (llvm_int 8));
+    (m, pm) <- ptr_to_fresh "buf" (llvm_array n (llvm_int 8));
+    crucible_execute_func [ pkey
+                          , pv
+                          , crucible_term {{ 0 : [32] }}
+                          , pm
+                          , crucible_term {{ `n : [32] }}
+                          ];
+    crucible_points_to pm (crucible_term {{ Salsa20_encrypt (key, v, m) }});
+    crucible_return (crucible_term {{ 0 : [32] }});
 };
 
 let main : TopLevel () = do {
-    m <- llvm_load_module "salsa20.bc";
-    qr <- llvm_verify m "s20_quarterround" [] quarterround_setup;
-    rr <- llvm_verify m "s20_rowround" [qr] rowround_setup;
-    cr <- llvm_verify m "s20_columnround" [qr] columnround_setup;
-    dr <- llvm_verify m "s20_doubleround" [cr,rr] doubleround_setup;
-    s20 <- llvm_verify m "s20_hash" [dr] salsa20_setup;
-    s20e32 <- llvm_verify m "s20_expand32" [s20] salsa20_expansion_32;
-    s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 63);
-    s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 64);
-    //s20encrypt <- llvm_verify m "s20_crypt32" [s20e32] (s20_encrypt32 65);
+    m      <- llvm_load_module "salsa20.bc";
+    qr     <- crucible_llvm_verify m "s20_quarterround" []      false quarterround_setup   abc;
+    rr     <- crucible_llvm_verify m "s20_rowround"     [qr]    false rowround_setup       abc;
+    cr     <- crucible_llvm_verify m "s20_columnround"  [qr]    false columnround_setup    abc;
+    dr     <- crucible_llvm_verify m "s20_doubleround"  [cr,rr] false doubleround_setup    abc;
+    s20    <- crucible_llvm_verify m "s20_hash"         [dr]    false salsa20_setup        abc;
+    s20e32 <- crucible_llvm_verify m "s20_expand32"     [s20]   true  salsa20_expansion_32 abc;
+    s20encrypt_63 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 63) abc;
+    s20encrypt_64 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 64) abc;
+    s20encrypt_65 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 65) abc;
+
+    djb    <- llvm_load_module "djb/salsa20.bc";
+    s20djb <- crucible_llvm_verify djb "salsa20_wordtobyte" [] false salsa20_djb_setup     abc;
     print "Done!";
 };

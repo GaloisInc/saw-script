@@ -1,9 +1,10 @@
+{-# LANGUAGE CPP              #-}
 {-# LANGUAGE DeriveFunctor    #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase       #-}
-{-# LANGUAGE ViewPatterns     #-}
+{-# LANGUAGE RankNTypes       #-}
 {-# LANGUAGE RecordWildCards  #-}
-{-# LANGUAGE CPP              #-}
+{-# LANGUAGE ViewPatterns     #-}
 
 module SAWScript.AutoMatch where
 
@@ -15,8 +16,9 @@ import Control.Monad.Trans
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Monad.Supply
 import Control.Monad.IfElse (awhen)
+import qualified Control.Monad.ST as ST
+import           Control.Monad.ST (ST)
 
 import Data.Char
 import Data.Ord
@@ -28,13 +30,17 @@ import Control.Applicative
 
 import System.FilePath
 
+import           Data.Parameterized.Some (Some(Some))
+import qualified Data.Parameterized.Nonce as Nonce
+import           Data.Parameterized.Nonce (NonceGenerator, withSTNonceGenerator)
+
 import qualified SAWScript.AST as SAWScript
 import qualified Cryptol.Parser.AST      as Cryptol
 import qualified Cryptol.Parser.Position as Cryptol
 import qualified Cryptol.Utils.PP        as Cryptol
 import qualified Cryptol.Utils.Ident     as Cryptol (packIdent)
 import SAWScript.Builtins
---import SAWScript.Options
+import SAWScript.Position
 import SAWScript.Utils
 import SAWScript.TopLevel
 import SAWScript.Value
@@ -277,7 +283,9 @@ loadDecls (TaggedSourceFile lang path) = do
    AIGProxy proxy <- getProxy
    case lang of
       Cryptol -> io $ getDeclsCryptol path
-      LLVM    -> llvm_load_module path >>= io . getDeclsLLVM proxy sc
+      LLVM    -> do
+        Some m <- llvm_load_module path
+        io $ getDeclsLLVM proxy sc m
       JVM     -> loadJavaClassTopLevel (dropExtension path) >>= io . getDeclsJVM
    where
       loadJavaClassTopLevel cls = do
@@ -322,7 +330,16 @@ autoMatch interpreter leftFile rightFile =
 #endif
 
 -- | Just a bunch of SAWScript statments as output and a supply of unique identifiers
-type ScriptWriter = WriterT [SAWScript.Stmt] (Supply String)
+type ScriptWriter s tp = WriterT [SAWScript.Stmt] (ReaderT (NonceGenerator (ST s) tp) (ST s))
+
+runScriptWriter :: (forall s tp. ScriptWriter s tp a)
+                -> (a, [SAWScript.Stmt])
+runScriptWriter c =
+  ST.runST $ withSTNonceGenerator $ runReaderT (runWriterT c)
+
+execScriptWriter :: (forall s tp. ScriptWriter s tp a)
+                 -> [SAWScript.Stmt]
+execScriptWriter c = snd (runScriptWriter c)
 
 -- | Given two tagged source files and a bunch of matchings of declarations,
 --   generate an interaction which asks the user what to do after the matching
@@ -348,7 +365,7 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
       nameRight  str = (("right_" ++ str ++ "_") ++)
       nameCenter str = ((str ++ "_") ++)
 
-      loadFile :: (String -> String) -> SourceLanguage -> FilePath -> ScriptWriter (SAWScript.LName)
+      loadFile :: (String -> String) -> SourceLanguage -> FilePath -> ScriptWriter s tp (SAWScript.LName)
       loadFile prefix lang file = do
          boundName <- newNameWith prefix
          returning boundName . tell $
@@ -369,7 +386,7 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                         (SAWScript.Var . locate $ "java_load_class")
                         (SAWScript.String $ dropExtension file))]
 
-      extractFunction :: (String -> String) -> SourceLanguage -> String -> SAWScript.LName -> ScriptWriter (SAWScript.LName)
+      extractFunction :: (String -> String) -> SourceLanguage -> String -> SAWScript.LName -> ScriptWriter s tp (SAWScript.LName)
       extractFunction prefix lang function loadedModule = do
          boundName <- newNameWith prefix
          returning boundName . tell $
@@ -385,22 +402,18 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                   [SAWScript.StmtBind Unknown (SAWScript.PVar boundName Nothing) Nothing
                      (SAWScript.Application
                         (SAWScript.Application
-                           (SAWScript.Application
-                              (SAWScript.Var . locate $ "llvm_extract")
-                              (SAWScript.Var loadedModule))
-                           (SAWScript.String function))
-                        (SAWScript.Var . locate $ "llvm_pure"))]
+                           (SAWScript.Var . locate $ "crucible_llvm_extract")
+                           (SAWScript.Var loadedModule))
+                        (SAWScript.String function))]
                JVM ->
                   [SAWScript.StmtBind Unknown (SAWScript.PVar boundName Nothing) Nothing
                      (SAWScript.Application
                         (SAWScript.Application
-                           (SAWScript.Application
-                              (SAWScript.Var . locate $ "java_extract")
-                              (SAWScript.Var loadedModule))
-                           (SAWScript.String function))
-                        (SAWScript.Var . locate $ "java_pure"))]
+                           (SAWScript.Var . locate $ "crucible_java_extract")
+                           (SAWScript.Var loadedModule))
+                        (SAWScript.String function))]
 
-      equivalenceTheorem :: (String -> String) -> SAWScript.LName -> SAWScript.LName -> Assignments -> ScriptWriter (SAWScript.LName)
+      equivalenceTheorem :: (String -> String) -> SAWScript.LName -> SAWScript.LName -> Assignments -> ScriptWriter s tp (SAWScript.LName)
       equivalenceTheorem prefix leftFunction rightFunction assigns = do
          theoremName <- newNameWith prefix
          (leftArgs, rightArgs) <-
@@ -434,7 +447,7 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
       cryptolApplyFunction function args =
          foldl Cryptol.EApp function args
 
-      prove :: SAWScript.LName -> ScriptWriter ()
+      prove :: SAWScript.LName -> ScriptWriter s tp ()
       prove theorem = tell $
          [SAWScript.StmtBind Unknown (SAWScript.PWild Nothing) Nothing
              (SAWScript.Application
@@ -443,7 +456,7 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                    (SAWScript.Var (locate "abc")))
                 (SAWScript.Var theorem))]
 
-      printString :: String -> ScriptWriter ()
+      printString :: String -> ScriptWriter s tp ()
       printString string = tell $
          [SAWScript.StmtBind Unknown (SAWScript.PWild Nothing) Nothing
              (SAWScript.Application
@@ -463,18 +476,21 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                (error "bogus position generated by auto_match"))
             (Cryptol.mkUnqual (Cryptol.packIdent name))
 
-      newNameWith :: (String -> String) -> ScriptWriter (SAWScript.LName)
-      newNameWith prefix = locate . prefix <$> supply
+      newNameWith :: (String -> String) -> ScriptWriter s tp (SAWScript.LName)
+      newNameWith prefix = do
+        gen   <- lift ask
+        nonce <- lift $ lift $ Nonce.freshNonce gen
+        pure . locate . prefix . show . Nonce.indexValue $ nonce
 
       -- Here's the template for the output script:
       script :: [SAWScript.Stmt]
-      script = flip evalSupply (map show [(0 :: Integer) ..]) . execWriterT $ do
-         leftModule  <- loadFile (nameLeft  "module") leftLang  leftFile
-         rightModule <- loadFile (nameRight "module") rightLang rightFile
-         forM_ matchings $ \(leftDecl, rightDecl, assigns) -> do
-            leftFunction  <- extractFunction (nameLeft  (declName leftDecl))  leftLang  (declName leftDecl)  leftModule
-            rightFunction <- extractFunction (nameRight (declName rightDecl)) rightLang (declName rightDecl) rightModule
-            theorem       <- equivalenceTheorem (nameCenter "theorem") leftFunction rightFunction assigns
-            printString $ "Proving '" ++ declName leftDecl  ++ "' (" ++ leftFile  ++ ")" ++
-                              " == '" ++ declName rightDecl ++ "' (" ++ rightFile ++ ")"
-            prove theorem
+      script = execScriptWriter $ do
+        leftModule  <- loadFile (nameLeft  "module") leftLang  leftFile
+        rightModule <- loadFile (nameRight "module") rightLang rightFile
+        forM_ matchings $ \(leftDecl, rightDecl, assigns) -> do
+          leftFunction  <- extractFunction (nameLeft  (declName leftDecl))  leftLang  (declName leftDecl)  leftModule
+          rightFunction <- extractFunction (nameRight (declName rightDecl)) rightLang (declName rightDecl) rightModule
+          theorem       <- equivalenceTheorem (nameCenter "theorem") leftFunction rightFunction assigns
+          printString $ "Proving '" ++ declName leftDecl  ++ "' (" ++ leftFile  ++ ")" ++
+                            " == '" ++ declName rightDecl ++ "' (" ++ rightFile ++ ")"
+          prove theorem

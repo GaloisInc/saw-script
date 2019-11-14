@@ -12,7 +12,8 @@
 % Useful packages:
 % \RequirePackage[table]{xcolor}
 \RequirePackage{graphicx}
-\RequirePackage[headheight=144pt,top=2in,left=1in,right=1in,bottom=1in]{geometry}
+%\RequirePackage[headheight=144pt,top=1in,left=1in,right=1in,bottom=1in]{geometry}
+\RequirePackage[top=1in,left=1in,right=1in,bottom=1in]{geometry}
 \RequirePackage{lastpage}
 
 % Define fonts
@@ -31,21 +32,11 @@
 \RequirePackage{sectsty}
 \allsectionsfont{\sffamily}
 
-% Define a TODO command
-\RequirePackage{ifthen}
-%% \RequirePackage{color}
-
-% \definecolor{Orange}{rgb}{1,0.5,0}
-\newcommand{\todo}[1][0]{%
-\textsf{\textbf{%
-[[TODO\ifthenelse{\equal{#1}{0}}{}{: #1}]]}}%
-}
-
 \newcommand{\highlight}[2][yellow]{\colorbox{#1}{#2}}
 
 % Misc defines
 \makeatletter
-  \newcommand{\@companyName}{\vspace*{3cm} Galois, Inc.}
+  \newcommand{\@companyName}{Galois, Inc.}
   \newcommand{\@addressPhone}{
    421 SW 6th Ave., Ste.\ 300\\
    Portland, OR 97204
@@ -68,19 +59,17 @@
 \fancyfoot{}%clear
 \renewcommand{\headrulewidth}{0pt}
 \renewcommand{\footrulewidth}{1pt}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{11pt} % TODO!
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 %% Define a special header style for the title page:
-%%
-\makeatletter
-\newcommand{\ps@title}{%
-  \renewcommand{\@oddhead}{%
-    \sffamily\hspace{-0.25in}\includegraphics[width=1in]{figures/galois.pdf}
-    }}
+%
+ \makeatletter
+ \newcommand{\ps@title}{%
+   \renewcommand{\@oddhead}{%
+     \sffamily\includegraphics[width=1in]{figures/galois.pdf}
+     }}
 \makeatother
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -90,16 +79,10 @@
 \lhead{\sffamily\hspace{1in}\includegraphics[width=1in]{figures/galois.pdf}}
 
 \makeatletter
-\rhead{
-  \sffamily
-  \textit{\@title{}}\\
-  % {\color{galoislightgray} {}}
-  {\color{lightgray} {}}
-  \vspace{0.12in}
-}
+\rhead{\sffamily \textit{\@title{}}}
 \makeatother
 
-\lfoot{\sffamily\color{lightgray}\small\copyright{} 2015 Galois, Inc.}
+\lfoot{\sffamily\color{lightgray}\small\copyright{} 2019 Galois, Inc.}
 
 \rfoot{
   % \sffamily \color{galoislightgray}\small
@@ -133,9 +116,6 @@
 %%
 %% Add a stop ``.'' after each section number:
 %%
-\renewcommand*{\@seccntformat}[1]{%
-  \csname the#1\endcsname.\quad
-}
 
 % Redefine the bibliography environment to use \section{\bibname}
 % instead of \section*{\bibname}
@@ -160,23 +140,4 @@
        {\@latex@warning{Empty `thebibliography' environment}}%
       \endlist}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
-%% Adjust spacing around headings:
-%%
-
-\renewcommand\section{\@startsection {section}{1}{\z@}%
-  {-0ex \@plus -1ex \@minus -.2ex}%
-  {0.2ex \@plus.1ex}%
-  {\raggedright\sffamily\large\bfseries}}
-
-\renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
-  {-0ex\@plus -1ex \@minus -.2ex}%
-  {0.1ex \@plus .1ex \@minus -.1ex}%
-  {\raggedright\sffamily\bfseries}}
-
-\renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}%
-  {-0ex \@plus -1ex \@minus -.2ex}%
-  {0.1ex \@plus .1ex \@minus -.1ex}%
-  {\sffamily\normalsize\bfseries}} %
 \makeatother

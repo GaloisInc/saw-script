@@ -12,6 +12,9 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.List (intercalate)
 
+import Prelude
+
+
 -- | Data structure for recording useful information about
 --   verification runs on goals.
 data SolverStats

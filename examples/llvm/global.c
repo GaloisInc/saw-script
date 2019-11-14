@@ -9,3 +9,7 @@ void clear() {
 void set(uint32_t x) {
     g = x;
 }
+
+uint32_t get() {
+    return g;
+}

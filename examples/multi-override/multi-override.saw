@@ -27,6 +27,7 @@ let sum_spec n : CrucibleSetup() = do {
 
   crucible_execute_func[arrp, crucible_term {{ `n:[32]}}];
   crucible_return (crucible_term {{ mysum arr }});
+  crucible_points_to arrp (crucible_term arr);
 };
 
 let example_sums : CrucibleSetup() = do {
@@ -35,6 +36,7 @@ let example_sums : CrucibleSetup() = do {
 };
 
 let set_myglobal n : CrucibleSetup() = do {
+  crucible_alloc_global "myglobal";
   old <- crucible_fresh_var "old" (llvm_int 32);
   crucible_precond {{ old < 1000 }};
   crucible_points_to (crucible_global "myglobal") (crucible_term old);
@@ -44,8 +46,11 @@ let set_myglobal n : CrucibleSetup() = do {
 };
 
 let myglobal_example : CrucibleSetup() = do {
+  crucible_alloc_global "myglobal";
   crucible_execute_func[];
   crucible_return (crucible_term {{ 120 : [32] }});
+  crucible_points_to (crucible_global "myglobal")
+                     (crucible_term {{ 120 : [32] }});
 };
 
 let main : TopLevel () = do {

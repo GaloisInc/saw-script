@@ -32,7 +32,7 @@ module SAWScript.REPL.Command (
 
 import SAWScript.REPL.Monad
 import SAWScript.REPL.Trie
-import SAWScript.Utils (getPos)
+import SAWScript.Position (getPos)
 
 import Cryptol.Parser (ParseError())
 import Cryptol.Utils.PP
@@ -53,9 +53,7 @@ import qualified SAWScript.AST as SS
      Pattern(..))
 import SAWScript.Exceptions
 import SAWScript.MGU (checkDecl)
-import SAWScript.Interpreter
-    (interpretStmt,
-     primDocEnv)
+import SAWScript.Interpreter (interpretStmt)
 import qualified SAWScript.Lexer (lexSAW)
 import qualified SAWScript.Parser (parseStmtSemi, parseExpression)
 import SAWScript.TopLevel (TopLevelRW(..), runTopLevel)
@@ -165,7 +163,7 @@ typeOfCmd str =
        Right expr -> return expr
      let decl = SS.Decl (getPos expr) (SS.PWild Nothing) Nothing expr
      rw <- getEnvironment
-     SS.Decl _pos _ (Just schema) _expr' <-
+     ~(SS.Decl _pos _ (Just schema) _expr') <-
        either failTypecheck return $ checkDecl (rwTypes rw) (rwTypedef rw) decl
      io $ putStrLn $ SS.pShow schema
 
@@ -182,14 +180,16 @@ envCmd = do
 helpCmd :: String -> REPL ()
 helpCmd cmd
   | null cmd = io (mapM_ putStrLn (genHelp commandList))
-  | Just d <- Map.lookup cmd primDocEnv =
-                io $ putStr d
+  | otherwise =
+    do env <- getEnvironment
+       case Map.lookup cmd (rwDocs env) of
+         Just d -> io $ putStr d
 -- FIXME? can we restore the ability to lookup doc strings from Cryptol?
 --  | Just (ec,_) <- lookup cmd builtIns =
 --                io $ print $ helpDoc ec
 
-  | otherwise = do io $ putStrLn $ "// No documentation is available."
-                   typeOfCmd cmd
+         Nothing -> do io $ putStrLn $ "// No documentation is available."
+                       typeOfCmd cmd
 
 
 cdCmd :: FilePath -> REPL ()

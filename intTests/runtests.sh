@@ -50,7 +50,6 @@ export CP
 # the spaces and semi-colons in the Windows class path.
 export SAW="eval saw -j '$CP'"
 export JSS="eval jss -j '$CP' -c ."
-export LSS="lss"
 
 # Figure out what tests to run
 if [[ -z "$@" ]]; then

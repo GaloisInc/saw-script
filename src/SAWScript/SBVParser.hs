@@ -25,6 +25,7 @@ import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Traversable (mapM)
+import Numeric.Natural (Natural)
 
 import Verifier.SAW.TypedAST
 import Verifier.SAW.SharedTerm
@@ -33,7 +34,7 @@ import SAWScript.Options
 
 type NodeCache = Map SBV.NodeId Term
 
-parseSBV :: SharedContext -> NodeCache -> SBV.SBV -> IO (Nat, Term)
+parseSBV :: SharedContext -> NodeCache -> SBV.SBV -> IO (Natural, Term)
 parseSBV sc _ (SBV.SBV size (Left num)) =
     do t <- scBvConst sc (fromInteger size) num
        return (fromInteger size, t)
@@ -45,7 +46,7 @@ parseSBV _ nodes (SBV.SBV size (Right nodeid)) =
 type UnintMap = String -> Typ -> Maybe Term
 
 parseSBVExpr :: Options -> SharedContext -> UnintMap -> NodeCache ->
-                Nat -> SBV.SBVExpr -> IO Term
+                Natural -> SBV.SBVExpr -> IO Term
 parseSBVExpr _opts sc _unint nodes _size (SBV.SBVAtom sbv) =
     liftM snd $ parseSBV sc nodes sbv
 parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
@@ -261,7 +262,7 @@ scTyp sc (TRecord fields) =
 splitInputs :: SharedContext -> Typ -> Term -> IO [Term]
 splitInputs _sc TBool x = return [x]
 splitInputs sc (TTuple ts) x =
-    do xs <- mapM (\i -> scTupleSelector sc x i) [1 .. length ts]
+    do xs <- mapM (\i -> scTupleSelector sc x i (length ts)) [1 .. length ts]
        yss <- sequence (zipWith (splitInputs sc) ts xs)
        return (concat yss)
 splitInputs _ (TVec _ TBool) x = return [x]
@@ -282,19 +283,19 @@ splitInputs sc (TRecord fields) x =
 ----------------------------------------------------------------------
 
 -- | Combines outputs into a data structure according to Typ
-combineOutputs :: SharedContext -> Typ -> [(Nat, Term)] -> IO Term
+combineOutputs :: SharedContext -> Typ -> [(Natural, Term)] -> IO Term
 combineOutputs sc ty xs0 =
     do (z, ys) <- runStateT (go ty) xs0
        unless (null ys) (fail $ "combineOutputs: too many outputs: " ++
                                 show (length ys) ++ " remaining")
        return z
     where
-      pop :: StateT [(Nat, Term)] IO (Nat, Term)
+      pop :: StateT [(Natural, Term)] IO (Natural, Term)
       pop = do xs <- get
                case xs of
                  [] -> fail "combineOutputs: too few outputs"
                  y : ys -> put ys >> return y
-      go :: Typ -> StateT [(Nat, Term)] IO Term
+      go :: Typ -> StateT [(Natural, Term)] IO Term
       go TBool =
           do (_, x) <- pop
              lift (scBv1ToBool sc x)
@@ -366,7 +367,7 @@ scBoolToBv1 sc x =
        scSingle sc b x
 
 -- see if it's the same error
-scMultiMux :: SharedContext -> Nat -> Term
+scMultiMux :: SharedContext -> Natural -> Term
            -> Term -> [Term] -> IO Term
 scMultiMux sc iSize e i args = do
     vec <- scVector sc e args

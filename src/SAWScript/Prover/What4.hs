@@ -34,11 +34,6 @@ import qualified Verifier.SAW.Simulator.What4 as W
 import           Verifier.SAW.Simulator.What4.FirstOrder
 import qualified What4.Expr.Builder as B
 
--- This class allows the "sim" argument to be passed implicitly,
--- allowing the What4 module to make an instance of the 'SymbolicValue' class.
-import           Data.Reflection(Given(..),give)
-
-
 
 ----------------------------------------------------------------
 
@@ -83,13 +78,13 @@ satWhat4_solver :: forall st t ff.
   Term               {- ^ A proposition to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
   -- ^ (example/counter-example, solver statistics)
-satWhat4_solver solver sym _unints sc goal =
+satWhat4_solver solver sym unints sc goal =
 
   do
      -- convert goal to lambda term
      term <- propToPredicate sc goal
      -- symbolically evaluate
-     (t', argNames, (bvs,lit0)) <- give sym $ prepWhat4 sc [] term
+     (t', argNames, (bvs,lit0)) <- prepWhat4 sym sc unints term
 
      lit <- notPred sym lit0
 
@@ -100,24 +95,27 @@ satWhat4_solver solver sym _unints sc goal =
                              (scSharedSize t')
 
      -- log to stdout
-     let logger _ str = putStr str
+     let logger _ str = putStrLn str
+     let logData = defaultLogData { logCallbackVerbose = logger
+                                  , logReason = "SAW proof" }
 
      -- run solver
-     solver_adapter_check_sat solver sym logger "SAW proof" lit $ \ r -> case r of
+     solver_adapter_check_sat solver sym logData [lit] $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
            mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
                          (zip bvs argNames)
            return (Just (catMaybes mvals), stats) where
 
-         Unsat   -> return (Nothing, stats)
+         Unsat _ -> return (Nothing, stats)
 
          Unknown -> fail "Prover returned Unknown"
 
 
-prepWhat4 :: forall sym. (Given sym, IsSymExprBuilder sym) =>
-  SharedContext -> [String] -> Term ->
-  IO (Term, [String], ([Maybe (W.Labeler sym)],Pred sym))
-prepWhat4 sc unints t0 = do
+prepWhat4 ::
+  forall sym. (IsSymExprBuilder sym) =>
+  sym -> SharedContext -> [String] -> Term ->
+  IO (Term, [String], ([Maybe (W.Labeler sym)], Pred sym))
+prepWhat4 sym sc unints t0 = do
   -- Abstract over all non-function ExtCns variables
   let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
   exts <- filterM nonFun (getAllExts t0)
@@ -126,7 +124,7 @@ prepWhat4 sc unints t0 = do
       scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc
 
   checkBooleanSchema schema
-  (argNames, lit) <- W.w4Solve sc w4Prims unints t'
+  (argNames, lit) <- W.w4Solve sym sc w4Prims unints t'
   return (t', argNames, lit)
 
 

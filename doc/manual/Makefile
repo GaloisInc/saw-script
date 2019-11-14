@@ -11,9 +11,11 @@ PDFARGS   = -H head.tex \
             --listings \
             -V documentclass:galois-whitepaper \
             -V fontsize:12 \
+            --toc \
             --pdf-engine=pdflatex
 HTMLARGS  = --css doc.css \
             --standalone \
+            --toc \
             --self-contained
 
 all: pdf

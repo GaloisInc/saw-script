@@ -1,0 +1,33 @@
+m <- llvm_load_module "test.bc";
+
+let ptr_to_fresh n ty = do {
+  p <- crucible_alloc ty;
+  x <- crucible_fresh_var n ty;
+  crucible_points_to p (crucible_term x);
+  return (p, x);
+};
+
+let len = 100;
+
+let array_inc_spec = do {
+  (pa, a) <- ptr_to_fresh "a" (llvm_array len (llvm_int 8));
+  let n = crucible_term {{ `len : [64] }};
+  crucible_execute_func [pa, n];
+};
+
+let inv_spec = do {
+  (pa, a) <- ptr_to_fresh "a" (llvm_array len (llvm_int 8));
+  ppa <- crucible_alloc (llvm_int 64);
+  crucible_points_to ppa pa;
+  let n = crucible_term {{ `len : [64] }};
+  pn <- crucible_alloc (llvm_int 64);
+  crucible_points_to pn n;
+  (pi, i) <- ptr_to_fresh "i" (llvm_int 64);
+  crucible_precond {{ 0 <= i /\ i <= `len }};
+  crucible_execute_func [ppa, pn, pi];
+};
+
+inv <- crucible_llvm_unsafe_assume_spec m "__breakpoint__inv#array_inc" inv_spec;
+crucible_llvm_verify m "__breakpoint__inv#array_inc" [inv] false inv_spec abc;
+crucible_llvm_verify m "array_inc" [inv] false array_inc_spec abc;
+

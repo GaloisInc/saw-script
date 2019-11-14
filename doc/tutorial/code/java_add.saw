@@ -1,17 +1,18 @@
-let add_spec : JavaSetup () = do {
-    x <- java_var "x" java_int;
-    y <- java_var "y" java_int;
-    java_return {{ x + y }};
-    java_verify_tactic abc;
+enable_experimental;
+let add_spec = do {
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ x + y }});
 };
 
-let dbl_spec : JavaSetup () = do {
-    x <- java_var "x" java_int;
-    java_return {{ x + x }};
-    java_verify_tactic abc;
+let dbl_spec = do {
+    x <- jvm_fresh_var "x" java_int;
+    jvm_execute_func [jvm_term x];
+    jvm_return (jvm_term {{ x + x }});
 };
 
 cls <- java_load_class "Add";
-ms <- java_verify cls "add" [] add_spec;
-ms' <- java_verify cls "dbl" [ms] dbl_spec;
+ms <- crucible_jvm_verify cls "add" [] false add_spec abc;
+ms' <- crucible_jvm_verify cls "dbl" [ms] false dbl_spec abc;
 print "Done.";

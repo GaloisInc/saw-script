@@ -1,5 +1,5 @@
 Name:          saw-script
-Version:       0.2
+Version:       0.4.0.99
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
 Build-type:    Custom
@@ -27,11 +27,13 @@ library
     , ansi-wl-pprint
     , array
     , binary
+    , bimap
     , bytestring
     , containers
+    , constraints >= 0.6
     , cryptol
     , cryptol-verifier
-    , crucible >= 0.4 && < 0.5
+    , crucible >= 0.4
     , crucible-jvm
     , crucible-llvm >= 0.2
     , crucible-saw
@@ -39,6 +41,7 @@ library
     , either
     , exceptions
     , executable-path
+    , extra
     , directory
     , fgl
     , filepath
@@ -48,10 +51,8 @@ library
     , jvm-parser
     , jvm-verifier
     , lens
-    , llvm-pretty >= 0.5
+    , llvm-pretty >= 0.8
     , llvm-pretty-bc-parser >= 0.1.3.1
-    , llvm-verifier >= 0.2.1
-    , monad-supply
     , mtl >= 2.1
     , old-locale
     , old-time
@@ -74,6 +75,7 @@ library
     , time
     , transformers
     , transformers-compat
+    , unordered-containers
     , utf8-string
     , what4 >= 0.4
     , vector
@@ -101,11 +103,6 @@ library
     SAWScript.AutoMatch.Util
     SAWScript.Builtins
     SAWScript.CongruenceClosure
-    SAWScript.CrucibleBuiltins
-    SAWScript.CrucibleLLVM
-    SAWScript.CrucibleOverride
-    SAWScript.CrucibleResolveSetupValue
-    SAWScript.CrucibleMethodSpecIR
     SAWScript.Exceptions
     SAWScript.Import
     SAWScript.ImportAIG
@@ -119,14 +116,11 @@ library
     SAWScript.JavaPretty
     SAWScript.Lexer
     SAWScript.LLVMBuiltins
-    SAWScript.LLVMExpr
-    SAWScript.LLVMMethodSpec
-    SAWScript.LLVMMethodSpecIR
-    SAWScript.LLVMUtils
     SAWScript.Options
     SAWScript.Parser
     SAWScript.PathVC
     SAWScript.Proof
+    SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
     SAWScript.SAWCorePrimitives
@@ -137,29 +131,39 @@ library
     SAWScript.Value
     SAWScript.VerificationCheck
 
-    SAWScript.CrucibleBuiltinsJVM
-                  
+    SAWScript.Crucible.Common
+    SAWScript.Crucible.Common.MethodSpec
+    SAWScript.Crucible.Common.Override
+    SAWScript.Crucible.Common.Setup.Builtins
+    SAWScript.Crucible.Common.Setup.Type
+
+    SAWScript.Crucible.LLVM.Builtins
+    SAWScript.Crucible.LLVM.Boilerplate
+    SAWScript.Crucible.LLVM.CrucibleLLVM
+    SAWScript.Crucible.LLVM.Override
+    SAWScript.Crucible.LLVM.MethodSpecIR
+    SAWScript.Crucible.LLVM.ResolveSetupValue
+
+    SAWScript.Crucible.JVM.Builtins
+    SAWScript.Crucible.JVM.BuiltinsJVM
+    SAWScript.Crucible.JVM.MethodSpecIR
+    SAWScript.Crucible.JVM.Override
+    SAWScript.Crucible.JVM.ResolveSetupValue
 
     SAWScript.Prover.Mode
     SAWScript.Prover.Rewrite
     SAWScript.Prover.SolverStats
     SAWScript.Prover.Util
     SAWScript.Prover.SBV
+    SAWScript.Prover.MRSolver
     SAWScript.Prover.RME
     SAWScript.Prover.ABC
     SAWScript.Prover.What4
     SAWScript.Prover.Exporter
+    SAWScript.Prover.Versions
 
     SAWScript.X86
-    SAWScript.X86SpecNew
     SAWScript.X86Spec
-    SAWScript.X86Spec.Memory
-    SAWScript.X86Spec.Registers
-    SAWScript.X86Spec.Fresh
-    SAWScript.X86Spec.Literal
-    SAWScript.X86Spec.SAW
-    SAWScript.X86Spec.Monad
-    SAWScript.X86Spec.Types
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)
@@ -173,7 +177,7 @@ executable saw
   default-language: Haskell2010
   hs-source-dirs: saw
 
-  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count -pgmlg++
+  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count -pgmlc++
   extra-libraries:      stdc++
 
   main-is: Main.hs

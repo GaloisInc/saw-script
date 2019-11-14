@@ -1,3 +1,4 @@
+enable_deprecated;
 let setup (add : Term) : JavaSetup () = do {
     x <- java_var "x" java_int;
     y <- java_var "y" java_int;

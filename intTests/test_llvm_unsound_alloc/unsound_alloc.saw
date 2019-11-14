@@ -1,0 +1,23 @@
+MODULE <- llvm_load_module "unsound_alloc.bc";
+
+let foo_setup = do {
+  x <- crucible_alloc (llvm_int 32);
+  x_star <- crucible_fresh_var "x" (llvm_int 32);
+  crucible_points_to x (crucible_term x_star);
+  crucible_execute_func [x];
+  crucible_return (crucible_term {{ x_star + 1 : [32] }});
+};
+foo_spec <- crucible_llvm_verify MODULE "foo" [] false foo_setup z3;
+
+let bar_setup = do {
+  crucible_execute_func [];
+  crucible_return (crucible_term {{ 3 : [32] }});
+};
+
+// the below line (without override) correctly fails
+// crucible_llvm_verify MODULE "bar" [] false bar_setup z3;
+
+// works, but shouldn't
+crucible_llvm_verify MODULE "bar" [foo_spec] false bar_setup z3;
+
+print "Should not have succeeded - unsound!";

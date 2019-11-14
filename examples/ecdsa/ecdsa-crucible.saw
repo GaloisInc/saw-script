@@ -1,0 +1,2035 @@
+enable_experimental;
+let ecc_class = "com.galois.ecc.P384ECC64";
+
+import "cryptol-spec/ecc.cry" as ecc;
+import "cryptol-spec/mul_java.cry" as mul_java;
+import "cryptol-spec/p384_field.cry" as p384_field;
+import "cryptol-spec/p384_ec_point_ops.cry" as p384_ec_point_ops;
+import "cryptol-spec/p384_ec_mul.cry" as p384_ec_mul;
+
+////////////////////////////////////////////////////////////
+/* Library of Cryptol functions */
+
+let {{
+
+  ec_join : [12][32] -> [384]
+  ec_join x = join (reverse x)
+
+  ec_join768 : [24][32] -> [768]
+  ec_join768 x = join (reverse x)
+
+  ec_split : [384] -> [12][32]
+  ec_split x = reverse (split x)
+
+  ec_split768 : [768] -> [24][32]
+  ec_split768 x = reverse (split x)
+
+  long_extend : [32] -> [64]
+  long_extend x = zero # x
+
+  ec_extend : [32] -> [384]
+  ec_extend x = zero # x
+
+  jget a (i : [32]) = a @ i
+
+  p384_mod_div (p,x,y) = egcd(p,0,y,x)
+    where
+      mh = p384_field::p384_mod_half
+      ms = p384_field::p384_mod_sub
+      /* In code below, a is always odd. */
+      egcd(a,ra,b,rb) =
+        if b == 0 then
+          ra
+        else if (b && 1) == 0 then /* b is even. */
+          egcd(a, ra, b >> 1, mh(p, rb))
+        else if a < b then
+          egcd(a, ra, (b - a) >> 1, mh(p, ms(p, rb, ra)))
+        else
+          egcd(b, rb, (a - b) >> 1, mh(p, ms(p, ra, rb)))
+
+  field_prime = 0xffffffffffffffffffffffffffffffffffffffffffffffff #
+                0xfffffffffffffffeffffffff0000000000000000ffffffff
+
+  group_order = 0xffffffffffffffffffffffffffffffffffffffffffffffff #
+                0xc7634d81f4372ddf581a0db248b0a77aecec196accc52973
+
+  app2 f x = f (x, x)
+  app3 f x = f (x, app2 f x)
+  app4 f x = f (app2 f x, app2 f x)
+  app8 f x = f (app4 f x, app4 f x)
+
+  bool : Bit -> [32]
+  bool b = if b then 1 else 0
+}};
+
+////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////
+/* Convenience functions for conventions used in the Java ECDSA
+implementation */
+
+let jvm_array12_is ref x =
+  do {
+    let xs = eval_list x;
+    for [0,1,2,3,4,5,6,7,8,9,10,11]
+      (\i -> jvm_elem_is ref i (jvm_term (nth xs i)));
+    return ();
+  };
+
+let jvm_array24_is ref x =
+  do {
+    let xs = eval_list x;
+    for [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
+      (\i -> jvm_elem_is ref i (jvm_term (nth xs i)));
+    return ();
+  };
+
+let jvm_fresh_array12 n =
+  do {
+    ref <- jvm_alloc_array 12 java_int;
+    x0 <- jvm_fresh_var (str_concat n ".0") java_int;
+    x1 <- jvm_fresh_var (str_concat n ".1") java_int;
+    x2 <- jvm_fresh_var (str_concat n ".2") java_int;
+    x3 <- jvm_fresh_var (str_concat n ".3") java_int;
+    x4 <- jvm_fresh_var (str_concat n ".4") java_int;
+    x5 <- jvm_fresh_var (str_concat n ".5") java_int;
+    x6 <- jvm_fresh_var (str_concat n ".6") java_int;
+    x7 <- jvm_fresh_var (str_concat n ".7") java_int;
+    x8 <- jvm_fresh_var (str_concat n ".8") java_int;
+    x9 <- jvm_fresh_var (str_concat n ".9") java_int;
+    x10 <- jvm_fresh_var (str_concat n ".10") java_int;
+    x11 <- jvm_fresh_var (str_concat n ".11") java_int;
+    jvm_elem_is ref 0 (jvm_term x0);
+    jvm_elem_is ref 1 (jvm_term x1);
+    jvm_elem_is ref 2 (jvm_term x2);
+    jvm_elem_is ref 3 (jvm_term x3);
+    jvm_elem_is ref 4 (jvm_term x4);
+    jvm_elem_is ref 5 (jvm_term x5);
+    jvm_elem_is ref 6 (jvm_term x6);
+    jvm_elem_is ref 7 (jvm_term x7);
+    jvm_elem_is ref 8 (jvm_term x8);
+    jvm_elem_is ref 9 (jvm_term x9);
+    jvm_elem_is ref 10 (jvm_term x10);
+    jvm_elem_is ref 11 (jvm_term x11);
+    let xs = {{ [x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11] }};
+    return (ref, xs);
+  };
+
+let jvm_fresh_array24 n =
+  do {
+    ref <- jvm_alloc_array 24 java_int;
+    x0 <- jvm_fresh_var (str_concat n ".0") java_int;
+    x1 <- jvm_fresh_var (str_concat n ".1") java_int;
+    x2 <- jvm_fresh_var (str_concat n ".2") java_int;
+    x3 <- jvm_fresh_var (str_concat n ".3") java_int;
+    x4 <- jvm_fresh_var (str_concat n ".4") java_int;
+    x5 <- jvm_fresh_var (str_concat n ".5") java_int;
+    x6 <- jvm_fresh_var (str_concat n ".6") java_int;
+    x7 <- jvm_fresh_var (str_concat n ".7") java_int;
+    x8 <- jvm_fresh_var (str_concat n ".8") java_int;
+    x9 <- jvm_fresh_var (str_concat n ".9") java_int;
+    x10 <- jvm_fresh_var (str_concat n ".10") java_int;
+    x11 <- jvm_fresh_var (str_concat n ".11") java_int;
+    x12 <- jvm_fresh_var (str_concat n ".12") java_int;
+    x13 <- jvm_fresh_var (str_concat n ".13") java_int;
+    x14 <- jvm_fresh_var (str_concat n ".14") java_int;
+    x15 <- jvm_fresh_var (str_concat n ".15") java_int;
+    x16 <- jvm_fresh_var (str_concat n ".16") java_int;
+    x17 <- jvm_fresh_var (str_concat n ".17") java_int;
+    x18 <- jvm_fresh_var (str_concat n ".18") java_int;
+    x19 <- jvm_fresh_var (str_concat n ".19") java_int;
+    x20 <- jvm_fresh_var (str_concat n ".20") java_int;
+    x21 <- jvm_fresh_var (str_concat n ".21") java_int;
+    x22 <- jvm_fresh_var (str_concat n ".22") java_int;
+    x23 <- jvm_fresh_var (str_concat n ".23") java_int;
+    jvm_elem_is ref 0 (jvm_term x0);
+    jvm_elem_is ref 1 (jvm_term x1);
+    jvm_elem_is ref 2 (jvm_term x2);
+    jvm_elem_is ref 3 (jvm_term x3);
+    jvm_elem_is ref 4 (jvm_term x4);
+    jvm_elem_is ref 5 (jvm_term x5);
+    jvm_elem_is ref 6 (jvm_term x6);
+    jvm_elem_is ref 7 (jvm_term x7);
+    jvm_elem_is ref 8 (jvm_term x8);
+    jvm_elem_is ref 9 (jvm_term x9);
+    jvm_elem_is ref 10 (jvm_term x10);
+    jvm_elem_is ref 11 (jvm_term x11);
+    jvm_elem_is ref 12 (jvm_term x12);
+    jvm_elem_is ref 13 (jvm_term x13);
+    jvm_elem_is ref 14 (jvm_term x14);
+    jvm_elem_is ref 15 (jvm_term x15);
+    jvm_elem_is ref 16 (jvm_term x16);
+    jvm_elem_is ref 17 (jvm_term x17);
+    jvm_elem_is ref 18 (jvm_term x18);
+    jvm_elem_is ref 19 (jvm_term x19);
+    jvm_elem_is ref 20 (jvm_term x20);
+    jvm_elem_is ref 21 (jvm_term x21);
+    jvm_elem_is ref 22 (jvm_term x22);
+    jvm_elem_is ref 23 (jvm_term x23);
+    let xs = {{ [x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,
+      x12,x13,x14,x15,x16,x17,x18,x19,x20,x21,x22,x23] }};
+    return (ref, xs);
+  };
+
+let ecdsa_arr384 n =
+  do {
+    (ref, xs) <- jvm_fresh_array12 n;
+    return (ref, {{ ec_join xs }});
+  };
+
+let ecdsa_arr768 n =
+  do {
+    (ref, xs) <- jvm_fresh_array24 n;
+    return (ref, {{ ec_join768 xs }});
+  };
+
+let ecdsa_arr384_constant this fname val =
+  do {
+    ref <- jvm_alloc_array 12 java_int;
+    jvm_field_is this fname ref;
+    jvm_array12_is ref val;
+  };
+
+let ecdsa_uses_field_prime this =
+  do {
+    ecdsa_arr384_constant this "com/galois/ecc/ECCProvider.field_prime" {{ ec_split field_prime }};
+  };
+
+let ecdsa_uses_field_unit this =
+  do {
+    ecdsa_arr384_constant this "com/galois/ecc/ECCProvider.field_unit" {{ ec_split 1 }};
+  };
+
+let ecdsa_uses_group_order this =
+  do {
+    ecdsa_arr384_constant this "com/galois/ecc/ECCProvider.group_order" {{ ec_split group_order }};
+  };
+
+/* FIXME: This definition of ecdsa_uses_temps doesn't really work.
+Really what we want to declare is both the *precondition* that t1, t2,
+and t3 are already allocated with the appropriate size, and then the
+*postcondition* that they have been overwritten with fresh arbitrary
+data. Currently we can't specify both preconditions and postconditions
+in the same function call, because pre/post is determined by whether
+the function is called before/after jvm_execute_func. */
+
+let ecdsa_uses_temps this =
+  do {
+    (t1, _) <- ecdsa_arr384 "t1";
+    (t2, _) <- ecdsa_arr384 "t2";
+    (t3, _) <- ecdsa_arr384 "t3";
+    jvm_field_is this "com/galois/ecc/ECCProvider.t1" t1;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t2" t2;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t3" t3;
+  };
+
+let ecdsa_temps_allocated this =
+  do {
+    t1 <- jvm_alloc_array 12 java_int;
+    t2 <- jvm_alloc_array 12 java_int;
+    t3 <- jvm_alloc_array 12 java_int;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t1" t1;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t2" t2;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t3" t3;
+  };
+
+let ecdsa_clobber12 ref =
+  do {
+    x <- jvm_fresh_var "temp" (java_array 12 java_int);
+    jvm_array12_is ref x;
+  };
+
+let ecdsa_clobber24 ref =
+  do {
+    x <- jvm_fresh_var "temp" (java_array 24 java_int);
+    jvm_array24_is ref x;
+  };
+
+// This should be called in the prestate section. Afterward,
+// 'ecdsa_clobber24 pa' should be called in the poststate section.
+let ecdsa_uses_a this =
+  do {
+    //pa <- jvm_alloc_array 24 java_int;
+    (pa, _) <- jvm_fresh_array24 "a";
+    jvm_field_is this "com/galois/ecc/NIST64.a" pa;
+    return pa;
+  };
+
+let ecdsa_affine n =
+  do {
+    ref <- jvm_alloc_object "com/galois/ecc/AffinePoint";
+    (px, x) <- ecdsa_arr384 (str_concat n ".x");
+    (py, y) <- ecdsa_arr384 (str_concat n ".y");
+    jvm_field_is ref "com/galois/ecc/AffinePoint.x" px;
+    jvm_field_is ref "com/galois/ecc/AffinePoint.y" py;
+    return ({ref = ref, x = px, y = py}, {{ { x = x, y = y } }});
+  };
+
+let ecdsa_jacobian n =
+  do {
+    ref <- jvm_alloc_object "com/galois/ecc/JacobianPoint";
+    (px, x) <- ecdsa_arr384 (str_concat n ".x");
+    (py, y) <- ecdsa_arr384 (str_concat n ".y");
+    (pz, z) <- ecdsa_arr384 (str_concat n ".z");
+    jvm_field_is ref "com/galois/ecc/JacobianPoint.x" px;
+    jvm_field_is ref "com/galois/ecc/JacobianPoint.y" py;
+    jvm_field_is ref "com/galois/ecc/JacobianPoint.z" pz;
+    return ({ref = ref, x = px, y = py, z = pz}, {{ { x = x, y = y, z = z } }});
+  };
+
+let ecdsa_uses_base this fname v =
+  do {
+    ref <- jvm_alloc_object "com/galois/ecc/AffinePoint";
+    px <- jvm_alloc_array 12 java_int;
+    py <- jvm_alloc_array 12 java_int;
+    jvm_field_is this fname ref;
+    jvm_field_is ref "com/galois/ecc/AffinePoint.x" px;
+    jvm_field_is ref "com/galois/ecc/AffinePoint.y" py;
+    jvm_array12_is px {{ ec_split v.x }};
+    jvm_array12_is py {{ ec_split v.y }};
+  };
+
+let ecdsa_signature n =
+  do {
+    ref <- jvm_alloc_object "com/galois/ecc/Signature";
+    (pr, r) <- ecdsa_arr384 (str_concat n ".r");
+    (ps, s) <- ecdsa_arr384 (str_concat n ".s");
+    jvm_field_is ref "com/galois/ecc/Signature.r" pr;
+    jvm_field_is ref "com/galois/ecc/Signature.s" ps;
+    return ({ref = ref, r = pr, s = ps}, {{ { r = r, s = s } }});
+  };
+
+let ecdsa_public_key n =
+  do {
+    ref <- jvm_alloc_object "com/galois/ecc/PublicKey";
+    (px, x) <- ecdsa_arr384 (str_concat n ".x");
+    (py, y) <- ecdsa_arr384 (str_concat n ".y");
+    jvm_field_is ref "com/galois/ecc/PublicKey.x" px;
+    jvm_field_is ref "com/galois/ecc/PublicKey.y" py;
+    return ({ref = ref, x = px, y = py}, {{ { x = x, y = y } }});
+  };
+
+let ecdsa_twin_mul_aux2_rslt n =
+  do {
+    auxr <- jvm_alloc_object "com/galois/ecc/TwinMulAux2Rslt";
+    ru0 <- jvm_fresh_var (str_concat n ".u0") java_int;
+    ru1 <- jvm_fresh_var (str_concat n ".u1") java_int;
+    rc0p <- jvm_fresh_var (str_concat n ".c0p") java_int;
+    rc1p <- jvm_fresh_var (str_concat n ".c1p") java_int;
+    re0p <- jvm_fresh_var (str_concat n ".e0p") java_int;
+    re1p <- jvm_fresh_var (str_concat n ".e1p") java_int;
+    rshp <- jvm_fresh_var (str_concat n ".shp") java_int;
+
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.u0" (jvm_term ru0);
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.u1" (jvm_term ru1);
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.c0p" (jvm_term rc0p);
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.c1p" (jvm_term rc1p);
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.e0p" (jvm_term re0p);
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.e1p" (jvm_term re1p);
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.shp" (jvm_term rshp);
+
+    return (auxr,
+           {{ { u0 = ru0, u1 = ru1
+              , c0p = rc0p, c1p = rc1p
+              , e0p = re0p, e1p = re1p
+              , shp = rshp
+              } }});
+  };
+
+let ecdsa_assign_arr384 ref x = jvm_array12_is ref {{ ec_split x }};
+
+let ecdsa_assign_arr768 ref x = jvm_array24_is ref {{ ec_split768 x }};
+
+let ecdsa_assign_jacobian (p : { ref : JVMValue, x : JVMValue, y : JVMValue, z : JVMValue }) j =
+  do {
+    ecdsa_assign_arr384 (p.x) {{ j.x }};
+    ecdsa_assign_arr384 (p.y) {{ j.y }};
+    ecdsa_assign_arr384 (p.z) {{ j.z }};
+  };
+
+let ecdsa_assign_affine (p : { ref : JVMValue, x : JVMValue, y : JVMValue }) a =
+  do {
+    ecdsa_assign_arr384 (p.x) {{ a.x }};
+    ecdsa_assign_arr384 (p.y) {{ a.y }};
+  };
+
+////////////////////////////////////////////////////////////
+
+c <- java_load_class ecc_class;
+
+let method_prove name specs setup tac =
+  time do {
+    print (str_concat "Verifying " name);
+    crucible_jvm_verify c name specs false setup tac;
+  };
+
+let method_assume name specs setup tac = method_prove name specs setup assume_unsat;
+
+let method_skip name _specs setup _tac =
+  time do {
+    print (str_concat "Skipping verification of " name);
+    crucible_jvm_unsafe_assume_spec c name setup;
+  };
+
+let method = method_prove;
+let method' = method_prove;
+//let method' = method_assume;
+//let method' = method_skip;
+
+let field_add_def = {{ p384_field::p384_field_add }};
+let field_sub_def = {{ p384_field::p384_field_sub }};
+
+print "Proving and registering rewrite rules.";
+let cry_ss = cryptol_ss ();
+let ss0 = add_prelude_eqs [ "bvShiftL_bvShl"
+                          , "bvShiftR_bvShr"
+                          ] cry_ss;
+
+let crule t = rewrite ss0 t;
+let prove_rule t = prove_print abc (rewrite ss0 t);
+
+let ss1 = add_prelude_eqs
+  [ "ite_not"
+  , "ite_nest1"
+  , "ite_nest2"
+  , "ite_fold_not"
+  , "ite_eq"
+  , "ite_bit"
+  , "ite_bit_false_1"
+  , "ite_bit_true_1"
+  , "ite_eq_cong_1"
+  , "ite_eq_cong_2"
+  , "ite_split_cong"
+  , "ite_join_cong"
+  , "eq_refl"
+  , "at_single"
+  , "and_True1", "and_True2", "and_False1", "and_False2", "and_idem"
+  , "or_True1", "or_True2", "or_False1", "or_False2"
+  , "implies_True1", "implies_False1"
+  , "not_True", "not_False"
+  ] ss0; //(add_prelude_defs ["implies"] ss0);
+let ss2 = add_cryptol_eqs [] ss1;
+
+
+ite24 <- prove_rule {{
+  \b
+  x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23
+  y0 y1 y2 y3 y4 y5 y6 y7 y8 y9 y10 y11 y12 y13 y14 y15 y16 y17 y18 y19 y20 y21 y22 y23 ->
+  [ if b then x0 else y0 : [32]
+  , if b then x1 else y1
+  , if b then x2 else y2
+  , if b then x3 else y3
+  , if b then x4 else y4
+  , if b then x5 else y5
+  , if b then x6 else y6
+  , if b then x7 else y7
+  , if b then x8 else y8
+  , if b then x9 else y9
+  , if b then x10 else y10
+  , if b then x11 else y11
+  , if b then x12 else y12
+  , if b then x13 else y13
+  , if b then x14 else y14
+  , if b then x15 else y15
+  , if b then x16 else y16
+  , if b then x17 else y17
+  , if b then x18 else y18
+  , if b then x19 else y19
+  , if b then x20 else y20
+  , if b then x21 else y21
+  , if b then x22 else y22
+  , if b then x23 else y23 ]
+  ==
+  (if b
+  then [x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,x13,x14,x15,x16,x17,x18,x19,x20,x21,x22,x23]
+  else [y0,y1,y2,y3,y4,y5,y6,y7,y8,y9,y10,y11,y12,y13,y14,y15,y16,y17,y18,y19,y20,y21,y22,y23])
+  }};
+
+at12 <- prove_core abc "(x : Vec 12 (Vec 32 Bool)) -> EqTrue (eq (Vec 12 (Vec 32 Bool)) [at 12 (Vec 32 Bool) x 0, at 12 (Vec 32 Bool) x 1, at 12 (Vec 32 Bool) x 2, at 12 (Vec 32 Bool) x 3, at 12 (Vec 32 Bool) x 4, at 12 (Vec 32 Bool) x 5, at 12 (Vec 32 Bool) x 6, at 12 (Vec 32 Bool) x 7, at 12 (Vec 32 Bool) x 8, at 12 (Vec 32 Bool) x 9, at 12 (Vec 32 Bool) x 10, at 12 (Vec 32 Bool) x 11] x)";
+
+at24 <- prove_rule {{
+  \(x:[24][32]) ->
+  [ x @ 0x00, x @ 0x01, x @ 0x02, x @ 0x03, x @ 0x04, x @ 0x05
+  , x @ 0x06, x @ 0x07, x @ 0x08, x @ 0x09, x @ 0x0a, x @ 0x0b
+  , x @ 0x0c, x @ 0x0d, x @ 0x0e, x @ 0x0f, x @ 0x10, x @ 0x11
+  , x @ 0x12, x @ 0x13, x @ 0x14, x @ 0x15, x @ 0x16, x @ 0x17
+  ] == x }};
+
+ec_join_split   <- prove_rule {{ \x -> ec_join (ec_split x) == x }};
+ec_join_split_768 <- prove_rule {{ \x -> ec_join768 (ec_split768 x) == x }};
+ec_split_join_768 <- prove_rule {{ \x -> ec_split768 (ec_join768 x) == x }};
+
+// Axiomatic rules: For now, we assume these without proof.
+let mul_java_elim = crule {{ \(a:[768]) -> \(x:[384]) -> \(y:[384]) ->
+                     mul_java::mul_java (a, x, y) == p384_field::p384_safe_product (x, y) }};
+let sq_java_elim = crule {{ \(a:[768]) -> \(x:[384]) ->
+                     mul_java::sq_java (a, x) == p384_field::p384_safe_product (x, x) }};
+
+let basic_simps  = [ ec_join_split
+                   , at12, at24
+                   ];
+let ss3 = addsimps basic_simps ss2;
+let ss4 = addsimps' [mul_java_elim, sq_java_elim] ss3;
+let ss = add_prelude_defs
+  [ "bvUpd"
+  , "bvAt"
+  , "bitvector"
+  ] ss4;
+
+p384_point_ops_add_simp <- do {
+  let t = {{ \x -> p384_ec_point_ops::p384_point_ops.add x ==
+              p384_ec_point_ops::p384_ec_full_add x }};
+  let t' = rewrite ss0 t;
+  //print "Proving rewrite rule:";
+  //print_term t';
+  prove_print do {
+    unint_z3
+      [ "p384_ec_double", "p384_field_add", "p384_field_mul", "p384_field_neg"
+      , "p384_field_sq", "p384_field_sub", "p384_group_field", "p384_is_field_val"
+      , "p384_mod_div", "p384_mod_half", "p384_prime" ];
+  } t';
+};
+
+p384_point_ops_sub_simp <- do {
+  let t = {{ \x -> p384_ec_point_ops::p384_point_ops.sub x ==
+              p384_ec_point_ops::p384_ec_full_sub x }};
+  let t' = rewrite ss0 t;
+  //print "Proving rewrite rule:";
+  //print_term t';
+  prove_print do {
+    unint_z3
+      [ "p384_ec_double", "p384_field_add", "p384_field_mul", "p384_field_neg"
+      , "p384_field_sq", "p384_field_sub", "p384_group_field", "p384_is_field_val"
+      , "p384_mod_div", "p384_mod_half", "p384_prime" ];
+  } t';
+};
+
+p384_point_ops_field_mul_simp <- do {
+  let {{ thm x = p384_ec_point_ops::p384_point_ops.field.mul x ==
+                 p384_field::p384_field_mul x }};
+  // This is pretty quick even without the rewriting and uniterpretation
+  // used above.
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print z3 t;
+};
+p384_point_ops_field_sq_simp <- do {
+  let {{ thm x = p384_ec_point_ops::p384_point_ops.field.sq x ==
+                 p384_field::p384_field_sq x }};
+  // This is pretty quick even without the rewriting and uninterpretation
+  // used above.
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print z3 t;
+};
+p384_point_ops_field_mul_simp2 <- do {
+  let {{ thm x = ecc::p384_curve.point_ops.field.mul x ==
+                 p384_field::p384_field_mul x }};
+  // This is pretty quick even without the rewriting and uniterpretation
+  // used above.
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print z3 t;
+};
+p384_point_ops_field_sq_simp2 <- do {
+  let {{ thm x = ecc::p384_curve.point_ops.field.sq x ==
+                 p384_field::p384_field_sq x }};
+  // This is pretty quick even without the rewriting and uniterpretation
+  // used above.
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print z3 t;
+};
+
+p384_curve_field_mul_simp <- do {
+  let {{ thm x y = ecc::p384_curve.point_ops.group_field.mul (x, y) ==
+                   mul_java::p384_group_mul (p384_field::p384_group_size, x, y) }};
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print (unint_z3 ["p384_group_mul"]) t;
+};
+
+p384_curve_field_sq_simp <- do {
+  let {{ thm x = ecc::p384_curve.point_ops.group_field.sq x ==
+                 p384_field::p384_mod_mul (p384_field::p384_group_size, x, x) }};
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print (unint_z3 ["p384_mod_mul"]) t;
+};
+p384_curve_field_div_simp <- do {
+  let {{ thm x y = ecc::p384_curve.point_ops.group_field.div (x,y) ==
+                   p384_mod_div (p384_field::p384_group_size, x, y) }};
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print (unint_z3 ["p384_mod_div"]) t;
+};
+p384_curve_twin_mul_simp <- do {
+  let {{ thm x = ecc::p384_curve.twin_mul x ==
+                 p384_ec_mul::p384_ec_twin_mul x }};
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print (unint_z3 ["p384_ec_twin_mul"]) t;
+};
+p384_curve_is_equal_simp <- do {
+  let {{ thm x y = ecc::p384_curve.point_ops.group_field.is_equal (x, y) ==
+                   (x == y) }};
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print z3 t;
+};
+p384_curve_is_val_simp <- do {
+  let {{ thm x = ecc::p384_curve.point_ops.group_field.is_val x ==
+                 p384_field::p384_is_group_val x }};
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print z3 t;
+};
+p384_curve_norm_simp <- do {
+  let {{ thm x = ecc::p384_curve.point_ops.group_field.norm x ==
+                 (if x < p384_field::p384_group_size
+                  then x
+                  else x - p384_field::p384_group_size) }};
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print z3 t;
+};
+p384_curve_field_zero_simp <- do {
+  let {{ thm = ecc::p384_curve.point_ops.group_field.field_zero == 0 }};
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print z3 t;
+};
+p384_curve_base_simp <- do {
+  let {{ thm = ecc::p384_curve.base == ecc::p384_base }};
+  let t = unfold_term ["thm"] {{ thm }};
+  let t = rewrite ss0 t;
+  //print_term t;
+  prove_print z3 t;
+};
+
+
+print "Performing verification.";
+
+set_color true;
+set_unit_ov <- method "set_unit" []
+  do {
+    x <- jvm_alloc_array 12 java_int;
+    jvm_execute_func [x];
+    ecdsa_assign_arr384 x {{ 1 }};
+  }
+  abc;
+
+set_zero_ov <- method "set_zero" []
+  do {
+    x <- jvm_alloc_array 12 java_int;
+    jvm_execute_func [x];
+    ecdsa_assign_arr384 x {{ 0 }};
+  }
+  abc;
+
+is_zero_ov <- method "is_zero" []
+  do {
+    (px, x) <- ecdsa_arr384 "x";
+    jvm_execute_func [px];
+    jvm_return (jvm_term {{ bool (x == 0) }});
+  }
+  abc;
+
+is_equal_ov <- method "is_equal" []
+  do {
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    jvm_execute_func [px, py];
+    jvm_return (jvm_term {{ bool (x == y) }});
+  }
+  abc;
+
+assign_ov <- method "assign" []
+  do {
+    px <- jvm_alloc_array 12 java_int;
+    (py, y) <- ecdsa_arr384 "y";
+    jvm_execute_func [px, py];
+    ecdsa_assign_arr384 px {{ y }};
+  }
+  abc;
+
+ashift_ov <- method "array_shift" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_arr384 "r";
+    jvm_execute_func [this, pr];
+    ecdsa_assign_arr384 pr {{ (r << 32) }};
+    jvm_return (jvm_term {{ long_extend (jget (ec_split r) 11) }});
+  }
+  abc;
+
+leq_ov <- method "leq" []
+  do {
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    jvm_execute_func [px, py];
+    //java_may_alias [ "x", "y" ];
+    //java_sat_branches true;
+    jvm_return (jvm_term {{ bool (x <= y) }});
+  }
+  abc;
+
+shr_ov <- method "shr" []
+  do {
+    pz <- jvm_alloc_array 12 java_int;
+    c <- jvm_fresh_var "c" java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    jvm_execute_func [pz, jvm_term c, px];
+    //java_may_alias [ "z", "x" ];
+    ecdsa_assign_arr384 pz {{ (ec_extend c << 383) || (x >> 1) }};
+  }
+  abc;
+
+// Like shr_ov, but where 1st and 3rd arguments are the same.
+shr_ov2 <- method "shr" []
+  do {
+    c <- jvm_fresh_var "c" java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    jvm_execute_func [px, jvm_term c, px];
+    //java_may_alias [ "z", "x" ];
+    ecdsa_assign_arr384 px {{ (ec_extend c << 383) || (x >> 1) }};
+  }
+  abc;
+
+dec_ov <- method "decFieldPrime" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    jvm_execute_func [this, px];
+    let r = {{ ecc::p384_decFieldPrime x }};
+    ecdsa_assign_arr384 px {{ r.rslt }};
+    jvm_return (jvm_term {{ r.carrybits }});
+  }
+  abc;
+
+inc_ov <- method "incFieldPrime" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    jvm_execute_func [this, px];
+    let r = {{ ecc::p384_incFieldPrime x }};
+    ecdsa_assign_arr384 px {{ r.rslt }};
+    jvm_return (jvm_term {{ r.carrybits }});
+  }
+  abc;
+
+dbl_ov <- method "dbl" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    jvm_execute_func [this, pz, px];
+    let z = {{ x + x }};
+    //java_may_alias ["x", "z"];
+    ecdsa_assign_arr384 pz {{ z }};
+    jvm_return (jvm_term {{ if z < x then (1:[32]) else (0:[32]) }});
+  }
+  abc;
+
+// Like dbl_ov, but with 1st and 2nd arguments the same.
+dbl_ov2 <- method "dbl" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    jvm_execute_func [this, px, px];
+    let z = {{ x + x }};
+    //java_may_alias ["x", "z"];
+    ecdsa_assign_arr384 px {{ z }};
+    jvm_return (jvm_term {{ if z < x then (1:[32]) else (0:[32]) }});
+  }
+  abc;
+
+add_ov <- method "add" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    jvm_execute_func [this, pz, px, py];
+    //java_may_alias ["z", "x", "y"];
+    let z = {{ x + y }};
+    ecdsa_assign_arr384 pz {{ z }};
+    jvm_return (jvm_term {{ if (z < x) && (z < y) then (1:[32]) else (0:[32]) }});
+  }
+  abc;
+
+// Like add_ov, but where the first 2 arguments are the same.
+add_ov2 <- method "add" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    jvm_execute_func [this, px, px, py];
+    //java_may_alias ["z", "x", "y"];
+    let z = {{ x + y }};
+    ecdsa_assign_arr384 px {{ z }};
+    jvm_return (jvm_term {{ if (z < x) && (z < y) then (1:[32]) else (0:[32]) }});
+  }
+  abc;
+
+// Like add_ov, but where the 1st and 3rd arguments are the same.
+add_ov3 <- method "add" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    jvm_execute_func [this, py, px, py];
+    //java_may_alias ["z", "x", "y"];
+    let z = {{ x + y }};
+    ecdsa_assign_arr384 py {{ z }};
+    jvm_return (jvm_term {{ if (z < x) && (z < y) then (1:[32]) else (0:[32]) }});
+  }
+  abc;
+
+sub_ov <- method "sub" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    jvm_execute_func [this, pz, px, py];
+    //java_may_alias ["z", "x", "y"];
+    let z = {{ x - y }};
+    ecdsa_assign_arr384 pz {{ z }};
+    jvm_return (jvm_term {{ if (x >= y) then (0:[32]) else (0xffffffff:[32]) }});
+  }
+  abc;
+
+// like sub_ov, but with 1st and 2nd arguments the same
+sub_ov2 <- method "sub" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    jvm_execute_func [this, px, px, py];
+    //java_may_alias ["z", "x", "y"];
+    let z = {{ x - y }};
+    ecdsa_assign_arr384 px {{ z }};
+    jvm_return (jvm_term {{ if (x >= y) then (0:[32]) else (0xffffffff:[32]) }});
+  }
+  abc;
+
+// like sub_ov, but with 1st and 3nd arguments the same
+sub_ov3 <- method "sub" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    jvm_execute_func [this, py, px, py];
+    //java_may_alias ["z", "x", "y"];
+    let z = {{ x - y }};
+    ecdsa_assign_arr384 py {{ z }};
+    jvm_return (jvm_term {{ if (x >= y) then (0:[32]) else (0xffffffff:[32]) }});
+  }
+  abc;
+
+let ltNat_bvToNat =
+  core_axiom "(x : bitvector 32) -> (y : Nat) -> Eq Bool (ltNat (bvToNat 32 x) y) (or (ltNat 4294967295 y) (bvult 32 x (bvNat 32 y)))";
+
+let equalNat_bvToNat1 =
+  core_axiom "(x : bitvector 32) -> (y : Nat) -> Eq Bool (equalNat (bvToNat 32 x) y) (and (ltNat y 4294967296) (bvEq 32 x (bvNat 32 y)))";
+
+let equalNat_bvToNat2 =
+  core_axiom "(x : Nat) -> (y : bitvector 32) -> Eq Bool (equalNat x (bvToNat 32 y)) (and (ltNat x 4294967296) (bvEq 32 (bvNat 32 x) y))";
+
+let ltNat_tac = simplify (addsimps [ltNat_bvToNat, equalNat_bvToNat1, equalNat_bvToNat2] empty_ss);
+
+mul_inner_ov <- method "mul_inner" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    azero <- jvm_fresh_var "azero" java_bool;
+    (pa, a) <- ecdsa_arr768 "a";
+    ij <- jvm_fresh_var "ij" java_int;
+    xi <- jvm_fresh_var "xi" java_int;
+    yj <- jvm_fresh_var "yj" java_int;
+    d <- jvm_fresh_var "d" java_long;
+    jvm_precond {{ (0 <= ij) && (ij <= 23) }};
+    let res = {{ mul_java::mul_java_inner (azero, ec_split768 a, ij, xi, yj, d) }};
+    jvm_execute_func [this, jvm_term azero, pa, jvm_term ij, jvm_term xi, jvm_term yj, jvm_term d];
+    jvm_array24_is pa {{ res.mji_a }};
+    jvm_return (jvm_term {{ res.mji_d }});
+  }
+  do {
+    simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
+    abc;
+  };
+
+mul_ov <- method "mul" [mul_inner_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pa, a) <- ecdsa_arr768 "a";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    //java_may_alias ["x", "y"];
+    jvm_execute_func [this, pa, px, py];
+    ecdsa_assign_arr768 pa {{ mul_java::mul_java (a, x, y) }};
+  }
+  do {
+    simplify
+      (addsimps [at24, ec_split_join_768]
+      (add_prelude_eqs
+        [ "and_True1", "and_True2"
+        , "and_False1", "and_False2"
+        , "or_False1", "or_False2"
+        , "not_True", "not_False", "not_not"
+        ]
+      cry_ss));
+    //print_goal;
+    abc;
+  };
+
+sq_inner1_ov <- method "sq_inner1" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pa, a) <- jvm_fresh_array24 "a";
+    ij <- jvm_fresh_var "ij" java_int;
+    c <- jvm_fresh_var "c" java_long;
+    jvm_precond {{ (0 <= ij) && (ij <= 23) }};
+    jvm_execute_func [this, pa, jvm_term ij, jvm_term c];
+    let res = {{ mul_java::sq_java_inner1 (a, ij, c) }};
+    jvm_array24_is pa {{ res.mji_a }};
+    jvm_return (jvm_term {{ res.mji_d }});
+  }
+  do {
+    simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
+    z3;
+  };
+
+sq_inner2_ov <- method "sq_inner2" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pa, a) <- jvm_fresh_array24 "a";
+    ij <- jvm_fresh_var "ij" java_int;
+    xati <- jvm_fresh_var "xati" java_int;
+    c <- jvm_fresh_var "c" java_long;
+    jvm_precond {{ (0 <= ij) && (ij <= 23) }};
+    jvm_execute_func [this, pa, jvm_term ij, jvm_term xati, jvm_term c];
+    let res = {{ mul_java::sq_java_inner2 (a, ij, xati, c) }};
+    jvm_array24_is pa {{ res.mji_a }};
+    jvm_return (jvm_term {{ res.mji_d }});
+  }
+  do {
+    simplify (add_prelude_eqs ["and_True1", "and_True2"] empty_ss);
+    z3;
+  };
+
+sq_loop_ov <- method "sq_loop" [mul_inner_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pa, a) <- jvm_fresh_array24 "a";
+    (px, x) <- ecdsa_arr384 "x";
+    jvm_execute_func [this, pa, px];
+    jvm_array24_is pa {{ mul_java::sq_java_loop (a, x) }};
+  }
+  z3;
+
+sq_ov <- method "sq" [sq_inner1_ov, sq_inner2_ov, sq_loop_ov, mul_inner_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pa, a) <- ecdsa_arr768 "a";
+    (px, x) <- ecdsa_arr384 "x";
+    jvm_execute_func [this, pa, px];
+    ecdsa_assign_arr768 pa {{ mul_java::sq_java (a, x) }};
+  }
+  z3;
+
+mod_sub_ov <- method "mod_sub" [sub_ov, add_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pz, z) <- ecdsa_arr384 "z";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    (pp, p) <- ecdsa_arr384 "p";
+    //java_may_alias ["z", "x", "y"];
+    jvm_execute_func [this, pz, px, py, pp];
+    ecdsa_assign_arr384 pz {{ p384_field::p384_mod_sub (p, x, y) }};
+  }
+  abc;
+
+// Like mod_sub_ov, but with 1st and 2nd arguments the same
+mod_sub_ov2 <- method "mod_sub" [sub_ov2, add_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    (pp, p) <- ecdsa_arr384 "p";
+    //java_may_alias ["z", "x", "y"];
+    jvm_execute_func [this, px, px, py, pp];
+    ecdsa_assign_arr384 px {{ p384_field::p384_mod_sub (p, x, y) }};
+  }
+  abc;
+
+mod_half_ov <- method "mod_half" [add_ov2, shr_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (pp, p) <- ecdsa_arr384 "p";
+    //java_may_alias [ "x", "p" ];
+    jvm_execute_func [this, px, pp];
+    ecdsa_assign_arr384 px {{ p384_field::p384_mod_half (p, x) }};
+  }
+  abc;
+
+// TODO: extract recursive models
+mod_div_ov <- method_skip "mod_div"
+  [set_zero_ov, is_zero_ov, assign_ov, leq_ov, sub_ov2, mod_sub_ov2, shr_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pra <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    (pp, p) <- ecdsa_arr384 "p";
+    jvm_execute_func [this, pra, px, py, pp];
+    //ecdsa_uses_temps this;
+    ecdsa_assign_arr384 pra {{ p384_mod_div (p, x, y) }};
+  }
+  abc;
+
+group_add_ov <- method "group_add" [add_ov, leq_ov, sub_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pz, z) <- ecdsa_arr384 "z";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    ecdsa_uses_group_order this;
+    jvm_execute_func [this, pz, px, py];
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_assign_arr384 pz {{ p384_field::p384_mod_add (group_order, x, y) }};
+  }
+  abc;
+
+// like group_add_ov, but 1st and 3rd arguments the same.
+group_add_ov3 <- method "group_add" [add_ov3, leq_ov, sub_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    ecdsa_uses_group_order this;
+    jvm_execute_func [this, py, px, py];
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_assign_arr384 py {{ p384_field::p384_mod_add (group_order, x, y) }};
+  }
+  abc;
+
+field_add_ov <- method "field_add" [add_ov, leq_ov, dec_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, pz, px, py];
+    ecdsa_assign_arr384 pz {{ p384_field::p384_field_add (x, y) }};
+  }
+  abc;
+
+// Like field_add_ov, but 1st and 3rd arguments the same.
+field_add_ov3 <- method "field_add" [add_ov3, leq_ov, dec_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, py, px, py];
+    ecdsa_assign_arr384 py {{ p384_field::p384_field_add (x, y) }};
+  }
+  abc;
+
+field_sub_ov <- method "field_sub" [sub_ov, inc_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, pz, px, py];
+    ecdsa_assign_arr384 pz {{ p384_field::p384_field_sub (x, y) }};
+  }
+  abc;
+
+// like field_sub_ov, but with 1st and 2nd arguments the same
+field_sub_ov2 <- method "field_sub" [sub_ov2, inc_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, px, px, py];
+    ecdsa_assign_arr384 px {{ p384_field::p384_field_sub (x, y) }};
+  }
+  abc;
+
+// like field_sub_ov, but with 1st and 3nd arguments the same
+field_sub_ov3 <- method "field_sub" [sub_ov3, inc_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, py, px, py];
+    ecdsa_assign_arr384 py {{ p384_field::p384_field_sub (x, y) }};
+  }
+  abc;
+
+field_dbl_ov <- method "field_dbl" [dbl_ov, leq_ov, dec_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    ecdsa_uses_field_prime this;
+    //java_may_alias ["z", "x"];
+    jvm_execute_func [this, pz, px];
+    ecdsa_assign_arr384 pz {{ p384_field::p384_field_add (x, x) }};
+  }
+  abc;
+
+// Like field_dbl_ov, but with 1st and 2nd arguments the same.
+field_dbl_ov2 <- method "field_dbl" [dbl_ov2, leq_ov, dec_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    ecdsa_uses_field_prime this;
+    //java_may_alias ["z", "x"];
+    jvm_execute_func [this, px, px];
+    ecdsa_assign_arr384 px {{ p384_field::p384_field_add (x, x) }};
+  }
+  abc;
+
+field_dbl_dec_ov <- method "field_dbl_dec" [field_sub_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pz, z) <- ecdsa_arr384 "z";
+    (px, x) <- ecdsa_arr384 "x";
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, pz, px];
+    ecdsa_assign_arr384 pz
+      {{ p384_field::p384_field_sub (p384_field::p384_field_sub (z, x), x) }};
+  }
+  z3;
+
+field_red_ov <- method "field_red" [inc_ov, leq_ov, dec_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (pa, a) <- ecdsa_arr768 "a";
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, pz, pa];
+    ecdsa_assign_arr384 pz {{ p384_field::p384_field_mod a }};
+  }
+  do {
+    simplify ss;
+    quickcheck 100;
+  };
+
+field_sq_ov <- method "field_sq" [sq_ov, field_red_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    pa <- ecdsa_uses_a this;
+    ecdsa_uses_field_prime this;
+    //java_may_alias ["z", "x"];
+    jvm_execute_func [this, pz, px];
+    //ecdsa_clobber24 pa; //FIXME
+    ecdsa_assign_arr384 pz {{ p384_field::p384_field_sq x }};
+  }
+  do {
+    unfolding ["p384_field_sq", "p384_field_mul"];
+    simplify ss;
+    //print_goal;
+    unint_z3 ["p384_field_mod", "p384_safe_product"];
+  };
+/*********
+FIXME: We get the following error message, unless we comment out the
+"ecdsa_uses_field_prime" line in field_red_ov.
+
+Abort due to false assumption:
+  no override specification applies for field_red
+  in overrideBranches at /Users/huffman/Work/saw-script/examples/ecdsa/ecdsa.saw:1604:16
+  When calling overrideBranches
+  When calling com/galois/ecc/P384ECC64.field_red
+  In com/galois/ecc/NIST64.field_sq at internal
+  When calling field_sq
+finish invoke:com/galois/ecc/NIST64/field_red
+Symbolic simulation completed with side conditions.
+Proof succeeded! field_sq
+
+(I think the message is actually spurious; it is suppressed if you lower the simulator verbosity.
+It just means that crucible couldn't *statically* determine that an override matched.
+See https://github.com/GaloisInc/saw-script/issues/334)
+*********/
+
+// like field_sq_ov, but with 1st and 2nd arguments the same
+field_sq_ov2 <- method "field_sq" [sq_ov, field_red_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    pa <- ecdsa_uses_a this;
+    ecdsa_uses_field_prime this;
+    //java_may_alias ["z", "x"];
+    jvm_execute_func [this, px, px];
+    //ecdsa_clobber24 pa; //FIXME
+    ecdsa_assign_arr384 px {{ p384_field::p384_field_sq x }};
+  }
+  do {
+    unfolding ["p384_field_sq", "p384_field_mul"];
+    simplify ss;
+    //print_goal;
+    unint_z3 ["p384_field_mod", "p384_safe_product"];
+  };
+
+field_mul_ov <- method "field_mul" [mul_ov, field_red_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    ecdsa_uses_field_prime this;
+    _ <- ecdsa_uses_a this;
+    jvm_execute_func [this, pz, px, py];
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_assign_arr384 pz {{ p384_field::p384_field_mul (x, y) }};
+  }
+  do {
+    unfolding ["p384_field_mul"];
+    simplify ss;
+    unint_z3 ["p384_field_mod", "p384_safe_product"];
+  };
+
+// like field_mul_ov, but with 1st and 2nd arguments the same
+field_mul_ov2 <- method "field_mul" [mul_ov, field_red_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    ecdsa_uses_field_prime this;
+    _ <- ecdsa_uses_a this;
+    jvm_execute_func [this, px, px, py];
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_assign_arr384 px {{ p384_field::p384_field_mul (x, y) }};
+  }
+  do {
+    unfolding ["p384_field_mul"];
+    simplify ss;
+    unint_z3 ["p384_field_mod", "p384_safe_product"];
+  };
+
+// like field_mul_ov, but with 1st and 3rd arguments the same
+field_mul_ov3 <- method "field_mul" [mul_ov, field_red_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    ecdsa_uses_field_prime this;
+    _ <- ecdsa_uses_a this;
+    jvm_execute_func [this, py, px, py];
+    //java_may_alias ["z", "x", "y"];
+    ecdsa_assign_arr384 py {{ p384_field::p384_field_mul (x, y) }};
+  }
+  do {
+    unfolding ["p384_field_mul"];
+    simplify ss;
+    unint_z3 ["p384_field_mod", "p384_safe_product"];
+  };
+
+group_red_aux_ov <- method "group_red_aux" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_arr384 "r";
+    aj <- jvm_fresh_var "aj" java_int;
+    j  <- jvm_fresh_var "j" java_int;
+    c  <- jvm_fresh_var "c" java_long;
+    b  <- jvm_fresh_var "b" java_long;
+    jvm_precond {{ (0 <= j) && (j <= 11) }};
+    jvm_execute_func [this, pr, jvm_term aj, jvm_term j, jvm_term c, jvm_term b];
+    let res = {{ mul_java::group_red_aux_java (r, aj, j, c, b) }};
+    ecdsa_assign_arr384 pr {{ res.gra_r }};
+    jvm_return (jvm_term {{ res.gra_b }});
+  }
+  //z3; //FIXME: This has problems due to a bug (in SBV?) where the wrong right-shift instruction is generated.
+  assume_unsat;
+
+group_red_ov <- method "group_red" [sub_ov2, group_red_aux_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_arr384 "r";
+    c <- jvm_fresh_var "c" java_long;
+    ecdsa_uses_group_order this;
+    jvm_execute_func [this, pr, jvm_term c];
+    ecdsa_assign_arr384 pr {{ mul_java::p384_group_red (group_order, r, c) }};
+  }
+  (quickcheck 10);
+  //do {
+  //  unfolding ["p384_group_red"];
+  //  simplify ss; unint_z3 ["group_red_aux_java"];
+  //};
+
+group_mul_aux_ov <- method "group_mul_aux" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_arr384 "r";
+    yj <- jvm_fresh_var "yj" java_int;
+    j  <- jvm_fresh_var "j" java_int;
+    xi <- jvm_fresh_var "xi" java_int;
+    c  <- jvm_fresh_var "c" java_long;
+    jvm_precond {{ (0 <= j) && (j <= 11) }};
+    jvm_execute_func [this, pr, jvm_term yj, jvm_term j, jvm_term xi, jvm_term c];
+    let res = {{ mul_java::group_mul_aux_java (r, yj, j, xi, c) }};
+    ecdsa_assign_arr384 pr {{ res.gra_r }};
+    jvm_return (jvm_term {{ res.gra_b }});
+  }
+  do {
+    abc;
+  };
+
+// FIXME: If we have "field_add_ov" instead of "field_add_ov3" as an override,
+// then the error message we get is *very* unhelpful!
+field_mul3_ov <- method "field_mul3" [field_add_ov3, field_dbl_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, pz, px];
+    ecdsa_assign_arr384 pz {{ app3 field_add_def x }};
+  }
+  (unint_z3 ["p384_field_add"]);
+
+field_mul4_ov <- method "field_mul4" [field_dbl_ov, field_dbl_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, pz, px];
+    ecdsa_assign_arr384 pz {{ app4 field_add_def x }};
+  }
+  (unint_z3 ["p384_field_add"]);
+
+// like field_mul4_ov, but with 1st and 2nd arguments the same
+field_mul4_ov2 <- method "field_mul4" [field_dbl_ov, field_dbl_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, px, px];
+    ecdsa_assign_arr384 px {{ app4 field_add_def x }};
+  }
+  (unint_z3 ["p384_field_add"]);
+
+field_mul8_ov <- method "field_mul8" [field_dbl_ov, field_dbl_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pz <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, pz, px];
+    ecdsa_assign_arr384 pz {{ app8 field_add_def x }};
+  }
+  (unint_z3 ["p384_field_add"]);
+
+// like field_mul8_ov, but with 1st and 2nd arguments the same
+field_mul8_ov2 <- method "field_mul8" [field_dbl_ov, field_dbl_ov2]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (px, x) <- ecdsa_arr384 "x";
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, px, px];
+    ecdsa_assign_arr384 px {{ app8 field_add_def x }};
+  }
+  (unint_z3 ["p384_field_add"]);
+
+// TODO: compare with old version to see how to make this subproof work
+group_mul_ov <- method "group_mul"
+  [ set_zero_ov
+  , group_red_ov
+  , ashift_ov
+  , group_mul_aux_ov
+  , leq_ov
+  , sub_ov2
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    pr <- jvm_alloc_array 12 java_int;
+    (px, x) <- ecdsa_arr384 "x";
+    (py, y) <- ecdsa_arr384 "y";
+    ecdsa_uses_group_order this;
+    jvm_execute_func [this, pr, px, py];
+    ecdsa_assign_arr384 pr {{ mul_java::p384_group_mul (group_order, x, y) }};
+  }
+  do {
+    unfolding ["p384_group_mul"];
+    simplify ss;
+    //print_goal;
+    //unint_z3 ["p384_group_red", "group_mul_aux_java"]; // this yields a counterexample (?)
+    quickcheck 100;
+  };
+
+ec_double_ov <- method "ec_double"
+  [ is_zero_ov
+  , set_unit_ov
+  , set_zero_ov
+  , field_sq_ov
+  , field_sub_ov
+  , field_add_ov3
+  , field_mul_ov3
+  , field_mul3_ov
+  , field_mul_ov2
+  , field_dbl_ov2
+  , field_sq_ov2
+  , field_mul_ov
+  , field_mul4_ov2
+  , field_dbl_dec_ov
+  , field_mul8_ov2
+  , field_sub_ov2
+  , field_mul_ov3
+  , field_sub_ov3
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_jacobian "r";
+    ecdsa_uses_temps this;
+    ecdsa_uses_a this;
+    ecdsa_uses_field_prime this;
+    jvm_execute_func [this, pr.ref];
+    ecdsa_assign_jacobian pr {{ p384_ec_point_ops::p384_ec_double r }};
+  }
+  do {
+    unfolding ["p384_ec_double"];
+    simplify ss;
+    unint_z3 [ "p384_field_add", "p384_field_mul"
+             , "p384_field_sq", "p384_field_sub"
+             ];
+  };
+
+ec_full_add_ov <- method "ec_full_add"
+  [ is_zero_ov
+  , assign_ov
+  , set_unit_ov
+  , set_zero_ov
+  , field_sq_ov
+  , field_mul_ov
+  , field_mul_ov3
+  , field_sub_ov3
+  , ec_double_ov
+  , field_dbl_ov2
+  , field_sub_ov2
+  , field_mul_ov2
+  , field_dbl_dec_ov
+  , field_sub_ov
+  , mod_half_ov
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_jacobian "r";
+    (pt, t) <- ecdsa_affine "t";
+    ecdsa_uses_a this;
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_temps this;
+    jvm_execute_func [this, pr.ref, pt.ref];
+    ecdsa_assign_jacobian pr {{ p384_ec_point_ops::p384_ec_full_add(r, t) }};
+  }
+  do {
+    unfolding ["p384_ec_full_add"];
+    simplify ss;
+    unint_z3 [ "p384_field_add", "p384_field_sub", "p384_field_mul"
+             , "p384_full_add", "p384_mod_half", "p384_ec_double"
+             ];
+  };
+
+p384_ec_full_sub_simp <-
+  do {
+    let t = {{ \s t ->
+        p384_ec_point_ops::p384_ec_full_sub(s,t) ==
+        p384_ec_point_ops::p384_ec_full_add(s,
+          { x = t.x, y = p384_field::p384_field_neg(t.y) }) }};
+    let t' = rewrite ss0 t;
+    print "Proving rewrite rule:";
+    //print_term t';
+    prove_print do {
+      unfolding
+        [ "p384_ec_full_sub", "ec_full_sub", "p384_point_ops", "p384_field"
+        , "p384_ec_full_add", "ec_full_add", "ec_add" ];
+      //print_goal_consts; // keep all remaining consts abstract for z3
+      unint_z3
+        [ "p384_ec_double", "p384_field_add", "p384_field_mul", "p384_field_neg"
+        , "p384_field_sq", "p384_field_sub", "p384_group_field", "p384_is_field_val"
+        , "p384_mod_div", "p384_mod_half", "p384_prime" ];
+    } t';
+  };
+
+let ec_full_sub_ss = addsimps [p384_ec_full_sub_simp] ss;
+
+ec_full_sub_ov <- method "ec_full_sub"
+  [ is_zero_ov
+  , sub_ov3
+  , ec_full_add_ov
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_jacobian "r";
+    (pt, t) <- ecdsa_affine "t";
+    ecdsa_uses_a this;
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_temps this;
+    jvm_execute_func [this, pr.ref, pt.ref];
+    ecdsa_assign_jacobian pr {{ p384_ec_point_ops::p384_ec_full_sub(r, t) }};
+  }
+  do {
+    simplify ec_full_sub_ss;
+    unfolding ["p384_field_neg"];
+    simplify ec_full_sub_ss;
+    unint_z3 [ "p384_ec_full_add", "p384_ec_double", "p384_field_add"
+             , "p384_field_sub", "p384_field_mul"
+             , "p384_full_add", "p384_mod_half"
+             ];
+  };
+
+ec_mul_init_ov <- method "ec_mul_init" [shr_ov, add_ov3, assign_ov, set_unit_ov, set_zero_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, _) <- ecdsa_jacobian "r";
+    (pd, d) <- ecdsa_arr384 "d";
+    (ps, s) <- ecdsa_affine "s";
+    ph <- jvm_alloc_array 12 java_int;
+    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_temps this;
+    jvm_execute_func [this, pr.ref, pd, ps.ref];
+    let res = {{ p384_ec_mul::p384_ec_mul_init (d, s) }};
+    ecdsa_assign_jacobian pr {{ res.r }};
+    ecdsa_assign_arr384 ph {{ res.h }};
+  }
+  abc;
+
+ec_mul_aux_ov <- method "ec_mul_aux"
+  [ ec_double_ov
+  , ec_full_add_ov
+  , ec_full_sub_ov
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_jacobian "r";
+    j <- jvm_fresh_var "j" java_int;
+    hi <- jvm_fresh_var "hi" java_int;
+    i_lt <- jvm_fresh_var "i_lt_11" java_bool;
+    d_at_i <- jvm_fresh_var "d_at_i" java_int;
+    d_at_ip1 <- jvm_fresh_var "d_at_ip1" java_int;
+    (ps, s) <- ecdsa_affine "s";
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_a this;
+    ecdsa_uses_temps this;
+    jvm_precond {{ (j >= 0) && (j <= 384) }};
+    jvm_precond {{ ((j >> 5) < 11) == i_lt }};
+    jvm_execute_func [this, pr.ref, ps.ref, jvm_term j, jvm_term hi, jvm_term i_lt, jvm_term d_at_i, jvm_term d_at_ip1];
+    ecdsa_assign_jacobian pr
+      {{ p384_ec_mul::p384_ec_mul_aux (r, s, j, hi, i_lt, d_at_i, d_at_ip1) }};
+  }
+  do {
+    unfolding ["p384_ec_mul_aux"];
+    simplify ss;
+    unint_z3 ["p384_ec_double", "p384_ec_full_add", "p384_ec_full_sub"];
+  };
+
+ec_mul_ov <- method "ec_mul" [ec_mul_init_ov, ec_mul_aux_ov]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pd, d) <- ecdsa_arr384 "d";
+    ph <- jvm_alloc_array 12 java_int;
+    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+    (pr, _) <- ecdsa_jacobian "r";
+    (ps, s) <- ecdsa_affine "s";
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_temps this;
+    ecdsa_uses_a this;
+    jvm_execute_func [this, pr.ref, pd, ps.ref];
+    ecdsa_assign_jacobian pr {{ p384_ec_mul::p384_ec_mul (d, s) }};
+    //java_modify "this.h";
+  }
+  do {
+    print_goal_size;
+    simplify ss;
+    unfolding ["p384_ec_mul"];
+    beta_reduce_goal;
+    //print_goal;
+    unint_z3 ["p384_ec_mul_aux", "p384_ec_mul_init"];
+  };
+
+ec_twin_mul_aux_f_ov <- method "ec_twin_mul_aux_f" []
+  do {
+    t <- jvm_fresh_var "t" java_int;
+    jvm_execute_func [jvm_term t];
+    jvm_return (jvm_term {{ p384_ec_mul::p384_ec_twin_mul_aux_F32 t }});
+  }
+  abc;
+
+let ec_twin_mul_aux1_ss =
+  addsimps [p384_point_ops_add_simp, p384_point_ops_sub_simp] ss;
+
+ec_twin_mul_aux1_ov <- method "ec_twin_mul_aux1"
+  [ ec_double_ov
+  , ec_full_sub_ov
+  , ec_full_add_ov
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_jacobian "r";
+    u0 <- jvm_fresh_var "u0" java_int;
+    u1 <- jvm_fresh_var "u1" java_int;
+    (psPt, sPt) <- ecdsa_affine "sPt";
+    (psMt, sMt) <- ecdsa_affine "sMt";
+    (ps, s) <- ecdsa_affine "s";
+    (pt, t) <- ecdsa_affine "t";
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_temps this;
+    ecdsa_uses_a this;
+    jvm_execute_func [this, pr.ref, jvm_term u0, jvm_term u1, psPt.ref, ps.ref, psMt.ref, pt.ref];
+    ecdsa_assign_jacobian pr
+      {{ p384_ec_mul::p384_ec_twin_mul_aux1 (r, u0, u1, sPt, s, sMt, t)}};
+  }
+  do {
+    unfolding ["p384_ec_twin_mul_aux1", "ec_twin_mul_aux1"];
+    simplify ec_twin_mul_aux1_ss;
+    unint_z3 ["p384_ec_double", "p384_ec_full_add", "p384_ec_full_sub"];
+  };
+
+ec_twin_mul_aux2_ov <- method "ec_twin_mul_aux2" []
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    c0 <- jvm_fresh_var "c0" java_int;
+    c1 <- jvm_fresh_var "c1" java_int;
+    e0 <- jvm_fresh_var "e0" java_int;
+    e1 <- jvm_fresh_var "e1" java_int;
+    shift <- jvm_fresh_var "shift" java_int;
+    d0i <- jvm_fresh_var "d0i" java_int;
+    d1i <- jvm_fresh_var "d1i" java_int;
+    dv1 <- jvm_fresh_var "dv1" java_bool;
+    dv2 <- jvm_fresh_var "dv2" java_bool;
+
+    auxr <- jvm_alloc_object "com/galois/ecc/TwinMulAux2Rslt";
+    jvm_field_is this "com/galois/ecc/ECCProvider.aux2Rslt" auxr;
+
+    jvm_execute_func
+      [ this, jvm_term c0, jvm_term c1, jvm_term e0, jvm_term e1, jvm_term shift
+      , jvm_term d0i, jvm_term d1i, jvm_term dv1, jvm_term dv2];
+
+    let res =
+      {{ p384_ec_mul::p384_ec_twin_mul_aux2 (c0, c1, e0, e1, shift, d0i, d1i, dv1, dv2) }};
+
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.u0" (jvm_term {{ res.tma2_u0 }});
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.u1" (jvm_term {{ res.tma2_u1 }});
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.c0p" (jvm_term {{ res.tma2_c0' }});
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.c1p" (jvm_term {{ res.tma2_c1' }});
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.e0p" (jvm_term {{ res.tma2_e0' }});
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.e1p" (jvm_term {{ res.tma2_e1' }});
+    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.shp" (jvm_term {{ res.tma2_sh' }});
+  }
+  abc;
+
+let twin_mul_init_ss =
+  addsimps [ p384_point_ops_add_simp
+           , p384_point_ops_sub_simp
+           , p384_point_ops_field_mul_simp
+           , p384_point_ops_field_sq_simp
+           , p384_point_ops_field_mul_simp2
+           , p384_point_ops_field_sq_simp2
+           , p384_curve_field_mul_simp
+           , p384_curve_field_sq_simp
+           , p384_curve_twin_mul_simp
+           , p384_curve_field_div_simp
+           , p384_curve_is_equal_simp
+           , p384_curve_field_zero_simp
+           , p384_curve_base_simp
+           , p384_curve_is_val_simp
+           , p384_curve_norm_simp
+           ] ss;
+
+ec_twin_mul_init_ov <- method "ec_twin_mul_init"
+  [ is_equal_ov
+  , group_add_ov
+  , ec_mul_ov
+  , mod_sub_ov
+  , set_zero_ov
+  , set_unit_ov
+  , assign_ov //ec_projectify
+  , ec_full_add_ov
+  , ec_full_sub_ov
+  , field_mul_ov
+  , mod_div_ov
+  , field_sq_ov2
+  , field_mul_ov2
+  , field_mul_ov3
+  , ec_double_ov
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_jacobian "r";
+    (pd0, d0) <- ecdsa_arr384 "d0";
+    (pd1, d1) <- ecdsa_arr384 "d1";
+    (psPt, sPt) <- ecdsa_affine "sPt";
+    (psMt, sMt) <- ecdsa_affine "sMt";
+    (ps, s) <- ecdsa_affine "s";
+    (pt, t) <- ecdsa_affine "t";
+    (psPtP, sPtP) <- ecdsa_jacobian "sPtP";
+    (psMtP, sMtP) <- ecdsa_jacobian "sMtP";
+    ph <- jvm_alloc_array 12 java_int;
+    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+    ecdsa_uses_group_order this;
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_field_unit this;
+    ecdsa_uses_temps this;
+    ecdsa_uses_a this;
+
+    jvm_execute_func [this, pr.ref, pd0, ps.ref, pd1, pt.ref, psPtP.ref, psMtP.ref, psPt.ref, psMt.ref];
+
+    let res = {{ p384_ec_mul::p384_ec_twin_mul_init (d0, s, d1, t) }};
+    ecdsa_assign_jacobian pr {{ res.r }};
+    ecdsa_assign_affine psPt {{ res.sPt }};
+    ecdsa_assign_affine psMt {{ res.sMt }};
+
+    jvm_return (jvm_term {{ s.x == t.x }});
+
+    //java_modify "sPtP.x";
+    //java_modify "sPtP.y";
+    //java_modify "sPtP.z";
+    //java_modify "sMtP.x";
+    //java_modify "sMtP.y";
+    //java_modify "sMtP.z";
+    //java_modify "this.h";
+  }
+  do {
+    unfolding [ "p384_ec_twin_mul_init" ];
+    simplify twin_mul_init_ss;
+    unint_z3 [ "p384_ec_full_add"
+             , "p384_ec_full_sub"
+             , "p384_ec_mul"
+             , "p384_ec_double"
+             , "p384_mod_add"
+             , "p384_mod_sub"
+             , "p384_field_mul"
+             , "p384_field_sq"
+             , "p384_mod_div"
+             ];
+  };
+
+ec_twin_mul_ov <- method "ec_twin_mul"
+  [ assign_ov
+  , is_equal_ov
+  , set_unit_ov
+  , set_zero_ov
+  , group_add_ov
+  , field_mul_ov
+  , field_sq_ov
+  , mod_sub_ov
+  , mod_div_ov
+  , ec_mul_ov
+  , ec_full_add_ov
+  , ec_full_sub_ov
+  , ec_twin_mul_aux1_ov
+  , ec_twin_mul_aux2_ov
+  , ec_twin_mul_aux_f_ov
+  , ec_twin_mul_init_ov
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (pr, r) <- ecdsa_jacobian "r";
+    (ps, s) <- ecdsa_affine "s";
+    (pt, t) <- ecdsa_affine "t";
+    (psPtP, sPtP) <- ecdsa_jacobian "sPtP";
+    (psMtP, sMtP) <- ecdsa_jacobian "sMtP";
+    (psPt, sPt) <- ecdsa_affine "sPt";
+    (psMt, sMt) <- ecdsa_affine "sMt";
+    (pd0, d0) <- ecdsa_arr384 "d0";
+    (pd1, d1) <- ecdsa_arr384 "d1";
+    // TODO: factor out a function 'ecdsa_uses_h' with the next 2 lines
+    ph <- jvm_alloc_array 12 java_int;
+    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+
+    //aux2rslt <- ecdsa_twin_mul_aux2_rslt this;
+    auxr <- jvm_alloc_object "com/galois/ecc/TwinMulAux2Rslt";
+    jvm_field_is this "com/galois/ecc/ECCProvider.aux2Rslt" auxr;
+
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_field_unit this;
+    ecdsa_uses_group_order this;
+    ecdsa_uses_temps this;
+    ecdsa_uses_a this;
+
+    jvm_execute_func [this, pr.ref, pd0, ps.ref, pd1, pt.ref, psPtP.ref, psMtP.ref, psPt.ref, psMt.ref];
+
+    ecdsa_assign_jacobian pr {{ p384_ec_mul::p384_ec_twin_mul (d0, s, d1, t) }};
+    //java_modify "this.aux2Rslt.u0";
+    //java_modify "this.aux2Rslt.u1";
+    //java_modify "this.aux2Rslt.c0p";
+    //java_modify "this.aux2Rslt.c1p";
+    //java_modify "this.aux2Rslt.e0p";
+    //java_modify "this.aux2Rslt.e1p";
+    //java_modify "this.aux2Rslt.shp";
+    //java_modify "sPtP.x";
+    //java_modify "sPtP.y";
+    //java_modify "sPtP.z";
+    //java_modify "sMtP.x";
+    //java_modify "sMtP.y";
+    //java_modify "sMtP.z";
+    //java_modify "sMt.x";
+    //java_modify "sMt.y";
+    //java_modify "sPt.x";
+    //java_modify "sPt.y";
+    //java_modify "this.h";
+  }
+  do {
+    unfolding ["p384_ec_twin_mul"];
+    beta_reduce_goal;
+    simplify ss;
+    // TODO: see if some rules from twin_mul_init_ss can help.
+    unint_z3 [ "p384_ec_twin_mul_init", "p384_ec_twin_mul_aux1"
+             , "p384_ec_twin_mul_aux2", "p384_ec_twin_mul_aux_f"
+             ];
+  };
+
+method "signHash"
+  [ assign_ov
+  , ec_mul_ov
+  , mod_div_ov
+  , field_sq_ov
+  , field_sq_ov2
+  , field_mul_ov
+  , field_mul_ov2
+  , leq_ov
+  , sub_ov2
+  , group_mul_ov
+  , group_add_ov3
+  , is_zero_ov
+  , set_zero_ov
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (psignature, signature) <- ecdsa_signature "signature";
+    (pd, d) <- ecdsa_arr384 "privateKey";
+    (pe, e) <- ecdsa_arr384 "hashValue";
+    (pk, k) <- ecdsa_arr384 "ephemeralKey";
+    (prP, rP) <- ecdsa_jacobian "this.rP";
+    (psPtP, sPtP) <- ecdsa_jacobian "this.sPtP";
+    (psMtP, sMtP) <- ecdsa_jacobian "this.sMtP";
+    (psPt, sPt) <- ecdsa_affine "this.sPt";
+    (psMt, sMt) <- ecdsa_affine "this.sMt";
+    paux2rslt <- jvm_alloc_object "com/galois/ecc/TwinMulAux2Rslt";
+    (pqPoint, qPoint) <- ecdsa_affine "this.qPoint";
+
+    jvm_field_is this "com/galois/ecc/ECCProvider.rP" prP.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.sPtP" psPtP.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.sMtP" psMtP.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.sPt" psPt.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.sMt" psMt.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.aux2Rslt" paux2rslt;
+    jvm_field_is this "com/galois/ecc/ECCProvider.width" (jvm_term {{ 12 : [32] }});
+    jvm_field_is this "com/galois/ecc/ECCProvider.qPoint" pqPoint.ref;
+
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_field_unit this;
+    ecdsa_uses_group_order this;
+    ecdsa_uses_a this;
+
+    ph <- jvm_alloc_array 12 java_int;
+    pu1 <- jvm_alloc_array 12 java_int;
+    pu2 <- jvm_alloc_array 12 java_int;
+    (pt1, _) <- ecdsa_arr384 "t1";
+    (pt2, _) <- ecdsa_arr384 "t2";
+    (pt3, _) <- ecdsa_arr384 "t3";
+
+    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+    jvm_field_is this "com/galois/ecc/ECCProvider.u1" pu1;
+    jvm_field_is this "com/galois/ecc/ECCProvider.u2" pu2;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t1" pt1;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t2" pt2;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t3" pt3;
+
+    ecdsa_uses_base this "com/galois/ecc/ECCProvider.basePoint" {{ ecc::p384_base }};
+    ecdsa_uses_base this "com/galois/ecc/ECCProvider.basePoint3" {{ ecc::p384_base3 }};
+    ecdsa_uses_base this "com/galois/ecc/ECCProvider.basePoint5" {{ ecc::p384_base5 }};
+
+    jvm_precond {{ d != (0:[384]) }};
+    jvm_precond {{ k != (0:[384]) }};
+    jvm_precond {{ d < group_order }};
+    jvm_precond {{ k < group_order }};
+
+    jvm_execute_func [this, psignature.ref, pd, pe, pk];
+
+    let res = {{ ecc::p384_ecdsa_sign(d, e, k) }};
+    ecdsa_assign_arr384 psignature.r {{ res.r }};
+    ecdsa_assign_arr384 psignature.s {{ res.s }};
+
+    //java_modify "this.a";
+
+    ecdsa_assign_arr384 ph            {{ 0 : [384] }};
+    ecdsa_assign_arr384 pt1           {{ 0 : [384] }};
+    ecdsa_assign_arr384 pt2           {{ 0 : [384] }};
+    ecdsa_assign_arr384 pt3           {{ 0 : [384] }};
+    ecdsa_assign_arr384 pu1           {{ 0 : [384] }};
+    ecdsa_assign_arr384 pu2           {{ 0 : [384] }};
+    ecdsa_assign_arr384 prP.x         {{ 0 : [384] }};
+    ecdsa_assign_arr384 prP.y         {{ 0 : [384] }};
+    ecdsa_assign_arr384 prP.z         {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPtP.x       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPtP.y       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPtP.z       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMtP.x       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMtP.y       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMtP.z       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPt.x        {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPt.y        {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMt.x        {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMt.y        {{ 0 : [384] }};
+    ecdsa_assign_arr384 pqPoint.x     {{ 0 : [384] }};
+    ecdsa_assign_arr384 pqPoint.y     {{ 0 : [384] }};
+
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.u0"  (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.u1"  (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.c0p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.c1p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.e0p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.e1p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.shp" (jvm_term {{ 0:[32] }});
+
+    jvm_return (jvm_term {{ res.r != 0 /\ res.s != 0 }});
+  }
+  do {
+    unfolding [ "p384_ecdsa_sign" ];
+    simplify ss;
+    unint_z3 [ "p384_ec_mul"
+             , "p384_field_mul"
+             , "p384_field_sq"
+             , "p384_group_mul"
+             , "p384_mod_add"
+             , "p384_mod_div"
+             ];
+  };
+
+method "verifySignature"
+  [ leq_ov
+  , sub_ov2
+  , mod_div_ov
+  , group_mul_ov
+  , assign_ov
+  , ec_twin_mul_ov
+  , is_zero_ov
+  , set_zero_ov
+  , field_sq_ov2
+  , field_mul_ov
+  , is_equal_ov
+  , add_ov
+  ]
+  do {
+    this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
+    (psig, sig) <- ecdsa_signature "signature";
+    (pe, e) <- ecdsa_arr384 "hashValue";
+    (ppublicKey, publicKey) <- ecdsa_public_key "publicKey";
+    (pq, q) <- ecdsa_affine "this.qPoint";
+    (prP, rP) <- ecdsa_jacobian "this.rP";
+    (psPtP, sPtP) <- ecdsa_jacobian "this.sPtP";
+    (psMtP, sMtP) <- ecdsa_jacobian "this.sMtP";
+    (psPt, sPt) <- ecdsa_affine "this.sPt";
+    (psMt, sMt) <- ecdsa_affine "this.sMt";
+    paux2rslt <- jvm_alloc_object "com/galois/ecc/TwinMulAux2Rslt";
+
+    jvm_field_is this "com/galois/ecc/ECCProvider.qPoint" pq.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.rP" prP.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.sPtP" psPtP.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.sMtP" psMtP.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.sPt" psPt.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.sMt" psMt.ref;
+    jvm_field_is this "com/galois/ecc/ECCProvider.aux2Rslt" paux2rslt;
+    jvm_field_is this "com/galois/ecc/ECCProvider.width" (jvm_term {{ 12 : [32] }});
+
+    ecdsa_uses_field_prime this;
+    ecdsa_uses_field_unit this;
+    ecdsa_uses_group_order this;
+    ecdsa_uses_a this;
+
+    ph <- jvm_alloc_array 12 java_int;
+    pu1 <- jvm_alloc_array 12 java_int;
+    pu2 <- jvm_alloc_array 12 java_int;
+    (pt1, _) <- ecdsa_arr384 "t1";
+    (pt2, _) <- ecdsa_arr384 "t2";
+    (pt3, _) <- ecdsa_arr384 "t3";
+
+    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+    jvm_field_is this "com/galois/ecc/ECCProvider.u1" pu1;
+    jvm_field_is this "com/galois/ecc/ECCProvider.u2" pu2;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t1" pt1;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t2" pt2;
+    jvm_field_is this "com/galois/ecc/ECCProvider.t3" pt3;
+
+    ecdsa_uses_base this "com/galois/ecc/ECCProvider.basePoint" {{ ecc::p384_base }};
+
+    jvm_execute_func [this, pe, psig.ref, ppublicKey.ref];
+
+    //java_modify "this.a";
+
+    ecdsa_assign_arr384 ph            {{ 0 : [384] }};
+    ecdsa_assign_arr384 pt1           {{ 0 : [384] }};
+    ecdsa_assign_arr384 pt2           {{ 0 : [384] }};
+    ecdsa_assign_arr384 pt3           {{ 0 : [384] }};
+    ecdsa_assign_arr384 pu1           {{ 0 : [384] }};
+    ecdsa_assign_arr384 pu2           {{ 0 : [384] }};
+    ecdsa_assign_arr384 prP.x         {{ 0 : [384] }};
+    ecdsa_assign_arr384 prP.y         {{ 0 : [384] }};
+    ecdsa_assign_arr384 prP.z         {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPtP.x       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPtP.y       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPtP.z       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMtP.x       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMtP.y       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMtP.z       {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPt.x        {{ 0 : [384] }};
+    ecdsa_assign_arr384 psPt.y        {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMt.x        {{ 0 : [384] }};
+    ecdsa_assign_arr384 psMt.y        {{ 0 : [384] }};
+    ecdsa_assign_arr384 pq.x          {{ 0 : [384] }};
+    ecdsa_assign_arr384 pq.y          {{ 0 : [384] }};
+
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.u0"  (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.u1"  (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.c0p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.c1p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.e0p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.e1p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.shp" (jvm_term {{ 0:[32] }});
+
+    jvm_return (jvm_term {{ ecc::p384_ecdsa_public_verify(e, sig.r, sig.s, publicKey) }});
+  }
+  do {
+    unfolding [ "p384_ecdsa_public_verify", "ecdsa_public_verify_imp" ];
+    simplify twin_mul_init_ss;
+    let ufs = [ "p384_ec_twin_mul"
+              , "p384_field_mul"
+              , "p384_field_sq"
+              , "p384_group_mul"
+              , "p384_mod_div"
+              ];
+    unint_z3 ufs;
+  };
+
+print "Done.";

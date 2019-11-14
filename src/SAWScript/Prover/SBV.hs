@@ -18,7 +18,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBVSim
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
-import Verifier.SAW.Recognizer(asPi, asPiList, asEqTrue)
+import Verifier.SAW.Recognizer(asPi, asPiList)
 
 import Verifier.SAW.Cryptol.Prims (sbvPrims)
 
@@ -70,7 +70,7 @@ satUnintSBV conf unints timeout sc term =
 
        SBV.Unknown {} -> fail "Prover returned Unknown"
 
-       SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
+       SBV.ProofError _ ls _ -> fail . unlines $ "Prover returned error: " : ls
 
 
 prepSBV ::
@@ -94,7 +94,7 @@ prepSBV sc unints goal =
 
 getLabels ::
   [SBVSim.Labeler] ->
-  Map String SBV.CW ->
+  Map String SBV.CV ->
   [String] -> Maybe [(String,FirstOrderValue)]
 
 getLabels ls d argNames
@@ -106,11 +106,11 @@ getLabels ls d argNames
   where
   xs = fmap getLabel ls
 
-  getLabel (SBVSim.BoolLabel s)    = FOVBit (SBV.cwToBool (d Map.! s))
-  getLabel (SBVSim.IntegerLabel s) = FOVInt (cwToInteger (d Map.! s))
+  getLabel (SBVSim.BoolLabel s)    = FOVBit (SBV.cvToBool (d Map.! s))
+  getLabel (SBVSim.IntegerLabel s) = FOVInt (cvToInteger (d Map.! s))
 
-  getLabel (SBVSim.WordLabel s)    = FOVWord (cwKind cw) (cwToInteger cw)
-    where cw = d Map.! s
+  getLabel (SBVSim.WordLabel s)    = FOVWord (cvKind cv) (cvToInteger cv)
+    where cv = d Map.! s
 
   getLabel (SBVSim.VecLabel ns)
     | V.null ns = error "getLabel of empty vector"
@@ -121,12 +121,12 @@ getLabels ls d argNames
   getLabel (SBVSim.TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
   getLabel (SBVSim.RecLabel ns) = FOVRec $ fmap getLabel ns
 
-  cwKind cw =
-    case SBV.kindOf cw of
+  cvKind cv =
+    case SBV.kindOf cv of
       SBV.KBounded _ k -> fromIntegral k
-      _                -> error "cwKind"
+      _                -> error "cvKind"
 
-  cwToInteger cw =
-    case SBV.cwVal cw of
-      SBV.CWInteger i -> i
-      _               -> error "cwToInteger"
+  cvToInteger cv =
+    case SBV.cvVal cv of
+      SBV.CInteger i -> i
+      _               -> error "cvToInteger"

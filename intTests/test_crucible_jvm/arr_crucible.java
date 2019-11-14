@@ -1,3 +1,4 @@
+enable_experimental;
 a <- java_load_class "Arr";
 
 print "**Extracting main";
