@@ -77,17 +77,18 @@ mgu m (TyUnifyVar i) t2 = bindVar m i t2
 mgu m t1 (TyUnifyVar i) = bindVar m i t1
 mgu m r1@(TyRecord ts1) r2@(TyRecord ts2) = do
   assert (M.keys ts1 == M.keys ts2) $
-    "mismatched record fields: " ++ pShow r1 ++ " and " ++ pShow r2
+    "Record field type mismatch. Expected " ++ pShow r1 ++ " but got " ++ pShow r2 ++ " at " ++ show m
   mgus m (M.elems ts1) (M.elems ts2)
-mgu m (TyCon tc1 ts1) (TyCon tc2 ts2) = do
-  assert (tc1 == tc2) $
-    "mismatched type constructors: " ++ pShow tc1 ++ " and " ++ pShow tc2
-  mgus m ts1 ts2
+mgu m (TyCon tc1 ts1) (TyCon tc2 ts2)
+  | tc1 == tc2 = (mgus m ts1 ts2)
+  | otherwise = case tc1 of
+      FunCon -> failMGU $ "Term is not a function at " ++ show m ++ "\n(maybe a function is applied to too many arguments?)"
+      _ -> failMGU $ "Type constructors mismatch. Expected: " ++ pShow tc1 ++ " but got " ++ pShow tc2 ++ " at " ++ show m
 mgu _ (TySkolemVar a i) (TySkolemVar b j)
   | (a, i) == (b, j) = return emptySubst
 mgu _ (TyVar a) (TyVar b)
   | a == b = return emptySubst
-mgu m t1 t2 = failMGU $ "type mismatch: " ++ pShow t1 ++ " and " ++ pShow t2 ++ " at " ++ show m
+mgu m t1 t2 = failMGU $ "Type mismatch. Expected: " ++ pShow t1 ++ " but got: " ++ pShow t2 ++ " at " ++ show m
 
 mgus :: LName -> [Type] -> [Type] -> Either String Subst
 mgus _ [] [] = return emptySubst
@@ -95,7 +96,7 @@ mgus m (t1:ts1) (t2:ts2) = do
   s <- mgu m t1 t2
   s' <- mgus m (map (appSubst s) ts1) (map (appSubst s) ts2)
   return (s' @@ s)
-mgus m _ _ = failMGU $ "type mismatch in constructor arity at" ++ show m
+mgus m ts1 ts2 = failMGU $ "Expected " ++ show (length ts1) ++ " arguments but got " ++ show (length ts2) ++ " at " ++ show m
 
 bindVar :: LName -> TypeIndex -> Type -> Either String Subst
 bindVar m i t
@@ -215,7 +216,7 @@ unify m t1 t2 = do
   case mgu m t1' t2' of
     Right s -> TI $ modify $ \rw -> rw { subst = s @@ subst rw }
     Left e -> recordError $ unlines
-                [ "type mismatch: " ++ pShow t1' ++ " and " ++ pShow t2'
+                [ "Type Mismatch, expected: " ++ pShow t1' ++ " but got: " ++ pShow t2'
                 , " at " ++ show m
                 , e
                 ]
@@ -472,7 +473,11 @@ inferE (ln, expr) = case expr of
     do env <- TI $ asks typeEnv
        case M.lookup x env of
          Nothing -> do
-           recordError $ "unbound variable: " ++ show x
+           recordError $ unlines
+             [ "Unbound variable: " ++ show x
+             , "Note that some built-in commands are available only after running"
+             , "either `enable_deprecated` or `enable_experimental`."
+             ]
            t <- newType
            return (Var x, t)
          Just (Forall as t) -> do

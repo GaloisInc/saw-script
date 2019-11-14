@@ -1,0 +1,25 @@
+MODULE <- llvm_load_module "unsound_global.bc";
+
+let foo_setup = do {
+  crucible_alloc_global "GLOBAL";
+  x <- crucible_fresh_var "x" (llvm_int 32);
+  crucible_execute_func [crucible_term x];
+  crucible_return (crucible_term {{ x + 1 : [32] }});
+  // crucible_points_to (crucible_elem (crucible_global "GLOBAL") 1) (crucible_term x);
+};
+foo_spec <- crucible_llvm_verify MODULE "foo" [] false foo_setup z3;
+
+let bar_setup = do {
+  crucible_alloc_global "GLOBAL";
+  crucible_alloc_global "TEST";
+  crucible_execute_func [];
+  crucible_return (crucible_term {{ 2 : [32] }});
+};
+
+// the below line (without override) correctly fails
+// crucible_llvm_verify MODULE "bar" [] false bar_setup z3;
+
+// works, but shouldn't
+crucible_llvm_verify MODULE "bar" [foo_spec] false bar_setup z3;
+
+print "Should not have succeeded - unsound!";

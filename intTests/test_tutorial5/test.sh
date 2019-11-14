@@ -8,6 +8,5 @@ $SAW des-cryptol2.saw
 $SAW des3.saw
 $SAW dotprod.saw
 $SAW double.saw
-$SAW picosat.saw
 cd ..
 rm -r tmp

@@ -26,6 +26,7 @@ module SAWScript.Crucible.Common.Setup.Type
   , CrucibleSetupT
   , currentState
   , addPointsTo
+  , addAllocGlobal
   , addCondition
   , freshVariable
   ) where
@@ -34,8 +35,10 @@ import           Control.Lens
 import           Control.Monad.State (StateT)
 import           Control.Monad.IO.Class (MonadIO(liftIO))
 
-import           Verifier.SAW.TypedTerm (TypedTerm, mkTypedTerm)
-import           Verifier.SAW.SharedTerm (Term, SharedContext, scFreshGlobal)
+import qualified Cryptol.TypeCheck.Type as Cryptol (Type, tMono)
+import qualified Verifier.SAW.Cryptol as Cryptol (importType, emptyEnv)
+import           Verifier.SAW.TypedTerm (TypedTerm(..))
+import           Verifier.SAW.SharedTerm (SharedContext, scFreshGlobal)
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 
@@ -86,6 +89,9 @@ currentState f x = case x^. csPrePost of
 addPointsTo :: Monad m => MS.PointsTo ext -> CrucibleSetupT ext m ()
 addPointsTo pt = currentState . MS.csPointsTos %= (pt : )
 
+addAllocGlobal :: Monad m => MS.AllocGlobal ext -> CrucibleSetupT ext m ()
+addAllocGlobal ag = csMethodSpec . MS.csGlobalAllocs %= (ag : )
+
 addCondition :: Monad m => MS.SetupCondition ext -> CrucibleSetupT ext m ()
 addCondition cond = currentState . MS.csConditions %= (cond : )
 
@@ -95,9 +101,11 @@ freshVariable ::
   MonadIO m =>
   SharedContext {- ^ shared context -} ->
   String        {- ^ variable name  -} ->
-  Term          {- ^ variable type  -} ->
+  Cryptol.Type  {- ^ variable type  -} ->
   CrucibleSetupT arch m TypedTerm
-freshVariable sc name ty =
-  do tt <- liftIO (mkTypedTerm sc =<< scFreshGlobal sc name ty)
+freshVariable sc name cty =
+  do ty <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv cty
+     trm <- liftIO $ scFreshGlobal sc name ty
+     let tt = TypedTerm (Cryptol.tMono cty) trm
      currentState . MS.csFreshVars %= cons tt
      return tt

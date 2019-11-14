@@ -82,6 +82,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
+import           SAWScript.Crucible.LLVM.Boilerplate
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
@@ -696,7 +697,7 @@ primitives = Map.fromList
 
   , prim "set_timeout"         "Int -> ProofScript ()"
     (pureVal set_timeout)
-    Current
+    Experimental
     [ "Set the timeout, in milliseconds, for any automated prover at the"
     , "end of this proof script. Not that this is simply ignored for provers"
     , "that don't support timeouts, for now."
@@ -1602,6 +1603,16 @@ primitives = Map.fromList
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
+  , prim "llvm_boilerplate_info" "LLVMModule -> [Profile] -> TopLevel ()"
+    (pureVal llvm_boilerplate_info)
+    Experimental
+    [ "Print information from an LLVM module relevant to boilerplate generation." ]
+
+  , prim "llvm_boilerplate" "String -> LLVMModule -> [Profile] -> TopLevel ()"
+    (pureVal llvm_boilerplate)
+    Experimental
+    [ "Generate boilerplate for the definitions in an LLVM module." ]
+
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
     Current
@@ -1804,6 +1815,11 @@ primitives = Map.fromList
     , "The specified size must be greater than the size of the LLVM type."
     ]
 
+  , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
+    (bicVal crucible_alloc_global)
+    Current
+    []
+
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)
     Current
@@ -1905,6 +1921,17 @@ primitives = Map.fromList
     , "any verification."
     ]
 
+  , prim "crucible_llvm_array_size_profile"
+    "LLVMModule -> String -> CrucibleSetup () -> TopLevel [Profile]"
+    (bicVal crucible_llvm_array_size_profile)
+    Experimental
+    [ "Symbolically execute the function named by the second parameter in"
+    , "the module specified by the first. The third parameter may be used"
+    , "to specify arguments. Returns profiles specifying the sizes of buffers"
+    , "referred to by pointer arguments for the function and all other functions"
+    , "it calls (recursively), to be passed to llvm_boilerplate."
+    ]
+
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
     (pureVal CIR.anySetupArray)
@@ -1959,9 +1986,7 @@ primitives = Map.fromList
     Current
     [ "Return a SetupValue representing the value of the initializer of a named"
     , "global. The String should be the name of a global value."
-    , "Note that initializing global variables may be unsound in the presence"
-    , "of compositional verification (see GaloisInc/saw-script#203)."
-    ] -- TODO: There should be a section in the manual about global-unsoundness.
+    ]
 
   , prim "crucible_term"
     "Term -> SetupValue"

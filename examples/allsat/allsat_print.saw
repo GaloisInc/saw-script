@@ -14,6 +14,6 @@ rec allsat_print p = do {
     (print "Done!")
     (\s -> do {
       print s;
-      allsat_print {{ \x -> x != s.0 /\ p x }};
+      allsat_print {{ \x -> x != s /\ p x }};
     });
 };

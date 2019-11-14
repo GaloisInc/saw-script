@@ -32,6 +32,7 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.MethodSpecIR where
 
 import           Control.Lens
+import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
 import           Data.IORef
 import           Data.Monoid ((<>))
@@ -40,6 +41,8 @@ import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 import qualified Text.PrettyPrint.HughesPJ as PP
+
+import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import           Data.Parameterized.All (All(All))
 import           Data.Parameterized.Some (Some(Some))
@@ -185,7 +188,12 @@ showLLVMModule (LLVMModule name m _) =
 instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue where
   type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue ctx = TypedTerm
   muxIntrinsic sym _ _namerep _ctx prd thn els =
-    do st <- readIORef (B.sbStateManager sym)
+    do when (ttSchema thn /= ttSchema els) $ fail $ unlines $
+         [ "Attempted to mux ghost variables of different types:"
+         , show (Cryptol.pp (ttSchema thn))
+         , show (Cryptol.pp (ttSchema els))
+         ]
+       st <- readIORef (B.sbStateManager sym)
        let sc  = Crucible.saw_ctx st
        prd' <- Crucible.toSC sym prd
        typ  <- scTypeOf sc (ttTerm thn)
@@ -201,7 +209,6 @@ data LLVMCrucibleContext arch =
   LLVMCrucibleContext
   { _ccLLVMModule      :: LLVMModule arch
   , _ccBackend         :: Sym
-  , _ccLLVMEmptyMem    :: CL.MemImpl Sym -- ^ A heap where LLVM globals are allocated, but not initialized.
   , _ccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM arch)
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   }
@@ -236,6 +243,21 @@ ppPointsTo (LLVMPointsTo _loc ptr val) =
 
 instance PPL.Pretty (LLVMPointsTo arch) where
   pretty = ppPointsTo
+
+--------------------------------------------------------------------------------
+-- ** AllocGlobal
+
+type instance MS.AllocGlobal (CL.LLVM arch) = LLVMAllocGlobal arch
+
+data LLVMAllocGlobal arch = LLVMAllocGlobal ProgramLoc L.Symbol
+
+ppAllocGlobal :: LLVMAllocGlobal arch -> PPL.Doc
+ppAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =
+  PPL.text "allocate global"
+  PPL.<+> PPL.text name
+
+instance PPL.Pretty (LLVMAllocGlobal arch) where
+  pretty = ppAllocGlobal
 
 --------------------------------------------------------------------------------
 -- ** ???

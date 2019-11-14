@@ -259,19 +259,20 @@ typeOfSetupValue' cc env nameEnv val =
 resolveSetupVal :: forall arch.
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   LLVMCrucibleContext arch ->
+  Crucible.MemImpl Sym ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
   Map AllocIndex LLVMAllocSpec ->
   Map AllocIndex Crucible.Ident ->
-  SetupValue (Crucible.LLVM arch)             ->
+  SetupValue (Crucible.LLVM arch) ->
   IO LLVMVal
-resolveSetupVal cc env tyenv nameEnv val =
+resolveSetupVal cc mem env tyenv nameEnv val = do
   case val of
     SetupVar i
       | Just ptr <- Map.lookup i env -> return (Crucible.ptrToPtrVal ptr)
       | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct () packed vs -> do
-      vals <- mapM (resolveSetupVal cc env tyenv nameEnv) vs
+      vals <- mapM (resolveSetupVal cc mem env tyenv nameEnv) vs
       let tps = map (typeOfLLVMVal dl) vals
       let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))
       let flds = case Crucible.storageTypeF t of
@@ -280,12 +281,12 @@ resolveSetupVal cc env tyenv nameEnv val =
       return $ Crucible.LLVMValStruct (V.zip flds (V.fromList vals))
     SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray () vs -> do
-      vals <- V.mapM (resolveSetupVal cc env tyenv nameEnv) (V.fromList vs)
+      vals <- V.mapM (resolveSetupVal cc mem env tyenv nameEnv) (V.fromList vs)
       let tp = typeOfLLVMVal dl (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupField () v n -> do
       i <- resolveSetupFieldIndexOrFail cc tyenv nameEnv v n
-      resolveSetupVal cc env tyenv nameEnv (SetupElem () v i)
+      resolveSetupVal cc mem env tyenv nameEnv (SetupElem () v i)
     SetupElem () v i ->
       do memTy <- typeOfSetupValue cc tyenv nameEnv v
          let msg = "resolveSetupVal: crucible_elem requires pointer to struct or array, found " ++ show memTy
@@ -303,7 +304,7 @@ resolveSetupVal cc env tyenv nameEnv val =
                    _ -> fail msg
                Left err -> fail $ unlines [msg, "Details:", err]
            _ -> fail msg
-         ptr <- resolveSetupVal cc env tyenv nameEnv v
+         ptr <- resolveSetupVal cc mem env tyenv nameEnv v
          case ptr of
            Crucible.LLVMValInt blk off ->
              do delta' <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToInteger delta)
@@ -313,8 +314,7 @@ resolveSetupVal cc env tyenv nameEnv val =
     SetupNull () ->
       Crucible.ptrToPtrVal <$> Crucible.mkNullPointer sym Crucible.PtrWidth
     SetupGlobal () name ->
-      do let mem = cc^.ccLLVMEmptyMem
-         Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
+      Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
     SetupGlobalInitializer () name ->
       case Map.lookup (L.Symbol name)
                       (Crucible.globalInitMap $ cc^.ccLLVMModuleTrans) of
@@ -322,7 +322,7 @@ resolveSetupVal cc env tyenv nameEnv val =
         Just (_, Left e) -> fail e
         Just (_, Right (_, Just v)) ->
           let ?lc = lc
-          in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) sym (cc^.ccLLVMEmptyMem) v
+          in Crucible.constToLLVMVal @(Crucible.ArchWidth arch) sym mem v
         Just (_, Right (_, Nothing)) ->
           fail $ "resolveSetupVal: global has no initializer: " ++ name
         Nothing ->

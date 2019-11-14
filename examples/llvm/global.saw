@@ -11,11 +11,13 @@ let ptr_to_fresh n ty = do {
 };
 
 let clear_setup = do {
+    crucible_alloc_global "g";
     crucible_execute_func [];
     crucible_points_to (crucible_global "g") (crucible_term {{ 0 : [32] }});
 };
 
 let set_setup = do {
+    crucible_alloc_global "g";
     x <- crucible_fresh_var "x" (llvm_int 32);
     crucible_execute_func [crucible_term x];
     crucible_points_to (crucible_global "g") (crucible_term x);
