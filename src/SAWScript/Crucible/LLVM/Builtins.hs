@@ -489,7 +489,7 @@ verifyPrestate opts cc mspec globals = do
 
   -- Allocate LLVM memory for each 'crucible_alloc'
   (env1, mem') <- runStateT
-    (traverse (doAlloc' cc) $ mspec ^. MS.csPreState . MS.csAllocs)
+    (traverse (doAlloc cc)  $ mspec ^. MS.csPreState . MS.csAllocs)
     mem
 
   env2 <- Map.traverseWithKey
@@ -506,8 +506,6 @@ verifyPrestate opts cc mspec globals = do
   args <- resolveArguments cc mem''' mspec env
 
   return (args, cs, env, globals2)
-
-  where doAlloc' cc_ allocSpec = StateT $ liftIO . doAlloc cc_ allocSpec
 
 -- | Check two MemTypes for register compatiblity.  This is a stricter
 --   check than the memory compatiblity check that is done for points-to
@@ -673,6 +671,23 @@ assertEqualVals ::
   IO Term
 assertEqualVals cc v1 v2 =
   CrucibleSAW.toSC (cc^.ccBackend) =<< equalValsPred cc v1 v2
+
+--------------------------------------------------------------------------------
+
+-- TODO(langston): combine with/move to executeAllocation
+doAlloc ::
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  LLVMCrucibleContext arch       ->
+  LLVMAllocSpec ->
+  StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
+doAlloc cc (LLVMAllocSpec mut _memTy sz loc) = StateT $ \mem ->
+  do let sym = cc^.ccBackend
+     let dl = Crucible.llvmDataLayout ?lc
+     sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger sz
+     let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
+     let l = show (W4.plSourceLoc loc)
+     liftIO $
+       Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
 
 --------------------------------------------------------------------------------
 
