@@ -1314,7 +1314,9 @@ cryptolTypeOfActual dl mt =
     Crucible.StructType si ->
       do let memtypes = V.toList (Crucible.siFieldTypes si)
          ctys <- traverse (cryptolTypeOfActual dl) memtypes
-         return $ Cryptol.tTuple ctys
+         case ctys of
+           [cty] -> return cty
+           _ -> return $ Cryptol.tTuple ctys
     _ ->
       Nothing
 
