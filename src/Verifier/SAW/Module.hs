@@ -20,13 +20,8 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Module
-  ( -- * Patterns.
-    Pat(..)
-  , patBoundVars
-  , patBoundVarCount
-  , patUnusedVarCount
-    -- * Data types and definitions.
-  , DefQualifier(..)
+  ( -- * Data types and definitions.
+    DefQualifier(..)
   , Def(..)
   , CtorArg(..)
   , CtorArgStruct(..)
@@ -95,62 +90,7 @@ import Prelude hiding (all, foldr, sum)
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.Term.CtxTerm
-import Verifier.SAW.Utils (sumBy, internalError)
-
--- Patterns --------------------------------------------------------------------
-
--- Patterns are used to match equations.
-data Pat = -- | Variable bound by pattern.
-           -- Variables may be bound in context in a different order than
-           -- a left-to-right traversal.  The DeBruijnIndex indicates the order.
-           PVar String DeBruijnIndex Term
-         | PUnused DeBruijnIndex Term
-         | PUnit
-         | PPair Pat Pat
-         | PEmpty
-         | PField Pat Pat Pat -- ^ Field name, field value, rest of record
-         | PString String
-         | PCtor Ident [Pat]
-  deriving (Eq, Ord, Show, Generic)
-
-instance Hashable Pat -- automatically derived
-
-patBoundVarCount :: Pat -> DeBruijnIndex
-patBoundVarCount p =
-  case p of
-    PVar{} -> 1
-    PUnused{} -> 0
-    PCtor _ l -> sumBy patBoundVarCount l
-    PUnit     -> 0
-    PPair x y -> patBoundVarCount x + patBoundVarCount y
-    PEmpty    -> 0
-    PField f x y -> patBoundVarCount f + patBoundVarCount x + patBoundVarCount y
-    PString _ -> 0
-
-patUnusedVarCount :: Pat -> DeBruijnIndex
-patUnusedVarCount p =
-  case p of
-    PVar{}       -> 0
-    PUnused{}    -> 1
-    PCtor _ l    -> sumBy patUnusedVarCount l
-    PUnit        -> 0
-    PPair x y    -> patUnusedVarCount x + patUnusedVarCount y
-    PEmpty       -> 0
-    PField _ x y -> patUnusedVarCount x + patUnusedVarCount y
-    PString _    -> 0
-
-patBoundVars :: Pat -> [String]
-patBoundVars p =
-  case p of
-    PVar s _ _   -> [s]
-    PCtor _ l    -> concatMap patBoundVars l
-    PUnit        -> []
-    PPair x y    -> patBoundVars x ++ patBoundVars y
-    PEmpty       -> []
-    PField _ x y -> patBoundVars x ++ patBoundVars y
-    PString _    -> []
-    PUnused{}    -> []
-
+import Verifier.SAW.Utils (internalError)
 
 -- Definitions -----------------------------------------------------------------
 

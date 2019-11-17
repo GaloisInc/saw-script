@@ -48,8 +48,6 @@ module Verifier.SAW.TypedAST
  , CtorArg(..)
  , Def(..)
  , DefQualifier(..)
- , patBoundVarCount
- , patUnusedVarCount
    -- * Terms and associated operations.
  , incVarsSimpleTerm
  , piArgCount
