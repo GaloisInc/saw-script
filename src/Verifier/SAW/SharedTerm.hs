@@ -743,18 +743,15 @@ reducePi sc t arg = do
 
 scTypeOfGlobal :: SharedContext -> Ident -> IO Term
 scTypeOfGlobal sc ident =
-  do d <- scRequireDef sc ident
-     scSharedTerm sc (defType d)
+  defType <$> scRequireDef sc ident
 
 scTypeOfDataType :: SharedContext -> Ident -> IO Term
 scTypeOfDataType sc ident =
-  do d <- scRequireDataType sc ident
-     scSharedTerm sc (dtType d)
+  dtType <$> scRequireDataType sc ident
 
 scTypeOfCtor :: SharedContext -> Ident -> IO Term
 scTypeOfCtor sc ident =
-  do ctor <- scRequireCtor sc ident
-     scSharedTerm sc (ctorType ctor)
+  ctorType <$> scRequireCtor sc ident
 
 -- | Computes the type of a term as quickly as possible, assuming that
 -- the term is well-typed.
