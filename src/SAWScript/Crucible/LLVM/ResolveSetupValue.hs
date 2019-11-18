@@ -71,7 +71,6 @@ import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
 
-import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
 --import qualified SAWScript.LLVMBuiltins as LB
@@ -369,7 +368,7 @@ resolveSAWTerm cc tp tm =
           Just (Some w)
             | Just LeqProof <- isPosNat w ->
               do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
-                 ss <- basic_ss sc
+                 let ss = cc^.ccBasicSS
                  tm' <- rewriteSharedTerm sc ss tm
                  mx <- case getAllExts tm' of
                          [] -> do

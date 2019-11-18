@@ -1044,6 +1044,7 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
                             , _ccBackend = sym
                             , _ccLLVMSimContext = lsimctx
                             , _ccLLVMGlobals = lglobals
+                            , _ccBasicSS = biBasicSS bic
                             }
       )
 
