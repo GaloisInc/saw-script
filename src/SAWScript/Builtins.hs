@@ -794,6 +794,9 @@ satSMTLib2 path = satWithExporter Prover.writeSMTLib2 path ".smt2"
 satUnintSMTLib2 :: [String] -> FilePath -> ProofScript SV.SatResult
 satUnintSMTLib2 unints path = satWithExporter (Prover.writeUnintSMTLib2 unints) path ".smt2"
 
+satVerilog :: FilePath -> ProofScript SV.SatResult
+satVerilog path = satWithExporter Prover.writeVerilog path ".v"
+
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (\ps -> ps { psTimeout = Just to })
 

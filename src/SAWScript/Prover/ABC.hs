@@ -9,6 +9,7 @@ import           Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 import SAWScript.Proof(propToPredicate)
+import SAWScript.Prover.Exporter (writeVerilog)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
@@ -68,13 +69,8 @@ satABCExternal ::
   Term ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
 satABCExternal sc goal =
-  do t0 <- propToPredicate sc goal
-     TypedTerm schema t <-
-        (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
-     checkBooleanSchema schema
-     tp <- scWhnf sc =<< scTypeOf sc t
-     let (args, _) = asPiList tp
-         argNames = map fst args
-     print t
-     let stats = solverStats "ABCExternal" (scSharedSize t0)
+  do let file = undefined
+         stats = solverStats "ABCExternal" (scSharedSize goal)
+     writeVerilog sc file goal
+     -- TODO: invoke ABC and parse output
      return (Nothing, stats)

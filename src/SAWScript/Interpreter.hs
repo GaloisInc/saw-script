@@ -943,7 +943,7 @@ primitives = Map.fromList
 
   , prim "write_verilog"       "String -> Term -> TopLevel ()"
     (pureVal write_verilog)
-    Current
+    Experimental
     [ "Write out a representation of a term in Verilog format." ]
 
   , prim "auto_match" "String -> String -> TopLevel ()"
@@ -1110,7 +1110,7 @@ primitives = Map.fromList
 
   , prim "abc_external"        "ProofScript SatResult"
     (pureVal satABCExternal)
-    Current
+    Experimental
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal."
     ]
@@ -1187,6 +1187,11 @@ primitives = Map.fromList
     [ "Write the current goal to the given file in SMT-Lib2 format,"
     , "leaving the listed functions uninterpreted."
     ]
+
+  , prim "offline_verilog"        "String -> ProofScript SatResult"
+    (pureVal satVerilog)
+    Experimental
+    [ "Write the current goal to the given file in Verilog format." ]
 
   , prim "external_cnf_solver" "String -> [String] -> ProofScript SatResult"
     (pureVal (satExternal True))

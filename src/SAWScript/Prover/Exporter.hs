@@ -1,4 +1,5 @@
 {-# Language ViewPatterns #-}
+{-# Language OverloadedStrings #-}
 module SAWScript.Prover.Exporter
   ( satWithExporter
   , adaptExporter
@@ -14,6 +15,7 @@ module SAWScript.Prover.Exporter
   , write_smtlib2
   , writeUnintSMTLib2
   , writeCore
+  , writeVerilog
   , write_verilog
 
     -- * Misc
@@ -31,7 +33,7 @@ import Cryptol.Utils.PP(pretty)
 
 import Data.Parameterized.Nonce(globalNonceGenerator)
 
-import qualified Lang.Crucible.Backend.SAWCore as Crucible (newSAWCoreBackend, toSC)
+import qualified Lang.Crucible.Backend.SAWCore as Crucible (newSAWCoreBackend)
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
@@ -43,13 +45,15 @@ import qualified Verifier.SAW.Simulator.What4 as W4Sim
 
 
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
-import SAWScript.Proof (predicateToProp, Quantification(..), propToPredicate)
+import SAWScript.Proof (predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
 import SAWScript.Prover.SBV(prepSBV)
 import SAWScript.Value
 
+import qualified What4.Expr.Builder as W4
+import What4.Protocol.VerilogWriter (exprVerilog)
 
 satWithExporter ::
   (SharedContext -> FilePath -> Term -> IO ()) ->
@@ -183,11 +187,24 @@ writeCore path t = writeFile path (scWriteExternal t)
 write_verilog :: FilePath -> Term -> TopLevel ()
 write_verilog path t = do
   sc <- getSharedContext
+  liftIO $ writeVerilog sc path t
+
+writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
+writeVerilog sc path t = do
   let gen = globalNonceGenerator
-  sym <- liftIO $ Crucible.newSAWCoreBackend sc gen
+  sym <- Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
   let unints = []
-  (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym sc Map.empty unints t
-  liftIO $ print p
+  -- TODO: support non-boolean expressions
+  (_names, (_mlabels, p)) <- W4Sim.w4Solve sym sc Map.empty unints t
+  let mdoc = exprVerilog p "goal"
+  putStrLn "What4 expression:"
+  print p
+  putStrLn ""
+  case mdoc of
+    Nothing -> putStrLn "Failed to translate to Verilog"
+    Just doc -> do
+      putStrLn "Verilog code:"
+      print doc
   return ()
 
 -- | Tranlsate a SAWCore term into an AIG

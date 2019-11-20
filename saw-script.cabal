@@ -77,6 +77,7 @@ library
     , unordered-containers
     , utf8-string
     , what4 >= 0.4
+    , what4-verilog
     , vector
     , xdg-basedir
     , GraphSCC
