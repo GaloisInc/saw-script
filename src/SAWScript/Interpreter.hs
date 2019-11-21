@@ -973,6 +973,13 @@ primitives = Map.fromList
     , "output."
     ]
 
+  , prim "offline_coq" "String -> ProofScript SatResult"
+    (pureVal satCoq)
+    Experimental
+    [ "Write out a representation of the current goal in Gallina syntax"
+    , "(for Coq). The argument is a prefix to use for file names."
+    ]
+
   , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal (autoMatch stmtInterpreter :: FilePath -> FilePath -> TopLevel ()))
     Current
