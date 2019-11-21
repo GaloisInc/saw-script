@@ -174,10 +174,12 @@ data SimplImpl ps_in ps_out where
 
   SImpl_IntroLLVMFieldContents ::
     ExprVar (LLVMPointerType w) -> ExprVar (LLVMPointerType w) ->
-    SimplImpl (RNil :> (LLVMPointerType w) :> (LLVMPointerType w))
-    (RNil :> (LLVMPointerType w))
+    LLVMFieldPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
   -- ^ Combine proofs of @x:ptr((rw,off) |-> eq(y))@ and @y:p@ on the top of the
-  -- permission stack into a proof of @x:ptr((rw,off) |-> p)@:
+  -- permission stack into a proof of @x:ptr((rw,off) |-> p)@, where the
+  -- supplied 'LLVMFieldPerm' gives the required output permission:
   --
   -- > x:ptr((rw,off) |-> eq(y)) * y:p -o x:ptr((rw,off) |-> p)
 
@@ -1207,6 +1209,28 @@ implSplitLifetimeM :: ExprVar a -> ValuePerm a -> PermExpr LifetimeType ->
                       (ps :> a :> LifetimeType) ()
 implSplitLifetimeM x p l = implSimplM Proxy (SImpl_SplitLifetime x p l)
 
+-- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of
+-- the permission stack into a proof of @x:ptr(pps,(off,spl |-> p))@
+introLLVMFieldContentsM ::
+  ExprVar (LLVMPointerType w) ->
+  ExprVar (LLVMPointerType w) ->
+  ImplM vars r (ps :> LLVMPointerType w)
+  (ps :> LLVMPointerType w :> LLVMPointerType w) ()
+introLLVMFieldContentsM x y =
+  getDistPerms >>>= \ps ->
+  case ps of
+    DistPermsCons
+      (DistPermsCons _ x'
+       (ValPerm_Conj [Perm_LLVMField fp@(LLVMFieldPerm
+                                         { llvmFieldContents =
+                                             ValPerm_Eq (PExpr_Var y')})]))
+      y'' p
+      | x' == x && y' == y && y'' == y ->
+        implSimplM Proxy (SImpl_IntroLLVMFieldContents x y $
+                          fp { llvmFieldContents = p })
+    _ -> error "introLLVMFieldContentsM: input perms not in expected form"
+
+
 {-
 
 -- | Call 'implPushM' for multiple @x:p@ permissions
@@ -1543,86 +1567,49 @@ proveVarEqH _ _ _ _ = implFailM
 -- * Proving Field Permissions
 ----------------------------------------------------------------------
 
--- | FIXME: documentation
-proveVarFieldImpl :: NuMatchingAny1 r => ExprVar (LLVMPointerType w) ->
-                     [LLVMPtrPerm w] -> LLVMFieldMatch w ->
-                     PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
-                     ImplM vars r (ps :> LLVMPointerType w)
-                     (ps :> LLVMPointerType w) ()
-proveVarFieldImpl x ps match off mb_fp = error "FIXME HERE NOW"
+-- | Prove an LLVM field permission @x:ptr((rw,off) |-> p)@ from permission @pi@
+-- assuming that the the current permissions @x:(p1 * ... *pn)@ for @x@ are on
+-- the top of the stack, and ensuring that any remaining permissions for @x@ get
+-- popped back to the primary permissions for @x@
+proveVarLLVMField ::
+  NuMatchingAny1 r => ExprVar (LLVMPointerType w) ->
+  [AtomicPerm (LLVMPointerType w)] -> Int ->
+  PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
+  ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
+proveVarLLVMField x ps i off mb_fp =
+  implExtractConjM x ps i >>>
+  let ps_rem = take i ps ++ drop (i+1) ps in
+  implPopM x (ValPerm_Conj ps_rem) >>>
+  extractNeededLLVMFieldPerm x (ps!!i) off mb_fp >>>= \(fp,maybe_p_rem) ->
+  (case maybe_p_rem of
+      Just p_rem ->
+        implPushM x (ValPerm_Conj ps_rem) >>>
+        implInsertConjM x p_rem ps_rem i >>>
+        implPopM x (ValPerm_Conj (take i ps_rem ++ [p_rem] ++ drop i ps_rem))
+      Nothing -> implDropM x ValPerm_True) >>>
+  proveVarLLVMFieldH x fp off mb_fp
 
-
-{-
-  let matches = findFieldMatches off ps in
-  case find fieldMatchDefinite matches of
-    Just match -> proveVarFieldImpl x ps match off mb_fp
-    Nothing ->
-      foldr (\match rest ->
-              implCatchM (proveVarFieldImpl x ps match off mb_fp) rest)
-      implFailM
-      matches
--}
-
-{-
--- | Attempt to prove @x:ptr(pps', off |-> (S,p))@ on the top of the stack from
--- the current permissions @x:ptr(pps)@ for @x@, assuming that @x:ptr(pps')@ is
--- already on the top of the stack.
---
--- FIXME: update this documentation
-proveVarField :: NuMatchingAny1 r => ExprVar (LLVMPointerType w) ->
-                 LLVMFieldMatch w ->
-                 PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
-                 ImplM vars r (ps :> LLVMPointerType w)
-                 (ps :> LLVMPointerType w) ()
-
--- Case for x:ptr((off',All) |-> p') |- x:ptr((off,All) |-> p)
-proveVarField x (FieldMatchField
-                 is_def i fp) off [nuP| LLVMFieldPerm _ SplExpr_All mb_p |]
-  | SplExpr_All <- llvmFieldSplitting fp =
-    -- NOTE: If we need "All" and don't have it, we fail, because we have set
-    -- things up to ensure that we cannot "piece together" an All from multiple
-    -- different pointer permissions: specifically, we make sure that the
-    -- pointer permissions in the permission have overlapping splittings. That
-    -- is why this case requires the splitting in fp to be "All".
-    elimLLVMFieldContentsM x i >>>= \y ->
-    introLLVMFieldAllM x i >>>
-    proveVarImpl y mb_p >>>
-    introLLVMFieldContentsM x y >>>
-    if is_def then greturn () else
-      castLLVMFieldOffsetM x (llvmFieldOffset fp) off
-
--- Case for x:ptr((off',spl') |-> p') |- x:ptr((off,z) |-> p), setting z=R(spl')
-proveVarField x (FieldMatchField
-                 is_def i fp) off [nuP| LLVMFieldPerm _ (SplExpr_Var z) mb_p |]
-  | Left memb <- mbNameBoundP z =
-    elimLLVMFieldContentsM x i >>>= \y ->
-    introLLVMFieldSplitM x i (llvmFieldSplitting fp) >>>
-    setVarM memb (PExpr_Spl $ SplExpr_R $ llvmFieldSplitting fp) >>>
-    proveVarImpl y mb_p >>>
-    introLLVMFieldContentsM x y >>>
-    if is_def then greturn () else
-      castLLVMFieldOffsetM x (llvmFieldOffset fp) off
-
-proveVarField x (FieldMatchArray _ i ap arr_ix fld_i) off mb_fld =
-  (if bvEq off (llvmArrayOffset ap) then greturn () else
-     divideLLVMArrayM x i arr_ix) >>>
-  indexLLVMArrayM x i >>>= \is_flds ->
-  proveVarField x (FieldMatchField True (fst (is_flds !! fld_i))
-                   (snd (is_flds !! fld_i))) off mb_fld
--}
 
 -- | Cast the offset, add any needed lifetimes, and prove the contents
 proveVarLLVMFieldH ::
   NuMatchingAny1 r => ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
   PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
   ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
-proveVarLLVMFieldH x fp off mb_fp =
-  error "FIXME HERE NOW: add lifetimes, prove contents"
+proveVarLLVMFieldH x fp off' mb_fp =
+  -- Step 1: cast the field offset to off'
+  implTryProveBVProp x (BVProp_Eq (llvmFieldOffset fp) off') >>>
+  implSimplM Proxy (SImpl_CastLLVMFieldOffset x fp off') >>>
+  -- Step 2: add any needed lifetimes / remove extra lifetimes
+  partialSubstForceM (fmap llvmFieldLifetimes mb_fp)
+  "proveVarLLVMFieldH: incomplete psubst: lifetime variable" >>>= \ls' ->
+  (error "FIXME HERE NOW: equalize lifetimes") >>>
+  -- Step 3: prove contents
+  let y = case llvmFieldContents fp of
+        ValPerm_Eq (PExpr_Var y) -> y
+        _ -> error "proveVarLLVMFieldH: expected eq(y) perm contents" in
+  proveVarImpl y (fmap llvmFieldContents mb_fp) >>>
+  introLLVMFieldContentsM x y
 
-{-
-    implTryProveBVProp x (BVProp_Eq (llvmFieldOffset fp) off') >>>
-    implSimplM Proxy (SImpl_CastLLVMFieldOffset x fp' off') >>>
--}
 
 -- | Extract an LLVM field permission from the given atomic permission, leaving
 -- as much of that atomic permission as possible on the top of the stack
@@ -1686,24 +1673,6 @@ extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
 
 extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp =
   error "FIXME HERE NOW"
-
-proveVarLLVMField ::
-  NuMatchingAny1 r => ExprVar (LLVMPointerType w) ->
-  [AtomicPerm (LLVMPointerType w)] -> Int ->
-  PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
-  ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
-proveVarLLVMField x ps i off mb_fp =
-  implExtractConjM x ps i >>>
-  let ps_rem = take i ps ++ drop (i+1) ps in
-  implPopM x (ValPerm_Conj ps_rem) >>>
-  extractNeededLLVMFieldPerm x (ps!!i) off mb_fp >>>= \(fp,maybe_p_rem) ->
-  (case maybe_p_rem of
-      Just p_rem ->
-        implPushM x (ValPerm_Conj ps_rem) >>>
-        implInsertConjM x p_rem ps_rem i >>>
-        implPopM x (ValPerm_Conj (take i ps_rem ++ [p_rem] ++ drop i ps_rem))
-      Nothing -> implDropM x ValPerm_True) >>>
-  proveVarLLVMFieldH x fp off mb_fp
 
 
 ----------------------------------------------------------------------
