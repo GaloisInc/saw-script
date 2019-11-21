@@ -430,13 +430,13 @@ translateTermToDocWith ::
   (Coq.Term -> Doc) ->
   Term ->
   Either (TranslationError Term) Doc
-translateTermToDocWith configuration globalDecls localEnv _f t = do
-  (_term, state) <- runTermTranslationMonad configuration globalDecls localEnv (translateTerm t)
+translateTermToDocWith configuration globalDecls localEnv f t = do
+  (term, state) <- runTermTranslationMonad configuration globalDecls localEnv (translateTerm t)
   let decls = view localDeclarations state
   return
     $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls)
-    -- <$$> (if null decls then empty else hardline)
-    -- <$$> f term
+    <$$> (if null decls then empty else hardline)
+    <$$> f term
 
 translateDefDoc ::
   TranslationConfiguration ->
