@@ -293,7 +293,7 @@ data SimplImpl ps_in ps_out where
 
   SImpl_LLVMArrayContents ::
     ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> [LLVMFieldPerm w] ->
-    IsLLVMPointerTypeList w f_ps ->
+    -- IsLLVMPointerTypeList w f_ps ->
     PermImpl ((:~:) f_ps) f_ps ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
   -- ^ FIXME HERE: describe this rule
@@ -382,36 +382,46 @@ data PermImpl1 ps_in ps_outs where
 data PermImpl r ps where
   PermImpl_Done :: r ps -> PermImpl r ps
   PermImpl_Step :: PermImpl1 ps_in ps_outs ->
-                   MapRList (MbPermImpl r) ps_outs ->
+                   MbPermImpls r ps_outs ->
                    PermImpl r ps_in
 
+data MbPermImpls r bs_pss where
+  MbPermImpls_Nil :: MbPermImpls r RNil
+  MbPermImpls_Cons :: MbPermImpls r bs_pss -> Mb bs (PermImpl r ps) ->
+                      MbPermImpls r (bs_pss :> '(bs,ps))
 
-type family Fst (p :: (k1,k2)) :: k1 where
-  Fst '(x,_) = x
+-- type IsLLVMPointerTypeList w ps = MapRList ((:~:) (LLVMPointerType w)) ps
 
-type family Snd (p :: (k1,k2)) :: k2 where
-  Snd '(_,y) = y
 
-newtype MbPermImpl r bs_ps =
-  MbPermImpl { unMbPermImpl :: Mb (Fst bs_ps) (PermImpl r (Snd bs_ps)) }
 
-type IsLLVMPointerTypeList w ps = MapRList ((:~:) (LLVMPointerType w)) ps
+$(mkNuMatching [t| forall ps_in ps_out. SimplImpl ps_in ps_out |])
+$(mkNuMatching [t| forall ps_in ps_outs. PermImpl1 ps_in ps_outs |])
+$(mkNuMatching [t| forall r bs_pss. NuMatchingAny1 r => MbPermImpls r bs_pss |])
+$(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
 
+-- | Compute the input permissions of a 'SimplImpl' implication
 simplImplIn :: SimplImpl ps_in ps_out -> MapRList ValuePerm ps_in
 simplImplIn = error "FIXME HERE NOW"
 
+-- | Compute the output permissions of a 'SimplImpl' implication
 simplImplOut :: SimplImpl ps_in ps_out -> MapRList ValuePerm ps_out
 simplImplOut = error "FIXME HERE NOW"
 
+-- | Apply a 'SimplImpl' implication to the permissions on the top of a
+-- permission set stack, checking that they equal the 'simplImplIn' of the
+-- 'SimplImpl' and then replacing them with its 'simplImplOut'
 applySimplImpl :: Proxy ps -> SimplImpl ps_in ps_out ->
                   PermSet (ps :++: ps_in) -> PermSet (ps :++: ps_out)
 applySimplImpl = error "FIXME HERE NOW"
 
 
-newtype MbPermSet bs_ps = MbPermSet (Mb (Fst bs_ps) (PermSet (Snd bs_ps)))
+data MbPermSets bs_pss where
+  MbPermSets_Nil :: MbPermSets RNil
+  MbPermSets_Cons :: MbPermSets bs_pss -> Mb bs (PermSet ps) ->
+                     MbPermSets (bs_pss :> '(bs,ps))
 
-applyImpl1 :: PermImpl1 ps_in ps_outs -> PermSet ps_in ->
-              MapRList MbPermSet ps_outs
+-- | Apply a single permission implication step to a permission set
+applyImpl1 :: PermImpl1 ps_in ps_outs -> PermSet ps_in -> MbPermSets ps_outs
 applyImpl1 = error "FIXME HERE NOW"
 
 
@@ -541,8 +551,6 @@ data PermImpl (r :: Ctx CrucibleType -> Type) ps where
   -- > Gin | Pl,ps_in * Pin |- rets
 
 
-$(mkNuMatching [t| forall ps_in ps_out. SimplImpl ps_in ps_out |])
-$(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
 -}
 
 
@@ -663,6 +671,12 @@ instance GenMonadPar r m q1 q2 =>
     gparallel f
     (unGenStateT m1 s) (unGenStateT m2 s)
 -}
+
+type family Fst (p :: (k1,k2)) :: k1 where
+  Fst '(x,_) = x
+
+type family Snd (p :: (k1,k2)) :: k2 where
+  Snd '(_,y) = y
 
 -- | The generalized state monad. Don't get confused: the parameters are
 -- reversed, so @p2@ is the /input/ state param type and @p1@ is the /output/.
@@ -1001,14 +1015,14 @@ implApplyImpl1 impl1 mb_ms =
   gmapRet (PermImpl_Step impl1) >>>
   helper (applyImpl1 impl1 perms) mb_ms
   where
-    helper :: MapRList MbPermSet ps_outs ->
+    helper :: MbPermSets ps_outs ->
               MapRList (Impl1Cont vars r ps_r a) ps_outs ->
               GenStateContM (ImplState vars ps_r) (PermImpl r ps_r)
-              (ImplState vars ps_in) (MapRList (MbPermImpl r) ps_outs) a
-    helper MNil _ = gabortM MNil
-    helper (mbperms :>: MbPermSet mbperm) (args :>: Impl1Cont f) =
-      gparallel (:>:) (helper mbperms args)
-      (gopenBinding MbPermImpl mbperm >>>= \(ns, perms') ->
+              (ImplState vars ps_in) (MbPermImpls r ps_outs) a
+    helper MbPermSets_Nil _ = gabortM MbPermImpls_Nil
+    helper (MbPermSets_Cons mbperms mbperm) (args :>: Impl1Cont f) =
+      gparallel MbPermImpls_Cons (helper mbperms args)
+      (gopenBinding id mbperm >>>= \(ns, perms') ->
         gmodify (set implStatePerms perms') >>>
         f ns)
 
