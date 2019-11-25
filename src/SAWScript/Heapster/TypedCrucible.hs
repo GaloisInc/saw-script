@@ -450,10 +450,10 @@ data TypedCFG
      (inits :: RList CrucibleType)
      (ret :: CrucibleType)
   = TypedCFG { tpcfgHandle :: TypedFnHandle ghosts inits ret
-             , tpcfgInputPerms :: MbValuePerms (ghosts :++: inits)
-             , tpcfgOutputPerms :: MbValuePerms (ghosts :++: inits :> ret)
+             , tpcfgInputPerms :: MbValuePerms (ghosts :> LifetimeType :++: inits)
+             , tpcfgOutputPerms :: MbValuePerms (ghosts :> LifetimeType :++: inits :> ret)
              , tpcfgBlockMap :: TypedBlockMap ext blocks ret
-             , tpcfgEntryBlockID :: TypedEntryID blocks inits ghosts
+             , tpcfgEntryBlockID :: TypedEntryID blocks inits (ghosts :> LifetimeType)
              }
 
 
@@ -1298,18 +1298,17 @@ makeRetPerms :: Mb (ctx :> ret) (DistPerms ps) ->
 makeRetPerms mb_perms =
   fmap RetPerms $ mbSeparate (MNil :>: Proxy) mb_perms
 
-{-
-
 -- | Type-check a Crucible CFG
 tcCFG :: PermCheckExtC ext => CFG ext blocks inits ret ->
          Closed (FunPerm ghosts inits ret) ->
          TypedCFG ext (CtxCtxToRList blocks) ghosts (CtxToRList inits) ret
 tcCFG cfg [clP| FunPerm _ perms_in perms_out :: FunPerm ghosts args ret |] =
+  let ghosts = knownRepr :: CruCtx ghosts in
   flip evalState (emptyTopPermCheckState (cfgBlockMap cfg)) $
   do init_memb <- stLookupBlockID (cfgEntryBlockID cfg) <$> get
      init_entry <-
        insNewBlockEntry init_memb (mkCruCtx $ handleArgTypes $ cfgHandle cfg)
-       (knownRepr :: CruCtx ghosts)
+       (CruCtxCons ghosts knownRepr)
        ($(mkClosed [| mbValuePermsToDistPerms |]) `clApply` perms_in)
        ($(mkClosed [| makeRetPerms
                     . mbValuePermsToDistPerms |]) `clApply` perms_out)
@@ -1318,7 +1317,7 @@ tcCFG cfg [clP| FunPerm _ perms_in perms_out :: FunPerm ghosts args ret |] =
      return $ TypedCFG
        { tpcfgHandle =
            -- FIXME: figure out the index for the TypedFnHandle
-           TypedFnHandle (knownRepr :: CruCtx ghosts) (cfgHandle cfg) 0
+           TypedFnHandle ghosts (cfgHandle cfg) 0
        , tpcfgInputPerms = unClosed perms_in
        , tpcfgOutputPerms = unClosed perms_out
        , tpcfgBlockMap =
@@ -1336,7 +1335,6 @@ tcCFG cfg [clP| FunPerm _ perms_in perms_out :: FunPerm ghosts args ret |] =
       tcEmitBlock (getBlock blkID (cfgBlockMap cfg)) >>
       mapM_ (visit cfg) comps
 
--}
 {-
 -- FIXME HERE NOW:
 -- + translate -> SAW
