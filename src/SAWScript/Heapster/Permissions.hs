@@ -136,6 +136,17 @@ pattern LifetimeRepr <-
 -- | A lifetime is an expression of type 'LifetimeType'
 type Lifetime = PermExpr LifetimeType
 
+-- | Crucible type for lists of expressions and permissions on them
+type PermListType = IntrinsicType "PermList" EmptyCtx
+
+-- | Pattern for building/desctructing permission list types
+pattern PermListRepr :: () => ty ~ PermListType => TypeRepr ty
+pattern PermListRepr <-
+  IntrinsicRepr (testEquality (knownSymbol :: SymbolRepr "PermList") ->
+                 Just Refl) Empty
+  where
+    PermListRepr = IntrinsicRepr knownSymbol Empty
+
 -- | Crucible type for LLVM stack frame objects
 type LLVMFrameType w = IntrinsicType "LLVM_frame" (EmptyCtx ::> BVType w)
 
@@ -186,6 +197,14 @@ data PermExpr (a :: CrucibleType) where
   PExpr_Fun :: FnHandle args ret -> PermExpr (FunctionHandleType args ret)
   -- ^ A literal function pointer
 
+  PExpr_PermListNil :: PermExpr PermListType
+  -- ^ An empty list of expressions plus permissions
+
+  PExpr_PermListCons :: KnownRepr TypeRepr a =>PermExpr a -> ValuePerm a ->
+                        PermExpr PermListType -> PermExpr PermListType
+  -- ^ A cons of an expression and permission for that expression onto a
+  -- permission list
+
 
 -- | A sequence of permission expressions
 data PermExprs (as :: Ctx CrucibleType) where
@@ -198,11 +217,6 @@ data BVFactor w where
               BVFactor w
     -- ^ A variable of type @'BVType' w@ multiplied by a constant @i@, which
     -- should be in the range @0 <= i < 2^w@
-
-
-$(mkNuMatching [t| forall a . PermExpr a |])
-$(mkNuMatching [t| forall a . BVFactor a |])
-$(mkNuMatching [t| forall as . PermExprs as |])
 
 
 instance Eq (PermExpr a) where
@@ -240,6 +254,16 @@ instance Eq (PermExpr a) where
 
   (PExpr_Fun fh1) == (PExpr_Fun fh2) = fh1 == fh2
   (PExpr_Fun _) == _ = False
+
+  PExpr_PermListNil == PExpr_PermListNil = True
+  PExpr_PermListNil == _ = False
+
+  (PExpr_PermListCons (e1 :: PermExpr a1) p1 l1)
+    == (PExpr_PermListCons (e2 :: PermExpr a2) p2 l2)
+    | Just Refl <-
+        testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
+    = e1 == e2 && p1 == p2 && l1 == l2
+  (PExpr_PermListCons _ _ _) == _ = False
 
 
 instance Eq (PermExprs as) where
@@ -489,7 +513,7 @@ data AtomicPerm (a :: CrucibleType) where
   -- | Ownership permission for a lifetime, including an assertion that it is
   -- still current and permission to end that lifetime and get back the given
   -- permissions
-  Perm_LOwned :: LOwnedPerm -> AtomicPerm LifetimeType
+  Perm_LOwned :: PermExpr PermListType -> AtomicPerm LifetimeType
 
   -- | Assertion that a lifetime is current during another lifetime, i.e., that
   -- it contains that other lifetime
@@ -541,17 +565,8 @@ data ValuePerms as where
   ValPerms_Nil :: ValuePerms RNil
   ValPerms_Cons :: ValuePerms as -> ValuePerm a -> ValuePerms (as :> a)
 
--- | An expression with a permission of some unknown type
-data SomeExprAndPerm where
-  SomeExprAndPerm :: KnownRepr TypeRepr a => PermExpr a -> ValuePerm a ->
-                     SomeExprAndPerm
-
 -- | A binding of 0 or more variables, each with permissions
 type MbValuePerms ctx = Mb ctx (ValuePerms ctx)
-
--- | A set of permissions held by a lifetime, that will be recovered when that
--- lifetime is ended
-type LOwnedPerm = [SomeExprAndPerm]
 
 -- | A frame permission is a list of the pointers that have been allocated in
 -- the frame and their corresponding allocation sizes in words of size
@@ -687,7 +702,7 @@ instance Eq (AtomicPerm a) where
   (Perm_LLVMFree _) == _ = False
   (Perm_LLVMFrame frame1) == (Perm_LLVMFrame frame2) = frame1 == frame2
   (Perm_LLVMFrame _) == _ = False
-  (Perm_LOwned perms1) == (Perm_LOwned perms2) = perms1 == perms2
+  (Perm_LOwned e1) == (Perm_LOwned e2) = e1 == e2
   (Perm_LOwned _) == _ = False
   (Perm_LContains e1) == (Perm_LContains e2) = e1 == e2
   (Perm_LContains _) == _ = False
@@ -701,14 +716,6 @@ instance Eq (ValuePerms as) where
   ValPerms_Nil == ValPerms_Nil = True
   (ValPerms_Cons ps1 p1) == (ValPerms_Cons ps2 p2) =
     ps1 == ps2 && p1 == p2
-
-instance Eq SomeExprAndPerm where
-  (SomeExprAndPerm (e1 :: PermExpr a1) p1) ==
-    (SomeExprAndPerm (e2 :: PermExpr a2) p2)
-    | Just Refl <-
-        testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
-    = e1 == e2 && p1 == p2
-  _ == _ = False
 
 -- | Test if function permissions with different ghost argument lists are equal
 funPermEq :: FunPerm ghosts1 args ret -> FunPerm ghosts2 args ret ->
@@ -725,6 +732,9 @@ instance Eq (FunPerm ghosts args ret) where
   fperm1 == fperm2 = isJust (funPermEq fperm1 fperm2)
 
 
+$(mkNuMatching [t| forall a . PermExpr a |])
+$(mkNuMatching [t| forall a . BVFactor a |])
+$(mkNuMatching [t| forall as . PermExprs as |])
 $(mkNuMatching [t| forall w. BVProp w |])
 $(mkNuMatching [t| forall a . AtomicPerm a |])
 $(mkNuMatching [t| forall a . ValuePerm a |])
@@ -734,7 +744,6 @@ $(mkNuMatching [t| forall w . LLVMArrayPerm w |])
 $(mkNuMatching [t| RWModality |])
 $(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
 $(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
-$(mkNuMatching [t| SomeExprAndPerm |])
 $(mkNuMatching [t| forall ps. DistPerms ps |])
 
 instance Liftable RWModality where
@@ -772,23 +781,31 @@ llvmFieldContents0Eq rw e =
   Perm_LLVMField $ LLVMFieldPerm { llvmFieldRW = rw,
                                    llvmFieldOffset = bvInt 0,
                                    llvmFieldContents = ValPerm_Eq e }
-
--- | Create an existential permission to read or write an arbitrary value from
--- offset 0 of an LLVM pointer dependeing on the modality, i.e., create the
--- permission @exists x.[RW]ptr (0 |-> eq(x))@
-llvmExFieldPerm0Eq :: (1 <= w, KnownNat w) => RWModality ->
-                      Binding (LLVMPointerType w) (ValuePerm (LLVMPointerType w))
-llvmExFieldPerm0Eq rw =
-  nu $ \x -> ValPerm_Conj [llvmFieldContents0Eq rw (PExpr_Var x)]
 -}
 
+-- | Create a permission to read a known value from offset 0 of an LLVM pointer
+-- in the given lifetime, i.e., return @exists y.[l]ptr ((0,R) |-> eq(e))@
+llvmRead0EqPerm :: (1 <= w, KnownNat w) => PermExpr LifetimeType ->
+                    PermExpr (LLVMPointerType w) ->
+                    ValuePerm (LLVMPointerType w)
+llvmRead0EqPerm l e =
+  ValPerm_Conj [Perm_LLVMField $
+                LLVMFieldPerm { llvmFieldRW = Read,
+                                llvmFieldLifetimes = [l],
+                                llvmFieldOffset = bvInt 0,
+                                llvmFieldContents = ValPerm_Eq e }]
+
 -- | Create a field write permission with offset 0 and @true@ permissions
-llvmFieldContents0True :: (1 <= w, KnownNat w) => LLVMFieldPerm w
-llvmFieldContents0True =
+llvmFieldWrite0True :: (1 <= w, KnownNat w) => LLVMFieldPerm w
+llvmFieldWrite0True =
   LLVMFieldPerm { llvmFieldRW = Write,
                   llvmFieldLifetimes = [],
                   llvmFieldOffset = bvInt 0,
                   llvmFieldContents = ValPerm_True }
+
+-- | Create a field write permission with offset 0 and @true@ permissions
+llvmWrite0TruePerm :: (1 <= w, KnownNat w) => ValuePerm (LLVMPointerType w)
+llvmWrite0TruePerm = ValPerm_Conj [Perm_LLVMField llvmFieldWrite0True]
 
 -- | Create the array ponter perm @array(0,<len,*1 |-> [ptr(0 |-> true)])@ of
 -- size @len@ words of width @w@
@@ -797,7 +814,7 @@ llvmArrayPtrPermOfSize len =
   Perm_LLVMArray $ LLVMArrayPerm { llvmArrayOffset = bvInt 0,
                                    llvmArrayLen = bvInt len,
                                    llvmArrayStride = 1,
-                                   llvmArrayFields = [llvmFieldContents0True],
+                                   llvmArrayFields = [llvmFieldWrite0True],
                                    llvmArrayBorrows = [] }
 
 -- | Like 'llvmArrayPtrPermOfSize', but return a 'ValuePerm' instead of a
@@ -1288,6 +1305,10 @@ instance SubstVar s m => Substable s (PermExpr a) m where
     addLLVMOffset <$> substExprVar s x <*> genSubst s off
   genSubst _ [nuP| PExpr_Fun fh |] =
     return $ PExpr_Fun $ mbLift fh
+  genSubst _ [nuP| PExpr_PermListNil |] =
+    return $ PExpr_PermListNil
+  genSubst s [nuP| PExpr_PermListCons e p l |] =
+    PExpr_PermListCons <$> genSubst s e <*> genSubst s p <*> genSubst s l
 
 instance SubstVar s m => Substable s (PermExprs as) m where
   genSubst s [nuP| PExprs_Nil |] = return PExprs_Nil
@@ -1309,8 +1330,8 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
   genSubst s [nuP| Perm_LLVMFree e |] = Perm_LLVMFree <$> genSubst s e
   genSubst s [nuP| Perm_LLVMFrame fp |] =
     Perm_LLVMFrame <$> genSubst s fp
-  genSubst s [nuP| Perm_LOwned es_and_ps |] =
-    Perm_LOwned <$> mapM (genSubst s) (mbList es_and_ps)
+  genSubst s [nuP| Perm_LOwned e |] =
+    Perm_LOwned <$> genSubst s e
   genSubst s [nuP| Perm_LContains e |] =
     Perm_LContains <$> genSubst s e
   genSubst s [nuP| Perm_Fun fperm |] =
@@ -1341,10 +1362,6 @@ instance SubstVar s m => Substable s (ValuePerms as) m where
 instance SubstVar s m => Substable s RWModality m where
   genSubst s [nuP| Write |] = return Write
   genSubst s [nuP| Read |] = return Read
-
-instance SubstVar s m => Substable s SomeExprAndPerm m where
-  genSubst s [nuP| SomeExprAndPerm e p |] =
-    SomeExprAndPerm <$> genSubst s e <*> genSubst s p
 
 instance SubstVar s m => Substable s (LLVMFieldPerm w) m where
   genSubst s [nuP| LLVMFieldPerm rw ls off p |] =
@@ -1678,6 +1695,13 @@ instance AbstractVars (PermExpr a) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
   abstractPEVars ns1 ns2 (PExpr_Fun fh) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_Fun |]) `clApply` toClosed fh)
+  abstractPEVars ns1 ns2 PExpr_PermListNil =
+    absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_PermListNil |]))
+  abstractPEVars ns1 ns2 (PExpr_PermListCons e p l) =
+    absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_PermListCons |]))
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p
+    `clMbMbApplyM` abstractPEVars ns1 ns2 l
 
 instance AbstractVars (PermExprs as) where
   abstractPEVars ns1 ns2 PExprs_Nil =
@@ -1767,12 +1791,6 @@ instance AbstractVars RWModality where
     absVarsReturnH ns1 ns2 $(mkClosed [| Write |])
   abstractPEVars ns1 ns2 Read =
     absVarsReturnH ns1 ns2 $(mkClosed [| Read |])
-
-instance AbstractVars SomeExprAndPerm where
-  abstractPEVars ns1 ns2 (SomeExprAndPerm e p) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| SomeExprAndPerm |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e
-    `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 instance AbstractVars (LLVMPtrPerm w) where
   abstractPEVars ns1 ns2 (Perm_LLVMField fp) =
