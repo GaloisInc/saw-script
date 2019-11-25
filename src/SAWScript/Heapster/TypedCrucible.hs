@@ -153,7 +153,7 @@ instance Liftable (TypedEntryID blocks args ghosts) where
 
 -- | Typed Crucible statements with the given Crucible syntax extension and the
 -- given set of return values
-data TypedStmt ext (rets :: RList CrucibleType) ps_out ps_in where
+data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
 
   -- | Assign a pure value to a register, where pure here means that its
   -- translation to SAW will be pure (i.e., no LLVM pointer operations)
@@ -164,38 +164,53 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_out ps_in where
   TypedAssert :: TypedReg BoolType -> TypedReg StringType ->
                  TypedStmt ext RNil RNil RNil
 
-  TypedLLVMStmt :: TypedLLVMStmt (ArchWidth arch) ret ps_out ps_in ->
-                   TypedStmt (LLVM arch) (RNil :> ret) ps_out ps_in
+  TypedLLVMStmt :: TypedLLVMStmt (ArchWidth arch) ret ps_in ps_out ->
+                   TypedStmt (LLVM arch) (RNil :> ret) ps_in ps_out
 
 
-data TypedLLVMStmt wptr ret ps_out ps_in where
+data TypedLLVMStmt wptr ret ps_in ps_out where
   -- | Assign an LLVM word (i.e., a pointer with block 0) to a register
+  --
+  -- Type: @. -o ret:eq(word(x))@
   ConstructLLVMWord :: (1 <= w, KnownNat w) =>
                        TypedReg (BVType w) ->
-                       TypedLLVMStmt wptr (LLVMPointerType w) RNil RNil
+                       TypedLLVMStmt wptr (LLVMPointerType w)
+                       RNil
+                       (RNil :> LLVMPointerType w)
 
   -- | Assert that an LLVM pointer is a word, and return 0 (this is the typed
   -- version of 'LLVM_PointerBlock' on words)
+  --
+  -- Type: @x:eq(word(y)) -o ret:eq(0)@
   AssertLLVMWord :: (1 <= w, KnownNat w) =>
-                    TypedReg (LLVMPointerType w) ->
+                    TypedReg (LLVMPointerType w) -> PermExpr (BVType w) ->
                     TypedLLVMStmt wptr NatType
                     (RNil :> LLVMPointerType w)
                     (RNil :> LLVMPointerType w)
 
   -- | Destruct an LLVM word into its bitvector value, which should equal the
   -- given expression
+  --
+  -- Type: @x:eq(word(y)) -o ret:eq(y)@
   DestructLLVMWord :: (1 <= w, KnownNat w) =>
                       TypedReg (LLVMPointerType w) -> PermExpr (BVType w) ->
                       TypedLLVMStmt wptr (BVType w)
                       (RNil :> LLVMPointerType w)
                       (RNil :> LLVMPointerType w)
 
-  -- FIXME: add Alignment to loads and stores
-  TypedLLVMLoad :: (TypedReg (LLVMPointerType wptr)) ->
+  -- | Load a machine value from the address pointed to by the given pointer
+  --
+  -- Type: @l:lowned(ps), x:[l]ptr((r,0) |-> eq(y)) -o l:lowned(ps), ret:eq(y)@
+  TypedLLVMLoad :: TypedReg (LLVMPointerType wptr) ->
+                   PermExpr LifetimeType -> LOwnedPerm ->
+                   TypedReg (LLVMPointerType wptr) ->
                    TypedLLVMStmt wptr (LLVMPointerType wptr)
-                   (RNil :> LLVMPointerType wptr :> LLVMPointerType wptr)
-                   (RNil :> LLVMPointerType wptr)
+                   (RNil :> LifetimeType :> LLVMPointerType wptr)
+                   (RNil :> LifetimeType :> LLVMPointerType wptr)
 
+  -- | Store a machine value to the address pointed to by the given pointer
+  --
+  -- Type: @x:ptr((w,0) |-> true) -o x:ptr((w,0) |-> eq(y))@
   TypedLLVMStore :: (TypedReg (LLVMPointerType wptr)) ->
                     (TypedReg (LLVMPointerType wptr)) ->
                     TypedLLVMStmt wptr UnitType
@@ -203,19 +218,53 @@ data TypedLLVMStmt wptr ret ps_out ps_in where
                     (RNil :> LLVMPointerType wptr)
 
   -- | Allocate an object of the given size on the given LLVM frame
+  --
+  -- Type:
+  -- > fp:frame(ps) -o fp:frame(ps,(ret,i)),
+  -- >                 ret:ptr((w,0) |-> true, (w,M) |-> true,
+  -- >                         ..., (w,M*(i-1)) |-> true)
+  --
+  -- where @M@ is the machine word size in bytes
   TypedLLVMAlloca :: TypedReg (LLVMFrameType wptr) -> Integer ->
                      TypedLLVMStmt wptr (LLVMPointerType wptr)
-                     (RNil :> LLVMPointerType wptr) RNil
+                     (RNil :> LLVMFrameType wptr)
+                     (RNil :> LLVMFrameType wptr :> LLVMPointerType wptr)
 
   -- | Create a new LLVM frame
-  TypedLLVMCreateFrame :: TypedLLVMStmt wptr (LLVMFrameType wptr) RNil RNil
+  --
+  -- Type: @. -o ret:frame()@
+  TypedLLVMCreateFrame :: TypedLLVMStmt wptr (LLVMFrameType wptr) RNil
+                          (RNil :> LLVMFrameType wptr)
 
   -- | Delete an LLVM frame and deallocate all memory objects allocated in it,
   -- assuming that the current distinguished permissions @ps@ correspond to the
   -- write permissions to all those objects allocated on the frame
+  --
+  -- Type: @ps, fp:frame(ps) -o .@
   TypedLLVMDeleteFrame :: TypedReg (LLVMFrameType wptr) ->
-                          TypedLLVMStmt wptr UnitType RNil ps
+                          TypedLLVMStmt wptr UnitType
+                          (ps :> LLVMFrameType wptr) RNil
 
+
+-- | Return the input permissions for a 'TypedStmt
+typedStmtIn :: TypedStmt ext rets ps_in ps_out -> MapRList ValuePerm ps_in
+typedStmtIn = error "FIXME HERE NOW"
+
+-- | Return the output permissions for a 'TypedStmt
+typedStmtOut :: TypedStmt ext rets ps_in ps_out -> MapRList Name rets ->
+                MapRList ValuePerm ps_out
+typedStmtOut = error "FIXME HERE NOW"
+
+-- | Check that the permission stack of the given permission set matches the
+-- input permissions of the given statement, and replace them with the output
+-- permissions of the statement
+applyTypedStmt :: TypedStmt ext rets ps_in ps_out -> MapRList Name rets ->
+                  PermSet ps_in -> PermSet ps_out
+applyTypedStmt = error "FIXME HERE NOW"
+
+
+{-
+FIXME HERE NOW: put all the following logic into applyTypedStmt
 
 -- | A @'StmtPermFun' rets ps_out ps_in@ is a function on permissions that
 -- specifies how a typed statement with the given type arguments manipulates the
@@ -281,6 +330,7 @@ llvmCreateFramePermFun (_ :>: fp) =
 llvmDeleteFramePermFun :: TypedReg (LLVMFrameType wptr) ->
                           StmtPermFun (RNil :> UnitType) RNil ps
 llvmDeleteFramePermFun (TypedReg fp) _  = deleteLLVMFrame fp
+-}
 
 
 ----------------------------------------------------------------------
@@ -323,7 +373,7 @@ data TypedStmtSeq ext blocks ret ps_in where
   -- | Typed version of 'ConsStmt', which binds new variables for the return
   -- value(s) of each statement
   TypedConsStmt :: ProgramLoc ->
-                   TypedStmt ext rets ps_next ps_in ->
+                   TypedStmt ext rets ps_in ps_next ->
                    Mb rets (TypedStmtSeq ext blocks ret ps_next) ->
                    TypedStmtSeq ext blocks ret ps_in
 
@@ -335,8 +385,8 @@ data TypedStmtSeq ext blocks ret ps_in where
 
 $(mkNuMatching [t| forall wptr tp ps_out ps_in.
                 TypedLLVMStmt wptr tp ps_out ps_in |])
-$(mkNuMatching [t| forall ext rets ps_out ps_in. NuMatchingExtC ext =>
-                TypedStmt ext rets ps_out ps_in |])
+$(mkNuMatching [t| forall ext rets ps_in ps_out. NuMatchingExtC ext =>
+                TypedStmt ext rets ps_in ps_out |])
 $(mkNuMatching [t| forall ret ps. TypedRet ret ps |])
 
 instance NuMatchingAny1 (TypedRet ret) where
@@ -699,11 +749,12 @@ insNewBlockEntry memb arg_tps ghost_tps perms_in perms_ret =
                  $(mkClosed [| fst |]) `clApply` cl_blkMap_entryID })
      return (snd $ unClosed cl_blkMap_entryID)
 
-
+-- | Look up the current primary permission associated with a variable
 getVarPerm :: ExprVar a ->
               PermCheckM ext cblocks blocks ret args r ps r ps (ValuePerm a)
 getVarPerm x = view (varPerm x) <$> stCurPerms <$> gget
 
+-- | Look up the current primary permission associated with a register
 getRegPerm :: TypedReg a ->
               PermCheckM ext cblocks blocks ret args r ps r ps (ValuePerm a)
 getRegPerm (TypedReg x) = getVarPerm x
@@ -746,14 +797,23 @@ setVarTypes _ CruCtxNil = greturn ()
 setVarTypes (xs :>: x) (CruCtxCons tps tp) =
   setVarTypes xs tps >>> setVarType x tp
 
+-- | Create a new lifetime
+--
+-- FIXME: maybe need a nicer way to represent lifetimes that does not require so
+-- many fresh variables?
+newLifetime :: PermCheckM ext cblocks blocks ret args r ps r ps
+               (PermExpr LifetimeType)
+newLifetime = error "FIXME HERE NOW:"
+
 -- | Failure in the statement permission-checking monad
 stmtFailM :: PermCheckM ext cblocks blocks ret args r1 ps1
              (TypedStmtSeq ext blocks ret ps2) ps2 a
-stmtFailM = gabortM (return $ TypedImplStmt Impl_Fail)
+stmtFailM = gabortM (return $ TypedImplStmt $
+                     PermImpl_Step Impl1_Fail MbPermImpls_Nil)
 
 -- | Smart constructor for applying a function on 'PermImpl's
 applyImplFun :: (PermImpl r ps -> r ps) -> PermImpl r ps -> r ps
-applyImplFun _ (Impl_Done r) = r
+applyImplFun _ (PermImpl_Done r) = r
 applyImplFun f impl = f impl
 
 -- | Embed an implication computation inside a permission-checking computation
@@ -769,14 +829,16 @@ embedImplM f_impl vars m =
   m >>>= \a ->
   gget >>>= \implSt ->
   gput (setSTCurPerms (implSt ^. implStatePerms) st) >>>
-  gmapRet (Impl_Done . flip evalState top_st) >>>
+  gmapRet (PermImpl_Done . flip evalState top_st) >>>
   greturn (completePSubst vars (implSt ^. implStatePSubst), a)
 
 -- | Recombine any outstanding distinguished permissions back into the main
 -- permission set, in the context of type-checking statements
 stmtRecombinePerms :: StmtPermCheckM ext cblocks blocks ret args RNil ps_in ()
 stmtRecombinePerms =
-  embedImplM TypedImplStmt emptyCruCtx recombinePerms >>>= \_ ->
+  gget >>>= \st ->
+  let dist_perms = view distPerms (stCurPerms st) in
+  embedImplM TypedImplStmt emptyCruCtx (recombinePerms dist_perms) >>>= \_ ->
   greturn ()
 
 -- | Prove permissions in the context of type-checking statements
@@ -842,27 +904,26 @@ tcExpr ctx (App app) = greturn $ TypedExpr $ fmapFC (tcReg ctx) app
 -- freshly-bound names for the return values. Return those freshly-bound names
 -- for the return values.
 emitStmt :: TypeCtx rets => CruCtx rets -> ProgramLoc ->
-            StmtPermFun rets ps_out ps_in ->
-            TypedStmt ext rets ps_out ps_in ->
+            TypedStmt ext rets ps_in ps_out ->
             StmtPermCheckM ext cblocks blocks ret args ps_out ps_in
             (MapRList Name rets)
-emitStmt tps loc f_perms stmt =
+emitStmt tps loc stmt =
   gopenBinding
   ((TypedConsStmt loc stmt <$>) . strongMbM)
   (nuMulti typeCtxProxies $ \vars -> ()) >>>= \(ns, ()) ->
   setVarTypes ns tps >>>
-  gmodify (modifySTCurPerms $ f_perms ns) >>>
+  gmodify (modifySTCurPerms $ applyTypedStmt stmt ns) >>>
   greturn ns
+
 
 -- | Call emitStmt with a 'TypedLLVMStmt'
 emitLLVMStmt :: TypeRepr tp -> ProgramLoc ->
-                StmtPermFun (RNil :> tp) ps_out ps_in ->
-                TypedLLVMStmt (ArchWidth arch) tp ps_out ps_in ->
+                TypedLLVMStmt (ArchWidth arch) tp ps_in ps_out ->
                 StmtPermCheckM (LLVM arch) cblocks blocks ret args ps_out ps_in
                 (Name tp)
-emitLLVMStmt tp loc f_perms stmt =
-  emitStmt (singletonCruCtx tp)
-  loc f_perms (TypedLLVMStmt stmt) >>>= \(_ :>: n) -> greturn n
+emitLLVMStmt tp loc stmt =
+  emitStmt (singletonCruCtx tp) loc (TypedLLVMStmt stmt) >>>= \(_ :>: n) ->
+  greturn n
 
 
 -- | Typecheck a statement and emit it in the current statement sequence,
@@ -873,9 +934,7 @@ tcEmitStmt :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
               (CtxTrans ctx')
 tcEmitStmt ctx loc (SetReg tp e) =
   tcExpr ctx e >>>= \typed_e ->
-  let perm_f = maybe nullPermFun eqPermFun (exprToPermExpr typed_e) in
-  emitStmt (singletonCruCtx tp) loc
-  perm_f (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
+  emitStmt (singletonCruCtx tp) loc (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
   greturn $ addCtxName ctx x
 
 tcEmitStmt ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
@@ -901,10 +960,9 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerExpr w blk_reg off_reg) =
   case maybe_const of
     Just 0 ->
       withKnownNat w $
-      emitLLVMStmt knownRepr loc
-      (eqPermFun $ PExpr_LLVMWord $ PExpr_Var $ typedRegVar toff_reg)
-      (ConstructLLVMWord toff_reg) >>>= \x ->
-      greturn $ addCtxName ctx x
+      emitLLVMStmt knownRepr loc (ConstructLLVMWord toff_reg) >>>= \x ->
+      stmtRecombinePerms >>>
+      greturn (addCtxName ctx x)
     _ -> stmtFailM
 
 -- Type-check the LLVM pointer destructor that gets the block, which is only
@@ -912,9 +970,9 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerExpr w blk_reg off_reg) =
 tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerBlock w ptr_reg) =
   let tptr_reg = tcReg ctx ptr_reg in
   withKnownNat w $
-  stmtProvePerm tptr_reg llvmExEqWord >>>= \_ ->
-  emitLLVMStmt knownRepr loc
-  (eqPermFun $ PExpr_Nat 0) (AssertLLVMWord tptr_reg) >>>= \x ->
+  stmtProvePerm tptr_reg llvmExEqWord >>>= \subst ->
+  let e = substLookup subst Member_Base in
+  emitLLVMStmt knownRepr loc (AssertLLVMWord tptr_reg e) >>>= \x ->
   stmtRecombinePerms >>>
   greturn (addCtxName ctx x)
 
@@ -925,8 +983,7 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerOffset w ptr_reg) =
   withKnownNat w $
   stmtProvePerm tptr_reg llvmExEqWord >>>= \subst ->
   let e = substLookup subst Member_Base in
-  emitLLVMStmt knownRepr loc
-  (eqPermFun e) (DestructLLVMWord tptr_reg e) >>>= \x ->
+  emitLLVMStmt knownRepr loc (DestructLLVMWord tptr_reg e) >>>= \x ->
   stmtRecombinePerms >>>
   greturn (addCtxName ctx x)
 
@@ -939,15 +996,24 @@ tcEmitLLVMStmt ::
   StmtPermCheckM (LLVM arch) cblocks blocks ret args RNil RNil
   (CtxTrans (ctx ::> tp))
 
+tcEmitLLVMStmt = error "FIXME HERE NOW"
+
+{-
+FIXME HERE NOW:
+- need to create a new lifetime for load instructions; maybe need a nicer way to
+  represent lifetimes that does not require so many fresh variables?
+- update all the type-checking funs
+
 -- Type-check a load of an LLVM pointer
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg (LLVMPointerRepr w) _ _)
   | Just Refl <- testEquality w (archWidth arch)
   = let treg = tcReg ctx reg in
-    stmtProvePerm treg llvmExRead0Perm >>>= \_ ->
-    (emitLLVMStmt knownRepr loc
-     (llvmLoadPermFun treg) (TypedLLVMLoad treg)) >>>= \y ->
+    newLifetime >>>= \l ->
+    let needed_perms = error "FIXME HERE NOW: need existential lowned perm!" in
+    stmtProvePerm treg needed_perms >>>= \(PermSubst (_ :>: ps :>: y)) ->
+    emitLLVMStmt knownRepr loc (TypedLLVMLoad treg l ps y) >>>= \z ->
     stmtRecombinePerms >>>
-    greturn (addCtxName ctx y)
+    greturn (addCtxName ctx z)
 
 -- Type-check a load of a value that can be cast from an LLVM pointer, by
 -- loading an LLVM pointer and then performing the cast
@@ -959,14 +1025,14 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp storage _)
 tcEmitLLVMStmt _ _ _ (LLVM_Load _ _ _ _ _) =
   error "FIXME: tcEmitLLVMStmt cannot yet handle loads larger than the size of LLVM pointers"
 
+
 -- Type-check a store of an LLVM pointer
 tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr (LLVMPointerRepr w) _ _ val)
   | Just Refl <- testEquality w (archWidth arch)
   = let tptr = tcReg ctx ptr
         tval = tcReg ctx val in
     stmtProvePerm tptr llvmExWrite0Perm >>>= \_ ->
-    (emitLLVMStmt knownRepr loc (llvmStorePermFun tptr tval)
-     (TypedLLVMStore tptr tval)) >>>= \y ->
+    emitLLVMStmt knownRepr loc (TypedLLVMStore tptr tval) >>>= \y ->
     stmtRecombinePerms >>>
     greturn (addCtxName ctx y)
 
@@ -979,8 +1045,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
   resolveConstant sz_treg >>>= \maybe_sz ->
   case (maybe_fp, maybe_sz) of
     (Just fp, Just sz) ->
-      (emitLLVMStmt knownRepr loc (llvmAllocaPermFun fp sz)
-       (TypedLLVMAlloca fp sz)) >>>= \y ->
+      emitLLVMStmt knownRepr loc (TypedLLVMAlloca fp sz) >>>= \y ->
       stmtRecombinePerms >>>
       greturn (addCtxName ctx y)
     _ ->
@@ -988,10 +1053,10 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
 
 -- Type-check a push frame instruction
 tcEmitLLVMStmt arch ctx loc (LLVM_PushFrame _) =
-  emitLLVMStmt knownRepr loc llvmCreateFramePermFun TypedLLVMCreateFrame >>>= \fp ->
+  emitLLVMStmt knownRepr loc TypedLLVMCreateFrame >>>= \fp ->
   setFramePtr (TypedReg fp) >>>
-  emitStmt knownRepr loc (eqPermFun PExpr_Unit)
-  (TypedSetReg knownRepr $ TypedExpr EmptyApp) >>>= \(_ :>: y) ->
+  emitStmt knownRepr loc (TypedSetReg knownRepr $
+                          TypedExpr EmptyApp) >>>= \(_ :>: y) ->
   greturn (addCtxName ctx y)
 
 -- Type-check a pop frame instruction
@@ -999,10 +1064,9 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
   getFramePtr >>>= \maybe_fp ->
   maybe (greturn ValPerm_True) getRegPerm maybe_fp >>>= \fp_perm ->
   case (maybe_fp, fp_perm) of
-    (Just fp, ValPerm_LLVMFrame fperms)
+    (Just fp, ValPerm_Conj [Perm_LLVMFrame fperms])
       | Just (Some del_perms) <- llvmFrameDeletionPerms fperms ->
-        emitLLVMStmt knownRepr loc (llvmDeleteFramePermFun fp)
-        (TypedLLVMDeleteFrame fp) >>>= \y ->
+        emitLLVMStmt knownRepr loc (TypedLLVMDeleteFrame fp) >>>= \y ->
         gmodify (\st -> st { stExtState = PermCheckExtState_LLVM Nothing }) >>>
         greturn (addCtxName ctx y)
     _ -> stmtFailM
@@ -1222,4 +1286,5 @@ tcCFG cfg [clP| FunPerm _ perms_in perms_out :: FunPerm ghosts args ret |] =
 -- + translate -> SAW
 -- + handle function calls and a function call context
 -- + top-level interface / add to interpreter
+-}
 -}

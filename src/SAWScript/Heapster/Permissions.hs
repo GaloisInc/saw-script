@@ -489,7 +489,7 @@ data AtomicPerm (a :: CrucibleType) where
   -- | Ownership permission for a lifetime, including an assertion that it is
   -- still current and permission to end that lifetime and get back the given
   -- permissions
-  Perm_LOwned :: [SomeExprAndPerm] -> AtomicPerm LifetimeType
+  Perm_LOwned :: LOwnedPerm -> AtomicPerm LifetimeType
 
   -- | Assertion that a lifetime is current during another lifetime, i.e., that
   -- it contains that other lifetime
@@ -548,6 +548,10 @@ data SomeExprAndPerm where
 
 -- | A binding of 0 or more variables, each with permissions
 type MbValuePerms ctx = Mb ctx (ValuePerms ctx)
+
+-- | A set of permissions held by a lifetime, that will be recovered when that
+-- lifetime is ended
+type LOwnedPerm = [SomeExprAndPerm]
 
 -- | A frame permission is a list of the pointers that have been allocated in
 -- the frame and their corresponding allocation sizes in words of size
@@ -753,12 +757,12 @@ exPermBody tp (ValPerm_Exists (p :: Binding tp' (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
 
-{-
 -- | Existential permission @x:eq(word(e))@ for some @e@
 llvmExEqWord :: (1 <= w, KnownNat w) =>
                 Binding (BVType w) (ValuePerm (LLVMPointerType w))
 llvmExEqWord = nu $ \e -> ValPerm_Eq (PExpr_LLVMWord $ PExpr_Var e)
 
+{-
 -- | Create a field pointer permission with offset 0 and @eq(e)@ permissions
 -- with the given read-write modality
 llvmFieldContents0Eq :: (1 <= w, KnownNat w) =>

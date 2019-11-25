@@ -49,6 +49,9 @@ class NuMatchingAny1 (f :: k -> Type) where
 instance {-# INCOHERENT #-} NuMatchingAny1 f => NuMatching (f a) where
   nuMatchingProof = nuMatchingAny1Proof
 
+-- FIXME: move to Hobbits
+instance NuMatchingAny1 ((:~:) a) where
+  nuMatchingAny1Proof = nuMatchingProof
 
 -- | A reification of an object of type @a@ at type level
 data ReifiesObj a = forall s. Reifies s a => ReifiesObj (Proxy s)
