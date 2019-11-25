@@ -200,7 +200,7 @@ data PermExpr (a :: CrucibleType) where
   PExpr_PermListNil :: PermExpr PermListType
   -- ^ An empty list of expressions plus permissions
 
-  PExpr_PermListCons :: KnownRepr TypeRepr a =>PermExpr a -> ValuePerm a ->
+  PExpr_PermListCons :: KnownRepr TypeRepr a => PermExpr a -> ValuePerm a ->
                         PermExpr PermListType -> PermExpr PermListType
   -- ^ A cons of an expression and permission for that expression onto a
   -- permission list
@@ -929,6 +929,15 @@ llvmFrameDeletionPerms ((asLLVMOffset -> Just (x,off), sz):fperm')
     [offsetLLVMAtomicPerm off $ llvmArrayPtrPermOfSize sz]
 llvmFrameDeletionPerms _ =
   error "llvmFrameDeletionPerms: unexpected LLVM word allocated in frame"
+
+-- | Extract the non-variable portion of a permission list expression
+permListToDistPerms :: PermExpr PermListType -> Some DistPerms
+permListToDistPerms PExpr_PermListNil = Some DistPermsNil
+permListToDistPerms (PExpr_Var _) = Some DistPermsNil
+permListToDistPerms (PExpr_PermListCons (PExpr_Var x) p l) =
+  case permListToDistPerms l of
+    Some perms -> Some $ DistPermsCons perms x p
+permListToDistPerms (PExpr_PermListCons _ _ l) = permListToDistPerms l
 
 valuePermsToDistPerms :: MapRList Name ps -> ValuePerms ps -> DistPerms ps
 valuePermsToDistPerms MNil _ = DistPermsNil

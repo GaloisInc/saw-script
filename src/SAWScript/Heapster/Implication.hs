@@ -1245,13 +1245,13 @@ introLLVMFieldContentsM x y =
     _ -> error "introLLVMFieldContentsM: input perms not in expected form"
 
 
-{-
-
 -- | Call 'implPushM' for multiple @x:p@ permissions
 implPushMultiM :: DistPerms ps -> ImplM vars r ps RNil ()
 implPushMultiM DistPermsNil = greturn ()
 implPushMultiM (DistPermsCons ps x p) =
   implPushMultiM ps >>> implPushM x p
+
+{-
 
 -- | Pop a permission from the top of the stack back to the primary permission
 -- for a variable, assuming that the primary permission for that variable is
