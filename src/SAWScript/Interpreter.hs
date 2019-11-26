@@ -1806,7 +1806,10 @@ primitives = Map.fromList
   , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
     (bicVal crucible_alloc_global)
     Current
-    []
+    [ "Declare that memory for the named global should be allocated in a"
+    , "Crucible specification. This is done implicitly for immutable globals."
+    , "A pointer to the allocated memory may be obtained using `crucible_global`."
+    ]
 
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)
