@@ -524,7 +524,8 @@ data AtomicPerm (a :: CrucibleType) where
               AtomicPerm (FunctionHandleType args ret)
 
   -- | An LLVM permission that asserts a proposition about bitvectors
-  Perm_BVProp :: BVProp w -> AtomicPerm (LLVMPointerType w)
+  Perm_BVProp :: (1 <= w, KnownNat w) => BVProp w ->
+                 AtomicPerm (LLVMPointerType w)
 
 
 -- | A value permission is a permission to do something with a value, such as
