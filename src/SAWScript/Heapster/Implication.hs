@@ -346,37 +346,81 @@ data SimplImpl ps_in ps_out where
   -- ^ FIXME HERE: describe this rule
 
 
+-- | A single step of permission implication. These can have multiple,
+-- disjunctive conclusions, each of which can bind some number of variables, and
+-- can also move permissions between the primary permissions for each variable
+-- and the permission stack. The general form is:
+--
+-- > x1::Px1 * ... * xl::Pl * P1 * ... * Pn
+-- >   -o (zs1 . x1::Px1_1 * ... * xl::Pxl_1 * P1_1 * ... * P1_k1) \/
+-- >      ... \/ (zsm . x1::Px1_m * ... * xl::Pxl_m * Pm_1 * ... * Pm_km)
+--
+-- where @zsi@ is a list of permission variables bound in the permissions @Pi_j@
+-- and @xi::Pxi@ denotes the primary permission for variable @xi@. In the
+-- comments below, we often omit the primary variable permissions when they do
+-- not change. The types of @P1@ through @Pn@ are given by the first type
+-- argument @ps_in@ of this type, while those of the @zsi@ and the @Pi_j@
+-- permissions are given by the @ps_outs@ argument. The latter is an 'RList' of
+-- the form
+--
+-- > RNil :> (bs1, ps1) :> ... :> (bsm, psm)
+--
+-- where each @bsi@ is itself an 'RList' of the types of the bound variables in
+-- @zsi@ and @psi@ is an 'RList' of the types of @Pi_1@ through @Pi_km@.
 data PermImpl1 ps_in ps_outs where
   Impl1_Fail :: PermImpl1 ps RNil
+  -- ^ Failure of a permission implication, which is a proof of 0 disjuncts:
+  --
+  -- > ps -o .
 
   Impl1_Catch :: PermImpl1 ps (RNil :> '(RNil, ps) :> '(RNil, ps))
+  -- ^ Catch any failure in the first branch by calling the second, passing the
+  -- same input permissions to both branches:
+  --
+  -- > ps -o ps \/ ps
 
   Impl1_Push :: ExprVar a -> ValuePerm a ->
                 PermImpl1 ps (RNil :> '(RNil, ps :> a))
+  -- ^ Push the primary permission for variable @x@ onto the stack:
+  --
+  -- > x::P * ps -o x::true * ps * x:P
 
   Impl1_Pop :: ExprVar a -> ValuePerm a ->
                PermImpl1 (ps :> a) (RNil :> '(RNil, ps))
+  -- ^ Pop the a permission for variable @x@ back to the primary permission for
+  -- @x@, assuming the latter is the trivial permission @true@:
+  --
+  -- > x::true * ps * x:P -o x::P * ps
 
   Impl1_ElimOr :: ExprVar a -> ValuePerm a -> ValuePerm a ->
                   PermImpl1 (ps :> a)
                   (RNil :> '(RNil, ps :> a) :> '(RNil, ps :> a))
+  -- ^ Eliminate a disjunction on the top of the stack:
+  --
+  -- > ps * x:(p1 \/ p2) -o (ps * x:p1) \/ (ps * x:p2)
 
   Impl1_ElimExists :: KnownRepr TypeRepr tp => ExprVar a ->
                       Binding tp (ValuePerm a) ->
                       PermImpl1 (ps :> a) (RNil :> '(RNil :> tp, ps :> a))
+  -- ^ Eliminate an existential on the top of the stack:
+  --
+  -- > ps * x:(exists z.p) -o z. ps * x:p
 
   Impl1_Simpl :: SimplImpl ps_in ps_out -> Proxy ps ->
                  PermImpl1 (ps :++: ps_in) (RNil :> '(RNil, ps :++: ps_out))
+  -- ^ Apply a 'SimplImpl'
 
   Impl1_ElimLLVMFieldContents ::
     ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
     PermImpl1 (ps :> LLVMPointerType w)
     (RNil :> '(RNil :> LLVMPointerType w,
                ps :> LLVMPointerType w :> LLVMPointerType w))
+  -- ^ FIXME HERE: document this rule
 
   Impl1_TryProveBVProp ::
     ExprVar (LLVMPointerType w) -> BVProp w ->
     PermImpl1 ps (RNil :> '(RNil, ps :> LLVMPointerType w))
+  -- ^ FIXME HERE: document this rule
 
 
 data PermImpl r ps where

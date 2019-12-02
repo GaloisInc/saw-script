@@ -676,7 +676,7 @@ itranslatePermImpl1 [nuP| Impl1_ElimOr x p1 p2 |]
            itranslate $ mbCombine mb_impl2)
        , return ptrans]
 
--- An oexists elimination performs a pattern-match on a Sigma
+-- An existential elimination performs a pattern-match on a Sigma
 itranslatePermImpl1 [nuP| Impl1_ElimExists x (p :: Binding tp (ValuePerm a)) |]
   [nuP| MbPermImpls_Cons _ mb_impl |] =
   do assertTopPermM "Impl1_ElimExists" x (fmap ValPerm_Exists p)
@@ -696,6 +696,11 @@ itranslatePermImpl1 [nuP| Impl1_ElimExists x (p :: Binding tp (ValuePerm a)) |]
            withPermStackM id ((:>: mkPermTrans (mbCombine p) z2) . mapRListTail) $
            itranslate $ mbCombine mb_impl)
        , return ptrans ]
+
+-- A SimplImpl is translated using itranslateSimplImpl
+itranslatePermImpl1 [nuP| Impl1_Simpl simpl prx |]
+  [nuP| MbPermImpls_Cons _ mb_impl |] =
+  itranslateSimplImpl (mbLift prx) simpl $ itranslate $ mbCombine mb_impl
 
 itranslatePermImpl1 _ _ = error "FIXME HERE NOW: finish itranslatePermImpl1!"
 
