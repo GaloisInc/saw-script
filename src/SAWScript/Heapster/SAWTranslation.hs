@@ -60,8 +60,8 @@ import SAWScript.Heapster.TypedCrucible
 
 
 -- | FIXME HERE: move to Hobbits!
-mapRListHead :: MapRList f (ctx :> a) -> MapRList f ctx
-mapRListHead (xs :>: _) = xs
+mapRListTail :: MapRList f (ctx :> a) -> MapRList f ctx
+mapRListTail (xs :>: _) = xs
 
 
 ----------------------------------------------------------------------
@@ -131,9 +131,13 @@ inExtTypeTransM :: ExprTrans tp -> TypeTransM (ctx :> tp) a ->
                    TypeTransM ctx a
 inExtTypeTransM tp_trans = withReader (:>: tp_trans)
 
--- | Apply terms inside translation monads
+-- | Apply the result of a translation to that of another
 applyTransM :: Monad m => m OpenTerm -> m OpenTerm -> m OpenTerm
 applyTransM m1 m2 = applyOpenTerm <$> m1 <*> m2
+
+-- | Apply the result of a translation to the results of multiple translations
+applyMultiTransM :: Monad m => m OpenTerm -> [m OpenTerm] -> m OpenTerm
+applyMultiTransM m ms = foldl applyTransM m ms
 
 -- | Build a lambda in a translation monad
 lambdaTransM :: String -> OpenTerm -> (OpenTerm -> Reader r OpenTerm) ->
@@ -604,8 +608,8 @@ itranslateSimplImpl _ [nuP| SImpl_IntroExists x (e :: PermExpr tp) p |] m =
        (mbMap2 subst (fmap singletonSubst e) p)
      let tp :: TypeRepr tp = knownRepr
      tp_trans <- itranslate $ nuMulti (mbToProxy e) $ const tp
-     tp_f <- tpTransM $ lambdaTransM "x_introEx" tp_trans $ \x ->
-         inExtTypeTransM (mkExprTrans tp x) (translatePerm $ mbCombine p)
+     tp_f <- tpTransM $ lambdaTransM "x_introEx" tp_trans $ \z ->
+         inExtTypeTransM (mkExprTrans tp z) (translatePerm $ mbCombine p)
      e_trans <- exprTransToTerm <$> tpTransM (tptranslate e)
      withPermStackM id
        (\(ps :>: p_top) ->
@@ -615,33 +619,6 @@ itranslateSimplImpl _ [nuP| SImpl_IntroExists x (e :: PermExpr tp) p |] m =
        m
 
 itranslateSimplImpl _ _ _ = error "FIXME HERE NOW: finish itranslateSimplImpl!"
-
-
-{-
--- | Helper type family to write 'itranslatePermImpl1'
-type family Perm1ImplTrans ext blocks ret args bs_pss ctx a r where
-  Perm1ImplTrans ext blocks ret args (bs_pss :> '(bs, ps)) ctx a r =
-    Perm1ImplTrans ext blocks ret args bs_pss ctx a
-    (ImpTransM ext blocks ret args ps (ctx :++: bs) a -> r)
-  Perm1ImplTrans ext blocks ret args RNil ctx a r = r
-
--- | Apply a 'Perm1ImplTrans'
-applyPerm1ImplTrans :: ImplTranslateF r ext blocks ret args =>
-                       Proxy '(ext,blocks,ret,args,a) ->
-                       Perm1ImplTrans ext blocks ret args bs_pss ctx a b ->
-                       Mb ctx (MbPermImpls r bs_pss) ->
-                       b
-applyPerm1ImplTrans _ b [nuP| MbPermImpls_Nil |] = b
-applyPerm1ImplTrans prx f [nuP| MbPermImpls_Cons mb_impls mb_impl |] =
-  applyPerm1ImplTrans prx f mb_impls (itranslate $ mbCombine mb_impl)
-
-
--- | Translate a 'PermImpl1' to a function on translation computations
-itranslatePermImpl1 :: Proxy '(ext,blocks,ret,args,a) ->
-                       Mb ctx (PermImpl1 ps_in ps_outs) ->
-                       Perm1ImplTrans ext blocks ret args ps_outs ctx
-itranslatePermImpl1 = error "FIXME HERE NOW"
--}
 
 
 -- | Translate a 'PermImpl1' to a function on translation computations
@@ -676,9 +653,49 @@ itranslatePermImpl1 [nuP| Impl1_Pop x p |] [nuP| MbPermImpls_Cons _ mb_impl |] =
   assertVarPermM "Impl1_Pop" x (nuMulti (mbToProxy p) $ const ValPerm_True) >>
   getTopPermM >>= \ptrans ->
   setVarPermM x ptrans
-  (withPermStackM mapRListHead mapRListHead $
+  (withPermStackM mapRListTail mapRListTail $
    itranslate (mbCombine mb_impl))
 
+-- An or elimination performs a pattern-match on an Either
+itranslatePermImpl1 [nuP| Impl1_ElimOr x p1 p2 |]
+  [nuP| MbPermImpls_Cons (MbPermImpls_Cons _ mb_impl1) mb_impl2 |] =
+  do assertTopPermM "Impl1_ElimOr" x (mbMap2 ValPerm_Or p1 p2)
+     tp1 <- itranslate p1
+     tp2 <- itranslate p2
+     tp_ret <- compReturnTypeM
+     ptrans <- permTransToTerm <$> getTopPermM
+     applyMultiTransM (return $ globalOpenTerm "Prelude.either")
+       [ return tp1, return tp2, return tp_ret
+       , lambdaTransM "x_left" tp1
+         (\z ->
+           withPermStackM id ((:>: mkPermTrans p1 z) . mapRListTail) $
+           itranslate $ mbCombine mb_impl1)
+       , lambdaTransM "x_right" tp2
+         (\z ->
+           withPermStackM id ((:>: mkPermTrans p2 z) . mapRListTail) $
+           itranslate $ mbCombine mb_impl2)
+       , return ptrans]
+
+-- An oexists elimination performs a pattern-match on a Sigma
+itranslatePermImpl1 [nuP| Impl1_ElimExists x (p :: Binding tp (ValuePerm a)) |]
+  [nuP| MbPermImpls_Cons _ mb_impl |] =
+  do assertTopPermM "Impl1_ElimExists" x (fmap ValPerm_Exists p)
+     let tp :: TypeRepr tp = knownRepr
+     tp_trans <- itranslate $ nuMulti (mbToProxy x) $ const tp
+     tp_f <- tpTransM $ lambdaTransM "x_elimEx" tp_trans $ \z ->
+       inExtTypeTransM (mkExprTrans tp z) (translatePerm $ mbCombine p)
+     ret_f <- lambdaTransM "x_elimEx" tp_trans $ const compReturnTypeM
+     ptrans <- permTransToTerm <$> getTopPermM
+     applyMultiTransM (return $ globalOpenTerm "Prelude.Sigma__rec")
+       [ return tp_trans, return tp_f, return ret_f
+       , lambdaTransM "x1_elimEx" tp_trans
+         (\z1 ->
+           lambdaTransM "x2_elimEx" (applyOpenTerm tp_f z1) $ \z2 ->
+           inExtImpTransM (mkExprTrans tp z1)
+           (PTrans_Conj (mbToProxy $ mbCombine p) []) $
+           withPermStackM id ((:>: mkPermTrans (mbCombine p) z2) . mapRListTail) $
+           itranslate $ mbCombine mb_impl)
+       , return ptrans ]
 
 itranslatePermImpl1 _ _ = error "FIXME HERE NOW: finish itranslatePermImpl1!"
 
