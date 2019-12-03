@@ -162,6 +162,13 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
   TypedSetReg :: TypeRepr tp -> TypedExpr ext tp ->
                  TypedStmt ext (RNil :> tp) RNil RNil
 
+  -- | Function call
+  TypedCall :: TypedFnHandle ghosts args ret -> PermExpr LifetimeType ->
+               DistPerms (ghosts :> LifetimeType :++: args) ->
+               DistPerms (ghosts :> LifetimeType :++: args :> ret) ->
+               TypedStmt ext (RNil :> ret) (ghosts :> LifetimeType :++: args)
+               (ghosts :> LifetimeType :++: args :> ret)
+
   -- | Begin a new lifetime
   --
   -- Type: @. -o ret:lowned(nil)@
