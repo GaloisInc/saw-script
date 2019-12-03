@@ -809,8 +809,9 @@ w4Eval sym sc ps unints t =
      ty <- eval =<< scTypeOf sc t
 
      -- get the names of the arguments to the function
-     let argNames = map fst (fst (R.asLambdaList t))
-     let moreNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
+     let lamNames = map fst (fst (R.asLambdaList t))
+     let varNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
+     let argNames = zipWith (++) varNames (map ("_" ++) lamNames ++ repeat "")
 
      -- and their types
      argTs <- asPredType ty
@@ -819,7 +820,7 @@ w4Eval sym sc ps unints t =
      vars' <-
        give sym $
        flip evalStateT 0 $
-       sequence (zipWith (newVarsForType ref) argTs (argNames ++ moreNames))
+       sequence (zipWith (newVarsForType ref) argTs argNames)
 
      -- symbolically evaluate
      bval <- eval t
