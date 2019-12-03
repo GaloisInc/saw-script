@@ -489,7 +489,7 @@ assertPermStackM nm f =
   if f (itiPermStackVars info) (itiPermStack info) then return () else
     error ("translate: " ++ nm)
 
--- | Assert that the current permission stack equals the given 'DistPerm's
+-- | Assert that the current permission stack equals the given 'DistPerms'
 assertPermStackEqM :: String -> Mb ctx (DistPerms ps) ->
                       ImpTransM ext blocks ret args ps ctx ()
 assertPermStackEqM nm perms =
@@ -780,23 +780,24 @@ permCtxToTerms prxs (ptranss :>: ptrans) =
 
 -- | Apply the translation of a function-like construct (i.e., a
 -- 'TypedJumpTarget' or 'TypedFnHandle') to the pure plus impure translations of
--- its arguments
-translateApply :: OpenTerm -> Mb ctx (CruCtx tps) -> ExprTransCtx tps ->
-                  PermTransCtx ctx tps ->
+-- its arguments, given as 'DistPerms', which should match the current stack
+translateApply :: String -> OpenTerm -> Mb ctx (CruCtx ps) ->
+                  Mb ctx (DistPerms ps) ->
                   ImpTransM ext blocks ret args ps ctx OpenTerm
-translateApply f ctx p_args i_args =
-  applyOpenTermMulti f <$>
-  ((++) <$> exprCtxToTerms ctx p_args <*> permCtxToTerms (mbToProxy ctx) i_args)
+translateApply nm f ctx perms =
+  do assertPermStackEqM nm perms
+     expr_ctx <- itiExprCtx <$> ask
+     arg_membs <- itiPermStackVars <$> ask
+     let e_args = mapMapRList (flip mapRListLookup expr_ctx) arg_membs
+     i_args <- itiPermStack <$> ask
+     applyOpenTermMulti f <$>
+       ((++) <$> exprCtxToTerms ctx e_args
+        <*> permCtxToTerms (mbToProxy ctx) i_args)
 
 instance ImplTranslate (TypedJumpTarget blocks ps) OpenTerm
          ext blocks ret args ps ctx where
   itranslate [nuP| TypedJumpTarget entryID args_ctx perms |] =
-    do assertPermStackEqM "TypedJumpTarget" perms
-       f <- itranslate entryID
-       expr_ctx <- itiExprCtx <$> ask
-       arg_membs <- itiPermStackVars <$> ask
-       let e_args = mapMapRList (flip mapRListLookup expr_ctx) arg_membs
-       i_args <- itiPermStack <$> ask
+    do f <- itranslate entryID
        let ghost_ctx = fmap entryGhosts entryID
            ctx = mbMap2 appendCruCtx ghost_ctx args_ctx
-       translateApply f ctx e_args i_args
+       translateApply "TypedJumpTarget" f ctx perms
