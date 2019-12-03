@@ -20,6 +20,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module SAWScript.Heapster.SAWTranslation where
 
@@ -109,12 +110,6 @@ exprTransToTerm ETrans_LLVMFrame = unitOpenTerm
 exprTransToTerm ETrans_Lifetime = unitOpenTerm
 exprTransToTerm ETrans_PermList = unitOpenTerm
 exprTransToTerm (ETrans_Term t) = t
-
--- | Map a context of pure translations to a list of 'OpenTerm's, dropping the
--- "invisible" ones that are always translated to unit
-exprCtxToTerms :: ExprTransCtx ctx -> [OpenTerm]
-exprCtxToTerms =
-  mapRListToList . mapMapRList (Constant.Constant . exprTransToTerm)
 
 -- | Translate a variable to a 'Member' proof, raising an error if the variable
 -- is unbound
@@ -249,10 +244,6 @@ instance TypeTranslate (TypeRepr a) (Maybe OpenTerm) where
 instance TypeTranslate (ExprVar a) (ExprTrans a) where
   tptranslate mb_x = mapRListLookup (translateVar mb_x) <$> ask
 
--- | Translate a permission to a SAW type, converting 'Nothing' to unit
-translatePerm :: Mb ctx (ValuePerm a) -> TypeTransM ctx OpenTerm
-translatePerm mb_p = maybe unitTypeOpenTerm id <$> tptranslate mb_p
-
 instance TypeTranslate (PermExpr a) (ExprTrans a) where
   tptranslate = error "FIXME HERE NOW"
 
@@ -269,6 +260,10 @@ instance TypeTranslate (ValuePerm a) (Maybe OpenTerm) where
 
 instance TypeTranslate (ValuePerms a) [OpenTerm] where
   tptranslate = error "FIXME HERE NOW"
+
+-- | Translate a permission to a SAW type, converting 'Nothing' to unit
+translatePerm :: Mb ctx (ValuePerm a) -> TypeTransM ctx OpenTerm
+translatePerm mb_p = maybe unitTypeOpenTerm id <$> tptranslate mb_p
 
 
 ----------------------------------------------------------------------
@@ -290,10 +285,8 @@ data PermTrans ctx (a :: CrucibleType) where
   -- | An @eq(e)@ permission has no computational content
   PTrans_Eq :: Mb ctx (PermExpr a) -> PermTrans ctx a
 
-  -- | A conjuction of atomic permission translations; note that the 'MapRList'
-  -- argument is so we know our @ctx@ argument is well-formeds
-  PTrans_Conj :: MapRList Proxy ctx -> [AtomicPermTrans ctx a] ->
-                 PermTrans ctx a
+  -- | A conjuction of atomic permission translations
+  PTrans_Conj :: [AtomicPermTrans ctx a] -> PermTrans ctx a
 
   -- | The default translation is a SAW term. Note that this can include LLVM
   -- pointer permissions that have not yet been broken into multiple SAW terms.
@@ -332,6 +325,10 @@ data AtomicPermTrans ctx a where
   APTrans_Term :: Mb ctx (AtomicPerm a) -> OpenTerm -> AtomicPermTrans ctx a
 
 
+-- | The translation of the vacuously true permission
+pattern PTrans_True :: PermTrans ctx a
+pattern PTrans_True = PTrans_Conj []
+
 -- | A context mapping bound names to their perm translations
 type PermTransCtx ctx ps = MapRList (PermTrans ctx) ps
 
@@ -343,7 +340,7 @@ mkPermTrans mb_p t = PTrans_Term mb_p t
 -- | Map a perm translation result to an 'OpenTerm'
 permTransToTerm :: PermTrans ctx a -> OpenTerm
 permTransToTerm (PTrans_Eq _) = unitOpenTerm
-permTransToTerm (PTrans_Conj _ aps) =
+permTransToTerm (PTrans_Conj aps) =
   tupleOpenTerm $ map atomicPermTransToTerm aps
 permTransToTerm (PTrans_Term _ t) = t
 
@@ -351,22 +348,22 @@ permTransToTerm (PTrans_Term _ t) = t
 atomicPermTransToTerm :: AtomicPermTrans ctx a -> OpenTerm
 atomicPermTransToTerm _ = error "FIXME HERE NOW"
 
--- | Map a context of perm translations to a list of 'OpenTerm's, dropping the
--- "invisible" ones that are always translated to unit
-permCtxToTerms :: PermTransCtx ctx ps -> [OpenTerm]
-permCtxToTerms =
-  mapRListToList . mapMapRList (Constant.Constant . permTransToTerm)
-
 -- | Extract out the permission of a permission translation result
-permTransPerm :: PermTrans ctx a -> Mb ctx (ValuePerm a)
-permTransPerm (PTrans_Eq e) = fmap ValPerm_Eq e
-permTransPerm (PTrans_Conj prxs ts) =
+permTransPerm :: MapRList Proxy ctx -> PermTrans ctx a -> Mb ctx (ValuePerm a)
+permTransPerm _ (PTrans_Eq e) = fmap ValPerm_Eq e
+permTransPerm prxs (PTrans_Conj ts) =
   fmap ValPerm_Conj $ foldr (mbMap2 (:)) (nuMulti prxs $ const []) $
-  map atomicPermTransPerm ts
-permTransPerm (PTrans_Term p _) = p
+  map (atomicPermTransPerm prxs) ts
+permTransPerm _ (PTrans_Term p _) = p
 
-atomicPermTransPerm :: AtomicPermTrans ctx a -> Mb ctx (AtomicPerm a)
+atomicPermTransPerm :: MapRList Proxy ctx -> AtomicPermTrans ctx a ->
+                       Mb ctx (AtomicPerm a)
 atomicPermTransPerm = error "FIXME HERE NOW"
+
+-- | Test that a permission equals that of a permission translation
+permTransPermEq :: PermTrans ctx a -> Mb ctx (ValuePerm a) -> Bool
+permTransPermEq ptrans mb_p =
+  permTransPerm (mbToProxy mb_p) ptrans == mb_p
 
 extMb :: Mb ctx a -> Mb (ctx :> tp) a
 extMb = mbCombine . fmap (nu . const)
@@ -374,8 +371,7 @@ extMb = mbCombine . fmap (nu . const)
 -- | Extend the context of a permission translation result
 extPermTrans :: PermTrans ctx a -> PermTrans (ctx :> tp) a
 extPermTrans (PTrans_Eq e) = PTrans_Eq $ extMb e
-extPermTrans (PTrans_Conj prxs aps) =
-  PTrans_Conj (prxs :>: Proxy) (map extAtomicPermTrans aps)
+extPermTrans (PTrans_Conj aps) = PTrans_Conj (map extAtomicPermTrans aps)
 extPermTrans (PTrans_Term p t) = PTrans_Term (extMb p) t
 
 -- | Extend the context of an atomic permission translation result
@@ -498,7 +494,7 @@ assertTopPermM :: String -> Mb ctx (ExprVar a) -> Mb ctx (ValuePerm a) ->
                   ImpTransM ext blocks ret args (ps :> a) ctx ()
 assertTopPermM nm x p =
   assertPermStackM nm (\(_ :>: x_top) (_ :>: p_top) ->
-                        x_top == translateVar x && permTransPerm p_top == p)
+                        x_top == translateVar x && permTransPermEq p_top p)
 
 -- | Get the (translation of the) perms for a variable
 getVarPermM :: Mb ctx (ExprVar tp) ->
@@ -510,7 +506,7 @@ assertVarPermM :: String -> Mb ctx (ExprVar tp) -> Mb ctx (ValuePerm tp) ->
                   ImpTransM ext blocks ret args ps ctx ()
 assertVarPermM nm x p =
   getVarPermM x >>= \x_p ->
-  if permTransPerm x_p == p then return () else error ("translation: " ++ nm)
+  if permTransPermEq x_p p then return () else error ("translation: " ++ nm)
 
 -- | Set the (translation of the) perms for a variable in a computation
 setVarPermM :: Mb ctx (ExprVar tp) -> PermTrans ctx tp ->
@@ -530,17 +526,6 @@ compReturnTypeM =
 withCatchHandlerM :: OpenTerm -> ImpTransM ext blocks ret args ps_out ctx a ->
                      ImpTransM ext blocks ret args ps_out ctx a
 withCatchHandlerM h = local (\info -> info { itiCatchHandler = h })
-
--- | Apply the translation of a function-like construct (i.e., a
--- 'TypedJumpTarget' or 'TypedFnHandle') to the pure plus impure translations of
--- its arguments
---
--- FIXME HERE NOW: should take in a CruCtx for the types, and possibly a
--- DistPerms for the arguments
-translateApply :: OpenTerm -> ExprTransCtx tps -> PermTransCtx ctx tps ->
-                  OpenTerm
-translateApply f p_args i_args =
-  applyOpenTermMulti f (exprCtxToTerms p_args ++ permCtxToTerms i_args)
 
 
 -- | The typeclass for translating permission implications
@@ -643,7 +628,7 @@ itranslatePermImpl1 [nuP| Impl1_Catch |]
 itranslatePermImpl1 [nuP| Impl1_Push x p |] [nuP| MbPermImpls_Cons _ mb_impl |] =
   assertVarPermM "Impl1_Push" x p >>
   getVarPermM x >>= \ptrans ->
-  setVarPermM x (PTrans_Conj (mbToProxy p) [])
+  setVarPermM x (PTrans_Conj [])
   (withPermStackM (:>: translateVar x) (:>: ptrans) $
    itranslate (mbCombine mb_impl))
 
@@ -692,7 +677,7 @@ itranslatePermImpl1 [nuP| Impl1_ElimExists x (p :: Binding tp (ValuePerm a)) |]
          (\z1 ->
            lambdaTransM "x2_elimEx" (applyOpenTerm tp_f z1) $ \z2 ->
            inExtImpTransM (mkExprTrans tp z1)
-           (PTrans_Conj (mbToProxy $ mbCombine p) []) $
+           (PTrans_Conj []) $
            withPermStackM id ((:>: mkPermTrans (mbCombine p) z2) . mapRListTail) $
            itranslate $ mbCombine mb_impl)
        , return ptrans ]
@@ -712,141 +697,92 @@ instance ImplTranslateF r ext blocks ret args =>
     itranslatePermImpl1 impl1 mb_impls
 
 
-{-
-
--- | FIXME: figure out a better name and move to Hobbits
-mbMap2 :: (a -> b -> c) -> Mb ctx a -> Mb ctx b -> Mb ctx c
-mbMap2 f mb1 mb2 = fmap f mb1 `mbApply` mb2
-
--- | Apply left or-introduction to a permission translation by applying the
--- @Left@ constructor in SAW
-introOrLTrans :: Mb ctx (ValuePerm a) -> PermTrans ctx a ->
-                 ImpTransM ext blocks ret args ps ctx (PermTrans ctx a)
-introOrLTrans p1 pt =
-  do tp1 <- tpTransM $ tptranslate p1
-     tp2 <- tpTransM $ tptranslate (permTransPerm pt)
-     return $
-       PTrans_Term (mbMap2 ValPerm_Or p1 $ permTransPerm pt)
-       (ctorOpenTerm "Prelude.Left" [tp1, tp2, permTransToTerm pt])
-
--- | Apply right or-introduction to a permission translation by applying the
--- @Right@ constructor in SAW
-introOrRTrans :: Mb ctx (ValuePerm a) -> PermTrans ctx a ->
-                 ImpTransM ext blocks ret args ps ctx (PermTrans ctx a)
-introOrRTrans p2 pt =
-  do tp1 <- tpTransM $ tptranslate (permTransPerm pt)
-     tp2 <- tpTransM $ tptranslate p2
-     return $
-       PTrans_Term (mbMap2 ValPerm_Or (permTransPerm pt) p2)
-       (ctorOpenTerm "Prelude.Right" [tp1, tp2, permTransToTerm pt])
-
--- | Translate an or-elimination to the @either@ elimination rule
-elimOrTrans :: PermTrans ctx a ->
-               (PermTrans ctx a ->
-                ImpTransM ext blocks ret args ps ctx OpenTerm) ->
-               (PermTrans ctx a ->
-                ImpTransM ext blocks ret args ps ctx OpenTerm) ->
-               ImpTransM ext blocks ret args ps ctx OpenTerm
-elimOrTrans (PTrans_Term mb_p t) f1 f2 =
-  do let mb_p1 = fmap orPermLeft mb_p
-         mb_p2 = fmap orPermRight mb_p
-     tp1 <- tpTransM $ tptranslate mb_p1
-     tp2 <- tpTransM $ tptranslate mb_p2
-     ret_tp <- itiReturnType <$> ask
-     f1trans <- lambdaTransM "x_left" tp1 (f1 . mkPermTrans mb_p1)
-     f2trans <- lambdaTransM "x_right" tp2 (f2 . mkPermTrans mb_p2)
-     return (applyOpenTermMulti (globalOpenTerm "Prelude.either")
-             [tp1, tp2, ret_tp, f1trans, f2trans])
-elimOrTrans _ _ _ = error "elimOrTrans"
-
--- | Translate an exists-introduction to a @Sigma@ introduction
-introExistsTrans :: KnownRepr TypeRepr tp => Mb ctx (PermExpr tp) ->
-                    Mb ctx (Binding tp (ValuePerm a)) ->
-                    PermTrans ctx a ->
-                    ImpTransM ext blocks ret args ps ctx (PermTrans ctx a)
-introExistsTrans (mb_e :: Mb ctx (PermExpr tp)) mb_p_body pt
-  | permTransPerm pt
-    == mbMap2 (\e p_body ->
-                subst (singletonSubst e) p_body) mb_e mb_p_body =
-    do let mb_p = permTransPerm pt
-           t = permTransToTerm pt
-       let tp = knownRepr :: TypeRepr tp
-       tp_trans <- tpTransM $ tptranslate (fmap (const tp) mb_e)
-       tp_f <- tpTransM $ lambdaTransM "x_introEx" tp_trans $ \x ->
-         inExtTypeTransM (mkExprTrans tp x) (tptranslate $ mbCombine mb_p_body)
-       e <- exprTransToTerm <$> tpTransM (tptranslate mb_e)
-       return $
-         PTrans_Term (fmap ValPerm_Exists mb_p_body) $
-         ctorOpenTerm "Prelude.exists" [tp_trans, tp_f, e, t]
-introExistsTrans _ _ _ = error "introExistsTrans"
-
--- | Translate an existential elimination into a @Sigma@ elimination
-elimExistsTrans :: KnownRepr TypeRepr tp =>
-                   PermTrans ctx a ->
-                   (PermTrans (ctx :> tp) a ->
-                    ImpTransM ext blocks ret args ps (ctx :> tp) OpenTerm) ->
-                   ImpTransM ext blocks ret args ps ctx OpenTerm
-elimExistsTrans (PTrans_Term mb_p t) f =
-  do let tp1 = knownRepr
-         mb_p_body = mbCombine $ fmap (exPermBody tp1) mb_p
-     tp1_trans <- tpTransM $ tptranslate $ fmap (const tp1) mb_p
-     tp2_trans <- tpTransM $ lambdaTransM "x_fst" tp1_trans $ \x ->
-       inExtTypeTransM (mkExprTrans tp1 x) $ tptranslate mb_p_body
-     ret_tp <- itiReturnType <$> ask
-     let ret_tp_f = lambdaOpenTerm "x_fst" tp1_trans (const ret_tp)
-     f_trans <- lambdaTransM "x_fst" tp1_trans $ \x1 ->
-       lambdaTransM "x_snd" (applyOpenTerm tp2_trans x1) $ \x2 ->
-       inExtImpTransM (mkExprTrans tp1 x1) (PTrans_True (mbToProxy mb_p_body)) $
-       f (mkPermTrans mb_p_body x2)
-     return $ applyOpenTermMulti (globalOpenTerm "Prelude.Sigma__rec")
-       [tp1_trans, tp2_trans, ret_tp_f, f_trans, t]
-elimExistsTrans _ _ = error "elimExistsTrans"
-
-
 ----------------------------------------------------------------------
--- * The Implication Translation
+-- * Translating Typed Crucible
 ----------------------------------------------------------------------
 
-instance ImplTranslate1 f ext blocks ret args ps ctx =>
-         ImplTranslate (PermImpl f ps) OpenTerm ext blocks ret args ps ctx where
-  itranslate = error "FIXME HERE NOW"
+-- tptranslate for a TypedReg yields an ExprTrans
+instance TypeTranslate (TypedReg tp) (ExprTrans tp) where
+  tptranslate [nuP| TypedReg x |] = tptranslate x
 
-instance ImplTranslate (TypedReg tp) (PermTrans ctx tp)
-         ext blocks ret args ps ctx where
-  itranslate = error "FIXME HERE NOW"
+-- tptranslate for a TypedExpr yields an ExprTrans
+instance NuMatchingExtC ext =>
+         TypeTranslate (App ext TypedReg tp) (ExprTrans tp) where
+  tptranslate [nuP| EmptyApp |] = return $ ETrans_Term unitOpenTerm
+  tptranslate _ = error "FIXME HERE NOW"
 
-instance ImplTranslate (TypedExpr ext tp) (PermTrans ctx tp)
+-- tptranslate for a TypedExpr yields an ExprTrans
+instance NuMatchingExtC ext =>
+         TypeTranslate (TypedExpr ext tp) (ExprTrans tp) where
+  tptranslate [nuP| TypedExpr app |] = tptranslate app
+
+-- itranslate for a TypedReg yields a PermTrans
+instance NuMatchingExtC ext =>
+         ImplTranslate (TypedReg tp) (PermTrans ctx tp)
          ext blocks ret args ps ctx where
-  itranslate = error "FIXME HERE NOW"
+  itranslate [nuP| TypedReg x |] = getVarPermM x
+
+-- itranslate for a TypedExpr yields a PermTrans
+instance NuMatchingExtC ext =>
+         ImplTranslate (App ext TypedReg tp) (PermTrans ctx tp)
+         ext blocks ret args ps ctx where
+  itranslate [nuP| EmptyApp |] = return PTrans_True
+  itranslate _ = error "FIXME HERE NOW"
+
+-- itranslate for a TypedExpr yields a PermTrans
+instance NuMatchingExtC ext =>
+         ImplTranslate (TypedExpr ext tp) (PermTrans ctx tp)
+         ext blocks ret args ps ctx where
+  itranslate [nuP| TypedExpr app |] = itranslate app
 
 instance ImplTranslate (TypedEntryID blocks args' ghosts) OpenTerm
          ext blocks ret args ps ctx where
   itranslate mb_entryID =
     translateTypedEntryID (mbLift mb_entryID) <$> itiBlockTrans <$> ask
 
--- A sequence of distinguished permissions on variables translates to a list of
--- pure translations of the variables and impure translations of the permissions
--- on them
-instance ImplTranslate (DistPerms tps) (ExprTransCtx tps, PermTransCtx ctx tps)
-         ext blocks ret args ps ctx where
-  itranslate [nuP| DistPermsNil |] = return (MNil, MNil)
-  itranslate [nuP| DistPermsCons perms x _ |] =
-    do (p_trs,i_trs) <- itranslate perms
-       p_tr <- tpTransM $ tptranslate x
-       i_tr <- itranslate (fmap TypedReg x)
-       return (p_trs :>: p_tr, i_trs :>: i_tr)
+
+-- | Map a context of expression translations to a list of 'OpenTerm's, dropping
+-- the "invisible" ones whose types are translated to 'Nothing'
+exprCtxToTerms :: Mb ctx (CruCtx tps) -> ExprTransCtx tps ->
+                  ImpTransM ext blocks ret args ps ctx [OpenTerm]
+exprCtxToTerms [nuP| CruCtxNil |] _ = return []
+exprCtxToTerms [nuP| CruCtxCons ctx tp |] (etranss :>: etrans) =
+  do maybe_t <- tpTransM $ tptranslate $ fmap unCruType tp
+     rest <- exprCtxToTerms ctx etranss
+     case maybe_t of
+       Just _ -> return (rest ++ [exprTransToTerm etrans])
+       Nothing -> return rest
+
+-- | Map a context of perm translations to a list of 'OpenTerm's, dropping the
+-- "invisible" ones whose permissions are translated to 'Nothing'
+permCtxToTerms :: MapRList Proxy ctx -> PermTransCtx ctx tps ->
+                  ImpTransM ext blocks ret args ps ctx [OpenTerm]
+permCtxToTerms _ MNil = return []
+permCtxToTerms prxs (ptranss :>: ptrans) =
+  do maybe_t <- tpTransM $ tptranslate (permTransPerm prxs ptrans)
+     rest <- permCtxToTerms prxs ptranss
+     case maybe_t of
+       Just _ -> return (rest ++ [permTransToTerm ptrans])
+       Nothing -> return rest
+
+-- | Apply the translation of a function-like construct (i.e., a
+-- 'TypedJumpTarget' or 'TypedFnHandle') to the pure plus impure translations of
+-- its arguments
+translateApply :: OpenTerm -> Mb ctx (CruCtx tps) -> ExprTransCtx tps ->
+                  PermTransCtx ctx tps ->
+                  ImpTransM ext blocks ret args ps ctx OpenTerm
+translateApply f ctx p_args i_args =
+  applyOpenTermMulti f <$>
+  ((++) <$> exprCtxToTerms ctx p_args <*> permCtxToTerms (mbToProxy ctx) i_args)
 
 instance ImplTranslate (TypedJumpTarget blocks ps) OpenTerm
          ext blocks ret args ps ctx where
-  itranslate [nuP| TypedJumpTarget entryID _ perms |] =
+  itranslate [nuP| TypedJumpTarget entryID args_ctx perms |] =
     do f <- itranslate entryID
-       (p_args, i_args) <- itranslate perms
-       return $ translateApply f p_args i_args
-
-{-
-FIXME HERE NOW:
-- Write the translation for PermImpl and for TypedStmt, to see what prims we need
-- Need something special for TypedStmt to bind vars; maybe just do seqs?
-- ImpTranslate for statement sequences, blocks / entrypoints, and CFGs
--}
--}
+       expr_ctx <- itiExprCtx <$> ask
+       arg_membs <- itiPermStackVars <$> ask
+       let e_args = mapMapRList (flip mapRListLookup expr_ctx) arg_membs
+       i_args <- itiPermStack <$> ask
+       let ghost_ctx = fmap entryGhosts entryID
+           ctx = mbMap2 appendCruCtx ghost_ctx args_ctx
+       translateApply f ctx e_args i_args
