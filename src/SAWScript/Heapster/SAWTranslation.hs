@@ -489,6 +489,19 @@ assertPermStackM nm f =
   if f (itiPermStackVars info) (itiPermStack info) then return () else
     error ("translate: " ++ nm)
 
+-- | Assert that the current permission stack equals the given 'DistPerm's
+assertPermStackEqM :: String -> Mb ctx (DistPerms ps) ->
+                      ImpTransM ext blocks ret args ps ctx ()
+assertPermStackEqM nm perms =
+  assertPermStackM nm (helper perms)
+  where
+    helper :: Mb ctx (DistPerms ps) -> MapRList (Member ctx) ps ->
+              PermTransCtx ctx ps -> Bool
+    helper [nuP| DistPermsNil |] _ _ = True
+    helper [nuP| DistPermsCons perms x p |] (xs :>: x') (ptranss :>: ptrans) =
+      x' == translateVar x && permTransPermEq ptrans p &&
+      helper perms xs ptranss
+
 -- | Assert that the top permission is as given by the arguments
 assertTopPermM :: String -> Mb ctx (ExprVar a) -> Mb ctx (ValuePerm a) ->
                   ImpTransM ext blocks ret args (ps :> a) ctx ()
@@ -778,7 +791,8 @@ translateApply f ctx p_args i_args =
 instance ImplTranslate (TypedJumpTarget blocks ps) OpenTerm
          ext blocks ret args ps ctx where
   itranslate [nuP| TypedJumpTarget entryID args_ctx perms |] =
-    do f <- itranslate entryID
+    do assertPermStackEqM "TypedJumpTarget" perms
+       f <- itranslate entryID
        expr_ctx <- itiExprCtx <$> ask
        arg_membs <- itiPermStackVars <$> ask
        let e_args = mapMapRList (flip mapRListLookup expr_ctx) arg_membs
