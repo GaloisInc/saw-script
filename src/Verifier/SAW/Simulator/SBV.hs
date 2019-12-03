@@ -627,12 +627,13 @@ sbvSolve sc addlPrims unints t = do
   modmap <- scGetModuleMap sc
   let eval = sbvSolveBasic modmap addlPrims unints
   ty <- eval =<< scTypeOf sc t
-  let argNames = map fst (fst (R.asLambdaList t))
-  let moreNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
+  let lamNames = map fst (fst (R.asLambdaList t))
+  let varNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
+  let argNames = zipWith (++) varNames (map ("_" ++) lamNames ++ repeat "")
   argTs <- asPredType ty
   (labels, vars) <-
     flip evalStateT 0 $ unzip <$>
-    sequence (zipWith newVarsForType argTs (argNames ++ moreNames))
+    sequence (zipWith newVarsForType argTs argNames)
   bval <- eval t
   let prd = do
               bval' <- traverse (fmap ready) vars >>= (liftIO . applyAll bval)
