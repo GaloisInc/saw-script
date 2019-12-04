@@ -73,6 +73,7 @@ import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
+import qualified What4.Utils.StringLiteral as W4S
 
 -- jvm-parser
 import qualified Language.JVM.Parser as J
@@ -740,7 +741,7 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
     setupClass :: J.Class -> IO (Crucible.RegValue Sym CJ.JVMClassType)
     setupClass cls =
       do let cname = J.className cls
-         name <- W4.stringLit sym (CJ.classNameText (J.className cls))
+         name <- W4.stringLit sym (W4S.UnicodeLiteral $ CJ.classNameText (J.className cls))
          status <- W4.bvLit sym knownRepr 0
          super <-
            case J.superClass cls of
@@ -750,7 +751,7 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
                  Nothing -> return W4.Unassigned -- this should never happen
                  Just cls' -> W4.justPartExpr sym <$> setupClass cls'
          let methods = foldr (addMethod cname) Map.empty (J.classMethods cls)
-         interfaces <- V.fromList <$> traverse (W4.stringLit sym . CJ.classNameText) (J.classInterfaces cls)
+         interfaces <- V.fromList <$> traverse (W4.stringLit sym . W4S.UnicodeLiteral . CJ.classNameText) (J.classInterfaces cls)
          return $
            Crucible.RolledType $
            Ctx.Empty
