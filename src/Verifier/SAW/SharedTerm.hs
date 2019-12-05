@@ -772,8 +772,14 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           x <- termf t
           State.modify (Map.insert i x)
           return x
+    toSort :: Term -> State.StateT (Map TermIndex Term) IO Sort
+    toSort t =
+      do t' <- liftIO (scWhnf sc t)
+         case asSort t' of
+           Just s -> return s
+           Nothing -> fail "scTypeOf: type error: expected sort"
     sort :: Term -> State.StateT (Map TermIndex Term) IO Sort
-    sort t = asSort =<< memo t
+    sort t = toSort =<< memo t
     termf :: TermF Term -> State.StateT (Map TermIndex Term) IO Term
     termf tf =
       case tf of
@@ -786,7 +792,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           lift $ scTermF sc (Pi name tp rtp)
         Pi _ tp rhs -> do
           ltp <- sort tp
-          rtp <- asSort =<< lift (scTypeOf' sc (tp : env) rhs)
+          rtp <- toSort =<< lift (scTypeOf' sc (tp : env) rhs)
           lift $ scSort sc (max ltp rtp)
         LocalVar i
           | i < length env -> lift $ incVars sc 0 (i + 1) (env !! i)
@@ -809,12 +815,14 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
           lift $ scSort sc (max sx sy)
         PairLeft t -> do
           tp <- (liftIO . scWhnf sc) =<< memo t
-          (t1, _) <- asPairType tp
-          return t1
+          case asPairType tp of
+            Just (t1, _) -> return t1
+            Nothing -> fail "scTypeOf: type error: expected pair type"
         PairRight t -> do
           tp <- (liftIO . scWhnf sc) =<< memo t
-          (_, t2) <- asPairType tp
-          return t2
+          case asPairType tp of
+            Just (_, t2) -> return t2
+            Nothing -> fail "scTypeOf: type error: expected pair type"
         CtorApp c params args -> do
           t <- lift $ scTypeOfCtor sc c
           lift $ foldM (reducePi sc) t (params ++ args)
