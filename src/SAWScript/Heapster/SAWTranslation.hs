@@ -711,7 +711,7 @@ instance ImplTranslateF r ext blocks ret args =>
 
 
 ----------------------------------------------------------------------
--- * Translating Typed Crucible
+-- * Translating Typed Crucible Expressions
 ----------------------------------------------------------------------
 
 -- tptranslate for a TypedReg yields an ExprTrans
@@ -748,11 +748,15 @@ instance NuMatchingExtC ext =>
          ext blocks ret args ps ctx where
   itranslate [nuP| TypedExpr app |] = itranslate app
 
+
+----------------------------------------------------------------------
+-- * Translating Typed Crucible Jump Targets
+----------------------------------------------------------------------
+
 instance ImplTranslate (TypedEntryID blocks args' ghosts) OpenTerm
          ext blocks ret args ps ctx where
   itranslate mb_entryID =
     translateTypedEntryID (mbLift mb_entryID) <$> itiBlockTrans <$> ask
-
 
 -- | Map a context of expression translations to a list of 'OpenTerm's, dropping
 -- the "invisible" ones whose types are translated to 'Nothing'
@@ -801,3 +805,34 @@ instance ImplTranslate (TypedJumpTarget blocks ps) OpenTerm
        let ghost_ctx = fmap entryGhosts entryID
            ctx = mbMap2 appendCruCtx ghost_ctx args_ctx
        translateApply "TypedJumpTarget" f ctx perms
+
+
+----------------------------------------------------------------------
+-- * Translating Typed Crucible Statements
+----------------------------------------------------------------------
+
+-- | Translate a 'PermImpl1' to a function on translation computations
+itranslateStmt :: NuMatchingExtC ext =>
+                  Mb ctx (TypedStmt ext rets ps_in ps_out) ->
+                  ImpTransM ext blocks ret args ps_out (ctx :++: rets) OpenTerm ->
+                  ImpTransM ext blocks ret args ps_in ctx OpenTerm
+
+itranslateStmt [nuP| TypedSetReg _ e |] m =
+  do etrans <- tpTransM $ tptranslate e
+     ptrans <- extPermTrans <$> itranslate e
+     inExtImpTransM etrans ptrans m
+
+{-
+itranslateStmt [nuP| TypedCall freg ghosts args l ps_in ps_out |] m =
+  do f <- permTransToTerm <$> itranslate freg
+     let ctx_in = _
+     fret <- translateApply "TypedCall" f ctx_in ps_in
+     FIXME HERE NOW: unpack fret as a tuple of ExprTranss and PermTranss
+-}
+
+itranslateStmt stmt@[nuP| BeginLifetime |] m =
+  inExtImpTransM ETrans_Lifetime PTrans_True $
+  withPermStackM (:>: Member_Base)
+  (:>: PTrans_Conj [APTrans_LifetimePerm $ nuMulti (mbToProxy stmt :>: Proxy) $
+                    const $ Perm_LOwned PExpr_PermListNil])
+  m
