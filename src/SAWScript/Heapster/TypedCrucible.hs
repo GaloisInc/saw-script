@@ -163,7 +163,9 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
                  TypedStmt ext (RNil :> tp) RNil RNil
 
   -- | Function call
-  TypedCall :: TypedFnHandle ghosts args ret -> PermExpr LifetimeType ->
+  TypedCall :: args ~ CtxToRList cargs =>
+               TypedReg (FunctionHandleType cargs ret) ->
+               CruCtx ghosts -> CruCtx args -> PermExpr LifetimeType ->
                DistPerms (ghosts :> LifetimeType :++: args) ->
                DistPerms (ghosts :> LifetimeType :++: args :> ret) ->
                TypedStmt ext (RNil :> ret) (ghosts :> LifetimeType :++: args)
