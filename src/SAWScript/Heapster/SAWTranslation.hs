@@ -806,12 +806,15 @@ instance ImplTranslate (TypedJumpTarget blocks ps) OpenTerm
            ctx = mbMap2 appendCruCtx ghost_ctx args_ctx
        translateApply "TypedJumpTarget" f ctx perms
 
+instance ImplTranslateF (TypedJumpTarget blocks) ext blocks ret args where
+  itranslateF mb_tgt = itranslate mb_tgt
+
 
 ----------------------------------------------------------------------
 -- * Translating Typed Crucible Statements
 ----------------------------------------------------------------------
 
--- | Translate a 'PermImpl1' to a function on translation computations
+-- | Translate a 'TypedStmt' to a function on translation computations
 itranslateStmt :: NuMatchingExtC ext =>
                   Mb ctx (TypedStmt ext rets ps_in ps_out) ->
                   ImpTransM ext blocks ret args ps_out (ctx :++: rets) OpenTerm ->
@@ -836,3 +839,59 @@ itranslateStmt stmt@[nuP| BeginLifetime |] m =
   (:>: PTrans_Conj [APTrans_LifetimePerm $ nuMulti (mbToProxy stmt :>: Proxy) $
                     const $ Perm_LOwned PExpr_PermListNil])
   m
+
+itranslateStmt stmt@[nuP| EndLifetime l perms |] m =
+  error "FIXME HERE NOW: each perm in the list gets recombined with the necessary perm in the var perms, and then we remove all var perms with l"
+
+itranslateStmt [nuP| TypedAssert e _ |] m =
+  applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
+  [compReturnTypeM, exprTransToTerm <$> tpTransM (tptranslate e),
+   m, itiCatchHandler <$> ask]
+
+itranslateStmt [nuP| TypedLLVMStmt stmt |] m = itranslateLLVMStmt stmt m
+
+
+-- | Translate a 'TypedStmt' to a function on translation computations
+itranslateLLVMStmt ::
+  Mb ctx (TypedLLVMStmt w r ps_in ps_out) ->
+  ImpTransM ext blocks ret args ps_out (ctx :> r) OpenTerm ->
+  ImpTransM ext blocks ret args ps_in ctx OpenTerm
+
+itranslateLLVMStmt _ _ = error "FIXME HERE NOW"
+
+
+----------------------------------------------------------------------
+-- * Translating Sequences of Typed Crucible Statements
+----------------------------------------------------------------------
+
+instance NuMatchingExtC ext =>
+         ImplTranslate (TypedRet ret ps) OpenTerm
+         ext blocks ret args ps ctx where
+  itranslate [nuP| TypedRet r perms |] = error "FIXME HERE NOW"
+
+instance NuMatchingExtC ext =>
+         ImplTranslateF (TypedRet ret) ext blocks ret args where
+  itranslateF mb_ret = itranslate mb_ret
+
+instance NuMatchingExtC ext =>
+         ImplTranslate (TypedTermStmt blocks ret ps) OpenTerm
+         ext blocks ret args ps ctx where
+  itranslate [nuP| TypedJump impl_tgt |] = itranslate impl_tgt
+  itranslate [nuP| TypedBr reg impl_tgt1 impl_tgt2 |] =
+    applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
+    [compReturnTypeM, exprTransToTerm <$> tpTransM (tptranslate reg),
+     itranslate impl_tgt1, itranslate impl_tgt2]
+  itranslate [nuP| TypedReturn impl_ret |] = itranslate impl_ret
+  itranslate [nuP| TypedErrorStmt _ |] = itiCatchHandler <$> ask
+
+instance NuMatchingExtC ext =>
+         ImplTranslate (TypedStmtSeq ext blocks ret ps) OpenTerm
+         ext blocks ret args ps ctx where
+  itranslate [nuP| TypedImplStmt impl_seq |] = itranslate impl_seq
+  itranslate [nuP| TypedConsStmt _ stmt mb_seq |] =
+    itranslateStmt stmt (itranslate $ mbCombine mb_seq)
+  itranslate [nuP| TypedTermStmt _ term_stmt |] = itranslate term_stmt
+
+instance NuMatchingExtC ext =>
+         ImplTranslateF (TypedStmtSeq ext blocks ret) ext blocks ret args where
+  itranslateF mb_seq = itranslate mb_seq
