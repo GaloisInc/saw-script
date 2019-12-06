@@ -87,6 +87,7 @@ rm -f logs/*
 
 NUM_TESTS=0
 FAILED_TESTS=0
+FAILED_TEST_DETAILS="failed:"
 export TIMEFORMAT="%R"
 TOTAL_TIME=0
 
@@ -122,6 +123,7 @@ for i in $TESTS; do
     echo "$i: FAIL (${TEST_TIME}s${TIMED_OUT})"
     if [ ! -z "$LOUD" ]; then cat logs/$i.log; fi
     FAILED_TESTS=$(( $FAILED_TESTS + 1 ))
+    FAILED_TEST_DETAILS+=" $i"
     echo "  <testcase name=\"${i}\" time=\"${TEST_TIME}\"><failure><![CDATA[" >> ${XML_TEMP}
     sed -e 's/]]>/] ]>/' logs/$i.log >> ${XML_TEMP}
     echo "]]></failure></testcase>" >> ${XML_TEMP}
@@ -136,4 +138,10 @@ echo " </testsuite>" >> $XML_FILE
 echo "</testsuites>" >> $XML_FILE
 rm $XML_TEMP
 
-echo "tests completed"
+PASSED_TESTS=$(expr $NUM_TESTS - $FAILED_TESTS)
+echo "tests passed: ${PASSED_TESTS} / ${NUM_TESTS}"
+if [ "${FAILED_TESTS}" == 0 ]; then
+    echo "all tests passed"
+else
+    echo "${FAILED_TEST_DETAILS}"
+fi
