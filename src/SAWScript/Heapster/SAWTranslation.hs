@@ -837,11 +837,11 @@ itranslateStmt stmt@[nuP| BeginLifetime |] m =
   inExtImpTransM ETrans_Lifetime PTrans_True $
   withPermStackM (:>: Member_Base)
   (:>: PTrans_Conj [APTrans_LifetimePerm $ nuMulti (mbToProxy stmt :>: Proxy) $
-                    const $ Perm_LOwned PExpr_PermListNil])
+                    const $ Perm_LOwned [] PExpr_PermListNil])
   m
 
-itranslateStmt stmt@[nuP| EndLifetime l perms |] m =
-  error "FIXME HERE NOW: each perm in the list gets recombined with the necessary perm in the var perms, and then we remove all var perms with l"
+itranslateStmt stmt@[nuP| EndLifetime l ps ps_lts |] m =
+  error "FIXME HERE NOW: should be the identity on ps and ps_lts except for the operation on the permissions"
 
 itranslateStmt [nuP| TypedAssert e _ |] m =
   applyMultiTransM (return $ globalOpenTerm "Prelude.ite")

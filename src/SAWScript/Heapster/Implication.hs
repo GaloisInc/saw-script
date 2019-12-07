@@ -1016,7 +1016,7 @@ implPushCurLifetimePermM l =
      error "implPushLifetimePermM: wrong value for the current lifetime!") >>>
   getPerm l >>>= \p ->
   case p of
-    ValPerm_Conj [Perm_LOwned _] -> implPushM l p
+    ValPerm_Conj [Perm_LOwned _ _] -> implPushM l p
     _ -> error "implPushLifetimePermM: no LOwned permission for the current lifetime!"
 
 -- | Pop (as in 'implPushM') the permission for the current lifetime
@@ -1028,7 +1028,7 @@ implPopCurLifetimePermM l =
      error "implPopLifetimePermM: wrong value for the current lifetime!") >>>
   getTopDistPerm l >>>= \p ->
   case p of
-    ValPerm_Conj [Perm_LOwned _] -> implPopM l p
+    ValPerm_Conj [Perm_LOwned _ _] -> implPopM l p
     _ -> error "implPopLifetimePermM: no LOwned permission for the current lifetime!"
 
 {- FIXME: this should no longer be needed!

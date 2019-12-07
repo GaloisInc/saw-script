@@ -512,8 +512,9 @@ data AtomicPerm (a :: CrucibleType) where
 
   -- | Ownership permission for a lifetime, including an assertion that it is
   -- still current and permission to end that lifetime and get back the given
-  -- permissions
-  Perm_LOwned :: PermExpr PermListType -> AtomicPerm LifetimeType
+  -- permissions once the listed lifetimes are also over.
+  Perm_LOwned :: [PermExpr LifetimeType] -> PermExpr PermListType ->
+                 AtomicPerm LifetimeType
 
   -- | Assertion that a lifetime is current during another lifetime, i.e., that
   -- it contains that other lifetime
@@ -703,8 +704,8 @@ instance Eq (AtomicPerm a) where
   (Perm_LLVMFree _) == _ = False
   (Perm_LLVMFrame frame1) == (Perm_LLVMFrame frame2) = frame1 == frame2
   (Perm_LLVMFrame _) == _ = False
-  (Perm_LOwned e1) == (Perm_LOwned e2) = e1 == e2
-  (Perm_LOwned _) == _ = False
+  (Perm_LOwned ls1 e1) == (Perm_LOwned ls2 e2) = ls1 == ls2 && e1 == e2
+  (Perm_LOwned _ _) == _ = False
   (Perm_LContains e1) == (Perm_LContains e2) = e1 == e2
   (Perm_LContains _) == _ = False
   (Perm_Fun fperm1) == (Perm_Fun fperm2)
@@ -1015,7 +1016,7 @@ atomicPermIsCopyable (Perm_LLVMArray
   all (atomicPermIsCopyable . Perm_LLVMField) fps
 atomicPermIsCopyable (Perm_LLVMFree _) = True
 atomicPermIsCopyable (Perm_LLVMFrame _) = False
-atomicPermIsCopyable (Perm_LOwned _) = False
+atomicPermIsCopyable (Perm_LOwned _ _) = False
 atomicPermIsCopyable (Perm_LContains _) = True
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
@@ -1041,7 +1042,7 @@ addLifetimeAtomic l (Perm_LLVMArray ap) =
                                  map (addLifetimeField l) (llvmArrayFields ap) }
 addLifetimeAtomic l p@(Perm_LLVMFree _) = Just p
 addLifetimeAtomic l (Perm_LLVMFrame _) = Nothing
-addLifetimeAtomic l (Perm_LOwned _) = Nothing
+addLifetimeAtomic l (Perm_LOwned _ _) = Nothing
 addLifetimeAtomic l p@(Perm_LContains _) = Just p
 addLifetimeAtomic l p@(Perm_Fun _) = Just p
 addLifetimeAtomic l p@(Perm_BVProp _) = Just p
@@ -1340,8 +1341,8 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
   genSubst s [nuP| Perm_LLVMFree e |] = Perm_LLVMFree <$> genSubst s e
   genSubst s [nuP| Perm_LLVMFrame fp |] =
     Perm_LLVMFrame <$> genSubst s fp
-  genSubst s [nuP| Perm_LOwned e |] =
-    Perm_LOwned <$> genSubst s e
+  genSubst s [nuP| Perm_LOwned ls e |] =
+    Perm_LOwned <$> genSubst s ls <*> genSubst s e
   genSubst s [nuP| Perm_LContains e |] =
     Perm_LContains <$> genSubst s e
   genSubst s [nuP| Perm_Fun fperm |] =
@@ -1757,8 +1758,9 @@ instance AbstractVars (AtomicPerm a) where
   abstractPEVars ns1 ns2 (Perm_LLVMFrame fp) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFrame |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 fp
-  abstractPEVars ns1 ns2 (Perm_LOwned eps) =
+  abstractPEVars ns1 ns2 (Perm_LOwned ls eps) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LOwned |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ls
     `clMbMbApplyM` abstractPEVars ns1 ns2 eps
   abstractPEVars ns1 ns2 (Perm_LContains e) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LContains |])
@@ -1918,6 +1920,17 @@ getAllPerms perms = helper (NameMap.assocs $ perms ^. varPermMap) where
   helper (NameAndElem x p : xps) =
     case helper xps of
       Some ps -> Some $ DistPermsCons ps x p
+
+-- | Get all the @lowned@ permissions that list @l@ as an earlier lifetime
+getLaterLifetimes :: ExprVar LifetimeType -> PermSet ps -> Some DistPerms
+getLaterLifetimes l perms = helper (NameMap.assocs $ perms ^. varPermMap) where
+  helper :: [NameAndElem ValuePerm] -> Some DistPerms
+  helper [] = Some DistPermsNil
+  helper (NameAndElem x p@(ValPerm_Conj [Perm_LOwned ls l_perms]) : xps)
+    | elem (PExpr_Var l) ls
+    , Some rest <- helper xps
+    = Some $ DistPermsCons rest x p
+  helper (NameAndElem x p : xps) = helper xps
 
 -- | Delete permission @x:p@ from the permission set, assuming @x@ has precisely
 -- permissions @p@, replacing it with @x:true@
