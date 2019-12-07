@@ -665,7 +665,7 @@ executeCond opts sc cc cs ss = do
             (ss ^. MS.csFreshPointers)
   OM (setupValueSub %= Map.union ptrs)
 
-  invalidateMutableAllocs opts sc cc cs
+  invalidateMutableAllocs cc cs
 
   traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
   traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
@@ -1223,16 +1223,13 @@ learnPred sc cc loc prepost t =
 
 -- | Invalidate all mutable memory that was allocated in the method spec
 -- precondition, either through explicit calls to "crucible_alloc" or to
--- "crucible_alloc_global". As an optimization, a memory allocation that
--- is overwritten by a postcondition memory write is not invalidated.
+-- "crucible_alloc_global".
 invalidateMutableAllocs ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  Options ->
-  SharedContext ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   OverrideMatcher (LLVM arch) RW ()
-invalidateMutableAllocs opts sc cc cs = do
+invalidateMutableAllocs cc cs = do
   sym <- use syminterface
   mem <- readGlobal . Crucible.llvmMemVar $ cc ^. ccLLVMContext
   sub <- use setupValueSub
@@ -1270,27 +1267,10 @@ invalidateMutableAllocs opts sc cc cs = do
           )
       _ -> pure Nothing
 
-  -- set of (concrete base pointer, size) for each postcondition memory write
-  postPtrs <- Set.fromList <$> mapM
-    (\(LLVMPointsTo _loc ptr val) -> do
-      (_, Crucible.LLVMPointer blk _) <- resolveSetupValue opts cc sc cs Crucible.PtrRepr ptr
-      sz <- (return . Crucible.storageTypeSize)
-        =<< Crucible.toStorableType
-        =<< typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val
-      return (W4.asNat blk, sz))
-    (cs ^. MS.csPostState ^. MS.csPointsTos)
-
-  -- filter out each allocation overwritten by a postcondition write
-  let danglingPtrs = filter
-        (\((Crucible.LLVMPointer blk _), sz, _) ->
-          Set.notMember (W4.asNat blk, sz) postPtrs)
-        (allocPtrs ++ globalPtrs)
-
-  -- invalidate each allocation that is not overwritten by a postcondition write
   mem' <- foldM (\m (ptr, sz, msg) ->
                     liftIO $ Crucible.doInvalidate sym ?ptrWidth m ptr msg
                       =<< W4.bvLit sym ?ptrWidth (Crucible.bytesToInteger sz)
-                ) mem danglingPtrs
+                ) mem $ allocPtrs ++ globalPtrs
 
   writeGlobal (Crucible.llvmMemVar $ cc ^. ccLLVMContext) mem'
 
