@@ -943,7 +943,8 @@ endLifetime l =
   case (permListToDistPerms perms_l, some_ps_lts) of
     (Some ps, Some ps_lts) ->
       stmtProvePerms (distPermsToExDistPerms
-                      (appendDistPerms ps ps_lts)) >>>= \_ ->
+                      (appendDistPerms
+                       (minLtEndPerms (PExpr_Var l) ps) ps_lts)) >>>= \_ ->
       stmtProvePerm (TypedReg l) (emptyMb $
                                   ValPerm_Conj
                                   [Perm_LOwned [] perms_l]) >>>= \_ ->

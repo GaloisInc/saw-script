@@ -1021,36 +1021,91 @@ atomicPermIsCopyable (Perm_LContains _) = True
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
 
--- | Add a lifetime to a permission
-addLifetime :: PermExpr LifetimeType -> ValuePerm a -> ValuePerm a
-addLifetime _ p@(ValPerm_Eq _) = p
-addLifetime l (ValPerm_Or p1 p2) =
-  ValPerm_Or (addLifetime l p1) (addLifetime l p2)
-addLifetime l (ValPerm_Exists mb_p) = ValPerm_Exists $ fmap (addLifetime l) mb_p
-addLifetime l (ValPerm_Mu mb_p) = ValPerm_Mu $ fmap (addLifetime l) mb_p
-addLifetime l p@(ValPerm_Var _) = p
-addLifetime l (ValPerm_Conj ps) =
-  ValPerm_Conj $ mapMaybe (addLifetimeAtomic l) ps
+-- | Generic function to add a lifetime to a permission
+class AddLifetime a where
+  addLifetime :: PermExpr LifetimeType -> a -> a
 
--- | Add a lifetime to an atomic permission
-addLifetimeAtomic :: PermExpr LifetimeType -> AtomicPerm a ->
-                     Maybe (AtomicPerm a)
-addLifetimeAtomic l (Perm_LLVMField fp) =
-  Just $ Perm_LLVMField $ addLifetimeField l fp
-addLifetimeAtomic l (Perm_LLVMArray ap) =
-  Just $ Perm_LLVMArray $ ap { llvmArrayFields =
-                                 map (addLifetimeField l) (llvmArrayFields ap) }
-addLifetimeAtomic l p@(Perm_LLVMFree _) = Just p
-addLifetimeAtomic l (Perm_LLVMFrame _) = Nothing
-addLifetimeAtomic l (Perm_LOwned _ _) = Nothing
-addLifetimeAtomic l p@(Perm_LContains _) = Just p
-addLifetimeAtomic l p@(Perm_Fun _) = Just p
-addLifetimeAtomic l p@(Perm_BVProp _) = Just p
+instance AddLifetime (DistPerms ps) where
+  addLifetime l DistPermsNil = DistPermsNil
+  addLifetime l (DistPermsCons perms x p) =
+    (DistPermsCons (addLifetime l perms) x (addLifetime l p))
 
--- | Add a lifetime to an LLVM field permission
-addLifetimeField :: PermExpr LifetimeType -> LLVMFieldPerm w -> LLVMFieldPerm w
-addLifetimeField l fp | elem l (llvmFieldLifetimes fp) = fp
-addLifetimeField l fp = fp { llvmFieldLifetimes = l : llvmFieldLifetimes fp }
+instance AddLifetime (ValuePerm a) where
+  addLifetime _ p@(ValPerm_Eq _) = p
+  addLifetime l (ValPerm_Or p1 p2) =
+    ValPerm_Or (addLifetime l p1) (addLifetime l p2)
+  addLifetime l (ValPerm_Exists mb_p) =
+    ValPerm_Exists $ fmap (addLifetime l) mb_p
+  addLifetime l (ValPerm_Mu mb_p) = ValPerm_Mu $ fmap (addLifetime l) mb_p
+  addLifetime l p@(ValPerm_Var _) = p
+  addLifetime l (ValPerm_Conj ps) =
+    ValPerm_Conj $ map (addLifetime l) ps
+
+instance AddLifetime (AtomicPerm a) where
+  addLifetime l (Perm_LLVMField fp) = Perm_LLVMField $ addLifetime l fp
+  addLifetime l (Perm_LLVMArray ap) = Perm_LLVMArray $ addLifetime l ap
+  addLifetime l p@(Perm_LLVMFree _) = p
+  addLifetime l p@(Perm_LLVMFrame _) = p
+  addLifetime l p@(Perm_LOwned _ _) = p
+  addLifetime l p@(Perm_LContains _) = p
+  addLifetime l p@(Perm_Fun _) = p
+  addLifetime l p@(Perm_BVProp _) = p
+
+instance AddLifetime (LLVMFieldPerm w) where
+  addLifetime l fp | elem l (llvmFieldLifetimes fp) = fp
+  addLifetime l fp = fp { llvmFieldLifetimes = l : llvmFieldLifetimes fp }
+
+instance AddLifetime (LLVMArrayPerm w) where
+  addLifetime l ap =
+    ap { llvmArrayFields = map (addLifetime l) (llvmArrayFields ap) }
+
+
+-- | Generic function to replace all writes with reads in a permission
+class MakeReadOnly a where
+  makeReadOnly :: a -> a
+
+instance MakeReadOnly (DistPerms ps) where
+  makeReadOnly DistPermsNil = DistPermsNil
+  makeReadOnly (DistPermsCons perms x p) =
+    DistPermsCons (makeReadOnly perms) x (makeReadOnly p)
+
+instance MakeReadOnly (ValuePerm a) where
+  makeReadOnly p@(ValPerm_Eq _) = p
+  makeReadOnly (ValPerm_Or p1 p2) =
+    ValPerm_Or (makeReadOnly p1) (makeReadOnly p2)
+  makeReadOnly (ValPerm_Exists p) = ValPerm_Exists (fmap makeReadOnly p)
+  makeReadOnly (ValPerm_Mu p) = ValPerm_Mu (fmap makeReadOnly p)
+  makeReadOnly p@(ValPerm_Var _) = p
+  makeReadOnly (ValPerm_Conj ps) = ValPerm_Conj $ map makeReadOnly ps
+
+instance MakeReadOnly (AtomicPerm a) where
+  makeReadOnly (Perm_LLVMField fp) = Perm_LLVMField $ makeReadOnly fp
+  makeReadOnly (Perm_LLVMArray ap) = Perm_LLVMArray $ makeReadOnly ap
+  makeReadOnly p@(Perm_LLVMFree _) = p
+  makeReadOnly p@(Perm_LLVMFrame _) = p
+  makeReadOnly p@(Perm_LOwned _ _) = p
+  makeReadOnly p@(Perm_LContains _) = p
+  makeReadOnly p@(Perm_Fun _) = p
+  makeReadOnly p@(Perm_BVProp _) = p
+
+instance MakeReadOnly (LLVMFieldPerm w) where
+  makeReadOnly fp =
+    fp { llvmFieldRW = Read,
+         llvmFieldContents = makeReadOnly (llvmFieldContents fp) }
+
+instance MakeReadOnly (LLVMArrayPerm w) where
+  makeReadOnly ap =
+    ap { llvmArrayFields = map makeReadOnly (llvmArrayFields ap) }
+
+
+-- | Compute the minimal permissions required to end a lifetime that contains
+-- the given permissions in an @lowned@ permission. Right now, this just
+-- replaces all writes with reads and adds the ending lifetime to the
+-- permissions. An important property of this function is that the returned
+-- permissions has the same translation as the input permissions, so the
+-- translation of a mapping from @minLtEndPerms p@ to @p@ is just the identity.
+minLtEndPerms :: PermExpr LifetimeType -> DistPerms ps -> DistPerms ps
+minLtEndPerms l ps = addLifetime l $ makeReadOnly ps
 
 
 ----------------------------------------------------------------------
