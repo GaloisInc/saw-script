@@ -191,7 +191,7 @@ ppPointsToAsLLVMVal ::
   OverrideMatcher (LLVM arch) w PP.Doc
 ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc setupVal1 setupVal2) = do
   pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec setupVal1
-  pretty2 <- ppSetupValueAsLLVMVal opts cc sc spec setupVal2
+  let pretty2 = MS.ppSetupValue setupVal2
   pure $ PP.vcat [ PP.text "Pointer:" PP.<+> pretty1
                  , PP.text "Pointee:" PP.<+> pretty2
                  , PP.text "Assertion made at:" PP.<+>
