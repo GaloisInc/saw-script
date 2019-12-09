@@ -29,6 +29,7 @@ cache:
     - $HOME/.ghc
     - $HOME/.cabal
     - dist-newstyle
+    - bin
 
 install:
   - git submodule update --init
@@ -39,6 +40,8 @@ script:
   # caching `dist-newstyle` means it must be manually built each time
   - (pushd deps/abcBridge && scripts/build-abc.sh X86_64 Linux --init && popd)
   - cabal new-build -j saw jss
+  - cp `cabal new-exec --verbose=silent -- sh -c 'which saw'` bin
+  - cp `cabal new-exec --verbose=silent -- sh -c 'which jss'` bin
 
 jobs:
   include:
@@ -51,13 +54,9 @@ jobs:
         - sudo add-apt-repository -y ppa:sri-csl/formal-methods
         - sudo apt-get update -q
         - sudo apt-get install -y yices2
-        - mkdir bin
         - wget -t 3 https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-ubuntu-16.04.zip
         - unzip z3-4.8.7-x64-ubuntu-16.04.zip
         - cp z3-4.8.7-x64-ubuntu-16.04/bin/z3 bin
-      before_script:
-        - cp dist-newstyle/build/x86_64-linux/ghc-8.6.5/saw-script-0.4.0.99/build/saw/saw bin
-        - cp dist-newstyle/build/x86_64-linux/ghc-8.6.5/jvm-verifier-0.4/x/jss/build/jss/jss bin
       script:
         - cd intTests
         - for t in test0001 test0019_jss_switch_statement test_crucible_jvm test_ecdsa test_examples test_issue108 test_tutorial1 test_tutorial2 test_tutorial_w4; do echo $t >> disabled_tests.txt; done
@@ -75,65 +74,64 @@ jobs:
           packages:
             - clang-3.8
             - llvm-3.8
-      before_install:
+      install:
         # - git clone https://github.com/awslabs/s2n.git
         - git clone https://github.com/GaloisInc/s2n.git
         - mkdir -p s2n/test-deps/saw/bin
-        - cp dist-newstyle/build/x86_64-linux/ghc-8.6.5/saw-script-0.4.0.99/build/saw/saw s2n/test-deps/saw/bin
+        - cp bin/saw s2n/test-deps/saw/bin
         - cd s2n
         - git checkout bump-saw
-      install:
+      before_script:
         - export TESTS=sawHMAC
         - export SAW_HMAC_TEST=md5
-      before_script:
-        - source .travis/s2n_setup_env.sh
       script:
+        - source .travis/s2n_setup_env.sh
         - SAW=true travis_retry .travis/s2n_install_test_dependencies.sh
         - .travis/s2n_travis_build.sh
     - <<: *s2n-test-staging
       name: hmac sha1
-      install:
+      before_script:
         - export TESTS=sawHMAC
         - export SAW_HMAC_TEST=sha1
     - <<: *s2n-test-staging
       name: hmac sha224
-      install:
+      before_script:
         - export TESTS=sawHMAC
         - export SAW_HMAC_TEST=sha224
     - <<: *s2n-test-staging
       name: hmac sha256
-      install:
+      before_script:
         - export TESTS=sawHMAC
         - export SAW_HMAC_TEST=sha256
     - <<: *s2n-test-staging
       name: hmac sha384
-      install:
+      before_script:
         - export TESTS=sawHMAC
         - export SAW_HMAC_TEST=sha384
     - <<: *s2n-test-staging
       name: hmac sha512
-      install:
+      before_script:
         - export TESTS=sawHMAC
         - export SAW_HMAC_TEST=sha512
     - <<: *s2n-test-staging
       name: drbg
-      install:
+      before_script:
         - export TESTS=sawDRBG
     - <<: *s2n-test-staging
       name: sike
-      install:
+      before_script:
         - export TESTS=sawSIKE
     - <<: *s2n-test-staging
       name: bike
-      install:
+      before_script:
         - export TESTS=sawBIKE
         - export S2N_LIBCRYPTO=openssl-1.0.2
     - <<: *s2n-test-staging
       name: tls
-      install:
+      before_script:
         - export TESTS=tls
     - <<: *s2n-test-staging
       name: hmac failure
-      install:
+      before_script:
         - export TESTS=sawHMACFailure
 
