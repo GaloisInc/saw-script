@@ -15,6 +15,13 @@ Import CryptolPrimitives.
 
 Import ListNotations.
 
+(** It is annoying to have to wrap natural numbers into [TCNum] to use them at
+type [Num], so these coercions will do it for us.
+ *)
+Coercion TCNum : Nat >-> Num.
+Definition natToNat (n : nat) : Nat := n.
+Coercion natToNat : nat >-> Nat.
+
 Theorem Eq_TCNum a b : a = b -> Eq _ (TCNum a) (TCNum b).
 Proof.
   intros EQ.
