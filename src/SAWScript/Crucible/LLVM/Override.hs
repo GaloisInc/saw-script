@@ -665,9 +665,8 @@ executeCond opts sc cc cs ss = do
             (ss ^. MS.csFreshPointers)
   OM (setupValueSub %= Map.union ptrs)
 
-  invalidateMutableAllocs opts sc cc cs
-
   traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
+  invalidateMutableAllocs opts sc cc cs
   traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
   traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
 
