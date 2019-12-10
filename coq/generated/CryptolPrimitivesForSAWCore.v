@@ -18,7 +18,7 @@ Definition compose : forall (a : Type), forall (b : Type), forall (c : Type), ((
   (fun (_ : Type) (_ : Type) (_ : Type) (f : (_) -> _) (g : (_) -> _) (x : _) => (f ((g (x))))).
 
 Definition bvExp : forall (n : (@Nat)), ((@SAWCorePrelude.bitvector (n))) -> ((@SAWCorePrelude.bitvector (n))) -> (@SAWCorePrelude.bitvector (n)) :=
-  (fun (n : (@Nat)) (x : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) (y : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => (@SAWCoreVectorsAsCoqVectors.foldr (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.bitvector (n))) (n) ((fun (b : @SAWCoreScaffolding.Bool) (a : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => if b then (@SAWCorePrelude.bvMul (n) (x) ((@SAWCorePrelude.bvMul (n) (a) (a)))) else (@SAWCorePrelude.bvMul (n) (a) (a)))) ((@SAWCorePrelude.bvNat (n) (1))) ((@SAWCorePrelude.reverse (n) (@SAWCoreScaffolding.Bool) (y))))).
+  (fun (n : (@Nat)) (x : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) (y : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => (@SAWCoreVectorsAsCoqVectors.foldr (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.bitvector (n))) (n) ((fun (b : @SAWCoreScaffolding.Bool) (a : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => if b then (@SAWCorePrelude.bvMul (n) (x) ((@SAWCorePrelude.bvMul (n) (a) (a)))) else (@SAWCorePrelude.bvMul (n) (a) (a)))) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) (1))) ((@SAWCorePrelude.reverse (n) (@SAWCoreScaffolding.Bool) (y))))).
 
 Definition updFst : forall (a : Type), forall (b : Type), ((a) -> a) -> ((prod (a) (b))) -> (prod (a) (b)) :=
   (fun (a : Type) (b : Type) (f : (a) -> a) (x : (prod (a) (b))) => (pair ((f ((fst (x))))) ((snd (x))))).
@@ -210,7 +210,7 @@ Definition PZeroSeq : forall (n : (@Num)), forall (a : Type), ((@CryptolPrimitiv
   (fun (n : (@Num)) (a : Type) (pa : a) => (@CryptolPrimitives.seqConst (n) (a) (pa))).
 
 Definition PZeroSeqBool : forall (n : (@Num)), (@CryptolPrimitives.PZero ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool)))) :=
-  (fun (n : (@Num)) => (@Num_rect ((fun (n : (@Num)) => (@CryptolPrimitives.PZero ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool)))))) ((fun (n : (@Nat)) => (@SAWCorePrelude.bvNat (n) (0)))) ((@SAWCorePrelude.streamConst (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.False))) (n))).
+  (fun (n : (@Num)) => (@Num_rect ((fun (n : (@Num)) => (@CryptolPrimitives.PZero ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool)))))) ((fun (n : (@Nat)) => (@SAWCoreVectorsAsCoqVectors.bvNat (n) (0)))) ((@SAWCorePrelude.streamConst (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.False))) (n))).
 
 Definition PZeroFun : forall (a : Type), forall (b : Type), ((@CryptolPrimitives.PZero (b))) -> (@CryptolPrimitives.PZero ((a) -> b)) :=
   (fun (a : Type) (b : Type) (pb : b) (_ : a) => pb).
@@ -336,7 +336,7 @@ Definition PLiteral : forall (a : Type), Type :=
   (fun (a : Type) => ((@Nat)) -> a).
 
 Definition PLiteralSeqBool : forall (n : (@Num)), (@CryptolPrimitives.PLiteral ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool)))) :=
-  (fun (n : (@Num)) => (@Num_rect ((fun (n : (@Num)) => (@CryptolPrimitives.PLiteral ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool)))))) (@SAWCorePrelude.bvNat) ((@SAWCoreScaffolding.error ((@CryptolPrimitives.PLiteral ((@Stream (@SAWCoreScaffolding.Bool))))) (("PLiteralSeqBool: no instance for streams")%string))) (n))).
+  (fun (n : (@Num)) => (@Num_rect ((fun (n : (@Num)) => (@CryptolPrimitives.PLiteral ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool)))))) (@SAWCoreVectorsAsCoqVectors.bvNat) ((@SAWCoreScaffolding.error ((@CryptolPrimitives.PLiteral ((@Stream (@SAWCoreScaffolding.Bool))))) (("PLiteralSeqBool: no instance for streams")%string))) (n))).
 
 Definition PLiteralInteger : (@CryptolPrimitives.PLiteral (@SAWCorePrelude.Integer)) :=
   @SAWCorePrelude.natToInt.
@@ -504,7 +504,7 @@ Definition ecUExt : forall (m : (@Num)), forall (n : (@Num)), ((@CryptolPrimitiv
   (@CryptolPrimitives.finNumRec2 ((fun (m : (@Num)) (n : (@Num)) => ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> (@CryptolPrimitives.seq ((@CryptolPrimitives.tcAdd (m) (n))) (@SAWCoreScaffolding.Bool)))) (@SAWCorePrelude.bvUExt)).
 
 Definition ecSExt : forall (m : (@Num)), forall (n : (@Num)), ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> (@CryptolPrimitives.seq ((@CryptolPrimitives.tcAdd (m) (n))) (@SAWCoreScaffolding.Bool)) :=
-  (@CryptolPrimitives.finNumRec2 ((fun (m : (@Num)) (n : (@Num)) => ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> (@CryptolPrimitives.seq ((@CryptolPrimitives.tcAdd (m) (n))) (@SAWCoreScaffolding.Bool)))) ((fun (m : (@Nat)) (n : (@Nat)) => (@SAWCorePrelude.natCase ((fun (n' : (@Nat)) => ((@SAWCorePrelude.bitvector (n'))) -> (@SAWCorePrelude.bitvector ((@SAWCorePrelude.addNat (m) (n')))))) ((fun (_ : (@SAWCoreVectorsAsCoqVectors.Vec (0) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.bvNat ((@SAWCorePrelude.addNat (m) (0))) (0)))) ((@SAWCorePrelude.bvSExt (m))) (n))))).
+  (@CryptolPrimitives.finNumRec2 ((fun (m : (@Num)) (n : (@Num)) => ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> (@CryptolPrimitives.seq ((@CryptolPrimitives.tcAdd (m) (n))) (@SAWCoreScaffolding.Bool)))) ((fun (m : (@Nat)) (n : (@Nat)) => (@SAWCorePrelude.natCase ((fun (n' : (@Nat)) => ((@SAWCorePrelude.bitvector (n'))) -> (@SAWCorePrelude.bitvector ((@SAWCorePrelude.addNat (m) (n')))))) ((fun (_ : (@SAWCoreVectorsAsCoqVectors.Vec (0) (@SAWCoreScaffolding.Bool))) => (@SAWCoreVectorsAsCoqVectors.bvNat ((@SAWCorePrelude.addNat (m) (0))) (0)))) ((@SAWCorePrelude.bvSExt (m))) (n))))).
 
 Definition ecSgt : forall (n : (@Num)), ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> @SAWCoreScaffolding.Bool :=
   (@CryptolPrimitives.finNumRec ((fun (n : (@Num)) => ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> @SAWCoreScaffolding.Bool)) (@SAWCorePrelude.bvsgt)).
@@ -518,7 +518,7 @@ Definition ecSlt : forall (n : (@Num)), ((@CryptolPrimitives.seq (n) (@SAWCoreSc
 Definition ecSle : forall (n : (@Num)), ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> @SAWCoreScaffolding.Bool :=
   (@CryptolPrimitives.finNumRec ((fun (n : (@Num)) => ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> ((@CryptolPrimitives.seq (n) (@SAWCoreScaffolding.Bool))) -> @SAWCoreScaffolding.Bool)) (@SAWCorePrelude.bvsle)).
 
-Axiom replicate_False : forall (n : (@Nat)), (@Eq ((@SAWCorePrelude.bitvector (n))) ((@SAWCorePrelude.replicate (n) (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.False))) ((@SAWCorePrelude.bvNat (n) (0)))) .
+Axiom replicate_False : forall (n : (@Nat)), (@Eq ((@SAWCorePrelude.bitvector (n))) ((@SAWCorePrelude.replicate (n) (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.False))) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) (0)))) .
 
 Axiom subNat_0 : forall (n : (@Nat)), (@Eq ((@Nat)) ((@SAWCorePrelude.subNat (n) (0))) (n)) .
 

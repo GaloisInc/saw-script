@@ -30,19 +30,20 @@ Proof.
   { simpl in *. intuition. }
 Qed.
 
-Ltac solve_unsafeAssert_step :=
+Ltac solveUnsafeAssertStep :=
   match goal with
   | [ |- context [ Succ ] ] => unfold Succ
-  | [n : Num |- _] => destruct n
-  | [ |- Eq Num ?a ?a ] => reflexivity
+  | [ n : Num |- _ ] => destruct n
   | [ |- Eq Num (TCNum _) (TCNum _) ] => apply Eq_TCNum
+  | [ |- Eq Num _ _ ] => reflexivity
   | [ |- context [ minNat _ _ ] ] => rewrite minNat_min
   | [ |- min ?n (S ?n) = ?n ] => apply min_S
   end.
 
-Ltac solve_unsafeAssert := repeat (solve_unsafeAssert_step; simpl).
+Ltac solveUnsafeAssert := repeat (solveUnsafeAssertStep; simpl).
 
-Definition cbc_enc_helper n : Eq Num (tcMin n (tcAdd (TCNum 1) n)) n := ltac:(solve_unsafeAssert).
+Definition cbc_enc_helper n : Eq Num (tcMin n (tcAdd (TCNum 1) n)) n :=
+  ltac:(solveUnsafeAssert).
 
 (*
 Goal forall n p b, Eq Num (tcAdd n (tcAdd (TCNum 32) p)) (tcMul (tcAdd (TCNum 2) b) (TCNum 16)).

@@ -175,7 +175,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ++
   [ ("error",             mapsTo sawDefinitionsModule "error")
   , ("fix",               skip)
-  , ("unsafeAssert",      rename "sawUnsafeAssert")
+  , ("unsafeAssert",      replace $ Coq.Ltac "solveUnsafeAssert")
   , ("unsafeCoerce",      skip)
   , ("unsafeCoerce_same", skip)
   ]
@@ -281,6 +281,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("at",                rename "sawAt") -- `at` is a reserved keyword in Coq
   , ("at_single",         skip) -- is boring, could be proved on the Coq side
   , ("atWithDefault",     mapsTo vectorsModule "atWithDefault")
+  , ("bvNat",             mapsTo vectorsModule "bvNat")
   , ("coerceVec",         mapsTo vectorsModule "coerceVec")
   , ("EmptyVec",          mapsTo vectorsModule "EmptyVec")
   , ("eq_Vec",            skip)

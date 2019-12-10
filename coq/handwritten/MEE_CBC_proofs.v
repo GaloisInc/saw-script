@@ -4,19 +4,19 @@ From Coq          Require Import Logic.Eqdep_dec.
 From Coq          Require Import Omega.
 From Coq          Require Import String.
 From Coq          Require Import Vectors.Vector.
-From CryptolToCoq Require Import SAWCoreScaffolding.
-From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-From Records      Require Import Records.
 
+From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
+From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra.
+From CryptolToCoq Require Import Cryptol_proofs.
+From CryptolToCoq Require Import MEE_CBC.
 From CryptolToCoq Require Import SAWCorePrelude.
-Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCorePreludeExtra.
 From CryptolToCoq Require Import SAWCorePrelude_proofs.
-From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
-Import CryptolPrimitives.
-From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra.
+From CryptolToCoq Require Import SAWCoreScaffolding.
+From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 
-From CryptolToCoq Require Import MEE_CBC.
+Import CryptolPrimitives.
+Import SAWCorePrelude.
 
 (*Notation "a" := (TCNum a) (at level 0, a at level 0, only printing).*)
 Notation "a '+' b" := (tcAdd a b).
@@ -89,105 +89,6 @@ Definition fin_seq_concat T m n :
   rewrite rewrite_addNat.
   apply Vector.append.
 Defined.
-
-Theorem gen_domain_eq n T : forall f g (domain_eq : forall m, m < n -> f m = g m),
-    gen n T f = gen n T g.
-Proof.
-  induction n; intros.
-  { reflexivity. }
-  {
-    simpl.
-    f_equal.
-    {
-      apply domain_eq.
-      apply PeanoNat.Nat.lt_0_succ.
-    }
-    {
-      apply IHn.
-      intuition.
-    }
-  }
-Qed.
-
-Theorem sawAt_zero T size h t :
-    sawAt (S size) T (cons T h size t) 0 = h.
-Proof.
-  unfold sawAt. now simpl.
-Qed.
-
-Theorem sawAt_S T size h t index :
-    sawAt (S size) T (cons T h size t) (S index) = sawAt size T t index.
-Proof.
-  unfold sawAt. now simpl.
-Qed.
-
-Require Import Morphisms.
-Import ProperNotations.
-
-Global Instance Proper_gen n a :
-    Proper (@pointwise_relation _ _ eq ==> eq) (@gen n a).
-Proof.
-  induction n.
-  {
-    now simpl.
-  }
-  {
-    intros f g FG.
-    simpl.
-    f_equal.
-    {
-      now apply FG.
-    }
-    {
-      rewrite IHn.
-      {
-        reflexivity.
-      }
-      {
-        intro.
-        apply FG.
-      }
-    }
-  }
-Qed.
-
-Lemma gen_sawAt T (m : Nat) a : gen m T (fun i => sawAt m T a i) = a.
-Proof.
-  induction m.
-  {
-    simpl.
-    now apply Vector.case0.
-  }
-  {
-    simpl.
-    apply @Vector.caseS' with (v := a).
-    intros h t.
-    f_equal.
-    setoid_rewrite sawAt_S.
-    apply IHm.
-  }
-Qed.
-
-Global Instance Proper_Nat__rec p T :
-    Proper
-      (
-        (forall_relation (fun _ => eq ==> eq)%signature)
-          ==>
-          (forall_relation (fun _ => eq))
-      )
-      (@Nat__rec p T).
-Proof.
-  intros tSucc1 tSucc2 TSucc n.
-  induction n.
-  {
-    simpl.
-    reflexivity.
-  }
-  {
-    simpl.
-    now erewrite TSucc.
-  }
-Qed.
 
 Theorem Nat__rec_S t o s n : Nat__rec t o s (S n) = s n (Nat__rec t o s n).
 Proof.

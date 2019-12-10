@@ -459,14 +459,14 @@ Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
     xs in Vector.t _ m'
     return Vector.t _ (minNat m' n)
   with
-  | Vector.nil _ => Vector.nil _
-  | Vector.cons _ x pm xs =>
+  | Vector.nil => Vector.nil _
+  | Vector.cons x pm xs =>
     match
       ys in Vector.t _ n'
       return Vector.t _ (minNat (S pm) n')
     with
-    | Vector.nil _ => Vector.nil _
-    | Vector.cons _ y pm' ys => Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)
+    | Vector.nil => Vector.nil _
+    | Vector.cons y pm' ys => Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)
     end
   end
 .
@@ -534,8 +534,6 @@ Definition msb : forall (n : (@Nat)), ((@SAWCorePrelude.bitvector ((@Succ (n))))
 Definition lsb : forall (n : (@Nat)), ((@SAWCorePrelude.bitvector ((@Succ (n))))) -> @SAWCoreScaffolding.Bool :=
   (fun (n : (@Nat)) (v : (@SAWCoreVectorsAsCoqVectors.Vec ((@Succ (n))) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.sawAt ((@Succ (n))) (@SAWCoreScaffolding.Bool) (v) (n))).
 
-Axiom bvNat : forall (n : (@Nat)), ((@Nat)) -> (@SAWCorePrelude.bitvector (n)) .
-
 Axiom bvToNat : forall (n : (@Nat)), ((@SAWCorePrelude.bitvector (n))) -> (@Nat) .
 
 Definition bvAt : forall (n : (@Nat)), forall (a : Type), forall (w : (@Nat)), ((@SAWCoreVectorsAsCoqVectors.Vec (n) (a))) -> ((@SAWCorePrelude.bitvector (w))) -> a :=
@@ -589,9 +587,9 @@ Definition bvSCarry : forall (n : (@Nat)), ((@SAWCorePrelude.bitvector ((@Succ (
 Definition bvAddWithCarry : forall (n : (@Nat)), ((@SAWCorePrelude.bitvector (n))) -> ((@SAWCorePrelude.bitvector (n))) -> (prod (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.bitvector (n)))) :=
   (fun (n : (@Nat)) (x : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) (y : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => (pair ((@SAWCorePrelude.bvCarry (n) (x) (y))) ((@SAWCorePrelude.bvAdd (n) (x) (y))))).
 
-Axiom bvAddZeroL : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), (@Eq ((@SAWCorePrelude.bitvector (n))) ((@SAWCorePrelude.bvAdd (n) ((@SAWCorePrelude.bvNat (n) (0))) (x))) (x)) .
+Axiom bvAddZeroL : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), (@Eq ((@SAWCorePrelude.bitvector (n))) ((@SAWCorePrelude.bvAdd (n) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) (0))) (x))) (x)) .
 
-Axiom bvAddZeroR : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), (@Eq ((@SAWCorePrelude.bitvector (n))) ((@SAWCorePrelude.bvAdd (n) (x) ((@SAWCorePrelude.bvNat (n) (0))))) (x)) .
+Axiom bvAddZeroR : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), (@Eq ((@SAWCorePrelude.bitvector (n))) ((@SAWCorePrelude.bvAdd (n) (x) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) (0))))) (x)) .
 
 Axiom bvNeg : forall (n : (@Nat)), ((@SAWCorePrelude.bitvector (n))) -> (@SAWCorePrelude.bitvector (n)) .
 
@@ -645,25 +643,25 @@ Axiom bvEq_refl : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n
 
 (* Prelude.eq_VecVec was skipped *)
 
-Axiom equalNat_bv : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), forall (i : (@Nat)), (@Eq (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.equalNat (i) ((@SAWCorePrelude.bvToNat (n) (x))))) ((@SAWCorePrelude.bvEq (n) ((@SAWCorePrelude.bvNat (n) (i))) (x)))) .
+Axiom equalNat_bv : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), forall (i : (@Nat)), (@Eq (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.equalNat (i) ((@SAWCorePrelude.bvToNat (n) (x))))) ((@SAWCorePrelude.bvEq (n) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) (i))) (x)))) .
 
 Definition bvBool : forall (n : (@Nat)), (@SAWCoreScaffolding.Bool) -> (@SAWCorePrelude.bitvector (n)) :=
-  (fun (n : (@Nat)) (b : @SAWCoreScaffolding.Bool) => if b then (@SAWCorePrelude.bvNat (n) (1)) else (@SAWCorePrelude.bvNat (n) (0))).
+  (fun (n : (@Nat)) (b : @SAWCoreScaffolding.Bool) => if b then (@SAWCoreVectorsAsCoqVectors.bvNat (n) (1)) else (@SAWCoreVectorsAsCoqVectors.bvNat (n) (0))).
 
 Definition bvNe : forall (n : (@Nat)), ((@SAWCorePrelude.bitvector (n))) -> ((@SAWCorePrelude.bitvector (n))) -> @SAWCoreScaffolding.Bool :=
   (fun (n : (@Nat)) (x : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) (y : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => (@SAWCoreScaffolding.not ((@SAWCorePrelude.bvEq (n) (x) (y))))).
 
 Definition bvNonzero : forall (n : (@Nat)), ((@SAWCorePrelude.bitvector (n))) -> @SAWCoreScaffolding.Bool :=
-  (fun (n : (@Nat)) (x : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.bvNe (n) (x) ((@SAWCorePrelude.bvNat (n) (0))))).
+  (fun (n : (@Nat)) (x : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.bvNe (n) (x) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) (0))))).
 
 Definition bvTrunc : forall (x : (@Nat)), forall (y : (@Nat)), ((@SAWCorePrelude.bitvector ((@SAWCorePrelude.addNat (x) (y))))) -> (@SAWCorePrelude.bitvector (y)) :=
   (@SAWCorePrelude.drop (@SAWCoreScaffolding.Bool)).
 
 Definition bvUExt : forall (m : (@Nat)), forall (n : (@Nat)), ((@SAWCorePrelude.bitvector (n))) -> (@SAWCorePrelude.bitvector ((@SAWCorePrelude.addNat (m) (n)))) :=
-  (fun (m : (@Nat)) (n : (@Nat)) (x : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.append (m) (n) (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.bvNat (m) (0))) (x))).
+  (fun (m : (@Nat)) (n : (@Nat)) (x : (@SAWCoreVectorsAsCoqVectors.Vec (n) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.append (m) (n) (@SAWCoreScaffolding.Bool) ((@SAWCoreVectorsAsCoqVectors.bvNat (m) (0))) (x))).
 
 Definition replicateBool : forall (n : (@Nat)), (@SAWCoreScaffolding.Bool) -> (@SAWCorePrelude.bitvector (n)) :=
-  (fun (n : (@Nat)) (b : @SAWCoreScaffolding.Bool) => if b then (@SAWCorePrelude.bvNot (n) ((@SAWCorePrelude.bvNat (n) (0)))) else (@SAWCorePrelude.bvNat (n) (0))).
+  (fun (n : (@Nat)) (b : @SAWCoreScaffolding.Bool) => if b then (@SAWCorePrelude.bvNot (n) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) (0)))) else (@SAWCoreVectorsAsCoqVectors.bvNat (n) (0))).
 
 Definition bvSExt : forall (m : (@Nat)), forall (n : (@Nat)), ((@SAWCorePrelude.bitvector ((@Succ (n))))) -> (@SAWCorePrelude.bitvector ((@SAWCorePrelude.addNat (m) ((@Succ (n)))))) :=
   (fun (m : (@Nat)) (n : (@Nat)) (x : (@SAWCoreVectorsAsCoqVectors.Vec ((@Succ (n))) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.append (m) ((@Succ (n))) (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.replicateBool (m) ((@SAWCorePrelude.msb (n) (x))))) (x))).
@@ -813,19 +811,19 @@ Definition fixM : forall (a : Type), forall (b : Type), (((a) -> (@SAWCorePrelud
   (fun (a : Type) (b : Type) (f : ((a) -> (@SAWCorePrelude.CompM (b))) -> (a) -> (@SAWCorePrelude.CompM (b))) (x : a) => (@SAWCorePrelude.letRecM ((@TypesCons (a) (b) ((@TypesNil)))) (b) ((fun (funs : (prod ((a) -> (@SAWCorePrelude.CompM (b))) (unit))) => (pair ((f ((fst (funs))))) (tt)))) ((fun (funs : (prod ((a) -> (@SAWCorePrelude.CompM (b))) (unit))) => ((fst (funs)) (x)))))).
 
 Definition test_fun0 : ((@SAWCorePrelude.bitvector (64))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64)))) :=
-  (fun (_ : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bvNat (64) (0))))).
+  (fun (_ : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) ((@SAWCoreVectorsAsCoqVectors.bvNat (64) (0))))).
 
 Definition test_fun1 : ((@SAWCorePrelude.bitvector (64))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64)))) :=
-  (fun (_ : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bvNat (64) (1))))).
+  (fun (_ : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) ((@SAWCoreVectorsAsCoqVectors.bvNat (64) (1))))).
 
 Definition test_fun2 : ((@SAWCorePrelude.bitvector (64))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64)))) :=
   (fun (x : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) (x))).
 
 Definition test_fun3 : ((@SAWCorePrelude.bitvector (64))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64)))) :=
-  (fun (x : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => if (@SAWCorePrelude.bvEq (64) (x) ((@SAWCorePrelude.bvNat (64) (0)))) then (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) (x)) else (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bvNat (64) (0))))).
+  (fun (x : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => if (@SAWCorePrelude.bvEq (64) (x) ((@SAWCoreVectorsAsCoqVectors.bvNat (64) (0)))) then (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) (x)) else (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) ((@SAWCoreVectorsAsCoqVectors.bvNat (64) (0))))).
 
 Definition test_fun4 : ((@SAWCorePrelude.bitvector (64))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64)))) :=
-  (fun (x : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.letRecM1 ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bitvector (64))) ((fun (f : ((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) (y : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bvNat (64) (0)))))) ((fun (f : ((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) => (f (x)))))).
+  (fun (x : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.letRecM1 ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bitvector (64))) ((fun (f : ((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) (y : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.returnM ((@SAWCorePrelude.bitvector (64))) ((@SAWCoreVectorsAsCoqVectors.bvNat (64) (0)))))) ((fun (f : ((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) => (f (x)))))).
 
 Definition test_fun5 : ((@SAWCorePrelude.bitvector (64))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64)))) :=
   (fun (x : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.letRecM1 ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bitvector (64))) ((fun (f : ((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) => f)) ((fun (f : ((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) => (f (x)))))).
@@ -833,13 +831,13 @@ Definition test_fun5 : ((@SAWCorePrelude.bitvector (64))) -> (@SAWCorePrelude.Co
 Definition test_fun6 : ((@SAWCorePrelude.bitvector (64))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64)))) :=
   (fun (x : (@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) => (@SAWCorePrelude.letRecM ((@TypesCons ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bitvector (64))) ((@TypesCons ((@SAWCorePrelude.bitvector (64))) ((@SAWCorePrelude.bitvector (64))) ((@TypesNil)))))) ((@SAWCorePrelude.bitvector (64))) ((fun (funs : (prod (((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) ((prod (((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) (unit))))) => (pair ((fst ((snd (funs))))) ((pair ((fst (funs))) (tt)))))) ((fun (funs : (prod (((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) ((prod (((@SAWCoreVectorsAsCoqVectors.Vec (64) (@SAWCoreScaffolding.Bool))) -> (@SAWCorePrelude.CompM ((@SAWCorePrelude.bitvector (64))))) (unit))))) => ((fst (funs)) (x)))))).
 
-Axiom bveq_sameL : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), forall (z : (@SAWCorePrelude.bitvector (n))), (@Eq (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.bvEq (n) (x) ((@SAWCorePrelude.bvAdd (n) (x) (z))))) ((@SAWCorePrelude.bvEq (n) ((@SAWCorePrelude.bvNat (n) (0))) (z)))) .
+Axiom bveq_sameL : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), forall (z : (@SAWCorePrelude.bitvector (n))), (@Eq (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.bvEq (n) (x) ((@SAWCorePrelude.bvAdd (n) (x) (z))))) ((@SAWCorePrelude.bvEq (n) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) (0))) (z)))) .
 
-Axiom bveq_sameR : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), forall (y : (@SAWCorePrelude.bitvector (n))), (@Eq (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.bvEq (n) ((@SAWCorePrelude.bvAdd (n) (x) (y))) (x))) ((@SAWCorePrelude.bvEq (n) (y) ((@SAWCorePrelude.bvNat (n) (0)))))) .
+Axiom bveq_sameR : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), forall (y : (@SAWCorePrelude.bitvector (n))), (@Eq (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.bvEq (n) ((@SAWCorePrelude.bvAdd (n) (x) (y))) (x))) ((@SAWCorePrelude.bvEq (n) (y) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) (0)))))) .
 
 Axiom bveq_same2 : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), forall (y : (@SAWCorePrelude.bitvector (n))), forall (z : (@SAWCorePrelude.bitvector (n))), (@Eq (@SAWCoreScaffolding.Bool) ((@SAWCorePrelude.bvEq (n) ((@SAWCorePrelude.bvAdd (n) (x) (y))) ((@SAWCorePrelude.bvAdd (n) (x) (z))))) ((@SAWCorePrelude.bvEq (n) (y) (z)))) .
 
-Axiom bvNat_bvToNat : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), (@Eq ((@SAWCorePrelude.bitvector (n))) ((@SAWCorePrelude.bvNat (n) ((@SAWCorePrelude.bvToNat (n) (x))))) (x)) .
+Axiom bvNat_bvToNat : forall (n : (@Nat)), forall (x : (@SAWCorePrelude.bitvector (n))), (@Eq ((@SAWCorePrelude.bitvector (n))) ((@SAWCoreVectorsAsCoqVectors.bvNat (n) ((@SAWCorePrelude.bvToNat (n) (x))))) (x)) .
 
 Axiom ite_split_cong : forall (b : @SAWCoreScaffolding.Bool), forall (x : (@SAWCoreVectorsAsCoqVectors.Vec (384) (@SAWCoreScaffolding.Bool))), forall (y : (@SAWCoreVectorsAsCoqVectors.Vec (384) (@SAWCoreScaffolding.Bool))), (@Eq ((@SAWCoreVectorsAsCoqVectors.Vec (12) ((@SAWCoreVectorsAsCoqVectors.Vec (32) (@SAWCoreScaffolding.Bool))))) ((@SAWCorePrelude.split (12) (32) (@SAWCoreScaffolding.Bool) (if b then x else y))) (if b then (@SAWCorePrelude.split (12) (32) (@SAWCoreScaffolding.Bool) (x)) else (@SAWCorePrelude.split (12) (32) (@SAWCoreScaffolding.Bool) (y)))) .
 

@@ -1,9 +1,14 @@
-From Coq.Lists          Require Import List.
-From Coq.Numbers.NatInt Require        NZLog.
-From Coq                Require Import PeanoNat.
-From Coq.Strings        Require        String.
-From Coq.Vectors        Require        Vector.
-From CryptolToCoq       Require Import SAWCoreScaffolding.
+From Coq Require Import Lists.List.
+From Coq Require        Numbers.NatInt.NZLog.
+From Coq Require Import PeanoNat.
+From Coq Require        Strings.String.
+From Coq Require        Vectors.Vector.
+
+From CryptolToCoq Require Import SAWCoreScaffolding.
+
+From mathcomp Require Import ssreflect.
+From mathcomp Require Import ssrnat.
+From mathcomp Require Import fintype.
 
 Definition Vec (n : nat) (a : Type) : Type := VectorDef.t a n.
 
@@ -16,11 +21,65 @@ Fixpoint gen (n : nat) (a : Type) (f : nat -> a) {struct n} : Vec n a.
     ).
 Defined.
 
+Theorem gen_domain_eq n T : forall f g (domain_eq : forall i, f i = g i),
+    gen n T f = gen n T g.
+Proof.
+  move : n.
+  elim => [|n' IH] f g DEQ.
+  { reflexivity. }
+  {
+    simpl.
+    f_equal.
+    {
+      apply DEQ.
+    }
+    {
+      apply IH.
+      intuition.
+    }
+  }
+Qed.
+
+Fixpoint genOrdinal (n : nat) (a : Type) {struct n}
+  : forall (f : 'I_n -> a), Vec n a.
+  refine (
+      match n as n' with
+      | O   => fun _ => Vector.nil _
+      | S p =>
+        fun f =>
+          Vector.cons
+            _
+            (f (Ordinal (ltn0Sn _)))
+            _
+            (genOrdinal _ _ (fun q => f (rshift 1 q)))
+      end
+    ).
+Defined.
+
+Theorem genOrdinal_domain_eq n T : forall f g (domain_eq : forall i, f i = g i),
+    genOrdinal n T f = genOrdinal n T g.
+Proof.
+  move : n.
+  elim => [|n' IH] f g DEQ.
+  { reflexivity. }
+  {
+    simpl.
+    f_equal.
+    {
+      apply DEQ.
+    }
+    {
+      apply IH.
+      intuition.
+    }
+  }
+Qed.
+
 Fixpoint atWithDefault (n : nat) (a : Type) (default : a) (v : Vec n a) (index : nat) : a.
   refine (
       match v with
-      | Vector.nil _ => default
-      | Vector.cons _ h n' t =>
+      | Vector.nil => default
+      | Vector.cons h n' t =>
         match index with
         | O => h
         | S index' => atWithDefault n' _ default t index'
@@ -34,8 +93,8 @@ Definition map (a b : Type) (f : a -> b) (n : Nat) (xs : Vec n a) :=
 
 Fixpoint foldr (a b : Type) (n : Nat) (f : a -> b -> b) (base : b) (v : Vec n a) : b :=
   match v with
-  | Vector.nil _ => base
-  | Vector.cons _ hd _ tl => f hd (foldr _ _ _ f base tl)
+  | Vector.nil => base
+  | Vector.cons hd _ tl => f hd (foldr _ _ _ f base tl)
   end.
 
 Definition EmptyVec := Vector.nil.
@@ -45,7 +104,7 @@ Definition coerceVec (a : sort 0) (m n : Nat) (eq : Eq Nat m n) (v : Vec m a) : 
     identity_sym eq in identity _ n'
     return Vec n' a -> Vec n a
   with
-  | identity_refl _ => fun x => x
+  | identity_refl => fun x => x
   end v.
 
 Theorem gen_add m n T : forall f, gen (m + n) T f = Vector.append (gen m T f) (gen n T (fun x => f (m + x))).
@@ -70,17 +129,26 @@ Fixpoint zipFunctional (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
     xs in Vector.t _ m'
     return Vector.t _ (Nat.min m' n)
   with
-  | Vector.nil _ => Vector.nil _
-  | Vector.cons _ x pm xs =>
+  | Vector.nil => Vector.nil _
+  | Vector.cons x pm xs =>
     match
       ys in Vector.t _ n'
       return Vector.t _ (Nat.min (S pm) n')
     with
-    | Vector.nil _ => Vector.nil _
-    | Vector.cons _ y pm' ys => Vector.cons _ (x, y) _ (zipFunctional _ _ _ _ xs ys)
+    | Vector.nil => Vector.nil _
+    | Vector.cons y pm' ys => Vector.cons _ (x, y) _ (zipFunctional _ _ _ _ xs ys)
     end
   end
 .
 
 Definition zipWithFunctional (a b c : Type) (f : a -> b -> c) (n : Nat) (xs : Vec n a) (ys : Vec n b) :=
   VectorDef.map (fun p => f (fst p) (snd p)) (zipFunctional _ _ _ _ xs ys).
+
+Definition joinLSB {n} (v : Vector.t bool n) (lsb : bool) : Vector.t bool n.+1 :=
+  Vector.shiftin lsb v.
+
+Fixpoint bvNat (size : Nat) (number : Nat) : Vector.t bool size :=
+  if size is size'.+1
+  then joinLSB (bvNat size' (number./2)) (Nat.odd number)
+  else Vector.nil _
+.
