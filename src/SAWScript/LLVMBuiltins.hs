@@ -40,6 +40,7 @@ llvm_load_module file =
     Left err -> fail (LLVM.formatError err)
     Right llvm_mod -> do
       halloc <- getHandleAlloc
+      let ?laxArith = False -- TODO? should this be configurable?
       Some mtrans <- io $ Crucible.translateModule halloc llvm_mod
       return (Some (CMS.LLVMModule file llvm_mod mtrans))
 
