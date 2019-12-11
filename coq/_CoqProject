@@ -16,7 +16,7 @@ generated/BESSPIN/SBB.v
 generated/BESSPIN/SBB_Invariants.v
 handwritten/BESSPIN/SBB_Scaffolding.v
 
-generated/S2N.v
+generated/S2N/S2N.v
 handwritten/S2N_proofs.v
 handwritten/S2N/Embedding.v
 handwritten/S2N/Pointed.v
