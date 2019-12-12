@@ -10,7 +10,7 @@ import qualified Verifier.SAW.Simulator.RME.Base as RME
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
 import Verifier.SAW.Recognizer(asPiList)
 
-import SAWScript.Proof(propToPredicate)
+import SAWScript.Proof(Prop, propToPredicate)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
@@ -18,8 +18,8 @@ import SAWScript.Prover.Util
 -- | Bit-blast a proposition and check its validity using RME.
 proveRME ::
   SharedContext {- ^ Context for working with terms -} ->
-  Term          {- ^ A boolean term to be proved/checked. -} ->
-  IO (Maybe [(String,FirstOrderValue)], SolverStats)
+  Prop          {- ^ A proposition to be proved -} ->
+  IO (Maybe [(String, FirstOrderValue)], SolverStats)
 proveRME sc goal =
   do t0 <- propToPredicate sc goal
      TypedTerm schema t <-

@@ -350,7 +350,7 @@ quickcheckGoal sc n = do
   withFirstGoal $ \goal -> io $ do
     printOutLn opts Warn $ "WARNING: using quickcheck to prove goal..."
     hFlush stdout
-    let tm = goalTerm goal
+    let Prop tm = goalProp goal
     ty <- scTypeOf sc tm
     maybeInputs <- scTestableType sc ty
     maybeInputs' <- scTestableType sc tm
@@ -369,21 +369,24 @@ quickcheckGoal sc n = do
         showTerm ty ++ ", for term: " ++ showTerm tm
 
 assumeValid :: ProofScript SV.ProofResult
-assumeValid = withFirstGoal $ \goal -> do
-  printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
-  let stats = solverStats "ADMITTED" (scSharedSize (goalTerm goal))
-  return (SV.Valid stats, stats, Nothing)
+assumeValid =
+  withFirstGoal $ \goal ->
+  do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
+     let stats = solverStats "ADMITTED" (scSharedSize (unProp (goalProp goal)))
+     return (SV.Valid stats, stats, Nothing)
 
 assumeUnsat :: ProofScript SV.SatResult
-assumeUnsat = withFirstGoal $ \goal -> do
-  printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
-  let stats = solverStats "ADMITTED" (scSharedSize (goalTerm goal))
-  return (SV.Unsat stats, stats, Nothing)
+assumeUnsat =
+  withFirstGoal $ \goal ->
+  do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
+     let stats = solverStats "ADMITTED" (scSharedSize (unProp (goalProp goal)))
+     return (SV.Unsat stats, stats, Nothing)
 
 trivial :: ProofScript SV.SatResult
-trivial = withFirstGoal $ \goal -> do
-  checkTrue (goalTerm goal)
-  return (SV.Unsat mempty, mempty, Nothing)
+trivial =
+  withFirstGoal $ \goal ->
+  do checkTrue (unProp (goalProp goal))
+     return (SV.Unsat mempty, mempty, Nothing)
   where
     checkTrue :: Term -> TopLevel ()
     checkTrue (asPiList -> (_, asEqTrue -> Just (asBool -> Just True))) = return ()
@@ -394,16 +397,16 @@ split_goal =
   StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "ProofScript failed: no subgoal"
-    (ProofGoal num ty name prop) : gs ->
-      let (vars, body) = asLambdaList prop in
-      case (isGlobalDef "Prelude.and" <@> return <@> return) body of
+    (ProofGoal num ty name (Prop prop)) : gs ->
+      let (vars, body) = asPiList prop in
+      case (isGlobalDef "Prelude.and" <@> return <@> return) =<< asEqTrue body of
         Nothing -> fail "split_goal: goal not of form 'Prelude.and _ _'"
         Just (_ :*: p1 :*: p2) ->
           do sc <- getSharedContext
-             t1 <- io $ scLambdaList sc vars p1
-             t2 <- io $ scLambdaList sc vars p2
-             let g1 = ProofGoal num (ty ++ ".left") name t1
-             let g2 = ProofGoal num (ty ++ ".right") name t2
+             t1 <- io $ scPiList sc vars =<< scEqTrue sc p1
+             t2 <- io $ scPiList sc vars =<< scEqTrue sc p2
+             let g1 = ProofGoal num (ty ++ ".left") name (Prop t1)
+             let g2 = ProofGoal num (ty ++ ".right") name (Prop t2)
              return ((), ProofState (g1 : g2 : gs) concl stats timeout)
 
 getTopLevelPPOpts :: TopLevel PPOpts
@@ -428,67 +431,74 @@ print_term_depth d t = do
   printOutLnTop Info $ show (scPrettyTerm opts' t)
 
 print_goal :: ProofScript ()
-print_goal = withFirstGoal $ \goal -> do
-  opts <- getTopLevelPPOpts
-  printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
-  printOutLnTop Info (scPrettyTerm opts (goalTerm goal))
-  return ((), mempty, Just goal)
+print_goal =
+  withFirstGoal $ \goal ->
+  do opts <- getTopLevelPPOpts
+     printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
+     printOutLnTop Info (scPrettyTerm opts (unProp (goalProp goal)))
+     return ((), mempty, Just goal)
 
 print_goal_depth :: Int -> ProofScript ()
-print_goal_depth n = withFirstGoal $ \goal -> do
-  opts <- getTopLevelPPOpts
-  let opts' = opts { ppMaxDepth = Just n }
-  printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
-  printOutLnTop Info $ scPrettyTerm opts' (goalTerm goal)
-  return ((), mempty, Just goal)
+print_goal_depth n =
+  withFirstGoal $ \goal ->
+  do opts <- getTopLevelPPOpts
+     let opts' = opts { ppMaxDepth = Just n }
+     printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
+     printOutLnTop Info $ scPrettyTerm opts' (unProp (goalProp goal))
+     return ((), mempty, Just goal)
 
 printGoalConsts :: ProofScript ()
-printGoalConsts = withFirstGoal $ \goal -> do
-  mapM_ (printOutLnTop Info) $ Map.keys (getConstantSet (goalTerm goal))
-  return ((), mempty, Just goal)
+printGoalConsts =
+  withFirstGoal $ \goal ->
+  do mapM_ (printOutLnTop Info) $ Map.keys (getConstantSet (unProp (goalProp goal)))
+     return ((), mempty, Just goal)
 
 printGoalSize :: ProofScript ()
-printGoalSize = withFirstGoal $ \goal -> do
-  let t = goalTerm goal
-  printOutLnTop Info $ "Goal shared size: " ++ show (scSharedSize t)
-  printOutLnTop Info $ "Goal unshared size: " ++ show (scTreeSize t)
-  return ((), mempty, Just goal)
+printGoalSize =
+  withFirstGoal $ \goal ->
+  do let Prop t = goalProp goal
+     printOutLnTop Info $ "Goal shared size: " ++ show (scSharedSize t)
+     printOutLnTop Info $ "Goal unshared size: " ++ show (scTreeSize t)
+     return ((), mempty, Just goal)
 
 unfoldGoal :: [String] -> ProofScript ()
-unfoldGoal names = withFirstGoal $ \goal -> do
-  sc <- getSharedContext
-  let trm = goalTerm goal
-  trm' <- io $ scUnfoldConstants sc names trm
-  return ((), mempty, Just (goal { goalTerm = trm' }))
+unfoldGoal names =
+  withFirstGoal $ \goal ->
+  do sc <- getSharedContext
+     let Prop trm = goalProp goal
+     trm' <- io $ scUnfoldConstants sc names trm
+     return ((), mempty, Just (goal { goalProp = Prop trm' }))
 
 simplifyGoal :: Simpset -> ProofScript ()
-simplifyGoal ss = withFirstGoal $ \goal -> do
-  sc <- getSharedContext
-  let trm = goalTerm goal
-  trm' <- io $ rewriteSharedTerm sc ss trm
-  return ((), mempty, Just (goal { goalTerm = trm' }))
+simplifyGoal ss =
+  withFirstGoal $ \goal ->
+  do sc <- getSharedContext
+     let Prop trm = goalProp goal
+     trm' <- io $ rewriteSharedTerm sc ss trm
+     return ((), mempty, Just (goal { goalProp = Prop trm' }))
 
 goal_eval :: [String] -> ProofScript ()
 goal_eval unints =
   withFirstGoal $ \goal ->
   do sc <- getSharedContext
-     t0 <- liftIO $ propToPredicate sc (goalTerm goal)
+     t0 <- liftIO $ propToPredicate sc (goalProp goal)
      let gen = globalNonceGenerator
      sym <- liftIO $ Crucible.newSAWCoreBackend FloatRealRepr sc gen
      (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym sc Map.empty unints t0
      t1 <- liftIO $ Crucible.toSC sym p
      t2 <- liftIO $ scEqTrue sc t1
-     return ((), mempty, Just (goal { goalTerm = t2 }))
+     return ((), mempty, Just (goal { goalProp = Prop t2 }))
 
 beta_reduce_goal :: ProofScript ()
-beta_reduce_goal = withFirstGoal $ \goal -> do
-  sc <- getSharedContext
-  let trm = goalTerm goal
-  trm' <- io $ betaNormalize sc trm
-  return ((), mempty, Just (goal { goalTerm = trm' }))
+beta_reduce_goal =
+  withFirstGoal $ \goal ->
+  do sc <- getSharedContext
+     let Prop trm = goalProp goal
+     trm' <- io $ betaNormalize sc trm
+     return ((), mempty, Just (goal { goalProp = Prop trm' }))
 
 goal_apply :: Theorem -> ProofScript ()
-goal_apply (Theorem rule) =
+goal_apply (Theorem (Prop rule)) =
   StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "goal_apply failed: no subgoal"
@@ -496,7 +506,7 @@ goal_apply (Theorem rule) =
       do sc <- getSharedContext
          let applyFirst [] = fail "goal_apply failed: no match"
              applyFirst ((ruleArgs, ruleConcl) : rest) =
-               do result <- io $ scMatch sc ruleConcl (goalTerm goal)
+               do result <- io $ scMatch sc ruleConcl (unProp (goalProp goal))
                   case result of
                     Nothing -> applyFirst rest
                     Just inst ->
@@ -505,12 +515,12 @@ goal_apply (Theorem rule) =
                          let mkNewGoals (Nothing : mts) ((_, prop) : args) =
                                do c0 <- instantiateVarList sc 0 (map (fromMaybe dummy) mts) prop
                                   cs <- mkNewGoals mts args
-                                  return (c0 : cs)
+                                  return (Prop c0 : cs)
                              mkNewGoals (Just _ : mts) (_ : args) =
                                mkNewGoals mts args
                              mkNewGoals _ _ = return []
                          newgoalterms <- io $ mkNewGoals inst' (reverse ruleArgs)
-                         let newgoals = reverse [ goal { goalTerm = t } | t <- newgoalterms ]
+                         let newgoals = reverse [ goal { goalProp = t } | t <- newgoalterms ]
                          return ((), ProofState (newgoals ++ goals') concl stats timeout)
          applyFirst (asPiLists rule)
   where
@@ -527,13 +537,13 @@ goal_assume =
   case goals of
     [] -> fail "goal_assume failed: no subgoal"
     goal : goals' ->
-      case asPi (goalTerm goal) of
+      case asPi (unProp (goalProp goal)) of
         Nothing -> fail "goal_assume failed: not a pi type"
         Just (_nm, tp, body)
           | looseVars body /= emptyBitSet -> fail "goal_assume failed: dependent pi type"
           | otherwise ->
-            let goal' = goal { goalTerm = body } in
-            return (Theorem tp, ProofState (goal' : goals') concl stats timeout)
+            let goal' = goal { goalProp = Prop body } in
+            return (Theorem (Prop tp), ProofState (goal' : goals') concl stats timeout)
 
 goal_intro :: String -> ProofScript TypedTerm
 goal_intro s =
@@ -541,7 +551,7 @@ goal_intro s =
   case goals of
     [] -> fail "goal_intro failed: no subgoal"
     goal : goals' ->
-      case asPi (goalTerm goal) of
+      case asPi (unProp (goalProp goal)) of
         Nothing -> fail "goal_intro failed: not a pi type"
         Just (nm, tp, body) ->
           do let name = if null s then nm else s
@@ -549,18 +559,18 @@ goal_intro s =
              x <- io $ scFreshGlobal sc name tp
              tt <- io $ mkTypedTerm sc x
              body' <- io $ instantiateVar sc 0 x body
-             let goal' = goal { goalTerm = body' }
+             let goal' = goal { goalProp = Prop body' }
              return (tt, ProofState (goal' : goals') concl stats timeout)
 
 goal_insert :: Theorem -> ProofScript ()
-goal_insert (Theorem t) =
+goal_insert (Theorem (Prop t)) =
   StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "goal_insert failed: no subgoal"
     goal : goals' ->
       do sc <- SV.getSharedContext
-         body' <- io $ scFun sc t (goalTerm goal)
-         let goal' = goal { goalTerm = body' }
+         body' <- io $ scFun sc t (unProp (goalProp goal))
+         let goal' = goal { goalProp = Prop body' }
          return ((), ProofState (goal' : goals') concl stats timeout)
 
 goal_when :: String -> ProofScript () -> ProofScript ()
@@ -593,7 +603,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   sc <- SV.getSharedContext
   SV.AIGProxy proxy <- SV.getProxy
   io $ do
-  let (vars, concl) = asPiList (goalTerm g)
+  let (vars, concl) = asPiList (unProp (goalProp g))
   t0 <- scLambdaList sc vars =<< asEqTrue concl
   t <- rewriteEqs sc t0
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
@@ -613,7 +623,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   let ls = lines out
       sls = filter ("s " `isPrefixOf`) ls
       vls = filter ("v " `isPrefixOf`) ls
-  ft <- scEqTrue sc =<< scApplyPrelude_False sc
+  ft <- Prop <$> (scEqTrue sc =<< scApplyPrelude_False sc)
   let stats = solverStats ("external SAT:" ++ execName) (scSharedSize t)
   case (sls, vls) of
     (["s SATISFIABLE"], _) -> do
@@ -625,7 +635,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
         Right vs
           | length argNames == length vs -> do
             let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
-            return (r', stats, Just (g { goalTerm = ft }))
+            return (r', stats, Just (g { goalProp = ft }))
           | otherwise -> fail $ unwords ["external SAT results do not match expected arguments", show argNames, show vs]
     (["s UNSATISFIABLE"], []) ->
       return (SV.Unsat stats, stats, Nothing)
@@ -682,16 +692,16 @@ proveUnintSBV conf unints =
 
 wrapProver ::
   ( SharedContext ->
-    Term -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
   ProofScript SV.SatResult
 wrapProver f = do
   sc <- lift $ SV.getSharedContext
   withFirstGoal $ \g -> do
 
-  (mb, stats) <- io $ f sc (goalTerm g)
+  (mb, stats) <- io $ f sc (goalProp g)
 
   let nope r = do ft <- io $ scEqTrue sc =<< scApplyPrelude_False sc
-                  return (r, stats, Just g { goalTerm = ft })
+                  return (r, stats, Just g { goalProp = Prop ft })
 
   case mb of
     Nothing -> return (SV.Unsat stats, stats, Nothing)
@@ -755,18 +765,16 @@ w4_unint_yices :: [String] -> ProofScript SV.SatResult
 w4_unint_yices = wrapProver . Prover.proveWhat4_yices
 
 proveWithExporter ::
-  (SharedContext -> FilePath -> Term -> IO ()) ->
+  (SharedContext -> FilePath -> Prop -> IO ()) ->
   String ->
   String ->
   ProofScript SV.SatResult
 proveWithExporter exporter path ext =
-  withFirstGoal $ \g -> do
-    let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-
-    sc <- SV.getSharedContext
-    stats <- io $ Prover.proveWithExporter exporter file sc (goalTerm g)
-
-    return (SV.Unsat stats, stats, Nothing)
+  withFirstGoal $ \g ->
+  do let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
+     sc <- SV.getSharedContext
+     stats <- io $ Prover.proveWithExporter exporter file sc (goalProp g)
+     return (SV.Unsat stats, stats, Nothing)
 
 offline_aig :: FilePath -> ProofScript SV.SatResult
 offline_aig path = do
@@ -779,7 +787,7 @@ offline_cnf path = do
   proveWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
 
 offline_extcore :: FilePath -> ProofScript SV.SatResult
-offline_extcore path = proveWithExporter (const Prover.writeCore) path ".extcore"
+offline_extcore path = proveWithExporter (const Prover.writeCoreProp) path ".extcore"
 
 offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
 offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2 path ".smt2"
@@ -911,14 +919,13 @@ beta_reduce_term (TypedTerm schema t) = do
   return (TypedTerm schema t')
 
 addsimp :: Theorem -> Simpset -> Simpset
-addsimp (Theorem t) ss = addRule (ruleOfProp t) ss
+addsimp (Theorem (Prop t)) ss = addRule (ruleOfProp t) ss
 
 addsimp' :: Term -> Simpset -> Simpset
 addsimp' t ss = addRule (ruleOfProp t) ss
 
 addsimps :: [Theorem] -> Simpset -> Simpset
-addsimps thms ss =
-  foldr (\thm -> addRule (ruleOfProp (thmTerm thm))) ss thms
+addsimps thms ss = foldr addsimp ss thms
 
 addsimps' :: [Term] -> Simpset -> Simpset
 addsimps' ts ss = foldr (\t -> addRule (ruleOfProp t)) ss ts
@@ -942,7 +949,7 @@ check_goal =
   StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "ProofScript failed: no subgoal"
-    (ProofGoal _num _ty _name prop) : _ ->
+    (ProofGoal _num _ty _name (Prop prop)) : _ ->
       do check_term prop
          return ((), ProofState goals concl stats timeout)
 
@@ -1237,27 +1244,27 @@ parse_core input = do
   io $ mkTypedTerm sc t
 
 prove_core :: ProofScript SV.SatResult -> String -> TopLevel Theorem
-prove_core script input = do
-  t <- parseCore input
-  (r', pstate) <- runStateT script (startProof (ProofGoal 0 "prove" "prove" t))
-  let r = SV.flipSatResult r'
-  opts <- rwPPOpts <$> getTopLevelRW
-  case finishProof pstate of
-    (_,Just thm) -> return thm
-    (_,Nothing)  -> fail $ "prove_core: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
-                      ++ SV.showsProofResult opts r ""
+prove_core script input =
+  do t <- parseCore input
+     (r', pstate) <- runStateT script (startProof (ProofGoal 0 "prove" "prove" (Prop t)))
+     let r = SV.flipSatResult r'
+     opts <- rwPPOpts <$> getTopLevelRW
+     case finishProof pstate of
+       (_,Just thm) -> return thm
+       (_,Nothing)  -> fail $ "prove_core: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
+                         ++ SV.showsProofResult opts r ""
 
 core_axiom :: String -> TopLevel Theorem
-core_axiom input = do
-  t <- parseCore input
-  return (Theorem t)
+core_axiom input =
+  do t <- parseCore input
+     return (Theorem (Prop t))
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
      ty <- io $ scTypeOf sc t
-     return (Theorem ty)
+     return (Theorem (Prop ty))
 
 get_opt :: Int -> TopLevel String
 get_opt n = do

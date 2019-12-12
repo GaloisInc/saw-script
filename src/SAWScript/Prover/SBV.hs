@@ -23,7 +23,7 @@ import Verifier.SAW.Recognizer(asPi, asPiList)
 import Verifier.SAW.Cryptol.Prims (sbvPrims)
 
 
-import SAWScript.Proof(propToPredicate)
+import SAWScript.Proof(Prop, propToPredicate)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.Util(checkBooleanSchema)
@@ -38,8 +38,8 @@ proveUnintSBV ::
   [String]      {- ^ Uninterpreted functions -} ->
   Maybe Integer {- ^ Timeout in milliseconds -} ->
   SharedContext {- ^ Context for working with terms -} ->
-  Term          {- ^ A proposition to be proved/checked. -} ->
-  IO (Maybe [(String,FirstOrderValue)], SolverStats)
+  Prop          {- ^ A proposition to be proved -} ->
+  IO (Maybe [(String, FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
 proveUnintSBV conf unints timeout sc term =
   do (t', mlabels, lit0) <- prepSBV sc unints term
@@ -74,7 +74,7 @@ proveUnintSBV conf unints timeout sc term =
 
 
 prepSBV ::
-  SharedContext -> [String] -> Term ->
+  SharedContext -> [String] -> Prop ->
   IO (Term, [Maybe SBVSim.Labeler], SBV.Symbolic SBV.SVal)
 prepSBV sc unints goal =
   do t0 <- propToPredicate sc goal

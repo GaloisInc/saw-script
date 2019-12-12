@@ -8,7 +8,7 @@ import           Verifier.SAW.TypedTerm
 import           Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import SAWScript.Proof(propToPredicate)
+import SAWScript.Proof(Prop, propToPredicate)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
@@ -20,8 +20,8 @@ proveABC ::
   (AIG.IsAIG l g) =>
   AIG.Proxy l g ->
   SharedContext ->
-  Term ->
-  IO (Maybe [(String,FirstOrderValue)], SolverStats)
+  Prop ->
+  IO (Maybe [(String, FirstOrderValue)], SolverStats)
 proveABC proxy sc goal =
   do t0 <- propToPredicate sc goal
      TypedTerm schema t <-

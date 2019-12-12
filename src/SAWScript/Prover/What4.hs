@@ -16,7 +16,7 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
 import Verifier.SAW.Recognizer(asPi)
 
-import           SAWScript.Proof(propToPredicate)
+import           SAWScript.Proof(Prop, propToPredicate)
 import           SAWScript.Prover.Rewrite(rewriteEqs)
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Prover.Util
@@ -45,7 +45,7 @@ proveWhat4_sym ::
   SolverAdapter St ->
   [String] ->
   SharedContext ->
-  Term ->
+  Prop ->
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
 proveWhat4_sym solver un sc t =
   do -- TODO: get rid of GlobalNonceGenerator ???
@@ -57,8 +57,8 @@ proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices ::
   [String]      {- ^ Uninterpreted functions -} ->
   SharedContext {- ^ Context for working with terms -} ->
-  Term          {- ^ A boolean term to be proved/checked. -} ->
-  IO (Maybe [(String,FirstOrderValue)], SolverStats)
+  Prop          {- ^ A proposition to be proved -} ->
+  IO (Maybe [(String, FirstOrderValue)], SolverStats)
 
 proveWhat4_z3        = proveWhat4_sym z3Adapter
 proveWhat4_boolector = proveWhat4_sym boolectorAdapter
@@ -76,8 +76,8 @@ proveWhat4_solver :: forall st t ff.
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
   [String]           {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
-  Term               {- ^ A proposition to be proved/checked. -} ->
-  IO (Maybe [(String,FirstOrderValue)], SolverStats)
+  Prop               {- ^ A proposition to be proved/checked. -} ->
+  IO (Maybe [(String, FirstOrderValue)], SolverStats)
   -- ^ (example/counter-example, solver statistics)
 proveWhat4_solver solver sym unints sc goal =
 
