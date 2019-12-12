@@ -942,7 +942,7 @@ check_goal =
   StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "ProofScript failed: no subgoal"
-    (ProofGoal _num _ty _name prop) : gs ->
+    (ProofGoal _num _ty _name prop) : _ ->
       do check_term prop
          return ((), ProofState goals concl stats timeout)
 
