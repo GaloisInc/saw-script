@@ -1,4 +1,4 @@
-module SAWScript.Prover.ABC (satABC) where
+module SAWScript.Prover.ABC (proveABC) where
 
 
 import qualified Data.AIG as AIG
@@ -15,15 +15,14 @@ import SAWScript.SAWCorePrimitives( bitblastPrimitives )
 import SAWScript.Prover.Util
          (liftCexBB, bindAllExts, checkBooleanSchema)
 
--- | Bit-blast a @Term@ representing a theorem and check its
--- satisfiability using ABC.
-satABC ::
+-- | Bit-blast a proposition and check its validity using ABC.
+proveABC ::
   (AIG.IsAIG l g) =>
   AIG.Proxy l g ->
   SharedContext ->
   Term ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
-satABC proxy sc goal =
+proveABC proxy sc goal =
   do t0 <- propToPredicate sc goal
      TypedTerm schema t <-
         (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)

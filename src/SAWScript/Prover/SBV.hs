@@ -1,5 +1,5 @@
 module SAWScript.Prover.SBV
-  ( satUnintSBV
+  ( proveUnintSBV
   , SBV.SMTConfig
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
   , prepSBV
@@ -30,10 +30,10 @@ import SAWScript.Prover.Util(checkBooleanSchema)
 
 
 
--- | Bit-blast a @Term@ representing a theorem and check its
--- satisfiability using SBV.
--- Constants with names in @unints@ are kept as uninterpreted functions.
-satUnintSBV ::
+-- | Bit-blast a proposition and check its validity using SBV.
+-- Constants with names in @unints@ are kept as uninterpreted
+-- functions.
+proveUnintSBV ::
   SBV.SMTConfig {- ^ SBV configuration -} ->
   [String]      {- ^ Uninterpreted functions -} ->
   Maybe Integer {- ^ Timeout in milliseconds -} ->
@@ -41,7 +41,7 @@ satUnintSBV ::
   Term          {- ^ A proposition to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
-satUnintSBV conf unints timeout sc term =
+proveUnintSBV conf unints timeout sc term =
   do (t', mlabels, lit0) <- prepSBV sc unints term
 
      let lit = liftM SBV.svNot lit0

@@ -41,36 +41,37 @@ import qualified What4.Expr.Builder as B
 -- trivial state
 data St t = St
 
-satWhat4_sym :: SolverAdapter St
-             -> [String]
-             -> SharedContext
-             -> Term
-             -> IO (Maybe [(String, FirstOrderValue)], SolverStats)
-satWhat4_sym solver un sc t = do
-  -- TODO: get rid of GlobalNonceGenerator ???
-  sym <- B.newExprBuilder B.FloatRealRepr St globalNonceGenerator
-  satWhat4_solver solver sym un sc t
+proveWhat4_sym ::
+  SolverAdapter St ->
+  [String] ->
+  SharedContext ->
+  Term ->
+  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+proveWhat4_sym solver un sc t =
+  do -- TODO: get rid of GlobalNonceGenerator ???
+     sym <- B.newExprBuilder B.FloatRealRepr St globalNonceGenerator
+     proveWhat4_solver solver sym un sc t
 
 
-satWhat4_z3, satWhat4_boolector, satWhat4_cvc4,
-  satWhat4_dreal, satWhat4_stp, satWhat4_yices ::
+proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
+  proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices ::
   [String]      {- ^ Uninterpreted functions -} ->
   SharedContext {- ^ Context for working with terms -} ->
   Term          {- ^ A boolean term to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
 
-satWhat4_z3        = satWhat4_sym z3Adapter
-satWhat4_boolector = satWhat4_sym boolectorAdapter
-satWhat4_cvc4      = satWhat4_sym cvc4Adapter
-satWhat4_dreal     = satWhat4_sym drealAdapter
-satWhat4_stp       = satWhat4_sym stpAdapter
-satWhat4_yices     = satWhat4_sym yicesAdapter
+proveWhat4_z3        = proveWhat4_sym z3Adapter
+proveWhat4_boolector = proveWhat4_sym boolectorAdapter
+proveWhat4_cvc4      = proveWhat4_sym cvc4Adapter
+proveWhat4_dreal     = proveWhat4_sym drealAdapter
+proveWhat4_stp       = proveWhat4_sym stpAdapter
+proveWhat4_yices     = proveWhat4_sym yicesAdapter
 
 
 
 
--- | Check the satisfiability of a theorem using What4.
-satWhat4_solver :: forall st t ff.
+-- | Check the validity of a proposition using What4.
+proveWhat4_solver :: forall st t ff.
   SolverAdapter st   {- ^ Which solver to use -} ->
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
   [String]           {- ^ Uninterpreted functions -} ->
@@ -78,7 +79,7 @@ satWhat4_solver :: forall st t ff.
   Term               {- ^ A proposition to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
   -- ^ (example/counter-example, solver statistics)
-satWhat4_solver solver sym unints sc goal =
+proveWhat4_solver solver sym unints sc goal =
 
   do
      -- convert goal to lambda term

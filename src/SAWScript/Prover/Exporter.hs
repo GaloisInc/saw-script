@@ -1,6 +1,6 @@
 {-# Language ViewPatterns #-}
 module SAWScript.Prover.Exporter
-  ( satWithExporter
+  ( proveWithExporter
   , adaptExporter
 
     -- * External formats
@@ -44,13 +44,13 @@ import SAWScript.Prover.SBV(prepSBV)
 import SAWScript.Value
 
 
-satWithExporter ::
+proveWithExporter ::
   (SharedContext -> FilePath -> Term -> IO ()) ->
   String ->
   SharedContext ->
   Term ->
   IO SolverStats
-satWithExporter exporter path sc goal =
+proveWithExporter exporter path sc goal =
   do exporter sc path goal
      let stats = solverStats ("offline: "++ path) (scSharedSize goal)
      return stats

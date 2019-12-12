@@ -570,12 +570,11 @@ goal_when str script =
     g : _ | str `isInfixOf` goalName g -> runStateT script s
     _ -> return ((), s)
 
--- | Bit-blast a @Term@ representing a theorem and check its
--- satisfiability using ABC.
-satABC :: ProofScript SV.SatResult
-satABC = do
+-- | Bit-blast a proposition and check its validity using ABC.
+proveABC :: ProofScript SV.SatResult
+proveABC = do
   SV.AIGProxy proxy <- lift SV.getProxy
-  wrapProver (Prover.satABC proxy)
+  wrapProver (Prover.proveABC proxy)
 
 parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
                     -> [String] -- ^ The value lines from the solver
@@ -656,10 +655,9 @@ writeSAIGComputedPrim f t n = do
   sc <- SV.getSharedContext
   liftIO $ Prover.writeSAIG proxy sc f t n
 
--- | Bit-blast a @Term@ representing a theorem and check its
--- satisfiability using the RME library.
-satRME :: ProofScript SV.SatResult
-satRME = wrapProver Prover.satRME
+-- | Bit-blast a proposition check its validity using the RME library.
+proveRME :: ProofScript SV.SatResult
+proveRME = wrapProver Prover.proveRME
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
@@ -667,18 +665,18 @@ codegenSBV sc path unints fname (TypedTerm _schema t) =
   where mpath = if null path then Nothing else Just path
 
 
--- | Bit-blast a @Term@ representing a theorem and check its
--- satisfiability using SBV. (Currently ignores satisfying assignments.)
-satSBV :: SBV.SMTConfig -> ProofScript SV.SatResult
-satSBV conf = satUnintSBV conf []
+-- | Bit-blast a proposition and check its validity using SBV.
+-- (Currently ignores satisfying assignments.)
+proveSBV :: SBV.SMTConfig -> ProofScript SV.SatResult
+proveSBV conf = proveUnintSBV conf []
 
--- | Bit-blast a @Term@ representing a theorem and check its
--- satisfiability using SBV. (Currently ignores satisfying assignments.)
--- Constants with names in @unints@ are kept as uninterpreted functions.
-satUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript SV.SatResult
-satUnintSBV conf unints = do
-  timeout <- psTimeout <$> get
-  wrapProver (Prover.satUnintSBV conf unints timeout)
+-- | Bit-blast a proposition and check its validity using SBV.
+-- (Currently ignores satisfying assignments.) Constants with names in
+-- @unints@ are kept as uninterpreted functions.
+proveUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript SV.SatResult
+proveUnintSBV conf unints =
+  do timeout <- psTimeout <$> get
+     wrapProver (Prover.proveUnintSBV conf unints timeout)
 
 
 
@@ -700,94 +698,94 @@ wrapProver f = do
     Just a  -> nope (SV.SatMulti stats a)
 
 --------------------------------------------------
-satBoolector :: ProofScript SV.SatResult
-satBoolector = satSBV SBV.boolector
+proveBoolector :: ProofScript SV.SatResult
+proveBoolector = proveSBV SBV.boolector
 
-satZ3 :: ProofScript SV.SatResult
-satZ3 = satSBV SBV.z3
+proveZ3 :: ProofScript SV.SatResult
+proveZ3 = proveSBV SBV.z3
 
-satCVC4 :: ProofScript SV.SatResult
-satCVC4 = satSBV SBV.cvc4
+proveCVC4 :: ProofScript SV.SatResult
+proveCVC4 = proveSBV SBV.cvc4
 
-satMathSAT :: ProofScript SV.SatResult
-satMathSAT = satSBV SBV.mathSAT
+proveMathSAT :: ProofScript SV.SatResult
+proveMathSAT = proveSBV SBV.mathSAT
 
-satYices :: ProofScript SV.SatResult
-satYices = satSBV SBV.yices
+proveYices :: ProofScript SV.SatResult
+proveYices = proveSBV SBV.yices
 
-satUnintBoolector :: [String] -> ProofScript SV.SatResult
-satUnintBoolector = satUnintSBV SBV.boolector
+proveUnintBoolector :: [String] -> ProofScript SV.SatResult
+proveUnintBoolector = proveUnintSBV SBV.boolector
 
-satUnintZ3 :: [String] -> ProofScript SV.SatResult
-satUnintZ3 = satUnintSBV SBV.z3
+proveUnintZ3 :: [String] -> ProofScript SV.SatResult
+proveUnintZ3 = proveUnintSBV SBV.z3
 
-satUnintCVC4 :: [String] -> ProofScript SV.SatResult
-satUnintCVC4 = satUnintSBV SBV.cvc4
+proveUnintCVC4 :: [String] -> ProofScript SV.SatResult
+proveUnintCVC4 = proveUnintSBV SBV.cvc4
 
-satUnintMathSAT :: [String] -> ProofScript SV.SatResult
-satUnintMathSAT = satUnintSBV SBV.mathSAT
+proveUnintMathSAT :: [String] -> ProofScript SV.SatResult
+proveUnintMathSAT = proveUnintSBV SBV.mathSAT
 
-satUnintYices :: [String] -> ProofScript SV.SatResult
-satUnintYices = satUnintSBV SBV.yices
+proveUnintYices :: [String] -> ProofScript SV.SatResult
+proveUnintYices = proveUnintSBV SBV.yices
 
 
 --------------------------------------------------
-satWhat4_Boolector :: ProofScript SV.SatResult
-satWhat4_Boolector = wrapProver $ Prover.satWhat4_boolector []
+w4_boolector :: ProofScript SV.SatResult
+w4_boolector = wrapProver $ Prover.proveWhat4_boolector []
 
-satWhat4_Z3 :: ProofScript SV.SatResult
-satWhat4_Z3 = wrapProver $ Prover.satWhat4_z3 []
+w4_z3 :: ProofScript SV.SatResult
+w4_z3 = wrapProver $ Prover.proveWhat4_z3 []
 
-satWhat4_CVC4 :: ProofScript SV.SatResult
-satWhat4_CVC4 = wrapProver $ Prover.satWhat4_cvc4 []
+w4_cvc4 :: ProofScript SV.SatResult
+w4_cvc4 = wrapProver $ Prover.proveWhat4_cvc4 []
 
-satWhat4_Yices :: ProofScript SV.SatResult
-satWhat4_Yices = wrapProver $ Prover.satWhat4_yices []
+w4_yices :: ProofScript SV.SatResult
+w4_yices = wrapProver $ Prover.proveWhat4_yices []
 
-satWhat4_UnintBoolector :: [String] -> ProofScript SV.SatResult
-satWhat4_UnintBoolector =  wrapProver . Prover.satWhat4_boolector
+w4_unint_boolector :: [String] -> ProofScript SV.SatResult
+w4_unint_boolector = wrapProver . Prover.proveWhat4_boolector
 
-satWhat4_UnintZ3 :: [String] -> ProofScript SV.SatResult
-satWhat4_UnintZ3 = wrapProver . Prover.satWhat4_z3
+w4_unint_z3 :: [String] -> ProofScript SV.SatResult
+w4_unint_z3 = wrapProver . Prover.proveWhat4_z3
 
-satWhat4_UnintCVC4 :: [String] -> ProofScript SV.SatResult
-satWhat4_UnintCVC4 =  wrapProver . Prover.satWhat4_cvc4
+w4_unint_cvc4 :: [String] -> ProofScript SV.SatResult
+w4_unint_cvc4 = wrapProver . Prover.proveWhat4_cvc4
 
-satWhat4_UnintYices :: [String] -> ProofScript SV.SatResult
-satWhat4_UnintYices =  wrapProver . Prover.satWhat4_yices
+w4_unint_yices :: [String] -> ProofScript SV.SatResult
+w4_unint_yices = wrapProver . Prover.proveWhat4_yices
 
-satWithExporter ::
+proveWithExporter ::
   (SharedContext -> FilePath -> Term -> IO ()) ->
   String ->
   String ->
   ProofScript SV.SatResult
-satWithExporter exporter path ext =
+proveWithExporter exporter path ext =
   withFirstGoal $ \g -> do
     let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
 
     sc <- SV.getSharedContext
-    stats <- io $ Prover.satWithExporter exporter file sc (goalTerm g)
+    stats <- io $ Prover.proveWithExporter exporter file sc (goalTerm g)
 
     return (SV.Unsat stats, stats, Nothing)
 
-satAIG :: FilePath -> ProofScript SV.SatResult
-satAIG path = do
+offline_aig :: FilePath -> ProofScript SV.SatResult
+offline_aig path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  satWithExporter (Prover.adaptExporter (Prover.writeAIG proxy)) path ".aig"
+  proveWithExporter (Prover.adaptExporter (Prover.writeAIG proxy)) path ".aig"
 
-satCNF :: FilePath -> ProofScript SV.SatResult
-satCNF path = do
+offline_cnf :: FilePath -> ProofScript SV.SatResult
+offline_cnf path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  satWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
+  proveWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
 
-satExtCore :: FilePath -> ProofScript SV.SatResult
-satExtCore path = satWithExporter (const Prover.writeCore) path ".extcore"
+offline_extcore :: FilePath -> ProofScript SV.SatResult
+offline_extcore path = proveWithExporter (const Prover.writeCore) path ".extcore"
 
-satSMTLib2 :: FilePath -> ProofScript SV.SatResult
-satSMTLib2 path = satWithExporter Prover.writeSMTLib2 path ".smt2"
+offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
+offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2 path ".smt2"
 
-satUnintSMTLib2 :: [String] -> FilePath -> ProofScript SV.SatResult
-satUnintSMTLib2 unints path = satWithExporter (Prover.writeUnintSMTLib2 unints) path ".smt2"
+offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript SV.SatResult
+offline_unint_smtlib2 unints path = proveWithExporter (Prover.writeUnintSMTLib2 unints) path ".smt2"
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (\ps -> ps { psTimeout = Just to })

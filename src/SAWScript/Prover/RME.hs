@@ -15,11 +15,12 @@ import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 
-satRME ::
+-- | Bit-blast a proposition and check its validity using RME.
+proveRME ::
   SharedContext {- ^ Context for working with terms -} ->
   Term          {- ^ A boolean term to be proved/checked. -} ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
-satRME sc goal =
+proveRME sc goal =
   do t0 <- propToPredicate sc goal
      TypedTerm schema t <-
         bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc
