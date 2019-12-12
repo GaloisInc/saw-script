@@ -161,3 +161,40 @@ Definition fst {A B} := @fst A B.
 Definition snd {A B} := @snd A B.
 Definition Zero := O.
 Definition Succ := S.
+
+From Coq Require Import ZArith.BinInt.
+From Coq Require Import ZArith.Zdiv.
+
+Definition Integer := Z.
+Definition intAdd : Integer -> Integer -> Integer := Zplus.
+Definition intSub : Integer -> Integer -> Integer := Zminus.
+Definition intMul : Integer -> Integer -> Integer := Zmult.
+Definition intDiv : Integer -> Integer -> Integer := Z.div.
+Definition intMod : Integer -> Integer -> Integer := Zmod.
+Definition intMin : Integer -> Integer -> Integer := Z.min.
+Definition intMax : Integer -> Integer -> Integer := Z.max.
+Definition intNeg : Integer -> Integer := Z.opp.
+Definition intAbs : Integer -> Integer := Z.abs.
+Definition intEq : Integer -> Integer -> Bool := Z.eqb.
+Definition intLe : Integer -> Integer -> Bool := Z.leb.
+Definition intLt : Integer -> Integer -> Bool := Z.ltb.
+Definition intToNat : Integer -> Nat := Z.to_nat.
+Definition natToInt : Nat -> Integer := Z.of_nat.
+
+From Coq Require Import Numbers.Cyclic.ZModulo.ZModulo.
+
+(* NOTE: the following will be nonsense for values of n <= 1 *)
+Definition IntMod (n : nat) := Z.
+Definition toIntMod (n : Nat) : Integer -> IntMod n := fun i => Zmod i (Z.of_nat n).
+Definition fromIntMod (n : Nat) : (IntMod n) -> Integer := ZModulo.to_Z (Pos.of_nat n).
+Local Notation "[| a |]_ n" := (to_Z (Pos.of_nat n) a) (at level 0, a at level 99).
+Definition intModEq (n : Nat) (a : IntMod n) (b : IntMod n) : Bool
+  := Z.eqb [| a |]_n [| b |]_n.
+Definition intModAdd : forall (n : Nat), (IntMod n) -> (IntMod n) -> IntMod n
+  := fun _ => ZModulo.add.
+Definition intModSub : forall (n : Nat), (IntMod n) -> (IntMod n) -> IntMod n
+  := fun _ => ZModulo.sub.
+Definition intModMul : forall (n : Nat), (IntMod n) -> (IntMod n) -> IntMod n
+  := fun _ => ZModulo.mul.
+Definition intModNeg : forall (n : Nat), (IntMod n) -> IntMod n
+  := fun _ => ZModulo.opp.

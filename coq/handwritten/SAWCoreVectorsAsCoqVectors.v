@@ -141,7 +141,8 @@ Fixpoint zipFunctional (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
   end
 .
 
-Definition zipWithFunctional (a b c : Type) (f : a -> b -> c) (n : Nat) (xs : Vec n a) (ys : Vec n b) :=
+Definition zipWithFunctional
+           (a b c : Type) (f : a -> b -> c) (n : Nat) (xs : Vec n a) (ys : Vec n b) :=
   VectorDef.map (fun p => f (fst p) (snd p)) (zipFunctional _ _ _ _ xs ys).
 
 Definition joinLSB {n} (v : Vector.t bool n) (lsb : bool) : Vector.t bool n.+1 :=
@@ -152,3 +153,39 @@ Fixpoint bvNat (size : Nat) (number : Nat) : Vector.t bool size :=
   then joinLSB (bvNat size' (number./2)) (Nat.odd number)
   else Vector.nil _
 .
+
+Fixpoint bvToNat (size : Nat) (v : Vector.t bool size) : Nat :=
+  Vector.fold_left (fun n (b : bool) => b + n.*2) 0 v.
+
+From Bits Require Import operations.
+From Bits Require Import spec.
+
+Definition bvToBITS {size : nat} (v : Vector.t bool size)
+  : BITS size
+  := fromNat (bvToNat size v).
+
+(* This is annoyingto implement, so using BITS conversion *)
+Definition bvAdd (n : nat) (a : Vector.t bool n) (b : Vector.t bool n)
+  : Vector.t bool n
+  := bvNat _ (toNat (addB (bvToBITS a) (bvToBITS b))).
+
+(* This is annoyingto implement, so using BITS conversion *)
+Definition bvSub (n : nat) (a : Vector.t bool n) (b : Vector.t bool n)
+  : Vector.t bool n
+  := bvNat _ (toNat (subB (bvToBITS a) (bvToBITS b))).
+
+(* This is annoyingto implement, so using BITS conversion *)
+Definition bvMul (n : nat) (a : Vector.t bool n) (b : Vector.t bool n)
+  : Vector.t bool n
+  := bvNat _ (toNat (mulB (bvToBITS a) (bvToBITS b))).
+
+Definition bvult (n : nat) (a : Vector.t bool n) (b : Vector.t bool n) : Bool :=
+  ltB (bvToBITS a) (bvToBITS b).
+
+(* FIXME this is incorrect, it is unsigned rather than signed *)
+Definition bvslt (n : nat) (a : Vector.t bool n) (b : Vector.t bool n) : Bool :=
+  ltB (bvToBITS a) (bvToBITS b).
+
+(* Axiom intToBv : forall (n : Nat), Integer -> bitvector n. *)
+
+(* Axiom bvToInt : forall (n : Nat), bitvector n -> Integer. *)

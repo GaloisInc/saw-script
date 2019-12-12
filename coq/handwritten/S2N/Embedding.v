@@ -6,7 +6,6 @@ From Coq Require Import String.
 From Coq Require Import Program.Equality.
 From Coq Require Import Vector.
 
-From CryptolToCoq Require Import Cryptol_proofs.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra.
 From CryptolToCoq Require Import SAWCorePrelude.
@@ -68,6 +67,57 @@ Global Instance Embedding_seq_tuple A B (n : nat) `{Embedding A B}
     toAbstract c := map_tuple toAbstract (seq_to_tuple c);
     toConcrete b := genOrdinal _ _ (fun i => toConcrete (tnth b i));
   |}.
+
+Theorem tnth_rshift {A n} (h : A) (t : n.-tuple A) (i : 'I_n)
+  : tnth (cat_tuple [tuple h] t) (rshift 1 i) = tnth t i.
+Proof.
+  setoid_rewrite (tnth_nth h).
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma genOrdinal_tnth
+  : forall (A : Type) (n : nat) (t : t A n),
+    genOrdinal n A (fun q : 'I_n => tnth (seq_to_tuple t) q) = t.
+Proof.
+  move => A.
+  apply Vector.t_ind => [|h n t IH].
+  {
+    simpl.
+    reflexivity.
+  }
+  {
+    simpl.
+    f_equal.
+    setoid_rewrite tnth_rshift.
+    assumption.
+  }
+Qed.
+
+Global Instance ProperEmbedding_seq_tuple A B n `{ProperEmbedding A B}
+       : ProperEmbedding (Embedding_seq_tuple A B n).
+Proof.
+  apply Build_ProperEmbedding.
+  move : n.
+  apply Vector.t_ind.
+  {
+    reflexivity.
+  }
+  {
+    move => h n t IH.
+    simpl.
+    f_equal.
+    {
+      apply roundtrip.
+    }
+    {
+      setoid_rewrite tnth_map.
+      setoid_rewrite roundtrip.
+      setoid_rewrite tnth_rshift.
+      apply genOrdinal_tnth.
+    }
+  }
+Qed.
 
 Global Instance Embedding_prod {A B C D} `{Embedding A B} `{Embedding C D}
   : Embedding (A * C) (B * D) :=

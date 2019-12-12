@@ -1,4 +1,5 @@
 From Bits Require Import operations.
+From Bits Require Import properties.
 From Bits Require Import spec.
 
 From Coq Require Import Lists.List.
@@ -7,7 +8,6 @@ From Coq Require Import String.
 From Coq Require Import Program.Equality.
 From Coq Require Import Vector.
 
-From CryptolToCoq Require Import Cryptol_proofs.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra.
 From CryptolToCoq Require Import SAWCorePrelude.
@@ -32,97 +32,127 @@ Import ListNotations.
 Import SAWCorePrelude.
 Import VectorNotations.
 
-(* From Ornamental Require Import Ornaments. *)
+Scheme Induction for tuple_of Sort Prop.
+Scheme Induction for tuple_of Sort Set.
+Scheme Induction for tuple_of Sort Type.
 
-(* Set DEVOID search prove equivalence. (* <-- Correctness proofs for search *) *)
-(* Set DEVOID lift type. (* <-- Prettier types than the ones Coq infers *) *)
+Scheme Induction for eqtype.Sub_spec Sort Prop.
+Scheme Induction for eqtype.Sub_spec Sort Set.
+Scheme Induction for eqtype.Sub_spec Sort Type.
 
-(* Preprocess *)
-(*   Module *)
-(*   SAWCorePrelude *)
-(*   as SAWCorePrelude' *)
-(*        { opaque *)
-(*            SAWCoreScaffolding.error *)
-(*            SAWCorePrelude.sawUnsafeAssert *)
-(*            SAWCorePrelude.drop0 *)
-(*            SAWCorePrelude.rotateL *)
-(*            SAWCorePrelude.rotateR *)
-(*            SAWCorePrelude.shiftL *)
-(*            SAWCorePrelude.shiftR *)
-(*            SAWCorePrelude.bvToNat *)
-(*            SAWCorePrelude.bvAdd *)
-(*            SAWCorePrelude.bvugt *)
-(*            SAWCorePrelude.bvuge *)
-(*            SAWCorePrelude.bvult *)
-(*            SAWCorePrelude.bvule *)
-(*            SAWCorePrelude.bvsgt *)
-(*            SAWCorePrelude.bvsge *)
-(*            SAWCorePrelude.bvslt *)
-(*            SAWCorePrelude.bvsle *)
-(*            SAWCorePrelude.bvPopcount *)
-(*            SAWCorePrelude.bvCountLeadingZeros *)
-(*            SAWCorePrelude.bvCountTrailingZeros *)
-(*            SAWCorePrelude.bvAddZeroL *)
-(*            SAWCorePrelude.bvAddZeroR *)
-(*            SAWCorePrelude.bvNeg *)
-(*            SAWCorePrelude.bvSub *)
-(*            SAWCorePrelude.bvMul *)
-(*            SAWCorePrelude.bvLg2 *)
-(*            SAWCorePrelude.bvUDiv *)
-(*            SAWCorePrelude.bvURem *)
-(*            SAWCorePrelude.bvSDiv *)
-(*            SAWCorePrelude.bvSRem *)
-(*            SAWCorePrelude.bvShl *)
-(*            SAWCorePrelude.bvShr *)
-(*            SAWCorePrelude.bvSShr *)
-(*            SAWCorePrelude.bvShiftL_bvShl *)
-(*            SAWCorePrelude.bvShiftR_bvShr *)
-(*            SAWCorePrelude.bvEq_refl *)
-(*            SAWCorePrelude.equalNat_bv *)
-(*            SAWCorePrelude.Integer *)
-(*            SAWCorePrelude.intAdd *)
-(*            SAWCorePrelude.intSub *)
-(*            SAWCorePrelude.intMul *)
-(*            SAWCorePrelude.intDiv *)
-(*            SAWCorePrelude.intMod *)
-(*            SAWCorePrelude.intMin *)
-(*            SAWCorePrelude.intMax *)
-(*            SAWCorePrelude.intNeg *)
-(*            SAWCorePrelude.intAbs *)
-(*            SAWCorePrelude.intEq *)
-(*            SAWCorePrelude.intLe *)
-(*            SAWCorePrelude.intLt *)
-(*            SAWCorePrelude.intToNat *)
-(*            SAWCorePrelude.natToInt *)
-(*            SAWCorePrelude.intToBv *)
-(*            SAWCorePrelude.bvToInt *)
-(*            SAWCorePrelude.sbvToInt *)
-(*            SAWCorePrelude.IntMod *)
-(*            SAWCorePrelude.toIntMod *)
-(*            SAWCorePrelude.fromIntMod *)
-(*            SAWCorePrelude.intModEq *)
-(*            SAWCorePrelude.intModAdd *)
-(*            SAWCorePrelude.intModSub *)
-(*            SAWCorePrelude.intModMul *)
-(*            SAWCorePrelude.intModNeg *)
-(*            SAWCorePrelude.Float *)
-(*            SAWCorePrelude.mkFloat *)
-(*            SAWCorePrelude.Double *)
-(*            SAWCorePrelude.mkDouble *)
-(*            SAWCorePrelude.CompM *)
-(*            SAWCorePrelude.returnM *)
-(*            SAWCorePrelude.bindM *)
-(*            SAWCorePrelude.errorM *)
-(*            SAWCorePrelude.catchM *)
-(*            SAWCorePrelude.letRecM *)
-(*            SAWCorePrelude.bveq_sameL *)
-(*            SAWCorePrelude.bveq_sameR *)
-(*            SAWCorePrelude.bveq_same2 *)
-(*            SAWCorePrelude.bvNat_bvToNat *)
-(*            SAWCorePrelude.ite_split_cong *)
-(*            SAWCorePrelude.ite_join_cong *)
-(*            SAWCorePrelude.map_map *)
-(*        } . *)
+Scheme Induction for eqtype.Equality.type Sort Prop.
+Scheme Induction for eqtype.Equality.type Sort Set.
+Scheme Induction for eqtype.Equality.type Sort Type.
+
+Scheme Induction for eqtype.Equality.mixin_of Sort Prop.
+Scheme Induction for eqtype.Equality.mixin_of Sort Set.
+Scheme Induction for eqtype.Equality.mixin_of Sort Type.
+
+Scheme Induction for eqtype.subType Sort Prop.
+Scheme Induction for eqtype.subType Sort Set.
+Scheme Induction for eqtype.subType Sort Type.
+
+From Ornamental Require Import Ornaments.
+
+Set DEVOID search prove equivalence. (* <-- Correctness proofs for search *)
+Set DEVOID lift type. (* <-- Prettier types than the ones Coq infers *)
+
+Preprocess
+  Module
+  SAWCorePrelude
+  as SAWCorePrelude'
+       { opaque
+           SAWCoreScaffolding.error
+           SAWCorePrelude.drop0
+           SAWCorePrelude.rotateL
+           SAWCorePrelude.rotateR
+           SAWCorePrelude.shiftL
+           SAWCorePrelude.shiftR
+           SAWCorePrelude.bvugt
+           SAWCorePrelude.bvuge
+           SAWCorePrelude.bvult
+           SAWCorePrelude.bvule
+           SAWCorePrelude.bvsgt
+           SAWCorePrelude.bvsge
+           SAWCorePrelude.bvslt
+           SAWCorePrelude.bvsle
+           SAWCorePrelude.bvPopcount
+           SAWCorePrelude.bvCountLeadingZeros
+           SAWCorePrelude.bvCountTrailingZeros
+           SAWCorePrelude.bvForall
+           SAWCorePrelude.bvAddZeroL
+           SAWCorePrelude.bvAddZeroR
+           SAWCorePrelude.bvNeg
+           SAWCorePrelude.bvSub
+           SAWCorePrelude.bvMul
+           SAWCorePrelude.bvLg2
+           SAWCorePrelude.bvUDiv
+           SAWCorePrelude.bvURem
+           SAWCorePrelude.bvSDiv
+           SAWCorePrelude.bvSRem
+           SAWCorePrelude.bvShl
+           SAWCorePrelude.bvShr
+           SAWCorePrelude.bvSShr
+           SAWCorePrelude.bvShiftL_bvShl
+           SAWCorePrelude.bvShiftR_bvShr
+           SAWCorePrelude.bvEq_refl
+           SAWCorePrelude.equalNat_bv
+           SAWCorePrelude.Integer
+           SAWCorePrelude.intAdd
+           SAWCorePrelude.intSub
+           SAWCorePrelude.intMul
+           SAWCorePrelude.intDiv
+           SAWCorePrelude.intMod
+           SAWCorePrelude.intMin
+           SAWCorePrelude.intMax
+           SAWCorePrelude.intNeg
+           SAWCorePrelude.intAbs
+           SAWCorePrelude.intEq
+           SAWCorePrelude.intLe
+           SAWCorePrelude.intLt
+           SAWCorePrelude.intToNat
+           SAWCorePrelude.natToInt
+           SAWCorePrelude.intToBv
+           SAWCorePrelude.bvToInt
+           SAWCorePrelude.sbvToInt
+           SAWCorePrelude.IntMod
+           SAWCorePrelude.toIntMod
+           SAWCorePrelude.fromIntMod
+           SAWCorePrelude.intModEq
+           SAWCorePrelude.intModAdd
+           SAWCorePrelude.intModSub
+           SAWCorePrelude.intModMul
+           SAWCorePrelude.intModNeg
+           SAWCorePrelude.Float
+           SAWCorePrelude.mkFloat
+           SAWCorePrelude.Double
+           SAWCorePrelude.mkDouble
+           SAWCorePrelude.CompM
+           SAWCorePrelude.returnM
+           SAWCorePrelude.bindM
+           SAWCorePrelude.errorM
+           SAWCorePrelude.catchM
+           SAWCorePrelude.letRecM
+           SAWCorePrelude.letRecM1
+           SAWCorePrelude.fixM
+           SAWCorePrelude.bveq_sameL
+           SAWCorePrelude.bveq_sameR
+           SAWCorePrelude.bveq_same2
+           SAWCorePrelude.bvNat_bvToNat
+           SAWCorePrelude.ite_split_cong
+           SAWCorePrelude.ite_join_cong
+           SAWCorePrelude.map_map
+           SAWCorePrelude.test_fun0
+           SAWCorePrelude.test_fun1
+           SAWCorePrelude.test_fun2
+           SAWCorePrelude.test_fun3
+           SAWCorePrelude.test_fun4
+           SAWCorePrelude.test_fun5
+           SAWCorePrelude.test_fun6
+           mathcomp.ssreflect.ssrnat.half
+           Nat.even
+           Coq.Init.Nat.pred
+       } .
 
 
 (** [cry_handshake] is the [handshake] type as it comes out of the translation
@@ -204,6 +234,13 @@ Record Handshake :=
       messageNumber : BITS 32;
     }.
 
+Ltac simplHandshake :=
+  cbv
+    [
+      handshakeType
+        messageNumber
+    ].
+
 Record Connection :=
   MkConnection
     {
@@ -217,6 +254,20 @@ Record Connection :=
       resumeFromCache   : bool;
       serverCanSendOCSP : bool;
     }.
+
+Ltac simplConnection :=
+  cbv
+    [
+      clientAuthFlag
+        corked
+        corkedIO
+        handshake
+        isCachingEnabled
+        keyExchangeEPH
+        mode
+        resumeFromCache
+        serverCanSendOCSP
+    ].
 
 Notation "a || b" := (operations.orB a b).
 
@@ -358,7 +409,7 @@ Definition advanceMessage (conn : Connection) : Connection :=
     handshake         := handshake';
     mode              := mode conn;
     corkedIO          := corkedIO conn;
-    corked            := corked conn;
+    corked            := corked';
     isCachingEnabled  := isCachingEnabled  conn;
     resumeFromCache   := resumeFromCache   conn;
     serverCanSendOCSP := serverCanSendOCSP conn;
@@ -464,57 +515,6 @@ Proof.
   move => x y XY.
   subst x.
   reflexivity.
-Qed.
-
-Theorem tnth_rshift {A n} (h : A) (t : n.-tuple A) (i : 'I_n)
-  : tnth (cat_tuple [tuple h] t) (rshift 1 i) = tnth t i.
-Proof.
-  setoid_rewrite (tnth_nth h).
-  simpl.
-  reflexivity.
-Qed.
-
-Lemma genOrdinal_tnth
-  : forall (A : Type) (n : nat) (t : t A n),
-    genOrdinal n A (fun q : 'I_n => tnth (seq_to_tuple t) q) = t.
-Proof.
-  move => A.
-  apply Vector.t_ind => [|h n t IH].
-  {
-    simpl.
-    reflexivity.
-  }
-  {
-    simpl.
-    f_equal.
-    setoid_rewrite tnth_rshift.
-    assumption.
-  }
-Qed.
-
-Global Instance ProperEmbedding_seq_BITS A B n `{ProperEmbedding A B}
-       : ProperEmbedding (Embedding_seq_tuple A B n).
-Proof.
-  apply Build_ProperEmbedding.
-  move : n.
-  apply Vector.t_ind.
-  {
-    reflexivity.
-  }
-  {
-    move => h n t IH.
-    simpl.
-    f_equal.
-    {
-      apply roundtrip.
-    }
-    {
-      setoid_rewrite tnth_map.
-      setoid_rewrite roundtrip.
-      setoid_rewrite tnth_rshift.
-      apply genOrdinal_tnth.
-    }
-  }
 Qed.
 
 Global Instance Embedding_Handshake
@@ -665,11 +665,40 @@ Proof.
   apply CT.
 Qed.
 
-Theorem toAbstract_ecOr
-  : forall {n} a b,
-    toAbstract (ecOr (Vec n bool) (PLogicWord n) a b)
+Theorem ecOr_cons m h1 h2 t1 t2
+  : ecOr (Vec m.+1 bool) (PLogicWord m.+1) (h1 :: t1) (h2 :: t2)
     =
-    toAbstract a || toAbstract b.
+    Vector.cons _ (or h1 h2) _ (ecOr (Vec m bool) (PLogicWord m) t1 t2).
+Proof.
+  move : t1 t2.
+  apply (Vector.t_ind _ (fun n v => forall b, _ = _)) with (n := m).
+  {
+    elim / @Vector.case0.
+    compute.
+    reflexivity.
+  }
+  {
+    move => h n t IH b.
+    move : b t IH.
+    elim / @Vector.caseS => h' n' t' t IH.
+
+    rewrite / ecOr.
+    simpl.
+    unfold Notation.Rget.
+    simpl.
+    rewrite / bvOr.
+    rewrite / bvZipWith.
+    rewrite / zipWith.
+    simpl.
+    f_equal.
+  }
+Qed.
+
+Theorem seq_to_tuple_ecOr
+  : forall {n} a b,
+    seq_to_tuple (ecOr (Vec n bool) (PLogicWord n) a b)
+    =
+    seq_to_tuple a || seq_to_tuple b.
 Proof.
   move => n.
   apply (Vector.t_ind _ (fun n v => forall b, _ = _)) with (n0 := n).
@@ -684,23 +713,14 @@ Proof.
     move : m b t IH.
     apply (caseS (fun n v => forall t, _ -> _)).
     move => h' m b t IH.
-    apply : val_inj.
+    rewrite ecOr_cons.
     simpl.
-    f_equal.
+    apply val_inj.
     rewrite IH.
+    simpl.
     reflexivity.
   }
 Qed.
-
-Ltac simplConnectionAccessors :=
-  repeat (
-      match goal with
-      | |- context [ ?f ?c ] =>
-        match type of c with
-        | Connection => unfold f
-        end
-      end
-    ).
 
 Theorem shiftin_false_zero n
   : shiftin false (bvNat n 0) = bvNat n.+1 0.
@@ -725,7 +745,7 @@ Proof.
     rewrite shiftin_false_zero.
     simpl.
     now rewrite IHn.
- }
+  }
 Qed.
 
 Theorem append_assoc :
@@ -812,47 +832,232 @@ Ltac crunchTheNumbersStep :=
 
 Ltac crunchTheNumbers := repeat crunchTheNumbersStep.
 
+Theorem t_for_n_equal_1 v :
+  let n := 1 in
+  ecPlus (Vec n bool) (PArithSeqBool n) v (ecNumber 1 (Vec n bool) (PLiteralSeqBool n))
+  =
+  toConcrete (incB (seq_to_tuple v)).
+Proof.
+  do 2 dependent destruction v.
+  move : h.
+  elim => /=.
+  {
+    cbv -[bvAdd].
+    rewrite / bvAdd /=.
+    rewrite toNat_addB.
+    cbv.
+    reflexivity.
+  }
+  {
+    cbv -[bvAdd].
+    rewrite / bvAdd /=.
+    rewrite toNat_addB.
+    cbv.
+    reflexivity.
+  }
+Qed.
+
+Theorem resolve_ecPlus_Vec n a b
+  : ecPlus (Vec n bool) (PArithSeqBool n) a b = bvAdd n a b.
+Proof.
+  reflexivity.
+Qed.
+
+Theorem half_toNat s (n : BITS s.+1) : (toNat n)./2 = toNat (droplsb n).
+Proof.
+Admitted.
+
+Eval compute in bvNat 3.+1 3 = PeanoNat.Nat.odd 3 :: bvNat 3 3./2.
+
+Theorem bvNat_S s n
+  : bvNat s.+1 n = PeanoNat.Nat.odd n :: bvNat s n./2.
+Proof.
+  move : s n.
+  elim => [|s].
+  {
+    rewrite / bvNat.
+    rewrite / joinLSB /=.
+    reflexivity.
+  }
+  {
+    rewrite /=.
+    rewrite / joinLSB /=.
+    move => IH n.
+    move : (IH n./2) => IH'.
+    rewrite IH'.
+    rewrite /=.
+    f_equal.
+    move => IH.
+  }
+Qed.
+
+Theorem bvNat_toNat size (n : BITS size)
+  : bvNat size (toNat n) = toConcrete n.
+Proof.
+  cbv -[bvNat toNat genOrdinal tnth].
+  move : size n.
+  elim => [|s IH] n.
+  {
+    reflexivity.
+  }
+  {
+    rewrite /=.
+    rewrite half_toNat.
+    rewrite IH.
+    rewrite / joinLSB.
+    TODO.
+    unfol
+      rewrite / toNat.
+    specialize (IH (toNat n)./2).
+    unfold tnth.
+    unfold joinLSB.
+    unfold shiftin.
+    simpl.
+  }
+  unfold BITS in n.
+  unfold toConcrete.
+Qed.
+
+Theorem todo a b
+  : bvAdd n a b = toConcrete (addB (seq_to_tuple a) (seq_to_tuple b)).
+Proof.
+  rewrite / bvAdd.
+
+  reflexivity.
+Qed.
+
+Theorem t v :
+  ecPlus (Vec 32 bool) (PArithSeqBool 32) v (ecNumber 1 (Vec 32 bool) (PLiteralSeqBool 32))
+  =
+  toConcrete (incB (seq_to_tuple v)).
+Proof.
+  rewrite resolve_ecPlus_Vec.
+  do 33 dependent destruction v.
+
+  simpl.
+  crunchTheNumbers.
+
+  rewrite / incB.
+
+
+  cbv -[ecPlus seq_to_tuple ecNumber PLiteralSeqBool PArithSeqBool].
+  cbv [seq_to_tuple cat_tuple].
+  cbv -[toConcrete seq_to_tuple].
+  rewrite / ecPlus.
+  unfold Notation.Rget.
+  cbv [
+      CoreRecords.record_get
+        CoreRecords.get_member
+        CoreRecords.Fields
+        CoreRecords.fields_insert
+        CoreRecords.ascii_to_p
+        CoreRecords.bool_to_p
+        CoreRecords.string_to_p
+        CoreRecords.record_left
+        CoreRecords.record_right
+    ].
+  reflexivity.
+Qed.
+
 Global Instance
        CorrectTranslation_connSetHandshakeType
   : CorrectTranslation conn_set_handshake_type connSetHandshakeType.
 Proof.
-  Opaque bvNat gen.
   constructor.
+  move => ci.
+  repeat (match goal with [ a : _ * _ |- _ ] => destruct a end).
   unfold conn_set_handshake_type.
-  intros [?[?[?[[][?[?[?[?]]]]]]]].
-  simpl.
-  intros ai co ao AI CO.
-  inversion_clear AI.
-  clear ai.
-  inversion_clear CO.
-  clear co.
-  intros AO.
-  inversion_clear AO.
-  clear ao.
+  cbv [fst snd Datatypes.fst Datatypes.snd].
+  move => ai co ao AI CO AO.
+  subst ai.
+  subst co.
+  subst ao.
   unfold connSetHandshakeType.
+  simplConnection.
+  cbv [
+      toAbstract
+        Embedding_Connection
+        Embedding_Handshake
+        Embedding_seq_tuple
+        Embedding_Bool
+    ].
+  repeat setoid_rewrite map_tuple_id.
   f_equal.
-  simplConnectionAccessors.
   f_equal.
-  {
-    repeat rewrite toAbstract_ecOr.
-    f_equal.
-    f_equal.
-    {
-      apply val_inj.
-      destruct b0, b2; simpl; reflexivity.
-    }
-    {
-      apply val_inj.
-      Transparent bvNat gen.
-      crunchTheNumbers.
-    }
-  }
+  repeat rewrite seq_to_tuple_ecOr.
+  f_equal.
+  apply val_inj.
+  destruct b1, b3, b, b0, b2; reflexivity.
 Qed.
 
 Global Instance
        CorrectTranslation_advanceMessage
   : CorrectTranslation advance_message advanceMessage.
 Proof.
+  constructor => ca.
+  repeat (match goal with [ a : _ * _ |- _ ] => destruct a end).
+  move => ai co ao AI CO AO.
+  subst ai.
+  subst co.
+  subst ao.
+  rewrite / advance_message.
+  cbv [fst snd Datatypes.fst Datatypes.snd].
+  cbv [
+      toAbstract
+        Embedding_Connection
+        Embedding_Handshake
+        Embedding_seq_tuple
+        Embedding_Bool
+    ].
+  repeat rewrite map_tuple_id.
+  rewrite / advanceMessage.
+  simplConnection.
+  simplHandshake.
+  f_equal.
+  {
+    destruct and eqn:A.
+    {
+      destruct (_ && _) eqn:B.
+      {
+        destruct ecEq eqn:C.
+        {
+          destruct (writer _ == modeWriter _) eqn:D.
+          {
+            admit.
+          }
+          {
+            (* C and D should agree *)
+            exfalso.
+            clear A B.
+            move : s3 C D.
+            unfold seq.
+            cbv [Num_rect].
+
+
+            pose proof (@Vector.caseS Bool) as V.
+            apply (V (fun n v => _ = true -> _)). with (n := 31).
+            apply (@Vector.caseS _ (fun n v => ecEq _ _ _ _ = true -> _)) with (n := 31).
+            dependent destruction s3.
+          }
+        }
+      }
+
+    }
+    {
+      admit.
+    }
+    rewrite / S2N.state_machine.
+    unfold ecAt.
+    simpl.
+    rewrite / corked.
+    cbv [ecAt Num_rect].
+    cbv [bvAt sawAt].
+    cbv [corked].
+    cbv [s2n_cork ecPlus].
+    unfold Notation.Rget.
+    simpl.
+    rewrite /=.
+  }
 
 Qed.
 
@@ -942,22 +1147,22 @@ Proof.
 Qed.
 
 Definition s2nTrans (conn : ((prod) (@SAWCoreScaffolding.Bool) (((prod)
-(((@CryptolPrimitives.seq) (((@TCNum) (2))) (@SAWCoreScaffolding.Bool)))
-(((prod) (((@CryptolPrimitives.seq) (((@TCNum) (8)))
-(@SAWCoreScaffolding.Bool))) (((prod) (((prod) (((@CryptolPrimitives.seq)
-(((@TCNum) (32))) (@SAWCoreScaffolding.Bool))) (((@CryptolPrimitives.seq)
-(((@TCNum) (32))) (@SAWCoreScaffolding.Bool))))) (((prod)
-(@SAWCoreScaffolding.Bool) (((prod) (@SAWCoreScaffolding.Bool) (((prod)
-(((@CryptolPrimitives.seq) (((@TCNum) (32))) (@SAWCoreScaffolding.Bool)))
-(((prod) (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.Bool)))))))))))))))))
-:= ((advance_message) (if ((orB) (((@CryptolPrimitives.ecEq)
-(((@CryptolPrimitives.seq) (((@TCNum) (32))) (@SAWCoreScaffolding.Bool)))
-(((@CryptolPrimitives.PCmpSeqBool) (((@TCNum) (32))))) (((ACTIVE_MESSAGE)
-(conn))) (((CLIENT_HELLO) (((@CryptolPrimitives.seq) (((@TCNum) (32)))
-(@SAWCoreScaffolding.Bool))) (((@CryptolPrimitives.PLiteralSeqBool) (((@TCNum)
-(32))))))))) (((@CryptolPrimitives.ecEq) (((@CryptolPrimitives.seq) (((@TCNum)
-(32))) (@SAWCoreScaffolding.Bool))) (((@CryptolPrimitives.PCmpSeqBool)
-(((@TCNum) (32))))) (((ACTIVE_MESSAGE) (conn))) (((SERVER_HELLO)
-(((@CryptolPrimitives.seq) (((@TCNum) (32))) (@SAWCoreScaffolding.Bool)))
-(((@CryptolPrimitives.PLiteralSeqBool) (((@TCNum) (32)))))))))) then
-((conn_set_handshake_type) (conn)) else conn)).
+                                                                   (((@CryptolPrimitives.seq) (((@TCNum) (2))) (@SAWCoreScaffolding.Bool)))
+                                                                   (((prod) (((@CryptolPrimitives.seq) (((@TCNum) (8)))
+                                                                                                       (@SAWCoreScaffolding.Bool))) (((prod) (((prod) (((@CryptolPrimitives.seq)
+                                                                                                                                                          (((@TCNum) (32))) (@SAWCoreScaffolding.Bool))) (((@CryptolPrimitives.seq)
+                                                                                                                                                                                                             (((@TCNum) (32))) (@SAWCoreScaffolding.Bool))))) (((prod)
+                                                                                                                                                                                                                                                                  (@SAWCoreScaffolding.Bool) (((prod) (@SAWCoreScaffolding.Bool) (((prod)
+                                                                                                                                                                                                                                                                                                                                     (((@CryptolPrimitives.seq) (((@TCNum) (32))) (@SAWCoreScaffolding.Bool)))
+                                                                                                                                                                                                                                                                                                                                     (((prod) (@SAWCoreScaffolding.Bool) (@SAWCoreScaffolding.Bool)))))))))))))))))
+  := ((advance_message) (if ((orB) (((@CryptolPrimitives.ecEq)
+                                       (((@CryptolPrimitives.seq) (((@TCNum) (32))) (@SAWCoreScaffolding.Bool)))
+                                       (((@CryptolPrimitives.PCmpSeqBool) (((@TCNum) (32))))) (((ACTIVE_MESSAGE)
+                                                                                                  (conn))) (((CLIENT_HELLO) (((@CryptolPrimitives.seq) (((@TCNum) (32)))
+                                                                                                                                                       (@SAWCoreScaffolding.Bool))) (((@CryptolPrimitives.PLiteralSeqBool) (((@TCNum)
+                                                                                                                                                                                                                               (32))))))))) (((@CryptolPrimitives.ecEq) (((@CryptolPrimitives.seq) (((@TCNum)
+                                                                                                                                                                                                                                                                                                       (32))) (@SAWCoreScaffolding.Bool))) (((@CryptolPrimitives.PCmpSeqBool)
+                                                                                                                                                                                                                                                                                                                                               (((@TCNum) (32))))) (((ACTIVE_MESSAGE) (conn))) (((SERVER_HELLO)
+                                                                                                                                                                                                                                                                                                                                                                                                   (((@CryptolPrimitives.seq) (((@TCNum) (32))) (@SAWCoreScaffolding.Bool)))
+                                                                                                                                                                                                                                                                                                                                                                                                   (((@CryptolPrimitives.PLiteralSeqBool) (((@TCNum) (32)))))))))) then
+                           ((conn_set_handshake_type) (conn)) else conn)).

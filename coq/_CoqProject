@@ -2,8 +2,8 @@
 -R handwritten CryptolToCoq
 
 generated/CryptolPrimitivesForSAWCore.v
+# generated/MEE_CBC.v
 generated/SAWCorePrelude.v
-generated/MEE_CBC.v
 handwritten/CryptolPrimitivesForSAWCoreExtra.v
 handwritten/SAWCoreScaffolding.v
 handwritten/SAWCorePrelude_proofs.v
@@ -12,9 +12,9 @@ handwritten/SAWCoreVectorsAsCoqLists.v
 handwritten/SAWCoreVectorsAsCoqVectors.v
 handwritten/CoqVectorsExtra.v
 
-generated/BESSPIN/SBB.v
-generated/BESSPIN/SBB_Invariants.v
-handwritten/BESSPIN/SBB_Scaffolding.v
+# generated/BESSPIN/SBB.v
+# generated/BESSPIN/SBB_Invariants.v
+# handwritten/BESSPIN/SBB_Scaffolding.v
 
 generated/S2N/S2N.v
 handwritten/S2N_proofs.v

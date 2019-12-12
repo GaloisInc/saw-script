@@ -6,7 +6,6 @@ From Coq Require Import String.
 From Coq Require Import Program.Equality.
 From Coq Require Import Vector.
 
-From CryptolToCoq Require Import Cryptol_proofs.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCore.
 From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra.
 From CryptolToCoq Require Import SAWCorePrelude.

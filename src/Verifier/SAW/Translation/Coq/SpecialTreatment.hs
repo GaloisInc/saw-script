@@ -252,48 +252,161 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Equality
   ++
-  [ ("Eq",                mapsTo sawDefinitionsModule "Eq")
-  , ("Eq__rec",           mapsTo sawDefinitionsModule "Eq__rec")
-  , ("Refl",              mapsTo sawDefinitionsModule "Refl")
+  [ ("Eq",      mapsTo sawDefinitionsModule "Eq")
+  , ("Eq__rec", mapsTo sawDefinitionsModule "Eq__rec")
+  , ("Refl",    mapsTo sawDefinitionsModule "Refl")
   ]
 
   -- Strings
   ++
-  [ ("String",            mapsTo sawDefinitionsModule "String")
+  [ ("String", mapsTo sawDefinitionsModule "String")
   ]
 
   -- Utility functions
   ++
-  [ ("id",                mapsTo sawDefinitionsModule "id")
+  [ ("id", mapsTo sawDefinitionsModule "id")
   ]
 
   -- Natural numbers
   ++
-  [ ("divModNat",         mapsTo sawDefinitionsModule "divModNat")
-  , ("Nat",               mapsTo sawDefinitionsModule "Nat")
-  , ("widthNat",          mapsTo sawDefinitionsModule "widthNat")
-  , ("Zero",              mapsTo cryptolToCoqModule   "Zero")
-  , ("Succ",              mapsTo cryptolToCoqModule   "Succ")
+  [ ("divModNat", mapsTo sawDefinitionsModule "divModNat")
+  , ("Nat",       mapsTo sawDefinitionsModule "Nat")
+  , ("widthNat",  mapsTo sawDefinitionsModule "widthNat")
+  , ("Zero",      mapsTo cryptolToCoqModule   "Zero")
+  , ("Succ",      mapsTo cryptolToCoqModule   "Succ")
   ]
 
   -- Vectors
   ++
-  [ ("at",                rename "sawAt") -- `at` is a reserved keyword in Coq
-  , ("at_single",         skip) -- is boring, could be proved on the Coq side
-  , ("atWithDefault",     mapsTo vectorsModule "atWithDefault")
-  , ("bvNat",             mapsTo vectorsModule "bvNat")
-  , ("coerceVec",         mapsTo vectorsModule "coerceVec")
-  , ("EmptyVec",          mapsTo vectorsModule "EmptyVec")
-  , ("eq_Vec",            skip)
-  , ("foldr",             mapsTo vectorsModule "foldr")
-  , ("gen",               mapsTo vectorsModule "gen")
-  , ("take0",             skip)
+  [ ("at",            rename "sawAt") -- `at` is a reserved keyword in Coq
+  , ("at_single",     skip) -- is boring, could be proved on the Coq side
+  , ("atWithDefault", mapsTo vectorsModule "atWithDefault")
+  , ("bvAdd",         mapsTo vectorsModule "bvAdd")
+  , ("bvMul",         mapsTo vectorsModule "bvMul")
+  , ("bvSub",         mapsTo vectorsModule "bvSub")
+  , ("bvNat",         mapsTo vectorsModule "bvNat")
+  , ("bvult",         mapsTo vectorsModule "bvult")
+  , ("bvToNat",       mapsTo vectorsModule "bvToNat")
+  , ("coerceVec",     mapsTo vectorsModule "coerceVec")
+  , ("EmptyVec",      mapsTo vectorsModule "EmptyVec")
+  , ("eq_Vec",        skip)
+  , ("foldr",         mapsTo vectorsModule "foldr")
+  , ("gen",           mapsTo vectorsModule "gen")
+  , ("take0",         skip)
   -- zip must be realized in-place because it both depends on definitions and is
   -- used by other definitions in the same file, so it can neither be pre- nor
   -- post-defined.
-  , ("zip",               realize zipSnippet)
+  , ("zip",           realize zipSnippet)
   -- cannot map directly to Vector.t because arguments are in a different order
-  , ("Vec",               mapsTo vectorsModule "Vec")
+  , ("Vec",           mapsTo vectorsModule "Vec")
+  ]
+
+  -- Integers
+  ++
+  [ ("Integer",  mapsTo sawDefinitionsModule "Integer")
+  , ("intAdd",   mapsTo sawDefinitionsModule "intAdd")
+  , ("intSub",   mapsTo sawDefinitionsModule "intSub")
+  , ("intMul",   mapsTo sawDefinitionsModule "intMul")
+  , ("intDiv",   mapsTo sawDefinitionsModule "intDiv")
+  , ("intMod",   mapsTo sawDefinitionsModule "intMod")
+  , ("intMin",   mapsTo sawDefinitionsModule "intMin")
+  , ("intMax",   mapsTo sawDefinitionsModule "intMax")
+  , ("intNeg",   mapsTo sawDefinitionsModule "intNeg")
+  , ("intAbs",   mapsTo sawDefinitionsModule "intAbs")
+  , ("intEq",    mapsTo sawDefinitionsModule "intEq")
+  , ("intLe",    mapsTo sawDefinitionsModule "intLe")
+  , ("intLt",    mapsTo sawDefinitionsModule "intLt")
+  , ("intToNat", mapsTo sawDefinitionsModule "intToNat")
+  , ("natToInt", mapsTo sawDefinitionsModule "natToInt")
+  ]
+
+  -- Modular integers
+  ++
+  [ ("IntMod",     mapsTo sawDefinitionsModule "IntMod")
+  , ("toIntMod",   mapsTo sawDefinitionsModule "toIntMod")
+  , ("fromIntMod", mapsTo sawDefinitionsModule "fromIntMod")
+  , ("intModEq",   mapsTo sawDefinitionsModule "intModEq")
+  , ("intModAdd",  mapsTo sawDefinitionsModule "intModAdd")
+  , ("intModSub",  mapsTo sawDefinitionsModule "intModSub")
+  , ("intModMul",  mapsTo sawDefinitionsModule "intModMul")
+  , ("intModNeg",  mapsTo sawDefinitionsModule "intModNeg")
+  ]
+
+  -- Axioms currently skipped
+  ++
+  [ ("drop0",                skip)
+  , ("rotateL",              skip)
+  , ("rotateR",              skip)
+  , ("shiftL",               skip)
+  , ("shiftR",               skip)
+  , ("bvugt",                skip)
+  , ("bvuge",                skip)
+  , ("bvule",                skip)
+  , ("bvsgt",                skip)
+  , ("bvsge",                skip)
+  , ("bvslt",                skip)
+  , ("bvsle",                skip)
+  , ("bvPopcount",           skip)
+  , ("bvCountLeadingZeros",  skip)
+  , ("bvCountTrailingZeros", skip)
+  , ("bvForall",             skip)
+  , ("bvAddZeroL",           skip)
+  , ("bvAddZeroR",           skip)
+  , ("bvNeg",                skip)
+  , ("bvSub",                skip)
+  , ("bvLg2",                skip)
+  , ("bvUDiv",               skip)
+  , ("bvURem",               skip)
+  , ("bvSDiv",               skip)
+  , ("bvSRem",               skip)
+  , ("bvShl",                skip)
+  , ("bvShr",                skip)
+  , ("bvSShr",               skip)
+  , ("bvShiftL_bvShl",       skip)
+  , ("bvShiftR_bvShr",       skip)
+  , ("bvEq_refl",            skip)
+  , ("equalNat_bv",          skip)
+  -- , ("intToBv",              skip)
+  -- , ("bvToInt",              skip)
+  , ("sbvToInt",             skip)
+  , ("Float",                skip)
+  , ("mkFloat",              skip)
+  , ("Double",               skip)
+  , ("mkDouble",             skip)
+  , ("CompM",                skip)
+  , ("returnM",              skip)
+  , ("bindM",                skip)
+  , ("errorM",               skip)
+  , ("catchM",               skip)
+  , ("letRecM",              skip)
+  , ("letRecM1",             skip)
+  , ("fixM",                 skip)
+  , ("bveq_sameL",           skip)
+  , ("bveq_sameR",           skip)
+  , ("bveq_same2",           skip)
+  , ("bvNat_bvToNat",        skip)
+  , ("ite_split_cong",       skip)
+  , ("ite_join_cong",        skip)
+  , ("map_map",              skip)
+  , ("test_fun0",            skip)
+  , ("test_fun1",            skip)
+  , ("test_fun2",            skip)
+  , ("test_fun3",            skip)
+  , ("test_fun4",            skip)
+  , ("test_fun5",            skip)
+  , ("test_fun6",            skip)
+  ]
+
+  -- Definitions that depend on axioms currently skipped
+  ++
+  [ ("bvRotateL",      skip)
+  , ("bvRotateR",      skip)
+  , ("bvShiftL",       skip)
+  , ("bvShiftR",       skip)
+  , ("bvCarry",        skip)
+  , ("bvAddWithCarry", skip)
+  , ("composeM",       skip)
+  , ("letRecFuns",     skip)
   ]
 
 constantsRenamingMap :: Map.Map String String
@@ -316,14 +429,14 @@ Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
     xs in Vector.t _ m'
     return Vector.t _ (minNat m' n)
   with
-  | Vector.nil _ => Vector.nil _
-  | Vector.cons _ x pm xs =>
+  | Vector.nil => Vector.nil _
+  | Vector.cons x pm xs =>
     match
       ys in Vector.t _ n'
       return Vector.t _ (minNat (S pm) n')
     with
-    | Vector.nil _ => Vector.nil _
-    | Vector.cons _ y pm' ys => Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)
+    | Vector.nil => Vector.nil _
+    | Vector.cons y pm' ys => Vector.cons _ (x, y) _ (zip _ _ _ _ xs ys)
     end
   end
 .
