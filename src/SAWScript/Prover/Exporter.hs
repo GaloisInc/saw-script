@@ -41,7 +41,7 @@ import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
-import SAWScript.Prover.SBV(prepSBV)
+import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
 
 
@@ -166,8 +166,8 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 -- constants as uninterpreted.
 writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
 writeUnintSMTLib2 unints sc f t =
-  do (_, _, l) <- prepSBV sc unints t
-     let isSat = False -- term is a proof goal with universally-quantified variables
+  do (_, _, l) <- prepNegatedSBV sc unints t
+     let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
      writeFile f txt
 

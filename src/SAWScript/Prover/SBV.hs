@@ -2,7 +2,7 @@ module SAWScript.Prover.SBV
   ( proveUnintSBV
   , SBV.SMTConfig
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
-  , prepSBV
+  , prepNegatedSBV
   ) where
 
 import           Data.Map ( Map )
@@ -42,9 +42,7 @@ proveUnintSBV ::
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
 proveUnintSBV conf unints timeout sc term =
-  do (t', mlabels, lit0) <- prepSBV sc unints term
-
-     let lit = liftM SBV.svNot lit0
+  do (t', mlabels, lit) <- prepNegatedSBV sc unints term
 
      tp <- scWhnf sc =<< scTypeOf sc t'
      let (args, _) = asPiList tp
@@ -72,11 +70,16 @@ proveUnintSBV conf unints timeout sc term =
 
        SBV.ProofError _ ls _ -> fail . unlines $ "Prover returned error: " : ls
 
-
-prepSBV ::
-  SharedContext -> [String] -> Prop ->
+-- | Convert a saw-core proposition to a logically-negated SBV
+-- symbolic boolean formula with existentially quantified variables.
+-- The returned formula is suitable for checking satisfiability. The
+-- specified function names are left uninterpreted.
+prepNegatedSBV ::
+  SharedContext ->
+  [String] {- ^ Uninterpreted function names -} ->
+  Prop     {- ^ Proposition to prove -} ->
   IO (Term, [Maybe SBVSim.Labeler], SBV.Symbolic SBV.SVal)
-prepSBV sc unints goal =
+prepNegatedSBV sc unints goal =
   do t0 <- propToPredicate sc goal
      -- Abstract over all non-function ExtCns variables
      let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
@@ -87,7 +90,8 @@ prepSBV sc unints goal =
 
      checkBooleanSchema schema
      (labels, lit) <- SBVSim.sbvSolve sc sbvPrims unints t'
-     return (t', labels, lit)
+     let lit' = liftM SBV.svNot lit
+     return (t', labels, lit')
 
 
 
