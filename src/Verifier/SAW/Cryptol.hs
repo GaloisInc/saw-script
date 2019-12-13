@@ -1227,7 +1227,7 @@ exportValue ty v = case ty of
 
   -- records
   TV.TVRec fields ->
-      V.VRecord (exportRecordValue (Map.assocs (Map.fromList fields)) v)
+      V.VRecord (Map.fromList $ exportRecordValue (Map.assocs (Map.fromList fields)) v)
 
   -- functions
   TV.TVFun _aty _bty ->
@@ -1276,7 +1276,7 @@ exportFirstOrderValue fv =
       | otherwise   -> V.VSeq  len (V.finiteSeqMap (map (V.ready . exportFirstOrderValue) vs))
       where len = toInteger (length vs)
     FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
-    FOVRec vm   -> V.VRecord [ (C.packIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
+    FOVRec vm   -> V.VRecord $ Map.fromList [ (C.packIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
 
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
 importFirstOrderValue t0 v0 = V.runEval (V.EvalOpts C.quietLogger V.defaultPPOpts) (go t0 v0)
@@ -1289,7 +1289,7 @@ importFirstOrderValue t0 v0 = V.runEval (V.EvalOpts C.quietLogger V.defaultPPOpt
     (FOTVec _ ty    , V.VSeq len xs)   -> FOVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
     (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
     (FOTRec fs      , V.VRecord xs)    ->
-        do xs' <- Map.fromList <$> mapM importField xs
+        do xs' <- Map.fromList <$> mapM importField (Map.assocs xs)
            let missing = Set.difference (Map.keysSet fs) (Map.keysSet xs')
            unless (Set.null missing)
                   (fail $ unwords $ ["Missing fields while importing finite value:"] ++ Set.toList missing)
