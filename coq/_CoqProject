@@ -4,6 +4,7 @@
 generated/CryptolPrimitivesForSAWCore.v
 # generated/MEE_CBC.v
 generated/SAWCorePrelude.v
+#generated/SAWCorePreludeCopy.v
 handwritten/CryptolPrimitivesForSAWCoreExtra.v
 handwritten/SAWCoreScaffolding.v
 handwritten/SAWCorePrelude_proofs.v

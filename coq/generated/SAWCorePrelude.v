@@ -544,13 +544,17 @@ Definition bvAt : forall (n : ((@Nat))), forall (a : Type), forall (w : ((@Nat))
 Definition bvUpd : forall (n : ((@Nat))), forall (a : Type), forall (w : ((@Nat))), (((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) -> (((@SAWCorePrelude.bitvector) (w))) -> (a) -> ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a)) :=
   (fun (n : ((@Nat))) (a : Type) (w : ((@Nat))) (xs : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (@SAWCoreScaffolding.Bool))) (y : a) => ((@SAWCorePrelude.upd) (n) (a) (xs) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))) (y))).
 
-(* Prelude.bvRotateL was skipped *)
+Definition bvRotateL : forall (n : ((@Nat))), forall (a : Type), forall (w : ((@Nat))), (((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) -> (((@SAWCorePrelude.bitvector) (w))) -> ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a)) :=
+  (fun (n : ((@Nat))) (a : Type) (w : ((@Nat))) (xs : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (@SAWCoreScaffolding.Bool))) => ((@SAWCoreVectorsAsCoqVectors.rotateL) (n) (a) (xs) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))))).
 
-(* Prelude.bvRotateR was skipped *)
+Definition bvRotateR : forall (n : ((@Nat))), forall (a : Type), forall (w : ((@Nat))), (((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) -> (((@SAWCorePrelude.bitvector) (w))) -> ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a)) :=
+  (fun (n : ((@Nat))) (a : Type) (w : ((@Nat))) (xs : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (@SAWCoreScaffolding.Bool))) => ((@SAWCoreVectorsAsCoqVectors.rotateR) (n) (a) (xs) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))))).
 
-(* Prelude.bvShiftL was skipped *)
+Definition bvShiftL : forall (n : ((@Nat))), forall (a : Type), forall (w : ((@Nat))), (a) -> (((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) -> (((@SAWCorePrelude.bitvector) (w))) -> ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a)) :=
+  (fun (n : ((@Nat))) (a : Type) (w : ((@Nat))) (z : a) (xs : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (@SAWCoreScaffolding.Bool))) => ((@SAWCoreVectorsAsCoqVectors.shiftL) (n) (a) (z) (xs) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))))).
 
-(* Prelude.bvShiftR was skipped *)
+Definition bvShiftR : forall (n : ((@Nat))), forall (a : Type), forall (w : ((@Nat))), (a) -> (((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) -> (((@SAWCorePrelude.bitvector) (w))) -> ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a)) :=
+  (fun (n : ((@Nat))) (a : Type) (w : ((@Nat))) (z : a) (xs : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (@SAWCoreScaffolding.Bool))) => ((@SAWCoreVectorsAsCoqVectors.shiftR) (n) (a) (z) (xs) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))))).
 
 (* Prelude.bvAdd was skipped *)
 
@@ -578,12 +582,14 @@ Definition bvUpd : forall (n : ((@Nat))), forall (a : Type), forall (w : ((@Nat)
 
 (* Prelude.bvForall was skipped *)
 
-(* Prelude.bvCarry was skipped *)
+Definition bvCarry : forall (n : ((@Nat))), (((@SAWCorePrelude.bitvector) (n))) -> (((@SAWCorePrelude.bitvector) (n))) -> @SAWCoreScaffolding.Bool :=
+  (fun (n : ((@Nat))) (x : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (@SAWCoreScaffolding.Bool))) (y : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (@SAWCoreScaffolding.Bool))) => ((@SAWCoreVectorsAsCoqVectors.bvult) (n) (((@SAWCoreVectorsAsCoqVectors.bvAdd) (n) (x) (y))) (x))).
 
 Definition bvSCarry : forall (n : ((@Nat))), (((@SAWCorePrelude.bitvector) (((@Succ) (n))))) -> (((@SAWCorePrelude.bitvector) (((@Succ) (n))))) -> @SAWCoreScaffolding.Bool :=
   (fun (n : ((@Nat))) (x : ((@SAWCoreVectorsAsCoqVectors.Vec) (((@Succ) (n))) (@SAWCoreScaffolding.Bool))) (y : ((@SAWCoreVectorsAsCoqVectors.Vec) (((@Succ) (n))) (@SAWCoreScaffolding.Bool))) => ((@SAWCoreScaffolding.and) (((@SAWCoreScaffolding.boolEq) (((@SAWCorePrelude.msb) (n) (x))) (((@SAWCorePrelude.msb) (n) (y))))) (((@SAWCoreScaffolding.xor) (((@SAWCorePrelude.msb) (n) (x))) (((@SAWCorePrelude.msb) (n) (((@SAWCoreVectorsAsCoqVectors.bvAdd) (((@Succ) (n))) (x) (y))))))))).
 
-(* Prelude.bvAddWithCarry was skipped *)
+Definition bvAddWithCarry : forall (n : ((@Nat))), (((@SAWCorePrelude.bitvector) (n))) -> (((@SAWCorePrelude.bitvector) (n))) -> ((prod) (@SAWCoreScaffolding.Bool) (((@SAWCorePrelude.bitvector) (n)))) :=
+  (fun (n : ((@Nat))) (x : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (@SAWCoreScaffolding.Bool))) (y : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (@SAWCoreScaffolding.Bool))) => ((pair) (((@SAWCorePrelude.bvCarry) (n) (x) (y))) (((@SAWCoreVectorsAsCoqVectors.bvAdd) (n) (x) (y))))).
 
 (* Prelude.bvAddZeroL was skipped *)
 

@@ -52,107 +52,27 @@ Scheme Induction for eqtype.subType Sort Prop.
 Scheme Induction for eqtype.subType Sort Set.
 Scheme Induction for eqtype.subType Sort Type.
 
+Scheme Induction for eqtype.insub_spec Sort Prop.
+Scheme Induction for eqtype.insub_spec Sort Set.
+Scheme Induction for eqtype.insub_spec Sort Type.
+
 From Ornamental Require Import Ornaments.
 
 Set DEVOID search prove equivalence. (* <-- Correctness proofs for search *)
 Set DEVOID lift type. (* <-- Prettier types than the ones Coq infers *)
 
-Preprocess
-  Module
-  SAWCorePrelude
-  as SAWCorePrelude'
-       { opaque
-           SAWCoreScaffolding.error
-           SAWCorePrelude.drop0
-           SAWCorePrelude.rotateL
-           SAWCorePrelude.rotateR
-           SAWCorePrelude.shiftL
-           SAWCorePrelude.shiftR
-           SAWCorePrelude.bvugt
-           SAWCorePrelude.bvuge
-           SAWCorePrelude.bvult
-           SAWCorePrelude.bvule
-           SAWCorePrelude.bvsgt
-           SAWCorePrelude.bvsge
-           SAWCorePrelude.bvslt
-           SAWCorePrelude.bvsle
-           SAWCorePrelude.bvPopcount
-           SAWCorePrelude.bvCountLeadingZeros
-           SAWCorePrelude.bvCountTrailingZeros
-           SAWCorePrelude.bvForall
-           SAWCorePrelude.bvAddZeroL
-           SAWCorePrelude.bvAddZeroR
-           SAWCorePrelude.bvNeg
-           SAWCorePrelude.bvSub
-           SAWCorePrelude.bvMul
-           SAWCorePrelude.bvLg2
-           SAWCorePrelude.bvUDiv
-           SAWCorePrelude.bvURem
-           SAWCorePrelude.bvSDiv
-           SAWCorePrelude.bvSRem
-           SAWCorePrelude.bvShl
-           SAWCorePrelude.bvShr
-           SAWCorePrelude.bvSShr
-           SAWCorePrelude.bvShiftL_bvShl
-           SAWCorePrelude.bvShiftR_bvShr
-           SAWCorePrelude.bvEq_refl
-           SAWCorePrelude.equalNat_bv
-           SAWCorePrelude.Integer
-           SAWCorePrelude.intAdd
-           SAWCorePrelude.intSub
-           SAWCorePrelude.intMul
-           SAWCorePrelude.intDiv
-           SAWCorePrelude.intMod
-           SAWCorePrelude.intMin
-           SAWCorePrelude.intMax
-           SAWCorePrelude.intNeg
-           SAWCorePrelude.intAbs
-           SAWCorePrelude.intEq
-           SAWCorePrelude.intLe
-           SAWCorePrelude.intLt
-           SAWCorePrelude.intToNat
-           SAWCorePrelude.natToInt
-           SAWCorePrelude.intToBv
-           SAWCorePrelude.bvToInt
-           SAWCorePrelude.sbvToInt
-           SAWCorePrelude.IntMod
-           SAWCorePrelude.toIntMod
-           SAWCorePrelude.fromIntMod
-           SAWCorePrelude.intModEq
-           SAWCorePrelude.intModAdd
-           SAWCorePrelude.intModSub
-           SAWCorePrelude.intModMul
-           SAWCorePrelude.intModNeg
-           SAWCorePrelude.Float
-           SAWCorePrelude.mkFloat
-           SAWCorePrelude.Double
-           SAWCorePrelude.mkDouble
-           SAWCorePrelude.CompM
-           SAWCorePrelude.returnM
-           SAWCorePrelude.bindM
-           SAWCorePrelude.errorM
-           SAWCorePrelude.catchM
-           SAWCorePrelude.letRecM
-           SAWCorePrelude.letRecM1
-           SAWCorePrelude.fixM
-           SAWCorePrelude.bveq_sameL
-           SAWCorePrelude.bveq_sameR
-           SAWCorePrelude.bveq_same2
-           SAWCorePrelude.bvNat_bvToNat
-           SAWCorePrelude.ite_split_cong
-           SAWCorePrelude.ite_join_cong
-           SAWCorePrelude.map_map
-           SAWCorePrelude.test_fun0
-           SAWCorePrelude.test_fun1
-           SAWCorePrelude.test_fun2
-           SAWCorePrelude.test_fun3
-           SAWCorePrelude.test_fun4
-           SAWCorePrelude.test_fun5
-           SAWCorePrelude.test_fun6
-           mathcomp.ssreflect.ssrnat.half
-           Nat.even
-           Coq.Init.Nat.pred
-       } .
+(* Preprocess *)
+(*   Module *)
+(*   SAWCorePrelude *)
+(*   as SAWCorePrelude' *)
+(*        { opaque *)
+(*            SAWCoreScaffolding.error *)
+(*            SAWCorePrelude.intToBv *)
+(*            SAWCorePrelude.bvToInt *)
+(*            mathcomp.ssreflect.ssrnat.half *)
+(*            Nat.even *)
+(*            Coq.Init.Nat.pred *)
+(*        } . *)
 
 
 (** [cry_handshake] is the [handshake] type as it comes out of the translation
@@ -607,24 +527,6 @@ Global Instance Embedding_Connection
           )
   |}.
 
-Theorem map_tuple_id {A n} (t : n.-tuple A) : map_tuple Datatypes.id t = t.
-Proof.
-  apply val_inj.
-  move : n t.
-  elim => [|n IH].
-  {
-    move => t.
-    rewrite [t] tuple0.
-    reflexivity.
-  }
-  {
-    case / tupleP => h t.
-    simpl.
-    f_equal.
-    apply IH.
-  }
-Qed.
-
 Global Instance ProperEmbedding_Connection
   : ProperEmbedding Embedding_Connection.
 Proof.
@@ -867,29 +769,12 @@ Theorem half_toNat s (n : BITS s.+1) : (toNat n)./2 = toNat (droplsb n).
 Proof.
 Admitted.
 
-Eval compute in bvNat 3.+1 3 = PeanoNat.Nat.odd 3 :: bvNat 3 3./2.
-
-Theorem bvNat_S s n
-  : bvNat s.+1 n = PeanoNat.Nat.odd n :: bvNat s n./2.
-Proof.
-  move : s n.
-  elim => [|s].
-  {
-    rewrite / bvNat.
-    rewrite / joinLSB /=.
-    reflexivity.
-  }
-  {
-    rewrite /=.
-    rewrite / joinLSB /=.
-    move => IH n.
-    move : (IH n./2) => IH'.
-    rewrite IH'.
-    rewrite /=.
-    f_equal.
-    move => IH.
-  }
-Qed.
+Goal
+    let n : BITS 3 := decB (ones 3) in
+    bvNat _ (toNat n) = toConcrete n.
+  unfold toConcrete.
+  compute.
+  (* 6 *)
 
 Theorem bvNat_toNat size (n : BITS size)
   : bvNat size (toNat n) = toConcrete n.

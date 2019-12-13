@@ -278,20 +278,35 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Vectors
   ++
-  [ ("at",            rename "sawAt") -- `at` is a reserved keyword in Coq
-  , ("at_single",     skip) -- is boring, could be proved on the Coq side
+  [ ("EmptyVec",      mapsTo vectorsModule "EmptyVec")
+  , ("at",            rename "sawAt") -- `at` is a reserved keyword in Coq
   , ("atWithDefault", mapsTo vectorsModule "atWithDefault")
+  , ("at_single",     skip) -- is boring, could be proved on the Coq side
   , ("bvAdd",         mapsTo vectorsModule "bvAdd")
+  , ("bvLg2",         mapsTo vectorsModule "bvLg2")
   , ("bvMul",         mapsTo vectorsModule "bvMul")
-  , ("bvSub",         mapsTo vectorsModule "bvSub")
   , ("bvNat",         mapsTo vectorsModule "bvNat")
-  , ("bvult",         mapsTo vectorsModule "bvult")
+  , ("bvNeg",         mapsTo vectorsModule "bvNeg")
+  , ("bvSDiv",        mapsTo vectorsModule "bvSDiv")
+  , ("bvSRem",        mapsTo vectorsModule "bvSRem")
+  , ("bvSShr",        mapsTo vectorsModule "bvSShr")
+  , ("bvSub",         mapsTo vectorsModule "bvSub")
   , ("bvToNat",       mapsTo vectorsModule "bvToNat")
+  , ("bvUDiv",        mapsTo vectorsModule "bvUDiv")
+  , ("bvURem",        mapsTo vectorsModule "bvURem")
+  , ("bvsge",         mapsTo vectorsModule "bvsge")
+  , ("bvsgt",         mapsTo vectorsModule "bvsgt")
+  , ("bvsle",         mapsTo vectorsModule "bvsle")
+  , ("bvslt",         mapsTo vectorsModule "bvslt")
+  , ("bvult",         mapsTo vectorsModule "bvult")
   , ("coerceVec",     mapsTo vectorsModule "coerceVec")
-  , ("EmptyVec",      mapsTo vectorsModule "EmptyVec")
   , ("eq_Vec",        skip)
   , ("foldr",         mapsTo vectorsModule "foldr")
   , ("gen",           mapsTo vectorsModule "gen")
+  , ("rotateL",       mapsTo vectorsModule "rotateL")
+  , ("rotateR",       mapsTo vectorsModule "rotateR")
+  , ("shiftL",        mapsTo vectorsModule "shiftL")
+  , ("shiftR",        mapsTo vectorsModule "shiftR")
   , ("take0",         skip)
   -- zip must be realized in-place because it both depends on definitions and is
   -- used by other definitions in the same file, so it can neither be pre- nor
@@ -335,33 +350,17 @@ sawCorePreludeSpecialTreatmentMap configuration =
   -- Axioms currently skipped
   ++
   [ ("drop0",                skip)
-  , ("rotateL",              skip)
-  , ("rotateR",              skip)
-  , ("shiftL",               skip)
-  , ("shiftR",               skip)
   , ("bvugt",                skip)
   , ("bvuge",                skip)
   , ("bvule",                skip)
-  , ("bvsgt",                skip)
-  , ("bvsge",                skip)
-  , ("bvslt",                skip)
-  , ("bvsle",                skip)
   , ("bvPopcount",           skip)
   , ("bvCountLeadingZeros",  skip)
   , ("bvCountTrailingZeros", skip)
   , ("bvForall",             skip)
   , ("bvAddZeroL",           skip)
   , ("bvAddZeroR",           skip)
-  , ("bvNeg",                skip)
-  , ("bvSub",                skip)
-  , ("bvLg2",                skip)
-  , ("bvUDiv",               skip)
-  , ("bvURem",               skip)
-  , ("bvSDiv",               skip)
-  , ("bvSRem",               skip)
   , ("bvShl",                skip)
   , ("bvShr",                skip)
-  , ("bvSShr",               skip)
   , ("bvShiftL_bvShl",       skip)
   , ("bvShiftR_bvShr",       skip)
   , ("bvEq_refl",            skip)
@@ -399,13 +398,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Definitions that depend on axioms currently skipped
   ++
-  [ ("bvRotateL",      skip)
-  , ("bvRotateR",      skip)
-  , ("bvShiftL",       skip)
-  , ("bvShiftR",       skip)
-  , ("bvCarry",        skip)
-  , ("bvAddWithCarry", skip)
-  , ("composeM",       skip)
+  [ ("composeM",       skip)
   , ("letRecFuns",     skip)
   ]
 
