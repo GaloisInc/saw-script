@@ -466,10 +466,10 @@ data TypedCFG
      (inits :: RList CrucibleType)
      (ret :: CrucibleType)
   = TypedCFG { tpcfgHandle :: TypedFnHandle ghosts inits ret
-             , tpcfgInputPerms :: MbValuePerms (ghosts :> LifetimeType :++: inits)
-             , tpcfgOutputPerms :: MbValuePerms (ghosts :> LifetimeType :++: inits :> ret)
+             , tpcfgInputPerms :: MbValuePerms (ghosts :++: inits)
+             , tpcfgOutputPerms :: MbValuePerms (ghosts :++: inits :> ret)
              , tpcfgBlockMap :: TypedBlockMap ext blocks ret
-             , tpcfgEntryBlockID :: TypedEntryID blocks inits (ghosts :> LifetimeType)
+             , tpcfgEntryBlockID :: TypedEntryID blocks inits ghosts
              }
 
 
@@ -1325,13 +1325,13 @@ makeRetPerms mb_perms =
 tcCFG :: PermCheckExtC ext => CFG ext blocks inits ret ->
          Closed (FunPerm ghosts inits ret) ->
          TypedCFG ext (CtxCtxToRList blocks) ghosts (CtxToRList inits) ret
-tcCFG cfg [clP| FunPerm _ perms_in perms_out :: FunPerm ghosts args ret |] =
+tcCFG cfg [clP| FunPerm _ _ perms_in perms_out :: FunPerm ghosts args ret |] =
   let ghosts = knownRepr :: CruCtx ghosts in
   flip evalState (emptyTopPermCheckState (cfgBlockMap cfg)) $
   do init_memb <- stLookupBlockID (cfgEntryBlockID cfg) <$> get
      init_entry <-
        insNewBlockEntry init_memb (mkCruCtx $ handleArgTypes $ cfgHandle cfg)
-       (CruCtxCons ghosts knownRepr)
+       ghosts
        ($(mkClosed [| mbValuePermsToDistPerms |]) `clApply` perms_in)
        ($(mkClosed [| makeRetPerms
                     . mbValuePermsToDistPerms |]) `clApply` perms_out)

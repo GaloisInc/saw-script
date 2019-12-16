@@ -642,12 +642,13 @@ arrayStrideBytes = helper Proxy where
 
 -- | A function permission is a set of input and output permissions inside a
 -- context of ghost variables that must be solved for when the function is
--- called. One ghost variable is always a lifetime that represents the lifetime
--- of the function call.
+-- called. One ghost variable can optionally be a lifetime that represents the
+-- lifetime of the function call.
 data FunPerm ghosts args ret where
   FunPerm :: KnownRepr CruCtx ghosts => Proxy args ->
-             MbValuePerms (ghosts :> LifetimeType :++: CtxToRList args) ->
-             MbValuePerms (ghosts :> LifetimeType :++: CtxToRList args :> ret) ->
+             Maybe (Member (ghosts :++: CtxToRList args) LifetimeType) ->
+             MbValuePerms (ghosts :++: CtxToRList args) ->
+             MbValuePerms (ghosts :++: CtxToRList args :> ret) ->
              FunPerm ghosts args ret
 
 
@@ -722,11 +723,11 @@ instance Eq (ValuePerms as) where
 -- | Test if function permissions with different ghost argument lists are equal
 funPermEq :: FunPerm ghosts1 args ret -> FunPerm ghosts2 args ret ->
              Maybe (ghosts1 :~: ghosts2)
-funPermEq (FunPerm _ perms_in1 perms_out1 :: FunPerm ghosts1 args ret)
-  (FunPerm _ perms_in2 perms_out2 :: FunPerm ghosts2 args ret)
+funPermEq (FunPerm _ v1 perms_in1 perms_out1 :: FunPerm ghosts1 args ret)
+  (FunPerm _ v2 perms_in2 perms_out2 :: FunPerm ghosts2 args ret)
   | Just Refl <-
       testEquality (knownRepr :: CruCtx ghosts1) (knownRepr :: CruCtx ghosts2)
-  , perms_in1 == perms_in2 && perms_out1 == perms_out2
+  , v1 == v2 && perms_in1 == perms_in2 && perms_out1 == perms_out2
   = Just Refl
 funPermEq _ _ = Nothing
 
@@ -1349,6 +1350,9 @@ instance (NuMatching a, Substable s a m) => Substable s (Maybe a) m where
 instance (Substable s a m, NuMatching a) => Substable s (Mb ctx a) m where
   genSubst s mbmb = mbM $ fmap (genSubst s) (mbSwap mbmb)
 
+instance SubstVar s m => Substable s (Member ctx a) m where
+  genSubst _ mb_memb = return $ mbLift mb_memb
+
 -- | Helper function to substitute into 'BVFactor's
 substBVFactor :: SubstVar s m => s ctx -> Mb ctx (BVFactor w) ->
                  m (PermExpr (BVType w))
@@ -1447,8 +1451,9 @@ instance SubstVar s m => Substable s (LLVMArrayBorrow w) m where
     RangeBorrow <$> genSubst s off <*> genSubst s len
 
 instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
-  genSubst s [nuP| FunPerm prx perms_in perms_out |] =
-    FunPerm (mbLift prx) <$> genSubst s perms_in <*> genSubst s perms_out
+  genSubst s [nuP| FunPerm prx maybe_l perms_in perms_out |] =
+    FunPerm (mbLift prx) <$> genSubst s maybe_l
+    <*> genSubst s perms_in <*> genSubst s perms_out
 
 instance SubstVar PermVarSubst m =>
          Substable PermVarSubst (DistPerms ps) m where
@@ -1715,6 +1720,9 @@ instance AbstractVars a => AbstractVars (Mb (ctx :: RList Type) a) where
 instance AbstractVars Integer where
   abstractPEVars ns1 ns2 i = absVarsReturnH ns1 ns2 (toClosed i)
 
+instance AbstractVars (Member ctx a) where
+  abstractPEVars ns1 ns2 memb = absVarsReturnH ns1 ns2 (toClosed memb)
+
 instance AbstractVars a => AbstractVars (Maybe a) where
   abstractPEVars ns1 ns2 Nothing =
     absVarsReturnH ns1 ns2 $(mkClosed [| Nothing |])
@@ -1907,9 +1915,10 @@ instance AbstractVars (DistPerms ps) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 x `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 instance AbstractVars (FunPerm ghosts args ret) where
-  abstractPEVars ns1 ns2 (FunPerm prx perms_in perms_out) =
+  abstractPEVars ns1 ns2 (FunPerm prx maybe_l perms_in perms_out) =
     absVarsReturnH ns1 ns2
     ($(mkClosed [| FunPerm |]) `clApply` toClosed prx)
+    `clMbMbApplyM` abstractPEVars ns1 ns2 maybe_l
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms_in
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms_out
 
