@@ -12,8 +12,9 @@ From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCorePrelude_proofs.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-From CryptolToCoq Require Import S2N.
-From CryptolToCoq Require Import S2N.Embedding.
+
+From S2N Require Import S2N.
+From S2N Require Import Embedding.
 
 From mathcomp Require Import eqtype.
 From mathcomp Require Import fintype.

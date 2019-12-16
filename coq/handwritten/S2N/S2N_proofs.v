@@ -14,10 +14,11 @@ From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCorePrelude_proofs.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-From CryptolToCoq Require Import S2N.
-From CryptolToCoq Require Import S2N.Embedding.
-From CryptolToCoq Require Import S2N.Pointed.
-From CryptolToCoq Require Import S2N.Translation.HandshakeAction.
+
+From S2N Require Import Embedding.
+From S2N Require Import Pointed.
+From S2N Require Import S2N.
+From S2N Require Import Translation.HandshakeAction.
 
 From mathcomp Require Import eqtype.
 From mathcomp Require Import fintype.
@@ -29,51 +30,8 @@ From mathcomp Require Import tuple.
 
 Import CryptolPrimitives.
 Import ListNotations.
-Import SAWCorePrelude.
+Import SAWCorePrelude.SAWCorePrelude.
 Import VectorNotations.
-
-Scheme Induction for tuple_of Sort Prop.
-Scheme Induction for tuple_of Sort Set.
-Scheme Induction for tuple_of Sort Type.
-
-Scheme Induction for eqtype.Sub_spec Sort Prop.
-Scheme Induction for eqtype.Sub_spec Sort Set.
-Scheme Induction for eqtype.Sub_spec Sort Type.
-
-Scheme Induction for eqtype.Equality.type Sort Prop.
-Scheme Induction for eqtype.Equality.type Sort Set.
-Scheme Induction for eqtype.Equality.type Sort Type.
-
-Scheme Induction for eqtype.Equality.mixin_of Sort Prop.
-Scheme Induction for eqtype.Equality.mixin_of Sort Set.
-Scheme Induction for eqtype.Equality.mixin_of Sort Type.
-
-Scheme Induction for eqtype.subType Sort Prop.
-Scheme Induction for eqtype.subType Sort Set.
-Scheme Induction for eqtype.subType Sort Type.
-
-Scheme Induction for eqtype.insub_spec Sort Prop.
-Scheme Induction for eqtype.insub_spec Sort Set.
-Scheme Induction for eqtype.insub_spec Sort Type.
-
-From Ornamental Require Import Ornaments.
-
-Set DEVOID search prove equivalence. (* <-- Correctness proofs for search *)
-Set DEVOID lift type. (* <-- Prettier types than the ones Coq infers *)
-
-(* Preprocess *)
-(*   Module *)
-(*   SAWCorePrelude *)
-(*   as SAWCorePrelude' *)
-(*        { opaque *)
-(*            SAWCoreScaffolding.error *)
-(*            SAWCorePrelude.intToBv *)
-(*            SAWCorePrelude.bvToInt *)
-(*            mathcomp.ssreflect.ssrnat.half *)
-(*            Nat.even *)
-(*            Coq.Init.Nat.pred *)
-(*        } . *)
-
 
 (** [cry_handshake] is the [handshake] type as it comes out of the translation
 from Cryptol to Coq.  The fields have been inlined into a nested tuple type.
@@ -458,23 +416,22 @@ Global Instance Embedding_Handshake
 Variant ubn_eq_spec m : nat -> Type := UbnEq n of m == n : ubn_eq_spec m n.
 Lemma ubnPeq m : ubn_eq_spec m m.      Proof. by []. Qed.
 
-Lemma gen_getBit'
-  : forall n v, gen n bool (fun i => getBit (n := n) (toAbstract v) i) = v.
-Proof.
-  simpl.
-  apply Vector.t_ind.
-  {
-    simpl.
-    reflexivity.
-  }
-  {
-    move => h n t IH.
-    simpl.
-    setoid_rewrite IH.
-    compute.
-    reflexivity.
-  }
-Qed.
+(* Lemma gen_getBit' *)
+(*   : forall n v, gen n bool (fun i => getBit (n := n) (toAbstract v) i) = v. *)
+(* Proof. *)
+(*   simpl. *)
+(*   apply Vector.t_ind. *)
+(*   { *)
+(*     simpl. *)
+(*     reflexivity. *)
+(*   } *)
+(*   { *)
+(*     move => h n t IH /=. *)
+(*     setoid_rewrite IH. *)
+(*     compute. *)
+(*     reflexivity. *)
+(*   } *)
+(* Qed. *)
 
 Global Instance ProperEmbedding_Handshake
   : ProperEmbedding Embedding_Handshake.
@@ -532,9 +489,9 @@ Global Instance ProperEmbedding_Connection
 Proof.
   constructor.
   intros [?[?[?[[][?[?[?[?]]]]]]]].
-  cbn - [ genOrdinal ].
-  repeat rewrite map_tuple_id.
-  repeat rewrite genOrdinal_tnth.
+  cbn - [ genOrdinal rev_ord ].
+  do ! rewrite map_tuple_id.
+  do ! rewrite genOrdinal_tnth_bitvector_to_BITS.
   reflexivity.
 Qed.
 
@@ -567,33 +524,18 @@ Proof.
   apply CT.
 Qed.
 
+Theorem unfold_ecOr n a b
+  : ecOr (Vec n bool) (PLogicWord n) a b = bvOr n a b.
+Proof.
+  reflexivity.
+Qed.
+
 Theorem ecOr_cons m h1 h2 t1 t2
   : ecOr (Vec m.+1 bool) (PLogicWord m.+1) (h1 :: t1) (h2 :: t2)
     =
     Vector.cons _ (or h1 h2) _ (ecOr (Vec m bool) (PLogicWord m) t1 t2).
 Proof.
-  move : t1 t2.
-  apply (Vector.t_ind _ (fun n v => forall b, _ = _)) with (n := m).
-  {
-    elim / @Vector.case0.
-    compute.
-    reflexivity.
-  }
-  {
-    move => h n t IH b.
-    move : b t IH.
-    elim / @Vector.caseS => h' n' t' t IH.
-
-    rewrite / ecOr.
-    simpl.
-    unfold Notation.Rget.
-    simpl.
-    rewrite / bvOr.
-    rewrite / bvZipWith.
-    rewrite / zipWith.
-    simpl.
-    f_equal.
-  }
+  by do ! rewrite unfold_ecOr.
 Qed.
 
 Theorem seq_to_tuple_ecOr
@@ -602,25 +544,17 @@ Theorem seq_to_tuple_ecOr
     =
     seq_to_tuple a || seq_to_tuple b.
 Proof.
-  move => n.
-  apply (Vector.t_ind _ (fun n v => forall b, _ = _)) with (n0 := n).
+  setoid_rewrite unfold_ecOr.
+  apply : Vector.t_ind => [|h m t IH b] /=.
   {
-    simpl.
     apply case0.
-    apply val_inj.
-    reflexivity.
+    apply val_inj => //.
   }
   {
-    move => h m t IH b.
-    move : m b t IH.
-    apply (caseS (fun n v => forall t, _ -> _)).
-    move => h' m b t IH.
-    rewrite ecOr_cons.
-    simpl.
+    move : m b t IH => /=.
+    apply (caseS (fun n v => forall t, _ -> _)) => h' m b t IH /=.
     apply val_inj.
-    rewrite IH.
-    simpl.
-    reflexivity.
+    rewrite IH //.
   }
 Qed.
 
@@ -769,45 +703,267 @@ Theorem half_toNat s (n : BITS s.+1) : (toNat n)./2 = toNat (droplsb n).
 Proof.
 Admitted.
 
-Goal
-    let n : BITS 3 := decB (ones 3) in
-    bvNat _ (toNat n) = toConcrete n.
-  unfold toConcrete.
-  compute.
-  (* 6 *)
-
-Theorem bvNat_toNat size (n : BITS size)
-  : bvNat size (toNat n) = toConcrete n.
+Theorem joinLSB_consL {n} h (t : bitvector n) x
+  : joinLSB (h :: t) x = h :: (joinLSB t x).
 Proof.
-  cbv -[bvNat toNat genOrdinal tnth].
-  move : size n.
-  elim => [|s IH] n.
+  reflexivity.
+Qed.
+
+(** [bvNat] reduces innermost first, which is not convenient to do proofs
+against functions which produce head first.  This equality allows to produce a
+head first. *)
+Theorem bvNatS s n
+  : bvNat s.+1 n = odd (iter s half n) :: bvNat s n.
+Proof.
+  move : s n.
+  elim => [|s IH] n; [ rewrite //= | ].
+  rewrite (lock s.+1) /=.
+  unlock.
+  rewrite IH.
+  rewrite //=.
+  rewrite joinLSB_consL.
+  f_equal.
+  f_equal.
+  rewrite <- iterS.
+  rewrite -> iterSr.
+  reflexivity.
+Qed.
+
+Theorem tnth_rshift {A n} (t : n.+1.-tuple A) (i : 'I_n)
+  : tnth t (rshift 1 i) = tnth (behead_tuple t) i.
+Proof.
+  elim (tupleP t) => hd tl /=.
+  setoid_rewrite (tnth_nth hd) => //.
+Qed.
+
+Theorem rev_ord_rshift s n (i : 'I_s) (j : 'I_(n + s))
+  : nat_of_ord j = n + nat_of_ord i ->
+    rshift n i = j.
+Proof.
+  move => E.
+  apply val_inj => //.
+Qed.
+
+Lemma nth_fromNat_S (s : nat) (n : nat) (i : nat) def
+  : i < s ->
+    nth def (@fromNat (S s) n) i
+    =
+    nth def (@fromNat s n) i.
+Proof.
+  move : s i n.
+  elim => [|s IHs] i n I //=.
+  move : i I.
+  case => [| i] I //=.
+  rewrite IHs //=.
+Qed.
+
+Theorem odd_iter_half s n b
+  : b > s ->
+    odd (iter s half n) = nth false (@fromNat b n) s.
+Proof.
+  move : s n b.
+  elim => [|s IH] n b SB //=.
   {
+    destruct b => //=.
+  }
+  {
+    destruct b => //=.
+    rewrite <- IH => //=.
+    rewrite <- iterS.
+    rewrite -> iterSr.
     reflexivity.
   }
+Qed.
+
+Theorem bvNat_genOrdinal size n
+  : bvNat size n = genOrdinal _ _ (fun i => tnth (fromNat n) (rev_ord i)).
+Proof.
+  move : size n.
+  elim => [|s IH] n; [ rewrite // | ].
+  rewrite bvNatS /=.
+  f_equal => //=.
   {
-    rewrite /=.
-    rewrite half_toNat.
-    rewrite IH.
-    rewrite / joinLSB.
-    TODO.
-    unfol
-      rewrite / toNat.
-    specialize (IH (toNat n)./2).
-    unfold tnth.
-    unfold joinLSB.
-    unfold shiftin.
-    simpl.
+    move : IH => _.
+    rewrite (tnth_nth false).
+    rewrite <- properties.fromNatHalf => /=.
+    rewrite subn1 /=.
+    apply odd_iter_half => //=.
   }
-  unfold BITS in n.
-  unfold toConcrete.
+  {
+    rewrite IH.
+    apply genOrdinal_domain_eq => i.
+    do ! rewrite (tnth_nth false).
+    rewrite nth_fromNat_S //=.
+    rewrite subSS.
+    apply rev_ord_proof.
+  }
+Qed.
+
+Theorem bvNat_toNat size (n : BITS size)
+  : bvNat size (toNat n) = genOrdinal _ _ (fun i => tnth n (rev_ord i)).
+Proof.
+  rewrite bvNat_genOrdinal.
+  rewrite properties.toNatK //.
+Qed.
+
+Definition bvToNat'Helper size (v : bitvector size) : (nat * nat) :=
+  Vector.fold_right (fun (b : bool) '(i, n) => (i.*2, n + b*i)) v (1, 0).
+
+Definition bvToNat' size (v : bitvector size) : nat :=
+  snd (bvToNat'Helper size v).
+
+Theorem fold_left_bvToNatFolder n h t
+  : fold_left bvToNatFolder h t = bvToNat n t + h * 2 ^ n.
+Proof.
+  move : n t h.
+  apply : Vector.t_ind => [| h' n t IH] n' //=.
+  {
+    rewrite add0n expn0 muln1 //.
+  }
+  {
+    do ! rewrite IH.
+    rewrite <- addnA.
+    f_equal.
+    rewrite / bvToNatFolder /=.
+    rewrite double0.
+    rewrite addn0.
+    rewrite mulnDl.
+    f_equal.
+    rewrite <- doubleMl.
+    rewrite doubleMr.
+    rewrite <- mul2n.
+    rewrite <- expnS.
+    reflexivity.
+  }
+Qed.
+
+Theorem bvToNat'Helper_bvToNat s v
+  : bvToNat'Helper s v = (2 ^ s, bvToNat s v).
+Proof.
+  move : s v.
+  apply : Vector.t_ind => //= h n t.
+  rewrite / bvToNat'Helper - / bvToNat'Helper /=.
+  move => ->.
+  rewrite <- muln2.
+  rewrite <- expnSr.
+  f_equal.
+  rewrite fold_left_bvToNatFolder.
+  f_equal.
+  rewrite / bvToNatFolder.
+  rewrite double0 addn0 //.
+Qed.
+
+Theorem bvToNat_bvToNat' s v
+  : bvToNat s v = bvToNat' s v.
+Proof.
+  rewrite / bvToNat'.
+  rewrite bvToNat'Helper_bvToNat //.
+Qed.
+
+Lemma bvToNatS
+  : forall n (v : bitvector n.+1),
+    bvToNat n.+1 v
+    =
+    (hd v * 2 ^ n) + (bvToNat n (tl v)).
+Proof.
+  apply : Vector.caseS => h n t.
+  rewrite / hd / tl / caseS.
+  rewrite bvToNat_bvToNat' //=.
+  rewrite / bvToNat'.
+  rewrite bvToNat'Helper_bvToNat /=.
+  rewrite fold_left_bvToNatFolder.
+  rewrite addnC.
+  f_equal.
+  rewrite / bvToNatFolder.
+  rewrite double0 addn0 //.
+Qed.
+
+Lemma decompose_fromNat n a b
+  : b < 2 ^ n ->
+    @fromNat n.+1 (a * 2 ^ n + b) = cat_tuple [tuple odd a] (@fromNat n b).
+Proof.
+  move : n a b.
+  elim => [|n IH] a b //=.
+  {
+    rewrite expn0.
+    move : b => [] //= _.
+    rewrite muln1 addn0.
+    apply val_inj => //=.
+  }
+  TODO.
+  {
+    move : b => [|b'] //=.
+    {
+      admit.
+    }
+    {
+      admit.
+    }
+  }
+Qed.
+
+
+Lemma yolo:
+  forall (h : nat) (n : nat) (t : t bool n),
+    @fromNat (S n) (fold_left bvToNatFolder h t) = cat_tuple [tuple (odd h)] (seq_to_tuple t).
+Proof.
+  move => h n t.
+  rewrite fold_left_bvToNatFolder.
+
+  rewrite <- fromNat_addBn.
+
+  move : n t h.
+  apply : Vector.t_ind => [|h' n t IH] h //=.
+  {
+    apply val_inj => //=.
+  }
+  {
+    rewrite / bvToNatFolder.
+    specialize (IH (h' + h.*2)).
+    Set Printing All.
+    unfold bvToNatFolder in IH.
+    setoid_rewrite IH.
+    apply val_inj.
+  }
+  compute.
+  simpl.
+  intros h n t.
+
+Theorem fromNat_bvToNat n v
+  : fromNat (bvToNat n v) = seq_to_tuple v.
+Proof.
+  move : n v.
+  apply Vector.t_ind => // h n t IH /=.
+  rewrite / bvToNatFolder -/ bvToNatFolder.
+  rewrite double0.
+  rewrite addn0.
+
+
+  rewrite IH.
+Qed.
+
+Theorem bvToBITS_seq_tuple n (a : bitvector n)
+  : bvToBITS a = seq_to_tuple a.
+Proof.
+  move : n a.
+  apply Vector.t_ind => // h n t IH /=.
+  unfold bvToBITS.
+
+
+  unfold bvToNat => /=.
+  rewrite bvToNatS.
+  simpl.
 Qed.
 
 Theorem todo a b
   : bvAdd n a b = toConcrete (addB (seq_to_tuple a) (seq_to_tuple b)).
 Proof.
   rewrite / bvAdd.
+  rewrite bvNat_toNat.
+  apply genOrdinal_domain_eq => i /=.
 
+
+  unfold seq_to_tuple.
   reflexivity.
 Qed.
 

@@ -12,7 +12,8 @@ From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCorePrelude_proofs.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-From CryptolToCoq Require Import S2N.
+
+From S2N Require Import S2N.
 
 From mathcomp Require Import eqtype.
 From mathcomp Require Import fintype.
@@ -92,7 +93,7 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma genOrdinal_tnth
+Lemma genOrdinal_tnth_seq_to_tuple
   : forall (A : Type) (n : nat) (t : t A n),
     genOrdinal n A (fun q : 'I_n => tnth (seq_to_tuple t) q) = t.
 Proof.
@@ -130,7 +131,7 @@ Proof.
       setoid_rewrite tnth_map.
       setoid_rewrite roundtrip.
       setoid_rewrite tnth_rshift.
-      apply genOrdinal_tnth.
+      apply genOrdinal_tnth_seq_to_tuple.
     }
   }
 Qed.
@@ -279,6 +280,39 @@ Proof.
   rewrite rev_rcons IH //=.
 Qed.
 
+Theorem tnth_rev_tuple {T n} (t : n.-tuple T) i
+  : tnth (rev_tuple t) i = tnth t (rev_ord i).
+Proof.
+  rewrite / tnth.
+  rewrite nth_rev size_tuple //=.
+  apply set_nth_default.
+  by rewrite size_tuple rev_ord_proof.
+Qed.
+
+Lemma genOrdinal_tnth_bitvector_to_BITS
+  : forall (n : nat) (v : bitvector n),
+    genOrdinal n bool (fun q : 'I_n => tnth (bitvector_to_BITS v) (rev_ord q)) = v.
+Proof.
+  apply Vector.t_ind => [|h n t IH] //=.
+  {
+    f_equal.
+    {
+      rewrite / tnth.
+      rewrite nth_rcons.
+      rewrite size_tuple /=.
+      rewrite subn1 /=.
+      rewrite ltnn.
+      rewrite eqxx.
+      reflexivity.
+    }
+    {
+      setoid_rewrite genOrdinal_domain_eq ; [ apply IH  | ] => i.
+      rewrite tnth_rcons_tuple_rev_ord_rshift.
+      by rewrite tnth_rev_tuple.
+    }
+  }
+Qed.
+
 Global Instance ProperEmbedding_bitvector_BITS n
   : ProperEmbedding (Embedding_bitvector_BITS n).
 Proof.
@@ -299,11 +333,10 @@ Proof.
     }
     {
       setoid_rewrite tnth_map.
-      erewrite genOrdinal_domain_eq; [ apply genOrdinal_tnth | ].
+      erewrite genOrdinal_domain_eq; [ apply genOrdinal_tnth_bitvector_to_BITS | ].
       move => i /=.
       rewrite tnth_rcons_tuple_rev_ord_rshift.
-      f_equal.
-      apply rev_tuple_bitvector_to_BITS.
+      apply tnth_rev_tuple.
     }
   }
 Qed.

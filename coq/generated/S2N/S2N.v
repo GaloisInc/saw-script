@@ -11,6 +11,8 @@ CryptolToCoq Require Import CryptolPrimitivesForSAWCore.  Import
 CryptolPrimitives.  From CryptolToCoq Require Import
 CryptolPrimitivesForSAWCoreExtra.
 
+(* Module S2N. *)
+
 Definition NEGOTIATED  := ((@SAWCoreScaffolding.coerce)
 (((@CryptolPrimitives.seq) (((@CryptolPrimitives.tcAdd) (((@TCNum) (24)))
 (((@TCNum) (8))))) (@SAWCoreScaffolding.Bool))) (((@CryptolPrimitives.seq)
@@ -2660,3 +2662,37 @@ Definition TLS_HELLO_REQUEST (u2653 : Type) (_P :
 
 Definition S2N_SERVER (u2654 : Type) (_P : ((@CryptolPrimitives.PLiteral)
 (u2654)))  := ((@CryptolPrimitives.ecNumber) (((@TCNum) (0))) (u2654) (_P)).
+
+(* End S2N. *)
+
+
+(* Preprocess Module S2N *)
+(*   as S2N' *)
+(*        { opaque *)
+(*            Bits.spec.spec.low *)
+(*            Coq.Arith.PeanoNat.Nat.even *)
+(*            Records.CoreRecords.Fields *)
+(*            Records.CoreRecords.ascii_to_p *)
+(*            Records.CoreRecords.bool_to_p *)
+(*            Records.CoreRecords.fields_get *)
+(*            Records.CoreRecords.fields_insert *)
+(*            Records.CoreRecords.fields_leaf *)
+(*            Records.CoreRecords.fields_join *)
+(*            Records.CoreRecords.fields_singleton *)
+(*            Records.CoreRecords.get_member *)
+(*            Records.CoreRecords.record_empty *)
+(*            Records.CoreRecords.record_get *)
+(*            Records.CoreRecords.record_here *)
+(*            Records.CoreRecords.record_left *)
+(*            Records.CoreRecords.record_right *)
+(*            Records.CoreRecords.record_singleton *)
+(*            Records.CoreRecords.Rjoin *)
+(*            Records.CoreRecords.string_to_p *)
+(*            Records.Notation.Rget *)
+(*            SAWCoreScaffolding.error *)
+(*            SAWCorePrelude.bvToInt *)
+(*            SAWCorePrelude.intToBv *)
+(*            mathcomp.ssreflect.eqtype.eq_irrelevance *)
+(*            mathcomp.ssreflect.ssrnat.half *)
+(*            mathcomp.ssreflect.tuple.behead_tupleP *)
+(*        }. *)

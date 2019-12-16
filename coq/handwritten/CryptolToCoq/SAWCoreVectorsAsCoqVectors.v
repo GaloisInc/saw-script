@@ -157,12 +157,14 @@ Definition joinLSB {n} (v : bitvector n) (lsb : bool) : bitvector n.+1 :=
 
 Fixpoint bvNat (size : Nat) (number : Nat) : bitvector size :=
   if size is size'.+1
-  then joinLSB (bvNat size' (number./2)) (Nat.odd number)
+  then joinLSB (bvNat size' (number./2)) (odd number)
   else Vector.nil _
 .
 
+Definition bvToNatFolder (n : nat) (b : bool) := b + n.*2.
+
 Fixpoint bvToNat (size : Nat) (v : bitvector size) : Nat :=
-  Vector.fold_left (fun n (b : bool) => b + n.*2) 0 v.
+  Vector.fold_left bvToNatFolder 0 v.
 
 (* NOTE BITS are stored in reverse order than bitvector *)
 Definition bvToBITS {size : nat} (v : bitvector size)
