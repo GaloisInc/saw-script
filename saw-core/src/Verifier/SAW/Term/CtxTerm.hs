@@ -940,7 +940,7 @@ mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
 -- @\(z1::Z1) -> .. -> d p1 .. pn ix1 .. ixp@, we build the recursive call
 --
 -- > \(z1::[ps/params,xs/args]Z1) -> .. ->
--- >   RecursorApp d ps P cs_fs [ps/params,xs/args]ixs xi
+-- >   RecursorApp d ps P cs_fs [ps/params,xs/args]ixs (xi z1 ... zn)
 --
 -- where @[ps/params,xs/args]@ substitutes the concrete parameters @pi@ for the
 -- parameter variables of the inductive type and the earlier constructor
@@ -989,12 +989,16 @@ ctxReduceRecursor d params p_ret cs_fs c c_args (CtorArgStruct{..}) =
                   CtxTerm EmptyCtx a -> m Term
     mk_rec_arg ps zs_ctx ixs x =
       elimClosedTerm <$> ctxLambda zs_ctx
-      (\_ ->
+      (\zs ->
         ctxRecursorAppM d (ctxLift InvNoBind zs_ctx ps)
         (mkLiftedClosedTerm zs_ctx p_ret)
         (forM cs_fs (\(c',f) -> (c',) <$> mkLiftedClosedTerm zs_ctx f))
         (return $ invertCtxTerms ixs)
-        (ctxLift InvNoBind zs_ctx x))
+        (ctxApplyMulti
+         -- FIXME: can we do this without a cast? mk_rec_arg should specify that
+         -- the input type for x is (Arrows zs a)...
+         (fmap (castCtxTerm Proxy Proxy) (ctxLift InvNoBind zs_ctx x))
+         (return zs)))
 
 
 --
