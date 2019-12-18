@@ -388,6 +388,7 @@ data TopLevelRW =
   , rwPrimsAvail :: Set PrimitiveLifecycle
   , rwSMTArrayMemoryModel :: Bool
   , rwProfilingFile :: Maybe FilePath
+  , rwLaxArith :: Bool
   }
 
 newtype TopLevel a =
