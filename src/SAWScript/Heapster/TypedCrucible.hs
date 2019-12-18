@@ -85,6 +85,25 @@ data TypedFnHandle ghosts args ret where
   TypedFnHandle :: CruCtx ghosts -> FnHandle cargs ret -> Int ->
                    TypedFnHandle ghosts (CtxToRList cargs) ret
 
+-- | Extract out the context of ghost arguments from a 'TypedFnHandle'
+typedFnHandleGhosts :: TypedFnHandle ghosts args ret -> CruCtx ghosts
+typedFnHandleGhosts (TypedFnHandle ghosts _ _) = ghosts
+
+-- | Extract out the context of regular arguments from a 'TypedFnHandle'
+typedFnHandleArgs :: TypedFnHandle ghosts args ret -> CruCtx args
+typedFnHandleArgs (TypedFnHandle _ h _) = mkCruCtx $ handleArgTypes h
+
+-- | Extract out the context of all arguments of a 'TypedFnHandle'
+typedFnHandleAllArgs :: TypedFnHandle ghosts args ret ->
+                        CruCtx (ghosts :++: args)
+typedFnHandleAllArgs h =
+  appendCruCtx (typedFnHandleGhosts h) (typedFnHandleArgs h)
+
+-- | Extract out the return type of a 'TypedFnHandle'
+typedFnHandleRetType :: TypedFnHandle ghosts args ret -> TypeRepr ret
+typedFnHandleRetType (TypedFnHandle _ h _) = handleReturnType h
+
+
 -- | All of our blocks have multiple entry points, for different inferred types,
 -- so a "typed" 'BlockID' is a normal Crucible 'BlockID' (which is just an index
 -- into the @blocks@ context of contexts) plus an 'Int' specifying which entry
@@ -163,6 +182,7 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
                  TypedStmt ext (RNil :> tp) RNil RNil
 
   -- | Function call
+  -- FIXME: switch to the new way of specifying lifetimes, as per 'FunPerm'
   TypedCall :: args ~ CtxToRList cargs =>
                TypedReg (FunctionHandleType cargs ret) ->
                CruCtx ghosts -> CruCtx args -> PermExpr LifetimeType ->
@@ -447,6 +467,8 @@ data TypedEntry ext blocks ret args where
   TypedEntry ::
     TypedEntryID blocks args ghosts -> CruCtx args ->
     MbDistPerms (ghosts :++: args) ->
+    -- FIXME: I think ret_ps here should = inits...?
+    Mb (ghosts :++: args) (RetPerms ret ret_ps) ->
     Mb (ghosts :++: args) (TypedStmtSeq ext blocks ret (ghosts :++: args)) ->
     TypedEntry ext blocks ret args
 
@@ -1283,7 +1305,7 @@ tcBlockEntry :: PermCheckExtC ext => Block ext cblocks ret args ->
                 TopPermCheckM ext cblocks blocks ret
                 (TypedEntry ext blocks ret (CtxToRList args))
 tcBlockEntry blk (BlockEntryInfo {..}) =
-  fmap (TypedEntry entryInfoID entryInfoArgs entryInfoPermsIn) $
+  fmap (TypedEntry entryInfoID entryInfoArgs entryInfoPermsIn entryInfoPermsOut) $
   strongMbM $
   flip nuMultiWithElim (MNil :>: entryInfoPermsIn :>:
                         entryInfoPermsOut) $ \ns (_ :>: perms :>: ret_perms) ->
