@@ -950,6 +950,14 @@ valuePermsToDistPerms (ns :>: n) (ValPerms_Cons ps p) =
 mbValuePermsToDistPerms :: MbValuePerms ps -> MbDistPerms ps
 mbValuePermsToDistPerms = nuMultiWithElim1 valuePermsToDistPerms
 
+distPermsToValuePerms :: DistPerms ps -> ValuePerms ps
+distPermsToValuePerms DistPermsNil = ValPerms_Nil
+distPermsToValuePerms (DistPermsCons dperms _ p) =
+  ValPerms_Cons (distPermsToValuePerms dperms) p
+
+mbDistPermsToValuePerms :: Mb ctx (DistPerms ps) -> Mb ctx (ValuePerms ps)
+mbDistPermsToValuePerms = fmap distPermsToValuePerms
+
 -- | Extract the variables in a 'DistPerms'
 distPermsVars :: DistPerms ps -> MapRList Name ps
 distPermsVars DistPermsNil = MNil

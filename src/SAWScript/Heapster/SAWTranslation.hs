@@ -131,6 +131,10 @@ inExtTypeTransM :: ExprTrans tp -> TypeTransM (ctx :> tp) a ->
                    TypeTransM ctx a
 inExtTypeTransM tp_trans = withReader (:>: tp_trans)
 
+-- | Run a 'TypeTransM' computation in the empty context
+inEmptyTypeTransM :: TypeTransM RNil a -> TypeTransM ctx a
+inEmptyTypeTransM = withReader (const MNil)
+
 -- | Apply the result of a translation to that of another
 applyTransM :: Monad m => m OpenTerm -> m OpenTerm -> m OpenTerm
 applyTransM m1 m2 = applyOpenTerm <$> m1 <*> m2
@@ -150,18 +154,13 @@ lambdaTransM x tp body_m =
 -- type has any computational content; otherwise, this operation is the identity
 lambdaExprTrans :: String -> TypeRepr a -> TypeTransM (ctx :> a) OpenTerm ->
                    TypeTransM ctx OpenTerm
-lambdaExprTrans _ (LLVMPointerRepr _) body = inExtTypeTransM ETrans_LLVM body
-lambdaExprTrans _ (LLVMFrameRepr _) body = inExtTypeTransM ETrans_LLVMFrame body
-lambdaExprTrans _ LifetimeRepr body = inExtTypeTransM ETrans_Lifetime body
-lambdaExprTrans _ PermListRepr body = inExtTypeTransM ETrans_PermList body
 lambdaExprTrans x tp body =
-  do ctx <- ask
-     maybe_tp_trans <- tptranslate $ nuMulti ctx $ const tp
-     case maybe_tp_trans of
-       Just tp_trans ->
-         lambdaTransM x tp_trans (\z -> inExtTypeTransM (ETrans_Term z) body)
-       Nothing -> error "lambdaExprTrans and tptranslate do not agree!"
-
+  do mb_tp <- nuMultiTransM $ const tp
+     eith <- tptranslate mb_tp
+     case eith of
+       Left etrans -> inExtTypeTransM etrans body
+       Right (tp_term, mk_etrans) ->
+         lambdaTransM x tp_term (\z -> inExtTypeTransM (mk_etrans z) body)
 
 -- | Build a pi in a translation monad
 piTransM :: String -> OpenTerm -> (OpenTerm -> Reader r OpenTerm) ->
@@ -185,19 +184,26 @@ letTransM x tp rhs_m body_m =
 ----------------------------------------------------------------------
 
 -- | The typeclass for the type-level translation
-class TypeTranslate a res | a -> res where
+class TypeTranslate a ctx res | a ctx -> res where
   tptranslate :: Mb ctx a -> TypeTransM ctx res
 
-instance TypeTranslate (NatRepr n) OpenTerm where
+instance TypeTranslate (NatRepr n) ctx OpenTerm where
   tptranslate mb_n = return $ natOpenTerm $ mbLift $ fmap intValue mb_n
 
 -- | Translate a Crucible type to a SAW type, converting 'Nothing' to unit
 translateType :: Mb ctx (TypeRepr a) -> TypeTransM ctx OpenTerm
-translateType mb_t = maybe unitTypeOpenTerm id <$> tptranslate mb_t
+translateType mb_t =
+  do eith <- tptranslate mb_t
+     case eith of
+       Left _ -> return unitTypeOpenTerm
+       Right (tp, _) -> return tp
 
--- The Idea: if a type translates to Nothing then its expressions are not
--- represented in our SAW translation
-instance TypeTranslate (TypeRepr a) (Maybe OpenTerm) where
+-- FIXME: explain this translation
+instance TypeTranslate (TypeRepr a) ctx (Either (ExprTrans a)
+                                         (OpenTerm,
+                                          OpenTerm -> ExprTrans a)) where
+  tptranslate = error "FIXME HERE NOW"
+{-
   tptranslate [nuP| (AnyRepr) |] =
     return $ error "TypeTranslate: Any"
   tptranslate [nuP| (UnitRepr) |] =
@@ -261,28 +267,34 @@ instance TypeTranslate (TypeRepr a) (Maybe OpenTerm) where
     return $ error "TypeTranslate: SymbolicArrayRepr"
   tptranslate [nuP| (SymbolicStructRepr _) |] =
     return $ error "TypeTranslate: SymbolicStructRepr"
+-}
 
-
-instance TypeTranslate (ExprVar a) (ExprTrans a) where
+instance TypeTranslate (ExprVar a) ctx (ExprTrans a) where
   tptranslate mb_x = mapRListLookup (translateVar mb_x) <$> ask
 
-instance TypeTranslate (PermExpr a) (ExprTrans a) where
+instance TypeTranslate (PermExpr a) ctx (ExprTrans a) where
   tptranslate = error "FIXME HERE NOW"
 
 instance ress ~ (CtxToRList as) =>
-         TypeTranslate (PermExprs as) (ExprTransCtx ress) where
+         TypeTranslate (PermExprs as) ctx (ExprTransCtx ress) where
   tptranslate = error "FIXME HERE NOW"
 
-instance TypeTranslate (BVFactor w) OpenTerm where
+instance TypeTranslate (BVFactor w) ctx OpenTerm where
   tptranslate = error "FIXME HERE NOW"
 
 -- [| p :: ValuePerm |] = type of the impl translation of reg with perms p
-instance TypeTranslate (ValuePerm a) (Maybe OpenTerm) where
+instance TypeTranslate (ValuePerm a) ctx (Either (PermTrans ctx a)
+                                          (OpenTerm,
+                                           OpenTerm -> PermTrans ctx a)) where
   tptranslate = error "FIXME HERE NOW"
 
 -- | Translate a permission to a SAW type, converting 'Nothing' to unit
 translatePerm :: Mb ctx (ValuePerm a) -> TypeTransM ctx OpenTerm
-translatePerm mb_p = maybe unitTypeOpenTerm id <$> tptranslate mb_p
+translatePerm mb_p =
+  tptranslate mb_p >>= \eith ->
+  case eith of
+    Left _ -> return unitTypeOpenTerm
+    Right (tp_term, _) -> return tp_term
 
 
 ----------------------------------------------------------------------
@@ -363,8 +375,12 @@ lambdaPermTrans :: String -> Mb ctx (ValuePerm a) ->
                    TypeTransM ctx OpenTerm
 lambdaPermTrans _ [nuP| ValPerm_Eq mb_e |] body_f = body_f (PTrans_Eq mb_e)
 lambdaPermTrans x mb_p body_f =
-  do tp <- maybe unitTypeOpenTerm id <$> tptranslate mb_p
-     lambdaTransM x tp (body_f . mkPermTrans mb_p)
+  tptranslate mb_p >>= \eith ->
+  case eith of
+    Left ptrans -> body_f ptrans
+    Right (tp_term, mk_ptrans) ->
+      lambdaTransM x tp_term (body_f . mk_ptrans)
+     
 
 -- | Map a perm translation result to an 'OpenTerm'
 permTransToTerm :: PermTrans ctx a -> OpenTerm
@@ -442,7 +458,7 @@ translateTypedEntryID entryID blkMap =
   let TypedBlockTrans entries = mapRListLookup (entryBlockID entryID) blkMap in
   foldr (\(TypedEntryTrans entry trm) rest ->
           case entry of
-            TypedEntry entryID' _ _ _ _
+            TypedEntry entryID' _ _ _ _ _
               | Just Refl <- testEquality entryID entryID' -> trm
             _ -> rest)
   (error "translateTypedEntryID")
@@ -597,12 +613,12 @@ class NuMatchingAny1 f => ImplTranslateF f ext blocks ret args where
 -- Translate a TypeRepr to a SAW type in the implication translation monad,
 -- using the unit type in place of 'Nothing'
 instance ImplTranslate (TypeRepr a) OpenTerm ext blocks ret args ps ctx where
-  itranslate tp = maybe unitTypeOpenTerm id <$> tpTransM (tptranslate tp)
+  itranslate tp = tpTransM $ translateType tp
 
 -- Translate a permission to a SAW type in the implication translation monad,
 -- using the unit type in place of 'Nothing'
 instance ImplTranslate (ValuePerm a) OpenTerm ext blocks ret args ps ctx where
-  itranslate p = maybe unitTypeOpenTerm id <$> tpTransM (tptranslate p)
+  itranslate p = tpTransM $ translatePerm p
 
 
 ----------------------------------------------------------------------
@@ -758,18 +774,18 @@ instance ImplTranslateF r ext blocks ret args =>
 ----------------------------------------------------------------------
 
 -- tptranslate for a TypedReg yields an ExprTrans
-instance TypeTranslate (TypedReg tp) (ExprTrans tp) where
+instance TypeTranslate (TypedReg tp) ctx (ExprTrans tp) where
   tptranslate [nuP| TypedReg x |] = tptranslate x
 
 -- tptranslate for a TypedExpr yields an ExprTrans
 instance NuMatchingExtC ext =>
-         TypeTranslate (App ext TypedReg tp) (ExprTrans tp) where
+         TypeTranslate (App ext TypedReg tp) ctx (ExprTrans tp) where
   tptranslate [nuP| EmptyApp |] = return $ ETrans_Term unitOpenTerm
   tptranslate _ = error "FIXME HERE NOW"
 
 -- tptranslate for a TypedExpr yields an ExprTrans
 instance NuMatchingExtC ext =>
-         TypeTranslate (TypedExpr ext tp) (ExprTrans tp) where
+         TypeTranslate (TypedExpr ext tp) ctx (ExprTrans tp) where
   tptranslate [nuP| TypedExpr app |] = tptranslate app
 
 -- itranslate for a TypedReg yields a PermTrans
@@ -807,11 +823,11 @@ exprCtxToTerms :: Mb ctx (CruCtx tps) -> ExprTransCtx tps ->
                   ImpTransM ext blocks ret args ps ctx [OpenTerm]
 exprCtxToTerms [nuP| CruCtxNil |] _ = return []
 exprCtxToTerms [nuP| CruCtxCons ctx tp |] (etranss :>: etrans) =
-  do maybe_t <- tpTransM $ tptranslate $ fmap unCruType tp
+  do eith <- tpTransM $ tptranslate $ fmap unCruType tp
      rest <- exprCtxToTerms ctx etranss
-     case maybe_t of
-       Just _ -> return (rest ++ [exprTransToTerm etrans])
-       Nothing -> return rest
+     case eith of
+       Left _ -> return rest
+       Right _ -> return (rest ++ [exprTransToTerm etrans])
 
 -- | Map a context of perm translations to a list of 'OpenTerm's, dropping the
 -- "invisible" ones whose permissions are translated to 'Nothing'
@@ -822,8 +838,8 @@ permCtxToTerms prxs (ptranss :>: ptrans) =
   do maybe_t <- tpTransM $ tptranslate (permTransPerm prxs ptrans)
      rest <- permCtxToTerms prxs ptranss
      case maybe_t of
-       Just _ -> return (rest ++ [permTransToTerm ptrans])
-       Nothing -> return rest
+       Left _ -> return rest
+       Right _ -> return (rest ++ [permTransToTerm ptrans])
 
 -- | Apply the translation of a function-like construct (i.e., a
 -- 'TypedJumpTarget' or 'TypedFnHandle') to the pure plus impure translations of
@@ -975,22 +991,55 @@ lambdaPermCtx [nuP| ValPerms_Cons ps p |] f =
   f (pctx :>: ptrans)
 
 -- | Build the return type for a function; FIXME: documentation
-translateRetType :: TypeRepr ret -> Mb (ctx :> ret) (ValuePerms (ps :> ret)) ->
+translateRetType :: TypeRepr ret -> Mb (ctx :> ret) (DistPerms ps) ->
                     TypeTransM ctx OpenTerm
 translateRetType = error "FIXME HERE NOW"
 
+nuMultiTransM :: (MapRList Name ctx -> b) -> TypeTransM ctx (Mb ctx b)
+nuMultiTransM f =
+  do ctx <- ask
+     return $ nuMulti ctx f
 
 -- | Build a @LetRecType@ that describes the type of the translation of a
 -- 'TypedEntry'
 translateEntryLRT :: TypedEntry ext blocks ret args ->
-                      TypeTransM ctx OpenTerm
-translateEntryLRT (TypedEntry entryID args perms_in perms_out _) =
-  error "FIXME HERE NOW"
+                     TypeTransM ctx OpenTerm
+translateEntryLRT (TypedEntry entryID args ret perms_in perms_out _) =
+  inEmptyTypeTransM $
+  helperExpr (appendCruCtx (entryGhosts entryID) args) $
+  helperPerms ret perms_in perms_out
+  where
+    helperExpr :: CruCtx ctx -> TypeTransM ctx OpenTerm ->
+                  TypeTransM RNil OpenTerm
+    helperExpr CruCtxNil m = m
+    helperExpr (CruCtxCons ctx tp) m =
+      helperExpr ctx $
+      do mb_tp <- nuMultiTransM $ const $ unCruType tp
+         tp_trans <- tptranslate mb_tp
+         case tp_trans of
+           Left etrans -> inExtTypeTransM etrans m
+           Right (tp_term, mk_etrans) ->
+             (\lam -> ctorOpenTerm "Prelude.LRT_Fun" [tp_term,lam]) <$>
+             lambdaTransM "e" tp_term (\x -> inExtTypeTransM (mk_etrans x) m)
+
+    helperPerms :: TypeRepr ret -> Mb ctx (DistPerms ps_in) ->
+                   Mb (ctx :> ret) (DistPerms ps_out) -> TypeTransM ctx OpenTerm
+    helperPerms ret [nuP| DistPermsNil |] ret_perms =
+      (\retType -> ctorOpenTerm "Prelude.LRT_Ret" [retType]) <$>
+      translateRetType ret ret_perms
+    helperPerms ret [nuP| DistPermsCons perms _ p |] ret_perms =
+      do eith <- tptranslate p
+         case eith of
+           Left _ -> helperPerms ret perms ret_perms
+           Right (tp_term, _) ->
+             (\lam -> ctorOpenTerm "Prelude.LRT_Fun" [tp_term,lam]) <$>
+             lambdaTransM "p" tp_term (\_ -> helperPerms ret perms ret_perms)
+
 
 -- | Build a @LetRecTypes@ list that describes the types of all of the
 -- entrypoints in a 'TypedBlockMap'
 translateBlockMapLRTs :: TypedBlockMap ext blocks ret ->
-                          TypeTransM ctx OpenTerm
+                         TypeTransM ctx OpenTerm
 translateBlockMapLRTs =
   foldBlockMap
   (\entry rest_m ->
@@ -999,24 +1048,6 @@ translateBlockMapLRTs =
        return $ ctorOpenTerm "Prelude.LRT_Cons" [entryType, rest])
   (return $ ctorOpenTerm "Prelude.LRT_Nil" [])
 
-
--- | Take an 'OpenTerm' for a tuple of functions, one for each entrypoint in a
--- 'TypedBlockMap', and build a 'TypedBlockMapTrans' that associated each
--- projection of that tuple to its corresponding 'TypedEntry'
-buildBlockMapTrans :: MapRList (TypedBlock ext blocks ret) blocks' ->
-                      OpenTerm ->
-                      MapRList (TypedBlockTrans ext blocks ret) blocks'
-buildBlockMapTrans MNil _ = MNil
-buildBlockMapTrans (blkMap :>: TypedBlock entries) funs =
-  let (eTranss, funs') = runState (helper entries) funs in
-  buildBlockMapTrans blkMap funs' :>: TypedBlockTrans eTranss
-  where
-    helper :: [TypedEntry ext blocks ret args] ->
-              State OpenTerm [TypedEntryTrans ext blocks ret args]
-    helper = mapM $ \entry ->
-      do fs <- get
-         put (pairRightOpenTerm fs)
-         return $ TypedEntryTrans entry $ pairLeftOpenTerm fs
 
 -- | FIXME: documentation
 lambdaBlockMap :: TypedBlockMap ext blocks ret ->
@@ -1040,39 +1071,60 @@ lambdaBlockMap = helper where
          (\(bsTrans :>: TypedBlockTrans eTranss) ->
            f (bsTrans :>: TypedBlockTrans (TypedEntryTrans entry fvar:eTranss)))
 
+translateEntryBody :: NuMatchingExtC ext =>
+                      TypedBlockMapTrans ext blocks ret ->
+                      TypedEntry ext blocks ret args ->
+                      TypeTransM ctx OpenTerm
+translateEntryBody mapTrans (TypedEntry entryID args ret in_perms
+                             ret_perms stmts) =
+  inEmptyTypeTransM $
+  lambdaExprCtx (appendCruCtx (entryGhosts entryID) args) $
+  lambdaPermCtx (mbDistPermsToValuePerms in_perms) $ \pctx ->
+  do retType <- translateRetType ret ret_perms
+     impTransM pctx mapTrans retType $ itranslate stmts
 
-translateBlockMapBodies :: TypedBlockMapTrans ext blocks ret ->
+
+translateBlockMapBodies :: NuMatchingExtC ext =>
+                           TypedBlockMapTrans ext blocks ret ->
+                           TypedBlockMap ext blocks ret ->
                            TypeTransM ctx OpenTerm
-translateBlockMapBodies = error "FIXME HERE NOW"
+translateBlockMapBodies mapTrans =
+  foldBlockMap
+  (\entry restM ->
+    pairOpenTerm <$> translateEntryBody mapTrans entry <*> restM)
+  (return unitOpenTerm)
 
 
 -- | Translate a typed CFG to a SAW term
-translateCFG :: TypedCFG ext blocks ghosts inits ret -> OpenTerm
+translateCFG :: NuMatchingExtC ext => TypedCFG ext blocks ghosts inits ret ->
+                OpenTerm
 translateCFG cfg =
   let h = tpcfgHandle cfg
+      blkMap = tpcfgBlockMap cfg
       ctx = typedFnHandleAllArgs $ tpcfgHandle cfg
-      mb_ctx = fmap (const ctx) (tpcfgInputPerms cfg) in
+      mb_ctx = fmap (const ctx) (tpcfgInputPerms cfg)
+      retType = typedFnHandleRetType $ tpcfgHandle cfg in
   runTypeTransM $ lambdaExprCtx ctx $
   lambdaPermCtx (tpcfgInputPerms cfg) $ \pctx ->
-  do retType <-
-       translateRetType (typedFnHandleRetType $ tpcfgHandle cfg)
-       (tpcfgOutputPerms cfg)
+  do retTypeTrans <-
+       translateRetType retType
+       (mbValuePermsToDistPerms $ tpcfgOutputPerms cfg)
      applyMultiTransM (return $ globalOpenTerm "Prelude.letRecM")
        [
          -- The LetRecTypes describing all the entrypoints of the CFG
-         translateBlockMapLRTs (tpcfgBlockMap cfg)
+         translateBlockMapLRTs blkMap
 
          -- The return type of the entire function
-       , return retType
+       , return retTypeTrans
 
          -- The definitions of the translations of the entrypoints of the CFG
-       , lambdaBlockMap (tpcfgBlockMap cfg)
-         (\mapTrans -> translateBlockMapBodies mapTrans)
+       , lambdaBlockMap blkMap
+         (\mapTrans -> translateBlockMapBodies mapTrans blkMap)
 
          -- The main body, that calls the first function with the input vars
-       , lambdaBlockMap (tpcfgBlockMap cfg)
+       , lambdaBlockMap blkMap
          (\mapTrans ->
-           impTransM pctx mapTrans retType $
+           impTransM pctx mapTrans retTypeTrans $
            translateApply "CFG"
            (translateTypedEntryID (tpcfgEntryBlockID cfg) mapTrans)
            mb_ctx

@@ -298,11 +298,11 @@ data TypedLLVMStmt wptr ret ps_in ps_out where
                           (ps :> LLVMFrameType wptr) RNil
 
 
--- | Return the input permissions for a 'TypedStmt
+-- | Return the input permissions for a 'TypedStmt'
 typedStmtIn :: TypedStmt ext rets ps_in ps_out -> MapRList ValuePerm ps_in
 typedStmtIn = error "FIXME HERE NOW"
 
--- | Return the output permissions for a 'TypedStmt
+-- | Return the output permissions for a 'TypedStmt'
 typedStmtOut :: TypedStmt ext rets ps_in ps_out -> MapRList Name rets ->
                 MapRList ValuePerm ps_out
 typedStmtOut = error "FIXME HERE NOW"
@@ -465,10 +465,10 @@ instance NuMatchingExtC ext => NuMatchingAny1 (TypedStmtSeq ext blocks ret) wher
 -- here.
 data TypedEntry ext blocks ret args where
   TypedEntry ::
-    TypedEntryID blocks args ghosts -> CruCtx args ->
+    TypedEntryID blocks args ghosts -> CruCtx args -> TypeRepr ret ->
     MbDistPerms (ghosts :++: args) ->
     -- FIXME: I think ret_ps here should = inits...?
-    Mb (ghosts :++: args) (RetPerms ret ret_ps) ->
+    Mb (ghosts :++: args :> ret) (DistPerms ret_ps) ->
     Mb (ghosts :++: args) (TypedStmtSeq ext blocks ret (ghosts :++: args)) ->
     TypedEntry ext blocks ret args
 
@@ -576,7 +576,7 @@ data BlockEntryInfo blocks ret args where
     entryInfoID :: TypedEntryID blocks args ghosts,
     entryInfoArgs :: CruCtx args,
     entryInfoPermsIn :: MbDistPerms (ghosts :++: args),
-    entryInfoPermsOut :: Mb (ghosts :++: args) (RetPerms ret ret_ps)
+    entryInfoPermsOut :: Mb (ghosts :++: args :> ret) (DistPerms ret_ps)
   } -> BlockEntryInfo blocks ret args
 
 -- | Extract the 'BlockID' from entrypoint info
@@ -606,7 +606,7 @@ blockInfoVisited _ = False
 -- This assumes that the block has not been visited; if it has, it is an error.
 blockInfoAddEntry :: CruCtx args -> CruCtx ghosts ->
                      MbDistPerms (ghosts :++: args) ->
-                     Mb (ghosts :++: args) (RetPerms ret ret_ps) ->
+                     Mb (ghosts :++: args :> ret) (DistPerms ret_ps) ->
                      BlockInfo ext blocks ret args ->
                      (BlockInfo ext blocks ret args,
                       TypedEntryID blocks args ghosts)
@@ -637,7 +637,7 @@ emptyBlockInfoMap asgn =
 -- visited; if it has, it is an error.
 blockInfoMapAddEntry :: Member blocks args -> CruCtx args -> CruCtx ghosts ->
                         MbDistPerms (ghosts :++: args) ->
-                        Mb (ghosts :++: args) (RetPerms ret ret_ps) ->
+                        Mb (ghosts :++: args :> ret) (DistPerms ret_ps) ->
                         BlockInfoMap ext blocks ret ->
                         (BlockInfoMap ext blocks ret,
                          TypedEntryID blocks args ghosts)
@@ -680,6 +680,7 @@ buildBlockIDMap (viewAssign -> AssignExtend asgn _) =
 data TopPermCheckState ext cblocks blocks ret =
   TopPermCheckState
   {
+    stRetType :: CruType ret,
     stBlockTrans :: Closed (Assignment (BlockIDTrans blocks) cblocks),
     stBlockInfo :: Closed (BlockInfoMap ext blocks ret)
   }
@@ -689,20 +690,23 @@ $(mkNuMatching [t| forall ext cblocks blocks ret.
 
 instance Closable (TopPermCheckState ext cblocks blocks ret) where
   toClosed (TopPermCheckState {..}) =
-    $(mkClosed [| TopPermCheckState |]) `clApplyCl` stBlockTrans
+    $(mkClosed [| TopPermCheckState |])
+    `clApply` (toClosed stRetType)
+    `clApplyCl` stBlockTrans
     `clApplyCl` stBlockInfo
 
 instance BindState (TopPermCheckState ext cblocks blocks ret) where
-  bindState [nuP| TopPermCheckState bt i |] =
-    TopPermCheckState (mbLift bt) (mbLift i)
+  bindState [nuP| TopPermCheckState retType bt i |] =
+    TopPermCheckState (mbLift retType) (mbLift bt) (mbLift i)
 
 -- | Build an empty 'TopPermCheckState' from a Crucible 'BlockMap'
 emptyTopPermCheckState ::
-  BlockMap ext cblocks ret ->
+  TypeRepr ret -> BlockMap ext cblocks ret ->
   TopPermCheckState ext cblocks (CtxCtxToRList cblocks) ret
-emptyTopPermCheckState blkMap =
+emptyTopPermCheckState ret blkMap =
   TopPermCheckState
-  { stBlockTrans =
+  { stRetType = mkCruType ret
+  , stBlockTrans =
     $(mkClosed [| buildBlockIDMap |]) `clApply` (closeAssign toClosed blkMap)
   , stBlockInfo =
     $(mkClosed [| emptyBlockInfoMap |]) `clApply` (closeAssign toClosed blkMap)
@@ -713,7 +717,7 @@ emptyTopPermCheckState blkMap =
 stLookupBlockID :: BlockID cblocks args ->
                    TopPermCheckState ext cblocks blocks ret ->
                    Member blocks (CtxToRList args)
-stLookupBlockID (BlockID ix) st=
+stLookupBlockID (BlockID ix) st =
   unBlockIDTrans $ unClosed (stBlockTrans st) Ctx.! ix
 
 -- | The top-level monad for permission-checking CFGs
@@ -788,7 +792,7 @@ lookupBlockInfo memb =
 
 insNewBlockEntry :: Member blocks args -> CruCtx args -> CruCtx ghosts ->
                     Closed (MbDistPerms (ghosts :++: args)) ->
-                    Closed (Mb (ghosts :++: args) (RetPerms ret ret_ps)) ->
+                    Closed (Mb (ghosts :++: args :> ret) (DistPerms ret_ps)) ->
                     TopPermCheckM ext cblocks blocks ret
                     (TypedEntryID blocks args ghosts)
 insNewBlockEntry memb arg_tps ghost_tps perms_in perms_ret =
@@ -1194,14 +1198,13 @@ abstractPermsIn xs args perms =
   `clApply` maybe (error "abstractPermsIn") id (abstractVars xs perms)
 
 abstractPermsRet :: MapRList Name (ghosts :: RList CrucibleType) ->
-                    MapRList f args -> RetPerms ret ret_ps ->
-                    Closed (Mb (ghosts :++: args) (RetPerms ret ret_ps))
-abstractPermsRet xs args (RetPerms mb_perms) =
-  $(mkClosed [| \args -> fmap RetPerms . mbCombine
-                         . fmap (nuMulti args . const) |])
+                    MapRList f args ->
+                    Binding (ret :: CrucibleType) (DistPerms ret_ps) ->
+                    Closed (Mb (ghosts :++: args :> ret) (DistPerms ret_ps))
+abstractPermsRet xs args ret_perms =
+  $(mkClosed [| \args ->  mbCombine . mbCombine . fmap (nuMulti args . const) |])
   `clApply` closedProxies args
-  `clApply` maybe (error "abstractPermsRet") id (abstractVars xs mb_perms)
-
+  `clApply` maybe (error "abstractPermsRet") id (abstractVars xs ret_perms)
 
 -- | Type-check a Crucible jump target
 tcJumpTarget :: CtxTrans ctx -> JumpTarget cblocks ctx ->
@@ -1221,7 +1224,7 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
     -- If not, we can make a new entrypoint that takes all of the current
     -- permissions as input
     case (getAllPerms (stCurPerms st), stRetPerms st) of
-      (Some ghost_perms, Some ret_perms) ->
+      (Some ghost_perms, Some (RetPerms ret_perms)) ->
         -- Get the types of all variables we hold permissions on, and then use
         -- these to make a new entrypoint into the given block, whose ghost
         -- arguments are all those that we hold permissions on
@@ -1305,11 +1308,16 @@ tcBlockEntry :: PermCheckExtC ext => Block ext cblocks ret args ->
                 TopPermCheckM ext cblocks blocks ret
                 (TypedEntry ext blocks ret (CtxToRList args))
 tcBlockEntry blk (BlockEntryInfo {..}) =
-  fmap (TypedEntry entryInfoID entryInfoArgs entryInfoPermsIn entryInfoPermsOut) $
+  (stRetType <$> get) >>= \retType ->
+  fmap (TypedEntry entryInfoID entryInfoArgs (unCruType retType)
+        entryInfoPermsIn entryInfoPermsOut) $
   strongMbM $
-  flip nuMultiWithElim (MNil :>: entryInfoPermsIn :>:
-                        entryInfoPermsOut) $ \ns (_ :>: perms :>: ret_perms) ->
-  runPermCheckM (distPermSet $ runIdentity perms) (runIdentity ret_perms) $
+  flip nuMultiWithElim
+  (MNil :>: entryInfoPermsIn :>:
+   mbSeparate (MNil :>: Proxy) entryInfoPermsOut) $ \ns (_ :>: perms
+                                                         :>: ret_perms) ->
+  runPermCheckM (distPermSet $ runIdentity perms)
+  (RetPerms $ runIdentity ret_perms) $
   let ctx =
         mkCtxTrans (blockInputs blk) $ snd $
         splitMapRList (entryGhosts entryInfoID) (ctxToMap $ entryInfoArgs) ns in
@@ -1338,25 +1346,20 @@ tcEmitBlock blk =
                         `clApply` stBlockInfo st)
      put (st { stBlockInfo = clMap })
 
-makeRetPerms :: Mb (ctx :> ret) (DistPerms ps) ->
-                Mb ctx (RetPerms ret ps)
-makeRetPerms mb_perms =
-  fmap RetPerms $ mbSeparate (MNil :>: Proxy) mb_perms
-
 -- | Type-check a Crucible CFG
 tcCFG :: PermCheckExtC ext => CFG ext blocks inits ret ->
          Closed (FunPerm ghosts inits ret) ->
          TypedCFG ext (CtxCtxToRList blocks) ghosts (CtxToRList inits) ret
 tcCFG cfg [clP| FunPerm _ _ perms_in perms_out :: FunPerm ghosts args ret |] =
   let ghosts = knownRepr :: CruCtx ghosts in
-  flip evalState (emptyTopPermCheckState (cfgBlockMap cfg)) $
+  flip evalState (emptyTopPermCheckState (handleReturnType $ cfgHandle cfg)
+                  (cfgBlockMap cfg)) $
   do init_memb <- stLookupBlockID (cfgEntryBlockID cfg) <$> get
      init_entry <-
        insNewBlockEntry init_memb (mkCruCtx $ handleArgTypes $ cfgHandle cfg)
        ghosts
        ($(mkClosed [| mbValuePermsToDistPerms |]) `clApply` perms_in)
-       ($(mkClosed [| makeRetPerms
-                    . mbValuePermsToDistPerms |]) `clApply` perms_out)
+       ($(mkClosed [| mbValuePermsToDistPerms |]) `clApply` perms_out)
      mapM_ (visit cfg) (cfgWeakTopologicalOrdering cfg)
      final_st <- get
      return $ TypedCFG
