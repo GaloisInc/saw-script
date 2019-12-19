@@ -86,6 +86,10 @@ data ExprTrans (a :: CrucibleType) where
   -- | Permission lists also have no computational content
   ETrans_PermList :: ExprTrans PermListType
 
+  -- | The computational content of functions is in their FunPerms, so functions
+  -- themselves have no computational content
+  ETrans_Fun :: ExprTrans (FunctionHandleType args ret)
+
   -- | The default translation of an expression is just a SAW term
   ETrans_Term :: OpenTerm -> ExprTrans a
 
@@ -150,18 +154,6 @@ lambdaTransM x tp body_m =
   do r <- ask
      return $ lambdaOpenTerm x tp (\x -> runReader (body_m x) r)
 
--- | Build a lambda-abstraction for an expression translation if the associated
--- type has any computational content; otherwise, this operation is the identity
-lambdaExprTrans :: String -> TypeRepr a -> TypeTransM (ctx :> a) OpenTerm ->
-                   TypeTransM ctx OpenTerm
-lambdaExprTrans x tp body =
-  do mb_tp <- nuMultiTransM $ const tp
-     eith <- tptranslate mb_tp
-     case eith of
-       Left etrans -> inExtTypeTransM etrans body
-       Right (tp_term, mk_etrans) ->
-         lambdaTransM x tp_term (\z -> inExtTypeTransM (mk_etrans z) body)
-
 -- | Build a pi in a translation monad
 piTransM :: String -> OpenTerm -> (OpenTerm -> Reader r OpenTerm) ->
             Reader r OpenTerm
@@ -180,7 +172,7 @@ letTransM x tp rhs_m body_m =
 
 
 ----------------------------------------------------------------------
--- * The Type and Expression Translation
+-- * Translating Types and Pure Expressions
 ----------------------------------------------------------------------
 
 -- | The typeclass for the type-level translation
@@ -189,14 +181,6 @@ class TypeTranslate a ctx res | a ctx -> res where
 
 instance TypeTranslate (NatRepr n) ctx OpenTerm where
   tptranslate mb_n = return $ natOpenTerm $ mbLift $ fmap intValue mb_n
-
--- | Translate a Crucible type to a SAW type, converting 'Nothing' to unit
-translateType :: Mb ctx (TypeRepr a) -> TypeTransM ctx OpenTerm
-translateType mb_t =
-  do eith <- tptranslate mb_t
-     case eith of
-       Left _ -> return unitTypeOpenTerm
-       Right (tp, _) -> return tp
 
 -- FIXME: explain this translation
 instance TypeTranslate (TypeRepr a) ctx (Either (ExprTrans a)
@@ -269,36 +253,94 @@ instance TypeTranslate (TypeRepr a) ctx (Either (ExprTrans a)
     return $ error "TypeTranslate: SymbolicStructRepr"
 -}
 
+-- | Translate a Crucible type to a SAW type, converting 'Nothing' to unit
+translateType :: Mb ctx (TypeRepr a) -> TypeTransM ctx OpenTerm
+translateType mb_t =
+  do eith <- tptranslate mb_t
+     case eith of
+       Left _ -> return unitTypeOpenTerm
+       Right (tp, _) -> return tp
+
+-- | Build a lambda-abstraction for an expression translation if the associated
+-- type has any computational content; otherwise, this operation is the identity
+lambdaExprTrans :: String -> TypeRepr a -> TypeTransM (ctx :> a) OpenTerm ->
+                   TypeTransM ctx OpenTerm
+lambdaExprTrans x tp body =
+  do mb_tp <- nuMultiTransM $ const tp
+     eith <- tptranslate mb_tp
+     case eith of
+       Left etrans -> inExtTypeTransM etrans body
+       Right (tp_term, mk_etrans) ->
+         lambdaTransM x tp_term (\z -> inExtTypeTransM (mk_etrans z) body)
+
+-- | Like 'lambdaExprTrans', but always build a lambda-abstraction, even if the
+-- type has no computational content and the lambda is over the unit type
+lambdaExprTransForce :: String -> TypeRepr a ->
+                        TypeTransM (ctx :> a) OpenTerm ->
+                        TypeTransM ctx OpenTerm
+lambdaExprTransForce x tp body =
+  do mb_tp <- nuMultiTransM $ const tp
+     eith <- tptranslate mb_tp
+     case eith of
+       Left etrans ->
+         lambdaTransM x unitTypeOpenTerm (\_ -> inExtTypeTransM etrans body)
+       Right (tp_term, mk_etrans) ->
+         lambdaTransM x tp_term (\z -> inExtTypeTransM (mk_etrans z) body)
+
 instance TypeTranslate (ExprVar a) ctx (ExprTrans a) where
   tptranslate mb_x = mapRListLookup (translateVar mb_x) <$> ask
 
+bvAddOpenTerm :: Integer -> OpenTerm -> OpenTerm -> OpenTerm
+bvAddOpenTerm n x y =
+  applyOpenTermMulti (globalOpenTerm "Prelude.bvAdd")
+  [natOpenTerm n, x, y]
+
+bvMulOpenTerm :: Integer -> OpenTerm -> OpenTerm -> OpenTerm
+bvMulOpenTerm n x y =
+  applyOpenTermMulti (globalOpenTerm "Prelude.bvMul")
+  [natOpenTerm n, x, y]
+
 instance TypeTranslate (PermExpr a) ctx (ExprTrans a) where
-  tptranslate = error "FIXME HERE NOW"
+  tptranslate [nuP| PExpr_Var x |] = tptranslate x
+  tptranslate [nuP| PExpr_Unit |] = return $ ETrans_Term unitOpenTerm
+  tptranslate [nuP| PExpr_Nat i |] =
+    return $ ETrans_Term $ natOpenTerm $ mbLift i
+  tptranslate [nuP| PExpr_BV (bvfactors :: [BVFactor w]) off |] =
+    do let w = natVal (Proxy :: Proxy w)
+       bv_transs <- mapM tptranslate $ mbList bvfactors
+       return $ ETrans_Term $
+         bvAddOpenTerm w (foldr (bvMulOpenTerm w) (natOpenTerm 1) bv_transs)
+         (natOpenTerm $ mbLift off)
+  tptranslate [nuP| PExpr_Struct _args |] =
+    error "FIXME HERE: translate struct expressions!"
+  tptranslate [nuP| PExpr_Always |] =
+    return ETrans_Lifetime
+  tptranslate [nuP| PExpr_LLVMWord _ |] = return ETrans_LLVM
+  tptranslate [nuP| PExpr_LLVMOffset _ _ |] = return ETrans_LLVM
+  tptranslate [nuP| PExpr_Fun _ |] = return ETrans_Fun
+  tptranslate [nuP| PExpr_PermListNil |] = return ETrans_PermList
+  tptranslate [nuP| PExpr_PermListCons _ _ _ |] = return ETrans_PermList
 
 instance ress ~ (CtxToRList as) =>
          TypeTranslate (PermExprs as) ctx (ExprTransCtx ress) where
-  tptranslate = error "FIXME HERE NOW"
+  tptranslate [nuP| PExprs_Nil |] = return MNil
+  tptranslate [nuP| PExprs_Cons es e |] =
+    (:>:) <$> tptranslate es <*> tptranslate e
 
 instance TypeTranslate (BVFactor w) ctx OpenTerm where
-  tptranslate = error "FIXME HERE NOW"
+  tptranslate [nuP| BVFactor i x :: BVFactor w |] =
+    tptranslate x >>= \x_trans ->
+    return $
+    bvMulOpenTerm (natVal (Proxy :: Proxy w)) (natOpenTerm (mbLift i))
+    (exprTransToTerm x_trans)
 
--- [| p :: ValuePerm |] = type of the impl translation of reg with perms p
-instance TypeTranslate (ValuePerm a) ctx (Either (PermTrans ctx a)
-                                          (OpenTerm,
-                                           OpenTerm -> PermTrans ctx a)) where
-  tptranslate = error "FIXME HERE NOW"
-
--- | Translate a permission to a SAW type, converting 'Nothing' to unit
-translatePerm :: Mb ctx (ValuePerm a) -> TypeTransM ctx OpenTerm
-translatePerm mb_p =
-  tptranslate mb_p >>= \eith ->
-  case eith of
-    Left _ -> return unitTypeOpenTerm
-    Right (tp_term, _) -> return tp_term
+-- | Translate a Crucible type to a SAW type, converting 'Nothing' to unit
+translateExpr :: Mb ctx (PermExpr a) -> TypeTransM ctx OpenTerm
+translateExpr mb_e = exprTransToTerm <$> tptranslate mb_e
 
 
 ----------------------------------------------------------------------
--- * The Translations of Permission Implications
+-- * Translating Permissions to Types
 ----------------------------------------------------------------------
 
 -- | The result of translating a "proof element" of a permission of type
@@ -368,20 +410,6 @@ mkPermTrans :: Mb ctx (ValuePerm a) -> OpenTerm -> PermTrans ctx a
 mkPermTrans [nuP| ValPerm_Eq mb_e |] _ = PTrans_Eq mb_e
 mkPermTrans mb_p t = PTrans_Term mb_p t
 
--- | Build a lambda-abstraction for a 'PermTrans' if the associated permission
--- has any computational content; otherwise, this operation is the identity
-lambdaPermTrans :: String -> Mb ctx (ValuePerm a) ->
-                   (PermTrans ctx a -> TypeTransM ctx OpenTerm) ->
-                   TypeTransM ctx OpenTerm
-lambdaPermTrans _ [nuP| ValPerm_Eq mb_e |] body_f = body_f (PTrans_Eq mb_e)
-lambdaPermTrans x mb_p body_f =
-  tptranslate mb_p >>= \eith ->
-  case eith of
-    Left ptrans -> body_f ptrans
-    Right (tp_term, mk_ptrans) ->
-      lambdaTransM x tp_term (body_f . mk_ptrans)
-     
-
 -- | Map a perm translation result to an 'OpenTerm'
 permTransToTerm :: PermTrans ctx a -> OpenTerm
 permTransToTerm (PTrans_Eq _) = unitOpenTerm
@@ -431,6 +459,63 @@ extPermTransCtx = mapMapRList extPermTrans
 consPermTransCtx :: PermTransCtx ctx ps -> PermTrans ctx a ->
                     PermTransCtx ctx (ps :> a)
 consPermTransCtx = (:>:)
+
+-- [| p :: ValuePerm |] = type of the impl translation of reg with perms p
+instance TypeTranslate (ValuePerm a) ctx (Either (PermTrans ctx a)
+                                          (OpenTerm,
+                                           OpenTerm -> PermTrans ctx a)) where
+  tptranslate = error "FIXME HERE NOW"
+
+-- | Translate a permission to a SAW type, converting 'Nothing' to unit
+translatePerm :: Mb ctx (ValuePerm a) -> TypeTransM ctx OpenTerm
+translatePerm mb_p =
+  tptranslate mb_p >>= \eith ->
+  case eith of
+    Left _ -> return unitTypeOpenTerm
+    Right (tp_term, _) -> return tp_term
+
+-- | Build a lambda-abstraction for a 'PermTrans' if the associated permission
+-- has any computational content; otherwise, this operation is the identity
+lambdaPermTrans :: String -> Mb ctx (ValuePerm a) ->
+                   (PermTrans ctx a -> TypeTransM ctx OpenTerm) ->
+                   TypeTransM ctx OpenTerm
+lambdaPermTrans _ [nuP| ValPerm_Eq mb_e |] body_f = body_f (PTrans_Eq mb_e)
+lambdaPermTrans x mb_p body_f =
+  tptranslate mb_p >>= \eith ->
+  case eith of
+    Left ptrans -> body_f ptrans
+    Right (tp_term, mk_ptrans) ->
+      lambdaTransM x tp_term (body_f . mk_ptrans)
+
+-- | Like 'lambdaPermTrans', but always build a lambda-abstraction, even if the
+-- permission has no computational content and the lambda is over the unit type
+lambdaPermTransForce :: String -> Mb ctx (ValuePerm a) ->
+                        (PermTrans ctx a -> TypeTransM ctx OpenTerm) ->
+                        TypeTransM ctx OpenTerm
+lambdaPermTransForce x mb_p body_f =
+  tptranslate mb_p >>= \eith ->
+  case eith of
+    Left ptrans ->
+      lambdaTransM x unitTypeOpenTerm (const $ body_f ptrans)
+    Right (tp_term, mk_ptrans) ->
+      lambdaTransM x tp_term (body_f . mk_ptrans)
+
+-- Translate a sequence of permissions into a nested pair type
+instance TypeTranslate (ValuePerms ps) ctx OpenTerm where
+  tptranslate ps = tupleTypeOpenTerm <$> helper ps where
+    helper :: Mb ctx (ValuePerms ps') -> TypeTransM ctx [OpenTerm]
+    helper [nuP| ValPerms_Nil |] = return []
+    helper [nuP| ValPerms_Cons ps p |] =
+      do rest <- helper ps
+         eith <- tptranslate p
+         case eith of
+           Left _ -> return rest
+           Right (tp_term, _) ->
+             return (rest ++ [tp_term])
+
+-- Translate a DistPerms into a nested pair type
+instance TypeTranslate (DistPerms ps) ctx OpenTerm where
+  tptranslate = tptranslate . mbDistPermsToValuePerms
 
 
 ----------------------------------------------------------------------
@@ -665,8 +750,8 @@ itranslateSimplImpl _ [nuP| SImpl_IntroExists x (e :: PermExpr tp) p |] m =
        (mbMap2 subst (fmap singletonSubst e) p)
      let tp :: TypeRepr tp = knownRepr
      tp_trans <- itranslate $ nuMulti (mbToProxy e) $ const tp
-     tp_f <- tpTransM $ lambdaTransM "x_introEx" tp_trans $ \z ->
-         inExtTypeTransM (mkExprTrans tp z) (translatePerm $ mbCombine p)
+     tp_f <- tpTransM (lambdaExprTrans "x_introEx" tp $
+                       translatePerm $ mbCombine p)
      e_trans <- exprTransToTerm <$> tpTransM (tptranslate e)
      withPermStackM id
        (\(ps :>: p_top) ->
@@ -739,8 +824,8 @@ itranslatePermImpl1 [nuP| Impl1_ElimExists x (p :: Binding tp (ValuePerm a)) |]
   do assertTopPermM "Impl1_ElimExists" x (fmap ValPerm_Exists p)
      let tp :: TypeRepr tp = knownRepr
      tp_trans <- itranslate $ nuMulti (mbToProxy x) $ const tp
-     tp_f <- tpTransM $ lambdaTransM "x_elimEx" tp_trans $ \z ->
-       inExtTypeTransM (mkExprTrans tp z) (translatePerm $ mbCombine p)
+     tp_f <- tpTransM (lambdaExprTrans "x_elimEx" tp $
+                       translatePerm $ mbCombine p)
      ret_f <- lambdaTransM "x_elimEx" tp_trans $ const compReturnTypeM
      ptrans <- permTransToTerm <$> getTopPermM
      applyMultiTransM (return $ globalOpenTerm "Prelude.Sigma__rec")
@@ -993,7 +1078,11 @@ lambdaPermCtx [nuP| ValPerms_Cons ps p |] f =
 -- | Build the return type for a function; FIXME: documentation
 translateRetType :: TypeRepr ret -> Mb (ctx :> ret) (DistPerms ps) ->
                     TypeTransM ctx OpenTerm
-translateRetType = error "FIXME HERE NOW"
+translateRetType ret ret_perms =
+  do mb_ret <- nuMultiTransM $ const ret
+     tp_term <- translateType mb_ret
+     tp_f <- lambdaExprTrans "x" ret (tptranslate ret_perms)
+     return $ dataTypeOpenTerm "Prelude.Sigma" [tp_term, tp_f]
 
 nuMultiTransM :: (MapRList Name ctx -> b) -> TypeTransM ctx (Mb ctx b)
 nuMultiTransM f =
