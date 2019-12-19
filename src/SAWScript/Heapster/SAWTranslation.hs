@@ -97,16 +97,6 @@ data ExprTrans (a :: CrucibleType) where
 -- | A context mapping bound names to their type-level SAW translations
 type ExprTransCtx (ctx :: RList CrucibleType) = MapRList ExprTrans ctx
 
--- | Build the correct 'ExprTrans' from an 'OpenTerm' given its type
-mkExprTrans :: TypeRepr a -> OpenTerm -> ExprTrans a
-mkExprTrans = helper where
-  helper :: TypeRepr a -> OpenTerm -> ExprTrans a
-  helper (LLVMPointerRepr _) _ = ETrans_LLVM
-  helper (LLVMFrameRepr _) _ = ETrans_LLVMFrame
-  helper LifetimeRepr _ = ETrans_Lifetime
-  helper PermListRepr _ = ETrans_PermList
-  helper _ t = ETrans_Term t
-
 -- | Map an expression translation result to an 'OpenTerm' or 'Nothing' if it
 -- has no pure content, i.e., if it is a splitting or LLVM value
 exprTransToTerm :: ExprTrans a -> OpenTerm
@@ -182,20 +172,24 @@ class TypeTranslate a ctx res | a ctx -> res where
 instance TypeTranslate (NatRepr n) ctx OpenTerm where
   tptranslate mb_n = return $ natOpenTerm $ mbLift $ fmap intValue mb_n
 
+-- | Helper for writing the 'TypeTranslate' instance for 'TypeRepr'
+returnType :: OpenTerm -> TypeTransM ctx (Either (ExprTrans a)
+                                          (OpenTerm,
+                                           OpenTerm -> ExprTrans a))
+returnType tp = return $ Right (tp, ETrans_Term)
+
 -- FIXME: explain this translation
 instance TypeTranslate (TypeRepr a) ctx (Either (ExprTrans a)
                                          (OpenTerm,
                                           OpenTerm -> ExprTrans a)) where
-  tptranslate = error "FIXME HERE NOW"
-{-
   tptranslate [nuP| (AnyRepr) |] =
     return $ error "TypeTranslate: Any"
   tptranslate [nuP| (UnitRepr) |] =
-    return $ Just unitTypeOpenTerm
+    returnType unitTypeOpenTerm
   tptranslate [nuP| (BoolRepr) |] =
-    return $ Just $ dataTypeOpenTerm "Prelude.Bool" []
+    returnType $ dataTypeOpenTerm "Prelude.Bool" []
   tptranslate [nuP| (NatRepr) |] =
-    return $ Just $ dataTypeOpenTerm "Prelude.Nat" []
+    returnType $ dataTypeOpenTerm "Prelude.Nat" []
   tptranslate [nuP| (IntegerRepr) |] =
     return $ error "TypeTranslate: IntegerRepr"
   tptranslate [nuP| (RealValRepr) |] =
@@ -203,38 +197,39 @@ instance TypeTranslate (TypeRepr a) ctx (Either (ExprTrans a)
   tptranslate [nuP| (ComplexRealRepr) |] =
     return $ error "TypeTranslate: ComplexRealRepr"
   tptranslate [nuP| (BVRepr w) |] =
-    Just <$>
-    applyOpenTerm (globalOpenTerm "Prelude.bitvector") <$> tptranslate w
+    returnType =<<
+    (applyOpenTerm (globalOpenTerm "Prelude.bitvector") <$> tptranslate w)
 
   -- Our special-purpose intrinsic types, whose translations do not have
   -- computational content
   tptranslate [nuP| (LLVMPointerRepr _) |] =
-    return Nothing
+    return $ Left ETrans_LLVM
   tptranslate [nuP| (LLVMFrameRepr _) |] =
-    return Nothing
+    return $ Left ETrans_LLVMFrame
   tptranslate [nuP| LifetimeRepr |] =
-    return Nothing
+    return $ Left ETrans_Lifetime
   tptranslate [nuP| PermListRepr |] =
-    return Nothing
+    return $ Left ETrans_PermList
   tptranslate [nuP| (IntrinsicRepr _ _) |] =
     return $ error "TypeTranslate: IntrinsicRepr"
 
   tptranslate [nuP| (RecursiveRepr _ _) |] =
     return $ error "TypeTranslate: RecursiveRepr"
   tptranslate [nuP| (FloatRepr _) |] =
-    return $ Just $ dataTypeOpenTerm "Prelude.Float" []
+    returnType $ dataTypeOpenTerm "Prelude.Float" []
   tptranslate [nuP| (IEEEFloatRepr _) |] =
     return $ error "TypeTranslate: IEEEFloatRepr"
   tptranslate [nuP| (CharRepr) |] =
     return $ error "TypeTranslate: CharRepr"
   tptranslate [nuP| (StringRepr) |] =
-    return $ Just $ dataTypeOpenTerm "Prelude.String" []
+    returnType $ dataTypeOpenTerm "Prelude.String" []
   tptranslate [nuP| (FunctionHandleRepr _ _) |] =
     -- NOTE: function permissions translate to the SAW function, but the
     -- function handle itself has no SAW translation
-    return Nothing
+    return $ Left ETrans_Fun
   tptranslate [nuP| (MaybeRepr tp) |] =
-    fmap (applyOpenTerm (globalOpenTerm "Prelude.Maybe")) <$> tptranslate tp
+    returnType =<<
+    (applyOpenTerm (globalOpenTerm "Prelude.Maybe") <$> translateType tp)
   tptranslate [nuP| (VectorRepr _) |] =
     return $ error "TypeTranslate: VectorRepr (can't map to Vec without size)"
   tptranslate [nuP| (StructRepr _) |] =
@@ -251,7 +246,7 @@ instance TypeTranslate (TypeRepr a) ctx (Either (ExprTrans a)
     return $ error "TypeTranslate: SymbolicArrayRepr"
   tptranslate [nuP| (SymbolicStructRepr _) |] =
     return $ error "TypeTranslate: SymbolicStructRepr"
--}
+
 
 -- | Translate a Crucible type to a SAW type, converting 'Nothing' to unit
 translateType :: Mb ctx (TypeRepr a) -> TypeTransM ctx OpenTerm
@@ -260,6 +255,15 @@ translateType mb_t =
      case eith of
        Left _ -> return unitTypeOpenTerm
        Right (tp, _) -> return tp
+
+-- | Build the correct 'ExprTrans' from an 'OpenTerm' given its type
+mkExprTrans :: TypeRepr a -> OpenTerm -> TypeTransM ctx (ExprTrans a)
+mkExprTrans tp trm =
+  do mb_tp <- nuMultiTransM $ const tp
+     eith <- tptranslate mb_tp
+     case eith of
+       Left etrans -> return etrans
+       Right (_, mk_etrans) -> return $ mk_etrans trm
 
 -- | Build a lambda-abstraction for an expression translation if the associated
 -- type has any computational content; otherwise, this operation is the identity
@@ -286,6 +290,16 @@ lambdaExprTransForce x tp body =
          lambdaTransM x unitTypeOpenTerm (\_ -> inExtTypeTransM etrans body)
        Right (tp_term, mk_etrans) ->
          lambdaTransM x tp_term (\z -> inExtTypeTransM (mk_etrans z) body)
+
+piExprTrans :: String -> TypeRepr a -> TypeTransM (ctx :> a) OpenTerm ->
+               TypeTransM ctx OpenTerm
+piExprTrans x tp body =
+  do mb_tp <- nuMultiTransM $ const tp
+     eith <- tptranslate mb_tp
+     case eith of
+       Left etrans -> inExtTypeTransM etrans body
+       Right (tp_term, mk_etrans) ->
+         piTransM x tp_term (\z -> inExtTypeTransM (mk_etrans z) body)
 
 instance TypeTranslate (ExprVar a) ctx (ExprTrans a) where
   tptranslate mb_x = mapRListLookup (translateVar mb_x) <$> ask
@@ -419,7 +433,12 @@ permTransToTerm (PTrans_Term _ t) = t
 
 -- | Map an atomic perm translation result to an 'OpenTerm'
 atomicPermTransToTerm :: AtomicPermTrans ctx a -> OpenTerm
-atomicPermTransToTerm _ = error "FIXME HERE NOW"
+atomicPermTransToTerm (APTrans_LLVMField _ ptrans) = permTransToTerm ptrans
+atomicPermTransToTerm (APTrans_LLVMFree _) = unitOpenTerm
+atomicPermTransToTerm (APTrans_LLVMFrame _) = unitOpenTerm
+atomicPermTransToTerm (APTrans_LifetimePerm _) = unitOpenTerm
+atomicPermTransToTerm (APTrans_BVProp _) = unitOpenTerm
+atomicPermTransToTerm (APTrans_Term _ t) = t
 
 -- | Extract out the permission of a permission translation result
 permTransPerm :: MapRList Proxy ctx -> PermTrans ctx a -> Mb ctx (ValuePerm a)
@@ -431,7 +450,12 @@ permTransPerm _ (PTrans_Term p _) = p
 
 atomicPermTransPerm :: MapRList Proxy ctx -> AtomicPermTrans ctx a ->
                        Mb ctx (AtomicPerm a)
-atomicPermTransPerm = error "FIXME HERE NOW"
+atomicPermTransPerm prxs (APTrans_LLVMField fld _) = fmap Perm_LLVMField fld
+atomicPermTransPerm prxs (APTrans_LLVMFree e) = fmap Perm_LLVMFree e
+atomicPermTransPerm prxs (APTrans_LLVMFrame fp) = fmap Perm_LLVMFrame fp
+atomicPermTransPerm prxs (APTrans_LifetimePerm p) = p
+atomicPermTransPerm prxs (APTrans_BVProp prop) = fmap Perm_BVProp prop
+atomicPermTransPerm prxs (APTrans_Term p _) = p
 
 -- | Test that a permission equals that of a permission translation
 permTransPermEq :: PermTrans ctx a -> Mb ctx (ValuePerm a) -> Bool
@@ -449,7 +473,13 @@ extPermTrans (PTrans_Term p t) = PTrans_Term (extMb p) t
 
 -- | Extend the context of an atomic permission translation result
 extAtomicPermTrans :: AtomicPermTrans ctx a -> AtomicPermTrans (ctx :> tp) a
-extAtomicPermTrans = error "FIXME HERE NOW"
+extAtomicPermTrans (APTrans_LLVMField fld ptrans) =
+  APTrans_LLVMField (extMb fld) (extPermTrans ptrans)
+extAtomicPermTrans (APTrans_LLVMFree e) = APTrans_LLVMFree $ extMb e
+extAtomicPermTrans (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
+extAtomicPermTrans (APTrans_LifetimePerm p) = APTrans_LifetimePerm $ extMb p
+extAtomicPermTrans (APTrans_BVProp prop) = APTrans_BVProp $ extMb prop
+extAtomicPermTrans (APTrans_Term p t) = APTrans_Term (extMb p) t
 
 -- | Extend the context of a permission translation context
 extPermTransCtx :: PermTransCtx ctx ps -> PermTransCtx (ctx :> tp) ps
@@ -465,6 +495,43 @@ instance TypeTranslate (ValuePerm a) ctx (Either (PermTrans ctx a)
                                           (OpenTerm,
                                            OpenTerm -> PermTrans ctx a)) where
   tptranslate = error "FIXME HERE NOW"
+
+instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
+                                           (OpenTerm,
+                                            OpenTerm ->
+                                            AtomicPermTrans ctx a)) where
+  tptranslate [nuP| Perm_LLVMField fld |] =
+    tptranslate (fmap llvmFieldContents fld) >>= \eith ->
+    case eith of
+      Left ptrans -> return $ Left $ APTrans_LLVMField fld ptrans
+      Right (tp_term, mk_ptrans) ->
+        return $ Right (tp_term, APTrans_LLVMField fld . mk_ptrans)
+
+  tptranslate p@([nuP| Perm_LLVMArray (LLVMArrayPerm _ len _ flds _) |]) =
+    do tps <- mapM (translatePerm . fmap llvmFieldContents) (mbList flds)
+       len_term <- translateExpr len
+       return $ Right
+         (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
+          [len_term, tupleTypeOpenTerm tps],
+          APTrans_Term p)
+
+  tptranslate [nuP| Perm_LLVMFree e |] = return $ Left $ APTrans_LLVMFree e
+  tptranslate [nuP| Perm_LLVMFrame fp |] = return $ Left $ APTrans_LLVMFrame fp
+  tptranslate p@[nuP| Perm_LOwned _ _ |] =
+    return $ Left $ APTrans_LifetimePerm p
+  tptranslate p@[nuP| Perm_LContains _ |] =
+    return $ Left $ APTrans_LifetimePerm p
+
+  tptranslate p@([nuP| Perm_Fun
+                     (FunPerm ghosts args ret _ perms_in perms_out) |]) =
+    (piExprCtx (appendCruCtx (mbLift ghosts) (mbLift args)) $
+     piPermCtx (mbCombine perms_in) $ \_ ->
+      translateRetType (unCruType $ mbLift ret)
+      (mbCombine $ fmap mbValuePermsToDistPerms perms_out)) >>= \tp_term ->
+    return $ Right (tp_term, APTrans_Term p)
+
+  tptranslate [nuP| Perm_BVProp prop |] = return $ Left $ APTrans_BVProp prop
+
 
 -- | Translate a permission to a SAW type, converting 'Nothing' to unit
 translatePerm :: Mb ctx (ValuePerm a) -> TypeTransM ctx OpenTerm
@@ -499,6 +566,17 @@ lambdaPermTransForce x mb_p body_f =
       lambdaTransM x unitTypeOpenTerm (const $ body_f ptrans)
     Right (tp_term, mk_ptrans) ->
       lambdaTransM x tp_term (body_f . mk_ptrans)
+
+piPermTrans :: String -> Mb ctx (ValuePerm a) ->
+               (PermTrans ctx a -> TypeTransM ctx OpenTerm) ->
+               TypeTransM ctx OpenTerm
+piPermTrans _ [nuP| ValPerm_Eq mb_e |] body_f = body_f (PTrans_Eq mb_e)
+piPermTrans x mb_p body_f =
+  tptranslate mb_p >>= \eith ->
+  case eith of
+    Left ptrans -> body_f ptrans
+    Right (tp_term, mk_ptrans) ->
+      piTransM x tp_term (body_f . mk_ptrans)
 
 -- Translate a sequence of permissions into a nested pair type
 instance TypeTranslate (ValuePerms ps) ctx OpenTerm where
@@ -609,6 +687,10 @@ inExtImpTransM :: ExprTrans tp -> PermTrans (ctx :> tp) tp ->
 inExtImpTransM tp_trans perm_trans =
   withReader $ extPermTransInfo tp_trans perm_trans
 
+-- | Get most recently bound variable
+getTopVarM :: ImpTransM ext blocks ret args ps (ctx :> tp) (ExprTrans tp)
+getTopVarM = (\(_ :>: p) -> p) <$> itiExprCtx <$> ask
+
 -- | Get the top permission on the stack
 getTopPermM :: ImpTransM ext blocks ret args (ps :> tp) ctx (PermTrans ctx tp)
 getTopPermM = (\(_ :>: p) -> p) <$> itiPermStack <$> ask
@@ -684,6 +766,58 @@ withCatchHandlerM :: OpenTerm -> ImpTransM ext blocks ret args ps_out ctx a ->
                      ImpTransM ext blocks ret args ps_out ctx a
 withCatchHandlerM h = local (\info -> info { itiCatchHandler = h })
 
+-- | Run 'lambdaExprTrans' in the 'ImpTransM' monad
+lambdaExprTransI ::
+  String -> TypeRepr tp ->
+  ImpTransM ext blocks ret args ps_out (ctx :> tp) OpenTerm ->
+  ImpTransM ext blocks ret args ps_out ctx OpenTerm
+lambdaExprTransI x tp body =
+  do eith <- tpTransM (nuMultiTransM (const tp) >>= tptranslate)
+     case eith of
+       Left etrans -> inExtImpTransM etrans PTrans_True body
+       Right (tp_term, mk_etrans) ->
+         lambdaTransM x tp_term
+         (\z -> inExtImpTransM (mk_etrans z) PTrans_True body)
+
+-- | Run 'lambdaExprTransForce' in the 'ImpTransM' monad
+lambdaExprTransForceI ::
+  String -> TypeRepr tp ->
+  ImpTransM ext blocks ret args ps_out (ctx :> tp) OpenTerm ->
+  ImpTransM ext blocks ret args ps_out ctx OpenTerm
+lambdaExprTransForceI x tp body =
+  do eith <- tpTransM (nuMultiTransM (const tp) >>= tptranslate)
+     case eith of
+       Left etrans ->
+         lambdaTransM x unitTypeOpenTerm
+         (\_ -> inExtImpTransM etrans PTrans_True body)
+       Right (tp_term, mk_etrans) ->
+         lambdaTransM x tp_term
+         (\z -> inExtImpTransM (mk_etrans z) PTrans_True body)
+
+-- | Run 'lambdaPermTrans' in the 'ImpTransM' monad
+lambdaPermTransI ::
+  String -> Mb ctx (ValuePerm a) ->
+  (PermTrans ctx a -> ImpTransM ext blocks ret args ps_out ctx OpenTerm) ->
+  ImpTransM ext blocks ret args ps_out ctx OpenTerm
+lambdaPermTransI x p body_f =
+  tpTransM (tptranslate p) >>= \eith ->
+  case eith of
+    Left ptrans -> body_f ptrans
+    Right (tp_term, mk_ptrans) ->
+      lambdaTransM x tp_term (body_f . mk_ptrans)
+
+-- | Run 'lambdaPermTransForce' in the 'ImpTransM' monad
+lambdaPermTransForceI ::
+  String -> Mb ctx (ValuePerm a) ->
+  (PermTrans ctx a -> ImpTransM ext blocks ret args ps_out ctx OpenTerm) ->
+  ImpTransM ext blocks ret args ps_out ctx OpenTerm
+lambdaPermTransForceI x p body_f =
+  tpTransM (tptranslate p) >>= \eith ->
+  case eith of
+    Left ptrans -> lambdaTransM x unitTypeOpenTerm (const $ body_f ptrans)
+    Right (tp_term, mk_ptrans) ->
+      lambdaTransM x tp_term (body_f . mk_ptrans)
+
 
 -- | The typeclass for translating permission implications
 class ImplTranslate a res ext blocks ret args ps ctx | ctx a -> res where
@@ -750,8 +884,7 @@ itranslateSimplImpl _ [nuP| SImpl_IntroExists x (e :: PermExpr tp) p |] m =
        (mbMap2 subst (fmap singletonSubst e) p)
      let tp :: TypeRepr tp = knownRepr
      tp_trans <- itranslate $ nuMulti (mbToProxy e) $ const tp
-     tp_f <- tpTransM (lambdaExprTrans "x_introEx" tp $
-                       translatePerm $ mbCombine p)
+     tp_f <- lambdaExprTransI "x_introEx" tp $ itranslate $ mbCombine p
      e_trans <- exprTransToTerm <$> tpTransM (tptranslate e)
      withPermStackM id
        (\(ps :>: p_top) ->
@@ -808,13 +941,13 @@ itranslatePermImpl1 [nuP| Impl1_ElimOr x p1 p2 |]
      ptrans <- permTransToTerm <$> getTopPermM
      applyMultiTransM (return $ globalOpenTerm "Prelude.either")
        [ return tp1, return tp2, return tp_ret
-       , lambdaTransM "x_left" tp1
-         (\z ->
-           withPermStackM id ((:>: mkPermTrans p1 z) . mapRListTail) $
+       , lambdaPermTransForceI "x_left" p1
+         (\ptrans ->
+           withPermStackM id ((:>: ptrans) . mapRListTail) $
            itranslate $ mbCombine mb_impl1)
-       , lambdaTransM "x_right" tp2
-         (\z ->
-           withPermStackM id ((:>: mkPermTrans p2 z) . mapRListTail) $
+       , lambdaPermTransForceI "x_right" p2
+         (\ptrans ->
+           withPermStackM id ((:>: ptrans) . mapRListTail) $
            itranslate $ mbCombine mb_impl2)
        , return ptrans]
 
@@ -824,17 +957,15 @@ itranslatePermImpl1 [nuP| Impl1_ElimExists x (p :: Binding tp (ValuePerm a)) |]
   do assertTopPermM "Impl1_ElimExists" x (fmap ValPerm_Exists p)
      let tp :: TypeRepr tp = knownRepr
      tp_trans <- itranslate $ nuMulti (mbToProxy x) $ const tp
-     tp_f <- tpTransM (lambdaExprTrans "x_elimEx" tp $
-                       translatePerm $ mbCombine p)
-     ret_f <- lambdaTransM "x_elimEx" tp_trans $ const compReturnTypeM
+     tp_f <- lambdaExprTransForceI "x_elimEx" tp $ itranslate $ mbCombine p
+     ret_f <- lambdaExprTransForceI "x_elimEx" tp compReturnTypeM
      ptrans <- permTransToTerm <$> getTopPermM
      applyMultiTransM (return $ globalOpenTerm "Prelude.Sigma__rec")
        [ return tp_trans, return tp_f, return ret_f
-       , lambdaTransM "x1_elimEx" tp_trans
-         (\z1 ->
-           lambdaTransM "x2_elimEx" (applyOpenTerm tp_f z1) $ \z2 ->
-           inExtImpTransM (mkExprTrans tp z1)
-           (PTrans_Conj []) $
+       , lambdaExprTransForceI "x1_elimEx" tp
+         (getTopVarM >>= \z1 ->
+           lambdaTransM "x2_elimEx" (applyOpenTerm tp_f $
+                                     exprTransToTerm z1) $ \z2 ->
            withPermStackM id ((:>: mkPermTrans (mbCombine p) z2) . mapRListTail) $
            itranslate $ mbCombine mb_impl)
        , return ptrans ]
@@ -1066,6 +1197,12 @@ lambdaExprCtx CruCtxNil m = m
 lambdaExprCtx (CruCtxCons ctx tp) m =
   lambdaExprCtx ctx $ lambdaExprTrans "e" (unCruType tp) m
 
+piExprCtx :: CruCtx ctx2 -> TypeTransM (ctx :++: ctx2) OpenTerm ->
+             TypeTransM ctx OpenTerm
+piExprCtx CruCtxNil m = m
+piExprCtx (CruCtxCons ctx tp) m =
+  piExprCtx ctx $ piExprTrans "e" (unCruType tp) m
+
 -- | FIXME: documentation
 lambdaPermCtx :: Mb ctx (ValuePerms ps) ->
                  (PermTransCtx ctx ps -> TypeTransM ctx OpenTerm) ->
@@ -1073,6 +1210,14 @@ lambdaPermCtx :: Mb ctx (ValuePerms ps) ->
 lambdaPermCtx [nuP| ValPerms_Nil |] f = f MNil
 lambdaPermCtx [nuP| ValPerms_Cons ps p |] f =
   lambdaPermCtx ps $ \pctx -> lambdaPermTrans "p" p $ \ptrans ->
+  f (pctx :>: ptrans)
+
+piPermCtx :: Mb ctx (ValuePerms ps) ->
+             (PermTransCtx ctx ps -> TypeTransM ctx OpenTerm) ->
+             TypeTransM ctx OpenTerm
+piPermCtx [nuP| ValPerms_Nil |] f = f MNil
+piPermCtx [nuP| ValPerms_Cons ps p |] f =
+  piPermCtx ps $ \pctx -> piPermTrans "p" p $ \ptrans ->
   f (pctx :>: ptrans)
 
 -- | Build the return type for a function; FIXME: documentation

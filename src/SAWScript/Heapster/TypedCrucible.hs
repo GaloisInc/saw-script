@@ -1348,10 +1348,10 @@ tcEmitBlock blk =
 
 -- | Type-check a Crucible CFG
 tcCFG :: PermCheckExtC ext => CFG ext blocks inits ret ->
-         Closed (FunPerm ghosts inits ret) ->
+         Closed (FunPerm ghosts (CtxToRList inits) ret) ->
          TypedCFG ext (CtxCtxToRList blocks) ghosts (CtxToRList inits) ret
-tcCFG cfg [clP| FunPerm _ _ perms_in perms_out :: FunPerm ghosts args ret |] =
-  let ghosts = knownRepr :: CruCtx ghosts in
+tcCFG cfg [clP| FunPerm cl_ghosts _ _ _ perms_in perms_out |] =
+  let ghosts = unClosed cl_ghosts in
   flip evalState (emptyTopPermCheckState (handleReturnType $ cfgHandle cfg)
                   (cfgBlockMap cfg)) $
   do init_memb <- stLookupBlockID (cfgEntryBlockID cfg) <$> get

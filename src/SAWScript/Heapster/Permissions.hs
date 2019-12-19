@@ -521,8 +521,8 @@ data AtomicPerm (a :: CrucibleType) where
   Perm_LContains :: PermExpr LifetimeType -> AtomicPerm LifetimeType
 
   -- | A function permission
-  Perm_Fun :: FunPerm ghosts args ret ->
-              AtomicPerm (FunctionHandleType args ret)
+  Perm_Fun :: FunPerm ghosts (CtxToRList cargs) ret ->
+              AtomicPerm (FunctionHandleType cargs ret)
 
   -- | An LLVM permission that asserts a proposition about bitvectors
   Perm_BVProp :: (1 <= w, KnownNat w) => BVProp w ->
@@ -645,10 +645,10 @@ arrayStrideBytes = helper Proxy where
 -- called. One ghost variable can optionally be a lifetime that represents the
 -- lifetime of the function call.
 data FunPerm ghosts args ret where
-  FunPerm :: KnownRepr CruCtx ghosts => Proxy args ->
-             Maybe (Member (ghosts :++: CtxToRList args) LifetimeType) ->
-             MbValuePerms (ghosts :++: CtxToRList args) ->
-             MbValuePerms (ghosts :++: CtxToRList args :> ret) ->
+  FunPerm :: CruCtx ghosts -> CruCtx args -> CruType ret ->
+             Maybe (Member (ghosts :++: args) LifetimeType) ->
+             MbValuePerms (ghosts :++: args) ->
+             MbValuePerms (ghosts :++: args :> ret) ->
              FunPerm ghosts args ret
 
 
@@ -723,10 +723,9 @@ instance Eq (ValuePerms as) where
 -- | Test if function permissions with different ghost argument lists are equal
 funPermEq :: FunPerm ghosts1 args ret -> FunPerm ghosts2 args ret ->
              Maybe (ghosts1 :~: ghosts2)
-funPermEq (FunPerm _ v1 perms_in1 perms_out1 :: FunPerm ghosts1 args ret)
-  (FunPerm _ v2 perms_in2 perms_out2 :: FunPerm ghosts2 args ret)
-  | Just Refl <-
-      testEquality (knownRepr :: CruCtx ghosts1) (knownRepr :: CruCtx ghosts2)
+funPermEq (FunPerm ghosts1 _ _ v1 perms_in1 perms_out1)
+  (FunPerm ghosts2 _ _ v2 perms_in2 perms_out2)
+  | Just Refl <- testEquality ghosts1 ghosts2
   , v1 == v2 && perms_in1 == perms_in2 && perms_out1 == perms_out2
   = Just Refl
 funPermEq _ _ = Nothing
@@ -1459,8 +1458,9 @@ instance SubstVar s m => Substable s (LLVMArrayBorrow w) m where
     RangeBorrow <$> genSubst s off <*> genSubst s len
 
 instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
-  genSubst s [nuP| FunPerm prx maybe_l perms_in perms_out |] =
-    FunPerm (mbLift prx) <$> genSubst s maybe_l
+  genSubst s [nuP| FunPerm ghosts args ret maybe_l perms_in perms_out |] =
+    FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
+    <$> genSubst s maybe_l
     <*> genSubst s perms_in <*> genSubst s perms_out
 
 instance SubstVar PermVarSubst m =>
@@ -1923,9 +1923,10 @@ instance AbstractVars (DistPerms ps) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 x `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 instance AbstractVars (FunPerm ghosts args ret) where
-  abstractPEVars ns1 ns2 (FunPerm prx maybe_l perms_in perms_out) =
+  abstractPEVars ns1 ns2 (FunPerm ghosts args ret maybe_l perms_in perms_out) =
     absVarsReturnH ns1 ns2
-    ($(mkClosed [| FunPerm |]) `clApply` toClosed prx)
+    ($(mkClosed [| FunPerm |])
+     `clApply` toClosed ghosts `clApply` toClosed args `clApply` toClosed ret)
     `clMbMbApplyM` abstractPEVars ns1 ns2 maybe_l
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms_in
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms_out
