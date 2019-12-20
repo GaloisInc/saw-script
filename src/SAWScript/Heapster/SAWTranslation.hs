@@ -461,6 +461,12 @@ atomicPermTransToTerm (APTrans_BVProp _) = Nothing
 permTransToTermForce :: PermTrans ctx a -> OpenTerm
 permTransToTermForce = maybe unitOpenTerm id . permTransToTerm
 
+-- | Map a context of perm translations to a list of 'OpenTerm's, dropping the
+-- "invisible" ones whose permissions are translated to 'Nothing'
+permCtxToTerms :: PermTransCtx ctx tps -> [OpenTerm]
+permCtxToTerms =
+  catMaybes . mapRListToList . mapMapRList (Constant.Constant . permTransToTerm)
+
 -- | Extract out the permission of a permission translation result
 permTransPerm :: MapRList Proxy ctx -> PermTrans ctx a -> Mb ctx (ValuePerm a)
 permTransPerm _ (PTrans_Eq e) = fmap ValPerm_Eq e
@@ -649,7 +655,7 @@ piPermCtx [nuP| ValPerms_Cons ps p |] f =
   piPermCtx ps $ \pctx -> piPermTrans "p" p $ \ptrans ->
   f (pctx :>: ptrans)
 
--- Translate a sequence of permissions into a nested pair type
+-- Translate a sequence of permissions into a nested tuple type
 instance TypeTranslate (ValuePerms ps) ctx OpenTerm where
   tptranslate ps = tupleTypeOpenTerm <$> helper ps where
     helper :: Mb ctx (ValuePerms ps') -> TypeTransM ctx [OpenTerm]
@@ -1103,12 +1109,6 @@ instance ImplTranslate (TypedEntryID blocks args' ghosts) OpenTerm
   itranslate mb_entryID =
     translateTypedEntryID (mbLift mb_entryID) <$> itiBlockMapTrans <$> ask
 
--- | Map a context of perm translations to a list of 'OpenTerm's, dropping the
--- "invisible" ones whose permissions are translated to 'Nothing'
-permCtxToTerms :: PermTransCtx ctx tps -> [OpenTerm]
-permCtxToTerms =
-  catMaybes . mapRListToList . mapMapRList (Constant.Constant . permTransToTerm)
-
 -- | Apply the translation of a function-like construct (i.e., a
 -- 'TypedJumpTarget' or 'TypedFnHandle') to the pure plus impure translations of
 -- its arguments, given as 'DistPerms', which should match the current
@@ -1155,7 +1155,7 @@ itranslateStmt [nuP| TypedCall freg ghosts args l ps_in ps_out |] m =
   do f <- permTransToTerm <$> itranslate freg
      let ctx_in = _
      fret <- translateApply "TypedCall" f ctx_in ps_in
-     FIXME HERE NOW: unpack fret as a tuple of ExprTranss and PermTranss
+     FIXME HERE: unpack fret as a Sigma of an ExprTrans and a tuple of PermTranss
 -}
 
 itranslateStmt stmt@[nuP| BeginLifetime |] m =
@@ -1192,7 +1192,20 @@ itranslateLLVMStmt _ _ = error "FIXME HERE NOW"
 instance NuMatchingExtC ext =>
          ImplTranslate (TypedRet ret ps) OpenTerm
          ext blocks ret args ps ctx where
-  itranslate [nuP| TypedRet r perms |] = error "FIXME HERE NOW"
+  itranslate [nuP| TypedRet ret r mb_perms |] =
+    do let perms =
+             mbMap2
+             (\reg mbps -> varSubst (singletonVarSubst $ typedRegVar reg) mbps)
+             r mb_perms
+       assertPermStackEqM "TypedRet" perms
+       r_trans <- exprTransToTermForce <$> tpTransM (tptranslate r)
+       ret_trans <- tpTransM $ translateType $ fmap unCruType ret
+       pctx <- itiPermStack <$> ask
+       tp_f <- lambdaExprTransForceI "r" (unCruType $ mbLift ret) $
+         tpTransM $ tptranslate $ mbCombine mb_perms
+       return $ ctorOpenTerm "Prelude.exists"
+         [ret_trans, tp_f, r_trans,
+          tupleOpenTerm (permCtxToTerms pctx)]
 
 instance NuMatchingExtC ext =>
          ImplTranslateF (TypedRet ret) ext blocks ret args where

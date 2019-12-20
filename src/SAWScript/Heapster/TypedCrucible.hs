@@ -390,7 +390,8 @@ llvmDeleteFramePermFun (TypedReg fp) _  = deleteLLVMFrame fp
 ----------------------------------------------------------------------
 
 -- | Typed return argument
-data TypedRet ret ps = TypedRet (TypedReg ret) (DistPerms ps)
+data TypedRet ret ps =
+  TypedRet (CruType ret) (TypedReg ret) (Binding ret (DistPerms ps))
 
 
 -- | Typed Crucible block termination statements
@@ -1270,12 +1271,14 @@ tcTermStmt ctx (Br reg tgt1 tgt2) =
 tcTermStmt ctx (Return reg) =
   let treg = tcReg ctx reg in
   gget >>>= \st ->
+  top_get >>>= \top_st ->
   case stRetPerms st of
     Some (RetPerms mb_ret_perms) ->
       let ret_perms =
             varSubst (singletonVarSubst $ typedRegVar treg) mb_ret_perms in
       greturn $ TypedReturn $
-      runImplM CruCtxNil (stCurPerms st) (TypedRet treg ret_perms) $
+      runImplM CruCtxNil (stCurPerms st) (TypedRet (stRetType top_st)
+                                          treg mb_ret_perms) $
       proveVarsImpl $ distPermsToExDistPerms ret_perms
 tcTermStmt ctx (ErrorStmt reg) = greturn $ TypedErrorStmt $ tcReg ctx reg
 tcTermStmt _ tstmt =
