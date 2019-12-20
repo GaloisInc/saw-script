@@ -546,8 +546,7 @@ data ValuePerm (a :: CrucibleType) where
                     Binding a (ValuePerm b) ->
                     ValuePerm b
 
-  -- | A recursive / least fixed-point permission, which is modified by a
-  -- read-write modality
+  -- | A recursive / least fixed-point permission
   ValPerm_Mu :: Binding (ValuePerm a) (ValuePerm a) -> ValuePerm a
 
   -- | A value permission variable, for use in recursive permissions
@@ -957,6 +956,11 @@ distPermsToValuePerms (DistPermsCons dperms _ p) =
 mbDistPermsToValuePerms :: Mb ctx (DistPerms ps) -> Mb ctx (ValuePerms ps)
 mbDistPermsToValuePerms = fmap distPermsToValuePerms
 
+mbDistPermsToProxies :: Mb ctx (DistPerms ps) -> MapRList Proxy ps
+mbDistPermsToProxies [nuP| DistPermsNil |] = MNil
+mbDistPermsToProxies [nuP| DistPermsCons ps _ _ |] =
+  mbDistPermsToProxies ps :>: Proxy
+
 -- | Extract the variables in a 'DistPerms'
 distPermsVars :: DistPerms ps -> MapRList Name ps
 distPermsVars DistPermsNil = MNil
@@ -1029,81 +1033,67 @@ atomicPermIsCopyable (Perm_LContains _) = True
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
 
--- | Generic function to add a lifetime to a permission
-class AddLifetime a where
-  addLifetime :: PermExpr LifetimeType -> a -> a
+-- | Generic function to modify read/write modalities and/or lifetimes
+class ModifyModalities a where
+  modifyModalities :: (RWModality -> RWModality) ->
+                      ([PermExpr LifetimeType] -> [PermExpr LifetimeType]) ->
+                      a -> a
 
-instance AddLifetime (DistPerms ps) where
-  addLifetime l DistPermsNil = DistPermsNil
-  addLifetime l (DistPermsCons perms x p) =
-    (DistPermsCons (addLifetime l perms) x (addLifetime l p))
+instance ModifyModalities (DistPerms ps) where
+  modifyModalities f1 f2 DistPermsNil = DistPermsNil
+  modifyModalities f1 f2 (DistPermsCons perms x p) =
+    (DistPermsCons (modifyModalities f1 f2 perms) x (modifyModalities f1 f2 p))
 
-instance AddLifetime (ValuePerm a) where
-  addLifetime _ p@(ValPerm_Eq _) = p
-  addLifetime l (ValPerm_Or p1 p2) =
-    ValPerm_Or (addLifetime l p1) (addLifetime l p2)
-  addLifetime l (ValPerm_Exists mb_p) =
-    ValPerm_Exists $ fmap (addLifetime l) mb_p
-  addLifetime l (ValPerm_Mu mb_p) = ValPerm_Mu $ fmap (addLifetime l) mb_p
-  addLifetime l p@(ValPerm_Var _) = p
-  addLifetime l (ValPerm_Conj ps) =
-    ValPerm_Conj $ map (addLifetime l) ps
+instance ModifyModalities (ValuePerm a) where
+  modifyModalities _ _ p@(ValPerm_Eq _) = p
+  modifyModalities f1 f2 (ValPerm_Or p1 p2) =
+    ValPerm_Or (modifyModalities f1 f2 p1) (modifyModalities f1 f2 p2)
+  modifyModalities f1 f2 (ValPerm_Exists mb_p) =
+    ValPerm_Exists $ fmap (modifyModalities f1 f2) mb_p
+  modifyModalities f1 f2 (ValPerm_Mu mb_p) =
+    ValPerm_Mu $ fmap (modifyModalities f1 f2) mb_p
+  modifyModalities _ _ p@(ValPerm_Var _) = p
+  modifyModalities f1 f2 (ValPerm_Conj ps) =
+    ValPerm_Conj $ map (modifyModalities f1 f2) ps
 
-instance AddLifetime (AtomicPerm a) where
-  addLifetime l (Perm_LLVMField fp) = Perm_LLVMField $ addLifetime l fp
-  addLifetime l (Perm_LLVMArray ap) = Perm_LLVMArray $ addLifetime l ap
-  addLifetime l p@(Perm_LLVMFree _) = p
-  addLifetime l p@(Perm_LLVMFrame _) = p
-  addLifetime l p@(Perm_LOwned _ _) = p
-  addLifetime l p@(Perm_LContains _) = p
-  addLifetime l p@(Perm_Fun _) = p
-  addLifetime l p@(Perm_BVProp _) = p
+instance ModifyModalities (AtomicPerm a) where
+  modifyModalities f1 f2 (Perm_LLVMField fp) =
+    Perm_LLVMField $ modifyModalities f1 f2 fp
+  modifyModalities f1 f2 (Perm_LLVMArray ap) =
+    Perm_LLVMArray $ modifyModalities f1 f2 ap
+  modifyModalities _ _ p@(Perm_LLVMFree _) = p
+  modifyModalities _ _ p@(Perm_LLVMFrame _) = p
+  modifyModalities _ _ p@(Perm_LOwned _ _) = p
+  modifyModalities _ _ p@(Perm_LContains _) = p
+  modifyModalities _ _ p@(Perm_Fun _) = p
+  modifyModalities _ _ p@(Perm_BVProp _) = p
 
-instance AddLifetime (LLVMFieldPerm w) where
-  addLifetime l fp | elem l (llvmFieldLifetimes fp) = fp
-  addLifetime l fp = fp { llvmFieldLifetimes = l : llvmFieldLifetimes fp }
+instance ModifyModalities (LLVMFieldPerm w) where
+  modifyModalities f1 f2 fp =
+    fp { llvmFieldRW = f1 (llvmFieldRW fp),
+         llvmFieldLifetimes = f2 (llvmFieldLifetimes fp),
+         llvmFieldContents = modifyModalities f1 f2 (llvmFieldContents fp) }
 
-instance AddLifetime (LLVMArrayPerm w) where
-  addLifetime l ap =
-    ap { llvmArrayFields = map (addLifetime l) (llvmArrayFields ap) }
+instance ModifyModalities (LLVMArrayPerm w) where
+  modifyModalities f1 f2 ap =
+    ap { llvmArrayFields = map (modifyModalities f1 f2) (llvmArrayFields ap) }
 
+-- | Add an element to a list if it is not present
+consIfMissing :: Eq b => b -> [b] -> [b]
+consIfMissing b bs | elem b bs = bs
+consIfMissing b bs = b:bs
 
--- | Generic function to replace all writes with reads in a permission
-class MakeReadOnly a where
-  makeReadOnly :: a -> a
+-- | Add a single lifetime to a permission
+addLifetime :: ModifyModalities a => PermExpr LifetimeType -> a -> a
+addLifetime l = modifyModalities id (consIfMissing l) where
 
-instance MakeReadOnly (DistPerms ps) where
-  makeReadOnly DistPermsNil = DistPermsNil
-  makeReadOnly (DistPermsCons perms x p) =
-    DistPermsCons (makeReadOnly perms) x (makeReadOnly p)
+-- | Remove a single lifetime to a permission
+remLifetime :: ModifyModalities a => PermExpr LifetimeType -> a -> a
+remLifetime l = modifyModalities id (delete l)
 
-instance MakeReadOnly (ValuePerm a) where
-  makeReadOnly p@(ValPerm_Eq _) = p
-  makeReadOnly (ValPerm_Or p1 p2) =
-    ValPerm_Or (makeReadOnly p1) (makeReadOnly p2)
-  makeReadOnly (ValPerm_Exists p) = ValPerm_Exists (fmap makeReadOnly p)
-  makeReadOnly (ValPerm_Mu p) = ValPerm_Mu (fmap makeReadOnly p)
-  makeReadOnly p@(ValPerm_Var _) = p
-  makeReadOnly (ValPerm_Conj ps) = ValPerm_Conj $ map makeReadOnly ps
-
-instance MakeReadOnly (AtomicPerm a) where
-  makeReadOnly (Perm_LLVMField fp) = Perm_LLVMField $ makeReadOnly fp
-  makeReadOnly (Perm_LLVMArray ap) = Perm_LLVMArray $ makeReadOnly ap
-  makeReadOnly p@(Perm_LLVMFree _) = p
-  makeReadOnly p@(Perm_LLVMFrame _) = p
-  makeReadOnly p@(Perm_LOwned _ _) = p
-  makeReadOnly p@(Perm_LContains _) = p
-  makeReadOnly p@(Perm_Fun _) = p
-  makeReadOnly p@(Perm_BVProp _) = p
-
-instance MakeReadOnly (LLVMFieldPerm w) where
-  makeReadOnly fp =
-    fp { llvmFieldRW = Read,
-         llvmFieldContents = makeReadOnly (llvmFieldContents fp) }
-
-instance MakeReadOnly (LLVMArrayPerm w) where
-  makeReadOnly ap =
-    ap { llvmArrayFields = map makeReadOnly (llvmArrayFields ap) }
+-- | Make a permission read-only
+makeReadOnly :: ModifyModalities a => a -> a
+makeReadOnly = modifyModalities (const Read) id
 
 
 -- | Compute the minimal permissions required to end a lifetime that contains
@@ -1113,7 +1103,7 @@ instance MakeReadOnly (LLVMArrayPerm w) where
 -- permissions has the same translation as the input permissions, so the
 -- translation of a mapping from @minLtEndPerms p@ to @p@ is just the identity.
 minLtEndPerms :: PermExpr LifetimeType -> DistPerms ps -> DistPerms ps
-minLtEndPerms l ps = addLifetime l $ makeReadOnly ps
+minLtEndPerms l = modifyModalities (const Read) (consIfMissing l)
 
 
 ----------------------------------------------------------------------

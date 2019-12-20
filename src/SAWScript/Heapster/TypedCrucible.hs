@@ -914,7 +914,7 @@ stmtProvePerm (TypedReg x) mb_p =
 resolveConstant :: KnownRepr TypeRepr tp => TypedReg tp ->
                    StmtPermCheckM ext cblocks blocks ret args ps ps
                    (Maybe Integer)
-resolveConstant = error "FIXME HERE: resolveConstant"
+resolveConstant = error "FIXME HERE NOW: resolveConstant"
 
 
 -- | Emit a statement in the current statement sequence, where the supplied
@@ -1008,10 +1008,6 @@ tcBlockID :: BlockID cblocks args ->
              (Member blocks (CtxToRList args))
 tcBlockID blkID = stLookupBlockID blkID <$> top_get
 
--- | Translate a 'TypedExpr' to a permission expression, if possible
-exprToPermExpr :: TypedExpr ext tp -> Maybe (PermExpr tp)
-exprToPermExpr _ = error "FIXME HERE: exprToPermExpr!"
-
 -- | Translate a Crucible expression
 tcExpr :: PermCheckExtC ext => CtxTrans ctx -> Expr ext ctx tp ->
           StmtPermCheckM ext cblocks blocks ret args ps ps (TypedExpr ext tp)
@@ -1036,7 +1032,10 @@ tcEmitStmt ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = tcEmitLLVMStmt Proxy ctx loc stmt_ext
 
-tcEmitStmt _ _ _ = error "FIXME: tcEmitStmt!"
+tcEmitStmt ctx loc (CallHandle ret freg args_ctx args) =
+  error "FIXME HERE: type-check function calls"
+
+tcEmitStmt _ _ _ = error "tcEmitStmt: unsupported statement"
 
 
 -- | Translate a Crucible assignment of an LLVM expression
@@ -1176,7 +1175,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
 
 tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME: tcEmitLLVMStmt"
 
--- FIXME HERE: need to handle PtrEq, PtrLe, PtrAddOffset, and PtrSubtract
+-- FIXME HERE NOW: need to handle PtrEq, PtrLe, PtrAddOffset, and PtrSubtract
 
 
 ----------------------------------------------------------------------
@@ -1385,10 +1384,3 @@ tcCFG cfg [clP| FunPerm cl_ghosts _ _ _ perms_in perms_out |] =
     visit cfg (SCC (Some blkID) comps) =
       tcEmitBlock (getBlock blkID (cfgBlockMap cfg)) >>
       mapM_ (visit cfg) comps
-
-{-
--- FIXME HERE NOW:
--- + translate -> SAW
--- + handle function calls and a function call context
--- + top-level interface / add to interpreter
--}

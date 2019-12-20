@@ -37,7 +37,7 @@ import Data.Binding.Hobbits
 import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
 import qualified Data.Binding.Hobbits.NameMap as NameMap
 
-import Data.Parameterized.Context hiding ((:>), empty, take, view)
+import Data.Parameterized.Context hiding ((:>), empty, take, view, zipWith)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
 
@@ -518,6 +518,71 @@ extPermTransCtx = mapMapRList extPermTrans
 consPermTransCtx :: PermTransCtx ctx ps -> PermTrans ctx a ->
                     PermTransCtx ctx (ps :> a)
 consPermTransCtx = (:>:)
+
+-- | Remove a lifetime from a 'PermTrans'. This is the same as applying
+-- 'remLifetime' to the 'permTransPerm' of a 'PermTrans'.
+permTransRemLifetime :: Mb ctx (PermExpr LifetimeType) -> PermTrans ctx a ->
+                        PermTrans ctx a
+permTransRemLifetime _ p@(PTrans_Eq _) = p
+permTransRemLifetime mb_l (PTrans_Conj ps) =
+    PTrans_Conj $ map (atomicPermTransRemLifetime mb_l) ps
+permTransRemLifetime mb_l (PTrans_Term p t) =
+    PTrans_Term (mbMap2 remLifetime mb_l p) t
+
+-- | Like 'permTransRemLifetime' but for atomic permission translations
+atomicPermTransRemLifetime :: Mb ctx (PermExpr LifetimeType) ->
+                              AtomicPermTrans ctx a ->
+                              AtomicPermTrans ctx a
+atomicPermTransRemLifetime mb_l (APTrans_LLVMField fld ptrans) =
+  APTrans_LLVMField (mbMap2 remLifetime mb_l fld) $
+  permTransRemLifetime mb_l ptrans
+atomicPermTransRemLifetime mb_l (APTrans_LLVMArray ap t) =
+  APTrans_LLVMArray (mbMap2 remLifetime mb_l ap) t
+atomicPermTransRemLifetime _ p@(APTrans_LLVMFree _) = p
+atomicPermTransRemLifetime _ p@(APTrans_LLVMFrame _) = p
+atomicPermTransRemLifetime _ p@(APTrans_LifetimePerm _) = p
+atomicPermTransRemLifetime _ p@(APTrans_Fun _ _) = p
+atomicPermTransRemLifetime _ p@(APTrans_BVProp _) = p
+
+-- | Map a 'PermTrans' to the permission it should have after a lifetime has
+-- ended, undoing 'minLtEndPerms'. The first argument should have associated
+-- permissions that equal 'minLtEndPerms' of the second. This operation does not
+-- actually modify the translation itself, just changes the associated
+-- permissions.
+permTransEndLifetime :: PermTrans ctx a -> Mb ctx (ValuePerm a) ->
+                        PermTrans ctx a
+permTransEndLifetime p@(PTrans_Eq _) _ = p
+permTransEndLifetime (PTrans_Conj ptranss) [nuP| ValPerm_Conj ps |] =
+  PTrans_Conj $ zipWith atomicPermTransEndLifetime ptranss (mbList ps)
+permTransEndLifetime (PTrans_Term _ t) p2 = PTrans_Term p2 t
+permTransEndLifetime _ _ =
+  error "permTransEndLifetime: permissions don't agree!"
+
+-- | Like 'permTransEndLifetime' but for atomic permission translations
+atomicPermTransEndLifetime :: AtomicPermTrans ctx a -> Mb ctx (AtomicPerm a) ->
+                              AtomicPermTrans ctx a
+atomicPermTransEndLifetime (APTrans_LLVMField
+                            _ ptrans) [nuP| Perm_LLVMField fld |] =
+  APTrans_LLVMField fld $
+  permTransEndLifetime ptrans (fmap llvmFieldContents fld)
+atomicPermTransEndLifetime (APTrans_LLVMArray
+                            _ t) [nuP| Perm_LLVMArray ap |] =
+  APTrans_LLVMArray ap t
+atomicPermTransEndLifetime p@(APTrans_LLVMFree _) _ = p
+atomicPermTransEndLifetime p@(APTrans_LLVMFrame _) _ = p
+atomicPermTransEndLifetime p@(APTrans_LifetimePerm _) _ = p
+atomicPermTransEndLifetime p@(APTrans_Fun _ _) _ = p
+atomicPermTransEndLifetime p@(APTrans_BVProp _) _ = p
+atomicPermTransEndLifetime _ _ =
+  error "atomicPermTransEndLifetime: permissions don't agree!"
+
+
+-- | Apply 'permTransEndLifetime' to a 'PermTransCtx'
+permCtxEndLifetime :: PermTransCtx ctx ps -> Mb ctx (DistPerms ps) ->
+                      PermTransCtx ctx ps
+permCtxEndLifetime MNil _ = MNil
+permCtxEndLifetime (ptranss :>: ptrans) [nuP| DistPermsCons perms _ p |] =
+  permCtxEndLifetime ptranss perms :>: permTransEndLifetime ptrans p
 
 -- [| p :: ValuePerm |] = type of the impl translation of reg with perms p
 instance TypeTranslate (ValuePerm a) ctx (Either (PermTrans ctx a)
@@ -1166,7 +1231,15 @@ itranslateStmt stmt@[nuP| BeginLifetime |] m =
   m
 
 itranslateStmt stmt@[nuP| EndLifetime l ps ps_lts |] m =
-  error "FIXME HERE NOW: should be the identity on ps and ps_lts except for the operation on the permissions"
+  withPermStackM mapRListTail
+  (\pctx ->
+    let (pctx_ps, pctx_ps_lts) =
+          splitMapRList Proxy (mbDistPermsToProxies ps_lts)
+          (mapRListTail pctx) in
+    appendMapRList
+    (permCtxEndLifetime pctx_ps ps)
+    (mapMapRList (permTransRemLifetime $ fmap PExpr_Var l) pctx_ps_lts))
+  m
 
 itranslateStmt [nuP| TypedAssert e _ |] m =
   applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
