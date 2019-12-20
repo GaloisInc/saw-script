@@ -688,7 +688,7 @@ evalSame sym t v1 v2 =
 doAssert :: Eval p => Opts -> S p -> (String, Prop p) -> IO ()
 doAssert opts s (msg,p) =
   do pr <- evalProp opts p s
-     assert (optsSym opts) pr (AssertFailureSimError msg)
+     assert (optsSym opts) pr (AssertFailureSimError msg "")
 
 
 --------------------------------------------------------------------------------
@@ -1144,11 +1144,12 @@ checkOverlaps sym = check
        opt2 <- bvUle sym x2 y1
        opt3 <- bvUle sym y2 x1
        ok <- orPred sym opt1 =<< orPred sym opt2 opt3
-       assert sym ok $ AssertFailureSimError $
-         unlines [ "Potentially aliased pointers:"
-                 , "*** " ++ show (ppPtr p1)
-                 , "*** " ++ show (ppPtr q1)
-                 ]
+       let msg = unlines
+             [ "Potentially aliased pointers:"
+             , "*** " ++ show (ppPtr p1)
+             , "*** " ++ show (ppPtr q1)
+             ]
+       assert sym ok $ AssertFailureSimError msg ""
 
 -- | Use a specification to replace the execution of a function.
 overrideMode :: Specification -> Opts -> State -> IO State
