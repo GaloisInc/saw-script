@@ -213,16 +213,16 @@ notEqual ::
 notEqual cond opts loc cc sc spec expected actual = do
   prettyLLVMVal      <- ppLLVMVal cc actual
   prettySetupLLVMVal <- ppSetupValueAsLLVMVal opts cc sc spec expected
-  pure $
-    Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
-      [ "Equality " ++ stateCond cond
-      , "Expected value (as a SAW value): "
-      , show (MS.ppSetupValue expected)
-      , "Expected value (as a Crucible value): "
-      , show prettySetupLLVMVal
-      , "Actual value: "
-      , show prettyLLVMVal
-      ]
+  let msg = unlines
+        [ "Equality " ++ stateCond cond
+        , "Expected value (as a SAW value): "
+        , show (MS.ppSetupValue expected)
+        , "Expected value (as a Crucible value): "
+        , show prettySetupLLVMVal
+        , "Actual value: "
+        , show prettyLLVMVal
+        ]
+  pure $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
 ------------------------------------------------------------------------
 
@@ -716,12 +716,13 @@ enforceDisjointness loc ss =
                     sym Crucible.PtrWidth
                     p psz'
                     q qsz'
-             addAssert c $ Crucible.SimError loc $
-               Crucible.AssertFailureSimError $
-                 "Memory regions not disjoint: "
+             let msg =
+                   "Memory regions not disjoint: "
                    ++ "(base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ show psz ++ ")"
                    ++ " and "
                    ++ "(base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ show qsz ++ ")"
+             addAssert c $ Crucible.SimError loc $
+               Crucible.AssertFailureSimError msg ""
 
         | (LLVMAllocSpec _mut _pty psz ploc, p) : ps <- tails memsRW
         , (LLVMAllocSpec _mut _qty qsz qloc, q) <- ps ++ memsRO
@@ -837,11 +838,12 @@ assignVar cc loc var val =
   do old <- OM (setupValueSub . at var <<.= Just val)
      for_ old $ \val' ->
        do p <- liftIO (equalValsPred cc (Crucible.ptrToPtrVal val') (Crucible.ptrToPtrVal val))
-          addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines
-            [ "The following pointers had to alias, but they didn't:"
-            , "  " ++ show (Crucible.ppPtr val)
-            , "  " ++ show (Crucible.ppPtr val')
-            ]
+          let msg = unlines
+                [ "The following pointers had to alias, but they didn't:"
+                , "  " ++ show (Crucible.ppPtr val)
+                , "  " ++ show (Crucible.ppPtr val')
+                ]
+          addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
 
 ------------------------------------------------------------------------
 
@@ -1054,11 +1056,12 @@ matchTerm sc cc loc prepost real expect =
        _ ->
          do t <- liftIO $ scEq sc real expect
             p <- liftIO $ resolveSAWPred cc t
-            addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError $ unlines $
-              [ "Literal equality " ++ stateCond prepost
-              , "Expected term: " ++ prettyTerm expect
-              , "Actual term:   " ++ prettyTerm real
-              ]
+            let msg = unlines $
+                  [ "Literal equality " ++ stateCond prepost
+                  , "Expected term: " ++ prettyTerm expect
+                  , "Actual term:   " ++ prettyTerm real
+                  ]
+            addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
   where prettyTerm = show . ppTermDepth 20
 
 
@@ -1151,7 +1154,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
            sym
            assertion_tree
          addAssert pred_ $ Crucible.SimError loc $
-           Crucible.AssertFailureSimError $ show $ PP.vcat $ summarizeBadLoad
+           Crucible.AssertFailureSimError (show $ PP.vcat $ summarizeBadLoad) ""
          pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val
        W4.Err _err -> do
          -- When we have a concrete failure, we do a little more computation to
@@ -1201,7 +1204,7 @@ learnEqual opts sc cc spec loc prepost v1 v2 = do
   (_, val2) <- resolveSetupValueLLVM opts cc sc spec v2
   p         <- liftIO (equalValsPred cc val1 val2)
   let name = "equality " ++ stateCond prepost
-  addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError name))
+  addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -1216,7 +1219,7 @@ learnPred sc cc loc prepost t =
   do s <- OM (use termSub)
      u <- liftIO $ scInstantiateExt sc s t
      p <- liftIO $ resolveSAWPred cc u
-     addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost)))
+     addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost) ""))
 
 ------------------------------------------------------------------------
 
