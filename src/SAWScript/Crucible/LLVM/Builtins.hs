@@ -717,32 +717,34 @@ registerOverride ::
   W4.ProgramLoc              ->
   [MS.CrucibleMethodSpecIR (LLVM arch)]     ->
   Crucible.OverrideSim (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret ()
-registerOverride opts cc _ctx top_loc cs = do
+registerOverride opts cc sim_ctx top_loc cs = do
   let sym = cc^.ccBackend
   sc <- CrucibleSAW.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
   let fstr = (head cs)^.csName
       fsym = L.Symbol fstr
       llvmctx = cc^.ccLLVMContext
-      matches (Crucible.LLVMHandleInfo _ h) =
-        matchingStatics (L.Symbol (Text.unpack (W4.functionName (Crucible.handleName h)))) fsym
+      mvar = Crucible.llvmMemVar llvmctx
+      halloc = Crucible.simHandleAllocator sim_ctx
+      matches dec = matchingStatics (L.decName dec) fsym
   liftIO $
     printOutLn opts Info $ "Registering overrides for `" ++ fstr ++ "`"
-  case filter matches (Map.elems (llvmctx ^. Crucible.symbolMap)) of
+
+  case filter matches (cc ^. ccLLVMModuleAST . to Crucible.allModuleDeclares) of
     [] -> fail $ "Couldn't find declaration for `" ++ fstr ++ "` when registering override for it."
-    -- LLVMHandleInfo constructor has two existential type arguments,
-    -- which are bound here. h :: FnHandle args' ret'
-    his -> forM_ his $ \(Crucible.LLVMHandleInfo _ h) -> do
-      -- TODO: check that decl' matches (csDefine cs)
-      let retType = Crucible.handleReturnType h
-      let hName = Crucible.handleName h
-      liftIO $
-        printOutLn opts Info $ "  variant `" ++ show hName ++ "`"
-      Crucible.bindFnHandle h
-        $ Crucible.UseOverride
-        $ Crucible.mkOverride'
-            hName
-            retType
-            (methodSpecHandler opts sc cc top_loc cs h)
+    (d:ds) ->
+      Crucible.llvmDeclToFunHandleRepr' d $ \argTypes retType ->
+        do let fn_name = W4.functionNameFromText $ Text.pack fstr
+           h <- liftIO $ Crucible.mkHandle' halloc fn_name argTypes retType
+           Crucible.bindFnHandle h
+             $ Crucible.UseOverride
+             $ Crucible.mkOverride' fn_name retType
+             $ methodSpecHandler opts sc cc top_loc cs h
+           mem <- Crucible.readGlobal mvar
+           let bindPtr m decl =
+                 do printOutLn opts Info $ "  variant `" ++ show (L.decName decl) ++ "`"
+                    Crucible.bindLLVMFunPtr sym decl h m
+           mem' <- liftIO $ foldM bindPtr mem (d:ds)
+           Crucible.writeGlobal mvar mem'
 
 registerInvariantOverride
   :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
@@ -788,7 +790,7 @@ withCfg
 withCfg context name k = do
   let function_id = L.Symbol name
   case Map.lookup function_id (Crucible.cfgMap (context^.ccLLVMModuleTrans)) of
-    Just (Crucible.AnyCFG cfg) -> k cfg
+    Just (_, Crucible.AnyCFG cfg) -> k cfg
     Nothing -> fail $ "Unexpected function name: " ++ name
 
 withCfgAndBlockId
@@ -1023,10 +1025,9 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
 
       let setupMem = do
              -- register the callable override functions
-             _llvmctx' <- Crucible.register_llvm_overrides llvm_mod ctx
-
+             Crucible.register_llvm_overrides llvm_mod [] [] ctx
              -- register all the functions defined in the LLVM module
-             mapM_ Crucible.registerModuleFn $ Map.toList $ Crucible.cfgMap mtrans
+             mapM_ (Crucible.registerModuleFn ctx) $ Map.elems $ Crucible.cfgMap mtrans
 
       let initExecState =
             Crucible.InitialState simctx globals Crucible.defaultAbortHandler Crucible.UnitRepr $
@@ -1176,7 +1177,7 @@ crucible_llvm_extract bic opts (Some lm) fn_name = do
   setupLLVMCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-      Just cfg -> io $ extractFromLLVMCFG opts (biSharedContext bic) cc cfg
+      Just (_,cfg) -> io $ extractFromLLVMCFG opts (biSharedContext bic) cc cfg
 
 crucible_llvm_cfg ::
   BuiltinContext ->
@@ -1190,7 +1191,7 @@ crucible_llvm_cfg bic opts (Some lm) fn_name = do
   setupLLVMCrucibleContext bic opts lm $ \cc ->
     case Map.lookup (fromString fn_name) (Crucible.cfgMap (cc^.ccLLVMModuleTrans)) of
       Nothing  -> fail $ unwords ["function", fn_name, "not found"]
-      Just cfg -> return (LLVM_CFG cfg)
+      Just (_,cfg) -> return (LLVM_CFG cfg)
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
