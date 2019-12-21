@@ -1173,7 +1173,8 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
         greturn (addCtxName ctx y)
     _ -> stmtFailM
 
-tcEmitLLVMStmt _arch _ctx _loc _stmt = error "FIXME: tcEmitLLVMStmt"
+tcEmitLLVMStmt _arch _ctx _loc _stmt =
+  error "tcEmitLLVMStmt: unimplemented statement"
 
 -- FIXME HERE NOW: need to handle PtrEq, PtrLe, PtrAddOffset, and PtrSubtract
 

@@ -133,7 +133,7 @@ data SimplImpl ps_in ps_out where
   -- >   -o x:(p0 * ... * p(i-1) * p * pi * ... * p(n-1))
 
   SImpl_CastLLVMWord ::
-    ExprVar (LLVMPointerType w) ->
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
     PermExpr (BVType w) -> PermExpr (BVType w) ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
     (RNil :> LLVMPointerType w)
@@ -143,6 +143,7 @@ data SimplImpl ps_in ps_out where
   -- > x:eq(word(e1)) * x:prop(e1=e2) -o x:eq(word(e2))
 
   SImpl_CastLLVMPtr ::
+    (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> [AtomicPerm (LLVMPointerType w)] ->
     PermExpr (BVType w) -> ExprVar (LLVMPointerType w) ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
@@ -154,8 +155,8 @@ data SimplImpl ps_in ps_out where
   -- > x:eq(y+off) * y:(p1 * ... * pn) -o x:(p1 - off * ... * pn - off)
 
   SImpl_CastLLVMFree ::
-    ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
-    PermExpr (BVType w) ->
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
+    PermExpr (BVType w) -> PermExpr (BVType w) ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
     (RNil :> LLVMPointerType w)
   -- ^ Cast a proof of @x:free(e1)@ to one of @x:free(e2)@ using an equality
@@ -164,15 +165,17 @@ data SimplImpl ps_in ps_out where
   -- > x:free(e1) * x:prop(e1=e2) -o x:free(e2)
 
   SImpl_CastLLVMFieldOffset ::
+    (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> LLVMFieldPerm w -> PermExpr (BVType w) ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
     (RNil :> LLVMPointerType w)
   -- ^ Cast the offset of a field permission from @off@ to @off'@ using an
   -- equality permission @off=off'@ on the top of the stack:
   --
-  -- > x:ptr((rw,off) |-> p) * x:prop(off=offf') -o x:ptr((rw,off') |-> p)
+  -- > x:ptr((rw,off) |-> p) * x:prop(off=off') -o x:ptr((rw,off') |-> p)
 
   SImpl_IntroLLVMFieldContents ::
+    (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> ExprVar (LLVMPointerType w) ->
     LLVMFieldPerm w ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
@@ -184,6 +187,7 @@ data SimplImpl ps_in ps_out where
   -- > x:ptr((rw,off) |-> eq(y)) * y:p -o x:ptr((rw,off) |-> p)
 
   SImpl_AddLLVMFieldLifetime ::
+    (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> LLVMFieldPerm w -> PermExpr LifetimeType ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
   -- ^ Add a lifetime to a field permission:
@@ -191,6 +195,7 @@ data SimplImpl ps_in ps_out where
   -- > x:[ls]ptr((rw,off) |-> p) -o [l,ls]x:ptr((rw,off) |-> p)
 
   SImpl_RemoveLLVMFieldLifetime ::
+    (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> LLVMFieldPerm w -> PermExpr LifetimeType ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
   -- ^ Remove a lifetime from a field permission if it is contained by another
@@ -199,6 +204,7 @@ data SimplImpl ps_in ps_out where
   -- > x:[l,ls]ptr((rw,off) |-> p) * li:lcontains(l) -o [ls]x:ptr((rw,off) |-> p)
 
   SImpl_DemoteLLVMFieldWrite ::
+    (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
   -- ^ Demote an LLVM field permission from write to read:
@@ -206,8 +212,8 @@ data SimplImpl ps_in ps_out where
   -- > x:[ls]ptr((W,off) |-> p) -o [ls]x:ptr((R,off) |-> p)
 
   SImpl_LLVMArrayCopy ::
-    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
-    PermExpr (BVType w) -> PermExpr (BVType w) ->
+    (1 <= w, KnownNat w) =>
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> BVRange w ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
     (RNil :> LLVMPointerType w :> LLVMPointerType w)
   -- ^ Copy a range of an array permission given by an offset and length,
@@ -219,8 +225,8 @@ data SimplImpl ps_in ps_out where
   -- >      * x:array(off,<len,*stride,fps,bs)
 
   SImpl_LLVMArrayBorrow ::
-    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
-    PermExpr (BVType w) -> PermExpr (BVType w) ->
+    (1 <= w, KnownNat w) =>
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> BVRange w ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
     (RNil :> LLVMPointerType w :> LLVMPointerType w)
   -- ^ Borrow a range of an array permission at the given offset and length,
@@ -236,8 +242,8 @@ data SimplImpl ps_in ps_out where
   -- >      * x:array(off,<len,*stride,fps,[off',len'):bs)
 
   SImpl_LLVMArrayReturn ::
-    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
-    PermExpr (BVType w) -> PermExpr (BVType w) ->
+    (1 <= w, KnownNat w) =>
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> BVRange w ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
     (RNil :> LLVMPointerType w)
   -- ^ Return a borrowed range of an array permission, undoing a borrow:
@@ -247,6 +253,7 @@ data SimplImpl ps_in ps_out where
   -- >   -o x:array(off,<len,*stride,fps,bs)
 
   SImpl_LLVMArrayIndexCopy ::
+    (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
     PermExpr (BVType w) -> Int ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
@@ -260,13 +267,14 @@ data SimplImpl ps_in ps_out where
   --
   -- > x:array(off,<len,*stride,fps,bs)
   -- > * x:(prop(i \in [off,len)) * disjoint(bs,i*stride+j))
-  -- >   -o x:(fp_j + offset i*stride) * x:array(off,<len,*stride,fps,bs)
+  -- >   -o x:(fp_j + off+i*stride+j) * x:array(off,<len,*stride,fps,bs)
 
   SImpl_LLVMArrayIndexBorrow ::
+    (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
     PermExpr (BVType w) -> Int ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
-    (RNil :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w :> LLVMPointerType w)
   -- ^ Borrow the @j@th field permission of the @i@th element of an array
   -- permission, where @j@ is a static 'Int' and @i@ is an expression. Requires
   -- a proposition permission on the top of the stack stating that @i@ is in the
@@ -279,6 +287,7 @@ data SimplImpl ps_in ps_out where
   -- >      * x:array(off,<len,*stride,fps,(i*stride+j):bs)
 
   SImpl_LLVMArrayIndexReturn ::
+    (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
     PermExpr (BVType w) -> Int ->
     SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
@@ -287,25 +296,32 @@ data SimplImpl ps_in ps_out where
   -- permission, where @j@ is a static 'Int' and @i@ is an expression, undoing a
   -- borrow:
   --
-  -- > x:(fp_j + offset i*stride)
+  -- > x:(fp_j + offset+i*stride+j)
   -- > * x:array(off,<len,*stride,fps,(i*stride+j):bs)
   -- >   -o x:array(off,<len,*stride,fps,bs)
 
   SImpl_LLVMArrayContents ::
-    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> [LLVMFieldPerm w] ->
-    -- IsLLVMPointerTypeList w f_ps ->
-    PermImpl ((:~:) f_ps) f_ps ->
+    (1 <= w, KnownNat w) =>
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> Int -> LLVMFieldPerm w ->
+    PermImpl ((:~:) (RNil :> LLVMPointerType w)) (RNil :> LLVMPointerType w) ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
-  -- ^ FIXME HERE: describe this rule
+  -- ^ Apply an implication to the @i@th field of an array permission:
+  --
+  -- > y:fpi -o y:fpi'
+  -- > ------------------------------------------------
+  -- > x:array(off,<len,*stride,(fp1, ..., fpn),bs) -o
+  -- >   x:array(off,<len,*stride,
+  -- >           (fp1, ..., fp(i-1), fpi', fp(i+1), ..., fpn),bs)
 
   SImpl_SplitLifetime ::
-    ExprVar a -> ValuePerm a -> PermExpr LifetimeType ->
+    KnownRepr TypeRepr a => ExprVar a -> ValuePerm a ->
+    ExprVar LifetimeType -> [PermExpr LifetimeType] -> PermExpr PermListType ->
     SimplImpl (RNil :> a :> LifetimeType)
     (RNil :> a :> LifetimeType)
   -- ^ Save a permission for later by adding the current lifetime to its type
   -- and storing the permission in the current lifetime for retrieval later:
   --
-  -- > x:p * l:lowned(ps) -o x:[l]p * l:lowned(x:p, ps)
+  -- > x:p * l:lowned(ls;ps) -o x:[l]p * l:lowned(ls;x:p, ps)
 
   SImpl_LContainsRefl :: ExprVar LifetimeType ->
                          SimplImpl RNil (RNil :> LifetimeType)
@@ -340,10 +356,15 @@ data SimplImpl ps_in ps_out where
   -- > x:(mu X.p) -o x:[mu X.p / X]p
 
   SImpl_Mu ::
-    ExprVar (LLVMPointerType w) -> Binding (ValuePerm a) (ValuePerm a) ->
+    ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
+    Binding (ValuePerm a) (ValuePerm a) ->
     PermImpl ((:~:) (RNil :> a)) (RNil :> a) ->
     SimplImpl (RNil :> a) (RNil :> a)
-  -- ^ FIXME HERE: describe this rule
+  -- ^ Apply an implication to the body of a least fixed-point permission:
+  --
+  -- > y:p1 -o y:p2
+  -- > ----------------------
+  -- > x:mu X.p1 -o x:mu X.p2
 
 
 -- | A single step of permission implication. These can have multiple,
@@ -423,12 +444,33 @@ data PermImpl1 ps_in ps_outs where
   -- ^ FIXME HERE: document this rule
 
 
+-- | A @'PermImpl' r ps@ is a proof tree of the judgment
+--
+-- > Gamma | Pl * P |- (Gamma1 | Pl1 * P1) \/ ... \/ (Gamman | Pln * Pn)
+--
+-- that contains an element of type @r@ at each leaf of the proof tree. Each
+-- disjunct on the right of the judgment corresponds to a different leaf in the
+-- tree, while each @Gammai@ denotes the variables that are bound on the path
+-- from the root to that leaf. The @ps@ argument captures the form of the
+-- "distinguished" left-hand side permissions @Pl@.
+--
+-- FIXME: explain that @Pl@ is like a stack, and that intro rules apply to the
+-- top of the stack
+--
+-- FIXME: it would be nice to have PermImpl r ps_out ps_in, where ps_out is
+-- guaranteed to be the stack shape at any Impl_Done, but this would make our
+-- generalized monad below more complicated...
 data PermImpl r ps where
   PermImpl_Done :: r ps -> PermImpl r ps
   PermImpl_Step :: PermImpl1 ps_in ps_outs ->
                    MbPermImpls r ps_outs ->
                    PermImpl r ps_in
 
+-- | Helper type for 'PermImpl', that defines a collection of permission
+-- implications, one for each element of the @bs_pss@ type argument. Each of
+-- these elements are of the form @(bs,ps)@, where @ps@ determines the input
+-- permissions for that implication tree and @bs@ specifies an existential
+-- contexts of bound variables for that implication tree.
 data MbPermImpls r bs_pss where
   MbPermImpls_Nil :: MbPermImpls r RNil
   MbPermImpls_Cons :: MbPermImpls r bs_pss -> Mb bs (PermImpl r ps) ->
@@ -443,20 +485,234 @@ $(mkNuMatching [t| forall ps_in ps_outs. PermImpl1 ps_in ps_outs |])
 $(mkNuMatching [t| forall r bs_pss. NuMatchingAny1 r => MbPermImpls r bs_pss |])
 $(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
 
+
 -- | Compute the input permissions of a 'SimplImpl' implication
-simplImplIn :: SimplImpl ps_in ps_out -> MapRList ValuePerm ps_in
-simplImplIn = error "FIXME HERE NOW"
+simplImplIn :: SimplImpl ps_in ps_out -> DistPerms ps_in
+simplImplIn (SImpl_Drop x p) = distPerms1 x p
+simplImplIn (SImpl_IntroOrL x p1 p2) = distPerms1 x p1
+simplImplIn (SImpl_IntroOrR x p1 p2) = distPerms1 x p2
+simplImplIn (SImpl_IntroExists x e p) =
+  distPerms1 x (subst (singletonSubst e) p)
+simplImplIn (SImpl_Cast x y p) = distPerms2 x (ValPerm_Eq $ PExpr_Var y) y p
+simplImplIn (SImpl_IntroEqRefl x) = DistPermsNil
+simplImplIn (SImpl_CopyEq x e) = distPerms1 x (ValPerm_Eq e)
+simplImplIn (SImpl_IntroConj x) = DistPermsNil
+simplImplIn (SImpl_ExtractConj x ps i) = distPerms1 x (ValPerm_Conj ps)
+simplImplIn (SImpl_CopyConj x ps i) = distPerms1 x (ValPerm_Conj ps)
+simplImplIn (SImpl_InsertConj x p ps i) =
+  distPerms2 x (ValPerm_Conj [p]) x (ValPerm_Conj ps)
+simplImplIn (SImpl_CastLLVMWord x e1 e2) =
+  distPerms2 x (ValPerm_Eq $ PExpr_LLVMWord e1)
+  x (ValPerm_Conj [Perm_BVProp $ BVProp_Eq e1 e2])
+simplImplIn (SImpl_CastLLVMPtr y ps off x) =
+  distPerms2 x (ValPerm_Eq $ PExpr_LLVMOffset y off) y (ValPerm_Conj ps)
+simplImplIn (SImpl_CastLLVMFree x e1 e2) =
+  distPerms2 x (ValPerm_Conj [Perm_LLVMFree e1])
+  x (ValPerm_Conj [Perm_BVProp $ BVProp_Eq e1 e2])
+simplImplIn (SImpl_CastLLVMFieldOffset x fld off') =
+  distPerms2 x (ValPerm_Conj [Perm_LLVMField fld])
+  x (ValPerm_Conj [Perm_BVProp $ BVProp_Eq (llvmFieldOffset fld) off'])
+simplImplIn (SImpl_IntroLLVMFieldContents x y fld) =
+  distPerms2 x (ValPerm_Conj [Perm_LLVMField $
+                              fld { llvmFieldContents =
+                                    ValPerm_Eq (PExpr_Var y)}])
+  y (llvmFieldContents fld)
+simplImplIn (SImpl_AddLLVMFieldLifetime x fld _) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
+simplImplIn (SImpl_RemoveLLVMFieldLifetime x fld _) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
+simplImplIn (SImpl_DemoteLLVMFieldWrite x fld) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField $
+                              fld { llvmFieldRW = Write }])
+simplImplIn (SImpl_LLVMArrayCopy x ap rng) =
+  if atomicPermIsCopyable (Perm_LLVMArray ap) then
+    distPerms2 x (ValPerm_Conj [Perm_LLVMArray ap])
+    x (ValPerm_Conj [Perm_BVProp $ BVProp_RangeSubset rng $ llvmArrayRange ap])
+  else
+    error "simplImplIn: SImpl_LLVMArrayCopy: array permission not copyable"
+
+simplImplIn (SImpl_LLVMArrayBorrow x ap rng) =
+  distPerms2 x (ValPerm_Conj [Perm_LLVMArray ap])
+  x (ValPerm_Conj (Perm_BVProp (BVProp_RangeSubset rng (llvmArrayRange ap))
+                   : map Perm_BVProp (llvmArrayBorrowsDisjoint ap rng)))
+
+simplImplIn (SImpl_LLVMArrayReturn x ap rng) =
+  if llvmArrayRangeIsBorrowed ap rng then
+    distPerms2 x
+    (ValPerm_Conj [Perm_LLVMArray $
+                   ap { llvmArrayOffset = bvRangeOffset rng,
+                        llvmArrayLen = bvRangeLength rng,
+                        llvmArrayBorrows = [] }])
+    x (ValPerm_Conj [Perm_LLVMArray ap])
+  else
+    error "simplImplIn: SImpl_LLVMArrayReturn: range not being borrowed"
+
+simplImplIn (SImpl_LLVMArrayIndexCopy x ap i j) =
+  if atomicPermIsCopyable (Perm_LLVMField (llvmArrayFields ap !! j)) then
+    distPerms2 x (ValPerm_Conj [Perm_LLVMArray ap])
+    x (ValPerm_Conj (Perm_BVProp (BVProp_InRange
+                                  (llvmArrayIndex ap i j) (llvmArrayRange ap))
+                     :
+                     map Perm_BVProp
+                     (llvmArrayBorrowsDisjoint ap
+                      (bvRangeOfIndex (llvmArrayIndex ap i j)))))
+  else
+    error "simplImplIn: SImpl_LLVMArrayIndexCopy: field is not copyable"
+
+simplImplIn (SImpl_LLVMArrayIndexBorrow x ap i j) =
+  distPerms2 x (ValPerm_Conj [Perm_LLVMArray ap])
+  x (ValPerm_Conj (Perm_BVProp (BVProp_InRange
+                                (llvmArrayIndex ap i j) (llvmArrayRange ap))
+                   : (map Perm_BVProp $
+                      llvmArrayBorrowsDisjoint ap (bvRangeOfIndex
+                                                   (llvmArrayIndex ap i j)))))
+
+simplImplIn (SImpl_LLVMArrayIndexReturn x ap i j) =
+  if llvmArrayRangeIsBorrowed ap (bvRangeOfIndex
+                                  (llvmArrayIndex ap i j)) then
+    distPerms2 x (ValPerm_Conj [Perm_LLVMField $
+                                llvmArrayFieldWithOffset ap i j])
+    x (ValPerm_Conj [Perm_LLVMArray ap])
+  else
+    error "simplImplIn: SImpl_LLVMArrayIndexReturn: index not being borrowed"
+
+simplImplIn (SImpl_LLVMArrayContents x ap _ _ _) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMArray ap])
+
+simplImplIn (SImpl_SplitLifetime x p l ls ps) =
+  distPerms2 x p l (ValPerm_Conj [Perm_LOwned ls ps])
+simplImplIn (SImpl_LContainsRefl l) = DistPermsNil
+simplImplIn (SImpl_LContainsAlways l) = DistPermsNil
+simplImplIn (SImpl_LContainsTrans l1 l2 l3) =
+  distPerms2 l1 (ValPerm_Conj [Perm_LContains $ PExpr_Var l2])
+  l2 (ValPerm_Conj [Perm_LContains $ PExpr_Var l3])
+simplImplIn (SImpl_FoldMu x p) =
+  distPerms1 x (substValPerm (ValPerm_Mu p) p)
+simplImplIn (SImpl_UnfoldMu x p) = distPerms1 x (ValPerm_Mu p)
+simplImplIn (SImpl_Mu x p1 _ _) = distPerms1 x (ValPerm_Mu p1)
+
 
 -- | Compute the output permissions of a 'SimplImpl' implication
-simplImplOut :: SimplImpl ps_in ps_out -> MapRList ValuePerm ps_out
-simplImplOut = error "FIXME HERE NOW"
+simplImplOut :: SimplImpl ps_in ps_out -> DistPerms ps_out
+simplImplOut (SImpl_Drop x p) = DistPermsNil
+simplImplOut (SImpl_IntroOrL x p1 p2) = distPerms1 x (ValPerm_Or p1 p2)
+simplImplOut (SImpl_IntroOrR x p1 p2) = distPerms1 x (ValPerm_Or p1 p2)
+simplImplOut (SImpl_IntroExists x _ p) = distPerms1 x (ValPerm_Exists p)
+simplImplOut (SImpl_Cast x _ p) = distPerms1 x p
+simplImplOut (SImpl_IntroEqRefl x) = distPerms1 x (ValPerm_Eq $ PExpr_Var x)
+simplImplOut (SImpl_CopyEq x e) = distPerms2 x (ValPerm_Eq e) x (ValPerm_Eq e)
+simplImplOut (SImpl_IntroConj x) = distPerms1 x ValPerm_True
+simplImplOut (SImpl_ExtractConj x ps i) =
+  distPerms2 x (ValPerm_Conj [ps !! i])
+  x (ValPerm_Conj (take i ps ++ drop (i+1) ps))
+simplImplOut (SImpl_CopyConj x ps i) =
+  if atomicPermIsCopyable (ps !! i) then
+    distPerms2 x (ValPerm_Conj [ps !! i]) x (ValPerm_Conj ps)
+  else
+    error "simplImplOut: SImpl_CopyConj: permission not copyable"
+simplImplOut (SImpl_InsertConj x p ps i) =
+  distPerms1 x (ValPerm_Conj (take i ps ++ p : drop i ps))
+simplImplOut (SImpl_CastLLVMWord x _ e2) =
+  distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e2)
+simplImplOut (SImpl_CastLLVMPtr _ ps off x) =
+  distPerms1 x (ValPerm_Conj $ map (offsetLLVMAtomicPerm $ bvNegate off) ps)
+simplImplOut (SImpl_CastLLVMFree x _ e2) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMFree e2])
+simplImplOut (SImpl_CastLLVMFieldOffset x fld off') =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField $ fld { llvmFieldOffset = off' }])
+simplImplOut (SImpl_IntroLLVMFieldContents x _ fld) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
+simplImplOut (SImpl_AddLLVMFieldLifetime x fld l) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField $ addLifetime l fld])
+simplImplOut (SImpl_RemoveLLVMFieldLifetime x fld l) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField $ remLifetime l fld])
+simplImplOut (SImpl_DemoteLLVMFieldWrite x fld) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField $
+                              fld { llvmFieldRW = Read }])
+simplImplOut (SImpl_LLVMArrayCopy x ap rng) =
+  if atomicPermIsCopyable (Perm_LLVMArray ap) then
+    distPerms2 x (ValPerm_Conj [Perm_LLVMArray $
+                                ap { llvmArrayOffset = bvRangeOffset rng,
+                                     llvmArrayLen = bvRangeLength rng }])
+    x (ValPerm_Conj [Perm_LLVMArray ap])
+  else
+    error "simplImplOut: SImpl_LLVMArrayCopy: array permission not copyable"
+
+simplImplOut (SImpl_LLVMArrayBorrow x ap rng) =
+  distPerms2 x (ValPerm_Conj [Perm_LLVMArray $
+                              ap { llvmArrayOffset = bvRangeOffset rng,
+                                   llvmArrayLen = bvRangeLength rng }])
+  x (ValPerm_Conj [Perm_LLVMArray $
+                              ap { llvmArrayBorrows =
+                                     RangeBorrow rng : llvmArrayBorrows ap }])
+
+simplImplOut (SImpl_LLVMArrayReturn x ap rng) =
+  if llvmArrayRangeIsBorrowed ap rng then
+    distPerms1 x
+    (ValPerm_Conj [Perm_LLVMArray $
+                   ap { llvmArrayBorrows =
+                          delete (RangeBorrow rng) (llvmArrayBorrows ap) }])
+  else
+    error "simplImplOut: SImpl_LLVMArrayReturn: range not being borrowed"
+
+simplImplOut (SImpl_LLVMArrayIndexCopy x ap i j) =
+  if atomicPermIsCopyable (Perm_LLVMField (llvmArrayFields ap !! j)) then
+    distPerms2 x (ValPerm_Conj [Perm_LLVMField $
+                                llvmArrayFieldWithOffset ap i j])
+    x (ValPerm_Conj [Perm_LLVMArray ap])
+  else
+    error "simplImplOut: SImpl_LLVMArrayIndexCopy: field is not copyable"
+
+simplImplOut (SImpl_LLVMArrayIndexBorrow x ap i j) =
+  distPerms2 x (ValPerm_Conj [Perm_LLVMField $
+                              llvmArrayFieldWithOffset ap i j])
+  x (ValPerm_Conj [Perm_LLVMArray $
+                   ap { llvmArrayBorrows =
+                          FieldBorrow i (toInteger j) Nothing
+                          : llvmArrayBorrows ap }])
+
+simplImplOut (SImpl_LLVMArrayIndexReturn x ap i j) =
+  let rng = bvRangeOfIndex (llvmArrayIndex ap i j) in
+  if llvmArrayRangeIsBorrowed ap rng then
+    distPerms1 x
+    (ValPerm_Conj [Perm_LLVMArray $ llvmArrayRemIndexBorrow i j ap])
+  else
+    error "simplImplOut: SImpl_LLVMArrayIndexReturn: index not being borrowed"
+
+simplImplOut (SImpl_LLVMArrayContents x ap i fp _) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMArray $
+                              ap { llvmArrayFields =
+                                     take i (llvmArrayFields ap) ++
+                                     fp : drop (i+1) (llvmArrayFields ap)}])
+
+simplImplOut (SImpl_SplitLifetime x p l ls ps) =
+  distPerms2 x (addLifetime (PExpr_Var l) p)
+  l (ValPerm_Conj [Perm_LOwned ls (PExpr_PermListCons (PExpr_Var x) p ps)])
+simplImplOut (SImpl_LContainsRefl l) =
+  distPerms1 l (ValPerm_Conj [Perm_LContains $ PExpr_Var l])
+simplImplOut (SImpl_LContainsAlways l) =
+  distPerms1 l (ValPerm_Conj [Perm_LContains PExpr_Always])
+simplImplOut (SImpl_LContainsTrans l1 _ l3) =
+  distPerms1 l1 (ValPerm_Conj [Perm_LContains $ PExpr_Var l3])
+simplImplOut (SImpl_FoldMu x p) = distPerms1 x (ValPerm_Mu p)
+simplImplOut (SImpl_UnfoldMu x p) =
+  distPerms1 x (substValPerm (ValPerm_Mu p) p)
+simplImplOut (SImpl_Mu x _ p2 _) = distPerms1 x (ValPerm_Mu p2)
+
 
 -- | Apply a 'SimplImpl' implication to the permissions on the top of a
 -- permission set stack, checking that they equal the 'simplImplIn' of the
 -- 'SimplImpl' and then replacing them with its 'simplImplOut'
 applySimplImpl :: Proxy ps -> SimplImpl ps_in ps_out ->
                   PermSet (ps :++: ps_in) -> PermSet (ps :++: ps_out)
-applySimplImpl = error "FIXME HERE NOW"
+applySimplImpl prx simpl =
+  modifyDistPerms $ \all_ps ->
+  let (ps, ps_in) =
+        splitDistPerms prx (distPermsToProxies $ simplImplIn simpl) all_ps in
+  if ps_in == simplImplIn simpl then
+    appendDistPerms ps (simplImplOut simpl)
+  else
+    error "applySimplImpl: input permissions are not as expected!"
 
 
 data MbPermSets bs_pss where
@@ -468,134 +724,6 @@ data MbPermSets bs_pss where
 applyImpl1 :: PermImpl1 ps_in ps_outs -> PermSet ps_in -> MbPermSets ps_outs
 applyImpl1 = error "FIXME HERE NOW"
 
-
--- FIXME HERE NOW: put this documentation where it belongs, above
-
--- | A @'PermImpl' r ls@ is a proof tree of the judgment
---
--- > Gamma | Pl * P |- (Gamma1 | Pl1 * P1) \/ ... \/ (Gamman | Pln * Pn)
---
--- that contains an element of type @r@ at each leaf of the proof tree. Each
--- disjunct on the right of the judgment corresponds to a different leaf in the
--- tree, while each @Gammai@ denotes the variables that are bound on the path
--- from the root to that leaf. The @ls@ argument captures the form of the
--- "distinguished" left-hand side permissions @Pl@.
---
--- FIXME: explain that @Pl@ is like a stack, and that intro rules apply to the
--- top of the stack
---
--- FIXME: it would be nice to have PermImpl r ps_out ps_in, where ps_out is
--- guaranteed to be the stack shape at any Impl_Done, but this would make our
--- generalized monad below more complicated...
-
-{-
-data PermImpl (r :: Ctx CrucibleType -> Type) ps where
-  Impl_Done :: r ps -> PermImpl r ps
-  -- ^ The proof is finished; i.e., implements the rule
-  --
-  -- > -------------------------------
-  -- > Gin | Pl * Pin |- . | Pin
-
-  Impl_Fail :: PermImpl r ps
-  -- ^ The empty tree, with no disjunctive possibilities; i.e., implements the
-  -- rule
-  --
-  -- > ------------------------------
-  -- > Gin | Pl * Pin |- anything
-
-  Impl_Catch :: PermImpl r ps -> PermImpl r ps -> PermImpl r ps
-  -- ^ Copy the same permissions into two different elimination trees, where an
-  -- 'Impl_Fail' in the first tree "calls" the second tree, just like a
-  -- try-catch block for exceptions. This implements the rule:
-  --
-  -- > pf1 = Gin | Pl * Pin |- rets1    pf2 = Gin | Pl * Pin |- rets2
-  -- > --------------------------------------------------------------
-  -- > Gin | Pl * Pin |- rets1, rets2
-
-  Impl_Push :: ExprVar a -> ValuePerm a -> PermImpl r (ps :> a) ->
-               PermImpl r ps
-  -- ^ "Push" all of the permissions in the permission set for a variable, which
-  -- should be equal to the supplied permission, after deleting those
-  -- permissions from the input permission set:
-  --
-  -- > Gin | Pl,x:p * Pin |- rets
-  -- > ---------------------------
-  -- > Gin | Pl * Pin, x:p |- rets
-
-  Impl_Pop :: ExprVar a -> ValuePerm a -> PermImpl r ps ->
-              PermImpl r (ps :> a)
-  -- ^ "Pop" an @x:p@ permission from the top of the permission stack back to
-  -- the primary permission for @x@, assuming that the primary permission for
-  -- @x@ is currently equal to @true@
-  --
-  -- > Gin | Pl * Pin, x:p |- rets
-  -- > ----------------------------------
-  -- > Gin | Pl,x:p * Pin, x:true |- rets
-
-  Impl_ElimOr :: ExprVar a -> PermImpl r (ps :> a) -> PermImpl r (ps :> a) ->
-                 PermImpl r (ps :> a)
-  -- ^ Eliminate a 'ValPerm_Or' on the top of the stack, replacing it with the
-  -- left- and right-hand sides in the two sub-eliminations
-  --
-  -- > pf1 = Gin | Pl, x:p1 * Pin |- GsPs1  pf2 = Gin | Pl, x:p2 * Pin |- GsPs2
-  -- > -------------------------------------------------------------------------
-  -- > Gin | Pl, x:(p1 \/ p2) * Pin |- GsPs1, GsPs2
-
-  Impl_ElimExists :: KnownRepr TypeRepr tp => ExprVar a ->
-                     Binding tp (PermImpl r ps) ->
-                     PermImpl r ps
-  -- ^ Eliminate an existential, i.e., a 'ValPerm_Exists', on the given variable
-  --
-  -- pf = Gin, z:tp | Pl, x:p * Pin |- rets
-  -- ------------------------------------------------------
-  -- Gin | Pl, x:(exists z:tp. p) * Pin |- rets
-
-  Impl_ElimLLVMFieldContents ::
-    ExprVar (LLVMPointerType w) ->
-    Binding (LLVMPointerType w) (PermImpl r (ps :> LLVMPointerType w :>
-                                             LLVMPointerType w)) ->
-    PermImpl r (ps :> LLVMPointerType w)
-  -- ^ Eliminate a field permission @x:ptr((rw,off) |-> p)@ into a permission
-  -- @x:ptr((rw,off) |-> eq(y))@ that the field contains a fresh variable @y@ and
-  -- a permission @y:p@ on @y@:
-  --
-  -- > Gin | Pl, x:ptr(pps1, (rw,off) |-> eq(y), pps2), y:p * Pin |- rets
-  -- > -----------------------------------------------------------------
-  -- > Gin | Pl, x:ptr(pps1, (rw,off) |-> p, pps2) * Pin |- rets
-
-  Impl_TryProveBVProp :: ExprVar (LLVMPointerType w) -> BVProp w ->
-                         PermImpl r (ps :> LLVMPointerType w) ->
-                         PermImpl r ps
-                         PermImpl r ps
-  -- ^ Try to prove a bitvector proposition using a dynamic check, passing a
-  -- proof of that proposition to the left branch on success and calling the
-  -- right branch on failure:
-  --
-  -- > Gin | Pl,x:prop(p) * Pin |- rets      Gin | Pl * Pin |- rets
-  -- > ------------------------------------------------------------
-  -- > Gin | Pl * Pin |- rets
-
-  Impl_IntroLLVMArrayContents ::
-    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
-    LLVMFieldPerms w f_ps ->
-    PermImpl UnitF f_ps ->
-    PermImpl r (ps :> LLVMPointerType w) ->
-    PermImpl r (ps :> LLVMPointerType w)
-  -- ^ Prove one array permission from another by proving that the fields of the
-  -- first imply those of the second:
-  --
-
-  Impl_Simpl :: Proxy ps -> SimplImpl ps_in ps_out ->
-                PermImpl r (ps :++: ps_out) ->
-                PermImpl r (ps :++: ps_in)
-  -- ^ Apply a simple implication to the top permissions on the stack:
-  --
-  -- > Gin | Pl,ps_out * Pin |- rets      ps_in -o ps_out
-  -- > --------------------------------------------------
-  -- > Gin | Pl,ps_in * Pin |- rets
-
-
--}
 
 
 ----------------------------------------------------------------------
@@ -1226,6 +1354,7 @@ introExistsM x e p_body = implSimplM Proxy (SImpl_IntroExists x e p_body)
 -- | Cast a proof of @x:eq(LLVMWord(e1))@ to @x:eq(LLVMWord(e2))@ on the top of
 -- the stack
 castLLVMWordEqM ::
+  (1 <= w, KnownNat w) =>
   ExprVar (LLVMPointerType w) -> PermExpr (BVType w) -> PermExpr (BVType w) ->
   ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 castLLVMWordEqM x e1 e2 =
@@ -1234,7 +1363,7 @@ castLLVMWordEqM x e1 e2 =
 
 -- | Cast a @y:ptr(pps)@ on the top of the stack to @x:ptr(pps - off)@ using a
 -- proof of @x:eq(y+off)@ just below it on the stack
-castLLVMPtrM :: ExprVar (LLVMPointerType w) ->
+castLLVMPtrM :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
                 [AtomicPerm (LLVMPointerType w)] -> PermExpr (BVType w) ->
                 ExprVar (LLVMPointerType w) ->
                 ImplM vars r (ps :> LLVMPointerType w)
@@ -1243,7 +1372,7 @@ castLLVMPtrM y ps off x = implSimplM Proxy (SImpl_CastLLVMPtr y ps off x)
 
 -- | Cast a proof of @x:free(e1)@ on the top of the stack to one of @x:free(e2)@
 -- by first proving that @e1=e2@
-castLLVMFreeM :: ExprVar (LLVMPointerType w) ->
+castLLVMFreeM :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
                  PermExpr (BVType w) -> PermExpr (BVType w) ->
                  ImplM vars r (ps :> LLVMPointerType w)
                  (ps :> LLVMPointerType w) ()
@@ -1262,10 +1391,16 @@ implUnfoldMuM :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
 implUnfoldMuM x p_body = implSimplM Proxy (SImpl_UnfoldMu x p_body)
 
 -- | FIXME: document this!
-implSplitLifetimeM :: ExprVar a -> ValuePerm a -> PermExpr LifetimeType ->
+implSplitLifetimeM :: KnownRepr TypeRepr a => ExprVar a -> ValuePerm a ->
+                      ExprVar LifetimeType ->
                       ImplM vars r (ps :> a :> LifetimeType)
                       (ps :> a :> LifetimeType) ()
-implSplitLifetimeM x p l = implSimplM Proxy (SImpl_SplitLifetime x p l)
+implSplitLifetimeM x p l =
+  getTopDistPerm l >>>= \lp ->
+  case lp of
+    ValPerm_Conj [Perm_LOwned ls ps] ->
+      implSimplM Proxy (SImpl_SplitLifetime x p l ls ps)
+    _ -> error "implSplitLifetimeM: top permission is not an lowned permission"
 
 -- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of
 -- the permission stack into a proof of @x:ptr(pps,(off,spl |-> p))@
@@ -1630,7 +1765,7 @@ proveVarEqH _ _ _ _ = implFailM
 -- the top of the stack, and ensuring that any remaining permissions for @x@ get
 -- popped back to the primary permissions for @x@
 proveVarLLVMField ::
-  NuMatchingAny1 r => ExprVar (LLVMPointerType w) ->
+  (1 <= w, KnownNat w, NuMatchingAny1 r) => ExprVar (LLVMPointerType w) ->
   [AtomicPerm (LLVMPointerType w)] -> Int ->
   PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
   ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
@@ -1650,7 +1785,8 @@ proveVarLLVMField x ps i off mb_fp =
 
 -- | Cast the offset, add any needed lifetimes, and prove the contents
 proveVarLLVMFieldH ::
-  NuMatchingAny1 r => ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
+  (1 <= w, KnownNat w, NuMatchingAny1 r) =>
+  ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
   PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
   ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 proveVarLLVMFieldH x fp off' mb_fp =
@@ -1711,7 +1847,7 @@ extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
     (if mbLift (fmap (elem lexpr . llvmFieldLifetimes) mb_fp) &&
         notElem lexpr (llvmFieldLifetimes fp) then
        implPushCurLifetimePermM l >>>
-       implSplitLifetimeM x (ValPerm_Conj [Perm_LLVMField fp']) lexpr >>>
+       implSplitLifetimeM x (ValPerm_Conj [Perm_LLVMField fp']) l >>>
        implPopCurLifetimePermM l >>>
        greturn (fp' { llvmFieldLifetimes = lexpr:(llvmFieldLifetimes fp') })
      else greturn fp') >>>= \fp'' ->

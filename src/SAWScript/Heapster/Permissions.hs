@@ -461,6 +461,10 @@ addLLVMOffset (PExpr_LLVMWord e) off = PExpr_LLVMWord $ bvAdd e off
 addLLVMOffset (PExpr_LLVMOffset x e) off =
   PExpr_LLVMOffset x $ bvAdd e off
 
+-- | Build a range that contains exactly one index
+bvRangeOfIndex :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> BVRange w
+bvRangeOfIndex e = BVRange e (bvInt 1)
+
 
 ----------------------------------------------------------------------
 -- * Permissions
@@ -471,19 +475,26 @@ addLLVMOffset (PExpr_LLVMOffset x e) off =
 -- variables cannot be bound as expressions and vice-versa.
 type PermVar a = Name (ValuePerm a)
 
+-- | Ranges of bitvector values
+data BVRange w = BVRange { bvRangeOffset :: PermExpr (BVType w),
+                           bvRangeLength :: PermExpr (BVType w) }
+               deriving Eq
+
 -- | Propositions about bitvectors
 data BVProp w
   = BVProp_Eq (PermExpr (BVType w)) (PermExpr (BVType w))
     -- ^ True iff the two expressions are equal
-  | BVProp_InRange (PermExpr (BVType w)) (PermExpr (BVType w))
-    (PermExpr (BVType w))
+  | BVProp_InRange (PermExpr (BVType w)) (BVRange w)
     -- ^ True iff the first expression is greater than or equal to the second
     -- and less than the third, i.e., in the half-closed interval @[e2,e3)@
-  | BVProp_RangeSubset (PermExpr (BVType w)) (PermExpr (BVType w))
-    (PermExpr (BVType w)) (PermExpr (BVType w))
+  | BVProp_RangeSubset (BVRange w) (BVRange w)
     -- ^ True iff the first and second expressions form an interval that is
-    -- contained in that form by the third and fourth, i.e., iff @[e1,e2)@ is a
-    -- subset of @[e3,e4)@
+    -- contained in that formed by the third and fourth, i.e., iff @[e1,e2)@ is
+    -- a subset of @[e3,e4)@
+  | BVProp_RangesDisjoint (BVRange w) (BVRange w)
+    -- ^ True iff the first and second expressions form an interval that is
+    -- disjoint from that formed by the third and fourth, i.e., iff @[e1,e2)@
+    -- and @[e3,e4)@ do not overlap
   deriving Eq
 
 -- | An atomic permission is a value permission that is not one of the compound
@@ -622,21 +633,9 @@ data LLVMArrayBorrow w
     -- If a variable is given, this variable equals the value stored in that
     -- field, i.e., equals @*(array+(i*stride)+j)@, and is borrowing the
     -- permissions associated with the @j@th field of this array.
-  | RangeBorrow (PermExpr (BVType w)) (PermExpr (BVType w))
-    -- ^ Borrow a range of indices starting at @off@ (the first argument) with
-    -- length @len@ (the second argument)
+  | RangeBorrow (BVRange w)
+    -- ^ Borrow a range of indices
   deriving Eq
-
-
--- | Return an array stride in bytes, instead of words of size @w@
-arrayStrideBytes :: KnownNat w => LLVMArrayPerm w -> Integer
-arrayStrideBytes = helper Proxy where
-  helper :: KnownNat w => Proxy w -> LLVMArrayPerm w -> Integer
-  helper w (LLVMArrayPerm {..}) =
-    if natVal w `mod` 8 /= 0 then
-      error "arrayStrideBytes: Word size is not a multiple of 8!"
-    else
-      llvmArrayStride * natVal w `div` 8
 
 
 -- | A function permission is a set of input and output permissions inside a
@@ -669,6 +668,11 @@ instance TestEquality DistPerms where
     = Just Refl
   testEquality _ _ = Nothing
 
+instance Eq (DistPerms ps) where
+  perms1 == perms2 =
+    case testEquality perms1 perms2 of
+      Just _ -> True
+      Nothing -> False
 
 -- FIXME: move to Hobbits!
 instance Eq a => Eq (Mb ctx a) where
@@ -736,6 +740,7 @@ instance Eq (FunPerm ghosts args ret) where
 $(mkNuMatching [t| forall a . PermExpr a |])
 $(mkNuMatching [t| forall a . BVFactor a |])
 $(mkNuMatching [t| forall as . PermExprs as |])
+$(mkNuMatching [t| forall w. BVRange w |])
 $(mkNuMatching [t| forall w. BVProp w |])
 $(mkNuMatching [t| forall a . AtomicPerm a |])
 $(mkNuMatching [t| forall a . ValuePerm a |])
@@ -807,6 +812,68 @@ llvmFieldWrite0True =
 -- | Create a field write permission with offset 0 and @true@ permissions
 llvmWrite0TruePerm :: (1 <= w, KnownNat w) => ValuePerm (LLVMPointerType w)
 llvmWrite0TruePerm = ValPerm_Conj [Perm_LLVMField llvmFieldWrite0True]
+
+-- | Return the range of the indices of an array permission
+llvmArrayRange :: LLVMArrayPerm w -> BVRange w
+llvmArrayRange ap = BVRange (llvmArrayOffset ap) (llvmArrayLen ap)
+
+-- | Return an array stride in bytes, instead of words of size @w@
+arrayStrideBytes :: KnownNat w => LLVMArrayPerm w -> Integer
+arrayStrideBytes = helper Proxy where
+  helper :: KnownNat w => Proxy w -> LLVMArrayPerm w -> Integer
+  helper w (LLVMArrayPerm {..}) =
+    if natVal w `mod` 8 /= 0 then
+      error "arrayStrideBytes: Word size is not a multiple of 8!"
+    else
+      llvmArrayStride * natVal w `div` 8
+
+-- | Add a borrow to an 'LLVMArrayPerm'
+llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
+llvmArrayAddBorrow b ap = ap { llvmArrayBorrows = b : llvmArrayBorrows ap }
+
+-- | Remove a borrow of an index from an 'LLVMArrayPerm'
+llvmArrayRemIndexBorrow :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                           Int -> LLVMArrayPerm w -> LLVMArrayPerm w
+llvmArrayRemIndexBorrow i j ap =
+  ap { llvmArrayBorrows =
+         filter ((/= bvRangeOfIndex (llvmArrayIndex ap i j))
+                 . llvmArrayBorrowRange)
+         (llvmArrayBorrows ap) }
+
+-- | Get the range of indices represented by an array borrow
+llvmArrayBorrowRange :: (1 <= w, KnownNat w) => LLVMArrayBorrow w -> BVRange w
+llvmArrayBorrowRange (FieldBorrow off len _) = BVRange off (bvInt len)
+llvmArrayBorrowRange (RangeBorrow r) = r
+
+-- | Test if a specific range corresponds to a borrow already on an array
+llvmArrayRangeIsBorrowed :: (1 <= w, KnownNat w) =>
+                            LLVMArrayPerm w -> BVRange w -> Bool
+llvmArrayRangeIsBorrowed ap rng =
+  elem rng (map llvmArrayBorrowRange $ llvmArrayBorrows ap)
+
+-- | Build 'BVProp's stating that each borrow in an array permission is disjoint
+-- from an index or range
+llvmArrayBorrowsDisjoint :: (1 <= w, KnownNat w) =>
+                            LLVMArrayPerm w -> BVRange w -> [BVProp w]
+llvmArrayBorrowsDisjoint ap range =
+  map (BVProp_RangesDisjoint range . llvmArrayBorrowRange) $
+  llvmArrayBorrows ap
+
+-- | Compute the byte index @i*stride + j@ of the @j@th field in the @i@th array
+-- element from the beginning of an array
+llvmArrayIndex :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                  PermExpr (BVType w) -> Int -> PermExpr (BVType w)
+llvmArrayIndex ap i j =
+  bvAdd (bvMult (llvmArrayStride ap) i) (bvInt $ toInteger j)
+
+-- | Return the @j@th field permission for the @i@th array element, offset by
+-- the array offset plus @i*stride+j@
+llvmArrayFieldWithOffset :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                            PermExpr (BVType w) -> Int -> LLVMFieldPerm w
+llvmArrayFieldWithOffset ap i j =
+  offsetLLVMFieldPerm
+  (bvAdd (llvmArrayOffset ap) (llvmArrayIndex ap i j))
+  (llvmArrayFields ap !! j)
 
 -- | Create the array ponter perm @array(0,<len,*1 |-> [ptr(0 |-> true)])@ of
 -- size @len@ words of width @w@
@@ -931,6 +998,15 @@ llvmFrameDeletionPerms ((asLLVMOffset -> Just (x,off), sz):fperm')
 llvmFrameDeletionPerms _ =
   error "llvmFrameDeletionPerms: unexpected LLVM word allocated in frame"
 
+-- | Build a 'DistPerms' with just one permission
+distPerms1 :: ExprVar a -> ValuePerm a -> DistPerms (RNil :> a)
+distPerms1 x p = DistPermsCons DistPermsNil x p
+
+-- | Build a 'DistPerms' with two permissions
+distPerms2 :: ExprVar a1 -> ValuePerm a1 ->
+              ExprVar a2 -> ValuePerm a2 -> DistPerms (RNil :> a1 :> a2)
+distPerms2 x1 p1 x2 p2 = DistPermsCons (distPerms1 x1 p1) x2 p2
+
 -- | Extract the non-variable portion of a permission list expression
 permListToDistPerms :: PermExpr PermListType -> Some DistPerms
 permListToDistPerms PExpr_PermListNil = Some DistPermsNil
@@ -956,6 +1032,10 @@ distPermsToValuePerms (DistPermsCons dperms _ p) =
 mbDistPermsToValuePerms :: Mb ctx (DistPerms ps) -> Mb ctx (ValuePerms ps)
 mbDistPermsToValuePerms = fmap distPermsToValuePerms
 
+distPermsToProxies :: DistPerms ps -> MapRList Proxy ps
+distPermsToProxies (DistPermsNil) = MNil
+distPermsToProxies (DistPermsCons ps _ _) = distPermsToProxies ps :>: Proxy
+
 mbDistPermsToProxies :: Mb ctx (DistPerms ps) -> MapRList Proxy ps
 mbDistPermsToProxies [nuP| DistPermsNil |] = MNil
 mbDistPermsToProxies [nuP| DistPermsCons ps _ _ |] =
@@ -973,10 +1053,10 @@ appendDistPerms ps1 (DistPermsCons ps2 x p) =
   DistPermsCons (appendDistPerms ps1 ps2) x p
 
 -- | Split a list of distinguished permissions into two
-splitDistPerms :: TypeCtx ps2 => f ps1 -> DistPerms (ps1 :++: ps2) ->
+splitDistPerms :: f ps1 -> MapRList g ps2 -> DistPerms (ps1 :++: ps2) ->
                   (DistPerms ps1, DistPerms ps2)
-splitDistPerms _ = helper typeCtxProxies where
-  helper :: MapRList Proxy ps2 -> DistPerms (ps1 :++: ps2) ->
+splitDistPerms _ = helper where
+  helper :: MapRList g ps2 -> DistPerms (ps1 :++: ps2) ->
             (DistPerms ps1, DistPerms ps2)
   helper MNil perms = (perms, DistPermsNil)
   helper (prxs :>: _) (DistPermsCons ps x p) =
@@ -1382,14 +1462,19 @@ instance SubstVar s m => Substable s (PermExprs as) m where
   genSubst s [nuP| PExprs_Cons es e |] =
     PExprs_Cons <$> genSubst s es <*> genSubst s e
 
+instance SubstVar s m => Substable s (BVRange w) m where
+  genSubst s [nuP| BVRange e1 e2 |] =
+    BVRange <$> genSubst s e1 <*> genSubst s e2
+
 instance SubstVar s m => Substable s (BVProp w) m where
   genSubst s [nuP| BVProp_Eq e1 e2 |] =
     BVProp_Eq <$> genSubst s e1 <*> genSubst s e2
-  genSubst s [nuP| BVProp_InRange e1 e2 e3 |] =
-    BVProp_InRange <$> genSubst s e1 <*> genSubst s e2 <*> genSubst s e3
-  genSubst s [nuP| BVProp_RangeSubset e1 e2 e3 e4 |] =
-    BVProp_RangeSubset <$> genSubst s e1 <*> genSubst s e2
-    <*> genSubst s e3 <*> genSubst s e4
+  genSubst s [nuP| BVProp_InRange e r |] =
+    BVProp_InRange <$> genSubst s e <*> genSubst s r
+  genSubst s [nuP| BVProp_RangeSubset r1 r2 |] =
+    BVProp_RangeSubset <$> genSubst s r1 <*> genSubst s r2
+  genSubst s [nuP| BVProp_RangesDisjoint r1 r2 |] =
+    BVProp_RangesDisjoint <$> genSubst s r1 <*> genSubst s r2
 
 instance SubstVar s m => Substable s (AtomicPerm a) m where
   genSubst s [nuP| Perm_LLVMField fp |] = Perm_LLVMField <$> genSubst s fp
@@ -1444,8 +1529,7 @@ instance SubstVar s m => Substable s (LLVMArrayPerm w) m where
 instance SubstVar s m => Substable s (LLVMArrayBorrow w) m where
   genSubst s [nuP| FieldBorrow i j maybe_x |] =
     FieldBorrow <$> genSubst s i <*> return (mbLift j) <*> genSubst s maybe_x
-  genSubst s [nuP| RangeBorrow off len |] =
-    RangeBorrow <$> genSubst s off <*> genSubst s len
+  genSubst s [nuP| RangeBorrow r |] = RangeBorrow <$> genSubst s r
 
 instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
   genSubst s [nuP| FunPerm ghosts args ret maybe_l perms_in perms_out |] =
@@ -1623,6 +1707,150 @@ partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
 
 
 ----------------------------------------------------------------------
+-- * Value Permission Substitutions
+----------------------------------------------------------------------
+
+noExprsInTypeCtx :: forall (ctx :: RList Type) (a :: CrucibleType) b.
+                    Member ctx a -> b
+noExprsInTypeCtx (Member_Step ctx) = noExprsInTypeCtx ctx
+-- No case for Member_Base
+
+-- | Typeclass to substitute a 'ValuePerm' for a 'PermVar'
+class SubstValPerm a where
+  substValPerm :: ValuePerm tp -> Binding (ValuePerm tp) a -> a
+
+instance SubstValPerm Integer where
+  substValPerm _ = mbLift
+
+instance (NuMatching a, SubstValPerm a) => SubstValPerm [a] where
+  substValPerm p as = map (substValPerm p) (mbList as)
+
+instance (SubstValPerm a, SubstValPerm b) => SubstValPerm (a,b) where
+  substValPerm p ab =
+    (substValPerm p (fmap fst ab), substValPerm p (fmap snd ab))
+
+instance (NuMatching a, SubstValPerm a) => SubstValPerm (Maybe a) where
+  substValPerm p [nuP| Just a |] = Just $ substValPerm p a
+  substValPerm _ [nuP| Nothing |] = Nothing
+
+instance (NuMatching a, SubstValPerm a) => SubstValPerm (Mb ctx a) where
+  substValPerm p mbmb = fmap (substValPerm p) (mbSwap mbmb)
+
+instance SubstValPerm (Member ctx a) where
+  substValPerm _ mb_memb = mbLift mb_memb
+
+instance SubstValPerm (Name (a :: CrucibleType)) where
+  substValPerm _ mb_x =
+    case mbNameBoundP mb_x of
+      Left memb -> noExprsInTypeCtx memb
+      Right x -> x
+
+instance SubstValPerm (BVFactor w) where
+  substValPerm p [nuP| BVFactor i x |] =
+    BVFactor (mbLift i) (substValPerm p x)
+
+instance SubstValPerm (PermExpr a) where
+  substValPerm p [nuP| PExpr_Var x |] = PExpr_Var (substValPerm p x)
+  substValPerm _ [nuP| PExpr_Unit |] = PExpr_Unit
+  substValPerm _ [nuP| PExpr_Nat n |] = PExpr_Nat $ mbLift n
+  substValPerm p [nuP| PExpr_BV factors off |] =
+    PExpr_BV (substValPerm p factors) (substValPerm p off)
+  substValPerm p [nuP| PExpr_Struct args |] =
+    PExpr_Struct $ substValPerm p args
+  substValPerm _ [nuP| PExpr_Always |] = PExpr_Always
+  substValPerm p [nuP| PExpr_LLVMWord e |] =
+    PExpr_LLVMWord $ substValPerm p e
+  substValPerm p [nuP| PExpr_LLVMOffset x off |] =
+    PExpr_LLVMOffset (substValPerm p x) (substValPerm p off)
+  substValPerm _ [nuP| PExpr_Fun fh |] = PExpr_Fun $ mbLift fh
+  substValPerm _ [nuP| PExpr_PermListNil |] = PExpr_PermListNil
+  substValPerm s [nuP| PExpr_PermListCons e p l |] =
+    PExpr_PermListCons (substValPerm s e) (substValPerm s p) (substValPerm s l)
+
+instance SubstValPerm (PermExprs as) where
+  substValPerm _ [nuP| PExprs_Nil |] = PExprs_Nil
+  substValPerm p [nuP| PExprs_Cons es e |] =
+    PExprs_Cons (substValPerm p es) (substValPerm p e)
+
+instance SubstValPerm (BVRange w) where
+  substValPerm p [nuP| BVRange e1 e2 |] =
+    BVRange (substValPerm p e1) (substValPerm p e2)
+
+instance SubstValPerm (BVProp w) where
+  substValPerm p [nuP| BVProp_Eq e1 e2 |] =
+    BVProp_Eq (substValPerm p e1) (substValPerm p e2)
+  substValPerm p [nuP| BVProp_InRange e r |] =
+    BVProp_InRange (substValPerm p e) (substValPerm p r)
+  substValPerm p [nuP| BVProp_RangeSubset r1 r2 |] =
+    BVProp_RangeSubset (substValPerm p r1) (substValPerm p r2)
+  substValPerm p [nuP| BVProp_RangesDisjoint r1 r2 |] =
+    BVProp_RangesDisjoint (substValPerm p r1) (substValPerm p r2)
+
+instance SubstValPerm (AtomicPerm a) where
+  substValPerm p [nuP| Perm_LLVMField fp |] =
+    Perm_LLVMField $ substValPerm p fp
+  substValPerm p [nuP| Perm_LLVMArray ap |] =
+    Perm_LLVMArray $ substValPerm p ap
+  substValPerm p [nuP| Perm_LLVMFree e |] =
+    Perm_LLVMFree $ substValPerm p e
+  substValPerm p [nuP| Perm_LLVMFrame fp |] =
+    Perm_LLVMFrame $ substValPerm p fp
+  substValPerm p [nuP| Perm_LOwned ls e |] =
+    Perm_LOwned (substValPerm p ls) (substValPerm p e)
+  substValPerm p [nuP| Perm_LContains e |] =
+    Perm_LContains $ substValPerm p e
+  substValPerm p [nuP| Perm_Fun fperm |] =
+    Perm_Fun $ substValPerm p fperm
+  substValPerm p [nuP| Perm_BVProp prop |] =
+    Perm_BVProp $ substValPerm p prop
+
+instance SubstValPerm (ValuePerm a) where
+  substValPerm p [nuP| ValPerm_Eq e |] = ValPerm_Eq $ substValPerm p e
+  substValPerm p [nuP| ValPerm_Or p1 p2 |] =
+    ValPerm_Or (substValPerm p p1) (substValPerm p p2)
+  substValPerm p [nuP| ValPerm_Exists p' |] =
+    ValPerm_Exists $ substValPerm p p'
+  substValPerm p [nuP| ValPerm_Mu p' |] =
+    ValPerm_Mu $ substValPerm p p'
+  substValPerm p [nuP| ValPerm_Var mb_x |] =
+    case mbNameBoundP mb_x of
+      Left Member_Base -> p
+      Right x -> ValPerm_Var x
+  substValPerm p [nuP| ValPerm_Conj aps |] =
+    ValPerm_Conj $ substValPerm p aps
+
+instance SubstValPerm (ValuePerms as) where
+  substValPerm p [nuP| ValPerms_Nil |] = ValPerms_Nil
+  substValPerm p [nuP| ValPerms_Cons ps p' |] =
+    ValPerms_Cons (substValPerm p ps) (substValPerm p p')
+
+instance SubstValPerm RWModality where
+  substValPerm _ [nuP| Write |] = Write
+  substValPerm _ [nuP| Read |] = Read
+
+instance SubstValPerm (LLVMFieldPerm w) where
+  substValPerm p [nuP| LLVMFieldPerm rw ls off p' |] =
+    LLVMFieldPerm (mbLift rw) (substValPerm p ls) (substValPerm p off)
+    (substValPerm p p')
+
+instance SubstValPerm (LLVMArrayPerm w) where
+  substValPerm p [nuP| LLVMArrayPerm off len stride pps bs |] =
+    LLVMArrayPerm (substValPerm p off) (substValPerm p len)
+    (mbLift stride) (substValPerm p pps) (substValPerm p bs)
+
+instance SubstValPerm (LLVMArrayBorrow w) where
+  substValPerm p [nuP| FieldBorrow i j maybe_x |] =
+    FieldBorrow (substValPerm p i) (mbLift j) (substValPerm p maybe_x)
+  substValPerm p [nuP| RangeBorrow r |] = RangeBorrow $ substValPerm p r
+
+instance SubstValPerm (FunPerm ghosts args ret) where
+  substValPerm p [nuP| FunPerm ghosts args ret maybe_l perms_in perms_out |] =
+    FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
+    (substValPerm p maybe_l) (substValPerm p perms_in)
+    (substValPerm p perms_out)
+
+
+----------------------------------------------------------------------
 -- * Abstracting Out Variables
 ----------------------------------------------------------------------
 
@@ -1789,22 +2017,29 @@ instance AbstractVars (BVFactor w) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 i
     `clMbMbApplyM` abstractPEVars ns1 ns2 x
 
+instance AbstractVars (BVRange w) where
+  abstractPEVars ns1 ns2 (BVRange e1 e2) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| BVRange |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e1
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e2
+
 instance AbstractVars (BVProp w) where
   abstractPEVars ns1 ns2 (BVProp_Eq e1 e2) =
     absVarsReturnH ns1 ns2 $(mkClosed [| BVProp_Eq |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e1
     `clMbMbApplyM` abstractPEVars ns1 ns2 e2
-  abstractPEVars ns1 ns2 (BVProp_InRange e1 e2 e3) =
+  abstractPEVars ns1 ns2 (BVProp_InRange e r) =
     absVarsReturnH ns1 ns2 $(mkClosed [| BVProp_InRange |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e1
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e2
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e3
-  abstractPEVars ns1 ns2 (BVProp_RangeSubset e1 e2 e3 e4) =
+    `clMbMbApplyM` abstractPEVars ns1 ns2 e
+    `clMbMbApplyM` abstractPEVars ns1 ns2 r
+  abstractPEVars ns1 ns2 (BVProp_RangeSubset r1 r2) =
     absVarsReturnH ns1 ns2 $(mkClosed [| BVProp_RangeSubset |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e1
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e2
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e3
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e4
+    `clMbMbApplyM` abstractPEVars ns1 ns2 r1
+    `clMbMbApplyM` abstractPEVars ns1 ns2 r2
+  abstractPEVars ns1 ns2 (BVProp_RangesDisjoint r1 r2) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| BVProp_RangesDisjoint |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 r1
+    `clMbMbApplyM` abstractPEVars ns1 ns2 r2
 
 instance AbstractVars (AtomicPerm a) where
   abstractPEVars ns1 ns2 (Perm_LLVMField fp) =
@@ -1899,10 +2134,9 @@ instance AbstractVars (LLVMArrayBorrow w) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 i
     `clMbMbApplyM` abstractPEVars ns1 ns2 j
     `clMbMbApplyM` abstractPEVars ns1 ns2 maybe_x
-  abstractPEVars ns1 ns2 (RangeBorrow off len) =
+  abstractPEVars ns1 ns2 (RangeBorrow r) =
     absVarsReturnH ns1 ns2 $(mkClosed [| RangeBorrow |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 off
-    `clMbMbApplyM` abstractPEVars ns1 ns2 len
+    `clMbMbApplyM` abstractPEVars ns1 ns2 r
 
 instance AbstractVars (DistPerms ps) where
   abstractPEVars ns1 ns2 DistPermsNil =

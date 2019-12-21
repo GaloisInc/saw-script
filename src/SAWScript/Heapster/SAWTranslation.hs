@@ -25,6 +25,7 @@
 module SAWScript.Heapster.SAWTranslation where
 
 import Data.Maybe
+import Data.Either
 import Data.Kind
 import GHC.TypeLits
 import qualified Data.Functor.Constant as Constant
@@ -401,9 +402,14 @@ data AtomicPermTrans ctx a where
                        PermTrans ctx (LLVMPointerType w) ->
                        AtomicPermTrans ctx (LLVMPointerType w)
 
-  -- | The translation of an LLVM array permission is a SAW term of @Vec@ type
+  -- | The translation of an LLVM array permission is a SAW term of @Vec@ type;
+  -- the function argument knows how to convert an term for a single element of
+  -- the array into a 'PermTrans' for that element, and is essentially a capture
+  -- of the result of 'tptranslate' on the element type
   APTrans_LLVMArray :: (1 <= w, KnownNat w) =>
                        Mb ctx (LLVMArrayPerm w) ->
+                       (OpenTerm ->
+                        [AtomicPermTrans ctx (LLVMPointerType w)]) ->
                        OpenTerm ->
                        AtomicPermTrans ctx (LLVMPointerType w)
 
@@ -434,6 +440,34 @@ data AtomicPermTrans ctx a where
 pattern PTrans_True :: PermTrans ctx a
 pattern PTrans_True = PTrans_Conj []
 
+-- | Extract the body of a conjunction or raise an error
+unPTransConj :: String -> PermTrans ctx a -> [AtomicPermTrans ctx a]
+unPTransConj _ (PTrans_Conj ps) = ps
+unPTransConj str _ = error (str ++ ": not a conjunction")
+
+-- | Extract the body of a conjunction, which should have exactly one conjunct,
+-- or raise an error
+unPTransConj1 :: String -> PermTrans ctx a -> AtomicPermTrans ctx a
+unPTransConj1 str ptrans =
+  case unPTransConj str ptrans of
+    [aptrans] -> aptrans
+    _ -> error (str ++ ": not a single-element conjunction")
+
+-- | Extract the body of a conjunction of a single field permission
+unPTransLLVMField :: String -> PermTrans ctx (LLVMPointerType w) ->
+                     (Mb ctx (LLVMFieldPerm w),
+                      PermTrans ctx (LLVMPointerType w))
+unPTransLLVMField _ (PTrans_Conj [APTrans_LLVMField e ptrans]) = (e, ptrans)
+unPTransLLVMField str _ = error (str ++ ": not an LLVM field permission")
+
+-- | Extract the body of a conjunction of a single array permission
+unPTransLLVMArray :: String -> PermTrans ctx (LLVMPointerType w) ->
+                     (Mb ctx (LLVMArrayPerm w),
+                      (OpenTerm -> [AtomicPermTrans ctx (LLVMPointerType w)]),
+                      OpenTerm)
+unPTransLLVMArray _ (PTrans_Conj [APTrans_LLVMArray e f trm]) = (e, f, trm)
+unPTransLLVMArray str _ = error (str ++ ": not an LLVM array permission")
+
 -- | A context mapping bound names to their perm translations
 type PermTransCtx ctx ps = MapRList (PermTrans ctx) ps
 
@@ -449,7 +483,7 @@ permTransToTerm (PTrans_Term _ t) = Just t
 -- the atomic perm has no computational content
 atomicPermTransToTerm :: AtomicPermTrans ctx a -> Maybe OpenTerm
 atomicPermTransToTerm (APTrans_LLVMField _ ptrans) = permTransToTerm ptrans
-atomicPermTransToTerm (APTrans_LLVMArray _ t) = Just t
+atomicPermTransToTerm (APTrans_LLVMArray _ _ t) = Just t
 atomicPermTransToTerm (APTrans_LLVMFree _) = Nothing
 atomicPermTransToTerm (APTrans_LLVMFrame _) = Nothing
 atomicPermTransToTerm (APTrans_LifetimePerm _) = Nothing
@@ -478,7 +512,7 @@ permTransPerm _ (PTrans_Term p _) = p
 atomicPermTransPerm :: MapRList Proxy ctx -> AtomicPermTrans ctx a ->
                        Mb ctx (AtomicPerm a)
 atomicPermTransPerm prxs (APTrans_LLVMField fld _) = fmap Perm_LLVMField fld
-atomicPermTransPerm prxs (APTrans_LLVMArray ap _) = fmap Perm_LLVMArray ap
+atomicPermTransPerm prxs (APTrans_LLVMArray ap _ _) = fmap Perm_LLVMArray ap
 atomicPermTransPerm prxs (APTrans_LLVMFree e) = fmap Perm_LLVMFree e
 atomicPermTransPerm prxs (APTrans_LLVMFrame fp) = fmap Perm_LLVMFrame fp
 atomicPermTransPerm prxs (APTrans_LifetimePerm p) = p
@@ -503,7 +537,8 @@ extPermTrans (PTrans_Term p t) = PTrans_Term (extMb p) t
 extAtomicPermTrans :: AtomicPermTrans ctx a -> AtomicPermTrans (ctx :> tp) a
 extAtomicPermTrans (APTrans_LLVMField fld ptrans) =
   APTrans_LLVMField (extMb fld) (extPermTrans ptrans)
-extAtomicPermTrans (APTrans_LLVMArray ap t) = APTrans_LLVMArray (extMb ap) t
+extAtomicPermTrans (APTrans_LLVMArray ap f t) =
+  APTrans_LLVMArray (extMb ap) (map extAtomicPermTrans . f) t
 extAtomicPermTrans (APTrans_LLVMFree e) = APTrans_LLVMFree $ extMb e
 extAtomicPermTrans (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
 extAtomicPermTrans (APTrans_LifetimePerm p) = APTrans_LifetimePerm $ extMb p
@@ -519,30 +554,54 @@ consPermTransCtx :: PermTransCtx ctx ps -> PermTrans ctx a ->
                     PermTransCtx ctx (ps :> a)
 consPermTransCtx = (:>:)
 
--- | Remove a lifetime from a 'PermTrans'. This is the same as applying
--- 'remLifetime' to the 'permTransPerm' of a 'PermTrans'.
-permTransRemLifetime :: Mb ctx (PermExpr LifetimeType) -> PermTrans ctx a ->
-                        PermTrans ctx a
-permTransRemLifetime _ p@(PTrans_Eq _) = p
-permTransRemLifetime mb_l (PTrans_Conj ps) =
-    PTrans_Conj $ map (atomicPermTransRemLifetime mb_l) ps
-permTransRemLifetime mb_l (PTrans_Term p t) =
-    PTrans_Term (mbMap2 remLifetime mb_l p) t
+-- | Apply 'offsetLLVMAtomicPerm' to the permissions associated with an 
+offsetLLVMAtomicPermTrans :: Mb ctx (PermExpr (BVType w)) ->
+                             AtomicPermTrans ctx (LLVMPointerType w) ->
+                             AtomicPermTrans ctx (LLVMPointerType w)
+offsetLLVMAtomicPermTrans mb_off (APTrans_LLVMField fld ptrans) =
+  APTrans_LLVMField (mbMap2 offsetLLVMFieldPerm mb_off fld) ptrans
+offsetLLVMAtomicPermTrans mb_off (APTrans_LLVMArray ap f t) =
+  APTrans_LLVMArray (mbMap2 offsetLLVMArrayPerm mb_off ap) f t
+offsetLLVMAtomicPermTrans _ p@(APTrans_LLVMFree _) = p
 
--- | Like 'permTransRemLifetime' but for atomic permission translations
-atomicPermTransRemLifetime :: Mb ctx (PermExpr LifetimeType) ->
-                              AtomicPermTrans ctx a ->
-                              AtomicPermTrans ctx a
-atomicPermTransRemLifetime mb_l (APTrans_LLVMField fld ptrans) =
-  APTrans_LLVMField (mbMap2 remLifetime mb_l fld) $
-  permTransRemLifetime mb_l ptrans
-atomicPermTransRemLifetime mb_l (APTrans_LLVMArray ap t) =
-  APTrans_LLVMArray (mbMap2 remLifetime mb_l ap) t
-atomicPermTransRemLifetime _ p@(APTrans_LLVMFree _) = p
-atomicPermTransRemLifetime _ p@(APTrans_LLVMFrame _) = p
-atomicPermTransRemLifetime _ p@(APTrans_LifetimePerm _) = p
-atomicPermTransRemLifetime _ p@(APTrans_Fun _ _) = p
-atomicPermTransRemLifetime _ p@(APTrans_BVProp _) = p
+-- | Modify the modalities of a 'PermTrans'. This is the same as applying
+-- 'modifyModalities' to the 'permTransPerm' of a 'PermTrans'.
+permTransModifyModalities :: (RWModality -> RWModality) ->
+                             (Mb ctx ([PermExpr LifetimeType] ->
+                                      [PermExpr LifetimeType])) ->
+                             PermTrans ctx a -> PermTrans ctx a
+permTransModifyModalities _ _ p@(PTrans_Eq _) = p
+permTransModifyModalities f1 f2 (PTrans_Conj ps) =
+    PTrans_Conj $ map (atomicPermTransMM f1 f2) ps
+permTransModifyModalities f1 f2 (PTrans_Term p t) =
+    PTrans_Term (mbMap2 (modifyModalities f1) f2 p) t
+
+-- | Like 'permTransModifyModalities' but for atomic permission translations
+atomicPermTransMM :: (RWModality -> RWModality) ->
+                     (Mb ctx ([PermExpr LifetimeType] ->
+                              [PermExpr LifetimeType])) ->
+                     AtomicPermTrans ctx a ->
+                     AtomicPermTrans ctx a
+atomicPermTransMM f1 f2 (APTrans_LLVMField fld ptrans) =
+  APTrans_LLVMField (mbMap2 (modifyModalities f1) f2 fld) $
+  permTransModifyModalities f1 f2 ptrans
+atomicPermTransMM f1 f2 (APTrans_LLVMArray ap f t) =
+  APTrans_LLVMArray (mbMap2 (modifyModalities f1) f2 ap)
+  (map (atomicPermTransMM f1 f2) . f)
+  t
+atomicPermTransMM _ _ p@(APTrans_LLVMFree _) = p
+atomicPermTransMM _ _ p@(APTrans_LLVMFrame _) = p
+atomicPermTransMM _ _ p@(APTrans_LifetimePerm _) = p
+atomicPermTransMM _ _ p@(APTrans_Fun _ _) = p
+atomicPermTransMM _ _ p@(APTrans_BVProp _) = p
+
+permTransRemLifetime :: Mb ctx (PermExpr LifetimeType) ->
+                        PermTrans ctx a -> PermTrans ctx a
+permTransRemLifetime = error "FIXME HERE NOW"
+
+permTransAddLifetime :: Mb ctx (PermExpr LifetimeType) ->
+                        PermTrans ctx a -> PermTrans ctx a
+permTransAddLifetime = error "FIXME HERE NOW"
 
 -- | Map a 'PermTrans' to the permission it should have after a lifetime has
 -- ended, undoing 'minLtEndPerms'. The first argument should have associated
@@ -566,8 +625,11 @@ atomicPermTransEndLifetime (APTrans_LLVMField
   APTrans_LLVMField fld $
   permTransEndLifetime ptrans (fmap llvmFieldContents fld)
 atomicPermTransEndLifetime (APTrans_LLVMArray
-                            _ t) [nuP| Perm_LLVMArray ap |] =
-  APTrans_LLVMArray ap t
+                            _ f t) [nuP| Perm_LLVMArray ap |] =
+  APTrans_LLVMArray ap
+  (\trm -> zipWith atomicPermTransEndLifetime (f trm)
+           (mbList $ fmap (map Perm_LLVMField . llvmArrayFields) ap))
+  t
 atomicPermTransEndLifetime p@(APTrans_LLVMFree _) _ = p
 atomicPermTransEndLifetime p@(APTrans_LLVMFrame _) _ = p
 atomicPermTransEndLifetime p@(APTrans_LifetimePerm _) _ = p
@@ -633,12 +695,18 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
         return $ Right (tp_term, APTrans_LLVMField fld . mk_ptrans)
 
   tptranslate ([nuP| Perm_LLVMArray ap@(LLVMArrayPerm _ len _ flds _) |]) =
-    do tps <- mapM (translatePerm . fmap llvmFieldContents) (mbList flds)
+    do elem_tp <- translateLLVMArrayElemType ap
        len_term <- translateExpr len
+       fld_funs <-
+         mapM ((either const snd <$>) . tptranslate . fmap Perm_LLVMField)
+         (mbList flds)
+       let fld_fun elem_trm =
+             map (\(f,i) -> f $ projTupleOpenTerm i elem_trm)
+             (zip fld_funs [0 ..])
        return $ Right
          (applyOpenTermMulti (globalOpenTerm "Prelude.Vec")
-          [len_term, tupleTypeOpenTerm tps],
-          APTrans_LLVMArray ap)
+          [len_term, elem_tp],
+          APTrans_LLVMArray ap fld_fun)
 
   tptranslate [nuP| Perm_LLVMFree e |] = return $ Left $ APTrans_LLVMFree e
   tptranslate [nuP| Perm_LLVMFrame fp |] = return $ Left $ APTrans_LLVMFrame fp
@@ -665,6 +733,13 @@ translatePerm mb_p =
   case eith of
     Left _ -> return unitTypeOpenTerm
     Right (tp_term, _) -> return tp_term
+
+-- | Translate the element type of an array permission
+translateLLVMArrayElemType :: Mb ctx (LLVMArrayPerm w) ->
+                              TypeTransM ctx OpenTerm
+translateLLVMArrayElemType [nuP| LLVMArrayPerm _ _ _ flds _ |] =
+  tupleTypeOpenTerm <$>
+  mapM (translatePerm . fmap llvmFieldContents) (mbList flds)
 
 -- | Build a lambda-abstraction for a 'PermTrans' if the associated permission
 -- has any computational content; otherwise, this operation is the identity
@@ -995,13 +1070,11 @@ itranslateSimplImpl :: Proxy ps -> Mb ctx (SimplImpl ps_in ps_out) ->
                        ImpTransM ext blocks ret args (ps :++: ps_out) ctx res ->
                        ImpTransM ext blocks ret args (ps :++: ps_in) ctx res
 
-itranslateSimplImpl _ [nuP| SImpl_Drop x p |] m =
-  assertTopPermM "SImpl_Drop" x p >>
+itranslateSimplImpl _ [nuP| SImpl_Drop _ _ |] m =
   withPermStackM (\(xs :>: _) -> xs) (\(ps :>: _) -> ps) m
 
-itranslateSimplImpl _ [nuP| SImpl_IntroOrL x p1 p2 |] m =
-  do assertTopPermM "SImpl_IntroOrL" x p1
-     tp1 <- itranslate p1
+itranslateSimplImpl _ [nuP| SImpl_IntroOrL _ p1 p2 |] m =
+  do tp1 <- itranslate p1
      tp2 <- itranslate p2
      withPermStackM id
        (\(ps :>: p_top) ->
@@ -1010,9 +1083,8 @@ itranslateSimplImpl _ [nuP| SImpl_IntroOrL x p1 p2 |] m =
                   [tp1, tp2, permTransToTermForce p_top])))
        m
 
-itranslateSimplImpl _ [nuP| SImpl_IntroOrR x p1 p2 |] m =
-  do assertTopPermM "SImpl_IntroOrR" x p2
-     tp1 <- itranslate p1
+itranslateSimplImpl _ [nuP| SImpl_IntroOrR _ p1 p2 |] m =
+  do tp1 <- itranslate p1
      tp2 <- itranslate p2
      withPermStackM id
        (\(ps :>: p_top) ->
@@ -1021,10 +1093,8 @@ itranslateSimplImpl _ [nuP| SImpl_IntroOrR x p1 p2 |] m =
                   [tp1, tp2, permTransToTermForce p_top])))
        m
 
-itranslateSimplImpl _ [nuP| SImpl_IntroExists x (e :: PermExpr tp) p |] m =
-  do assertTopPermM "SImpl_IntroExists" x
-       (mbMap2 subst (fmap singletonSubst e) p)
-     let tp :: TypeRepr tp = knownRepr
+itranslateSimplImpl _ [nuP| SImpl_IntroExists _ (e :: PermExpr tp) p |] m =
+  do let tp :: TypeRepr tp = knownRepr
      tp_trans <- itranslate $ nuMulti (mbToProxy e) $ const tp
      tp_f <- lambdaExprTransI "x_introEx" tp $ itranslate $ mbCombine p
      e_trans <- tpTransM (translateExpr e)
@@ -1034,6 +1104,227 @@ itranslateSimplImpl _ [nuP| SImpl_IntroExists x (e :: PermExpr tp) p |] m =
                  (ctorOpenTerm "Prelude.exists"
                   [tp_trans, tp_f, e_trans, permTransToTermForce p_top])))
        m
+
+itranslateSimplImpl _ [nuP| SImpl_Cast _ _ p |] m =
+  withPermStackM mapRListTail
+  (\(pctx :>: _ :>: ptrans) -> pctx :>: ptrans)
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_IntroEqRefl x |] m =
+  withPermStackM (:>: translateVar x) (:>: PTrans_Eq (fmap PExpr_Var x)) m
+  
+itranslateSimplImpl _ [nuP| SImpl_CopyEq _ _ |] m =
+  withPermStackM
+  (\(vars :>: var) -> (vars :>: var :>: var))
+  (\(pctx :>: ptrans) -> (pctx :>: ptrans :>: ptrans))
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_IntroConj x |] m =
+  withPermStackM (:>: translateVar x) (:>: PTrans_True) m
+
+itranslateSimplImpl _ [nuP| SImpl_ExtractConj x _ i |] m =
+  withPermStackM (:>: translateVar x)
+  (\(pctx :>: ptrans) ->
+    let ps = unPTransConj "itranslateSimplImpl: SImpl_ExtractConj" ptrans in
+    pctx :>: PTrans_Conj [ps !! mbLift i]
+    :>: PTrans_Conj (take (mbLift i) ps ++ drop (mbLift i +1) ps))
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_CopyConj x _ i |] m =
+  withPermStackM (:>: translateVar x)
+  (\(pctx :>: ptrans) ->
+    let ps = unPTransConj "itranslateSimplImpl: SImpl_CopyConj" ptrans in
+    pctx :>: PTrans_Conj [ps !! mbLift i] :>: ptrans)
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_InsertConj x _ _ i |] m =
+  withPermStackM mapRListTail
+  (\(pctx :>: ptransi :>: ptrans) ->
+    let ps = unPTransConj "itranslateSimplImpl: SImpl_CopyConj" ptrans
+        pi = unPTransConj1 "itranslateSimplImpl: SImpl_CopyConj" ptransi in
+    pctx :>: PTrans_Conj (take (mbLift i) ps ++ pi : drop (mbLift i) ps))
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_CastLLVMWord _ _ e2 |] m =
+  withPermStackM mapRListTail
+  ((:>: PTrans_Eq (fmap PExpr_LLVMWord e2)) . mapRListTail . mapRListTail)
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_CastLLVMPtr _ _ off _ |] m =
+  withPermStackM mapRListTail
+  (\(pctx :>: _ :>: ptrans) ->
+    let ps = unPTransConj "itranslateSimplImpl: SImpl_CastLLVMPtr" ptrans in
+    pctx :>: PTrans_Conj (map (offsetLLVMAtomicPermTrans $
+                               fmap bvNegate off) ps))
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_CastLLVMFree _ _ e2 |] m =
+  withPermStackM mapRListTail
+  ((:>: PTrans_Conj [APTrans_LLVMFree e2]) . mapRListTail . mapRListTail)
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_CastLLVMFieldOffset _ _ mb_off |] m =
+  withPermStackM mapRListTail
+  (\(pctx :>: _ :>: ptrans) ->
+    let (mb_fld,ptrans') =
+          unPTransLLVMField "itranslateSimplImpl: SImpl_CastLLVMPtr" ptrans in
+    pctx :>: PTrans_Conj [APTrans_LLVMField
+                          (mbMap2 (\fld off -> fld { llvmFieldOffset = off })
+                           mb_fld mb_off)
+                          ptrans'])
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_IntroLLVMFieldContents x _ mb_fld |] m =
+  withPermStackM ((:>: translateVar x) . mapRListTail . mapRListTail)
+  (\(pctx :>: _ :>: ptrans) ->
+    pctx :>: PTrans_Conj [APTrans_LLVMField mb_fld ptrans])
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_AddLLVMFieldLifetime _ mb_fld mb_l |] m =
+  withPermStackM id
+  (\(pctx :>: ptrans) ->
+    let (mb_fld,ptrans') =
+          unPTransLLVMField
+          "itranslateSimplImpl: SImpl_AddLLVMFieldLifetime" ptrans in
+    pctx :>: PTrans_Conj [APTrans_LLVMField
+                          (mbMap2 addLifetime mb_l mb_fld) ptrans])
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_RemoveLLVMFieldLifetime _ _ mb_l |] m =
+  withPermStackM id
+  (\(pctx :>: ptrans) ->
+    let (mb_fld,ptrans') =
+          unPTransLLVMField
+          "itranslateSimplImpl: SImpl_RemoveLLVMFieldLifetime" ptrans in
+    pctx :>: PTrans_Conj [APTrans_LLVMField
+                          (mbMap2 remLifetime mb_l mb_fld) ptrans])
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_DemoteLLVMFieldWrite _ _ |] m =
+  withPermStackM id
+  (\(pctx :>: ptrans) ->
+    let (mb_fld,ptrans') =
+          unPTransLLVMField
+          "itranslateSimplImpl: SImpl_DemoteLLVMFieldWrite" ptrans in
+    pctx :>: PTrans_Conj [APTrans_LLVMField
+                          (fmap (\fld -> fld { llvmFieldRW = Read }) mb_fld)
+                          ptrans])
+  m
+
+
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayCopy _ mb_ap mb_rng |] m =
+  error "FIXME HERE: itranslateSimplImpl: SImpl_LLVMArrayCopy not yet implemented!"
+  -- NOTE: needs a special version of slice, to avoid casts
+  --
+  -- IDEA: the translation of a BVProp should be a proof of that BVProp, so we
+  -- can use it in casting things! Or our special version of slice could take
+  -- one of these proofs as input
+  {-
+  do elem_tp <- tpTransM (translateLLVMArrayElemType mb_ap)
+     withPermStackM id
+       (\(pctx :>: ptrans :>: _) ->
+         let (mb_ap, trm) =
+               unPTransLLVMArray
+               "itranslateSimplImpl: SImpl_LLVMArrayCopy" ptrans in
+         pctx :>: PTrans_Conj [APTrans_LLVMArray ap t] :>:
+         PTrans_Conj [APTrans_LLVMArray
+                      (mbMap2 $ \ap rng ->
+                        ap { llvmArrayOffset = bvRangeOffset rng,
+                             llvmArrayLen = bvRangeLength rng })
+                      (applyOpenTermMulti
+                       (globalOpenTerm "Prelude.slice")
+                       [elem_tp, ]
+                      )
+                     ])
+       m -}
+
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayBorrow _ _ _ |] m =
+  error
+  "FIXME HERE: itranslateSimplImpl: SImpl_LLVMArrayBorrow not yet implemented!"
+  -- NOTE: same issue as for SImpl_LLVMArrayCopy
+
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayReturn _ _ _ |] m =
+  error
+  "FIXME HERE: itranslateSimplImpl: SImpl_LLVMArrayReturn not yet implemented!"
+  -- NOTE: needs a function to replace a sub-range of a Vec with another one
+  -- IDEA: the borrows could translate to proofs of the relevant BVProps, which
+  -- could be used when returning
+
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexCopy x _ mb_i j |] m =
+  do ptrans_array <- getTopPermM
+     let (mb_ap, f_elem, array_trm) =
+           unPTransLLVMArray
+           "itranslateSimplImpl: SImpl_LLVMArrayIndexCopy" ptrans_array
+     elem_ptrans <-
+       (!! mbLift j) <$> f_elem <$>
+       tpTransM (applyMultiTransM (return $ globalOpenTerm "Prelude.at")
+                 [translateExpr (fmap llvmArrayLen mb_ap),
+                  translateLLVMArrayElemType mb_ap,
+                  return array_trm, translateExpr mb_i])
+     withPermStackM id
+       (\(pctx :>: _ :>: _) ->
+         pctx :>: PTrans_Conj [elem_ptrans] :>: ptrans_array)
+       m
+
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexBorrow x _ mb_i j |] m =
+  do ptrans_array <- getTopPermM
+     let (mb_ap, f_elem, array_trm) =
+           unPTransLLVMArray
+           "itranslateSimplImpl: SImpl_LLVMArrayIndexBorrow" ptrans_array
+     elem_ptrans <-
+       (!! mbLift j) <$> f_elem <$>
+       tpTransM (applyMultiTransM (return $ globalOpenTerm "Prelude.at")
+                 [translateExpr (fmap llvmArrayLen mb_ap),
+                  translateLLVMArrayElemType mb_ap,
+                  return array_trm, translateExpr mb_i])
+     withPermStackM id
+       (\(pctx :>: _ :>: _) ->
+         pctx :>: PTrans_Conj [elem_ptrans] :>:
+         PTrans_Conj
+         [APTrans_LLVMArray
+          (mbMap2 (\i -> llvmArrayAddBorrow
+                         (FieldBorrow i (toInteger $ mbLift j) Nothing))
+           mb_i mb_ap)
+          f_elem array_trm])
+       m
+
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexReturn x _ mb_i j |] m =
+  do (_ :>: ptrans_fld :>: ptrans_array) <- itiPermStack <$> ask
+     let (mb_ap, f_elem, array_trm) =
+           unPTransLLVMArray
+           "itranslateSimplImpl: SImpl_LLVMArrayIndexReturn" ptrans_array
+     old_elem_trm <-
+       tpTransM (applyMultiTransM (return $ globalOpenTerm "Prelude.at")
+                 [translateExpr (fmap llvmArrayLen mb_ap),
+                  translateLLVMArrayElemType mb_ap,
+                  return array_trm, translateExpr mb_i])
+     let replace_nth_proj :: Int -> OpenTerm -> OpenTerm -> OpenTerm
+         replace_nth_proj 0 _ t_repl = t_repl
+         replace_nth_proj i t t_repl =
+           pairOpenTerm (pairLeftOpenTerm t)
+           (replace_nth_proj (i-1) (pairRightOpenTerm t) t_repl)
+     let new_elem_trm =
+           replace_nth_proj (mbLift j) old_elem_trm $
+           permTransToTermForce ptrans_fld
+     new_array_trm <-
+       tpTransM (applyMultiTransM (return $ globalOpenTerm "Prelude.upd")
+                 [translateExpr (fmap llvmArrayLen mb_ap),
+                  translateLLVMArrayElemType mb_ap,
+                  return array_trm, translateExpr mb_i,
+                  return new_elem_trm])
+     withPermStackM mapRListTail
+       (\(pctx :>: _ :>: _) ->
+         pctx :>:
+         PTrans_Conj [APTrans_LLVMArray
+                      (mbMap2 (\i ap -> llvmArrayRemIndexBorrow i (mbLift j) ap)
+                       mb_i mb_ap)
+                      f_elem
+                      new_array_trm])
+       m
+
+
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayContents _ _ _ _ _ |] m =
+  error "FIXME HERE: itranslateSimplImpl: SImpl_LLVMArrayContents unhandled"
 
 itranslateSimplImpl _ _ _ = error "FIXME HERE NOW: finish itranslateSimplImpl!"
 
@@ -1114,6 +1405,7 @@ itranslatePermImpl1 [nuP| Impl1_ElimExists x (p :: Binding tp (ValuePerm a)) |]
 -- A SimplImpl is translated using itranslateSimplImpl
 itranslatePermImpl1 [nuP| Impl1_Simpl simpl prx |]
   [nuP| MbPermImpls_Cons _ mb_impl |] =
+  {- FIXME HERE: assert that current perms = the input perms of simpl -}
   itranslateSimplImpl (mbLift prx) simpl $ itranslate $ mbCombine mb_impl
 
 itranslatePermImpl1 _ _ = error "FIXME HERE NOW: finish itranslatePermImpl1!"
