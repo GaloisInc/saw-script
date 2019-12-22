@@ -429,16 +429,23 @@ data PermImpl1 ps_in ps_outs where
   -- ^ Apply a 'SimplImpl'
 
   Impl1_ElimLLVMFieldContents ::
-    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
     PermImpl1 (ps :> LLVMPointerType w)
     (RNil :> '(RNil :> LLVMPointerType w,
                ps :> LLVMPointerType w :> LLVMPointerType w))
-  -- ^ FIXME HERE: document this rule
+  -- ^ Eliminate the contents of an LLVM field permission, binding a new
+  -- variable to hold those permissions and changing the contents of the field
+  -- permission to an equals permision for that variable:
+  --
+  -- > x:((rw,off) -> p) -o y. ((rw,off) -> eq(y)) * y:p
 
   Impl1_TryProveBVProp ::
-    ExprVar (LLVMPointerType w) -> BVProp w ->
+    (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> BVProp w ->
     PermImpl1 ps (RNil :> '(RNil, ps :> LLVMPointerType w))
-  -- ^ FIXME HERE: document this rule
+  -- ^ Try to prove a bitvector proposition, or fail (as in the 'Impl1_Fail'
+  -- rule) if this is not possible:
+  --
+  -- > . -o prop(p)
 
 
 -- | A @'PermImpl' r ps@ is a proof tree of the judgment
@@ -712,16 +719,61 @@ applySimplImpl prx simpl =
   else
     error "applySimplImpl: input permissions are not as expected!"
 
-
+-- | A sequence of permission sets inside name-bindings
 data MbPermSets bs_pss where
   MbPermSets_Nil :: MbPermSets RNil
   MbPermSets_Cons :: MbPermSets bs_pss -> Mb bs (PermSet ps) ->
                      MbPermSets (bs_pss :> '(bs,ps))
 
+-- | Helper for building a one-element 'MbPermSets' sequence
+mbPermSets1 :: Mb bs (PermSet ps) -> MbPermSets (RNil :> '(bs,ps))
+mbPermSets1 = MbPermSets_Cons MbPermSets_Nil
+
+-- | Helper for building a two-element 'MbPermSets' sequence
+mbPermSets2 :: Mb bs1 (PermSet ps1) -> Mb bs2 (PermSet ps2) ->
+               MbPermSets (RNil :> '(bs1,ps1) :> '(bs2,ps2))
+mbPermSets2 ps1 ps2 = MbPermSets_Cons (MbPermSets_Cons MbPermSets_Nil ps1) ps2
+
 -- | Apply a single permission implication step to a permission set
 applyImpl1 :: PermImpl1 ps_in ps_outs -> PermSet ps_in -> MbPermSets ps_outs
-applyImpl1 = error "FIXME HERE NOW"
-
+applyImpl1 Impl1_Fail _ = MbPermSets_Nil
+applyImpl1 Impl1_Catch ps = mbPermSets2 (emptyMb ps) (emptyMb ps)
+applyImpl1 (Impl1_Push x p) ps =
+  if ps ^. varPerm x == p then
+    mbPermSets1 $ emptyMb $ pushPerm x p $ set (varPerm x) ValPerm_True ps
+  else
+    error "applyImpl1: Impl1_Push: unexpected permission"
+applyImpl1 (Impl1_Pop x p) ps =
+  if ps ^. topDistPerm x == p then
+    mbPermSets1 $ emptyMb $ fst $ popPerm x $ set (varPerm x) p ps
+  else
+    error "applyImpl1: Impl1_Pop: unexpected permission"
+applyImpl1 (Impl1_ElimOr x p1 p2) ps =
+  if ps ^. topDistPerm x == ValPerm_Or p1 p2 then
+    mbPermSets2 (emptyMb $ set (topDistPerm x) p1 ps)
+    (emptyMb $ set (topDistPerm x) p2 ps)
+  else
+    error "applyImpl1: Impl1_ElimOr: unexpected permission"
+applyImpl1 (Impl1_ElimExists x p_body) ps =
+  if ps ^. topDistPerm x == ValPerm_Exists p_body then
+    mbPermSets1 (fmap (\p -> set (topDistPerm x) p ps) p_body)
+  else
+    error "applyImpl1: Impl1_ElimExists: unexpected permission"
+applyImpl1 (Impl1_Simpl simpl prx) ps =
+  mbPermSets1 $ emptyMb $ applySimplImpl prx simpl ps
+applyImpl1 (Impl1_ElimLLVMFieldContents x fp) ps =
+  if ps ^. topDistPerm x == ValPerm_Conj [Perm_LLVMField fp] then
+    (mbPermSets1 $ nu $ \y ->
+      pushPerm y (llvmFieldContents fp) $
+      set (topDistPerm x) (ValPerm_Conj [Perm_LLVMField $
+                                         fp { llvmFieldContents =
+                                              ValPerm_Eq (PExpr_Var y) }])
+      ps)
+  else
+    error "applyImpl1: Impl1_ElimLLVMFieldContents: unexpected permission"
+applyImpl1 (Impl1_TryProveBVProp x prop) ps =
+  mbPermSets1 $ emptyMb $
+  pushPerm x (ValPerm_Conj [Perm_BVProp prop]) ps
 
 
 ----------------------------------------------------------------------
@@ -1251,7 +1303,7 @@ implSimplM prx simpl =
 -- fresh variable @y@ and popping the @y@ permissions off the stack. If @p@
 -- already has the form @eq(y)@, then just return @y@.
 implElimLLVMFieldContentsM ::
-  ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
+  (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
   ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
   (ExprVar (LLVMPointerType w))
 implElimLLVMFieldContentsM _ fp
@@ -1265,7 +1317,8 @@ implElimLLVMFieldContentsM x fp =
 
 -- | Try to prove a proposition about bitvectors dynamically, failing as in
 -- 'implFailM' if the proposition does not hold
-implTryProveBVProp :: ExprVar (LLVMPointerType w) -> BVProp w ->
+implTryProveBVProp :: (1 <= w, KnownNat w) =>
+                      ExprVar (LLVMPointerType w) -> BVProp w ->
                       ImplM vars r (ps :> LLVMPointerType w) ps ()
 implTryProveBVProp x p =
   implApplyImpl1 (Impl1_TryProveBVProp x p)
@@ -2040,19 +2093,16 @@ proveVarImplH x (ValPerm_Mu p) [nuP| ValPerm_Mu mb_p |] =
 -- If the LHS is a mu but the RHS is not, unfold the left and recurse
 proveVarImplH x (ValPerm_Mu p_body) mb_p =
   implSetMuRecurseLeftM >>> implUnfoldMuM x p_body >>>
-  proveVarImplH x (permVarSubst p_body p_body) mb_p
-  where
-    permVarSubst = error "FIXME HERE NOW"
+  proveVarImplH x (substValPerm (ValPerm_Mu p_body) p_body) mb_p
 
 -- If the RHS is a mu but the LHS is not, unfold the right and recurse
 proveVarImplH x p [nuP| ValPerm_Mu mb_p_body |] =
   implSetMuRecurseRightM >>>
-  proveVarImplH x p (fmap (\p_body -> permVarSubst p_body p_body) mb_p_body) >>>
+  proveVarImplH x p (fmap (\p_body -> substValPerm (ValPerm_Mu p_body) p_body)
+                     mb_p_body) >>>
   partialSubstForceM mb_p_body
   "proveVarImpl: incomplete psubst: implFold" >>>= \p_body ->
   implFoldMuM x p_body
-  where
-    permVarSubst = error "FIXME HERE NOW"
 
 -- Prove x:X |- x:Y from an assumption that X |- Y
 proveVarImplH _ (ValPerm_Var _) [nuP| ValPerm_Var _ |] =
