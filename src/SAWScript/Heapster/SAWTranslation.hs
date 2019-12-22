@@ -67,16 +67,6 @@ mapRListTail :: MapRList f (ctx :> a) -> MapRList f ctx
 mapRListTail (xs :>: _) = xs
 
 
-{-
-FIXME HERE NOWNOW:
-- Change LContains -> LCurrent, and sort out its rules
-- Change LOwned to not have lifetimes, and remove things that used that
-- Replace modifyModalities with inLifetime, and write minLtEndPerms separately
-- Update EndLifetime and how that works
-- Change fields to only have at most one lifetime
-- Update / finish the field implication stuff
--}
-
 ----------------------------------------------------------------------
 -- * The Type and Expression Translation Monad
 ----------------------------------------------------------------------
