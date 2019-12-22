@@ -1532,7 +1532,7 @@ itranslateStmt stmt@[nuP| BeginLifetime |] m =
                     const $ Perm_LOwned PExpr_PermListNil])
   m
 
-itranslateStmt stmt@[nuP| EndLifetime _ ps |] m =
+itranslateStmt stmt@[nuP| EndLifetime _ ps _ |] m =
   withPermStackM mapRListTail
   (\(pctx :>: _) -> permCtxEndLifetime pctx ps)
   m

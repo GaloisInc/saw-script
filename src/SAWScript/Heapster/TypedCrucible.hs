@@ -74,6 +74,20 @@ import SAWScript.Heapster.Implication
 -- | During type-checking, we convert Crucible registers to variables
 newtype TypedReg tp = TypedReg { typedRegVar :: ExprVar tp }
 
+-- | A sequence of typed registers
+data TypedRegs ctx where
+  TypedRegsNil :: TypedRegs RNil
+  TypedRegsCons :: TypedRegs ctx -> TypedReg a -> TypedRegs (ctx :> a)
+
+-- | Extract out a sequence of variables from a 'TypedRegs'
+typedRegsToVars :: TypedRegs ctx -> MapRList Name ctx
+typedRegsToVars TypedRegsNil = MNil
+typedRegsToVars (TypedRegsCons regs (TypedReg x)) = typedRegsToVars regs :>: x
+
+-- | Turn a sequence of typed registers into a variable substitution
+typedRegsToVarSubst :: TypedRegs ctx -> PermVarSubst ctx
+typedRegsToVarSubst = PermVarSubst . mapMapRList VarSubstElem . typedRegsToVars
+
 -- | A type-checked Crucible expression is a Crucible 'Expr' that uses
 -- 'TypedReg's for variables
 newtype TypedExpr ext tp = TypedExpr (App ext TypedReg tp)
@@ -132,6 +146,7 @@ data TypedJumpTarget blocks ps where
 
 
 $(mkNuMatching [t| forall tp. TypedReg tp |])
+$(mkNuMatching [t| forall ctx. TypedRegs ctx |])
 
 instance NuMatchingAny1 TypedReg where
   nuMatchingAny1Proof = nuMatchingProof
@@ -185,11 +200,10 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
   -- FIXME: switch to the new way of specifying lifetimes, as per 'FunPerm'
   TypedCall :: args ~ CtxToRList cargs =>
                TypedReg (FunctionHandleType cargs ret) ->
-               CruCtx ghosts -> CruCtx args -> PermExpr LifetimeType ->
-               DistPerms (ghosts :> LifetimeType :++: args) ->
-               DistPerms (ghosts :> LifetimeType :++: args :> ret) ->
-               TypedStmt ext (RNil :> ret) (ghosts :> LifetimeType :++: args)
-               (ghosts :> LifetimeType :++: args :> ret)
+               FunPerm ghosts args ret ->
+               TypedRegs (ghosts :++: args) ->
+               TypedStmt ext (RNil :> ret) (ghosts :++: args)
+               (ghosts :++: args :> ret)
 
   -- | Begin a new lifetime:
   --
@@ -202,6 +216,7 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
   --
   -- > minLtEndperms(ps) * l:lowned(ps) -o ps
   EndLifetime :: ExprVar LifetimeType -> DistPerms ps ->
+                 PermExpr PermListType ->
                  TypedStmt ext RNil (ps :> LifetimeType) ps
 
   -- | Assert a boolean condition, printing the given string on failure
@@ -213,54 +228,54 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
                    TypedStmt (LLVM arch) (RNil :> ret) ps_in ps_out
 
 
-data TypedLLVMStmt wptr ret ps_in ps_out where
+data TypedLLVMStmt w ret ps_in ps_out where
   -- | Assign an LLVM word (i.e., a pointer with block 0) to a register
   --
   -- Type: @. -o ret:eq(word(x))@
-  ConstructLLVMWord :: (1 <= w, KnownNat w) =>
-                       TypedReg (BVType w) ->
-                       TypedLLVMStmt wptr (LLVMPointerType w)
+  ConstructLLVMWord :: (1 <= w2, KnownNat w2) =>
+                       TypedReg (BVType w2) ->
+                       TypedLLVMStmt w (LLVMPointerType w2)
                        RNil
-                       (RNil :> LLVMPointerType w)
+                       (RNil :> LLVMPointerType w2)
 
   -- | Assert that an LLVM pointer is a word, and return 0 (this is the typed
   -- version of 'LLVM_PointerBlock' on words)
   --
   -- Type: @x:eq(word(y)) -o ret:eq(0)@
-  AssertLLVMWord :: (1 <= w, KnownNat w) =>
-                    TypedReg (LLVMPointerType w) -> PermExpr (BVType w) ->
-                    TypedLLVMStmt wptr NatType
-                    (RNil :> LLVMPointerType w)
-                    (RNil :> LLVMPointerType w)
+  AssertLLVMWord :: (1 <= w2, KnownNat w2) =>
+                    TypedReg (LLVMPointerType w2) -> PermExpr (BVType w2) ->
+                    TypedLLVMStmt w NatType
+                    (RNil :> LLVMPointerType w2)
+                    (RNil :> NatType)
 
   -- | Destruct an LLVM word into its bitvector value, which should equal the
   -- given expression
   --
   -- Type: @x:eq(word(y)) -o ret:eq(y)@
-  DestructLLVMWord :: (1 <= w, KnownNat w) =>
-                      TypedReg (LLVMPointerType w) -> PermExpr (BVType w) ->
-                      TypedLLVMStmt wptr (BVType w)
-                      (RNil :> LLVMPointerType w)
-                      (RNil :> LLVMPointerType w)
+  DestructLLVMWord :: (1 <= w2, KnownNat w2) =>
+                      TypedReg (LLVMPointerType w2) -> PermExpr (BVType w2) ->
+                      TypedLLVMStmt w (BVType w2)
+                      (RNil :> LLVMPointerType w2)
+                      (RNil :> BVType w2)
 
   -- | Load a machine value from the address pointed to by the given pointer
   --
   -- Type: @l:lowned(ps), x:[l]ptr((r,0) |-> eq(y)) -o l:lowned(ps), ret:eq(y)@
-  TypedLLVMLoad :: TypedReg (LLVMPointerType wptr) ->
-                   PermExpr LifetimeType -> PermExpr PermListType ->
-                   PermExpr (LLVMPointerType wptr) ->
-                   TypedLLVMStmt wptr (LLVMPointerType wptr)
-                   (RNil :> LifetimeType :> LLVMPointerType wptr)
-                   (RNil :> LifetimeType :> LLVMPointerType wptr)
+  TypedLLVMLoad :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
+                   ExprVar LifetimeType -> PermExpr PermListType ->
+                   PermExpr (LLVMPointerType w) ->
+                   TypedLLVMStmt w (LLVMPointerType w)
+                   (RNil :> LifetimeType :> LLVMPointerType w)
+                   (RNil :> LifetimeType :> LLVMPointerType w)
 
   -- | Store a machine value to the address pointed to by the given pointer
   --
   -- Type: @x:ptr((w,0) |-> true) -o x:ptr((w,0) |-> eq(y))@
-  TypedLLVMStore :: (TypedReg (LLVMPointerType wptr)) ->
-                    (TypedReg (LLVMPointerType wptr)) ->
-                    TypedLLVMStmt wptr UnitType
-                    (RNil :> LLVMPointerType wptr)
-                    (RNil :> LLVMPointerType wptr)
+  TypedLLVMStore :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
+                    TypedReg (LLVMPointerType w) ->
+                    TypedLLVMStmt w UnitType
+                    (RNil :> LLVMPointerType w)
+                    (RNil :> LLVMPointerType w)
 
   -- | Allocate an object of the given size on the given LLVM frame
   --
@@ -270,113 +285,115 @@ data TypedLLVMStmt wptr ret ps_in ps_out where
   -- >                         ..., (w,M*(i-1)) |-> true)
   --
   -- where @M@ is the machine word size in bytes
-  TypedLLVMAlloca :: TypedReg (LLVMFrameType wptr) -> Integer ->
-                     TypedLLVMStmt wptr (LLVMPointerType wptr)
-                     (RNil :> LLVMFrameType wptr)
-                     (RNil :> LLVMFrameType wptr :> LLVMPointerType wptr)
+  TypedLLVMAlloca :: (1 <= w, KnownNat w) => TypedReg (LLVMFrameType w) ->
+                     LLVMFramePerm w -> Integer ->
+                     TypedLLVMStmt w (LLVMPointerType w)
+                     (RNil :> LLVMFrameType w)
+                     (RNil :> LLVMFrameType w :> LLVMPointerType w)
 
   -- | Create a new LLVM frame
   --
   -- Type: @. -o ret:frame()@
-  TypedLLVMCreateFrame :: TypedLLVMStmt wptr (LLVMFrameType wptr) RNil
-                          (RNil :> LLVMFrameType wptr)
+  TypedLLVMCreateFrame :: (1 <= w, KnownNat w) =>
+                          TypedLLVMStmt w (LLVMFrameType w) RNil
+                          (RNil :> LLVMFrameType w)
 
   -- | Delete an LLVM frame and deallocate all memory objects allocated in it,
   -- assuming that the current distinguished permissions @ps@ correspond to the
   -- write permissions to all those objects allocated on the frame
   --
   -- Type: @ps, fp:frame(ps) -o .@
-  TypedLLVMDeleteFrame :: TypedReg (LLVMFrameType wptr) -> LLVMFramePerm w ->
-                          DistPerms ps ->
-                          TypedLLVMStmt wptr UnitType
-                          (ps :> LLVMFrameType wptr) RNil
+  TypedLLVMDeleteFrame :: (1 <= w, KnownNat w) => TypedReg (LLVMFrameType w) ->
+                          LLVMFramePerm w -> DistPerms ps ->
+                          TypedLLVMStmt w UnitType (ps :> LLVMFrameType w) RNil
 
 
 -- | Return the input permissions for a 'TypedStmt'
-typedStmtIn :: TypedStmt ext rets ps_in ps_out -> MapRList ValuePerm ps_in
-typedStmtIn = error "FIXME HERE NOW"
+typedStmtIn :: TypedStmt ext rets ps_in ps_out -> DistPerms ps_in
+typedStmtIn (TypedSetReg _ _) = DistPermsNil
+typedStmtIn (TypedCall _ fun_perm args) =
+  varSubst (typedRegsToVarSubst args) (mbValuePermsToDistPerms $
+                                       funPermIns fun_perm)
+typedStmtIn BeginLifetime = DistPermsNil
+typedStmtIn (EndLifetime l perms ps) =
+  case permListToDistPerms ps of
+    Some perms'
+      | Just Refl <- testEquality perms' perms ->
+        DistPermsCons (minLtEndPerms (PExpr_Var l) perms)
+        l (ValPerm_Conj [Perm_LOwned ps])
+    _ -> error "typedStmtIn: EndLifetime: malformed arguments"
+typedStmtIn (TypedAssert _ _) = DistPermsNil
+typedStmtIn (TypedLLVMStmt llvmStmt) = typedLLVMStmtIn llvmStmt
+
+-- | Return the input permissions for a 'TypedLLVMStmt'
+typedLLVMStmtIn :: TypedLLVMStmt w ret ps_in ps_out -> DistPerms ps_in
+typedLLVMStmtIn (ConstructLLVMWord _) = DistPermsNil
+typedLLVMStmtIn (AssertLLVMWord (TypedReg x) e) =
+  distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e)
+typedLLVMStmtIn (DestructLLVMWord (TypedReg x) e) =
+  distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e)
+typedLLVMStmtIn (TypedLLVMLoad (TypedReg x) l ps e) =
+  distPerms2 l (ValPerm_Conj [Perm_LOwned ps])
+  x (llvmRead0EqPerm (PExpr_Var l) e)
+typedLLVMStmtIn (TypedLLVMStore (TypedReg x) _) =
+  distPerms1 x llvmWrite0TruePerm
+typedLLVMStmtIn (TypedLLVMAlloca (TypedReg f) fperms _) =
+  distPerms1 f (ValPerm_Conj [Perm_LLVMFrame fperms])
+typedLLVMStmtIn TypedLLVMCreateFrame = DistPermsNil
+typedLLVMStmtIn (TypedLLVMDeleteFrame (TypedReg f) fperms perms) =
+  case llvmFrameDeletionPerms fperms of
+    Some perms'
+      | Just Refl <- testEquality perms perms' ->
+        DistPermsCons perms f (ValPerm_Conj1 $ Perm_LLVMFrame fperms)
+    _ -> error "typedLLVMStmtIn: incorrect perms in rule"
 
 -- | Return the output permissions for a 'TypedStmt'
 typedStmtOut :: TypedStmt ext rets ps_in ps_out -> MapRList Name rets ->
-                MapRList ValuePerm ps_out
-typedStmtOut = error "FIXME HERE NOW"
+                DistPerms ps_out
+typedStmtOut (TypedSetReg _ _) _ = DistPermsNil
+typedStmtOut (TypedCall _ fun_perm args) (_ :>: ret) =
+  varSubst
+  (PermVarSubst $ mapMapRList VarSubstElem (typedRegsToVars args :>: ret))
+  (mbValuePermsToDistPerms $ funPermOuts fun_perm)
+typedStmtOut BeginLifetime (_ :>: l) =
+  distPerms1 l $ ValPerm_Conj [Perm_LOwned PExpr_PermListNil]
+typedStmtOut (EndLifetime l perms _) _ = perms
+typedStmtOut (TypedAssert _ _) _ = DistPermsNil
+typedStmtOut (TypedLLVMStmt llvmStmt) (_ :>: ret) =
+  typedLLVMStmtOut llvmStmt ret
+
+-- | Return the output permissions for a 'TypedStmt'
+typedLLVMStmtOut :: TypedLLVMStmt w ret ps_in ps_out -> Name ret ->
+                    DistPerms ps_out
+typedLLVMStmtOut (ConstructLLVMWord (TypedReg x)) ret =
+  distPerms1 ret (ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var x)
+typedLLVMStmtOut (AssertLLVMWord (TypedReg x) _) ret =
+  distPerms1 ret (ValPerm_Eq $ PExpr_Nat 0)
+typedLLVMStmtOut (DestructLLVMWord (TypedReg x) e) ret =
+  distPerms1 ret (ValPerm_Eq e)
+typedLLVMStmtOut (TypedLLVMLoad _ l ps e) ret =
+  distPerms2 l (ValPerm_Conj [Perm_LOwned ps]) ret (ValPerm_Eq e)
+typedLLVMStmtOut (TypedLLVMStore (TypedReg x) (TypedReg y)) _ =
+  distPerms1 x $ llvmWrite0EqPerm (PExpr_Var y)
+typedLLVMStmtOut (TypedLLVMAlloca (TypedReg f) fperms len) ret =
+  distPerms2 f (ValPerm_Conj [Perm_LLVMFrame ((PExpr_Var ret, len):fperms)])
+  ret (llvmArrayPermOfSize len)
+typedLLVMStmtOut TypedLLVMCreateFrame ret =
+  distPerms1 ret $ ValPerm_Conj [Perm_LLVMFrame []]
+typedLLVMStmtOut (TypedLLVMDeleteFrame _ _ _) _ = DistPermsNil
+
 
 -- | Check that the permission stack of the given permission set matches the
 -- input permissions of the given statement, and replace them with the output
 -- permissions of the statement
 applyTypedStmt :: TypedStmt ext rets ps_in ps_out -> MapRList Name rets ->
                   PermSet ps_in -> PermSet ps_out
-applyTypedStmt = error "FIXME HERE NOW"
-
-
-{-
-FIXME HERE NOW: put all the following logic into applyTypedStmt
-
--- | A @'StmtPermFun' rets ps_out ps_in@ is a function on permissions that
--- specifies how a typed statement with the given type arguments manipulates the
--- current permission set. Specifically, such a function takes a permission set
--- with distinguished permissions given by @ps_in@ to one with distinguished
--- permissions given by @ps_out@. The latter can also refer to the return values
--- of types @rets@ of the statement, and so takes in bound variables for these.
-type StmtPermFun rets ps_out ps_in =
-  (MapRList Name rets -> PermSet ps_in -> PermSet ps_out)
-
--- | The trivial permission function that does nothing
-nullPermFun :: StmtPermFun rets RNil RNil
-nullPermFun = const id
-
--- | Add permission @x:eq(expr)@
-eqPermFun :: PermExpr tp -> StmtPermFun (RNil :> tp) ps ps
-eqPermFun e (_ :>: x) = set (varPerm x) (ValPerm_Eq e)
-
--- | Take in permission @x:ptr((0,spl) |-> eq(e))@ and return that permission
--- along with permission @ret:eq(e)@, where @ret@ is the return value
-llvmLoadPermFun :: (1 <= w, KnownNat w) => (TypedReg (LLVMPointerType w)) ->
-                   StmtPermFun (RNil :> LLVMPointerType w)
-                   (RNil :> LLVMPointerType w :> LLVMPointerType w)
-                   (RNil :> LLVMPointerType w)
-llvmLoadPermFun (TypedReg x) (_ :>: ret) perms =
-  case llvmPtrIsField0 (perms ^. topDistPerm x ^. llvmPtrPerm 0) of
-    Just (_, ValPerm_Eq e) -> pushPerm ret (ValPerm_Eq e) perms
-    _ -> error "llvmLoadPermFun"
-
--- | Take in write permission @p:ptr((0,All) |-> _)@ and return the permission
--- @p:ptr((0,All) |-> eq(val))@, where @val@ is the value being stored
-llvmStorePermFun :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
-                    TypedReg (LLVMPointerType w) ->
-                    StmtPermFun (RNil :> UnitType) (RNil :> LLVMPointerType w)
-                    (RNil :> LLVMPointerType w)
-llvmStorePermFun (TypedReg p) (TypedReg val) _ =
-  over (topDistPerm p . llvmPtrPerm 0) $ \pp ->
-  case llvmPtrIsField0 pp of
-    Just (SplExpr_All, _) -> llvmFieldPerm0Eq SplExpr_All (PExpr_Var val)
-    _ -> error "llvmStorePermFun"
-
--- | Take in permissions @fp:frame(xs_lens)@ for the given frame pointer @fp@
--- and return permissions @fp:frame((ret,sz):xs_lens)@ and permissions
--- @ret:ptr((0,All) |-> true * .. * (sz - w/8,All) |-> true)@
-llvmAllocaPermFun :: TypedReg (LLVMFrameType w) -> Integer ->
-                     StmtPermFun (RNil :> LLVMPointerType w)
-                     (RNil :> LLVMPointerType w) RNil
-llvmAllocaPermFun (TypedReg fp) sz (_ :>: ret) perms =
-  case perms ^. varPerm fp of
-    ValPerm_LLVMFrame frm ->
-      set (varPerm fp) (ValPerm_LLVMFrame ((PExpr_Var ret,sz):frm)) $
-      pushPerm ret (llvmPtrPermOfSize sz) perms
-
--- | Add permissions to allocate on the newly-created frame
-llvmCreateFramePermFun :: (1 <= w, KnownNat w) =>
-                          StmtPermFun (RNil :> LLVMFrameType w) RNil RNil
-llvmCreateFramePermFun (_ :>: fp) =
-  set (varPerm fp) (ValPerm_LLVMFrame [])
-
--- | Ensure that the current distinguished permissions equal those required to
--- delete the given frame, and then delete those distinguished permissions and
--- the frame permissions
-llvmDeleteFramePermFun :: TypedReg (LLVMFrameType wptr) ->
-                          StmtPermFun (RNil :> UnitType) RNil ps
-llvmDeleteFramePermFun (TypedReg fp) _  = deleteLLVMFrame fp
--}
+applyTypedStmt stmt rets =
+  modifyDistPerms $ \perms ->
+  if perms == typedStmtIn stmt then
+    typedStmtOut stmt rets
+  else
+    error "applyTypedStmt: unexpected input permissions!"
 
 
 ----------------------------------------------------------------------
@@ -430,8 +447,8 @@ data TypedStmtSeq ext blocks ret ps_in where
                    TypedStmtSeq ext blocks ret ps_in
 
 
-$(mkNuMatching [t| forall wptr tp ps_out ps_in.
-                TypedLLVMStmt wptr tp ps_out ps_in |])
+$(mkNuMatching [t| forall w tp ps_out ps_in.
+                TypedLLVMStmt w tp ps_out ps_in |])
 $(mkNuMatching [t| forall ext rets ps_in ps_out. NuMatchingExtC ext =>
                 TypedStmt ext rets ps_in ps_out |])
 $(mkNuMatching [t| forall ret ps. TypedRet ret ps |])
@@ -904,11 +921,35 @@ stmtProvePerm (TypedReg x) mb_p =
   embedImplM TypedImplStmt knownRepr (proveVarImpl x mb_p) >>>= \(s,_) ->
   greturn s
 
--- | Try to prove that a register equals a constant integer
-resolveConstant :: KnownRepr TypeRepr tp => TypedReg tp ->
+-- | Try to prove that a register equals a constant integer using equality
+-- permissions in the context
+resolveConstant :: TypedReg tp ->
                    StmtPermCheckM ext cblocks blocks ret args ps ps
                    (Maybe Integer)
-resolveConstant = error "FIXME HERE NOW: resolveConstant"
+resolveConstant = helper . PExpr_Var . typedRegVar where
+  helper :: PermExpr a ->
+            StmtPermCheckM ext cblocks blocks ret args ps ps (Maybe Integer)
+  helper (PExpr_Var x) =
+    getVarPerm x >>>= \p ->
+    case p of
+      ValPerm_Eq e -> helper e
+      _ -> greturn Nothing
+  helper (PExpr_Nat i) = greturn (Just i)
+  helper (PExpr_BV factors off) =
+    foldM (\maybe_res (BVFactor i x) ->
+            helper (PExpr_Var x) >>= \maybe_x_val ->
+            case (maybe_res, maybe_x_val) of
+              (Just res, Just x_val) -> return (Just (res + x_val * i))
+              _ -> return Nothing)
+    (Just off) factors
+  helper (PExpr_LLVMWord e) = helper e
+  helper (PExpr_LLVMOffset x e) =
+    do maybe_x_val <- helper (PExpr_Var x)
+       maybe_e_val <- helper e
+       case (maybe_x_val, maybe_e_val) of
+         (Just x_val, Just e_val) -> return (Just (x_val + e_val))
+         _ -> return Nothing
+  helper _ = return Nothing
 
 
 -- | Emit a statement in the current statement sequence, where the supplied
@@ -962,7 +1003,8 @@ endLifetime l =
         stmtProvePerms (distPermsToExDistPerms $
                         minLtEndPerms (PExpr_Var l) ps) >>>= \_ ->
         stmtProvePerm (TypedReg l) (emptyMb l_perm) >>>= \_ ->
-        emitStmt knownRepr checkerProgramLoc (EndLifetime l ps) >>>= \_ ->
+        emitStmt knownRepr checkerProgramLoc (EndLifetime l
+                                              ps ps_list) >>>= \_ ->
         stmtRecombinePerms
     _ -> stmtFailM
 
@@ -1095,7 +1137,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg (LLVMPointerRepr w) _ _)
           x (nuMulti prxs $ \(_ :>: _ :>: y) ->
               llvmRead0EqPerm (PExpr_Var l) (PExpr_Var y)) in
     stmtProvePerms needed_perms >>>= \(PermSubst (_ :>: ps :>: y)) ->
-    emitLLVMStmt knownRepr loc (TypedLLVMLoad treg (PExpr_Var l) ps y) >>>= \z ->
+    emitLLVMStmt knownRepr loc (TypedLLVMLoad treg l ps y) >>>= \z ->
     stmtRecombinePerms >>>
     endLifetime l >>>
     greturn (addCtxName ctx z)
@@ -1126,12 +1168,12 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr (LLVMPointerRepr w) _ _ val)
 tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
   let sz_treg = tcReg ctx sz_reg in
   getFramePtr >>>= \maybe_fp ->
+  maybe (greturn ValPerm_True) getRegPerm maybe_fp >>>= \fp_perm ->
   resolveConstant sz_treg >>>= \maybe_sz ->
-  case (maybe_fp, maybe_sz) of
-    (Just fp, Just sz) ->
-      getRegPerm fp >>>= \fp_perm ->
+  case (maybe_fp, fp_perm, maybe_sz) of
+    (Just fp, ValPerm_Conj [Perm_LLVMFrame fperms], Just sz) ->
       stmtProvePerm fp (emptyMb fp_perm) >>>= \_ ->
-      emitLLVMStmt knownRepr loc (TypedLLVMAlloca fp sz) >>>= \y ->
+      emitLLVMStmt knownRepr loc (TypedLLVMAlloca fp fperms sz) >>>= \y ->
       stmtRecombinePerms >>>
       greturn (addCtxName ctx y)
     _ ->

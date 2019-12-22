@@ -270,10 +270,8 @@ instance Eq (PermExprs as) where
   PExprs_Nil == PExprs_Nil = True
   (PExprs_Cons es1 e1) == (PExprs_Cons es2 e2) = es1 == es2 && e1 == e2
 
-
 instance Eq (BVFactor w) where
   (BVFactor i1 x1) == (BVFactor i2 x2) = i1 == i2 && x1 == x2
-
 
 -- | Build a "default" expression for a given type
 zeroOfType :: TypeRepr tp -> PermExpr tp
@@ -641,15 +639,22 @@ data LLVMArrayBorrow w
 
 -- | A function permission is a set of input and output permissions inside a
 -- context of ghost variables that must be solved for when the function is
--- called. One ghost variable can optionally be a lifetime that represents the
--- lifetime of the function call.
+-- called. One ghost variable is a lifetime that represents the lifetime of the
+-- function call.
 data FunPerm ghosts args ret where
   FunPerm :: CruCtx ghosts -> CruCtx args -> CruType ret ->
-             Maybe (Member (ghosts :++: args) LifetimeType) ->
+             Member ghosts LifetimeType ->
              MbValuePerms (ghosts :++: args) ->
              MbValuePerms (ghosts :++: args :> ret) ->
              FunPerm ghosts args ret
 
+-- | Return the input permissions of a function permission
+funPermIns :: FunPerm ghosts args ret -> MbValuePerms (ghosts :++: args)
+funPermIns (FunPerm _ _ _ _ perms_in _) = perms_in
+
+-- | Return the output permissions of a function permission
+funPermOuts :: FunPerm ghosts args ret -> MbValuePerms (ghosts :++: args :> ret)
+funPermOuts (FunPerm _ _ _ _ _ perms_out) = perms_out
 
 -- | A list of "distinguished" permissions to named variables
 -- FIXME: just call these VarsAndPerms or something like that...
@@ -813,6 +818,13 @@ llvmFieldWrite0True =
 -- | Create a field write permission with offset 0 and @true@ permissions
 llvmWrite0TruePerm :: (1 <= w, KnownNat w) => ValuePerm (LLVMPointerType w)
 llvmWrite0TruePerm = ValPerm_Conj [Perm_LLVMField llvmFieldWrite0True]
+
+-- | Create a field write permission with offset 0 and an @eq(e)@ permission
+llvmWrite0EqPerm :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
+                    ValuePerm (LLVMPointerType w)
+llvmWrite0EqPerm e =
+  ValPerm_Conj [Perm_LLVMField $
+                llvmFieldWrite0True { llvmFieldContents = ValPerm_Eq e }]
 
 -- | Return the range of the indices of an array permission
 llvmArrayRange :: LLVMArrayPerm w -> BVRange w
@@ -1551,9 +1563,9 @@ instance SubstVar s m => Substable s (LLVMArrayBorrow w) m where
   genSubst s [nuP| RangeBorrow r |] = RangeBorrow <$> genSubst s r
 
 instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
-  genSubst s [nuP| FunPerm ghosts args ret maybe_l perms_in perms_out |] =
+  genSubst s [nuP| FunPerm ghosts args ret l perms_in perms_out |] =
     FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
-    <$> genSubst s maybe_l
+    <$> genSubst s l
     <*> genSubst s perms_in <*> genSubst s perms_out
 
 instance SubstVar PermVarSubst m =>
@@ -1863,9 +1875,9 @@ instance SubstValPerm (LLVMArrayBorrow w) where
   substValPerm p [nuP| RangeBorrow r |] = RangeBorrow $ substValPerm p r
 
 instance SubstValPerm (FunPerm ghosts args ret) where
-  substValPerm p [nuP| FunPerm ghosts args ret maybe_l perms_in perms_out |] =
+  substValPerm p [nuP| FunPerm ghosts args ret l perms_in perms_out |] =
     FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
-    (substValPerm p maybe_l) (substValPerm p perms_in)
+    (substValPerm p l) (substValPerm p perms_in)
     (substValPerm p perms_out)
 
 
@@ -2165,11 +2177,11 @@ instance AbstractVars (DistPerms ps) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 x `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 instance AbstractVars (FunPerm ghosts args ret) where
-  abstractPEVars ns1 ns2 (FunPerm ghosts args ret maybe_l perms_in perms_out) =
+  abstractPEVars ns1 ns2 (FunPerm ghosts args ret l perms_in perms_out) =
     absVarsReturnH ns1 ns2
     ($(mkClosed [| FunPerm |])
      `clApply` toClosed ghosts `clApply` toClosed args `clApply` toClosed ret)
-    `clMbMbApplyM` abstractPEVars ns1 ns2 maybe_l
+    `clMbMbApplyM` abstractPEVars ns1 ns2 l
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms_in
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms_out
 
