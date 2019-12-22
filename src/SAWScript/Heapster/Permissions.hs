@@ -357,6 +357,14 @@ bvLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvLt (PExpr_BV [] k1) (PExpr_BV [] k2) = k1 < k2
 bvLt _ _ = False
 
+-- | Test whether a bitvector expression is in a 'BVRange'. This is an
+-- underapproximation, meaning that it could return 'False' in cases where it is
+-- actually 'True'.
+bvInRange :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> BVRange w -> Bool
+bvInRange e (BVRange off len) =
+  (bvEq off e || bvLt off e) && bvLt e (bvAdd off len)
+
+
 -- | Test whether a bitvector @e@ could equal @0@, i.e., whether the equation
 -- @e=0@ has any solutions.
 --
@@ -830,6 +838,10 @@ llvmWrite0EqPerm e =
 llvmArrayRange :: LLVMArrayPerm w -> BVRange w
 llvmArrayRange ap = BVRange (llvmArrayOffset ap) (llvmArrayLen ap)
 
+-- | Return the range of the byte offsets of an array permission
+llvmArrayRangeBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
+llvmArrayRangeBytes ap = BVRange (llvmArrayOffset ap) (arrayLengthBytes ap)
+
 -- | Return an array stride in bytes, instead of words of size @w@
 arrayStrideBytes :: KnownNat w => LLVMArrayPerm w -> Integer
 arrayStrideBytes = helper Proxy where
@@ -839,6 +851,11 @@ arrayStrideBytes = helper Proxy where
       error "arrayStrideBytes: Word size is not a multiple of 8!"
     else
       llvmArrayStride * natVal w `div` 8
+
+-- | Return the length of an array in bytes
+arrayLengthBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                    PermExpr (BVType w)
+arrayLengthBytes ap = bvMult (arrayStrideBytes ap) (llvmArrayLen ap)
 
 -- | Add a borrow to an 'LLVMArrayPerm'
 llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w

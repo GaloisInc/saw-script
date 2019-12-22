@@ -327,13 +327,13 @@ data SimplImpl ps_in ps_out where
   -- > x:p * l:lowned(ps) -o x:(inLifetime l p) * l:lowned(x:p,ps)
 
   SImpl_LCurrentRefl :: ExprVar LifetimeType ->
-                         SimplImpl RNil (RNil :> LifetimeType)
+                        SimplImpl RNil (RNil :> LifetimeType)
   -- ^ Reflexivity for @lcurrent@ proofs:
   --
   -- > . -o l:lcurrent(l)
 
   SImpl_LCurrentTrans :: ExprVar LifetimeType -> ExprVar LifetimeType ->
-                         ExprVar LifetimeType ->
+                         PermExpr LifetimeType ->
                          SimplImpl (RNil :> LifetimeType :> LifetimeType)
                          (RNil :> LifetimeType)
   -- ^ Transitively combine @lcurrent@ proofs:
@@ -592,7 +592,7 @@ simplImplIn (SImpl_SplitLifetime x p l ps) =
 simplImplIn (SImpl_LCurrentRefl _) = DistPermsNil
 simplImplIn (SImpl_LCurrentTrans l1 l2 l3) =
   distPerms2 l1 (ValPerm_Conj [Perm_LCurrent $ PExpr_Var l2])
-  l2 (ValPerm_Conj [Perm_LCurrent $ PExpr_Var l3])
+  l2 (ValPerm_Conj [Perm_LCurrent l3])
 simplImplIn (SImpl_FoldMu x p) =
   distPerms1 x (substValPerm (ValPerm_Mu p) p)
 simplImplIn (SImpl_UnfoldMu x p) = distPerms1 x (ValPerm_Mu p)
@@ -698,7 +698,7 @@ simplImplOut (SImpl_SplitLifetime x p l ps) =
 simplImplOut (SImpl_LCurrentRefl l) =
   distPerms1 l (ValPerm_Conj1 $ Perm_LCurrent $ PExpr_Var l)
 simplImplOut (SImpl_LCurrentTrans l1 _ l3) =
-  distPerms1 l1 (ValPerm_Conj [Perm_LCurrent $ PExpr_Var l3])
+  distPerms1 l1 (ValPerm_Conj [Perm_LCurrent l3])
 simplImplOut (SImpl_FoldMu x p) = distPerms1 x (ValPerm_Mu p)
 simplImplOut (SImpl_UnfoldMu x p) =
   distPerms1 x (substValPerm (ValPerm_Mu p) p)
@@ -1961,11 +1961,16 @@ proveVarLLVMArray x ps i off mb_ap =
 
 isLLVMFieldMatch :: PermExpr (BVType w) -> AtomicPerm (LLVMPointerType w) ->
                     Bool
-isLLVMFieldMatch = error "FIXME HERE NOW"
+isLLVMFieldMatch off (Perm_LLVMField fp) = bvEq off $ llvmFieldOffset fp
+isLLVMFieldMatch off (Perm_LLVMArray ap) =
+  bvInRange off (llvmArrayRangeBytes ap)
+isLLVMFieldMatch _ _ = False
 
 isLLVMArrayMatch :: PermExpr (BVType w) -> AtomicPerm (LLVMPointerType w) ->
                     Bool
-isLLVMArrayMatch = error "FIXME HERE NOW"
+isLLVMArrayMatch off (Perm_LLVMArray ap) =
+  bvInRange off (llvmArrayRangeBytes ap)
+isLLVMArrayMatch _ _ = False
 
 proveVarAtomicImpl :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
                       Mb vars (AtomicPerm a) ->
@@ -2002,26 +2007,57 @@ proveVarAtomicImpl x ps [nuP| Perm_LLVMFree mb_e |] =
       castLLVMFreeM x e' e
     _ -> implFailM
 
+proveVarAtomicImpl x [Perm_LLVMFrame
+                      fperms] [nuP| Perm_LLVMFrame mb_fperms |] =
+  partialSubstForceM mb_fperms
+  "proveVarAtomicImpl: incomplete frame perms" >>>= \fperms' ->
+  if fperms == fperms' then greturn () else implFailM
+
+proveVarAtomicImpl x [Perm_LOwned ps] [nuP| Perm_LOwned (PExpr_Var z) |]
+  | Left memb <- mbNameBoundP z
+  = getPSubst >>>= \psubst ->
+    case psubstLookup psubst memb of
+      Just ps' ->
+        if ps == ps' then greturn () else implFailM
+      Nothing ->
+        setVarM memb ps
+
+proveVarAtomicImpl x [Perm_LOwned ps] [nuP| Perm_LOwned mb_ps |] =
+  partialSubstForceM mb_ps
+  "proveVarAtomicImpl: incomplete lowned perms" >>>= \ps' ->
+  if ps == ps' then greturn () else implFailM
+
+proveVarAtomicImpl x ps p@[nuP| Perm_LCurrent mb_l' |] =
+  partialSubstForceM mb_l'
+  "proveVarAtomicImpl: incomplete lcurrent perms" >>>= \l' ->
+  case ps of
+    _ | l' == PExpr_Var x ->
+        implPopM x (ValPerm_Conj ps) >>>
+        implSimplM Proxy (SImpl_LCurrentRefl x)
+    [Perm_LCurrent l] | l == l' -> greturn ()
+    [Perm_LCurrent (PExpr_Var l)] ->
+      proveVarImpl l (fmap ValPerm_Conj1 p) >>>
+      implSimplM Proxy (SImpl_LCurrentTrans x l l')
+
+-- NOTE: cannot have existential Perm_Fun vars unless we test type equality...
 {-
-proveVarAtomicImpl _x _ps [nuP| Perm_LLVMFrame _mb_fp |] =
-  error "FIXME HERE NOW: prove frame perms!"
-
-proveVarAtomicImpl _x _ps [nuP| Perm_LOwned _mb_ps |] =
-  error "FIXME HERE NOW: prove lowned perms!"
--- IDEA: have a case for an existential var of type PermSetType
-
-proveVarAtomicImpl _x _ps [nuP| Perm_LCurrent _mb_l |] =
-  error "FIXME HERE NOW: prove lcurrent perms!"
--- IDEA: go through the lifetime stack
-
-proveVarAtomicImpl _x _ps [nuP| Perm_Fun _mb_fun_perm |] =
-  error "FIXME HERE NOW: prove fun perms!"
--- IDEA: for function variables we just need to find an equal fun perm; for
--- function constants (which will show up in the eq(e) |- fun_perm case) we will
--- need an environment to look up function types and we will need a SimplImpl
--- rule that just asserts those types and we can look them up at translation
--- time
+proveVarAtomicImpl x [Perm_Fun fun_perm] [nuP| Perm_Fun (PExpr_Var z) |]
+  | Left memb <- mbNameBoundP z
+  = getPSubst >>>= \psubst ->
+    case psubstLookup psubst memb of
+      Just fun_perm'
+        | Just Refl <- funPermEq fun_perm fun_perm' -> greturn ()
+      Just _ -> implFailM
+      Nothing -> setVarM memb fun_perm
 -}
+
+proveVarAtomicImpl x [Perm_Fun fun_perm] [nuP| Perm_Fun mb_fun_perm |] =
+  partialSubstForceM mb_fun_perm
+  "proveVarAtomicImpl: incomplete function perm" >>>= \fun_perm' ->
+  case funPermEq fun_perm fun_perm' of
+    Just Refl -> greturn ()
+    Nothing -> implFailM
+
 
 -- | Prove @x:(p1 * ... * pn) |- x:(p1' * ... * pm')@ assuming that the LHS
 -- conjunction is on the top of the stack, and push any leftover permissions for
