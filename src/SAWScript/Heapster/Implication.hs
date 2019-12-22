@@ -186,22 +186,25 @@ data SimplImpl ps_in ps_out where
   --
   -- > x:ptr((rw,off) |-> eq(y)) * y:p -o x:ptr((rw,off) |-> p)
 
-  SImpl_AddLLVMFieldLifetime ::
+  SImpl_LLVMFieldLifetimeCurrent ::
     (1 <= w, KnownNat w) =>
-    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w -> PermExpr LifetimeType ->
-    SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
-  -- ^ Add a lifetime to a field permission:
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
+    ExprVar LifetimeType -> PermExpr LifetimeType ->
+    SimplImpl (RNil :> LLVMPointerType w :> LifetimeType)
+    (RNil :> LLVMPointerType w)
+  -- ^ Change the lifetime of a field permission to one during which the
+  -- existing lifetime is current:
   --
-  -- > x:[ls]ptr((rw,off) |-> p) -o [l,ls]x:ptr((rw,off) |-> p)
+  -- > x:[l1]ptr((rw,off) |-> p) * l1:[l2]lcurrent -o [l2]x:ptr((rw,off) |-> p)
 
-  SImpl_RemoveLLVMFieldLifetime ::
+  SImpl_LLVMFieldLifetimeAlways ::
     (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> LLVMFieldPerm w -> PermExpr LifetimeType ->
     SimplImpl (RNil :> LLVMPointerType w) (RNil :> LLVMPointerType w)
-  -- ^ Remove a lifetime from a field permission if it is contained by another
-  -- lifetime already on this field:
+  -- ^ Change the lifetime of a field permission whose existing lifetime is
+  -- always:
   --
-  -- > x:[l,ls]ptr((rw,off) |-> p) * li:lcontains(l) -o [ls]x:ptr((rw,off) |-> p)
+  -- > x:[always]ptr((rw,off) |-> p) -o [l]x:ptr((rw,off) |-> p)
 
   SImpl_DemoteLLVMFieldWrite ::
     (1 <= w, KnownNat w) =>
@@ -315,33 +318,27 @@ data SimplImpl ps_in ps_out where
 
   SImpl_SplitLifetime ::
     KnownRepr TypeRepr a => ExprVar a -> ValuePerm a ->
-    ExprVar LifetimeType -> [PermExpr LifetimeType] -> PermExpr PermListType ->
+    ExprVar LifetimeType -> PermExpr PermListType ->
     SimplImpl (RNil :> a :> LifetimeType)
     (RNil :> a :> LifetimeType)
-  -- ^ Save a permission for later by adding the current lifetime to its type
-  -- and storing the permission in the current lifetime for retrieval later:
+  -- ^ Save a permission for later by splitting it into part that is in the
+  -- current lifetime and part that is saved in the lifetime for later:
   --
-  -- > x:p * l:lowned(ls;ps) -o x:[l]p * l:lowned(ls;x:p, ps)
+  -- > x:p * l:lowned(ps) -o x:(inLifetime l p) * l:lowned(x:p,ps)
 
-  SImpl_LContainsRefl :: ExprVar LifetimeType ->
+  SImpl_LCurrentRefl :: ExprVar LifetimeType ->
                          SimplImpl RNil (RNil :> LifetimeType)
-  -- ^ Reflexivity for @lcontains@ proofs:
+  -- ^ Reflexivity for @lcurrent@ proofs:
   --
-  -- > . -o l:lcontains(l)
+  -- > . -o l:lcurrent(l)
 
-  SImpl_LContainsAlways :: ExprVar LifetimeType ->
-                           SimplImpl RNil (RNil :> LifetimeType)
-  -- ^ Every lifetime is contained by @always@:
+  SImpl_LCurrentTrans :: ExprVar LifetimeType -> ExprVar LifetimeType ->
+                         ExprVar LifetimeType ->
+                         SimplImpl (RNil :> LifetimeType :> LifetimeType)
+                         (RNil :> LifetimeType)
+  -- ^ Transitively combine @lcurrent@ proofs:
   --
-  -- > . -o always:lcontains(l)
-
-  SImpl_LContainsTrans :: ExprVar LifetimeType -> ExprVar LifetimeType ->
-                          ExprVar LifetimeType ->
-                          SimplImpl (RNil :> LifetimeType :> LifetimeType)
-                          (RNil :> LifetimeType)
-  -- ^ Transitively combine @lcontains@ proofs:
-  --
-  -- > l1:lcontains(l2) * l2:lcontains(l3) -o l1:lcontains(l3)
+  -- > l1:lcurrent(l2) * l2:lcurrent(l3) -o l1:lcurrent(l3)
 
   SImpl_FoldMu :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
                   SimplImpl (RNil :> a) (RNil :> a)
@@ -517,10 +514,14 @@ simplImplIn (SImpl_IntroLLVMFieldContents x y fld) =
                               fld { llvmFieldContents =
                                     ValPerm_Eq (PExpr_Var y)}])
   y (llvmFieldContents fld)
-simplImplIn (SImpl_AddLLVMFieldLifetime x fld _) =
-  distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
-simplImplIn (SImpl_RemoveLLVMFieldLifetime x fld _) =
-  distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
+simplImplIn (SImpl_LLVMFieldLifetimeCurrent x fld l1 l2) =
+  distPerms2 x (ValPerm_Conj [Perm_LLVMField fld])
+  l1 (ValPerm_Conj [Perm_LCurrent l2])
+simplImplIn (SImpl_LLVMFieldLifetimeAlways x fld l) =
+  if llvmFieldLifetime fld == PExpr_Always then
+    distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
+  else
+    error "simplImplIn: SImpl_LLVMFieldLifetimeAlways: input lifetime is not always"
 simplImplIn (SImpl_DemoteLLVMFieldWrite x fld) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField $
                               fld { llvmFieldRW = Write }])
@@ -579,13 +580,12 @@ simplImplIn (SImpl_LLVMArrayIndexReturn x ap i j) =
 simplImplIn (SImpl_LLVMArrayContents x ap _ _ _) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMArray ap])
 
-simplImplIn (SImpl_SplitLifetime x p l ls ps) =
-  distPerms2 x p l (ValPerm_Conj [Perm_LOwned ls ps])
-simplImplIn (SImpl_LContainsRefl l) = DistPermsNil
-simplImplIn (SImpl_LContainsAlways l) = DistPermsNil
-simplImplIn (SImpl_LContainsTrans l1 l2 l3) =
-  distPerms2 l1 (ValPerm_Conj [Perm_LContains $ PExpr_Var l2])
-  l2 (ValPerm_Conj [Perm_LContains $ PExpr_Var l3])
+simplImplIn (SImpl_SplitLifetime x p l ps) =
+  distPerms2 x p l (ValPerm_Conj [Perm_LOwned ps])
+simplImplIn (SImpl_LCurrentRefl _) = DistPermsNil
+simplImplIn (SImpl_LCurrentTrans l1 l2 l3) =
+  distPerms2 l1 (ValPerm_Conj [Perm_LCurrent $ PExpr_Var l2])
+  l2 (ValPerm_Conj [Perm_LCurrent $ PExpr_Var l3])
 simplImplIn (SImpl_FoldMu x p) =
   distPerms1 x (substValPerm (ValPerm_Mu p) p)
 simplImplIn (SImpl_UnfoldMu x p) = distPerms1 x (ValPerm_Mu p)
@@ -622,10 +622,10 @@ simplImplOut (SImpl_CastLLVMFieldOffset x fld off') =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField $ fld { llvmFieldOffset = off' }])
 simplImplOut (SImpl_IntroLLVMFieldContents x _ fld) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
-simplImplOut (SImpl_AddLLVMFieldLifetime x fld l) =
-  distPerms1 x (ValPerm_Conj [Perm_LLVMField $ addLifetime l fld])
-simplImplOut (SImpl_RemoveLLVMFieldLifetime x fld l) =
-  distPerms1 x (ValPerm_Conj [Perm_LLVMField $ remLifetime l fld])
+simplImplOut (SImpl_LLVMFieldLifetimeCurrent x fld l1 l2) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField fld { llvmFieldLifetime = l2 }])
+simplImplOut (SImpl_LLVMFieldLifetimeAlways x fld l) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField $ fld { llvmFieldLifetime = l }])
 simplImplOut (SImpl_DemoteLLVMFieldWrite x fld) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField $
                               fld { llvmFieldRW = Read }])
@@ -685,15 +685,13 @@ simplImplOut (SImpl_LLVMArrayContents x ap i fp _) =
                                      take i (llvmArrayFields ap) ++
                                      fp : drop (i+1) (llvmArrayFields ap)}])
 
-simplImplOut (SImpl_SplitLifetime x p l ls ps) =
-  distPerms2 x (addLifetime (PExpr_Var l) p)
-  l (ValPerm_Conj [Perm_LOwned ls (PExpr_PermListCons (PExpr_Var x) p ps)])
-simplImplOut (SImpl_LContainsRefl l) =
-  distPerms1 l (ValPerm_Conj [Perm_LContains $ PExpr_Var l])
-simplImplOut (SImpl_LContainsAlways l) =
-  distPerms1 l (ValPerm_Conj [Perm_LContains PExpr_Always])
-simplImplOut (SImpl_LContainsTrans l1 _ l3) =
-  distPerms1 l1 (ValPerm_Conj [Perm_LContains $ PExpr_Var l3])
+simplImplOut (SImpl_SplitLifetime x p l ps) =
+  distPerms2 x (inLifetime (PExpr_Var l) p)
+  l (ValPerm_Conj [Perm_LOwned (PExpr_PermListCons (PExpr_Var x) p ps)])
+simplImplOut (SImpl_LCurrentRefl l) =
+  distPerms1 l (ValPerm_Conj1 $ Perm_LCurrent $ PExpr_Var l)
+simplImplOut (SImpl_LCurrentTrans l1 _ l3) =
+  distPerms1 l1 (ValPerm_Conj [Perm_LCurrent $ PExpr_Var l3])
 simplImplOut (SImpl_FoldMu x p) = distPerms1 x (ValPerm_Mu p)
 simplImplOut (SImpl_UnfoldMu x p) =
   distPerms1 x (substValPerm (ValPerm_Mu p) p)
@@ -991,7 +989,7 @@ data ImplState vars ps =
               _implStateLifetimes :: [ExprVar LifetimeType],
               -- ^ Stack of active lifetimes, where the first element is the
               -- current lifetime (we should have an @lowned@ permission for it)
-              -- and each lifetime contains (i.e., has an @lcontains@ permission
+              -- and each lifetime contains (i.e., has an @lcurrent@ permission
               -- for) the next lifetime in the stack
               _implStateMuRecurseFlag :: Maybe (Either () ())
               -- ^ Whether we are recursing under a @mu@, either on the left
@@ -1144,7 +1142,7 @@ implPushCurLifetimePermM l =
      error "implPushLifetimePermM: wrong value for the current lifetime!") >>>
   getPerm l >>>= \p ->
   case p of
-    ValPerm_Conj [Perm_LOwned _ _] -> implPushM l p
+    ValPerm_Conj [Perm_LOwned _] -> implPushM l p
     _ -> error "implPushLifetimePermM: no LOwned permission for the current lifetime!"
 
 -- | Pop (as in 'implPushM') the permission for the current lifetime
@@ -1156,7 +1154,7 @@ implPopCurLifetimePermM l =
      error "implPopLifetimePermM: wrong value for the current lifetime!") >>>
   getTopDistPerm l >>>= \p ->
   case p of
-    ValPerm_Conj [Perm_LOwned _ _] -> implPopM l p
+    ValPerm_Conj [Perm_LOwned _] -> implPopM l p
     _ -> error "implPopLifetimePermM: no LOwned permission for the current lifetime!"
 
 {- FIXME: this should no longer be needed!
@@ -1398,8 +1396,8 @@ implSplitLifetimeM :: KnownRepr TypeRepr a => ExprVar a -> ValuePerm a ->
 implSplitLifetimeM x p l =
   getTopDistPerm l >>>= \lp ->
   case lp of
-    ValPerm_Conj [Perm_LOwned ls ps] ->
-      implSimplM Proxy (SImpl_SplitLifetime x p l ls ps)
+    ValPerm_Conj [Perm_LOwned ps] ->
+      implSimplM Proxy (SImpl_SplitLifetime x p l ps)
     _ -> error "implSplitLifetimeM: top permission is not an lowned permission"
 
 -- | Combine proofs of @x:ptr(pps,(off,spl) |-> eq(y))@ and @y:p@ on the top of
@@ -1780,10 +1778,12 @@ proveVarLLVMField x ps i off mb_fp =
         implInsertConjM x p_rem ps_rem i >>>
         implPopM x (ValPerm_Conj (take i ps_rem ++ [p_rem] ++ drop i ps_rem))
       Nothing -> implDropM x ValPerm_True) >>>
-  proveVarLLVMFieldH x fp off mb_fp
+  implElimLLVMFieldContentsM x fp >>>= \y ->
+  let fp' = fp { llvmFieldContents = ValPerm_Eq (PExpr_Var y) } in
+  proveVarLLVMFieldH x fp' off mb_fp
 
 
--- | Cast the offset, add any needed lifetimes, and prove the contents
+-- | Cast the offset, change the lifetime if needed, and prove the contents
 proveVarLLVMFieldH ::
   (1 <= w, KnownNat w, NuMatchingAny1 r) =>
   ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
@@ -1793,10 +1793,21 @@ proveVarLLVMFieldH x fp off' mb_fp =
   -- Step 1: cast the field offset to off'
   implTryProveBVProp x (BVProp_Eq (llvmFieldOffset fp) off') >>>
   implSimplM Proxy (SImpl_CastLLVMFieldOffset x fp off') >>>
-  -- Step 2: add any needed lifetimes / remove extra lifetimes
-  partialSubstForceM (fmap llvmFieldLifetimes mb_fp)
-  "proveVarLLVMFieldH: incomplete psubst: lifetime variable" >>>= \ls' ->
-  (error "FIXME HERE NOW: equalize lifetimes") >>>
+  -- Step 2: change the lifetime if needed
+  --
+  -- NOTE: we could allow existential lifetimes on the RHS by just adding some
+  -- more cases here
+  partialSubstForceM (fmap llvmFieldLifetime mb_fp)
+  "proveVarLLVMFieldH: incomplete RHS lifetime" >>>= \l2 ->
+  (case (llvmFieldLifetime fp, l2) of
+      (l1, l2) | l1 == l2 -> greturn ()
+      (PExpr_Always, l2) ->
+        implSimplM Proxy (SImpl_LLVMFieldLifetimeAlways x fp l2)
+      (PExpr_Var l1, l2) ->
+        let lcur_perm = ValPerm_Conj [Perm_LCurrent l2] in
+        proveVarImpl l1 (fmap (const $ lcur_perm) mb_fp) >>>
+        implSimplM Proxy (SImpl_LLVMFieldLifetimeCurrent x fp l1 l2)) >>>
+  
   -- Step 3: prove contents
   let y = case llvmFieldContents fp of
         ValPerm_Eq (PExpr_Var y) -> y
@@ -1806,7 +1817,15 @@ proveVarLLVMFieldH x fp off' mb_fp =
 
 
 -- | Extract an LLVM field permission from the given atomic permission, leaving
--- as much of that atomic permission as possible on the top of the stack
+-- as much of the original atomic permission as possible on the top of the stack
+-- (which could be none of it, i.e., @true@). At the end of this function, the
+-- top of the stack should look like
+--
+-- > x:ptr((rw,off) -> p) * x:rem
+--
+-- where @rem@ is the remainder of the input atomic permission, which is either
+-- a single atomic permission or @true@. The field permission and remaining
+-- atomic permission (if any) are the return values of this function.
 extractNeededLLVMFieldPerm ::
   NuMatchingAny1 r => ExprVar (LLVMPointerType w) ->
   AtomicPerm (LLVMPointerType w) ->
@@ -1815,19 +1834,13 @@ extractNeededLLVMFieldPerm ::
   (ps :> LLVMPointerType w)
   (LLVMFieldPerm w, Maybe (AtomicPerm (LLVMPointerType w)))
 
--- Cannot get a field permission from a free, so fail
-extractNeededLLVMFieldPerm _ (Perm_LLVMFree _) _ _ = implFailM
-
--- If proving x:ptr((R,off) |-> p) |- x:ptr((R,off') |-> p'):
--- 1. Bind a variable y for the contents of x using Impl1_ElimLLVMFieldContents
--- 2. Copy the input read permission; and
+-- If proving x:ptr((R,off) |-> p) |- x:ptr((R,off') |-> p'), just copy the read
+-- permission
 extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
   | Read <- llvmFieldRW fp
   , Read <- mbLift (fmap llvmFieldRW mb_fp)
-  = implElimLLVMFieldContentsM x fp >>>= \y ->
-    let fp' = fp { llvmFieldContents = ValPerm_Eq (PExpr_Var y) } in
-    implCopyConjM x [Perm_LLVMField fp'] 0 >>>
-    greturn (fp', Just (Perm_LLVMField fp'))
+  = implCopyConjM x [Perm_LLVMField fp] 0 >>>
+    greturn (fp, Just (Perm_LLVMField fp))
 
 -- Cannot prove x:ptr((R,off) |-> p) |- x:ptr((W,off') |-> p'), so fail
 extractNeededLLVMFieldPerm x (Perm_LLVMField fp) _ mb_fp
@@ -1835,38 +1848,45 @@ extractNeededLLVMFieldPerm x (Perm_LLVMField fp) _ mb_fp
   , Write <- mbLift (fmap llvmFieldRW mb_fp)
   = implFailM
 
--- If proving x:ptr((W,off) |-> p) |- x:ptr((R,off') |-> p'), try to split the
--- lifetime of the input permission, if possible, and then demote to read
-extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
+-- If proving x:[l1]ptr((W,off) |-> p) |- x:[l2]ptr((R,off') |-> p'), first
+-- split the lifetime of the input permission if l2 /= l1 and we have an lowned
+-- permission for l2, and then demote to read and copy the read permission as in
+-- the R |- R case above
+extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' mb_fp
   | Write <- llvmFieldRW fp
   , Read <- mbLift (fmap llvmFieldRW mb_fp)
-  = implElimLLVMFieldContentsM x fp >>>= \y ->
-    let fp' = fp { llvmFieldContents = ValPerm_Eq (PExpr_Var y) } in
-    getCurLifetime >>>= \l ->
-    let lexpr = PExpr_Var l in
-    (if mbLift (fmap (elem lexpr . llvmFieldLifetimes) mb_fp) &&
-        notElem lexpr (llvmFieldLifetimes fp) then
-       implPushCurLifetimePermM l >>>
-       implSplitLifetimeM x (ValPerm_Conj [Perm_LLVMField fp']) l >>>
-       implPopCurLifetimePermM l >>>
-       greturn (fp' { llvmFieldLifetimes = lexpr:(llvmFieldLifetimes fp') })
-     else greturn fp') >>>= \fp'' ->
-    implSimplM Proxy (SImpl_DemoteLLVMFieldWrite x fp'') >>>
-    implCopyConjM x [Perm_LLVMField fp'] 0 >>>
-    let fp''' = fp'' { llvmFieldRW = Read } in
-    greturn (fp''', Just (Perm_LLVMField fp'''))
+  = partialSubstForceM (fmap llvmFieldLifetime mb_fp)
+    "extractNeededLLVMFieldPerm: incomplete RHS lifetime" >>>= \l2 ->
+    -- NOTE: we could allow existential lifetimes on the RHS by just adding some
+    -- more cases here
+    (case l2 of
+        PExpr_Var l2_var ->
+          getPerm l2_var >>>= \l2_perm ->
+          (case l2_perm of
+              ValPerm_Conj [Perm_LOwned _] ->
+                implPushM l2_var l2_perm >>>
+                implSplitLifetimeM x (ValPerm_Conj1 p) l2_var >>>
+                implPopM l2_var l2_perm >>>
+                greturn (fp { llvmFieldLifetime = l2 })
+              _ -> greturn fp)
+        _ -> greturn fp) >>>= \fp' ->
+    implSimplM Proxy (SImpl_DemoteLLVMFieldWrite x fp') >>>
+    let fp'' = fp' { llvmFieldRW = Read } in
+    implCopyConjM x [Perm_LLVMField fp''] 0 >>>
+    greturn (fp'', Just (Perm_LLVMField fp''))
 
--- If proving x:ptr((W,off) |-> p) |- x:ptr((W,off') |-> p'), bind a fresh
--- variable y for the contents, and then we are done
+-- If proving x:ptr((W,off) |-> p) |- x:ptr((W,off') |-> p'), just push a true
+-- permission, because there is no remaining permission
 extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
   | Write <- llvmFieldRW fp
   , Write <- mbLift (fmap llvmFieldRW mb_fp)
-  = implElimLLVMFieldContentsM x fp >>>= \y ->
-    introConjM x >>>
-    greturn (fp { llvmFieldContents = ValPerm_Eq (PExpr_Var y) }, Nothing)
+  = introConjM x >>> greturn (fp, Nothing)
 
 extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp =
   error "FIXME HERE NOW"
+
+-- Cannot get a field permission from a free, so fail
+extractNeededLLVMFieldPerm _ (Perm_LLVMFree _) _ _ = implFailM
 
 
 ----------------------------------------------------------------------
@@ -1937,8 +1957,8 @@ proveVarAtomicImpl _x _ps [nuP| Perm_LOwned _mb_ps |] =
   error "FIXME HERE NOW: prove lowned perms!"
 -- IDEA: have a case for an existential var of type PermSetType
 
-proveVarAtomicImpl _x _ps [nuP| Perm_LContains _mb_l |] =
-  error "FIXME HERE NOW: prove lcontains perms!"
+proveVarAtomicImpl _x _ps [nuP| Perm_LCurrent _mb_l |] =
+  error "FIXME HERE NOW: prove lcurrent perms!"
 -- IDEA: go through the lifetime stack
 
 proveVarAtomicImpl _x _ps [nuP| Perm_Fun _mb_fun_perm |] =

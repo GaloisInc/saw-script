@@ -191,24 +191,18 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
                TypedStmt ext (RNil :> ret) (ghosts :> LifetimeType :++: args)
                (ghosts :> LifetimeType :++: args :> ret)
 
-  -- | Begin a new lifetime
+  -- | Begin a new lifetime:
   --
-  -- Type: @. -o ret:lowned(nil)@
+  -- > . -o ret:lowned(nil)
   BeginLifetime :: TypedStmt ext (RNil :> LifetimeType)
                    RNil (RNil :> LifetimeType)
 
   -- | End a lifetime, consuming the minimal lifetime ending permissions for the
-  -- lifetime, returning the permissions stored in the @lowned@ permission for
-  -- the lifetime, and removing the lifetime from any other @lowned@
-  -- permissions:
+  -- lifetime and returning the permissions stored in the @lowned@ permission:
   --
-  -- Type: @minLtEndperms(ps) * ps_lts * l:lowned(ps) -o ps * remLt(l,ps_lts)@
-  --
-  -- where @remLt(l,ps_lts)@ removes @l@ from the @lowned@ permissions in
-  -- @ps_lts@, all of which must be @lowned@ permissions
-  EndLifetime :: ExprVar LifetimeType -> DistPerms ps -> DistPerms ps_lts ->
-                 TypedStmt ext RNil (ps :++: ps_lts :> LifetimeType)
-                 (ps :++: ps_lts)
+  -- > minLtEndperms(ps) * l:lowned(ps) -o ps
+  EndLifetime :: ExprVar LifetimeType -> DistPerms ps ->
+                 TypedStmt ext RNil (ps :> LifetimeType) ps
 
   -- | Assert a boolean condition, printing the given string on failure
   TypedAssert :: TypedReg BoolType -> TypedReg StringType ->
@@ -961,22 +955,16 @@ beginLifetime =
 endLifetime :: PermCheckExtC ext => ExprVar LifetimeType ->
                StmtPermCheckM ext cblocks blocks ret args RNil RNil ()
 endLifetime l =
-  stmtProvePerm (TypedReg l) (nu $ \ps ->
-                               ValPerm_Conj [Perm_LOwned [] $
-                                             PExpr_Var ps]) >>>= \subst ->
-  let perms_l = substLookup subst Member_Base in
-  stmtRecombinePerms >>>
-  (getLaterLifetimes l <$> stCurPerms <$> gget) >>>= \some_ps_lts ->
-  case (permListToDistPerms perms_l, some_ps_lts) of
-    (Some ps, Some ps_lts) ->
-      stmtProvePerms (distPermsToExDistPerms
-                      (appendDistPerms
-                       (minLtEndPerms (PExpr_Var l) ps) ps_lts)) >>>= \_ ->
-      stmtProvePerm (TypedReg l) (emptyMb $
-                                  ValPerm_Conj
-                                  [Perm_LOwned [] perms_l]) >>>= \_ ->
-      emitStmt knownRepr checkerProgramLoc (EndLifetime l ps ps_lts) >>>= \_ ->
-      stmtRecombinePerms
+  getVarPerm l >>>= \l_perm ->
+  case l_perm of
+    ValPerm_Conj [Perm_LOwned ps_list]
+      | Some ps <- permListToDistPerms ps_list ->
+        stmtProvePerms (distPermsToExDistPerms $
+                        minLtEndPerms (PExpr_Var l) ps) >>>= \_ ->
+        stmtProvePerm (TypedReg l) (emptyMb l_perm) >>>= \_ ->
+        emitStmt knownRepr checkerProgramLoc (EndLifetime l ps) >>>= \_ ->
+        stmtRecombinePerms
+    _ -> stmtFailM
 
 
 ----------------------------------------------------------------------
@@ -1103,7 +1091,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg (LLVMPointerRepr w) _ _)
           (ExDistPermsCons ExDistPermsNil
            l
            (nuMulti prxs $ \(_ :>: ps :>: _) ->
-             ValPerm_Conj [Perm_LOwned [] (PExpr_Var ps)]))
+             ValPerm_Conj [Perm_LOwned (PExpr_Var ps)]))
           x (nuMulti prxs $ \(_ :>: _ :>: y) ->
               llvmRead0EqPerm (PExpr_Var l) (PExpr_Var y)) in
     stmtProvePerms needed_perms >>>= \(PermSubst (_ :>: ps :>: y)) ->

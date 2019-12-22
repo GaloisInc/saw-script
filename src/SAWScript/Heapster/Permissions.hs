@@ -523,13 +523,11 @@ data AtomicPerm (a :: CrucibleType) where
 
   -- | Ownership permission for a lifetime, including an assertion that it is
   -- still current and permission to end that lifetime and get back the given
-  -- permissions once the listed lifetimes are also over.
-  Perm_LOwned :: [PermExpr LifetimeType] -> PermExpr PermListType ->
-                 AtomicPerm LifetimeType
+  -- permissions that are being held by the lifetime
+  Perm_LOwned :: PermExpr PermListType -> AtomicPerm LifetimeType
 
-  -- | Assertion that a lifetime is current during another lifetime, i.e., that
-  -- it contains that other lifetime
-  Perm_LContains :: PermExpr LifetimeType -> AtomicPerm LifetimeType
+  -- | Assertion that a lifetime is current during another lifetime
+  Perm_LCurrent :: PermExpr LifetimeType -> AtomicPerm LifetimeType
 
   -- | A function permission
   Perm_Fun :: FunPerm ghosts (CtxToRList cargs) ret ->
@@ -572,6 +570,10 @@ data ValuePerm (a :: CrucibleType) where
 pattern ValPerm_True :: ValuePerm a
 pattern ValPerm_True = ValPerm_Conj []
 
+-- | The conjunction of exactly 1 atomic permission
+pattern ValPerm_Conj1 :: AtomicPerm a -> ValuePerm a
+pattern ValPerm_Conj1 p = ValPerm_Conj [p]
+
 -- | A sequence of value permissions
 data ValuePerms as where
   ValPerms_Nil :: ValuePerms RNil
@@ -593,9 +595,8 @@ type LLVMPtrPerm w = AtomicPerm (LLVMPointerType w)
 data LLVMFieldPerm w =
   LLVMFieldPerm { llvmFieldRW :: RWModality,
                   -- ^ Whether this is a read or write permission
-                  llvmFieldLifetimes :: [PermExpr LifetimeType],
-                  -- ^ The lifetimes that must all be active for this field
-                  -- permission to be usable
+                  llvmFieldLifetime :: PermExpr LifetimeType,
+                  -- ^ The lifetime during with this field permission is active
                   llvmFieldOffset :: PermExpr (BVType w),
                   -- ^ The offset from the pointer in bytes of this field
                   llvmFieldContents :: ValuePerm (LLVMPointerType w)
@@ -708,10 +709,10 @@ instance Eq (AtomicPerm a) where
   (Perm_LLVMFree _) == _ = False
   (Perm_LLVMFrame frame1) == (Perm_LLVMFrame frame2) = frame1 == frame2
   (Perm_LLVMFrame _) == _ = False
-  (Perm_LOwned ls1 e1) == (Perm_LOwned ls2 e2) = ls1 == ls2 && e1 == e2
-  (Perm_LOwned _ _) == _ = False
-  (Perm_LContains e1) == (Perm_LContains e2) = e1 == e2
-  (Perm_LContains _) == _ = False
+  (Perm_LOwned e1) == (Perm_LOwned e2) = e1 == e2
+  (Perm_LOwned _) == _ = False
+  (Perm_LCurrent e1) == (Perm_LCurrent e2) = e1 == e2
+  (Perm_LCurrent _) == _ = False
   (Perm_Fun fperm1) == (Perm_Fun fperm2)
     | Just Refl <- funPermEq fperm1 fperm2 = True
   (Perm_Fun _) == _ = False
@@ -797,7 +798,7 @@ llvmRead0EqPerm :: (1 <= w, KnownNat w) => PermExpr LifetimeType ->
 llvmRead0EqPerm l e =
   ValPerm_Conj [Perm_LLVMField $
                 LLVMFieldPerm { llvmFieldRW = Read,
-                                llvmFieldLifetimes = [l],
+                                llvmFieldLifetime = l,
                                 llvmFieldOffset = bvInt 0,
                                 llvmFieldContents = ValPerm_Eq e }]
 
@@ -805,7 +806,7 @@ llvmRead0EqPerm l e =
 llvmFieldWrite0True :: (1 <= w, KnownNat w) => LLVMFieldPerm w
 llvmFieldWrite0True =
   LLVMFieldPerm { llvmFieldRW = Write,
-                  llvmFieldLifetimes = [],
+                  llvmFieldLifetime = PExpr_Always,
                   llvmFieldOffset = bvInt 0,
                   llvmFieldContents = ValPerm_True }
 
@@ -1007,6 +1008,14 @@ distPerms2 :: ExprVar a1 -> ValuePerm a1 ->
               ExprVar a2 -> ValuePerm a2 -> DistPerms (RNil :> a1 :> a2)
 distPerms2 x1 p1 x2 p2 = DistPermsCons (distPerms1 x1 p1) x2 p2
 
+-- | Map a function on permissions across a 'DistPerms'
+mapDistPerms :: (forall a. ValuePerm a -> ValuePerm a) ->
+                DistPerms ps -> DistPerms ps
+mapDistPerms _ DistPermsNil = DistPermsNil
+mapDistPerms f (DistPermsCons perms x p) =
+  DistPermsCons (mapDistPerms f perms) x (f p)
+
+
 -- | Extract the non-variable portion of a permission list expression
 permListToDistPerms :: PermExpr PermListType -> Some DistPerms
 permListToDistPerms PExpr_PermListNil = Some DistPermsNil
@@ -1108,72 +1117,48 @@ atomicPermIsCopyable (Perm_LLVMArray
   all (atomicPermIsCopyable . Perm_LLVMField) fps
 atomicPermIsCopyable (Perm_LLVMFree _) = True
 atomicPermIsCopyable (Perm_LLVMFrame _) = False
-atomicPermIsCopyable (Perm_LOwned _ _) = False
-atomicPermIsCopyable (Perm_LContains _) = True
+atomicPermIsCopyable (Perm_LOwned _) = False
+atomicPermIsCopyable (Perm_LCurrent _) = True
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
 
--- | Generic function to modify read/write modalities and/or lifetimes
-class ModifyModalities a where
-  modifyModalities :: (RWModality -> RWModality) ->
-                      ([PermExpr LifetimeType] -> [PermExpr LifetimeType]) ->
-                      a -> a
+-- | Generic function to put a permission inside a lifetime
+class InLifetime a where
+  inLifetime :: PermExpr LifetimeType -> a -> a
 
-instance ModifyModalities (DistPerms ps) where
-  modifyModalities f1 f2 DistPermsNil = DistPermsNil
-  modifyModalities f1 f2 (DistPermsCons perms x p) =
-    (DistPermsCons (modifyModalities f1 f2 perms) x (modifyModalities f1 f2 p))
+instance InLifetime (DistPerms ps) where
+  inLifetime l = mapDistPerms (inLifetime l)
 
-instance ModifyModalities (ValuePerm a) where
-  modifyModalities _ _ p@(ValPerm_Eq _) = p
-  modifyModalities f1 f2 (ValPerm_Or p1 p2) =
-    ValPerm_Or (modifyModalities f1 f2 p1) (modifyModalities f1 f2 p2)
-  modifyModalities f1 f2 (ValPerm_Exists mb_p) =
-    ValPerm_Exists $ fmap (modifyModalities f1 f2) mb_p
-  modifyModalities f1 f2 (ValPerm_Mu mb_p) =
-    ValPerm_Mu $ fmap (modifyModalities f1 f2) mb_p
-  modifyModalities _ _ p@(ValPerm_Var _) = p
-  modifyModalities f1 f2 (ValPerm_Conj ps) =
-    ValPerm_Conj $ map (modifyModalities f1 f2) ps
+instance InLifetime (ValuePerm a) where
+  inLifetime _ p@(ValPerm_Eq _) = p
+  inLifetime l (ValPerm_Or p1 p2) =
+    ValPerm_Or (inLifetime l p1) (inLifetime l p2)
+  inLifetime l (ValPerm_Exists mb_p) =
+    ValPerm_Exists $ fmap (inLifetime l) mb_p
+  inLifetime l (ValPerm_Mu mb_p) =
+    ValPerm_Mu $ fmap (inLifetime l) mb_p
+  inLifetime _ p@(ValPerm_Var _) = p
+  inLifetime l (ValPerm_Conj ps) =
+    ValPerm_Conj $ map (inLifetime l) ps
 
-instance ModifyModalities (AtomicPerm a) where
-  modifyModalities f1 f2 (Perm_LLVMField fp) =
-    Perm_LLVMField $ modifyModalities f1 f2 fp
-  modifyModalities f1 f2 (Perm_LLVMArray ap) =
-    Perm_LLVMArray $ modifyModalities f1 f2 ap
-  modifyModalities _ _ p@(Perm_LLVMFree _) = p
-  modifyModalities _ _ p@(Perm_LLVMFrame _) = p
-  modifyModalities _ _ p@(Perm_LOwned _ _) = p
-  modifyModalities _ _ p@(Perm_LContains _) = p
-  modifyModalities _ _ p@(Perm_Fun _) = p
-  modifyModalities _ _ p@(Perm_BVProp _) = p
+instance InLifetime (AtomicPerm a) where
+  inLifetime l (Perm_LLVMField fp) =
+    Perm_LLVMField $ inLifetime l fp
+  inLifetime l (Perm_LLVMArray ap) =
+    Perm_LLVMArray $ inLifetime l ap
+  inLifetime _ p@(Perm_LLVMFree _) = p
+  inLifetime _ p@(Perm_LLVMFrame _) = p
+  inLifetime l (Perm_LOwned _) = Perm_LCurrent l
+  inLifetime _ p@(Perm_LCurrent _) = p
+  inLifetime _ p@(Perm_Fun _) = p
+  inLifetime _ p@(Perm_BVProp _) = p
 
-instance ModifyModalities (LLVMFieldPerm w) where
-  modifyModalities f1 f2 fp =
-    fp { llvmFieldRW = f1 (llvmFieldRW fp),
-         llvmFieldLifetimes = f2 (llvmFieldLifetimes fp),
-         llvmFieldContents = modifyModalities f1 f2 (llvmFieldContents fp) }
+instance InLifetime (LLVMFieldPerm w) where
+  inLifetime l fp = fp { llvmFieldLifetime = l }
 
-instance ModifyModalities (LLVMArrayPerm w) where
-  modifyModalities f1 f2 ap =
-    ap { llvmArrayFields = map (modifyModalities f1 f2) (llvmArrayFields ap) }
-
--- | Add an element to a list if it is not present
-consIfMissing :: Eq b => b -> [b] -> [b]
-consIfMissing b bs | elem b bs = bs
-consIfMissing b bs = b:bs
-
--- | Add a single lifetime to a permission
-addLifetime :: ModifyModalities a => PermExpr LifetimeType -> a -> a
-addLifetime l = modifyModalities id (consIfMissing l) where
-
--- | Remove a single lifetime to a permission
-remLifetime :: ModifyModalities a => PermExpr LifetimeType -> a -> a
-remLifetime l = modifyModalities id (delete l)
-
--- | Make a permission read-only
-makeReadOnly :: ModifyModalities a => a -> a
-makeReadOnly = modifyModalities (const Read) id
+instance InLifetime (LLVMArrayPerm w) where
+  inLifetime l ap =
+    ap { llvmArrayFields = map (inLifetime l) (llvmArrayFields ap) }
 
 
 -- | Compute the minimal permissions required to end a lifetime that contains
@@ -1182,8 +1167,42 @@ makeReadOnly = modifyModalities (const Read) id
 -- permissions. An important property of this function is that the returned
 -- permissions has the same translation as the input permissions, so the
 -- translation of a mapping from @minLtEndPerms p@ to @p@ is just the identity.
-minLtEndPerms :: PermExpr LifetimeType -> DistPerms ps -> DistPerms ps
-minLtEndPerms l = modifyModalities (const Read) (consIfMissing l)
+class MinLtEndPerms a where
+  minLtEndPerms :: PermExpr LifetimeType -> a -> a
+
+instance MinLtEndPerms (DistPerms ps) where
+  minLtEndPerms l = mapDistPerms (minLtEndPerms l)
+
+instance MinLtEndPerms (ValuePerm a) where
+  minLtEndPerms _ p@(ValPerm_Eq _) = p
+  minLtEndPerms l (ValPerm_Or p1 p2) =
+    ValPerm_Or (minLtEndPerms l p1) (minLtEndPerms l p2)
+  minLtEndPerms l (ValPerm_Exists mb_p) =
+    ValPerm_Exists $ fmap (minLtEndPerms l) mb_p
+  minLtEndPerms l (ValPerm_Mu mb_p) =
+    ValPerm_Mu $ fmap (minLtEndPerms l) mb_p
+  minLtEndPerms _ p@(ValPerm_Var _) = p
+  minLtEndPerms l (ValPerm_Conj ps) =
+    ValPerm_Conj $ map (minLtEndPerms l) ps
+
+instance MinLtEndPerms (AtomicPerm a) where
+  minLtEndPerms l (Perm_LLVMField fp) =
+    Perm_LLVMField $ minLtEndPerms l fp
+  minLtEndPerms l (Perm_LLVMArray ap) =
+    Perm_LLVMArray $ minLtEndPerms l ap
+  minLtEndPerms _ p@(Perm_LLVMFree _) = p
+  minLtEndPerms _ p@(Perm_LLVMFrame _) = p
+  minLtEndPerms l (Perm_LOwned _) = Perm_LCurrent l
+  minLtEndPerms _ p@(Perm_LCurrent _) = p
+  minLtEndPerms _ p@(Perm_Fun _) = p
+  minLtEndPerms _ p@(Perm_BVProp _) = p
+
+instance MinLtEndPerms (LLVMFieldPerm w) where
+  minLtEndPerms l fp = fp { llvmFieldRW = Read, llvmFieldLifetime = l }
+
+instance MinLtEndPerms (LLVMArrayPerm w) where
+  minLtEndPerms l ap =
+    ap { llvmArrayFields = map (minLtEndPerms l) (llvmArrayFields ap) }
 
 
 ----------------------------------------------------------------------
@@ -1482,10 +1501,10 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
   genSubst s [nuP| Perm_LLVMFree e |] = Perm_LLVMFree <$> genSubst s e
   genSubst s [nuP| Perm_LLVMFrame fp |] =
     Perm_LLVMFrame <$> genSubst s fp
-  genSubst s [nuP| Perm_LOwned ls e |] =
-    Perm_LOwned <$> genSubst s ls <*> genSubst s e
-  genSubst s [nuP| Perm_LContains e |] =
-    Perm_LContains <$> genSubst s e
+  genSubst s [nuP| Perm_LOwned e |] =
+    Perm_LOwned <$> genSubst s e
+  genSubst s [nuP| Perm_LCurrent e |] =
+    Perm_LCurrent <$> genSubst s e
   genSubst s [nuP| Perm_Fun fperm |] =
     Perm_Fun <$> genSubst s fperm
   genSubst s [nuP| Perm_BVProp prop |] =
@@ -1795,10 +1814,10 @@ instance SubstValPerm (AtomicPerm a) where
     Perm_LLVMFree $ substValPerm p e
   substValPerm p [nuP| Perm_LLVMFrame fp |] =
     Perm_LLVMFrame $ substValPerm p fp
-  substValPerm p [nuP| Perm_LOwned ls e |] =
-    Perm_LOwned (substValPerm p ls) (substValPerm p e)
-  substValPerm p [nuP| Perm_LContains e |] =
-    Perm_LContains $ substValPerm p e
+  substValPerm p [nuP| Perm_LOwned e |] =
+    Perm_LOwned (substValPerm p e)
+  substValPerm p [nuP| Perm_LCurrent e |] =
+    Perm_LCurrent $ substValPerm p e
   substValPerm p [nuP| Perm_Fun fperm |] =
     Perm_Fun $ substValPerm p fperm
   substValPerm p [nuP| Perm_BVProp prop |] =
@@ -2054,12 +2073,11 @@ instance AbstractVars (AtomicPerm a) where
   abstractPEVars ns1 ns2 (Perm_LLVMFrame fp) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFrame |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 fp
-  abstractPEVars ns1 ns2 (Perm_LOwned ls eps) =
+  abstractPEVars ns1 ns2 (Perm_LOwned eps) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LOwned |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 ls
     `clMbMbApplyM` abstractPEVars ns1 ns2 eps
-  abstractPEVars ns1 ns2 (Perm_LContains e) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LContains |])
+  abstractPEVars ns1 ns2 (Perm_LCurrent e) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LCurrent |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
   abstractPEVars ns1 ns2 (Perm_Fun fperm) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_Fun |])
@@ -2217,17 +2235,6 @@ getAllPerms perms = helper (NameMap.assocs $ perms ^. varPermMap) where
   helper (NameAndElem x p : xps) =
     case helper xps of
       Some ps -> Some $ DistPermsCons ps x p
-
--- | Get all the @lowned@ permissions that list @l@ as an earlier lifetime
-getLaterLifetimes :: ExprVar LifetimeType -> PermSet ps -> Some DistPerms
-getLaterLifetimes l perms = helper (NameMap.assocs $ perms ^. varPermMap) where
-  helper :: [NameAndElem ValuePerm] -> Some DistPerms
-  helper [] = Some DistPermsNil
-  helper (NameAndElem x p@(ValPerm_Conj [Perm_LOwned ls l_perms]) : xps)
-    | elem (PExpr_Var l) ls
-    , Some rest <- helper xps
-    = Some $ DistPermsCons rest x p
-  helper (NameAndElem x p : xps) = helper xps
 
 -- | Delete permission @x:p@ from the permission set, assuming @x@ has precisely
 -- permissions @p@, replacing it with @x:true@

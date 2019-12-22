@@ -67,6 +67,16 @@ mapRListTail :: MapRList f (ctx :> a) -> MapRList f ctx
 mapRListTail (xs :>: _) = xs
 
 
+{-
+FIXME HERE NOWNOW:
+- Change LContains -> LCurrent, and sort out its rules
+- Change LOwned to not have lifetimes, and remove things that used that
+- Replace modifyModalities with inLifetime, and write minLtEndPerms separately
+- Update EndLifetime and how that works
+- Change fields to only have at most one lifetime
+- Update / finish the field implication stuff
+-}
+
 ----------------------------------------------------------------------
 -- * The Type and Expression Translation Monad
 ----------------------------------------------------------------------
@@ -564,44 +574,33 @@ offsetLLVMAtomicPermTrans mb_off (APTrans_LLVMArray ap f t) =
   APTrans_LLVMArray (mbMap2 offsetLLVMArrayPerm mb_off ap) f t
 offsetLLVMAtomicPermTrans _ p@(APTrans_LLVMFree _) = p
 
--- | Modify the modalities of a 'PermTrans'. This is the same as applying
--- 'modifyModalities' to the 'permTransPerm' of a 'PermTrans'.
-permTransModifyModalities :: (RWModality -> RWModality) ->
-                             (Mb ctx ([PermExpr LifetimeType] ->
-                                      [PermExpr LifetimeType])) ->
-                             PermTrans ctx a -> PermTrans ctx a
-permTransModifyModalities _ _ p@(PTrans_Eq _) = p
-permTransModifyModalities f1 f2 (PTrans_Conj ps) =
-    PTrans_Conj $ map (atomicPermTransMM f1 f2) ps
-permTransModifyModalities f1 f2 (PTrans_Term p t) =
-    PTrans_Term (mbMap2 (modifyModalities f1) f2 p) t
+-- | Put a 'PermTrans' into a lifetime. This is the same as applying
+-- 'inLifetime' to the 'permTransPerm' of a 'PermTrans'.
+permTransInLifetime :: Mb ctx (PermExpr LifetimeType) ->
+                       PermTrans ctx a -> PermTrans ctx a
+permTransInLifetime _ p@(PTrans_Eq _) = p
+permTransInLifetime l (PTrans_Conj ps) =
+  PTrans_Conj $ map (atomicPermTransInLifetime l) ps
+permTransInLifetime l (PTrans_Term p t) =
+  PTrans_Term (mbMap2 inLifetime l p) t
 
--- | Like 'permTransModifyModalities' but for atomic permission translations
-atomicPermTransMM :: (RWModality -> RWModality) ->
-                     (Mb ctx ([PermExpr LifetimeType] ->
-                              [PermExpr LifetimeType])) ->
+-- | Like 'permTransInLifetime' but for atomic permission translations
+atomicPermTransInLifetime :: Mb ctx (PermExpr LifetimeType) ->
                      AtomicPermTrans ctx a ->
                      AtomicPermTrans ctx a
-atomicPermTransMM f1 f2 (APTrans_LLVMField fld ptrans) =
-  APTrans_LLVMField (mbMap2 (modifyModalities f1) f2 fld) $
-  permTransModifyModalities f1 f2 ptrans
-atomicPermTransMM f1 f2 (APTrans_LLVMArray ap f t) =
-  APTrans_LLVMArray (mbMap2 (modifyModalities f1) f2 ap)
-  (map (atomicPermTransMM f1 f2) . f)
+atomicPermTransInLifetime l (APTrans_LLVMField fld ptrans) =
+  APTrans_LLVMField (mbMap2 inLifetime l fld) $
+  permTransInLifetime l ptrans
+atomicPermTransInLifetime l (APTrans_LLVMArray ap f t) =
+  APTrans_LLVMArray (mbMap2 inLifetime l ap)
+  (map (atomicPermTransInLifetime l) . f)
   t
-atomicPermTransMM _ _ p@(APTrans_LLVMFree _) = p
-atomicPermTransMM _ _ p@(APTrans_LLVMFrame _) = p
-atomicPermTransMM _ _ p@(APTrans_LifetimePerm _) = p
-atomicPermTransMM _ _ p@(APTrans_Fun _ _) = p
-atomicPermTransMM _ _ p@(APTrans_BVProp _) = p
-
-permTransRemLifetime :: Mb ctx (PermExpr LifetimeType) ->
-                        PermTrans ctx a -> PermTrans ctx a
-permTransRemLifetime = error "FIXME HERE NOW"
-
-permTransAddLifetime :: Mb ctx (PermExpr LifetimeType) ->
-                        PermTrans ctx a -> PermTrans ctx a
-permTransAddLifetime = error "FIXME HERE NOW"
+atomicPermTransInLifetime _ p@(APTrans_LLVMFree _) = p
+atomicPermTransInLifetime _ p@(APTrans_LLVMFrame _) = p
+atomicPermTransInLifetime l (APTrans_LifetimePerm p) =
+  APTrans_LifetimePerm $ mbMap2 inLifetime l p
+atomicPermTransInLifetime _ p@(APTrans_Fun _ _) = p
+atomicPermTransInLifetime _ p@(APTrans_BVProp _) = p
 
 -- | Map a 'PermTrans' to the permission it should have after a lifetime has
 -- ended, undoing 'minLtEndPerms'. The first argument should have associated
@@ -710,9 +709,9 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
 
   tptranslate [nuP| Perm_LLVMFree e |] = return $ Left $ APTrans_LLVMFree e
   tptranslate [nuP| Perm_LLVMFrame fp |] = return $ Left $ APTrans_LLVMFrame fp
-  tptranslate p@[nuP| Perm_LOwned _ _ |] =
+  tptranslate p@[nuP| Perm_LOwned _ |] =
     return $ Left $ APTrans_LifetimePerm p
-  tptranslate p@[nuP| Perm_LContains _ |] =
+  tptranslate p@[nuP| Perm_LCurrent _ |] =
     return $ Left $ APTrans_LifetimePerm p
 
   tptranslate ([nuP| Perm_Fun
@@ -1180,24 +1179,28 @@ itranslateSimplImpl _ [nuP| SImpl_IntroLLVMFieldContents x _ mb_fld |] m =
     pctx :>: PTrans_Conj [APTrans_LLVMField mb_fld ptrans])
   m
 
-itranslateSimplImpl _ [nuP| SImpl_AddLLVMFieldLifetime _ mb_fld mb_l |] m =
-  withPermStackM id
-  (\(pctx :>: ptrans) ->
+itranslateSimplImpl _ [nuP| SImpl_LLVMFieldLifetimeCurrent _ _ _ mb_l |] m =
+  withPermStackM mapRListTail
+  (\(pctx :>: ptrans :>: _) ->
     let (mb_fld,ptrans') =
           unPTransLLVMField
-          "itranslateSimplImpl: SImpl_AddLLVMFieldLifetime" ptrans in
+          "itranslateSimplImpl: SImpl_LLVMFieldLifetimeCurrent" ptrans in
     pctx :>: PTrans_Conj [APTrans_LLVMField
-                          (mbMap2 addLifetime mb_l mb_fld) ptrans])
+                          (mbMap2 (\fp l -> fp { llvmFieldLifetime = l })
+                           mb_fld mb_l)
+                          ptrans'])
   m
 
-itranslateSimplImpl _ [nuP| SImpl_RemoveLLVMFieldLifetime _ _ mb_l |] m =
+itranslateSimplImpl _ [nuP| SImpl_LLVMFieldLifetimeAlways _ _ mb_l |] m =
   withPermStackM id
   (\(pctx :>: ptrans) ->
     let (mb_fld,ptrans') =
           unPTransLLVMField
-          "itranslateSimplImpl: SImpl_RemoveLLVMFieldLifetime" ptrans in
+          "itranslateSimplImpl: SImpl_LLVMFieldLifetimeCurrent" ptrans in
     pctx :>: PTrans_Conj [APTrans_LLVMField
-                          (mbMap2 remLifetime mb_l mb_fld) ptrans])
+                          (mbMap2 (\fp l -> fp { llvmFieldLifetime = l })
+                           mb_fld mb_l)
+                          ptrans'])
   m
 
 itranslateSimplImpl _ [nuP| SImpl_DemoteLLVMFieldWrite _ _ |] m =
@@ -1325,6 +1328,23 @@ itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexReturn x _ mb_i j |] m =
 
 itranslateSimplImpl _ [nuP| SImpl_LLVMArrayContents _ _ _ _ _ |] m =
   error "FIXME HERE: itranslateSimplImpl: SImpl_LLVMArrayContents unhandled"
+
+itranslateSimplImpl _ [nuP| SImpl_SplitLifetime mb_x mb_p mb_l mb_ps |] m =
+  withPermStackM id
+  (\(pctx :>: ptrans_x :>: ptrans_l) ->
+    pctx :>: permTransInLifetime (fmap PExpr_Var mb_l) ptrans_x :>:
+    PTrans_Conj
+    [APTrans_LifetimePerm
+     (fmap
+      (\x p ps ->
+        Perm_LOwned (PExpr_PermListCons (PExpr_Var x) p ps))
+      mb_x `mbApply` mb_p `mbApply` mb_ps)])
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_LCurrentRefl l |] m =
+  withPermStackM (:>: translateVar l)
+  (:>: PTrans_Conj [APTrans_LifetimePerm $ fmap (Perm_LCurrent . PExpr_Var) l])
+  m
 
 itranslateSimplImpl _ _ _ = error "FIXME HERE NOW: finish itranslateSimplImpl!"
 
@@ -1519,18 +1539,12 @@ itranslateStmt stmt@[nuP| BeginLifetime |] m =
   inExtImpTransM ETrans_Lifetime PTrans_True $
   withPermStackM (:>: Member_Base)
   (:>: PTrans_Conj [APTrans_LifetimePerm $ nuMulti (mbToProxy stmt :>: Proxy) $
-                    const $ Perm_LOwned [] PExpr_PermListNil])
+                    const $ Perm_LOwned PExpr_PermListNil])
   m
 
-itranslateStmt stmt@[nuP| EndLifetime l ps ps_lts |] m =
+itranslateStmt stmt@[nuP| EndLifetime _ ps |] m =
   withPermStackM mapRListTail
-  (\pctx ->
-    let (pctx_ps, pctx_ps_lts) =
-          splitMapRList Proxy (mbDistPermsToProxies ps_lts)
-          (mapRListTail pctx) in
-    appendMapRList
-    (permCtxEndLifetime pctx_ps ps)
-    (mapMapRList (permTransRemLifetime $ fmap PExpr_Var l) pctx_ps_lts))
+  (\(pctx :>: _) -> permCtxEndLifetime pctx ps)
   m
 
 itranslateStmt [nuP| TypedAssert e _ |] m =
