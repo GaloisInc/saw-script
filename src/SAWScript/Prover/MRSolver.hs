@@ -21,6 +21,7 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 
+import SAWScript.Proof (Prop(..))
 import qualified SAWScript.Prover.SBV as SBV
 
 import Prelude
@@ -268,7 +269,7 @@ liftSC1 f a = (mrSC <$> get) >>= \sc -> liftIO (f sc a)
 liftSC2 :: (SharedContext -> a -> b -> IO c) -> a -> b -> MRM c
 liftSC2 f a b = (mrSC <$> get) >>= \sc -> liftIO (f sc a b)
 
--- | Lift a trinary SharedTerm computation into 'MRM'
+-- | Lift a ternary SharedTerm computation into 'MRM'
 liftSC3 :: (SharedContext -> a -> b -> c -> IO d) -> a -> b -> c -> MRM d
 liftSC3 f a b c = (mrSC <$> get) >>= \sc -> liftIO (f sc a b c)
 
@@ -280,7 +281,7 @@ mrProvable bool_prop =
      path_prop <- mrPathCondition <$> get
      bool_prop' <- liftSC2 scImplies path_prop bool_prop
      prop <- liftSC1 scEqTrue bool_prop'
-     (smt_res, _) <- liftSC1 (SBV.satUnintSBV smt_conf [] timeout) prop
+     (smt_res, _) <- liftSC1 (SBV.proveUnintSBV smt_conf [] timeout) (Prop prop)
      case smt_res of
        Just _ -> return False
        Nothing -> return True
