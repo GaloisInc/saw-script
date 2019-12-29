@@ -452,7 +452,7 @@ data PermImpl1 ps_in ps_outs where
   -- variable to hold those permissions and changing the contents of the field
   -- permission to an equals permision for that variable:
   --
-  -- > x:((rw,off) -> p) -o y. ((rw,off) -> eq(y)) * y:p
+  -- > x:ptr((rw,off) -> p) -o y. x:ptr((rw,off) -> eq(y)) * y:p
 
   Impl1_TryProveBVProp ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> BVProp w ->
