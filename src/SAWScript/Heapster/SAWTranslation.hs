@@ -317,6 +317,9 @@ piExprTrans x tp body =
 instance TypeTranslate (ExprVar a) ctx (ExprTrans a) where
   tptranslate mb_x = mapRListLookup (translateVar mb_x) <$> ask
 
+trueOpenTerm :: OpenTerm
+trueOpenTerm = ctorOpenTerm "Prelude.True" []
+
 bvAddOpenTerm :: Integer -> OpenTerm -> OpenTerm -> OpenTerm
 bvAddOpenTerm n x y =
   applyOpenTermMulti (globalOpenTerm "Prelude.bvAdd")
@@ -431,9 +434,9 @@ data AtomicPermTrans ctx a where
   APTrans_Fun :: Mb ctx (FunPerm ghosts (CtxToRList cargs) ret) -> OpenTerm ->
                  AtomicPermTrans ctx (FunctionHandleType cargs ret)
 
-  -- | Propositional permissions have no computational content
+  -- | Propositional permissions are represented by a SAW term
   APTrans_BVProp :: (1 <= w, KnownNat w) => Mb ctx (BVProp w) ->
-                    AtomicPermTrans ctx (LLVMPointerType w)
+                    OpenTerm -> AtomicPermTrans ctx (LLVMPointerType w)
 
 
 -- | The translation of the vacuously true permission
@@ -488,7 +491,7 @@ atomicPermTransToTerm (APTrans_LLVMFree _) = Nothing
 atomicPermTransToTerm (APTrans_LLVMFrame _) = Nothing
 atomicPermTransToTerm (APTrans_LifetimePerm _) = Nothing
 atomicPermTransToTerm (APTrans_Fun _ t) = Just t
-atomicPermTransToTerm (APTrans_BVProp _) = Nothing
+atomicPermTransToTerm (APTrans_BVProp _ t) = Just t
 
 -- | Map a perm translation result to an 'OpenTerm', or to a unit if it has no
 -- computational content
@@ -517,7 +520,7 @@ atomicPermTransPerm prxs (APTrans_LLVMFree e) = fmap Perm_LLVMFree e
 atomicPermTransPerm prxs (APTrans_LLVMFrame fp) = fmap Perm_LLVMFrame fp
 atomicPermTransPerm prxs (APTrans_LifetimePerm p) = p
 atomicPermTransPerm prxs (APTrans_Fun fp _) = fmap Perm_Fun fp
-atomicPermTransPerm prxs (APTrans_BVProp prop) = fmap Perm_BVProp prop
+atomicPermTransPerm prxs (APTrans_BVProp prop _) = fmap Perm_BVProp prop
 
 -- | Test that a permission equals that of a permission translation
 permTransPermEq :: PermTrans ctx a -> Mb ctx (ValuePerm a) -> Bool
@@ -543,7 +546,7 @@ extAtomicPermTrans (APTrans_LLVMFree e) = APTrans_LLVMFree $ extMb e
 extAtomicPermTrans (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
 extAtomicPermTrans (APTrans_LifetimePerm p) = APTrans_LifetimePerm $ extMb p
 extAtomicPermTrans (APTrans_Fun fp t) = APTrans_Fun (extMb fp) t
-extAtomicPermTrans (APTrans_BVProp prop) = APTrans_BVProp $ extMb prop
+extAtomicPermTrans (APTrans_BVProp prop t) = APTrans_BVProp (extMb prop) t
 
 -- | Extend the context of a permission translation context
 extPermTransCtx :: PermTransCtx ctx ps -> PermTransCtx (ctx :> tp) ps
@@ -590,7 +593,7 @@ atomicPermTransInLifetime _ p@(APTrans_LLVMFrame _) = p
 atomicPermTransInLifetime l (APTrans_LifetimePerm p) =
   APTrans_LifetimePerm $ mbMap2 inLifetime l p
 atomicPermTransInLifetime _ p@(APTrans_Fun _ _) = p
-atomicPermTransInLifetime _ p@(APTrans_BVProp _) = p
+atomicPermTransInLifetime _ p@(APTrans_BVProp _ _) = p
 
 -- | Map a 'PermTrans' to the permission it should have after a lifetime has
 -- ended, undoing 'minLtEndPerms'. The first argument should have associated
@@ -623,7 +626,7 @@ atomicPermTransEndLifetime p@(APTrans_LLVMFree _) _ = p
 atomicPermTransEndLifetime p@(APTrans_LLVMFrame _) _ = p
 atomicPermTransEndLifetime p@(APTrans_LifetimePerm _) _ = p
 atomicPermTransEndLifetime p@(APTrans_Fun _ _) _ = p
-atomicPermTransEndLifetime p@(APTrans_BVProp _) _ = p
+atomicPermTransEndLifetime p@(APTrans_BVProp _ _) _ = p
 atomicPermTransEndLifetime _ _ =
   error "atomicPermTransEndLifetime: permissions don't agree!"
 
@@ -712,7 +715,45 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
       (mbCombine $ fmap mbValuePermsToDistPerms perms_out)) >>= \tp_term ->
     return $ Right (tp_term, APTrans_Fun fp)
 
-  tptranslate [nuP| Perm_BVProp prop |] = return $ Left $ APTrans_BVProp prop
+  -- The proposition e1 = e2 becomes sort 1 equality in SAW
+  -- FIXME: this should use propositional equality
+  tptranslate [nuP| Perm_BVProp (BVProp_Eq e1 (e2 :: PermExpr (BVType w))) |] =
+    do let w = natVal (Proxy :: Proxy w)
+       t1 <- translateExpr e1
+       t2 <- translateExpr e2
+       return $ Right
+         (applyOpenTermMulti (globalOpenTerm "Prelude.Eq")
+          [applyOpenTerm (globalOpenTerm "Prelude.bitvector") (natOpenTerm w),
+           t1, t2],
+          APTrans_BVProp prop)
+
+  -- The proposition e in [off,off+len) becomes (e-off) < len, which in SAW is
+  -- represented as bvslt (e-off) len = True
+  tptranslate [nuP| Perm_BVProp (BVProp_InRange (e :: PermExpr (BVType w))
+                  (BVRange off len)) |] =
+    do let w = natVal (Proxy :: Proxy w)
+       t_sub <- translateExpr (bvSub e off)
+       t_len <- translateExpr len
+       return $ Right
+         (applyOpenTermMulti (globalOpenTerm "Prelude.Eq")
+          [globalOpenTerm "Prelude.Bool",
+           applyOpenTermMulti (globalOpenTerm "Prelude.bvult")
+           [natOpenTerm w, t_sub, t_len],
+           trueOpenTerm],
+          APTrans_BVProp prop)
+
+  -- The proposition [off1,off1+len1) subset [off2,off2+len2) becomes the
+  -- proposition...?
+  -- FIXME: must imply (bvToNat (off1 - off2) + bvToNat len1) <= bvToNat len2
+  tptranslate [nuP| Perm_BVProp (BVProp_RangeSubset
+                  (BVRange (off1 :: PermExpr (BVType w)) len1)
+                  (BVRange off2 len2)) |] =
+    error "FIXME HERE NOW"
+
+  tptranslate [nuP| Perm_BVProp (BVProp_RangesDisjoint
+                  (BVRange (off1 :: PermExpr (BVType w)) len1)
+                  (BVRange off2 len2)) |] =
+    error "FIXME HERE NOW"
 
 
 -- | Translate a permission to a SAW type, converting 'Nothing' to unit
@@ -1062,6 +1103,11 @@ itranslateSimplImpl :: Proxy ps -> Mb ctx (SimplImpl ps_in ps_out) ->
 itranslateSimplImpl _ [nuP| SImpl_Drop _ _ |] m =
   withPermStackM (\(xs :>: _) -> xs) (\(ps :>: _) -> ps) m
 
+itranslateSimplImpl _ [nuP| SImpl_Swap _ _ _ _ |] m =
+  withPermStackM (\(xs :>: x :>: y) -> xs :>: y :>: x)
+  (\(pctx :>: px :>: py) -> pctx :>: py :>: px)
+  m
+
 itranslateSimplImpl _ [nuP| SImpl_IntroOrL _ p1 p2 |] m =
   do tp1 <- itranslate p1
      tp2 <- itranslate p2
@@ -1336,7 +1382,20 @@ itranslateSimplImpl _ [nuP| SImpl_LCurrentRefl l |] m =
   (:>: PTrans_Conj [APTrans_LifetimePerm $ fmap (Perm_LCurrent . PExpr_Var) l])
   m
 
-itranslateSimplImpl _ _ _ = error "FIXME HERE NOW: finish itranslateSimplImpl!"
+itranslateSimplImpl _ [nuP| SImpl_LCurrentTrans l1 l2 l3 |] m =
+  withPermStackM mapRListTail
+  ((:>: PTrans_Conj [APTrans_LifetimePerm $ fmap Perm_LCurrent l3]) .
+   mapRListTail . mapRListTail)
+  m
+
+itranslateSimplImpl _ [nuP| SImpl_FoldMu _ _ |] m =
+  error "FIXME HERE: SImpl_FoldMu: translation not yet implemented"
+
+itranslateSimplImpl _ [nuP| SImpl_UnfoldMu _ _ |] m =
+  error "FIXME HERE: SImpl_UnfoldMu: translation not yet implemented"
+
+itranslateSimplImpl _ [nuP| SImpl_Mu _ _ _ _ |] m =
+  error "FIXME HERE: SImpl_Mu: translation not yet implemented"
 
 
 -- | Translate a 'PermImpl1' to a function on translation computations
@@ -1415,10 +1474,26 @@ itranslatePermImpl1 [nuP| Impl1_ElimExists x (p :: Binding tp (ValuePerm a)) |]
 -- A SimplImpl is translated using itranslateSimplImpl
 itranslatePermImpl1 [nuP| Impl1_Simpl simpl prx |]
   [nuP| MbPermImpls_Cons _ mb_impl |] =
-  {- FIXME HERE: assert that current perms = the input perms of simpl -}
   itranslateSimplImpl (mbLift prx) simpl $ itranslate $ mbCombine mb_impl
 
-itranslatePermImpl1 _ _ = error "FIXME HERE NOW: finish itranslatePermImpl1!"
+itranslatePermImpl1 [nuP| Impl1_ElimLLVMFieldContents
+                        _ mb_fld |] [nuP| MbPermImpls_Cons _ mb_impl |] =
+  inExtImpTransM ETrans_LLVM PTrans_True $
+  withPermStackM (:>: Member_Base)
+  (\(pctx :>: ptrans_x) ->
+    let (_,ptrans') =
+          unPTransLLVMField
+          "itranslateSimplImpl: Impl1_ElimLLVMFieldContents" ptrans_x in
+    pctx :>: PTrans_Conj [APTrans_LLVMField
+                          (mbCombine $
+                           fmap (\fld -> nu $ \y ->
+                                  fld { llvmFieldContents =
+                                          ValPerm_Eq (PExpr_Var y)})
+                           mb_fld) $
+                          PTrans_Eq (mbCombine $
+                                     fmap (const $ nu PExpr_Var) mb_fld)]
+    :>: ptrans') $
+  itranslate $ mbCombine mb_impl
 
 
 instance ImplTranslateF r ext blocks ret args =>
