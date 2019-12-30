@@ -717,7 +717,8 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
 
   -- The proposition e1 = e2 becomes sort 1 equality in SAW
   -- FIXME: this should use propositional equality
-  tptranslate [nuP| Perm_BVProp (BVProp_Eq e1 (e2 :: PermExpr (BVType w))) |] =
+  tptranslate [nuP| Perm_BVProp
+                  prop@(BVProp_Eq e1 (e2 :: PermExpr (BVType w))) |] =
     do let w = natVal (Proxy :: Proxy w)
        t1 <- translateExpr e1
        t2 <- translateExpr e2
@@ -729,10 +730,11 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
 
   -- The proposition e in [off,off+len) becomes (e-off) < len, which in SAW is
   -- represented as bvslt (e-off) len = True
-  tptranslate [nuP| Perm_BVProp (BVProp_InRange (e :: PermExpr (BVType w))
-                  (BVRange off len)) |] =
+  tptranslate [nuP| Perm_BVProp
+                  prop@(BVProp_InRange (e :: PermExpr (BVType w))
+                        (BVRange off len)) |] =
     do let w = natVal (Proxy :: Proxy w)
-       t_sub <- translateExpr (bvSub e off)
+       t_sub <- translateExpr (mbMap2 bvSub e off)
        t_len <- translateExpr len
        return $ Right
          (applyOpenTermMulti (globalOpenTerm "Prelude.Eq")
