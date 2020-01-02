@@ -124,8 +124,8 @@ import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
 import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
-import SAWScript.X86Spec
-import SAWScript.Proof(predicateToProp, Quantification(Universal))
+import SAWScript.X86Spec hiding (Prop)
+import SAWScript.Proof(predicateToProp, Quantification(Universal), Prop)
 
 
 
@@ -514,8 +514,8 @@ data Goal = Goal
   , gMessage :: SimErrorReason        -- ^ We should say this if the proof fails
   }
 
--- | The boolean term that needs proving (i.e., assumptions imply conclusion)
-gGoal :: SharedContext -> Goal -> IO Term
+-- | The proposition that needs proving (i.e., assumptions imply conclusion)
+gGoal :: SharedContext -> Goal -> IO Prop
 gGoal sc g0 = predicateToProp sc Universal [] =<< go (gAssumes g)
   where
   g = g0 { gAssumes = mapMaybe skip (gAssumes g0) }
