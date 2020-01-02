@@ -828,11 +828,18 @@ llvmWrite0TruePerm :: (1 <= w, KnownNat w) => ValuePerm (LLVMPointerType w)
 llvmWrite0TruePerm = ValPerm_Conj [Perm_LLVMField llvmFieldWrite0True]
 
 -- | Create a field write permission with offset 0 and an @eq(e)@ permission
+llvmFieldWrite0Eq :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
+                     LLVMFieldPerm w
+llvmFieldWrite0Eq e =
+  LLVMFieldPerm { llvmFieldRW = Write,
+                  llvmFieldLifetime = PExpr_Always,
+                  llvmFieldOffset = bvInt 0,
+                  llvmFieldContents = ValPerm_Eq e }
+
+-- | Create a field write permission with offset 0 and an @eq(e)@ permission
 llvmWrite0EqPerm :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
                     ValuePerm (LLVMPointerType w)
-llvmWrite0EqPerm e =
-  ValPerm_Conj [Perm_LLVMField $
-                llvmFieldWrite0True { llvmFieldContents = ValPerm_Eq e }]
+llvmWrite0EqPerm e = ValPerm_Conj [Perm_LLVMField $ llvmFieldWrite0Eq e]
 
 -- | Return the range of the indices of an array permission
 llvmArrayRange :: LLVMArrayPerm w -> BVRange w
@@ -842,15 +849,22 @@ llvmArrayRange ap = BVRange (llvmArrayOffset ap) (llvmArrayLen ap)
 llvmArrayRangeBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
 llvmArrayRangeBytes ap = BVRange (llvmArrayOffset ap) (arrayLengthBytes ap)
 
+-- | Return the number of bytes per machine word; @w@ is the number of bits
+machineWordBytes :: KnownNat w => f w -> Integer
+machineWordBytes w
+  | natVal w `mod` 8 /= 0 =
+    error "machineWordBytes: word size is not a multiple of 8!"
+machineWordBytes w = natVal w `div` 8
+
+-- | Convert bytes to machine words, rounded up, i.e., return @ceil(n/W)@,
+-- where @W@ is the number of bytes per machine word
+bytesToMachineWords :: KnownNat w => f w -> Integer -> Integer
+bytesToMachineWords w n = (n + machineWordBytes w - 1) `div` machineWordBytes w
+
 -- | Return an array stride in bytes, instead of words of size @w@
 arrayStrideBytes :: KnownNat w => LLVMArrayPerm w -> Integer
-arrayStrideBytes = helper Proxy where
-  helper :: KnownNat w => Proxy w -> LLVMArrayPerm w -> Integer
-  helper w (LLVMArrayPerm {..}) =
-    if natVal w `mod` 8 /= 0 then
-      error "arrayStrideBytes: Word size is not a multiple of 8!"
-    else
-      llvmArrayStride * natVal w `div` 8
+arrayStrideBytes ap@(LLVMArrayPerm {..}) =
+  llvmArrayStride * machineWordBytes ap
 
 -- | Return the length of an array in bytes
 arrayLengthBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
@@ -904,6 +918,25 @@ llvmArrayFieldWithOffset ap i j =
   offsetLLVMFieldPerm
   (bvAdd (llvmArrayOffset ap) (llvmArrayIndex ap i j))
   (llvmArrayFields ap !! j)
+
+-- | Create a list of field permissions the cover @N@ bytes:
+--
+-- > ptr((w,0) |-> true, (w,W) |-> true, ..., (w,W*(M-1)) |-> true)
+--
+-- where @W@ is the number of bytes per machine word and @M@ is the number of
+-- machine words for @N@ bytes, rounded up
+llvmFieldsOfSize :: (1 <= w, KnownNat w) => f w -> Integer -> [LLVMFieldPerm w]
+llvmFieldsOfSize w n =
+  map (\i -> llvmFieldWrite0True { llvmFieldOffset =
+                                     bvInt (i * machineWordBytes w) })
+  [0 .. bytesToMachineWords w n - 1]
+
+-- | Return the permission built from the field permissions returned by
+-- 'llvmFieldsOfSize'
+llvmFieldsPermOfSize :: (1 <= w, KnownNat w) => f w -> Integer ->
+                        ValuePerm (LLVMPointerType w)
+llvmFieldsPermOfSize w n =
+  ValPerm_Conj $ map Perm_LLVMField $ llvmFieldsOfSize w n
 
 -- | Create the array ponter perm @array(0,<len,*1 |-> [ptr(0 |-> true)])@ of
 -- size @len@ words of width @w@

@@ -251,7 +251,7 @@ data TypedLLVMStmt w ret ps_in ps_out where
   -- | Destruct an LLVM word into its bitvector value, which should equal the
   -- given expression
   --
-  -- Type: @x:eq(word(y)) -o ret:eq(y)@
+  -- Type: @x:eq(word(e)) -o ret:eq(e)@
   DestructLLVMWord :: (1 <= w2, KnownNat w2) =>
                       TypedReg (LLVMPointerType w2) -> PermExpr (BVType w2) ->
                       TypedLLVMStmt w (BVType w2)
@@ -375,9 +375,10 @@ typedLLVMStmtOut (TypedLLVMLoad _ l ps e) ret =
   distPerms2 l (ValPerm_Conj [Perm_LOwned ps]) ret (ValPerm_Eq e)
 typedLLVMStmtOut (TypedLLVMStore (TypedReg x) (TypedReg y)) _ =
   distPerms1 x $ llvmWrite0EqPerm (PExpr_Var y)
-typedLLVMStmtOut (TypedLLVMAlloca (TypedReg f) fperms len) ret =
+typedLLVMStmtOut (TypedLLVMAlloca
+                  (TypedReg f) (fperms :: LLVMFramePerm w) len) ret =
   distPerms2 f (ValPerm_Conj [Perm_LLVMFrame ((PExpr_Var ret, len):fperms)])
-  ret (llvmArrayPermOfSize len)
+  ret (llvmFieldsPermOfSize Proxy len)
 typedLLVMStmtOut TypedLLVMCreateFrame ret =
   distPerms1 ret $ ValPerm_Conj [Perm_LLVMFrame []]
 typedLLVMStmtOut (TypedLLVMDeleteFrame _ _ _) _ = DistPermsNil

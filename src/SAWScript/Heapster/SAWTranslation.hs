@@ -1628,7 +1628,68 @@ itranslateLLVMStmt ::
   ImpTransM ext blocks ret args ps_out (ctx :> r) OpenTerm ->
   ImpTransM ext blocks ret args ps_in ctx OpenTerm
 
-itranslateLLVMStmt _ _ = error "FIXME HERE NOW"
+itranslateLLVMStmt [nuP| ConstructLLVMWord (TypedReg x) |] m =
+  inExtImpTransM ETrans_LLVM PTrans_True $
+  withPermStackM (:>: Member_Base) (:>: (PTrans_Eq $ extMb $
+                                         fmap (PExpr_LLVMWord . PExpr_Var) x)) m
+
+itranslateLLVMStmt [nuP| AssertLLVMWord reg _ |] m =
+  inExtImpTransM (ETrans_Term $ natOpenTerm 0) PTrans_True $
+  withPermStackM ((:>: Member_Base) . mapRListTail)
+  ((:>: (PTrans_Eq $ fmap (const $ PExpr_Nat 0) $ extMb reg)) . mapRListTail)
+  m
+
+itranslateLLVMStmt [nuP| DestructLLVMWord _ e |] m =
+  tpTransM (tptranslate e) >>= \etrans ->
+  inExtImpTransM etrans PTrans_True $
+  withPermStackM ((:>: Member_Base) . mapRListTail)
+  ((:>: (PTrans_Eq $ extMb e)) . mapRListTail)
+  m
+
+itranslateLLVMStmt [nuP| TypedLLVMLoad _ _ _ e |] m =
+  inExtImpTransM ETrans_LLVM PTrans_True $
+  withPermStackM ((:>: Member_Base) . mapRListTail)
+  ((:>: (PTrans_Eq $ extMb e)) . mapRListTail)
+  m
+
+itranslateLLVMStmt [nuP| TypedLLVMStore _ (TypedReg y) |] m =
+  inExtImpTransM (ETrans_Term unitOpenTerm) PTrans_True $
+  withPermStackM id
+  ((:>: PTrans_Conj [APTrans_LLVMField
+                     (fmap (llvmFieldWrite0Eq . PExpr_Var) (extMb y))
+                     (PTrans_Eq $ fmap PExpr_Var $ extMb y)])
+   . mapRListTail)
+  m
+
+itranslateLLVMStmt [nuP| TypedLLVMAlloca
+                       _ (mb_fperm :: LLVMFramePerm w) mb_sz |] m =
+  let sz = mbLift mb_sz
+      w :: Proxy w = Proxy in
+  inExtImpTransM ETrans_LLVM PTrans_True $
+  withPermStackM (:>: Member_Base)
+  (\(pctx :>: _) ->
+    pctx
+    :>: PTrans_Conj [APTrans_LLVMFrame $
+                     flip nuMultiWithElim1 (extMb mb_fperm) $
+                     \(_ :>: ret) fperm -> (PExpr_Var ret, sz):fperm]
+    :>: PTrans_Conj (flip map [0 .. bytesToMachineWords w sz - 1] $ \i ->
+                      APTrans_LLVMField
+                      (fmap
+                       (const $ llvmFieldWrite0True
+                        { llvmFieldOffset = bvInt (i * machineWordBytes w) })
+                       (extMb mb_fperm))
+                      PTrans_True))
+  m
+
+itranslateLLVMStmt mb_stmt@[nuP| TypedLLVMCreateFrame |] m =
+  inExtImpTransM ETrans_LLVMFrame PTrans_True $
+  withPermStackM (:>: Member_Base)
+  (:>: PTrans_Conj [APTrans_LLVMFrame $ fmap (const []) (extMb mb_stmt)])
+  m
+
+itranslateLLVMStmt mb_stmt@[nuP| TypedLLVMDeleteFrame _ _ _ |] m =
+  inExtImpTransM (ETrans_Term unitOpenTerm) PTrans_True $
+  withPermStackM (const MNil) (const MNil) m
 
 
 ----------------------------------------------------------------------
