@@ -27,6 +27,7 @@ import qualified Data.ByteString.Lazy.UTF8 as B
 import Data.Maybe (isJust)
 import Data.Traversable
 import Data.Word
+import Numeric.Natural
 import System.Directory (getCurrentDirectory)
 
 import Prelude hiding (mapM, sequence)
@@ -352,7 +353,7 @@ mkPiArg (TypeConstraint (exprAsIdentList -> Just xs) _ t) =
 mkPiArg lhs = [(UnusedVar (pos lhs), lhs)]
 
 -- | Parse a tuple projection of the form @t.(1)@ or @t.(2)@
-mkTupleProj :: Term -> Integer -> Parser Term
+mkTupleProj :: Term -> Natural -> Parser Term
 mkTupleProj t 1 = return $ PairLeft t
 mkTupleProj t 2 = return $ PairRight t
 mkTupleProj t _ =
@@ -372,7 +373,7 @@ parseRecursorProj t _ =
   do addParseError (pos t) "Malformed recursor projection"
      return (badTerm (pos t))
 
-parseTupleSelector :: Term -> PosPair Integer -> Parser Term
+parseTupleSelector :: Term -> PosPair Natural -> Parser Term
 parseTupleSelector t i =
   if val i >= 1 then return (mkTupleSelector t (val i)) else
     do addParseError (pos t) "non-positive tuple projection index"

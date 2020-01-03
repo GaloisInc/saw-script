@@ -30,6 +30,8 @@ module Verifier.SAW.OpenTerm (
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Numeric.Natural
+
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.SCTypeCheck
@@ -55,7 +57,7 @@ flatOpenTerm ftf = OpenTerm $
   (sequence (fmap unOpenTerm ftf) >>= typeInferComplete)
 
 -- | Build an 'OpenTermm' for a natural number literal
-natOpenTerm :: Integer -> OpenTerm
+natOpenTerm :: Natural -> OpenTerm
 natOpenTerm = flatOpenTerm . NatLit
 
 -- | Build an 'OpenTerm' for a constructor applied to its arguments

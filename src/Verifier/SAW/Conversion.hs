@@ -297,7 +297,7 @@ asSort s = Matcher (termToPat (Unshared (FTermF (Sort s)))) fn
 
 -- | Match a Nat literal
 asAnyNatLit :: (MonadFail m) => Matcher m Natural
-asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return (fromInteger i)
+asAnyNatLit = asVar $ \t -> do NatLit i <- R.asFTermF t; return i
 
 -- | Match a Vec literal
 asAnyVecLit :: (MonadFail m) => Matcher m (Term, V.Vector Term)
@@ -420,7 +420,7 @@ mkDataType i paramsB argsB =
      mkTermF $ FTermF $ DataTypeApp i params args
 
 mkNatLit :: Natural -> TermBuilder Term
-mkNatLit n = mkTermF (FTermF (NatLit (toInteger n)))
+mkNatLit n = mkTermF (FTermF (NatLit n))
 
 mkVecLit :: Term -> V.Vector Term -> TermBuilder Term
 mkVecLit t xs = mkTermF (FTermF (ArrayValue t xs))

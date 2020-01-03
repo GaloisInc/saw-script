@@ -37,6 +37,7 @@ import Control.Monad.State.Strict
 import qualified Data.ByteString.Lazy as B
 import Data.ByteString.Lazy.UTF8 (toString)
 import Data.Word (Word8)
+import Numeric.Natural
 
 import Verifier.SAW.Position
 
@@ -94,7 +95,7 @@ $white+;
 data Token
   = TIdent { tokIdent :: String }   -- ^ Identifier
   | TRecursor { tokRecursor :: String }   -- ^ Recursor
-  | TNat { tokNat :: Integer }  -- ^ Natural number literal
+  | TNat { tokNat :: Natural }  -- ^ Natural number literal
   | TString { tokString :: String } -- ^ String literal
   | TKey String     -- ^ Keyword or predefined symbol
   | TEnd            -- ^ End of file.

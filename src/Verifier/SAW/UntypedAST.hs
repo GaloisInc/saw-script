@@ -46,6 +46,7 @@ import Control.Applicative ((<$>))
 #endif
 
 import qualified Language.Haskell.TH.Syntax as TH
+import Numeric.Natural
 
 import Verifier.SAW.Position
 import Verifier.SAW.TypedAST
@@ -74,7 +75,7 @@ data Term
   | PairRight Term
     -- | Identifies a type constraint on the term, i.e., a type ascription
   | TypeConstraint Term Pos Term
-  | NatLit Pos Integer
+  | NatLit Pos Natural
   | StringLit Pos String
     -- | Vector literal.
   | VecLit Pos [Term]
@@ -237,7 +238,7 @@ mkTupleType p (x:xs) = PairType (pos x) x (mkTupleType p xs)
 -- | Build a projection @t.i@ of a tuple. NOTE: This function does not
 -- work to access the last component in a tuple, since it always
 -- generates a @PairLeft@.
-mkTupleSelector :: Term -> Integer -> Term
+mkTupleSelector :: Term -> Natural -> Term
 mkTupleSelector t i
   | i == 1    = PairLeft t
   | i > 1     = mkTupleSelector (PairRight t) (i - 1)

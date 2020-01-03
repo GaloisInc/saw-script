@@ -70,6 +70,7 @@ import qualified Data.Vector as V
 import Data.Word
 import GHC.Generics (Generic)
 import GHC.Exts (IsString(..))
+import Numeric.Natural
 
 import qualified Language.Haskell.TH.Syntax as TH
 import Instances.TH.Lift () -- for instance TH.Lift Text
@@ -167,7 +168,7 @@ isIdChar c = isAlphaNum c || (c == '_') || (c == '\'')
 -- | The sorts, also known as universes, which can either be a predicative
 -- universe with level i or the impredicative universe Prop.
 data Sort
-  = TypeSort Integer
+  = TypeSort Natural
   | PropSort
   deriving (Eq, Generic, TH.Lift)
 
@@ -183,10 +184,9 @@ instance Show Sort where
   showsPrec p (TypeSort i) = showParen (p >= 10) (showString "sort " . shows i)
   showsPrec _ PropSort = showString "Prop"
 
--- | Create sort @Type i@ for the given integer @i@
-mkSort :: Integer -> Sort
-mkSort i | 0 <= i = TypeSort i
-         | otherwise = error "Negative index given to sort."
+-- | Create sort @Type i@ for the given natural number @i@.
+mkSort :: Natural -> Sort
+mkSort i = TypeSort i
 
 -- | Wrapper around 'PropSort', for export
 propSort :: Sort
@@ -278,8 +278,8 @@ data FlatTermF e
   | Sort !Sort
 
     -- Primitive builtin values
-    -- | Natural number with given value (negative numbers are not allowed).
-  | NatLit !Integer
+    -- | Natural number with given value.
+  | NatLit !Natural
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
     -- | String literal

@@ -232,7 +232,7 @@ asCtorParams t = do CtorApp c ps args <- asFTermF t; return (c,ps,args)
 -- literal @k@ becomes @Succ (k-1)@
 asCtorOrNat :: (Alternative f, MonadFail f) =>
                Recognizer f Term (Ident, [Term], [Term])
-asCtorOrNat = asCtorParams `orElse` (asNatLit >=> helper . toInteger) where
+asCtorOrNat = asCtorParams `orElse` (asNatLit >=> helper) where
   asNatLit (unwrapTermF -> FTermF (NatLit i)) = return i
   asNatLit _ = fail "not NatLit"
   helper 0 = return (preludeZeroIdent, [], [])
@@ -266,7 +266,7 @@ isDataType i p t = do
   if i == o then p l else fail "not datatype"
 
 asNat :: (MonadFail f) => Recognizer f Term Natural
-asNat (unwrapTermF -> FTermF (NatLit i)) = return $ fromInteger i
+asNat (unwrapTermF -> FTermF (NatLit i)) = return i
 asNat (asCtor -> Just (c, [])) | c == "Prelude.Zero" = return 0
 asNat (asCtor -> Just (c, [asNat -> Just i])) | c == "Prelude.Succ" = return (i+1)
 asNat _ = fail "not Nat"
