@@ -895,6 +895,38 @@ scImport sc t0 =
 --------------------------------------------------------------------------------
 -- Instantiating variables
 
+-- | The second argument is a function that takes the number of
+-- enclosing lambdas and the de Bruijn index of the variable,
+-- returning the new term to replace it with.
+instantiateLocalVars ::
+  SharedContext ->
+  (DeBruijnIndex -> DeBruijnIndex -> IO Term) ->
+  DeBruijnIndex -> Term -> IO Term
+instantiateLocalVars sc f initialLevel t0 =
+  do cache <- newCache
+     let ?cache = cache in go initialLevel t0
+  where
+    go :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
+          DeBruijnIndex -> Term -> IO Term
+    go l t =
+      case t of
+        Unshared tf -> go' l tf
+        STApp{ stAppIndex = tidx, stAppFreeVars = _fv, stAppTermF = tf}
+          --   | fv == emptyBitSet -> return t -- closed terms map to themselves
+          | otherwise -> useCache ?cache (tidx, l) (go' l tf)
+
+    go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
+           DeBruijnIndex -> TermF Term -> IO Term
+    go' _ (FTermF tf@(ExtCns _)) = scFlatTermF sc tf
+    go' l (FTermF tf)       = scFlatTermF sc =<< (traverse (go l) tf)
+    go' l (App x y)         = scTermF sc =<< (App <$> go l x <*> go l y)
+    go' l (Lambda i tp rhs) = scTermF sc =<< (Lambda i <$> go l tp <*> go (l+1) rhs)
+    go' l (Pi i lhs rhs)    = scTermF sc =<< (Pi i <$> go l lhs <*> go (l+1) rhs)
+    go' l (LocalVar i)
+      | i < l     = scTermF sc (LocalVar i)
+      | otherwise = f l i
+    go' _ tf@(Constant {}) = scTermF sc tf
+
 instantiateVars :: SharedContext
                 -> (DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term)
                 -> DeBruijnIndex -> Term -> IO Term
@@ -927,10 +959,9 @@ incVars :: SharedContext
         -> DeBruijnIndex -> DeBruijnIndex -> Term -> IO Term
 incVars sc initialLevel j
   | j == 0    = return
-  | otherwise = instantiateVars sc fn initialLevel
+  | otherwise = instantiateLocalVars sc fn initialLevel
   where
-    fn _ (Left ec) = scFlatTermF sc $ ExtCns ec
-    fn _ (Right i) = scTermF sc (LocalVar (i+j))
+    fn _ i = scTermF sc (LocalVar (i+j))
 
 -- | Substitute @t0@ for variable @k@ in @t@ and decrement all higher
 -- dangling variables.
@@ -938,17 +969,15 @@ instantiateVar :: SharedContext
                -> DeBruijnIndex -> Term -> Term -> IO Term
 instantiateVar sc k t0 t =
     do cache <- newCache
-       let ?cache = cache in instantiateVars sc fn k t
+       let ?cache = cache in instantiateLocalVars sc fn k t
   where -- Use map reference to memoize instantiated versions of t.
         term :: (?cache :: Cache IO DeBruijnIndex Term) =>
                 DeBruijnIndex -> IO Term
         term i = useCache ?cache i (incVars sc 0 i t0)
         -- Instantiate variable 0.
         fn :: (?cache :: Cache IO DeBruijnIndex Term) =>
-              DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term
-        fn _ (Left ec) = scFlatTermF sc $ ExtCns ec
-        fn i (Right j)
-               | j  > i     = scTermF sc (LocalVar (j - 1))
+              DeBruijnIndex -> DeBruijnIndex -> IO Term
+        fn i j | j  > i     = scTermF sc (LocalVar (j - 1))
                | j == i     = term i
                | otherwise  = scTermF sc (LocalVar j)
 
@@ -973,7 +1002,7 @@ instantiateVarList :: SharedContext
 instantiateVarList _ _ [] t = return t
 instantiateVarList sc k ts t =
     do caches <- mapM (const newCache) ts
-       instantiateVars sc (fn (zip caches ts)) k t
+       instantiateLocalVars sc (fn (zip caches ts)) k t
   where
     l = length ts
     -- Memoize instantiated versions of ts.
@@ -982,13 +1011,10 @@ instantiateVarList sc k ts t =
     term (cache, x) i = useCache cache i (incVars sc 0 (i-k) x)
     -- Instantiate variables [k .. k+l-1].
     fn :: [(Cache IO DeBruijnIndex Term, Term)]
-       -> DeBruijnIndex -> Either (ExtCns Term) DeBruijnIndex -> IO Term
-    fn _ _ (Left ec) = scFlatTermF sc $ ExtCns ec
-    fn rs i (Right j)
-              | j >= i + l     = scTermF sc (LocalVar (j - l))
+       -> DeBruijnIndex -> DeBruijnIndex -> IO Term
+    fn rs i j | j >= i + l     = scTermF sc (LocalVar (j - l))
               | j >= i         = term (rs !! (j - i)) i
               | otherwise      = scTermF sc (LocalVar j)
-
 
 
 --------------------------------------------------------------------------------
