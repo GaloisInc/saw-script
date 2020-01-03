@@ -73,6 +73,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad.Trans.Writer.Strict
+import Numeric.Natural
 
 
 import Verifier.SAW.Cache
@@ -107,7 +108,7 @@ instance Net.Pattern RewriteRule where
 data MatchState =
   MatchState
   { substitution :: Map DeBruijnIndex Term
-  , constraints :: [(Term, Integer)]
+  , constraints :: [(Term, Natural)]
   }
 
 emptyMatchState :: MatchState
@@ -163,7 +164,7 @@ scMatch sc pat term =
      mapM_ (check inst) cs
      return inst
   where
-    check :: Map DeBruijnIndex Term -> (Term, Integer) -> MaybeT IO ()
+    check :: Map DeBruijnIndex Term -> (Term, Natural) -> MaybeT IO ()
     check inst (t, n) = do
       --lift $ putStrLn $ "checking: " ++ show (t, n)
       -- apply substitution to the term

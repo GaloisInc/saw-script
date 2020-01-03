@@ -590,7 +590,7 @@ data WHNFElim
 -- natural number literal. Specifically, test if a term is not already a natural
 -- number literal, but is 0 or more applications of the @Succ@ constructor to
 -- either the @Zero@ constructor or a natural number literal
-convertsToNat :: Term -> Maybe Integer
+convertsToNat :: Term -> Maybe Natural
 convertsToNat (asFTermF -> Just (NatLit _)) = Nothing
 convertsToNat t = helper t where
   helper (asFTermF -> Just (NatLit k)) = return k
@@ -1077,7 +1077,7 @@ scSort :: SharedContext -> Sort -> IO Term
 scSort sc s = scFlatTermF sc (Sort s)
 
 scNat :: SharedContext -> Natural -> IO Term
-scNat sc n = scFlatTermF sc (NatLit (toInteger n))
+scNat sc n = scFlatTermF sc (NatLit n)
 
 scString :: SharedContext -> String -> IO Term
 scString sc s = scFlatTermF sc (StringLit s)
