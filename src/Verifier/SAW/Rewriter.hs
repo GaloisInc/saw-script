@@ -67,7 +67,6 @@ import Control.Monad.State
 import Control.Monad.Trans.Maybe
 import qualified Data.Foldable as Foldable
 import Data.Map (Map)
-import Data.Maybe (fromMaybe)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -142,14 +141,35 @@ first_order_match pat term = match pat term Map.empty
 -- occur as the 2nd argument of an @App@ constructor. This ensures
 -- that instantiations are well-typed.
 
--- | Normalization with a set of conversions
-bottom_convs :: [Conversion] -> Term -> TermBuilder Term
-bottom_convs convs t = do
-  t' <-
-    case unwrapTermF t of
-      App t1 t2 -> mkApp (bottom_convs convs t1) (bottom_convs convs t2)
-      _ -> return t
-  fromMaybe (return t') $ msum [ runConversion c t' | c <- convs ]
+asConstantNat :: Term -> Maybe Natural
+asConstantNat t =
+  case R.asCtor t of
+    Just (i, []) | i == "Prelude.Zero" -> Just 0
+    Just (i, [x]) | i == "Prelude.Succ" -> (+ 1) <$> asConstantNat x
+    _ ->
+      do let (f, xs) = R.asApplyAll t
+         i <- R.asGlobalDef f
+         case xs of
+           [x, y]
+             | i == "Prelude.addNat" -> (+) <$> asConstantNat x <*> asConstantNat y
+             | i == "Prelude.mulNat" -> (*) <$> asConstantNat x <*> asConstantNat y
+             | i == "Prelude.expNat" -> (^) <$> asConstantNat x <*> asConstantNat y
+             | i == "Prelude.subNat" ->
+                 do x' <- asConstantNat x
+                    y' <- asConstantNat y
+                    guard (x' >= y')
+                    return (x' - y')
+             | i == "Prelude.divNat" ->
+                 do x' <- asConstantNat x
+                    y' <- asConstantNat y
+                    guard (y' > 0)
+                    return (x' `div` y')
+             | i == "Prelude.remNat" ->
+                 do x' <- asConstantNat x
+                    y' <- asConstantNat y
+                    guard (y' > 0)
+                    return (x' `rem` y')
+           _ -> Nothing
 
 -- | An enhanced matcher that can handle higher-order patterns.
 scMatch ::
@@ -171,11 +191,9 @@ scMatch sc pat term =
       t' <- lift $ instantiateVarList sc 0 (Map.elems inst) t
       --lift $ putStrLn $ "t': " ++ show t'
       -- constant-fold nat operations
-      t'' <- lift $ runTermBuilder (bottom_convs natConversions t') (scTermF sc)
-      --lift $ putStrLn $ "t'': " ++ show t''
       -- ensure that it evaluates to the same number
-      case unwrapTermF t'' of
-        FTermF (NatLit i) | i == n -> return ()
+      case asConstantNat t' of
+        Just i | i == n -> return ()
         _ -> mzero
 
     asVarPat :: Int -> Term -> Maybe (DeBruijnIndex, [DeBruijnIndex])
