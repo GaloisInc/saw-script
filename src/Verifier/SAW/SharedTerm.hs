@@ -911,8 +911,8 @@ instantiateLocalVars sc f initialLevel t0 =
     go l t =
       case t of
         Unshared tf -> go' l tf
-        STApp{ stAppIndex = tidx, stAppFreeVars = _fv, stAppTermF = tf}
-          --   | fv == emptyBitSet -> return t -- closed terms map to themselves
+        STApp{ stAppIndex = tidx, stAppFreeVars = fv, stAppTermF = tf}
+          | fv == emptyBitSet -> return t -- closed terms map to themselves
           | otherwise -> useCache ?cache (tidx, l) (go' l tf)
 
     go' :: (?cache :: Cache IO (TermIndex, DeBruijnIndex) Term) =>
