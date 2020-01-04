@@ -1515,14 +1515,15 @@ instance TypeTranslate (TypedReg tp) ctx (ExprTrans tp) where
 
 -- tptranslate for a TypedExpr yields an ExprTrans
 instance NuMatchingExtC ext =>
-         TypeTranslate (App ext TypedReg tp) ctx (ExprTrans tp) where
+         TypeTranslate (App ext RegWithVal tp) ctx (ExprTrans tp) where
   tptranslate [nuP| EmptyApp |] = return $ ETrans_Term unitOpenTerm
   tptranslate _ = error "FIXME HERE NOW"
 
 -- tptranslate for a TypedExpr yields an ExprTrans
 instance NuMatchingExtC ext =>
          TypeTranslate (TypedExpr ext tp) ctx (ExprTrans tp) where
-  tptranslate [nuP| TypedExpr app |] = tptranslate app
+  tptranslate [nuP| TypedExpr _ (Just e) |] = tptranslate e
+  tptranslate [nuP| TypedExpr app Nothing |] = tptranslate app
 
 -- itranslate for a TypedReg yields a PermTrans
 instance NuMatchingExtC ext =>
@@ -1531,17 +1532,21 @@ instance NuMatchingExtC ext =>
   itranslate [nuP| TypedReg x |] = getVarPermM x
 
 -- itranslate for a TypedExpr yields a PermTrans
+{-
 instance NuMatchingExtC ext =>
          ImplTranslate (App ext TypedReg tp) (PermTrans ctx tp)
          ext blocks ret args ps ctx where
   itranslate [nuP| EmptyApp |] = return PTrans_True
   itranslate _ = error "FIXME HERE NOW"
+-}
 
--- itranslate for a TypedExpr yields a PermTrans
+-- itranslate for a TypedExpr yields a PermTrans, which is either an eq(e)
+-- permission or true
 instance NuMatchingExtC ext =>
          ImplTranslate (TypedExpr ext tp) (PermTrans ctx tp)
          ext blocks ret args ps ctx where
-  itranslate [nuP| TypedExpr app |] = itranslate app
+  itranslate [nuP| TypedExpr _ (Just e) |] = return $ PTrans_Eq e
+  itranslate [nuP| TypedExpr _ Nothing |] = return $ PTrans_True
 
 
 ----------------------------------------------------------------------
@@ -1592,7 +1597,8 @@ itranslateStmt :: NuMatchingExtC ext =>
 itranslateStmt [nuP| TypedSetReg _ e |] m =
   do etrans <- tpTransM $ tptranslate e
      ptrans <- extPermTrans <$> itranslate e
-     inExtImpTransM etrans ptrans m
+     inExtImpTransM etrans PTrans_True $
+       withPermStackM (:>: Member_Base) (:>: ptrans) m
 
 {-
 itranslateStmt [nuP| TypedCall freg ghosts args l ps_in ps_out |] m =

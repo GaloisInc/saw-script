@@ -88,9 +88,18 @@ typedRegsToVars (TypedRegsCons regs (TypedReg x)) = typedRegsToVars regs :>: x
 typedRegsToVarSubst :: TypedRegs ctx -> PermVarSubst ctx
 typedRegsToVarSubst = PermVarSubst . mapMapRList VarSubstElem . typedRegsToVars
 
+-- | A typed register along with its value if that is known statically
+data RegWithVal a
+  = RegWithVal (TypedReg a) (PermExpr a)
+  | RegNoVal (TypedReg a)
+
 -- | A type-checked Crucible expression is a Crucible 'Expr' that uses
--- 'TypedReg's for variables
-newtype TypedExpr ext tp = TypedExpr (App ext TypedReg tp)
+-- 'TypedReg's for variables. As part of type-checking, these typed registers
+-- (which are the inputs to the expression) as well as the final output value of
+-- the expression are annotated with equality permissions @eq(e)@ if their
+-- values can be statically represented as permission expressions @e@.
+data TypedExpr ext tp =
+  TypedExpr (App ext RegWithVal tp) (Maybe (PermExpr tp))
 
 -- | A "typed" function handle is a normal function handle along with an index
 -- of which typing of that function handle we are using, in case there are
@@ -146,13 +155,18 @@ data TypedJumpTarget blocks ps where
 
 
 $(mkNuMatching [t| forall tp. TypedReg tp |])
+$(mkNuMatching [t| forall tp. RegWithVal tp |])
 $(mkNuMatching [t| forall ctx. TypedRegs ctx |])
 
 instance NuMatchingAny1 TypedReg where
   nuMatchingAny1Proof = nuMatchingProof
 
+instance NuMatchingAny1 RegWithVal where
+  nuMatchingAny1Proof = nuMatchingProof
+
 type NuMatchingExtC ext =
-  (NuMatchingAny1 (ExprExtension ext TypedReg)
+  (NuMatchingAny1 (ExprExtension ext RegWithVal)
+  -- (NuMatchingAny1 (ExprExtension ext TypedReg)
    -- , NuMatchingAny1 (StmtExtension ext TypedReg)
   )
 
@@ -194,7 +208,7 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
   -- | Assign a pure value to a register, where pure here means that its
   -- translation to SAW will be pure (i.e., no LLVM pointer operations)
   TypedSetReg :: TypeRepr tp -> TypedExpr ext tp ->
-                 TypedStmt ext (RNil :> tp) RNil RNil
+                 TypedStmt ext (RNil :> tp) RNil (RNil :> tp)
 
   -- | Function call
   -- FIXME: switch to the new way of specifying lifetimes, as per 'FunPerm'
@@ -350,7 +364,10 @@ typedLLVMStmtIn (TypedLLVMDeleteFrame (TypedReg f) fperms perms) =
 -- | Return the output permissions for a 'TypedStmt'
 typedStmtOut :: TypedStmt ext rets ps_in ps_out -> MapRList Name rets ->
                 DistPerms ps_out
-typedStmtOut (TypedSetReg _ _) _ = DistPermsNil
+typedStmtOut (TypedSetReg _ (TypedExpr _ (Just e))) (_ :>: ret) =
+  distPerms1 ret (ValPerm_Eq e)
+typedStmtOut (TypedSetReg _ (TypedExpr _ Nothing)) (_ :>: ret) =
+  distPerms1 ret ValPerm_True
 typedStmtOut (TypedCall _ fun_perm args) (_ :>: ret) =
   varSubst
   (PermVarSubst $ mapMapRList VarSubstElem (typedRegsToVars args :>: ret))
@@ -825,6 +842,11 @@ getVarPerm :: ExprVar a ->
               PermCheckM ext cblocks blocks ret args r ps r ps (ValuePerm a)
 getVarPerm x = view (varPerm x) <$> stCurPerms <$> gget
 
+-- | Set the current primary permission associated with a variable
+setVarPerm :: ExprVar a -> ValuePerm a ->
+              PermCheckM ext cblocks blocks ret args r ps r ps ()
+setVarPerm x p = gmodify $ modifySTCurPerms $ set (varPerm x) p
+
 -- | Look up the current primary permission associated with a register
 getRegPerm :: TypedReg a ->
               PermCheckM ext cblocks blocks ret args r ps r ps (ValuePerm a)
@@ -1018,9 +1040,25 @@ endLifetime l =
 archWidth :: KnownNat (ArchWidth arch) => f arch -> NatRepr (ArchWidth arch)
 archWidth _ = knownNat
 
--- | Translate a Crucible register by looking it up in the translated context
+-- | Type-check a Crucible register by looking it up in the translated context
 tcReg :: CtxTrans ctx -> Reg ctx tp -> TypedReg tp
 tcReg ctx (Reg ix) = ctx ! ix
+
+-- | Type-check a Crucible register and also look up its value, if known
+tcRegWithVal :: CtxTrans ctx -> Reg ctx tp ->
+                StmtPermCheckM ext cblocks blocks ret args' ps ps
+                (RegWithVal tp)
+tcRegWithVal ctx r_untyped =
+  let r = tcReg ctx r_untyped in
+  getRegPerm r >>>= \p_init ->
+  embedImplM TypedImplStmt emptyCruCtx
+  (implPushM (typedRegVar r) p_init >>>
+   elimOrsExistsM (typedRegVar r) >>>= \p ->
+    implPopM (typedRegVar r) p >>> greturn p) >>>= \p ->
+  getRegPerm r >>>= \p ->
+  case p of
+    ValPerm_Eq e -> greturn (RegWithVal r e)
+    _ -> greturn (RegNoVal r)
 
 -- | Type-check a sequence of Crucible arguments into a 'TypedArgs' list
 {-
@@ -1039,14 +1077,17 @@ tcBlockID :: BlockID cblocks args ->
              (Member blocks (CtxToRList args))
 tcBlockID blkID = stLookupBlockID blkID <$> top_get
 
--- | Translate a Crucible expression
-tcExpr :: PermCheckExtC ext => CtxTrans ctx -> Expr ext ctx tp ->
-          StmtPermCheckM ext cblocks blocks ret args ps ps (TypedExpr ext tp)
-tcExpr ctx (App (ExtensionApp e_ext :: App ext (Reg ctx) tp))
+-- | Type-check a Crucible expression to test if it has a statically known
+-- 'PermExpr' value that we can use as an @eq(e)@ permission on the output of
+-- the expression
+tcExpr :: PermCheckExtC ext => App ext RegWithVal tp ->
+          StmtPermCheckM ext cblocks blocks ret args ps ps
+          (Maybe (PermExpr tp))
+tcExpr (ExtensionApp e_ext :: App ext RegWithVal tp)
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = error "tcExpr: unexpected LLVM expression"
-tcExpr ctx (App app) = greturn $ TypedExpr $ fmapFC (tcReg ctx) app
 
+tcExpr _ = greturn Nothing -- FIXME HERE NOW: at least handle bv operations
 
 -- | Typecheck a statement and emit it in the current statement sequence,
 -- starting and ending with an empty stack of distinguished permissions
@@ -1054,10 +1095,17 @@ tcEmitStmt :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
               Stmt ext ctx ctx' ->
               StmtPermCheckM ext cblocks blocks ret args RNil RNil
               (CtxTrans ctx')
-tcEmitStmt ctx loc (SetReg tp e) =
-  tcExpr ctx e >>>= \typed_e ->
+tcEmitStmt ctx loc (SetReg tp (App (ExtensionApp e_ext
+                                    :: App ext (Reg ctx) tp)))
+  | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
+  = tcEmitLLVMSetExpr Proxy ctx loc e_ext
+tcEmitStmt ctx loc (SetReg tp (App e)) =
+  traverseFC (tcRegWithVal ctx) e >>>= \e_with_vals ->
+  tcExpr e_with_vals >>>= \maybe_val ->
+  let typed_e = TypedExpr e_with_vals maybe_val in
   emitStmt (singletonCruCtx tp) loc (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
-  greturn $ addCtxName ctx x
+  stmtRecombinePerms >>>
+  greturn (addCtxName ctx x)
 
 tcEmitStmt ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
@@ -1185,8 +1233,9 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PushFrame _) =
   emitLLVMStmt knownRepr loc TypedLLVMCreateFrame >>>= \fp ->
   setFramePtr (TypedReg fp) >>>
   stmtRecombinePerms >>>
-  emitStmt knownRepr loc (TypedSetReg knownRepr $
-                          TypedExpr EmptyApp) >>>= \(_ :>: y) ->
+  emitStmt knownRepr loc (TypedSetReg knownRepr
+                          (TypedExpr EmptyApp Nothing)) >>>= \(_ :>: y) ->
+  stmtRecombinePerms >>>
   greturn (addCtxName ctx y)
 
 -- Type-check a pop frame instruction
