@@ -42,6 +42,8 @@ import Control.Monad.Trans.Maybe
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.CFG.Core
+import Lang.Crucible.FunctionHandle
+import Verifier.SAW.OpenTerm
 
 import Data.Binding.Hobbits
 import SAWScript.Heapster.CruUtil
@@ -137,6 +139,17 @@ data SimplImpl ps_in ps_out where
   --
   -- > x:p * x:(p0 * ... * p(n-1))
   -- >   -o x:(p0 * ... * p(i-1) * p * pi * ... * p(n-1))
+
+  SImpl_ConstFunPerm ::
+    args ~ CtxToRList cargs =>
+    ExprVar (FunctionHandleType cargs ret) ->
+    FnHandle cargs ret -> FunPerm ghosts (CtxToRList cargs) ret ->
+    SimplImpl (RNil :> FunctionHandleType cargs ret)
+    (RNil :> FunctionHandleType cargs ret)
+  -- ^ Prove a function permission for a statically-known function (assuming
+  -- that the given entry is in the current function environment):
+  --
+  -- > x:eq(handle) -o x:fun_perm
 
   SImpl_CastLLVMWord ::
     (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
@@ -521,6 +534,8 @@ simplImplIn (SImpl_ExtractConj x ps i) = distPerms1 x (ValPerm_Conj ps)
 simplImplIn (SImpl_CopyConj x ps i) = distPerms1 x (ValPerm_Conj ps)
 simplImplIn (SImpl_InsertConj x p ps i) =
   distPerms2 x (ValPerm_Conj [p]) x (ValPerm_Conj ps)
+simplImplIn (SImpl_ConstFunPerm x h _) =
+  distPerms1 x (ValPerm_Eq $ PExpr_Fun h)
 simplImplIn (SImpl_CastLLVMWord x e1 e2) =
   distPerms2 x (ValPerm_Eq $ PExpr_LLVMWord e1)
   x (ValPerm_Conj [Perm_BVProp $ BVProp_Eq e1 e2])
@@ -638,6 +653,8 @@ simplImplOut (SImpl_CopyConj x ps i) =
     error "simplImplOut: SImpl_CopyConj: permission not copyable"
 simplImplOut (SImpl_InsertConj x p ps i) =
   distPerms1 x (ValPerm_Conj (take i ps ++ p : drop i ps))
+simplImplOut (SImpl_ConstFunPerm x _ fun_perm) =
+  distPerms1 x (ValPerm_Conj1 $ Perm_Fun fun_perm)
 simplImplOut (SImpl_CastLLVMWord x _ e2) =
   distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e2)
 simplImplOut (SImpl_InvertLLVMOffsetEq x off y) =
@@ -1064,19 +1081,22 @@ data ImplState vars ps =
               -- current lifetime (we should have an @lowned@ permission for it)
               -- and each lifetime contains (i.e., has an @lcurrent@ permission
               -- for) the next lifetime in the stack
-              _implStateMuRecurseFlag :: Maybe (Either () ())
+              _implStateMuRecurseFlag :: Maybe (Either () ()),
               -- ^ Whether we are recursing under a @mu@, either on the left
               -- hand or the right hand side
+              _implStateFnEnv :: TypedFnEnv
+              -- ^ The current function environment
             }
 makeLenses ''ImplState
 
-mkImplState :: CruCtx vars -> PermSet ps -> ImplState vars ps
-mkImplState vars perms =
+mkImplState :: CruCtx vars -> PermSet ps -> TypedFnEnv -> ImplState vars ps
+mkImplState vars perms env =
   ImplState { _implStateVars = vars,
               _implStatePerms = perms,
               _implStatePSubst = emptyPSubst vars,
               _implStateLifetimes = [],
-              _implStateMuRecurseFlag = Nothing
+              _implStateMuRecurseFlag = Nothing,
+              _implStateFnEnv = env
             }
 
 extImplState :: KnownRepr TypeRepr tp => ImplState vars ps ->
@@ -1098,10 +1118,10 @@ type ImplM vars r ps_out ps_in =
 
 -- | Run an 'ImplM' computation by passing it a @vars@ context, a starting
 -- permission set, and an @r@
-runImplM :: CruCtx vars -> PermSet ps_in -> r ps_out ->
+runImplM :: CruCtx vars -> PermSet ps_in -> TypedFnEnv -> r ps_out ->
             ImplM vars r ps_out ps_in () -> PermImpl r ps_in
-runImplM vars perms r m =
-  runGenContM (runGenStateT m (mkImplState vars perms))
+runImplM vars perms env r m =
+  runGenContM (runGenStateT m (mkImplState vars perms env))
   (const $ PermImpl_Done r)
 
 -- | Look up the current partial substitution
@@ -2015,9 +2035,16 @@ proveVarImplH x p@(ValPerm_Eq
 proveVarImplH x (ValPerm_Eq (PExpr_LLVMWord _)) [nuP| ValPerm_Conj _ |] =
   implFailM
 
-proveVarImplH _ (ValPerm_Eq (PExpr_Fun f)) [nuP| ValPerm_Conj
-                                               [Perm_Fun mb_fun_perm] |] =
-  error "FIXME HERE: prove function permissions for known functions"
+proveVarImplH x p@(ValPerm_Eq (PExpr_Fun f)) [nuP| ValPerm_Conj
+                                                 [Perm_Fun mb_fun_perm] |] =
+  (view implStateFnEnv <$> gget) >>>= \env ->
+  case lookupFnEntry env f of
+    Just (SomeFunPerm fun_perm, _)
+      | [nuP| Just Refl |] <- fmap (funPermEq fun_perm) mb_fun_perm ->
+        introEqCopyM x (PExpr_Fun f) >>>
+        implPopM x p >>>
+        implSimplM Proxy (SImpl_ConstFunPerm x f fun_perm)
+    _ -> implFailM
 
 proveVarImplH _ (ValPerm_Eq _) [nuP| ValPerm_Conj _ |] =
   implFailM

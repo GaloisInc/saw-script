@@ -47,6 +47,7 @@ import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.CFG.Core
+import Verifier.SAW.OpenTerm
 
 import SAWScript.Heapster.CruUtil
 
@@ -663,6 +664,32 @@ funPermIns (FunPerm _ _ _ _ perms_in _) = perms_in
 -- | Return the output permissions of a function permission
 funPermOuts :: FunPerm ghosts args ret -> MbValuePerms (ghosts :++: args :> ret)
 funPermOuts (FunPerm _ _ _ _ _ perms_out) = perms_out
+
+-- | A function permission that existentially quantifies the @ghosts@ types
+data SomeFunPerm args ret where
+  SomeFunPerm :: FunPerm ghosts args ret -> SomeFunPerm args ret
+
+-- | An entry in a 'TypedFnEnv' that associates a permission and SAW translation
+-- to a Crucible function handle
+data TypedFnEnvEntry where
+  TypedFnEnvEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
+                     FunPerm ghosts args ret -> OpenTerm ->
+                     TypedFnEnvEntry
+
+-- | A typed function environment is a mapping from Crucible function handles
+-- and their associated types and translations into SAW
+newtype TypedFnEnv = TypedFnEnv [TypedFnEnvEntry]
+
+-- | Look up the environment entry for a 'FnHandle'
+lookupFnEntry :: TypedFnEnv -> FnHandle cargs ret ->
+                 Maybe (SomeFunPerm (CtxToRList cargs) ret, OpenTerm)
+lookupFnEntry (TypedFnEnv []) _ = Nothing
+lookupFnEntry (TypedFnEnv ((TypedFnEnvEntry h' fun_perm t): _)) h
+  | Just Refl <- testEquality (handleType h') (handleType h)
+  , h' == h
+  = Just (SomeFunPerm fun_perm, t)
+lookupFnEntry (TypedFnEnv (_:entries)) h = lookupFnEntry (TypedFnEnv entries) h
+
 
 -- | A list of "distinguished" permissions to named variables
 -- FIXME: just call these VarsAndPerms or something like that...

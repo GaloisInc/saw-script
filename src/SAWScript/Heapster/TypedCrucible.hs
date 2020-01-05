@@ -101,20 +101,19 @@ data RegWithVal a
 data TypedExpr ext tp =
   TypedExpr (App ext RegWithVal tp) (Maybe (PermExpr tp))
 
--- | A "typed" function handle is a normal function handle along with an index
--- of which typing of that function handle we are using, in case there are
--- multiples (just like 'TypedEntryID', below)
+-- | A "typed" function handle is a normal function handle along with a context
+-- of ghost variables
 data TypedFnHandle ghosts args ret where
-  TypedFnHandle :: CruCtx ghosts -> FnHandle cargs ret -> Int ->
+  TypedFnHandle :: CruCtx ghosts -> FnHandle cargs ret ->
                    TypedFnHandle ghosts (CtxToRList cargs) ret
 
 -- | Extract out the context of ghost arguments from a 'TypedFnHandle'
 typedFnHandleGhosts :: TypedFnHandle ghosts args ret -> CruCtx ghosts
-typedFnHandleGhosts (TypedFnHandle ghosts _ _) = ghosts
+typedFnHandleGhosts (TypedFnHandle ghosts _) = ghosts
 
 -- | Extract out the context of regular arguments from a 'TypedFnHandle'
 typedFnHandleArgs :: TypedFnHandle ghosts args ret -> CruCtx args
-typedFnHandleArgs (TypedFnHandle _ h _) = mkCruCtx $ handleArgTypes h
+typedFnHandleArgs (TypedFnHandle _ h) = mkCruCtx $ handleArgTypes h
 
 -- | Extract out the context of all arguments of a 'TypedFnHandle'
 typedFnHandleAllArgs :: TypedFnHandle ghosts args ret ->
@@ -124,7 +123,7 @@ typedFnHandleAllArgs h =
 
 -- | Extract out the return type of a 'TypedFnHandle'
 typedFnHandleRetType :: TypedFnHandle ghosts args ret -> TypeRepr ret
-typedFnHandleRetType (TypedFnHandle _ h _) = handleReturnType h
+typedFnHandleRetType (TypedFnHandle _ h) = handleReturnType h
 
 
 -- | All of our blocks have multiple entry points, for different inferred types,
@@ -586,7 +585,8 @@ data PermCheckState ext args ret ps =
     stCurPerms :: PermSet ps,
     stExtState :: PermCheckExtState ext,
     stRetPerms :: Some (RetPerms ret),
-    stVarTypes :: NameMap CruType
+    stVarTypes :: NameMap CruType,
+    stFnEnv    :: TypedFnEnv
   }
 
 -- | Like the 'set' method of a lens, but allows the @ps@ argument to change
@@ -791,15 +791,16 @@ liftPermCheckM :: TopPermCheckM ext cblocks blocks ret a ->
 liftPermCheckM m = gcaptureCC $ \k -> m >>= k
 
 runPermCheckM :: KnownRepr ExtRepr ext =>
-                 PermSet ps_in -> RetPerms ret ret_ps ->
+                 PermSet ps_in -> RetPerms ret ret_ps -> TypedFnEnv ->
                  PermCheckM ext cblocks blocks ret args () ps_out r ps_in () ->
                  TopPermCheckM ext cblocks blocks ret r
-runPermCheckM perms ret_perms m =
+runPermCheckM perms ret_perms env m =
   let st = PermCheckState {
         stCurPerms = perms,
         stExtState = emptyPermCheckExtState knownRepr,
         stRetPerms = Some ret_perms,
-        stVarTypes = NameMap.empty } in
+        stVarTypes = NameMap.empty,
+        stFnEnv = env } in
   runGenContM (runGenStateT m st) (const $ return ())
 
 
@@ -1334,7 +1335,7 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         -- permissions into the current distinguished perms, and then proves
         -- that each "real" argument register equals itself.
         greturn $
-        runImplM CruCtxNil (stCurPerms st) target_t
+        runImplM CruCtxNil (stCurPerms st) env target_t
         (implPushMultiM ghost_perms >>>
          proveVarsImplAppend (distPermsToExDistPerms arg_eq_perms))
 
@@ -1352,13 +1353,14 @@ tcTermStmt ctx (Return reg) =
   let treg = tcReg ctx reg in
   gget >>>= \st ->
   top_get >>>= \top_st ->
+  let env = 
   case stRetPerms st of
     Some (RetPerms mb_ret_perms) ->
       let ret_perms =
             varSubst (singletonVarSubst $ typedRegVar treg) mb_ret_perms in
       greturn $ TypedReturn $
-      runImplM CruCtxNil (stCurPerms st) (TypedRet (stRetType top_st)
-                                          treg mb_ret_perms) $
+      runImplM CruCtxNil (stCurPerms st) env (TypedRet (stRetType top_st)
+                                              treg mb_ret_perms) $
       proveVarsImpl $ distPermsToExDistPerms ret_perms
 tcTermStmt ctx (ErrorStmt reg) = greturn $ TypedErrorStmt $ tcReg ctx reg
 tcTermStmt _ tstmt =
@@ -1448,7 +1450,7 @@ tcCFG cfg [clP| FunPerm cl_ghosts _ _ _ perms_in perms_out |] =
      return $ TypedCFG
        { tpcfgHandle =
            -- FIXME: figure out the index for the TypedFnHandle
-           TypedFnHandle ghosts (cfgHandle cfg) 0
+           TypedFnHandle ghosts (cfgHandle cfg)
        , tpcfgInputPerms = unClosed perms_in
        , tpcfgOutputPerms = unClosed perms_out
        , tpcfgBlockMap =
