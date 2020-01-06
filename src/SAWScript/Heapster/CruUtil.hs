@@ -313,6 +313,7 @@ appendCruCtx :: CruCtx ctx1 -> CruCtx ctx2 -> CruCtx (ctx1 :++: ctx2)
 appendCruCtx ctx1 CruCtxNil = ctx1
 appendCruCtx ctx1 (CruCtxCons ctx2 tp) = CruCtxCons (appendCruCtx ctx1 ctx2) tp
 
-ctxToMap :: CruCtx ctx -> MapRList CruType ctx
-ctxToMap CruCtxNil = MNil
-ctxToMap (CruCtxCons ctx tp) = ctxToMap ctx :>: tp
+-- | Build a 'MapRList' phantom argument from a context of Crucible types
+cruCtxProxies :: CruCtx ctx -> MapRList Proxy ctx
+cruCtxProxies CruCtxNil = MNil
+cruCtxProxies (CruCtxCons ctx _) = cruCtxProxies ctx :>: Proxy

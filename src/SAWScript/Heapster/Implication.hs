@@ -1084,12 +1084,12 @@ data ImplState vars ps =
               _implStateMuRecurseFlag :: Maybe (Either () ()),
               -- ^ Whether we are recursing under a @mu@, either on the left
               -- hand or the right hand side
-              _implStateFnEnv :: TypedFnEnv
+              _implStateFnEnv :: FunTypeEnv
               -- ^ The current function environment
             }
 makeLenses ''ImplState
 
-mkImplState :: CruCtx vars -> PermSet ps -> TypedFnEnv -> ImplState vars ps
+mkImplState :: CruCtx vars -> PermSet ps -> FunTypeEnv -> ImplState vars ps
 mkImplState vars perms env =
   ImplState { _implStateVars = vars,
               _implStatePerms = perms,
@@ -1118,7 +1118,7 @@ type ImplM vars r ps_out ps_in =
 
 -- | Run an 'ImplM' computation by passing it a @vars@ context, a starting
 -- permission set, and an @r@
-runImplM :: CruCtx vars -> PermSet ps_in -> TypedFnEnv -> r ps_out ->
+runImplM :: CruCtx vars -> PermSet ps_in -> FunTypeEnv -> r ps_out ->
             ImplM vars r ps_out ps_in () -> PermImpl r ps_in
 runImplM vars perms env r m =
   runGenContM (runGenStateT m (mkImplState vars perms env))
@@ -2038,8 +2038,8 @@ proveVarImplH x (ValPerm_Eq (PExpr_LLVMWord _)) [nuP| ValPerm_Conj _ |] =
 proveVarImplH x p@(ValPerm_Eq (PExpr_Fun f)) [nuP| ValPerm_Conj
                                                  [Perm_Fun mb_fun_perm] |] =
   (view implStateFnEnv <$> gget) >>>= \env ->
-  case lookupFnEntry env f of
-    Just (SomeFunPerm fun_perm, _)
+  case lookupFunPerm env f of
+    Just (SomeFunPerm fun_perm)
       | [nuP| Just Refl |] <- fmap (funPermEq fun_perm) mb_fun_perm ->
         introEqCopyM x (PExpr_Fun f) >>>
         implPopM x p >>>

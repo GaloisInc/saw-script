@@ -647,48 +647,41 @@ data LLVMArrayBorrow w
 
 
 -- | A function permission is a set of input and output permissions inside a
--- context of ghost variables that must be solved for when the function is
--- called. One ghost variable is a lifetime that represents the lifetime of the
--- function call.
+-- context of ghost variables, including one for the lifetime of the function,
+-- that must be solved for when the function is called
 data FunPerm ghosts args ret where
   FunPerm :: CruCtx ghosts -> CruCtx args -> CruType ret ->
-             Member ghosts LifetimeType ->
-             MbValuePerms (ghosts :++: args) ->
-             MbValuePerms (ghosts :++: args :> ret) ->
+             Mb (ghosts :> LifetimeType) (MbValuePerms args) ->
+             Mb (ghosts :> LifetimeType) (MbValuePerms (args :> ret)) ->
              FunPerm ghosts args ret
 
--- | Return the input permissions of a function permission
-funPermIns :: FunPerm ghosts args ret -> MbValuePerms (ghosts :++: args)
-funPermIns (FunPerm _ _ _ _ perms_in _) = perms_in
-
--- | Return the output permissions of a function permission
-funPermOuts :: FunPerm ghosts args ret -> MbValuePerms (ghosts :++: args :> ret)
-funPermOuts (FunPerm _ _ _ _ _ perms_out) = perms_out
+-- | Extract the @ghosts@ context from a function permission
+funPermGhosts :: FunPerm ghosts args ret -> CruCtx ghosts
+funPermGhosts (FunPerm ghosts _ _ _ _) = ghosts
 
 -- | A function permission that existentially quantifies the @ghosts@ types
 data SomeFunPerm args ret where
   SomeFunPerm :: FunPerm ghosts args ret -> SomeFunPerm args ret
 
--- | An entry in a 'TypedFnEnv' that associates a permission and SAW translation
--- to a Crucible function handle
-data TypedFnEnvEntry where
-  TypedFnEnvEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
-                     FunPerm ghosts args ret -> OpenTerm ->
-                     TypedFnEnvEntry
+-- | An entry in a 'FunTypeEnv' that associates a permission with a Crucible
+-- function handle
+data FunTypeEnvEntry where
+  FunTypeEnvEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
+                     FunPerm ghosts args ret -> FunTypeEnvEntry
 
--- | A typed function environment is a mapping from Crucible function handles
--- and their associated types and translations into SAW
-newtype TypedFnEnv = TypedFnEnv [TypedFnEnvEntry]
+-- | A typed function environment is a mapping from Crucible function handles to
+-- their associated function permissions
+newtype FunTypeEnv = FunTypeEnv [FunTypeEnvEntry]
 
--- | Look up the environment entry for a 'FnHandle'
-lookupFnEntry :: TypedFnEnv -> FnHandle cargs ret ->
-                 Maybe (SomeFunPerm (CtxToRList cargs) ret, OpenTerm)
-lookupFnEntry (TypedFnEnv []) _ = Nothing
-lookupFnEntry (TypedFnEnv ((TypedFnEnvEntry h' fun_perm t): _)) h
+-- | Look up the function permission for a 'FnHandle'
+lookupFunPerm :: FunTypeEnv -> FnHandle cargs ret ->
+                 Maybe (SomeFunPerm (CtxToRList cargs) ret)
+lookupFunPerm (FunTypeEnv []) _ = Nothing
+lookupFunPerm (FunTypeEnv ((FunTypeEnvEntry h' fun_perm): _)) h
   | Just Refl <- testEquality (handleType h') (handleType h)
   , h' == h
-  = Just (SomeFunPerm fun_perm, t)
-lookupFnEntry (TypedFnEnv (_:entries)) h = lookupFnEntry (TypedFnEnv entries) h
+  = Just (SomeFunPerm fun_perm)
+lookupFunPerm (FunTypeEnv (_:entries)) h = lookupFunPerm (FunTypeEnv entries) h
 
 
 -- | A list of "distinguished" permissions to named variables
@@ -767,10 +760,10 @@ instance Eq (ValuePerms as) where
 -- | Test if function permissions with different ghost argument lists are equal
 funPermEq :: FunPerm ghosts1 args ret -> FunPerm ghosts2 args ret ->
              Maybe (ghosts1 :~: ghosts2)
-funPermEq (FunPerm ghosts1 _ _ v1 perms_in1 perms_out1)
-  (FunPerm ghosts2 _ _ v2 perms_in2 perms_out2)
+funPermEq (FunPerm ghosts1 _ _ perms_in1 perms_out1)
+  (FunPerm ghosts2 _ _ perms_in2 perms_out2)
   | Just Refl <- testEquality ghosts1 ghosts2
-  , v1 == v2 && perms_in1 == perms_in2 && perms_out1 == perms_out2
+  , perms_in1 == perms_in2 && perms_out1 == perms_out2
   = Just Refl
 funPermEq _ _ = Nothing
 
@@ -1105,6 +1098,18 @@ mapDistPerms f (DistPermsCons perms x p) =
   DistPermsCons (mapDistPerms f perms) x (f p)
 
 
+-- | Create a sequence of @true@ permissions
+trueValuePerms :: CruCtx ps -> ValuePerms ps
+trueValuePerms CruCtxNil = ValPerms_Nil
+trueValuePerms (CruCtxCons ctx _) =
+  ValPerms_Cons (trueValuePerms ctx) ValPerm_True
+
+-- | Append two lists of permissions
+appendValuePerms :: ValuePerms ps1 -> ValuePerms ps2 -> ValuePerms (ps1 :++: ps2)
+appendValuePerms ps1 ValPerms_Nil = ps1
+appendValuePerms ps1 (ValPerms_Cons ps2 p) =
+  ValPerms_Cons (appendValuePerms ps1 ps2) p
+
 -- | Extract the non-variable portion of a permission list expression
 permListToDistPerms :: PermExpr PermListType -> Some DistPerms
 permListToDistPerms PExpr_PermListNil = Some DistPermsNil
@@ -1114,11 +1119,15 @@ permListToDistPerms (PExpr_PermListCons (PExpr_Var x) p l) =
     Some perms -> Some $ DistPermsCons perms x p
 permListToDistPerms (PExpr_PermListCons _ _ l) = permListToDistPerms l
 
+-- | Combine a list of variable names and a list of permissions into a list of
+-- distinguished permissions
 valuePermsToDistPerms :: MapRList Name ps -> ValuePerms ps -> DistPerms ps
 valuePermsToDistPerms MNil _ = DistPermsNil
 valuePermsToDistPerms (ns :>: n) (ValPerms_Cons ps p) =
   DistPermsCons (valuePermsToDistPerms ns ps) n p
 
+-- | Convert a list of permissions inside bindings for variables into a list of
+-- distinguished permissions for those variables
 mbValuePermsToDistPerms :: MbValuePerms ps -> MbDistPerms ps
 mbValuePermsToDistPerms = nuMultiWithElim1 valuePermsToDistPerms
 
@@ -1181,6 +1190,28 @@ nthVarPerm :: Member ps a -> ExprVar a -> Lens' (DistPerms ps) (ValuePerm a)
 nthVarPerm Member_Base x = distPermsHead x
 nthVarPerm (Member_Step memb') x = distPermsTail . nthVarPerm memb' x
 
+-- | Return the input permissions of a function permission given a lifetime @l@
+-- and a permission list @ps@ for the @lowned(ps)@ permission on @l@
+funPermIns :: FunPerm ghosts args ret ->
+              ExprVar LifetimeType -> PermExpr PermListType ->
+              Mb (ghosts :++: args) (DistPerms (args :> LifetimeType))
+funPermIns (FunPerm _ _ _ perms_in _) l ps =
+  fmap (\perms -> DistPermsCons perms l (ValPerm_Conj1 (Perm_LOwned ps))) $
+  mbCombine $
+  fmap (mbValuePermsToDistPerms . subst (singletonSubst $ PExpr_Var l)) $
+  mbSeparate (MNil :>: Proxy) perms_in
+
+-- | Return the output permissions of a function permission given a lifetime @l@
+-- and a permission list @ps@ for the @lowned(ps)@ permission on @l@
+funPermOuts :: FunPerm ghosts args ret ->
+               ExprVar LifetimeType -> PermExpr PermListType ->
+               Mb (ghosts :++: args :> ret) (DistPerms
+                                             (args :> ret :> LifetimeType))
+funPermOuts (FunPerm _ _ _ _ perms_out) l ps =
+  fmap (\perms -> DistPermsCons perms l (ValPerm_Conj1 (Perm_LOwned ps))) $
+  mbCombine $
+  fmap (mbValuePermsToDistPerms . subst (singletonSubst $ PExpr_Var l)) $
+  mbSeparate (MNil :>: Proxy) perms_out
 
 -- | Test if a permission can be copied, i.e., whether @p -o p*p@. This is true
 -- iff @p@ does not contain any 'Write' modalities, any frame permissions, or
@@ -1640,10 +1671,9 @@ instance SubstVar s m => Substable s (LLVMArrayBorrow w) m where
   genSubst s [nuP| RangeBorrow r |] = RangeBorrow <$> genSubst s r
 
 instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
-  genSubst s [nuP| FunPerm ghosts args ret l perms_in perms_out |] =
+  genSubst s [nuP| FunPerm ghosts args ret perms_in perms_out |] =
     FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
-    <$> genSubst s l
-    <*> genSubst s perms_in <*> genSubst s perms_out
+    <$> genSubst s perms_in <*> genSubst s perms_out
 
 instance SubstVar PermVarSubst m =>
          Substable PermVarSubst (DistPerms ps) m where
@@ -1708,6 +1738,9 @@ newtype PermVarSubst ctx =
 
 singletonVarSubst :: ExprVar a -> PermVarSubst (RNil :> a)
 singletonVarSubst x = PermVarSubst (empty :>: VarSubstElem x)
+
+consVarSubst :: PermVarSubst ctx -> ExprVar a -> PermVarSubst (ctx :> a)
+consVarSubst (PermVarSubst elems) n = PermVarSubst (elems :>: VarSubstElem n)
 
 varSubstLookup :: PermVarSubst ctx -> Member ctx a -> ExprVar a
 varSubstLookup (PermVarSubst m) memb =
@@ -1952,10 +1985,9 @@ instance SubstValPerm (LLVMArrayBorrow w) where
   substValPerm p [nuP| RangeBorrow r |] = RangeBorrow $ substValPerm p r
 
 instance SubstValPerm (FunPerm ghosts args ret) where
-  substValPerm p [nuP| FunPerm ghosts args ret l perms_in perms_out |] =
+  substValPerm p [nuP| FunPerm ghosts args ret perms_in perms_out |] =
     FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
-    (substValPerm p l) (substValPerm p perms_in)
-    (substValPerm p perms_out)
+    (substValPerm p perms_in) (substValPerm p perms_out)
 
 
 ----------------------------------------------------------------------
@@ -2254,13 +2286,23 @@ instance AbstractVars (DistPerms ps) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 x `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 instance AbstractVars (FunPerm ghosts args ret) where
-  abstractPEVars ns1 ns2 (FunPerm ghosts args ret l perms_in perms_out) =
+  abstractPEVars ns1 ns2 (FunPerm ghosts args ret perms_in perms_out) =
     absVarsReturnH ns1 ns2
     ($(mkClosed [| FunPerm |])
      `clApply` toClosed ghosts `clApply` toClosed args `clApply` toClosed ret)
-    `clMbMbApplyM` abstractPEVars ns1 ns2 l
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms_in
     `clMbMbApplyM` abstractPEVars ns1 ns2 perms_out
+
+instance AbstractVars FunTypeEnvEntry where
+  abstractPEVars ns1 ns2 (FunTypeEnvEntry h fun_perm) =
+    absVarsReturnH ns1 ns2
+    ($(mkClosed [| FunTypeEnvEntry |]) `clApply` toClosed h)
+    `clMbMbApplyM` abstractPEVars ns1 ns2 fun_perm
+
+instance AbstractVars FunTypeEnv where
+  abstractPEVars ns1 ns2 (FunTypeEnv entries) =
+    absVarsReturnH ns1 ns2
+    $(mkClosed [| FunTypeEnv |]) `clMbMbApplyM` abstractPEVars ns1 ns2 entries
 
 
 ----------------------------------------------------------------------
