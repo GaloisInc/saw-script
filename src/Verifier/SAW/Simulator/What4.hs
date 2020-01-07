@@ -551,7 +551,7 @@ parseUninterpreted sym ref nm args tys ty =
     VPiType _ f
       -> return $
          strictFun $ \x -> do
-           SomeArgs nm' args' tys' <- flattenSValue (SomeArgs nm args tys) x
+           UnintApp nm' args' tys' <- applyUnintApp (UnintApp nm args tys) x
            t2 <- f (ready x)
            parseUninterpreted sym ref nm' args' tys' t2
 
@@ -605,34 +605,38 @@ mkUninterpreted sym ref nm args tys ret =
   do fn <- mkSymFn sym ref nm tys ret
      W.applySymFn sym fn args
 
-data SomeArgs f =
-  forall args. SomeArgs String (Assignment f args) (Assignment BaseTypeRepr args)
+-- | A value of type @UnintApp f@ represents an uninterpreted function
+-- with the given 'String' name, applied to a list of argument values
+-- paired with a representation of their types. The context of
+-- argument types is existentially quantified.
+data UnintApp f =
+  forall args. UnintApp String (Assignment f args) (Assignment BaseTypeRepr args)
 
 -- | Flatten an 'SValue' to a sequence of components, each of which is
--- a symbolic value of a base type (e.g. word or boolean), and append
--- them onto the end of the given 'Assignment'. If the 'SValue'
--- contains any values built from data constructors, then encode them
--- as suffixes on the given 'String'.
-flattenSValue ::
+-- a symbolic value of a base type (e.g. word or boolean), and add
+-- them to the list of arguments of the given 'UnintApp'. If the
+-- 'SValue' contains any values built from data constructors, then
+-- encode them as suffixes on the function name of the 'UnintApp'.
+applyUnintApp ::
   forall sym.
-  SomeArgs (SymExpr sym) ->
+  UnintApp (SymExpr sym) ->
   SValue sym ->
-  IO (SomeArgs (SymExpr sym))
-flattenSValue args0@(SomeArgs nm xs tys) v =
+  IO (UnintApp (SymExpr sym))
+applyUnintApp app0@(UnintApp nm xs tys) v =
   case v of
-    VUnit                     -> return args0
-    VPair x y                 -> do args1 <- flattenSValue args0 =<< force x
-                                    args2 <- flattenSValue args1 =<< force y
-                                    return args2
-    VRecordValue elems        -> foldM flattenSValue args0 =<< traverse (force . snd) elems
-    VVector xv                -> foldM flattenSValue args0 =<< traverse force xv
-    VBool sb                  -> return (SomeArgs nm (Ctx.extend xs sb) (Ctx.extend tys BaseBoolRepr))
-    VInt si                   -> return (SomeArgs nm (Ctx.extend xs si) (Ctx.extend tys BaseIntegerRepr))
-    VWord (DBV sw)            -> return (SomeArgs nm (Ctx.extend xs sw) (Ctx.extend tys (W.exprType sw)))
-    VWord ZBV                 -> return args0
-    VCtorApp i xv             -> foldM flattenSValue args' =<< traverse force xv
-                                   where args' = SomeArgs (nm ++ "_" ++ identName i) xs tys
-    VNat n                    -> return (SomeArgs (nm ++ "_" ++ show n) xs tys)
+    VUnit                     -> return app0
+    VPair x y                 -> do app1 <- applyUnintApp app0 =<< force x
+                                    app2 <- applyUnintApp app1 =<< force y
+                                    return app2
+    VRecordValue elems        -> foldM applyUnintApp app0 =<< traverse (force . snd) elems
+    VVector xv                -> foldM applyUnintApp app0 =<< traverse force xv
+    VBool sb                  -> return (UnintApp nm (Ctx.extend xs sb) (Ctx.extend tys BaseBoolRepr))
+    VInt si                   -> return (UnintApp nm (Ctx.extend xs si) (Ctx.extend tys BaseIntegerRepr))
+    VWord (DBV sw)            -> return (UnintApp nm (Ctx.extend xs sw) (Ctx.extend tys (W.exprType sw)))
+    VWord ZBV                 -> return app0
+    VCtorApp i xv             -> foldM applyUnintApp app' =<< traverse force xv
+                                   where app' = UnintApp (nm ++ "_" ++ identName i) xs tys
+    VNat n                    -> return (UnintApp (nm ++ "_" ++ show n) xs tys)
     _ -> fail $ "Could not create argument for " ++ show v
 
 ------------------------------------------------------------
@@ -883,7 +887,7 @@ parseUninterpretedSAW sym sc ref trm nm args tys ty =
     VPiType t1 f
       -> return $
          strictFun $ \x -> do
-           (SomeArgs nm' args' tys') <- flattenSValue (SomeArgs nm args tys) x
+           (UnintApp nm' args' tys') <- applyUnintApp (UnintApp nm args tys) x
            arg <- mkArgTerm sc t1 x
            let trm' = ArgTermApply trm arg
            t2 <- f (ready x)
@@ -1027,7 +1031,7 @@ reconstructArgTerm atrm sc ts =
 -- | Given a type and value encoded as 'SValue's, construct an
 -- 'ArgTerm' that builds a term of that type from local variables with
 -- base types. The number of 'ArgTermVar' constructors should match
--- the number of arguments returned by 'flattenSValue'.
+-- the number of arguments appended by 'applyUnintApp'.
 mkArgTerm :: SharedContext -> SValue sym -> SValue sym -> IO ArgTerm
 mkArgTerm sc ty val =
   case (ty, val) of
