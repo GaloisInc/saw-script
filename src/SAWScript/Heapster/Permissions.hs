@@ -658,6 +658,10 @@ data FunPerm ghosts args ret where
 funPermGhosts :: FunPerm ghosts args ret -> CruCtx ghosts
 funPermGhosts (FunPerm ghosts _ _ _ _) = ghosts
 
+-- | Extract the return type from a function permission
+funPermRet :: FunPerm ghosts args ret -> CruType ret
+funPermRet (FunPerm _ _ ret _ _) = ret
+
 -- | Extract the input permissions of a function permission
 funPermIns :: FunPerm ghosts args ret ->
               Mb (ghosts :> LifetimeType) (MbValuePerms args)
@@ -1099,6 +1103,10 @@ distPerms1 x p = DistPermsCons DistPermsNil x p
 distPerms2 :: ExprVar a1 -> ValuePerm a1 ->
               ExprVar a2 -> ValuePerm a2 -> DistPerms (RNil :> a1 :> a2)
 distPerms2 x1 p1 x2 p2 = DistPermsCons (distPerms1 x1 p1) x2 p2
+
+-- | Drop the last permission in a 'DistPerms'
+distPermsSnoc :: DistPerms (ps :> a) -> DistPerms ps
+distPermsSnoc (DistPermsCons ps _ _) = ps
 
 -- | Map a function on permissions across a 'DistPerms'
 mapDistPerms :: (forall a. ValuePerm a -> ValuePerm a) ->

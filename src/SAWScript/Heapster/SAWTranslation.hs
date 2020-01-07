@@ -851,6 +851,24 @@ instance TypeTranslate (ValuePerms ps) ctx OpenTerm where
 instance TypeTranslate (DistPerms ps) ctx OpenTerm where
   tptranslate = tptranslate . mbDistPermsToValuePerms
 
+-- | Unpack a SAW nested tuple, whose type is determined by the supplied
+-- permissions, into a permission translation context for those permissions
+unpackPermCtxTuple :: Mb ctx (ValuePerms ps) -> OpenTerm ->
+                      TypeTransM ctx (PermTransCtx ctx ps)
+unpackPermCtxTuple top_ps = evalStateT (helper top_ps) where
+  helper :: Mb ctx (ValuePerms ps') ->
+            StateT OpenTerm (TypeTransM ctx) (PermTransCtx ctx ps')
+  helper [nuP| ValPerms_Nil |] = return MNil
+  helper [nuP| ValPerms_Cons ps p |] =
+    do rest <- helper ps
+       eith <- lift $ tptranslate p
+       case eith of
+         Left ptrans -> return (rest :>: ptrans)
+         Right (_, mk_ptrans) ->
+           do trm <- get
+              put (pairRightOpenTerm trm)
+              return (rest :>: mk_ptrans (pairLeftOpenTerm trm))
+
 
 ----------------------------------------------------------------------
 -- * The Implication Translation Monad
@@ -1147,7 +1165,7 @@ itranslateSimplImpl _ [nuP| SImpl_IntroOrR _ p1 p2 |] m =
 itranslateSimplImpl _ [nuP| SImpl_IntroExists _ (e :: PermExpr tp) p |] m =
   do let tp :: TypeRepr tp = knownRepr
      tp_trans <- itranslate $ nuMulti (mbToProxy e) $ const tp
-     tp_f <- lambdaExprTransI "x_introEx" tp $ itranslate $ mbCombine p
+     tp_f <- lambdaExprTransForceI "x_introEx" tp $ itranslate $ mbCombine p
      e_trans <- tpTransM (translateExpr e)
      withPermStackM id
        (\(ps :>: p_top) ->
@@ -1476,7 +1494,9 @@ itranslatePermImpl1 [nuP| Impl1_ElimExists x (p :: Binding tp (ValuePerm a)) |]
      let tp :: TypeRepr tp = knownRepr
      tp_trans <- itranslate $ nuMulti (mbToProxy x) $ const tp
      tp_f <- lambdaExprTransForceI "x_elimEx" tp $ itranslate $ mbCombine p
-     ret_f <- lambdaExprTransForceI "x_elimEx" tp compReturnTypeM
+     ret_f <- lambdaTransM "x_elimEx"
+       (dataTypeOpenTerm "Prelude.Sigma" [tp_trans, tp_f])
+       (const compReturnTypeM)
      top_ptrans <- getTopPermM
      applyMultiTransM (return $ globalOpenTerm "Prelude.Sigma__rec")
        [ return tp_trans, return tp_f, return ret_f
@@ -1626,13 +1646,40 @@ itranslateStmt [nuP| TypedSetReg _ e |] m =
      inExtImpTransM etrans PTrans_True $
        withPermStackM (:>: Member_Base) (:>: ptrans) m
 
-{-
-itranslateStmt [nuP| TypedCall freg ghosts l ps_in ps_out |] m =
-  do f <- permTransToTerm <$> itranslate freg
-     let ctx_in = _
-     fret <- translateApply "TypedCall" f ctx_in ps_in
-     FIXME HERE: unpack fret as a Sigma of an ExprTrans and a tuple of PermTranss
--}
+itranslateStmt [nuP| stmt@(TypedCall freg fun_perm ghosts args l ps) |] m =
+  do f_trans <- getTopPermM
+     let f = case f_trans of
+           PTrans_Conj [APTrans_Fun _ f_trm] -> f_trm
+           _ -> error "itranslateStmt: TypedCall: unexpected function permission"
+     let perms_in = fmap (distPermsSnoc . typedStmtIn) stmt
+     let perms_out =
+           mbCombine $ fmap (\stmt' -> nu $ \ret ->
+                              flip typedStmtOut (MNil :>: ret) stmt') stmt
+     let mb_ret_tp = fmap (unCruType . funPermRet) fun_perm
+     let ret_tp = unCruType $ mbLift $ fmap funPermRet fun_perm
+     ret_tp_trm <- itranslate mb_ret_tp
+     tp_f <- lambdaExprTransForceI "x_elimCallRet" ret_tp $ tpTransM $
+       tptranslate $ mbCombine $
+       fmap (\stmt' -> nu $ \ret ->
+              typedStmtOut stmt' (MNil :>: ret)) stmt
+     ret_f <- lambdaTransM "x_elimCallRet"
+       (dataTypeOpenTerm "Prelude.Sigma" [ret_tp_trm, tp_f])
+       (const compReturnTypeM)
+     fret_trm <-
+       withPermStackM mapRListTail mapRListTail $
+       translateApply "TypedCall" f perms_in
+     applyMultiTransM (return $ globalOpenTerm "Prelude.Sigma__rec")
+       [return ret_tp_trm, return tp_f, return ret_f,
+        lambdaExprTransForceI "x_elimCallRet" ret_tp $
+        lambdaTransM "x_elimCallRet" (dataTypeOpenTerm "Prelude.Sigma"
+                                      [ret_tp_trm, tp_f]) $ \z_perms ->
+         tpTransM (unpackPermCtxTuple
+                   (mbDistPermsToValuePerms perms_out) z_perms) >>= \pctx ->
+         withPermStackM
+         (\(args :>: l :>: _) -> (args :>: Member_Base :>: l))
+         (const $ pctx)
+         m
+       ]
 
 itranslateStmt stmt@[nuP| BeginLifetime |] m =
   inExtImpTransM ETrans_Lifetime PTrans_True $
