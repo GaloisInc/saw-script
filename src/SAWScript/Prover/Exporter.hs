@@ -1,6 +1,6 @@
 {-# Language ViewPatterns #-}
 module SAWScript.Prover.Exporter
-  ( satWithExporter
+  ( proveWithExporter
   , adaptExporter
 
     -- * External formats
@@ -14,6 +14,7 @@ module SAWScript.Prover.Exporter
   , write_smtlib2
   , writeUnintSMTLib2
   , writeCore
+  , writeCoreProp
 
     -- * Misc
   , bitblastPrim
@@ -36,34 +37,34 @@ import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
-import SAWScript.Proof (predicateToProp, Quantification(..))
+import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
-import SAWScript.Prover.SBV(prepSBV)
+import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
 
 
-satWithExporter ::
-  (SharedContext -> FilePath -> Term -> IO ()) ->
+proveWithExporter ::
+  (SharedContext -> FilePath -> Prop -> IO ()) ->
   String ->
   SharedContext ->
-  Term ->
+  Prop ->
   IO SolverStats
-satWithExporter exporter path sc goal =
+proveWithExporter exporter path sc goal =
   do exporter sc path goal
-     let stats = solverStats ("offline: "++ path) (scSharedSize goal)
+     let stats = solverStats ("offline: "++ path) (scSharedSize (unProp goal))
      return stats
 
 -- | Converts an old-style exporter (which expects to take a predicate
 -- as an argument) into a new-style one (which takes a pi-type proposition).
 adaptExporter ::
   (SharedContext -> FilePath -> Term -> IO ()) ->
-  (SharedContext -> FilePath -> Term -> IO ())
-adaptExporter exporter sc path goal =
+  (SharedContext -> FilePath -> Prop -> IO ())
+adaptExporter exporter sc path (Prop goal) =
   do let (args, concl) = asPiList goal
      p <- asEqTrue concl
-     p' <- scNot sc p
+     p' <- scNot sc p -- is this right?
      t <- scLambdaList sc args p'
      exporter sc path t
 
@@ -148,9 +149,9 @@ write_cnf sc f (TypedTerm schema t) = do
   AIGProxy proxy <- getProxy
   io $ writeCNF proxy sc f t
 
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file.
-writeSMTLib2 :: SharedContext -> FilePath -> Term -> IO ()
+-- | Write a proposition to an SMT-Lib version 2 file.
+-- TODO: say something about convention for negation
+writeSMTLib2 :: SharedContext -> FilePath -> Prop -> IO ()
 writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
@@ -161,17 +162,20 @@ write_smtlib2 sc f (TypedTerm schema t) = do
   p <- predicateToProp sc Universal [] t
   writeSMTLib2 sc f p
 
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file, treating some constants as uninterpreted.
-writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
-writeUnintSMTLib2 unints sc f t = do
-  (_, _, l) <- prepSBV sc unints t
-  let isSat = False -- term is a proof goal with universally-quantified variables
-  txt <- SBV.generateSMTBenchmark isSat l
-  writeFile f txt
+-- | Write a proposition to an SMT-Lib version 2 file, treating some
+-- constants as uninterpreted.
+writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
+writeUnintSMTLib2 unints sc f t =
+  do (_, _, l) <- prepNegatedSBV sc unints t
+     let isSat = True -- l is encoded as an existential formula
+     txt <- SBV.generateSMTBenchmark isSat l
+     writeFile f txt
 
 writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)
+
+writeCoreProp :: FilePath -> Prop -> IO ()
+writeCoreProp path (Prop t) = writeFile path (scWriteExternal t)
 
 
 -- | Tranlsate a SAWCore term into an AIG
@@ -186,5 +190,3 @@ bitblastPrim proxy sc t = do
 -}
   BBSim.withBitBlastedTerm proxy sc bitblastPrimitives t' $ \be ls -> do
     return (AIG.Network be (toList ls))
-
-
