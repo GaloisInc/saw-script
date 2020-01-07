@@ -90,7 +90,6 @@ import Data.Parameterized.Map (MapF)
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Context (Assignment)
 import Data.Parameterized.Some
-import Data.Parameterized.TraversableFC (FunctorFC(fmapFC))
 
 -- crucible-saw
 import qualified Lang.Crucible.Backend.SAWCore as CS
@@ -486,7 +485,7 @@ w4SolveBasic ::
 w4SolveBasic m addlPrims ref unints t =
   do let unintSet = Set.fromList unints
      let sym = given :: sym
-     let extcns (EC ix nm ty) = parseUninterpreted sym ref (nm ++ "_" ++ show ix) Ctx.empty ty
+     let extcns (EC ix nm ty) = parseUninterpreted sym ref (nm ++ "_" ++ show ix) Ctx.empty Ctx.empty ty
      let uninterpreted ec
            | Set.member (ecName ec) unintSet = Just (extcns ec)
            | otherwise                       = Nothing
@@ -545,21 +544,22 @@ parseUninterpreted ::
   forall sym args.
   (IsSymExprBuilder sym) =>
   sym -> IORef (SymFnCache sym) ->
-  String -> Assignment (SymExpr sym) args -> SValue sym -> IO (SValue sym)
-parseUninterpreted sym ref nm args ty =
+  String -> Assignment (SymExpr sym) args ->
+  Assignment BaseTypeRepr args -> SValue sym -> IO (SValue sym)
+parseUninterpreted sym ref nm args tys ty =
   case ty of
     VPiType _ f
       -> return $
          strictFun $ \x -> do
-           (nm', Some args') <- flattenSValue (nm, Some args) x
+           SomeArgs nm' args' tys' <- flattenSValue (SomeArgs nm args tys) x
            t2 <- f (ready x)
-           parseUninterpreted sym ref nm' args' t2
+           parseUninterpreted sym ref nm' args' tys' t2
 
     VBoolType
-      -> VBool <$> mkUninterpreted sym ref nm args BaseBoolRepr
+      -> VBool <$> mkUninterpreted sym ref nm args tys BaseBoolRepr
 
     VIntType
-      -> VInt  <$> mkUninterpreted sym ref nm args BaseIntegerRepr
+      -> VInt  <$> mkUninterpreted sym ref nm args tys BaseIntegerRepr
 
     -- 0 width bitvector is a constant
     VVecType (VNat 0) VBoolType
@@ -567,11 +567,11 @@ parseUninterpreted sym ref nm args ty =
 
     VVecType (VNat n) VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
-      -> (VWord . DBV) <$> mkUninterpreted sym ref nm args (BaseBVRepr w)
+      -> (VWord . DBV) <$> mkUninterpreted sym ref nm args tys (BaseBVRepr w)
 
     VVecType (VNat n) ety
       ->  do xs <- sequence $
-                  [ parseUninterpreted sym ref (nm ++ "_a" ++ show i) args ety
+                  [ parseUninterpreted sym ref (nm ++ "_a" ++ show i) args tys ety
                   | i <- [0 .. n-1] ]
              return (VVector (V.fromList (map ready xs)))
 
@@ -579,15 +579,15 @@ parseUninterpreted sym ref nm args ty =
       -> return VUnit
 
     VPairType ty1 ty2
-      -> do x1 <- parseUninterpreted sym ref (nm ++ "_L") args ty1
-            x2 <- parseUninterpreted sym ref (nm ++ "_R") args ty2
+      -> do x1 <- parseUninterpreted sym ref (nm ++ "_L") args tys ty1
+            x2 <- parseUninterpreted sym ref (nm ++ "_R") args tys ty2
             return (VPair (ready x1) (ready x2))
 
     (VRecordType elem_tps)
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
-                 parseUninterpreted sym ref (nm ++ "_" ++ f) args tp) elem_tps)
+                 parseUninterpreted sym ref (nm ++ "_" ++ f) args tys tp) elem_tps)
 
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
@@ -596,12 +596,17 @@ parseUninterpreted sym ref nm args ty =
 mkUninterpreted ::
   forall sym args t. (IsSymExprBuilder sym) =>
   sym -> IORef (SymFnCache sym) ->
-  String -> Assignment (SymExpr sym) args -> BaseTypeRepr t ->
+  String {- ^ function name -} ->
+  Assignment (SymExpr sym) args ->
+  Assignment BaseTypeRepr args ->
+  BaseTypeRepr t ->
   IO (SymExpr sym t)
-mkUninterpreted sym ref nm args ret =
-  do fn <- mkSymFn sym ref nm (fmapFC W.exprType args) ret
+mkUninterpreted sym ref nm args tys ret =
+  do fn <- mkSymFn sym ref nm tys ret
      W.applySymFn sym fn args
 
+data SomeArgs f =
+  forall args. SomeArgs String (Assignment f args) (Assignment BaseTypeRepr args)
 
 -- | Flatten an 'SValue' to a sequence of components, each of which is
 -- a symbolic value of a base type (e.g. word or boolean), and append
@@ -610,10 +615,10 @@ mkUninterpreted sym ref nm args ret =
 -- as suffixes on the given 'String'.
 flattenSValue ::
   forall sym.
-  (String, Some (Assignment (SymExpr sym))) ->
+  SomeArgs (SymExpr sym) ->
   SValue sym ->
-  IO (String, Some (Assignment (SymExpr sym)))
-flattenSValue args0@(nm, Some xs) v =
+  IO (SomeArgs (SymExpr sym))
+flattenSValue args0@(SomeArgs nm xs tys) v =
   case v of
     VUnit                     -> return args0
     VPair x y                 -> do args1 <- flattenSValue args0 =<< force x
@@ -621,13 +626,13 @@ flattenSValue args0@(nm, Some xs) v =
                                     return args2
     VRecordValue elems        -> foldM flattenSValue args0 =<< traverse (force . snd) elems
     VVector xv                -> foldM flattenSValue args0 =<< traverse force xv
-    VBool sb                  -> return (nm, Some (Ctx.extend xs sb))
-    VInt si                   -> return (nm, Some (Ctx.extend xs si))
-    VWord (DBV sw)            -> return (nm, Some (Ctx.extend xs sw))
+    VBool sb                  -> return (SomeArgs nm (Ctx.extend xs sb) (Ctx.extend tys BaseBoolRepr))
+    VInt si                   -> return (SomeArgs nm (Ctx.extend xs si) (Ctx.extend tys BaseIntegerRepr))
+    VWord (DBV sw)            -> return (SomeArgs nm (Ctx.extend xs sw) (Ctx.extend tys (W.exprType sw)))
     VWord ZBV                 -> return args0
     VCtorApp i xv             -> foldM flattenSValue args' =<< traverse force xv
-                                   where args' = (nm ++ "_" ++ identName i, Some xs)
-    VNat n                    -> return (nm ++ "_" ++ show n, Some xs)
+                                   where args' = SomeArgs (nm ++ "_" ++ identName i) xs tys
+    VNat n                    -> return (SomeArgs (nm ++ "_" ++ show n) xs tys)
     _ -> fail $ "Could not create argument for " ++ show v
 
 ------------------------------------------------------------
@@ -741,7 +746,7 @@ newVarsForType ref v nm =
          return (Just te, sv)
 
     Nothing ->
-      do sv <- lift $ parseUninterpreted sym ref nm Ctx.empty v
+      do sv <- lift $ parseUninterpreted sym ref nm Ctx.empty Ctx.empty v
          return (Nothing, sv)
   where sym = given :: sym
 
@@ -851,7 +856,7 @@ w4EvalBasic sym sc m addlPrims ref unints t =
   do let unintSet = Set.fromList unints
      let extcns tf (EC ix nm ty) =
            do trm <- ArgTermConst <$> scTermF sc tf
-              parseUninterpretedSAW sym sc ref trm (nm ++ "_" ++ show ix) Ctx.empty ty
+              parseUninterpretedSAW sym sc ref trm (nm ++ "_" ++ show ix) Ctx.empty Ctx.empty ty
      let uninterpreted tf ec
            | Set.member (ecName ec) unintSet = Just (extcns tf ec)
            | otherwise                       = Nothing
@@ -870,24 +875,25 @@ parseUninterpretedSAW ::
   ArgTerm {- ^ representation of function applied to arguments -} ->
   String {- ^ name of uninterpreted function -} ->
   Assignment (SymExpr (CS.SAWCoreBackend n solver fs)) args {- ^ arguments to uninterpreted function -} ->
+  Assignment BaseTypeRepr args {- ^ argument types -} ->
   SValue (CS.SAWCoreBackend n solver fs) {- ^ return type -} ->
   IO (SValue (CS.SAWCoreBackend n solver fs))
-parseUninterpretedSAW sym sc ref trm nm args ty =
+parseUninterpretedSAW sym sc ref trm nm args tys ty =
   case ty of
     VPiType t1 f
       -> return $
          strictFun $ \x -> do
-           (nm', Some args') <- flattenSValue (nm, Some args) x
+           (SomeArgs nm' args' tys') <- flattenSValue (SomeArgs nm args tys) x
            arg <- mkArgTerm sc t1 x
            let trm' = ArgTermApply trm arg
            t2 <- f (ready x)
-           parseUninterpretedSAW sym sc ref trm' nm' args' t2
+           parseUninterpretedSAW sym sc ref trm' nm' args' tys' t2
 
     VBoolType
-      -> VBool <$> mkUninterpretedSAW sym ref trm nm args BaseBoolRepr
+      -> VBool <$> mkUninterpretedSAW sym ref trm nm args tys BaseBoolRepr
 
     VIntType
-      -> VInt  <$> mkUninterpretedSAW sym ref trm nm args BaseIntegerRepr
+      -> VInt  <$> mkUninterpretedSAW sym ref trm nm args tys BaseIntegerRepr
 
     -- 0 width bitvector is a constant
     VVecType (VNat 0) VBoolType
@@ -895,14 +901,14 @@ parseUninterpretedSAW sym sc ref trm nm args ty =
 
     VVecType (VNat n) VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
-      -> (VWord . DBV) <$> mkUninterpretedSAW sym ref trm nm args (BaseBVRepr w)
+      -> (VWord . DBV) <$> mkUninterpretedSAW sym ref trm nm args tys (BaseBVRepr w)
 
     VVecType (VNat n) ety
       ->  do ety' <- termOfSValue sc ety
              let mkElem i =
                    do let trm' = ArgTermAt n ety' trm i
                       let nm' = nm ++ "_a" ++ show i
-                      parseUninterpretedSAW sym sc ref trm' nm' args ety
+                      parseUninterpretedSAW sym sc ref trm' nm' args tys ety
              xs <- traverse mkElem [0 .. n-1]
              return (VVector (V.fromList (map ready xs)))
 
@@ -912,15 +918,15 @@ parseUninterpretedSAW sym sc ref trm nm args ty =
     VPairType ty1 ty2
       -> do let trm1 = ArgTermPairLeft trm
             let trm2 = ArgTermPairRight trm
-            x1 <- parseUninterpretedSAW sym sc ref trm1 (nm ++ "_L") args ty1
-            x2 <- parseUninterpretedSAW sym sc ref trm2 (nm ++ "_R") args ty2
+            x1 <- parseUninterpretedSAW sym sc ref trm1 (nm ++ "_L") args tys ty1
+            x2 <- parseUninterpretedSAW sym sc ref trm2 (nm ++ "_R") args tys ty2
             return (VPair (ready x1) (ready x2))
 {-
     VRecordType elem_tps
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
-                 parseUninterpretedSAW sym ref (nm ++ "_" ++ f) args tp) elem_tps)
+                 parseUninterpretedSAW sym ref (nm ++ "_" ++ f) args tys tp) elem_tps)
 -}
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
@@ -928,10 +934,11 @@ parseUninterpretedSAW sym sc ref trm nm args ty =
 mkUninterpretedSAW ::
   forall n solver fs args t.
   CS.SAWCoreBackend n solver fs -> IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) ->
-  ArgTerm -> String -> Assignment (SymExpr (CS.SAWCoreBackend n solver fs)) args -> BaseTypeRepr t ->
+  ArgTerm -> String -> Assignment (SymExpr (CS.SAWCoreBackend n solver fs)) args ->
+  Assignment BaseTypeRepr args -> BaseTypeRepr t ->
   IO (SymExpr (CS.SAWCoreBackend n solver fs) t)
-mkUninterpretedSAW sym ref trm nm args ret =
-  do fn <- mkSymFn sym ref nm (fmapFC W.exprType args) ret
+mkUninterpretedSAW sym ref trm nm args tys ret =
+  do fn <- mkSymFn sym ref nm tys ret
      CS.sawRegisterSymFunInterp sym fn (reconstructArgTerm trm)
      W.applySymFn sym fn args
 
