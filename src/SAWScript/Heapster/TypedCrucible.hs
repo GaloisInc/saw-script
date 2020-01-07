@@ -86,7 +86,7 @@ typedRegsToVars (TypedRegsCons regs (TypedReg x)) = typedRegsToVars regs :>: x
 
 -- | Turn a sequence of typed registers into a variable substitution
 typedRegsToVarSubst :: TypedRegs ctx -> PermVarSubst ctx
-typedRegsToVarSubst = PermVarSubst . mapMapRList VarSubstElem . typedRegsToVars
+typedRegsToVarSubst = PermVarSubst . typedRegsToVars
 
 -- | A typed register along with its value if that is known statically
 data RegWithVal a
@@ -115,11 +115,13 @@ typedFnHandleGhosts (TypedFnHandle ghosts _) = ghosts
 typedFnHandleArgs :: TypedFnHandle ghosts args ret -> CruCtx args
 typedFnHandleArgs (TypedFnHandle _ h) = mkCruCtx $ handleArgTypes h
 
--- | Extract out the context of all arguments of a 'TypedFnHandle'
+-- | Extract out the context of all arguments of a 'TypedFnHandle', including
+-- the lifetime argument
 typedFnHandleAllArgs :: TypedFnHandle ghosts args ret ->
-                        CruCtx (ghosts :++: args)
+                        CruCtx (ghosts :++: args :> LifetimeType)
 typedFnHandleAllArgs h =
-  appendCruCtx (typedFnHandleGhosts h) (typedFnHandleArgs h)
+  CruCtxCons (appendCruCtx (typedFnHandleGhosts h) (typedFnHandleArgs h))
+  knownRepr
 
 -- | Extract out the return type of a 'TypedFnHandle'
 typedFnHandleRetType :: TypedFnHandle ghosts args ret -> TypeRepr ret
@@ -166,7 +168,7 @@ instance NuMatchingAny1 RegWithVal where
 type NuMatchingExtC ext =
   (NuMatchingAny1 (ExprExtension ext RegWithVal)
   -- (NuMatchingAny1 (ExprExtension ext TypedReg)
-   -- , NuMatchingAny1 (StmtExtension ext TypedReg)
+   -- , NuMatchingAny1 (StmtExtension ext TypedReg))
   )
 
 $(mkNuMatching [t| forall ext tp. NuMatchingExtC ext => TypedExpr ext tp |])
@@ -213,7 +215,7 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
   TypedCall :: args ~ CtxToRList cargs =>
                TypedReg (FunctionHandleType cargs ret) ->
                FunPerm ghosts args ret ->
-               TypedRegs (ghosts :++: args) ->
+               PermExprs ghosts -> TypedRegs args ->
                ExprVar LifetimeType -> PermExpr PermListType ->
                TypedStmt ext (RNil :> ret)
                (args :> LifetimeType :> FunctionHandleType cargs ret)
@@ -325,9 +327,11 @@ data TypedLLVMStmt w ret ps_in ps_out where
 -- | Return the input permissions for a 'TypedStmt'
 typedStmtIn :: TypedStmt ext rets ps_in ps_out -> DistPerms ps_in
 typedStmtIn (TypedSetReg _ _) = DistPermsNil
-typedStmtIn (TypedCall (TypedReg f) fun_perm args l ps) =
+typedStmtIn (TypedCall (TypedReg f) fun_perm ghosts args l ps) =
   DistPermsCons
-  (varSubst (typedRegsToVarSubst args) (funPermIns fun_perm l ps))
+  (DistPermsCons
+   (funPermDistIns fun_perm (typedRegsToVars args) l ghosts)
+   l (ValPerm_Conj1 $ Perm_LOwned ps))
   f (ValPerm_Conj1 $ Perm_Fun fun_perm)
 typedStmtIn BeginLifetime = DistPermsNil
 typedStmtIn (EndLifetime l perms ps) =
@@ -369,9 +373,10 @@ typedStmtOut (TypedSetReg _ (TypedExpr _ (Just e))) (_ :>: ret) =
   distPerms1 ret (ValPerm_Eq e)
 typedStmtOut (TypedSetReg _ (TypedExpr _ Nothing)) (_ :>: ret) =
   distPerms1 ret ValPerm_True
-typedStmtOut (TypedCall _ fun_perm args l ps) (_ :>: ret) =
-  varSubst (consVarSubst (typedRegsToVarSubst args) ret)
-  (funPermOuts fun_perm l ps)
+typedStmtOut (TypedCall _ fun_perm ghosts args l ps) (_ :>: ret) =
+  DistPermsCons
+  (funPermDistOuts fun_perm (typedRegsToVars args :>: ret) l ghosts)
+  l (ValPerm_Conj1 $ Perm_LOwned ps)
 typedStmtOut BeginLifetime (_ :>: l) =
   distPerms1 l $ ValPerm_Conj [Perm_LOwned PExpr_PermListNil]
 typedStmtOut (EndLifetime l perms _) _ = perms
@@ -958,14 +963,20 @@ stmtRecombinePerms =
   embedImplM TypedImplStmt emptyCruCtx (recombinePerms dist_perms) >>>= \_ ->
   greturn ()
 
+stmtProvePerms' :: PermCheckExtC ext =>
+                   CruCtx vars -> ExDistPerms vars ps ->
+                   StmtPermCheckM ext cblocks blocks ret args
+                   ps RNil (PermSubst vars)
+stmtProvePerms' vars ps =
+  embedImplM TypedImplStmt vars (proveVarsImpl ps) >>>= \(s,_) ->
+  greturn s
+
 -- | Prove permissions in the context of type-checking statements
 stmtProvePerms :: (PermCheckExtC ext, KnownRepr CruCtx vars) =>
                   ExDistPerms vars ps ->
                   StmtPermCheckM ext cblocks blocks ret args
                   ps RNil (PermSubst vars)
-stmtProvePerms ps =
-  embedImplM TypedImplStmt knownRepr (proveVarsImpl ps) >>>= \(s,_) ->
-  greturn s
+stmtProvePerms ps = stmtProvePerms' knownRepr ps
 
 -- | Prove a single permission in the context of type-checking statements
 stmtProvePerm :: (PermCheckExtC ext, KnownRepr CruCtx vars) =>
@@ -1087,6 +1098,13 @@ tcRegWithVal ctx r_untyped =
     ValPerm_Eq e -> greturn (RegWithVal r e)
     _ -> greturn (RegNoVal r)
 
+-- | Type-check a sequence of Crucible registers
+tcRegs :: CtxTrans ctx -> Assignment (Reg ctx) tps -> TypedRegs (CtxToRList tps)
+tcRegs ctx (viewAssign -> AssignEmpty) = TypedRegsNil
+tcRegs ctx (viewAssign -> AssignExtend regs reg) =
+  TypedRegsCons (tcRegs ctx regs) (tcReg ctx reg)
+
+
 -- | Type-check a sequence of Crucible arguments into a 'TypedArgs' list
 {-
 tcArgs :: CtxTrans ctx -> CtxRepr args -> Assignment (Reg ctx) args ->
@@ -1138,13 +1156,28 @@ tcEmitStmt ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = tcEmitLLVMStmt Proxy ctx loc stmt_ext
 
-tcEmitStmt ctx loc (CallHandle ret freg_untyped args_ctx args) =
-  let freg = tcReg ctx freg_untyped in
+tcEmitStmt ctx loc (CallHandle ret freg_untyped args_ctx args_untyped) =
+  let freg = tcReg ctx freg_untyped
+      args = tcRegs ctx args_untyped in
   getRegFunPerm freg >>>= \some_fun_perm ->
   case some_fun_perm of
     SomeFunPerm fun_perm ->
       beginLifetime >>>= \l ->
-      error "FIXME HERE NOW: type-check function calls"
+      (stmtProvePerms' (funPermGhosts fun_perm)
+       (funPermExDistIns fun_perm (typedRegsToVars args) l)) >>>= \ghosts ->
+      (getVarPerm l >>>= \l_perm ->
+        case l_perm of
+          ValPerm_Conj [Perm_LOwned ps] -> greturn ps
+          _ -> error "tcEmitStmt: CallHandle: unexpected perm on lifetime"
+      ) >>>= \ps ->
+      stmtProvePerm (TypedReg l) (emptyMb $
+                                  ValPerm_Conj1 $ Perm_LOwned ps) >>>= \_ ->
+      stmtProvePerm freg (emptyMb $ ValPerm_Conj1 $ Perm_Fun fun_perm) >>>= \_ ->
+      (emitStmt (singletonCruCtx ret) loc
+       (TypedCall freg fun_perm (exprsOfSubst ghosts) args l ps)
+      ) >>>= \(_ :>: ret) ->
+      stmtRecombinePerms >>>
+      greturn (addCtxName ctx ret)
 
 
 {-
@@ -1477,19 +1510,15 @@ tcEmitBlock blk =
 
 funPermToBlockInputs :: FunPerm ghosts args ret ->
                         MbDistPerms (ghosts :> LifetimeType :++: args)
-funPermToBlockInputs (FunPerm ghosts _ _ perms_in perms_out) =
-  error "FIXME HERE NOW"
-
-{-
-\ctx ->
-                     mbValuePermsToDistPerms .
-                     fmap (appendValuePerms $
-                           trueValuePerms ctx) . mbCombine
--}
+funPermToBlockInputs fun_perm =
+  mbValuePermsToDistPerms $
+  fmap (appendValuePerms (ValPerms_Cons (trueValuePerms $ funPermGhosts fun_perm) $
+                          ValPerm_Conj1 $ Perm_LOwned $ PExpr_PermListNil)) $
+  mbCombine $ funPermIns fun_perm
 
 funPermToBlockOutputs :: FunPerm ghosts args ret ->
                          Mb (ghosts :> LifetimeType :++: args :> ret)
-                         (DistPerms (args :> ret :> LifetimeType))
+                         (DistPerms (args :> LifetimeType :> ret))
 funPermToBlockOutputs (FunPerm ghosts _ _ perms_in perms_out) =
   error "FIXME HERE NOW"
 
@@ -1512,7 +1541,7 @@ tcCFG cfg env [clP| fun_perm@(FunPerm cl_ghosts _ _ perms_in perms_out) |] =
   do init_memb <- stLookupBlockID (cfgEntryBlockID cfg) <$> get
      init_entry <-
        insNewBlockEntry init_memb (mkCruCtx $ handleArgTypes $ cfgHandle cfg)
-       (CruCtxCons ghosts $ mkCruType LifetimeRepr)
+       (CruCtxCons ghosts knownRepr)
        ($(mkClosed [| funPermToBlockInputs |]) `clApply` fun_perm)
        ($(mkClosed [| funPermToBlockOutputs |]) `clApply` fun_perm)
      mapM_ (visit cfg) (cfgWeakTopologicalOrdering cfg)

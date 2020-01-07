@@ -2072,6 +2072,19 @@ distPermsToExDistPerms DistPermsNil = ExDistPermsNil
 distPermsToExDistPerms (DistPermsCons ps x p) =
   ExDistPermsCons (distPermsToExDistPerms ps) x (emptyMb p)
 
+-- | Substitute arguments and a lifetime into a function permission to get the
+-- existentially quantified input permissions needed on the arguments
+funPermExDistIns :: FunPerm ghosts args ret ->
+                    MapRList Name args -> ExprVar LifetimeType ->
+                    ExDistPerms ghosts args
+funPermExDistIns fun_perm args l =
+  error "FIXME HERE NOW"
+  {-
+  fmap (varSubst (PermVarSubst args) . mbValuePermsToDistPerms
+        . varSubst (singletonVarSubst l)) $
+  mbSeparate (MNil :>: Proxy) $ funPermIns fun_perm
+-}
+
 -- | Prove a list of existentially-quantified distinguished permissions
 proveVarsImpl :: NuMatchingAny1 r => ExDistPerms vars as ->
                  ImplM vars r as RNil ()

@@ -179,7 +179,7 @@ data PermExpr (a :: CrucibleType) where
   -- ^ A bitvector expression is a linear expression in @N@ variables, i.e., sum
   -- of constant times variable factors plus a constant
 
-  PExpr_Struct :: PermExprs args -> PermExpr (StructType args)
+  PExpr_Struct :: PermExprs (CtxToRList args) -> PermExpr (StructType args)
   -- ^ A struct expression is an expression for each argument of the struct type
 
   PExpr_Always :: PermExpr LifetimeType
@@ -208,9 +208,9 @@ data PermExpr (a :: CrucibleType) where
 
 
 -- | A sequence of permission expressions
-data PermExprs (as :: Ctx CrucibleType) where
-  PExprs_Nil :: PermExprs EmptyCtx
-  PExprs_Cons :: PermExprs as -> PermExpr a -> PermExprs (as ::> a)
+data PermExprs (as :: RList CrucibleType) where
+  PExprs_Nil :: PermExprs RNil
+  PExprs_Cons :: PermExprs as -> PermExpr a -> PermExprs (as :> a)
 
 -- | A bitvector variable, possibly multiplied by a constant
 data BVFactor w where
@@ -647,8 +647,7 @@ data LLVMArrayBorrow w
 
 
 -- | A function permission is a set of input and output permissions inside a
--- context of ghost variables, including one for the lifetime of the function,
--- that must be solved for when the function is called
+-- context of ghost variables, including a lifetime ghost variable
 data FunPerm ghosts args ret where
   FunPerm :: CruCtx ghosts -> CruCtx args -> CruType ret ->
              Mb (ghosts :> LifetimeType) (MbValuePerms args) ->
@@ -658,6 +657,17 @@ data FunPerm ghosts args ret where
 -- | Extract the @ghosts@ context from a function permission
 funPermGhosts :: FunPerm ghosts args ret -> CruCtx ghosts
 funPermGhosts (FunPerm ghosts _ _ _ _) = ghosts
+
+-- | Extract the input permissions of a function permission
+funPermIns :: FunPerm ghosts args ret ->
+              Mb (ghosts :> LifetimeType) (MbValuePerms args)
+funPermIns (FunPerm _ _ _ perms_in _) = perms_in
+
+-- | Extract the output permissions of a function permission
+funPermOuts :: FunPerm ghosts args ret ->
+               Mb (ghosts :> LifetimeType) (MbValuePerms (args :> ret))
+funPermOuts (FunPerm _ _ _ _ perms_out) = perms_out
+
 
 -- | A function permission that existentially quantifies the @ghosts@ types
 data SomeFunPerm args ret where
@@ -1190,29 +1200,6 @@ nthVarPerm :: Member ps a -> ExprVar a -> Lens' (DistPerms ps) (ValuePerm a)
 nthVarPerm Member_Base x = distPermsHead x
 nthVarPerm (Member_Step memb') x = distPermsTail . nthVarPerm memb' x
 
--- | Return the input permissions of a function permission given a lifetime @l@
--- and a permission list @ps@ for the @lowned(ps)@ permission on @l@
-funPermIns :: FunPerm ghosts args ret ->
-              ExprVar LifetimeType -> PermExpr PermListType ->
-              Mb (ghosts :++: args) (DistPerms (args :> LifetimeType))
-funPermIns (FunPerm _ _ _ perms_in _) l ps =
-  fmap (\perms -> DistPermsCons perms l (ValPerm_Conj1 (Perm_LOwned ps))) $
-  mbCombine $
-  fmap (mbValuePermsToDistPerms . subst (singletonSubst $ PExpr_Var l)) $
-  mbSeparate (MNil :>: Proxy) perms_in
-
--- | Return the output permissions of a function permission given a lifetime @l@
--- and a permission list @ps@ for the @lowned(ps)@ permission on @l@
-funPermOuts :: FunPerm ghosts args ret ->
-               ExprVar LifetimeType -> PermExpr PermListType ->
-               Mb (ghosts :++: args :> ret) (DistPerms
-                                             (args :> ret :> LifetimeType))
-funPermOuts (FunPerm _ _ _ _ perms_out) l ps =
-  fmap (\perms -> DistPermsCons perms l (ValPerm_Conj1 (Perm_LOwned ps))) $
-  mbCombine $
-  fmap (mbValuePermsToDistPerms . subst (singletonSubst $ PExpr_Var l)) $
-  mbSeparate (MNil :>: Proxy) perms_out
-
 -- | Test if a permission can be copied, i.e., whether @p -o p*p@. This is true
 -- iff @p@ does not contain any 'Write' modalities, any frame permissions, or
 -- any lifetime ownership permissions.
@@ -1241,6 +1228,24 @@ atomicPermIsCopyable (Perm_LOwned _) = False
 atomicPermIsCopyable (Perm_LCurrent _) = True
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
+
+-- | Substitute arguments, a lifetime, and ghost values into a function
+-- permission to get the input permissions needed on the arguments
+funPermDistIns :: FunPerm ghosts args ret -> MapRList Name args ->
+                  ExprVar LifetimeType -> PermExprs ghosts ->
+                  DistPerms args
+funPermDistIns fun_perm args l ghosts =
+  varSubst (PermVarSubst args) $ mbValuePermsToDistPerms $
+  subst (consSubst (substOfExprs ghosts) (PExpr_Var l)) $ funPermIns fun_perm
+
+-- | Substitute arguments, a lifetime, and ghost values into a function
+-- permission to get the output permissions returned by the function
+funPermDistOuts :: FunPerm ghosts args ret -> MapRList Name (args :> ret) ->
+                   ExprVar LifetimeType -> PermExprs ghosts ->
+                   DistPerms (args :> ret)
+funPermDistOuts fun_perm args l ghosts =
+  varSubst (PermVarSubst args) $ mbValuePermsToDistPerms $
+  subst (consSubst (substOfExprs ghosts) (PExpr_Var l)) $ funPermOuts fun_perm
 
 -- | Generic function to put a permission inside a lifetime
 class InLifetime a where
@@ -1701,6 +1706,16 @@ consSubst (PermSubst elems) e = PermSubst (elems :>: e)
 singletonSubst :: PermExpr a -> PermSubst (RNil :> a)
 singletonSubst e = PermSubst (empty :>: e)
 
+substOfExprs :: PermExprs ctx -> PermSubst ctx
+substOfExprs PExprs_Nil = PermSubst MNil
+substOfExprs (PExprs_Cons es e) = consSubst (substOfExprs es) e
+
+-- FIXME: Maybe PermSubst should just be PermExprs?
+exprsOfSubst :: PermSubst ctx -> PermExprs ctx
+exprsOfSubst (PermSubst MNil) = PExprs_Nil
+exprsOfSubst (PermSubst (es :>: e)) =
+  PExprs_Cons (exprsOfSubst $ PermSubst es) e
+
 substLookup :: PermSubst ctx -> Member ctx a -> PermExpr a
 substLookup (PermSubst m) memb = mapRListLookup memb m
 
@@ -1729,22 +1744,19 @@ subst s mb = runIdentity $ genSubst s mb
 -- * Variable Substitutions
 ----------------------------------------------------------------------
 
-newtype VarSubstElem a = VarSubstElem { unVarSubstElem :: ExprVar a }
-
 -- | Like a substitution but assigns variables instead of arbitrary expressions
 -- to bound variables
-newtype PermVarSubst ctx =
-  PermVarSubst { unPermVarSubst :: MapRList VarSubstElem ctx }
+newtype PermVarSubst (ctx :: RList CrucibleType) =
+  PermVarSubst { unPermVarSubst :: MapRList Name ctx }
 
 singletonVarSubst :: ExprVar a -> PermVarSubst (RNil :> a)
-singletonVarSubst x = PermVarSubst (empty :>: VarSubstElem x)
+singletonVarSubst x = PermVarSubst (empty :>: x)
 
 consVarSubst :: PermVarSubst ctx -> ExprVar a -> PermVarSubst (ctx :> a)
-consVarSubst (PermVarSubst elems) n = PermVarSubst (elems :>: VarSubstElem n)
+consVarSubst (PermVarSubst elems) n = PermVarSubst (elems :>: n)
 
 varSubstLookup :: PermVarSubst ctx -> Member ctx a -> ExprVar a
-varSubstLookup (PermVarSubst m) memb =
-  unVarSubstElem $ mapRListLookup memb m
+varSubstLookup (PermVarSubst m) memb = mapRListLookup memb m
 
 varSubstVar :: PermVarSubst ctx -> Mb ctx (ExprVar a) -> ExprVar a
 varSubstVar s mb_x =
@@ -1753,7 +1765,7 @@ varSubstVar s mb_x =
     Right x -> x
 
 instance SubstVar PermVarSubst Identity where
-  extSubst (PermVarSubst elems) x = PermVarSubst $ elems :>: VarSubstElem x
+  extSubst (PermVarSubst elems) x = PermVarSubst $ elems :>: x
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> return $ PExpr_Var $ varSubstLookup s memb
