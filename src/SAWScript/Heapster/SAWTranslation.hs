@@ -1910,18 +1910,21 @@ translateBlockMapBodies mapTrans =
     pairOpenTerm <$> translateEntryBody mapTrans entry <*> restM)
   (return unitOpenTerm)
 
-{-
 -- | Translate a typed CFG to a SAW term
 translateCFG :: NuMatchingExtC ext => TypedCFG ext blocks ghosts inits ret ->
                 OpenTerm
 translateCFG cfg =
   let h = tpcfgHandle cfg
+      fun_perm = tpcfgFunPerm cfg
       blkMap = tpcfgBlockMap cfg
       ctx = typedFnHandleAllArgs h
       ghosts = typedFnHandleGhosts h
       retType = typedFnHandleRetType h in
   runTypeTransM $ lambdaExprCtx ctx $
-  lambdaPermCtx (mbCombine $ tpcfgInputPerms cfg) $ \pctx ->
+  lambdaPermCtx (mbCombine $ funPermIns fun_perm) $ \pctx ->
+  lambdaPermTrans "l" (fmap (const $ ValPerm_Conj1 $
+                             Perm_LOwned PExpr_PermListNil) $
+                       mbCombine $ funPermIns fun_perm) $ \pl ->
   do retTypeTrans <-
        translateRetType retType
        (mbCombine $ fmap mbValuePermsToDistPerms $ tpcfgOutputPerms cfg)
@@ -1940,10 +1943,10 @@ translateCFG cfg =
          -- The main body, that calls the first function with the input vars
        , lambdaBlockMap blkMap
          (\mapTrans ->
-           impTransM (appendMapRList (truePermTransCtx ghosts)
+           impTransM (appendMapRList
+                      (truePermTransCtx ghosts :>: pl)
                       pctx) mapTrans retTypeTrans $
            translateCallEntryID "CFG" (tpcfgEntryBlockID cfg)
-           (mbCombine $ fmap mbValuePermsToDistPerms $ tpcfgInputPerms cfg)
-           )
+           (funPermToBlockInputs fun_perm)
+         )
        ]
--}

@@ -118,10 +118,11 @@ typedFnHandleArgs (TypedFnHandle _ h) = mkCruCtx $ handleArgTypes h
 -- | Extract out the context of all arguments of a 'TypedFnHandle', including
 -- the lifetime argument
 typedFnHandleAllArgs :: TypedFnHandle ghosts args ret ->
-                        CruCtx (ghosts :++: args :> LifetimeType)
+                        CruCtx (ghosts :> LifetimeType :++: args)
 typedFnHandleAllArgs h =
-  CruCtxCons (appendCruCtx (typedFnHandleGhosts h) (typedFnHandleArgs h))
-  knownRepr
+  appendCruCtx (CruCtxCons (typedFnHandleGhosts h) (mkCruType LifetimeRepr))
+  (typedFnHandleArgs h)
+
 
 -- | Extract out the return type of a 'TypedFnHandle'
 typedFnHandleRetType :: TypedFnHandle ghosts args ret -> TypeRepr ret
@@ -523,14 +524,20 @@ data TypedCFG
      (inits :: RList CrucibleType)
      (ret :: CrucibleType)
   = TypedCFG { tpcfgHandle :: TypedFnHandle ghosts inits ret
-             , tpcfgInputPerms ::
-                 Mb (ghosts :> LifetimeType) (MbValuePerms inits)
-             , tpcfgOutputPerms ::
-                 Mb (ghosts :> LifetimeType) (MbValuePerms (inits :> ret))
+             , tpcfgFunPerm :: FunPerm ghosts inits ret
              , tpcfgBlockMap :: TypedBlockMap ext blocks ret
              , tpcfgEntryBlockID ::
                  TypedEntryID blocks inits (ghosts :> LifetimeType)
              }
+
+
+tpcfgInputPerms :: TypedCFG ext blocks ghosts inits ret ->
+                   Mb (ghosts :> LifetimeType) (MbValuePerms inits)
+tpcfgInputPerms = funPermIns . tpcfgFunPerm
+
+tpcfgOutputPerms :: TypedCFG ext blocks ghosts inits ret ->
+                    Mb (ghosts :> LifetimeType) (MbValuePerms (inits :> ret))
+tpcfgOutputPerms = funPermOuts . tpcfgFunPerm
 
 
 ----------------------------------------------------------------------
@@ -1177,18 +1184,8 @@ tcEmitStmt ctx loc (CallHandle ret freg_untyped args_ctx args_untyped) =
        (TypedCall freg fun_perm (exprsOfSubst ghosts) args l ps)
       ) >>>= \(_ :>: ret) ->
       stmtRecombinePerms >>>
+      endLifetime l >>>
       greturn (addCtxName ctx ret)
-
-
-{-
-FIXME HERE NOW:
-- change FunPerms to not specify perms on the ghost arguments:
-  + should be Mb (ghosts :> LifetimeType) (MbValuePerms ps)
-
-- begin the necessary lifetime
-- prove the fun input perms and then the funperm
-- end the lifetime and recombine
--}
 
 tcEmitStmt _ _ _ = error "tcEmitStmt: unsupported statement"
 
@@ -1517,17 +1514,16 @@ funPermToBlockInputs fun_perm =
   mbCombine $ funPermIns fun_perm
 
 funPermToBlockOutputs :: FunPerm ghosts args ret ->
-                         Mb (ghosts :> LifetimeType :++: args :> ret)
-                         (DistPerms (args :> LifetimeType :> ret))
-funPermToBlockOutputs (FunPerm ghosts _ _ perms_in perms_out) =
-  error "FIXME HERE NOW"
-
-{-
-\ctx ->
-                     mbValuePermsToDistPerms .
-                     fmap (appendValuePerms $
-                           trueValuePerms ctx) . mbCombine
--}
+                         Mb ((ghosts :> LifetimeType) :++: args :> ret)
+                         (DistPerms (args :> ret :> LifetimeType))
+funPermToBlockOutputs (fun_perm :: FunPerm ghosts args ret) =
+  mbCombine @_ @_ @(args :> ret) @(ghosts :> LifetimeType) $
+  nuMultiWithElim1 (\(_ :>: l) mb_perms ->
+                     fmap (\perms ->
+                            DistPermsCons perms l $
+                            ValPerm_Conj1 $ Perm_LOwned $ PExpr_PermListNil) $
+                     mbValuePermsToDistPerms mb_perms) $
+  funPermOuts fun_perm
 
 
 -- | Type-check a Crucible CFG
@@ -1550,8 +1546,7 @@ tcCFG cfg env [clP| fun_perm@(FunPerm cl_ghosts _ _ perms_in perms_out) |] =
        { tpcfgHandle =
            -- FIXME: figure out the index for the TypedFnHandle
            TypedFnHandle ghosts (cfgHandle cfg)
-       , tpcfgInputPerms = unClosed perms_in
-       , tpcfgOutputPerms = unClosed perms_out
+       , tpcfgFunPerm = unClosed fun_perm
        , tpcfgBlockMap =
            mapMapRList
            (maybe (error "tcCFG: unvisited block!") id . blockInfoBlock)
