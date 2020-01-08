@@ -45,12 +45,12 @@ import SAWScript.Heapster.SAWTranslation
 data PermsListEntry where
   PermsListEntry :: FunPerm ghosts inits ret -> PermsListEntry
 
--- | A permission for a function that takes in two 64-bit words and returns a
--- 64-bit word
-binaryWordFunPerm64 :: FunPerm (RNil :> BVType 64 :> BVType 64)
-                       (RNil :> LLVMPointerType 64 :> LLVMPointerType 64)
-                       (LLVMPointerType 64)
-binaryWordFunPerm64 =
+-- | A permission for a function that takes in two words and returns a word
+binaryWordFunPerm :: (1 <= w, KnownNat w) =>
+                     FunPerm (RNil :> BVType w :> BVType w)
+                     (RNil :> LLVMPointerType w :> LLVMPointerType w)
+                     (LLVMPointerType w)
+binaryWordFunPerm =
   FunPerm knownRepr knownRepr knownRepr
   -- Input perms: r1:eq(x), r2:eq(y)
   (nuMulti (MNil :>: Proxy :>: Proxy :>: Proxy) $ \(_ :>: x :>: y :>: _) ->
@@ -66,9 +66,20 @@ binaryWordFunPerm64 =
                    (ValPerms_Cons ValPerms_Nil ValPerm_True) ValPerm_True)
     (ValPerm_Exists $ nu $ \z -> ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var z))
 
+binaryWordFunPerm64 :: FunPerm (RNil :> BVType 64 :> BVType 64)
+                       (RNil :> LLVMPointerType 64 :> LLVMPointerType 64)
+                       (LLVMPointerType 64)
+binaryWordFunPerm64 = binaryWordFunPerm
+
+binaryWordFunPerm32 :: FunPerm (RNil :> BVType 32 :> BVType 32)
+                       (RNil :> LLVMPointerType 32 :> LLVMPointerType 32)
+                       (LLVMPointerType 32)
+binaryWordFunPerm32 = binaryWordFunPerm
+
+
 heapsterPermsList :: [PermsListEntry]
 heapsterPermsList =
-  [PermsListEntry binaryWordFunPerm64]
+  [PermsListEntry binaryWordFunPerm32, PermsListEntry binaryWordFunPerm64]
 
 -- FIXME: in order to make withCFG work, we need an ArchRepr arg for LLVM_CFG
 {-
@@ -98,6 +109,22 @@ getLLVMCFG _ (JVM_CFG _) =
 archReprWidth :: ArchRepr arch -> NatRepr (ArchWidth arch)
 archReprWidth (X86Repr w) = w
 
+castFunPerm :: CFG ext blocks inits ret ->
+               FunPerm ghosts args ret' ->
+               TopLevel (FunPerm ghosts (CtxToRList inits) ret)
+castFunPerm cfg fun_perm =
+  case (testEquality (funPermArgs fun_perm) (mkCruCtx $ cfgArgTypes cfg),
+        testEquality (funPermRet fun_perm) (cfgReturnType cfg)) of
+    (Just Refl, Just Refl) -> return fun_perm
+    (Nothing, _) ->
+      fail $ unlines ["Function permission has incorrect argument types",
+                      "Expected: " ++ show (cfgArgTypes cfg),
+                      "Actual: " ++ show (funPermArgs fun_perm) ]
+    (_, Nothing) ->
+      fail $ unlines ["Function permission has incorrect return type",
+                      "Expected: " ++ show (cfgReturnType cfg),
+                      "Actual: " ++ show (funPermRet fun_perm)]
+
 heapster_extract_print :: BuiltinContext -> Options ->
                           LLVMModule -> String -> Int ->
                           TopLevel String
@@ -113,17 +140,19 @@ heapster_extract_print bic opts lm fn_name perms_num =
              return (heapsterPermsList !! perms_num)
            else fail "heapster_extract: perms index out of bounds"
          case (any_cfg, somePerms) of
-           (AnyCFG cfg, PermsListEntry fun_perm)
-             | Just Refl <-
-                 testEquality (funPermArgs fun_perm) (mkCruCtx $ cfgArgTypes cfg)
-             , Just Refl <-
-                 testEquality (unCruType $ funPermRet fun_perm) (cfgReturnType cfg)
-             , Just cl_fun_perm <- tryClose fun_perm
-             , Left LeqProof <- decideLeq (knownNat @1) w ->
-               withKnownNat w $
-               do let cl_env = $(mkClosed [| FunTypeEnv [] |])
-                  let typed_cfg = tcCFG cl_env cl_fun_perm cfg
-                  let fun_openterm = translateCFG typed_cfg
-                  sc <- getSharedContext
-                  fun_term <- liftIO $ completeOpenTerm sc fun_openterm
-                  return $ scPrettyTerm pp_opts fun_term
+           (AnyCFG cfg, PermsListEntry fun_perm_raw) ->
+             do fun_perm <- castFunPerm cfg fun_perm_raw
+                cl_fun_perm <-
+                  case tryClose fun_perm of
+                    Just cl_fun_perm -> return cl_fun_perm
+                    Nothing -> fail "Function permission is not closed"
+                leq_proof <- case decideLeq (knownNat @1) w of
+                  Left pf -> return pf
+                  Right _ -> fail "LLVM arch width is 0!"
+                let cl_env = $(mkClosed [| FunTypeEnv [] |])
+                let fun_openterm =
+                      withKnownNat w $ withLeqProof leq_proof $
+                      translateCFG $ tcCFG cl_env cl_fun_perm cfg
+                sc <- getSharedContext
+                fun_term <- liftIO $ completeOpenTerm sc fun_openterm
+                return $ scPrettyTerm pp_opts fun_term
