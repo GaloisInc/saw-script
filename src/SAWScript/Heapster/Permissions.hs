@@ -2253,6 +2253,9 @@ instance AbstractVars (ValuePerm a) where
   abstractPEVars ns1 ns2 (ValPerm_Var x) =
     absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Var |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 x
+  abstractPEVars ns1 ns2 (ValPerm_Conj ps) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Conj |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ps
 
 instance AbstractVars (ValuePerms as) where
   abstractPEVars ns1 ns2 ValPerms_Nil =
