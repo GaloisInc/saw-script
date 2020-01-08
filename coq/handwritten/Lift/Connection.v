@@ -95,20 +95,20 @@ type connection = {handshake : handshake
   Definition get_handshake (c : connection) : Handshake.handshake :=
     fst (snd (snd (snd c))).
 
-  Definition get_is_caching_enabled (c : connection) : bool :=
-    fst (snd (snd (snd (snd c)))).
+  (* Definition get_is_caching_enabled (c : connection) : bool := *)
+  (*   fst (snd (snd (snd (snd c)))). *)
 
-  Definition get_key_exchange_EPH (c : connection) : bool :=
-    fst (snd (snd (snd (snd (snd c))))).
+  (* Definition get_key_exchange_EPH (c : connection) : bool := *)
+  (*   fst (snd (snd (snd (snd (snd c))))). *)
 
-  Definition get_mode (c : connection) : seq 32 bool :=
-    fst (snd (snd (snd (snd (snd (snd c)))))).
+  (* Definition get_mode (c : connection) : seq 32 bool := *)
+  (*   fst (snd (snd (snd (snd (snd (snd c)))))). *)
 
-  Definition get_resume_from_cache (c : connection) : bool :=
-    fst (snd (snd (snd (snd (snd (snd (snd c))))))).
+  (* Definition get_resume_from_cache (c : connection) : bool := *)
+  (*   fst (snd (snd (snd (snd (snd (snd (snd c))))))). *)
 
-  Definition get_server_can_send_ocsp (c : connection) : bool :=
-    snd (snd (snd (snd (snd (snd (snd (snd c))))))).
+  (* Definition get_server_can_send_ocsp (c : connection) : bool := *)
+  (*   snd (snd (snd (snd (snd (snd (snd (snd c))))))). *)
 
 End Connection.
 
@@ -127,16 +127,16 @@ Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_corked_IO  
 Lift connectionPP ConnectionPP.Connection        in getCorkedIO0                          as getCorkedIO.
 Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_handshake            as getHandshake0.
 Lift connectionPP ConnectionPP.Connection        in getHandshake0                         as getHandshake.
-Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_is_caching_enabled   as getIsCachingEnabled0.
-Lift connectionPP ConnectionPP.Connection        in getIsCachingEnabled0                  as getIsCachingEnabled.
-Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_key_exchange_EPH     as getKeyExchangeEPH0.
-Lift connectionPP ConnectionPP.Connection        in getKeyExchangeEPH0                    as getKeyExchangeEPH.
-Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_mode                 as getMode0.
-Lift connectionPP ConnectionPP.Connection        in getMode0                              as getMode.
-Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_resume_from_cache    as getResumeFromCache0.
-Lift connectionPP ConnectionPP.Connection        in getResumeFromCache0                   as getResumeFromCache.
-Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_server_can_send_ocsp as getServerCanSendOCSP0.
-Lift connectionPP ConnectionPP.Connection        in getServerCanSendOCSP0                 as getServerCanSendOCSP.
+(* Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_is_caching_enabled   as getIsCachingEnabled0. *)
+(* Lift connectionPP ConnectionPP.Connection        in getIsCachingEnabled0                  as getIsCachingEnabled. *)
+(* Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_key_exchange_EPH     as getKeyExchangeEPH0. *)
+(* Lift connectionPP ConnectionPP.Connection        in getKeyExchangeEPH0                    as getKeyExchangeEPH. *)
+(* Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_mode                 as getMode0. *)
+(* Lift connectionPP ConnectionPP.Connection        in getMode0                              as getMode. *)
+(* Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_resume_from_cache    as getResumeFromCache0. *)
+(* Lift connectionPP ConnectionPP.Connection        in getResumeFromCache0                   as getResumeFromCache. *)
+(* Lift HandshakePP.handshake HandshakePP.Handshake in ConnectionPP.get_server_can_send_ocsp as getServerCanSendOCSP0. *)
+(* Lift connectionPP ConnectionPP.Connection        in getServerCanSendOCSP0                 as getServerCanSendOCSP. *)
 
 From Lift Require Import S2N.
 
@@ -259,14 +259,16 @@ Configure Lift
               S2N'.handshakes
           }.
 
-Lift HandshakePP.handshake
-     HandshakePP.Handshake
-  in ecAt
-  as ecAt0.
+(* Lift HandshakePP.handshake *)
+(*      HandshakePP.Handshake *)
+(*   in ecAt *)
+(*   as ecAt0. *)
 
-Lift connectionPP ConnectionPP.Connection
-  in ecAt0
-  as ecAt.
+(* Lift connectionPP ConnectionPP.Connection *)
+(*   in ecAt0 *)
+(*   as ecAt. *)
+
+From Lift Require Import Handshake.
 
 Lift HandshakePP.handshake
      HandshakePP.Handshake

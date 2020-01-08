@@ -79,7 +79,7 @@ Preprocess Module Handshake
 Lift HandshakePP.handshake
      HandshakePP.Handshake
   in HandshakePP.get_handshake_type
-  as getHandshake.
+  as getHandshakeType.
 
 Lift HandshakePP.handshake
      HandshakePP.Handshake
@@ -103,6 +103,11 @@ Configure Lift HandshakePP.handshake HandshakePP.Handshake
               natToNat
               seq
           }.
+
+Lift HandshakePP.handshake
+     HandshakePP.Handshake
+  in S2N'.ACTIVE_MESSAGE
+  as ActiveMessage0.
 
 Lift HandshakePP.handshake
      HandshakePP.Handshake

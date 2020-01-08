@@ -22,8 +22,8 @@ handwritten/CryptolToCoq/SAWCoreVectorsAsCoqVectors.v
 
 handwritten/Lift/Connection.v
 handwritten/Lift/Handshake.v
-handwritten/Lift/HandshakeAction.v
-handwritten/Lift/Minimal.v
+# handwritten/Lift/HandshakeAction.v
+# handwritten/Lift/Minimal.v
 handwritten/Lift/SAWCorePrelude.v
 handwritten/Lift/S2N.v
 
@@ -31,4 +31,6 @@ generated/S2N/S2N.v
 handwritten/S2N/S2N_proofs.v
 handwritten/S2N/Embedding.v
 handwritten/S2N/Pointed.v
+handwritten/S2N/Translation/Connection.v
+handwritten/S2N/Translation/Handshake.v
 handwritten/S2N/Translation/HandshakeAction.v

@@ -43,6 +43,34 @@ Preprocess Module H as H_PP.
 Lift SN_PP.h H_PP.H in H_PP.get_h_b as getHB.
 Lift SN_PP.h H_PP.H in SN_PP.f as f_PP { opaque andb }.
 
+Definition get_h_b_expected (h : SN_PP.h) :=
+  Prod.fst _ _ h.
+
+Arguments SN_PP.Coq_Init_Datatypes_fst [A B].
+Arguments SN_PP.Coq_Init_Datatypes_snd [A B].
+
+Notation "'fst_PP' x" := (SN_PP.Coq_Init_Datatypes_fst x) (at level 50, only printing).
+Notation "'snd_PP' x" := (SN_PP.Coq_Init_Datatypes_snd x) (at level 50, only printing).
+
+Print f_PP.
+
+Definition f_PP_expected (h : H_PP.H) (c : nat * (nat * (bool * (H_PP.H * nat)))) : bool :=
+ H_PP.b h
+ &&
+ SN_PP.Coq_Init_Datatypes_fst bool (H_PP.H * nat)
+   (SN_PP.Coq_Init_Datatypes_snd nat (bool * (H_PP.H * nat))
+                                 (SN_PP.Coq_Init_Datatypes_snd nat (nat * (bool * (H_PP.H * nat))) c)).
+
+Lemma test_f_PP:
+  f_PP = f_PP_expected.
+Proof.
+  unfold f_PP, f_PP_expected.
+  match goal with
+  | |- ?x = ?x => reflexivity
+  | _ => idtac
+  end.
+Qed.
+
 Print f_PP.
 
 (*
