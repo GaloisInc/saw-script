@@ -180,6 +180,16 @@ $(mkNuMatching [t| forall blocks ps_in. TypedJumpTarget blocks ps_in |])
 instance NuMatchingAny1 (TypedJumpTarget blocks) where
   nuMatchingAny1Proof = nuMatchingProof
 
+-- FIXME: Hobbits mkNuMatching cannot handle empty types
+-- $(mkNuMatching [t| forall f tp. EmptyExprExtension f tp |])
+
+instance NuMatching (EmptyExprExtension f tp) where
+  nuMatchingProof = unsafeMbTypeRepr
+
+
+instance NuMatchingAny1 (EmptyExprExtension f) where
+  nuMatchingAny1Proof = nuMatchingProof
+
 $(mkNuMatching [t| AVXOp1 |])
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => ExtX86 f tp |])
 $(mkNuMatching [t| forall arch f tp. NuMatchingAny1 f =>
@@ -1527,10 +1537,11 @@ funPermToBlockOutputs (fun_perm :: FunPerm ghosts args ret) =
 
 
 -- | Type-check a Crucible CFG
-tcCFG :: PermCheckExtC ext => CFG ext blocks inits ret -> Closed FunTypeEnv ->
+tcCFG :: PermCheckExtC ext => Closed FunTypeEnv ->
          Closed (FunPerm ghosts (CtxToRList inits) ret) ->
+         CFG ext blocks inits ret ->
          TypedCFG ext (CtxCtxToRList blocks) ghosts (CtxToRList inits) ret
-tcCFG cfg env [clP| fun_perm@(FunPerm cl_ghosts _ _ perms_in perms_out) |] =
+tcCFG env [clP| fun_perm@(FunPerm cl_ghosts _ _ perms_in perms_out) |] cfg =
   let ghosts = unClosed cl_ghosts in
   flip evalState (emptyTopPermCheckState (handleReturnType $ cfgHandle cfg)
                   (cfgBlockMap cfg) env) $

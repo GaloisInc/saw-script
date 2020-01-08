@@ -654,6 +654,10 @@ data FunPerm ghosts args ret where
              Mb (ghosts :> LifetimeType) (MbValuePerms (args :> ret)) ->
              FunPerm ghosts args ret
 
+-- | Extract the @args@ context from a function permission
+funPermArgs :: FunPerm ghosts args ret -> CruCtx args
+funPermArgs (FunPerm _ args _ _ _) = args
+
 -- | Extract the @ghosts@ context from a function permission
 funPermGhosts :: FunPerm ghosts args ret -> CruCtx ghosts
 funPermGhosts (FunPerm ghosts _ _ _ _) = ghosts
@@ -2061,6 +2065,11 @@ abstractVars :: AbstractVars a =>
                 Maybe (Closed (Mb ctx a))
 abstractVars ns a =
   fmap (clApply $(mkClosed [| elimEmptyMb |])) $ abstractPEVars MNil ns a
+
+tryClose :: AbstractVars a => a -> Maybe (Closed a)
+tryClose a =
+  fmap (clApply $(mkClosed [| elimEmptyMb . elimEmptyMb |])) $
+  abstractPEVars MNil MNil a
 
 instance AbstractVars (Name (a :: CrucibleType)) where
   abstractPEVars ns1 ns2 (n :: Name a)
