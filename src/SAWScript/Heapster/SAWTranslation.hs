@@ -714,10 +714,10 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
   tptranslate ([nuP| Perm_Fun
                    fp@(FunPerm ghosts args ret perms_in perms_out) |]) =
     (piExprCtx (appendCruCtx
-                (CruCtxCons (mbLift ghosts) (mkCruType LifetimeRepr))
+                (CruCtxCons (mbLift ghosts) LifetimeRepr)
                 (mbLift args)) $
      piPermCtx (mbCombine $ fmap mbCombine perms_in) $ \_ ->
-      translateRetType (unCruType $ mbLift ret)
+      translateRetType (mbLift ret)
       (mbCombine $ fmap (mbCombine
                          . fmap mbValuePermsToDistPerms) perms_out)) >>= \tp_term ->
     return $ Right (tp_term, APTrans_Fun fp)
@@ -1655,8 +1655,8 @@ itranslateStmt [nuP| stmt@(TypedCall freg fun_perm ghosts args l ps) |] m =
      let perms_out =
            mbCombine $ fmap (\stmt' -> nu $ \ret ->
                               flip typedStmtOut (MNil :>: ret) stmt') stmt
-     let mb_ret_tp = fmap (unCruType . funPermRet) fun_perm
-     let ret_tp = unCruType $ mbLift $ fmap funPermRet fun_perm
+     let mb_ret_tp = fmap funPermRet fun_perm
+     let ret_tp = mbLift $ fmap funPermRet fun_perm
      ret_tp_trm <- itranslate mb_ret_tp
      tp_f <- lambdaExprTransForceI "x_elimCallRet" ret_tp $ tpTransM $
        tptranslate $ mbCombine $
@@ -1784,9 +1784,9 @@ instance NuMatchingExtC ext =>
              r mb_perms
        assertPermStackEqM "TypedRet" perms
        r_trans <- exprTransToTermForce <$> tpTransM (tptranslate r)
-       ret_trans <- tpTransM $ translateType $ fmap unCruType ret
+       ret_trans <- tpTransM $ translateType $ ret
        pctx <- itiPermStack <$> ask
-       tp_f <- lambdaExprTransForceI "r" (unCruType $ mbLift ret) $
+       tp_f <- lambdaExprTransForceI "r" (mbLift ret) $
          tpTransM $ tptranslate $ mbCombine mb_perms
        return $ ctorOpenTerm "Prelude.exists"
          [ret_trans, tp_f, r_trans,
@@ -1841,13 +1841,13 @@ lambdaExprCtx :: CruCtx ctx -> TypeTransM ctx OpenTerm ->
                  TypeTransM RNil OpenTerm
 lambdaExprCtx CruCtxNil m = m
 lambdaExprCtx (CruCtxCons ctx tp) m =
-  lambdaExprCtx ctx $ lambdaExprTrans "e" (unCruType tp) m
+  lambdaExprCtx ctx $ lambdaExprTrans "e" tp m
 
 piExprCtx :: CruCtx ctx2 -> TypeTransM (ctx :++: ctx2) OpenTerm ->
              TypeTransM ctx OpenTerm
 piExprCtx CruCtxNil m = m
 piExprCtx (CruCtxCons ctx tp) m =
-  piExprCtx ctx $ piExprTrans "e" (unCruType tp) m
+  piExprCtx ctx $ piExprTrans "e" tp m
 
 -- | Build the return type for a function; FIXME: documentation
 translateRetType :: TypeRepr ret -> Mb (ctx :> ret) (DistPerms ps) ->
@@ -1877,7 +1877,7 @@ translateEntryLRT (TypedEntry entryID args ret perms_in perms_out _) =
     helperExpr CruCtxNil m = m
     helperExpr (CruCtxCons ctx tp) m =
       helperExpr ctx $
-      do mb_tp <- nuMultiTransM $ const $ unCruType tp
+      do mb_tp <- nuMultiTransM $ const tp
          tp_trans <- tptranslate mb_tp
          case tp_trans of
            Left etrans -> inExtTypeTransM etrans m

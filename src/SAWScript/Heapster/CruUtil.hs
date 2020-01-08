@@ -81,6 +81,12 @@ instance NuMatching (NatRepr tp) where
 instance NuMatching (TypeRepr tp) where
   nuMatchingProof = unsafeMbTypeRepr
 
+instance Closable (TypeRepr tp) where
+  toClosed = unsafeClose
+
+instance Liftable (TypeRepr tp) where
+  mbLift = unClosed . mbLift . fmap toClosed
+
 instance NuMatching (BaseTypeRepr tp) where
   nuMatchingProof = unsafeMbTypeRepr
 
@@ -125,6 +131,13 @@ instance NuMatchingAny1 f => NuMatching (Assignment f ctx) where
     -- need to figure out how to use the TraversableFC instance for Assignment
     -- here?
     isoMbTypeRepr viewAssign viewToAssign
+
+instance Closable (Assignment TypeRepr ctx) where
+  toClosed = unsafeClose
+
+instance Liftable (Assignment TypeRepr ctx) where
+  mbLift = unClosed . mbLift . fmap toClosed
+
 
 $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => BaseTerm f tp |])
 
@@ -192,6 +205,7 @@ rlistToAssign :: MapRList f ctx -> Assignment f (RListToCtx ctx)
 rlistToAssign MNil = Ctx.empty
 rlistToAssign (rlist :>: f) = extend (rlistToAssign rlist) f
 
+{-
 -- | Representation types that support the 'withKnownRepr' operation
 class WithKnownRepr f where
   withKnownRepr :: f a -> (KnownRepr f a => r) -> r
@@ -199,17 +213,58 @@ class WithKnownRepr f where
 instance WithKnownRepr NatRepr where
   withKnownRepr = withKnownNat
 
+instance WithKnownRepr NatRepr where
+  withKnownRepr = withKnownNat
+
+{-
 instance WithKnownRepr BaseTypeRepr where
-  withKnownRepr = error "FIXME HERE: write withKnownBaseType!"
+  withKnownRepr = error "FIXME HERE NOW: write withKnownBaseType!"
+-}
 
 instance WithKnownRepr TypeRepr where
-  withKnownRepr = error "FIXME HERE: write withKnownType!"
+  withKnownRepr AnyRepr f = f
+  withKnownRepr UnitRepr f = f
+  withKnownRepr BoolRepr f = f
+  withKnownRepr NatRepr f = f
+  withKnownRepr IntegerRepr f = f
+  withKnownRepr RealValRepr f = f
+  withKnownRepr ComplexRealRepr f = f
+  withKnownRepr (BVRepr n) f = withKnownNat n $ f
+  withKnownRepr (IntrinsicRepr sym args) f =
+    withKnownRepr sym $ withKnownRepr args f
+  withKnownRepr (RecursiveRepr sym args) f =
+    withKnownRepr sym $ withKnownRepr args f
+  withKnownRepr (FloatRepr _) _ = error "FIXME: withKnownRepr: FloatRepr case"
+  withKnownRepr (IEEEFloatRepr _) _ =
+    error "FIXME: withKnownRepr: IEEEFloatRepr case"
+  withKnownRepr CharRepr f = f
+  withKnownRepr StringRepr f = f
+  withKnownRepr (FunctionHandleRepr args ret) f =
+    withKnownRepr args $ withKnownRepr ret f
+  withKnownRepr (MaybeRepr tp) f = withKnownRepr tp f
+  withKnownRepr (VectorRepr tp) f = withKnownRepr tp f
+  withKnownRepr (StructRepr args) f = withKnownRepr args f
+  withKnownRepr (VariantRepr ctx) f = withKnownRepr ctx f
+  withKnownRepr (ReferenceRepr tp) f = withKnownRepr tp f
+  withKnownRepr (WordMapRepr _ _) _ =
+    error "FIXME: withKnownRepr: WordMapRepr case"
+  withKnownRepr (StringMapRepr _) _ =
+    error "FIXME: withKnownRepr: StringMapRepr case"
+  withKnownRepr (SymbolicArrayRepr _ _) _ =
+    error "FIXME: withKnownRepr: SymbolicArrayRepr case"
+  withKnownRepr (SymbolicStructRepr _) _ =
+    error "FIXME: withKnownRepr: SymbolicStructRepr case"
+
 
 instance WithKnownRepr CtxRepr where
-  withKnownRepr = error "FIXME HERE: write withKnownCtx!"
+  withKnownRepr (viewAssign -> AssignEmpty) f = f
+  withKnownRepr (viewAssign -> AssignExtend ctx tp) f =
+    withKnownRepr ctx $ withKnownRepr tp f
 
+{-
 instance WithKnownRepr (Index ctx) where
-  withKnownRepr = error "FIXME HERE: write withKnownIndex!"
+  withKnownRepr = error "FIXME HERE NOW: write withKnownIndex!"
+-}
 
 
 {-
@@ -245,14 +300,16 @@ instance Liftable (CruType a) where
 
 instance Closable (CruType a) where
   toClosed CruType = $(mkClosed [| CruType |])
+-}
+
 
 -- | A context of Crucible types. NOTE: we do not use 'MapRList' here, because
 -- we do not yet have a nice way to define the 'NuMatching' instance we want...
 data CruCtx ctx where
   CruCtxNil :: CruCtx RNil
-  CruCtxCons :: CruCtx ctx -> CruType a -> CruCtx (ctx :> a)
+  CruCtxCons :: CruCtx ctx -> TypeRepr a -> CruCtx (ctx :> a)
 
-$(mkNuMatching [t| forall a. CruType a |])
+-- $(mkNuMatching [t| forall a. CruType a |])
 $(mkNuMatching [t| forall ctx. CruCtx ctx |])
 
 instance Liftable (CruCtx ctx) where
@@ -272,25 +329,43 @@ instance TestEquality CruCtx where
     = Just Refl
   testEquality _ _ = Nothing
 
+{-
 instance KnownRepr TypeRepr tp => KnownRepr CruType tp where
   knownRepr = CruType
+-}
 
 instance KnownRepr CruCtx RNil where
   knownRepr = CruCtxNil
 
+{-
 instance (KnownRepr CruCtx tps, KnownRepr CruType tp) =>
          KnownRepr CruCtx (tps :> tp) where
   knownRepr = CruCtxCons knownRepr knownRepr
+-}
 
+instance (KnownRepr CruCtx tps, KnownRepr TypeRepr tp) =>
+         KnownRepr CruCtx (tps :> tp) where
+  knownRepr = CruCtxCons knownRepr knownRepr
+
+{-
 -- | Build a 'CruType' from a 'TypeRepr'
 mkCruType :: TypeRepr a -> CruType a
 mkCruType tp = withKnownRepr tp CruType
+-}
 
 -- | Build a 'CruCtx' from a 'CtxRepr'
 mkCruCtx :: CtxRepr ctx -> CruCtx (CtxToRList ctx)
 mkCruCtx ctx = case viewAssign ctx of
   AssignEmpty -> CruCtxNil
-  AssignExtend ctx' tp -> CruCtxCons (mkCruCtx ctx') (mkCruType tp)
+  AssignExtend ctx' tp -> CruCtxCons (mkCruCtx ctx') tp
+
+-- | Convert a 'CruCtx' to a 'CtxRepr'
+cruCtxToRepr :: CruCtx ctx -> CtxRepr (RListToCtx ctx)
+cruCtxToRepr CruCtxNil = Ctx.empty
+cruCtxToRepr (CruCtxCons ctx tp) = Ctx.extend (cruCtxToRepr ctx) tp
+
+instance Show (CruCtx ctx) where
+  show = show . cruCtxToRepr
 
 -- | The empty context
 emptyCruCtx :: CruCtx RNil
@@ -298,11 +373,11 @@ emptyCruCtx = CruCtxNil
 
 -- | Build a singleton crucible context
 singletonCruCtx :: TypeRepr tp -> CruCtx (RNil :> tp)
-singletonCruCtx tp = CruCtxCons CruCtxNil (mkCruType tp)
+singletonCruCtx tp = CruCtxCons CruCtxNil tp
 
 -- | Add an element to the end of a context
 extCruCtx :: KnownRepr TypeRepr a => CruCtx ctx -> CruCtx (ctx :> a)
-extCruCtx ctx = CruCtxCons ctx CruType
+extCruCtx ctx = CruCtxCons ctx knownRepr
 
 -- | Remove an element from the end of a context
 unextCruCtx :: CruCtx (ctx :> a) -> CruCtx ctx

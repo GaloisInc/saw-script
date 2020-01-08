@@ -120,7 +120,7 @@ typedFnHandleArgs (TypedFnHandle _ h) = mkCruCtx $ handleArgTypes h
 typedFnHandleAllArgs :: TypedFnHandle ghosts args ret ->
                         CruCtx (ghosts :> LifetimeType :++: args)
 typedFnHandleAllArgs h =
-  appendCruCtx (CruCtxCons (typedFnHandleGhosts h) (mkCruType LifetimeRepr))
+  appendCruCtx (CruCtxCons (typedFnHandleGhosts h) LifetimeRepr)
   (typedFnHandleArgs h)
 
 
@@ -436,7 +436,7 @@ applyTypedStmt stmt rets =
 
 -- | Typed return argument
 data TypedRet ret ps =
-  TypedRet (CruType ret) (TypedReg ret) (Binding ret (DistPerms ps))
+  TypedRet (TypeRepr ret) (TypedReg ret) (Binding ret (DistPerms ps))
 
 
 -- | Typed Crucible block termination statements
@@ -611,7 +611,7 @@ data PermCheckState ext args ret ps =
     stCurPerms :: PermSet ps,
     stExtState :: PermCheckExtState ext,
     stRetPerms :: Some (RetPerms ret),
-    stVarTypes :: NameMap CruType
+    stVarTypes :: NameMap TypeRepr
   }
 
 -- | Like the 'set' method of a lens, but allows the @ps@ argument to change
@@ -735,7 +735,7 @@ buildBlockIDMap (viewAssign -> AssignExtend asgn _) =
 data TopPermCheckState ext cblocks blocks ret =
   TopPermCheckState
   {
-    stRetType :: CruType ret,
+    stRetType :: TypeRepr ret,
     stBlockTrans :: Closed (Assignment (BlockIDTrans blocks) cblocks),
     stBlockInfo :: Closed (BlockInfoMap ext blocks ret),
     stFunTypeEnv :: Closed FunTypeEnv
@@ -762,7 +762,7 @@ emptyTopPermCheckState ::
   TopPermCheckState ext cblocks (CtxCtxToRList cblocks) ret
 emptyTopPermCheckState ret blkMap env =
   TopPermCheckState
-  { stRetType = mkCruType ret
+  { stRetType = ret
   , stBlockTrans =
     $(mkClosed [| buildBlockIDMap |]) `clApply` (closeAssign toClosed blkMap)
   , stBlockInfo =
@@ -920,7 +920,7 @@ setFramePtr fp =
 
 -- | Look up the type of a free variable, or raise an error if it is unknown
 getVarType :: ExprVar a ->
-              PermCheckM ext cblocks blocks ret args r ps r ps (CruType a)
+              PermCheckM ext cblocks blocks ret args r ps r ps (TypeRepr a)
 getVarType x =
   maybe (error "getVarType") id <$> NameMap.lookup x <$> stVarTypes <$> gget
 
@@ -931,7 +931,7 @@ getVarTypes MNil = greturn CruCtxNil
 getVarTypes (xs :>: x) = CruCtxCons <$> getVarTypes xs <*> getVarType x
 
 -- | Remember the type of a free variable
-setVarType :: ExprVar a -> CruType a ->
+setVarType :: ExprVar a -> TypeRepr a ->
               PermCheckM ext cblocks blocks ret args r ps r ps ()
 setVarType x tp =
   gmodify $ \st ->
@@ -1121,17 +1121,6 @@ tcRegs ctx (viewAssign -> AssignEmpty) = TypedRegsNil
 tcRegs ctx (viewAssign -> AssignExtend regs reg) =
   TypedRegsCons (tcRegs ctx regs) (tcReg ctx reg)
 
-
--- | Type-check a sequence of Crucible arguments into a 'TypedArgs' list
-{-
-tcArgs :: CtxTrans ctx -> CtxRepr args -> Assignment (Reg ctx) args ->
-          TypedArgs (CtxToRList args)
-tcArgs _ _ (viewAssign -> AssignEmpty) = TypedArgsNil
-tcArgs ctx (viewAssign ->
-            AssignExtend arg_tps' tp) (viewAssign -> AssignExtend args' reg) =
-  withKnownRepr tp $
-  TypedArgsCons (tcArgs ctx arg_tps' args') (tcReg ctx reg)
--}
 
 -- | Type-check a Crucibe block id into a 'Member' proof
 tcBlockID :: BlockID cblocks args ->
@@ -1477,7 +1466,7 @@ tcBlockEntry :: PermCheckExtC ext => Block ext cblocks ret args ->
                 (TypedEntry ext blocks ret (CtxToRList args))
 tcBlockEntry blk (BlockEntryInfo {..}) =
   (stRetType <$> get) >>= \retType ->
-  fmap (TypedEntry entryInfoID entryInfoArgs (unCruType retType)
+  fmap (TypedEntry entryInfoID entryInfoArgs retType
         entryInfoPermsIn entryInfoPermsOut) $
   strongMbM $
   flip nuMultiWithElim

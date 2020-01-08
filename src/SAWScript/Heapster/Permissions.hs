@@ -649,7 +649,7 @@ data LLVMArrayBorrow w
 -- | A function permission is a set of input and output permissions inside a
 -- context of ghost variables, including a lifetime ghost variable
 data FunPerm ghosts args ret where
-  FunPerm :: CruCtx ghosts -> CruCtx args -> CruType ret ->
+  FunPerm :: CruCtx ghosts -> CruCtx args -> TypeRepr ret ->
              Mb (ghosts :> LifetimeType) (MbValuePerms args) ->
              Mb (ghosts :> LifetimeType) (MbValuePerms (args :> ret)) ->
              FunPerm ghosts args ret
@@ -663,7 +663,7 @@ funPermGhosts :: FunPerm ghosts args ret -> CruCtx ghosts
 funPermGhosts (FunPerm ghosts _ _ _ _) = ghosts
 
 -- | Extract the return type from a function permission
-funPermRet :: FunPerm ghosts args ret -> CruType ret
+funPermRet :: FunPerm ghosts args ret -> TypeRepr ret
 funPermRet (FunPerm _ _ ret _ _) = ret
 
 -- | Extract the input permissions of a function permission
@@ -1839,7 +1839,7 @@ completePSubst :: CruCtx vars -> PartialSubst vars -> PermSubst vars
 completePSubst ctx (PartialSubst pselems) = PermSubst $ helper ctx pselems where
   helper :: CruCtx vars -> MapRList PSubstElem vars -> MapRList PermExpr vars
   helper _ MNil = MNil
-  helper (CruCtxCons ctx' CruType) (pselems' :>: pse) =
+  helper (CruCtxCons ctx' knownRepr) (pselems' :>: pse) =
     helper ctx' pselems' :>:
     (fromMaybe (zeroOfType knownRepr) (unPSubstElem pse))
 
