@@ -1855,7 +1855,7 @@ translateRetType :: TypeRepr ret -> Mb (ctx :> ret) (DistPerms ps) ->
 translateRetType ret ret_perms =
   do mb_ret <- nuMultiTransM $ const ret
      tp_term <- translateType mb_ret
-     tp_f <- lambdaExprTrans "x" ret (tptranslate ret_perms)
+     tp_f <- lambdaExprTransForce "x" ret (tptranslate ret_perms)
      return $ dataTypeOpenTerm "Prelude.Sigma" [tp_term, tp_f]
 
 nuMultiTransM :: (MapRList Name ctx -> b) -> TypeTransM ctx (Mb ctx b)
