@@ -141,7 +141,7 @@ ppLLVMVal ::
   OverrideMatcher (LLVM arch) w PP.Doc
 ppLLVMVal cc val = do
   sym <- Ov.getSymInterface
-  mem <- readGlobal (Crucible.llvmMemVar (cc^.ccLLVMContext))
+  mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))
   liftIO $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplGlobalMap mem) val
 
 -- | Resolve a 'SetupValue' into a 'LLVMVal' and pretty-print it
@@ -322,7 +322,7 @@ ppArgs sym cc cs (Crucible.RegMap args) = do
         do storTy <- Crucible.toStorableType memTy
            llvmval <- Crucible.packMemValue sym storTy tyrep val
            return (llvmval, memTy)
-  case Crucible.lookupGlobal (Crucible.llvmMemVar (cc^.ccLLVMContext)) (cc^.ccLLVMGlobals) of
+  case Crucible.lookupGlobal (Crucible.llvmMemVar (ccLLVMContext cc)) (cc^.ccLLVMGlobals) of
     Nothing -> fail "Internal error: Couldn't find LLVM memory variable"
     Just mem -> do
       traverse (Crucible.ppLLVMValWithGlobals sym (Crucible.memImplGlobalMap mem) . fst) =<<
@@ -886,7 +886,7 @@ matchArg ::
   OverrideMatcher (LLVM arch) md ()
 
 matchArg opts sc cc cs prepost actual expectedTy expected = do
-  let mvar = Crucible.llvmMemVar $ cc ^. ccLLVMContext
+  let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
   mem <- case Crucible.lookupGlobal mvar $ cc ^. ccLLVMGlobals of
     Nothing -> fail "internal error: LLVM Memory global not found"
     Just mem -> pure mem
@@ -1132,12 +1132,12 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
      sym    <- Ov.getSymInterface
 
      mem    <- readGlobal $ Crucible.llvmMemVar
-                          $ (cc^.ccLLVMContext)
+                          $ ccLLVMContext cc
 
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
      res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
      let summarizeBadLoad =
-          let dataLayout = Crucible.llvmDataLayout (cc^.ccTypeCtx)
+          let dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)
               sz = Crucible.memTypeSize dataLayout memTy
           in map (PP.text . unwords)
              [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
@@ -1236,7 +1236,7 @@ invalidateMutableAllocs ::
   OverrideMatcher (LLVM arch) RW ()
 invalidateMutableAllocs opts sc cc cs = do
   sym <- use syminterface
-  mem <- readGlobal . Crucible.llvmMemVar $ cc ^. ccLLVMContext
+  mem <- readGlobal . Crucible.llvmMemVar $ ccLLVMContext cc
   sub <- use setupValueSub
 
   let mutableAllocs = Map.filter (view isMut) $ cs ^. MS.csPreState . MS.csAllocs
@@ -1294,7 +1294,7 @@ invalidateMutableAllocs opts sc cc cs = do
                       =<< W4.bvLit sym ?ptrWidth (Crucible.bytesToInteger sz)
                 ) mem danglingPtrs
 
-  writeGlobal (Crucible.llvmMemVar $ cc ^. ccLLVMContext) mem'
+  writeGlobal (Crucible.llvmMemVar $ ccLLVMContext cc) mem'
 
 ------------------------------------------------------------------------
 
@@ -1314,7 +1314,7 @@ executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
                 Nothing    -> fail "executAllocation: failed to resolve type"
                 -}
      liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
-     let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
+     let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
      sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger sz)
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
@@ -1371,7 +1371,7 @@ executePointsTo ::
   OverrideMatcher (LLVM arch) RW ()
 executePointsTo opts sc cc spec (LLVMPointsTo _loc ptr val) =
   do (_, ptr') <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
-     let memVar = Crucible.llvmMemVar $ (cc^.ccLLVMContext)
+     let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
 
      -- In case the types are different (from crucible_points_to_untyped)
@@ -1513,7 +1513,7 @@ resolveSetupValueLLVM ::
 resolveSetupValueLLVM opts cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
-     mem <- readGlobal (Crucible.llvmMemVar (cc^.ccLLVMContext))
+     mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))
      let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv sval
