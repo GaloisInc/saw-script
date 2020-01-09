@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
@@ -22,6 +23,7 @@ module Verifier.SAW.Translation.Coq (
   ) where
 
 import           Control.Monad.Reader                          hiding (fail)
+import           Data.String.Interpolate                       (i)
 import           Prelude                                       hiding (fail)
 import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
 
@@ -88,27 +90,21 @@ traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
 --   modify $ over environment (bindings ++)
 --   translateTerm term
 
--- Eventually, different modules will want different preambles, for now,
--- hardcoded.
+-- | Eventually, different modules may want different preambles.  For now,
+-- we hardcode a sufficient set of imports for all our purposes.
 preamblePlus :: TranslationConfiguration -> Doc -> Doc
-preamblePlus configuration extraImports = vcat $
-  [ "From Coq          Require Import Lists.List."
-  , "Import            ListNotations."
-  , "From Coq          Require Import String."
-  , "From Coq          Require Import Vectors.Vector."
-  , "From CryptolToCoq Require Import SAWCoreScaffolding."
-  , sawVectors
-  , "From Records      Require Import Records."
-  , ""
-  , extraImports
-  , ""
-  ]
-  where
-    sawVectors :: Doc
-    sawVectors =
-      if translateVectorsAsCoqVectors configuration
-      then "From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors."
-      else "From CryptolToCoq Require Import SAWCoreVectorsAsCoqLists."
+preamblePlus (TranslationConfiguration {..}) extraImports = text [i|
+From Coq          Require Import Lists.List.
+From Coq          Require Import String.
+From Coq          Require Import Vectors.Vector.
+From CryptolToCoq Require Import SAWCoreScaffolding.
+From CryptolToCoq Require Import #{vectorModule}.
+From Records      Require Import Records.
+
+#{extraImports}
+
+Import ListNotations.
+|]
 
 preamble :: TranslationConfiguration -> Doc
 preamble configuration = preamblePlus configuration $ vcat []
