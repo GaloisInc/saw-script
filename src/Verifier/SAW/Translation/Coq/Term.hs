@@ -24,7 +24,7 @@ Portability : portable
 
 module Verifier.SAW.Translation.Coq.Term where
 
-import           Control.Lens                                  (Getter, makeLenses, over, set, to, view)
+import           Control.Lens                                  (makeLenses, over, set, to, view)
 import qualified Control.Monad.Except                          as Except
 import qualified Control.Monad.Fail                            as Fail
 import           Control.Monad.Reader                          hiding (fail, fix)
@@ -34,7 +34,7 @@ import           Data.Maybe                                    (fromMaybe)
 import           Prelude                                       hiding (fail)
 import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
 
-import qualified Data.Vector                                   as Vector (reverse, toList)
+import qualified Data.Vector                                   as Vector (reverse)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
 import           Verifier.SAW.Recognizer
@@ -64,8 +64,11 @@ data TranslationState = TranslationState
 
   }
   deriving (Show)
+
 makeLenses ''TranslationState
 
+-- | Extract the list of names from a list of Coq declarations.  Not all
+-- declarations have names, e.g. comments and code snippets come without names.
 namedDecls :: [Coq.Decl] -> [String]
 namedDecls = concatMap filterNamed
   where
@@ -76,9 +79,15 @@ namedDecls = concatMap filterNamed
     filterNamed (Coq.InductiveDecl (Coq.Inductive n _ _ _ _)) = [n]
     filterNamed (Coq.Snippet _)                               = []
 
-allDeclarations :: Getter TranslationState [String]
-allDeclarations =
-  to (\ (TranslationState {..}) -> namedDecls _localDeclarations ++ _globalDeclarations)
+-- | Retrieve the names of all local and global declarations from the
+-- translation state.
+getNamesOfAllDeclarations ::
+  TermTranslationMonad m =>
+  m [String]
+getNamesOfAllDeclarations = view allDeclarations <$> get
+  where
+    allDeclarations =
+      to (\ (TranslationState {..}) -> namedDecls _localDeclarations ++ _globalDeclarations)
 
 type TermTranslationMonad m = TranslationMonad TranslationState m
 
@@ -154,18 +163,13 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
     Sort s -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit i)
     ArrayValue _ vec -> do
-      config <- ask
-      if translateVectorsAsCoqVectors config
-        then
-        let addElement accum element = do
-              elementTerm <- go element
-              return (Coq.App (Coq.Var "Vector.cons")
-                      [Coq.Var "_", elementTerm, Coq.Var "_", accum]
-                     )
+      let addElement accum element = do
+            elementTerm <- go element
+            return (Coq.App (Coq.Var "Vector.cons")
+                    [Coq.Var "_", elementTerm, Coq.Var "_", accum]
+                   )
         in
         foldM addElement (Coq.App (Coq.Var "Vector.nil") [Coq.Var "_"]) (Vector.reverse vec)
-        else
-        (Coq.List . Vector.toList) <$> traverse go vec  -- TODO: special case bit vectors?
     StringLit s -> pure (Coq.Scope (Coq.StringLit s) "string")
     ExtCns (EC _ _ _) -> notSupported
 
@@ -267,10 +271,10 @@ translatePi binders body = withLocalLocalEnvironment $ do
   bodyT <- translateTerm body
   return $ Coq.Pi bindersT bodyT
 
--- env is innermost first order
 translateTerm :: TermTranslationMonad m => Term -> m Coq.Term
 translateTerm t = withLocalLocalEnvironment $ do
-  -- traceTerm "translateTerm" t
+  -- traceTerm "translateTerm" t $
+  -- NOTE: env is in innermost-first order
   env <- view localEnvironment <$> get
   case t of
 
@@ -379,17 +383,19 @@ translateTerm t = withLocalLocalEnvironment $ do
       | n < length env -> Coq.Var <$> pure (env !! n)
       | otherwise -> Except.throwError $ LocalVarOutOfBounds t
 
+  -- Constants come with a body
     (unwrapTermF -> Constant n body) -> do
-      configuration <- ask
       let renamed = translateConstant n
-      alreadyTranslatedDecls <- view allDeclarations <$> get
-      if | not (traverseConsts configuration) || elem renamed alreadyTranslatedDecls ->
-           Coq.Var <$> pure renamed
-         | otherwise -> do
-             b <- go env body
-             modify $ over localDeclarations $ (mkDefinition renamed b :)
-             Coq.Var <$> pure renamed
-    _ -> {- trace "translateTerm fallthrough" -} notSupported $ "Unhandled : " ++ showTerm t
+      alreadyTranslatedDecls <- getNamesOfAllDeclarations
+      if elem renamed alreadyTranslatedDecls
+        then Coq.Var <$> pure renamed
+        else do
+        b <- go env body
+        modify $ over localDeclarations $ (mkDefinition renamed b :)
+        Coq.Var <$> pure renamed
+
+    _ -> {- trace "translateTerm fallthrough" -} notSupported "fallthrough"
+
   where
     badTerm          = Except.throwError $ BadTerm t
     notSupported lbl = return (Coq.App (Coq.Var "error") [Coq.StringLit ("Not supported: " ++ lbl)])

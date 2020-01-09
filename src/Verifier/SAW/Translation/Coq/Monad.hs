@@ -48,8 +48,18 @@ showError printer err = case err of
   CannotCreateDefaultValue a -> "Unable to generate a default value of the given type: " ++ printer a
 
 data TranslationConfiguration = TranslationConfiguration
-  { translateVectorsAsCoqVectors :: Bool -- ^ when `False`, translate vectors as Coq lists
-  , traverseConsts               :: Bool
+  { vectorModule   :: String
+  -- ^ all vector operations will be prepended with this module name, i.e.
+  -- "<VectorModule>.append", etc.  So that it can be retargeted easily.
+  -- Current provided options are:
+  -- - SAWCoreVectorsAsCoqLists
+  -- - SAWCoreVectorsAsCoqVectors
+  -- Currently considering adding:
+  -- - SAWCoreVectorsAsSSReflectSeqs
+  , monadicTranslation :: Bool
+  -- ^ Whether to wrap everything in a free monad construction.
+  -- - Advantage: fixpoints can be readily represented
+  -- - Disadvantage: pure computations look more gnarly
   }
 
 type TranslationConfigurationMonad m =

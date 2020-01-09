@@ -31,8 +31,7 @@ import Verifier.SAW.Translation.Coq
 
 configuration :: TranslationConfiguration
 configuration = TranslationConfiguration
-  { translateVectorsAsCoqVectors = True
-  , traverseConsts               = True
+  { vectorModule   = "SAWCoreVectorsAsCoqVectors"
   }
 
 -- Creating a bunch of terms with no sharing, for testing purposes

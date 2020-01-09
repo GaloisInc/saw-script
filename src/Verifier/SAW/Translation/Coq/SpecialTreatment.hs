@@ -133,9 +133,7 @@ sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
-  if translateVectorsAsCoqVectors
-  then mkModuleName ["SAWCoreVectorsAsCoqVectors"]
-  else mkModuleName ["SAWCoreVectorsAsCoqLists"]
+  mkModuleName [vectorModule]
 
 cryptolPrimitivesModule :: ModuleName
 cryptolPrimitivesModule = mkModuleName ["CryptolPrimitives"]
