@@ -12,7 +12,13 @@ Stability   : experimental
 Portability : portable
 -}
 
-module Verifier.SAW.Translation.Coq.Monad where
+module Verifier.SAW.Translation.Coq.Monad
+  ( TranslationConfiguration(..)
+  , TranslationConfigurationMonad
+  , TranslationMonad
+  , TranslationError(..)
+  , runTranslationMonad
+  ) where
 
 import qualified Control.Monad.Except as Except
 import Control.Monad.Reader hiding (fail)
@@ -48,7 +54,16 @@ showError printer err = case err of
   CannotCreateDefaultValue a -> "Unable to generate a default value of the given type: " ++ printer a
 
 data TranslationConfiguration = TranslationConfiguration
-  { vectorModule   :: String
+  { notations          :: [(String, String)]
+  -- ^ We currently don't have a nice way of mapping Cryptol notations to Coq
+  -- notations.  Instead, we provide a mapping from the notation symbol to an
+  -- identifier to use instead.
+  , monadicTranslation :: Bool
+  -- ^ Whether to wrap everything in a free monad construction.
+  -- - Advantage: fixpoints can be readily represented
+  -- - Disadvantage: pure computations look more gnarly
+  , skipDefinitions    :: [String]
+  , vectorModule       :: String
   -- ^ all vector operations will be prepended with this module name, i.e.
   -- "<VectorModule>.append", etc.  So that it can be retargeted easily.
   -- Current provided options are:
@@ -56,10 +71,6 @@ data TranslationConfiguration = TranslationConfiguration
   -- - SAWCoreVectorsAsCoqVectors
   -- Currently considering adding:
   -- - SAWCoreVectorsAsSSReflectSeqs
-  , monadicTranslation :: Bool
-  -- ^ Whether to wrap everything in a free monad construction.
-  -- - Advantage: fixpoints can be readily represented
-  -- - Disadvantage: pure computations look more gnarly
   }
 
 type TranslationConfigurationMonad m =

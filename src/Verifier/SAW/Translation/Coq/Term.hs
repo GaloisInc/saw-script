@@ -140,8 +140,8 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
     UnitType      -> pure (Coq.Var "unit")
     PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse go [x, y]
     PairType x y  -> Coq.App (Coq.Var "prod") <$> traverse go [x, y]
-    PairLeft t    -> Coq.App (Coq.Var "fst") <$> traverse go [t]
-    PairRight t   -> Coq.App (Coq.Var "snd") <$> traverse go [t]
+    PairLeft t    -> Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.fst") <*> traverse go [t]
+    PairRight t   -> Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.snd") <*> traverse go [t]
     -- TODO: maybe have more customizable translation of data types
     DataTypeApp n is as ->
       Coq.App
@@ -387,7 +387,8 @@ translateTerm t = withLocalLocalEnvironment $ do
     (unwrapTermF -> Constant n body) -> do
       let renamed = translateConstant n
       alreadyTranslatedDecls <- getNamesOfAllDeclarations
-      if elem renamed alreadyTranslatedDecls
+      definitionsToSkip <- skipDefinitions <$> ask
+      if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
         then Coq.Var <$> pure renamed
         else do
         b <- go env body

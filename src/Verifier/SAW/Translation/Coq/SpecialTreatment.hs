@@ -107,6 +107,7 @@ realize code = IdentSpecialTreatment
 -- be renamed.  This is useful for certain definitions whose name on the
 -- SAWCore/Cryptol side clashes with names on the Coq side.  For instance, `at`
 -- is a reserved Coq keyword, but is used as a function name in SAWCore Prelude.
+-- Also useful for translation notations, until they are better supported.
 rename :: String -> IdentSpecialTreatment
 rename ident = IdentSpecialTreatment
   { atDefSite = DefRename Nothing ident
@@ -149,6 +150,11 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
   , ("unsafeAssert_same_Num", skip) -- unsafe and unused
   ]
 
+  ++
+  [ ("==>", rename "impliesBool")
+  , ("\\/", rename "orBool")
+  ]
+
 specialTreatmentMap :: TranslationConfiguration -> Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
 specialTreatmentMap configuration = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
@@ -180,72 +186,72 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- coercions
   ++
-  [ ("coerce",            mapsTo sawDefinitionsModule "coerce")
-  , ("coerce__def",       skip)
-  , ("coerce__eq",        skip)
-  , ("rcoerce",           skip)
+  [ ("coerce",      mapsTo sawDefinitionsModule "coerce")
+  , ("coerce__def", skip)
+  , ("coerce__eq",  skip)
+  , ("rcoerce",     skip)
   ]
 
   -- Unit
   ++
-  [ ("Unit",              mapsTo sawDefinitionsModule "Unit")
-  , ("UnitType",          mapsTo sawDefinitionsModule "UnitType")
-  , ("UnitType__rec",     mapsTo sawDefinitionsModule "UnitType__rec")
+  [ ("Unit",          mapsTo sawDefinitionsModule "Unit")
+  , ("UnitType",      mapsTo sawDefinitionsModule "UnitType")
+  , ("UnitType__rec", mapsTo sawDefinitionsModule "UnitType__rec")
   ]
 
   -- Records
   ++
-  [ ("EmptyType",         skip)
-  , ("EmptyType__rec",    skip)
-  , ("RecordType",        skip)
-  , ("RecordType__rec",   skip)
+  [ ("EmptyType",       skip)
+  , ("EmptyType__rec",  skip)
+  , ("RecordType",      skip)
+  , ("RecordType__rec", skip)
   ]
 
   -- Decidable equality, does not make sense in Coq unless turned into a type
   -- class
   -- Apparently, this is not used much for Cryptol, so we can skip it.
   ++
-  [ ("eq",                skip) -- MapsTo $ mkCoqIdent sawDefinitionsModule "eq")
-  , ("eq_bitvector",      skip)
-  , ("eq_Bool",           skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq_Bool")
-  , ("eq_Nat",            skip)
-  , ("eq_refl",           skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq_refl")
-  , ("eq_VecBool",        skip)
-  , ("eq_VecVec",         skip)
-  , ("ite_eq_cong_1",     skip)
-  , ("ite_eq_cong_2",     skip)
+  [ ("eq",            skip) -- MapsTo $ mkCoqIdent sawDefinitionsModule "eq")
+  , ("eq_bitvector",  skip)
+  , ("eq_Bool",       skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq_Bool")
+  , ("eq_Nat",        skip)
+  , ("eq_refl",       skip) -- MapsTo $ mkCoqIdent "CryptolToCoq.SAW" "eq_refl")
+  , ("eq_VecBool",    skip)
+  , ("eq_VecVec",     skip)
+  , ("ite_eq_cong_1", skip)
+  , ("ite_eq_cong_2", skip)
   ]
 
   -- Boolean
   ++
-  [ ("and",               mapsTo sawDefinitionsModule "and")
-  , ("and__eq",           mapsTo sawDefinitionsModule "and__eq")
-  , ("Bool",              mapsTo sawDefinitionsModule "Bool")
-  , ("boolEq",            mapsTo sawDefinitionsModule "boolEq")
-  , ("boolEq__eq",        mapsTo sawDefinitionsModule "boolEq__eq")
-  , ("False",             mapsTo sawDefinitionsModule "False")
-  , ("ite",               mapsTo sawDefinitionsModule "ite")
-  , ("iteDep",            mapsTo sawDefinitionsModule "iteDep")
-  , ("iteDep_True",       mapsTo sawDefinitionsModule "iteDep_True")
-  , ("iteDep_False",      mapsTo sawDefinitionsModule "iteDep_False")
-  , ("ite_bit",           skip) -- FIXME: change this
-  , ("ite_eq_iteDep",     mapsTo sawDefinitionsModule "ite_eq_iteDep")
-  , ("not",               mapsTo sawDefinitionsModule "not")
-  , ("not__eq",           mapsTo sawDefinitionsModule "not__eq")
-  , ("or",                mapsTo sawDefinitionsModule "or")
-  , ("or__eq",            mapsTo sawDefinitionsModule "or__eq")
-  , ("True",              mapsTo sawDefinitionsModule "True")
-  , ("xor",               mapsTo sawDefinitionsModule "xor")
-  , ("xor__eq",           mapsTo sawDefinitionsModule "xor__eq")
+  [ ("and",           mapsTo sawDefinitionsModule "and")
+  , ("and__eq",       mapsTo sawDefinitionsModule "and__eq")
+  , ("Bool",          mapsTo sawDefinitionsModule "Bool")
+  , ("boolEq",        mapsTo sawDefinitionsModule "boolEq")
+  , ("boolEq__eq",    mapsTo sawDefinitionsModule "boolEq__eq")
+  , ("False",         mapsTo sawDefinitionsModule "False")
+  , ("ite",           mapsTo sawDefinitionsModule "ite")
+  , ("iteDep",        mapsTo sawDefinitionsModule "iteDep")
+  , ("iteDep_True",   mapsTo sawDefinitionsModule "iteDep_True")
+  , ("iteDep_False",  mapsTo sawDefinitionsModule "iteDep_False")
+  , ("ite_bit",       skip) -- FIXME: change this
+  , ("ite_eq_iteDep", mapsTo sawDefinitionsModule "ite_eq_iteDep")
+  , ("not",           mapsTo sawDefinitionsModule "not")
+  , ("not__eq",       mapsTo sawDefinitionsModule "not__eq")
+  , ("or",            mapsTo sawDefinitionsModule "or")
+  , ("or__eq",        mapsTo sawDefinitionsModule "or__eq")
+  , ("True",          mapsTo sawDefinitionsModule "True")
+  , ("xor",           mapsTo sawDefinitionsModule "xor")
+  , ("xor__eq",       mapsTo sawDefinitionsModule "xor__eq")
   ]
 
   -- Pairs
   ++
-  [ ("PairType",          mapsTo sawDefinitionsModule "PairType")
-  , ("PairValue",         mapsTo sawDefinitionsModule "PairValue")
-  , ("Pair__rec",         mapsTo sawDefinitionsModule "Pair__rec")
-  , ("fst",               mapsTo sawDefinitionsModule "fst")
-  , ("snd",               mapsTo sawDefinitionsModule "snd")
+  [ ("PairType",  mapsTo sawDefinitionsModule "PairType")
+  , ("PairValue", mapsTo sawDefinitionsModule "PairValue")
+  , ("Pair__rec", mapsTo sawDefinitionsModule "Pair__rec")
+  , ("fst",       mapsTo sawDefinitionsModule "fst")
+  , ("snd",       mapsTo sawDefinitionsModule "snd")
   ]
 
   -- Equality
@@ -396,14 +402,16 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Definitions that depend on axioms currently skipped
   ++
-  [ ("composeM",       skip)
-  , ("letRecFuns",     skip)
+  [ ("composeM",   skip)
+  , ("letRecFuns", skip)
   ]
 
 constantsRenamingMap :: Map.Map String String
 constantsRenamingMap =
   Map.fromList
-  [ ("/\\", "and")
+  [ ("/\\", "andBool")
+  , ("==>", "impliesBool")
+  , ("\\/", "orBool")
   ]
 
 -- TODO: Now that ExtCns contains a unique identifier, it might make sense
