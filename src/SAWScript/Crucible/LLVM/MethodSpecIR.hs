@@ -29,7 +29,74 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
-module SAWScript.Crucible.LLVM.MethodSpecIR where
+module SAWScript.Crucible.LLVM.MethodSpecIR
+  ( -- * LLVMMethodId
+    LLVMMethodId(..)
+  , llvmMethodParent
+  , llvmMethodName
+  , csName
+  , csParentName
+    -- * LLVMAllocSpec
+  , LLVMAllocSpec(..)
+  , allocSpecType
+  , allocSpecMut
+  , allocSpecLoc
+  , allocSpecBytes
+  , mutIso
+  , isMut
+    -- * LLVMModule
+  , LLVMModule -- abstract
+  , modFilePath
+  , modAST
+  , modTrans
+  , loadLLVMModule
+  , showLLVMModule
+    -- * CrucibleContext
+  , LLVMCrucibleContext(..)
+  , ccLLVMSimContext
+  , ccLLVMModule
+  , ccLLVMGlobals
+  , ccBasicSS
+  , ccBackend
+  , ccLLVMModuleAST
+  , ccLLVMModuleTrans
+  , ccLLVMContext
+  , ccTypeCtx
+    -- * PointsTo
+  , LLVMPointsTo(..)
+  , ppPointsTo
+    -- * AllocGlobal
+  , LLVMAllocGlobal(..)
+  , ppAllocGlobal
+    -- * Intrinsics
+  , intrinsics
+    -- * Initial CrucibleSetupMethodSpec
+  , SetupError(..)
+  , ppSetupError
+  , resolveArgs
+  , resolveRetTy
+  , initialDefCrucibleMethodSpecIR
+  , initialDeclCrucibleMethodSpecIR
+  , initialCrucibleSetupState
+  , initialCrucibleSetupStateDecl
+    -- * AllLLVM
+  , AllLLVM
+  , mkAllLLVM
+  , getAllLLVM
+  , anySetupTerm
+  , anySetupArray
+  , anySetupStruct
+  , anySetupElem
+  , anySetupField
+  , anySetupNull
+  , anySetupGlobal
+  , anySetupGlobalInitializer
+    -- * SomeLLVM
+  , SomeLLVM
+  , pattern SomeLLVM
+  , mkSomeLLVM
+  , getSomeLLVM
+  ) where
 
 import           Control.Lens
 import           Control.Monad (when)

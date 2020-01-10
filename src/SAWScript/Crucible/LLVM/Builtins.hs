@@ -294,10 +294,11 @@ createMethodSpec ::
   String            {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   TopLevel (MS.CrucibleMethodSpecIR (LLVM arch))
-createMethodSpec verificationArgs asp bic opts lm@(LLVMModule _ _ mtrans) nm setup = do
+createMethodSpec verificationArgs asp bic opts lm nm setup = do
   (nm', parent) <- resolveSpecName nm
   let edef = findDefMaybeStatic (modAST lm) nm'
   let edecl = findDecl (modAST lm) nm'
+  let mtrans = modTrans lm
   defOrDecls <- case (edef, edecl) of
     (Right defs, _) -> return (NE.map Left defs)
     (_, Right decl) -> return (Right decl NE.:| [])
@@ -570,7 +571,7 @@ setupGlobalAllocs cc allocs mem0 = foldM go mem0 allocs
 
     go :: MemImpl -> MS.AllocGlobal (LLVM arch) -> IO MemImpl
     go mem (LLVMAllocGlobal _ symbol@(L.Symbol name)) = do
-      let LLVMModule _ _ mtrans = cc ^. ccLLVMModule
+      let mtrans = ccLLVMModuleTrans cc
           gimap = Crucible.globalInitMap mtrans
       case Map.lookup symbol gimap of
         Just (g, Right (mt, _)) -> do
@@ -989,8 +990,10 @@ setupLLVMCrucibleContext ::
   ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
    LLVMCrucibleContext arch -> TopLevel a) ->
   TopLevel a
-setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
+setupLLVMCrucibleContext bic opts lm action = do
   halloc <- getHandleAlloc
+  let llvm_mod = modAST lm
+  let mtrans = modTrans lm
   let ctx = mtrans^.Crucible.transContext
   smt_array_memory_model_enabled <- gets rwSMTArrayMemoryModel
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $

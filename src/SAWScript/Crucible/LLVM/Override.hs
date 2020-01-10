@@ -1251,7 +1251,7 @@ invalidateMutableAllocs opts sc cc cs = do
              ]
            )
         ) <$> Map.elems (Map.intersectionWith (,) sub mutableAllocs)
-      LLVMModule _ _ mtrans = cc ^. ccLLVMModule
+      mtrans = ccLLVMModuleTrans cc
       gimap = Crucible.globalInitMap mtrans
       mutableGlobals = cs ^. MS.csGlobalAllocs
 
