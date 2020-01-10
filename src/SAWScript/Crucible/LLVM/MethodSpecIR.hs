@@ -216,6 +216,11 @@ data LLVMModule arch =
   , _modAST :: L.Module
   , _modTrans :: CL.ModuleTranslation arch
   }
+-- NOTE: Type 'LLVMModule' is exported as an abstract type, and we
+-- maintain the invariant that the 'FilePath', 'Module', and
+-- 'ModuleTranslation' fields are all consistent with each other;
+-- 'loadLLVMModule' is the only function that is allowed to create
+-- values of type 'LLVMModule'.
 
 -- | The file path that the LLVM module was loaded from.
 modFilePath :: LLVMModule arch -> FilePath
