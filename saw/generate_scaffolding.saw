@@ -1,6 +1,3 @@
 enable_experimental;
-write_coq_sawcore_prelude                              "../coq/generated/SAWCorePrelude.v";
-write_coq_cryptol_primitives_for_sawcore               "../coq/generated/CryptolPrimitivesForSAWCore.v";
-write_coq_cryptol_module                 "Cryptol.cry" "../coq/generated/CryptolPrelude.v";
-// Ideally, we don't need to load Cryptol.cry, but it is not currently exposed
-// Additionally, this trick only works if Cryptol.cry is in this directory!
+write_coq_sawcore_prelude                "../coq/generated/SAWCorePrelude.v";
+write_coq_cryptol_primitives_for_sawcore "../coq/generated/CryptolPrimitivesForSAWCore.v";

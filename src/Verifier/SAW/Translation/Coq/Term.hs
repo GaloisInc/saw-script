@@ -385,9 +385,10 @@ translateTerm t = withLocalLocalEnvironment $ do
 
   -- Constants come with a body
     (unwrapTermF -> Constant n body) -> do
-      let renamed = translateConstant n
+      configuration <- ask
+      let renamed = translateConstant (notations configuration) n
       alreadyTranslatedDecls <- getNamesOfAllDeclarations
-      definitionsToSkip <- skipDefinitions <$> ask
+      let definitionsToSkip = skipDefinitions configuration
       if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
         then Coq.Var <$> pure renamed
         else do

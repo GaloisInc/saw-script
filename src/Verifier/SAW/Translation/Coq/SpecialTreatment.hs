@@ -150,11 +150,6 @@ cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
   , ("unsafeAssert_same_Num", skip) -- unsafe and unused
   ]
 
-  ++
-  [ ("==>", rename "impliesBool")
-  , ("\\/", rename "orBool")
-  ]
-
 specialTreatmentMap :: TranslationConfiguration -> Map.Map ModuleName (Map.Map String IdentSpecialTreatment)
 specialTreatmentMap configuration = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
@@ -406,19 +401,14 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("letRecFuns", skip)
   ]
 
-constantsRenamingMap :: Map.Map String String
-constantsRenamingMap =
-  Map.fromList
-  [ ("/\\", "andBool")
-  , ("==>", "impliesBool")
-  , ("\\/", "orBool")
-  ]
+constantsRenamingMap :: [(String, String)] -> Map.Map String String
+constantsRenamingMap notations = Map.fromList notations
 
 -- TODO: Now that ExtCns contains a unique identifier, it might make sense
 -- to check those here to avoid some captures?
-translateConstant :: ExtCns e -> String
-translateConstant (EC {..}) =
-  Map.findWithDefault ecName ecName constantsRenamingMap
+translateConstant :: [(String, String)] -> ExtCns e -> String
+translateConstant notations (EC {..}) =
+  Map.findWithDefault ecName ecName (constantsRenamingMap notations)
 
 zipSnippet :: String
 zipSnippet = [i|
