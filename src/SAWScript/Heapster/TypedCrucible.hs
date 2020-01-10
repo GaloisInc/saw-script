@@ -966,12 +966,13 @@ getVarTypes :: MapRList Name tps ->
 getVarTypes MNil = greturn CruCtxNil
 getVarTypes (xs :>: x) = CruCtxCons <$> getVarTypes xs <*> getVarType x
 
--- | Remember the type of a free variable
+-- | Remember the type of a free variable, and ensure that it has a permission
 setVarType :: ExprVar a -> TypeRepr a ->
               PermCheckM ext cblocks blocks ret args r ps r ps ()
 setVarType x tp =
   gmodify $ \st ->
-  st { stVarTypes = NameMap.insert x tp (stVarTypes st) }
+  st { stCurPerms = initVarPerm x (stCurPerms st),
+       stVarTypes = NameMap.insert x tp (stVarTypes st) }
 
 -- | Remember the types of a sequence of free variables
 setVarTypes :: MapRList Name tps -> CruCtx tps ->
@@ -1566,8 +1567,9 @@ tcBlock :: PermCheckExtC ext => Member blocks (CtxToRList args) ->
            TopPermCheckM ext cblocks blocks ret
            (TypedBlock ext blocks ret (CtxToRList args))
 tcBlock memb blk =
-  TypedBlock <$> mapM (tcBlockEntry blk) <$> blockInfoEntries <$>
-  mapRListLookup memb <$> stBlockInfo <$> unClosed <$> get
+  do entries <- blockInfoEntries <$> mapRListLookup memb <$>
+       stBlockInfo <$> unClosed <$> get
+     TypedBlock <$> mapM (tcBlockEntry blk) entries
 
 -- | Type-check a Crucible block and put its translation into the 'BlockInfo'
 -- for that block

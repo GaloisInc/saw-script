@@ -2377,6 +2377,18 @@ setVarPerm x p =
     ValPerm_True -> p
     _ -> error "setVarPerm: permission for variable already set!"
 
+-- | Initialize the primary permission of a variable to @true@ if it is not set
+initVarPerm :: ExprVar a -> PermSet ps -> PermSet ps
+initVarPerm x =
+  over varPermMap $ \nmap ->
+  if NameMap.member x nmap then nmap else NameMap.insert x ValPerm_True nmap
+
+-- | Set the primary permissions for a sequence of variables to @true@
+initVarPerms :: MapRList Name (as :: RList CrucibleType) -> PermSet ps ->
+                PermSet ps
+initVarPerms MNil perms = perms
+initVarPerms (ns :>: n) perms = initVarPerms ns $ initVarPerm n perms
+
 -- | The lens for a particular distinguished perm, checking that it is indeed
 -- associated with the given variable
 distPerm :: Member ps a -> ExprVar a -> Lens' (PermSet ps) (ValuePerm a)
