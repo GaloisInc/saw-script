@@ -86,6 +86,9 @@ instance MonadStrongBind Identity where
 class NuMatching s => BindState s where
   bindState :: Mb ctx s -> s
 
+instance BindState (Closed s) where
+  bindState = mbLift
+
 instance (MonadBind m, BindState s) => MonadBind (StateT s m) where
   mbM mb_m = StateT $ \s ->
     mbM (fmap (\m -> runStateT m s) mb_m) >>= \mb_as ->

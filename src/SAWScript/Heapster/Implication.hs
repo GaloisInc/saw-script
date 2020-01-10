@@ -517,6 +517,21 @@ $(mkNuMatching [t| forall ps_in ps_outs. PermImpl1 ps_in ps_outs |])
 $(mkNuMatching [t| forall r bs_pss. NuMatchingAny1 r => MbPermImpls r bs_pss |])
 $(mkNuMatching [t| forall r ps. NuMatchingAny1 r => PermImpl r ps |])
 
+-- FIXME: no longer needed...?
+traversePermImpl :: MonadStrongBind m => (forall ps. r1 ps -> m (r2 ps)) ->
+                    PermImpl r1 ps -> m (PermImpl r2 ps)
+traversePermImpl f (PermImpl_Done r) = PermImpl_Done <$> f r
+traversePermImpl f (PermImpl_Step impl1 mb_impls) =
+  PermImpl_Step impl1 <$> helper f mb_impls
+  where
+    helper :: MonadStrongBind m => (forall ps. r1 ps -> m (r2 ps)) ->
+              MbPermImpls r1 bs_pss -> m (MbPermImpls r2 bs_pss)
+    helper _ MbPermImpls_Nil = return MbPermImpls_Nil
+    helper f (MbPermImpls_Cons mb_impls mb_impl) =
+      do mb_impls' <- helper f mb_impls
+         mb_impl' <- strongMbM (fmap (traversePermImpl f) mb_impl)
+         return (MbPermImpls_Cons mb_impls' mb_impl')
+
 
 -- | Compute the input permissions of a 'SimplImpl' implication
 simplImplIn :: SimplImpl ps_in ps_out -> DistPerms ps_in
@@ -1064,6 +1079,8 @@ gparallel f m1 m2 =
 --
 -- FIXME: figure out how to write this with something like 'gcaptureCC'...? The
 -- problem is that 'gcaptureCC' will not allow us to change the state type...
+--
+-- IDEA: maybe we can do this with gmapRet (const $ return ret)?
 gabortM :: r2 -> GenStateContM s1 r1 s2 r2 a
 gabortM ret = GenStateT $ \_ -> GenContM $ \_ -> ret
 
@@ -1111,47 +1128,48 @@ unextImplState s =
       _implStatePSubst = unextPSubst (_implStatePSubst s) }
 
 -- | The implication monad is the permission monad that uses 'ImplState'
-type ImplM vars r ps_out ps_in =
-  GenStateContM (ImplState vars ps_out) (PermImpl r ps_out)
-  (ImplState vars ps_in) (PermImpl r ps_in)
+type ImplM vars s r ps_out ps_in =
+  GenStateContM (ImplState vars ps_out) (State (Closed s) (PermImpl r ps_out))
+  (ImplState vars ps_in) (State (Closed s) (PermImpl r ps_in))
 
 
 -- | Run an 'ImplM' computation by passing it a @vars@ context, a starting
 -- permission set, and an @r@
-runImplM :: CruCtx vars -> PermSet ps_in -> FunTypeEnv -> r ps_out ->
-            ImplM vars r ps_out ps_in () -> PermImpl r ps_in
-runImplM vars perms env r m =
+runImplM :: CruCtx vars -> PermSet ps_in -> FunTypeEnv ->
+            ((a, ImplState vars ps_out) -> State (Closed s) (r ps_out)) ->
+            ImplM vars s r ps_out ps_in a -> State (Closed s) (PermImpl r ps_in)
+runImplM vars perms env k m =
   runGenContM (runGenStateT m (mkImplState vars perms env))
-  (const $ PermImpl_Done r)
+  (\as -> PermImpl_Done <$> k as)
 
 -- | Look up the current partial substitution
-getPSubst :: ImplM vars r ps ps (PartialSubst vars)
+getPSubst :: ImplM vars s r ps ps (PartialSubst vars)
 getPSubst = view implStatePSubst <$> gget
 
 -- | Apply the current partial substitution to an expression, raising an error
 -- with the given string if the partial substitution is not complete enough
 partialSubstForceM :: Substable PartialSubst a Maybe => Mb vars a -> String ->
-                      ImplM vars r ps ps a
+                      ImplM vars s r ps ps a
 partialSubstForceM mb_e msg =
   getPSubst >>>= \psubst ->
   greturn (partialSubstForce psubst mb_e msg)
 
 -- | Modify the current partial substitution
 modifyPSubst :: (PartialSubst vars -> PartialSubst vars) ->
-                ImplM vars r ps ps ()
+                ImplM vars s r ps ps ()
 modifyPSubst f = gmodify (over implStatePSubst f)
 
 -- | Set the value for an existential variable in the current substitution,
 -- raising an error if it is already set
-setVarM :: Member vars a -> PermExpr a -> ImplM vars r ps ps ()
+setVarM :: Member vars a -> PermExpr a -> ImplM vars s r ps ps ()
 setVarM x e = modifyPSubst (psubstSet x e)
 
 -- | Run an implication computation with one more existential variable,
 -- returning the optional expression it was bound to in the current partial
 -- substitution when it is done
 withExtVarsM :: KnownRepr TypeRepr tp =>
-                ImplM (vars :> tp) r ps1 ps2 a ->
-                ImplM vars r ps1 ps2 (a, Maybe (PermExpr tp))
+                ImplM (vars :> tp) s r ps1 ps2 a ->
+                ImplM vars s r ps1 ps2 (a, Maybe (PermExpr tp))
 withExtVarsM m =
   withAltStateM extImplState (const unextImplState) $
   (m >>>= \a ->
@@ -1160,7 +1178,7 @@ withExtVarsM m =
 
 -- | Set the mu recursion flag to indicate recursion on the right, or fail if we
 -- are already recursing on the left
-implSetMuRecurseRightM :: ImplM vars r ps ps ()
+implSetMuRecurseRightM :: ImplM vars s r ps ps ()
 implSetMuRecurseRightM =
   gget >>>= \s ->
   case view implStateMuRecurseFlag s of
@@ -1169,7 +1187,7 @@ implSetMuRecurseRightM =
 
 -- | Set the mu recursion flag to indicate recursion on the left, or fail if we
 -- are already recursing on the right
-implSetMuRecurseLeftM :: ImplM vars r ps ps ()
+implSetMuRecurseLeftM :: ImplM vars s r ps ps ()
 implSetMuRecurseLeftM =
   gget >>>= \s ->
   case view implStateMuRecurseFlag s of
@@ -1177,38 +1195,38 @@ implSetMuRecurseLeftM =
     _ -> gmodify (set implStateMuRecurseFlag (Just (Left ())))
 
 -- | Get the current 'PermSet'
-getPerms :: ImplM vars r ps ps (PermSet ps)
+getPerms :: ImplM vars s r ps ps (PermSet ps)
 getPerms = view implStatePerms <$> gget
 
 -- | Look up the current permission for a given variable
-getPerm :: ExprVar a -> ImplM vars r ps ps (ValuePerm a)
+getPerm :: ExprVar a -> ImplM vars s r ps ps (ValuePerm a)
 getPerm x = view (implStatePerms . varPerm x) <$> gget
 
 -- | Get the pointer permissions for a variable @x@, assuming @x@ has LLVM
 -- pointer permissions
 getLLVMPtrPerms :: ExprVar (LLVMPointerType w) ->
-                   ImplM vars r ps ps [LLVMPtrPerm w]
+                   ImplM vars s r ps ps [LLVMPtrPerm w]
 getLLVMPtrPerms x =
   view (implStatePerms . varPerm x . llvmPtrPerms) <$> gget
 
 -- | Get the distinguished permission stack
-getDistPerms :: ImplM vars r ps ps (DistPerms ps)
+getDistPerms :: ImplM vars s r ps ps (DistPerms ps)
 getDistPerms = view (implStatePerms . distPerms) <$> gget
 
 -- | Get the top permission in the stack
-getTopDistPerm :: ExprVar a -> ImplM vars r (ps :> a) (ps :> a) (ValuePerm a)
+getTopDistPerm :: ExprVar a -> ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
 getTopDistPerm x = view (implStatePerms . topDistPerm x) <$> gget
 
 -- | Set the current 'PermSet'
-setPerms :: PermSet ps -> ImplM vars r ps ps ()
+setPerms :: PermSet ps -> ImplM vars s r ps ps ()
 setPerms perms = modify $ set (implStatePerms) perms
 
 -- | Set the current permission for a given variable
-setPerm :: ExprVar a -> ValuePerm a -> ImplM vars r ps ps ()
+setPerm :: ExprVar a -> ValuePerm a -> ImplM vars s r ps ps ()
 setPerm x p = modify $ set (implStatePerms . varPerm x) p
 
 -- | Get the current lifetime
-getCurLifetime :: ImplM vars r ps ps (ExprVar LifetimeType)
+getCurLifetime :: ImplM vars s r ps ps (ExprVar LifetimeType)
 getCurLifetime =
   (view implStateLifetimes <$> gget) >>>= \ls ->
   case ls of
@@ -1216,11 +1234,11 @@ getCurLifetime =
     [] -> error "getCurLifetime: no current lifetime!"
 
 -- | Push a lifetime onto the lifetimes stack
-pushLifetime :: ExprVar LifetimeType -> ImplM vars r ps ps ()
+pushLifetime :: ExprVar LifetimeType -> ImplM vars s r ps ps ()
 pushLifetime l = gmodify (over implStateLifetimes (l:))
 
 -- | Pop a lifetime off of the lifetimes stack
-popLifetime :: ImplM vars r ps ps (ExprVar LifetimeType)
+popLifetime :: ImplM vars s r ps ps (ExprVar LifetimeType)
 popLifetime =
   getCurLifetime >>>= \l ->
   gmodify (over implStateLifetimes tail) >>>
@@ -1228,7 +1246,7 @@ popLifetime =
 
 -- | Push (as in 'implPushM') the permission for the current lifetime
 implPushCurLifetimePermM :: ExprVar LifetimeType ->
-                            ImplM vars r (ps :> LifetimeType) ps ()
+                            ImplM vars s r (ps :> LifetimeType) ps ()
 implPushCurLifetimePermM l =
   getCurLifetime >>>= \l' ->
   (if l == l' then greturn () else
@@ -1240,7 +1258,7 @@ implPushCurLifetimePermM l =
 
 -- | Pop (as in 'implPushM') the permission for the current lifetime
 implPopCurLifetimePermM :: ExprVar LifetimeType ->
-                           ImplM vars r ps (ps :> LifetimeType) ()
+                           ImplM vars s r ps (ps :> LifetimeType) ()
 implPopCurLifetimePermM l =
   getCurLifetime >>>= \l' ->
   (if l == l' then greturn () else
@@ -1254,7 +1272,7 @@ implPopCurLifetimePermM l =
 -- | Map the final return value and the current permissions
 gmapRetAndPerms :: (PermSet ps2 -> PermSet ps1) ->
                    (PermImpl r ps1 -> PermImpl r ps2) ->
-                   ImplM vars r ps1 ps2 ()
+                   ImplM vars s r ps1 ps2 ()
 gmapRetAndPerms f_perms f_impl =
   gmapRetAndState (over implStatePerms f_perms) f_impl
 -}
@@ -1265,38 +1283,41 @@ gmapRetAndPerms f_perms f_impl =
 ----------------------------------------------------------------------
 
 -- | An 'ImplM' continuation for a permission implication rule
-newtype Impl1Cont vars r ps_r a bs_ps =
-  Impl1Cont (MapRList Name (Fst bs_ps) -> ImplM vars r ps_r (Snd bs_ps) a)
+newtype Impl1Cont vars s r ps_r a bs_ps =
+  Impl1Cont (MapRList Name (Fst bs_ps) -> ImplM vars s r ps_r (Snd bs_ps) a)
 
 -- | Apply a permission implication rule, with the given continuations in the
 -- possible disjunctive branches of the result
 implApplyImpl1 :: PermImpl1 ps_in ps_outs ->
-                  MapRList (Impl1Cont vars r ps_r a) ps_outs ->
-                  ImplM vars r ps_r ps_in a
+                  MapRList (Impl1Cont vars s r ps_r a) ps_outs ->
+                  ImplM vars s r ps_r ps_in a
 implApplyImpl1 impl1 mb_ms =
   getPerms >>>= \perms ->
-  gmapRet (PermImpl_Step impl1) >>>
+  gmapRet (PermImpl_Step impl1 <$>) >>>
   helper (applyImpl1 impl1 perms) mb_ms
   where
     helper :: MbPermSets ps_outs ->
-              MapRList (Impl1Cont vars r ps_r a) ps_outs ->
-              GenStateContM (ImplState vars ps_r) (PermImpl r ps_r)
-              (ImplState vars ps_in) (MbPermImpls r ps_outs) a
-    helper MbPermSets_Nil _ = gabortM MbPermImpls_Nil
+              MapRList (Impl1Cont vars s r ps_r a) ps_outs ->
+              GenStateContM (ImplState vars ps_r)
+              (State (Closed s) (PermImpl r ps_r))
+              (ImplState vars ps_in)
+              (State (Closed s) (MbPermImpls r ps_outs)) a
+    helper MbPermSets_Nil _ = gabortM (return MbPermImpls_Nil)
     helper (MbPermSets_Cons mbperms mbperm) (args :>: Impl1Cont f) =
-      gparallel MbPermImpls_Cons (helper mbperms args)
-      (gopenBinding id mbperm >>>= \(ns, perms') ->
+      gparallel (\m1 m2 -> MbPermImpls_Cons <$> m1 <*> m2)
+      (helper mbperms args)
+      (gopenBinding strongMbM mbperm >>>= \(ns, perms') ->
         gmodify (set implStatePerms perms') >>>
         f ns)
 
 -- | Terminate the current proof branch with a failure
-implFailM :: ImplM vars r ps_any ps a
+implFailM :: ImplM vars s r ps_any ps a
 implFailM = implApplyImpl1 Impl1_Fail MNil
 
 -- | Produce a branching proof tree that performs the first implication and, if
 -- that one fails, falls back on the second
-implCatchM :: ImplM vars r ps1 ps2 () -> ImplM vars r ps1 ps2 () ->
-              ImplM vars r ps1 ps2 ()
+implCatchM :: ImplM vars s r ps1 ps2 () -> ImplM vars s r ps1 ps2 () ->
+              ImplM vars s r ps1 ps2 ()
 implCatchM m1 m2 =
   implApplyImpl1 Impl1_Catch
   (MNil :>: Impl1Cont (const m1) :>: Impl1Cont (const m2))
@@ -1304,21 +1325,21 @@ implCatchM m1 m2 =
 -- | "Push" all of the permissions in the permission set for a variable, which
 -- should be equal to the supplied permission, after deleting those permissions
 -- from the input permission set. This is like a simple "proof" of @x:p@.
-implPushM :: ExprVar a -> ValuePerm a -> ImplM vars r (ps :> a) ps ()
+implPushM :: ExprVar a -> ValuePerm a -> ImplM vars s r (ps :> a) ps ()
 implPushM x p =
   implApplyImpl1 (Impl1_Push x p) (MNil :>: Impl1Cont (const $ greturn ()))
 
 -- | Pop a permission from the top of the stack back to the primary permission
 -- for a variable, assuming that the primary permission for that variable is
 -- empty, i.e., is the @true@ permission
-implPopM :: ExprVar a -> ValuePerm a -> ImplM vars r ps (ps :> a) ()
+implPopM :: ExprVar a -> ValuePerm a -> ImplM vars s r ps (ps :> a) ()
 implPopM x p =
   implApplyImpl1 (Impl1_Pop x p) (MNil :>: Impl1Cont (const $ greturn ()))
 
 -- | Eliminate a disjunctive permission @x:(p1 \/ p2)@, building proof trees
 -- that proceed with both @x:p1@ and @x:p2@
 implElimOrM :: ExprVar a -> ValuePerm a -> ValuePerm a ->
-               ImplM vars r (ps :> a) (ps :> a) ()
+               ImplM vars s r (ps :> a) (ps :> a) ()
 implElimOrM x p1 p2 =
   implApplyImpl1 (Impl1_ElimOr x p1 p2)
   (MNil :>: Impl1Cont (const $ greturn ()) :>: Impl1Cont (const $ greturn ()))
@@ -1327,14 +1348,14 @@ implElimOrM x p1 p2 =
 -- permission set
 implElimExistsM :: KnownRepr TypeRepr tp =>
                    ExprVar a -> Binding tp (ValuePerm a) ->
-                   ImplM vars r (ps :> a) (ps :> a) ()
+                   ImplM vars s r (ps :> a) (ps :> a) ()
 implElimExistsM x p =
   implApplyImpl1 (Impl1_ElimExists x p)
   (MNil :>: Impl1Cont (const $ greturn ()))
 
 -- | Apply a simple implication rule to the top permissions on the stack
 implSimplM :: Proxy ps -> SimplImpl ps_in ps_out ->
-              ImplM vars r (ps :++: ps_out) (ps :++: ps_in) ()
+              ImplM vars s r (ps :++: ps_out) (ps :++: ps_in) ()
 implSimplM prx simpl =
   implApplyImpl1 (Impl1_Simpl simpl prx)
   (MNil :>: Impl1Cont (const $ greturn ()))
@@ -1345,7 +1366,7 @@ implSimplM prx simpl =
 -- already has the form @eq(y)@, then just return @y@.
 implElimLLVMFieldContentsM ::
   (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
-  ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w)
   (ExprVar (LLVMPointerType w))
 implElimLLVMFieldContentsM _ fp
   | ValPerm_Eq (PExpr_Var y) <- llvmFieldContents fp
@@ -1360,23 +1381,23 @@ implElimLLVMFieldContentsM x fp =
 -- 'implFailM' if the proposition does not hold
 implTryProveBVProp :: (1 <= w, KnownNat w) =>
                       ExprVar (LLVMPointerType w) -> BVProp w ->
-                      ImplM vars r (ps :> LLVMPointerType w) ps ()
+                      ImplM vars s r (ps :> LLVMPointerType w) ps ()
 implTryProveBVProp x p =
   implApplyImpl1 (Impl1_TryProveBVProp x p)
   (MNil :>: Impl1Cont (const $ greturn ()))
 
 -- | Drop a permission from the top of the stack
-implDropM :: ExprVar a -> ValuePerm a -> ImplM vars r ps (ps :> a) ()
+implDropM :: ExprVar a -> ValuePerm a -> ImplM vars s r ps (ps :> a) ()
 implDropM x p = implSimplM Proxy (SImpl_Drop x p)
 
 -- | Swap the top two permissions on the top of the stack
 implSwapM :: ExprVar a -> ValuePerm a -> ExprVar b -> ValuePerm b ->
-             ImplM vars r (ps :> b :> a) (ps :> a :> b) ()
+             ImplM vars s r (ps :> b :> a) (ps :> a :> b) ()
 implSwapM x p1 y p2 = implSimplM Proxy (SImpl_Swap x p1 y p2)
 
 -- | Eliminate disjunctives and existentials on the top of the stack and return
 -- the resulting permission
-elimOrsExistsM :: ExprVar a -> ImplM vars r (ps :> a) (ps :> a) (ValuePerm a)
+elimOrsExistsM :: ExprVar a -> ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
 elimOrsExistsM x =
   getTopDistPerm x >>>= \p ->
   case p of
@@ -1386,30 +1407,30 @@ elimOrsExistsM x =
     _ -> greturn p
 
 -- | Introduce a proof of @x:eq(x)@ onto the top of the stack
-introEqReflM :: ExprVar a -> ImplM vars r (ps :> a) ps ()
+introEqReflM :: ExprVar a -> ImplM vars s r (ps :> a) ps ()
 introEqReflM x = implSimplM Proxy (SImpl_IntroEqRefl x)
 
 -- | Copy an @x:eq(e)@ permission on the top of the stack
 introEqCopyM :: ExprVar a -> PermExpr a ->
-                ImplM vars r (ps :> a :> a) (ps :> a) ()
+                ImplM vars s r (ps :> a :> a) (ps :> a) ()
 introEqCopyM x e = implSimplM Proxy (SImpl_CopyEq x e)
 
 -- | Cast a @y:p@ perm on the top of the stack to an @x:p@ perm using an
 -- @x:eq(y)@ just below it on the stack
 introCastM :: ExprVar a -> ExprVar a -> ValuePerm a ->
-              ImplM vars r (ps :> a) (ps :> a :> a) ()
+              ImplM vars s r (ps :> a) (ps :> a :> a) ()
 introCastM x y p = implSimplM Proxy (SImpl_Cast x y p)
 
 -- | Introduce a proof of @x:true@ onto the top of the stack, which is the same
 -- as an empty conjunction
-introConjM :: ExprVar a -> ImplM vars r (ps :> a) ps ()
+introConjM :: ExprVar a -> ImplM vars s r (ps :> a) ps ()
 introConjM x = implSimplM Proxy (SImpl_IntroConj x)
 
 -- | Delete the @i@th atomic permission in the conjunct on the top of the stack,
 -- assuming that conjunction contains the given atomic permissions, and put the
 -- extracted atomic permission just below the top of the stack
 implExtractConjM :: ExprVar a -> [AtomicPerm a] -> Int ->
-                    ImplM vars r (ps :> a :> a) (ps :> a) ()
+                    ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implExtractConjM x ps i = implSimplM Proxy (SImpl_ExtractConj x ps i)
 
 -- | Copy @i@th atomic permission in the conjunct on the top of the stack,
@@ -1417,25 +1438,25 @@ implExtractConjM x ps i = implSimplM Proxy (SImpl_ExtractConj x ps i)
 -- given conjunct is copyable, and put the copied atomic permission just below
 -- the top of the stack
 implCopyConjM :: ExprVar a -> [AtomicPerm a] -> Int ->
-                 ImplM vars r (ps :> a :> a) (ps :> a) ()
+                 ImplM vars s r (ps :> a :> a) (ps :> a) ()
 implCopyConjM x ps i = implSimplM Proxy (SImpl_CopyConj x ps i)
 
 -- | Insert an atomic permission below the top of the stack at the @i@th
 -- position in the conjunct on the top of the stack, where @i@ must be between
 implInsertConjM :: ExprVar a -> AtomicPerm a -> [AtomicPerm a] -> Int ->
-                   ImplM vars r (ps :> a) (ps :> a :> a) ()
+                   ImplM vars s r (ps :> a) (ps :> a :> a) ()
 implInsertConjM x p ps i = implSimplM Proxy (SImpl_InsertConj x p ps i)
 
 -- | Apply the left or-introduction rule to the top of the permission stack,
 -- changing it from @x:p1@ to @x:(p1 \/ p2)@
 introOrLM :: ExprVar a -> ValuePerm a -> ValuePerm a ->
-             ImplM vars r (ps :> a) (ps :> a) ()
+             ImplM vars s r (ps :> a) (ps :> a) ()
 introOrLM x p1 p2 = implSimplM Proxy (SImpl_IntroOrL x p1 p2)
 
 -- | Apply the right or-introduction rule to the top of the permission stack,
 -- changing it from @x:p2@ to @x:(p1 \/ p2)@
 introOrRM :: ExprVar a -> ValuePerm a -> ValuePerm a ->
-             ImplM vars r (ps :> a) (ps :> a) ()
+             ImplM vars s r (ps :> a) (ps :> a) ()
 introOrRM x p1 p2 = implSimplM Proxy (SImpl_IntroOrR x p1 p2)
 
 -- | Apply existential introduction to the top of the permission stack, changing
@@ -1445,7 +1466,7 @@ introOrRM x p1 p2 = implSimplM Proxy (SImpl_IntroOrR x p1 p2)
 -- permission on the top of the stack really equals @[e/x]p@?
 introExistsM :: KnownRepr TypeRepr tp => ExprVar a -> PermExpr tp ->
                 Binding tp (ValuePerm a) ->
-                ImplM vars r (ps :> a) (ps :> a) ()
+                ImplM vars s r (ps :> a) (ps :> a) ()
 introExistsM x e p_body = implSimplM Proxy (SImpl_IntroExists x e p_body)
 
 -- | Cast a proof of @x:eq(LLVMWord(e1))@ to @x:eq(LLVMWord(e2))@ on the top of
@@ -1453,7 +1474,7 @@ introExistsM x e p_body = implSimplM Proxy (SImpl_IntroExists x e p_body)
 castLLVMWordEqM ::
   (1 <= w, KnownNat w) =>
   ExprVar (LLVMPointerType w) -> PermExpr (BVType w) -> PermExpr (BVType w) ->
-  ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 castLLVMWordEqM x e1 e2 =
   implTryProveBVProp x (BVProp_Eq e1 e2) >>>
   implSimplM Proxy (SImpl_CastLLVMWord x e1 e2)
@@ -1463,7 +1484,7 @@ castLLVMWordEqM x e1 e2 =
 castLLVMPtrM :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
                 [AtomicPerm (LLVMPointerType w)] -> PermExpr (BVType w) ->
                 ExprVar (LLVMPointerType w) ->
-                ImplM vars r (ps :> LLVMPointerType w)
+                ImplM vars s r (ps :> LLVMPointerType w)
                 (ps :> LLVMPointerType w :> LLVMPointerType w) ()
 castLLVMPtrM y ps off x = implSimplM Proxy (SImpl_CastLLVMPtr y ps off x)
 
@@ -1471,7 +1492,7 @@ castLLVMPtrM y ps off x = implSimplM Proxy (SImpl_CastLLVMPtr y ps off x)
 -- by first proving that @e1=e2@
 castLLVMFreeM :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
                  PermExpr (BVType w) -> PermExpr (BVType w) ->
-                 ImplM vars r (ps :> LLVMPointerType w)
+                 ImplM vars s r (ps :> LLVMPointerType w)
                  (ps :> LLVMPointerType w) ()
 castLLVMFreeM x e1 e2 =
   implTryProveBVProp x (BVProp_Eq e1 e2) >>>
@@ -1479,18 +1500,18 @@ castLLVMFreeM x e1 e2 =
 
 -- | Build a proof of @mu X.p@ from one of @[mu X.p/X]p@
 implFoldMuM :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
-               ImplM vars r (ps :> a) (ps :> a) ()
+               ImplM vars s r (ps :> a) (ps :> a) ()
 implFoldMuM x p_body = implSimplM Proxy (SImpl_FoldMu x p_body)
 
 -- | Build a proof of @[mu X.p/X]p@ from one of @mu X.p@
 implUnfoldMuM :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
-                 ImplM vars r (ps :> a) (ps :> a) ()
+                 ImplM vars s r (ps :> a) (ps :> a) ()
 implUnfoldMuM x p_body = implSimplM Proxy (SImpl_UnfoldMu x p_body)
 
 -- | FIXME: document this!
 implSplitLifetimeM :: KnownRepr TypeRepr a => ExprVar a -> ValuePerm a ->
                       ExprVar LifetimeType ->
-                      ImplM vars r (ps :> a :> LifetimeType)
+                      ImplM vars s r (ps :> a :> LifetimeType)
                       (ps :> a :> LifetimeType) ()
 implSplitLifetimeM x p l =
   getTopDistPerm l >>>= \lp ->
@@ -1504,7 +1525,7 @@ implSplitLifetimeM x p l =
 introLLVMFieldContentsM ::
   ExprVar (LLVMPointerType w) ->
   ExprVar (LLVMPointerType w) ->
-  ImplM vars r (ps :> LLVMPointerType w)
+  ImplM vars s r (ps :> LLVMPointerType w)
   (ps :> LLVMPointerType w :> LLVMPointerType w) ()
 introLLVMFieldContentsM x y =
   getDistPerms >>>= \ps ->
@@ -1522,7 +1543,7 @@ introLLVMFieldContentsM x y =
 
 
 -- | Call 'implPushM' for multiple @x:p@ permissions
-implPushMultiM :: DistPerms ps -> ImplM vars r ps RNil ()
+implPushMultiM :: DistPerms ps -> ImplM vars s r ps RNil ()
 implPushMultiM DistPermsNil = greturn ()
 implPushMultiM (DistPermsCons ps x p) =
   implPushMultiM ps >>> implPushM x p
@@ -1536,7 +1557,7 @@ implPushMultiM (DistPermsCons ps x p) =
 -- permission @x_p@ for @x@, where @x_p@ is the first permission argument and
 -- @p@ is the second
 recombinePerm :: ExprVar a -> ValuePerm a -> ValuePerm a ->
-                 ImplM RNil r as (as :> a) ()
+                 ImplM RNil s r as (as :> a) ()
 recombinePerm x _ p@ValPerm_True = implDropM x p
 recombinePerm x ValPerm_True p = implPopM x p
 recombinePerm x x_p@(ValPerm_Eq (PExpr_Var y)) p =
@@ -1575,7 +1596,7 @@ recombinePerm x x_p@(ValPerm_Conj x_ps) (ValPerm_Conj (p:ps)) =
 recombinePerm x _ p = implDropM x p
 
 -- | Recombine the permissions on the stack back into the permission set
-recombinePerms :: DistPerms ps -> ImplM RNil r RNil ps ()
+recombinePerms :: DistPerms ps -> ImplM RNil s r RNil ps ()
 recombinePerms DistPermsNil = greturn ()
 recombinePerms (DistPermsCons ps' x p) =
   getPerm x >>>= \x_p -> recombinePerm x x_p p >>> recombinePerms ps'
@@ -1588,16 +1609,16 @@ recombinePerms (DistPermsCons ps' x p) =
 -- | Build a proof on the top of the stack that @x:eq(e)@. Assume that all @x@
 -- permissions are on the top of the stack and given by argument @p@, and pop
 -- them back to the primary permission for @x@ at the end of the proof.
-proveVarEq :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
-              Mb vars (PermExpr a) -> ImplM vars r (ps :> a) (ps :> a) ()
+proveVarEq :: ExprVar a -> ValuePerm a ->
+              Mb vars (PermExpr a) -> ImplM vars s r (ps :> a) (ps :> a) ()
 proveVarEq x p mb_e =
   getPSubst >>>= \psubst ->
   proveVarEqH x p psubst mb_e
 
 -- | Main helper function for 'proveVarEq'
-proveVarEqH :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+proveVarEqH :: ExprVar a -> ValuePerm a ->
                PartialSubst vars -> Mb vars (PermExpr a) ->
-               ImplM vars r (ps :> a) (ps :> a) ()
+               ImplM vars s r (ps :> a) (ps :> a) ()
 
 -- Prove x:eq(z) for evar z by setting z=x
 proveVarEqH x p psubst [nuP| PExpr_Var z |]
@@ -1653,10 +1674,10 @@ proveVarEqH _ _ _ _ = implFailM
 -- the top of the stack, and ensuring that any remaining permissions for @x@ get
 -- popped back to the primary permissions for @x@
 proveVarLLVMField ::
-  (1 <= w, KnownNat w, NuMatchingAny1 r) => ExprVar (LLVMPointerType w) ->
+  (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
   [AtomicPerm (LLVMPointerType w)] -> Int ->
   PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
-  ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 proveVarLLVMField x ps i off mb_fp =
   implExtractConjM x ps i >>>
   let ps_rem = take i ps ++ drop (i+1) ps in
@@ -1675,10 +1696,10 @@ proveVarLLVMField x ps i off mb_fp =
 
 -- | Cast the offset, change the lifetime if needed, and prove the contents
 proveVarLLVMFieldH ::
-  (1 <= w, KnownNat w, NuMatchingAny1 r) =>
+  (1 <= w, KnownNat w) =>
   ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
   PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
-  ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 proveVarLLVMFieldH x fp off' mb_fp =
   -- Step 1: cast the field offset to off'
   implTryProveBVProp x (BVProp_Eq (llvmFieldOffset fp) off') >>>
@@ -1717,10 +1738,10 @@ proveVarLLVMFieldH x fp off' mb_fp =
 -- a single atomic permission or @true@. The field permission and remaining
 -- atomic permission (if any) are the return values of this function.
 extractNeededLLVMFieldPerm ::
-  NuMatchingAny1 r => ExprVar (LLVMPointerType w) ->
+  ExprVar (LLVMPointerType w) ->
   AtomicPerm (LLVMPointerType w) ->
   PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
-  ImplM vars r (ps :> LLVMPointerType w :> LLVMPointerType w)
+  ImplM vars s r (ps :> LLVMPointerType w :> LLVMPointerType w)
   (ps :> LLVMPointerType w)
   (LLVMFieldPerm w, Maybe (AtomicPerm (LLVMPointerType w)))
 
@@ -1784,10 +1805,10 @@ extractNeededLLVMFieldPerm _ (Perm_LLVMFree _) _ _ = implFailM
 ----------------------------------------------------------------------
 
 proveVarLLVMArray ::
-  NuMatchingAny1 r => ExprVar (LLVMPointerType w) ->
+  ExprVar (LLVMPointerType w) ->
   [AtomicPerm (LLVMPointerType w)] -> Int ->
   PermExpr (BVType w) -> Mb vars (LLVMArrayPerm w) ->
-  ImplM vars r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
+  ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 proveVarLLVMArray x ps i off mb_ap =
   error "FIXME HERE NOW"
 
@@ -1809,9 +1830,9 @@ isLLVMArrayMatch off (Perm_LLVMArray ap) =
   bvInRange off (llvmArrayRangeBytes ap)
 isLLVMArrayMatch _ _ = False
 
-proveVarAtomicImpl :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
+proveVarAtomicImpl :: ExprVar a -> [AtomicPerm a] ->
                       Mb vars (AtomicPerm a) ->
-                      ImplM vars r (ps :> a) (ps :> a) ()
+                      ImplM vars s r (ps :> a) (ps :> a) ()
 
 proveVarAtomicImpl x ps [nuP| Perm_LLVMField mb_fp |] =
   partialSubstForceM (fmap llvmFieldOffset mb_fp)
@@ -1908,9 +1929,9 @@ proveVarAtomicImpl _ _ _ = implFailM
 -- | Prove @x:(p1 * ... * pn) |- x:(p1' * ... * pm')@ assuming that the LHS
 -- conjunction is on the top of the stack, and push any leftover permissions for
 -- @x@ back to the primary permissions for @x@
-proveVarConjImpl :: NuMatchingAny1 r => ExprVar a -> [AtomicPerm a] ->
+proveVarConjImpl :: ExprVar a -> [AtomicPerm a] ->
                     Mb vars [AtomicPerm a] ->
-                    ImplM vars r (ps :> a) (ps :> a) ()
+                    ImplM vars s r (ps :> a) (ps :> a) ()
 proveVarConjImpl x ps [nuP| [] |] =
   implPopM x (ValPerm_Conj ps) >>> introConjM x
 proveVarConjImpl x ps [nuP| mb_p : mb_ps |] =
@@ -1928,8 +1949,8 @@ proveVarConjImpl x ps [nuP| mb_p : mb_ps |] =
 ----------------------------------------------------------------------
 
 -- | Prove @x:p'@, where @p@ may have existentially-quantified variables in it
-proveVarImpl :: NuMatchingAny1 r => ExprVar a -> Mb vars (ValuePerm a) ->
-                ImplM vars r (ps :> a) ps ()
+proveVarImpl :: ExprVar a -> Mb vars (ValuePerm a) ->
+                ImplM vars s r (ps :> a) ps ()
 proveVarImpl x mb_p =
   getPerm x >>>= \p ->
   implPushM x p >>>
@@ -1938,9 +1959,9 @@ proveVarImpl x mb_p =
 -- | Prove @x:p'@ assuming that the primary permissions for @x@ have all been
 -- pushed to the top of the stack and are equal to @p@. Pop the remaining
 -- permissions for @x@ back to its primary permission when we are finished.
-proveVarImplH :: NuMatchingAny1 r => ExprVar a -> ValuePerm a ->
+proveVarImplH :: ExprVar a -> ValuePerm a ->
                  Mb vars (ValuePerm a) ->
-                 ImplM vars r (ps :> a) (ps :> a) ()
+                 ImplM vars s r (ps :> a) (ps :> a) ()
 
 -- Prove x:eq(e) by calling proveVarEq; note that we do not eliminate
 -- disjunctive permissions first because some trivial equalities do not require
@@ -2086,15 +2107,15 @@ funPermExDistIns fun_perm args l =
 -}
 
 -- | Prove a list of existentially-quantified distinguished permissions
-proveVarsImpl :: NuMatchingAny1 r => ExDistPerms vars as ->
-                 ImplM vars r as RNil ()
+proveVarsImpl :: ExDistPerms vars as ->
+                 ImplM vars s r as RNil ()
 proveVarsImpl ExDistPermsNil = return ()
 proveVarsImpl (ExDistPermsCons ps x p) = proveVarsImpl ps >>> proveVarImpl x p
 
 -- | Like 'proveVarsImpl' but the starting permission set need not be empty, and
 -- so is appended to
-proveVarsImplAppend :: NuMatchingAny1 r => ExDistPerms vars ps' ->
-                       ImplM vars r (ps :++: ps') ps ()
+proveVarsImplAppend :: ExDistPerms vars ps' ->
+                       ImplM vars s r (ps :++: ps') ps ()
 proveVarsImplAppend ExDistPermsNil = return ()
 proveVarsImplAppend (ExDistPermsCons ps x p) =
   proveVarsImplAppend ps >>> proveVarImpl x p

@@ -26,6 +26,7 @@ module SAWScript.Heapster.SAWTranslation where
 
 import Data.Maybe
 import Data.Either
+import Data.List
 import Data.Kind
 import GHC.TypeLits
 import qualified Data.Functor.Constant as Constant
@@ -879,6 +880,10 @@ unpackPermCtxTuple top_ps = evalStateT (helper top_ps) where
 data TypedEntryTrans ext blocks ret args =
   TypedEntryTrans (TypedEntry ext blocks ret args) OpenTerm
 
+typedEntryTransEntry :: TypedEntryTrans ext blocks ret args ->
+                        TypedEntry ext blocks ret args
+typedEntryTransEntry (TypedEntryTrans entry _) = entry
+
 -- | A mapping from a block to the SAW functions for each entrypoint
 data TypedBlockTrans ext blocks ret args =
   TypedBlockTrans [TypedEntryTrans ext blocks ret args]
@@ -897,7 +902,15 @@ lookupEntryTrans entryID blkMap =
             TypedEntryTrans (TypedEntry entryID' _ _ _ _ _) _
               | Just Refl <- testEquality entryID entryID' -> trans
             _ -> rest)
-  (error "lookupEntryTrans")
+  (case find (\(TypedEntryTrans entry _) ->
+               typedEntryIndex entry == entryIndex entryID) entries of
+      Just entry ->
+        error ("lookupEntryTrans: type mismatch on entry "
+               ++ show (entryIndex entryID))
+      Nothing ->
+        error ("lookupEntryTrans: entry " ++ show (entryIndex entryID)
+               ++ " not in list: "
+               ++ show (map (typedEntryIndex . typedEntryTransEntry) entries)))
   entries
 
 -- | Translate an entrypoint ID by looking up its SAW function
