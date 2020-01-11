@@ -59,9 +59,7 @@ module Verifier.SAW.Rewriter
 import Control.Applicative ((<$>), pure, (<*>))
 import Data.Foldable (Foldable)
 #endif
-import Control.Applicative (Alternative)
 import Control.Monad (guard)
-import Control.Monad.Fail (MonadFail)
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
@@ -225,7 +223,7 @@ scMatch sc pat term =
              guard (fvy `unionBitSets` fvj == fvj)
              let fixVar t (nm, ty) =
                    do v <- scFreshGlobal sc nm ty
-                      ec <- R.asExtCns v
+                      let Just ec = R.asExtCns v
                       t' <- instantiateVar sc 0 v t
                       return (t', ec)
              let fixVars t [] = return (t, [])
@@ -360,7 +358,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
          -- The type @ti@ is in the de Bruijn context @ctxt1@.
          ti <- scWhnf sc (reverse ctxt !! i)
          -- The datatype parameters are also in context @ctxt1@.
-         (_d, params1, _ixs) <- R.asDataTypeParams ti
+         (_d, params1, _ixs) <- maybe (fail "expected DataTypeApp") return (R.asDataTypeParams ti)
          let ctorRule ctor =
                do -- Compute the argument types @argTs@ in context @ctxt1@.
                   ctorT <- piAppType (ctorType ctor) params1
@@ -402,7 +400,7 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
     piAppType :: Term -> [Term] -> IO Term
     piAppType funtype [] = return funtype
     piAppType funtype (arg : args) =
-      do (_, _, body) <- R.asPi funtype
+      do (_, _, body) <- maybe (fail "expected Pi type") return (R.asPi funtype)
          funtype' <- instantiateVar sc 0 arg body
          piAppType funtype' args
 
@@ -481,19 +479,19 @@ listRules ss = [ r | Left r <- Net.content ss ]
 ----------------------------------------------------------------------
 -- Destructors for terms
 
-asBetaRedex :: (MonadFail m) => R.Recognizer m Term (String, Term, Term, Term)
+asBetaRedex :: R.Recognizer Term (String, Term, Term, Term)
 asBetaRedex t =
     do (f, arg) <- R.asApp t
        (s, ty, body) <- R.asLambda f
        return (s, ty, body, arg)
 
-asPairRedex :: (MonadFail m) => R.Recognizer m Term Term
+asPairRedex :: R.Recognizer Term Term
 asPairRedex t =
     do (u, b) <- R.asPairSelector t
        (x, y) <- R.asPairValue u
        return (if b then y else x)
 
-asRecordRedex :: (MonadFail m) => R.Recognizer m Term Term
+asRecordRedex :: R.Recognizer Term Term
 asRecordRedex t =
     do (x, i) <- R.asRecordSelector t
        ts <- R.asRecordValue x
@@ -505,8 +503,7 @@ asRecordRedex t =
 -- constructor application; specifically, this function recognizes
 --
 -- > RecursorApp d params p_ret cs_fs _ (CtorApp c _ args)
-asIotaRedex :: (MonadFail m, Alternative m) => R.Recognizer m Term
-               (Ident,[Term],Term,[(Ident,Term)],Ident,[Term])
+asIotaRedex :: R.Recognizer Term (Ident, [Term], Term, [(Ident, Term)], Ident, [Term])
 asIotaRedex t =
   do (d, params, p_ret, cs_fs, _, arg) <- R.asRecursorApp t
      (c, _, args) <- asCtorOrNat arg
