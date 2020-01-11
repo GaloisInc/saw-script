@@ -11,7 +11,7 @@ import qualified Data.AIG as AIG
 import Text.LLVM
 import Verifier.SAW.SharedTerm
 
-import SAWScript.Crucible.LLVM.MethodSpecIR (LLVMModule(..))
+import SAWScript.Crucible.LLVM.MethodSpecIR (LLVMModule, modAST, modFilePath)
 
 --import Data.Maybe
 import Data.Either
@@ -31,17 +31,17 @@ getDeclsLLVM ::
   SharedContext ->
   LLVMModule arch ->
   IO (Interaction (Maybe [Decl]))
-getDeclsLLVM _proxy _sc (LLVMModule file mdl _) = do
+getDeclsLLVM _proxy _sc lm = do
     let symStr (Symbol s) = s
     return $ do
       let (untranslateable, translations) =
-            partitionEithers . for (modDefines mdl) $ \def ->
+            partitionEithers . for (modDefines (modAST lm)) $ \def ->
                maybe (Left (symStr (defName def))) Right $
                   symDefineToDecl def
 
       when (not . null $ untranslateable) $ do
          separator ThinSep
-         liftF . flip Warning () $ "No translation for the following signatures in " ++ file ++ ":"
+         liftF . flip Warning () $ "No translation for the following signatures in " ++ modFilePath lm ++ ":"
          bulleted $ map (("'" ++) . (++ "'")) untranslateable
 
       return $ Just translations
