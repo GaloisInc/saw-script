@@ -49,6 +49,9 @@ import Data.Parameterized.Context hiding ((:>), empty, take, view)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
 
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
+
 -- import Data.Parameterized.TraversableFC
 import Lang.Crucible.FunctionHandle
 import Lang.Crucible.Types
@@ -78,6 +81,9 @@ mbMap2 f mb1 mb2 = fmap f mb1 `mbApply` mb2
 
 -- | During type-checking, we convert Crucible registers to variables
 newtype TypedReg tp = TypedReg { typedRegVar :: ExprVar tp }
+
+instance PermPretty (TypedReg tp) where
+  permPrettyM = permPrettyM . typedRegVar
 
 -- | A sequence of typed registers
 data TypedRegs ctx where
@@ -949,7 +955,8 @@ getRegFunPerm freg =
       | Just some_fun_perm <- lookupFunPerm env f ->
           greturn some_fun_perm
     ValPerm_Conj [Perm_Fun fun_perm] -> greturn (SomeFunPerm fun_perm)
-    _ -> stmtFailM
+    _ -> stmtFailM (\i ->
+                     string "No function permission for" <+> permPretty i freg)
 
 -- | Get the current frame pointer on LLVM architectures
 getFramePtr :: PermCheckM (LLVM arch) cblocks blocks ret args r ps r ps
@@ -991,11 +998,19 @@ setVarTypes _ CruCtxNil = greturn ()
 setVarTypes (xs :>: x) (CruCtxCons tps tp) =
   setVarTypes xs tps >>> setVarType x tp
 
+-- | Emit debugging output using the current 'PPInfo'
+stmtTraceM :: (PPInfo -> Doc) ->
+              PermCheckM ext cblocks blocks ret args r ps r ps ()
+stmtTraceM f =
+  (f <$> stPPInfo <$> get) >>>= \doc -> tracePretty doc (greturn ())
+
 -- | Failure in the statement permission-checking monad
-stmtFailM :: PermCheckM ext cblocks blocks ret args r1 ps1
+stmtFailM :: (PPInfo -> Doc) -> PermCheckM ext cblocks blocks ret args r1 ps1
              (TypedStmtSeq ext blocks ret ps2) ps2 a
-stmtFailM = gabortM (return $ TypedImplStmt $
-                     PermImpl_Step Impl1_Fail MbPermImpls_Nil)
+stmtFailM msg =
+  stmtTraceM (\i -> string "Type-checking failure:" <+> msg i) >>>
+  gabortM (return $ TypedImplStmt $
+           PermImpl_Step Impl1_Fail MbPermImpls_Nil)
 
 -- | Smart constructor for applying a function on 'PermImpl's
 applyImplFun :: (PermImpl r ps -> r ps) -> PermImpl r ps -> r ps
@@ -1178,7 +1193,9 @@ endLifetime l =
         emitStmt knownRepr checkerProgramLoc (EndLifetime l
                                               ps ps_list) >>>= \_ ->
         stmtRecombinePerms
-    _ -> stmtFailM
+    _ -> stmtFailM (\i ->
+                     string "endLifetime: no lowned permission for"
+                     <+> permPretty i l)
 
 
 ----------------------------------------------------------------------
@@ -1297,7 +1314,8 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerExpr w blk_reg off_reg) =
       emitLLVMStmt knownRepr loc (ConstructLLVMWord toff_reg) >>>= \x ->
       stmtRecombinePerms >>>
       greturn (addCtxName ctx x)
-    _ -> stmtFailM
+    _ -> stmtFailM (\i -> "LLVM_PointerExpr: Non-constant pointer block: "
+                          <> permPretty i tblk_reg)
 
 -- Type-check the LLVM pointer destructor that gets the block, which is only
 -- valid on LLVM words, i.e., when the block = 0
@@ -1387,7 +1405,8 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
       stmtRecombinePerms >>>
       greturn (addCtxName ctx y)
     _ ->
-      stmtFailM
+      stmtFailM (const $
+                 string "LLVM_Alloca: no frame perms or non-constant size")
 
 -- Type-check a push frame instruction
 tcEmitLLVMStmt arch ctx loc (LLVM_PushFrame _) =
@@ -1412,7 +1431,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
                                     fp fperms del_perms) >>>= \y ->
         gmodify (\st -> st { stExtState = PermCheckExtState_LLVM Nothing }) >>>
         greturn (addCtxName ctx y)
-    _ -> stmtFailM
+    _ -> stmtFailM (const $ string "LLVM_PopFrame: no frame perms")
 
 tcEmitLLVMStmt _arch _ctx _loc _stmt =
   error "tcEmitLLVMStmt: unimplemented statement"
@@ -1584,8 +1603,10 @@ tcBlockEntry blk (BlockEntryInfo {..}) =
         mkCtxTrans (blockInputs blk) $ snd $
         splitMapRList (entryGhosts entryInfoID)
         (cruCtxProxies $ entryInfoArgs) ns in
-  stmtRecombinePerms >>>
   setVarTypes ns (appendCruCtx (entryGhosts entryInfoID) entryInfoArgs) >>>
+  stmtTraceM (\i -> string "Input perms:"
+                    <> align (permPretty i $ runIdentity perms)) >>>
+  stmtRecombinePerms >>>
   tcEmitStmtSeq ctx (blk ^. blockStmts)
 
 -- | Type-check a Crucible block
@@ -1604,13 +1625,8 @@ tcEmitBlock :: PermCheckExtC ext => Block ext cblocks ret args ->
                TopPermCheckM ext cblocks blocks ret ()
 tcEmitBlock blk =
   do !cl_memb <- toClosed <$> stLookupBlockID (blockID blk) <$> unClosed <$> get
-     () <- trace ("tcEmitBlock: " ++ show (memberLength (unClosed cl_memb)))
-       (return ())
      !cl_block_t <- closedM ( $(mkClosed [| tcBlock |])
                               `clApply` cl_memb `clApply` toClosed blk)
-     () <- trace ("tcEmitBlock finished: "
-                  ++ show (memberLength (unClosed cl_memb)))
-       (return ())
      modifyBlockInfo ($(mkClosed [| blockInfoMapSetBlock |] )
                       `clApply` cl_memb `clApply` cl_block_t)
 

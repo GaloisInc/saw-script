@@ -1194,7 +1194,8 @@ implSetMuRecurseRightM :: ImplM vars s r ps ps ()
 implSetMuRecurseRightM =
   gget >>>= \s ->
   case view implStateMuRecurseFlag s of
-    Just (Left ()) -> implFailM
+    Just (Left ()) ->
+      implFailMsgM "Tried to unfold a mu on the right after unfolding on the left"
     _ -> gmodify (set implStateMuRecurseFlag (Just (Right ())))
 
 -- | Set the mu recursion flag to indicate recursion on the left, or fail if we
@@ -1203,7 +1204,8 @@ implSetMuRecurseLeftM :: ImplM vars s r ps ps ()
 implSetMuRecurseLeftM =
   gget >>>= \s ->
   case view implStateMuRecurseFlag s of
-    Just (Right ()) -> implFailM
+    Just (Right ()) ->
+      implFailMsgM "Tried to unfold a mu on the left after unfolding on the right"
     _ -> gmodify (set implStateMuRecurseFlag (Just (Left ())))
 
 -- | Get the current 'PermSet'
@@ -1323,9 +1325,31 @@ implApplyImpl1 impl1 mb_ms =
                  over implStatePPInfo (ppInfoAddExprNames "z" ns)) >>>
         f ns)
 
+-- | Emit debugging output using the current 'PPInfo'
+implTraceM :: (PPInfo -> Doc) -> ImplM vars s r ps ps ()
+implTraceM f =
+  (f <$> view implStatePPInfo <$> gget) >>>= \doc ->
+  tracePretty doc (greturn ())
+
 -- | Terminate the current proof branch with a failure
 implFailM :: ImplM vars s r ps_any ps a
 implFailM = implApplyImpl1 Impl1_Fail MNil
+
+-- | Call 'implFailM' and also output a debugging message
+implFailMsgM :: String -> ImplM vars s r ps_any ps a
+implFailMsgM msg =
+  implTraceM (const $ string (msg ++ "; backtracking...")) >>> implFailM
+
+-- | Terminate the current proof branch with a failure proving @x:p -o mb_p@
+implFailVarM :: String -> ExprVar tp -> ValuePerm tp -> Mb vars (ValuePerm tp) ->
+                ImplM vars s r ps_any ps a
+implFailVarM f x p mb_p =
+  implTraceM (\i ->
+               string f <> colon <+> string "Could not prove"
+               </> permPretty i x <> colon <> permPretty i p
+               </> string "-o" <> permPretty i mb_p <> string ";"
+               </> string "backtracking...") >>>
+  implFailM
 
 -- | Produce a branching proof tree that performs the first implication and, if
 -- that one fails, falls back on the second
@@ -1686,7 +1710,8 @@ proveVarEqH x (ValPerm_Exists _) _ mb_e =
   elimOrsExistsM x >>>= \p -> proveVarEq x p mb_e
 
 -- Otherwise give up!
-proveVarEqH _ _ _ _ = implFailM
+proveVarEqH x p _ mb_e =
+  implFailVarM "proveVarEqH" x p (fmap ValPerm_Eq mb_e)
 
 
 ----------------------------------------------------------------------
@@ -1778,10 +1803,11 @@ extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
     greturn (fp, Just (Perm_LLVMField fp))
 
 -- Cannot prove x:ptr((R,off) |-> p) |- x:ptr((W,off') |-> p'), so fail
-extractNeededLLVMFieldPerm x (Perm_LLVMField fp) _ mb_fp
+extractNeededLLVMFieldPerm x ap@(Perm_LLVMField fp) _ mb_fp
   | Read <- llvmFieldRW fp
   , Write <- mbLift (fmap llvmFieldRW mb_fp)
-  = implFailM
+  = implFailVarM "extractNeededLLVMFieldPerm" x (ValPerm_Conj1 $ ap)
+    (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)
 
 -- If proving x:[l1]ptr((W,off) |-> p) |- x:[l2]ptr((R,off') |-> p'), first
 -- split the lifetime of the input permission if l2 /= l1 and we have an lowned
@@ -1821,7 +1847,9 @@ extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp =
   error "FIXME HERE NOW"
 
 -- Cannot get a field permission from a free, so fail
-extractNeededLLVMFieldPerm _ (Perm_LLVMFree _) _ _ = implFailM
+extractNeededLLVMFieldPerm x ap@(Perm_LLVMFree _) _ mb_fp =
+  implFailVarM "extractNeededLLVMFieldPerm" x (ValPerm_Conj1 $ ap)
+  (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)
 
 
 ----------------------------------------------------------------------
@@ -1854,6 +1882,13 @@ isLLVMArrayMatch off (Perm_LLVMArray ap) =
   bvInRange off (llvmArrayRangeBytes ap)
 isLLVMArrayMatch _ _ = False
 
+proveVarAtomicImplFail :: ExprVar a -> [AtomicPerm a] ->
+                          Mb vars (AtomicPerm a) ->
+                          ImplM vars s r (ps :> a) (ps :> a) ()
+proveVarAtomicImplFail x aps mb_ap =
+  implFailVarM "proveVarAtomicImpl" x (ValPerm_Conj aps)
+  (fmap ValPerm_Conj1 mb_ap)
+
 proveVarAtomicImpl :: ExprVar a -> [AtomicPerm a] ->
                       Mb vars (AtomicPerm a) ->
                       ImplM vars s r (ps :> a) (ps :> a) ()
@@ -1866,7 +1901,7 @@ proveVarAtomicImpl x ps [nuP| Perm_LLVMField mb_fp |] =
     Nothing ->
       foldr
       (\i rest -> implCatchM (proveVarLLVMField x ps i off mb_fp) rest)
-      implFailM
+      (implFailMsgM "proveVarAtomicImpl: ran out of cases")
       [0 .. length ps - 1]
 
 proveVarAtomicImpl x ps [nuP| Perm_LLVMArray mb_ap |] =
@@ -1877,37 +1912,38 @@ proveVarAtomicImpl x ps [nuP| Perm_LLVMArray mb_ap |] =
     Nothing ->
       foldr
       (\i rest -> implCatchM (proveVarLLVMArray x ps i off mb_ap) rest)
-      implFailM
+      (implFailMsgM "proveVarAtomicImpl: ran out of cases")
       [0 .. length ps - 1]
 
-proveVarAtomicImpl x ps [nuP| Perm_LLVMFree mb_e |] =
+proveVarAtomicImpl x ps ap@[nuP| Perm_LLVMFree mb_e |] =
   partialSubstForceM mb_e
   "proveVarAtomicImpl: incomplete psubst: LLVM free size" >>>= \e ->
   case findFreePerm ps of
     Just (i, e') ->
       implCopyConjM x ps i >>> implPopM x (ValPerm_Conj ps) >>>
       castLLVMFreeM x e' e
-    _ -> implFailM
+    _ -> proveVarAtomicImplFail x ps ap
 
-proveVarAtomicImpl x [Perm_LLVMFrame
-                      fperms] [nuP| Perm_LLVMFrame mb_fperms |] =
+proveVarAtomicImpl x aps@[Perm_LLVMFrame
+                          fperms] mb_ap@[nuP| Perm_LLVMFrame mb_fperms |] =
   partialSubstForceM mb_fperms
   "proveVarAtomicImpl: incomplete frame perms" >>>= \fperms' ->
-  if fperms == fperms' then greturn () else implFailM
+  if fperms == fperms' then greturn () else
+    proveVarAtomicImplFail x aps mb_ap
 
-proveVarAtomicImpl x [Perm_LOwned ps] [nuP| Perm_LOwned (PExpr_Var z) |]
+proveVarAtomicImpl x aps@[Perm_LOwned ps] mb_ap@[nuP| Perm_LOwned (PExpr_Var z) |]
   | Left memb <- mbNameBoundP z
   = getPSubst >>>= \psubst ->
     case psubstLookup psubst memb of
       Just ps' ->
-        if ps == ps' then greturn () else implFailM
+        if ps == ps' then greturn () else proveVarAtomicImplFail x aps mb_ap
       Nothing ->
         setVarM memb ps
 
-proveVarAtomicImpl x [Perm_LOwned ps] [nuP| Perm_LOwned mb_ps |] =
+proveVarAtomicImpl x aps@[Perm_LOwned ps] mb_ap@[nuP| Perm_LOwned mb_ps |] =
   partialSubstForceM mb_ps
   "proveVarAtomicImpl: incomplete lowned perms" >>>= \ps' ->
-  if ps == ps' then greturn () else implFailM
+  if ps == ps' then greturn () else proveVarAtomicImplFail x aps mb_ap
 
 proveVarAtomicImpl x ps p@[nuP| Perm_LCurrent mb_l' |] =
   partialSubstForceM mb_l'
@@ -1934,12 +1970,12 @@ proveVarAtomicImpl x [Perm_Fun fun_perm] [nuP| Perm_Fun (PExpr_Var z) |]
       Nothing -> setVarM memb fun_perm
 -}
 
-proveVarAtomicImpl x [Perm_Fun fun_perm] [nuP| Perm_Fun mb_fun_perm |] =
+proveVarAtomicImpl x aps@[Perm_Fun fun_perm] mb_ap@[nuP| Perm_Fun mb_fun_perm |] =
   partialSubstForceM mb_fun_perm
   "proveVarAtomicImpl: incomplete function perm" >>>= \fun_perm' ->
   case funPermEq fun_perm fun_perm' of
     Just Refl -> greturn ()
-    Nothing -> implFailM
+    Nothing -> proveVarAtomicImplFail x aps mb_ap
 
 proveVarAtomicImpl x ps [nuP| Perm_BVProp mb_prop |] =
   implPopM x (ValPerm_Conj ps) >>>
@@ -1947,7 +1983,7 @@ proveVarAtomicImpl x ps [nuP| Perm_BVProp mb_prop |] =
   "proveVarAtomicImpl: incomplete bitvector proposition" >>>= \prop ->
   implTryProveBVProp x prop
 
-proveVarAtomicImpl _ _ _ = implFailM
+proveVarAtomicImpl x aps mb_ap = proveVarAtomicImplFail x aps mb_ap
 
 
 -- | Prove @x:(p1 * ... * pn) |- x:(p1' * ... * pm')@ assuming that the LHS
@@ -2036,7 +2072,8 @@ proveVarImplH _ (ValPerm_Var _) [nuP| ValPerm_Var _ |] =
   error "FIXME HERE NOW: handle permission variables!"
 
 -- Cannot prove x:p |- x:X for any non-variable p
-proveVarImplH _ _ [nuP| ValPerm_Var _ |] = implFailM
+proveVarImplH x p mb_p@[nuP| ValPerm_Var _ |] =
+  implFailVarM "proveVarImplH" x p mb_p
 
 -- Prove x:(p1 \/ p2) by trying to prove x:p1 and x:p2 in two branches
 proveVarImplH x p [nuP| ValPerm_Or mb_p1 mb_p2 |] =
@@ -2077,11 +2114,11 @@ proveVarImplH x p@(ValPerm_Eq
   castLLVMPtrM y ps off x
 
 -- If x:eq(LLVMword(e)) then we cannot prove any pointer permissions for it
-proveVarImplH x (ValPerm_Eq (PExpr_LLVMWord _)) [nuP| ValPerm_Conj _ |] =
-  implFailM
+proveVarImplH x p@(ValPerm_Eq (PExpr_LLVMWord _)) mb_p@[nuP| ValPerm_Conj _ |] =
+  implFailVarM "proveVarImplH" x p mb_p
 
-proveVarImplH x p@(ValPerm_Eq (PExpr_Fun f)) [nuP| ValPerm_Conj
-                                                 [Perm_Fun mb_fun_perm] |] =
+proveVarImplH x p@(ValPerm_Eq (PExpr_Fun f)) mb_p@[nuP| ValPerm_Conj
+                                                      [Perm_Fun mb_fun_perm] |] =
   (view implStateFnEnv <$> gget) >>>= \env ->
   case lookupFunPerm env f of
     Just (SomeFunPerm fun_perm)
@@ -2089,17 +2126,17 @@ proveVarImplH x p@(ValPerm_Eq (PExpr_Fun f)) [nuP| ValPerm_Conj
         introEqCopyM x (PExpr_Fun f) >>>
         implPopM x p >>>
         implSimplM Proxy (SImpl_ConstFunPerm x f fun_perm)
-    _ -> implFailM
+    _ -> implFailVarM "proveVarImplH" x p mb_p
 
-proveVarImplH _ (ValPerm_Eq _) [nuP| ValPerm_Conj _ |] =
-  implFailM
+proveVarImplH x p@(ValPerm_Eq _) mb_p@[nuP| ValPerm_Conj _ |] =
+  implFailVarM "proveVarImplH" x p mb_p
   -- FIXME HERE: are there other x:eq(e) |- x:pps cases?
 
 proveVarImplH x (ValPerm_Conj ps) [nuP| ValPerm_Conj mb_ps |] =
   proveVarConjImpl x ps mb_ps
 
 -- Fail if nothing else matched
-proveVarImplH _ _ _ = implFailM
+proveVarImplH x p mb_p = implFailVarM "proveVarImplH" x p mb_p
 
 
 -- | A list of distinguished permissions with existential variables

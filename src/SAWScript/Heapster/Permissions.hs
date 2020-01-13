@@ -237,19 +237,15 @@ permPrettyPermMb f mb =
   do docs <- traverseMapRList (\n -> Constant <$> permPrettyM n) ns
      f docs $ permPrettyM a
 
-{-
 instance PermPretty a => PermPretty (Mb (ctx :: RList CrucibleType) a) where
-  permPrettyM mb =
-    fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
-    withPPExprVars ns (mapMapRList (StringF . show) ns) $
-    permPrettyM a
+  permPrettyM =
+    permPrettyExprMb $ \docs ppm ->
+    (\pp -> hang 2 (tupled (mapRListToList docs) <> dot </> pp)) <$> ppm
 
 instance PermPretty a => PermPretty (Mb (ctx :: RList Type) a) where
-  permPrettyM mb =
-    fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
-    withPPPermVars ns (mapMapRList (StringF . show) ns) $
-    permPrettyM a
--}
+  permPrettyM =
+    permPrettyPermMb $ \docs ppm ->
+    (\pp -> hang 2 (tupled (mapRListToList docs) <> dot </> pp)) <$> ppm
 
 
 ----------------------------------------------------------------------
