@@ -982,6 +982,7 @@ instance PermPretty (ValuePerm a) where
     flip permPrettyPermMb mb_p $ \(_ :>: Constant pp_n) ppm ->
     (\pp -> hang 2 (string "mu" <+> pp_n <> dot <+> pp)) <$> ppm
   permPrettyM (ValPerm_Var x) = permPrettyM x
+  permPrettyM ValPerm_True = return $ string "true"
   permPrettyM (ValPerm_Conj ps) =
     (hang 2 . encloseSep PP.empty PP.empty (string "*")) <$> mapM permPrettyM ps
 
