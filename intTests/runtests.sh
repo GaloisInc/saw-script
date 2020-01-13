@@ -166,8 +166,3 @@ echo "<?xml version='1.0'?>" > $XML_FILE
 rm $XML_TEMP
 
 finish;
-
-# Local Variables:
-# sh-basic-offset: 2
-# indent-tabs-mode: nil
-# End:
