@@ -1851,7 +1851,7 @@ primitives = Map.fromList
     , " to ask if two monadic terms are equal" ]
 
   , prim "heapster_extract_print"
-    "LLVMModule -> String -> Int -> TopLevel String"
+    "LLVMModule -> String -> Int -> TopLevel ()"
     (bicVal heapster_extract_print)
     [ "Translate an LLVM function to a SAW core term using Heapster"
     , " type-checkin, and print the result."

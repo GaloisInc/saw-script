@@ -127,7 +127,7 @@ castFunPerm cfg fun_perm =
 
 heapster_extract_print :: BuiltinContext -> Options ->
                           LLVMModule -> String -> Int ->
-                          TopLevel String
+                          TopLevel ()
 heapster_extract_print bic opts lm fn_name perms_num =
   case modTrans lm of
     Some mod_trans ->
@@ -155,4 +155,4 @@ heapster_extract_print bic opts lm fn_name perms_num =
                       translateCFG $ tcCFG cl_env cl_fun_perm cfg
                 sc <- getSharedContext
                 fun_term <- liftIO $ completeOpenTerm sc fun_openterm
-                return $ scPrettyTerm pp_opts fun_term
+                liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
