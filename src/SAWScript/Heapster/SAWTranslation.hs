@@ -486,7 +486,9 @@ truePermTransCtx (CruCtxCons ctx _) = truePermTransCtx ctx :>: PTrans_True
 permTransToTerm :: PermTrans ctx a -> Maybe OpenTerm
 permTransToTerm (PTrans_Eq _) = Nothing
 permTransToTerm (PTrans_Conj aps) =
-  Just $ tupleOpenTerm $ mapMaybe atomicPermTransToTerm aps
+  case mapMaybe atomicPermTransToTerm aps of
+    [] -> Nothing
+    ts -> Just $ tupleOpenTerm ts
 permTransToTerm (PTrans_Term _ t) = Just t
 
 -- | Map an atomic perm translation result to an 'OpenTerm', or to 'Nothing' if
@@ -667,19 +669,22 @@ instance TypeTranslate (ValuePerm a) ctx (Either (PermTrans ctx a)
     error "FIXME HERE: tptranslate ValPerm_Var"
   tptranslate [nuP| ValPerm_Conj ps |] =
     mapM tptranslate (mbList ps) >>= \eithers ->
-    return $ Right (tupleTypeOpenTerm
-                    (mapMaybe (\eith -> case eith of
-                                  Left _ -> Nothing
-                                  Right (tp,_) -> Just tp) eithers),
-                    (\t ->
-                      PTrans_Conj $ fst $
-                      foldl (\(rest, t') eith ->
-                              case eith of
-                                Left ptrans -> (ptrans:rest, t')
-                                Right (_, mk_ptrans) ->
-                                  (mk_ptrans (pairLeftOpenTerm t'):rest,
-                                   pairRightOpenTerm t'))
-                      ([],t) eithers))
+    case partitionEithers eithers of
+      (transs, []) -> return $ Left $ PTrans_Conj transs
+      _ ->
+        return $ Right (tupleTypeOpenTerm
+                        (mapMaybe (\eith -> case eith of
+                                      Left _ -> Nothing
+                                      Right (tp,_) -> Just tp) eithers),
+                        (\t ->
+                          PTrans_Conj $ fst $
+                          foldl (\(rest, t') eith ->
+                                  case eith of
+                                    Left ptrans -> (ptrans:rest, t')
+                                    Right (_, mk_ptrans) ->
+                                      (mk_ptrans (pairLeftOpenTerm t'):rest,
+                                       pairRightOpenTerm t'))
+                          ([],t) eithers))
 
 
 instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
