@@ -2363,6 +2363,13 @@ instance AbstractVars a => AbstractVars (Mb (ctx :: RList Type) a) where
       abstractPEVars (appendMapRList ns1 ns) ns2 a)
     mb
 
+instance AbstractVars (MapRList Name (ctx :: RList CrucibleType)) where
+  abstractPEVars ns1 ns2 MNil = absVarsReturnH ns1 ns2 $(mkClosed [| MNil |])
+  abstractPEVars ns1 ns2 (ns :>: n) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| (:>:) |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ns
+    `clMbMbApplyM` abstractPEVars ns1 ns2 n
+
 instance AbstractVars Integer where
   abstractPEVars ns1 ns2 i = absVarsReturnH ns1 ns2 (toClosed i)
 

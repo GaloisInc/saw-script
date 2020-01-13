@@ -1140,10 +1140,6 @@ instance ImplTranslate (ValuePerm a) OpenTerm ext blocks ret ps ctx where
 -- * Translating Permission Implication Constructs
 ----------------------------------------------------------------------
 
--- | FIXME: figure out a better name and move to Hobbits
-mbMap2 :: (a -> b -> c) -> Mb ctx a -> Mb ctx b -> Mb ctx c
-mbMap2 f mb1 mb2 = fmap f mb1 `mbApply` mb2
-
 -- | Translate a 'SimplImpl' to a function on translation computations
 itranslateSimplImpl :: Proxy ps -> Mb ctx (SimplImpl ps_in ps_out) ->
                        ImpTransM ext blocks ret (ps :++: ps_out) ctx res ->

@@ -68,6 +68,10 @@ import SAWScript.Heapster.Implication
 import Debug.Trace
 
 
+-- | FIXME: figure out a better name and move to Hobbits
+mbMap2 :: (a -> b -> c) -> Mb ctx a -> Mb ctx b -> Mb ctx c
+mbMap2 f mb1 mb2 = fmap f mb1 `mbApply` mb2
+
 ----------------------------------------------------------------------
 -- * Typed Jump Targets and Function Handles
 ----------------------------------------------------------------------
@@ -1420,20 +1424,31 @@ tcEmitLLVMStmt _arch _ctx _loc _stmt =
 -- * Permission Checking for Jump Targets and Termination Statements
 ----------------------------------------------------------------------
 
-argsToEqPerms :: CtxTrans ctx -> Assignment (Reg ctx) args ->
-                 DistPerms (CtxToRList args)
-argsToEqPerms _ (viewAssign -> AssignEmpty) = DistPermsNil
-argsToEqPerms ctx (viewAssign -> AssignExtend args reg) =
-  let x = typedRegVar (tcReg ctx reg) in
-  DistPermsCons (argsToEqPerms ctx args) x (ValPerm_Eq $ PExpr_Var x)
+mkEqVarPerms :: MapRList Name ctx -> MapRList Name ctx -> DistPerms ctx
+mkEqVarPerms MNil _ = DistPermsNil
+mkEqVarPerms (xs :>: x) (ys :>: y) =
+  DistPermsCons (mkEqVarPerms xs ys) x (ValPerm_Eq $ PExpr_Var y)
 
-abstractPermsIn :: MapRList Name (ghosts :: RList CrucibleType) ->
-                   MapRList f args -> DistPerms (ghosts :++: args) ->
+-- | Take a set of permissions on some ghost variables as well as a set of
+-- assignments @arg1=ghost1, ...@ of those ghost variables to the "real"
+-- arguments of a block and add the permissions @arg1:eq(ghost1), ...@ to the
+-- input permissions
+buildInputPermsH :: Mb ghosts (DistPerms ghosts) ->
+                    Mb ghosts (MapRList Name args) ->
+                    MbDistPerms (ghosts :++: args)
+buildInputPermsH mb_perms mb_args =
+  mbCombine $ mbMap2 (\perms args ->
+                       nuMulti args $ \arg_vars ->
+                       appendDistPerms perms (mkEqVarPerms arg_vars args))
+  mb_perms mb_args
+
+buildInputPerms :: MapRList Name (ghosts :: RList CrucibleType) ->
+                   DistPerms ghosts -> MapRList Name args ->
                    Closed (MbDistPerms (ghosts :++: args))
-abstractPermsIn xs args perms =
-  $(mkClosed [| \args -> mbCombine . fmap (nuMulti args . const) |])
-  `clApply` closedProxies args
-  `clApply` maybe (error "abstractPermsIn") id (abstractVars xs perms)
+buildInputPerms xs perms_in args_in =
+  $(mkClosed [| buildInputPermsH |])
+  `clApply` maybe (error "buildInputPerms") id (abstractVars xs perms_in)
+  `clApply` maybe (error "buildInputPerms") id (abstractVars xs args_in)
 
 abstractPermsRet :: MapRList Name (ghosts :: RList CrucibleType) ->
                     MapRList f args ->
@@ -1473,20 +1488,21 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         -- Translate each "real" argument x into an eq(x) permission, and then
         -- form the append of (ghosts :++: real_args) for the types and the
         -- permissions. These are all used to build the TypedJumpTarget.
-        let arg_eq_perms = argsToEqPerms ctx args
-            perms = appendDistPerms ghost_perms arg_eq_perms in        
+        let args_t = tcRegs ctx args
+            args_vars = typedRegsToVars args_t
+            arg_eq_perms = mkEqVarPerms args_vars args_vars
+            perms_in = appendDistPerms ghost_perms arg_eq_perms in
 
         -- Insert a new block entrypoint that has all the permissions we
         -- constructed above as input permissions
         liftPermCheckM
         (insNewBlockEntry memb (mkCruCtx arg_tps) ghost_tps
-         (abstractPermsIn (distPermsVars ghost_perms)
-          (distPermsVars arg_eq_perms) perms)
+         (buildInputPerms (distPermsVars ghost_perms) ghost_perms args_vars)
          (abstractPermsRet (distPermsVars ghost_perms)
-          (distPermsVars arg_eq_perms) ret_perms)) >>>= \entryID ->
+          args_vars ret_perms)) >>>= \entryID ->
 
         -- Build the typed jump target for this jump target
-        let target_t = TypedJumpTarget entryID (mkCruCtx arg_tps) perms in
+        let target_t = TypedJumpTarget entryID (mkCruCtx arg_tps) perms_in in
 
         -- Finally, build the PermImpl that proves all the required permissions
         -- from the current permission set. This proof just copies the existing
@@ -1495,7 +1511,8 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         liftPermCheckM $
         runImplM CruCtxNil (stCurPerms st) env ppInfo (const $ return target_t)
         (implPushMultiM ghost_perms >>>
-         proveVarsImplAppend (distPermsToExDistPerms arg_eq_perms))
+         proveVarsImplAppend (distPermsToExDistPerms $
+                              mkEqVarPerms args_vars args_vars))
 
 
 -- | Type-check a termination statement
