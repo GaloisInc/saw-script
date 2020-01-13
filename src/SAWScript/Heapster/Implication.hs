@@ -39,6 +39,9 @@ import Control.Monad.Trans
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
 
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
+
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.CFG.Core
@@ -48,6 +51,8 @@ import Verifier.SAW.OpenTerm
 import Data.Binding.Hobbits
 import SAWScript.Heapster.CruUtil
 import SAWScript.Heapster.Permissions
+
+import Debug.Trace
 
 
 ----------------------------------------------------------------------
@@ -1101,19 +1106,22 @@ data ImplState vars ps =
               _implStateMuRecurseFlag :: Maybe (Either () ()),
               -- ^ Whether we are recursing under a @mu@, either on the left
               -- hand or the right hand side
-              _implStateFnEnv :: FunTypeEnv
+              _implStateFnEnv :: FunTypeEnv,
               -- ^ The current function environment
+              _implStatePPInfo :: PPInfo
             }
 makeLenses ''ImplState
 
-mkImplState :: CruCtx vars -> PermSet ps -> FunTypeEnv -> ImplState vars ps
-mkImplState vars perms env =
+mkImplState :: CruCtx vars -> PermSet ps -> FunTypeEnv -> PPInfo ->
+               ImplState vars ps
+mkImplState vars perms env info =
   ImplState { _implStateVars = vars,
               _implStatePerms = perms,
               _implStatePSubst = emptyPSubst vars,
               _implStateLifetimes = [],
               _implStateMuRecurseFlag = Nothing,
-              _implStateFnEnv = env
+              _implStateFnEnv = env,
+              _implStatePPInfo = info
             }
 
 extImplState :: KnownRepr TypeRepr tp => ImplState vars ps ->
@@ -1135,16 +1143,20 @@ type ImplM vars s r ps_out ps_in =
 
 -- | Run an 'ImplM' computation by passing it a @vars@ context, a starting
 -- permission set, and an @r@
-runImplM :: CruCtx vars -> PermSet ps_in -> FunTypeEnv ->
+runImplM :: CruCtx vars -> PermSet ps_in -> FunTypeEnv -> PPInfo ->
             ((a, ImplState vars ps_out) -> State (Closed s) (r ps_out)) ->
             ImplM vars s r ps_out ps_in a -> State (Closed s) (PermImpl r ps_in)
-runImplM vars perms env k m =
-  runGenContM (runGenStateT m (mkImplState vars perms env))
+runImplM vars perms env ppInfo k m =
+  runGenContM (runGenStateT m (mkImplState vars perms env ppInfo))
   (\as -> PermImpl_Done <$> k as)
 
 -- | Look up the current partial substitution
 getPSubst :: ImplM vars s r ps ps (PartialSubst vars)
 getPSubst = view implStatePSubst <$> gget
+
+-- | Look up the current pretty-printing info
+getPPInfo :: ImplM vars s r ps ps PPInfo
+getPPInfo = view implStatePPInfo <$> gget
 
 -- | Apply the current partial substitution to an expression, raising an error
 -- with the given string if the partial substitution is not complete enough
@@ -1307,7 +1319,8 @@ implApplyImpl1 impl1 mb_ms =
       gparallel (\m1 m2 -> MbPermImpls_Cons <$> m1 <*> m2)
       (helper mbperms args)
       (gopenBinding strongMbM mbperm >>>= \(ns, perms') ->
-        gmodify (set implStatePerms perms') >>>
+        gmodify (set implStatePerms perms' .
+                 over implStatePPInfo (ppInfoAddExprNames "z" ns)) >>>
         f ns)
 
 -- | Terminate the current proof branch with a failure
@@ -1558,42 +1571,53 @@ implPushMultiM (DistPermsCons ps x p) =
 -- @p@ is the second
 recombinePerm :: ExprVar a -> ValuePerm a -> ValuePerm a ->
                  ImplM RNil s r as (as :> a) ()
-recombinePerm x _ p@ValPerm_True = implDropM x p
-recombinePerm x ValPerm_True p = implPopM x p
-recombinePerm x x_p@(ValPerm_Eq (PExpr_Var y)) p =
+recombinePerm x x_p p =
+  getPPInfo >>>= \info ->
+  tracePretty (string "recombinePerm" <+> permPretty info x
+               </> permPretty info x_p </> string "<-"
+               </> permPretty info p) $
+  recombinePerm' x x_p p
+
+recombinePerm' :: ExprVar a -> ValuePerm a -> ValuePerm a ->
+                  ImplM RNil s r as (as :> a) ()
+recombinePerm' x _ p@ValPerm_True = implDropM x p
+recombinePerm' x ValPerm_True p = implPopM x p
+recombinePerm' x (ValPerm_Eq (PExpr_Var y)) _
+  | y == x = error "recombinePerm: variable x has permission eq(x)!"
+recombinePerm' x x_p@(ValPerm_Eq (PExpr_Var y)) p =
   implPushM x x_p >>> introEqCopyM x (PExpr_Var y) >>> implPopM x x_p >>>
   implSwapM x p x x_p >>> introCastM x y p >>> getPerm y >>>= \y_p ->
   recombinePerm y y_p p
-recombinePerm x x_p@(ValPerm_Eq (PExpr_LLVMOffset y off)) (ValPerm_Conj ps) =
+recombinePerm' x x_p@(ValPerm_Eq (PExpr_LLVMOffset y off)) (ValPerm_Conj ps) =
   implPushM x x_p >>> introEqCopyM x (PExpr_LLVMOffset y off) >>>
   implPopM x x_p >>> implSimplM Proxy (SImpl_InvertLLVMOffsetEq x off y) >>>
   castLLVMPtrM x ps (bvNegate off) y >>>
   getPerm y >>>= \y_p ->
   recombinePerm y y_p (ValPerm_Conj $ map (offsetLLVMAtomicPerm off) ps)
-recombinePerm _ _ (ValPerm_Eq _) =
+recombinePerm' _ _ (ValPerm_Eq _) =
   -- NOTE: we could handle this by swapping the stack with the variable perm and
   -- calling recombinePerm again, but this could potentially create permission
   -- equality cycles with, e.g., x:eq(y) * y:eq(x). Plus, we don't expect any
   -- functions or typed instructions to return equality permissions unless it is
   -- for a new, fresh variable, in which case the above cases will handle it
   error "recombinePerm: unexpected equality permission being recombined"
-recombinePerm x x_p (ValPerm_Or _ _) =
+recombinePerm' x x_p (ValPerm_Or _ _) =
   elimOrsExistsM x >>>= \p' -> recombinePerm x x_p p'
-recombinePerm x x_p (ValPerm_Exists _) =
+recombinePerm' x x_p (ValPerm_Exists _) =
   elimOrsExistsM x >>>= \p' -> recombinePerm x x_p p'
-recombinePerm x x_p@(ValPerm_Or _ _) p =
+recombinePerm' x x_p@(ValPerm_Or _ _) p =
   implPushM x x_p >>> elimOrsExistsM x >>>= \x_p' ->
   implPopM x x_p' >>> recombinePerm x x_p' p
-recombinePerm x x_p@(ValPerm_Exists _) p =
+recombinePerm' x x_p@(ValPerm_Exists _) p =
   implPushM x x_p >>> elimOrsExistsM x >>>= \x_p' ->
   implPopM x x_p' >>> recombinePerm x x_p' p
-recombinePerm x x_p@(ValPerm_Conj x_ps) (ValPerm_Conj (p:ps)) =
+recombinePerm' x x_p@(ValPerm_Conj x_ps) (ValPerm_Conj (p:ps)) =
   implExtractConjM x ps 0 >>>
   implSwapM x (ValPerm_Conj1 p) x (ValPerm_Conj ps) >>>
   implPushM x x_p >>> implInsertConjM x p x_ps (length x_ps) >>>
   implPopM x (ValPerm_Conj (x_ps ++ [p])) >>>
   recombinePerm x (ValPerm_Conj (x_ps ++ [p])) (ValPerm_Conj ps)
-recombinePerm x _ p = implDropM x p
+recombinePerm' x _ p = implDropM x p
 
 -- | Recombine the permissions on the stack back into the permission set
 recombinePerms :: DistPerms ps -> ImplM RNil s r RNil ps ()

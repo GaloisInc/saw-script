@@ -62,6 +62,8 @@ import SAWScript.Heapster.Permissions
 import SAWScript.Heapster.Implication
 import SAWScript.Heapster.TypedCrucible
 
+import Debug.Trace
+
 
 -- | FIXME HERE: move to Hobbits!
 mapRListTail :: MapRList f (ctx :> a) -> MapRList f ctx
@@ -1881,6 +1883,7 @@ nuMultiTransM f =
 translateEntryLRT :: TypedEntry ext blocks ret args ->
                      TypeTransM ctx OpenTerm
 translateEntryLRT (TypedEntry entryID args ret perms_in perms_out _) =
+  trace "translateEntryLRT starting..." $
   inEmptyTypeTransM $
   helperExpr (appendCruCtx (entryGhosts entryID) args) $
   helperPerms ret perms_in perms_out
@@ -1901,7 +1904,9 @@ translateEntryLRT (TypedEntry entryID args ret perms_in perms_out _) =
     helperPerms :: TypeRepr ret -> Mb ctx (DistPerms ps_in) ->
                    Mb (ctx :> ret) (DistPerms ps_out) -> TypeTransM ctx OpenTerm
     helperPerms ret [nuP| DistPermsNil |] ret_perms =
-      (\retType -> ctorOpenTerm "Prelude.LRT_Ret" [retType]) <$>
+      (\retType ->
+        trace "translateEntryLRT finished" $
+        ctorOpenTerm "Prelude.LRT_Ret" [retType]) <$>
       translateRetType ret ret_perms
     helperPerms ret [nuP| DistPermsCons perms _ p |] ret_perms =
       do eith <- tptranslate p
@@ -1917,12 +1922,14 @@ translateEntryLRT (TypedEntry entryID args ret perms_in perms_out _) =
 translateBlockMapLRTs :: TypedBlockMap ext blocks ret ->
                          TypeTransM ctx OpenTerm
 translateBlockMapLRTs =
+  trace "translateBlockMapLRTs started..." $
   foldBlockMap
   (\entry rest_m ->
     do entryType <- translateEntryLRT entry
        rest <- rest_m
        return $ ctorOpenTerm "Prelude.LRT_Cons" [entryType, rest])
-  (return $ ctorOpenTerm "Prelude.LRT_Nil" [])
+  (trace "translateBlockMapLRTs finished" $
+   return $ ctorOpenTerm "Prelude.LRT_Nil" [])
 
 
 -- | FIXME: documentation
@@ -1965,10 +1972,11 @@ translateBlockMapBodies :: NuMatchingExtC ext =>
                            TypedBlockMap ext blocks ret ->
                            TypeTransM ctx OpenTerm
 translateBlockMapBodies mapTrans =
+  trace "translateBlockMapBodies starting..." $
   foldBlockMap
   (\entry restM ->
     pairOpenTerm <$> translateEntryBody mapTrans entry <*> restM)
-  (return unitOpenTerm)
+  (trace "translateBlockMapBodies finished" $ return unitOpenTerm)
 
 -- | Translate a typed CFG to a SAW term
 translateCFG :: NuMatchingExtC ext => TypedCFG ext blocks ghosts inits ret ->

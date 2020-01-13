@@ -27,6 +27,7 @@ import Data.Maybe
 import Data.Bits
 import Data.List
 import Data.Proxy
+import Data.Functor.Constant
 import Data.Reflection
 import Data.Binding.Hobbits
 import GHC.TypeLits
@@ -34,6 +35,7 @@ import Data.Kind
 import Control.Applicative hiding (empty)
 import Control.Monad.Identity
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Lens hiding ((:>), Index, Empty)
 
 import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
@@ -43,6 +45,9 @@ import Data.Parameterized.Context hiding ((:>), empty, take)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.NatRepr
 
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
+
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
 import Lang.Crucible.LLVM.MemModel
@@ -50,6 +55,8 @@ import Lang.Crucible.CFG.Core
 import Verifier.SAW.OpenTerm
 
 import SAWScript.Heapster.CruUtil
+
+import Debug.Trace
 
 
 ----------------------------------------------------------------------
@@ -74,6 +81,9 @@ instance MonadBind Maybe where
   mbM [nuP| Just x |] = return x
   mbM [nuP| Nothing |] = Nothing
 
+instance MonadBind m => MonadBind (ReaderT r m) where
+  mbM mb = ReaderT $ \r -> mbM $ fmap (flip runReaderT r) mb
+
 -- | A version of 'MonadBind' that does not require a 'NuMatching' instance on
 -- the element type of the multi-binding in the monad
 class MonadBind m => MonadStrongBind m where
@@ -81,6 +91,9 @@ class MonadBind m => MonadStrongBind m where
 
 instance MonadStrongBind Identity where
   strongMbM = Identity . fmap runIdentity
+
+instance MonadStrongBind m => MonadStrongBind (ReaderT r m) where
+  strongMbM mb = ReaderT $ \r -> strongMbM $ fmap (flip runReaderT r) mb
 
 -- | State types that can incorporate name-bindings
 class NuMatching s => BindState s where
@@ -113,6 +126,130 @@ instance (MonadClosed m, Closable s) => MonadClosed (StateT s m) where
                                  `clApply` toClosed s)
        put (snd $ unClosed cl_a_s)
        return ($(mkClosed [| fst |]) `clApply` cl_a_s)
+
+
+----------------------------------------------------------------------
+-- * Pretty-printing
+----------------------------------------------------------------------
+
+newtype StringF a = StringF { unStringF :: String }
+
+data PPInfo =
+  PPInfo { ppExprNames :: NameMap (StringF :: CrucibleType -> Type),
+           ppPermNames :: NameMap (StringF :: Type -> Type),
+           ppVarIndex :: Int }
+
+emptyPPInfo :: PPInfo
+emptyPPInfo = PPInfo NameMap.empty NameMap.empty 1
+
+-- | Record an expression variable in a 'PPInfo' with the given base name
+ppInfoAddExprName :: String -> ExprVar a -> PPInfo -> PPInfo
+ppInfoAddExprName base x info =
+  info { ppExprNames =
+           NameMap.insert x (StringF (base ++ show (ppVarIndex info)))
+           (ppExprNames info),
+           ppVarIndex = ppVarIndex info + 1 }
+
+ppInfoAddExprNames :: String -> MapRList Name (tps :: RList CrucibleType) ->
+                      PPInfo -> PPInfo
+ppInfoAddExprNames _ MNil info = info
+ppInfoAddExprNames base (ns :>: n) info =
+  ppInfoAddExprNames base ns $ ppInfoAddExprName base n info
+
+-- | Record a permission variable in a 'PPInfo' with the given base name
+ppInfoAddPermName :: String -> Name (a :: Type) -> PPInfo -> PPInfo
+ppInfoAddPermName base x info =
+  info { ppPermNames =
+           NameMap.insert x (StringF (base ++ show (ppVarIndex info)))
+           (ppPermNames info),
+           ppVarIndex = ppVarIndex info + 1 }
+
+ppInfoAddPermNames :: String -> MapRList Name (tps :: RList Type) ->
+                      PPInfo -> PPInfo
+ppInfoAddPermNames _ MNil info = info
+ppInfoAddPermNames base (ns :>: n) info =
+  ppInfoAddPermNames base ns $ ppInfoAddPermName base n info
+
+
+type PermPPM = Reader PPInfo
+
+instance NuMatching Doc where
+  nuMatchingProof = unsafeMbTypeRepr
+
+instance Closable Doc where
+  toClosed = unsafeClose
+
+instance Liftable Doc where
+  mbLift = unClosed . mbLift . fmap toClosed
+
+
+class PermPretty a where
+  permPrettyM :: a -> PermPPM Doc
+
+permPretty :: PermPretty a => PPInfo -> a -> Doc
+permPretty info a = runReader (permPrettyM a) info
+
+tracePretty :: Doc -> a -> a
+tracePretty doc = trace (flip displayS "" $ renderPretty 0.8 80 doc)
+
+instance PermPretty (ExprVar a) where
+  permPrettyM x =
+    do maybe_str <- NameMap.lookup x <$> ppExprNames <$> ask
+       case maybe_str of
+         Just (StringF str) -> return $ string str
+         Nothing -> return $ string (show x)
+
+instance PermPretty (Name (a :: Type)) where
+  permPrettyM x =
+    do maybe_str <- NameMap.lookup x <$> ppPermNames <$> ask
+       case maybe_str of
+         Just (StringF str) -> return $ string str
+         Nothing -> return $ string (show x)
+
+-- FIXME: move to Hobbits...?
+{-
+instance TraversableFC MapRList where
+  traverseFC _ MNil = pure MNil
+  traverseFC f (xs :>: x) = (:>:) <$> traverseFC f xs <*> f x
+-}
+
+-- FIXME: this is just TraversableFC without having an orphan instance...
+traverseMapRList :: Applicative m => (forall a. f a -> m (g a)) ->
+                    MapRList f as -> m (MapRList g as)
+traverseMapRList _ MNil = pure MNil
+traverseMapRList f (xs :>: x) = (:>:) <$> traverseMapRList f xs <*> f x
+
+permPrettyExprMb :: PermPretty a =>
+                    (MapRList (Constant Doc) ctx -> PermPPM Doc -> PermPPM Doc) ->
+                    Mb (ctx :: RList CrucibleType) a -> PermPPM Doc
+permPrettyExprMb f mb =
+  fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
+  local (ppInfoAddExprNames "z" ns) $
+  do docs <- traverseMapRList (\n -> Constant <$> permPrettyM n) ns
+     f docs $ permPrettyM a
+
+permPrettyPermMb :: PermPretty a =>
+                    (MapRList (Constant Doc) ctx -> PermPPM Doc -> PermPPM Doc) ->
+                    Mb (ctx :: RList Type) a -> PermPPM Doc
+permPrettyPermMb f mb =
+  fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
+  local (ppInfoAddPermNames "z" ns) $
+  do docs <- traverseMapRList (\n -> Constant <$> permPrettyM n) ns
+     f docs $ permPrettyM a
+
+{-
+instance PermPretty a => PermPretty (Mb (ctx :: RList CrucibleType) a) where
+  permPrettyM mb =
+    fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
+    withPPExprVars ns (mapMapRList (StringF . show) ns) $
+    permPrettyM a
+
+instance PermPretty a => PermPretty (Mb (ctx :: RList Type) a) where
+  permPrettyM mb =
+    fmap mbLift $ strongMbM $ flip nuMultiWithElim1 mb $ \ns a ->
+    withPPPermVars ns (mapMapRList (StringF . show) ns) $
+    permPrettyM a
+-}
 
 
 ----------------------------------------------------------------------
@@ -276,6 +413,48 @@ instance Eq (PermExprs as) where
 
 instance Eq (BVFactor w) where
   (BVFactor i1 x1) == (BVFactor i2 x2) = i1 == i2 && x1 == x2
+
+
+instance PermPretty (PermExpr a) where
+  permPrettyM (PExpr_Var x) = permPrettyM x
+  permPrettyM PExpr_Unit = return $ string "()"
+  permPrettyM (PExpr_Nat n) = return $ integer n
+  permPrettyM (PExpr_BV factors const) =
+    do pps <- mapM permPrettyM factors
+       return $ encloseSep lparen rparen (string "+") (pps ++ [integer const])
+  permPrettyM (PExpr_Struct args) =
+    (\pp -> string "struct" <+> parens pp) <$> permPrettyM args
+  permPrettyM PExpr_Always = return $ string "always"
+  permPrettyM (PExpr_LLVMWord e) = (string "LLVMword" <+>) <$> permPrettyM e
+  permPrettyM (PExpr_LLVMOffset x e) =
+    (\ppx ppe -> ppx <+> string "&+" <+> ppe)
+    <$> permPrettyM x <*> permPrettyM e
+  permPrettyM (PExpr_Fun fh) = return $ angles $ string ("fun" ++ show fh)
+  permPrettyM PExpr_PermListNil = return $ string "[]"
+  permPrettyM e@(PExpr_PermListCons _ _ _) = prettyPermListM e
+
+prettyPermListH :: PermExpr PermListType -> PermPPM ([Doc], Maybe Doc)
+prettyPermListH (PExpr_Var x) = (\pp -> ([], Just pp)) <$> permPrettyM x
+prettyPermListH PExpr_PermListNil = return ([], Nothing)
+prettyPermListH (PExpr_PermListCons e p l) =
+  (\ppe ppp (pps, maybe_doc) -> (ppe <> colon <> ppp : pps, maybe_doc))
+  <$> permPrettyM e <*> permPrettyM p <*> prettyPermListH l
+
+prettyPermListM :: PermExpr PermListType -> PermPPM Doc
+prettyPermListM e = prettyPermListH e >>= \(pps, maybe_doc) ->
+  case maybe_doc of
+    Just pp_x -> return $ encloseSep lparen rparen (string "::") (pps ++ [pp_x])
+    Nothing -> return $ list pps
+
+instance PermPretty (PermExprs as) where
+  permPrettyM es = tupled <$> helper es where
+    helper :: PermExprs as' -> PermPPM [Doc]
+    helper PExprs_Nil = return []
+    helper (PExprs_Cons es e) =
+      (\pps pp -> pps ++ [pp]) <$> helper es <*> permPrettyM e
+
+instance PermPretty (BVFactor w) where
+  permPrettyM (BVFactor i x) = ((integer i <> string "*") <>) <$> permPrettyM x
 
 -- | Build a "default" expression for a given type
 zeroOfType :: TypeRepr tp -> PermExpr tp
@@ -790,6 +969,75 @@ funPermEq _ _ = Nothing
 
 instance Eq (FunPerm ghosts args ret) where
   fperm1 == fperm2 = isJust (funPermEq fperm1 fperm2)
+
+instance PermPretty (ValuePerm a) where
+  permPrettyM (ValPerm_Eq e) = ((string "eq" <>) . parens) <$> permPrettyM e
+  permPrettyM (ValPerm_Or p1 p2) =
+    (\pp1 pp2 -> hang 2 (pp1 </> string "\\/" <> pp2))
+    <$> permPrettyM p1 <*> permPrettyM p2
+  permPrettyM (ValPerm_Exists mb_p) =
+    flip permPrettyExprMb mb_p $ \(_ :>: Constant pp_n) ppm ->
+    (\pp -> hang 2 (string "exists" <+> pp_n <> dot <+> pp)) <$> ppm
+  permPrettyM (ValPerm_Mu mb_p) =
+    flip permPrettyPermMb mb_p $ \(_ :>: Constant pp_n) ppm ->
+    (\pp -> hang 2 (string "mu" <+> pp_n <> dot <+> pp)) <$> ppm
+  permPrettyM (ValPerm_Var x) = permPrettyM x
+  permPrettyM (ValPerm_Conj ps) =
+    (hang 2 . encloseSep PP.empty PP.empty (string "*")) <$> mapM permPrettyM ps
+
+instance PermPretty (AtomicPerm a) where
+  permPrettyM (Perm_LLVMField (LLVMFieldPerm {..})) =
+    do pp_contents <- permPrettyM llvmFieldContents
+       pp_l <- case llvmFieldLifetime of
+         PExpr_Var l -> brackets <$> permPrettyM l
+         PExpr_Always -> return PP.empty
+       pp_off <- permPrettyM llvmFieldOffset
+       let pp_rw = case llvmFieldRW of
+             Read -> string "Read"
+             Write -> string "Write"
+       return (string "LLVMptr" <>
+               parens (hang 2 (tupled [pp_rw, pp_off] <+> string "|->"
+                               </> pp_contents)))
+  permPrettyM (Perm_LLVMArray _) = error "FIXME HERE: pretty-print array perms"
+  permPrettyM (Perm_LLVMFree e) = (string "free" <+>) <$> permPrettyM e
+  permPrettyM (Perm_LLVMFrame fperm) =
+    do pps <- mapM (\(e,i) -> (<> (colon <> integer i)) <$> permPrettyM e) fperm
+       return (string "LLVMframe" <+> list pps)
+  permPrettyM (Perm_LOwned ps) = (string "lowned" <+>) <$> permPrettyM ps
+  permPrettyM (Perm_LCurrent l) = (string "lcurrent" <+>) <$> permPrettyM l
+  permPrettyM (Perm_Fun fun_perm) = permPrettyM fun_perm
+  permPrettyM (Perm_BVProp prop) = permPrettyM prop
+
+instance PermPretty (FunPerm ghosts args ret) where
+  permPrettyM fun_perm =
+    return $ string "<FunPerm (FIXME)>" -- FIXME HERE: implement
+
+instance PermPretty (BVRange w) where
+  permPrettyM (BVRange e1 e2) =
+    (\pp1 pp2 -> braces (pp1 <> comma <+> pp2))
+    <$> permPrettyM e1 <*> permPrettyM e2
+
+instance PermPretty (BVProp w) where
+  permPrettyM (BVProp_Eq e1 e2) =
+    (\pp1 pp2 -> pp1 <+> equals <+> pp2) <$> permPrettyM e1 <*> permPrettyM e2
+  permPrettyM (BVProp_InRange e rng) =
+    (\pp1 pp2 -> pp1 <+> string "in" <+> pp2)
+    <$> permPrettyM e <*> permPrettyM rng
+  permPrettyM (BVProp_RangeSubset rng1 rng2) =
+    (\pp1 pp2 -> pp1 <+> string "subset" <+> pp2)
+    <$> permPrettyM rng1 <*> permPrettyM rng2
+  permPrettyM (BVProp_RangesDisjoint rng1 rng2) =
+    (\pp1 pp2 -> pp1 <+> string "disjoint" <+> pp2)
+    <$> permPrettyM rng1 <*> permPrettyM rng2
+
+instance PermPretty (DistPerms ps) where
+  permPrettyM ps = encloseSep PP.empty PP.empty comma <$> helper ps where
+    helper :: DistPerms ps' -> PermPPM [Doc]
+    helper DistPermsNil = return []
+    helper (DistPermsCons ps x p) =
+      do x_pp <- permPrettyM x
+         p_pp <- permPrettyM p
+         (++ [x_pp <> colon <> p_pp]) <$> helper ps
 
 
 $(mkNuMatching [t| forall a . PermExpr a |])
