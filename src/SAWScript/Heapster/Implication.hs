@@ -1345,9 +1345,9 @@ implFailVarM :: String -> ExprVar tp -> ValuePerm tp -> Mb vars (ValuePerm tp) -
                 ImplM vars s r ps_any ps a
 implFailVarM f x p mb_p =
   implTraceM (\i ->
-               string f <> colon <+> string "Could not prove"
-               </> permPretty i x <> colon <> permPretty i p
-               </> string "-o" <> permPretty i mb_p <> string ";"
+               string f <> colon <+> string "Could not prove" <> line
+               </> permPretty i x <> colon <> PP.group (permPretty i p)
+               </> string "-o" <+> PP.group (permPretty i mb_p) <> string ";"
                </> string "backtracking...") >>>
   implFailM
 
