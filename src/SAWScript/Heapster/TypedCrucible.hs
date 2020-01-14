@@ -1333,11 +1333,20 @@ tcEmitStmt :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
               Stmt ext ctx ctx' ->
               StmtPermCheckM ext cblocks blocks ret args RNil RNil
               (CtxTrans ctx')
-tcEmitStmt ctx loc (SetReg tp (App (ExtensionApp e_ext
-                                    :: App ext (Reg ctx) tp)))
+tcEmitStmt ctx loc stmt =
+  stmtTraceM (const (string "Type-checking statement:" <+>
+                     ppStmt (size ctx) stmt)) >>>
+  tcEmitStmt' ctx loc stmt
+
+tcEmitStmt' :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
+               Stmt ext ctx ctx' ->
+               StmtPermCheckM ext cblocks blocks ret args RNil RNil
+               (CtxTrans ctx')
+tcEmitStmt' ctx loc (SetReg tp (App (ExtensionApp e_ext
+                                     :: App ext (Reg ctx) tp)))
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = tcEmitLLVMSetExpr Proxy ctx loc e_ext
-tcEmitStmt ctx loc (SetReg tp (App e)) =
+tcEmitStmt' ctx loc (SetReg tp (App e)) =
   traverseFC (tcRegWithVal ctx) e >>>= \e_with_vals ->
   tcExpr e_with_vals >>>= \maybe_val ->
   let typed_e = TypedExpr e_with_vals maybe_val in
@@ -1345,11 +1354,11 @@ tcEmitStmt ctx loc (SetReg tp (App e)) =
   stmtRecombinePerms >>>
   greturn (addCtxName ctx x)
 
-tcEmitStmt ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
+tcEmitStmt' ctx loc (ExtendAssign stmt_ext :: Stmt ext ctx ctx')
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = tcEmitLLVMStmt Proxy ctx loc stmt_ext
 
-tcEmitStmt ctx loc (CallHandle ret freg_untyped args_ctx args_untyped) =
+tcEmitStmt' ctx loc (CallHandle ret freg_untyped args_ctx args_untyped) =
   let freg = tcReg ctx freg_untyped
       args = tcRegs ctx args_untyped in
   getRegFunPerm freg >>>= \some_fun_perm ->
@@ -1373,7 +1382,11 @@ tcEmitStmt ctx loc (CallHandle ret freg_untyped args_ctx args_untyped) =
       endLifetime l >>>
       greturn (addCtxName ctx ret)
 
-tcEmitStmt _ _ _ = error "tcEmitStmt: unsupported statement"
+tcEmitStmt' ctx loc (Assert reg msg) =
+  emitStmt CruCtxNil loc (TypedAssert (tcReg ctx reg) (tcReg ctx msg)) >>>= \_ ->
+  greturn ctx
+
+tcEmitStmt' _ _ _ = error "tcEmitStmt: unsupported statement"
 
 
 -- | Translate a Crucible assignment of an LLVM expression
