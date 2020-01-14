@@ -342,7 +342,10 @@ instance TypeTranslate (PermExpr a) ctx (ExprTrans a) where
     do let w = natVal (Proxy :: Proxy w)
        bv_transs <- mapM tptranslate $ mbList bvfactors
        return $ ETrans_Term $
-         bvAddOpenTerm w (foldr (bvMulOpenTerm w) (natOpenTerm 1) bv_transs)
+         bvAddOpenTerm w (foldr (bvMulOpenTerm w)
+                          (applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
+                           [natOpenTerm w, natOpenTerm 1])
+                          bv_transs)
          (natOpenTerm $ mbLift off)
   tptranslate [nuP| PExpr_Struct _args |] =
     error "FIXME HERE: translate struct expressions!"
