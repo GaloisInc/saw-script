@@ -738,7 +738,7 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
        t1 <- translateExpr e1
        t2 <- translateExpr e2
        return $ Right
-         (applyOpenTermMulti (globalOpenTerm "Prelude.Eq")
+         (dataTypeOpenTerm "Prelude.EqP"
           [applyOpenTerm (globalOpenTerm "Prelude.bitvector") (natOpenTerm w),
            t1, t2],
           APTrans_BVProp prop)
@@ -752,7 +752,7 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
        t_sub <- translateExpr (mbMap2 bvSub e off)
        t_len <- translateExpr len
        return $ Right
-         (applyOpenTermMulti (globalOpenTerm "Prelude.Eq")
+         (dataTypeOpenTerm "Prelude.EqP"
           [globalOpenTerm "Prelude.Bool",
            applyOpenTermMulti (globalOpenTerm "Prelude.bvult")
            [natOpenTerm w, t_sub, t_len],
@@ -765,12 +765,12 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
   tptranslate [nuP| Perm_BVProp (BVProp_RangeSubset
                   (BVRange (off1 :: PermExpr (BVType w)) len1)
                   (BVRange off2 len2)) |] =
-    error "FIXME HERE NOW"
+    error "FIXME HERE NOW: translate BVProp_RangeSubset"
 
   tptranslate [nuP| Perm_BVProp (BVProp_RangesDisjoint
                   (BVRange (off1 :: PermExpr (BVType w)) len1)
                   (BVRange off2 len2)) |] =
-    error "FIXME HERE NOW"
+    error "FIXME HERE NOW: translate BVProp_RangesDisjoint"
 
 
 -- | Translate a permission to a SAW type, converting 'Nothing' to unit
@@ -1546,6 +1546,49 @@ itranslatePermImpl1 [nuP| Impl1_ElimLLVMFieldContents
                                      fmap (const $ nu PExpr_Var) mb_fld)]
     :>: ptrans') $
   itranslate $ mbCombine mb_impl
+
+
+itranslatePermImpl1 [nuP| Impl1_TryProveBVProp x
+                        prop@(BVProp_Eq e1 (e2 :: PermExpr (BVType w))) |]
+  [nuP| MbPermImpls_Cons _ mb_impl |] =
+  let p_prop = fmap (ValPerm_Conj1 . Perm_BVProp) prop in
+  applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
+  [ tpTransM (translatePerm p_prop)
+  , compReturnTypeM, (itiCatchHandler <$> ask)
+  , lambdaPermTransForceI "eq_pf" p_prop
+    (\ptrans ->
+      withPermStackM (:>: translateVar x) (:>: ptrans)
+      (itranslate $ mbCombine mb_impl))
+  , applyMultiTransM (return $ globalOpenTerm "Prelude.bvEqWithProof")
+    [ return (natOpenTerm $ natVal (Proxy :: Proxy w))
+    , tpTransM (translateExpr e1), tpTransM (translateExpr e2)]
+  ]
+
+itranslatePermImpl1 [nuP| Impl1_TryProveBVProp x
+                        prop@(BVProp_InRange
+                              (e :: PermExpr (BVType w)) (BVRange off len)) |]
+  [nuP| MbPermImpls_Cons _ mb_impl |] =
+  let p_prop = fmap (ValPerm_Conj1 . Perm_BVProp) prop in
+  applyMultiTransM (return $ globalOpenTerm "Prelude.maybe")
+  [ tpTransM (translatePerm p_prop)
+  , compReturnTypeM, (itiCatchHandler <$> ask)
+  , lambdaPermTransForceI "inrange_pf" p_prop
+    (\ptrans ->
+      withPermStackM (:>: translateVar x) (:>: ptrans)
+      (itranslate $ mbCombine mb_impl))
+  , applyMultiTransM (return $ globalOpenTerm "Prelude.bvultWithProof")
+    [ return (natOpenTerm $ natVal (Proxy :: Proxy w))
+    , tpTransM (translateExpr (mbMap2 bvSub e off)),
+      tpTransM (translateExpr len)]
+  ]
+
+itranslatePermImpl1 [nuP| Impl1_TryProveBVProp _ (BVProp_RangeSubset _ _) |]
+  [nuP| MbPermImpls_Cons _ _ |] =
+  error "FIXME HERE NOW: translate Impl1_TryProveBVProp (BVProp_RangeSubset)"
+
+itranslatePermImpl1 [nuP| Impl1_TryProveBVProp _ (BVProp_RangesDisjoint _ _) |]
+  [nuP| MbPermImpls_Cons _ _ |] =
+  error "FIXME HERE NOW: translate Impl1_TryProveBVProp (BVProp_RangesDisjoint)"
 
 
 instance ImplTranslateF r ext blocks ret =>
