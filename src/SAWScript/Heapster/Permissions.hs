@@ -1343,7 +1343,9 @@ llvmFrameDeletionPerms [] = Some DistPermsNil
 llvmFrameDeletionPerms ((asLLVMOffset -> Just (x,off), sz):fperm')
   | Some del_perms <- llvmFrameDeletionPerms fperm' =
     Some $ DistPermsCons del_perms x $ ValPerm_Conj
-    [offsetLLVMAtomicPerm off $ llvmArrayPtrPermOfSize sz]
+    (map (offsetLLVMAtomicPerm off . Perm_LLVMField) $
+     llvmFieldsOfSize knownNat sz)
+    -- [offsetLLVMAtomicPerm off $ llvmArrayPtrPermOfSize sz]
 llvmFrameDeletionPerms _ =
   error "llvmFrameDeletionPerms: unexpected LLVM word allocated in frame"
 
