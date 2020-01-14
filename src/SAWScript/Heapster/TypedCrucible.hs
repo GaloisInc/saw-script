@@ -75,6 +75,13 @@ import Debug.Trace
 mbMap2 :: (a -> b -> c) -> Mb ctx a -> Mb ctx b -> Mb ctx c
 mbMap2 f mb1 mb2 = fmap f mb1 `mbApply` mb2
 
+-- | Make a program location with "internal" posiotion that has the same
+-- function name as another location
+-- FIXME: figure out where to put this
+internalLoc :: ProgramLoc -> ProgramLoc
+internalLoc loc = mkProgramLoc (plFunction loc) InternalPos
+
+
 ----------------------------------------------------------------------
 -- * Typed Jump Targets and Function Handles
 ----------------------------------------------------------------------
@@ -1151,6 +1158,60 @@ resolveConstant = helper . PExpr_Var . typedRegVar where
   helper _ = return Nothing
 
 
+-- FIXME HERE: documentation!
+convertRegType :: ExtRepr ext -> ProgramLoc ->
+                  TypedReg tp1 -> TypeRepr tp1 -> TypeRepr tp2 ->
+                  StmtPermCheckM ext cblocks blocks ret args RNil RNil
+                  (TypedReg tp2)
+convertRegType _ _ reg tp1 tp2
+  | Just Refl <- testEquality tp1 tp2 = greturn reg
+convertRegType _ loc reg (BVRepr w1) tp2@(BVRepr w2)
+  | Left LeqProof <- decideLeq (knownNat :: NatRepr 1) w2
+  , NatCaseGT LeqProof <- testNatCases w1 w2 =
+    withKnownNat w2 $
+    emitStmt knownRepr loc (TypedSetReg tp2 $
+                            TypedExpr (BVTrunc w2 w1 $ RegNoVal reg)
+                            Nothing) >>>= \(_ :>: x) ->
+    stmtRecombinePerms >>>
+    greturn (TypedReg x)
+convertRegType _ loc reg (BVRepr w1) tp2@(BVRepr w2)
+  | Left LeqProof <- decideLeq (knownNat :: NatRepr 1) w1
+  , Left LeqProof <- decideLeq (knownNat :: NatRepr 1) w2
+  , NatCaseLT LeqProof <- testNatCases w1 w2 =
+    withKnownNat w2 $
+    emitStmt knownRepr loc (TypedSetReg tp2 $
+                            TypedExpr (BVSext w2 w1 $ RegNoVal reg)
+                            Nothing) >>>= \(_ :>: x) ->
+    stmtRecombinePerms >>>
+    greturn (TypedReg x)
+convertRegType ExtRepr_LLVM loc reg (LLVMPointerRepr w1) (BVRepr w2)
+  | Just Refl <- testEquality w1 w2 =
+    withKnownNat w1 $
+    stmtProvePerm reg llvmExEqWord >>>= \subst ->
+    let e = substLookup subst Member_Base in
+    emitLLVMStmt knownRepr loc (DestructLLVMWord reg e) >>>= \x ->
+    stmtRecombinePerms >>>
+    greturn (TypedReg x)
+convertRegType ext loc reg (LLVMPointerRepr w1) (BVRepr w2) =
+  convertRegType ext loc reg (LLVMPointerRepr w1) (BVRepr w1) >>>= \reg' ->
+  convertRegType ext loc reg' (BVRepr w1) (BVRepr w2)
+convertRegType ExtRepr_LLVM loc reg (BVRepr w2) (LLVMPointerRepr w1)
+  | Just Refl <- testEquality w1 w2 =
+    withKnownNat w1 $
+    emitLLVMStmt knownRepr loc (ConstructLLVMWord reg) >>>= \x ->
+    stmtRecombinePerms >>> greturn (TypedReg x)
+convertRegType ext loc reg (BVRepr w1) (LLVMPointerRepr w2) =
+  convertRegType ext loc reg (BVRepr w1) (BVRepr w2) >>>= \reg' ->
+  convertRegType ext loc reg' (BVRepr w2) (LLVMPointerRepr w2)
+convertRegType ext loc reg (LLVMPointerRepr w1) (LLVMPointerRepr w2) =
+  convertRegType ext loc reg (LLVMPointerRepr w1) (BVRepr w1) >>>= \reg1 ->
+  convertRegType ext loc reg1 (BVRepr w1) (BVRepr w2) >>>= \reg2 ->
+  convertRegType ext loc reg2 (BVRepr w2) (LLVMPointerRepr w2)
+convertRegType _ _ x tp1 tp2 =
+  stmtFailM (\i -> string "Could not cast" <+> permPretty i x
+                   <+> string "from" <+> string (show tp1)
+                   <+> string "to" <+> string (show tp2))
+
 -- | Emit a statement in the current statement sequence, where the supplied
 -- function says how that statement modifies the current permissions, given the
 -- freshly-bound names for the return values. Return those freshly-bound names
@@ -1369,27 +1430,28 @@ tcEmitLLVMStmt ::
   (CtxTrans (ctx ::> tp))
 
 -- Type-check a load of an LLVM pointer
-tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg (LLVMPointerRepr w) _ _)
-  | Just Refl <- testEquality w (archWidth arch)
-  = let treg = tcReg ctx reg
-        x = typedRegVar treg in
-    beginLifetime >>>= \l ->
-    let prxs :: MapRList Proxy (RNil :> PermListType :> LLVMPointerType _)
-          = typeCtxProxies
-        needed_perms =
-          ExDistPermsCons
-          (ExDistPermsCons ExDistPermsNil
-           l
-           (nuMulti prxs $ \(_ :>: ps :>: _) ->
-             ValPerm_Conj [Perm_LOwned (PExpr_Var ps)]))
-          x (nuMulti prxs $ \(_ :>: _ :>: y) ->
-              llvmRead0EqPerm (PExpr_Var l) (PExpr_Var y)) in
-    stmtProvePerms needed_perms >>>= \(PermSubst (_ :>: ps :>: y)) ->
-    emitLLVMStmt knownRepr loc (TypedLLVMLoad treg l ps y) >>>= \z ->
-    stmtRecombinePerms >>>
-    endLifetime l >>>
-    greturn (addCtxName ctx z)
+tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp _ _) =
+  let treg = tcReg ctx reg
+      x = typedRegVar treg in
+  beginLifetime >>>= \l ->
+  let prxs :: MapRList Proxy (RNil :> PermListType :> LLVMPointerType _)
+        = typeCtxProxies
+      needed_perms =
+        ExDistPermsCons
+        (ExDistPermsCons ExDistPermsNil
+         l
+         (nuMulti prxs $ \(_ :>: ps :>: _) ->
+           ValPerm_Conj [Perm_LOwned (PExpr_Var ps)]))
+        x (nuMulti prxs $ \(_ :>: _ :>: y) ->
+            llvmRead0EqPerm (PExpr_Var l) (PExpr_Var y)) in
+  stmtProvePerms needed_perms >>>= \(PermSubst (_ :>: ps :>: y)) ->
+  emitLLVMStmt knownRepr loc (TypedLLVMLoad treg l ps y) >>>= \z_ptr ->
+  stmtRecombinePerms >>>
+  endLifetime l >>>
+  convertRegType knownRepr loc (TypedReg z_ptr) knownRepr tp >>>= \(TypedReg z) ->
+  greturn (addCtxName ctx z)
 
+{-
 -- Type-check a load of a value that can be cast from an LLVM pointer, by
 -- loading an LLVM pointer and then performing the cast
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp storage _)
@@ -1399,16 +1461,20 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp storage _)
 -- We canot yet handle other loads
 tcEmitLLVMStmt _ _ _ (LLVM_Load _ _ _ _ _) =
   error "FIXME: tcEmitLLVMStmt cannot yet handle loads larger than the size of LLVM pointers"
+-}
 
 -- Type-check a store of an LLVM pointer
-tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr (LLVMPointerRepr w) _ _ val)
-  | Just Refl <- testEquality w (archWidth arch)
-  = let tptr = tcReg ctx ptr
-        tval = tcReg ctx val in
-    stmtProvePerm tptr (emptyMb $ llvmWrite0TruePerm) >>>= \_ ->
-    emitLLVMStmt knownRepr loc (TypedLLVMStore tptr tval) >>>= \y ->
-    stmtRecombinePerms >>>
-    greturn (addCtxName ctx y)
+tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr tp _ _ val) =
+  let tptr = tcReg ctx ptr
+      tval = tcReg ctx val in
+  convertRegType knownRepr loc tval tp knownRepr >>>= \tval_ptr ->
+  stmtProvePerm tptr (emptyMb $ llvmWrite0TruePerm) >>>= \_ ->
+  emitLLVMStmt knownRepr loc (TypedLLVMStore tptr tval_ptr) >>>= \y ->
+  stmtRecombinePerms >>>
+  greturn (addCtxName ctx y)
+
+tcEmitLLVMStmt _ _ _ (LLVM_Store _ _ _ _ _ _) =
+  error "FIXME: tcEmitLLVMStmt cannot yet handle stores of size other than that of LLVM pointers"
 
 -- FIXME HERE: handle stores of values that can be converted to/from pointers
 
