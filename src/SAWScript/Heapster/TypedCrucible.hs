@@ -958,6 +958,18 @@ getRegFunPerm freg =
     _ -> stmtFailM (\i ->
                      string "No function permission for" <+> permPretty i freg)
 
+-- | Find all the variables of LLVM frame pointer type in a sequence
+-- FIXME: move to Permissions.hs
+findLLVMFrameVars :: NatRepr w -> CruCtx as -> MapRList Name as ->
+                     [ExprVar (LLVMFrameType w)]
+findLLVMFrameVars _ CruCtxNil _ = []
+findLLVMFrameVars w (CruCtxCons tps (LLVMFrameRepr w')) (ns :>: n) =
+  case testEquality w w' of
+    Just Refl -> n : findLLVMFrameVars w tps ns
+    Nothing -> error "findLLVMFrameVars: found LLVM frame pointer of wrong type"
+findLLVMFrameVars w (CruCtxCons tps _) (ns :>: _) = findLLVMFrameVars w tps ns
+
+
 -- | Get the current frame pointer on LLVM architectures
 getFramePtr :: PermCheckM (LLVM arch) cblocks blocks ret args r ps r ps
                (Maybe (TypedReg (LLVMFrameType (ArchWidth arch))))
@@ -1404,9 +1416,15 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
       emitLLVMStmt knownRepr loc (TypedLLVMAlloca fp fperms sz) >>>= \y ->
       stmtRecombinePerms >>>
       greturn (addCtxName ctx y)
-    _ ->
-      stmtFailM (const $
-                 string "LLVM_Alloca: no frame perms or non-constant size")
+    (_, _, Nothing) ->
+      stmtFailM (\i -> string "LLVM_Alloca: non-constant size for"
+                       <+> permPretty i sz_treg)
+    (Just fp, p, _) ->
+      stmtFailM (\i -> string "LLVM_Alloca: expected LLVM frame perm for "
+                       <+> permPretty i fp <> ", found perm"
+                       <+> permPretty i p)
+    (Nothing, _, _) ->
+      stmtFailM (const $ string "LLVM_Alloca: no frame pointer set")
 
 -- Type-check a push frame instruction
 tcEmitLLVMStmt arch ctx loc (LLVM_PushFrame _) =
@@ -1583,6 +1601,20 @@ tcEmitStmtSeq ctx (TermStmt loc tstmt) =
   tcTermStmt ctx tstmt >>>= \typed_tstmt ->
   gmapRet (>> return (TypedTermStmt loc typed_tstmt))
 
+llvmReprWidth :: ExtRepr (LLVM arch) -> NatRepr (ArchWidth arch)
+llvmReprWidth ExtRepr_LLVM = knownRepr
+
+setInputExtState :: ExtRepr ext -> CruCtx as -> MapRList Name as ->
+                    PermCheckM ext cblocks blocks ret args r ps r ps ()
+setInputExtState ExtRepr_Unit _ _ = greturn ()
+setInputExtState repr@ExtRepr_LLVM tps ns
+  | [n] <- findLLVMFrameVars (llvmReprWidth repr) tps ns
+  = setFramePtr $ TypedReg n
+setInputExtState ExtRepr_LLVM _ _ =
+  -- FIXME: make sure there are not more than one frame var and/or a frame var
+  -- of the wrong type
+  greturn ()
+
 -- | Type-check a single block entrypoint
 tcBlockEntry :: PermCheckExtC ext => Block ext cblocks ret args ->
                 BlockEntryInfo blocks ret (CtxToRList args) ->
@@ -1606,6 +1638,9 @@ tcBlockEntry blk (BlockEntryInfo {..}) =
   setVarTypes ns (appendCruCtx (entryGhosts entryInfoID) entryInfoArgs) >>>
   stmtTraceM (\i -> string "Input perms:"
                     <> align (permPretty i $ runIdentity perms)) >>>
+  setInputExtState knownRepr (entryGhosts entryInfoID)
+  (fst $ splitMapRList (entryGhosts entryInfoID) (cruCtxProxies
+                                                  entryInfoArgs) ns) >>>
   stmtRecombinePerms >>>
   tcEmitStmtSeq ctx (blk ^. blockStmts)
 
