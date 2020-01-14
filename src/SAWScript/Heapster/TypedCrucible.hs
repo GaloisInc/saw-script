@@ -1256,7 +1256,15 @@ tcExpr (ExtensionApp e_ext :: App ext RegWithVal tp)
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = error "tcExpr: unexpected LLVM expression"
 
+tcExpr (NatLit i) = greturn $ Just $ PExpr_Nat $ toInteger i
+
+tcExpr (BVLit w i) = withKnownNat w $ greturn $ Just $ bvInt i
+
+tcExpr (BVAdd w (RegWithVal _ e1) (RegWithVal _ e2)) =
+  withKnownNat w $ greturn $ Just $ bvAdd e1 e2
+
 tcExpr _ = greturn Nothing -- FIXME HERE NOW: at least handle bv operations
+
 
 -- | Typecheck a statement and emit it in the current statement sequence,
 -- starting and ending with an empty stack of distinguished permissions
