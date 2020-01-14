@@ -63,7 +63,10 @@ adaptExporter ::
   (SharedContext -> FilePath -> Prop -> IO ())
 adaptExporter exporter sc path (Prop goal) =
   do let (args, concl) = asPiList goal
-     p <- asEqTrue concl
+     p <-
+       case asEqTrue concl of
+         Just p -> return p
+         Nothing -> fail "adaptExporter: expected EqTrue"
      p' <- scNot sc p -- is this right?
      t <- scLambdaList sc args p'
      exporter sc path t
