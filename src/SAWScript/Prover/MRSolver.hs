@@ -9,7 +9,6 @@ module SAWScript.Prover.MRSolver
   , SBV.z3, SBV.cvc4, SBV.yices, SBV.mathSAT, SBV.boolector
   ) where
 
-import Control.Monad.Fail (MonadFail)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
@@ -331,13 +330,13 @@ compFunInputType (CompFunComp f _) = compFunInputType f
 compFunInputType (CompFunMark f _) = compFunInputType f
 
 -- | Match a term as a function name
-asFunName :: (MonadPlus m, MonadFail m) => Recognizer m Term FunName
+asFunName :: Term -> Maybe FunName
 asFunName t =
   (LocalName <$> LocalFunName <$> asExtCns t)
   `mplus` (GlobalName <$> asGlobalDef t)
 
 -- | Match a term as being of the form @CompM a@ for some @a@
-asCompMApp :: Monad m => Recognizer m Term Term
+asCompMApp :: Term -> Maybe Term
 asCompMApp (asApp -> Just (isGlobalDef "Prelude.CompM" -> Just (), tp)) =
   return tp
 asCompMApp _ = fail "not CompM app"

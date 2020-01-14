@@ -83,8 +83,9 @@ predicateToProp sc quant env t =
 propToPredicate :: SharedContext -> Prop -> IO Term
 propToPredicate sc (Prop goal) =
   do let (args, t1) = asPiList goal
-     t2 <- asEqTrue t1
-     scLambdaList sc args t2
+     case asEqTrue t1 of
+       Just t2 -> scLambdaList sc args t2
+       Nothing -> fail "propToPredicate: expected EqTrue"
 
 -- | A ProofState represents a sequent, where the collection of goals
 -- implies the conclusion.

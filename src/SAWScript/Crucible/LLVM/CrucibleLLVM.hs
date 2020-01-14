@@ -71,13 +71,12 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , ModuleTranslation
   , llvmMemVar
   , toStorableType
-  , symbolMap
-  , LLVMHandleInfo(LLVMHandleInfo)
   , cfgMap
   , transContext
   , llvmPtrWidth
   , LLVMContext
   , translateModule
+  , llvmDeclToFunHandleRepr'
     -- * Re-exports from "Lang.Crucible.LLVM.MemModel"
   , doResolveGlobal
   , Mem
@@ -144,7 +143,7 @@ import Lang.Crucible.LLVM.Extension
   (ArchWidth)
 
 import Lang.Crucible.LLVM.Intrinsics
-  (LLVM, llvmTypeCtx, register_llvm_overrides, llvmIntrinsicTypes)
+  (LLVM, register_llvm_overrides, llvmIntrinsicTypes)
 
 import Lang.Crucible.LLVM.MemType
   (SymType(MemType, Alias, VoidType),
@@ -162,9 +161,8 @@ import Lang.Crucible.LLVM.Globals
   (GlobalInitializerMap, initializeMemoryConstGlobals, makeGlobalMap, populateConstGlobals)
 
 import Lang.Crucible.LLVM.Translation
-  (llvmMemVar, symbolMap, LLVMHandleInfo(LLVMHandleInfo),
-   cfgMap, transContext, llvmPtrWidth,
-   ModuleTranslation, LLVMContext, translateModule)
+  (llvmMemVar, cfgMap, transContext, llvmPtrWidth, llvmTypeCtx,
+   ModuleTranslation, LLVMContext, translateModule, llvmDeclToFunHandleRepr')
 
 import Lang.Crucible.LLVM.MemModel
   (Mem, MemImpl, doResolveGlobal, storeRaw, storeConstRaw, mallocRaw, mallocConstRaw,
