@@ -323,6 +323,11 @@ instance TypeTranslate (ExprVar a) ctx (ExprTrans a) where
 trueOpenTerm :: OpenTerm
 trueOpenTerm = ctorOpenTerm "Prelude.True" []
 
+bvNat :: Integer -> Integer -> OpenTerm
+bvNat w n =
+  applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
+  [natOpenTerm w, natOpenTerm n]
+
 bvAddOpenTerm :: Integer -> OpenTerm -> OpenTerm -> OpenTerm
 bvAddOpenTerm n x y =
   applyOpenTermMulti (globalOpenTerm "Prelude.bvAdd")
@@ -342,11 +347,8 @@ instance TypeTranslate (PermExpr a) ctx (ExprTrans a) where
     do let w = natVal (Proxy :: Proxy w)
        bv_transs <- mapM tptranslate $ mbList bvfactors
        return $ ETrans_Term $
-         bvAddOpenTerm w (foldr (bvMulOpenTerm w)
-                          (applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
-                           [natOpenTerm w, natOpenTerm 1])
-                          bv_transs)
-         (natOpenTerm $ mbLift off)
+         bvAddOpenTerm w (foldr (bvMulOpenTerm w) (bvNat w 1) bv_transs)
+         (bvNat w $ mbLift off)
   tptranslate [nuP| PExpr_Struct _args |] =
     error "FIXME HERE: translate struct expressions!"
   tptranslate [nuP| PExpr_Always |] =
