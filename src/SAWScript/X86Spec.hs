@@ -45,6 +45,7 @@ module SAWScript.X86Spec
   , debugPPReg
 
   , Sym
+  , freshRegister
 
   -- * Cryptol
   , CryArg(..)

@@ -55,6 +55,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , setupArgs
     , getGlobalPair
     , runCFG
+    , setupLLVMCrucibleContext
     ) where
 
 import Prelude hiding (fail)
