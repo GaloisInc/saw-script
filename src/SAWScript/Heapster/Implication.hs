@@ -1701,6 +1701,15 @@ proveVarEqH x p@(ValPerm_Eq
     introEqCopyM x (PExpr_LLVMWord e') >>> implPopM x p >>>
     castLLVMWordEqM x e' e
 
+-- Prove x:eq(y) |- x:eq(e) by first proving y:eq(e) and then casting
+proveVarEqH x p@(ValPerm_Eq (PExpr_Var y)) psubst mb_e =
+  introEqCopyM x (PExpr_Var y) >>>
+  implPopM x p >>>
+  proveVarImpl y (fmap ValPerm_Eq mb_e) >>>
+  partialSubstForceM mb_e
+  "proveVarEqH: incomplete psubst" >>>= \e ->
+  introCastM x y (ValPerm_Eq e)
+
 -- Eliminate disjunctive and/or existential permissions
 proveVarEqH x (ValPerm_Or _ _) _ mb_e =
   elimOrsExistsM x >>>= \p -> proveVarEq x p mb_e
@@ -2025,7 +2034,8 @@ proveVarImplH :: ExprVar a -> ValuePerm a ->
 
 -- Prove x:eq(e) by calling proveVarEq; note that we do not eliminate
 -- disjunctive permissions first because some trivial equalities do not require
--- any eq permissions on the left
+-- any eq permissions on the left, and we do not eliminate equalities on the
+-- left first because that may be the equality we are trying to prove!
 proveVarImplH x p [nuP| ValPerm_Eq e |] = proveVarEq x p e
 
 -- Eliminate any disjunctions and existentials on the left
