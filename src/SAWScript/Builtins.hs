@@ -350,12 +350,12 @@ quickcheckGoal sc n = do
   withFirstGoal $ \goal -> io $ do
     printOutLn opts Warn $ "WARNING: using quickcheck to prove goal..."
     hFlush stdout
-    let Prop tm = goalProp goal
+    tm0 <- propToPredicate sc (goalProp goal)
+    tm <- scAbstractExts sc (getAllExts tm0) tm0
     ty <- scTypeOf sc tm
     maybeInputs <- scTestableType sc ty
-    maybeInputs' <- scTestableType sc tm
     let stats = solverStats "quickcheck" (scSharedSize tm)
-    case msum [maybeInputs, maybeInputs'] of
+    case maybeInputs of
       Just inputs -> do
         result <- scRunTestsTFIO sc n tm inputs
         case result of
