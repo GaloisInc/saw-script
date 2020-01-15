@@ -44,6 +44,8 @@ import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizeP
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
+import qualified Text.LLVM.AST as L
+
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
@@ -1936,7 +1938,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_llvm_verify_x86"
-    "LLVMModule -> String -> String -> [LLVMType] -> [LLVMType] -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    "LLVMModule -> String -> String -> [LLVMType] -> Maybe LLVMType -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify_x86)
     Experimental
     [ "Load the ELF file specified by the second argument and verify the function"
@@ -1944,6 +1946,18 @@ primitives = Map.fromList
     , "when verifying other LLVM. The fourth and fifth arguments specify the types"
     , "of the arguments and return value, respectively."
     ]
+
+  , prim "crucible_llvm_x86_return_type"
+    "LLVMType -> Maybe LLVMType"
+    (pureVal (Just :: L.Type -> Maybe L.Type))
+    Experimental
+    []
+
+  , prim "crucible_llvm_x86_return_void"
+    "Maybe LLVMType"
+    (pureVal (Nothing :: Maybe L.Type))
+    Experimental
+    []
 
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
