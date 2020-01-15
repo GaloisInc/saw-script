@@ -680,6 +680,8 @@ instance TypeTranslate (ValuePerm a) ctx (Either (PermTrans ctx a)
     mapM tptranslate (mbList ps) >>= \eithers ->
     case partitionEithers eithers of
       (transs, []) -> return $ Left $ PTrans_Conj transs
+      (_, [(tp, mk_ptrans)]) ->
+        return $ Right (tp, \t -> PTrans_Conj [mk_ptrans t])
       _ ->
         return $ Right (tupleTypeOpenTerm
                         (mapMaybe (\eith -> case eith of
