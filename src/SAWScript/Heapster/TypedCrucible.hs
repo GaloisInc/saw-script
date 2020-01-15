@@ -321,12 +321,17 @@ data TypedLLVMStmt w ret ps_in ps_out where
 
   -- | Load a machine value from the address pointed to by the given pointer
   --
-  -- Type: @l:lowned(ps), x:[l]ptr((r,0) |-> eq(y)) -o l:lowned(ps), ret:eq(y)@
+  -- Type: @x:[l]ptr((r,0) |-> eq(y)), l:lowned(ps) -o l:lowned(ps), ret:eq(y)@
+  --
+  -- NOTE: the input lifetime permission on @l@ is second, after the permission
+  -- for @x@, so that we prove the @x@ permission first. This ensures that the
+  -- @lowned@ permission is still a distinguished permission for @l@, allowing
+  -- us to split the lifetime of @x@ wrt @l@ if needed.
   TypedLLVMLoad :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
                    ExprVar LifetimeType -> PermExpr PermListType ->
                    PermExpr (LLVMPointerType w) ->
                    TypedLLVMStmt w (LLVMPointerType w)
-                   (RNil :> LifetimeType :> LLVMPointerType w)
+                   (RNil :> LLVMPointerType w :> LifetimeType)
                    (RNil :> LifetimeType :> LLVMPointerType w)
 
   -- | Store a machine value to the address pointed to by the given pointer
@@ -397,8 +402,8 @@ typedLLVMStmtIn (AssertLLVMWord (TypedReg x) e) =
 typedLLVMStmtIn (DestructLLVMWord (TypedReg x) e) =
   distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e)
 typedLLVMStmtIn (TypedLLVMLoad (TypedReg x) l ps e) =
-  distPerms2 l (ValPerm_Conj [Perm_LOwned ps])
-  x (llvmRead0EqPerm (PExpr_Var l) e)
+  distPerms2 x (llvmRead0EqPerm (PExpr_Var l) e)
+  l (ValPerm_Conj [Perm_LOwned ps])
 typedLLVMStmtIn (TypedLLVMStore (TypedReg x) _) =
   distPerms1 x llvmWrite0TruePerm
 typedLLVMStmtIn (TypedLLVMAlloca (TypedReg f) fperms _) =
@@ -1262,6 +1267,7 @@ beginLifetime =
 endLifetime :: PermCheckExtC ext => ExprVar LifetimeType ->
                StmtPermCheckM ext cblocks blocks ret args RNil RNil ()
 endLifetime l =
+  stmtTraceM (\i -> string "Ending lifetime" <+> permPretty i l) >>>
   getVarPerm l >>>= \l_perm ->
   case l_perm of
     ValPerm_Conj [Perm_LOwned ps_list]
@@ -1456,13 +1462,15 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp _ _) =
   let prxs :: MapRList Proxy (RNil :> PermListType :> LLVMPointerType _)
         = typeCtxProxies
       needed_perms =
+        -- NOTE: need to prove x:LLVMptr(...) first, before proving l:lowned, so
+        -- that the former proof can split the lifetime of x wrt l before we
+        -- push the l:lowned perm onto the stack
         ExDistPermsCons
         (ExDistPermsCons ExDistPermsNil
-         l
-         (nuMulti prxs $ \(_ :>: ps :>: _) ->
-           ValPerm_Conj [Perm_LOwned (PExpr_Var ps)]))
-        x (nuMulti prxs $ \(_ :>: _ :>: y) ->
-            llvmRead0EqPerm (PExpr_Var l) (PExpr_Var y)) in
+         x (nuMulti prxs $ \(_ :>: _ :>: y) ->
+             llvmRead0EqPerm (PExpr_Var l) (PExpr_Var y)))
+        l (nuMulti prxs $ \(_ :>: ps :>: _) ->
+            ValPerm_Conj [Perm_LOwned (PExpr_Var ps)]) in
   stmtProvePerms needed_perms >>>= \(PermSubst (_ :>: ps :>: y)) ->
   emitLLVMStmt knownRepr loc (TypedLLVMLoad treg l ps y) >>>= \z_ptr ->
   stmtRecombinePerms >>>

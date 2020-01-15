@@ -1340,15 +1340,22 @@ implFailMsgM :: String -> ImplM vars s r ps_any ps a
 implFailMsgM msg =
   implTraceM (const $ string (msg ++ "; backtracking...")) >>> implFailM
 
+-- | Pretty print an implication @x:p -o (vars).p'@
+ppImpl :: PPInfo -> ExprVar tp -> ValuePerm tp ->
+          Mb (vars :: RList CrucibleType) (ValuePerm tp) -> Doc
+ppImpl i x p mb_p =
+  sep [permPretty i x <> colon <> align (permPretty i p),
+       string "-o",
+       align (permPretty i mb_p)]
+
 -- | Terminate the current proof branch with a failure proving @x:p -o mb_p@
 implFailVarM :: String -> ExprVar tp -> ValuePerm tp -> Mb vars (ValuePerm tp) ->
                 ImplM vars s r ps_any ps a
 implFailVarM f x p mb_p =
   implTraceM (\i ->
-               string f <> colon <+> string "Could not prove" <> line
-               </> permPretty i x <> colon <> PP.group (permPretty i p)
-               </> string "-o" <+> PP.group (permPretty i mb_p) <> string ";"
-               </> string "backtracking...") >>>
+               sep [string f <> colon <+> string "Could not prove",
+                    ppImpl i x p mb_p <> string ";",
+                    string "backtracking..."]) >>>
   implFailM
 
 -- | Produce a branching proof tree that performs the first implication and, if
@@ -1636,7 +1643,7 @@ recombinePerm' x x_p@(ValPerm_Exists _) p =
   implPushM x x_p >>> elimOrsExistsM x >>>= \x_p' ->
   implPopM x x_p' >>> recombinePerm x x_p' p
 recombinePerm' x x_p@(ValPerm_Conj x_ps) (ValPerm_Conj (p:ps)) =
-  implExtractConjM x ps 0 >>>
+  implExtractConjM x (p:ps) 0 >>>
   implSwapM x (ValPerm_Conj1 p) x (ValPerm_Conj ps) >>>
   implPushM x x_p >>> implInsertConjM x p x_ps (length x_ps) >>>
   implPopM x (ValPerm_Conj (x_ps ++ [p])) >>>
@@ -1833,12 +1840,23 @@ extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' mb_fp
         PExpr_Var l2_var ->
           getPerm l2_var >>>= \l2_perm ->
           (case l2_perm of
-              ValPerm_Conj [Perm_LOwned _] ->
+              ValPerm_Conj [Perm_LOwned ps] ->
                 implPushM l2_var l2_perm >>>
                 implSplitLifetimeM x (ValPerm_Conj1 p) l2_var >>>
-                implPopM l2_var l2_perm >>>
+                implPopM l2_var (ValPerm_Conj
+                                 [Perm_LOwned
+                                  (PExpr_PermListCons (PExpr_Var x)
+                                   (ValPerm_Conj1 p) ps)]) >>>
                 greturn (fp { llvmFieldLifetime = l2 })
-              _ -> greturn fp)
+              l_p ->
+                implTraceM (\i ->
+                             sep [ string "No lowned perm for" <+> permPretty i l2
+                                   <> comma
+                                 , string "instead found" <+> permPretty i l_p
+                                   <> comma
+                                 , string "so we must demote the RW on"
+                                   <> permPretty i x]) >>>
+                greturn fp)
         _ -> greturn fp) >>>= \fp' ->
     implSimplM Proxy (SImpl_DemoteLLVMFieldWrite x fp') >>>
     let fp'' = fp' { llvmFieldRW = Read } in
@@ -2023,6 +2041,7 @@ proveVarImpl :: ExprVar a -> Mb vars (ValuePerm a) ->
 proveVarImpl x mb_p =
   getPerm x >>>= \p ->
   implPushM x p >>>
+  implTraceM (\i -> string "proveVarImpl:" <> line <> ppImpl i x p mb_p) >>>
   proveVarImplH x p mb_p
 
 -- | Prove @x:p'@ assuming that the primary permissions for @x@ have all been

@@ -1962,8 +1962,8 @@ itranslateLLVMStmt [nuP| DestructLLVMWord _ e |] m =
 
 itranslateLLVMStmt [nuP| TypedLLVMLoad _ _ _ e |] m =
   inExtImpTransM ETrans_LLVM PTrans_True $
-  withPermStackM ((:>: Member_Base) . mapRListTail)
-  ((:>: (PTrans_Eq $ extMb e)) . mapRListTail)
+  withPermStackM (\(vars :>: _ :>: l) -> vars :>: l :>: Member_Base)
+  (\(pctx :>: _ :>: ltrans) -> pctx :>: ltrans :>: PTrans_Eq (extMb e))
   m
 
 itranslateLLVMStmt [nuP| TypedLLVMStore _ (TypedReg y) |] m =

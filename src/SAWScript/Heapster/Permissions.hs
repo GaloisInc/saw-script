@@ -992,7 +992,7 @@ instance PermPretty (AtomicPerm a) where
        let pp_rw = case llvmFieldRW of
              Read -> string "Read"
              Write -> string "Write"
-       return (string "LLVMptr" <>
+       return (pp_l <> string "LLVMptr" <>
                parens (hang 2 (tupled [pp_rw, pp_off] <+> string "|->"
                                </> pp_contents)))
   permPrettyM (Perm_LLVMArray _) = error "FIXME HERE: pretty-print array perms"
