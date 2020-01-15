@@ -39,6 +39,9 @@ import Data.Binding.Hobbits
 import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
 import qualified Data.Binding.Hobbits.NameMap as NameMap
 
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
+
 import Data.Parameterized.Context hiding ((:>), empty, take, view, zipWith)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
@@ -50,6 +53,7 @@ import Lang.Crucible.LLVM.Extension
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Arch.X86
 import Lang.Crucible.CFG.Expr
+import qualified Lang.Crucible.CFG.Expr as Expr
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.CFG.Extension
 import Lang.Crucible.Analysis.Fixpoint.Components
@@ -1611,27 +1615,192 @@ instance ImplTranslateF r ext blocks ret =>
 instance TypeTranslate (TypedReg tp) ctx (ExprTrans tp) where
   tptranslate [nuP| TypedReg x |] = tptranslate x
 
--- tptranslate for a TypedExpr yields an ExprTrans
-instance NuMatchingExtC ext =>
-         TypeTranslate (App ext RegWithVal tp) ctx (ExprTrans tp) where
-  tptranslate [nuP| EmptyApp |] = return $ ETrans_Term unitOpenTerm
-  tptranslate _ = error "FIXME HERE NOW"
+instance TypeTranslate (RegWithVal tp) ctx (ExprTrans tp) where
+  tptranslate [nuP| RegWithVal _ e |] = tptranslate e
+  tptranslate [nuP| RegNoVal x |] = tptranslate x
+
+translateRWV :: Mb ctx (RegWithVal a) -> TypeTransM ctx OpenTerm
+translateRWV mb_rwv = exprTransToTermForce <$> tptranslate mb_rwv
 
 -- tptranslate for a TypedExpr yields an ExprTrans
-instance NuMatchingExtC ext =>
+instance PermCheckExtC ext =>
+         TypeTranslate (App ext RegWithVal tp) ctx (ExprTrans tp) where
+  tptranslate [nuP| BaseIsEq BaseBoolRepr e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.boolEq")
+    [translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BaseIsEq BaseNatRepr e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.equalNat")
+    [translateRWV e1, translateRWV e2]
+
+  tptranslate [nuP| EmptyApp |] = return $ ETrans_Term unitOpenTerm
+
+  -- Booleans
+  tptranslate [nuP| BoolLit True |] =
+    return $ ETrans_Term $ globalOpenTerm "Prelude.True"
+  tptranslate [nuP| BoolLit False |] =
+    return $ ETrans_Term $ globalOpenTerm "Prelude.False"
+  tptranslate [nuP| Not e |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.not")
+    [translateRWV e]
+  tptranslate [nuP| And e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.and")
+    [translateRWV e1, translateRWV e2]
+  tptranslate [nuP| Or e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.or")
+    [translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BoolXor e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.xor")
+    [translateRWV e1, translateRWV e2]
+
+  -- Natural numbers
+  tptranslate [nuP| Expr.NatLit n |] =
+    return $ ETrans_Term $ natOpenTerm $ toInteger $ mbLift n
+  tptranslate [nuP| NatLt e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.ltNat")
+    [translateRWV e1, translateRWV e2]
+  -- tptranslate [nuP| NatLe _ _ |] =
+  tptranslate [nuP| NatAdd e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.addNat")
+    [translateRWV e1, translateRWV e2]
+  tptranslate [nuP| NatSub e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.subNat")
+    [translateRWV e1, translateRWV e2]
+  tptranslate [nuP| NatMul e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.mulNat")
+    [translateRWV e1, translateRWV e2]
+  tptranslate [nuP| NatDiv e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.divNat")
+    [translateRWV e1, translateRWV e2]
+  tptranslate [nuP| NatMod e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.modNat")
+    [translateRWV e1, translateRWV e2]
+
+  -- Function handles: the expression part of a function handle has no
+  -- computational content
+  tptranslate [nuP| HandleLit _ |] = return ETrans_Fun
+
+  -- Bitvectors
+  tptranslate [nuP| BVLit w i |] =
+    return $ ETrans_Term $ bvNat (intValue $ mbLift w) (mbLift i)
+  tptranslate [nuP| BVConcat w1 w2 e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.join")
+    [tptranslate w1, tptranslate w2, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVTrunc w1 w2 e |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.take")
+    [return (globalOpenTerm "Prelude.Bool"),
+     return (natOpenTerm (intValue (mbLift w2) - intValue (mbLift w1))),
+     tptranslate w1,
+     translateRWV e]
+  tptranslate [nuP| BVZext w1 w2 e |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvUExt")
+    [tptranslate w1, tptranslate w2, translateRWV e]
+  tptranslate [nuP| BVSext w1 w2 e |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvSExt")
+    [tptranslate w1, tptranslate w2, translateRWV e]
+  tptranslate [nuP| BVNot w e |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvNot")
+    [tptranslate w, translateRWV e]
+  tptranslate [nuP| BVAnd w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvAnd")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVOr w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvOr")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVNeg w e |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvNeg")
+    [tptranslate w, translateRWV e]
+  tptranslate [nuP| BVAdd w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvAdd")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVSub w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvSub")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVMul w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvMul")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVUdiv w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvUDiv")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVSdiv w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvSDiv")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVUrem w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvURem")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVSrem w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvSRem")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVUle w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvule")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVUlt w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvult")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVSle w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvsle")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate [nuP| BVSlt w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvslt")
+    [tptranslate w, translateRWV e1, translateRWV e2]
+  tptranslate mb_e =
+    error ("Unhandled expression form: " ++
+           (flip displayS "" $ renderPretty 0.8 80 $
+            mbLift $ fmap (ppApp (const $ string "_")) mb_e))
+
+
+-- tptranslate for a TypedExpr yields an ExprTrans
+{-
+instance PermCheckExtC ext =>
+         TypeTranslate (App ext RegWithVal tp) ctx (ExprTrans tp) where
+  tptranslate mb_app = tptranslate (fmap (fmapFC regWithValExpr) mb_app)
+-}
+
+-- tptranslate for a TypedExpr yields an ExprTrans
+instance PermCheckExtC ext =>
          TypeTranslate (TypedExpr ext tp) ctx (ExprTrans tp) where
   tptranslate [nuP| TypedExpr _ (Just e) |] = tptranslate e
   tptranslate [nuP| TypedExpr app Nothing |] = tptranslate app
 
 -- itranslate for a TypedReg yields a PermTrans
-instance NuMatchingExtC ext =>
+instance PermCheckExtC ext =>
          ImplTranslate (TypedReg tp) (PermTrans ctx tp)
          ext blocks ret ps ctx where
   itranslate [nuP| TypedReg x |] = getVarPermM x
 
 -- itranslate for a TypedExpr yields a PermTrans
 {-
-instance NuMatchingExtC ext =>
+instance PermCheckExtC ext =>
          ImplTranslate (App ext TypedReg tp) (PermTrans ctx tp)
          ext blocks ret ps ctx where
   itranslate [nuP| EmptyApp |] = return PTrans_True
@@ -1640,7 +1809,7 @@ instance NuMatchingExtC ext =>
 
 -- itranslate for a TypedExpr yields a PermTrans, which is either an eq(e)
 -- permission or true
-instance NuMatchingExtC ext =>
+instance PermCheckExtC ext =>
          ImplTranslate (TypedExpr ext tp) (PermTrans ctx tp)
          ext blocks ret ps ctx where
   itranslate [nuP| TypedExpr _ (Just e) |] = return $ PTrans_Eq e
@@ -1699,7 +1868,7 @@ instance ImplTranslateF (TypedJumpTarget blocks) ext blocks ret where
 ----------------------------------------------------------------------
 
 -- | Translate a 'TypedStmt' to a function on translation computations
-itranslateStmt :: NuMatchingExtC ext =>
+itranslateStmt :: PermCheckExtC ext =>
                   Mb ctx (TypedStmt ext rets ps_in ps_out) ->
                   ImpTransM ext blocks ret ps_out (ctx :++: rets) OpenTerm ->
                   ImpTransM ext blocks ret ps_in ctx OpenTerm
@@ -1839,7 +2008,7 @@ itranslateLLVMStmt mb_stmt@[nuP| TypedLLVMDeleteFrame _ _ _ |] m =
 -- * Translating Sequences of Typed Crucible Statements
 ----------------------------------------------------------------------
 
-instance NuMatchingExtC ext =>
+instance PermCheckExtC ext =>
          ImplTranslate (TypedRet ret ps) OpenTerm ext blocks ret ps ctx where
   itranslate [nuP| TypedRet ret r mb_perms |] =
     do let perms =
@@ -1856,11 +2025,11 @@ instance NuMatchingExtC ext =>
          [ret_trans, tp_f, r_trans,
           tupleOpenTerm (permCtxToTerms pctx)]
 
-instance NuMatchingExtC ext =>
+instance PermCheckExtC ext =>
          ImplTranslateF (TypedRet ret) ext blocks ret where
   itranslateF mb_ret = itranslate mb_ret
 
-instance NuMatchingExtC ext =>
+instance PermCheckExtC ext =>
          ImplTranslate (TypedTermStmt blocks ret ps) OpenTerm
          ext blocks ret ps ctx where
   itranslate [nuP| TypedJump impl_tgt |] = itranslate impl_tgt
@@ -1871,7 +2040,7 @@ instance NuMatchingExtC ext =>
   itranslate [nuP| TypedReturn impl_ret |] = itranslate impl_ret
   itranslate [nuP| TypedErrorStmt _ |] = itiCatchHandler <$> ask
 
-instance NuMatchingExtC ext =>
+instance PermCheckExtC ext =>
          ImplTranslate (TypedStmtSeq ext blocks ret ps) OpenTerm
          ext blocks ret ps ctx where
   itranslate [nuP| TypedImplStmt impl_seq |] = itranslate impl_seq
@@ -1879,7 +2048,7 @@ instance NuMatchingExtC ext =>
     itranslateStmt stmt (itranslate $ mbCombine mb_seq)
   itranslate [nuP| TypedTermStmt _ term_stmt |] = itranslate term_stmt
 
-instance NuMatchingExtC ext =>
+instance PermCheckExtC ext =>
          ImplTranslateF (TypedStmtSeq ext blocks ret) ext blocks ret where
   itranslateF mb_seq = itranslate mb_seq
 
@@ -2003,7 +2172,7 @@ lambdaBlockMap = helper where
          (\(bsTrans :>: TypedBlockTrans eTranss) ->
            f (bsTrans :>: TypedBlockTrans (TypedEntryTrans entry fvar:eTranss)))
 
-translateEntryBody :: NuMatchingExtC ext =>
+translateEntryBody :: PermCheckExtC ext =>
                       TypedBlockMapTrans ext blocks ret ->
                       TypedEntry ext blocks ret args ->
                       TypeTransM ctx OpenTerm
@@ -2016,7 +2185,7 @@ translateEntryBody mapTrans (TypedEntry entryID args ret in_perms
      impTransM pctx mapTrans retType $ itranslate stmts
 
 
-translateBlockMapBodies :: NuMatchingExtC ext =>
+translateBlockMapBodies :: PermCheckExtC ext =>
                            TypedBlockMapTrans ext blocks ret ->
                            TypedBlockMap ext blocks ret ->
                            TypeTransM ctx OpenTerm
@@ -2028,7 +2197,7 @@ translateBlockMapBodies mapTrans =
   (trace "translateBlockMapBodies finished" $ return unitOpenTerm)
 
 -- | Translate a typed CFG to a SAW term
-translateCFG :: NuMatchingExtC ext => TypedCFG ext blocks ghosts inits ret ->
+translateCFG :: PermCheckExtC ext => TypedCFG ext blocks ghosts inits ret ->
                 OpenTerm
 translateCFG cfg =
   let h = tpcfgHandle cfg

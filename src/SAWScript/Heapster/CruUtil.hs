@@ -78,6 +78,12 @@ instance NuMatching (SymbolRepr tp) where
 instance NuMatching (NatRepr tp) where
   nuMatchingProof = unsafeMbTypeRepr
 
+instance Closable (NatRepr tp) where
+  toClosed = unsafeClose
+
+instance Liftable (NatRepr tp) where
+  mbLift = unClosed . mbLift . fmap toClosed
+
 instance NuMatching (TypeRepr tp) where
   nuMatchingProof = unsafeMbTypeRepr
 

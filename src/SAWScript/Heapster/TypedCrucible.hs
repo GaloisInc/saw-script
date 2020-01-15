@@ -111,6 +111,12 @@ data RegWithVal a
   = RegWithVal (TypedReg a) (PermExpr a)
   | RegNoVal (TypedReg a)
 
+-- | Get the expression for a 'RegWithVal', even if it is only the variable for
+-- its register value when it has no statically-known value
+regWithValExpr :: RegWithVal a -> PermExpr a
+regWithValExpr (RegWithVal _ e) = e
+regWithValExpr (RegNoVal (TypedReg x)) = PExpr_Var x
+
 -- | A type-checked Crucible expression is a Crucible 'Expr' that uses
 -- 'TypedReg's for variables. As part of type-checking, these typed registers
 -- (which are the inputs to the expression) as well as the final output value of
@@ -626,7 +632,8 @@ instance (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) =>
 -- | The constraints for a Crucible syntax extension that supports permission
 -- checking
 type PermCheckExtC ext =
-  (NuMatchingExtC ext, IsSyntaxExtension ext, KnownRepr ExtRepr ext)
+  (NuMatchingExtC ext, IsSyntaxExtension ext, KnownRepr ExtRepr ext,
+   PrettyExt ext)
 
 -- | Extension-specific state
 data PermCheckExtState ext where
