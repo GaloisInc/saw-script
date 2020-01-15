@@ -632,8 +632,7 @@ instance (1 <= ArchWidth arch, KnownNat (ArchWidth arch)) =>
 -- | The constraints for a Crucible syntax extension that supports permission
 -- checking
 type PermCheckExtC ext =
-  (NuMatchingExtC ext, IsSyntaxExtension ext, KnownRepr ExtRepr ext,
-   PrettyExt ext)
+  (NuMatchingExtC ext, IsSyntaxExtension ext, KnownRepr ExtRepr ext)
 
 -- | Extension-specific state
 data PermCheckExtState ext where
