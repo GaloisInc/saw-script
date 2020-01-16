@@ -1066,11 +1066,15 @@ setVarPermM x p =
   local $ \info -> info { itiPermCtx =
                             mapRListSet (translateVar x) p $ itiPermCtx info }
 
+-- | The current non-monadic return type
+returnTypeM :: ImpTransM ext blocks ret ps_out ctx OpenTerm
+returnTypeM = itiReturnType <$> ask
+
 -- | Build the monadic return type @CompM ret@, where @ret@ is the current
 -- return type in 'itiReturnType'
 compReturnTypeM :: ImpTransM ext blocks ret ps_out ctx OpenTerm
 compReturnTypeM =
-  applyOpenTerm (globalOpenTerm "Prelude.CompM") <$> itiReturnType <$> ask
+  applyOpenTerm (globalOpenTerm "Prelude.CompM") <$> returnTypeM
 
 -- | Run a computation with a new catch handler
 withCatchHandlerM :: OpenTerm -> ImpTransM ext blocks ret ps_out ctx a ->
@@ -1709,11 +1713,15 @@ instance PermCheckExtC ext =>
   tptranslate [nuP| BVZext w1 w2 e |] =
     ETrans_Term <$>
     applyMultiTransM (return $ globalOpenTerm "Prelude.bvUExt")
-    [tptranslate w1, tptranslate w2, translateRWV e]
+    [return (natOpenTerm (intValue (mbLift w1) - intValue (mbLift w2))),
+     tptranslate w2, translateRWV e]
   tptranslate [nuP| BVSext w1 w2 e |] =
     ETrans_Term <$>
     applyMultiTransM (return $ globalOpenTerm "Prelude.bvSExt")
-    [tptranslate w1, tptranslate w2, translateRWV e]
+    [return (natOpenTerm (intValue (mbLift w1) - intValue (mbLift w2))),
+     -- NOTE: bvSExt adds 1 to the 2ns arg
+     return (natOpenTerm (intValue (mbLift w2) - 1)),
+     translateRWV e]
   tptranslate [nuP| BVNot w e |] =
     ETrans_Term <$>
     applyMultiTransM (return $ globalOpenTerm "Prelude.bvNot")
@@ -2018,20 +2026,23 @@ itranslateLLVMStmt mb_stmt@[nuP| TypedLLVMDeleteFrame _ _ _ |] m =
 
 instance PermCheckExtC ext =>
          ImplTranslate (TypedRet ret ps) OpenTerm ext blocks ret ps ctx where
-  itranslate [nuP| TypedRet ret r mb_perms |] =
+  itranslate [nuP| TypedRet tp r mb_perms |] =
     do let perms =
              mbMap2
              (\reg mbps -> varSubst (singletonVarSubst $ typedRegVar reg) mbps)
              r mb_perms
        assertPermStackEqM "TypedRet" perms
        r_trans <- exprTransToTermForce <$> tpTransM (tptranslate r)
-       ret_trans <- tpTransM $ translateType $ ret
+       tp_trans <- tpTransM $ translateType tp
+       ret_tp_trans <- returnTypeM
        pctx <- itiPermStack <$> ask
-       tp_f <- lambdaExprTransForceI "r" (mbLift ret) $
+       tp_f <- lambdaExprTransForceI "r" (mbLift tp) $
          tpTransM $ tptranslate $ mbCombine mb_perms
-       return $ ctorOpenTerm "Prelude.exists"
-         [ret_trans, tp_f, r_trans,
-          tupleOpenTerm (permCtxToTerms pctx)]
+       return $
+         applyOpenTermMulti (globalOpenTerm "Prelude.returnM")
+         [ret_tp_trans,
+          ctorOpenTerm "Prelude.exists" [tp_trans, tp_f, r_trans,
+                                         tupleOpenTerm (permCtxToTerms pctx)]]
 
 instance PermCheckExtC ext =>
          ImplTranslateF (TypedRet ret) ext blocks ret where
