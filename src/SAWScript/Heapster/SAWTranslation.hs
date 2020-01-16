@@ -736,12 +736,10 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
                 (mbLift args)) $
      piPermCtx (mbCombine $ fmap mbCombine perms_in) $ \_ ->
       translateRetType (mbLift ret)
-      (mbCombine $ fmap (mbCombine
-                         . fmap mbValuePermsToDistPerms) perms_out)) >>= \tp_term ->
+      (mbCombine $
+       fmap (mbCombine . fmap mbValuePermsToDistPerms) perms_out)) >>= \tp_term ->
     return $ Right (tp_term, APTrans_Fun fp)
 
-  -- The proposition e1 = e2 becomes sort 1 equality in SAW
-  -- FIXME: this should use propositional equality
   tptranslate [nuP| Perm_BVProp
                   prop@(BVProp_Eq e1 (e2 :: PermExpr (BVType w))) |] =
     do let w = natVal (Proxy :: Proxy w)
@@ -1561,6 +1559,19 @@ itranslatePermImpl1 [nuP| Impl1_ElimLLVMFieldContents
     :>: ptrans') $
   itranslate $ mbCombine mb_impl
 
+-- If e1 and e2 are already equal, short-circuit the proof construction and then
+-- elimination
+itranslatePermImpl1 [nuP| Impl1_TryProveBVProp x
+                        prop@(BVProp_Eq e1 (e2 :: PermExpr (BVType w))) |]
+  [nuP| MbPermImpls_Cons _ mb_impl |]
+  | mbLift (mbMap2 bvEq e1 e2) =
+    do let tp :: TypeRepr (BVType w) = knownRepr
+       bv_tp <- tpTransM (nuMultiTransM (const tp) >>= translateType)
+       e1_trans <- tpTransM $ translateExpr e1
+       let pf = ctorOpenTerm "Prelude.ReflP" [bv_tp, e1_trans]
+       withPermStackM (:>: translateVar x)
+         (:>: PTrans_Conj [APTrans_BVProp prop pf])
+         (itranslate $ mbCombine mb_impl)
 
 itranslatePermImpl1 [nuP| Impl1_TryProveBVProp x
                         prop@(BVProp_Eq e1 (e2 :: PermExpr (BVType w))) |]
