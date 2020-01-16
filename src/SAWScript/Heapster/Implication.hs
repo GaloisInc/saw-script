@@ -39,6 +39,9 @@ import Control.Monad.Trans
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
 
+import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
+import qualified Data.Binding.Hobbits.NameMap as NameMap
+
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -1594,6 +1597,63 @@ implPushMultiM (DistPermsCons ps x p) =
 
 
 ----------------------------------------------------------------------
+-- * Support for Ending Lifetimes
+----------------------------------------------------------------------
+
+data LifetimeEndPerm a
+  = LifetimeEndPerm (ExprVar a) (ValuePerm a)
+  | LifetimeEndConj (ExprVar a) [AtomicPerm a] Int
+
+type LifetimeEndPerms ps = MapRList LifetimeEndPerm ps
+type SomeLifetimeEndPerms = Some (MapRList LifetimeEndPerm)
+
+lifetimeEndPermsToDistPerms :: LifetimeEndPerms ps -> DistPerms ps
+lifetimeEndPermsToDistPerms MNil = DistPermsNil
+lifetimeEndPermsToDistPerms (ps :>: LifetimeEndPerm x p) =
+  DistPermsCons (lifetimeEndPermsToDistPerms ps) x p
+lifetimeEndPermsToDistPerms (ps :>: LifetimeEndConj x x_ps i) =
+  DistPermsCons (lifetimeEndPermsToDistPerms ps)
+  x (ValPerm_Conj [x_ps!!i])
+
+-- | Search through all distinguished permissions @x:p@ and return any conjuncts
+-- of @p@ that contain the lifetime @l@, if @p@ is a conjunctive permission, or
+-- @p@ itself if it contains @l@ and is any other construct
+buildLifetimeEndPerms :: ExprVar LifetimeType ->
+                        ImplM vars s r ps ps SomeLifetimeEndPerms
+buildLifetimeEndPerms l =
+  getPerms >>>= \perms ->
+  return $ helper (NameMap.assocs (perms ^. varPermMap)) (Some MNil)
+  where
+    helper :: [NameAndElem ValuePerm] -> SomeLifetimeEndPerms ->
+              SomeLifetimeEndPerms
+    helper [] end_perms = end_perms
+    helper (NameAndElem x (ValPerm_Conj ps) : naes) (Some end_perms) =
+      case findIndex (containsLifetime (PExpr_Var l)) ps of
+        Just i ->
+          helper (NameAndElem x
+                  (ValPerm_Conj (take i ps ++ drop (i+1) ps)) : naes)
+          (Some (end_perms :>: LifetimeEndConj x ps i))
+        Nothing -> helper naes (Some end_perms)
+    helper (NameAndElem x p : naes) (Some end_perms)
+      | containsLifetime (PExpr_Var l) p
+      = helper naes $ Some (end_perms :>: LifetimeEndPerm x p)
+    helper (_ : naes) end_perms = helper naes end_perms
+
+
+-- | Call 'implPushM' for multiple @x:p@ permissions
+implPushLifetimeEndPerms :: LifetimeEndPerms ps' ->
+                            ImplM vars s r (ps :++: ps') ps ()
+implPushLifetimeEndPerms MNil = greturn ()
+implPushLifetimeEndPerms (ps :>: LifetimeEndPerm x p) =
+  implPushLifetimeEndPerms ps >>> implPushM x p
+implPushLifetimeEndPerms (ps :>: LifetimeEndConj x x_ps i) =
+  implPushLifetimeEndPerms ps >>>
+  introConjM x >>>
+  implExtractConjM x x_ps i >>>
+  implPopM x (ValPerm_Conj (take i x_ps ++ drop (i+1) x_ps))
+
+
+----------------------------------------------------------------------
 -- * Recombining Permissions
 ----------------------------------------------------------------------
 
@@ -1645,10 +1705,24 @@ recombinePerm' x x_p@(ValPerm_Exists _) p =
 recombinePerm' x x_p@(ValPerm_Conj x_ps) (ValPerm_Conj (p:ps)) =
   implExtractConjM x (p:ps) 0 >>>
   implSwapM x (ValPerm_Conj1 p) x (ValPerm_Conj ps) >>>
-  implPushM x x_p >>> implInsertConjM x p x_ps (length x_ps) >>>
-  implPopM x (ValPerm_Conj (x_ps ++ [p])) >>>
-  recombinePerm x (ValPerm_Conj (x_ps ++ [p])) (ValPerm_Conj ps)
+  recombinePermConj x x_ps p >>>= \x_ps' ->
+  recombinePerm x (ValPerm_Conj x_ps') (ValPerm_Conj ps)
 recombinePerm' x _ p = implDropM x p
+
+-- | Recombine a single conjuct @x:p@ on top of the stack back into the existing
+-- conjuctive permission @x_p1 * ... * x_pn@ for @x@, returning the resulting
+-- permission conjucts for @x@
+recombinePermConj :: ExprVar a -> [AtomicPerm a] -> AtomicPerm a ->
+                     ImplM RNil s r as (as :> a) [AtomicPerm a]
+
+-- FIXME HERE NOW: return array borrows; possibly "uncast" casted field offsets?
+
+-- Default case: insert p at the end of the x_ps
+recombinePermConj x x_ps p =
+  implPushM x (ValPerm_Conj x_ps) >>>
+  implInsertConjM x p x_ps (length x_ps) >>>
+  implPopM x (ValPerm_Conj (x_ps ++ [p])) >>>
+  greturn (x_ps ++ [p])
 
 -- | Recombine the permissions on the stack back into the permission set
 recombinePerms :: DistPerms ps -> ImplM RNil s r RNil ps ()

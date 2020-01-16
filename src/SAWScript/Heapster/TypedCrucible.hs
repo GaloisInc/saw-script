@@ -273,12 +273,13 @@ data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
                    RNil (RNil :> LifetimeType)
 
   -- | End a lifetime, consuming the minimal lifetime ending permissions for the
-  -- lifetime and returning the permissions stored in the @lowned@ permission:
+  -- lifetime as well as all permissions that still contain the lifetime, and
+  -- returning the permissions stored in the @lowned@ permission:
   --
-  -- > minLtEndperms(ps) * l:lowned(ps) -o ps
+  -- > minLtEndperms(ps) * ps_l * l:lowned(ps) -o ps
   EndLifetime :: ExprVar LifetimeType -> DistPerms ps ->
-                 PermExpr PermListType ->
-                 TypedStmt ext RNil (ps :> LifetimeType) ps
+                 PermExpr PermListType -> DistPerms ps_l ->
+                 TypedStmt ext RNil (ps :> LifetimeType :++: ps_l) ps
 
   -- | Assert a boolean condition, printing the given string on failure
   TypedAssert :: TypedReg BoolType -> TypedReg StringType ->
@@ -384,12 +385,14 @@ typedStmtIn (TypedCall (TypedReg f) fun_perm ghosts args l ps) =
    l (ValPerm_Conj1 $ Perm_LOwned ps))
   f (ValPerm_Conj1 $ Perm_Fun fun_perm)
 typedStmtIn BeginLifetime = DistPermsNil
-typedStmtIn (EndLifetime l perms ps) =
+typedStmtIn (EndLifetime l perms ps end_perms) =
   case permListToDistPerms ps of
     Some perms'
       | Just Refl <- testEquality perms' perms ->
-        DistPermsCons (minLtEndPerms (PExpr_Var l) perms)
-        l (ValPerm_Conj [Perm_LOwned ps])
+        appendDistPerms
+        (DistPermsCons (minLtEndPerms (PExpr_Var l) perms)
+         l (ValPerm_Conj [Perm_LOwned ps]))
+        end_perms
     _ -> error "typedStmtIn: EndLifetime: malformed arguments"
 typedStmtIn (TypedAssert _ _) = DistPermsNil
 typedStmtIn (TypedLLVMStmt llvmStmt) = typedLLVMStmtIn llvmStmt
@@ -429,7 +432,7 @@ typedStmtOut (TypedCall _ fun_perm ghosts args l ps) (_ :>: ret) =
   l (ValPerm_Conj1 $ Perm_LOwned ps)
 typedStmtOut BeginLifetime (_ :>: l) =
   distPerms1 l $ ValPerm_Conj [Perm_LOwned PExpr_PermListNil]
-typedStmtOut (EndLifetime l perms _) _ = perms
+typedStmtOut (EndLifetime l perms _ _) _ = perms
 typedStmtOut (TypedAssert _ _) _ = DistPermsNil
 typedStmtOut (TypedLLVMStmt llvmStmt) (_ :>: ret) =
   typedLLVMStmtOut llvmStmt ret
@@ -1275,9 +1278,19 @@ endLifetime l =
         stmtProvePerms (distPermsToExDistPerms $
                         minLtEndPerms (PExpr_Var l) ps) >>>= \_ ->
         stmtProvePerm (TypedReg l) (emptyMb l_perm) >>>= \_ ->
-        emitStmt knownRepr checkerProgramLoc (EndLifetime l
-                                              ps ps_list) >>>= \_ ->
-        stmtRecombinePerms
+        embedImplM TypedImplStmt CruCtxNil (buildLifetimeEndPerms
+                                            l) >>>= \(_, some_end_perms) ->
+        case some_end_perms of
+          Some end_perms ->
+            stmtTraceM (\i -> string "Dropping permissions:" <+>
+                              permPretty i (lifetimeEndPermsToDistPerms
+                                            end_perms)) >>>
+            embedImplM TypedImplStmt CruCtxNil
+            (implPushLifetimeEndPerms end_perms) >>>= \_ ->
+            emitStmt knownRepr checkerProgramLoc
+            (EndLifetime l ps ps_list (lifetimeEndPermsToDistPerms
+                                       end_perms)) >>>= \_ ->
+            stmtRecombinePerms
     _ -> stmtFailM (\i ->
                      string "endLifetime: no lowned permission for"
                      <+> permPretty i l)
@@ -1287,7 +1300,7 @@ endLifetime l =
 -- * Permission Checking for Expressions and Statements
 ----------------------------------------------------------------------
 
--- | Get a dynamic representation of a architecture's width
+-- | Get a dynamic representation of an architecture's width
 archWidth :: KnownNat (ArchWidth arch) => f arch -> NatRepr (ArchWidth arch)
 archWidth _ = knownNat
 

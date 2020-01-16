@@ -1923,9 +1923,16 @@ itranslateStmt stmt@[nuP| BeginLifetime |] m =
                     const $ Perm_LOwned PExpr_PermListNil])
   m
 
-itranslateStmt stmt@[nuP| EndLifetime _ ps _ |] m =
-  withPermStackM mapRListTail
-  (\(pctx :>: _) -> permCtxEndLifetime pctx ps)
+itranslateStmt stmt@[nuP| EndLifetime _ ps _ end_perms |] m =
+  let end_prx = mbDistPermsToProxies end_perms
+      ps_l_prx = mbDistPermsToProxies ps :>: (Proxy :: Proxy LifetimeType) in
+  withPermStackM
+  (\pvars_all ->
+    let ((pvars :>: _), _) = splitMapRList ps_l_prx end_prx pvars_all in
+    pvars)
+  (\pctx_all ->
+    let ((pctx :>: _), _) = splitMapRList ps_l_prx end_prx pctx_all in
+    permCtxEndLifetime pctx ps)
   m
 
 itranslateStmt [nuP| TypedAssert e _ |] m =

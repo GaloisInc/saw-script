@@ -1509,6 +1509,50 @@ funPermDistOuts fun_perm args l ghosts =
   varSubst (PermVarSubst args) $ mbValuePermsToDistPerms $
   subst (consSubst (substOfExprs ghosts) (PExpr_Var l)) $ funPermOuts fun_perm
 
+-- | Generic function to test if a permission contains a lifetime
+class ContainsLifetime a where
+  containsLifetime :: PermExpr LifetimeType -> a -> Bool
+
+instance ContainsLifetime (DistPerms ps) where
+  containsLifetime _ DistPermsNil = False
+  containsLifetime l (DistPermsCons ps _ p) =
+    containsLifetime l ps || containsLifetime l p
+
+instance ContainsLifetime (ValuePerm a) where
+  containsLifetime _ (ValPerm_Eq _) = False
+  containsLifetime l (ValPerm_Or p1 p2) =
+    containsLifetime l p1 || containsLifetime l p2
+  containsLifetime l (ValPerm_Exists mb_p) =
+    mbLift $ fmap (containsLifetime l) mb_p
+  containsLifetime l (ValPerm_Mu mb_p) =
+    mbLift $ fmap (containsLifetime l) mb_p
+  containsLifetime _ (ValPerm_Var _) = False
+  containsLifetime l (ValPerm_Conj ps) = any (containsLifetime l) ps
+
+instance ContainsLifetime (AtomicPerm a) where
+  containsLifetime l (Perm_LLVMField fp) = containsLifetime l fp
+  containsLifetime l (Perm_LLVMArray ap) = containsLifetime l ap
+  containsLifetime _ (Perm_LLVMFree _) = False
+  containsLifetime _ (Perm_LLVMFrame _) = False
+  containsLifetime l (Perm_LOwned _) =
+    -- NOTE: we could check the permissions in the lowned perm, but we are only
+    -- using containsLifetime to end lifetimes, and we should never have an
+    -- lowned perm containing a different lifetime that we own; also, we would
+    -- have to avoid the lowned perm for l itself, as that will not allow use to
+    -- prove the l:lowned perm we need to end the lifetime...
+    False
+  containsLifetime l (Perm_LCurrent l') = l == l'
+  containsLifetime _ (Perm_Fun _) = False
+  containsLifetime _ (Perm_BVProp _) = False
+
+instance ContainsLifetime (LLVMFieldPerm w) where
+  containsLifetime l fp =
+    l == llvmFieldLifetime fp || containsLifetime l (llvmFieldContents fp)
+
+instance ContainsLifetime (LLVMArrayPerm w) where
+  containsLifetime l ap = any (containsLifetime l) (llvmArrayFields ap)
+
+
 -- | Generic function to put a permission inside a lifetime
 class InLifetime a where
   inLifetime :: PermExpr LifetimeType -> a -> a
