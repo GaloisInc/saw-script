@@ -327,8 +327,8 @@ instance TypeTranslate (ExprVar a) ctx (ExprTrans a) where
 trueOpenTerm :: OpenTerm
 trueOpenTerm = ctorOpenTerm "Prelude.True" []
 
-bvNat :: Integer -> Integer -> OpenTerm
-bvNat w n =
+bvNatOpenTerm :: Integer -> Integer -> OpenTerm
+bvNatOpenTerm w n =
   applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
   [natOpenTerm w, natOpenTerm n]
 
@@ -351,8 +351,7 @@ instance TypeTranslate (PermExpr a) ctx (ExprTrans a) where
     do let w = natVal (Proxy :: Proxy w)
        bv_transs <- mapM tptranslate $ mbList bvfactors
        return $ ETrans_Term $
-         bvAddOpenTerm w (foldr (bvMulOpenTerm w) (bvNat w 1) bv_transs)
-         (bvNat w $ mbLift off)
+         foldr (bvAddOpenTerm w) (bvNatOpenTerm w $ mbLift off) bv_transs
   tptranslate [nuP| PExpr_Struct _args |] =
     error "FIXME HERE: translate struct expressions!"
   tptranslate [nuP| PExpr_Always |] =
@@ -370,10 +369,10 @@ instance TypeTranslate (PermExprs as) ctx (ExprTransCtx as) where
 
 instance TypeTranslate (BVFactor w) ctx OpenTerm where
   tptranslate [nuP| BVFactor i x :: BVFactor w |] =
+    let w = natVal (Proxy :: Proxy w) in
     tptranslate x >>= \x_trans ->
     return $
-    bvMulOpenTerm (natVal (Proxy :: Proxy w)) (natOpenTerm (mbLift i))
-    (exprTransToTermForce x_trans)
+    bvMulOpenTerm w (bvNatOpenTerm w (mbLift i)) (exprTransToTermForce x_trans)
 
 -- | Translate a Crucible type to a SAW type, converting 'Nothing' to unit
 translateExpr :: Mb ctx (PermExpr a) -> TypeTransM ctx OpenTerm
@@ -1695,7 +1694,7 @@ instance PermCheckExtC ext =>
 
   -- Bitvectors
   tptranslate [nuP| BVLit w i |] =
-    return $ ETrans_Term $ bvNat (intValue $ mbLift w) (mbLift i)
+    return $ ETrans_Term $ bvNatOpenTerm (intValue $ mbLift w) (mbLift i)
   tptranslate [nuP| BVConcat w1 w2 e1 e2 |] =
     ETrans_Term <$>
     applyMultiTransM (return $ globalOpenTerm "Prelude.join")
