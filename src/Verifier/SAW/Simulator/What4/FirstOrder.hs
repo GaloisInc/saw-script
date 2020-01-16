@@ -27,7 +27,6 @@ module Verifier.SAW.Simulator.What4.FirstOrder
     groundToFOV
   ) where
 
-import Data.Parameterized.NatRepr (natValue)
 import Data.Parameterized.TraversableFC (FoldableFC(..))
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Context hiding (replicate)
@@ -75,11 +74,11 @@ typeReprToFOT BaseBoolRepr            = pure FOTBit
 typeReprToFOT BaseNatRepr             = pure FOTInt
 typeReprToFOT BaseIntegerRepr         = pure FOTInt
 typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (natValue w) FOTBit
-typeReprToFOT BaseRealRepr            = fail "No FO Real"
-typeReprToFOT BaseComplexRepr         = fail "No FO Complex"
-typeReprToFOT (BaseStringRepr _)      = fail "No FO String"
-typeReprToFOT (BaseArrayRepr _ctx _b) = fail "TODO: FO Arrays"
-typeReprToFOT (BaseFloatRepr _)       = fail "No FO Floating point"
+typeReprToFOT BaseRealRepr            = Left "No FO Real"
+typeReprToFOT BaseComplexRepr         = Left "No FO Complex"
+typeReprToFOT (BaseStringRepr _)      = Left "No FO String"
+typeReprToFOT (BaseArrayRepr _ctx _b) = Left "TODO: FO Arrays"
+typeReprToFOT (BaseFloatRepr _)       = Left "No FO Floating point"
 typeReprToFOT (BaseStructRepr ctx)    = FOTTuple <$> assnToList ctx
 
 assnToList :: Assignment BaseTypeRepr ctx -> Either String [FirstOrderType]
@@ -96,11 +95,11 @@ groundToFOV BaseBoolRepr    b         = pure $ FOVBit b
 groundToFOV BaseNatRepr     n         = pure $ FOVInt (toInteger n)
 groundToFOV BaseIntegerRepr i         = pure $ FOVInt i
 groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) bv
-groundToFOV BaseRealRepr    _         = fail "Real is not FOV"
-groundToFOV BaseComplexRepr         _ = fail "Complex is not FOV"
-groundToFOV (BaseStringRepr _)      _ = fail "String is not FOV"
-groundToFOV (BaseFloatRepr _)       _ = fail "Floating point is not FOV"
-groundToFOV (BaseArrayRepr _idx _b) _ = fail "TODO: FOV Array"
+groundToFOV BaseRealRepr    _         = Left "Real is not FOV"
+groundToFOV BaseComplexRepr         _ = Left "Complex is not FOV"
+groundToFOV (BaseStringRepr _)      _ = Left "String is not FOV"
+groundToFOV (BaseFloatRepr _)       _ = Left "Floating point is not FOV"
+groundToFOV (BaseArrayRepr _idx _b) _ = Left "TODO: FOV Array"
 groundToFOV (BaseStructRepr ctx) tup  = FOVTuple <$> tupleToList ctx tup
 
 
