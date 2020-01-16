@@ -1648,7 +1648,7 @@ implPushLifetimeEndPerms (ps :>: LifetimeEndPerm x p) =
   implPushLifetimeEndPerms ps >>> implPushM x p
 implPushLifetimeEndPerms (ps :>: LifetimeEndConj x x_ps i) =
   implPushLifetimeEndPerms ps >>>
-  introConjM x >>>
+  implPushM x (ValPerm_Conj x_ps) >>>
   implExtractConjM x x_ps i >>>
   implPopM x (ValPerm_Conj (take i x_ps ++ drop (i+1) x_ps))
 
