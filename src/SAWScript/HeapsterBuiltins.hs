@@ -58,7 +58,7 @@ binaryWordFunPerm =
     ValPerms_Cons (ValPerms_Cons
                    ValPerms_Nil
                    (ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var x))
-    (ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var x))
+    (ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var y))
   -- Output perms: r1:true, r2:true, ret:(exists z.eq(z))
   (nuMulti (MNil :>: Proxy :>: Proxy :>: Proxy) $ \_ ->
     nuMulti (MNil :>: Proxy :>: Proxy :>: Proxy) $ \_ ->
