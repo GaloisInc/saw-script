@@ -1,3 +1,4 @@
+{-# Language OverloadedStrings #-}
 {-# Language FlexibleContexts #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language PatternSynonyms #-}
@@ -107,7 +108,7 @@ import Data.Macaw.Discovery
   ( FunctionExploreReason(..)
   , analyzeFunction, emptyDiscoveryState
   )
-import Data.Macaw.Memory (MemSegmentOff)
+import Data.Macaw.Memory (MemSegment(..), MemSegmentOff(..), segmentSize)
 import Data.Macaw.Symbolic
   ( GlobalMap, LookupFunctionHandle(..), MacawExt, MacawSimulatorState(..), MacawCrucibleRegTypes
   , macawExtensions, mkFunCFG
@@ -267,14 +268,15 @@ setArgsRet sym cc env tyenv nameEnv mem regs mret args
 initialMemory ::
   Sym ->
   LLVMCrucibleContext (X86 64) ->
+  Integer ->
   MS.CrucibleMethodSpecIR (LLVM (X86 64)) ->
   IO (GlobalMap Sym 64, MemImpl Sym, Regs, Map MS.AllocIndex (LLVMPtr Sym 64))
-initialMemory sym cc ms = do
+initialMemory sym cc globalSize ms = do
   let ?ptrWidth = knownNat @64
   mem <- emptyMem LittleEndian
   regs <- Ctx.traverseWithIndex (freshRegister sym) knownRepr
 
-  sz <- bvLit sym knownNat 0x402000
+  sz <- bvLit sym knownNat globalSize
   (ptr, mem') <- doMalloc sym GlobalAlloc Immutable "globals" mem sz noAlignment
   let globs = mkGlobalMap $ Map.singleton 0 ptr
 
@@ -310,8 +312,6 @@ checkPointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
   ptr <- unpackMemValue sym (LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   storTy <- toStorableType =<< typeOfSetupValue cc tyenv nameEnv texpected
-  putStrLn "loadRaw"
-  print $ ppPtr ptr
   actual <- assertSafe sym =<< loadRaw sym mem ptr storTy noAlignment
   -- TODO
   pure ()
@@ -328,7 +328,6 @@ checkPost ::
 checkPost sym cc env ms mem regs = do
   let tyenv = ms ^. MS.csPreState . MS.csAllocs
       nameEnv = MS.csTypeNames ms
-  print $ ppMem mem
   forM_ (ms ^. MS.csPostState . MS.csPointsTos)
     $ checkPointsTo sym cc env tyenv nameEnv mem
 
@@ -357,6 +356,10 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm ar
       liftIO . printOutLn opts Info $ mconcat ["Finding symbol for \"", nm, "\""]
       elf <- liftIO $ getElf path >>= getRelevant
       (addr :: MemSegmentOff 64) <- liftIO . findSymbol (symMap elf) . encodeUtf8 $ Text.pack nm
+      addrInt <- if segmentBase (segoffSegment addr) == 0
+        then pure . toInteger $ segmentOffset (segoffSegment addr) + segoffOffset addr
+        else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
+      let maxAddr = addrInt + toInteger (segmentSize $ segoffSegment addr)
 
       liftIO . printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
       (_, Some finfo) <- liftIO . stToIO . analyzeFunction (const $ pure ()) addr UserRequest
@@ -376,10 +379,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm ar
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
       methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) args ret setup
-      (globs :: GlobalMap Sym 64, mem, regs, env) <- liftIO $ initialMemory sym cc methodSpec
-
-      liftIO . print $ ppMem mem
-      liftIO $ print . ppPtr =<< getReg RDI regs
+      (globs :: GlobalMap Sym 64, mem, regs, env) <- liftIO $ initialMemory sym cc maxAddr methodSpec
 
       let
         ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
