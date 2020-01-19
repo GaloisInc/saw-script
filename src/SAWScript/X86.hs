@@ -20,6 +20,8 @@ module SAWScript.X86
   , findSymbol
   , TheCFG
   , posFn
+
+  , loadGlobal
   ) where
 
 

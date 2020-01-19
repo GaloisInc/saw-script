@@ -22,7 +22,7 @@ import Control.Monad.State (execStateT)
 import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Foldable (foldlM, forM_)
 import qualified Data.Text as Text
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Map as Map
 import Data.Map (Map)
 
@@ -42,10 +42,10 @@ import SAWScript.Value
 import SAWScript.Options
 import SAWScript.X86
   ( RelevantElf(..), X86Error(..)
-  , findSymbol, getElf, getGoals, getRelevant, gGoal, posFn
+  , findSymbol, getElf, getGoals, getRelevant, gGoal, loadGlobal, posFn
   )
 import SAWScript.X86Spec
-  ( Sym
+  ( Sym, Unit(..)
   , freshRegister, mkGlobalMap
   )
 
@@ -66,6 +66,7 @@ import What4.ProgramLoc (Position(..), mkProgramLoc, plSourceLoc)
 
 -- crucible
 import Lang.Crucible.Analysis.Postdom (postdomInfo)
+import Lang.Crucible.Backend (getProofObligations)
 import Lang.Crucible.Backend.SAWCore
 import Lang.Crucible.CFG.Core
   ( SomeCFG(..), TypeRepr(..)
@@ -89,7 +90,7 @@ import Lang.Crucible.LLVM.DataLayout (EndianForm(..), defaultDataLayout, noAlign
 import Lang.Crucible.LLVM.Extension (LLVM, X86, ArchRepr(..))
 import Lang.Crucible.LLVM.Intrinsics (llvmArch, llvmIntrinsicTypes, llvmTypeCtx)
 import Lang.Crucible.LLVM.MemModel
-  ( AllocType(..), LLVMPointerType, LLVMPtr, MemImpl, Mutability(..)
+  ( AllocType(..), LLVMPointerType, LLVMPtr, LLVMVal(..), MemImpl, Mutability(..)
   , pattern LLVMPointer, pattern LLVMPointerRepr
   , doMalloc, doPtrAddOffset, doStore
   , loadRaw, storeConstRaw
@@ -264,21 +265,51 @@ setArgsRet sym cc env tyenv nameEnv mem regs mret args
       let pairs = (case mret of Nothing -> []; Just ret -> [(retReg, ret)]) <> zip argRegs args
       in foldlM (setRegSetupValue sym cc env tyenv nameEnv mem) regs pairs
 
+setupGlobals ::
+  Sym ->
+  RelevantElf -> 
+  MemImpl Sym ->
+  Integer ->
+  [(String, Integer)] ->
+  IO (GlobalMap Sym 64, MemImpl Sym)
+setupGlobals sym elf mem endText globsyms = do
+  let ?ptrWidth = knownNat @64
+  globs <- mconcat <$> mapM readInitialGlobal globsyms
+  sz <- bvLit sym knownNat . maximum $ endText:(globalEnd <$> globs)
+  (base, mem') <- doMalloc sym GlobalAlloc Immutable "globals" mem sz noAlignment
+  mem'' <- foldlM (writeGlobal base) mem' globs
+  pure (mkGlobalMap $ Map.singleton 0 base, mem'')
+  where
+    readInitialGlobal :: (String, Integer) -> IO [(String, Integer, [Integer])]
+    readInitialGlobal (nm, sz) = do
+      res <- loadGlobal elf (encodeUtf8 $ Text.pack nm, sz, Bytes)
+      pure $ (\(n, a, _, b) -> (n, a, b)) <$> res
+    globalEnd :: (String, Integer, [Integer]) -> Integer
+    globalEnd (_nm, addr, bytes) = addr + toInteger (length bytes)
+    writeByte :: LLVMPtr Sym 64 -> MemImpl Sym -> (Integer, Integer) -> IO (MemImpl Sym)
+    writeByte base m (addr, byte) = do
+      let ?ptrWidth = knownNat @64
+      ptr <- doPtrAddOffset sym m base =<< bvLit sym knownNat addr
+      val <- LLVMValInt <$> natLit sym 0 <*> bvLit sym (knownNat @8) byte
+      storeConstRaw sym m ptr (bitvectorType 1) noAlignment val
+    writeGlobal :: LLVMPtr Sym 64 -> MemImpl Sym -> (String, Integer, [Integer]) -> IO (MemImpl Sym)
+    writeGlobal base m (_nm, addr, bytes) = foldlM (writeByte base) m $ zip [addr, addr+1..] bytes
+
 -- ^ Given the spec, build the initial memory, register map, and global map.
 initialMemory ::
   Sym ->
+  RelevantElf ->
   LLVMCrucibleContext (X86 64) ->
   Integer ->
+  [(String, Integer)] ->
   MS.CrucibleMethodSpecIR (LLVM (X86 64)) ->
   IO (GlobalMap Sym 64, MemImpl Sym, Regs, Map MS.AllocIndex (LLVMPtr Sym 64))
-initialMemory sym cc globalSize ms = do
+initialMemory sym elf cc endText globsyms ms = do
   let ?ptrWidth = knownNat @64
   mem <- emptyMem LittleEndian
   regs <- Ctx.traverseWithIndex (freshRegister sym) knownRepr
 
-  sz <- bvLit sym knownNat globalSize
-  (ptr, mem') <- doMalloc sym GlobalAlloc Immutable "globals" mem sz noAlignment
-  let globs = mkGlobalMap $ Map.singleton 0 ptr
+  (globs, mem' ) <- setupGlobals sym elf mem endText globsyms
 
   -- Allocate a reasonable amount of stack (4 KiB + 1 qword for IP)
   (rsp, mem'') <- allocateStack sym mem' 4096
@@ -312,8 +343,9 @@ checkPointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
   ptr <- unpackMemValue sym (LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   storTy <- toStorableType =<< typeOfSetupValue cc tyenv nameEnv texpected
-  actual <- assertSafe sym =<< loadRaw sym mem ptr storTy noAlignment
-  -- TODO
+  _actual <- assertSafe sym =<< loadRaw sym mem ptr storTy noAlignment
+  -- TODO: actually do matching between actual and expected
+  -- For now, we only make sure we can load the memory
   pure ()
 
 -- ^ Assert the postcondition for the spec, given the final memory and register map.
@@ -325,11 +357,12 @@ checkPost ::
   MemImpl Sym ->
   Regs ->
   IO ()
-checkPost sym cc env ms mem regs = do
+checkPost sym cc env ms mem _regs = do
   let tyenv = ms ^. MS.csPreState . MS.csAllocs
       nameEnv = MS.csTypeNames ms
   forM_ (ms ^. MS.csPostState . MS.csPointsTos)
     $ checkPointsTo sym cc env tyenv nameEnv mem
+  -- TODO: postconditions about calling convention
 
 -- ^ Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
@@ -340,11 +373,12 @@ crucible_llvm_verify_x86 ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
-  [LLVM.Type] {- ^ Types of function arguments -}->
-  Maybe LLVM.Type {- ^ Function return type -}->
+  [LLVM.Type] {- ^ Types of function arguments -} ->
+  Maybe LLVM.Type {- ^ Function return type -} ->
+  [(String, Integer)] ->
   LLVMCrucibleSetupM () ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm args ret setup
+crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm args ret globsyms setup
   | Just Refl <- testEquality (X86Repr $ knownNat @64) . llvmArch
                  $ llvmModule ^. modTrans . transContext = do
       let sc = biSharedContext bic
@@ -379,7 +413,8 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm ar
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
       methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) args ret setup
-      (globs :: GlobalMap Sym 64, mem, regs, env) <- liftIO $ initialMemory sym cc maxAddr methodSpec
+      (globs :: GlobalMap Sym 64, mem, regs, env) <-
+        liftIO $ initialMemory sym elf cc maxAddr globsyms methodSpec
 
       let
         ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
@@ -414,7 +449,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm ar
         FinishedResult{} -> pure ()
         AbortedResult{} -> printOutLn opts Warn "Warning: function never returns"
         TimeoutResult{} -> fail "Execution timed out"
-
+ 
       liftIO $ printOutLn opts Info "Simulation finished, running solver on goals"
       gs <- liftIO $ getGoals sym
       liftIO $ print gs

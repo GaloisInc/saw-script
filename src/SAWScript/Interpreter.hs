@@ -1938,7 +1938,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_llvm_verify_x86"
-    "LLVMModule -> String -> String -> [LLVMType] -> Maybe LLVMType -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    "LLVMModule -> String -> String -> [LLVMType] -> Maybe LLVMType -> [(String, Int)] -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify_x86)
     Experimental
     [ "Load the ELF file specified by the second argument and verify the function"
