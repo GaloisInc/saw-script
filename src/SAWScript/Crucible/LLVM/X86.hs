@@ -1,6 +1,15 @@
+{- |
+Module      : SAWScript.Crucible.LLVM.X86
+Description : Implements a SAWScript primitive for verifying x86_64 functions
+              against LLVM specifications.
+Maintainer  : sbreese
+Stability   : provisional
+-}
+
 {-# Language OverloadedStrings #-}
 {-# Language FlexibleContexts #-}
 {-# Language ScopedTypeVariables #-}
+{-# Language TypeOperators #-}
 {-# Language PatternSynonyms #-}
 {-# Language LambdaCase #-}
 {-# Language TupleSections #-}
@@ -32,11 +41,10 @@ import qualified Text.LLVM.AST as LLVM
 
 import Data.Parameterized.Some (Some(..))
 import Data.Parameterized.NatRepr (knownNat)
-import Data.Parameterized.Context (singleton)
+import Data.Parameterized.Context (EmptyCtx, (::>), singleton)
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import qualified Data.Parameterized.Context as Ctx
 
--- saw-script
 import SAWScript.Prover.SBV
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -61,6 +69,8 @@ import SAWScript.Crucible.LLVM.MethodSpecIR
 import SAWScript.Crucible.LLVM.ResolveSetupValue
   ( resolveSetupVal, typeOfSetupValue
   )
+
+import Verifier.SAW.SharedTerm
 
 import qualified What4.Expr as W4
 import qualified What4.FunctionName as W4
@@ -105,8 +115,8 @@ crucible_llvm_verify_x86 ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
-  [(String, Integer)] ->
-  LLVMCrucibleSetupM () ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms setup
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
@@ -117,18 +127,11 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
       mvar <- liftIO $ C.LLVM.mkMemVar halloc
       sfs <- liftIO $ Macaw.newSymFuns sym
 
-      liftIO . printOutLn opts Info $ mconcat ["Finding symbol for \"", nm, "\""]
-      elf <- liftIO $ getElf path >>= getRelevant
-      (addr :: Macaw.MemSegmentOff 64) <- liftIO . findSymbol (symMap elf) . encodeUtf8 $ Text.pack nm
+      (C.SomeCFG cfg, elf, addr) <- liftIO $ buildCFG opts halloc path nm
       addrInt <- if Macaw.segmentBase (Macaw.segoffSegment addr) == 0
         then pure . toInteger $ Macaw.segmentOffset (Macaw.segoffSegment addr) + Macaw.segoffOffset addr
         else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
       let maxAddr = addrInt + toInteger (Macaw.segmentSize $ Macaw.segoffSegment addr)
-
-      liftIO . printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
-      (_, Some finfo) <- liftIO . stToIO . Macaw.analyzeFunction (const $ pure ()) addr Macaw.UserRequest
-        $ Macaw.emptyDiscoveryState (memory elf) (funSymMap elf) Macaw.x86_64_linux_info
-      C.SomeCFG cfg <- liftIO $ Macaw.mkFunCFG Macaw.x86_64MacawSymbolicFns halloc (W4.functionNameFromText $ Text.pack nm) posFn finfo
 
       let
         cc :: LLVMCrucibleContext x
@@ -173,7 +176,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
                        mem' <- C.readGlobal mvar
                        liftIO $ printOutLn opts Info
                          "Examining specification to determine postconditions"
-                       liftIO $ checkPost sym cc env methodSpec mem' $ C.regValue r
+                       liftIO $ assertPost sym cc env methodSpec mem' $ C.regValue r
                        pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
@@ -181,38 +184,57 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         C.FinishedResult{} -> pure ()
         C.AbortedResult{} -> printOutLn opts Warn "Warning: function never returns"
         C.TimeoutResult{} -> fail "Execution timed out"
- 
-      liftIO $ printOutLn opts Info "Simulation finished, running solver on goals"
-      gs <- liftIO $ getGoals sym
-      liftIO $ print gs
-      liftIO . forM_ gs $ \g ->
-        do term <- gGoal sc g
-           (mb, stats) <- proveUnintSBV z3 [] Nothing sc term
-           putStrLn $ ppStats stats
-           case mb of
-             Nothing -> printOutLn opts Info "Goal succeeded"
-             Just ex -> fail $ "Failure, counterexample: " <> show ex
-        `catch` \(X86Error e) -> fail $ "Failure, error: " <> e
 
-      liftIO $ printOutLn opts Info "All goals succeeded"
+      liftIO $ checkGoals sym opts sc
+ 
       pure $ SomeLLVM methodSpec
   | otherwise = fail "LLVM module must be 64-bit"
 
 --------------------------------------------------------------------------------
+-- ** Computing the CFG
+
+-- | Load the given ELF file and use Macaw to construct a Crucible CFG.
+buildCFG ::
+  Options ->
+  C.HandleAllocator ->
+  String {- ^ Path to ELF file -} ->
+  String {- ^ Function's symbol in ELF file -} ->
+  IO ( C.SomeCFG
+       (Macaw.MacawExt Macaw.X86_64)
+       (EmptyCtx ::> Macaw.ArchRegStruct Macaw.X86_64)
+       (Macaw.ArchRegStruct Macaw.X86_64)
+     , RelevantElf
+     , Macaw.MemSegmentOff 64
+     )
+buildCFG opts halloc path nm = do
+  printOutLn opts Info $ mconcat ["Finding symbol for \"", nm, "\""]
+  elf <- getElf path >>= getRelevant
+  (addr :: Macaw.MemSegmentOff 64) <- findSymbol (symMap elf) . encodeUtf8 $ Text.pack nm
+  printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
+  (_, Some finfo) <- stToIO . Macaw.analyzeFunction (const $ pure ()) addr Macaw.UserRequest
+    $ Macaw.emptyDiscoveryState (memory elf) (funSymMap elf) Macaw.x86_64_linux_info
+  scfg <- Macaw.mkFunCFG Macaw.x86_64MacawSymbolicFns halloc (W4.functionNameFromText $ Text.pack nm) posFn finfo
+  pure (scfg, elf, addr)
+
+
+--------------------------------------------------------------------------------
 -- ** Computing the specification
 
+-- | Construct the method spec like we normally would in crucible_llvm_verify.
+-- Unlike in crucible_llvm_verify, we can't reuse the simulator state (due to the
+-- different memory layout / RegMap).
 buildMethodSpec ::
   BuiltinContext ->
   Options ->
   LLVMModule LLVMArch ->
-  String ->
-  String ->
+  String {- ^ Name of method -} ->
+  String {- ^ Source location for method spec (here, we use the address) -} ->
   LLVMCrucibleSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR LLVM)
-buildMethodSpec bic opts lm nm addr setup =
+buildMethodSpec bic opts lm nm loc setup =
   setupLLVMCrucibleContext bic opts lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
-    let programLoc = W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm) . W4.OtherPos $ Text.pack addr
+    let programLoc = W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm) . W4.OtherPos $ Text.pack loc
     let LLVMModule _ _ mtrans = lm
     let lc = mtrans ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
     (args, ret) <- case llvmSignature opts lm nm of
@@ -230,6 +252,7 @@ llvmTypeToMemType ::
   Either String C.LLVM.MemType
 llvmTypeToMemType lc t = let ?lc = lc in C.LLVM.liftMemType t
 
+-- | Find a function declaration in the LLVM AST and return its signature.
 llvmSignature ::
   Options ->
   LLVMModule LLVMArch ->
@@ -248,111 +271,15 @@ llvmSignature opts llvmModule nm =
 --------------------------------------------------------------------------------
 -- ** Precondition
 
-allocateStack ::
-  Sym ->
-  C.LLVM.MemImpl Sym ->
-  C.LLVM.Bytes ->
-  IO (Ptr, C.LLVM.MemImpl Sym)
-allocateStack sym mem bytes = do
-  let ?ptrWidth = knownNat @64
-  let szInt = C.LLVM.bytesToInteger bytes
-  sz <- W4.bvLit sym knownNat $ szInt + 8
-  (base, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz C.LLVM.noAlignment
-  sn <- case W4.userSymbol "stack" of
-    Left err -> fail $ "Invalid symbol for stack: " <> show err
-    Right sn -> pure sn
-  fresh <- C.LLVM.LLVMPointer <$> W4.natLit sym 0 <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
-  ptr <- C.LLVM.doPtrAddOffset sym mem' base =<< W4.bvLit sym knownNat szInt
-  (ptr,) <$> C.LLVM.doStore sym mem' ptr (C.LLVM.LLVMPointerRepr $ knownNat @64) (C.LLVM.bitvectorType 8) C.LLVM.noAlignment fresh
-
-executeAllocation ::
-  Sym ->
-  (Map MS.AllocIndex Ptr, C.LLVM.MemImpl Sym) ->
-  (MS.AllocIndex, LLVMAllocSpec) ->
-  IO (Map MS.AllocIndex Ptr, C.LLVM.MemImpl Sym)
-executeAllocation sym (env, mem) (i, LLVMAllocSpec mut _memTy sz loc) = do
-  let ?ptrWidth = knownNat @64
-  sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToInteger sz
-  (ptr, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut (show $ W4.plSourceLoc loc) mem sz' C.LLVM.noAlignment
-  pure (Map.insert i ptr env, mem')
-
-executePointsTo ::
-  Sym ->
-  LLVMCrucibleContext LLVMArch ->
-  Map MS.AllocIndex Ptr ->
-  Map MS.AllocIndex LLVMAllocSpec ->
-  Map MS.AllocIndex C.LLVM.Ident ->
-  C.LLVM.MemImpl Sym ->
-  LLVMPointsTo LLVMArch ->
-  IO (C.LLVM.MemImpl Sym)
-executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr tval) = do
-  let ?ptrWidth = knownNat @64
-  ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-    =<< resolveSetupVal cc mem env tyenv Map.empty tptr
-  val <- resolveSetupVal cc mem env tyenv Map.empty tval
-  storTy <- C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
-  C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
-
-setArgs ::
-  Sym ->
-  LLVMCrucibleContext LLVMArch ->
-  Map MS.AllocIndex Ptr ->
-  Map MS.AllocIndex LLVMAllocSpec ->
-  Map MS.AllocIndex C.LLVM.Ident ->
-  C.LLVM.MemImpl Sym ->
-  Regs ->
-  [MS.SetupValue LLVM] ->
-  IO Regs
-setArgs sym cc env tyenv nameEnv mem regs args
-  | length args > length argRegs = fail "More arguments than would fit into registers"
-  | otherwise = foldlM (setRegSetupValue sym cc env tyenv nameEnv mem) regs $ zip argRegs args
-  where
-    argRegs :: [Register]
-    argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
-    -- retReg :: Register
-    -- retReg = Macaw.RAX
-
--- | Given an alist of symbol names and sizes (in bytes), allocate space and copy
--- the corresponding globals from the Macaw memory to the Crucible LLVM memory model.
-setupGlobals ::
-  Sym ->
-  RelevantElf -> 
-  C.LLVM.MemImpl Sym ->
-  Integer ->
-  [(String, Integer)] ->
-  IO (Macaw.GlobalMap Sym 64, C.LLVM.MemImpl Sym)
-setupGlobals sym elf mem endText globsyms = do
-  let ?ptrWidth = knownNat @64
-  globs <- mconcat <$> mapM readInitialGlobal globsyms
-  sz <- W4.bvLit sym knownNat . maximum $ endText:(globalEnd <$> globs)
-  (base, mem') <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Immutable "globals" mem sz C.LLVM.noAlignment
-  mem'' <- foldlM (writeGlobal base) mem' globs
-  pure (mkGlobalMap $ Map.singleton 0 base, mem'')
-  where
-    readInitialGlobal :: (String, Integer) -> IO [(String, Integer, [Integer])]
-    readInitialGlobal (nm, sz) = do
-      res <- loadGlobal elf (encodeUtf8 $ Text.pack nm, sz, Bytes)
-      pure $ (\(n, a, _, b) -> (n, a, b)) <$> res
-    globalEnd :: (String, Integer, [Integer]) -> Integer
-    globalEnd (_nm, addr, bytes) = addr + toInteger (length bytes)
-    writeByte :: Ptr -> C.LLVM.MemImpl Sym -> (Integer, Integer) -> IO (C.LLVM.MemImpl Sym)
-    writeByte base m (addr, byte) = do
-      let ?ptrWidth = knownNat @64
-      ptr <- C.LLVM.doPtrAddOffset sym m base =<< W4.bvLit sym knownNat addr
-      val <- C.LLVM.LLVMValInt <$> W4.natLit sym 0 <*> W4.bvLit sym (knownNat @8) byte
-      C.LLVM.storeConstRaw sym m ptr (C.LLVM.bitvectorType 1) C.LLVM.noAlignment val
-    writeGlobal :: Ptr -> C.LLVM.MemImpl Sym -> (String, Integer, [Integer]) -> IO (C.LLVM.MemImpl Sym)
-    writeGlobal base m (_nm, addr, bytes) = foldlM (writeByte base) m $ zip [addr, addr+1..] bytes
-
--- | Given the spec, build the initial memory, register map, and global map.
+-- | Given the method spec, build the initial memory, register map, and global map.
 initialMemory ::
   Sym ->
   RelevantElf ->
   LLVMCrucibleContext LLVMArch ->
-  Integer ->
-  [(String, Integer)] ->
+  Integer {- ^ Minimum size of the global allocation (here, the end of the .text segment -} ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   MS.CrucibleMethodSpecIR LLVM ->
-  IO (Macaw.GlobalMap Sym 64, C.LLVM.MemImpl Sym, Regs, Map MS.AllocIndex Ptr)
+  IO (Macaw.GlobalMap Sym 64, Mem, Regs, Map MS.AllocIndex Ptr)
 initialMemory sym elf cc endText globsyms ms = do
   let ?ptrWidth = knownNat @64
   mem <- C.LLVM.emptyMem C.LLVM.LittleEndian
@@ -378,20 +305,147 @@ initialMemory sym elf cc endText globsyms ms = do
 
   pure (globs, mem'''', regs'', env)
 
+-- | Given an alist of symbol names and sizes (in bytes), allocate space and copy
+-- the corresponding globals from the Macaw memory to the Crucible LLVM memory model.
+setupGlobals ::
+  Sym ->
+  RelevantElf ->
+  Mem ->
+  Integer {- ^ Minimum size of the global allocation -} ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  IO (Macaw.GlobalMap Sym 64, Mem)
+setupGlobals sym elf mem endText globsyms = do
+  let ?ptrWidth = knownNat @64
+  globs <- mconcat <$> mapM readInitialGlobal globsyms
+  sz <- W4.bvLit sym knownNat . maximum $ endText:(globalEnd <$> globs)
+  (base, mem') <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Immutable "globals" mem sz C.LLVM.noAlignment
+  mem'' <- foldlM (writeGlobal base) mem' globs
+  pure (mkGlobalMap $ Map.singleton 0 base, mem'')
+  where
+    readInitialGlobal :: (String, Integer) -> IO [(String, Integer, [Integer])]
+    readInitialGlobal (nm, sz) = do
+      res <- loadGlobal elf (encodeUtf8 $ Text.pack nm, sz, Bytes)
+      pure $ (\(n, a, _, b) -> (n, a, b)) <$> res
+    globalEnd :: (String, Integer, [Integer]) -> Integer
+    globalEnd (_nm, addr, bytes) = addr + toInteger (length bytes)
+    writeByte :: Ptr -> Mem -> (Integer, Integer) -> IO Mem
+    writeByte base m (addr, byte) = do
+      let ?ptrWidth = knownNat @64
+      ptr <- C.LLVM.doPtrAddOffset sym m base =<< W4.bvLit sym knownNat addr
+      val <- C.LLVM.LLVMValInt <$> W4.natLit sym 0 <*> W4.bvLit sym (knownNat @8) byte
+      C.LLVM.storeConstRaw sym m ptr (C.LLVM.bitvectorType 1) C.LLVM.noAlignment val
+    writeGlobal :: Ptr -> Mem -> (String, Integer, [Integer]) -> IO Mem
+    writeGlobal base m (_nm, addr, bytes) = foldlM (writeByte base) m $ zip [addr, addr+1..] bytes
+
+-- | Allocate memory for the stack, and pushes a fresh pointer as the return
+-- address. Note that this function only returns a pointer to the top-of-stack,
+-- and does not set RSP.
+allocateStack ::
+  Sym ->
+  Mem ->
+  Integer {- ^ Stack size in bytes -} ->
+  IO (Ptr, Mem)
+allocateStack sym mem szInt = do
+  let ?ptrWidth = knownNat @64
+  sz <- W4.bvLit sym knownNat $ szInt + 8
+  (base, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz C.LLVM.noAlignment
+  sn <- case W4.userSymbol "stack" of
+    Left err -> fail $ "Invalid symbol for stack: " <> show err
+    Right sn -> pure sn
+  fresh <- C.LLVM.LLVMPointer <$> W4.natLit sym 0 <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
+  ptr <- C.LLVM.doPtrAddOffset sym mem' base =<< W4.bvLit sym knownNat szInt
+  (ptr,) <$> C.LLVM.doStore sym mem' ptr (C.LLVM.LLVMPointerRepr $ knownNat @64) (C.LLVM.bitvectorType 8) C.LLVM.noAlignment fresh
+
+-- | Process a crucible_alloc statement, allocating the requested memory and
+-- associating a pointer to that memory with the appropriate index.
+executeAllocation ::
+  Sym ->
+  ( Map MS.AllocIndex Ptr {- ^ Associates each previous AllocIndex with the corresponding allocation -}
+  , Mem
+  ) ->
+  (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
+  IO (Map MS.AllocIndex Ptr, Mem)
+executeAllocation sym (env, mem) (i, LLVMAllocSpec mut _memTy sz loc) = do
+  let ?ptrWidth = knownNat @64
+  sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToInteger sz
+  (ptr, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut (show $ W4.plSourceLoc loc) mem sz' C.LLVM.noAlignment
+  pure (Map.insert i ptr env, mem')
+
+-- | Process a crucible_points_to statement, writing some SetupValue to a pointer.
+executePointsTo ::
+  Sym ->
+  LLVMCrucibleContext LLVMArch ->
+  Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
+  Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
+  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
+  Mem ->
+  LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
+  IO Mem
+executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr tval) = do
+  let ?ptrWidth = knownNat @64
+  ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+    =<< resolveSetupVal cc mem env tyenv Map.empty tptr
+  val <- resolveSetupVal cc mem env tyenv Map.empty tval
+  storTy <- C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
+  C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+
+-- | Write each SetupValue passed to crucible_execute_func to the appropriate
+-- x86_64 register from the calling convention.
+setArgs ::
+  Sym ->
+  LLVMCrucibleContext LLVMArch ->
+  Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
+  Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
+  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
+  Mem ->
+  Regs ->
+  [MS.SetupValue LLVM] {- ^ Arguments passed to crucible_execute_func -} ->
+  IO Regs
+setArgs sym cc env tyenv nameEnv mem regs args
+  | length args > length argRegs = fail "More arguments than would fit into registers"
+  | otherwise = foldlM setRegSetupValue regs $ zip argRegs args
+  where
+    argRegs :: [Register]
+    argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
+    setRegSetupValue rs (reg, sval) = do
+      let ?ptrWidth = knownNat @64
+      val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+        =<< resolveSetupVal cc mem env tyenv nameEnv sval
+      setReg reg val rs
+
 --------------------------------------------------------------------------------
 -- ** Postcondition
 
--- | Assert that a points-to postcondition holds.
-checkPointsTo ::
+-- | Assert the postcondition for the spec, given the final memory and register map.
+assertPost ::
   Sym ->
   LLVMCrucibleContext LLVMArch ->
   Map MS.AllocIndex Ptr ->
-  Map MS.AllocIndex LLVMAllocSpec ->
-  Map MS.AllocIndex C.LLVM.Ident ->
-  C.LLVM.MemImpl Sym ->
-  LLVMPointsTo LLVMArch ->
+  MS.CrucibleMethodSpecIR LLVM ->
+  Mem ->
+  Regs ->
   IO ()
-checkPointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
+assertPost sym cc env ms mem _regs = do
+  let tyenv = ms ^. MS.csPreState . MS.csAllocs
+      nameEnv = MS.csTypeNames ms
+  forM_ (ms ^. MS.csPostState . MS.csPointsTos)
+    $ assertPointsTo sym cc env tyenv nameEnv mem
+  -- TODO: postconditions about calling convention
+  -- + Check that IP is set to return address
+  -- + Check that the stack is properly restored
+  -- + Match return value in RAX
+
+-- | Assert that a points-to postcondition holds.
+assertPointsTo ::
+  Sym ->
+  LLVMCrucibleContext LLVMArch ->
+  Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
+  Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
+  Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
+  Mem ->
+  LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
+  IO ()
+assertPointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
   let ?ptrWidth = knownNat @64
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
@@ -401,23 +455,25 @@ checkPointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
   -- For now, we only make sure we can load the memory
   pure ()
 
--- | Assert the postcondition for the spec, given the final memory and register map.
-checkPost ::
+-- | Gather and run the solver on goals from the simulator.
+checkGoals ::
   Sym ->
-  LLVMCrucibleContext LLVMArch ->
-  Map MS.AllocIndex Ptr ->
-  MS.CrucibleMethodSpecIR LLVM ->
-  C.LLVM.MemImpl Sym ->
-  Regs ->
+  Options ->
+  SharedContext ->
   IO ()
-checkPost sym cc env ms mem _regs = do
-  let tyenv = ms ^. MS.csPreState . MS.csAllocs
-      nameEnv = MS.csTypeNames ms
-  forM_ (ms ^. MS.csPostState . MS.csPointsTos)
-    $ checkPointsTo sym cc env tyenv nameEnv mem
-  -- TODO: postconditions about calling convention
-  -- + Check that IP is set to return address
-  -- + Check that the stack is properly restored
+checkGoals sym opts sc = do
+  liftIO $ printOutLn opts Info "Simulation finished, running solver on goals"
+  gs <- liftIO $ getGoals sym
+  liftIO $ print gs
+  liftIO . forM_ gs $ \g ->
+    do term <- gGoal sc g
+       (mb, stats) <- proveUnintSBV z3 [] Nothing sc term
+       putStrLn $ ppStats stats
+       case mb of
+         Nothing -> printOutLn opts Info "Goal succeeded"
+         Just ex -> fail $ "Failure, counterexample: " <> show ex
+    `catch` \(X86Error e) -> fail $ "Failure, error: " <> e
+  liftIO $ printOutLn opts Info "All goals succeeded"
 
 -------------------------------------------------------------------------------
 -- ** Utility type synonyms and functions
@@ -426,6 +482,7 @@ type LLVMArch = C.LLVM.X86 64
 type LLVM = C.LLVM.LLVM LLVMArch
 type Regs = Ctx.Assignment (C.RegValue' Sym) (Macaw.MacawCrucibleRegTypes Macaw.X86_64)
 type Register = Macaw.X86Reg (Macaw.BVType 64)
+type Mem = C.LLVM.MemImpl Sym
 type Ptr = C.LLVM.LLVMPtr Sym 64
 
 setReg ::
@@ -437,22 +494,6 @@ setReg reg val regs
   | Just regs' <- Macaw.updateX86Reg reg (C.RV . const val) regs = pure regs'
   | otherwise = fail $ mconcat ["Invalid register: ", show reg]
 
-setRegSetupValue ::
-  Sym ->
-  LLVMCrucibleContext LLVMArch ->
-  Map MS.AllocIndex Ptr ->
-  Map MS.AllocIndex LLVMAllocSpec ->
-  Map MS.AllocIndex C.LLVM.Ident ->
-  C.LLVM.MemImpl Sym ->
-  Regs ->
-  (Register, MS.SetupValue LLVM) ->
-  IO Regs
-setRegSetupValue sym cc env tyenv nameEnv mem regs (reg, sval) = do
-  let ?ptrWidth = knownNat @64
-  val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-    =<< resolveSetupVal cc mem env tyenv nameEnv sval
-  setReg reg val regs
-
 getReg ::
   Register ->
   Regs ->
@@ -463,11 +504,11 @@ getReg reg regs = case Macaw.lookupX86Reg reg regs of
 
 allocate ::
   Sym ->
-  C.LLVM.MemImpl Sym ->
+  Mem ->
   String ->
   C.LLVM.MemType ->
   C.LLVM.Mutability ->
-  IO (Ptr, C.LLVM.MemImpl Sym)
+  IO (Ptr, Mem)
 allocate sym mem nm mt mut = do
   let ?ptrWidth = knownNat @64
   sz <- W4.bvLit sym knownNat . C.LLVM.bytesToInteger $ C.LLVM.memTypeSize C.LLVM.defaultDataLayout mt
