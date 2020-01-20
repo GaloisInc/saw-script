@@ -399,7 +399,6 @@ cryCur l = Cry (Loc l)
 data Prop :: SpecType -> Type where
   Same    :: TypeRepr t -> V p t -> V p t -> Prop p
   CryProp :: String -> [ CryArg p ] -> Prop p
-  Initialized :: V Post (LLVMPointerType 64) -> Integer -> Unit -> Prop Post
   CryPostMem ::
     V Post (LLVMPointerType 64) {- starting here -} ->
     Integer                     {- this many elemnts -} ->
@@ -635,11 +634,6 @@ evalProp opts p s =
       do v1 <- eval x opts s
          v2 <- eval y opts s
          evalSame sym t v1 v2
-
-    Initialized ptr n u ->
-      unitByteSize u $ \wBytes ->
-        do _ <- readArr opts ptr n wBytes s $ snd s
-           pure $ truePred sym
 
     CryProp f xs -> evalCryFunGen opts s BaseBoolRepr f xs
 

@@ -16,11 +16,11 @@ module SAWScript.X86
   , SharedContext
   , CallHandler
   , Sym
-  , RelevantElf(..), getElf, getRelevant
+  , RelevantElf(..)
+  , getElf
+  , getRelevant
   , findSymbol
-  , TheCFG
   , posFn
-
   , loadGlobal
   ) where
 
