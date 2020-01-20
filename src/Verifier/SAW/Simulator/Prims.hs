@@ -35,7 +35,7 @@ import Verifier.SAW.Term.Functor (Ident, alistAllFields)
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Prim
 
-import qualified Verifier.SAW.Panic as Panic (panic)
+import qualified Verifier.SAW.Utils as Panic (panic)
 
 ------------------------------------------------------------
 --

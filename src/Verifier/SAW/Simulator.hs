@@ -50,7 +50,7 @@ import Data.Traversable
 import qualified Data.Vector as V
 --import qualified Debug.Trace as Debug
 
-import qualified Verifier.SAW.Panic as Panic
+import qualified Verifier.SAW.Utils as Panic (panic)
 
 import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
