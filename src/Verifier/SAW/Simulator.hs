@@ -50,6 +50,8 @@ import Data.Traversable
 import qualified Data.Vector as V
 --import qualified Debug.Trace as Debug
 
+import qualified Verifier.SAW.Panic as Panic
+
 import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
@@ -63,6 +65,9 @@ type OpenValueIn m l       = OpenValue (WithM m l)
 type ValueIn m l           = Value (WithM m l)
 type MValueIn m l          = MValue (WithM m l)
 type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
+
+panic :: String -> a
+panic msg = Panic.panic "Verifier.SAW.Simulator" [msg]
 
 ------------------------------------------------------------
 -- Simulator configuration
@@ -86,11 +91,11 @@ data SimulatorConfig l =
 evalDef :: forall l. VMonad l => (Term -> OpenValue l) -> Def -> MValue l
 evalDef recEval (Def _ NoQualifier _ (Just body)) = recEval body []
 evalDef _ (Def ident NoQualifier _ Nothing) =
-  fail $ unwords ["attempted to evaluate definition with no body", show ident]
+  panic $ unwords ["attempted to evaluate definition with no body", show ident]
 evalDef _ (Def ident PrimQualifier _ _) =
-  fail $ unwords ["attempted to evaluate primitive", show ident]
+  panic $ unwords ["attempted to evaluate primitive", show ident]
 evalDef _ (Def ident AxiomQualifier _ _) =
-  fail $ unwords ["attempted to evaluate axiom", show ident]
+  panic $ unwords ["attempted to evaluate axiom", show ident]
 
 
 ------------------------------------------------------------
@@ -251,7 +256,7 @@ evalGlobal' modmap prims extcns uninterpreted = do
     global thunks ident =
       case HashMap.lookup ident thunks of
         Just v -> force v
-        Nothing -> fail $ "Unimplemented global: " ++ show ident
+        Nothing -> panic $ "Unimplemented global: " ++ show ident
 
     globals :: SimulatorConfig l -> HashMap Ident (MValue l)
     globals cfg =
@@ -269,7 +274,7 @@ evalGlobal' modmap prims extcns uninterpreted = do
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
 noExtCns :: VMonad l => ExtCns (Value l) -> MValue l
-noExtCns ec = fail $ "evalTermF ExtCns unimplemented (" ++ ecName ec ++ ")"
+noExtCns ec = panic $ "evalTermF ExtCns unimplemented (" ++ ecName ec ++ ")"
 
 
 -- | Check that all the primitives declared in the given module
@@ -282,7 +287,7 @@ checkPrimitives :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l))
 checkPrimitives modmap prims = do
    -- FIXME this is downgraded to a warning temporarily while we work out a
    -- solution to issue GaloisInc/saw-script#48
-   --   when (not $ null unimplementedPrims) (fail $ unimplementedMsg)
+   --   when (not $ null unimplementedPrims) (panic $ unimplementedMsg)
    -- (if null unimplementedPrims then id else Debug.trace (unimplementedMsg++"\n")) $
 --   (if null overridePrims then id else Debug.trace (overrideMsg++"\n")) $
      return ()
@@ -314,21 +319,21 @@ evalRecursorApp modmap lam ps p_ret cs_fs (VCtorApp c all_args)
          mapM (\c' -> case lookup (ctorName c') cs_fs of
                   Just elim -> return elim
                   Nothing ->
-                    fail ("evalRecursorApp: internal error: "
+                    panic ("evalRecursorApp: internal error: "
                           ++ "constructor not found in its own datatype: "
                           ++ show c')) $
          dtCtors dt
        let args = drop (length ps) $ V.toList all_args
        lam (ctorIotaReduction ctor) (reverse $ ps ++ [p_ret] ++ elims ++ args)
 evalRecursorApp _ _ _ _ _ (VCtorApp c _) =
-  fail $ ("evalRecursorApp: could not find info for constructor: " ++ show c)
+  panic $ ("evalRecursorApp: could not find info for constructor: " ++ show c)
 evalRecursorApp modmap lam ps p_ret cs_fs (VNat 0) =
   evalRecursorApp modmap lam ps p_ret cs_fs (VCtorApp "Prelude.Zero" V.empty)
 evalRecursorApp modmap lam ps p_ret cs_fs (VNat i) =
   evalRecursorApp modmap lam ps p_ret cs_fs
   (VCtorApp "Prelude.Succ" (V.singleton $ ready $ VNat $ i-1))
 evalRecursorApp _ _ _ _ _ v =
-  fail $ "evalRecursorApp: non-constructor value: " ++ show v
+  panic $ "evalRecursorApp: non-constructor value: " ++ show v
 
 
 ----------------------------------------------------------------------
@@ -407,7 +412,7 @@ evalClosedTermF cfg memoClosed tf = evalTermF cfg lam recEval tf []
     recEval (STApp{ stAppIndex = i }) =
       case IMap.lookup i memoClosed of
         Just x -> force x
-        Nothing -> fail "evalClosedTermF: internal error"
+        Nothing -> panic "evalClosedTermF: internal error"
 
 {-# SPECIALIZE mkMemoLocal ::
   Show (Extra l) =>
@@ -477,7 +482,7 @@ evalLocalTermF cfg memoClosed memoLocal tf0 env = evalTermF cfg lam recEval tf0 
     recEval (STApp{ stAppIndex = i }) =
       case IMap.lookup i memoLocal of
         Just x -> force x
-        Nothing -> fail "evalLocalTermF: internal error"
+        Nothing -> panic "evalLocalTermF: internal error"
 
 {-# SPECIALIZE evalOpen ::
   Show (Extra l) =>
