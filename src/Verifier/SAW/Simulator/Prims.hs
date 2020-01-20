@@ -35,6 +35,8 @@ import Verifier.SAW.Term.Functor (Ident, alistAllFields)
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Prim
 
+import qualified Verifier.SAW.Panic as Panic (panic)
+
 ------------------------------------------------------------
 --
 
@@ -250,7 +252,7 @@ constMap bp = Map.fromList
 -- | Call this function to indicate that a programming error has
 -- occurred, e.g. a datatype invariant has been violated.
 panic :: String -> a
-panic msg = error msg
+panic msg = Panic.panic "Verifier.SAW.Simulator.Prims" [msg]
 
 ------------------------------------------------------------
 -- Value accessors and constructors
