@@ -1938,26 +1938,13 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_llvm_verify_x86"
-    "LLVMModule -> String -> String -> [LLVMType] -> Maybe LLVMType -> [(String, Int)] -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    "LLVMModule -> String -> String -> [(String, Int)] -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify_x86)
     Experimental
     [ "Load the ELF file specified by the second argument and verify the function"
     , "named by the third. Returns a method spec that can be used as an override"
-    , "when verifying other LLVM. The fourth and fifth arguments specify the types"
-    , "of the arguments and return value, respectively."
+    , "when verifying other LLVM functions."
     ]
-
-  , prim "crucible_llvm_x86_return_type"
-    "LLVMType -> Maybe LLVMType"
-    (pureVal (Just :: L.Type -> Maybe L.Type))
-    Experimental
-    []
-
-  , prim "crucible_llvm_x86_return_void"
-    "Maybe LLVMType"
-    (pureVal (Nothing :: Maybe L.Type))
-    Experimental
-    []
 
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"

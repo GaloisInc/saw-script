@@ -52,7 +52,9 @@ import SAWScript.X86Spec
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
-import SAWScript.Crucible.LLVM.Builtins (setupLLVMCrucibleContext)
+import SAWScript.Crucible.LLVM.Builtins
+  ( displayVerifExceptionOpts, findDecl, setupLLVMCrucibleContext
+  )
 import SAWScript.Crucible.LLVM.MethodSpecIR
 import SAWScript.Crucible.LLVM.ResolveSetupValue
   ( resolveSetupVal, typeOfSetupValue
@@ -130,22 +132,38 @@ llvmTypeToMemType ::
   Either String MemType
 llvmTypeToMemType lc t = let ?lc = lc in liftMemType t
 
+llvmSignature ::
+  Options ->
+  LLVMModule (X86 64) ->
+  String ->
+  Either String ([LLVM.Type], Maybe LLVM.Type)
+llvmSignature opts llvmModule nm =
+  case findDecl (llvmModule ^. modAST) nm of
+    Left err -> Left $ displayVerifExceptionOpts opts err
+    Right decl -> pure
+      ( LLVM.decArgs decl
+      , case LLVM.decRetType decl of
+          LLVM.PrimType LLVM.Void -> Nothing
+          x -> Just x
+      )
+
 buildMethodSpec ::
   BuiltinContext ->
   Options ->
   LLVMModule (X86 64) ->
   String ->
   String ->
-  [LLVM.Type] ->
-  Maybe LLVM.Type ->
   LLVMCrucibleSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR (LLVM (X86 64)))
-buildMethodSpec bic opts lm nm addr args ret setup =
+buildMethodSpec bic opts lm nm addr setup =
   setupLLVMCrucibleContext bic opts lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
     let programLoc = mkProgramLoc (functionNameFromText $ Text.pack nm) . OtherPos $ Text.pack addr
     let LLVMModule _ _ mtrans = lm
     let lc = mtrans ^. transContext . llvmTypeCtx
+    (args, ret) <- case llvmSignature opts lm nm of
+      Left err -> fail $ mconcat ["Could not find declaration for \"", nm, "\": ", err]
+      Right x -> pure x
     (mtargs, mtret) <- case (,) <$> mapM (llvmTypeToMemType lc) args <*> mapM (llvmTypeToMemType lc) ret of
       Left err -> fail err
       Right x -> pure x
@@ -373,12 +391,10 @@ crucible_llvm_verify_x86 ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
-  [LLVM.Type] {- ^ Types of function arguments -} ->
-  Maybe LLVM.Type {- ^ Function return type -} ->
   [(String, Integer)] ->
   LLVMCrucibleSetupM () ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm args ret globsyms setup
+crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms setup
   | Just Refl <- testEquality (X86Repr $ knownNat @64) . llvmArch
                  $ llvmModule ^. modTrans . transContext = do
       let sc = biSharedContext bic
@@ -412,7 +428,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm ar
              }
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
-      methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) args ret setup
+      methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) setup
       (globs :: GlobalMap Sym 64, mem, regs, env) <-
         liftIO $ initialMemory sym elf cc maxAddr globsyms methodSpec
 

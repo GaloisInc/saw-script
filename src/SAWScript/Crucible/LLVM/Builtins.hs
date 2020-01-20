@@ -55,6 +55,9 @@ module SAWScript.Crucible.LLVM.Builtins
     , setupArgs
     , getGlobalPair
     , runCFG
+
+    , displayVerifExceptionOpts
+    , findDecl
     , setupLLVMCrucibleContext
     ) where
 
