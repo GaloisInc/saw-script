@@ -122,6 +122,7 @@ import Verifier.SAW.Recognizer ((:*:)(..))
 import Verifier.SAW.Prim
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 
 -- | A hack to allow storage of conversions in a term net.
@@ -394,7 +395,7 @@ mkTupleSelector :: Int -> Term -> TermBuilder Term
 mkTupleSelector i t
   | i == 1 = mkTermF (FTermF (PairLeft t))
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
-  | otherwise = error "mkTupleSelector: non-positive index"
+  | otherwise = panic "Verifier.SAW.Conversion.mkTupleSelector" ["non-positive index:", show i]
 
 mkCtor :: Ident -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
@@ -517,8 +518,13 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 -- | Conversion for selector on a tuple
 tupleConversion :: Conversion
 tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) action
-  where action (ts, i) | i > length ts = error "tupleConversion"
-        action (ts, i) = Just (return (ts !! (i - 1)))
+  where
+    action (ts, i)
+      | i > length ts =
+          panic "Verifier.SAW.Conversion.tupleConversion"
+          ["index out of bounds:", show (i, length ts)]
+      | otherwise =
+          Just (return (ts !! (i - 1)))
 
 -- | Conversion for selector on a record
 recordConversion :: Conversion
