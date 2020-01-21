@@ -15,8 +15,10 @@ module Verifier.SAW.Cryptol.Prims
 , bitblastPrims
 , sbvPrims
 , w4Prims
+, CryptolError(..)
 ) where
 
+import Control.Exception
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -33,12 +35,18 @@ import What4.Interface as W4
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Prim as P
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.Simulator.Prims
+import Verifier.SAW.Simulator.Prims hiding (panic)
 import qualified Verifier.SAW.Simulator.BitBlast as BB
 import qualified Verifier.SAW.Simulator.SBV as SBV
 import qualified Verifier.SAW.Simulator.Concrete as C
 import qualified Verifier.SAW.Simulator.What4 as W4
 import qualified Verifier.SAW.Simulator.What4.SWord as W4
+import Verifier.SAW.Cryptol.Panic
+
+data CryptolError = CryptolError String
+  deriving (Eq, Ord, Show)
+
+instance Exception CryptolError
 
 -- primitive cryError :: (a :: sort 0) -> (n :: Nat) -> Vec n (bitvector 8) -> a;
 cryError :: VMonad l => (VWord l -> EvalM l Char) -> Value l
@@ -47,9 +55,9 @@ cryError asChar =
   strictFun $ \_n -> return $
   strictFun $ \(VVector msgChars) -> do
     let toChar (VWord w) = asChar w
-        toChar _ = fail "Cryptol.cryError: unable to print message"
+        toChar _ = throw (CryptolError "unable to print message")
     msg <- mapM (toChar <=< force) $ V.toList $ msgChars
-    fail $ "Cryptol.cryError: " ++ msg
+    throw (CryptolError msg)
 
 bvAsChar :: Monad m => P.BitVector -> m Char
 bvAsChar w = return $ toEnum $ fromInteger $ P.unsigned $ w
@@ -58,19 +66,19 @@ aigWordAsChar :: (Monad m, IsAIG l g) => g s -> AIG.BV (l s) -> m Char
 aigWordAsChar g bv =
   case AIG.asUnsigned g bv of
     Just i -> return $ toEnum $ fromInteger i
-    Nothing -> fail "unable to interpret bitvector as character"
+    Nothing -> throw (CryptolError "unable to interpret bitvector as character")
 
 sbvWordAsChar :: Monad m => SBV.SWord -> m Char
 sbvWordAsChar bv =
   case SBV.svAsInteger bv of
     Just i -> return $ toEnum $ fromInteger i
-    Nothing -> fail "unable to interpret bitvector as character"
+    Nothing -> throw (CryptolError "unable to interpret bitvector as character")
 
 w4WordAsChar :: (Monad m,W4.IsExprBuilder sym) => W4.SWord sym -> m Char
 w4WordAsChar bv =
   case W4.bvAsUnsignedInteger bv of   -- or signed?
     Just i -> return $ toEnum $ fromInteger i
-    Nothing -> fail "unable to interpret bitvector as character"
+    Nothing -> throw (CryptolError "unable to interpret bitvector as character")
 
 --primitive tcLenFromThenTo_Nat :: Nat -> Nat -> Nat -> Nat;
 tcLenFromThenTo_Nat :: VMonad l => Value l
@@ -82,7 +90,7 @@ tcLenFromThenTo_Nat =
                                (CryNat.Nat $ fromIntegral y)
                                (CryNat.Nat $ fromIntegral z) of
       Just (CryNat.Nat ans) -> return $ vNat $ fromIntegral ans
-      _ -> fail "tcLenFromThenTo_Nat: unable to calculate length"
+      _ -> panic "tcLenFromThenTo_Nat"  ["unable to calculate length"]
 
 concretePrims :: Map Ident C.CValue
 concretePrims = Map.fromList
