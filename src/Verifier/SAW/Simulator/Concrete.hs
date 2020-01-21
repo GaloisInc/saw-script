@@ -33,7 +33,6 @@ import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
-import qualified Verifier.SAW.Prim as Prim (userError)
 import Verifier.SAW.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator as Sim

@@ -59,7 +59,6 @@ module Verifier.SAW.Rewriter
 import Control.Applicative ((<$>), pure, (<*>))
 import Data.Foldable (Foldable)
 #endif
-import Control.Monad (guard)
 import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.Trans.Maybe

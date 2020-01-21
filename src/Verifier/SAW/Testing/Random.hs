@@ -29,8 +29,6 @@ import Verifier.SAW.Utils (panic)
 import Control.Applicative ((<$>), Applicative)
 import Data.Traversable (traverse)
 #endif
-import Control.Monad (msum, replicateM)
-import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Random
 import Data.Map (Map)
 import qualified Data.Map as Map

@@ -311,7 +311,7 @@ parseSAWTerm = runParser parseSAWTerm2
 parseError :: PosPair Token -> Parser a
 parseError pt = do
   addError (pos pt) (UnexpectedToken (val pt))
-  fail $ (ppPos (pos pt)) ++ " Parse error\n  " ++ (ppToken (val pt))
+  return $ error $ (ppPos (pos pt)) ++ " Parse error\n  " ++ (ppToken (val pt))
 
 addParseError :: Pos -> String -> Parser ()
 addParseError p s = addError p (ParseError s)
