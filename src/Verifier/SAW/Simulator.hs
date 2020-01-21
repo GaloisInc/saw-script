@@ -25,7 +25,6 @@ module Verifier.SAW.Simulator
   , evalSharedTerm
   , evalGlobal
   , evalGlobal'
-  , noExtCns
   , checkPrimitives
   ) where
 
@@ -272,10 +271,6 @@ evalGlobal' modmap prims extcns uninterpreted = do
     vCtor :: Ident -> [Thunk l] -> Term -> Value l
     vCtor ident xs (unwrapTermF -> (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
     vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
-
-noExtCns :: VMonad l => ExtCns (Value l) -> MValue l
-noExtCns ec = panic $ "evalTermF ExtCns unimplemented (" ++ ecName ec ++ ")"
-
 
 -- | Check that all the primitives declared in the given module
 --   are implemented, and that terms with implementations are not

@@ -37,6 +37,7 @@ import Verifier.SAW.Simulator.RME.Base (RME)
 import qualified Verifier.SAW.Simulator.RME.Base as RME
 import qualified Verifier.SAW.Simulator.RME.Vector as RMEV
 
+import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
@@ -57,8 +58,10 @@ evalSharedTerm :: ModuleMap -> Map Ident RValue -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           Sim.noExtCns (const Nothing)
+           extcns (const Nothing)
     Sim.evalSharedTerm cfg t
+  where
+    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ ecName ec
 
 ------------------------------------------------------------
 -- Values

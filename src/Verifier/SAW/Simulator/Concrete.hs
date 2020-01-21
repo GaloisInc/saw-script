@@ -33,6 +33,7 @@ import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
+import qualified Verifier.SAW.Prim as Prim (userError)
 import Verifier.SAW.Prim (BitVector(..), signed, bv, bvNeg)
 import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator as Sim
@@ -50,8 +51,10 @@ evalSharedTerm :: ModuleMap -> Map Ident CValue -> Term -> CValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           Sim.noExtCns (const Nothing)
+           extcns (const Nothing)
     Sim.evalSharedTerm cfg t
+  where
+    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ ecName ec
 
 ------------------------------------------------------------
 -- Values
