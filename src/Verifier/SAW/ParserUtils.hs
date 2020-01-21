@@ -49,8 +49,8 @@ import Verifier.SAW.Typechecker (tcInsertModule)
 readModule :: FilePath -> FilePath -> BL.ByteString -> Un.Module
 readModule base path b =
   case Un.parseSAW base path b of
-    (m,[]) -> m
-    (_,errs) -> error $ "Module parsing failed:\n" ++ show errs
+    Right m -> m
+    Left err -> error $ "Module parsing failed:\n" ++ show err
 
 -- | Parse an untyped module from file
 readModuleFromFile :: FilePath -> IO Un.Module
