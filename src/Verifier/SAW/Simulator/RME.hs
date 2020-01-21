@@ -45,6 +45,7 @@ import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (ModuleMap, showTerm)
+import Verifier.SAW.Utils (panic)
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -371,7 +372,7 @@ asPredType sc t = do
   case t' of
     (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
     (R.asBoolType -> Just ())    -> return []
-    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: " ++ showTerm t'
+    _                            -> panic "Verifier.SAW.Simulator.RME.asPredType" ["non-boolean result type:", showTerm t']
 
 withBitBlastedPred ::
   SharedContext ->
@@ -388,4 +389,4 @@ withBitBlastedPred sc addlPrims t c = do
   let bval' = runIdentity $ applyAll bval vars
   case bval' of
     VBool anf -> c anf shapes
-    _ -> fail "Verifier.SAW.Simulator.RME.bitBlast: non-boolean result type."
+    _ -> panic "Verifier.SAW.Simulator.RME.bitBlast" ["non-boolean result type."]
