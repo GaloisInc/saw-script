@@ -24,6 +24,7 @@ import Control.Applicative hiding (many)
 #endif
 import Data.String
 import Data.Parameterized.Some
+import Control.Monad.State (gets)
 
 import qualified Text.LLVM.AST as LLVM
 import qualified Data.LLVM.BitCode as LLVM
@@ -31,17 +32,16 @@ import qualified Text.LLVM.Parser as LLVM (parseType)
 
 import SAWScript.Value as SV
 
-import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible (translateModule)
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule(..))
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (LLVMModule, loadLLVMModule)
 
 llvm_load_module :: FilePath -> TopLevel (Some CMS.LLVMModule)
 llvm_load_module file =
-  io (LLVM.parseBitCodeFromFile file) >>= \case
-    Left err -> fail (LLVM.formatError err)
-    Right llvm_mod -> do
-      halloc <- getHandleAlloc
-      Some mtrans <- io $ Crucible.translateModule halloc llvm_mod
-      return (Some (CMS.LLVMModule file llvm_mod mtrans))
+  do laxArith <- gets rwLaxArith
+     let ?laxArith = laxArith
+     halloc <- getHandleAlloc
+     io (CMS.loadLLVMModule file halloc) >>= \case
+       Left err -> fail (LLVM.formatError err)
+       Right llvm_mod -> return llvm_mod
 
 llvm_type :: String -> TopLevel LLVM.Type
 llvm_type str =

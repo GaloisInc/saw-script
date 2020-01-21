@@ -1,4 +1,4 @@
-module SAWScript.Prover.ABC (satABC, satABCExternal) where
+module SAWScript.Prover.ABC (proveABC, proveABCExternal) where
 
 
 import qualified Data.AIG as AIG
@@ -8,23 +8,22 @@ import           Verifier.SAW.TypedTerm
 import           Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import SAWScript.Proof(propToPredicate)
-import SAWScript.Prover.Exporter (writeVerilog)
+import SAWScript.Proof(Prop, propToPredicate, unProp)
+import SAWScript.Prover.Exporter (writeVerilogProp)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
 import SAWScript.Prover.Util
          (liftCexBB, bindAllExts, checkBooleanSchema)
 
--- | Bit-blast a @Term@ representing a theorem and check its
--- satisfiability using ABC.
-satABC ::
+-- | Bit-blast a proposition and check its validity using ABC.
+proveABC ::
   (AIG.IsAIG l g) =>
   AIG.Proxy l g ->
   SharedContext ->
-  Term ->
-  IO (Maybe [(String,FirstOrderValue)], SolverStats)
-satABC proxy sc goal =
+  Prop ->
+  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+proveABC proxy sc goal =
   do t0 <- propToPredicate sc goal
      TypedTerm schema t <-
         (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
@@ -64,13 +63,14 @@ getModel argNames shapes satRes =
 
 -- | Check the satisfiability of a @Term@ using ABC as an external
 -- process.
-satABCExternal ::
+proveABCExternal ::
   SharedContext ->
-  Term ->
+  Prop ->
   IO (Maybe [(String,FirstOrderValue)], SolverStats)
-satABCExternal sc goal =
+proveABCExternal sc goal =
   do let file = undefined
-         stats = solverStats "ABCExternal" (scSharedSize goal)
-     writeVerilog sc file goal
+         stats = solverStats "ABCExternal" (scSharedSize (unProp goal))
+     -- TODO: negate goal
+     writeVerilogProp sc file goal
      -- TODO: invoke ABC and parse output
      return (Nothing, stats)

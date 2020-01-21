@@ -22,6 +22,7 @@ import Control.Lens
 import Control.Monad.State
 import Control.Monad.Trans.Except
 import Data.List (partition)
+import Data.Maybe (mapMaybe)
 import Data.IORef
 import qualified Data.Map as Map
 import Data.Time.Clock
@@ -177,7 +178,7 @@ extractJava bic opts cls mname setup = do
       liftIO $ do
         let sc = biSharedContext bic
         argBinds <- reverse <$> readIORef argsRef
-        exts <- mapM asExtCns argBinds
+        let exts = mapMaybe asExtCns argBinds
         -- TODO: group argBinds according to the declared types
         scAbstractExts jsc exts dt >>= mkTypedTerm sc
 
@@ -251,7 +252,7 @@ verifyJava bic opts cls mname overrides setup = do
               let exts = getAllExts g
               gprop <- io $ scGeneralizeExts jsc exts =<< scEqTrue jsc g
               io $ doExtraChecks opts bsc gprop
-              let goal = ProofGoal n "vc" (vsVCName vs) gprop
+              let goal = ProofGoal n "vc" (vsVCName vs) (Prop gprop)
               r <- evalStateT script (startProof goal)
               case r of
                 SS.Unsat _ -> liftIO $ printOutLn opts Debug "Valid."

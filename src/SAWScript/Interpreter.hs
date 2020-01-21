@@ -146,7 +146,7 @@ typedTermOfString :: String -> TypedTerm
 typedTermOfString cs = TypedTerm schema trm
   where
     nat :: Integer -> Term
-    nat n = Unshared (FTermF (NatLit n))
+    nat n = Unshared (FTermF (NatLit (fromInteger n)))
     bvNat :: Term
     bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
     bvNat8 :: Term
@@ -472,6 +472,7 @@ buildTopLevelEnv proxy opts =
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
                    , rwProfilingFile = Nothing
+                   , rwLaxArith = False
                    }
        return (bic, ro0, rw0)
 
@@ -510,6 +511,11 @@ enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwProfilingFile = Just f }
+
+enable_lax_arithmetic :: TopLevel ()
+enable_lax_arithmetic = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxArith = True }
 
 disable_crucible_profiling :: TopLevel ()
 disable_crucible_profiling = do
@@ -673,6 +679,11 @@ primitives = Map.fromList
     (pureVal enable_smt_array_memory_model)
     Current
     [ "Enable the SMT array memory model." ]
+
+  , prim "enable_lax_arithmetic" "TopLevel ()"
+    (pureVal enable_lax_arithmetic)
+    Current
+    [ "Enable lax rules for arithmetic overflow in Crucible." ]
 
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
@@ -1104,7 +1115,7 @@ primitives = Map.fromList
     ]
 
   , prim "abc"                 "ProofScript SatResult"
-    (pureVal satABC)
+    (pureVal proveABC)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
@@ -1116,73 +1127,73 @@ primitives = Map.fromList
     ]
 
   , prim "boolector"           "ProofScript SatResult"
-    (pureVal satBoolector)
+    (pureVal proveBoolector)
     Current
     [ "Use the Boolector theorem prover to prove the current goal." ]
 
   , prim "cvc4"                "ProofScript SatResult"
-    (pureVal satCVC4)
+    (pureVal proveCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
 
   , prim "z3"                  "ProofScript SatResult"
-    (pureVal satZ3)
+    (pureVal proveZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal." ]
 
   , prim "mathsat"             "ProofScript SatResult"
-    (pureVal satMathSAT)
+    (pureVal proveMathSAT)
     Current
     [ "Use the MathSAT theorem prover to prove the current goal." ]
 
   , prim "yices"               "ProofScript SatResult"
-    (pureVal satYices)
+    (pureVal proveYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal." ]
 
   , prim "unint_z3"            "[String] -> ProofScript SatResult"
-    (pureVal satUnintZ3)
+    (pureVal proveUnintZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "unint_cvc4"            "[String] -> ProofScript SatResult"
-    (pureVal satUnintCVC4)
+    (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "unint_yices"           "[String] -> ProofScript SatResult"
-    (pureVal satUnintYices)
+    (pureVal proveUnintYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "offline_aig"         "String -> ProofScript SatResult"
-    (pureVal satAIG)
+    (pureVal offline_aig)
     Current
     [ "Write the current goal to the given file in AIGER format." ]
 
   , prim "offline_cnf"         "String -> ProofScript SatResult"
-    (pureVal satCNF)
+    (pureVal offline_cnf)
     Current
     [ "Write the current goal to the given file in CNF format." ]
 
   , prim "offline_extcore"     "String -> ProofScript SatResult"
-    (pureVal satExtCore)
+    (pureVal offline_extcore)
     Current
     [ "Write the current goal to the given file in SAWCore format." ]
 
   , prim "offline_smtlib2"     "String -> ProofScript SatResult"
-    (pureVal satSMTLib2)
+    (pureVal offline_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
   , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript SatResult"
-    (pureVal satUnintSMTLib2)
+    (pureVal offline_unint_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format,"
     , "leaving the listed functions uninterpreted."
@@ -1212,7 +1223,7 @@ primitives = Map.fromList
     , "temporary file holding the AIG version of the formula."]
 
   , prim "rme"                 "ProofScript SatResult"
-    (pureVal satRME)
+    (pureVal proveRME)
     Current
     [ "Prove the current goal by expansion to Reed-Muller Normal Form." ]
 
@@ -1222,26 +1233,26 @@ primitives = Map.fromList
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
   , prim "w4"                  "ProofScript SatResult"
-    (pureVal satWhat4_Z3)
+    (pureVal w4_z3)
     Current
     [ "Prove the current goal using What4 (Z3 backend)." ]
 
   , prim "w4_unint_z3"         "[String] -> ProofScript SatResult"
-    (pureVal satWhat4_UnintZ3)
+    (pureVal w4_unint_z3)
     Current
     [ "Prove the current goal using What4 (Z3 backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "w4_unint_yices"         "[String] -> ProofScript SatResult"
-    (pureVal satWhat4_UnintYices)
+    (pureVal w4_unint_yices)
     Current
     [ "Prove the current goal using What4 (Yices backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
   , prim "w4_unint_cvc4"         "[String] -> ProofScript SatResult"
-    (pureVal satWhat4_UnintCVC4)
+    (pureVal w4_unint_cvc4)
     Current
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
@@ -1823,7 +1834,10 @@ primitives = Map.fromList
   , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
     (bicVal crucible_alloc_global)
     Current
-    []
+    [ "Declare that memory for the named global should be allocated in a"
+    , "Crucible specification. This is done implicitly for immutable globals."
+    , "A pointer to the allocated memory may be obtained using `crucible_global`."
+    ]
 
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)

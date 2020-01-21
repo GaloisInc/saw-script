@@ -27,7 +27,6 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
 
 import Control.Lens
 import Control.Monad
-import qualified Control.Monad.Fail as Fail
 import Control.Monad.Fail (MonadFail)
 import Control.Monad.State
 import Data.Foldable (toList)
@@ -71,7 +70,6 @@ import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
 
-import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
 --import qualified SAWScript.LLVMBuiltins as LB
@@ -92,7 +90,7 @@ resolveSetupValueInfo cc env nameEnv v =
     -- SetupGlobal g ->
     SetupVar i
       | Just alias <- Map.lookup i nameEnv
-      , let mdMap = Crucible.llvmMetadataMap (cc^.ccTypeCtx)
+      , let mdMap = Crucible.llvmMetadataMap (ccTypeCtx cc)
       -> L.Pointer (guessAliasInfo mdMap alias)
     SetupField () a n ->
        fromMaybe L.Unknown $
@@ -124,7 +122,7 @@ resolveSetupFieldIndex cc env nameEnv v n =
 
     _ -> Nothing
   where
-    lc = cc^.ccTypeCtx
+    lc = ccTypeCtx cc
 
 resolveSetupFieldIndexOrFail ::
   MonadFail m =>
@@ -157,7 +155,7 @@ typeOfSetupValue ::
   SetupValue (Crucible.LLVM arch) ->
   m Crucible.MemType
 typeOfSetupValue cc env nameEnv val =
-  do let ?lc = cc^.ccTypeCtx
+  do let ?lc = ccTypeCtx cc
      typeOfSetupValue' cc env nameEnv val
 
 typeOfSetupValue' :: forall m arch.
@@ -227,7 +225,7 @@ typeOfSetupValue' cc env nameEnv val =
       return (Crucible.PtrType Crucible.VoidType)
     -- A global and its initializer have the same type.
     SetupGlobal () name -> do
-      let m = cc ^. ccLLVMModuleAST
+      let m = ccLLVMModuleAST cc
           tys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals m ] ++
                 [ (L.decName d, L.decFunType d) | d <- L.modDeclares m ] ++
                 [ (L.defName d, L.defFunType d) | d <- L.modDefines m ]
@@ -241,7 +239,7 @@ typeOfSetupValue' cc env nameEnv val =
                                        ]
             Right symTy -> return (Crucible.PtrType symTy)
     SetupGlobalInitializer () name -> do
-      case Map.lookup (L.Symbol name) (Crucible.globalInitMap $ cc^.ccLLVMModuleTrans) of
+      case Map.lookup (L.Symbol name) (Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         Just (g, _) ->
           case let ?lc = lc in Crucible.liftMemType (L.globalType g) of
             Left err -> fail $ unlines [ "typeOfSetupValue: invalid type " ++ show (L.globalType g)
@@ -251,7 +249,7 @@ typeOfSetupValue' cc env nameEnv val =
             Right memTy -> return memTy
         Nothing             -> fail $ "resolveSetupVal: global not found: " ++ name
   where
-    lc = cc^.ccTypeCtx
+    lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
 
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
@@ -317,7 +315,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
       Crucible.ptrToPtrVal <$> Crucible.doResolveGlobal sym mem (L.Symbol name)
     SetupGlobalInitializer () name ->
       case Map.lookup (L.Symbol name)
-                      (Crucible.globalInitMap $ cc^.ccLLVMModuleTrans) of
+                      (Crucible.globalInitMap $ ccLLVMModuleTrans cc) of
         -- There was an error in global -> constant translation
         Just (_, Left e) -> fail e
         Just (_, Right (_, Just v)) ->
@@ -329,7 +327,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
           fail $ "resolveSetupVal: global not found: " ++ name
   where
     sym = cc^.ccBackend
-    lc = cc^.ccTypeCtx
+    lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
 
 resolveTypedTerm ::
@@ -369,7 +367,7 @@ resolveSAWTerm cc tp tm =
           Just (Some w)
             | Just LeqProof <- isPosNat w ->
               do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
-                 ss <- basic_ss sc
+                 let ss = cc^.ccBasicSS
                  tm' <- rewriteSharedTerm sc ss tm
                  mx <- case getAllExts tm' of
                          [] -> do
@@ -416,7 +414,7 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: invalid function type"
   where
     sym = cc^.ccBackend
-    dl = Crucible.llvmDataLayout (cc^.ccTypeCtx)
+    dl = Crucible.llvmDataLayout (ccTypeCtx cc)
 
 data ToLLVMTypeErr = NotYetSupported String | Impossible String
 
@@ -552,7 +550,7 @@ memArrayToSawCoreTerm ::
   IO Term
 memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let sym = crucible_context ^. ccBackend
-  let data_layout = Crucible.llvmDataLayout $ crucible_context ^. ccTypeCtx
+  let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
   saw_context <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
 
   let setBytes :: Cryptol.TValue -> Term -> Crucible.Bytes -> StateT (Vector Term) IO ()

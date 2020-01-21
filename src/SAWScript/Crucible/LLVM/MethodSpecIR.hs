@@ -29,18 +29,87 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
-module SAWScript.Crucible.LLVM.MethodSpecIR where
+module SAWScript.Crucible.LLVM.MethodSpecIR
+  ( -- * LLVMMethodId
+    LLVMMethodId(..)
+  , llvmMethodParent
+  , llvmMethodName
+  , csName
+  , csParentName
+    -- * LLVMAllocSpec
+  , LLVMAllocSpec(..)
+  , allocSpecType
+  , allocSpecMut
+  , allocSpecLoc
+  , allocSpecBytes
+  , mutIso
+  , isMut
+    -- * LLVMModule
+  , LLVMModule -- abstract
+  , modFilePath
+  , modAST
+  , modTrans
+  , loadLLVMModule
+  , showLLVMModule
+    -- * CrucibleContext
+  , LLVMCrucibleContext(..)
+  , ccLLVMSimContext
+  , ccLLVMModule
+  , ccLLVMGlobals
+  , ccBasicSS
+  , ccBackend
+  , ccLLVMModuleAST
+  , ccLLVMModuleTrans
+  , ccLLVMContext
+  , ccTypeCtx
+    -- * PointsTo
+  , LLVMPointsTo(..)
+  , ppPointsTo
+    -- * AllocGlobal
+  , LLVMAllocGlobal(..)
+  , ppAllocGlobal
+    -- * Intrinsics
+  , intrinsics
+    -- * Initial CrucibleSetupMethodSpec
+  , SetupError(..)
+  , ppSetupError
+  , resolveArgs
+  , resolveRetTy
+  , initialDefCrucibleMethodSpecIR
+  , initialDeclCrucibleMethodSpecIR
+  , initialCrucibleSetupState
+  , initialCrucibleSetupStateDecl
+    -- * AllLLVM
+  , AllLLVM
+  , mkAllLLVM
+  , getAllLLVM
+  , anySetupTerm
+  , anySetupArray
+  , anySetupStruct
+  , anySetupElem
+  , anySetupField
+  , anySetupNull
+  , anySetupGlobal
+  , anySetupGlobalInitializer
+    -- * SomeLLVM
+  , SomeLLVM
+  , pattern SomeLLVM
+  , mkSomeLLVM
+  , getSomeLLVM
+  ) where
 
 import           Control.Lens
 import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
 import           Data.IORef
 import           Data.Monoid ((<>))
-import           Data.Type.Equality (TestEquality(..), (:~:)(Refl))
+import           Data.Type.Equality (TestEquality(..))
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 import qualified Text.PrettyPrint.HughesPJ as PP
+
+import qualified Data.LLVM.BitCode as LLVM
 
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 
@@ -53,6 +122,7 @@ import           What4.ProgramLoc (ProgramLoc)
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
+import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
 import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
@@ -64,6 +134,7 @@ import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 
+import           Verifier.SAW.Rewriter (Simpset)
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
 
@@ -137,23 +208,54 @@ isMut = allocSpecMut . mutIso
 --------------------------------------------------------------------------------
 -- *** LLVMModule
 
+-- | An 'LLVMModule' contains an LLVM module that has been parsed from
+-- a bitcode file and translated to Crucible.
 data LLVMModule arch =
   LLVMModule
-  { _modName :: String
+  { _modFilePath :: FilePath
   , _modAST :: L.Module
   , _modTrans :: CL.ModuleTranslation arch
   }
+-- NOTE: Type 'LLVMModule' is exported as an abstract type, and we
+-- maintain the invariant that the 'FilePath', 'Module', and
+-- 'ModuleTranslation' fields are all consistent with each other;
+-- 'loadLLVMModule' is the only function that is allowed to create
+-- values of type 'LLVMModule'.
 
-makeLenses ''LLVMModule
+-- | The file path that the LLVM module was loaded from.
+modFilePath :: LLVMModule arch -> FilePath
+modFilePath = _modFilePath
+
+-- | The parsed AST of the LLVM module.
+modAST :: LLVMModule arch -> L.Module
+modAST = _modAST
+
+-- | The Crucible translation of an LLVM module.
+modTrans :: LLVMModule arch -> CL.ModuleTranslation arch
+modTrans = _modTrans
+
+-- | Load an LLVM module from the given bitcode file, then parse and
+-- translate to Crucible.
+loadLLVMModule ::
+  (?laxArith :: Bool) =>
+  FilePath ->
+  Crucible.HandleAllocator ->
+  IO (Either LLVM.Error (Some LLVMModule))
+loadLLVMModule file halloc =
+  do parseResult <- LLVM.parseBitCodeFromFile file
+     case parseResult of
+       Left err -> return (Left err)
+       Right llvm_mod ->
+         do Some mtrans <- CL.translateModule halloc llvm_mod
+            return (Right (Some (LLVMModule file llvm_mod mtrans)))
 
 instance TestEquality LLVMModule where
-  testEquality (LLVMModule nm1 lm1 mt1) (LLVMModule nm2 lm2 mt2) =
-    case testEquality mt1 mt2 of
-      Nothing -> Nothing
-      r@(Just Refl) ->
-        if nm1 == nm2 && lm1 == lm2
-        then r
-        else Nothing
+  -- As 'LLVMModule' is an abstract type, we know that the values must
+  -- have been created by a call to 'loadLLVMModule'. Furthermore each
+  -- call to 'translateModule' generates a 'ModuleTranslation' that
+  -- contains a fresh nonce; thus comparison of the 'modTrans' fields
+  -- is sufficient to guarantee equality of two 'LLVMModule' values.
+  testEquality m1 m2 = testEquality (modTrans m1) (modTrans m2)
 
 type instance MS.Codebase (CL.LLVM arch) = LLVMModule arch
 
@@ -211,21 +313,22 @@ data LLVMCrucibleContext arch =
   , _ccBackend         :: Sym
   , _ccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM arch)
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
+  , _ccBasicSS         :: Simpset
   }
 
 makeLenses ''LLVMCrucibleContext
 
-ccLLVMModuleAST :: Simple Lens (LLVMCrucibleContext arch) L.Module
-ccLLVMModuleAST = ccLLVMModule . modAST
+ccLLVMModuleAST :: LLVMCrucibleContext arch -> L.Module
+ccLLVMModuleAST = modAST . _ccLLVMModule
 
-ccLLVMModuleTrans :: Simple Lens (LLVMCrucibleContext arch) (CL.ModuleTranslation arch)
-ccLLVMModuleTrans = ccLLVMModule . modTrans
+ccLLVMModuleTrans :: LLVMCrucibleContext arch -> CL.ModuleTranslation arch
+ccLLVMModuleTrans = modTrans . _ccLLVMModule
 
-ccLLVMContext :: Simple Lens (LLVMCrucibleContext arch) (CL.LLVMContext arch)
-ccLLVMContext = ccLLVMModuleTrans . CL.transContext
+ccLLVMContext :: LLVMCrucibleContext arch -> CL.LLVMContext arch
+ccLLVMContext = view CL.transContext . ccLLVMModuleTrans
 
-ccTypeCtx :: Simple Lens (LLVMCrucibleContext arch) CL.TypeContext
-ccTypeCtx = ccLLVMContext . CL.llvmTypeCtx
+ccTypeCtx :: LLVMCrucibleContext arch -> CL.TypeContext
+ccTypeCtx = view CL.llvmTypeCtx . ccLLVMContext
 
 --------------------------------------------------------------------------------
 -- ** PointsTo

@@ -1,7 +1,7 @@
 {-# Language ViewPatterns #-}
 {-# Language OverloadedStrings #-}
 module SAWScript.Prover.Exporter
-  ( satWithExporter
+  ( proveWithExporter
   , adaptExporter
 
     -- * External formats
@@ -16,7 +16,9 @@ module SAWScript.Prover.Exporter
   , writeUnintSMTLib2
   , writeCore
   , writeVerilog
+  , writeVerilogProp
   , write_verilog
+  , writeCoreProp
 
     -- * Misc
   , bitblastPrim
@@ -24,8 +26,10 @@ module SAWScript.Prover.Exporter
 
 import Data.Foldable(toList)
 
+import Control.Monad.Except (runExcept, throwError)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.AIG as AIG
+import Data.IORef (newIORef)
 import qualified Data.Map as Map
 import qualified Data.SBV.Dynamic as SBV
 
@@ -35,46 +39,52 @@ import Data.Parameterized.Nonce(globalNonceGenerator)
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible (newSAWCoreBackend)
 
-import Verifier.SAW.SharedTerm
+import Verifier.SAW.Cryptol.Prims (w4Prims)
+import Verifier.SAW.SharedTerm as SC
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
+import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
+import qualified Verifier.SAW.Simulator.What4.SWord as W4Sim
 
 
 import SAWScript.SAWCorePrimitives( bitblastPrimitives )
-import SAWScript.Proof (predicateToProp, Quantification(..))
+import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
-import SAWScript.Prover.SBV(prepSBV)
+import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
-import What4.Protocol.VerilogWriter (exprVerilog)
+import What4.Protocol.VerilogWriter (exprVerilog, eqVerilog, exprToModule, eqToModule)
 
-satWithExporter ::
-  (SharedContext -> FilePath -> Term -> IO ()) ->
+proveWithExporter ::
+  (SharedContext -> FilePath -> Prop -> IO ()) ->
   String ->
   SharedContext ->
-  Term ->
+  Prop ->
   IO SolverStats
-satWithExporter exporter path sc goal =
+proveWithExporter exporter path sc goal =
   do exporter sc path goal
-     let stats = solverStats ("offline: "++ path) (scSharedSize goal)
+     let stats = solverStats ("offline: "++ path) (scSharedSize (unProp goal))
      return stats
 
 -- | Converts an old-style exporter (which expects to take a predicate
 -- as an argument) into a new-style one (which takes a pi-type proposition).
 adaptExporter ::
   (SharedContext -> FilePath -> Term -> IO ()) ->
-  (SharedContext -> FilePath -> Term -> IO ())
-adaptExporter exporter sc path goal =
+  (SharedContext -> FilePath -> Prop -> IO ())
+adaptExporter exporter sc path (Prop goal) =
   do let (args, concl) = asPiList goal
-     p <- asEqTrue concl
-     p' <- scNot sc p
+     p <-
+       case asEqTrue concl of
+         Just p -> return p
+         Nothing -> fail "adaptExporter: expected EqTrue"
+     p' <- scNot sc p -- is this right?
      t <- scLambdaList sc args p'
      exporter sc path t
 
@@ -159,9 +169,9 @@ write_cnf sc f (TypedTerm schema t) = do
   AIGProxy proxy <- getProxy
   io $ writeCNF proxy sc f t
 
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file.
-writeSMTLib2 :: SharedContext -> FilePath -> Term -> IO ()
+-- | Write a proposition to an SMT-Lib version 2 file.
+-- TODO: say something about convention for negation
+writeSMTLib2 :: SharedContext -> FilePath -> Prop -> IO ()
 writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
@@ -172,14 +182,14 @@ write_smtlib2 sc f (TypedTerm schema t) = do
   p <- predicateToProp sc Universal [] t
   writeSMTLib2 sc f p
 
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file, treating some constants as uninterpreted.
-writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
-writeUnintSMTLib2 unints sc f t = do
-  (_, _, l) <- prepSBV sc unints t
-  let isSat = False -- term is a proof goal with universally-quantified variables
-  txt <- SBV.generateSMTBenchmark isSat l
-  writeFile f txt
+-- | Write a proposition to an SMT-Lib version 2 file, treating some
+-- constants as uninterpreted.
+writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
+writeUnintSMTLib2 unints sc f t =
+  do (_, _, l) <- prepNegatedSBV sc unints t
+     let isSat = True -- l is encoded as an existential formula
+     txt <- SBV.generateSMTBenchmark isSat l
+     writeFile f txt
 
 writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)
@@ -194,18 +204,33 @@ writeVerilog sc path t = do
   let gen = globalNonceGenerator
   sym <- Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
   let unints = []
-  -- TODO: support non-boolean expressions
-  (_names, (_mlabels, p)) <- W4Sim.w4Solve sym sc Map.empty unints t
-  let mdoc = exprVerilog p "goal"
-  putStrLn "What4 expression:"
-  print p
-  putStrLn ""
-  case mdoc of
-    Nothing -> putStrLn "Failed to translate to Verilog"
-    Just doc -> do
-      putStrLn "Verilog code:"
-      print doc
-  return ()
+  modmap <- scGetModuleMap sc
+  ref <- newIORef Map.empty
+  e <- W4Sim.w4EvalBasic sym sc modmap w4Prims ref unints t
+  let edoc = case e of
+              Sim.VBool b -> exprToModule b
+              Sim.VWord (W4Sim.DBV w) -> exprToModule w
+              Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> eqToModule x y
+              _ -> throwError $ "writeVerilog: nyi: " ++ show e
+  print (ppTermDepth 15 t)
+  case e of
+    Sim.VBool b -> print (W4.ppExpr b)
+    Sim.VWord (W4Sim.DBV w) -> print (W4.ppExpr w)
+    Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> print (W4.ppExpr x) >> putStrLn "==" >> print (W4.ppExpr y)
+  case runExcept edoc of
+    Left err -> do
+      fail $ "Failed to translate to Verilog: " ++ err
+      --putStrLn "Original:"
+      --print (ppTermDepth 3 t)
+      --putStrLn "What4:"
+      --print e
+    Right doc -> putStrLn "Success!" -- >> print doc >> writeFile path (show doc)
+
+writeVerilogProp :: SharedContext -> FilePath -> Prop -> IO ()
+writeVerilogProp sc path prop = writeVerilog sc path (unProp prop)
+
+writeCoreProp :: FilePath -> Prop -> IO ()
+writeCoreProp path (Prop t) = writeFile path (scWriteExternal t)
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
@@ -219,5 +244,3 @@ bitblastPrim proxy sc t = do
 -}
   BBSim.withBitBlastedTerm proxy sc bitblastPrimitives t' $ \be ls -> do
     return (AIG.Network be (toList ls))
-
-
