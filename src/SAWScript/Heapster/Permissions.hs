@@ -629,6 +629,14 @@ bvMod (bvMatch -> (factors, off)) n =
                        if mod i n /= 0 then Just f else Nothing) factors)
   (mod off n)
 
+-- | Given a constant factor @a@, test if a bitvector expression can be written
+-- as @a*x+y@ for some constant @y@
+bvMatchFactorPlusConst :: (1 <= w, KnownNat w) =>
+                          Integer -> PermExpr (BVType w) ->
+                          Maybe (PermExpr (BVType w), Integer)
+bvMatchFactorPlusConst a e =
+  bvMatchConst (bvMod e a) >>= \y -> Just (bvDiv e a, y)
+
 -- | Convert an LLVM pointer expression to a variable + optional offset, if this
 -- is possible
 asLLVMOffset :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
@@ -813,8 +821,7 @@ data LLVMArrayPerm w =
 
 -- | An index or range of indices that are missing from an array perm
 data LLVMArrayBorrow w
-  = FieldBorrow (PermExpr (BVType w)) Integer (Maybe
-                                               (PermExpr (LLVMPointerType w)))
+  = FieldBorrow (PermExpr (BVType w)) Int
     -- ^ Borrow the @j@th field from index @i@, where @j@ is statically known.
     -- If a variable is given, this variable equals the value stored in that
     -- field, i.e., equals @*(array+(i*stride)+j)@, and is borrowing the
@@ -1167,27 +1174,8 @@ llvmArrayRemIndexBorrow :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
 llvmArrayRemIndexBorrow i j ap =
   ap { llvmArrayBorrows =
          filter ((/= bvRangeOfIndex (llvmArrayIndex ap i j))
-                 . llvmArrayBorrowRange)
+                 . llvmArrayBorrowRange ap)
          (llvmArrayBorrows ap) }
-
--- | Get the range of indices represented by an array borrow
-llvmArrayBorrowRange :: (1 <= w, KnownNat w) => LLVMArrayBorrow w -> BVRange w
-llvmArrayBorrowRange (FieldBorrow off len _) = BVRange off (bvInt len)
-llvmArrayBorrowRange (RangeBorrow r) = r
-
--- | Test if a specific range corresponds to a borrow already on an array
-llvmArrayRangeIsBorrowed :: (1 <= w, KnownNat w) =>
-                            LLVMArrayPerm w -> BVRange w -> Bool
-llvmArrayRangeIsBorrowed ap rng =
-  elem rng (map llvmArrayBorrowRange $ llvmArrayBorrows ap)
-
--- | Build 'BVProp's stating that each borrow in an array permission is disjoint
--- from an index or range
-llvmArrayBorrowsDisjoint :: (1 <= w, KnownNat w) =>
-                            LLVMArrayPerm w -> BVRange w -> [BVProp w]
-llvmArrayBorrowsDisjoint ap range =
-  map (BVProp_RangesDisjoint range . llvmArrayBorrowRange) $
-  llvmArrayBorrows ap
 
 -- | Compute the byte index @i*stride + j@ of the @j@th field in the @i@th array
 -- element from the beginning of an array
@@ -1195,6 +1183,41 @@ llvmArrayIndex :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                   PermExpr (BVType w) -> Int -> PermExpr (BVType w)
 llvmArrayIndex ap i j =
   bvAdd (bvMult (llvmArrayStride ap) i) (bvInt $ toInteger j)
+
+-- | Convert the output of 'llvmArrayIndex' to a single-element 'BVRange'
+llvmArrayIndexRange :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                       PermExpr (BVType w) -> Int -> BVRange w
+llvmArrayIndexRange ap ix fld_num =
+  bvRangeOfIndex $ llvmArrayIndex ap ix fld_num
+
+-- | Get the range of byte offsets represented by an array borrow
+llvmArrayBorrowRange :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                        LLVMArrayBorrow w -> BVRange w
+llvmArrayBorrowRange ap (FieldBorrow ix fld_num) =
+  llvmArrayIndexRange ap ix fld_num
+llvmArrayBorrowRange _ (RangeBorrow r) = r
+
+-- | Test if a specific range of byte offsets from the beginning of an array
+-- corresponds to a borrow already on an array
+llvmArrayRangeIsBorrowed :: (1 <= w, KnownNat w) =>
+                            LLVMArrayPerm w -> BVRange w -> Bool
+llvmArrayRangeIsBorrowed ap rng =
+  elem rng (map (llvmArrayBorrowRange ap) $ llvmArrayBorrows ap)
+
+-- | Test if a specific array index and field number correspond to a borrow
+-- already on an array
+llvmArrayIndexIsBorrowed :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                            PermExpr (BVType w) -> Int -> Bool
+llvmArrayIndexIsBorrowed ap ix fld_num =
+  llvmArrayRangeIsBorrowed ap $ llvmArrayIndexRange ap ix fld_num
+
+-- | Build 'BVProp's stating that each borrow in an array permission is disjoint
+-- from an index or range
+llvmArrayBorrowsDisjoint :: (1 <= w, KnownNat w) =>
+                            LLVMArrayPerm w -> BVRange w -> [BVProp w]
+llvmArrayBorrowsDisjoint ap range =
+  map (BVProp_RangesDisjoint range . llvmArrayBorrowRange ap) $
+  llvmArrayBorrows ap
 
 -- | Return the @j@th field permission for the @i@th array element, offset by
 -- the array offset plus @i*stride+j@
@@ -1204,6 +1227,25 @@ llvmArrayFieldWithOffset ap i j =
   offsetLLVMFieldPerm
   (bvAdd (llvmArrayOffset ap) (llvmArrayIndex ap i j))
   (llvmArrayFields ap !! j)
+
+-- | Search through a list of atomic permissions to see if one of them is an
+-- LLVM array permission where the given field has been borrowed. If so, return
+-- the index of the array permission in the list, the array permission itself,
+-- and the index and field number of the field in the array
+findLLVMArrayWithFieldBorrow :: (1 <= w, KnownNat w) => LLVMFieldPerm w ->
+                                [AtomicPerm (LLVMPointerType w)] ->
+                                Maybe (Int, LLVMArrayPerm w,
+                                       PermExpr (BVType w), Int)
+findLLVMArrayWithFieldBorrow _ [] = Nothing
+findLLVMArrayWithFieldBorrow fp (Perm_LLVMArray ap : _)
+  | Just (ix, fromInteger -> fld_num) <-
+      bvMatchFactorPlusConst (llvmArrayStride ap)
+      (bvSub (llvmFieldOffset fp) (llvmArrayOffset ap))
+  , llvmArrayIndexIsBorrowed ap ix fld_num =
+    Just (0, ap, ix, fld_num)
+findLLVMArrayWithFieldBorrow fp (_ : ps) =
+  fmap (\(i, ap, ix, fld_num) -> (i+1, ap, ix, fld_num)) $
+  findLLVMArrayWithFieldBorrow fp ps
 
 -- | Create a list of field permissions the cover @N@ bytes:
 --
@@ -1977,8 +2019,8 @@ instance SubstVar s m => Substable s (LLVMArrayPerm w) m where
     <*> mapM (genSubst s) (mbList bs)
 
 instance SubstVar s m => Substable s (LLVMArrayBorrow w) m where
-  genSubst s [nuP| FieldBorrow i j maybe_x |] =
-    FieldBorrow <$> genSubst s i <*> return (mbLift j) <*> genSubst s maybe_x
+  genSubst s [nuP| FieldBorrow i j |] =
+    FieldBorrow <$> genSubst s i <*> return (mbLift j)
   genSubst s [nuP| RangeBorrow r |] = RangeBorrow <$> genSubst s r
 
 instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
@@ -2298,8 +2340,8 @@ instance SubstValPerm (LLVMArrayPerm w) where
     (mbLift stride) (substValPerm p pps) (substValPerm p bs)
 
 instance SubstValPerm (LLVMArrayBorrow w) where
-  substValPerm p [nuP| FieldBorrow i j maybe_x |] =
-    FieldBorrow (substValPerm p i) (mbLift j) (substValPerm p maybe_x)
+  substValPerm p [nuP| FieldBorrow i j |] =
+    FieldBorrow (substValPerm p i) (mbLift j)
   substValPerm p [nuP| RangeBorrow r |] = RangeBorrow $ substValPerm p r
 
 instance SubstValPerm (FunPerm ghosts args ret) where
@@ -2601,11 +2643,11 @@ instance AbstractVars (LLVMArrayPerm w) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 bs
 
 instance AbstractVars (LLVMArrayBorrow w) where
-  abstractPEVars ns1 ns2 (FieldBorrow i j maybe_x) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| FieldBorrow |])
+  abstractPEVars ns1 ns2 (FieldBorrow i j) =
+    absVarsReturnH ns1 ns2 $(mkClosed
+                             [| \i j -> FieldBorrow i $ fromInteger j |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 i
-    `clMbMbApplyM` abstractPEVars ns1 ns2 j
-    `clMbMbApplyM` abstractPEVars ns1 ns2 maybe_x
+    `clMbMbApplyM` abstractPEVars ns1 ns2 (toInteger j)
   abstractPEVars ns1 ns2 (RangeBorrow r) =
     absVarsReturnH ns1 ns2 $(mkClosed [| RangeBorrow |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 r

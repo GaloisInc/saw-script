@@ -1384,7 +1384,7 @@ itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexBorrow x _ mb_i j |] m =
          PTrans_Conj
          [APTrans_LLVMArray
           (mbMap2 (\i -> llvmArrayAddBorrow
-                         (FieldBorrow i (toInteger $ mbLift j) Nothing))
+                         (FieldBorrow i (mbLift j)))
            mb_i mb_ap)
           f_elem array_trm])
        m
