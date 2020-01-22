@@ -119,7 +119,6 @@ import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
 import SAWScript.TopLevel
-import SAWScript.SAWCorePrimitives( bitblastPrimitives, sbvPrimitives, concretePrimitives )
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 
@@ -611,7 +610,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   let args' = map replaceFileName args
       replaceFileName "%f" = path
       replaceFileName a = a
-  BBSim.withBitBlastedPred proxy sc bitblastPrimitives t $ \be l0 shapes -> do
+  BBSim.withBitBlastedPred proxy sc mempty t $ \be l0 shapes -> do
   -- negate formula to turn it into an existentially-quantified SAT query
   let l = AIG.not l0
   variables <- (if doCNF then AIG.writeCNF else writeAIGWithMapping) be l path
@@ -670,7 +669,7 @@ proveRME = wrapProver Prover.proveRME
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
-  SBVSim.sbvCodeGen sc sbvPrimitives unints mpath fname t
+  SBVSim.sbvCodeGen sc mempty unints mpath fname t
   where mpath = if null path then Nothing else Just path
 
 
@@ -1010,7 +1009,7 @@ cexEvalFn sc args tm = do
       argMap = Map.fromList (zip is args')
   tm' <- scInstantiateExt sc argMap tm
   modmap <- scGetModuleMap sc
-  return $ Concrete.evalSharedTerm modmap concretePrimitives tm'
+  return $ Concrete.evalSharedTerm modmap mempty tm'
 
 toValueCase :: (SV.FromValue b) =>
                (b -> SV.Value -> SV.Value -> TopLevel SV.Value)

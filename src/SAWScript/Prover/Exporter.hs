@@ -36,7 +36,6 @@ import Verifier.SAW.ExternalFormat(scWriteExternal)
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 
-import SAWScript.SAWCorePrimitives( bitblastPrimitives )
 import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
@@ -191,5 +190,5 @@ bitblastPrim proxy sc t = do
     C.Forall [] [] _ -> return ()
     _ -> fail $ "Attempting to bitblast a term with a polymorphic type: " ++ pretty s
 -}
-  BBSim.withBitBlastedTerm proxy sc bitblastPrimitives t' $ \be ls -> do
+  BBSim.withBitBlastedTerm proxy sc mempty t' $ \be ls -> do
     return (AIG.Network be (toList ls))
