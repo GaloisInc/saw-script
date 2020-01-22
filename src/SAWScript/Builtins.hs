@@ -1223,18 +1223,22 @@ tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
 parseCore :: String -> TopLevel Term
-parseCore input = do
-  sc <- getSharedContext
-  let base = "<interactive>"
-      path = "<interactive>"
-  let (uterm, errs) = parseSAWTerm base path (B.fromString input)
-  mapM_ (printOutLnTop Opts.Error . show) errs
-  unless (null errs) $ fail $ show errs
-  let mnm = Just $ mkModuleName ["Cryptol"]
-  err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
-  case err_or_t of
-    Left err -> fail (show err)
-    Right (TC.TypedTerm x _) -> return x
+parseCore input =
+  do sc <- getSharedContext
+     let base = "<interactive>"
+         path = "<interactive>"
+     uterm <-
+       case parseSAWTerm base path (B.fromString input) of
+         Right uterm -> return uterm
+         Left err ->
+           do let msg = show err
+              printOutLnTop Opts.Error msg
+              fail msg
+     let mnm = Just $ mkModuleName ["Cryptol"]
+     err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
+     case err_or_t of
+       Left err -> fail (show err)
+       Right (TC.TypedTerm x _) -> return x
 
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do
