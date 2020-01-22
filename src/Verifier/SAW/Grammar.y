@@ -235,17 +235,9 @@ rlist1(p) :: { [p] }
 {
 data ParseError
   = UnexpectedLex [Word8]
-  | UnexpectedEndOfBlockComment
   | UnexpectedToken Token
   | ParseError String
-  | UnexpectedEnd
   deriving (Show)
-
-type ErrorList = [PosPair ParseError]
-
-data ParserState = PS { psInput :: AlexInput
-                      , psErrors :: [PosPair ParseError]
-                      }
 
 newtype Parser a = Parser { _unParser :: ExceptT (PosPair ParseError) (State AlexInput) a }
   deriving (Applicative, Functor, Monad)
@@ -314,22 +306,6 @@ parseError pt = addError (pos pt) (UnexpectedToken (val pt))
 addParseError :: Pos -> String -> Parser ()
 addParseError p s = addError p (ParseError s)
 
-unexpectedIntLiteral :: Pos -> Integer -> String -> Parser ()
-unexpectedIntLiteral p _ ctxt = do
-  addParseError p $ "Unexpected integer literal when parsing " ++ ctxt ++ "."
-
-unexpectedTypeConstraint :: Pos -> Parser ()
-unexpectedTypeConstraint p = addParseError p "Unexpected type constraint."
-
-unexpectedPi :: Pos -> Parser ()
-unexpectedPi p = addParseError p "Unexpected pi expression"
-
-unexpectedLambda :: Pos -> Parser ()
-unexpectedLambda p = addParseError p "Unexpected lambda expression"
-
-unexpectedOpenParen :: Pos -> Parser ()
-unexpectedOpenParen p = addParseError p "Unexpected parenthesis"
-
 -- Try to parse an expression as a list of identifiers
 exprAsIdentList :: Term -> Maybe [TermVar]
 exprAsIdentList (Name x) = return [TermVar x]
@@ -377,7 +353,7 @@ parseTupleSelector t i =
     do addParseError (pos t) "non-positive tuple projection index"
        return (badTerm (pos t))
 
--- | Crete a module name given a list of strings with the top-most
+-- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkPosModuleName :: [PosPair String] -> PosPair ModuleName
 mkPosModuleName [] = error "internal: Unexpected empty module name"
