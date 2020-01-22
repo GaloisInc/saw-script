@@ -30,6 +30,7 @@ library
     cryptol >= 2.3.0,
     data-inttrie >= 0.1.4,
     integer-gmp,
+    panic,
     saw-core,
     saw-core-aig,
     saw-core-sbv,
@@ -43,8 +44,8 @@ library
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Cryptol
+     Verifier.SAW.Cryptol.Panic
      Verifier.SAW.Cryptol.Prelude
-     Verifier.SAW.Cryptol.Prims
      Verifier.SAW.Cryptol.Simpset
      Verifier.SAW.CryptolEnv
      Verifier.SAW.TypedTerm
