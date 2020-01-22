@@ -37,6 +37,7 @@ library
     lens >= 3.8,
     MonadRandom,
     mtl,
+    panic,
     parameterized-utils,
     pretty,
     random,

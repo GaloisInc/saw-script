@@ -37,6 +37,7 @@ import Verifier.SAW.Simulator.RME.Base (RME)
 import qualified Verifier.SAW.Simulator.RME.Base as RME
 import qualified Verifier.SAW.Simulator.RME.Vector as RMEV
 
+import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
@@ -44,6 +45,7 @@ import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (ModuleMap, showTerm)
+import Verifier.SAW.Utils (panic)
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -57,8 +59,10 @@ evalSharedTerm :: ModuleMap -> Map Ident RValue -> Term -> RValue
 evalSharedTerm m addlPrims t =
   runIdentity $ do
     cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           Sim.noExtCns (const Nothing)
+           extcns (const Nothing)
     Sim.evalSharedTerm cfg t
+  where
+    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ ecName ec
 
 ------------------------------------------------------------
 -- Values
@@ -368,7 +372,7 @@ asPredType sc t = do
   case t' of
     (R.asPi -> Just (_, t1, t2)) -> (t1 :) <$> asPredType sc t2
     (R.asBoolType -> Just ())    -> return []
-    _                            -> fail $ "Verifier.SAW.Simulator.BitBlast.asPredType: non-boolean result type: " ++ showTerm t'
+    _                            -> panic "Verifier.SAW.Simulator.RME.asPredType" ["non-boolean result type:", showTerm t']
 
 withBitBlastedPred ::
   SharedContext ->
@@ -385,4 +389,4 @@ withBitBlastedPred sc addlPrims t c = do
   let bval' = runIdentity $ applyAll bval vars
   case bval' of
     VBool anf -> c anf shapes
-    _ -> fail "Verifier.SAW.Simulator.RME.bitBlast: non-boolean result type."
+    _ -> panic "Verifier.SAW.Simulator.RME.bitBlast" ["non-boolean result type."]

@@ -32,6 +32,7 @@ import qualified Data.Vector as V
 import Verifier.SAW.FiniteValue (FiniteType(..))
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
+import Verifier.SAW.Utils (panic)
 
 import Verifier.SAW.Simulator.MonadLazy
 
@@ -182,11 +183,11 @@ vTupleType (t : ts) = VPairType t (vTupleType ts)
 
 valPairLeft :: (VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
-valPairLeft v = fail $ "valPairLeft: Not a pair value: " ++ show v
+valPairLeft v = panic "Verifier.SAW.Simulator.Value.valPairLeft" ["Not a pair value:", show v]
 
 valPairRight :: (VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairRight (VPair _ t2) = force t2
-valPairRight v = fail $ "valPairRight: Not a pair value: " ++ show v
+valPairRight v = panic "Verifier.SAW.Simulator.Value.valPairRight" ["Not a pair value:", show v]
 
 vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = VRecordValue (Map.assocs m)
@@ -195,14 +196,16 @@ valRecordProj :: (VMonad l, Show (Extra l)) => Value l -> String -> MValue l
 valRecordProj (VRecordValue fld_map) fld
   | Just t <- lookup fld fld_map = force t
 valRecordProj v@(VRecordValue _) fld =
-  fail $
-  "valRecordProj: record field not found: " ++ fld ++ " in value: " ++ show v
-valRecordProj v _ = fail $ "valRecordProj: not a record value: " ++ show v
+  panic "Verifier.SAW.Simulator.Value.valRecordProj"
+  ["Record field not found:", fld, "in value:", show v]
+valRecordProj v _ =
+  panic "Verifier.SAW.Simulator.Value.valRecordProj"
+  ["Not a record value:", show v]
 
 apply :: (VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
 apply (VPiType _ f) x = f x
-apply v _x = fail $ "Not a function value: " ++ show v
+apply v _x = panic "Verifier.SAW.Simulator.Value.apply" ["Not a function value:", show v]
 
 applyAll :: (VMonad l, Show (Extra l)) => Value l -> [Thunk l] -> MValue l
 applyAll = foldM apply

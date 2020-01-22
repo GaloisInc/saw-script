@@ -22,7 +22,8 @@ module Verifier.SAW.Grammar
 
 import Control.Applicative ((<$>))
 import Control.Monad ()
-import Control.Monad.State (State, get, gets, modify, runState)
+import Control.Monad.State (State, get, gets, modify, put, runState, evalState)
+import Control.Monad.Except (ExceptT, throwError, runExceptT)
 import qualified Data.ByteString.Lazy.UTF8 as B
 import Data.Maybe (isJust)
 import Data.Traversable
@@ -234,29 +235,21 @@ rlist1(p) :: { [p] }
 {
 data ParseError
   = UnexpectedLex [Word8]
-  | UnexpectedEndOfBlockComment
   | UnexpectedToken Token
   | ParseError String
-  | UnexpectedEnd
   deriving (Show)
 
-type ErrorList = [PosPair ParseError]
-
-data ParserState = PS { psInput :: AlexInput
-                      , psErrors :: [PosPair ParseError]
-                      }
-
-newtype Parser a = Parser { _unParser :: State ParserState a }
+newtype Parser a = Parser { _unParser :: ExceptT (PosPair ParseError) (State AlexInput) a }
   deriving (Applicative, Functor, Monad)
 
-addError :: Pos -> ParseError -> Parser ()
-addError p err = Parser $ modify $ \s -> s { psErrors = PosPair p err : psErrors s }
+addError :: Pos -> ParseError -> Parser a
+addError p err = Parser $ throwError (PosPair p err)
 
 setInput :: AlexInput -> Parser ()
-setInput inp = Parser $ modify $ \s -> s { psInput = inp }
+setInput inp = Parser $ put inp
 
 parsePos :: Parser Pos
-parsePos = Parser $ gets (pos . psInput)
+parsePos = Parser $ gets pos
 
 lexer :: (PosPair Token -> Parser a) -> Parser a
 lexer f = do
@@ -266,7 +259,7 @@ lexer f = do
                 Nothing -> return ()
                 Just (po,l) -> addError po (UnexpectedLex (reverse l))
         s <- Parser get
-        let inp@(PosPair p (Buffer _ b)) = psInput s
+        let inp@(PosPair p (Buffer _ b)) = s
             end = addErrors >> next (PosPair p TEnd)
         case alexScan inp 0 of
           AlexEOF -> end
@@ -297,40 +290,21 @@ lexer f = do
 
 -- | Run parser given a directory for the base (used for making pathname relative),
 -- bytestring to parse, and parser to run.
-runParser :: Parser a -> FilePath -> FilePath -> B.ByteString -> (a,ErrorList)
-runParser (Parser m) base path b = (r, reverse (psErrors s))
-  where initState = PS { psInput = initialAlexInput base path b, psErrors = [] }
-        (r,s) = runState m initState
+runParser :: Parser a -> FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) a
+runParser (Parser m) base path b = evalState (runExceptT m) initState
+  where initState = initialAlexInput base path b
 
-parseSAW :: FilePath -> FilePath -> B.ByteString -> (Module,ErrorList)
+parseSAW :: FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) Module
 parseSAW = runParser parseSAW2
 
-parseSAWTerm :: FilePath -> FilePath -> B.ByteString -> (Term,ErrorList)
+parseSAWTerm :: FilePath -> FilePath -> B.ByteString -> Either (PosPair ParseError) Term
 parseSAWTerm = runParser parseSAWTerm2
 
 parseError :: PosPair Token -> Parser a
-parseError pt = do
-  addError (pos pt) (UnexpectedToken (val pt))
-  fail $ (ppPos (pos pt)) ++ " Parse error\n  " ++ (ppToken (val pt))
+parseError pt = addError (pos pt) (UnexpectedToken (val pt))
 
 addParseError :: Pos -> String -> Parser ()
 addParseError p s = addError p (ParseError s)
-
-unexpectedIntLiteral :: Pos -> Integer -> String -> Parser ()
-unexpectedIntLiteral p _ ctxt = do
-  addParseError p $ "Unexpected integer literal when parsing " ++ ctxt ++ "."
-
-unexpectedTypeConstraint :: Pos -> Parser ()
-unexpectedTypeConstraint p = addParseError p "Unexpected type constraint."
-
-unexpectedPi :: Pos -> Parser ()
-unexpectedPi p = addParseError p "Unexpected pi expression"
-
-unexpectedLambda :: Pos -> Parser ()
-unexpectedLambda p = addParseError p "Unexpected lambda expression"
-
-unexpectedOpenParen :: Pos -> Parser ()
-unexpectedOpenParen p = addParseError p "Unexpected parenthesis"
 
 -- Try to parse an expression as a list of identifiers
 exprAsIdentList :: Term -> Maybe [TermVar]
@@ -379,7 +353,7 @@ parseTupleSelector t i =
     do addParseError (pos t) "non-positive tuple projection index"
        return (badTerm (pos t))
 
--- | Crete a module name given a list of strings with the top-most
+-- | Create a module name given a list of strings with the top-most
 -- module name given first.
 mkPosModuleName :: [PosPair String] -> PosPair ModuleName
 mkPosModuleName [] = error "internal: Unexpected empty module name"

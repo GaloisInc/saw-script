@@ -110,7 +110,7 @@ module Verifier.SAW.Conversion
 import Control.Applicative (Applicative(..), (<$>), (<*>))
 #endif
 import Control.Lens (view, _1, _2)
-import Control.Monad (ap, liftM, liftM2, unless, (>=>), (<=<))
+import Control.Monad (ap, guard, liftM, liftM2, (>=>), (<=<))
 import Data.Bits
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -122,6 +122,7 @@ import Verifier.SAW.Recognizer ((:*:)(..))
 import Verifier.SAW.Prim
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.TermNet as Net
+import Verifier.SAW.Utils (panic)
 import Verifier.SAW.Term.Functor
 
 -- | A hack to allow storage of conversions in a term net.
@@ -162,7 +163,7 @@ class ArgsMatchable v a where
 instance ArgsMatchable Matcher a where
   defaultArgsMatcher (Matcher p f) = ArgsMatcher [p] match
     where match (h:r) = do v <- f h; return (v,r)
-          match [] = fail "empty"
+          match [] = Nothing
 
 instance ArgsMatchable ArgsMatcher a where
   defaultArgsMatcher = id
@@ -173,7 +174,7 @@ consArgsMatcher (ArgsMatcher pl f) (Matcher p g) = ArgsMatcher (pl ++ [p]) match
           (a,l1) <- f l
           case l1 of
             (h:l2) -> do b <- g h; return (a :*: b, l2)
-            [] ->  fail "empty"
+            [] -> Nothing
 
 asEmpty :: ArgsMatcher ()
 asEmpty = ArgsMatcher [] (\l -> return ((),l))
@@ -206,7 +207,7 @@ resolveArgs (Matcher p m) (defaultArgsMatcher -> args@(ArgsMatcher pl _)) =
 asGlobalDef :: Ident -> Matcher ()
 asGlobalDef ident = Matcher (Net.Atom (identBaseName ident)) f
   where f (R.asGlobalDef -> Just o) | ident == o = return ()
-        f _ = fail (show ident ++ " match failed.")
+        f _ = Nothing
 
 infixl 8 <:>
 
@@ -215,7 +216,7 @@ infixl 8 <:>
 (<:>) (Matcher p1 f1) (Matcher p2 f2) = Matcher (Net.App p1 p2) match
     where
       match (unwrapTermF -> App t1 t2) = liftM2 (:*:) (f1 t1) (f2 t2)
-      match _ = fail "internal: <:> net failed"
+      match _ = Nothing
 
 -- | Match an application and return second term.
 (<:>>) :: Matcher a -> Matcher b -> Matcher b
@@ -264,7 +265,7 @@ asCtor :: ArgsMatchable v a => Ident -> v a -> Matcher a
 asCtor o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
   where match t = do
           CtorApp c params l <- R.asFTermF t
-          unless (c == o) $ fail $ "not " ++ show o
+          guard (c == o)
           return (params ++ l)
 
 -- | Match a datatype.
@@ -272,7 +273,7 @@ asDataType :: ArgsMatchable v a => Ident -> v a -> Matcher a
 asDataType o = resolveArgs $ Matcher (Net.Atom (identBaseName o)) match
   where match t = do
           DataTypeApp dt params l <- R.asFTermF t
-          unless (dt == o) $ fail $ "not " ++ show o
+          guard (dt == o)
           return (params ++ l)
 
 -- | Match any sort.
@@ -283,7 +284,7 @@ asAnySort = asVar $ \t -> do Sort v <- R.asFTermF t; return v
 asSort :: Sort -> Matcher ()
 asSort s = Matcher (termToPat (Unshared (FTermF (Sort s)))) fn
   where fn t = do s' <- R.asSort t
-                  unless (s == s') $ fail "Does not matched expected sort."
+                  guard (s == s')
 
 -- | Match a Nat literal
 asAnyNatLit :: Matcher Natural
@@ -318,7 +319,7 @@ asBvNatLit =
 checkedIntegerToNonNegInt :: Integer -> Maybe Int
 checkedIntegerToNonNegInt x
   | 0 <= x && x <= toInteger (maxBound :: Int) = return (fromInteger x)
-  | otherwise = fail "match out of range"
+  | otherwise = Nothing
 
 ----------------------------------------------------------------------
 -- Matchable
@@ -394,7 +395,7 @@ mkTupleSelector :: Int -> Term -> TermBuilder Term
 mkTupleSelector i t
   | i == 1 = mkTermF (FTermF (PairLeft t))
   | i > 1  = mkTermF (FTermF (PairRight t)) >>= mkTupleSelector (i - 1)
-  | otherwise = fail "mkTupleSelector: non-positive index"
+  | otherwise = panic "Verifier.SAW.Conversion.mkTupleSelector" ["non-positive index:", show i]
 
 mkCtor :: Ident -> [TermBuilder Term] -> [TermBuilder Term] -> TermBuilder Term
 mkCtor i paramsB argsB =
@@ -517,8 +518,13 @@ globalConv ident f = convOfMatcher (thenMatcher (asGlobalDef ident) (const (Just
 -- | Conversion for selector on a tuple
 tupleConversion :: Conversion
 tupleConversion = Conversion $ thenMatcher (asTupleSelector asAnyTupleValue) action
-  where action (ts, i) | i > length ts = error "tupleConversion"
-        action (ts, i) = Just (return (ts !! (i - 1)))
+  where
+    action (ts, i)
+      | i > length ts =
+          panic "Verifier.SAW.Conversion.tupleConversion"
+          ["index out of bounds:", show (i, length ts)]
+      | otherwise =
+          Just (return (ts !! (i - 1)))
 
 -- | Conversion for selector on a record
 recordConversion :: Conversion
@@ -709,11 +715,11 @@ remove_ident_coerce = Conversion $ thenMatcher pat action
   where pat = asGlobalDef "Prelude.coerce" <:> asAny <:> asAny <:> asAny <:> asAny
         action (() :*: t :*: f :*: _prf :*: x)
           | alphaEquiv t f = return (return x)
-          | otherwise = fail "Cannot remove coerce."
+          | otherwise = Nothing
 
 remove_ident_unsafeCoerce :: Conversion
 remove_ident_unsafeCoerce = Conversion $ thenMatcher pat action
   where pat = asGlobalDef "Prelude.unsafeCoerce" <:> asAny <:> asAny <:> asAny
         action (() :*: t :*: f :*: x)
           | alphaEquiv t f = return (return x)
-          | otherwise = fail "Cannot remove unsafeCoerce."
+          | otherwise = Nothing
