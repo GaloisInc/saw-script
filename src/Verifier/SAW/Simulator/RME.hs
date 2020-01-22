@@ -44,7 +44,7 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST (ModuleMap, showTerm)
+import Verifier.SAW.TypedAST (ModuleMap)
 import Verifier.SAW.Utils (panic)
 
 #if !MIN_VERSION_base(4,8,0)

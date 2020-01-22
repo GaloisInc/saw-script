@@ -70,6 +70,7 @@ module Verifier.SAW.Term.CtxTerm
   , mkCtorArgStruct
   ) where
 
+import Data.Kind(Type)
 import Data.Proxy
 import Data.Type.Equality
 import Control.Monad
@@ -88,7 +89,7 @@ import Verifier.SAW.Term.Functor
 -- SAW type that is represented by Haskell type @a@. Of course, the Haskell type
 -- system is not rich enough to capture SAW types in complete detail, but we do
 -- our best, and capture at least the types and functions.
-data Typ (a :: *)
+data Typ (a :: Type)
 
 -- | An identifier for a datatype that is statically associated with Haskell
 -- type @d@. Again, we cannot capture all of the SAW type system in Haskell, so
@@ -116,7 +117,7 @@ type CtxInv as = CtxInvApp EmptyCtx as
 -- by a Haskell type @a@ in the 'Bind' constructor. There is no way to actually
 -- related the Haskell type @a@ to the type it "represents", so we do not try,
 -- and just write "represent" in quotes.
-data Bindings (tp :: Ctx * -> * -> *) (ctx :: Ctx *) (as :: [*]) where
+data Bindings (tp :: Ctx Type -> Type -> Type) (ctx :: Ctx Type) (as :: [Type]) where
   NoBind :: Bindings tp ctx '[]
   Bind :: String -> tp ctx (Typ a) -> Bindings tp (ctx ::> a) as ->
           Bindings tp ctx (a ': as)
@@ -127,7 +128,7 @@ bindingsLength NoBind = 0
 bindingsLength (Bind _ _ bs) = 1 + bindingsLength bs
 
 -- | An inverted list of bindings, seen from the "inside out"
-data InvBindings (tp :: Ctx * -> * -> *) (ctx :: Ctx *) (as :: Ctx *) where
+data InvBindings (tp :: Ctx Type -> Type -> Type) (ctx :: Ctx Type) (as :: Ctx Type) where
   InvNoBind :: InvBindings tp ctx EmptyCtx
   InvBind :: InvBindings tp ctx as -> String -> tp (ctx <+> as) (Typ a) ->
              InvBindings tp ctx (as ::> a)
@@ -194,7 +195,7 @@ appendTopInvBindings ctx1 (InvBind ctx2 x tp) =
 
 -- | A sequence of bindings bundled with something that is relative to those
 -- bindings
-data InBindings tp (f :: Ctx * -> k -> *) ctx (a::k) where
+data InBindings tp (f :: Ctx Type -> k -> Type) ctx (a::k) where
   InBindings :: Bindings tp ctx as -> f (CtxInvApp ctx as) a ->
                 InBindings tp f ctx a
 
@@ -214,7 +215,7 @@ type family Arrows as b where
 -- "types" are usually instantiated with a dummy, such as '()', but the code
 -- that consumes them cannot know that and has to be agnostic to what type it
 -- is.
-newtype CtxTerm (ctx :: Ctx *) (a :: *) = CtxTerm Term
+newtype CtxTerm (ctx :: Ctx Type) (a :: Type) = CtxTerm Term
 
 -- | Convert a 'CtxTerm' to an untyped term. This is "unsafe" because it throws
 -- away our typing information.

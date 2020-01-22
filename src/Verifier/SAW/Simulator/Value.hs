@@ -24,6 +24,7 @@ module Verifier.SAW.Simulator.Value
 import Prelude hiding (mapM)
 
 import Control.Monad (foldM, liftM, mapM)
+import Data.Kind (Type)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
@@ -72,15 +73,15 @@ data Value l
 type Thunk l = Lazy (EvalM l) (Value l)
 
 -- | Evaluation monad for value instantiation 'l'
-type family EvalM l :: * -> *
+type family EvalM l :: Type -> Type
 -- | Booleans for value instantiation 'l'
-type family VBool l :: *
+type family VBool l :: Type
 -- | Words for value instantiation 'l'
-type family VWord l :: *
+type family VWord l :: Type
 -- | Integers for value instantiation 'l'
-type family VInt  l :: *
+type family VInt  l :: Type
 -- | Additional constructors for instantiation 'l'
-type family Extra l :: *
+type family Extra l :: Type
 
 -- | Short-hand for a monadic value.
 type MValue l     = EvalM l (Value l)
@@ -104,7 +105,7 @@ type VMonadLazy l = MonadLazy (EvalM l)
 
 
 -- | Language instantiations with a specific monad.
-data WithM (m :: * -> *) l
+data WithM (m :: Type -> Type) l
 type instance EvalM (WithM m l) = m
 type instance VBool (WithM m l) = VBool l
 type instance VWord (WithM m l) = VWord l
