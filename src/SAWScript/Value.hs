@@ -72,7 +72,6 @@ import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
-import SAWScript.SAWCorePrimitives( concretePrimitives )
 
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
@@ -326,7 +325,7 @@ tupleLookupValue _ _ = error "tupleLookupValue"
 
 evaluate :: SharedContext -> Term -> IO Concrete.CValue
 evaluate sc t =
-  (\modmap -> Concrete.evalSharedTerm modmap concretePrimitives t) <$>
+  (\modmap -> Concrete.evalSharedTerm modmap mempty t) <$>
   scGetModuleMap sc
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value

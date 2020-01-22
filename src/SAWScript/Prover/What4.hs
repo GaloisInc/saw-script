@@ -21,8 +21,6 @@ import           SAWScript.Prover.Rewrite(rewriteEqs)
 import           SAWScript.Prover.SolverStats
 import           SAWScript.Prover.Util
 
-import Verifier.SAW.Cryptol.Prims (w4Prims)
-
 import Data.Parameterized.Nonce
 
 import           What4.Config
@@ -125,7 +123,7 @@ prepWhat4 sym sc unints t0 = do
       scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc
 
   checkBooleanSchema schema
-  (argNames, lit) <- W.w4Solve sym sc w4Prims unints t'
+  (argNames, lit) <- W.w4Solve sym sc mempty unints t'
   return (t', argNames, lit)
 
 

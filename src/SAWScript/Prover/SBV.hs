@@ -20,9 +20,6 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
 import Verifier.SAW.Recognizer(asPi, asPiList)
 
-import Verifier.SAW.Cryptol.Prims (sbvPrims)
-
-
 import SAWScript.Proof(Prop, propToPredicate)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite(rewriteEqs)
@@ -89,7 +86,7 @@ prepNegatedSBV sc unints goal =
          scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc
 
      checkBooleanSchema schema
-     (labels, lit) <- SBVSim.sbvSolve sc sbvPrims unints t'
+     (labels, lit) <- SBVSim.sbvSolve sc mempty unints t'
      let lit' = liftM SBV.svNot lit
      return (t', labels, lit')
 
