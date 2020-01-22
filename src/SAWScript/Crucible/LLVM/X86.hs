@@ -78,6 +78,7 @@ import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
 
 import qualified Lang.Crucible.Analysis.Postdom as C
+import qualified Lang.Crucible.Backend as C
 import qualified Lang.Crucible.Backend.SAWCore as C
 import qualified Lang.Crucible.CFG.Core as C
 import qualified Lang.Crucible.FunctionHandle as C
@@ -87,6 +88,7 @@ import qualified Lang.Crucible.Simulator.GlobalState as C
 import qualified Lang.Crucible.Simulator.Operations as C
 import qualified Lang.Crucible.Simulator.OverrideSim as C
 import qualified Lang.Crucible.Simulator.RegMap as C
+import qualified Lang.Crucible.Simulator.SimError as C
 
 import qualified Lang.Crucible.LLVM.Bytes as C.LLVM
 import qualified Lang.Crucible.LLVM.DataLayout as C.LLVM
@@ -176,7 +178,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
                        mem' <- C.readGlobal mvar
                        liftIO $ printOutLn opts Info
                          "Examining specification to determine postconditions"
-                       liftIO $ assertPost sym cc env methodSpec mem' $ C.regValue r
+                       liftIO $ assertPost sym cc env methodSpec (mem, mem') (regs, C.regValue r)
                        pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
@@ -422,18 +424,30 @@ assertPost ::
   LLVMCrucibleContext LLVMArch ->
   Map MS.AllocIndex Ptr ->
   MS.CrucibleMethodSpecIR LLVM ->
-  Mem ->
-  Regs ->
+  (Mem, Mem) {- ^ The state of memory before and after simulation -} ->
+  (Regs, Regs) {- ^ The state of the registers before and after simulation -} ->
   IO ()
-assertPost sym cc env ms mem _regs = do
+assertPost sym cc env ms (premem, postmem) (preregs, postregs) = do
+  let ?ptrWidth = knownNat @64
   let tyenv = ms ^. MS.csPreState . MS.csAllocs
       nameEnv = MS.csTypeNames ms
   forM_ (ms ^. MS.csPostState . MS.csPointsTos)
-    $ assertPointsTo sym cc env tyenv nameEnv mem
-  -- TODO: postconditions about calling convention
-  -- + Check that IP is set to return address
-  -- + Check that the stack is properly restored
-  -- + Match return value in RAX
+    $ assertPointsTo sym cc env tyenv nameEnv postmem
+
+  prersp <- getReg Macaw.RSP preregs
+  expectedIP <- C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8) (C.LLVM.LLVMPointerRepr $ knownNat @64) C.LLVM.noAlignment
+  actualIP <- getReg Macaw.X86_IP postregs
+  correctRetAddr <- C.LLVM.ptrEq sym C.LLVM.PtrWidth actualIP expectedIP
+  C.addAssertion sym . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc
+    $ C.AssertFailureSimError "Instruction pointer not set to return address" ""
+
+  stack <- C.LLVM.doPtrAddOffset sym premem prersp =<< W4.bvLit sym knownNat 1
+  postrsp <- getReg Macaw.RSP postregs
+  correctStack <- C.LLVM.ptrEq sym C.LLVM.PtrWidth stack postrsp
+  C.addAssertion sym . C.LabeledPred correctStack . C.SimError W4.initializationLoc
+    $ C.AssertFailureSimError "Stack not preserved" ""
+
+  -- TODO: Match return value in RAX
 
 -- | Assert that a points-to postcondition holds.
 assertPointsTo ::
