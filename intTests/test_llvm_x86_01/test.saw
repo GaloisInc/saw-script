@@ -1,0 +1,19 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+let foo_setup = do {
+  ptr <- crucible_alloc (llvm_int 64);
+  val <- crucible_fresh_var "val" (llvm_int 64);
+  crucible_points_to ptr (crucible_term val);
+  j <- crucible_fresh_var "j" (llvm_int 64);
+  crucible_execute_func [ptr, crucible_term j];
+  val <- crucible_fresh_var "val'" (llvm_int 64);
+  crucible_points_to ptr (crucible_term val);
+};
+foo_method_spec <- crucible_llvm_verify_x86 m "./test" "foo" [] foo_setup;
+
+let bar_setup = do {
+  crucible_execute_func [];
+};
+crucible_llvm_verify m "bar" [foo_method_spec] false bar_setup z3;
