@@ -400,13 +400,13 @@ bpFunToSpec (BPFun name setup ret as ls deps) = do
 
 llvm_boilerplate_info :: Some LLVMModule -> [Profile] -> TopLevel ()
 llvm_boilerplate_info m profs = liftIO $
-  (try . mapM (mapM typeToBPType) $ extractDefines (viewSome _modAST m) profs) >>=
+  (try . mapM (mapM typeToBPType) $ extractDefines (viewSome modAST m) profs) >>=
     \case Left (BPException e) -> liftIO . Text.IO.hPutStrLn stderr $ "[error] " <> e
           Right funs -> liftIO . Text.IO.putStrLn . Text.pack $ show funs
 
 llvm_boilerplate :: FilePath -> Some LLVMModule -> [Profile] -> TopLevel ()
 llvm_boilerplate path m profs = liftIO $
-  (try . mapM (mapM typeToBPType) $ extractDefines (viewSome _modAST m) profs) >>=
+  (try . mapM (mapM typeToBPType) $ extractDefines (viewSome modAST m) profs) >>=
   \case Left (BPException e) -> liftIO . Text.IO.hPutStrLn stderr $ "[error] " <> e
         Right funs -> liftIO . withFile path WriteMode $ \h -> do
           binds <- mconcat <$> mapM globalBinds globals
@@ -418,7 +418,7 @@ llvm_boilerplate path m profs = liftIO $
           mapM bpFunToSpec funs >>= Text.IO.hPutStrLn h . mconcat
   where
     globals :: [((LLVM.Type, Text, Bool), Text)]
-    globals = zip (extractGlobals $ viewSome _modAST m) $ globalName <$> [0, 1..]
+    globals = zip (extractGlobals $ viewSome modAST m) $ globalName <$> [0, 1..]
       where globalName :: Int -> Text
             globalName i = "global" <> Text.pack (show i)
     globalBinds :: MonadThrow m => ((LLVM.Type, Text, Bool), Text) -> m Text

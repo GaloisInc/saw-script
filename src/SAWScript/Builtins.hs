@@ -119,7 +119,6 @@ import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
 import SAWScript.TopLevel
-import SAWScript.SAWCorePrimitives( bitblastPrimitives, sbvPrimitives, concretePrimitives )
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 
@@ -350,12 +349,12 @@ quickcheckGoal sc n = do
   withFirstGoal $ \goal -> io $ do
     printOutLn opts Warn $ "WARNING: using quickcheck to prove goal..."
     hFlush stdout
-    let Prop tm = goalProp goal
+    tm0 <- propToPredicate sc (goalProp goal)
+    tm <- scAbstractExts sc (getAllExts tm0) tm0
     ty <- scTypeOf sc tm
     maybeInputs <- scTestableType sc ty
-    maybeInputs' <- scTestableType sc tm
     let stats = solverStats "quickcheck" (scSharedSize tm)
-    case msum [maybeInputs, maybeInputs'] of
+    case maybeInputs of
       Just inputs -> do
         result <- scRunTestsTFIO sc n tm inputs
         case result of
@@ -603,8 +602,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   sc <- SV.getSharedContext
   SV.AIGProxy proxy <- SV.getProxy
   io $ do
-  let (vars, concl) = asPiList (unProp (goalProp g))
-  t0 <- scLambdaList sc vars =<< asEqTrue concl
+  t0 <- propToPredicate sc (goalProp g)
   t <- rewriteEqs sc t0
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
   (path, fh) <- openTempFile "." cnfName
@@ -612,7 +610,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   let args' = map replaceFileName args
       replaceFileName "%f" = path
       replaceFileName a = a
-  BBSim.withBitBlastedPred proxy sc bitblastPrimitives t $ \be l0 shapes -> do
+  BBSim.withBitBlastedPred proxy sc mempty t $ \be l0 shapes -> do
   -- negate formula to turn it into an existentially-quantified SAT query
   let l = AIG.not l0
   variables <- (if doCNF then AIG.writeCNF else writeAIGWithMapping) be l path
@@ -671,7 +669,7 @@ proveRME = wrapProver Prover.proveRME
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
-  SBVSim.sbvCodeGen sc sbvPrimitives unints mpath fname t
+  SBVSim.sbvCodeGen sc mempty unints mpath fname t
   where mpath = if null path then Nothing else Just path
 
 
@@ -1011,7 +1009,7 @@ cexEvalFn sc args tm = do
       argMap = Map.fromList (zip is args')
   tm' <- scInstantiateExt sc argMap tm
   modmap <- scGetModuleMap sc
-  return $ Concrete.evalSharedTerm modmap concretePrimitives tm'
+  return $ Concrete.evalSharedTerm modmap mempty tm'
 
 toValueCase :: (SV.FromValue b) =>
                (b -> SV.Value -> SV.Value -> TopLevel SV.Value)
@@ -1224,18 +1222,22 @@ tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
 parseCore :: String -> TopLevel Term
-parseCore input = do
-  sc <- getSharedContext
-  let base = "<interactive>"
-      path = "<interactive>"
-  let (uterm, errs) = parseSAWTerm base path (B.fromString input)
-  mapM_ (printOutLnTop Opts.Error . show) errs
-  unless (null errs) $ fail $ show errs
-  let mnm = Just $ mkModuleName ["Cryptol"]
-  err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
-  case err_or_t of
-    Left err -> fail (show err)
-    Right (TC.TypedTerm x _) -> return x
+parseCore input =
+  do sc <- getSharedContext
+     let base = "<interactive>"
+         path = "<interactive>"
+     uterm <-
+       case parseSAWTerm base path (B.fromString input) of
+         Right uterm -> return uterm
+         Left err ->
+           do let msg = show err
+              printOutLnTop Opts.Error msg
+              fail msg
+     let mnm = Just $ mkModuleName ["Cryptol"]
+     err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
+     case err_or_t of
+       Left err -> fail (show err)
+       Right (TC.TypedTerm x _) -> return x
 
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do
