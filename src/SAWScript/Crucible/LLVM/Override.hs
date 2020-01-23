@@ -612,12 +612,12 @@ learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWi
           -> PrePost
           -> MS.StateSpec (LLVM arch)
           -> OverrideMatcher (LLVM arch) md ()
-learnCond opts sc cc cs prepost ss = do
-  let loc = cs ^. MS.csLoc
-  matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
-  traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
-  enforceDisjointness loc ss
-  enforceCompleteSubstitution loc ss
+learnCond opts sc cc cs prepost ss =
+  do let loc = cs ^. MS.csLoc
+     matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
+     traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
+     enforceDisjointness loc ss
+     enforceCompleteSubstitution loc ss
 
 
 -- | Verify that all of the fresh variables for the given
@@ -1078,9 +1078,11 @@ learnSetupCondition ::
   PrePost                    ->
   MS.SetupCondition (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
-learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal loc val1 val2)  = learnEqual opts sc cc spec loc prepost val1 val2
-learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred loc tm)         = learnPred sc cc loc prepost (ttTerm tm)
-learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Ghost () loc var val)   = learnGhost sc cc loc prepost var val
+learnSetupCondition opts sc cc spec prepost cond =
+  case cond of
+    MS.SetupCond_Equal loc val1 val2  -> learnEqual opts sc cc spec loc prepost val1 val2
+    MS.SetupCond_Pred loc tm          -> learnPred sc cc loc prepost (ttTerm tm)
+    MS.SetupCond_Ghost () loc var val -> learnGhost sc cc loc prepost var val
 
 
 ------------------------------------------------------------------------
