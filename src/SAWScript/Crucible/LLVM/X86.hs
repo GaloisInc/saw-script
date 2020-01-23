@@ -513,16 +513,3 @@ getReg ::
 getReg reg regs = case Macaw.lookupX86Reg reg regs of
   Just (C.RV val) -> pure val
   Nothing -> fail $ mconcat ["Invalid register: ", show reg]
-
-allocate ::
-  Sym ->
-  Mem ->
-  String ->
-  C.LLVM.MemType ->
-  C.LLVM.Mutability ->
-  IO (Ptr, Mem)
-allocate sym mem nm mt mut = do
-  let ?ptrWidth = knownNat @64
-  sz <- W4.bvLit sym knownNat . C.LLVM.bytesToInteger
-    $ C.LLVM.memTypeSize C.LLVM.defaultDataLayout mt
-  C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut nm mem sz C.LLVM.noAlignment
