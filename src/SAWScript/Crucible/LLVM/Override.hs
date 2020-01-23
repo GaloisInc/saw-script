@@ -724,8 +724,8 @@ enforceDisjointness loc ss =
              addAssert c $ Crucible.SimError loc $
                Crucible.AssertFailureSimError msg ""
 
-        | (LLVMAllocSpec _mut _pty psz ploc, p) : ps <- tails memsRW
-        , (LLVMAllocSpec _mut _qty qsz qloc, q) <- ps ++ memsRO
+        | (LLVMAllocSpec _mut _pty _align psz ploc, p) : ps <- tails memsRW
+        , (LLVMAllocSpec _mut _qty _align qsz qloc, q) <- ps ++ memsRO
         ]
 
 ------------------------------------------------------------------------
@@ -1306,7 +1306,7 @@ executeAllocation ::
   LLVMCrucibleContext arch          ->
   (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher (LLVM arch) RW ()
-executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
+executeAllocation opts cc (var, LLVMAllocSpec mut memTy alignment sz loc) =
   do let sym = cc^.ccBackend
      {-
      memTy <- case Crucible.asMemType symTy of
@@ -1317,7 +1317,6 @@ executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
      sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger sz)
-     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
      (ptr, mem') <- liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
