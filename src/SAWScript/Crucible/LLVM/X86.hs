@@ -39,38 +39,25 @@ import Data.Map (Map)
 
 import qualified Text.LLVM.AST as LLVM
 
-import Data.Parameterized.Some (Some(..))
-import Data.Parameterized.NatRepr (knownNat)
-import Data.Parameterized.Context (EmptyCtx, (::>), singleton)
-import Data.Parameterized.Nonce (globalNonceGenerator)
-import qualified Data.Parameterized.Context as Ctx
+import Data.Parameterized.Some
+import Data.Parameterized.NatRepr
+import Data.Parameterized.Context hiding (view)
+import Data.Parameterized.Nonce
 
 import SAWScript.Prover.SBV
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
 import SAWScript.Value
 import SAWScript.Options
-import SAWScript.X86
-  ( RelevantElf(..), X86Error(..)
-  , findSymbol, getElf, getGoals, getRelevant, gGoal, loadGlobal, posFn
-  )
+import SAWScript.X86 hiding (Options)
 import SAWScript.X86Spec
-  ( Sym, Unit(..)
-  , freshRegister, mkGlobalMap
-  )
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
 import SAWScript.Crucible.LLVM.Builtins
-  ( displayVerifExceptionOpts, findDecl, setupLLVMCrucibleContext
-  )
 import SAWScript.Crucible.LLVM.MethodSpecIR
 import SAWScript.Crucible.LLVM.ResolveSetupValue
-  ( resolveSetupVal, typeOfSetupValue
-  )
-
-import Verifier.SAW.SharedTerm
 
 import qualified What4.Expr as W4
 import qualified What4.FunctionName as W4
@@ -215,7 +202,8 @@ buildCFG opts halloc path nm = do
   printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
   (_, Some finfo) <- stToIO . Macaw.analyzeFunction (const $ pure ()) addr Macaw.UserRequest
     $ Macaw.emptyDiscoveryState (memory elf) (funSymMap elf) Macaw.x86_64_linux_info
-  scfg <- Macaw.mkFunCFG Macaw.x86_64MacawSymbolicFns halloc (W4.functionNameFromText $ Text.pack nm) posFn finfo
+  scfg <- Macaw.mkFunCFG Macaw.x86_64MacawSymbolicFns halloc
+    (W4.functionNameFromText $ Text.pack nm) posFn finfo
   pure (scfg, elf, addr)
 
 
@@ -236,7 +224,8 @@ buildMethodSpec ::
 buildMethodSpec bic opts lm nm loc setup =
   setupLLVMCrucibleContext bic opts lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
-    let programLoc = W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm) . W4.OtherPos $ Text.pack loc
+    let programLoc = W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm)
+                     . W4.OtherPos $ Text.pack loc
     let LLVMModule _ _ mtrans = lm
     let lc = mtrans ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
     (args, ret) <- case llvmSignature opts lm nm of
@@ -245,8 +234,10 @@ buildMethodSpec bic opts lm nm loc setup =
     (mtargs, mtret) <- case (,) <$> mapM (llvmTypeToMemType lc) args <*> mapM (llvmTypeToMemType lc) ret of
       Left err -> fail err
       Right x -> pure x
-    let initialMethodSpec = MS.makeCrucibleMethodSpecIR @(C.LLVM.LLVM (C.LLVM.X86 64)) methodId mtargs mtret programLoc lm
-    view Setup.csMethodSpec <$> execStateT (runLLVMCrucibleSetupM setup) (Setup.makeCrucibleSetupState cc initialMethodSpec)
+    let initialMethodSpec = MS.makeCrucibleMethodSpecIR @(C.LLVM.LLVM (C.LLVM.X86 64))
+          methodId mtargs mtret programLoc lm
+    view Setup.csMethodSpec <$> execStateT (runLLVMCrucibleSetupM setup)
+      (Setup.makeCrucibleSetupState cc initialMethodSpec)
 
 llvmTypeToMemType ::
   C.LLVM.TypeContext ->
@@ -284,28 +275,28 @@ initialMemory ::
   IO (Macaw.GlobalMap Sym 64, Mem, Regs, Map MS.AllocIndex Ptr)
 initialMemory sym elf cc endText globsyms ms = do
   let ?ptrWidth = knownNat @64
-  mem <- C.LLVM.emptyMem C.LLVM.LittleEndian
-  regs <- Ctx.traverseWithIndex (freshRegister sym) C.knownRepr
+  emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
+  emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
 
-  (globs, mem' ) <- setupGlobals sym elf mem endText globsyms
+  (globs, initialMem ) <- setupGlobals sym elf emptyMem endText globsyms
 
   -- Allocate a reasonable amount of stack (4 KiB + 1 qword for IP)
-  (rsp, mem'') <- allocateStack sym mem' 4096
-  regs' <- setReg Macaw.RSP rsp regs
+  (rsp, memWithStack) <- allocateStack sym initialMem 4096
+  regsWithStack <- setReg Macaw.RSP rsp emptyRegs
 
   let tyenv = ms ^. MS.csPreState . MS.csAllocs
       nameEnv = MS.csTypeNames ms
 
-  (env, mem''') <- foldlM (executeAllocation sym) (Map.empty, mem'') . Map.assocs
+  (env, memWithAllocs) <- foldlM (executeAllocation sym) (Map.empty, memWithStack) . Map.assocs
     $ tyenv
 
-  mem'''' <- foldlM (executePointsTo sym cc env tyenv nameEnv) mem'''
+  mem <- foldlM (executePointsTo sym cc env tyenv nameEnv) memWithAllocs
     $ ms ^. MS.csPreState . MS.csPointsTos
 
-  regs'' <- setArgs sym cc env tyenv nameEnv mem'''' regs' . fmap snd . Map.elems
+  regs <- setArgs sym cc env tyenv nameEnv mem regsWithStack . fmap snd . Map.elems
     $ ms ^. MS.csArgBindings
 
-  pure (globs, mem'''', regs'', env)
+  pure (globs, mem, regs, env)
 
 -- | Given an alist of symbol names and sizes (in bytes), allocate space and copy
 -- the corresponding globals from the Macaw memory to the Crucible LLVM memory model.
@@ -320,7 +311,8 @@ setupGlobals sym elf mem endText globsyms = do
   let ?ptrWidth = knownNat @64
   globs <- mconcat <$> mapM readInitialGlobal globsyms
   sz <- W4.bvLit sym knownNat . maximum $ endText:(globalEnd <$> globs)
-  (base, mem') <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Immutable "globals" mem sz C.LLVM.noAlignment
+  (base, mem') <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Immutable
+    "globals" mem sz C.LLVM.noAlignment
   mem'' <- foldlM (writeGlobal base) mem' globs
   pure (mkGlobalMap $ Map.singleton 0 base, mem'')
   where
@@ -350,13 +342,17 @@ allocateStack ::
 allocateStack sym mem szInt = do
   let ?ptrWidth = knownNat @64
   sz <- W4.bvLit sym knownNat $ szInt + 8
-  (base, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz C.LLVM.noAlignment
+  (base, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable
+    "stack_alloc" mem sz C.LLVM.noAlignment
   sn <- case W4.userSymbol "stack" of
     Left err -> fail $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn
-  fresh <- C.LLVM.LLVMPointer <$> W4.natLit sym 0 <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
+  fresh <- C.LLVM.LLVMPointer
+    <$> W4.natLit sym 0
+    <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
   ptr <- C.LLVM.doPtrAddOffset sym mem' base =<< W4.bvLit sym knownNat szInt
-  (ptr,) <$> C.LLVM.doStore sym mem' ptr (C.LLVM.LLVMPointerRepr $ knownNat @64) (C.LLVM.bitvectorType 8) C.LLVM.noAlignment fresh
+  (ptr,) <$> C.LLVM.doStore sym mem' ptr (C.LLVM.LLVMPointerRepr $ knownNat @64)
+    (C.LLVM.bitvectorType 8) C.LLVM.noAlignment fresh
 
 -- | Process a crucible_alloc statement, allocating the requested memory and
 -- associating a pointer to that memory with the appropriate index.
@@ -370,7 +366,8 @@ executeAllocation ::
 executeAllocation sym (env, mem) (i, LLVMAllocSpec mut _memTy sz loc) = do
   let ?ptrWidth = knownNat @64
   sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToInteger sz
-  (ptr, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut (show $ W4.plSourceLoc loc) mem sz' C.LLVM.noAlignment
+  (ptr, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
+    (show $ W4.plSourceLoc loc) mem sz' C.LLVM.noAlignment
   pure (Map.insert i ptr env, mem')
 
 -- | Process a crucible_points_to statement, writing some SetupValue to a pointer.
@@ -435,7 +432,8 @@ assertPost sym cc env ms (premem, postmem) (preregs, postregs) = do
     $ assertPointsTo sym cc env tyenv nameEnv postmem
 
   prersp <- getReg Macaw.RSP preregs
-  expectedIP <- C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8) (C.LLVM.LLVMPointerRepr $ knownNat @64) C.LLVM.noAlignment
+  expectedIP <- C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8)
+    (C.LLVM.LLVMPointerRepr $ knownNat @64) C.LLVM.noAlignment
   actualIP <- getReg Macaw.X86_IP postregs
   correctRetAddr <- C.LLVM.ptrEq sym C.LLVM.PtrWidth actualIP expectedIP
   C.addAssertion sym . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc
@@ -494,7 +492,7 @@ checkGoals sym opts sc = do
 
 type LLVMArch = C.LLVM.X86 64
 type LLVM = C.LLVM.LLVM LLVMArch
-type Regs = Ctx.Assignment (C.RegValue' Sym) (Macaw.MacawCrucibleRegTypes Macaw.X86_64)
+type Regs = Assignment (C.RegValue' Sym) (Macaw.MacawCrucibleRegTypes Macaw.X86_64)
 type Register = Macaw.X86Reg (Macaw.BVType 64)
 type Mem = C.LLVM.MemImpl Sym
 type Ptr = C.LLVM.LLVMPtr Sym 64
@@ -525,5 +523,6 @@ allocate ::
   IO (Ptr, Mem)
 allocate sym mem nm mt mut = do
   let ?ptrWidth = knownNat @64
-  sz <- W4.bvLit sym knownNat . C.LLVM.bytesToInteger $ C.LLVM.memTypeSize C.LLVM.defaultDataLayout mt
+  sz <- W4.bvLit sym knownNat . C.LLVM.bytesToInteger
+    $ C.LLVM.memTypeSize C.LLVM.defaultDataLayout mt
   C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut nm mem sz C.LLVM.noAlignment
