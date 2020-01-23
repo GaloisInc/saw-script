@@ -109,7 +109,7 @@ crucible_llvm_verify_x86 ::
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms setup
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
-                 $ llvmModule ^. modTrans . C.LLVM.transContext = do
+                 $ modTrans llvmModule ^. C.LLVM.transContext = do
       let sc = biSharedContext bic
       sym <- liftIO $ C.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
       halloc <- getHandleAlloc
@@ -226,8 +226,7 @@ buildMethodSpec bic opts lm nm loc setup =
     let methodId = LLVMMethodId nm Nothing
     let programLoc = W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm)
                      . W4.OtherPos $ Text.pack loc
-    let LLVMModule _ _ mtrans = lm
-    let lc = mtrans ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
+    let lc = modTrans lm ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
     (args, ret) <- case llvmSignature opts lm nm of
       Left err -> fail $ mconcat ["Could not find declaration for \"", nm, "\": ", err]
       Right x -> pure x
@@ -252,7 +251,7 @@ llvmSignature ::
   String ->
   Either String ([LLVM.Type], Maybe LLVM.Type)
 llvmSignature opts llvmModule nm =
-  case findDecl (llvmModule ^. modAST) nm of
+  case findDecl (modAST llvmModule) nm of
     Left err -> Left $ displayVerifExceptionOpts opts err
     Right decl -> pure
       ( LLVM.decArgs decl
