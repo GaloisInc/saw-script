@@ -438,7 +438,7 @@ assertPost sym cc env ms (premem, postmem) (preregs, postregs) = do
   C.addAssertion sym . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc
     $ C.AssertFailureSimError "Instruction pointer not set to return address" ""
 
-  stack <- C.LLVM.doPtrAddOffset sym premem prersp =<< W4.bvLit sym knownNat 1
+  stack <- C.LLVM.doPtrAddOffset sym premem prersp =<< W4.bvLit sym knownNat 8
   postrsp <- getReg Macaw.RSP postregs
   correctStack <- C.LLVM.ptrEq sym C.LLVM.PtrWidth stack postrsp
   C.addAssertion sym . C.LabeledPred correctStack . C.SimError W4.initializationLoc
