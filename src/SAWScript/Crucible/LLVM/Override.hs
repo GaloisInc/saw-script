@@ -616,6 +616,7 @@ learnCond opts sc cc cs prepost ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
+     enforceAlignment loc ss
      enforceDisjointness loc ss
      enforceCompleteSubstitution loc ss
 
@@ -685,6 +686,33 @@ refreshTerms sc ss =
         Just ec -> do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
                       return (termId (ttTerm tt), new)
         Nothing -> error "refreshTerms: not a variable"
+
+------------------------------------------------------------------------
+
+-- | Generate assertions that all of the memory regions matched by an
+-- override's precondition are properly aligned.
+enforceAlignment ::
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  W4.ProgramLoc ->
+  MS.StateSpec (LLVM arch) ->
+  OverrideMatcher (LLVM arch) md ()
+enforceAlignment loc ss =
+  do sym <- Ov.getSymInterface
+     sub <- OM (use setupValueSub) -- Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
+     let allocs = view MS.csAllocs ss -- Map AllocIndex LLVMAllocSpec
+     let mems = Map.elems $ Map.intersectionWith (,) allocs sub
+
+     sequence_
+        [ do c <- liftIO $ Crucible.isAligned sym Crucible.PtrWidth ptr alignment
+             let msg =
+                   "Memory region not aligned: "
+                   ++ "(base=" ++ show (Crucible.ppPtr ptr)
+                   ++ ", required alignment=" ++ show alignment ++ ")"
+             addAssert c $ Crucible.SimError loc $
+               Crucible.AssertFailureSimError msg ""
+
+        | (LLVMAllocSpec _mut _pty alignment _psz _ploc, ptr) <- mems
+        ]
 
 ------------------------------------------------------------------------
 
