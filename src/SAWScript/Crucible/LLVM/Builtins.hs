@@ -120,7 +120,6 @@ import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.Breakpoint as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
-import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 -- crucible-llvm
 import qualified Lang.Crucible.LLVM.ArraySizeProfile as Crucible
@@ -970,11 +969,11 @@ verifyPoststate opts sc cc mspec env0 globals ret =
   where
     sym = cc^.ccBackend
 
-    verifyObligation (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError _loc err))) = do
+    verifyObligation (Crucible.ProofGoal hyps (Crucible.LabeledPred concl err)) = do
       hypTerm <- CrucibleSAW.toSC sym =<< W4.andAllOf sym (folded . Crucible.labeledPred) hyps
       conclTerm  <- CrucibleSAW.toSC sym concl
       obligation <- scImplies sc hypTerm conclTerm
-      return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
+      return (unlines ["safety assertion:", show err], obligation)
 
     matchResult =
       case (ret, mspec ^. MS.csRetValue) of
