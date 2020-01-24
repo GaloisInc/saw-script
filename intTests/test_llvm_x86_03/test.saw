@@ -1,0 +1,9 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+let test_setup = do {
+  crucible_execute_func [];
+  crucible_return (crucible_term {{ 1 : [64] }});
+};
+fail (crucible_llvm_verify_x86 m "./test" "foo" [] test_setup);
