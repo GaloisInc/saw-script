@@ -50,6 +50,7 @@ jobs:
         apt:
           packages:
             - openjdk-8-jdk
+            - yasm
       before_install:
         - sudo add-apt-repository -y ppa:sri-csl/formal-methods
         - sudo apt-get update -q
