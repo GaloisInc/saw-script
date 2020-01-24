@@ -1797,6 +1797,16 @@ primitives = Map.fromList
     , "verified is expected to perform the allocation."
     ]
 
+  , prim "crucible_alloc_aligned" "Int -> LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_alloc_aligned)
+    Current
+    [ "Declare that a memory region of the given type should be allocated in"
+    , "a Crucible specification, and also specify that the start of the region"
+    , "should be aligned to a multiple of the specified number of bytes (which"
+    , "must be a power of 2). The specified alignment must be no less than the"
+    , "minimum required by the LLVM type."
+    ]
+
   , prim "crucible_alloc_readonly" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_alloc_readonly)
     Current

@@ -44,6 +44,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_llvm_unsafe_assume_spec
     , crucible_fresh_var
     , crucible_alloc
+    , crucible_alloc_aligned
     , crucible_alloc_readonly
     , crucible_alloc_with_size
     , crucible_alloc_global
@@ -1505,6 +1506,26 @@ crucible_alloc ::
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 crucible_alloc =
   crucible_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing
+
+crucible_alloc_aligned ::
+  BuiltinContext ->
+  Options        ->
+  Int            ->
+  L.Type         ->
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
+crucible_alloc_aligned bic opts n lty =
+  case Crucible.toAlignment (Crucible.toBytes n) of
+    Nothing ->
+      LLVMCrucibleSetupM $ fail $
+      "crucible_alloc_aligned: invalid non-power-of-2 alignment: " ++ show n
+    Just alignment ->
+      crucible_alloc_with_mutability_and_size
+        Crucible.Mutable
+        Nothing
+        (Just alignment)
+        bic
+        opts
+        lty
 
 crucible_alloc_readonly ::
   BuiltinContext ->
