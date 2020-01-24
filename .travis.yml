@@ -72,15 +72,13 @@ jobs:
       addons:
         apt:
           packages:
-            - clang-3.8
-            - llvm-3.8
+            - clang-3.9
+            - llvm-3.9
       install:
-        # - git clone https://github.com/awslabs/s2n.git
-        - git clone https://github.com/GaloisInc/s2n.git
+        - git clone https://github.com/awslabs/s2n.git
         - mkdir -p s2n/test-deps/saw/bin
         - cp bin/saw s2n/test-deps/saw/bin
         - cd s2n
-        - git checkout bump-saw
       before_script:
         - export TESTS=sawHMAC
         - export SAW_HMAC_TEST=md5
