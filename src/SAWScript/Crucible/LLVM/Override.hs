@@ -707,7 +707,7 @@ enforceAlignment loc ss =
              let msg =
                    "Memory region not aligned: "
                    ++ "(base=" ++ show (Crucible.ppPtr ptr)
-                   ++ ", required alignment=" ++ show alignment ++ ")"
+                   ++ ", required alignment=" ++ show (Crucible.fromAlignment alignment) ++ "-byte)"
              addAssert c $ Crucible.SimError loc $
                Crucible.AssertFailureSimError msg ""
 

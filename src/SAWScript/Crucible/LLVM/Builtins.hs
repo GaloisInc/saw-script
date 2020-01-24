@@ -1483,8 +1483,9 @@ crucible_alloc_with_mutability_and_size mut sz alignment bic opts lty =
          Just a -> do
            when (a < memTyAlign) $ fail $ unlines
              [ "User error: manually-specified alignment was less than needed"
-             , "Needed for this type: " ++ show memTyAlign
-             , "Specified: " ++ show a
+             , "Allocation type: " ++ show memTy
+             , "Minimum alignment for type: " ++ show (Crucible.fromAlignment memTyAlign) ++ "-byte"
+             , "Specified alignment: " ++ show (Crucible.fromAlignment a) ++ "-byte"
              ]
            pure a
          Nothing -> pure memTyAlign
