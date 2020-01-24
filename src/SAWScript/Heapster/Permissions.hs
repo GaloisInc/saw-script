@@ -41,7 +41,7 @@ import Control.Lens hiding ((:>), Index, Empty)
 import Data.Binding.Hobbits.NameMap (NameMap, NameAndElem(..))
 import qualified Data.Binding.Hobbits.NameMap as NameMap
 
-import Data.Parameterized.Context hiding ((:>), empty, take)
+import Data.Parameterized.Context hiding ((:>), empty, take, zipWith)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.NatRepr
 
@@ -536,9 +536,9 @@ bvLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvLt (PExpr_BV [] k1) (PExpr_BV [] k2) = k1 < k2
 bvLt _ _ = False
 
--- | Test whether a bitvector expression is in a 'BVRange'. This is an
--- underapproximation, meaning that it could return 'False' in cases where it is
--- actually 'True'.
+-- | Test whether a bitvector expression is in a 'BVRange' for all substitutions
+-- to the free variables. This is an underapproximation, meaning that it could
+-- return 'False' in cases where it is actually 'True'.
 bvInRange :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> BVRange w -> Bool
 bvInRange e (BVRange off len) =
   (bvEq off e || bvLt off e) && bvLt e (bvAdd off len)
@@ -577,6 +577,34 @@ bvCouldEqual _ _ = True
 bvCouldBeLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvCouldBeLt (PExpr_BV [] k1) (PExpr_BV [] k2) = k1 < k2
 bvCouldBeLt _ _ = True
+
+-- | Test whether a bitvector expression is in a 'BVRange' for all substitutions
+-- to the free variables. This is an overapproximation, meaning that some
+-- expressions are marked as "could" be in the range when they actually cannot.
+bvCouldBeInRange :: (1 <= w, KnownNat w) => PermExpr (BVType w) -> BVRange w -> Bool
+bvCouldBeInRange e (BVRange off len) =
+  (bvCouldEqual off e || bvCouldBeLt off e) && bvCouldBeLt e (bvAdd off len)
+
+-- | Test whether a 'BVProp' "could" hold for all substitutions of the free
+-- variables. This is an overapproximation, meaning that some propositions are
+-- marked as "could" hold when they actually cannot.
+bvPropCouldHold :: (1 <= w, KnownNat w) => BVProp w -> Bool
+bvPropCouldHold (BVProp_Eq e1 e2) = bvCouldEqual e1 e2
+bvPropCouldHold (BVProp_Neq e1 e2) = not (bvEq e1 e2)
+bvPropCouldHold (BVProp_InRange e rng) = bvCouldBeInRange e rng
+bvPropCouldHold (BVProp_NotInRange e rng) = not (bvInRange e rng)
+bvPropCouldHold (BVProp_RangeSubset rng1 rng2) =
+  bvCouldBeInRange (bvRangeOffset rng1) rng2 &&
+  bvCouldBeInRange (bvSub
+                    (bvAdd (bvRangeOffset rng1) (bvRangeLength rng1))
+                    (bvInt 1)) rng2
+bvPropCouldHold (BVProp_RangesDisjoint rng1 rng2) =
+  -- NOTE: if two ranges are not disjoint then either one fully contains the
+  -- other or they overlap. In either case, one range will contain the first
+  -- value of the other.
+  not (bvInRange (bvRangeOffset rng1) rng2) &&
+  not (bvInRange (bvRangeOffset rng2) rng1)
+
 
 -- | Build a bitvector expression from an integer
 bvInt :: (1 <= w, KnownNat w) => Integer -> PermExpr (BVType w)
@@ -677,9 +705,13 @@ data BVRange w = BVRange { bvRangeOffset :: PermExpr (BVType w),
 data BVProp w
   = BVProp_Eq (PermExpr (BVType w)) (PermExpr (BVType w))
     -- ^ True iff the two expressions are equal
+  | BVProp_Neq (PermExpr (BVType w)) (PermExpr (BVType w))
+    -- ^ True iff the two expressions are not equal
   | BVProp_InRange (PermExpr (BVType w)) (BVRange w)
     -- ^ True iff the first expression is greater than or equal to the second
     -- and less than the third, i.e., in the half-closed interval @[e2,e3)@
+  | BVProp_NotInRange (PermExpr (BVType w)) (BVRange w)
+    -- ^ True iff the first expression is *not* in the given range
   | BVProp_RangeSubset (BVRange w) (BVRange w)
     -- ^ True iff the first and second expressions form an interval that is
     -- contained in that formed by the third and fourth, i.e., iff @[e1,e2)@ is
@@ -803,7 +835,24 @@ data RWModality
   | Read
   deriving Eq
 
--- | A permission to an array of repeated field permissions
+-- | Helper type to represent byte offsets
+--
+-- > 'machineWordBytes' * (stride * ix + fld_num)
+--
+-- from the beginning of an array permission. Such an expression refers to the
+-- array field @fld_num@, which must be a statically-known constant, in array
+-- cell @ix@.
+data LLVMArrayIndex w =
+  LLVMArrayIndex { llvmArrayIndexCell :: PermExpr (BVType w),
+                   llvmArrayIndexFieldNum :: Int }
+  deriving Eq
+
+-- | A permission to an array of repeated field permissions. An array permission
+-- is structured as zero or more cells, each of which are composed of one or
+-- more individual fields. The number of cells can be a dynamic expression, but
+-- the size in memory of each cell, called the /stride/ of the array, must be
+-- statically known and no less than the total number of fields times the
+-- machine word size.
 data LLVMArrayPerm w =
   LLVMArrayPerm { llvmArrayOffset :: PermExpr (BVType w),
                   -- ^ The offset from the pointer in bytes of this array
@@ -820,14 +869,13 @@ data LLVMArrayPerm w =
   deriving Eq
 
 -- | An index or range of indices that are missing from an array perm
+--
+-- FIXME: think about calling the just @LLVMArrayIndexSet@
 data LLVMArrayBorrow w
-  = FieldBorrow (PermExpr (BVType w)) Int
-    -- ^ Borrow the @j@th field from index @i@, where @j@ is statically known.
-    -- If a variable is given, this variable equals the value stored in that
-    -- field, i.e., equals @*(array+(i*stride)+j)@, and is borrowing the
-    -- permissions associated with the @j@th field of this array.
+  = FieldBorrow (LLVMArrayIndex w)
+    -- ^ Borrow a specific field in a specific cell of an array permission
   | RangeBorrow (BVRange w)
-    -- ^ Borrow a range of indices
+    -- ^ Borrow a range of array cells
   deriving Eq
 
 
@@ -1055,6 +1103,7 @@ $(mkNuMatching [t| forall as. ValuePerms as |])
 $(mkNuMatching [t| forall w . LLVMFieldPerm w |])
 $(mkNuMatching [t| forall w . LLVMArrayPerm w |])
 $(mkNuMatching [t| RWModality |])
+$(mkNuMatching [t| forall w . LLVMArrayIndex w |])
 $(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
 $(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
 $(mkNuMatching [t| forall ps. DistPerms ps |])
@@ -1134,13 +1183,22 @@ llvmWrite0EqPerm :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
                     ValuePerm (LLVMPointerType w)
 llvmWrite0EqPerm e = ValPerm_Conj [Perm_LLVMField $ llvmFieldWrite0Eq e]
 
--- | Return the range of the indices of an array permission
-llvmArrayRange :: LLVMArrayPerm w -> BVRange w
-llvmArrayRange ap = BVRange (llvmArrayOffset ap) (llvmArrayLen ap)
+-- | Find all elements of list @l@ where @f@ returns a value and return that
+-- value plus its index into @l@
+--
+-- FIXME: figure out a better place to put this function
+findMaybeIndices :: (a -> Maybe b) -> [a] -> [(Int, b)]
+findMaybeIndices f l = catMaybes $ zipWith (\i a -> (i,) <$> f a) [0 ..] l
+
+-- | Return the clopen range @[0,len)@ of the indices of an array permission
+llvmArrayIndexRange :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
+llvmArrayIndexRange ap = BVRange (bvInt 0) (llvmArrayLen ap)
 
 -- | Return the range of the byte offsets of an array permission
+{-
 llvmArrayRangeBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
 llvmArrayRangeBytes ap = BVRange (llvmArrayOffset ap) (arrayLengthBytes ap)
+-}
 
 -- | Return the number of bytes per machine word; @w@ is the number of bits
 machineWordBytes :: KnownNat w => f w -> Integer
@@ -1154,6 +1212,7 @@ machineWordBytes w = natVal w `div` 8
 bytesToMachineWords :: KnownNat w => f w -> Integer -> Integer
 bytesToMachineWords w n = (n + machineWordBytes w - 1) `div` machineWordBytes w
 
+{-
 -- | Return an array stride in bytes, instead of words of size @w@
 arrayStrideBytes :: KnownNat w => LLVMArrayPerm w -> Integer
 arrayStrideBytes ap@(LLVMArrayPerm {..}) =
@@ -1163,38 +1222,139 @@ arrayStrideBytes ap@(LLVMArrayPerm {..}) =
 arrayLengthBytes :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                     PermExpr (BVType w)
 arrayLengthBytes ap = bvMult (arrayStrideBytes ap) (llvmArrayLen ap)
+-}
 
 -- | Add a borrow to an 'LLVMArrayPerm'
 llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
 llvmArrayAddBorrow b ap = ap { llvmArrayBorrows = b : llvmArrayBorrows ap }
 
 -- | Remove a borrow of an index from an 'LLVMArrayPerm'
-llvmArrayRemIndexBorrow :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                           Int -> LLVMArrayPerm w -> LLVMArrayPerm w
-llvmArrayRemIndexBorrow i j ap =
-  ap { llvmArrayBorrows =
-         filter ((/= bvRangeOfIndex (llvmArrayIndex ap i j))
-                 . llvmArrayBorrowRange ap)
-         (llvmArrayBorrows ap) }
+llvmArrayRemBorrow :: (1 <= w, KnownNat w) => LLVMArrayBorrow w ->
+                      LLVMArrayPerm w -> LLVMArrayPerm w
+llvmArrayRemBorrow b ap =
+  ap { llvmArrayBorrows = filter (/= b) (llvmArrayBorrows ap) }
 
--- | Compute the byte index @i*stride + j@ of the @j@th field in the @i@th array
--- element from the beginning of an array
+-- | Test if a byte offset @o@ statically aligns with a field in an array, i.e.,
+-- whether
+--
+-- > o - off = wordBytes * (stride*ix + fld_num)
+--
+-- for some @ix@ and @fld_num@, where @off@ is the array offset and @stride@ is
+-- the array stride. Return @ix@ and @fld_num@ on success.
+matchLLVMArrayField :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                       PermExpr (BVType w) -> Maybe (LLVMArrayIndex w)
+matchLLVMArrayField ap o
+  | w <- machineWordBytes ap
+  , rel_off <- bvSub o (llvmArrayOffset ap)
+  , bvEq (bvMod rel_off w) (bvInt 0) =
+    fmap (\(ix, fld_num) -> LLVMArrayIndex ix $ fromInteger fld_num) $
+    bvMatchFactorPlusConst (llvmArrayStride ap) (bvDiv rel_off w)
+matchLLVMArrayField _ _ = Nothing
+
+-- | Return a 'BVProp' stating that the field(s) represented by an array borrow
+-- are in the "base" set of fields in an array, before the borrows are
+-- considered. We assume that the borrow is statically well-formed for that
+-- array, meaning that the static field number of a 'FieldBorrow' refers to a
+-- valid field in the array perm.
+llvmArrayBorrowInArrayBase :: (1 <= w, KnownNat w) =>
+                              LLVMArrayPerm w -> LLVMArrayBorrow w ->
+                              BVProp w
+llvmArrayBorrowInArrayBase ap (FieldBorrow ix)
+  | llvmArrayIndexFieldNum ix >= length (llvmArrayFields ap) =
+    error "llvmArrayBorrowInArrayBase: invalid index"
+llvmArrayBorrowInArrayBase ap (FieldBorrow ix) =
+  BVProp_InRange (llvmArrayIndexCell ix) (llvmArrayIndexRange ap)
+llvmArrayBorrowInArrayBase ap (RangeBorrow rng) =
+  BVProp_RangeSubset rng (llvmArrayIndexRange ap)
+
+-- | Return a 'BVProp' stating that two array borrows are disjoint, or 'Nothing'
+-- if they are trivially disjoint because they refer to statically distinct
+-- field numbers
+llvmArrayBorrowsDisjoint :: LLVMArrayBorrow w -> LLVMArrayBorrow w ->
+                            Maybe (BVProp w)
+llvmArrayBorrowsDisjoint (FieldBorrow ix1) (FieldBorrow ix2)
+  | llvmArrayIndexFieldNum ix1 == llvmArrayIndexFieldNum ix2
+  = Just (BVProp_Neq (llvmArrayIndexCell ix1) (llvmArrayIndexCell ix2))
+llvmArrayBorrowsDisjoint (FieldBorrow _) (FieldBorrow _) = Nothing
+llvmArrayBorrowsDisjoint (FieldBorrow ix) (RangeBorrow rng) =
+  Just $ BVProp_NotInRange (llvmArrayIndexCell ix) rng
+llvmArrayBorrowsDisjoint (RangeBorrow rng) (FieldBorrow ix) =
+  Just $ BVProp_NotInRange (llvmArrayIndexCell ix) rng
+llvmArrayBorrowsDisjoint (RangeBorrow rng1) (RangeBorrow rng2) =
+  Just $ BVProp_RangesDisjoint rng1 rng2
+
+-- | Return a list of propositions stating that the field(s) represented by an
+-- array borrow are in the set of fields of an array permission. This takes into
+-- account the current borrows on the array permission, which are fields that
+-- are /not/ currently in that array permission.
+llvmArrayBorrowInArray :: (1 <= w, KnownNat w) =>
+                          LLVMArrayPerm w -> LLVMArrayBorrow w -> [BVProp w]
+llvmArrayBorrowInArray ap b =
+  llvmArrayBorrowInArrayBase ap b :
+  mapMaybe (llvmArrayBorrowsDisjoint b) (llvmArrayBorrows ap)
+
+-- | Shorthand for 'llvmArrayBorrowInArray' with a single index
+llvmArrayIndexInArray :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                         LLVMArrayIndex w -> [BVProp w]
+llvmArrayIndexInArray ap ix = llvmArrayBorrowInArray ap (FieldBorrow ix)
+
+-- | Test if an atomic LLVM permission potentially allows a read or write of a
+-- given offset. If so, return a list of the propositions required for the read
+-- to be allowed. For LLVM field permissions, the offset of the field must
+-- statically match the supplied offset, so the list of propositions will be
+-- empty, while for arrays, the offset must only /not/ match any outstanding
+-- borrows, and the propositions returned codify that as well as the requirement
+-- that the offset is in the array range.
+llvmPermContainsOffset :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                          AtomicPerm (LLVMPointerType w) -> Maybe [BVProp w]
+llvmPermContainsOffset off (Perm_LLVMField fp)
+  | bvEq (llvmFieldOffset fp) off = Just []
+llvmPermContainsOffset off (Perm_LLVMArray ap)
+  | Just ix <- matchLLVMArrayField ap off
+  , props <- llvmArrayIndexInArray ap ix
+  , all bvPropCouldHold props =
+    Just props
+llvmPermContainsOffset _ _ = Nothing
+
+-- | Return the byte offset @'machineWordBytes' * (stride * cell + field_num)@
+-- of an array index from the beginning of the array
+llvmArrayIndexByteOffset :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                            LLVMArrayIndex w -> PermExpr (BVType w)
+llvmArrayIndexByteOffset ap ix =
+  bvMult (machineWordBytes ap) $
+  bvAdd (bvMult (llvmArrayStride ap) (llvmArrayIndexCell ix))
+  (bvInt (toInteger $ llvmArrayIndexFieldNum ix))
+
+-- | Return the field permission corresponding to the given index an array
+-- permission, offset by the array offset plus the byte offset of the field
+llvmArrayFieldWithOffset :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                            LLVMArrayIndex w -> LLVMFieldPerm w
+llvmArrayFieldWithOffset ap ix =
+  offsetLLVMFieldPerm
+  (bvAdd (llvmArrayOffset ap) (llvmArrayIndexByteOffset ap ix))
+  (llvmArrayFields ap !! llvmArrayIndexFieldNum ix)
+
+
+{- FIXME HERE: remove these...?
+
+-- | Compute the byte index @wordSize*(i*stride + j)@ of the @j@th field in the
+-- @i@th array element from the beginning of an array
 llvmArrayIndex :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
-                  PermExpr (BVType w) -> Int -> PermExpr (BVType w)
-llvmArrayIndex ap i j =
+                  LLVMArrayIndex w -> Int -> PermExpr (BVType w)
+llvmArrayIndex ap (LLVMArrayIndex i) j =
   bvAdd (bvMult (llvmArrayStride ap) i) (bvInt $ toInteger j)
 
 -- | Convert the output of 'llvmArrayIndex' to a single-element 'BVRange'
-llvmArrayIndexRange :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
-                       PermExpr (BVType w) -> Int -> BVRange w
-llvmArrayIndexRange ap ix fld_num =
+llvmArrayIndexToRange :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
+                         PermExpr (BVType w) -> Int -> BVRange w
+llvmArrayIndexToRange ap ix fld_num =
   bvRangeOfIndex $ llvmArrayIndex ap ix fld_num
 
 -- | Get the range of byte offsets represented by an array borrow
 llvmArrayBorrowRange :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                         LLVMArrayBorrow w -> BVRange w
 llvmArrayBorrowRange ap (FieldBorrow ix fld_num) =
-  llvmArrayIndexRange ap ix fld_num
+  llvmArrayIndexToRange ap ix fld_num
 llvmArrayBorrowRange _ (RangeBorrow r) = r
 
 -- | Test if a specific range of byte offsets from the beginning of an array
@@ -1209,7 +1369,7 @@ llvmArrayRangeIsBorrowed ap rng =
 llvmArrayIndexIsBorrowed :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
                             PermExpr (BVType w) -> Int -> Bool
 llvmArrayIndexIsBorrowed ap ix fld_num =
-  llvmArrayRangeIsBorrowed ap $ llvmArrayIndexRange ap ix fld_num
+  llvmArrayRangeIsBorrowed ap $ llvmArrayIndexToRange ap ix fld_num
 
 -- | Build 'BVProp's stating that each borrow in an array permission is disjoint
 -- from an index or range
@@ -1218,15 +1378,6 @@ llvmArrayBorrowsDisjoint :: (1 <= w, KnownNat w) =>
 llvmArrayBorrowsDisjoint ap range =
   map (BVProp_RangesDisjoint range . llvmArrayBorrowRange ap) $
   llvmArrayBorrows ap
-
--- | Return the @j@th field permission for the @i@th array element, offset by
--- the array offset plus @i*stride+j@
-llvmArrayFieldWithOffset :: (1 <= w, KnownNat w) => LLVMArrayPerm w ->
-                            PermExpr (BVType w) -> Int -> LLVMFieldPerm w
-llvmArrayFieldWithOffset ap i j =
-  offsetLLVMFieldPerm
-  (bvAdd (llvmArrayOffset ap) (llvmArrayIndex ap i j))
-  (llvmArrayFields ap !! j)
 
 -- | Search through a list of atomic permissions to see if one of them is an
 -- LLVM array permission where the given field has been borrowed. If so, return
@@ -1246,6 +1397,7 @@ findLLVMArrayWithFieldBorrow fp (Perm_LLVMArray ap : _)
 findLLVMArrayWithFieldBorrow fp (_ : ps) =
   fmap (\(i, ap, ix, fld_num) -> (i+1, ap, ix, fld_num)) $
   findLLVMArrayWithFieldBorrow fp ps
+-}
 
 -- | Create a list of field permissions the cover @N@ bytes:
 --
@@ -1744,6 +1896,8 @@ findArrayPerms :: [LLVMPtrPerm w] -> [(Int, LLVMArrayPerm w)]
 findArrayPerms = findMatches matchArrayPtrPerm
 
 
+{- FIXME HERE: remove LLVMFieldMatch and friends
+
 -- | A field match represents a pointer permission that could be used to prove a
 -- field permission @ptr(off |-> p)@.
 --
@@ -1794,7 +1948,7 @@ findFieldMatches off pps =
          if bvCouldBeLt arr_ix llvmArrayLen then
            return $ FieldMatchArray (bvLt arr_ix llvmArrayLen) i ap arr_ix fld_i
            else Nothing
-
+-}
 
 -- FIXME HERE: remove, or at least reevaluate, these!
 {-
@@ -2018,9 +2172,12 @@ instance SubstVar s m => Substable s (LLVMArrayPerm w) m where
     return (mbLift stride) <*> mapM (genSubst s) (mbList pps)
     <*> mapM (genSubst s) (mbList bs)
 
+instance SubstVar s m => Substable s (LLVMArrayIndex w) m where
+  genSubst s [nuP| LLVMArrayIndex ix fld_num |] =
+    LLVMArrayIndex <$> genSubst s ix <*> return (mbLift fld_num)
+
 instance SubstVar s m => Substable s (LLVMArrayBorrow w) m where
-  genSubst s [nuP| FieldBorrow i j |] =
-    FieldBorrow <$> genSubst s i <*> return (mbLift j)
+  genSubst s [nuP| FieldBorrow ix |] = FieldBorrow <$> genSubst s ix
   genSubst s [nuP| RangeBorrow r |] = RangeBorrow <$> genSubst s r
 
 instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
@@ -2339,9 +2496,13 @@ instance SubstValPerm (LLVMArrayPerm w) where
     LLVMArrayPerm (substValPerm p off) (substValPerm p len)
     (mbLift stride) (substValPerm p pps) (substValPerm p bs)
 
+instance SubstValPerm (LLVMArrayIndex w) where
+  substValPerm p [nuP| LLVMArrayIndex ix fld_num |] =
+    LLVMArrayIndex (substValPerm p ix) (mbLift fld_num)
+
 instance SubstValPerm (LLVMArrayBorrow w) where
-  substValPerm p [nuP| FieldBorrow i j |] =
-    FieldBorrow (substValPerm p i) (mbLift j)
+  substValPerm p [nuP| FieldBorrow ix |] =
+    FieldBorrow (substValPerm p ix)
   substValPerm p [nuP| RangeBorrow r |] = RangeBorrow $ substValPerm p r
 
 instance SubstValPerm (FunPerm ghosts args ret) where
@@ -2642,12 +2803,18 @@ instance AbstractVars (LLVMArrayPerm w) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 flds
     `clMbMbApplyM` abstractPEVars ns1 ns2 bs
 
-instance AbstractVars (LLVMArrayBorrow w) where
-  abstractPEVars ns1 ns2 (FieldBorrow i j) =
+instance AbstractVars (LLVMArrayIndex w) where
+  abstractPEVars ns1 ns2 (LLVMArrayIndex ix fld_num) =
     absVarsReturnH ns1 ns2 $(mkClosed
-                             [| \i j -> FieldBorrow i $ fromInteger j |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 i
-    `clMbMbApplyM` abstractPEVars ns1 ns2 (toInteger j)
+                             [| \ix' fld_num' ->
+                               LLVMArrayIndex ix' $ fromInteger fld_num' |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ix
+    `clMbMbApplyM` abstractPEVars ns1 ns2 (toInteger fld_num)
+
+instance AbstractVars (LLVMArrayBorrow w) where
+  abstractPEVars ns1 ns2 (FieldBorrow ix) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| FieldBorrow |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 ix
   abstractPEVars ns1 ns2 (RangeBorrow r) =
     absVarsReturnH ns1 ns2 $(mkClosed [| RangeBorrow |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 r
@@ -2981,6 +3148,7 @@ elimLLVMFieldContents x i perms =
 -- starting at offset @off+e*stride@. The latter permission (at offset
 -- @off+e*stride@) stays at the same index, while the former (at the original
 -- offset) is moved to the end of the field permissions for @x@.
+{-
 divideLLVMArray :: ExprVar (LLVMPointerType w) -> Int -> PermExpr (BVType w) ->
                    PermSet ps -> PermSet ps
 divideLLVMArray x i e perms =
@@ -2995,6 +3163,7 @@ divideLLVMArray x i e perms =
                         Perm_LLVMArray $ ap { llvmArrayLen = e }) $
       perms
     _ -> error "divideLLVMArray"
+-}
 
 -- | Perform an array indexing of the first cell of an array, by separating an
 -- array permission @x:ptr((off,*stride,<len,S) |-> pps)@ into one array cell,

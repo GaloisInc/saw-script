@@ -751,6 +751,10 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
            t1, t2],
           APTrans_BVProp prop)
 
+  tptranslate [nuP| Perm_BVProp
+                  prop@(BVProp_Neq e1 (e2 :: PermExpr (BVType w))) |] =
+    error "FIXME HERE NOW: translate BVProp_RangeNeq"
+
   -- The proposition e in [off,off+len) becomes (e-off) < len, which in SAW is
   -- represented as bvslt (e-off) len = True
   tptranslate [nuP| Perm_BVProp
@@ -766,6 +770,11 @@ instance TypeTranslate (AtomicPerm a) ctx (Either (AtomicPermTrans ctx a)
            [natOpenTerm w, t_sub, t_len],
            trueOpenTerm],
           APTrans_BVProp prop)
+
+  tptranslate [nuP| Perm_BVProp
+                  prop@(BVProp_NotInRange (e :: PermExpr (BVType w))
+                        (BVRange off len)) |] =
+    error "FIXME HERE NOW: translate BVProp_NotInRange"
 
   -- The proposition [off1,off1+len1) subset [off2,off2+len2) becomes the
   -- proposition...?
@@ -1351,7 +1360,8 @@ itranslateSimplImpl _ [nuP| SImpl_LLVMArrayReturn _ _ _ |] m =
   -- IDEA: the borrows could translate to proofs of the relevant BVProps, which
   -- could be used when returning
 
-itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexCopy x _ mb_i j |] m =
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexCopy x _
+                          (LLVMArrayIndex mb_i j) |] m =
   do ptrans_array <- getTopPermM
      let (mb_ap, f_elem, array_trm) =
            unPTransLLVMArray
@@ -1367,7 +1377,8 @@ itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexCopy x _ mb_i j |] m =
          pctx :>: PTrans_Conj [elem_ptrans] :>: ptrans_array)
        m
 
-itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexBorrow x _ mb_i j |] m =
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexBorrow x _
+                          (LLVMArrayIndex mb_i j) |] m =
   do ptrans_array <- getTopPermM
      let (mb_ap, f_elem, array_trm) =
            unPTransLLVMArray
@@ -1384,12 +1395,13 @@ itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexBorrow x _ mb_i j |] m =
          PTrans_Conj
          [APTrans_LLVMArray
           (mbMap2 (\i -> llvmArrayAddBorrow
-                         (FieldBorrow i (mbLift j)))
+                         (FieldBorrow $ LLVMArrayIndex i (mbLift j)))
            mb_i mb_ap)
           f_elem array_trm])
        m
 
-itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexReturn x _ mb_i j |] m =
+itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexReturn x _
+                          (LLVMArrayIndex mb_i j) |] m =
   do (_ :>: ptrans_fld :>: ptrans_array) <- itiPermStack <$> ask
      let (mb_ap, f_elem, array_trm) =
            unPTransLLVMArray
@@ -1417,7 +1429,9 @@ itranslateSimplImpl _ [nuP| SImpl_LLVMArrayIndexReturn x _ mb_i j |] m =
        (\(pctx :>: _ :>: _) ->
          pctx :>:
          PTrans_Conj [APTrans_LLVMArray
-                      (mbMap2 (\i ap -> llvmArrayRemIndexBorrow i (mbLift j) ap)
+                      (mbMap2 (\i ->
+                                llvmArrayRemBorrow (FieldBorrow $
+                                                    LLVMArrayIndex i (mbLift j)))
                        mb_i mb_ap)
                       f_elem
                       new_array_trm])
@@ -1590,6 +1604,12 @@ itranslatePermImpl1 [nuP| Impl1_TryProveBVProp x
   ]
 
 itranslatePermImpl1 [nuP| Impl1_TryProveBVProp x
+                        prop@(BVProp_Neq e1 (e2 :: PermExpr (BVType w))) |]
+  [nuP| MbPermImpls_Cons _ mb_impl |] =
+  error "FIXME HERE NOW: translate Impl1_TryProveBVProp (BVProp_Neq)"
+
+
+itranslatePermImpl1 [nuP| Impl1_TryProveBVProp x
                         prop@(BVProp_InRange
                               (e :: PermExpr (BVType w)) (BVRange off len)) |]
   [nuP| MbPermImpls_Cons _ mb_impl |] =
@@ -1606,6 +1626,12 @@ itranslatePermImpl1 [nuP| Impl1_TryProveBVProp x
     , tpTransM (translateExpr (mbMap2 bvSub e off)),
       tpTransM (translateExpr len)]
   ]
+
+itranslatePermImpl1 [nuP| Impl1_TryProveBVProp x
+                        prop@(BVProp_NotInRange
+                              (e :: PermExpr (BVType w)) (BVRange off len)) |]
+  [nuP| MbPermImpls_Cons _ mb_impl |] =
+  error "FIXME HERE NOW: translate Impl1_TryProveBVProp (BVProp_NotInRange)"
 
 itranslatePermImpl1 [nuP| Impl1_TryProveBVProp _ (BVProp_RangeSubset _ _) |]
   [nuP| MbPermImpls_Cons _ _ |] =
