@@ -953,7 +953,7 @@ primitives = Map.fromList
     [ "Write out a representation of a term in SAWCore external format." ]
 
   , prim "write_verilog"       "String -> Term -> TopLevel ()"
-    (pureVal write_verilog)
+    (scVal writeVerilog)
     Experimental
     [ "Write out a representation of a term in Verilog format." ]
 
@@ -1120,11 +1120,16 @@ primitives = Map.fromList
     [ "Use the ABC theorem prover to prove the current goal." ]
 
   , prim "abc_external"        "ProofScript SatResult"
-    (pureVal satABCExternal)
+    (pureVal proveABCExternal)
     Experimental
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal."
     ]
+
+  , prim "abc_sbv"             "ProofScript SatResult"
+    (pureVal proveABC_SBV)
+    Current
+    [ "Use the ABC theorem prover to prove the current goal." ]
 
   , prim "boolector"           "ProofScript SatResult"
     (pureVal proveBoolector)
@@ -1200,7 +1205,7 @@ primitives = Map.fromList
     ]
 
   , prim "offline_verilog"        "String -> ProofScript SatResult"
-    (pureVal satVerilog)
+    (pureVal offline_verilog)
     Experimental
     [ "Write the current goal to the given file in Verilog format." ]
 

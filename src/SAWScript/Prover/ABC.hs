@@ -70,7 +70,6 @@ proveABCExternal ::
 proveABCExternal sc goal =
   do let file = undefined
          stats = solverStats "ABCExternal" (scSharedSize (unProp goal))
-     -- TODO: negate goal
      writeVerilogProp sc file goal
      -- TODO: invoke ABC and parse output
      return (Nothing, stats)

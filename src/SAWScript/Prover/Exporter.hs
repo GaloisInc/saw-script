@@ -26,7 +26,7 @@ module SAWScript.Prover.Exporter
 
 import Data.Foldable(toList)
 
-import Control.Monad.Except (runExcept, throwError)
+import Control.Monad.Except (runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.AIG as AIG
 import Data.IORef (newIORef)
@@ -203,29 +203,27 @@ writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   let gen = globalNonceGenerator
   sym <- Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
+  W4.startCaching sym
   let unints = []
   modmap <- scGetModuleMap sc
   ref <- newIORef Map.empty
   e <- W4Sim.w4EvalBasic sym sc modmap w4Prims ref unints t
-  let edoc = case e of
-              Sim.VBool b -> exprToModule b
-              Sim.VWord (W4Sim.DBV w) -> exprToModule w
-              Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> eqToModule x y
-              _ -> throwError $ "writeVerilog: nyi: " ++ show e
-  print (ppTermDepth 15 t)
-  case e of
-    Sim.VBool b -> print (W4.ppExpr b)
-    Sim.VWord (W4Sim.DBV w) -> print (W4.ppExpr w)
-    Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> print (W4.ppExpr x) >> putStrLn "==" >> print (W4.ppExpr y)
-  case runExcept edoc of
+  edoc <- runExceptT $
+    case e of
+      Sim.VBool b -> exprVerilog b "f"
+      Sim.VWord (W4Sim.DBV w) -> exprVerilog w "f"
+      Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> eqVerilog x y "f"
+      _ -> throwError $ "writeVerilog: nyi: " ++ show e
+  case edoc of
     Left err -> do
       fail $ "Failed to translate to Verilog: " ++ err
       --putStrLn "Original:"
       --print (ppTermDepth 3 t)
       --putStrLn "What4:"
       --print e
-    Right doc -> putStrLn "Success!" -- >> print doc >> writeFile path (show doc)
+    Right doc -> writeFile path (show doc)
 
+-- TODO: negate goal
 writeVerilogProp :: SharedContext -> FilePath -> Prop -> IO ()
 writeVerilogProp sc path prop = writeVerilog sc path (unProp prop)
 

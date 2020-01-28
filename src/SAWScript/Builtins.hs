@@ -588,8 +588,8 @@ proveABC = do
 
 -- | Check the satisfiability of a @Term@ using ABC as an external
 -- process.
-satABCExternal :: ProofScript SV.SatResult
-satABCExternal = wrapProver Prover.satABCExternal
+proveABCExternal :: ProofScript SV.SatResult
+proveABCExternal = wrapProver Prover.proveABCExternal
 
 parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
                     -> [String] -- ^ The value lines from the solver
@@ -712,6 +712,9 @@ wrapProver f = do
     Just a  -> nope (SV.SatMulti stats a)
 
 --------------------------------------------------
+proveABC_SBV :: ProofScript SV.SatResult
+proveABC_SBV = proveSBV SBV.abc
+
 proveBoolector :: ProofScript SV.SatResult
 proveBoolector = proveSBV SBV.boolector
 
@@ -799,8 +802,9 @@ offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2 path ".smt2"
 offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript SV.SatResult
 offline_unint_smtlib2 unints path = proveWithExporter (Prover.writeUnintSMTLib2 unints) path ".smt2"
 
-satVerilog :: FilePath -> ProofScript SV.SatResult
-satVerilog path = satWithExporter Prover.writeVerilog path ".v"
+offline_verilog :: FilePath -> ProofScript SV.SatResult
+offline_verilog path =
+  proveWithExporter (Prover.adaptExporter Prover.writeVerilog) path ".v"
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (\ps -> ps { psTimeout = Just to })
