@@ -616,7 +616,7 @@ learnCond opts sc cc cs prepost ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
-     enforceAlignment loc ss
+     enforcePointerValidity cc loc ss
      enforceDisjointness loc ss
      enforceCompleteSubstitution loc ss
 
@@ -690,29 +690,40 @@ refreshTerms sc ss =
 ------------------------------------------------------------------------
 
 -- | Generate assertions that all of the memory regions matched by an
--- override's precondition are properly aligned.
-enforceAlignment ::
+-- override's precondition are allocated, and meet the appropriate
+-- requirements for alignment and mutability.
+enforcePointerValidity ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
-enforceAlignment loc ss =
+enforcePointerValidity cc loc ss =
   do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub) -- Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
      let allocs = view MS.csAllocs ss -- Map AllocIndex LLVMAllocSpec
      let mems = Map.elems $ Map.intersectionWith (,) allocs sub
+     let w = Crucible.PtrWidth
+     let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
+     mem <- readGlobal memVar
 
      sequence_
-        [ do c <- liftIO $ Crucible.isAligned sym Crucible.PtrWidth ptr alignment
-             let msg =
-                   "Memory region not aligned: "
-                   ++ "(base=" ++ show (Crucible.ppPtr ptr)
-                   ++ ", required alignment=" ++ show (Crucible.fromAlignment alignment) ++ "-byte)"
-             addAssert c $ Crucible.SimError loc $
-               Crucible.AssertFailureSimError msg ""
+       [ do psz' <-
+              liftIO $ W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger psz
+            c <-
+              liftIO $
+              Crucible.isAllocatedAlignedPointer sym w alignment mut ptr (Just psz') mem
+            let msg =
+                  "Pointer not valid:"
+                  ++ "\n  base = " ++ show (Crucible.ppPtr ptr)
+                  ++ "\n  size = " ++ show psz
+                  ++ "\n  required alignment = " ++ show (Crucible.fromAlignment alignment) ++ "-byte"
+                  ++ "\n  required mutability = " ++ show mut
+            addAssert c $ Crucible.SimError loc $
+              Crucible.AssertFailureSimError msg ""
 
-        | (LLVMAllocSpec _mut _pty alignment _psz _ploc, ptr) <- mems
-        ]
+       | (LLVMAllocSpec mut _pty alignment psz _ploc, ptr) <- mems
+       ]
 
 ------------------------------------------------------------------------
 
