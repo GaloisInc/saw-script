@@ -21,6 +21,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 
 module SAWScript.Heapster.Implication where
 
@@ -77,6 +78,12 @@ data SimplImpl ps_in ps_out where
   -- ^ Drop a permission, i.e., forget about it:
   --
   -- > x:p -o .
+
+  SImpl_Copy :: ExprVar a -> ValuePerm a ->
+                SimplImpl (RNil :> a) (RNil :> a :> a)
+  -- ^ Copy any copyable permission:
+  --
+  -- > x:p -o x:p * x:p
 
   SImpl_Swap :: ExprVar a -> ValuePerm a -> ExprVar b -> ValuePerm b ->
                 SimplImpl (RNil :> a :> b) (RNil :> b :> a)
@@ -541,6 +548,9 @@ traversePermImpl f (PermImpl_Step impl1 mb_impls) =
 -- | Compute the input permissions of a 'SimplImpl' implication
 simplImplIn :: SimplImpl ps_in ps_out -> DistPerms ps_in
 simplImplIn (SImpl_Drop x p) = distPerms1 x p
+simplImplIn (SImpl_Copy x p) =
+  if permIsCopyable p then distPerms1 x p else
+    error "simplImplIn: SImpl_Copy: permission is not copyable!"
 simplImplIn (SImpl_Swap x p1 y p2) = distPerms2 x p1 y p2
 simplImplIn (SImpl_IntroOrL x p1 p2) = distPerms1 x p1
 simplImplIn (SImpl_IntroOrR x p1 p2) = distPerms1 x p2
@@ -647,6 +657,9 @@ simplImplIn (SImpl_Mu x p1 _ _) = distPerms1 x (ValPerm_Mu p1)
 -- | Compute the output permissions of a 'SimplImpl' implication
 simplImplOut :: SimplImpl ps_in ps_out -> DistPerms ps_out
 simplImplOut (SImpl_Drop x p) = DistPermsNil
+simplImplOut (SImpl_Copy x p) =
+  if permIsCopyable p then distPerms2 x p x p else
+    error "simplImplOut: SImpl_Copy: permission is not copyable!"
 simplImplOut (SImpl_Swap x p1 y p2) = distPerms2 y p2 x p1
 simplImplOut (SImpl_IntroOrL x p1 p2) = distPerms1 x (ValPerm_Or p1 p2)
 simplImplOut (SImpl_IntroOrR x p1 p2) = distPerms1 x (ValPerm_Or p1 p2)
@@ -842,8 +855,8 @@ class GenMonad (m :: k -> k -> Kind.* -> Kind.*) where
 infixl 1 >>>=
 infixl 1 >>>
 
-(>>>) :: GenMonad m => m r2 r3 () -> m r1 r2 a -> m r1 r3 a
-m1 >>> m2 = m1 >>>= \() -> m2
+(>>>) :: GenMonad m => m r2 r3 a -> m r1 r2 b -> m r1 r3 b
+m1 >>> m2 = m1 >>>= \a -> seq a m2
 
 class GenMonadT (t :: (k1 -> k1 -> Kind.* -> Kind.*) ->
                  k2 -> k2 -> Kind.* -> Kind.*) p1 p2 q1 q2 |
@@ -1348,8 +1361,8 @@ implFailVarM f x p mb_p =
 
 -- | Produce a branching proof tree that performs the first implication and, if
 -- that one fails, falls back on the second
-implCatchM :: ImplM vars s r ps1 ps2 () -> ImplM vars s r ps1 ps2 () ->
-              ImplM vars s r ps1 ps2 ()
+implCatchM :: ImplM vars s r ps1 ps2 a -> ImplM vars s r ps1 ps2 a ->
+              ImplM vars s r ps1 ps2 a
 implCatchM m1 m2 =
   implApplyImpl1 Impl1_Catch
   (MNil :>: Impl1Cont (const m1) :>: Impl1Cont (const m2))
@@ -1360,6 +1373,12 @@ implCatchM m1 m2 =
 implPushM :: ExprVar a -> ValuePerm a -> ImplM vars s r (ps :> a) ps ()
 implPushM x p =
   implApplyImpl1 (Impl1_Push x p) (MNil :>: Impl1Cont (const $ greturn ()))
+
+-- | Call 'implPushM' for multiple @x:p@ permissions
+implPushMultiM :: DistPerms ps -> ImplM vars s r ps RNil ()
+implPushMultiM DistPermsNil = greturn ()
+implPushMultiM (DistPermsCons ps x p) =
+  implPushMultiM ps >>> implPushM x p
 
 -- | Pop a permission from the top of the stack back to the primary permission
 -- for a variable, assuming that the primary permission for that variable is
@@ -1432,6 +1451,11 @@ implTryProveBVProps x (prop:props) =
 implDropM :: ExprVar a -> ValuePerm a -> ImplM vars s r ps (ps :> a) ()
 implDropM x p = implSimplM Proxy (SImpl_Drop x p)
 
+-- | Copy a permission on the top of the stack, assuming it is copyable
+implCopyM :: ExprVar a -> ValuePerm a ->
+             ImplM vars s r (ps :> a :> a) (ps :> a) ()
+implCopyM x p = implSimplM Proxy (SImpl_Copy x p)
+
 -- | Swap the top two permissions on the top of the stack
 implSwapM :: ExprVar a -> ValuePerm a -> ExprVar b -> ValuePerm b ->
              ImplM vars s r (ps :> b :> a) (ps :> a :> b) ()
@@ -1446,6 +1470,19 @@ elimOrsExistsM x =
     ValPerm_Or p1 p2 -> implElimOrM x p1 p2 >>> elimOrsExistsM x
     ValPerm_Exists mb_p ->
       implElimExistsM x mb_p >>> elimOrsExistsM x
+    _ -> greturn p
+
+-- | Eliminate disjunctives, existentials, and recusive permissions on the top
+-- of the stack
+elimOrsExistsRecsM :: ExprVar a ->
+                      ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
+elimOrsExistsRecsM x =
+  getTopDistPerm x >>>= \p ->
+  case p of
+    ValPerm_Or p1 p2 -> implElimOrM x p1 p2 >>> elimOrsExistsM x
+    ValPerm_Exists mb_p ->
+      implElimExistsM x mb_p >>> elimOrsExistsM x
+    ValPerm_Mu mb_p -> implUnfoldMuM x mb_p >>> elimOrsExistsRecsM x
     _ -> greturn p
 
 -- | Introduce a proof of @x:eq(x)@ onto the top of the stack
@@ -1583,12 +1620,32 @@ introLLVMFieldContentsM x y =
                           fp { llvmFieldContents = p })
     _ -> error "introLLVMFieldContentsM: input perms not in expected form"
 
+-- | Borrow a field from an LLVM array permission on the top of the stack, after
+-- proving (with 'implTryProveBVProps') that the index is in the array exclusive
+-- of any outstanding borrows (see 'llvmArrayIndexInArray'). Return the
+-- resulting array permission with the borrow and the borrowed field permission.
+implLLVMArrayIndexBorrow ::
+  (1 <= w, KnownNat w) =>
+  ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> LLVMArrayIndex w ->
+  ImplM vars s r (ps :> LLVMPointerType w :> LLVMPointerType w)
+  (ps :> LLVMPointerType w) (LLVMArrayPerm w, LLVMFieldPerm w)
+implLLVMArrayIndexBorrow x ap ix =
+  implTryProveBVProps x (llvmArrayIndexInArray ap ix) >>>
+  implSimplM Proxy (SImpl_LLVMArrayIndexBorrow x ap ix) >>>
+  greturn (llvmArrayAddBorrow (FieldBorrow ix) ap,
+           llvmArrayFieldWithOffset ap ix)
 
--- | Call 'implPushM' for multiple @x:p@ permissions
-implPushMultiM :: DistPerms ps -> ImplM vars s r ps RNil ()
-implPushMultiM DistPermsNil = greturn ()
-implPushMultiM (DistPermsCons ps x p) =
-  implPushMultiM ps >>> implPushM x p
+-- | Return a field permission that has been borrowed from an array permission,
+-- where the field permission is on the top of the stack and the array
+-- permission is just below it. Return the resulting array permission.
+implLLVMArrayIndexReturn ::
+  (1 <= w, KnownNat w) =>
+  ExprVar (LLVMPointerType w) -> LLVMArrayPerm w -> LLVMArrayIndex w ->
+  ImplM vars s r (ps :> LLVMPointerType w)
+  (ps :> LLVMPointerType w :> LLVMPointerType w) (LLVMArrayPerm w)
+implLLVMArrayIndexReturn x ap ix =
+  implSimplM Proxy (SImpl_LLVMArrayIndexReturn x ap ix) >>>
+  greturn (llvmArrayRemBorrow (FieldBorrow ix) ap)
 
 
 ----------------------------------------------------------------------
@@ -1709,6 +1766,20 @@ recombinePerm' x _ p = implDropM x p
 -- permission conjucts for @x@
 recombinePermConj :: ExprVar a -> [AtomicPerm a] -> AtomicPerm a ->
                      ImplM RNil s r as (as :> a) [AtomicPerm a]
+
+-- If p is a field read permission that is already in x_ps, drop it
+recombinePermConj x x_ps p@(Perm_LLVMField fp)
+  | Just (Perm_LLVMField fp') <-
+      find (\case Perm_LLVMField fp' ->
+                    bvEq (llvmFieldOffset fp') (llvmFieldOffset fp)
+                  _ -> False) x_ps
+  , Read <- llvmFieldRW fp
+  , Read <- llvmFieldRW fp' =
+    implDropM x (ValPerm_Conj1 p) >>>
+    greturn x_ps
+
+-- FIXME HERE: return borrowed sub-arrays because there is never a reason to
+-- keep part of an array separate from the rest (except funcalls)
 
 {-
 -- If the permission being recombined is an LLVM field permission that has been
@@ -2029,17 +2100,17 @@ proveVarAtomicImpl :: ExprVar a -> [AtomicPerm a] ->
 proveVarAtomicImpl x ps [nuP| Perm_LLVMField mb_fp |] =
   partialSubstForceM (fmap llvmFieldOffset mb_fp)
   "proveVarPtrPerms: incomplete psubst: LLVM field offset" >>>= \off ->
-  foldr
-  (\(i,_) rest -> implCatchM (proveVarLLVMField x ps i off mb_fp) rest)
-  (implFailMsgM "proveVarAtomicImpl: ran out of cases")
+  foldMapWithDefault implCatchM
+  (implFailMsgM "proveVarAtomicImpl: no cases to prove field")
+  (\(i,_) -> proveVarLLVMField x ps i off mb_fp)
   (findMaybeIndices (llvmPermContainsOffset off) ps)
 
 proveVarAtomicImpl x ps [nuP| Perm_LLVMArray mb_ap |] =
   partialSubstForceM (fmap llvmArrayOffset mb_ap)
   "proveVarPtrPerms: incomplete psubst: LLVM array offset" >>>= \off ->
-  foldr
-  (\(i,_) rest -> implCatchM (proveVarLLVMArray x ps i off mb_ap) rest)
-  (implFailMsgM "proveVarAtomicImpl: ran out of cases")
+  foldMapWithDefault implCatchM
+  (implFailMsgM "proveVarAtomicImpl: no cases to prove array")
+  (\(i,_) -> proveVarLLVMArray x ps i off mb_ap)
   (findMaybeIndices (llvmPermContainsOffset off) ps)
 
 proveVarAtomicImpl x ps ap@[nuP| Perm_LLVMFree mb_e |] =

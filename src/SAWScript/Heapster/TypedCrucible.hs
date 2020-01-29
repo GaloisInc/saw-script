@@ -320,20 +320,28 @@ data TypedLLVMStmt w ret ps_in ps_out where
                       (RNil :> LLVMPointerType w2)
                       (RNil :> BVType w2)
 
-  -- | Load a machine value from the address pointed to by the given pointer
+  -- | Load a machine value from the address pointed to by the given pointer,
+  -- using the supplied field permission along with permissions stating the the
+  -- lifetime of the field permission is current:
   --
-  -- Type: @x:[l]ptr((r,0) |-> eq(y)), l:lowned(ps) -o l:lowned(ps), ret:eq(y)@
+  -- Type:
+  -- > x:[lx]ptr((rw,0) |-> p), l:lowned(ps), lx:lcurrent(l)
+  -- > -o x:[lx]ptr((rw,0) |-> eq(ret)), ret:p, l:lowned(ps)
   --
-  -- NOTE: the input lifetime permission on @l@ is second, after the permission
-  -- for @x@, so that we prove the @x@ permission first. This ensures that the
-  -- @lowned@ permission is still a distinguished permission for @l@, allowing
-  -- us to split the lifetime of @x@ wrt @l@ if needed.
-  TypedLLVMLoad :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
+  -- NOTE: we also allow other permissions on the stack below that for x
+  TypedLLVMLoad :: (1 <= w, KnownNat w) =>
+                   TypedReg (LLVMPointerType w) -> LLVMFieldPerm w ->
                    ExprVar LifetimeType -> PermExpr PermListType ->
-                   PermExpr (LLVMPointerType w) ->
+                   DistPerms ps ->
                    TypedLLVMStmt w (LLVMPointerType w)
-                   (RNil :> LLVMPointerType w :> LifetimeType)
-                   (RNil :> LifetimeType :> LLVMPointerType w)
+                   (ps :> LLVMPointerType w :> LifetimeType :> LifetimeType)
+                   (ps :> LLVMPointerType w :> LLVMPointerType w :> LifetimeType)
+
+{-
+FIXME HERE NOWNOW: figure out if we need to change the way stores work...
+- NOTE: if we have a write with a lifetime, store requires the perm to be
+  given to the field... maybe should ignore for now?
+-}
 
   -- | Store a machine value to the address pointed to by the given pointer
   --
@@ -404,9 +412,22 @@ typedLLVMStmtIn (AssertLLVMWord (TypedReg x) e) =
   distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e)
 typedLLVMStmtIn (DestructLLVMWord (TypedReg x) e) =
   distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e)
-typedLLVMStmtIn (TypedLLVMLoad (TypedReg x) l ps e) =
-  distPerms2 x (llvmRead0EqPerm (PExpr_Var l) e)
-  l (ValPerm_Conj [Perm_LOwned ps])
+typedLLVMStmtIn (TypedLLVMLoad (TypedReg x) fp l ps ps') =
+  case llvmFieldLifetime fp of
+    PExpr_Var l_x ->
+      DistPermsCons
+      (DistPermsCons
+       (DistPermsCons ps'
+        x (ValPerm_Conj1 $ Perm_LLVMField fp))
+       l (ValPerm_Conj1 $ Perm_LOwned ps))
+      l_x (ValPerm_Conj1 $ Perm_LCurrent $ PExpr_Var l)
+    PExpr_Always ->
+      DistPermsCons
+      (DistPermsCons
+       (DistPermsCons ps'
+        x (ValPerm_Conj1 $ Perm_LLVMField fp))
+       l (ValPerm_Conj1 $ Perm_LOwned ps))
+      l ValPerm_True
 typedLLVMStmtIn (TypedLLVMStore (TypedReg x) _) =
   distPerms1 x llvmWrite0TruePerm
 typedLLVMStmtIn (TypedLLVMAlloca (TypedReg f) fperms _) =
@@ -446,8 +467,14 @@ typedLLVMStmtOut (AssertLLVMWord (TypedReg x) _) ret =
   distPerms1 ret (ValPerm_Eq $ PExpr_Nat 0)
 typedLLVMStmtOut (DestructLLVMWord (TypedReg x) e) ret =
   distPerms1 ret (ValPerm_Eq e)
-typedLLVMStmtOut (TypedLLVMLoad _ l ps e) ret =
-  distPerms2 l (ValPerm_Conj [Perm_LOwned ps]) ret (ValPerm_Eq e)
+typedLLVMStmtOut (TypedLLVMLoad (TypedReg x) fp l ps ps') ret =
+  DistPermsCons
+  (DistPermsCons
+   (DistPermsCons ps'
+    x (ValPerm_Conj1 $ Perm_LLVMField $ fp { llvmFieldContents =
+                                               ValPerm_Eq (PExpr_Var ret) }))
+   ret (llvmFieldContents fp))
+  l (ValPerm_Conj1 $ Perm_LOwned ps)
 typedLLVMStmtOut (TypedLLVMStore (TypedReg x) (TypedReg y)) _ =
   distPerms1 x $ llvmWrite0EqPerm (PExpr_Var y)
 typedLLVMStmtOut (TypedLLVMAlloca
@@ -952,17 +979,55 @@ getRegPerm :: TypedReg a ->
               PermCheckM ext cblocks blocks ret args r ps r ps (ValuePerm a)
 getRegPerm (TypedReg x) = getVarPerm x
 
--- | Eliminate any disjunctions or existentials on the permission associated
--- with a register and then return the resulting "atomic" permission
-getAtomicRegPerm :: TypedReg a ->
+-- | Eliminate any disjunctions, existentials, or recursive permissions for a
+-- register and then return the resulting "simple" permission
+getSimpleRegPerm :: TypedReg a ->
                     StmtPermCheckM ext cblocks blocks ret args ps ps (ValuePerm a)
-getAtomicRegPerm r =
+getSimpleRegPerm r =
   getRegPerm r >>>= \p_init ->
   embedImplM TypedImplStmt emptyCruCtx
   (implPushM (typedRegVar r) p_init >>>
-   elimOrsExistsM (typedRegVar r) >>>= \p ->
+   elimOrsExistsRecsM (typedRegVar r) >>>= \p ->
     implPopM (typedRegVar r) p >>> greturn p) >>>= \(_, p_ret) ->
   greturn p_ret
+
+-- | Eliminate any disjunctions, existentials, recursive permissions, or
+-- equality permissions for an LLVM register until we either get a conjunctive
+-- permission for it or we are stuck with it being equal to a bitvector word. In
+-- the former case, leave the conjunctive permission on top of the stack and
+-- return the atomic permissions in the conjunction. In the latter case, fail.
+getAtomicLLVMPerms :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
+                      StmtPermCheckM ext cblocks blocks ret args
+                      (ps :> LLVMPointerType w)
+                      ps
+                      [AtomicPerm (LLVMPointerType w)]
+getAtomicLLVMPerms r =
+  let x = typedRegVar r in
+  getSimpleRegPerm r >>>= \p ->
+  case p of
+    ValPerm_Conj ps ->
+      embedImplM TypedImplStmt emptyCruCtx (implPushM x p) >>>
+      greturn ps
+    ValPerm_Eq (PExpr_Var y) ->
+      embedImplM TypedImplStmt emptyCruCtx
+      (implPushM x p >>>
+       introEqCopyM x (PExpr_Var y) >>> implPopM x p) >>>
+      getAtomicLLVMPerms (TypedReg y) >>>= \ps ->
+      embedImplM TypedImplStmt emptyCruCtx (introCastM x y $
+                                            ValPerm_Conj ps) >>>
+      greturn ps
+    ValPerm_Eq e@(PExpr_LLVMOffset y off) ->
+      embedImplM TypedImplStmt emptyCruCtx
+      (implPushM x p >>> introEqCopyM x e >>> implPopM x p) >>>
+      getAtomicLLVMPerms (TypedReg y) >>>= \ps ->
+      embedImplM TypedImplStmt emptyCruCtx (castLLVMPtrM y ps off x) >>>
+      greturn (map (offsetLLVMAtomicPerm $ bvNegate off) ps)
+    ValPerm_Eq (PExpr_LLVMWord e) ->
+      stmtFailM (\i ->
+                  sep [string "getAtomicLLVMPerms:",
+                       string "Needed atomic permissions for" <+> permPretty i x,
+                       string "but found" <+> permPretty i p])
+
 
 -- | Look up the function permission associated with a typed register
 getRegFunPerm :: TypedReg (FunctionHandleType cargs fret) ->
@@ -970,7 +1035,7 @@ getRegFunPerm :: TypedReg (FunctionHandleType cargs fret) ->
                  (SomeFunPerm (CtxToRList cargs) fret)
 getRegFunPerm freg =
   (stFunTypeEnv <$> unClosed <$> top_get) >>>= \env ->
-  getAtomicRegPerm freg >>>= \p_freg ->
+  getSimpleRegPerm freg >>>= \p_freg ->
   case p_freg of
     ValPerm_Eq (PExpr_Fun f)
       | Just some_fun_perm <- lookupFunPerm env f ->
@@ -1071,41 +1136,15 @@ embedImplM f_impl vars m =
            . setSTCurPerms (implSt ^. implStatePerms)) >>>
   greturn (completePSubst vars (implSt ^. implStatePSubst), a)
 
-{-
-embedImplM :: (forall ps. PermImpl r ps -> r ps) -> CruCtx vars ->
-              ImplM vars (WithImplState vars a ps_out) ps_out ps_in a ->
-              PermCheckM ext cblocks blocks ret args
-              (r ps_out) ps_out (r ps_in) ps_in (PermSubst vars, a)
-embedImplM f_impl vars m =
-  gmapRet (f_impl <$>) >>>
-  (stCurPerms <$> gget) >>>= \perms_in ->
-  (unClosed <$> stFunTypeEnv <$> top_get) >>>= \env ->
-  let perm_impl_with_st =
-        runGenContM
-        (runGenStateT m
-         (mkImplState vars perms_in env))
-        (\(a,st) -> PermImpl_Done (WithImplState a st Refl)) in
-  (gcaptureCC $ \k ->
-    traversePermImpl (\(wis :: WithImplState vars a ps ps') -> case wis of
-                         WithImplState a implState Refl ->
-                           k (a, implState) :: TopPermCheckM _ _ _ _ (r ps_in))
-    perm_impl_with_st)
-  >>>= \(a, implSt) ->
-  gmodify (setSTCurPerms (implSt ^. implStatePerms)) >>>
-  greturn (completePSubst vars (implSt ^. implStatePSubst), a)
--}
-
-{-
-  top_get >>>= \top_st ->
-  gget >>>= \st ->
-  gmapRet (return . applyImplFun f_impl) >>>
-  gput (mkImplState vars (stCurPerms st) (unClosed $ stFunTypeEnv top_st)) >>>
-  m >>>= \a ->
-  gget >>>= \implSt ->
-  gput (setSTCurPerms (implSt ^. implStatePerms) st) >>>
-  gmapRet (PermImpl_Done . flip evalState top_st) >>>
-  greturn (completePSubst vars (implSt ^. implStatePSubst), a)
--}
+-- | Special case of 'embedImplM' for a statement type-checking context where
+-- @vars@ is empty
+stmtEmbedImplM ::
+  ImplM RNil (TopPermCheckState ext cblocks blocks ret)
+  (TypedStmtSeq ext blocks ret) ps_out ps_in a
+  ->
+  StmtPermCheckM ext cblocks blocks ret args ps_out ps_in a
+stmtEmbedImplM m =
+  embedImplM TypedImplStmt emptyCruCtx m >>>= \(_,a) -> greturn a
 
 
 -- | Recombine any outstanding distinguished permissions back into the main
@@ -1258,6 +1297,12 @@ checkerProgramLoc =
   mkProgramLoc (functionNameFromText "None")
   (OtherPos "(Generated by permission type-checker)")
 
+-- | Find a lifetime that we own and push its @lowned@ permission
+findOwnedLifetime :: StmtPermCheckM ext cblocks blocks ret args
+                     (ps :> LifetimeType) ps
+                     (ExprVar LifetimeType, PermExpr PermListType)
+findOwnedLifetime = error "FIXME HERE NOWNOW: write findOwnedLifetime"
+
 -- | Create a new lifetime @l@
 beginLifetime :: StmtPermCheckM ext cblocks blocks ret args
                  RNil RNil (ExprVar LifetimeType)
@@ -1314,7 +1359,7 @@ tcRegWithVal :: CtxTrans ctx -> Reg ctx tp ->
                 (RegWithVal tp)
 tcRegWithVal ctx r_untyped =
   let r = tcReg ctx r_untyped in
-  getAtomicRegPerm r >>>= \p ->
+  getSimpleRegPerm r >>>= \p ->
   case p of
     ValPerm_Eq e -> greturn (RegWithVal r e)
     _ -> greturn (RegNoVal r)
@@ -1459,6 +1504,40 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerOffset w ptr_reg) =
   greturn (addCtxName ctx x)
 
 
+-- | Emit a 'TypedLLVMLoad' instruction, assuming the given LLVM field
+-- permission is on the top of the stack. Prove the required lifetime
+-- permissions as part of this process, and pop the resulting lifetime
+-- permission off the stack before returning. Return the resulting return
+-- register.
+tcEmitLLVMLoad ::
+  (1 <= w, KnownNat w, w ~ ArchWidth arch) =>
+  Proxy arch -> ProgramLoc -> DistPerms ps ->
+  TypedReg (LLVMPointerType (ArchWidth arch)) ->
+  LLVMFieldPerm (ArchWidth arch) ->
+  StmtPermCheckM (LLVM arch) cblocks blocks ret args
+  (ps :> LLVMPointerType w :> LLVMPointerType w)
+  (ps :> LLVMPointerType w)
+  (TypedReg (LLVMPointerType (ArchWidth arch)))
+tcEmitLLVMLoad arch loc ps treg fp =
+  -- Determine the current lifetime and the lifetime of the field perm, and
+  -- prove any necessary lifetime perms
+  findOwnedLifetime >>>= \(l, l_ps) ->
+  (case llvmFieldLifetime fp of
+      PExpr_Always ->
+        stmtEmbedImplM (introConjM l) >>> greturn ()
+      PExpr_Var lx ->
+        stmtProvePerm (TypedReg lx) (emptyMb $ ValPerm_Conj1 $
+                                     Perm_LCurrent $ PExpr_Var l) >>>
+        greturn ()) >>>
+  -- Emit the typed load instruction
+  emitLLVMStmt knownRepr loc (TypedLLVMLoad treg fp l l_ps ps) >>>= \z_ptr ->
+  -- Recombine the resulting lowned permission on the top of the stack
+  stmtEmbedImplM (getPerm l >>>= \l_p ->
+                   recombinePerm l l_p (ValPerm_Conj1 $ Perm_LOwned l_ps)) >>>
+  -- Return the loaded LLVMPointerType register
+  greturn (TypedReg z_ptr)
+
+
 -- | Typecheck a statement and emit it in the current statement sequence,
 -- starting and ending with an empty stack of distinguished permissions
 tcEmitLLVMStmt ::
@@ -1471,37 +1550,59 @@ tcEmitLLVMStmt ::
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp _ _) =
   let treg = tcReg ctx reg
       x = typedRegVar treg in
-  beginLifetime >>>= \l ->
-  let prxs :: MapRList Proxy (RNil :> PermListType :> LLVMPointerType _)
-        = typeCtxProxies
-      needed_perms =
-        -- NOTE: need to prove x:LLVMptr(...) first, before proving l:lowned, so
-        -- that the former proof can split the lifetime of x wrt l before we
-        -- push the l:lowned perm onto the stack
-        ExDistPermsCons
-        (ExDistPermsCons ExDistPermsNil
-         x (nuMulti prxs $ \(_ :>: _ :>: y) ->
-             llvmRead0EqPerm (PExpr_Var l) (PExpr_Var y)))
-        l (nuMulti prxs $ \(_ :>: ps :>: _) ->
-            ValPerm_Conj [Perm_LOwned (PExpr_Var ps)]) in
-  stmtProvePerms needed_perms >>>= \(PermSubst (_ :>: ps :>: y)) ->
-  emitLLVMStmt knownRepr loc (TypedLLVMLoad treg l ps y) >>>= \z_ptr ->
-  stmtRecombinePerms >>>
-  endLifetime l >>>
-  convertRegType knownRepr loc (TypedReg z_ptr) knownRepr tp >>>= \(TypedReg z) ->
-  greturn (addCtxName ctx z)
+  -- First, look for an LLVM array or field permission for offset 0
+  getAtomicLLVMPerms treg >>>= \ps ->
+  stmtEmbedImplM
+  (foldMapWithDefault implCatchM
+   (implFailMsgM "LLVM_Load: could not find permission for offset 0")
+   greturn
+   (findMaybeIndices (llvmPermContainsOffset $ bvInt 0) ps)) >>>= \(i,props) ->
+  case ps !! i of
+    Perm_LLVMField fp ->
+      -- If we found a field perm for offset 0, first extract it out of all the
+      -- other perms for x and pop all the other perms off of the stack
+      stmtEmbedImplM (implExtractConjM x ps i >>>
+                      implPopM x (ValPerm_Conj (deleteNth i ps))) >>>
+      -- Next, emit the typed LLVM load instruction
+      tcEmitLLVMLoad arch loc DistPermsNil treg fp >>>= \ret_ptr ->
+      -- Recombine the resulting permissions and return the new ctx
+      stmtRecombinePerms >>>
+      -- Finally, convert the return value to the requested type and return the
+      -- result
+      convertRegType knownRepr loc ret_ptr knownRepr tp >>>= \ret ->
+      greturn (addCtxName ctx $ typedRegVar ret)
 
-{-
--- Type-check a load of a value that can be cast from an LLVM pointer, by
--- loading an LLVM pointer and then performing the cast
-tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp storage _)
-  | bytesToBits (storageTypeSize storage) <= natValue (archWidth arch)
-  = error "FIXME HERE: call tcEmitLLVMStmt with LLVMPointerRepr (ArchWidth arch) and then coerce to tp!"
+    Perm_LLVMArray ap
+      | Just ix <- matchLLVMArrayField ap (bvInt 0) ->
+        -- Extract the array perm we want out of the other perms on the stack
+        -- and pop all the other perms off of the stack, then borrow the field
+        -- corresopnding to offset 0
+        stmtEmbedImplM (implExtractConjM x ps i >>>
+                        implPopM x (ValPerm_Conj (deleteNth i ps)) >>>
+                        implLLVMArrayIndexBorrow x ap ix) >>>= \(ap',fp) ->
+        -- Emit the typed LLVM load instruction, noting that the array
+        -- permission is on the stack above the borrowed field permission
+        tcEmitLLVMLoad arch loc (distPerms1 x $ ValPerm_Conj1 $
+                                 Perm_LLVMArray ap') treg fp >>>= \(TypedReg z) ->
+        -- If the resulting perms on z are copyable, copy them and return the
+        -- borrow back to the array, otherwise leave things like they are
+        let z_p = llvmFieldContents fp in
+        (if permIsCopyable z_p then
+           stmtEmbedImplM (implCopyM z z_p >>>
+                           recombinePerm z ValPerm_True z_p >>>
+                           introLLVMFieldContentsM x z >>>
+                           implLLVMArrayIndexReturn x ap' ix) >>>
+           stmtRecombinePerms
+         else
+           stmtRecombinePerms) >>>
+        -- Finally, convert the return value to the requested type and return
+        -- the result
+        convertRegType knownRepr loc (TypedReg z) knownRepr tp >>>= \ret ->
+        greturn (addCtxName ctx $ typedRegVar ret)
 
--- We canot yet handle other loads
-tcEmitLLVMStmt _ _ _ (LLVM_Load _ _ _ _ _) =
-  error "FIXME: tcEmitLLVMStmt cannot yet handle loads larger than the size of LLVM pointers"
--}
+    _ ->
+      error "tcEmitLLVMStmt: unexpected permission matched by llvmPermContainsOffset"
+
 
 -- Type-check a store of an LLVM pointer
 tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr tp _ _ val) =
@@ -1512,11 +1613,6 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Store _ ptr tp _ _ val) =
   emitLLVMStmt knownRepr loc (TypedLLVMStore tptr tval_ptr) >>>= \y ->
   stmtRecombinePerms >>>
   greturn (addCtxName ctx y)
-
-tcEmitLLVMStmt _ _ _ (LLVM_Store _ _ _ _ _ _) =
-  error "FIXME: tcEmitLLVMStmt cannot yet handle stores of size other than that of LLVM pointers"
-
--- FIXME HERE: handle stores of values that can be converted to/from pointers
 
 -- Type-check an alloca instruction
 tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =

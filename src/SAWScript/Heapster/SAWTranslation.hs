@@ -1174,6 +1174,9 @@ itranslateSimplImpl :: Proxy ps -> Mb ctx (SimplImpl ps_in ps_out) ->
 itranslateSimplImpl _ [nuP| SImpl_Drop _ _ |] m =
   withPermStackM (\(xs :>: _) -> xs) (\(ps :>: _) -> ps) m
 
+itranslateSimplImpl _ [nuP| SImpl_Copy x _ |] m =
+  withPermStackM (:>: translateVar x) (\(ps :>: p) -> ps :>: p :>: p) m
+
 itranslateSimplImpl _ [nuP| SImpl_Swap _ _ _ _ |] m =
   withPermStackM (\(xs :>: x :>: y) -> xs :>: y :>: x)
   (\(pctx :>: px :>: py) -> pctx :>: py :>: px)
@@ -2011,10 +2014,21 @@ itranslateLLVMStmt [nuP| DestructLLVMWord _ e |] m =
   ((:>: (PTrans_Eq $ extMb e)) . mapRListTail)
   m
 
-itranslateLLVMStmt [nuP| TypedLLVMLoad _ _ _ e |] m =
+itranslateLLVMStmt [nuP| TypedLLVMLoad _ mb_fp _ _ _ |] m =
   inExtImpTransM ETrans_LLVM PTrans_True $
-  withPermStackM (\(vars :>: _ :>: l) -> vars :>: l :>: Member_Base)
-  (\(pctx :>: _ :>: ltrans) -> pctx :>: ltrans :>: PTrans_Eq (extMb e))
+  withPermStackM (\(vars :>: l :>: _) -> vars :>: Member_Base :>: l)
+  (\(pctx :>: p_ptr :>: l_p :>: _) ->
+    let (_, p_ret) =
+          unPTransLLVMField
+          "itranslateLLVMStmt: TypedLLVMLoad: expected field perm" p_ptr in
+    pctx :>: PTrans_Conj [APTrans_LLVMField
+                          (mbCombine $
+                           fmap (\fp -> nu $ \ret ->
+                                  fp { llvmFieldContents =
+                                         ValPerm_Eq (PExpr_Var ret)}) mb_fp)
+                          (PTrans_Eq $ mbCombine $
+                           fmap (const $ nu $ \ret -> PExpr_Var ret) mb_fp)]
+    :>: p_ret :>: l_p)
   m
 
 itranslateLLVMStmt [nuP| TypedLLVMStore _ (TypedReg y) |] m =

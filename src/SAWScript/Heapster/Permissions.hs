@@ -1183,13 +1183,6 @@ llvmWrite0EqPerm :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
                     ValuePerm (LLVMPointerType w)
 llvmWrite0EqPerm e = ValPerm_Conj [Perm_LLVMField $ llvmFieldWrite0Eq e]
 
--- | Find all elements of list @l@ where @f@ returns a value and return that
--- value plus its index into @l@
---
--- FIXME: figure out a better place to put this function
-findMaybeIndices :: (a -> Maybe b) -> [a] -> [(Int, b)]
-findMaybeIndices f l = catMaybes $ zipWith (\i a -> (i,) <$> f a) [0 ..] l
-
 -- | Return the clopen range @[0,len)@ of the indices of an array permission
 llvmArrayIndexRange :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
 llvmArrayIndexRange ap = BVRange (bvInt 0) (llvmArrayLen ap)
@@ -1833,6 +1826,29 @@ instance MinLtEndPerms (LLVMArrayPerm w) where
 ----------------------------------------------------------------------
 -- * Matching Functions for Inspecting Permissions
 ----------------------------------------------------------------------
+
+-- FIXME: figure out a better place to put these functions
+
+-- | Find all elements of list @l@ where @f@ returns a value and return that
+-- value plus its index into @l@
+findMaybeIndices :: (a -> Maybe b) -> [a] -> [(Int, b)]
+findMaybeIndices f l = catMaybes $ zipWith (\i a -> (i,) <$> f a) [0 ..] l
+
+-- | Combine all elements of a list like 'foldr1' unless the list is empty, in
+-- which case return the default case
+foldr1WithDefault :: (a -> a -> a) -> a -> [a] -> a
+foldr1WithDefault _ def [] = def
+foldr1WithDefault _ _ [a] = a
+foldr1WithDefault f def (a:as) = f a $ foldr1WithDefault f def as
+
+-- | Map a function across a list and then call 'foldr1WithDefault'. This is a
+-- form of map-reduce where the default is returned as a special case for the
+-- empty list.
+foldMapWithDefault :: (b -> b -> b) -> b -> (a -> b) -> [a] -> b
+foldMapWithDefault comb def f l = foldr1WithDefault comb def $ map f l
+
+
+-- FIXME HERE: I think these are no longer used...
 
 -- | The type of a matcher, that matches on an object of type @a@ and maybe
 -- produces a @b@
