@@ -545,12 +545,20 @@ traversePermImpl f (PermImpl_Step impl1 mb_impls) =
          mb_impl' <- strongMbM (fmap (traversePermImpl f) mb_impl)
          return (MbPermImpls_Cons mb_impls' mb_impl')
 
+-- | Assert a condition and print an error message if it fails
+--
+-- FIXME: put this somewhere more meaningful...
+permAssert :: Bool -> String -> a -> a
+permAssert True _ a = a
+permAssert False str _ = error str
+
 -- | Compute the input permissions of a 'SimplImpl' implication
 simplImplIn :: SimplImpl ps_in ps_out -> DistPerms ps_in
 simplImplIn (SImpl_Drop x p) = distPerms1 x p
 simplImplIn (SImpl_Copy x p) =
-  if permIsCopyable p then distPerms1 x p else
-    error "simplImplIn: SImpl_Copy: permission is not copyable!"
+  permAssert (permIsCopyable p)
+  "simplImplIn: SImpl_Copy: permission is not copyable!" $
+  distPerms1 x p
 simplImplIn (SImpl_Swap x p1 y p2) = distPerms2 x p1 y p2
 simplImplIn (SImpl_IntroOrL x p1 p2) = distPerms1 x p1
 simplImplIn (SImpl_IntroOrR x p1 p2) = distPerms1 x p2
@@ -588,10 +596,9 @@ simplImplIn (SImpl_LLVMFieldLifetimeCurrent x fld l1 l2) =
   distPerms2 x (ValPerm_Conj [Perm_LLVMField fld])
   l1 (ValPerm_Conj [Perm_LCurrent l2])
 simplImplIn (SImpl_LLVMFieldLifetimeAlways x fld l) =
-  if llvmFieldLifetime fld == PExpr_Always then
-    distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
-  else
-    error "simplImplIn: SImpl_LLVMFieldLifetimeAlways: input lifetime is not always"
+  permAssert (llvmFieldLifetime fld == PExpr_Always)
+  "simplImplIn: SImpl_LLVMFieldLifetimeAlways: input lifetime is not always" $
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
 simplImplIn (SImpl_DemoteLLVMFieldWrite x fld) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField $
                               fld { llvmFieldRW = Write }])
