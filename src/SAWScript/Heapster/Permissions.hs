@@ -944,6 +944,48 @@ data DistPerms ps where
 
 type MbDistPerms ps = Mb ps (DistPerms ps)
 
+-- | A special-purpose 'DistPerms' that specifies a list of permissions needed
+-- to prove that a lifetime is current
+data LifetimeCurrentPerms ps_l where
+  -- | The @always@ lifetime needs no proof that it is current
+  AlwaysCurrentPerms :: LifetimeCurrentPerms RNil
+  -- | A variable @l@ that is @lowned@ is current, requiring perms
+  --
+  -- > l:lowned(ps)
+  LOwnedCurrentPerms :: ExprVar LifetimeType -> PermExpr PermListType ->
+                        LifetimeCurrentPerms (RNil :> LifetimeType)
+
+  -- | A variable @l@ that is @lcurrent@ during another lifetime @l'@ is
+  -- current, i.e., if @ps@ ensure @l'@ is current then we need perms
+  --
+  -- > ps, l:lcurrent(l')
+  CurrentTransPerms :: LifetimeCurrentPerms ps_l -> ExprVar LifetimeType ->
+                       LifetimeCurrentPerms (ps_l :> LifetimeType)
+
+-- | Get the lifetime that a 'LifetimeCurrentPerms' is about
+lifetimeCurrentPermsLifetime :: LifetimeCurrentPerms ps_l ->
+                                PermExpr LifetimeType
+lifetimeCurrentPermsLifetime AlwaysCurrentPerms = PExpr_Always
+lifetimeCurrentPermsLifetime (LOwnedCurrentPerms l _) = PExpr_Var l
+lifetimeCurrentPermsLifetime (CurrentTransPerms _ l) = PExpr_Var l
+
+-- | Convert a 'LifetimeCurrentPerms' to the 'DistPerms' it represent
+lifetimeCurrentPermsPerms :: LifetimeCurrentPerms ps_l -> DistPerms ps_l
+lifetimeCurrentPermsPerms AlwaysCurrentPerms = DistPermsNil
+lifetimeCurrentPermsPerms (LOwnedCurrentPerms l ps) =
+  DistPermsCons DistPermsNil l $ ValPerm_Conj1 $ Perm_LOwned ps
+lifetimeCurrentPermsPerms (CurrentTransPerms cur_ps l) =
+  DistPermsCons (lifetimeCurrentPermsPerms cur_ps) l $
+  ValPerm_Conj1 $ Perm_LCurrent $ lifetimeCurrentPermsLifetime cur_ps
+
+-- | Build a lift of proxies for a 'LifetimeCurrentPerms'
+mbLifetimeCurrentPermsProxies :: Mb ctx (LifetimeCurrentPerms ps_l) ->
+                                 MapRList Proxy ps_l
+mbLifetimeCurrentPermsProxies [nuP| AlwaysCurrentPerms |] = MNil
+mbLifetimeCurrentPermsProxies [nuP| LOwnedCurrentPerms _ _ |] = MNil :>: Proxy
+mbLifetimeCurrentPermsProxies [nuP| CurrentTransPerms cur_ps _ |] =
+  mbLifetimeCurrentPermsProxies cur_ps :>: Proxy
+
 instance TestEquality DistPerms where
   testEquality DistPermsNil DistPermsNil = Just Refl
   testEquality (DistPermsCons ps1 x1 p1) (DistPermsCons ps2 x2 p2)
@@ -1107,6 +1149,7 @@ $(mkNuMatching [t| forall w . LLVMArrayIndex w |])
 $(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
 $(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
 $(mkNuMatching [t| forall ps. DistPerms ps |])
+$(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
 
 instance Liftable RWModality where
   mbLift [nuP| Write |] = Write

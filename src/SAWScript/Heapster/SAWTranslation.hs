@@ -2014,21 +2014,27 @@ itranslateLLVMStmt [nuP| DestructLLVMWord _ e |] m =
   ((:>: (PTrans_Eq $ extMb e)) . mapRListTail)
   m
 
-itranslateLLVMStmt [nuP| TypedLLVMLoad _ mb_fp _ _ _ |] m =
+itranslateLLVMStmt [nuP| TypedLLVMLoad _ (mb_fp :: LLVMFieldPerm w)
+                       (_ :: DistPerms ps) cur_perms |] m =
+  let prx_l = mbLifetimeCurrentPermsProxies cur_perms
+      prx_ps :: Proxy (ps :> LLVMPointerType w) = Proxy in
   inExtImpTransM ETrans_LLVM PTrans_True $
-  withPermStackM (\(vars :>: l :>: _) -> vars :>: Member_Base :>: l)
-  (\(pctx :>: p_ptr :>: l_p :>: _) ->
+  withPermStackM
+  (\(splitMapRList prx_ps prx_l -> (vars, vars_l)) ->
+    appendMapRList (vars :>: Member_Base) vars_l)
+  (\(splitMapRList prx_ps prx_l -> (pctx :>: p_ptr, pctx_l)) ->
     let (_, p_ret) =
           unPTransLLVMField
           "itranslateLLVMStmt: TypedLLVMLoad: expected field perm" p_ptr in
-    pctx :>: PTrans_Conj [APTrans_LLVMField
-                          (mbCombine $
-                           fmap (\fp -> nu $ \ret ->
-                                  fp { llvmFieldContents =
-                                         ValPerm_Eq (PExpr_Var ret)}) mb_fp)
-                          (PTrans_Eq $ mbCombine $
-                           fmap (const $ nu $ \ret -> PExpr_Var ret) mb_fp)]
-    :>: p_ret :>: l_p)
+    appendMapRList
+    (pctx :>: PTrans_Conj [APTrans_LLVMField
+                           (mbCombine $
+                            fmap (\fp -> nu $ \ret ->
+                                   fp { llvmFieldContents =
+                                          ValPerm_Eq (PExpr_Var ret)}) mb_fp)
+                           (PTrans_Eq $ mbCombine $
+                            fmap (const $ nu $ \ret -> PExpr_Var ret) mb_fp)]
+     :>: p_ret) pctx_l)
   m
 
 itranslateLLVMStmt [nuP| TypedLLVMStore _ (TypedReg y) |] m =

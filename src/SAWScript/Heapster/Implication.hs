@@ -1649,6 +1649,43 @@ implLLVMArrayIndexReturn x ap ix =
 
 
 ----------------------------------------------------------------------
+-- * Support for Proving Lifetimes Are Current
+----------------------------------------------------------------------
+
+-- | Build a 'LifetimeCurrentPerms' to prove that a lifetime @l@ is current in
+-- the current permission set, failing if this is not possible
+getLifetimeCurrentPerms :: PermExpr LifetimeType ->
+                           ImplM vars s r ps ps (Some LifetimeCurrentPerms)
+getLifetimeCurrentPerms PExpr_Always = greturn $ Some AlwaysCurrentPerms
+getLifetimeCurrentPerms (PExpr_Var l) =
+  getPerm l >>>= \p ->
+  case p of
+    ValPerm_Conj [Perm_LOwned ps] -> greturn $ Some $ LOwnedCurrentPerms l ps
+    ValPerm_Conj [Perm_LCurrent l'] ->
+      getLifetimeCurrentPerms l' >>>= \some_cur_perms ->
+      case some_cur_perms of
+        Some cur_perms -> greturn $ Some $ CurrentTransPerms cur_perms l
+    _ ->
+      implTraceM (\i -> string "Could not prove lifetime is current:" <+>
+                        permPretty i l) >>>
+      implFailM
+
+-- | Prove the permissions represented by a 'LifetimeCurrentPerms'
+proveLifetimeCurrent :: LifetimeCurrentPerms ps_l ->
+                        ImplM vars s r (ps :++: ps_l) ps ()
+proveLifetimeCurrent AlwaysCurrentPerms = greturn ()
+proveLifetimeCurrent (LOwnedCurrentPerms l ps) =
+  implPushM l (ValPerm_Conj1 $ Perm_LOwned ps)
+proveLifetimeCurrent (CurrentTransPerms cur_perms l) =
+  proveLifetimeCurrent cur_perms >>>
+  let l' = lifetimeCurrentPermsLifetime cur_perms
+      p_l_cur = ValPerm_Conj1 $ Perm_LCurrent l' in
+  implPushM l p_l_cur >>>
+  implCopyM l p_l_cur >>>
+  implPopM l p_l_cur
+
+
+----------------------------------------------------------------------
 -- * Support for Ending Lifetimes
 ----------------------------------------------------------------------
 
@@ -1818,6 +1855,17 @@ recombinePerms :: DistPerms ps -> ImplM RNil s r RNil ps ()
 recombinePerms DistPermsNil = greturn ()
 recombinePerms (DistPermsCons ps' x p) =
   getPerm x >>>= \x_p -> recombinePerm x x_p p >>> recombinePerms ps'
+
+-- | Recombine the permissions for a 'LifetimeCurrentPerms' list
+recombineLifetimeCurrentPerms :: LifetimeCurrentPerms ps_l ->
+                                 ImplM RNil s r ps (ps :++: ps_l) ()
+recombineLifetimeCurrentPerms AlwaysCurrentPerms = greturn ()
+recombineLifetimeCurrentPerms (LOwnedCurrentPerms l ps) =
+  recombinePerm l ValPerm_True (ValPerm_Conj1 $ Perm_LOwned ps)
+recombineLifetimeCurrentPerms (CurrentTransPerms cur_perms l) =
+  implDropM l (ValPerm_Conj1 $ Perm_LCurrent $
+               lifetimeCurrentPermsLifetime cur_perms) >>>
+  recombineLifetimeCurrentPerms cur_perms
 
 
 ----------------------------------------------------------------------
