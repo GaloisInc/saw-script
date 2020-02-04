@@ -845,7 +845,11 @@ data RWModality
 data LLVMArrayIndex w =
   LLVMArrayIndex { llvmArrayIndexCell :: PermExpr (BVType w),
                    llvmArrayIndexFieldNum :: Int }
-  deriving Eq
+
+-- NOTE: we need a custom instance of Eq so we can use bvEq on the cell
+instance Eq (LLVMArrayIndex w) where
+  LLVMArrayIndex e1 i1 == LLVMArrayIndex e2 i2 =
+    bvEq e1 e2 && i1 == i2
 
 -- | A permission to an array of repeated field permissions. An array permission
 -- is structured as zero or more cells, each of which are composed of one or
@@ -1264,11 +1268,19 @@ arrayLengthBytes ap = bvMult (arrayStrideBytes ap) (llvmArrayLen ap)
 llvmArrayAddBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
 llvmArrayAddBorrow b ap = ap { llvmArrayBorrows = b : llvmArrayBorrows ap }
 
--- | Remove a borrow of an index from an 'LLVMArrayPerm'
-llvmArrayRemBorrow :: (1 <= w, KnownNat w) => LLVMArrayBorrow w ->
-                      LLVMArrayPerm w -> LLVMArrayPerm w
+-- | Find the position in the list of borrows of an 'LLVMArrayPerm' of a
+-- specific borrow
+llvmArrayFindBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> Int
+llvmArrayFindBorrow b ap =
+  case findIndex (== b) (llvmArrayBorrows ap) of
+    Just i -> i
+    Nothing -> error "llvmArrayFindBorrow: borrow not found"
+
+-- | Remove a borrow from an 'LLVMArrayPerm'
+llvmArrayRemBorrow :: LLVMArrayBorrow w -> LLVMArrayPerm w -> LLVMArrayPerm w
 llvmArrayRemBorrow b ap =
-  ap { llvmArrayBorrows = filter (/= b) (llvmArrayBorrows ap) }
+  ap { llvmArrayBorrows =
+         deleteNth (llvmArrayFindBorrow b ap) (llvmArrayBorrows ap) }
 
 -- | Test if a byte offset @o@ statically aligns with a field in an array, i.e.,
 -- whether
@@ -1901,6 +1913,11 @@ type Matcher a b = a -> Maybe b
 deleteNth :: Int -> [a] -> [a]
 deleteNth i xs | i >= length xs = error "deleteNth"
 deleteNth i xs = take i xs ++ drop (i+1) xs
+
+-- | Replace the nth element of a list
+replaceNth :: Int -> a -> [a] -> [a]
+replaceNth i _ xs | i >= length xs = error "replaceNth"
+replaceNth i x xs = take i xs ++ x : drop (i+1) xs
 
 -- | Find all indices in a list for which the supplied
 -- function @f@ returns @'Just' b@ for some @b@, also returning the @b@s
