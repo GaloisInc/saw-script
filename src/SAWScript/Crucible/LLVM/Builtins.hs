@@ -44,6 +44,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_llvm_unsafe_assume_spec
     , crucible_fresh_var
     , crucible_alloc
+    , crucible_alloc_aligned
     , crucible_alloc_readonly
     , crucible_alloc_with_size
     , crucible_alloc_global
@@ -676,15 +677,13 @@ assertEqualVals cc v1 v2 =
 
 -- TODO(langston): combine with/move to executeAllocation
 doAlloc ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch       ->
   LLVMAllocSpec ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAlloc cc (LLVMAllocSpec mut _memTy sz loc) = StateT $ \mem ->
+doAlloc cc (LLVMAllocSpec mut _memTy alignment sz loc) = StateT $ \mem ->
   do let sym = cc^.ccBackend
-     let dl = Crucible.llvmDataLayout ?lc
      sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger sz
-     let alignment = Crucible.maxAlignment dl -- Use the maximum alignment required for any primitive type (FIXME?)
      let l = show (W4.plSourceLoc loc)
      liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
@@ -1452,37 +1451,53 @@ crucible_alloc_internal _bic _opt lty spec = do
 crucible_alloc_with_mutability_and_size ::
   Crucible.Mutability    ->
   Maybe (Crucible.Bytes) ->
+  Maybe Crucible.Alignment ->
   BuiltinContext   ->
   Options          ->
   L.Type           ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-crucible_alloc_with_mutability_and_size mut sz bic opts lty = LLVMCrucibleSetupM $ do
-  cctx <- getLLVMCrucibleContext
-  loc <- getW4Position "crucible_alloc"
-  memTy <- memTypeForLLVMType bic lty
+crucible_alloc_with_mutability_and_size mut sz alignment bic opts lty =
+  LLVMCrucibleSetupM $
+  do cctx <- getLLVMCrucibleContext
+     loc <- getW4Position "crucible_alloc"
+     memTy <- memTypeForLLVMType bic lty
 
-  let memTySize =
-        let ?lc = ccTypeCtx cctx
-            ?dl = Crucible.llvmDataLayout ?lc
-        in Crucible.memTypeSize ?dl memTy
+     let lc = ccTypeCtx cctx
+     let dl = Crucible.llvmDataLayout lc
+     let memTySize = Crucible.memTypeSize dl memTy
+     let memTyAlign = Crucible.memTypeAlign dl memTy
 
-  sz' <-
-    case sz of
-      Just sz_ -> do
-        when (sz_ < memTySize) $ fail $ unlines
-          [ "User error: manually-specified allocation size was less than needed"
-          , "Needed for this type: " ++ show memTySize
-          , "Specified: " ++ show sz_
-          ]
-        pure sz_
-      Nothing -> pure (Crucible.toBytes memTySize)
+     sz' <-
+       case sz of
+         Just sz_ -> do
+           when (sz_ < memTySize) $ fail $ unlines
+             [ "User error: manually-specified allocation size was less than needed"
+             , "Needed for this type: " ++ show memTySize
+             , "Specified: " ++ show sz_
+             ]
+           pure sz_
+         Nothing -> pure (Crucible.toBytes memTySize)
 
-  crucible_alloc_internal bic opts lty $
-      LLVMAllocSpec { _allocSpecMut = mut
-                    , _allocSpecType = memTy
-                    , _allocSpecBytes = sz'
-                    , _allocSpecLoc = loc
-                    }
+     alignment' <-
+       case alignment of
+         Just a -> do
+           when (a < memTyAlign) $ fail $ unlines
+             [ "User error: manually-specified alignment was less than needed"
+             , "Allocation type: " ++ show memTy
+             , "Minimum alignment for type: " ++ show (Crucible.fromAlignment memTyAlign) ++ "-byte"
+             , "Specified alignment: " ++ show (Crucible.fromAlignment a) ++ "-byte"
+             ]
+           pure a
+         Nothing -> pure memTyAlign
+
+     crucible_alloc_internal bic opts lty $
+       LLVMAllocSpec
+       { _allocSpecMut = mut
+       , _allocSpecType = memTy
+       , _allocSpecAlign = alignment'
+       , _allocSpecBytes = sz'
+       , _allocSpecLoc = loc
+       }
 
 crucible_alloc ::
   BuiltinContext ->
@@ -1490,7 +1505,27 @@ crucible_alloc ::
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 crucible_alloc =
-  crucible_alloc_with_mutability_and_size Crucible.Mutable Nothing
+  crucible_alloc_with_mutability_and_size Crucible.Mutable Nothing Nothing
+
+crucible_alloc_aligned ::
+  BuiltinContext ->
+  Options        ->
+  Int            ->
+  L.Type         ->
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
+crucible_alloc_aligned bic opts n lty =
+  case Crucible.toAlignment (Crucible.toBytes n) of
+    Nothing ->
+      LLVMCrucibleSetupM $ fail $
+      "crucible_alloc_aligned: invalid non-power-of-2 alignment: " ++ show n
+    Just alignment ->
+      crucible_alloc_with_mutability_and_size
+        Crucible.Mutable
+        Nothing
+        (Just alignment)
+        bic
+        opts
+        lty
 
 crucible_alloc_readonly ::
   BuiltinContext ->
@@ -1498,7 +1533,7 @@ crucible_alloc_readonly ::
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 crucible_alloc_readonly =
-  crucible_alloc_with_mutability_and_size Crucible.Immutable Nothing
+  crucible_alloc_with_mutability_and_size Crucible.Immutable Nothing Nothing
 
 crucible_alloc_with_size ::
   BuiltinContext ->
@@ -1510,6 +1545,7 @@ crucible_alloc_with_size bic opts sz lty =
   crucible_alloc_with_mutability_and_size
     Crucible.Mutable
     (Just (Crucible.toBytes sz))
+    Nothing
     bic
     opts
     lty
@@ -1538,23 +1574,25 @@ constructFreshPointer ::
   W4.ProgramLoc ->
   Crucible.MemType ->
   CrucibleSetup (LLVM arch) (AllLLVM SetupValue)
-constructFreshPointer mid loc memTy = do
-  cctx <- getLLVMCrucibleContext
-  let ?lc = ccTypeCtx cctx
-  let ?dl = Crucible.llvmDataLayout ?lc
-  n <- Setup.csVarCounter <<%= nextAllocIndex
-  let sz = Crucible.memTypeSize ?dl memTy
-  Setup.currentState . MS.csFreshPointers . at n ?=
-    LLVMAllocSpec { _allocSpecMut = Crucible.Mutable
-                  , _allocSpecType = memTy
-                  , _allocSpecBytes = sz
-                  , _allocSpecLoc = loc
-                  }
-  -- TODO: refactor
-  case mid of
-    Just i -> Setup.currentState . MS.csVarTypeNames.at n ?= i
-    Nothing -> return ()
-  return (mkAllLLVM (SetupVar n))
+constructFreshPointer mid loc memTy =
+  do cctx <- getLLVMCrucibleContext
+     let ?lc = ccTypeCtx cctx
+     let ?dl = Crucible.llvmDataLayout ?lc
+     n <- Setup.csVarCounter <<%= nextAllocIndex
+     let sz = Crucible.memTypeSize ?dl memTy
+     let alignment = Crucible.memTypeAlign ?dl memTy
+     Setup.currentState . MS.csFreshPointers . at n ?=
+       LLVMAllocSpec { _allocSpecMut = Crucible.Mutable
+                     , _allocSpecType = memTy
+                     , _allocSpecAlign = alignment
+                     , _allocSpecBytes = sz
+                     , _allocSpecLoc = loc
+                     }
+     -- TODO: refactor
+     case mid of
+       Just i -> Setup.currentState . MS.csVarTypeNames.at n ?= i
+       Nothing -> return ()
+     return (mkAllLLVM (SetupVar n))
 
 crucible_points_to ::
   Bool {- ^ whether to check type compatibility -} ->
