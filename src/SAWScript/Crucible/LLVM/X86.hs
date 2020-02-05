@@ -125,14 +125,22 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
       let
         cc :: LLVMCrucibleContext x
         cc = LLVMCrucibleContext
-             { _ccLLVMModule = llvmModule
-             , _ccBackend = sym
-             , _ccBasicSS = biBasicSS bic
+          { _ccLLVMModule = llvmModule
+          , _ccBackend = sym
+          , _ccBasicSS = biBasicSS bic
 
-             -- It's unpleasant that we need to do this to use resolveSetupVal.
-             , _ccLLVMSimContext = error "Attempted to access ccLLVMSimContext"
-             , _ccLLVMGlobals = error "Attempted to access ccLLVMGlobals"
-             }
+          -- It's unpleasant that we need to do this to use resolveSetupVal.
+          , _ccLLVMSimContext = error "Attempted to access ccLLVMSimContext"
+          , _ccLLVMGlobals = error "Attempted to access ccLLVMGlobals"
+          }
+
+      liftIO . printOutLn opts Info $ mconcat
+        [ "Simulating function \""
+        , nm
+        , "\" (at address "
+        , show addr
+        , ")"
+        ]
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
       methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) setup
@@ -161,12 +169,13 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         initial = C.InitialState ctx globals C.defaultAbortHandler macawStructRepr
                   $ C.runOverrideSim macawStructRepr
                   $ Macaw.crucGenArchConstraints Macaw.x86_64MacawSymbolicFns
-                  $ do r <- C.callCFG cfg $ C.RegMap $ singleton $ C.RegEntry macawStructRepr regs
-                       mem' <- C.readGlobal mvar
-                       liftIO $ printOutLn opts Info
-                         "Examining specification to determine postconditions"
-                       liftIO $ assertPost sym cc env methodSpec (mem, mem') (regs, C.regValue r)
-                       pure $ C.regValue r
+                  $ do
+          r <- C.callCFG cfg $ C.RegMap $ singleton $ C.RegEntry macawStructRepr regs
+          mem' <- C.readGlobal mvar
+          liftIO $ printOutLn opts Info
+            "Examining specification to determine postconditions"
+          liftIO $ assertPost sym cc env methodSpec (mem, mem') (regs, C.regValue r)
+          pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
       liftIO $ C.executeCrucible [] initial >>= \case
@@ -308,10 +317,11 @@ setupGlobals ::
   IO (Macaw.GlobalMap Sym 64, Mem)
 setupGlobals sym elf mem endText globsyms = do
   let ?ptrWidth = knownNat @64
+  let align = C.LLVM.exponentToAlignment 4
   globs <- mconcat <$> mapM readInitialGlobal globsyms
   sz <- W4.bvLit sym knownNat . maximum $ endText:(globalEnd <$> globs)
   (base, mem') <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Immutable
-    "globals" mem sz C.LLVM.noAlignment
+    "globals" mem sz align
   mem'' <- foldlM (writeGlobal base) mem' globs
   pure (mkGlobalMap $ Map.singleton 0 base, mem'')
   where
@@ -340,9 +350,10 @@ allocateStack ::
   IO (Ptr, Mem)
 allocateStack sym mem szInt = do
   let ?ptrWidth = knownNat @64
+  let align = C.LLVM.exponentToAlignment 4
   sz <- W4.bvLit sym knownNat $ szInt + 8
   (base, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable
-    "stack_alloc" mem sz C.LLVM.noAlignment
+    "stack_alloc" mem sz align
   sn <- case W4.userSymbol "stack" of
     Left err -> fail $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn
@@ -351,7 +362,7 @@ allocateStack sym mem szInt = do
     <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
   ptr <- C.LLVM.doPtrAddOffset sym mem' base =<< W4.bvLit sym knownNat szInt
   (ptr,) <$> C.LLVM.doStore sym mem' ptr (C.LLVM.LLVMPointerRepr $ knownNat @64)
-    (C.LLVM.bitvectorType 8) C.LLVM.noAlignment fresh
+    (C.LLVM.bitvectorType 8) align fresh
 
 -- | Process a crucible_alloc statement, allocating the requested memory and
 -- associating a pointer to that memory with the appropriate index.
@@ -477,12 +488,13 @@ checkGoals sym opts sc = do
   gs <- liftIO $ getGoals sym
   liftIO $ print gs
   liftIO . forM_ gs $ \g ->
-    do term <- gGoal sc g
-       (mb, stats) <- proveUnintSBV z3 [] Nothing sc term
-       putStrLn $ ppStats stats
-       case mb of
-         Nothing -> printOutLn opts Info "Goal succeeded"
-         Just ex -> fail $ "Failure, counterexample: " <> show ex
+    do
+      term <- gGoal sc g
+      (mb, stats) <- proveUnintSBV z3 [] Nothing sc term
+      printOutLn opts Info $ ppStats stats
+      case mb of
+        Nothing -> printOutLn opts Info "Goal succeeded"
+        Just ex -> fail $ "Failure, counterexample: " <> show ex
     `catch` \(X86Error e) -> fail $ "Failure, error: " <> e
   liftIO $ printOutLn opts Info "All goals succeeded"
 
