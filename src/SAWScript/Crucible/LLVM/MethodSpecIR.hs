@@ -39,6 +39,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
     -- * LLVMAllocSpec
   , LLVMAllocSpec(..)
   , allocSpecType
+  , allocSpecAlign
   , allocSpecMut
   , allocSpecLoc
   , allocSpecBytes
@@ -183,6 +184,7 @@ data LLVMAllocSpec =
   LLVMAllocSpec
     { _allocSpecMut   :: CL.Mutability
     , _allocSpecType  :: CL.MemType
+    , _allocSpecAlign :: CL.Alignment
     , _allocSpecBytes :: CL.Bytes
     , _allocSpecLoc   :: ProgramLoc
     }

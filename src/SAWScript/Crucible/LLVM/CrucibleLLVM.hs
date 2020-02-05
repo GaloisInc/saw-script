@@ -31,6 +31,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , ptrBitwidth
   , integerAlignment
   , floatAlignment
+  , fromAlignment
   , EndianForm(..)
     -- * Re-exports from "Lang.Crucible.LLVM.Extension"
   , ArchWidth
@@ -137,7 +138,7 @@ import Lang.Crucible.LLVM.Bytes
 
 import Lang.Crucible.LLVM.DataLayout
   (Alignment, noAlignment, padToAlignment, DataLayout, EndianForm(..),
-   integerAlignment, floatAlignment, intWidthSize, ptrBitwidth)
+   integerAlignment, floatAlignment, fromAlignment, intWidthSize, ptrBitwidth)
 
 import Lang.Crucible.LLVM.Extension
   (ArchWidth)
