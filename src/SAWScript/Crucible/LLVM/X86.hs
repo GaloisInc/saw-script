@@ -34,6 +34,7 @@ import Control.Monad.State (execStateT)
 
 import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Foldable (foldlM, forM_)
+import qualified Data.Vector as Vector
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Map as Map
@@ -337,14 +338,16 @@ setupGlobals sym elf mem endText globsyms = do
       pure $ (\(n, a, _, b) -> (n, a, b)) <$> res
     globalEnd :: (String, Integer, [Integer]) -> Integer
     globalEnd (_nm, addr, bytes) = addr + toInteger (length bytes)
-    writeByte :: Ptr -> Mem -> (Integer, Integer) -> IO Mem
-    writeByte base m (addr, byte) = do
-      let ?ptrWidth = knownNat @64
-      ptr <- C.LLVM.doPtrAddOffset sym m base =<< W4.bvLit sym knownNat addr
-      val <- C.LLVM.LLVMValInt <$> W4.natLit sym 0 <*> W4.bvLit sym (knownNat @8) byte
-      C.LLVM.storeConstRaw sym m ptr (C.LLVM.bitvectorType 1) C.LLVM.noAlignment val
+    convertByte :: Integer -> IO (C.LLVM.LLVMVal Sym)
+    convertByte byte =
+      C.LLVM.LLVMValInt <$> W4.natLit sym 0 <*> W4.bvLit sym (knownNat @8) byte
     writeGlobal :: Ptr -> Mem -> (String, Integer, [Integer]) -> IO Mem
-    writeGlobal base m (_nm, addr, bytes) = foldlM (writeByte base) m $ zip [addr, addr+1..] bytes
+    writeGlobal base m (_nm, addr, bytes) = do
+      ptr <- C.LLVM.doPtrAddOffset sym m base =<< W4.bvLit sym knownNat addr
+      v <- Vector.fromList <$> mapM convertByte bytes
+      let st = C.LLVM.arrayType (fromIntegral $ length bytes) $ C.LLVM.bitvectorType 1
+      C.LLVM.storeConstRaw sym m ptr st C.LLVM.noAlignment
+        $ C.LLVM.LLVMValArray (C.LLVM.bitvectorType 1) v
 
 -- | Allocate memory for the stack, and pushes a fresh pointer as the return
 -- address. Note that this function only returns a pointer to the top-of-stack,
