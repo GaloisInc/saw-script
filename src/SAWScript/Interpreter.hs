@@ -507,6 +507,11 @@ enable_smt_array_memory_model = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwSMTArrayMemoryModel = True }
 
+disable_smt_array_memory_model :: TopLevel ()
+disable_smt_array_memory_model = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSMTArrayMemoryModel = False }
+
 enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
   rw <- getTopLevelRW
@@ -679,6 +684,11 @@ primitives = Map.fromList
     (pureVal enable_smt_array_memory_model)
     Current
     [ "Enable the SMT array memory model." ]
+
+  , prim "disable_smt_array_memory_model" "TopLevel ()"
+    (pureVal disable_smt_array_memory_model)
+    Current
+    [ "Disable the SMT array memory model." ]
 
   , prim "enable_lax_arithmetic" "TopLevel ()"
     (pureVal enable_lax_arithmetic)
