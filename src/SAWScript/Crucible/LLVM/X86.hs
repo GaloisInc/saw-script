@@ -12,6 +12,7 @@ Stability   : provisional
 {-# Language TypeOperators #-}
 {-# Language PatternSynonyms #-}
 {-# Language LambdaCase #-}
+{-# Language MultiWayIf #-}
 {-# Language TupleSections #-}
 {-# Language ImplicitParams #-}
 {-# Language TypeApplications #-}
@@ -43,6 +44,9 @@ import Data.Parameterized.Some
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Context hiding (view)
 import Data.Parameterized.Nonce
+
+import Verifier.SAW.Term.Functor
+import Verifier.SAW.TypedTerm
 
 import SAWScript.Prover.SBV
 import SAWScript.Prover.SolverStats
@@ -174,7 +178,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
           mem' <- C.readGlobal mvar
           liftIO $ printOutLn opts Info
             "Examining specification to determine postconditions"
-          liftIO $ assertPost sym cc env methodSpec (mem, mem') (regs, C.regValue r)
+          liftIO $ assertPost sym opts cc env methodSpec (mem, mem') (regs, C.regValue r)
           pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
@@ -428,18 +432,19 @@ setArgs sym cc env tyenv nameEnv mem regs args
 -- | Assert the postcondition for the spec, given the final memory and register map.
 assertPost ::
   Sym ->
+  Options ->
   LLVMCrucibleContext LLVMArch ->
   Map MS.AllocIndex Ptr ->
   MS.CrucibleMethodSpecIR LLVM ->
   (Mem, Mem) {- ^ The state of memory before and after simulation -} ->
   (Regs, Regs) {- ^ The state of the registers before and after simulation -} ->
   IO ()
-assertPost sym cc env ms (premem, postmem) (preregs, postregs) = do
+assertPost sym opts cc env ms (premem, postmem) (preregs, postregs) = do
   let ?ptrWidth = knownNat @64
   let tyenv = ms ^. MS.csPreState . MS.csAllocs
       nameEnv = MS.csTypeNames ms
   forM_ (ms ^. MS.csPostState . MS.csPointsTos)
-    $ assertPointsTo sym cc env tyenv nameEnv postmem
+    $ assertPointsTo sym opts cc env tyenv nameEnv postmem
 
   prersp <- getReg Macaw.RSP preregs
   expectedIP <- C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8)
@@ -460,6 +465,7 @@ assertPost sym cc env ms (premem, postmem) (preregs, postregs) = do
 -- | Assert that a points-to postcondition holds.
 assertPointsTo ::
   Sym ->
+  Options ->
   LLVMCrucibleContext LLVMArch ->
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
@@ -467,7 +473,7 @@ assertPointsTo ::
   Mem ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   IO ()
-assertPointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
+assertPointsTo sym opts cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
   let ?ptrWidth = knownNat @64
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
@@ -475,6 +481,17 @@ assertPointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
   _actual <- C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment
   -- TODO: actually do matching between actual and expected
   -- For now, we only make sure we can load the memory
+  if | MS.SetupTerm expected <- texpected
+     , FTermF (ExtCns ec) <- unwrapTermF $ ttTerm expected
+     , ('_':_) <- ecName ec
+     -> pure ()
+     | otherwise -> printOutLn opts Warn $ mconcat
+       [ "During x86 verification, attempted to match against a term that is not "
+       , "a fresh variable with an underscore-prefixed name. "
+       , "Note that crucible_points_to only asserts that memory is readable. "
+       , "Matching against concrete values is potentially unsound."
+       ]
+
   pure ()
 
 -- | Gather and run the solver on goals from the simulator.
