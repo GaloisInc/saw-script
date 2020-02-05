@@ -383,10 +383,10 @@ executeAllocation ::
   ) ->
   (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
   IO (Map MS.AllocIndex Ptr, Mem)
-executeAllocation sym (env, mem) (i, LLVMAllocSpec mut _memTy sz loc) = do
+executeAllocation sym (env, mem) (i, LLVMAllocSpec mut _memTy align sz loc) = do
   sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToInteger sz
   (ptr, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
-    (show $ W4.plSourceLoc loc) mem sz' C.LLVM.noAlignment
+    (show $ W4.plSourceLoc loc) mem sz' align
   pure (Map.insert i ptr env, mem')
 
 -- | Process a crucible_points_to statement, writing some SetupValue to a pointer.
