@@ -18,6 +18,7 @@ Stability   : provisional
 {-# Language TypeApplications #-}
 {-# Language GADTs #-}
 {-# Language DataKinds #-}
+{-# Language ConstraintKinds #-}
 
 module SAWScript.Crucible.LLVM.X86
   ( crucible_llvm_verify_x86
@@ -114,6 +115,7 @@ crucible_llvm_verify_x86 ::
 crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms setup
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
+      let ?ptrWidth = knownNat @64
       let sc = biSharedContext bic
       sym <- liftIO $ C.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
       halloc <- getHandleAlloc
@@ -278,6 +280,7 @@ llvmSignature opts llvmModule nm =
 
 -- | Given the method spec, build the initial memory, register map, and global map.
 initialMemory ::
+  HasPtrWidth =>
   Sym ->
   RelevantElf ->
   LLVMCrucibleContext LLVMArch ->
@@ -286,7 +289,6 @@ initialMemory ::
   MS.CrucibleMethodSpecIR LLVM ->
   IO (Macaw.GlobalMap Sym 64, Mem, Regs, Map MS.AllocIndex Ptr)
 initialMemory sym elf cc endText globsyms ms = do
-  let ?ptrWidth = knownNat @64
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
 
@@ -313,6 +315,7 @@ initialMemory sym elf cc endText globsyms ms = do
 -- | Given an alist of symbol names and sizes (in bytes), allocate space and copy
 -- the corresponding globals from the Macaw memory to the Crucible LLVM memory model.
 setupGlobals ::
+  HasPtrWidth =>
   Sym ->
   RelevantElf ->
   Mem ->
@@ -320,7 +323,6 @@ setupGlobals ::
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   IO (Macaw.GlobalMap Sym 64, Mem)
 setupGlobals sym elf mem endText globsyms = do
-  let ?ptrWidth = knownNat @64
   let align = C.LLVM.exponentToAlignment 4
   globs <- mconcat <$> mapM readInitialGlobal globsyms
   sz <- W4.bvLit sym knownNat . maximum $ endText:(globalEnd <$> globs)
@@ -348,12 +350,12 @@ setupGlobals sym elf mem endText globsyms = do
 -- address. Note that this function only returns a pointer to the top-of-stack,
 -- and does not set RSP.
 allocateStack ::
+  HasPtrWidth =>
   Sym ->
   Mem ->
   Integer {- ^ Stack size in bytes -} ->
   IO (Ptr, Mem)
 allocateStack sym mem szInt = do
-  let ?ptrWidth = knownNat @64
   let align = C.LLVM.exponentToAlignment 4
   sz <- W4.bvLit sym knownNat $ szInt + 8
   (base, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable
@@ -371,6 +373,7 @@ allocateStack sym mem szInt = do
 -- | Process a crucible_alloc statement, allocating the requested memory and
 -- associating a pointer to that memory with the appropriate index.
 executeAllocation ::
+  HasPtrWidth =>
   Sym ->
   ( Map MS.AllocIndex Ptr {- ^ Associates each previous AllocIndex with the corresponding allocation -}
   , Mem
@@ -378,7 +381,6 @@ executeAllocation ::
   (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
   IO (Map MS.AllocIndex Ptr, Mem)
 executeAllocation sym (env, mem) (i, LLVMAllocSpec mut _memTy sz loc) = do
-  let ?ptrWidth = knownNat @64
   sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToInteger sz
   (ptr, mem') <- C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
     (show $ W4.plSourceLoc loc) mem sz' C.LLVM.noAlignment
@@ -386,6 +388,7 @@ executeAllocation sym (env, mem) (i, LLVMAllocSpec mut _memTy sz loc) = do
 
 -- | Process a crucible_points_to statement, writing some SetupValue to a pointer.
 executePointsTo ::
+  HasPtrWidth =>
   Sym ->
   LLVMCrucibleContext LLVMArch ->
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
@@ -395,7 +398,6 @@ executePointsTo ::
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   IO Mem
 executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr tval) = do
-  let ?ptrWidth = knownNat @64
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   val <- resolveSetupVal cc mem env tyenv Map.empty tval
@@ -405,6 +407,7 @@ executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr tval) = do
 -- | Write each SetupValue passed to crucible_execute_func to the appropriate
 -- x86_64 register from the calling convention.
 setArgs ::
+  HasPtrWidth =>
   Sym ->
   LLVMCrucibleContext LLVMArch ->
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
@@ -421,7 +424,6 @@ setArgs sym cc env tyenv nameEnv mem regs args
     argRegs :: [Register]
     argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
     setRegSetupValue rs (reg, sval) = do
-      let ?ptrWidth = knownNat @64
       val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
         =<< resolveSetupVal cc mem env tyenv nameEnv sval
       setReg reg val rs
@@ -431,6 +433,7 @@ setArgs sym cc env tyenv nameEnv mem regs args
 
 -- | Assert the postcondition for the spec, given the final memory and register map.
 assertPost ::
+  HasPtrWidth =>
   Sym ->
   Options ->
   LLVMCrucibleContext LLVMArch ->
@@ -440,7 +443,6 @@ assertPost ::
   (Regs, Regs) {- ^ The state of the registers before and after simulation -} ->
   IO ()
 assertPost sym opts cc env ms (premem, postmem) (preregs, postregs) = do
-  let ?ptrWidth = knownNat @64
   let tyenv = ms ^. MS.csPreState . MS.csAllocs
       nameEnv = MS.csTypeNames ms
   forM_ (ms ^. MS.csPostState . MS.csPointsTos)
@@ -464,6 +466,7 @@ assertPost sym opts cc env ms (premem, postmem) (preregs, postregs) = do
 
 -- | Assert that a points-to postcondition holds.
 assertPointsTo ::
+  HasPtrWidth =>
   Sym ->
   Options ->
   LLVMCrucibleContext LLVMArch ->
@@ -474,7 +477,6 @@ assertPointsTo ::
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   IO ()
 assertPointsTo sym opts cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
-  let ?ptrWidth = knownNat @64
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   storTy <- C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv texpected
@@ -524,6 +526,7 @@ type Regs = Assignment (C.RegValue' Sym) (Macaw.MacawCrucibleRegTypes Macaw.X86_
 type Register = Macaw.X86Reg (Macaw.BVType 64)
 type Mem = C.LLVM.MemImpl Sym
 type Ptr = C.LLVM.LLVMPtr Sym 64
+type HasPtrWidth = C.LLVM.HasPtrWidth (C.LLVM.ArchWidth LLVMArch)
 
 setReg ::
   Register ->
