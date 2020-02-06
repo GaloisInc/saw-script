@@ -111,9 +111,10 @@ crucible_llvm_verify_x86 ::
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Bool {-^ Whether to enable path satisfiability checking (currently ignored) -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms setup
+crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms _checkSat setup
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64
