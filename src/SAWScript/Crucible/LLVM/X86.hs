@@ -427,10 +427,15 @@ setArgs sym cc env tyenv nameEnv mem regs args
   where
     argRegs :: [Register]
     argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
-    setRegSetupValue rs (reg, sval) = do
-      val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-        =<< resolveSetupVal cc mem env tyenv nameEnv sval
-      setReg reg val rs
+    setRegSetupValue rs (reg, sval) = typeOfSetupValue cc tyenv nameEnv sval >>= \ty ->
+      let assign = do
+            val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+              =<< resolveSetupVal cc mem env tyenv nameEnv sval
+            setReg reg val rs
+      in case (ty, C.LLVM.memTypeBitwidth ty) of
+        (C.LLVM.PtrType _, _) -> assign
+        (_, Just 64) -> assign
+        _ -> fail "Argument is not 64 bits"
 
 --------------------------------------------------------------------------------
 -- ** Postcondition
