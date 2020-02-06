@@ -1926,8 +1926,13 @@ tcBlockEntry blk (BlockEntryInfo {..}) =
         splitMapRList (entryGhosts entryInfoID)
         (cruCtxProxies $ entryInfoArgs) ns in
   setVarTypes ns (appendCruCtx (entryGhosts entryInfoID) entryInfoArgs) >>>
-  stmtTraceM (\i -> string "Input perms:"
-                    <> align (permPretty i $ runIdentity perms)) >>>
+  stmtTraceM (\i ->
+               string "Input types:"
+               <> align (pretty $
+                         appendCruCtx (entryGhosts entryInfoID) entryInfoArgs)
+               PP.<$>
+               string "Input perms:"
+               <> align (permPretty i $ runIdentity perms)) >>>
   setInputExtState knownRepr (entryGhosts entryInfoID)
   (fst $ splitMapRList (entryGhosts entryInfoID) (cruCtxProxies
                                                   entryInfoArgs) ns) >>>

@@ -26,6 +26,8 @@ import Data.Parameterized.Context hiding ((:>), empty, take, view)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
 
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
+
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
 import Lang.Crucible.CFG.Expr
@@ -334,6 +336,12 @@ instance TestEquality CruCtx where
     , Just Refl <- testEquality tp1 tp2
     = Just Refl
   testEquality _ _ = Nothing
+
+instance Pretty (CruCtx ctx) where
+  pretty ctx = list $ helper ctx where
+    helper :: CruCtx ctx' -> [Doc]
+    helper CruCtxNil = []
+    helper (CruCtxCons ctx tp) = helper ctx ++ [pretty tp]
 
 {-
 instance KnownRepr TypeRepr tp => KnownRepr CruType tp where

@@ -99,11 +99,11 @@ instance Applicative TypeTrans where
 
 -- | Build a 'TypeTrans' represented by 0 SAW types
 mkTypeTrans0 :: tr -> TypeTrans tr
-mkTypeTrans0 tr = TypeTrans [] (const tr)
+mkTypeTrans0 tr = TypeTrans [] (\[] -> tr)
 
 -- | Build a 'TypeTrans' represented by 1 SAW type
 mkTypeTrans1 :: OpenTerm -> (OpenTerm -> tr) -> TypeTrans tr
-mkTypeTrans1 tp f = TypeTrans [tp] (f . head)
+mkTypeTrans1 tp f = TypeTrans [tp] (\[t] -> f t)
 
 -- | Extract out the single SAW type associated with a 'TypeTrans', or the unit
 -- type if it has 0 SAW types. It is an error if it has 2 or more SAW types.
@@ -2725,7 +2725,7 @@ translateEntryLRT :: TypedEntry ext blocks ret args ->
 translateEntryLRT (TypedEntry entryID args ret perms_in perms_out _) =
   trace "translateEntryLRT starting..." $ inEmptyCtxTransM $
   translateClosed (appendCruCtx (entryGhosts entryID) args) >>= \arg_tps ->
-  lambdaLRTTransM "e" arg_tps $ \ectx ->
+  lambdaLRTTransM "arg" arg_tps $ \ectx ->
   inCtxTransM ectx $
   translate perms_in >>= \perms_in_tps ->
   lambdaLRTTransM "p" perms_in_tps $ \_ ->
