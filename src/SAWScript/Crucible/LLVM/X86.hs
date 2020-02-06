@@ -336,7 +336,7 @@ setupGlobals sym elf mem endText globsyms = do
     readInitialGlobal :: (String, Integer) -> IO [(String, Integer, [Integer])]
     readInitialGlobal (nm, sz) = do
       res <- loadGlobal elf (encodeUtf8 $ Text.pack nm, sz, Bytes)
-      pure $ (\(n, a, _, b) -> (n, a, b)) <$> res
+      pure $ (\(name, addr, _unit, bytes) -> (name, addr, bytes)) <$> res
     globalEnd :: (String, Integer, [Integer]) -> Integer
     globalEnd (_nm, addr, bytes) = addr + toInteger (length bytes)
     convertByte :: Integer -> IO (C.LLVM.LLVMVal Sym)
