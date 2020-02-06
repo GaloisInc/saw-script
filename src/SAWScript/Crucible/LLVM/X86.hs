@@ -379,9 +379,7 @@ allocateStack sym mem szInt = do
 executeAllocation ::
   HasPtrWidth =>
   Sym ->
-  ( Map MS.AllocIndex Ptr {- ^ Associates each previous AllocIndex with the corresponding allocation -}
-  , Mem
-  ) ->
+  (Map MS.AllocIndex Ptr, Mem) ->
   (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
   IO (Map MS.AllocIndex Ptr, Mem)
 executeAllocation sym (env, mem) (i, LLVMAllocSpec mut _memTy align sz loc) = do
