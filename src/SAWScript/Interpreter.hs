@@ -44,6 +44,8 @@ import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizeP
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
+import qualified Text.LLVM.AST as L
+
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
@@ -82,6 +84,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
+import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
@@ -1952,6 +1955,15 @@ primitives = Map.fromList
     , "to specify arguments. Returns profiles specifying the sizes of buffers"
     , "referred to by pointer arguments for the function and all other functions"
     , "it calls (recursively), to be passed to llvm_boilerplate."
+    ]
+
+  , prim "crucible_llvm_verify_x86"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_verify_x86)
+    Experimental
+    [ "Load the ELF file specified by the second argument and verify the function"
+    , "named by the third. Returns a method spec that can be used as an override"
+    , "when verifying other LLVM functions."
     ]
 
   , prim "crucible_array"
