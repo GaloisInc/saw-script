@@ -3,6 +3,6 @@
 *.glob
 *.vo
 /default.nix
-/Makefile
-/Makefile.conf
+/Makefile.coq
+/Makefile.coq.conf
 /saw
