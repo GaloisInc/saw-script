@@ -941,7 +941,7 @@ primitives = Map.fromList
     Current
     [ "Write out a representation of a term in SAWCore external format." ]
 
-  , prim "write_coq_term"      "String -> String -> Term -> TopLevel ()"
+  , prim "write_coq_term" "String -> [(String, String)] -> [String] -> String -> Term -> TopLevel ()"
     (pureVal writeCoqTerm)
     Experimental
     [ "Write out a representation of a term in Gallina syntax for Coq."
@@ -950,7 +950,7 @@ primitives = Map.fromList
     , "filename to write to standard output."
     ]
 
-  , prim "write_coq_cryptol_module" "String -> String -> TopLevel ()"
+  , prim "write_coq_cryptol_module" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal writeCoqCryptolModule)
     Experimental
     [ "Write out a representation of a Cryptol module in Gallina syntax for"
@@ -958,14 +958,14 @@ primitives = Map.fromList
     , "filename to use as output."
     ]
 
-  , prim "write_coq_sawcore_prelude" "String -> TopLevel ()"
+  , prim "write_coq_sawcore_prelude" "String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal writeCoqSAWCorePrelude)
     Experimental
     [ "Write out a representation of the SAW Core prelude in Gallina syntax for"
     , "Coq. The first argument is the filename to use as output."
     ]
 
-  , prim "write_coq_cryptol_primitives_for_sawcore" "String -> TopLevel ()"
+  , prim "write_coq_cryptol_primitives_for_sawcore" "String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal writeCoqCryptolPrimitivesForSAWCore)
     Experimental
     [ "Write out a representation of cryptol-verifier's Cryptol.sawcore in"
