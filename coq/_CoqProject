@@ -1,8 +1,8 @@
--Q generated/CryptolToCoq CryptolToCoq
+-Q generated/CryptolToCoq   CryptolToCoq
 -Q handwritten/CryptolToCoq CryptolToCoq
--Q handwritten/Lift Lift
--Q generated/S2N S2N
--Q handwritten/S2N S2N
+-Q handwritten/Lift         Lift
+-Q generated/S2N            S2N
+-Q handwritten/S2N          S2N
 
 generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
 # generated/MEE_CBC.v
