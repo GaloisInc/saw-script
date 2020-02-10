@@ -52,6 +52,10 @@ instance {-# INCOHERENT #-} NuMatchingAny1 f => NuMatching (f a) where
   nuMatchingProof = nuMatchingAny1Proof
 
 -- FIXME: move to Hobbits
+instance NuMatchingAny1 Name where
+  nuMatchingAny1Proof = nuMatchingProof
+
+-- FIXME: move to Hobbits
 instance NuMatchingAny1 ((:~:) a) where
   nuMatchingAny1Proof = nuMatchingProof
 
@@ -114,11 +118,16 @@ instance NuMatching ProgramLoc where
 instance NuMatching (FnHandle args ret) where
   nuMatchingProof = unsafeMbTypeRepr
 
+instance NuMatching SomeHandle where
+  nuMatchingProof = unsafeMbTypeRepr
+
 instance NuMatching (FloatInfoRepr fi) where
   nuMatchingProof = unsafeMbTypeRepr
 
 instance NuMatching RoundingMode where
   nuMatchingProof = unsafeMbTypeRepr
+
+$(mkNuMatching [t| forall f. NuMatchingAny1 f => Some f |])
 
 instance NuMatchingAny1 BaseTypeRepr where
   nuMatchingAny1Proof = nuMatchingProof
@@ -170,6 +179,12 @@ instance Closable (FnHandle args ret) where
 instance Liftable (FnHandle args ret) where
   mbLift fh = unClosed $ mbLift $ fmap toClosed fh
 
+instance Closable SomeHandle where
+  toClosed = unsafeClose
+
+instance Liftable SomeHandle where
+  mbLift fh = unClosed $ mbLift $ fmap toClosed fh
+
 -- | Close an assignment whose elements are all 'Closable'
 closeAssign :: (forall a. f a -> Closed (f a)) -> Assignment f ctx ->
                Closed (Assignment f ctx)
@@ -212,6 +227,17 @@ assignToRList asgn = case viewAssign asgn of
 rlistToAssign :: MapRList f ctx -> Assignment f (RListToCtx ctx)
 rlistToAssign MNil = Ctx.empty
 rlistToAssign (rlist :>: f) = extend (rlistToAssign rlist) f
+
+-- | A data-level encapsulation of the 'KnownRepr' typeclass
+data KnownReprObj f a = KnownRepr f a => KnownReprObj
+
+-- | Build a 'KnownReprObj' using a phantom type
+mkKnownReprObj :: KnownRepr f a => prx a -> KnownReprObj f a
+mkKnownReprObj _ = KnownReprObj
+
+-- | Extract the representation in a 'KnownReprObj'
+unKnownReprObj :: KnownReprObj f a -> f a
+unKnownReprObj (KnownReprObj :: KnownReprObj f a) = knownRepr :: f a
 
 {-
 -- | Representation types that support the 'withKnownRepr' operation

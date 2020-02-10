@@ -140,6 +140,7 @@ library
 
     SAWScript.Heapster.CruUtil
     SAWScript.Heapster.Permissions
+    SAWScript.Heapster.PermParser
     SAWScript.Heapster.Implication
     SAWScript.Heapster.TypedCrucible
     SAWScript.Heapster.SAWTranslation

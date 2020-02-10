@@ -341,6 +341,8 @@ data PermExpr (a :: CrucibleType) where
                         PermExpr PermListType -> PermExpr PermListType
   -- ^ A cons of an expression and permission for that expression onto a
   -- permission list
+  --
+  -- FIXME: turn the 'KnownRepr' constraint into a normal 'TypeRepr' argument
 
 
 -- | A sequence of permission expressions
@@ -776,6 +778,8 @@ data ValuePerm (a :: CrucibleType) where
   ValPerm_Or :: ValuePerm a -> ValuePerm a -> ValuePerm a
 
   -- | An existential binding of a value in a value permission
+  --
+  -- FIXME: turn the 'KnownRepr' constraint into a normal 'TypeRepr' argument
   ValPerm_Exists :: KnownRepr TypeRepr a =>
                     Binding a (ValuePerm b) ->
                     ValuePerm b
