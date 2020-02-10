@@ -2,3 +2,5 @@
 #$JAVAC JavaMD5.java
 
 $SAW javamd5test.saw
+
+exit 1
