@@ -46,6 +46,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_alloc
     , crucible_alloc_aligned
     , crucible_alloc_readonly
+    , crucible_alloc_readonly_aligned
     , crucible_alloc_with_size
     , crucible_alloc_global
     , crucible_fresh_expanded_val
@@ -1485,10 +1486,10 @@ crucible_alloc_with_mutability_and_size mut sz alignment bic opts lty =
      alignment' <-
        case alignment of
          Just a -> do
-           when (a < memTyAlign) $ fail $ unlines
-             [ "User error: manually-specified alignment was less than needed"
+           when (a < memTyAlign) $ liftIO $ printOutLn opts Info $ unlines
+             [ "Warning: manually-specified alignment was less than default for type"
              , "Allocation type: " ++ show memTy
-             , "Minimum alignment for type: " ++ show (Crucible.fromAlignment memTyAlign) ++ "-byte"
+             , "Default alignment for type: " ++ show (Crucible.fromAlignment memTyAlign) ++ "-byte"
              , "Specified alignment: " ++ show (Crucible.fromAlignment a) ++ "-byte"
              ]
            pure a
@@ -1517,19 +1518,8 @@ crucible_alloc_aligned ::
   Int            ->
   L.Type         ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-crucible_alloc_aligned bic opts n lty =
-  case Crucible.toAlignment (Crucible.toBytes n) of
-    Nothing ->
-      LLVMCrucibleSetupM $ fail $
-      "crucible_alloc_aligned: invalid non-power-of-2 alignment: " ++ show n
-    Just alignment ->
-      crucible_alloc_with_mutability_and_size
-        Crucible.Mutable
-        Nothing
-        (Just alignment)
-        bic
-        opts
-        lty
+crucible_alloc_aligned =
+  crucible_alloc_aligned_with_mutability Crucible.Mutable
 
 crucible_alloc_readonly ::
   BuiltinContext ->
@@ -1538,6 +1528,39 @@ crucible_alloc_readonly ::
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 crucible_alloc_readonly =
   crucible_alloc_with_mutability_and_size Crucible.Immutable Nothing Nothing
+
+crucible_alloc_readonly_aligned ::
+  BuiltinContext ->
+  Options        ->
+  Int            ->
+  L.Type         ->
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
+crucible_alloc_readonly_aligned =
+  crucible_alloc_aligned_with_mutability Crucible.Immutable
+
+crucible_alloc_aligned_with_mutability ::
+  Crucible.Mutability ->
+  BuiltinContext ->
+  Options ->
+  Int ->
+  L.Type ->
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
+crucible_alloc_aligned_with_mutability mut bic opts n lty =
+  case Crucible.toAlignment (Crucible.toBytes n) of
+    Nothing ->
+      LLVMCrucibleSetupM $ fail $ unwords
+        [ "crucible_alloc_aligned/crucible_alloc_readonly_aligned:"
+        , "invalid non-power-of-2 alignment:"
+        , show n
+        ]
+    Just alignment ->
+      crucible_alloc_with_mutability_and_size
+        mut
+        Nothing
+        (Just alignment)
+        bic
+        opts
+        lty
 
 crucible_alloc_with_size ::
   BuiltinContext ->
