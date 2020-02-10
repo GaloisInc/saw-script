@@ -1087,20 +1087,36 @@ instance PermPretty (ValuePerm a) where
   permPrettyM (ValPerm_Conj ps) =
     (hang 2 . encloseSep PP.empty PP.empty (string "*")) <$> mapM permPrettyM ps
 
+-- | Pretty-print an 'LLVMFieldPerm', either by itself as the form
+-- @[l]ptr((rw,off) |-> p)@ if the 'Bool' flag is 'False' or as part of an array
+-- permission as the form @[l](rw,off) |-> p@ if the 'Bool' flag is 'True'
+permPrettyLLVMField :: Bool -> LLVMFieldPerm w -> PermPPM Doc
+permPrettyLLVMField in_array (LLVMFieldPerm {..}) =
+  do pp_l <-
+       if llvmFieldLifetime == PExpr_Always then return (string "")
+       else brackets <$> permPrettyM llvmFieldLifetime
+     pp_off <- permPrettyM llvmFieldOffset
+     let pp_rw = case llvmFieldRW of
+           Read -> string "Read"
+           Write -> string "Write"
+     pp_contents <- permPrettyM llvmFieldContents
+     return (pp_l <>
+             (if in_array then id else (string "ptr" <>) . parens)
+             (parens (pp_rw <> comma <> pp_off) </>
+              string "|->" </> pp_contents))
+
 instance PermPretty (AtomicPerm a) where
-  permPrettyM (Perm_LLVMField (LLVMFieldPerm {..})) =
-    do pp_contents <- permPrettyM llvmFieldContents
-       pp_l <- case llvmFieldLifetime of
-         PExpr_Var l -> brackets <$> permPrettyM l
-         PExpr_Always -> return PP.empty
-       pp_off <- permPrettyM llvmFieldOffset
-       let pp_rw = case llvmFieldRW of
-             Read -> string "Read"
-             Write -> string "Write"
-       return (pp_l <> string "LLVMptr" <>
-               parens (hang 2 (tupled [pp_rw, pp_off] <+> string "|->"
-                               </> pp_contents)))
-  permPrettyM (Perm_LLVMArray _) = error "FIXME HERE: pretty-print array perms"
+  permPrettyM (Perm_LLVMField fp) = permPrettyLLVMField False fp
+  permPrettyM (Perm_LLVMArray (LLVMArrayPerm {..})) =
+    do pp_off <- permPrettyM llvmArrayOffset
+       pp_len <- permPrettyM llvmArrayLen
+       let pp_stride = string (show llvmArrayStride)
+       pp_flds <- mapM (permPrettyLLVMField True) llvmArrayFields
+       pp_bs <- mapM permPrettyM llvmArrayBorrows
+       return (string "array" <>
+               parens (sep [pp_off, string "<" <> pp_len,
+                            string "*" <> pp_stride,
+                            list pp_flds, list pp_bs]))
   permPrettyM (Perm_LLVMFree e) = (string "free" <+>) <$> permPrettyM e
   permPrettyM (Perm_LLVMFrame fperm) =
     do pps <- mapM (\(e,i) -> (<> (colon <> integer i)) <$> permPrettyM e) fperm
@@ -1122,6 +1138,8 @@ instance PermPretty (BVRange w) where
 instance PermPretty (BVProp w) where
   permPrettyM (BVProp_Eq e1 e2) =
     (\pp1 pp2 -> pp1 <+> equals <+> pp2) <$> permPrettyM e1 <*> permPrettyM e2
+  permPrettyM (BVProp_Neq e1 e2) =
+    (\pp1 pp2 -> pp1 <+> string "/=" <+> pp2) <$> permPrettyM e1 <*> permPrettyM e2
   permPrettyM (BVProp_InRange e rng) =
     (\pp1 pp2 -> pp1 <+> string "in" <+> pp2)
     <$> permPrettyM e <*> permPrettyM rng
@@ -1131,6 +1149,13 @@ instance PermPretty (BVProp w) where
   permPrettyM (BVProp_RangesDisjoint rng1 rng2) =
     (\pp1 pp2 -> pp1 <+> string "disjoint" <+> pp2)
     <$> permPrettyM rng1 <*> permPrettyM rng2
+
+instance PermPretty (LLVMArrayBorrow w) where
+  permPrettyM (FieldBorrow (LLVMArrayIndex ix fld_num)) =
+    do pp_ix <- permPrettyM ix
+       let pp_fld_num = string (show fld_num)
+       return (parens pp_ix <> string "." <> pp_fld_num)
+  permPrettyM (RangeBorrow rng) = permPrettyM rng
 
 instance PermPretty (DistPerms ps) where
   permPrettyM ps = encloseSep PP.empty PP.empty comma <$> helper ps where

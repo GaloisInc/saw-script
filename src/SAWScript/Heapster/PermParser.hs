@@ -230,6 +230,14 @@ parseInParensOpt m = parseInParens m <|> m
 -- * Parsing Types
 ----------------------------------------------------------------------
 
+-- | A 'NatRepr' for @1@
+oneRepr :: NatRepr 1
+oneRepr = knownRepr
+
+-- | Parse a comma
+comma :: Stream s Identity Char => PermParseM s ()
+comma = char ',' >> return ()
+
 -- | Parse an integer
 integer :: Stream s Identity Char => PermParseM s Integer
 integer = read <$> many1 digit
@@ -241,7 +249,7 @@ parseNatRepr =
   do i <- integer
      case someNat i of
        Just (Some w)
-         | Left leq <- decideLeq knownNat w -> return (Some (Pair w leq))
+         | Left leq <- decideLeq oneRepr w -> return (Some (Pair w leq))
        Just _ -> unexpected "Zero bitvector width not allowed"
        Nothing -> error "parseNatRepr: unexpected negative bitvector width"
 
@@ -320,25 +328,39 @@ parseIdent =
      cs <- many (alphaNum <|> char '_' <|> char '\'')
      return (c:cs)
 
--- | Parse a valid identifier string as a variable in the current environment
-parseVarAndStr :: Stream s Identity Char => PermParseM s (String, SomeName)
-parseVarAndStr =
+-- | Parse a valid identifier string as an expression variable
+parseExprVarAndStr :: Stream s Identity Char => PermParseM s (String, SomeName)
+parseExprVarAndStr =
   do str <- parseIdent
      env <- getState
      case lookupExprVar str env of
        Just x -> return (str, x)
        Nothing -> unexpected ("Unknown variable: " ++ str)
 
--- | Parse a valid identifier string as a variable in the current environment
-parseVar :: Stream s Identity Char => PermParseM s SomeName
-parseVar = snd <$> parseVarAndStr
+-- | Parse a valid identifier string as an expression variable
+parseExprVar :: Stream s Identity Char => PermParseM s SomeName
+parseExprVar = snd <$> parseExprVarAndStr
 
--- | Parse an identifier as a variable of a specific type
-parseVarOfType :: Stream s Identity Char => TypeRepr a ->
-                  PermParseM s (ExprVar a)
-parseVarOfType tp =
-  do (str, some_nm) <- parseVarAndStr
+-- | Parse an identifier as an expression variable of a specific type
+parseExprVarOfType :: Stream s Identity Char => TypeRepr a ->
+                      PermParseM s (ExprVar a)
+parseExprVarOfType tp =
+  do (str, some_nm) <- parseExprVarAndStr
      castTypedM ("Variable of incorrect type: " ++ str) tp some_nm
+
+-- | Parse an identifier as a permission variable of a specific type
+parsePermVarOfType :: Stream s Identity Char => TypeRepr a ->
+                      PermParseM s (PermVar a)
+parsePermVarOfType tp =
+  do str <- parseIdent
+     env <- getState
+     case lookupPermVar str env of
+       Just some_perm_name ->
+         unPermName <$>
+         castTypedM ("Permission variable of incorrect type: "
+                     ++ str) tp some_perm_name
+       Nothing ->
+         unexpected ("Unkown variable: " ++ str)
 
 -- | Parse a single bitvector factor of the form @x*n@, @n*x@, @x@, or @n@,
 -- where @x@ is a variable and @n@ is an integer. Note that this returns a
@@ -350,15 +372,15 @@ parseBVFactor =
   spaces >>
   (try (do i <- integer
            spaces >> char '*' >> spaces
-           x <- parseVarOfType knownRepr
+           x <- parseExprVarOfType knownRepr
            return $ PExpr_BV [BVFactor i x] 0)
    <|>
-   try (do x <- parseVarOfType knownRepr
+   try (do x <- parseExprVarOfType knownRepr
            spaces >> char '*' >> spaces
            i <- integer
            return $ PExpr_BV [BVFactor i x] 0)
    <|>
-   try (do x <- parseVarOfType knownRepr
+   try (do x <- parseExprVarOfType knownRepr
            return $ PExpr_BV [BVFactor 1 x] 0)
    <|>
    do i <- integer
@@ -378,24 +400,24 @@ parseExpr :: Stream s Identity Char => TypeRepr a ->
              PermParseM s (PermExpr a)
 parseExpr UnitRepr =
   try (string "unit" >> return PExpr_Unit) <|>
-  (PExpr_Var <$> parseVarOfType UnitRepr)
+  (PExpr_Var <$> parseExprVarOfType UnitRepr)
 parseExpr NatRepr =
-  (PExpr_Nat <$> integer) <|> (PExpr_Var <$> parseVarOfType NatRepr)
+  (PExpr_Nat <$> integer) <|> (PExpr_Var <$> parseExprVarOfType NatRepr)
 parseExpr (BVRepr w) = withKnownNat w parseBVExpr
 parseExpr tp@(StructRepr fld_tps) =
   spaces >>
   ((string "struct" >>
     parseInParens (PExpr_Struct <$> parseExprs (mkCruCtx fld_tps))) <|>
-   (PExpr_Var <$> parseVarOfType tp))
+   (PExpr_Var <$> parseExprVarOfType tp))
 parseExpr LifetimeRepr =
   try (string "always" >> return PExpr_Always) <|>
-  (PExpr_Var <$> parseVarOfType LifetimeRepr)
+  (PExpr_Var <$> parseExprVarOfType LifetimeRepr)
 parseExpr tp@(LLVMPointerRepr w) =
   withKnownNat w $
   spaces >>
   (try (string "llvmword" >>
         (PExpr_LLVMWord <$> parseInParens parseBVExpr)) <|>
-   (do x <- parseVarOfType tp
+   (do x <- parseExprVarOfType tp
        try (do spaces >> char '+'
                off <- parseBVExpr
                return $ PExpr_LLVMOffset x off) <|>
@@ -418,8 +440,8 @@ parseExpr tp@(FunctionHandleRepr _ _) =
 parseExpr PermListRepr =
   -- FIXME: parse non-empty perm lists
   (string "[]" >> return PExpr_PermListNil) <|>
-  (PExpr_Var <$> parseVarOfType PermListRepr)
-parseExpr tp = PExpr_Var <$> parseVarOfType tp
+  (PExpr_Var <$> parseExprVarOfType PermListRepr)
+parseExpr tp = PExpr_Var <$> parseExprVarOfType tp
 
 
 -- | Parse a comma-separated list of expressions to a 'PermExprs'
@@ -464,7 +486,7 @@ parseValPerm tp =
                spaces >> char '.'
                fmap ValPerm_Mu $ mbM $ nu $ \p_x ->
                  withPermVar var tp p_x $ parseValPerm tp) <|>
-       -- FIXME HERE NOW: (ValPerm_Var <$> parseVarOfType (valuePermRepr tp)) <|>
+       try (ValPerm_Var <$> parsePermVarOfType tp) <|>
        (ValPerm_Conj <$> parseAtomicPerms tp)
      spaces
      try (string "\\/" >> (ValPerm_Or p1 <$> parseValPerm tp)) <|>
@@ -473,7 +495,95 @@ parseValPerm tp =
 -- | Parse a @*@-separated list of atomic permissions
 parseAtomicPerms :: (Stream s Identity Char, BindState s) => TypeRepr a ->
                     PermParseM s [AtomicPerm a]
-parseAtomicPerms tp = error "FIXME HERE NOW"
+parseAtomicPerms tp =
+  do p1 <- parseAtomicPerm tp
+     spaces
+     try (string "*" >> (p1:) <$> parseAtomicPerms tp) <|> return [p1]
+
+-- | Parse an atomic permission of a specific type
+parseAtomicPerm :: (Stream s Identity Char, BindState s) => TypeRepr a ->
+                   PermParseM s (AtomicPerm a)
+parseAtomicPerm (LLVMPointerRepr w)
+  | Left LeqProof <- decideLeq oneRepr w =
+    withKnownNat w
+    (try (Perm_LLVMField <$> parseLLVMFieldPerm False) <|>
+     try (Perm_LLVMArray <$> parseLLVMArrayPerm) <|>
+     try (string "free" >> (Perm_LLVMFree <$> parseInParens parseBVExpr)) <|>
+     Perm_BVProp <$> parseBVProp)
+
+-- | Parse a field permission @[l]ptr((rw,off) |-> p)@. If the 'Bool' flag is
+-- 'True', the field permission is being parsed as part of an array permission,
+-- so that @ptr@ and outer parentheses should be omitted.
+parseLLVMFieldPerm :: (Stream s Identity Char, BindState s,
+                       KnownNat w, 1 <= w) =>
+                      Bool -> PermParseM s (LLVMFieldPerm w)
+parseLLVMFieldPerm in_array =
+  do l <- try (do string "["
+                  l <- parseExpr knownRepr
+                  string "]"
+                  return l) <|> return PExpr_Always
+     if in_array then spaces >> string "ptr" >> string "(" >> return ()
+       else return ()
+     spaces >> string "("
+     llvmFieldRW <- (string "R" >> return Read) <|> (string "W" >> return Write)
+     spaces >> comma >> spaces
+     llvmFieldOffset <- parseBVExpr
+     spaces >> string ")" >> spaces >> string "|->" >> spaces
+     llvmFieldContents <- parseValPerm knownRepr
+     if in_array then spaces >> string ")" >> return () else return ()
+     return (LLVMFieldPerm {..})
+
+-- | Parse an array permission @array(off,<len,*stride,[fp1,...])@
+parseLLVMArrayPerm :: (Stream s Identity Char, BindState s,
+                       KnownNat w, 1 <= w) =>
+                      PermParseM s (LLVMArrayPerm w)
+parseLLVMArrayPerm =
+  do string "array("
+     llvmArrayOffset <- parseBVExpr
+     spaces >> comma >> spaces >> char '<'
+     llvmArrayLen <- parseBVExpr
+     spaces >> comma >> spaces >> char '*'
+     llvmArrayStride <- integer
+     spaces >> comma >> spaces >> char '['
+     llvmArrayFields <- sepBy1 (parseLLVMFieldPerm True) (spaces >> comma)
+     let llvmArrayBorrows = []
+     return LLVMArrayPerm {..}
+
+-- | Parse a 'BVProp'
+parseBVProp :: (Stream s Identity Char, BindState s, KnownNat w, 1 <= w) =>
+               PermParseM s (BVProp w)
+parseBVProp =
+  try (parseBVExpr >>= \e1 ->
+        try (do spaces >> string "==" >> spaces
+                e2 <- parseBVExpr
+                return $ BVProp_Eq e1 e2) <|>
+        try (do spaces >> string "/=" >> spaces
+                e2 <- parseBVExpr
+                return $ BVProp_Neq e1 e2) <|>
+        try (do spaces1 >> string "in" >> spaces1
+                rng <- parseBVRange
+                return $ BVProp_InRange e1 rng) <|>
+        try (do spaces1 >> string "not" >> spaces1 >> string "in" >> spaces1
+                rng <- parseBVRange
+                return $ BVProp_NotInRange e1 rng)) <|>
+  do rng1 <- parseBVRange
+     spaces
+     mk_prop <-
+       try (string "subset" >> return BVProp_RangeSubset) <|>
+       (string "disjoint" >> return BVProp_RangesDisjoint)
+     rng2 <- parseBVRange
+     return $ mk_prop rng1 rng2
+
+-- | Parse a 'BVRange' written as @{ off, len }@
+parseBVRange :: (Stream s Identity Char, BindState s, KnownNat w, 1 <= w) =>
+                PermParseM s (BVRange w)
+parseBVRange =
+  do spaces >> char '{'
+     bvRangeOffset <- parseBVExpr
+     spaces >> comma
+     bvRangeLength <- parseBVExpr
+     spaces >> char '}'
+     return BVRange {..}
 
 -- FIXME HERE NOW:
 -- parse a DistPerms list x1:p1, x2:p2, ... where we know the types of the xi
@@ -519,7 +629,7 @@ parseValPermH env tp =
            spaces >> char '.'
            ValPerm_Mu <$>
              parseValPerm (extendPEnv env var (valuePermRepr tp)) tp) <|>
-       (ValPerm_Var <$> parseVarOfType env (valuePermRepr tp))
+       (ValPerm_Var <$> parseExprVarOfType env (valuePermRepr tp))
      spaces
      try (string "\\/" >> (ValPerm_Or p1 <$> parseValPerm env tp)) <|>
        return p1
@@ -542,12 +652,12 @@ parseValPerm env tp@(LLVMPointerRepr w) =
 parseValPerm env tp = parseValPermH env tp
 
 
-parseVarPerms :: Stream s Identity Char => ParserEnv ctx ->
+parseExprVarPerms :: Stream s Identity Char => ParserEnv ctx ->
                  MapF (PermVar ctx) (ValuePerm ctx) ->
                  PermParseM s (MapF (PermVar ctx) (ValuePerm ctx))
-parseVarPerms env perms =
+parseExprVarPerms env perms =
   do spaces
-     some_x <- parseVar env
+     some_x <- parseExprVar env
      spaces >> char ':'
      case some_x of
        Some (Typed tp x) ->
@@ -557,12 +667,12 @@ parseVarPerms env perms =
             p <- parseValPerm env tp
             let perms' = MapF.insert x p perms
             spaces
-            (char ',' >> parseVarPerms env perms') <|> return perms'
+            (char ',' >> parseExprVarPerms env perms') <|> return perms'
 
 parsePermSet :: Stream s Identity Char => ParserEnv ctx ->
                 PermParseM s (PermSet ctx)
 parsePermSet env =
-  do perms <- parseVarPerms env MapF.empty
+  do perms <- parseExprVarPerms env MapF.empty
      return $ PermSet (ctxOfEnv env) $
        generatePermVar (size env) $ \x ->
        case MapF.lookup x perms of
