@@ -1,4 +1,5 @@
 {-# OPTIONS -Wall -Werror #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -10,17 +11,25 @@
 module SAWScript.Crucible.LLVM.Boilerplate
   ( llvm_boilerplate_info
   , llvm_boilerplate
+
+  , BPType(..)
+  , BPArg(..), bpArgType, bpArgBufSize, bpArgName
+  , BPFun(..), bpFunName, bpFunSetup, bpFunRet, bpFunArgs, bpFunDeps
+
+  , extractDefines
   ) where
+
+import Control.Lens.TH
 
 import System.IO
 
 import Control.Exception (Exception)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
+import Control.Lens
 
 import Data.Bifunctor
 import Data.Maybe
-import Data.Tuple
 import Data.List
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -54,30 +63,32 @@ data BPType
   | BPDouble
   | BPAlias Text
   | BPPointer BPType
-  | BPArray Text BPType
+  | BPArray Int BPType
   | BPStruct [BPType]
   deriving (Show, Eq, Ord)
 
--- Tuple of argument type, possibly buffer size in bytes,
--- possibly argument name from debug symbols
-type BPArg ty = (ty, Maybe Int, Maybe Text)
+data BPArg ty = BPArg
+  { _bpArgType :: ty
+  , _bpArgBufSize :: Maybe Int
+  , _bpArgName :: Maybe Text
+  } deriving (Show, Eq, Functor, Foldable, Traversable)
+makeLenses ''BPArg
 
 data BPFun ty = BPFun
-  { bpFunName :: Text
-  , bpFunSetup :: Text
-  , bpFunRet :: ty
-  , bpFunArgs :: [BPArg ty]
-  , bpFunLenArgs :: [(Int, Int)]
-  , bpFunDeps :: [Text]
+  { _bpFunName :: Text
+  , _bpFunSetup :: Text
+  , _bpFunRet :: ty
+  , _bpFunArgs :: [BPArg ty]
+  , _bpFunDeps :: [Text]
   } deriving (Show, Functor, Foldable, Traversable)
+makeLenses ''BPFun
 
 -- Ignore differences in setup name
 instance Eq ty => Eq (BPFun ty) where
-  f1 == f2 = bpFunName f1 == bpFunName f2 &&
-             bpFunRet f1 == bpFunRet f2 &&
-             bpFunArgs f1 == bpFunArgs f2 &&
-             bpFunLenArgs f1 == bpFunLenArgs f2 &&
-             bpFunDeps f1 == bpFunDeps f2
+  f1 == f2 = _bpFunName f1 == _bpFunName f2 &&
+             _bpFunRet f1 == _bpFunRet f2 &&
+             _bpFunArgs f1 == _bpFunArgs f2 &&
+             _bpFunDeps f1 == _bpFunDeps f2
 
 debugInfoArgName :: LLVM.Module -> LLVM.Define -> Int -> Maybe Text
 debugInfoArgName m d i = defScope >>= lookup i . scopeArgs
@@ -102,77 +113,6 @@ debugInfoArgName m d i = defScope >>= lookup i . scopeArgs
               if s == s' then (fromIntegral a, Text.pack n):go xs else go xs
             go (_:xs) = go xs
 
-stmtInputsOutputs :: LLVM.Stmt -> (Set LLVM.Ident, Set LLVM.Ident)
-stmtInputsOutputs (LLVM.Result r i _) = second (Set.insert r) $ instrInputsOutputs i
-stmtInputsOutputs (LLVM.Effect i _) = instrInputsOutputs i
-
-instrInputsOutputs :: LLVM.Instr -> (Set LLVM.Ident, Set LLVM.Ident)
-instrInputsOutputs (LLVM.Ret v) = (valueIdents $ LLVM.typedValue v, mempty)
-instrInputsOutputs (LLVM.Arith _ v v') = (valueIdents (LLVM.typedValue v) <> valueIdents v', mempty)
-instrInputsOutputs (LLVM.Bit _ v v') = (valueIdents (LLVM.typedValue v) <> valueIdents v', mempty)
-instrInputsOutputs (LLVM.Conv _ v _) = (valueIdents $ LLVM.typedValue v, mempty)
-instrInputsOutputs (LLVM.Call _ _ _ vs) = (mconcat $ valueIdents . LLVM.typedValue <$> vs, mempty)
-instrInputsOutputs (LLVM.Alloca _ (Just v) _) = (valueIdents $ LLVM.typedValue v, mempty)
-instrInputsOutputs (LLVM.Load v _ _) = (valueIdents $ LLVM.typedValue v, mempty)
-instrInputsOutputs (LLVM.Store v l _ _) =
-  (valueIdents $ LLVM.typedValue v, valueIdents $ LLVM.typedValue l)
-instrInputsOutputs (LLVM.ICmp _ v v') = (valueIdents (LLVM.typedValue v) <> valueIdents v', mempty)
-instrInputsOutputs (LLVM.FCmp _ v v') = (valueIdents (LLVM.typedValue v) <> valueIdents v', mempty)
-instrInputsOutputs (LLVM.Phi _ vs) = (mconcat $ valueIdents . fst <$> vs, mempty)
-instrInputsOutputs (LLVM.GEP _ v vs) =
-  (valueIdents (LLVM.typedValue v) <> mconcat (valueIdents . LLVM.typedValue <$> vs), mempty)
-instrInputsOutputs (LLVM.ExtractValue v _) = (valueIdents $ LLVM.typedValue v, mempty)
-instrInputsOutputs (LLVM.InsertValue v v' _) =
-  ( valueIdents (LLVM.typedValue v) <> valueIdents (LLVM.typedValue v')
-  , valueIdents $ LLVM.typedValue v
-  )
-instrInputsOutputs (LLVM.ExtractElt v v') =
-  (valueIdents (LLVM.typedValue v) <> valueIdents v', mempty)
-instrInputsOutputs (LLVM.InsertElt v v' v'') =
-  (valueIdents (LLVM.typedValue v) <> valueIdents (LLVM.typedValue v') <> valueIdents v''
-  , valueIdents $ LLVM.typedValue v
-  )
-instrInputsOutputs _ = (mempty, mempty)
-
-valueIdents :: LLVM.Value -> Set LLVM.Ident
-valueIdents (LLVM.ValIdent i) = Set.singleton i
-valueIdents (LLVM.ValArray _ vs) = mconcat $ valueIdents <$> vs
-valueIdents (LLVM.ValStruct vs) = mconcat $ valueIdents . LLVM.typedValue <$> vs
-valueIdents (LLVM.ValPackedStruct vs) = mconcat $ valueIdents . LLVM.typedValue <$> vs
-valueIdents _ = mempty
-
-analyzeUsage :: [Set LLVM.Ident] -> [LLVM.Stmt] -> [Set LLVM.Ident]
-analyzeUsage gs [] = gs
-analyzeUsage gs (stmt:stmts) = analyzeUsage (update <$> gs) stmts
-  where (i, o) = stmtInputsOutputs stmt
-        update g = if any (`elem` i) g
-                   then o <> g
-                   else g
-
-extractAllocas :: [LLVM.Stmt] -> [LLVM.Ident]
-extractAllocas [] = []
-extractAllocas (LLVM.Result i LLVM.Alloca{} _:stmts) = i:extractAllocas stmts
-extractAllocas (_:stmts) = extractAllocas stmts
-
-extractICmps :: [LLVM.Stmt] -> [Set LLVM.Ident]
-extractICmps [] = []
-extractICmps (LLVM.Result _
-               (LLVM.ICmp _
-                (LLVM.Typed _ (LLVM.ValIdent i))
-                (LLVM.ValIdent i'))
-               _:stmts) = Set.fromList [i, i']:extractICmps stmts
-extractICmps (_:stmts) = extractICmps stmts
-
-extractGEPs :: [LLVM.Stmt] -> [(LLVM.Ident, Set LLVM.Ident)]
-extractGEPs [] = []
-extractGEPs (LLVM.Result _
-              (LLVM.GEP _
-                (LLVM.Typed _ (LLVM.ValIdent s))
-                vs)
-              _:stmts) =
-  (s, mconcat $ valueIdents . LLVM.typedValue <$> vs):extractGEPs stmts
-extractGEPs (_:stmts) = extractGEPs stmts
-
 llvmRefTypeSize :: Crucible.TypeContext -> LLVM.Type -> Maybe Int
 llvmRefTypeSize tc (LLVM.PtrTo t) =
   let ?lc = tc in
@@ -184,21 +124,19 @@ llvmRefTypeSize _ _ = Nothing
 convertDefine :: LLVM.Module -> Crucible.TypeContext -> [Profile] -> LLVM.Define -> [BPFun LLVM.Type]
 convertDefine m tc profs d =
   (\(suffix, pargs) -> BPFun
-    { bpFunName = defName d
-    , bpFunSetup = defName d <> suffix <> "_setup"
-    , bpFunRet = LLVM.defRetType d
-    , bpFunArgs =
-        (\(t, mp, i) -> ( LLVM.typedType t
-                        , do p <- quot <$> mp <*> llvmRefTypeSize tc (LLVM.typedType t)
-                             if p <= 1 ||
-                                (i - 1) `elem` (fst <$> lenPairs) ||
-                                (i - 1) `elem` (snd <$> lenPairs)
-                               then Nothing else Just p
-                        , debugInfoArgName m d i
-                        )
+    { _bpFunName = defName d
+    , _bpFunSetup = defName d <> suffix <> "_setup"
+    , _bpFunRet = LLVM.defRetType d
+    , _bpFunArgs =
+        (\(t, mp, i) -> BPArg
+          { _bpArgType =  LLVM.typedType t
+          , _bpArgBufSize = do
+              p <- quot <$> mp <*> llvmRefTypeSize tc (LLVM.typedType t)
+              if p <= 1 then Nothing else Just p
+          , _bpArgName = debugInfoArgName m d i
+          }
         ) <$> zip3 (LLVM.defArgs d) pargs [1, 2..]
-    , bpFunLenArgs = lenPairs
-    , bpFunDeps = Set.toList (Set.intersection
+    , _bpFunDeps = Set.toList (Set.intersection
                                (Set.fromList $ defName <$> LLVM.modDefines m)
                                $ extractCalls stmts)
     }) <$> profileArgs
@@ -211,38 +149,6 @@ convertDefine m tc profs d =
       Just as -> first (("_profile" <>) . Text.pack . show) <$> zip [0 :: Int, 1..] as
     stmts :: [LLVM.Stmt]
     stmts = mconcat . fmap LLVM.bbStmts $ LLVM.defBody d
-    icmps :: [Set LLVM.Ident]
-    icmps = extractICmps stmts
-    geps :: [(LLVM.Ident, Set LLVM.Ident)]
-    geps = extractGEPs stmts
-    allocas :: [Set LLVM.Ident]
-    allocas = analyzeUsage (Set.singleton <$> extractAllocas stmts) stmts
-    guessIsLen :: Set LLVM.Ident -> Set LLVM.Ident -> Bool
-    guessIsLen len buf = not . null $ filter
-      (\x -> any (`elem` x) comparedWith && any (`elem` x) indexedBy) allocas
-      where
-        comparedWith :: Set LLVM.Ident
-        comparedWith = Set.difference (mconcat $ filter (any $ flip elem len) icmps) len
-        indexedBy :: Set LLVM.Ident
-        indexedBy = mconcat $ snd <$> filter (flip elem buf . fst) geps
-    isPointer :: LLVM.Type -> Bool
-    isPointer (LLVM.PtrTo _) = True
-    isPointer _ = False
-    isInt :: LLVM.Type -> Bool
-    isInt (LLVM.PrimType (LLVM.Integer _)) = True
-    isInt _ = False
-    args :: [(Int, Set LLVM.Ident)]
-    args = zip [0, 1..] $ analyzeUsage (Set.singleton . LLVM.Ident . show <$> [0 :: Int, 1..]) stmts
-    labeledArgs :: [(LLVM.Type, Int)]
-    labeledArgs = zip (LLVM.typedType <$> LLVM.defArgs d) [0, 1..]
-    lenPairs :: [(Int, Int)]
-    lenPairs = [(l, b)
-               | l <- snd <$> filter (isInt . fst) labeledArgs
-               , b <- snd <$> filter (isPointer . fst) labeledArgs
-               , case (lookup l args, lookup b args) of
-                   (Just len, Just buf) -> guessIsLen len buf
-                   _ -> False
-               ]
 
 extractCalls :: [LLVM.Stmt] -> Set Text
 extractCalls [] = Set.empty
@@ -285,13 +191,9 @@ typeToBPType (LLVM.PrimType t) = primTypeToBPType t
     primTypeToBPType t' = throwM . BPException $ "Unsupported primitive type " <> Text.pack (show t')
 typeToBPType (LLVM.Alias (LLVM.Ident n)) = pure . BPAlias $ Text.pack n
 typeToBPType (LLVM.PtrTo t) = BPPointer <$> typeToBPType t
-typeToBPType (LLVM.Array i t) = BPArray (Text.pack $ show i) <$> typeToBPType t
+typeToBPType (LLVM.Array i t) = BPArray (fromIntegral i) <$> typeToBPType t
 typeToBPType (LLVM.Struct ts) = BPStruct <$> mapM typeToBPType ts
 typeToBPType t = throwM . BPException $ "Unsupported type " <> Text.pack (show t)
-
-bpTypeToCryptolType :: MonadThrow m => BPType -> m Text
-bpTypeToCryptolType (BPInt i) = pure $ mconcat ["[", Text.pack $ show i, "]"]
-bpTypeToCryptolType _ = throwM $ BPException "Attempted to generate non-integer Cryptol type"
 
 bpTypeToSAWScriptType :: MonadThrow m => BPType -> m Text
 bpTypeToSAWScriptType BPVoid = throwM $ BPException "Attempted to generate void"
@@ -302,12 +204,12 @@ bpTypeToSAWScriptType (BPAlias n) = pure $ mconcat ["(llvm_type \"%", n, "\")"]
 bpTypeToSAWScriptType (BPPointer _) = throwM $ BPException "Attempted to generate pointer type"
 bpTypeToSAWScriptType (BPArray i t) = do
   t' <- bpTypeToSAWScriptType t
-  pure $ mconcat ["(llvm_array ", i, " ", t', ")"]
+  pure $ mconcat ["(llvm_array ", Text.pack $ show i, " ", t', ")"]
 bpTypeToSAWScriptType (BPStruct _) = throwM $ BPException "Attempted to generate struct type"
 
 bpTypeToSAWScriptArgBinds :: MonadThrow m => Text -> Text -> Maybe Int -> BPType -> m Text
 bpTypeToSAWScriptArgBinds n n' (Just size) (BPPointer t) =
-  bpTypeToSAWScriptArgBinds n n' Nothing . BPPointer $ BPArray (Text.pack $ show size) t
+  bpTypeToSAWScriptArgBinds n n' Nothing . BPPointer $ BPArray size t
 bpTypeToSAWScriptArgBinds n n' Nothing (BPPointer t) = do
   t' <- bpTypeToSAWScriptType t
   pure $ mconcat
@@ -354,7 +256,7 @@ bpTypeToSAWScriptRetBinds t = do
     ]
 
 bpFunToSpec :: forall m. MonadThrow m => BPFun BPType -> m Text
-bpFunToSpec (BPFun name setup ret as ls deps) = do
+bpFunToSpec (BPFun name setup ret as deps) = do
   binds <- mconcat <$> mapM argBinds args
   retbinds <- bpTypeToSAWScriptRetBinds ret
   pure $ mconcat
@@ -373,30 +275,15 @@ bpFunToSpec (BPFun name setup ret as ls deps) = do
         argName :: Int -> Text
         argName i = "arg" <> Text.pack (show i)
         argIdent :: (BPArg BPType, Int) -> Text
-        argIdent ((_, _, Just i), _) = i
-        argIdent ((_, _, Nothing), i) = argName i
+        argIdent (a, i)
+          | Just n <- a ^. bpArgName = n
+          | otherwise = argName i
         argParam :: (BPArg BPType, Int) -> Text
-        argParam ((BPPointer{}, _, _), i) = argName i
-        argParam (_, i) = mconcat ["crucible_term ", argName i]
+        argParam (a, i)
+          | BPPointer{} <- a ^. bpArgType = argName i
+          | otherwise = mconcat ["crucible_term ", argName i]
         argBinds :: (BPArg BPType, Int) -> m Text
-        argBinds a@((t, arr, _), i) =
-          case (lookup i ls, lookup i $ swap <$> ls) of
-            (Just _, _) -> do
-              t' <- bpTypeToCryptolType t
-              pure $ mconcat
-                [ "  let ", argName i
-                , " = {{ `ARRAY_LEN : ", t'
-                , "}}; // ", argIdent a
-                , "\n"
-                ]
-            (Nothing, Just _) ->
-              case t of
-                BPPointer t' ->
-                  bpTypeToSAWScriptArgBinds (argName i) (argIdent a) Nothing
-                  . BPPointer $ BPArray "ARRAY_LEN" t'
-                _ -> throwM $ BPException "Guessed non-pointer type is array"
-            (Nothing, Nothing) ->
-              bpTypeToSAWScriptArgBinds (argName i) (argIdent a) arr t
+        argBinds ai@(a, i) = bpTypeToSAWScriptArgBinds (argName i) (argIdent ai) (a ^. bpArgBufSize) $ a ^. bpArgType
 
 llvm_boilerplate_info :: Some LLVMModule -> [Profile] -> TopLevel ()
 llvm_boilerplate_info m profs = liftIO $
