@@ -136,11 +136,6 @@ jobs:
         - export TESTS=sawBIKE_r2
         - export S2N_LIBCRYPTO=openssl-1.0.2
     - <<: *s2n-test-staging
-      name: bike_r1
-      before_script:
-        - export TESTS=sawBIKE_r1
-        - export S2N_LIBCRYPTO=openssl-1.0.2
-    - <<: *s2n-test-staging
       name: tls
       before_script:
         - export TESTS=tls
