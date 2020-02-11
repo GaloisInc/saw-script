@@ -585,135 +585,52 @@ parseBVRange =
      spaces >> char '}'
      return BVRange {..}
 
--- FIXME HERE NOW:
--- parse a DistPerms list x1:p1, x2:p2, ... where we know the types of the xi
--- parse inside a variable context (x1:tp1, ...).p
--- parse a fun perm (ctx).dist_perms -> dist_perms
 
-{-
-parseLLVMShape :: (1 <= w, Stream s Identity Char) =>
-                  ParserEnv ctx -> NatRepr w ->
-                  PermParseM s (LLVMShapePerm ctx w)
-parseLLVMShape env w =
-  do spaces
-     llvmFieldOffset <- integer
-     spaces
-     string "|->"
-     spaces >> char '('
-     llvmFieldSplitting <- parseSplitting env
-     spaces >> char ','
-     llvmFieldPerm <- parseValPerm env (LLVMPointerRepr w)
-     spaces >> char ')'
-     return $ LLVMFieldShapePerm $ LLVMFieldPerm { .. }
+----------------------------------------------------------------------
+-- * Parsing Permission Sets and Function Permissions
+----------------------------------------------------------------------
 
+-- | A sequence of variable names and their types
+data ParsedCtx ctx = ParsedCtx [String] (CruCtx ctx)
 
-parseValPermH :: Stream s Identity Char => ParserEnv ctx -> TypeRepr a ->
-                 PermParseM s (ValuePerm ctx a)
-parseValPermH env tp =
-  do spaces
-     p1 <-
-       (parseInParens (parseValPerm env tp)) <|>
-       (string "true" >> return ValPerm_True) <|>
-       (string "eq" >> parseInParens (ValPerm_Eq <$> parseExpr env tp)) <|>
-       (do string "exists" >> spaces
-           var <- parseIdent
-           spaces >> char ':'
-           some_tp' <- parseType
-           spaces >> char '.'
-           case some_tp' of
-             Some tp' ->
-               do p <- parseValPerm (extendPEnv env var tp') tp
-                  return $ ValPerm_Exists tp' p) <|>
-       (do string "mu" >> spaces
-           var <- parseIdent
-           spaces >> char '.'
-           ValPerm_Mu <$>
-             parseValPerm (extendPEnv env var (valuePermRepr tp)) tp) <|>
-       (ValPerm_Var <$> parseExprVarOfType env (valuePermRepr tp))
-     spaces
-     try (string "\\/" >> (ValPerm_Or p1 <$> parseValPerm env tp)) <|>
-       return p1
+-- | Add a variable name and type to an unknown 'ParsedCtx'
+consSomeParsedCtx :: String -> Some TypeRepr -> Some ParsedCtx ->
+                     Some ParsedCtx
+consSomeParsedCtx x (Some tp) (Some (ParsedCtx xs ctx)) =
+  Some (ParsedCtx (x:xs) (CruCtxCons ctx tp))
 
-parseValPerm :: Stream s Identity Char => ParserEnv ctx -> TypeRepr a ->
-                PermParseM s (ValuePerm ctx a)
-parseValPerm env tp@(LLVMPointerRepr w) =
-  (do string "llvmptr"
-      spaces
-      maybe_free <-
-        try (do char '['
-                e <- parseExpr env (BVRepr w)
-                spaces >> char ']'
-                return $ Just e) <|>
-        return Nothing
-      shapes <-
-        parseInParens (sepBy (parseLLVMShape env w) (spaces >> char '*'))
-      return $ ValPerm_LLVMPtr w shapes maybe_free) <|>
-  parseValPermH env tp
-parseValPerm env tp = parseValPermH env tp
-
-
-parseExprVarPerms :: Stream s Identity Char => ParserEnv ctx ->
-                 MapF (PermVar ctx) (ValuePerm ctx) ->
-                 PermParseM s (MapF (PermVar ctx) (ValuePerm ctx))
-parseExprVarPerms env perms =
-  do spaces
-     some_x <- parseExprVar env
-     spaces >> char ':'
-     case some_x of
-       Some (Typed tp x) ->
-         do if MapF.member x perms then
-              unexpected ("Variable " ++ lookupVarName env x ++ " occurs twice")
-              else return ()
-            p <- parseValPerm env tp
-            let perms' = MapF.insert x p perms
-            spaces
-            (char ',' >> parseExprVarPerms env perms') <|> return perms'
-
-parsePermSet :: Stream s Identity Char => ParserEnv ctx ->
-                PermParseM s (PermSet ctx)
-parsePermSet env =
-  do perms <- parseExprVarPerms env MapF.empty
-     return $ PermSet (ctxOfEnv env) $
-       generatePermVar (size env) $ \x ->
-       case MapF.lookup x perms of
-         Just p -> p
-         Nothing -> ValPerm_True
-
-parseCtx :: Stream s Identity Char => ParserEnv ctx ->
-            PermParseM s (Some ParserEnv)
-parseCtx env =
-  do spaces
-     x <- parseIdent
-     case lookupVar x env of
-       Nothing -> return ()
-       Just _ -> unexpected ("Variable " ++ x ++ " occurs twice")
+-- | Parse a typing context @x1:tp1, x2:tp2, ...@
+parseCtx :: (Stream s Identity Char, BindState s) =>
+            PermParseM s (Some ParsedCtx)
+parseCtx =
+  do x <- parseIdent
      spaces >> char ':'
      some_tp <- parseType
-     spaces
-     case some_tp of
-       Some tp ->
-         let env' = extendPEnv env x tp in
-         (char ',' >> parseCtx env') <|> return (Some env')
+     try (do spaces >> comma
+             some_ctx' <- parseCtx
+             return $ consSomeParsedCtx x some_tp some_ctx')
+       <|>
+       (case some_tp of
+           Some tp ->
+             return (Some $ ParsedCtx [x] $ CruCtxCons CruCtxNil tp))
 
-parsePermsInCtx1 :: String -> String ->
-                    Either ParseError (Some (Product CtxRepr PermSet))
-parsePermsInCtx1 ctx_str perms_str =
-  case parse (parseCtx empty) "input" ctx_str of
-    Left err -> Left err
-    Right (Some env) ->
-      case parse (parsePermSet env) "input" perms_str of
-        Left err -> Left err
-        Right permSet -> Right $ Some (Pair (ctxOfEnv env) permSet)
+-- | Parse a sequence @x1:p1, x2:p2, ...@ of variables and their permissions
+parseDistPerms :: (Stream s Identity Char, BindState s) =>
+                  PermParseM s (Some DistPerms)
+parseDistPerms =
+  parseExprVar >>= \some_x ->
+  case some_x of
+    Some (Typed tp x) ->
+      do p <- parseValPerm tp
+         try (do spaces >> comma
+                 some_dist_perms' <- parseDistPerms
+                 case some_dist_perms' of
+                   Some perms ->
+                     return $ Some (DistPermsCons perms x p))
+           <|>
+           return (Some $ distPerms1 x p)
 
-parsePermsInCtx2 :: String -> String -> String ->
-                    Either ParseError (Some
-                                       (Product CtxRepr
-                                        (Product PermSet PermSet)))
-parsePermsInCtx2 ctx_str perms1_str perms2_str =
-  do some_env <- parse (parseCtx empty) "input" ctx_str
-     case some_env of
-       Some env ->
-         do permSet1 <- parse (parsePermSet env) "input" perms1_str
-            permSet2 <- parse (parsePermSet env) "input" perms2_str
-            return $ Some $ Pair (ctxOfEnv env) (Pair permSet1 permSet2)
--}
+
+-- FIXME HERE NOW:
+-- parse inside a variable context (x1:tp1, ...).p
+-- parse a fun perm (ctx).dist_perms -> dist_perms
