@@ -156,6 +156,9 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         liftIO $ initialMemory sym elf cc maxAddr globsyms methodSpec
 
       let
+        funcLookup = Macaw.LookupFunctionHandle $ \_ _ _ ->
+          fail "Attempted to call a function during x86 verification"
+        noExtraValidityPred _ _ _ _ = return Nothing
         ctx :: C.SimContext (Macaw.MacawSimulatorState Sym) Sym (Macaw.MacawExt Macaw.X86_64)
         ctx = C.SimContext
               { C._ctxSymInterface = sym
@@ -164,9 +167,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
               , C.simHandleAllocator = halloc
               , C.printHandle = stdout
               , C.extensionImpl =
-                Macaw.macawExtensions (Macaw.x86_64MacawEvalFn sfs) mvar globs
-                $ Macaw.LookupFunctionHandle $ \_ _ _ ->
-                  fail "Attempted to call a function during x86 verification"
+                Macaw.macawExtensions (Macaw.x86_64MacawEvalFn sfs) mvar globs funcLookup noExtraValidityPred
               , C._functionBindings =
                 C.insertHandleMap (C.cfgHandle cfg) (C.UseCFG cfg $ C.postdomInfo cfg) C.emptyHandleMap
               , C._cruciblePersonality = Macaw.MacawSimulatorState
