@@ -187,6 +187,14 @@ withExprVar str tp x m =
      putState env
      return ret
 
+-- | Run a parsing computation in a context extended with 0 or more expression
+-- variables
+withExprVars :: [String] -> CruCtx ctx -> MapRList Name ctx ->
+                PermParseM s a -> PermParseM s a
+withExprVars [] CruCtxNil MNil m = m
+withExprVars (x:xs) (CruCtxCons ctx tp) (ns :>: n) m =
+  withExprVars xs ctx ns $ withExprVar x tp n m
+
 -- | Run a parsing computation in a context extended with a permission variable
 withPermVar :: String -> TypeRepr tp -> PermVar tp ->
                PermParseM s a -> PermParseM s a
@@ -593,6 +601,12 @@ parseBVRange =
 -- | A sequence of variable names and their types
 data ParsedCtx ctx = ParsedCtx [String] (CruCtx ctx)
 
+-- | Add a variable name and type to a 'ParsedCtx'
+consParsedCtx :: String -> TypeRepr tp -> ParsedCtx ctx ->
+                 ParsedCtx (ctx :> tp)
+consParsedCtx x tp (ParsedCtx xs ctx) =
+  ParsedCtx (x:xs) (CruCtxCons ctx tp)
+
 -- | Add a variable name and type to an unknown 'ParsedCtx'
 consSomeParsedCtx :: String -> Some TypeRepr -> Some ParsedCtx ->
                      Some ParsedCtx
@@ -634,3 +648,27 @@ parseDistPerms =
 -- FIXME HERE NOW:
 -- parse inside a variable context (x1:tp1, ...).p
 -- parse a fun perm (ctx).dist_perms -> dist_perms
+
+inParsedCtxM :: (BindState s, NuMatching a) =>
+                ParsedCtx ctx -> PermParseM s a -> PermParseM s (Mb ctx a)
+inParsedCtxM (ParsedCtx ids tps) m =
+  mbM $ nuMulti (cruCtxProxies tps) $ \ns -> withExprVars ids tps ns m
+
+parseFunPerm :: (Stream s Identity Char, BindState s) =>
+                CruCtx args -> TypeRepr ret ->
+                PermParseM s (SomeFunPerm args ret)
+parseFunPerm args ret =
+  parseInParens parseCtx >>= \some_ghosts_ctx ->
+  case some_ghosts_ctx of
+    Some ghosts_ctx ->
+      do spaces >> char '.'
+         let arg_vars = take (cruCtxLen args) $ map (("arg" ++) . show) [0..]
+         let ghosts_l_ctx = consParsedCtx "l" LifetimeRepr ghosts_ctx
+         dperms_in <-
+           inParsedCtxM ghosts_l_ctx $
+           inParsedCtxM (ParsedCtx arg_vars args) parseDistPerms
+         dperms_out <-
+           inParsedCtxM ghosts_l_ctx $
+           inParsedCtxM (ParsedCtx ("ret":arg_vars) (CruCtxCons args ret))
+           parseDistPerms
+         error "FIXME HERE NOW"

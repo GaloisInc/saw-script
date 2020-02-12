@@ -432,3 +432,8 @@ appendCruCtx ctx1 (CruCtxCons ctx2 tp) = CruCtxCons (appendCruCtx ctx1 ctx2) tp
 cruCtxProxies :: CruCtx ctx -> MapRList Proxy ctx
 cruCtxProxies CruCtxNil = MNil
 cruCtxProxies (CruCtxCons ctx _) = cruCtxProxies ctx :>: Proxy
+
+-- | Compute the length of a 'CruCtx'
+cruCtxLen :: CruCtx ctx -> Int
+cruCtxLen CruCtxNil = 0
+cruCtxLen (CruCtxCons ctx _) = 1 + cruCtxLen ctx

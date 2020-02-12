@@ -1184,6 +1184,9 @@ $(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
 $(mkNuMatching [t| forall ps. DistPerms ps |])
 $(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
 
+instance NuMatchingAny1 DistPerms where
+  nuMatchingAny1Proof = nuMatchingProof
+
 instance Liftable RWModality where
   mbLift [nuP| Write |] = Write
   mbLift [nuP| Read |] = Read
