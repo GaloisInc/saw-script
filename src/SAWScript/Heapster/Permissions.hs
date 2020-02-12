@@ -2373,6 +2373,11 @@ consVarSubst (PermVarSubst elems) n = PermVarSubst (elems :>: n)
 varSubstLookup :: PermVarSubst ctx -> Member ctx a -> ExprVar a
 varSubstLookup (PermVarSubst m) memb = mapRListLookup memb m
 
+appendVarSubsts :: PermVarSubst ctx1 -> PermVarSubst ctx2 ->
+                   PermVarSubst (ctx1 :++: ctx2)
+appendVarSubsts (PermVarSubst es1) (PermVarSubst es2) =
+  PermVarSubst (appendMapRList es1 es2)
+
 varSubstVar :: PermVarSubst ctx -> Mb ctx (ExprVar a) -> ExprVar a
 varSubstVar s mb_x =
   case mbNameBoundP mb_x of
