@@ -888,7 +888,9 @@ data LLVMArrayBorrow w
 
 
 -- | A function permission is a set of input and output permissions inside a
--- context of ghost variables, including a lifetime ghost variable
+-- context of ghost variables, including a lifetime ghost variable. The input
+-- and output permissions are only over the "real" arguments (including the
+-- return value in the latter case); ghost arguments do not get permissions.
 data FunPerm ghosts args ret where
   FunPerm :: CruCtx ghosts -> CruCtx args -> TypeRepr ret ->
              Mb (ghosts :> LifetimeType) (MbValuePerms args) ->

@@ -8,6 +8,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
 
@@ -17,6 +18,7 @@ import Data.List
 import Data.String
 import Data.Maybe
 import Data.Functor.Product
+import Data.Functor.Constant
 import Data.Functor.Compose
 import Data.Type.Equality
 import GHC.TypeLits
@@ -189,10 +191,11 @@ withExprVar str tp x m =
 
 -- | Run a parsing computation in a context extended with 0 or more expression
 -- variables
-withExprVars :: [String] -> CruCtx ctx -> MapRList Name ctx ->
+withExprVars :: MapRList (Constant String) ctx -> CruCtx ctx ->
+                MapRList Name ctx ->
                 PermParseM s a -> PermParseM s a
-withExprVars [] CruCtxNil MNil m = m
-withExprVars (x:xs) (CruCtxCons ctx tp) (ns :>: n) m =
+withExprVars MNil CruCtxNil MNil m = m
+withExprVars (xs :>: Constant x) (CruCtxCons ctx tp) (ns :>: n) m =
   withExprVars xs ctx ns $ withExprVar x tp n m
 
 -- | Run a parsing computation in a context extended with a permission variable
@@ -599,19 +602,38 @@ parseBVRange =
 ----------------------------------------------------------------------
 
 -- | A sequence of variable names and their types
-data ParsedCtx ctx = ParsedCtx [String] (CruCtx ctx)
+data ParsedCtx ctx =
+  ParsedCtx (MapRList (Constant String) ctx) (CruCtx ctx)
+
+-- | Remove the last variable in a 'ParsedCtx'
+parsedCtxUncons :: ParsedCtx (ctx :> tp) -> ParsedCtx ctx
+parsedCtxUncons (ParsedCtx (xs :>: _) (CruCtxCons ctx _)) = ParsedCtx xs ctx
 
 -- | Add a variable name and type to a 'ParsedCtx'
 consParsedCtx :: String -> TypeRepr tp -> ParsedCtx ctx ->
                  ParsedCtx (ctx :> tp)
 consParsedCtx x tp (ParsedCtx xs ctx) =
-  ParsedCtx (x:xs) (CruCtxCons ctx tp)
+  ParsedCtx (xs :>: Constant x) (CruCtxCons ctx tp)
 
--- | Add a variable name and type to an unknown 'ParsedCtx'
-consSomeParsedCtx :: String -> Some TypeRepr -> Some ParsedCtx ->
-                     Some ParsedCtx
-consSomeParsedCtx x (Some tp) (Some (ParsedCtx xs ctx)) =
-  Some (ParsedCtx (x:xs) (CruCtxCons ctx tp))
+-- | A 'ParsedCtx' with a single element
+singletonParsedCtx :: String -> TypeRepr tp -> ParsedCtx (RNil :> tp)
+singletonParsedCtx x tp =
+  ParsedCtx (MNil :>: Constant x) (CruCtxCons CruCtxNil tp)
+
+-- | Add a variable name and type to the beginning of an unknown 'ParsedCtx'
+preconsSomeParsedCtx :: String -> Some TypeRepr -> Some ParsedCtx ->
+                        Some ParsedCtx
+preconsSomeParsedCtx x (Some (tp :: TypeRepr tp)) (Some (ParsedCtx ns tps)) =
+  Some $ ParsedCtx
+  (appendMapRList (MNil :>: (Constant x :: Constant String tp)) ns)
+  (appendCruCtx (singletonCruCtx tp) tps)
+
+mkArgsParsedCtx :: CruCtx ctx -> ParsedCtx ctx
+mkArgsParsedCtx ctx = ParsedCtx (helper ctx) ctx where
+  helper :: CruCtx ctx' -> MapRList (Constant String) ctx'
+  helper CruCtxNil = MNil
+  helper (CruCtxCons ctx tp) =
+    helper ctx :>: Constant ("arg" ++ show (cruCtxLen ctx))
 
 -- | Parse a typing context @x1:tp1, x2:tp2, ...@
 parseCtx :: (Stream s Identity Char, BindState s) =>
@@ -622,13 +644,14 @@ parseCtx =
      some_tp <- parseType
      try (do spaces >> comma
              some_ctx' <- parseCtx
-             return $ consSomeParsedCtx x some_tp some_ctx')
+             return $ preconsSomeParsedCtx x some_tp some_ctx')
        <|>
        (case some_tp of
-           Some tp ->
-             return (Some $ ParsedCtx [x] $ CruCtxCons CruCtxNil tp))
+           Some tp -> return (Some $ singletonParsedCtx x tp))
 
 -- | Parse a sequence @x1:p1, x2:p2, ...@ of variables and their permissions
+--
+-- FIXME: not used
 parseDistPerms :: (Stream s Identity Char, BindState s) =>
                   PermParseM s (Some DistPerms)
 parseDistPerms =
@@ -644,31 +667,104 @@ parseDistPerms =
            <|>
            return (Some $ distPerms1 x p)
 
+-- | Helper type for 'parseValuePerms'
+data VarPermSpec a = VarPermSpec (Name a) (Maybe (ValuePerm a))
 
--- FIXME HERE NOW:
--- parse inside a variable context (x1:tp1, ...).p
--- parse a fun perm (ctx).dist_perms -> dist_perms
+type VarPermSpecs = MapRList VarPermSpec
 
+-- | Build a 'VarPermSpecs' from a list of names
+mkVarPermSpecs :: MapRList Name ctx -> VarPermSpecs ctx
+mkVarPermSpecs = mapMapRList (\n -> VarPermSpec n Nothing)
+
+-- | Find a 'VarPermSpec' for a particular variable
+findVarPermSpec :: Name (a :: CrucibleType) ->
+                   VarPermSpecs ctx -> Maybe (Member ctx a)
+findVarPermSpec _ MNil = Nothing
+findVarPermSpec n (_ :>: VarPermSpec n' _)
+  | Just Refl <- testEquality n n'
+  = Just Member_Base
+findVarPermSpec n (specs :>: _) = Member_Step <$> findVarPermSpec n specs
+
+-- | Try to set the permission for a variable in a 'VarPermSpecs' list, raising
+-- a parse error if the variable already has a permission or is one of the
+-- expected variables
+setVarSpecsPermM :: Stream s Identity Char =>
+                    String -> Name tp -> ValuePerm tp -> VarPermSpecs ctx ->
+                    PermParseM s (VarPermSpecs ctx)
+setVarSpecsPermM _ n p var_specs
+  | Just memb <- findVarPermSpec n var_specs
+  , VarPermSpec _ Nothing <- mapRListLookup memb var_specs =
+    return $ mapRListModify memb (const $ VarPermSpec n $ Just p) var_specs
+setVarSpecsPermM var n _ var_specs
+  | Just memb <- findVarPermSpec n var_specs =
+    unexpected ("Variable " ++ var ++ " occurs more than once!")
+setVarSpecsPermM var n _ var_specs =
+    unexpected ("Unknown variable: " ++ var)
+
+-- | Convert a 'VarPermSpecs' sequence to a sequence of permissions, using the
+-- @true@ permission for any variables without permissions
+varSpecsToPerms :: VarPermSpecs ctx -> ValuePerms ctx
+varSpecsToPerms MNil = ValPerms_Nil
+varSpecsToPerms (var_specs :>: VarPermSpec _ (Just p)) =
+  ValPerms_Cons (varSpecsToPerms var_specs) p
+varSpecsToPerms (var_specs :>: VarPermSpec _ Nothing) =
+  ValPerms_Cons (varSpecsToPerms var_specs) ValPerm_True
+
+-- | Parse a sequence @x1:p1, x2:p2, ...@ of variables and their permissions,
+-- where each variable occurs at most once. The input list says which variables
+-- can occur and which have already been seen. Return a sequence of the
+-- permissions in the same order as the input list of variables.
+parseSortedValuePerms :: (Stream s Identity Char, BindState s) =>
+                         VarPermSpecs ctx ->
+                         PermParseM s (ValuePerms ctx)
+parseSortedValuePerms var_specs =
+  try (spaces >> string "empty" >> return (varSpecsToPerms var_specs)) <|>
+  (parseExprVarAndStr >>= \(var, some_n) ->
+   case some_n of
+     Some (Typed tp n) ->
+       do spaces >> char ':'
+          p <- parseValPerm tp
+          var_specs' <- setVarSpecsPermM var n p var_specs
+          try (spaces >> comma >> parseSortedValuePerms var_specs') <|>
+            return (varSpecsToPerms var_specs'))
+
+-- | Run a parsing computation inside a name-binding for expressions variables
+-- given by a 'ParsedCtx'. Returning the results inside a name-binding.
 inParsedCtxM :: (BindState s, NuMatching a) =>
-                ParsedCtx ctx -> PermParseM s a -> PermParseM s (Mb ctx a)
-inParsedCtxM (ParsedCtx ids tps) m =
-  mbM $ nuMulti (cruCtxProxies tps) $ \ns -> withExprVars ids tps ns m
+                ParsedCtx ctx -> (MapRList Name ctx -> PermParseM s a) ->
+                PermParseM s (Mb ctx a)
+inParsedCtxM (ParsedCtx ids tps) f =
+  mbM $ nuMulti (cruCtxProxies tps) $ \ns -> withExprVars ids tps ns (f ns)
 
+-- | Parse a sequence @x1:p1, x2:p2, ...@ of variables and their permissions,
+-- and sort the result into a 'ValuePerms' in a multi-binding that is in the
+-- same order as the 'ParsedCtx' supplied on input
+parseSortedMbValuePerms :: (Stream s Identity Char, BindState s) =>
+                           ParsedCtx ctx -> PermParseM s (MbValuePerms ctx)
+parseSortedMbValuePerms ctx =
+  inParsedCtxM ctx $ \ns ->
+  parseSortedValuePerms (mkVarPermSpecs ns)
+
+-- | Parse a function permission of the form
+--
+-- > (x1:tp1, ...). arg1:p1, ... -o arg1:p1', ..., argn:pn', ret:p_ret
+--
+-- for some arbitrary context @x1:tp1, ...@ of ghost variables
 parseFunPerm :: (Stream s Identity Char, BindState s) =>
                 CruCtx args -> TypeRepr ret ->
                 PermParseM s (SomeFunPerm args ret)
 parseFunPerm args ret =
   parseInParens parseCtx >>= \some_ghosts_ctx ->
   case some_ghosts_ctx of
-    Some ghosts_ctx ->
+    Some ghosts_ctx@(ParsedCtx _ ghosts) ->
       do spaces >> char '.'
-         let arg_vars = take (cruCtxLen args) $ map (("arg" ++) . show) [0..]
+         let args_ctx = mkArgsParsedCtx args
          let ghosts_l_ctx = consParsedCtx "l" LifetimeRepr ghosts_ctx
-         dperms_in <-
-           inParsedCtxM ghosts_l_ctx $
-           inParsedCtxM (ParsedCtx arg_vars args) parseDistPerms
-         dperms_out <-
-           inParsedCtxM ghosts_l_ctx $
-           inParsedCtxM (ParsedCtx ("ret":arg_vars) (CruCtxCons args ret))
-           parseDistPerms
-         error "FIXME HERE NOW"
+         perms_in <-
+           inParsedCtxM ghosts_l_ctx $ const $
+           parseSortedMbValuePerms args_ctx
+         spaces >> string "-o"
+         perms_out <-
+           inParsedCtxM ghosts_l_ctx $ const $
+           parseSortedMbValuePerms (consParsedCtx "ret" ret args_ctx)
+         return $ SomeFunPerm $ FunPerm ghosts args ret perms_in perms_out
