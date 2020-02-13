@@ -22,6 +22,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 
 import Lang.Crucible.Types
+import Lang.Crucible.FunctionHandle
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.CFG.Extension
 import Lang.Crucible.LLVM.Extension
@@ -41,6 +42,7 @@ import SAWScript.Heapster.CruUtil
 import SAWScript.Heapster.Permissions
 import SAWScript.Heapster.TypedCrucible
 import SAWScript.Heapster.SAWTranslation
+import SAWScript.Heapster.PermParser
 
 data PermsListEntry where
   PermsListEntry :: FunPerm ghosts inits ret -> PermsListEntry
@@ -126,33 +128,35 @@ castFunPerm cfg fun_perm =
                       "Actual: " ++ show (funPermRet fun_perm)]
 
 heapster_extract_print :: BuiltinContext -> Options ->
-                          LLVMModule -> String -> Int ->
+                          LLVMModule -> String -> String ->
                           TopLevel ()
-heapster_extract_print bic opts lm fn_name perms_num =
+heapster_extract_print bic opts lm fn_name perms_string =
   case modTrans lm of
-    Some mod_trans ->
-      do let arch = llvmArch $ _transContext mod_trans
-         let w = archReprWidth arch
-         any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts lm fn_name
-         pp_opts <- getTopLevelPPOpts
-         somePerms <-
-           if perms_num < length heapsterPermsList then
-             return (heapsterPermsList !! perms_num)
-           else fail "heapster_extract: perms index out of bounds"
-         case (any_cfg, somePerms) of
-           (AnyCFG cfg, PermsListEntry fun_perm_raw) ->
-             do fun_perm <- castFunPerm cfg fun_perm_raw
-                cl_fun_perm <-
-                  case tryClose fun_perm of
-                    Just cl_fun_perm -> return cl_fun_perm
-                    Nothing -> fail "Function permission is not closed"
-                leq_proof <- case decideLeq (knownNat @1) w of
-                  Left pf -> return pf
-                  Right _ -> fail "LLVM arch width is 0!"
-                let cl_env = $(mkClosed [| FunTypeEnv [] |])
-                let fun_openterm =
-                      withKnownNat w $ withLeqProof leq_proof $
-                      translateCFG $ tcCFG cl_env cl_fun_perm cfg
-                sc <- getSharedContext
-                fun_term <- liftIO $ completeOpenTerm sc fun_openterm
-                liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
+    Some mod_trans -> do
+      let arch = llvmArch $ _transContext mod_trans
+      let w = archReprWidth arch
+      any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts lm fn_name
+      pp_opts <- getTopLevelPPOpts
+      case any_cfg of
+        AnyCFG cfg -> do
+          let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
+          let ret = handleReturnType $ cfgHandle cfg
+          some_fun_perm <- case parseFunPermString [] args ret perms_string of
+            Left err -> fail $ show err
+            Right p -> return p
+          case some_fun_perm of
+            SomeFunPerm fun_perm -> do
+              cl_fun_perm <-
+                case tryClose fun_perm of
+                  Just cl_fun_perm -> return cl_fun_perm
+                  Nothing -> fail "Function permission is not closed"
+              leq_proof <- case decideLeq (knownNat @1) w of
+                Left pf -> return pf
+                Right _ -> fail "LLVM arch width is 0!"
+              let cl_env = $(mkClosed [| FunTypeEnv [] |])
+              let fun_openterm =
+                    withKnownNat w $ withLeqProof leq_proof $
+                    translateCFG $ tcCFG cl_env cl_fun_perm cfg
+              sc <- getSharedContext
+              fun_term <- liftIO $ completeOpenTerm sc fun_openterm
+              liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term

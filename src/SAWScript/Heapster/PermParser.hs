@@ -97,6 +97,10 @@ data ParserEnv = ParserEnv {
   parserEnvFuns :: [SomeHandle]
 }
 
+-- | Make a 'ParserEnv' with empty contexts and a given list of function names
+mkParserEnv :: [SomeHandle] -> ParserEnv
+mkParserEnv hns = ParserEnv [] [] hns
+
 $(mkNuMatching [t| forall f a. NuMatching (f a) => Typed f a |])
 $(mkNuMatching [t| forall a. PermName a |])
 $(mkNuMatching [t| ParserEnv |])
@@ -119,6 +123,9 @@ lookupPermVar str = lookup str . parserEnvPermVars
 lookupFun :: String -> ParserEnv -> Maybe SomeHandle
 lookupFun str =
   find (\(SomeHandle h) -> handleName h == fromString str) . parserEnvFuns
+
+instance BindState String where
+  bindState = mbLift
 
 instance BindState ParserEnv where
   bindState [nuP| ParserEnv evars pvars funs |] =
@@ -750,10 +757,10 @@ parseSortedMbValuePerms ctx =
 -- > (x1:tp1, ...). arg1:p1, ... -o arg1:p1', ..., argn:pn', ret:p_ret
 --
 -- for some arbitrary context @x1:tp1, ...@ of ghost variables
-parseFunPerm :: (Stream s Identity Char, BindState s) =>
-                CruCtx args -> TypeRepr ret ->
-                PermParseM s (SomeFunPerm args ret)
-parseFunPerm args ret =
+parseFunPermM :: (Stream s Identity Char, BindState s) =>
+                 CruCtx args -> TypeRepr ret ->
+                 PermParseM s (SomeFunPerm args ret)
+parseFunPermM args ret =
   parseInParens parseCtx >>= \some_ghosts_ctx ->
   case some_ghosts_ctx of
     Some ghosts_ctx@(ParsedCtx _ ghosts) ->
@@ -768,3 +775,9 @@ parseFunPerm args ret =
            inParsedCtxM ghosts_l_ctx $ const $
            parseSortedMbValuePerms (consParsedCtx "ret" ret args_ctx)
          return $ SomeFunPerm $ FunPerm ghosts args ret perms_in perms_out
+
+-- | Run the 'parseFunPermM' parsing computation on a 'String'
+parseFunPermString :: [SomeHandle] -> CruCtx args -> TypeRepr ret ->
+                      String -> Either ParseError (SomeFunPerm args ret)
+parseFunPermString hns args ret str =
+  runParser (parseFunPermM args ret) (mkParserEnv hns) "" str
