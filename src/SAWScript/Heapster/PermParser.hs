@@ -540,15 +540,15 @@ parseLLVMFieldPerm in_array =
                   l <- parseExpr knownRepr
                   string "]"
                   return l) <|> return PExpr_Always
-     if in_array then spaces >> string "ptr" >> string "(" >> return ()
-       else return ()
+     if in_array then return ()
+       else spaces >> string "ptr" >> string "(" >> return ()
      spaces >> string "("
      llvmFieldRW <- (string "R" >> return Read) <|> (string "W" >> return Write)
      spaces >> comma >> spaces
      llvmFieldOffset <- parseBVExpr
      spaces >> string ")" >> spaces >> string "|->" >> spaces
      llvmFieldContents <- parseValPerm knownRepr
-     if in_array then spaces >> string ")" >> return () else return ()
+     if in_array then return () else spaces >> string ")" >> return ()
      return (LLVMFieldPerm {..})
 
 -- | Parse an array permission @array(off,<len,*stride,[fp1,...])@
