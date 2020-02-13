@@ -280,7 +280,7 @@ parseTypeKnown :: Stream s Identity Char =>
                   PermParseM s (Some (KnownReprObj TypeRepr))
 parseTypeKnown =
   spaces >>
-  (parseInParensOpt parseTypeKnown <|>
+  (parseInParens parseTypeKnown <|>
    (string "unit" >> return (Some $ mkKnownReprObj UnitRepr)) <|>
    (string "nat" >> return (Some $ mkKnownReprObj NatRepr)) <|>
    (do string "bv" >> spaces1
