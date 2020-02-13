@@ -2774,6 +2774,8 @@ instance AbstractVars (PermExpr a) where
   abstractPEVars ns1 ns2 (PExpr_Struct es) =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Struct |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 es
+  abstractPEVars ns1 ns2 PExpr_Always =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Always |])
   abstractPEVars ns1 ns2 (PExpr_LLVMWord e) =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_LLVMWord |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
