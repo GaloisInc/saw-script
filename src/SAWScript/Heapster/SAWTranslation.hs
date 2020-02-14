@@ -2525,6 +2525,7 @@ translateStmt stmt@[nuP| EndLifetime _ ps _ end_perms |] m =
     permCtxEndLifetime pctx ps)
   m
 
+-- FIXME HERE: figure out why these asserts always translate to ite True
 translateStmt [nuP| TypedAssert e _ |] m =
   applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
   [compReturnTypeM, translate1 e, m, itiCatchHandler <$> ask]
@@ -2678,7 +2679,6 @@ instance PermCheckExtC ext =>
 instance PermCheckExtC ext =>
          ImplTranslateF (TypedStmtSeq ext blocks ret) ext blocks ret where
   translateF mb_seq = translate mb_seq
-
 
 
 ----------------------------------------------------------------------
