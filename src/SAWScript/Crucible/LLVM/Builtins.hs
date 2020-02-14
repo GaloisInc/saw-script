@@ -60,6 +60,7 @@ module SAWScript.Crucible.LLVM.Builtins
 
     , displayVerifExceptionOpts
     , findDecl
+    , findDefMaybeStatic
     , setupLLVMCrucibleContext
     ) where
 

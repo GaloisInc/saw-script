@@ -34,6 +34,7 @@ import Control.Monad.State (execStateT)
 
 import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Foldable (foldlM, forM_)
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
@@ -216,7 +217,10 @@ buildCFG ::
 buildCFG opts halloc path nm = do
   printOutLn opts Info $ mconcat ["Finding symbol for \"", nm, "\""]
   elf <- getElf path >>= getRelevant
-  (addr :: Macaw.MemSegmentOff 64) <- findSymbol (symMap elf) . encodeUtf8 $ Text.pack nm
+  (addr :: Macaw.MemSegmentOff 64) <-
+    case findSymbols (symMap elf) . encodeUtf8 $ Text.pack nm of
+      (addr:_) -> pure addr
+      _ -> fail $ mconcat ["Could not find symbol \"", nm, "\""]
   printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
   (_, Some finfo) <- stToIO . Macaw.analyzeFunction (const $ pure ()) addr Macaw.UserRequest
     $ Macaw.emptyDiscoveryState (memory elf) (funSymMap elf) Macaw.x86_64_linux_info
@@ -270,7 +274,14 @@ llvmSignature ::
   Either String ([LLVM.Type], Maybe LLVM.Type)
 llvmSignature opts llvmModule nm =
   case findDecl (modAST llvmModule) nm of
-    Left err -> Left $ displayVerifExceptionOpts opts err
+    Left err -> case findDefMaybeStatic (modAST llvmModule) nm of
+      Left _ -> Left $ displayVerifExceptionOpts opts err
+      Right defs -> pure
+        ( LLVM.typedType <$> LLVM.defArgs (NE.head defs)
+        , case LLVM.defRetType $ NE.head defs of
+            LLVM.PrimType LLVM.Void -> Nothing
+            x -> Just x
+        )
     Right decl -> pure
       ( LLVM.decArgs decl
       , case LLVM.decRetType decl of
@@ -421,20 +432,31 @@ setArgs ::
   [MS.SetupValue LLVM] {- ^ Arguments passed to crucible_execute_func -} ->
   IO Regs
 setArgs sym cc env tyenv nameEnv mem regs args
-  | length args > length argRegs = fail "More arguments than would fit into registers"
+  | length args > length argRegs = fail "More arguments than would fit into general-purpose registers"
   | otherwise = foldlM setRegSetupValue regs $ zip argRegs args
   where
     argRegs :: [Register]
     argRegs = [Macaw.RDI, Macaw.RSI, Macaw.RDX, Macaw.RCX, Macaw.R8, Macaw.R9]
     setRegSetupValue rs (reg, sval) = typeOfSetupValue cc tyenv nameEnv sval >>= \ty ->
-      let assign = do
-            val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-              =<< resolveSetupVal cc mem env tyenv nameEnv sval
-            setReg reg val rs
-      in case (ty, C.LLVM.memTypeBitwidth ty) of
-        (C.LLVM.PtrType _, _) -> assign
-        (_, Just 64) -> assign
-        _ -> fail "Argument is not 64 bits"
+      case ty of
+        C.LLVM.PtrType _ -> do
+          val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+            =<< resolveSetupVal cc mem env tyenv nameEnv sval
+          setReg reg val rs
+        C.LLVM.IntType 64 -> do
+          val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+            =<< resolveSetupVal cc mem env tyenv nameEnv sval
+          setReg reg val rs
+        C.LLVM.IntType _ -> do
+          C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
+          case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
+            Nothing -> fail "Argument bitvector does not fit in a single general-purpose register"
+            Just LeqProof -> do
+              off' <- W4.bvZext sym (knownNat @64) off
+              val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+                $ C.LLVM.LLVMValInt base off'
+              setReg reg val rs
+        _ -> fail "Argument does not fit into a single general-purpose register"
 
 --------------------------------------------------------------------------------
 -- ** Postcondition
