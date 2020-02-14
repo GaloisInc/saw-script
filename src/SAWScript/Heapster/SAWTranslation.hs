@@ -682,6 +682,13 @@ instance TransInfo info =>
   translate [nuP| PExpr_Unit |] = return $ ETrans_Term unitOpenTerm
   translate [nuP| PExpr_Nat i |] =
     return $ ETrans_Term $ natOpenTerm $ mbLift i
+  translate [nuP| PExpr_BV bvfactors@[] off |] =
+    let w = natVal3 bvfactors in
+    return $ ETrans_Term $ bvNatOpenTerm w $ mbLift off
+  translate [nuP| PExpr_BV bvfactors 0 |] =
+    let w = natVal3 bvfactors in
+    ETrans_Term <$> foldr1 (bvAddOpenTerm w) <$>
+    mapM translate (mbList bvfactors)
   translate [nuP| PExpr_BV bvfactors off |] =
     do let w = natVal3 bvfactors
        bv_transs <- mapM translate $ mbList bvfactors
@@ -704,6 +711,7 @@ instance TransInfo info =>
     (:>:) <$> translate es <*> translate e
 
 instance TransInfo info => Translate info ctx (BVFactor w) OpenTerm where
+  translate [nuP| BVFactor 1 x |] = translate1 (fmap PExpr_Var x)
   translate [nuP| BVFactor i x |] =
     let w = natVal4 x in
     bvMulOpenTerm w (bvNatOpenTerm w (mbLift i)) <$>
@@ -2317,6 +2325,10 @@ instance (PermCheckExtC ext, TransInfo info) =>
   translate [nuP| BVOr w e1 e2 |] =
     ETrans_Term <$>
     applyMultiTransM (return $ globalOpenTerm "Prelude.bvOr")
+    [translate w, translateRWV e1, translateRWV e2]
+  translate [nuP| BVXor w e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvXor")
     [translate w, translateRWV e1, translateRWV e2]
   translate [nuP| BVNeg w e |] =
     ETrans_Term <$>
