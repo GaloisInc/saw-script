@@ -523,12 +523,16 @@ bvMatchConst :: PermExpr (BVType w) -> Maybe Integer
 bvMatchConst (PExpr_BV [] const) = Just const
 bvMatchConst _ = Nothing
 
+-- | Normalize a bitvector expression to a canonical form. Currently this just
+-- means converting @1*x+0@ to @x@.
+normalizeBVExpr :: PermExpr (BVType w) -> PermExpr (BVType w)
+normalizeBVExpr (PExpr_BV [BVFactor 1 x] 0) = PExpr_Var x
+normalizeBVExpr e = e
+
 -- | Test whether two bitvector expressions are semantically equal, assuming
 -- they are both in normal form
 bvEq :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
-bvEq e1 e2 = toVar e1 == toVar e2 where
-  toVar (PExpr_BV [BVFactor 1 x] 0) = (PExpr_Var x)
-  toVar e = e
+bvEq e1 e2 = normalizeBVExpr e1 == normalizeBVExpr e2
 
 -- | Test whether a bitvector expression is less than another for all
 -- substitutions to the free variables. This is an underapproximation, meaning
