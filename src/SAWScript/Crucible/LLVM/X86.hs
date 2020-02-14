@@ -432,7 +432,7 @@ setArgs ::
   [MS.SetupValue LLVM] {- ^ Arguments passed to crucible_execute_func -} ->
   IO Regs
 setArgs sym cc env tyenv nameEnv mem regs args
-  | length args > length argRegs = fail "More arguments than would fit into registers"
+  | length args > length argRegs = fail "More arguments than would fit into general-purpose registers"
   | otherwise = foldlM setRegSetupValue regs $ zip argRegs args
   where
     argRegs :: [Register]
@@ -446,13 +446,13 @@ setArgs sym cc env tyenv nameEnv mem regs args
         C.LLVM.IntType _ -> do
           C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
           case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
-            Nothing -> fail "Argument bitvector does not fit in a single register"
+            Nothing -> fail "Argument bitvector does not fit in a single general-purpose register"
             Just LeqProof -> do
               off' <- W4.bvZext sym (knownNat @64) off
               val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
                 $ C.LLVM.LLVMValInt base off'
               setReg reg val rs
-        _ -> fail "Argument does not fit into a single register"
+        _ -> fail "Argument does not fit into a single general-purpose register"
 
 --------------------------------------------------------------------------------
 -- ** Postcondition
