@@ -19,7 +19,7 @@ module SAWScript.X86
   , RelevantElf(..)
   , getElf
   , getRelevant
-  , findSymbol
+  , findSymbols
   , posFn
   , loadGlobal
   ) where
