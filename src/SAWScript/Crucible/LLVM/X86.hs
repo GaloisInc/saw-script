@@ -443,6 +443,10 @@ setArgs sym cc env tyenv nameEnv mem regs args
           val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
             =<< resolveSetupVal cc mem env tyenv nameEnv sval
           setReg reg val rs
+        C.LLVM.IntType 64 -> do
+          val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+            =<< resolveSetupVal cc mem env tyenv nameEnv sval
+          setReg reg val rs
         C.LLVM.IntType _ -> do
           C.LLVM.LLVMValInt base off <- resolveSetupVal cc mem env tyenv nameEnv sval
           case testLeq (incNat $ W4.bvWidth off) (knownNat @64) of
