@@ -121,6 +121,11 @@ data SimplImpl ps_in ps_out where
   --
   -- > . -o x:eq(x)
 
+  SImpl_InvertEq :: ExprVar a -> ExprVar a -> SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ Invert an @x:eq(y)@ permission into a @y:eq(x)@ permission:
+  --
+  -- > x:eq(y) -o y:eq(x)
+
   SImpl_CopyEq :: ExprVar a -> PermExpr a ->
                   SimplImpl (RNil :> a) (RNil :> a :> a)
   -- ^ Copy an equality proof on the top of the stack:
@@ -566,6 +571,7 @@ simplImplIn (SImpl_IntroExists x e p) =
   distPerms1 x (subst (singletonSubst e) p)
 simplImplIn (SImpl_Cast x y p) = distPerms2 x (ValPerm_Eq $ PExpr_Var y) y p
 simplImplIn (SImpl_IntroEqRefl x) = DistPermsNil
+simplImplIn (SImpl_InvertEq x y) = distPerms1 x (ValPerm_Eq $ PExpr_Var y)
 simplImplIn (SImpl_CopyEq x e) = distPerms1 x (ValPerm_Eq e)
 simplImplIn (SImpl_IntroConj x) = DistPermsNil
 simplImplIn (SImpl_ExtractConj x ps i) = distPerms1 x (ValPerm_Conj ps)
@@ -673,6 +679,7 @@ simplImplOut (SImpl_IntroOrR x p1 p2) = distPerms1 x (ValPerm_Or p1 p2)
 simplImplOut (SImpl_IntroExists x _ p) = distPerms1 x (ValPerm_Exists p)
 simplImplOut (SImpl_Cast x _ p) = distPerms1 x p
 simplImplOut (SImpl_IntroEqRefl x) = distPerms1 x (ValPerm_Eq $ PExpr_Var x)
+simplImplOut (SImpl_InvertEq x y) = distPerms1 y (ValPerm_Eq $ PExpr_Var x)
 simplImplOut (SImpl_CopyEq x e) = distPerms2 x (ValPerm_Eq e) x (ValPerm_Eq e)
 simplImplOut (SImpl_IntroConj x) = distPerms1 x ValPerm_True
 simplImplOut (SImpl_ExtractConj x ps i) =
@@ -774,16 +781,19 @@ simplImplOut (SImpl_Mu x _ p2 _) = distPerms1 x (ValPerm_Mu p2)
 -- | Apply a 'SimplImpl' implication to the permissions on the top of a
 -- permission set stack, checking that they equal the 'simplImplIn' of the
 -- 'SimplImpl' and then replacing them with its 'simplImplOut'
-applySimplImpl :: Proxy ps -> SimplImpl ps_in ps_out ->
+applySimplImpl :: PPInfo -> Proxy ps -> SimplImpl ps_in ps_out ->
                   PermSet (ps :++: ps_in) -> PermSet (ps :++: ps_out)
-applySimplImpl prx simpl =
+applySimplImpl pp_info prx simpl =
   modifyDistPerms $ \all_ps ->
   let (ps, ps_in) =
         splitDistPerms prx (distPermsToProxies $ simplImplIn simpl) all_ps in
   if ps_in == simplImplIn simpl then
     appendDistPerms ps (simplImplOut simpl)
   else
-    error "applySimplImpl: input permissions are not as expected!"
+    error $ flip displayS "" $ renderPretty 0.8 80 $
+    vsep [string "applySimplImpl: incorrect input permissions",
+          string "expected: " <> permPretty pp_info (simplImplIn simpl),
+          string "actual: " <> permPretty pp_info ps_in]
 
 -- | A sequence of permission sets inside name-bindings
 data MbPermSets bs_pss where
@@ -801,33 +811,34 @@ mbPermSets2 :: Mb bs1 (PermSet ps1) -> Mb bs2 (PermSet ps2) ->
 mbPermSets2 ps1 ps2 = MbPermSets_Cons (MbPermSets_Cons MbPermSets_Nil ps1) ps2
 
 -- | Apply a single permission implication step to a permission set
-applyImpl1 :: PermImpl1 ps_in ps_outs -> PermSet ps_in -> MbPermSets ps_outs
-applyImpl1 Impl1_Fail _ = MbPermSets_Nil
-applyImpl1 Impl1_Catch ps = mbPermSets2 (emptyMb ps) (emptyMb ps)
-applyImpl1 (Impl1_Push x p) ps =
+applyImpl1 :: PPInfo -> PermImpl1 ps_in ps_outs -> PermSet ps_in ->
+              MbPermSets ps_outs
+applyImpl1 _ Impl1_Fail _ = MbPermSets_Nil
+applyImpl1 _ Impl1_Catch ps = mbPermSets2 (emptyMb ps) (emptyMb ps)
+applyImpl1 _ (Impl1_Push x p) ps =
   if ps ^. varPerm x == p then
     mbPermSets1 $ emptyMb $ pushPerm x p $ set (varPerm x) ValPerm_True ps
   else
     error "applyImpl1: Impl1_Push: unexpected permission"
-applyImpl1 (Impl1_Pop x p) ps =
-  if ps ^. topDistPerm x == p then
+applyImpl1 _ (Impl1_Pop x p) ps =
+  if ps ^. topDistPerm x == p && ps ^. varPerm x == ValPerm_True then
     mbPermSets1 $ emptyMb $ fst $ popPerm x $ set (varPerm x) p ps
   else
     error "applyImpl1: Impl1_Pop: unexpected permission"
-applyImpl1 (Impl1_ElimOr x p1 p2) ps =
+applyImpl1 _ (Impl1_ElimOr x p1 p2) ps =
   if ps ^. topDistPerm x == ValPerm_Or p1 p2 then
     mbPermSets2 (emptyMb $ set (topDistPerm x) p1 ps)
     (emptyMb $ set (topDistPerm x) p2 ps)
   else
     error "applyImpl1: Impl1_ElimOr: unexpected permission"
-applyImpl1 (Impl1_ElimExists x p_body) ps =
+applyImpl1 _ (Impl1_ElimExists x p_body) ps =
   if ps ^. topDistPerm x == ValPerm_Exists p_body then
     mbPermSets1 (fmap (\p -> set (topDistPerm x) p ps) p_body)
   else
     error "applyImpl1: Impl1_ElimExists: unexpected permission"
-applyImpl1 (Impl1_Simpl simpl prx) ps =
-  mbPermSets1 $ emptyMb $ applySimplImpl prx simpl ps
-applyImpl1 (Impl1_ElimLLVMFieldContents x fp) ps =
+applyImpl1 pp_info (Impl1_Simpl simpl prx) ps =
+  mbPermSets1 $ emptyMb $ applySimplImpl pp_info prx simpl ps
+applyImpl1 _ (Impl1_ElimLLVMFieldContents x fp) ps =
   if ps ^. topDistPerm x == ValPerm_Conj [Perm_LLVMField fp] then
     (mbPermSets1 $ nu $ \y ->
       pushPerm y (llvmFieldContents fp) $
@@ -837,7 +848,7 @@ applyImpl1 (Impl1_ElimLLVMFieldContents x fp) ps =
       ps)
   else
     error "applyImpl1: Impl1_ElimLLVMFieldContents: unexpected permission"
-applyImpl1 (Impl1_TryProveBVProp x prop) ps =
+applyImpl1 _ (Impl1_TryProveBVProp x prop) ps =
   mbPermSets1 $ emptyMb $
   pushPerm x (ValPerm_Conj [Perm_BVProp prop]) ps
 
@@ -1315,8 +1326,9 @@ implApplyImpl1 :: PermImpl1 ps_in ps_outs ->
                   ImplM vars s r ps_r ps_in a
 implApplyImpl1 impl1 mb_ms =
   getPerms >>>= \perms ->
+  (view implStatePPInfo <$> gget) >>>= \pp_info ->
   gmapRet (PermImpl_Step impl1 <$>) >>>
-  helper (applyImpl1 impl1 perms) mb_ms
+  helper (applyImpl1 pp_info impl1 perms) mb_ms
   where
     helper :: MbPermSets ps_outs ->
               MapRList (Impl1Cont vars s r ps_r a) ps_outs ->
@@ -1495,6 +1507,10 @@ elimOrsExistsRecsM x =
 -- | Introduce a proof of @x:eq(x)@ onto the top of the stack
 introEqReflM :: ExprVar a -> ImplM vars s r (ps :> a) ps ()
 introEqReflM x = implSimplM Proxy (SImpl_IntroEqRefl x)
+
+-- | Invert a proof of @x:eq(y)@ on the top of the stack to one of @y:eq(x)@
+invertEqM :: ExprVar a -> ExprVar a -> ImplM vars s r (ps :> a) (ps :> a) ()
+invertEqM x y = implSimplM Proxy (SImpl_InvertEq x y)
 
 -- | Copy an @x:eq(e)@ permission on the top of the stack
 introEqCopyM :: ExprVar a -> PermExpr a ->
@@ -1754,11 +1770,16 @@ implPushLifetimeEndPerms (ps :>: LifetimeEndConj x x_ps i) =
 ----------------------------------------------------------------------
 
 -- | Recombine the permission @x:p@ on top of the stack back into the existing
--- permission @x_p@ for @x@, where @x_p@ is the first permission argument and
--- @p@ is the second
-recombinePerm :: ExprVar a -> ValuePerm a -> ValuePerm a ->
-                 ImplM RNil s r as (as :> a) ()
-recombinePerm x x_p p =
+-- permission for @x@
+recombinePerm :: ExprVar a -> ValuePerm a -> ImplM RNil s r as (as :> a) ()
+recombinePerm x p = getPerm x >>>= \x_p -> recombinePermExpl x x_p p
+
+-- | Recombine the permission @x:p@ on top of the stack back into the existing
+-- permission @x_p@ for @x@, where @x_p@ is given explicitly as the first
+-- permission argument and @p@ is the second
+recombinePermExpl :: ExprVar a -> ValuePerm a -> ValuePerm a ->
+                     ImplM RNil s r as (as :> a) ()
+recombinePermExpl x x_p p =
   getPPInfo >>>= \info ->
   tracePretty (string "recombinePerm" <+> permPretty info x
                </> permPretty info x_p </> string "<-"
@@ -1773,14 +1794,14 @@ recombinePerm' x (ValPerm_Eq (PExpr_Var y)) _
   | y == x = error "recombinePerm: variable x has permission eq(x)!"
 recombinePerm' x x_p@(ValPerm_Eq (PExpr_Var y)) p =
   implPushM x x_p >>> introEqCopyM x (PExpr_Var y) >>> implPopM x x_p >>>
-  implSwapM x p x x_p >>> introCastM x y p >>> getPerm y >>>= \y_p ->
-  recombinePerm y y_p p
+  invertEqM x y >>> implSwapM x p y (ValPerm_Eq (PExpr_Var x)) >>>
+  introCastM y x p >>> getPerm y >>>= \y_p -> recombinePermExpl y y_p p
 recombinePerm' x x_p@(ValPerm_Eq (PExpr_LLVMOffset y off)) (ValPerm_Conj ps) =
   implPushM x x_p >>> introEqCopyM x (PExpr_LLVMOffset y off) >>>
   implPopM x x_p >>> implSimplM Proxy (SImpl_InvertLLVMOffsetEq x off y) >>>
   castLLVMPtrM x ps (bvNegate off) y >>>
   getPerm y >>>= \y_p ->
-  recombinePerm y y_p (ValPerm_Conj $ map (offsetLLVMAtomicPerm off) ps)
+  recombinePermExpl y y_p (ValPerm_Conj $ map (offsetLLVMAtomicPerm off) ps)
 recombinePerm' _ _ (ValPerm_Eq _) =
   -- NOTE: we could handle this by swapping the stack with the variable perm and
   -- calling recombinePerm again, but this could potentially create permission
@@ -1789,20 +1810,20 @@ recombinePerm' _ _ (ValPerm_Eq _) =
   -- for a new, fresh variable, in which case the above cases will handle it
   error "recombinePerm: unexpected equality permission being recombined"
 recombinePerm' x x_p (ValPerm_Or _ _) =
-  elimOrsExistsM x >>>= \p' -> recombinePerm x x_p p'
+  elimOrsExistsM x >>>= \p' -> recombinePermExpl x x_p p'
 recombinePerm' x x_p (ValPerm_Exists _) =
-  elimOrsExistsM x >>>= \p' -> recombinePerm x x_p p'
+  elimOrsExistsM x >>>= \p' -> recombinePermExpl x x_p p'
 recombinePerm' x x_p@(ValPerm_Or _ _) p =
   implPushM x x_p >>> elimOrsExistsM x >>>= \x_p' ->
-  implPopM x x_p' >>> recombinePerm x x_p' p
+  implPopM x x_p' >>> recombinePermExpl x x_p' p
 recombinePerm' x x_p@(ValPerm_Exists _) p =
   implPushM x x_p >>> elimOrsExistsM x >>>= \x_p' ->
-  implPopM x x_p' >>> recombinePerm x x_p' p
+  implPopM x x_p' >>> recombinePermExpl x x_p' p
 recombinePerm' x x_p@(ValPerm_Conj x_ps) (ValPerm_Conj (p:ps)) =
   implExtractConjM x (p:ps) 0 >>>
   implSwapM x (ValPerm_Conj1 p) x (ValPerm_Conj ps) >>>
   recombinePermConj x x_ps p >>>= \x_ps' ->
-  recombinePerm x (ValPerm_Conj x_ps') (ValPerm_Conj ps)
+  recombinePermExpl x (ValPerm_Conj x_ps') (ValPerm_Conj ps)
 recombinePerm' x _ p = implDropM x p
 
 -- | Recombine a single conjuct @x:p@ on top of the stack back into the existing
@@ -1861,14 +1882,14 @@ recombinePermConj x x_ps p =
 recombinePerms :: DistPerms ps -> ImplM RNil s r RNil ps ()
 recombinePerms DistPermsNil = greturn ()
 recombinePerms (DistPermsCons ps' x p) =
-  getPerm x >>>= \x_p -> recombinePerm x x_p p >>> recombinePerms ps'
+  recombinePerm x p >>> recombinePerms ps'
 
 -- | Recombine the permissions for a 'LifetimeCurrentPerms' list
 recombineLifetimeCurrentPerms :: LifetimeCurrentPerms ps_l ->
                                  ImplM RNil s r ps (ps :++: ps_l) ()
 recombineLifetimeCurrentPerms AlwaysCurrentPerms = greturn ()
 recombineLifetimeCurrentPerms (LOwnedCurrentPerms l ps) =
-  recombinePerm l ValPerm_True (ValPerm_Conj1 $ Perm_LOwned ps)
+  recombinePermExpl l ValPerm_True (ValPerm_Conj1 $ Perm_LOwned ps)
 recombineLifetimeCurrentPerms (CurrentTransPerms cur_perms l) =
   implDropM l (ValPerm_Conj1 $ Perm_LCurrent $
                lifetimeCurrentPermsLifetime cur_perms) >>>

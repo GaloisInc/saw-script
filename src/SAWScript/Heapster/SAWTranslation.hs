@@ -1778,6 +1778,11 @@ translateSimplImpl _ [nuP| SImpl_Cast _ _ p |] m =
 translateSimplImpl _ [nuP| SImpl_IntroEqRefl x |] m =
   withPermStackM (:>: translateVar x) (:>: PTrans_Eq (fmap PExpr_Var x)) m
   
+translateSimplImpl _ [nuP| SImpl_InvertEq x y |] m =
+  withPermStackM ((:>: translateVar y) . mapRListTail)
+  ((:>: PTrans_Eq (fmap PExpr_Var x)) . mapRListTail)
+  m
+
 translateSimplImpl _ [nuP| SImpl_CopyEq _ _ |] m =
   withPermStackM
   (\(vars :>: var) -> (vars :>: var :>: var))

@@ -1593,7 +1593,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp _ _) =
       -- If we found a field perm for offset 0, first extract it out of all the
       -- other perms for x and pop all the other perms off of the stack
       stmtEmbedImplM (implExtractConjM x ps i >>>
-                      implPopM x (ValPerm_Conj (deleteNth i ps))) >>>
+                      recombinePerm x (ValPerm_Conj (deleteNth i ps))) >>>
       -- Next, emit the typed LLVM load instruction
       emitTypedLLVMLoad arch loc treg fp DistPermsNil >>>= \z ->
       -- Recombine the resulting permissions and return the new ctx
@@ -1609,7 +1609,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp _ _) =
         -- and pop all the other perms off of the stack, then borrow the field
         -- corresopnding to offset 0
         stmtEmbedImplM (implExtractConjM x ps i >>>
-                        implPopM x (ValPerm_Conj (deleteNth i ps)) >>>
+                        recombinePerm x (ValPerm_Conj (deleteNth i ps)) >>>
                         implLLVMArrayIndexBorrow x ap ix) >>>= \(ap',fp) ->
         -- Emit the typed LLVM load instruction, noting that the array
         -- permission is on the stack below the borrowed field permission
@@ -1620,7 +1620,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp _ _) =
         let z_p = llvmFieldContents fp in
         (if permIsCopyable z_p then
            stmtEmbedImplM (implCopyM z z_p >>>
-                           recombinePerm z ValPerm_True z_p >>>
+                           recombinePermExpl z ValPerm_True z_p >>>
                            introLLVMFieldContentsM x z >>>
                            implLLVMArrayIndexReturn x ap' ix) >>>
            stmtRecombinePerms
@@ -1655,7 +1655,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Store _ (ptr :: Reg ctx (LLVMPointerType w)) t
         -- If we found a field perm for offset 0, first extract it out of all
         -- the other perms for x and pop all the other perms off of the stack
         stmtEmbedImplM (implExtractConjM x ps i >>>
-                        implPopM x (ValPerm_Conj (deleteNth i ps))) >>>
+                        recombinePerm x (ValPerm_Conj (deleteNth i ps))) >>>
         -- Next, emit the typed LLVM store instruction
         emitTypedLLVMStore arch loc tptr fp tval_ptr DistPermsNil >>>= \z ->
         -- Finally, return the expanded context
@@ -1668,7 +1668,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Store _ (ptr :: Reg ctx (LLVMPointerType w)) t
         -- and pop all the other perms off of the stack, then borrow the field
         -- corresopnding to offset 0
         stmtEmbedImplM (implExtractConjM x ps i >>>
-                        implPopM x (ValPerm_Conj (deleteNth i ps)) >>>
+                        recombinePerm x (ValPerm_Conj (deleteNth i ps)) >>>
                         implLLVMArrayIndexBorrow x ap ix) >>>= \(ap',fp) ->
         -- Emit the typed LLVM store instruction, noting that the array
         -- permission is on the stack below the borrowed field permission
