@@ -59,6 +59,10 @@ import SAWScript.Heapster.Permissions
 import Debug.Trace
 
 
+-- | FIXME: figure out a better name and move to Hobbits
+mbMap2 :: (a -> b -> c) -> Mb ctx a -> Mb ctx b -> Mb ctx c
+mbMap2 f mb1 mb2 = fmap f mb1 `mbApply` mb2
+
 ----------------------------------------------------------------------
 -- * Permission Implications
 ----------------------------------------------------------------------
@@ -401,7 +405,7 @@ data SimplImpl ps_in ps_out where
   SImpl_Mu ::
     ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
     Binding (ValuePerm a) (ValuePerm a) ->
-    PermImpl ((:~:) (RNil :> a)) (RNil :> a) ->
+    Binding (ValuePerm a) (PermImpl ((:~:) (RNil :> a)) (RNil :> a)) ->
     SimplImpl (RNil :> a) (RNil :> a)
   -- ^ Apply an implication to the body of a least fixed-point permission:
   --
@@ -1108,6 +1112,10 @@ gparallel f m1 m2 =
 gabortM :: r2 -> GenStateContM s1 r1 s2 r2 a
 gabortM ret = GenStateT $ \_ -> GenContM $ \_ -> ret
 
+-- | Lift a monadic action into a generalized state-continuation monad
+liftGenStateContM :: Monad m => m a -> GenStateContM s (m b) s (m b) a
+liftGenStateContM m = glift $ liftGenContM m
+
 
 ----------------------------------------------------------------------
 -- * Permission Implication Monad
@@ -1168,6 +1176,21 @@ runImplM :: CruCtx vars -> PermSet ps_in -> FunTypeEnv -> PPInfo ->
 runImplM vars perms env ppInfo k m =
   runGenContM (runGenStateT m (mkImplState vars perms env ppInfo))
   (\as -> PermImpl_Done <$> k as)
+
+-- | Embed a sub-computation in a name-binding inside another 'ImplM'
+-- computation, throwing away any state from that sub-computation and returning
+-- a 'PermImpl' inside a name-binding
+embedMbImplM :: Mb ctx (PermSet ps_in) ->
+                Mb ctx (ImplM RNil s r' ps_out ps_in (r' ps_out)) ->
+                ImplM vars s r ps ps (Mb ctx (PermImpl r' ps_in))
+embedMbImplM mb_ps_in mb_m =
+  gget >>>= \s ->
+  liftGenStateContM $
+  strongMbM (mbMap2
+       (\ps_in m ->
+         runImplM CruCtxNil ps_in
+         (view implStateFnEnv s) (view implStatePPInfo s) (return . fst) m)
+      mb_ps_in mb_m)
 
 -- | Look up the current partial substitution
 getPSubst :: ImplM vars s r ps ps (PartialSubst vars)
@@ -2324,10 +2347,14 @@ proveVarImplH x p@(ValPerm_Eq (PExpr_Var y)) mb_p =
 
 -- To prove mu X.p |- mu Y.p', we assume X |- Y and prove p |- p'
 --
--- FIXME: we need to somehow ensure that the perms don't change in that proof...
--- FIXME: also need to split the lifetime of the mu if necessary
-proveVarImplH x (ValPerm_Mu p) [nuP| ValPerm_Mu mb_p |] =
-  error "FIXME HERE NOW: handle mu!"
+-- FIXME HERE NOW: need to split the lifetime of the mu if necessary
+proveVarImplH x (ValPerm_Mu p_body) [nuP| ValPerm_Mu mb_p'_body |] =
+  partialSubstForceM mb_p'_body
+  "proveVarImpl: incomplete psubst: implMu" >>>= \p'_body ->
+  embedMbImplM (fmap (\p -> distPermSet $ distPerms1 x p) p_body)
+  (mbMap2 (\p p' -> proveVarImplH x p (emptyMb p') >>> greturn Refl)
+   p_body p'_body) >>>= \mb_impl ->
+  implSimplM Proxy (SImpl_Mu x p_body p'_body mb_impl)
 
 -- If the LHS is a mu but the RHS is not, unfold the left and recurse
 proveVarImplH x (ValPerm_Mu p_body) mb_p =

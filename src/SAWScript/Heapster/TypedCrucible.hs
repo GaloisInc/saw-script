@@ -71,10 +71,6 @@ import SAWScript.Heapster.Implication
 import Debug.Trace
 
 
--- | FIXME: figure out a better name and move to Hobbits
-mbMap2 :: (a -> b -> c) -> Mb ctx a -> Mb ctx b -> Mb ctx c
-mbMap2 f mb1 mb2 = fmap f mb1 `mbApply` mb2
-
 -- | Make a program location with "internal" posiotion that has the same
 -- function name as another location
 -- FIXME: figure out where to put this
