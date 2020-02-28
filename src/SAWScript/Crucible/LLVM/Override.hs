@@ -1257,10 +1257,17 @@ learnPred ::
   Term             {- ^ the precondition to learn                  -} ->
   OverrideMatcher (LLVM arch) md ()
 learnPred sc cc loc prepost t =
-  do s <- OM (use termSub)
-     u <- liftIO $ scInstantiateExt sc s t
-     p <- liftIO $ resolveSAWPred cc u
+  do p <- instantiateExtResolveSAWPred sc cc t
      addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost) ""))
+
+instantiateExtResolveSAWPred ::
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  Term ->
+  OverrideMatcher (LLVM arch) md (W4.Pred Sym)
+instantiateExtResolveSAWPred sc cc cond = do
+  sub <- OM (use termSub)
+  liftIO $ resolveSAWPred cc =<< scInstantiateExt sc sub cond
 
 ------------------------------------------------------------------------
 
@@ -1496,10 +1503,7 @@ executePred ::
   TypedTerm {- ^ the term to assert as a postcondition -} ->
   OverrideMatcher (LLVM arch) md ()
 executePred sc cc tt =
-  do s <- OM (use termSub)
-     t <- liftIO $ scInstantiateExt sc s (ttTerm tt)
-     p <- liftIO $ resolveSAWPred cc t
-     addAssume p
+  addAssume =<< instantiateExtResolveSAWPred sc cc (ttTerm tt)
 
 ------------------------------------------------------------------------
 
