@@ -40,6 +40,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_declare_ghost_state
     , crucible_equal
     , crucible_points_to
+    , crucible_conditional_points_to
     , crucible_fresh_pointer
     , crucible_llvm_unsafe_assume_spec
     , crucible_fresh_var
@@ -626,7 +627,7 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
     go :: MemImpl -> MS.PointsTo (LLVM arch) -> IO MemImpl
-    go mem (LLVMPointsTo _loc ptr val) =
+    go mem (LLVMPointsTo _loc cond ptr val) =
       do ptr' <- resolveSetupVal cc mem env tyenv nameEnv ptr
          ptr'' <- case ptr' of
            Crucible.LLVMValInt blk off
@@ -634,7 +635,9 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
              -> return (Crucible.LLVMPointer blk off)
            _ -> fail "Non-pointer value found in points-to assertion"
 
-         storePointsToValue opts cc env tyenv nameEnv mem ptr'' val
+         cond' <- mapM (resolveSAWPred cc . ttTerm) cond
+
+         storePointsToValue opts cc env tyenv nameEnv mem cond' ptr'' val
 
 -- | Sets up globals (ghost variable), and collects boolean terms
 -- that should be assumed to be true.
@@ -1629,7 +1632,28 @@ crucible_points_to ::
   AllLLVM SetupValue     ->
   AllLLVM SetupValue     ->
   LLVMCrucibleSetupM ()
-crucible_points_to typed _bic _opt (getAllLLVM -> ptr) (getAllLLVM -> val) =
+crucible_points_to typed bic opt =
+  crucible_points_to_internal bic opt typed Nothing
+
+crucible_conditional_points_to ::
+  BuiltinContext ->
+  Options ->
+  TypedTerm ->
+  AllLLVM SetupValue ->
+  AllLLVM SetupValue ->
+  LLVMCrucibleSetupM ()
+crucible_conditional_points_to bic opt cond =
+  crucible_points_to_internal bic opt True (Just cond)
+
+crucible_points_to_internal ::
+  BuiltinContext ->
+  Options ->
+  Bool {- ^ whether to check type compatibility -} ->
+  Maybe TypedTerm ->
+  AllLLVM SetupValue ->
+  AllLLVM SetupValue ->
+  LLVMCrucibleSetupM ()
+crucible_points_to_internal _bic _opt typed cond (getAllLLVM -> ptr) (getAllLLVM -> val) =
   LLVMCrucibleSetupM $
   do cc <- getLLVMCrucibleContext
      loc <- getW4Position "crucible_points_to"
@@ -1655,7 +1679,7 @@ crucible_points_to typed _bic _opt (getAllLLVM -> ptr) (getAllLLVM -> val) =
             _ -> fail $ "lhs not a pointer type: " ++ show ptrTy
           valTy <- typeOfSetupValue cc env nameEnv val
           when typed (checkMemTypeCompatibility lhsTy valTy)
-          Setup.addPointsTo (LLVMPointsTo loc ptr val)
+          Setup.addPointsTo (LLVMPointsTo loc cond ptr val)
 
 crucible_equal ::
   BuiltinContext ->

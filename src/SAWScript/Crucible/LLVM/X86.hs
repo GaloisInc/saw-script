@@ -30,7 +30,7 @@ import Control.Exception (catch)
 import Control.Lens (view, (^.))
 import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.State (execStateT)
+import Control.Monad.State
 
 import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Foldable (foldlM, forM_)
@@ -40,6 +40,7 @@ import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Maybe
 
 import qualified Text.LLVM.AST as LLVM
 
@@ -411,7 +412,8 @@ executePointsTo ::
   Mem ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   IO Mem
-executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr tval) = do
+executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ cond tptr tval) = do
+  when (isJust cond) $ fail "unsupported x86_64 command: crucible_conditional_points_to"
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   val <- resolveSetupVal cc mem env tyenv Map.empty tval
@@ -506,7 +508,8 @@ assertPointsTo ::
   Mem ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   IO ()
-assertPointsTo sym opts cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
+assertPointsTo sym opts cc env tyenv nameEnv mem (LLVMPointsTo _ cond tptr texpected) = do
+  when (isJust cond) $ fail "unsupported x86_64 command: crucible_conditional_points_to"
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   storTy <- C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv texpected

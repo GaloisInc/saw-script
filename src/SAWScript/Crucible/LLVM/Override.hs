@@ -54,7 +54,7 @@ import           Data.Foldable (for_, traverse_, toList)
 import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Maybe (fromMaybe, catMaybes)
+import           Data.Maybe
 import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
@@ -189,11 +189,12 @@ ppPointsToAsLLVMVal ::
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   PointsTo (LLVM arch) ->
   OverrideMatcher (LLVM arch) w PP.Doc
-ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc setupVal1 setupVal2) = do
+ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc cond setupVal1 setupVal2) = do
   pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec setupVal1
   let pretty2 = MS.ppSetupValue setupVal2
   pure $ PP.vcat [ PP.text "Pointer:" PP.<+> pretty1
                  , PP.text "Pointee:" PP.<+> pretty2
+                 , maybe PP.empty (\tt -> PP.text "Condition:" PP.<+> MS.ppTypedTerm tt) cond
                  , PP.text "Assertion made at:" PP.<+>
                    PP.pretty (W4.plSourceLoc loc)
                  ]
@@ -801,7 +802,7 @@ matchPointsTos opts sc cc spec prepost = go False []
     go True delayed [] = go False [] delayed
 
     -- progress the next points-to in the work queue
-    go progress delayed (c@(LLVMPointsTo loc _ _):cs) =
+    go progress delayed (c@(LLVMPointsTo loc _ _ _):cs) =
       do ready <- checkPointsTo c
          if ready then
            do err <- learnPointsTo opts sc cc spec prepost c
@@ -815,7 +816,7 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- determine if a precondition is ready to be checked
     checkPointsTo :: PointsTo (LLVM arch) -> OverrideMatcher (LLVM arch) md Bool
-    checkPointsTo (LLVMPointsTo _loc p _) = checkSetupValue p
+    checkPointsTo (LLVMPointsTo _loc _ p _) = checkSetupValue p
 
     checkSetupValue :: SetupValue (Crucible.LLVM arch) -> OverrideMatcher (LLVM arch) md Bool
     checkSetupValue v =
@@ -1161,7 +1162,7 @@ learnPointsTo ::
   PrePost                    ->
   PointsTo (LLVM arch)       ->
   OverrideMatcher (LLVM arch) md (Maybe PP.Doc)
-learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
+learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
   do let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
@@ -1194,7 +1195,12 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
            (Proxy @(Crucible.LLVM arch))
            sym
            assertion_tree
-         addAssert pred_ $ Crucible.SimError loc $
+         pred_' <- case maybe_cond of
+           Just cond -> do
+             cond' <- instantiateExtResolveSAWPred sc cc (ttTerm cond)
+             liftIO $ W4.impliesPred sym cond' pred_
+           Nothing -> return pred_
+         addAssert pred_' $ Crucible.SimError loc $
            Crucible.AssertFailureSimError (show $ PP.vcat $ summarizeBadLoad) ""
          pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val
        W4.Err _err -> do
@@ -1322,18 +1328,18 @@ invalidateMutableAllocs opts sc cc cs = do
 
   -- set of (concrete base pointer, size) for each postcondition memory write
   postPtrs <- Set.fromList <$> mapM
-    (\(LLVMPointsTo _loc ptr val) -> do
+    (\(LLVMPointsTo _loc cond ptr val) -> do
       (_, Crucible.LLVMPointer blk _) <- resolveSetupValue opts cc sc cs Crucible.PtrRepr ptr
       sz <- (return . Crucible.storageTypeSize)
         =<< Crucible.toStorableType
         =<< typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val
-      return (W4.asNat blk, sz))
+      return (W4.asNat blk, sz, isJust cond))
     (cs ^. MS.csPostState ^. MS.csPointsTos)
 
   -- filter out each allocation overwritten by a postcondition write
   let danglingPtrs = filter
         (\((Crucible.LLVMPointer blk _), sz, _) ->
-          Set.notMember (W4.asNat blk, sz) postPtrs)
+          Set.notMember (W4.asNat blk, sz, False) postPtrs)
         (allocPtrs ++ globalPtrs)
 
   -- invalidate each allocation that is not overwritten by a postcondition write
@@ -1416,7 +1422,7 @@ executePointsTo ::
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
   PointsTo (LLVM arch)       ->
   OverrideMatcher (LLVM arch) RW ()
-executePointsTo opts sc cc spec (LLVMPointsTo _loc ptr val) =
+executePointsTo opts sc cc spec (LLVMPointsTo _loc cond ptr val) =
   do (_, ptr') <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
@@ -1428,8 +1434,9 @@ executePointsTo opts sc cc spec (LLVMPointsTo _loc ptr val) =
      let tyenv = MS.csAllocations spec
      let nameEnv = MS.csTypeNames spec
      val' <- liftIO $ instantiateSetupValue sc s val
+     cond' <- mapM (instantiateExtResolveSAWPred sc cc . ttTerm) cond
 
-     mem' <- liftIO $ storePointsToValue opts cc m tyenv nameEnv mem ptr' val'
+     mem' <- liftIO $ storePointsToValue opts cc m tyenv nameEnv mem cond' ptr' val'
      writeGlobal memVar mem'
 
 storePointsToValue ::
@@ -1440,10 +1447,11 @@ storePointsToValue ::
   Map AllocIndex (MS.AllocSpec (LLVM arch)) ->
   Map AllocIndex (MS.TypeName (LLVM arch)) ->
   Crucible.MemImpl Sym ->
+  Maybe (W4.Pred Sym) ->
   LLVMPtr (Crucible.ArchWidth arch) ->
   SetupValue (Crucible.LLVM arch) ->
   IO (Crucible.MemImpl Sym)
-storePointsToValue opts cc env tyenv nameEnv mem ptr val = do
+storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val = do
   let sym = cc ^. ccBackend
 
   let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
@@ -1453,26 +1461,31 @@ storePointsToValue opts cc env tyenv nameEnv mem ptr val = do
   smt_array_memory_model_enabled <- W4.getOpt
     =<< W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)
 
-  case val of
-    SetupTerm tm
-      | Crucible.storageTypeSize storTy > 16
-      , smt_array_memory_model_enabled -> do
-        arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
-        arr <- Crucible.bindSAWTerm
-          sym
-          (W4.BaseArrayRepr
-            (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
-            (W4.BaseBVRepr (W4.knownNat @8)))
-          arr_tm
-        sz <- W4.bvLit
-          sym
-          ?ptrWidth
-          (fromIntegral $ Crucible.storageTypeSize storTy)
-        Crucible.doArrayConstStore sym mem ptr alignment arr sz
-    _ -> do
-      val' <- X.handle (handleException opts) $
-        resolveSetupVal cc mem env tyenv nameEnv val
-      Crucible.storeConstRaw sym mem ptr storTy alignment val'
+  let store_op = \mem -> case val of
+        SetupTerm tm
+          | Crucible.storageTypeSize storTy > 16
+          , smt_array_memory_model_enabled -> do
+            arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
+            arr <- Crucible.bindSAWTerm
+              sym
+              (W4.BaseArrayRepr
+                (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
+                (W4.BaseBVRepr (W4.knownNat @8)))
+              arr_tm
+            sz <- W4.bvLit
+              sym
+              ?ptrWidth
+              (fromIntegral $ Crucible.storageTypeSize storTy)
+            Crucible.doArrayConstStore sym mem ptr alignment arr sz
+        _ -> do
+          val' <- X.handle (handleException opts) $
+            resolveSetupVal cc mem env tyenv nameEnv val
+          Crucible.storeConstRaw sym mem ptr storTy alignment val'
+
+  case maybe_cond of
+    Just cond -> do
+      Crucible.doConditionalWriteOperation sym base_mem cond store_op
+    Nothing -> store_op base_mem
 
 
 ------------------------------------------------------------------------

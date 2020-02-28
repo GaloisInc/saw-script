@@ -1885,6 +1885,19 @@ primitives = Map.fromList
     , "about the final memory state after running the function."
     ]
 
+  , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal crucible_conditional_points_to)
+    Current
+    [ "Declare that the memory location indicated by the given pointer (second"
+    , "argument) contains the given value (third argument) if the given"
+    , "condition (first argument) holds."
+    , ""
+    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after crucible_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
   , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal (crucible_points_to False))
     Current
