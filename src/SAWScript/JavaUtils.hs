@@ -19,6 +19,7 @@ import Control.Applicative
 #endif
 import Control.Lens
 import Control.Monad
+import qualified Control.Monad.Fail as Fail
 import Control.Monad.IO.Class
 import qualified Data.Array as Array
 import Data.Int
@@ -194,7 +195,7 @@ writeJavaValue (CC.Term e) v =
         _ -> fail "Instance argument of instance field evaluates to non-reference"
     StaticField f -> setStaticFieldValue f v
 
-writeJavaValuePS :: (Functor m, Monad m) =>
+writeJavaValuePS :: (Fail.MonadFail m) =>
                     JavaExpr
                  -> SpecJavaValue
                  -> SpecPathState
@@ -215,7 +216,7 @@ writeJavaValuePS (CC.Term e) v ps =
         _ -> fail "Instance argument of instance field evaluates to non-reference"
     StaticField f -> return (setStaticFieldValuePS f v ps)
 
-readJavaTerm :: (Functor m, Monad m, MonadIO m) =>
+readJavaTerm :: (Fail.MonadFail m, MonadIO m) =>
                 SharedContext -> Maybe (LocalMap Term) -> Path' Term -> JavaExpr -> m Term
 readJavaTerm sc mcf ps et =
   termOfValue sc ps (exprType et) =<< readJavaValue mcf ps et
@@ -228,7 +229,7 @@ readJavaTermSim sc e = do
   ps <- getPath "readJavaTermSim"
   readJavaTerm sc ((^. cfLocals) <$> currentCallFrame ps) ps e
 
-termOfValue :: (Functor m, Monad m, MonadIO m) =>
+termOfValue :: (Fail.MonadFail m, MonadIO m) =>
                SharedContext -> Path' Term -> JSS.Type -> SpecJavaValue -> m Term
 termOfValue sc _ tp (IValue t) = liftIO $ truncateIValue sc tp t
 termOfValue _ _ _ (LValue t) = return t
@@ -277,7 +278,7 @@ valueOfTerm sc jty (TypedTerm _schema t) = do
 -- NB: the CallFrame parameter allows this function to use a different
 -- call frame than the one in the current state, which can be useful to
 -- access parameters of a method that has returned.
-readJavaValue :: (Functor m, Monad m) =>
+readJavaValue :: (Fail.MonadFail m) =>
                  Maybe (LocalMap Term)
               -> Path' Term
               -> JavaExpr

@@ -23,6 +23,7 @@ module SAWScript.Prover.Exporter
 import Data.Foldable(toList)
 
 import Control.Monad.IO.Class (liftIO)
+import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
 import qualified Data.SBV.Dynamic as SBV
 
@@ -100,7 +101,7 @@ writeSAIGInferLatches proxy sc file tt = do
   let numLatches = sizeFiniteType s
   writeSAIG proxy sc file (ttTerm tt) numLatches
   where
-    die :: Monad m => String -> m a
+    die :: Fail.MonadFail m => String -> m a
     die why = fail $
       "writeSAIGInferLatches: " ++ why ++ ":\n" ++
       "term must have type of the form '(i, s) -> (o, s)',\n" ++

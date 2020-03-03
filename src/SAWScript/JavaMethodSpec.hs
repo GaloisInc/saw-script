@@ -46,6 +46,7 @@ import Control.Applicative hiding (empty)
 import Control.Lens
 import Control.Monad
 import Control.Monad.Cont
+import qualified Control.Monad.Fail as Fail
 import Control.Monad.State
 import Data.Function
 import Data.List (intercalate, sortBy)
@@ -579,7 +580,7 @@ setClassValues sc l tp rs =
       t <- resolveClassRHS sc e tp rs
       writeJavaTerm sc e t
 
-valueEqTerm :: (Functor m, Monad m, MonadIO m) =>
+valueEqTerm :: (Fail.MonadFail m, MonadIO m) =>
                SharedContext
             -> String
             -> SpecPathState
@@ -591,7 +592,7 @@ valueEqTerm sc name ps ty v t = do
   t' <- termOfValue sc ps ty v
   pvcgAssertEq name t' t
 
-valueEqValue :: (Functor m, Monad m, MonadIO m) =>
+valueEqValue :: (Fail.MonadFail m, MonadIO m) =>
                SharedContext
             -> String
             -> SpecPathState
@@ -620,7 +621,7 @@ valueEqValue _ name ps (RValue r) ps' (RValue r') = do
     _ -> fail $ "valueEqValue: " ++ name ++ ": ref does not point to array"
 valueEqValue _ name _ v _ v' = fail $ "valueEqValue: " ++ name ++ ": unspported value type: " ++ show v ++ ", " ++ show v'
 
-readJavaValueVerif :: (Functor m, Monad m) =>
+readJavaValueVerif :: (Fail.MonadFail m) =>
                       VerificationState
                    -> Path' Term
                    -> JavaExpr
@@ -629,7 +630,7 @@ readJavaValueVerif vs ps refExpr = do
   let initPS = vsInitialState vs
   readJavaValue ((^. cfLocals) <$> currentCallFrame initPS) ps refExpr
 
-checkStep :: (Functor m, Monad m, MonadIO m) =>
+checkStep :: (Fail.MonadFail m, MonadIO m) =>
              VerificationState
           -> SpecPathState
           -> BehaviorCommand
