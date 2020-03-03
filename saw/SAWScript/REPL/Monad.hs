@@ -143,6 +143,10 @@ instance Monad REPL where
     x <- unREPL m ref
     unREPL (f x) ref
 
+#if !MIN_VERSION_base(4,13,0)
+  fail = Fail.fail
+#endif
+
 instance Fail.MonadFail REPL where
   {-# INLINE fail #-}
   fail msg = REPL (\_ -> fail msg)
