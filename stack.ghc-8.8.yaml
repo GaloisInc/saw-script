@@ -1,0 +1,50 @@
+flags: {}
+packages:
+  - deps/llvm-pretty/
+  - deps/llvm-pretty-bc-parser/
+  - deps/jvm-parser/
+  - deps/aig/
+  - deps/abcBridge/
+  - deps/cryptol/
+  - deps/saw-core/
+  - deps/saw-core-aig/
+  - deps/saw-core-sbv/
+  - deps/saw-core-what4/
+  - deps/cryptol-verifier/
+  - deps/jvm-verifier/
+  - deps/what4/what4/
+  - deps/what4/what4-abc/
+  - deps/crucible/crucible/
+  - deps/crucible/crucible-jvm/
+  - deps/crucible/crucible-llvm/
+  - deps/crucible/crucible-saw/
+  - deps/crucible/crux/
+  - deps/parameterized-utils/
+  - deps/dwarf/
+  - deps/elf-edit/
+  - deps/flexdis86/
+  - deps/flexdis86/binary-symbols/
+  - deps/macaw/base
+  - deps/macaw/symbolic
+  - deps/macaw/x86
+  - deps/macaw/x86_symbolic
+  - .
+extra-deps:
+  - zenc-0.1.1@sha256:e4be3e5e9fe1a1ade05910909c6e5b5a8eff72e697868b03955c9781b0443947
+  - IfElse-0.85
+  - fgl-visualize-0.1.0.1
+  - simple-smt-0.9.4
+  - GraphSCC-1.0.4
+  - monadLib-3.10
+  - sbv-8.6
+  - panic-0.4.0.1
+  - itanium-abi-0.1.1.1
+  - boomerang-1.4.5.7
+  - config-schema-1.2.0.0
+  - config-value-0.7.0.1
+  - simple-get-opt-0.4
+  - base-orphans-0.8.2
+  - base-compat-0.10.5
+  - json-0.10
+resolver: lts-15.1
+allow-newer: false
