@@ -62,6 +62,7 @@ import Cryptol.Utils.PP
 import Control.Applicative (Applicative(..), pure, (<*>))
 #endif
 import Control.Monad (unless, ap)
+import qualified Control.Monad.Fail as Fail
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -142,6 +143,7 @@ instance Monad REPL where
     x <- unREPL m ref
     unREPL (f x) ref
 
+instance Fail.MonadFail REPL where
   {-# INLINE fail #-}
   fail msg = REPL (\_ -> fail msg)
 
