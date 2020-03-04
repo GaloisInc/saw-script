@@ -51,14 +51,14 @@ import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
 import           Data.Either (partitionEithers)
 import           Data.Foldable (for_, traverse_, toList)
-import           Data.List (tails)
+import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Maybe
 import           Data.Proxy
 import           Data.Set (Set)
 import qualified Data.Set as Set
-import           Data.Text (pack)
+import           Data.Text (Text, pack)
 import qualified Data.Vector as V
 import           GHC.Generics (Generic)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -668,8 +668,10 @@ executeCond opts sc cc cs ss = do
   OM (setupValueSub %= Map.union ptrs)
 
   traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
-  invalidateMutableAllocs opts sc cc cs
-  traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
+  overwritten_allocs <- invalidateMutableAllocs opts sc cc cs
+  traverse_
+    (executePointsTo opts sc cc cs overwritten_allocs)
+    (ss ^. MS.csPointsTos)
   traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
 
 -- | Allocate fresh variables for all of the "fresh" vars
@@ -1281,13 +1283,14 @@ instantiateExtResolveSAWPred sc cc cond = do
 -- precondition, either through explicit calls to "crucible_alloc" or to
 -- "crucible_alloc_global". As an optimization, a memory allocation that
 -- is overwritten by a postcondition memory write is not invalidated.
+-- Return a map containing the overwritten memory allocations.
 invalidateMutableAllocs ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options ->
   SharedContext ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
-  OverrideMatcher (LLVM arch) RW ()
+  OverrideMatcher (LLVM arch) RW (Map (W4.SymNat Sym) Text)
 invalidateMutableAllocs opts sc cc cs = do
   sym <- use syminterface
   mem <- readGlobal . Crucible.llvmMemVar $ ccLLVMContext cc
@@ -1328,19 +1331,24 @@ invalidateMutableAllocs opts sc cc cs = do
 
   -- set of (concrete base pointer, size) for each postcondition memory write
   postPtrs <- Set.fromList <$> mapM
-    (\(LLVMPointsTo _loc cond ptr val) -> do
+    (\(LLVMPointsTo _loc _cond ptr val) -> do
       (_, Crucible.LLVMPointer blk _) <- resolveSetupValue opts cc sc cs Crucible.PtrRepr ptr
       sz <- (return . Crucible.storageTypeSize)
         =<< Crucible.toStorableType
         =<< typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val
-      return (W4.asNat blk, sz, isJust cond))
+      return (W4.asNat blk, sz))
     (cs ^. MS.csPostState ^. MS.csPointsTos)
 
-  -- filter out each allocation overwritten by a postcondition write
-  let danglingPtrs = filter
+  -- partition allocations into those overwritten by a postcondition write
+  -- and those not overwritten
+  let (overwritten_ptrs, danglingPtrs) = partition
         (\((Crucible.LLVMPointer blk _), sz, _) ->
-          Set.notMember (W4.asNat blk, sz, False) postPtrs)
+          Set.member (W4.asNat blk, sz) postPtrs)
         (allocPtrs ++ globalPtrs)
+
+  let overwritten_allocs = Map.fromList $ map
+        (\((Crucible.LLVMPointer blk _), _, msg) -> (blk, msg))
+        overwritten_ptrs
 
   -- invalidate each allocation that is not overwritten by a postcondition write
   mem' <- foldM (\m (ptr, sz, msg) ->
@@ -1349,6 +1357,8 @@ invalidateMutableAllocs opts sc cc cs = do
                 ) mem danglingPtrs
 
   writeGlobal (Crucible.llvmMemVar $ ccLLVMContext cc) mem'
+
+  return overwritten_allocs
 
 ------------------------------------------------------------------------
 
@@ -1420,9 +1430,10 @@ executePointsTo ::
   SharedContext              ->
   LLVMCrucibleContext arch     ->
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
+  Map (W4.SymNat Sym) Text ->
   PointsTo (LLVM arch)       ->
   OverrideMatcher (LLVM arch) RW ()
-executePointsTo opts sc cc spec (LLVMPointsTo _loc cond ptr val) =
+executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr val) =
   do (_, ptr') <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
@@ -1435,8 +1446,10 @@ executePointsTo opts sc cc spec (LLVMPointsTo _loc cond ptr val) =
      let nameEnv = MS.csTypeNames spec
      val' <- liftIO $ instantiateSetupValue sc s val
      cond' <- mapM (instantiateExtResolveSAWPred sc cc . ttTerm) cond
+     let Crucible.LLVMPointer blk _ = ptr'
+     let invalidate_msg = Map.lookup blk overwritten_allocs
 
-     mem' <- liftIO $ storePointsToValue opts cc m tyenv nameEnv mem cond' ptr' val'
+     mem' <- liftIO $ storePointsToValue opts cc m tyenv nameEnv mem cond' ptr' val' invalidate_msg
      writeGlobal memVar mem'
 
 storePointsToValue ::
@@ -1450,8 +1463,9 @@ storePointsToValue ::
   Maybe (W4.Pred Sym) ->
   LLVMPtr (Crucible.ArchWidth arch) ->
   SetupValue (Crucible.LLVM arch) ->
+  Maybe Text ->
   IO (Crucible.MemImpl Sym)
-storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val = do
+storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg = do
   let sym = cc ^. ccBackend
 
   let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
@@ -1483,8 +1497,17 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val = do
           Crucible.storeConstRaw sym mem ptr storTy alignment val'
 
   case maybe_cond of
-    Just cond -> do
-      Crucible.doConditionalWriteOperation sym base_mem cond store_op
+    Just cond -> case maybe_invalidate_msg of
+      Just invalidate_msg -> do
+        let invalidate_op = \mem -> do
+              sz <- W4.bvLit
+                sym
+                ?ptrWidth
+                (Crucible.bytesToInteger $ Crucible.storageTypeSize storTy)
+              Crucible.doInvalidate sym ?ptrWidth mem ptr invalidate_msg sz
+        Crucible.mergeWriteOperations sym base_mem cond store_op invalidate_op
+      Nothing ->
+        Crucible.doConditionalWriteOperation sym base_mem cond store_op
     Nothing -> store_op base_mem
 
 

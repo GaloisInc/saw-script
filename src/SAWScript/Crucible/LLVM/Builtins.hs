@@ -637,7 +637,7 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
 
          cond' <- mapM (resolveSAWPred cc . ttTerm) cond
 
-         storePointsToValue opts cc env tyenv nameEnv mem cond' ptr'' val
+         storePointsToValue opts cc env tyenv nameEnv mem cond' ptr'' val Nothing
 
 -- | Sets up globals (ghost variable), and collects boolean terms
 -- that should be assumed to be true.
