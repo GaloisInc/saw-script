@@ -72,6 +72,7 @@ import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import SAWScript.Crucible.LLVM.Skeleton
 
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
@@ -129,6 +130,8 @@ data Value
   | VJVMSetup !(JVMSetupM Value)
   | VJVMMethodSpec !(CMS.CrucibleMethodSpecIR CJ.JVM)
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
+  -----
+  | VLLVMModuleSkeleton ModuleSkeleton
   -----
   | VJavaType JavaType
   | VLLVMType LLVM.Type
@@ -281,6 +284,7 @@ showsPrecValue opts p v =
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
+    VLLVMModuleSkeleton s -> shows s
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
@@ -671,6 +675,13 @@ instance IsValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
 instance FromValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
     fromValue (VJVMMethodSpec t) = t
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
+
+instance IsValue ModuleSkeleton where
+    toValue s = VLLVMModuleSkeleton s
+
+instance FromValue ModuleSkeleton where
+    fromValue (VLLVMModuleSkeleton s) = s
+    fromValue _ = error "fromValue ModuleSkeleton"
 
 -----------------------------------------------------------------------------------
 

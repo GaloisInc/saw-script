@@ -86,6 +86,7 @@ import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
 import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
+import           SAWScript.Crucible.LLVM.Skeleton.Builtins
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
@@ -1615,15 +1616,15 @@ primitives = Map.fromList
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
-  , prim "llvm_boilerplate_info" "LLVMModule -> [Profile] -> TopLevel ()"
-    (pureVal llvm_boilerplate_info)
-    Experimental
-    [ "Print information from an LLVM module relevant to boilerplate generation." ]
+  -- , prim "llvm_boilerplate_info" "LLVMModule -> [Profile] -> TopLevel ()"
+  --   (pureVal llvm_boilerplate_info)
+  --   Experimental
+  --   [ "Print information from an LLVM module relevant to boilerplate generation." ]
 
-  , prim "llvm_boilerplate" "String -> LLVMModule -> [Profile] -> TopLevel ()"
-    (pureVal llvm_boilerplate)
-    Experimental
-    [ "Generate boilerplate for the definitions in an LLVM module." ]
+  -- , prim "module_skeleton" "LLVMModule -> TopLevel ()"
+  --   (pureVal module_skeleton)
+  --   Experimental
+  --   []
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
@@ -1957,16 +1958,16 @@ primitives = Map.fromList
     , "any verification."
     ]
 
-  , prim "crucible_llvm_array_size_profile"
-    "LLVMModule -> String -> CrucibleSetup () -> TopLevel [Profile]"
-    (bicVal crucible_llvm_array_size_profile)
-    Experimental
-    [ "Symbolically execute the function named by the second parameter in"
-    , "the module specified by the first. The third parameter may be used"
-    , "to specify arguments. Returns profiles specifying the sizes of buffers"
-    , "referred to by pointer arguments for the function and all other functions"
-    , "it calls (recursively), to be passed to llvm_boilerplate."
-    ]
+  -- , prim "crucible_llvm_array_size_profile"
+  --   "LLVMModule -> String -> CrucibleSetup () -> TopLevel [Profile]"
+  --   (bicVal crucible_llvm_array_size_profile)
+  --   Experimental
+  --   [ "Symbolically execute the function named by the second parameter in"
+  --   , "the module specified by the first. The third parameter may be used"
+  --   , "to specify arguments. Returns profiles specifying the sizes of buffers"
+  --   , "referred to by pointer arguments for the function and all other functions"
+  --   , "it calls (recursively), to be passed to llvm_boilerplate."
+  --   ]
 
   , prim "crucible_llvm_verify_x86"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"

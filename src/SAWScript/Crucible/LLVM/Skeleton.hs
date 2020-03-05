@@ -1,3 +1,10 @@
+{- |
+Module      : SAWScript.Crucible.LLVM.Skeleton
+Description : Inferring and using "skeletons" of LLVM specifications
+Maintainer  : sbreese
+Stability   : provisional
+-}
+
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
@@ -6,221 +13,230 @@ module SAWScript.Crucible.LLVM.Skeleton where
 
 import Control.Lens.TH
 
+import Control.Arrow
 import Control.Monad
 import Control.Lens
 
 import Data.Maybe
-import Data.List
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Parameterized.Some
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import qualified Text.LLVM as LLVM
 
-import Lang.Crucible.LLVM.ArraySizeProfile
+--------------------------------------------------------------------------------
+-- ** Skeletons
 
-import Verifier.SAW.TypedTerm
+data Location = Location
+  { _locationLine :: Int
+  , _locationColumn :: Maybe Int
+  } deriving (Show, Eq, Ord)
+makeLenses ''Location
 
-import SAWScript.Options
-import SAWScript.Value
-import SAWScript.Crucible.Common.MethodSpec
-import SAWScript.Crucible.LLVM.Builtins
-import SAWScript.Crucible.LLVM.MethodSpecIR
-import SAWScript.Crucible.LLVM.Boilerplate
+data SizeGuess = SizeGuess
+  { _sizeGuessElems :: Int
+  , _sizeGuessSource :: Text
+  } deriving (Show, Eq, Ord)
+makeLenses ''SizeGuess
 
-type Skeleton = BPFun LLVM.Type
+data TypeSkeleton = TypeSkeleton
+  { _typeSkelLLVMType :: LLVM.Type
+  , _typeSkelIsPointer :: Bool
+  , _typeSkelSizeGuesses :: [SizeGuess]
+  } deriving (Show, Eq, Ord)
+makeLenses ''TypeSkeleton
 
-data SkeletonState = SkeletonState
-  { _skelArgs :: [(TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)]
-  }
-makeLenses ''SkeletonState
+data GlobalSkeleton = GlobalSkeleton
+  { _globSkelName :: Text
+  , _globSkelLoc :: Maybe Location
+  , _globSkelType :: TypeSkeleton
+  , _globSkelInitialized :: Bool
+  } deriving (Show, Eq, Ord)
+makeLenses ''GlobalSkeleton
 
-llvm_skeleton ::
-  Some LLVMModule ->
-  [Profile] ->
-  String ->
-  TopLevel Skeleton
-llvm_skeleton m profs nm
-  | Just skel <- find (\fun -> fun ^. bpFunName == Text.pack nm)
-                 $ extractDefines (viewSome modAST m) profs
-  = pure skel
-  | otherwise = fail $ mconcat
-    [ "No function named \""
-    , nm
-    , "\" defined in LLVM module."
-    ]
+data ArgSkeleton = ArgSkeleton
+  { _argSkelName :: Maybe Text
+  , _argSkelLoc :: Maybe Location
+  , _argSkelType :: TypeSkeleton
+  } deriving (Show, Eq, Ord)
+makeLenses ''ArgSkeleton
 
-skeleton_resize_arg_index ::
-  Skeleton ->
-  Int ->
-  Int ->
-  TopLevel Skeleton
-skeleton_resize_arg_index skel idx sz = pure (skel & bpFunArgs . ix idx . bpArgBufSize .~ Just sz)
+data FunctionSkeleton = FunctionSkeleton
+  { _funSkelName :: Text
+  , _funSkelLoc :: Maybe Location
+  , _funSkelArgs :: [ArgSkeleton]
+  , _funSkelRet :: TypeSkeleton
+  , _funSkelCalls :: Set Text
+  } deriving (Show, Eq, Ord)
+makeLenses ''FunctionSkeleton
 
-skeleton_resize_arg ::
-  Skeleton ->
-  String ->
-  Int ->
-  TopLevel Skeleton
-skeleton_resize_arg skel nm sz
-  | Just idx <- skelArgIndex skel nm
-  = skeleton_resize_arg_index skel idx sz
-  | otherwise = fail $ mconcat
-    [ "No argument named \""
-    , nm
-    , "\" (enabling debug symbols when compiling might help)"
-    ]
+data ModuleSkeleton = ModuleSkeleton
+  { _modSkelGlobals :: Map Text GlobalSkeleton
+  , _modSkelFunctions :: Map Text FunctionSkeleton
+  } deriving (Show, Eq, Ord)
+makeLenses ''ModuleSkeleton
 
-skeleton_prestate ::
-  BuiltinContext ->
-  Options ->
-  Skeleton ->
-  LLVMCrucibleSetupM SkeletonState
-skeleton_prestate bic opts skel = do
-  _skelArgs <- mapM (uncurry $ buildArg bic opts) $ zip (skel ^. bpFunArgs) [1,2..]
-  pure $ SkeletonState{..}
+--------------------------------------------------------------------------------
+-- ** Inferring skeletons
 
-skeleton_exec ::
-  BuiltinContext ->
-  Options ->
-  SkeletonState ->
-  LLVMCrucibleSetupM ()
-skeleton_exec bic opts prestate =
-  crucible_execute_func bic opts
-  $ (prestate ^. skelArgs) <&> \(val, mptr, _) -> fromMaybe (anySetupTerm val) mptr
+parseType :: LLVM.Type -> IO TypeSkeleton
+parseType (LLVM.PtrTo t) = pure $ TypeSkeleton t True [SizeGuess 1 "default guess of size 1"]
+parseType (LLVM.Array i t) = pure $ TypeSkeleton t True
+  [ SizeGuess (fromIntegral i) $ "default guess of size " <> Text.pack (show i)
+  ]
+parseType t = pure $ TypeSkeleton t False []
 
-skeleton_poststate ::
-  BuiltinContext ->
-  Options ->
-  Skeleton ->
-  SkeletonState ->
-  LLVMCrucibleSetupM SkeletonState
-skeleton_poststate bic opts skel prestate = do
-  _skelArgs <- zipWithM (rebuildArg bic opts)
-    (zip (skel ^. bpFunArgs) (prestate ^. skelArgs))
-    [1,2..]
-  pure $ SkeletonState{..}
-
-skeleton_arg_index ::
-  BuiltinContext ->
-  Options ->
-  SkeletonState ->
-  Int ->
-  LLVMCrucibleSetupM TypedTerm
-skeleton_arg_index _bic _opts state idx
-  | idx < length (state ^. skelArgs)
-  , (t, _, _) <- (state ^. skelArgs) !! idx
-  = pure t
-  | otherwise = fail $ mconcat
-    [ "No argument at index "
-    , show idx
-    ]
-
-skeleton_arg ::
-  BuiltinContext ->
-  Options ->
-  SkeletonState ->
-  String ->
-  LLVMCrucibleSetupM TypedTerm
-skeleton_arg bic opts state nm
-  | Just idx <- stateArgIndex state nm
-  = skeleton_arg_index bic opts state idx
-  | otherwise = fail $ mconcat
-    [ "No argument named \""
-    , nm
-    , "\" (enabling debug symbols when compiling might help)"
-    ]
-
-skeleton_arg_index_pointer ::
-  BuiltinContext ->
-  Options ->
-  SkeletonState ->
-  Int ->
-  LLVMCrucibleSetupM (AllLLVM SetupValue)
-skeleton_arg_index_pointer _bic _opts state idx
-  | idx < length (state ^. skelArgs)
-  , (_, mp, _) <- (state ^. skelArgs) !! idx
-  = case mp of
-      Just p -> pure p
-      Nothing -> fail $ mconcat
-        [ "Argument at index "
-        , show idx
-        , " is not a pointer or array"
-        ]
-  | otherwise = fail $ mconcat
-    [ "No argument at index "
-    , show idx
-    ]
-
-skeleton_arg_pointer ::
-  BuiltinContext ->
-  Options ->
-  SkeletonState ->
-  String ->
-  LLVMCrucibleSetupM (AllLLVM SetupValue)
-skeleton_arg_pointer bic opts state nm
-  | Just idx <- stateArgIndex state nm
-  = skeleton_arg_index_pointer bic opts state idx
-  | otherwise = fail $ mconcat
-    [ "No argument named \""
-    , nm
-    , "\" (enabling debug symbols when compiling might help)"
-    ]
-
--------------------------------------------------------------------------------
-
-buildArg ::
-  BuiltinContext ->
-  Options ->
-  BPArg LLVM.Type ->
-  Int ->
-  LLVMCrucibleSetupM (TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
-buildArg bic opts arg idx
-  | LLVM.PtrTo pt <- arg ^. bpArgType
-  = let t = case arg ^. bpArgBufSize of
-              Nothing -> pt
-              Just s -> LLVM.Array (fromIntegral s) pt
-    in do
-      ptr <- crucible_alloc bic opts t
-      val <- crucible_fresh_var bic opts ident t
-      crucible_points_to True bic opts ptr (anySetupTerm val)
-      pure (val, Just ptr, arg ^. bpArgName)
-  | otherwise
-  = let t = arg ^. bpArgType in do
-      val <- crucible_fresh_var bic opts ident t
-      pure (val, Nothing, arg ^. bpArgName)
+debugInfoGlobalLines :: LLVM.Module -> Map Text Int
+debugInfoGlobalLines = go . LLVM.modUnnamedMd
   where
-    ident = maybe ("arg" <> show idx) Text.unpack $ arg ^. bpArgName
+    go :: [LLVM.UnnamedMd] -> Map Text Int
+    go (LLVM.UnnamedMd
+         { LLVM.umValues = LLVM.ValMdDebugInfo
+           (LLVM.DebugInfoGlobalVariable LLVM.DIGlobalVariable
+             { LLVM.digvName = Just n
+             , LLVM.digvLine = l
+             }
+           )
+         }:xs) = Map.insert (Text.pack n) (fromIntegral l) $ go xs
+    go (_:xs) = go xs
+    go [] = Map.empty
 
-rebuildArg ::
-  BuiltinContext ->
-  Options ->
-  (BPArg LLVM.Type, (TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text))  ->
-  Int ->
-  LLVMCrucibleSetupM (TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
-rebuildArg bic opts (arg, prearg) idx
-  | LLVM.PtrTo pt <- arg ^. bpArgType
-  , (_, Just ptr, nm) <- prearg
-  = let t = case arg ^. bpArgBufSize of
-              Nothing -> pt
-              Just s -> LLVM.Array (fromIntegral s) pt
-        ident = maybe ("arg" <> show idx) Text.unpack nm
-    in do
-      val' <- crucible_fresh_var bic opts ident t
-      crucible_points_to True bic opts ptr (anySetupTerm val')
-      pure (val', Just ptr, nm)
-  | otherwise = pure prearg
+parseGlobal :: Map Text Int -> LLVM.Global -> IO GlobalSkeleton
+parseGlobal ls LLVM.Global
+  { LLVM.globalSym = LLVM.Symbol s
+  , LLVM.globalType = t
+  , LLVM.globalValue = v
+  } = do
+  let nm = Text.pack s
+  ty <- parseType t
+  pure GlobalSkeleton
+    { _globSkelName = Text.pack s
+    , _globSkelLoc = flip Location Nothing <$> Map.lookup nm ls
+    , _globSkelType = ty
+    , _globSkelInitialized = isJust v
+    }
 
-skelArgIndex ::
-  Skeleton ->
-  String ->
-  Maybe Int
-skelArgIndex state nm = flip findIndex (state ^. bpFunArgs) $ \arg ->
-  arg ^. bpArgName == Just (Text.pack nm)
+parseArg :: LLVM.Typed LLVM.Ident -> (Maybe Text, Maybe Location) -> IO ArgSkeleton
+parseArg LLVM.Typed { LLVM.typedType = t } (nm, loc) = do
+  ty <- parseType t
+  pure ArgSkeleton
+    { _argSkelName = nm
+    , _argSkelLoc = loc
+    , _argSkelType = ty
+    }
 
-stateArgIndex ::
-  SkeletonState ->
-  String ->
-  Maybe Int
-stateArgIndex state nm = flip findIndex (state ^. skelArgs) $ \(_, _, mnm) ->
-  mnm == Just (Text.pack nm)
+stmtCalls :: [LLVM.Stmt] -> Set Text
+stmtCalls [] = Set.empty
+stmtCalls (LLVM.Result _ (LLVM.Call _ _ (LLVM.ValSymbol (LLVM.Symbol s)) _) _:stmts) =
+  Set.insert (Text.pack s) $ stmtCalls stmts
+stmtCalls (LLVM.Effect (LLVM.Call _ _ (LLVM.ValSymbol (LLVM.Symbol s)) _) _:stmts) =
+  Set.insert (Text.pack s) $ stmtCalls stmts
+stmtCalls (_:stmts) = stmtCalls stmts
+
+stmtDebugDeclares :: [LLVM.Stmt] -> Map Int Location
+stmtDebugDeclares [] = Map.empty
+stmtDebugDeclares
+  (LLVM.Result _
+    (LLVM.Call _ _
+      (LLVM.ValSymbol (LLVM.Symbol s))
+      [ _
+      , LLVM.Typed
+        { LLVM.typedValue =
+          LLVM.ValMd (LLVM.ValMdDebugInfo (LLVM.DebugInfoLocalVariable LLVM.DILocalVariable { LLVM.dilvArg = a }))
+        }
+      , _
+      ]) md:stmts)
+  | s == "llvm.dbg.declare" || s == "llvm.dbg.value"
+  , Just (LLVM.ValMdLoc LLVM.DebugLoc { LLVM.dlLine = line, LLVM.dlCol = col }) <- lookup "dbg" md
+  = Map.insert (fromIntegral a) (Location (fromIntegral line) . Just $ fromIntegral col) $ stmtDebugDeclares stmts
+stmtDebugDeclares
+  (LLVM.Effect 
+    (LLVM.Call _ _
+      (LLVM.ValSymbol (LLVM.Symbol s))
+      [ _
+      , LLVM.Typed
+        { LLVM.typedValue =
+          LLVM.ValMd (LLVM.ValMdDebugInfo (LLVM.DebugInfoLocalVariable LLVM.DILocalVariable { LLVM.dilvArg = a }))
+        }
+      , _
+      ]) md:stmts)
+  | s == "llvm.dbg.declare" || s == "llvm.dbg.value"
+  , Just (LLVM.ValMdLoc LLVM.DebugLoc { LLVM.dlLine = line, LLVM.dlCol = col }) <- lookup "dbg" md
+  = Map.insert (fromIntegral a) (Location (fromIntegral line) . Just $ fromIntegral col) $ stmtDebugDeclares stmts
+stmtDebugDeclares (_:stmts) = stmtDebugDeclares stmts
+
+defineName :: LLVM.Define -> Text
+defineName LLVM.Define { LLVM.defName = LLVM.Symbol s } = Text.pack s
+
+debugInfoArgNames :: LLVM.Module -> LLVM.Define -> Map Int Text
+debugInfoArgNames m d =
+  case Map.lookup "dbg" $ LLVM.defMetadata d of
+    Just (LLVM.ValMdRef s) -> scopeArgs s
+    _ -> Map.empty
+  where
+    scopeArgs :: Int -> Map Int Text
+    scopeArgs s = go $ LLVM.modUnnamedMd m
+      where go :: [LLVM.UnnamedMd] -> Map Int Text
+            go [] = Map.empty
+            go (LLVM.UnnamedMd
+                 { LLVM.umValues =
+                   LLVM.ValMdDebugInfo
+                     (LLVM.DebugInfoLocalVariable
+                       LLVM.DILocalVariable
+                       { LLVM.dilvScope = Just (LLVM.ValMdRef s')
+                       , LLVM.dilvArg = a
+                       , LLVM.dilvName = Just n
+                       })}:xs) =
+              if s == s' then Map.insert (fromIntegral a) (Text.pack n) $ go xs else go xs
+            go (_:xs) = go xs
+
+debugInfoDefineLines :: LLVM.Module -> Map Text Int
+debugInfoDefineLines = go . LLVM.modUnnamedMd
+  where
+    go :: [LLVM.UnnamedMd] -> Map Text Int
+    go (LLVM.UnnamedMd
+         { LLVM.umValues = LLVM.ValMdDebugInfo
+           (LLVM.DebugInfoSubprogram LLVM.DISubprogram
+             { LLVM.dispName = Just n
+             , LLVM.dispIsDefinition = True
+             , LLVM.dispLine = l
+             }
+           )
+         }:xs) = Map.insert (Text.pack n) (fromIntegral l) $ go xs
+    go (_:xs) = go xs
+    go [] = Map.empty
+
+parseDefine :: Map Text Int -> LLVM.Module -> LLVM.Define -> IO FunctionSkeleton
+parseDefine _ _ LLVM.Define { LLVM.defVarArgs = True } = undefined
+parseDefine ls m d@LLVM.Define
+  { LLVM.defName = LLVM.Symbol s
+  , LLVM.defArgs = args
+  , LLVM.defBody = body
+  , LLVM.defRetType = ret
+  } = do
+  let stmts = mconcat $ LLVM.bbStmts <$> body
+  let argNames = debugInfoArgNames m d
+  let debugDeclares = stmtDebugDeclares stmts
+  argSkels <- zipWithM parseArg args $ (flip Map.lookup argNames &&& flip Map.lookup debugDeclares) <$> [1, 2..]
+  retTy <- parseType ret
+  pure FunctionSkeleton
+    { _funSkelName = Text.pack s
+    , _funSkelLoc = flip Location Nothing <$> Map.lookup (Text.pack s) ls
+    , _funSkelArgs = argSkels
+    , _funSkelRet = retTy
+    , _funSkelCalls = Set.intersection
+      (Set.fromList $ defineName <$> LLVM.modDefines m)
+      (stmtCalls stmts)
+    }
+
+moduleSkeleton :: LLVM.Module -> IO ModuleSkeleton
+moduleSkeleton ast = do
+  globs <- mapM (parseGlobal $ debugInfoGlobalLines ast) $ LLVM.modGlobals ast
+  funs <- mapM (parseDefine (debugInfoDefineLines ast) ast) $ LLVM.modDefines ast
+  pure $ ModuleSkeleton
+    { _modSkelGlobals = Map.fromList $ (\g -> (g ^. globSkelName, g)) <$> globs
+    , _modSkelFunctions = Map.fromList $ (\f -> (f ^. funSkelName, f)) <$> funs
+    }
