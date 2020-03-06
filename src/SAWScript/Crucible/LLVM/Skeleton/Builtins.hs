@@ -92,6 +92,32 @@ data SkeletonState = SkeletonState
   }
 makeLenses ''SkeletonState
 
+skeleton_globals_pre ::
+  BuiltinContext ->
+  Options ->
+  ModuleSkeleton ->
+  LLVMCrucibleSetupM ()
+skeleton_globals_pre bic opts mskel =
+  forM_ (mskel ^. modSkelGlobals) $ \gskel ->
+    when (gskel ^. globSkelMutable) $ do
+      let gname = Text.unpack $ gskel ^. globSkelName
+      crucible_alloc_global bic opts gname
+      when (gskel ^. globSkelInitialized)
+        . crucible_points_to True bic opts (anySetupGlobal gname)
+        $ anySetupGlobalInitializer gname
+
+skeleton_globals_post ::
+  BuiltinContext ->
+  Options ->
+  ModuleSkeleton ->
+  LLVMCrucibleSetupM ()
+skeleton_globals_post bic opts mskel =
+  forM_ (mskel ^. modSkelGlobals) $ \gskel -> do
+    when (gskel ^. globSkelMutable && gskel ^. globSkelInitialized) $ do
+      let gname = Text.unpack $ gskel ^. globSkelName
+      crucible_points_to True bic opts (anySetupGlobal gname)
+        $ anySetupGlobalInitializer gname
+
 buildArg ::
   BuiltinContext ->
   Options ->
@@ -153,7 +179,7 @@ rebuildArg bic opts (arg, prearg) idx
       ident = maybe ("arg" <> show idx) Text.unpack nm
     in do
       val' <- crucible_fresh_var bic opts ident t
-      crucible_points_to True bic opts ptr (anySetupTerm val')
+      crucible_points_to True bic opts ptr $ anySetupTerm val'
       pure (val', Just ptr, nm)
   | otherwise = pure prearg
 
@@ -167,6 +193,8 @@ skeleton_poststate bic opts skel prestate = do
   _skelArgs <- zipWithM (rebuildArg bic opts)
     (zip (skel ^. funSkelArgs) (prestate ^. skelArgs))
     [1,2..]
+  ret <- crucible_fresh_var bic opts "return value" $ skel ^. funSkelRet . typeSkelLLVMType
+  crucible_return bic opts $ anySetupTerm ret
   pure $ SkeletonState{..}
 
 skeleton_arg_index ::

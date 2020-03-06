@@ -53,6 +53,7 @@ data GlobalSkeleton = GlobalSkeleton
   { _globSkelName :: Text
   , _globSkelLoc :: Maybe Location
   , _globSkelType :: TypeSkeleton
+  , _globSkelMutable :: Bool
   , _globSkelInitialized :: Bool
   } deriving (Show, Eq, Ord)
 makeLenses ''GlobalSkeleton
@@ -109,6 +110,7 @@ parseGlobal ls LLVM.Global
   { LLVM.globalSym = LLVM.Symbol s
   , LLVM.globalType = t
   , LLVM.globalValue = v
+  , LLVM.globalAttrs = LLVM.GlobalAttrs { LLVM.gaConstant = c }
   } = do
   let nm = Text.pack s
   ty <- parseType t
@@ -116,6 +118,7 @@ parseGlobal ls LLVM.Global
     { _globSkelName = Text.pack s
     , _globSkelLoc = flip Location Nothing <$> Map.lookup nm ls
     , _globSkelType = ty
+    , _globSkelMutable = not c
     , _globSkelInitialized = isJust v
     }
 
@@ -210,7 +213,8 @@ debugInfoDefineLines = go . LLVM.modUnnamedMd
     go [] = Map.empty
 
 parseDefine :: Map Text Int -> LLVM.Module -> LLVM.Define -> IO FunctionSkeleton
-parseDefine _ _ LLVM.Define { LLVM.defVarArgs = True } = undefined
+parseDefine _ _ LLVM.Define { LLVM.defVarArgs = True } =
+  fail "Skeleton generation does not support varargs"
 parseDefine ls m d@LLVM.Define
   { LLVM.defName = LLVM.Symbol s
   , LLVM.defArgs = args
