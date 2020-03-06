@@ -24,8 +24,9 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
   , equalValsPred
   ) where
 
-import Control.Lens
-import Data.IORef
+import           Control.Lens
+import qualified Control.Monad.Fail as Fail
+import           Data.IORef
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (absurd)
@@ -86,7 +87,7 @@ type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
 type SetupValue = MS.SetupValue CJ.JVM
 
 typeOfSetupValue ::
-  Monad m =>
+  Fail.MonadFail m =>
   JVMCrucibleContext ->
   Map AllocIndex (W4.ProgramLoc, Allocation) ->
   Map AllocIndex JIdent ->
