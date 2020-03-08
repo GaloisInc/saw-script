@@ -193,8 +193,11 @@ skeleton_poststate bic opts skel prestate = do
   _skelArgs <- zipWithM (rebuildArg bic opts)
     (zip (skel ^. funSkelArgs) (prestate ^. skelArgs))
     [1,2..]
-  ret <- crucible_fresh_var bic opts "return value" $ skel ^. funSkelRet . typeSkelLLVMType
-  crucible_return bic opts $ anySetupTerm ret
+  case skel ^. funSkelRet . typeSkelLLVMType of
+    LLVM.PrimType LLVM.Void -> pure ()
+    t -> do
+      ret <- crucible_fresh_var bic opts "return value" t
+      crucible_return bic opts $ anySetupTerm ret
   pure $ SkeletonState{..}
 
 skeleton_arg_index ::
