@@ -196,7 +196,7 @@ skeleton_poststate bic opts skel prestate = do
   case skel ^. funSkelRet . typeSkelLLVMType of
     LLVM.PrimType LLVM.Void -> pure ()
     t -> do
-      ret <- crucible_fresh_var bic opts "return value" t
+      ret <- crucible_fresh_var bic opts ("return value of " <> (Text.unpack $ skel ^. funSkelName)) t
       crucible_return bic opts $ anySetupTerm ret
   pure $ SkeletonState{..}
 
