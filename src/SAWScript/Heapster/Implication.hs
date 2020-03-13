@@ -2345,7 +2345,7 @@ proveVarImplH x p@(ValPerm_Eq (PExpr_Var y)) mb_p =
   "proveVarImpl: incomplete psubst: introCast" >>>= \p' ->
   introCastM x y p'
 
--- To prove mu X.p |- mu Y.p', we assume X |- Y and prove p |- p'
+-- To prove mu X.p |- mu X.p', we bind X as a free var and prove p |- p'
 --
 -- FIXME HERE NOW: need to split the lifetime of the mu if necessary
 proveVarImplH x (ValPerm_Mu p_body) [nuP| ValPerm_Mu mb_p'_body |] =
@@ -2370,9 +2370,12 @@ proveVarImplH x p [nuP| ValPerm_Mu mb_p_body |] =
   "proveVarImpl: incomplete psubst: implFold" >>>= \p_body ->
   implFoldMuM x p_body
 
--- Prove x:X |- x:Y from an assumption that X |- Y
-proveVarImplH _ (ValPerm_Var _) [nuP| ValPerm_Var _ |] =
-  error "FIXME HERE NOW: handle permission variables!"
+-- Prove x:X |- x:X by reflexivity, which in this case is just doing nothing
+proveVarImplH _ (ValPerm_Var x) [nuP| ValPerm_Var y |] | x == y = greturn ()
+
+-- Cannot prove x:X |- x:Y for unequal variables X and Y
+proveVarImplH x p@(ValPerm_Var _) mb_p@[nuP| ValPerm_Var _ |] =
+  implFailVarM "proveVarImplH" x p mb_p
 
 -- Cannot prove x:p |- x:X for any non-variable p
 proveVarImplH x p mb_p@[nuP| ValPerm_Var _ |] =
