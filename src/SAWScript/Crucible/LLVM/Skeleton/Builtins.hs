@@ -5,7 +5,6 @@ Maintainer  : sbreese
 Stability   : provisional
 -}
 
-{-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
 
@@ -47,6 +46,15 @@ module_skeleton m = do
   let ast = viewSome modAST m
   liftIO $ moduleSkeleton ast
 
+function_skeleton ::
+  ModuleSkeleton ->
+  String ->
+  TopLevel FunctionSkeleton
+function_skeleton mskel nm =
+  case mskel ^. modSkelFunctions . at (Text.pack nm) of
+    Just fskel -> pure fskel
+    Nothing -> fail $ mconcat ["No skeleton exists for function \"", nm, "\""]
+
 -- | Manually add a new guess for the size of the argument at the given index
 skeleton_resize_arg_index ::
   FunctionSkeleton ->
@@ -86,11 +94,6 @@ skeleton_resize_arg skel nm sz
 
 --------------------------------------------------------------------------------
 -- ** Writing SAWScript specifications using skeletons 
-
-data SkeletonState = SkeletonState
-  { _skelArgs :: [(TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)]
-  }
-makeLenses ''SkeletonState
 
 skeleton_globals_pre ::
   BuiltinContext ->

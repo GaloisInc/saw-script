@@ -32,7 +32,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_llvm_cfg
     , crucible_llvm_extract
     , crucible_llvm_verify
-    -- , crucible_llvm_array_size_profile
+    , crucible_llvm_array_size_profile
     , crucible_setup_val_to_typed_term
     , crucible_spec_size
     , crucible_spec_solvers
@@ -264,19 +264,19 @@ crucible_llvm_unsafe_assume_spec ::
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_unsafe_assume_spec bic opts (Some lm) nm setup =
   SomeLLVM <$> createMethodSpec Nothing Nothing bic opts lm nm setup
--- 
--- crucible_llvm_array_size_profile ::
---   BuiltinContext ->
---   Options ->
---   Some LLVMModule ->
---   String ->
---   LLVMCrucibleSetupM () ->
---   TopLevel [Crucible.Profile]
--- crucible_llvm_array_size_profile bic opts (Some lm) nm setup = do
---   cell <- io $ newIORef Map.empty
---   void $ createMethodSpec (Just ([], False, undefined)) (Just cell) bic opts lm nm setup
---   profiles <- io $ readIORef cell
---   pure $ Map.toList profiles
+
+crucible_llvm_array_size_profile ::
+  BuiltinContext ->
+  Options ->
+  Some LLVMModule ->
+  String ->
+  LLVMCrucibleSetupM () ->
+  TopLevel [(String, [Crucible.FunctionProfile])]
+crucible_llvm_array_size_profile bic opts (Some lm) nm setup = do
+  cell <- io $ newIORef Map.empty
+  void $ createMethodSpec (Just ([], False, undefined)) (Just cell) bic opts lm nm setup
+  profiles <- io $ readIORef cell
+  pure . fmap (\(fnm, prof) -> (Text.unpack fnm, prof)) $ Map.toList profiles
 
 -- | Check that all the overrides/lemmas were actually from this module
 checkModuleCompatibility ::
@@ -298,7 +298,7 @@ checkModuleCompatibility llvmModule = foldM step []
 createMethodSpec ::
   Maybe ([MS.CrucibleMethodSpecIR (LLVM arch)], Bool, ProofScript SatResult)
   {- ^ If verifying, provide lemmas, branch sat checking, tactic -} ->
-  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
+  Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   BuiltinContext   ->
   Options          ->
   LLVMModule arch ->
@@ -844,7 +844,7 @@ verifySimulate ::
   [MS.CrucibleMethodSpecIR (LLVM arch)]        ->
   Crucible.SymGlobalState Sym   ->
   Bool                          ->
-  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
+  Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp =
   withCfgAndBlockId cc mspec $ \cfg entryId -> do
@@ -877,8 +877,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
       (groupOn (view csName) invLemmas)
 
     additionalFeatures <- mapM (Crucible.arraySizeProfile (ccLLVMContext cc))
-                          --- $ maybeToList asp
-                          $ []
+                          $ maybeToList asp
 
     let execFeatures = invariantExecFeatures ++
                        map Crucible.genericToExecutionFeature (patSatGenExecFeature ++ pfs) ++

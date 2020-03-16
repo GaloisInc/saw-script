@@ -25,6 +25,7 @@ Stability   : provisional
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module SAWScript.Value where
 
@@ -97,6 +98,8 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
 
+import Lang.Crucible.LLVM.ArraySizeProfile
+
 import           What4.ProgramLoc (ProgramLoc)
 
 -- Values ----------------------------------------------------------------------
@@ -132,6 +135,9 @@ data Value
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
   -----
   | VLLVMModuleSkeleton ModuleSkeleton
+  | VLLVMFunctionSkeleton FunctionSkeleton
+  | VLLVMSkeletonState SkeletonState
+  | VLLVMFunctionProfile FunctionProfile
   -----
   | VJavaType JavaType
   | VLLVMType LLVM.Type
@@ -285,6 +291,9 @@ showsPrecValue opts p v =
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VLLVMModuleSkeleton s -> shows s
+    VLLVMFunctionSkeleton s -> shows s
+    VLLVMSkeletonState _ -> showString "<<Skeleton state>>"
+    VLLVMFunctionProfile _ -> showString "<<Array sizes for function>>"
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
@@ -683,6 +692,27 @@ instance FromValue ModuleSkeleton where
     fromValue (VLLVMModuleSkeleton s) = s
     fromValue _ = error "fromValue ModuleSkeleton"
 
+instance IsValue FunctionSkeleton where
+    toValue s = VLLVMFunctionSkeleton s
+
+instance FromValue FunctionSkeleton where
+    fromValue (VLLVMFunctionSkeleton s) = s
+    fromValue _ = error "fromValue FunctionSkeleton"
+
+instance IsValue SkeletonState where
+    toValue s = VLLVMSkeletonState s
+
+instance FromValue SkeletonState where
+    fromValue (VLLVMSkeletonState s) = s
+    fromValue _ = error "fromValue SkeletonState"
+
+instance IsValue FunctionProfile where
+    toValue s = VLLVMFunctionProfile s
+
+instance FromValue FunctionProfile where
+    fromValue (VLLVMFunctionProfile s) = s
+    fromValue _ = error "fromValue FunctionProfile"
+
 -----------------------------------------------------------------------------------
 
 
@@ -882,3 +912,8 @@ addTraceReaderT str = underReaderT (addTraceTopLevel str)
 addTraceTopLevel :: String -> TopLevel a -> TopLevel a
 addTraceTopLevel str action = action & _Wrapped' %~
   underReaderT (underStateT (liftIO . addTraceIO str))
+
+data SkeletonState = SkeletonState
+  { _skelArgs :: [(TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]
+  }
+makeLenses ''SkeletonState

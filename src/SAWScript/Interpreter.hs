@@ -1616,15 +1616,75 @@ primitives = Map.fromList
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
-  -- , prim "llvm_boilerplate_info" "LLVMModule -> [Profile] -> TopLevel ()"
-  --   (pureVal llvm_boilerplate_info)
-  --   Experimental
-  --   [ "Print information from an LLVM module relevant to boilerplate generation." ]
+  , prim "module_skeleton" "LLVMModule -> TopLevel ModuleSkeleton"
+    (pureVal module_skeleton)
+    Experimental
+    []
 
-  -- , prim "module_skeleton" "LLVMModule -> TopLevel ()"
-  --   (pureVal module_skeleton)
-  --   Experimental
-  --   []
+  , prim "function_skeleton" "ModuleSkeleton -> String -> TopLevel FunctionSkeleton"
+    (pureVal function_skeleton)
+    Experimental
+    []
+
+  , prim "skeleton_resize_arg_index" "FunctionSkeleton -> Int -> Int -> TopLevel FunctionSkeleton"
+    (pureVal skeleton_resize_arg_index)
+    Experimental
+    []
+
+  , prim "skeleton_resize_arg" "FunctionSkeleton -> String -> Int -> TopLevel FunctionSkeleton"
+    (pureVal skeleton_resize_arg)
+    Experimental
+    []
+
+  , prim "skeleton_globals_pre" "ModuleSkeleton -> CrucibleSetup ()"
+    (bicVal skeleton_globals_pre)
+    Experimental
+    []
+
+  , prim "skeleton_globals_post" "ModuleSkeleton -> CrucibleSetup ()"
+    (bicVal skeleton_globals_post)
+    Experimental
+    []
+
+  , prim "skeleton_prestate" "FunctionSkeleton -> CrucibleSetup SkeletonState"
+    (bicVal skeleton_prestate)
+    Experimental
+    []
+
+  , prim "skeleton_poststate" "FunctionSkeleton -> SkeletonState -> CrucibleSetup SkeletonState"
+    (bicVal skeleton_poststate)
+    Experimental
+    []
+
+  , prim "skeleton_arg_index" "SkeletonState -> Int -> CrucibleSetup Term"
+    (bicVal skeleton_arg_index)
+    Experimental
+    []
+
+  , prim "skeleton_arg" "SkeletonState -> String -> CrucibleSetup Term"
+    (bicVal skeleton_arg)
+    Experimental
+    []
+
+  , prim "skeleton_arg_index_pointer" "SkeletonState -> Int -> CrucibleSetup SetupValue"
+    (bicVal skeleton_arg_index_pointer)
+    Experimental
+    []
+
+  , prim "skeleton_arg_pointer" "SkeletonState -> String -> CrucibleSetup SetupValue"
+    (bicVal skeleton_arg_pointer)
+    Experimental
+    []
+
+  , prim "skeleton_exec" "SkeletonState -> CrucibleSetup ()"
+    (bicVal skeleton_exec)
+    Experimental
+    []
+
+  , prim "llvm_boilerplate" "String -> LLVMModule -> TopLevel ()"
+    (pureVal llvm_boilerplate)
+    Experimental
+    [ "Generate boilerplate for the definitions in an LLVM module." ]
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
@@ -1958,16 +2018,16 @@ primitives = Map.fromList
     , "any verification."
     ]
 
-  -- , prim "crucible_llvm_array_size_profile"
-  --   "LLVMModule -> String -> CrucibleSetup () -> TopLevel [Profile]"
-  --   (bicVal crucible_llvm_array_size_profile)
-  --   Experimental
-  --   [ "Symbolically execute the function named by the second parameter in"
-  --   , "the module specified by the first. The third parameter may be used"
-  --   , "to specify arguments. Returns profiles specifying the sizes of buffers"
-  --   , "referred to by pointer arguments for the function and all other functions"
-  --   , "it calls (recursively), to be passed to llvm_boilerplate."
-  --   ]
+  , prim "crucible_llvm_array_size_profile"
+    "LLVMModule -> String -> CrucibleSetup () -> TopLevel [(String, FunctionProfile)]"
+    (bicVal crucible_llvm_array_size_profile)
+    Experimental
+    [ "Symbolically execute the function named by the second parameter in"
+    , "the module specified by the first. The third parameter may be used"
+    , "to specify arguments. Returns profiles specifying the sizes of buffers"
+    , "referred to by pointer arguments for the function and all other functions"
+    , "it calls (recursively), to be passed to llvm_boilerplate."
+    ]
 
   , prim "crucible_llvm_verify_x86"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
