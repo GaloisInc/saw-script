@@ -37,6 +37,7 @@ import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.LLVM.Extension
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Arch.X86
+import Verifier.SAW.Term.Functor
 
 
 ----------------------------------------------------------------------
@@ -77,6 +78,25 @@ projReifiesObj (ReifiesObj prx) = reflect prx
 -- for types that are guaranteed not to contain any 'Name' or 'Mb' values.
 unsafeMbTypeRepr :: MbTypeRepr a
 unsafeMbTypeRepr = isoMbTypeRepr mkReifiesObj projReifiesObj
+
+-- FIXME: move to Hobbits
+instance Closable Char where
+  toClosed = unsafeClose
+
+-- FIXME: move to Hobbits
+instance Closable a => Closable [a] where
+  toClosed [] = $(mkClosed [| [] |])
+  toClosed (a:as) =
+    $(mkClosed [| (:) |]) `clApply` toClosed a `clApply` toClosed as
+
+instance NuMatching Ident where
+  nuMatchingProof = unsafeMbTypeRepr
+
+instance Closable Ident where
+  toClosed = unsafeClose
+
+instance Liftable Ident where
+  mbLift = unClosed . mbLift . fmap toClosed
 
 instance NuMatching (SymbolRepr tp) where
   nuMatchingProof = unsafeMbTypeRepr

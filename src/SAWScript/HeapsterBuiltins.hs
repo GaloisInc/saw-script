@@ -111,6 +111,7 @@ getLLVMCFG _ (JVM_CFG _) =
 archReprWidth :: ArchRepr arch -> NatRepr (ArchWidth arch)
 archReprWidth (X86Repr w) = w
 
+-- FIXME: no longer needed...?
 castFunPerm :: CFG ext blocks inits ret ->
                FunPerm ghosts args ret' ->
                TopLevel (FunPerm ghosts (CtxToRList inits) ret)
@@ -127,6 +128,16 @@ castFunPerm cfg fun_perm =
                       "Expected: " ++ show (cfgReturnType cfg),
                       "Actual: " ++ show (funPermRet fun_perm)]
 
+heapster_default_env :: Closed PermEnv
+heapster_default_env =
+  $(mkClosed
+    [| PermEnv
+     {
+       permEnvFunPerms = [],
+       permEnvRecPerms = []
+     }
+     |])
+
 heapster_extract_print :: BuiltinContext -> Options ->
                           LLVMModule -> String -> String ->
                           TopLevel ()
@@ -135,15 +146,18 @@ heapster_extract_print bic opts lm fn_name perms_string =
     Some mod_trans -> do
       let arch = llvmArch $ _transContext mod_trans
       let w = archReprWidth arch
+      let cl_env = heapster_default_env -- FIXME: cl_env should be an argument
+      let env = unClosed cl_env
       any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts lm fn_name
       pp_opts <- getTopLevelPPOpts
       case any_cfg of
         AnyCFG cfg -> do
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
           let ret = handleReturnType $ cfgHandle cfg
-          some_fun_perm <- case parseFunPermString [] args ret perms_string of
-            Left err -> fail $ show err
-            Right p -> return p
+          some_fun_perm <-
+            case parseFunPermString cl_env args ret perms_string of
+              Left err -> fail $ show err
+              Right p -> return p
           case some_fun_perm of
             SomeFunPerm fun_perm -> do
               cl_fun_perm <-
@@ -153,10 +167,9 @@ heapster_extract_print bic opts lm fn_name perms_string =
               leq_proof <- case decideLeq (knownNat @1) w of
                 Left pf -> return pf
                 Right _ -> fail "LLVM arch width is 0!"
-              let cl_env = $(mkClosed [| FunTypeEnv [] |])
               let fun_openterm =
                     withKnownNat w $ withLeqProof leq_proof $
-                    translateCFG $ tcCFG cl_env cl_fun_perm cfg
+                    translateCFG env $ tcCFG cl_env cl_fun_perm cfg
               sc <- getSharedContext
               fun_term <- liftIO $ completeOpenTerm sc fun_openterm
               liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term

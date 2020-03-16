@@ -418,7 +418,8 @@ typedLLVMStmtIn (TypedLLVMLoad (TypedReg x) fp ps ps_l) =
   (DistPermsCons ps x (ValPerm_Conj1 $ Perm_LLVMField fp))
   (lifetimeCurrentPermsPerms ps_l)
 typedLLVMStmtIn (TypedLLVMStore (TypedReg x) fp _ ps cur_ps) =
-  permAssert (llvmFieldRW fp == Write && bvEq (llvmFieldOffset fp) (bvInt 0) &&
+  permAssert (llvmFieldRW fp == PExpr_Write &&
+              bvEq (llvmFieldOffset fp) (bvInt 0) &&
               llvmFieldLifetime fp == lifetimeCurrentPermsLifetime cur_ps)
   "typedLLVMStmtIn: TypedLLVMStore: mismatch for field permission" $
   appendDistPerms
@@ -473,7 +474,8 @@ typedLLVMStmtOut (TypedLLVMLoad (TypedReg x) fp ps ps_l) ret =
   else
     error "typedLLVMStmtOut: TypedLLVMLoad: mismatch for field lifetime"
 typedLLVMStmtOut (TypedLLVMStore (TypedReg x) fp (TypedReg y) ps cur_ps) _ =
-  permAssert (llvmFieldRW fp == Write && bvEq (llvmFieldOffset fp) (bvInt 0) &&
+  permAssert (llvmFieldRW fp == PExpr_Write &&
+              bvEq (llvmFieldOffset fp) (bvInt 0) &&
               llvmFieldLifetime fp == lifetimeCurrentPermsLifetime cur_ps)
   "typedLLVMStmtOut: TypedLLVMStore: mismatch for field permission" $
   appendDistPerms
@@ -835,7 +837,7 @@ data TopPermCheckState ext cblocks blocks ret =
     stRetType :: TypeRepr ret,
     stBlockTrans :: Assignment (BlockIDTrans blocks) cblocks,
     stBlockInfo :: BlockInfoMap ext blocks ret,
-    stFunTypeEnv :: FunTypeEnv
+    stPermEnv :: PermEnv
   }
 
 {-
@@ -857,7 +859,7 @@ instance BindState (TopPermCheckState ext cblocks blocks ret) where
 
 -- | Build an empty 'TopPermCheckState' from a Crucible 'BlockMap'
 emptyTopPermCheckState ::
-  TypeRepr ret -> BlockMap ext cblocks ret -> Closed FunTypeEnv ->
+  TypeRepr ret -> BlockMap ext cblocks ret -> Closed PermEnv ->
   Closed (TopPermCheckState ext cblocks (CtxCtxToRList cblocks) ret)
 emptyTopPermCheckState ret blkMap cl_env =
   $(mkClosed [| \ret' blkMap' env' ->
@@ -865,7 +867,7 @@ emptyTopPermCheckState ret blkMap cl_env =
               { stRetType = ret'
               , stBlockTrans = buildBlockIDMap blkMap'
               , stBlockInfo = emptyBlockInfoMap blkMap'
-              , stFunTypeEnv = env' } |])
+              , stPermEnv = env' } |])
   `clApply` toClosed ret `clApply` closeAssign toClosed blkMap `clApply` cl_env
 
 
@@ -1037,11 +1039,11 @@ getRegFunPerm :: TypedReg (FunctionHandleType cargs fret) ->
                  StmtPermCheckM ext cblocks blocks ret args ps ps
                  (SomeFunPerm (CtxToRList cargs) fret)
 getRegFunPerm freg =
-  (stFunTypeEnv <$> unClosed <$> top_get) >>>= \env ->
+  (stPermEnv <$> unClosed <$> top_get) >>>= \env ->
   getSimpleRegPerm freg >>>= \p_freg ->
   case p_freg of
     ValPerm_Eq (PExpr_Fun f)
-      | Just some_fun_perm <- lookupFunPerm env f ->
+      | Just (some_fun_perm, _) <- lookupFunPerm env f ->
           greturn some_fun_perm
     ValPerm_Conj [Perm_Fun fun_perm] -> greturn (SomeFunPerm fun_perm)
     _ -> stmtFailM (\i ->
@@ -1132,7 +1134,7 @@ embedImplM :: (forall ps. PermImpl r ps -> r ps) -> CruCtx vars ->
 embedImplM f_impl vars m =
   gmapRet (f_impl <$>) >>>
   (stCurPerms <$> gget) >>>= \perms_in ->
-  (stFunTypeEnv <$> unClosed <$> top_get) >>>= \env ->
+  (stPermEnv <$> unClosed <$> top_get) >>>= \env ->
   (stPPInfo <$> gget) >>>= \ppInfo ->
   (gcaptureCC $ \k -> runImplM vars perms_in env ppInfo k m) >>>= \(a, implSt) ->
   gmodify ((\st -> st { stPPInfo = implSt ^. implStatePPInfo })
@@ -1647,7 +1649,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_Store _ (ptr :: Reg ctx (LLVMPointerType w)) t
    (findMaybeIndices (llvmPermContainsOffset $ bvInt 0) ps)) >>>= \(i,_) ->
   case ps !! i of
     Perm_LLVMField fp
-      | Write <- llvmFieldRW fp ->
+      | PExpr_Write <- llvmFieldRW fp ->
         -- If we found a field perm for offset 0, first extract it out of all
         -- the other perms for x and pop all the other perms off of the stack
         stmtEmbedImplM (implExtractConjM x ps i >>>
@@ -1787,7 +1789,7 @@ tcJumpTarget :: CtxTrans ctx -> JumpTarget cblocks ctx ->
                 StmtPermCheckM ext cblocks blocks ret args RNil RNil
                 (PermImpl (TypedJumpTarget blocks) RNil)
 tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
-  (stFunTypeEnv <$> unClosed <$> top_get) >>>= \env ->
+  (stPermEnv <$> unClosed <$> top_get) >>>= \env ->
   (stPPInfo <$> get) >>>= \ppInfo ->
   gget >>>= \st ->
   tcBlockID blkID >>>= \memb ->
@@ -1851,7 +1853,7 @@ tcTermStmt ctx (Return reg) =
   let treg = tcReg ctx reg in
   gget >>>= \st ->
   (unClosed <$> top_get) >>>= \top_st ->
-  let env = stFunTypeEnv top_st
+  let env = stPermEnv top_st
       ppInfo = stPPInfo st in
   case stRetPerms st of
     Some (RetPerms mb_ret_perms) ->
@@ -1978,7 +1980,7 @@ funPermToBlockOutputs (fun_perm :: FunPerm ghosts args ret) =
 
 
 -- | Type-check a Crucible CFG
-tcCFG :: PermCheckExtC ext => Closed FunTypeEnv ->
+tcCFG :: PermCheckExtC ext => Closed PermEnv ->
          Closed (FunPerm ghosts (CtxToRList inits) ret) ->
          CFG ext blocks inits ret ->
          TypedCFG ext (CtxCtxToRList blocks) ghosts (CtxToRList inits) ret

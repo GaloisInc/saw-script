@@ -50,6 +50,7 @@ import Lang.Crucible.Types
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.FunctionHandle
+import Verifier.SAW.Term.Functor (Ident)
 import Verifier.SAW.OpenTerm
 
 import Data.Binding.Hobbits
@@ -167,7 +168,7 @@ data SimplImpl ps_in ps_out where
   SImpl_ConstFunPerm ::
     args ~ CtxToRList cargs =>
     ExprVar (FunctionHandleType cargs ret) ->
-    FnHandle cargs ret -> FunPerm ghosts (CtxToRList cargs) ret ->
+    FnHandle cargs ret -> FunPerm ghosts (CtxToRList cargs) ret -> Ident ->
     SimplImpl (RNil :> FunctionHandleType cargs ret)
     (RNil :> FunctionHandleType cargs ret)
   -- ^ Prove a function permission for a statically-known function (assuming
@@ -390,17 +391,19 @@ data SimplImpl ps_in ps_out where
   --
   -- > l1:lcurrent(l2) * l2:lcurrent(l3) -o l1:lcurrent(l3)
 
-  SImpl_FoldMu :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
-                  SimplImpl (RNil :> a) (RNil :> a)
-  -- ^ Fold a mu permission:
+  SImpl_FoldRec :: ExprVar a -> RecPerm args a -> RecPermArgs args ->
+                   SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ Fold a recursive permission:
   --
-  -- > x:[mu X.p / X]p -o x:(mu X.p)
+  -- > x:(unfold P args) -o x:P<args>
 
-  SImpl_UnfoldMu :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
-                    SimplImpl (RNil :> a) (RNil :> a)
-  -- ^ Unfold a mu permission:
+  SImpl_UnfoldRec :: ExprVar a -> RecPerm args a -> RecPermArgs args ->
+                     SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ Unfold a recursive permission:
   --
-  -- > x:(mu X.p) -o x:[mu X.p / X]p
+  -- > x:P<args> -o x:(unfold P args)
+
+{- FIXME HERE NOW: Write the rule for proving one recursive perm implies another
 
   SImpl_Mu ::
     ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
@@ -412,6 +415,7 @@ data SimplImpl ps_in ps_out where
   -- > y:p1 -o y:p2
   -- > ----------------------
   -- > x:mu X.p1 -o x:mu X.p2
+-}
 
 
 -- | A single step of permission implication. These can have multiple,
@@ -582,7 +586,7 @@ simplImplIn (SImpl_ExtractConj x ps i) = distPerms1 x (ValPerm_Conj ps)
 simplImplIn (SImpl_CopyConj x ps i) = distPerms1 x (ValPerm_Conj ps)
 simplImplIn (SImpl_InsertConj x p ps i) =
   distPerms2 x (ValPerm_Conj [p]) x (ValPerm_Conj ps)
-simplImplIn (SImpl_ConstFunPerm x h _) =
+simplImplIn (SImpl_ConstFunPerm x h _ _) =
   distPerms1 x (ValPerm_Eq $ PExpr_Fun h)
 simplImplIn (SImpl_CastLLVMWord x e1 e2) =
   distPerms2 x (ValPerm_Eq $ PExpr_LLVMWord e1)
@@ -610,8 +614,7 @@ simplImplIn (SImpl_LLVMFieldLifetimeAlways x fld l) =
   "simplImplIn: SImpl_LLVMFieldLifetimeAlways: input lifetime is not always" $
   distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
 simplImplIn (SImpl_DemoteLLVMFieldWrite x fld) =
-  distPerms1 x (ValPerm_Conj [Perm_LLVMField $
-                              fld { llvmFieldRW = Write }])
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField fld])
 simplImplIn (SImpl_LLVMArrayCopy x ap rng) =
   if atomicPermIsCopyable (Perm_LLVMArray ap) then
     distPerms2 x (ValPerm_Conj [Perm_LLVMArray ap])
@@ -665,10 +668,11 @@ simplImplIn (SImpl_LCurrentRefl _) = DistPermsNil
 simplImplIn (SImpl_LCurrentTrans l1 l2 l3) =
   distPerms2 l1 (ValPerm_Conj [Perm_LCurrent $ PExpr_Var l2])
   l2 (ValPerm_Conj [Perm_LCurrent l3])
-simplImplIn (SImpl_FoldMu x p) =
-  distPerms1 x (substValPerm (ValPerm_Mu p) p)
-simplImplIn (SImpl_UnfoldMu x p) = distPerms1 x (ValPerm_Mu p)
-simplImplIn (SImpl_Mu x p1 _ _) = distPerms1 x (ValPerm_Mu p1)
+simplImplIn (SImpl_FoldRec x rp args) =
+  distPerms1 x (unfoldRecPerm rp args)
+simplImplIn (SImpl_UnfoldRec x rp args) =
+  distPerms1 x (ValPerm_Rec (recPermName rp) args)
+-- simplImplIn (SImpl_Mu x p1 _ _) = distPerms1 x (ValPerm_Mu p1)
 
 
 -- | Compute the output permissions of a 'SimplImpl' implication
@@ -696,7 +700,7 @@ simplImplOut (SImpl_CopyConj x ps i) =
     error "simplImplOut: SImpl_CopyConj: permission not copyable"
 simplImplOut (SImpl_InsertConj x p ps i) =
   distPerms1 x (ValPerm_Conj (take i ps ++ p : drop i ps))
-simplImplOut (SImpl_ConstFunPerm x _ fun_perm) =
+simplImplOut (SImpl_ConstFunPerm x _ fun_perm _) =
   distPerms1 x (ValPerm_Conj1 $ Perm_Fun fun_perm)
 simplImplOut (SImpl_CastLLVMWord x _ e2) =
   distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e2)
@@ -716,7 +720,7 @@ simplImplOut (SImpl_LLVMFieldLifetimeAlways x fld l) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField $ fld { llvmFieldLifetime = l }])
 simplImplOut (SImpl_DemoteLLVMFieldWrite x fld) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMField $
-                              fld { llvmFieldRW = Read }])
+                              fld { llvmFieldRW = PExpr_Read }])
 simplImplOut (SImpl_LLVMArrayCopy x ap rng) =
   if atomicPermIsCopyable (Perm_LLVMArray ap) then
     distPerms2 x (ValPerm_Conj [Perm_LLVMArray $
@@ -776,10 +780,10 @@ simplImplOut (SImpl_LCurrentRefl l) =
   distPerms1 l (ValPerm_Conj1 $ Perm_LCurrent $ PExpr_Var l)
 simplImplOut (SImpl_LCurrentTrans l1 _ l3) =
   distPerms1 l1 (ValPerm_Conj [Perm_LCurrent l3])
-simplImplOut (SImpl_FoldMu x p) = distPerms1 x (ValPerm_Mu p)
-simplImplOut (SImpl_UnfoldMu x p) =
-  distPerms1 x (substValPerm (ValPerm_Mu p) p)
-simplImplOut (SImpl_Mu x _ p2 _) = distPerms1 x (ValPerm_Mu p2)
+simplImplOut (SImpl_FoldRec x rp args) =
+  distPerms1 x (ValPerm_Rec (recPermName rp) args)
+simplImplOut (SImpl_UnfoldRec x rp args) = distPerms1 x (unfoldRecPerm rp args)
+-- simplImplOut (SImpl_Mu x _ p2 _) = distPerms1 x (ValPerm_Mu p2)
 
 
 -- | Apply a 'SimplImpl' implication to the permissions on the top of a
@@ -1130,24 +1134,24 @@ data ImplState vars ps =
               -- current lifetime (we should have an @lowned@ permission for it)
               -- and each lifetime contains (i.e., has an @lcurrent@ permission
               -- for) the next lifetime in the stack
-              _implStateMuRecurseFlag :: Maybe (Either () ()),
-              -- ^ Whether we are recursing under a @mu@, either on the left
-              -- hand or the right hand side
-              _implStateFnEnv :: FunTypeEnv,
-              -- ^ The current function environment
+              _implStateRecRecurseFlag :: Maybe (Either () ()),
+              -- ^ Whether we are recursing under a recursive permission, either
+              -- on the left hand or the right hand side
+              _implStatePermEnv :: PermEnv,
+              -- ^ The current permission environment
               _implStatePPInfo :: PPInfo
             }
 makeLenses ''ImplState
 
-mkImplState :: CruCtx vars -> PermSet ps -> FunTypeEnv -> PPInfo ->
-               ImplState vars ps
+mkImplState :: CruCtx vars -> PermSet ps -> PermEnv ->
+               PPInfo -> ImplState vars ps
 mkImplState vars perms env info =
   ImplState { _implStateVars = vars,
               _implStatePerms = perms,
               _implStatePSubst = emptyPSubst vars,
               _implStateLifetimes = [],
-              _implStateMuRecurseFlag = Nothing,
-              _implStateFnEnv = env,
+              _implStateRecRecurseFlag = Nothing,
+              _implStatePermEnv = env,
               _implStatePPInfo = info
             }
 
@@ -1162,15 +1166,15 @@ unextImplState s =
   s { _implStateVars = unextCruCtx (_implStateVars s),
       _implStatePSubst = unextPSubst (_implStatePSubst s) }
 
--- | The implication monad is the permission monad that uses 'ImplState'
+-- | The implication monad is a state-continuation monad that uses 'ImplState'
 type ImplM vars s r ps_out ps_in =
   GenStateContM (ImplState vars ps_out) (State (Closed s) (PermImpl r ps_out))
   (ImplState vars ps_in) (State (Closed s) (PermImpl r ps_in))
 
 
 -- | Run an 'ImplM' computation by passing it a @vars@ context, a starting
--- permission set, and an @r@
-runImplM :: CruCtx vars -> PermSet ps_in -> FunTypeEnv -> PPInfo ->
+-- permission set, top-level state, and a continuation to consume the output
+runImplM :: CruCtx vars -> PermSet ps_in -> PermEnv -> PPInfo ->
             ((a, ImplState vars ps_out) -> State (Closed s) (r ps_out)) ->
             ImplM vars s r ps_out ps_in a -> State (Closed s) (PermImpl r ps_in)
 runImplM vars perms env ppInfo k m =
@@ -1189,7 +1193,7 @@ embedMbImplM mb_ps_in mb_m =
   strongMbM (mbMap2
        (\ps_in m ->
          runImplM CruCtxNil ps_in
-         (view implStateFnEnv s) (view implStatePPInfo s) (return . fst) m)
+         (view implStatePermEnv s) (view implStatePPInfo s) (return . fst) m)
       mb_ps_in mb_m)
 
 -- | Look up the current partial substitution
@@ -1230,25 +1234,34 @@ withExtVarsM m =
     getPSubst >>>= \psubst ->
     greturn (a, psubstLookup psubst Member_Base))
 
--- | Set the mu recursion flag to indicate recursion on the right, or fail if we
--- are already recursing on the left
-implSetMuRecurseRightM :: ImplM vars s r ps ps ()
-implSetMuRecurseRightM =
+-- | Set the recursive permission recursion flag to indicate recursion on the
+-- right, or fail if we are already recursing on the left
+implSetRecRecurseRightM :: ImplM vars s r ps ps ()
+implSetRecRecurseRightM =
   gget >>>= \s ->
-  case view implStateMuRecurseFlag s of
+  case view implStateRecRecurseFlag s of
     Just (Left ()) ->
       implFailMsgM "Tried to unfold a mu on the right after unfolding on the left"
-    _ -> gmodify (set implStateMuRecurseFlag (Just (Right ())))
+    _ -> gmodify (set implStateRecRecurseFlag (Just (Right ())))
 
--- | Set the mu recursion flag to indicate recursion on the left, or fail if we
--- are already recursing on the right
-implSetMuRecurseLeftM :: ImplM vars s r ps ps ()
-implSetMuRecurseLeftM =
+-- | Set the recursive recursion flag to indicate recursion on the left, or fail
+-- if we are already recursing on the right
+implSetRecRecurseLeftM :: ImplM vars s r ps ps ()
+implSetRecRecurseLeftM =
   gget >>>= \s ->
-  case view implStateMuRecurseFlag s of
+  case view implStateRecRecurseFlag s of
     Just (Right ()) ->
       implFailMsgM "Tried to unfold a mu on the left after unfolding on the right"
-    _ -> gmodify (set implStateMuRecurseFlag (Just (Left ())))
+    _ -> gmodify (set implStateRecRecurseFlag (Just (Left ())))
+
+-- | Look up the 'RecPerm' structure for a recursive permssion name
+implLookupRecPerm :: RecPermName args a -> ImplM vars s r ps ps (RecPerm args a)
+implLookupRecPerm rpn =
+  (view implStatePermEnv <$> gget) >>>= \env ->
+  case lookupRecPerm env rpn of
+    Just rp -> greturn rp
+    Nothing -> error ("Recursive permission " ++ recPermNameName rpn
+                      ++ " not defined!")
 
 -- | Get the current 'PermSet'
 getPerms :: ImplM vars s r ps ps (PermSet ps)
@@ -1524,8 +1537,9 @@ elimOrsExistsRecsM x =
     ValPerm_Or p1 p2 -> implElimOrM x p1 p2 >>> elimOrsExistsM x
     ValPerm_Exists mb_p ->
       implElimExistsM x mb_p >>> elimOrsExistsM x
-    ValPerm_Mu mb_p -> implUnfoldMuM x mb_p >>> elimOrsExistsRecsM x
+    ValPerm_Rec rpn args -> implUnfoldRecM x rpn args >>> elimOrsExistsRecsM x
     _ -> greturn p
+
 
 -- | Introduce a proof of @x:eq(x)@ onto the top of the stack
 introEqReflM :: ExprVar a -> ImplM vars s r (ps :> a) ps ()
@@ -1623,15 +1637,21 @@ castLLVMFreeM x e1 e2 =
   implTryProveBVProp x (BVProp_Eq e1 e2) >>>
   implSimplM Proxy (SImpl_CastLLVMFree x e1 e2)
 
--- | Build a proof of @mu X.p@ from one of @[mu X.p/X]p@
-implFoldMuM :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
-               ImplM vars s r (ps :> a) (ps :> a) ()
-implFoldMuM x p_body = implSimplM Proxy (SImpl_FoldMu x p_body)
+-- | Build a proof of @P<args>@ from one of @unfold P args@
+implFoldRecM :: ExprVar a -> RecPermName args a -> RecPermArgs args ->
+                ImplM vars s r (ps :> a) (ps :> a) ()
+implFoldRecM x rpn args =
+  implLookupRecPerm rpn >>>= \rp ->
+  implSimplM Proxy (SImpl_FoldRec x rp args)
 
--- | Build a proof of @[mu X.p/X]p@ from one of @mu X.p@
-implUnfoldMuM :: ExprVar a -> Binding (ValuePerm a) (ValuePerm a) ->
-                 ImplM vars s r (ps :> a) (ps :> a) ()
-implUnfoldMuM x p_body = implSimplM Proxy (SImpl_UnfoldMu x p_body)
+-- | Build a proof of @unfold P args@ from one of @P<args>@, returning the
+-- resulting permission @unfold P args@
+implUnfoldRecM :: ExprVar a -> RecPermName args a -> RecPermArgs args ->
+                  ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
+implUnfoldRecM x rpn args =
+  implLookupRecPerm rpn >>>= \rp ->
+  implSimplM Proxy (SImpl_UnfoldRec x rp args) >>>
+  greturn (unfoldRecPerm rp args)
 
 -- | FIXME: document this!
 implSplitLifetimeM :: KnownRepr TypeRepr a => ExprVar a -> ValuePerm a ->
@@ -1861,8 +1881,8 @@ recombinePermConj x x_ps p@(Perm_LLVMField fp)
       find (\case Perm_LLVMField fp' ->
                     bvEq (llvmFieldOffset fp') (llvmFieldOffset fp)
                   _ -> False) x_ps
-  , Read <- llvmFieldRW fp
-  , Read <- llvmFieldRW fp' =
+  , PExpr_Read <- llvmFieldRW fp
+  , PExpr_Read <- llvmFieldRW fp' =
     implDropM x (ValPerm_Conj1 p) >>>
     greturn x_ps
 
@@ -2075,15 +2095,15 @@ extractNeededLLVMFieldPerm ::
 -- If proving x:ptr((R,off) |-> p) |- x:ptr((R,off') |-> p'), just copy the read
 -- permission
 extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
-  | Read <- llvmFieldRW fp
-  , Read <- mbLift (fmap llvmFieldRW mb_fp)
+  | PExpr_Read <- llvmFieldRW fp
+  , [nuP| PExpr_Read |] <- fmap llvmFieldRW mb_fp
   = implCopyConjM x [Perm_LLVMField fp] 0 >>>
     greturn (fp, Just (Perm_LLVMField fp))
 
 -- Cannot prove x:ptr((R,off) |-> p) |- x:ptr((W,off') |-> p'), so fail
 extractNeededLLVMFieldPerm x ap@(Perm_LLVMField fp) _ mb_fp
-  | Read <- llvmFieldRW fp
-  , Write <- mbLift (fmap llvmFieldRW mb_fp)
+  | PExpr_Read <- llvmFieldRW fp
+  , [nuP| PExpr_Write |] <- fmap llvmFieldRW mb_fp
   = implFailVarM "extractNeededLLVMFieldPerm" x (ValPerm_Conj1 $ ap)
     (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)
 
@@ -2092,8 +2112,8 @@ extractNeededLLVMFieldPerm x ap@(Perm_LLVMField fp) _ mb_fp
 -- permission for l2, and then demote to read and copy the read permission as in
 -- the R |- R case above
 extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' mb_fp
-  | Write <- llvmFieldRW fp
-  , Read <- mbLift (fmap llvmFieldRW mb_fp)
+  | PExpr_Write <- llvmFieldRW fp
+  , [nuP| PExpr_Read |] <- fmap llvmFieldRW mb_fp
   = partialSubstForceM (fmap llvmFieldLifetime mb_fp)
     "extractNeededLLVMFieldPerm: incomplete RHS lifetime" >>>= \l2 ->
     -- NOTE: we could allow existential lifetimes on the RHS by just adding some
@@ -2121,15 +2141,14 @@ extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' mb_fp
                 greturn fp)
         _ -> greturn fp) >>>= \fp' ->
     implSimplM Proxy (SImpl_DemoteLLVMFieldWrite x fp') >>>
-    let fp'' = fp' { llvmFieldRW = Read } in
+    let fp'' = fp' { llvmFieldRW = PExpr_Read } in
     implCopyConjM x [Perm_LLVMField fp''] 0 >>>
     greturn (fp'', Just (Perm_LLVMField fp''))
 
--- If proving x:ptr((W,off) |-> p) |- x:ptr((W,off') |-> p'), just push a true
--- permission, because there is no remaining permission
+-- If proving x:ptr((rw,off) |-> p) |- x:ptr((rw,off') |-> p') for any other
+-- case, just push a true permission, because there is no remaining permission
 extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
-  | Write <- llvmFieldRW fp
-  , Write <- mbLift (fmap llvmFieldRW mb_fp)
+  | mbLift (fmap ((llvmFieldRW fp ==) . llvmFieldRW) mb_fp)
   = introConjM x >>> greturn (fp, Nothing)
 
 -- If proving x:array(off,<len,*stride,fps,bs) |- x:ptr((R,off) |-> p) such that
@@ -2138,8 +2157,8 @@ extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
 extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp
   | Just ix <- matchLLVMArrayField ap off'
   , fp <- llvmArrayFieldWithOffset ap ix
-  , Read <- llvmFieldRW fp
-  , Read <- mbLift (fmap llvmFieldRW mb_fp) =
+  , PExpr_Read <- llvmFieldRW fp
+  , [nuP| PExpr_Read |] <- fmap llvmFieldRW mb_fp =
     implTryProveBVProps x (llvmArrayIndexInArray ap ix) >>>
     implSimplM Proxy (SImpl_LLVMArrayIndexCopy x ap ix) >>>
     greturn (fp, Just (Perm_LLVMArray ap))
@@ -2150,7 +2169,7 @@ extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp
 extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp
   | Just ix <- matchLLVMArrayField ap off'
   , fp <- llvmArrayFieldWithOffset ap ix
-  , Write <- llvmFieldRW fp =
+  , PExpr_Write <- llvmFieldRW fp =
     implTryProveBVProps x (llvmArrayIndexInArray ap ix) >>>
     implSimplM Proxy (SImpl_LLVMArrayIndexBorrow x ap ix) >>>
     extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp >>>=
@@ -2179,6 +2198,27 @@ proveVarLLVMArray ::
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 proveVarLLVMArray x ps i off mb_ap =
   error "FIXME HERE NOW"
+
+
+----------------------------------------------------------------------
+-- * Proving Recursive Permissions
+----------------------------------------------------------------------
+
+-- | Prove @P<args1> |- P<args2>@ by weakening the arguments in @args1@ and
+-- substituting for free variablers in @args2@ until the arguments are
+-- equal. The weakening steps include:
+--
+-- * Replacing 'Write' arguments with 'Read';
+--
+-- * Replacing a bigger lifetime @l1@ with a smaller one @l2@, defined by the
+-- existence of a @l2:[l1]lcurrent@;
+--
+-- * Replacing all lifetime arguments with a single @lowned@ lifetime @l@, by
+-- splitting the lifetime of the input permission
+proveRecArgs :: ExprVar a -> RecPermName args a -> RecPermArgs args ->
+                Mb vars (RecPermArgs args) ->
+                ImplM vars s r (ps :> a) (ps :> a) ()
+proveRecArgs x rpn1 args mb_args = error "FIXME HERE NOW: proveRecArgs"
 
 
 ----------------------------------------------------------------------
@@ -2345,9 +2385,13 @@ proveVarImplH x p@(ValPerm_Eq (PExpr_Var y)) mb_p =
   "proveVarImpl: incomplete psubst: introCast" >>>= \p' ->
   introCastM x y p'
 
--- To prove mu X.p |- mu X.p', we bind X as a free var and prove p |- p'
---
--- FIXME HERE NOW: need to split the lifetime of the mu if necessary
+-- To prove P<args1> |- P<args2>, just need to equalize the args
+proveVarImplH x (ValPerm_Rec rpn args) [nuP| ValPerm_Rec mb_rpn mb_args |]
+  | Just (Refl, Refl) <- testRecPermNameEq rpn (mbLift mb_rpn) =
+    proveRecArgs x rpn args mb_args
+
+{- FIXME: This is an example of how we used embedMbImplM to prove the body
+   of one mu from another; remove it when we have used it for arrays
 proveVarImplH x (ValPerm_Mu p_body) [nuP| ValPerm_Mu mb_p'_body |] =
   partialSubstForceM mb_p'_body
   "proveVarImpl: incomplete psubst: implMu" >>>= \p'_body ->
@@ -2355,31 +2399,25 @@ proveVarImplH x (ValPerm_Mu p_body) [nuP| ValPerm_Mu mb_p'_body |] =
   (mbMap2 (\p p' -> proveVarImplH x p (emptyMb p') >>> greturn Refl)
    p_body p'_body) >>>= \mb_impl ->
   implSimplM Proxy (SImpl_Mu x p_body p'_body mb_impl)
+-}
 
--- If the LHS is a mu but the RHS is not, unfold the left and recurse
-proveVarImplH x (ValPerm_Mu p_body) mb_p =
-  implSetMuRecurseLeftM >>> implUnfoldMuM x p_body >>>
-  proveVarImplH x (substValPerm (ValPerm_Mu p_body) p_body) mb_p
+-- FIXME HERE NOW: figure out how to prove P1<args1> |- P2<args2> for P1 != P2
+proveVarImplH x (ValPerm_Rec rpn args) [nuP| ValPerm_Rec mb_rpn mb_args |] =
+  error "FIXME HERE NOW: implement P1<args1> |- P2<args2>!"
 
--- If the RHS is a mu but the LHS is not, unfold the right and recurse
-proveVarImplH x p [nuP| ValPerm_Mu mb_p_body |] =
-  implSetMuRecurseRightM >>>
-  proveVarImplH x p (fmap (\p_body -> substValPerm (ValPerm_Mu p_body) p_body)
-                     mb_p_body) >>>
-  partialSubstForceM mb_p_body
-  "proveVarImpl: incomplete psubst: implFold" >>>= \p_body ->
-  implFoldMuM x p_body
+-- If the LHS is recursive but the RHS is not, unfold the left and recurse
+proveVarImplH x (ValPerm_Rec rpn args) mb_p =
+  implSetRecRecurseLeftM >>> implUnfoldRecM x rpn args >>>= \p' ->
+  proveVarImplH x p' mb_p
 
--- Prove x:X |- x:X by reflexivity, which in this case is just doing nothing
-proveVarImplH _ (ValPerm_Var x) [nuP| ValPerm_Var y |] | x == y = greturn ()
-
--- Cannot prove x:X |- x:Y for unequal variables X and Y
-proveVarImplH x p@(ValPerm_Var _) mb_p@[nuP| ValPerm_Var _ |] =
-  implFailVarM "proveVarImplH" x p mb_p
-
--- Cannot prove x:p |- x:X for any non-variable p
-proveVarImplH x p mb_p@[nuP| ValPerm_Var _ |] =
-  implFailVarM "proveVarImplH" x p mb_p
+-- If the RHS is recursive but the LHS is not, unfold the right and recurse
+proveVarImplH x p [nuP| ValPerm_Rec mb_rpn mb_args |] =
+  implSetRecRecurseRightM >>>
+  implLookupRecPerm (mbLift mb_rpn) >>>= \rp ->
+  proveVarImplH x p (fmap (unfoldRecPerm rp) mb_args) >>>
+  partialSubstForceM mb_args
+  "proveVarImpl: incomplete psubst: implFold" >>>= \args ->
+  implFoldRecM x (mbLift mb_rpn) args
 
 -- Prove x:(p1 \/ p2) by trying to prove x:p1 and x:p2 in two branches
 proveVarImplH x p [nuP| ValPerm_Or mb_p1 mb_p2 |] =
@@ -2425,13 +2463,13 @@ proveVarImplH x p@(ValPerm_Eq (PExpr_LLVMWord _)) mb_p@[nuP| ValPerm_Conj _ |] =
 
 proveVarImplH x p@(ValPerm_Eq (PExpr_Fun f)) mb_p@[nuP| ValPerm_Conj
                                                       [Perm_Fun mb_fun_perm] |] =
-  (view implStateFnEnv <$> gget) >>>= \env ->
+  (view implStatePermEnv <$> gget) >>>= \env ->
   case lookupFunPerm env f of
-    Just (SomeFunPerm fun_perm)
+    Just (SomeFunPerm fun_perm, ident)
       | [nuP| Just Refl |] <- fmap (funPermEq fun_perm) mb_fun_perm ->
         introEqCopyM x (PExpr_Fun f) >>>
         implPopM x p >>>
-        implSimplM Proxy (SImpl_ConstFunPerm x f fun_perm)
+        implSimplM Proxy (SImpl_ConstFunPerm x f fun_perm ident)
     _ -> implFailVarM "proveVarImplH" x p mb_p
 
 proveVarImplH x p@(ValPerm_Eq _) mb_p@[nuP| ValPerm_Conj _ |] =

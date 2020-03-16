@@ -214,11 +214,8 @@ exprCtxToTerms =
 -- context of expression translations
 class TransInfo info where
   infoCtx :: info ctx -> ExprTransCtx ctx
+  infoEnv :: info ctx -> PermEnv
   extTransInfo :: ExprTrans tp -> info ctx -> info (ctx :> tp)
-
-instance TransInfo ExprTransCtx where
-  infoCtx = id
-  extTransInfo etrans ctx = ctx :>: etrans
 
 -- | A "translation monad" is a 'Reader' monad with some info type that is
 -- parameterized by a translation context
@@ -502,12 +499,22 @@ piTransM x tp body_m =
 -- * Translating Types
 ----------------------------------------------------------------------
 
+-- | Translation info for translating types and pure expressions
+data TypeTransInfo ctx = TypeTransInfo (ExprTransCtx ctx) PermEnv
+
+instance TransInfo TypeTransInfo where
+  infoCtx (TypeTransInfo ctx _) = ctx
+  infoEnv (TypeTransInfo _ env) = env
+  extTransInfo etrans (TypeTransInfo ctx env) =
+    TypeTransInfo (ctx :>: etrans) env
+
 -- | The translation monad specific to translating types and pure expressions
-type TypeTransM = TransM ExprTransCtx
+type TypeTransM = TransM TypeTransInfo
 
 -- | Run a translation computation in an empty expression translation context
 inEmptyCtxTransM :: TypeTransM RNil a -> TypeTransM ctx a
-inEmptyCtxTransM = withInfoM (const MNil)
+inEmptyCtxTransM =
+  withInfoM (\(TypeTransInfo _ env) -> TypeTransInfo MNil env)
 
 instance TransInfo info => Translate info ctx (NatRepr n) OpenTerm where
   translate mb_n = return $ natOpenTerm $ mbLift $ fmap intValue mb_n
@@ -1238,10 +1245,12 @@ instance TransInfo info =>
        mkPermTypeTrans1 p <$>
          sigmaTypeTransM "x_ex" tp_trans (\x -> inExtTransM x $
                                                 translate $ mbCombine p1)
-  translate [nuP| ValPerm_Mu _ |] =
-    error "FIXME HERE: translate ValPerm_Mu"
-  translate [nuP| ValPerm_Var _ |] =
-    error "FIXME HERE: translate ValPerm_Var"
+  translate p@[nuP| ValPerm_Rec rpn _ |] =
+    do env <- infoEnv <$> ask
+       let rp = case lookupRecPerm env (mbLift rpn) of
+             Just rp -> rp
+             Nothing -> error "Unknown recursive permission name!"
+       return $ mkPermTypeTrans1 p (dataTypeOpenTerm (recPermDataType rp) [])
   translate [nuP| ValPerm_Conj ps |] =
     fmap PTrans_Conj <$> listTypeTrans <$> mapM translate (mbList ps)
 
@@ -1519,6 +1528,7 @@ data ImpTransInfo ext blocks ret ps ctx =
     itiPermCtx :: PermTransCtx ctx ctx,
     itiPermStack :: PermTransCtx ctx ps,
     itiPermStackVars :: MapRList (Member ctx) ps,
+    itiPermEnv :: PermEnv,
     itiBlockMapTrans :: TypedBlockMapTrans ext blocks ret,
     itiCatchHandler :: OpenTerm,
     itiReturnType :: OpenTerm
@@ -1526,6 +1536,7 @@ data ImpTransInfo ext blocks ret ps ctx =
 
 instance TransInfo (ImpTransInfo ext blocks ret ps) where
   infoCtx = itiExprCtx
+  infoEnv = itiPermEnv
   extTransInfo etrans (ImpTransInfo {..}) =
     ImpTransInfo
     { itiExprCtx = itiExprCtx :>: etrans
@@ -1548,11 +1559,12 @@ impTransM :: PermTransCtx ctx ctx -> TypedBlockMapTrans ext blocks ret ->
              OpenTerm -> ImpTransM ext blocks ret ctx ctx a ->
              TypeTransM ctx a
 impTransM pctx mapTrans retType =
-  withInfoM $ \ectx ->
+  withInfoM $ \(TypeTransInfo ectx env) ->
   ImpTransInfo { itiExprCtx = ectx,
                  itiPermCtx = mapMapRList (const $ PTrans_True) pctx,
                  itiPermStack = pctx,
                  itiPermStackVars = members pctx,
+                 itiPermEnv = env,
                  itiBlockMapTrans = mapTrans,
                  itiCatchHandler = defaultCatchHandler retType,
                  itiReturnType = retType }
@@ -1560,7 +1572,8 @@ impTransM pctx mapTrans retType =
 -- | Embed a type translation into an impure translation
 -- FIXME: should no longer need this...
 tpTransM :: TypeTransM ctx a -> ImpTransM ext blocks ret ps ctx a
-tpTransM = withInfoM itiExprCtx
+tpTransM =
+  withInfoM (\info -> TypeTransInfo (itiExprCtx info) (itiPermEnv info))
 
 -- | Get most recently bound variable
 getTopVarM :: ImpTransM ext blocks ret ps (ctx :> tp) (ExprTrans tp)
@@ -1823,6 +1836,14 @@ translateSimplImpl _ [nuP| SImpl_InsertConj x _ _ i |] m =
     pctx :>: PTrans_Conj (take (mbLift i) ps ++ pi : drop (mbLift i) ps))
   m
 
+translateSimplImpl _ [nuP| SImpl_ConstFunPerm x _ mb_fun_perm ident |] m =
+  withPermStackM ((:>: translateVar x) . mapRListTail)
+  ((:>: PTrans_Term (fmap (ValPerm_Conj1
+                           . Perm_Fun) mb_fun_perm) (globalOpenTerm $
+                                                     mbLift ident))
+   . mapRListTail)
+  m
+
 translateSimplImpl _ [nuP| SImpl_CastLLVMWord _ _ e2 |] m =
   withPermStackM mapRListTail
   ((:>: PTrans_Eq (fmap PExpr_LLVMWord e2)) . mapRListTail . mapRListTail)
@@ -1889,7 +1910,7 @@ translateSimplImpl _ [nuP| SImpl_DemoteLLVMFieldWrite _ _ |] m =
           unPTransLLVMField
           "translateSimplImpl: SImpl_DemoteLLVMFieldWrite" ptrans in
     pctx :>: PTrans_Conj [APTrans_LLVMField
-                          (fmap (\fld -> fld { llvmFieldRW = Read }) mb_fld)
+                          (fmap (\fld -> fld { llvmFieldRW = PExpr_Read }) mb_fld)
                           ptrans])
   m
 
@@ -2014,15 +2035,16 @@ translateSimplImpl _ [nuP| SImpl_LCurrentTrans l1 l2 l3 |] m =
    mapRListTail . mapRListTail)
   m
 
-translateSimplImpl _ [nuP| SImpl_FoldMu _ _ |] m =
-  error "FIXME HERE: SImpl_FoldMu: translation not yet implemented"
+translateSimplImpl _ [nuP| SImpl_FoldRec _ _ _ |] m =
+  error "FIXME HERE NOW: SImpl_FoldRec: translation not yet implemented"
 
-translateSimplImpl _ [nuP| SImpl_UnfoldMu _ _ |] m =
-  error "FIXME HERE: SImpl_UnfoldMu: translation not yet implemented"
+translateSimplImpl _ [nuP| SImpl_UnfoldRec _ _ _ |] m =
+  error "FIXME HERE NOW: SImpl_UnfoldRec: translation not yet implemented"
 
+{-
 translateSimplImpl _ [nuP| SImpl_Mu _ _ _ _ |] m =
   error "FIXME HERE: SImpl_Mu: translation not yet implemented"
-
+-}
 
 -- | Translate a 'PermImpl1' to a function on translation computations
 translatePermImpl1 :: ImplTranslateF r ext blocks ret =>
@@ -2846,16 +2868,17 @@ translateBlockMapBodies mapTrans =
   (trace "translateBlockMapBodies finished" $ return unitOpenTerm)
 
 -- | Translate a typed CFG to a SAW term
-translateCFG :: PermCheckExtC ext => TypedCFG ext blocks ghosts inits ret ->
+translateCFG :: PermCheckExtC ext => PermEnv ->
+                TypedCFG ext blocks ghosts inits ret ->
                 OpenTerm
-translateCFG cfg =
+translateCFG env cfg =
   let h = tpcfgHandle cfg
       fun_perm = tpcfgFunPerm cfg
       blkMap = tpcfgBlockMap cfg
       ctx = typedFnHandleAllArgs h
       ghosts = typedFnHandleGhosts h
       retType = typedFnHandleRetType h in
-  flip runTransM MNil $ lambdaExprCtx ctx $
+  flip runTransM (TypeTransInfo MNil env) $ lambdaExprCtx ctx $
   lambdaPermCtx (mbCombine $ funPermIns fun_perm) $ \pctx ->
   lambdaPermTrans "l" (fmap (const $ ValPerm_Conj1 $
                              Perm_LOwned PExpr_PermListNil) $
