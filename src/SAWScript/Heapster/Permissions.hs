@@ -1029,6 +1029,8 @@ instance Eq (RecPermArgs args) where
 data RecPerm args a = RecPerm {
   recPermName :: RecPermName args a,
   recPermDataType :: Ident,
+  recPermFoldFun :: Ident,
+  recPermUnfoldFun :: Ident,
   recPermCases :: [(Mb args (ValuePerm a), Ident)]
   }
 

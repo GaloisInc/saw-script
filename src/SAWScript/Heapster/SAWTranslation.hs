@@ -1750,8 +1750,8 @@ class NuMatchingAny1 f => ImplTranslateF f ext blocks ret where
 
 -- | Translate a 'SimplImpl' to a function on translation computations
 translateSimplImpl :: Proxy ps -> Mb ctx (SimplImpl ps_in ps_out) ->
-                       ImpTransM ext blocks ret (ps :++: ps_out) ctx res ->
-                       ImpTransM ext blocks ret (ps :++: ps_in) ctx res
+                      ImpTransM ext blocks ret (ps :++: ps_out) ctx res ->
+                      ImpTransM ext blocks ret (ps :++: ps_in) ctx res
 
 translateSimplImpl _ [nuP| SImpl_Drop _ _ |] m =
   withPermStackM (\(xs :>: _) -> xs) (\(ps :>: _) -> ps) m
@@ -2035,11 +2035,27 @@ translateSimplImpl _ [nuP| SImpl_LCurrentTrans l1 l2 l3 |] m =
    mapRListTail . mapRListTail)
   m
 
-translateSimplImpl _ [nuP| SImpl_FoldRec _ _ _ |] m =
-  error "FIXME HERE NOW: SImpl_FoldRec: translation not yet implemented"
+translateSimplImpl _ [nuP| SImpl_FoldRec x rp args |] m =
+  do ttrans <-
+       translate $ mbMap2 ValPerm_Rec (fmap recPermName rp) args
+     let fold_ident = mbLift $ fmap recPermFoldFun rp
+     withPermStackM id
+       (\(pctx :>: ptrans_x) ->
+         pctx :>: typeTransF ttrans [applyOpenTermMulti
+                                     (globalOpenTerm fold_ident)
+                                     (transTerms ptrans_x)])
+       m
 
-translateSimplImpl _ [nuP| SImpl_UnfoldRec _ _ _ |] m =
-  error "FIXME HERE NOW: SImpl_UnfoldRec: translation not yet implemented"
+translateSimplImpl _ [nuP| SImpl_UnfoldRec x rp args |] m =
+  do ttrans <- translate $ mbMap2 unfoldRecPerm rp args
+     let unfold_ident = mbLift $ fmap recPermFoldFun rp
+     withPermStackM id
+       (\(pctx :>: ptrans_x) ->
+         pctx :>:
+         typeTransF (tupleTypeTrans ttrans) [applyOpenTerm
+                                             (globalOpenTerm unfold_ident)
+                                             (transTerm1 ptrans_x)])
+       m
 
 {-
 translateSimplImpl _ [nuP| SImpl_Mu _ _ _ _ |] m =
