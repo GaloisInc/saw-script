@@ -6,6 +6,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module SAWScript.HeapsterBuiltins
        ( heapster_extract_print
@@ -131,11 +132,49 @@ castFunPerm cfg fun_perm =
 heapster_default_env :: Closed PermEnv
 heapster_default_env =
   $(mkClosed
-    [| PermEnv
-     {
-       permEnvFunPerms = [],
-       permEnvRecPerms = []
-     }
+    [| let l_rw_ctx :: CruCtx (RNil :> LifetimeType :> RWModalityType) =
+             knownRepr
+           llvm64_tp :: TypeRepr (LLVMPointerType 64) = knownRepr
+           w64_rpn = RecPermName "list64" llvm64_tp l_rw_ctx in
+       PermEnv
+       {
+         permEnvFunPerms = [],
+         permEnvRecPerms =
+           [SomeRecPerm $ RecPerm
+            w64_rpn
+            "W64List"
+            "foldW64List"
+            "unfoldW64List"
+            [(nuMulti (cruCtxProxies l_rw_ctx)
+              (\_ -> ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] 0))),
+              "W64Nil")
+            ,
+             (nuMulti (cruCtxProxies l_rw_ctx)
+              (\(_ :>: l :>: rw) ->
+                ValPerm_Conj
+                [Perm_LLVMField $ LLVMFieldPerm {
+                    llvmFieldRW = PExpr_Var rw,
+                    llvmFieldLifetime = PExpr_Var l,
+                    llvmFieldOffset = PExpr_BV [] 0,
+                    llvmFieldContents =
+                        ValPerm_Exists (nu $ \x ->
+                                         ValPerm_Eq $ PExpr_LLVMWord $
+                                         PExpr_Var x) },
+                 Perm_LLVMField $ LLVMFieldPerm {
+                    llvmFieldRW = PExpr_Var rw,
+                    llvmFieldLifetime = PExpr_Var l,
+                    llvmFieldOffset = PExpr_BV [] 8,
+                    llvmFieldContents =
+                        ValPerm_Rec w64_rpn
+                        (RecPermArgs_Cons
+                         (RecPermArgs_Cons RecPermArgs_Nil
+                          (RecPermArg_Lifetime $ PExpr_Var l))
+                         (RecPermArg_RWModality $ PExpr_Var rw)) }]
+              ),
+              "W64Cons")
+             ]
+           ]
+       }
      |])
 
 heapster_extract_print :: BuiltinContext -> Options ->
