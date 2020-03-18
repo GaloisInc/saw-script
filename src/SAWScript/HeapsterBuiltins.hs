@@ -142,12 +142,12 @@ heapster_default_env =
          permEnvRecPerms =
            [SomeRecPerm $ RecPerm
             w64_rpn
-            "W64List"
-            "foldW64List"
-            "unfoldW64List"
+            "Prelude.W64List"
+            "Prelude.foldW64List"
+            "Prelude.unfoldW64List"
             [(nuMulti (cruCtxProxies l_rw_ctx)
               (\_ -> ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] 0))),
-              "W64Nil")
+              "Prelude.W64Nil")
             ,
              (nuMulti (cruCtxProxies l_rw_ctx)
               (\(_ :>: l :>: rw) ->
@@ -171,7 +171,7 @@ heapster_default_env =
                           (RecPermArg_Lifetime $ PExpr_Var l))
                          (RecPermArg_RWModality $ PExpr_Var rw)) }]
               ),
-              "W64Cons")
+              "Prelude.W64Cons")
              ]
            ]
        }
