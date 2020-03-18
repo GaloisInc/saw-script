@@ -485,7 +485,7 @@ parseValPerm tp =
              Just (SomeRecPermName rpn) ->
                fail ("Recursive permission name " ++ n ++ " has incorrect type")
              Nothing ->
-               fail ("Unknown recursive permission name " ++ n)) <|>
+               fail ("Unknown recursive permission name '" ++ n ++ "'")) <|>
        (ValPerm_Conj <$> parseAtomicPerms tp) <?>
        ("permission of type " ++ show tp)
      try (spaces >> string "\\/" >> (ValPerm_Or p1 <$> parseValPerm tp)) <|>
@@ -558,6 +558,8 @@ parseLLVMArrayPerm =
 parseRecPermArgs :: (Stream s Identity Char, BindState s) =>
                     CruCtx args -> PermParseM s (RecPermArgs args)
 parseRecPermArgs CruCtxNil = return RecPermArgs_Nil
+parseRecPermArgs (CruCtxCons CruCtxNil tp) =
+  RecPermArgs_Cons RecPermArgs_Nil <$> parseRecPermArg tp
 parseRecPermArgs (CruCtxCons ctx tp) =
   do args <- parseRecPermArgs ctx
      spaces >> comma
