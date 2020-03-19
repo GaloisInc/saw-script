@@ -544,7 +544,7 @@ instance TransInfo info =>
   translate [nuP| (UnitRepr) |] =
     returnType1 unitTypeOpenTerm
   translate [nuP| (BoolRepr) |] =
-    returnType1 $ dataTypeOpenTerm "Prelude.Bool" []
+    returnType1 $ globalOpenTerm "Prelude.Bool"
   translate [nuP| (NatRepr) |] =
     returnType1 $ dataTypeOpenTerm "Prelude.Nat" []
   translate [nuP| (IntegerRepr) |] =
@@ -579,7 +579,7 @@ instance TransInfo info =>
   translate [nuP| (CharRepr) |] =
     return $ error "TypeTranslate: CharRepr"
   translate [nuP| (StringRepr) |] =
-    returnType1 $ dataTypeOpenTerm "Prelude.String" []
+    returnType1 $ globalOpenTerm "Prelude.String"
   translate [nuP| (FunctionHandleRepr _ _) |] =
     -- NOTE: function permissions translate to the SAW function, but the
     -- function handle itself has no SAW translation
@@ -632,7 +632,7 @@ piExprCtx ctx m =
 
 -- FIXME HERE: move these OpenTerm operations to OpenTerm.hs
 trueOpenTerm :: OpenTerm
-trueOpenTerm = ctorOpenTerm "Prelude.True" []
+trueOpenTerm = globalOpenTerm "Prelude.True"
 
 bvNatOpenTerm :: Integer -> Integer -> OpenTerm
 bvNatOpenTerm w n =
