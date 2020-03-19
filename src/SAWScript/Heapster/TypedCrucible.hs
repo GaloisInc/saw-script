@@ -1132,8 +1132,10 @@ getAtomicOrWordLLVMPerms r =
         Right ps ->
           embedImplM TypedImplStmt emptyCruCtx (castLLVMPtrM y ps off x) >>>
           greturn (Right $ map (offsetLLVMAtomicPerm $ bvNegate off) ps)
-    ValPerm_Eq (PExpr_LLVMWord e) ->
-      greturn (Left e)
+    ValPerm_Eq e@(PExpr_LLVMWord e_word) ->
+      embedImplM TypedImplStmt emptyCruCtx (introEqCopyM x e >>>
+                                            recombinePerm x p) >>>
+      greturn (Left e_word)
 
 
 -- | Like 'getAtomicOrWordLLVMPerms', but fail if an equality permission to a
