@@ -828,11 +828,20 @@ applyImpl1 _ (Impl1_Push x p) ps =
     mbPermSets1 $ emptyMb $ pushPerm x p $ set (varPerm x) ValPerm_True ps
   else
     error "applyImpl1: Impl1_Push: unexpected permission"
-applyImpl1 _ (Impl1_Pop x p) ps =
+applyImpl1 pp_info (Impl1_Pop x p) ps =
   if ps ^. topDistPerm x == p && ps ^. varPerm x == ValPerm_True then
     mbPermSets1 $ emptyMb $ fst $ popPerm x $ set (varPerm x) p ps
   else
-    error "applyImpl1: Impl1_Pop: unexpected permission"
+    if ps ^. varPerm x == ValPerm_True then
+      error $ flip displayS "" $ renderPretty 0.8 80 $
+      vsep [string "applyImpl1: Impl1_Pop: unexpected permissions on top of the stack",
+            string "expected: " <> permPretty pp_info p,
+            string "actual: " <> permPretty pp_info (ps ^. topDistPerm x)]
+    else
+      error $ flip displayS "" $ renderPretty 0.8 80 $
+      vsep [string "applyImpl1: Impl1_Pop: non-empty permissions for variable"
+            <+> permPretty pp_info x <> string ":",
+            permPretty pp_info (ps ^. varPerm x)]
 applyImpl1 _ (Impl1_ElimOr x p1 p2) ps =
   if ps ^. topDistPerm x == ValPerm_Or p1 p2 then
     mbPermSets2 (emptyMb $ set (topDistPerm x) p1 ps)
