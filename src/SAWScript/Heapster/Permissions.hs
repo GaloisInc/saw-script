@@ -1221,6 +1221,7 @@ instance PermPretty (FunPerm ghosts args ret) where
 
 instance PermPretty (RecPermArgs args) where
   permPrettyM RecPermArgs_Nil = return $ string ""
+  permPrettyM (RecPermArgs_Cons RecPermArgs_Nil arg) = permPrettyM arg
   permPrettyM (RecPermArgs_Cons args arg) =
     (\pp1 pp2 -> pp1 <> comma <> pp2) <$> permPrettyM args <*> permPrettyM arg
 
@@ -1320,6 +1321,16 @@ exPermBody :: TypeRepr tp -> ValuePerm a -> Binding tp (ValuePerm a)
 exPermBody tp (ValPerm_Exists (p :: Binding tp' (ValuePerm a)))
   | Just Refl <- testEquality tp (knownRepr :: TypeRepr tp') = p
 exPermBody _ _ = error "exPermBody"
+
+-- | Test if an 'AtomicPerm' is a field permission
+isLLVMFieldPerm :: AtomicPerm (LLVMPointerType w) -> Bool
+isLLVMFieldPerm (Perm_LLVMField _) = True
+isLLVMFieldPerm _ = False
+
+-- | Test if an 'AtomicPerm' is an array permission
+isLLVMArrayPerm :: AtomicPerm (LLVMPointerType w) -> Bool
+isLLVMArrayPerm (Perm_LLVMArray _) = True
+isLLVMArrayPerm _ = False
 
 -- | Existential permission @x:eq(word(e))@ for some @e@
 llvmExEqWord :: (1 <= w, KnownNat w) =>
