@@ -771,6 +771,10 @@ data AtomicPermTrans ctx a where
                       Mb ctx (PermExpr (BVType w)) ->
                       AtomicPermTrans ctx (LLVMPointerType w)
 
+  -- | IsLLVMPtr permissions have no computational content
+  APTrans_IsLLVMPtr :: (1 <= w, KnownNat w) =>
+                       AtomicPermTrans ctx (LLVMPointerType w)
+
   -- | LLVM frame permissions have no computational content
   APTrans_LLVMFrame :: (1 <= w, KnownNat w) =>
                        Mb ctx (LLVMFramePerm w) ->
@@ -892,6 +896,7 @@ instance IsTermTrans (AtomicPermTrans ctx a) where
   transTerms (APTrans_LLVMField _ ptrans) = transTerms ptrans
   transTerms (APTrans_LLVMArray arr_trans) = transTerms arr_trans
   transTerms (APTrans_LLVMFree _) = []
+  transTerms APTrans_IsLLVMPtr = []
   transTerms (APTrans_LLVMFrame _) = []
   transTerms (APTrans_LifetimePerm _) = []
   transTerms (APTrans_Fun _ t) = [t]
@@ -928,6 +933,7 @@ atomicPermTransPerm prxs (APTrans_LLVMField fld _) = fmap Perm_LLVMField fld
 atomicPermTransPerm prxs (APTrans_LLVMArray arr_trans) =
   fmap Perm_LLVMArray $ llvmArrayTransPerm arr_trans
 atomicPermTransPerm prxs (APTrans_LLVMFree e) = fmap Perm_LLVMFree e
+atomicPermTransPerm prxs APTrans_IsLLVMPtr = nuMulti prxs $ const Perm_IsLLVMPtr
 atomicPermTransPerm prxs (APTrans_LLVMFrame fp) = fmap Perm_LLVMFrame fp
 atomicPermTransPerm prxs (APTrans_LifetimePerm p) = p
 atomicPermTransPerm prxs (APTrans_Fun fp _) = fmap Perm_Fun fp
@@ -962,6 +968,7 @@ instance ExtPermTrans AtomicPermTrans where
   extPermTrans (APTrans_LLVMArray arr_trans) =
     APTrans_LLVMArray $ extPermTrans arr_trans
   extPermTrans (APTrans_LLVMFree e) = APTrans_LLVMFree $ extMb e
+  extPermTrans APTrans_IsLLVMPtr = APTrans_IsLLVMPtr
   extPermTrans (APTrans_LLVMFrame fp) = APTrans_LLVMFrame $ extMb fp
   extPermTrans (APTrans_LifetimePerm p) = APTrans_LifetimePerm $ extMb p
   extPermTrans (APTrans_Fun fp t) = APTrans_Fun (extMb fp) t
@@ -1000,6 +1007,7 @@ offsetLLVMAtomicPermTrans mb_off (APTrans_LLVMArray
   APTrans_LLVMArray $
   LLVMArrayPermTrans (mbMap2 offsetLLVMArrayPerm mb_off ap) len flds bs t
 offsetLLVMAtomicPermTrans _ p@(APTrans_LLVMFree _) = p
+offsetLLVMAtomicPermTrans _ p@APTrans_IsLLVMPtr = p
 
 -- | Get the SAW type of the cells (= lists of fields) of the translation of an
 -- LLVM array permission
@@ -1124,6 +1132,7 @@ atomicPermTransInLifetime l (APTrans_LLVMArray
   bs
   t
 atomicPermTransInLifetime _ p@(APTrans_LLVMFree _) = p
+atomicPermTransInLifetime _ p@APTrans_IsLLVMPtr = p
 atomicPermTransInLifetime _ p@(APTrans_LLVMFrame _) = p
 atomicPermTransInLifetime l (APTrans_LifetimePerm p) =
   APTrans_LifetimePerm $ mbMap2 inLifetime l p
@@ -1160,6 +1169,7 @@ atomicPermTransEndLifetime (APTrans_LLVMArray
           (mbList $ fmap (map Perm_LLVMField . llvmArrayFields) ap)) flds)
   bs t
 atomicPermTransEndLifetime p@(APTrans_LLVMFree _) _ = p
+atomicPermTransEndLifetime p@APTrans_IsLLVMPtr _ = p
 atomicPermTransEndLifetime p@(APTrans_LLVMFrame _) _ = p
 atomicPermTransEndLifetime p@(APTrans_LifetimePerm _) _ = p
 atomicPermTransEndLifetime p@(APTrans_Fun _ _) _ = p
@@ -1266,6 +1276,8 @@ instance TransInfo info =>
 
   translate [nuP| Perm_LLVMFree e |] =
     return $ mkTypeTrans0 $ APTrans_LLVMFree e
+  translate [nuP| Perm_IsLLVMPtr |] =
+    return $ mkTypeTrans0 APTrans_IsLLVMPtr
   translate [nuP| Perm_LLVMFrame fp |] =
     return $ mkTypeTrans0 $ APTrans_LLVMFrame fp
   translate p@[nuP| Perm_LOwned _ |] =
@@ -2012,6 +2024,18 @@ translateSimplImpl _ [nuP| SImpl_LLVMArrayIndexReturn x _ ix |] m =
 translateSimplImpl _ [nuP| SImpl_LLVMArrayContents _ _ _ _ _ |] m =
   error "FIXME HERE: translateSimplImpl: SImpl_LLVMArrayContents unhandled"
 
+translateSimplImpl _ [nuP| SImpl_LLVMFieldIsPtr x _ |] m =
+  withPermStackM (:>: translateVar x)
+  (\(pctx :>: ptrans_fld) ->
+    pctx :>: PTrans_Conj [APTrans_IsLLVMPtr] :>: ptrans_fld)
+  m
+
+translateSimplImpl _ [nuP| SImpl_LLVMArrayIsPtr x _ |] m =
+  withPermStackM (:>: translateVar x)
+  (\(pctx :>: ptrans_array) ->
+    pctx :>: PTrans_Conj [APTrans_IsLLVMPtr] :>: ptrans_array)
+  m
+
 translateSimplImpl _ [nuP| SImpl_SplitLifetime mb_x mb_p mb_l mb_ps |] m =
   withPermStackM id
   (\(pctx :>: ptrans_x :>: ptrans_l) ->
@@ -2587,6 +2611,10 @@ translateLLVMStmt [nuP| AssertLLVMWord reg _ |] m =
   withPermStackM ((:>: Member_Base) . mapRListTail)
   ((:>: (PTrans_Eq $ fmap (const $ PExpr_Nat 0) $ extMb reg)) . mapRListTail)
   m
+
+translateLLVMStmt [nuP| AssertLLVMPtr _ |] m =
+  inExtTransM (ETrans_Term unitOpenTerm) $
+  withPermStackM mapRListTail mapRListTail m
 
 translateLLVMStmt [nuP| DestructLLVMWord _ e |] m =
   translate e >>= \etrans ->

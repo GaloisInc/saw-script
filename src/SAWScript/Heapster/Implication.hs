@@ -131,6 +131,7 @@ data SimplImpl ps_in ps_out where
   --
   -- > x:eq(y) -o y:eq(x)
 
+  -- FIXME HERE: remove this in favor of SImpl_Copy
   SImpl_CopyEq :: ExprVar a -> PermExpr a ->
                   SimplImpl (RNil :> a) (RNil :> a :> a)
   -- ^ Copy an equality proof on the top of the stack:
@@ -366,6 +367,24 @@ data SimplImpl ps_in ps_out where
   -- > x:array(off,<len,*stride,(fp1, ..., fpn),bs) -o
   -- >   x:array(off,<len,*stride,
   -- >           (fp1, ..., fp(i-1), fpi', fp(i+1), ..., fpn),bs)
+
+  SImpl_LLVMFieldIsPtr ::
+    (1 <= w, KnownNat w) =>
+    ExprVar (LLVMPointerType w) -> LLVMFieldPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w :> LLVMPointerType w)
+  -- ^ Prove that @x@ is a pointer from a field permission:
+  --
+  -- > x:ptr((rw,off) |-> p) -o x:is_llvmptr * x:ptr((rw,off) |-> p)
+
+  SImpl_LLVMArrayIsPtr ::
+    (1 <= w, KnownNat w) =>
+    ExprVar (LLVMPointerType w) -> LLVMArrayPerm w ->
+    SimplImpl (RNil :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w :> LLVMPointerType w)
+  -- ^ Prove that @x@ is a pointer from a field permission:
+  --
+  -- > x:array(...) -o x:is_llvmptr * x:array(...)
 
   SImpl_SplitLifetime ::
     KnownRepr TypeRepr a => ExprVar a -> ValuePerm a ->
@@ -661,7 +680,10 @@ simplImplIn (SImpl_LLVMArrayIndexReturn x ap ix) =
 
 simplImplIn (SImpl_LLVMArrayContents x ap _ _ _) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMArray ap])
-
+simplImplIn (SImpl_LLVMFieldIsPtr x fp) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMField fp])
+simplImplIn (SImpl_LLVMArrayIsPtr x ap) =
+  distPerms1 x (ValPerm_Conj [Perm_LLVMArray ap])
 simplImplIn (SImpl_SplitLifetime x p l ps) =
   distPerms2 x p l (ValPerm_Conj [Perm_LOwned ps])
 simplImplIn (SImpl_LCurrentRefl _) = DistPermsNil
@@ -773,6 +795,12 @@ simplImplOut (SImpl_LLVMArrayContents x ap i fp _) =
                                      take i (llvmArrayFields ap) ++
                                      fp : drop (i+1) (llvmArrayFields ap)}])
 
+simplImplOut (SImpl_LLVMFieldIsPtr x fp) =
+  distPerms2 x (ValPerm_Conj1 Perm_IsLLVMPtr)
+  x (ValPerm_Conj [Perm_LLVMField fp])
+simplImplOut (SImpl_LLVMArrayIsPtr x ap) =
+  distPerms2 x (ValPerm_Conj1 Perm_IsLLVMPtr)
+  x (ValPerm_Conj [Perm_LLVMArray ap])
 simplImplOut (SImpl_SplitLifetime x p l ps) =
   distPerms2 x (inLifetime (PExpr_Var l) p)
   l (ValPerm_Conj [Perm_LOwned (PExpr_PermListCons (PExpr_Var x) p ps)])
@@ -1895,6 +1923,13 @@ recombinePermConj x x_ps p@(Perm_LLVMField fp)
     implDropM x (ValPerm_Conj1 p) >>>
     greturn x_ps
 
+-- If p is an is_llvmptr permission and x_ps already contains one, drop it
+recombinePermConj x x_ps p@Perm_IsLLVMPtr
+  | elem Perm_IsLLVMPtr x_ps =
+    implDropM x (ValPerm_Conj1 p) >>>
+    greturn x_ps
+
+
 -- FIXME HERE: return borrowed sub-arrays because there is never a reason to
 -- keep part of an array separate from the rest (except funcalls)
 
@@ -2269,6 +2304,31 @@ proveVarAtomicImpl x ps ap@[nuP| Perm_LLVMFree mb_e |] =
       implCopyConjM x ps i >>> implPopM x (ValPerm_Conj ps) >>>
       castLLVMFreeM x e' e
     _ -> proveVarAtomicImplFail x ps ap
+
+proveVarAtomicImpl x ps [nuP| Perm_IsLLVMPtr |]
+  | Just i <- elemIndex Perm_IsLLVMPtr ps =
+    implCopyConjM x ps i >>> implPopM x (ValPerm_Conj ps)
+
+proveVarAtomicImpl x ps [nuP| Perm_IsLLVMPtr |]
+  | Just i <- findIndex isLLVMFieldPerm ps
+  , p@(Perm_LLVMField fp) <- ps !! i =
+    implExtractConjM x ps i >>> implPopM x (ValPerm_Conj $ deleteNth i ps) >>>
+    implSimplM Proxy (SImpl_LLVMFieldIsPtr x fp) >>>
+    implPushM x (ValPerm_Conj $ deleteNth i ps) >>>
+    implInsertConjM x p (deleteNth i ps) i >>>
+    implPopM x (ValPerm_Conj ps)
+
+proveVarAtomicImpl x ps [nuP| Perm_IsLLVMPtr |]
+  | Just i <- findIndex isLLVMArrayPerm ps
+  , p@(Perm_LLVMArray ap) <- ps !! i =
+    implExtractConjM x ps i >>> implPopM x (ValPerm_Conj $ deleteNth i ps) >>>
+    implSimplM Proxy (SImpl_LLVMArrayIsPtr x ap) >>>
+    implPushM x (ValPerm_Conj $ deleteNth i ps) >>>
+    implInsertConjM x p (deleteNth i ps) i >>>
+    implPopM x (ValPerm_Conj ps)
+
+proveVarAtomicImpl x ps mb_p@[nuP| Perm_IsLLVMPtr |] =
+  proveVarAtomicImplFail x ps mb_p
 
 proveVarAtomicImpl x aps@[Perm_LLVMFrame
                           fperms] mb_ap@[nuP| Perm_LLVMFrame mb_fperms |] =

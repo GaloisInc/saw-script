@@ -783,6 +783,11 @@ data AtomicPerm (a :: CrucibleType) where
   Perm_LLVMFree :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
                    AtomicPerm (LLVMPointerType w)
 
+  -- | Says we know an LLVM value is a pointer value, meaning that its block
+  -- value is non-zero. Note that this does not say the pointer is allocated.
+  Perm_IsLLVMPtr :: (1 <= w, KnownNat w) =>
+                    AtomicPerm (LLVMPointerType w)
+
   -- | Permission to allocate (via @alloca@) on an LLVM stack frame, and
   -- permission to delete that stack frame if we have exclusive permissions to
   -- all the given LLVM pointer objects
@@ -1129,6 +1134,8 @@ instance Eq (AtomicPerm a) where
   (Perm_LLVMArray _) == _ = False
   (Perm_LLVMFree e1) == (Perm_LLVMFree e2) = e1 == e2
   (Perm_LLVMFree _) == _ = False
+  Perm_IsLLVMPtr == Perm_IsLLVMPtr = True
+  Perm_IsLLVMPtr == _ = False
   (Perm_LLVMFrame frame1) == (Perm_LLVMFrame frame2) = frame1 == frame2
   (Perm_LLVMFrame _) == _ = False
   (Perm_LOwned e1) == (Perm_LOwned e2) = e1 == e2
@@ -1207,6 +1214,7 @@ instance PermPretty (AtomicPerm a) where
                             string "*" <> pp_stride,
                             list pp_flds, list pp_bs]))
   permPrettyM (Perm_LLVMFree e) = (string "free" <+>) <$> permPrettyM e
+  permPrettyM Perm_IsLLVMPtr = return (string "is_llvmptr")
   permPrettyM (Perm_LLVMFrame fperm) =
     do pps <- mapM (\(e,i) -> (<> (colon <> integer i)) <$> permPrettyM e) fperm
        return (string "LLVMframe" <+> list pps)
@@ -1647,6 +1655,7 @@ offsetLLVMAtomicPerm off (Perm_LLVMField fp) =
 offsetLLVMAtomicPerm off (Perm_LLVMArray ap) =
   Perm_LLVMArray $ offsetLLVMArrayPerm off ap
 offsetLLVMAtomicPerm _ (Perm_LLVMFree e) = Perm_LLVMFree e
+offsetLLVMAtomicPerm _ p@Perm_IsLLVMPtr = p
 
 -- | Add an offset to a field permission
 offsetLLVMFieldPerm :: (1 <= w, KnownNat w) =>
@@ -1882,6 +1891,7 @@ atomicPermIsCopyable (Perm_LLVMArray
                       (LLVMArrayPerm { llvmArrayFields = fps })) =
   all (atomicPermIsCopyable . Perm_LLVMField) fps
 atomicPermIsCopyable (Perm_LLVMFree _) = True
+atomicPermIsCopyable Perm_IsLLVMPtr = True
 atomicPermIsCopyable (Perm_LLVMFrame _) = False
 atomicPermIsCopyable (Perm_LOwned _) = False
 atomicPermIsCopyable (Perm_LCurrent _) = True
@@ -1947,6 +1957,7 @@ instance ContainsLifetime (AtomicPerm a) where
   containsLifetime l (Perm_LLVMField fp) = containsLifetime l fp
   containsLifetime l (Perm_LLVMArray ap) = containsLifetime l ap
   containsLifetime _ (Perm_LLVMFree _) = False
+  containsLifetime _ Perm_IsLLVMPtr = False
   containsLifetime _ (Perm_LLVMFrame _) = False
   containsLifetime l (Perm_LOwned _) =
     -- NOTE: we could check the permissions in the lowned perm, but we are only
@@ -2000,6 +2011,7 @@ instance InLifetime (AtomicPerm a) where
   inLifetime l (Perm_LLVMArray ap) =
     Perm_LLVMArray $ inLifetime l ap
   inLifetime _ p@(Perm_LLVMFree _) = p
+  inLifetime _ p@Perm_IsLLVMPtr = p
   inLifetime _ p@(Perm_LLVMFrame _) = p
   inLifetime l (Perm_LOwned _) = Perm_LCurrent l
   inLifetime _ p@(Perm_LCurrent _) = p
@@ -2052,6 +2064,7 @@ instance MinLtEndPerms (AtomicPerm a) where
   minLtEndPerms l (Perm_LLVMArray ap) =
     Perm_LLVMArray $ minLtEndPerms l ap
   minLtEndPerms _ p@(Perm_LLVMFree _) = p
+  minLtEndPerms _ p@Perm_IsLLVMPtr = Perm_IsLLVMPtr
   minLtEndPerms _ p@(Perm_LLVMFrame _) = p
   minLtEndPerms l (Perm_LOwned _) = Perm_LCurrent l
   minLtEndPerms _ p@(Perm_LCurrent _) = p
@@ -2468,6 +2481,7 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
   genSubst s [nuP| Perm_LLVMField fp |] = Perm_LLVMField <$> genSubst s fp
   genSubst s [nuP| Perm_LLVMArray ap |] = Perm_LLVMArray <$> genSubst s ap
   genSubst s [nuP| Perm_LLVMFree e |] = Perm_LLVMFree <$> genSubst s e
+  genSubst _ [nuP| Perm_IsLLVMPtr |] = return Perm_IsLLVMPtr
   genSubst s [nuP| Perm_LLVMFrame fp |] =
     Perm_LLVMFrame <$> genSubst s fp
   genSubst s [nuP| Perm_LOwned e |] =
@@ -2797,6 +2811,7 @@ instance SubstValPerm (AtomicPerm a) where
     Perm_LLVMArray $ substValPerm p ap
   substValPerm p [nuP| Perm_LLVMFree e |] =
     Perm_LLVMFree $ substValPerm p e
+  substValPerm _ [nuP| Perm_IsLLVMPtr |] = Perm_IsLLVMPtr
   substValPerm p [nuP| Perm_LLVMFrame fp |] =
     Perm_LLVMFrame $ substValPerm p fp
   substValPerm p [nuP| Perm_LOwned e |] =
@@ -3085,6 +3100,8 @@ instance AbstractVars (AtomicPerm a) where
   abstractPEVars ns1 ns2 (Perm_LLVMFree e) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFree |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
+  abstractPEVars ns1 ns2 Perm_IsLLVMPtr =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_IsLLVMPtr |])
   abstractPEVars ns1 ns2 (Perm_LLVMFrame fp) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFrame |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 fp
@@ -3133,17 +3150,6 @@ instance AbstractVars RWModality where
     absVarsReturnH ns1 ns2 $(mkClosed [| Write |])
   abstractPEVars ns1 ns2 Read =
     absVarsReturnH ns1 ns2 $(mkClosed [| Read |])
-
-instance AbstractVars (LLVMPtrPerm w) where
-  abstractPEVars ns1 ns2 (Perm_LLVMField fp) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMField |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 fp
-  abstractPEVars ns1 ns2 (Perm_LLVMArray ap) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMArray |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 ap
-  abstractPEVars ns1 ns2 (Perm_LLVMFree e) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFree |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 e
 
 instance AbstractVars (LLVMFieldPerm w) where
   abstractPEVars ns1 ns2 (LLVMFieldPerm rw ls off p) =
