@@ -315,8 +315,6 @@ data TypedLLVMStmt w ret ps_in ps_out where
   AssertLLVMPtr :: (1 <= w2, KnownNat w2) => TypedReg (LLVMPointerType w2) ->
                    TypedLLVMStmt w UnitType (RNil :> LLVMPointerType w2) RNil
 
-
-
   -- | Destruct an LLVM word into its bitvector value, which should equal the
   -- given expression
   --
@@ -326,6 +324,15 @@ data TypedLLVMStmt w ret ps_in ps_out where
                       TypedLLVMStmt w (BVType w2)
                       (RNil :> LLVMPointerType w2)
                       (RNil :> BVType w2)
+
+  -- | Add an offset to an LLVM value
+  --
+  -- Type: @. -o ret:eq(x &+ off)@
+  OffsetLLVMValue :: (1 <= w2, KnownNat w2) =>
+                     TypedReg (LLVMPointerType w2) -> TypedReg (BVType w2) ->
+                     TypedLLVMStmt w (LLVMPointerType w2)
+                     RNil
+                     (RNil :> LLVMPointerType w2)
 
   -- | Load a machine value from the address pointed to by the given pointer
   -- using the supplied field permission. Some set of permissions @ps@ can be on
@@ -421,6 +428,8 @@ typedLLVMStmtIn (AssertLLVMPtr (TypedReg x)) =
   distPerms1 x (ValPerm_Conj1 Perm_IsLLVMPtr)
 typedLLVMStmtIn (DestructLLVMWord (TypedReg x) e) =
   distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e)
+typedLLVMStmtIn (OffsetLLVMValue _ _) =
+  DistPermsNil
 typedLLVMStmtIn (TypedLLVMLoad (TypedReg x) fp ps ps_l) =
   permAssert
   (lifetimeCurrentPermsLifetime ps_l == llvmFieldLifetime fp)
@@ -476,6 +485,8 @@ typedLLVMStmtOut (AssertLLVMWord (TypedReg x) _) ret =
 typedLLVMStmtOut (AssertLLVMPtr _) _ = DistPermsNil
 typedLLVMStmtOut (DestructLLVMWord (TypedReg x) e) ret =
   distPerms1 ret (ValPerm_Eq e)
+typedLLVMStmtOut (OffsetLLVMValue (TypedReg x) (TypedReg off)) ret =
+  distPerms1 ret (ValPerm_Eq $ PExpr_LLVMOffset x $ PExpr_Var off)
 typedLLVMStmtOut (TypedLLVMLoad (TypedReg x) fp ps ps_l) ret =
   if lifetimeCurrentPermsLifetime ps_l == llvmFieldLifetime fp then
     appendDistPerms
@@ -1060,8 +1071,8 @@ getAtomicOrWordLLVMPerms r =
       getAtomicOrWordLLVMPerms (TypedReg y) >>>= \eith ->
       case eith of
         Left e ->
-          error ("Internal error in getAtomicOrWordLLVMPerms: "
-                 ++ "LLVMOffset of LLVMWord")
+          embedImplM TypedImplStmt emptyCruCtx (offsetLLVMWordM y e off x) >>>
+          greturn (Left $ bvAdd e off)
         Right ps ->
           embedImplM TypedImplStmt emptyCruCtx (castLLVMPtrM y ps off x) >>>
           greturn (Right $ map (offsetLLVMAtomicPerm $ bvNegate off) ps)
@@ -1836,6 +1847,14 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
         gmodify (\st -> st { stExtState = PermCheckExtState_LLVM Nothing }) >>>
         greturn (addCtxName ctx y)
     _ -> stmtFailM (const $ string "LLVM_PopFrame: no frame perms")
+
+-- Type-check a pointer offset instruction by emitting OffsetLLVMValue
+tcEmitLLVMStmt arch ctx loc (LLVM_PtrAddOffset w _ ptr off) =
+  let tptr = tcReg ctx ptr
+      toff = tcReg ctx off in
+  emitLLVMStmt knownRepr loc (OffsetLLVMValue tptr toff) >>>= \ret ->
+  stmtRecombinePerms >>>
+  greturn (addCtxName ctx ret)
 
 tcEmitLLVMStmt _arch _ctx _loc _stmt =
   error "tcEmitLLVMStmt: unimplemented statement"

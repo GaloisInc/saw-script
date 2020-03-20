@@ -2623,6 +2623,14 @@ translateLLVMStmt [nuP| DestructLLVMWord _ e |] m =
   ((:>: (PTrans_Eq $ extMb e)) . mapRListTail)
   m
 
+translateLLVMStmt [nuP| OffsetLLVMValue x off |] m =
+  inExtTransM ETrans_LLVM $
+  withPermStackM (:>: Member_Base)
+  (:>: (PTrans_Eq $ extMb $
+        mbMap2 PExpr_LLVMOffset (fmap typedRegVar x)
+        (fmap (PExpr_Var . typedRegVar) off)))
+  m
+
 translateLLVMStmt [nuP| TypedLLVMLoad _ (mb_fp :: LLVMFieldPerm w)
                        (_ :: DistPerms ps) cur_perms |] m =
   let prx_l = mbLifetimeCurrentPermsProxies cur_perms

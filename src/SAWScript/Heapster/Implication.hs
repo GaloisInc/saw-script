@@ -196,6 +196,17 @@ data SimplImpl ps_in ps_out where
   --
   -- > x:eq(y+off) -o y:eq(x-off)
 
+  SImpl_OffsetLLVMWord ::
+    (1 <= w, KnownNat w) =>
+    ExprVar (LLVMPointerType w) -> PermExpr (BVType w) ->
+    PermExpr (BVType w) -> ExprVar (LLVMPointerType w) ->
+    SimplImpl (RNil :> LLVMPointerType w :> LLVMPointerType w)
+    (RNil :> LLVMPointerType w)
+  -- ^ Cast a proof of @y:eq(word(e))@ to one of @x:eq(word(e+off))@ using an
+  -- equality permission @x:eq(y+off)@ on top of the stack:
+  --
+  -- > x:eq(y+off) * y:eq(word(e)) -o x:eq(word(e+off))
+
   SImpl_CastLLVMPtr ::
     (1 <= w, KnownNat w) =>
     ExprVar (LLVMPointerType w) -> [AtomicPerm (LLVMPointerType w)] ->
@@ -612,6 +623,9 @@ simplImplIn (SImpl_CastLLVMWord x e1 e2) =
   x (ValPerm_Conj [Perm_BVProp $ BVProp_Eq e1 e2])
 simplImplIn (SImpl_InvertLLVMOffsetEq x off y) =
   distPerms1 x $ ValPerm_Eq $ PExpr_LLVMOffset y off
+simplImplIn (SImpl_OffsetLLVMWord y e off x) =
+  distPerms2 x (ValPerm_Eq $ PExpr_LLVMOffset y off)
+  y (ValPerm_Eq (PExpr_LLVMWord e))
 simplImplIn (SImpl_CastLLVMPtr y ps off x) =
   distPerms2 x (ValPerm_Eq $ PExpr_LLVMOffset y off) y (ValPerm_Conj ps)
 simplImplIn (SImpl_CastLLVMFree x e1 e2) =
@@ -728,6 +742,8 @@ simplImplOut (SImpl_CastLLVMWord x _ e2) =
   distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord e2)
 simplImplOut (SImpl_InvertLLVMOffsetEq x off y) =
   distPerms1 y $ ValPerm_Eq $ PExpr_LLVMOffset x $ bvNegate off
+simplImplOut (SImpl_OffsetLLVMWord _ e off x) =
+  distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord $ bvAdd e off)
 simplImplOut (SImpl_CastLLVMPtr _ ps off x) =
   distPerms1 x (ValPerm_Conj $ map (offsetLLVMAtomicPerm $ bvNegate off) ps)
 simplImplOut (SImpl_CastLLVMFree x _ e2) =
@@ -1663,6 +1679,15 @@ castLLVMPtrM :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
                 ImplM vars s r (ps :> LLVMPointerType w)
                 (ps :> LLVMPointerType w :> LLVMPointerType w) ()
 castLLVMPtrM y ps off x = implSimplM Proxy (SImpl_CastLLVMPtr y ps off x)
+
+-- | Cast a @y:eq(word(e))@ on the top of the stack to @x:eq(word(e+off))@ using
+-- a proof of @x:eq(y+off)@ just below it on the stack
+offsetLLVMWordM :: (1 <= w, KnownNat w) => ExprVar (LLVMPointerType w) ->
+                   PermExpr (BVType w) -> PermExpr (BVType w) ->
+                   ExprVar (LLVMPointerType w) ->
+                   ImplM vars s r (ps :> LLVMPointerType w)
+                   (ps :> LLVMPointerType w :> LLVMPointerType w) ()
+offsetLLVMWordM y e off x = implSimplM Proxy (SImpl_OffsetLLVMWord y e off x)
 
 -- | Cast a proof of @x:free(e1)@ on the top of the stack to one of @x:free(e2)@
 -- by first proving that @e1=e2@
