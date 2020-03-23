@@ -1,6 +1,7 @@
 {-# Language DataKinds, OverloadedStrings #-}
 {-# Language RankNTypes, TypeOperators #-}
 {-# Language PatternSynonyms #-}
+{-# LANGUAGE ImplicitParams #-}
 module SAWScript.X86
   ( Options(..)
   , proof
@@ -33,6 +34,7 @@ import Control.Monad.IO.Class(liftIO)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
+import           Data.IORef
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
@@ -80,6 +82,7 @@ import SAWScript.Crucible.LLVM.CrucibleLLVM
   (Mem, ppPtr, pattern LLVMPointer, bytesToInteger)
 import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
 import Lang.Crucible.LLVM.MemModel (mkMemVar)
+import qualified Lang.Crucible.LLVM.MemModel as Crucible
 
 -- Crucible SAW
 import Lang.Crucible.Backend.SAWCore
@@ -387,6 +390,9 @@ translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
+     bbMapRef <- newIORef mempty
+     let ?badBehaviorMap = bbMapRef
+
      let sym   = backend opts
          sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }
 
@@ -418,6 +424,7 @@ setSimulatorVerbosity verbosity sym = do
 
 
 doSim ::
+  Crucible.HasLLVMAnn Sym =>
   Options ->
   RelevantElf ->
   SymFuns Sym ->
