@@ -1005,6 +1005,7 @@ setupLLVMCrucibleContext bic opts lm action = do
   let mtrans = modTrans lm
   let ctx = mtrans^.Crucible.transContext
   smt_array_memory_model_enabled <- gets rwSMTArrayMemoryModel
+  what4HashConsing <- gets rwWhat4HashConsing
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
     let ?lc = ctx^.Crucible.llvmTypeCtx in
     action =<< (io $ do
@@ -1016,6 +1017,9 @@ setupLLVMCrucibleContext bic opts lm action = do
       let cfg = W4.getConfiguration sym
       verbSetting <- W4.getOptionSetting W4.verbosity cfg
       _ <- W4.setOpt verbSetting (toInteger verbosity)
+
+      cacheTermsSetting <- W4.getOptionSetting W4.cacheTerms cfg
+      _ <- W4.setOpt cacheTermsSetting what4HashConsing
 
       W4.extendConfig
         [ W4.opt

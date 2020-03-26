@@ -476,6 +476,7 @@ buildTopLevelEnv proxy opts =
                    , rwSMTArrayMemoryModel = False
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
+                   , rwWhat4HashConsing = False
                    }
        return (bic, ro0, rw0)
 
@@ -520,15 +521,25 @@ enable_crucible_profiling f = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwProfilingFile = Just f }
 
+disable_crucible_profiling :: TopLevel ()
+disable_crucible_profiling = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProfilingFile = Nothing }
+
 enable_lax_arithmetic :: TopLevel ()
 enable_lax_arithmetic = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxArith = True }
 
-disable_crucible_profiling :: TopLevel ()
-disable_crucible_profiling = do
+enable_what4_hash_consing :: TopLevel ()
+enable_what4_hash_consing = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwProfilingFile = Nothing }
+  putTopLevelRW rw { rwWhat4HashConsing = True }
+
+disable_what4_hash_consing :: TopLevel ()
+disable_what4_hash_consing = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4HashConsing = False }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -697,6 +708,16 @@ primitives = Map.fromList
     (pureVal enable_lax_arithmetic)
     Current
     [ "Enable lax rules for arithmetic overflow in Crucible." ]
+
+  , prim "enable_what4_hash_consing" "TopLevel ()"
+    (pureVal enable_what4_hash_consing)
+    Current
+    [ "Enable hash consing for What4 expressions." ]
+
+  , prim "disable_what4_hash_consing" "TopLevel ()"
+    (pureVal disable_what4_hash_consing)
+    Current
+    [ "Disable hash consing for What4 expressions." ]
 
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)

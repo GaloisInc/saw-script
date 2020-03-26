@@ -388,6 +388,7 @@ data TopLevelRW =
   , rwSMTArrayMemoryModel :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+  , rwWhat4HashConsing :: Bool
   }
 
 newtype TopLevel a =
