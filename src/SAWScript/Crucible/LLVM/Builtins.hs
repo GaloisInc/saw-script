@@ -1005,6 +1005,7 @@ setupLLVMCrucibleContext bic opts lm action = do
   let mtrans = modTrans lm
   let ctx = mtrans^.Crucible.transContext
   smt_array_memory_model_enabled <- gets rwSMTArrayMemoryModel
+  crucible_assert_then_assume_enabled <- gets rwCrucibleAssertThenAssume
   what4HashConsing <- gets rwWhat4HashConsing
   Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
     let ?lc = ctx^.Crucible.llvmTypeCtx in
@@ -1028,6 +1029,13 @@ setupLLVMCrucibleContext bic opts lm action = do
             (PP.text "Enable SMT array memory model")
         ]
         cfg
+
+      crucible_assert_then_assume_option_setting <- W4.getOptionSetting
+        Crucible.assertThenAssumeConfigOption
+        cfg
+      _ <- W4.setOpt
+        crucible_assert_then_assume_option_setting
+        crucible_assert_then_assume_enabled
 
       let bindings = Crucible.fnBindingsFromList []
       let simctx   = Crucible.initSimContext sym intrinsics halloc stdout
