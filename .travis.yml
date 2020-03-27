@@ -69,7 +69,7 @@ jobs:
     # instead of using the `env` key.
     - &s2n-test-staging
       stage: test s2n
-      name: hmac md5
+      name: hmac
       addons:
         apt:
           packages:
@@ -81,65 +81,31 @@ jobs:
         - mkdir -p s2n/test-deps/saw/bin
         - cp bin/saw s2n/test-deps/saw/bin
         - cd s2n
-        - git checkout b7221bfe6e7f7d8d92dad990a6f71446d7728ad2
+        # - git checkout saw-travis-branch
+        - git checkout ea69559d0152d2839eaae80c1e17893f5a3e6d50
       before_script:
         - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=md5
       script:
-        - source .travis/s2n_setup_env.sh
-        - SAW=true travis_retry .travis/s2n_install_test_dependencies.sh
-        - .travis/s2n_travis_build.sh
-    - <<: *s2n-test-staging
-      name: hmac sha1
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha1
-    - <<: *s2n-test-staging
-      name: hmac sha224
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha224
-    - <<: *s2n-test-staging
-      name: hmac sha256
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha256
-    - <<: *s2n-test-staging
-      name: hmac sha384
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha384
-    - <<: *s2n-test-staging
-      name: hmac sha512
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha512
+        - source codebuild/bin/s2n_setup_env.sh
+        - SAW=true SAW_INSTALL_DIR=tmp-saw travis_retry codebuild/bin/s2n_install_test_dependencies.sh
+        - codebuild/bin/s2n_codebuild.sh
     - <<: *s2n-test-staging
       name: drbg
       before_script:
         - export TESTS=sawDRBG
     - <<: *s2n-test-staging
-      name: sike_r2_generic
+      name: sike
       before_script:
-        - export TESTS=sawSIKE_r2
+        - export TESTS=sawSIKE
     - <<: *s2n-test-staging
-      name: sike_r2_x86
+      name: bike
       before_script:
-        - export TESTS=sawSIKE_r2_x86
-    - <<: *s2n-test-staging
-      name: sike_r1
-      before_script:
-        - export TESTS=sawSIKE_r1
-    - <<: *s2n-test-staging
-      name: bike_r2
-      before_script:
-        - export TESTS=sawBIKE_r2
+        - export TESTS=sawBIKE
         - export S2N_LIBCRYPTO=openssl-1.0.2
-    # skip tls job due to bitfield issue
-    # - <<: *s2n-test-staging
-    #   name: tls
-    #   before_script:
-    #     - export TESTS=tls
+    - <<: *s2n-test-staging
+      name: tls
+      before_script:
+        - export TESTS=tls
     - <<: *s2n-test-staging
       name: hmac failure
       before_script:
