@@ -386,6 +386,7 @@ data TopLevelRW =
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
   , rwPrimsAvail :: Set PrimitiveLifecycle
   , rwSMTArrayMemoryModel :: Bool
+  , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
   , rwWhat4HashConsing :: Bool

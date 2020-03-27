@@ -474,6 +474,7 @@ buildTopLevelEnv proxy opts =
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
+                   , rwCrucibleAssertThenAssume = False
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
                    , rwWhat4HashConsing = False
@@ -515,6 +516,16 @@ disable_smt_array_memory_model :: TopLevel ()
 disable_smt_array_memory_model = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwSMTArrayMemoryModel = False }
+
+enable_crucible_assert_then_assume :: TopLevel ()
+enable_crucible_assert_then_assume = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwCrucibleAssertThenAssume = True }
+
+disable_crucible_assert_then_assume :: TopLevel ()
+disable_crucible_assert_then_assume = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwCrucibleAssertThenAssume = False }
 
 enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
@@ -703,6 +714,16 @@ primitives = Map.fromList
     (pureVal disable_smt_array_memory_model)
     Current
     [ "Disable the SMT array memory model." ]
+
+ , prim "enable_crucible_assert_then_assume" "TopLevel ()"
+    (pureVal enable_crucible_assert_then_assume)
+    Current
+    [ "Assume predicate after asserting it during Crucible symbolic simulation." ]
+
+  , prim "disable_crucible_assert_then_assume" "TopLevel ()"
+    (pureVal disable_crucible_assert_then_assume)
+    Current
+    [ "Do not assume predicate after asserting it during Crucible symbolic simulation." ]
 
   , prim "enable_lax_arithmetic" "TopLevel ()"
     (pureVal enable_lax_arithmetic)

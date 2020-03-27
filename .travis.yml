@@ -81,8 +81,7 @@ jobs:
         - mkdir -p s2n/test-deps/saw/bin
         - cp bin/saw s2n/test-deps/saw/bin
         - cd s2n
-        # - git checkout saw-travis-branch
-        - git checkout ea69559d0152d2839eaae80c1e17893f5a3e6d50
+        - git checkout 0c7f3eeb5419b2edf4d3a58021cd8312f4325606
       before_script:
         - export TESTS=sawHMAC
       script:

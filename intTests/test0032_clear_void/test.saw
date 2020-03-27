@@ -48,7 +48,9 @@ let main : TopLevel () = do {
     voidTest <- llvm_load_module "voidTest.bc";
     
     // The actual subroutine result would be "crucible_llvm_unsafe_assume_spec ..."
+    enable_crucible_assert_then_assume;
     clear_void_12_result <- crucible_llvm_verify voidTest "clear_void" [] true clear_void_spec z3;
+    disable_crucible_assert_then_assume;
     clear_uints_3_result <- crucible_llvm_verify voidTest "clear_uints" [clear_void_12_result] true clear_uints_spec z3;
     
     print "Done!";
