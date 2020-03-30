@@ -1832,22 +1832,22 @@ tcEmitLLVMStmt _ ctx loc (LLVM_MemClear _ _ 0) =
 -- It is currently an error to clear a number of bytes that is not a multiple of
 -- the machine word size, so throw an error
 tcEmitLLVMStmt arch ctx loc (LLVM_MemClear _ ptr bytes)
-  | bytesToInteger bytes `mod` intValue (archWidth arch) /= 0 =
+  | bytesToBits bytes `mod` natValue (archWidth arch) /= 0 =
     stmtFailM (\_ -> string "LLVM_MemClear: size not a multiple of arch width")
 
 -- Type-check a non-empty mem-clear instruction by writing a 0 to the last word
 -- and then recursively clearing all but the last word
 tcEmitLLVMStmt arch ctx loc (LLVM_MemClear mem ptr bytes) =
   let tptr = tcReg ctx ptr
-      off = bytesToInteger bytes - intValue (archWidth arch) in
+      bytes' = bytes - bitsToBytes (intValue (archWidth arch))
+      off = bytesToInteger bytes' in
   stmtProvePerm tptr (llvmWriteTrueExLPerm $ bvInt off) >>>= \subst ->
   let l = substLookup subst Member_Base in
   let fp = llvmFieldWriteTrueL (bvInt off) l in
   emitTypedLLVMStore arch loc tptr fp (PExpr_LLVMWord $
                                        bvInt 0) DistPermsNil >>>
   stmtRecombinePerms >>>
-  tcEmitLLVMStmt arch ctx loc (LLVM_MemClear mem ptr $
-                               bytes - fromIntegral (intValue (archWidth arch)))
+  tcEmitLLVMStmt arch ctx loc (LLVM_MemClear mem ptr bytes')
 
 -- Type-check an alloca instruction
 tcEmitLLVMStmt arch ctx loc (LLVM_Alloca w _ sz_reg _ _) =
