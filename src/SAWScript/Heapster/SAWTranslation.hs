@@ -2654,8 +2654,8 @@ translateLLVMStmt [nuP| TypedLLVMLoad _ (mb_fp :: LLVMFieldPerm w)
      :>: p_ret) pctx_l)
   m
 
-translateLLVMStmt [nuP| TypedLLVMStore _ (mb_fp :: LLVMFieldPerm w)
-                       (TypedReg mb_y) (_ :: DistPerms ps) cur_perms |] m =
+translateLLVMStmt [nuP| TypedLLVMStore _ (mb_fp :: LLVMFieldPerm w) mb_e
+                      (_ :: DistPerms ps) cur_perms |] m =
   let prx_l = mbLifetimeCurrentPermsProxies cur_perms
       prx_ps :: Proxy (ps :> LLVMPointerType w) = Proxy in
   inExtTransM (ETrans_Term unitOpenTerm) $
@@ -2663,11 +2663,11 @@ translateLLVMStmt [nuP| TypedLLVMStore _ (mb_fp :: LLVMFieldPerm w)
   (\(splitMapRList prx_ps prx_l -> (pctx :>: p_ptr, pctx_l)) ->
     appendMapRList
     (pctx :>: PTrans_Conj [APTrans_LLVMField
-                           (extMb $ mbMap2 (\fp y ->
+                           (extMb $ mbMap2 (\fp e ->
                                              fp { llvmFieldContents =
-                                                    ValPerm_Eq $ PExpr_Var y })
-                            mb_fp mb_y)
-                           (PTrans_Eq $ fmap PExpr_Var $ extMb mb_y)])
+                                                    ValPerm_Eq e })
+                            mb_fp mb_e)
+                           (PTrans_Eq $ extMb mb_e)])
     pctx_l)
   m
 

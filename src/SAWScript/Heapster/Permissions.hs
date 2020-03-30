@@ -1395,6 +1395,34 @@ llvmWrite0EqPerm :: (1 <= w, KnownNat w) => PermExpr (LLVMPointerType w) ->
                     ValuePerm (LLVMPointerType w)
 llvmWrite0EqPerm e = ValPerm_Conj [Perm_LLVMField $ llvmFieldWrite0Eq e]
 
+-- | Create a field write permission with offset @e@ and lifetime @l@
+llvmFieldWriteTrueL :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                      PermExpr LifetimeType -> LLVMFieldPerm w
+llvmFieldWriteTrueL off l =
+  LLVMFieldPerm { llvmFieldRW = PExpr_Write,
+                  llvmFieldLifetime = l,
+                  llvmFieldOffset = off,
+                  llvmFieldContents = ValPerm_True }
+
+-- | Create a field write permission with offset @e@ and an existential lifetime
+llvmWriteTrueExLPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                        Binding LifetimeType (ValuePerm (LLVMPointerType w))
+llvmWriteTrueExLPerm off =
+  nu $ \l ->
+  ValPerm_Conj1 $ Perm_LLVMField $ llvmFieldWriteTrueL off (PExpr_Var l)
+
+-- | Create a field permission with offset @e@ and existential lifetime and rw
+llvmReadExRWExLPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                       Mb (RNil :> RWModalityType :> LifetimeType)
+                       (ValuePerm (LLVMPointerType w))
+llvmReadExRWExLPerm off =
+  nuMulti (MNil :>: Proxy :>: Proxy) $ \(_ :>: rw :>: l) ->
+  ValPerm_Conj1 $ Perm_LLVMField $
+  LLVMFieldPerm { llvmFieldRW = PExpr_Var rw,
+                  llvmFieldLifetime = PExpr_Var l,
+                  llvmFieldOffset = off,
+                  llvmFieldContents = ValPerm_True }
+
 -- | Return the clopen range @[0,len)@ of the indices of an array permission
 llvmArrayIndexRange :: (1 <= w, KnownNat w) => LLVMArrayPerm w -> BVRange w
 llvmArrayIndexRange ap = BVRange (bvInt 0) (llvmArrayLen ap)

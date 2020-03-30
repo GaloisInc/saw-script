@@ -850,17 +850,20 @@ applySimplImpl pp_info prx simpl =
 -- | A sequence of permission sets inside name-bindings
 data MbPermSets bs_pss where
   MbPermSets_Nil :: MbPermSets RNil
-  MbPermSets_Cons :: MbPermSets bs_pss -> Mb bs (PermSet ps) ->
+  MbPermSets_Cons :: MbPermSets bs_pss -> CruCtx bs -> Mb bs (PermSet ps) ->
                      MbPermSets (bs_pss :> '(bs,ps))
 
 -- | Helper for building a one-element 'MbPermSets' sequence
-mbPermSets1 :: Mb bs (PermSet ps) -> MbPermSets (RNil :> '(bs,ps))
-mbPermSets1 = MbPermSets_Cons MbPermSets_Nil
+mbPermSets1 :: KnownRepr CruCtx bs =>
+               Mb bs (PermSet ps) -> MbPermSets (RNil :> '(bs,ps))
+mbPermSets1 = MbPermSets_Cons MbPermSets_Nil knownRepr
 
 -- | Helper for building a two-element 'MbPermSets' sequence
-mbPermSets2 :: Mb bs1 (PermSet ps1) -> Mb bs2 (PermSet ps2) ->
+mbPermSets2 :: (KnownRepr CruCtx bs1, KnownRepr CruCtx bs2) =>
+               Mb bs1 (PermSet ps1) -> Mb bs2 (PermSet ps2) ->
                MbPermSets (RNil :> '(bs1,ps1) :> '(bs2,ps2))
-mbPermSets2 ps1 ps2 = MbPermSets_Cons (MbPermSets_Cons MbPermSets_Nil ps1) ps2
+mbPermSets2 ps1 ps2 =
+  MbPermSets_Cons (MbPermSets_Cons MbPermSets_Nil knownRepr ps1) knownRepr ps2
 
 -- | Apply a single permission implication step to a permission set
 applyImpl1 :: PPInfo -> PermImpl1 ps_in ps_outs -> PermSet ps_in ->
@@ -1178,6 +1181,9 @@ liftGenStateContM m = glift $ liftGenContM m
 -- * Permission Implication Monad
 ----------------------------------------------------------------------
 
+-- FIXME HERE: instead of having a separate PPInfo and name type map, we should
+-- maybe combine all the local context into one type...?
+
 data ImplState vars ps =
   ImplState { _implStatePerms :: PermSet ps,
               _implStateVars :: CruCtx vars,
@@ -1192,20 +1198,22 @@ data ImplState vars ps =
               -- on the left hand or the right hand side
               _implStatePermEnv :: PermEnv,
               -- ^ The current permission environment
-              _implStatePPInfo :: PPInfo
+              _implStatePPInfo :: PPInfo,
+              _implStateNameTypes :: NameMap TypeRepr
             }
 makeLenses ''ImplState
 
 mkImplState :: CruCtx vars -> PermSet ps -> PermEnv ->
-               PPInfo -> ImplState vars ps
-mkImplState vars perms env info =
+               PPInfo -> NameMap TypeRepr -> ImplState vars ps
+mkImplState vars perms env info nameTypes =
   ImplState { _implStateVars = vars,
               _implStatePerms = perms,
               _implStatePSubst = emptyPSubst vars,
               _implStateLifetimes = [],
               _implStateRecRecurseFlag = Nothing,
               _implStatePermEnv = env,
-              _implStatePPInfo = info
+              _implStatePPInfo = info,
+              _implStateNameTypes = nameTypes
             }
 
 extImplState :: KnownRepr TypeRepr tp => ImplState vars ps ->
@@ -1228,10 +1236,11 @@ type ImplM vars s r ps_out ps_in =
 -- | Run an 'ImplM' computation by passing it a @vars@ context, a starting
 -- permission set, top-level state, and a continuation to consume the output
 runImplM :: CruCtx vars -> PermSet ps_in -> PermEnv -> PPInfo ->
+            NameMap TypeRepr ->
             ((a, ImplState vars ps_out) -> State (Closed s) (r ps_out)) ->
             ImplM vars s r ps_out ps_in a -> State (Closed s) (PermImpl r ps_in)
-runImplM vars perms env ppInfo k m =
-  runGenContM (runGenStateT m (mkImplState vars perms env ppInfo))
+runImplM vars perms env ppInfo nameTypes k m =
+  runGenContM (runGenStateT m (mkImplState vars perms env ppInfo nameTypes))
   (\as -> PermImpl_Done <$> k as)
 
 -- | Embed a sub-computation in a name-binding inside another 'ImplM'
@@ -1246,7 +1255,8 @@ embedMbImplM mb_ps_in mb_m =
   strongMbM (mbMap2
        (\ps_in m ->
          runImplM CruCtxNil ps_in
-         (view implStatePermEnv s) (view implStatePPInfo s) (return . fst) m)
+         (view implStatePermEnv s) (view implStatePPInfo s)
+         (view implStateNameTypes s) (return . fst) m)
       mb_ps_in mb_m)
 
 -- | Look up the current partial substitution
@@ -1400,6 +1410,14 @@ gmapRetAndPerms f_perms f_impl =
 -}
 
 
+-- | Remember the types associated with a list of 'Name's
+implSetNameTypes :: MapRList Name ctx -> CruCtx ctx -> ImplM vars s r ps ps ()
+implSetNameTypes MNil _ = greturn ()
+implSetNameTypes (ns :>: n) (CruCtxCons tps tp) =
+  gmodify (over implStateNameTypes $ NameMap.insert n tp) >>>
+  implSetNameTypes ns tps
+
+
 ----------------------------------------------------------------------
 -- * The Permission Implication Rules as Monadic Operations
 ----------------------------------------------------------------------
@@ -1426,12 +1444,13 @@ implApplyImpl1 impl1 mb_ms =
               (ImplState vars ps_in)
               (State (Closed s) (MbPermImpls r ps_outs)) a
     helper MbPermSets_Nil _ = gabortM (return MbPermImpls_Nil)
-    helper (MbPermSets_Cons mbperms mbperm) (args :>: Impl1Cont f) =
+    helper (MbPermSets_Cons mbperms ctx mbperm) (args :>: Impl1Cont f) =
       gparallel (\m1 m2 -> MbPermImpls_Cons <$> m1 <*> m2)
       (helper mbperms args)
       (gopenBinding strongMbM mbperm >>>= \(ns, perms') ->
         gmodify (set implStatePerms perms' .
                  over implStatePPInfo (ppInfoAddExprNames "z" ns)) >>>
+        implSetNameTypes ns ctx >>>
         f ns)
 
 -- | Emit debugging output using the current 'PPInfo'
@@ -2096,9 +2115,10 @@ proveVarLLVMField ::
   ImplM vars s r (ps :> LLVMPointerType w) (ps :> LLVMPointerType w) ()
 proveVarLLVMField x ps i off mb_fp =
   implExtractConjM x ps i >>>
-  let ps_rem = take i ps ++ drop (i+1) ps in
+  let ps_rem = deleteNth i ps in
   implPopM x (ValPerm_Conj ps_rem) >>>
-  extractNeededLLVMFieldPerm x (ps!!i) off mb_fp >>>= \(fp,maybe_p_rem) ->
+  getPSubst >>>= \psubst ->
+  extractNeededLLVMFieldPerm x (ps!!i) off psubst mb_fp >>>= \(fp,maybe_p_rem) ->
   (case maybe_p_rem of
       Just p_rem ->
         implPushM x (ValPerm_Conj ps_rem) >>>
@@ -2120,21 +2140,28 @@ proveVarLLVMFieldH x fp off' mb_fp =
   -- Step 1: cast the field offset to off'
   implTryProveBVProp x (BVProp_Eq (llvmFieldOffset fp) off') >>>
   implSimplM Proxy (SImpl_CastLLVMFieldOffset x fp off') >>>
+
   -- Step 2: change the lifetime if needed
-  --
-  -- NOTE: we could allow existential lifetimes on the RHS by just adding some
-  -- more cases here
-  partialSubstForceM (fmap llvmFieldLifetime mb_fp)
-  "proveVarLLVMFieldH: incomplete RHS lifetime" >>>= \l2 ->
-  (case (llvmFieldLifetime fp, l2) of
-      (l1, l2) | l1 == l2 -> greturn ()
-      (PExpr_Always, l2) ->
-        implSimplM Proxy (SImpl_LLVMFieldLifetimeAlways x fp l2)
-      (PExpr_Var l1, l2) ->
-        let lcur_perm = ValPerm_Conj [Perm_LCurrent l2] in
-        proveVarImpl l1 (fmap (const $ lcur_perm) mb_fp) >>>
-        implSimplM Proxy (SImpl_LLVMFieldLifetimeCurrent x fp l1 l2)) >>>
-  
+  getPSubst >>>= \psubst ->
+  (case (llvmFieldLifetime fp, fmap llvmFieldLifetime mb_fp) of
+      (l1, mb_l2) | mbLift (fmap (== l1) mb_l2) -> greturn ()
+      (l1, [nuP| PExpr_Var z |])
+        | Left memb <- mbNameBoundP z
+        , Nothing <- psubstLookup psubst memb ->
+          setVarM memb l1
+      (PExpr_Always, [nuP| PExpr_Var z |])
+        | Right l2 <- mbNameBoundP z ->
+          implSimplM Proxy (SImpl_LLVMFieldLifetimeAlways x fp $ PExpr_Var l2)
+      (PExpr_Var l1, [nuP| PExpr_Var z |])
+        | Right l2_var <- mbNameBoundP z ->
+          let l2 = PExpr_Var l2_var in
+          let lcur_perm = ValPerm_Conj [Perm_LCurrent l2] in
+          proveVarImpl l1 (fmap (const $ lcur_perm) mb_fp) >>>
+          implSimplM Proxy (SImpl_LLVMFieldLifetimeCurrent x fp l1 l2)
+      _ ->
+        implFailVarM "proveVarLLVMFieldH" x (ValPerm_Conj1 $ Perm_LLVMField fp)
+        (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)) >>>
+
   -- Step 3: prove contents
   let y = case llvmFieldContents fp of
         ValPerm_Eq (PExpr_Var y) -> y
@@ -2156,32 +2183,43 @@ proveVarLLVMFieldH x fp off' mb_fp =
 extractNeededLLVMFieldPerm ::
   ExprVar (LLVMPointerType w) ->
   AtomicPerm (LLVMPointerType w) ->
-  PermExpr (BVType w) -> Mb vars (LLVMFieldPerm w) ->
+  PermExpr (BVType w) -> PartialSubst vars -> Mb vars (LLVMFieldPerm w) ->
   ImplM vars s r (ps :> LLVMPointerType w :> LLVMPointerType w)
   (ps :> LLVMPointerType w)
   (LLVMFieldPerm w, Maybe (AtomicPerm (LLVMPointerType w)))
 
+-- If proving x:ptr((rw,off) |-> p) |- x:ptr((z,off') |-> p') for an RWModality
+-- variable z, set z = rw and recurse
+extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' psubst mb_fp
+  | [nuP| PExpr_Var z |] <- fmap llvmFieldRW mb_fp
+  , Left memb <- mbNameBoundP z
+  , Nothing <- psubstLookup psubst memb =
+    setVarM memb (llvmFieldRW fp) >>>
+    extractNeededLLVMFieldPerm x p off' psubst
+    (fmap (\fp' -> fp' { llvmFieldRW = llvmFieldRW fp }) mb_fp)
+
 -- If proving x:ptr((R,off) |-> p) |- x:ptr((R,off') |-> p'), just copy the read
 -- permission
-extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
+extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' _ mb_fp
   | PExpr_Read <- llvmFieldRW fp
   , [nuP| PExpr_Read |] <- fmap llvmFieldRW mb_fp
   = implCopyConjM x [Perm_LLVMField fp] 0 >>>
     greturn (fp, Just (Perm_LLVMField fp))
 
--- Cannot prove x:ptr((R,off) |-> p) |- x:ptr((W,off') |-> p'), so fail
-extractNeededLLVMFieldPerm x ap@(Perm_LLVMField fp) _ mb_fp
-  | PExpr_Read <- llvmFieldRW fp
+-- Cannot prove x:ptr((rw,off) |-> p) |- x:ptr((W,off') |-> p') if rw is not W,
+-- so fail
+extractNeededLLVMFieldPerm x ap@(Perm_LLVMField fp) _ _ mb_fp
+  | PExpr_Write /= llvmFieldRW fp
   , [nuP| PExpr_Write |] <- fmap llvmFieldRW mb_fp
   = implFailVarM "extractNeededLLVMFieldPerm" x (ValPerm_Conj1 $ ap)
     (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)
 
--- If proving x:[l1]ptr((W,off) |-> p) |- x:[l2]ptr((R,off') |-> p'), first
--- split the lifetime of the input permission if l2 /= l1 and we have an lowned
--- permission for l2, and then demote to read and copy the read permission as in
--- the R |- R case above
-extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' mb_fp
-  | PExpr_Write <- llvmFieldRW fp
+-- If proving x:[l1]ptr((rw,off) |-> p) |- x:[l2]ptr((R,off') |-> p') for rw not
+-- equal to R, first split the lifetime of the input permission if l2 /= l1 and
+-- we have an lowned permission for l2, and then demote to read and copy the
+-- read permission as in the R |- R case above
+extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' _ mb_fp
+  | PExpr_Read /= llvmFieldRW fp
   , [nuP| PExpr_Read |] <- fmap llvmFieldRW mb_fp
   = partialSubstForceM (fmap llvmFieldLifetime mb_fp)
     "extractNeededLLVMFieldPerm: incomplete RHS lifetime" >>>= \l2 ->
@@ -2216,14 +2254,14 @@ extractNeededLLVMFieldPerm x p@(Perm_LLVMField fp) off' mb_fp
 
 -- If proving x:ptr((rw,off) |-> p) |- x:ptr((rw,off') |-> p') for any other
 -- case, just push a true permission, because there is no remaining permission
-extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp
+extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' _ mb_fp
   | mbLift (fmap ((llvmFieldRW fp ==) . llvmFieldRW) mb_fp)
   = introConjM x >>> greturn (fp, Nothing)
 
 -- If proving x:array(off,<len,*stride,fps,bs) |- x:ptr((R,off) |-> p) such that
 -- off=i*stride+j and the jth field of the ith index of the array is a read,
 -- copy that field
-extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp
+extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' _ mb_fp
   | Just ix <- matchLLVMArrayField ap off'
   , fp <- llvmArrayFieldWithOffset ap ix
   , PExpr_Read <- llvmFieldRW fp
@@ -2233,15 +2271,15 @@ extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp
     greturn (fp, Just (Perm_LLVMArray ap))
 
 -- If proving x:array(off,<len,*stride,fps,bs) |- x:ptr((rw,off) |-> p) such that
--- off=i*stride+j and the jth field of the ith index of the array is a write,
+-- off=i*stride+j and the jth field of the ith index of the array is not a read,
 -- borrow that field
-extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp
+extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' psubst mb_fp
   | Just ix <- matchLLVMArrayField ap off'
   , fp <- llvmArrayFieldWithOffset ap ix
-  , PExpr_Write <- llvmFieldRW fp =
+  , PExpr_Read /= llvmFieldRW fp =
     implTryProveBVProps x (llvmArrayIndexInArray ap ix) >>>
     implSimplM Proxy (SImpl_LLVMArrayIndexBorrow x ap ix) >>>
-    extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' mb_fp >>>=
+    extractNeededLLVMFieldPerm x (Perm_LLVMField fp) off' psubst mb_fp >>>=
     \(fp', maybe_p_rem) ->
     -- NOTE: it is safe to just drop the remaining permission on the stack,
     -- because it is either Nothing (for a write) or a copy of the field
@@ -2251,7 +2289,7 @@ extractNeededLLVMFieldPerm x (Perm_LLVMArray ap) off' mb_fp
              Just (Perm_LLVMArray $ llvmArrayAddBorrow (FieldBorrow ix) ap))
 
 -- All other cases fail
-extractNeededLLVMFieldPerm x ap@(Perm_LLVMFree _) _ mb_fp =
+extractNeededLLVMFieldPerm x ap@(Perm_LLVMFree _) _ _ mb_fp =
   implFailVarM "extractNeededLLVMFieldPerm" x (ValPerm_Conj1 $ ap)
   (fmap (ValPerm_Conj1 . Perm_LLVMField) mb_fp)
 
