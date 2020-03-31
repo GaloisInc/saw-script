@@ -29,6 +29,7 @@ import Prelude.Compat
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Eval.Monad as V
 import qualified Cryptol.Eval.Value as V
+import qualified Cryptol.Eval.Concrete.Value as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleSubst)
@@ -1207,11 +1208,11 @@ exportValue ty v = case ty of
 
   TV.TVSeq _ e ->
     case v of
-      SC.VWord w -> V.word (toInteger (width w)) (unsigned w)
+      SC.VWord w -> V.word V.Concrete (toInteger (width w)) (unsigned w)
       SC.VVector xs
         | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.LargeBitsVal (fromIntegral (Vector.length xs))
-                            (V.finiteSeqMap . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
-        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
+                            (V.finiteSeqMap V.Concrete . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
+        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap V.Concrete $
                             map (V.ready . exportValue e . SC.runIdentity . force) $ Vector.toList xs
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
@@ -1269,10 +1270,10 @@ exportFirstOrderValue fv =
   case fv of
     FOVBit b    -> V.VBit b
     FOVInt i    -> V.VInteger i
-    FOVWord w x -> V.word (toInteger w) x
+    FOVWord w x -> V.word V.Concrete (toInteger w) x
     FOVVec t vs
-      | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap . map (V.ready . V.VBit . fvAsBool) $ vs)))
-      | otherwise   -> V.VSeq  len (V.finiteSeqMap (map (V.ready . exportFirstOrderValue) vs))
+      | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap V.Concrete . map (V.ready . V.VBit . fvAsBool) $ vs)))
+      | otherwise   -> V.VSeq  len (V.finiteSeqMap V.Concrete (map (V.ready . exportFirstOrderValue) vs))
       where len = toInteger (length vs)
     FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
     FOVRec vm   -> V.VRecord $ Map.fromList [ (C.packIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
@@ -1284,7 +1285,7 @@ importFirstOrderValue t0 v0 = V.runEval (V.EvalOpts C.quietLogger V.defaultPPOpt
   go t v = case (t,v) of
     (FOTBit         , V.VBit b)        -> return (FOVBit b)
     (FOTInt         , V.VInteger i)    -> return (FOVInt i)
-    (FOTVec _ FOTBit, V.VWord w wv)    -> FOVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal =<< wv)
+    (FOTVec _ FOTBit, V.VWord w wv)    -> FOVWord (fromIntegral w) . V.bvVal <$> (V.asWordVal V.Concrete =<< wv)
     (FOTVec _ ty    , V.VSeq len xs)   -> FOVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
     (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
     (FOTRec fs      , V.VRecord xs)    ->
