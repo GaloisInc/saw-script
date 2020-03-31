@@ -42,6 +42,8 @@ module SAWScript.Crucible.LLVM.Override
   , termId
   , storePointsToValue
 
+  , diffMemTypes
+
   , enableSMTArrayMemoryModel
   ) where
 
@@ -61,6 +63,7 @@ import qualified Data.Set as Set
 import           Data.Text (Text, pack)
 import qualified Data.Vector as V
 import           GHC.Generics (Generic)
+import           Numeric.Natural
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import qualified Text.LLVM.AST as L
@@ -910,6 +913,53 @@ assignTerm sc cc loc prepost var val =
 --             p <- liftIO $ resolveSAWPred cc t
 --             addAssert p (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost))
 
+------------------------------------------------------------------------
+
+diffMemTypes ::
+  Crucible.HasPtrWidth wptr =>
+  Crucible.MemType ->
+  Crucible.MemType ->
+  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
+diffMemTypes x0 y0 =
+  let wptr :: Natural = fromIntegral (W4.natValue ?ptrWidth) in
+  case (x0, y0) of
+    -- Special case; consider a one-element struct to be compatible with
+    -- the type of its field
+    (Crucible.StructType x, _)
+      | V.length (Crucible.siFields x) == 1 -> diffMemTypes (Crucible.fiType (V.head (Crucible.siFields x))) y0
+    (_, Crucible.StructType y)
+      | V.length (Crucible.siFields y) == 1 -> diffMemTypes x0 (Crucible.fiType (V.head (Crucible.siFields y)))
+
+    (Crucible.IntType x, Crucible.IntType y) | x == y -> []
+    (Crucible.FloatType, Crucible.FloatType) -> []
+    (Crucible.DoubleType, Crucible.DoubleType) -> []
+    (Crucible.PtrType{}, Crucible.PtrType{}) -> []
+    (Crucible.IntType w, Crucible.PtrType{}) | w == wptr -> []
+    (Crucible.PtrType{}, Crucible.IntType w) | w == wptr -> []
+    (Crucible.ArrayType xn xt, Crucible.ArrayType yn yt)
+      | xn == yn ->
+        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
+    (Crucible.VecType xn xt, Crucible.VecType yn yt)
+      | xn == yn ->
+        [ (Nothing : path, l , r) | (path, l, r) <- diffMemTypes xt yt ]
+    (Crucible.StructType x, Crucible.StructType y)
+      | V.map Crucible.fiOffset (Crucible.siFields x) ==
+        V.map Crucible.fiOffset (Crucible.siFields y) ->
+          let xts = Crucible.siFieldTypes x
+              yts = Crucible.siFieldTypes y
+          in diffMemTypesList 1 (V.toList (V.zip xts yts))
+    _ -> [([], x0, y0)]
+
+diffMemTypesList ::
+  Crucible.HasPtrWidth arch =>
+  Int ->
+  [(Crucible.MemType, Crucible.MemType)] ->
+  [([Maybe Int], Crucible.MemType, Crucible.MemType)]
+diffMemTypesList _ [] = []
+diffMemTypesList i ((x, y) : ts) =
+  [ (Just i : path, l , r) | (path, l, r) <- diffMemTypes x y ]
+  ++ diffMemTypesList (i+1) ts
+
 
 ------------------------------------------------------------------------
 
@@ -982,7 +1032,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
     resolveAndMatch = do
       (ty, val) <- resolveSetupValueLLVM opts cc sc cs expected
       sym  <- Ov.getSymInterface
-      if expectedTy /= ty
+      if diffMemTypes expectedTy ty /= []
       then failure (cs ^. MS.csLoc) =<<
             mkStructuralMismatch opts cc sc cs actual expected expectedTy
       else liftIO (Crucible.testEqual sym val actual) >>=
