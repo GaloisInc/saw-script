@@ -476,7 +476,7 @@ checkSpecReturnType cc mspec =
 -- Returns a tuple of (arguments, preconditions, pointer values,
 -- memory).
 verifyPrestate ::
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options ->
   LLVMCrucibleContext arch ->
   MS.CrucibleMethodSpecIR (LLVM arch) ->
@@ -612,7 +612,7 @@ setupGlobalAllocs cc allocs mem0 = foldM go mem0 allocs
 -- function spec, write the given value to the address of the given
 -- pointer.
 setupPrePointsTos :: forall arch.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
   Options ->
   LLVMCrucibleContext arch       ->
@@ -717,7 +717,7 @@ ppGlobalPair cc gp =
 --------------------------------------------------------------------------------
 
 registerOverride ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch, Crucible.HasLLVMAnn Sym) =>
   Options                    ->
   LLVMCrucibleContext arch       ->
   Crucible.SimContext (CrucibleSAW.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) ->
@@ -754,7 +754,7 @@ registerOverride opts cc sim_ctx top_loc cs = do
            Crucible.writeGlobal mvar mem'
 
 registerInvariantOverride
-  :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+  :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
   => Options
   -> LLVMCrucibleContext arch
   -> W4.ProgramLoc
@@ -789,7 +789,7 @@ registerInvariantOverride opts cc top_loc all_breakpoints cs = do
 --------------------------------------------------------------------------------
 
 withCfg
-  :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+  :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
   => LLVMCrucibleContext arch
   -> String
   -> (forall blocks init ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> IO a)
@@ -801,7 +801,7 @@ withCfg context name k = do
     Nothing -> fail $ "Unexpected function name: " ++ name
 
 withCfgAndBlockId
-  :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+  :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
   => LLVMCrucibleContext arch
   -> MS.CrucibleMethodSpecIR (LLVM arch)
   -> (forall blocks init args ret . Crucible.CFG (Crucible.LLVM arch) blocks init ret -> Crucible.BlockID blocks args -> IO a)
@@ -816,7 +816,7 @@ withCfgAndBlockId context method_spec k = case method_spec ^. csParentName of
     k
 
 withBreakpointCfgAndBlockId
-  :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+  :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
   => LLVMCrucibleContext arch
   -> String
   -> String
@@ -830,7 +830,7 @@ withBreakpointCfgAndBlockId context name parent k = do
       Nothing -> fail $ "Unexpected breakpoint name: " ++ name
 
 verifySimulate ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch, Crucible.HasLLVMAnn Sym) =>
   Options                       ->
   LLVMCrucibleContext arch          ->
   [Crucible.GenericExecutionFeature Sym] ->
@@ -938,7 +938,7 @@ scAndList sc = conj . filter nontrivial
 --------------------------------------------------------------------------------
 
 verifyPoststate ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth wptr, wptr ~ Crucible.ArchWidth arch, Crucible.HasLLVMAnn Sym) =>
   Options                           {- ^ saw script debug and print options           -} ->
   SharedContext                     {- ^ saw core context                             -} ->
   LLVMCrucibleContext arch              {- ^ crucible context                             -} ->
@@ -995,7 +995,7 @@ setupLLVMCrucibleContext ::
   BuiltinContext ->
   Options ->
   LLVMModule arch ->
-  ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
    LLVMCrucibleContext arch -> TopLevel a) ->
   TopLevel a
 setupLLVMCrucibleContext bic opts lm action = do
@@ -1006,8 +1006,10 @@ setupLLVMCrucibleContext bic opts lm action = do
   smt_array_memory_model_enabled <- gets rwSMTArrayMemoryModel
   crucible_assert_then_assume_enabled <- gets rwCrucibleAssertThenAssume
   what4HashConsing <- gets rwWhat4HashConsing
-  Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $
-    let ?lc = ctx^.Crucible.llvmTypeCtx in
+  Crucible.llvmPtrWidth ctx $ \wptr -> Crucible.withPtrWidth wptr $ do
+    let ?lc = ctx^.Crucible.llvmTypeCtx
+    bbMapRef <- io $ newIORef mempty
+    let ?badBehaviorMap = bbMapRef
     action =<< (io $ do
       let gen = globalNonceGenerator
       let sc  = biSharedContext bic
