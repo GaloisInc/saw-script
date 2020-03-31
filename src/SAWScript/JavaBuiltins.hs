@@ -59,6 +59,7 @@ import SAWScript.Value as SS
 
 import qualified Cryptol.Eval.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
+import qualified Cryptol.Eval.Concrete.Value as Cryptol (Concrete(..))
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
@@ -307,7 +308,8 @@ showCexResults vpopts sc opts ms vs exts vals = do
   printOutLn vpopts Info $ "When verifying " ++ specName ms ++ ":"
   printOutLn vpopts Info $ "Proof of " ++ vsVCName vs ++ " failed."
   printOutLn vpopts Info $ "Counterexample:"
-  let showVal v = show <$> (Cryptol.runEval SS.quietEvalOpts (Cryptol.ppValue (cryptolPPOpts opts) (exportFirstOrderValue v)))
+  let showVal v = show <$> (Cryptol.runEval SS.quietEvalOpts
+                    (Cryptol.ppValue Cryptol.Concrete (cryptolPPOpts opts) (exportFirstOrderValue v)))
   mapM_ (\(n, v) -> do vdoc <- showVal v
                        printOutLn vpopts Info ("  " ++ n ++ ": " ++ vdoc)) vals
   if (length exts == length vals)
