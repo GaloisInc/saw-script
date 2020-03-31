@@ -2086,6 +2086,31 @@ translateSimplImpl _ [nuP| SImpl_Mu _ _ _ _ |] m =
   error "FIXME HERE: SImpl_Mu: translation not yet implemented"
 -}
 
+translateSimplImpl _ mb_simpl@[nuP| SImpl_RecArgAlways _ _ _ _ _ |] m =
+  withPermStackM id
+  (\(pctx :>: PTrans_Term _ t) ->
+    pctx :>: PTrans_Term (fmap (distPermsHeadPerm . simplImplOut) mb_simpl) t)
+  m
+
+translateSimplImpl _ mb_simpl@[nuP| SImpl_RecArgCurrent _ _ _ _ _ |] m =
+  withPermStackM mapRListTail
+  (\(pctx :>: PTrans_Term _ t :>: _) ->
+    pctx :>: PTrans_Term (fmap (distPermsHeadPerm . simplImplOut) mb_simpl) t)
+  m
+
+translateSimplImpl _ mb_simpl@[nuP| SImpl_RecArgWrite _ _ _ _ _ |] m =
+  withPermStackM id
+  (\(pctx :>: PTrans_Term _ t) ->
+    pctx :>: PTrans_Term (fmap (distPermsHeadPerm . simplImplOut) mb_simpl) t)
+  m
+
+translateSimplImpl _ mb_simpl@[nuP| SImpl_RecArgRead _ _ _ _ |] m =
+  withPermStackM id
+  (\(pctx :>: PTrans_Term _ t) ->
+    pctx :>: PTrans_Term (fmap (distPermsHeadPerm . simplImplOut) mb_simpl) t)
+  m
+
+
 -- | Translate a 'PermImpl1' to a function on translation computations
 translatePermImpl1 :: ImplTranslateF r ext blocks ret =>
                       Mb ctx (PermImpl1 ps_in ps_outs) ->

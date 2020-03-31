@@ -447,6 +447,35 @@ data SimplImpl ps_in ps_out where
   -- > x:mu X.p1 -o x:mu X.p2
 -}
 
+  SImpl_RecArgAlways :: ExprVar a -> RecPerm args a -> RecPermArgs args ->
+                        Member args LifetimeType -> PermExpr LifetimeType ->
+                        SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ Weaken an @always@ lifetime argument of a recursive permission:
+  --
+  -- > x:P<args1,always,args2> -o x:P<args1,l,args2>
+
+  SImpl_RecArgCurrent :: ExprVar a -> RecPerm args a -> RecPermArgs args ->
+                         Member args LifetimeType -> PermExpr LifetimeType ->
+                         SimplImpl (RNil :> a :> LifetimeType) (RNil :> a)
+  -- ^ Weaken a lifetime argument @l1@ of a recursive permission:
+  --
+  -- > x:P<args1,l1,args2> * l1:[l2]lcurrent -o x:P<args1,l2,args2>
+
+  SImpl_RecArgWrite :: ExprVar a -> RecPerm args a -> RecPermArgs args ->
+                       Member args RWModalityType -> PermExpr RWModalityType ->
+                       SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ Weaken a 'Write' modality argument to any other modality:
+  --
+  -- > x:P<args1,W,args2> -o x:P<args1,rw,args2>
+
+  SImpl_RecArgRead :: ExprVar a -> RecPerm args a -> RecPermArgs args ->
+                      Member args RWModalityType ->
+                      SimplImpl (RNil :> a) (RNil :> a)
+  -- ^ Weaken any modality argument to a 'Read' modality:
+  --
+  -- > x:P<args1,rw,args2> -o x:P<args1,R,args2>
+
+
 
 -- | A single step of permission implication. These can have multiple,
 -- disjunctive conclusions, each of which can bind some number of variables, and
@@ -709,6 +738,24 @@ simplImplIn (SImpl_FoldRec x rp args) =
 simplImplIn (SImpl_UnfoldRec x rp args) =
   distPerms1 x (ValPerm_Rec (recPermName rp) args)
 -- simplImplIn (SImpl_Mu x p1 _ _) = distPerms1 x (ValPerm_Mu p1)
+simplImplIn (SImpl_RecArgAlways x rp args memb _) =
+  case getRecPermArg args memb of
+    RecPermArg_Lifetime PExpr_Always ->
+      distPerms1 x (ValPerm_Rec (recPermName rp) args)
+    _ -> error "simplImplIn: SImplRecArgAlways: non-always argument!"
+simplImplIn (SImpl_RecArgCurrent x rp args memb l2) =
+  case getRecPermArg args memb of
+    RecPermArg_Lifetime (PExpr_Var l1) ->
+      distPerms2 x (ValPerm_Rec (recPermName rp) args)
+      l1 (ValPerm_Conj1 $ Perm_LCurrent l2)
+    _ -> error "simplImplIn: SImplRecArgCurrent: non-variable argument!"
+simplImplIn (SImpl_RecArgWrite x rp args memb _) =
+  case getRecPermArg args memb of
+    RecPermArg_RWModality (PExpr_RWModality Write) ->
+      distPerms1 x (ValPerm_Rec (recPermName rp) args)
+    _ -> error "simplImplIn: SImplRecArgWrite: non-Write argument!"
+simplImplIn (SImpl_RecArgRead x rp args _) =
+  distPerms1 x (ValPerm_Rec (recPermName rp) args)
 
 
 -- | Compute the output permissions of a 'SimplImpl' implication
@@ -828,6 +875,19 @@ simplImplOut (SImpl_FoldRec x rp args) =
   distPerms1 x (ValPerm_Rec (recPermName rp) args)
 simplImplOut (SImpl_UnfoldRec x rp args) = distPerms1 x (unfoldRecPerm rp args)
 -- simplImplOut (SImpl_Mu x _ p2 _) = distPerms1 x (ValPerm_Mu p2)
+simplImplOut (SImpl_RecArgAlways x rp args memb l) =
+  distPerms1 x (ValPerm_Rec (recPermName rp)
+                (setRecPermArg args memb (RecPermArg_Lifetime l)))
+simplImplOut (SImpl_RecArgCurrent x rp args memb l2) =
+  distPerms1 x (ValPerm_Rec (recPermName rp)
+                (setRecPermArg args memb (RecPermArg_Lifetime l2)))
+simplImplOut (SImpl_RecArgWrite x rp args memb rw) =
+  distPerms1 x (ValPerm_Rec (recPermName rp)
+                (setRecPermArg args memb (RecPermArg_RWModality rw)))
+simplImplOut (SImpl_RecArgRead x rp args memb) =
+  distPerms1 x (ValPerm_Rec (recPermName rp)
+                (setRecPermArg args memb (RecPermArg_RWModality $
+                                          PExpr_RWModality Read)))
 
 
 -- | Apply a 'SimplImpl' implication to the permissions on the top of a
@@ -2322,10 +2382,82 @@ proveVarLLVMArray x ps i off mb_ap =
 --
 -- * Replacing all lifetime arguments with a single @lowned@ lifetime @l@, by
 -- splitting the lifetime of the input permission
+--
+-- FIXME: currently this does not do the lifetime splitting step
 proveRecArgs :: ExprVar a -> RecPermName args a -> RecPermArgs args ->
                 Mb vars (RecPermArgs args) ->
                 ImplM vars s r (ps :> a) (ps :> a) ()
-proveRecArgs x rpn1 args mb_args = error "FIXME HERE NOW: proveRecArgs"
+proveRecArgs x rpn args mb_args =
+  implLookupRecPerm rpn >>>= \rp ->
+  getPSubst >>>= \psubst ->
+  mapM_ (\case Some memb ->
+                 proveRecArg x rp args memb psubst $
+                 fmap (`getRecPermArg` memb) mb_args) $
+  getRecPermsMembers args
+
+
+-- | Prove @P<args1,arg,args2> |- P<args1,arg',args2>@ where @arg@ is specified
+-- by a 'Member' proof in the input @args@ and @arg'@ potentially has
+-- existential variables. Assume the LHS is on the top of the stack and leave
+-- the RHS, if proved, on the top of the stack.
+proveRecArg :: ExprVar a -> RecPerm args a -> RecPermArgs args ->
+               Member args b -> PartialSubst vars -> Mb vars (RecPermArg b) ->
+               ImplM vars s r (ps :> a) (ps :> a) ()
+
+-- If the current and required args are equal, do nothing and return
+proveRecArg x rp args memb _ mb_arg
+  | mbLift (fmap (== getRecPermArg args memb) mb_arg) =
+    greturn ()
+
+-- If the RHS is an unassigned existential variable then set it and return
+--
+-- FIXME: eventually we might want to generate some sort of constraints...?
+proveRecArg x rp args memb psubst arg
+  | [nuP| PExpr_Var z |] <- fmap permArgToExpr arg
+  , Left memb_z <- mbNameBoundP z
+  , Nothing <- psubstLookup psubst memb_z =
+    setVarM memb_z (permArgToExpr (getRecPermArg args memb))
+
+-- If the RHS is an already-assigned existential variable, subst and recurse
+proveRecArg x rp args memb psubst arg@[nuP| RecPermArg_Lifetime (PExpr_Var z) |]
+  | Left memb_z <- mbNameBoundP z
+  , Just l <- psubstLookup psubst memb_z =
+    proveRecArg x rp args memb psubst $ fmap (const $ RecPermArg_Lifetime l) arg
+proveRecArg x rp args memb psubst arg@[nuP| RecPermArg_RWModality (PExpr_Var z) |]
+  | Left memb_z <- mbNameBoundP z
+  , Just rw <- psubstLookup psubst memb_z =
+    proveRecArg x rp args memb psubst $
+    fmap (const $ RecPermArg_RWModality rw) arg
+
+-- Prove P<args1,always,args2> -o P<args1,l,args2>
+proveRecArg x rp args memb _ arg@[nuP| RecPermArg_Lifetime (PExpr_Var z) |]
+  | Right l <- mbNameBoundP z
+  , RecPermArg_Lifetime PExpr_Always <- getRecPermArg args memb =
+    implSimplM Proxy (SImpl_RecArgAlways x rp args memb (PExpr_Var l))
+
+-- Prove P<args1,l1,args2> -o P<args1,l2,args2> using l1:[l2]lcurrent
+proveRecArg x rp args memb _ arg@[nuP| RecPermArg_Lifetime (PExpr_Var z) |]
+  | Right l1 <- mbNameBoundP z
+  , RecPermArg_Lifetime (PExpr_Var l2) <- getRecPermArg args memb =
+    proveVarImpl l1 (fmap (const $ ValPerm_Conj1 $
+                           Perm_LCurrent $ PExpr_Var l2) arg) >>>
+    implSimplM Proxy (SImpl_RecArgCurrent x rp args memb (PExpr_Var l2))
+
+-- Prove P<args1,W,args2> -o P<args1,rw,args2> for any variable rw
+proveRecArg x rp args memb _ arg@[nuP| RecPermArg_RWModality (PExpr_Var z) |]
+  | Right rw <- mbNameBoundP z
+  , RecPermArg_RWModality (PExpr_RWModality Write) <- getRecPermArg args memb =
+    implSimplM Proxy (SImpl_RecArgWrite x rp args memb (PExpr_Var rw))
+
+-- Prove P<args1,rw,args2> -o P<args1,R,args2> for any rw
+proveRecArg x rp args memb _ arg@[nuP| RecPermArg_RWModality
+                                     (PExpr_RWModality Read) |] =
+  implSimplM Proxy (SImpl_RecArgRead x rp args memb)
+
+-- Fail in any other case
+proveRecArg x rp args memb _ mb_arg =
+  implFailVarM "proveRecArg" x (ValPerm_Rec (recPermName rp) args)
+  (fmap (ValPerm_Rec (recPermName rp) . setRecPermArg args memb) mb_arg)
 
 
 ----------------------------------------------------------------------

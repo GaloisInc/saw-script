@@ -20,6 +20,7 @@
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase #-}
 
 module SAWScript.Heapster.Permissions where
 
@@ -1014,6 +1015,27 @@ permArgsToExprs RecPermArgs_Nil = PExprs_Nil
 permArgsToExprs (RecPermArgs_Cons args arg) =
   PExprs_Cons (permArgsToExprs args) (permArgToExpr arg)
 
+-- | Get the @n@th argument in a 'RecPermArgs' list
+getRecPermArg :: RecPermArgs args -> Member args a -> RecPermArg a
+getRecPermArg (RecPermArgs_Cons _ arg) Member_Base = arg
+getRecPermArg (RecPermArgs_Cons args _) (Member_Step memb) =
+  getRecPermArg args memb
+
+-- | Set the @n@th argument in a 'RecPermArgs' list
+setRecPermArg :: RecPermArgs args -> Member args a -> RecPermArg a ->
+                 RecPermArgs args
+setRecPermArg (RecPermArgs_Cons args _) Member_Base a = RecPermArgs_Cons args a
+setRecPermArg (RecPermArgs_Cons args arg) (Member_Step memb) a =
+  RecPermArgs_Cons (setRecPermArg args memb a) arg
+
+-- | Get a list of 'Member' proofs for each arg in a 'RecPermArgs' sequence
+getRecPermsMembers :: RecPermArgs args ->
+                      [Some (Member args :: CrucibleType -> Type)]
+getRecPermsMembers RecPermArgs_Nil = []
+getRecPermsMembers (RecPermArgs_Cons args _) =
+  map (\case Some memb -> Some (Member_Step memb)) (getRecPermsMembers args)
+  ++ [Some Member_Base]
+
 instance TestEquality RecPermArgs where
   testEquality (RecPermArgs_Cons args1 arg1) (RecPermArgs_Cons args2 arg2)
     | Just Refl <- testEquality args1 args2
@@ -1793,6 +1815,10 @@ distPerms1 x p = DistPermsCons DistPermsNil x p
 distPerms2 :: ExprVar a1 -> ValuePerm a1 ->
               ExprVar a2 -> ValuePerm a2 -> DistPerms (RNil :> a1 :> a2)
 distPerms2 x1 p1 x2 p2 = DistPermsCons (distPerms1 x1 p1) x2 p2
+
+-- | Get the first permission in a 'DistPerms'
+distPermsHeadPerm :: DistPerms (ps :> a) -> ValuePerm a
+distPermsHeadPerm (DistPermsCons _ _ p) = p
 
 -- | Drop the last permission in a 'DistPerms'
 distPermsSnoc :: DistPerms (ps :> a) -> DistPerms ps
