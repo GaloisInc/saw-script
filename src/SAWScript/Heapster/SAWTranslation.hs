@@ -1858,6 +1858,20 @@ translateSimplImpl _ [nuP| SImpl_CastLLVMWord _ _ e2 |] m =
   ((:>: PTrans_Eq (fmap PExpr_LLVMWord e2)) . mapRListTail . mapRListTail)
   m
 
+translateSimplImpl _ [nuP| SImpl_InvertLLVMOffsetEq mb_x mb_off mb_y |] m =
+  withPermStackM
+  ((:>: translateVar mb_y) . mapRListTail)
+  ((:>: PTrans_Eq (mbMap2 (\x off -> PExpr_LLVMOffset x $
+                                     bvNegate off) mb_x mb_off)) . mapRListTail)
+  m
+
+translateSimplImpl _ [nuP| SImpl_OffsetLLVMWord _ mb_e mb_off mb_x |] m =
+  withPermStackM
+  ((:>: translateVar mb_x) . mapRListTail . mapRListTail)
+  ((:>: PTrans_Eq (mbMap2 (\e off -> PExpr_LLVMWord $ bvAdd e off)
+                   mb_e mb_off)) . mapRListTail . mapRListTail)
+  m
+
 translateSimplImpl _ [nuP| SImpl_CastLLVMPtr _ _ off _ |] m =
   withPermStackM mapRListTail
   (\(pctx :>: _ :>: ptrans) ->
@@ -2462,6 +2476,18 @@ instance (PermCheckExtC ext, TransInfo info) =>
     ETrans_Term <$>
     applyMultiTransM (return $ globalOpenTerm "Prelude.bvslt")
     [translate w, translateRWV e1, translateRWV e2]
+  translate [nuP| BoolToBV w e |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
+    [applyTransM (return $ globalOpenTerm "Prelude.bitvector") (translate w),
+     translateRWV e,
+     return (bvNatOpenTerm (intValue $ mbLift w) 1),
+     return (bvNatOpenTerm (intValue $ mbLift w) 0)]
+  translate [nuP| BVNonzero w e |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
+    [translate w, translateRWV e,
+     return (bvNatOpenTerm (intValue $ mbLift w) 0)]
   translate mb_e =
     error ("Unhandled expression form: " ++
            (flip displayS "" $ renderPretty 0.8 80 $
