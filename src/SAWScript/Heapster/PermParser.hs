@@ -490,8 +490,8 @@ parseValPerm tp =
        ("permission of type " ++ show tp)
      -- FIXME: I think the SAW lexer can't handle "\/" in strings...?
      -- try (spaces >> string "\\/" >> (ValPerm_Or p1 <$> parseValPerm tp)) <|>
-     try (spaces1 >> string "or" >> space >>
-          (ValPerm_Or p1 <$> parseValPerm tp)) <|>
+     (try (spaces1 >> string "or" >> space) >> (ValPerm_Or p1 <$>
+                                                parseValPerm tp)) <|>
        return p1
 
 -- | Parse a @*@-separated list of atomic permissions
