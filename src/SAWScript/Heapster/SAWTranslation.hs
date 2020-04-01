@@ -120,10 +120,10 @@ typeTransTupleType (TypeTrans [] _) = unitTypeOpenTerm
 typeTransTupleType (TypeTrans [tp] _) = tp
 typeTransTupleType (TypeTrans tps _) = tupleTypeOpenTerm tps
 
--- | Convert a 'TypeTrans' over 0 or more types to one over 0 or 1 type, where 2
+-- | Convert a 'TypeTrans' over 0 or more types to one over 1 type, where 2
 -- or more types are converted to a single tuple type
 tupleTypeTrans :: TypeTrans tr -> TypeTrans tr
-tupleTypeTrans ttrans@(TypeTrans [] _) = ttrans
+-- tupleTypeTrans ttrans@(TypeTrans [] _) = ttrans
 tupleTypeTrans ttrans@(TypeTrans [_] _) = ttrans
 tupleTypeTrans ttrans =
   TypeTrans [tupleTypeOpenTerm $ typeTransTypes ttrans]
@@ -298,13 +298,10 @@ lambdaTransM x tps body_f =
 --
 -- > \x1:(tp1, ..., tpn) -> body
 --
--- over a tuple of the types in a 'TypeTrans', with the special case that 0
--- types just returns the @body@ and 1 type uses the type directly instead of
--- forming a tuple type
+-- over a tuple of the types in a 'TypeTrans'. Note that this always builds
+-- exactly one lambda-abstraction, even if there are 0 types.
 lambdaTupleTransM :: String -> TypeTrans tr -> (tr -> TransM info ctx OpenTerm) ->
                      TransM info ctx OpenTerm
-lambdaTupleTransM _ ttrans@(typeTransTypes -> []) body_f =
-  body_f $ typeTransF ttrans []
 lambdaTupleTransM x ttrans body_f =
   lambdaTransM x (tupleTypeTrans ttrans) body_f
 
