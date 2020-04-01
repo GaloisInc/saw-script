@@ -1854,7 +1854,13 @@ primitives = Map.fromList
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_extract_print)
     [ "Translate an LLVM function to a SAW core term using Heapster"
-    , " type-checkin, and print the result."
+    , " type-checking, and print the result."
+    ]
+
+  , prim "heapster_parse_test"
+    "LLVMModule -> String -> String -> TopLevel ()"
+    (bicVal heapster_parse_test)
+    [ "Parse and print back a set of Heapster permissions for a function"
     ]
 
   ]

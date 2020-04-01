@@ -488,7 +488,10 @@ parseValPerm tp =
                fail ("Unknown recursive permission name '" ++ n ++ "'")) <|>
        (ValPerm_Conj <$> parseAtomicPerms tp) <?>
        ("permission of type " ++ show tp)
-     try (spaces >> string "\\/" >> (ValPerm_Or p1 <$> parseValPerm tp)) <|>
+     -- FIXME: I think the SAW lexer can't handle "\/" in strings...?
+     -- try (spaces >> string "\\/" >> (ValPerm_Or p1 <$> parseValPerm tp)) <|>
+     try (spaces1 >> string "or" >> space >>
+          (ValPerm_Or p1 <$> parseValPerm tp)) <|>
        return p1
 
 -- | Parse a @*@-separated list of atomic permissions
@@ -783,6 +786,7 @@ parseFunPermM args ret =
          perms_out <-
            inParsedCtxM ghosts_l_ctx $ const $
            parseSortedMbValuePerms (consParsedCtx "ret" ret args_ctx)
+         eof
          return $ SomeFunPerm $ FunPerm ghosts args ret perms_in perms_out
 
 -- | Run the 'parseFunPermM' parsing computation on a 'String'

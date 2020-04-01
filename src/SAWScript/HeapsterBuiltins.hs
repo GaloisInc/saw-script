@@ -10,6 +10,7 @@
 
 module SAWScript.HeapsterBuiltins
        ( heapster_extract_print
+       , heapster_parse_test
        ) where
 
 import qualified Data.Map as Map
@@ -212,3 +213,20 @@ heapster_extract_print bic opts lm fn_name perms_string =
               sc <- getSharedContext
               fun_term <- liftIO $ completeOpenTerm sc fun_openterm
               liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
+
+heapster_parse_test :: BuiltinContext -> Options -> LLVMModule ->
+                       String -> String ->  TopLevel ()
+heapster_parse_test bic opts lm fn_name perms_string =
+  case modTrans lm of
+    Some mod_trans -> do
+      let cl_env = heapster_default_env -- FIXME: cl_env should be an argument
+      let arch = llvmArch $ _transContext mod_trans
+      any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts lm fn_name
+      case any_cfg of
+        AnyCFG cfg -> do
+          let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
+          let ret = handleReturnType $ cfgHandle cfg
+          case parseFunPermString cl_env args ret perms_string of
+            Left err -> fail $ show err
+            Right (SomeFunPerm fun_perm) ->
+              liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm

@@ -192,6 +192,10 @@ class PermPretty a where
 permPretty :: PermPretty a => PPInfo -> a -> Doc
 permPretty info a = runReader (permPrettyM a) info
 
+permPrettyString :: PermPretty a => PPInfo -> a -> String
+permPrettyString info a =
+  flip displayS "" $ renderPretty 0.8 80 $ permPretty info a
+
 tracePretty :: Doc -> a -> a
 tracePretty doc = trace (flip displayS "" $ renderPretty 0.8 80 doc)
 
