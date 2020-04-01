@@ -634,7 +634,7 @@ trueOpenTerm = globalOpenTerm "Prelude.True"
 bvNatOpenTerm :: Integer -> Integer -> OpenTerm
 bvNatOpenTerm w n =
   applyOpenTermMulti (globalOpenTerm "Prelude.bvNat")
-  [natOpenTerm w, natOpenTerm n]
+  [natOpenTerm w, natOpenTerm (n `mod` 2 ^ w)]
 
 bvAddOpenTerm :: Integer -> OpenTerm -> OpenTerm -> OpenTerm
 bvAddOpenTerm n x y =
