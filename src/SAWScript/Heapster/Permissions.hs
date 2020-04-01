@@ -1198,7 +1198,9 @@ instance PermPretty (RecPermName args a) where
 instance PermPretty (ValuePerm a) where
   permPrettyM (ValPerm_Eq e) = ((string "eq" <>) . parens) <$> permPrettyM e
   permPrettyM (ValPerm_Or p1 p2) =
-    (\pp1 pp2 -> hang 2 (pp1 </> string "\\/" <> pp2))
+    -- FIXME: If we ever fix the SAW lexer to handle "\/"...
+    -- (\pp1 pp2 -> hang 2 (pp1 </> string "\\/" <> pp2))
+    (\pp1 pp2 -> hang 2 (pp1 </> string "or" <+> pp2))
     <$> permPrettyM p1 <*> permPrettyM p2
   permPrettyM (ValPerm_Exists mb_p) =
     flip permPrettyExprMb mb_p $ \(_ :>: Constant pp_n) ppm ->
