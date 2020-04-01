@@ -336,6 +336,8 @@ data PermExpr (a :: CrucibleType) where
               [BVFactor w] -> Integer -> PermExpr (BVType w)
   -- ^ A bitvector expression is a linear expression in @N@ variables, i.e., sum
   -- of constant times variable factors plus a constant
+  --
+  -- FIXME: make the offset a 'Natural'
 
   PExpr_Struct :: PermExprs (CtxToRList args) -> PermExpr (StructType args)
   -- ^ A struct expression is an expression for each argument of the struct type
@@ -379,8 +381,10 @@ data PermExprs (as :: RList CrucibleType) where
 data BVFactor w where
   BVFactor :: (1 <= w, KnownNat w) => Integer -> ExprVar (BVType w) ->
               BVFactor w
-    -- ^ A variable of type @'BVType' w@ multiplied by a constant @i@, which
-    -- should be in the range @0 <= i < 2^w@
+  -- ^ A variable of type @'BVType' w@ multiplied by a constant @i@, which
+  -- should be in the range @0 <= i < 2^w@
+  --
+  -- FIXME: make the constant a 'Natural'
 
 -- | Whether a permission allows reads or writes
 data RWModality
