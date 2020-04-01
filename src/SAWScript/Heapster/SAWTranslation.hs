@@ -2328,6 +2328,10 @@ instance (PermCheckExtC ext, TransInfo info) =>
     ETrans_Term <$>
     applyMultiTransM (return $ globalOpenTerm "Prelude.equalNat")
     [translateRWV e1, translateRWV e2]
+  translate [nuP| BaseIsEq (BaseBVRepr w) e1 e2 |] =
+    ETrans_Term <$>
+    applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
+    [translate w, translateRWV e1, translateRWV e2]
 
   translate [nuP| EmptyApp |] = return $ ETrans_Term unitOpenTerm
 
