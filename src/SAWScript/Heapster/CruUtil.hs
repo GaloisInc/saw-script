@@ -80,6 +80,11 @@ unsafeMbTypeRepr :: MbTypeRepr a
 unsafeMbTypeRepr = isoMbTypeRepr mkReifiesObj projReifiesObj
 
 -- FIXME: move to Hobbits
+instance Closable Bool where
+  toClosed True = $(mkClosed [| True |])
+  toClosed False = $(mkClosed [| False |])
+
+-- FIXME: move to Hobbits
 instance Closable Char where
   toClosed = unsafeClose
 
@@ -122,6 +127,12 @@ instance Liftable (TypeRepr tp) where
 instance NuMatching (BaseTypeRepr tp) where
   nuMatchingProof = unsafeMbTypeRepr
 
+instance Closable (BaseTypeRepr tp) where
+  toClosed = unsafeClose
+
+instance Liftable (BaseTypeRepr tp) where
+  mbLift = unClosed . mbLift . fmap toClosed
+
 -- NOTE: this is handled by the Assignment instance
 -- instance NuMatching (CtxRepr ctx) where
 --   nuMatchingProof = isoMbTypeRepr mkKnownReprObj getKnownReprObj
@@ -132,8 +143,20 @@ instance NuMatching (Index ctx a) where
 instance NuMatching Text where
   nuMatchingProof = unsafeMbTypeRepr
 
+instance Closable Text where
+  toClosed = unsafeClose
+
+instance Liftable Text where
+  mbLift = unClosed . mbLift . fmap toClosed
+
 instance NuMatching ProgramLoc where
   nuMatchingProof = unsafeMbTypeRepr
+
+instance Closable ProgramLoc where
+  toClosed = unsafeClose
+
+instance Liftable ProgramLoc where
+  mbLift = unClosed . mbLift . fmap toClosed
 
 instance NuMatching (FnHandle args ret) where
   nuMatchingProof = unsafeMbTypeRepr

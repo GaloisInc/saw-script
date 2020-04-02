@@ -1484,10 +1484,12 @@ unpackPermCtxTuple top_ps = evalStateT (helper top_ps) where
 -- * The Implication Translation Monad
 ----------------------------------------------------------------------
 
--- | A mapping from a block entrypoint to its corresponding SAW variable that is
--- bound to its translation
+-- | A mapping from a block entrypoint to a corresponding SAW variable that is
+-- bound to its translation if it has one: only those entrypoints marked as the
+-- heads of strongly-connect components have translations as letrec-bound
+-- variables
 data TypedEntryTrans ext blocks ret args =
-  TypedEntryTrans (TypedEntry ext blocks ret args) OpenTerm
+  TypedEntryTrans (TypedEntry ext blocks ret args) (Maybe OpenTerm)
 
 typedEntryTransEntry :: TypedEntryTrans ext blocks ret args ->
                         TypedEntry ext blocks ret args
@@ -1508,7 +1510,7 @@ lookupEntryTrans entryID blkMap =
   let TypedBlockTrans entries = mapRListLookup (entryBlockID entryID) blkMap in
   foldr (\trans rest ->
           case trans of
-            TypedEntryTrans (TypedEntry entryID' _ _ _ _ _) _
+            TypedEntryTrans (TypedEntry entryID' _ _ _ _ _ _) _
               | Just Refl <- testEquality entryID entryID' -> trans
             _ -> rest)
   (case find (\(TypedEntryTrans entry _) ->
@@ -1522,13 +1524,15 @@ lookupEntryTrans entryID blkMap =
                ++ show (map (typedEntryIndex . typedEntryTransEntry) entries)))
   entries
 
--- | Translate an entrypoint ID by looking up its SAW function
+{- FIXME: unused
+-- | Translate an entrypoint ID by looking up its SAW function, if it has one
 translateTypedEntryID :: TypedEntryID blocks args ghosts ->
                          TypedBlockMapTrans ext blocks ret ->
-                         OpenTerm
+                         Maybe OpenTerm
 translateTypedEntryID entryID blkMap =
   case lookupEntryTrans entryID blkMap of
-    TypedEntryTrans _ trm -> trm
+    TypedEntryTrans _ maybe_trm -> maybe_trm
+-}
 
 -- | Contextual info for an implication translation
 data ImpTransInfo ext blocks ret ps ctx =
@@ -2547,10 +2551,12 @@ exprOutPerm [nuP| TypedExpr _ Nothing |] = PTrans_True
 -- * Translating Typed Crucible Jump Targets
 ----------------------------------------------------------------------
 
+{- FIXME: unused
 instance Translate (ImpTransInfo ext blocks ret ps) ctx
-         (TypedEntryID blocks args ghosts) OpenTerm where
+         (TypedEntryID blocks args ghosts) (Maybe OpenTerm) where
   translate mb_entryID =
     translateTypedEntryID (mbLift mb_entryID) <$> itiBlockMapTrans <$> ask
+-}
 
 -- | Apply the translation of a function-like construct (i.e., a
 -- 'TypedJumpTarget' or 'TypedFnHandle') to the pure plus impure translations of
@@ -2568,25 +2574,35 @@ translateApply nm f perms =
      return $
        applyOpenTermMulti f (exprCtxToTerms e_args ++ permCtxToTerms i_args)
 
--- | Translate a 'TypedEntryID' and call the resulting function
+-- | Look up the 'TypedEntryTrans' for a 'TypedEntryID' and test if it has a
+-- letrec-bound variable. If so, call that, otherwise translate the body of the
+-- corresponding 'TypedEntry'
 --
 -- FIXME: check that the supplied perms match those expected by the entryID
-translateCallEntryID :: String -> TypedEntryID blocks args ghosts ->
+translateCallEntryID :: (PermCheckExtC ext, ps ~ (ghosts :++: args)) =>
+                        String -> TypedEntryID blocks args ghosts ->
                         Mb ctx (DistPerms ps) ->
                         ImpTransM ext blocks ret ps ctx OpenTerm
-translateCallEntryID nm entryID perms =
+translateCallEntryID nm entryID mb_perms =
   do entry_trans <-
        lookupEntryTrans entryID <$> itiBlockMapTrans <$> ask
      case entry_trans of
-       TypedEntryTrans _ f ->
-         translateApply nm f perms
+       TypedEntryTrans _ (Just f) ->
+         translateApply nm f mb_perms
+       TypedEntryTrans entry Nothing ->
+         translate $
+         fmap (\perms ->
+                varSubst (PermVarSubst $ distPermsVars perms) $
+                typedEntryBody entryID entry) mb_perms
 
-instance Translate (ImpTransInfo ext blocks ret ps) ctx
+instance PermCheckExtC ext =>
+         Translate (ImpTransInfo ext blocks ret ps) ctx
          (TypedJumpTarget blocks ps) OpenTerm where
   translate [nuP| TypedJumpTarget entryID _ perms |] =
     translateCallEntryID "TypedJumpTarget" (mbLift entryID) perms
 
-instance ImplTranslateF (TypedJumpTarget blocks) ext blocks ret where
+instance PermCheckExtC ext =>
+         ImplTranslateF (TypedJumpTarget blocks) ext blocks ret where
   translateF mb_tgt = translate mb_tgt
 
 
@@ -2819,17 +2835,21 @@ instance PermCheckExtC ext =>
 -- * Translating CFGs
 ----------------------------------------------------------------------
 
--- | Fold a function over all the 'TypedEntry's in a 'TypedBlockMap', visiting
--- the entries in the right-most 'TypedBlock' first
-foldBlockMap :: (forall args. TypedEntry ext blocks ret args -> b -> b) ->
-                 b -> TypedBlockMap ext blocks ret -> b
-foldBlockMap = helper where
+-- | Fold a function over each 'TypedEntry' in a 'TypedBlockMap' that is marked
+-- as being the head of a strongly-connected component, visiting the entries in
+-- the right-most 'TypedBlock' first
+foldBlockMapSCC :: (forall args. TypedEntry ext blocks ret args -> b -> b) ->
+                   b -> TypedBlockMap ext blocks ret -> b
+foldBlockMapSCC = helper where
   helper :: (forall args. TypedEntry ext blocks ret args -> b -> b) ->
             b -> MapRList (TypedBlock ext blocks ret) bs -> b
   helper _ b MNil = b
   helper f b (bs :>: TypedBlock []) = helper f b bs
-  helper f b (bs :>: TypedBlock (entry:entries)) =
-    f entry $ helper f b (bs :>: TypedBlock entries)
+  helper f b (bs :>: TypedBlock (entry:entries))
+    | typedEntryIsSCC entry =
+      f entry $ helper f b (bs :>: TypedBlock entries)
+  helper f b (bs :>: TypedBlock (_:entries)) =
+    helper f b (bs :>: TypedBlock (entries))
 
 {-
 -- | FIXME: documentation
@@ -2873,7 +2893,7 @@ lambdaLRTTransM x tps body_f =
 -- 'TypedEntry'
 translateEntryLRT :: TypedEntry ext blocks ret args ->
                      TypeTransM ctx OpenTerm
-translateEntryLRT (TypedEntry entryID args ret perms_in perms_out _) =
+translateEntryLRT (TypedEntry entryID args ret is_scc perms_in perms_out _) =
   trace "translateEntryLRT starting..." $ inEmptyCtxTransM $
   translateClosed (appendCruCtx (entryGhosts entryID) args) >>= \arg_tps ->
   lambdaLRTTransM "arg" arg_tps $ \ectx ->
@@ -2924,7 +2944,7 @@ translateBlockMapLRTs :: TypedBlockMap ext blocks ret ->
                          TypeTransM ctx OpenTerm
 translateBlockMapLRTs =
   trace "translateBlockMapLRTs started..." $
-  foldBlockMap
+  foldBlockMapSCC
   (\entry rest_m ->
     do entryType <- translateEntryLRT entry
        rest <- rest_m
@@ -2946,20 +2966,27 @@ lambdaBlockMap = helper where
   helper MNil f = f MNil
   helper (bs :>: TypedBlock []) f =
     helper bs (f . (:>: TypedBlockTrans []))
+  helper (bs :>: TypedBlock (entry:entries)) f
+    | typedEntryIsSCC entry =
+      do entryLRT <- translateEntryLRT entry
+         lambdaOpenTermTransM "f" (applyOpenTerm
+                                   (globalOpenTerm "Prelude.lrtToType")
+                                   entryLRT) $ \fvar ->
+           helper (bs :>: TypedBlock entries)
+           (\(bsTrans :>: TypedBlockTrans eTranss) ->
+             f (bsTrans :>:
+                TypedBlockTrans (TypedEntryTrans entry (Just fvar):eTranss)))
   helper (bs :>: TypedBlock (entry:entries)) f =
-    do entryLRT <- translateEntryLRT entry
-       lambdaOpenTermTransM "f" (applyOpenTerm
-                                 (globalOpenTerm "Prelude.lrtToType")
-                                 entryLRT) $ \fvar ->
-         helper (bs :>: TypedBlock entries)
-         (\(bsTrans :>: TypedBlockTrans eTranss) ->
-           f (bsTrans :>: TypedBlockTrans (TypedEntryTrans entry fvar:eTranss)))
+    helper (bs :>: TypedBlock entries)
+           (\(bsTrans :>: TypedBlockTrans eTranss) ->
+             f (bsTrans :>:
+                TypedBlockTrans (TypedEntryTrans entry Nothing:eTranss)))
 
 translateEntryBody :: PermCheckExtC ext =>
                       TypedBlockMapTrans ext blocks ret ->
                       TypedEntry ext blocks ret args ->
                       TypeTransM ctx OpenTerm
-translateEntryBody mapTrans (TypedEntry entryID args ret in_perms
+translateEntryBody mapTrans (TypedEntry entryID args ret _ in_perms
                              ret_perms stmts) =
   inEmptyCtxTransM $
   lambdaExprCtx (appendCruCtx (entryGhosts entryID) args) $
@@ -2974,7 +3001,7 @@ translateBlockMapBodies :: PermCheckExtC ext =>
                            TypeTransM ctx OpenTerm
 translateBlockMapBodies mapTrans =
   trace "translateBlockMapBodies starting..." $
-  foldBlockMap
+  foldBlockMapSCC
   (\entry restM ->
     pairOpenTerm <$> translateEntryBody mapTrans entry <*> restM)
   (trace "translateBlockMapBodies finished" $ return unitOpenTerm)

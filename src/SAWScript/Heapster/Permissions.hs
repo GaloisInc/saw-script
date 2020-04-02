@@ -2474,6 +2474,10 @@ class MonadBind m => SubstVar s m | s -> m where
 class SubstVar s m => Substable s a m where
   genSubst :: s ctx -> Mb ctx a -> m a
 
+-- | A version of 'Substable' for type functors
+class SubstVar s m => Substable1 s f m where
+  genSubst1 :: s ctx -> Mb ctx (f a) -> m (f a)
+
 instance SubstVar s m => Substable s Integer m where
   genSubst _ mb_i = return $ mbLift mb_i
 
@@ -2498,6 +2502,14 @@ substBVFactor :: SubstVar s m => s ctx -> Mb ctx (BVFactor w) ->
                  m (PermExpr (BVType w))
 substBVFactor s [nuP| BVFactor i x |] =
   bvMult (mbLift i) <$> substExprVar s x
+
+instance SubstVar s m =>
+         Substable s (NatRepr n) m where
+  genSubst _ = return . mbLift
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (ExprVar a) m where
+  genSubst s mb_x = return $ varSubstVar s mb_x
 
 instance SubstVar s m => Substable s (PermExpr a) m where
   genSubst s [nuP| PExpr_Var x |] = substExprVar s x
@@ -2557,6 +2569,15 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
   genSubst s [nuP| Perm_BVProp prop |] =
     Perm_BVProp <$> genSubst s prop
 
+instance SubstVar s m => Substable s (RecPermName args a) m where
+  genSubst _ mb_rpn = return $ mbLift mb_rpn
+
+instance SubstVar s m => Substable s (RecPerm args a) m where
+  genSubst s [nuP| RecPerm rpn dt_i f_i u_i cases |] =
+    RecPerm (mbLift rpn) (mbLift dt_i) (mbLift f_i) (mbLift u_i) <$>
+    mapM (\[nuP| (mb_p, i) |] -> genSubst s mb_p >>= \p -> return (p,mbLift i))
+    (mbList cases)
+
 instance SubstVar s m => Substable s (ValuePerm a) m where
   genSubst s [nuP| ValPerm_Eq e |] = ValPerm_Eq <$> genSubst s e
   genSubst s [nuP| ValPerm_Or p1 p2 |] =
@@ -2614,6 +2635,14 @@ instance SubstVar s m => Substable s (RecPermArg a) m where
     RecPermArg_Lifetime <$> genSubst s l
   genSubst s [nuP| RecPermArg_RWModality rw |] =
     RecPermArg_RWModality <$> genSubst s rw
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (LifetimeCurrentPerms ps) m where
+  genSubst s [nuP| AlwaysCurrentPerms |] = return AlwaysCurrentPerms
+  genSubst s [nuP| LOwnedCurrentPerms l ps |] =
+    LOwnedCurrentPerms <$> genSubst s l <*> genSubst s ps
+  genSubst s [nuP| CurrentTransPerms ps l |] =
+    CurrentTransPerms <$> genSubst s ps <*> genSubst s l
 
 instance SubstVar PermVarSubst m =>
          Substable PermVarSubst (DistPerms ps) m where

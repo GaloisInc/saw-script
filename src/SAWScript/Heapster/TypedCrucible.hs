@@ -598,13 +598,210 @@ instance NuMatchingExtC ext => NuMatchingAny1 (TypedStmtSeq ext blocks ret) wher
   nuMatchingAny1Proof = nuMatchingProof
 
 
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (TypedReg tp) m where
+  genSubst s [nuP| TypedReg x |] = TypedReg <$> genSubst s x
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (RegWithVal tp) m where
+  genSubst s [nuP| RegWithVal r e |] =
+    RegWithVal <$> genSubst s r <*> genSubst s e
+  genSubst s [nuP| RegNoVal r |] = RegNoVal <$> genSubst s r
+
+instance SubstVar PermVarSubst m =>
+         Substable1 PermVarSubst RegWithVal m where
+  genSubst1 = genSubst
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (TypedRegs tp) m where
+  genSubst _ [nuP| TypedRegsNil |] = return TypedRegsNil
+  genSubst s [nuP| TypedRegsCons rs r |] =
+    TypedRegsCons <$> genSubst s rs <*> genSubst s r
+
+instance (PermCheckExtC ext, NuMatchingAny1 f,
+          SubstVar PermVarSubst m, Substable1 PermVarSubst f m) =>
+         Substable PermVarSubst (App ext f a) m where
+  genSubst s [nuP| BaseIsEq tp e1 e2 |] =
+    BaseIsEq (mbLift tp) <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| EmptyApp |] = return EmptyApp
+  genSubst s [nuP| BoolLit b |] = return $ BoolLit $ mbLift b
+  genSubst s [nuP| Not e |] =
+    Not <$> genSubst1 s e
+  genSubst s [nuP| And e1 e2 |] =
+    And <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| Or e1 e2 |] =
+    Or <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BoolXor e1 e2 |] =
+    BoolXor <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| NatLit n |] =
+    return $ NatLit $ mbLift n
+  genSubst s [nuP| NatLt e1 e2 |] =
+    NatLt <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| NatLe e1 e2 |] =
+    NatLe <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| NatAdd e1 e2 |] =
+    NatAdd <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| NatSub e1 e2 |] =
+    NatSub <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| NatMul e1 e2 |] =
+    NatMul <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| NatDiv e1 e2 |] =
+    NatDiv <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| NatMod e1 e2 |] =
+    NatMod <$> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| HandleLit h |] =
+    return $ HandleLit $ mbLift h
+  genSubst s [nuP| BVLit w i |] =
+    BVLit <$> genSubst s w <*> return (mbLift i)
+  genSubst s [nuP| BVConcat w1 w2 e1 e2 |] =
+    BVConcat <$> genSubst s w1 <*> genSubst s w2 <*>
+    genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVTrunc w1 w2 e |] =
+    BVTrunc <$> genSubst s w1 <*> genSubst s w2 <*> genSubst1 s e
+  genSubst s [nuP| BVZext w1 w2 e |] =
+    BVZext <$> genSubst s w1 <*> genSubst s w2 <*> genSubst1 s e
+  genSubst s [nuP| BVSext w1 w2 e |] =
+    BVSext <$> genSubst s w1 <*> genSubst s w2 <*> genSubst1 s e
+  genSubst s [nuP| BVNot w e |] =
+    BVNot <$> genSubst s w <*> genSubst1 s e
+  genSubst s [nuP| BVAnd w e1 e2 |] =
+    BVAnd <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVOr w e1 e2 |] =
+    BVOr <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVXor w e1 e2 |] =
+    BVXor <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVNeg w e |] =
+    BVNeg <$> genSubst s w <*> genSubst1 s e
+  genSubst s [nuP| BVAdd w e1 e2 |] =
+    BVAdd <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVSub w e1 e2 |] =
+    BVSub <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVMul w e1 e2 |] =
+    BVMul <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVUdiv w e1 e2 |] =
+    BVUdiv <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVSdiv w e1 e2 |] =
+    BVSdiv <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVUrem w e1 e2 |] =
+    BVUrem <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVSrem w e1 e2 |] =
+    BVSrem <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVUle w e1 e2 |] =
+    BVUle <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVUlt w e1 e2 |] =
+    BVUlt <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVSle w e1 e2 |] =
+    BVSle <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BVSlt w e1 e2 |] =
+    BVSlt <$> genSubst s w <*> genSubst1 s e1 <*> genSubst1 s e2
+  genSubst s [nuP| BoolToBV w e |] =
+    BoolToBV <$> genSubst s w <*> genSubst1 s e
+  genSubst s [nuP| BVNonzero w e |] =
+    BVNonzero <$> genSubst s w <*> genSubst1 s e
+  genSubst _ [nuP| TextLit text |] =
+    return $ TextLit $ mbLift text
+  genSubst _ [nuP| _ |] =
+    error "genSubst: unhandled Crucible expression construct"
+
+instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
+         Substable PermVarSubst (TypedExpr ext tp) m where
+  genSubst s [nuP| TypedExpr app maybe_val |] =
+    TypedExpr <$> genSubst s app <*> genSubst s maybe_val
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (TypedLLVMStmt w tp ps_out ps_in) m where
+  genSubst s [nuP| ConstructLLVMWord r |] = ConstructLLVMWord <$> genSubst s r
+  genSubst s [nuP| AssertLLVMWord r e |] =
+    AssertLLVMWord <$> genSubst s r <*> genSubst s e
+  genSubst s [nuP| AssertLLVMPtr r |] =
+    AssertLLVMPtr <$> genSubst s r
+  genSubst s [nuP| DestructLLVMWord r e |] =
+    DestructLLVMWord <$> genSubst s r <*> genSubst s e
+  genSubst s [nuP| OffsetLLVMValue r1 r2 |] =
+    OffsetLLVMValue <$> genSubst s r1 <*> genSubst s r2
+  genSubst s [nuP| TypedLLVMLoad r fp ps ps_l |] =
+    TypedLLVMLoad <$> genSubst s r <*> genSubst s fp <*> genSubst s ps <*>
+    genSubst s ps_l
+  genSubst s [nuP| TypedLLVMStore r fp e ps cur_ps |] =
+    TypedLLVMStore <$> genSubst s r <*> genSubst s fp <*> genSubst s e <*>
+    genSubst s ps <*> genSubst s cur_ps
+  genSubst s [nuP| TypedLLVMAlloca r fperms i |] =
+    TypedLLVMAlloca <$> genSubst s r <*> genSubst s fperms <*>
+    return (mbLift i)
+  genSubst _ [nuP| TypedLLVMCreateFrame |] = return TypedLLVMCreateFrame
+  genSubst s [nuP| TypedLLVMDeleteFrame r fperms perms |] =
+    TypedLLVMDeleteFrame <$> genSubst s r <*> genSubst s fperms <*>
+    genSubst s perms
+
+
+instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
+         Substable PermVarSubst (TypedStmt ext rets ps_in ps_out) m where
+  genSubst s [nuP| TypedSetReg tp expr |] =
+    TypedSetReg (mbLift tp) <$> genSubst s expr
+  genSubst s [nuP| TypedCall f fun_perm ghosts args l ps |] =
+    TypedCall <$> genSubst s f <*> genSubst s fun_perm <*>
+    genSubst s ghosts <*> genSubst s args <*> genSubst s l <*> genSubst s ps
+  genSubst s [nuP| BeginLifetime |] = return BeginLifetime
+  genSubst s [nuP| EndLifetime l perms ps end_perms |] =
+    EndLifetime <$> genSubst s l <*> genSubst s perms <*> genSubst s ps <*>
+    genSubst s end_perms
+  genSubst s [nuP| TypedAssert r1 r2 |] =
+    TypedAssert <$> genSubst s r1 <*> genSubst s r2
+  genSubst s [nuP| TypedLLVMStmt llvmStmt |] =
+    TypedLLVMStmt <$> genSubst s llvmStmt
+
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (TypedRet ret ps) m where
+  genSubst s [nuP| TypedRet tp ret mb_perms |] =
+    TypedRet (mbLift tp) <$> genSubst s ret <*> genSubst s mb_perms
+
+instance SubstVar PermVarSubst m =>
+         Substable1 PermVarSubst (TypedRet ret) m where
+  genSubst1 = genSubst
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (TypedJumpTarget blocks ps) m where
+  genSubst s [nuP| TypedJumpTarget entryID ctx perms |] =
+    TypedJumpTarget (mbLift entryID) (mbLift ctx) <$> genSubst s perms
+
+instance SubstVar PermVarSubst m =>
+         Substable1 PermVarSubst (TypedJumpTarget blocks) m where
+  genSubst1 = genSubst
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (TypedTermStmt blocks ret ps_in) m where
+  genSubst s [nuP| TypedJump impl_tgt |] = TypedJump <$> genSubst s impl_tgt
+  genSubst s [nuP| TypedBr reg impl_tgt1 impl_tgt2 |] =
+    TypedBr <$> genSubst s reg <*> genSubst s impl_tgt1 <*>
+    genSubst s impl_tgt2
+  genSubst s [nuP| TypedReturn impl_ret |] =
+    TypedReturn <$> genSubst s impl_ret
+  genSubst s [nuP| TypedErrorStmt r |] = TypedErrorStmt <$> genSubst s r
+
+instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
+         Substable PermVarSubst (TypedStmtSeq ext blocks ret ps_in) m where
+  genSubst s [nuP| TypedImplStmt impl_seq |] =
+    TypedImplStmt <$> genSubst s impl_seq
+  genSubst s [nuP| TypedConsStmt loc stmt mb_seq |] =
+    TypedConsStmt (mbLift loc) <$> genSubst s stmt <*> genSubst s mb_seq
+  genSubst s [nuP| TypedTermStmt loc term_stmt |] =
+    TypedTermStmt (mbLift loc) <$> genSubst s term_stmt
+
+instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
+         Substable1 PermVarSubst (TypedStmtSeq ext blocks ret) m where
+  genSubst1 = genSubst
+
+
 ----------------------------------------------------------------------
 -- * Typed Control-Flow Graphs
 ----------------------------------------------------------------------
 
 -- | A single, typed entrypoint to a Crucible block. Note that our blocks
 -- implicitly take extra "ghost" arguments, that are needed to express the input
--- and output permissions.
+-- and output permissions. Each entrypoint is also marked with a 'Bool' flag
+-- that indicates whether it is the head of a strongly-connected component,
+-- i.e., if it is the entrypoint of a loop.
 --
 -- FIXME: add a @ghostss@ type argument that associates a @ghosts@ type with
 -- each index of each block, rather than having @ghost@ existentially bound
@@ -612,14 +809,28 @@ instance NuMatchingExtC ext => NuMatchingAny1 (TypedStmtSeq ext blocks ret) wher
 data TypedEntry ext blocks ret args where
   TypedEntry ::
     !(TypedEntryID blocks args ghosts) -> !(CruCtx args) -> !(TypeRepr ret) ->
-    !(MbDistPerms (ghosts :++: args)) ->
+    !Bool -> !(MbDistPerms (ghosts :++: args)) ->
     -- FIXME: I think ret_ps here should = inits...?
     !(Mb (ghosts :++: args :> ret) (DistPerms ret_ps)) ->
     !(Mb (ghosts :++: args) (TypedStmtSeq ext blocks ret (ghosts :++: args))) ->
     TypedEntry ext blocks ret args
 
 typedEntryIndex :: TypedEntry ext blocks ret args -> Int
-typedEntryIndex (TypedEntry entryID _ _ _ _ _) = entryIndex entryID
+typedEntryIndex (TypedEntry entryID _ _ _ _ _ _) = entryIndex entryID
+
+typedEntryIsSCC :: TypedEntry ext blocks ret args -> Bool
+typedEntryIsSCC (TypedEntry _ _ _ is_scc _ _ _) = is_scc
+
+-- | Get the body of a 'TypedEntry' using its 'TypedEntryID' to indicate the
+-- @ghosts@ argument. It is an error if the wrong 'TypedEntryID' is given.
+typedEntryBody :: TypedEntryID blocks args ghosts ->
+                  TypedEntry ext blocks ret args ->
+                  Mb (ghosts :++: args)
+                  (TypedStmtSeq ext blocks ret (ghosts :++: args))
+typedEntryBody entryID (TypedEntry entryID' _ _ _ _ _ body)
+  | Just Refl <- testEquality entryID entryID' = body
+typedEntryBody _ _ = error "typedEntryBody"
+
 
 -- | A typed Crucible block is a list of typed entrypoints to that block
 newtype TypedBlock ext blocks ret args
@@ -630,7 +841,7 @@ type TypedBlockMap ext blocks ret =
   MapRList (TypedBlock ext blocks ret) blocks
 
 instance Show (TypedEntry ext blocks ret args) where
-  show (TypedEntry entryID _ _ _ _ _) =
+  show (TypedEntry entryID _ _ _ _ _ _) =
     "<entry " ++ show (entryIDIndices entryID) ++ ">"
 
 instance Show (TypedBlock ext blocks ret args) where
@@ -2072,13 +2283,13 @@ setInputExtState ExtRepr_LLVM _ _ =
   greturn ()
 
 -- | Type-check a single block entrypoint
-tcBlockEntry :: PermCheckExtC ext => Block ext cblocks ret args ->
+tcBlockEntry :: PermCheckExtC ext => Bool -> Block ext cblocks ret args ->
                 BlockEntryInfo blocks ret (CtxToRList args) ->
                 TopPermCheckM ext cblocks blocks ret
                 (TypedEntry ext blocks ret (CtxToRList args))
-tcBlockEntry blk (BlockEntryInfo {..}) =
+tcBlockEntry is_scc blk (BlockEntryInfo {..}) =
   (stRetType <$> unClosed <$> get) >>= \retType ->
-  fmap (TypedEntry entryInfoID entryInfoArgs retType
+  fmap (TypedEntry entryInfoID entryInfoArgs retType is_scc
         entryInfoPermsIn entryInfoPermsOut) $
   strongMbM $
   flip nuMultiWithElim
@@ -2106,22 +2317,24 @@ tcBlockEntry blk (BlockEntryInfo {..}) =
   tcEmitStmtSeq ctx (blk ^. blockStmts)
 
 -- | Type-check a Crucible block
-tcBlock :: PermCheckExtC ext => Member blocks (CtxToRList args) ->
+tcBlock :: PermCheckExtC ext => Bool -> Member blocks (CtxToRList args) ->
            Block ext cblocks ret args ->
            TopPermCheckM ext cblocks blocks ret
            (TypedBlock ext blocks ret (CtxToRList args))
-tcBlock memb blk =
+tcBlock is_scc memb blk =
   do entries <- blockInfoEntries <$> mapRListLookup memb <$>
        stBlockInfo <$> unClosed <$> get
-     TypedBlock <$> mapM (tcBlockEntry blk) entries
+     TypedBlock <$> mapM (tcBlockEntry is_scc blk) entries
 
 -- | Type-check a Crucible block and put its translation into the 'BlockInfo'
--- for that block
-tcEmitBlock :: PermCheckExtC ext => Block ext cblocks ret args ->
+-- for that block. The 'Bool' flag indicates if the block is the head of a
+-- strongly-connected component, i.e., if it is the entrypoint of a loop.
+tcEmitBlock :: PermCheckExtC ext => Bool -> Block ext cblocks ret args ->
                TopPermCheckM ext cblocks blocks ret ()
-tcEmitBlock blk =
+tcEmitBlock is_scc blk =
   do !cl_memb <- toClosed <$> stLookupBlockID (blockID blk) <$> unClosed <$> get
      !cl_block_t <- closedM ( $(mkClosed [| tcBlock |])
+                              `clApply` toClosed is_scc
                               `clApply` cl_memb `clApply` toClosed blk)
      modifyBlockInfo ($(mkClosed [| blockInfoMapSetBlock |] )
                       `clApply` cl_memb `clApply` cl_block_t)
@@ -2180,9 +2393,9 @@ tcCFG env [clP| fun_perm@(FunPerm cl_ghosts _ _ perms_in perms_out) |] cfg =
     visit cfg (Vertex (Some blkID)) =
       do blkIx <- memberLength <$> stLookupBlockID blkID <$> unClosed <$> get
          () <- trace ("Visiting block: " ++ show blkIx) $ return ()
-         !ret <- tcEmitBlock (getBlock blkID (cfgBlockMap cfg))
+         !ret <- tcEmitBlock False (getBlock blkID (cfgBlockMap cfg))
          !s <- get
          trace ("Visiting block " ++ show blkIx ++ " complete") $ return ret
     visit cfg (SCC (Some blkID) comps) =
-      tcEmitBlock (getBlock blkID (cfgBlockMap cfg)) >>
+      tcEmitBlock True (getBlock blkID (cfgBlockMap cfg)) >>
       mapM_ (visit cfg) comps
