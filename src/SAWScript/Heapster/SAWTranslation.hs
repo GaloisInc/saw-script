@@ -2084,7 +2084,7 @@ translateSimplImpl _ [nuP| SImpl_FoldRec x rp args |] m =
 
 translateSimplImpl _ [nuP| SImpl_UnfoldRec x rp args |] m =
   do ttrans <- translate $ mbMap2 unfoldRecPerm rp args
-     let unfold_ident = mbLift $ fmap recPermFoldFun rp
+     let unfold_ident = mbLift $ fmap recPermUnfoldFun rp
      withPermStackM id
        (\(pctx :>: ptrans_x) ->
          pctx :>:
