@@ -28,6 +28,7 @@ import Data.Maybe
 import Data.Either
 import Data.List
 import Data.Kind
+import Data.Text (unpack)
 import GHC.TypeLits
 import qualified Data.Functor.Constant as Constant
 import Control.Applicative
@@ -536,68 +537,68 @@ returnType1 tp = return $ mkTypeTrans1 tp ETrans_Term
 -- FIXME: explain this translation
 instance TransInfo info =>
          Translate info ctx (TypeRepr a) (TypeTrans (ExprTrans a)) where
-  translate [nuP| (AnyRepr) |] =
+  translate [nuP| AnyRepr |] =
     return $ error "TypeTranslate: Any"
-  translate [nuP| (UnitRepr) |] =
+  translate [nuP| UnitRepr |] =
     returnType1 unitTypeOpenTerm
-  translate [nuP| (BoolRepr) |] =
+  translate [nuP| BoolRepr |] =
     returnType1 $ globalOpenTerm "Prelude.Bool"
-  translate [nuP| (NatRepr) |] =
+  translate [nuP| NatRepr |] =
     returnType1 $ dataTypeOpenTerm "Prelude.Nat" []
-  translate [nuP| (IntegerRepr) |] =
+  translate [nuP| IntegerRepr |] =
     return $ error "TypeTranslate: IntegerRepr"
-  translate [nuP| (RealValRepr) |] =
+  translate [nuP| RealValRepr |] =
     return $ error "TypeTranslate: RealValRepr"
-  translate [nuP| (ComplexRealRepr) |] =
+  translate [nuP| ComplexRealRepr |] =
     return $ error "TypeTranslate: ComplexRealRepr"
-  translate [nuP| (BVRepr w) |] =
+  translate [nuP| BVRepr w |] =
     returnType1 =<<
     (applyOpenTerm (globalOpenTerm "Prelude.bitvector") <$> translate w)
 
   -- Our special-purpose intrinsic types, whose translations do not have
   -- computational content
-  translate [nuP| (LLVMPointerRepr _) |] =
+  translate [nuP| LLVMPointerRepr _ |] =
     return $ mkTypeTrans0 ETrans_LLVM
-  translate [nuP| (LLVMFrameRepr _) |] =
+  translate [nuP| LLVMFrameRepr _ |] =
     return $ mkTypeTrans0 ETrans_LLVMFrame
   translate [nuP| LifetimeRepr |] =
     return $ mkTypeTrans0 ETrans_Lifetime
   translate [nuP| PermListRepr |] =
     return $ mkTypeTrans0 ETrans_PermList
-  translate [nuP| (IntrinsicRepr _ _) |] =
+  translate [nuP| IntrinsicRepr _ _ |] =
     return $ error "TypeTranslate: IntrinsicRepr"
 
-  translate [nuP| (RecursiveRepr _ _) |] =
+  translate [nuP| RecursiveRepr _ _ |] =
     return $ error "TypeTranslate: RecursiveRepr"
-  translate [nuP| (FloatRepr _) |] =
+  translate [nuP| FloatRepr _ |] =
     returnType1 $ dataTypeOpenTerm "Prelude.Float" []
-  translate [nuP| (IEEEFloatRepr _) |] =
+  translate [nuP| IEEEFloatRepr _ |] =
     return $ error "TypeTranslate: IEEEFloatRepr"
-  translate [nuP| (CharRepr) |] =
+  translate [nuP| CharRepr |] =
     return $ error "TypeTranslate: CharRepr"
-  translate [nuP| (StringRepr) |] =
+  translate [nuP| StringRepr |] =
     returnType1 $ globalOpenTerm "Prelude.String"
-  translate [nuP| (FunctionHandleRepr _ _) |] =
+  translate [nuP| FunctionHandleRepr _ _ |] =
     -- NOTE: function permissions translate to the SAW function, but the
     -- function handle itself has no SAW translation
     return $ mkTypeTrans0 ETrans_Fun
-  translate [nuP| (MaybeRepr tp) |] =
+  translate [nuP| MaybeRepr tp |] =
     return $ error "TypeTranslate: MaybeRepr"
-  translate [nuP| (VectorRepr _) |] =
+  translate [nuP| VectorRepr _ |] =
     return $ error "TypeTranslate: VectorRepr (can't map to Vec without size)"
-  translate [nuP| (StructRepr _) |] =
+  translate [nuP| StructRepr _ |] =
     return $ error "TypeTranslate: StructRepr"
-  translate [nuP| (VariantRepr _) |] =
+  translate [nuP| VariantRepr _ |] =
     return $ error "TypeTranslate: VariantRepr"
-  translate [nuP| (ReferenceRepr _) |] =
+  translate [nuP| ReferenceRepr _ |] =
     return $ error "TypeTranslate: ReferenceRepr"
-  translate [nuP| (WordMapRepr _ _) |] =
+  translate [nuP| WordMapRepr _ _ |] =
     return $ error "TypeTranslate: WordMapRepr"
-  translate [nuP| (StringMapRepr _) |] =
+  translate [nuP| StringMapRepr _ |] =
     return $ error "TypeTranslate: StringMapRepr"
-  translate [nuP| (SymbolicArrayRepr _ _) |] =
+  translate [nuP| SymbolicArrayRepr _ _ |] =
     return $ error "TypeTranslate: SymbolicArrayRepr"
-  translate [nuP| (SymbolicStructRepr _) |] =
+  translate [nuP| SymbolicStructRepr _ |] =
     return $ error "TypeTranslate: SymbolicStructRepr"
 
 
@@ -2492,6 +2493,13 @@ instance (PermCheckExtC ext, TransInfo info) =>
     applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
     [translate w, translateRWV e,
      return (bvNatOpenTerm (intValue $ mbLift w) 0)]
+
+  -- Strings
+  translate [nuP| TextLit text |] =
+    return $ ETrans_Term $ flatOpenTerm $ StringLit $
+    mbLift $ fmap unpack text
+
+  -- Everything else is an error
   translate mb_e =
     error ("Unhandled expression form: " ++
            (flip displayS "" $ renderPretty 0.8 80 $
