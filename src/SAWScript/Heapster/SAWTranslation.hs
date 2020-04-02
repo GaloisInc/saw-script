@@ -353,8 +353,8 @@ eitherElimTransM :: TypeTrans trL -> TypeTrans trR ->
                     (trR -> TransM info ctx OpenTerm) -> OpenTerm ->
                     TransM info ctx OpenTerm
 eitherElimTransM tp_l tp_r tp_ret fl fr eith =
-  do fl_trans <- lambdaTransM "x_left" tp_l fl
-     fr_trans <- lambdaTransM "x_right" tp_r fr
+  do fl_trans <- lambdaTupleTransM "x_left" tp_l fl
+     fr_trans <- lambdaTupleTransM "x_right" tp_r fr
      return $ applyOpenTermMulti (globalOpenTerm "Prelude.either")
        [ typeTransTupleType tp_l, typeTransTupleType tp_r,
          typeTransTupleType tp_ret, fl_trans, fr_trans, eith ]
