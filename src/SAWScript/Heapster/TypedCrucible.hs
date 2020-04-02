@@ -1695,6 +1695,7 @@ tcEmitLLVMStmt ::
   (CtxTrans (ctx ::> tp))
 
 -- Type-check a load of an LLVM pointer
+-- FIXME HERE NOW: change this to just look up a pointer perm, like stores
 tcEmitLLVMStmt arch ctx loc (LLVM_Load _ reg tp _ _) =
   let treg = tcReg ctx reg
       x = typedRegVar treg in
