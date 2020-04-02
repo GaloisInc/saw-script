@@ -639,6 +639,10 @@ singletonParsedCtx :: String -> TypeRepr tp -> ParsedCtx (RNil :> tp)
 singletonParsedCtx x tp =
   ParsedCtx (MNil :>: Constant x) (CruCtxCons CruCtxNil tp)
 
+-- | An empty 'ParsedCtx'
+emptyParsedCtx :: ParsedCtx RNil
+emptyParsedCtx = ParsedCtx MNil CruCtxNil
+
 -- | Add a variable name and type to the beginning of an unknown 'ParsedCtx'
 preconsSomeParsedCtx :: String -> Some TypeRepr -> Some ParsedCtx ->
                         Some ParsedCtx
@@ -658,15 +662,16 @@ mkArgsParsedCtx ctx = ParsedCtx (helper ctx) ctx where
 parseCtx :: (Stream s Identity Char, BindState s) =>
             PermParseM s (Some ParsedCtx)
 parseCtx =
-  do x <- parseIdent
-     spaces >> char ':'
-     some_tp <- parseType
-     try (do spaces >> comma
-             some_ctx' <- parseCtx
-             return $ preconsSomeParsedCtx x some_tp some_ctx')
-       <|>
-       (case some_tp of
-           Some tp -> return (Some $ singletonParsedCtx x tp))
+  (do x <- try parseIdent
+      spaces >> char ':'
+      some_tp <- parseType
+      try (do spaces >> comma
+              some_ctx' <- parseCtx
+              return $ preconsSomeParsedCtx x some_tp some_ctx')
+        <|>
+        (case some_tp of
+            Some tp -> return (Some $ singletonParsedCtx x tp))) <|>
+  return (Some emptyParsedCtx)
 
 -- | Parse a sequence @x1:p1, x2:p2, ...@ of variables and their permissions
 --
