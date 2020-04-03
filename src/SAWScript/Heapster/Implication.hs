@@ -1617,11 +1617,13 @@ gmapRetAndPerms f_perms f_impl =
 -}
 
 
--- | Remember the types associated with a list of 'Name's
+-- | Remember the types associated with a list of 'Name's, and also ensure those
+-- names have permissions
 implSetNameTypes :: MapRList Name ctx -> CruCtx ctx -> ImplM vars s r ps ps ()
 implSetNameTypes MNil _ = greturn ()
 implSetNameTypes (ns :>: n) (CruCtxCons tps tp) =
-  gmodify (over implStateNameTypes $ NameMap.insert n tp) >>>
+  gmodify (over implStateNameTypes $ NameMap.insert n tp) >>
+  gmodify (over implStatePerms $ initVarPerm n) >>
   implSetNameTypes ns tps
 
 
