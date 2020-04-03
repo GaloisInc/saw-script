@@ -213,6 +213,14 @@ instance PermPretty (Name (a :: Type)) where
          Just (StringF str) -> return $ string str
          Nothing -> return $ string (show x)
 
+instance PermPretty (MapRList Name (ctx :: RList CrucibleType)) where
+  permPrettyM MNil = return PP.empty
+  permPrettyM (MNil :>: n) = permPrettyM n
+  permPrettyM (ns :>: n) =
+    do pp_ns <- permPrettyM ns
+       pp_n <- permPrettyM n
+       return (pp_ns <> comma <+> pp_n)
+
 -- FIXME: move to Hobbits...?
 {-
 instance TraversableFC MapRList where
