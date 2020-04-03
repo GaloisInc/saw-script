@@ -2703,8 +2703,7 @@ translateLLVMStmt [nuP| OffsetLLVMValue x off |] m =
   inExtTransM ETrans_LLVM $
   withPermStackM (:>: Member_Base)
   (:>: (PTrans_Eq $ extMb $
-        mbMap2 PExpr_LLVMOffset (fmap typedRegVar x)
-        (fmap (PExpr_Var . typedRegVar) off)))
+        mbMap2 PExpr_LLVMOffset (fmap typedRegVar x) off))
   m
 
 translateLLVMStmt [nuP| TypedLLVMLoad _ (mb_fp :: LLVMFieldPerm w)

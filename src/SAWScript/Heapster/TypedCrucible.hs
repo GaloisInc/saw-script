@@ -25,7 +25,7 @@
 module SAWScript.Heapster.TypedCrucible where
 
 import Data.Maybe
-import Data.Text hiding (length, map, concat, findIndex)
+import Data.Text hiding (length, map, concat, findIndex, foldr)
 import Data.List (findIndex)
 import Data.Type.Equality
 import Data.Functor.Identity
@@ -329,7 +329,7 @@ data TypedLLVMStmt w ret ps_in ps_out where
   --
   -- Type: @. -o ret:eq(x &+ off)@
   OffsetLLVMValue :: (1 <= w2, KnownNat w2) =>
-                     TypedReg (LLVMPointerType w2) -> TypedReg (BVType w2) ->
+                     TypedReg (LLVMPointerType w2) -> PermExpr (BVType w2) ->
                      TypedLLVMStmt w (LLVMPointerType w2)
                      RNil
                      (RNil :> LLVMPointerType w2)
@@ -486,8 +486,8 @@ typedLLVMStmtOut (AssertLLVMWord (TypedReg x) _) ret =
 typedLLVMStmtOut (AssertLLVMPtr _) _ = DistPermsNil
 typedLLVMStmtOut (DestructLLVMWord (TypedReg x) e) ret =
   distPerms1 ret (ValPerm_Eq e)
-typedLLVMStmtOut (OffsetLLVMValue (TypedReg x) (TypedReg off)) ret =
-  distPerms1 ret (ValPerm_Eq $ PExpr_LLVMOffset x $ PExpr_Var off)
+typedLLVMStmtOut (OffsetLLVMValue (TypedReg x) off) ret =
+  distPerms1 ret (ValPerm_Eq $ PExpr_LLVMOffset x off)
 typedLLVMStmtOut (TypedLLVMLoad (TypedReg x) fp ps ps_l) ret =
   if lifetimeCurrentPermsLifetime ps_l == llvmFieldLifetime fp then
     appendDistPerms
@@ -717,8 +717,8 @@ instance SubstVar PermVarSubst m =>
     AssertLLVMPtr <$> genSubst s r
   genSubst s [nuP| DestructLLVMWord r e |] =
     DestructLLVMWord <$> genSubst s r <*> genSubst s e
-  genSubst s [nuP| OffsetLLVMValue r1 r2 |] =
-    OffsetLLVMValue <$> genSubst s r1 <*> genSubst s r2
+  genSubst s [nuP| OffsetLLVMValue r off |] =
+    OffsetLLVMValue <$> genSubst s r <*> genSubst s off
   genSubst s [nuP| TypedLLVMLoad r fp ps ps_l |] =
     TypedLLVMLoad <$> genSubst s r <*> genSubst s fp <*> genSubst s ps <*>
     genSubst s ps_l
@@ -1246,6 +1246,25 @@ getSimpleRegPerm r =
     implPopM (typedRegVar r) p >>> greturn p) >>>= \(_, p_ret) ->
   greturn p_ret
 
+-- | Eliminate any disjunctions, existentials, or recursive permissions for any
+-- variables in the supplied expression and substitute any equality permissions
+-- for those variables
+getEqualsExpr :: PermExpr a ->
+                 StmtPermCheckM ext cblocks blocks ret args ps ps (PermExpr a)
+getEqualsExpr e@(PExpr_Var x) =
+  getSimpleRegPerm (TypedReg x) >>>= \p ->
+  case p of
+    ValPerm_Eq e' -> getEqualsExpr e'
+    _ -> greturn e
+getEqualsExpr (PExpr_BV factors off) =
+  foldr bvAdd (PExpr_BV [] off) <$>
+  mapM (\(BVFactor i x) -> bvMult i <$> getEqualsExpr (PExpr_Var x)) factors
+getEqualsExpr (PExpr_LLVMOffset x off) =
+  getEqualsExpr (PExpr_Var x) >>>= \e ->
+  getEqualsExpr off >>>= \off' ->
+  greturn (addLLVMOffset e off)
+getEqualsExpr e = greturn e
+
 
 -- | Eliminate any disjunctions, existentials, recursive permissions, or
 -- equality permissions for an LLVM register until we either get a conjunctive
@@ -1708,8 +1727,17 @@ tcExpr (NatLit i) = greturn $ Just $ PExpr_Nat $ toInteger i
 
 tcExpr (BVLit w i) = withKnownNat w $ greturn $ Just $ bvInt i
 
+tcExpr (BVSext w2 _ (RegWithVal _ (bvMatchConst -> Just i))) =
+  withKnownNat w2 $ greturn $ Just $ bvInt i
+
 tcExpr (BVAdd w (RegWithVal _ e1) (RegWithVal _ e2)) =
   withKnownNat w $ greturn $ Just $ bvAdd e1 e2
+
+tcExpr (BVMul w (RegWithVal _ (bvMatchConst -> Just i)) (RegWithVal _ e)) =
+  withKnownNat w $ greturn $ Just $ bvMult i e
+
+tcExpr (BVMul w (RegWithVal _ e) (RegWithVal _ (bvMatchConst -> Just i))) =
+  withKnownNat w $ greturn $ Just $ bvMult i e
 
 tcExpr _ = greturn Nothing -- FIXME HERE NOW: at least handle bv operations
 
@@ -2154,7 +2182,8 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
 tcEmitLLVMStmt arch ctx loc (LLVM_PtrAddOffset w _ ptr off) =
   let tptr = tcReg ctx ptr
       toff = tcReg ctx off in
-  emitLLVMStmt knownRepr loc (OffsetLLVMValue tptr toff) >>>= \ret ->
+  getEqualsExpr (PExpr_Var $ typedRegVar toff) >>>= \off_expr ->
+  emitLLVMStmt knownRepr loc (OffsetLLVMValue tptr off_expr) >>>= \ret ->
   stmtRecombinePerms >>>
   greturn (addCtxName ctx ret)
 
