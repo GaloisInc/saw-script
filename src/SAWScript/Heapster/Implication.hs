@@ -1668,7 +1668,9 @@ implTraceM f =
 
 -- | Terminate the current proof branch with a failure
 implFailM :: ImplM vars s r ps_any ps a
-implFailM = implApplyImpl1 Impl1_Fail MNil
+implFailM =
+  implTraceM (const $ string "Implication failed") >>>
+  implApplyImpl1 Impl1_Fail MNil
 
 -- | Call 'implFailM' and also output a debugging message
 implFailMsgM :: String -> ImplM vars s r ps_any ps a
@@ -2111,10 +2113,11 @@ recombinePerm x p = getPerm x >>>= \x_p -> recombinePermExpl x x_p p
 recombinePermExpl :: ExprVar a -> ValuePerm a -> ValuePerm a ->
                      ImplM RNil s r as (as :> a) ()
 recombinePermExpl x x_p p =
+  {-
   getPPInfo >>>= \info ->
   tracePretty (string "recombinePerm" <+> permPretty info x
                </> permPretty info x_p </> string "<-"
-               </> permPretty info p) $
+               </> permPretty info p) $ -}
   recombinePerm' x x_p p
 
 recombinePerm' :: ExprVar a -> ValuePerm a -> ValuePerm a ->

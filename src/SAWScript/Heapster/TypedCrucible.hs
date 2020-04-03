@@ -1328,6 +1328,32 @@ getRegFunPerm freg =
     _ -> stmtFailM (\i ->
                      string "No function permission for" <+> permPretty i freg)
 
+-- | Pretty-print the permissions that are "relevant" to a register, which
+-- includes its permissions and all those relevant to any register it is equal
+-- to, possibly plus some offset
+ppRelevantPerms :: TypedReg tp ->
+                   PermCheckM ext cblocks blocks ret args r ps r ps Doc
+ppRelevantPerms r =
+  getRegPerm r >>>= \p ->
+  permGetPPInfo >>>= \ppInfo ->
+  let pp_r = permPretty ppInfo r <> colon <> permPretty ppInfo p in
+  case p of
+    ValPerm_Eq (PExpr_Var x) ->
+      ((pp_r <> comma) <+>) <$> ppRelevantPerms (TypedReg x)
+    ValPerm_Eq (PExpr_LLVMOffset x _) ->
+      ((pp_r <> comma) <+>) <$> ppRelevantPerms (TypedReg x)
+    _ -> greturn pp_r
+
+-- | Pretty-print a Crucible 'Reg' and what 'TypedReg' it is equal to, along
+-- with the relevant permissions for that 'TypedReg'
+ppCruRegAndPerms :: CtxTrans ctx -> Reg ctx a ->
+                    PermCheckM ext cblocks blocks ret args r ps r ps Doc
+ppCruRegAndPerms ctx r =
+  permGetPPInfo >>>= \ppInfo ->
+  ppRelevantPerms (tcReg ctx r) >>>= \pp ->
+  greturn (PP.group (pretty r <+> char '=' <+> permPretty ppInfo (tcReg ctx r)
+                     <> comma <+> pp))
+
 -- | Find all the variables of LLVM frame pointer type in a sequence
 -- FIXME: move to Permissions.hs
 findLLVMFrameVars :: NatRepr w -> CruCtx as -> MapRList Name as ->
@@ -1386,11 +1412,15 @@ setVarTypes _ CruCtxNil = greturn ()
 setVarTypes (xs :>: x) (CruCtxCons tps tp) =
   setVarTypes xs tps >>> setVarType x tp
 
+-- | Get the current 'PPInfo'
+permGetPPInfo :: PermCheckM ext cblocks blocks ret args r ps r ps PPInfo
+permGetPPInfo = stPPInfo <$> get
+
 -- | Emit debugging output using the current 'PPInfo'
 stmtTraceM :: (PPInfo -> Doc) ->
               PermCheckM ext cblocks blocks ret args r ps r ps ()
 stmtTraceM f =
-  (f <$> stPPInfo <$> get) >>>= \doc -> tracePretty doc (greturn ())
+  (f <$> permGetPPInfo) >>>= \doc -> tracePretty doc (greturn ())
 
 -- | Failure in the statement permission-checking monad
 stmtFailM :: (PPInfo -> Doc) -> PermCheckM ext cblocks blocks ret args r1 ps1
@@ -1693,7 +1723,19 @@ tcEmitStmt :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
 tcEmitStmt ctx loc stmt =
   stmtTraceM (const (string "Type-checking statement:" <+>
                      ppStmt (size ctx) stmt)) >>>
-  tcEmitStmt' ctx loc stmt
+  permGetPPInfo >>>= \ppInfo ->
+  mapM (\(Some r) -> ppCruRegAndPerms ctx r)
+  (stmtInputRegs stmt) >>>= \pps ->
+  stmtTraceM (const (string "Input perms:" </>
+                     encloseSep PP.empty PP.empty comma pps)) >>>
+  tcEmitStmt' ctx loc stmt >>>= \ctx' ->
+  mapM (\(Some r) -> ppCruRegAndPerms ctx' r) (stmtOutputRegs
+                                               (Ctx.size ctx')
+                                               stmt) >>>= \pps ->
+  stmtTraceM (const (string "Output perms:" </>
+                     encloseSep PP.empty PP.empty comma pps)) >>>
+  greturn ctx'
+
 
 tcEmitStmt' :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
                Stmt ext ctx ctx' ->
@@ -2304,6 +2346,9 @@ tcBlockEntry is_scc blk (BlockEntryInfo {..}) =
         (cruCtxProxies $ entryInfoArgs) ns in
   setVarTypes ns (appendCruCtx (entryGhosts entryInfoID) entryInfoArgs) >>>
   stmtTraceM (\i ->
+               string "Type-checking block" <+> pretty (blockID blk) <>
+               comma <+> string "entrypoint" <+> int (entryIndex entryInfoID)
+               <> line <>
                string "Input types:"
                <> align (pretty $
                          appendCruCtx (entryGhosts entryInfoID) entryInfoArgs)

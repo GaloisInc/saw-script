@@ -31,7 +31,8 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
 import Lang.Crucible.CFG.Expr
-import Lang.Crucible.CFG.Core
+import Lang.Crucible.CFG.Core hiding (App)
+import qualified Lang.Crucible.CFG.Core as Core
 import Lang.Crucible.CFG.Extension
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.LLVM.Extension
@@ -480,3 +481,53 @@ cruCtxProxies (CruCtxCons ctx _) = cruCtxProxies ctx :>: Proxy
 cruCtxLen :: CruCtx ctx -> Int
 cruCtxLen CruCtxNil = 0
 cruCtxLen (CruCtxCons ctx _) = 1 + cruCtxLen ctx
+
+
+----------------------------------------------------------------------
+-- * Misc Operations on Crucible Objects
+----------------------------------------------------------------------
+
+-- | Get all the registers used in a Crucible statement
+stmtInputRegs :: (TraversableFC (ExprExtension ext),
+                  TraversableFC (StmtExtension ext)) =>
+                 Stmt ext ctx ctx' -> [Some (Reg ctx)]
+stmtInputRegs (SetReg _ (Core.App app)) = foldMapFC (\r -> [Some r]) app
+stmtInputRegs (ExtendAssign s') = foldMapFC (\r -> [Some r]) s'
+stmtInputRegs (CallHandle _ h _ args) =
+  Some h : foldMapFC (\r -> [Some r]) args
+stmtInputRegs (Print msg) = [Some msg]
+stmtInputRegs (ReadGlobal _) = []
+stmtInputRegs (WriteGlobal _ r) = [Some r]
+stmtInputRegs (FreshConstant _ _) = []
+stmtInputRegs (NewRefCell _ r) = [Some r]
+stmtInputRegs (NewEmptyRefCell _) = []
+stmtInputRegs (ReadRefCell r) = [Some r]
+stmtInputRegs (WriteRefCell r1 r2) = [Some r1, Some r2]
+stmtInputRegs (DropRefCell r) = [Some r]
+stmtInputRegs (Assert r1 r2) = [Some r1, Some r2]
+stmtInputRegs (Assume r1 r2) = [Some r1, Some r2]
+
+-- | Get all the input and output registers of a Crucible statement
+stmtOutputRegs :: (TraversableFC (ExprExtension ext),
+                   TraversableFC (StmtExtension ext)) =>
+                  Size ctx' -> Stmt ext ctx ctx' -> [Some (Reg ctx')]
+stmtOutputRegs sz (SetReg _ (Core.App app)) =
+  foldMapFC (\r -> [Some $ extendReg r]) app ++ [Some $ Reg $ Ctx.lastIndex sz]
+stmtOutputRegs sz (ExtendAssign s') =
+  foldMapFC (\r -> [Some $ extendReg r]) s' ++ [Some $ Reg $ Ctx.lastIndex sz]
+stmtOutputRegs sz (CallHandle _ h _ args) =
+  Some (extendReg h) : foldMapFC (\r -> [Some $ extendReg r]) args
+  ++ [Some $ Reg $ Ctx.lastIndex sz]
+stmtOutputRegs sz (Print msg) = [Some msg]
+stmtOutputRegs sz (ReadGlobal _) = []
+stmtOutputRegs sz (WriteGlobal _ r) = [Some r]
+stmtOutputRegs sz (FreshConstant _ _) = []
+stmtOutputRegs sz (NewRefCell _ r) =
+  [Some $ extendReg r] ++ [Some $ Reg $ Ctx.lastIndex sz]
+stmtOutputRegs sz (NewEmptyRefCell _) = []
+stmtOutputRegs sz (ReadRefCell r) =
+  [Some $ extendReg r] ++ [Some $ Reg $ Ctx.lastIndex sz]
+stmtOutputRegs sz (WriteRefCell r1 r2) = [Some r1, Some r2]
+stmtOutputRegs sz (DropRefCell r) = [Some r]
+stmtOutputRegs sz (Assert r1 r2) = [Some r1, Some r2]
+stmtOutputRegs sz (Assume r1 r2) = [Some r1, Some r2]
