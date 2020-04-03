@@ -2215,13 +2215,18 @@ buildInputPermsH mb_perms mb_args =
                        appendDistPerms perms (mkEqVarPerms arg_vars args))
   mb_perms mb_args
 
-buildInputPerms :: MapRList Name (ghosts :: RList CrucibleType) ->
+buildInputPerms :: PPInfo -> MapRList Name (ghosts :: RList CrucibleType) ->
                    DistPerms ghosts -> MapRList Name args ->
                    Closed (MbDistPerms (ghosts :++: args))
-buildInputPerms xs perms_in args_in =
+buildInputPerms ppInfo xs perms_in args_in =
   $(mkClosed [| buildInputPermsH |])
-  `clApply` maybe (error "buildInputPerms") id (abstractVars xs perms_in)
-  `clApply` maybe (error "buildInputPerms") id (abstractVars xs args_in)
+  `clApply` maybe (error ("buildInputPerms:\n" ++
+                          permPrettyString ppInfo xs ++ "\n" ++
+                          permPrettyString ppInfo perms_in)) id
+  (abstractVars xs perms_in)
+  `clApply` maybe (error ("buildInputPerms: " ++
+                          permPrettyString ppInfo args_in)) id
+  (abstractVars xs args_in)
 
 abstractPermsRet :: MapRList Name (ghosts :: RList CrucibleType) ->
                     MapRList f args ->
@@ -2271,7 +2276,7 @@ tcJumpTarget ctx (JumpTarget blkID arg_tps args) =
         -- constructed above as input permissions
         liftPermCheckM
         (insNewBlockEntry memb (mkCruCtx arg_tps) ghost_tps
-         (buildInputPerms (distPermsVars ghost_perms) ghost_perms args_vars)
+         (buildInputPerms ppInfo (distPermsVars ghost_perms) ghost_perms args_vars)
          (abstractPermsRet (distPermsVars ghost_perms)
           args_vars ret_perms)) >>>= \entryID ->
 
