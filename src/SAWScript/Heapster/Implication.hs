@@ -2133,6 +2133,8 @@ recombinePerm' x x_p@(ValPerm_Eq (PExpr_Var y)) p =
 recombinePerm' x x_p@(ValPerm_Eq (PExpr_LLVMOffset y off)) (ValPerm_Conj ps) =
   implPushM x x_p >>> introEqCopyM x (PExpr_LLVMOffset y off) >>>
   implPopM x x_p >>> implSimplM Proxy (SImpl_InvertLLVMOffsetEq x off y) >>>
+  implSwapM x (ValPerm_Conj ps) y (ValPerm_Eq
+                                   (PExpr_LLVMOffset x (bvNegate off))) >>>
   castLLVMPtrM x ps (bvNegate off) y >>>
   getPerm y >>>= \y_p ->
   recombinePermExpl y y_p (ValPerm_Conj $ map (offsetLLVMAtomicPerm off) ps)
