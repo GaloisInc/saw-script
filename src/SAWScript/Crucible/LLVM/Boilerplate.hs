@@ -41,7 +41,7 @@ sortByDeps skels = reverse $ (\(f, _, _) -> f) . fromVertex <$> Graph.topSort g
     adjacency s = (s, s ^. funSkelName, Set.toList $ s ^. funSkelCalls)
 
 preBoilerplate :: ModuleSkeleton -> Text
-preBoilerplate _mskel = "enable_experimental;\nMODULE_SKEL <- module_skeleton MODULE;\n"
+preBoilerplate _mskel = "enable_experimental;\nMODULE_SKEL <- module_skeleton MODULE;\n\n"
 
 functionBoilerplate :: FunctionSkeleton -> Text
 functionBoilerplate fskel = mconcat
@@ -71,4 +71,3 @@ llvm_boilerplate path (Some (modAST -> m)) = do
     [ preBoilerplate mskel
     , Text.unlines $ functionBoilerplate <$> fskels
     ]
-  pure ()
