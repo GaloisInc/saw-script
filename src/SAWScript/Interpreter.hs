@@ -44,8 +44,6 @@ import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizeP
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
-import qualified Text.LLVM.AST as L
-
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
@@ -1619,72 +1617,99 @@ primitives = Map.fromList
   , prim "module_skeleton" "LLVMModule -> TopLevel ModuleSkeleton"
     (pureVal module_skeleton)
     Experimental
-    []
+    [ "Given a handle to an LLVM module, return a skeleton for that module."
+    ]
 
   , prim "function_skeleton" "ModuleSkeleton -> String -> TopLevel FunctionSkeleton"
     (pureVal function_skeleton)
     Experimental
-    []
+    [ "Given a module skeleton and a function name, return the corresponding"
+    , "function skeleton."
+    ]
 
   , prim "skeleton_resize_arg_index" "FunctionSkeleton -> Int -> Int -> Bool -> TopLevel FunctionSkeleton"
     (pureVal skeleton_resize_arg_index)
     Experimental
-    []
+    [ "Given a function skeleton, argument index, array length, and whether or"
+    , "not that argument is initialized, return a new function skeleton where"
+    , "the assumed length/initialization of the given argument is updated."
+    ]
 
   , prim "skeleton_resize_arg" "FunctionSkeleton -> String -> Int -> Bool -> TopLevel FunctionSkeleton"
     (pureVal skeleton_resize_arg)
     Experimental
-    []
+    [ "Given a function skeleton, argument name, array length, and whether or"
+    , "not that argument is initialized, return a new function skeleton where"
+    , "the assumed length/initialization of the given argument is updated."
+    ]
 
   , prim "skeleton_guess_arg_sizes" "FunctionSkeleton -> LLVMModule -> [(String, [FunctionProfile])] -> TopLevel FunctionSkeleton"
     (pureVal skeleton_guess_arg_sizes)
     Experimental
-    []
+    [ "Update the sizes of all arguments of the given function skeleton using"
+    , "information obtained from 'crucible_llvm_array_size_profile'."
+    ]
 
   , prim "skeleton_globals_pre" "ModuleSkeleton -> CrucibleSetup ()"
     (bicVal skeleton_globals_pre)
     Experimental
-    []
+    [ "Allocate and initialize mutable globals from the given module skeleton."
+    ]
 
   , prim "skeleton_globals_post" "ModuleSkeleton -> CrucibleSetup ()"
     (bicVal skeleton_globals_post)
     Experimental
-    []
+    [ "Assert that all mutable globals from the given module skeleton are unchanged."
+    ]
 
   , prim "skeleton_prestate" "FunctionSkeleton -> CrucibleSetup SkeletonState"
     (bicVal skeleton_prestate)
     Experimental
-    []
+    [ "Allocate and initialize the arguments of the given function skeleton."
+    , "Return a 'SkeletonState' from which those arguments can be retrieved,"
+    , "so that preconditions can be imposed."
+    ]
 
   , prim "skeleton_poststate" "FunctionSkeleton -> SkeletonState -> CrucibleSetup SkeletonState"
     (bicVal skeleton_poststate)
     Experimental
-    []
+    [ "Assert that pointer arguments of the given function skeleton remain"
+    , "initialized. Return a 'SkeletonState' from which those arguments can"
+    , "be retrieved, so that postconditions can be imposed."
+    ]
 
   , prim "skeleton_arg_index" "SkeletonState -> Int -> CrucibleSetup Term"
     (bicVal skeleton_arg_index)
     Experimental
-    []
+    [ "Retrieve the argument value at the given index from the given 'SkeletonState'."
+    ]
 
   , prim "skeleton_arg" "SkeletonState -> String -> CrucibleSetup Term"
     (bicVal skeleton_arg)
     Experimental
-    []
+    [ "Retrieve the argument value of the given name from the given 'SkeletonState'."
+    ]
 
   , prim "skeleton_arg_index_pointer" "SkeletonState -> Int -> CrucibleSetup SetupValue"
     (bicVal skeleton_arg_index_pointer)
     Experimental
-    []
+    [ "Retrieve the argument pointer at the given indexfrom the given 'SkeletonState'."
+    , "Fails if the specified argument is not a pointer."
+    ]
 
   , prim "skeleton_arg_pointer" "SkeletonState -> String -> CrucibleSetup SetupValue"
     (bicVal skeleton_arg_pointer)
     Experimental
-    []
+    [ "Retrieve the argument pointer of the given name from the given 'SkeletonState'."
+    , "Fails if the specified argument is not a pointer."
+    ]
 
   , prim "skeleton_exec" "SkeletonState -> CrucibleSetup ()"
     (bicVal skeleton_exec)
     Experimental
-    []
+    [ "Wrapper around 'crucible_execute_func' that passes the arguments initialized"
+    , "in 'skeleton_prestate'."
+    ]
 
   , prim "llvm_boilerplate" "String -> LLVMModule -> TopLevel ()"
     (pureVal llvm_boilerplate)
