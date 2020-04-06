@@ -792,7 +792,7 @@ simplImplOut (SImpl_InvertLLVMOffsetEq x off y) =
 simplImplOut (SImpl_OffsetLLVMWord _ e off x) =
   distPerms1 x (ValPerm_Eq $ PExpr_LLVMWord $ bvAdd e off)
 simplImplOut (SImpl_CastLLVMPtr _ ps off x) =
-  distPerms1 x (ValPerm_Conj $ map (offsetLLVMAtomicPerm $ bvNegate off) ps)
+  distPerms1 x (ValPerm_Conj $ mapMaybe (offsetLLVMAtomicPerm $ bvNegate off) ps)
 simplImplOut (SImpl_CastLLVMFree x _ e2) =
   distPerms1 x (ValPerm_Conj [Perm_LLVMFree e2])
 simplImplOut (SImpl_CastLLVMFieldOffset x fld off') =
@@ -2139,7 +2139,7 @@ recombinePerm' x x_p@(ValPerm_Eq (PExpr_LLVMOffset y off)) (ValPerm_Conj ps) =
                                    (PExpr_LLVMOffset x (bvNegate off))) >>>
   castLLVMPtrM x ps (bvNegate off) y >>>
   getPerm y >>>= \y_p ->
-  recombinePermExpl y y_p (ValPerm_Conj $ map (offsetLLVMAtomicPerm off) ps)
+  recombinePermExpl y y_p (ValPerm_Conj $ mapMaybe (offsetLLVMAtomicPerm off) ps)
 recombinePerm' _ _ (ValPerm_Eq _) =
   -- NOTE: we could handle this by swapping the stack with the variable perm and
   -- calling recombinePerm again, but this could potentially create permission
@@ -2654,6 +2654,13 @@ proveVarAtomicImpl x ps ap@[nuP| Perm_LLVMFree mb_e |] =
       castLLVMFreeM x e' e
     _ -> proveVarAtomicImplFail x ps ap
 
+proveVarAtomicImpl x ps ap@[nuP| Perm_LLVMFunPtr mb_fperm |] =
+  partialSubstForceM mb_fperm
+  "proveVarAtomicImpl: incomplete psubst: LLVM function pointer" >>>= \fperm ->
+  case elemIndex (Perm_LLVMFunPtr fperm) ps of
+    Just i -> implCopyConjM x ps i >>> implPopM x (ValPerm_Conj ps)
+    _ -> proveVarAtomicImplFail x ps ap
+
 proveVarAtomicImpl x ps [nuP| Perm_IsLLVMPtr |]
   | Just i <- elemIndex Perm_IsLLVMPtr ps =
     implCopyConjM x ps i >>> implPopM x (ValPerm_Conj ps)
@@ -2866,14 +2873,16 @@ proveVarImplH x p [nuP| ValPerm_Conj [] |] = implPopM x p >>> introConjM x
 -- Prove x:(p1 * .. * pn) from x:eq(y+off) by proving y:(p1 + off * ...) and
 -- then casting the result
 proveVarImplH x p@(ValPerm_Eq
-                   e@(PExpr_LLVMOffset y off)) mb_p@[nuP| ValPerm_Conj mb_ps |] =
-  introEqCopyM x e >>>
-  implPopM x p >>>
-  proveVarImpl y (fmap (ValPerm_Conj
-                        . map (offsetLLVMAtomicPerm off)) mb_ps) >>>
-  mapM (flip partialSubstForceM
-        "proveVarImpl: incomplete psubst: castLLVMPtr") (mbList mb_ps) >>>= \ps ->
-  castLLVMPtrM y ps off x
+                   e@(PExpr_LLVMOffset y off)) mb_p@[nuP| ValPerm_Conj mb_ps |]
+  | mbLift (fmap (all (canOffsetLLVMAtomicPerm off)) mb_ps) =
+    let mb_ps_y = fmap (map (fromJust . offsetLLVMAtomicPerm off)) mb_ps in
+    introEqCopyM x e >>>
+    implPopM x p >>>
+    proveVarImpl y (fmap ValPerm_Conj mb_ps_y) >>>
+    mapM (flip partialSubstForceM
+          "proveVarImpl: incomplete psubst: castLLVMPtr") (mbList
+                                                           mb_ps_y) >>>= \ps_y ->
+    castLLVMPtrM y ps_y off x
 
 -- If x:eq(LLVMword(e)) then we cannot prove any pointer permissions for it
 proveVarImplH x p@(ValPerm_Eq (PExpr_LLVMWord _)) mb_p@[nuP| ValPerm_Conj _ |] =

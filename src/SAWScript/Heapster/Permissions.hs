@@ -800,6 +800,11 @@ data AtomicPerm (a :: CrucibleType) where
   Perm_LLVMFree :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
                    AtomicPerm (LLVMPointerType w)
 
+  -- | Says that we known an LLVM value is a function pointer whose function has
+  -- the given function permissions
+  Perm_LLVMFunPtr :: (1 <= w, KnownNat w) => FunPerm ghosts args ret ->
+                     AtomicPerm (LLVMPointerType w)
+
   -- | Says we know an LLVM value is a pointer value, meaning that its block
   -- value is non-zero. Note that this does not say the pointer is allocated.
   Perm_IsLLVMPtr :: (1 <= w, KnownNat w) =>
@@ -1172,6 +1177,11 @@ instance Eq (AtomicPerm a) where
   (Perm_LLVMArray _) == _ = False
   (Perm_LLVMFree e1) == (Perm_LLVMFree e2) = e1 == e2
   (Perm_LLVMFree _) == _ = False
+  (Perm_LLVMFunPtr fperm1) == (Perm_LLVMFunPtr fperm2)
+    | Just Refl <- testEquality (funPermArgs fperm1) (funPermArgs fperm2)
+    , Just Refl <- testEquality (funPermRet fperm1) (funPermRet fperm2)
+    , Just Refl <- funPermEq fperm1 fperm2 = True
+  (Perm_LLVMFunPtr _) == _ = False
   Perm_IsLLVMPtr == Perm_IsLLVMPtr = True
   Perm_IsLLVMPtr == _ = False
   (Perm_LLVMFrame frame1) == (Perm_LLVMFrame frame2) = frame1 == frame2
@@ -1200,6 +1210,18 @@ funPermEq (FunPerm ghosts1 _ _ perms_in1 perms_out1)
   , perms_in1 == perms_in2 && perms_out1 == perms_out2
   = Just Refl
 funPermEq _ _ = Nothing
+
+-- | Test if function permissions with all 3 type args different are equal
+funPermEq3 :: FunPerm ghosts1 args1 ret1 -> FunPerm ghosts2 args2 ret2 ->
+              Maybe (ghosts1 :~: ghosts2, args1 :~: args2, ret1 :~: ret2)
+funPermEq3 (FunPerm ghosts1 args1 ret1 perms_in1 perms_out1)
+  (FunPerm ghosts2 args2 ret2 perms_in2 perms_out2)
+  | Just Refl <- testEquality ghosts1 ghosts2
+  , Just Refl <- testEquality args1 args2
+  , Just Refl <- testEquality ret1 ret2
+  , perms_in1 == perms_in2 && perms_out1 == perms_out2
+  = Just (Refl, Refl, Refl)
+funPermEq3 _ _ = Nothing
 
 instance Eq (FunPerm ghosts args ret) where
   fperm1 == fperm2 = isJust (funPermEq fperm1 fperm2)
@@ -1254,6 +1276,8 @@ instance PermPretty (AtomicPerm a) where
                             string "*" <> pp_stride,
                             list pp_flds, list pp_bs]))
   permPrettyM (Perm_LLVMFree e) = (string "free" <+>) <$> permPrettyM e
+  permPrettyM (Perm_LLVMFunPtr fp) =
+    (string "llvm_funptr" <+>) <$> permPrettyM fp
   permPrettyM Perm_IsLLVMPtr = return (string "is_llvmptr")
   permPrettyM (Perm_LLVMFrame fperm) =
     do pps <- mapM (\(e,i) -> (<> (colon <> integer i)) <$> permPrettyM e) fperm
@@ -1715,15 +1739,24 @@ llvmArrayPermOfSize :: (1 <= w, KnownNat w) => Integer ->
                        ValuePerm (LLVMPointerType w)
 llvmArrayPermOfSize sz = ValPerm_Conj [llvmArrayPtrPermOfSize sz]
 
--- | Add an offset to an LLVM pointer permission
+-- | Test if an LLVM pointer permission can be offset by the given offset; i.e.,
+-- whether 'offsetLLVMAtomicPerm' returns a value
+canOffsetLLVMAtomicPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
+                           LLVMPtrPerm w -> Bool
+canOffsetLLVMAtomicPerm off p = isJust $ offsetLLVMAtomicPerm off p
+
+-- | Add an offset to an LLVM pointer permission, returning 'Nothing' for
+-- permissions like @free@ and @llvm_funptr@ that cannot be offset
 offsetLLVMAtomicPerm :: (1 <= w, KnownNat w) => PermExpr (BVType w) ->
-                        LLVMPtrPerm w -> LLVMPtrPerm w
+                        LLVMPtrPerm w -> Maybe (LLVMPtrPerm w)
+offsetLLVMAtomicPerm (bvMatchConst -> Just 0) p = Just p
 offsetLLVMAtomicPerm off (Perm_LLVMField fp) =
-  Perm_LLVMField $ offsetLLVMFieldPerm off fp
+  Just $ Perm_LLVMField $ offsetLLVMFieldPerm off fp
 offsetLLVMAtomicPerm off (Perm_LLVMArray ap) =
-  Perm_LLVMArray $ offsetLLVMArrayPerm off ap
-offsetLLVMAtomicPerm _ (Perm_LLVMFree e) = Perm_LLVMFree e
-offsetLLVMAtomicPerm _ p@Perm_IsLLVMPtr = p
+  Just $ Perm_LLVMArray $ offsetLLVMArrayPerm off ap
+offsetLLVMAtomicPerm _ (Perm_LLVMFree _) = Nothing
+offsetLLVMAtomicPerm _ (Perm_LLVMFunPtr _) = Nothing
+offsetLLVMAtomicPerm _ p@Perm_IsLLVMPtr = Just p
 
 -- | Add an offset to a field permission
 offsetLLVMFieldPerm :: (1 <= w, KnownNat w) =>
@@ -1819,7 +1852,7 @@ llvmFrameDeletionPerms [] = Some DistPermsNil
 llvmFrameDeletionPerms ((asLLVMOffset -> Just (x,off), sz):fperm')
   | Some del_perms <- llvmFrameDeletionPerms fperm' =
     Some $ DistPermsCons del_perms x $ ValPerm_Conj
-    (map (offsetLLVMAtomicPerm off . Perm_LLVMField) $
+    (map (Perm_LLVMField . offsetLLVMFieldPerm off) $
      llvmFieldsOfSize knownNat sz)
     -- [offsetLLVMAtomicPerm off $ llvmArrayPtrPermOfSize sz]
 llvmFrameDeletionPerms _ =
@@ -1963,6 +1996,7 @@ atomicPermIsCopyable (Perm_LLVMArray
                       (LLVMArrayPerm { llvmArrayFields = fps })) =
   all (atomicPermIsCopyable . Perm_LLVMField) fps
 atomicPermIsCopyable (Perm_LLVMFree _) = True
+atomicPermIsCopyable (Perm_LLVMFunPtr _) = True
 atomicPermIsCopyable Perm_IsLLVMPtr = True
 atomicPermIsCopyable (Perm_LLVMFrame _) = False
 atomicPermIsCopyable (Perm_LOwned _) = False
@@ -2029,6 +2063,7 @@ instance ContainsLifetime (AtomicPerm a) where
   containsLifetime l (Perm_LLVMField fp) = containsLifetime l fp
   containsLifetime l (Perm_LLVMArray ap) = containsLifetime l ap
   containsLifetime _ (Perm_LLVMFree _) = False
+  containsLifetime _ (Perm_LLVMFunPtr _) = False
   containsLifetime _ Perm_IsLLVMPtr = False
   containsLifetime _ (Perm_LLVMFrame _) = False
   containsLifetime l (Perm_LOwned _) =
@@ -2083,6 +2118,7 @@ instance InLifetime (AtomicPerm a) where
   inLifetime l (Perm_LLVMArray ap) =
     Perm_LLVMArray $ inLifetime l ap
   inLifetime _ p@(Perm_LLVMFree _) = p
+  inLifetime _ p@(Perm_LLVMFunPtr _) = p
   inLifetime _ p@Perm_IsLLVMPtr = p
   inLifetime _ p@(Perm_LLVMFrame _) = p
   inLifetime l (Perm_LOwned _) = Perm_LCurrent l
@@ -2136,6 +2172,7 @@ instance MinLtEndPerms (AtomicPerm a) where
   minLtEndPerms l (Perm_LLVMArray ap) =
     Perm_LLVMArray $ minLtEndPerms l ap
   minLtEndPerms _ p@(Perm_LLVMFree _) = p
+  minLtEndPerms _ p@(Perm_LLVMFunPtr _) = p
   minLtEndPerms _ p@Perm_IsLLVMPtr = Perm_IsLLVMPtr
   minLtEndPerms _ p@(Perm_LLVMFrame _) = p
   minLtEndPerms l (Perm_LOwned _) = Perm_LCurrent l
@@ -2179,13 +2216,19 @@ data PermEnvFunEntry where
 data SomeRecPerm where
   SomeRecPerm :: RecPerm args a -> SomeRecPerm
 
--- | An entry in a permission environemnt that associated a 'RecPerm' structure and a 
+-- | An entry in a permission environment that associates a 'GlobalSymbol' with
+-- a permission and a translation of that permission
+data PermEnvGlobalEntry where
+  PermEnvGlobalEntry :: (1 <= w, KnownNat w) => GlobalSymbol ->
+                        ValuePerm (LLVMPointerType w) -> [OpenTerm] ->
+                        PermEnvGlobalEntry
 
--- | A permission environment that maps function and recursive permission names
--- to their respective permission structures
+-- | A permission environment that maps function names, recursive permission
+-- names, and 'GlobalSymbols' to their respective permission structures
 data PermEnv = PermEnv {
   permEnvFunPerms :: [PermEnvFunEntry],
-  permEnvRecPerms :: [SomeRecPerm]
+  permEnvRecPerms :: [SomeRecPerm],
+  permEnvGlobalSyms :: [PermEnvGlobalEntry]
   }
 
 -- | Look up a 'FnHandle' by name in a 'PermEnv'
@@ -2226,6 +2269,21 @@ lookupRecPerm env = helper (permEnvRecPerms env) where
     | Just (Refl, Refl) <- testRecPermNameEq (recPermName rp) rpn
     = Just rp
   helper (_:rps) rpn = helper rps rpn
+
+-- | Look up the permissions and translation for a 'GlobalSymbol' at a
+-- particular machine word width
+lookupGlobalSymbol :: PermEnv -> GlobalSymbol -> NatRepr w ->
+                      Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
+lookupGlobalSymbol env = helper (permEnvGlobalSyms env) where
+  helper :: [PermEnvGlobalEntry] -> GlobalSymbol -> NatRepr w ->
+            Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
+  helper  (PermEnvGlobalEntry sym'
+            (p :: ValuePerm (LLVMPointerType w')) t:_) sym w
+    | sym' == sym
+    , Just Refl <- testEquality w (knownNat :: NatRepr w') =
+      Just (p, t)
+  helper (_:entries) sym w = helper entries sym w
+  helper [] _ _ = Nothing
 
 
 ----------------------------------------------------------------------
@@ -2565,6 +2623,7 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
   genSubst s [nuP| Perm_LLVMField fp |] = Perm_LLVMField <$> genSubst s fp
   genSubst s [nuP| Perm_LLVMArray ap |] = Perm_LLVMArray <$> genSubst s ap
   genSubst s [nuP| Perm_LLVMFree e |] = Perm_LLVMFree <$> genSubst s e
+  genSubst s [nuP| Perm_LLVMFunPtr fp |] = Perm_LLVMFunPtr <$> genSubst s fp
   genSubst _ [nuP| Perm_IsLLVMPtr |] = return Perm_IsLLVMPtr
   genSubst s [nuP| Perm_LLVMFrame fp |] =
     Perm_LLVMFrame <$> genSubst s fp
@@ -2912,6 +2971,8 @@ instance SubstValPerm (AtomicPerm a) where
     Perm_LLVMArray $ substValPerm p ap
   substValPerm p [nuP| Perm_LLVMFree e |] =
     Perm_LLVMFree $ substValPerm p e
+  substValPerm p [nuP| Perm_LLVMFunPtr fp |] =
+    Perm_LLVMFunPtr $ substValPerm p fp
   substValPerm _ [nuP| Perm_IsLLVMPtr |] = Perm_IsLLVMPtr
   substValPerm p [nuP| Perm_LLVMFrame fp |] =
     Perm_LLVMFrame $ substValPerm p fp
@@ -3201,6 +3262,9 @@ instance AbstractVars (AtomicPerm a) where
   abstractPEVars ns1 ns2 (Perm_LLVMFree e) =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFree |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 e
+  abstractPEVars ns1 ns2 (Perm_LLVMFunPtr fp) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| Perm_LLVMFunPtr |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 fp
   abstractPEVars ns1 ns2 Perm_IsLLVMPtr =
     absVarsReturnH ns1 ns2 $(mkClosed [| Perm_IsLLVMPtr |])
   abstractPEVars ns1 ns2 (Perm_LLVMFrame fp) =
@@ -3340,6 +3404,9 @@ instance AbstractVars (RecPermArg a) where
 ----------------------------------------------------------------------
 -- * Permission Sets
 ----------------------------------------------------------------------
+
+-- FIXME: revisit all the operations in this section and remove those that we no
+-- longer need
 
 -- | A permission set associates permissions with expression variables, and also
 -- has a stack of "distinguished permissions" that are used for intro rules
@@ -3552,7 +3619,7 @@ castLLVMPtr y off x perms =
       | y' == y -> pushPerm x p perms''
     (ValPerm_Conj pps, ValPerm_Eq (PExpr_LLVMOffset y' off))
       | y' == y ->
-        pushPerm x (ValPerm_Conj $ map (offsetLLVMAtomicPerm off) pps) perms''
+        pushPerm x (ValPerm_Conj $ mapMaybe (offsetLLVMAtomicPerm off) pps) perms''
     _ -> error "castLLVMPtr"
 
 -- | Copy an LLVM free permission @free(e)@ on the top of the stack

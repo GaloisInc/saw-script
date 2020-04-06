@@ -174,7 +174,8 @@ heapster_default_env =
               ),
               "Prelude.W64Cons")
              ]
-           ]
+           ],
+           permEnvGlobalSyms = []
        }
      |])
 

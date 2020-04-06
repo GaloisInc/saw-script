@@ -104,6 +104,15 @@ instance Closable Ident where
 instance Liftable Ident where
   mbLift = unClosed . mbLift . fmap toClosed
 
+instance NuMatching GlobalSymbol where
+  nuMatchingProof = unsafeMbTypeRepr
+
+instance Closable GlobalSymbol where
+  toClosed = unsafeClose
+
+instance Liftable GlobalSymbol where
+  mbLift = unClosed . mbLift . fmap toClosed
+
 instance NuMatching (SymbolRepr tp) where
   nuMatchingProof = unsafeMbTypeRepr
 

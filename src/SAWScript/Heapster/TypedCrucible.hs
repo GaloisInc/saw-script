@@ -397,6 +397,25 @@ data TypedLLVMStmt w ret ps_in ps_out where
                           LLVMFramePerm w -> DistPerms ps ->
                           TypedLLVMStmt w UnitType (ps :> LLVMFrameType w) RNil
 
+  -- | Typed version of 'LLVM_LoadHandle', that loads the function handle
+  -- referred to by a function pointer, assuming we know it has one:
+  --
+  -- Type: @x:llvm_funptr(fun_perm) -o ret:fun_perm@
+  TypedLLVMLoadHandle :: (1 <= w, KnownNat w) => TypedReg (LLVMPointerType w) ->
+                         FunPerm ghosts (CtxToRList cargs) ret ->
+                         TypedLLVMStmt w (FunctionHandleType cargs ret)
+                         (RNil :> LLVMPointerType w)
+                         (RNil :> FunctionHandleType cargs ret)
+
+  -- | Typed version of 'LLVM_ResolveGlobal', that resolves a 'GlobalSymbol' to
+  -- an LLVM value, assuming it has the given permission in the environment:
+  --
+  -- Type: @. -o ret:p@
+  TypedLLVMResolveGlobal :: (1 <= w, KnownNat w) =>
+                            GlobalSymbol -> ValuePerm (LLVMPointerType w) ->
+                            TypedLLVMStmt w (LLVMPointerType w)
+                            RNil (RNil :> LLVMPointerType w)
+
 
 -- | Return the input permissions for a 'TypedStmt'
 typedStmtIn :: TypedStmt ext rets ps_in ps_out -> DistPerms ps_in
@@ -457,6 +476,10 @@ typedLLVMStmtIn (TypedLLVMDeleteFrame (TypedReg f) fperms perms) =
       | Just Refl <- testEquality perms perms' ->
         DistPermsCons perms f (ValPerm_Conj1 $ Perm_LLVMFrame fperms)
     _ -> error "typedLLVMStmtIn: incorrect perms in rule"
+typedLLVMStmtIn (TypedLLVMLoadHandle (TypedReg f) fun_perm) =
+  distPerms1 f (ValPerm_Conj1 $ Perm_LLVMFunPtr fun_perm)
+typedLLVMStmtIn (TypedLLVMResolveGlobal _ _) =
+  DistPermsNil
 
 -- | Return the output permissions for a 'TypedStmt'
 typedStmtOut :: TypedStmt ext rets ps_in ps_out -> MapRList Name rets ->
@@ -515,6 +538,10 @@ typedLLVMStmtOut (TypedLLVMAlloca
 typedLLVMStmtOut TypedLLVMCreateFrame ret =
   distPerms1 ret $ ValPerm_Conj [Perm_LLVMFrame []]
 typedLLVMStmtOut (TypedLLVMDeleteFrame _ _ _) _ = DistPermsNil
+typedLLVMStmtOut (TypedLLVMLoadHandle _ fun_perm) ret =
+  distPerms1 ret (ValPerm_Conj1 $ Perm_Fun fun_perm)
+typedLLVMStmtOut (TypedLLVMResolveGlobal _ p) ret =
+  distPerms1 ret p
 
 
 -- | Check that the permission stack of the given permission set matches the
@@ -732,6 +759,10 @@ instance SubstVar PermVarSubst m =>
   genSubst s [nuP| TypedLLVMDeleteFrame r fperms perms |] =
     TypedLLVMDeleteFrame <$> genSubst s r <*> genSubst s fperms <*>
     genSubst s perms
+  genSubst s [nuP| TypedLLVMLoadHandle r fun_perm |] =
+    TypedLLVMLoadHandle <$> genSubst s r <*> genSubst s fun_perm
+  genSubst s [nuP| TypedLLVMResolveGlobal gsym p |] =
+    TypedLLVMResolveGlobal (mbLift gsym) <$> genSubst s p
 
 
 instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
@@ -1306,7 +1337,7 @@ getAtomicOrWordLLVMPerms r =
           greturn (Left $ bvAdd e off)
         Right ps ->
           embedImplM TypedImplStmt emptyCruCtx (castLLVMPtrM y ps off x) >>>
-          greturn (Right $ map (offsetLLVMAtomicPerm $ bvNegate off) ps)
+          greturn (Right $ mapMaybe (offsetLLVMAtomicPerm $ bvNegate off) ps)
     ValPerm_Eq e@(PExpr_LLVMWord e_word) ->
       embedImplM TypedImplStmt emptyCruCtx (introEqCopyM x e >>>
                                             recombinePerm x p) >>>
@@ -2187,10 +2218,41 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PtrAddOffset w _ ptr off) =
   stmtRecombinePerms >>>
   greturn (addCtxName ctx ret)
 
+-- Type-check a LoadHandle instruction by looking for a function pointer perm
+tcEmitLLVMStmt arch ctx loc (LLVM_LoadHandle _ ptr args ret) =
+  let tptr = tcReg ctx ptr
+      x = typedRegVar tptr in
+  getAtomicLLVMPerms tptr >>>= \ps ->
+  case findIndex (\p -> case p of
+                     Perm_LLVMFunPtr _ -> True
+                     _ -> False) ps of
+    Just i
+      | Perm_LLVMFunPtr fun_perm <- ps!!i
+      , Just Refl <- testEquality (funPermArgs fun_perm) (mkCruCtx args)
+      , Just Refl <- testEquality (funPermRet fun_perm) ret ->
+        stmtEmbedImplM (implCopyConjM x ps i >>>
+                        implPopM x (ValPerm_Conj ps)) >>>
+        emitLLVMStmt (FunctionHandleRepr args ret) loc
+        (TypedLLVMLoadHandle tptr fun_perm) >>>= \ret ->
+        stmtRecombinePerms >>>
+        greturn (addCtxName ctx ret)
+
+-- Type-check a LoadHandle instruction by looking for a function pointer perm
+tcEmitLLVMStmt arch ctx loc (LLVM_ResolveGlobal w _ gsym) =
+  (stPermEnv <$> unClosed <$> top_get) >>>= \env ->
+  case lookupGlobalSymbol env gsym w of
+    Just (p, _) ->
+      emitLLVMStmt knownRepr loc (TypedLLVMResolveGlobal gsym p) >>>= \ret ->
+      stmtRecombinePerms >>>
+      greturn (addCtxName ctx ret)
+    Nothing ->
+      stmtFailM (const $ string ("LLVM_ResolveGlobal: no perms for global "
+                                 ++ show gsym))
+
 tcEmitLLVMStmt _arch _ctx _loc _stmt =
   error "tcEmitLLVMStmt: unimplemented statement"
 
--- FIXME HERE NOW: need to handle PtrEq, PtrLe, PtrAddOffset, and PtrSubtract
+-- FIXME HERE NOW: need to handle PtrEq, PtrLe, and PtrSubtract
 
 
 ----------------------------------------------------------------------
