@@ -76,13 +76,6 @@ mapRListTail :: MapRList f (ctx :> a) -> MapRList f ctx
 mapRListTail (xs :>: _) = xs
 
 
-{- FIXME HERE NOWNOW:
-- fix up uses of offsetLLVMAtomicPerm
-- Add Perm_LLVMFunPtr everywhere it needs to be
-- Add GlobalSymbols to the translation env and use them to type resolveGlobal
-- Build a letrec, adding a GlobalSymbol to the current env, when translating funs
--}
-
 ----------------------------------------------------------------------
 -- * Translation Monads
 ----------------------------------------------------------------------
