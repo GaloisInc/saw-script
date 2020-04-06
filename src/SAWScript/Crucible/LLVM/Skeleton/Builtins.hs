@@ -15,15 +15,10 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Lens
 
-import Data.Maybe
 import Data.List
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Parameterized.Some
-import Data.Set (Set)
-import qualified Data.Set as Set
 
 import qualified Text.LLVM as LLVM
 
@@ -173,8 +168,11 @@ buildArg bic opts arg idx
   = let
       pt = arg ^. argSkelType . typeSkelLLVMType
       (t, initialized) = case arg ^. argSkelType . typeSkelSizeGuesses of
-        [] -> (pt, False)
-        (s:_) -> (LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt, s ^. sizeGuessInitialized)
+        (s:_)
+          | s ^. sizeGuessElems > 1
+            -> (LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt, s ^. sizeGuessInitialized)
+          | otherwise -> (pt, False)
+        _ -> (pt, False)
     in do
       ptr <- crucible_alloc bic opts t
       mval <- if initialized
@@ -226,8 +224,11 @@ rebuildArg bic opts (arg, prearg) idx
   = let
       pt = arg ^. argSkelType . typeSkelLLVMType
       t = case arg ^. argSkelType . typeSkelSizeGuesses of
-        [] -> pt
-        (s:_) -> LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt
+        (s:_)
+          | s ^. sizeGuessElems > 1
+            -> LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt
+          | otherwise -> pt
+        _ -> pt
       ident = maybe ("arg" <> show idx) Text.unpack nm
     in do
       val' <- crucible_fresh_var bic opts ident t
