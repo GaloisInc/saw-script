@@ -1626,13 +1626,18 @@ primitives = Map.fromList
     Experimental
     []
 
-  , prim "skeleton_resize_arg_index" "FunctionSkeleton -> Int -> Int -> TopLevel FunctionSkeleton"
+  , prim "skeleton_resize_arg_index" "FunctionSkeleton -> Int -> Int -> Bool -> TopLevel FunctionSkeleton"
     (pureVal skeleton_resize_arg_index)
     Experimental
     []
 
-  , prim "skeleton_resize_arg" "FunctionSkeleton -> String -> Int -> TopLevel FunctionSkeleton"
+  , prim "skeleton_resize_arg" "FunctionSkeleton -> String -> Int -> Bool -> TopLevel FunctionSkeleton"
     (pureVal skeleton_resize_arg)
+    Experimental
+    []
+
+  , prim "skeleton_guess_arg_sizes" "FunctionSkeleton -> LLVMModule -> [(String, [FunctionProfile])] -> TopLevel FunctionSkeleton"
+    (pureVal skeleton_guess_arg_sizes)
     Experimental
     []
 

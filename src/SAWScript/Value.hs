@@ -914,6 +914,6 @@ addTraceTopLevel str action = action & _Wrapped' %~
   underReaderT (underStateT (liftIO . addTraceIO str))
 
 data SkeletonState = SkeletonState
-  { _skelArgs :: [(TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]
+  { _skelArgs :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]
   }
 makeLenses ''SkeletonState

@@ -38,6 +38,7 @@ makeLenses ''Location
 
 data SizeGuess = SizeGuess
   { _sizeGuessElems :: Int
+  , _sizeGuessInitialized :: Bool
   , _sizeGuessSource :: Text
   } deriving (Show, Eq, Ord)
 makeLenses ''SizeGuess
@@ -84,9 +85,9 @@ makeLenses ''ModuleSkeleton
 -- ** Inferring skeletons
 
 parseType :: LLVM.Type -> IO TypeSkeleton
-parseType (LLVM.PtrTo t) = pure $ TypeSkeleton t True [SizeGuess 1 "default guess of size 1"]
+parseType (LLVM.PtrTo t) = pure $ TypeSkeleton t True [SizeGuess 1 True "default guess of size 1"]
 parseType (LLVM.Array i t) = pure $ TypeSkeleton t True
-  [ SizeGuess (fromIntegral i) $ "default guess of size " <> Text.pack (show i)
+  [ SizeGuess (fromIntegral i) True $ "default guess of size " <> Text.pack (show i)
   ]
 parseType t = pure $ TypeSkeleton t False []
 

@@ -7,6 +7,7 @@ Stability   : provisional
 
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
+{-# Language ImplicitParams #-}
 
 module SAWScript.Crucible.LLVM.Skeleton.Builtins where
 
@@ -25,6 +26,10 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import qualified Text.LLVM as LLVM
+
+import Lang.Crucible.LLVM.ArraySizeProfile
+import qualified Lang.Crucible.LLVM.MemType as C.LLVM
+import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 
 import Verifier.SAW.TypedTerm
 
@@ -60,14 +65,16 @@ skeleton_resize_arg_index ::
   FunctionSkeleton ->
   Int ->
   Int ->
+  Bool ->
   TopLevel FunctionSkeleton
-skeleton_resize_arg_index skel idx sz =
+skeleton_resize_arg_index skel idx sz initialized =
   pure (skel & funSkelArgs . ix idx . argSkelType . typeSkelSizeGuesses %~ (guess:))
   where
     guess :: SizeGuess
     guess = SizeGuess
       { _sizeGuessElems = sz
-      , _sizeGuessSource = ""
+      , _sizeGuessInitialized = initialized
+      , _sizeGuessSource = "user guess"
       }
 
 skelArgIndex ::
@@ -82,15 +89,49 @@ skeleton_resize_arg ::
   FunctionSkeleton ->
   String ->
   Int ->
+  Bool ->
   TopLevel FunctionSkeleton
-skeleton_resize_arg skel nm sz
+skeleton_resize_arg skel nm sz initialized
   | Just idx <- skelArgIndex skel nm
-  = skeleton_resize_arg_index skel idx sz
+  = skeleton_resize_arg_index skel idx sz initialized
   | otherwise = fail $ mconcat
     [ "No argument named \""
     , nm
     , "\" (enabling debug symbols when compiling might help)"
     ]
+
+llvmTypeSize :: C.LLVM.TypeContext -> LLVM.Type -> Int
+llvmTypeSize tc t =
+  let ?lc = tc in
+    case C.LLVM.liftMemType t of
+      Left _ -> 1
+      Right m -> fromIntegral $ C.LLVM.memTypeSize (C.LLVM.llvmDataLayout ?lc) m
+
+skeleton_guess_arg_sizes ::
+  FunctionSkeleton ->
+  Some LLVMModule ->
+  [(String, [FunctionProfile])] ->
+  TopLevel FunctionSkeleton
+skeleton_guess_arg_sizes skel (Some m) profiles =
+  let (_, tc) = C.LLVM.typeContextFromModule $ modAST m
+  in case lookup (Text.unpack $ skel ^. funSkelName) profiles of
+    Just (prof:_) -> let
+      updateArg (a, p)
+        | a ^. argSkelType . typeSkelIsPointer
+        , Just s <- p ^. argProfileSize
+        = a & argSkelType . typeSkelSizeGuesses
+          %~ (SizeGuess
+               (quot s $ llvmTypeSize tc $ a ^. argSkelType . typeSkelLLVMType)
+               (p ^. argProfileInitialized)
+               "checking sizes in the simulator":)
+        | otherwise = a
+      uargs args = updateArg <$> zip args (prof ^. funProfileArgs)
+      in pure (skel & funSkelArgs %~ uargs)
+    _ -> fail $ mconcat
+      [ "No profile for \""
+      , Text.unpack $ skel ^. funSkelName
+      , "\" was generated."
+      ]
 
 --------------------------------------------------------------------------------
 -- ** Writing SAWScript specifications using skeletons 
@@ -126,24 +167,28 @@ buildArg ::
   Options ->
   ArgSkeleton ->
   Int ->
-  LLVMCrucibleSetupM (TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
+  LLVMCrucibleSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
 buildArg bic opts arg idx
   | arg ^. argSkelType . typeSkelIsPointer
   = let
       pt = arg ^. argSkelType . typeSkelLLVMType
-      t = case arg ^. argSkelType . typeSkelSizeGuesses of
-        [] -> pt
-        (s:_) -> LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt
+      (t, initialized) = case arg ^. argSkelType . typeSkelSizeGuesses of
+        [] -> (pt, False)
+        (s:_) -> (LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt, s ^. sizeGuessInitialized)
     in do
       ptr <- crucible_alloc bic opts t
-      val <- crucible_fresh_var bic opts ident t
-      crucible_points_to True bic opts ptr (anySetupTerm val)
-      pure (val, Just ptr, arg ^. argSkelName)
+      mval <- if initialized
+        then do
+        val <- crucible_fresh_var bic opts ident t
+        crucible_points_to True bic opts ptr (anySetupTerm val)
+        pure $ Just val
+        else pure Nothing
+      pure (mval, Just ptr, arg ^. argSkelName)
   | otherwise
   = do
       val <- crucible_fresh_var bic opts ident
         $ arg ^. argSkelType . typeSkelLLVMType
-      pure (val, Nothing, arg ^. argSkelName)
+      pure (Just val, Nothing, arg ^. argSkelName)
   where
     ident = maybe ("arg" <> show idx) Text.unpack $ arg ^. argSkelName
 
@@ -161,16 +206,20 @@ skeleton_exec ::
   Options ->
   SkeletonState ->
   LLVMCrucibleSetupM ()
-skeleton_exec bic opts prestate =
-  crucible_execute_func bic opts
-  $ (prestate ^. skelArgs) <&> \(val, mptr, _) -> fromMaybe (anySetupTerm val) mptr
+skeleton_exec bic opts prestate = do
+  args <- forM (prestate ^. skelArgs) $ \(mval, mptr, _) ->
+    case (mval, mptr) of
+      (_, Just ptr) -> pure ptr
+      (Just val, Nothing) -> pure $ anySetupTerm val
+      (Nothing, Nothing) -> fail ""
+  crucible_execute_func bic opts args
 
 rebuildArg ::
   BuiltinContext ->
   Options ->
-  (ArgSkeleton, (TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text))  ->
+  (ArgSkeleton, (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text))  ->
   Int ->
-  LLVMCrucibleSetupM (TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
+  LLVMCrucibleSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
 rebuildArg bic opts (arg, prearg) idx
   | arg ^. argSkelType . typeSkelIsPointer
   , (_, Just ptr, nm) <- prearg
@@ -183,7 +232,7 @@ rebuildArg bic opts (arg, prearg) idx
     in do
       val' <- crucible_fresh_var bic opts ident t
       crucible_points_to True bic opts ptr $ anySetupTerm val'
-      pure (val', Just ptr, nm)
+      pure (Just val', Just ptr, nm)
   | otherwise = pure prearg
 
 skeleton_poststate ::
@@ -211,10 +260,10 @@ skeleton_arg_index ::
   LLVMCrucibleSetupM TypedTerm
 skeleton_arg_index _bic _opts state idx
   | idx < length (state ^. skelArgs)
-  , (t, _, _) <- (state ^. skelArgs) !! idx
+  , (Just t, _, _) <- (state ^. skelArgs) !! idx
   = pure t
   | otherwise = fail $ mconcat
-    [ "No argument at index "
+    [ "No initialized argument at index "
     , show idx
     ]
 
@@ -235,7 +284,7 @@ skeleton_arg bic opts state nm
   | Just idx <- stateArgIndex state nm
   = skeleton_arg_index bic opts state idx
   | otherwise = fail $ mconcat
-    [ "No argument named \""
+    [ "No initialized argument named \""
     , nm
     , "\" (enabling debug symbols when compiling might help)"
     ]
