@@ -174,20 +174,32 @@ asPairSelector t = do
     PairRight x -> return (x, True)
     _           -> Nothing
 
+destTupleType :: Term -> [Term]
+destTupleType t =
+  case unwrapTermF t of
+    FTermF (PairType x y) -> x : destTupleType y
+    _ -> [t]
+
+destTupleValue :: Term -> [Term]
+destTupleValue t =
+  case unwrapTermF t of
+    FTermF (PairValue x y) -> x : destTupleType y
+    _ -> [t]
+
 asTupleType :: Recognizer Term [Term]
 asTupleType t =
   do ftf <- asFTermF t
      case ftf of
-       UnitType     -> return []
-       PairType x y -> do xs <- asTupleType y; return (x : xs)
+       UnitType     -> Just []
+       PairType x y -> Just (x : destTupleType y)
        _            -> Nothing
 
 asTupleValue :: Recognizer Term [Term]
 asTupleValue t =
   do ftf <- asFTermF t
      case ftf of
-       UnitValue     -> return []
-       PairValue x y -> do xs <- asTupleValue y; return (x : xs)
+       UnitValue     -> Just []
+       PairValue x y -> Just (x : destTupleValue y)
        _             -> Nothing
 
 asTupleSelector :: Recognizer Term (Term, Int)
