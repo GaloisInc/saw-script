@@ -1384,6 +1384,47 @@ liftGenStateContM :: Monad m => m a -> GenStateContM s (m b) s (m b) a
 liftGenStateContM m = glift $ liftGenContM m
 
 
+-- | The generalized reader transformer with a monomorphic read type
+newtype GenMonoReaderT r (m :: k -> k -> Type -> Type) p1 p2 a =
+  GenMonoReaderT { unGenMonoReaderT :: r -> m p1 p2 a }
+
+instance Monad (m p p) => Functor (GenMonoReaderT r m p p) where
+  fmap f m = m >>= return . f
+
+instance Monad (m p p) => Applicative (GenMonoReaderT r m p p) where
+  pure = return
+  (<*>) = ap
+
+instance Monad (m p p) => Monad (GenMonoReaderT r m p p) where
+  return x = GenMonoReaderT $ \_ -> return x
+  (GenMonoReaderT m) >>= f =
+    GenMonoReaderT $ \r -> m r >>= \a -> unGenMonoReaderT (f a) r
+
+instance GenMonad m => GenMonad (GenMonoReaderT r m) where
+  greturn x = GenMonoReaderT $ \_ -> greturn x
+  (GenMonoReaderT m) >>>= f =
+    GenMonoReaderT $ \r -> m r >>>= \a -> unGenMonoReaderT (f a) r
+
+instance GenMonadT (GenMonoReaderT r) q1 q2 q1 q2 where
+  glift m = GenMonoReaderT $ \_ -> m
+
+instance GenMonadCaptureCC rin rout m q1 q2 =>
+         GenMonadCaptureCC rin rout (GenMonoReaderT r m) q1 q2 where
+  gcaptureCC f = glift $ gcaptureCC f
+
+instance GenMonadGet s m q => GenMonadGet s (GenMonoReaderT r m) q where
+  gget = glift gget
+
+instance GenMonadPut s m q1 q2 => GenMonadPut s (GenMonoReaderT r m) q1 q2 where
+  gput = glift . gput
+
+class GenMonad m => GenMonadAsk r m p | m p -> r where
+  gask :: m p p r
+
+instance GenMonad m => GenMonadAsk r (GenMonoReaderT r m) p where
+  gask = GenMonoReaderT $ \r -> greturn r
+
+
 ----------------------------------------------------------------------
 -- * Permission Implication Monad
 ----------------------------------------------------------------------
