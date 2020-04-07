@@ -175,20 +175,20 @@ asPairSelector t = do
     _           -> Nothing
 
 asTupleType :: Recognizer Term [Term]
-asTupleType t = do
-  ftf <- asFTermF t
-  case ftf of
-    UnitType     -> return []
-    PairType x y -> do xs <- asTupleType y; return (x : xs)
-    _            -> Nothing
+asTupleType t =
+  do ftf <- asFTermF t
+     case ftf of
+       UnitType     -> return []
+       PairType x y -> do xs <- asTupleType y; return (x : xs)
+       _            -> Nothing
 
 asTupleValue :: Recognizer Term [Term]
-asTupleValue t = do
-  ftf <- asFTermF t
-  case ftf of
-    UnitValue     -> return []
-    PairValue x y -> do xs <- asTupleValue y; return (x : xs)
-    _             -> Nothing
+asTupleValue t =
+  do ftf <- asFTermF t
+     case ftf of
+       UnitValue     -> return []
+       PairValue x y -> do xs <- asTupleValue y; return (x : xs)
+       _             -> Nothing
 
 asTupleSelector :: Recognizer Term (Term, Int)
 asTupleSelector t = do
