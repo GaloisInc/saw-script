@@ -190,22 +190,39 @@ writeUnintSMTLib2 unints sc f t = do
 writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)
 
-coqTranslationConfiguration :: Coq.TranslationConfiguration
-coqTranslationConfiguration = Coq.TranslationConfiguration
-  { Coq.translateVectorsAsCoqVectors = True
-  , Coq.traverseConsts               = True
+coqTranslationConfiguration ::
+  [(String, String)] ->
+  [String] ->
+  Coq.TranslationConfiguration
+coqTranslationConfiguration notations skips = Coq.TranslationConfiguration
+  { Coq.notations          = notations
+  , Coq.monadicTranslation = False
+  , Coq.skipDefinitions    = skips
+  , Coq.vectorModule       = "SAWVectorsAsCoqVectors"
   }
 
-writeCoqTerm :: String -> FilePath -> Term -> IO ()
-writeCoqTerm name path t = do
-  case Coq.translateTermAsDeclImports coqTranslationConfiguration name t of
+writeCoqTerm ::
+  String ->
+  [(String, String)] ->
+  [String] ->
+  FilePath ->
+  Term ->
+  IO ()
+writeCoqTerm name notations skips path t = do
+  let configuration = coqTranslationConfiguration notations skips
+  case Coq.translateTermAsDeclImports configuration name t of
     Left err -> putStrLn $ "Error translating: " ++ show err
     Right doc -> case path of
       "" -> print doc
       _ -> writeFile path (show doc)
 
-writeCoqCryptolModule :: FilePath -> FilePath -> IO ()
-writeCoqCryptolModule inputFile outputFile = do
+writeCoqCryptolModule ::
+  FilePath ->
+  FilePath ->
+  [(String, String)] ->
+  [String] ->
+  IO ()
+writeCoqCryptolModule inputFile outputFile notations skips = do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
@@ -215,11 +232,12 @@ writeCoqCryptolModule inputFile outputFile = do
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   (cm, _) <- loadCryptolModule ctx env inputFile
   let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
-  case Coq.translateCryptolModule coqTranslationConfiguration cryptolPreludeDecls cm of
+  let configuration = coqTranslationConfiguration notations skips
+  case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of
     Left e -> putStrLn $ show e
     Right cmDoc ->
       writeFile outputFile
-      (show . vcat $ [ Coq.preamble coqTranslationConfiguration
+      (show . vcat $ [ Coq.preamble configuration
                      , "From CryptolToCoq Require Import SAWCorePrelude."
                      , "Import SAWCorePrelude."
                      , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
@@ -235,27 +253,37 @@ nameOfSAWCorePrelude = Un.moduleName preludeModule
 nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
 nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule
 
-writeCoqSAWCorePrelude :: FilePath -> IO ()
-writeCoqSAWCorePrelude outputFile = do
+writeCoqSAWCorePrelude ::
+  FilePath ->
+  [(String, String)] ->
+  [String] ->
+  IO ()
+writeCoqSAWCorePrelude outputFile notations skips = do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   m   <- scFindModule sc nameOfSAWCorePrelude
-  let doc = Coq.translateSAWModule coqTranslationConfiguration m
-  writeFile outputFile (show . vcat $ [ Coq.preamble coqTranslationConfiguration, doc ])
+  let configuration = coqTranslationConfiguration notations skips
+  let doc = Coq.translateSAWModule configuration m
+  writeFile outputFile (show . vcat $ [ Coq.preamble configuration, doc ])
 
-writeCoqCryptolPrimitivesForSAWCore :: FilePath -> IO ()
-writeCoqCryptolPrimitivesForSAWCore outputFile = do
+writeCoqCryptolPrimitivesForSAWCore ::
+  FilePath ->
+  [(String, String)] ->
+  [String] ->
+  IO ()
+writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
   sc <- mkSharedContext
   () <- scLoadPreludeModule sc
   () <- scLoadCryptolModule sc
   () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
   m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  let doc = Coq.translateSAWModule coqTranslationConfiguration m
+  let configuration = coqTranslationConfiguration notations skips
+  let doc = Coq.translateSAWModule configuration m
   let extraPreamble = vcat $
         [ "From CryptolToCoq Require Import SAWCorePrelude."
         , "Import SAWCorePrelude."
         ]
-  writeFile outputFile (show . vcat $ [ Coq.preamblePlus coqTranslationConfiguration extraPreamble
+  writeFile outputFile (show . vcat $ [ Coq.preamblePlus configuration extraPreamble
                                       , doc
                                       ])
 

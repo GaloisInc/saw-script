@@ -781,7 +781,7 @@ satCNF path = do
   satWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
 
 satCoq :: FilePath -> ProofScript SV.SatResult
-satCoq path = satWithExporter (const (Prover.writeCoqTerm "goal")) path ".v"
+satCoq path = satWithExporter (const (Prover.writeCoqTerm "goal" [] [])) path ".v"
 
 satExtCore :: FilePath -> ProofScript SV.SatResult
 satExtCore path = satWithExporter (const Prover.writeCore) path ".extcore"
