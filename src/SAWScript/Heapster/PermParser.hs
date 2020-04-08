@@ -91,12 +91,12 @@ type SomeName = Some (Typed Name)
 -- | A parsing environment, which includes variables and function names
 data ParserEnv = ParserEnv {
   parserEnvExprVars :: [(String, SomeName)],
-  parserEnvClEnv :: Closed PermEnv
+  parserEnvPermEnv :: PermEnv
 }
 
 -- | Make a 'ParserEnv' with empty contexts and a given list of function names
-mkParserEnv :: Closed PermEnv -> ParserEnv
-mkParserEnv cl_env = ParserEnv [] cl_env
+mkParserEnv :: PermEnv -> ParserEnv
+mkParserEnv env = ParserEnv [] env
 
 $(mkNuMatching [t| forall f a. NuMatching (f a) => Typed f a |])
 $(mkNuMatching [t| ParserEnv |])
@@ -108,6 +108,7 @@ instance NuMatchingAny1 f => NuMatchingAny1 (Typed f) where
 lookupExprVar :: String -> ParserEnv -> Maybe SomeName
 lookupExprVar str = lookup str . parserEnvExprVars
 
+{-
 instance BindState String where
   bindState = mbLift
 
@@ -121,7 +122,8 @@ instance BindState ParserEnv where
                   _ -> Nothing)
      (mbList evars))
     (mbLift env)
-      
+-}
+
 -- | The parsing monad is a 'Parsec' computation with a 'ParserEnv'
 type PermParseM s = Parsec s ParserEnv
 
@@ -147,19 +149,44 @@ instance (FunctorBind f, FunctorBind g) => FunctorBind (Compose f g) where
   mbF [nuP| Compose fga |] = Compose $ fmap mbF $ mbF fga
 -}
 
+{-
 instance (BindState s, BindState u) => BindState (State s u) where
   bindState [nuP| State s pos u |] =
     State (bindState s) (mbLift pos) (bindState u)
+-}
 
-instance (BindState s, BindState u) => MonadBind (ParsecT s u Identity) where
+-- | Lift a 'ParserEnv' out of a binding except for its 'PermEnv', which should
+-- be unchanged from the input
+liftParserEnv :: PermEnv -> Mb ctx ParserEnv -> ParserEnv
+liftParserEnv env [nuP| ParserEnv evars _ |] =
+  ParserEnv
+  (mapMaybe (\env_elem -> case env_elem of
+                [nuP| (str, Some (Typed tp mb_n)) |]
+                  | Right n <- mbNameBoundP mb_n ->
+                    Just (mbLift str, Some (Typed (mbLift tp) n))
+                _ -> Nothing)
+   (mbList evars))
+  env
+
+-- | Lift a Parsec 'State' out of a binding except for its 'PermEnv', which
+-- should be unchanged from the input
+liftParsecState :: Liftable s => PermEnv -> Mb ctx (State s ParserEnv) ->
+                   State s ParserEnv
+liftParsecState env [nuP| State s pos u |] =
+  State (mbLift s) (mbLift pos) (liftParserEnv env u)
+
+instance Liftable s => MonadBind (ParsecT s ParserEnv Identity) where
   mbM mb_m = mkPT $ \s ->
+    let env = parserEnvPermEnv $ stateUser s in
     case fmap (flip runParsecT s) mb_m of
       [nuP| Identity (Consumed (Identity (Ok a s' err))) |] ->
-        Identity (Consumed (Identity (Ok a (bindState s') (mbLift err))))
+        Identity (Consumed (Identity (Ok a (liftParsecState env s')
+                                      (mbLift err))))
       [nuP| Identity (Consumed (Identity (Error err))) |] ->
         Identity (Consumed (Identity (Error (mbLift err))))
       [nuP| Identity (Consumed (Identity (Ok a s' err))) |] ->
-        Identity (Empty (Identity (Ok a (bindState s') (mbLift err))))
+        Identity (Empty (Identity (Ok a (liftParsecState env s')
+                                   (mbLift err))))
       [nuP| Identity (Consumed (Identity (Error err))) |] ->
         Identity (Empty (Identity (Error (mbLift err))))
 
@@ -415,7 +442,7 @@ parseExpr tp@(FunctionHandleRepr _ _) =
        Just some_x ->
          PExpr_Var <$> castTypedM "variable" tp some_x
        Nothing ->
-         case lookupFunHandle (unClosed $ parserEnvClEnv env) str of
+         case lookupFunHandle (parserEnvPermEnv env) str of
            Just (SomeHandle hn)
              | Just Refl <- testEquality tp (handleType hn) ->
                return $ PExpr_Fun hn
@@ -453,7 +480,7 @@ parseExprs (CruCtxCons ctx tp) =
 ----------------------------------------------------------------------
 
 -- | Parse a value permission of a known type
-parseValPerm :: (Stream s Identity Char, BindState s) => TypeRepr a ->
+parseValPerm :: (Stream s Identity Char, Liftable s) => TypeRepr a ->
                 PermParseM s (ValuePerm a)
 parseValPerm tp =
   do spaces
@@ -476,7 +503,7 @@ parseValPerm tp =
                parseValPerm tp) <|>
        (do n <- try (parseIdent >>= \n -> spaces >> char '<' >> return n)
            env <- getState
-           case lookupRecPermName (unClosed $ parserEnvClEnv env) n of
+           case lookupRecPermName (parserEnvPermEnv env) n of
              Just (SomeRecPermName rpn)
                | Just Refl <- testEquality (recPermNameType rpn) tp ->
                  do args <- parseRecPermArgs (recPermNameArgs rpn)
@@ -495,7 +522,7 @@ parseValPerm tp =
        return p1
 
 -- | Parse a @*@-separated list of atomic permissions
-parseAtomicPerms :: (Stream s Identity Char, BindState s) => TypeRepr a ->
+parseAtomicPerms :: (Stream s Identity Char, Liftable s) => TypeRepr a ->
                     PermParseM s [AtomicPerm a]
 parseAtomicPerms tp =
   do p1 <- parseAtomicPerm tp
@@ -503,7 +530,7 @@ parseAtomicPerms tp =
      (try (string "*") >> (p1:) <$> parseAtomicPerms tp) <|> return [p1]
 
 -- | Parse an atomic permission of a specific type
-parseAtomicPerm :: (Stream s Identity Char, BindState s) => TypeRepr a ->
+parseAtomicPerm :: (Stream s Identity Char, Liftable s) => TypeRepr a ->
                    PermParseM s (AtomicPerm a)
 parseAtomicPerm (LLVMPointerRepr w)
   | Left LeqProof <- decideLeq oneRepr w =
@@ -521,7 +548,7 @@ parseAtomicPerm (LLVMPointerRepr w)
 -- so that @ptr@ and outer parentheses should be omitted. If the 'Bool' flag is
 -- 'False', only consume input if that input starts with @( )* "ptr" ( )* "("@,
 -- while if it is 'True', only consume input if it starts with @( )* "("@.
-parseLLVMFieldPerm :: (Stream s Identity Char, BindState s,
+parseLLVMFieldPerm :: (Stream s Identity Char, Liftable s,
                        KnownNat w, 1 <= w) =>
                       Bool -> PermParseM s (LLVMFieldPerm w)
 parseLLVMFieldPerm in_array =
@@ -542,7 +569,7 @@ parseLLVMFieldPerm in_array =
 
 -- | Parse an array permission @array(off,<len,*stride,[fp1,...])@. Only consume
 -- input if that input starts with @"array" ( )* "("@.
-parseLLVMArrayPerm :: (Stream s Identity Char, BindState s,
+parseLLVMArrayPerm :: (Stream s Identity Char, Liftable s,
                        KnownNat w, 1 <= w) =>
                       PermParseM s (LLVMArrayPerm w)
 parseLLVMArrayPerm =
@@ -558,7 +585,7 @@ parseLLVMArrayPerm =
      return LLVMArrayPerm {..}
 
 -- | Parse a 'RecPermArgs' sequence
-parseRecPermArgs :: (Stream s Identity Char, BindState s) =>
+parseRecPermArgs :: (Stream s Identity Char, Liftable s) =>
                     CruCtx args -> PermParseM s (RecPermArgs args)
 parseRecPermArgs CruCtxNil = return RecPermArgs_Nil
 parseRecPermArgs (CruCtxCons CruCtxNil tp) =
@@ -570,7 +597,7 @@ parseRecPermArgs (CruCtxCons ctx tp) =
      return $ RecPermArgs_Cons args arg
 
 -- | Parse a 'RecPermArg'
-parseRecPermArg :: (Stream s Identity Char, BindState s) =>
+parseRecPermArg :: (Stream s Identity Char, Liftable s) =>
                    TypeRepr a -> PermParseM s (RecPermArg a)
 parseRecPermArg LifetimeRepr =
   RecPermArg_Lifetime <$> parseExpr LifetimeRepr
@@ -580,7 +607,7 @@ parseRecPermArg tp =
   error ("Unexpected type for recursive permission argument: " ++ show tp)
 
 -- | Parse a 'BVProp'
-parseBVProp :: (Stream s Identity Char, BindState s, KnownNat w, 1 <= w) =>
+parseBVProp :: (Stream s Identity Char, Liftable s, KnownNat w, 1 <= w) =>
                PermParseM s (BVProp w)
 parseBVProp =
   (try parseBVExpr >>= \e1 ->
@@ -605,7 +632,7 @@ parseBVProp =
      return $ mk_prop rng1 rng2
 
 -- | Parse a 'BVRange' written as @{ off, len }@
-parseBVRange :: (Stream s Identity Char, BindState s, KnownNat w, 1 <= w) =>
+parseBVRange :: (Stream s Identity Char, Liftable s, KnownNat w, 1 <= w) =>
                 PermParseM s (BVRange w)
 parseBVRange =
   do try (spaces >> char '{')
@@ -659,7 +686,7 @@ mkArgsParsedCtx ctx = ParsedCtx (helper ctx) ctx where
     helper ctx :>: Constant ("arg" ++ show (cruCtxLen ctx))
 
 -- | Parse a typing context @x1:tp1, x2:tp2, ...@
-parseCtx :: (Stream s Identity Char, BindState s) =>
+parseCtx :: (Stream s Identity Char, Liftable s) =>
             PermParseM s (Some ParsedCtx)
 parseCtx =
   (do x <- try parseIdent
@@ -676,7 +703,7 @@ parseCtx =
 -- | Parse a sequence @x1:p1, x2:p2, ...@ of variables and their permissions
 --
 -- FIXME: not used
-parseDistPerms :: (Stream s Identity Char, BindState s) =>
+parseDistPerms :: (Stream s Identity Char, Liftable s) =>
                   PermParseM s (Some DistPerms)
 parseDistPerms =
   parseExprVar >>= \some_x ->
@@ -738,7 +765,7 @@ varSpecsToPerms (var_specs :>: VarPermSpec _ Nothing) =
 -- where each variable occurs at most once. The input list says which variables
 -- can occur and which have already been seen. Return a sequence of the
 -- permissions in the same order as the input list of variables.
-parseSortedValuePerms :: (Stream s Identity Char, BindState s) =>
+parseSortedValuePerms :: (Stream s Identity Char, Liftable s) =>
                          VarPermSpecs ctx ->
                          PermParseM s (ValuePerms ctx)
 parseSortedValuePerms var_specs =
@@ -754,7 +781,7 @@ parseSortedValuePerms var_specs =
 
 -- | Run a parsing computation inside a name-binding for expressions variables
 -- given by a 'ParsedCtx'. Returning the results inside a name-binding.
-inParsedCtxM :: (BindState s, NuMatching a) =>
+inParsedCtxM :: (Liftable s, NuMatching a) =>
                 ParsedCtx ctx -> (MapRList Name ctx -> PermParseM s a) ->
                 PermParseM s (Mb ctx a)
 inParsedCtxM (ParsedCtx ids tps) f =
@@ -763,7 +790,7 @@ inParsedCtxM (ParsedCtx ids tps) f =
 -- | Parse a sequence @x1:p1, x2:p2, ...@ of variables and their permissions,
 -- and sort the result into a 'ValuePerms' in a multi-binding that is in the
 -- same order as the 'ParsedCtx' supplied on input
-parseSortedMbValuePerms :: (Stream s Identity Char, BindState s) =>
+parseSortedMbValuePerms :: (Stream s Identity Char, Liftable s) =>
                            ParsedCtx ctx -> PermParseM s (MbValuePerms ctx)
 parseSortedMbValuePerms ctx =
   inParsedCtxM ctx $ \ns ->
@@ -774,7 +801,7 @@ parseSortedMbValuePerms ctx =
 -- > (x1:tp1, ...). arg1:p1, ... -o arg1:p1', ..., argn:pn', ret:p_ret
 --
 -- for some arbitrary context @x1:tp1, ...@ of ghost variables
-parseFunPermM :: (Stream s Identity Char, BindState s) =>
+parseFunPermM :: (Stream s Identity Char, Liftable s) =>
                  CruCtx args -> TypeRepr ret ->
                  PermParseM s (SomeFunPerm args ret)
 parseFunPermM args ret =
@@ -795,7 +822,7 @@ parseFunPermM args ret =
          return $ SomeFunPerm $ FunPerm ghosts args ret perms_in perms_out
 
 -- | Run the 'parseFunPermM' parsing computation on a 'String'
-parseFunPermString :: Closed PermEnv -> CruCtx args -> TypeRepr ret ->
+parseFunPermString :: PermEnv -> CruCtx args -> TypeRepr ret ->
                       String -> Either ParseError (SomeFunPerm args ret)
-parseFunPermString cl_env args ret str =
-  runParser (parseFunPermM args ret) (mkParserEnv cl_env) "" str
+parseFunPermString env args ret str =
+  runParser (parseFunPermM args ret) (mkParserEnv env) "" str

@@ -196,21 +196,17 @@ heapster_extract_print bic opts lm fn_name perms_string =
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
           let ret = handleReturnType $ cfgHandle cfg
           some_fun_perm <-
-            case parseFunPermString cl_env args ret perms_string of
+            case parseFunPermString env args ret perms_string of
               Left err -> fail $ show err
               Right p -> return p
           case some_fun_perm of
             SomeFunPerm fun_perm -> do
-              cl_fun_perm <-
-                case tryClose fun_perm of
-                  Just cl_fun_perm -> return cl_fun_perm
-                  Nothing -> fail "Function permission is not closed"
               leq_proof <- case decideLeq (knownNat @1) w of
                 Left pf -> return pf
                 Right _ -> fail "LLVM arch width is 0!"
               let fun_openterm =
                     withKnownNat w $ withLeqProof leq_proof $
-                    translateCFG env $ tcCFG cl_env cl_fun_perm cfg
+                    translateCFG env $ tcCFG env fun_perm cfg
               sc <- getSharedContext
               fun_term <- liftIO $ completeOpenTerm sc fun_openterm
               liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
@@ -220,14 +216,14 @@ heapster_parse_test :: BuiltinContext -> Options -> LLVMModule ->
 heapster_parse_test bic opts lm fn_name perms_string =
   case modTrans lm of
     Some mod_trans -> do
-      let cl_env = heapster_default_env -- FIXME: cl_env should be an argument
+      let env = unClosed heapster_default_env -- FIXME: cl_env should be an argument
       let arch = llvmArch $ _transContext mod_trans
       any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts lm fn_name
       case any_cfg of
         AnyCFG cfg -> do
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
           let ret = handleReturnType $ cfgHandle cfg
-          case parseFunPermString cl_env args ret perms_string of
+          case parseFunPermString env args ret perms_string of
             Left err -> fail $ show err
             Right (SomeFunPerm fun_perm) ->
               liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm

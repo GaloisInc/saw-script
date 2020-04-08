@@ -39,6 +39,7 @@ import Lang.Crucible.LLVM.Extension
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Arch.X86
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.OpenTerm
 
 
 ----------------------------------------------------------------------
@@ -90,6 +91,10 @@ instance Closable Char where
   toClosed = unsafeClose
 
 -- FIXME: move to Hobbits
+instance Closable Int where
+  toClosed = unsafeClose
+
+-- FIXME: move to Hobbits
 instance Closable a => Closable [a] where
   toClosed [] = $(mkClosed [| [] |])
   toClosed (a:as) =
@@ -103,6 +108,9 @@ instance Closable Ident where
 
 instance Liftable Ident where
   mbLift = unClosed . mbLift . fmap toClosed
+
+instance NuMatching OpenTerm where
+  nuMatchingProof = unsafeMbTypeRepr
 
 instance NuMatching GlobalSymbol where
   nuMatchingProof = unsafeMbTypeRepr
