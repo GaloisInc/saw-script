@@ -21,6 +21,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TupleSections #-}
 
 module SAWScript.Heapster.SAWTranslation where
 
@@ -3089,3 +3090,60 @@ translateCFG env cfg =
            (funPermToBlockInputs fun_perm)
          )
        ]
+
+
+----------------------------------------------------------------------
+-- * Translating Sets of CFGs
+----------------------------------------------------------------------
+
+-- | An existentially quantified pair of a 'CFG' its function permission
+data SomeCFGAndPerm ext where
+  SomeCFGAndPerm :: GlobalSymbol -> CFG ext blocks inits ret ->
+                    FunPerm ghosts (CtxToRList inits) ret ->
+                    SomeCFGAndPerm ext
+
+someCFGAndPermSym :: SomeCFGAndPerm ext -> GlobalSymbol
+someCFGAndPermSym (SomeCFGAndPerm sym _ _) = sym
+
+someCFGAndPermLRT :: SomeCFGAndPerm ext -> OpenTerm
+someCFGAndPermLRT = error "FIXME HERE NOWNOW"
+
+someCFGAndPermPtrPerm :: (1 <= ArchWidth arch, KnownNat (ArchWidth arch),
+                          w ~ ArchWidth arch) =>
+                         NatRepr w -> SomeCFGAndPerm (LLVM arch) ->
+                         ValuePerm (LLVMPointerType w)
+someCFGAndPermPtrPerm w (SomeCFGAndPerm _ _ fun_perm) =
+  withKnownNat w $ ValPerm_Conj1 $ Perm_LLVMFunPtr fun_perm
+
+-- | Type-check a set of 'CFG's against their function permissions and translate
+-- the result to a pair of a 'LetRecTypes' SAW core term @lrts@ describing the
+-- function permissions and a mutually-recursive function-binding argument
+--
+-- > \(f1:tp1) -> ... -> \(fn:tpn) -> (tp1, ..., tpn)
+--
+-- that defines the functions mutually recursively in terms of themselves, where
+-- each @tpi@ is the @i@th type in @lrts@
+tcTranslateCFGTupleFun ::
+  (1 <= ArchWidth arch, KnownNat (ArchWidth arch), w ~ ArchWidth arch) =>
+  NatRepr w -> PermEnv -> [SomeCFGAndPerm (LLVM arch)] ->
+  (OpenTerm, OpenTerm)
+tcTranslateCFGTupleFun w env cfgs_and_perms =
+  let lrts = map someCFGAndPermLRT cfgs_and_perms in
+  (tupleOpenTerm lrts ,) $
+  lambdaOpenTermMulti (zip
+                       (map (show . someCFGAndPermSym) cfgs_and_perms)
+                       (map (applyOpenTerm
+                             (globalOpenTerm
+                              "Prelude.lrtToType")) lrts)) $ \funs ->
+  let env' =
+        permEnvAddGlobalSyms env $
+        zipWith (\cfg_and_perm f ->
+                  PermEnvGlobalEntry
+                  (someCFGAndPermSym cfg_and_perm)
+                  (someCFGAndPermPtrPerm w cfg_and_perm)
+                  [f])
+        cfgs_and_perms funs in
+  tupleOpenTerm $ flip map (zip cfgs_and_perms funs) $ \(cfg_and_perm, fun) ->
+  case cfg_and_perm of
+    SomeCFGAndPerm sym cfg fun_perm ->
+      translateCFG env' $ tcCFG env' fun_perm cfg

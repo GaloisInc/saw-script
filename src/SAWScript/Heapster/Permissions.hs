@@ -3352,6 +3352,11 @@ $(mkNuMatching [t| SomeRecPerm |])
 $(mkNuMatching [t| PermEnvGlobalEntry |])
 $(mkNuMatching [t| PermEnv |])
 
+-- | Add some 'PermEnvGlobalEntry's to a 'PermEnv'
+permEnvAddGlobalSyms :: PermEnv -> [PermEnvGlobalEntry] -> PermEnv
+permEnvAddGlobalSyms env entries = env { permEnvGlobalSyms =
+                                           permEnvGlobalSyms env ++ entries }
+
 -- | Look up a 'FnHandle' by name in a 'PermEnv'
 lookupFunHandle :: PermEnv -> String -> Maybe SomeHandle
 lookupFunHandle env str =
