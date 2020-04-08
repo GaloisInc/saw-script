@@ -46,62 +46,6 @@ import SAWScript.Heapster.TypedCrucible
 import SAWScript.Heapster.SAWTranslation
 import SAWScript.Heapster.PermParser
 
-data PermsListEntry where
-  PermsListEntry :: FunPerm ghosts inits ret -> PermsListEntry
-
--- | A permission for a function that takes in two words and returns a word
-binaryWordFunPerm :: (1 <= w, KnownNat w) =>
-                     FunPerm (RNil :> BVType w :> BVType w)
-                     (RNil :> LLVMPointerType w :> LLVMPointerType w)
-                     (LLVMPointerType w)
-binaryWordFunPerm =
-  FunPerm knownRepr knownRepr knownRepr
-  -- Input perms: r1:eq(x), r2:eq(y)
-  (nuMulti (MNil :>: Proxy :>: Proxy :>: Proxy) $ \(_ :>: x :>: y :>: _) ->
-    nuMulti (MNil :>: Proxy :>: Proxy) $ \_ ->
-    ValPerms_Cons (ValPerms_Cons
-                   ValPerms_Nil
-                   (ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var x))
-    (ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var y))
-  -- Output perms: r1:true, r2:true, ret:(exists z.eq(z))
-  (nuMulti (MNil :>: Proxy :>: Proxy :>: Proxy) $ \_ ->
-    nuMulti (MNil :>: Proxy :>: Proxy :>: Proxy) $ \_ ->
-    ValPerms_Cons (ValPerms_Cons
-                   (ValPerms_Cons ValPerms_Nil ValPerm_True) ValPerm_True)
-    (ValPerm_Exists $ nu $ \z -> ValPerm_Eq $ PExpr_LLVMWord $ PExpr_Var z))
-
-binaryWordFunPerm64 :: FunPerm (RNil :> BVType 64 :> BVType 64)
-                       (RNil :> LLVMPointerType 64 :> LLVMPointerType 64)
-                       (LLVMPointerType 64)
-binaryWordFunPerm64 = binaryWordFunPerm
-
-binaryWordFunPerm32 :: FunPerm (RNil :> BVType 32 :> BVType 32)
-                       (RNil :> LLVMPointerType 32 :> LLVMPointerType 32)
-                       (LLVMPointerType 32)
-binaryWordFunPerm32 = binaryWordFunPerm
-
-
-heapsterPermsList :: [PermsListEntry]
-heapsterPermsList =
-  [PermsListEntry binaryWordFunPerm32, PermsListEntry binaryWordFunPerm64]
-
--- FIXME: in order to make withCFG work, we need an ArchRepr arg for LLVM_CFG
-{-
--- FIXME: how do we do a type-level comparison of nats?
-proveNatNonZero :: Proxy w -> (1 <=? w) :~: True
-proveNatNonZero _ = unsafeCoerce Refl
-
-withCFG :: SAW_CFG ->
-           (forall ext blocks init ret.
-            (TraverseExt ext, PrettyExt ext, PermCheckExtC ext) =>
-            CFG ext blocks init ret -> a) -> a
-withCFG (LLVM_CFG (AnyCFG (cfg :: CFG (LLVM arch) blocks inits ret))) f
-  | Refl <- proveNatNonZero (Proxy :: Proxy (ArchWidth arch)) =  
-    withKnownNat (Proxy :: Proxy (ArchWidth arch)) $ f cfg
-withCFG (JVM_CFG (AnyCFG cfg)) f =
-  error "FIXME: JVM CFGs not yet supported!"
-  -- f cfg
--}
 
 getLLVMCFG :: ArchRepr arch -> SAW_CFG -> AnyCFG (LLVM arch)
 getLLVMCFG _ (LLVM_CFG cfg) =
