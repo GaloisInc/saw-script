@@ -71,6 +71,7 @@ import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
 import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
                                                        ppTerm, scPrettyTerm)
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.Term.Functor (ModuleName)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
@@ -86,6 +87,8 @@ import qualified Lang.Crucible.LLVM.MemModel as Crucible (HasPtrWidth)
 
 import           Lang.Crucible.JVM.Translation (JVM)
 import qualified Lang.Crucible.JVM.Translation as CJ
+
+import SAWScript.Heapster.Permissions
 
 -- Values ----------------------------------------------------------------------
 
@@ -119,6 +122,7 @@ data Value
   | VCryptolModule CryptolModule
   | VJavaClass JSS.Class
   | VLLVMModule LLVMModule
+  | VHeapsterEnv HeapsterEnv
   | VSatResult SatResult
   | VProofResult ProofResult
   | VUninterp Uninterp
@@ -167,6 +171,19 @@ showLLVMModule (LLVMModule name m _) =
       L.ppSymbol (L.defName d) PP.<>
       L.ppArgList (L.defVarArgs d) (map (L.ppTyped L.ppIdent) (L.defArgs d)) PP.<+>
       L.ppMaybe (\gc -> PP.text "gc" PP.<+> L.ppGC gc) (L.defGC d)
+
+-- | All the context maintained by Heapster
+data HeapsterEnv = HeapsterEnv {
+  heapsterEnvSAWModule :: ModuleName,
+  -- ^ The SAW module containing all our Heapster definitions
+  heapsterEnvPermEnv :: PermEnv,
+  -- ^ The current permissions environment
+  heapsterEnvLLVMModule :: LLVMModule
+  -- ^ The underlying 'LLVMModule' that we are translating
+  }
+
+showHeapsterEnv :: HeapsterEnv -> String
+showHeapsterEnv _ = "<FIXME: HeapsterEnv>"
 
 data ProofResult
   = Valid SolverStats
@@ -295,6 +312,7 @@ showsPrecValue opts p v =
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
     VLLVMModule m -> showString (showLLVMModule m)
+    VHeapsterEnv env -> showString (showHeapsterEnv env)
     VJavaClass c -> shows (prettyClass c)
     VProofResult r -> showsProofResult opts r
     VSatResult r -> showsSatResult opts r
@@ -757,6 +775,13 @@ instance IsValue LLVMModule where
 instance FromValue LLVMModule where
     fromValue (VLLVMModule m) = m
     fromValue _ = error "fromValue LLVMModule"
+
+instance IsValue HeapsterEnv where
+    toValue m = VHeapsterEnv m
+
+instance FromValue HeapsterEnv where
+    fromValue (VHeapsterEnv m) = m
+    fromValue _ = error "fromValue HeapsterEnv"
 
 instance IsValue ProofResult where
    toValue r = VProofResult r

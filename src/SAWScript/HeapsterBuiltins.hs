@@ -9,10 +9,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module SAWScript.HeapsterBuiltins
-       ( heapster_extract_print
+       ( heapster_init_env
+       , heapster_typecheck_fun
+       , heapster_print_fun_trans
        , heapster_parse_test
        ) where
 
+import Data.Maybe
 import qualified Data.Map as Map
 import Control.Monad.IO.Class
 import Unsafe.Coerce
@@ -20,6 +23,8 @@ import GHC.TypeNats
 
 import Data.Binding.Hobbits
 
+import Verifier.SAW.Term.Functor
+import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 
@@ -38,6 +43,7 @@ import SAWScript.Value
 import SAWScript.Utils as SS
 import SAWScript.Options
 import SAWScript.CrucibleBuiltins
+import SAWScript.LLVMBuiltins
 import SAWScript.Builtins
 
 import SAWScript.Heapster.CruUtil
@@ -123,10 +129,28 @@ heapster_default_env =
        }
      |])
 
-heapster_extract_print :: BuiltinContext -> Options ->
-                          LLVMModule -> String -> String ->
-                          TopLevel ()
-heapster_extract_print bic opts lm fn_name perms_string =
+heapster_init_env :: BuiltinContext -> Options -> String -> String ->
+                     TopLevel HeapsterEnv
+heapster_init_env bic opts mod_str llvm_filename =
+  do llvm_mod <- llvm_load_module llvm_filename
+     sc <- getSharedContext
+     let saw_mod_name = mkModuleName [mod_str]
+     mod_loaded <- liftIO $ scModuleIsLoaded sc saw_mod_name
+     if mod_loaded then
+       fail ("SAW module with name " ++ show mod_str ++ " already defined!")
+       else return ()
+     liftIO $ scLoadModule sc (emptyModule saw_mod_name)
+     let perm_env = unClosed heapster_default_env
+     return $ HeapsterEnv {
+       heapsterEnvSAWModule = saw_mod_name,
+       heapsterEnvPermEnv = perm_env,
+       heapsterEnvLLVMModule = llvm_mod
+       }
+
+heapster_typecheck_fun :: BuiltinContext -> Options -> HeapsterEnv ->
+                          String -> String -> TopLevel ()
+heapster_typecheck_fun bic opts henv fn_name perms_string =
+  let lm = heapsterEnvLLVMModule henv in
   case modTrans lm of
     Some mod_trans -> do
       let arch = llvmArch $ _transContext mod_trans
@@ -134,7 +158,6 @@ heapster_extract_print bic opts lm fn_name perms_string =
       let cl_env = heapster_default_env -- FIXME: cl_env should be an argument
       let env = unClosed cl_env
       any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts lm fn_name
-      pp_opts <- getTopLevelPPOpts
       case any_cfg of
         AnyCFG cfg -> do
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
@@ -153,7 +176,25 @@ heapster_extract_print bic opts lm fn_name perms_string =
                     translateCFG env $ tcCFG env fun_perm cfg
               sc <- getSharedContext
               fun_term <- liftIO $ completeOpenTerm sc fun_openterm
-              liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
+              fun_tp <- liftIO $ completeOpenTermType sc fun_openterm
+              let saw_modname = heapsterEnvSAWModule henv
+              liftIO $ scModifyModule sc saw_modname $
+                flip insDef $
+                Def { defIdent = mkIdent saw_modname fn_name,
+                      defQualifier = NoQualifier,
+                      defType = fun_tp,
+                      defBody = Just fun_term }
+
+heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->
+                            String -> TopLevel ()
+heapster_print_fun_trans bic opts henv fn_name =
+  do pp_opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     let saw_modname = heapsterEnvSAWModule henv
+     fun_term <-
+       fmap (fromJust . defBody) $
+       liftIO $ scRequireDef sc $ mkIdent saw_modname fn_name
+     liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
 
 heapster_parse_test :: BuiltinContext -> Options -> LLVMModule ->
                        String -> String ->  TopLevel ()

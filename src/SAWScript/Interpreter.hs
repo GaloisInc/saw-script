@@ -1850,11 +1850,24 @@ primitives = Map.fromList
     [ "Call the monadic-recursive solver (that's MR. Solver to you)"
     , " to ask if two monadic terms are equal" ]
 
-  , prim "heapster_extract_print"
-    "LLVMModule -> String -> String -> TopLevel ()"
-    (bicVal heapster_extract_print)
+  , prim "heapster_init_env"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env)
+    [ "Create a new Heapster environment with the given SAW module name"
+    , " from the named LLVM bitcode file."
+    ]
+
+  , prim "heapster_typecheck_fun"
+    "HeapsterEnv -> String -> String -> TopLevel ()"
+    (bicVal heapster_typecheck_fun)
     [ "Translate an LLVM function to a SAW core term using Heapster"
-    , " type-checking, and print the result."
+    , " type-checking, and store the result in the current Heapster SAW module."
+    ]
+
+  , prim "heapster_print_fun_trans"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_print_fun_trans)
+    [ "Print the translation to SAW of a function that has been type-checked."
     ]
 
   , prim "heapster_parse_test"
