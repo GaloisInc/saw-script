@@ -2198,95 +2198,6 @@ instance MinLtEndPerms (RecPermArg a) where
 
 
 ----------------------------------------------------------------------
--- * Permission Environments
-----------------------------------------------------------------------
-
--- | A function permission that existentially quantifies the @ghosts@ types
-data SomeFunPerm args ret where
-  SomeFunPerm :: FunPerm ghosts args ret -> SomeFunPerm args ret
-
--- | An entry in a permission environment that associates a permission and
--- corresponding SAW identifier with a Crucible function handle
-data PermEnvFunEntry where
-  PermEnvFunEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
-                     FunPerm ghosts args ret -> Ident ->
-                     PermEnvFunEntry
-
--- | An existentially quantified 'RecPerm' (FIXME: is this needed?)
-data SomeRecPerm where
-  SomeRecPerm :: RecPerm args a -> SomeRecPerm
-
--- | An entry in a permission environment that associates a 'GlobalSymbol' with
--- a permission and a translation of that permission
-data PermEnvGlobalEntry where
-  PermEnvGlobalEntry :: (1 <= w, KnownNat w) => GlobalSymbol ->
-                        ValuePerm (LLVMPointerType w) -> [OpenTerm] ->
-                        PermEnvGlobalEntry
-
--- | A permission environment that maps function names, recursive permission
--- names, and 'GlobalSymbols' to their respective permission structures
-data PermEnv = PermEnv {
-  permEnvFunPerms :: [PermEnvFunEntry],
-  permEnvRecPerms :: [SomeRecPerm],
-  permEnvGlobalSyms :: [PermEnvGlobalEntry]
-  }
-
--- | Look up a 'FnHandle' by name in a 'PermEnv'
-lookupFunHandle :: PermEnv -> String -> Maybe SomeHandle
-lookupFunHandle env str =
-  case find (\(PermEnvFunEntry h _ _) ->
-              handleName h == fromString str) (permEnvFunPerms env) of
-    Just (PermEnvFunEntry h _ _) -> Just (SomeHandle h)
-    Nothing -> Nothing
-
--- | Look up the function permission and SAW translation for a 'FnHandle'
-lookupFunPerm :: PermEnv -> FnHandle cargs ret ->
-                 Maybe (SomeFunPerm (CtxToRList cargs) ret, Ident)
-lookupFunPerm env = helper (permEnvFunPerms env) where
-  helper :: [PermEnvFunEntry] -> FnHandle cargs ret ->
-            Maybe (SomeFunPerm (CtxToRList cargs) ret, Ident)
-  helper [] _ = Nothing
-  helper ((PermEnvFunEntry h' fun_perm ident):_) h
-    | Just Refl <- testEquality (handleType h') (handleType h)
-    , h' == h
-    = Just (SomeFunPerm fun_perm, ident)
-  helper (_:entries) h = helper entries h
-
--- | Look up a 'RecPermName' by name in a 'PermEnv'
-lookupRecPermName :: PermEnv -> String -> Maybe SomeRecPermName
-lookupRecPermName env str =
-  case find (\(SomeRecPerm rp) ->
-              recPermNameName (recPermName rp) == str) (permEnvRecPerms env) of
-    Just (SomeRecPerm rp) -> Just (SomeRecPermName (recPermName rp))
-    Nothing -> Nothing
-
--- | Look up the 'RecPerm' for a 'RecPermName' in a 'RecPermEnv'
-lookupRecPerm :: PermEnv -> RecPermName args a -> Maybe (RecPerm args a)
-lookupRecPerm env = helper (permEnvRecPerms env) where
-  helper :: [SomeRecPerm] -> RecPermName args a -> Maybe (RecPerm args a)
-  helper [] _ = Nothing
-  helper (SomeRecPerm rp:_) rpn
-    | Just (Refl, Refl) <- testRecPermNameEq (recPermName rp) rpn
-    = Just rp
-  helper (_:rps) rpn = helper rps rpn
-
--- | Look up the permissions and translation for a 'GlobalSymbol' at a
--- particular machine word width
-lookupGlobalSymbol :: PermEnv -> GlobalSymbol -> NatRepr w ->
-                      Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
-lookupGlobalSymbol env = helper (permEnvGlobalSyms env) where
-  helper :: [PermEnvGlobalEntry] -> GlobalSymbol -> NatRepr w ->
-            Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
-  helper  (PermEnvGlobalEntry sym'
-            (p :: ValuePerm (LLVMPointerType w')) t:_) sym w
-    | sym' == sym
-    , Just Refl <- testEquality w (knownNat :: NatRepr w') =
-      Just (p, t)
-  helper (_:entries) sym w = helper entries sym w
-  helper [] _ _ = Nothing
-
-
-----------------------------------------------------------------------
 -- * Matching Functions for Inspecting Permissions
 ----------------------------------------------------------------------
 
@@ -3399,6 +3310,101 @@ instance AbstractVars (RecPermArg a) where
   abstractPEVars ns1 ns2 (RecPermArg_RWModality rw) =
     absVarsReturnH ns1 ns2 $(mkClosed [| RecPermArg_RWModality |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 rw
+
+
+----------------------------------------------------------------------
+-- * Permission Environments
+----------------------------------------------------------------------
+
+-- | A function permission that existentially quantifies the @ghosts@ types
+data SomeFunPerm args ret where
+  SomeFunPerm :: FunPerm ghosts args ret -> SomeFunPerm args ret
+
+-- | An entry in a permission environment that associates a permission and
+-- corresponding SAW identifier with a Crucible function handle
+data PermEnvFunEntry where
+  PermEnvFunEntry :: args ~ CtxToRList cargs => FnHandle cargs ret ->
+                     FunPerm ghosts args ret -> Ident ->
+                     PermEnvFunEntry
+
+-- | An existentially quantified 'RecPerm' (FIXME: is this needed?)
+data SomeRecPerm where
+  SomeRecPerm :: RecPerm args a -> SomeRecPerm
+
+-- | An entry in a permission environment that associates a 'GlobalSymbol' with
+-- a permission and a translation of that permission
+data PermEnvGlobalEntry where
+  PermEnvGlobalEntry :: (1 <= w, KnownNat w) => GlobalSymbol ->
+                        ValuePerm (LLVMPointerType w) -> [OpenTerm] ->
+                        PermEnvGlobalEntry
+
+-- | A permission environment that maps function names, recursive permission
+-- names, and 'GlobalSymbols' to their respective permission structures
+data PermEnv = PermEnv {
+  permEnvFunPerms :: [PermEnvFunEntry],
+  permEnvRecPerms :: [SomeRecPerm],
+  permEnvGlobalSyms :: [PermEnvGlobalEntry]
+  }
+
+$(mkNuMatching [t| forall args ret. SomeFunPerm args ret |])
+$(mkNuMatching [t| PermEnvFunEntry |])
+$(mkNuMatching [t| SomeRecPerm |])
+$(mkNuMatching [t| PermEnvGlobalEntry |])
+$(mkNuMatching [t| PermEnv |])
+
+-- | Look up a 'FnHandle' by name in a 'PermEnv'
+lookupFunHandle :: PermEnv -> String -> Maybe SomeHandle
+lookupFunHandle env str =
+  case find (\(PermEnvFunEntry h _ _) ->
+              handleName h == fromString str) (permEnvFunPerms env) of
+    Just (PermEnvFunEntry h _ _) -> Just (SomeHandle h)
+    Nothing -> Nothing
+
+-- | Look up the function permission and SAW translation for a 'FnHandle'
+lookupFunPerm :: PermEnv -> FnHandle cargs ret ->
+                 Maybe (SomeFunPerm (CtxToRList cargs) ret, Ident)
+lookupFunPerm env = helper (permEnvFunPerms env) where
+  helper :: [PermEnvFunEntry] -> FnHandle cargs ret ->
+            Maybe (SomeFunPerm (CtxToRList cargs) ret, Ident)
+  helper [] _ = Nothing
+  helper ((PermEnvFunEntry h' fun_perm ident):_) h
+    | Just Refl <- testEquality (handleType h') (handleType h)
+    , h' == h
+    = Just (SomeFunPerm fun_perm, ident)
+  helper (_:entries) h = helper entries h
+
+-- | Look up a 'RecPermName' by name in a 'PermEnv'
+lookupRecPermName :: PermEnv -> String -> Maybe SomeRecPermName
+lookupRecPermName env str =
+  case find (\(SomeRecPerm rp) ->
+              recPermNameName (recPermName rp) == str) (permEnvRecPerms env) of
+    Just (SomeRecPerm rp) -> Just (SomeRecPermName (recPermName rp))
+    Nothing -> Nothing
+
+-- | Look up the 'RecPerm' for a 'RecPermName' in a 'RecPermEnv'
+lookupRecPerm :: PermEnv -> RecPermName args a -> Maybe (RecPerm args a)
+lookupRecPerm env = helper (permEnvRecPerms env) where
+  helper :: [SomeRecPerm] -> RecPermName args a -> Maybe (RecPerm args a)
+  helper [] _ = Nothing
+  helper (SomeRecPerm rp:_) rpn
+    | Just (Refl, Refl) <- testRecPermNameEq (recPermName rp) rpn
+    = Just rp
+  helper (_:rps) rpn = helper rps rpn
+
+-- | Look up the permissions and translation for a 'GlobalSymbol' at a
+-- particular machine word width
+lookupGlobalSymbol :: PermEnv -> GlobalSymbol -> NatRepr w ->
+                      Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
+lookupGlobalSymbol env = helper (permEnvGlobalSyms env) where
+  helper :: [PermEnvGlobalEntry] -> GlobalSymbol -> NatRepr w ->
+            Maybe (ValuePerm (LLVMPointerType w), [OpenTerm])
+  helper  (PermEnvGlobalEntry sym'
+            (p :: ValuePerm (LLVMPointerType w')) t:_) sym w
+    | sym' == sym
+    , Just Refl <- testEquality w (knownNat :: NatRepr w') =
+      Just (p, t)
+  helper (_:entries) sym w = helper entries sym w
+  helper [] _ _ = Nothing
 
 
 ----------------------------------------------------------------------
