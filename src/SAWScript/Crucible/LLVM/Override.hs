@@ -77,7 +77,6 @@ import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
-import qualified Lang.Crucible.CFG.Extension.Safety as Crucible
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
@@ -91,7 +90,6 @@ import qualified What4.Config as W4
 import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
-import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Symbol as W4
 
@@ -355,7 +353,7 @@ ppArgs sym cc cs (Crucible.RegMap args) = do
 --   predicates.
 methodSpecHandler ::
   forall arch rtp args ret.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -564,7 +562,7 @@ methodSpecHandler opts sc cc top_loc css h = do
 --   predicates.
 methodSpecHandler_prestate ::
   forall arch ctx.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -596,7 +594,7 @@ methodSpecHandler_prestate opts sc cc args cs =
 --   and computing postcondition predicates.
 methodSpecHandler_poststate ::
   forall arch ret.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
@@ -608,7 +606,7 @@ methodSpecHandler_poststate opts sc cc retTy cs =
      computeReturnValue opts cc sc cs retTy (cs ^. MS.csRetValue)
 
 -- learn pre/post condition
-learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
           => Options
           -> SharedContext
           -> LLVMCrucibleContext arch
@@ -655,7 +653,7 @@ termId t =
 
 
 -- execute a pre/post condition
-executeCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch))
+executeCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym)
             => Options
             -> SharedContext
             -> LLVMCrucibleContext arch
@@ -781,7 +779,7 @@ enforceDisjointness loc ss =
 -- statement cannot be executed until bindings for any/all lhs
 -- variables exist.
 matchPointsTos :: forall arch md.
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options          {- ^ saw script print out opts -} ->
   SharedContext    {- ^ term construction context -} ->
   LLVMCrucibleContext arch {- ^ simulator context     -} ->
@@ -1206,7 +1204,7 @@ learnGhost sc cc loc prepost var expected =
 -- Returns a string on failure describing a concrete memory load failure.
 learnPointsTo ::
   forall arch md .
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                    ->
   SharedContext              ->
   LLVMCrucibleContext arch      ->
@@ -1242,11 +1240,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
              , [ "And type:", show (Crucible.ppMemType memTy) ]
              ]
      case res of
-       Crucible.PartLLVMVal assertion_tree res_val -> do
-         pred_ <- Crucible.treeToPredicate
-           (Proxy @(Crucible.LLVM arch))
-           sym
-           assertion_tree
+       Crucible.NoErr pred_ res_val -> do
          pred_' <- case maybe_cond of
            Just cond -> do
              cond' <- instantiateExtResolveSAWPred sc cc (ttTerm cond)
@@ -1255,7 +1249,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
          addAssert pred_' $ Crucible.SimError loc $
            Crucible.AssertFailureSimError (show $ PP.vcat $ summarizeBadLoad) ""
          pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val
-       W4.Err _err -> do
+       _ -> do
          -- When we have a concrete failure, we do a little more computation to
          -- try and find out why.
          let (blk, _offset) = Crucible.llvmPointerView ptr1
@@ -1475,7 +1469,7 @@ executeGhost sc var val =
 -- the CrucibleSetup block. First we compute the value indicated by
 -- 'val', and then write it to the address indicated by 'ptr'.
 executePointsTo ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                    ->
   SharedContext              ->
   LLVMCrucibleContext arch     ->
@@ -1503,7 +1497,7 @@ executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr v
      writeGlobal memVar mem'
 
 storePointsToValue ::
-  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options ->
   LLVMCrucibleContext arch ->
   Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch)) ->
