@@ -23,6 +23,8 @@ import Verifier.SAW.Recognizer
 
 import qualified SAWScript.Prover.SBV as SBV
 
+import Prelude
+
 
 newtype LocalFunName = LocalFunName { unLocalFunName :: ExtCns Term } deriving (Eq, Show)
 
@@ -168,6 +170,7 @@ instance Pretty MRTerm where
   pretty (MRTermComp comp) = pretty comp
   pretty (MRTermCompFun f) = pretty f
   pretty (MRTermWHNFComp norm) = pretty norm
+  pretty (MRTermFunName nm) = pretty ("function" :: String) <+> pretty nm
 
 instance Pretty FailCtx where
   pretty (FailCtxCmp t1 t2) =

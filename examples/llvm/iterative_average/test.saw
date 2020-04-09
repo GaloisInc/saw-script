@@ -1,165 +1,74 @@
 import "test.cry";
 m <- llvm_load_module "tmp/test.bc";
 
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
+};
+
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
+};
+
 // Verify 'init'.
-//
-// Using 'llvm_symexec' and 'llvm_verify'.
-
-st <- fresh_symbolic "st" {| State |};
-let allocs = [ ("st", 1) ];
-let inputs = [ ("st->0", {{ st.sum }}, 1)
-             , ("st->1", {{ st.len }}, 1)
-             ];
-// How to get resulting 'st' state from output?
-//
-// LLVM+SAW integration doesn't have a way to talk about structs in
-// their entirety. So, we have to break the struct up in to fields,
-// and then reconstruct it.
-//
-// These don't work:
-//
-// - References the pointer, not the value:
-//
-//let outputs = [ ("st", 1) ];
-//
-// - Incomprehensible error:
-//
-//let outputs = [ ("*st", 1) ];
-let outputs = [ ("st->0", 1), ("st->1", 1) ];
-
-// Reconstruct 'state' record from tuple of its fields.
-let {{ 
-  toState : ([32], [32]) -> State
-  toState t = { sum = t.0, len = t.1 }
-}};
-
-t <- llvm_symexec m "init" allocs inputs outputs true;
-// Would like to do
-//
-//thm <- abstract_symbolic {{ t == init }};
-//
-// but can't talk about entire 'state' struct.
-thm <- abstract_symbolic {{ toState t == init }};
-print "Verifying 'init' using 'llvm_symexec':";
-prove_print abc thm;
 
 let init_spec = do {
-  llvm_ptr "st" (llvm_struct "struct.state");
+  (s, sp) <- ptr_to_fresh "st" (llvm_struct "struct.state");
 
-  // Says "Unsupported type in llvm_var: { i32, i32 }
-  //st <- llvm_var "*st" (llvm_struct "struct.state");
-  //llvm_ensure_eq "*st" {{ init }};
+  crucible_execute_func [sp];
 
-  // We need to declare all vars, even if we don't refer to their
-  // initial values.
-  llvm_var "st->0" (llvm_int 32);
-  llvm_var "st->1" (llvm_int 32);
-
-  llvm_ensure_eq "st->0" {{ init.sum }};
-  llvm_ensure_eq "st->1" {{ init.len }};
-
-  llvm_sat_branches true;
-  llvm_verify_tactic abc;
+  let res = crucible_struct [ crucible_term {{ init.sum }}
+                            , crucible_term {{ init.len }}
+                            ];
+  crucible_points_to sp res;
 };
-print "Verifying 'init' using 'llvm_verify':";
-init_ov <- llvm_verify m "init" [] init_spec;
+print "Verifying 'init' using 'crucible_llvm_verify':";
+init_ov <- crucible_llvm_verify m "init" [] true init_spec abc;
 print "";
 
 // Verify 'update'.
 
-let xs_len = 3;
-st <- fresh_symbolic "st" {| State |};
-xs <- fresh_symbolic "xs" {| [xs_len][32] |};
-let allocs = [ ("st", 1), ("xs", xs_len) ];
-let inputs = [ ("st->0", {{ st.sum }}, 1)
-             , ("st->1", {{ st.len }}, 1)
-             , ("*xs", {{ xs }}, xs_len)
-             , ("len", {{ `xs_len:[32] }}, 1)
-             ];
-let outputs = [ ("st->0", 1), ("st->1", 1) ];
-t <- llvm_symexec m "update" allocs inputs outputs true;
-thm <- abstract_symbolic {{ toState t == updatef st xs }};
-print "Verifying 'update' using 'llvm_symexec':";
-prove_print abc thm;
-
 let update_spec xs_len = do {
-  llvm_ptr "st" (llvm_struct "struct.state");
-  llvm_ptr "xs" (llvm_array xs_len (llvm_int 32));
+  (st0, stp) <- ptr_to_fresh "st" (llvm_struct "struct.state");
+  (xs0, xsp) <- ptr_to_fresh "xs" (llvm_array xs_len (llvm_int 32));
 
-  xs0 <- llvm_var "*xs" (llvm_array xs_len (llvm_int 32));
-  llvm_var "len" (llvm_int 32);
-  sum0 <- llvm_var "st->0" (llvm_int 32);
-  len0 <- llvm_var "st->1" (llvm_int 32);
+  crucible_execute_func [stp, xsp, crucible_term {{ `xs_len : [32] }}];
 
-  llvm_assert_eq "len" {{ `xs_len:[32] }};
+  let st1 = {{ updatef {sum = st0.0, len = st0.1} xs0 }};
 
-  let st0 = {{ { sum = sum0, len = len0 } }};
-  let st1 = {{ updatef st0 xs0 }};
-
-  llvm_ensure_eq "st->0" {{ st1.sum }};
-  llvm_ensure_eq "st->1" {{ st1.len }};
+  
+  let res = crucible_struct [ crucible_term {{ st1.sum }}
+                            , crucible_term {{ st1.len }}
+                            ];
+  crucible_points_to stp res;
   // Also prove that the content of xs is unchanged.
-  llvm_ensure_eq "*xs" {{ xs0 }};
-
-  llvm_sat_branches true;
-  //llvm_verify_tactic abc;
-  llvm_verify_tactic do {
-    unfolding ["st1", "updatef", "st0"];
-    simplify (cryptol_ss ());
-    simplify (add_prelude_eqs ["eq_refl"] empty_ss);
-    //print_goal;
-    //offline_extcore "out";
-    //assume_unsat;
-    abc;
-  };
+  crucible_points_to xsp (crucible_term xs0);
 };
-print "Verifying 'update' using 'llvm_verify':";
-update_ov <- llvm_verify m "update" [] (update_spec 3);
+print "Verifying 'update' using 'crucible_llvm_verify':";
+update_ov <- crucible_llvm_verify m "update" [] true (update_spec 3) abc;
 print "";
 
 // Verify 'digest'.
 
-st <- fresh_symbolic "st" {| State |};
-avg <- fresh_symbolic "avg" {| [32] |};
-let allocs = [ ("st", 1), ("avg", 1) ];
-let inputs = [ ("st->0", {{ st.sum }}, 1)
-             , ("st->1", {{ st.len }}, 1)
-             , ("*avg", {{ avg }}, 1)
-             ];
-let outputs = [ ("*avg", 1) ];
-t <- llvm_symexec m "digest" allocs inputs outputs true;
-thm <- abstract_symbolic {{ t == digest st }};
-print "Verifying 'update' using 'llvm_symexec':";
-prove_print abc thm;
-
 let digest_spec = do {
-  llvm_ptr "st" (llvm_struct "struct.state");
-  llvm_ptr "avg" (llvm_int 32);
+  (st0, stp) <- ptr_to_fresh "st" (llvm_struct "struct.state");
+  avgp <- crucible_alloc (llvm_int 32);
 
-  sum0 <- llvm_var "st->0" (llvm_int 32);
-  len0 <- llvm_var "st->1" (llvm_int 32);
-  llvm_var "*avg" (llvm_int 32);
+  // Avoid division by zero
+  crucible_precond {{ st0.1 != 0 }};
 
-  // If we define our Cryptol terms as Cryptol vars, instead of as
-  // SAWScript vars, then the verification fails! Apparently the
-  // problem is related to a bug whereby rewriting does not happen
-  // inside the values of Cryptol-defined variables.
-  //
-  //let {{ st0 = { sum = sum0, len = len0 } }};
-  //
-  // So, use a SAWScript var.
-  let st0 = {{ { sum = sum0, len = len0 } }};
+  crucible_execute_func [stp, avgp];
 
-  llvm_ensure_eq "*avg" {{ digest st0 }};
+  crucible_points_to avgp (crucible_term {{ digest {sum = st0.0, len = st0.1} }});
   // Also prove that the content of 'st' is unchanged.
-  llvm_ensure_eq "st->0" {{ sum0 }};
-  llvm_ensure_eq "st->1" {{ len0 }};
+  crucible_points_to stp (crucible_term st0);
 
-  llvm_sat_branches true;
-  llvm_verify_tactic abc;
 };
-print "Verifying 'digest' using 'llvm_verify':";
-digest_ov <- llvm_verify m "digest" [] digest_spec;
+print "Verifying 'digest' using 'crucible_llvm_verify':";
+digest_ov <- crucible_llvm_verify m "digest" [] true digest_spec abc;
 print "";
 
 // Verify imperative spec against pure spec.

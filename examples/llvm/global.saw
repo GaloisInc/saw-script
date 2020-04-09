@@ -1,19 +1,31 @@
-let clear_setup : LLVMSetup () = do {
-    g <- llvm_var "g" (llvm_int 32);
-    llvm_ensure_eq "g" {{ 0 : [32] }};
-    llvm_verify_tactic abc;
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
 };
 
-let set_setup : LLVMSetup () = do {
-    x <- llvm_var "x" (llvm_int 32);
-    g <- llvm_var "g" (llvm_int 32);
-    llvm_ensure_eq "g" {{ x : [32] }};
-    llvm_verify_tactic abc;
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
+};
+
+let clear_setup = do {
+    crucible_alloc_global "g";
+    crucible_execute_func [];
+    crucible_points_to (crucible_global "g") (crucible_term {{ 0 : [32] }});
+};
+
+let set_setup = do {
+    crucible_alloc_global "g";
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    crucible_execute_func [crucible_term x];
+    crucible_points_to (crucible_global "g") (crucible_term x);
 };
 
 let main : TopLevel () = do {
     m <- llvm_load_module "global.bc";
-    llvm_verify m "clear" [] clear_setup;
-    llvm_verify m "set" [] set_setup;
+    crucible_llvm_verify m "clear" [] false clear_setup abc;
+    crucible_llvm_verify m "set" [] false set_setup abc;
     print "Done.";
 };

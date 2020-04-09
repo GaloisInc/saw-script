@@ -1,3 +1,4 @@
+enable_deprecated;
 let id_spec = do {
     java_class_var "x" (java_class "java.lang.Object");
     java_return {{ 0 : [32] }};

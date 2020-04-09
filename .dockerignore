@@ -1,0 +1,20 @@
+*\#*
+*~
+.DS_Store
+.cabal-sandbox
+cabal.sandbox.config
+.ghc.environment.x86_64-darwin-*
+
+# vim swap files
+.*.swp
+.*.swo
+
+**/*.a
+**/*.o
+
+Dockerfile*
+
+**/.git
+**/.stack-work
+**/dist
+**/dist-newstyle

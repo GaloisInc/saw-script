@@ -1,3 +1,4 @@
+enable_deprecated;
 let copy_setup : JavaSetup () = do {
     a <- java_var "a" (java_array 10 java_int);
     java_var "b" (java_array 10 java_int);

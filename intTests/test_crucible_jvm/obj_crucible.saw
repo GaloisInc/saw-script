@@ -1,3 +1,4 @@
+enable_experimental;
 print "**loading TestStr";
 str <- java_load_class "java/lang/String";
 teststr <- java_load_class "TestStr";

@@ -79,6 +79,7 @@ import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 
 import qualified SAWScript.CongruenceClosure as CC
+import SAWScript.Position
 import SAWScript.Utils
 
 import qualified Cryptol.TypeCheck.AST as Cryptol
@@ -361,8 +362,6 @@ parseJavaExpr cb cls meth estr = parseParts eparts
               return $ CC.Term $ InstanceField e fid
         eparts = reverse $ splitOn "." estr
 
--- JavaType {{{1
-
 -- | Adapted from type 'JavaType' in Java.sawcore.
 data JavaType
   = JavaBoolean
@@ -375,4 +374,4 @@ data JavaType
   | JavaDouble
   | JavaArray Int JavaType
   | JavaClass String
-  deriving Eq
+  deriving (Eq, Show)

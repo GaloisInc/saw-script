@@ -50,6 +50,7 @@ import SAWScript.JavaUtils
 
 import SAWScript.Builtins
 import SAWScript.Options
+import SAWScript.Position (Pos(..), renderDoc)
 import SAWScript.Proof
 import SAWScript.Utils
 import SAWScript.Value as SS
@@ -167,7 +168,7 @@ extractJava bic opts cls mname setup = do
       rslt <- case methodIsStatic meth of
                 True -> execStaticMethod (className cls) (methodKey meth) args
                 False -> do
-                  RValue this <- freshJavaVal (Just argsRef) jsc (ClassInstance cls)
+                  ~(RValue this) <- freshJavaVal (Just argsRef) jsc (ClassInstance cls)
                   execInstanceMethod (className cls) (methodKey meth) this args
       dt <- case (rslt, methodReturnType meth) of
               (Nothing, _) -> fail $ "No return value from " ++ methodName meth
@@ -250,7 +251,7 @@ verifyJava bic opts cls mname overrides setup = do
               let exts = getAllExts g
               gprop <- io $ scGeneralizeExts jsc exts =<< scEqTrue jsc g
               io $ doExtraChecks opts bsc gprop
-              let goal = ProofGoal Universal n "vc" (vsVCName vs) gprop
+              let goal = ProofGoal n "vc" (vsVCName vs) gprop
               r <- evalStateT script (startProof goal)
               case r of
                 SS.Unsat _ -> liftIO $ printOutLn opts Debug "Valid."

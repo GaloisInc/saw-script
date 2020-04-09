@@ -17,6 +17,7 @@ module SAWScript.HeapsterBuiltins
 
 import Data.Maybe
 import qualified Data.Map as Map
+import Control.Lens
 import Control.Monad.IO.Class
 import Unsafe.Coerce
 import GHC.TypeNats
@@ -42,9 +43,10 @@ import SAWScript.TopLevel
 import SAWScript.Value
 import SAWScript.Utils as SS
 import SAWScript.Options
-import SAWScript.CrucibleBuiltins
 import SAWScript.LLVMBuiltins
 import SAWScript.Builtins
+import SAWScript.Crucible.LLVM.Builtins
+import SAWScript.Crucible.LLVM.MethodSpecIR
 
 import SAWScript.Heapster.CruUtil
 import SAWScript.Heapster.Permissions
@@ -150,14 +152,14 @@ heapster_init_env bic opts mod_str llvm_filename =
 heapster_typecheck_fun :: BuiltinContext -> Options -> HeapsterEnv ->
                           String -> String -> TopLevel ()
 heapster_typecheck_fun bic opts henv fn_name perms_string =
-  let lm = heapsterEnvLLVMModule henv in
-  case modTrans lm of
-    Some mod_trans -> do
-      let arch = llvmArch $ _transContext mod_trans
+  let some_lm = heapsterEnvLLVMModule henv in
+  case some_lm of
+    Some lm -> do
+      let arch = llvmArch $ _transContext (lm ^. modTrans)
       let w = archReprWidth arch
       let cl_env = heapster_default_env -- FIXME: cl_env should be an argument
       let env = unClosed cl_env
-      any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts lm fn_name
+      any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts some_lm fn_name
       case any_cfg of
         AnyCFG cfg -> do
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
@@ -196,14 +198,14 @@ heapster_print_fun_trans bic opts henv fn_name =
        liftIO $ scRequireDef sc $ mkIdent saw_modname fn_name
      liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
 
-heapster_parse_test :: BuiltinContext -> Options -> LLVMModule ->
+heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
                        String -> String ->  TopLevel ()
-heapster_parse_test bic opts lm fn_name perms_string =
-  case modTrans lm of
-    Some mod_trans -> do
+heapster_parse_test bic opts some_lm fn_name perms_string =
+  case some_lm of
+    Some lm -> do
       let env = unClosed heapster_default_env -- FIXME: cl_env should be an argument
-      let arch = llvmArch $ _transContext mod_trans
-      any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts lm fn_name
+      let arch = llvmArch $ _transContext (lm ^. modTrans)
+      any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts some_lm fn_name
       case any_cfg of
         AnyCFG cfg -> do
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg

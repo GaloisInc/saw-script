@@ -1,6 +1,6 @@
 l <- llvm_load_module "double.bc";
-double_imp <- llvm_extract l "double_imp" llvm_pure;
-double_ref <- llvm_extract l "double_ref" llvm_pure;
+double_imp <- crucible_llvm_extract l "double_imp";
+double_ref <- crucible_llvm_extract l "double_ref";
 let thm = {{ \x -> double_ref x == double_imp x }};
 
 r <- prove abc thm;
@@ -9,7 +9,7 @@ print r;
 r <- prove yices thm;
 print r;
 
-r <- prove cvc4 thm;
+r <- prove z3 thm;
 print r;
 
 let thm_neg = {{ \x -> ~(thm x) }};

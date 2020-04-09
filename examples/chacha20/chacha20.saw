@@ -1,3 +1,4 @@
+enable_deprecated;
 import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry" as chacha20;
 
 // -----------------------------------------------------------------------------
@@ -6,26 +7,36 @@ import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry"
 print "loading LLVM bitcode...";
 mod <- llvm_load_module "chacha20.bc";
 
-c <- fresh_symbolic "out"     {| [256][8] |};
-k <- fresh_symbolic "key"     {| [32][8]  |};
-n <- fresh_symbolic "nonce"   {| [12][8]  |};
-i <- fresh_symbolic "counter" {| [32] |};
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p v;
+    return p;
+};
 
-let allocs = [ ("out",   256)
-             , ("key",   32)
-             , ("nonce", 12)
-             ];
-let inits = [ ("*out",   c, 256)
-            , ("olen", {{ 256:[64] }}, 1)
-            , ("counter", i, 1)
-            , ("*key",   k, 32)
-            , ("*nonce", n, 12)
-            ];
-let results = [ ("*out", 256) ];
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty (crucible_term x);
+    return (x, p);
+};
 
-print "extracting stream function...";
-cstream <- time (llvm_symexec mod "crypto_stream_chacha20" allocs inits results true);
+let i8 = llvm_int 8;
+let i32 = llvm_int 32;
 
-print "checking equality...";
-thm <- abstract_symbolic {{ cstream == chacha20::stream k i n }};
-time (prove_print abc thm);
+let stream_spec len = do {
+  outp <- crucible_alloc (llvm_array len i8);
+  (key, keyp) <- ptr_to_fresh "key" (llvm_array 32 i8);
+  (nonce, noncep) <- ptr_to_fresh "nonce" (llvm_array 12 i8);
+  counter <- crucible_fresh_var "counter" i32;
+
+  crucible_execute_func [ outp
+                        , crucible_term {{ `len : [64] }}
+                        , crucible_term counter
+                        , noncep
+                        , keyp
+                        ];
+
+  crucible_points_to outp (crucible_term {{ chacha20::stream key counter nonce : [len][8] }});
+};
+
+print "running verification...";
+time (crucible_llvm_verify mod "crypto_stream_chacha20" [] true (stream_spec 256) abc);

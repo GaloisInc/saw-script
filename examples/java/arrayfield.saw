@@ -1,3 +1,4 @@
+enable_deprecated;
 let init_spec = do {
   a <- java_var "this.a" (java_array 5 java_int);
   x <- java_var "x" java_int;

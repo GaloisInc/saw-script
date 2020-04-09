@@ -18,6 +18,7 @@ module SAWScript.Heapster.CruUtil where
 import Data.Kind
 import Data.Text hiding (length)
 import Data.Reflection
+import Data.List.NonEmpty (NonEmpty(..))
 
 import Data.Binding.Hobbits
 
@@ -30,17 +31,23 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
 
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
+import What4.Partial
+import What4.Partial.AssertionTree
+import Lang.Crucible.CFG.Extension.Safety
 import Lang.Crucible.CFG.Expr
 import Lang.Crucible.CFG.Core hiding (App)
 import qualified Lang.Crucible.CFG.Core as Core
 import Lang.Crucible.CFG.Extension
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.LLVM.Extension
+import Lang.Crucible.LLVM.Extension.Safety
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Arch.X86
+import Lang.Crucible.LLVM.DataLayout
+import qualified Lang.Crucible.LLVM.Extension.Safety.Poison as Poison
+import qualified Lang.Crucible.LLVM.Extension.Safety.UndefinedBehavior as UB
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.OpenTerm
-
 
 ----------------------------------------------------------------------
 -- * Building 'NuMatching' and 'Closable' Instances for Crucible Types
@@ -222,9 +229,30 @@ $(mkNuMatching [t| forall f tp. NuMatchingAny1 f => BaseTerm f tp |])
 instance NuMatchingAny1 f => NuMatchingAny1 (BaseTerm f) where
   nuMatchingAny1Proof = nuMatchingProof
 
+$(mkNuMatching [t| forall a. NuMatching a => NonEmpty a |])
+$(mkNuMatching [t| forall c a.
+                (NuMatching c, NuMatching a) => AssertionTree c a |])
+$(mkNuMatching [t| forall p v. (NuMatching p, NuMatching v) => Partial p v |])
 $(mkNuMatching [t| forall ext f tp.
-                (NuMatchingAny1 f, NuMatchingAny1 (ExprExtension ext f)) =>
+                (NuMatchingAny1 f, NuMatchingAny1 (ExprExtension ext f),
+                 NuMatching (AssertionClassifierTree ext f)) =>
+                PartialExpr ext f tp |])
+$(mkNuMatching [t| forall ext f tp.
+                (NuMatchingAny1 f, NuMatchingAny1 (ExprExtension ext f),
+                 NuMatching (AssertionClassifier ext f)) =>
                 App ext f tp |])
+
+
+$(mkNuMatching [t| Bytes |])
+$(mkNuMatching [t| forall v. NuMatching v => Field v |])
+$(mkNuMatching [t| Alignment |])
+$(mkNuMatching [t| UB.PtrComparisonOperator |])
+$(mkNuMatching [t| forall v. NuMatching v => StorageTypeF v |])
+
+$(mkNuMatching [t| forall f. NuMatchingAny1 f => UB.UndefinedBehavior f |])
+$(mkNuMatching [t| forall f. NuMatchingAny1 f => Poison.Poison f |])
+$(mkNuMatching [t| forall f. NuMatchingAny1 f => BadBehavior f |])
+$(mkNuMatching [t| forall f. NuMatchingAny1 f => LLVMSafetyAssertion f |])
 
 
 -- NOTE: Crucible objects can never contain any Hobbits names, but "proving"
@@ -505,9 +533,7 @@ cruCtxLen (CruCtxCons ctx _) = 1 + cruCtxLen ctx
 ----------------------------------------------------------------------
 
 -- | Get all the registers used in a Crucible statement
-stmtInputRegs :: (TraversableFC (ExprExtension ext),
-                  TraversableFC (StmtExtension ext)) =>
-                 Stmt ext ctx ctx' -> [Some (Reg ctx)]
+stmtInputRegs :: TraverseExt ext => Stmt ext ctx ctx' -> [Some (Reg ctx)]
 stmtInputRegs (SetReg _ (Core.App app)) = foldMapFC (\r -> [Some r]) app
 stmtInputRegs (ExtendAssign s') = foldMapFC (\r -> [Some r]) s'
 stmtInputRegs (CallHandle _ h _ args) =
@@ -525,9 +551,8 @@ stmtInputRegs (Assert r1 r2) = [Some r1, Some r2]
 stmtInputRegs (Assume r1 r2) = [Some r1, Some r2]
 
 -- | Get all the input and output registers of a Crucible statement
-stmtOutputRegs :: (TraversableFC (ExprExtension ext),
-                   TraversableFC (StmtExtension ext)) =>
-                  Size ctx' -> Stmt ext ctx ctx' -> [Some (Reg ctx')]
+stmtOutputRegs :: TraverseExt ext => Size ctx' -> Stmt ext ctx ctx' ->
+                  [Some (Reg ctx')]
 stmtOutputRegs sz (SetReg _ (Core.App app)) =
   foldMapFC (\r -> [Some $ extendReg r]) app ++ [Some $ Reg $ Ctx.lastIndex sz]
 stmtOutputRegs sz (ExtendAssign s') =

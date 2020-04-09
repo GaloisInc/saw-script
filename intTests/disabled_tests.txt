@@ -9,7 +9,6 @@ test_FNV_a1_rev
 
 # Symbolic simulators can't tell that the loops terminate.
 test0010_jss_cnf_exp
-test0011_lss_cnf_exp
 
-# This test takes a long time, and doesn't add much value
-test_tutorial4
+# Missing LLVM intrinsic
+test0039_rust

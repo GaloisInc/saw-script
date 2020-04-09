@@ -1,16 +1,14 @@
-let f_spec = do {
-    llvm_ptr "x" (llvm_int 32);
-    llvm_assert_null "x";
-    llvm_return {{ 1 : [32] }};
-    llvm_verify_tactic abc;
+let f_spec1 = do {
+    p <- crucible_alloc (llvm_int 32);
+    crucible_execute_func [p];
+    crucible_return (crucible_term {{ 0 : [32] }});
 };
 
 let f_spec2 = do {
-    llvm_ptr "x" (llvm_int 32);
-    llvm_return {{ 0 : [32] }};
-    llvm_verify_tactic abc;
+    crucible_execute_func [crucible_null];
+    crucible_return (crucible_term {{ 1 : [32] }});
 };
 
 m <- llvm_load_module "assert-null.bc";
-llvm_verify m "f" [] f_spec;
-llvm_verify m "f" [] f_spec2;
+crucible_llvm_verify m "f" [] false f_spec1 abc;
+crucible_llvm_verify m "f" [] false f_spec2 abc;

@@ -63,6 +63,7 @@ import Lang.Crucible.LLVM.Arch.X86
 import Lang.Crucible.CFG.Expr
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.CFG.Extension
+import Lang.Crucible.CFG.Extension.Safety
 import Lang.Crucible.Analysis.Fixpoint.Components
 
 import SAWScript.Heapster.CruUtil
@@ -198,7 +199,8 @@ instance NuMatchingAny1 RegWithVal where
   nuMatchingAny1Proof = nuMatchingProof
 
 type NuMatchingExtC ext =
-  (NuMatchingAny1 (ExprExtension ext RegWithVal)
+  (NuMatchingAny1 (ExprExtension ext RegWithVal),
+   NuMatching (AssertionClassifier ext RegWithVal)
   -- (NuMatchingAny1 (ExprExtension ext TypedReg)
    -- , NuMatchingAny1 (StmtExtension ext TypedReg))
   )

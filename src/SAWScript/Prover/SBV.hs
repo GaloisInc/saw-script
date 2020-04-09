@@ -18,7 +18,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBVSim
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
-import Verifier.SAW.Recognizer(asPi, asPiList, asEqTrue)
+import Verifier.SAW.Recognizer(asPi, asPiList)
 
 import Verifier.SAW.Cryptol.Prims (sbvPrims)
 
@@ -70,7 +70,7 @@ satUnintSBV conf unints timeout sc term =
 
        SBV.Unknown {} -> fail "Prover returned Unknown"
 
-       SBV.ProofError _ ls -> fail . unlines $ "Prover returned error: " : ls
+       SBV.ProofError _ ls _ -> fail . unlines $ "Prover returned error: " : ls
 
 
 prepSBV ::

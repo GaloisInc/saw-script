@@ -1,3 +1,4 @@
+enable_deprecated;
 let ecc_class = "com.galois.ecc.P384ECC64";
 
 import "cryptol-spec/ecc.cry" as ecc;
@@ -30,21 +31,6 @@ let {{
   ec_extend x = zero # x
 
   jget a (i : [32]) = a @ i
-
-  p384_mod_div (p,x,y) = egcd(p,0,y,x)
-    where
-      mh = p384_field::p384_mod_half
-      ms = p384_field::p384_mod_sub
-      /* In code below, a is always odd. */
-      egcd(a,ra,b,rb) =
-        if b == 0 then
-          ra
-        else if (b && 1) == 0 then /* b is even. */
-          egcd(a, ra, b >> 1, mh(p, rb))
-        else if a < b then
-          egcd(a, ra, (b - a) >> 1, mh(p, ms(p, rb, ra)))
-        else
-          egcd(b, rb, (a - b) >> 1, mh(p, ms(p, ra, rb)))
 
   field_prime = 0xffffffffffffffffffffffffffffffffffffffffffffffff #
                 0xfffffffffffffffeffffffff0000000000000000ffffffff
@@ -383,7 +369,7 @@ let mod_div_spec = do {
   y <- ecdsa_arr384 "y";
   p <- ecdsa_arr384 "p";
   ecdsa_uses_temps;
-  ecdsa_assign_arr384 "ra" {{ p384_mod_div (p, x, y) }};
+  ecdsa_assign_arr384 "ra" {{ p384_field::p384_mod_div (p, x, y) }};
   java_no_simulate;
 };
 
@@ -1225,11 +1211,8 @@ let main = do {
     prove_print (unint_z3 ["p384_mod_mul"]) t;
   };
   p384_curve_field_div_simp <- do {
-    let {{ thm x y = ecc::p384_curve.point_ops.group_field.div (x,y) ==
-                     p384_mod_div (p384_field::p384_group_size, x, y) }};
-    let t = unfold_term ["thm"] {{ thm }};
-    let t = rewrite ss0 t;
-    //print_term t;
+    let t = {{ \x y -> ecc::p384_curve.point_ops.group_field.div (x,y) ==
+                     p384_field::p384_mod_div (p384_field::p384_group_size, x, y) }};
     prove_print (unint_z3 ["p384_mod_div"]) t;
   };
   p384_curve_twin_mul_simp <- do {

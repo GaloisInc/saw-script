@@ -1,0 +1,2 @@
+This tests whether static functions given numeric suffixes by clang can
+be verified by using only their base name, without the suffix.

@@ -1,6 +1,6 @@
 l <- llvm_load_module "double.bc";
-double_imp <- llvm_extract l "double_imp" llvm_pure;
-double_ref <- llvm_extract l "double_ref" llvm_pure;
+double_imp <- crucible_llvm_extract l "double_imp";
+double_ref <- crucible_llvm_extract l "double_ref";
 let thm = {{ \x -> double_ref x == double_imp x }};
 
 let picosat = external_cnf_solver "picosat" ["%f"];

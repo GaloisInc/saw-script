@@ -1,19 +1,17 @@
-let add_setup : LLVMSetup () = do {
-    x <- llvm_var "x" (llvm_int 32);
-    y <- llvm_var "y" (llvm_int 32);
-    llvm_return {{ x + y : [32] }};
-    llvm_verify_tactic abc;
+let add_setup = do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    y <- crucible_fresh_var "y" (llvm_int 32);
+    crucible_execute_func [crucible_term x, crucible_term y];
+    crucible_return (crucible_term {{ x + y : [32] }});
 };
 
-let dbl_setup : LLVMSetup () = do {
-    x <- llvm_var "x" (llvm_int 32);
-    llvm_return {{ x + x : [32] }};
-    llvm_verify_tactic abc;
+let dbl_setup = do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    crucible_execute_func [crucible_term x];
+    crucible_return (crucible_term {{ x + x : [32] }});
 };
 
-let main : TopLevel () = do {
-    m <- llvm_load_module "basic.bc";
-    add_ms <- llvm_verify m "add" [] add_setup;
-    llvm_verify m "dbl" [add_ms] dbl_setup;
-    print "Done.";
-};
+m <- llvm_load_module "basic.bc";
+add_ms <- crucible_llvm_verify m "add" [] false add_setup abc;
+crucible_llvm_verify m "dbl" [add_ms] false dbl_setup abc;
+print "Done.";

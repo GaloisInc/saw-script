@@ -37,7 +37,7 @@ module SAWScript.AST
        ) where
 
 import SAWScript.Token
-import SAWScript.Utils
+import SAWScript.Position (Pos(..), Positioned(..), maxSpan)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
