@@ -12,6 +12,7 @@ module SAWScript.HeapsterBuiltins
        ( heapster_init_env
        , heapster_typecheck_fun
        , heapster_print_fun_trans
+       , heapster_export_coq
        , heapster_parse_test
        ) where
 
@@ -53,6 +54,9 @@ import SAWScript.Heapster.Permissions
 import SAWScript.Heapster.TypedCrucible
 import SAWScript.Heapster.SAWTranslation
 import SAWScript.Heapster.PermParser
+
+import SAWScript.Prover.Exporter
+import Verifier.SAW.Translation.Coq
 
 
 getLLVMCFG :: ArchRepr arch -> SAW_CFG -> AnyCFG (LLVM arch)
@@ -197,6 +201,15 @@ heapster_print_fun_trans bic opts henv fn_name =
        fmap (fromJust . defBody) $
        liftIO $ scRequireDef sc $ mkIdent saw_modname fn_name
      liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
+
+heapster_export_coq :: BuiltinContext -> Options -> HeapsterEnv ->
+                       String -> TopLevel ()
+heapster_export_coq bic opts henv filename =
+  do let coq_trans_conf = coqTranslationConfiguration [] []
+     sc <- getSharedContext
+     saw_mod <- liftIO $ scFindModule sc $ heapsterEnvSAWModule henv
+     let coq_doc = translateSAWModule coq_trans_conf saw_mod
+     liftIO $ writeFile filename (show coq_doc)
 
 heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
                        String -> String ->  TopLevel ()

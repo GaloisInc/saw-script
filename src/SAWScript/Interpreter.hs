@@ -2264,6 +2264,12 @@ primitives = Map.fromList
     [ "Print the translation to SAW of a function that has been type-checked."
     ]
 
+  , prim "heapster_export_coq"
+    "HeapsterEnv -> String -> TopLevel ()"
+    (bicVal heapster_export_coq)
+    Experimental
+    [ "Export a Heapster environment to a Coq file" ]
+
   , prim "heapster_parse_test"
     "LLVMModule -> String -> String -> TopLevel ()"
     (bicVal heapster_parse_test)

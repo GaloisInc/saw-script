@@ -19,6 +19,7 @@ module SAWScript.Prover.Exporter
   , writeCoqCryptolModule
   , writeCoqSAWCorePrelude
   , writeCoqTerm
+  , coqTranslationConfiguration
   , writeCore
 
     -- * Misc
