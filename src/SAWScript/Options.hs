@@ -124,7 +124,7 @@ options =
      "<num 0-5 | 'silent' | 'counterexamples' | 'error' | 'warn' | 'info' | 'debug'>"
     )
     "Set verbosity level"
-  , Option "C" ["no-color"]
+  , Option [] ["no-color"]
     (NoArg (\opts -> opts { useColor = False }))
     "Disable ANSI color and Unicode output"
   ]
