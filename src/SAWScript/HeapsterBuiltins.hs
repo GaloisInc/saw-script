@@ -57,6 +57,7 @@ import SAWScript.Heapster.PermParser
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 
 getLLVMCFG :: ArchRepr arch -> SAW_CFG -> AnyCFG (LLVM arch)
@@ -208,7 +209,10 @@ heapster_export_coq bic opts henv filename =
   do let coq_trans_conf = coqTranslationConfiguration [] []
      sc <- getSharedContext
      saw_mod <- liftIO $ scFindModule sc $ heapsterEnvSAWModule henv
-     let coq_doc = translateSAWModule coq_trans_conf saw_mod
+     let coq_doc =
+           vcat [preamblePlus coq_trans_conf
+                 (string "From CryptolToCoq Require Import SAWCorePrelude"),
+                 translateSAWModule coq_trans_conf saw_mod]
      liftIO $ writeFile filename (show coq_doc)
 
 heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
