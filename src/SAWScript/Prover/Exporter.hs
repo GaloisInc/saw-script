@@ -199,7 +199,7 @@ coqTranslationConfiguration notations skips = Coq.TranslationConfiguration
   { Coq.notations          = notations
   , Coq.monadicTranslation = False
   , Coq.skipDefinitions    = skips
-  , Coq.vectorModule       = "SAWVectorsAsCoqVectors"
+  , Coq.vectorModule       = "SAWCoreVectorsAsCoqVectors"
   }
 
 writeCoqTerm ::
