@@ -31,6 +31,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , ptrBitwidth
   , integerAlignment
   , floatAlignment
+  , fromAlignment
   , EndianForm(..)
     -- * Re-exports from "Lang.Crucible.LLVM.Extension"
   , ArchWidth
@@ -119,6 +120,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , mkNullPointer
   , ptrIsNull
   , ptrEq
+  , muxLLVMPtr
   , pattern PtrWidth
   , llvmPointerView
   , llvmPointer_bv
@@ -137,7 +139,7 @@ import Lang.Crucible.LLVM.Bytes
 
 import Lang.Crucible.LLVM.DataLayout
   (Alignment, noAlignment, padToAlignment, DataLayout, EndianForm(..),
-   integerAlignment, floatAlignment, intWidthSize, ptrBitwidth)
+   integerAlignment, floatAlignment, fromAlignment, intWidthSize, ptrBitwidth)
 
 import Lang.Crucible.LLVM.Extension
   (ArchWidth)
@@ -174,6 +176,7 @@ import Lang.Crucible.LLVM.MemModel
    pattern LLVMPointerRepr, LLVMPointerType,
    pattern PtrWidth, llvmPointer_bv, withPtrWidth, pattern LLVMPointer, pattern PtrRepr,
    llvmPointerView, projectLLVM_bv,
+   muxLLVMPtr,
    storageTypeF, StorageType, StorageTypeF(..),
    storageTypeSize, toStorableType, fieldVal, bitvectorType, fieldPad, arrayType,
    mkStructType, AllocType(HeapAlloc, GlobalAlloc), Mutability(..))

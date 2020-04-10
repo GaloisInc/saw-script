@@ -50,6 +50,7 @@ jobs:
         apt:
           packages:
             - openjdk-8-jdk
+            - yasm
       before_install:
         - sudo add-apt-repository -y ppa:sri-csl/formal-methods
         - sudo apt-get update -q
@@ -68,51 +69,25 @@ jobs:
     # instead of using the `env` key.
     - &s2n-test-staging
       stage: test s2n
-      name: hmac md5
+      name: hmac
       addons:
         apt:
           packages:
-            - clang-3.8
-            - llvm-3.8
+            - clang-3.9
+            - llvm-3.9
       install:
         # - git clone https://github.com/awslabs/s2n.git
         - git clone https://github.com/GaloisInc/s2n.git
         - mkdir -p s2n/test-deps/saw/bin
         - cp bin/saw s2n/test-deps/saw/bin
         - cd s2n
-        - git checkout bump-saw
+        - git checkout fc861ca412cd50f3b1d264f940e6251aef63c94d
       before_script:
         - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=md5
       script:
-        - source .travis/s2n_setup_env.sh
-        - SAW=true travis_retry .travis/s2n_install_test_dependencies.sh
-        - .travis/s2n_travis_build.sh
-    - <<: *s2n-test-staging
-      name: hmac sha1
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha1
-    - <<: *s2n-test-staging
-      name: hmac sha224
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha224
-    - <<: *s2n-test-staging
-      name: hmac sha256
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha256
-    - <<: *s2n-test-staging
-      name: hmac sha384
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha384
-    - <<: *s2n-test-staging
-      name: hmac sha512
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha512
+        - source codebuild/bin/s2n_setup_env.sh
+        - SAW=true SAW_INSTALL_DIR=tmp-saw travis_retry codebuild/bin/s2n_install_test_dependencies.sh
+        - codebuild/bin/s2n_codebuild.sh
     - <<: *s2n-test-staging
       name: drbg
       before_script:

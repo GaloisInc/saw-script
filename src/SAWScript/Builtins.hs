@@ -108,7 +108,8 @@ import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst)
 import qualified Cryptol.Eval.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
-import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
+import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
+import qualified Cryptol.Eval.Concrete.Value as C (Concrete(..), bvVal)
 import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
@@ -119,7 +120,6 @@ import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
 import SAWScript.Proof
 import SAWScript.TopLevel
-import SAWScript.SAWCorePrimitives( bitblastPrimitives, sbvPrimitives, concretePrimitives )
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 
@@ -616,7 +616,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   let args' = map replaceFileName args
       replaceFileName "%f" = path
       replaceFileName a = a
-  BBSim.withBitBlastedPred proxy sc bitblastPrimitives t $ \be l0 shapes -> do
+  BBSim.withBitBlastedPred proxy sc mempty t $ \be l0 shapes -> do
   -- negate formula to turn it into an existentially-quantified SAT query
   let l = AIG.not l0
   variables <- (if doCNF then AIG.writeCNF else writeAIGWithMapping) be l path
@@ -675,7 +675,7 @@ proveRME = wrapProver Prover.proveRME
 
 codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
-  SBVSim.sbvCodeGen sc sbvPrimitives unints mpath fname t
+  SBVSim.sbvCodeGen sc mempty unints mpath fname t
   where mpath = if null path then Nothing else Just path
 
 
@@ -1022,7 +1022,7 @@ cexEvalFn sc args tm = do
       argMap = Map.fromList (zip is args')
   tm' <- scInstantiateExt sc argMap tm
   modmap <- scGetModuleMap sc
-  return $ Concrete.evalSharedTerm modmap concretePrimitives tm'
+  return $ Concrete.evalSharedTerm modmap mempty tm'
 
 toValueCase :: (SV.FromValue b) =>
                (b -> SV.Value -> SV.Value -> TopLevel SV.Value)
@@ -1132,7 +1132,7 @@ eval_int t = do
     C.Forall [] [] (isInteger -> True) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
   v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
-  io $ C.runEval SV.quietEvalOpts (C.fromWord "eval_int" v)
+  io $ C.runEval SV.quietEvalOpts (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
 
 -- Predicate on Cryptol types true of integer types, i.e. types
 -- @[n]Bit@ for *finite* @n@.
@@ -1235,18 +1235,22 @@ tailPrim [] = fail "tail: empty list"
 tailPrim (_ : xs) = return xs
 
 parseCore :: String -> TopLevel Term
-parseCore input = do
-  sc <- getSharedContext
-  let base = "<interactive>"
-      path = "<interactive>"
-  let (uterm, errs) = parseSAWTerm base path (B.fromString input)
-  mapM_ (printOutLnTop Opts.Error . show) errs
-  unless (null errs) $ fail $ show errs
-  let mnm = Just $ mkModuleName ["Cryptol"]
-  err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
-  case err_or_t of
-    Left err -> fail (show err)
-    Right (TC.TypedTerm x _) -> return x
+parseCore input =
+  do sc <- getSharedContext
+     let base = "<interactive>"
+         path = "<interactive>"
+     uterm <-
+       case parseSAWTerm base path (B.fromString input) of
+         Right uterm -> return uterm
+         Left err ->
+           do let msg = show err
+              printOutLnTop Opts.Error msg
+              fail msg
+     let mnm = Just $ mkModuleName ["Cryptol"]
+     err_or_t <- io $ runTCM (typeInferComplete uterm) sc mnm []
+     case err_or_t of
+       Left err -> fail (show err)
+       Right (TC.TypedTerm x _) -> return x
 
 parse_core :: String -> TopLevel TypedTerm
 parse_core input = do

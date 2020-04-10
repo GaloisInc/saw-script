@@ -81,7 +81,7 @@ data JVMMethodId =
 
 makeLenses ''JVMMethodId
 
-csMethodName :: Simple Lens (MS.CrucibleMethodSpecIR CJ.JVM) String
+csMethodName :: Lens' (MS.CrucibleMethodSpecIR CJ.JVM) String
 csMethodName = MS.csMethod . jvmMethodName
 
 instance PPL.Pretty JVMMethodId where

@@ -21,7 +21,7 @@ The process of extracting models from programs, manipulating them,
 forming queries about them, and sending them to external provers is
 orchestrated using a special purpose language called SAWScript.
 SAWScript is a typed functional language with support for sequencing of
-imperative commmands.
+imperative commands.
 
 The rest of this document first describes how to use the SAW tool,
 `saw`, and outlines the structure of the SAWScript language and its
@@ -2073,7 +2073,7 @@ available in the bitcode
 Either of these functions can be used with `crucible_points_to` to
 specify the value of a particular array element or `struct` field.
 Sometimes, however, it is more convenient to specify all array elements
-or field values at onces. The `crucible_array` and `crucible_struct`
+or field values at once. The `crucible_array` and `crucible_struct`
 functions construct compound values from lists of element values.
 
 * `crucible_array : [SetupValue] -> SetupValue`

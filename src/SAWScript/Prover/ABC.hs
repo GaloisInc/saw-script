@@ -12,7 +12,6 @@ import SAWScript.Proof(Prop, propToPredicate, unProp)
 import SAWScript.Prover.Exporter (writeVerilogProp)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
-import SAWScript.SAWCorePrimitives( bitblastPrimitives )
 import SAWScript.Prover.Util
          (liftCexBB, bindAllExts, checkBooleanSchema)
 
@@ -28,7 +27,7 @@ proveABC proxy sc goal =
      TypedTerm schema t <-
         (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
      checkBooleanSchema schema
-     BBSim.withBitBlastedPred proxy sc bitblastPrimitives t $
+     BBSim.withBitBlastedPred proxy sc mempty t $
       \be lit0 shapes ->
          do let lit = AIG.not lit0
             satRes <- getModel (map fst shapes) (map snd shapes) =<< AIG.checkSat be lit

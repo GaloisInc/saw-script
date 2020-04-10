@@ -72,7 +72,6 @@ import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
-import SAWScript.SAWCorePrimitives( concretePrimitives )
 
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
@@ -86,6 +85,7 @@ import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
 import qualified Cryptol.Eval.Value as C
+import qualified Cryptol.Eval.Concrete.Value as C
 import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
@@ -326,7 +326,7 @@ tupleLookupValue _ _ = error "tupleLookupValue"
 
 evaluate :: SharedContext -> Term -> IO Concrete.CValue
 evaluate sc t =
-  (\modmap -> Concrete.evalSharedTerm modmap concretePrimitives t) <$>
+  (\modmap -> Concrete.evalSharedTerm modmap mempty t) <$>
   scGetModuleMap sc
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
@@ -387,8 +387,10 @@ data TopLevelRW =
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
   , rwPrimsAvail :: Set PrimitiveLifecycle
   , rwSMTArrayMemoryModel :: Bool
+  , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+  , rwWhat4HashConsing :: Bool
   }
 
 newtype TopLevel a =

@@ -1,6 +1,7 @@
 {-# Language DataKinds, OverloadedStrings #-}
 {-# Language RankNTypes, TypeOperators #-}
 {-# Language PatternSynonyms #-}
+{-# LANGUAGE ImplicitParams #-}
 module SAWScript.X86
   ( Options(..)
   , proof
@@ -10,11 +11,18 @@ module SAWScript.X86
   , Fun(..)
   , Goal(..)
   , gGoal
+  , getGoals
   , X86Error(..)
   , X86Unsupported(..)
   , SharedContext
   , CallHandler
   , Sym
+  , RelevantElf(..)
+  , getElf
+  , getRelevant
+  , findSymbols
+  , posFn
+  , loadGlobal
   ) where
 
 
@@ -26,6 +34,7 @@ import Control.Monad.IO.Class(liftIO)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
+import           Data.IORef
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
@@ -73,6 +82,7 @@ import SAWScript.Crucible.LLVM.CrucibleLLVM
   (Mem, ppPtr, pattern LLVMPointer, bytesToInteger)
 import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
 import Lang.Crucible.LLVM.MemModel (mkMemVar)
+import qualified Lang.Crucible.LLVM.MemModel as Crucible
 
 -- Crucible SAW
 import Lang.Crucible.Backend.SAWCore
@@ -380,6 +390,9 @@ translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
+     bbMapRef <- newIORef mempty
+     let ?badBehaviorMap = bbMapRef
+
      let sym   = backend opts
          sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }
 
@@ -411,6 +424,7 @@ setSimulatorVerbosity verbosity sym = do
 
 
 doSim ::
+  Crucible.HasLLVMAnn Sym =>
   Options ->
   RelevantElf ->
   SymFuns Sym ->
@@ -444,13 +458,20 @@ doSim opts elf sfs name (globs,overs) st checkPost =
      execResult <- statusBlock "  Simulating... " $ do
        let crucRegTypes = crucArchRegTypes x86
        let macawStructRepr = StructRepr crucRegTypes
+       -- The global pointer validity predicate is required if your memory
+       -- representation has gaps that are not supposed to be mapped and you
+       -- want to verify that no memory accesses touch unmapped regions.
+       --
+       -- The memory setup for this verifier does not have that problem, and
+       -- thus does not need any additional validity predicates.
+       let noExtraValidityPred _ _ _ _ = return Nothing
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
            ctx = SimContext { _ctxSymInterface = sym
                               , ctxSolverProof = \a -> a
                               , ctxIntrinsicTypes = llvmIntrinsicTypes
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
-                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym)
+                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym) noExtraValidityPred
                               , _functionBindings =
                                    insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) $
                                    emptyHandleMap

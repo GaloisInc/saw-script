@@ -28,6 +28,7 @@ import Data.Foldable(toList)
 
 import Control.Monad.Except (runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
+import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
 import Data.IORef (newIORef)
 import qualified Data.Map as Map
@@ -51,7 +52,6 @@ import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.What4.SWord as W4Sim
 
 
-import SAWScript.SAWCorePrimitives( bitblastPrimitives )
 import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
@@ -118,7 +118,7 @@ writeSAIGInferLatches proxy sc file tt = do
   let numLatches = sizeFiniteType s
   writeSAIG proxy sc file (ttTerm tt) numLatches
   where
-    die :: Monad m => String -> m a
+    die :: Fail.MonadFail m => String -> m a
     die why = fail $
       "writeSAIGInferLatches: " ++ why ++ ":\n" ++
       "term must have type of the form '(i, s) -> (o, s)',\n" ++
@@ -240,5 +240,5 @@ bitblastPrim proxy sc t = do
     C.Forall [] [] _ -> return ()
     _ -> fail $ "Attempting to bitblast a term with a polymorphic type: " ++ pretty s
 -}
-  BBSim.withBitBlastedTerm proxy sc bitblastPrimitives t' $ \be ls -> do
+  BBSim.withBitBlastedTerm proxy sc mempty t' $ \be ls -> do
     return (AIG.Network be (toList ls))

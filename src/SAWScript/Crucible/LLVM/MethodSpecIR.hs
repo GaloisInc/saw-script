@@ -39,6 +39,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
     -- * LLVMAllocSpec
   , LLVMAllocSpec(..)
   , allocSpecType
+  , allocSpecAlign
   , allocSpecMut
   , allocSpecLoc
   , allocSpecBytes
@@ -183,6 +184,7 @@ data LLVMAllocSpec =
   LLVMAllocSpec
     { _allocSpecMut   :: CL.Mutability
     , _allocSpecType  :: CL.MemType
+    , _allocSpecAlign :: CL.Alignment
     , _allocSpecBytes :: CL.Bytes
     , _allocSpecLoc   :: ProgramLoc
     }
@@ -336,13 +338,14 @@ ccTypeCtx = view CL.llvmTypeCtx . ccLLVMContext
 type instance MS.PointsTo (CL.LLVM arch) = LLVMPointsTo arch
 
 data LLVMPointsTo arch =
-  LLVMPointsTo ProgramLoc (MS.SetupValue (CL.LLVM arch)) (MS.SetupValue (CL.LLVM arch))
+  LLVMPointsTo ProgramLoc (Maybe TypedTerm) (MS.SetupValue (CL.LLVM arch)) (MS.SetupValue (CL.LLVM arch))
 
 ppPointsTo :: LLVMPointsTo arch -> PPL.Doc
-ppPointsTo (LLVMPointsTo _loc ptr val) =
+ppPointsTo (LLVMPointsTo _loc cond ptr val) =
   MS.ppSetupValue ptr
   PPL.<+> PPL.text "points to"
   PPL.<+> MS.ppSetupValue val
+  PPL.<+> maybe PPL.empty (\tt -> PPL.text "if" PPL.<+> MS.ppTypedTerm tt) cond
 
 instance PPL.Pretty (LLVMPointsTo arch) where
   pretty = ppPointsTo
