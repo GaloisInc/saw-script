@@ -5,3 +5,9 @@ Makefile.coq: _CoqProject
 
 build: Makefile.coq
 	make -f Makefile.coq
+
+clean: Makefile.coq
+	make -f Makefile.coq clean
+
+%.vo: Makefile.coq
+	make -f Makefile.coq $@
