@@ -77,7 +77,6 @@ library
     , unordered-containers
     , utf8-string
     , what4 >= 0.4
-    , what4-verilog
     , vector
     , xdg-basedir
     , GraphSCC
@@ -88,6 +87,7 @@ library
     , flexdis86
     , elf-edit
     , reflection
+    , prettyprinter
 
   hs-source-dirs: src
 
