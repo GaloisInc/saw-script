@@ -108,7 +108,8 @@ import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst)
 import qualified Cryptol.Eval.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
-import qualified Cryptol.Eval.Value as C (fromVBit, fromWord)
+import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
+import qualified Cryptol.Eval.Concrete.Value as C (Concrete(..), bvVal)
 import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
@@ -1119,7 +1120,7 @@ eval_int t = do
     C.Forall [] [] (isInteger -> True) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
   v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
-  io $ C.runEval SV.quietEvalOpts (C.fromWord "eval_int" v)
+  io $ C.runEval SV.quietEvalOpts (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
 
 -- Predicate on Cryptol types true of integer types, i.e. types
 -- @[n]Bit@ for *finite* @n@.

@@ -11,6 +11,7 @@ import Control.Monad
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.Eval.Monad as CV
 import qualified Cryptol.Eval.Value as CV
+import qualified Cryptol.Eval.Concrete.Value as CV
 import Verifier.SAW.Cryptol (exportValueWithSchema, scCryptolType)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Concrete (CValue)
@@ -58,8 +59,8 @@ vcCounterexample sc opts (EqualityCheck nm impNode specNode) evalFn =
          sv = exportValueWithSchema sschema sn
          opts' = SV.cryptolPPOpts opts
      -- Grr. Different pretty-printers.
-     lv_doc <- CV.runEval SV.quietEvalOpts (CV.ppValue opts' lv)
-     sv_doc <- CV.runEval SV.quietEvalOpts (CV.ppValue opts' sv)
+     lv_doc <- CV.runEval SV.quietEvalOpts (CV.ppValue CV.Concrete opts' lv)
+     sv_doc <- CV.runEval SV.quietEvalOpts (CV.ppValue CV.Concrete opts' sv)
 
      return (text nm <$$>
         nest 2 (text "Encountered: " <+>
