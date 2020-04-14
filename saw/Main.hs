@@ -15,6 +15,7 @@ import Data.List
 import System.IO
 import System.Console.GetOpt
 import System.Environment
+import System.Directory
 
 import SAWScript.Options
 import SAWScript.Utils
@@ -22,7 +23,6 @@ import SAWScript.Interpreter (processFile)
 import qualified SAWScript.REPL as REPL
 import SAWScript.Version (shortVersionText)
 import SAWScript.Value (AIGProxy(..))
-import SAWScript.Prover.Versions (getZ3Version)
 import qualified Data.ABC.GIA as GIA
 
 main :: IO ()
@@ -48,8 +48,8 @@ main = do
                        exitProofUnknown
   where header = "Usage: saw [OPTION...] [-I | file]"
         checkZ3Version opts = do
-          z3 <- getZ3Version
-          unless (isJust z3)
+          p <- findExecutable "z3"
+          unless (isJust p)
             $ err opts "Error: z3 is required to run SAW, but it was not found on the system path."
         err opts msg = do
           when (verbLevel opts >= Error)
