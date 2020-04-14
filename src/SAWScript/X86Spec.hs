@@ -424,6 +424,8 @@ locRepr l =
         M.BVTypeRepr w -> LLVMPointerRepr w
         M.BoolTypeRepr -> BoolRepr
         M.TupleTypeRepr {} -> error $ "[locRepr] Unexpected tuple register"
+        M.FloatTypeRepr {} -> error $ "[locRepr] Unexpected float register"
+        M.VecTypeRepr {} -> error $ "[locRepr] Unexpected vector register"
 
 --------------------------------------------------------------------------------
 

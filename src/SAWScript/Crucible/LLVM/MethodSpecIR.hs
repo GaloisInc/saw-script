@@ -103,7 +103,6 @@ import           Control.Lens
 import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
 import           Data.IORef
-import           Data.Monoid ((<>))
 import           Data.Type.Equality (TestEquality(..))
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
