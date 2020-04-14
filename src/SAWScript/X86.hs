@@ -429,7 +429,7 @@ doSim ::
   RelevantElf ->
   SymFuns Sym ->
   ByteString ->
-  (GlobalMap Sym 64, Overrides) ->
+  (GlobalMap Sym Crucible.Mem 64, Overrides) ->
   State ->
   (State -> IO ()) ->
   IO Integer

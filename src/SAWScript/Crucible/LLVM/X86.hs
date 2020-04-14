@@ -157,7 +157,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
       methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) setup
-      (globs :: Macaw.GlobalMap Sym 64, mem, regs, env) <-
+      (globs :: Macaw.GlobalMap Sym C.LLVM.Mem 64, mem, regs, env) <-
         liftIO $ initialMemory sym elf cc maxAddr globsyms methodSpec
 
       let
@@ -305,7 +305,7 @@ initialMemory ::
   Integer {- ^ Minimum size of the global allocation (here, the end of the .text segment -} ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   MS.CrucibleMethodSpecIR LLVM ->
-  IO (Macaw.GlobalMap Sym 64, Mem, Regs, Map MS.AllocIndex Ptr)
+  IO (Macaw.GlobalMap Sym C.LLVM.Mem 64, Mem, Regs, Map MS.AllocIndex Ptr)
 initialMemory sym elf cc endText globsyms ms = do
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
@@ -339,7 +339,7 @@ setupGlobals ::
   Mem ->
   Integer {- ^ Minimum size of the global allocation -} ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
-  IO (Macaw.GlobalMap Sym 64, Mem)
+  IO (Macaw.GlobalMap Sym C.LLVM.Mem 64, Mem)
 setupGlobals sym elf mem endText globsyms = do
   let align = C.LLVM.exponentToAlignment 4
   globs <- mconcat <$> mapM readInitialGlobal globsyms
