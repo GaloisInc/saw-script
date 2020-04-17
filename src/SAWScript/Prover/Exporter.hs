@@ -33,6 +33,8 @@ import qualified Data.AIG as AIG
 import Data.IORef (newIORef)
 import qualified Data.Map as Map
 import qualified Data.SBV.Dynamic as SBV
+import System.IO
+import Data.Text.Prettyprint.Doc.Render.Text
 
 import Cryptol.Utils.PP(pretty)
 
@@ -40,7 +42,6 @@ import Data.Parameterized.Nonce(globalNonceGenerator)
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible (newSAWCoreBackend)
 
-import Verifier.SAW.Cryptol.Prims (w4Prims)
 import Verifier.SAW.SharedTerm as SC
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.FiniteValue
@@ -60,7 +61,7 @@ import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
-import What4.Protocol.VerilogWriter (exprVerilog, eqVerilog, exprToModule, eqToModule)
+import What4.Protocol.VerilogWriter (exprVerilog, eqVerilog)
 
 proveWithExporter ::
   (SharedContext -> FilePath -> Prop -> IO ()) ->
@@ -201,13 +202,10 @@ write_verilog path t = do
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
-  let gen = globalNonceGenerator
-  sym <- Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
-  W4.startCaching sym
-  let unints = []
+  sym <- Crucible.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
   modmap <- scGetModuleMap sc
   ref <- newIORef Map.empty
-  e <- W4Sim.w4EvalBasic sym sc modmap w4Prims ref unints t
+  e <- W4Sim.w4EvalBasic sym sc modmap Map.empty ref [] =<< rewriteEqs sc t
   edoc <- runExceptT $
     case e of
       Sim.VBool b -> exprVerilog b "f"
@@ -217,11 +215,11 @@ writeVerilog sc path t = do
   case edoc of
     Left err -> do
       fail $ "Failed to translate to Verilog: " ++ err
-      --putStrLn "Original:"
-      --print (ppTermDepth 3 t)
-      --putStrLn "What4:"
-      --print e
-    Right doc -> writeFile path (show doc)
+    Right doc -> do
+      h <- openFile path WriteMode
+      hPutDoc h doc
+      hPutStrLn h ""
+      hClose h
 
 -- TODO: negate goal
 {-
