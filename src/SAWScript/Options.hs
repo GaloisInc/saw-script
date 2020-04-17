@@ -29,6 +29,7 @@ data Options = Options
   , showHelp         :: Bool
   , showVersion      :: Bool
   , printShowPos     :: Bool
+  , useColor         :: Bool
   , printOutFn       :: Verbosity -> String -> IO ()
   } deriving (Show)
 
@@ -58,6 +59,7 @@ defaultOptions
     , runInteractively = False
     , showHelp = False
     , showVersion = False
+    , useColor = True
     }
 
 printOutWith :: Verbosity -> Verbosity -> String -> IO ()
@@ -122,6 +124,9 @@ options =
      "<num 0-5 | 'silent' | 'counterexamples' | 'error' | 'warn' | 'info' | 'debug'>"
     )
     "Set verbosity level"
+  , Option [] ["no-color"]
+    (NoArg (\opts -> opts { useColor = False }))
+    "Disable ANSI color and Unicode output"
   ]
 
 -- Try to read verbosity as either a string or number and default to 'Debug'.
