@@ -24,9 +24,10 @@ Portability : portable
 
 module Verifier.SAW.Translation.Coq.SAWModule where
 
-import           Control.Lens                                  (makeLenses)
+import           Control.Lens                                  (makeLenses, view)
 import qualified Control.Monad.Except                          as Except
 import           Control.Monad.Reader                          hiding (fail)
+import           Control.Monad.State                           hiding (fail)
 import           Prelude                                       hiding (fail)
 import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
 
@@ -39,20 +40,22 @@ import           Verifier.SAW.Translation.Coq.Monad
 import           Verifier.SAW.Translation.Coq.SpecialTreatment
 import qualified Verifier.SAW.Translation.Coq.Term             as TermTranslation
 
-data TranslationState = TranslationState
-  { _localEnvironment  :: [String]
+import Debug.Trace
+
+data ModuleTranslationState = ModuleTranslationState
+  { _currentModule  :: Maybe ModuleName
   }
   deriving (Show)
-makeLenses ''TranslationState
+makeLenses ''ModuleTranslationState
 
-type ModuleTranslationMonad m = TranslationMonad TranslationState m
+type ModuleTranslationMonad m = TranslationMonad ModuleTranslationState m
 
 runModuleTranslationMonad ::
-  TranslationConfiguration ->
+  TranslationConfiguration -> Maybe ModuleName ->
   (forall m. ModuleTranslationMonad m => m a) ->
-  Either (TranslationError Term) (a, TranslationState)
-runModuleTranslationMonad configuration =
-  runTranslationMonad configuration (TranslationState [])
+  Either (TranslationError Term) (a, ModuleTranslationState)
+runModuleTranslationMonad configuration modname =
+  runTranslationMonad configuration (ModuleTranslationState modname)
 
 dropPi :: Coq.Term -> Coq.Term
 dropPi (Coq.Pi (_ : t) r) = Coq.Pi t r
@@ -64,7 +67,11 @@ translateCtor ::
   [Coq.Binder] -> -- list of parameters to drop from `ctorType`
   Ctor -> m Coq.Constructor
 translateCtor inductiveParameters (Ctor {..}) = do
-  constructorName <- TermTranslation.translateIdentUnqualified ctorName
+  maybe_constructorName <-
+    liftTermTranslationMonad $ TermTranslation.translateIdentToIdent ctorName
+  let constructorName = case maybe_constructorName of
+        Just n -> identName n
+        Nothing -> error "translateCtor: unexpected translation for constructor"
   constructorType <-
     -- Unfortunately, `ctorType` qualifies the inductive type's name in the
     -- return type.
@@ -79,6 +86,8 @@ translateCtor inductiveParameters (Ctor {..}) = do
     }
 
 translateDataType :: ModuleTranslationMonad m => DataType -> m Coq.Decl
+translateDataType (DataType {..})
+  | trace ("translateDataType: " ++ show dtName) False = undefined
 translateDataType (DataType {..}) =
   atDefSite <$> findSpecialTreatment dtName >>= \case
   DefPreserve              -> translateNamed $ identName dtName
@@ -89,19 +98,11 @@ translateDataType (DataType {..}) =
     translateNamed :: ModuleTranslationMonad m => Coq.Ident -> m Coq.Decl
     translateNamed name = do
       let inductiveName = name
-      let
-        mkParam :: ModuleTranslationMonad m => (String, Term) -> m Coq.Binder
-        mkParam (s, t) = do
-          t' <- liftTermTranslationMonad (TermTranslation.translateTerm t)
-          return $ Coq.Binder s (Just t')
-      let mkIndex (s, t) = do
-            t' <- liftTermTranslationMonad (TermTranslation.translateTerm t)
-            let s' = case s of
-                  "_" -> Nothing
-                  _   -> Just s
-            return $ Coq.PiBinder s' t'
-      inductiveParameters   <- mapM mkParam dtParams
-      inductiveIndices      <- mapM mkIndex dtIndices
+      (inductiveParameters, inductiveIndices) <-
+        liftTermTranslationMonad $ do
+        ps <- TermTranslation.translateParams dtParams
+        ixs <- TermTranslation.translateParams dtIndices
+        return (ps, map (\(Coq.Binder s (Just t)) -> Coq.PiBinder (Just s) t) ixs)
       let inductiveSort = TermTranslation.translateSort dtSort
       inductiveConstructors <- mapM (translateCtor inductiveParameters) dtCtors
       return $ Coq.InductiveDecl $ Coq.Inductive
@@ -126,7 +127,7 @@ skipped sawIdent =
   Coq.Comment $ show sawIdent ++ " was skipped"
 
 translateDef :: ModuleTranslationMonad m => Def -> m Coq.Decl
-translateDef (Def {..}) = do
+translateDef (Def {..}) = trace ("translateDef " ++ show defIdent) $ do
   specialTreatment <- findSpecialTreatment defIdent
   translateAccordingly (atDefSite specialTreatment)
 
@@ -162,20 +163,21 @@ liftTermTranslationMonad ::
   (forall m. ModuleTranslationMonad m => m a)
 liftTermTranslationMonad n = do
   configuration <- ask
-  let r = TermTranslation.runTermTranslationMonad configuration [] [] n
+  cur_mod <- view currentModule <$> get
+  let r = TermTranslation.runTermTranslationMonad configuration cur_mod [] [] n
   case r of
     Left  e      -> Except.throwError e
     Right (a, _) -> do
       return a
 
-translateDecl :: TranslationConfiguration -> ModuleDecl -> Doc
-translateDecl configuration decl =
+translateDecl :: TranslationConfiguration -> Maybe ModuleName -> ModuleDecl -> Doc
+translateDecl configuration modname decl =
   case decl of
   TypeDecl td -> do
-    case runModuleTranslationMonad configuration (translateDataType td) of
+    case runModuleTranslationMonad configuration modname (translateDataType td) of
       Left e -> error $ show e
       Right (tdecl, _) -> Coq.ppDecl tdecl
   DefDecl dd -> do
-    case runModuleTranslationMonad configuration (translateDef dd) of
+    case runModuleTranslationMonad configuration modname (translateDef dd) of
       Left e -> error $ show e
       Right (tdecl, _) -> Coq.ppDecl tdecl

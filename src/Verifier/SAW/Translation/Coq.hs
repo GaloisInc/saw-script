@@ -112,7 +112,7 @@ preamble configuration = preamblePlus configuration $ vcat []
 translateTermAsDeclImports ::
   TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
 translateTermAsDeclImports configuration name t = do
-  doc <- TermTranslation.translateDefDoc configuration [] name t
+  doc <- TermTranslation.translateDefDoc configuration Nothing [] name t
   return (preamble configuration <$$> hardline <> doc)
 
 translateSAWModule :: TranslationConfiguration -> Module -> Doc
@@ -123,8 +123,10 @@ translateSAWModule configuration m =
   ++ [ text $ "Module " ++ name ++ "."
      , ""
      ]
-  ++ [ SAWModuleTranslation.translateDecl configuration decl | decl <- moduleDecls m ]
+  ++ [ SAWModuleTranslation.translateDecl configuration (Just $ moduleName m) decl
+     | decl <- moduleDecls m ]
   ++ [ text $ "End " ++ name ++ "."
+     , ""
      ]
 
 translateCryptolModule ::

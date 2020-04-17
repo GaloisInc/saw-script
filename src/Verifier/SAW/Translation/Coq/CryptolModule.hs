@@ -35,6 +35,7 @@ translateCryptolModule ::
 translateCryptolModule configuration globalDecls (CryptolModule _ tm) =
   case TermTranslation.runTermTranslationMonad
        configuration
+       Nothing
        globalDecls
        []
        (translateTypedTermMap tm) of

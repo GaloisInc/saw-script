@@ -43,6 +43,10 @@ import           Verifier.SAW.Term.Functor
 import           Verifier.SAW.Translation.Coq.Monad
 import           Verifier.SAW.Translation.Coq.SpecialTreatment
 
+import Debug.Trace
+traceTerm :: String -> Term -> a -> a
+traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
+
 data TranslationState = TranslationState
 
   { _globalDeclarations :: [String]
@@ -62,6 +66,7 @@ data TranslationState = TranslationState
   , _localEnvironment  :: [String]
   -- ^ TODO: describe me
 
+  , _currentModule :: Maybe ModuleName
   }
   deriving (Show)
 
@@ -93,85 +98,103 @@ type TermTranslationMonad m = TranslationMonad TranslationState m
 
 runTermTranslationMonad ::
   TranslationConfiguration ->
+  Maybe ModuleName ->
   [String] ->
   [String] ->
   (forall m. TermTranslationMonad m => m a) ->
   Either (TranslationError Term) (a, TranslationState)
-runTermTranslationMonad configuration globalDecls localEnv =
+runTermTranslationMonad configuration modname globalDecls localEnv =
   runTranslationMonad configuration
   (TranslationState { _globalDeclarations = globalDecls
                     , _localDeclarations  = []
                     , _localEnvironment   = localEnv
+                    , _currentModule      = modname
                     })
 
-findIdentTranslation ::
-  TranslationConfigurationMonad m =>
-  Ident -> m Ident
-findIdentTranslation i =
-  atUseSite <$> findSpecialTreatment i >>= \case
-    UsePreserve                         -> pure $ mkIdent translatedModuleName (identName i)
-    UseRename   targetModule targetName -> pure $ mkIdent (fromMaybe translatedModuleName targetModule) targetName
-    UseReplace  _                       -> error $ "This identifier should have been replaced already: " ++ show i
+errorTermM :: TermTranslationMonad m => String -> m Coq.Term
+errorTermM str = return $ Coq.App (Coq.Var "error") [Coq.StringLit str]
+
+translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Coq.Term
+translateIdentWithArgs i args =
+  (view currentModule <$> get) >>= \cur_modname ->
+  let identToCoq ident =
+        if Just (identModule ident) == cur_modname then "@" ++ identName ident else
+          "@" ++ show (translateModuleName (identModule ident))
+          ++ "." ++ identName ident in
+
+  (atUseSite <$> findSpecialTreatment i) >>= \case
+    UsePreserve -> Coq.App (Coq.Var $ identToCoq i) <$> mapM translateTerm args
+    UseRename targetModule targetName ->
+      Coq.App (Coq.Var $ identToCoq $
+               mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
+               targetName) <$>
+      mapM translateTerm args
+    UseReplaceDropArgs n replacement
+      | length args >= n -> Coq.App replacement <$> mapM translateTerm (drop n args)
+    UseReplaceDropArgs n _ ->
+      errorTermM ("Identifier " ++ show i
+                  ++ " not applied to required number of args,"
+                  ++ " which is " ++ show n)
+
+translateIdent :: TermTranslationMonad m => Ident -> m Coq.Term
+translateIdent i = translateIdentWithArgs i []
+
+translateIdentToIdent :: TermTranslationMonad m => Ident -> m (Maybe Ident)
+translateIdentToIdent i =
+  (atUseSite <$> findSpecialTreatment i) >>= \case
+    UsePreserve -> return $ Just (mkIdent translatedModuleName (identName i))
+    UseRename   targetModule targetName ->
+      return $ Just $ mkIdent (fromMaybe translatedModuleName targetModule) targetName
+    UseReplaceDropArgs _ _ -> return Nothing
   where
     translatedModuleName = translateModuleName (identModule i)
-
-translateIdent ::
-  TranslationConfigurationMonad m =>
-  Ident -> m Coq.Ident
-translateIdent = (show <$>) <$> findIdentTranslation
-
-translateIdentUnqualified ::
-  TranslationConfigurationMonad m =>
-  Ident -> m Coq.Ident
-translateIdentUnqualified = (identName <$>) <$> findIdentTranslation
 
 translateSort :: Sort -> Coq.Sort
 translateSort s = if s == propSort then Coq.Prop else Coq.Type
 
 flatTermFToExpr ::
   TermTranslationMonad m =>
-  (Term -> m Coq.Term) ->
   FlatTermF Term ->
   m Coq.Term
-flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
+flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
-    GlobalDef i   -> Coq.Var <$> (("@" ++) <$> translateIdent i)
+    GlobalDef i   -> translateIdent i
     UnitValue     -> pure (Coq.Var "tt")
     UnitType      -> pure (Coq.Var "unit")
-    PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse go [x, y]
-    PairType x y  -> Coq.App (Coq.Var "prod") <$> traverse go [x, y]
-    PairLeft t    -> Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.fst") <*> traverse go [t]
-    PairRight t   -> Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.snd") <*> traverse go [t]
+    PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse translateTerm [x, y]
+    PairType x y  -> Coq.App (Coq.Var "prod") <$> traverse translateTerm [x, y]
+    PairLeft t    ->
+      Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.fst") <*> traverse translateTerm [t]
+    PairRight t   ->
+      Coq.App <$> pure (Coq.Var "SAWCoreScaffolding.snd") <*> traverse translateTerm [t]
     -- TODO: maybe have more customizable translation of data types
-    DataTypeApp n is as ->
-      Coq.App
-        <$> (Coq.Var <$> (("@" ++) <$> translateIdentUnqualified n))
-        <*> traverse go (is ++ as)
-    -- TODO: maybe have more customizable translation of data constructors
-    CtorApp n is as ->
-      Coq.App
-        <$> (Coq.Var <$> (("@" ++) <$> translateIdentUnqualified n))
-        <*> traverse go (is ++ as)
+    DataTypeApp n is as -> translateIdentWithArgs n (is ++ as)
+    CtorApp n is as -> translateIdentWithArgs n (is ++ as)
     -- TODO: support this next!
-    RecursorApp typeEliminated parameters motive eliminators indices termEliminated ->
-      Coq.App
-      <$> (Coq.Var <$> ((\ i -> "@" ++ i ++ "_rect") <$> translateIdentUnqualified typeEliminated))
-      <*> (
-      traverse go $
-      parameters ++ [motive] ++ map snd eliminators ++ indices ++ [termEliminated]
-      )
+    RecursorApp d parameters motive eliminators indices termEliminated ->
+      do maybe_d_trans <- translateIdentToIdent d
+         rect_var <- case maybe_d_trans of
+           Just i -> return $ Coq.Var (show i ++ "_rect")
+           Nothing ->
+             errorTermM ("Recursor for " ++ show d ++
+                         " cannot be translated because the datatype " ++
+                         "is mapped to an arbitrary Coq term")
+         let args =
+               parameters ++ [motive] ++ map snd eliminators
+               ++ indices ++ [termEliminated]
+         Coq.App rect_var <$> mapM translateTerm args
     Sort s -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit i)
     ArrayValue _ vec -> do
       let addElement accum element = do
-            elementTerm <- go element
+            elementTerm <- translateTerm element
             return (Coq.App (Coq.Var "Vector.cons")
                     [Coq.Var "_", elementTerm, Coq.Var "_", accum]
                    )
         in
         foldM addElement (Coq.App (Coq.Var "Vector.nil") [Coq.Var "_"]) (Vector.reverse vec)
     StringLit s -> pure (Coq.Scope (Coq.StringLit s) "string")
-    ExtCns (EC _ _ _) -> notSupported
+    ExtCns (EC _ _ _) -> errorTermM "External constants not supported"
 
     -- NOTE: The following requires the coq-extensible-records library, because
     -- Coq records are nominal rather than structural
@@ -180,7 +203,7 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
     -- (record (Fields (FSCons ("x" %e nat) FSNil)))   has one field "x" of type "nat"
     RecordType fs ->
       let makeField name typ = do
-            typTerm <- go typ
+            typTerm <- translateTerm typ
             return (Coq.App (Coq.Var "@pair")
               [ Coq.Var "field"
               , Coq.Var "_"
@@ -198,7 +221,7 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
 
     RecordValue fs ->
       let makeField name val = do
-            valTerm <- go val
+            valTerm <- translateTerm val
             return (Coq.App (Coq.Var "@record_singleton")
               [ Coq.Var "_"
               , Coq.Scope (Coq.StringLit name) "string"
@@ -211,7 +234,7 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
       in
       foldM addField (Coq.Var "record_empty") fs
     RecordProj r f -> do
-      rTerm <- go r
+      rTerm <- translateTerm r
       return (Coq.App (Coq.Var "@Rget")
               [ Coq.Var "_"
               , rTerm
@@ -219,12 +242,6 @@ flatTermFToExpr go tf = -- traceFTermF "flatTermFToExpr" tf $
               , Coq.Var "_"
               , Coq.Ltac "simpl; exact eq_refl"
               ])
-  where
-    notSupported = Except.throwError $ NotSupported errorTerm
-    --badTerm = throwError $ BadTerm errorTerm
-    errorTerm = Unshared $ FTermF tf
-    --asString (asFTermF -> Just (StringLit s)) = pure s
-    --asString _ = badTerm
 
 -- | Recognizes an $App (App "Cryptol.seq" n) x$ and returns ($n$, $x$).
 asSeq :: Fail.MonadFail f => Recognizer f Term (Term, Term)
@@ -276,9 +293,10 @@ translateTerm t = withLocalLocalEnvironment $ do
   -- traceTerm "translateTerm" t $
   -- NOTE: env is in innermost-first order
   env <- view localEnvironment <$> get
-  case t of
+  let t' = trace ("translateTerm: " ++ "env = " ++ show env ++ ", t =" ++ showTerm t) t
+  case t' of
 
-    (asFTermF -> Just tf)  -> flatTermFToExpr (go env) tf
+    (asFTermF -> Just tf)  -> flatTermFToExpr tf
 
     (asPi -> Just _) -> translatePi params e
       where
@@ -317,8 +335,8 @@ translateTerm t = withLocalLocalEnvironment $ do
         -- FIXME: (pun not intended) better conditions for when this is safe to do
         "Prelude.fix" ->
           case args of
-          []  -> notSupported "call to Prelude.fix with no argument"
-          [_] -> notSupported "call to Prelude.fix with 1 argument"
+          []  -> errorTermM "call to Prelude.fix with no argument"
+          [_] -> errorTermM "call to Prelude.fix with 1 argument"
           resultType : lambda : rest ->
             case resultType of
             -- TODO: check that 'n' is finite
@@ -342,7 +360,7 @@ translateTerm t = withLocalLocalEnvironment $ do
                       _  -> Coq.App iter <$> mapM (go env) rest
               _ -> badTerm
             -- NOTE: there is currently one instance of `fix` that will trigger
-            -- `notSupported`.  It is used in `Cryptol.cry` when translating
+            -- `errorTermM`.  It is used in `Cryptol.cry` when translating
             -- `iterate`, which generates an infinite stream of nested
             -- applications of a given function.
 
@@ -370,13 +388,11 @@ translateTerm t = withLocalLocalEnvironment $ do
                 let fix = Coq.Fix recFn bindersT typeT bodyT
                 case rest of
                   [] -> return fix
-                  _  -> notSupported "THAT" -- Coq.App fix <$> mapM (go env) rest
-              _ -> notSupported "call to Prelude.fix without lambda"
+                  _  -> errorTermM "THAT" -- Coq.App fix <$> mapM (go env) rest
+              _ -> errorTermM "call to Prelude.fix without lambda"
 
         _ ->
-          atUseSite <$> findSpecialTreatment i >>= \case
-          UseReplace replacement -> return replacement
-          _                      -> Coq.App <$> go env f <*> traverse (go env) args
+          translateIdentWithArgs i args
       _ -> Coq.App <$> go env f <*> traverse (go env) args
 
     (asLocalVar -> Just n)
@@ -396,11 +412,11 @@ translateTerm t = withLocalLocalEnvironment $ do
         modify $ over localDeclarations $ (mkDefinition renamed b :)
         Coq.Var <$> pure renamed
 
-    _ -> {- trace "translateTerm fallthrough" -} notSupported "fallthrough"
+    _ -> {- trace "translateTerm fallthrough" -}
+      errorTermM "Unhandled case in translateTerm"
 
   where
     badTerm          = Except.throwError $ BadTerm t
-    notSupported lbl = return (Coq.App (Coq.Var "error") [Coq.StringLit ("Not supported: " ++ lbl)])
     go env term      = do
       modify $ set localEnvironment env
       translateTerm term
@@ -419,11 +435,9 @@ defaultTermForType typ = do
       nT       <- translateTerm n
       typ'T    <- translateTerm typ'
       defaultT <- defaultTermForType typ'
-      return $ Coq.App (Coq.Var seqConst) [ nT, typ'T, defaultT ]
+      return $ Coq.App seqConst [ nT, typ'T, defaultT ]
 
-    (asBoolType -> Just ()) -> do
-      falseT <- translateIdent (mkIdent preludeName "False")
-      return $ Coq.Var falseT
+    (asBoolType -> Just ()) -> translateIdent (mkIdent preludeName "False")
 
     _ ->
       return $ Coq.App (Coq.Var "error")
@@ -433,13 +447,15 @@ defaultTermForType typ = do
 
 translateTermToDocWith ::
   TranslationConfiguration ->
+  Maybe ModuleName ->
   [String] ->
   [String] ->
   (Coq.Term -> Doc) ->
   Term ->
   Either (TranslationError Term) Doc
-translateTermToDocWith configuration globalDecls localEnv f t = do
-  (term, state) <- runTermTranslationMonad configuration globalDecls localEnv (translateTerm t)
+translateTermToDocWith configuration mn globalDecls localEnv f t = do
+  (term, state) <-
+    runTermTranslationMonad configuration mn globalDecls localEnv (translateTerm t)
   let decls = view localDeclarations state
   return
     $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls)
@@ -448,8 +464,10 @@ translateTermToDocWith configuration globalDecls localEnv f t = do
 
 translateDefDoc ::
   TranslationConfiguration ->
+  Maybe ModuleName ->
   [String] ->
   Coq.Ident -> Term ->
   Either (TranslationError Term) Doc
-translateDefDoc configuration globalDecls name =
-  translateTermToDocWith configuration globalDecls [name] (\ term -> Coq.ppDecl (mkDefinition name term))
+translateDefDoc configuration mn globalDecls name =
+  translateTermToDocWith configuration mn globalDecls [name]
+  (\ term -> Coq.ppDecl (mkDefinition name term))

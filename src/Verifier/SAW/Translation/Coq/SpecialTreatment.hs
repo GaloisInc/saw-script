@@ -49,7 +49,7 @@ data DefSiteTreatment
 data UseSiteTreatment
   = UsePreserve
   | UseRename   (Maybe ModuleName) String
-  | UseReplace  Coq.Term
+  | UseReplaceDropArgs  Int Coq.Term
 
 data IdentSpecialTreatment = IdentSpecialTreatment
   { atDefSite :: DefSiteTreatment
@@ -114,12 +114,20 @@ rename ident = IdentSpecialTreatment
   , atUseSite = UseRename Nothing ident
   }
 
--- TODO: document me
-replace :: Coq.Term -> IdentSpecialTreatment
-replace term = IdentSpecialTreatment
+-- Replace any occurrences of identifier applied to @n@ arguments with the
+-- supplied Coq term. If @n=0@ and the supplied Coq term is an identifier then
+-- this is the same as 'rename'.
+replaceDropArgs :: Int -> Coq.Term -> IdentSpecialTreatment
+replaceDropArgs n term = IdentSpecialTreatment
   { atDefSite = DefSkip
-  , atUseSite = UseReplace term
+  , atUseSite = UseReplaceDropArgs n term
   }
+
+-- A version of 'replaceDropArgs' that drops no arguments; i.e., just replaces
+-- an identifier with the supplied Coq term
+replace :: Coq.Term -> IdentSpecialTreatment
+replace = replaceDropArgs 0
+
 
 -- Use `skip` for identifiers that are already defined in the appropriate module
 -- on the Coq side.
@@ -132,6 +140,9 @@ skip = IdentSpecialTreatment
 sawDefinitionsModule :: ModuleName
 sawDefinitionsModule = mkModuleName ["SAWCoreScaffolding"]
 
+compMModule :: ModuleName
+compMModule = mkModuleName ["CompM"]
+
 sawVectorDefinitionsModule :: TranslationConfiguration -> ModuleName
 sawVectorDefinitionsModule (TranslationConfiguration {..}) =
   mkModuleName [vectorModule]
@@ -139,8 +150,8 @@ sawVectorDefinitionsModule (TranslationConfiguration {..}) =
 cryptolPrimitivesModule :: ModuleName
 cryptolPrimitivesModule = mkModuleName ["CryptolPrimitives"]
 
-cryptolToCoqModule :: ModuleName
-cryptolToCoqModule = mkModuleName ["CryptolToCoq"]
+sawCoreScaffoldingModule :: ModuleName
+sawCoreScaffoldingModule = mkModuleName ["SAWCoreScaffolding"]
 
 cryptolPreludeSpecialTreatmentMap :: Map.Map String IdentSpecialTreatment
 cryptolPreludeSpecialTreatmentMap = Map.fromList $ []
@@ -174,7 +185,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ++
   [ ("error",             mapsTo sawDefinitionsModule "error")
   , ("fix",               skip)
-  , ("unsafeAssert",      replace $ Coq.Ltac "solveUnsafeAssert")
+  , ("unsafeAssert",      replaceDropArgs 3 $ Coq.Ltac "solveUnsafeAssert")
   , ("unsafeCoerce",      skip)
   , ("unsafeCoerce_same", skip)
   ]
@@ -254,6 +265,9 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("Eq",      mapsTo sawDefinitionsModule "Eq")
   , ("Eq__rec", mapsTo sawDefinitionsModule "Eq__rec")
   , ("Refl",    mapsTo sawDefinitionsModule "Refl")
+  , ("EqP",      mapsTo sawDefinitionsModule "EqP")
+  , ("EqP__rec", mapsTo sawDefinitionsModule "EqP__rec")
+  , ("ReflP",    mapsTo sawDefinitionsModule "ReflP")
   ]
 
   -- Strings
@@ -271,8 +285,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("divModNat", mapsTo sawDefinitionsModule "divModNat")
   , ("Nat",       mapsTo sawDefinitionsModule "Nat")
   , ("widthNat",  mapsTo sawDefinitionsModule "widthNat")
-  , ("Zero",      mapsTo cryptolToCoqModule   "Zero")
-  , ("Succ",      mapsTo cryptolToCoqModule   "Succ")
+  , ("Zero",      mapsTo sawCoreScaffoldingModule   "Zero")
+  , ("Succ",      mapsTo sawCoreScaffoldingModule   "Succ")
   ]
 
   -- Vectors
@@ -371,14 +385,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("mkFloat",              skip)
   , ("Double",               skip)
   , ("mkDouble",             skip)
-  , ("CompM",                skip)
-  , ("returnM",              skip)
-  , ("bindM",                skip)
-  , ("errorM",               skip)
-  , ("catchM",               skip)
-  , ("letRecM",              skip)
-  , ("letRecM1",             skip)
-  , ("fixM",                 skip)
   , ("bveq_sameL",           skip)
   , ("bveq_sameR",           skip)
   , ("bveq_same2",           skip)
@@ -393,6 +399,27 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("test_fun4",            skip)
   , ("test_fun5",            skip)
   , ("test_fun6",            skip)
+  ]
+
+  -- The computation monad
+  ++
+  [ ("CompM",                replace (Coq.Var "CompM"))
+  , ("returnM",              replace (Coq.App (Coq.Var "@returnM")
+                                       [Coq.Var "CompM", Coq.Var "_"]))
+  , ("bindM",                replace (Coq.App (Coq.Var "@bindM")
+                                       [Coq.Var "CompM", Coq.Var "_"]))
+  , ("errorM",               replace (Coq.App (Coq.Var "@errorM")
+                                       [Coq.Var "CompM", Coq.Var "_"]))
+  , ("catchM",               skip)
+  , ("fixM",                 replace (Coq.App (Coq.Var "@fixM")
+                                       [Coq.Var "CompM", Coq.Var "_"]))
+  ]
+
+  -- Dependent pairs
+  ++
+  [ ("Sigma", replace (Coq.Var "@sigT"))
+  , ("exists", replace (Coq.Var "@existT"))
+  , ("Sigma__rec", replace (Coq.Var "@sigT_rect"))
   ]
 
   -- Definitions that depend on axioms currently skipped
