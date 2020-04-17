@@ -29,8 +29,7 @@ the above mentioned Coq libraries, but will make sure to install the proper
 version of Coq needed for those libraries:
 
 ```
-sh <(curl -sL
-https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)
+sh <(curl -sL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)
 opam init
 opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-bits coq-extensible-records
