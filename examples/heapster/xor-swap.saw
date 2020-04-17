@@ -1,0 +1,5 @@
+// This script expects to be run from the saw-script root directory
+enable_experimental
+env <- heapster_init_env "xor_swap" "examples/heapster/xor-swap.bc"
+heapster_typecheck_fun env "swap_xor" "(x:bv 64, y:bv 64). arg0: ptr((W,0) |-> eq(llvmword(x))), arg1: ptr((W,0) |-> eq(llvmword(y))) -o arg0: ptr((W,0) |-> exists z:bv 64.eq(llvmword(z))), arg1: ptr((W,0) |-> exists z:bv 64.eq(llvmword(z))), ret:true"
+heapster_export_coq env "examples/heapster-coq/xor_swap.v"
