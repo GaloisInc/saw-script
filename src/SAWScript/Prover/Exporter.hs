@@ -224,8 +224,10 @@ writeVerilog sc path t = do
     Right doc -> writeFile path (show doc)
 
 -- TODO: negate goal
+{-
 writeVerilogProp :: SharedContext -> FilePath -> Prop -> IO ()
 writeVerilogProp sc path prop = writeVerilog sc path (unProp prop)
+-}
 
 writeCoreProp :: FilePath -> Prop -> IO ()
 writeCoreProp path (Prop t) = writeFile path (scWriteExternal t)

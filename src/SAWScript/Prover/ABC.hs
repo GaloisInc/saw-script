@@ -62,6 +62,8 @@ getModel argNames shapes satRes =
 
 -- | Check the satisfiability of a @Term@ using ABC as an external
 -- process.
+-- TODO: currently incomplete
+{-
 proveABCExternal ::
   SharedContext ->
   Prop ->
@@ -72,3 +74,4 @@ proveABCExternal sc goal =
      writeVerilogProp sc file goal
      -- TODO: invoke ABC and parse output
      return (Nothing, stats)
+     -}

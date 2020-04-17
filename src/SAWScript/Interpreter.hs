@@ -1175,12 +1175,15 @@ primitives = Map.fromList
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
+-- TODO: currently incomplete
+{-
   , prim "abc_external"        "ProofScript SatResult"
     (pureVal proveABCExternal)
     Experimental
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal."
     ]
+-}
 
   , prim "abc_sbv"             "ProofScript SatResult"
     (pureVal proveABC_SBV)
