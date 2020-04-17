@@ -191,6 +191,9 @@ Definition bvNeg (n : nat) (a : bitvector n)
   : bitvector n
   := bvNat _ (toNat (invB (bvToBITS a))).
 
+Definition bvSExt (m n : Nat) (a:bitvector (Succ n)) : bitvector (m + (Succ n)) :=
+  bvNat _ (bvToNat _ a).
+
 (* FIXME this is not implemented *)
 Definition bvUDiv (n : nat) (a : bitvector n) (b : bitvector n)
   : bitvector n

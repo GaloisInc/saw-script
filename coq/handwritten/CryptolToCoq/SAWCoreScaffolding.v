@@ -4,6 +4,7 @@ From Coq Require Import ZArith.Zdiv.
 From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require        Strings.String.
+From CryptolToCoq Require Export CompM.
 
 Definition sort (n : nat) := Type.
 
@@ -19,6 +20,8 @@ Definition Bool   := bool.
 Definition Eq     := identity.
 Definition Eq__rec  := identity_rect.
 Definition Refl   := identity_refl.
+Definition EqP     := @eq.
+Definition ReflP  := @eq_refl.
 Definition True      := true.
 Definition ite (a : Type) (b : Bool) (t e : a) : a := if b then t else e.
 Definition and    := andb.
@@ -27,6 +30,14 @@ Definition not      := negb.
 Definition or     := orb.
 Definition xor    := xorb.
 Definition boolEq := Coq.Bool.Bool.eqb.
+
+(* SAW uses an alternate form of eq_rect where the motive function P also
+depends on the equality proof itself *)
+Definition EqP__rec (A : Type) (x : A) (P: forall y, x=y -> Type) (p:P x eq_refl) y (e:x=y) :
+  P y e.
+  dependent inversion e; assumption.
+Defined.
+
 Theorem boolEq__eq (b1 b2:Bool) : Eq Bool (boolEq b1 b2) (ite Bool b1 b2 (not b2)).
 Proof.
   destruct b1, b2; reflexivity.
