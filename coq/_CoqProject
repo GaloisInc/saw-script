@@ -9,6 +9,7 @@ generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
 generated/CryptolToCoq/SAWCorePrelude.v
 # generated/CryptolToCoq/SAWCorePreludeCopy.v
 handwritten/CryptolToCoq/CryptolPrimitivesForSAWCoreExtra.v
+handwritten/CryptolToCoq/CompM.v
 handwritten/CryptolToCoq/SAWCoreScaffolding.v
 handwritten/CryptolToCoq/SAWCorePrelude_proofs.v
 handwritten/CryptolToCoq/SAWCorePreludeExtra.v
