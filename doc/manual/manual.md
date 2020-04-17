@@ -688,9 +688,9 @@ So far, we have talked about using Cryptol *value* expressions. However,
 SAWScript can also work with Cryptol *types*. The most direct way to
 refer to a Cryptol type is to use type brackets: `{|` and `|}`. Any
 Cryptol type written between these brackets becomes a `Type` value in
-SAWScript. Some types in Cryptol are *size* types, and isomorphic to
-integers. These can be translated into SAWScript integers with the
-`eval_size` function. For example:
+SAWScript. Some types in Cryptol are *numeric* (also known as *size*)
+types, and isomorphic to integers. These can be translated into
+SAWScript integers with the `eval_size` function. For example:
 
 ~~~~
 sawscript> let {{ type n = 16 }}
@@ -700,7 +700,7 @@ sawscript> eval_size {| 16 |}
 16
 ~~~~
 
-For non-size types, `eval_size` fails at runtime:
+For non-numeric types, `eval_size` fails at runtime:
 
 ~~~~
 sawscript> eval_size {| [16] |}
