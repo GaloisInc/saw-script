@@ -208,7 +208,13 @@ The basic types available are similar to those in many other languages.
 * Functions are given types that indicate what type they consume and
   what type they produce. For example, the type `Int -> Bool` indicates
   a function that takes an `Int` as input and produces a `Bool` as
-  output.
+  output. Functions with multiple arguments use multiple arrows. For
+  example, the type `Int -> String -> Bool` indicates a function in
+  which the first argument is an `Int`, the second is a `String`, and
+  the result is a `Bool`. It is possible, but not necessary, to group
+  arguments in tuples, as well, so the type `(Int, String) -> Bool`
+  describes a function that takes one argument, a pair of an `Int` and a
+  `String`, and returns a `Bool`.
 
 SAWScript also includes some more specialized types that do not have
 straightforward counterparts in most other languages. These will appear
@@ -1576,7 +1582,8 @@ C++ code with SAW.
 The first key issue is that the C++ standard library is large and
 complex, and tends to be widely used by C++ applications. To analyze
 most C++ code, it will be necessary to link your code with a version of
-the `libc++` library compiled to LLVM bitcode. TODO: how?
+the `libc++` library[^2] compiled to LLVM bitcode. The `wllvm` program
+can[^3] be useful for this.
 
 The C++ standard library includes a number of key global variables, and
 any code that touches them will require that they be initialized using
@@ -1604,6 +1611,9 @@ llvm_type "%\"class.quux::Foo\""
 Finally, there is no support for calling constructors in specifications,
 so you will need to construct objects piece-by-piece using, *e.g.*,
 `crucible_alloc` and `crucible_points_to`.
+
+[^2]: https://libcxx.llvm.org/docs/BuildingLibcxx.html
+[^3]: https://github.com/travitch/whole-program-llvm
 
 # Direct Extraction
 
