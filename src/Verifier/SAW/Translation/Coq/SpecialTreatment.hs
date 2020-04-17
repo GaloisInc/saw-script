@@ -235,7 +235,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Bool",          mapsTo sawDefinitionsModule "Bool")
   , ("boolEq",        mapsTo sawDefinitionsModule "boolEq")
   , ("boolEq__eq",    mapsTo sawDefinitionsModule "boolEq__eq")
-  , ("False",         mapsTo sawDefinitionsModule "False")
+  , ("False",         mapsTo sawDefinitionsModule "false")
   , ("ite",           mapsTo sawDefinitionsModule "ite")
   , ("iteDep",        mapsTo sawDefinitionsModule "iteDep")
   , ("iteDep_True",   mapsTo sawDefinitionsModule "iteDep_True")
@@ -246,7 +246,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("not__eq",       mapsTo sawDefinitionsModule "not__eq")
   , ("or",            mapsTo sawDefinitionsModule "or")
   , ("or__eq",        mapsTo sawDefinitionsModule "or__eq")
-  , ("True",          mapsTo sawDefinitionsModule "True")
+  , ("True",          mapsTo sawDefinitionsModule "true")
   , ("xor",           mapsTo sawDefinitionsModule "xor")
   , ("xor__eq",       mapsTo sawDefinitionsModule "xor__eq")
   ]

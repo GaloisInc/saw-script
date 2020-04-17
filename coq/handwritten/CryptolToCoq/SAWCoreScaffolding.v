@@ -22,10 +22,10 @@ Definition Eq__rec  := identity_rect.
 Definition Refl   := identity_refl.
 Definition EqP     := @eq.
 Definition ReflP  := @eq_refl.
-Definition True      := true.
+Definition true      := true.
 Definition ite (a : Type) (b : Bool) (t e : a) : a := if b then t else e.
 Definition and    := andb.
-Definition False      := false.
+Definition false      := false.
 Definition not      := negb.
 Definition or     := orb.
 Definition xor    := xorb.
@@ -92,8 +92,8 @@ Defined.
 
 (* SAW's prelude defines iteDep as a Bool eliminator whose arguments are
 reordered to look more like if-then-else. *)
-Definition iteDep (P : Bool -> Type) (b : Bool) : P True -> P False -> P b :=
-  fun PTrue PFalse => bool_rect P PTrue PFalse b.
+Definition iteDep (P : Bool -> Type) (b : Bool) : P true -> P false -> P b :=
+  fun Ptrue Pfalse => bool_rect P Ptrue Pfalse b.
 
 Definition ite_eq_iteDep : forall (a : Type) (b : Bool) (x y : a),
     @identity a (ite a b x y) (iteDep (fun _ => a) b x y).
@@ -101,27 +101,27 @@ Proof.
   reflexivity.
 Defined.
 
-Definition iteDep_True : forall (p : Bool -> Type), forall (f1 : p True), forall (f2 : p False), (@identity (p True) (iteDep p True f1 f2)) f1.
+Definition iteDep_True : forall (p : Bool -> Type), forall (f1 : p true), forall (f2 : p false), (@identity (p true) (iteDep p true f1 f2)) f1.
 Proof.
   reflexivity.
 Defined.
 
-Definition iteDep_False : forall (p : Bool -> Type), forall (f1 : p True), forall (f2 : p False), (@identity (p False) (iteDep p False f1 f2)) f2.
+Definition iteDep_False : forall (p : Bool -> Type), forall (f1 : p true), forall (f2 : p false), (@identity (p false) (iteDep p false f1 f2)) f2.
 Proof.
   reflexivity.
 Defined.
 
-Definition not__eq (b : Bool) : @identity Bool (not b) (ite Bool b False True).
+Definition not__eq (b : Bool) : @identity Bool (not b) (ite Bool b false true).
 Proof.
   reflexivity.
 Defined.
 
-Definition and__eq (b1 b2 : Bool) : @identity Bool (and b1 b2) (ite Bool b1 b2 False).
+Definition and__eq (b1 b2 : Bool) : @identity Bool (and b1 b2) (ite Bool b1 b2 false).
 Proof.
   reflexivity.
 Defined.
 
-Definition or__eq (b1 b2 : Bool) : @identity Bool (or b1 b2) (ite Bool b1 True b2).
+Definition or__eq (b1 b2 : Bool) : @identity Bool (or b1 b2) (ite Bool b1 true b2).
 Proof.
   reflexivity.
 Defined.
