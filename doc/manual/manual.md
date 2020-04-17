@@ -1542,20 +1542,68 @@ easier or more likely to succeed. For generating LLVM with `clang`, it
 can be helpful to:
 
 * Turn on debugging symbols with `-g` so that SAW can find source
-locations of functions, names of variables, etc.
+  locations of functions, names of variables, etc.
 
 * Optimize with `-O1` so that the generated bitcode more closely matches
-the C/C++ source, making the results more comprehensible.
+  the C/C++ source, making the results more comprehensible.
 
 * Use `-fno-threadsafe-statics` to prevent `clang` from emitting
-unnecessary pthread code.
+  unnecessary pthread code.
 
 * Link all relevant bitcode with `llvm-link` (including, *e.g.*, the C++
   standard library when analyzing C++ code).
 
+All SAW proofs include side conditions to rule out undefined behavior,
+and proofs will only succeed if all of these side conditions have been
+discharged. However the default SAW notion of undefined behavior is with
+respect to the semantics of LLVM, rather than C or C++. If you want to
+rule out undefined behavior according to the C or C++ standards,
+consider compiling your code with `-fsanitize=undefined` or one of the
+related flags[^1] to `clang`.
+
 For Java, the only compilation flag that tends to be valuable is `-g` to
 retain information about the names of function arguments and local
 variables.
+
+[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
+
+## Notes on C++ Analysis
+
+The distance between C++ code and LLVM is greater than between C and
+LLVM, so some additional considerations come into play when analyzing
+C++ code with SAW.
+
+The first key issue is that the C++ standard library is large and
+complex, and tends to be widely used by C++ applications. To analyze
+most C++ code, it will be necessary to link your code with a version of
+the `libc++` library compiled to LLVM bitcode. TODO: how?
+
+The C++ standard library includes a number of key global variables, and
+any code that touches them will require that they be initialized using
+`crucible_alloc_global`.
+
+Many C++ names are slightly awkward to deal with in SAW. They may be
+mangled relative to the text that appears in the C++ soruce code. SAW
+currently only understands the mangled names. The `llvm-nm` program can
+be used to show the list of symbols in an LLVM bitcode file, and the
+`c++filt` program can be used to demangle them, which can help in
+identifying the symbol you want to refer to. In addition, C++ names from
+namespaces can sometimes include quote marks in their LLVM encoding. For
+example:
+
+~~~~
+%"class.quux::Foo" = type { i32, i32 }
+~~~~
+
+This can be mentioned in SAW by saying:
+
+~~~~
+llvm_type "%\"class.quux::Foo\""
+~~~~
+
+Finally, there is no support for calling constructors in specifications,
+so you will need to construct objects piece-by-piece using, *e.g.*,
+`crucible_alloc` and `crucible_points_to`.
 
 # Direct Extraction
 
