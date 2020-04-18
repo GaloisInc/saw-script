@@ -39,13 +39,11 @@ script:
   # `libabc.a` is built in by `cabal configure`, not by `cabal build`.
   # caching `dist-newstyle` means it must be manually built each time
   - (pushd deps/abcBridge && scripts/build-abc.sh X86_64 Linux --init && popd)
-
   # Ideally, we'd like to pass --ghc-options=-Werror to cabal build.
   # However, this currently enables -Werror for all dependencies as well.
   # See: https://github.com/haskell/cabal/issues/3883
   - (printf 'package saw-script\n  ghc-options: -Werror' >> cabal.project)
   - cabal new-build -j saw jss
-
   - cp `cabal new-exec --verbose=silent -- sh -c 'which saw'` bin
   - cp `cabal new-exec --verbose=silent -- sh -c 'which jss'` bin
 
