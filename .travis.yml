@@ -43,7 +43,7 @@ script:
   # Ideally, we'd like to pass --ghc-options=-Werror to cabal build.
   # However, this currently enables -Werror for all dependencies as well.
   # See: https://github.com/haskell/cabal/issues/3883
-  - printf 'package saw-script\n  ghc-options: -Werror' >> cabal.project
+  - sh -c "printf 'package saw-script\n  ghc-options: -Werror' >> cabal.project"
   - cabal new-build -j saw jss
 
   - cp `cabal new-exec --verbose=silent -- sh -c 'which saw'` bin
