@@ -259,6 +259,12 @@ $(mkNuMatching [t| forall f. NuMatchingAny1 f => Poison.Poison f |])
 $(mkNuMatching [t| forall f. NuMatchingAny1 f => BadBehavior f |])
 $(mkNuMatching [t| forall f. NuMatchingAny1 f => LLVMSafetyAssertion f |])
 
+-- FIXME: Hobbits does not yet support mkNuMatching for empty types!
+--- $(mkNuMatching [t| forall f. NoAssertionClassifier f |])
+
+instance NuMatching (NoAssertionClassifier f) where
+  nuMatchingProof = unsafeMbTypeRepr
+
 
 -- NOTE: Crucible objects can never contain any Hobbits names, but "proving"
 -- that would require introspection of opaque types like 'Index' and 'Nonce',

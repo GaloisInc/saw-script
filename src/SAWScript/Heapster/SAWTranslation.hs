@@ -28,6 +28,7 @@ module SAWScript.Heapster.SAWTranslation where
 import Data.Maybe
 import Data.Either
 import Data.List
+import Data.List.NonEmpty (toList)
 import Data.Kind
 import Data.Text (unpack)
 import Data.IORef
@@ -54,13 +55,16 @@ import Lang.Crucible.FunctionHandle
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.LLVM.Extension
+import Lang.Crucible.LLVM.Extension.Safety
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Arch.X86
 import Lang.Crucible.CFG.Expr
 import qualified Lang.Crucible.CFG.Expr as Expr
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.CFG.Extension
+import Lang.Crucible.CFG.Extension.Safety
 import Lang.Crucible.Analysis.Fixpoint.Components
+import qualified What4.Partial.AssertionTree as AT
 
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor
@@ -1621,6 +1625,10 @@ getTopVarM = (\(_ :>: p) -> p) <$> itiExprCtx <$> ask
 getTopPermM :: ImpTransM ext blocks ret (ps :> tp) ctx (PermTrans ctx tp)
 getTopPermM = (\(_ :>: p) -> p) <$> itiPermStack <$> ask
 
+-- | Helper to disambiguate the @ext@ type variable
+getExtReprM :: PermCheckExtC ext => ImpTransM ext blocks ret ps ctx (ExtRepr ext)
+getExtReprM = return knownRepr
+
 -- | Apply a transformation to the (translation of the) current perm stack
 withPermStackM :: (MapRList (Member ctx) ps_in -> MapRList (Member ctx) ps_out) ->
                   (PermTransCtx ctx ps_in -> PermTransCtx ctx ps_out) ->
@@ -2572,6 +2580,47 @@ exprOutPerm [nuP| TypedExpr _ Nothing |] = PTrans_True
 
 
 ----------------------------------------------------------------------
+-- * Translating 'AssertionClassifierTree's
+----------------------------------------------------------------------
+
+instance TransInfo info =>
+         Translate info ctx (NoAssertionClassifier RegWithVal) OpenTerm where
+  translate _ = error "Unreachable!"
+
+instance TransInfo info =>
+         Translate info ctx (LLVMSafetyAssertion RegWithVal) OpenTerm where
+  translate a = translate1 (fmap (^. predicate) a)
+
+-- Translate an AssertionClassifierTree to a Boolean expression
+instance (TransInfo info, NuMatching a, Translate info ctx a OpenTerm) =>
+         Translate info ctx (AT.AssertionTree
+                             (RegWithVal BoolType) a) OpenTerm where
+  translate [nuP| AT.Leaf a |] = translate a
+  translate [nuP| AT.And ps |] =
+    foldr (\p m ->
+            applyMultiTransM (return $ globalOpenTerm "Prelude.and")
+            [translate p, m]) (return trueOpenTerm) (mbList $ fmap toList ps)
+  translate [nuP| AT.Or ps |] =
+    foldr (\p m ->
+            applyMultiTransM (return $ globalOpenTerm "Prelude.or")
+            [translate p, m]) (return trueOpenTerm) (mbList $ fmap toList ps)
+  translate [nuP| AT.Ite c p1 p2 |] =
+    applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
+    [return (globalOpenTerm "Prelude.Bool"), translate1 c,
+     translate p1, translate p2]
+
+translateAssertionClassifierTree ::
+  PermCheckExtC ext =>
+  Mb ctx (AssertionClassifierTree ext RegWithVal) ->
+  ImpTransM ext blocks ret ps ctx OpenTerm
+translateAssertionClassifierTree t = getExtReprM >>= \r -> helper r t where
+  helper :: ExtRepr ext -> Mb ctx (AssertionClassifierTree ext RegWithVal) ->
+            ImpTransM ext blocks ret ps ctx OpenTerm
+  helper ExtRepr_LLVM = translate
+  helper ExtRepr_Unit = translate
+
+
+----------------------------------------------------------------------
 -- * Translating Typed Crucible Jump Targets
 ----------------------------------------------------------------------
 
@@ -2639,6 +2688,19 @@ translateStmt :: PermCheckExtC ext =>
                  Mb ctx (TypedStmt ext rets ps_in ps_out) ->
                  ImpTransM ext blocks ret ps_out (ctx :++: rets) OpenTerm ->
                  ImpTransM ext blocks ret ps_in ctx OpenTerm
+
+translateStmt [nuP| TypedSetReg _
+                  top_e@(TypedExpr (WithAssertion _ (PartialExp pred e)) maybe_e) |] m =
+  do pred_trans <- translateAssertionClassifierTree pred
+     etrans <- tpTransM (case maybe_e of
+                            [nuP| Just e' |] -> translate e'
+                            _ -> translate e)
+     applyMultiTransM (return $ globalOpenTerm "Prelude.ite")
+       [compReturnTypeM, return pred_trans,
+        inExtTransM etrans (withPermStackM
+                            (:>: Member_Base)
+                            (:>: extPermTrans (exprOutPerm top_e)) m),
+        itiCatchHandler <$> ask]
 
 translateStmt [nuP| TypedSetReg _ e |] m =
   do etrans <- tpTransM $ translate e

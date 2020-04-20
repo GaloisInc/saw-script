@@ -1869,6 +1869,9 @@ tcExpr (BVMul w (RegWithVal _ (bvMatchConst -> Just i)) (RegWithVal _ e)) =
 tcExpr (BVMul w (RegWithVal _ e) (RegWithVal _ (bvMatchConst -> Just i))) =
   withKnownNat w $ greturn $ Just $ bvMult i e
 
+tcExpr (WithAssertion tp (PartialExp _ (regWithValExpr -> e))) =
+  greturn $ Just e
+
 tcExpr _ = greturn Nothing -- FIXME HERE NOW: at least handle bv operations
 
 
