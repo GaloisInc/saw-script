@@ -29,6 +29,7 @@ import Data.Parameterized.TraversableFC
 
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
 
+import qualified Text.LLVM.AST as L
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
 import What4.Partial
@@ -127,6 +128,10 @@ instance Closable GlobalSymbol where
 
 instance Liftable GlobalSymbol where
   mbLift = unClosed . mbLift . fmap toClosed
+
+-- | This is copied from 'Lang.Crucible.LLVM.Types', as that module is hidden
+globalSymbolName :: GlobalSymbol -> String
+globalSymbolName (GlobalSymbol (L.Symbol str)) = str
 
 instance NuMatching (SymbolRepr tp) where
   nuMatchingProof = unsafeMbTypeRepr

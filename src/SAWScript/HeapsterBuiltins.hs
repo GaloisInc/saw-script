@@ -11,6 +11,7 @@
 module SAWScript.HeapsterBuiltins
        ( heapster_init_env
        , heapster_typecheck_fun
+       , heapster_typecheck_mut_funs
        , heapster_print_fun_trans
        , heapster_export_coq
        , heapster_parse_test
@@ -18,7 +19,10 @@ module SAWScript.HeapsterBuiltins
 
 import Data.Maybe
 import qualified Data.Map as Map
+import Data.String
+import Data.IORef
 import Control.Lens
+import Control.Monad
 import Control.Monad.IO.Class
 import Unsafe.Coerce
 import GHC.TypeNats
@@ -148,49 +152,49 @@ heapster_init_env bic opts mod_str llvm_filename =
        else return ()
      liftIO $ scLoadModule sc (emptyModule saw_mod_name)
      let perm_env = unClosed heapster_default_env
+     perm_env_ref <- liftIO $ newIORef perm_env
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
-       heapsterEnvPermEnv = perm_env,
+       heapsterEnvPermEnvRef = perm_env_ref,
        heapsterEnvLLVMModule = llvm_mod
        }
 
-heapster_typecheck_fun :: BuiltinContext -> Options -> HeapsterEnv ->
-                          String -> String -> TopLevel ()
-heapster_typecheck_fun bic opts henv fn_name perms_string =
+
+heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->
+                               [(String, String)] -> TopLevel ()
+heapster_typecheck_mut_funs bic opts henv fn_names_and_perms =
   let some_lm = heapsterEnvLLVMModule henv in
   case some_lm of
     Some lm -> do
       let arch = llvmArch $ _transContext (lm ^. modTrans)
       let w = archReprWidth arch
-      let cl_env = heapster_default_env -- FIXME: cl_env should be an argument
-      let env = unClosed cl_env
-      any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts some_lm fn_name
-      case any_cfg of
-        AnyCFG cfg -> do
-          let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
-          let ret = handleReturnType $ cfgHandle cfg
-          some_fun_perm <-
-            case parseFunPermString env args ret perms_string of
-              Left err -> fail $ show err
-              Right p -> return p
-          case some_fun_perm of
-            SomeFunPerm fun_perm -> do
-              leq_proof <- case decideLeq (knownNat @1) w of
-                Left pf -> return pf
-                Right _ -> fail "LLVM arch width is 0!"
-              let fun_openterm =
-                    withKnownNat w $ withLeqProof leq_proof $
-                    translateCFG env $ tcCFG env fun_perm cfg
-              sc <- getSharedContext
-              fun_term <- liftIO $ completeOpenTerm sc fun_openterm
-              fun_tp <- liftIO $ completeOpenTermType sc fun_openterm
-              let saw_modname = heapsterEnvSAWModule henv
-              liftIO $ scModifyModule sc saw_modname $
-                flip insDef $
-                Def { defIdent = mkIdent saw_modname fn_name,
-                      defQualifier = NoQualifier,
-                      defType = fun_tp,
-                      defBody = Just fun_term }
+      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+      some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm,perms_string) ->
+        (getLLVMCFG arch <$>
+         crucible_llvm_cfg bic opts some_lm nm) >>= \any_cfg ->
+        case any_cfg of
+          AnyCFG cfg ->
+            do let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
+               let ret = handleReturnType $ cfgHandle cfg
+               case parseFunPermString env args ret perms_string of
+                 Left err -> fail $ show err
+                 Right (SomeFunPerm fun_perm) ->
+                   return $ SomeCFGAndPerm (GlobalSymbol $
+                                            fromString nm) cfg fun_perm
+      sc <- getSharedContext
+      let saw_modname = heapsterEnvSAWModule henv
+      leq_proof <- case decideLeq (knownNat @1) w of
+        Left pf -> return pf
+        Right _ -> fail "LLVM arch width is 0!"
+      env' <- liftIO $ withKnownNat w $ withLeqProof leq_proof $
+        tcTranslateAddCFGs sc saw_modname w env some_cfgs_and_perms
+      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+
+heapster_typecheck_fun :: BuiltinContext -> Options -> HeapsterEnv ->
+                          String -> String -> TopLevel ()
+heapster_typecheck_fun bic opts henv fn_name perms_string =
+  heapster_typecheck_mut_funs bic opts henv [(fn_name, perms_string)]
 
 heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->
                             String -> TopLevel ()

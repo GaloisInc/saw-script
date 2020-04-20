@@ -30,6 +30,7 @@ import Data.Either
 import Data.List
 import Data.Kind
 import Data.Text (unpack)
+import Data.IORef
 import GHC.TypeLits
 import qualified Data.Functor.Constant as Constant
 import Control.Applicative
@@ -45,7 +46,7 @@ import qualified Data.Binding.Hobbits.NameMap as NameMap
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), empty)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
-import Data.Parameterized.Context hiding ((:>), empty, take, view, zipWith)
+import Data.Parameterized.Context hiding ((:>), empty, take, view, zipWith, zipWithM)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
 
@@ -63,6 +64,8 @@ import Lang.Crucible.Analysis.Fixpoint.Components
 
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor
+import Verifier.SAW.Module
+import Verifier.SAW.SharedTerm
 
 import SAWScript.Heapster.CruUtil
 import SAWScript.Heapster.Permissions
@@ -2816,7 +2819,8 @@ translateLLVMStmt [nuP| TypedLLVMResolveGlobal gsym
      let w :: NatRepr w = knownRepr
      case lookupGlobalSymbol env (mbLift gsym) w of
        Nothing -> error ("translateLLVMStmt: TypedLLVMResolveGlobal: "
-                         ++ " no translation of symbol " ++ show (mbLift gsym))
+                         ++ " no translation of symbol "
+                         ++ globalSymbolName (mbLift gsym))
        Just (_, ts) ->
          withPermStackM (:>: Member_Base) (:>: typeTransF ptrans ts) m
 
@@ -3105,8 +3109,23 @@ data SomeCFGAndPerm ext where
 someCFGAndPermSym :: SomeCFGAndPerm ext -> GlobalSymbol
 someCFGAndPermSym (SomeCFGAndPerm sym _ _) = sym
 
-someCFGAndPermLRT :: SomeCFGAndPerm ext -> OpenTerm
-someCFGAndPermLRT = error "FIXME HERE NOWNOW"
+someCFGAndPermName :: SomeCFGAndPerm ext -> String
+someCFGAndPermName (SomeCFGAndPerm sym _ _) = globalSymbolName sym
+
+someCFGAndPermLRT :: PermEnv -> SomeCFGAndPerm ext -> OpenTerm
+someCFGAndPermLRT env (SomeCFGAndPerm _ _
+                       (FunPerm ghosts args ret perms_in perms_out)) =
+  flip runTransM (TypeTransInfo MNil env) $
+  translateClosed (appendCruCtx
+                   (CruCtxCons ghosts LifetimeRepr) args) >>= \ctx_trans ->
+  lambdaLRTTransM "arg" ctx_trans $ \ectx ->
+  inCtxTransM ectx $
+  translate (mbCombine perms_in) >>= \perms_trans ->
+  lambdaLRTTransM "perm" perms_trans $ \_ ->
+  translateRetType ret (mbCombine $
+                        fmap mbValuePermsToDistPerms perms_out) >>= \ret_tp ->
+  return $ ctorOpenTerm "Prelude.LRT_Ret" [ret_tp]
+
 
 someCFGAndPermPtrPerm :: (1 <= ArchWidth arch, KnownNat (ArchWidth arch),
                           w ~ ArchWidth arch) =>
@@ -3115,8 +3134,9 @@ someCFGAndPermPtrPerm :: (1 <= ArchWidth arch, KnownNat (ArchWidth arch),
 someCFGAndPermPtrPerm w (SomeCFGAndPerm _ _ fun_perm) =
   withKnownNat w $ ValPerm_Conj1 $ Perm_LLVMFunPtr fun_perm
 
+
 -- | Type-check a set of 'CFG's against their function permissions and translate
--- the result to a pair of a 'LetRecTypes' SAW core term @lrts@ describing the
+-- the result to a pair of a @LetRecTypes@ SAW core term @lrts@ describing the
 -- function permissions and a mutually-recursive function-binding argument
 --
 -- > \(f1:tp1) -> ... -> \(fn:tpn) -> (tp1, ..., tpn)
@@ -3128,10 +3148,14 @@ tcTranslateCFGTupleFun ::
   NatRepr w -> PermEnv -> [SomeCFGAndPerm (LLVM arch)] ->
   (OpenTerm, OpenTerm)
 tcTranslateCFGTupleFun w env cfgs_and_perms =
-  let lrts = map someCFGAndPermLRT cfgs_and_perms in
-  (tupleOpenTerm lrts ,) $
+  let lrts = map (someCFGAndPermLRT env) cfgs_and_perms in
+  let lrts_tm =
+        foldr (\lrt lrts' -> ctorOpenTerm "Prelude.LRT_Cons" [lrt,lrts'])
+        (ctorOpenTerm "Prelude.LRT_Nil" [])
+        lrts in
+  (lrts_tm ,) $
   lambdaOpenTermMulti (zip
-                       (map (show . someCFGAndPermSym) cfgs_and_perms)
+                       (map someCFGAndPermName cfgs_and_perms)
                        (map (applyOpenTerm
                              (globalOpenTerm
                               "Prelude.lrtToType")) lrts)) $ \funs ->
@@ -3147,3 +3171,50 @@ tcTranslateCFGTupleFun w env cfgs_and_perms =
   case cfg_and_perm of
     SomeCFGAndPerm sym cfg fun_perm ->
       translateCFG env' $ tcCFG env' fun_perm cfg
+
+
+-- | Type-check a set of CFGs against their function permissions, translate the
+-- results to SAW core functions, and add them as definitions to the SAW core
+-- module with the given module name. The name of each definition will be the
+-- same as the 'GlobalSymbol' associated with its CFG An additional definition
+-- with the name @"n__tuple_fun"@ will also be added, where @n@ is the name
+-- associated with the first CFG in the list.
+tcTranslateAddCFGs ::
+  (1 <= ArchWidth arch, KnownNat (ArchWidth arch), w ~ ArchWidth arch) =>
+  SharedContext -> ModuleName ->
+  NatRepr w -> PermEnv -> [SomeCFGAndPerm (LLVM arch)] ->
+  IO PermEnv
+tcTranslateAddCFGs sc mod_name w env cfgs_and_perms =
+  do let (lrts, tup_fun) = tcTranslateCFGTupleFun w env cfgs_and_perms
+     let tup_fun_ident =
+           mkIdent mod_name (someCFGAndPermName (head cfgs_and_perms)
+                             ++ "__tuple_fun")
+     tup_fun_tp <- completeOpenTerm sc $
+       applyOpenTerm (globalOpenTerm "Prelude.lrtTupleType") lrts
+     tup_fun_tm <- completeOpenTerm sc $
+       applyOpenTermMulti (globalOpenTerm "Prelude.multiFixM") [lrts, tup_fun]
+     scModifyModule sc mod_name $ flip insDef $
+       Def { defIdent = tup_fun_ident,
+             defQualifier = NoQualifier,
+             defType = tup_fun_tp,
+             defBody = Just tup_fun_tm }
+     new_entries <-
+       zipWithM
+       (\cfg_and_perm i ->
+         do tp <- completeOpenTerm sc $
+              applyOpenTerm (globalOpenTerm "Prelude.lrtToType") $
+              someCFGAndPermLRT env cfg_and_perm
+            tm <- completeOpenTerm sc $
+              projTupleOpenTerm i (globalOpenTerm tup_fun_ident)
+            let ident = mkIdent mod_name (someCFGAndPermName cfg_and_perm)
+            scModifyModule sc mod_name $ flip insDef $
+              Def { defIdent = ident,
+                    defQualifier = NoQualifier,
+                    defType = tp,
+                    defBody = Just tm }
+            return $ PermEnvGlobalEntry
+              (someCFGAndPermSym cfg_and_perm)
+              (someCFGAndPermPtrPerm w cfg_and_perm)
+              [globalOpenTerm ident])
+       cfgs_and_perms [0 ..]
+     return $ permEnvAddGlobalSyms env new_entries

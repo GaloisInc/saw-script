@@ -49,6 +49,7 @@ import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
+import Data.IORef
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 import Data.Typeable
@@ -167,7 +168,7 @@ data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
 data HeapsterEnv = HeapsterEnv {
   heapsterEnvSAWModule :: ModuleName,
   -- ^ The SAW module containing all our Heapster definitions
-  heapsterEnvPermEnv :: PermEnv,
+  heapsterEnvPermEnvRef :: IORef PermEnv,
   -- ^ The current permissions environment
   heapsterEnvLLVMModule :: Some CMSLLVM.LLVMModule
   -- ^ The underlying 'LLVMModule' that we are translating

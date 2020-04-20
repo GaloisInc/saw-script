@@ -2257,6 +2257,15 @@ primitives = Map.fromList
     , " type-checking, and store the result in the current Heapster SAW module."
     ]
 
+  , prim "heapster_typecheck_mut_funs"
+    "HeapsterEnv -> [(String, String)] -> TopLevel ()"
+    (bicVal heapster_typecheck_mut_funs)
+    Experimental
+    [ "Translate a set of mutually recursive LLVM function to a set of SAW "
+    , "core terms using Heapster type-checking. Store the results in the "
+    , "current Heapster SAW module."
+    ]
+
   , prim "heapster_print_fun_trans"
     "HeapsterEnv -> String -> TopLevel ()"
     (bicVal heapster_print_fun_trans)
