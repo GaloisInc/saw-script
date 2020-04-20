@@ -152,24 +152,27 @@ write_cnf sc f (TypedTerm schema t) = do
   AIGProxy proxy <- getProxy
   io $ writeCNF proxy sc f t
 
--- | Write a proposition to an SMT-Lib version 2 file.
--- TODO: say something about convention for negation
+-- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
+-- assumed to have universally quantified variables, it will be negated.
 writeSMTLib2 :: SharedContext -> FilePath -> Prop -> IO ()
 writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
--- function returning a boolean) to an SMT-Lib version 2 file.
+-- function returning a boolean) to an SMT-Lib version 2 file. The goal
+-- is to pass the term through as directly as possible, so we interpret
+-- it as an existential.
 write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> IO ()
 write_smtlib2 sc f (TypedTerm schema t) = do
   checkBooleanSchema schema
-  p <- predicateToProp sc Universal [] t
+  p <- predicateToProp sc Existential [] t
   writeSMTLib2 sc f p
 
 -- | Write a proposition to an SMT-Lib version 2 file, treating some
--- constants as uninterpreted.
+-- constants as uninterpreted. Because @Prop@ is assumed to have
+-- universally quantified variables, it will be negated.
 writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
-writeUnintSMTLib2 unints sc f t =
-  do (_, _, l) <- prepNegatedSBV sc unints t
+writeUnintSMTLib2 unints sc f p =
+  do (_, _, l) <- prepNegatedSBV sc unints p
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
      writeFile f txt
