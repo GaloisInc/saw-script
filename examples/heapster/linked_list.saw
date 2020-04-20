@@ -1,0 +1,5 @@
+// This script expects to be run from the saw-script root directory
+enable_experimental
+env <- heapster_init_env "linked_list" "examples/heapster/linked_list.bc"
+heapster_typecheck_fun env "is_elem" "(x:bv 64).arg0:eq(llvmword(x)), arg1:list64<always,R> -o arg0:true, arg1:list64<always,R>, ret:exists x:(bv 64).eq(llvmword(x))"
+heapster_export_coq env "examples/heapster/linked_list.v"
