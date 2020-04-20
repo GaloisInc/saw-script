@@ -43,9 +43,11 @@ import           Verifier.SAW.Term.Functor
 import           Verifier.SAW.Translation.Coq.Monad
 import           Verifier.SAW.Translation.Coq.SpecialTreatment
 
+{-
 import Debug.Trace
 traceTerm :: String -> Term -> a -> a
 traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
+-}
 
 data TranslationState = TranslationState
 
@@ -293,8 +295,9 @@ translateTerm t = withLocalLocalEnvironment $ do
   -- traceTerm "translateTerm" t $
   -- NOTE: env is in innermost-first order
   env <- view localEnvironment <$> get
-  let t' = trace ("translateTerm: " ++ "env = " ++ show env ++ ", t =" ++ showTerm t) t
-  case t' of
+  -- let t' = trace ("translateTerm: " ++ "env = " ++ show env ++ ", t =" ++ showTerm t) t
+  -- case t' of
+  case t of
 
     (asFTermF -> Just tf)  -> flatTermFToExpr tf
 

@@ -40,7 +40,7 @@ import           Verifier.SAW.Translation.Coq.Monad
 import           Verifier.SAW.Translation.Coq.SpecialTreatment
 import qualified Verifier.SAW.Translation.Coq.Term             as TermTranslation
 
-import Debug.Trace
+-- import Debug.Trace
 
 data ModuleTranslationState = ModuleTranslationState
   { _currentModule  :: Maybe ModuleName
@@ -86,8 +86,8 @@ translateCtor inductiveParameters (Ctor {..}) = do
     }
 
 translateDataType :: ModuleTranslationMonad m => DataType -> m Coq.Decl
-translateDataType (DataType {..})
-  | trace ("translateDataType: " ++ show dtName) False = undefined
+-- translateDataType (DataType {..})
+--   | trace ("translateDataType: " ++ show dtName) False = undefined
 translateDataType (DataType {..}) =
   atDefSite <$> findSpecialTreatment dtName >>= \case
   DefPreserve              -> translateNamed $ identName dtName
@@ -127,7 +127,7 @@ skipped sawIdent =
   Coq.Comment $ show sawIdent ++ " was skipped"
 
 translateDef :: ModuleTranslationMonad m => Def -> m Coq.Decl
-translateDef (Def {..}) = trace ("translateDef " ++ show defIdent) $ do
+translateDef (Def {..}) = {- trace ("translateDef " ++ show defIdent) $ -} do
   specialTreatment <- findSpecialTreatment defIdent
   translateAccordingly (atDefSite specialTreatment)
 
