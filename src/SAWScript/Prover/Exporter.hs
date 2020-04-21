@@ -1,6 +1,7 @@
 {-# Language ViewPatterns #-}
 {-# Language OverloadedStrings #-}
 {-# Language ExplicitForAll #-}
+{-# Language FlexibleContexts #-}
 module SAWScript.Prover.Exporter
   ( proveWithExporter
   , adaptExporter
@@ -28,15 +29,12 @@ import Data.Foldable(toList)
 
 import Control.Monad.Except (runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.State (evalStateT, StateT)
 import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
-import Data.IORef (newIORef)
 import qualified Data.Map as Map
 import qualified Data.SBV.Dynamic as SBV
 import System.IO
 import Data.Text.Prettyprint.Doc.Render.Text
-import Data.Reflection (Given(..), give)
 
 import Cryptol.Utils.PP(pretty)
 
@@ -47,7 +45,7 @@ import qualified Lang.Crucible.Backend.SAWCore as Crucible (newSAWCoreBackend)
 import Verifier.SAW.SharedTerm as SC
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.FiniteValue
-import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue, asLambdaList)
+import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
@@ -205,38 +203,14 @@ write_verilog path t = do
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   sym <- Crucible.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
-  modmap <- scGetModuleMap sc
-  ref <- newIORef Map.empty
-
-  ty <- give sym (W4Sim.w4SolveBasic modmap Map.empty ref [] =<< scTypeOf sc t)
-
-  -- get the names of the arguments to the function
-  let argNames = map fst (fst (asLambdaList t))
-  let moreNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
-
-  -- and their types
-  argTs <- W4Sim.asPredType ty
-
-  -- construct symbolic expressions for the variables
-  vars' <-
-    give sym $
-    flip evalStateT 0 $
-    sequence (zipWith (W4Sim.newVarsForType ref) argTs (argNames ++ moreNames))
-
-  -- symbolically evaluate
-  bval <- W4Sim.w4EvalBasic sym sc modmap Map.empty ref [] =<< rewriteEqs sc t
-
-  -- apply and existentially quantify
-  let (bvs, vars) = unzip vars'
-  let vars'' = fmap Sim.ready vars
-  bval' <- Sim.applyAll bval vars''
-
+  (_, (_, bval)) <- W4Sim.w4EvalAny sym sc Map.empty [] t
   edoc <- runExceptT $
-    case bval' of
+    case bval of
       Sim.VBool b -> exprVerilog b "f"
       Sim.VWord (W4Sim.DBV w) -> exprVerilog w "f"
+      --Sim.VPair u v -> undefined
       Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> eqVerilog x y "f"
-      _ -> throwError $ "writeVerilog: nyi: " ++ show bval'
+      _ -> throwError $ "write_verilog: unsupported result type: " ++ show bval
   case edoc of
     Left err -> do
       fail $ "Failed to translate to Verilog: " ++ err
