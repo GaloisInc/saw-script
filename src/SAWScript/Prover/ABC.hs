@@ -1,4 +1,7 @@
-module SAWScript.Prover.ABC (proveABC, proveABCExternal) where
+module SAWScript.Prover.ABC
+    ( proveABC
+    --, proveABCExternal
+    ) where
 
 
 import qualified Data.AIG as AIG
@@ -9,7 +12,7 @@ import           Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 import SAWScript.Proof(Prop, propToPredicate, unProp)
-import SAWScript.Prover.Exporter (writeVerilogProp)
+--import SAWScript.Prover.Exporter (writeVerilogProp)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.Util
