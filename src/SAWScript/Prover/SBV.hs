@@ -5,10 +5,13 @@ module SAWScript.Prover.SBV
   , prepNegatedSBV
   ) where
 
+import System.Directory
+
+import           Data.Maybe
 import           Data.Map ( Map )
 import qualified Data.Map as Map
 import qualified Data.Vector as V
-import           Control.Monad(filterM,liftM)
+import           Control.Monad
 
 import qualified Data.SBV.Dynamic as SBV
 import qualified Data.SBV.Internals as SBV
@@ -39,7 +42,15 @@ proveUnintSBV ::
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
 proveUnintSBV conf unints timeout sc term =
-  do (t', mlabels, lit) <- prepNegatedSBV sc unints term
+  do p <- findExecutable . SBV.executable $ SBV.solver conf
+     unless (isJust p) . fail $ mconcat
+       [ "Unable to locate the executable \""
+       , SBV.executable $ SBV.solver conf
+       , "\" needed to run the solver "
+       , show . SBV.name $ SBV.solver conf
+       ]
+
+     (t', mlabels, lit) <- prepNegatedSBV sc unints term
 
      tp <- scWhnf sc =<< scTypeOf sc t'
      let (args, _) = asPiList tp
