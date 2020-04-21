@@ -695,8 +695,8 @@ SAWScript can also work with Cryptol *types*. The most direct way to
 refer to a Cryptol type is to use type brackets: `{|` and `|}`. Any
 Cryptol type written between these brackets becomes a `Type` value in
 SAWScript. Some types in Cryptol are *numeric* (also known as *size*)
-types, and isomorphic to integers. These can be translated into
-SAWScript integers with the `eval_size` function. For example:
+types, and correspond to non-negative integers. These can be translated
+into SAWScript integers with the `eval_size` function. For example:
 
 ~~~~
 sawscript> let {{ type n = 16 }}
@@ -1590,7 +1590,7 @@ any code that touches them will require that they be initialized using
 `crucible_alloc_global`.
 
 Many C++ names are slightly awkward to deal with in SAW. They may be
-mangled relative to the text that appears in the C++ soruce code. SAW
+mangled relative to the text that appears in the C++ source code. SAW
 currently only understands the mangled names. The `llvm-nm` program can
 be used to show the list of symbols in an LLVM bitcode file, and the
 `c++filt` program can be used to demangle them, which can help in
