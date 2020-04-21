@@ -35,6 +35,7 @@ import Data.Semigroup ((<>))
 import Control.Applicative (Applicative)
 #endif
 import Control.Lens
+import Control.Monad.Catch (MonadThrow(..))
 import Control.Monad.Fail (MonadFail(..))
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.Reader (MonadReader)
@@ -57,6 +58,7 @@ import GHC.Generics (Generic, Generic1)
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
+import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
@@ -335,7 +337,7 @@ evaluateTypedTerm sc (TypedTerm schema trm) =
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
-applyValue _ _ = fail "applyValue"
+applyValue _ _ = throwTopLevel "applyValue"
 
 thenValue :: SS.Pos -> Value -> Value -> Value
 thenValue pos v1 v2 = VBind pos v1 (VLambda (const (return v2)))
@@ -395,7 +397,7 @@ data TopLevelRW =
 
 newtype TopLevel a =
   TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
-  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadFail)
+  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow)
 
 deriving instance MonadReader TopLevelRO TopLevel
 deriving instance MonadState TopLevelRW TopLevel
@@ -406,6 +408,11 @@ runTopLevel (TopLevel m) ro rw = runStateT (runReaderT m ro) rw
 
 io :: IO a -> TopLevel a
 io = liftIO
+
+throwTopLevel :: String -> TopLevel a
+throwTopLevel msg = do
+  pos <- getPosition
+  X.throw $ SS.TopLevelException pos msg
 
 withPosition :: SS.Pos -> TopLevel a -> TopLevel a
 withPosition pos (TopLevel m) = TopLevel (local (\ro -> ro{ roPosition = pos }) m)
@@ -481,6 +488,9 @@ data JavaSetupState
 
 type JavaSetup a = StateT JavaSetupState TopLevel a
 
+throwJava :: String -> JavaSetup a
+throwJava = lift . throwTopLevel
+
 type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
 -- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
@@ -504,6 +514,12 @@ instance Monad LLVMCrucibleSetupM where
   return = pure
   LLVMCrucibleSetupM m >>= f =
     LLVMCrucibleSetupM (m >>= runLLVMCrucibleSetupM . f)
+
+throwCrucibleSetup :: ProgramLoc -> String -> CrucibleSetup ext a
+throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
+
+throwLLVM :: ProgramLoc -> String -> LLVMCrucibleSetupM a
+throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg
 
 -- | This gets more accurate locations than @lift (lift getPosition)@ because
 --   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
@@ -854,13 +870,15 @@ addTrace str val =
 
 -- | Wrap an action with a handler that catches and rethrows user
 -- errors with an extended message.
-addTraceIO :: String -> IO a -> IO a
-addTraceIO str action = X.catchJust p action h
+addTraceIO :: forall a. String -> IO a -> IO a
+addTraceIO str action = X.catch action h
   where
-    -- TODO: Use a custom exception type instead of fail/userError
-    -- init/drop 12 is a hack to remove "user error (" and ")"
-    p e = if IOError.isUserError e then Just (init (drop 12 (show e))) else Nothing
-    h msg = X.throwIO (IOError.userError (str ++ ":\n" ++ msg))
+    rethrow msg = X.throwIO . IOError.userError $ mconcat [str, ":\n", msg]
+    h :: SS.TopLevelException -> IO a
+    h (SS.TopLevelException _pos msg) = rethrow msg
+    h (SS.JavaException _pos msg) = rethrow msg
+    h (SS.CrucibleSetupException _pos msg) = rethrow msg
+    h (SS.OverrideMatcherException _pos msg) = rethrow msg
 
 -- | Similar to 'addTraceIO', but for state monads built from 'TopLevel'.
 addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a

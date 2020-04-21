@@ -1,7 +1,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module SAWScript.Exceptions (TypeErrors(..), failTypecheck) where
+module SAWScript.Exceptions
+  ( TypeErrors(..), failTypecheck
+  , TopLevelException(..)
+  ) where
 
 import Control.Exception
+
+import What4.ProgramLoc (ProgramLoc)
 
 import SAWScript.Position (Pos(..))
 
@@ -19,3 +24,10 @@ instance Exception TypeErrors where
 failTypecheck :: [(Pos, String)] -> a
 failTypecheck = throw . TypeErrors
 
+data TopLevelException
+  = TopLevelException Pos String
+  | JavaException Pos String
+  | CrucibleSetupException ProgramLoc String
+  | OverrideMatcherException ProgramLoc String
+  deriving Show
+instance Exception TopLevelException
