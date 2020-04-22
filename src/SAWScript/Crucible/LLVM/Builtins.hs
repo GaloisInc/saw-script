@@ -67,6 +67,7 @@ module SAWScript.Crucible.LLVM.Builtins
 
 import Prelude hiding (fail)
 
+import qualified Control.Exception as X
 import           Control.Lens
 
 import           Control.Monad.State hiding (fail)
@@ -154,7 +155,8 @@ import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Versions
 import SAWScript.TopLevel
 import SAWScript.Value
-import SAWScript.Position as SS
+import SAWScript.Position
+import SAWScript.Exceptions
 import SAWScript.Options
 
 import qualified SAWScript.Crucible.Common as Common
@@ -328,7 +330,7 @@ createMethodSpec verificationArgs asp bic opts lm nm setup = do
         st0 <- either (throwTopLevel . show . ppSetupError) return est0
 
         -- execute commands of the method spec
-        liftIO $ W4.setCurrentProgramLoc sym setupLoc
+        io $ W4.setCurrentProgramLoc sym setupLoc
 
         methodSpec <- view Setup.csMethodSpec <$>
           execStateT (runLLVMCrucibleSetupM setup) st0
@@ -426,6 +428,9 @@ verifyObligations cc mspec tactic assumes asserts = do
   printOutLnTop Info $ unwords ["Proof succeeded!", nm]
   return (mconcat stats)
 
+throwMethodSpec :: MS.CrucibleMethodSpecIR (LLVM arch) -> String -> IO a
+throwMethodSpec mspec msg = X.throw $ LLVMMethodSpecException (mspec ^. MS.csLoc) msg
+
 -- | Check that the specified return value has the expected type
 --
 -- The expected type is inferred from the LLVM module.
@@ -439,7 +444,7 @@ checkSpecReturnType ::
 checkSpecReturnType cc mspec =
   case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
     (Just _, Nothing) ->
-         fail $ unlines
+         throwMethodSpec mspec $ unlines
            [ "Could not resolve return type of " ++ mspec ^. csName
            , "Raw type: " ++ show (mspec ^. MS.csRet)
            ]
@@ -451,7 +456,7 @@ checkSpecReturnType cc mspec =
           sv
       -- This check is too lax, see saw-script#443
       b <- checkRegisterCompatibility retTy retTy'
-      unless b $ fail $ unlines
+      unless b $ throwMethodSpec mspec $ unlines
         [ "Incompatible types for return value when verifying " ++ mspec^.csName
         , "Expected: " ++ show retTy
         , "but given value of type: " ++ show retTy'
@@ -503,7 +508,7 @@ verifyPrestate opts cc mspec globals = do
             (mspec ^. MS.csPreState . MS.csFreshPointers)
   let env = Map.unions [env1, env2]
 
-  mem'' <- setupGlobalAllocs cc (mspec ^. MS.csGlobalAllocs) mem'
+  mem'' <- setupGlobalAllocs cc mspec mem'
 
   mem''' <- setupPrePointsTos mspec opts cc env (mspec ^. MS.csPreState . MS.csPointsTos) mem''
 
@@ -543,14 +548,15 @@ resolveArguments cc mem mspec env = mapM resolveArg [0..(nArgs-1)]
     checkArgTy i mt mt' =
       do b <- checkRegisterCompatibility mt mt'
          unless b $
-           fail $ unlines [ "Type mismatch in argument " ++ show i ++ " when veriyfing " ++ show nm
-                          , "Argument is declared with type: " ++ show mt
-                          , "but provided argument has incompatible type: " ++ show mt'
-                          , "Note: this may be because the signature of your " ++
-                            "function changed during compilation. If using " ++
-                            "Clang, check the signature in the disassembled " ++
-                            ".ll file."
-                          ]
+           throwMethodSpec mspec $ unlines
+           [ "Type mismatch in argument " ++ show i ++ " when veriyfing " ++ show nm
+           , "Argument is declared with type: " ++ show mt
+           , "but provided argument has incompatible type: " ++ show mt'
+           , "Note: this may be because the signature of your " ++
+             "function changed during compilation. If using " ++
+             "Clang, check the signature in the disassembled " ++
+             ".ll file."
+           ]
     resolveArg i =
       case Map.lookup i (mspec ^. MS.csArgBindings) of
         Just (mt, sv) -> do
@@ -558,7 +564,8 @@ resolveArguments cc mem mspec env = mapM resolveArg [0..(nArgs-1)]
           checkArgTy i mt mt'
           v <- resolveSetupVal cc mem env tyenv nameEnv sv
           return (mt, v)
-        Nothing -> fail $ unwords ["Argument", show i, "unspecified when verifying", show nm]
+        Nothing -> throwMethodSpec mspec $ unwords
+          ["Argument", show i, "unspecified when verifying", show nm]
 
 --------------------------------------------------------------------------------
 
@@ -567,10 +574,10 @@ resolveArguments cc mem mspec env = mapM resolveArg [0..(nArgs-1)]
 setupGlobalAllocs :: forall arch.
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
-  [MS.AllocGlobal (LLVM arch)] ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
   MemImpl ->
   IO MemImpl
-setupGlobalAllocs cc allocs mem0 = foldM go mem0 allocs
+setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
   where
     sym = cc ^. ccBackend
 
@@ -580,7 +587,7 @@ setupGlobalAllocs cc allocs mem0 = foldM go mem0 allocs
           gimap = Crucible.globalInitMap mtrans
       case Map.lookup symbol gimap of
         Just (g, Right (mt, _)) -> do
-          when (L.gaConstant $ L.globalAttrs g) . fail $ mconcat
+          when (L.gaConstant $ L.globalAttrs g) . throwMethodSpec mspec $ mconcat
             [ "Global variable \""
             , name
             , "\" is not mutable"
@@ -591,7 +598,7 @@ setupGlobalAllocs cc allocs mem0 = foldM go mem0 allocs
             case L.globalAlign g of
               Just a | a > 0 ->
                 case Crucible.toAlignment $ Crucible.toBytes a of
-                  Nothing -> fail $ mconcat
+                  Nothing -> throwMethodSpec mspec $ mconcat
                     [ "Global variable \""
                     , name
                     , "\" has invalid alignment: "
@@ -601,7 +608,7 @@ setupGlobalAllocs cc allocs mem0 = foldM go mem0 allocs
               _ -> pure $ Crucible.memTypeAlign (Crucible.llvmDataLayout ?lc) mt
           (ptr, mem') <- Crucible.doMalloc sym Crucible.GlobalAlloc Crucible.Mutable name mem sz' alignment
           pure $ Crucible.registerGlobal mem' [symbol] ptr
-        _ -> fail $ mconcat
+        _ -> throwMethodSpec mspec $ mconcat
           [ "Global variable \""
           , name
           , "\" does not exist"
@@ -631,7 +638,7 @@ setupPrePointsTos mspec opts cc env pts mem0 = foldM go mem0 pts
            Crucible.LLVMValInt blk off
              | Just Refl <- testEquality (W4.bvWidth off) Crucible.PtrWidth
              -> return (Crucible.LLVMPointer blk off)
-           _ -> fail "Non-pointer value found in points-to assertion"
+           _ -> throwMethodSpec mspec "Non-pointer value found in points-to assertion"
 
          cond' <- mapM (resolveSAWPred cc . ttTerm) cond
 

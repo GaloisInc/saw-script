@@ -2,6 +2,7 @@
 module SAWScript.Exceptions
   ( TypeErrors(..), failTypecheck
   , TopLevelException(..)
+  , TraceException(..)
   ) where
 
 import Control.Exception
@@ -29,5 +30,13 @@ data TopLevelException
   | JavaException Pos String
   | CrucibleSetupException ProgramLoc String
   | OverrideMatcherException ProgramLoc String
+  | LLVMMethodSpecException ProgramLoc String
   deriving Show
 instance Exception TopLevelException
+
+data TraceException = TraceException String
+
+instance Show TraceException where
+  show (TraceException msg) = "Stack trace:\n" ++ msg
+
+instance Exception TraceException

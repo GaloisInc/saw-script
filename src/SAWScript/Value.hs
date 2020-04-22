@@ -55,6 +55,8 @@ import Data.Parameterized.Some
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
 
+import qualified Text.PrettyPrint.ANSI.Leijen as PP
+
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
@@ -99,7 +101,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
 
-import           What4.ProgramLoc (ProgramLoc)
+import           What4.ProgramLoc (ProgramLoc(..))
 
 -- Values ----------------------------------------------------------------------
 
@@ -871,14 +873,29 @@ addTrace str val =
 -- | Wrap an action with a handler that catches and rethrows user
 -- errors with an extended message.
 addTraceIO :: forall a. String -> IO a -> IO a
-addTraceIO str action = X.catch action h
+addTraceIO str action = X.catches action
+  [ X.Handler handleTopLevel
+  , X.Handler handleTrace
+  , X.Handler handleIO
+  ]
   where
-    rethrow msg = X.throwIO . IOError.userError $ mconcat [str, ":\n", msg]
-    h :: SS.TopLevelException -> IO a
-    h (SS.TopLevelException _pos msg) = rethrow msg
-    h (SS.JavaException _pos msg) = rethrow msg
-    h (SS.CrucibleSetupException _pos msg) = rethrow msg
-    h (SS.OverrideMatcherException _pos msg) = rethrow msg
+    rethrow msg = X.throwIO . SS.TraceException $ mconcat [str, ":\n", msg]
+    handleTopLevel :: SS.TopLevelException -> IO a
+    handleTopLevel (SS.TopLevelException _pos msg) = rethrow msg
+    handleTopLevel (SS.JavaException _pos msg) = rethrow msg
+    handleTopLevel (SS.CrucibleSetupException _loc msg) = rethrow msg
+    handleTopLevel (SS.OverrideMatcherException _loc msg) = rethrow msg
+    handleTopLevel (SS.LLVMMethodSpecException loc msg) = rethrow $ mconcat
+      [ "At "
+      , show . PP.pretty $ plSourceLoc loc
+      , ":\n"
+      , msg
+      ]
+    handleTrace (SS.TraceException msg) = rethrow msg
+    handleIO :: X.IOException -> IO a
+    handleIO e
+      | IOError.isUserError e = rethrow . init . drop 12 $ show e
+      | otherwise = X.throwIO e
 
 -- | Similar to 'addTraceIO', but for state monads built from 'TopLevel'.
 addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
