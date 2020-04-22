@@ -201,6 +201,8 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unsupported record type"
     Cryptol.TVFun _ _ ->
       fail "resolveSAWTerm: unsupported function type"
+    Cryptol.TVAbstract _ _ ->
+      fail "resolveSAWTerm: unsupported abstract type"
   where
     sym = cc^.jccBackend
 
@@ -265,6 +267,7 @@ toJVMType tp =
     Cryptol.TVTuple _tps -> Nothing
     Cryptol.TVRec _flds -> Nothing
     Cryptol.TVFun _ _ -> Nothing
+    Cryptol.TVAbstract _ _ -> Nothing
 
 equalValsPred ::
   JVMCrucibleContext ->
