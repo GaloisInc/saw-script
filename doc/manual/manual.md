@@ -1559,9 +1559,19 @@ can be helpful to:
 * Link all relevant bitcode with `llvm-link` (including, *e.g.*, the C++
   standard library when analyzing C++ code).
 
+All SAW proofs include side conditions to rule out undefined behavior,
+and proofs will only succeed if all of these side conditions have been
+discharged. However the default SAW notion of undefined behavior is with
+respect to the semantics of LLVM, rather than C or C++. If you want to
+rule out undefined behavior according to the C or C++ standards,
+consider compiling your code with `-fsanitize=undefined` or one of the
+related flags[^1] to `clang`.
+
 For Java, the only compilation flag that tends to be valuable is `-g` to
 retain information about the names of function arguments and local
 variables.
+
+[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
 
 ## Notes on C++ Analysis
 
