@@ -1567,6 +1567,15 @@ rule out undefined behavior according to the C or C++ standards,
 consider compiling your code with `-fsanitize=undefined` or one of the
 related flags[^1] to `clang`.
 
+Generally, you'll also want to use `-fsanitize-trap=undefined`, or one
+of the related flags, to cause the compiled code to use `llvm.trap` to
+indicate the presence of undefined behavior. Otherwise, the compiled
+code will call a separate function, such as
+`__ubsan_handle_shift_out_of_bounds`, for each type of undefined
+behavior, and SAW currently does not have built in support for these
+functions (though you could manually create overrides for them in a
+verification script).
+
 For Java, the only compilation flag that tends to be valuable is `-g` to
 retain information about the names of function arguments and local
 variables.
