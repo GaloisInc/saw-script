@@ -36,7 +36,6 @@ import Control.Applicative (Applicative)
 #endif
 import Control.Lens
 import Control.Monad.Catch (MonadThrow(..))
-import Control.Monad.Fail (MonadFail(..))
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X

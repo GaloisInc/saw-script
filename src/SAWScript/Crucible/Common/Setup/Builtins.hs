@@ -13,7 +13,6 @@ module SAWScript.Crucible.Common.Setup.Builtins where
 import           Control.Lens
 import           Control.Monad (when)
 import           Control.Monad.State (get)
-import qualified Control.Monad.Fail as Fail
 import qualified Data.Map as Map
 
 import qualified What4.ProgramLoc as W4

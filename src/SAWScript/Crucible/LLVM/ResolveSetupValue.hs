@@ -28,7 +28,6 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
 import Control.Lens
 import Control.Monad
 import Control.Monad.Catch (MonadThrow)
-import Control.Monad.Fail (MonadFail)
 import Control.Monad.State
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
