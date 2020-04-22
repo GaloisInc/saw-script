@@ -44,8 +44,6 @@ import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizeP
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
-import qualified Text.LLVM.AST as L
-
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
