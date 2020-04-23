@@ -1771,6 +1771,8 @@ implPopM x p =
 implElimOrM :: ExprVar a -> ValuePerm a -> ValuePerm a ->
                ImplM vars s r (ps :> a) (ps :> a) ()
 implElimOrM x p1 p2 =
+  implTraceM (\pp_info -> string "Eliminating or:" <+>
+                          permPretty pp_info (ValPerm_Or p1 p2)) >>>
   implApplyImpl1 (Impl1_ElimOr x p1 p2)
   (MNil :>: Impl1Cont (const $ greturn ()) :>: Impl1Cont (const $ greturn ()))
 

@@ -27,6 +27,7 @@ module SAWScript.Heapster.TypedCrucible where
 import Data.Maybe
 import Data.Text hiding (length, map, concat, findIndex, foldr, foldl, maximum)
 import Data.List (findIndex)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Type.Equality
 import Data.Functor.Identity
 import Data.Functor.Compose
@@ -58,6 +59,7 @@ import Lang.Crucible.FunctionHandle
 import Lang.Crucible.Types
 import Lang.Crucible.LLVM.Bytes
 import Lang.Crucible.LLVM.Extension
+import Lang.Crucible.LLVM.Extension.Safety
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Arch.X86
 import Lang.Crucible.CFG.Expr
@@ -65,6 +67,7 @@ import Lang.Crucible.CFG.Core
 import Lang.Crucible.CFG.Extension
 import Lang.Crucible.CFG.Extension.Safety
 import Lang.Crucible.Analysis.Fixpoint.Components
+import qualified What4.Partial.AssertionTree as AT
 
 import SAWScript.Heapster.CruUtil
 import SAWScript.Heapster.Permissions
@@ -255,10 +258,14 @@ instance Liftable (TypedEntryID blocks args ghosts) where
 -- given set of return values
 data TypedStmt ext (rets :: RList CrucibleType) ps_in ps_out where
 
-  -- | Assign a pure value to a register, where pure here means that its
-  -- translation to SAW will be pure (i.e., no LLVM pointer operations)
+  -- | Assign a pure Crucible expressions to a register, where pure here means
+  -- that its translation to SAW will be pure (i.e., no LLVM pointer operations)
   TypedSetReg :: TypeRepr tp -> TypedExpr ext tp ->
                  TypedStmt ext (RNil :> tp) RNil (RNil :> tp)
+
+  -- | Assign a pure permissions expression to a register
+  TypedSetRegPermExpr :: TypeRepr tp -> PermExpr tp ->
+                         TypedStmt ext (RNil :> tp) RNil (RNil :> tp)
 
   -- | Function call (FIXME: document the type here)
   TypedCall :: args ~ CtxToRList cargs =>
@@ -427,6 +434,7 @@ data TypedLLVMStmt w ret ps_in ps_out where
 -- | Return the input permissions for a 'TypedStmt'
 typedStmtIn :: TypedStmt ext rets ps_in ps_out -> DistPerms ps_in
 typedStmtIn (TypedSetReg _ _) = DistPermsNil
+typedStmtIn (TypedSetRegPermExpr _ _) = DistPermsNil
 typedStmtIn (TypedCall (TypedReg f) fun_perm ghosts args l ps) =
   DistPermsCons
   (DistPermsCons
@@ -495,6 +503,8 @@ typedStmtOut (TypedSetReg _ (TypedExpr _ (Just e))) (_ :>: ret) =
   distPerms1 ret (ValPerm_Eq e)
 typedStmtOut (TypedSetReg _ (TypedExpr _ Nothing)) (_ :>: ret) =
   distPerms1 ret ValPerm_True
+typedStmtOut (TypedSetRegPermExpr _ e) (_ :>: ret) =
+  distPerms1 ret (ValPerm_Eq e)
 typedStmtOut (TypedCall _ fun_perm ghosts args l ps) (_ :>: ret) =
   DistPermsCons
   (funPermDistOuts fun_perm (typedRegsToVars args :>: ret) l ghosts)
@@ -653,7 +663,9 @@ instance SubstVar PermVarSubst m =>
     TypedRegsCons <$> genSubst s rs <*> genSubst s r
 
 instance (PermCheckExtC ext, NuMatchingAny1 f,
-          SubstVar PermVarSubst m, Substable1 PermVarSubst f m) =>
+          NuMatching (AssertionClassifier ext f),
+          SubstVar PermVarSubst m, Substable1 PermVarSubst f m,
+          Substable PermVarSubst (f BoolType) m) =>
          Substable PermVarSubst (App ext f a) m where
   genSubst s [nuP| BaseIsEq tp e1 e2 |] =
     BaseIsEq (mbLift tp) <$> genSubst1 s e1 <*> genSubst1 s e2
@@ -685,6 +697,16 @@ instance (PermCheckExtC ext, NuMatchingAny1 f,
     NatMod <$> genSubst1 s e1 <*> genSubst1 s e2
   genSubst s [nuP| HandleLit h |] =
     return $ HandleLit $ mbLift h
+  genSubst s mb_e@[nuP| WithAssertion tp (PartialExp p e) |] =
+    let getExtRepr :: PermCheckExtC ext => Mb ctx (App ext f a) -> ExtRepr ext
+        getExtRepr _ = knownRepr in
+    case getExtRepr mb_e of
+      ExtRepr_Unit ->
+        WithAssertion (mbLift tp) <$>
+        (PartialExp <$> genSubst s p <*> genSubst1 s e)
+      ExtRepr_LLVM ->
+        WithAssertion (mbLift tp) <$>
+        (PartialExp <$> genSubst s p <*> genSubst1 s e)
   genSubst s [nuP| BVLit w i |] =
     BVLit <$> genSubst s w <*> return (mbLift i)
   genSubst s [nuP| BVConcat w1 w2 e1 e2 |] =
@@ -734,8 +756,32 @@ instance (PermCheckExtC ext, NuMatchingAny1 f,
     BVNonzero <$> genSubst s w <*> genSubst1 s e
   genSubst _ [nuP| TextLit text |] =
     return $ TextLit $ mbLift text
-  genSubst _ [nuP| _ |] =
-    error "genSubst: unhandled Crucible expression construct"
+  genSubst _ mb_expr =
+    error ("genSubst: unhandled Crucible expression construct: "
+           ++ mbLift (fmap (show . ppApp (const (string "_"))) mb_expr))
+
+instance (NuMatchingAny1 f, SubstVar PermVarSubst m,
+          Substable1 PermVarSubst f m) =>
+         Substable PermVarSubst (LLVMSafetyAssertion f) m where
+  genSubst s [nuP| LLVMSafetyAssertion bbeh p extra |] =
+    LLVMSafetyAssertion (mbLift bbeh) <$> genSubst1 s p <*> return (mbLift extra)
+
+instance SubstVar PermVarSubst m =>
+         Substable PermVarSubst (NoAssertionClassifier f) m where
+  genSubst _ _ = error "Unreachable!"
+
+instance (NuMatching a, Substable s a m) => Substable s (NonEmpty a) m where
+  genSubst s [nuP| x :| xs |] = (:|) <$> genSubst s x <*> genSubst s xs
+
+instance (NuMatching a, NuMatching c,
+          SubstVar s m, Substable s c m, Substable s a m) =>
+         Substable s (AT.AssertionTree c a) m where
+  genSubst s [nuP| AT.Leaf a |] = AT.Leaf <$> genSubst s a
+  genSubst s [nuP| AT.And ts |] = AT.And <$> genSubst s ts
+  genSubst s [nuP| AT.Or ts |] = AT.Or <$> genSubst s ts
+  genSubst s [nuP| AT.Ite c t1 t2 |] =
+    AT.Ite <$> genSubst s c <*> genSubst s t1 <*> genSubst s t2
+
 
 instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
          Substable PermVarSubst (TypedExpr ext tp) m where
@@ -776,6 +822,8 @@ instance (PermCheckExtC ext, SubstVar PermVarSubst m) =>
          Substable PermVarSubst (TypedStmt ext rets ps_in ps_out) m where
   genSubst s [nuP| TypedSetReg tp expr |] =
     TypedSetReg (mbLift tp) <$> genSubst s expr
+  genSubst s [nuP| TypedSetRegPermExpr tp expr |] =
+    TypedSetRegPermExpr (mbLift tp) <$> genSubst s expr
   genSubst s [nuP| TypedCall f fun_perm ghosts args l ps |] =
     TypedCall <$> genSubst s f <*> genSubst s fun_perm <*>
     genSubst s ghosts <*> genSubst s args <*> genSubst s l <*> genSubst s ps
@@ -2004,7 +2052,7 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerBlock w ptr_reg) =
       greturn (addCtxName ctx ret)
 
 -- Type-check the LLVM value destructor that gets the offset value, by either
--- proving a permission eq(llvmword e) and returning block e or proving
+-- proving a permission eq(llvmword e) and returning e or proving
 -- permission is_llvmptr and returning the constant bitvector value 0.
 --
 -- NOTE: Just as with 'LLVM_PointerBlock', because our SAW translation does not
@@ -2031,7 +2079,7 @@ tcEmitLLVMSetExpr arch ctx loc (LLVM_PointerOffset w ptr_reg) =
       emitLLVMStmt knownRepr loc (AssertLLVMPtr tptr_reg) >>>
       emitStmt knownRepr loc (TypedSetReg knownRepr $
                               TypedExpr (BVLit w 0)
-                              (Just $ bvInt 1)) >>>= \(_ :>: ret) ->
+                              (Just $ bvInt 0)) >>>= \(_ :>: ret) ->
       stmtRecombinePerms >>>
       greturn (addCtxName ctx ret)
 
@@ -2350,6 +2398,83 @@ tcEmitLLVMStmt arch ctx loc (LLVM_ResolveGlobal w _ gsym) =
     Nothing ->
       stmtFailM (const $ string ("LLVM_ResolveGlobal: no perms for global "
                                  ++ show gsym))
+
+tcEmitLLVMStmt arch ctx loc (LLVM_PtrEq _ r1 r2) =
+  let x1 = tcReg ctx r1
+      x2 = tcReg ctx r2 in
+  getEqualsExpr (PExpr_Var $ typedRegVar x1) >>>= \e1 ->
+  getEqualsExpr (PExpr_Var $ typedRegVar x2) >>>= \e2 ->
+  case (e1, e2) of
+
+    -- If both variables equal words, then compare the words
+    --
+    -- FIXME: if we have bvEq e1' e2' or not (bvCouldEqual e1' e2') then we
+    -- should return a known Boolean value in place of the Nothing
+    (PExpr_LLVMWord e1', PExpr_LLVMWord e2') ->
+      emitStmt knownRepr loc (TypedSetRegPermExpr
+                              knownRepr e1') >>>= \(_ :>: n1) ->
+      stmtRecombinePerms >>>
+      emitStmt knownRepr loc (TypedSetRegPermExpr
+                              knownRepr e2') >>>= \(_ :>: n2) ->
+      stmtRecombinePerms >>>
+      emitStmt knownRepr loc (TypedSetReg knownRepr $
+                              TypedExpr (BaseIsEq knownRepr
+                                         (RegWithVal (TypedReg n1) e1')
+                                         (RegWithVal (TypedReg n2) e2'))
+                              Nothing) >>>= \(_ :>: ret) ->
+      stmtRecombinePerms >>>
+      greturn (addCtxName ctx ret)
+
+    -- If both variables equal x+off for the same x, compare the offsets
+    --
+    -- FIXME: test off1 == off2 like above
+    (asLLVMOffset -> Just (x1', off1), asLLVMOffset -> Just (x2', off2))
+      | x1' == x2' ->
+        emitStmt knownRepr loc (TypedSetRegPermExpr
+                                knownRepr off1) >>>= \(_ :>: n1) ->
+        stmtRecombinePerms >>>
+        emitStmt knownRepr loc (TypedSetRegPermExpr
+                                knownRepr off2) >>>= \(_ :>: n2) ->
+        stmtRecombinePerms >>>
+        emitStmt knownRepr loc (TypedSetReg knownRepr $
+                                TypedExpr (BaseIsEq knownRepr
+                                           (RegWithVal (TypedReg n1) off1)
+                                           (RegWithVal (TypedReg n2) off2))
+                                Nothing) >>>= \(_ :>: ret) ->
+        stmtRecombinePerms >>>
+        greturn (addCtxName ctx ret)
+
+    -- If one variable is a word and the other is not known to be a word, then
+    -- that other has to be a pointer, in which case the comparison will
+    -- definitely fail. Otherwise we cannot compare them and we fail.
+    (PExpr_LLVMWord e, asLLVMOffset -> Just (x', _)) ->
+      let r' = TypedReg x' in
+      stmtProvePerm r' (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
+      emitLLVMStmt knownRepr loc (AssertLLVMPtr r') >>>
+      emitStmt knownRepr loc (TypedSetReg knownRepr $
+                              TypedExpr (BoolLit False)
+                              Nothing) >>>= \(_ :>: ret) ->
+      stmtRecombinePerms >>>
+      greturn (addCtxName ctx ret)
+
+    -- Symmetrical version of the above case
+    (asLLVMOffset -> Just (x', _), PExpr_LLVMWord e) ->
+      let r' = TypedReg x' in
+      stmtProvePerm r' (emptyMb $ ValPerm_Conj1 Perm_IsLLVMPtr) >>>
+      emitLLVMStmt knownRepr loc (AssertLLVMPtr r') >>>
+      emitStmt knownRepr loc (TypedSetReg knownRepr $
+                              TypedExpr (BoolLit False)
+                              Nothing) >>>= \(_ :>: ret) ->
+      stmtRecombinePerms >>>
+      greturn (addCtxName ctx ret)
+
+    -- If we don't know any relationship between the two registers, then we
+    -- fail, because there is no way to compare pointers in the translation
+    _ ->
+      stmtFailM (\i ->
+                  sep [string "Could not compare LLVM pointer values",
+                       permPretty i x1, string "and", permPretty i x2])
+
 
 tcEmitLLVMStmt _arch _ctx _loc _stmt =
   error "tcEmitLLVMStmt: unimplemented statement"

@@ -266,6 +266,12 @@ instance NuMatching (NoAssertionClassifier f) where
   nuMatchingProof = unsafeMbTypeRepr
 
 
+instance Closable (BadBehavior e) where
+  toClosed = unsafeClose
+
+instance NuMatchingAny1 e => Liftable (BadBehavior e) where
+  mbLift = unClosed . mbLift . fmap toClosed
+
 -- NOTE: Crucible objects can never contain any Hobbits names, but "proving"
 -- that would require introspection of opaque types like 'Index' and 'Nonce',
 -- and would also be inefficient, so we just use 'unsafeClose'

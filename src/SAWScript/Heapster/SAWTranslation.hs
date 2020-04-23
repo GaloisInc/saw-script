@@ -66,7 +66,7 @@ import Lang.Crucible.CFG.Extension.Safety
 import Lang.Crucible.Analysis.Fixpoint.Components
 import qualified What4.Partial.AssertionTree as AT
 
-import Verifier.SAW.OpenTerm
+import Verifier.SAW.TracedOpenTerm
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
@@ -409,7 +409,7 @@ sigmaElimTransM :: (IsTermTrans trL, IsTermTrans trR) =>
                    TransM info ctx OpenTerm
 sigmaElimTransM _ tp_l@(typeTransTypes -> []) tp_r _ f sigma =
   do let proj1 = typeTransF tp_l []
-     proj2 <- flip typeTransF [sigma] <$> tp_r proj1
+     proj2 <- flip (typeTransF . tupleTypeTrans) [sigma] <$> tp_r proj1
      f proj1 proj2
 sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
   do tp_r_trm <- lambdaTupleTransM x tp_l (\tr ->
@@ -418,9 +418,9 @@ sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
      tp_ret <- lambdaTransM x (mkTypeTrans1 sigma_tp id)
        (const (typeTransTupleType <$> tp_ret_m))
      f_trm <-
-       lambdaTupleTransM (x ++ "_left") tp_l $ \x_l ->
+       lambdaTupleTransM (x ++ "_proj1") tp_l $ \x_l ->
        tp_r x_l >>= \tp_r_app ->
-       lambdaTupleTransM (x ++ "_right") tp_r_app (f x_l)
+       lambdaTupleTransM (x ++ "_proj2") tp_r_app (f x_l)
      return (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma__rec")
              [ typeTransTupleType tp_l, tp_r_trm, tp_ret, f_trm, sigma ])
 
@@ -2345,6 +2345,12 @@ instance TransInfo info =>
   translate [nuP| TypedReg x |] = translate x
 
 instance TransInfo info =>
+         Translate info ctx (TypedRegs tps) (ExprTransCtx tps) where
+  translate [nuP| TypedRegsNil |] = return MNil
+  translate [nuP| TypedRegsCons rs r |] =
+    (:>:) <$> translate rs <*> translate r
+
+instance TransInfo info =>
          Translate info ctx (RegWithVal tp) (ExprTrans tp) where
   translate [nuP| RegWithVal _ e |] = translate e
   translate [nuP| RegNoVal x |] = translate x
@@ -2708,6 +2714,11 @@ translateStmt [nuP| TypedSetReg _ e |] m =
      inExtTransM etrans $
        withPermStackM (:>: Member_Base) (:>: extPermTrans ptrans) m
 
+translateStmt [nuP| TypedSetRegPermExpr _ e |] m =
+  do etrans <- tpTransM $ translate e
+     inExtTransM etrans $
+       withPermStackM (:>: Member_Base) (:>: PTrans_Eq (extMb e)) m
+
 translateStmt [nuP| stmt@(TypedCall freg fun_perm ghosts args l ps) |] m =
   do f_trans <- getTopPermM
      let f = case f_trans of
@@ -2717,18 +2728,27 @@ translateStmt [nuP| stmt@(TypedCall freg fun_perm ghosts args l ps) |] m =
      let perms_out = mbCombine $ fmap (\stmt' -> nu $ \ret ->
                                         typedStmtOut stmt' (MNil :>: ret)) stmt
      ret_tp <- translate $ fmap funPermRet fun_perm
-     fret_trm <-
-       withPermStackM mapRListTail mapRListTail $
-       translateApply "TypedCall" f perms_in
-     sigmaElimTransM "x_elimCalRet" ret_tp
-       (flip inExtTransM (translate perms_out)) compReturnTypeTransM
-       (\ret_trans pctx ->
-         inExtTransM ret_trans $
-         withPermStackM
-         (\(args :>: l :>: _) -> (args :>: Member_Base :>: l))
-         (const pctx)
-         m)
-       fret_trm
+     ectx_ghosts <- translate ghosts
+     ectx_args <- translate args
+     pctx_in <- mapRListTail <$> itiPermStack <$> ask
+     let fret_trm =
+           applyOpenTermMulti f (exprCtxToTerms ectx_ghosts
+                                 ++ exprCtxToTerms ectx_args
+                                 ++ permCtxToTerms pctx_in)
+     fret_tp <- sigmaTypeTransM "ret" ret_tp (flip inExtTransM
+                                              (translate perms_out))
+     applyMultiTransM (return $ globalOpenTerm "Prelude.bindM")
+       [return fret_tp, returnTypeM, return fret_trm,
+        lambdaOpenTermTransM "call_ret_val" fret_tp $ \ret_val ->
+         sigmaElimTransM "elim_call_ret_val" ret_tp
+         (flip inExtTransM (translate perms_out)) compReturnTypeTransM
+         (\ret_trans pctx ->
+           inExtTransM ret_trans $
+           withPermStackM
+           (\(args :>: l :>: _) -> (args :>: Member_Base :>: l))
+           (const pctx)
+           m)
+         ret_val]
 
 translateStmt stmt@[nuP| BeginLifetime |] m =
   inExtTransM ETrans_Lifetime $
