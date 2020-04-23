@@ -19,7 +19,6 @@ module SAWScript.JavaBuiltins where
 import Control.Applicative hiding (empty)
 #endif
 import Control.Lens
-import qualified Control.Monad.Fail as Fail
 import Control.Monad.State
 import Control.Monad.Trans.Except
 import Data.List (partition)
