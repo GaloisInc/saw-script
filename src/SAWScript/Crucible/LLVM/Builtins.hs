@@ -249,8 +249,8 @@ crucible_llvm_verify ::
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_verify bic opts (Some lm) nm lemmas checkSat setup tactic = do
   lemmas' <- checkModuleCompatibility lm lemmas
-  SomeLLVM <$>
-    createMethodSpec (Just (lemmas', checkSat, tactic)) Nothing bic opts lm nm setup
+  withMethodSpec bic opts lm nm setup $ \cc method_spec ->
+    SomeLLVM <$> verifyMethodSpec bic opts cc method_spec lemmas' checkSat tactic Nothing
 
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
@@ -260,7 +260,10 @@ crucible_llvm_unsafe_assume_spec ::
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_unsafe_assume_spec bic opts (Some lm) nm setup =
-  SomeLLVM <$> createMethodSpec Nothing Nothing bic opts lm nm setup
+  withMethodSpec bic opts lm nm setup $ \_ method_spec -> do
+    printOutLnTop Info $
+      unwords ["Assume override", (method_spec ^. csName)]
+    return $ SomeLLVM method_spec
 
 crucible_llvm_array_size_profile ::
   BuiltinContext ->
@@ -269,11 +272,12 @@ crucible_llvm_array_size_profile ::
   String ->
   LLVMCrucibleSetupM () ->
   TopLevel [Crucible.Profile]
-crucible_llvm_array_size_profile bic opts (Some lm) nm setup = do
-  cell <- io $ newIORef Map.empty
-  void $ createMethodSpec (Just ([], False, undefined)) (Just cell) bic opts lm nm setup
-  profiles <- io $ readIORef cell
-  pure $ Map.toList profiles
+crucible_llvm_array_size_profile bic opts (Some lm) nm setup =
+  withMethodSpec bic opts lm nm setup $ \cc method_spec -> do
+    cell <- io $ newIORef Map.empty
+    void $ verifyMethodSpec bic opts cc method_spec [] False undefined (Just cell)
+    profiles <- io $ readIORef cell
+    pure $ Map.toList profiles
 
 -- | Check that all the overrides/lemmas were actually from this module
 checkModuleCompatibility ::
@@ -290,18 +294,15 @@ checkModuleCompatibility llvmModule = foldM step []
             Just Refl -> pure (lemma:accum)
 
 
--- | The real work of 'crucible_llvm_verify' and 'crucible_llvm_unsafe_assume_spec'.
-createMethodSpec ::
-  Maybe ([MS.CrucibleMethodSpecIR (LLVM arch)], Bool, ProofScript SatResult)
-  {- ^ If verifying, provide lemmas, branch sat checking, tactic -} ->
-  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
+withMethodSpec ::
   BuiltinContext   ->
   Options          ->
   LLVMModule arch ->
   String            {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
-  TopLevel (MS.CrucibleMethodSpecIR (LLVM arch))
-createMethodSpec verificationArgs asp bic opts lm nm setup = do
+  ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) => LLVMCrucibleContext arch -> MS.CrucibleMethodSpecIR (LLVM arch) -> TopLevel a) ->
+  TopLevel a
+withMethodSpec bic opts lm nm setup action = do
   (nm', parent) <- resolveSpecName nm
   let edef = findDefMaybeStatic (modAST lm) nm'
   let edecl = findDecl (modAST lm) nm'
@@ -313,13 +314,11 @@ createMethodSpec verificationArgs asp bic opts lm nm setup = do
 
   let ?lc = mtrans ^. Crucible.transContext . Crucible.llvmTypeCtx
 
-  profFile <- rwProfilingFile <$> getTopLevelRW
   Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \_ ->
     fmap NE.head $ forM defOrDecls $ \defOrDecl -> do
       setupLLVMCrucibleContext bic opts lm $ \cc -> do
         let sym = cc^.ccBackend
 
-        (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_llvm_verify" profFile
         pos <- getPosition
         let setupLoc = toW4Loc "_SAW_verify_prestate" pos
 
@@ -337,60 +336,71 @@ createMethodSpec verificationArgs asp bic opts lm nm setup = do
 
         void $ io $ checkSpecReturnType cc methodSpec
 
-        case verificationArgs of
-          -- If we're just admitting, don't do anything
-          Nothing -> do
-            printOutLnTop Info $
-              unwords ["Assume override", (methodSpec ^. csName) ]
-            return methodSpec
+        action cc methodSpec
 
-          -- If we're verifying, actually perform the verification
-          Just (lemmas, checkSat, tactic) -> do
-            printOutLnTop Info $
-              unwords ["Verifying", (methodSpec ^. csName) , "..."]
+verifyMethodSpec ::
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  BuiltinContext ->
+  Options ->
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  [MS.CrucibleMethodSpecIR (LLVM arch)] ->
+  Bool ->
+  ProofScript SatResult ->
+  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
+  TopLevel (MS.CrucibleMethodSpecIR (LLVM arch))
+verifyMethodSpec bic opts cc methodSpec lemmas checkSat tactic asp = do
+  printOutLnTop Info $
+    unwords ["Verifying", (methodSpec ^. csName) , "..."]
 
-            -- set up the LLVM memory with a pristine heap
-            let globals = cc^.ccLLVMGlobals
-            let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
-            mem0 <- case Crucible.lookupGlobal mvar globals of
-              Nothing   -> throwTopLevel "internal error: LLVM Memory global not found"
-              Just mem0 -> return mem0
-            -- push a memory stack frame if starting from a breakpoint
-            let mem = if isJust (methodSpec^.csParentName)
-                      then mem0
-                        { Crucible.memImplHeap = Crucible.pushStackFrameMem
-                          (Crucible.memImplHeap mem0)
-                        }
-                      else mem0
-            let globals1 = Crucible.llvmGlobals (ccLLVMContext cc) mem
+  let sym = cc^.ccBackend
 
-            -- construct the initial state for verifications
-            (args, assumes, env, globals2) <-
-              io $ verifyPrestate opts cc methodSpec globals1
+  profFile <- rwProfilingFile <$> getTopLevelRW
+  (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_llvm_verify" profFile
 
-            -- save initial path conditions
-            frameIdent <- io $ Crucible.pushAssumptionFrame sym
+  -- set up the LLVM memory with a pristine heap
+  let globals = cc^.ccLLVMGlobals
+  let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
+  mem0 <- case Crucible.lookupGlobal mvar globals of
+    Nothing   -> fail "internal error: LLVM Memory global not found"
+    Just mem0 -> return mem0
+  -- push a memory stack frame if starting from a breakpoint
+  let mem = if isJust (methodSpec^.csParentName)
+            then mem0
+              { Crucible.memImplHeap = Crucible.pushStackFrameMem
+                (Crucible.memImplHeap mem0)
+              }
+            else mem0
+  let globals1 = Crucible.llvmGlobals (ccLLVMContext cc) mem
 
-            -- run the symbolic execution
-            printOutLnTop Info $
-              unwords ["Simulating", (methodSpec ^. csName) , "..."]
-            top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
-            (ret, globals3)
-              <- io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp
+  -- construct the initial state for verifications
+  (args, assumes, env, globals2) <-
+    io $ verifyPrestate opts cc methodSpec globals1
 
-            -- collect the proof obligations
-            asserts <- verifyPoststate opts (biSharedContext bic) cc
-                          methodSpec env globals3 ret
+  -- save initial path conditions
+  frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
-            -- restore previous assumption state
-            _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+  -- run the symbolic execution
+  printOutLnTop Info $
+    unwords ["Simulating", (methodSpec ^. csName) , "..."]
+  top_loc <- toW4Loc "crucible_llvm_verify" <$> getPosition
+  (ret, globals3)
+    <- io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat asp
 
-            -- attempt to verify the proof obligations
-            printOutLnTop Info $
-              unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
-            stats <- verifyObligations cc methodSpec tactic assumes asserts
-            io $ writeFinalProfile
-            return (methodSpec & MS.csSolverStats .~ stats)
+  -- collect the proof obligations
+  asserts <- verifyPoststate opts (biSharedContext bic) cc
+                methodSpec env globals3 ret
+
+  -- restore previous assumption state
+  _ <- io $ Crucible.popAssumptionFrame sym frameIdent
+
+  -- attempt to verify the proof obligations
+  printOutLnTop Info $
+    unwords ["Checking proof obligations", (methodSpec ^. csName), "..."]
+  stats <- verifyObligations cc methodSpec tactic assumes asserts
+  io $ writeFinalProfile
+
+  return $ methodSpec & MS.csSolverStats .~ stats
 
 
 verifyObligations :: LLVMCrucibleContext arch
