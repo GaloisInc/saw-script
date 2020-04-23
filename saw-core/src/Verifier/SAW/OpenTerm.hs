@@ -17,7 +17,7 @@ built.
 
 module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
-  OpenTerm, completeOpenTerm, completeOpenTermType,
+  OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
   closedOpenTerm, flatOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
@@ -28,7 +28,7 @@ module Verifier.SAW.OpenTerm (
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
   letOpenTerm,
   -- * Monadic operations for building terms with binders
-  OpenTermM, completeOpenTermM,
+  OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM
   ) where
