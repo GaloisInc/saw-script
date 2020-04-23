@@ -883,12 +883,7 @@ addTraceIO str action = X.catches action
     handleTopLevel (SS.JavaException _pos msg) = rethrow msg
     handleTopLevel (SS.CrucibleSetupException _loc msg) = rethrow msg
     handleTopLevel (SS.OverrideMatcherException _loc msg) = rethrow msg
-    handleTopLevel (SS.LLVMMethodSpecException loc msg) = rethrow $ mconcat
-      [ "At "
-      , show . PP.pretty $ plSourceLoc loc
-      , ":\n"
-      , msg
-      ]
+    handleTopLevel (SS.LLVMMethodSpecException _loc msg) = rethrow msg
     handleTrace (SS.TraceException msg) = rethrow msg
     handleIO :: X.IOException -> IO a
     handleIO e
