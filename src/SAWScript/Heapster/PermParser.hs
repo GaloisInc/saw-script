@@ -228,7 +228,7 @@ spaces1 = space >> spaces
 parseInParens :: Stream s Identity Char =>
                  PermParseM s a -> PermParseM s a
 parseInParens m =
-  do spaces >> char '('
+  do char '('
      ret <- m
      spaces >> char ')'
      return ret
@@ -300,6 +300,7 @@ parseTypeKnown =
    (do try (string "permlist")
        return (Some $ mkKnownReprObj PermListRepr)) <|>
    (do try (string "struct")
+       spaces
        some_fld_tps <- parseInParens parseStructFieldTypesKnown
        case some_fld_tps of
          Some fld_tps@KnownReprObj ->
@@ -414,7 +415,7 @@ parseExpr NatRepr =
 parseExpr (BVRepr w) = withKnownNat w parseBVExpr
 parseExpr tp@(StructRepr fld_tps) =
   spaces >>
-  ((string "struct" >>
+  ((string "struct" >> spaces >>
     parseInParens (PExpr_Struct <$> parseExprs (mkCruCtx fld_tps))) <|>
    (PExpr_Var <$> parseExprVarOfType tp)) <?>
   "struct expression"
@@ -526,8 +527,7 @@ parseAtomicPerms :: (Stream s Identity Char, Liftable s) => TypeRepr a ->
                     PermParseM s [AtomicPerm a]
 parseAtomicPerms tp =
   do p1 <- parseAtomicPerm tp
-     spaces
-     (try (string "*") >> (p1:) <$> parseAtomicPerms tp) <|> return [p1]
+     (try (spaces >> string "*") >> (p1:) <$> parseAtomicPerms tp) <|> return [p1]
 
 -- | Parse an atomic permission of a specific type
 parseAtomicPerm :: (Stream s Identity Char, Liftable s) => TypeRepr a ->
@@ -805,7 +805,7 @@ parseFunPermM :: (Stream s Identity Char, Liftable s) =>
                  CruCtx args -> TypeRepr ret ->
                  PermParseM s (SomeFunPerm args ret)
 parseFunPermM args ret =
-  parseInParens parseCtx >>= \some_ghosts_ctx ->
+  spaces >> parseInParens parseCtx >>= \some_ghosts_ctx ->
   case some_ghosts_ctx of
     Some ghosts_ctx@(ParsedCtx _ ghosts) ->
       do spaces >> char '.'
