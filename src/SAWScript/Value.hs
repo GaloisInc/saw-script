@@ -54,8 +54,6 @@ import Data.Parameterized.Some
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
 
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
-
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
