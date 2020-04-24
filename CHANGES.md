@@ -1,3 +1,62 @@
+# Version 0.5
+
+## New Features
+
+* Added experimental support for basic, non-compositional verification
+  of x86 machine code for use in conjunction with LLVM verification.
+
+        crucible_llvm_verify_x86 :
+          LLVMModule -> String -> String ->
+          [(String, Int)] -> Bool -> CrucibleSetup () ->
+          TopLevel CrucibleMethodSpec
+
+
+  The first argument specifies the LLVM module containing the _caller_.
+  The second and third specify the ELF file name and symbol name of the
+  function to be verifier. The fourth and fifth specify TODO and whether
+  to perform path satisfiability checking, respectively. And the last
+  argument is the LLVM specification of the calling context against
+  which to verify the function.
+
+* Added support for using the SMT theory of arrays in the LLVM memory
+  model. In some cases, this can significantly improve performance.
+
+        enable_smt_array_memory_model : TopLevel ()
+        disable_smt_array_memory_model : TopLevel ()
+
+* Added experimental Verilog export, targeting the subset of Verilog
+  supported by ABC, in the new `write_verilog` and `offline_verilog`
+  commands.
+
+* Added several new options:
+
+    * New functions `enable_what4_hash_consing` and
+      `enable_what4_hash_consing` to enable or disable hash consing to
+      increase sub-formula sharing during symbolic execution.
+
+    * New command-line option `TODO` to print an ASCII logo without ANSI color.
+
+    * New command-line option `TODO` to print an ASCII logo without unicode.
+
+## Performance Improvements
+
+* Improved performance of the LLVM memory model.
+
+* Improved performance of bitvector operations during symbolic execution.
+
+* Improve performance of rewriting SAWCore terms.
+
+## Bug Fixes
+
+* Fixed SBV interface to fail more gracefully when it cannot find the
+  solver executable.
+
+* Fixed SMT-Lib export negation issues.
+
+Fixes issues #286, #489, #491, #564, #580, #583, #585, #586, #587, #590,
+ #592, #594, #597, #598, #602, #603, #612, #613, #622, #626, #633, #638,
+ #639, and #647.
+
 # Version 0.4
 
 * Fixed a long-standing soundness issue (#30) in compositional
