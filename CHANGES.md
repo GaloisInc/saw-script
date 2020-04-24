@@ -13,10 +13,11 @@
 
   The first argument specifies the LLVM module containing the _caller_.
   The second and third specify the ELF file name and symbol name of the
-  function to be verifier. The fourth and fifth specify TODO and whether
-  to perform path satisfiability checking, respectively. And the last
-  argument is the LLVM specification of the calling context against
-  which to verify the function.
+  function to be verifier. The fourth specifies the names and sizes (in
+  bytes) of global variables to initialize, and the fifth whether to
+  perform path satisfiability checking. The last argument is the LLVM
+  specification of the calling context against which to verify the
+  function.
 
 * Added support for using the SMT theory of arrays in the LLVM memory
   model. In some cases, this can significantly improve performance.
@@ -34,9 +35,8 @@
       `enable_what4_hash_consing` to enable or disable hash consing to
       increase sub-formula sharing during symbolic execution.
 
-    * New command-line option `TODO` to print an ASCII logo without ANSI color.
-
-    * New command-line option `TODO` to print an ASCII logo without unicode.
+    * New command-line option `--no-color` to print an ASCII logo
+      without ANSI color or Unicode.
 
 ## Performance Improvements
 
