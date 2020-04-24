@@ -1135,7 +1135,7 @@ instance SubstVar s m => Substable1 s ((:~:) a) m where
 -- Note that a generalized monad @m@ should always be a standard monad when the
 -- input and output types are the same; i.e., @m r r@ should always be a
 -- monad. I do not know a nice way to encode this in Haskell, however...
-class GenMonad (m :: k -> k -> Kind.* -> Kind.*) where
+class GenMonad (m :: k -> k -> Type -> Type) where
   -- | Generalized return
   greturn :: a -> m r r a
   -- | Generalized bind, that passes the output of @f@ to the input of @m@
@@ -1147,8 +1147,8 @@ infixl 1 >>>
 (>>>) :: GenMonad m => m r2 r3 a -> m r1 r2 b -> m r1 r3 b
 m1 >>> m2 = m1 >>>= \a -> seq a m2
 
-class GenMonadT (t :: (k1 -> k1 -> Kind.* -> Kind.*) ->
-                 k2 -> k2 -> Kind.* -> Kind.*) p1 p2 q1 q2 |
+class GenMonadT (t :: (k1 -> k1 -> Type -> Type) ->
+                 k2 -> k2 -> Type -> Type) p1 p2 q1 q2 |
   t q1 q2 -> p1 p2 , t q1 p2 -> q2 p1 , t p1 q2 -> p2 q1 where
   glift :: GenMonad m => m p1 p2 a -> t m q1 q2 a
 
@@ -1250,7 +1250,7 @@ type family Snd (p :: (k1,k2)) :: k2 where
 
 -- | The generalized state monad. Don't get confused: the parameters are
 -- reversed, so @p2@ is the /input/ state param type and @p1@ is the /output/.
-newtype GenStateT (m :: k -> k -> Kind.* -> Kind.*) p1 p2 a =
+newtype GenStateT (m :: k -> k -> Type -> Type) p1 p2 a =
   GenStateT { unGenStateT :: Fst p2 -> m (Snd p1) (Snd p2) (a, Fst p1) }
 
 -- | This version of 'unGenStateT' tells GHC to make the parameters into actual
