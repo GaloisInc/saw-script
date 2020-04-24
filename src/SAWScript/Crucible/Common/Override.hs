@@ -54,7 +54,7 @@ import           Control.Lens
 import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
-import           Control.Monad.Fail (MonadFail)
+import qualified Control.Monad.Fail as Fail
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
@@ -252,7 +252,7 @@ data RW
 -- and side-conditions needed to proceed.
 newtype OverrideMatcher ext rorw a =
   OM (StateT (OverrideState ext) (ExceptT (OverrideFailure ext) IO) a)
-  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadFail)
+  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, Fail.MonadFail)
 
 instance Wrapped (OverrideMatcher ext rorw a) where
 
