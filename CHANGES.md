@@ -59,29 +59,29 @@
     * New `crucible_llvm_verify` and `crucible_llvm_extract` commands
       replace `llvm_verify` and `llvm_extract`, with a different
       structure for specification blocks.
-    
+
     * LLVM verification tracks undefined behavior more carefully and has
       a more sophisicated memory model. See the
       [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#specification-based-verification)
       for more.
-    
+
     * New, experimental `crucible_jvm_verify` and
       `crucible_java_extract` commands will eventually replace
       `java_verify` and `java_extract`. For the moment, the former two
       are enabled with the `enable_experimental` command and the latter
       two are enabled with `enable_deprecated`.
-      
+
     * More flexible specification language allows convenient description
       of functions that allocate memory, return arbitrary values, expect
       explicit aliasing, work with NULL pointers, cast between pointers
       and integers, or work with opaque pointers.
-    
+
     * Ghost state is supported in LLVM verification, allowing reasoning
       about certain complex or unavailable code.
-    
+
     * Verification of LLVM works for a larger subset of the language,
       which particularly improves support for C++.
-    
+
 * LLVM bitcode format support is greatly improved. Versions 3.5 to 7.0
   are known to be mostly well-supported. We consider parsing failures
   with any version newer than 3.5 to be a bug, so please report them on
