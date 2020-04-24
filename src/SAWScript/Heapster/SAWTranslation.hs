@@ -66,7 +66,8 @@ import Lang.Crucible.CFG.Extension.Safety
 import Lang.Crucible.Analysis.Fixpoint.Components
 import qualified What4.Partial.AssertionTree as AT
 
-import Verifier.SAW.TracedOpenTerm
+--import Verifier.SAW.TracedOpenTerm
+import Verifier.SAW.OpenTerm
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
