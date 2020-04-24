@@ -99,11 +99,11 @@ jobs:
       name: sike
       before_script:
         - export TESTS=sawSIKE
-    # - <<: *s2n-test-staging
-    #   name: bike
-    #   before_script:
-    #     - export TESTS=sawBIKE
-    #     - export S2N_LIBCRYPTO=openssl-1.0.2
+    - <<: *s2n-test-staging
+      name: bike
+      before_script:
+        - export TESTS=sawBIKE
+        - export S2N_LIBCRYPTO=openssl-1.0.2
     - <<: *s2n-test-staging
       name: tls
       before_script:
