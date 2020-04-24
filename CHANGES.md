@@ -10,7 +10,6 @@
           [(String, Int)] -> Bool -> CrucibleSetup () ->
           TopLevel CrucibleMethodSpec
 
-
   The first argument specifies the LLVM module containing the _caller_.
   The second and third specify the ELF file name and symbol name of the
   function to be verifier. The fourth specifies the names and sizes (in
@@ -25,6 +24,17 @@
         enable_smt_array_memory_model : TopLevel ()
         disable_smt_array_memory_model : TopLevel ()
 
+
+* Added support for specifying alignment in LLVM allocations. The
+  `crucible_alloc_aligned` and `crucible_alloc_readonly_aligned`
+  functions allocate read-write and read-only memory regions,
+  respectively, with the specified alignment (in bytes).
+
+* Added a conditional points-to function,
+  `crucible_conditional_points_to`, that allows an LLVM function to
+  conditionally modify memory, leaving it in its previous state
+  (potentially uninitialized) when the condition is false.
+
 * Added experimental Verilog export, targeting the subset of Verilog
   supported by ABC, in the new `write_verilog` and `offline_verilog`
   commands.
@@ -32,8 +42,14 @@
 * Added several new options:
 
     * New functions `enable_what4_hash_consing` and
-      `enable_what4_hash_consing` to enable or disable hash consing to
+      `disable_what4_hash_consing` to enable or disable hash consing to
       increase sub-formula sharing during symbolic execution.
+
+    * New functions `enable_crucible_assert_then_assume` and
+      `disable_crucible_assert_then_assume` to control whether
+      predicates are assumed after asserting them during symbolic
+      execution. The default is now to not assume them, whereas
+      previously they were assumed.
 
     * New command-line option `--no-color` to print an ASCII logo
       without ANSI color or Unicode.
@@ -44,7 +60,7 @@
 
 * Improved performance of bitvector operations during symbolic execution.
 
-* Improve performance of rewriting SAWCore terms.
+* Improved performance of rewriting SAWCore terms.
 
 ## Bug Fixes
 
