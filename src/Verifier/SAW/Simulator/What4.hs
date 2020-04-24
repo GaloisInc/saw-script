@@ -39,12 +39,14 @@
 
 module Verifier.SAW.Simulator.What4
   ( w4Solve
+  , w4SolveAny
   , w4SolveBasic
   , SymFnCache
   , TypedExpr(..)
   , SValue
   , Labeler(..)
   , w4Eval
+  , w4EvalAny
   , w4EvalBasic
   ) where
 
@@ -651,11 +653,11 @@ applyUnintApp app0 v =
 
 ------------------------------------------------------------
 
-w4Solve ::
+w4SolveAny ::
   forall sym. (IsSymExprBuilder sym) =>
   sym -> SharedContext -> Map Ident (SValue sym) -> [String] -> Term ->
-  IO ([String], ([Maybe (Labeler sym)], SBool sym))
-w4Solve sym sc ps unints t = give sym $ do
+  IO ([String], ([Maybe (Labeler sym)], SValue sym))
+w4SolveAny sym sc ps unints t = give sym $ do
   modmap <- scGetModuleMap sc
   ref <- newIORef Map.empty
   let eval = w4SolveBasic modmap ps ref unints
@@ -666,7 +668,7 @@ w4Solve sym sc ps unints t = give sym $ do
   let moreNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
 
   -- and their types
-  argTs <- asPredType ty
+  argTs <- argTypes ty
 
   -- construct symbolic expressions for the variables
   vars' <-
@@ -681,24 +683,30 @@ w4Solve sym sc ps unints t = give sym $ do
   let vars'' = fmap ready vars
   bval' <- applyAll bval vars''
 
-  prd <- case bval' of
-           VBool b -> return b
-           _ -> fail $ "solve: non-boolean result type. " ++ show bval'
-  return (argNames, (bvs, prd))
+  return (argNames, (bvs, bval'))
+
+w4Solve ::
+  forall sym. (IsSymExprBuilder sym) =>
+  sym -> SharedContext -> Map Ident (SValue sym) -> [String] -> Term ->
+  IO ([String], ([Maybe (Labeler sym)], SBool sym))
+w4Solve sym sc ps unints t =
+  do (argNames, (bvs, bval)) <- w4SolveAny sym sc ps unints t
+     case bval of
+       VBool b -> return (argNames, (bvs, b))
+       _ -> fail $ "w4Solve: non-boolean result type. " ++ show bval
 
 
 --
--- Pull out argument types until bottoming out at a bool type
+-- Pull out argument types until bottoming out at a non-Pi type
 --
-asPredType :: IsSymExprBuilder sv => SValue sv -> IO [SValue sv]
-asPredType v =
+argTypes :: IsSymExprBuilder sv => SValue sv -> IO [SValue sv]
+argTypes v =
   case v of
-    VBoolType -> return []
     VPiType v1 f ->
-      do v2 <- f (error "asPredType: unsupported dependent SAW-Core type")
-         vs <- asPredType v2
+      do v2 <- f (error "argTypes: unsupported dependent SAW-Core type")
+         vs <- argTypes v2
          return (v1 : vs)
-    _ -> fail $ "non-boolean result type: " ++ show v
+    _ -> return []
 
 --
 -- Convert a saw-core type expression to a FirstOrder type expression
@@ -816,12 +824,12 @@ typedToSValue (TypedExpr ty expr) =
 
 -- | Simplify a saw-core term by evaluating it through the saw backend
 -- of what4.
-w4Eval ::
+w4EvalAny ::
   forall n solver fs.
   CS.SAWCoreBackend n solver fs -> SharedContext ->
   Map Ident (SValue (CS.SAWCoreBackend n solver fs)) -> [String] -> Term ->
-  IO ([String], ([Maybe (Labeler (CS.SAWCoreBackend n solver fs))], SBool (CS.SAWCoreBackend n solver fs)))
-w4Eval sym sc ps unints t =
+  IO ([String], ([Maybe (Labeler (CS.SAWCoreBackend n solver fs))], SValue (CS.SAWCoreBackend n solver fs)))
+w4EvalAny sym sc ps unints t =
   do modmap <- scGetModuleMap sc
      ref <- newIORef Map.empty
      let eval = w4EvalBasic sym sc modmap ps ref unints
@@ -833,7 +841,7 @@ w4Eval sym sc ps unints t =
      let argNames = zipWith (++) varNames (map ("_" ++) lamNames ++ repeat "")
 
      -- and their types
-     argTs <- asPredType ty
+     argTs <- argTypes ty
 
      -- construct symbolic expressions for the variables
      vars' <-
@@ -849,10 +857,18 @@ w4Eval sym sc ps unints t =
      let vars'' = fmap ready vars
      bval' <- applyAll bval vars''
 
-     prd <- case bval' of
-              VBool b -> return b
-              _ -> fail $ "solve: non-boolean result type. " ++ show bval'
-     return (argNames, (bvs, prd))
+     return (argNames, (bvs, bval'))
+
+w4Eval ::
+  forall n solver fs.
+  CS.SAWCoreBackend n solver fs -> SharedContext ->
+  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) -> [String] -> Term ->
+  IO ([String], ([Maybe (Labeler (CS.SAWCoreBackend n solver fs))], SBool (CS.SAWCoreBackend n solver fs)))
+w4Eval sym sc ps uints t =
+  do (argNames, (bvs, bval)) <- w4EvalAny sym sc ps uints t
+     case bval of
+       VBool b -> return (argNames, (bvs, b))
+       _ -> fail $ "w4Eval: non-boolean result type. " ++ show bval
 
 -- | Simplify a saw-core term by evaluating it through the saw backend
 -- of what4.
