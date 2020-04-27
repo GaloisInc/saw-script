@@ -1,3 +1,73 @@
+# Version 0.5
+
+## New Features
+
+* Added experimental support for basic, non-compositional verification
+  of x86 machine code for use in conjunction with LLVM verification.
+
+        crucible_llvm_verify_x86 :
+          LLVMModule -> String -> String ->
+          [(String, Int)] -> Bool -> CrucibleSetup () ->
+          TopLevel CrucibleMethodSpec
+
+  The first argument specifies the LLVM module containing the _caller_.
+  The second and third specify the ELF file name and symbol name of the
+  function to be verifier. The fourth specifies the names and sizes (in
+  bytes) of global variables to initialize, and the fifth whether to
+  perform path satisfiability checking. The last argument is the LLVM
+  specification of the calling context against which to verify the
+  function.
+
+* Added support for using the SMT theory of arrays in the LLVM memory
+  model. In some cases, this can significantly improve performance.
+
+        enable_smt_array_memory_model : TopLevel ()
+        disable_smt_array_memory_model : TopLevel ()
+
+* Added support for specifying alignment in LLVM allocations. The
+  `crucible_alloc_aligned` and `crucible_alloc_readonly_aligned`
+  functions allocate read-write and read-only memory regions,
+  respectively, with the specified alignment (in bytes).
+
+* Added a conditional points-to function,
+  `crucible_conditional_points_to`, that allows an LLVM function to
+  conditionally modify memory, leaving it in its previous state
+  (potentially uninitialized) when the condition is false.
+
+* Added several new options:
+
+    * New functions `enable_what4_hash_consing` and
+      `disable_what4_hash_consing` to enable or disable hash consing to
+      increase sub-formula sharing during symbolic execution.
+
+    * New functions `enable_crucible_assert_then_assume` and
+      `disable_crucible_assert_then_assume` to control whether
+      predicates are assumed after asserting them during symbolic
+      execution. The default is now to not assume them, whereas
+      previously they were assumed.
+
+    * New command-line option `--no-color` to print an ASCII logo
+      without ANSI color or Unicode.
+
+## Performance Improvements
+
+* Improved performance of the LLVM memory model.
+
+* Improved performance of bitvector operations during symbolic execution.
+
+* Improved performance of rewriting SAWCore terms.
+
+## Bug Fixes
+
+* Fixed SBV interface to fail more gracefully when it cannot find the
+  solver executable.
+
+* Fixed SMT-Lib export negation issues.
+
+Fixes issues #286, #489, #491, #564, #580, #583, #585, #586, #587, #590,
+ #592, #594, #597, #598, #602, #603, #612, #613, #622, #626, #633, #638,
+ #639, and #647.
+
 # Version 0.4
 
 * Fixed a long-standing soundness issue (#30) in compositional
@@ -59,29 +129,29 @@
     * New `crucible_llvm_verify` and `crucible_llvm_extract` commands
       replace `llvm_verify` and `llvm_extract`, with a different
       structure for specification blocks.
-    
+
     * LLVM verification tracks undefined behavior more carefully and has
       a more sophisicated memory model. See the
       [manual](https://github.com/GaloisInc/saw-script/blob/master/doc/manual/manual.md#specification-based-verification)
       for more.
-    
+
     * New, experimental `crucible_jvm_verify` and
       `crucible_java_extract` commands will eventually replace
       `java_verify` and `java_extract`. For the moment, the former two
       are enabled with the `enable_experimental` command and the latter
       two are enabled with `enable_deprecated`.
-      
+
     * More flexible specification language allows convenient description
       of functions that allocate memory, return arbitrary values, expect
       explicit aliasing, work with NULL pointers, cast between pointers
       and integers, or work with opaque pointers.
-    
+
     * Ghost state is supported in LLVM verification, allowing reasoning
       about certain complex or unavailable code.
-    
+
     * Verification of LLVM works for a larger subset of the language,
       which particularly improves support for C++.
-    
+
 * LLVM bitcode format support is greatly improved. Versions 3.5 to 7.0
   are known to be mostly well-supported. We consider parsing failures
   with any version newer than 3.5 to be a bug, so please report them on

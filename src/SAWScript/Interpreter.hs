@@ -2026,9 +2026,15 @@ primitives = Map.fromList
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify_x86)
     Experimental
-    [ "Load the ELF file specified by the second argument and verify the function"
-    , "named by the third. Returns a method spec that can be used as an override"
-    , "when verifying other LLVM functions."
+    [ "Verify an x86 function from an ELF file for use as an override in an"
+    , "LLVM verification. The first argument specifies the LLVM module"
+    , "containing the _caller_. The second and third specify the ELF file"
+    , "name and symbol name of the function to be verifier. The fourth"
+    , "specifies the names and sizes (in bytes) of global variables to"
+    , "initialize, and the fifth whether to perform path satisfiability"
+    , "checking. The last argument is the LLVM specification of the calling"
+    , "context against which to verify the function.Returns a method spec"
+    , "that can be used as an override when verifying other LLVM functions."
     ]
 
   , prim "crucible_array"
