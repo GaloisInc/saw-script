@@ -12,6 +12,7 @@
 -- TODO NOTE: support for tuples, arrays and records is not complete
 -- but is also unused in Verifier.SAW.Simulator.What4
 ------------------------------------------------------------------------
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
@@ -108,4 +109,6 @@ tupleToList :: Assignment BaseTypeRepr ctx ->
 tupleToList (viewAssign -> AssignEmpty) (viewAssign -> AssignEmpty) = Right []
 tupleToList (viewAssign -> AssignExtend rs r) (viewAssign -> AssignExtend gvs gv) =
   (:) <$> groundToFOV r (unGVW gv) <*> tupleToList rs gvs
+#if !MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
 tupleToList _ _ = error "GADTs should rule this out."
+#endif
