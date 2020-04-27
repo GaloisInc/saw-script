@@ -24,7 +24,6 @@
         enable_smt_array_memory_model : TopLevel ()
         disable_smt_array_memory_model : TopLevel ()
 
-
 * Added support for specifying alignment in LLVM allocations. The
   `crucible_alloc_aligned` and `crucible_alloc_readonly_aligned`
   functions allocate read-write and read-only memory regions,
@@ -34,10 +33,6 @@
   `crucible_conditional_points_to`, that allows an LLVM function to
   conditionally modify memory, leaving it in its previous state
   (potentially uninitialized) when the condition is false.
-
-* Added experimental Verilog export, targeting the subset of Verilog
-  supported by ABC, in the new `write_verilog` and `offline_verilog`
-  commands.
 
 * Added several new options:
 
