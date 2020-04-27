@@ -23,7 +23,7 @@ import Verifier.SAW.TypedAST
 import Control.Monad.State.Strict as State
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.List
+import Data.List (elemIndex)
 import qualified Data.Vector as V
 
 --------------------------------------------------------------------------------

@@ -238,13 +238,13 @@ matching unif = match
     match t net nets =
       case net of
         Leaf _ -> nets
-        Net {var, ..} ->
+        Net {var} ->
           case t of
             Var -> if unif then net_skip net nets else var : nets {-only matches Var in net-}
             _   -> rands t net (var : nets)  {-var could match also-}
     rands :: Pat -> Net a -> [Net a] -> [Net a]
     rands _ (Leaf _) nets = nets
-    rands t (Net {comb, atoms, ..}) nets =
+    rands t (Net {comb, atoms}) nets =
       case t of
         Atom c    -> look1 (atoms, c) nets
         Var       -> nets

@@ -46,7 +46,7 @@ import Control.Monad.Except
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 
-import Data.List
+import Data.List ( (\\) )
 import Data.Map (Map)
 import qualified Data.Map as Map
 #if !MIN_VERSION_base(4,8,0)
