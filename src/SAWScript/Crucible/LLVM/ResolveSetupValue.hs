@@ -27,7 +27,7 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
 
 import Control.Lens
 import Control.Monad
-import Control.Monad.Fail (MonadFail)
+import Control.Monad.Catch (MonadThrow)
 import Control.Monad.State
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
@@ -125,7 +125,7 @@ resolveSetupFieldIndex cc env nameEnv v n =
     lc = ccTypeCtx cc
 
 resolveSetupFieldIndexOrFail ::
-  MonadFail m =>
+  MonadThrow m =>
   LLVMCrucibleContext arch {- ^ crucible context  -} ->
   Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
   Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
@@ -148,7 +148,7 @@ resolveSetupFieldIndexOrFail cc env nameEnv v n =
             _ -> unlines [msg, "No field names were found for this struct"]
 
 typeOfSetupValue ::
-  MonadFail m =>
+  MonadThrow m =>
   LLVMCrucibleContext arch ->
   Map AllocIndex LLVMAllocSpec ->
   Map AllocIndex Crucible.Ident ->
@@ -159,7 +159,7 @@ typeOfSetupValue cc env nameEnv val =
      typeOfSetupValue' cc env nameEnv val
 
 typeOfSetupValue' :: forall m arch.
-  MonadFail m =>
+  MonadThrow m =>
   LLVMCrucibleContext arch ->
   Map AllocIndex LLVMAllocSpec ->
   Map AllocIndex Crucible.Ident ->

@@ -13,7 +13,6 @@ module SAWScript.Crucible.Common.Setup.Builtins where
 import           Control.Lens
 import           Control.Monad (when)
 import           Control.Monad.State (get)
-import qualified Control.Monad.Fail as Fail
 import qualified Data.Map as Map
 
 import qualified What4.ProgramLoc as W4
@@ -32,10 +31,9 @@ import           SAWScript.Crucible.Common.Setup.Type
 -- TODO: crucible_fresh_var?
 
 crucible_precond ::
-  Fail.MonadFail m =>
   W4.ProgramLoc ->
   TypedTerm ->
-  CrucibleSetupT ext m ()
+  CrucibleSetup ext ()
 crucible_precond loc p = do
   st <- get
   when (st ^. csPrePost == MS.PostState) $
@@ -43,10 +41,9 @@ crucible_precond loc p = do
   addCondition (MS.SetupCond_Pred loc p)
 
 crucible_postcond ::
-  Fail.MonadFail m =>
   W4.ProgramLoc ->
   TypedTerm ->
-  CrucibleSetupT ext m ()
+  CrucibleSetup ext ()
 crucible_postcond loc p = do
   st <- get
   when (st ^. csPrePost == MS.PreState) $
@@ -54,11 +51,10 @@ crucible_postcond loc p = do
   addCondition (MS.SetupCond_Pred loc p)
 
 crucible_return ::
-  Fail.MonadFail m =>
   BuiltinContext ->
   Options ->
   MS.SetupValue ext ->
-  CrucibleSetupT ext m ()
+  CrucibleSetup ext ()
 crucible_return _bic _opt retval = do
   ret <- use (csMethodSpec . MS.csRetValue)
   case ret of
@@ -66,11 +62,10 @@ crucible_return _bic _opt retval = do
     Nothing -> csMethodSpec . MS.csRetValue .= Just retval
 
 crucible_execute_func ::
-  Monad m =>
   BuiltinContext ->
   Options ->
   [MS.SetupValue ext] ->
-  CrucibleSetupT ext m ()
+  CrucibleSetup ext ()
 crucible_execute_func _bic _opt args = do
   tps <- use (csMethodSpec . MS.csArgs)
   csPrePost .= MS.PostState
