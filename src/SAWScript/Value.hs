@@ -30,7 +30,6 @@ module SAWScript.Value where
 
 import Prelude hiding (fail)
 
-import Data.Semigroup ((<>))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif

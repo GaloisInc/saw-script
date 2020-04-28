@@ -25,7 +25,7 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , memArrayToSawCoreTerm
   ) where
 
-import Control.Lens
+import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Catch (MonadThrow)
 import Control.Monad.State
