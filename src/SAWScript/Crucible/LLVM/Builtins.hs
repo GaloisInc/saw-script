@@ -74,7 +74,7 @@ import           Control.Monad.State hiding (fail)
 import           Control.Monad.Fail (MonadFail(..))
 import qualified Data.Bimap as Bimap
 import           Data.Char (isDigit)
-import           Data.Foldable (for_, toList, find, fold)
+import           Data.Foldable (for_, toList, fold)
 import           Data.Function
 import           Data.IORef
 import           Data.List
