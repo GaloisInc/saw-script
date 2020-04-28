@@ -589,6 +589,17 @@ bvMatchConst :: PermExpr (BVType w) -> Maybe Integer
 bvMatchConst (PExpr_BV [] const) = Just const
 bvMatchConst _ = Nothing
 
+-- | Test if a bitvector expression is a constant value. If so, return its
+-- signed value, i.e., subtract @2^w@ from any number @off >= 2^(w-1)@
+bvMatchSignedConst :: PermExpr (BVType w) -> Maybe Integer
+bvMatchSignedConst (PExpr_BV ([] :: [BVFactor w]) const) =
+  let w :: NatRepr w = knownRepr
+      k = const `mod` (2 ^ intValue w) in
+  if k >= (2 ^ (intValue w - 1)) then
+    Just (k - (2 ^ intValue w))
+  else Just k
+bvMatchSignedConst _ = Nothing
+
 -- | Normalize a bitvector expression to a canonical form. Currently this just
 -- means converting @1*x+0@ to @x@.
 normalizeBVExpr :: PermExpr (BVType w) -> PermExpr (BVType w)
@@ -601,12 +612,23 @@ bvEq :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvEq e1 e2 = normalizeBVExpr e1 == normalizeBVExpr e2
 
 -- | Test whether a bitvector expression is less than another for all
--- substitutions to the free variables. This is an underapproximation, meaning
--- that it could return 'False' in cases where it is actually 'True'. The
--- current algorithm only returns 'True' for constant expressions @k1 < k2@.
+-- substitutions to the free variables. The comparison is unsigned. This is an
+-- underapproximation, meaning that it could return 'False' in cases where it is
+-- actually 'True'. The current algorithm only returns 'True' for constant
+-- expressions @k1 < k2@.
 bvLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvLt (PExpr_BV [] k1) (PExpr_BV [] k2) = k1 < k2
 bvLt _ _ = False
+
+-- | Test whether a bitvector expression is less than another for all
+-- substitutions to the free variables. The comparison is signed. This is an
+-- underapproximation, meaning that it could return 'False' in cases where it is
+-- actually 'True'. The current algorithm only returns 'True' for constant
+-- expressions @k1 < k2@.
+bvSLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
+bvSLt (bvMatchSignedConst -> Just i1) (bvMatchSignedConst -> Just i2) =
+  trace ("bvSLt " ++ show i1 ++ " " ++ show i2) (i1 < i2)
+bvSLt _ _ = False
 
 -- | Test whether a bitvector expression is in a 'BVRange' for all substitutions
 -- to the free variables. This is an underapproximation, meaning that it could
@@ -642,13 +664,23 @@ bvCouldEqual e1 e2@(PExpr_BV _ _) = bvZeroable (bvSub e1 e2)
 bvCouldEqual _ _ = True
 
 -- | Test whether a bitvector expression could potentially be less than another,
--- for some substitution to the free variables. This is an overapproximation,
--- meaning that some expressions are marked as "could" be less than when they
--- actually cannot. The current algorithm returns 'True' in all cases except
--- constant expressions @k1 >= k2@.
+-- for some substitution to the free variables. The comparison is unsigned. This
+-- is an overapproximation, meaning that some expressions are marked as "could"
+-- be less than when they actually cannot. The current algorithm returns 'True'
+-- in all cases except constant expressions @k1 >= k2@.
 bvCouldBeLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
 bvCouldBeLt (PExpr_BV [] k1) (PExpr_BV [] k2) = k1 < k2
 bvCouldBeLt _ _ = True
+
+-- | Test whether a bitvector expression could potentially be less than another,
+-- for some substitution to the free variables. The comparison is signed. This
+-- is an overapproximation, meaning that some expressions are marked as "could"
+-- be less than when they actually cannot. The current algorithm returns 'True'
+-- in all cases except constant expressions @k1 >= k2@.
+bvCouldBeSLt :: PermExpr (BVType w) -> PermExpr (BVType w) -> Bool
+bvCouldBeSLt (bvMatchSignedConst -> Just i1) (bvMatchSignedConst -> Just i2) =
+  i1 < i2
+bvCouldBeSLt _ _ = True
 
 -- | Test whether a bitvector expression is in a 'BVRange' for all substitutions
 -- to the free variables. This is an overapproximation, meaning that some

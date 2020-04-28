@@ -1907,6 +1907,8 @@ tcExpr (ExtensionApp e_ext :: App ext RegWithVal tp)
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = error "tcExpr: unexpected LLVM expression"
 
+-- Equality expressions --
+
 tcExpr (BaseIsEq _ rwv1 rwv2)
   | regWithValExpr rwv1 == regWithValExpr rwv2 =
     greturn $ Just $ PExpr_Bool True
@@ -1920,6 +1922,8 @@ tcExpr (BaseIsEq (BaseBVRepr _) (RegWithVal _ bv1) (RegWithVal _ bv2))
   | bvEq bv1 bv2 = greturn $ Just $ PExpr_Bool True
 tcExpr (BaseIsEq (BaseBVRepr _) (RegWithVal _ bv1) (RegWithVal _ bv2))
   | not (bvCouldEqual bv1 bv2) = greturn $ Just $ PExpr_Bool False
+
+-- Boolean expressions --
 
 tcExpr (BoolLit b) = greturn $ Just $ PExpr_Bool b
 
@@ -1952,7 +1956,11 @@ tcExpr (BoolXor (RegWithVal _ (PExpr_Bool True))
         (RegWithVal _ (PExpr_Bool True))) =
   greturn $ Just $ PExpr_Bool False
 
+-- Nat expressions --
+
 tcExpr (NatLit i) = greturn $ Just $ PExpr_Nat $ toInteger i
+
+-- Bitvector expressions --
 
 tcExpr (BVLit w i) = withKnownNat w $ greturn $ Just $ bvInt i
 
@@ -1972,15 +1980,35 @@ tcExpr (BoolToBV w (RegWithVal _ (PExpr_Bool True))) =
 tcExpr (BoolToBV w (RegWithVal _ (PExpr_Bool False))) =
   withKnownNat w $ greturn $ Just $ bvInt 0
 
+tcExpr (BVUlt w (RegWithVal _ e1) (RegWithVal _ e2))
+  | bvLt e1 e2 = greturn $ Just $ PExpr_Bool True
+tcExpr (BVUlt w (RegWithVal _ e1) (RegWithVal _ e2))
+  | not (bvCouldBeLt e1 e2) = greturn $ Just $ PExpr_Bool False
+tcExpr (BVUle w (RegWithVal _ e1) (RegWithVal _ e2))
+  | bvLt e2 e1 = greturn $ Just $ PExpr_Bool False
+tcExpr (BVUle w (RegWithVal _ e1) (RegWithVal _ e2))
+  | not (bvCouldBeLt e2 e1) = greturn $ Just $ PExpr_Bool True
+
+tcExpr (BVSlt w (RegWithVal _ e1) (RegWithVal _ e2))
+  | bvSLt e1 e2 = greturn $ Just $ PExpr_Bool True
+tcExpr (BVSlt w (RegWithVal _ e1) (RegWithVal _ e2))
+  | not (bvCouldBeSLt e1 e2) = greturn $ Just $ PExpr_Bool False
+tcExpr (BVSle w (RegWithVal _ e1) (RegWithVal _ e2))
+  | bvSLt e2 e1 = greturn $ Just $ PExpr_Bool False
+tcExpr (BVSle w (RegWithVal _ e1) (RegWithVal _ e2))
+  | not (bvCouldBeSLt e2 e1) = greturn $ Just $ PExpr_Bool True
+
 tcExpr (BVNonzero w (RegWithVal _ bv))
   | bvEq bv (withKnownNat w $ bvInt 0) = greturn $ Just $ PExpr_Bool False
 tcExpr (BVNonzero w (RegWithVal _ bv))
   | not (bvZeroable bv) = greturn $ Just $ PExpr_Bool True
 
+-- Misc expressions --
+
 tcExpr (WithAssertion tp (PartialExp _ (regWithValExpr -> e))) =
   greturn $ Just e
 
-tcExpr _ = greturn Nothing -- FIXME HERE NOW: at least handle bv operations
+tcExpr _ = greturn Nothing
 
 
 -- | Get the Boolean value of an 'AssertionClassifierTree' if it has one
