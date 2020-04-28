@@ -2537,9 +2537,10 @@ instance (PermCheckExtC ext, TransInfo info) =>
      return (bvNatOpenTerm (intValue $ mbLift w) 0)]
   translate [nuP| BVNonzero w e |] =
     ETrans_Term <$>
-    applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
-    [translate w, translateRWV e,
-     return (bvNatOpenTerm (intValue $ mbLift w) 0)]
+    applyTransM (return $ globalOpenTerm "Prelude.not")
+    (applyMultiTransM (return $ globalOpenTerm "Prelude.bvEq")
+     [translate w, translateRWV e,
+      return (bvNatOpenTerm (intValue $ mbLift w) 0)])
 
   -- Strings
   translate [nuP| TextLit text |] =
