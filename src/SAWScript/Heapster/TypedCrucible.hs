@@ -1961,7 +1961,7 @@ tcExpr (BVMul w (RegWithVal _ (bvMatchConst -> Just i)) (RegWithVal _ e)) =
 tcExpr (BVMul w (RegWithVal _ e) (RegWithVal _ (bvMatchConst -> Just i))) =
   withKnownNat w $ greturn $ Just $ bvMult i e
 
-tcExpr (BoolToBV w (RegWithVal _ (PExpr_Bool False))) =
+tcExpr (BoolToBV w (RegWithVal _ (PExpr_Bool True))) =
   withKnownNat w $ greturn $ Just $ bvInt 1
 tcExpr (BoolToBV w (RegWithVal _ (PExpr_Bool False))) =
   withKnownNat w $ greturn $ Just $ bvInt 0
