@@ -28,7 +28,6 @@ Stability   : provisional
 module SAWScript.Crucible.JVM.MethodSpecIR where
 
 import           Control.Lens
-import           Data.Monoid ((<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 
 -- what4

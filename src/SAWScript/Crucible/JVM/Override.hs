@@ -43,7 +43,12 @@ module SAWScript.Crucible.JVM.Override
   , decodeJVMVal
   ) where
 
-import           Control.Lens
+import           Control.Lens.At
+import           Control.Lens.Each
+import           Control.Lens.Fold
+import           Control.Lens.Getter
+import           Control.Lens.Lens
+import           Control.Lens.Setter
 import           Control.Exception as X
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad

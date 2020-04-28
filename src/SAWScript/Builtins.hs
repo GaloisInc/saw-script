@@ -34,7 +34,6 @@ import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Monoid ((<>))
 import Data.Time.Clock
 import Data.Typeable
 import System.Directory
