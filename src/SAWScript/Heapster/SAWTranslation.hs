@@ -694,6 +694,10 @@ instance TransInfo info =>
          Translate info ctx (PermExpr a) (ExprTrans a) where
   translate [nuP| PExpr_Var x |] = translate x
   translate [nuP| PExpr_Unit |] = return $ ETrans_Term unitOpenTerm
+  translate [nuP| PExpr_Bool True |] =
+    return $ ETrans_Term $ globalOpenTerm "Prelude.True"
+  translate [nuP| PExpr_Bool False |] =
+    return $ ETrans_Term $ globalOpenTerm "Prelude.False"
   translate [nuP| PExpr_Nat i |] =
     return $ ETrans_Term $ natOpenTerm $ mbLift i
   translate [nuP| PExpr_BV bvfactors@[] off |] =

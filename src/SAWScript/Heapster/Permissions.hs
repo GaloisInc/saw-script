@@ -337,6 +337,9 @@ data PermExpr (a :: CrucibleType) where
   PExpr_Unit :: PermExpr UnitType
   -- ^ A unit literal
 
+  PExpr_Bool :: Bool -> PermExpr BoolType
+  -- ^ A literal Boolean number
+
   PExpr_Nat :: Integer -> PermExpr NatType
   -- ^ A literal natural number
 
@@ -411,6 +414,9 @@ instance Eq (PermExpr a) where
   (PExpr_Nat n1) == (PExpr_Nat n2) = n1 == n2
   (PExpr_Nat _) == _ = False
 
+  (PExpr_Bool b1) == (PExpr_Bool b2) = b1 == b2
+  (PExpr_Bool _) == _ = False
+
   (PExpr_BV factors1 const1) == (PExpr_BV factors2 const2) =
     const1 == const2 && eqFactors factors1 factors2
     where
@@ -463,6 +469,7 @@ instance PermPretty (PermExpr a) where
   permPrettyM (PExpr_Var x) = permPrettyM x
   permPrettyM PExpr_Unit = return $ string "()"
   permPrettyM (PExpr_Nat n) = return $ integer n
+  permPrettyM (PExpr_Bool b) = return $ bool b
   permPrettyM (PExpr_BV factors const) =
     do pps <- mapM permPrettyM factors
        return $ encloseSep lparen rparen (string "+") (pps ++ [integer const])
@@ -2492,6 +2499,7 @@ instance SubstVar s m => Substable s (PermExpr a) m where
   genSubst s [nuP| PExpr_Var x |] = substExprVar s x
   genSubst _ [nuP| PExpr_Unit |] = return $ PExpr_Unit
   genSubst _ [nuP| PExpr_Nat n |] = return $ PExpr_Nat $ mbLift n
+  genSubst _ [nuP| PExpr_Bool b |] = return $ PExpr_Bool $ mbLift b
   genSubst s [nuP| PExpr_BV factors off |] =
     foldr bvAdd (PExpr_BV [] (mbLift off)) <$>
     mapM (substBVFactor s) (mbList factors)
@@ -2841,6 +2849,7 @@ instance SubstValPerm (PermExpr a) where
   substValPerm p [nuP| PExpr_Var x |] = PExpr_Var (substValPerm p x)
   substValPerm _ [nuP| PExpr_Unit |] = PExpr_Unit
   substValPerm _ [nuP| PExpr_Nat n |] = PExpr_Nat $ mbLift n
+  substValPerm _ [nuP| PExpr_Bool b |] = PExpr_Bool $ mbLift b
   substValPerm p [nuP| PExpr_BV factors off |] =
     PExpr_BV (substValPerm p factors) (substValPerm p off)
   substValPerm p [nuP| PExpr_Struct args |] =
@@ -3063,6 +3072,9 @@ instance AbstractVars Integer where
 instance AbstractVars Char where
   abstractPEVars ns1 ns2 c = absVarsReturnH ns1 ns2 (toClosed c)
 
+instance AbstractVars Bool where
+  abstractPEVars ns1 ns2 b = absVarsReturnH ns1 ns2 (toClosed b)
+
 instance AbstractVars (Member ctx a) where
   abstractPEVars ns1 ns2 memb = absVarsReturnH ns1 ns2 (toClosed memb)
 
@@ -3093,6 +3105,9 @@ instance AbstractVars (PermExpr a) where
     `clMbMbApplyM` abstractPEVars ns1 ns2 x
   abstractPEVars ns1 ns2 PExpr_Unit =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Unit |])
+  abstractPEVars ns1 ns2 (PExpr_Bool b) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Bool |])
+    `clMbMbApplyM` abstractPEVars ns1 ns2 b
   abstractPEVars ns1 ns2 (PExpr_Nat i) =
     absVarsReturnH ns1 ns2 $(mkClosed [| PExpr_Nat |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 i

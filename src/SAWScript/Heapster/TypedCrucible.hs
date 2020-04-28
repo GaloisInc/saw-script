@@ -1901,6 +1901,51 @@ tcExpr (ExtensionApp e_ext :: App ext RegWithVal tp)
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = error "tcExpr: unexpected LLVM expression"
 
+tcExpr (BaseIsEq _ rwv1 rwv2)
+  | regWithValExpr rwv1 == regWithValExpr rwv2 =
+    greturn $ Just $ PExpr_Bool True
+tcExpr (BaseIsEq _ (RegWithVal _ (PExpr_Bool b1))
+        (RegWithVal _ (PExpr_Bool b2))) =
+  greturn $ Just $ PExpr_Bool (b1 == b2)
+tcExpr (BaseIsEq _ (RegWithVal _ (PExpr_Nat i1))
+        (RegWithVal _ (PExpr_Nat i2))) =
+  greturn $ Just $ PExpr_Bool (i1 == i2)
+tcExpr (BaseIsEq (BaseBVRepr _) (RegWithVal _ bv1) (RegWithVal _ bv2))
+  | bvEq bv1 bv2 = greturn $ Just $ PExpr_Bool True
+tcExpr (BaseIsEq (BaseBVRepr _) (RegWithVal _ bv1) (RegWithVal _ bv2))
+  | not (bvCouldEqual bv1 bv2) = greturn $ Just $ PExpr_Bool False
+
+tcExpr (BoolLit b) = greturn $ Just $ PExpr_Bool b
+
+tcExpr (Not (RegWithVal _ (PExpr_Bool b))) =
+  greturn $ Just $ PExpr_Bool $ not b
+
+tcExpr (And (RegWithVal _ (PExpr_Bool False)) _) =
+  greturn $ Just $ PExpr_Bool False
+tcExpr (And _ (RegWithVal _ (PExpr_Bool False))) =
+  greturn $ Just $ PExpr_Bool False
+tcExpr (And (RegWithVal _ (PExpr_Bool True)) rwv) =
+  greturn $ Just $ regWithValExpr rwv
+tcExpr (And rwv (RegWithVal _ (PExpr_Bool True))) =
+  greturn $ Just $ regWithValExpr rwv
+
+tcExpr (Or (RegWithVal _ (PExpr_Bool True)) _) =
+  greturn $ Just $ PExpr_Bool True
+tcExpr (Or _ (RegWithVal _ (PExpr_Bool True))) =
+  greturn $ Just $ PExpr_Bool True
+tcExpr (Or (RegWithVal _ (PExpr_Bool False)) rwv) =
+  greturn $ Just $ regWithValExpr rwv
+tcExpr (Or rwv (RegWithVal _ (PExpr_Bool False))) =
+  greturn $ Just $ regWithValExpr rwv
+
+tcExpr (BoolXor (RegWithVal _ (PExpr_Bool False)) rwv) =
+  greturn $ Just $ regWithValExpr rwv
+tcExpr (BoolXor rwv (RegWithVal _ (PExpr_Bool False))) =
+  greturn $ Just $ regWithValExpr rwv
+tcExpr (BoolXor (RegWithVal _ (PExpr_Bool True))
+        (RegWithVal _ (PExpr_Bool True))) =
+  greturn $ Just $ PExpr_Bool False
+
 tcExpr (NatLit i) = greturn $ Just $ PExpr_Nat $ toInteger i
 
 tcExpr (BVLit w i) = withKnownNat w $ greturn $ Just $ bvInt i
@@ -1913,9 +1958,18 @@ tcExpr (BVAdd w (RegWithVal _ e1) (RegWithVal _ e2)) =
 
 tcExpr (BVMul w (RegWithVal _ (bvMatchConst -> Just i)) (RegWithVal _ e)) =
   withKnownNat w $ greturn $ Just $ bvMult i e
-
 tcExpr (BVMul w (RegWithVal _ e) (RegWithVal _ (bvMatchConst -> Just i))) =
   withKnownNat w $ greturn $ Just $ bvMult i e
+
+tcExpr (BoolToBV w (RegWithVal _ (PExpr_Bool False))) =
+  withKnownNat w $ greturn $ Just $ bvInt 1
+tcExpr (BoolToBV w (RegWithVal _ (PExpr_Bool False))) =
+  withKnownNat w $ greturn $ Just $ bvInt 0
+
+tcExpr (BVNonzero w (RegWithVal _ bv))
+  | bvEq bv (withKnownNat w $ bvInt 0) = greturn $ Just $ PExpr_Bool False
+tcExpr (BVNonzero w (RegWithVal _ bv))
+  | not (bvZeroable bv) = greturn $ Just $ PExpr_Bool True
 
 tcExpr (WithAssertion tp (PartialExp _ (regWithValExpr -> e))) =
   greturn $ Just e
@@ -1991,8 +2045,14 @@ tcEmitStmt' ctx loc (CallHandle ret freg_untyped args_ctx args_untyped) =
       greturn (addCtxName ctx ret)
 
 tcEmitStmt' ctx loc (Assert reg msg) =
-  emitStmt CruCtxNil loc (TypedAssert (tcReg ctx reg) (tcReg ctx msg)) >>>= \_ ->
-  greturn ctx
+  let treg = tcReg ctx reg in
+  getEqualsExpr (PExpr_Var $ typedRegVar treg) >>>= \treg_expr ->
+  case treg_expr of
+    PExpr_Bool True -> greturn ctx
+    PExpr_Bool False -> stmtFailM (\_ -> string "Failed assertion")
+    _ ->
+      emitStmt CruCtxNil loc (TypedAssert (tcReg ctx reg) (tcReg ctx msg)) >>>= \_ ->
+      greturn ctx
 
 tcEmitStmt' _ _ _ = error "tcEmitStmt: unsupported statement"
 
@@ -2589,7 +2649,15 @@ tcTermStmt :: PermCheckExtC ext => CtxTrans ctx ->
 tcTermStmt ctx (Jump tgt) =
   TypedJump <$> tcJumpTarget ctx tgt
 tcTermStmt ctx (Br reg tgt1 tgt2) =
-  TypedBr (tcReg ctx reg) <$> tcJumpTarget ctx tgt1 <*> tcJumpTarget ctx tgt2
+  -- FIXME: Instead of mapping Br to TypedJump when the jump target is known,
+  -- make a version of TypedBr that still stores the JumpTargets of never-taken
+  -- branches in order to allow translating back to untyped Crucible
+  let treg = tcReg ctx reg in
+  getEqualsExpr (PExpr_Var $ typedRegVar treg) >>>= \treg_expr ->
+  case treg_expr of
+    PExpr_Bool True -> TypedJump <$> tcJumpTarget ctx tgt1
+    PExpr_Bool False -> TypedJump <$> tcJumpTarget ctx tgt2
+    _ -> TypedBr treg <$> tcJumpTarget ctx tgt1 <*> tcJumpTarget ctx tgt2
 tcTermStmt ctx (Return reg) =
   let treg = tcReg ctx reg in
   gget >>>= \st ->
