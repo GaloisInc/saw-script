@@ -28,6 +28,7 @@ import Data.Maybe
 import Data.Text hiding (length, map, concat, findIndex, foldr, foldl, maximum)
 import Data.List (findIndex)
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Type.Equality
 import Data.Functor.Identity
 import Data.Functor.Compose
@@ -1982,6 +1983,45 @@ tcExpr (WithAssertion tp (PartialExp _ (regWithValExpr -> e))) =
 tcExpr _ = greturn Nothing -- FIXME HERE NOW: at least handle bv operations
 
 
+-- | Get the Boolean value of an 'AssertionClassifierTree' if it has one
+assertionTreeVal :: ExtRepr ext -> AssertionClassifierTree ext RegWithVal ->
+                    Maybe Bool
+assertionTreeVal ExtRepr_LLVM (AT.Leaf a)
+  | RegWithVal _ (PExpr_Bool b) <- a ^. predicate = Just b
+assertionTreeVal _ _ = Nothing
+
+-- | Simplify an 'AssertionTree'
+simplAssertionTree :: ExtRepr ext -> AssertionClassifierTree ext RegWithVal ->
+                      AssertionClassifierTree ext RegWithVal
+simplAssertionTree _ atree@(AT.Leaf _) = atree
+simplAssertionTree ext (AT.And atrees) =
+  let atrees_simp = NonEmpty.map (simplAssertionTree ext) atrees in
+  case foldr (\atree restM -> case assertionTreeVal ext atree of
+                 Just True -> restM
+                 Just False -> Left atree
+                 _ -> (atree :) <$> restM) (return []) atrees_simp of
+    Left a -> a
+    Right (a:as) -> AT.And (a NonEmpty.:| as)
+    Right [] -> NonEmpty.head atrees_simp
+simplAssertionTree ext (AT.Or atrees) =
+  let atrees_simp = NonEmpty.map (simplAssertionTree ext) atrees in
+  case foldr (\atree restM -> case assertionTreeVal ext atree of
+                 Just False -> restM
+                 Just True -> Left atree
+                 _ -> (atree :) <$> restM) (return []) atrees_simp of
+    Left a -> a
+    Right (a:as) -> AT.Or (a NonEmpty.:| as)
+    Right [] -> NonEmpty.head atrees_simp
+simplAssertionTree ext (AT.Ite rwv atree1 _)
+  | PExpr_Bool True <- regWithValExpr rwv =
+    simplAssertionTree ext atree1
+simplAssertionTree ext (AT.Ite rwv _ atree2)
+  | PExpr_Bool False <- regWithValExpr rwv =
+    simplAssertionTree ext atree2
+simplAssertionTree ext (AT.Ite rwv atree1 atree2) =
+  AT.Ite rwv (simplAssertionTree ext atree1) (simplAssertionTree ext atree2)
+
+
 -- | Typecheck a statement and emit it in the current statement sequence,
 -- starting and ending with an empty stack of distinguished permissions
 tcEmitStmt :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
@@ -2009,10 +2049,35 @@ tcEmitStmt' :: PermCheckExtC ext => CtxTrans ctx -> ProgramLoc ->
                Stmt ext ctx ctx' ->
                StmtPermCheckM ext cblocks blocks ret args RNil RNil
                (CtxTrans ctx')
+
 tcEmitStmt' ctx loc (SetReg tp (App (ExtensionApp e_ext
                                      :: App ext (Reg ctx) tp)))
   | ExtRepr_LLVM <- knownRepr :: ExtRepr ext
   = tcEmitLLVMSetExpr Proxy ctx loc e_ext
+
+tcEmitStmt' ctx loc (SetReg tp (App e@(WithAssertion _ _
+                                       :: App ext (Reg ctx) tp))) =
+  let ext :: ExtRepr ext = knownRepr in
+  traverseFC (tcRegWithVal ctx) e >>>= \e_with_vals ->
+  let (atree, rwv) = case e_with_vals of
+        WithAssertion _ (PartialExp atree rwv) -> (atree, rwv) in
+  let atree_simp = simplAssertionTree ext atree in
+  case assertionTreeVal ext atree_simp of
+    Just True ->
+      emitStmt (singletonCruCtx tp) loc (TypedSetRegPermExpr tp $
+                                         regWithValExpr rwv) >>>= \(_ :>: x) ->
+      stmtRecombinePerms >>>
+      greturn (addCtxName ctx x)
+    Just False ->
+      stmtFailM (\_ -> string "Failed assertion")
+    _ ->
+      let typed_e =
+            TypedExpr (WithAssertion tp (PartialExp atree_simp rwv))
+            (Just (regWithValExpr rwv)) in
+      emitStmt (singletonCruCtx tp) loc (TypedSetReg tp typed_e) >>>= \(_ :>: x) ->
+      stmtRecombinePerms >>>
+      greturn (addCtxName ctx x)
+
 tcEmitStmt' ctx loc (SetReg tp (App e)) =
   traverseFC (tcRegWithVal ctx) e >>>= \e_with_vals ->
   tcExpr e_with_vals >>>= \maybe_val ->
