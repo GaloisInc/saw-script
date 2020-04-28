@@ -34,6 +34,7 @@ import Prelude hiding (fail)
 import Control.Applicative (Applicative)
 #endif
 import Control.Lens
+import Control.Monad.Fail (MonadFail(..))
 import Control.Monad.Catch (MonadThrow(..))
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.Reader (MonadReader)
@@ -399,6 +400,8 @@ newtype TopLevel a =
 deriving instance MonadReader TopLevelRO TopLevel
 deriving instance MonadState TopLevelRW TopLevel
 instance Wrapped (TopLevel a) where
+instance MonadFail TopLevel where
+  fail = throwTopLevel
 
 runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
 runTopLevel (TopLevel m) ro rw = runStateT (runReaderT m ro) rw
