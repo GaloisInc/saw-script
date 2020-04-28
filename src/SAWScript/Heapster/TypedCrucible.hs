@@ -1429,6 +1429,11 @@ getEqualsExpr (PExpr_LLVMOffset x off) =
   greturn (addLLVMOffset e off)
 getEqualsExpr e = greturn e
 
+-- | A version of 'getEqualsExpr' for 'TypedReg's
+getRegEqualsExpr ::
+  TypedReg a ->
+  StmtPermCheckM ext cblocks blocks ret args ps ps (PermExpr a)
+getRegEqualsExpr = getEqualsExpr . PExpr_Var . typedRegVar
 
 -- | Eliminate any disjunctions, existentials, recursive permissions, or
 -- equality permissions for an LLVM register until we either get a conjunctive
@@ -1873,10 +1878,10 @@ tcRegWithVal :: CtxTrans ctx -> Reg ctx tp ->
                 (RegWithVal tp)
 tcRegWithVal ctx r_untyped =
   let r = tcReg ctx r_untyped in
-  getSimpleRegPerm r >>>= \p ->
-  case p of
-    ValPerm_Eq e -> greturn (RegWithVal r e)
-    _ -> greturn (RegNoVal r)
+  getRegEqualsExpr r >>>= \e ->
+  case e of
+    PExpr_Var x | x == typedRegVar r -> greturn $ RegNoVal r
+    _ -> greturn $ RegWithVal r e
 
 -- | Type-check a sequence of Crucible registers
 tcRegs :: CtxTrans ctx -> Assignment (Reg ctx) tps -> TypedRegs (CtxToRList tps)
@@ -2046,7 +2051,7 @@ tcEmitStmt' ctx loc (CallHandle ret freg_untyped args_ctx args_untyped) =
 
 tcEmitStmt' ctx loc (Assert reg msg) =
   let treg = tcReg ctx reg in
-  getEqualsExpr (PExpr_Var $ typedRegVar treg) >>>= \treg_expr ->
+  getRegEqualsExpr treg >>>= \treg_expr ->
   case treg_expr of
     PExpr_Bool True -> greturn ctx
     PExpr_Bool False -> stmtFailM (\_ -> string "Failed assertion")
@@ -2423,7 +2428,7 @@ tcEmitLLVMStmt arch ctx loc (LLVM_PopFrame _) =
 tcEmitLLVMStmt arch ctx loc (LLVM_PtrAddOffset w _ ptr off) =
   let tptr = tcReg ctx ptr
       toff = tcReg ctx off in
-  getEqualsExpr (PExpr_Var $ typedRegVar toff) >>>= \off_expr ->
+  getRegEqualsExpr toff >>>= \off_expr ->
   emitLLVMStmt knownRepr loc (OffsetLLVMValue tptr off_expr) >>>= \ret ->
   stmtRecombinePerms >>>
   greturn (addCtxName ctx ret)
@@ -2462,8 +2467,8 @@ tcEmitLLVMStmt arch ctx loc (LLVM_ResolveGlobal w _ gsym) =
 tcEmitLLVMStmt arch ctx loc (LLVM_PtrEq _ r1 r2) =
   let x1 = tcReg ctx r1
       x2 = tcReg ctx r2 in
-  getEqualsExpr (PExpr_Var $ typedRegVar x1) >>>= \e1 ->
-  getEqualsExpr (PExpr_Var $ typedRegVar x2) >>>= \e2 ->
+  getRegEqualsExpr x1 >>>= \e1 ->
+  getRegEqualsExpr x2 >>>= \e2 ->
   case (e1, e2) of
 
     -- If both variables equal words, then compare the words
@@ -2653,7 +2658,7 @@ tcTermStmt ctx (Br reg tgt1 tgt2) =
   -- make a version of TypedBr that still stores the JumpTargets of never-taken
   -- branches in order to allow translating back to untyped Crucible
   let treg = tcReg ctx reg in
-  getEqualsExpr (PExpr_Var $ typedRegVar treg) >>>= \treg_expr ->
+  getRegEqualsExpr treg >>>= \treg_expr ->
   case treg_expr of
     PExpr_Bool True -> TypedJump <$> tcJumpTarget ctx tgt1
     PExpr_Bool False -> TypedJump <$> tcJumpTarget ctx tgt2
