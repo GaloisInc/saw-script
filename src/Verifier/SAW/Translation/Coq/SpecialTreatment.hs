@@ -413,6 +413,19 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("catchM",               skip)
   , ("fixM",                 replace (Coq.App (Coq.Var "@fixM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
+  , ("fixM",                 replace (Coq.App (Coq.Var "@fixM")
+                                       [Coq.Var "CompM", Coq.Var "_"]))
+  , ("LetRecType",           mapsTo compMModule "LetRecType")
+  , ("LRT_Ret",              mapsTo compMModule "LRT_Ret")
+  , ("LRT_Fun",              mapsTo compMModule "LRT_Fun")
+  , ("lrtToType",            mapsTo compMModule "lrtToType")
+  , ("LetRecTypes",          mapsTo compMModule "LetRecTypes")
+  , ("LRT_Cons",             mapsTo compMModule "LRT_Cons")
+  , ("LRT_Nil",              mapsTo compMModule "LRT_Nil")
+  , ("lrtPi",                mapsTo compMModule "lrtPi")
+  , ("lrtTupleType",         mapsTo compMModule "lrtTupleType")
+  , ("multiFixM",            mapsTo compMModule "multiFixM")
+  , ("letRecM",              mapsTo compMModule "letRecM")
   ]
 
   -- Dependent pairs
