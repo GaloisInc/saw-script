@@ -39,7 +39,7 @@
 
 (defconst flycheck-saw-script--info-start-regexp
   (rx-to-string
-   `(or (regexp ,saw-script--output-regexp)
+   `(or (regexp ,flycheck-saw-script--output-regexp)
         (seq line-start "[error] at "
              (group-n 1 (1+ (not (any ?\:))))
              ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
@@ -79,7 +79,7 @@ See URL `http://saw.galois.com' for more information."
         (with-temp-buffer
           (insert output)
           (goto-char (point-min))
-          (while (re-search-forward saw-script--info-start-regexp nil t)
+          (while (re-search-forward flycheck-saw-script--info-start-regexp nil t)
             (let ((line (string-to-number (match-string 2)))
                   (column (string-to-number (match-string 3)))
                   (end-line (and (match-string 5)
