@@ -21,6 +21,7 @@ dist: xenial
 language: haskell
 cabal: 2.4
 ghc:
+  - 8.8.2
   - 8.6.5
   - 8.4.4
 
