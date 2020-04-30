@@ -32,7 +32,7 @@ cache:
     - dist-newstyle
     - bin
 
-install:
+before_install:
   - git submodule update --init
   - (pushd deps/abcBridge && git submodule update --init && popd)
 script:
