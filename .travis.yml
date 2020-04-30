@@ -19,7 +19,7 @@ os: linux
 dist: xenial
 
 language: haskell
-cabal: 2.4
+cabal: 3.2
 ghc:
   - 8.8.2
   - 8.6.5
