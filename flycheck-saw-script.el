@@ -31,29 +31,41 @@
 (require 'saw-script)
 
 (defconst flycheck-saw-script--output-regexp
-  (rx (seq line-start "[output] at "
+  (rx (seq "] [output] at "
            (group-n 1 (1+ (not (any ?\:))))
            ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
-           "-" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) ":" (0+ space)))
+           "-" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit))
+           ":" (0+ space) "\n" (0+ space) (group-n 4 (1+ (not (any ?\n))))))
   "Output from SAWScript matches this regexp.")
 
 (defconst flycheck-saw-script--info-start-regexp
   (rx-to-string
    `(or (regexp ,flycheck-saw-script--output-regexp)
-        (seq line-start "[error] at "
+        (seq "] [error] at "
              (group-n 1 (1+ (not (any ?\:))))
              ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
-             "--" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) ":"
-             (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n)))))))
-        (seq line-start "[warning] at "
+             "--" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit))
+             ":" (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n)))))))
+        (seq "] [warning] at "
              (group-n 1 (1+ (not (any ?\:))))
              ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
-             "--" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) ":"
-             (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n)))))))
-        (seq line-start "Parse error at " (group-n 1 (1+ (not (any ?\:))))
+             "--" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit))
+             ":" (group-n 4 (1+ (seq "\n " (1+ (not (any ?\n)))))))
+        (seq "] Parse error at " (group-n 1 (1+ (not (any ?\:))))
              ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
-             "-" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) ":"
-             (group-n 4 (1+ (not (any ?\n))))))))
+             "-" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit))
+             ":" (group-n 4 (1+ (not (any ?\n)))))
+        (seq "] " (group-n 1 (1+ (not (any ?\:))))
+             ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
+             "-" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit))
+             ": " (group-n 4 (1+ (not (any ?\n)))))
+        (seq "] Stack trace:\n"
+             line-start "\"" (1+ (not (any ?\:)))
+             "\" (" (group-n 1 (1+ (not (any ?\:))))
+             ":" (group-n 2 (1+ digit)) ":" (group-n 3 (1+ digit))
+             "-" (group-n 5 (1+ digit)) ":" (group-n 6 (1+ digit)) "):\n"
+             (0+ line-start "\"" (1+ (not (any ?\n))) "\n")
+             line-start (group-n 4 (1+ (not (any ?\[))))))))
 
 (defun flycheck-saw-script--abbreviate-string (str)
   "Cut off STR if it's too long."
