@@ -5,7 +5,7 @@ sudo: required
 # only really care about one recursive submodule, so we do the update
 # manually in the `script` section.
 git:
-  submodules: false
+  submodules_depth: 1
   depth: 3
 
 stages:
@@ -32,7 +32,7 @@ cache:
     - dist-newstyle
     - bin
 
-before_install:
+install:
   - git submodule update --init
   - (pushd deps/abcBridge && git submodule update --init && popd)
 script:
