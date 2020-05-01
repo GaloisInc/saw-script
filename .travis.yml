@@ -5,8 +5,7 @@ sudo: required
 # only really care about one recursive submodule, so we do the update
 # manually in the `script` section.
 git:
-  submodules_depth: 1
-  depth: 3
+  clone: false
 
 stages:
   - build
@@ -33,6 +32,7 @@ cache:
     - bin
 
 install:
+  - git clone https://github.com/$TRAVIS_REPO_SLUG.git $TRAVIS_REPO_SLUG
   - git submodule update --init
   - (pushd deps/abcBridge && git submodule update --init && popd)
 script:
