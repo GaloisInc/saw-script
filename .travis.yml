@@ -20,7 +20,7 @@ dist: xenial
 language: haskell
 cabal: 3.2
 ghc:
-  - 8.8.2
+  - 8.8.3
   - 8.6.5
   - 8.4.4
 
@@ -37,7 +37,7 @@ install:
   - git submodule update --init
   - (pushd deps/abcBridge && git submodule update --init && popd)
 script:
-  - cabal new-update
+  - cabal new-update --project-file=cabal.project.ci
   # `libabc.a` is built in by `cabal configure`, not by `cabal build`.
   # caching `dist-newstyle` means it must be manually built each time
   - (pushd deps/abcBridge && scripts/build-abc.sh X86_64 Linux --init && popd)
