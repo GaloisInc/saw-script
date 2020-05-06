@@ -1,0 +1,36 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+let ptr_to_fresh nm ty = do {
+    x <- crucible_fresh_var nm ty;
+    p <- crucible_alloc ty;
+    crucible_points_to p (crucible_term x);
+    return (x, p);
+};
+
+let foo_spec = do {
+  (_, p_p) <- ptr_to_fresh "p" (llvm_int 32);
+  x <- crucible_fresh_var "x" (llvm_int 32);
+  crucible_execute_func [p_p, crucible_term x];
+  p <- crucible_fresh_var "p" (llvm_int 32);
+  crucible_points_to p_p (crucible_term p);
+  r <- crucible_fresh_var "r" (llvm_int 32);
+  crucible_return (crucible_term r);
+};
+
+let bar_spec = do {
+  (_, p_p) <- ptr_to_fresh "p" (llvm_int 32);
+  crucible_execute_func [p_p];
+  p <- crucible_fresh_var "p" (llvm_int 32);
+  crucible_points_to p_p (crucible_term p);
+};
+
+foo_ov <- crucible_llvm_compositional_extract m "foo" "f" [] false foo_spec abc;
+_ <- crucible_llvm_compositional_extract m "bar" "g" [foo_ov] false bar_spec abc;
+
+f_thm <- prove_print abc {{ \x p -> f x p == (p + x, p + x) }};
+fails (prove_print (do { unfolding ["g"]; w4_unint_yices ["f"]; }) {{ \p -> g p == 2 * (p + 1) }});
+prove_print (do { unfolding ["g"]; simplify (addsimp f_thm empty_ss); w4_unint_yices ["f"]; })
+  {{ \p -> g p == 2 * (p + 1) }};
+

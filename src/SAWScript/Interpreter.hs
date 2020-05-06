@@ -1782,6 +1782,12 @@ primitives = Map.fromList
     , "flexibility, see 'crucible_llvm_verify'."
     ]
 
+  , prim "crucible_llvm_compositional_extract"
+    "LLVMModule -> String -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_compositional_extract)
+    Experimental
+    []
+
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
     Current
