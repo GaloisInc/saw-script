@@ -38,8 +38,6 @@ import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
-import Data.Text (pack)
-import qualified Data.Vector as Vector
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
@@ -88,12 +86,10 @@ import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
 import Cryptol.ModuleSystem.Env (meSolverConfig)
-import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Eval.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
 import qualified Cryptol.Eval.Concrete.Value as V (Concrete(..))
-import qualified Cryptol.TypeCheck.AST as C
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -114,54 +110,6 @@ emptyLocal = []
 
 extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
 extendLocal x mt md v env = LocalLet x mt md v : env
-
-maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
-maybeInsert _ Nothing m = m
-maybeInsert k (Just x) m = Map.insert k x m
-
-extendEnv :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> TopLevelRW
-extendEnv x mt md v rw =
-  rw { rwValues  = Map.insert name v (rwValues rw)
-     , rwTypes   = maybeInsert name mt (rwTypes rw)
-     , rwDocs    = maybeInsert (getVal name) md (rwDocs rw)
-     , rwCryptol = ce'
-     }
-  where
-    name = x
-    ident = T.packIdent (getOrig x)
-    modname = T.packModName [pack (getOrig x)]
-    ce = rwCryptol rw
-    ce' = case v of
-            VTerm t
-              -> CEnv.bindTypedTerm (ident, t) ce
-            VType s
-              -> CEnv.bindType (ident, s) ce
-            VInteger n
-              -> CEnv.bindInteger (ident, n) ce
-            VCryptolModule m
-              -> CEnv.bindCryptolModule (modname, m) ce
-            VString s
-              -> CEnv.bindTypedTerm (ident, typedTermOfString s) ce
-            _ -> ce
-
-typedTermOfString :: String -> TypedTerm
-typedTermOfString cs = TypedTerm schema trm
-  where
-    nat :: Integer -> Term
-    nat n = Unshared (FTermF (NatLit (fromInteger n)))
-    bvNat :: Term
-    bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
-    bvNat8 :: Term
-    bvNat8 = Unshared (App bvNat (nat 8))
-    encodeChar :: Char -> Term
-    encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
-    bitvector :: Term
-    bitvector = Unshared (FTermF (GlobalDef "Prelude.bitvector"))
-    byteT :: Term
-    byteT = Unshared (App bitvector (nat 8))
-    trm :: Term
-    trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
-    schema = C.Forall [] [] (C.tString (length cs))
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
