@@ -6,6 +6,7 @@ Maintainer  : langston
 Stability   : provisional
 -}
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -56,7 +57,9 @@ import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
 import           Control.Monad.Catch (MonadThrow)
+#if !MIN_VERSION_base(4,13,0)
 import           Control.Monad.Fail (MonadFail(..))
+#endif
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class

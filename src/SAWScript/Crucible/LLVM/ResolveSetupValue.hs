@@ -6,6 +6,7 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
@@ -27,7 +28,9 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
 
 import Control.Lens ((^.))
 import Control.Monad
+#if !MIN_VERSION_base(4,13,0)
 import Control.Monad.Fail (MonadFail)
+#endif
 import Control.Monad.State
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
