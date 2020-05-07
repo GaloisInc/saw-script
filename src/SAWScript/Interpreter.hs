@@ -1786,7 +1786,16 @@ primitives = Map.fromList
     "LLVMModule -> String -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_compositional_extract)
     Experimental
-    []
+    [ "Translate an LLVM function directly to a Term. The parameters of the"
+    , "Term are the input parameters of the LLVM function: the parameters"
+    , "passed by value (in the order given by `crucible_exec_func`), then"
+    , "the parameters passed by reference (in the order given by"
+    , "`crucible_points_to`). The Term is the tuple consisting of the"
+    , "output parameters of the LLVM function: the return parameter, then"
+    , "the parameters passed by reference (in the order given by"
+    , "`crucible_points_to`). For more flexibility, see"
+    , "`crucible_llvm_verify`."
+    ]
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
