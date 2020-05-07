@@ -18,6 +18,7 @@ Stability   : provisional
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -49,6 +50,7 @@ import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
+import qualified Data.Vector as Vector
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 import Data.Typeable
@@ -81,14 +83,16 @@ import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
                                        ppTerm, scPrettyTerm)
 import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
                                                        ppTerm, scPrettyTerm)
+import Verifier.SAW.TypedAST hiding (PPOpts(..), defaultPPOpts, ppTerm)
 import Verifier.SAW.TypedTerm
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
 import qualified Cryptol.Eval.Concrete.Value as C
 import Verifier.SAW.Cryptol (exportValueWithSchema)
-import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
+import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.Logger as C (quietLogger)
+import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
@@ -467,6 +471,54 @@ addJVMTrans trans = do
   rw <- getTopLevelRW
   let jvmt = rwJVMTrans rw
   putTopLevelRW ( rw { rwJVMTrans = trans <> jvmt })
+
+maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
+maybeInsert _ Nothing m = m
+maybeInsert k (Just x) m = M.insert k x m
+
+extendEnv :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> TopLevelRW
+extendEnv x mt md v rw =
+  rw { rwValues  = M.insert name v (rwValues rw)
+     , rwTypes   = maybeInsert name mt (rwTypes rw)
+     , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
+     , rwCryptol = ce'
+     }
+  where
+    name = x
+    ident = T.packIdent (SS.getOrig x)
+    modname = T.packModName [pack (SS.getOrig x)]
+    ce = rwCryptol rw
+    ce' = case v of
+            VTerm t
+              -> CEnv.bindTypedTerm (ident, t) ce
+            VType s
+              -> CEnv.bindType (ident, s) ce
+            VInteger n
+              -> CEnv.bindInteger (ident, n) ce
+            VCryptolModule m
+              -> CEnv.bindCryptolModule (modname, m) ce
+            VString s
+              -> CEnv.bindTypedTerm (ident, typedTermOfString s) ce
+            _ -> ce
+
+typedTermOfString :: String -> TypedTerm
+typedTermOfString cs = TypedTerm schema trm
+  where
+    nat :: Integer -> Term
+    nat n = Unshared (FTermF (NatLit (fromInteger n)))
+    bvNat :: Term
+    bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
+    bvNat8 :: Term
+    bvNat8 = Unshared (App bvNat (nat 8))
+    encodeChar :: Char -> Term
+    encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
+    bitvector :: Term
+    bitvector = Unshared (FTermF (GlobalDef "Prelude.bitvector"))
+    byteT :: Term
+    byteT = Unshared (App bitvector (nat 8))
+    trm :: Term
+    trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
+    schema = Cryptol.Forall [] [] (Cryptol.tString (length cs))
 
 
 -- Other SAWScript Monads ------------------------------------------------------
