@@ -58,6 +58,7 @@ Class MonadFixOp (M:Type -> Type) : Type :=
                        (forall (a:A), M (B a)).
 
 (* Typeclass for dependent functions that respect the domain order *)
+(* FIXME: this doesn't need to be a typeclass *)
 Class ProperFixFun {A B M} `{MonadLeqOp M}
       (F:(forall (a:A), M (B a)) -> (forall (a:A), M (B a))) : Prop :=
   { properFixFun : forall f1 f2, (forall a, leqM (f1 a) (f2 a)) ->
@@ -260,6 +261,144 @@ Qed.
 
 
 (***
+ *** The Set of Sets Monad
+ ***)
+
+(*
+FIXME: can we get this to work as a predicate monad for SetM?
+- The hard part is defining bindM: the current version fails associativity
+  because it requires finding a choice function
+- I could imagine P >> Q is the union over all Q a for any a in mA in P, or the
+  union_(s in P) (intersection_(a in s) (Q a))
+- But all of these have issues!
+- e.g., if P contains the empty set, so should P >>= Q!
+
+(* A SetSetM computation is a set of subsets of a type *)
+Definition SetSetM (A:Type) := SetM A -> Prop.
+
+(* Close off a SetSetM under extensional equivalence *)
+Definition inSetSetM {A} (P:SetSetM A) : SetSetM A :=
+  fun m => exists2 m', m' ~= m & P m'.
+
+(* Equivalence of two sets = they contain the same elements *)
+Instance MonadEqOp_SetSetM : MonadEqOp SetSetM :=
+  fun A P1 P2 => forall m, inSetSetM P1 m <-> inSetSetM P2 m.
+
+Instance Proper_eqM_inSetSetM {A} :
+  Proper (eqM ==> eqM ==> iff) (inSetSetM (A:=A)).
+Proof.
+  intros P1 P2 eqP m1 m2 eqm.
+  split; intros [ m' eq_m' in_m' ]; apply eqP; exists m'; try assumption.
+  - transitivity m1; assumption.
+  - transitivity m2; [ | symmetry ]; assumption.
+Qed.
+
+Instance Equivalence_SetSetM_eqM A : Equivalence (eqM (M:=SetSetM) (A:=A)).
+Proof.
+  split.
+  { intros m a; reflexivity. }
+  { intros m1 m2 eq_m a. symmetry. apply eq_m. }
+  { intros m1 m2 m3 eq12 eq23 a. etransitivity; [ apply eq12 | apply eq23 ]. }
+Qed.
+
+Instance MonadReturnOp_SetSetM : MonadReturnOp SetSetM :=
+  fun A a m => m ~= returnM a.
+
+Lemma SetSetM_returnM A (m:SetM A) a :
+  inSetSetM (returnM a) m <-> m ~= returnM a.
+Proof.
+  split.
+  - intros [ m' eq_m' in_P ]. transitivity m'; [ symmetry; assumption | apply in_P ].
+  - intro e_m; exists (returnM a); [ symmetry; assumption | intro; reflexivity ].
+Qed.
+
+Instance MonadBindOp_SetSetM : MonadBindOp SetSetM :=
+  fun A B P Q m =>
+    exists2 mA, inSetSetM P mA &
+                exists2 f, (forall a, mA a -> inSetSetM (Q a) (f a)) &
+                           m ~= mA >>= f.
+
+Lemma SetSetM_bindM_elim {A B P} {Q:A -> SetSetM B} {m} :
+  inSetSetM (P >>= Q) m ->
+  exists2 mA, inSetSetM P mA &
+              exists2 f, (forall a, mA a -> inSetSetM (Q a) (f a)) & m ~= mA >>= f.
+Proof.
+  intros [ m' eq_m [ mA in_P_mA [ f in_Q_f eq_m' ]]].
+  exists mA; [ assumption | ].
+  exists f; [ apply in_Q_f | ].
+  rewrite <- eq_m; assumption.
+Qed.
+
+
+Lemma SetSetM_bindM_intro {A B P} {Q:A -> SetSetM B} {m} mA f :
+  inSetSetM P mA -> (forall a, mA a -> inSetSetM (Q a) (f a)) -> m ~= mA >>= f ->
+  inSetSetM (P >>= Q) m.
+Proof.
+  intros [ mA' eq_mA in_mA' ] in_Q_f eq_m.
+  exists (mA >>= f); [ symmetry; assumption | ].
+  exists mA; [ exists mA'; assumption | ].
+  exists f; [ | reflexivity ]. apply in_Q_f.
+Qed.
+
+Instance Monad_SetSetM : Monad SetSetM.
+Proof.
+  split; intros.
+  { typeclasses eauto. }
+  { intros P1 P2 RP Q1 Q2 RQ m; split;
+      intros [ m' eq_m [ mA in_P_mA [ f in_Q_f eq_m' ] ] ];
+      exists m'; try assumption; exists mA; try (apply RP; assumption);
+        exists f; try assumption;
+          intros a in_mA; apply (RQ a a eq_refl); apply in_Q_f; assumption. }
+  { intro m; split.
+    { intro in_m.
+      destruct (SetSetM_bindM_elim in_m) as [ mA in_mA [ g in_g eq_m ]].
+      rewrite eq_m.
+      rewrite SetSetM_returnM in in_mA. rewrite in_mA. rewrite returnM_bindM.
+      apply in_g. rewrite (in_mA a). apply eq_refl. }
+    { intro in_m. apply (SetSetM_bindM_intro (returnM a) (fun _ => m)).
+      - apply SetSetM_returnM; reflexivity.
+      - intros a' eq_a_a'; compute in eq_a_a'. rewrite <- eq_a_a'. assumption.
+      - rewrite returnM_bindM. reflexivity. } }
+  { intro s; split.
+    { intro in_s.
+      destruct (SetSetM_bindM_elim in_s) as [ mA in_mA [ g in_g eq_s ]].
+      assert (eq_s_mA : s ~= mA); [ | rewrite eq_s_mA; assumption ].
+      transitivity (mA >>= g); [ assumption | ].
+      transitivity (mA >>= returnM); [ | apply bindM_returnM ].
+      intro a; split; intros [ a' in_a' in_f_a' ]; exists a'; try assumption.
+      - destruct (in_g a' in_a') as [ s' eq_s' in_s'].
+        rewrite <- (in_s' a). rewrite (eq_s' a). assumption.
+      - destruct (in_g a' in_a')  as [ s' eq_s' in_s'].
+        rewrite <- (eq_s' a). apply in_s'. assumption. }
+    { intros [ s' eq_s' in_m_s' ]. exists s'; [ assumption | ].
+      exists s'; [ exists s'; [ reflexivity | assumption ] | ].
+      exists returnM; [ | symmetry; apply bindM_returnM ].
+      intros a in_s'. exists (returnM a); [ reflexivity | ].
+      intro a'; reflexivity. } }
+  { intro sC; split; intro in_sC.
+    { destruct (SetSetM_bindM_elim in_sC) as [ sB in_sB [ sg in_sg eq_sC ]].
+      destruct (SetSetM_bindM_elim in_sB) as [ sA in_sA [ sf in_sf eq_sB ]].
+      apply (SetSetM_bindM_intro sA (fun x => sf x >>= sg)); try assumption;
+        [ | rewrite eq_sC; rewrite eq_sB; rewrite bindM_bindM; reflexivity ].
+      intros a in_a.
+      apply (SetSetM_bindM_intro (sf a) sg); [ apply in_sf; assumption | | reflexivity ].
+      intros b in_b. apply in_sg. rewrite (eq_sB b).
+      exists a; assumption. }
+    { destruct (SetSetM_bindM_elim in_sC) as [ sA in_sA [ sfg in_sfg eq_sC ]].
+      apply (SetSetM_bindM_intro sA sfg).
+
+
+      admit. } }
+
+      apply (SetSetM_bindM_intro sA sfg); try assumption.
+
+      destruct (SetSetM_bindM_elim in_sB) as [ sA in_sA [ sf in_sf eq_sB ]].
+
+    intros [ sC' eq_sC' [ sB [ sB' eq_sB' [ sA eq_sA in_sA ] ] eq_sB ] ]. destruct in_sC'.
+ *)
+
+
+(***
  *** The Computation Monad = the Option-Set Monad
  ***)
 
@@ -384,3 +523,152 @@ Definition multiFixM {lrts:LetRecTypes}
 Definition letRecM {lrts : LetRecTypes} {B} (F: lrtPi lrts (lrtTupleType lrts))
            (body:lrtPi lrts (CompM B)) : CompM B :=
   lrtApply body (multiFixM F).
+
+
+(* FIXME: write this! *)
+Class ProperLRTFun {lrts} (F : lrtPi lrts (lrtTupleType lrts)) : Prop :=
+  { properLRTFun : True }.
+
+Instance ProperLRTFun_any lrts F : @ProperLRTFun lrts F.
+Proof.
+  constructor. apply I.
+Qed.
+
+
+(***
+ *** Refinement Proofs
+ ***)
+
+Definition refinesM {A} (m1 m2:CompM A) : Prop := forall a, m1 a -> m2 a.
+
+Infix "|=" := refinesM (at level 70, no associativity).
+
+Instance PreOrder_refinesM A : PreOrder (refinesM (A:=A)).
+Proof.
+  split.
+  { intros m a in_a; assumption. }
+  { intros m1 m2 m3 R12 R23 a in_m1. apply R23. apply R12. assumption. }
+Qed.
+
+Instance Proper_eqM_refinesM A : Proper (eqM ==> eqM ==> iff) (refinesM (A:=A)).
+Proof.
+  intros m1 m1' e1 m2 m2' e2.
+  split; intros R12 a in_a; apply e2; apply R12; apply e1; assumption.
+Qed.
+
+Instance Proper_refinesM_bindM A B :
+  Proper (refinesM ==> (eq ==> refinesM) ==> refinesM) (bindM (A:=A) (B:=B)).
+Proof.
+  intros m1 m2 Rm f1 f2 Rf opt_b [ opt_a in_opt_a in_opt_b ].
+  exists opt_a; [ apply Rm; assumption | ].
+  destruct opt_a; [ | assumption ].
+  apply (Rf a a eq_refl); assumption.
+Qed.
+
+
+(* If a monadic function f is F-closed w.r.t. the refinement relation, then the
+least fixed-point of F refines f *)
+Lemma refinesM_fixM A B (F : (forall (a:A), CompM (B a)) ->
+                             (forall (a:A), CompM (B a))) f :
+  (forall a, F f a |= f a) -> forall a, fixM F a |= f a.
+Proof.
+  admit. (* FIXME *)
+Admitted.
+
+(* Lift refinesM to monadic functions *)
+Fixpoint refinesFun {lrt} : relation (lrtToType lrt) :=
+  match lrt return relation (lrtToType lrt) with
+  | LRT_Ret B => refinesM
+  | LRT_Fun A lrtF => fun f1 f2 => forall a, refinesFun (f1 a) (f2 a)
+  end.
+
+(* Lift refinesM to tuples of monadic functions *)
+Fixpoint refinesFunTuple {lrts} : relation (lrtTupleType lrts) :=
+  match lrts return relation (lrtTupleType lrts) with
+  | LRT_Nil => fun _ _ => True
+  | LRT_Cons lrt lrts' =>
+    fun tup1 tup2 => refinesFun (fst tup1) (fst tup2) /\
+                     refinesFunTuple (snd tup1) (snd tup2)
+  end.
+
+Lemma refinesFunTuple_multiFixM lrts (F:lrtPi lrts (lrtTupleType lrts)) tup :
+  refinesFunTuple (lrtApply F tup) tup -> refinesFunTuple (multiFixM F) tup.
+Proof.
+  admit. (* FIXME *)
+Admitted.
+
+Lemma refinesFun_multiFixM_fst lrt (F:lrtPi (LRT_Cons lrt LRT_Nil)
+                                            (lrtTupleType (LRT_Cons lrt LRT_Nil))) f
+      (ref_f:refinesFun (fst (F f)) f) :
+  refinesFun (fst (multiFixM F)) f.
+Proof.
+  refine (proj1 (refinesFunTuple_multiFixM (LRT_Cons lrt LRT_Nil) _ (f, tt) _)).
+  split; [ | constructor ].
+  apply ref_f.
+Qed.
+
+
+Lemma refinesM_if {A} (m1 m2:CompM A) b P :
+  (b = true -> m1 |= P) -> (b = false -> m2 |= P) ->
+  (if b then m1 else m2) |= P.
+Proof.
+  intros ref1 ref2; destruct b; [ apply ref1 | apply ref2 ]; reflexivity.
+Qed.
+
+Lemma simpl_letRecM0 B F body : @letRecM LRT_Nil B F body = body.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma refinesM_sigT_rect {A1 A2 B} F P (s: {x:A1 & A2 x}) :
+  (forall a1 a2, s = existT _ a1 a2 -> F a1 a2 |= P) ->
+  sigT_rect (fun _ => CompM B) F s |= P.
+Proof.
+  destruct s; intros.
+  apply H. reflexivity.
+Qed.
+
+
+(** Existential Specifications **)
+
+Definition existsM {A B} (P: A -> CompM B) : CompM B :=
+  fun b => exists a, P a b.
+
+Lemma refinesM_existsM_r {A B} (P: A -> CompM B) m a :
+  m |= (P a) -> m |= (existsM P).
+Proof.
+  intros r b in_b. exists a. apply r. assumption.
+Qed.
+
+Lemma refinesM_existsM_l A B (P: A -> CompM B) Q :
+  (forall a, P a |= Q) -> existsM P |= Q.
+Proof.
+  intros r b [ a in_b ]. apply (r a). assumption.
+Qed.
+
+Lemma existsM_bindM A B C (P: A -> CompM B) (Q: B -> CompM C) :
+  (existsM P) >>= Q ~= existsM (fun x => P x >>= Q).
+Proof.
+  intros c; split.
+  - intros [ opt_b [ a in_b ] in_c ]. exists a. exists opt_b; assumption.
+  - intros [ a [ opt_b in_b in_c ] ]. exists opt_b; [ | assumption ].
+    exists a; assumption.
+Qed.
+
+
+(** Universal Specifications **)
+
+Definition forallM {A B} (P: A -> CompM B) : CompM B :=
+  fun b => forall a, P a b.
+
+Lemma refinesM_forallM_r {A B} P (Q: A -> CompM B) :
+  (forall a, P |= (Q a)) -> P |= (forallM Q).
+Proof.
+  intros r b in_b a. apply r. assumption.
+Qed.
+
+Lemma refinesM_forallM_l {A B} (P: A -> CompM B) Q a :
+  P a |= Q -> forallM P |= Q.
+Proof.
+  intros r b in_b. apply r. apply in_b.
+Qed.
