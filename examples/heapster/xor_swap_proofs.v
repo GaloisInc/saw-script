@@ -7,19 +7,36 @@ From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From Records      Require Import Records.
 
 From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToCoq Require Import CompMExtra.
 
 Load "xor_swap.v".
 Import xor_swap.
 
-Definition noErrors {A} (m:CompM A) : Prop := (m None) -> False.
 
-Lemma noErrors_returnM A (a:A) : noErrors (returnM a).
-Proof.
-  intro. discriminate H.
-Qed.
+Definition xor_swap_spec x1 x2 :
+  CompM {_ : unit &
+             ({_ : SAWCorePrelude.bitvector 64 & unit} *
+              ({_ : SAWCorePrelude.bitvector 64 & unit} * unit))%type} :=
+  returnM (existT _ tt (existT _ x2 tt, ((existT _ x1 tt), tt))).
 
-Lemma noErrors_xor_swap x1 x2 : noErrors (xor_swap x1 x2).
+(* FIXME: move lemma to SAWCorePrelude...? *)
+Lemma bvXor_twice_r n x y :
+  SAWCorePrelude.bvXor n (SAWCorePrelude.bvXor n x y) y = x.
 Proof.
-  unfold xor_swap; simpl.
-  apply noErrors_returnM.
+  admit.
+Admitted.
+
+(* FIXME: move lemma to SAWCorePrelude...? *)
+Lemma bvXor_twice_l n x y :
+  SAWCorePrelude.bvXor n (SAWCorePrelude.bvXor n y x) y = x.
+Proof.
+  admit.
+Admitted.
+
+Lemma xor_swap_correct : refinesFun xor_swap xor_swap_spec.
+Proof.
+  apply refinesFun_multiFixM_fst. simpl. intros x1 x2.
+  rewrite simpl_letRecM0. apply refinesM_returnM.
+  rewrite bvXor_twice_r. rewrite bvXor_twice_l.
+  reflexivity.
 Qed.
