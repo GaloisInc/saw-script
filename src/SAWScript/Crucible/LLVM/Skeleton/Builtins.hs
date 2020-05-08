@@ -171,7 +171,7 @@ buildArg bic opts arg idx
         (s:_)
           | s ^. sizeGuessElems > 1
             -> (LLVM.Array (fromIntegral $ s ^. sizeGuessElems) pt, s ^. sizeGuessInitialized)
-          | otherwise -> (pt, False)
+          | otherwise -> (pt, s ^. sizeGuessInitialized)
         _ -> (pt, False)
     in do
       ptr <- crucible_alloc bic opts t
