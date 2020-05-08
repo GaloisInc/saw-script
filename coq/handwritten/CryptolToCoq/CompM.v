@@ -565,6 +565,10 @@ Proof.
   apply (Rf a a eq_refl); assumption.
 Qed.
 
+Lemma refinesM_returnM A (a1 a2:A) : a1 = a2 -> returnM a1 |= returnM a2.
+Proof.
+  intro e; rewrite e. reflexivity.
+Qed.
 
 (* If a monadic function f is F-closed w.r.t. the refinement relation, then the
 least fixed-point of F refines f *)
