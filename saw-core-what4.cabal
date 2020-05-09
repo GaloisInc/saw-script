@@ -25,7 +25,7 @@ library
     crucible-saw,
     transformers,
     vector,
-    parameterized-utils >= 1.0.8 && < 2.1,
+    parameterized-utils >= 1.0.8 && < 2.2,
     reflection
   hs-source-dirs: src
   exposed-modules:
