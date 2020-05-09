@@ -18,6 +18,7 @@ Definition xor_swap_spec x1 x2 :
              ({_ : SAWCorePrelude.bitvector 64 & unit} *
               ({_ : SAWCorePrelude.bitvector 64 & unit} * unit))%type} :=
   returnM (existT _ tt (existT _ x2 tt, ((existT _ x1 tt), tt))).
+Arguments xor_swap_spec /.
 
 (* FIXME: move lemma to SAWCorePrelude...? *)
 Lemma bvXor_twice_r n x y :
@@ -35,8 +36,7 @@ Admitted.
 
 Lemma xor_swap_correct : refinesFun xor_swap xor_swap_spec.
 Proof.
-  apply refinesFun_multiFixM_fst. simpl. intros x1 x2.
-  rewrite simpl_letRecM0. apply refinesM_returnM.
+  prove_refinesFun.
   rewrite bvXor_twice_r. rewrite bvXor_twice_l.
   reflexivity.
 Qed.
