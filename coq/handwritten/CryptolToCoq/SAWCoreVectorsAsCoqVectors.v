@@ -161,6 +161,8 @@ Fixpoint bvNat (size : Nat) (number : Nat) : bitvector size :=
   else Vector.nil _
 .
 
+Arguments bvNat : simpl never.
+
 Definition bvToNatFolder (n : nat) (b : bool) := b + n.*2.
 
 Fixpoint bvToNat (size : Nat) (v : bitvector size) : Nat :=
