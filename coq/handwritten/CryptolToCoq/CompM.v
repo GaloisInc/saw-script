@@ -611,10 +611,21 @@ Proof.
   apply ref_f.
 Qed.
 
+Lemma refinesM_letRecM0 B F P Q : P |= Q -> @letRecM LRT_Nil B F P |= Q.
+Proof.
+  intro. apply H.
+Qed.
 
-Lemma refinesM_if {A} (m1 m2:CompM A) b P :
+Lemma refinesM_if_l {A} (m1 m2:CompM A) b P :
   (b = true -> m1 |= P) -> (b = false -> m2 |= P) ->
   (if b then m1 else m2) |= P.
+Proof.
+  intros ref1 ref2; destruct b; [ apply ref1 | apply ref2 ]; reflexivity.
+Qed.
+
+Lemma refinesM_if_r {A} (m1 m2:CompM A) b P :
+  (b = true -> P |= m1) -> (b = false -> P |= m2) ->
+  P |= (if b then m1 else m2).
 Proof.
   intros ref1 ref2; destruct b; [ apply ref1 | apply ref2 ]; reflexivity.
 Qed.
@@ -624,9 +635,17 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma refinesM_sigT_rect {A1 A2 B} F P (s: {x:A1 & A2 x}) :
+Lemma refinesM_sigT_rect_l {A1 A2 B} F P (s: {x:A1 & A2 x}) :
   (forall a1 a2, s = existT _ a1 a2 -> F a1 a2 |= P) ->
   sigT_rect (fun _ => CompM B) F s |= P.
+Proof.
+  destruct s; intros.
+  apply H. reflexivity.
+Qed.
+
+Lemma refinesM_sigT_rect_r {A1 A2 B} F P (s: {x:A1 & A2 x}) :
+  (forall a1 a2, s = existT _ a1 a2 -> P |= F a1 a2) ->
+  P |= sigT_rect (fun _ => CompM B) F s.
 Proof.
   destruct s; intros.
   apply H. reflexivity.
@@ -658,6 +677,9 @@ Proof.
   - intros [ a [ opt_b in_b in_c ] ]. exists opt_b; [ | assumption ].
     exists a; assumption.
 Qed.
+
+Definition noErrorsSpec {A} : CompM A := existsM (fun a => returnM a).
+Arguments noErrorsSpec /.
 
 
 (** Universal Specifications **)
