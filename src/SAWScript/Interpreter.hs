@@ -38,13 +38,9 @@ import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
-import Data.Text (pack)
-import qualified Data.Vector as Vector
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
-
-import qualified Text.LLVM.AST as L
 
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
@@ -90,12 +86,10 @@ import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
 import Cryptol.ModuleSystem.Env (meSolverConfig)
-import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Eval.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
 import qualified Cryptol.Eval.Concrete.Value as V (Concrete(..))
-import qualified Cryptol.TypeCheck.AST as C
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -116,54 +110,6 @@ emptyLocal = []
 
 extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
 extendLocal x mt md v env = LocalLet x mt md v : env
-
-maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
-maybeInsert _ Nothing m = m
-maybeInsert k (Just x) m = Map.insert k x m
-
-extendEnv :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> TopLevelRW
-extendEnv x mt md v rw =
-  rw { rwValues  = Map.insert name v (rwValues rw)
-     , rwTypes   = maybeInsert name mt (rwTypes rw)
-     , rwDocs    = maybeInsert (getVal name) md (rwDocs rw)
-     , rwCryptol = ce'
-     }
-  where
-    name = x
-    ident = T.packIdent (getOrig x)
-    modname = T.packModName [pack (getOrig x)]
-    ce = rwCryptol rw
-    ce' = case v of
-            VTerm t
-              -> CEnv.bindTypedTerm (ident, t) ce
-            VType s
-              -> CEnv.bindType (ident, s) ce
-            VInteger n
-              -> CEnv.bindInteger (ident, n) ce
-            VCryptolModule m
-              -> CEnv.bindCryptolModule (modname, m) ce
-            VString s
-              -> CEnv.bindTypedTerm (ident, typedTermOfString s) ce
-            _ -> ce
-
-typedTermOfString :: String -> TypedTerm
-typedTermOfString cs = TypedTerm schema trm
-  where
-    nat :: Integer -> Term
-    nat n = Unshared (FTermF (NatLit (fromInteger n)))
-    bvNat :: Term
-    bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
-    bvNat8 :: Term
-    bvNat8 = Unshared (App bvNat (nat 8))
-    encodeChar :: Char -> Term
-    encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
-    bitvector :: Term
-    bitvector = Unshared (FTermF (GlobalDef "Prelude.bitvector"))
-    byteT :: Term
-    byteT = Unshared (App bitvector (nat 8))
-    trm :: Term
-    trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
-    schema = C.Forall [] [] (C.tString (length cs))
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
@@ -1861,6 +1807,21 @@ primitives = Map.fromList
     , "flexibility, see 'crucible_llvm_verify'."
     ]
 
+  , prim "crucible_llvm_compositional_extract"
+    "LLVMModule -> String -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_compositional_extract)
+    Experimental
+    [ "Translate an LLVM function directly to a Term. The parameters of the"
+    , "Term are the input parameters of the LLVM function: the parameters"
+    , "passed by value (in the order given by `crucible_exec_func`), then"
+    , "the parameters passed by reference (in the order given by"
+    , "`crucible_points_to`). The Term is the tuple consisting of the"
+    , "output parameters of the LLVM function: the return parameter, then"
+    , "the parameters passed by reference (in the order given by"
+    , "`crucible_points_to`). For more flexibility, see"
+    , "`crucible_llvm_verify`."
+    ]
+
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
     Current
@@ -2053,9 +2014,15 @@ primitives = Map.fromList
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify_x86)
     Experimental
-    [ "Load the ELF file specified by the second argument and verify the function"
-    , "named by the third. Returns a method spec that can be used as an override"
-    , "when verifying other LLVM functions."
+    [ "Verify an x86 function from an ELF file for use as an override in an"
+    , "LLVM verification. The first argument specifies the LLVM module"
+    , "containing the _caller_. The second and third specify the ELF file"
+    , "name and symbol name of the function to be verifier. The fourth"
+    , "specifies the names and sizes (in bytes) of global variables to"
+    , "initialize, and the fifth whether to perform path satisfiability"
+    , "checking. The last argument is the LLVM specification of the calling"
+    , "context against which to verify the function.Returns a method spec"
+    , "that can be used as an override when verifying other LLVM functions."
     ]
 
   , prim "crucible_array"

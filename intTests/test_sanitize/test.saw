@@ -1,0 +1,11 @@
+m_norm <- llvm_load_module "add-normal.bc";
+m_san <- llvm_load_module "add-sanitized.bc";
+
+let f_spec = do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    y <- crucible_fresh_var "y" (llvm_int 32);
+    crucible_execute_func [crucible_term x, crucible_term y];
+};
+
+crucible_llvm_verify m_norm "f" [] false f_spec z3;
+fails (crucible_llvm_verify m_san "f" [] false f_spec z3);

@@ -61,7 +61,6 @@ import GHC.Natural(Natural)
 import Data.Kind(Type)
 import Control.Applicative ( (<|>) )
 import Control.Lens (view, (^.), over)
-import Control.Monad(foldM,zipWithM,join)
 import Data.List(sortBy)
 import Data.Maybe(catMaybes)
 import Data.Map (Map)
@@ -105,7 +104,6 @@ import SAWScript.Crucible.LLVM.CrucibleLLVM
   )
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 
-import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Backend
           (addAssumption, getProofObligations, proofGoalsToList
@@ -424,6 +422,8 @@ locRepr l =
         M.BVTypeRepr w -> LLVMPointerRepr w
         M.BoolTypeRepr -> BoolRepr
         M.TupleTypeRepr {} -> error $ "[locRepr] Unexpected tuple register"
+        M.FloatTypeRepr {} -> error $ "[locRepr] Unexpected float register"
+        M.VecTypeRepr {} -> error $ "[locRepr] Unexpected vector register"
 
 --------------------------------------------------------------------------------
 

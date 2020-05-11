@@ -8,12 +8,14 @@ Stability   : provisional
 module Main where
 
 import Control.Exception
-import Control.Monad (when)
+import Control.Monad
+import Data.Maybe
 import Data.List
 
 import System.IO
 import System.Console.GetOpt
 import System.Environment
+import System.Directory
 
 import SAWScript.Options
 import SAWScript.Utils
@@ -36,15 +38,20 @@ main = do
       case files of
         _ | showVersion opts'' -> hPutStrLn stderr shortVersionText
         _ | showHelp opts'' -> err opts'' (usageInfo header options)
-        [] -> REPL.run opts''
-        _ | runInteractively opts'' -> REPL.run opts''
-        [file] -> processFile (AIGProxy GIA.proxy) opts'' file `catch`
-                  (\(ErrorCall msg) -> err opts'' msg)
+        [] -> checkZ3 opts'' *> REPL.run opts''
+        _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''
+        [file] -> checkZ3 opts'' *>
+          processFile (AIGProxy GIA.proxy) opts'' file `catch`
+          (\(ErrorCall msg) -> err opts'' msg)
         (_:_) -> err opts'' "Multiple files not yet supported."
     (_, _, errs) -> do hPutStrLn stderr (concat errs ++ usageInfo header options)
                        exitProofUnknown
   where header = "Usage: saw [OPTION...] [-I | file]"
+        checkZ3 opts = do
+          p <- findExecutable "z3"
+          unless (isJust p)
+            $ err opts "Error: z3 is required to run SAW, but it was not found on the system path."
         err opts msg = do
-               when (verbLevel opts >= Error)
-                    (hPutStrLn stderr msg)
-               exitProofUnknown
+          when (verbLevel opts >= Error)
+            (hPutStrLn stderr msg)
+          exitProofUnknown

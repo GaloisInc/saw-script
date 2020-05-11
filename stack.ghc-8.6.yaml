@@ -54,4 +54,4 @@ extra-deps:
   - simple-get-opt-0.3
   - base-orphans-0.8.2
 resolver: lts-14.3
-allow-newer: true
+allow-newer: false

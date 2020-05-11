@@ -25,7 +25,7 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , memArrayToSawCoreTerm
   ) where
 
-import Control.Lens
+import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Fail (MonadFail)
 import Control.Monad.State
@@ -412,6 +412,8 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: unimplemented record type (FIXME)"
       Cryptol.TVFun _ _ ->
         fail "resolveSAWTerm: invalid function type"
+      Cryptol.TVAbstract _ _ ->
+        fail "resolveSAWTerm: invalid abstract type"
   where
     sym = cc^.ccBackend
     dl = Crucible.llvmDataLayout (ccTypeCtx cc)
@@ -455,6 +457,7 @@ toLLVMType dl tp =
       return (Crucible.StructType si)
     Cryptol.TVRec _flds -> Left (NotYetSupported "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
+    Cryptol.TVAbstract _ _ -> Left (Impossible "abstract")
 
 toLLVMStorageType ::
   forall w .

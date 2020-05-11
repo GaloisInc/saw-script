@@ -29,11 +29,9 @@ import System.IO (stdout)
 import Control.Exception (catch)
 import Control.Lens (view, (^.))
 import Control.Monad.ST (stToIO)
-import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State
 
-import Data.Type.Equality ((:~:)(..), testEquality)
-import Data.Foldable (foldlM, forM_)
+import Data.Foldable (foldlM)
 import Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
