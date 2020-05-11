@@ -6,6 +6,7 @@ sudo: required
 # manually in the `script` section.
 git:
   clone: false
+  depth: false
 
 stages:
   - build
