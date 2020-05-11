@@ -36,7 +36,7 @@ install:
   - ghc-pkg list
   - git clone https://github.com/$TRAVIS_REPO_SLUG.git $TRAVIS_REPO_SLUG
   - cd $TRAVIS_REPO_SLUG
-  - git checkout $TRAVIS_COMMIT
+  - git checkout $TRAVIS_BRANCH
   - git status
   - git submodule update --init
   - (pushd deps/abcBridge && git submodule update --init && popd)
