@@ -28,6 +28,7 @@ cache:
     - bin
 
 install:
+  - ghc --version
   - ghc-pkg list
   - git clone https://github.com/$TRAVIS_REPO_SLUG.git $TRAVIS_REPO_SLUG
   - cd $TRAVIS_REPO_SLUG
