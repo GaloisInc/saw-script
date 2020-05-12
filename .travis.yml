@@ -23,12 +23,15 @@ matrix:
   include:
     - env: GHCVER="8.8.3"
       compiler: ": #GHC 8.8.3"
+      stage: build
       addons: {apt: {packages: [cabal-install-3.2,ghc-8.8.3], sources: [hvr-ghc]}}
     - env: GHCVER="8.6.5"
       compiler: ": #GHC 8.6.5"
+      stage: build
       addons: {apt: {packages: [cabal-install-3.2,ghc-8.6.5], sources: [hvr-ghc]}}
     - env: GHCVER="8.4.4"
       compiler: ": #GHC 8.4.4"
+      stage: build
       addons: {apt: {packages: [cabal-install-3.2,ghc-8.4.4], sources: [hvr-ghc]}}
 
 cache:
