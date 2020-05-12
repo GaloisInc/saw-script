@@ -74,6 +74,7 @@ jobs:
         - wget -t 3 https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-ubuntu-16.04.zip
         - unzip z3-4.8.7-x64-ubuntu-16.04.zip
         - cp z3-4.8.7-x64-ubuntu-16.04/bin/z3 bin
+      install:
       script:
         - cd intTests
         - for t in test0001 test0019_jss_switch_statement test_crucible_jvm test_ecdsa test_examples test_issue108 test_tutorial1 test_tutorial2 test_tutorial_w4; do echo $t >> disabled_tests.txt; done
