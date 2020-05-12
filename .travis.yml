@@ -5,8 +5,8 @@ sudo: required
 # only really care about one recursive submodule, so we do the update
 # manually in the `script` section.
 git:
-  clone: false
-  depth: false
+  submodules: false
+  depth: 3
 
 stages:
   - build
@@ -18,12 +18,18 @@ stage: build
 os: linux
 dist: xenial
 
-language: haskell
-cabal: 3.2
-ghc:
-  - 8.8.3
-  - 8.6.5
-  - 8.4.4
+language: c
+matrix:
+  include:
+    - env: GHCVER="8.8.3"
+      compiler: ": #GHC 8.8.3"
+      addons: {apt: {packages: [cabal-install-3.2,ghc-8.8.3], sources: [hvr-ghc]}}
+    - env: GHCVER="8.6.5"
+      compiler: ": #GHC 8.6.5"
+      addons: {apt: {packages: [cabal-install-3.2,ghc-8.6.5], sources: [hvr-ghc]}}
+    - env: GHCVER="8.4.4"
+      compiler: ": #GHC 8.4.4"
+      addons: {apt: {packages: [cabal-install-3.2,ghc-8.4.4], sources: [hvr-ghc]}}
 
 cache:
   directories:
