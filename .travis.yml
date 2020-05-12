@@ -28,6 +28,7 @@ cache:
     - bin
 
 install:
+  - PATH=/opt/cabal/bin:/opt/ghc/bin:$PATH
   - ghc --version
   - ghc-pkg list
   - git clone https://github.com/$TRAVIS_REPO_SLUG.git $TRAVIS_REPO_SLUG
@@ -37,6 +38,7 @@ install:
   - git submodule update --init
   - (pushd deps/abcBridge && git submodule update --init && popd)
 script:
+  - PATH=/opt/cabal/bin:/opt/ghc/bin:$PATH
   - cabal new-update --project-file=cabal.project.ci
   # `libabc.a` is built in by `cabal configure`, not by `cabal build`.
   # caching `dist-newstyle` means it must be manually built each time
