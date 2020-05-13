@@ -36,7 +36,7 @@ Admitted.
 
 Lemma xor_swap_correct : refinesFun xor_swap xor_swap_spec.
 Proof.
-  prove_refinesFun.
+  prove_refinement.
   rewrite bvXor_twice_r. rewrite bvXor_twice_l.
   reflexivity.
 Qed.
