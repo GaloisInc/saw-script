@@ -27,7 +27,7 @@ module SAWScript.Crucible.LLVM.X86
 import System.IO (stdout)
 
 import Control.Exception (catch)
-import Control.Lens (view, (^.))
+import Control.Lens (view, (&), (^.), (.~))
 import Control.Monad.ST (stToIO)
 import Control.Monad.State
 
@@ -37,6 +37,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -224,8 +225,12 @@ buildCFG opts halloc path nm = do
       (addr:_) -> pure addr
       _ -> fail $ mconcat ["Could not find symbol \"", nm, "\""]
   printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
-  (_, Some finfo) <- stToIO . Macaw.analyzeFunction (const $ pure ()) addr Macaw.UserRequest
-    $ Macaw.emptyDiscoveryState (memory elf) (funSymMap elf) Macaw.x86_64_linux_info
+  let
+    initialDiscoveryState =
+      Macaw.emptyDiscoveryState (memory elf) (funSymMap elf) Macaw.x86_64_linux_info
+      & Macaw.trustedFunctionEntryPoints .~ Set.empty
+  (_fstate, Some finfo) <-
+    stToIO $ Macaw.analyzeFunction (const $ pure ()) addr Macaw.UserRequest initialDiscoveryState
   scfg <- Macaw.mkFunCFG Macaw.x86_64MacawSymbolicFns halloc
     (W4.functionNameFromText $ Text.pack nm) posFn finfo
   pure (scfg, elf, addr)
