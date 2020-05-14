@@ -52,17 +52,29 @@ Hint Resolve refinesM_returnM : refinesM.
 *)
 
 Hint Extern 1 (SAWCorePrelude.either _ _ _ _ _ _ |= _) =>
-  apply refinesM_either_l; intros : refinesM.
+  apply refinesM_either_l;
+    let e := fresh "e_either" in
+    (intro; intro e; try discriminate e; try rewrite e) : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.either _ _ _ _ _ _) =>
-  apply refinesM_either_r; intros : refinesM.
+  apply refinesM_either_r;
+    let e := fresh "e_either" in
+    (intro; intro e; try discriminate e; try rewrite e) : refinesM.
 Hint Extern 1 (sigT_rect _ _ _ |= _) =>
-  apply refinesM_sigT_rect_l; intros : refinesM.
+  apply refinesM_sigT_rect_l;
+    let e := fresh "e_sigT_rect" in
+    (intro; intro; intro e; try rewrite e) : refinesM.
 Hint Extern 1 (_ |= sigT_rect _ _ _) =>
-  apply refinesM_sigT_rect_r; intros : refinesM.
+  apply refinesM_sigT_rect_r;
+    let e := fresh "e_sigT_rect" in
+    (intro; intro; intro e; try rewrite e) : refinesM.
 Hint Extern 1 ((if _ then _ else _) |= _) =>
-  apply refinesM_if_l; intros : refinesM.
+  apply refinesM_if_l;
+    let e := fresh "e_if" in
+    (intro e; try discriminate e; try rewrite e) : refinesM.
 Hint Extern 1 (_ |= (if _ then _ else _)) =>
-  apply refinesM_if_r; intros : refinesM.
+  apply refinesM_if_r;
+    let e := fresh "e_if" in
+    (intro e; try discriminate e; try rewrite e) : refinesM.
 
 Hint Extern 1 (existsM _ |= _) => apply refinesM_existsM_l; intros : refinesM.
 Hint Extern 1 (_ |= forallM _) => apply refinesM_forallM_r; intros : refinesM.
