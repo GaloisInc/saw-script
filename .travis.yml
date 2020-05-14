@@ -43,8 +43,8 @@ script:
   # However, this currently enables -Werror for all dependencies as well.
   # See: https://github.com/haskell/cabal/issues/3883
   - cabal new-build --project-file=cabal.project.ci -j saw jss
-  - cp `cabal new-exec --verbose=silent -- sh -c 'which saw'` bin
-  - cp `cabal new-exec --verbose=silent -- sh -c 'which jss'` bin
+  - cp `cabal new-exec --project-file=cabal.project.ci --verbose=silent -- sh -c 'which saw'` bin
+  - cp `cabal new-exec --project-file=cabal.project.ci --verbose=silent -- sh -c 'which jss'` bin
 
 jobs:
   include:
