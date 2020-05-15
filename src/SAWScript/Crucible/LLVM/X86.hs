@@ -128,6 +128,7 @@ data X86State = X86State
   , _x86Options :: Options
   , _x86SharedContext :: SharedContext
   , _x86CrucibleContext :: LLVMCrucibleContext LLVMArch
+  , _x86Elf :: Elf.Elf 64
   , _x86RelevantElf :: RelevantElf
   , _x86MethodSpec :: MS.CrucibleMethodSpecIR LLVM
   , _x86Mem :: Mem
@@ -384,6 +385,8 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
   let
     align = C.LLVM.exponentToAlignment 4
+    allocGlobalEnd :: MS.AllocGlobal LLVM -> Integer
+    allocGlobalEnd (LLVMAllocGlobal _ (LLVM.Symbol nm)) = globalEnd nm
     globalEnd :: String -> Integer
     globalEnd nm = case
       Vector.headM
@@ -396,6 +399,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
   sz <- W4.bvLit sym knownNat . maximum $ mconcat
     [ [maxAddr]
     , globalEnd . fst <$> globs
+    , allocGlobalEnd <$> ms ^. MS.csGlobalAllocs
     ]
   (base, mem) <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Immutable
     "globals" emptyMem sz align
@@ -404,6 +408,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     , _x86Options = opts
     , _x86SharedContext = sc
     , _x86CrucibleContext = cc
+    , _x86Elf = elf
     , _x86RelevantElf = relf
     , _x86MethodSpec = ms
     , _x86Mem = mem
@@ -530,8 +535,21 @@ executePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval)
       sym <- use x86Sym
       cc <- use x86CrucibleContext
       mem <- use x86Mem
-      ptr <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-        =<< resolveSetupVal cc mem env tyenv Map.empty tptr
+      elf <- use x86Elf
+      base <- use x86GlobalBase
+      ptr <- case tptr of
+        MS.SetupGlobal () nm -> case
+          Vector.headM
+          . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
+          . mconcat
+          . fmap Elf.elfSymbolTableEntries
+          $ Elf.elfSymtab elf of
+          Nothing -> throwX86 "not found"
+          Just entry -> do
+            let addr = fromIntegral $ Elf.steValue entry
+            liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat addr
+        _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+             =<< resolveSetupVal cc mem env tyenv Map.empty tptr
       val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
       storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
       mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
@@ -667,7 +685,6 @@ checkGoals = do
       case mb of
         Nothing -> printOutLn opts Info "Goal succeeded"
         Just ex -> do
-          print g
           fail $ mconcat
             ["Failure (", show $ gLoc g
             , "): ", show $ gMessage g
