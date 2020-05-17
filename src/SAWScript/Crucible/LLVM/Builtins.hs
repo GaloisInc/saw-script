@@ -452,7 +452,8 @@ withMethodSpec bic opts lm nm setup action =
                 view Setup.csMethodSpec <$>
                 execStateT (runLLVMCrucibleSetupM setup) st0
 
-              void $ io $ checkSpecReturnType cc methodSpec
+              io $ checkSpecArgumentTypes cc methodSpec
+              io $ checkSpecReturnType cc methodSpec
 
               action cc methodSpec
 
@@ -562,7 +563,43 @@ verifyObligations cc mspec tactic assumes asserts =
 throwMethodSpec :: MS.CrucibleMethodSpecIR (LLVM arch) -> String -> IO a
 throwMethodSpec mspec msg = X.throw $ LLVMMethodSpecException (mspec ^. MS.csLoc) msg
 
--- | Check that the specified return value has the expected type
+-- | Check that the specified arguments have the expected types.
+--
+-- The expected types are inferred from the LLVM module.
+checkSpecArgumentTypes ::
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
+  LLVMCrucibleContext arch ->
+  MS.CrucibleMethodSpecIR (LLVM arch) ->
+  IO ()
+checkSpecArgumentTypes cc mspec = mapM_ resolveArg [0..(nArgs-1)]
+  where
+    nArgs = toInteger (length (mspec ^. MS.csArgs))
+    tyenv = MS.csAllocations mspec
+    nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
+    nm = mspec^.csName
+
+    checkArgTy i mt mt' =
+      do b <- checkRegisterCompatibility mt mt'
+         unless b $
+           throwMethodSpec mspec $ unlines
+           [ "Type mismatch in argument " ++ show i ++ " when verifying " ++ show nm
+           , "Argument is declared with type: " ++ show mt
+           , "but provided argument has incompatible type: " ++ show mt'
+           , "Note: this may be because the signature of your " ++
+             "function changed during compilation. If using " ++
+             "Clang, check the signature in the disassembled " ++
+             ".ll file."
+           ]
+    resolveArg i =
+      case Map.lookup i (mspec ^. MS.csArgBindings) of
+        Just (mt, sv) -> do
+          mt' <- typeOfSetupValue cc tyenv nameEnv sv
+          checkArgTy i mt mt'
+        Nothing -> throwMethodSpec mspec $ unwords
+          ["Argument", show i, "unspecified when verifying", show nm]
+
+
+-- | Check that the specified return value has the expected type.
 --
 -- The expected type is inferred from the LLVM module.
 --
@@ -678,23 +715,10 @@ resolveArguments cc mem mspec env = mapM resolveArg [0..(nArgs-1)]
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
     nm = mspec^.csName
 
-    checkArgTy i mt mt' =
-      do b <- checkRegisterCompatibility mt mt'
-         unless b $
-           throwMethodSpec mspec $ unlines
-           [ "Type mismatch in argument " ++ show i ++ " when veriyfing " ++ show nm
-           , "Argument is declared with type: " ++ show mt
-           , "but provided argument has incompatible type: " ++ show mt'
-           , "Note: this may be because the signature of your " ++
-             "function changed during compilation. If using " ++
-             "Clang, check the signature in the disassembled " ++
-             ".ll file."
-           ]
     resolveArg i =
       case Map.lookup i (mspec ^. MS.csArgBindings) of
         Just (mt, sv) -> do
           mt' <- typeOfSetupValue cc tyenv nameEnv sv
-          checkArgTy i mt mt'
           v <- resolveSetupVal cc mem env tyenv nameEnv sv
           return (mt, v)
         Nothing -> throwMethodSpec mspec $ unwords
