@@ -718,7 +718,6 @@ resolveArguments cc mem mspec env = mapM resolveArg [0..(nArgs-1)]
     resolveArg i =
       case Map.lookup i (mspec ^. MS.csArgBindings) of
         Just (mt, sv) -> do
-          mt' <- typeOfSetupValue cc tyenv nameEnv sv
           v <- resolveSetupVal cc mem env tyenv nameEnv sv
           return (mt, v)
         Nothing -> throwMethodSpec mspec $ unwords
