@@ -377,8 +377,8 @@ initialState ::
   Elf.Elf 64 ->
   RelevantElf ->
   MS.CrucibleMethodSpecIR LLVM ->
-  [(String, Integer)] ->
-  Integer ->
+  [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Integer {- ^ Minimum size of the global allocation (here, the end of the .text segment -} ->
   IO X86State
 initialState sym opts sc cc elf relf ms globs maxAddr = do
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
@@ -388,14 +388,12 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     allocGlobalEnd :: MS.AllocGlobal LLVM -> Integer
     allocGlobalEnd (LLVMAllocGlobal _ (LLVM.Symbol nm)) = globalEnd nm
     globalEnd :: String -> Integer
-    globalEnd nm = case
+    globalEnd nm = maybe 0 (\entry -> fromIntegral $ Elf.steValue entry + Elf.steSize entry) $
       Vector.headM
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
       . mconcat
       . fmap Elf.elfSymbolTableEntries
-      $ Elf.elfSymtab elf of
-        Just entry -> fromIntegral $ Elf.steValue entry + Elf.steSize entry
-        Nothing -> 0
+      $ Elf.elfSymtab elf
   sz <- W4.bvLit sym knownNat . maximum $ mconcat
     [ [maxAddr]
     , globalEnd . fst <$> globs
@@ -425,9 +423,6 @@ setupMemory ::
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   X86Sim (Map MS.AllocIndex Ptr)
 setupMemory globsyms = do
-  -- emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
-  -- emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
-
   setupGlobals globsyms
 
   -- Allocate a reasonable amount of stack (4 KiB + 1 qword for IP)
@@ -529,31 +524,30 @@ executePointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   X86Sim ()
-executePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval)
-  | isJust cond = throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
-  | otherwise = do
-      sym <- use x86Sym
-      cc <- use x86CrucibleContext
-      mem <- use x86Mem
-      elf <- use x86Elf
-      base <- use x86GlobalBase
-      ptr <- case tptr of
-        MS.SetupGlobal () nm -> case
-          Vector.headM
-          . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
-          . mconcat
-          . fmap Elf.elfSymbolTableEntries
-          $ Elf.elfSymtab elf of
-          Nothing -> throwX86 "not found"
-          Just entry -> do
-            let addr = fromIntegral $ Elf.steValue entry
-            liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat addr
-        _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-             =<< resolveSetupVal cc mem env tyenv Map.empty tptr
-      val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
-      storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
-      mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
-      x86Mem .= mem'
+executePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
+  when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  sym <- use x86Sym
+  cc <- use x86CrucibleContext
+  mem <- use x86Mem
+  elf <- use x86Elf
+  base <- use x86GlobalBase
+  ptr <- case tptr of
+    MS.SetupGlobal () nm -> case
+      Vector.headM
+      . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
+      . mconcat
+      . fmap Elf.elfSymbolTableEntries
+      $ Elf.elfSymtab elf of
+      Nothing -> throwX86 "not found"
+      Just entry -> do
+        let addr = fromIntegral $ Elf.steValue entry
+        liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat addr
+    _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+         =<< resolveSetupVal cc mem env tyenv Map.empty tptr
+  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
+  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
+  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  x86Mem .= mem'
 
 -- | Write each SetupValue passed to crucible_execute_func to the appropriate
 -- x86_64 register from the calling convention.
