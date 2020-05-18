@@ -996,10 +996,11 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
               matchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
 
     -- match arrays point-wise
-    (Crucible.LLVMValArray _ xs, Crucible.ArrayType _len y, SetupArray () zs) ->
-      sequence_
-        [ matchArg opts sc cc cs prepost x y z
-        | (x, z) <- zip (V.toList xs) zs ]
+    (Crucible.LLVMValArray _ xs, Crucible.ArrayType _len y, SetupArray () zs)
+      | V.length xs >= length zs ->
+        sequence_
+          [ matchArg opts sc cc cs prepost x y z
+          | (x, z) <- zip (V.toList xs) zs ]
 
     -- match the fields of struct point-wise
     (Crucible.LLVMValStruct xs, Crucible.StructType fields, SetupStruct () _ zs) ->
