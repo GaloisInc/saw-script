@@ -412,6 +412,22 @@ sigmaElimTransM _ tp_l@(typeTransTypes -> []) tp_r _ f sigma =
   do let proj1 = typeTransF tp_l []
      proj2 <- flip (typeTransF . tupleTypeTrans) [sigma] <$> tp_r proj1
      f proj1 proj2
+sigmaElimTransM x tp_l tp_r _tp_ret_m f sigma =
+  do let tp_l_trm = typeTransTupleType tp_l
+     tp_r_trm <- lambdaTupleTransM x tp_l (\tr ->
+                                            typeTransTupleType <$> tp_r tr)
+     let proj_l_trm =
+           applyOpenTermMulti (globalOpenTerm "Prelude.Sigma_proj1")
+           [tp_l_trm, tp_r_trm, sigma]
+     let proj_l = typeTransF (tupleTypeTrans tp_l) [proj_l_trm]
+     tp_r_app <- tp_r proj_l
+     let proj_r_trm =
+           applyOpenTermMulti (globalOpenTerm "Prelude.Sigma_proj2")
+           [tp_l_trm, tp_r_trm, sigma]
+     let proj_r = typeTransF (tupleTypeTrans tp_r_app) [proj_r_trm]
+     f proj_l proj_r
+
+{- NOTE: the following is the version that inserts a Sigma__rec
 sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
   do tp_r_trm <- lambdaTupleTransM x tp_l (\tr ->
                                             typeTransTupleType <$> tp_r tr)
@@ -424,6 +440,7 @@ sigmaElimTransM x tp_l tp_r tp_ret_m f sigma =
        lambdaTupleTransM (x ++ "_proj2") tp_r_app (f x_l)
      return (applyOpenTermMulti (globalOpenTerm "Prelude.Sigma__rec")
              [ typeTransTupleType tp_l, tp_r_trm, tp_ret, f_trm, sigma ])
+-}
 
 
 -- | The class for translating to SAW
