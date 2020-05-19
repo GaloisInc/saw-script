@@ -32,7 +32,7 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete.Value as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleSubst)
+import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
 import qualified Cryptol.Utils.Ident as C (Ident, packIdent, unpackIdent)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
@@ -686,7 +686,7 @@ importExpr' sc env schema expr =
       do schema' <-
            case schema of
              C.Forall (tp1 : tparams) props ty ->
-               let s = C.singleSubst (C.TVBound tp1) (C.TVar (C.TVBound tp))
+               let s = C.singleTParamSubst tp1 (C.TVar (C.TVBound tp))
                in return (C.Forall tparams (map (plainSubst s) props) (plainSubst s ty))
              C.Forall [] _ _ -> panic "importExpr'" ["internal error: unexpected type abstraction"]
          env' <- bindTParam sc tp env
