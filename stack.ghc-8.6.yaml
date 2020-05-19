@@ -53,5 +53,7 @@ extra-deps:
   - config-value-0.6.3.1
   - simple-get-opt-0.3
   - base-orphans-0.8.2
+  - QuickCheck-2.14
+  - splitmix-0.0.4
 resolver: lts-14.3
 allow-newer: false

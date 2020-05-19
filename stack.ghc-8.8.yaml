@@ -46,5 +46,7 @@ extra-deps:
   - base-orphans-0.8.2
   - base-compat-0.10.5
   - json-0.10
+  - QuickCheck-2.14
+  - splitmix-0.0.4
 resolver: lts-15.1
 allow-newer: false

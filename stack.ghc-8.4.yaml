@@ -57,5 +57,7 @@ extra-deps:
   - yaml-0.11.2.0
   - libyaml-0.1.2
   - aeson-1.4.3.0
+  - QuickCheck-2.14
+  - splitmix-0.0.4
 resolver: lts-12.26
 allow-newer: false
