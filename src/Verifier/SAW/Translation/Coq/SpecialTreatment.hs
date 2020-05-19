@@ -433,6 +433,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("Sigma", replace (Coq.Var "@sigT"))
   , ("exists", replace (Coq.Var "@existT"))
   , ("Sigma__rec", replace (Coq.Var "@sigT_rect"))
+  , ("Sigma_proj1", replace (Coq.Var "@projT1"))
+  , ("Sigma_proj2", replace (Coq.Var "@projT2"))
   ]
 
   -- Definitions that depend on axioms currently skipped
