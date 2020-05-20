@@ -395,7 +395,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
       . fmap Elf.elfSymbolTableEntries
       $ Elf.elfSymtab elf
   sz <- W4.bvLit sym knownNat . maximum $ mconcat
-    [ [maxAddr]
+    [ [maxAddr, globalEnd "_end"]
     , globalEnd . fst <$> globs
     , allocGlobalEnd <$> ms ^. MS.csGlobalAllocs
     ]
