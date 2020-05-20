@@ -140,6 +140,20 @@ Definition bindM_bindM_CompM A B C (m : CompM A) (f : A -> CompM B) (g : B -> Co
 
 Hint Rewrite returnM_bindM_CompM bindM_returnM_CompM bindM_bindM_CompM : refinesM.
 
+(*
+FIXME: do we need these rules?
+
+Lemma bvEq_sym n x y : bvEq n x y = bvEq n y x.
+  admit.
+Admitted.
+
+From Coq Require Import Nat.
+
+Lemma bvEq_eqb n x y : bvEq n (bvNat n x) (bvNat n y) = eqb x y.
+  admit.
+Admitted.
+*)
+
 
 (***
  *** Automation for proving function refinement
