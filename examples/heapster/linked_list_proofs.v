@@ -53,19 +53,6 @@ Definition is_elem_spec (x:bitvector 64) : W64List -> CompM {_:bitvector 64 & un
 
 Arguments is_elem_spec /.
 
-Lemma bvEq_sym n x y : bvEq n x y = bvEq n y x.
-  admit.
-Admitted.
-
-From Coq Require Import Nat.
-
-Lemma bvEq_eqb n x y : bvEq n (bvNat n x) (bvNat n y) = eqb x y.
-  admit.
-Admitted.
-
-Definition bindM_returnM_CompM A (m:CompM A) : m >>= (fun x => returnM x) ~= m :=
-  bindM_returnM (M:=CompM) A m.
-
 Lemma is_elem_correct : refinesFun is_elem is_elem_spec.
 Proof.
   unfold is_elem, is_elem__tuple_fun, is_elem_spec.
