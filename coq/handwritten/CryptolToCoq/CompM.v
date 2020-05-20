@@ -28,11 +28,20 @@ Infix ">>=" := bindM (at level 58, left associativity).
 Class Monad M `{MonadEqOp M} `{MonadReturnOp M} `{MonadBindOp M} : Prop :=
   { Equivalence_eqM :> forall A, Equivalence (eqM (A:=A));
     Proper_bindM :> forall A B,
-        Proper (eqM (A:=A) ==> (eq ==> eqM (A:=B)) ==> eqM) bindM;
+        Proper (eqM (A:=A) ==> (pointwise_relation A (eqM (A:=B))) ==> eqM) bindM;
     returnM_bindM : forall A B a (f:A -> M B), returnM a >>= f ~= f a;
-    bindM_returnM : forall A (m:M A), m >>= returnM ~= m;
+    bindM_returnM : forall A (m:M A), m >>= (fun x => returnM x) ~= m;
     bindM_bindM : forall A B C (m:M A) (f:A -> M B) (g:B -> M C),
         (m >>= f) >>= g ~= m >>= (fun x => f x >>= g) }.
+
+(* This is not strictly necessary, but it speed up rewriting w.r.t. eq *)
+Instance Proper_eq_bindM A B `{Monad} :
+  Proper (eq ==> (pointwise_relation A (@eq (M B))) ==> eqM) bindM.
+Proof.
+  intros m1 m2 e_m; rewrite e_m.
+  intros f1 f2 ef; eapply Proper_bindM; [ reflexivity | ].
+  intros a; rewrite (ef _). reflexivity.
+Qed.
 
 
 (** Monads with Errors **)
@@ -109,7 +118,7 @@ Proof.
   { typeclasses eauto. }
   { intros m1 m2 Rm f1 f2 Rf b; split; unfold bindM; intros [ a in_m in_fa ];
       exists a; try (apply Rm; assumption);
-        try apply (Rf a a); try reflexivity; assumption. }
+        try apply (Rf a); assumption. }
   { split; unfold bindM, returnM; intro.
     { destruct H as [ x in_a in_fa ]. rewrite in_a. assumption. }
     { exists a; [ reflexivity | assumption ]. } }
@@ -205,8 +214,7 @@ Proof.
   { intro A; apply (Equivalence_eqM (option A)). }
   { intros A B m1 m2 Rm f1 f2 Rf.
     apply (Proper_bindM (M:=M)); [ assumption | ].
-    intros opt_a1 opt_a2 eq12; rewrite eq12.
-    destruct opt_a2; [ apply Rf | ]; reflexivity. }
+    intros opt_a; destruct opt_a; [ apply Rf | ]; reflexivity. }
   { intros.
     unfold returnM, MonadReturnOp_OptionT, bindM, MonadBindOp_OptionT.
     unfold eqM, MonadEqOp_OptionT.
@@ -216,18 +224,15 @@ Proof.
     unfold eqM, MonadEqOp_OptionT.
     etransitivity; [ | apply (bindM_returnM (M:=M)) ].
     apply Proper_bindM; [ reflexivity | ].
-    intros opt1 opt2 eq12. rewrite eq12.
-    destruct opt2; reflexivity. }
+    intros opt; destruct opt; reflexivity. }
   { intros.
     unfold returnM, MonadReturnOp_OptionT, bindM, MonadBindOp_OptionT;
       unfold eqM, MonadEqOp_OptionT.
     rewrite (bindM_bindM (M:=M)).
     apply Proper_bindM; [ reflexivity | ].
-    intros opt_a1 opt_a2 eq_a12; rewrite eq_a12.
-    destruct opt_a2.
+    intros opt_a; destruct opt_a.
     { apply Proper_bindM; [ reflexivity | ].
-      intros opt_b1 opt_b2 eq_b12; rewrite eq_b12.
-      destruct opt_b2; reflexivity. }
+      intros opt_b; destruct opt_b; reflexivity. }
     { rewrite returnM_bindM. reflexivity. } }
 Qed.
 
@@ -557,12 +562,12 @@ Proof.
 Qed.
 
 Instance Proper_refinesM_bindM A B :
-  Proper (refinesM ==> (eq ==> refinesM) ==> refinesM) (bindM (A:=A) (B:=B)).
+  Proper (refinesM ==> (pointwise_relation A refinesM) ==> refinesM) (bindM (A:=A) (B:=B)).
 Proof.
   intros m1 m2 Rm f1 f2 Rf opt_b [ opt_a in_opt_a in_opt_b ].
   exists opt_a; [ apply Rm; assumption | ].
   destruct opt_a; [ | assumption ].
-  apply (Rf a a eq_refl); assumption.
+  apply (Rf a); assumption.
 Qed.
 
 Lemma refinesM_returnM A (a1 a2:A) : a1 = a2 -> returnM a1 |= returnM a2.

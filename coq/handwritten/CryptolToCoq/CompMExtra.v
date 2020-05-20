@@ -5,6 +5,10 @@
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Export CompM.
 
+(***
+ *** Extra lemmas about refinement that rely on SAWCorePrelude
+ ***)
+
 Lemma refinesM_either_l {A B C} (f:A -> CompM C) (g:B -> CompM C) eith P :
   (forall a, eith = SAWCorePrelude.Left _ _ a -> f a |= P) ->
   (forall b, eith = SAWCorePrelude.Right _ _ b -> g b |= P) ->
@@ -26,13 +30,17 @@ Proof.
 Qed.
 
 
+(***
+ *** Automation for proving refinement
+ ***)
+
 Create HintDb refinesM.
-Create HintDb refinesFun.
 
-Hint Extern 1 (refinesFun _ _) => (apply refinesFun_multiFixM_fst;
+(*
+Hint Extern 2 (refinesFun _ _) => (apply refinesFun_multiFixM_fst;
                                      simpl; intros) : refinesFun.
+*)
 
-Hint Extern 999 (_ |= _) => shelve : refinesFun.
 Hint Extern 999 (_ |= _) => shelve : refinesM.
 Hint Resolve refinesM_letRecM0 : refinesM.
 
@@ -92,7 +100,110 @@ Hint Extern 1 (_ |= (errorM >>= _)) => rewrite errorM_bindM : refinesM.
 Hint Extern 1 (((_ >>= _) >>= _) |= _) => rewrite bindM_bindM : refinesM.
 Hint Extern 1 (_ |= ((_ >>= _) >>= _)) => rewrite bindM_bindM : refinesM.
 
-Ltac prove_refinement := unshelve (typeclasses eauto with refinesM refinesFun).
+
+(***
+ *** Rewriting rules
+ ***)
+
+Lemma existT_eta A (B:A -> Type) (s: {a:A & B a}) :
+  existT B (projT1 s) (projT2 s) = s.
+Proof.
+  destruct s; reflexivity.
+Qed.
+
+Lemma existT_eta_unit A (s: {_:A & unit}) : existT (fun _ => unit) (projT1 s) tt = s.
+Proof.
+  destruct s; destruct u; reflexivity.
+Qed.
+
+Hint Rewrite existT_eta existT_eta_unit : refinesM.
+
+(*
+Lemma function_eta A B (f:A -> B) : pointwise_relation A eq (fun x => f x) f.
+Proof.
+  intro; reflexivity.
+Qed.
+*)
+
+(* Specialized versions of monad laws for CompM to make rewriting faster,
+probably because Coq doesn't have to search for the instances...? *)
+
+Definition returnM_bindM_CompM A B (a:A) (f:A -> CompM B) : returnM a >>= f ~= f a :=
+  returnM_bindM (M:=CompM) A B a f.
+
+Definition bindM_returnM_CompM A (m:CompM A) : m >>= (fun x => returnM x) ~= m :=
+  bindM_returnM (M:=CompM) A m.
+
+Definition bindM_bindM_CompM A B C (m : CompM A) (f : A -> CompM B) (g : B -> CompM C) :
+  m >>= f >>= g ~= m >>= (fun x : A => f x >>= g) :=
+  bindM_bindM (M:=CompM) A B C m f g.
+
+Hint Rewrite returnM_bindM_CompM bindM_returnM_CompM bindM_bindM_CompM : refinesM.
+
+
+(***
+ *** Automation for proving function refinement
+ ***)
+
+Create HintDb refinesFun.
+Hint Extern 999 (_ |= _) => shelve : refinesFun.
+Hint Extern 999 (refinesFun _ _) => shelve : refinesFun.
+
+Definition MaybeDestructArg A (a:A) (goal:Type) : Type := goal.
+Definition noDestructArg A a goal : goal -> MaybeDestructArg A a goal := fun g => g.
+Definition noDestructArg_bv n a goal :
+  goal -> MaybeDestructArg (SAWCorePrelude.bitvector n) a goal := fun g => g.
+
+Definition refinesFun_multiFixM_fst' lrt (F:lrtPi (LRT_Cons lrt LRT_Nil)
+                                                  (lrtTupleType (LRT_Cons lrt LRT_Nil))) f
+      (ref_f:refinesFun (SAWCoreScaffolding.fst (F f)) f) :
+  refinesFun (fst (multiFixM F)) f := refinesFun_multiFixM_fst lrt F f ref_f.
+
+Definition refinesFun_fst lrt B f1 (fs:B) f2 (r:@refinesFun lrt f1 f2) :
+  refinesFun (SAWCoreScaffolding.fst (f1, fs)) f2 := r.
+
+Hint Resolve refinesFun_fst | 1 : refinesFun.
+Hint Resolve refinesFun_multiFixM_fst' | 1 : refinesFun.
+Hint Resolve noDestructArg | 5 : refinesFun.
+(* Hint Resolve noDestructArg_bv | 5 : refinesFun. *)
+
+(*
+Hint Extern 1 (MaybeDestructArg _ _ _) =>
+  (lazymatch goal with
+  | |- MaybeDestructArg ?W64list ?l ?g =>
+    match g with
+    | context [W64List_rect _ _ _ l] => destruct l; simpl; apply noDestructArg
+    end
+  end) : refiesFun.
+Print HintDb refinesFun.
+ *)
+
+Ltac destructArg_W64List :=
+  (lazymatch goal with
+  | |- MaybeDestructArg ?W64list ?l ?g =>
+    match g with
+    | context [SAWCorePrelude.W64List_rect _ _ _ l] =>
+      destruct l; simpl; apply noDestructArg
+    end
+  end).
+Hint Extern 1 (MaybeDestructArg _ _ _) => destructArg_W64List :refinesFun.
+
+Definition refinesFunBase B m1 m2 (r: m1 |= m2) : @refinesFun (LRT_Ret B) m1 m2 := r.
+Definition refinesFunStep A lrtF f1 f2
+           (r: forall a:A, MaybeDestructArg A a (@refinesFun (lrtF a) (f1 a) (f2 a))) :
+  @refinesFun (LRT_Fun A lrtF) f1 f2 := r.
+
+Hint Resolve refinesFunBase refinesFunStep | 5 : refinesFun.
+
+
+(***
+ *** Top-level tactics to put it all together
+ ***)
+
+Ltac prove_refinement :=
+  unshelve (typeclasses eauto with refinesM refinesFun);
+  unshelve (rewrite_strat (bottomup (hints refinesM)));
+  try reflexivity.
 
 Ltac prove_refinesFun := unshelve (typeclasses eauto with refinesFun).
 
@@ -101,6 +212,9 @@ Ltac rewrite_refinesM :=
   try ((rewrite returnM_bindM || rewrite bindM_returnM || rewrite bindM_bindM ||
         rewrite errorM_bindM || rewrite existsM_bindM); rewrite_refinesM).
 *)
+
+
+(*** FIXME: old stuff below ***)
 
 Ltac old_prove_refinesM :=
   lazymatch goal with
@@ -148,23 +262,3 @@ Ltac old_prove_refinesM :=
 
 Ltac old_prove_refinesFun :=
   apply refinesFun_multiFixM_fst; simpl; intros; old_prove_refinesM.
-
-
-(*
-FIXME: it would be nice if we could rewrite under binders, but the sigT_rect
-rule requires rewriting under a dependent binder, which I'm not sure how to do...
-
-Instance Proper_either A B C (RC:relation C) :
-  Proper ((eq ==> RC) ==> (eq ==> RC) ==> eq ==> RC) (either A B C).
-Proof.
-  intros f1 f2 Rf g1 g2 Rg eith1 eith2 Reith. rewrite Reith.
-  destruct eith2; simpl; [ apply Rf | apply Rg ]; reflexivity.
-Qed.
-
-Print is_elem__tuple_fun.
-Print sigT_rect.
-
-
-Instance Proper_sigT_rect A (B:A -> Type) C (RC:relation C) :
-  Proper ((eq ==> eq ==> RC) ==> eq ==> RC) (@sigT_rect A B (fun _ => C)).
-*)
