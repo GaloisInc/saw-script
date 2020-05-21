@@ -389,7 +389,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     allocGlobalEnd (LLVMAllocGlobal _ (LLVM.Symbol nm)) = globalEnd nm
     globalEnd :: String -> Integer
     globalEnd nm = maybe 0 (\entry -> fromIntegral $ Elf.steValue entry + Elf.steSize entry) $
-      Vector.headM
+      (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
       . mconcat
       . fmap Elf.elfSymbolTableEntries
@@ -533,12 +533,12 @@ executePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
   base <- use x86GlobalBase
   ptr <- case tptr of
     MS.SetupGlobal () nm -> case
-      Vector.headM
+      (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
       . mconcat
       . fmap Elf.elfSymbolTableEntries
       $ Elf.elfSymtab elf of
-      Nothing -> throwX86 "not found"
+      Nothing -> throwX86 $ mconcat ["Global symbol \"", nm, "\" not found"]
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat addr
