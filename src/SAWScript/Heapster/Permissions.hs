@@ -891,8 +891,8 @@ data ValuePerm (a :: CrucibleType) where
                     Binding a (ValuePerm b) ->
                     ValuePerm b
 
-  -- | A named recursive permission
-  ValPerm_Rec :: RecPermName args a -> RecPermArgs args -> ValuePerm a
+  -- | A named permission
+  ValPerm_Named :: NamedPermName args a -> NamedPermArgs args -> ValuePerm a
 
   -- | A separating conjuction of 0 or more atomic permissions, where 0
   -- permissions is the trivially true permission
@@ -1018,95 +1018,115 @@ funPermOuts :: FunPerm ghosts args ret ->
 funPermOuts (FunPerm _ _ _ _ perms_out) = perms_out
 
 
--- | A name for a recursive permission
-data RecPermName args a = RecPermName {
-  recPermNameName :: String,
-  recPermNameType :: TypeRepr a,
-  recPermNameArgs :: CruCtx args
+-- | A name for a named permission
+data NamedPermName args a = NamedPermName {
+  namedPermNameName :: String,
+  namedPermNameType :: TypeRepr a,
+  namedPermNameArgs :: CruCtx args
   }
 
--- | Test if two 'RecPermName's of possibly different types are equal
-testRecPermNameEq :: RecPermName args1 a1 -> RecPermName args2 a2 ->
-                     Maybe (args1 :~: args2, a1 :~: a2)
-testRecPermNameEq (RecPermName str1 tp1 ctx1) (RecPermName str2 tp2 ctx2)
+-- | Test if two 'NamedPermName's of possibly different types are equal
+testNamedPermNameEq :: NamedPermName args1 a1 -> NamedPermName args2 a2 ->
+                       Maybe (args1 :~: args2, a1 :~: a2)
+testNamedPermNameEq (NamedPermName str1 tp1 ctx1) (NamedPermName str2 tp2 ctx2)
   | Just Refl <- testEquality tp1 tp2
   , Just Refl <- testEquality ctx1 ctx2
   , str1 == str2 = Just (Refl, Refl)
-testRecPermNameEq _ _ = Nothing
+testNamedPermNameEq _ _ = Nothing
 
-instance Eq (RecPermName args a) where
-  n1 == n2 | Just (Refl, Refl) <- testRecPermNameEq n1 n2 = True
+instance Eq (NamedPermName args a) where
+  n1 == n2 | Just (Refl, Refl) <- testNamedPermNameEq n1 n2 = True
   _ == _ = False
 
--- | An existentially quantified 'RecPermName'
-data SomeRecPermName where
-  SomeRecPermName :: RecPermName args a -> SomeRecPermName
+-- | An existentially quantified 'NamedPermName'
+data SomeNamedPermName where
+  SomeNamedPermName :: NamedPermName args a -> SomeNamedPermName
 
--- | An argument for a recursive permission
-data RecPermArg a where
-  RecPermArg_Lifetime :: PermExpr LifetimeType -> RecPermArg LifetimeType
-  RecPermArg_RWModality :: PermExpr RWModalityType ->
-                           RecPermArg RWModalityType
+-- | An argument for a named permission
+data NamedPermArg a where
+  NamedPermArg_Lifetime :: PermExpr LifetimeType -> NamedPermArg LifetimeType
+  NamedPermArg_RWModality :: PermExpr RWModalityType ->
+                             NamedPermArg RWModalityType
 
-instance TestEquality RecPermArg where
-  testEquality (RecPermArg_Lifetime l1) (RecPermArg_Lifetime l2)
+instance TestEquality NamedPermArg where
+  testEquality (NamedPermArg_Lifetime l1) (NamedPermArg_Lifetime l2)
     | l1 == l2 = Just Refl
-  testEquality (RecPermArg_RWModality rw1) (RecPermArg_RWModality rw2)
+  testEquality (NamedPermArg_RWModality rw1) (NamedPermArg_RWModality rw2)
     | rw1 == rw2 = Just Refl
   testEquality _ _ = Nothing
 
-instance Eq (RecPermArg a) where
+instance Eq (NamedPermArg a) where
   arg1 == arg2 | Just Refl <- testEquality arg1 arg2 = True
   _ == _ = False
 
--- | A sequence of 'RecPermArg's
-data RecPermArgs (args :: RList CrucibleType) where
-  RecPermArgs_Nil :: RecPermArgs RNil
-  RecPermArgs_Cons :: RecPermArgs as -> RecPermArg a -> RecPermArgs (as :> a)
+-- | A sequence of 'NamedPermArg's
+data NamedPermArgs (args :: RList CrucibleType) where
+  NamedPermArgs_Nil :: NamedPermArgs RNil
+  NamedPermArgs_Cons :: NamedPermArgs as -> NamedPermArg a ->
+                        NamedPermArgs (as :> a)
 
--- | Convert a 'RecPermArg' to an expression
-permArgToExpr :: RecPermArg a -> PermExpr a
-permArgToExpr (RecPermArg_Lifetime l) = l
-permArgToExpr (RecPermArg_RWModality rw) = rw
+-- | Convert a 'NamedPermArg' to an expression
+permArgToExpr :: NamedPermArg a -> PermExpr a
+permArgToExpr (NamedPermArg_Lifetime l) = l
+permArgToExpr (NamedPermArg_RWModality rw) = rw
 
--- | Convert a sequence of 'RecPermArg's to expressions
-permArgsToExprs :: RecPermArgs args -> PermExprs args
-permArgsToExprs RecPermArgs_Nil = PExprs_Nil
-permArgsToExprs (RecPermArgs_Cons args arg) =
+-- | Convert a sequence of 'NamedPermArg's to expressions
+permArgsToExprs :: NamedPermArgs args -> PermExprs args
+permArgsToExprs NamedPermArgs_Nil = PExprs_Nil
+permArgsToExprs (NamedPermArgs_Cons args arg) =
   PExprs_Cons (permArgsToExprs args) (permArgToExpr arg)
 
--- | Get the @n@th argument in a 'RecPermArgs' list
-getRecPermArg :: RecPermArgs args -> Member args a -> RecPermArg a
-getRecPermArg (RecPermArgs_Cons _ arg) Member_Base = arg
-getRecPermArg (RecPermArgs_Cons args _) (Member_Step memb) =
-  getRecPermArg args memb
+-- | Get the @n@th argument in a 'NamedPermArgs' list
+getNamedPermArg :: NamedPermArgs args -> Member args a -> NamedPermArg a
+getNamedPermArg (NamedPermArgs_Cons _ arg) Member_Base = arg
+getNamedPermArg (NamedPermArgs_Cons args _) (Member_Step memb) =
+  getNamedPermArg args memb
 
--- | Set the @n@th argument in a 'RecPermArgs' list
-setRecPermArg :: RecPermArgs args -> Member args a -> RecPermArg a ->
-                 RecPermArgs args
-setRecPermArg (RecPermArgs_Cons args _) Member_Base a = RecPermArgs_Cons args a
-setRecPermArg (RecPermArgs_Cons args arg) (Member_Step memb) a =
-  RecPermArgs_Cons (setRecPermArg args memb a) arg
+-- | Set the @n@th argument in a 'NamedPermArgs' list
+setNamedPermArg :: NamedPermArgs args -> Member args a -> NamedPermArg a ->
+                   NamedPermArgs args
+setNamedPermArg (NamedPermArgs_Cons args _) Member_Base a =
+  NamedPermArgs_Cons args a
+setNamedPermArg (NamedPermArgs_Cons args arg) (Member_Step memb) a =
+  NamedPermArgs_Cons (setNamedPermArg args memb a) arg
 
--- | Get a list of 'Member' proofs for each arg in a 'RecPermArgs' sequence
-getRecPermsMembers :: RecPermArgs args ->
-                      [Some (Member args :: CrucibleType -> Type)]
-getRecPermsMembers RecPermArgs_Nil = []
-getRecPermsMembers (RecPermArgs_Cons args _) =
-  map (\case Some memb -> Some (Member_Step memb)) (getRecPermsMembers args)
+-- | Get a list of 'Member' proofs for each arg in a 'NamedPermArgs' sequence
+getNamedPermsMembers :: NamedPermArgs args ->
+                        [Some (Member args :: CrucibleType -> Type)]
+getNamedPermsMembers NamedPermArgs_Nil = []
+getNamedPermsMembers (NamedPermArgs_Cons args _) =
+  map (\case Some memb -> Some (Member_Step memb)) (getNamedPermsMembers args)
   ++ [Some Member_Base]
 
-instance TestEquality RecPermArgs where
-  testEquality (RecPermArgs_Cons args1 arg1) (RecPermArgs_Cons args2 arg2)
+instance TestEquality NamedPermArgs where
+  testEquality (NamedPermArgs_Cons args1 arg1) (NamedPermArgs_Cons args2 arg2)
     | Just Refl <- testEquality args1 args2
     , Just Refl <- testEquality arg1 arg2
     = Just Refl
-  testEquality RecPermArgs_Nil RecPermArgs_Nil = Just Refl
+  testEquality NamedPermArgs_Nil NamedPermArgs_Nil = Just Refl
   testEquality _ _ = Nothing
 
-instance Eq (RecPermArgs args) where
+instance Eq (NamedPermArgs args) where
   args1 == args2 | Just Refl <- testEquality args1 args2 = True
   _ == _ = False
+
+-- | The semantics of a named permission, which can can either be an opaque
+-- named permission or a recursive named permission
+data NamedPerm args a
+  = NamedPerm_Opaque (OpaquePerm args a)
+  | NamedPerm_Rec (RecPerm args a)
+
+-- | Extract the name back out of the interpretation of a 'NamedPerm'
+namedPermName :: NamedPerm args a -> NamedPermName args a
+namedPermName (NamedPerm_Opaque op) = opaquePermName op
+namedPermName (NamedPerm_Rec rp) = recPermName rp
+
+-- | An opaque named permission is just a name and a SAW core type given by
+-- identifier that it is translated to
+data OpaquePerm args a = OpaquePerm {
+  opaquePermName :: NamedPermName args a,
+  opaquePermTrans :: Ident
+  }
 
 -- | A recursive permission is a disjunction of 1 or more permissions, each of
 -- which can contain the recursive permission itself. NOTE: it is an error to
@@ -1114,7 +1134,7 @@ instance Eq (RecPermArgs args) where
 -- SAW datatype, given by a SAW 'Ident', and each disjunctive permission case is
 -- associated with a constructor of that datatype.
 data RecPerm args a = RecPerm {
-  recPermName :: RecPermName args a,
+  recPermName :: NamedPermName args a,
   recPermDataType :: Ident,
   recPermFoldFun :: Ident,
   recPermUnfoldFun :: Ident,
@@ -1203,9 +1223,9 @@ instance Eq (ValuePerm a) where
         testEquality (knownRepr :: TypeRepr a1) (knownRepr :: TypeRepr a2)
     = p1 == p2
   (ValPerm_Exists _) == _ = False
-  (ValPerm_Rec n1 args1) == (ValPerm_Rec n2 args2)
-    | Just (Refl, Refl) <- testRecPermNameEq n1 n2 = args1 == args2
-  (ValPerm_Rec _ _) == _ = False
+  (ValPerm_Named n1 args1) == (ValPerm_Named n2 args2)
+    | Just (Refl, Refl) <- testNamedPermNameEq n1 n2 = args1 == args2
+  (ValPerm_Named _ _) == _ = False
   (ValPerm_Conj aps1) == (ValPerm_Conj aps2) = aps1 == aps2
   (ValPerm_Conj _) == _ = False
 
@@ -1265,8 +1285,8 @@ funPermEq3 _ _ = Nothing
 instance Eq (FunPerm ghosts args ret) where
   fperm1 == fperm2 = isJust (funPermEq fperm1 fperm2)
 
-instance PermPretty (RecPermName args a) where
-  permPrettyM (RecPermName str _ _) = return $ string str
+instance PermPretty (NamedPermName args a) where
+  permPrettyM (NamedPermName str _ _) = return $ string str
 
 instance PermPretty (ValuePerm a) where
   permPrettyM (ValPerm_Eq e) = ((string "eq" <>) . parens) <$> permPrettyM e
@@ -1278,7 +1298,7 @@ instance PermPretty (ValuePerm a) where
   permPrettyM (ValPerm_Exists mb_p) =
     flip permPrettyExprMb mb_p $ \(_ :>: Constant pp_n) ppm ->
     (\pp -> hang 2 (string "exists" <+> pp_n <> dot <+> pp)) <$> ppm
-  permPrettyM (ValPerm_Rec n args) =
+  permPrettyM (ValPerm_Named n args) =
     do n_pp <- permPrettyM n
        args_pp <- permPrettyM args
        return (n_pp <> char '<' <> args_pp <> char '>')
@@ -1330,15 +1350,15 @@ instance PermPretty (FunPerm ghosts args ret) where
   permPrettyM fun_perm =
     return $ string "<FunPerm (FIXME)>" -- FIXME HERE: implement
 
-instance PermPretty (RecPermArgs args) where
-  permPrettyM RecPermArgs_Nil = return $ string ""
-  permPrettyM (RecPermArgs_Cons RecPermArgs_Nil arg) = permPrettyM arg
-  permPrettyM (RecPermArgs_Cons args arg) =
+instance PermPretty (NamedPermArgs args) where
+  permPrettyM NamedPermArgs_Nil = return $ string ""
+  permPrettyM (NamedPermArgs_Cons NamedPermArgs_Nil arg) = permPrettyM arg
+  permPrettyM (NamedPermArgs_Cons args arg) =
     (\pp1 pp2 -> pp1 <> comma <> pp2) <$> permPrettyM args <*> permPrettyM arg
 
-instance PermPretty (RecPermArg a) where
-  permPrettyM (RecPermArg_Lifetime l) = permPrettyM l
-  permPrettyM (RecPermArg_RWModality rw) = permPrettyM rw
+instance PermPretty (NamedPermArg a) where
+  permPrettyM (NamedPermArg_Lifetime l) = permPrettyM l
+  permPrettyM (NamedPermArg_RWModality rw) = permPrettyM rw
 
 instance PermPretty (BVRange w) where
   permPrettyM (BVRange e1 e2) =
@@ -1391,10 +1411,12 @@ $(mkNuMatching [t| RWModality |])
 $(mkNuMatching [t| forall w . LLVMArrayIndex w |])
 $(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
 $(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
-$(mkNuMatching [t| forall args a. RecPermName args a |])
-$(mkNuMatching [t| SomeRecPermName |])
-$(mkNuMatching [t| forall a. RecPermArg a |])
-$(mkNuMatching [t| forall args. RecPermArgs args |])
+$(mkNuMatching [t| forall args a. NamedPermName args a |])
+$(mkNuMatching [t| SomeNamedPermName |])
+$(mkNuMatching [t| forall a. NamedPermArg a |])
+$(mkNuMatching [t| forall args. NamedPermArgs args |])
+$(mkNuMatching [t| forall args a. NamedPerm args a |])
+$(mkNuMatching [t| forall args a. OpaquePerm args a |])
 $(mkNuMatching [t| forall args a. RecPerm args a |])
 $(mkNuMatching [t| forall ps. DistPerms ps |])
 $(mkNuMatching [t| forall ps. LifetimeCurrentPerms ps |])
@@ -1410,12 +1432,12 @@ instance Closable RWModality where
   toClosed Write = $(mkClosed [| Write |])
   toClosed Read = $(mkClosed [| Read |])
 
-instance Liftable (RecPermName args a) where
-  mbLift [nuP| RecPermName n tp args |] =
-    RecPermName (mbLift n) (mbLift tp) (mbLift args)
+instance Liftable (NamedPermName args a) where
+  mbLift [nuP| NamedPermName n tp args |] =
+    NamedPermName (mbLift n) (mbLift tp) (mbLift args)
 
-instance Liftable SomeRecPermName where
-  mbLift [nuP| SomeRecPermName rpn |] = SomeRecPermName $ mbLift rpn
+instance Liftable SomeNamedPermName where
+  mbLift [nuP| SomeNamedPermName rpn |] = SomeNamedPermName $ mbLift rpn
 
 -- | Extract @p1@ from a permission of the form @p1 \/ p2@
 orPermLeft :: ValuePerm a -> ValuePerm a
@@ -2021,7 +2043,7 @@ permIsCopyable :: ValuePerm a -> Bool
 permIsCopyable (ValPerm_Eq _) = True
 permIsCopyable (ValPerm_Or p1 p2) = permIsCopyable p1 && permIsCopyable p2
 permIsCopyable (ValPerm_Exists mb_p) = mbLift $ fmap permIsCopyable mb_p
-permIsCopyable (ValPerm_Rec _ args) = recPermArgsAreCopyable args
+permIsCopyable (ValPerm_Named _ args) = namedPermArgsAreCopyable args
 permIsCopyable (ValPerm_Conj ps) = all atomicPermIsCopyable ps
 
 -- | The same as 'permIsCopyable' except for atomic permissions
@@ -2043,17 +2065,17 @@ atomicPermIsCopyable (Perm_LCurrent _) = True
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
 
--- | 'permIsCopyable' for the 'RecPermArg' type
-recPermArgIsCopyable :: RecPermArg a -> Bool
-recPermArgIsCopyable (RecPermArg_Lifetime _) = True
-recPermArgIsCopyable (RecPermArg_RWModality PExpr_Read) = True
-recPermArgIsCopyable (RecPermArg_RWModality _) = False
+-- | 'permIsCopyable' for the 'NamedPermArg' type
+namedPermArgIsCopyable :: NamedPermArg a -> Bool
+namedPermArgIsCopyable (NamedPermArg_Lifetime _) = True
+namedPermArgIsCopyable (NamedPermArg_RWModality PExpr_Read) = True
+namedPermArgIsCopyable (NamedPermArg_RWModality _) = False
 
--- | 'permIsCopyable' for the 'RecPermArgs' type
-recPermArgsAreCopyable :: RecPermArgs args -> Bool
-recPermArgsAreCopyable RecPermArgs_Nil = True
-recPermArgsAreCopyable (RecPermArgs_Cons args arg) =
-  recPermArgsAreCopyable args && recPermArgIsCopyable arg
+-- | 'permIsCopyable' for the 'NamedPermArgs' type
+namedPermArgsAreCopyable :: NamedPermArgs args -> Bool
+namedPermArgsAreCopyable NamedPermArgs_Nil = True
+namedPermArgsAreCopyable (NamedPermArgs_Cons args arg) =
+  namedPermArgsAreCopyable args && namedPermArgIsCopyable arg
 
 -- | Substitute arguments, a lifetime, and ghost values into a function
 -- permission to get the input permissions needed on the arguments
@@ -2074,7 +2096,7 @@ funPermDistOuts fun_perm args l ghosts =
   subst (consSubst (substOfExprs ghosts) (PExpr_Var l)) $ funPermOuts fun_perm
 
 -- | Unfold a recursive permission given a 'RecPerm' for it
-unfoldRecPerm :: RecPerm args a -> RecPermArgs args -> ValuePerm a
+unfoldRecPerm :: RecPerm args a -> NamedPermArgs args -> ValuePerm a
 unfoldRecPerm rp args =
   foldl1 ValPerm_Or $
   map (subst (substOfExprs $ permArgsToExprs args) . fst) $ recPermCases rp
@@ -2094,7 +2116,7 @@ instance ContainsLifetime (ValuePerm a) where
     containsLifetime l p1 || containsLifetime l p2
   containsLifetime l (ValPerm_Exists mb_p) =
     mbLift $ fmap (containsLifetime l) mb_p
-  containsLifetime l (ValPerm_Rec _ args) =
+  containsLifetime l (ValPerm_Named _ args) =
     containsLifetime l args
   containsLifetime l (ValPerm_Conj ps) = any (containsLifetime l) ps
 
@@ -2123,13 +2145,13 @@ instance ContainsLifetime (LLVMFieldPerm w) where
 instance ContainsLifetime (LLVMArrayPerm w) where
   containsLifetime l ap = any (containsLifetime l) (llvmArrayFields ap)
 
-instance ContainsLifetime (RecPermArgs args) where
-  containsLifetime _ RecPermArgs_Nil = False
-  containsLifetime l (RecPermArgs_Cons args arg) =
+instance ContainsLifetime (NamedPermArgs args) where
+  containsLifetime _ NamedPermArgs_Nil = False
+  containsLifetime l (NamedPermArgs_Cons args arg) =
     containsLifetime l args || containsLifetime l arg
 
-instance ContainsLifetime (RecPermArg a) where
-  containsLifetime l (RecPermArg_Lifetime l') = l == l'
+instance ContainsLifetime (NamedPermArg a) where
+  containsLifetime l (NamedPermArg_Lifetime l') = l == l'
   containsLifetime l _ = False
 
 
@@ -2146,8 +2168,8 @@ instance InLifetime (ValuePerm a) where
     ValPerm_Or (inLifetime l p1) (inLifetime l p2)
   inLifetime l (ValPerm_Exists mb_p) =
     ValPerm_Exists $ fmap (inLifetime l) mb_p
-  inLifetime l (ValPerm_Rec n args) =
-    ValPerm_Rec n $ inLifetime l args
+  inLifetime l (ValPerm_Named n args) =
+    ValPerm_Named n $ inLifetime l args
   inLifetime l (ValPerm_Conj ps) =
     ValPerm_Conj $ map (inLifetime l) ps
 
@@ -2172,14 +2194,14 @@ instance InLifetime (LLVMArrayPerm w) where
   inLifetime l ap =
     ap { llvmArrayFields = map (inLifetime l) (llvmArrayFields ap) }
 
-instance InLifetime (RecPermArgs args) where
-  inLifetime _ RecPermArgs_Nil = RecPermArgs_Nil
-  inLifetime l (RecPermArgs_Cons args arg) =
-    RecPermArgs_Cons (inLifetime l args) (inLifetime l arg)
+instance InLifetime (NamedPermArgs args) where
+  inLifetime _ NamedPermArgs_Nil = NamedPermArgs_Nil
+  inLifetime l (NamedPermArgs_Cons args arg) =
+    NamedPermArgs_Cons (inLifetime l args) (inLifetime l arg)
 
-instance InLifetime (RecPermArg a) where
-  inLifetime l (RecPermArg_Lifetime _) = RecPermArg_Lifetime l
-  inLifetime _ arg@(RecPermArg_RWModality _) = arg
+instance InLifetime (NamedPermArg a) where
+  inLifetime l (NamedPermArg_Lifetime _) = NamedPermArg_Lifetime l
+  inLifetime _ arg@(NamedPermArg_RWModality _) = arg
 
 
 -- | Compute the minimal permissions required to end a lifetime that contains
@@ -2200,8 +2222,8 @@ instance MinLtEndPerms (ValuePerm a) where
     ValPerm_Or (minLtEndPerms l p1) (minLtEndPerms l p2)
   minLtEndPerms l (ValPerm_Exists mb_p) =
     ValPerm_Exists $ fmap (minLtEndPerms l) mb_p
-  minLtEndPerms l (ValPerm_Rec n args) =
-    ValPerm_Rec n $ minLtEndPerms l args
+  minLtEndPerms l (ValPerm_Named n args) =
+    ValPerm_Named n $ minLtEndPerms l args
   minLtEndPerms l (ValPerm_Conj ps) =
     ValPerm_Conj $ map (minLtEndPerms l) ps
 
@@ -2226,14 +2248,15 @@ instance MinLtEndPerms (LLVMArrayPerm w) where
   minLtEndPerms l ap =
     ap { llvmArrayFields = map (minLtEndPerms l) (llvmArrayFields ap) }
 
-instance MinLtEndPerms (RecPermArgs args) where
-  minLtEndPerms _ RecPermArgs_Nil = RecPermArgs_Nil
-  minLtEndPerms l (RecPermArgs_Cons args arg) =
-    RecPermArgs_Cons (minLtEndPerms l args) (minLtEndPerms l arg)
+instance MinLtEndPerms (NamedPermArgs args) where
+  minLtEndPerms _ NamedPermArgs_Nil = NamedPermArgs_Nil
+  minLtEndPerms l (NamedPermArgs_Cons args arg) =
+    NamedPermArgs_Cons (minLtEndPerms l args) (minLtEndPerms l arg)
 
-instance MinLtEndPerms (RecPermArg a) where
-  minLtEndPerms l (RecPermArg_Lifetime _) = RecPermArg_Lifetime l
-  minLtEndPerms _ (RecPermArg_RWModality _) = RecPermArg_RWModality PExpr_Read
+instance MinLtEndPerms (NamedPermArg a) where
+  minLtEndPerms l (NamedPermArg_Lifetime _) = NamedPermArg_Lifetime l
+  minLtEndPerms _ (NamedPermArg_RWModality _) =
+    NamedPermArg_RWModality PExpr_Read
 
 
 ----------------------------------------------------------------------
@@ -2587,8 +2610,15 @@ instance SubstVar s m => Substable s (AtomicPerm a) m where
   genSubst s [nuP| Perm_BVProp prop |] =
     Perm_BVProp <$> genSubst s prop
 
-instance SubstVar s m => Substable s (RecPermName args a) m where
+instance SubstVar s m => Substable s (NamedPermName args a) m where
   genSubst _ mb_rpn = return $ mbLift mb_rpn
+
+instance SubstVar s m => Substable s (NamedPerm args a) m where
+  genSubst s [nuP| NamedPerm_Opaque p |] = NamedPerm_Opaque <$> genSubst s p
+  genSubst s [nuP| NamedPerm_Rec p |] = NamedPerm_Rec <$> genSubst s p
+
+instance SubstVar s m => Substable s (OpaquePerm args a) m where
+  genSubst _ [nuP| OpaquePerm n i |] = return $ OpaquePerm (mbLift n) (mbLift i)
 
 instance SubstVar s m => Substable s (RecPerm args a) m where
   genSubst s [nuP| RecPerm rpn dt_i f_i u_i cases |] =
@@ -2605,8 +2635,8 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
     -- Substable instance for Mb ctx a from above
     ValPerm_Exists <$>
     nuM (\x -> genSubst (extSubst s x) $ mbCombine p)
-  genSubst s [nuP| ValPerm_Rec n args |] =
-    ValPerm_Rec (mbLift n) <$> genSubst s args
+  genSubst s [nuP| ValPerm_Named n args |] =
+    ValPerm_Named (mbLift n) <$> genSubst s args
   genSubst s [nuP| ValPerm_Conj aps |] =
     ValPerm_Conj <$> mapM (genSubst s) (mbList aps)
 
@@ -2643,16 +2673,16 @@ instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
     FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
     <$> genSubst s perms_in <*> genSubst s perms_out
 
-instance SubstVar s m => Substable s (RecPermArgs args) m where
-  genSubst s [nuP| RecPermArgs_Nil |] = return RecPermArgs_Nil
-  genSubst s [nuP| RecPermArgs_Cons args arg |] =
-    RecPermArgs_Cons <$> genSubst s args <*> genSubst s arg
+instance SubstVar s m => Substable s (NamedPermArgs args) m where
+  genSubst s [nuP| NamedPermArgs_Nil |] = return NamedPermArgs_Nil
+  genSubst s [nuP| NamedPermArgs_Cons args arg |] =
+    NamedPermArgs_Cons <$> genSubst s args <*> genSubst s arg
 
-instance SubstVar s m => Substable s (RecPermArg a) m where
-  genSubst s [nuP| RecPermArg_Lifetime l |] =
-    RecPermArg_Lifetime <$> genSubst s l
-  genSubst s [nuP| RecPermArg_RWModality rw |] =
-    RecPermArg_RWModality <$> genSubst s rw
+instance SubstVar s m => Substable s (NamedPermArg a) m where
+  genSubst s [nuP| NamedPermArg_Lifetime l |] =
+    NamedPermArg_Lifetime <$> genSubst s l
+  genSubst s [nuP| NamedPermArg_RWModality rw |] =
+    NamedPermArg_RWModality <$> genSubst s rw
 
 instance SubstVar PermVarSubst m =>
          Substable PermVarSubst (LifetimeCurrentPerms ps) m where
@@ -2943,8 +2973,8 @@ instance SubstValPerm (ValuePerm a) where
     ValPerm_Or (substValPerm p p1) (substValPerm p p2)
   substValPerm p [nuP| ValPerm_Exists p' |] =
     ValPerm_Exists $ substValPerm p p'
-  substValPerm p [nuP| ValPerm_Rec n args |] =
-    ValPerm_Rec (mbLift n) $ substValPerm p args
+  substValPerm p [nuP| ValPerm_Named n args |] =
+    ValPerm_Named (mbLift n) $ substValPerm p args
   substValPerm p [nuP| ValPerm_Conj aps |] =
     ValPerm_Conj $ substValPerm p aps
 
@@ -2981,16 +3011,16 @@ instance SubstValPerm (FunPerm ghosts args ret) where
     FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
     (substValPerm p perms_in) (substValPerm p perms_out)
 
-instance SubstValPerm (RecPermArgs args) where
-  substValPerm _ [nuP| RecPermArgs_Nil |] = RecPermArgs_Nil
-  substValPerm p [nuP| RecPermArgs_Cons args arg |] =
-    RecPermArgs_Cons (substValPerm p args) (substValPerm p arg)
+instance SubstValPerm (NamedPermArgs args) where
+  substValPerm _ [nuP| NamedPermArgs_Nil |] = NamedPermArgs_Nil
+  substValPerm p [nuP| NamedPermArgs_Cons args arg |] =
+    NamedPermArgs_Cons (substValPerm p args) (substValPerm p arg)
 
-instance SubstValPerm (RecPermArg a) where
-  substValPerm p [nuP| RecPermArg_Lifetime l |] =
-    RecPermArg_Lifetime $ substValPerm p l
-  substValPerm p [nuP| RecPermArg_RWModality rw |] =
-    RecPermArg_RWModality $ substValPerm p rw
+instance SubstValPerm (NamedPermArg a) where
+  substValPerm p [nuP| NamedPermArg_Lifetime l |] =
+    NamedPermArg_Lifetime $ substValPerm p l
+  substValPerm p [nuP| NamedPermArg_RWModality rw |] =
+    NamedPermArg_RWModality $ substValPerm p rw
 
 
 ----------------------------------------------------------------------
@@ -3252,8 +3282,8 @@ instance AbstractVars (ValuePerm a) where
   abstractPEVars ns1 ns2 (ValPerm_Exists p) =
     absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Exists |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 p
-  abstractPEVars ns1 ns2 (ValPerm_Rec n args) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Rec |])
+  abstractPEVars ns1 ns2 (ValPerm_Named n args) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| ValPerm_Named |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 n
     `clMbMbApplyM` abstractPEVars ns1 ns2 args
   abstractPEVars ns1 ns2 (ValPerm_Conj ps) =
@@ -3336,26 +3366,26 @@ instance AbstractVars FunTypeEnv where
     $(mkClosed [| FunTypeEnv |]) `clMbMbApplyM` abstractPEVars ns1 ns2 entries
 -}
 
-instance AbstractVars (RecPermName args a) where
-  abstractPEVars ns1 ns2 (RecPermName n tp args) =
+instance AbstractVars (NamedPermName args a) where
+  abstractPEVars ns1 ns2 (NamedPermName n tp args) =
     absVarsReturnH ns1 ns2
-    ($(mkClosed [| RecPermName |])
+    ($(mkClosed [| NamedPermName |])
      `clApply` toClosed n `clApply` toClosed tp `clApply` toClosed args)
 
-instance AbstractVars (RecPermArgs args) where
-  abstractPEVars ns1 ns2 RecPermArgs_Nil =
-    absVarsReturnH ns1 ns2 $(mkClosed [| RecPermArgs_Nil |])
-  abstractPEVars ns1 ns2 (RecPermArgs_Cons args arg) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| RecPermArgs_Cons |])
+instance AbstractVars (NamedPermArgs args) where
+  abstractPEVars ns1 ns2 NamedPermArgs_Nil =
+    absVarsReturnH ns1 ns2 $(mkClosed [| NamedPermArgs_Nil |])
+  abstractPEVars ns1 ns2 (NamedPermArgs_Cons args arg) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| NamedPermArgs_Cons |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 args
     `clMbMbApplyM` abstractPEVars ns1 ns2 arg
 
-instance AbstractVars (RecPermArg a) where
-  abstractPEVars ns1 ns2 (RecPermArg_Lifetime l) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| RecPermArg_Lifetime |])
+instance AbstractVars (NamedPermArg a) where
+  abstractPEVars ns1 ns2 (NamedPermArg_Lifetime l) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| NamedPermArg_Lifetime |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 l
-  abstractPEVars ns1 ns2 (RecPermArg_RWModality rw) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| RecPermArg_RWModality |])
+  abstractPEVars ns1 ns2 (NamedPermArg_RWModality rw) =
+    absVarsReturnH ns1 ns2 $(mkClosed [| NamedPermArg_RWModality |])
     `clMbMbApplyM` abstractPEVars ns1 ns2 rw
 
 
@@ -3374,9 +3404,9 @@ data PermEnvFunEntry where
                      FunPerm ghosts args ret -> Ident ->
                      PermEnvFunEntry
 
--- | An existentially quantified 'RecPerm' (FIXME: is this needed?)
-data SomeRecPerm where
-  SomeRecPerm :: RecPerm args a -> SomeRecPerm
+-- | An existentially quantified 'NamedPerm' (FIXME: is this needed?)
+data SomeNamedPerm where
+  SomeNamedPerm :: NamedPerm args a -> SomeNamedPerm
 
 -- | An entry in a permission environment that associates a 'GlobalSymbol' with
 -- a permission and a translation of that permission
@@ -3385,17 +3415,17 @@ data PermEnvGlobalEntry where
                         ValuePerm (LLVMPointerType w) -> [OpenTerm] ->
                         PermEnvGlobalEntry
 
--- | A permission environment that maps function names, recursive permission
--- names, and 'GlobalSymbols' to their respective permission structures
+-- | A permission environment that maps function names, permission names, and
+-- 'GlobalSymbols' to their respective permission structures
 data PermEnv = PermEnv {
   permEnvFunPerms :: [PermEnvFunEntry],
-  permEnvRecPerms :: [SomeRecPerm],
+  permEnvNamedPerms :: [SomeNamedPerm],
   permEnvGlobalSyms :: [PermEnvGlobalEntry]
   }
 
 $(mkNuMatching [t| forall args ret. SomeFunPerm args ret |])
 $(mkNuMatching [t| PermEnvFunEntry |])
-$(mkNuMatching [t| SomeRecPerm |])
+$(mkNuMatching [t| SomeNamedPerm |])
 $(mkNuMatching [t| PermEnvGlobalEntry |])
 $(mkNuMatching [t| PermEnv |])
 
@@ -3425,21 +3455,21 @@ lookupFunPerm env = helper (permEnvFunPerms env) where
     = Just (SomeFunPerm fun_perm, ident)
   helper (_:entries) h = helper entries h
 
--- | Look up a 'RecPermName' by name in a 'PermEnv'
-lookupRecPermName :: PermEnv -> String -> Maybe SomeRecPermName
-lookupRecPermName env str =
-  case find (\(SomeRecPerm rp) ->
-              recPermNameName (recPermName rp) == str) (permEnvRecPerms env) of
-    Just (SomeRecPerm rp) -> Just (SomeRecPermName (recPermName rp))
+-- | Look up a 'NamedPermName' by name in a 'PermEnv'
+lookupNamedPermName :: PermEnv -> String -> Maybe SomeNamedPermName
+lookupNamedPermName env str =
+  case find (\(SomeNamedPerm np) ->
+              namedPermNameName (namedPermName np) == str) (permEnvNamedPerms env) of
+    Just (SomeNamedPerm np) -> Just (SomeNamedPermName (namedPermName np))
     Nothing -> Nothing
 
--- | Look up the 'RecPerm' for a 'RecPermName' in a 'RecPermEnv'
-lookupRecPerm :: PermEnv -> RecPermName args a -> Maybe (RecPerm args a)
-lookupRecPerm env = helper (permEnvRecPerms env) where
-  helper :: [SomeRecPerm] -> RecPermName args a -> Maybe (RecPerm args a)
+-- | Look up the 'NamedPerm' for a 'NamedPermName' in a 'PermEnv'
+lookupNamedPerm :: PermEnv -> NamedPermName args a -> Maybe (NamedPerm args a)
+lookupNamedPerm env = helper (permEnvNamedPerms env) where
+  helper :: [SomeNamedPerm] -> NamedPermName args a -> Maybe (NamedPerm args a)
   helper [] _ = Nothing
-  helper (SomeRecPerm rp:_) rpn
-    | Just (Refl, Refl) <- testRecPermNameEq (recPermName rp) rpn
+  helper (SomeNamedPerm rp:_) rpn
+    | Just (Refl, Refl) <- testNamedPermNameEq (namedPermName rp) rpn
     = Just rp
   helper (_:rps) rpn = helper rps rpn
 

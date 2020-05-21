@@ -504,16 +504,16 @@ parseValPerm tp =
                parseValPerm tp) <|>
        (do n <- try (parseIdent >>= \n -> spaces >> char '<' >> return n)
            env <- getState
-           case lookupRecPermName (parserEnvPermEnv env) n of
-             Just (SomeRecPermName rpn)
-               | Just Refl <- testEquality (recPermNameType rpn) tp ->
-                 do args <- parseRecPermArgs (recPermNameArgs rpn)
+           case lookupNamedPermName (parserEnvPermEnv env) n of
+             Just (SomeNamedPermName rpn)
+               | Just Refl <- testEquality (namedPermNameType rpn) tp ->
+                 do args <- parseNamedPermArgs (namedPermNameArgs rpn)
                     spaces >> char '>'
-                    return $ ValPerm_Rec rpn args
-             Just (SomeRecPermName rpn) ->
-               fail ("Recursive permission name " ++ n ++ " has incorrect type")
+                    return $ ValPerm_Named rpn args
+             Just (SomeNamedPermName rpn) ->
+               fail ("Named permission " ++ n ++ " has incorrect type")
              Nothing ->
-               fail ("Unknown recursive permission name '" ++ n ++ "'")) <|>
+               fail ("Unknown named permission '" ++ n ++ "'")) <|>
        (ValPerm_Conj <$> parseAtomicPerms tp) <?>
        ("permission of type " ++ show tp)
      -- FIXME: I think the SAW lexer can't handle "\/" in strings...?
@@ -584,27 +584,27 @@ parseLLVMArrayPerm =
      let llvmArrayBorrows = []
      return LLVMArrayPerm {..}
 
--- | Parse a 'RecPermArgs' sequence
-parseRecPermArgs :: (Stream s Identity Char, Liftable s) =>
-                    CruCtx args -> PermParseM s (RecPermArgs args)
-parseRecPermArgs CruCtxNil = return RecPermArgs_Nil
-parseRecPermArgs (CruCtxCons CruCtxNil tp) =
-  RecPermArgs_Cons RecPermArgs_Nil <$> parseRecPermArg tp
-parseRecPermArgs (CruCtxCons ctx tp) =
-  do args <- parseRecPermArgs ctx
+-- | Parse a 'NamedPermArgs' sequence
+parseNamedPermArgs :: (Stream s Identity Char, Liftable s) =>
+                      CruCtx args -> PermParseM s (NamedPermArgs args)
+parseNamedPermArgs CruCtxNil = return NamedPermArgs_Nil
+parseNamedPermArgs (CruCtxCons CruCtxNil tp) =
+  NamedPermArgs_Cons NamedPermArgs_Nil <$> parseNamedPermArg tp
+parseNamedPermArgs (CruCtxCons ctx tp) =
+  do args <- parseNamedPermArgs ctx
      spaces >> comma
-     arg <- parseRecPermArg tp
-     return $ RecPermArgs_Cons args arg
+     arg <- parseNamedPermArg tp
+     return $ NamedPermArgs_Cons args arg
 
--- | Parse a 'RecPermArg'
-parseRecPermArg :: (Stream s Identity Char, Liftable s) =>
-                   TypeRepr a -> PermParseM s (RecPermArg a)
-parseRecPermArg LifetimeRepr =
-  RecPermArg_Lifetime <$> parseExpr LifetimeRepr
-parseRecPermArg RWModalityRepr =
-  RecPermArg_RWModality <$> parseExpr RWModalityRepr
-parseRecPermArg tp =
-  error ("Unexpected type for recursive permission argument: " ++ show tp)
+-- | Parse a 'NamedPermArg'
+parseNamedPermArg :: (Stream s Identity Char, Liftable s) =>
+                     TypeRepr a -> PermParseM s (NamedPermArg a)
+parseNamedPermArg LifetimeRepr =
+  NamedPermArg_Lifetime <$> parseExpr LifetimeRepr
+parseNamedPermArg RWModalityRepr =
+  NamedPermArg_RWModality <$> parseExpr RWModalityRepr
+parseNamedPermArg tp =
+  error ("Unexpected type for named permission argument: " ++ show tp)
 
 -- | Parse a 'BVProp'
 parseBVProp :: (Stream s Identity Char, Liftable s, KnownNat w, 1 <= w) =>

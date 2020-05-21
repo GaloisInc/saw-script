@@ -766,7 +766,7 @@ instance TransInfo info => Translate info ctx (BVFactor w) OpenTerm where
 -- partially static representation (in the sense of the partial evaluation
 -- literature) of a SAW expression of type @'translate' p@. Note that we do
 -- not include special representations for disjunctions, existentials, or
--- recursive mu permissions, however, because our type-checker does not
+-- recursive permissions, however, because our type-checker does not
 -- generally introduce these forms as intermediate values.
 data PermTrans ctx (a :: CrucibleType) where
   -- | An @eq(e)@ permission has no computational content
@@ -1297,12 +1297,15 @@ instance TransInfo info =>
        mkPermTypeTrans1 p <$>
          sigmaTypeTransM "x_ex" tp_trans (\x -> inExtTransM x $
                                                 translate $ mbCombine p1)
-  translate p@[nuP| ValPerm_Rec rpn _ |] =
+  translate p@[nuP| ValPerm_Named npn _ |] =
     do env <- infoEnv <$> ask
-       let rp = case lookupRecPerm env (mbLift rpn) of
-             Just rp -> rp
-             Nothing -> error "Unknown recursive permission name!"
-       return $ mkPermTypeTrans1 p (dataTypeOpenTerm (recPermDataType rp) [])
+       case lookupNamedPerm env (mbLift npn) of
+         Just (NamedPerm_Rec rp) ->
+           return $ mkPermTypeTrans1 p (dataTypeOpenTerm
+                                        (recPermDataType rp) [])
+         Just (NamedPerm_Opaque op) ->
+           return $ mkPermTypeTrans1 p (globalOpenTerm (opaquePermTrans op))
+         Nothing -> error "Unknown permission name!"
   translate [nuP| ValPerm_Conj ps |] =
     fmap PTrans_Conj <$> listTypeTrans <$> mapM translate (mbList ps)
 
@@ -2131,7 +2134,7 @@ translateSimplImpl _ [nuP| SImpl_LCurrentTrans l1 l2 l3 |] m =
 
 translateSimplImpl _ [nuP| SImpl_FoldRec x rp args |] m =
   do ttrans <-
-       translate $ mbMap2 ValPerm_Rec (fmap recPermName rp) args
+       translate $ mbMap2 ValPerm_Named (fmap recPermName rp) args
      let fold_ident = mbLift $ fmap recPermFoldFun rp
      withPermStackM id
        (\(pctx :>: ptrans_x) ->
@@ -2156,25 +2159,25 @@ translateSimplImpl _ [nuP| SImpl_Mu _ _ _ _ |] m =
   error "FIXME HERE: SImpl_Mu: translation not yet implemented"
 -}
 
-translateSimplImpl _ mb_simpl@[nuP| SImpl_RecArgAlways _ _ _ _ _ |] m =
+translateSimplImpl _ mb_simpl@[nuP| SImpl_NamedArgAlways _ _ _ _ _ |] m =
   withPermStackM id
   (\(pctx :>: PTrans_Term _ t) ->
     pctx :>: PTrans_Term (fmap (distPermsHeadPerm . simplImplOut) mb_simpl) t)
   m
 
-translateSimplImpl _ mb_simpl@[nuP| SImpl_RecArgCurrent _ _ _ _ _ |] m =
+translateSimplImpl _ mb_simpl@[nuP| SImpl_NamedArgCurrent _ _ _ _ _ |] m =
   withPermStackM mapRListTail
   (\(pctx :>: PTrans_Term _ t :>: _) ->
     pctx :>: PTrans_Term (fmap (distPermsHeadPerm . simplImplOut) mb_simpl) t)
   m
 
-translateSimplImpl _ mb_simpl@[nuP| SImpl_RecArgWrite _ _ _ _ _ |] m =
+translateSimplImpl _ mb_simpl@[nuP| SImpl_NamedArgWrite _ _ _ _ _ |] m =
   withPermStackM id
   (\(pctx :>: PTrans_Term _ t) ->
     pctx :>: PTrans_Term (fmap (distPermsHeadPerm . simplImplOut) mb_simpl) t)
   m
 
-translateSimplImpl _ mb_simpl@[nuP| SImpl_RecArgRead _ _ _ _ |] m =
+translateSimplImpl _ mb_simpl@[nuP| SImpl_NamedArgRead _ _ _ _ |] m =
   withPermStackM id
   (\(pctx :>: PTrans_Term _ t) ->
     pctx :>: PTrans_Term (fmap (distPermsHeadPerm . simplImplOut) mb_simpl) t)

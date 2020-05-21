@@ -97,12 +97,12 @@ heapster_default_env =
     [| let l_rw_ctx :: CruCtx (RNil :> LifetimeType :> RWModalityType) =
              knownRepr
            llvm64_tp :: TypeRepr (LLVMPointerType 64) = knownRepr
-           w64_rpn = RecPermName "list64" llvm64_tp l_rw_ctx in
+           w64_rpn = NamedPermName "list64" llvm64_tp l_rw_ctx in
        PermEnv
        {
          permEnvFunPerms = [],
-         permEnvRecPerms =
-           [SomeRecPerm $ RecPerm
+         permEnvNamedPerms =
+           [SomeNamedPerm $ NamedPerm_Rec $ RecPerm
             w64_rpn
             "Prelude.W64List"
             "Prelude.foldW64List"
@@ -127,11 +127,11 @@ heapster_default_env =
                     llvmFieldLifetime = PExpr_Var l,
                     llvmFieldOffset = PExpr_BV [] 8,
                     llvmFieldContents =
-                        ValPerm_Rec w64_rpn
-                        (RecPermArgs_Cons
-                         (RecPermArgs_Cons RecPermArgs_Nil
-                          (RecPermArg_Lifetime $ PExpr_Var l))
-                         (RecPermArg_RWModality $ PExpr_Var rw)) }]
+                        ValPerm_Named w64_rpn
+                        (NamedPermArgs_Cons
+                         (NamedPermArgs_Cons NamedPermArgs_Nil
+                          (NamedPermArg_Lifetime $ PExpr_Var l))
+                         (NamedPermArg_RWModality $ PExpr_Var rw)) }]
               ),
               "Prelude.W64Cons")
              ]
