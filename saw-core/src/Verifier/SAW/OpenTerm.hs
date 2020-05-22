@@ -19,7 +19,7 @@ module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
   OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  closedOpenTerm, flatOpenTerm, natOpenTerm,
+  closedOpenTerm, flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
@@ -66,6 +66,10 @@ closedOpenTerm t = OpenTerm $ typeInferComplete t
 flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
 flatOpenTerm ftf = OpenTerm $
   (sequence (fmap unOpenTerm ftf) >>= typeInferComplete)
+
+-- | Build an 'OpenTerm' for a sort
+sortOpenTerm :: Sort -> OpenTerm
+sortOpenTerm s = flatOpenTerm (Sort s)
 
 -- | Build an 'OpenTerm' for a natural number literal
 natOpenTerm :: Natural -> OpenTerm
