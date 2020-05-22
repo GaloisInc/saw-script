@@ -96,8 +96,12 @@ heapster_default_env =
   $(mkClosed
     [| let l_rw_ctx :: CruCtx (RNil :> LifetimeType :> RWModalityType) =
              knownRepr
+           p_l_rw_ctx :: CruCtx (RNil :> ValuePermType (LLVMPointerType 64) :>
+                                 LifetimeType :> RWModalityType) =
+             knownRepr
            llvm64_tp :: TypeRepr (LLVMPointerType 64) = knownRepr
-           w64_rpn = NamedPermName "list64" llvm64_tp l_rw_ctx in
+           w64_rpn = NamedPermName "list64" llvm64_tp l_rw_ctx
+           list_rpn = NamedPermName "List" llvm64_tp p_l_rw_ctx in
        PermEnv
        {
          permEnvFunPerms = [],
@@ -133,6 +137,36 @@ heapster_default_env =
                          (PExpr_Var rw)) }]
               ),
               "Prelude.W64Cons")
+             ],
+            SomeNamedPerm $ NamedPerm_Rec $ RecPerm
+            list_rpn
+            "Prelude.List"
+            "Prelude.foldList"
+            "Prelude.unfoldList"
+            [(nuMulti (cruCtxProxies p_l_rw_ctx)
+              (\_ -> ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] 0))),
+              "Prelude.Nil")
+            ,
+             (nuMulti (cruCtxProxies p_l_rw_ctx)
+              (\(_ :>: p :>: l :>: rw) ->
+                ValPerm_Conj
+                [Perm_LLVMField $ LLVMFieldPerm {
+                    llvmFieldRW = PExpr_Var rw,
+                    llvmFieldLifetime = PExpr_Var l,
+                    llvmFieldOffset = PExpr_BV [] 0,
+                    llvmFieldContents = ValPerm_Var p },
+                 Perm_LLVMField $ LLVMFieldPerm {
+                    llvmFieldRW = PExpr_Var rw,
+                    llvmFieldLifetime = PExpr_Var l,
+                    llvmFieldOffset = PExpr_BV [] 8,
+                    llvmFieldContents =
+                        ValPerm_Named list_rpn
+                        (PExprs_Cons
+                         (PExprs_Cons (PExprs_Cons PExprs_Nil (PExpr_Var p))
+                          (PExpr_Var l))
+                         (PExpr_Var rw)) }]
+              ),
+              "Prelude.Cons")
              ]
            ],
            permEnvGlobalSyms = []

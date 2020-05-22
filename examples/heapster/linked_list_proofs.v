@@ -34,6 +34,15 @@ Proof.
       eapply refinesM_existsM_r. reflexivity.
 Qed.
 
+Ltac destructArg_list :=
+  (lazymatch goal with
+  | |- MaybeDestructArg (list _) ?l ?g =>
+    match g with
+    | context [Datatypes.list_rect _ _ _ l] =>
+      destruct l; simpl; apply noDestructArg
+    end
+  end).
+Hint Extern 1 (MaybeDestructArg _ _ _) => destructArg_list :refinesFun.
 
 (*
 Fixpoint is_elem_spec (x:bitvector 64) (l:W64List) : CompM {_:bitvector 64 & unit} :=
@@ -45,11 +54,12 @@ Fixpoint is_elem_spec (x:bitvector 64) (l:W64List) : CompM {_:bitvector 64 & uni
   end.
 *)
 
-Definition is_elem_spec (x:bitvector 64) : W64List -> CompM {_:bitvector 64 & unit} :=
-  W64List_rect (fun _ => CompM {_:bitvector 64 & unit})
-               (returnM (existT _ (bvNat 64 0) tt))
-               (fun y l' rec =>
-                  if bvEq 64 y x then returnM (existT _ (bvNat 64 1) tt) else rec).
+Definition is_elem_spec (x:bitvector 64) :
+  list {_:bitvector 64 & unit} -> CompM {_:bitvector 64 & unit} :=
+  list_rect (fun _ => CompM {_:bitvector 64 & unit})
+            (returnM (existT _ (bvNat 64 0) tt))
+            (fun y l' rec =>
+               if bvEq 64 (projT1 y) x then returnM (existT _ (bvNat 64 1) tt) else rec).
 
 Arguments is_elem_spec /.
 
