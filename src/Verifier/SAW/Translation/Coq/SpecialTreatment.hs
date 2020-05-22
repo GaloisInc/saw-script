@@ -437,6 +437,14 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("Sigma_proj2", replace (Coq.Var "@projT2"))
   ]
 
+  -- Lists
+  ++
+  [ ("List", replace (Coq.Var "@Datatypes.list"))
+  , ("Nil", replace (Coq.Var "@Datatypes.nil"))
+  , ("Cons", replace (Coq.Var "@Datatypes.cons"))
+  , ("List__rec", replace (Coq.Var "@Datatypes.list_rect"))
+  ]
+
   -- Definitions that depend on axioms currently skipped
   ++
   [ ("composeM",   skip)

@@ -852,6 +852,30 @@ Definition updBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((
 
 (* Prelude.Sigma_proj2 was skipped *)
 
+(* Prelude.List was skipped *)
+
+(* Prelude.List__rec was skipped *)
+
+Definition unfoldList : forall (a : Type), (((@Datatypes.list) (a))) -> ((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit)))))) :=
+  (fun (a : Type) (l : ((@Datatypes.list) (a))) => ((@Datatypes.list_rect) (a) ((fun (_ : ((@Datatypes.list) (a))) => ((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit)))))))) (((@Left) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (tt))) ((fun (x : a) (l : ((@Datatypes.list) (a))) (_ : ((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))))) => ((@Right) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (((pair) (x) (((pair) (l) (tt)))))))) (l))).
+
+Definition foldList : forall (a : Type), (((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))))) -> ((@Datatypes.list) (a)) :=
+  (fun (a : Type) => ((@either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (((@Datatypes.list) (a))) ((fun (_ : unit) => ((@Datatypes.nil) (a)))) ((fun (tup : ((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) => ((@Datatypes.cons) (a) (((SAWCoreScaffolding.fst) (tup))) (((SAWCoreScaffolding.fst) (((SAWCoreScaffolding.snd) (tup)))))))))).
+
+Inductive W64List : Type :=
+| W64Nil : ((@W64List))
+| W64Cons : (((@bitvector) (64))) -> (((@W64List))) -> ((@W64List))
+.
+
+Definition unfoldedW64List : Type :=
+  ((@Either) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit)))))).
+
+Definition unfoldW64List : (((@W64List))) -> ((@unfoldedW64List)) :=
+  (fun (l : ((@W64List))) => ((SAWCorePrelude.W64List_rect) ((fun (_ : ((@W64List))) => ((@unfoldedW64List)))) (((@Left) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (tt))) ((fun (bv : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) (l' : ((@W64List))) (_ : ((@Either) (unit) (((prod) (((@sigT) (((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))))) => ((@Right) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (((pair) (((@existT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)) (bv) (tt))) (((pair) (l') (tt)))))))) (l))).
+
+Definition foldW64List : (((@unfoldedW64List))) -> ((@W64List)) :=
+  ((@either) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (((@W64List))) ((fun (_ : unit) => ((@W64Nil)))) ((fun (bv_l : ((prod) (((@sigT) (((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) => ((@W64Cons) (((@projT1) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)) (((SAWCoreScaffolding.fst) (bv_l))))) (((SAWCoreScaffolding.fst) (((SAWCoreScaffolding.snd) (bv_l))))))))).
+
 (* Prelude.CompM was skipped *)
 
 (* Prelude.returnM was skipped *)
@@ -894,20 +918,6 @@ Definition letRecM1 : forall (a : Type), forall (b : Type), forall (c : Type), (
 (* Prelude.test_fun5 was skipped *)
 
 (* Prelude.test_fun6 was skipped *)
-
-Inductive W64List : Type :=
-| W64Nil : ((@W64List))
-| W64Cons : (((@bitvector) (64))) -> (((@W64List))) -> ((@W64List))
-.
-
-Definition unfoldedW64List : Type :=
-  ((@Either) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit)))))).
-
-Definition unfoldW64List : (((@W64List))) -> ((@unfoldedW64List)) :=
-  (fun (l : ((@W64List))) => ((SAWCorePrelude.W64List_rect) ((fun (_ : ((@W64List))) => ((@unfoldedW64List)))) (((@Left) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (tt))) ((fun (bv : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) (l' : ((@W64List))) (_ : ((@Either) (unit) (((prod) (((@sigT) (((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))))) => ((@Right) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (((pair) (((@existT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)) (bv) (tt))) (((pair) (l') (tt)))))))) (l))).
-
-Definition foldW64List : (((@unfoldedW64List))) -> ((@W64List)) :=
-  ((@either) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (((@W64List))) ((fun (_ : unit) => ((@W64Nil)))) ((fun (bv_l : ((prod) (((@sigT) (((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) => ((@W64Cons) (((@projT1) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)) (((SAWCoreScaffolding.fst) (bv_l))))) (((SAWCoreScaffolding.fst) (((SAWCoreScaffolding.snd) (bv_l))))))))).
 
 (* Prelude.bveq_sameL was skipped *)
 
