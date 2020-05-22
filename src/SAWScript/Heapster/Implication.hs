@@ -421,13 +421,13 @@ data SimplImpl ps_in ps_out where
   --
   -- > l1:lcurrent(l2) * l2:lcurrent(l3) -o l1:lcurrent(l3)
 
-  SImpl_FoldRec :: ExprVar a -> RecPerm args a -> NamedPermArgs args ->
+  SImpl_FoldRec :: ExprVar a -> RecPerm args a -> PermExprs args ->
                    SimplImpl (RNil :> a) (RNil :> a)
   -- ^ Fold a recursive permission:
   --
   -- > x:(unfold P args) -o x:P<args>
 
-  SImpl_UnfoldRec :: ExprVar a -> RecPerm args a -> NamedPermArgs args ->
+  SImpl_UnfoldRec :: ExprVar a -> RecPerm args a -> PermExprs args ->
                      SimplImpl (RNil :> a) (RNil :> a)
   -- ^ Unfold a recursive permission:
   --
@@ -447,23 +447,21 @@ data SimplImpl ps_in ps_out where
   -- > x:mu X.p1 -o x:mu X.p2
 -}
 
-  SImpl_NamedArgAlways :: ExprVar a -> NamedPerm args a ->
-                          NamedPermArgs args ->
+  SImpl_NamedArgAlways :: ExprVar a -> NamedPerm args a -> PermExprs args ->
                           Member args LifetimeType -> PermExpr LifetimeType ->
                           SimplImpl (RNil :> a) (RNil :> a)
   -- ^ Weaken an @always@ lifetime argument of a named permission:
   --
   -- > x:P<args1,always,args2> -o x:P<args1,l,args2>
 
-  SImpl_NamedArgCurrent :: ExprVar a -> NamedPerm args a ->
-                           NamedPermArgs args ->
+  SImpl_NamedArgCurrent :: ExprVar a -> NamedPerm args a -> PermExprs args ->
                            Member args LifetimeType -> PermExpr LifetimeType ->
                            SimplImpl (RNil :> a :> LifetimeType) (RNil :> a)
   -- ^ Weaken a lifetime argument @l1@ of a named permission:
   --
   -- > x:P<args1,l1,args2> * l1:[l2]lcurrent -o x:P<args1,l2,args2>
 
-  SImpl_NamedArgWrite :: ExprVar a -> NamedPerm args a -> NamedPermArgs args ->
+  SImpl_NamedArgWrite :: ExprVar a -> NamedPerm args a -> PermExprs args ->
                          Member args RWModalityType ->
                          PermExpr RWModalityType ->
                          SimplImpl (RNil :> a) (RNil :> a)
@@ -471,7 +469,7 @@ data SimplImpl ps_in ps_out where
   --
   -- > x:P<args1,W,args2> -o x:P<args1,rw,args2>
 
-  SImpl_NamedArgRead :: ExprVar a -> NamedPerm args a -> NamedPermArgs args ->
+  SImpl_NamedArgRead :: ExprVar a -> NamedPerm args a -> PermExprs args ->
                         Member args RWModalityType ->
                         SimplImpl (RNil :> a) (RNil :> a)
   -- ^ Weaken any modality argument to a 'Read' modality:
@@ -742,19 +740,18 @@ simplImplIn (SImpl_UnfoldRec x rp args) =
   distPerms1 x (ValPerm_Named (recPermName rp) args)
 -- simplImplIn (SImpl_Mu x p1 _ _) = distPerms1 x (ValPerm_Mu p1)
 simplImplIn (SImpl_NamedArgAlways x pn args memb _) =
-  case getNamedPermArg args memb of
-    NamedPermArg_Lifetime PExpr_Always ->
-      distPerms1 x (ValPerm_Named (namedPermName pn) args)
+  case nthPermExpr args memb of
+    PExpr_Always -> distPerms1 x (ValPerm_Named (namedPermName pn) args)
     _ -> error "simplImplIn: SImplNamedArgAlways: non-always argument!"
 simplImplIn (SImpl_NamedArgCurrent x pn args memb l2) =
-  case getNamedPermArg args memb of
-    NamedPermArg_Lifetime (PExpr_Var l1) ->
+  case nthPermExpr args memb of
+    PExpr_Var l1 ->
       distPerms2 x (ValPerm_Named (namedPermName pn) args)
       l1 (ValPerm_Conj1 $ Perm_LCurrent l2)
     _ -> error "simplImplIn: SImplNamedArgCurrent: non-variable argument!"
 simplImplIn (SImpl_NamedArgWrite x pn args memb _) =
-  case getNamedPermArg args memb of
-    NamedPermArg_RWModality (PExpr_RWModality Write) ->
+  case nthPermExpr args memb of
+    PExpr_RWModality Write ->
       distPerms1 x (ValPerm_Named (namedPermName pn) args)
     _ -> error "simplImplIn: SImplNamedArgWrite: non-Write argument!"
 simplImplIn (SImpl_NamedArgRead x pn args _) =
@@ -880,17 +877,16 @@ simplImplOut (SImpl_UnfoldRec x rp args) = distPerms1 x (unfoldRecPerm rp args)
 -- simplImplOut (SImpl_Mu x _ p2 _) = distPerms1 x (ValPerm_Mu p2)
 simplImplOut (SImpl_NamedArgAlways x rp args memb l) =
   distPerms1 x (ValPerm_Named (namedPermName rp)
-                (setNamedPermArg args memb (NamedPermArg_Lifetime l)))
+                (setNthPermExpr args memb l))
 simplImplOut (SImpl_NamedArgCurrent x rp args memb l2) =
   distPerms1 x (ValPerm_Named (namedPermName rp)
-                (setNamedPermArg args memb (NamedPermArg_Lifetime l2)))
+                (setNthPermExpr args memb l2))
 simplImplOut (SImpl_NamedArgWrite x rp args memb rw) =
   distPerms1 x (ValPerm_Named (namedPermName rp)
-                (setNamedPermArg args memb (NamedPermArg_RWModality rw)))
+                (setNthPermExpr args memb rw))
 simplImplOut (SImpl_NamedArgRead x rp args memb) =
   distPerms1 x (ValPerm_Named (namedPermName rp)
-                (setNamedPermArg args memb (NamedPermArg_RWModality $
-                                            PExpr_RWModality Read)))
+                (setNthPermExpr args memb (PExpr_RWModality Read)))
 
 
 -- | Apply a 'SimplImpl' implication to the permissions on the top of a
@@ -1989,7 +1985,7 @@ castLLVMFreeM x e1 e2 =
   implSimplM Proxy (SImpl_CastLLVMFree x e1 e2)
 
 -- | Build a proof of @P<args>@ from one of @unfold P args@
-implFoldRecM :: ExprVar a -> NamedPermName args a -> NamedPermArgs args ->
+implFoldRecM :: ExprVar a -> NamedPermName args a -> PermExprs args ->
                 ImplM vars s r (ps :> a) (ps :> a) ()
 implFoldRecM x npn args =
   implLookupNamedPerm npn >>>= \np ->
@@ -2000,7 +1996,7 @@ implFoldRecM x npn args =
 
 -- | Build a proof of @unfold P args@ from one of @P<args>@, returning the
 -- resulting permission @unfold P args@
-implUnfoldRecM :: ExprVar a -> NamedPermName args a -> NamedPermArgs args ->
+implUnfoldRecM :: ExprVar a -> NamedPermName args a -> PermExprs args ->
                   ImplM vars s r (ps :> a) (ps :> a) (ValuePerm a)
 implUnfoldRecM x npn args =
   implLookupNamedPerm npn >>>= \np ->
@@ -2605,81 +2601,75 @@ proveVarLLVMArray x ps i off mb_ap =
 -- splitting the lifetime of the input permission
 --
 -- FIXME: currently this does not do the lifetime splitting step
-proveNamedArgs :: ExprVar a -> NamedPermName args a -> NamedPermArgs args ->
-                  Mb vars (NamedPermArgs args) ->
+proveNamedArgs :: ExprVar a -> NamedPermName args a -> PermExprs args ->
+                  Mb vars (PermExprs args) ->
                   ImplM vars s r (ps :> a) (ps :> a) ()
 proveNamedArgs x npn args mb_args =
   implLookupNamedPerm npn >>>= \np ->
   getPSubst >>>= \psubst ->
   mapM_ (\case Some memb ->
                  proveNamedArg x np args memb psubst $
-                 fmap (`getNamedPermArg` memb) mb_args) $
-  getNamedPermsMembers args
+                 fmap (`nthPermExpr` memb) mb_args) $
+  getPermExprsMembers args
 
 
 -- | Prove @P<args1,arg,args2> |- P<args1,arg',args2>@ where @arg@ is specified
 -- by a 'Member' proof in the input @args@ and @arg'@ potentially has
 -- existential variables. Assume the LHS is on the top of the stack and leave
 -- the RHS, if proved, on the top of the stack.
-proveNamedArg :: ExprVar a -> NamedPerm args a -> NamedPermArgs args ->
+proveNamedArg :: ExprVar a -> NamedPerm args a -> PermExprs args ->
                  Member args b -> PartialSubst vars ->
-                 Mb vars (NamedPermArg b) ->
+                 Mb vars (PermExpr b) ->
                  ImplM vars s r (ps :> a) (ps :> a) ()
 
 -- If the current and required args are equal, do nothing and return
 proveNamedArg x rp args memb _ mb_arg
-  | mbLift (fmap (== getNamedPermArg args memb) mb_arg) =
+  | mbLift (fmap (== nthPermExpr args memb) mb_arg) =
     greturn ()
 
 -- If the RHS is an unassigned existential variable then set it and return
 --
 -- FIXME: eventually we might want to generate some sort of constraints...?
-proveNamedArg x rp args memb psubst arg
-  | [nuP| PExpr_Var z |] <- fmap permArgToExpr arg
-  , Left memb_z <- mbNameBoundP z
+proveNamedArg x rp args memb psubst [nuP| PExpr_Var z |]
+  | Left memb_z <- mbNameBoundP z
   , Nothing <- psubstLookup psubst memb_z =
-    setVarM memb_z (permArgToExpr (getNamedPermArg args memb))
+    setVarM memb_z (nthPermExpr args memb)
 
 -- If the RHS is an already-assigned existential variable, subst and recurse
-proveNamedArg x rp args memb psubst arg@[nuP| NamedPermArg_Lifetime (PExpr_Var z) |]
+proveNamedArg x rp args memb psubst arg@[nuP| PExpr_Var z |]
   | Left memb_z <- mbNameBoundP z
-  , Just l <- psubstLookup psubst memb_z =
-    proveNamedArg x rp args memb psubst $ fmap (const $ NamedPermArg_Lifetime l) arg
-proveNamedArg x rp args memb psubst arg@[nuP| NamedPermArg_RWModality (PExpr_Var z) |]
-  | Left memb_z <- mbNameBoundP z
-  , Just rw <- psubstLookup psubst memb_z =
-    proveNamedArg x rp args memb psubst $
-    fmap (const $ NamedPermArg_RWModality rw) arg
+  , Just e <- psubstLookup psubst memb_z =
+    proveNamedArg x rp args memb psubst $ fmap (const e) arg
 
 -- Prove P<args1,always,args2> -o P<args1,l,args2>
-proveNamedArg x rp args memb _ arg@[nuP| NamedPermArg_Lifetime (PExpr_Var z) |]
+proveNamedArg x rp args memb _ arg@[nuP| PExpr_Var z |]
   | Right l <- mbNameBoundP z
-  , NamedPermArg_Lifetime PExpr_Always <- getNamedPermArg args memb =
+  , PExpr_Always <- nthPermExpr args memb =
     implSimplM Proxy (SImpl_NamedArgAlways x rp args memb (PExpr_Var l))
 
 -- Prove P<args1,l1,args2> -o P<args1,l2,args2> using l1:[l2]lcurrent
-proveNamedArg x rp args memb _ arg@[nuP| NamedPermArg_Lifetime (PExpr_Var z) |]
+proveNamedArg x rp args memb _ arg@[nuP| PExpr_Var z |]
   | Right l1 <- mbNameBoundP z
-  , NamedPermArg_Lifetime (PExpr_Var l2) <- getNamedPermArg args memb =
+  , LifetimeRepr <- cruCtxLookup (namedPermArgs rp) memb
+  , PExpr_Var l2 <- nthPermExpr args memb =
     proveVarImpl l1 (fmap (const $ ValPerm_Conj1 $
                            Perm_LCurrent $ PExpr_Var l2) arg) >>>
     implSimplM Proxy (SImpl_NamedArgCurrent x rp args memb (PExpr_Var l2))
 
 -- Prove P<args1,W,args2> -o P<args1,rw,args2> for any variable rw
-proveNamedArg x rp args memb _ arg@[nuP| NamedPermArg_RWModality (PExpr_Var z) |]
+proveNamedArg x rp args memb _ arg@[nuP| PExpr_Var z |]
   | Right rw <- mbNameBoundP z
-  , NamedPermArg_RWModality (PExpr_RWModality Write) <- getNamedPermArg args memb =
+  , PExpr_RWModality Write <- nthPermExpr args memb =
     implSimplM Proxy (SImpl_NamedArgWrite x rp args memb (PExpr_Var rw))
 
 -- Prove P<args1,rw,args2> -o P<args1,R,args2> for any rw
-proveNamedArg x rp args memb _ arg@[nuP| NamedPermArg_RWModality
-                                       (PExpr_RWModality Read) |] =
+proveNamedArg x rp args memb _ arg@[nuP| PExpr_RWModality Read |] =
   implSimplM Proxy (SImpl_NamedArgRead x rp args memb)
 
 -- Fail in any other case
 proveNamedArg x rp args memb _ mb_arg =
   implFailVarM "proveNamedArg" x (ValPerm_Named (namedPermName rp) args)
-  (fmap (ValPerm_Named (namedPermName rp) . setNamedPermArg args memb) mb_arg)
+  (fmap (ValPerm_Named (namedPermName rp) . setNthPermExpr args memb) mb_arg)
 
 
 ----------------------------------------------------------------------

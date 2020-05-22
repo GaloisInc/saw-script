@@ -159,6 +159,9 @@ data ExprTrans (a :: CrucibleType) where
   -- | Lifetimes also have no computational content
   ETrans_Lifetime :: ExprTrans LifetimeType
 
+  -- | Read-write modalities also have no computational content
+  ETrans_RWModality :: ExprTrans RWModalityType
+
   -- | Permission lists also have no computational content
   ETrans_PermList :: ExprTrans PermListType
 
@@ -205,6 +208,7 @@ instance IsTermTrans (ExprTrans tp) where
   transTerms ETrans_LLVM = []
   transTerms ETrans_LLVMFrame = []
   transTerms ETrans_Lifetime = []
+  transTerms ETrans_RWModality = []
   transTerms ETrans_PermList = []
   transTerms ETrans_Fun = []
   transTerms (ETrans_Term t) = [t]
@@ -591,6 +595,8 @@ instance TransInfo info =>
     return $ mkTypeTrans0 ETrans_Lifetime
   translate [nuP| PermListRepr |] =
     return $ mkTypeTrans0 ETrans_PermList
+  translate [nuP| ValuePermRepr _ |] =
+    returnType1 (sortOpenTerm $ mkSort 0)
   translate [nuP| IntrinsicRepr _ _ |] =
     return $ error "TypeTranslate: IntrinsicRepr"
 
@@ -738,6 +744,9 @@ instance TransInfo info =>
   translate [nuP| PExpr_Fun _ |] = return ETrans_Fun
   translate [nuP| PExpr_PermListNil |] = return ETrans_PermList
   translate [nuP| PExpr_PermListCons _ _ _ |] = return ETrans_PermList
+  translate [nuP| PExpr_RWModality _ |] = return ETrans_RWModality
+  translate [nuP| PExpr_ValPerm p |] =
+    ETrans_Term <$> typeTransTupleType <$> translate p
 
 instance TransInfo info =>
          Translate info ctx (PermExprs as) (ExprTransCtx as) where
@@ -775,7 +784,7 @@ data PermTrans ctx (a :: CrucibleType) where
   -- | A conjuction of atomic permission translations
   PTrans_Conj :: [AtomicPermTrans ctx a] -> PermTrans ctx a
 
-  -- | The translation for disjunctive, existential, and mu permissions
+  -- | The translation for disjunctive, existential, and named permissions
   PTrans_Term :: Mb ctx (ValuePerm a) -> OpenTerm -> PermTrans ctx a
 
 
@@ -864,7 +873,7 @@ data LLVMArrayBorrowTrans ctx w =
 pattern PTrans_True :: PermTrans ctx a
 pattern PTrans_True = PTrans_Conj []
 
--- | Build a type translation for a disjunctive, existential, or recursive
+-- | Build a type translation for a disjunctive, existential, or named
 -- permission that uses the 'PTrans_Term' constructor
 mkPermTypeTrans1 :: Mb ctx (ValuePerm a) -> OpenTerm ->
                     TypeTrans (PermTrans ctx a)
@@ -1297,18 +1306,22 @@ instance TransInfo info =>
        mkPermTypeTrans1 p <$>
          sigmaTypeTransM "x_ex" tp_trans (\x -> inExtTransM x $
                                                 translate $ mbCombine p1)
-  translate p@[nuP| ValPerm_Named npn _ |] =
+  translate p@[nuP| ValPerm_Named npn args |] =
     do env <- infoEnv <$> ask
+       args <- translate args
        case lookupNamedPerm env (mbLift npn) of
          Just (NamedPerm_Rec rp) ->
            return $ mkPermTypeTrans1 p (dataTypeOpenTerm
-                                        (recPermDataType rp) [])
+                                        (recPermDataType rp) (transTerms args))
          Just (NamedPerm_Opaque op) ->
-           return $ mkPermTypeTrans1 p (globalOpenTerm (opaquePermTrans op))
+           return $ mkPermTypeTrans1 p (applyOpenTermMulti
+                                        (globalOpenTerm (opaquePermTrans op))
+                                        (transTerms args))
          Nothing -> error "Unknown permission name!"
   translate [nuP| ValPerm_Conj ps |] =
     fmap PTrans_Conj <$> listTypeTrans <$> mapM translate (mbList ps)
-
+  translate p@[nuP| ValPerm_Var x |] =
+    mkPermTypeTrans1 p <$> translate1 x
 
 instance TransInfo info =>
          Translate info ctx (AtomicPerm a) (TypeTrans

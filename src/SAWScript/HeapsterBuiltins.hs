@@ -128,10 +128,9 @@ heapster_default_env =
                     llvmFieldOffset = PExpr_BV [] 8,
                     llvmFieldContents =
                         ValPerm_Named w64_rpn
-                        (NamedPermArgs_Cons
-                         (NamedPermArgs_Cons NamedPermArgs_Nil
-                          (NamedPermArg_Lifetime $ PExpr_Var l))
-                         (NamedPermArg_RWModality $ PExpr_Var rw)) }]
+                        (PExprs_Cons
+                         (PExprs_Cons PExprs_Nil (PExpr_Var l))
+                         (PExpr_Var rw)) }]
               ),
               "Prelude.W64Cons")
              ]

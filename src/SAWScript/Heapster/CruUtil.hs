@@ -544,6 +544,11 @@ cruCtxLen :: CruCtx ctx -> Int
 cruCtxLen CruCtxNil = 0
 cruCtxLen (CruCtxCons ctx _) = 1 + cruCtxLen ctx
 
+-- | Look up a type in a 'CruCtx'
+cruCtxLookup :: CruCtx ctx -> Member ctx a -> TypeRepr a
+cruCtxLookup (CruCtxCons _ tp) Member_Base = tp
+cruCtxLookup (CruCtxCons ctx _) (Member_Step memb) = cruCtxLookup ctx memb
+
 
 ----------------------------------------------------------------------
 -- * Misc Operations on Crucible Objects

@@ -403,7 +403,7 @@ parseBVExprH w =
   <?> ("expression of type bv " ++ show (natVal w))
 
 -- | Parse an expression of a known type
-parseExpr :: Stream s Identity Char => TypeRepr a ->
+parseExpr :: (Stream s Identity Char, Liftable s) => TypeRepr a ->
              PermParseM s (PermExpr a)
 parseExpr UnitRepr =
   try (string "unit" >> return PExpr_Unit) <|>
@@ -459,11 +459,12 @@ parseExpr PermListRepr =
   "permission list expression"
 parseExpr RWModalityRepr =
   (string "R" >> return PExpr_Read) <|> (string "W" >> return PExpr_Write)
+parseExpr (ValuePermRepr tp) = PExpr_ValPerm <$> parseValPerm tp
 parseExpr tp = PExpr_Var <$> parseExprVarOfType tp <?> ("expression of type "
                                                         ++ show tp)
 
 -- | Parse a comma-separated list of expressions to a 'PermExprs'
-parseExprs :: Stream s Identity Char => CruCtx ctx ->
+parseExprs :: (Stream s Identity Char, Liftable s) => CruCtx ctx ->
               PermParseM s (PermExprs ctx)
 parseExprs CruCtxNil = return PExprs_Nil
 parseExprs (CruCtxCons CruCtxNil tp) =
@@ -507,14 +508,15 @@ parseValPerm tp =
            case lookupNamedPermName (parserEnvPermEnv env) n of
              Just (SomeNamedPermName rpn)
                | Just Refl <- testEquality (namedPermNameType rpn) tp ->
-                 do args <- parseNamedPermArgs (namedPermNameArgs rpn)
+                 do args <- parseExprs (namedPermNameArgs rpn)
                     spaces >> char '>'
                     return $ ValPerm_Named rpn args
              Just (SomeNamedPermName rpn) ->
                fail ("Named permission " ++ n ++ " has incorrect type")
              Nothing ->
                fail ("Unknown named permission '" ++ n ++ "'")) <|>
-       (ValPerm_Conj <$> parseAtomicPerms tp) <?>
+       (ValPerm_Conj <$> parseAtomicPerms tp) <|>
+       (ValPerm_Var <$> parseExprVarOfType (ValuePermRepr tp)) <?>
        ("permission of type " ++ show tp)
      -- FIXME: I think the SAW lexer can't handle "\/" in strings...?
      -- try (spaces >> string "\\/" >> (ValPerm_Or p1 <$> parseValPerm tp)) <|>
@@ -583,28 +585,6 @@ parseLLVMArrayPerm =
      llvmArrayFields <- sepBy1 (parseLLVMFieldPerm True) (spaces >> comma)
      let llvmArrayBorrows = []
      return LLVMArrayPerm {..}
-
--- | Parse a 'NamedPermArgs' sequence
-parseNamedPermArgs :: (Stream s Identity Char, Liftable s) =>
-                      CruCtx args -> PermParseM s (NamedPermArgs args)
-parseNamedPermArgs CruCtxNil = return NamedPermArgs_Nil
-parseNamedPermArgs (CruCtxCons CruCtxNil tp) =
-  NamedPermArgs_Cons NamedPermArgs_Nil <$> parseNamedPermArg tp
-parseNamedPermArgs (CruCtxCons ctx tp) =
-  do args <- parseNamedPermArgs ctx
-     spaces >> comma
-     arg <- parseNamedPermArg tp
-     return $ NamedPermArgs_Cons args arg
-
--- | Parse a 'NamedPermArg'
-parseNamedPermArg :: (Stream s Identity Char, Liftable s) =>
-                     TypeRepr a -> PermParseM s (NamedPermArg a)
-parseNamedPermArg LifetimeRepr =
-  NamedPermArg_Lifetime <$> parseExpr LifetimeRepr
-parseNamedPermArg RWModalityRepr =
-  NamedPermArg_RWModality <$> parseExpr RWModalityRepr
-parseNamedPermArg tp =
-  error ("Unexpected type for named permission argument: " ++ show tp)
 
 -- | Parse a 'BVProp'
 parseBVProp :: (Stream s Identity Char, Liftable s, KnownNat w, 1 <= w) =>

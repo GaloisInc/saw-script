@@ -327,6 +327,19 @@ pattern LLVMFrameRepr w <-
   where
     LLVMFrameRepr w = IntrinsicRepr knownSymbol (extend Empty (BVRepr w))
 
+-- | Crucible type for value permissions themselves
+type ValuePermType a = IntrinsicType "Perm" (EmptyCtx ::> a)
+
+-- | Pattern for building/desctructing permissions as expressions
+pattern ValuePermRepr :: () => (ty ~ ValuePermType a) => TypeRepr a ->
+                         TypeRepr ty
+pattern ValuePermRepr a <-
+  IntrinsicRepr (testEquality (knownSymbol :: SymbolRepr "Perm") ->
+                 Just Refl)
+  (viewAssign -> AssignExtend Empty a)
+  where
+    ValuePermRepr a = IntrinsicRepr knownSymbol (extend Empty a)
+
 
 -- | Expressions that are considered "pure" for use in permissions. Note that
 -- these are in a normal form, that makes them easier to analyze.
@@ -381,6 +394,9 @@ data PermExpr (a :: CrucibleType) where
 
   PExpr_RWModality :: RWModality -> PermExpr RWModalityType
   -- ^ A read/write modality 
+
+  PExpr_ValPerm :: ValuePerm a -> PermExpr (ValuePermType a)
+  -- ^ A permission as an expression
 
 
 -- | A sequence of permission expressions
@@ -456,6 +472,9 @@ instance Eq (PermExpr a) where
   (PExpr_RWModality rw1) == (PExpr_RWModality rw2) = rw1 == rw2
   (PExpr_RWModality _) == _ = False
 
+  (PExpr_ValPerm p1) == (PExpr_ValPerm p2) = p1 == p2
+  (PExpr_ValPerm _) == _ = False
+
 
 instance Eq (PermExprs as) where
   PExprs_Nil == PExprs_Nil = True
@@ -484,6 +503,7 @@ instance PermPretty (PermExpr a) where
   permPrettyM PExpr_PermListNil = return $ string "[]"
   permPrettyM e@(PExpr_PermListCons _ _ _) = prettyPermListM e
   permPrettyM (PExpr_RWModality rw) = permPrettyM rw
+  permPrettyM (PExpr_ValPerm p) = permPrettyM p
 
 prettyPermListH :: PermExpr PermListType -> PermPPM ([Doc], Maybe Doc)
 prettyPermListH (PExpr_Var x) = (\pp -> ([], Just pp)) <$> permPrettyM x
@@ -499,7 +519,7 @@ prettyPermListM e = prettyPermListH e >>= \(pps, maybe_doc) ->
     Nothing -> return $ list pps
 
 instance PermPretty (PermExprs as) where
-  permPrettyM es = tupled <$> helper es where
+  permPrettyM es = encloseSep PP.empty PP.empty comma <$> helper es where
     helper :: PermExprs as' -> PermPPM [Doc]
     helper PExprs_Nil = return []
     helper (PExprs_Cons es e) =
@@ -795,6 +815,10 @@ bvRangeOfIndex e = BVRange e (bvInt 1)
 -- * Permissions
 ----------------------------------------------------------------------
 
+-- | The Haskell type of permission variables, that is, variables that range
+-- over 'ValuePerm's
+type PermVar (a :: CrucibleType) = Name (ValuePermType a)
+
 -- | Ranges of bitvector values
 data BVRange w = BVRange { bvRangeOffset :: PermExpr (BVType w),
                            bvRangeLength :: PermExpr (BVType w) }
@@ -892,7 +916,10 @@ data ValuePerm (a :: CrucibleType) where
                     ValuePerm b
 
   -- | A named permission
-  ValPerm_Named :: NamedPermName args a -> NamedPermArgs args -> ValuePerm a
+  ValPerm_Named :: NamedPermName args a -> PermExprs args -> ValuePerm a
+
+  -- | A permission variable
+  ValPerm_Var :: PermVar a -> ValuePerm a
 
   -- | A separating conjuction of 0 or more atomic permissions, where 0
   -- permissions is the trivially true permission
@@ -1025,6 +1052,11 @@ data NamedPermName args a = NamedPermName {
   namedPermNameArgs :: CruCtx args
   }
 
+-- FIXME: NamedPermNames should maybe say something about which arguments are
+-- covariant? Right now we assume lifetime and rwmodalities are covariant
+-- w.r.t. their respective orders, and everything else is invariant, but that
+-- could potentially change
+
 -- | Test if two 'NamedPermName's of possibly different types are equal
 testNamedPermNameEq :: NamedPermName args1 a1 -> NamedPermName args2 a2 ->
                        Maybe (args1 :~: args2, a1 :~: a2)
@@ -1042,73 +1074,27 @@ instance Eq (NamedPermName args a) where
 data SomeNamedPermName where
   SomeNamedPermName :: NamedPermName args a -> SomeNamedPermName
 
--- | An argument for a named permission
-data NamedPermArg a where
-  NamedPermArg_Lifetime :: PermExpr LifetimeType -> NamedPermArg LifetimeType
-  NamedPermArg_RWModality :: PermExpr RWModalityType ->
-                             NamedPermArg RWModalityType
+-- | Get the @n@th expression in a 'PermExprs' list
+nthPermExpr :: PermExprs args -> Member args a -> PermExpr a
+nthPermExpr (PExprs_Cons _ arg) Member_Base = arg
+nthPermExpr (PExprs_Cons args _) (Member_Step memb) =
+  nthPermExpr args memb
 
-instance TestEquality NamedPermArg where
-  testEquality (NamedPermArg_Lifetime l1) (NamedPermArg_Lifetime l2)
-    | l1 == l2 = Just Refl
-  testEquality (NamedPermArg_RWModality rw1) (NamedPermArg_RWModality rw2)
-    | rw1 == rw2 = Just Refl
-  testEquality _ _ = Nothing
+-- | Set the @n@th expression in a 'PermExprs' list
+setNthPermExpr :: PermExprs args -> Member args a -> PermExpr a ->
+                  PermExprs args
+setNthPermExpr (PExprs_Cons args _) Member_Base a =
+  PExprs_Cons args a
+setNthPermExpr (PExprs_Cons args arg) (Member_Step memb) a =
+  PExprs_Cons (setNthPermExpr args memb a) arg
 
-instance Eq (NamedPermArg a) where
-  arg1 == arg2 | Just Refl <- testEquality arg1 arg2 = True
-  _ == _ = False
-
--- | A sequence of 'NamedPermArg's
-data NamedPermArgs (args :: RList CrucibleType) where
-  NamedPermArgs_Nil :: NamedPermArgs RNil
-  NamedPermArgs_Cons :: NamedPermArgs as -> NamedPermArg a ->
-                        NamedPermArgs (as :> a)
-
--- | Convert a 'NamedPermArg' to an expression
-permArgToExpr :: NamedPermArg a -> PermExpr a
-permArgToExpr (NamedPermArg_Lifetime l) = l
-permArgToExpr (NamedPermArg_RWModality rw) = rw
-
--- | Convert a sequence of 'NamedPermArg's to expressions
-permArgsToExprs :: NamedPermArgs args -> PermExprs args
-permArgsToExprs NamedPermArgs_Nil = PExprs_Nil
-permArgsToExprs (NamedPermArgs_Cons args arg) =
-  PExprs_Cons (permArgsToExprs args) (permArgToExpr arg)
-
--- | Get the @n@th argument in a 'NamedPermArgs' list
-getNamedPermArg :: NamedPermArgs args -> Member args a -> NamedPermArg a
-getNamedPermArg (NamedPermArgs_Cons _ arg) Member_Base = arg
-getNamedPermArg (NamedPermArgs_Cons args _) (Member_Step memb) =
-  getNamedPermArg args memb
-
--- | Set the @n@th argument in a 'NamedPermArgs' list
-setNamedPermArg :: NamedPermArgs args -> Member args a -> NamedPermArg a ->
-                   NamedPermArgs args
-setNamedPermArg (NamedPermArgs_Cons args _) Member_Base a =
-  NamedPermArgs_Cons args a
-setNamedPermArg (NamedPermArgs_Cons args arg) (Member_Step memb) a =
-  NamedPermArgs_Cons (setNamedPermArg args memb a) arg
-
--- | Get a list of 'Member' proofs for each arg in a 'NamedPermArgs' sequence
-getNamedPermsMembers :: NamedPermArgs args ->
-                        [Some (Member args :: CrucibleType -> Type)]
-getNamedPermsMembers NamedPermArgs_Nil = []
-getNamedPermsMembers (NamedPermArgs_Cons args _) =
-  map (\case Some memb -> Some (Member_Step memb)) (getNamedPermsMembers args)
+-- | Get a list of 'Member' proofs for each expression in a 'PermExprs' list
+getPermExprsMembers :: PermExprs args ->
+                       [Some (Member args :: CrucibleType -> Type)]
+getPermExprsMembers PExprs_Nil = []
+getPermExprsMembers (PExprs_Cons args _) =
+  map (\case Some memb -> Some (Member_Step memb)) (getPermExprsMembers args)
   ++ [Some Member_Base]
-
-instance TestEquality NamedPermArgs where
-  testEquality (NamedPermArgs_Cons args1 arg1) (NamedPermArgs_Cons args2 arg2)
-    | Just Refl <- testEquality args1 args2
-    , Just Refl <- testEquality arg1 arg2
-    = Just Refl
-  testEquality NamedPermArgs_Nil NamedPermArgs_Nil = Just Refl
-  testEquality _ _ = Nothing
-
-instance Eq (NamedPermArgs args) where
-  args1 == args2 | Just Refl <- testEquality args1 args2 = True
-  _ == _ = False
 
 -- | The semantics of a named permission, which can can either be an opaque
 -- named permission or a recursive named permission
@@ -1120,6 +1106,10 @@ data NamedPerm args a
 namedPermName :: NamedPerm args a -> NamedPermName args a
 namedPermName (NamedPerm_Opaque op) = opaquePermName op
 namedPermName (NamedPerm_Rec rp) = recPermName rp
+
+-- | Extract out the argument context of the name of a 'NamedPerm'
+namedPermArgs :: NamedPerm args a -> CruCtx args
+namedPermArgs = namedPermNameArgs . namedPermName
 
 -- | An opaque named permission is just a name and a SAW core type given by
 -- identifier that it is translated to
@@ -1226,6 +1216,8 @@ instance Eq (ValuePerm a) where
   (ValPerm_Named n1 args1) == (ValPerm_Named n2 args2)
     | Just (Refl, Refl) <- testNamedPermNameEq n1 n2 = args1 == args2
   (ValPerm_Named _ _) == _ = False
+  (ValPerm_Var x1) == (ValPerm_Var x2) = x1 == x2
+  (ValPerm_Var _) == _ = False
   (ValPerm_Conj aps1) == (ValPerm_Conj aps2) = aps1 == aps2
   (ValPerm_Conj _) == _ = False
 
@@ -1302,6 +1294,7 @@ instance PermPretty (ValuePerm a) where
     do n_pp <- permPrettyM n
        args_pp <- permPrettyM args
        return (n_pp <> char '<' <> args_pp <> char '>')
+  permPrettyM (ValPerm_Var n) = permPrettyM n
   permPrettyM ValPerm_True = return $ string "true"
   permPrettyM (ValPerm_Conj ps) =
     (hang 2 . encloseSep PP.empty PP.empty (string "*")) <$> mapM permPrettyM ps
@@ -1349,16 +1342,6 @@ instance PermPretty (AtomicPerm a) where
 instance PermPretty (FunPerm ghosts args ret) where
   permPrettyM fun_perm =
     return $ string "<FunPerm (FIXME)>" -- FIXME HERE: implement
-
-instance PermPretty (NamedPermArgs args) where
-  permPrettyM NamedPermArgs_Nil = return $ string ""
-  permPrettyM (NamedPermArgs_Cons NamedPermArgs_Nil arg) = permPrettyM arg
-  permPrettyM (NamedPermArgs_Cons args arg) =
-    (\pp1 pp2 -> pp1 <> comma <> pp2) <$> permPrettyM args <*> permPrettyM arg
-
-instance PermPretty (NamedPermArg a) where
-  permPrettyM (NamedPermArg_Lifetime l) = permPrettyM l
-  permPrettyM (NamedPermArg_RWModality rw) = permPrettyM rw
 
 instance PermPretty (BVRange w) where
   permPrettyM (BVRange e1 e2) =
@@ -1413,8 +1396,6 @@ $(mkNuMatching [t| forall w . LLVMArrayBorrow w |])
 $(mkNuMatching [t| forall ghosts args ret. FunPerm ghosts args ret |])
 $(mkNuMatching [t| forall args a. NamedPermName args a |])
 $(mkNuMatching [t| SomeNamedPermName |])
-$(mkNuMatching [t| forall a. NamedPermArg a |])
-$(mkNuMatching [t| forall args. NamedPermArgs args |])
 $(mkNuMatching [t| forall args a. NamedPerm args a |])
 $(mkNuMatching [t| forall args a. OpaquePerm args a |])
 $(mkNuMatching [t| forall args a. RecPerm args a |])
@@ -2038,12 +2019,16 @@ nthVarPerm (Member_Step memb') x = distPermsTail . nthVarPerm memb' x
 
 -- | Test if a permission can be copied, i.e., whether @p -o p*p@. This is true
 -- iff @p@ does not contain any 'Write' modalities, any frame permissions, or
--- any lifetime ownership permissions.
+-- any lifetime ownership permissions. Note that this must be true for all
+-- substitutions of free (permission or expression) variables, so free variables
+-- can make a permission not copyable as well.
 permIsCopyable :: ValuePerm a -> Bool
 permIsCopyable (ValPerm_Eq _) = True
 permIsCopyable (ValPerm_Or p1 p2) = permIsCopyable p1 && permIsCopyable p2
 permIsCopyable (ValPerm_Exists mb_p) = mbLift $ fmap permIsCopyable mb_p
-permIsCopyable (ValPerm_Named _ args) = namedPermArgsAreCopyable args
+permIsCopyable (ValPerm_Named npn args) =
+  namedPermArgsAreCopyable (namedPermNameArgs npn) args
+permIsCopyable (ValPerm_Var _) = False
 permIsCopyable (ValPerm_Conj ps) = all atomicPermIsCopyable ps
 
 -- | The same as 'permIsCopyable' except for atomic permissions
@@ -2065,17 +2050,19 @@ atomicPermIsCopyable (Perm_LCurrent _) = True
 atomicPermIsCopyable (Perm_Fun _) = True
 atomicPermIsCopyable (Perm_BVProp _) = True
 
--- | 'permIsCopyable' for the 'NamedPermArg' type
-namedPermArgIsCopyable :: NamedPermArg a -> Bool
-namedPermArgIsCopyable (NamedPermArg_Lifetime _) = True
-namedPermArgIsCopyable (NamedPermArg_RWModality PExpr_Read) = True
-namedPermArgIsCopyable (NamedPermArg_RWModality _) = False
+-- | 'permIsCopyable' for the arguments of a named permission
+namedPermArgIsCopyable :: TypeRepr a -> PermExpr a -> Bool
+namedPermArgIsCopyable RWModalityRepr PExpr_Read = True
+namedPermArgIsCopyable RWModalityRepr _ = False
+namedPermArgIsCopyable (ValuePermRepr _) (PExpr_ValPerm p) = permIsCopyable p
+namedPermArgIsCopyable (ValuePermRepr _) (PExpr_Var _) = False
+namedPermArgIsCopyable _ _ = True
 
--- | 'permIsCopyable' for the 'NamedPermArgs' type
-namedPermArgsAreCopyable :: NamedPermArgs args -> Bool
-namedPermArgsAreCopyable NamedPermArgs_Nil = True
-namedPermArgsAreCopyable (NamedPermArgs_Cons args arg) =
-  namedPermArgsAreCopyable args && namedPermArgIsCopyable arg
+-- | 'permIsCopyable' for an argument of a named permission
+namedPermArgsAreCopyable :: CruCtx args -> PermExprs args -> Bool
+namedPermArgsAreCopyable CruCtxNil PExprs_Nil = True
+namedPermArgsAreCopyable (CruCtxCons tps tp) (PExprs_Cons args arg) =
+  namedPermArgsAreCopyable tps args && namedPermArgIsCopyable tp arg
 
 -- | Substitute arguments, a lifetime, and ghost values into a function
 -- permission to get the input permissions needed on the arguments
@@ -2096,10 +2083,9 @@ funPermDistOuts fun_perm args l ghosts =
   subst (consSubst (substOfExprs ghosts) (PExpr_Var l)) $ funPermOuts fun_perm
 
 -- | Unfold a recursive permission given a 'RecPerm' for it
-unfoldRecPerm :: RecPerm args a -> NamedPermArgs args -> ValuePerm a
+unfoldRecPerm :: RecPerm args a -> PermExprs args -> ValuePerm a
 unfoldRecPerm rp args =
-  foldl1 ValPerm_Or $
-  map (subst (substOfExprs $ permArgsToExprs args) . fst) $ recPermCases rp
+  foldl1 ValPerm_Or $ map (subst (substOfExprs args) . fst) $ recPermCases rp
 
 -- | Generic function to test if a permission contains a lifetime
 class ContainsLifetime a where
@@ -2118,6 +2104,7 @@ instance ContainsLifetime (ValuePerm a) where
     mbLift $ fmap (containsLifetime l) mb_p
   containsLifetime l (ValPerm_Named _ args) =
     containsLifetime l args
+  containsLifetime l (ValPerm_Var _) = False
   containsLifetime l (ValPerm_Conj ps) = any (containsLifetime l) ps
 
 instance ContainsLifetime (AtomicPerm a) where
@@ -2145,14 +2132,17 @@ instance ContainsLifetime (LLVMFieldPerm w) where
 instance ContainsLifetime (LLVMArrayPerm w) where
   containsLifetime l ap = any (containsLifetime l) (llvmArrayFields ap)
 
-instance ContainsLifetime (NamedPermArgs args) where
-  containsLifetime _ NamedPermArgs_Nil = False
-  containsLifetime l (NamedPermArgs_Cons args arg) =
+instance ContainsLifetime (PermExprs args) where
+  containsLifetime _ PExprs_Nil = False
+  containsLifetime l (PExprs_Cons args arg) =
     containsLifetime l args || containsLifetime l arg
 
-instance ContainsLifetime (NamedPermArg a) where
-  containsLifetime l (NamedPermArg_Lifetime l') = l == l'
-  containsLifetime l _ = False
+instance ContainsLifetime (PermExpr a) where
+  containsLifetime (PExpr_Var l) (PExpr_Var l')
+    | Just Refl <- testEquality l l' = True
+  containsLifetime PExpr_Always PExpr_Always = True
+  containsLifetime l (PExpr_ValPerm p) = containsLifetime l p
+  containsLifetime _ _ = False
 
 
 -- | Generic function to put a permission inside a lifetime
@@ -2168,8 +2158,9 @@ instance InLifetime (ValuePerm a) where
     ValPerm_Or (inLifetime l p1) (inLifetime l p2)
   inLifetime l (ValPerm_Exists mb_p) =
     ValPerm_Exists $ fmap (inLifetime l) mb_p
-  inLifetime l (ValPerm_Named n args) =
-    ValPerm_Named n $ inLifetime l args
+  inLifetime l (ValPerm_Named npn args) =
+    ValPerm_Named npn $ inLifetimeArgs l (namedPermNameArgs npn) args
+  inLifetime _ p@(ValPerm_Var _) = p
   inLifetime l (ValPerm_Conj ps) =
     ValPerm_Conj $ map (inLifetime l) ps
 
@@ -2194,14 +2185,16 @@ instance InLifetime (LLVMArrayPerm w) where
   inLifetime l ap =
     ap { llvmArrayFields = map (inLifetime l) (llvmArrayFields ap) }
 
-instance InLifetime (NamedPermArgs args) where
-  inLifetime _ NamedPermArgs_Nil = NamedPermArgs_Nil
-  inLifetime l (NamedPermArgs_Cons args arg) =
-    NamedPermArgs_Cons (inLifetime l args) (inLifetime l arg)
+inLifetimeArgs :: Lifetime -> CruCtx args -> PermExprs args -> PermExprs args
+inLifetimeArgs _ _ PExprs_Nil = PExprs_Nil
+inLifetimeArgs l (CruCtxCons tps tp) (PExprs_Cons args arg) =
+  PExprs_Cons (inLifetimeArgs l tps args) (inLifetimeArg l tp arg)
 
-instance InLifetime (NamedPermArg a) where
-  inLifetime l (NamedPermArg_Lifetime _) = NamedPermArg_Lifetime l
-  inLifetime _ arg@(NamedPermArg_RWModality _) = arg
+inLifetimeArg :: Lifetime -> TypeRepr arg -> PermExpr arg -> PermExpr arg
+inLifetimeArg l LifetimeRepr _ = l
+inLifetimeArg l (ValuePermRepr _) (PExpr_ValPerm p) =
+  PExpr_ValPerm $ inLifetime l p
+inLifetimeArg _ _ arg = arg
 
 
 -- | Compute the minimal permissions required to end a lifetime that contains
@@ -2222,8 +2215,9 @@ instance MinLtEndPerms (ValuePerm a) where
     ValPerm_Or (minLtEndPerms l p1) (minLtEndPerms l p2)
   minLtEndPerms l (ValPerm_Exists mb_p) =
     ValPerm_Exists $ fmap (minLtEndPerms l) mb_p
-  minLtEndPerms l (ValPerm_Named n args) =
-    ValPerm_Named n $ minLtEndPerms l args
+  minLtEndPerms l (ValPerm_Named npn args) =
+    ValPerm_Named npn $ minLtEndPermsArgs l (namedPermNameArgs npn) args
+  minLtEndPerms _ p@(ValPerm_Var _) = p
   minLtEndPerms l (ValPerm_Conj ps) =
     ValPerm_Conj $ map (minLtEndPerms l) ps
 
@@ -2248,15 +2242,16 @@ instance MinLtEndPerms (LLVMArrayPerm w) where
   minLtEndPerms l ap =
     ap { llvmArrayFields = map (minLtEndPerms l) (llvmArrayFields ap) }
 
-instance MinLtEndPerms (NamedPermArgs args) where
-  minLtEndPerms _ NamedPermArgs_Nil = NamedPermArgs_Nil
-  minLtEndPerms l (NamedPermArgs_Cons args arg) =
-    NamedPermArgs_Cons (minLtEndPerms l args) (minLtEndPerms l arg)
+minLtEndPermsArgs :: Lifetime -> CruCtx args -> PermExprs args -> PermExprs args
+minLtEndPermsArgs _ _ PExprs_Nil = PExprs_Nil
+minLtEndPermsArgs l (CruCtxCons tps tp) (PExprs_Cons args arg) =
+    PExprs_Cons (minLtEndPermsArgs l tps args) (minLtEndPermsArg l tp arg)
 
-instance MinLtEndPerms (NamedPermArg a) where
-  minLtEndPerms l (NamedPermArg_Lifetime _) = NamedPermArg_Lifetime l
-  minLtEndPerms _ (NamedPermArg_RWModality _) =
-    NamedPermArg_RWModality PExpr_Read
+minLtEndPermsArg :: Lifetime -> TypeRepr arg -> PermExpr arg -> PermExpr arg
+minLtEndPermsArg l LifetimeRepr _ = l
+minLtEndPermsArg l (ValuePermRepr _) (PExpr_ValPerm p) =
+  PExpr_ValPerm $ minLtEndPerms l p
+minLtEndPermsArg _ _ arg = arg
 
 
 ----------------------------------------------------------------------
@@ -2502,11 +2497,28 @@ matchFieldPtrPermOff _ _ = Nothing
 -- * Generalized Substitution
 ----------------------------------------------------------------------
 
+-- FIXME: these two EFQ proofs may no longer be needed...?
+noTypesInExprCtx :: forall (ctx :: RList CrucibleType) (a :: Type) b.
+                    Member ctx a -> b
+noTypesInExprCtx (Member_Step ctx) = noTypesInExprCtx ctx
+
+noExprsInTypeCtx :: forall (ctx :: RList Type) (a :: CrucibleType) b.
+                    Member ctx a -> b
+noExprsInTypeCtx (Member_Step ctx) = noExprsInTypeCtx ctx
+-- No case for Member_Base
+
 -- | Defines a substitution type @s@ that supports substituting into expression
 -- and permission variables in a given monad @m@
 class MonadBind m => SubstVar s m | s -> m where
-  extSubst :: s ctx -> ExprVar a -> s (ctx :> a)
+  -- extSubst :: s ctx -> ExprVar a -> s (ctx :> a)
   substExprVar :: s ctx -> Mb ctx (ExprVar a) -> m (PermExpr a)
+
+substPermVar :: SubstVar s m => s ctx -> Mb ctx (PermVar a) -> m (ValuePerm a)
+substPermVar s mb_x =
+  substExprVar s mb_x >>= \e ->
+  case e of
+    PExpr_Var x -> return $ ValPerm_Var x
+    PExpr_ValPerm p -> return p
 
 -- | Generalized notion of substitution, which says that substitution type @s@
 -- supports substituting into type @a@ in monad @m@
@@ -2573,6 +2585,8 @@ instance SubstVar s m => Substable s (PermExpr a) m where
     PExpr_PermListCons <$> genSubst s e <*> genSubst s p <*> genSubst s l
   genSubst _ [nuP| PExpr_RWModality rw |] =
     return $ PExpr_RWModality $ mbLift rw
+  genSubst s [nuP| PExpr_ValPerm p |] =
+    PExpr_ValPerm <$> genSubst s p
 
 instance SubstVar s m => Substable s (PermExprs as) m where
   genSubst s [nuP| PExprs_Nil |] = return PExprs_Nil
@@ -2633,10 +2647,11 @@ instance SubstVar s m => Substable s (ValuePerm a) m where
   genSubst s [nuP| ValPerm_Exists p |] =
     -- FIXME: maybe we don't need extSubst at all, but can just use the
     -- Substable instance for Mb ctx a from above
-    ValPerm_Exists <$>
-    nuM (\x -> genSubst (extSubst s x) $ mbCombine p)
+    ValPerm_Exists <$> genSubst s p
+    -- nuM (\x -> genSubst (extSubst s x) $ mbCombine p)
   genSubst s [nuP| ValPerm_Named n args |] =
     ValPerm_Named (mbLift n) <$> genSubst s args
+  genSubst s [nuP| ValPerm_Var mb_x |] = substPermVar s mb_x
   genSubst s [nuP| ValPerm_Conj aps |] =
     ValPerm_Conj <$> mapM (genSubst s) (mbList aps)
 
@@ -2672,17 +2687,6 @@ instance SubstVar s m => Substable s (FunPerm ghosts args ret) m where
   genSubst s [nuP| FunPerm ghosts args ret perms_in perms_out |] =
     FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
     <$> genSubst s perms_in <*> genSubst s perms_out
-
-instance SubstVar s m => Substable s (NamedPermArgs args) m where
-  genSubst s [nuP| NamedPermArgs_Nil |] = return NamedPermArgs_Nil
-  genSubst s [nuP| NamedPermArgs_Cons args arg |] =
-    NamedPermArgs_Cons <$> genSubst s args <*> genSubst s arg
-
-instance SubstVar s m => Substable s (NamedPermArg a) m where
-  genSubst s [nuP| NamedPermArg_Lifetime l |] =
-    NamedPermArg_Lifetime <$> genSubst s l
-  genSubst s [nuP| NamedPermArg_RWModality rw |] =
-    NamedPermArg_RWModality <$> genSubst s rw
 
 instance SubstVar PermVarSubst m =>
          Substable PermVarSubst (LifetimeCurrentPerms ps) m where
@@ -2737,11 +2741,16 @@ noPermsInCruCtx (Member_Step ctx) = noPermsInCruCtx ctx
 -- No case for Member_Base
 
 instance SubstVar PermSubst Identity where
-  extSubst (PermSubst elems) x = PermSubst $ elems :>: PExpr_Var x
+  -- extSubst (PermSubst elems) x = PermSubst $ elems :>: PExpr_Var x
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> return $ substLookup s memb
       Right y -> return $ PExpr_Var y
+  {-
+  substPermVar s mb_x =
+    case mbNameBoundP mb_x of
+      Left memb -> noTypesInExprCtx memb
+      Right x -> return $ ValPerm_Var x -}
 
 -- | Wrapper function to apply a substitution to an expression type
 subst :: Substable PermSubst a Identity => PermSubst ctx -> Mb ctx a -> a
@@ -2778,11 +2787,16 @@ varSubstVar s mb_x =
     Right x -> x
 
 instance SubstVar PermVarSubst Identity where
-  extSubst (PermVarSubst elems) x = PermVarSubst $ elems :>: x
+  -- extSubst (PermVarSubst elems) x = PermVarSubst $ elems :>: x
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> return $ PExpr_Var $ varSubstLookup s memb
       Right y -> return $ PExpr_Var y
+  {-
+  substPermVar s mb_x =
+    case mbNameBoundP mb_x of
+      Left memb -> noTypesInExprCtx memb
+      Right x -> return $ ValPerm_Var x -}
 
 -- | Wrapper function to apply a renamionmg to an expression type
 varSubst :: Substable PermVarSubst a Identity => PermVarSubst ctx ->
@@ -2845,12 +2859,18 @@ psubstLookup :: PartialSubst ctx -> Member ctx a -> Maybe (PermExpr a)
 psubstLookup (PartialSubst m) memb = unPSubstElem $ mapRListLookup memb m
 
 instance SubstVar PartialSubst Maybe where
+  {-
   extSubst (PartialSubst elems) x =
-    PartialSubst $ elems :>: PSubstElem (Just $ PExpr_Var x)
+    PartialSubst $ elems :>: PSubstElem (Just $ PExpr_Var x) -}
   substExprVar s x =
     case mbNameBoundP x of
       Left memb -> psubstLookup s memb
       Right y -> return $ PExpr_Var y
+  {-
+  substPermVar s mb_x =
+    case mbNameBoundP mb_x of
+      Left memb -> noTypesInExprCtx memb
+      Right x -> return $ ValPerm_Var x -}
 
 -- | Wrapper function to apply a partial substitution to an expression type
 partialSubst :: Substable PartialSubst a Maybe => PartialSubst ctx ->
@@ -2868,159 +2888,58 @@ partialSubstForce s mb msg = fromMaybe (error msg) $ partialSubst s mb
 -- * Value Permission Substitutions
 ----------------------------------------------------------------------
 
-noExprsInTypeCtx :: forall (ctx :: RList Type) (a :: CrucibleType) b.
-                    Member ctx a -> b
-noExprsInTypeCtx (Member_Step ctx) = noExprsInTypeCtx ctx
--- No case for Member_Base
+{-
+-- | An element of a 'ValPermSubst'
+data ValPermSubstElem a where
+  ValPermSubstElem :: ValuePerm a -> ValPermSubstElem (ValuePerm a)
 
--- | Typeclass to substitute a 'ValuePerm' for a 'PermVar'
-class SubstValPerm a where
-  substValPerm :: ValuePerm tp -> Binding (ValuePerm tp) a -> a
+-- | A substitution of value permissions for free 'PermVar's
+newtype ValPermSubst ctx =
+  ValPermSubst { unValPermSubst :: MapRList ValPermSubstElem ctx }
 
-instance SubstValPerm Integer where
-  substValPerm _ = mbLift
-
-instance (NuMatching a, SubstValPerm a) => SubstValPerm [a] where
-  substValPerm p as = map (substValPerm p) (mbList as)
-
-instance (SubstValPerm a, SubstValPerm b) => SubstValPerm (a,b) where
-  substValPerm p ab =
-    (substValPerm p (fmap fst ab), substValPerm p (fmap snd ab))
-
-instance (NuMatching a, SubstValPerm a) => SubstValPerm (Maybe a) where
-  substValPerm p [nuP| Just a |] = Just $ substValPerm p a
-  substValPerm _ [nuP| Nothing |] = Nothing
-
-instance (NuMatching a, SubstValPerm a) => SubstValPerm (Mb ctx a) where
-  substValPerm p mbmb = fmap (substValPerm p) (mbSwap mbmb)
-
-instance SubstValPerm (Member ctx a) where
-  substValPerm _ mb_memb = mbLift mb_memb
-
-instance SubstValPerm (Name (a :: CrucibleType)) where
-  substValPerm _ mb_x =
+instance SubstVar ValPermSubst Identity where
+  substExprVar s x =
+    case mbNameBoundP x of
+      Left memb -> noExprsInTypeCtx memb s
+      Right y -> return $ PExpr_Var y
+  substPermVar (ValPermSubst elems) mb_x =
     case mbNameBoundP mb_x of
-      Left memb -> noExprsInTypeCtx memb
-      Right x -> x
+      Left memb ->
+        case mapRListLookup memb elems of
+          ValPermSubstElem p -> return p
+      Right x -> return $ ValPerm_Var x
 
-instance SubstValPerm (BVFactor w) where
-  substValPerm p [nuP| BVFactor i x |] =
-    BVFactor (mbLift i) (substValPerm p x)
+-- | Apply a 'ValPermSubst' to substitute for free permission variables
+vpsubst :: Substable ValPermSubst a Identity => ValPermSubst ctx -> Mb ctx a -> a
+vpsubst s mb = runIdentity $ genSubst s mb
 
-instance SubstValPerm (PermExpr a) where
-  substValPerm p [nuP| PExpr_Var x |] = PExpr_Var (substValPerm p x)
-  substValPerm _ [nuP| PExpr_Unit |] = PExpr_Unit
-  substValPerm _ [nuP| PExpr_Nat n |] = PExpr_Nat $ mbLift n
-  substValPerm _ [nuP| PExpr_Bool b |] = PExpr_Bool $ mbLift b
-  substValPerm p [nuP| PExpr_BV factors off |] =
-    PExpr_BV (substValPerm p factors) (substValPerm p off)
-  substValPerm p [nuP| PExpr_Struct args |] =
-    PExpr_Struct $ substValPerm p args
-  substValPerm _ [nuP| PExpr_Always |] = PExpr_Always
-  substValPerm p [nuP| PExpr_LLVMWord e |] =
-    PExpr_LLVMWord $ substValPerm p e
-  substValPerm p [nuP| PExpr_LLVMOffset x off |] =
-    PExpr_LLVMOffset (substValPerm p x) (substValPerm p off)
-  substValPerm _ [nuP| PExpr_Fun fh |] = PExpr_Fun $ mbLift fh
-  substValPerm _ [nuP| PExpr_PermListNil |] = PExpr_PermListNil
-  substValPerm s [nuP| PExpr_PermListCons e p l |] =
-    PExpr_PermListCons (substValPerm s e) (substValPerm s p) (substValPerm s l)
-  substValPerm _ [nuP| PExpr_RWModality rw |] = PExpr_RWModality $ mbLift rw
+-- | An element of a partial substitution for permission variables
+data PValPermSubstElem a where
+  PValPermSubstElem ::
+    Maybe (ValuePerm a) -> PValPermSubstElem (ValuePerm a)
 
-instance SubstValPerm (PermExprs as) where
-  substValPerm _ [nuP| PExprs_Nil |] = PExprs_Nil
-  substValPerm p [nuP| PExprs_Cons es e |] =
-    PExprs_Cons (substValPerm p es) (substValPerm p e)
+-- | A partial substitution of value permissions for free 'PermVar's
+newtype PValPermSubst ctx =
+  PValPermSubst { unPValPermSubst :: MapRList PValPermSubstElem ctx }
 
-instance SubstValPerm (BVRange w) where
-  substValPerm p [nuP| BVRange e1 e2 |] =
-    BVRange (substValPerm p e1) (substValPerm p e2)
+instance SubstVar PValPermSubst Maybe where
+  substExprVar s x =
+    case mbNameBoundP x of
+      Left memb -> noExprsInTypeCtx memb s
+      Right y -> return $ PExpr_Var y
+  substPermVar (PValPermSubst elems) mb_x =
+    case mbNameBoundP mb_x of
+      Left memb ->
+        case mapRListLookup memb elems of
+          PValPermSubstElem p -> p
+      Right x -> return $ ValPerm_Var x
 
-instance SubstValPerm (BVProp w) where
-  substValPerm p [nuP| BVProp_Eq e1 e2 |] =
-    BVProp_Eq (substValPerm p e1) (substValPerm p e2)
-  substValPerm p [nuP| BVProp_InRange e r |] =
-    BVProp_InRange (substValPerm p e) (substValPerm p r)
-  substValPerm p [nuP| BVProp_RangeSubset r1 r2 |] =
-    BVProp_RangeSubset (substValPerm p r1) (substValPerm p r2)
-  substValPerm p [nuP| BVProp_RangesDisjoint r1 r2 |] =
-    BVProp_RangesDisjoint (substValPerm p r1) (substValPerm p r2)
-
-instance SubstValPerm (AtomicPerm a) where
-  substValPerm p [nuP| Perm_LLVMField fp |] =
-    Perm_LLVMField $ substValPerm p fp
-  substValPerm p [nuP| Perm_LLVMArray ap |] =
-    Perm_LLVMArray $ substValPerm p ap
-  substValPerm p [nuP| Perm_LLVMFree e |] =
-    Perm_LLVMFree $ substValPerm p e
-  substValPerm p [nuP| Perm_LLVMFunPtr fp |] =
-    Perm_LLVMFunPtr $ substValPerm p fp
-  substValPerm _ [nuP| Perm_IsLLVMPtr |] = Perm_IsLLVMPtr
-  substValPerm p [nuP| Perm_LLVMFrame fp |] =
-    Perm_LLVMFrame $ substValPerm p fp
-  substValPerm p [nuP| Perm_LOwned e |] =
-    Perm_LOwned (substValPerm p e)
-  substValPerm p [nuP| Perm_LCurrent e |] =
-    Perm_LCurrent $ substValPerm p e
-  substValPerm p [nuP| Perm_Fun fperm |] =
-    Perm_Fun $ substValPerm p fperm
-  substValPerm p [nuP| Perm_BVProp prop |] =
-    Perm_BVProp $ substValPerm p prop
-
-instance SubstValPerm (ValuePerm a) where
-  substValPerm p [nuP| ValPerm_Eq e |] = ValPerm_Eq $ substValPerm p e
-  substValPerm p [nuP| ValPerm_Or p1 p2 |] =
-    ValPerm_Or (substValPerm p p1) (substValPerm p p2)
-  substValPerm p [nuP| ValPerm_Exists p' |] =
-    ValPerm_Exists $ substValPerm p p'
-  substValPerm p [nuP| ValPerm_Named n args |] =
-    ValPerm_Named (mbLift n) $ substValPerm p args
-  substValPerm p [nuP| ValPerm_Conj aps |] =
-    ValPerm_Conj $ substValPerm p aps
-
-instance SubstValPerm (ValuePerms as) where
-  substValPerm p [nuP| ValPerms_Nil |] = ValPerms_Nil
-  substValPerm p [nuP| ValPerms_Cons ps p' |] =
-    ValPerms_Cons (substValPerm p ps) (substValPerm p p')
-
-instance SubstValPerm RWModality where
-  substValPerm _ [nuP| Write |] = Write
-  substValPerm _ [nuP| Read |] = Read
-
-instance SubstValPerm (LLVMFieldPerm w) where
-  substValPerm p [nuP| LLVMFieldPerm rw ls off p' |] =
-    LLVMFieldPerm (substValPerm p rw) (substValPerm p ls) (substValPerm p off)
-    (substValPerm p p')
-
-instance SubstValPerm (LLVMArrayPerm w) where
-  substValPerm p [nuP| LLVMArrayPerm off len stride pps bs |] =
-    LLVMArrayPerm (substValPerm p off) (substValPerm p len)
-    (mbLift stride) (substValPerm p pps) (substValPerm p bs)
-
-instance SubstValPerm (LLVMArrayIndex w) where
-  substValPerm p [nuP| LLVMArrayIndex ix fld_num |] =
-    LLVMArrayIndex (substValPerm p ix) (mbLift fld_num)
-
-instance SubstValPerm (LLVMArrayBorrow w) where
-  substValPerm p [nuP| FieldBorrow ix |] =
-    FieldBorrow (substValPerm p ix)
-  substValPerm p [nuP| RangeBorrow r |] = RangeBorrow $ substValPerm p r
-
-instance SubstValPerm (FunPerm ghosts args ret) where
-  substValPerm p [nuP| FunPerm ghosts args ret perms_in perms_out |] =
-    FunPerm (mbLift ghosts) (mbLift args) (mbLift ret)
-    (substValPerm p perms_in) (substValPerm p perms_out)
-
-instance SubstValPerm (NamedPermArgs args) where
-  substValPerm _ [nuP| NamedPermArgs_Nil |] = NamedPermArgs_Nil
-  substValPerm p [nuP| NamedPermArgs_Cons args arg |] =
-    NamedPermArgs_Cons (substValPerm p args) (substValPerm p arg)
-
-instance SubstValPerm (NamedPermArg a) where
-  substValPerm p [nuP| NamedPermArg_Lifetime l |] =
-    NamedPermArg_Lifetime $ substValPerm p l
-  substValPerm p [nuP| NamedPermArg_RWModality rw |] =
-    NamedPermArg_RWModality $ substValPerm p rw
+-- | Apply a partial substitution to free permission variables, returning
+-- 'Nothing' if some free variable has not been substituted for
+partialVPSubst :: Substable PValPermSubst a Maybe => ValPermSubst ctx ->
+                  Mb ctx a -> Maybe a
+partialVPSubst s mb = genSubst s mb
+-}
 
 
 ----------------------------------------------------------------------
@@ -3201,6 +3120,9 @@ instance AbstractVars (PermExpr a) where
   abstractPEVars ns1 ns2 (PExpr_RWModality rw) =
     absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_RWModality |])
                             `clApply` toClosed rw)
+  abstractPEVars ns1 ns2 (PExpr_ValPerm p) =
+    absVarsReturnH ns1 ns2 ($(mkClosed [| PExpr_ValPerm |]))
+    `clMbMbApplyM` abstractPEVars ns1 ns2 p
 
 instance AbstractVars (PermExprs as) where
   abstractPEVars ns1 ns2 PExprs_Nil =
@@ -3371,22 +3293,6 @@ instance AbstractVars (NamedPermName args a) where
     absVarsReturnH ns1 ns2
     ($(mkClosed [| NamedPermName |])
      `clApply` toClosed n `clApply` toClosed tp `clApply` toClosed args)
-
-instance AbstractVars (NamedPermArgs args) where
-  abstractPEVars ns1 ns2 NamedPermArgs_Nil =
-    absVarsReturnH ns1 ns2 $(mkClosed [| NamedPermArgs_Nil |])
-  abstractPEVars ns1 ns2 (NamedPermArgs_Cons args arg) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| NamedPermArgs_Cons |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 args
-    `clMbMbApplyM` abstractPEVars ns1 ns2 arg
-
-instance AbstractVars (NamedPermArg a) where
-  abstractPEVars ns1 ns2 (NamedPermArg_Lifetime l) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| NamedPermArg_Lifetime |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 l
-  abstractPEVars ns1 ns2 (NamedPermArg_RWModality rw) =
-    absVarsReturnH ns1 ns2 $(mkClosed [| NamedPermArg_RWModality |])
-    `clMbMbApplyM` abstractPEVars ns1 ns2 rw
 
 
 ----------------------------------------------------------------------
