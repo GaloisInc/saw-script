@@ -2146,25 +2146,28 @@ translateSimplImpl _ [nuP| SImpl_LCurrentTrans l1 l2 l3 |] m =
   m
 
 translateSimplImpl _ [nuP| SImpl_FoldRec x rp args |] m =
-  do ttrans <-
-       translate $ mbMap2 ValPerm_Named (fmap recPermName rp) args
+  do args_trans <- translate args
+     ttrans <- translate $ mbMap2 ValPerm_Named (fmap recPermName rp) args
      let fold_ident = mbLift $ fmap recPermFoldFun rp
      withPermStackM id
        (\(pctx :>: ptrans_x) ->
          pctx :>: typeTransF ttrans [applyOpenTermMulti
                                      (globalOpenTerm fold_ident)
-                                     (transTerms ptrans_x)])
+                                     (transTerms args_trans
+                                      ++ transTerms ptrans_x)])
        m
 
 translateSimplImpl _ [nuP| SImpl_UnfoldRec x rp args |] m =
-  do ttrans <- translate $ mbMap2 unfoldRecPerm rp args
+  do args_trans <- translate args
+     ttrans <- translate $ mbMap2 unfoldRecPerm rp args
      let unfold_ident = mbLift $ fmap recPermUnfoldFun rp
      withPermStackM id
        (\(pctx :>: ptrans_x) ->
          pctx :>:
-         typeTransF (tupleTypeTrans ttrans) [applyOpenTerm
+         typeTransF (tupleTypeTrans ttrans) [applyOpenTermMulti
                                              (globalOpenTerm unfold_ident)
-                                             (transTerm1 ptrans_x)])
+                                             (transTerms args_trans
+                                              ++ [transTerm1 ptrans_x])])
        m
 
 {-
