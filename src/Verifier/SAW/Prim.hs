@@ -271,6 +271,7 @@ lg2rem n = (k+1, 2*d+r)
 data EvalError
   = InvalidIndex Integer
   | DivideByZero
+  | UnsupportedPrimitive String String
   | UserError String
   deriving (Eq, Typeable)
 
@@ -280,6 +281,7 @@ instance Show EvalError where
   show e = case e of
     InvalidIndex i -> "invalid sequence index: " ++ show i
     DivideByZero -> "division by 0"
+    UnsupportedPrimitive b p -> "unsupported primitive " ++ p ++ " in " ++ b ++ " backend"
     UserError msg -> "Run-time error: " ++ msg
 
 -- | A sequencing operation has gotten an invalid index.
@@ -289,6 +291,11 @@ invalidIndex i = X.throw (InvalidIndex i)
 -- | For division by 0.
 divideByZero :: a
 divideByZero = X.throw DivideByZero
+
+-- | A backend with a unsupported primitive.
+unsupportedPrimitive :: String -> String -> a
+unsupportedPrimitive backend primitive =
+  X.throw $ UnsupportedPrimitive backend primitive
 
 -- | For `error`
 userError :: String -> a
