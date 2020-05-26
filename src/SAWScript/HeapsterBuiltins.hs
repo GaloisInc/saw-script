@@ -12,6 +12,8 @@ module SAWScript.HeapsterBuiltins
        ( heapster_init_env
        , heapster_typecheck_fun
        , heapster_typecheck_mut_funs
+       , heapster_define_opaque_perm
+       , heapster_assume_fun
        , heapster_print_fun_trans
        , heapster_export_coq
        , heapster_parse_test
@@ -191,6 +193,59 @@ heapster_init_env bic opts mod_str llvm_filename =
        heapsterEnvPermEnvRef = perm_env_ref,
        heapsterEnvLLVMModule = llvm_mod
        }
+
+-- | Define a new opaque named permission with the given name, arguments, and
+-- type, that translates to the given named SAW core definition
+heapster_define_opaque_perm :: BuiltinContext -> Options -> HeapsterEnv ->
+                               String -> String -> String -> String ->
+                               TopLevel ()
+heapster_define_opaque_perm _bic _opts henv nm args_str tp_str i_string =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     some_args <- case parseCtxString env args_str of
+       Left err -> fail ("Error parsing argument types: " ++ show err)
+       Right args -> return args
+     some_tp <- case parseTypeString env tp_str of
+       Left err -> fail ("Error parsing permission type: " ++ show err)
+       Right tp -> return tp
+     sc <- getSharedContext
+     let i = fromString i_string
+     _ <- liftIO $ scRequireDef sc i -- Ensure that i is defined
+     case (some_args, some_tp) of
+       (Some args, Some tp) ->
+         let env' = permEnvAddOpaquePerm env nm args tp i in
+         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+-- | Assume that the given named function has the supplied type and translates
+-- to a SAW core definition given by name
+heapster_assume_fun :: BuiltinContext -> Options -> HeapsterEnv ->
+                       String -> String -> String -> TopLevel ()
+heapster_assume_fun bic opts henv nm perms_string i_string =
+  let some_lm = heapsterEnvLLVMModule henv in
+  case some_lm of
+    Some lm -> do
+      sc <- getSharedContext
+      let i = fromString i_string
+      _ <- liftIO $ scRequireDef sc i -- Ensure that i is defined
+      let trans_tm = globalOpenTerm i
+
+      let arch = llvmArch $ _transContext (lm ^. modTrans)
+      let w = archReprWidth arch
+      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+      any_cfg <- (getLLVMCFG arch <$> crucible_llvm_cfg bic opts some_lm nm)
+      leq_proof <- case decideLeq (knownNat @1) w of
+        Left pf -> return pf
+        Right _ -> fail "LLVM arch width is 0!"
+      case any_cfg of
+        AnyCFG cfg ->
+          withKnownNat w $ withLeqProof leq_proof $
+          let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
+              ret = handleReturnType $ cfgHandle cfg in
+          case parseFunPermString env args ret perms_string of
+            Left err -> fail $ show err
+            Right (SomeFunPerm fun_perm) ->
+              liftIO $ writeIORef (heapsterEnvPermEnvRef henv) $
+              permEnvAddGlobalSymFun env (GlobalSymbol $
+                                          fromString nm) w fun_perm trans_tm
 
 
 heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->

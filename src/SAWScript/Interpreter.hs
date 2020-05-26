@@ -2249,6 +2249,23 @@ primitives = Map.fromList
     , " from the named LLVM bitcode file."
     ]
 
+  , prim "heapster_define_opaque_perm"
+    "String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_opaque_perm)
+    Experimental
+    [ "heapster_define_opaque_perm nm args tp trans defines an opaque named"
+    , " Heapster permission named nm with arguments parsed from args and type"
+    , " parsed from tp that translates to the named type trans"
+    ]
+
+  , prim "heapster_assume_fun"
+    "String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun)
+    Experimental
+    [ "heapster_assume_fun nm perms trans assumes that function nm has"
+    , " permissions perms and translates to named function trans"
+    ]
+
   , prim "heapster_typecheck_fun"
     "HeapsterEnv -> String -> String -> TopLevel ()"
     (bicVal heapster_typecheck_fun)

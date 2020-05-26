@@ -305,8 +305,14 @@ parseTypeKnown =
        case some_fld_tps of
          Some fld_tps@KnownReprObj ->
            return $ Some $ mkKnownReprObj $
-           StructRepr $ unKnownReprObj fld_tps) <?>
-   "type")
+           StructRepr $ unKnownReprObj fld_tps) <|>
+   (do try (string "perm")
+       spaces
+       known_tp <- parseInParens parseTypeKnown
+       case known_tp of
+         Some tp@KnownReprObj ->
+           return $ Some $ mkKnownReprObj $ ValuePermRepr $ unKnownReprObj tp)
+   <?> "type")
 
 -- | Parse a comma-separated list of struct field types
 parseStructFieldTypesKnown :: Stream s Identity Char =>
@@ -806,3 +812,15 @@ parseFunPermString :: PermEnv -> CruCtx args -> TypeRepr ret ->
                       String -> Either ParseError (SomeFunPerm args ret)
 parseFunPermString env args ret str =
   runParser (parseFunPermM args ret) (mkParserEnv env) "" str
+
+-- | Parse a type context from a 'String'
+parseCtxString :: PermEnv -> String -> Either ParseError (Some CruCtx)
+parseCtxString env str =
+  runParser parseCtx (mkParserEnv env) "" str >>= \some_ctx ->
+  case some_ctx of
+    Some (ParsedCtx _ ctx) -> return $ Some ctx
+
+-- | Parse a type from a 'String'
+parseTypeString :: PermEnv -> String -> Either ParseError (Some TypeRepr)
+parseTypeString env str =
+  runParser parseType (mkParserEnv env) "" str

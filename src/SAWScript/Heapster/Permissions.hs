@@ -3335,10 +3335,26 @@ $(mkNuMatching [t| SomeNamedPerm |])
 $(mkNuMatching [t| PermEnvGlobalEntry |])
 $(mkNuMatching [t| PermEnv |])
 
+-- | Add an opaque named permission to a 'PermEnv'
+permEnvAddOpaquePerm :: PermEnv -> String -> CruCtx args -> TypeRepr a ->
+                        Ident -> PermEnv
+permEnvAddOpaquePerm env str args tp i =
+  let np = NamedPerm_Opaque (OpaquePerm (NamedPermName str tp args) i) in
+  env { permEnvNamedPerms = SomeNamedPerm np : permEnvNamedPerms env }
+
+-- | Add a global symbol with a function permission to a 'PermEnv'
+permEnvAddGlobalSymFun :: (1 <= w, KnownNat w) => PermEnv -> GlobalSymbol ->
+                          f w -> FunPerm ghosts args ret -> OpenTerm -> PermEnv
+permEnvAddGlobalSymFun env sym (w :: f w) fun_perm t =
+  let p :: ValuePerm (LLVMPointerType w)
+      p = ValPerm_Conj1 $ Perm_LLVMFunPtr fun_perm in
+  env { permEnvGlobalSyms =
+          PermEnvGlobalEntry sym p [t] : permEnvGlobalSyms env }
+
 -- | Add some 'PermEnvGlobalEntry's to a 'PermEnv'
 permEnvAddGlobalSyms :: PermEnv -> [PermEnvGlobalEntry] -> PermEnv
 permEnvAddGlobalSyms env entries = env { permEnvGlobalSyms =
-                                           permEnvGlobalSyms env ++ entries }
+                                           entries ++ permEnvGlobalSyms env }
 
 -- | Look up a 'FnHandle' by name in a 'PermEnv'
 lookupFunHandle :: PermEnv -> String -> Maybe SomeHandle
