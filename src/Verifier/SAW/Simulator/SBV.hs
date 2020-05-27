@@ -58,6 +58,7 @@ import Control.Monad.IO.Class
 import Control.Monad.State as ST
 import Numeric.Natural (Natural)
 
+import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
@@ -154,7 +155,7 @@ prims =
   , Prims.bpBvPopcount = pure1 svPopcount
   , Prims.bpBvCountLeadingZeros = pure1 svCountLeadingZeros
   , Prims.bpBvCountTrailingZeros = pure1 svCountTrailingZeros
-  , Prims.bpBvForall = error "bvForall unimplemented for backend"
+  , Prims.bpBvForall = unsupportedSBVPrimitive "bvForall"
     -- Integer operations
   , Prims.bpIntAdd = pure2 svPlus
   , Prims.bpIntSub = pure2 svMinus
@@ -166,9 +167,12 @@ prims =
   , Prims.bpIntEq  = pure2 svEqual
   , Prims.bpIntLe  = pure2 svLessEq
   , Prims.bpIntLt  = pure2 svLessThan
-  , Prims.bpIntMin = undefined --pure2 min
-  , Prims.bpIntMax = undefined --pure2 max
+  , Prims.bpIntMin = unsupportedSBVPrimitive "bpIntMin"
+  , Prims.bpIntMax = unsupportedSBVPrimitive "bpIntMax"
   }
+
+unsupportedSBVPrimitive :: String -> a
+unsupportedSBVPrimitive = Prim.unsupportedPrimitive "SBV"
 
 constMap :: Map Ident SValue
 constMap =
