@@ -39,6 +39,7 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
+import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Recognizer as R
 
 import qualified Data.AIG as AIG
@@ -226,7 +227,7 @@ prims be =
   , Prims.bpBvPopcount = AIG.popCount be
   , Prims.bpBvCountLeadingZeros = AIG.countLeadingZeros be
   , Prims.bpBvCountTrailingZeros = AIG.countTrailingZeros be
-  , Prims.bpBvForall = error "bvForall unimplemented for backend"
+  , Prims.bpBvForall = unsupportedAIGPrimitive "bvForall"
 
     -- Integer operations
   , Prims.bpIntAdd = pure2 (+)
@@ -242,6 +243,9 @@ prims be =
   , Prims.bpIntMin = pure2 min
   , Prims.bpIntMax = pure2 max
   }
+
+unsupportedAIGPrimitive :: String -> a
+unsupportedAIGPrimitive = Prim.unsupportedPrimitive "AIG"
 
 beConstMap :: AIG.IsAIG l g => g s -> Map Ident (BValue (l s))
 beConstMap be =
