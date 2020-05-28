@@ -2250,7 +2250,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_define_opaque_perm"
-    "String -> String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_perm)
     Experimental
     [ "heapster_define_opaque_perm nm args tp trans defines an opaque named"
@@ -2259,7 +2259,7 @@ primitives = Map.fromList
     ]
 
   , prim "heapster_assume_fun"
-    "String -> String -> String -> TopLevel HeapsterEnv"
+    "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun)
     Experimental
     [ "heapster_assume_fun nm perms trans assumes that function nm has"
