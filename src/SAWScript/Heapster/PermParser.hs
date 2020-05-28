@@ -297,6 +297,8 @@ parseTypeKnown =
            return (Some $ mkKnownReprObj $ LLVMFrameRepr w)) <|>
    (do try (string "lifetime")
        return (Some $ mkKnownReprObj LifetimeRepr)) <|>
+   (do try (string "rwmodality")
+       return (Some $ mkKnownReprObj RWModalityRepr)) <|>
    (do try (string "permlist")
        return (Some $ mkKnownReprObj PermListRepr)) <|>
    (do try (string "struct")
