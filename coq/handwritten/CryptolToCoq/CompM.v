@@ -23,6 +23,7 @@ Class MonadBindOp (M:Type -> Type) : Type :=
   bindM : forall {A B}, M A -> (A -> M B) -> M B.
 
 Infix ">>=" := bindM (at level 58, left associativity).
+Notation "m1 >> m2" := (m1 >>= fun _ => m2) (at level 58, left associativity).
 
 (* A monad is a collection of monad operations that satisfy the monad laws *)
 Class Monad M `{MonadEqOp M} `{MonadReturnOp M} `{MonadBindOp M} : Prop :=
