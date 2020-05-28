@@ -862,6 +862,14 @@ Definition unfoldList : forall (a : Type), (((@Datatypes.list) (a))) -> ((@Eithe
 Definition foldList : forall (a : Type), (((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))))) -> ((@Datatypes.list) (a)) :=
   (fun (a : Type) => ((@either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (((@Datatypes.list) (a))) ((fun (_ : unit) => ((@Datatypes.nil) (a)))) ((fun (tup : ((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) => ((@Datatypes.cons) (a) (((SAWCoreScaffolding.fst) (tup))) (((SAWCoreScaffolding.fst) (((SAWCoreScaffolding.snd) (tup)))))))))).
 
+(* Prelude.equalString was skipped *)
+
+Definition stringListInsert : (((@Datatypes.list) (((@SAWCoreScaffolding.String))))) -> (((@SAWCoreScaffolding.String))) -> ((@Datatypes.list) (((@SAWCoreScaffolding.String)))) :=
+  (fun (l : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (s : ((@SAWCoreScaffolding.String))) => ((@Datatypes.cons) (((@SAWCoreScaffolding.String))) (s) (l))).
+
+Definition stringListRemove : (((@Datatypes.list) (((@SAWCoreScaffolding.String))))) -> (((@SAWCoreScaffolding.String))) -> ((@Datatypes.list) (((@SAWCoreScaffolding.String)))) :=
+  (fun (l : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (s : ((@SAWCoreScaffolding.String))) => ((@Datatypes.list_rect) (((@SAWCoreScaffolding.String))) ((fun (_ : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) => ((@Datatypes.list) (((@SAWCoreScaffolding.String)))))) (((@Datatypes.nil) (((@SAWCoreScaffolding.String))))) ((fun (s' : ((@SAWCoreScaffolding.String))) (_ : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (rec : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) => if ((@SAWCoreScaffolding.equalString) (s) (s')) then rec else ((@Datatypes.cons) (((@SAWCoreScaffolding.String))) (s') (rec)))) (l))).
+
 Inductive W64List : Type :=
 | W64Nil : ((@W64List))
 | W64Cons : (((@bitvector) (64))) -> (((@W64List))) -> ((@W64List))

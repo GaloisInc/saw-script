@@ -12,6 +12,12 @@ Axiom error : forall (a : Type), String.string -> a.
 
 Definition String := String.string.
 
+Definition equalString (s1 s2: String) : bool :=
+  match String.string_dec s1 s2 with
+  | left _ => true
+  | right _ => false
+  end.
+
 Definition Unit        := tt.
 Definition UnitType    := unit.
 Definition UnitType__rec := unit_rect.
