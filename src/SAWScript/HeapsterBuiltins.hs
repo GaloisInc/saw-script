@@ -209,7 +209,8 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str i_string =
        Right tp -> return tp
      sc <- getSharedContext
      let i = fromString i_string
-     _ <- liftIO $ scRequireDef sc i -- Ensure that i is defined
+     -- FIXME: i could be a datatype as well
+     -- _ <- liftIO $ scRequireDef sc i -- Ensure that i is defined
      case (some_args, some_tp) of
        (Some args, Some tp) ->
          let env' = permEnvAddOpaquePerm env nm args tp i in
