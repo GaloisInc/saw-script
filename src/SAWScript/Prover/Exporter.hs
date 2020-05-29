@@ -209,10 +209,10 @@ writeVerilog sc path t = do
   (_, (_, bval)) <- W4Sim.w4EvalAny sym sc Map.empty [] t
   edoc <- runExceptT $
     case bval of
-      Sim.VBool b -> exprVerilog b "f"
-      Sim.VWord (W4Sim.DBV w) -> exprVerilog w "f"
+      Sim.VBool b -> exprVerilog sym b "f"
+      Sim.VWord (W4Sim.DBV w) -> exprVerilog sym w "f"
       --Sim.VPair u v -> undefined
-      Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> eqVerilog x y "f"
+      Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> eqVerilog sym x y "f"
       _ -> throwError $ "write_verilog: unsupported result type: " ++ show bval
   case edoc of
     Left err -> do
