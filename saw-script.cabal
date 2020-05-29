@@ -47,6 +47,8 @@ library
     , filepath
     , free
     , haskeline
+    , heapster-saw
+    , hobbits >= 1.2.5
     , IfElse
     , jvm-parser
     , jvm-verifier
@@ -88,7 +90,6 @@ library
     , flexdis86
     , elf-edit
     , reflection
-    , hobbits >= 1.2.5
 
   hs-source-dirs: src
 
@@ -132,12 +133,6 @@ library
     SAWScript.Value
     SAWScript.VerificationCheck
 
-    SAWScript.Heapster.CruUtil
-    SAWScript.Heapster.Permissions
-    SAWScript.Heapster.PermParser
-    SAWScript.Heapster.Implication
-    SAWScript.Heapster.TypedCrucible
-    SAWScript.Heapster.SAWTranslation
     SAWScript.HeapsterBuiltins
 
     SAWScript.Crucible.Common
@@ -220,4 +215,5 @@ executable saw
     , transformers
     , saw-script
     , saw-core
+    , heapster-saw
     , cryptol-verifier

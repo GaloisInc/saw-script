@@ -55,11 +55,11 @@ import SAWScript.Builtins
 import SAWScript.Crucible.LLVM.Builtins
 import SAWScript.Crucible.LLVM.MethodSpecIR
 
-import SAWScript.Heapster.CruUtil
-import SAWScript.Heapster.Permissions
-import SAWScript.Heapster.TypedCrucible
-import SAWScript.Heapster.SAWTranslation
-import SAWScript.Heapster.PermParser
+import Verifier.SAW.Heapster.CruUtil
+import Verifier.SAW.Heapster.Permissions
+import Verifier.SAW.Heapster.TypedCrucible
+import Verifier.SAW.Heapster.SAWTranslation
+import Verifier.SAW.Heapster.PermParser
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq

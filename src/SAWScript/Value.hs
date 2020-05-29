@@ -101,7 +101,7 @@ import qualified Lang.Crucible.JVM as CJ
 
 import           What4.ProgramLoc (ProgramLoc)
 
-import SAWScript.Heapster.Permissions
+import Verifier.SAW.Heapster.Permissions
 
 -- Values ----------------------------------------------------------------------
 
