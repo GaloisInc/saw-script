@@ -147,7 +147,10 @@ importPC sc pc =
     C.PHas _     -> panic "importPC PHas" []
     C.PZero      -> scGlobalDef sc "Cryptol.PZero"
     C.PLogic     -> scGlobalDef sc "Cryptol.PLogic"
-    C.PArith     -> scGlobalDef sc "Cryptol.PArith"
+    C.PRing      -> scGlobalDef sc "Cryptol.PRing"
+    C.PIntegral  -> scGlobalDef sc "Cryptol.PIntegral"
+    C.PField     -> scGlobalDef sc "Cryptol.PField"
+    C.PRound     -> scGlobalDef sc "Cryptol.PRound"
     C.PCmp       -> scGlobalDef sc "Cryptol.PCmp"
     C.PSignedCmp -> scGlobalDef sc "Cryptol.PSignedCmp"
     C.PLiteral   -> scGlobalDef sc "Cryptol.PLiteral"
@@ -180,6 +183,7 @@ importType sc env ty =
             C.TCArray    -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scArrayType sc a b
+            C.TCRational -> panic "importType TODO: RationalType" []
             C.TCSeq      -> scGlobalApply sc "Cryptol.seq" =<< traverse go tyargs
             C.TCFun      -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
@@ -210,7 +214,10 @@ isErasedProp prop =
   case prop of
     C.TCon (C.PC C.PZero     ) _ -> False
     C.TCon (C.PC C.PLogic    ) _ -> False
-    C.TCon (C.PC C.PArith    ) _ -> False
+    C.TCon (C.PC C.PRing     ) _ -> False
+    C.TCon (C.PC C.PIntegral ) _ -> False
+    C.TCon (C.PC C.PField    ) _ -> False
+    C.TCon (C.PC C.PRound    ) _ -> False
     C.TCon (C.PC C.PCmp      ) _ -> False
     C.TCon (C.PC C.PSignedCmp) _ -> False
     C.TCon (C.PC C.PLiteral  ) _ -> False
@@ -321,44 +328,55 @@ proveProp sc env prop =
         (C.pIsLogic -> Just (tIsRec' -> Just fm))
           -> do proveProp sc env (C.pLogic (C.tTuple (Map.elems fm)))
 
-        -- instance Arith Integer
-        (C.pIsArith -> Just (C.tIsInteger -> True))
-          -> do scGlobalApply sc "Cryptol.PArithInteger" []
-        -- instance Arith (Z n)
-        (C.pIsArith -> Just (C.tIsIntMod -> Just n))
+        -- instance Ring Integer
+        (C.pIsRing -> Just (C.tIsInteger -> True))
+          -> do scGlobalApply sc "Cryptol.PRingInteger" []
+        -- instance Ring (Z n)
+        (C.pIsRing -> Just (C.tIsIntMod -> Just n))
           -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PArithIntModNum" [n']
-        -- instance (fin n) => Arith [n]
-        (C.pIsArith -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
+                scGlobalApply sc "Cryptol.PRingIntModNum" [n']
+        -- instance (fin n) => Ring [n]
+        (C.pIsRing -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PArithSeqBool" [n']
-        -- instance (Arith a) => Arith [n]a
-        (C.pIsArith -> Just (C.tIsSeq -> Just (n, a)))
+                scGlobalApply sc "Cryptol.PRingSeqBool" [n']
+        -- instance (Ring a) => Ring [n]a
+        (C.pIsRing -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
                 a' <- importType sc env a
-                pa <- proveProp sc env (C.pArith a)
-                scGlobalApply sc "Cryptol.PArithSeq" [n', a', pa]
-        -- instance (Arith b) => Arith (a -> b)
-        (C.pIsArith -> Just (C.tIsFun -> Just (a, b)))
+                pa <- proveProp sc env (C.pRing a)
+                scGlobalApply sc "Cryptol.PRingSeq" [n', a', pa]
+        -- instance (Ring b) => Ring (a -> b)
+        (C.pIsRing -> Just (C.tIsFun -> Just (a, b)))
           -> do a' <- importType sc env a
                 b' <- importType sc env b
-                pb <- proveProp sc env (C.pArith b)
-                scGlobalApply sc "Cryptol.PArithFun" [a', b', pb]
-        -- instance Arith ()
-        (C.pIsArith -> Just (C.tIsTuple -> Just []))
-          -> do scGlobalApply sc "Cryptol.PArithUnit" []
-        -- instance (Arith a, Arith b) => Arith (a, b)
-        (C.pIsArith -> Just (C.tIsTuple -> Just [t]))
-          -> do proveProp sc env (C.pArith t)
-        (C.pIsArith -> Just (C.tIsTuple -> Just (t : ts)))
+                pb <- proveProp sc env (C.pRing b)
+                scGlobalApply sc "Cryptol.PRingFun" [a', b', pb]
+        -- instance Ring ()
+        (C.pIsRing -> Just (C.tIsTuple -> Just []))
+          -> do scGlobalApply sc "Cryptol.PRingUnit" []
+        -- instance (Ring a, Ring b) => Ring (a, b)
+        (C.pIsRing -> Just (C.tIsTuple -> Just [t]))
+          -> do proveProp sc env (C.pRing t)
+        (C.pIsRing -> Just (C.tIsTuple -> Just (t : ts)))
           -> do a <- importType sc env t
                 b <- importType sc env (C.tTuple ts)
-                pa <- proveProp sc env (C.pArith t)
-                pb <- proveProp sc env (C.pArith (C.tTuple ts))
-                scGlobalApply sc "Cryptol.PArithPair" [a, b, pa, pb]
-        -- instance (Arith a, Arith b, ...) => instance Arith { x : a, y : b, ... }
-        (C.pIsArith -> Just (tIsRec' -> Just fm))
-          -> do proveProp sc env (C.pArith (C.tTuple (Map.elems fm)))
+                pa <- proveProp sc env (C.pRing t)
+                pb <- proveProp sc env (C.pRing (C.tTuple ts))
+                scGlobalApply sc "Cryptol.PRingPair" [a, b, pa, pb]
+        -- instance (Ring a, Ring b, ...) => instance Ring { x : a, y : b, ... }
+        (C.pIsRing -> Just (tIsRec' -> Just fm))
+          -> do proveProp sc env (C.pRing (C.tTuple (Map.elems fm)))
+
+        -- instance Integral Integer
+        (C.pIsIntegral -> Just (C.tIsInteger -> True))
+          -> scGlobalApply sc "Cryptol.PIntegralInteger" []
+        -- instance Integral [n]
+        (C.pIsIntegral -> Just (C.tIsSeq -> (Just (n, C.tIsBit -> True))))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PIntegralSeqBool" [n']
+
+        -- TODO, Field instances
+        -- TODO, Round instances
 
         -- instance Cmp Bit
         (C.pIsCmp -> Just (C.tIsBit -> True))
@@ -443,55 +461,92 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "False"         -> scBool sc False
     "number"        -> scGlobalDef sc "Cryptol.ecNumber"      -- Converts a numeric type into its corresponding value.
                                                               -- {val, a} (Literal val a) => a
-    "toInteger"     -> scGlobalDef sc "Cryptol.ecToInteger"   -- {n} (fin n) => [n] -> Integer
-    "fromInteger"   -> scGlobalDef sc "Cryptol.ecFromInteger" -- {a} (Arith a) => Integer -> a
+
     "fromZ"         -> scGlobalDef sc "Cryptol.ecFromZ"       -- {n} (fin n, n >= 1) => Z n -> Integer
-    "+"             -> scGlobalDef sc "Cryptol.ecPlus"        -- {a} (Arith a) => a -> a -> a
-    "-"             -> scGlobalDef sc "Cryptol.ecMinus"       -- {a} (Arith a) => a -> a -> a
-    "*"             -> scGlobalDef sc "Cryptol.ecMul"         -- {a} (Arith a) => a -> a -> a
-    "/"             -> scGlobalDef sc "Cryptol.ecDiv"         -- {a} (Arith a) => a -> a -> a
-    "%"             -> scGlobalDef sc "Cryptol.ecMod"         -- {a} (Arith a) => a -> a -> a
-    "^^"            -> scGlobalDef sc "Cryptol.ecExp"         -- {a} (Arith a) => a -> a -> a
-    "lg2"           -> scGlobalDef sc "Cryptol.ecLg2"         -- {a} (Arith a) => a -> a
-    "negate"        -> scGlobalDef sc "Cryptol.ecNeg"         -- {a} (Arith a) => a -> a
-    "/$"            -> scGlobalDef sc "Cryptol.ecSDiv"        -- {a} (Arith a) => a -> a -> a
-    "%$"            -> scGlobalDef sc "Cryptol.ecSMod"        -- {a} (Arith a) => a -> a -> a
-    "<"             -> scGlobalDef sc "Cryptol.ecLt"          -- {a} (Cmp a) => a -> a -> Bit
-    ">"             -> scGlobalDef sc "Cryptol.ecGt"          -- {a} (Cmp a) => a -> a -> Bit
-    "<="            -> scGlobalDef sc "Cryptol.ecLtEq"        -- {a} (Cmp a) => a -> a -> Bit
-    ">="            -> scGlobalDef sc "Cryptol.ecGtEq"        -- {a} (Cmp a) => a -> a -> Bit
-    "=="            -> scGlobalDef sc "Cryptol.ecEq"          -- {a} (Cmp a) => a -> a -> Bit
-    "!="            -> scGlobalDef sc "Cryptol.ecNotEq"       -- {a} (Cmp a) => a -> a -> Bit
-    "<$"            -> scGlobalDef sc "Cryptol.ecSLt"         -- {a} (SignedCmp a) => a -> a -> Bit
-    ">>$"           -> scGlobalDef sc "Cryptol.ecSShiftR"     -- {n, k} (fin n, n >= 1, fin k) => [n] -> [k] -> [n]
+
+    -- Zero
+    "zero"          -> scGlobalDef sc "Cryptol.ecZero"        -- {a} (Zero a) => a
+
+    -- Logic
     "&&"            -> scGlobalDef sc "Cryptol.ecAnd"         -- {a} (Logic a) => a -> a -> a
     "||"            -> scGlobalDef sc "Cryptol.ecOr"          -- {a} (Logic a) => a -> a -> a
     "^"             -> scGlobalDef sc "Cryptol.ecXor"         -- {a} (Logic a) => a -> a -> a
     "complement"    -> scGlobalDef sc "Cryptol.ecCompl"       -- {a} (Logic a) => a -> a
-    "zero"          -> scGlobalDef sc "Cryptol.ecZero"        -- {a} (Zero a) => a
-    "carry"         -> scGlobalDef sc "Cryptol.ecCarry"       -- {n} (fin n) => [n] -> [n] -> Bit
-    "scarry"        -> scGlobalDef sc "Cryptol.ecSCarry"      -- {n} (fin n, n >= 1) => [n] -> [n] -> Bit
-    "<<"            -> scGlobalDef sc "Cryptol.ecShiftL"      -- {m,n,a} (fin n, Zero a) => [m] a -> [n] -> [m] a
-    ">>"            -> scGlobalDef sc "Cryptol.ecShiftR"      -- {m,n,a} (fin n, Zero a) => [m] a -> [n] -> [m] a
-    "<<<"           -> scGlobalDef sc "Cryptol.ecRotL"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
-    ">>>"           -> scGlobalDef sc "Cryptol.ecRotR"        -- {m,n,a} (fin m) => [m] a -> [n] -> [m] a
+
+    -- Ring
+    "fromInteger"   -> scGlobalDef sc "Cryptol.ecFromInteger" -- {a} (Ring a) => Integer -> a
+    "+"             -> scGlobalDef sc "Cryptol.ecPlus"        -- {a} (Ring a) => a -> a -> a
+    "-"             -> scGlobalDef sc "Cryptol.ecMinus"       -- {a} (Ring a) => a -> a -> a
+    "*"             -> scGlobalDef sc "Cryptol.ecMul"         -- {a} (Ring a) => a -> a -> a
+    "negate"        -> scGlobalDef sc "Cryptol.ecNeg"         -- {a} (Ring a) => a -> a
+
+    -- Integral
+    "toInteger"     -> scGlobalDef sc "Cryptol.ecToInteger"   -- {a} (Integral a) => a -> Integer
+    "/"             -> scGlobalDef sc "Cryptol.ecDiv"         -- {a} (Integral a) => a -> a -> a
+    "%"             -> scGlobalDef sc "Cryptol.ecMod"         -- {a} (Integral a) => a -> a -> a
+    "^^"            -> scGlobalDef sc "Cryptol.ecExp"         -- {a} (Ring a, Integral b) => a -> b -> a
+    "infFrom"       -> scGlobalDef sc "Cryptol.ecInfFrom"     -- {a} (Integral a) => a -> [inf]a
+    "infFromThen"   -> scGlobalDef sc "Cryptol.ecInfFromThen" -- {a} (Integral a) => a -> a -> [inf]a
+
+    -- Field
+    "recip"         -> scGlobalDef sc "Cryptol.ecRecip"       -- {a} (Field a) => a -> a
+    "/."            -> scGlobalDef sc "Cryptol.ecFieldDiv"    -- {a} (Field a) => a -> a -> a
+
+    -- Round
+    "ceiling"       -> scGlobalDef sc "Cryptol.ecCeiling"     -- {a} (Round a) => a -> Integer
+    "floor"         -> scGlobalDef sc "Cryptol.ecFloor"       -- {a} (Round a) => a -> Integer
+    "trunc"         -> scGlobalDef sc "Cryptol.ecTrunc"       -- {a} (Round a) => a -> Integer
+    "round"         -> scGlobalDef sc "Cryptol.ecRound"       -- {a} (Round a) => a -> Integer
+
+    -- Cmp
+    "=="            -> scGlobalDef sc "Cryptol.ecEq"          -- {a} (Cmp a) => a -> a -> Bit
+    "!="            -> scGlobalDef sc "Cryptol.ecNotEq"       -- {a} (Cmp a) => a -> a -> Bit
+
+    "<"             -> scGlobalDef sc "Cryptol.ecLt"          -- {a} (Cmp a) => a -> a -> Bit
+    ">"             -> scGlobalDef sc "Cryptol.ecGt"          -- {a} (Cmp a) => a -> a -> Bit
+    "<="            -> scGlobalDef sc "Cryptol.ecLtEq"        -- {a} (Cmp a) => a -> a -> Bit
+    ">="            -> scGlobalDef sc "Cryptol.ecGtEq"        -- {a} (Cmp a) => a -> a -> Bit
+
+    -- SignedCmp
+    "<$"            -> scGlobalDef sc "Cryptol.ecSLt"         -- {a} (SignedCmp a) => a -> a -> Bit
+
+    -- Bitvector primitives
+    "/$"            -> scGlobalDef sc "Cryptol.ecSDiv"        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
+    "%$"            -> scGlobalDef sc "Cryptol.ecSMod"        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
+    "lg2"           -> scGlobalDef sc "Cryptol.ecLg2"         -- {n} (fin n) => [n] -> [n]
+    ">>$"           -> scGlobalDef sc "Cryptol.ecSShiftR"     -- {n, ix} (fin n, n >= 1, Integral ix) => [n] -> ix -> [n]
+
+    -- Shifts/rotates
+    "<<"            -> scGlobalDef sc "Cryptol.ecShiftL"      -- {n, ix, a} (Integral ix, Zero a) => [n]a -> ix -> [n]a
+    ">>"            -> scGlobalDef sc "Cryptol.ecShiftR"      -- {n, ix, a} (Integral ix, Zero a) => [n]a -> ix -> [n]a
+    "<<<"           -> scGlobalDef sc "Cryptol.ecRotL"        -- {n, ix, a} (fin n, Integral ix) => [n]a -> ix -> [n]a
+    ">>>"           -> scGlobalDef sc "Cryptol.ecRotR"        -- {n, ix, a} (fin n, Integral ix) => [n]a -> ix -> [n]a
+
+    -- Sequences primitives
     "#"             -> scGlobalDef sc "Cryptol.ecCat"         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
     "splitAt"       -> scGlobalDef sc "Cryptol.ecSplitAt"     -- {a,b,c} (fin a) => [a+b] c -> ([a]c,[b]c)
     "join"          -> scGlobalDef sc "Cryptol.ecJoin"        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
     "split"         -> scGlobalDef sc "Cryptol.ecSplit"       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
     "reverse"       -> scGlobalDef sc "Cryptol.ecReverse"     -- {a,b} (fin a) => [a] b -> [a] b
     "transpose"     -> scGlobalDef sc "Cryptol.ecTranspose"   -- {a,b,c} [a][b]c -> [b][a]c
-    "@"             -> scGlobalDef sc "Cryptol.ecAt"          -- {n,a,i} (fin i) => [n]a -> [i] -> a
-    "!"             -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n,a,i} (fin n, fin i) => [n]a -> [i] -> a
-    "update"        -> scGlobalDef sc "Cryptol.ecUpdate"      -- {a,b,c} (fin c) => [a]b -> [c] -> b -> [a]b
-    "updateEnd"     -> scGlobalDef sc "Cryptol.ecUpdateEnd"   -- {a,b,c} (fin a, fin c) => [a]b -> [c] -> b -> [a]b
+    "@"             -> scGlobalDef sc "Cryptol.ecAt"          -- {n, a, ix} (Integral ix) => [n]a -> ix -> a
+    "!"             -> scGlobalDef sc "Cryptol.ecAtBack"      -- {n, a, ix} (fin n, Integral ix) => [n]a -> ix -> a
+    "update"        -> scGlobalDef sc "Cryptol.ecUpdate"      -- {n, a, ix} (Integral ix) => [n]a -> ix -> a -> [n]a
+    "updateEnd"     -> scGlobalDef sc "Cryptol.ecUpdateEnd"   -- {n, a, ix} (fin n, Integral ix) => [n]a -> ix -> a -> [n]a
+
+    -- Enumerations
     "fromTo"        -> scGlobalDef sc "Cryptol.ecFromTo"
-                               -- fromTo : {first, last, bits}
-                               --           ( fin last, fin bits, last >== first, bits >== width last)
-                               --        => [1 + (last - first)] [bits]
+                               -- fromTo : {first, last, bits, a}
+                               --           ( fin last, fin bits, last >== first,
+                               --             Literal first a, Literal last a)
+                               --        => [1 + (last - first)]a
     "fromThenTo"    -> scGlobalDef sc "Cryptol.ecFromThenTo"
-    "infFrom"       -> scGlobalDef sc "Cryptol.ecInfFrom"     -- {a} (fin a) => [a] -> [inf][a]
-    "infFromThen"   -> scGlobalDef sc "Cryptol.ecInfFromThen" -- {a} (fin a) => [a] -> [a] -> [inf][a]
+                               -- fromThenTo : {first, next, last, a, len}
+                               --              ( fin first, fin next, fin last
+                               --              , Literal first a, Literal next a, Literal last a
+                               --              , first != next
+                               --              , lengthFromThenTo first next last == len) => [len]a
+
     "error"         -> scGlobalDef sc "Cryptol.ecError"       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
     "random"        -> scGlobalDef sc "Cryptol.ecRandom"      -- {a} => [32] -> a -- Random values
     "trace"         -> scGlobalDef sc "Cryptol.ecTrace"       -- {n,a,b} [n][8] -> a -> b -> b
@@ -815,7 +870,7 @@ tupleUpdate sc f n (a : ts) =
 tupleUpdate _ _ _ [] = panic "tupleUpdate" ["empty tuple"]
 
 -- | Apply a substitution to a type *without* simplifying
--- constraints like @Arith [n]a@ to @Arith a@. (This is in contrast to
+-- constraints like @Ring [n]a@ to @Ring a@. (This is in contrast to
 -- 'apSubst', which performs simplifications wherever possible.)
 plainSubst :: C.Subst -> C.Type -> C.Type
 plainSubst s ty =
@@ -1217,6 +1272,8 @@ exportValue ty v = case ty of
     V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
   TV.TVArray{} -> error $ "exportValue: (on array type " ++ show ty ++ ")"
+
+  TV.TVRational -> error "exportValue: Not yet implemented: Rational"
 
   TV.TVSeq _ e ->
     case v of
