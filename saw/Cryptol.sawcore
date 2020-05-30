@@ -362,7 +362,7 @@ seqZip a b m n =
 
 
 --------------------------------------------------------------------------------
--- Arith and Logic functions
+-- Ring and Logic functions
 
 seqBinary : (n : Num) -> (a : sort 0) -> (a -> a -> a) ->
              seq n a -> seq n a -> seq n a;
@@ -433,6 +433,82 @@ pairCmp a b f g x12 y12 k =
 --------------------------------------------------------------------------------
 -- Dictionaries and overloading
 
+-- Cmp class
+
+PCmp : sort 0 -> sort 1;
+PCmp a =
+  #{ eq  : a -> a -> Bool
+   , cmp : a -> a -> Bool -> Bool
+   };
+
+PCmpBit : PCmp Bool;
+PCmpBit = { eq = boolEq, cmp = boolCmp };
+
+PCmpInteger : PCmp Integer;
+PCmpInteger = { eq = intEq, cmp = integerCmp };
+
+PCmpIntMod : (n : Nat) -> PCmp (IntMod n);
+PCmpIntMod n =
+  { eq = intModEq n
+  , cmp = \ (x y : IntMod n) -> integerCmp (fromIntMod n x) (fromIntMod n y) };
+
+PCmpIntModNum : (num : Num) -> PCmp (IntModNum num);
+PCmpIntModNum num =
+  Num#rec (\ (n : Num) -> PCmp (IntModNum n)) PCmpIntMod PCmpInteger num;
+
+PCmpVec : (n : Nat) -> (a : sort 0) -> PCmp a -> PCmp (Vec n a);
+PCmpVec n a pa = { eq = vecEq n a pa.eq, cmp = vecCmp n a pa.cmp };
+
+PCmpSeq : (n : Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a);
+PCmpSeq n =
+  Num#rec (\ (n:Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a))
+          (\ (n:Nat) -> PCmpVec n)
+          (\ (a:sort 0) (pa : PCmp a) -> error (PCmp (Stream a)) "invalid Cmp instance")
+          n;
+
+PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
+PCmpWord n = { eq = bvEq n, cmp = bvCmp n };
+
+PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
+PCmpSeqBool n =
+  Num#rec (\ (n : Num) -> PCmp (seq n Bool))
+          (\ (n:Nat) -> PCmpWord n)
+          (error (PCmp (Stream Bool)) "invalid Cmp instance")
+          n;
+
+PCmpUnit : PCmp #();
+PCmpUnit = { eq = \ (x y : #()) -> True, cmp = unitCmp };
+
+PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp (a * b);
+PCmpPair a b pa pb =
+  { eq  = pairEq a b pa.eq pb.eq
+  , cmp = pairCmp a b pa.cmp pb.cmp };
+
+-- SignedCmp class
+
+PSignedCmp : sort 0 -> sort 1;
+PSignedCmp a = #{ scmp : a -> a -> Bool -> Bool };
+
+PSignedCmpVec : (n : Nat) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (Vec n a);
+PSignedCmpVec n a pa = { scmp = vecCmp n a pa.scmp };
+
+PSignedCmpSeq : (n : Num) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (seq n a);
+PSignedCmpSeq n =
+  Num#rec (\ (n:Num) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (seq n a))
+          (\ (n:Nat) -> PSignedCmpVec n)
+          (\ (a:sort 0) (pa : PSignedCmp a) -> error (PSignedCmp (Stream a)) "invalid SignedCmp instance")
+          n;
+
+PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec n Bool);
+PSignedCmpWord n = { scmp = bvSCmp n };
+
+PSignedCmpUnit : PSignedCmp #();
+PSignedCmpUnit = { scmp = unitCmp };
+
+PSignedCmpPair : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp (a * b);
+PSignedCmpPair a b pa pb = { scmp = pairCmp a b pa.scmp pb.scmp };
+
+
 -- Zero class
 
 PZero : sort 0 -> sort 0;
@@ -465,7 +541,7 @@ PZeroFun a b pb = (\(_ : a) -> pb);
 
 -- Logic class
 
-PLogic : sort 0 -> sort 0;
+PLogic : sort 0 -> sort 1;
 PLogic a =
   #{ and  : a -> a -> a
    , or   : a -> a -> a
@@ -539,236 +615,177 @@ PLogicPair a b pa pb =
   , not  = pairUnary a b pa.not pb.not
   };
 
--- Arith class
+-- Ring class
 
-PArith : sort 0 -> sort 0;
-PArith a =
+PRing : sort 0 -> sort 1;
+PRing a =
   #{ add  : a -> a -> a
    , sub  : a -> a -> a
    , mul  : a -> a -> a
-   , div  : a -> a -> a
-   , mod  : a -> a -> a
-   , exp  : a -> a -> a
-   , lg2  : a -> a
    , neg  : a -> a
-   , sdiv : a -> a -> a
-   , smod : a -> a -> a
    , int  : Integer -> a
    };
 
-PArithInteger : PArith Integer;
-PArithInteger =
+PRingInteger : PRing Integer;
+PRingInteger =
   { add = intAdd
   , sub = intSub
   , mul = intMul
-  , div = intDiv
-  , mod = intMod
-  , exp = errorBinary "no implementation for exp on Integer" Integer
-  , lg2 = errorUnary "no implementation for lg2 on Integer" Integer
   , neg = intNeg
-  , sdiv = errorBinary "no implementation for sdiv on Integer" Integer
-  , smod = errorBinary "no implementation for smod on Integer" Integer
   , int = \ (i : Integer) -> i
   };
 
-PArithIntMod : (n : Nat) -> PArith (IntMod n);
-PArithIntMod n =
+PRingIntMod : (n : Nat) -> PRing (IntMod n);
+PRingIntMod n =
   { add = intModAdd n
   , sub = intModSub n
   , mul = intModMul n
-  , div = \(x y : IntMod n) -> toIntMod n (intDiv (fromIntMod n x) (fromIntMod n y))
-  , mod = \(x y : IntMod n) -> toIntMod n (intMod (fromIntMod n x) (fromIntMod n y))
-  , exp = errorBinary "no implementation for exp on IntMod" (IntMod n)
-  , lg2 = errorUnary "no implementation for lg2 on IntMod" (IntMod n)
   , neg = intModNeg n
-  , sdiv = errorBinary "no implementation for sdiv on IntMod" (IntMod n)
-  , smod = errorBinary "no implementation for smod on IntMod" (IntMod n)
   , int = toIntMod n
   };
 
-PArithIntModNum : (num : Num) -> PArith (IntModNum num);
-PArithIntModNum num =
-  Num#rec (\ (n : Num) -> PArith (IntModNum n)) PArithIntMod PArithInteger num;
+PRingIntModNum : (num : Num) -> PRing (IntModNum num);
+PRingIntModNum num =
+  Num#rec (\ (n : Num) -> PRing (IntModNum n)) PRingIntMod PRingInteger num;
 
-PArithVec : (n : Nat) -> (a : sort 0) -> PArith a -> PArith (Vec n a);
-PArithVec n a pa =
+PRingVec : (n : Nat) -> (a : sort 0) -> PRing a -> PRing (Vec n a);
+PRingVec n a pa =
   { add = zipWith a a a pa.add n
   , sub = zipWith a a a pa.sub n
   , mul = zipWith a a a pa.mul n
-  , div = zipWith a a a pa.div n
-  , mod = zipWith a a a pa.mod n
-  , exp = zipWith a a a pa.exp n
-  , lg2 = map a a pa.lg2 n
   , neg = map a a pa.neg n
-  , sdiv = zipWith a a a pa.sdiv n
-  , smod = zipWith a a a pa.smod n
   , int = \ (i : Integer) -> replicate n a (pa.int i)
   };
 
-PArithStream : (a : sort 0) -> PArith a -> PArith (Stream a);
-PArithStream a pa =
+PRingStream : (a : sort 0) -> PRing a -> PRing (Stream a);
+PRingStream a pa =
   { add = streamMap2 a a a pa.add
   , sub = streamMap2 a a a pa.sub
   , mul = streamMap2 a a a pa.mul
-  , div = streamMap2 a a a pa.div
-  , mod = streamMap2 a a a pa.mod
-  , exp = streamMap2 a a a pa.exp
-  , lg2 = streamMap a a pa.lg2
   , neg = streamMap a a pa.neg
-  , sdiv = streamMap2 a a a pa.sdiv
-  , smod = streamMap2 a a a pa.smod
   , int = \ (i : Integer) -> streamConst a (pa.int i)
   };
 
-PArithSeq : (n : Num) -> (a : sort 0) -> PArith a -> PArith (seq n a);
-PArithSeq n =
-  Num#rec (\ (n : Num) -> (a : sort 0) -> PArith a -> PArith (seq n a))
-          (\ (n:Nat) -> PArithVec n)
-          PArithStream
+PRingSeq : (n : Num) -> (a : sort 0) -> PRing a -> PRing (seq n a);
+PRingSeq n =
+  Num#rec (\ (n : Num) -> (a : sort 0) -> PRing a -> PRing (seq n a))
+          (\ (n:Nat) -> PRingVec n)
+          PRingStream
           n;
 
-PArithWord : (n : Nat) -> PArith (Vec n Bool);
-PArithWord n =
+PRingWord : (n : Nat) -> PRing (Vec n Bool);
+PRingWord n =
   { add = bvAdd n
   , sub = bvSub n
   , mul = bvMul n
-  , div = bvUDiv n
-  , mod = bvURem n
-  , exp = bvExp n
-  , lg2 = bvLg2 n
   , neg = bvNeg n
-  , sdiv = natCase (\ (w:Nat) -> bitvector w -> bitvector w -> bitvector w)
-           (errorBinary "no implementation for sdiv on empty bit vectors" (bitvector 0)) bvSDiv n
-  , smod = natCase (\ (w:Nat) -> bitvector w -> bitvector w -> bitvector w)
-           (errorBinary "no implementation for smod on empty bit vectors" (bitvector 0)) bvSRem n
   , int = intToBv n
   };
 
-PArithSeqBool : (n : Num) -> PArith (seq n Bool);
-PArithSeqBool n =
-  Num#rec (\ (n:Num) -> PArith (seq n Bool))
-          (\ (n:Nat) -> PArithWord n)
-          (error (PArith (Stream Bool)) "PArithSeqBool: no instance for streams")
+PRingSeqBool : (n : Num) -> PRing (seq n Bool);
+PRingSeqBool n =
+  Num#rec (\ (n:Num) -> PRing (seq n Bool))
+          (\ (n:Nat) -> PRingWord n)
+          (error (PRing (Stream Bool)) "PRingSeqBool: no instance for streams")
           n;
 
-PArithFun : (a b : sort 0) -> PArith b -> PArith (a -> b);
-PArithFun a b pb =
+PRingFun : (a b : sort 0) -> PRing b -> PRing (a -> b);
+PRingFun a b pb =
   { add = funBinary a b pb.add
   , sub = funBinary a b pb.sub
   , mul = funBinary a b pb.mul
-  , div = funBinary a b pb.div
-  , mod = funBinary a b pb.mod
-  , exp = funBinary a b pb.exp
-  , lg2 = compose a b b pb.lg2
   , neg = compose a b b pb.neg
-  , sdiv = funBinary a b pb.sdiv
-  , smod = funBinary a b pb.smod
   , int = \ (i : Integer) -> \ (_ : a) -> pb.int i
   };
 
-PArithUnit : PArith #();
-PArithUnit =
+PRingUnit : PRing #();
+PRingUnit =
   { add = unitBinary
   , sub = unitBinary
   , mul = unitBinary
-  , div = unitBinary
-  , mod = unitBinary
-  , exp = unitBinary
-  , lg2 = unitUnary
   , neg = unitUnary
-  , sdiv = unitBinary
-  , smod = unitBinary
   , int = \ (i : Integer) -> ()
   };
 
-PArithPair : (a b : sort 0) -> PArith a -> PArith b -> PArith (a * b);
-PArithPair a b pa pb =
+PRingPair : (a b : sort 0) -> PRing a -> PRing b -> PRing (a * b);
+PRingPair a b pa pb =
   { add = pairBinary a b pa.add pb.add
   , sub = pairBinary a b pa.sub pb.sub
   , mul = pairBinary a b pa.mul pb.mul
-  , div = pairBinary a b pa.div pb.div
-  , mod = pairBinary a b pa.mod pb.mod
-  , exp = pairBinary a b pa.exp pb.exp
-  , lg2 = pairUnary a b pa.lg2 pb.lg2
   , neg = pairUnary a b pa.neg pb.neg
-  , sdiv = pairBinary a b pa.sdiv pb.sdiv
-  , smod = pairBinary a b pa.smod pb.smod
   , int = \ (i : Integer) -> (pa.int i, pb.int i)
   };
 
--- Cmp class
 
-PCmp : sort 0 -> sort 0;
-PCmp a =
-  #{ eq  : a -> a -> Bool
-   , cmp : a -> a -> Bool -> Bool };
+-- Integral class
 
-PCmpBit : PCmp Bool;
-PCmpBit = { eq = boolEq, cmp = boolCmp };
+PIntegral : sort 0 -> sort 1;
+PIntegral a =
+  #{ integralRing : PRing a
+   , div  : a -> a -> a
+   , mod  : a -> a -> a
+   , toInt : a -> Integer
+   , posNegCases :
+        (r : sort 0) ->
+	(Nat -> r) ->
+	(Nat -> r) ->
+	a -> r
+   };
 
-PCmpInteger : PCmp Integer;
-PCmpInteger = { eq = intEq, cmp = integerCmp };
+PIntegralInteger : PIntegral Integer;
+PIntegralInteger =
+   { integralRing = PRingInteger
+   , div = intDiv
+   , mod = intMod
+   , toInt = \(i:Integer) -> i
+   , posNegCases = \ (r:sort 0) -> \ (pos neg:Nat -> r) -> \ (i:Integer) ->
+        ite r (intLe (natToInt 0) i) (pos (intToNat i)) (neg (intToNat (intNeg i)))
+   };
 
-PCmpIntMod : (n : Nat) -> PCmp (IntMod n);
-PCmpIntMod n =
-  { eq = intModEq n
-  , cmp = \ (x y : IntMod n) -> integerCmp (fromIntMod n x) (fromIntMod n y) };
+PIntegralWord : (n : Nat) -> PIntegral (Vec n Bool);
+PIntegralWord n =
+   { integralRing = PRingWord n
+   , div = bvUDiv n
+   , mod = bvURem n
+   , toInt = bvToInt n
 
-PCmpIntModNum : (num : Num) -> PCmp (IntModNum num);
-PCmpIntModNum num =
-  Num#rec (\ (n : Num) -> PCmp (IntModNum n)) PCmpIntMod PCmpInteger num;
+     -- words are always considered non-negative
+   , posNegCases = \ (r:sort 0) -> \ (pos neg:Nat -> r) -> \(i:Vec n Bool) -> pos (bvToNat n i)
+   };
 
-PCmpVec : (n : Nat) -> (a : sort 0) -> PCmp a -> PCmp (Vec n a);
-PCmpVec n a pa = { eq = vecEq n a pa.eq, cmp = vecCmp n a pa.cmp };
+PIntegralSeqBool : (n : Num) -> PIntegral (seq n Bool);
+PIntegralSeqBool n =
+  Num#rec (\ (n:Num) -> PIntegral (seq n Bool))
+          (\ (n:Nat) -> PIntegralWord n)
+          (error (PIntegral (Stream Bool)) "PIntegralSeqBool: no instance for streams")
+	  n;
 
-PCmpSeq : (n : Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a);
-PCmpSeq n =
-  Num#rec (\ (n:Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a))
-          (\ (n:Nat) -> PCmpVec n)
-          (\ (a:sort 0) (pa : PCmp a) -> error (PCmp (Stream a)) "invalid Cmp instance")
-          n;
+-- Field class
 
-PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
-PCmpWord n = { eq = bvEq n, cmp = bvCmp n };
+PField : sort 0 -> sort 1;
+PField a =
+  #{ fieldRing : PRing a
+   , recip     : a -> a
+   , fieldDiv  : a -> a -> a
+   };
 
-PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
-PCmpSeqBool n =
-  Num#rec (\ (n : Num) -> PCmp (seq n Bool))
-          (\ (n:Nat) -> PCmpWord n)
-          (error (PCmp (Stream Bool)) "invalid Cmp instance")
-          n;
+-- TODO Field class instances
 
-PCmpUnit : PCmp #();
-PCmpUnit = { eq = \ (x y : #()) -> True, cmp = unitCmp };
 
-PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp (a * b);
-PCmpPair a b pa pb =
-  { eq  = pairEq a b pa.eq pb.eq
-  , cmp = pairCmp a b pa.cmp pb.cmp };
+-- Round class
 
--- SignedCmp class
+PRound : sort 0 -> sort 1;
+PRound a =
+  #{ roundField : PField a
+   , roundCmp   : PCmp a
+   , floor      : a -> Integer
+   , ceiling    : a -> Integer
+   , trunc      : a -> Integer
+   , round      : a -> Integer
+   };
 
-PSignedCmp : sort 0 -> sort 0;
-PSignedCmp a = #{ scmp : a -> a -> Bool -> Bool };
+-- TODO Round class instances
 
-PSignedCmpVec : (n : Nat) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (Vec n a);
-PSignedCmpVec n a pa = { scmp = vecCmp n a pa.scmp };
-
-PSignedCmpSeq : (n : Num) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (seq n a);
-PSignedCmpSeq n =
-  Num#rec (\ (n:Num) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (seq n a))
-          (\ (n:Nat) -> PSignedCmpVec n)
-          (\ (a:sort 0) (pa : PSignedCmp a) -> error (PSignedCmp (Stream a)) "invalid SignedCmp instance")
-          n;
-
-PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec n Bool);
-PSignedCmpWord n = { scmp = bvSCmp n };
-
-PSignedCmpUnit : PSignedCmp #();
-PSignedCmpUnit = { scmp = unitCmp };
-
-PSignedCmpPair : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp (a * b);
-PSignedCmpPair a b pa pb = { scmp = pairCmp a b pa.scmp pb.scmp };
 
 -- Literal class
 
@@ -800,50 +817,75 @@ ecNumber val a pa =
   Num#rec (\ (_ : Num) -> a) pa (pa 0) val;
   -- Dummy case: treat `inf as `0 (this never happens anyway)
 
-ecToInteger : (n : Num) -> seq n Bool -> Integer;
-ecToInteger n =
-  Num#rec (\ (n:Num) -> seq n Bool -> Integer) bvToInt
-          (error (Stream Bool -> Integer) "ecToInteger called on TCInf")
-          n;
+ecToInteger : (a : sort 0) -> PIntegral a -> a -> Integer;
+ecToInteger a pa = pa.toInt;
 
-ecFromInteger : (a : sort 0) -> PArith a -> Integer -> a;
+ecFromInteger : (a : sort 0) -> PRing a -> Integer -> a;
 ecFromInteger a pa = pa.int;
 
 ecFromZ : (n : Num) -> IntModNum n -> Integer;
 ecFromZ n =
   Num#rec (\ (n : Num) -> IntModNum n -> Integer)
-          fromIntMod (\ (x : Integer) -> x) n;
+          fromIntMod
+	  (\ (x : Integer) -> x)
+	  n;
 
--- Arith
-ecPlus : (a : sort 0) -> PArith a -> a -> a -> a;
+-- Ring
+ecPlus : (a : sort 0) -> PRing a -> a -> a -> a;
 ecPlus a pa = pa.add;
 
-ecMinus : (a : sort 0) -> PArith a -> a -> a -> a;
+ecMinus : (a : sort 0) -> PRing a -> a -> a -> a;
 ecMinus a pa = pa.sub;
 
-ecMul : (a : sort 0) -> PArith a -> a -> a -> a;
+ecMul : (a : sort 0) -> PRing a -> a -> a -> a;
 ecMul a pa = pa.mul;
 
-ecDiv : (a : sort 0) -> PArith a -> a -> a -> a;
-ecDiv a pa = pa.div;
-
-ecMod : (a : sort 0) -> PArith a -> a -> a -> a;
-ecMod a pa = pa.mod;
-
-ecExp : (a : sort 0) -> PArith a -> a -> a -> a;
-ecExp a pa = pa.exp;
-
-ecLg2 : (a : sort 0) -> PArith a -> a -> a;
-ecLg2 a pa = pa.lg2;
-
-ecNeg : (a : sort 0) -> PArith a -> a -> a;
+ecNeg : (a : sort 0) -> PRing a -> a -> a;
 ecNeg a pa = pa.neg;
 
-ecSDiv : (a : sort 0) -> PArith a -> a -> a -> a;
-ecSDiv a pa = pa.sdiv;
+-- Integral
 
-ecSMod : (a : sort 0) -> PArith a -> a -> a -> a;
-ecSMod a pa = pa.smod;
+ecDiv : (a : sort 0) -> PIntegral a -> a -> a -> a;
+ecDiv a pi = pi.div;
+
+ecMod : (a : sort 0) -> PIntegral a -> a -> a -> a;
+ecMod a pi = pi.mod;
+
+ecExp : (a b: sort 0) -> PRing a -> PIntegral b -> a -> b -> a;
+ecExp a b pa pi x =
+  pi.posNegCases a
+    (Nat__rec (\ (i:Nat) -> a)
+       (pa.int (natToInt 1))
+       (\ (_:Nat) -> \ (acc:a) -> pa.mul x acc))
+    (error (Nat -> a) "ecExp : negative exponent");
+
+
+-- Bitvector ops
+
+ecLg2 : (n : Num) -> seq n Bool -> seq n Bool;
+ecLg2 n =
+  Num#rec (\ (n:Num) -> seq n Bool -> seq n Bool)
+    bvLg2
+    (error (Stream Bool -> Stream Bool) "ecLg2: expected finite word")
+    n;
+
+ecSDiv : (n : Num) -> seq n Bool -> seq n Bool -> seq n Bool;
+ecSDiv n =
+  Num#rec (\ (n:Num) -> seq n Bool -> seq n Bool -> seq n Bool)
+    (Nat__rec (\ (n:Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool)
+      (error (Vec 0 Bool -> Vec 0 Bool -> Vec 0 Bool) "ecSDiv: illegal 0-width word")
+      (\ (n':Nat) -> \ (_:Vec n' Bool -> Vec n' Bool -> Vec n' Bool) -> bvSDiv n'))
+    (error (Stream Bool -> Stream Bool -> Stream Bool) "ecSDiv: expected finite word")
+    n;
+
+ecSMod : (n : Num) -> seq n Bool -> seq n Bool -> seq n Bool;
+ecSMod n =
+  Num#rec (\ (n:Num) -> seq n Bool -> seq n Bool -> seq n Bool)
+    (Nat__rec (\ (n:Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool)
+      (error (Vec 0 Bool -> Vec 0 Bool -> Vec 0 Bool) "ecSMod: illegal 0-width word")
+      (\ (n':Nat) -> \ (_:Vec n' Bool -> Vec n' Bool -> Vec n' Bool) -> bvSRem n'))
+    (error (Stream Bool -> Stream Bool -> Stream Bool) "ecSMod: expected finite word")
+    n;
 
 -- Cmp
 ecLt : (a : sort 0) -> PCmp a -> a -> a -> Bool;
@@ -884,92 +926,77 @@ ecZero : (a : sort 0) -> PZero a -> a;
 ecZero a pa = pa;
 
 -- Sequences
-ecShiftL : (m n : Num) -> (a : sort 0) -> PZero a -> seq m a -> seq n Bool ->
-            seq m a;
+ecShiftL : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+            seq m a -> ix -> seq m a;
 ecShiftL m =
   Num#rec
-    (\ (m:Num) -> (n:Num) -> (a : sort 0) -> PZero a -> seq m a ->
-       seq n Bool -> seq m a)
-    (\ (m:Nat) ->
-       finNumRec
-         (\ (n:Num) -> (a : sort 0) -> PZero a -> Vec m a -> seq n Bool ->
-            Vec m a)
-         -- Case for (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
-            bvShiftL m a n (ecZero a pz)))
-    (finNumRec
-       (\ (n:Num) -> (a:sort 0) -> PZero a -> Stream a -> seq n Bool ->
-          Stream a)
-       -- Case for (infinity, TCNum n)
-       (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
-          bvStreamShiftL a n))
+    (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a -> seq m a -> ix -> seq m a)
+
+    -- Case for (TCNum m)
+    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec m a) ->
+        pix.posNegCases (Vec m a)
+	  (shiftL m a (ecZero a pz) xs)
+	  (shiftR m a (ecZero a pz) xs))
+
+    -- Case for (infinity)
+    (\ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) ->
+       \ (xs:Stream a) ->
+        pix.posNegCases (Stream a)
+	  (\ (posi:Nat) -> streamDrop a posi xs)
+	  (\ (negi:Nat) -> streamAppend a negi (replicate negi a pz) xs))
     m;
 
-ecShiftR : (m n : Num) -> (a : sort 0) -> PZero a -> seq m a -> seq n Bool ->
-            seq m a;
+ecShiftR : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
+            seq m a -> ix -> seq m a;
 ecShiftR m =
   Num#rec
-    (\ (m:Num) -> (n:Num) -> (a : sort 0) -> PZero a -> seq m a ->
-       seq n Bool -> seq m a)
-    (\ (m:Nat) ->
-       finNumRec
-         (\ (n:Num) -> (a : sort 0) -> PZero a -> Vec m a -> seq n Bool ->
-            Vec m a)
-         -- Case for (TCNum m, TCNum n)
-         (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
-            bvShiftR m a n (ecZero a pz)))
-    (finNumRec
-       (\ (n:Num) -> (a:sort 0) -> PZero a -> Stream a -> seq n Bool ->
-          Stream a)
-       -- Case for (infinity, TCNum n)
-       (\ (n:Nat) -> \ (a:sort 0) -> \ (pz:PZero a) ->
-          bvStreamShiftR a n (ecZero a pz)))
+    (\ (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a -> seq m a -> ix -> seq m a)
+
+    -- Case for (TCNum m)
+    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec m a) ->
+        pix.posNegCases (Vec m a)
+	  (shiftR m a (ecZero a pz) xs)
+	  (shiftL m a (ecZero a pz) xs))
+
+    -- Case for (infinity)
+    (\ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Stream a) ->
+        pix.posNegCases (Stream a)
+	  (\ (posi:Nat) -> streamAppend a posi (replicate posi a pz) xs)
+	  (\ (negi:Nat) -> streamDrop a negi xs))
     m;
 
-ecSShiftR : (n k : Num) -> seq n Bool -> seq k Bool -> seq n Bool;
+ecSShiftR : (n : Num) -> (ix : sort 0) -> PIntegral ix -> seq n Bool -> ix -> seq n Bool;
 ecSShiftR =
   finNumRec
-    (\ (n:Num) -> (k:Num) -> seq n Bool -> seq k Bool -> seq n Bool)
+    (\ (n:Num) -> (ix : sort 0) -> PIntegral ix -> seq n Bool -> ix -> seq n Bool)
     (\ (n:Nat) ->
-       finNumRec
-         (\ (k:Num) -> Vec n Bool -> seq k Bool -> Vec n Bool)
-         -- Case for (TCNum n, TCNum k)
-         (\ (k:Nat) ->
+         (\ (ix : sort 0) -> \ (pix : PIntegral ix) ->
             natCase
-              (\ (w : Nat) -> bitvector w -> bitvector k -> bitvector w)
-              (\ (x : bitvector 0) -> \ (i : bitvector k) -> x)
-              (\ (w : Nat) -> \ (x : bitvector (Succ w)) ->
-               \ (i : bitvector k) -> bvSShr w x (bvToNat k i))
+              (\ (w : Nat) -> bitvector w -> ix -> bitvector w)
+              (\ (xs : bitvector 0) -> \ (_ : ix) -> xs)
+              (\ (w : Nat) -> \ (xs : bitvector (Succ w)) ->
+                   pix.posNegCases (bitvector (Succ w))
+		     (bvSShr w xs)
+		     (bvShl (Succ w) xs))
               n));
 
-ecCarry : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
-ecCarry =
-  finNumRec (\ (n:Num) -> seq n Bool -> seq n Bool -> Bool) bvCarry;
-
-ecSCarry : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
-ecSCarry =
-  finNumRec
-    (\ (n:Num) -> seq n Bool -> seq n Bool -> Bool)
-    (\ (n:Nat) ->
-       natCase
-         (\ (w : Nat) -> bitvector w -> bitvector w -> Bool)
-         (\ (_ : bitvector 0) (_ : bitvector 0) ->
-            error Bool "invalid SCarry instance")
-         bvSCarry n);
-
-ecRotL : (m n : Num) -> (a : sort 0) -> seq m a -> seq n Bool ->
-          seq m a;
+ecRotL : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a;
 ecRotL =
-  finNumRec2
-    (\ (m:Num) -> \ (n:Num) -> (a:sort 0) -> seq m a -> seq n Bool -> seq m a)
-    (\ (m:Nat) -> \ (n:Nat) -> \ (a:sort 0) -> bvRotateL m a n);
+  finNumRec
+    (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a)
+    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
+      pix.posNegCases (Vec m a)
+        (rotateL m a xs)
+	(rotateR m a xs));
 
-
-ecRotR : (m n : Num) -> (a : sort 0) -> seq m a -> seq n Bool -> seq m a;
+ecRotR : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a;
 ecRotR =
-  finNumRec2
-    (\ (m:Num) -> \ (n:Num) -> (a:sort 0) -> seq m a -> seq n Bool -> seq m a)
-    (\ (m:Nat) -> \ (n:Nat) -> \ (a:sort 0) -> bvRotateR m a n);
+  finNumRec
+    (\ (m:Num) -> (ix a : sort 0) -> PIntegral ix -> seq m a -> ix -> seq m a)
+    (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec m a) ->
+      pix.posNegCases (Vec m a)
+        (rotateR m a xs)
+	(rotateL m a xs));
 
 ecCat : (m n : Num) -> (a : sort 0) -> seq m a -> seq n a -> seq (tcAdd m n) a;
 ecCat =
@@ -1092,38 +1119,34 @@ ecTranspose m n a =
     )
     m;
 
-ecAt : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a -> seq i Bool -> a;
-ecAt n a i =
+ecAt : (n : Num) -> (a ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a;
+ecAt n =
   Num#rec
-    (\ (i:Num) -> seq n a -> seq i Bool -> a)
-    (\ (i:Nat) ->
-       Num#rec
-         (\ (n:Num) -> seq n a -> Vec i Bool -> a)
-         -- Case for (TCNum n, TCNum i)
-         (\ (n:Nat) -> bvAt n a i)
-         -- Case for (TCInf, TCNum i)
-         (bvStreamGet a i)
-         n
-    )
-    -- No case for (n, TCInf)
-    (error (seq n a -> Stream Bool -> a) "Unexpected Fin constraint violation!")
-    i;
+    (\ (n:Num) -> (a ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a)
+    (\ (n:Nat) -> \ (a:sort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
+          pix.posNegCases a
+	    (at n a xs)
+	    (error (Nat -> a) "ecAt : negative index"))
+    (\ (a:sort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Stream a) ->
+          pix.posNegCases a
+	    (streamGet a xs)
+	    (error (Nat -> a) "ecAt : negative index"))
+    n;
 
-ecAtBack : (n : Num) -> (a : sort 0) -> (i : Num) -> seq n a ->
-            seq i Bool -> a;
-ecAtBack n a i xs = ecAt n a i (ecReverse n a xs);
+ecAtBack : (n : Num) -> (a ix : sort 0) -> PIntegral ix -> seq n a -> ix -> a;
+ecAtBack n a ix pix xs = ecAt n a ix pix (ecReverse n a xs);
 
-ecFromTo : (first last : Num) -> (a : sort 0) -> PLiteral a ->
+ecFromTo : (first last : Num) -> (a : sort 0) -> PLiteral a -> PLiteral a ->
             seq (tcAdd (TCNum 1) (tcSub last first)) a;
 ecFromTo =
   finNumRec
-    (\ (first:Num) -> (last:Num) -> (a : sort 0) -> PLiteral a ->
+    (\ (first:Num) -> (last:Num) -> (a : sort 0) -> PLiteral a -> PLiteral a ->
        seq (tcAdd (TCNum 1) (tcSub last first)) a)
     (\ (first:Nat) ->
        finNumRec
-         (\ (last:Num) -> (a : sort 0) -> PLiteral a ->
+         (\ (last:Num) -> (a : sort 0) -> PLiteral a -> PLiteral a ->
             seq (tcAdd (TCNum 1) (tcSub last (TCNum first))) a)
-         (\ (last:Nat) -> \ (a : sort 0) -> \ (pa : PLiteral a) ->
+         (\ (last:Nat) -> \ (a : sort 0) -> \ (pa : PLiteral a) -> \ (_ : PLiteral a) ->
             gen (addNat 1 (subNat last first)) a
                 (\ (i : Nat) -> pa (addNat i first))));
 
@@ -1141,13 +1164,14 @@ ecFromThenTo first next _ a =
                          (mulNat i (getFinNat first)))));
 
 -- Infinite word sequences
-ecInfFrom : (a : sort 0) -> PArith a -> a -> seq TCInf a;
+ecInfFrom : (a : sort 0) -> PIntegral a -> a -> seq TCInf a;
 ecInfFrom a pa x =
-  MkStream a (\ (i : Nat) -> pa.add x (pa.int (natToInt i)));
+  MkStream a (\ (i : Nat) -> pa.integralRing.add x (pa.integralRing.int (natToInt i)));
 
-ecInfFromThen : (a : sort 0) -> PArith a -> a -> a -> seq TCInf a;
+ecInfFromThen : (a : sort 0) -> PIntegral a -> a -> a -> seq TCInf a;
 ecInfFromThen a pa x y =
-  MkStream a (\ (i : Nat) -> pa.add x (pa.mul (pa.sub y x) (pa.int (natToInt i))));
+  MkStream a (\ (i : Nat) ->
+    pa.integralRing.add x (pa.integralRing.mul (pa.integralRing.sub y x) (pa.integralRing.int (natToInt i))));
 
 
 -- Run-time error
@@ -1176,35 +1200,31 @@ ecTrace _ _ _ _ _ x = x;
 -- Extra primitives
 
 -- Array update
-ecUpdate : (n : Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
-            seq w Bool -> a -> seq n a;
+ecUpdate : (n : Num) -> (a ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a;
 ecUpdate n =
   Num#rec
-    (\ (n:Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
-       seq w Bool -> a -> seq n a)
-    (\ (n:Nat) -> \ (a:sort 0) ->
+    (\ (n:Num) -> (a ix : sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a)
+    (\ (n:Nat) -> \ (a:sort 0) -> \ (ix : sort 0) -> \ (pix:PIntegral ix) -> \ (xs : Vec n a) ->
        -- Case for (TCNum n, TCNum w)
-       finNumRec
-         (\ (w:Num) -> Vec n a -> seq w Bool -> a -> Vec n a)
-         (\ (w:Nat) -> bvUpd n a w))
-    (\ (a:sort 0) ->
-       finNumRec
-         (\ (w:Num) -> Stream a -> seq w Bool -> a -> Stream a)
-         -- Case for (TCInf, TCNum w)
-         (\ (w:Nat) -> bvStreamUpd a w))
+       pix.posNegCases (a -> Vec n a)
+         (upd n a xs)
+	 (error (Nat -> a -> Vec n a) "ecUpdate: negative index"))
+    (\ (a:sort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs : Stream a) ->
+       pix.posNegCases (a -> Stream a)
+         (streamUpd a xs)
+	 (error (Nat -> a -> Stream a) "ecUpdate: negative index"))
     n;
 
-ecUpdateEnd : (n : Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
-               seq w Bool -> a -> seq n a;
+
+ecUpdateEnd : (n : Num) -> (a ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a;
 ecUpdateEnd =
   finNumRec
-    (\ (n:Num) -> (a : sort 0) -> (w : Num) -> seq n a ->
-       seq w Bool -> a -> seq n a)
-    (\ (n:Nat) -> \ (a:sort 0) ->
-       finNumRec
-         (\ (w:Num) -> Vec n a -> seq w Bool -> a -> Vec n a)
-         (\ (w:Nat) -> \ (xs:Vec n a) -> \ (i:Vec w Bool) -> \ (y:a) ->
-            upd n a xs (subNat (subNat n 1) (bvToNat w i)) y));
+    (\ (n:Num) -> (a ix: sort 0) -> PIntegral ix -> seq n a -> ix -> a -> seq n a)
+    (\ (n:Nat) -> \ (a:sort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
+       pix.posNegCases (a -> Vec n a)
+         (\ (i:Nat) -> upd n a xs (subNat (subNat n 1) i))
+	 (error (Nat -> a -> Vec n a) "ecUpdateEnd: negative index"));
+
 
 -- Bitvector truncation
 ecTrunc : (m n : Num) -> seq (tcAdd m n) Bool -> seq n Bool;
