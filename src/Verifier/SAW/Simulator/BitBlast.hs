@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -277,8 +278,7 @@ beConstMap be =
   , ("Prelude.intModNeg" , intModUnOp negate)
 -- Streams
   , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
-  , ("Prelude.bvStreamGet", bvStreamGetOp be)
+  , ("Prelude.streamGet", streamGetOp be)
   ]
 
 -- | Lifts a strict mux operation to a lazy mux
@@ -383,20 +383,17 @@ mkStreamOp =
     return $ VExtra (BStream (\n -> apply f (ready (VNat n))) r)
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
-streamGetOp :: BValue l
-streamGetOp =
+streamGetOp :: AIG.IsAIG l g => g s -> BValue (l s)
+streamGetOp be =
   constFun $
   strictFun $ \xs -> return $
-  Prims.natFun'' "streamGet" $ \n -> lookupBStream xs (toInteger n)
+  strictFun $ \case
+    VNat n -> lookupBStream xs (toInteger n)
+    VToNat w ->
+       do bs <- toWord w
+          AIG.muxInteger (lazyMux be (muxBVal be)) ((2 ^ AIG.length bs) - 1) bs (lookupBStream xs)
+    v -> fail (unlines ["Verifier.SAW.Simulator.BitBlast.streamGetOp", "Expected Nat value", show v])
 
--- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
-bvStreamGetOp :: AIG.IsAIG l g => g s -> BValue (l s)
-bvStreamGetOp be =
-  constFun $
-  constFun $
-  strictFun $ \xs -> return $
-  wordFun $ \ilv ->
-  AIG.muxInteger (lazyMux be (muxBVal be)) ((2 ^ AIG.length ilv) - 1) ilv (lookupBStream xs)
 
 lookupBStream :: BValue l -> Integer -> IO (BValue l)
 lookupBStream (VExtra (BStream f r)) n = do
