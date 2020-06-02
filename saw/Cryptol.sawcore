@@ -951,8 +951,8 @@ ecShiftL m =
     (\ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) ->
        \ (xs:Stream a) ->
         pix.posNegCases (Stream a)
-	  (\ (posi:Nat) -> streamDrop a posi xs)
-	  (\ (negi:Nat) -> streamAppend a negi (replicate negi a pz) xs))
+	  (streamShiftL a xs)
+	  (streamShiftR a pz xs))
     m;
 
 ecShiftR : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
@@ -970,8 +970,8 @@ ecShiftR m =
     -- Case for (infinity)
     (\ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Stream a) ->
         pix.posNegCases (Stream a)
-	  (\ (posi:Nat) -> streamAppend a posi (replicate posi a pz) xs)
-	  (\ (negi:Nat) -> streamDrop a negi xs))
+	  (streamShiftR a pz xs)
+	  (streamShiftL a xs))
     m;
 
 ecSShiftR : (n : Num) -> (ix : sort 0) -> PIntegral ix -> seq n Bool -> ix -> seq n Bool;
