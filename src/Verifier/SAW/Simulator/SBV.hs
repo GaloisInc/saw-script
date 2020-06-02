@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
@@ -205,7 +206,6 @@ constMap =
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
-  , ("Prelude.bvStreamGet", bvStreamGetOp)
   ]
 
 ------------------------------------------------------------
@@ -460,16 +460,13 @@ streamGetOp :: SValue
 streamGetOp =
   constFun $
   strictFun $ \xs -> return $
-  Prims.natFun'' "streamGetOp" $ \n -> lookupSStream xs (toInteger n)
+  strictFun $ \case
+    VNat n -> lookupSStream xs (toInteger n)
+    VToNat w ->
+      do ilv <- toWord w
+         selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+    v -> Prims.panic "SBV.streamGetOp" ["Expected Nat value", show v]
 
--- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
-bvStreamGetOp :: SValue
-bvStreamGetOp =
-  constFun $
-  constFun $
-  strictFun $ \xs -> return $
-  wordFun $ \ilv ->
-  selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
 
 lookupSStream :: SValue -> Integer -> IO SValue
 lookupSStream (VExtra s) n = lookupSbvExtra s n
