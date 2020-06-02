@@ -177,6 +177,9 @@ importType sc env ty =
             C.TCBit      -> scBoolType sc
             C.TCInteger  -> scIntegerType sc
             C.TCIntMod   -> scGlobalApply sc "Cryptol.IntModNum" =<< traverse go tyargs
+            C.TCArray    -> do a <- go (tyargs !! 0)
+                               b <- go (tyargs !! 1)
+                               scArrayType sc a b
             C.TCSeq      -> scGlobalApply sc "Cryptol.seq" =<< traverse go tyargs
             C.TCFun      -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
@@ -492,6 +495,9 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "error"         -> scGlobalDef sc "Cryptol.ecError"       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
     "random"        -> scGlobalDef sc "Cryptol.ecRandom"      -- {a} => [32] -> a -- Random values
     "trace"         -> scGlobalDef sc "Cryptol.ecTrace"       -- {n,a,b} [n][8] -> a -> b -> b
+    "Array::arrayConstant" -> scGlobalDef sc "Cryptol.ecArrayConstant" -- {a,b} b -> Array a b
+    "Array::arrayLookup"   -> scGlobalDef sc "Cryptol.ecArrayLookup" -- {a,b} Array a b -> a -> b
+    "Array::arrayUpdate"   -> scGlobalDef sc "Cryptol.ecArrayUpdate" -- {a,b} Array a b -> a -> b -> Array a b
 
     _ -> panic "Unknown Cryptol primitive name" [C.unpackIdent nm]
 
@@ -1115,6 +1121,10 @@ asCryptolTypeValue v =
   case v of
     SC.VBoolType -> return C.tBit
     SC.VIntType -> return C.tInteger
+    SC.VArrayType v1 v2 -> do
+      t1 <- asCryptolTypeValue v1
+      t2 <- asCryptolTypeValue v2
+      return $ C.tArray t1 t2
     SC.VVecType (SC.VNat n) v2 -> do
       t2 <- asCryptolTypeValue v2
       return (C.tSeq (C.tNum n) t2)
@@ -1206,6 +1216,8 @@ exportValue ty v = case ty of
   TV.TVIntMod _modulus ->
     V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
+  TV.TVArray{} -> error $ "exportValue: (on array type " ++ show ty ++ ")"
+
   TV.TVSeq _ e ->
     case v of
       SC.VWord w -> V.word V.Concrete (toInteger (width w)) (unsigned w)
@@ -1275,6 +1287,7 @@ exportFirstOrderValue fv =
       | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap V.Concrete . map (V.ready . V.VBit . fvAsBool) $ vs)))
       | otherwise   -> V.VSeq  len (V.finiteSeqMap V.Concrete (map (V.ready . exportFirstOrderValue) vs))
       where len = toInteger (length vs)
+    FOVArray{}  -> error $ "exportFirstOrderValue: unsupported FOT Array"
     FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
     FOVRec vm   -> V.VRecord $ Map.fromList [ (C.packIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
 

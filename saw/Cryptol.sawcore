@@ -1250,6 +1250,16 @@ ecSle : (n : Num) -> seq n Bool -> seq n Bool -> Bool;
 ecSle =
   finNumRec (\ (n : Num) -> seq n Bool -> seq n Bool -> Bool) bvsle;
 
+-- Array operations
+ecArrayConstant : (a b : sort 0) -> b -> Array a b;
+ecArrayConstant = arrayConstant;
+
+ecArrayLookup : (a b : sort 0) -> (Array a b) -> a -> b;
+ecArrayLookup = arrayLookup;
+
+ecArrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
+ecArrayUpdate = arrayUpdate;
+
 --------------------------------------------------------------------------------
 -- Rewrite rules
 
