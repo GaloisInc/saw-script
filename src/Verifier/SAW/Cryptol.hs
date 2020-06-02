@@ -183,7 +183,7 @@ importType sc env ty =
             C.TCArray    -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
                                scArrayType sc a b
-            C.TCRational -> panic "importType TODO: RationalType" []
+            C.TCRational -> scGlobalApply sc "Cryptol.Rational" []
             C.TCSeq      -> scGlobalApply sc "Cryptol.seq" =<< traverse go tyargs
             C.TCFun      -> do a <- go (tyargs !! 0)
                                b <- go (tyargs !! 1)
@@ -515,6 +515,9 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "%$"            -> scGlobalDef sc "Cryptol.ecSMod"        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
     "lg2"           -> scGlobalDef sc "Cryptol.ecLg2"         -- {n} (fin n) => [n] -> [n]
     ">>$"           -> scGlobalDef sc "Cryptol.ecSShiftR"     -- {n, ix} (fin n, n >= 1, Integral ix) => [n] -> ix -> [n]
+
+    -- Rational primitives
+    "ratio"         -> scGlobalDef sc "Cryptol.ecRatio"       -- Integer -> Integer -> Rational
 
     -- Shifts/rotates
     "<<"            -> scGlobalDef sc "Cryptol.ecShiftL"      -- {n, ix, a} (Integral ix, Zero a) => [n]a -> ix -> [n]a

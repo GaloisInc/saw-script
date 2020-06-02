@@ -212,6 +212,15 @@ IntModNum : (num : Num) -> sort 0;
 IntModNum num =
   Num#rec (\ (n : Num) -> sort 0) IntMod Integer num;
 
+-------------------------------------------------------------------------------
+-- Rationals (TODO)
+
+Rational : sort 0;
+Rational = #();
+
+ecRatio : Integer -> Integer -> Rational;
+ecRatio x y = ();
+
 --------------------------------------------------------------------------------
 -- Type coercions
 
