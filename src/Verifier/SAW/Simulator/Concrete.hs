@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE EmptyDataDecls #-}
@@ -261,7 +262,6 @@ constMap =
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
-  , ("Prelude.bvStreamGet", bvStreamGetOp)
   -- Miscellaneous
   , ("Prelude.bvToNat", bvToNatOp) -- override Prims.constMap
   ]
@@ -352,14 +352,8 @@ streamGetOp :: CValue
 streamGetOp =
   constFun $
   pureFun $ \xs ->
-  Prims.natFun'' "streamGetOp" $ \n -> return $
-  IntTrie.apply (toStream xs) n
-
--- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
-bvStreamGetOp :: CValue
-bvStreamGetOp =
-  constFun $
-  constFun $
-  pureFun $ \xs ->
-  wordFun $ \i ->
-  IntTrie.apply (toStream xs) (Prim.unsigned i)
+  strictFun $ \case
+    VNat n -> return $ IntTrie.apply (toStream xs) (toInteger n)
+    VToNat w -> return $ IntTrie.apply (toStream xs) (unsigned (toWord w))
+    n -> Prims.panic "Verifier.SAW.Simulator.Concrete.streamGetOp"
+               ["Expected Nat value", show n]

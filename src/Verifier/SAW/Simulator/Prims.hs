@@ -18,6 +18,8 @@ module Verifier.SAW.Simulator.Prims where
 
 import Prelude hiding (sequence, mapM)
 
+import GHC.Stack( HasCallStack )
+
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
@@ -235,13 +237,7 @@ constMap bp = Map.fromList
   , ("Prelude.shiftL", shiftLOp bp)
   , ("Prelude.shiftR", shiftROp bp)
   , ("Prelude.EmptyVec", emptyVec)
-{-
-  -- Streams
-  , ("Prelude.MkStream", mkStreamOp)
-  , ("Prelude.streamGet", streamGetOp)
-  , ("Prelude.bvStreamGet", bvStreamGetOp)
   -- Miscellaneous
--}
   , ("Prelude.coerce", coerceOp)
   , ("Prelude.bvNat", bvNatOp bp)
   , ("Prelude.bvToNat", bvToNatOp)
@@ -260,7 +256,7 @@ constMap bp = Map.fromList
 
 -- | Call this function to indicate that a programming error has
 -- occurred, e.g. a datatype invariant has been violated.
-panic :: String -> a
+panic :: HasCallStack => String -> a
 panic msg = Panic.panic "Verifier.SAW.Simulator.Prims" [msg]
 
 ------------------------------------------------------------
@@ -273,17 +269,17 @@ natFromValue :: Num a => Value l -> a
 natFromValue (VNat n) = fromInteger n
 natFromValue _ = panic "natFromValue"
 
-natFun'' :: (VMonad l, Show (Extra l)) => String -> (Natural -> MValue l) -> Value l
+natFun'' :: (HasCallStack, VMonad l, Show (Extra l)) => String -> (Natural -> MValue l) -> Value l
 natFun'' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g v = panic $ "expected Nat (" ++ s ++ "): " ++ show v
 
-natFun' :: VMonad l => String -> (Natural -> MValue l) -> Value l
+natFun' :: (HasCallStack, VMonad l) => String -> (Natural -> MValue l) -> Value l
 natFun' s f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = panic $ "expected Nat: " ++ s
 
-natFun :: VMonad l => (Natural -> MValue l) -> Value l
+natFun :: (HasCallStack, VMonad l) => (Natural -> MValue l) -> Value l
 natFun f = strictFun g
   where g (VNat n) = f (fromInteger n)
         g _ = panic "expected Nat"

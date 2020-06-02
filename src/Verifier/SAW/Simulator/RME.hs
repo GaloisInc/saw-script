@@ -1,4 +1,6 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE EmptyDataDecls #-}
@@ -211,8 +213,8 @@ prims =
   , Prims.bpIntEq  = pure2 (\x y -> RME.constant (x == y))
   , Prims.bpIntLe  = pure2 (\x y -> RME.constant (x <= y))
   , Prims.bpIntLt  = pure2 (\x y -> RME.constant (x < y))
-  , Prims.bpIntMin = unsupportedRMEPrimitive "bpIntMin"
-  , Prims.bpIntMax = unsupportedRMEPrimitive "bpIntMax"
+  , Prims.bpIntMin = pure2 min
+  , Prims.bpIntMax = pure2 max
     -- Array operations
   , Prims.bpArrayConstant = unsupportedRMEPrimitive "bpArrayConstant"
   , Prims.bpArrayLookup = unsupportedRMEPrimitive "bpArrayLookup"
@@ -247,9 +249,6 @@ constMap =
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
-  , ("Prelude.bvStreamGet", bvStreamGetOp)
-  -- Miscellaneous
-  , ("Prelude.bvToNat", Prims.bvToNatOp)
   ]
 
 -- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
@@ -333,18 +332,25 @@ streamGetOp :: RValue
 streamGetOp =
   constFun $
   pureFun $ \xs ->
-  Prims.natFun'' "streamGetOp" $ \n -> return $
-  IntTrie.apply (toStream xs) n
+  strictFun $ \case
+    VNat n -> pure $ IntTrie.apply (toStream xs) (toInteger n)
+    VToNat bv ->
+      do let trie = toStream xs
+             loop k [] = IntTrie.apply trie k
+             loop k (b:bs)
+               | Just True <- RME.isBool b
+               = loop k1 bs
+               | Just False <- RME.isBool b
+               = loop k0 bs
+               | otherwise
+               = muxRValue b (loop k1 bs) (loop k0 bs)
+              where
+               k0 = k `shiftL` 1
+               k1 = k0 + 1
+         pure $ loop (0::Integer) (V.toList (toWord bv))
 
--- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
-bvStreamGetOp :: RValue
-bvStreamGetOp =
-  constFun $
-  constFun $
-  pureFun $ \_xs ->
-  wordFun $ \_i ->
-  error "bvStreamGetOp"
-  --IntTrie.apply (toStream xs) (Prim.unsigned i)
+    v -> panic "Verifer.SAW.Simulator.RME.streamGetOp"
+               [ "Expected Nat value", show v ]
 
 ------------------------------------------------------------
 -- Generating variables for arguments

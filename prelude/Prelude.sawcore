@@ -1298,14 +1298,11 @@ streamSplit a n xs =
     gen n a (\ (j : Nat) ->
       streamGet a xs (addNat (mulNat i n) j)));
 
-bvStreamGet : (a : sort 0) -> (w : Nat) -> Stream a -> bitvector w -> a;
-bvStreamGet a w xs i = streamGet a xs (bvToNat w i);
+streamShiftL : (a : sort 0) -> Stream a -> Nat -> Stream a;
+streamShiftL a xs i = streamDrop a i xs;
 
-bvStreamShiftL : (a : sort 0) -> (w : Nat) -> Stream a -> bitvector w -> Stream a;
-bvStreamShiftL a w xs i = streamDrop a (bvToNat w i) xs;
-
-bvStreamShiftR : (a : sort 0) -> (w : Nat) -> a -> Stream a -> bitvector w -> Stream a;
-bvStreamShiftR a w x xs i = streamAppend a (bvToNat w i) (replicate (bvToNat w i) a x) xs;
+streamShiftR : (a : sort 0) -> a -> Stream a -> Nat -> Stream a;
+streamShiftR a z xs i = streamAppend a i (replicate i a z) xs;
 
 --------------------------------------------------------------------------------
 -- Integer values
