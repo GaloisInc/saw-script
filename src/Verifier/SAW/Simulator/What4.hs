@@ -258,7 +258,6 @@ constMap =
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
-  , ("Prelude.bvStreamGet", bvStreamGetOp)
   ]
   where sym = given :: sym
 
@@ -438,20 +437,16 @@ mkStreamOp =
     return $ VExtra (SStream (\n -> apply f (ready (VNat n))) r)
 
 -- streamGet :: (a :: sort 0) -> Stream a -> Nat -> a;
-streamGetOp :: SValue sym
+streamGetOp :: forall sym. (IsExpr (SymExpr sym), Sym sym) => SValue sym
 streamGetOp =
   constFun $
   strictFun $ \xs -> return $
-  Prims.natFun'' "streamGetOp" $ \n -> lookupSStream xs (toInteger n)
-
--- bvStreamGet :: (a :: sort 0) -> (w :: Nat) -> Stream a -> bitvector w -> a;
-bvStreamGetOp :: forall sym. (IsExpr (SymExpr sym), Sym sym) => SValue sym
-bvStreamGetOp =
-  constFun $
-  constFun $
-  strictFun $ \xs -> return $
-  wordFun $ \ilv ->
-  selectV (lazyMux @sym muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+  strictFun $ \case
+    VNat n -> lookupSStream xs (toInteger n)
+    VToNat w ->
+      do ilv <- toWord w
+         selectV (lazyMux @sym muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+    v -> Prims.panic "streamGetOp" ["Expected Nat value", show v]
 
 lookupSStream :: SValue sym -> Integer -> IO (SValue sym)
 lookupSStream (VExtra (SStream f r)) n = do
