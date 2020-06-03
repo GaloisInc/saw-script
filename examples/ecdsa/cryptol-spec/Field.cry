@@ -3,9 +3,9 @@ module Field where
 import Morphism
 import Set
 
-type Field fv =
+type FieldRep fv =
   { is_val : Set fv         // carrier set
-  , norm : fv -> fv
+  , normalize : fv -> fv
   , add : (fv,fv) -> fv
   , sub : (fv,fv) -> fv
   , neg : fv -> fv
@@ -44,12 +44,12 @@ Field_closed f (a1,a2) =
 /* ***** Field morphisms ****** */
 
 /*
-type Field_Mor (a,b) = Mor (Field a, Field b)
+type Field_Mor (a,b) = Mor (FieldRep a, FieldRep b)
 
 Field_mor : {a b} EP (a,b) -> Field_Mor (a,b);
 Field_mor p f =
   { is_val     = Emb (Set_ep (ep_op p)) ((f:Field a).is_val)
-  ; norm       = Emb (Efun1_ep p) (f.norm)
+  ; normalize  = Emb (Efun1_ep p) (f.norm)
   ; add        = Emb (Efun2_ep p) (f.add)
   ; sub        = Emb (Efun2_ep p) (f.sub)
   ; neg        = Emb (Efun1_ep p) (f.neg)
@@ -65,12 +65,12 @@ Field_mor p f =
 // Does m induce a Field morphism between f and g?
 isFieldMorphism : {a b} (fin b) =>
                         Mor (a,b) ->
-                        Field a ->
-                        Field b ->
+                        FieldRep a ->
+                        FieldRep b ->
                         Set ((a,a));
 isFieldMorphism m f g (a1,a2) =
-  implies ((f : Field a).is_val a1 & f.is_val a2)
-    ( (g : Field b).is_val b1
+  implies ((f : FieldRep a).is_val a1 & f.is_val a2)
+    ( (g : FieldRep b).is_val b1
     & equalFun2 (f.add)  (g.add)
     & equalFun2 (f.sub)  (g.sub)
     & equalFun1 (f.neg)  (g.neg)
@@ -93,8 +93,8 @@ isFieldMorphism m f g (a1,a2) =
 // Are fields f and g isomorphic (via the EP-pair p)?
 isFieldIso : {a b} (fin a, fin b) =>
                   EP (a,b) ->
-                  Field a ->
-                  Field b ->
+                  FieldRep a ->
+                  FieldRep b ->
                   Set ((a,a,b,b));
 isFieldIso p f g (a1,a2,b1,b2) =
   isFieldMorphism (p.emb) f g (a1,a2) &
@@ -105,7 +105,7 @@ isFieldIso p f g (a1,a2,b1,b2) =
 /* ***** Field EP-pair ***** */
 
 /*
-type Field_EP (a,b) = EP (Field a, Field b);
+type Field_EP (a,b) = EP (FieldRep a, FieldRep b);
 
 Field_ep : {a b} EP (a,b) -> Field_EP (a,b);
 Field_ep p =
