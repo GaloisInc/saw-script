@@ -258,6 +258,8 @@ constMap =
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
+  -- Misc
+  , ("Prelude.expByNat", Prims.expByNatOp prims)
   ]
   where sym = given :: sym
 
