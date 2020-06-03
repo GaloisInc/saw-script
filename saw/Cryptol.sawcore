@@ -826,12 +826,6 @@ ecNumber val a pa =
   Num#rec (\ (_ : Num) -> a) pa (pa 0) val;
   -- Dummy case: treat `inf as `0 (this never happens anyway)
 
-ecToInteger : (a : sort 0) -> PIntegral a -> a -> Integer;
-ecToInteger a pa = pa.toInt;
-
-ecFromInteger : (a : sort 0) -> PRing a -> Integer -> a;
-ecFromInteger a pa = pa.int;
-
 ecFromZ : (n : Num) -> IntModNum n -> Integer;
 ecFromZ n =
   Num#rec (\ (n : Num) -> IntModNum n -> Integer)
@@ -840,6 +834,9 @@ ecFromZ n =
 	  n;
 
 -- Ring
+ecFromInteger : (a : sort 0) -> PRing a -> Integer -> a;
+ecFromInteger a pa = pa.int;
+
 ecPlus : (a : sort 0) -> PRing a -> a -> a -> a;
 ecPlus a pa = pa.add;
 
@@ -853,6 +850,8 @@ ecNeg : (a : sort 0) -> PRing a -> a -> a;
 ecNeg a pa = pa.neg;
 
 -- Integral
+ecToInteger : (a : sort 0) -> PIntegral a -> a -> Integer;
+ecToInteger a pa = pa.toInt;
 
 ecDiv : (a : sort 0) -> PIntegral a -> a -> a -> a;
 ecDiv a pi = pi.div;
@@ -865,6 +864,28 @@ ecExp a b pa pi x =
   pi.posNegCases a
     (expByNat a (pa.int (natToInt 1)) pa.mul x)
     (error (Nat -> a) "ecExp : negative exponent");
+
+-- Field
+
+ecRecip : (a: sort 0) -> PField a -> a -> a;
+ecRecip a pf = pf.recip;
+
+ecFieldDiv : (a: sort 0) -> PField a -> a -> a -> a;
+ecFieldDiv a pf = pf.fieldDiv;
+
+-- Round
+
+ecCeiling : (a: sort 0) -> PRound a -> a -> Integer;
+ecCeiling a pr = pr.ceiling;
+
+ecFloor : (a: sort 0) -> PRound a -> a -> Integer;
+ecFloor a pr = pr.floor;
+
+ecTruncate : (a: sort 0) -> PRound a -> a -> Integer;
+ecTruncate a pr = pr.trunc;
+
+ecRound : (a: sort 0) -> PRound a -> a -> Integer;
+ecRound a pr = pr.round;
 
 -- Bitvector ops
 
