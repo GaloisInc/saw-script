@@ -13,7 +13,7 @@ nzAffinePoint (ax,ay) = { x = ax, y = ay }
 type JacobianPoint fv = { x : fv, y : fv, z : fv }
 
 /* Create affine point from Jacobian (only well-defined if z coordinate is non-zero). */
-ec_affinify : {fv} (Field fv, JacobianPoint fv) -> AffinePoint fv
+ec_affinify : {fv} (FieldRep fv, JacobianPoint fv) -> AffinePoint fv
 ec_affinify(f,s) = { x = f.mul(g2, s.x), y = f.mul(g3, s.y) }
   where g = f.div(f.field_unit, s.z)
         g2 = f.sq(g)
@@ -21,15 +21,15 @@ ec_affinify(f,s) = { x = f.mul(g2, s.x), y = f.mul(g3, s.y) }
 
 /* Create projective value from affine. */
 /* Routine 2.2.1 in [NSA 2008] */
-ec_projectify : {fv} (Field fv, AffinePoint fv) -> JacobianPoint fv
+ec_projectify : {fv} (FieldRep fv, AffinePoint fv) -> JacobianPoint fv
 ec_projectify(f,s) = { x = s.x, y = s.y, z = f.field_unit }
 
 /* Returns zero point. */
-ec_zero_point : {fv} Field fv -> JacobianPoint fv
+ec_zero_point : {fv} FieldRep fv -> JacobianPoint fv
 ec_zero_point(f) = { x = f.field_unit, y = f.field_unit, z = f.field_zero }
 
 /* Checks to see if point is zero. */
-ec_is_zero_point : {fv} (Field fv, JacobianPoint fv) -> Bit
+ec_is_zero_point : {fv} (FieldRep fv, JacobianPoint fv) -> Bit
 ec_is_zero_point(f,s) = f.is_equal(s.z, f.field_zero)
 
 /* Is the Jacobian point well-formed? Here we assume
@@ -39,7 +39,7 @@ ec_is_zero_point(f,s) = f.is_equal(s.z, f.field_zero)
 **   permissive in their inputs, i.e. they still do the
 **   right thing when given a non-unit zero point.
 */
-is_JacobianPoint : {fv} (Cmp fv) => Field fv -> Set (JacobianPoint fv)
+is_JacobianPoint : {fv} (Cmp fv) => FieldRep fv -> Set (JacobianPoint fv)
 is_JacobianPoint f s =
   (  f.is_val ((s:JacobianPoint fv).x)
   && f.is_val (s.y)
@@ -52,7 +52,7 @@ is_JacobianPoint f s =
 
    This avoids the partiality and division needed by ec_affinify.
  */
-ec_jacobian_eq : {fv} (Field fv, JacobianPoint fv, JacobianPoint fv) -> Bit
+ec_jacobian_eq : {fv} (FieldRep fv, JacobianPoint fv, JacobianPoint fv) -> Bit
 ec_jacobian_eq(f, a, b)
      =  f.is_equal(f.mul(bz2, a.x), f.mul(az2, b.x))
      && f.is_equal(f.mul(bz3, a.y), f.mul(az3, b.y))
@@ -65,11 +65,11 @@ ec_jacobian_eq(f, a, b)
 /* Point operations {{{1 */
 
 type PointOps fv gv = {
-       field : Field fv
+       field : FieldRep fv
      , double : JacobianPoint fv -> JacobianPoint fv
      , add : (JacobianPoint fv, AffinePoint fv) -> JacobianPoint fv
      , sub : (JacobianPoint fv, AffinePoint fv) -> JacobianPoint fv
-     , group_field : Field gv
+     , group_field : FieldRep gv
      }
 
 /* Double a Jacobian point */
@@ -89,7 +89,7 @@ type PointOps fv gv = {
    The key difference is to replace the computation of r13
     with "r13 = (s.y + s.z)^2 - s.y^2 - s.z^2".
    */
-ec_double : {fv} (Field fv, JacobianPoint fv) -> JacobianPoint fv
+ec_double : {fv} (FieldRep fv, JacobianPoint fv) -> JacobianPoint fv
 ec_double(f,s) =
   if is_zero(s.z) then
     { x = f.field_unit, y = f.field_unit, z = f.field_zero } /* 5: r <- (1,1,0) and return */
