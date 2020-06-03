@@ -33,3 +33,4 @@ scEq sc x y = do
 -- @scApplyPrelude_Bool@
 scPrelude_Bool :: SharedContext -> IO Term
 scPrelude_Bool = scApplyPrelude_Bool
+

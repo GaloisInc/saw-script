@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -249,6 +250,9 @@ constMap =
   -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp)
+
+  -- Misc
+  , ("Prelude.expByNat", Prims.expByNatOp prims)
   ]
 
 -- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
@@ -351,6 +355,7 @@ streamGetOp =
 
     v -> panic "Verifer.SAW.Simulator.RME.streamGetOp"
                [ "Expected Nat value", show v ]
+
 
 ------------------------------------------------------------
 -- Generating variables for arguments

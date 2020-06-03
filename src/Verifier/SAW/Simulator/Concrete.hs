@@ -1,3 +1,4 @@
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -264,6 +265,7 @@ constMap =
   , ("Prelude.streamGet", streamGetOp)
   -- Miscellaneous
   , ("Prelude.bvToNat", bvToNatOp) -- override Prims.constMap
+  , ("Prelude.expByNat", Prims.expByNatOp prims)
   ]
 
 ------------------------------------------------------------

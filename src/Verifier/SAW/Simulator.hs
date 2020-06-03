@@ -327,6 +327,8 @@ evalRecursorApp modmap lam ps p_ret cs_fs (VNat 0) =
 evalRecursorApp modmap lam ps p_ret cs_fs (VNat i) =
   evalRecursorApp modmap lam ps p_ret cs_fs
   (VCtorApp "Prelude.Succ" (V.singleton $ ready $ VNat $ i-1))
+evalRecursorApp _modmap _lam _ps _p_ret _cs_fs (VToNat _bv) =
+  panic $ "evalRecursorApp: VToNat!"
 evalRecursorApp _ _ _ _ _ v =
   panic $ "evalRecursorApp: non-constructor value: " ++ show v
 

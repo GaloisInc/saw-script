@@ -878,6 +878,12 @@ natCase p z s = Nat__rec p z (\ (n:Nat) -> \ (r:p n) -> s n);
 if0Nat : (a : sort 0) -> Nat -> a -> a -> a;
 if0Nat a n x y = natCase (\ (_:Nat) -> a) x (\ (_:Nat) -> y) n;
 
+-- An exponentation operation on arbitrary types.
+--
+-- The arguments are: the 1 value for a;
+-- the multiplication operation, the base of the exponent
+-- and the number of times to multiply.
+primitive expByNat : (a:sort 0) -> a -> (a -> a -> a) -> a -> Nat -> a;
 
 --------------------------------------------------------------------------------
 -- "Vec n a" is an array of n elements, each with type "a".

@@ -1,4 +1,7 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -753,6 +756,57 @@ vZipOp unpack =
      yv <- toVector unpack y
      let pair a b = ready (vTuple [a, b])
      return (VVector (V.zipWith pair xv yv))
+
+
+--------------------------------------------------------------------------
+-- Generic square-and-multiply
+
+-- primitive expByNat : (a:sort 0) -> a -> (a -> a -> a) -> a -> Nat -> a;
+expByNatOp :: (MonadLazy (EvalM l), VMonad l, Show (Extra l)) => BasePrims l -> Value l
+expByNatOp bp =
+  constFun $
+  pureFun $ \one ->
+  pureFun $ \mul ->
+  pureFun $ \x   ->
+  strictFun $ \case
+    VToNat w ->
+      do let loop acc [] = return acc
+             loop acc (b:bs)
+               | Just False <- bpAsBool bp b
+               = do sq <- applyAll mul [ ready acc, ready acc ]
+                    loop sq bs
+               | Just True <- bpAsBool bp b
+               = do sq   <- applyAll mul [ ready acc, ready acc ]
+                    sq_x <- applyAll mul [ ready sq, ready x ]
+                    loop sq_x bs
+               | otherwise
+               = do sq   <- applyAll mul [ ready acc, ready acc ]
+                    sq_x <- applyAll mul [ ready sq, ready x ]
+                    acc' <- muxValue bp b sq_x sq
+                    loop acc' bs
+
+         loop one . V.toList =<< toBits (bpUnpack bp) w
+
+    VNat n ->
+      do let loop acc [] = return acc
+             loop acc (False:bs) =
+               do sq <- applyAll mul [ ready acc, ready acc ]
+                  loop sq bs
+             loop acc (True:bs) =
+               do sq   <- applyAll mul [ ready acc, ready acc ]
+                  sq_x <- applyAll mul [ ready sq, ready x ]
+                  loop sq_x bs
+
+             w = toInteger (widthNat (fromInteger n :: Natural))
+
+         if w > toInteger (maxBound :: Int) then
+           panic "expByNatOp" ["Exponent too large", show n]
+         else
+           loop one [ testBit n (fromInteger i) | i <- reverse [ 0 .. w-1 ]]
+
+    v -> panic "expByNatOp" [ "Expected Nat value", show v ]
+
+
 
 ------------------------------------------------------------
 -- Shifts and Rotates
