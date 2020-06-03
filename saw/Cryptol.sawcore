@@ -863,11 +863,8 @@ ecMod a pi = pi.mod;
 ecExp : (a b: sort 0) -> PRing a -> PIntegral b -> a -> b -> a;
 ecExp a b pa pi x =
   pi.posNegCases a
-    (Nat__rec (\ (i:Nat) -> a)
-       (pa.int (natToInt 1))
-       (\ (_:Nat) -> \ (acc:a) -> pa.mul x acc))
+    (expByNat a (pa.int (natToInt 1)) pa.mul x)
     (error (Nat -> a) "ecExp : negative exponent");
-
 
 -- Bitvector ops
 
