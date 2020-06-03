@@ -276,9 +276,11 @@ beConstMap be =
   , ("Prelude.intModSub" , intModBinOp (-))
   , ("Prelude.intModMul" , intModBinOp (*))
   , ("Prelude.intModNeg" , intModUnOp negate)
--- Streams
+  -- Streams
   , ("Prelude.MkStream", mkStreamOp)
   , ("Prelude.streamGet", streamGetOp be)
+  -- Misc
+  , ("Prelude.expByNat", Prims.expByNatOp (prims be))
   ]
 
 -- | Lifts a strict mux operation to a lazy mux
