@@ -363,6 +363,9 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: unimplemented type Z n (FIXME)"
       Cryptol.TVArray{} ->
         fail "resolveSAWTerm: unimplemented type Array a b (FIXME)"
+      Cryptol.TVRational ->
+        fail "resolveSAWTerm: unimplemented type Rational (FIXME)"
+
       Cryptol.TVSeq sz Cryptol.TVBit ->
         case someNat sz of
           Just (Some w)
@@ -445,6 +448,8 @@ toLLVMType dl tp =
     Cryptol.TVInteger -> Left (NotYetSupported "integer")
     Cryptol.TVIntMod _ -> Left (NotYetSupported "integer (mod n)")
     Cryptol.TVArray{} -> Left (NotYetSupported "array a b")
+    Cryptol.TVRational -> Left (NotYetSupported "rational")
+
     Cryptol.TVSeq n Cryptol.TVBit
       | n > 0 -> Right (Crucible.IntType (fromInteger n))
       | otherwise -> Left (Impossible "infinite sequence")
