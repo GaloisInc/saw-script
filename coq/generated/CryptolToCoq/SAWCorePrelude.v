@@ -862,14 +862,6 @@ Definition unfoldList : forall (a : Type), (((@Datatypes.list) (a))) -> ((@Eithe
 Definition foldList : forall (a : Type), (((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))))) -> ((@Datatypes.list) (a)) :=
   (fun (a : Type) => ((@either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (((@Datatypes.list) (a))) ((fun (_ : unit) => ((@Datatypes.nil) (a)))) ((fun (tup : ((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) => ((@Datatypes.cons) (a) (((SAWCoreScaffolding.fst) (tup))) (((SAWCoreScaffolding.fst) (((SAWCoreScaffolding.snd) (tup)))))))))).
 
-(* Prelude.equalString was skipped *)
-
-Definition stringListInsert : (((@Datatypes.list) (((@SAWCoreScaffolding.String))))) -> (((@SAWCoreScaffolding.String))) -> ((@Datatypes.list) (((@SAWCoreScaffolding.String)))) :=
-  (fun (l : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (s : ((@SAWCoreScaffolding.String))) => ((@Datatypes.cons) (((@SAWCoreScaffolding.String))) (s) (l))).
-
-Definition stringListRemove : (((@Datatypes.list) (((@SAWCoreScaffolding.String))))) -> (((@SAWCoreScaffolding.String))) -> ((@Datatypes.list) (((@SAWCoreScaffolding.String)))) :=
-  (fun (l : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (s : ((@SAWCoreScaffolding.String))) => ((@Datatypes.list_rect) (((@SAWCoreScaffolding.String))) ((fun (_ : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) => ((@Datatypes.list) (((@SAWCoreScaffolding.String)))))) (((@Datatypes.nil) (((@SAWCoreScaffolding.String))))) ((fun (s' : ((@SAWCoreScaffolding.String))) (_ : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (rec : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) => if ((@SAWCoreScaffolding.equalString) (s) (s')) then rec else ((@Datatypes.cons) (((@SAWCoreScaffolding.String))) (s') (rec)))) (l))).
-
 Inductive W64List : Type :=
 | W64Nil : ((@W64List))
 | W64Cons : (((@bitvector) (64))) -> (((@W64List))) -> ((@W64List))
@@ -940,5 +932,27 @@ Definition letRecM1 : forall (a : Type), forall (b : Type), forall (c : Type), (
 (* Prelude.ite_join_cong was skipped *)
 
 (* Prelude.map_map was skipped *)
+
+(* Prelude.equalString was skipped *)
+
+Definition stringList : Type :=
+  ((@Datatypes.list) (((@SAWCoreScaffolding.String)))).
+
+Definition stringListInsertM : (((@Datatypes.list) (((@SAWCoreScaffolding.String))))) -> (((@SAWCoreScaffolding.String))) -> ((CompM) (((@sigT) (unit) ((fun (_ : unit) => ((@Datatypes.list) (((@SAWCoreScaffolding.String))))))))) :=
+  (fun (l : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (s : ((@SAWCoreScaffolding.String))) => ((((@returnM) (CompM) (_))) (((@sigT) (unit) ((fun (_ : unit) => ((@Datatypes.list) (((@SAWCoreScaffolding.String)))))))) (((@existT) (unit) ((fun (_ : unit) => ((@Datatypes.list) (((@SAWCoreScaffolding.String)))))) (tt) (((@Datatypes.cons) (((@SAWCoreScaffolding.String))) (s) (l))))))).
+
+Definition stringListRemoveM : (((@Datatypes.list) (((@SAWCoreScaffolding.String))))) -> (((@SAWCoreScaffolding.String))) -> ((CompM) (((@sigT) (unit) ((fun (_ : unit) => ((prod) (((@stringList))) (((prod) (((@SAWCoreScaffolding.String))) (unit))))))))) :=
+  (fun (l : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (s : ((@SAWCoreScaffolding.String))) => ((((@returnM) (CompM) (_))) (((@sigT) (unit) ((fun (_ : unit) => ((prod) (((@stringList))) (((prod) (((@SAWCoreScaffolding.String))) (unit)))))))) (((@existT) (unit) ((fun (_ : unit) => ((prod) (((@stringList))) (((prod) (((@SAWCoreScaffolding.String))) (unit)))))) (tt) (((pair) (((@Datatypes.list_rect) (((@SAWCoreScaffolding.String))) ((fun (_ : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) => ((@Datatypes.list) (((@SAWCoreScaffolding.String)))))) (((@Datatypes.nil) (((@SAWCoreScaffolding.String))))) ((fun (s' : ((@SAWCoreScaffolding.String))) (_ : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (rec : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) => if ((@SAWCoreScaffolding.equalString) (s) (s')) then rec else ((@Datatypes.cons) (((@SAWCoreScaffolding.String))) (s') (rec)))) (l))) (((pair) (s) (tt))))))))).
+
+Definition string_dup : (((@SAWCoreScaffolding.String))) -> ((prod) (((@SAWCoreScaffolding.String))) (((@SAWCoreScaffolding.String)))) :=
+  (fun (x : ((@SAWCoreScaffolding.String))) => ((pair) (x) (x))).
+
+Inductive ULCTerm : Type :=
+| ULCTerm_Const : (((@bitvector) (64))) -> ((@ULCTerm))
+| ULCTerm_Variable : (((@SAWCoreScaffolding.String))) -> ((@ULCTerm))
+| ULCTerm_Lambda : (((@SAWCoreScaffolding.String))) -> (((@ULCTerm))) -> ((@ULCTerm))
+| ULCTerm_Add : (((@ULCTerm))) -> (((@ULCTerm))) -> ((@ULCTerm))
+| ULCTerm_Call : (((@ULCTerm))) -> (((@ULCTerm))) -> ((@ULCTerm))
+.
 
 End SAWCorePrelude.
