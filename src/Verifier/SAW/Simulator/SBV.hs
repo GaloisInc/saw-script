@@ -169,6 +169,10 @@ prims =
   , Prims.bpIntLt  = pure2 svLessThan
   , Prims.bpIntMin = unsupportedSBVPrimitive "bpIntMin"
   , Prims.bpIntMax = unsupportedSBVPrimitive "bpIntMax"
+    -- Array operations
+  , Prims.bpArrayConstant = unsupportedSBVPrimitive "bpArrayConstant"
+  , Prims.bpArrayLookup = unsupportedSBVPrimitive "bpArrayLookup"
+  , Prims.bpArrayUpdate = unsupportedSBVPrimitive "bpArrayUpdate"
   }
 
 unsupportedSBVPrimitive :: String -> a
@@ -684,6 +688,7 @@ newVars (FOTVec n FOTBit) =
 newVars (FOTVec n tp) = do
   (labels, vals) <- V.unzip <$> V.replicateM (fromIntegral n) (newVars tp)
   return (VecLabel labels, VVector <$> traverse (fmap ready) vals)
+newVars (FOTArray{}) = fail "FOTArray unimplemented for backend"
 newVars (FOTTuple ts) = do
   (labels, vals) <- V.unzip <$> traverse newVars (V.fromList ts)
   return (TupleLabel labels, vTuple <$> traverse (fmap ready) (V.toList vals))
@@ -711,6 +716,7 @@ newCodeGenVars checkSz (FOTVec n (FOTVec m FOTBit))
 newCodeGenVars checkSz (FOTVec n tp) = do
   vals <- V.replicateM (fromIntegral n) (newCodeGenVars checkSz tp)
   return (VVector <$> traverse (fmap ready) vals)
+newCodeGenVars _ (FOTArray{}) = fail "FOTArray unimplemented for backend"
 newCodeGenVars checkSz (FOTTuple ts) = do
   vals <- traverse (newCodeGenVars checkSz) ts
   return (vTuple <$> traverse (fmap ready) vals)
