@@ -28,6 +28,7 @@ module Verifier.SAW.Simulator.What4.FirstOrder
     groundToFOV
   ) where
 
+import qualified Data.BitVector.Sized as BV
 import Data.Parameterized.TraversableFC (FoldableFC(..))
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Context hiding (replicate)
@@ -103,7 +104,7 @@ groundToFOV :: BaseTypeRepr ty -> GroundValue ty -> Either String FirstOrderValu
 groundToFOV BaseBoolRepr    b         = pure $ FOVBit b
 groundToFOV BaseNatRepr     n         = pure $ FOVInt (toInteger n)
 groundToFOV BaseIntegerRepr i         = pure $ FOVInt i
-groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) bv
+groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) (BV.asUnsigned bv)
 groundToFOV BaseRealRepr    _         = Left "Real is not FOV"
 groundToFOV BaseComplexRepr         _ = Left "Complex is not FOV"
 groundToFOV (BaseStringRepr _)      _ = Left "String is not FOV"

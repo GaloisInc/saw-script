@@ -60,6 +60,7 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import           GHC.TypeNats
 
+import qualified Data.BitVector.Sized as BV
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some(Some(..))
 import           Verifier.SAW.Simulator.What4.PosNat
@@ -90,13 +91,13 @@ instance Show (SWord sym) where
 bvAsSignedInteger :: forall sym. IsExprBuilder sym => SWord sym -> Maybe Integer
 bvAsSignedInteger ZBV = Just 0
 bvAsSignedInteger (DBV (bv :: SymBV sym w)) =
-  W.asSignedBV bv
+  BV.asSigned (W.bvWidth bv) <$> W.asBV bv
 
 -- | Return the unsigned value if this is a constant bitvector
 bvAsUnsignedInteger :: forall sym. IsExprBuilder sym => SWord sym -> Maybe Integer
 bvAsUnsignedInteger ZBV = Just 0
 bvAsUnsignedInteger (DBV (bv :: SymBV sym w)) =
-  W.asUnsignedBV bv
+  BV.asUnsigned <$> W.asBV bv
 
 -- | Convert an integer to an unsigned bitvector.
 --   Result is undefined if integer is outside of range.
@@ -141,7 +142,7 @@ bvLit _ w _
   = return ZBV
 bvLit sym w dat
   | Just (Some (PosNat rw)) <- somePosNat w
-  = DBV <$> W.bvLit sym rw dat
+  = DBV <$> W.bvLit sym rw (BV.mkBV rw dat)
   | otherwise
   = fail "bvLit: size of bitvector is < 0 or >= maxInt"
 
@@ -202,7 +203,7 @@ w_bvLg2 sym x = go 0
     size :: Integer
     size = intValue (knownNat @w)
     lit :: Integer -> IO (SymBV sym w)
-    lit n = W.bvLit sym (knownNat @w) n
+    lit n = W.bvLit sym (knownNat @w) (BV.mkBV knownNat n)
     go :: Integer -> IO (SymBV sym w)
     go i | i < size = do
            x' <- lit (2 ^ i)
@@ -638,7 +639,8 @@ bvShiftL sym b x j = do
 bvShl' :: (IsExprBuilder sym, 1 <= w) => sym ->
   NatRepr w -> Pred sym -> SymBV sym w -> Integer -> IO (SymBV sym w)
 bvShl' sym rep b x i = do
-  j   <- W.bvLit sym rep i   -- what if i is too big for rep bits?
+  -- what if i is too big for rep bits?
+  j   <- W.bvLit sym rep (BV.mkBV rep i)
   bvShiftL sym b x j
 
 
@@ -658,5 +660,5 @@ bvShr' :: (IsExprBuilder sym, 1 <= w) => sym ->
   (SymBV sym w -> SymBV sym w -> IO (SymBV sym w)) ->
   NatRepr w -> Pred sym -> SymBV sym w -> Integer -> IO (SymBV sym w)
 bvShr' sym shr rep b x i = do
-  j   <- W.bvLit sym rep i
+  j   <- W.bvLit sym rep (BV.mkBV rep i)
   bvShiftR sym shr b x j
