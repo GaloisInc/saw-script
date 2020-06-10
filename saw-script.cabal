@@ -29,6 +29,7 @@ library
     , binary
     , bimap
     , bytestring
+    , bv-sized >= 1.0 && < 1.1
     , containers
     , constraints >= 0.6
     , cryptol
