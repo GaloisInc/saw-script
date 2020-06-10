@@ -242,6 +242,11 @@ prims be =
   , Prims.bpIntLt  = pure2 (\x y -> AIG.constant be (x < y))
   , Prims.bpIntMin = pure2 min
   , Prims.bpIntMax = pure2 max
+
+    -- Array operations
+  , Prims.bpArrayConstant = unsupportedAIGPrimitive "bpArrayConstant"
+  , Prims.bpArrayLookup = unsupportedAIGPrimitive "bpArrayLookup"
+  , Prims.bpArrayUpdate = unsupportedAIGPrimitive "bpArrayUpdate"
   }
 
 unsupportedAIGPrimitive :: String -> a
