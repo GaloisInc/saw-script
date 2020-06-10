@@ -19,6 +19,7 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
@@ -100,11 +101,20 @@ import qualified Lang.Crucible.Backend.SAWCore as CS
 import Verifier.SAW.Simulator.What4.SWord
 import Verifier.SAW.Simulator.What4.PosNat
 import Verifier.SAW.Simulator.What4.FirstOrder
+import Verifier.SAW.Simulator.What4.Panic
 
 ---------------------------------------------------------------------
 -- empty datatype to index (open) type families
 -- for this backend
 data What4 (sym :: *)
+
+-- | A What4 symbolic array where the domain and co-domain types do not appear
+--   in the type
+data SArray sym where
+  SArray ::
+    W.IsExpr (W.SymExpr sym) =>
+    W.SymArray sym (Ctx.EmptyCtx Ctx.::> itp) etp ->
+    SArray sym
 
 -- type abbreviations for uniform naming
 type SBool sym = Pred sym
@@ -114,6 +124,7 @@ type instance EvalM (What4 sym) = IO
 type instance VBool (What4 sym) = SBool sym
 type instance VWord (What4 sym) = SWord sym
 type instance VInt  (What4 sym) = SInt  sym
+type instance VArray (What4 sym) = SArray sym
 type instance Extra (What4 sym) = What4Extra sym
 
 type SValue sym = Value (What4 sym)
@@ -213,6 +224,10 @@ prims =
   , Prims.bpIntLt  = W.intLt sym
   , Prims.bpIntMin = intMin  sym
   , Prims.bpIntMax = intMax  sym
+    -- Array operations
+  , Prims.bpArrayConstant = arrayConstant sym
+  , Prims.bpArrayLookup = arrayLookup sym
+  , Prims.bpArrayUpdate = arrayUpdate sym
   }
 
 
@@ -267,6 +282,26 @@ toWord x            = fail $ unwords ["Verifier.SAW.Simulator.What4.toWord", sho
 wordFun :: (Sym sym) =>
            (SWord sym -> IO (SValue sym)) -> SValue sym
 wordFun f = strictFun (\x -> f =<< toWord x)
+
+valueToSymExpr :: SValue sym -> Maybe (Some (W.SymExpr sym))
+valueToSymExpr = \case
+  VBool b -> Just $ Some b
+  VInt i -> Just $ Some i
+  VWord (DBV w) -> Just $ Some w
+  VArray (SArray a) -> Just $ Some a
+  _ -> Nothing
+
+symExprToValue ::
+  IsExpr (SymExpr sym) =>
+  W.BaseTypeRepr tp ->
+  W.SymExpr sym tp ->
+  Maybe (SValue sym)
+symExprToValue tp expr = case tp of
+  BaseBoolRepr -> Just $ VBool expr
+  BaseIntegerRepr -> Just $ VInt expr
+  (BaseBVRepr w) -> Just $ withKnownNat w $ VWord $ DBV expr
+  (BaseArrayRepr (Ctx.Empty Ctx.:> _) _) -> Just $ VArray $ SArray expr
+  _ -> Nothing
 
 --
 -- Integer bit/vector conversions
@@ -472,6 +507,59 @@ selectV merger maxValue valueFn vx =
       p <- bvAt (given :: sym) vx j
       merger p (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
+instance Show (SArray sym) where
+  show (SArray arr) = show $ W.printSymExpr arr
+
+arrayConstant ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SValue sym ->
+  SValue sym ->
+  IO (SArray sym)
+arrayConstant sym ity elm
+  | Just (Some idx_repr) <- valueAsBaseType ity
+  , Just (Some elm_expr) <- valueToSymExpr elm =
+    SArray <$> W.constantArray sym (Ctx.Empty Ctx.:> idx_repr) elm_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayConstant" ["argument type mismatch"]
+
+arrayLookup ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SArray sym ->
+  SValue sym ->
+  IO (SValue sym)
+arrayLookup sym arr idx
+  | SArray arr_expr <- arr
+  , Just (Some idx_expr) <- valueToSymExpr idx
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr <- W.exprType arr_expr
+  , Just Refl <- testEquality idx_repr (W.exprType idx_expr) = do
+    elm_expr <- W.arrayLookup sym arr_expr (Ctx.Empty Ctx.:> idx_expr)
+    maybe
+      (panic "Verifier.SAW.Simulator.What4.Panic.arrayLookup" ["argument type mismatch"])
+      return
+      (symExprToValue elm_repr elm_expr)
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayLookup" ["argument type mismatch"]
+
+arrayUpdate ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SArray sym ->
+  SValue sym ->
+  SValue sym ->
+  IO (SArray sym)
+arrayUpdate sym arr idx elm
+  | SArray arr_expr <- arr
+  , Just (Some idx_expr) <- valueToSymExpr idx
+  , Just (Some elm_expr) <- valueToSymExpr elm
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr <- W.exprType arr_expr
+  , Just Refl <- testEquality idx_repr (W.exprType idx_expr)
+  , Just Refl <- testEquality elm_repr (W.exprType elm_expr) =
+    SArray <$> W.arrayUpdate sym arr_expr (Ctx.Empty Ctx.:> idx_expr) elm_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayUpdate" ["argument type mismatch"]
+
 ----------------------------------------------------------------------
 -- | A basic symbolic simulator/evaluator: interprets a saw-core Term as
 -- a symbolic value
@@ -577,6 +665,12 @@ parseUninterpreted sym ref app ty =
                   | i <- [0 .. n-1] ]
              return (VVector (V.fromList (map ready xs)))
 
+    VArrayType ity ety
+      | Just (Some idx_repr) <- valueAsBaseType ity
+      , Just (Some elm_repr) <- valueAsBaseType ety
+      -> (VArray . SArray) <$>
+          mkUninterpreted sym ref app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
+
     VUnitType
       -> return VUnit
 
@@ -645,6 +739,7 @@ applyUnintApp app0 v =
     VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
     VInt si                   -> return (extendUnintApp app0 si BaseIntegerRepr)
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
+    VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
     VCtorApp i xv             -> foldM applyUnintApp app' =<< traverse force xv
                                    where app' = suffixUnintApp ("_" ++ identName i) app0
@@ -720,6 +815,8 @@ vAsFirstOrderType v =
       -> return FOTInt
     VVecType (VNat n) v2
       -> FOTVec (fromInteger n) <$> vAsFirstOrderType v2
+    VArrayType iv ev
+      -> FOTArray <$> vAsFirstOrderType iv <*> vAsFirstOrderType ev
     VUnitType
       -> return (FOTTuple [])
     VPairType v1 v2
@@ -732,6 +829,9 @@ vAsFirstOrderType v =
       -> (FOTRec <$> Map.fromList <$>
           mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
     _ -> Nothing
+
+valueAsBaseType :: IsSymExprBuilder sym => SValue sym -> Maybe (Some W.BaseTypeRepr)
+valueAsBaseType v = fmap fotToBaseType $ vAsFirstOrderType v
 
 ------------------------------------------------------------------------------
 
@@ -812,11 +912,7 @@ newVarFOT fot
 
 typedToSValue :: (IsExpr (SymExpr sym)) => TypedExpr sym -> IO (SValue sym)
 typedToSValue (TypedExpr ty expr) =
-  case ty of
-    BaseBoolRepr         -> return $ VBool expr
-    BaseIntegerRepr      -> return $ VInt  expr
-    (BaseBVRepr w)       -> return $ withKnownNat w $ VWord (DBV expr)
-    _                    -> fail "Cannot handle"
+  maybe (fail "Cannot handle") return $ symExprToValue ty expr
 
 ----------------------------------------------------------------------
 -- Evaluation through crucible-saw backend
@@ -939,6 +1035,12 @@ parseUninterpretedSAW sym sc ref trm app ty =
                       parseUninterpretedSAW sym sc ref trm' app' ety
              xs <- traverse mkElem [0 .. n-1]
              return (VVector (V.fromList (map ready xs)))
+
+    VArrayType ity ety
+      | Just (Some idx_repr) <- valueAsBaseType ity
+      , Just (Some elm_repr) <- valueAsBaseType ety
+      -> (VArray . SArray) <$>
+          mkUninterpretedSAW sym ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
     VUnitType
       -> return VUnit

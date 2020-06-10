@@ -55,6 +55,10 @@ fotToBaseType (FOTVec nat FOTBit)
 fotToBaseType (FOTVec nat fot)
   | Some assn <- listToAssn (replicate (fromIntegral nat) fot)
   = Some (BaseStructRepr assn)
+fotToBaseType (FOTArray fot1 fot2)
+  | Some ty1 <- fotToBaseType fot1
+  , Some ty2 <- fotToBaseType fot2
+  = Some $ BaseArrayRepr (Empty :> ty1) ty2
 fotToBaseType (FOTTuple fots)
   | Some assn <- listToAssn fots
   = Some (BaseStructRepr assn)
@@ -78,7 +82,11 @@ typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (natValue w) FOTBit
 typeReprToFOT BaseRealRepr            = Left "No FO Real"
 typeReprToFOT BaseComplexRepr         = Left "No FO Complex"
 typeReprToFOT (BaseStringRepr _)      = Left "No FO String"
-typeReprToFOT (BaseArrayRepr _ctx _b) = Left "TODO: FO Arrays"
+typeReprToFOT (BaseArrayRepr (Empty :> ty) b)
+  | Right fot1 <- typeReprToFOT ty
+  , Right fot2 <- typeReprToFOT b
+  = pure $ FOTArray fot1 fot2
+typeReprToFOT ty@(BaseArrayRepr _ctx _b) = Left $ "Unsupported FO Array: " ++ show ty
 typeReprToFOT (BaseFloatRepr _)       = Left "No FO Floating point"
 typeReprToFOT (BaseStructRepr ctx)    = FOTTuple <$> assnToList ctx
 
@@ -100,7 +108,11 @@ groundToFOV BaseRealRepr    _         = Left "Real is not FOV"
 groundToFOV BaseComplexRepr         _ = Left "Complex is not FOV"
 groundToFOV (BaseStringRepr _)      _ = Left "String is not FOV"
 groundToFOV (BaseFloatRepr _)       _ = Left "Floating point is not FOV"
-groundToFOV (BaseArrayRepr _idx _b) _ = Left "TODO: FOV Array"
+groundToFOV (BaseArrayRepr (Empty :> ty) b) _
+  | Right fot1 <- typeReprToFOT ty
+  , Right fot2 <- typeReprToFOT b
+  = pure $ FOVArray fot1 fot2
+groundToFOV (BaseArrayRepr _idx _b) _ = Left "Unsupported FOV Array"
 groundToFOV (BaseStructRepr ctx) tup  = FOVTuple <$> tupleToList ctx tup
 
 
