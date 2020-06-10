@@ -84,6 +84,7 @@ import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
 import qualified Lang.Crucible.FunctionHandle as Crucible
+import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
@@ -719,7 +720,7 @@ enforcePointerValidity cc loc ss =
 
      sequence_
        [ do psz' <-
-              liftIO $ W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger psz
+              liftIO $ W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth psz
             c <-
               liftIO $
               Crucible.isAllocatedAlignedPointer sym w alignment mut ptr (Just psz') mem
@@ -757,9 +758,9 @@ enforceDisjointness loc ss =
      sequence_
         [ do c <- liftIO $
                do W4.setCurrentProgramLoc sym ploc
-                  psz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger psz
+                  psz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth psz
                   W4.setCurrentProgramLoc sym qloc
-                  qsz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger qsz
+                  qsz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth qsz
                   W4.setCurrentProgramLoc sym loc
                   Crucible.buildDisjointRegionsAssertion
                     sym Crucible.PtrWidth
@@ -1410,7 +1411,7 @@ invalidateMutableAllocs opts sc cc cs = do
   -- invalidate each allocation that is not overwritten by a postcondition write
   mem' <- foldM (\m (ptr, sz, msg) ->
                     liftIO $ Crucible.doInvalidate sym ?ptrWidth m ptr msg
-                      =<< W4.bvLit sym ?ptrWidth (Crucible.bytesToInteger sz)
+                      =<< W4.bvLit sym ?ptrWidth (Crucible.bytesToBV ?ptrWidth sz)
                 ) mem danglingPtrs
 
   writeGlobal (Crucible.llvmMemVar $ ccLLVMContext cc) mem'
@@ -1437,7 +1438,7 @@ executeAllocation opts cc (var, LLVMAllocSpec mut memTy alignment sz loc) =
      liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
-     sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger sz)
+     sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToBV Crucible.PtrWidth sz)
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
      (ptr, mem') <- liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
@@ -1546,7 +1547,7 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
             sz <- W4.bvLit
               sym
               ?ptrWidth
-              (fromIntegral $ Crucible.storageTypeSize storTy)
+              (Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)
             Crucible.doArrayConstStore sym mem ptr alignment arr sz
         _ -> do
           val' <- X.handle (handleException opts) $
@@ -1560,7 +1561,7 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
               sz <- W4.bvLit
                 sym
                 ?ptrWidth
-                (Crucible.bytesToInteger $ Crucible.storageTypeSize storTy)
+                (Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)
               Crucible.doInvalidate sym ?ptrWidth mem ptr invalidate_msg sz
         Crucible.mergeWriteOperations sym base_mem cond store_op invalidate_op
       Nothing ->
