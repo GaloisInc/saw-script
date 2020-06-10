@@ -1507,6 +1507,15 @@ test_fun6 x =
                  #((bitvector 64 -> CompM (bitvector 64)), #()))) ->
       funs.1 x);
 
+--------------------------------------------------------------------------------
+-- SMT Array
+
+primitive Array : sort 0 -> sort 0 -> sort 0;
+
+primitive arrayConstant : (a b : sort 0) -> b -> (Array a b);
+primitive arrayLookup : (a b : sort 0) -> (Array a b) -> a -> b;
+primitive arrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
+
 
 --------------------------------------------------------------------------------
 -- General axioms

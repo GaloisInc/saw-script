@@ -49,6 +49,7 @@ data FirstOrderType
   = FOTBit
   | FOTInt
   | FOTVec Natural FirstOrderType
+  | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
   | FOTRec (Map FieldName FirstOrderType)
   deriving (Eq, Show)
@@ -59,6 +60,7 @@ data FirstOrderValue
   | FOVInt Integer
   | FOVWord Natural Integer -- ^ a more efficient special case for 'FOVVec FOTBit _'.
   | FOVVec FirstOrderType [FirstOrderValue]
+  | FOVArray FirstOrderType FirstOrderType
   | FOVTuple [FirstOrderValue]
   | FOVRec (Map FieldName FirstOrderValue)
   deriving Eq
@@ -90,6 +92,7 @@ instance Show FirstOrderValue where
       FOVInt i    -> shows i
       FOVWord _ x -> shows x
       FOVVec _ vs -> showString "[" . commaSep (map shows vs) . showString "]"
+      FOVArray{}  -> shows $ firstOrderTypeOf fv
       FOVTuple vs -> showString "(" . commaSep (map shows vs) . showString ")"
       FOVRec vm   -> showString "{" . commaSep (map showField (Map.assocs vm)) . showString "}"
     where
@@ -109,6 +112,7 @@ ppFirstOrderValue opts = loop
    FOVInt i      -> integer i
    FOVWord _w i  -> ppNat opts i
    FOVVec _ xs   -> brackets (sep (punctuate comma (map loop xs)))
+   FOVArray{}    -> text $ show $ firstOrderTypeOf fv
    FOVTuple xs   -> parens (sep (punctuate comma (map loop xs)))
    FOVRec xs     -> braces (sep (punctuate comma (map ppField (Map.toList xs))))
       where ppField (f,x) = pretty f <+> char '=' <+> loop x
@@ -158,6 +162,11 @@ firstOrderTypeOf fv =
     FOVInt _    -> FOTInt
     FOVWord n _ -> FOTVec n FOTBit
     FOVVec t vs -> FOTVec (fromIntegral (length vs)) t
+    -- Note: FOVArray contains type information, but not an actual Array value,
+    -- because it is not possible to obtain Array values from SMT solvers. This
+    -- is needed to display a counterexample that includes variables of Array
+    -- type.
+    FOVArray t1 t2 -> FOTArray t1 t2
     FOVTuple vs -> FOTTuple (map firstOrderTypeOf vs)
     FOVRec vm   -> FOTRec (fmap firstOrderTypeOf vm)
 
@@ -194,6 +203,10 @@ asFirstOrderType sc t = do
       -> return FOTInt
     (R.isVecType return -> Just (n R.:*: tp))
       -> FOTVec n <$> asFirstOrderType sc tp
+    (R.asArrayType -> Just (tp1 R.:*: tp2)) -> do
+      tp1' <- asFirstOrderType sc tp1
+      tp2' <- asFirstOrderType sc tp2
+      return $ FOTArray tp1' tp2'
     (R.asTupleType -> Just ts)
       -> FOTTuple <$> traverse (asFirstOrderType sc) ts
     (R.asRecordType -> Just tm)
@@ -227,6 +240,9 @@ scFirstOrderType sc ft =
     FOTVec n t  -> do n' <- scNat sc n
                       t' <- scFirstOrderType sc t
                       scVecType sc n' t'
+    FOTArray t1 t2 -> do t1' <- scFirstOrderType sc t1
+                         t2' <- scFirstOrderType sc t2
+                         scArrayType sc t1' t2'
     FOTTuple ts -> scTupleType sc =<< traverse (scFirstOrderType sc) ts
     FOTRec tm   ->
       scRecordType sc =<< (Map.assocs <$> traverse (scFirstOrderType sc) tm)
@@ -247,6 +263,9 @@ scFirstOrderValue sc fv =
     FOVVec t vs -> do t' <- scFirstOrderType sc t
                       vs' <- traverse (scFirstOrderValue sc) vs
                       scVector sc t' vs'
+    FOVArray t1 t2 -> do t1' <- scFirstOrderType sc t1
+                         t2' <- scFirstOrderType sc t2
+                         scArrayType sc t1' t2'
     FOVTuple vs -> scTuple sc =<< traverse (scFirstOrderValue sc) vs
     FOVRec vm   -> scRecord sc =<< traverse (scFirstOrderValue sc) vm
 

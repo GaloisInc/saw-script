@@ -66,6 +66,7 @@ module Verifier.SAW.Recognizer
   , asMux
   , asEq
   , asEqTrue
+  , asArrayType
   ) where
 
 import Control.Applicative
@@ -371,3 +372,6 @@ asEq t =
 
 asEqTrue :: Recognizer Term Term
 asEqTrue = isGlobalDef "Prelude.EqTrue" @> return
+
+asArrayType :: Recognizer Term (Term :*: Term)
+asArrayType = (isGlobalDef "Prelude.Array" @> return) <@> return

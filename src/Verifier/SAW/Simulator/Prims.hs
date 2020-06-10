@@ -118,6 +118,10 @@ data BasePrims l =
   , bpIntLt :: VInt l -> VInt l -> MBool l
   , bpIntMin :: VInt l -> VInt l -> MInt l
   , bpIntMax :: VInt l -> VInt l -> MInt l
+    -- Array operations
+  , bpArrayConstant :: Value l -> Value l -> MArray l
+  , bpArrayLookup :: VArray l -> Value l -> MValue l
+  , bpArrayUpdate :: VArray l -> Value l -> Value l -> MArray l
   }
 
 bpBool :: VMonad l => BasePrims l -> Bool -> MBool l
@@ -247,6 +251,11 @@ constMap bp = Map.fromList
   , ("Prelude.eq", eqOp bp)
   , ("Prelude.ite", iteOp bp)
   , ("Prelude.iteDep", iteOp bp)
+  -- SMT Arrays
+  , ("Prelude.Array", arrayTypeOp)
+  , ("Prelude.arrayConstant", arrayConstantOp bp)
+  , ("Prelude.arrayLookup", arrayLookupOp bp)
+  , ("Prelude.arrayUpdate", arrayUpdateOp bp)
   ]
 
 -- | Call this function to indicate that a programming error has
@@ -328,6 +337,10 @@ vecIdx err v n =
   case (V.!?) v n of
     Just a -> a
     Nothing -> err
+
+toArray :: (VMonad l, Show (Extra l)) => Value l -> MArray l
+toArray (VArray f) = return f
+toArray x = panic $ unwords ["Verifier.SAW.Simulator.toArray", show x]
 
 ------------------------------------------------------------
 -- Standard operator types
@@ -1208,3 +1221,39 @@ fixOp =
   constFun $
   strictFun $ \f ->
   force =<< mfix (\x -> delay (apply f x))
+
+------------------------------------------------------------
+-- SMT Array
+
+-- Array :: sort 0 -> sort 0 -> sort 0
+arrayTypeOp :: VMonad l => Value l
+arrayTypeOp = pureFun $ \a -> pureFun $ \b -> VArrayType a b
+
+-- arrayConstant :: (a b :: sort 0) -> b -> (Array a b);
+arrayConstantOp :: VMonad l => BasePrims l -> Value l
+arrayConstantOp bp =
+  pureFun $ \a ->
+  constFun $
+  strictFun $ \e ->
+    VArray <$> (bpArrayConstant bp) a e
+
+-- arrayLookup :: (a b :: sort 0) -> (Array a b) -> a -> b;
+arrayLookupOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
+arrayLookupOp bp =
+  constFun $
+  constFun $
+  pureFun $ \f ->
+  strictFun $ \i -> do
+    f' <- toArray f
+    (bpArrayLookup bp) f' i
+
+-- arrayUpdate :: (a b :: sort 0) -> (Array a b) -> a -> b -> (Array a b);
+arrayUpdateOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
+arrayUpdateOp bp =
+  constFun $
+  constFun $
+  pureFun $ \f ->
+  pureFun $ \i ->
+  strictFun $ \e -> do
+    f' <- toArray f
+    VArray <$> (bpArrayUpdate bp) f' i e

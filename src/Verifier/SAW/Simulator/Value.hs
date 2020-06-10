@@ -58,6 +58,8 @@ data Value l
   | VNat !Integer
   | VInt (VInt l)
   | VIntType
+  | VArray (VArray l)
+  | VArrayType (Value l) (Value l)
   | VString !String
   | VFloat !Float
   | VDouble !Double
@@ -80,6 +82,8 @@ type family VBool l :: Type
 type family VWord l :: Type
 -- | Integers for value instantiation 'l'
 type family VInt  l :: Type
+-- | SMT arrays for value instantiation 'l'
+type family VArray l :: Type
 -- | Additional constructors for instantiation 'l'
 type family Extra l :: Type
 
@@ -94,6 +98,9 @@ type MWord l      = EvalM l (VWord l)
 
 -- | Short-hand for a monadic integer.
 type MInt l       = EvalM l (VInt  l)
+
+-- | Short-hand for a monadic array.
+type MArray l     = EvalM l (VArray l)
 
 -- | Short hand to specify that the evaluation monad is a monad (very common)
 type VMonad l     = Monad (EvalM l)
@@ -110,6 +117,7 @@ type instance EvalM (WithM m l) = m
 type instance VBool (WithM m l) = VBool l
 type instance VWord (WithM m l) = VWord l
 type instance VInt  (WithM m l) = VInt l
+type instance VArray (WithM m l) = VArray l
 type instance Extra (WithM m l) = Extra l
 
 --------------------------------------------------------------------------------
@@ -140,6 +148,8 @@ instance Show (Extra l) => Show (Value l) where
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
       VIntType       -> showString "Integer"
+      VArray{}       -> showString "<<array>>"
+      VArrayType{}   -> showString "Array"
       VFloat float   -> shows float
       VDouble double -> shows double
       VString s      -> shows s

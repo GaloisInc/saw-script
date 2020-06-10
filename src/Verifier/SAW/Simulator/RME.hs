@@ -73,6 +73,7 @@ type instance EvalM ReedMuller = Identity
 type instance VBool ReedMuller = RME
 type instance VWord ReedMuller = Vector RME
 type instance VInt  ReedMuller = Integer
+type instance VArray ReedMuller = ()
 type instance Extra ReedMuller = RExtra
 
 type RValue = Value ReedMuller
@@ -212,6 +213,10 @@ prims =
   , Prims.bpIntLt  = pure2 (\x y -> RME.constant (x < y))
   , Prims.bpIntMin = unsupportedRMEPrimitive "bpIntMin"
   , Prims.bpIntMax = unsupportedRMEPrimitive "bpIntMax"
+    -- Array operations
+  , Prims.bpArrayConstant = unsupportedRMEPrimitive "bpArrayConstant"
+  , Prims.bpArrayLookup = unsupportedRMEPrimitive "bpArrayLookup"
+  , Prims.bpArrayUpdate = unsupportedRMEPrimitive "bpArrayUpdate"
   }
 
 unsupportedRMEPrimitive :: String -> a

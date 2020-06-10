@@ -161,6 +161,10 @@ module Verifier.SAW.SharedTerm
   , scIte
   , scSingle
   , scSlice
+  , scArrayType
+  , scArrayConstant
+  , scArrayLookup
+  , scArrayUpdate
   -- *** Integer primitives
   , scIntegerType
   , scIntegerConst
@@ -1559,6 +1563,22 @@ scUpdNatFun sc a f i v = scGlobalApply sc "Prelude.updNatFun" [a, f, i, v]
 scUpdBvFun :: SharedContext -> Term -> Term
            -> Term -> Term -> Term -> IO Term
 scUpdBvFun sc n a f i v = scGlobalApply sc "Prelude.updBvFun" [n, a, f, i, v]
+
+-- | Array :: sort 0 -> sort 0 -> sort 0
+scArrayType :: SharedContext -> Term -> Term -> IO Term
+scArrayType sc a b = scGlobalApply sc "Prelude.Array" [a, b]
+
+-- arrayConstant :: (a b :: sort 0) -> b -> (Array a b);
+scArrayConstant :: SharedContext -> Term -> Term -> Term -> IO Term
+scArrayConstant sc a b e = scGlobalApply sc "Prelude.arrayConstant" [a, b, e]
+
+-- | arrayLookup :: (a b :: sort 0) -> (Array a b) -> a -> b;
+scArrayLookup :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
+scArrayLookup sc a b f i = scGlobalApply sc "Prelude.arrayLookup" [a, b, f, i]
+
+-- | arrayUpdate :: (a b :: sort 0) -> (Array a b) -> a -> b -> (Array a b);
+scArrayUpdate :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
+scArrayUpdate sc a b f i e = scGlobalApply sc "Prelude.arrayUpdate" [a, b, f, i, e]
 
 ------------------------------------------------------------
 -- | The default instance of the SharedContext operations.

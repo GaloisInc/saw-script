@@ -55,3 +55,9 @@ preludeStringIdent =  mkIdent preludeModuleName "String"
 
 preludeStringType :: FlatTermF e
 preludeStringType = GlobalDef preludeStringIdent
+
+preludeArrayIdent :: Ident
+preludeArrayIdent =  mkIdent preludeModuleName "Array"
+
+preludeArrayTypeFun :: FlatTermF e
+preludeArrayTypeFun = GlobalDef preludeArrayIdent
