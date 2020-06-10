@@ -31,6 +31,7 @@ import Control.Exception(Exception(..),throwIO)
 import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class(liftIO)
 
+import qualified Data.BitVector.Sized as BV
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -50,7 +51,7 @@ import Data.Parameterized.Context(EmptyCtx,(::>),singleton)
 import Data.Parameterized.Nonce(globalNonceGenerator)
 
 -- What4
-import What4.Interface(asNat,asUnsignedBV)
+import What4.Interface(asNat,asBV)
 import What4.Expr(FloatModeRepr(..))
 import qualified What4.Interface as W4
 import qualified What4.Config as W4
@@ -367,7 +368,7 @@ callHandler :: Overrides -> CallHandler
 callHandler callMap sym = Macaw.LookupFunctionHandle $ \st mem regs -> do
   case lookupX86Reg X86_IP regs of
     Just (RV ptr) | LLVMPointer base off <- ptr ->
-      case (asNat base, asUnsignedBV off) of
+      case (asNat base, BV.asUnsigned <$> asBV off) of
         (Just b, Just o) ->
            case Map.lookup (b,o) callMap of
              Just h  -> case h sym of

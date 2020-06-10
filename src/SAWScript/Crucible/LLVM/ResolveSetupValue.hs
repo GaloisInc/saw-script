@@ -29,6 +29,7 @@ import Control.Lens ((^.))
 import Control.Monad
 import Control.Monad.Fail (MonadFail)
 import Control.Monad.State
+import qualified Data.BitVector.Sized as BV
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
 import Data.IORef
@@ -52,6 +53,7 @@ import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
 import qualified What4.Expr.Builder as W4
 
+import qualified Lang.Crucible.LLVM.Bytes       as Crucible
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Backend.SAWCore  as Crucible
@@ -305,7 +307,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
          ptr <- resolveSetupVal cc mem env tyenv nameEnv v
          case ptr of
            Crucible.LLVMValInt blk off ->
-             do delta' <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToInteger delta)
+             do delta' <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
                 off' <- W4.bvAdd sym off delta'
                 return (Crucible.LLVMValInt blk off')
            _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
@@ -380,7 +382,7 @@ resolveSAWTerm cc tp tm =
                            return (SBV.svAsInteger sbv)
                          _ -> return Nothing
                  v <- case mx of
-                        Just x  -> W4.bvLit sym w x
+                        Just x  -> W4.bvLit sym w (BV.mkBV w x)
                         Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
                  Crucible.ptrToPtrVal <$> Crucible.llvmPointer_bv sym v
           _ -> fail ("Invalid bitvector width: " ++ show sz)

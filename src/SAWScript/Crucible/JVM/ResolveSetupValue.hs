@@ -27,6 +27,7 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
 import           Control.Lens
 import qualified Control.Monad.Fail as Fail
 import           Data.IORef
+import qualified Data.BitVector.Sized as BV
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (absurd)
@@ -176,8 +177,8 @@ resolveSAWTerm cc tp tm =
   case tp of
     Cryptol.TVBit ->
       do b <- resolveBoolTerm sym tm
-         x0 <- W4.bvLit sym W4.knownNat 0
-         x1 <- W4.bvLit sym W4.knownNat 1
+         x0 <- W4.bvLit sym W4.knownNat (BV.zero W4.knownNat)
+         x1 <- W4.bvLit sym W4.knownNat (BV.one  W4.knownNat)
          x <- W4.bvIte sym b x1 x0
          return (IVal x)
     Cryptol.TVInteger ->
@@ -229,7 +230,7 @@ resolveBitvectorTerm sym w tm =
                   return (SBV.svAsInteger sbv)
              _ -> return Nothing
      case mx of
-       Just x  -> W4.bvLit sym w x
+       Just x  -> W4.bvLit sym w (BV.mkBV w x)
        Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
 
 -- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.

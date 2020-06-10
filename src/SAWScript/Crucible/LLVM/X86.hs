@@ -35,6 +35,7 @@ import Control.Monad.ST (stToIO)
 import Control.Monad.State
 import Control.Monad.Catch (MonadThrow)
 
+import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
 import Data.IORef
 import qualified Data.List.NonEmpty as NE
@@ -394,7 +395,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
       . mconcat
       . fmap Elf.elfSymbolTableEntries
       $ Elf.elfSymtab elf
-  sz <- W4.bvLit sym knownNat . maximum $ mconcat
+  sz <- W4.bvLit sym knownNat . BV.mkBV knownNat . maximum $ mconcat
     [ [maxAddr, globalEnd "_end"]
     , globalEnd . fst <$> globs
     , allocGlobalEnd <$> ms ^. MS.csGlobalAllocs
@@ -460,10 +461,10 @@ setupGlobals globsyms = do
       pure $ (\(name, addr, _unit, bytes) -> (name, addr, bytes)) <$> res
     convertByte :: Integer -> IO (C.LLVM.LLVMVal Sym)
     convertByte byte =
-      C.LLVM.LLVMValInt <$> W4.natLit sym 0 <*> W4.bvLit sym (knownNat @8) byte
+      C.LLVM.LLVMValInt <$> W4.natLit sym 0 <*> W4.bvLit sym (knownNat @8) (BV.mkBV knownNat byte)
     writeGlobal :: Mem -> (String, Integer, [Integer]) -> IO Mem
     writeGlobal m (_nm, addr, bytes) = do
-      ptr <- C.LLVM.doPtrAddOffset sym m base =<< W4.bvLit sym knownNat addr
+      ptr <- C.LLVM.doPtrAddOffset sym m base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
       v <- Vector.fromList <$> mapM convertByte bytes
       let st = C.LLVM.arrayType (fromIntegral $ length bytes) $ C.LLVM.bitvectorType 1
       C.LLVM.storeConstRaw sym m ptr st C.LLVM.noAlignment
@@ -483,7 +484,7 @@ allocateStack szInt = do
   mem <- use x86Mem
   regs <- use x86Regs
   let align = C.LLVM.exponentToAlignment 4
-  sz <- liftIO $ W4.bvLit sym knownNat $ szInt + 8
+  sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt + 8
   (base, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable
     "stack_alloc" mem sz align
   sn <- case W4.userSymbol "stack" of
@@ -492,7 +493,7 @@ allocateStack szInt = do
   fresh <- liftIO $ C.LLVM.LLVMPointer
     <$> W4.natLit sym 0
     <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
-  ptr <- liftIO $ C.LLVM.doPtrAddOffset sym mem' base =<< W4.bvLit sym knownNat szInt
+  ptr <- liftIO $ C.LLVM.doPtrAddOffset sym mem' base =<< W4.bvLit sym knownNat (BV.mkBV knownNat szInt)
   finalMem <- liftIO $ C.LLVM.doStore sym mem' ptr
     (C.LLVM.LLVMPointerRepr $ knownNat @64)
     (C.LLVM.bitvectorType 8) align fresh
@@ -510,7 +511,7 @@ executeAllocation ::
 executeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc) = do
   sym <- use x86Sym
   mem <- use x86Mem
-  sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToInteger sz
+  sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToBV knownNat sz
   (ptr, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
     (show $ W4.plSourceLoc loc) mem sz' align
   x86Mem .= mem'
@@ -541,7 +542,7 @@ executePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
       Nothing -> throwX86 $ mconcat ["Global symbol \"", nm, "\" not found"]
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
-        liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat addr
+        liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
     _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
          =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
@@ -617,7 +618,7 @@ assertPost env premem preregs = do
   liftIO . C.addAssertion sym . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc
     $ C.AssertFailureSimError "Instruction pointer not set to return address" ""
 
-  stack <- liftIO $ C.LLVM.doPtrAddOffset sym premem prersp =<< W4.bvLit sym knownNat 8
+  stack <- liftIO $ C.LLVM.doPtrAddOffset sym premem prersp =<< W4.bvLit sym knownNat (BV.mkBV knownNat 8)
   postrsp <- getReg Macaw.RSP postregs
   correctStack <- liftIO $ C.LLVM.ptrEq sym C.LLVM.PtrWidth stack postrsp
   liftIO $ C.addAssertion sym . C.LabeledPred correctStack . C.SimError W4.initializationLoc
