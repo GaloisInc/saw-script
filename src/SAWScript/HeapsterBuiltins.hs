@@ -281,7 +281,6 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
       let mnm = heapsterEnvSAWModule henv
       un_term <- parseTermFromString nm term_string
       TypedTerm term typ <- typecheckTerm mnm un_term
-      -- Q: Is this what we want term_ident to be?
       let term_ident = mkIdent mnm nm
           trans_tm = globalOpenTerm term_ident
       liftIO $ scModifyModule sc mnm $ \m ->
