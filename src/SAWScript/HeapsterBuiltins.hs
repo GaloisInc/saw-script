@@ -44,6 +44,8 @@ import Lang.Crucible.LLVM.Extension
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Translation
 
+import qualified Text.LLVM.AST as L
+
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -231,16 +233,16 @@ heapster_assume_fun bic opts henv nm perms_string i_string =
 
       let arch = llvmArch $ _transContext (lm ^. modTrans)
       let w = archReprWidth arch
-      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-      any_cfg <- (getLLVMCFG arch <$> crucible_llvm_cfg bic opts some_lm nm)
       leq_proof <- case decideLeq (knownNat @1) w of
         Left pf -> return pf
         Right _ -> fail "LLVM arch width is 0!"
-      case any_cfg of
-        AnyCFG cfg ->
+      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+      case lm ^. modTrans.transContext.symbolMap.at (L.Symbol nm) of
+        Nothing -> fail ("Could not find symbol: " ++ nm)
+        Just (LLVMHandleInfo _ h) ->
+          let args = mkCruCtx $ handleArgTypes h
+              ret = handleReturnType h in
           withKnownNat w $ withLeqProof leq_proof $
-          let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
-              ret = handleReturnType $ cfgHandle cfg in
           case parseFunPermString env args ret perms_string of
             Left err -> fail $ show err
             Right (SomeFunPerm fun_perm) ->
