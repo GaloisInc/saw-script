@@ -31,6 +31,7 @@ import Unsafe.Coerce
 import GHC.TypeNats
 import System.Directory
 import qualified Data.ByteString.Lazy as BL
+import Data.ByteString.Internal (c2w)
 
 import Data.Binding.Hobbits
 
@@ -39,6 +40,7 @@ import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Typechecker
+import Verifier.SAW.SCTypeCheck
 import qualified Verifier.SAW.UntypedAST as Un
 import qualified Verifier.SAW.Grammar as Un
 
@@ -193,6 +195,24 @@ readModuleFromFile path = do
     (m@(Un.Module (Un.PosPair _ mnm) _ _),[]) -> pure (m, mnm)
     (_,errs) -> fail $ "Module parsing failed:\n" ++ show errs
 
+parseTermFromString :: String -> String -> TopLevel Un.Term
+parseTermFromString ctx term_string = do
+  base <- liftIO getCurrentDirectory
+  -- Q: What should the values for the base and path arguments be below?
+  -- Q: Is B.pack . fmap c2w the right way to turn a String into a ByteString?
+  case Un.parseSAWTerm "" ctx (BL.pack (fmap c2w term_string)) of
+    (term,[]) -> pure term
+    (_,errs) -> fail $ "Term parsing failed:\n" ++ show errs
+
+typecheckTerm :: ModuleName -> Un.Term -> TopLevel TypedTerm
+typecheckTerm mnm term = do
+  sc <- getSharedContext
+  res <- liftIO $ runTCM (typeInferComplete term) sc (Just mnm) []
+  case res of
+    Right typed_term -> pure typed_term
+    Left err -> fail $ "Term failed to typecheck:\n" ++ unlines (prettyTCError err)
+
+
 heapster_init_env :: BuiltinContext -> Options -> String -> String ->
                      TopLevel HeapsterEnv
 heapster_init_env bic opts mod_str llvm_filename =
@@ -253,14 +273,22 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str i_string =
 -- to a SAW core definition given by name
 heapster_assume_fun :: BuiltinContext -> Options -> HeapsterEnv ->
                        String -> String -> String -> TopLevel ()
-heapster_assume_fun bic opts henv nm perms_string i_string =
+heapster_assume_fun bic opts henv nm perms_string term_string =
   let some_lm = heapsterEnvLLVMModule henv in
   case some_lm of
     Some lm -> do
       sc <- getSharedContext
-      let i = fromString i_string
-      _ <- liftIO $ scRequireDef sc i -- Ensure that i is defined
-      let trans_tm = globalOpenTerm i
+      let mnm = heapsterEnvSAWModule henv
+      un_term <- parseTermFromString nm term_string
+      TypedTerm term typ <- typecheckTerm mnm un_term
+      -- Q: Is this what we want term_ident to be?
+      let term_ident = mkIdent mnm nm
+          trans_tm = globalOpenTerm term_ident
+      liftIO $ scModifyModule sc mnm $ \m ->
+        insDef m $ Def { defIdent = term_ident,
+                         defQualifier = NoQualifier,
+                         defType = typ,
+                         defBody = Just term }
 
       let arch = llvmArch $ _transContext (lm ^. modTrans)
       let w = archReprWidth arch

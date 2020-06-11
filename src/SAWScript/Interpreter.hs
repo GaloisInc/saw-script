@@ -2271,7 +2271,7 @@ primitives = Map.fromList
     (bicVal heapster_assume_fun)
     Experimental
     [ "heapster_assume_fun nm perms trans assumes that function nm has"
-    , " permissions perms and translates to named function trans"
+    , " permissions perms and translates to the SAW core term trans"
     ]
 
   , prim "heapster_typecheck_fun"
