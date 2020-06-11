@@ -10,6 +10,7 @@
 
 module SAWScript.HeapsterBuiltins
        ( heapster_init_env
+       , heapster_init_env_from_file
        , heapster_typecheck_fun
        , heapster_typecheck_mut_funs
        , heapster_define_opaque_perm
@@ -28,6 +29,8 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Unsafe.Coerce
 import GHC.TypeNats
+import System.Directory
+import qualified Data.ByteString.Lazy as BL
 
 import Data.Binding.Hobbits
 
@@ -35,6 +38,9 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.Module
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
+import Verifier.SAW.Typechecker
+import qualified Verifier.SAW.UntypedAST as Un
+import qualified Verifier.SAW.Grammar as Un
 
 import Lang.Crucible.Types
 import Lang.Crucible.FunctionHandle
@@ -175,6 +181,16 @@ heapster_default_env =
        }
      |])
 
+-- | Based on the function of the same name in Verifier.SAW.ParserUtils.
+-- Unlike that function, this calls 'fail' instead of 'error'.
+readModuleFromFile :: FilePath -> TopLevel (Un.Module, ModuleName)
+readModuleFromFile path = do
+  base <- liftIO getCurrentDirectory
+  b <- liftIO $ BL.readFile path
+  case Un.parseSAW base path b of
+    (m@(Un.Module (Un.PosPair _ mnm) _ _),[]) -> pure (m, mnm)
+    (_,errs) -> fail $ "Module parsing failed:\n" ++ show errs
+
 heapster_init_env :: BuiltinContext -> Options -> String -> String ->
                      TopLevel HeapsterEnv
 heapster_init_env bic opts mod_str llvm_filename =
@@ -186,6 +202,21 @@ heapster_init_env bic opts mod_str llvm_filename =
        fail ("SAW module with name " ++ show mod_str ++ " already defined!")
        else return ()
      liftIO $ scLoadModule sc (emptyModule saw_mod_name)
+     let perm_env = unClosed heapster_default_env
+     perm_env_ref <- liftIO $ newIORef perm_env
+     return $ HeapsterEnv {
+       heapsterEnvSAWModule = saw_mod_name,
+       heapsterEnvPermEnvRef = perm_env_ref,
+       heapsterEnvLLVMModule = llvm_mod
+       }
+
+heapster_init_env_from_file :: BuiltinContext -> Options -> String -> String ->
+                               TopLevel HeapsterEnv
+heapster_init_env_from_file bic opts mod_filename llvm_filename =
+  do llvm_mod <- llvm_load_module llvm_filename
+     sc <- getSharedContext
+     (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
+     liftIO $ tcInsertModule sc saw_mod
      let perm_env = unClosed heapster_default_env
      perm_env_ref <- liftIO $ newIORef perm_env
      return $ HeapsterEnv {
