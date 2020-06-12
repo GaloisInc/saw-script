@@ -31,6 +31,7 @@ import Unsafe.Coerce
 import GHC.TypeNats
 import System.Directory
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.UTF8 as BL
 import Data.ByteString.Internal (c2w)
 
 import Data.Binding.Hobbits
@@ -196,20 +197,20 @@ readModuleFromFile path = do
     (_,errs) -> fail $ "Module parsing failed:\n" ++ show errs
 
 parseTermFromString :: String -> String -> TopLevel Un.Term
-parseTermFromString ctx term_string = do
-  base <- liftIO getCurrentDirectory
-  -- Q: What should the values for the base and path arguments be below?
-  -- Q: Is B.pack . fmap c2w the right way to turn a String into a ByteString?
-  case Un.parseSAWTerm "" ctx (BL.pack (fmap c2w term_string)) of
+parseTermFromString nm term_string = do
+  let base = ""
+      path = "<" ++ nm ++ ">"
+  case Un.parseSAWTerm base path (BL.fromString term_string) of
     (term,[]) -> pure term
     (_,errs) -> fail $ "Term parsing failed:\n" ++ show errs
 
-typecheckTerm :: ModuleName -> Un.Term -> TopLevel TypedTerm
-typecheckTerm mnm term = do
+-- based on 'inferCompleteTermCtx'
+typecheckTerm :: ModuleName -> Un.Term -> TopLevel Term
+typecheckTerm mnm t = do
   sc <- getSharedContext
-  res <- liftIO $ runTCM (typeInferComplete term) sc (Just mnm) []
+  res <- liftIO $ runTCM (typeInferComplete t) sc (Just mnm) []
   case res of
-    Right typed_term -> pure typed_term
+    Right t' -> pure $ typedVal t'
     Left err -> fail $ "Term failed to typecheck:\n" ++ unlines (prettyTCError err)
 
 
@@ -280,14 +281,9 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
       sc <- getSharedContext
       let mnm = heapsterEnvSAWModule henv
       un_term <- parseTermFromString nm term_string
-      TypedTerm term typ <- typecheckTerm mnm un_term
+      term <- typecheckTerm mnm un_term
       let term_ident = mkIdent mnm nm
           trans_tm = globalOpenTerm term_ident
-      liftIO $ scModifyModule sc mnm $ \m ->
-        insDef m $ Def { defIdent = term_ident,
-                         defQualifier = NoQualifier,
-                         defType = typ,
-                         defBody = Just term }
 
       let arch = llvmArch $ _transContext (lm ^. modTrans)
       let w = archReprWidth arch
@@ -303,10 +299,17 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
           withKnownNat w $ withLeqProof leq_proof $
           case parseFunPermString env args ret perms_string of
             Left err -> fail $ show err
-            Right (SomeFunPerm fun_perm) ->
-              liftIO $ writeIORef (heapsterEnvPermEnvRef henv) $
-              permEnvAddGlobalSymFun env (GlobalSymbol $
-                                          fromString nm) w fun_perm trans_tm
+            Right (SomeFunPerm fun_perm) -> liftIO $ do
+              perm_env <- readIORef (heapsterEnvPermEnvRef henv)
+              fun_typ <- translateCompleteFunPerm sc perm_env fun_perm
+              scModifyModule sc mnm $ \m ->
+                insDef m $ Def { defIdent = term_ident,
+                                 defQualifier = NoQualifier,
+                                 defType = fun_typ,
+                                 defBody = Just term }
+              writeIORef (heapsterEnvPermEnvRef henv) $
+               permEnvAddGlobalSymFun env (GlobalSymbol $
+                                           fromString nm) w fun_perm trans_tm
 
 
 heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->
