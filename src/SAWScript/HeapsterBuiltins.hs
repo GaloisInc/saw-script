@@ -205,13 +205,20 @@ parseTermFromString nm term_string = do
     (_,errs) -> fail $ "Term parsing failed:\n" ++ show errs
 
 -- based on 'inferCompleteTermCtx'
-typecheckTerm :: ModuleName -> Un.Term -> TopLevel Term
+typecheckTerm :: ModuleName -> Un.Term -> TopLevel TypedTerm
 typecheckTerm mnm t = do
   sc <- getSharedContext
   res <- liftIO $ runTCM (typeInferComplete t) sc (Just mnm) []
   case res of
-    Right t' -> pure $ typedVal t'
+    Right t' -> pure $ t'
     Left err -> fail $ "Term failed to typecheck:\n" ++ unlines (prettyTCError err)
+
+-- | Translate a 'TypRepr' to the SAW core type it represents
+translateTypePerm :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
+translateTypePerm sc env typ_perm =
+  completeOpenTerm sc $
+  transTerm1 $
+  runTransM (translate $ emptyMb typ_perm) (emptyTypeTransInfo env)
 
 
 heapster_init_env :: BuiltinContext -> Options -> String -> String ->
@@ -253,7 +260,7 @@ heapster_init_env_from_file bic opts mod_filename llvm_filename =
 heapster_define_opaque_perm :: BuiltinContext -> Options -> HeapsterEnv ->
                                String -> String -> String -> String ->
                                TopLevel ()
-heapster_define_opaque_perm _bic _opts henv nm args_str tp_str i_string =
+heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_string =
   do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      some_args <- case parseCtxString env args_str of
        Left err -> fail ("Error parsing argument types: " ++ show err)
@@ -262,13 +269,21 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str i_string =
        Left err -> fail ("Error parsing permission type: " ++ show err)
        Right tp -> return tp
      sc <- getSharedContext
-     let i = fromString i_string
-     -- FIXME: i could be a datatype as well
-     -- _ <- liftIO $ scRequireDef sc i -- Ensure that i is defined
+     let mnm = heapsterEnvSAWModule henv
+     un_term <- parseTermFromString nm term_string
+     TypedTerm term term_tp <- typecheckTerm mnm un_term
+     let term_ident = mkIdent mnm nm
      case (some_args, some_tp) of
-       (Some args, Some tp) ->
-         let env' = permEnvAddOpaquePerm env nm args tp i in
-         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+       (Some args, Some tp_perm) -> liftIO $ do
+         -- FIXME: should't we really be doing this?
+         -- term_tp <- translateTypePerm sc env tp_perm
+         scModifyModule sc mnm $ \m ->
+           insDef m $ Def { defIdent = term_ident,
+                            defQualifier = NoQualifier,
+                            defType = term_tp,
+                            defBody = Just term }
+         let env' = permEnvAddOpaquePerm env nm args tp_perm term_ident
+         writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by name
@@ -281,7 +296,7 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
       sc <- getSharedContext
       let mnm = heapsterEnvSAWModule henv
       un_term <- parseTermFromString nm term_string
-      term <- typecheckTerm mnm un_term
+      TypedTerm term _ <- typecheckTerm mnm un_term
       let term_ident = mkIdent mnm nm
           trans_tm = globalOpenTerm term_ident
 
