@@ -86,17 +86,24 @@ resolveSetupValueInfo ::
   L.Info                          {- ^ field index       -}
 resolveSetupValueInfo cc env nameEnv v =
   case v of
-    -- SetupGlobal g ->
+    SetupGlobal _ name ->
+      case lookup (L.Symbol name) globalTys of
+        Just (L.Alias alias) -> L.Pointer (guessAliasInfo mdMap alias)
+        _ -> L.Unknown
+
     SetupVar i
       | Just alias <- Map.lookup i nameEnv
-      , let mdMap = Crucible.llvmMetadataMap (ccTypeCtx cc)
       -> L.Pointer (guessAliasInfo mdMap alias)
+
     SetupField () a n ->
        fromMaybe L.Unknown $
        do L.Pointer (L.Structure xs) <- return (resolveSetupValueInfo cc env nameEnv a)
           listToMaybe [L.Pointer i | (n',_,i) <- xs, n == n' ]
 
     _ -> L.Unknown
+  where
+    globalTys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals (ccLLVMModuleAST cc) ]
+    mdMap = Crucible.llvmMetadataMap (ccTypeCtx cc)
 
 -- | Use the LLVM metadata to determine the struct field index
 -- corresponding to the given field name.
