@@ -72,10 +72,11 @@ import SAWScript.Crucible.LLVM.Builtins
 import SAWScript.Crucible.LLVM.MethodSpecIR
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 
-import qualified What4.Expr as W4
-import qualified What4.FunctionName as W4
 import qualified What4.Interface as W4
-import qualified What4.ProgramLoc as W4
+import qualified What4.InterpretedFloatingPoint as W4
+
+import           Lang.Crucible.ProgramLoc
+import           Lang.Crucible.FunctionName
 
 import qualified Lang.Crucible.Analysis.Postdom as C
 import qualified Lang.Crucible.Backend as C
@@ -260,7 +261,8 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
           pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
-      liftIO $ C.executeCrucible [] initial >>= \case
+      fm <- liftIO $ C.getFloatMode sym
+      liftIO $ C.executeCrucible fm [] initial >>= \case
         C.FinishedResult{} -> pure ()
         C.AbortedResult{} -> printOutLn opts Warn "Warning: function never returns"
         C.TimeoutResult{} -> fail "Execution timed out"
@@ -303,7 +305,7 @@ buildCFG opts halloc path nm = do
   (_fstate, Some finfo) <-
     stToIO $ Macaw.analyzeFunction (const $ pure ()) addr Macaw.UserRequest initialDiscoveryState
   scfg <- Macaw.mkFunCFG Macaw.x86_64MacawSymbolicFns halloc
-    (W4.functionNameFromText $ Text.pack nm) posFn finfo
+    (functionNameFromText $ Text.pack nm) posFn finfo
   pure (scfg, elf, relf, addr)
 
 --------------------------------------------------------------------------------
@@ -323,8 +325,8 @@ buildMethodSpec ::
 buildMethodSpec bic opts lm nm loc setup =
   setupLLVMCrucibleContext bic opts lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
-    let programLoc = W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm)
-                     . W4.OtherPos $ Text.pack loc
+    let pgLoc = mkProgramLoc (functionNameFromText $ Text.pack nm)
+                     . OtherPos $ Text.pack loc
     let lc = modTrans lm ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
     (args, ret) <- case llvmSignature opts lm nm of
       Left err -> fail $ mconcat ["Could not find declaration for \"", nm, "\": ", err]
@@ -333,7 +335,7 @@ buildMethodSpec bic opts lm nm loc setup =
       Left err -> fail err
       Right x -> pure x
     let initialMethodSpec = MS.makeCrucibleMethodSpecIR @(C.LLVM.LLVM (C.LLVM.X86 64))
-          methodId mtargs mtret programLoc lm
+          methodId mtargs mtret pgLoc lm
     view Setup.csMethodSpec <$> execStateT (runLLVMCrucibleSetupM setup)
       (Setup.makeCrucibleSetupState cc initialMethodSpec)
 
@@ -513,7 +515,7 @@ executeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc) = do
   mem <- use x86Mem
   sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToBV knownNat sz
   (ptr, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
-    (show $ W4.plSourceLoc loc) mem sz' align
+    (show $ plSourceLoc loc) mem sz' align
   x86Mem .= mem'
   pure $ Map.insert i ptr env
 
@@ -532,6 +534,7 @@ executePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
   mem <- use x86Mem
   elf <- use x86Elf
   base <- use x86GlobalBase
+  fm <- liftIO $ C.getFloatMode sym
   ptr <- case tptr of
     MS.SetupGlobal () nm -> case
       (Vector.!? 0)
@@ -543,7 +546,7 @@ executePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
-    _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+    _ -> liftIO $ C.LLVM.unpackMemValue sym fm (C.LLVM.LLVMPointerRepr $ knownNat @64)
          =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
   storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
@@ -565,15 +568,16 @@ setArgs env tyenv nameEnv args
       sym <- use x86Sym
       cc <- use x86CrucibleContext
       mem <- use x86Mem
+      fm <- liftIO $ C.getFloatMode sym
       let
         setRegSetupValue rs (reg, sval) = typeOfSetupValue cc tyenv nameEnv sval >>= \ty ->
           case ty of
             C.LLVM.PtrType _ -> do
-              val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+              val <- C.LLVM.unpackMemValue sym fm (C.LLVM.LLVMPointerRepr $ knownNat @64)
                 =<< resolveSetupVal cc mem env tyenv nameEnv sval
               setReg reg val rs
             C.LLVM.IntType 64 -> do
-              val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+              val <- C.LLVM.unpackMemValue sym fm (C.LLVM.LLVMPointerRepr $ knownNat @64)
                 =<< resolveSetupVal cc mem env tyenv nameEnv sval
               setReg reg val rs
             C.LLVM.IntType _ -> do
@@ -582,7 +586,7 @@ setArgs env tyenv nameEnv args
                 Nothing -> fail "Argument bitvector does not fit in a single general-purpose register"
                 Just LeqProof -> do
                   off' <- W4.bvZext sym (knownNat @64) off
-                  val <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+                  val <- C.LLVM.unpackMemValue sym fm (C.LLVM.LLVMPointerRepr $ knownNat @64)
                     $ C.LLVM.LLVMValInt base off'
                   setReg reg val rs
             _ -> fail "Argument does not fit into a single general-purpose register"
@@ -615,13 +619,13 @@ assertPost env premem preregs = do
     (C.LLVM.LLVMPointerRepr $ knownNat @64) C.LLVM.noAlignment
   actualIP <- getReg Macaw.X86_IP postregs
   correctRetAddr <- liftIO $ C.LLVM.ptrEq sym C.LLVM.PtrWidth actualIP expectedIP
-  liftIO . C.addAssertion sym . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc
+  liftIO . C.addAssertion sym . C.LabeledPred correctRetAddr . C.SimError initializationLoc
     $ C.AssertFailureSimError "Instruction pointer not set to return address" ""
 
   stack <- liftIO $ C.LLVM.doPtrAddOffset sym premem prersp =<< W4.bvLit sym knownNat (BV.mkBV knownNat 8)
   postrsp <- getReg Macaw.RSP postregs
   correctStack <- liftIO $ C.LLVM.ptrEq sym C.LLVM.PtrWidth stack postrsp
-  liftIO $ C.addAssertion sym . C.LabeledPred correctStack . C.SimError W4.initializationLoc
+  liftIO $ C.addAssertion sym . C.LabeledPred correctStack . C.SimError initializationLoc
     $ C.AssertFailureSimError "Stack not preserved" ""
 
   -- TODO: Match return value in RAX
@@ -640,10 +644,11 @@ assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr texpected) = do
   opts <- use x86Options
   cc <- use x86CrucibleContext
   mem <- use x86Mem
-  ptr <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
+  fm <- liftIO $ C.getFloatMode sym
+  ptr <- liftIO $ C.LLVM.unpackMemValue sym fm (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv texpected
-  _actual <- liftIO $ C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment
+  _actual <- liftIO $ C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym fm mem ptr storTy C.LLVM.noAlignment
   -- TODO: actually do matching between actual and expected
   -- For now, we only make sure we can load the memory
   if | MS.SetupTerm expected <- texpected

@@ -118,11 +118,12 @@ import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Map as MapF
 
 import qualified What4.Expr.Builder as B
-import           What4.ProgramLoc (ProgramLoc)
+import qualified What4.InterpretedFloatingPoint as B
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+import           Lang.Crucible.ProgramLoc (ProgramLoc)
 import qualified Lang.Crucible.Simulator.ExecutionTree as Crucible (SimContext)
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible (SymGlobalState)
 import qualified Lang.Crucible.Types as Crucible (SymbolRepr, knownSymbol)
@@ -288,8 +289,8 @@ showLLVMModule (LLVMModule name m _) =
 --------------------------------------------------------------------------------
 -- ** Ghost state
 
-instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue where
-  type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue ctx = TypedTerm
+instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver B.FloatReal) MS.GhostValue where
+  type Intrinsic (Crucible.SAWCoreBackend n solver B.FloatReal) MS.GhostValue ctx = TypedTerm
   muxIntrinsic sym _ _namerep _ctx prd thn els =
     do when (ttSchema thn /= ttSchema els) $ fail $ unlines $
          [ "Attempted to mux ghost variables of different types:"

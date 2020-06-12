@@ -30,10 +30,9 @@ module SAWScript.Crucible.JVM.MethodSpecIR where
 import           Control.Lens
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 
--- what4
-import           What4.ProgramLoc (ProgramLoc)
-
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
+
+import           Lang.Crucible.ProgramLoc (ProgramLoc)
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ

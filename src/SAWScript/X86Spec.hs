@@ -71,7 +71,7 @@ import Data.IORef(newIORef,atomicModifyIORef')
 import Data.String
 import Control.Monad.Reader
 
-import qualified What4.Expr.Builder as B
+import qualified What4.InterpretedFloatingPoint as B
 import qualified What4.Solver.Yices as Yices
 
 import Data.Parameterized.NatRepr
@@ -86,8 +86,8 @@ import Data.Foldable(foldlM, toList)
 import What4.Interface
           (bvLit,isEq, Pred, notPred, orPred, natEq
           , bvUle, truePred, natLit, asNat, andPred, userSymbol, freshConstant )
-import What4.ProgramLoc
 
+import Lang.Crucible.ProgramLoc
 import Lang.Crucible.FunctionHandle
 import SAWScript.Crucible.LLVM.CrucibleLLVM
   ( EndianForm(LittleEndian)
@@ -181,7 +181,7 @@ type Post = 'Post
 
 
 -- | The Crucible backend used for speicifcations.
-type Sym = SAWCoreBackend GlobalNonceGenerator (Yices.Connection GlobalNonceGenerator) (B.Flags B.FloatReal)
+type Sym = SAWCoreBackend GlobalNonceGenerator Yices.Connection B.FloatReal
 
 data Opts = Opts
   { optsSym :: Sym

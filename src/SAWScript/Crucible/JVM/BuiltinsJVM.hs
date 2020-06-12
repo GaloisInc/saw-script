@@ -58,6 +58,7 @@ import qualified Lang.Crucible.Analysis.Postdom        as Crucible
 import qualified What4.Expr as W4
 import qualified What4.Config as W4
 import qualified What4.Interface as W4
+import qualified What4.InterpretedFloatingPoint as W4
 import qualified What4.Solver.Yices as Yices
 
 -- saw-core

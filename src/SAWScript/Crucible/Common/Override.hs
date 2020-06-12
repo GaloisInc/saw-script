@@ -75,13 +75,14 @@ import           Verifier.SAW.SharedTerm as SAWVerifier
 import           Verifier.SAW.TypedTerm as SAWVerifier
 
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr, GlobalVar)
+import           Lang.Crucible.ProgramLoc
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
-import qualified What4.ProgramLoc as W4
+
 
 import           SAWScript.Exceptions
 import           SAWScript.Crucible.Common (Sym)
@@ -117,7 +118,7 @@ data OverrideState ext = OverrideState
   , _overrideGlobals :: Crucible.SymGlobalState Sym
 
     -- | Source location to associated with this override
-  , _osLocation :: W4.ProgramLoc
+  , _osLocation :: ProgramLoc
   }
 
 makeLenses ''OverrideState
@@ -130,7 +131,7 @@ initialState ::
   Map AllocIndex (Pointer ext)  {- ^ initial allocation substituion -} ->
   Map VarIndex Term             {- ^ initial term substituion       -} ->
   Set VarIndex                  {- ^ initial free terms             -} ->
-  W4.ProgramLoc                 {- ^ location information for the override -} ->
+  ProgramLoc                    {- ^ location information for the override -} ->
   OverrideState ext
 initialState sym globals allocs terms free loc = OverrideState
   { _osAsserts       = []
@@ -219,13 +220,13 @@ ppOverrideFailureReason rsn = case rsn of
 --------------------------------------------------------------------------------
 -- ** OverrideFailure
 
-data OverrideFailure ext = OF W4.ProgramLoc (OverrideFailureReason ext)
+data OverrideFailure ext = OF ProgramLoc (OverrideFailureReason ext)
 
 ppOverrideFailure :: ( PP.Pretty (ExtType ext)
                      , PP.Pretty (MS.PointsTo ext)
                      ) => OverrideFailure ext -> PP.Doc
 ppOverrideFailure (OF loc rsn) =
-  PP.text "at" PP.<+> PP.pretty (W4.plSourceLoc loc) PP.<$$>
+  PP.text "at" PP.<+> PP.pretty (plSourceLoc loc) PP.<$$>
   ppOverrideFailureReason rsn
 
 instance ( PP.Pretty (ExtType ext)
@@ -278,7 +279,7 @@ runOverrideMatcher ::
    Map AllocIndex (Pointer ext) {- ^ initial allocation substitution -} ->
    Map VarIndex Term           {- ^ initial term substitution       -} ->
    Set VarIndex                {- ^ initial free variables          -} ->
-   W4.ProgramLoc               {- ^ override location information   -} ->
+   ProgramLoc                  {- ^ override location information   -} ->
    OverrideMatcher ext md a   {- ^ matching action                 -} ->
    IO (Either (OverrideFailure ext) (a, OverrideState ext))
 runOverrideMatcher sym g a t free loc (OM m) =
@@ -314,7 +315,7 @@ writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)
 -- | Abort the current computation by raising the given 'OverrideFailure'
 -- exception.
 failure ::
-  W4.ProgramLoc ->
+  ProgramLoc ->
   OverrideFailureReason ext ->
   OverrideMatcher ext md a
 failure loc e = OM (lift (throwE (OF loc e)))

@@ -7,7 +7,7 @@ module SAWScript.Exceptions
 
 import Control.Exception
 
-import What4.ProgramLoc (ProgramLoc)
+import Lang.Crucible.ProgramLoc (ProgramLoc)
 
 import SAWScript.Position (Pos(..))
 

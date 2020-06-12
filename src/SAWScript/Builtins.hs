@@ -45,7 +45,7 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
-import What4.Expr(FloatModeRepr(..))
+import What4.InterpretedFloatingPoint(FloatModeRepr(..))
 
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol

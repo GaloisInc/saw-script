@@ -100,8 +100,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
-
-import           What4.ProgramLoc (ProgramLoc(..))
+import           Lang.Crucible.ProgramLoc (ProgramLoc(..))
 
 -- Values ----------------------------------------------------------------------
 
@@ -576,7 +575,7 @@ throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg
 -- | This gets more accurate locations than @lift (lift getPosition)@ because
 --   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
 getW4Position :: Text -> CrucibleSetup arch ProgramLoc
-getW4Position s = SS.toW4Loc s <$> lift (asks roPosition)
+getW4Position s = SS.toCrucibleLoc s <$> lift (asks roPosition)
 
 --
 

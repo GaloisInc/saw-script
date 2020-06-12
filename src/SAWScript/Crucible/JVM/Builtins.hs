@@ -70,7 +70,6 @@ import Verifier.SAW.Cryptol (importType, emptyEnv)
 
 -- what4
 import qualified What4.Partial as W4
-import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import qualified What4.Utils.StringLiteral as W4S
@@ -84,6 +83,7 @@ import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(..))
 import qualified Lang.Crucible.FunctionHandle as Crucible
+import           Lang.Crucible.ProgramLoc
 import qualified Lang.Crucible.Simulator as Crucible
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
@@ -201,13 +201,13 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      let sym = cc^.jccBackend
      let jc = cc^.jccJVMContext
 
-     pos <- getPosition
-     let loc = SS.toW4Loc "_SAW_verify_prestate" pos
+     ps <- getPosition
+     let loc = SS.toCrucibleLoc "_SAW_verify_prestate" ps
 
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_jvm_verify" profFile
 
-     (_cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
+     (_cls', method) <- io $ findMethod cb ps nm cls -- TODO: switch to crucible-jvm version
      let st0 = initialCrucibleSetupState cc method loc
 
      -- execute commands of the method spec
@@ -224,7 +224,7 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
      -- run the symbolic execution
-     top_loc <- SS.toW4Loc "crucible_jvm_verify" <$> getPosition
+     top_loc <- SS.toCrucibleLoc "crucible_jvm_verify" <$> getPosition
      (ret, globals3) <-
        io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat
 
@@ -252,9 +252,9 @@ crucible_jvm_unsafe_assume_spec bic opts cls nm setup =
   do cc <- setupCrucibleContext bic opts cls
      cb <- getJavaCodebase
      -- cls' is either cls or a subclass of cls
-     pos <- getPosition
-     (_cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
-     let loc = SS.toW4Loc "_SAW_assume_spec" pos
+     ps <- getPosition
+     (_cls', method) <- io $ findMethod cb ps nm cls -- TODO: switch to crucible-jvm version
+     let loc = SS.toCrucibleLoc "_SAW_assume_spec" ps
      let st0 = initialCrucibleSetupState cc method loc
      (view Setup.csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
 
@@ -320,7 +320,7 @@ verifyPrestate cc mspec globals0 =
      let tyenv = MS.csAllocations mspec
      let nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-     let prestateLoc = W4.mkProgramLoc "_SAW_verify_prestate" W4.InternalPos
+     let prestateLoc = mkProgramLoc "_SAW_verify_prestate" InternalPos
      W4.setCurrentProgramLoc sym prestateLoc
 
      --let cvar = CJ.dynamicClassTable (cc^.jccJVMContext)
@@ -503,7 +503,7 @@ registerOverride ::
   Options ->
   JVMCrucibleContext ->
   Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   [CrucibleMethodSpecIR] ->
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc cs =
@@ -513,10 +513,10 @@ registerOverride opts cc _ctx top_loc cs =
      let c0 = head cs
      let cname = c0 ^. MS.csMethod . jvmClassName
      let mname = c0 ^. csMethodName
-     let pos = SS.PosInternal "registerOverride"
+     let ps = SS.PosInternal "registerOverride"
      sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
 
-     (mcls, meth) <- liftIO $ findMethod cb pos mname =<< lookupClass cb pos cname
+     (mcls, meth) <- liftIO $ findMethod cb ps mname =<< lookupClass cb ps cname
      mhandle <- liftIO $ CJ.findMethodHandle jc mcls meth
      case mhandle of
        -- LLVMHandleInfo constructor has two existential type arguments,
@@ -540,7 +540,7 @@ verifySimulate ::
   CrucibleMethodSpecIR          ->
   [(a, JVMVal)]                 ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
-  W4.ProgramLoc                 ->
+  ProgramLoc                    ->
   [CrucibleMethodSpecIR]        ->
   Crucible.SymGlobalState Sym   ->
   Bool {- ^ path sat checking -} ->
@@ -553,7 +553,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
      let cname = J.className cls
      let mname = mspec ^. csMethodName
      let verbosity = simVerbose opts
-     let pos = SS.PosInternal "verifySimulate"
+     let ps = SS.PosInternal "verifySimulate"
      let halloc = cc^.jccHandleAllocator
 
      -- executeCrucibleJVM
@@ -563,7 +563,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
 
      CJ.setSimulatorVerbosity verbosity sym
 
-     (mcls, meth) <- findMethod cb pos mname =<< lookupClass cb pos cname
+     (mcls, meth) <- findMethod cb ps mname =<< lookupClass cb ps cname
      --when (not (J.methodIsStatic meth)) $ do
      --  fail $ unlines [ "Crucible can only extract static methods" ]
 
@@ -585,7 +585,8 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
                      Crucible.addAssumptions sym (Seq.fromList preds)
                    liftIO $ putStrLn "simulating function"
                    fnCall
-          Crucible.executeCrucible (map Crucible.genericToExecutionFeature feats)
+          fm <- Crucible.getFloatMode sym
+          Crucible.executeCrucible fm (map Crucible.genericToExecutionFeature feats)
             (simSt (Crucible.runOverrideSim (Crucible.handleReturnType h) overrideSim))
 
      case res of
@@ -658,7 +659,7 @@ verifyPoststate ::
   Maybe (J.Type, JVMVal)            {- ^ optional return value                        -} ->
   TopLevel [(String, Term)]         {- ^ generated labels and verification conditions -}
 verifyPoststate opts sc cc mspec env0 globals ret =
-  do poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
+  do poststateLoc <- SS.toCrucibleLoc "_SAW_verify_poststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
      let terms0 = Map.fromList
@@ -706,7 +707,7 @@ setupCrucibleContext bic opts jclass =
      cb <- getJavaCodebase
      let sc  = biSharedContext bic
      let gen = globalNonceGenerator
-     sym <- io $ Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
+     sym <- io $ Crucible.newSAWCoreBackend Crucible.FloatRealRepr sc gen
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
      return JVMCrucibleContext { _jccJVMClass = jclass
                                , _jccCodebase = cb
@@ -847,7 +848,7 @@ jvm_alloc_object ::
   JVMSetupM SetupValue
 jvm_alloc_object _bic _opt cname =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_alloc_object" <$> lift getPosition
+  do loc <- SS.toCrucibleLoc "jvm_alloc_object" <$> lift getPosition
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?=
        (loc, AllocObject (parseClassName cname))
@@ -861,7 +862,7 @@ jvm_alloc_array ::
   JVMSetupM SetupValue
 jvm_alloc_array _bic _opt len ety =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_alloc_array" <$> lift getPosition
+  do loc <- SS.toCrucibleLoc "jvm_alloc_array" <$> lift getPosition
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= (loc, AllocArray len (typeOfJavaType ety))
      return (MS.SetupVar n)
@@ -876,7 +877,7 @@ jvm_field_is ::
   JVMSetupM ()
 jvm_field_is _typed _bic _opt ptr fname val =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_field_is" <$> lift getPosition
+  do loc <- SS.toCrucibleLoc "jvm_field_is" <$> lift getPosition
      st <- get
      let rs = st ^. Setup.csResolvedState
      let path = Left fname
@@ -900,7 +901,7 @@ jvm_elem_is ::
   JVMSetupM ()
 jvm_elem_is _typed _bic _opt ptr idx val =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_elem_is" <$> lift getPosition
+  do loc <- SS.toCrucibleLoc "jvm_elem_is" <$> lift getPosition
      st <- get
      let rs = st ^. Setup.csResolvedState
      let path = Right idx
@@ -913,12 +914,12 @@ jvm_elem_is _typed _bic _opt ptr idx val =
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do
-  loc <- SS.toW4Loc "jvm_precond" <$> lift getPosition
+  loc <- SS.toCrucibleLoc "jvm_precond" <$> lift getPosition
   Setup.crucible_precond loc term
 
 jvm_postcond :: TypedTerm -> JVMSetupM ()
 jvm_postcond term = JVMSetupM $ do
-  loc <- SS.toW4Loc "jvm_postcond" <$> lift getPosition
+  loc <- SS.toCrucibleLoc "jvm_postcond" <$> lift getPosition
   Setup.crucible_postcond loc term
 
 jvm_execute_func :: BuiltinContext -> Options -> [SetupValue] -> JVMSetupM ()

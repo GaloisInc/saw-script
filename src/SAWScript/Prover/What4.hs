@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module SAWScript.Prover.What4 where
 
@@ -37,7 +38,17 @@ import qualified What4.Expr.Builder as B
 
 
 -- trivial state
+data SAWProver 
 data St t = St
+
+type ProverSym = B.ExprBuilder SAWProver St
+
+type instance B.ExprNonceBrand SAWProver = GlobalNonceGenerator
+type instance B.ExprLoc SAWProver = ()
+
+newSAWProverInterface :: IO ProverSym
+newSAWProverInterface = B.newExprBuilder St globalNonceGenerator ()
+
 
 proveWhat4_sym ::
   SolverAdapter St ->
@@ -46,10 +57,8 @@ proveWhat4_sym ::
   Prop ->
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
 proveWhat4_sym solver un sc t =
-  do -- TODO: get rid of GlobalNonceGenerator ???
-     sym <- B.newExprBuilder B.FloatRealRepr St globalNonceGenerator
+  do sym <- newSAWProverInterface
      proveWhat4_solver solver sym un sc t
-
 
 proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices ::
@@ -69,9 +78,9 @@ proveWhat4_yices     = proveWhat4_sym yicesAdapter
 
 
 -- | Check the validity of a proposition using What4.
-proveWhat4_solver :: forall st t ff.
-  SolverAdapter st   {- ^ Which solver to use -} ->
-  B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
+proveWhat4_solver ::
+  SolverAdapter St   {- ^ Which solver to use -} ->
+  ProverSym          {- ^ The glorious sym -}  ->
   [String]           {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
   Prop               {- ^ A proposition to be proved/checked. -} ->
@@ -101,7 +110,7 @@ proveWhat4_solver solver sym unints sc goal =
      -- run solver
      solver_adapter_check_sat solver sym logData [lit] $ \ r -> case r of
          Sat (gndEvalFcn,_) -> do
-           mvals <- mapM (getValues @(B.ExprBuilder t st ff) gndEvalFcn)
+           mvals <- mapM (getValues @ProverSym gndEvalFcn)
                          (zip bvs argNames)
            return (Just (catMaybes mvals), stats) where
 
@@ -159,8 +168,8 @@ getLabelValues f (W.BaseLabel (W.TypedExpr ty bv)) = do
 
 
 -- | For debugging
-printValue :: (B.ExprBuilder t st ff) -> GroundEvalFn t ->
-  (Maybe (W.TypedExpr (B.ExprBuilder t st ff)), String) -> IO ()
+printValue :: (B.ExprBuilder t st) -> GroundEvalFn t ->
+  (Maybe (W.TypedExpr (B.ExprBuilder t st)), String) -> IO ()
 printValue _ _ (Nothing, _) = return ()
 printValue _ f (Just (W.TypedExpr (ty :: BaseTypeRepr ty) (bv :: B.Expr t ty)), orig) = do
   gv <- groundEval f @ty bv

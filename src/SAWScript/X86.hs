@@ -52,16 +52,16 @@ import Data.Parameterized.Nonce(globalNonceGenerator)
 
 -- What4
 import What4.Interface(asNat,asBV)
-import What4.Expr(FloatModeRepr(..))
+import What4.InterpretedFloatingPoint (FloatModeRepr(..))
 import qualified What4.Interface as W4
 import qualified What4.Config as W4
-import What4.FunctionName(functionNameFromText)
-import What4.ProgramLoc(ProgramLoc,Position(OtherPos))
 
 -- Crucible
 import Lang.Crucible.Analysis.Postdom (postdomInfo)
 import Lang.Crucible.CFG.Core(SomeCFG(..), TypeRepr(..), cfgHandle)
 import Lang.Crucible.CFG.Common(GlobalVar)
+import Lang.Crucible.FunctionName(functionNameFromText)
+import Lang.Crucible.ProgramLoc(ProgramLoc,Position(OtherPos))
 import Lang.Crucible.Simulator.RegMap(regValue, RegMap(..), RegEntry(..))
 import Lang.Crucible.Simulator.RegValue(RegValue'(..))
 import Lang.Crucible.Simulator.GlobalState(insertGlobal,emptyGlobals)
@@ -74,7 +74,7 @@ import Lang.Crucible.Simulator.ExecutionTree
           )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
-          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,proofGoalsToList)
+          (getProofObligations,ProofGoal(..),labeledPredMsg,labeledPred,proofGoalsToList,getFloatMode)
 import Lang.Crucible.FunctionHandle(HandleAllocator,newHandleAllocator,insertHandleMap,emptyHandleMap)
 
 
@@ -481,7 +481,8 @@ doSim opts elf sfs name (globs,overs) st checkPost =
                               }
        let initGlobals = insertGlobal mvar (stateMem st) emptyGlobals
 
-       executeCrucible []
+       fm <- getFloatMode sym
+       executeCrucible fm []
          $ InitialState ctx initGlobals defaultAbortHandler macawStructRepr
          $ runOverrideSim macawStructRepr
          $ do let args :: RegMap Sym (MacawFunctionArgs X86_64)

@@ -69,13 +69,13 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
 -- what4
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.ProgramLoc as W4
 import           What4.LabeledPred (labeledPred)
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible ( TypeRepr(UnitRepr) )
 import qualified Lang.Crucible.FunctionHandle as Crucible
+import           Lang.Crucible.ProgramLoc
 import qualified Lang.Crucible.Simulator as Crucible
 
 -- crucible-saw
@@ -173,8 +173,8 @@ methodSpecHandler ::
   forall rtp args ret.
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
-  JVMCrucibleContext          {- ^ context for interacting with Crucible        -} ->
-  W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
+  JVMCrucibleContext       {- ^ context for interacting with Crucible        -} ->
+  ProgramLoc               {- ^ Location of the call site for error reporting-} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ a handle for the function -} ->
   Crucible.OverrideSim (CrucibleSAW.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
@@ -246,7 +246,7 @@ methodSpecHandler opts sc cc top_loc css h = do
                               (Crucible.AssumptionReason (st^.osLocation) "override postcondition"))
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc (cs ^. MS.csLoc))
+           , Just (plSourceLoc (cs ^. MS.csLoc))
            )
          | (precond, cs, st) <- branches
          ] ++
@@ -258,7 +258,7 @@ methodSpecHandler opts sc cc top_loc css h = do
             in
             ( W4.truePred sym
             , liftIO $ Crucible.addFailedAssertion sym (Crucible.GenericSimError $ "no override specification applies for " ++ fnName)
-            , Just (W4.plSourceLoc top_loc)
+            , Just (plSourceLoc top_loc)
             )
         ]
        ))
@@ -334,7 +334,7 @@ learnCond opts sc cc cs prepost ss =
 -- | Verify that all of the fresh variables for the given
 -- state spec have been "learned". If not, throws
 -- 'AmbiguousVars' exception.
-enforceCompleteSubstitution :: W4.ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
+enforceCompleteSubstitution :: ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
 enforceCompleteSubstitution loc ss =
 
   do sub <- OM (use termSub)
@@ -393,7 +393,7 @@ refreshTerms sc ss =
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint.
 enforceDisjointness ::
-  JVMCrucibleContext -> W4.ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
+  JVMCrucibleContext -> ProgramLoc -> StateSpec -> OverrideMatcher CJ.JVM w ()
 enforceDisjointness _cc loc ss =
   do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub)
@@ -518,7 +518,7 @@ computeReturnValue opts cc sc spec ty (Just val) =
 -- index, then add a pointer-equality constraint.
 assignVar ::
   JVMCrucibleContext {- ^ context for interacting with Crucible -} ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   AllocIndex {- ^ variable index -} ->
   JVMRefVal  {- ^ concrete value -} ->
   OverrideMatcher CJ.JVM w ()
@@ -536,7 +536,7 @@ assignVar cc loc var ref =
 assignTerm ::
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   JVMCrucibleContext    {- ^ context for interacting with Crucible -} ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   PrePost                                                          ->
   VarIndex {- ^ external constant index -} ->
   Term     {- ^ value                   -} ->
@@ -601,7 +601,7 @@ matchArg opts sc cc cs _prepost actual expectedTy expected =
 
 valueToSC ::
   Sym ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   OverrideFailureReason CJ.JVM ->
   Cryptol.TValue ->
   JVMVal ->
@@ -627,7 +627,7 @@ valueToSC _sym loc failMsg _tval _val =
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
   JVMCrucibleContext {- ^ context for interacting with Crucible -} ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   PrePost                                                       ->
   Term            {- ^ exported concrete term                -} ->
   Term            {- ^ expected specification term           -} ->
@@ -712,7 +712,7 @@ learnEqual ::
   SharedContext                                    ->
   JVMCrucibleContext                                  ->
   CrucibleMethodSpecIR                             ->
-  W4.ProgramLoc                                    ->
+  ProgramLoc                                    ->
   PrePost                                          ->
   SetupValue       {- ^ first value to compare  -} ->
   SetupValue       {- ^ second value to compare -} ->
@@ -729,7 +729,7 @@ learnEqual opts sc cc spec loc prepost v1 v2 =
 learnPred ::
   SharedContext                                                       ->
   JVMCrucibleContext                                                     ->
-  W4.ProgramLoc                                                       ->
+  ProgramLoc                                                       ->
   PrePost                                                             ->
   Term             {- ^ the precondition to learn                  -} ->
   OverrideMatcher CJ.JVM w ()
@@ -741,7 +741,7 @@ learnPred sc cc loc prepost t =
 
 ------------------------------------------------------------------------
 
--- TODO: replace (W4.ProgramLoc, J.Type) by some allocation datatype
+-- TODO: replace (ProgramLoc, J.Type) by some allocation datatype
 -- that includes constructors for object allocations and array
 -- allocations (with length).
 
@@ -750,7 +750,7 @@ learnPred sc cc loc prepost t =
 executeAllocation ::
   Options                        ->
   JVMCrucibleContext                ->
-  (AllocIndex, (W4.ProgramLoc, Allocation)) ->
+  (AllocIndex, (ProgramLoc, Allocation)) ->
   OverrideMatcher CJ.JVM w ()
 executeAllocation opts cc (var, (loc, alloc)) =
   do liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show alloc]
@@ -945,7 +945,7 @@ decodeJVMVal ty v =
 
 ------------------------------------------------------------------------
 
-asRVal :: W4.ProgramLoc -> JVMVal -> OverrideMatcher CJ.JVM w JVMRefVal
+asRVal :: ProgramLoc -> JVMVal -> OverrideMatcher CJ.JVM w JVMRefVal
 asRVal _ (RVal ptr) = return ptr
 asRVal loc _ = failure loc BadPointerCast
 

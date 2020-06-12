@@ -34,9 +34,7 @@ import           Control.Lens
 import           Data.Kind (Type)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
--- what4
-import           What4.ProgramLoc (ProgramLoc(plSourceLoc))
-
+import           Lang.Crucible.ProgramLoc (ProgramLoc(plSourceLoc))
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
 import qualified Lang.Crucible.CFG.Common as Crucible (GlobalVar)

@@ -87,6 +87,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
+import           Lang.Crucible.ProgramLoc
 import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim as Crucible
 import qualified Lang.Crucible.Simulator.RegMap as Crucible
@@ -97,7 +98,7 @@ import qualified What4.Config as W4
 import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
-import qualified What4.ProgramLoc as W4
+
 import qualified What4.Symbol as W4
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
@@ -204,7 +205,7 @@ ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc cond setupVal1 setupVal2) 
                  , PP.text "Pointee:" PP.<+> pretty2
                  , maybe PP.empty (\tt -> PP.text "Condition:" PP.<+> MS.ppTypedTerm tt) cond
                  , PP.text "Assertion made at:" PP.<+>
-                   PP.pretty (W4.plSourceLoc loc)
+                   PP.pretty (plSourceLoc loc)
                  ]
 
 -- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
@@ -212,7 +213,7 @@ notEqual ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   PrePost ->
   Options              {- ^ output/verbosity options -} ->
-  W4.ProgramLoc        {- ^ where is the assertion from? -} ->
+  ProgramLoc           {- ^ where is the assertion from? -} ->
   LLVMCrucibleContext arch ->
   SharedContext {- ^ context for constructing SAW terms -} ->
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
@@ -364,7 +365,7 @@ methodSpecHandler ::
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   LLVMCrucibleContext arch     {- ^ context for interacting with Crucible        -} ->
-  W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
+  ProgramLoc               {- ^ Location of the call site for error reporting-} ->
   [MS.CrucibleMethodSpecIR (LLVM arch)]
     {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ the handle for this function -} ->
@@ -475,7 +476,7 @@ methodSpecHandler opts sc cc top_loc css h = do
                               (Crucible.AssumptionReason (st^.osLocation) "override postcondition"))
                        Crucible.writeGlobals (st'^.overrideGlobals)
                        Crucible.overrideReturn' (Crucible.RegEntry retTy ret)
-           , Just (W4.plSourceLoc (cs ^. MS.csLoc))
+           , Just (plSourceLoc (cs ^. MS.csLoc))
            )
          | (precond, cs, st) <- branches'
          ] ++
@@ -553,7 +554,7 @@ methodSpecHandler opts sc cc top_loc css h = do
 
                   Crucible.addFailedAssertion sym
                     (Crucible.GenericSimError (e prettyArgs symFalse unsat))
-              , Just (W4.plSourceLoc top_loc)
+              , Just (plSourceLoc top_loc)
               )
          ]))
      (Crucible.RegMap args)
@@ -634,7 +635,7 @@ learnCond opts sc cc cs prepost ss =
 -- state spec have been "learned". If not, throws
 -- 'AmbiguousVars' exception.
 enforceCompleteSubstitution ::
-  W4.ProgramLoc ->
+  ProgramLoc ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
 enforceCompleteSubstitution loc ss =
@@ -706,7 +707,7 @@ refreshTerms sc ss =
 enforcePointerValidity ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
 enforcePointerValidity cc loc ss =
@@ -743,7 +744,7 @@ enforcePointerValidity cc loc ss =
 -- allowed to alias other read-only allocations, however.
 enforceDisjointness ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
-  W4.ProgramLoc ->
+  ProgramLoc ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointness loc ss =
@@ -879,7 +880,7 @@ computeReturnValue opts cc sc spec ty (Just val) =
 assignVar ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   LLVMCrucibleContext arch {- ^ context for interacting with Crucible -} ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   AllocIndex      {- ^ variable index -} ->
   LLVMPtr (Crucible.ArchWidth arch) {- ^ concrete value -} ->
   OverrideMatcher (LLVM arch) md ()
@@ -901,7 +902,7 @@ assignVar cc loc var val =
 assignTerm ::
   SharedContext      {- ^ context for constructing SAW terms    -} ->
   LLVMCrucibleContext arch   {- ^ context for interacting with Crucible -} ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   PrePost                                                          ->
   VarIndex {- ^ external constant index -} ->
   Term     {- ^ value                   -} ->
@@ -1044,10 +1045,11 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
     resolveAndMatch = do
       (ty, val) <- resolveSetupValueLLVM opts cc sc cs expected
       sym  <- Ov.getSymInterface
+      fm <- liftIO (Crucible.getFloatMode sym)
       if diffMemTypes expectedTy ty /= []
       then failure (cs ^. MS.csLoc) =<<
             mkStructuralMismatch opts cc sc cs actual expected expectedTy
-      else liftIO (Crucible.testEqual sym val actual) >>=
+      else liftIO (Crucible.testEqual sym fm val actual) >>=
         \case
           Nothing -> failure (cs ^. MS.csLoc) BadEqualityComparison
           Just pred_ ->
@@ -1075,7 +1077,7 @@ zeroValueSC sc tp = case Crucible.storageTypeF tp of
 
 valueToSC ::
   Sym ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   OverrideFailureReason (LLVM arch) ->
   Cryptol.TValue ->
   Crucible.LLVMVal Sym  ->
@@ -1143,7 +1145,7 @@ typeToSC sc t =
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
   LLVMCrucibleContext arch {- ^ context for interacting with Crucible -} ->
-  W4.ProgramLoc ->
+  ProgramLoc ->
   PrePost                                                       ->
   Term            {- ^ exported concrete term                -} ->
   Term            {- ^ expected specification term           -} ->
@@ -1195,7 +1197,7 @@ learnSetupCondition opts sc cc spec prepost cond =
 learnGhost ::
   SharedContext                                          ->
   LLVMCrucibleContext arch                                  ->
-  W4.ProgramLoc                                          ->
+  ProgramLoc                                          ->
   PrePost                                                ->
   MS.GhostGlobal                                            ->
   TypedTerm                                              ->
@@ -1241,7 +1243,8 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
                           $ ccLLVMContext cc
 
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
+     fm <- liftIO $ Crucible.getFloatMode sym
+     res <- liftIO $ Crucible.loadRaw sym fm mem ptr1 storTy alignment
      let summarizeBadLoad =
           let dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)
               sz = Crucible.memTypeSize dataLayout memTy
@@ -1301,7 +1304,7 @@ learnEqual ::
   SharedContext                                    ->
   LLVMCrucibleContext arch                            ->
   MS.CrucibleMethodSpecIR (LLVM arch)                             ->
-  W4.ProgramLoc                                    ->
+  ProgramLoc                                    ->
   PrePost                                          ->
   SetupValue (Crucible.LLVM arch)       {- ^ first value to compare  -} ->
   SetupValue (Crucible.LLVM arch)       {- ^ second value to compare -} ->
@@ -1318,7 +1321,7 @@ learnEqual opts sc cc spec loc prepost v1 v2 = do
 learnPred ::
   SharedContext                                                       ->
   LLVMCrucibleContext arch                                               ->
-  W4.ProgramLoc                                                       ->
+  ProgramLoc                                                       ->
   PrePost                                                             ->
   Term             {- ^ the precondition to learn                  -} ->
   OverrideMatcher (LLVM arch) md ()
@@ -1361,7 +1364,7 @@ invalidateMutableAllocs opts sc cc cs = do
            , _allocSpecBytes spec
            , mconcat
              [ "state of memory allocated in precondition (at "
-             , pack . show . W4.plSourceLoc $ spec ^. allocSpecLoc
+             , pack . show . plSourceLoc $ spec ^. allocSpecLoc
              , ") not described in postcondition"
              ]
            )
@@ -1381,7 +1384,7 @@ invalidateMutableAllocs opts sc cc cs = do
             [ "state of mutable global variable \""
             , pack st
             , "\" (allocated at "
-            , pack . show $ W4.plSourceLoc loc
+            , pack . show $ plSourceLoc loc
             , ") not described in postcondition"
             ]
           )
@@ -1439,7 +1442,7 @@ executeAllocation opts cc (var, LLVMAllocSpec mut memTy alignment sz loc) =
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
      sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToBV Crucible.PtrWidth sz)
-     let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
+     let l = show (plSourceLoc loc) ++ " (Poststate)"
      (ptr, mem') <- liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
      writeGlobal memVar mem'
@@ -1671,7 +1674,8 @@ resolveSetupValue ::
 resolveSetupValue opts cc sc spec tp sval =
   do (memTy, lval) <- resolveSetupValueLLVM opts cc sc spec sval
      sym <- Ov.getSymInterface
-     val <- liftIO $ Crucible.unpackMemValue sym tp lval
+     fm <- liftIO $ Crucible.getFloatMode sym
+     val <- liftIO $ Crucible.unpackMemValue sym fm tp lval
      return (memTy, val)
 
 enableSMTArrayMemoryModel :: W4.ConfigOption W4.BaseBoolType

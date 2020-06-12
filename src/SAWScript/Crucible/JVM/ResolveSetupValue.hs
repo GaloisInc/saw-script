@@ -39,9 +39,9 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
-import qualified What4.ProgramLoc as W4
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
+import           Lang.Crucible.ProgramLoc
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -90,7 +90,7 @@ type SetupValue = MS.SetupValue CJ.JVM
 typeOfSetupValue ::
   Fail.MonadFail m =>
   JVMCrucibleContext ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (ProgramLoc, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   m J.Type
@@ -129,7 +129,7 @@ typeOfSetupValue _cc env _nameEnv val =
 resolveSetupVal ::
   JVMCrucibleContext ->
   Map AllocIndex JVMRefVal ->
-  Map AllocIndex (W4.ProgramLoc, Allocation) ->
+  Map AllocIndex (ProgramLoc, Allocation) ->
   Map AllocIndex JIdent ->
   SetupValue ->
   IO JVMVal

@@ -15,7 +15,7 @@ import           Control.Monad (when)
 import           Control.Monad.State (get)
 import qualified Data.Map as Map
 
-import qualified What4.ProgramLoc as W4
+import           Lang.Crucible.ProgramLoc
 
 import           Verifier.SAW.TypedTerm (TypedTerm)
 
@@ -31,7 +31,7 @@ import           SAWScript.Crucible.Common.Setup.Type
 -- TODO: crucible_fresh_var?
 
 crucible_precond ::
-  W4.ProgramLoc ->
+  ProgramLoc ->
   TypedTerm ->
   CrucibleSetup ext ()
 crucible_precond loc p = do
@@ -41,7 +41,7 @@ crucible_precond loc p = do
   addCondition (MS.SetupCond_Pred loc p)
 
 crucible_postcond ::
-  W4.ProgramLoc ->
+  ProgramLoc ->
   TypedTerm ->
   CrucibleSetup ext ()
 crucible_postcond loc p = do

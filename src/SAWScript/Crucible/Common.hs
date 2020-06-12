@@ -6,7 +6,9 @@ Maintainer  : langston
 Stability   : provisional
 -}
 
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module SAWScript.Crucible.Common
   ( ppAbortedResult
@@ -20,17 +22,18 @@ import           Lang.Crucible.Simulator.CallFrame (SimFrame)
 import           Lang.Crucible.Simulator.Profiling
 import           Lang.Crucible.Backend (AbortExecReason(..), ppAbortExecReason, IsSymInterface)
 import           Lang.Crucible.Backend.SAWCore (SAWCoreBackend)
+import           Lang.Crucible.ProgramLoc (plSourceLoc)
 import qualified Data.Parameterized.Nonce as Nonce
 import qualified What4.Solver.Yices as Yices
-import qualified What4.Expr as W4
-import qualified What4.ProgramLoc as W4 (plSourceLoc)
+import qualified What4.InterpretedFloatingPoint as W4
+
 
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
 -- | The symbolic backend we use for SAW verification
-type Sym = SAWCoreBackend Nonce.GlobalNonceGenerator (Yices.Connection Nonce.GlobalNonceGenerator) (W4.Flags W4.FloatReal)
+type Sym = SAWCoreBackend Nonce.GlobalNonceGenerator Yices.Connection W4.FloatReal
 
 ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc)
                 -> AbortedResult Sym ext
@@ -43,7 +46,7 @@ ppAbortedResult ppGP (AbortedBranch loc _predicate trueBranch falseBranch) =
   PP.vcat
     [ PP.text "Both branches aborted after a symbolic branch."
     , PP.text "Location of control-flow branching:"
-    , PP.indent 2 (PP.text (show (W4.plSourceLoc loc)))
+    , PP.indent 2 (PP.text (show (plSourceLoc loc)))
     , PP.text "Message from the true branch:"
     , PP.indent 2 (ppAbortedResult ppGP trueBranch)
     , PP.text "Message from the false branch:"
