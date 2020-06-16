@@ -261,8 +261,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
           pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
-      fm <- liftIO $ C.getFloatMode sym
-      liftIO $ C.executeCrucible fm [] initial >>= \case
+      liftIO $ C.executeCrucible [] initial >>= \case
         C.FinishedResult{} -> pure ()
         C.AbortedResult{} -> printOutLn opts Warn "Warning: function never returns"
         C.TimeoutResult{} -> fail "Execution timed out"

@@ -585,8 +585,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
                      Crucible.addAssumptions sym (Seq.fromList preds)
                    liftIO $ putStrLn "simulating function"
                    fnCall
-          fm <- Crucible.getFloatMode sym
-          Crucible.executeCrucible fm (map Crucible.genericToExecutionFeature feats)
+          Crucible.executeCrucible (map Crucible.genericToExecutionFeature feats)
             (simSt (Crucible.runOverrideSim (Crucible.handleReturnType h) overrideSim))
 
      case res of

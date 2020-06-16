@@ -481,8 +481,7 @@ doSim opts elf sfs name (globs,overs) st checkPost =
                               }
        let initGlobals = insertGlobal mvar (stateMem st) emptyGlobals
 
-       fm <- getFloatMode sym
-       executeCrucible fm []
+       executeCrucible []
          $ InitialState ctx initGlobals defaultAbortHandler macawStructRepr
          $ runOverrideSim macawStructRepr
          $ do let args :: RegMap Sym (MacawFunctionArgs X86_64)

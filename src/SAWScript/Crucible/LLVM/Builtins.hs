@@ -1056,8 +1056,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat as
                 do preds <- (traverse . Crucible.labeledPred) (resolveSAWPred cc) assumes
                    Crucible.addAssumptions sym (Seq.fromList preds)
               Crucible.regValue <$> (Crucible.callBlock cfg entryId args')
-     fm <- Crucible.getFloatMode sym
-     res <- Crucible.executeCrucible fm execFeatures initExecState
+     res <- Crucible.executeCrucible execFeatures initExecState
      case res of
        Crucible.FinishedResult _ partialResult ->
          do Crucible.GlobalPair retval globals1 <-
@@ -1230,7 +1229,7 @@ setupLLVMCrucibleContext bic opts lm action =
                let initExecState =
                      Crucible.InitialState simctx globals Crucible.defaultAbortHandler Crucible.UnitRepr $
                      Crucible.runOverrideSim Crucible.UnitRepr setupMem
-               res <- Crucible.executeCrucible knownRepr [] initExecState
+               res <- Crucible.executeCrucible [] initExecState
                (lglobals, lsimctx) <-
                    case res of
                      Crucible.FinishedResult st (Crucible.TotalRes gp) -> return (gp^.Crucible.gpGlobals, st)
@@ -1319,8 +1318,7 @@ runCFG simCtx globals h cfg args =
            Crucible.InitialState simCtx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h) $
            Crucible.runOverrideSim (Crucible.handleReturnType h)
                     (Crucible.regValue <$> (Crucible.callCFG cfg args))
-     fm <- Crucible.getFloatMode (simCtx^.Crucible.ctxSymInterface)
-     Crucible.executeCrucible fm [] initExecState
+     Crucible.executeCrucible [] initExecState
 
 extractFromLLVMCFG ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
