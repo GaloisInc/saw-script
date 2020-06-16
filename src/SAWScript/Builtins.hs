@@ -705,6 +705,14 @@ wrapProver f = do
     Nothing -> return (SV.Unsat stats, stats, Nothing)
     Just a  -> nope (SV.SatMulti stats a)
 
+wrapW4Prover ::
+  ( SharedContext -> Bool ->
+    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  ProofScript SV.SatResult
+wrapW4Prover f = do
+  hashConsing <- lift $ gets SV.rwWhat4HashConsing
+  wrapProver $ \sc -> f sc hashConsing
+
 --------------------------------------------------
 proveBoolector :: ProofScript SV.SatResult
 proveBoolector = proveSBV SBV.boolector
@@ -739,28 +747,28 @@ proveUnintYices = proveUnintSBV SBV.yices
 
 --------------------------------------------------
 w4_boolector :: ProofScript SV.SatResult
-w4_boolector = wrapProver $ Prover.proveWhat4_boolector []
+w4_boolector = wrapW4Prover $ Prover.proveWhat4_boolector []
 
 w4_z3 :: ProofScript SV.SatResult
-w4_z3 = wrapProver $ Prover.proveWhat4_z3 []
+w4_z3 = wrapW4Prover $ Prover.proveWhat4_z3 []
 
 w4_cvc4 :: ProofScript SV.SatResult
-w4_cvc4 = wrapProver $ Prover.proveWhat4_cvc4 []
+w4_cvc4 = wrapW4Prover $ Prover.proveWhat4_cvc4 []
 
 w4_yices :: ProofScript SV.SatResult
-w4_yices = wrapProver $ Prover.proveWhat4_yices []
+w4_yices = wrapW4Prover $ Prover.proveWhat4_yices []
 
 w4_unint_boolector :: [String] -> ProofScript SV.SatResult
-w4_unint_boolector = wrapProver . Prover.proveWhat4_boolector
+w4_unint_boolector = wrapW4Prover . Prover.proveWhat4_boolector
 
 w4_unint_z3 :: [String] -> ProofScript SV.SatResult
-w4_unint_z3 = wrapProver . Prover.proveWhat4_z3
+w4_unint_z3 = wrapW4Prover . Prover.proveWhat4_z3
 
 w4_unint_cvc4 :: [String] -> ProofScript SV.SatResult
-w4_unint_cvc4 = wrapProver . Prover.proveWhat4_cvc4
+w4_unint_cvc4 = wrapW4Prover . Prover.proveWhat4_cvc4
 
 w4_unint_yices :: [String] -> ProofScript SV.SatResult
-w4_unint_yices = wrapProver . Prover.proveWhat4_yices
+w4_unint_yices = wrapW4Prover . Prover.proveWhat4_yices
 
 proveWithExporter ::
   (SharedContext -> FilePath -> Prop -> IO ()) ->
