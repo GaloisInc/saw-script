@@ -1,0 +1,39 @@
+// This is a regression test for saw-script issue #635.
+// https://github.com/GaloisInc/saw-script/issues/635
+
+bc <- llvm_load_module "test.bc";
+
+let i8 = llvm_int 8;
+let i64 = llvm_int 64;
+
+write_ov <-
+  crucible_llvm_verify bc "write" [] false
+    do {
+      p <- crucible_alloc i64;
+      x <- crucible_fresh_var "x" i64;
+      crucible_execute_func [p, crucible_term x];
+      crucible_points_to p (crucible_term x);
+    }
+    z3;
+
+let write_unaligned_spec =
+  do {
+    p <- crucible_alloc (llvm_array 16 i8);
+    b <- crucible_fresh_var "b" (llvm_array 16 i8);
+    x <- crucible_fresh_var "x" i64;
+    crucible_points_to p (crucible_term b);
+    crucible_execute_func [p, crucible_term x];
+    crucible_points_to p (crucible_term {{ take`{1} b # reverse (split x) # drop`{9} b }});
+  };
+
+fails (
+  crucible_llvm_verify bc "write_unaligned" [] false
+    write_unaligned_spec
+    z3
+  );
+
+fails (
+  crucible_llvm_verify bc "write_unaligned" [write_ov] false
+    write_unaligned_spec
+    z3
+  );
