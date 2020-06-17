@@ -134,6 +134,7 @@ import qualified Lang.Crucible.Simulator.PathSatisfiability as Crucible
 import qualified Lang.Crucible.LLVM.ArraySizeProfile as Crucible
 import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import           Lang.Crucible.LLVM.Extension (LLVM)
+import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
@@ -749,7 +750,7 @@ setupGlobalAllocs cc mspec mem0 = foldM go mem0 $ mspec ^. MS.csGlobalAllocs
                , "\" is not mutable"
                ]
              let sz = Crucible.memTypeSize (Crucible.llvmDataLayout ?lc) mt
-             sz' <- W4.bvLit sym ?ptrWidth $ Crucible.bytesToInteger sz
+             sz' <- W4.bvLit sym ?ptrWidth $ Crucible.bytesToBV ?ptrWidth sz
              alignment <-
                case L.globalAlign g of
                  Just a | a > 0 ->
@@ -853,7 +854,7 @@ doAlloc ::
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
 doAlloc cc (LLVMAllocSpec mut _memTy alignment sz loc) = StateT $ \mem ->
   do let sym = cc^.ccBackend
-     sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger sz
+     sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc)
      liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
