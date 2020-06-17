@@ -49,6 +49,8 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
 import Verifier.SAW.TypedAST (mkSort, mkModuleName, FieldName)
 
+import GHC.Stack
+
 --------------------------------------------------------------------------------
 -- Type Environments
 
@@ -131,13 +133,13 @@ insertSupers prop fs v m
 
  go (C.TCon (C.PC p) [t]) =
     case p of
-      C.PRing     -> super C.PZero "ringZero" t m
-      C.PLogic    -> super C.PZero "logicZero" t m
-      C.PField    -> super C.PRing "fieldRing" t m
-      C.PIntegral -> super C.PRing "integralRing" t m
-      C.PRound    -> super C.PField "roundField" t . super C.PCmp "roundCmp" t $ m
---      C.PCmp      -> super C.PEq "cmpEq" t m
---      C.PSignedCmp -> super C.PSignedCmp "signedCmpEq" t m
+      C.PRing      -> super C.PZero "ringZero" t m
+      C.PLogic     -> super C.PZero "logicZero" t m
+      C.PField     -> super C.PRing "fieldRing" t m
+      C.PIntegral  -> super C.PRing "integralRing" t m
+      C.PRound     -> super C.PField "roundField" t . super C.PCmp "roundCmp" t $ m
+      C.PCmp       -> super C.PEq "cmpEq" t m
+      C.PSignedCmp -> super C.PEq "signedCmpEq" t m
       _ -> m
  go _ = m
 
@@ -191,6 +193,7 @@ importPC sc pc =
     C.PIntegral  -> scGlobalDef sc "Cryptol.PIntegral"
     C.PField     -> scGlobalDef sc "Cryptol.PField"
     C.PRound     -> scGlobalDef sc "Cryptol.PRound"
+    C.PEq        -> scGlobalDef sc "Cryptol.PEq"
     C.PCmp       -> scGlobalDef sc "Cryptol.PCmp"
     C.PSignedCmp -> scGlobalDef sc "Cryptol.PSignedCmp"
     C.PLiteral   -> scGlobalDef sc "Cryptol.PLiteral"
@@ -258,6 +261,7 @@ isErasedProp prop =
     C.TCon (C.PC C.PIntegral ) _ -> False
     C.TCon (C.PC C.PField    ) _ -> False
     C.TCon (C.PC C.PRound    ) _ -> False
+    C.TCon (C.PC C.PEq       ) _ -> False
     C.TCon (C.PC C.PCmp      ) _ -> False
     C.TCon (C.PC C.PSignedCmp) _ -> False
     C.TCon (C.PC C.PLiteral  ) _ -> False
@@ -293,7 +297,7 @@ importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams 
 tIsRec' :: C.Type -> Maybe (Map C.Ident C.Type)
 tIsRec' t = fmap Map.fromList (C.tIsRec t)
 
-proveProp :: SharedContext -> Env -> C.Prop -> IO Term
+proveProp :: HasCallStack => SharedContext -> Env -> C.Prop -> IO Term
 proveProp sc env prop =
   case Map.lookup (normalizeProp prop) (envP env) of
 
@@ -427,16 +431,48 @@ proveProp sc env prop =
         -- TODO, Field instances
         -- TODO, Round instances
 
+        -- instance Eq Bit
+        (C.pIsEq -> Just (C.tIsBit -> True))
+          -> do scGlobalApply sc "Cryptol.PEqBit" []
+        -- instance Eq Integer
+        (C.pIsEq -> Just (C.tIsInteger -> True))
+          -> do scGlobalApply sc "Cryptol.PEqInteger" []
+        -- instance Eq (Z n)
+        (C.pIsEq -> Just (C.tIsIntMod -> Just n))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PEqIntModNum" [n']
+        -- instance (fin n) => Eq [n]
+        (C.pIsEq -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PEqSeqBool" [n']
+        -- instance (fin n, Eq a) => Eq [n]a
+        (C.pIsEq -> Just (C.tIsSeq -> Just (n, a)))
+          -> do n' <- importType sc env n
+                a' <- importType sc env a
+                pa <- proveProp sc env (C.pEq a)
+                scGlobalApply sc "Cryptol.PEqSeq" [n', a', pa]
+        -- instance Eq ()
+        (C.pIsEq -> Just (C.tIsTuple -> Just []))
+          -> do scGlobalApply sc "Cryptol.PEqUnit" []
+        -- instance (Cmp a, Cmp b) => Cmp (a, b)
+        (C.pIsEq -> Just (C.tIsTuple -> Just [t]))
+          -> do proveProp sc env (C.pEq t)
+        (C.pIsEq -> Just (C.tIsTuple -> Just (t : ts)))
+          -> do a <- importType sc env t
+                b <- importType sc env (C.tTuple ts)
+                pa <- proveProp sc env (C.pEq t)
+                pb <- proveProp sc env (C.pEq (C.tTuple ts))
+                scGlobalApply sc "Cryptol.PEqPair" [a, b, pa, pb]
+        -- instance (Eq a, Eq b, ...) => instance Eq { x : a, y : b, ... }
+        (C.pIsEq -> Just (tIsRec' -> Just fm))
+          -> do proveProp sc env (C.pEq (C.tTuple (Map.elems fm)))
+
         -- instance Cmp Bit
         (C.pIsCmp -> Just (C.tIsBit -> True))
           -> do scGlobalApply sc "Cryptol.PCmpBit" []
         -- instance Cmp Integer
         (C.pIsCmp -> Just (C.tIsInteger -> True))
           -> do scGlobalApply sc "Cryptol.PCmpInteger" []
-        -- instance Cmp (Z n)
-        (C.pIsCmp -> Just (C.tIsIntMod -> Just n))
-          -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PCmpIntModNum" [n']
         -- instance (fin n) => Cmp [n]
         (C.pIsCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -547,10 +583,11 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "trunc"         -> scGlobalDef sc "Cryptol.ecTruncate"    -- {a} (Round a) => a -> Integer
     "round"         -> scGlobalDef sc "Cryptol.ecRound"       -- {a} (Round a) => a -> Integer
 
-    -- Cmp
-    "=="            -> scGlobalDef sc "Cryptol.ecEq"          -- {a} (Cmp a) => a -> a -> Bit
-    "!="            -> scGlobalDef sc "Cryptol.ecNotEq"       -- {a} (Cmp a) => a -> a -> Bit
+    -- Eq
+    "=="            -> scGlobalDef sc "Cryptol.ecEq"          -- {a} (Eq a) => a -> a -> Bit
+    "!="            -> scGlobalDef sc "Cryptol.ecNotEq"       -- {a} (Eq a) => a -> a -> Bit
 
+    -- Cmp
     "<"             -> scGlobalDef sc "Cryptol.ecLt"          -- {a} (Cmp a) => a -> a -> Bit
     ">"             -> scGlobalDef sc "Cryptol.ecGt"          -- {a} (Cmp a) => a -> a -> Bit
     "<="            -> scGlobalDef sc "Cryptol.ecLtEq"        -- {a} (Cmp a) => a -> a -> Bit
@@ -1288,12 +1325,12 @@ scCryptolEq sc x y =
                  , pretty ty
                  ]
 
-     -- Actually apply the equality function, along with the Cmp class dictionary
+     -- Actually apply the equality function, along with the Eq class dictionary
      t <- scTypeOf sc x
      c <- scCryptolType sc t
      k <- importType sc emptyEnv c
-     cmpPrf <- proveProp sc emptyEnv (C.pCmp c)
-     scGlobalApply sc "Cryptol.ecEq" [k, cmpPrf, x, y]
+     eqPrf <- proveProp sc emptyEnv (C.pEq c)
+     scGlobalApply sc "Cryptol.ecEq" [k, eqPrf, x, y]
 
   where
     defs1 = map (mkIdent (mkModuleName ["Prelude"])) ["bitvector"]

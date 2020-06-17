@@ -47,6 +47,7 @@ excludedNames =
   , "PIntegral"
   , "PField"
   , "PRound"
+  , "PEq"
   , "PCmp"
   , "PSignedCmp"
   , "ecEq"

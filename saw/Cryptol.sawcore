@@ -442,31 +442,67 @@ pairCmp a b f g x12 y12 k =
 --------------------------------------------------------------------------------
 -- Dictionaries and overloading
 
+-- Eq class
+
+PEq : sort 0 -> sort 1;
+PEq a = #{ eq : a -> a -> Bool };
+
+PEqBit : PEq Bool;
+PEqBit = { eq = boolEq };
+
+PEqInteger : PEq Integer;
+PEqInteger = { eq = intEq };
+
+PEqIntMod : (n : Nat) -> PEq (IntMod n);
+PEqIntMod n = { eq = intModEq n };
+
+PEqIntModNum : (num : Num) -> PEq (IntModNum num);
+PEqIntModNum num =
+  Num#rec (\ (n : Num) -> PEq (IntModNum n)) PEqIntMod PEqInteger num;
+
+PEqVec : (n : Nat) -> (a : sort 0) -> PEq a -> PEq (Vec n a);
+PEqVec n a pa = { eq = vecEq n a pa.eq };
+
+PEqSeq : (n : Num) -> (a : sort 0) -> PEq a -> PEq (seq n a);
+PEqSeq n =
+  Num#rec (\ (n:Num) -> (a : sort 0) -> PEq a -> PEq (seq n a))
+          (\ (n:Nat) -> PEqVec n)
+          (\ (a:sort 0) (pa : PEq a) -> error (PEq (Stream a)) "invalid Eq instance")
+          n;
+
+PEqWord : (n : Nat) -> PEq (Vec n Bool);
+PEqWord n = { eq = bvEq n };
+
+PEqSeqBool : (n : Num) -> PEq (seq n Bool);
+PEqSeqBool n =
+  Num#rec (\ (n : Num) -> PEq (seq n Bool))
+          (\ (n:Nat) -> PEqWord n)
+          (error (PEq (Stream Bool)) "invalid Eq instance")
+          n;
+
+PEqUnit : PEq #();
+PEqUnit = { eq = \ (x y : #()) -> True };
+
+PEqPair : (a b : sort 0) -> PEq a -> PEq b -> PEq (a * b);
+PEqPair a b pa pb = { eq = pairEq a b pa.eq pb.eq };
+
+
 -- Cmp class
 
 PCmp : sort 0 -> sort 1;
 PCmp a =
-  #{ eq  : a -> a -> Bool
+  #{ cmpEq : PEq a
    , cmp : a -> a -> Bool -> Bool
    };
 
 PCmpBit : PCmp Bool;
-PCmpBit = { eq = boolEq, cmp = boolCmp };
+PCmpBit = { cmpEq = PEqBit, cmp = boolCmp };
 
 PCmpInteger : PCmp Integer;
-PCmpInteger = { eq = intEq, cmp = integerCmp };
-
-PCmpIntMod : (n : Nat) -> PCmp (IntMod n);
-PCmpIntMod n =
-  { eq = intModEq n
-  , cmp = \ (x y : IntMod n) -> integerCmp (fromIntMod n x) (fromIntMod n y) };
-
-PCmpIntModNum : (num : Num) -> PCmp (IntModNum num);
-PCmpIntModNum num =
-  Num#rec (\ (n : Num) -> PCmp (IntModNum n)) PCmpIntMod PCmpInteger num;
+PCmpInteger = { cmpEq = PEqInteger, cmp = integerCmp };
 
 PCmpVec : (n : Nat) -> (a : sort 0) -> PCmp a -> PCmp (Vec n a);
-PCmpVec n a pa = { eq = vecEq n a pa.eq, cmp = vecCmp n a pa.cmp };
+PCmpVec n a pa = { cmpEq = PEqVec n a pa.cmpEq, cmp = vecCmp n a pa.cmp };
 
 PCmpSeq : (n : Num) -> (a : sort 0) -> PCmp a -> PCmp (seq n a);
 PCmpSeq n =
@@ -476,7 +512,7 @@ PCmpSeq n =
           n;
 
 PCmpWord : (n : Nat) -> PCmp (Vec n Bool);
-PCmpWord n = { eq = bvEq n, cmp = bvCmp n };
+PCmpWord n = { cmpEq = PEqWord n, cmp = bvCmp n };
 
 PCmpSeqBool : (n : Num) -> PCmp (seq n Bool);
 PCmpSeqBool n =
@@ -486,20 +522,27 @@ PCmpSeqBool n =
           n;
 
 PCmpUnit : PCmp #();
-PCmpUnit = { eq = \ (x y : #()) -> True, cmp = unitCmp };
+PCmpUnit = { cmpEq = PEqUnit, cmp = unitCmp };
 
 PCmpPair : (a b : sort 0) -> PCmp a -> PCmp b -> PCmp (a * b);
 PCmpPair a b pa pb =
-  { eq  = pairEq a b pa.eq pb.eq
-  , cmp = pairCmp a b pa.cmp pb.cmp };
+  { cmpEq  = PEqPair a b pa.cmpEq pb.cmpEq
+  , cmp = pairCmp a b pa.cmp pb.cmp
+  };
 
 -- SignedCmp class
 
 PSignedCmp : sort 0 -> sort 1;
-PSignedCmp a = #{ scmp : a -> a -> Bool -> Bool };
+PSignedCmp a =
+   #{ signedCmpEq : PEq a
+    , scmp : a -> a -> Bool -> Bool
+    };
 
 PSignedCmpVec : (n : Nat) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (Vec n a);
-PSignedCmpVec n a pa = { scmp = vecCmp n a pa.scmp };
+PSignedCmpVec n a pa =
+   { signedCmpEq = PEqVec n a pa.signedCmpEq
+   , scmp = vecCmp n a pa.scmp
+   };
 
 PSignedCmpSeq : (n : Num) -> (a : sort 0) -> PSignedCmp a -> PSignedCmp (seq n a);
 PSignedCmpSeq n =
@@ -509,13 +552,16 @@ PSignedCmpSeq n =
           n;
 
 PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec n Bool);
-PSignedCmpWord n = { scmp = bvSCmp n };
+PSignedCmpWord n = { signedCmpEq = PEqWord n, scmp = bvSCmp n };
 
 PSignedCmpUnit : PSignedCmp #();
-PSignedCmpUnit = { scmp = unitCmp };
+PSignedCmpUnit = { signedCmpEq = PEqUnit, scmp = unitCmp };
 
 PSignedCmpPair : (a b : sort 0) -> PSignedCmp a -> PSignedCmp b -> PSignedCmp (a * b);
-PSignedCmpPair a b pa pb = { scmp = pairCmp a b pa.scmp pb.scmp };
+PSignedCmpPair a b pa pb =
+  { signedCmpEq = PEqPair a b pa.signedCmpEq pb.signedCmpEq
+  , scmp = pairCmp a b pa.scmp pb.scmp
+  };
 
 
 -- Zero class
@@ -931,6 +977,14 @@ ecSMod n =
     (error (Stream Bool -> Stream Bool -> Stream Bool) "ecSMod: expected finite word")
     n;
 
+
+-- Eq
+ecEq : (a : sort 0) -> PEq a -> a -> a -> Bool;
+ecEq a pa = pa.eq;
+
+ecNotEq : (a : sort 0) -> PEq a -> a -> a -> Bool;
+ecNotEq a pa x y = not (ecEq a pa x y);
+
 -- Cmp
 ecLt : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecLt a pa x y = pa.cmp x y False;
@@ -944,14 +998,9 @@ ecLtEq a pa x y = not (ecLt a pa y x);
 ecGtEq  : (a : sort 0) -> PCmp a -> a -> a -> Bool;
 ecGtEq a pa x y = not (ecLt a pa x y);
 
+-- SignedCmp
 ecSLt : (a : sort 0) -> PSignedCmp a -> a -> a -> Bool;
 ecSLt a pa x y = pa.scmp x y False;
-
-ecEq : (a : sort 0) -> PCmp a -> a -> a -> Bool;
-ecEq a pa = pa.eq;
-
-ecNotEq : (a : sort 0) -> PCmp a -> a -> a -> Bool;
-ecNotEq a pa x y = not (ecEq a pa x y);
 
 -- Logic
 ecAnd : (a : sort 0) -> PLogic a -> a -> a -> a;
