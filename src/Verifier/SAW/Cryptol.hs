@@ -47,7 +47,7 @@ import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
-import Verifier.SAW.TypedAST (mkSort, mkModuleName)
+import Verifier.SAW.TypedAST (mkSort, mkModuleName, FieldName)
 
 --------------------------------------------------------------------------------
 -- Type Environments
@@ -56,7 +56,10 @@ import Verifier.SAW.TypedAST (mkSort, mkModuleName)
 data Env = Env
   { envT :: Map Int    (Term, Int) -- ^ Type variables are referenced by unique id
   , envE :: Map C.Name (Term, Int) -- ^ Term variables are referenced by name
-  , envP :: Map C.Prop (Term, Int) -- ^ Bound propositions are referenced implicitly by their types
+  , envP :: Map C.Prop (Term, [FieldName], Int)
+              -- ^ Bound propositions are referenced implicitly by their types
+              --   The actual class dictionary we need is obtained by applying the
+              --   given field selctors (in reverse order!) to the term.
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
   }
@@ -67,12 +70,15 @@ emptyEnv = Env Map.empty Map.empty Map.empty Map.empty []
 liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
 
+liftProp :: (Term, [FieldName], Int) -> (Term, [FieldName], Int)
+liftProp (t, fns, j) = (t, fns, j + 1)
+
 -- | Increment dangling bound variables of all types in environment.
 liftEnv :: Env -> Env
 liftEnv env =
   Env { envT = fmap liftTerm (envT env)
       , envE = fmap liftTerm (envE env)
-      , envP = fmap liftTerm (envP env)
+      , envP = fmap liftProp (envP env)
       , envC = envC env
       , envS = envS env
       }
@@ -99,8 +105,42 @@ bindProp sc prop env = do
   let env' = liftEnv env
   v <- scLocalVar sc 0
   k <- scSort sc (mkSort 0)
-  return $ env' { envP = Map.insert (normalizeProp prop) (v, 0) (envP env')
-                , envS = k : envS env' }
+  return $ env' { envP = insertSupers prop [] v (envP env')
+                , envS = k : envS env'
+                }
+
+-- | When we insert a nonerasable prop into the environment, make
+--   sure to also insert all it's superclasses.  We arrange it so
+--   that every class dictionay contains the implementation of its
+--   superclass dictionaries, which can be extracted via field projections.
+insertSupers ::
+  C.Prop ->
+  [FieldName] {- Field names to project the associated class (in reverse order) -} ->
+  Term ->
+  Map C.Prop (Term, [FieldName], Int) ->
+  Map C.Prop (Term, [FieldName], Int)
+insertSupers prop fs v m
+  -- If the prop is already in the map, stop
+  | Just _ <- Map.lookup prop m = m
+
+  -- Insert the prop and check if it has any superclasses that also need to be added
+  | otherwise = Map.insert (normalizeProp prop) (v, fs, 0) $ go prop
+
+ where
+ super p f t = insertSupers (C.TCon (C.PC p) [t]) (f:fs) v
+
+ go (C.TCon (C.PC p) [t]) =
+    case p of
+      C.PRing     -> super C.PZero "ringZero" t m
+      C.PLogic    -> super C.PZero "logicZero" t m
+      C.PField    -> super C.PRing "fieldRing" t m
+      C.PIntegral -> super C.PRing "integralRing" t m
+      C.PRound    -> super C.PField "roundField" t . super C.PCmp "roundCmp" t $ m
+--      C.PCmp      -> super C.PEq "cmpEq" t m
+--      C.PSignedCmp -> super C.PSignedCmp "signedCmpEq" t m
+      _ -> m
+ go _ = m
+
 
 -- | We normalize the first argument of 'Literal' class constraints
 -- arbitrarily to 'inf', so that we can ignore that parameter when
@@ -256,7 +296,16 @@ tIsRec' t = fmap Map.fromList (C.tIsRec t)
 proveProp :: SharedContext -> Env -> C.Prop -> IO Term
 proveProp sc env prop =
   case Map.lookup (normalizeProp prop) (envP env) of
-    Just (prf, j) -> incVars sc 0 j prf
+
+    -- Class dictionary was provided as an argument
+    Just (prf, fs, j) ->
+       do -- shift deBruijn indicies by j
+          v <- incVars sc 0 j prf
+          -- apply field projections as necessary to compute superclasses
+          -- NB: reverse the order of the fields
+          foldM (scRecordSelect sc) v (reverse fs)
+
+    -- Class dictionary not provided, compute it from the structure of types
     Nothing ->
       case prop of
         -- instance Zero Bit
