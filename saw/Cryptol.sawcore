@@ -552,7 +552,8 @@ PZeroFun a b pb = (\(_ : a) -> pb);
 
 PLogic : sort 0 -> sort 1;
 PLogic a =
-  #{ and  : a -> a -> a
+  #{ logicZero : PZero a
+   , and  : a -> a -> a
    , or   : a -> a -> a
    , xor  : a -> a -> a
    , not  : a -> a
@@ -560,7 +561,8 @@ PLogic a =
 
 PLogicBit : PLogic Bool;
 PLogicBit =
-  { and  = and
+  { logicZero = PZeroBit
+  , and  = and
   , or   = or
   , xor  = xor
   , not  = not
@@ -568,7 +570,8 @@ PLogicBit =
 
 PLogicVec : (n : Nat) -> (a : sort 0) -> PLogic a -> PLogic (Vec n a);
 PLogicVec n a pa =
-  { and  = zipWith a a a pa.and n
+  { logicZero = replicate n a pa.logicZero
+  , and  = zipWith a a a pa.and n
   , or   = zipWith a a a pa.or  n
   , xor  = zipWith a a a pa.xor n
   , not  = map a a pa.not n
@@ -576,7 +579,8 @@ PLogicVec n a pa =
 
 PLogicStream : (a : sort 0) -> PLogic a -> PLogic (Stream a);
 PLogicStream a pa =
-  { and  = streamMap2 a a a pa.and
+  { logicZero = streamConst a pa.logicZero
+  , and  = streamMap2 a a a pa.and
   , or   = streamMap2 a a a pa.or
   , xor  = streamMap2 a a a pa.xor
   , not  = streamMap a a pa.not
@@ -589,7 +593,8 @@ PLogicSeq n =
 
 PLogicWord : (n : Nat) -> PLogic (Vec n Bool);
 PLogicWord n =
-  { and  = bvAnd n
+  { logicZero = bvNat n 0
+  , and  = bvAnd n
   , or   = bvOr  n
   , xor  = bvXor n
   , not  = bvNot n
@@ -602,7 +607,8 @@ PLogicSeqBool n =
 
 PLogicFun : (a b : sort 0) -> PLogic b -> PLogic (a -> b);
 PLogicFun a b pb =
-  { and  = funBinary a b pb.and
+  { logicZero = PZeroFun a b pb.logicZero
+  , and  = funBinary a b pb.and
   , or   = funBinary a b pb.or
   , xor  = funBinary a b pb.xor
   , not  = compose a b b pb.not
@@ -610,7 +616,8 @@ PLogicFun a b pb =
 
 PLogicUnit : PLogic #();
 PLogicUnit =
-  { and  = unitBinary
+  { logicZero = ()
+  , and  = unitBinary
   , or   = unitBinary
   , xor  = unitBinary
   , not  = unitUnary
@@ -618,7 +625,8 @@ PLogicUnit =
 
 PLogicPair : (a b : sort 0) -> PLogic a -> PLogic b -> PLogic (a * b);
 PLogicPair a b pa pb =
-  { and  = pairBinary a b pa.and pb.and
+  { logicZero = (pa.logicZero, pb.logicZero)
+  , and  = pairBinary a b pa.and pb.and
   , or   = pairBinary a b pa.or  pb.or
   , xor  = pairBinary a b pa.xor pb.xor
   , not  = pairUnary a b pa.not pb.not
@@ -628,7 +636,8 @@ PLogicPair a b pa pb =
 
 PRing : sort 0 -> sort 1;
 PRing a =
-  #{ add  : a -> a -> a
+  #{ ringZero : PZero a
+   , add  : a -> a -> a
    , sub  : a -> a -> a
    , mul  : a -> a -> a
    , neg  : a -> a
@@ -637,7 +646,8 @@ PRing a =
 
 PRingInteger : PRing Integer;
 PRingInteger =
-  { add = intAdd
+  { ringZero = PZeroInteger
+  , add = intAdd
   , sub = intSub
   , mul = intMul
   , neg = intNeg
@@ -646,7 +656,8 @@ PRingInteger =
 
 PRingIntMod : (n : Nat) -> PRing (IntMod n);
 PRingIntMod n =
-  { add = intModAdd n
+  { ringZero = PZeroIntMod n
+  , add = intModAdd n
   , sub = intModSub n
   , mul = intModMul n
   , neg = intModNeg n
@@ -659,7 +670,8 @@ PRingIntModNum num =
 
 PRingVec : (n : Nat) -> (a : sort 0) -> PRing a -> PRing (Vec n a);
 PRingVec n a pa =
-  { add = zipWith a a a pa.add n
+  { ringZero = replicate n a pa.ringZero
+  , add = zipWith a a a pa.add n
   , sub = zipWith a a a pa.sub n
   , mul = zipWith a a a pa.mul n
   , neg = map a a pa.neg n
@@ -668,7 +680,8 @@ PRingVec n a pa =
 
 PRingStream : (a : sort 0) -> PRing a -> PRing (Stream a);
 PRingStream a pa =
-  { add = streamMap2 a a a pa.add
+  { ringZero = streamConst a pa.ringZero
+  , add = streamMap2 a a a pa.add
   , sub = streamMap2 a a a pa.sub
   , mul = streamMap2 a a a pa.mul
   , neg = streamMap a a pa.neg
@@ -684,7 +697,8 @@ PRingSeq n =
 
 PRingWord : (n : Nat) -> PRing (Vec n Bool);
 PRingWord n =
-  { add = bvAdd n
+  { ringZero = bvNat n 0
+  , add = bvAdd n
   , sub = bvSub n
   , mul = bvMul n
   , neg = bvNeg n
@@ -700,7 +714,8 @@ PRingSeqBool n =
 
 PRingFun : (a b : sort 0) -> PRing b -> PRing (a -> b);
 PRingFun a b pb =
-  { add = funBinary a b pb.add
+  { ringZero = PZeroFun a b pb.ringZero
+  , add = funBinary a b pb.add
   , sub = funBinary a b pb.sub
   , mul = funBinary a b pb.mul
   , neg = compose a b b pb.neg
@@ -709,7 +724,8 @@ PRingFun a b pb =
 
 PRingUnit : PRing #();
 PRingUnit =
-  { add = unitBinary
+  { ringZero = ()
+  , add = unitBinary
   , sub = unitBinary
   , mul = unitBinary
   , neg = unitUnary
@@ -718,7 +734,8 @@ PRingUnit =
 
 PRingPair : (a b : sort 0) -> PRing a -> PRing b -> PRing (a * b);
 PRingPair a b pa pb =
-  { add = pairBinary a b pa.add pb.add
+  { ringZero = (pa.ringZero, pb.ringZero)
+  , add = pairBinary a b pa.add pb.add
   , sub = pairBinary a b pa.sub pb.sub
   , mul = pairBinary a b pa.mul pb.mul
   , neg = pairUnary a b pa.neg pb.neg
