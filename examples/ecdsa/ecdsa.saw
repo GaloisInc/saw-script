@@ -1240,7 +1240,7 @@ let main = do {
     prove_print z3 t;
   };
   p384_curve_norm_simp <- do {
-    let {{ thm x = ecc::p384_curve.point_ops.group_field.norm x ==
+    let {{ thm x = ecc::p384_curve.point_ops.group_field.normalize x ==
                    (if x < p384_field::p384_group_size
                     then x
                     else x - p384_field::p384_group_size) }};

@@ -1,4 +1,4 @@
-zip : {n, a} (fin n, Arith a) => (a -> a -> a) -> [n]a -> [n]a -> [n]a
+zip : {n, a} (fin n) => (a -> a -> a) -> [n]a -> [n]a -> [n]a
 zip f xs ys = [ f x y | x <- xs | y <- ys ]
 
 sum : {n, a} (fin n, fin a) => [n][a] -> [a]
