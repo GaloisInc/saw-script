@@ -11,4 +11,4 @@ let increment_setup = do {
   crucible_points_to ptr (crucible_term valprime);
   crucible_postcond {{ valprime == val }};
 };
-fails (crucible_llvm_verify_x86 m "./test" "increment" [] false increment_setup w4);
+fails (crucible_llvm_verify_x86 m "./test" "increment" [] false increment_setup);

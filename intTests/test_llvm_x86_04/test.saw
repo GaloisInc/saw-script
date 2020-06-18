@@ -16,4 +16,4 @@ let addvar_setup = do {
   valprime <- crucible_fresh_var "_val" (llvm_int 64);
   crucible_points_to ptr (crucible_term valprime);
 };
-crucible_llvm_verify_x86 m "./test" "addvar" [] false addvar_setup w4;
+crucible_llvm_verify_x86 m "./test" "addvar" [] false addvar_setup;
