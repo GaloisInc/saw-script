@@ -1,0 +1,16 @@
+// This test ensures that `crucible_field` can be used in conjunction
+// with `crucible_global`. It is a regression test for saw-script
+// issue 742 (https://github.com/GaloisInc/saw-script/issues/742).
+
+bc <- llvm_load_module "test.bc";
+
+crucible_llvm_verify bc "set" [] false
+  do {
+    crucible_alloc_global "the_pair";
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    y <- crucible_fresh_var "y" (llvm_int 32);
+    crucible_execute_func [crucible_term x, crucible_term y];
+    crucible_points_to (crucible_field (crucible_global "the_pair") "first") (crucible_term x);
+    crucible_points_to (crucible_field (crucible_global "the_pair") "second") (crucible_term y);
+  }
+  z3;
