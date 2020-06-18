@@ -39,16 +39,14 @@ extra-deps:
   - sbv-8.6
   - panic-0.4.0.1
   - itanium-abi-0.1.1.1
-  - boomerang-1.4.5.7
+  - boomerang-1.4.6
   - config-schema-1.2.0.0
   - config-value-0.7.0.1
   - simple-get-opt-0.4
-  - base-orphans-0.8.2
-  - base-compat-0.10.5
   - json-0.10
   - QuickCheck-2.14
-  - splitmix-0.0.4
   - bv-sized-1.0.1
   - bitwise-1.0.0.1
-resolver: lts-15.1
+  - constraints-0.11.2
+resolver: lts-16.1
 allow-newer: false
