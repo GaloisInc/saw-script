@@ -217,7 +217,7 @@ typecheckTerm mnm t = do
 translateTypePerm :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
 translateTypePerm sc env typ_perm =
   completeOpenTerm sc $
-  transTerm1 $
+  typeTransType1 $
   runTransM (translate $ emptyMb typ_perm) (emptyTypeTransInfo env)
 
 
@@ -271,12 +271,11 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_string =
      sc <- getSharedContext
      let mnm = heapsterEnvSAWModule henv
      un_term <- parseTermFromString nm term_string
-     TypedTerm term term_tp <- typecheckTerm mnm un_term
+     TypedTerm term _ <- typecheckTerm mnm un_term
      let term_ident = mkIdent mnm nm
      case (some_args, some_tp) of
        (Some args, Some tp_perm) -> liftIO $ do
-         -- FIXME: should't we really be doing this?
-         -- term_tp <- translateTypePerm sc env tp_perm
+         term_tp <- translateTypePerm sc env (ValuePermRepr tp_perm)
          scModifyModule sc mnm $ \m ->
            insDef m $ Def { defIdent = term_ident,
                             defQualifier = NoQualifier,
