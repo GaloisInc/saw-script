@@ -29,6 +29,20 @@ Proof.
   - apply H0; reflexivity.
 Qed.
 
+Lemma returnM_if A (b : bool) (x y : A) :
+  @returnM CompM _ A (if b then x else y) ~= if b then returnM x else returnM y.
+Proof. destruct b. setoid_reflexivity. setoid_reflexivity. Qed.
+
+Lemma refinesM_returnM_if_l A (b : bool) (x y : A) P :
+  ((if b then returnM x else returnM y) |= P) ->
+  (returnM (if b then x else y) |= P).
+Proof. rewrite returnM_if. trivial. Qed.
+
+Lemma refinesM_returnM_if_r A (b : bool) (x y : A) P :
+  (P |= (if b then returnM x else returnM y)) ->
+  (P |= returnM (if b then x else y)).
+Proof. rewrite returnM_if. trivial. Qed.
+
 
 (***
  *** Automation for proving refinement
@@ -83,13 +97,17 @@ Hint Extern 1 (_ |= (if _ then _ else _)) =>
   apply refinesM_if_r;
     let e := fresh "e_if" in
     (intro e; try discriminate e; try rewrite e) : refinesM.
+Hint Extern 1 (returnM (if _ then _ else _) |= _) =>
+  apply refinesM_returnM_if_l : refinesM.
+Hint Extern 1 (_ |= returnM (if _ then _ else _)) =>
+  apply refinesM_returnM_if_r : refinesM.
 
 Hint Extern 1 (existsM _ |= _) => apply refinesM_existsM_l; intros : refinesM.
 Hint Extern 1 (_ |= forallM _) => apply refinesM_forallM_r; intros : refinesM.
-Hint Extern 10 (_ |= existsM _) => eapply refinesM_existsM_r : refinesM.
-Hint Extern 10 (forallM _ |= _) => eapply refinesM_forallM_l : refinesM.
-Hint Extern 10 (returnM _ |= returnM _) => apply refinesM_returnM; intros;
-                                             (reflexivity || shelve) : refinesM.
+Hint Extern 2 (_ |= existsM _) => eapply refinesM_existsM_r; shelve : refinesM.
+Hint Extern 2 (forallM _ |= _) => eapply refinesM_forallM_l; shelve : refinesM.
+(* Hint Extern 2 (returnM _ |= returnM _) => apply refinesM_returnM; intros; *)
+(*                                              (reflexivity || shelve) : refinesM. *)
 
 Hint Extern 1 ((returnM _ >>= _) |= _) => rewrite returnM_bindM : refinesM.
 Hint Extern 1 (_ |= (returnM _ >>= _)) => rewrite returnM_bindM : refinesM.
@@ -192,12 +210,29 @@ Hint Extern 1 (MaybeDestructArg _ _ _) =>
 Print HintDb refinesFun.
  *)
 
+Ltac get_last_hyp tt :=
+  match goal with H: _ |- _ => constr:(H) end.
+
+Ltac destructArg_list :=
+  (lazymatch goal with
+  | |- MaybeDestructArg (list _) ?l ?g =>
+    match g with
+    | context [Datatypes.list_rect _ _ _ l] =>
+      induction l; let IH := get_last_hyp tt in
+      try simpl in IH; try unfold MaybeDestructArg in IH;
+      simpl; apply noDestructArg
+    end
+   end).
+Hint Extern 1 (MaybeDestructArg _ _ _) => destructArg_list :refinesFun.
+
 Ltac destructArg_W64List :=
   (lazymatch goal with
   | |- MaybeDestructArg ?W64list ?l ?g =>
     match g with
     | context [SAWCorePrelude.W64List_rect _ _ _ l] =>
-      destruct l; simpl; apply noDestructArg
+      induction l; let IH := get_last_hyp tt in
+      try simpl in IH; try unfold MaybeDestructArg in IH;
+      simpl; apply noDestructArg
     end
   end).
 Hint Extern 1 (MaybeDestructArg _ _ _) => destructArg_W64List :refinesFun.
@@ -216,7 +251,7 @@ Hint Resolve refinesFunBase refinesFunStep | 5 : refinesFun.
 
 Ltac prove_refinement :=
   unshelve (typeclasses eauto with refinesM refinesFun);
-  unshelve (rewrite_strat (bottomup (hints refinesM)));
+  unshelve (try rewrite_strat (bottomup (hints refinesM)));
   try reflexivity.
 
 Ltac prove_refinesFun := unshelve (typeclasses eauto with refinesFun).

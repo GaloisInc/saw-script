@@ -675,6 +675,12 @@ Proof.
   intros r b [ a in_b ]. apply (r a). assumption.
 Qed.
 
+Lemma refinesM_existsM_lr A B (P Q : A -> CompM B) :
+  (forall a, P a |= Q a) -> existsM P |= existsM Q.
+Proof.
+  intros r b [ a in_b ]. exists a. apply r. assumption.
+Qed.
+
 Lemma existsM_bindM A B C (P: A -> CompM B) (Q: B -> CompM C) :
   (existsM P) >>= Q ~= existsM (fun x => P x >>= Q).
 Proof.
