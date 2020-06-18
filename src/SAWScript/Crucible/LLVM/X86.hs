@@ -196,7 +196,6 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
       let ?badBehaviorMap = bbMapRef
       sym <- liftIO $ C.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
       halloc <- getHandleAlloc
-      -- mvar <- liftIO $ C.LLVM.mkMemVar halloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
 
@@ -641,17 +640,18 @@ assertPost globals env premem preregs = do
   liftIO $ C.addAssertion sym . C.LabeledPred correctStack . C.SimError W4.initializationLoc
     $ C.AssertFailureSimError "Stack not preserved" ""
 
-  pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
-    $ assertPointsTo env tyenv nameEnv
-
   returnMatches <- case (ms ^. MS.csRetValue, ms ^. MS.csRet) of
     (Just expectedRet, Just retTy) -> do
       postRAX <- C.LLVM.ptrToPtrVal <$> getReg Macaw.RAX postregs
       pure [LO.matchArg opts sc cc ms MS.PostState postRAX retTy expectedRet]
     _ -> pure []
 
-  let setupConditionMatches = LO.learnSetupCondition opts sc cc ms MS.PostState
-        <$> (ms ^. MS.csPostState . MS.csConditions)
+  pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
+    $ assertPointsTo env tyenv nameEnv
+
+  let setupConditionMatches = fmap
+        (LO.learnSetupCondition opts sc cc ms MS.PostState)
+        $ ms ^. MS.csPostState . MS.csConditions
 
   let
     initialTerms = Map.fromList
@@ -659,7 +659,7 @@ assertPost globals env premem preregs = do
       | tt <- ms ^. MS.csPreState . MS.csFreshVars
       , let Just ec = asExtCns (ttTerm tt)
       ]
-    initialFree = Set.fromList $ LO.termId . ttTerm <$> ms ^. MS.csPostState . MS.csFreshVars
+    initialFree = Set.fromList . fmap (LO.termId . ttTerm) $ ms ^. MS.csPostState . MS.csFreshVars
 
   result <- liftIO
     . O.runOverrideMatcher sym globals env initialTerms initialFree (ms ^. MS.csLoc)
