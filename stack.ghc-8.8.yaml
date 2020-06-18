@@ -48,5 +48,7 @@ extra-deps:
   - json-0.10
   - QuickCheck-2.14
   - splitmix-0.0.4
+  - bv-sized-1.0.1
+  - bitwise-1.0.0.1
 resolver: lts-15.1
 allow-newer: false
