@@ -6,4 +6,4 @@ let test_setup = do {
   crucible_execute_func [];
   crucible_return (crucible_term {{ 1 : [64] }});
 };
-fail (crucible_llvm_verify_x86 m "./test" "foo" [] false test_setup);
+fails (crucible_llvm_verify_x86 m "./test" "foo" [] false test_setup);

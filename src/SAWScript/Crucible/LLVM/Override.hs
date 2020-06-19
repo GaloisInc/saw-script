@@ -36,6 +36,7 @@ module SAWScript.Crucible.LLVM.Override
   , termSub
 
   , learnCond
+  , learnSetupCondition
   , matchArg
   , methodSpecHandler
   , valueToSC
