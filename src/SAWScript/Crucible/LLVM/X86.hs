@@ -29,7 +29,7 @@ module SAWScript.Crucible.LLVM.X86
 import Control.Lens.TH (makeLenses)
 
 import System.IO (stdout)
-import Control.Exception (catch, throw)
+import Control.Exception (throw)
 import Control.Lens (view, use, (&), (^.), (.~), (.=))
 import Control.Monad.ST (stToIO)
 import Control.Monad.State
@@ -54,10 +54,11 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.Context hiding (view)
 import Data.Parameterized.Nonce
 
+import Verifier.SAW.FiniteValue
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.TypedTerm
 
-import SAWScript.Prover.SBV
+import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
 import SAWScript.Value
@@ -127,7 +128,6 @@ newtype X86Sim a = X86Sim { unX86Sim :: StateT X86State IO a }
 data X86State = X86State
   { _x86Sym :: Sym
   , _x86Options :: Options
-  , _x86SharedContext :: SharedContext
   , _x86CrucibleContext :: LLVMCrucibleContext LLVMArch
   , _x86Elf :: Elf.Elf 64
   , _x86RelevantElf :: RelevantElf
@@ -178,8 +178,9 @@ crucible_llvm_verify_x86 ::
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {-^ Whether to enable path satisfiability checking (currently ignored) -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
+  ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms _checkSat setup
+crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms _checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64
@@ -220,7 +221,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
       methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) setup
 
-      emptyState <- liftIO $ initialState sym opts sc cc elf relf methodSpec globsyms maxAddr
+      emptyState <- liftIO $ initialState sym opts cc elf relf methodSpec globsyms maxAddr
       (env, preState) <- liftIO . runX86Sim emptyState $ setupMemory globsyms
 
       let
@@ -265,7 +266,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         C.AbortedResult{} -> printOutLn opts Warn "Warning: function never returns"
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      liftIO . void $ runX86Sim preState checkGoals
+      checkGoals sym opts sc tactic
  
       pure $ SomeLLVM methodSpec
   | otherwise = fail "LLVM module must be 64-bit"
@@ -373,7 +374,6 @@ initialState ::
   X86Constraints =>
   Sym ->
   Options ->
-  SharedContext ->
   LLVMCrucibleContext LLVMArch ->
   Elf.Elf 64 ->
   RelevantElf ->
@@ -381,7 +381,7 @@ initialState ::
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Integer {- ^ Minimum size of the global allocation (here, the end of the .text segment -} ->
   IO X86State
-initialState sym opts sc cc elf relf ms globs maxAddr = do
+initialState sym opts cc elf relf ms globs maxAddr = do
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
   let
@@ -405,7 +405,6 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
   pure $ X86State
     { _x86Sym = sym
     , _x86Options = opts
-    , _x86SharedContext = sc
     , _x86CrucibleContext = cc
     , _x86Elf = elf
     , _x86RelevantElf = relf
@@ -661,29 +660,35 @@ assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr texpected) = do
 
 -- | Gather and run the solver on goals from the simulator.
 checkGoals ::
-  X86Sim ()
-checkGoals = do
-  sym <- use x86Sym
-  opts <- use x86Options
-  sc <- use x86SharedContext
+  Sym ->
+  Options ->
+  SharedContext ->
+  ProofScript SatResult ->
+  TopLevel ()
+checkGoals sym opts sc tactic = do
   gs <- liftIO $ getGoals sym
   liftIO . printOutLn opts Info $ mconcat
     [ "Simulation finished, running solver on "
     , show $ length gs
     , " goals"
     ]
-  liftIO . forM_ gs $ \g ->
-    do
-      term <- gGoal sc g
-      (mb, stats) <- proveUnintSBV z3 [] Nothing sc term
-      printOutLn opts Info $ ppStats stats
-      case mb of
-        Nothing -> printOutLn opts Info "Goal succeeded"
-        Just ex -> do
-          fail $ mconcat
-            ["Failure (", show $ gLoc g
-            , "): ", show $ gMessage g
-            , "\nCounterexample: " <> show ex
-            ]
-    `catch` \(X86Error e) -> fail $ "Failure, error: " <> e
+  forM_ (zip [0..] gs) $ \(n, g) -> do
+    term <- liftIO $ gGoal sc g
+    let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
+    r <- evalStateT tactic $ startProof proofgoal
+    case r of
+      Unsat stats -> do
+        liftIO . printOutLn opts Info $ ppStats stats
+      SatMulti stats vals -> do
+        printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
+        printOutLnTop Info (show stats)
+        printOutLnTop OnlyCounterExamples "----------Counterexample----------"
+        ppOpts <- sawPPOpts . rwPPOpts <$> getTopLevelRW
+        case vals of
+          [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
+          _ -> let showAssignment (name, val) =
+                     mconcat [ " ", name, ": ", show $ ppFirstOrderValue ppOpts val ]
+               in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
+        printOutLnTop OnlyCounterExamples "----------------------------------"
+        throwTopLevel "Proof failed."
   liftIO $ printOutLn opts Info "All goals succeeded"
