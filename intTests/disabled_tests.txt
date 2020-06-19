@@ -12,7 +12,3 @@ test0010_jss_cnf_exp
 
 # Missing LLVM intrinsic
 test0039_rust
-
-# Current limitations of crucible_llvm_verify_x86
-test_llvm_x86_02
-test_llvm_x86_03

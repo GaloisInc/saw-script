@@ -36,6 +36,7 @@ module SAWScript.Crucible.LLVM.Override
   , termSub
 
   , learnCond
+  , learnSetupCondition
   , matchArg
   , methodSpecHandler
   , valueToSC
@@ -592,7 +593,7 @@ methodSpecHandler_prestate opts sc cc args cs =
 
        sequence_ [ matchArg opts sc cc cs PreState x y z | (x, y, z) <- xs]
 
-       learnCond opts sc cc cs PreState (cs ^. MS.csPreState)
+       learnCond opts sc cc cs PreState (cs ^. MS.csGlobalAllocs) (cs ^. MS.csPreState)
 
 
 -- | Use a method spec to override the behavior of a function.
@@ -619,14 +620,15 @@ learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWi
           -> LLVMCrucibleContext arch
           -> MS.CrucibleMethodSpecIR (LLVM arch)
           -> PrePost
+          -> [MS.AllocGlobal (LLVM arch)]
           -> MS.StateSpec (LLVM arch)
           -> OverrideMatcher (LLVM arch) md ()
-learnCond opts sc cc cs prepost ss =
+learnCond opts sc cc cs prepost globals ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      enforcePointerValidity cc loc ss
-     enforceDisjointness loc ss
+     enforceDisjointness cc loc globals ss
      enforceCompleteSubstitution loc ss
 
 
@@ -743,12 +745,15 @@ enforcePointerValidity cc loc ss =
 -- allowed to alias other read-only allocations, however.
 enforceDisjointness ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
+  [MS.AllocGlobal (LLVM arch)] ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointness loc ss =
+enforceDisjointness cc loc globals ss =
   do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub)
+     mem <- readGlobal $ Crucible.llvmMemVar $ ccLLVMContext cc
      let (allocsRW, allocsRO) = Map.partition (view isMut) (view MS.csAllocs ss)
          memsRW = Map.elems $ Map.intersectionWith (,) allocsRW sub
          memsRO = Map.elems $ Map.intersectionWith (,) allocsRO sub
@@ -756,27 +761,70 @@ enforceDisjointness loc ss =
      -- Ensure that all RW regions are disjoint from each other, and
      -- that all RW regions are disjoint from all RO regions.
      sequence_
-        [ do c <- liftIO $
-               do W4.setCurrentProgramLoc sym ploc
-                  psz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth psz
-                  W4.setCurrentProgramLoc sym qloc
-                  qsz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth qsz
-                  W4.setCurrentProgramLoc sym loc
-                  Crucible.buildDisjointRegionsAssertion
-                    sym Crucible.PtrWidth
-                    p psz'
-                    q qsz'
-             let msg =
-                   "Memory regions not disjoint: "
-                   ++ "(base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ show psz ++ ")"
-                   ++ " and "
-                   ++ "(base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ show qsz ++ ")"
-             addAssert c $ Crucible.SimError loc $
-               Crucible.AssertFailureSimError msg ""
-
-        | (LLVMAllocSpec _mut _pty _align psz ploc, p) : ps <- tails memsRW
-        , (LLVMAllocSpec _mut _qty _align qsz qloc, q) <- ps ++ memsRO
+        [ enforceDisjointAllocSpec sym loc p q
+        | p : ps <- tails memsRW
+        , q <- ps ++ memsRO
         ]
+
+     -- Ensure that all RW and RO regions are disjoint from mutable
+     -- global regions.
+     let resolveAllocGlobal g@(LLVMAllocGlobal _ nm) =
+           do ptr <- liftIO $ Crucible.doResolveGlobal sym mem nm
+              pure (g, ptr)
+     globals' <- traverse resolveAllocGlobal globals
+     sequence_
+       [ enforceDisjointAllocGlobal sym loc p q
+       | p <- memsRW ++ memsRO
+       , q <- globals'
+       ]
+
+-- | Assert that two LLVM allocations are disjoint from each other.
+enforceDisjointAllocSpec ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  Sym -> W4.ProgramLoc ->
+  (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
+  (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
+  OverrideMatcher (LLVM arch) md ()
+enforceDisjointAllocSpec sym loc
+  (LLVMAllocSpec _pmut _pty _palign psz ploc, p)
+  (LLVMAllocSpec _qmut _qty _qalign qsz qloc, q) =
+  do c <- liftIO $
+       do W4.setCurrentProgramLoc sym ploc
+          psz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth psz
+          W4.setCurrentProgramLoc sym qloc
+          qsz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth qsz
+          W4.setCurrentProgramLoc sym loc
+          Crucible.buildDisjointRegionsAssertion
+            sym Crucible.PtrWidth
+            p psz'
+            q qsz'
+     let msg =
+           "Memory regions not disjoint: "
+           ++ "(base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ show psz ++ ")"
+           ++ " and "
+           ++ "(base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ show qsz ++ ")"
+     addAssert c $ Crucible.SimError loc $
+       Crucible.AssertFailureSimError msg ""
+
+-- | Assert that an LLVM allocation is disjoint from a global region.
+enforceDisjointAllocGlobal ::
+  Sym -> W4.ProgramLoc ->
+  (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
+  (LLVMAllocGlobal arch, LLVMPtr (Crucible.ArchWidth arch)) ->
+  OverrideMatcher (LLVM arch) md ()
+enforceDisjointAllocGlobal sym loc
+  (LLVMAllocSpec _pmut _pty _palign psz _ploc, p)
+  (LLVMAllocGlobal _qloc (L.Symbol qname), q) =
+  do let Crucible.LLVMPointer pblk _ = p
+     let Crucible.LLVMPointer qblk _ = q
+     c <- liftIO $ W4.notPred sym =<< W4.natEq sym pblk qblk
+     let msg =
+           "Memory regions not disjoint: "
+           ++ "(base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ show psz ++ ")"
+           ++ " and "
+           ++ "global " ++ show qname ++ " (base=" ++ show (Crucible.ppPtr q) ++ ")"
+     addAssert c $ Crucible.SimError loc $
+       Crucible.AssertFailureSimError msg ""
 
 ------------------------------------------------------------------------
 
