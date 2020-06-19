@@ -756,27 +756,37 @@ enforceDisjointness loc ss =
      -- Ensure that all RW regions are disjoint from each other, and
      -- that all RW regions are disjoint from all RO regions.
      sequence_
-        [ do c <- liftIO $
-               do W4.setCurrentProgramLoc sym ploc
-                  psz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth psz
-                  W4.setCurrentProgramLoc sym qloc
-                  qsz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth qsz
-                  W4.setCurrentProgramLoc sym loc
-                  Crucible.buildDisjointRegionsAssertion
-                    sym Crucible.PtrWidth
-                    p psz'
-                    q qsz'
-             let msg =
-                   "Memory regions not disjoint: "
-                   ++ "(base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ show psz ++ ")"
-                   ++ " and "
-                   ++ "(base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ show qsz ++ ")"
-             addAssert c $ Crucible.SimError loc $
-               Crucible.AssertFailureSimError msg ""
-
-        | (LLVMAllocSpec _mut _pty _align psz ploc, p) : ps <- tails memsRW
-        , (LLVMAllocSpec _mut _qty _align qsz qloc, q) <- ps ++ memsRO
+        [ enforceDisjointAllocSpec sym loc p q
+        | p : ps <- tails memsRW
+        , q <- ps ++ memsRO
         ]
+
+enforceDisjointAllocSpec ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  Sym -> W4.ProgramLoc ->
+  (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
+  (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
+  OverrideMatcher (LLVM arch) md ()
+enforceDisjointAllocSpec sym loc
+  (LLVMAllocSpec _pmut _pty _palign psz ploc, p)
+  (LLVMAllocSpec _qmut _qty _qalign qsz qloc, q) =
+  do c <- liftIO $
+       do W4.setCurrentProgramLoc sym ploc
+          psz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth psz
+          W4.setCurrentProgramLoc sym qloc
+          qsz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth qsz
+          W4.setCurrentProgramLoc sym loc
+          Crucible.buildDisjointRegionsAssertion
+            sym Crucible.PtrWidth
+            p psz'
+            q qsz'
+     let msg =
+           "Memory regions not disjoint: "
+           ++ "(base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ show psz ++ ")"
+           ++ " and "
+           ++ "(base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ show qsz ++ ")"
+     addAssert c $ Crucible.SimError loc $
+       Crucible.AssertFailureSimError msg ""
 
 ------------------------------------------------------------------------
 
