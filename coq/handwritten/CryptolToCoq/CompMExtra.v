@@ -213,18 +213,7 @@ Print HintDb refinesFun.
 Ltac get_last_hyp tt :=
   match goal with H: _ |- _ => constr:(H) end.
 
-Ltac destructArg_list :=
-  (lazymatch goal with
-  | |- MaybeDestructArg (list _) ?l ?g =>
-    match g with
-    | context [Datatypes.list_rect _ _ _ l] =>
-      induction l; let IH := get_last_hyp tt in
-      try simpl in IH; try unfold MaybeDestructArg in IH;
-      simpl; apply noDestructArg
-    end
-   end).
-Hint Extern 1 (MaybeDestructArg _ _ _) => destructArg_list :refinesFun.
-
+(* If a goal contains W64List_rect applied to l, then destruct l *)
 Ltac destructArg_W64List :=
   (lazymatch goal with
   | |- MaybeDestructArg ?W64list ?l ?g =>
@@ -236,6 +225,19 @@ Ltac destructArg_W64List :=
     end
   end).
 Hint Extern 1 (MaybeDestructArg _ _ _) => destructArg_W64List :refinesFun.
+
+(* If a goal contains list_rect applied to l, then destruct l *)
+Ltac destructArg_list :=
+  (lazymatch goal with
+  | |- MaybeDestructArg (list _) ?l ?g =>
+    match g with
+    | context [Datatypes.list_rect _ _ _ l] =>
+      induction l; let IH := get_last_hyp tt in
+      try simpl in IH; try unfold MaybeDestructArg in IH;
+      simpl; apply noDestructArg
+    end
+   end).
+Hint Extern 1 (MaybeDestructArg _ _ _) => destructArg_list :refinesFun.
 
 Definition refinesFunBase B m1 m2 (r: m1 |= m2) : @refinesFun (LRT_Ret B) m1 m2 := r.
 Definition refinesFunStep A lrtF f1 f2
@@ -251,7 +253,7 @@ Hint Resolve refinesFunBase refinesFunStep | 5 : refinesFun.
 
 Ltac prove_refinement :=
   unshelve (typeclasses eauto with refinesM refinesFun);
-  unshelve (try rewrite_strat (bottomup (hints refinesM)));
+  try (unshelve (rewrite_strat (bottomup (hints refinesM))));
   try reflexivity.
 
 Ltac prove_refinesFun := unshelve (typeclasses eauto with refinesFun).
