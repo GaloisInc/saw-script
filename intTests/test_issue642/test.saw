@@ -1,0 +1,37 @@
+// This test checks whether we can use an override with a pointer
+// argument that aliases a global. It is a regression test for
+// saw-script issue #642.
+// https://github.com/GaloisInc/saw-script/issues/642
+
+bc <- llvm_load_module "test.bc";
+
+let i32 = llvm_int 32;
+
+foo_ov <-
+  crucible_llvm_verify bc "foo" [] false
+    do {
+      crucible_alloc_global "glob";
+      x <- crucible_alloc i32;
+      crucible_execute_func [x];
+      crucible_return (crucible_term {{ 0 : [32] }});
+    }
+    z3;
+
+bar_ov1 <-
+  crucible_llvm_verify bc "bar" [] false
+    do {
+      crucible_alloc_global "glob";
+      crucible_execute_func [];
+      crucible_return (crucible_term {{ 1 : [32] }});
+    }
+    z3;
+
+fails (
+  crucible_llvm_verify bc "bar" [foo_ov] false
+    do {
+      crucible_alloc_global "glob";
+      crucible_execute_func [];
+      crucible_return (crucible_term {{ 0 : [32] }});
+    }
+    z3
+  );
