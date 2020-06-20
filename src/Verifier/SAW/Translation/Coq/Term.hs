@@ -198,52 +198,31 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     StringLit s -> pure (Coq.Scope (Coq.StringLit s) "string")
     ExtCns (EC _ _ _) -> errorTermM "External constants not supported"
 
-    -- NOTE: The following requires the coq-extensible-records library, because
-    -- Coq records are nominal rather than structural
-    -- In this library, record types are represented as:
-    -- (record (Fields FSNil))                         is the type of the empty record
-    -- (record (Fields (FSCons ("x" %e nat) FSNil)))   has one field "x" of type "nat"
+    -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
+    -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil) ...)
     RecordType fs ->
-      let makeField name typ = do
-            typTerm <- translateTerm typ
-            return (Coq.App (Coq.Var "@pair")
-              [ Coq.Var "field"
-              , Coq.Var "_"
-              , Coq.Scope (Coq.StringLit name) "string"
-              , typTerm
-              ])
-      in
-      let addField accum (name, typ) = do
-            fieldTerm <- makeField name typ
-            return (Coq.App (Coq.Var "FScons") [fieldTerm, accum])
-      in
-      do
-        fields <- foldM addField (Coq.Var "FSnil") fs
-        return $ Coq.App (Coq.Var "record") [ Coq.App (Coq.Var "Fields") [fields] ]
+      foldr (\(name, tp) rest_m ->
+              do rest <- rest_m
+                 tp_trans <- translateTerm tp
+                 return (Coq.App (Coq.Var "RecordTypeCons")
+                         [Coq.StringLit name, tp_trans, rest]))
+      (return (Coq.Var "RecordTypeNil"))
+      fs
 
+    -- The translation of a record value {fld1 = x1, ..., fldn = xn} is
+    -- RecordCons fld1 x1 (... (RecordCons fldn xn RecordNil) ...)
     RecordValue fs ->
-      let makeField name val = do
-            valTerm <- translateTerm val
-            return (Coq.App (Coq.Var "@record_singleton")
-              [ Coq.Var "_"
-              , Coq.Scope (Coq.StringLit name) "string"
-              , valTerm
-              ])
-      in
-      let addField accum (name, typ) = do
-            fieldTerm <- makeField name typ
-            return (Coq.App (Coq.Var "@Rjoin") [Coq.Var "_", Coq.Var "_", fieldTerm, accum])
-      in
-      foldM addField (Coq.Var "record_empty") fs
+      foldr (\(name, trm) rest_m ->
+              do rest <- rest_m
+                 trm_trans <- translateTerm trm
+                 return (Coq.App (Coq.Var "RecordCons")
+                         [Coq.StringLit name, trm_trans, rest]))
+      (return (Coq.Var "RecordNil"))
+      fs
+
     RecordProj r f -> do
-      rTerm <- translateTerm r
-      return (Coq.App (Coq.Var "@Rget")
-              [ Coq.Var "_"
-              , rTerm
-              , Coq.Scope (Coq.StringLit f) "string"
-              , Coq.Var "_"
-              , Coq.Ltac "simpl; exact eq_refl"
-              ])
+      r_trans <- translateTerm r
+      return (Coq.App (Coq.Var "RecordProj") [r_trans, Coq.StringLit f])
 
 -- | Recognizes an $App (App "Cryptol.seq" n) x$ and returns ($n$, $x$).
 asSeq :: Fail.MonadFail f => Recognizer f Term (Term, Term)
