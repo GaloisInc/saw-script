@@ -225,66 +225,51 @@ Definition intModNeg : forall (n : Nat), (IntMod n) -> IntMod n
  ***)
 
 (* The empty record type *)
-Variant RecordNilType : Type :=
-  RecordNilElem : RecordNilType.
+Variant RecordTypeNil : Type :=
+  RecordNil : RecordTypeNil.
 
 (* A non-empty record type *)
-Variant RecordConsType (str:String.string) (tp:Type) (rest_tp:Type) : Type :=
-  RecordConsElem (x:tp) (rest:rest_tp) : RecordConsType str tp rest_tp.
-Arguments RecordConsElem str%string_scope {tp rest_tp} x rest.
+Variant RecordTypeCons (str:String.string) (tp:Type) (rest_tp:Type) : Type :=
+  RecordCons (x:tp) (rest:rest_tp) : RecordTypeCons str tp rest_tp.
+
+Arguments RecordTypeCons str%string_scope tp rest_tp.
+Arguments RecordCons str%string_scope {tp rest_tp} x rest.
 
 (* Get the head element of a non-empty record type *)
-Definition recordHead {str tp rest_tp} (r:RecordConsType str tp rest_tp) : tp :=
+Definition recordHead {str tp rest_tp} (r:RecordTypeCons str tp rest_tp) : tp :=
   match r with
-  | RecordConsElem _ x _ => x
+  | RecordCons _ x _ => x
   end.
 
 (* Get the tail of a non-empty record type *)
-Definition recordTail {str tp rest_tp} (r:RecordConsType str tp rest_tp) : rest_tp :=
+Definition recordTail {str tp rest_tp} (r:RecordTypeCons str tp rest_tp) : rest_tp :=
   match r with
-  | RecordConsElem _ _ rest => rest
+  | RecordCons _ _ rest => rest
   end.
-
-(* A list of fields with their associated types *)
-Definition Fields : Type := list (String.string * Type).
-
-(* Build the record type for a list of fields *)
-Fixpoint RecordType (flds : Fields) : Type :=
-  match flds with
-  | nil => RecordNilType
-  | cons (str,tp) flds' => RecordConsType str tp (RecordType flds')
-  end.
-
-(* Build an element of the empty record type; the explicit type annotation tells
-Coq how to type-check it *)
-Definition RecordNil : RecordType nil := RecordNilElem.
-
-(* Build up an element of a non-empty record type; the explicit type annotation
-tells Coq how to type-check it *)
-Definition RecordCons str {tp flds} :
-  tp -> RecordType flds -> RecordType (cons (str,tp) flds) := RecordConsElem str.
-Arguments RecordCons str%string_scope {tp flds} _ _.
 
 (* Give us a way to project a specific field out a record type *)
-Class RecordProjFun (str:String.string) (tp:Type) (flds:Fields) : Type :=
-  recordProjFun : RecordType flds -> tp.
+Class RecordProjFun (str:String.string) (tp:Type) (rtp:Type) : Type :=
+  recordProjFun : rtp -> tp.
 
 (* Projection function for the first field in a record type *)
-Instance RecordProjFun_Base str tp flds : RecordProjFun str tp (cons (str,tp) flds) :=
+Instance RecordProjFun_Base str tp rtp : RecordProjFun str tp (RecordTypeCons str tp rtp) :=
   recordHead.
 
 (* Projection function for some other field in a record type *)
-Instance RecordProjFun_Step str tp str' tp' flds (rproj:RecordProjFun str tp flds)
-  : RecordProjFun str tp (cons (str',tp') flds) :=
+Instance RecordProjFun_Step str tp str' tp' rtp (rproj:RecordProjFun str tp rtp)
+  : RecordProjFun str tp (RecordTypeCons str' tp' rtp) :=
   fun elem => rproj (recordTail elem).
 
 (* Perform a record projection, using typeclass resolution to find the
 projection we want using the string name *)
-Definition RecordProj {flds} (x:RecordType flds) str {tp} `{RecordProjFun str tp flds} : tp :=
+Definition RecordProj {rtp} (x:rtp) str {tp} `{RecordProjFun str tp rtp} : tp :=
   recordProjFun x.
-Arguments RecordProj {flds} !x str%string_scope {tp} {_}.
+Arguments RecordProj {rtp} !x str%string_scope {tp} {_}.
 
 (* Some tests *)
+Definition recordType1 :=
+  RecordTypeCons "fld1" Nat (RecordTypeCons "flds2" Bool RecordTypeNil).
+
 Definition recordTest1 := RecordCons "fld1" 0 (RecordCons "fld2" true RecordNil).
 (* Check recordTest1. *)
 
