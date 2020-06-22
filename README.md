@@ -17,11 +17,9 @@ support libraries must be compiled by Coq in order to use them.
 ## Installing Dependencies
 
 To compile the Coq support libraries, Coq must be installed, as must the
-following two Coq libraries:
+following Coq library:
 
-1. [coq-extensible-records](https://github.com/gmalecha/coq-extensible-records)
-
-2. [bits](https://github.com/coq-community/bits)
+* [bits](https://github.com/coq-community/bits)
 
 The recommended way to install Coq and these dependencies is using opam. This
 can be done with the following steps, which will not only install opam, Coq, and
@@ -32,7 +30,7 @@ version of Coq needed for those libraries:
 sh <(curl -sL https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh)
 opam init
 opam repo add coq-released https://coq.inria.fr/opam/released
-opam install coq-bits coq-extensible-records
+opam install coq-bits
 ```
 
 
