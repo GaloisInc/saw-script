@@ -29,7 +29,7 @@ import qualified Control.Monad.Except                          as Except
 import qualified Control.Monad.Fail                            as Fail
 import           Control.Monad.Reader                          hiding (fail, fix)
 import           Control.Monad.State                           hiding (fail, fix, state)
-import           Data.List                                     (intersperse)
+import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
 import           Prelude                                       hiding (fail)
 import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
@@ -199,7 +199,9 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
     ExtCns (EC _ _ _) -> errorTermM "External constants not supported"
 
     -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
-    -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil) ...)
+    -- RecordTypeCons fld1 tp1 (... (RecordTypeCons fldn tpn RecordTypeNil)...).
+    -- Note that SAW core equates record types up to reordering, so we sort our
+    -- record types by field name to canonicalize them.
     RecordType fs ->
       foldr (\(name, tp) rest_m ->
               do rest <- rest_m
@@ -207,10 +209,12 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                  return (Coq.App (Coq.Var "RecordTypeCons")
                          [Coq.StringLit name, tp_trans, rest]))
       (return (Coq.Var "RecordTypeNil"))
-      fs
+      (sortOn fst fs)
 
     -- The translation of a record value {fld1 = x1, ..., fldn = xn} is
-    -- RecordCons fld1 x1 (... (RecordCons fldn xn RecordNil) ...)
+    -- RecordCons fld1 x1 (... (RecordCons fldn xn RecordNil) ...). Note that
+    -- SAW core equates record values up to reordering, so we sort our record
+    -- values by field name to canonicalize them.
     RecordValue fs ->
       foldr (\(name, trm) rest_m ->
               do rest <- rest_m
@@ -218,7 +222,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                  return (Coq.App (Coq.Var "RecordCons")
                          [Coq.StringLit name, trm_trans, rest]))
       (return (Coq.Var "RecordNil"))
-      fs
+      (sortOn fst fs)
 
     RecordProj r f -> do
       r_trans <- translateTerm r
