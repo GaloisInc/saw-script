@@ -99,7 +99,6 @@ From Coq          Require Import String.
 From Coq          Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import #{vectorModule}.
-From Records      Require Import Records.
 
 #{extraImports}
 
