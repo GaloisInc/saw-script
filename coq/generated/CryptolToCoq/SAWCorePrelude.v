@@ -4,7 +4,6 @@ From Coq          Require Import String.
 From Coq          Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
-From Records      Require Import Records.
 
 
 
@@ -452,6 +451,8 @@ Definition natCase : forall (p : (((@SAWCoreScaffolding.Nat))) -> Type), (((p) (
 
 Definition if0Nat : forall (a : Type), (((@SAWCoreScaffolding.Nat))) -> (a) -> (a) -> a :=
   (fun (a : Type) (n : ((@SAWCoreScaffolding.Nat))) (x : a) (y : a) => ((@natCase) ((fun (_ : ((@SAWCoreScaffolding.Nat))) => a)) (x) ((fun (_ : ((@SAWCoreScaffolding.Nat))) => y)) (n))).
+
+(* Prelude.equalString was skipped *)
 
 (* Prelude.Vec was skipped *)
 
@@ -932,27 +933,5 @@ Definition letRecM1 : forall (a : Type), forall (b : Type), forall (c : Type), (
 (* Prelude.ite_join_cong was skipped *)
 
 (* Prelude.map_map was skipped *)
-
-(* Prelude.equalString was skipped *)
-
-Definition stringList : Type :=
-  ((@Datatypes.list) (((@SAWCoreScaffolding.String)))).
-
-Definition stringListInsertM : (((@Datatypes.list) (((@SAWCoreScaffolding.String))))) -> (((@SAWCoreScaffolding.String))) -> ((CompM) (((@sigT) (unit) ((fun (_ : unit) => ((@Datatypes.list) (((@SAWCoreScaffolding.String))))))))) :=
-  (fun (l : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (s : ((@SAWCoreScaffolding.String))) => ((((@returnM) (CompM) (_))) (((@sigT) (unit) ((fun (_ : unit) => ((@Datatypes.list) (((@SAWCoreScaffolding.String)))))))) (((@existT) (unit) ((fun (_ : unit) => ((@Datatypes.list) (((@SAWCoreScaffolding.String)))))) (tt) (((@Datatypes.cons) (((@SAWCoreScaffolding.String))) (s) (l))))))).
-
-Definition stringListRemoveM : (((@Datatypes.list) (((@SAWCoreScaffolding.String))))) -> (((@SAWCoreScaffolding.String))) -> ((CompM) (((@sigT) (unit) ((fun (_ : unit) => ((prod) (((@stringList))) (((prod) (((@SAWCoreScaffolding.String))) (unit))))))))) :=
-  (fun (l : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (s : ((@SAWCoreScaffolding.String))) => ((((@returnM) (CompM) (_))) (((@sigT) (unit) ((fun (_ : unit) => ((prod) (((@stringList))) (((prod) (((@SAWCoreScaffolding.String))) (unit)))))))) (((@existT) (unit) ((fun (_ : unit) => ((prod) (((@stringList))) (((prod) (((@SAWCoreScaffolding.String))) (unit)))))) (tt) (((pair) (((@Datatypes.list_rect) (((@SAWCoreScaffolding.String))) ((fun (_ : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) => ((@Datatypes.list) (((@SAWCoreScaffolding.String)))))) (((@Datatypes.nil) (((@SAWCoreScaffolding.String))))) ((fun (s' : ((@SAWCoreScaffolding.String))) (_ : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) (rec : ((@Datatypes.list) (((@SAWCoreScaffolding.String))))) => if ((@SAWCoreScaffolding.equalString) (s) (s')) then rec else ((@Datatypes.cons) (((@SAWCoreScaffolding.String))) (s') (rec)))) (l))) (((pair) (s) (tt))))))))).
-
-Definition string_dup : (((@SAWCoreScaffolding.String))) -> ((prod) (((@SAWCoreScaffolding.String))) (((@SAWCoreScaffolding.String)))) :=
-  (fun (x : ((@SAWCoreScaffolding.String))) => ((pair) (x) (x))).
-
-Inductive ULCTerm : Type :=
-| ULCTerm_Const : (((@bitvector) (64))) -> ((@ULCTerm))
-| ULCTerm_Variable : (((@SAWCoreScaffolding.String))) -> ((@ULCTerm))
-| ULCTerm_Lambda : (((@SAWCoreScaffolding.String))) -> (((@ULCTerm))) -> ((@ULCTerm))
-| ULCTerm_Add : (((@ULCTerm))) -> (((@ULCTerm))) -> ((@ULCTerm))
-| ULCTerm_Call : (((@ULCTerm))) -> (((@ULCTerm))) -> ((@ULCTerm))
-.
 
 End SAWCorePrelude.

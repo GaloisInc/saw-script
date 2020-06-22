@@ -13,8 +13,6 @@ From mathcomp Require Import ssrbool.
 From mathcomp Require Import ssreflect.
 From mathcomp Require Import ssrnat.
 
-From Records Require Import Records.
-
 Import ProperNotations.
 Import SAWCorePrelude.
 

@@ -5,7 +5,6 @@ From Coq          Require Import Lists.List.
 From Coq          Require Import String.
 From Coq          Require Import Vectors.Vector.
 From CryptolToCoq Require Import SAWCoreScaffolding.
-From Records      Require Import Records.
 From CryptolToCoq Require Import SAWCorePrelude.
 Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCorePreludeExtra.
