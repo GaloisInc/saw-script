@@ -61,7 +61,7 @@ data Env = Env
   , envP :: Map C.Prop (Term, [FieldName], Int)
               -- ^ Bound propositions are referenced implicitly by their types
               --   The actual class dictionary we need is obtained by applying the
-              --   given field selctors (in reverse order!) to the term.
+              --   given field selectors (in reverse order!) to the term.
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
   }
@@ -112,8 +112,8 @@ bindProp sc prop env = do
                 }
 
 -- | When we insert a nonerasable prop into the environment, make
---   sure to also insert all it's superclasses.  We arrange it so
---   that every class dictionay contains the implementation of its
+--   sure to also insert all its superclasses.  We arrange it so
+--   that every class dictionary contains the implementation of its
 --   superclass dictionaries, which can be extracted via field projections.
 insertSupers ::
   C.Prop ->
@@ -454,7 +454,7 @@ proveProp sc env prop =
         -- instance Eq ()
         (C.pIsEq -> Just (C.tIsTuple -> Just []))
           -> do scGlobalApply sc "Cryptol.PEqUnit" []
-        -- instance (Cmp a, Cmp b) => Cmp (a, b)
+        -- instance (Eq a, Eq b) => Eq (a, b)
         (C.pIsEq -> Just (C.tIsTuple -> Just [t]))
           -> do proveProp sc env (C.pEq t)
         (C.pIsEq -> Just (C.tIsTuple -> Just (t : ts)))
