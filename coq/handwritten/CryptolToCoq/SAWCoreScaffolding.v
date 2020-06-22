@@ -3,7 +3,7 @@ From Coq Require Import ZArith.BinInt.
 From Coq Require Import ZArith.Zdiv.
 From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
-From Coq Require        Strings.String.
+From Coq Require Import Strings.String.
 From CryptolToCoq Require Export CompM.
 
 Definition sort (n : nat) := Type.
@@ -267,8 +267,6 @@ Definition RecordProj {rtp} (x:rtp) str {tp} `{RecordProjFun str tp rtp} : tp :=
 Arguments RecordProj {rtp} !x str%string_scope {tp} {_}.
 
 (* Some tests *)
-Definition recordType1 :=
-  RecordTypeCons "fld1" Nat (RecordTypeCons "flds2" Bool RecordTypeNil).
 
 Definition recordTest1 := RecordCons "fld1" 0 (RecordCons "fld2" true RecordNil).
 (* Check recordTest1. *)
