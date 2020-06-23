@@ -1986,7 +1986,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_llvm_verify_x86"
-    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify_x86)
     Experimental
     [ "Verify an x86 function from an ELF file for use as an override in an"
