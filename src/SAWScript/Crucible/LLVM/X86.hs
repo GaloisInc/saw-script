@@ -541,7 +541,7 @@ assumePointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   X86Sim ()
-assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
+assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr (ConcreteSizeValue tval)) = do
   when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
   sym <- use x86Sym
   cc <- use x86CrucibleContext
@@ -685,7 +685,7 @@ assertPointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr texpected) = do
+assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr (ConcreteSizeValue texpected)) = do
   when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
   sym <- use x86Sym
   opts <- use x86Options

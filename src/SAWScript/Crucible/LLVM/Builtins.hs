@@ -308,7 +308,7 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
                 (\(_, setup_value) -> setupValueAsExtCns setup_value)
                 (Map.elems $ method_spec ^. MS.csArgBindings)
           let reference_input_parameters = mapMaybe
-                (\(LLVMPointsTo _ _ _ setup_value) -> setupValueAsExtCns setup_value)
+                (\(LLVMPointsTo _ _ _ setup_value) -> llvmPointsToValueAsExtCns setup_value)
                 (method_spec ^. MS.csPreState ^. MS.csPointsTos)
           let input_parameters = nub $ value_input_parameters ++ reference_input_parameters
           let pre_free_variables = Map.fromList $
@@ -329,7 +329,7 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
                   Nothing -> Nothing
           let reference_output_parameters =
                 mapMaybe
-                (\(LLVMPointsTo _ _ _ setup_value) -> setupValueAsExtCns setup_value)
+                (\(LLVMPointsTo _ _ _ setup_value) -> llvmPointsToValueAsExtCns setup_value)
                 (method_spec ^. MS.csPostState ^. MS.csPointsTos)
           let output_parameters =
                 nub $ filter (isNothing . (Map.!?) pre_free_variables) $
@@ -376,12 +376,15 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
                 , Just x <- output_parameter_substitution Map.!? ext_cns =
                   SetupTerm x
                 | otherwise = setup_value
+          let substitute_output_parameter' = \case
+                ConcreteSizeValue val -> ConcreteSizeValue $ substitute_output_parameter val
+                SymbolicSizeValue{} -> undefined
 
           let extracted_method_spec =
                 res_method_spec &
                 MS.csRetValue %~ fmap substitute_output_parameter &
                 MS.csPostState . MS.csPointsTos %~ map
-                  (\(LLVMPointsTo x y z setup_value) -> LLVMPointsTo x y z $ substitute_output_parameter setup_value)
+                  (\(LLVMPointsTo x y z setup_value) -> LLVMPointsTo x y z $ substitute_output_parameter' setup_value)
 
           typed_extracted_func_const <- io $ mkTypedTerm shared_context extracted_func_const
           modify' $
@@ -398,6 +401,12 @@ setupValueAsExtCns =
   \case
     SetupTerm term -> asExtCns $ ttTerm term
     _ -> Nothing
+
+llvmPointsToValueAsExtCns :: LLVMPointsToValue arch -> Maybe (ExtCns Term)
+llvmPointsToValueAsExtCns =
+  \case
+    ConcreteSizeValue val -> setupValueAsExtCns val
+    SymbolicSizeValue{} -> undefined
 
 -- | Check that all the overrides/lemmas were actually from this module
 checkModuleCompatibility ::
@@ -1904,7 +1913,7 @@ crucible_points_to_internal _bic _opt typed cond (getAllLLVM -> ptr) (getAllLLVM
             _ -> throwCrucibleSetup loc $ "lhs not a pointer type: " ++ show ptrTy
           valTy <- typeOfSetupValue cc env nameEnv val
           when typed (checkMemTypeCompatibility loc lhsTy valTy)
-          Setup.addPointsTo (LLVMPointsTo loc cond ptr val)
+          Setup.addPointsTo (LLVMPointsTo loc cond ptr $ ConcreteSizeValue val)
 
 crucible_equal ::
   BuiltinContext ->
