@@ -84,7 +84,7 @@ jobs:
         - mkdir -p s2n/test-deps/saw/bin
         - cp bin/saw s2n/test-deps/saw/bin
         - cd s2n
-        - git checkout 28ea0fea9ab7dc710c9424d9b869b39ca3804d79
+        - git checkout cd7282102bf5e65cc8b324c4127c7943c71c8513
       before_script:
         - export TESTS=sawHMAC
       script:
