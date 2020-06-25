@@ -146,7 +146,7 @@ typedTermOfString :: String -> TypedTerm
 typedTermOfString cs = TypedTerm schema trm
   where
     nat :: Integer -> Term
-    nat n = Unshared (FTermF (NatLit n))
+    nat n = Unshared (FTermF (NatLit (fromInteger n)))
     bvNat :: Term
     bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
     bvNat8 :: Term
