@@ -472,6 +472,7 @@ buildTopLevelEnv proxy opts =
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
                    , rwProfilingFile = Nothing
+                   , rwLaxArith = False
                    }
        return (bic, ro0, rw0)
 
@@ -510,6 +511,11 @@ enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwProfilingFile = Just f }
+
+enable_lax_arithmetic :: TopLevel ()
+enable_lax_arithmetic = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwLaxArith = True }
 
 disable_crucible_profiling :: TopLevel ()
 disable_crucible_profiling = do
@@ -673,6 +679,11 @@ primitives = Map.fromList
     (pureVal enable_smt_array_memory_model)
     Current
     [ "Enable the SMT array memory model." ]
+
+  , prim "enable_lax_arithmetic" "TopLevel ()"
+    (pureVal enable_lax_arithmetic)
+    Current
+    [ "Enable lax rules for arithmetic overflow in Crucible." ]
 
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
@@ -1867,7 +1878,10 @@ primitives = Map.fromList
   , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
     (bicVal crucible_alloc_global)
     Current
-    []
+    [ "Declare that memory for the named global should be allocated in a"
+    , "Crucible specification. This is done implicitly for immutable globals."
+    , "A pointer to the allocated memory may be obtained using `crucible_global`."
+    ]
 
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_fresh_pointer)

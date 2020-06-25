@@ -2107,6 +2107,21 @@ specifies the name of an object field.
 
 ## Global variables
 
+Mutable global variables that are accessed in a function must first be allocated
+by calling `crucible_alloc_global` on the name of the global.
+
+* `crucible_alloc_global : String -> CrucibleSetup ()`
+
+This ensures that all global variables that might influence the function are
+accounted for explicitly in the specification: if `crucible_alloc_global` is
+used in the precondition, there must be a corresponding `crucible_points_to`
+in the postcondition describing the new state of that global. Otherwise, a
+specification might not fully capture the behavior of the function, potentially
+leading to unsoundness in the presence of compositional verification.
+
+Immutable (i.e. `const`) global variables are allocated implicitly, and do not
+require a call to `crucible_alloc_global`.
+
 Pointers to global variables or functions can be accessed with
 `crucible_global`:
 
