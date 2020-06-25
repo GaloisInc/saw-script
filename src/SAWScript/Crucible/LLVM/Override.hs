@@ -109,6 +109,7 @@ import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
+import qualified Data.BitVector.Sized as BV
 
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.SharedTerm
@@ -1353,7 +1354,19 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
                       --                          , "from each matching write failed"
                       --                          ])
                       -- PP.<$$> PP.text (show err)
-       SymbolicSizeValue{} -> undefined
+       SymbolicSizeValue expected_arr_tm expected_sz_tm ->
+         do maybe_allocation_array <- liftIO $
+              Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr1 (Crucible.memImplHeap mem)
+            case maybe_allocation_array of
+              Just (arr, sz)
+                | Crucible.LLVMPointer _ off <- ptr1
+                , Just 0 <- BV.asUnsigned <$> W4.asBV off ->
+                do arr_tm <- liftIO $ Crucible.toSC sym arr
+                   matchTerm sc cc (spec ^. MS.csLoc) prepost arr_tm (ttTerm expected_arr_tm)
+                   sz_tm <- liftIO $ Crucible.toSC sym sz
+                   matchTerm sc cc (spec ^. MS.csLoc) prepost sz_tm (ttTerm expected_sz_tm)
+                   return Nothing
+              _ -> return $ Just $ PP.text ""
 
 ------------------------------------------------------------------------
 
@@ -1471,15 +1484,15 @@ invalidateMutableAllocs opts sc cc cs = do
       _ -> pure Nothing
 
   -- set of (concrete base pointer, size) for each postcondition memory write
-  postPtrs <- Set.fromList <$> mapM
+  postPtrs <- Set.fromList <$> catMaybes <$> mapM
     (\(LLVMPointsTo _loc _cond ptr val) -> case val of
       ConcreteSizeValue val' -> do
         (_, Crucible.LLVMPointer blk _) <- resolveSetupValue opts cc sc cs Crucible.PtrRepr ptr
         sz <- (return . Crucible.storageTypeSize)
           =<< Crucible.toStorableType
           =<< typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val'
-        return (W4.asNat blk, sz)
-      SymbolicSizeValue{} -> undefined)
+        return $ Just (W4.asNat blk, sz)
+      SymbolicSizeValue{} -> return Nothing)
     (cs ^. MS.csPostState ^. MS.csPointsTos)
 
   -- partition allocations into those overwritten by a postcondition write
@@ -1644,7 +1657,15 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
               val'' <- X.handle (handleException opts) $
                 resolveSetupVal cc mem env tyenv nameEnv val'
               Crucible.storeConstRaw sym mem ptr storTy alignment val''
-        SymbolicSizeValue{} -> undefined
+        SymbolicSizeValue arr_tm sz_tm -> do
+          arr <- Crucible.bindSAWTerm
+            sym
+            (W4.BaseArrayRepr
+              (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
+              (W4.BaseBVRepr (W4.knownNat @8)))
+            (ttTerm arr_tm)
+          sz <- resolveSAWSymBV cc ?ptrWidth $ ttTerm sz_tm
+          Crucible.doArrayConstStore sym mem ptr alignment arr sz
 
   case maybe_cond of
     Just cond -> case maybe_invalidate_msg of
