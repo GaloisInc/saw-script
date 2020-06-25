@@ -581,7 +581,8 @@ importPrimitive sc (C.asPrim -> Just nm) =
     "ceiling"       -> scGlobalDef sc "Cryptol.ecCeiling"     -- {a} (Round a) => a -> Integer
     "floor"         -> scGlobalDef sc "Cryptol.ecFloor"       -- {a} (Round a) => a -> Integer
     "trunc"         -> scGlobalDef sc "Cryptol.ecTruncate"    -- {a} (Round a) => a -> Integer
-    "round"         -> scGlobalDef sc "Cryptol.ecRound"       -- {a} (Round a) => a -> Integer
+    "roundAway"     -> scGlobalDef sc "Cryptol.ecRoundAway"   -- {a} (Round a) => a -> Integer
+    "roundToEven"   -> scGlobalDef sc "Cryptol.ecRoundToEven" -- {a} (Round a) => a -> Integer
 
     -- Eq
     "=="            -> scGlobalDef sc "Cryptol.ecEq"          -- {a} (Eq a) => a -> a -> Bit

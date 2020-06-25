@@ -848,12 +848,13 @@ PField a =
 
 PRound : sort 0 -> sort 1;
 PRound a =
-  #{ roundField : PField a
-   , roundCmp   : PCmp a
-   , floor      : a -> Integer
-   , ceiling    : a -> Integer
-   , trunc      : a -> Integer
-   , round      : a -> Integer
+  #{ roundField  : PField a
+   , roundCmp    : PCmp a
+   , floor       : a -> Integer
+   , ceiling     : a -> Integer
+   , trunc       : a -> Integer
+   , roundAway   : a -> Integer
+   , roundToEven : a -> Integer
    };
 
 -- TODO Round class instances
@@ -947,8 +948,11 @@ ecFloor a pr = pr.floor;
 ecTruncate : (a: sort 0) -> PRound a -> a -> Integer;
 ecTruncate a pr = pr.trunc;
 
-ecRound : (a: sort 0) -> PRound a -> a -> Integer;
-ecRound a pr = pr.round;
+ecRoundAway : (a: sort 0) -> PRound a -> a -> Integer;
+ecRoundAway a pr = pr.roundAway;
+
+ecRoundToEven : (a: sort 0) -> PRound a -> a -> Integer;
+ecRoundToEven a pr = pr.roundToEven;
 
 -- Bitvector ops
 
