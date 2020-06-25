@@ -59,6 +59,7 @@ module SAWScript.X86Spec
 import GHC.TypeLits(KnownNat)
 import GHC.Natural(Natural)
 import Data.Kind(Type)
+import Control.Applicative ( (<|>) )
 import Control.Lens (view, (^.), over)
 import Control.Monad(foldM,zipWithM,join)
 import Data.List(sortBy)
@@ -80,10 +81,10 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Pair
 
-import Data.Foldable(toList)
+import Data.Foldable(foldlM, toList)
 
 import What4.Interface
-          (bvLit,isEq, Pred, notPred, orPred
+          (bvLit,isEq, Pred, notPred, orPred, natEq
           , bvUle, truePred, natLit, asNat, andPred, userSymbol, freshConstant )
 import What4.ProgramLoc
 
@@ -95,6 +96,7 @@ import SAWScript.Crucible.LLVM.CrucibleLLVM
   , pattern LLVMPointerRepr, doMalloc, storeConstRaw, packMemValue
   , LLVMPointerType, LLVMVal(LLVMValInt)
   , ptrEq, LLVMPtr, ppPtr, llvmPointerView, projectLLVM_bv, llvmPointer_bv
+  , muxLLVMPtr
   , bitvectorType
   , Bytes, bytesToInteger, toBytes
   , StorageType
@@ -977,15 +979,42 @@ checkAlloc sym s (l := a) =
      p3 <- adjustPtr sym mem p2 siI
      return (p2,p3)
 
-
+-- | Implements a layer to map 'LLVMPtr's to their underlying allocations, as
+-- tracked by the 'RegionIndex' map
+--
+-- NOTE: If the initial obvious mapping (where the concrete nat is in the map)
+-- fails, there are two possibilities:
+--
+-- 1. The region ID is concrete but not in the map.  We should just pass it
+--    through without modifying it, since it is a valid LLVM pointer
+-- 2. The region ID is symbolic.  In this case, we need to generate a mux that
+--    dispatches to the entries in the map when they match, or otherwise passes
+--    the pointer through untouched.
+--
+-- If the region ID is concretely zero, it should be the case that the
+-- 'RegionIndex' map would translate it into a real 'LLVMPtr' since the only map
+-- entry (established in 'setupGlobals') is for 0.
 mkGlobalMap :: Map.Map RegionIndex (LLVMPtr Sym 64) -> GlobalMap Sym 64
-mkGlobalMap rmap sym mem region off = sequence (addOffset <$> thisRegion)
+mkGlobalMap rmap sym mem region off =
+  mapConcreteRegion <|> passThroughConcreteRegion <|> mapSymbolicRegion
   where
+    mapConcreteRegion = maybe mzero id (addOffset <$> thisRegion)
     thisRegion = join (findRegion <$> asNat region)
     findRegion r = Map.lookup (fromIntegral r) rmap
     addOffset p = doPtrAddOffset sym mem p off
       where ?ptrWidth = knownNat
-
+    passThroughConcreteRegion =
+      case asNat region of
+        Nothing -> mzero
+        Just _ -> return (LLVMPointer region off)
+    -- If the symbolic nat is (symbolically) equal to any of the entries in the
+    -- rmap, we need to do the translation; otherwise, we pass it through
+    mapSymbolicRegion = foldlM muxSymbolicRegion (LLVMPointer region off) (Map.toList rmap)
+    muxSymbolicRegion others (regionNum, basePtr) = do
+      thisRegionNat <- natLit sym (fromIntegral regionNum)
+      isEqRegion <- natEq sym thisRegionNat region
+      adjustedPtr <- addOffset basePtr
+      muxLLVMPtr sym isEqRegion adjustedPtr others
 
 -- | Setup globals in a single read-only region (index 0).
 setupGlobals ::

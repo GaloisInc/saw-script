@@ -120,6 +120,7 @@ module SAWScript.Crucible.LLVM.CrucibleLLVM
   , mkNullPointer
   , ptrIsNull
   , ptrEq
+  , muxLLVMPtr
   , pattern PtrWidth
   , llvmPointerView
   , llvmPointer_bv
@@ -175,6 +176,7 @@ import Lang.Crucible.LLVM.MemModel
    pattern LLVMPointerRepr, LLVMPointerType,
    pattern PtrWidth, llvmPointer_bv, withPtrWidth, pattern LLVMPointer, pattern PtrRepr,
    llvmPointerView, projectLLVM_bv,
+   muxLLVMPtr,
    storageTypeF, StorageType, StorageTypeF(..),
    storageTypeSize, toStorableType, fieldVal, bitvectorType, fieldPad, arrayType,
    mkStructType, AllocType(HeapAlloc, GlobalAlloc), Mutability(..))

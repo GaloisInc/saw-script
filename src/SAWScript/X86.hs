@@ -19,7 +19,7 @@ module SAWScript.X86
   , RelevantElf(..)
   , getElf
   , getRelevant
-  , findSymbol
+  , findSymbols
   , posFn
   , loadGlobal
   ) where
@@ -451,13 +451,20 @@ doSim opts elf sfs name (globs,overs) st checkPost =
      execResult <- statusBlock "  Simulating... " $ do
        let crucRegTypes = crucArchRegTypes x86
        let macawStructRepr = StructRepr crucRegTypes
+       -- The global pointer validity predicate is required if your memory
+       -- representation has gaps that are not supposed to be mapped and you
+       -- want to verify that no memory accesses touch unmapped regions.
+       --
+       -- The memory setup for this verifier does not have that problem, and
+       -- thus does not need any additional validity predicates.
+       let noExtraValidityPred _ _ _ _ = return Nothing
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
            ctx = SimContext { _ctxSymInterface = sym
                               , ctxSolverProof = \a -> a
                               , ctxIntrinsicTypes = llvmIntrinsicTypes
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
-                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym)
+                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym) noExtraValidityPred
                               , _functionBindings =
                                    insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) $
                                    emptyHandleMap
