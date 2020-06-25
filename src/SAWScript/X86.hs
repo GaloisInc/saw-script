@@ -10,11 +10,18 @@ module SAWScript.X86
   , Fun(..)
   , Goal(..)
   , gGoal
+  , getGoals
   , X86Error(..)
   , X86Unsupported(..)
   , SharedContext
   , CallHandler
   , Sym
+  , RelevantElf(..)
+  , getElf
+  , getRelevant
+  , findSymbol
+  , posFn
+  , loadGlobal
   ) where
 
 
