@@ -123,7 +123,6 @@ library
     SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
-    SAWScript.SAWCorePrimitives
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU
