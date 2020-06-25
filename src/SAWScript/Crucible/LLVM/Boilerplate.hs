@@ -14,7 +14,6 @@ module SAWScript.Crucible.LLVM.Boilerplate
 
 import System.IO
 
-import Control.Exception (Exception)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
 

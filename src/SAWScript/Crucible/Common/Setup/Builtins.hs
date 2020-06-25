@@ -13,7 +13,7 @@ module SAWScript.Crucible.Common.Setup.Builtins where
 import           Control.Lens
 import           Control.Monad (when)
 import           Control.Monad.State (get)
-import           Control.Monad.Fail (MonadFail)
+import qualified Control.Monad.Fail as Fail
 import qualified Data.Map as Map
 
 import qualified What4.ProgramLoc as W4
@@ -32,7 +32,7 @@ import           SAWScript.Crucible.Common.Setup.Type
 -- TODO: crucible_fresh_var?
 
 crucible_precond ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   W4.ProgramLoc ->
   TypedTerm ->
   CrucibleSetupT ext m ()
@@ -43,7 +43,7 @@ crucible_precond loc p = do
   addCondition (MS.SetupCond_Pred loc p)
 
 crucible_postcond ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   W4.ProgramLoc ->
   TypedTerm ->
   CrucibleSetupT ext m ()
@@ -54,7 +54,7 @@ crucible_postcond loc p = do
   addCondition (MS.SetupCond_Pred loc p)
 
 crucible_return ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   BuiltinContext ->
   Options ->
   MS.SetupValue ext ->

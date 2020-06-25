@@ -103,6 +103,7 @@ import SAWScript.Crucible.LLVM.CrucibleLLVM
   , noAlignment
   , pattern LLVMPointer
   )
+import qualified Lang.Crucible.LLVM.MemModel as Crucible
 
 import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
@@ -423,6 +424,8 @@ locRepr l =
         M.BVTypeRepr w -> LLVMPointerRepr w
         M.BoolTypeRepr -> BoolRepr
         M.TupleTypeRepr {} -> error $ "[locRepr] Unexpected tuple register"
+        M.FloatTypeRepr {} -> error $ "[locRepr] Unexpected float register"
+        M.VecTypeRepr {} -> error $ "[locRepr] Unexpected vector register"
 
 --------------------------------------------------------------------------------
 
@@ -467,7 +470,7 @@ freshVal sym t ptrOk nm =
       Left err -> error ("Invalid symbol name " ++ show s ++ ": " ++ show err)
       Right a -> return a
 
-getLoc :: Loc t -> Sym -> State -> IO (RegValue Sym t)
+getLoc :: Crucible.HasLLVMAnn Sym => Loc t -> Sym -> State -> IO (RegValue Sym t)
 getLoc l =
   case l of
 
@@ -493,7 +496,7 @@ ptrTy wb
 llvmBytes :: NatRepr w -> StorageType
 llvmBytes w = bitvectorType (toBytes (natValue w))
 
-setLoc :: Loc t -> Sym -> RegValue Sym t -> State -> IO State
+setLoc :: Crucible.HasLLVMAnn Sym => Loc t -> Sym -> RegValue Sym t -> State -> IO State
 setLoc l =
 
   case l of
@@ -521,7 +524,7 @@ setLoc l =
 
 class Eval p where
   type S p
-  eval :: V p t -> Opts -> S p -> IO (RegValue Sym t)
+  eval :: Crucible.HasLLVMAnn Sym => V p t -> Opts -> S p -> IO (RegValue Sym t)
   curState :: f p -> S p -> State
   setCurState :: f p -> State -> S p -> S p
 
@@ -554,7 +557,7 @@ instance Eval Post where
   curState _ (_,s) = s
   setCurState _ s (s1,_) = (s1,s)
 
-evalCry :: forall p. Eval p => Opts -> CryArg p -> S p -> IO Term
+evalCry :: forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> CryArg p -> S p -> IO Term
 evalCry opts cry s =
   case cry of
     CryNat n -> do sc <- sawBackendSharedContext sym
@@ -582,7 +585,7 @@ evalCry opts cry s =
   sym = optsSym opts
 
 evalCryFunGen ::
-  Eval p =>
+  (Eval p, Crucible.HasLLVMAnn Sym) =>
   Opts ->
   S p ->
   BaseTypeRepr t ->
@@ -596,7 +599,7 @@ evalCryFunGen opts s ty f xs =
 
 -- | Cryptol function that returns a list of bit-vectors.
 evalCryFunArr ::
-  (1 <= w, Eval p) =>
+  (1 <= w, Eval p, Crucible.HasLLVMAnn Sym) =>
   Opts ->
   S p ->
   Integer ->
@@ -619,7 +622,7 @@ evalCryFunArr opts s n w f xs =
 
 -- | Cryptol function that returns a bitvector of the given len
 evalCryFun ::
-  (1 <= w, Eval p) =>
+  (1 <= w, Eval p, Crucible.HasLLVMAnn Sym) =>
   Opts ->
   S p ->
   NatRepr w ->
@@ -629,7 +632,7 @@ evalCryFun ::
 evalCryFun opts s w f xs =
   llvmPointer_bv (optsSym opts) =<< evalCryFunGen opts s (BaseBVRepr w) f xs
 
-evalProp :: Eval p => Opts -> Prop p -> S p -> IO (Pred Sym)
+evalProp :: (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> Prop p -> S p -> IO (Pred Sym)
 evalProp opts p s =
   case p of
     Same t x y ->
@@ -653,7 +656,7 @@ evalProp opts p s =
 
 
 readArr :: forall w p.
-  (1 <= w, Eval p) =>
+  (1 <= w, Eval p, Crucible.HasLLVMAnn Sym) =>
   Opts ->
   V p (LLVMPointerType 64) ->
   Integer ->
@@ -688,7 +691,7 @@ evalSame sym t v1 v2 =
 
 
 -- | Add an assertion to the post-condition.
-doAssert :: Eval p => Opts -> S p -> (String, Prop p) -> IO ()
+doAssert :: (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> (String, Prop p) -> IO ()
 doAssert opts s (msg,p) =
   do pr <- evalProp opts p s
      assert (optsSym opts) pr (AssertFailureSimError msg "")
@@ -789,7 +792,7 @@ getEq (_,p) mp =
     Same t v       (Loc x) -> addEqLocVal t x v mp
     _                      -> mp
 
-makeEquiv :: forall p. Eval p => Opts -> S p -> Pair Rep (Equiv p) -> IO (S p)
+makeEquiv :: forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> Pair Rep (Equiv p) -> IO (S p)
 makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
   do -- Note that (at least currently) the `ys` do not
      -- depend on the current state: they are all either `Lit`
@@ -836,12 +839,12 @@ makeEquiv opts s (Pair (Rep t _) (Equiv xs ys)) =
      return (setCurState pName s1 s)
 
 
-makeEquivs :: Eval p => Opts -> RepMap p -> S p -> IO (S p)
+makeEquivs :: (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> RepMap p -> S p -> IO (S p)
 makeEquivs opts mp s = foldM (makeEquiv opts) s (MapF.toList (repBy mp))
 
 
 
-addAsmp :: Eval p => Opts -> S p -> (String,Prop p) -> IO ()
+addAsmp :: (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> (String,Prop p) -> IO ()
 addAsmp opts s (msg,p) =
   case p of
     Same _ (Loc _) _ -> return ()
@@ -852,7 +855,7 @@ addAsmp opts s (msg,p) =
             let loc = mkProgramLoc "<addAssmp>" InternalPos -- FIXME
             addAssumption (optsSym opts) (LabeledPred p' (AssumptionReason loc msg))
 
-setCryPost :: forall p. Eval p => Opts -> S p -> (String,Prop p) -> IO (S p)
+setCryPost :: forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> (String,Prop p) -> IO (S p)
 setCryPost opts s (_nm,p) =
   case p of
     CryPostMem ptr n u f xs ->
@@ -880,7 +883,7 @@ setCryPost opts s (_nm,p) =
 
 
 addAssumptions ::
-  forall p. Eval p => Opts -> S p -> [(String, Prop p)] -> IO State
+  forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> S p -> [(String, Prop p)] -> IO State
 addAssumptions opts s0 ps =
   do let mp = foldr getEq emptyRepMap ps
      s1 <- makeEquivs opts mp s0
@@ -892,7 +895,7 @@ addAssumptions opts s0 ps =
 --------------------------------------------------------------------------------
 
 -- | Allocate a memory region.
-allocate :: Sym -> Area -> State -> IO (LLVMPtr Sym 64, State)
+allocate :: Crucible.HasLLVMAnn Sym => Sym -> Area -> State -> IO (LLVMPtr Sym 64, State)
 allocate sym ar s =
   case areaMode ar of
     RO -> do (base,p,m1) <- alloc Immutable
@@ -923,8 +926,10 @@ allocate sym ar s =
   names = [ areaName ar ++ "_" ++ show uni ++ "_" ++ show i
           | i <- take (fromInteger num) [ 0 :: Int .. ] ]
 
-fillFresh :: Sym -> Bool -> LLVMPtr Sym 64 -> Unit ->
-                [String] -> MemImpl Sym -> IO (MemImpl Sym)
+fillFresh ::
+  Crucible.HasLLVMAnn Sym =>
+  Sym -> Bool -> LLVMPtr Sym 64 -> Unit ->
+  [String] -> MemImpl Sym -> IO (MemImpl Sym)
 fillFresh sym ptrOk p u todo mem =
   unitByteSize u $ \w ->
   case todo of
@@ -944,7 +949,7 @@ fillFresh sym ptrOk p u todo mem =
 
 
 -- | Make an allocation.  Used when verifying.
-doAlloc :: Sym -> State -> Alloc -> IO State
+doAlloc :: Crucible.HasLLVMAnn Sym => Sym -> State -> Alloc -> IO State
 doAlloc sym s (l := a) =
   do (p,s1) <- allocate sym a s
      setLoc l sym p s1
@@ -952,6 +957,7 @@ doAlloc sym s (l := a) =
 -- | Fill-in a memory area with fresh values.
 -- This has no effect if the area is RO.
 clobberArea ::
+  Crucible.HasLLVMAnn Sym =>
   Sym -> MemImpl Sym -> LLVMPtr Sym 64 -> Area -> IO (MemImpl Sym)
 clobberArea sym mem p ar =
   case areaMode ar of
@@ -968,7 +974,7 @@ clobberArea sym mem p ar =
 -- | Lookup the value for an allocation in the existing state.
 -- Used when overriding.
 -- Returns the start and end of the allocation.
-checkAlloc :: Sym -> State -> Alloc -> IO (LLVMPtr Sym 64, LLVMPtr Sym 64)
+checkAlloc :: Crucible.HasLLVMAnn Sym => Sym -> State -> Alloc -> IO (LLVMPtr Sym 64, LLVMPtr Sym 64)
 checkAlloc sym s (l := a) =
   do p1 <- getLoc l sym s
      let mem = stateMem s
@@ -994,7 +1000,7 @@ checkAlloc sym s (l := a) =
 -- If the region ID is concretely zero, it should be the case that the
 -- 'RegionIndex' map would translate it into a real 'LLVMPtr' since the only map
 -- entry (established in 'setupGlobals') is for 0.
-mkGlobalMap :: Map.Map RegionIndex (LLVMPtr Sym 64) -> GlobalMap Sym 64
+mkGlobalMap :: Map.Map RegionIndex (LLVMPtr Sym 64) -> GlobalMap Sym Crucible.Mem 64
 mkGlobalMap rmap sym mem region off =
   mapConcreteRegion <|> passThroughConcreteRegion <|> mapSymbolicRegion
   where
@@ -1018,11 +1024,12 @@ mkGlobalMap rmap sym mem region off =
 
 -- | Setup globals in a single read-only region (index 0).
 setupGlobals ::
+  Crucible.HasLLVMAnn Sym =>
   Opts ->
   [(String,Integer,Unit,[Integer])] ->
   [(String,Integer,Int -> Specification)] ->
   State ->
-  IO ((GlobalMap Sym 64, Overrides), State)
+  IO ((GlobalMap Sym Crucible.Mem 64, Overrides), State)
 setupGlobals opts gs fs s
   | null regions && null fs = return ((mkGlobalMap Map.empty, Map.empty), s)
 
@@ -1139,9 +1146,10 @@ type Overrides = Map (Natural,Integer) (Sym -> LookupFunctionHandle Sym X86_64)
 -- | Use a specification to verify a function.
 -- Returns the initial state for the function, and a post-condition.
 verifyMode ::
+  Crucible.HasLLVMAnn Sym =>
   Specification ->
   Opts ->
-  IO ( (GlobalMap Sym 64, Overrides)
+  IO ( (GlobalMap Sym Crucible.Mem 64, Overrides)
      , State
      , State -> IO ()
      )
@@ -1155,7 +1163,7 @@ verifyMode spec opts =
      return (globs, s3, post)
 
 -- | Ensure that writable areas do not overlap with any other areas.
-checkOverlaps :: Sym -> [((LLVMPtr Sym 64, LLVMPtr Sym 64), Area)] -> IO ()
+checkOverlaps :: Crucible.HasLLVMAnn Sym => Sym -> [((LLVMPtr Sym 64, LLVMPtr Sym 64), Area)] -> IO ()
 checkOverlaps sym = check
   where
   check (p : ps) = mapM_ (nonOverLap p) ps >> check ps
@@ -1182,7 +1190,7 @@ checkOverlaps sym = check
        assert sym ok $ AssertFailureSimError msg ""
 
 -- | Use a specification to replace the execution of a function.
-overrideMode :: Specification -> Opts -> State -> IO State
+overrideMode :: Crucible.HasLLVMAnn Sym => Specification -> Opts -> State -> IO State
 overrideMode spec opts s =
   do let sym = optsSym opts
      let orderedAllocs = sortBy cmpAlloc (specAllocs spec)

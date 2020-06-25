@@ -24,8 +24,9 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
   , equalValsPred
   ) where
 
-import Control.Lens
-import Data.IORef
+import           Control.Lens
+import qualified Control.Monad.Fail as Fail
+import           Data.IORef
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (absurd)
@@ -86,7 +87,7 @@ type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
 type SetupValue = MS.SetupValue CJ.JVM
 
 typeOfSetupValue ::
-  Monad m =>
+  Fail.MonadFail m =>
   JVMCrucibleContext ->
   Map AllocIndex (W4.ProgramLoc, Allocation) ->
   Map AllocIndex JIdent ->
@@ -200,6 +201,8 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unsupported record type"
     Cryptol.TVFun _ _ ->
       fail "resolveSAWTerm: unsupported function type"
+    Cryptol.TVAbstract _ _ ->
+      fail "resolveSAWTerm: unsupported abstract type"
   where
     sym = cc^.jccBackend
 
@@ -264,6 +267,7 @@ toJVMType tp =
     Cryptol.TVTuple _tps -> Nothing
     Cryptol.TVRec _flds -> Nothing
     Cryptol.TVFun _ _ -> Nothing
+    Cryptol.TVAbstract _ _ -> Nothing
 
 equalValsPred ::
   JVMCrucibleContext ->

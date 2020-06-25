@@ -44,8 +44,6 @@ import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizeP
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
 
-import qualified Text.LLVM.AST as L
-
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Position as SS
 import SAWScript.AST (Located(..),Import(..))
@@ -94,6 +92,7 @@ import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Eval.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
+import qualified Cryptol.Eval.Concrete.Value as V (Concrete(..))
 import qualified Cryptol.TypeCheck.AST as C
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -474,8 +473,10 @@ buildTopLevelEnv proxy opts =
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
+                   , rwCrucibleAssertThenAssume = False
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
+                   , rwWhat4HashConsing = False
                    }
        return (bic, ro0, rw0)
 
@@ -515,20 +516,40 @@ disable_smt_array_memory_model = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwSMTArrayMemoryModel = False }
 
+enable_crucible_assert_then_assume :: TopLevel ()
+enable_crucible_assert_then_assume = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwCrucibleAssertThenAssume = True }
+
+disable_crucible_assert_then_assume :: TopLevel ()
+disable_crucible_assert_then_assume = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwCrucibleAssertThenAssume = False }
+
 enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwProfilingFile = Just f }
+
+disable_crucible_profiling :: TopLevel ()
+disable_crucible_profiling = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProfilingFile = Nothing }
 
 enable_lax_arithmetic :: TopLevel ()
 enable_lax_arithmetic = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxArith = True }
 
-disable_crucible_profiling :: TopLevel ()
-disable_crucible_profiling = do
+enable_what4_hash_consing :: TopLevel ()
+enable_what4_hash_consing = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwProfilingFile = Nothing }
+  putTopLevelRW rw { rwWhat4HashConsing = True }
+
+disable_what4_hash_consing :: TopLevel ()
+disable_what4_hash_consing = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4HashConsing = False }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -568,7 +589,7 @@ print_value (VTerm t) = do
                               , V.useBase = ppOptsBase opts
                               }
   evaled_t <- io $ evaluateTypedTerm sc t'
-  doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' evaled_t)
+  doc <- io $ V.runEval quietEvalOpts (V.ppValue V.Concrete opts' evaled_t)
   sawOpts <- getOptions
   io (rethrowEvalError $ printOutLn sawOpts Info $ show $ doc)
 
@@ -693,10 +714,30 @@ primitives = Map.fromList
     Current
     [ "Disable the SMT array memory model." ]
 
+ , prim "enable_crucible_assert_then_assume" "TopLevel ()"
+    (pureVal enable_crucible_assert_then_assume)
+    Current
+    [ "Assume predicate after asserting it during Crucible symbolic simulation." ]
+
+  , prim "disable_crucible_assert_then_assume" "TopLevel ()"
+    (pureVal disable_crucible_assert_then_assume)
+    Current
+    [ "Do not assume predicate after asserting it during Crucible symbolic simulation." ]
+
   , prim "enable_lax_arithmetic" "TopLevel ()"
     (pureVal enable_lax_arithmetic)
     Current
     [ "Enable lax rules for arithmetic overflow in Crucible." ]
+
+  , prim "enable_what4_hash_consing" "TopLevel ()"
+    (pureVal enable_what4_hash_consing)
+    Current
+    [ "Enable hash consing for What4 expressions." ]
+
+  , prim "disable_what4_hash_consing" "TopLevel ()"
+    (pureVal disable_what4_hash_consing)
+    Current
+    [ "Disable hash consing for What4 expressions." ]
 
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
@@ -1939,6 +1980,19 @@ primitives = Map.fromList
     Current
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the given value (second argument)."
+    , ""
+    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after crucible_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal crucible_conditional_points_to)
+    Current
+    [ "Declare that the memory location indicated by the given pointer (second"
+    , "argument) contains the given value (third argument) if the given"
+    , "condition (first argument) holds."
     , ""
     , "In the pre-state section (before crucible_execute_func) this specifies"
     , "the initial memory layout before function execution. In the post-state"

@@ -30,16 +30,18 @@ import Control.Exception (catch)
 import Control.Lens (view, (^.))
 import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.State (execStateT)
+import Control.Monad.State
 
 import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Foldable (foldlM, forM_)
+import Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Map as Map
 import Data.Map (Map)
+import Data.Maybe
 
 import qualified Text.LLVM.AST as LLVM
 
@@ -120,6 +122,8 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64
       let sc = biSharedContext bic
+      bbMapRef <- liftIO $ newIORef mempty
+      let ?badBehaviorMap = bbMapRef
       sym <- liftIO $ C.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
       halloc <- getHandleAlloc
       mvar <- liftIO $ C.LLVM.mkMemVar halloc
@@ -153,7 +157,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
       methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) setup
-      (globs :: Macaw.GlobalMap Sym 64, mem, regs, env) <-
+      (globs :: Macaw.GlobalMap Sym C.LLVM.Mem 64, mem, regs, env) <-
         liftIO $ initialMemory sym elf cc maxAddr globsyms methodSpec
 
       let
@@ -294,14 +298,14 @@ llvmSignature opts llvmModule nm =
 
 -- | Given the method spec, build the initial memory, register map, and global map.
 initialMemory ::
-  HasPtrWidth =>
+  X86Constraints =>
   Sym ->
   RelevantElf ->
   LLVMCrucibleContext LLVMArch ->
   Integer {- ^ Minimum size of the global allocation (here, the end of the .text segment -} ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   MS.CrucibleMethodSpecIR LLVM ->
-  IO (Macaw.GlobalMap Sym 64, Mem, Regs, Map MS.AllocIndex Ptr)
+  IO (Macaw.GlobalMap Sym C.LLVM.Mem 64, Mem, Regs, Map MS.AllocIndex Ptr)
 initialMemory sym elf cc endText globsyms ms = do
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
@@ -329,13 +333,13 @@ initialMemory sym elf cc endText globsyms ms = do
 -- | Given an alist of symbol names and sizes (in bytes), allocate space and copy
 -- the corresponding globals from the Macaw memory to the Crucible LLVM memory model.
 setupGlobals ::
-  HasPtrWidth =>
+  X86Constraints =>
   Sym ->
   RelevantElf ->
   Mem ->
   Integer {- ^ Minimum size of the global allocation -} ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
-  IO (Macaw.GlobalMap Sym 64, Mem)
+  IO (Macaw.GlobalMap Sym C.LLVM.Mem 64, Mem)
 setupGlobals sym elf mem endText globsyms = do
   let align = C.LLVM.exponentToAlignment 4
   globs <- mconcat <$> mapM readInitialGlobal globsyms
@@ -366,7 +370,7 @@ setupGlobals sym elf mem endText globsyms = do
 -- address. Note that this function only returns a pointer to the top-of-stack,
 -- and does not set RSP.
 allocateStack ::
-  HasPtrWidth =>
+  X86Constraints =>
   Sym ->
   Mem ->
   Integer {- ^ Stack size in bytes -} ->
@@ -389,7 +393,7 @@ allocateStack sym mem szInt = do
 -- | Process a crucible_alloc statement, allocating the requested memory and
 -- associating a pointer to that memory with the appropriate index.
 executeAllocation ::
-  HasPtrWidth =>
+  X86Constraints =>
   Sym ->
   (Map MS.AllocIndex Ptr, Mem) ->
   (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
@@ -402,7 +406,7 @@ executeAllocation sym (env, mem) (i, LLVMAllocSpec mut _memTy align sz loc) = do
 
 -- | Process a crucible_points_to statement, writing some SetupValue to a pointer.
 executePointsTo ::
-  HasPtrWidth =>
+  X86Constraints =>
   Sym ->
   LLVMCrucibleContext LLVMArch ->
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
@@ -411,7 +415,8 @@ executePointsTo ::
   Mem ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   IO Mem
-executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr tval) = do
+executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ cond tptr tval) = do
+  when (isJust cond) $ fail "unsupported x86_64 command: crucible_conditional_points_to"
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   val <- resolveSetupVal cc mem env tyenv Map.empty tval
@@ -421,7 +426,7 @@ executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr tval) = do
 -- | Write each SetupValue passed to crucible_execute_func to the appropriate
 -- x86_64 register from the calling convention.
 setArgs ::
-  HasPtrWidth =>
+  X86Constraints =>
   Sym ->
   LLVMCrucibleContext LLVMArch ->
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
@@ -463,7 +468,7 @@ setArgs sym cc env tyenv nameEnv mem regs args
 
 -- | Assert the postcondition for the spec, given the final memory and register map.
 assertPost ::
-  HasPtrWidth =>
+  X86Constraints =>
   Sym ->
   Options ->
   LLVMCrucibleContext LLVMArch ->
@@ -496,7 +501,7 @@ assertPost sym opts cc env ms (premem, postmem) (preregs, postregs) = do
 
 -- | Assert that a points-to postcondition holds.
 assertPointsTo ::
-  HasPtrWidth =>
+  X86Constraints =>
   Sym ->
   Options ->
   LLVMCrucibleContext LLVMArch ->
@@ -506,7 +511,8 @@ assertPointsTo ::
   Mem ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   IO ()
-assertPointsTo sym opts cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
+assertPointsTo sym opts cc env tyenv nameEnv mem (LLVMPointsTo _ cond tptr texpected) = do
+  when (isJust cond) $ fail "unsupported x86_64 command: crucible_conditional_points_to"
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   storTy <- C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv texpected
@@ -556,7 +562,7 @@ type Regs = Assignment (C.RegValue' Sym) (Macaw.MacawCrucibleRegTypes Macaw.X86_
 type Register = Macaw.X86Reg (Macaw.BVType 64)
 type Mem = C.LLVM.MemImpl Sym
 type Ptr = C.LLVM.LLVMPtr Sym 64
-type HasPtrWidth = C.LLVM.HasPtrWidth (C.LLVM.ArchWidth LLVMArch)
+type X86Constraints = (C.LLVM.HasPtrWidth (C.LLVM.ArchWidth LLVMArch), C.LLVM.HasLLVMAnn Sym)
 
 setReg ::
   Register ->

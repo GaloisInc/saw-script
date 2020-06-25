@@ -103,7 +103,6 @@ import           Control.Lens
 import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
 import           Data.IORef
-import           Data.Monoid ((<>))
 import           Data.Type.Equality (TestEquality(..))
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
@@ -338,13 +337,14 @@ ccTypeCtx = view CL.llvmTypeCtx . ccLLVMContext
 type instance MS.PointsTo (CL.LLVM arch) = LLVMPointsTo arch
 
 data LLVMPointsTo arch =
-  LLVMPointsTo ProgramLoc (MS.SetupValue (CL.LLVM arch)) (MS.SetupValue (CL.LLVM arch))
+  LLVMPointsTo ProgramLoc (Maybe TypedTerm) (MS.SetupValue (CL.LLVM arch)) (MS.SetupValue (CL.LLVM arch))
 
 ppPointsTo :: LLVMPointsTo arch -> PPL.Doc
-ppPointsTo (LLVMPointsTo _loc ptr val) =
+ppPointsTo (LLVMPointsTo _loc cond ptr val) =
   MS.ppSetupValue ptr
   PPL.<+> PPL.text "points to"
   PPL.<+> MS.ppSetupValue val
+  PPL.<+> maybe PPL.empty (\tt -> PPL.text "if" PPL.<+> MS.ppTypedTerm tt) cond
 
 instance PPL.Pretty (LLVMPointsTo arch) where
   pretty = ppPointsTo

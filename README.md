@@ -161,9 +161,9 @@ project, place the following snippet in the file `src/.dir-locals.el`:
 ## Acknowledgements
 
 Much of the work on SAW has been funded by, and lots of design input was
-provided by the team at the [NSA's Trusted Systems Research
-Group](http://www.nsa.gov/research/ia_research/), including Brad Martin,
-Frank Taylor and Sean Weaver.
+provided by the team at the [NSA's Laboratory for Advanced Cybersecurity
+Research](https://www.nsa.gov/what-we-do/research/cybersecurity-research/),
+including Brad Martin, Frank Taylor, and Sean Weaver.
 
 Portions of SAW are also based upon work supported by the Office
 of Naval Research under Contract No. N68335-17-C-0452. Any opinions,

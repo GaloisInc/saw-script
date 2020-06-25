@@ -46,7 +46,6 @@ import           Data.Foldable (for_)
 import           Data.Function
 import           Data.IORef
 import           Data.List
-import           Data.Monoid ((<>))
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
