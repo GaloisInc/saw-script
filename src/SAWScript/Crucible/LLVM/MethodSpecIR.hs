@@ -64,6 +64,7 @@ import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 
+import           Verifier.SAW.Rewriter (Simpset)
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
 
@@ -211,6 +212,7 @@ data LLVMCrucibleContext arch =
   , _ccBackend         :: Sym
   , _ccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM arch)
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
+  , _ccBasicSS         :: Simpset
   }
 
 makeLenses ''LLVMCrucibleContext

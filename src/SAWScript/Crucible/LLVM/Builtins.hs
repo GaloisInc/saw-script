@@ -1044,6 +1044,7 @@ setupLLVMCrucibleContext bic opts lm@(LLVMModule _ llvm_mod mtrans) action = do
                             , _ccBackend = sym
                             , _ccLLVMSimContext = lsimctx
                             , _ccLLVMGlobals = lglobals
+                            , _ccBasicSS = biBasicSS bic
                             }
       )
 
@@ -1314,7 +1315,9 @@ cryptolTypeOfActual dl mt =
     Crucible.StructType si ->
       do let memtypes = V.toList (Crucible.siFieldTypes si)
          ctys <- traverse (cryptolTypeOfActual dl) memtypes
-         return $ Cryptol.tTuple ctys
+         case ctys of
+           [cty] -> return cty
+           _ -> return $ Cryptol.tTuple ctys
     _ ->
       Nothing
 

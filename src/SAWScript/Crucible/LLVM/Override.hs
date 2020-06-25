@@ -683,8 +683,8 @@ refreshTerms sc ss =
   where
     freshenTerm tt =
       case asExtCns (ttTerm tt) of
-        Just ec -> do new <- liftIO (mkTypedTerm sc =<< scFreshGlobal sc (ecName ec) (ecType ec))
-                      return (termId (ttTerm tt), ttTerm new)
+        Just ec -> do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
+                      return (termId (ttTerm tt), new)
         Nothing -> error "refreshTerms: not a variable"
 
 ------------------------------------------------------------------------
@@ -1060,9 +1060,7 @@ matchTerm sc cc loc prepost real expect =
               , "Expected term: " ++ prettyTerm expect
               , "Actual term:   " ++ prettyTerm real
               ]
-  where prettyTerm term =
-          let pretty_ = show (ppTerm defaultPPOpts term)
-          in if length pretty_ < 200 then pretty_ else "<term omitted due to size>"
+  where prettyTerm = show . ppTermDepth 20
 
 
 ------------------------------------------------------------------------
