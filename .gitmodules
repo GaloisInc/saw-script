@@ -55,6 +55,9 @@
 [submodule "deps/cryptol-specs"]
 	path = deps/cryptol-specs
 	url = https://github.com/galoisinc/cryptol-specs
+[submodule "deps/what4"]
+	path = deps/what4
+	url = https://github.com/GaloisInc/what4.git
 [submodule "deps/saw-core-coq"]
 	path = deps/saw-core-coq
 	url = https://github.com/GaloisInc/saw-core-coq.git
