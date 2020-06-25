@@ -603,8 +603,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   sc <- SV.getSharedContext
   SV.AIGProxy proxy <- SV.getProxy
   io $ do
-  let (vars, concl) = asPiList (unProp (goalProp g))
-  t0 <- scLambdaList sc vars =<< asEqTrue concl
+  t0 <- propToPredicate sc (goalProp g)
   t <- rewriteEqs sc t0
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
   (path, fh) <- openTempFile "." cnfName
