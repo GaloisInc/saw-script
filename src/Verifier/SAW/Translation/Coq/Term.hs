@@ -186,7 +186,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                ++ indices ++ [termEliminated]
          Coq.App rect_var <$> mapM translateTerm args
     Sort s -> pure (Coq.Sort (translateSort s))
-    NatLit i -> pure (Coq.NatLit i)
+    NatLit i -> pure (Coq.NatLit (toInteger i))
     ArrayValue _ vec -> do
       let addElement accum element = do
             elementTerm <- translateTerm element
@@ -229,14 +229,14 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
       return (Coq.App (Coq.Var "RecordProj") [r_trans, Coq.StringLit f])
 
 -- | Recognizes an $App (App "Cryptol.seq" n) x$ and returns ($n$, $x$).
-asSeq :: Fail.MonadFail f => Recognizer f Term (Term, Term)
+asSeq :: Recognizer Term (Term, Term)
 asSeq t = do (f, args) <- asApplyAllRecognizer t
              fid <- asGlobalDef f
              case (fid, args) of
                ("Cryptol.seq", [n, x]) -> return (n,x)
                _ -> Fail.fail "not a seq"
 
-asApplyAllRecognizer :: Fail.MonadFail f => Recognizer f Term (Term, [Term])
+asApplyAllRecognizer :: Recognizer Term (Term, [Term])
 asApplyAllRecognizer t = do _ <- asApp t
                             return $ asApplyAll t
 
