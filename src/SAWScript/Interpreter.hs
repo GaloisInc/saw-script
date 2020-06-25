@@ -507,6 +507,11 @@ enable_smt_array_memory_model = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwSMTArrayMemoryModel = True }
 
+disable_smt_array_memory_model :: TopLevel ()
+disable_smt_array_memory_model = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwSMTArrayMemoryModel = False }
+
 enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
   rw <- getTopLevelRW
@@ -679,6 +684,11 @@ primitives = Map.fromList
     (pureVal enable_smt_array_memory_model)
     Current
     [ "Enable the SMT array memory model." ]
+
+  , prim "disable_smt_array_memory_model" "TopLevel ()"
+    (pureVal disable_smt_array_memory_model)
+    Current
+    [ "Disable the SMT array memory model." ]
 
   , prim "enable_lax_arithmetic" "TopLevel ()"
     (pureVal enable_lax_arithmetic)
@@ -1856,6 +1866,16 @@ primitives = Map.fromList
     , "that the function expects the object to be allocated before it runs."
     , "After `crucible_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
+    ]
+
+  , prim "crucible_alloc_aligned" "Int -> LLVMType -> CrucibleSetup SetupValue"
+    (bicVal crucible_alloc_aligned)
+    Current
+    [ "Declare that a memory region of the given type should be allocated in"
+    , "a Crucible specification, and also specify that the start of the region"
+    , "should be aligned to a multiple of the specified number of bytes (which"
+    , "must be a power of 2). The specified alignment must be no less than the"
+    , "minimum required by the LLVM type."
     ]
 
   , prim "crucible_alloc_readonly" "LLVMType -> CrucibleSetup SetupValue"

@@ -612,12 +612,13 @@ learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWi
           -> PrePost
           -> MS.StateSpec (LLVM arch)
           -> OverrideMatcher (LLVM arch) md ()
-learnCond opts sc cc cs prepost ss = do
-  let loc = cs ^. MS.csLoc
-  matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
-  traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
-  enforceDisjointness loc ss
-  enforceCompleteSubstitution loc ss
+learnCond opts sc cc cs prepost ss =
+  do let loc = cs ^. MS.csLoc
+     matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
+     traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
+     enforcePointerValidity cc loc ss
+     enforceDisjointness loc ss
+     enforceCompleteSubstitution loc ss
 
 
 -- | Verify that all of the fresh variables for the given
@@ -688,6 +689,44 @@ refreshTerms sc ss =
 
 ------------------------------------------------------------------------
 
+-- | Generate assertions that all of the memory regions matched by an
+-- override's precondition are allocated, and meet the appropriate
+-- requirements for alignment and mutability.
+enforcePointerValidity ::
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  LLVMCrucibleContext arch ->
+  W4.ProgramLoc ->
+  MS.StateSpec (LLVM arch) ->
+  OverrideMatcher (LLVM arch) md ()
+enforcePointerValidity cc loc ss =
+  do sym <- Ov.getSymInterface
+     sub <- OM (use setupValueSub) -- Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
+     let allocs = view MS.csAllocs ss -- Map AllocIndex LLVMAllocSpec
+     let mems = Map.elems $ Map.intersectionWith (,) allocs sub
+     let w = Crucible.PtrWidth
+     let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
+     mem <- readGlobal memVar
+
+     sequence_
+       [ do psz' <-
+              liftIO $ W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToInteger psz
+            c <-
+              liftIO $
+              Crucible.isAllocatedAlignedPointer sym w alignment mut ptr (Just psz') mem
+            let msg =
+                  "Pointer not valid:"
+                  ++ "\n  base = " ++ show (Crucible.ppPtr ptr)
+                  ++ "\n  size = " ++ show psz
+                  ++ "\n  required alignment = " ++ show (Crucible.fromAlignment alignment) ++ "-byte"
+                  ++ "\n  required mutability = " ++ show mut
+            addAssert c $ Crucible.SimError loc $
+              Crucible.AssertFailureSimError msg ""
+
+       | (LLVMAllocSpec mut _pty alignment psz _ploc, ptr) <- mems
+       ]
+
+------------------------------------------------------------------------
+
 -- | Generate assertions that all of the memory allocations matched by
 -- an override's precondition are disjoint. Read-only allocations are
 -- allowed to alias other read-only allocations, however.
@@ -724,8 +763,8 @@ enforceDisjointness loc ss =
              addAssert c $ Crucible.SimError loc $
                Crucible.AssertFailureSimError msg ""
 
-        | (LLVMAllocSpec _mut _pty psz ploc, p) : ps <- tails memsRW
-        , (LLVMAllocSpec _mut _qty qsz qloc, q) <- ps ++ memsRO
+        | (LLVMAllocSpec _mut _pty _align psz ploc, p) : ps <- tails memsRW
+        , (LLVMAllocSpec _mut _qty _align qsz qloc, q) <- ps ++ memsRO
         ]
 
 ------------------------------------------------------------------------
@@ -1078,9 +1117,11 @@ learnSetupCondition ::
   PrePost                    ->
   MS.SetupCondition (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
-learnSetupCondition opts sc cc spec prepost (MS.SetupCond_Equal loc val1 val2)  = learnEqual opts sc cc spec loc prepost val1 val2
-learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Pred loc tm)         = learnPred sc cc loc prepost (ttTerm tm)
-learnSetupCondition _opts sc cc _    prepost (MS.SetupCond_Ghost () loc var val)   = learnGhost sc cc loc prepost var val
+learnSetupCondition opts sc cc spec prepost cond =
+  case cond of
+    MS.SetupCond_Equal loc val1 val2  -> learnEqual opts sc cc spec loc prepost val1 val2
+    MS.SetupCond_Pred loc tm          -> learnPred sc cc loc prepost (ttTerm tm)
+    MS.SetupCond_Ghost () loc var val -> learnGhost sc cc loc prepost var val
 
 
 ------------------------------------------------------------------------
@@ -1306,7 +1347,7 @@ executeAllocation ::
   LLVMCrucibleContext arch          ->
   (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher (LLVM arch) RW ()
-executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
+executeAllocation opts cc (var, LLVMAllocSpec mut memTy alignment sz loc) =
   do let sym = cc^.ccBackend
      {-
      memTy <- case Crucible.asMemType symTy of
@@ -1317,7 +1358,6 @@ executeAllocation opts cc (var, LLVMAllocSpec mut memTy sz loc) =
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
      sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToInteger sz)
-     let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
      (ptr, mem') <- liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
