@@ -186,7 +186,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                ++ indices ++ [termEliminated]
          Coq.App rect_var <$> mapM translateTerm args
     Sort s -> pure (Coq.Sort (translateSort s))
-    NatLit i -> pure (Coq.NatLit i)
+    NatLit i -> pure (Coq.NatLit (toInteger i))
     ArrayValue _ vec -> do
       let addElement accum element = do
             elementTerm <- translateTerm element
