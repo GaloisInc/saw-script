@@ -14,6 +14,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_typecheck_fun
        , heapster_typecheck_mut_funs
        , heapster_define_opaque_perm
+       , heapster_define_recursive_perm
        , heapster_assume_fun
        , heapster_print_fun_trans
        , heapster_export_coq
@@ -71,6 +72,7 @@ import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.TypedCrucible
 import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.PermParser
+import Text.Parsec (runParser)
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
@@ -124,11 +126,10 @@ heapster_default_env =
             "Prelude.W64List"
             "Prelude.foldW64List"
             "Prelude.unfoldW64List"
-            [(nuMulti (cruCtxProxies l_rw_ctx)
-              (\_ -> ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] 0))),
-              "Prelude.W64Nil")
+            [nuMulti (cruCtxProxies l_rw_ctx)
+              (\_ -> ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] 0)))
             ,
-             (nuMulti (cruCtxProxies l_rw_ctx)
+             nuMulti (cruCtxProxies l_rw_ctx)
               (\(_ :>: l :>: rw) ->
                 ValPerm_Conj
                 [Perm_LLVMField $ LLVMFieldPerm {
@@ -148,19 +149,17 @@ heapster_default_env =
                         (PExprs_Cons
                          (PExprs_Cons PExprs_Nil (PExpr_Var l))
                          (PExpr_Var rw)) }]
-              ),
-              "Prelude.W64Cons")
+              )
              ],
             SomeNamedPerm $ NamedPerm_Rec $ RecPerm
             list_rpn
             "Prelude.List"
             "Prelude.foldList"
             "Prelude.unfoldList"
-            [(nuMulti (cruCtxProxies p_l_rw_ctx)
-              (\_ -> ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] 0))),
-              "Prelude.Nil")
+            [nuMulti (cruCtxProxies p_l_rw_ctx)
+              (\_ -> ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] 0)))
             ,
-             (nuMulti (cruCtxProxies p_l_rw_ctx)
+             nuMulti (cruCtxProxies p_l_rw_ctx)
               (\(_ :>: p :>: l :>: rw) ->
                 ValPerm_Conj
                 [Perm_LLVMField $ LLVMFieldPerm {
@@ -178,8 +177,7 @@ heapster_default_env =
                          (PExprs_Cons (PExprs_Cons PExprs_Nil (PExpr_Var p))
                           (PExpr_Var l))
                          (PExpr_Var rw)) }]
-              ),
-              "Prelude.Cons")
+              )
              ]
            ],
            permEnvGlobalSyms = []
@@ -220,6 +218,20 @@ translateTypePerm sc env typ_perm =
   typeTransType1 $
   runTransM (translate $ emptyMb typ_perm) (emptyTypeTransInfo env)
 
+-- FIXME: If the parsed string is an ident, don't insert a new definition.
+parseAndInsDef :: HeapsterEnv -> String -> Term -> String -> TopLevel Ident
+parseAndInsDef henv nm term_tp term_string =
+  do sc <- getSharedContext
+     un_term <- parseTermFromString nm term_string
+     let mnm = heapsterEnvSAWModule henv
+     TypedTerm term _ <- typecheckTerm mnm un_term
+     let term_ident = mkIdent mnm nm
+     liftIO $ scModifyModule sc mnm $ \m ->
+        insDef m $ Def { defIdent = term_ident,
+                         defQualifier = NoQualifier,
+                         defType = term_tp,
+                         defBody = Just term }
+     pure term_ident
 
 heapster_init_env :: BuiltinContext -> Options -> String -> String ->
                      TopLevel HeapsterEnv
@@ -268,21 +280,49 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_string =
      some_tp <- case parseTypeString env tp_str of
        Left err -> fail ("Error parsing permission type: " ++ show err)
        Right tp -> return tp
-     sc <- getSharedContext
-     let mnm = heapsterEnvSAWModule henv
-     un_term <- parseTermFromString nm term_string
-     TypedTerm term _ <- typecheckTerm mnm un_term
-     let term_ident = mkIdent mnm nm
      case (some_args, some_tp) of
-       (Some args, Some tp_perm) -> liftIO $ do
-         term_tp <- translateTypePerm sc env (ValuePermRepr tp_perm)
-         scModifyModule sc mnm $ \m ->
-           insDef m $ Def { defIdent = term_ident,
-                            defQualifier = NoQualifier,
-                            defType = term_tp,
-                            defBody = Just term }
+       (Some args, Some tp_perm) -> do
+         sc <- getSharedContext
+         term_tp <- liftIO $ translateTypePerm sc env (ValuePermRepr tp_perm)
+         term_ident <- parseAndInsDef henv nm term_tp term_string
          let env' = permEnvAddOpaquePerm env nm args tp_perm term_ident
-         writeIORef (heapsterEnvPermEnvRef henv) env'
+         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+-- | Define a new recursive named permission with the given name, arguments,
+-- type, that translates to the given named SAW core definition.
+heapster_define_recursive_perm :: BuiltinContext -> Options -> HeapsterEnv ->
+                                  String -> String -> String -> [String] ->
+                                  String -> String -> String ->
+                                  TopLevel ()
+heapster_define_recursive_perm _bic _opts henv
+  nm args_str val_str p_strs trans_str fold_fun_str unfold_fun_str =
+    do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+       let penv = mkParserEnv env
+       some_args <- case runParser parseCtx penv "" args_str  of
+         Left err -> fail ("Error parsing argument types: " ++ show err)
+         Right argsCtx -> return argsCtx
+       some_val <- case parseTypeString env val_str of
+         Left err -> fail ("Error parsing permission type: " ++ show err)
+         Right tp -> return tp
+       case (some_args, some_val) of
+         (Some args_ctx@(ParsedCtx _ args), Some val_perm) -> do
+           sc <- getSharedContext
+           trans_tp <- liftIO $ translateTypePerm sc env (ValuePermRepr val_perm)
+           trans_ident <- parseAndInsDef henv nm trans_tp trans_str
+           let srpn = SomeNamedPermName (NamedPermName nm val_perm args)
+               penv' = (mkParserEnv env) { parserEnvPermVars = [(nm,srpn)] }
+           p_perms <- forM p_strs $ \p_str ->
+             case runParser (parseValPermInCtx args_ctx val_perm) penv' "" p_str of
+               Left err -> fail ("Error parsing disjunctive perm: " ++ show err)
+               Right p_perm -> pure p_perm
+           let fold_ident   = fromString fold_fun_str
+           let unfold_ident = fromString unfold_fun_str
+           sc <- getSharedContext
+           _ <- liftIO $ scRequireDef sc fold_ident -- Ensure that these are defined
+           _ <- liftIO $ scRequireDef sc unfold_ident
+           let env' = permEnvAddRecPerm env nm args val_perm p_perms
+                                        trans_ident fold_ident unfold_ident
+           liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by name
