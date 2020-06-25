@@ -36,6 +36,7 @@ module SAWScript.Crucible.Common.Override
   , ppOverrideFailure
   --
   , OverrideMatcher(..)
+  , throwOverrideMatcher
   , runOverrideMatcher
   , RO
   , RW
@@ -54,7 +55,8 @@ import           Control.Lens
 import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
-import           Control.Monad.Fail (MonadFail)
+import           Control.Monad.Catch (MonadThrow)
+import           Control.Monad.Fail (MonadFail(..))
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
@@ -81,6 +83,7 @@ import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
 
+import           SAWScript.Exceptions
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec as MS
 
@@ -177,10 +180,10 @@ ppOverrideFailureReason ::
   ) => OverrideFailureReason ext -> PP.Doc
 ppOverrideFailureReason rsn = case rsn of
   AmbiguousPointsTos pts ->
-    PP.text "ambiguous collection of points-to assertions" PP.<$$>
+    PP.text "LHS of points-to assertion(s) not reachable via points-tos from inputs/outputs:" PP.<$$>
     (PP.indent 2 $ PP.vcat (map PP.pretty pts))
   AmbiguousVars vs ->
-    PP.text "ambiguous collection of variables" PP.<$$>
+    PP.text "Fresh variable(s) not reachable via points-tos from function inputs/outputs:" PP.<$$>
     (PP.indent 2 $ PP.vcat (map MS.ppTypedTerm vs))
   BadTermMatch x y ->
     PP.text "terms do not match" PP.<$$>
@@ -252,12 +255,20 @@ data RW
 -- and side-conditions needed to proceed.
 newtype OverrideMatcher ext rorw a =
   OM (StateT (OverrideState ext) (ExceptT (OverrideFailure ext) IO) a)
-  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadFail)
+  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow)
 
 instance Wrapped (OverrideMatcher ext rorw a) where
 
 deriving instance MonadState (OverrideState ext) (OverrideMatcher ext rorw)
 deriving instance MonadError (OverrideFailure ext) (OverrideMatcher ext rorw)
+
+throwOverrideMatcher :: String -> OverrideMatcher ext rorw a
+throwOverrideMatcher msg = do
+  loc <- use osLocation
+  X.throw $ OverrideMatcherException loc msg
+
+instance MonadFail (OverrideMatcher ext rorw) where
+  fail = throwOverrideMatcher
 
 -- | "Run" function for OverrideMatcher. The final result and state
 -- are returned. The state will contain the updated globals and substitutions
@@ -291,7 +302,7 @@ readGlobal ::
 readGlobal k =
   do mb <- OM (uses overrideGlobals (Crucible.lookupGlobal k))
      case mb of
-       Nothing -> fail ("No such global: " ++ show k)
+       Nothing -> throwOverrideMatcher ("No such global: " ++ show k)
        Just v  -> return v
 
 writeGlobal ::

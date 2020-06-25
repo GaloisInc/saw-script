@@ -25,10 +25,10 @@ the specific analysis algorithms that we have chosen to use.
 
 Ultimately, due to several closely related theoretical results (known as
 the halting problem, Rice's theorem, Gödel's completeness theorem, among
-others), there will always be *some* combination a program a property
-that a given automated analysis system cannot prove. But we have some
-flexibility to decide which sorts of programs and properties we can
-prove and which we cannot.
+others), there will always be *some* combination of a program and a
+property that a given automated analysis system cannot prove. But we
+have some flexibility to decide which sorts of programs and properties
+we can prove and which we cannot.
 
 SAW builds on two fundamental technologies at the moment, and inherits
 the benefits and limitations of both. These two technologies are 1)

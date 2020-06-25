@@ -61,7 +61,7 @@ import GHC.Natural(Natural)
 import Data.Kind(Type)
 import Control.Applicative ( (<|>) )
 import Control.Lens (view, (^.), over)
-import Control.Monad(foldM,zipWithM,join)
+import qualified Data.BitVector.Sized as BV
 import Data.List(sortBy)
 import Data.Maybe(catMaybes)
 import Data.Map (Map)
@@ -105,7 +105,6 @@ import SAWScript.Crucible.LLVM.CrucibleLLVM
   )
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
 
-import Lang.Crucible.Simulator.RegValue(RegValue'(..),RegValue)
 import Lang.Crucible.Simulator.SimError(SimErrorReason(AssertFailureSimError))
 import Lang.Crucible.Backend
           (addAssumption, getProofObligations, proofGoalsToList
@@ -529,7 +528,7 @@ class Eval p where
   setCurState :: f p -> State -> S p -> S p
 
 evIntLit :: (1 <= w) => Sym -> NatRepr w -> Integer -> IO (LLVMPtr Sym w)
-evIntLit sym w n = llvmPointer_bv sym =<< bvLit sym w n
+evIntLit sym w n = llvmPointer_bv sym =<< bvLit sym w (BV.mkBV w n)
 
 instance Eval Pre where
   type S Pre = State
@@ -914,7 +913,7 @@ allocate sym ar s =
   alloc mut =
     do let ?ptrWidth = knownNat @64
        let szInt = bytesToInteger (uncurry (*.) (areaSize ar))
-       sz <- bvLit sym knownNat szInt
+       sz <- bvLit sym knownNat (BV.mkBV knownNat szInt)
        let alignment = noAlignment -- default to byte-aligned (FIXME)
        (base,mem) <- doMalloc sym HeapAlloc mut (areaName ar) (stateMem s) sz alignment
        ptr <- adjustPtr sym mem base (bytesToInteger (areaPtr ar))
@@ -1044,7 +1043,7 @@ setupGlobals opts gs fs s
            size    = maximum (endGlob : fundAddrs)
 
        let ?ptrWidth = knownNat @64
-       sz <- bvLit sym knownNat size
+       sz <- bvLit sym knownNat (BV.mkBV knownNat size)
        let alignment = noAlignment -- default to byte-aligned (FIXME)
        (p,mem) <- doMalloc sym GlobalAlloc Immutable "Globals" (stateMem s) sz alignment
 
@@ -1119,7 +1118,7 @@ setupGlobals opts gs fs s
              szI = bytesToInteger sz
              lty = bitvectorType sz
          z    <- natLit sym 0
-         val  <- LLVMValInt z <$> bvLit sym w v
+         val  <- LLVMValInt z <$> bvLit sym w (BV.mkBV w v)
          let ?ptrWidth = knownNat
          let alignment = noAlignment -- default to byte-aligned (FIXME)
          mem1 <- storeConstRaw sym mem p lty alignment val
@@ -1265,4 +1264,4 @@ adjustPtr sym mem ptr amt
   | amt == 0  = return ptr
   | otherwise =
     do let ?ptrWidth = knownNat
-       doPtrAddOffset sym mem ptr =<< bvLit sym knownNat amt
+       doPtrAddOffset sym mem ptr =<< bvLit sym knownNat (BV.mkBV knownNat amt)

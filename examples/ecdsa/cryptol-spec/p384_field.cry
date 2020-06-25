@@ -92,10 +92,10 @@ p384_field_mod(a)
 
 /* Defines a reference prime field that uses normalized numbers and
    large word bit operations. */
-p384_field :  Field [384]
+p384_field :  FieldRep [384]
 p384_field = {
     is_val     = p384_is_field_val
-  , norm       = \x -> if x < p384_prime then x else x - p384_prime
+  , normalize  = \x -> if x < p384_prime then x else x - p384_prime
   , add        = p384_field_add
   , sub        = p384_field_sub
   , neg        = p384_field_neg
@@ -116,10 +116,10 @@ p384_group_size =
 
 /* Defines a reference prime field that uses normalized numbers and
    large word bit operations. */
-p384_group_field :  Field [384]
+p384_group_field :  FieldRep [384]
 p384_group_field =
   { is_val     = p384_is_group_val
-  , norm       = \x -> if x < p384_group_size then x else x - p384_group_size
+  , normalize  = \x -> if x < p384_group_size then x else x - p384_group_size
   , add        = \(x,y) -> p384_mod_add(p384_group_size, x, y)
   , sub        = \(x,y) -> p384_mod_sub(p384_group_size, x, y)
   , neg        = \x     -> p384_mod_neg(p384_group_size, x)

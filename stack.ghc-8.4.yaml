@@ -49,10 +49,18 @@ extra-deps:
   - generic-deriving-1.12.4
   - invariant-0.5.3
   - lens-4.17.1
-  - th-lift-0.8.0.1
+  - th-lift-0.8.1
   - config-schema-1.1.0.0
   - config-value-0.6.3.1
   - simple-get-opt-0.3
   - base-orphans-0.8.2
+  - Glob-0.10.0
+  - yaml-0.11.2.0
+  - libyaml-0.1.2
+  - aeson-1.4.3.0
+  - QuickCheck-2.14
+  - splitmix-0.0.4
+  - bv-sized-1.0.1
+  - bitwise-1.0.0.1
 resolver: lts-12.26
-allow-newer: true
+allow-newer: false
