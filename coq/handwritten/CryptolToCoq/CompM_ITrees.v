@@ -89,6 +89,8 @@ Proof.
 *)
 
 
+(* FIXME: old stuff below *)
+
 (* The set of ITrees monad *)
 Definition ITreeSet E A : Type := itree E A -> Prop.
 
