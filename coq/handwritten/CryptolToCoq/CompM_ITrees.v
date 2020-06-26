@@ -46,29 +46,26 @@ Inductive is_itree_retval {E A} : itree E A -> A -> Prop :=
 Infix ">>=" := ITree.bind (at level 58, left associativity).
 Notation "m1 >> m2" := (m1 >>= fun _ => m2) (at level 58, left associativity).
 
+Instance Proper_eq_itree_itree_satisfies_spec_impl E A :
+  Proper (eq_itree eq ==> eq_itree eq ==> Basics.impl) (@itree_satisfies_spec E A).
+Proof.
+Admitted.
+
 Instance Proper_eq_itree_itree_satisfies_spec E A :
   Proper (eq_itree eq ==> eq_itree eq ==> iff) (@itree_satisfies_spec E A).
 Proof.
-  intros P1 P2 RP m1 m2 Rm. split; intro.
-  - revert P2 RP m1 m2 Rm H; cofix H1; intros.
-    destruct H.
+(* FIXME: should follow directly from Proper_eq_itree_itree_satisfies_spec_impl and
+  symmetry of eq_itree
 
-Definition itree_satisfies_spec_decompose E A spec tree
-           (iss: @itree_satisfies_spec E A spec tree) : itree_satisfies_spec spec tree :=
-  match iss with
-  | Satisfies_Ret a => Satisfies_Ret a
-  | Satisfies_TauL spec tree iss' => Satisfies_TauL spec tree iss'
-  | Satisfies_TauR spec tree iss' => Satisfies_TauR spec tree iss'
-  | Satisfies_Vis X e spec tree issF => Satisfies_Vis X e spec tree issF
-  | Satisfies_Forall X spec tree issF => Satisfies_Forall X spec tree issF
-  | Satisfies_Exists X spec tree issF => Satisfies_Exists X spec tree issF
-  end.
+  intros P1 P2 RP m1 m2 Rm; split; intro.
+  - unshelve (eapply (Proper_eq_itree_itree_satisfies_spec_impl _ _ RP _ _ Rm _)).
+      try eassumption.
+  - eapply (Proper_eq_itree_itree_satisfies_spec_impl _ _ _ _ _ _ _).
+    + symmetry; eassumption.
+    + eassumption.
+*)
+Admitted.
 
-Lemma itree_satisfies_spec_unfold E A spec tree iss :
-  iss = itree_satisfies_spec_decompose E A spec tree iss.
-Proof.
-  case iss; simpl; trivial.
-Qed.
 
 Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
       (m:itree E A) (f:A -> itree E B) :
@@ -76,10 +73,7 @@ Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
   (forall a, is_itree_retval m a -> itree_satisfies_spec (Q a) (f a)) ->
   itree_satisfies_spec (P >>= Q) (m >>= f).
 Proof.
-  revert Q m f; cofix H; intros.
-  destruct H0; intros.
-  { rewrite bind_ret_l.
-apply (H1 a).
+Admitted.
 
 (* FIXME: I don't think this is provable... *)
 (*
