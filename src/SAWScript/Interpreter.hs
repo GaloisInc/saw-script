@@ -1865,6 +1865,14 @@ primitives = Map.fromList
     , "name is used only for pretty-printing."
     ]
 
+  , prim "crucible_fresh_cryptol_var" "String -> Type -> CrucibleSetup Term"
+    (bicVal crucible_fresh_cryptol_var)
+    Experimental
+    [ "Create a fresh variable of the given Cryptol type for use within"
+    , "a Crucible specification. The given name is used only for"
+    , "pretty-printing."
+    ]
+
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
     (bicVal crucible_alloc)
     Current
