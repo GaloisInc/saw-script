@@ -42,6 +42,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_equal
     , crucible_points_to
     , crucible_conditional_points_to
+    , crucible_array_points_to
     , crucible_fresh_pointer
     , crucible_llvm_unsafe_assume_spec
     , crucible_fresh_var
@@ -1914,6 +1915,40 @@ crucible_points_to_internal _bic _opt typed cond (getAllLLVM -> ptr) (getAllLLVM
           valTy <- typeOfSetupValue cc env nameEnv val
           when typed (checkMemTypeCompatibility loc lhsTy valTy)
           Setup.addPointsTo (LLVMPointsTo loc cond ptr $ ConcreteSizeValue val)
+
+crucible_array_points_to ::
+  BuiltinContext ->
+  Options ->
+  AllLLVM SetupValue ->
+  TypedTerm ->
+  TypedTerm ->
+  LLVMCrucibleSetupM ()
+crucible_array_points_to _bic _opt (getAllLLVM -> ptr) arr sz =
+  LLVMCrucibleSetupM $
+  do cc <- getLLVMCrucibleContext
+     loc <- getW4Position "crucible_points_to"
+     Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -> Crucible.withPtrWidth wptr $
+       do let ?lc = ccTypeCtx cc
+          st <- get
+          let rs = st ^. Setup.csResolvedState
+          if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
+            then throwCrucibleSetup loc "Multiple points-to preconditions on same pointer"
+            else Setup.csResolvedState %= MS.markResolved ptr []
+          let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+              nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+          ptrTy <- typeOfSetupValue cc env nameEnv ptr
+          _ <- case ptrTy of
+            Crucible.PtrType symTy ->
+              case Crucible.asMemType symTy of
+                Right lhsTy -> return lhsTy
+                Left err -> throwCrucibleSetup loc $ unlines
+                  [ "lhs not a valid pointer type: " ++ show ptrTy
+                  , "Details:"
+                  , err
+                  ]
+
+            _ -> throwCrucibleSetup loc $ "lhs not a pointer type: " ++ show ptrTy
+          Setup.addPointsTo (LLVMPointsTo loc Nothing ptr $ SymbolicSizeValue arr sz)
 
 crucible_equal ::
   BuiltinContext ->
