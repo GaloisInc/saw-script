@@ -792,6 +792,9 @@ offline_cnf path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
   proveWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
 
+offline_coq :: FilePath -> ProofScript SV.SatResult
+offline_coq path = proveWithExporter (const (Prover.writeCoqProp "goal" [] [])) path ".v"
+
 offline_extcore :: FilePath -> ProofScript SV.SatResult
 offline_extcore path = proveWithExporter (const Prover.writeCoreProp) path ".extcore"
 
