@@ -8,6 +8,7 @@ packages:
     deps/cryptol
     deps/saw-core
     deps/saw-core-aig
+    deps/saw-core-coq
     deps/saw-core-sbv
     deps/saw-core-what4
     deps/cryptol-verifier
