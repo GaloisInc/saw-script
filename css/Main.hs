@@ -20,6 +20,7 @@ import           Cryptol.Utils.Logger (quietLogger)
 import qualified Verifier.SAW.Cryptol as C
 import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Cryptol.Prelude as C
+import           Verifier.SAW.CryptolEnv (schemaNoUser)
 
 
 import qualified Data.ABC as ABC
@@ -134,13 +135,3 @@ extractCryptol sc modEnv input = do
   putStrLn $ "Extracting expression of type " ++ show (pp (schemaNoUser schema))
   C.importExpr sc env expr
 
-typeNoUser :: T.Type -> T.Type
-typeNoUser t =
-  case t of
-    T.TCon tc ts   -> T.TCon tc (map typeNoUser ts)
-    T.TVar {}      -> t
-    T.TUser _ _ ty -> typeNoUser ty
-    T.TRec fields  -> T.TRec [ (n, typeNoUser ty) | (n, ty) <- fields ]
-
-schemaNoUser :: T.Schema -> T.Schema
-schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)

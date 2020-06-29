@@ -36,6 +36,7 @@ import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst
 import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
 import qualified Cryptol.Utils.Ident as C (Ident, packIdent, unpackIdent)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
+import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
 
@@ -211,8 +212,8 @@ importType sc env ty =
                          Just (t, j) -> incVars sc 0 j t
                          Nothing -> panic "importType TVBound" []
     C.TUser _ _ t  -> go t
-    C.TRec (Map.fromList -> fm) ->
-      importType sc env (C.tTuple (Map.elems fm))
+    C.TRec fm ->
+      importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
 
     C.TCon tcon tyargs ->
       case tcon of
@@ -294,9 +295,6 @@ importPolyType sc env (tp : tps) props ty =
 importSchema :: SharedContext -> Env -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams props ty
 
-tIsRec' :: C.Type -> Maybe (Map C.Ident C.Type)
-tIsRec' t = fmap Map.fromList (C.tIsRec t)
-
 proveProp :: HasCallStack => SharedContext -> Env -> C.Prop -> IO Term
 proveProp sc env prop =
   case Map.lookup (normalizeProp prop) (envP env) of
@@ -343,8 +341,8 @@ proveProp sc env prop =
           -> do ps <- traverse (proveProp sc env . C.pZero) ts
                 scTuple sc ps
         -- instance (Zero a, Zero b, ...) => Zero { x : a, y : b, ... }
-        (C.pIsZero -> Just (tIsRec' -> Just fm))
-          -> do proveProp sc env (C.pZero (C.tTuple (Map.elems fm)))
+        (C.pIsZero -> Just (C.tIsRec -> Just fm))
+          -> do proveProp sc env (C.pZero (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Logic Bit
         (C.pIsLogic -> Just (C.tIsBit -> True))
@@ -378,8 +376,8 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pLogic (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PLogicPair" [a, b, pa, pb]
         -- instance (Logic a, Logic b, ...) => instance Logic { x : a, y : b, ... }
-        (C.pIsLogic -> Just (tIsRec' -> Just fm))
-          -> do proveProp sc env (C.pLogic (C.tTuple (Map.elems fm)))
+        (C.pIsLogic -> Just (C.tIsRec -> Just fm))
+          -> do proveProp sc env (C.pLogic (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Ring Integer
         (C.pIsRing -> Just (C.tIsInteger -> True))
@@ -417,8 +415,8 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pRing (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PRingPair" [a, b, pa, pb]
         -- instance (Ring a, Ring b, ...) => instance Ring { x : a, y : b, ... }
-        (C.pIsRing -> Just (tIsRec' -> Just fm))
-          -> do proveProp sc env (C.pRing (C.tTuple (Map.elems fm)))
+        (C.pIsRing -> Just (C.tIsRec -> Just fm))
+          -> do proveProp sc env (C.pRing (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Integral Integer
         (C.pIsIntegral -> Just (C.tIsInteger -> True))
@@ -464,8 +462,8 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pEq (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PEqPair" [a, b, pa, pb]
         -- instance (Eq a, Eq b, ...) => instance Eq { x : a, y : b, ... }
-        (C.pIsEq -> Just (tIsRec' -> Just fm))
-          -> do proveProp sc env (C.pEq (C.tTuple (Map.elems fm)))
+        (C.pIsEq -> Just (C.tIsRec -> Just fm))
+          -> do proveProp sc env (C.pEq (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Cmp Bit
         (C.pIsCmp -> Just (C.tIsBit -> True))
@@ -496,8 +494,8 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PCmpPair" [a, b, pa, pb]
         -- instance (Cmp a, Cmp b, ...) => instance Cmp { x : a, y : b, ... }
-        (C.pIsCmp -> Just (tIsRec' -> Just fm))
-          -> do proveProp sc env (C.pCmp (C.tTuple (Map.elems fm)))
+        (C.pIsCmp -> Just (C.tIsRec -> Just fm))
+          -> do proveProp sc env (C.pCmp (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance (fin n) => SignedCmp [n]
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
@@ -522,8 +520,8 @@ proveProp sc env prop =
                 pb <- proveProp sc env (C.pSignedCmp (C.tTuple ts))
                 scGlobalApply sc "Cryptol.PSignedCmpPair" [a, b, pa, pb]
         -- instance (SignedCmp a, SignedCmp b, ...) => instance SignedCmp { x : a, y : b, ... }
-        (C.pIsSignedCmp -> Just (tIsRec' -> Just fm))
-          -> do proveProp sc env (C.pSignedCmp (C.tTuple (Map.elems fm)))
+        (C.pIsSignedCmp -> Just (C.tIsRec -> Just fm))
+          -> do proveProp sc env (C.pSignedCmp (C.tTuple (map snd (C.canonicalFields fm))))
 
         -- instance Literal val Integer
         (C.pIsLiteral -> Just (_, C.tIsInteger -> True))
@@ -666,8 +664,8 @@ importExpr sc env expr =
       do es' <- traverse (importExpr sc env) es
          scTuple sc es'
 
-    C.ERec (Map.fromList -> fm) ->
-      do es' <- traverse (importExpr sc env) (Map.elems fm)
+    C.ERec fm ->
+      do es' <- traverse (importExpr sc env . snd) (C.canonicalFields fm)
          scTuple sc es'
 
     C.ESel e sel ->
@@ -685,10 +683,10 @@ importExpr sc env expr =
         C.RecordSel x _ ->
           do e' <- importExpr sc env e
              let t = fastTypeOf (envC env) e
-             case tIsRec' t of
+             case C.tIsRec t of
                Just fm ->
-                 do i <- the (elemIndex x (Map.keys fm))
-                    scTupleSelector sc e' (i+1) (Map.size fm)
+                 do i <- the (elemIndex x (map fst (C.canonicalFields fm)))
+                    scTupleSelector sc e' (i+1) (length (C.canonicalFields fm))
                Nothing ->
                  do f <- mapRecordSelector sc env x t
                     scApply sc f e'
@@ -722,11 +720,11 @@ importExpr sc env expr =
           do e1' <- importExpr sc env e1
              e2' <- importExpr sc env e2
              let t1 = fastTypeOf (envC env) e1
-             case tIsRec' t1 of
+             case C.tIsRec t1 of
                Nothing -> panic "importExpr" ["ESet/TupleSel: not a tuple type"]
                Just tm ->
-                 do i <- the (elemIndex x (Map.keys tm))
-                    ts' <- traverse (importType sc env) (Map.elems tm)
+                 do i <- the (elemIndex x (map fst (C.canonicalFields tm)))
+                    ts' <- traverse (importType sc env . snd) (C.canonicalFields tm)
                     let t2' = ts' !! i
                     f <- scGlobalApply sc "Cryptol.const" [t2', t2', e2']
                     g <- tupleUpdate sc f i ts'
@@ -818,11 +816,10 @@ importExpr' sc env schema expr =
          es' <- sequence (zipWith go ts es)
          scTuple sc es'
 
-    C.ERec (Map.fromList -> fm) ->
+    C.ERec fm ->
       do ty <- the (C.isMono schema)
-         tm <- the (tIsRec' ty)
-         let es = Map.elems fm
-         es' <- sequence (zipWith go (Map.elems tm) es)
+         tm <- the (C.tIsRec ty)
+         es' <- sequence (zipWith go (map snd (C.canonicalFields tm)) (map snd (C.canonicalFields fm)))
          scTuple sc es'
 
     C.EIf e1 e2 e3 ->
@@ -940,12 +937,12 @@ mapRecordSelector sc env i = fmap fst . go
              n' <- importType sc env n
              g <- scGlobalApply sc "Cryptol.compose" [n', a', b', f]
              return (g, C.tFun n b)
-        (tIsRec' -> Just tm) | Just k <- elemIndex i (Map.keys tm) ->
+        (C.tIsRec -> Just tm) | Just k <- elemIndex i (map fst (C.canonicalFields tm)) ->
           do x <- scLocalVar sc 0
-             y <- scTupleSelector sc x (k+1) (Map.size tm)
+             y <- scTupleSelector sc x (k+1) (length (C.canonicalFields tm))
              t' <- importType sc env t
              f <- scLambda sc "x" t' y
-             return (f, Map.elems tm !! k)
+             return (f, snd (C.canonicalFields tm !! k))
         _ -> panic "importExpr" ["invalid record selector", show i, show t]
 
 tupleUpdate :: SharedContext -> Term -> Int -> [Term] -> IO Term
@@ -967,7 +964,7 @@ plainSubst s ty =
   case ty of
     C.TCon tc ts   -> C.TCon tc (map (plainSubst s) ts)
     C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
-    C.TRec fs      -> C.TRec [ (x, plainSubst s t) | (x, t) <- fs ]
+    C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
     C.TVar x       -> C.apSubst s (C.TVar x)
 
 -- | Currently this imports declaration groups by inlining all the
@@ -1131,9 +1128,9 @@ proveEq sc env t1 t2
                else if a1 == a2
                     then scGlobalApply sc "Cryptol.pair_cong2" [a1', b1', b2', bEq]
                     else scGlobalApply sc "Cryptol.pair_cong" [a1', a2', b1', b2', aEq, bEq]
-      (tIsRec' -> Just tm1, tIsRec' -> Just tm2)
-        | Map.keys tm1 == Map.keys tm2 ->
-          proveEq sc env (C.tTuple (Map.elems tm1)) (C.tTuple (Map.elems tm2))
+      (C.tIsRec -> Just tm1, C.tIsRec -> Just tm2)
+        | map fst (C.canonicalFields tm1) == map fst (C.canonicalFields tm2) ->
+          proveEq sc env (C.tTuple (map snd (C.canonicalFields tm1))) (C.tTuple (map snd (C.canonicalFields tm2)))
       (_, _) ->
         panic "proveEq" ["Internal type error:", pretty t1, pretty t2]
 
@@ -1386,7 +1383,7 @@ exportValue ty v = case ty of
 
   -- records
   TV.TVRec fields ->
-      V.VRecord (Map.fromList $ exportRecordValue (Map.assocs (Map.fromList fields)) v)
+      V.VRecord (C.recordFromFieldsWithDisplay (C.displayOrder fields) $ exportRecordValue (C.canonicalFields fields) v)
 
   -- functions
   TV.TVFun _aty _bty ->
@@ -1436,7 +1433,7 @@ exportFirstOrderValue fv =
       where len = toInteger (length vs)
     FOVArray{}  -> error $ "exportFirstOrderValue: unsupported FOT Array"
     FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
-    FOVRec vm   -> V.VRecord $ Map.fromList [ (C.packIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
+    FOVRec vm   -> V.VRecord $ C.recordFromFields [ (C.packIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
 
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
 importFirstOrderValue t0 v0 = V.runEval (V.EvalOpts C.quietLogger V.defaultPPOpts) (go t0 v0)
@@ -1449,11 +1446,11 @@ importFirstOrderValue t0 v0 = V.runEval (V.EvalOpts C.quietLogger V.defaultPPOpt
     (FOTVec _ ty    , V.VSeq len xs)   -> FOVVec ty <$> traverse (go ty =<<) (V.enumerateSeqMap len xs)
     (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
     (FOTRec fs      , V.VRecord xs)    ->
-        do xs' <- Map.fromList <$> mapM importField (Map.assocs xs)
-           let missing = Set.difference (Map.keysSet fs) (Map.keysSet xs')
+        do xs' <- Map.fromList <$> mapM importField (C.canonicalFields xs)
+           let missing = Set.difference (Map.keysSet fs) (Set.fromList (map C.unpackIdent (C.displayOrder xs)))
            unless (Set.null missing)
                   (panic "importFirstOrderValue" $
-                         ["Missing fields while importing finite value:"] ++ Set.toList missing)
+                         ["Missing fields while importing finite value:"] ++ (map show (Set.toList missing)))
            return $ FOVRec $ xs'
       where
        importField :: (C.Ident, V.Eval V.Value) -> V.Eval (String, FirstOrderValue)
