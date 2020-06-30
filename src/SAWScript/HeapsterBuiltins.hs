@@ -225,7 +225,7 @@ parseAndInsDef henv nm term_tp term_string =
      un_term <- parseTermFromString nm term_string
      let mnm = heapsterEnvSAWModule henv
      TypedTerm term _ <- typecheckTerm mnm un_term
-     let term_ident = mkIdent mnm nm
+     let term_ident = mkSafeIdent mnm nm
      liftIO $ scModifyModule sc mnm $ \m ->
         insDef m $ Def { defIdent = term_ident,
                          defQualifier = NoQualifier,
@@ -336,7 +336,7 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
       let mnm = heapsterEnvSAWModule henv
       un_term <- parseTermFromString nm term_string
       TypedTerm term _ <- typecheckTerm mnm un_term
-      let term_ident = mkIdent mnm nm
+      let term_ident = mkSafeIdent mnm nm
           trans_tm = globalOpenTerm term_ident
 
       let arch = llvmArch $ _transContext (lm ^. modTrans)
@@ -410,7 +410,7 @@ heapster_print_fun_trans bic opts henv fn_name =
      let saw_modname = heapsterEnvSAWModule henv
      fun_term <-
        fmap (fromJust . defBody) $
-       liftIO $ scRequireDef sc $ mkIdent saw_modname fn_name
+       liftIO $ scRequireDef sc $ mkSafeIdent saw_modname fn_name
      liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
 
 heapster_export_coq :: BuiltinContext -> Options -> HeapsterEnv ->
