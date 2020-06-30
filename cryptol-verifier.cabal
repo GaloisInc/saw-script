@@ -26,6 +26,7 @@ library
     array,
     base,
     base-compat,
+    bytestring,
     containers,
     cryptol >= 2.3.0,
     data-inttrie >= 0.1.4,
