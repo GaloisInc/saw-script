@@ -12,6 +12,7 @@ Stability   : provisional
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
 module SAWScript.Crucible.LLVM.ResolveSetupValue
   ( LLVMVal, LLVMPtr
@@ -20,6 +21,7 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , typeOfSetupValue
   , resolveTypedTerm
   , resolveSAWPred
+  , resolveSAWSymBV
   , resolveSetupFieldIndex
   , equalValsPred
   , memArrayToSawCoreTerm
@@ -47,7 +49,6 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
-                   (NatRepr(..), someNat, natValue, LeqProof(..), isPosNat)
 
 import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
@@ -356,6 +357,28 @@ resolveSAWPred ::
 resolveSAWPred cc tm =
   Crucible.bindSAWTerm (cc^.ccBackend) W4.BaseBoolRepr tm
 
+resolveSAWSymBV ::
+  (1 <= w) =>
+  LLVMCrucibleContext arch ->
+  NatRepr w ->
+  Term ->
+  IO (W4.SymBV Sym w)
+resolveSAWSymBV cc w tm =
+  do let sym = cc^.ccBackend
+     sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+     let ss = cc^.ccBasicSS
+     tm' <- rewriteSharedTerm sc ss tm
+     mx <- case getAllExts tm' of
+             [] -> do
+               -- Evaluate in SBV to test whether 'tm' is a concrete value
+               modmap <- scGetModuleMap sc
+               sbv <- SBV.toWord =<< SBV.sbvSolveBasic modmap Map.empty [] tm'
+               return (SBV.svAsInteger sbv)
+             _ -> return Nothing
+     case mx of
+       Just x  -> W4.bvLit sym w (BV.mkBV w x)
+       Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+
 resolveSAWTerm ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   LLVMCrucibleContext arch ->
@@ -381,19 +404,7 @@ resolveSAWTerm cc tp tm =
         case someNat sz of
           Just (Some w)
             | Just LeqProof <- isPosNat w ->
-              do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
-                 let ss = cc^.ccBasicSS
-                 tm' <- rewriteSharedTerm sc ss tm
-                 mx <- case getAllExts tm' of
-                         [] -> do
-                           -- Evaluate in SBV to test whether 'tm' is a concrete value
-                           modmap <- scGetModuleMap sc
-                           sbv <- SBV.toWord =<< SBV.sbvSolveBasic modmap Map.empty [] tm'
-                           return (SBV.svAsInteger sbv)
-                         _ -> return Nothing
-                 v <- case mx of
-                        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-                        Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+              do v <- resolveSAWSymBV cc w tm
                  Crucible.ptrToPtrVal <$> Crucible.llvmPointer_bv sym v
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
