@@ -788,7 +788,6 @@ PRingPair a b pa pb =
   , int = \ (i : Integer) -> (pa.int i, pb.int i)
   };
 
-
 -- Integral class
 
 PIntegral : sort 0 -> sort 1;
@@ -881,6 +880,9 @@ PLiteralIntMod n = \ (x : Nat) -> toIntMod n (natToInt x);
 PLiteralIntModNum : (num : Num) -> PLiteral (IntModNum num);
 PLiteralIntModNum num =
   Num#rec (\ (n : Num) -> PLiteral (IntModNum n)) PLiteralIntMod PLiteralInteger num;
+
+-- TODO: FLiteral class
+
 
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
@@ -1021,6 +1023,12 @@ ecCompl a pa = pa.not;
 
 ecZero : (a : sort 0) -> PZero a -> a;
 ecZero a pa = pa;
+
+-- FLiteral
+
+ecFraction : (a : sort 0) -> a;
+ecFraction a = error a "Unimplemented: fraction";
+
 
 -- Sequences
 ecShiftL : (m : Num) -> (ix a : sort 0) -> PIntegral ix -> PZero a ->
@@ -1291,6 +1299,53 @@ ecRandom a _ = error a "Cryptol.random";
 -- Trace function; simply return the final argument
 ecTrace : (n : Num) -> (a b : sort 0) -> seq n (bitvector 8) -> a -> b -> b;
 ecTrace _ _ _ _ _ x = x;
+
+
+--------------------------------------------------------------------------------
+-- Floating point primitives (TODO)
+
+TCFloat : Num -> Num -> sort 0;
+TCFloat _ _ = #();
+
+PZeroFloat : (e p : Num) -> PZero (TCFloat e p);
+PZeroFloat e p = error (TCFloat e p) "Unimplemented: Zero Float";
+
+PRingFloat : (e p : Num) -> PRing (TCFloat e p);
+PRingFloat e p =
+  { ringZero = PZeroFloat e p
+  , add = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (+) Float"
+  , sub = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (-) Float"
+  , mul = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (*) Float"
+  , neg = \(x : TCFloat e p) -> error (TCFloat e p) "Unimplemented: neg Float"
+  , int = \ (i : Integer) -> error (TCFloat e p) "Unimplemented: toInteger Float"
+  };
+
+ecFpNaN : (e : Num) -> (p : Num) -> TCFloat e p;
+ecFpNaN e p = error (TCFloat e p) "Unimplemented: fpNaN";
+
+ecFpPosInf : (e : Num) -> (p : Num) -> TCFloat e p;
+ecFpPosInf e p = error (TCFloat e p) "Unimplemented: fpPosInf";
+
+ecFpFromBits : (e : Num) -> (p : Num) -> seq (tcAdd e p) Bool -> TCFloat e p;
+ecFpFromBits e p _ = error (TCFloat e p) "Unimplemented: fpFromBits";
+
+ecFpToBits : (e : Num) -> (p : Num) -> TCFloat e p -> seq (tcAdd e p) Bool;
+ecFpToBits e p _ = error (seq (tcAdd e p) Bool) "Unimplemented: fpToBits";
+
+ecFpEq : (e : Num) -> (p : Num) -> TCFloat e p -> TCFloat e p -> Bool;
+ecFpEq e p _ _ = error Bool "Unimplemented: =.=";
+
+ecFpAdd : (e : Num) -> (p : Num) -> bitvector 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpAdd e p _ _ _ = error (TCFloat e p) "Unimplemented: fpAdd";
+
+ecFpSub : (e : Num) -> (p : Num) -> bitvector 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpSub e p _ _ _ = error (TCFloat e p) "Unimplemented: fpSub";
+
+ecFpMul : (e : Num) -> (p : Num) -> bitvector 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpMul e p _ _ _ = error (TCFloat e p) "Unimplemented: fpMul";
+
+ecFpDiv : (e : Num) -> (p : Num) -> bitvector 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpDiv e p _ _ _ = error (TCFloat e p) "Unimplemented: fpDiv";
 
 
 --------------------------------------------------------------------------------
