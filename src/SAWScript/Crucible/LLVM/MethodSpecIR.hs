@@ -184,7 +184,7 @@ data LLVMAllocSpec =
     { _allocSpecMut   :: CL.Mutability
     , _allocSpecType  :: CL.MemType
     , _allocSpecAlign :: CL.Alignment
-    , _allocSpecBytes :: CL.Bytes
+    , _allocSpecBytes :: Term
     , _allocSpecLoc   :: ProgramLoc
     }
   deriving (Eq, Show)

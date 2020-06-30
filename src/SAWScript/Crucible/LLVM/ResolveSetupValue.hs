@@ -25,6 +25,7 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , resolveSetupFieldIndex
   , equalValsPred
   , memArrayToSawCoreTerm
+  , scPtrWidthBvNat
   ) where
 
 import Control.Lens ((^.))
@@ -443,6 +444,16 @@ resolveSAWTerm cc tp tm =
   where
     sym = cc^.ccBackend
     dl = Crucible.llvmDataLayout (ccTypeCtx cc)
+
+scPtrWidthBvNat ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Integral a) =>
+  LLVMCrucibleContext arch ->
+  a ->
+  IO Term
+scPtrWidthBvNat cc n =
+  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager $ cc^.ccBackend)
+     w <- scNat sc $ natValue Crucible.PtrWidth
+     scBvNat sc w =<< scNat sc (fromIntegral n)
 
 data ToLLVMTypeErr = NotYetSupported String | Impossible String
 

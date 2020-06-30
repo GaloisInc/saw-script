@@ -1,0 +1,27 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+let foo_spec check = do {
+  n <- crucible_fresh_var "n" (llvm_int 64);
+  x_ptr <- crucible_array_alloc 1 n;
+  i <- crucible_fresh_var "i" (llvm_int 64);
+  if check then do {
+    crucible_precond {{ i < n }};
+  } else do {
+    return ();
+  };
+  crucible_execute_func [x_ptr, (crucible_term n), (crucible_term i)];
+};
+
+let bar_spec = do {
+  n <- crucible_fresh_var "n" (llvm_int 64);
+  x_ptr <- crucible_array_alloc 1 n;
+  i <- crucible_fresh_var "i" (llvm_int 64);
+  crucible_execute_func [x_ptr, (crucible_term n), (crucible_term i)];
+};
+
+fails (crucible_llvm_verify m "foo" [] false (foo_spec false) abc);
+foo_ov <- crucible_llvm_verify m "foo" [] false (foo_spec true) abc;
+crucible_llvm_verify m "bar" [foo_ov] false bar_spec abc;
+
