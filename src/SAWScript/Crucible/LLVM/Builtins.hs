@@ -1723,23 +1723,26 @@ crucible_alloc_aligned_with_mutability ::
   L.Type ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 crucible_alloc_aligned_with_mutability mut bic opts n lty =
+  do alignment <- LLVMCrucibleSetupM $ coerceAlignment n
+     crucible_alloc_with_mutability_and_size
+       mut
+       Nothing
+       (Just alignment)
+       bic
+       opts
+       lty
+
+coerceAlignment :: Int -> CrucibleSetup (LLVM arch) Crucible.Alignment
+coerceAlignment n =
   case Crucible.toAlignment (Crucible.toBytes n) of
     Nothing ->
-      LLVMCrucibleSetupM $ do
-        loc <- getW4Position "crucible_alloc_aligned_with_mutability"
-        throwCrucibleSetup loc $ unwords
-          [ "crucible_alloc_aligned/crucible_alloc_readonly_aligned:"
-          , "invalid non-power-of-2 alignment:"
-          , show n
-          ]
-    Just alignment ->
-      crucible_alloc_with_mutability_and_size
-        mut
-        Nothing
-        (Just alignment)
-        bic
-        opts
-        lty
+      do loc <- getW4Position "crucible_alloc_aligned_with_mutability"
+         throwCrucibleSetup loc $ unwords
+           [ "crucible_alloc_aligned/crucible_alloc_readonly_aligned:"
+           , "invalid non-power-of-2 alignment:"
+           , show n
+           ]
+    Just alignment -> return alignment
 
 crucible_alloc_with_size ::
   BuiltinContext ->
