@@ -153,7 +153,7 @@ heapster_default_env =
              ],
             SomeNamedPerm $ NamedPerm_Rec $ RecPerm
             list_rpn
-            "Prelude.List"
+            "Prelude.List_def"
             "Prelude.foldList"
             "Prelude.unfoldList"
             [nuMulti (cruCtxProxies p_l_rw_ctx)
