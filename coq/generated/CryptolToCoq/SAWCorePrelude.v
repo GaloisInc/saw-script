@@ -855,6 +855,9 @@ Definition updBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((
 
 (* Prelude.List was skipped *)
 
+Definition List_def : forall (a : Type), Type :=
+  (fun (a : Type) => ((@Datatypes.list) (a))).
+
 (* Prelude.List__rec was skipped *)
 
 Definition unfoldList : forall (a : Type), (((@Datatypes.list) (a))) -> ((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit)))))) :=
