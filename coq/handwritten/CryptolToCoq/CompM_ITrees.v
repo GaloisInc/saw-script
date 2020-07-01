@@ -115,6 +115,12 @@ Lemma bind_vis_eutt E A B C (e:E A) (tree:A -> itree E B) (f:B -> itree E C) :
 Proof.
 Admitted.
 
+Lemma bind_tau_eutt E A B (tree:itree E A) (f:A -> itree E B) :
+  eutt eq (Tau tree >>= f) (Tau (tree >>= f)).
+Proof.
+Admitted.
+
+
 Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
       (m:itree E A) (f:A -> itree E B) :
   itree_satisfies_spec P m ->
@@ -123,16 +129,22 @@ Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
 Proof.
   intro sats; revert P m sats B Q f. cofix CIH. intros P m sats; destruct sats; intros.
   { rewrite bind_ret_l. rewrite bind_ret_l. apply H. constructor. }
-  { rewrite tau_eutt. apply CIH; assumption. }
-  { rewrite tau_eutt. apply CIH; [ assumption | ].
+  { rewrite bind_tau_eutt. apply Satisfies_TauL. apply CIH; assumption. }
+  { rewrite bind_tau_eutt. apply Satisfies_TauR. apply CIH; [ assumption | ].
     intros a iirv; apply H. apply iirv_tau; assumption. }
   { rewrite bind_vis_eutt. rewrite bind_vis_eutt.
     apply Satisfies_Vis. intro.
     apply CIH; [ apply H | ]. intros a iirv. apply H0.
     apply (iirv_vis _ _ _ x). assumption. }
+  { rewrite bind_vis_eutt. apply Satisfies_Forall. intros.
+    apply CIH; [ apply (H x) | apply H0 ]. }
+  { rewrite bind_vis_eutt. apply Satisfies_Exists.
+    destruct H as [ x H ]. exists x.
+    apply CIH; [ apply H | apply H0 ]. }
+Qed.
 
 
-FIXME HERE: keep going...
+FIXME HERE: the above does not work because of casts!
 
 
 
