@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE KindSignatures #-}
 
 module SAWScript.HeapsterBuiltins
        ( heapster_init_env
@@ -39,6 +40,7 @@ import Data.Binding.Hobbits
 
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Module
+import Verifier.SAW.Prelude
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.OpenTerm
 import Verifier.SAW.Typechecker
@@ -72,6 +74,7 @@ import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.TypedCrucible
 import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.PermParser
+import Verifier.SAW.Heapster.Implication (mbMap2)
 import Text.Parsec (runParser)
 
 import SAWScript.Prover.Exporter
@@ -107,82 +110,7 @@ castFunPerm cfg fun_perm =
                       "Actual: " ++ show (funPermRet fun_perm)]
 
 heapster_default_env :: Closed PermEnv
-heapster_default_env =
-  $(mkClosed
-    [| let l_rw_ctx :: CruCtx (RNil :> LifetimeType :> RWModalityType) =
-             knownRepr
-           p_l_rw_ctx :: CruCtx (RNil :> ValuePermType (LLVMPointerType 64) :>
-                                 LifetimeType :> RWModalityType) =
-             knownRepr
-           llvm64_tp :: TypeRepr (LLVMPointerType 64) = knownRepr
-           w64_rpn = NamedPermName "list64" llvm64_tp l_rw_ctx
-           list_rpn = NamedPermName "List" llvm64_tp p_l_rw_ctx in
-       PermEnv
-       {
-         permEnvFunPerms = [],
-         permEnvNamedPerms =
-           [SomeNamedPerm $ NamedPerm_Rec $ RecPerm
-            w64_rpn
-            "Prelude.W64List"
-            "Prelude.foldW64List"
-            "Prelude.unfoldW64List"
-            [nuMulti (cruCtxProxies l_rw_ctx)
-              (\_ -> ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] 0)))
-            ,
-             nuMulti (cruCtxProxies l_rw_ctx)
-              (\(_ :>: l :>: rw) ->
-                ValPerm_Conj
-                [Perm_LLVMField $ LLVMFieldPerm {
-                    llvmFieldRW = PExpr_Var rw,
-                    llvmFieldLifetime = PExpr_Var l,
-                    llvmFieldOffset = PExpr_BV [] 0,
-                    llvmFieldContents =
-                        ValPerm_Exists (nu $ \x ->
-                                         ValPerm_Eq $ PExpr_LLVMWord $
-                                         PExpr_Var x) },
-                 Perm_LLVMField $ LLVMFieldPerm {
-                    llvmFieldRW = PExpr_Var rw,
-                    llvmFieldLifetime = PExpr_Var l,
-                    llvmFieldOffset = PExpr_BV [] 8,
-                    llvmFieldContents =
-                        ValPerm_Named w64_rpn
-                        (PExprs_Cons
-                         (PExprs_Cons PExprs_Nil (PExpr_Var l))
-                         (PExpr_Var rw)) }]
-              )
-             ],
-            SomeNamedPerm $ NamedPerm_Rec $ RecPerm
-            list_rpn
-            "Prelude.List"
-            "Prelude.foldList"
-            "Prelude.unfoldList"
-            [nuMulti (cruCtxProxies p_l_rw_ctx)
-              (\_ -> ValPerm_Eq (PExpr_LLVMWord (PExpr_BV [] 0)))
-            ,
-             nuMulti (cruCtxProxies p_l_rw_ctx)
-              (\(_ :>: p :>: l :>: rw) ->
-                ValPerm_Conj
-                [Perm_LLVMField $ LLVMFieldPerm {
-                    llvmFieldRW = PExpr_Var rw,
-                    llvmFieldLifetime = PExpr_Var l,
-                    llvmFieldOffset = PExpr_BV [] 0,
-                    llvmFieldContents = ValPerm_Var p },
-                 Perm_LLVMField $ LLVMFieldPerm {
-                    llvmFieldRW = PExpr_Var rw,
-                    llvmFieldLifetime = PExpr_Var l,
-                    llvmFieldOffset = PExpr_BV [] 8,
-                    llvmFieldContents =
-                        ValPerm_Named list_rpn
-                        (PExprs_Cons
-                         (PExprs_Cons (PExprs_Cons PExprs_Nil (PExpr_Var p))
-                          (PExpr_Var l))
-                         (PExpr_Var rw)) }]
-              )
-             ]
-           ],
-           permEnvGlobalSyms = []
-       }
-     |])
+heapster_default_env = $(mkClosed [| PermEnv [] [] [] |])
 
 -- | Based on the function of the same name in Verifier.SAW.ParserUtils.
 -- Unlike that function, this calls 'fail' instead of 'error'.
@@ -218,20 +146,30 @@ translateTypePerm sc env typ_perm =
   typeTransType1 $
   runTransM (translate $ emptyMb typ_perm) (emptyTypeTransInfo env)
 
--- FIXME: If the parsed string is an ident, don't insert a new definition.
+translateOpenTermToTerm :: SharedContext -> PermEnv -> [(SomeNamedPermName, Ident)]
+                        -> TransM TypeTransInfo RNil OpenTerm -> TopLevel Term 
+translateOpenTermToTerm sc env npnts m =
+  liftIO $ completeOpenTerm sc $ runTransM m (TypeTransInfo MNil npnts env)
+
 parseAndInsDef :: HeapsterEnv -> String -> Term -> String -> TopLevel Ident
 parseAndInsDef henv nm term_tp term_string =
   do sc <- getSharedContext
      un_term <- parseTermFromString nm term_string
      let mnm = heapsterEnvSAWModule henv
-     TypedTerm term _ <- typecheckTerm mnm un_term
-     let term_ident = mkIdent mnm nm
-     liftIO $ scModifyModule sc mnm $ \m ->
-        insDef m $ Def { defIdent = term_ident,
-                         defQualifier = NoQualifier,
-                         defType = term_tp,
-                         defBody = Just term }
-     pure term_ident
+     typed_term <- typecheckTerm mnm un_term
+     case typed_term of
+       TypedTerm (STApp _ _ (FTermF (GlobalDef term_ident))) _ -> do
+         liftIO $ runTCM (checkSubtype typed_term term_tp) sc (Just mnm) []
+         pure term_ident
+       TypedTerm term _ -> do
+         let term_ident = mkSafeIdent mnm nm
+         liftIO $ scModifyModule sc mnm $ \m ->
+           insDef m $ Def { defIdent = term_ident,
+                            defQualifier = NoQualifier,
+                            defType = term_tp,
+                            defBody = Just term }
+         pure term_ident
+
 
 heapster_init_env :: BuiltinContext -> Options -> String -> String ->
                      TopLevel HeapsterEnv
@@ -243,7 +181,10 @@ heapster_init_env bic opts mod_str llvm_filename =
      if mod_loaded then
        fail ("SAW module with name " ++ show mod_str ++ " already defined!")
        else return ()
-     liftIO $ scLoadModule sc (emptyModule saw_mod_name)
+     -- import Prelude by default
+     preludeMod <- liftIO $ scFindModule sc preludeModuleName
+     liftIO $ scLoadModule sc (insImport (const True) preludeMod $
+                                 emptyModule saw_mod_name)
      let perm_env = unClosed heapster_default_env
      perm_env_ref <- liftIO $ newIORef perm_env
      return $ HeapsterEnv {
@@ -306,20 +247,34 @@ heapster_define_recursive_perm _bic _opts henv
          Right tp -> return tp
        case (some_args, some_val) of
          (Some args_ctx@(ParsedCtx _ args), Some val_perm) -> do
+           let rpn = NamedPermName nm val_perm args
            sc <- getSharedContext
-           trans_tp <- liftIO $ translateTypePerm sc env (ValuePermRepr val_perm)
+           
+           trans_tp <- translateOpenTermToTerm sc env [] $
+             piExprCtx args (typeTransType1 <$>
+               translateClosed (ValuePermRepr val_perm))
            trans_ident <- parseAndInsDef henv nm trans_tp trans_str
-           let srpn = SomeNamedPermName (NamedPermName nm val_perm args)
-               penv' = (mkParserEnv env) { parserEnvPermVars = [(nm,srpn)] }
+           
+           let penv' = penv { parserEnvPermVars = [(nm, SomeNamedPermName rpn)] }
            p_perms <- forM p_strs $ \p_str ->
              case runParser (parseValPermInCtx args_ctx val_perm) penv' "" p_str of
                Left err -> fail ("Error parsing disjunctive perm: " ++ show err)
                Right p_perm -> pure p_perm
-           let fold_ident   = fromString fold_fun_str
-           let unfold_ident = fromString unfold_fun_str
-           sc <- getSharedContext
-           _ <- liftIO $ scRequireDef sc fold_ident -- Ensure that these are defined
-           _ <- liftIO $ scRequireDef sc unfold_ident
+          
+           let npnts = [(SomeNamedPermName rpn, trans_ident)]
+               or_tp = mbCombine . emptyMb $
+                         foldr1 (mbMap2 ValPerm_Or) p_perms
+               nm_tp = mbCombine . emptyMb $
+                         nus (cruCtxProxies args) (ValPerm_Named rpn . pExprVars)
+           fold_fun_tp <- translateOpenTermToTerm sc env npnts $ 
+             piExprCtx args (piPermCtx (fmap (ValPerms_Cons ValPerms_Nil) or_tp)
+               (const $ typeTransType1 <$> translate nm_tp))
+           fold_ident <- parseAndInsDef henv nm fold_fun_tp fold_fun_str
+           unfold_fun_tp <- translateOpenTermToTerm sc env npnts $ 
+             piExprCtx args (piPermCtx (fmap (ValPerms_Cons ValPerms_Nil) nm_tp)
+               (const $ typeTransType1 <$> translate or_tp))
+           unfold_ident <- parseAndInsDef henv nm unfold_fun_tp unfold_fun_str
+
            let env' = permEnvAddRecPerm env nm args val_perm p_perms
                                         trans_ident fold_ident unfold_ident
            liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
@@ -336,7 +291,7 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
       let mnm = heapsterEnvSAWModule henv
       un_term <- parseTermFromString nm term_string
       TypedTerm term _ <- typecheckTerm mnm un_term
-      let term_ident = mkIdent mnm nm
+      let term_ident = mkSafeIdent mnm nm
           trans_tm = globalOpenTerm term_ident
 
       let arch = llvmArch $ _transContext (lm ^. modTrans)
@@ -410,7 +365,7 @@ heapster_print_fun_trans bic opts henv fn_name =
      let saw_modname = heapsterEnvSAWModule henv
      fun_term <-
        fmap (fromJust . defBody) $
-       liftIO $ scRequireDef sc $ mkIdent saw_modname fn_name
+       liftIO $ scRequireDef sc $ mkSafeIdent saw_modname fn_name
      liftIO $ putStrLn $ scPrettyTerm pp_opts fun_term
 
 heapster_export_coq :: BuiltinContext -> Options -> HeapsterEnv ->
