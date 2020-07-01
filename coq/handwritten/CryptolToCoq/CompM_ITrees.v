@@ -46,26 +46,74 @@ Inductive is_itree_retval {E A} : itree E A -> A -> Prop :=
 Infix ">>=" := ITree.bind (at level 58, left associativity).
 Notation "m1 >> m2" := (m1 >>= fun _ => m2) (at level 58, left associativity).
 
+CoFixpoint itree_satisfies_untau_l' E A spec tree
+           (sats:@itree_satisfies_spec E A spec tree) :
+  forall spec', spec = Tau spec' -> itree_satisfies_spec spec' tree.
+Proof.
+  destruct sats; intros; try discriminate.
+  - injection H; intro e; rewrite <- e. assumption.
+  - apply Satisfies_TauR. apply (itree_satisfies_untau_l' _ _ spec); assumption.
+Qed.
+
+Lemma itree_satisfies_untau_l E A spec tree :
+  @itree_satisfies_spec E A (Tau spec) tree ->
+  itree_satisfies_spec spec tree.
+Proof.
+  intros sats. apply (itree_satisfies_untau_l' E A _ _ sats _ eq_refl).
+Qed.
+
+CoFixpoint itree_satisfies_untau_r' E A spec tree
+           (sats:@itree_satisfies_spec E A spec tree) :
+  forall tree', tree = Tau tree' -> itree_satisfies_spec spec tree'.
+Proof.
+  destruct sats; intros; try discriminate.
+  - apply Satisfies_TauL. apply (itree_satisfies_untau_r' _ _ _ tree); assumption.
+  - injection H; intro e; rewrite <- e. assumption.
+  - apply Satisfies_Forall; intro.
+    apply (itree_satisfies_untau_r' _ _ _ tree (H x) _ H0).
+  - destruct H as [ x H ]. apply Satisfies_Exists. exists x.
+    apply (itree_satisfies_untau_r' _ _ _ tree H _ H0).
+Qed.
+
+Lemma itree_satisfies_untau_r E A spec tree :
+  @itree_satisfies_spec E A spec (Tau tree) ->
+  itree_satisfies_spec spec tree.
+Proof.
+  intros sats. apply (itree_satisfies_untau_r' E A _ _ sats _ eq_refl).
+Qed.
+
+CoFixpoint itree_satisfies_eutt_l E A spec tree
+           (sats:@itree_satisfies_spec E A spec tree)
+           spec' (e:eutt eq spec spec') :
+  itree_satisfies_spec spec' tree.
+Proof.
+Admitted.
+
+CoFixpoint itree_satisfies_eutt_r E A spec tree
+           (sats:@itree_satisfies_spec E A spec tree)
+           tree' (e:eutt eq tree tree') :
+  itree_satisfies_spec spec tree'.
+Proof.
+Admitted.
+
 Instance Proper_eq_itree_itree_satisfies_spec_impl E A :
-  Proper (eq_itree eq ==> eq_itree eq ==> Basics.impl) (@itree_satisfies_spec E A).
+  Proper (eutt eq ==> eutt eq ==> iff) (@itree_satisfies_spec E A).
+Proof.
+  intros spec1 spec2 e_spec tree1 tree2 e_tree.
+  split; intro H.
+  - eapply itree_satisfies_eutt_l; [ | eassumption ].
+    eapply itree_satisfies_eutt_r; [ | eassumption ].
+    assumption.
+  - eapply itree_satisfies_eutt_l; [ | symmetry; eassumption ].
+    eapply itree_satisfies_eutt_r; [ | symmetry; eassumption ].
+    assumption.
+Qed.
+
+
+Lemma bind_vis_eutt E A B C (e:E A) (tree:A -> itree E B) (f:B -> itree E C) :
+  eutt eq (Vis e tree >>= f) (Vis e (fun x => tree x >>= f)).
 Proof.
 Admitted.
-
-Instance Proper_eq_itree_itree_satisfies_spec E A :
-  Proper (eq_itree eq ==> eq_itree eq ==> iff) (@itree_satisfies_spec E A).
-Proof.
-(* FIXME: should follow directly from Proper_eq_itree_itree_satisfies_spec_impl and
-  symmetry of eq_itree
-
-  intros P1 P2 RP m1 m2 Rm; split; intro.
-  - unshelve (eapply (Proper_eq_itree_itree_satisfies_spec_impl _ _ RP _ _ Rm _)).
-      try eassumption.
-  - eapply (Proper_eq_itree_itree_satisfies_spec_impl _ _ _ _ _ _ _).
-    + symmetry; eassumption.
-    + eassumption.
-*)
-Admitted.
-
 
 Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
       (m:itree E A) (f:A -> itree E B) :
@@ -73,115 +121,19 @@ Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
   (forall a, is_itree_retval m a -> itree_satisfies_spec (Q a) (f a)) ->
   itree_satisfies_spec (P >>= Q) (m >>= f).
 Proof.
-Admitted.
-
-(* FIXME: I don't think this is provable... *)
-(*
-Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
-      (m:itree E B) :
-  itree_satisfies_spec (P >>= Q) m <->
-  exists m', exists f,
-      eutt eq m (m' >>= f) /\ itree_satisfies_spec P m' /\
-      forall a, is_itree_retval m' a -> itree_satisfies_spec (Q a) (f a).
-Proof.
-  split.
-  { intro. 
-*)
+  intro sats; revert P m sats B Q f. cofix CIH. intros P m sats; destruct sats; intros.
+  { rewrite bind_ret_l. rewrite bind_ret_l. apply H. constructor. }
+  { rewrite tau_eutt. apply CIH; assumption. }
+  { rewrite tau_eutt. apply CIH; [ assumption | ].
+    intros a iirv; apply H. apply iirv_tau; assumption. }
+  { rewrite bind_vis_eutt. rewrite bind_vis_eutt.
+    apply Satisfies_Vis. intro.
+    apply CIH; [ apply H | ]. intros a iirv. apply H0.
+    apply (iirv_vis _ _ _ x). assumption. }
 
 
-(* FIXME: old stuff below *)
+FIXME HERE: keep going...
 
-(* The set of ITrees monad *)
-Definition ITreeSet E A : Type := itree E A -> Prop.
-
-
-(* Refinement = subset *)
-Definition refinesM {E A} (m1 m2:ITreeSet E A) : Prop :=
-  forall itree, m1 itree -> m2 itree.
-
-Instance PreOrder_refinesM E A : PreOrder (@refinesM E A).
-Proof.
-  constructor.
-  - repeat intro; assumption.
-  - intros m1 m2 m3 R12 R23 itree in_1. apply R23; apply R12; assumption.
-Qed.
-
-
-(* Equality = refinement in both directions *)
-Definition eqM {E A} (m1 m2:ITreeSet E A) : Prop :=
-  forall itree, m1 itree <-> m2 itree.
-
-Infix "~=" := eqM (at level 70, no associativity).
-
-Instance Equivalence_eqM E A : Equivalence (@eqM E A).
-Proof.
-  constructor.
-  - intros m itree; reflexivity.
-  - intros m1 m2 R12 itree; symmetry; apply R12.
-  - intros m1 m2 m3 R12 R23 itree.
-    transitivity (m2 itree); [ apply R12 | apply R23 ].
-Qed.
-
-
-(* return x = the set containing exactly the itree return x *)
-Definition returnM {E A} (a:A) : ITreeSet E A :=
-  fun itree => eutt eq itree (Ret a).
-
-
-(* The proposition that a is returned by an itree along some path *)
-CoInductive is_itree_retval {E A} : itree E A -> A -> Prop :=
-| iirv_ret a : is_itree_retval (Ret a) a
-| iirv_tau itree a : is_itree_retval itree a -> is_itree_retval (Tau itree) a
-| iirv_vis {X} (ev:E X) itree a x : is_itree_retval (itree x) a ->
-                                    is_itree_retval (Vis ev itree) a
-.
-
-Lemma is_itree_retval_eutt E A (itree1: itree E A) a (iirv: is_itree_retval itree1 a) itree2 :
-  eutt eq itree1 itree2 -> is_itree_retval itree2 a.
-Admitted.
-
-Instance Proper_is_itree_retval E A : Proper (eutt eq ==> eq ==> iff) (@is_itree_retval E A).
-Proof.
-  intros itree1 itree2 R12 a1 a2 eq_a; rewrite eq_a.
-  split; intro iirv;
-    apply (is_itree_retval_eutt _ _ _ _ iirv); [ | symmetry ]; assumption.
-Qed.
-
-(* m >>= f is the set of all m' >>= f' such that m' is in m and, for all return
-values a of m', f' a is in f a *)
-Definition bindM {E A B} (m:ITreeSet E A) (f:A -> ITreeSet E B) : ITreeSet E B :=
-  fun itree =>
-    exists itree_m,
-    exists itree_f,
-      eutt eq itree (ITree.bind itree_m itree_f) /\
-      m itree_m /\ forall a, is_itree_retval itree_m a -> f a (itree_f a).
-
-Infix ">>=" := bindM (at level 58, left associativity).
-Notation "m1 >> m2" := (m1 >>= fun _ => m2) (at level 58, left associativity).
-
-(* bindM is Proper w.r.t eqM *)
-Instance Proper_bindM E A B : Proper (eqM ==> (pointwise_relation A eqM) ==> eqM)
-                                     (@bindM E A B).
-Proof.
-  intros m1 m2 Rm f1 f2 Rf itree. unfold eqM, refinesM, bindM.
-  split; intros [ itree_m [ itree_f [ eq_mf [ in_m in_f ]]]];
-    exists itree_m; exists itree_f; split; try assumption; split;
-      try (apply Rm; assumption);
-      intros; apply Rf; apply in_f; assumption.
-Qed.
-
-(* FIXME: bindM is Proper w.r.t. refinement *)
-
-(* The first monad law *)
-Theorem returnM_bindM E A B (a:A) (f:A -> ITreeSet E B) : returnM a >>= f ~= f a.
-Proof.
-  intro itree. unfold bindM. split.
-  - intros [ itree_m [ itree_f [ itree_eq [ in_return in_f ]]]].
-    unfold returnM in in_return. rewrite in_return in itree_eq.
-    rewrite bind_ret_l in itree_eq.
-
-
-FIXME: eqM needs to expand the sets up to eutt
 
 
 (* Our event type = errors *)
