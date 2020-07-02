@@ -256,7 +256,7 @@ crucible_llvm_verify bic opts (Some lm) nm lemmas checkSat setup tactic =
   do lemmas' <- checkModuleCompatibility lm lemmas
      withMethodSpec bic opts lm nm setup $ \cc method_spec ->
        do (res_method_spec, _) <- verifyMethodSpec bic opts cc method_spec lemmas' checkSat tactic Nothing
-          return $ SomeLLVM res_method_spec
+          returnProof $ SomeLLVM res_method_spec
 
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
@@ -269,7 +269,7 @@ crucible_llvm_unsafe_assume_spec bic opts (Some lm) nm setup =
   withMethodSpec bic opts lm nm setup $ \_ method_spec ->
   do printOutLnTop Info $
        unwords ["Assume override", (method_spec ^. csName)]
-     return $ SomeLLVM method_spec
+     returnProof $ SomeLLVM method_spec
 
 crucible_llvm_array_size_profile ::
   BuiltinContext ->

@@ -61,6 +61,7 @@ library
     , parsec
     , pretty
     , pretty-show
+    , prettyprinter
     , process
     , saw-core
     , saw-core-aig
@@ -161,6 +162,8 @@ library
     SAWScript.Prover.What4
     SAWScript.Prover.Exporter
     SAWScript.Prover.Versions
+
+    SAWScript.VerificationSummary
 
     SAWScript.X86
     SAWScript.X86Spec

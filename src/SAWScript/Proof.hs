@@ -19,7 +19,11 @@ newtype Prop = Prop { unProp :: Term }
 
 -- | A theorem is a proposition which has been wrapped in a
 -- constructor indicating that it has already been proved.
-data Theorem = Theorem { thmProp :: Prop }
+data Theorem =
+  Theorem
+  { thmProp :: Prop
+  , thmStats :: SolverStats
+  }
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
 -- some metadata.
@@ -103,5 +107,5 @@ startProof g = ProofState [g] g mempty Nothing
 finishProof :: ProofState -> (SolverStats, Maybe Theorem)
 finishProof (ProofState gs concl stats _) =
   case gs of
-    []    -> (stats, Just (Theorem (goalProp concl)))
+    []    -> (stats, Just (Theorem (goalProp concl) stats))
     _ : _ -> (stats, Nothing)

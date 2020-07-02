@@ -280,9 +280,9 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         C.AbortedResult{} -> printOutLn opts Warn "Warning: function never returns"
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      checkGoals sym opts sc tactic
+      stats <- checkGoals sym opts sc tactic
  
-      pure $ SomeLLVM methodSpec
+      returnProof $ SomeLLVM (methodSpec & MS.csSolverStats .~ stats)
   | otherwise = fail "LLVM module must be 64-bit"
 
 --------------------------------------------------------------------------------
@@ -706,7 +706,7 @@ checkGoals ::
   Options ->
   SharedContext ->
   ProofScript SatResult ->
-  TopLevel ()
+  TopLevel SolverStats
 checkGoals sym opts sc tactic = do
   gs <- liftIO $ getGoals sym
   liftIO . printOutLn opts Info $ mconcat
@@ -714,13 +714,13 @@ checkGoals sym opts sc tactic = do
     , show $ length gs
     , " goals"
     ]
-  forM_ (zip [0..] gs) $ \(n, g) -> do
+  stats <-
+    forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
     r <- evalStateT tactic $ startProof proofgoal
     case r of
-      Unsat stats -> do
-        liftIO . printOutLn opts Info $ ppStats stats
+      Unsat stats -> return stats
       SatMulti stats vals -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show stats)
@@ -734,3 +734,4 @@ checkGoals sym opts sc tactic = do
         printOutLnTop OnlyCounterExamples "----------------------------------"
         throwTopLevel "Proof failed."
   liftIO $ printOutLn opts Info "All goals succeeded"
+  return (mconcat stats)
