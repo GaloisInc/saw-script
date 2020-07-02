@@ -136,9 +136,17 @@ Proof.
     assumption.
 Qed.
 
+(*
 Instance Proper_eutt_paco2_satisfies_impl E A r :
   Proper (eutt eq ==> eutt eq ==> iff) (paco2 (@satisfiesF E A) r).
 Proof.
+Admitted.
+*)
+
+Instance Proper_observing_paco2_satisfies_impl E A r :
+  Proper (observing eq ==> observing eq ==> iff) (paco2 (@satisfiesF E A) r).
+Proof.
+  intros spec1 spec2 [ Rspec ] tree1 tree2 [ Rtree ]. split; intro.
 Admitted.
 
 Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
@@ -149,23 +157,22 @@ Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
 Proof.
   intro sats; revert P m sats. pcofix CIH.
   intros P m sats; punfold sats; destruct sats; intros.
-  { rewrite bind_ret_l. rewrite bind_ret_l.
-    eapply paco2_mon_bot; [ apply H0; constructor | intros; assumption ]. }
-  { rewrite bind_tau. pfold. apply Satisfies_TauL. pclearbot. right.
+  { eapply paco2_mon_bot; [ |  intros; eassumption ].
+    rewrite bind_ret_. rewrite bind_ret_. apply H0. constructor. }
+  { rewrite bind_tau_. pfold. apply Satisfies_TauL. pclearbot. right.
     apply CIH; assumption. }
-  { rewrite bind_tau. pfold. apply Satisfies_TauR. pclearbot. right.
+  { rewrite bind_tau_. pfold. apply Satisfies_TauR. pclearbot. right.
     apply CIH; [ assumption | ]. intros. apply H0. apply iirv_tau; assumption. }
-  { rewrite bind_vis. rewrite bind_vis. pfold. pclearbot.
+  { rewrite bind_vis_. rewrite bind_vis_. pfold. pclearbot.
     apply Satisfies_Vis. intro. right. apply CIH; [ apply H | ].
     intros a iirv. apply H0.
     apply (iirv_vis _ _ _ x). assumption. }
-  { rewrite bind_vis. pfold. pclearbot. apply Satisfies_Forall. intros. right.
+  { rewrite bind_vis_. pfold. pclearbot. apply Satisfies_Forall. intros. right.
     apply CIH; [ apply (H x) | apply H0 ]. }
-  { rewrite bind_vis. pfold. pclearbot. apply Satisfies_Exists.
+  { rewrite bind_vis_. pfold. pclearbot. apply Satisfies_Exists.
     destruct H as [ x H ]. exists x. right. pclearbot.
     apply CIH; [ apply H | apply H0 ]. }
 Qed.
-
 
 
 (* Our event type = errors *)
