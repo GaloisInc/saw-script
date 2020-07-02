@@ -248,6 +248,7 @@ prims be =
   , Prims.bpArrayConstant = unsupportedAIGPrimitive "bpArrayConstant"
   , Prims.bpArrayLookup = unsupportedAIGPrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedAIGPrimitive "bpArrayUpdate"
+  , Prims.bpArrayEq = unsupportedAIGPrimitive "bpArrayEq"
   }
 
 unsupportedAIGPrimitive :: String -> a
