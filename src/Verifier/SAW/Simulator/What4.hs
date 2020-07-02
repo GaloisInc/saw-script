@@ -228,6 +228,7 @@ prims =
   , Prims.bpArrayConstant = arrayConstant sym
   , Prims.bpArrayLookup = arrayLookup sym
   , Prims.bpArrayUpdate = arrayUpdate sym
+  , Prims.bpArrayEq = arrayEq sym
   }
 
 
@@ -556,6 +557,23 @@ arrayUpdate sym arr idx elm
     SArray <$> W.arrayUpdate sym arr_expr (Ctx.Empty Ctx.:> idx_expr) elm_expr
   | otherwise =
     panic "Verifier.SAW.Simulator.What4.Panic.arrayUpdate" ["argument type mismatch"]
+
+arrayEq ::
+  W.IsSymExprBuilder sym =>
+  sym ->
+  SArray sym ->
+  SArray sym ->
+  IO (W.Pred sym)
+arrayEq sym lhs_arr rhs_arr
+  | SArray lhs_arr_expr <- lhs_arr
+  , SArray rhs_arr_expr <- rhs_arr
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> lhs_idx_repr) lhs_elm_repr <- W.exprType lhs_arr_expr
+  , W.BaseArrayRepr (Ctx.Empty Ctx.:> rhs_idx_repr) rhs_elm_repr <- W.exprType rhs_arr_expr
+  , Just Refl <- testEquality lhs_idx_repr rhs_idx_repr
+  , Just Refl <- testEquality lhs_elm_repr rhs_elm_repr =
+    W.arrayEq sym lhs_arr_expr rhs_arr_expr
+  | otherwise =
+    panic "Verifier.SAW.Simulator.What4.Panic.arrayEq" ["argument type mismatch"]
 
 ----------------------------------------------------------------------
 -- | A basic symbolic simulator/evaluator: interprets a saw-core Term as
