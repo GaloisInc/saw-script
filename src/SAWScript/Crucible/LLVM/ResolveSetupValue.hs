@@ -370,6 +370,8 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: unimplemented type Integer (FIXME)"
       Cryptol.TVIntMod _ ->
         fail "resolveSAWTerm: unimplemented type Z n (FIXME)"
+      Cryptol.TVFloat{} ->
+        fail "resolveSAWTerm: unimplemented type Float e p (FIXME)"
       Cryptol.TVArray{} ->
         fail "resolveSAWTerm: unimplemented type Array a b (FIXME)"
       Cryptol.TVRational ->
@@ -456,6 +458,7 @@ toLLVMType dl tp =
     Cryptol.TVBit -> Left (NotYetSupported "bit") -- FIXME
     Cryptol.TVInteger -> Left (NotYetSupported "integer")
     Cryptol.TVIntMod _ -> Left (NotYetSupported "integer (mod n)")
+    Cryptol.TVFloat{} -> Left (NotYetSupported "float e p")
     Cryptol.TVArray{} -> Left (NotYetSupported "array a b")
     Cryptol.TVRational -> Left (NotYetSupported "rational")
 
