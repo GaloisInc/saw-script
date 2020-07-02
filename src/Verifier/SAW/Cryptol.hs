@@ -35,7 +35,7 @@ import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
-import qualified Cryptol.Utils.Ident as C (Ident, PrimIdent(..), packIdent, unpackIdent, prelPrim, floatPrim, arrayName)
+import qualified Cryptol.Utils.Ident as C (Ident, PrimIdent(..), packIdent, unpackIdent, prelPrim, floatPrim, arrayPrim)
 import qualified Cryptol.Utils.Logger as C (quietLogger)
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
@@ -676,7 +676,7 @@ prelPrims =
 arrayPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 arrayPrims =
   Map.fromList $
-  first (C.PrimIdent C.arrayName) <$>
+  first C.arrayPrim <$>
   [ ("arrayConstant", flip scGlobalDef "Cryptol.ecArrayConstant") -- {a,b} b -> Array a b
   , ("arrayLookup",   flip scGlobalDef "Cryptol.ecArrayLookup") -- {a,b} Array a b -> a -> b
   , ("arrayUpdate",   flip scGlobalDef "Cryptol.ecArrayUpdate") -- {a,b} Array a b -> a -> b -> Array a b
