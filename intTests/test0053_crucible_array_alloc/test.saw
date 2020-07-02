@@ -4,8 +4,9 @@ m <- llvm_load_module "test.bc";
 
 let foo_spec check = do {
   n <- crucible_fresh_var "n" (llvm_int 64);
-  x_ptr <- crucible_array_alloc 1 n;
+  x_ptr <- crucible_array_alloc 4 {{ n * 4 }};
   i <- crucible_fresh_var "i" (llvm_int 64);
+  crucible_precond {{ n < 2 ^^ 61 }};
   if check then do {
     crucible_precond {{ i < n }};
   } else do {
@@ -16,8 +17,10 @@ let foo_spec check = do {
 
 let bar_spec = do {
   n <- crucible_fresh_var "n" (llvm_int 64);
-  x_ptr <- crucible_array_alloc 1 n;
+  x_ptr <- crucible_array_alloc 4 n;
   i <- crucible_fresh_var "i" (llvm_int 64);
+  crucible_precond {{ n < 2 ^^ 63 }};
+  crucible_precond {{ n && 3 == 0 }};
   crucible_execute_func [x_ptr, (crucible_term n), (crucible_term i)];
 };
 
