@@ -127,6 +127,7 @@ data BasePrims l =
   , bpArrayConstant :: Value l -> Value l -> MArray l
   , bpArrayLookup :: VArray l -> Value l -> MValue l
   , bpArrayUpdate :: VArray l -> Value l -> Value l -> MArray l
+  , bpArrayEq :: VArray l -> VArray l -> MBool l
   }
 
 bpBool :: VMonad l => BasePrims l -> Bool -> MBool l
@@ -607,6 +608,7 @@ eqOp bp =
       zipWithM go' (map snd elems1) elems2 >>= foldM (bpAnd bp) (bpTrue bp)
     go (VBool b1) (VBool b2) = bpBoolEq bp b1 b2
     go (VInt i1) (VInt i2) = bpIntEq bp i1 i2
+    go (VArray f1) (VArray f2) = bpArrayEq bp f1 f2
     go x1 x2 = panic $ "eq: invalid arguments: " ++ show (x1, x2)
 
     go' :: Thunk l -> Thunk l -> MBool l

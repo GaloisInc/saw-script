@@ -232,6 +232,7 @@ prims =
   , Prims.bpArrayConstant = unsupportedConcretePrimitive "bpArrayConstant"
   , Prims.bpArrayLookup = unsupportedConcretePrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedConcretePrimitive "bpArrayUpdate"
+  , Prims.bpArrayEq = unsupportedConcretePrimitive "bpArrayEq"
   }
 
 unsupportedConcretePrimitive :: String -> a

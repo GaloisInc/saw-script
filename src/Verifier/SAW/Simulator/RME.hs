@@ -220,6 +220,7 @@ prims =
   , Prims.bpArrayConstant = unsupportedRMEPrimitive "bpArrayConstant"
   , Prims.bpArrayLookup = unsupportedRMEPrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedRMEPrimitive "bpArrayUpdate"
+  , Prims.bpArrayEq = unsupportedRMEPrimitive "bpArrayEq"
   }
 
 unsupportedRMEPrimitive :: String -> a
