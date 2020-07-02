@@ -29,4 +29,3 @@ packages:
     deps/macaw/x86_symbolic
     deps/elf-edit
     deps/dwarf
-    deps/cryptol/dependencies/libBF-hs
