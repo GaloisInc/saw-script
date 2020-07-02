@@ -88,17 +88,24 @@ Proof.
     apply H.
 Qed.
 
+Instance Proper_observing_satisfies E A :
+  Proper (observing eq ==> observing eq ==> iff) (@satisfies E A).
+Proof.
+  apply Proper_observing_paco2_satisfies_impl.
+Qed.
+
+(* FIXME: no longer needed? *)
 Lemma observing_eta {E A} (tree:itree E A) : observing eq tree (go (observe tree)).
 Proof.
   constructor. reflexivity.
 Qed.
 
+(* FIXME: no longer needed? *)
 Lemma observing_fun_eta {E A B} (tree:A -> itree E B) :
   pointwise_relation A (observing eq) tree (fun x => go (observe (tree x))).
 Proof.
   intro a. constructor. reflexivity.
 Qed.
-
 
 
 Lemma satisfies_inv_tau_l E A (P:itree_spec E A) m :
@@ -112,53 +119,10 @@ Proof.
     rewrite <- (observing_intros _ _ (Tau P) H). assumption. }
 Qed.
 
+(* FIXME: how do we prove this? *)
 (*
-Lemma satisfies_inv_vis_l E A e X (P:X -> itree_spec E A) m :
-  satisfies (Vis e P) m -> exists m', 
-
-Lemma satisfies_eutt_l E A (P1 P2:itree_spec E A) (e: eutt eq P1 P2) :
-  forall m, satisfies P1 m -> satisfies P2 m.
-Proof.
-  revert P1 P2 e; pcofix CIH. intros P1 P2 e.
-  pose (e' := e).
-  punfold e'. inversion e'; intros.
-  { rewrite <- (observing_intros _ (Ret r2) _ H). rewrite <- REL.
-    rewrite (observing_intros _ (Ret r1) _ H0).
-    eapply paco2_mon_bot; intros; eassumption. }
-  { rewrite <- (observing_intros _ (Tau m2) _ H). pfold.
-    apply Satisfies_TauL. right. apply (CIH m1).
-    - pclearbot. apply REL.
-    - unfold satisfies in H1. rewrite <- (observing_intros _ (Tau m1) _ H0) in H1.
-      apply satisfies_inv_tau_l. apply H1. }
-  { unfold satisfies in H1. rewrite <- (observing_intros _ (Vis e0 k1) _ H0) in H1.
-    punfold H1. inversion H1.
-    - rewrite <- (observing_intros _ (Tau tree) _ H3).
-      rewrite <- (observing_intros _ (Vis e0 k2) _ H).
-      pfold. apply Satisfies_TauR.
-      pclearbot. left.
-
-      rewrite (observing_intros _ (Vis e0 k2) _ H)
-
-
-rewrite <- (observing_intros _ (Vis e0 k2) _ H).
-    - rewrite <- (observing_intros _ (Tau tree) _ H3).
-    apply Satisfies
-
-
-Lemma satisfies_eutt_l' E A (P1 P2:itree_spec' E A)
-      (e: eqitF eq true true id (eutt eq) P1 P2) :
-  forall m, satisfies (go P1) m -> satisfies (go P2) m.
-Proof.
-  revert P1 P2 e; pcofix CIH. intros P1 P2 e m sats. induction e.
-  { rewrite <- REL. eapply paco2_mon_bot; [ eassumption | intros; assumption ]. }
-  { pfold. apply Satisfies_TauL. right. apply CIH.
-FIXME: can't apply CIH, because the argument to Tau is not of the form (go _)
-
-punfold sats. inversion sats.
-*)
-
 Instance Proper_eutt_satisfies E A : Proper (eutt eq ==> eutt eq ==> iff) (@satisfies E A).
-Admitted.
+*)
 
 (* The proposition that a is returned by an itree along some path *)
 Inductive is_itree_retval' {E A} : itree' E A -> A -> Prop :=
@@ -176,56 +140,52 @@ Definition is_itree_retval {E A} tree a := @is_itree_retval' E A (observe tree) 
 Infix ">>=" := ITree.bind (at level 58, left associativity).
 Notation "m1 >> m2" := (m1 >>= fun _ => m2) (at level 58, left associativity).
 
-
-(* FIXME: this is not actually true! *)
-Instance Proper_observing_TauF E A : Proper (observing eq ==> eq)
-                                            (TauF (E:=E) (R:=A) (itree:=itree E A)).
+Instance Proper_observing_is_itree_retval E A :
+  Proper (observing eq ==> eq ==> iff) (@is_itree_retval E A).
 Proof.
-Admitted.
+  intros m1 m2 [ em ] a1 a2 ea. rewrite <- ea. unfold is_itree_retval.
+  rewrite em. reflexivity.
+Qed.
 
-(* FIXME: this is not actually true! *)
-Instance Proper_observing_VisF E A X :
-  Proper (eq ==> pointwise_relation X (observing eq) ==> eq)
-         (VisF (E:=E) (R:=A) (itree:=itree E A) (X:=X)).
-Proof.
-Admitted.
-
-Lemma bind_satisfies_bind' E A B (P:itree_spec' E A) (Q:A -> itree_spec E B)
-      (m:itree' E A) (f:A -> itree E B) :
-  satisfiesF satisfies P m ->
-  (forall a, is_itree_retval' m a -> satisfies (Q a) (f a)) ->
-  satisfies (go P >>= Q) (go m >>= f).
+Lemma bind_satisfies_bind E A B (P:itree_spec E A) (Q:A -> itree_spec E B)
+      (m:itree E A) (f:A -> itree E B) :
+  satisfies P m ->
+  (forall a, is_itree_retval m a -> satisfies (Q a) (f a)) ->
+  satisfies (P >>= Q) (m >>= f).
 Proof.
   intro sats; revert P m sats. pcofix CIH.
-  intros P m sats; destruct sats; intros.
-  { repeat rewrite bind_ret_. eapply paco2_mon_bot; [ | intros; eassumption ].
-    apply H0. constructor. }
-  { rewrite (observing_eta spec). rewrite bind_tau_. pfold. apply Satisfies_TauL. right.
-    apply CIH; [ | apply H0 ]. punfold H. unfold satisfies_ in H.
-    eapply satisfiesF_mono; [ | eassumption ].
-    intros s t sats. pclearbot. apply sats. }
-  { rewrite (observing_eta tree). rewrite bind_tau_. pfold. apply Satisfies_TauR. right.
+  intros P m sats; punfold sats; inversion sats; intros.
+  { rewrite <- (observing_intros _ (Ret a) _ H).
+    rewrite <- (observing_intros _ (Ret a) _ H0).
+    repeat rewrite bind_ret_.
+    eapply paco2_mon_bot; [ apply H1 | intros; eassumption ].
+    rewrite <- (observing_intros _ (Ret a) _ H). constructor. }
+  { rewrite <- (observing_intros _ (Tau spec) _ H). rewrite bind_tau_.
+    pfold. apply Satisfies_TauL. right. apply CIH; [ | apply H2 ].
+    pclearbot. rewrite <- (observing_intros _ _ _ H0). assumption. }
+  { rewrite <- (observing_intros _ (Tau tree) _ H0). rewrite bind_tau_.
+    pfold. apply Satisfies_TauR. right.
     apply CIH.
-    - punfold H. eapply satisfiesF_mono; [ | eassumption ].
-      intros. pclearbot. assumption.
-    - intros. apply H0. apply iirv_tau; assumption. }
-  { rewrite (observing_fun_eta spec). rewrite (observing_fun_eta tree).
+    - pclearbot. rewrite <- (observing_intros _ _ _ H). assumption.
+    - intros. apply H2. rewrite <- (observing_intros _ (Tau tree) _ H0).
+      constructor. apply H3. }
+  { rewrite <- (observing_intros _ (Vis (Spec_vis e) spec) _ H).
+    rewrite <- (observing_intros _ (Vis e tree) _ H0).
     rewrite bind_vis_. rewrite bind_vis_. pfold.
     apply Satisfies_Vis. intro. right. apply CIH.
-    - pose (sats := H x). punfold sats. eapply satisfiesF_mono; [ | eassumption ].
-      intros; pclearbot; assumption.
-    - intros; apply H0. eapply iirv_vis. eassumption. }
-  { rewrite (observing_fun_eta spec). rewrite bind_vis_. pfold.
+    - pclearbot. apply H1.
+    - intros; apply H2. rewrite <- (observing_intros _ (Vis e tree) _ H0).
+      econstructor. eassumption. }
+  { rewrite <- (observing_intros _ (Vis Spec_forall spec) _ H).
+    rewrite bind_vis_. pfold.
     apply Satisfies_Forall. intros. right.
-    apply CIH; [ | apply H0 ].
-    pose (sats := H x). punfold sats. eapply satisfiesF_mono; [ | eassumption ].
-    intros. pclearbot. assumption. }
-  { rewrite (observing_fun_eta spec). rewrite bind_vis_. pfold.
-    apply Satisfies_Exists.
-    destruct H as [ x sats ]. exists x. right.
-    apply CIH; [ | apply H0 ].
-    punfold sats. eapply satisfiesF_mono; [ | eassumption ].
-    intros. pclearbot. assumption. }
+    apply CIH; [ | apply H2 ].
+    pclearbot. rewrite <- (observing_intros _ _ _ H0). apply H1. }
+  { rewrite <- (observing_intros _ (Vis Spec_exists spec) _ H).
+    rewrite bind_vis_. pfold. apply Satisfies_Exists.
+    destruct H1 as [ x sats' ]. exists x. right.
+    apply CIH; [ | apply H2 ].
+    pclearbot. rewrite <- (observing_intros _ _ _ H0). assumption. }
 Qed.
 
 
