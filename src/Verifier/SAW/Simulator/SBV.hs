@@ -174,6 +174,7 @@ prims =
   , Prims.bpArrayConstant = unsupportedSBVPrimitive "bpArrayConstant"
   , Prims.bpArrayLookup = unsupportedSBVPrimitive "bpArrayLookup"
   , Prims.bpArrayUpdate = unsupportedSBVPrimitive "bpArrayUpdate"
+  , Prims.bpArrayEq = unsupportedSBVPrimitive "bpArrayEq"
   }
 
 unsupportedSBVPrimitive :: String -> a
