@@ -159,8 +159,10 @@ parseAndInsDef henv nm term_tp term_string =
      typed_term <- typecheckTerm mnm un_term
      case typed_term of
        TypedTerm (STApp _ _ (FTermF (GlobalDef term_ident))) _ -> do
-         liftIO $ runTCM (checkSubtype typed_term term_tp) sc (Just mnm) []
-         pure term_ident
+         eith <- liftIO $ runTCM (checkSubtype typed_term term_tp) sc (Just mnm) []
+         case eith of
+           Left err -> fail $ unlines $ prettyTCError err
+           Right _ -> return term_ident
        TypedTerm term _ -> do
          let term_ident = mkSafeIdent mnm nm
          liftIO $ scModifyModule sc mnm $ \m ->
