@@ -51,7 +51,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_alloc_readonly
     , crucible_alloc_readonly_aligned
     , crucible_alloc_with_size
-    , crucible_array_alloc
+    , crucible_symbolic_alloc
     , crucible_alloc_global
     , crucible_fresh_expanded_val
 
@@ -1763,18 +1763,19 @@ crucible_alloc_with_size bic opts sz lty =
     opts
     lty
 
-crucible_array_alloc ::
+crucible_symbolic_alloc ::
   BuiltinContext ->
   Options ->
+  Bool ->
   Int ->
   Term ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-crucible_array_alloc _bic _opts align_bytes sz =
+crucible_symbolic_alloc _bic _opts ro align_bytes sz =
   LLVMCrucibleSetupM $
   do alignment <- coerceAlignment align_bytes
-     loc <- getW4Position "crucible_array_alloc"
+     loc <- getW4Position "crucible_symbolic_alloc"
      let spec = LLVMAllocSpec
-           { _allocSpecMut = Crucible.Mutable
+           { _allocSpecMut = if ro then Crucible.Immutable else Crucible.Mutable
            , _allocSpecType = Crucible.i8p
            , _allocSpecAlign = alignment
            , _allocSpecBytes = sz
