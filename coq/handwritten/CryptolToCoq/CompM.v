@@ -3,6 +3,7 @@
  ***)
 
 From Coq Require Export Morphisms Setoid.
+From Coq Require Import Strings.String.
 
 (***
  *** The Monad Typeclasses
@@ -49,11 +50,11 @@ Qed.
 
 (* The error operation *)
 Class MonadErrorOp (M:Type -> Type) : Type :=
-  errorM : forall {A}, M A.
+  errorM : forall {A}, string -> M A.
 
 (* A monad with errors *)
 Class MonadError M `{Monad M} `{MonadErrorOp M} : Prop :=
-  { errorM_bindM : forall A B (f:A -> M B), errorM >>= f ~= errorM }.
+  { errorM_bindM : forall A B str (f:A -> M B), errorM str >>= f ~= errorM str }.
 
 
 (** Monads with Fixed-points **)
@@ -239,7 +240,7 @@ Qed.
 
 
 Instance MonadErrorOp_OptionT M `{MonadReturnOp M} : MonadErrorOp (OptionT M) :=
-  fun A => returnM None.
+  fun A _ => returnM None.
 
 Instance MonadError_OptionT M `{Monad M} : MonadError (OptionT M).
 Proof.
