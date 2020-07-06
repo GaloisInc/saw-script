@@ -299,9 +299,6 @@ Qed.
 Lemma satisfies_eutt_spec E A (P1 P2:itree_spec E A) tree :
   satisfies P1 tree -> eutt eq P1 P2 -> satisfies P2 tree.
 Proof.
-  intros 
-
-
 Admitted.
 (*
   revert P1 P2 tree; pcofix CIH; intros P1 P2 tree sats e12.
