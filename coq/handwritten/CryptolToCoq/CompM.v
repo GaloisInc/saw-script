@@ -710,3 +710,38 @@ Lemma refinesM_forallM_l {A B} (P: A -> CompM B) Q a :
 Proof.
   intros r b in_b. apply r. apply in_b.
 Qed.
+
+(* NOTE: the other direction does not hold *)
+Lemma forallM_bindM A B C (P: A -> CompM B) (Q: B -> CompM C) :
+  refinesM ((forallM P) >>= Q) (forallM (fun x => P x >>= Q)).
+Proof.
+  intros c [ opt_b H ] a. exists opt_b; [ apply (H _) | assumption ].
+Qed.
+
+
+(*** Assertions and Assumptions ***)
+
+Definition assertM (P:Prop) : CompM unit :=
+  existsM (fun pf:P => returnM tt).
+
+Definition assertM_eq (P:Prop) (pf:P) : assertM P ~= returnM tt.
+Proof.
+  intro opt_a; split.
+  - intros [ _ H ]; assumption.
+  - intros H. exists pf. assumption.
+Qed.
+
+Lemma refinesM_bindM_assertM_r {A} (P:Prop) (m1 m2: CompM A) :
+  P -> refinesM m1 m2 -> refinesM m1 (assertM P >> m2).
+Proof.
+  intro pf; rewrite (assertM_eq P pf). rewrite returnM_bindM. intro; assumption.
+Qed.
+
+Definition assumingM {A} (P:Prop) (m:CompM A) : CompM A :=
+  forallM (fun pf:P => m).
+
+Lemma refinesM_assumingM_r {A} (P:Prop) (m1 m2: CompM A) :
+  (P -> m1 |= m2) -> m1 |= assumingM P m2.
+Proof.
+  intro H; apply refinesM_forallM_r. assumption.
+Qed.
