@@ -25,6 +25,7 @@ module SAWScript.HeapsterBuiltins
 import Data.Maybe
 import qualified Data.Map as Map
 import Data.String
+import Data.List
 import Data.IORef
 import Control.Lens
 import Control.Monad
@@ -92,22 +93,18 @@ getLLVMCFG _ (JVM_CFG _) =
 archReprWidth :: ArchRepr arch -> NatRepr (ArchWidth arch)
 archReprWidth (X86Repr w) = w
 
--- FIXME: no longer needed...?
-castFunPerm :: CFG ext blocks inits ret ->
-               FunPerm ghosts args ret' ->
-               TopLevel (FunPerm ghosts (CtxToRList inits) ret)
-castFunPerm cfg fun_perm =
-  case (testEquality (funPermArgs fun_perm) (mkCruCtx $ cfgArgTypes cfg),
-        testEquality (funPermRet fun_perm) (cfgReturnType cfg)) of
-    (Just Refl, Just Refl) -> return fun_perm
-    (Nothing, _) ->
-      fail $ unlines ["Function permission has incorrect argument types",
-                      "Expected: " ++ show (cfgArgTypes cfg),
-                      "Actual: " ++ show (funPermArgs fun_perm) ]
-    (_, Nothing) ->
-      fail $ unlines ["Function permission has incorrect return type",
-                      "Expected: " ++ show (cfgReturnType cfg),
-                      "Actual: " ++ show (funPermRet fun_perm)]
+lookupModDefiningSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
+lookupModDefiningSym env nm =
+  find (\some_lm -> case some_lm of
+           Some lm -> Map.member (fromString nm) (cfgMap (lm ^. modTrans))) $
+  heapsterEnvLLVMModules env
+
+lookupModDeclaringSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
+lookupModDeclaringSym env nm =
+  find (\some_lm -> case some_lm of
+           Some lm ->
+             Map.member (fromString nm) (lm ^. modTrans.transContext.symbolMap)) $
+  heapsterEnvLLVMModules env
 
 heapster_default_env :: Closed PermEnv
 heapster_default_env = $(mkClosed [| PermEnv [] [] [] |])
@@ -192,7 +189,7 @@ heapster_init_env bic opts mod_str llvm_filename =
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModule = llvm_mod
+       heapsterEnvLLVMModules = [llvm_mod]
        }
 
 heapster_init_env_from_file :: BuiltinContext -> Options -> String -> String ->
@@ -207,7 +204,7 @@ heapster_init_env_from_file bic opts mod_filename llvm_filename =
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = perm_env_ref,
-       heapsterEnvLLVMModule = llvm_mod
+       heapsterEnvLLVMModules = [llvm_mod]
        }
 
 -- | Define a new opaque named permission with the given name, arguments, and
@@ -286,16 +283,16 @@ heapster_define_recursive_perm _bic _opts henv
 heapster_assume_fun :: BuiltinContext -> Options -> HeapsterEnv ->
                        String -> String -> String -> TopLevel ()
 heapster_assume_fun bic opts henv nm perms_string term_string =
-  let some_lm = heapsterEnvLLVMModule henv in
-  case some_lm of
-    Some lm -> do
+  case lookupModDeclaringSym henv nm of
+    Nothing ->
+      fail ("Could not find symbol: " ++ nm)
+    Just (Some lm) -> do
       sc <- getSharedContext
       let mnm = heapsterEnvSAWModule henv
       un_term <- parseTermFromString nm term_string
       TypedTerm term _ <- typecheckTerm mnm un_term
       let term_ident = mkSafeIdent mnm nm
           trans_tm = globalOpenTerm term_ident
-
       let arch = llvmArch $ _transContext (lm ^. modTrans)
       let w = archReprWidth arch
       leq_proof <- case decideLeq (knownNat @1) w of
@@ -303,7 +300,7 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
         Right _ -> fail "LLVM arch width is 0!"
       env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
       case lm ^. modTrans.transContext.symbolMap.at (L.Symbol nm) of
-        Nothing -> fail ("Could not find symbol: " ++ nm)
+        Nothing -> error ("Unreachable: could not find symbol: " ++ nm)
         Just (LLVMHandleInfo _ h) ->
           let args = mkCruCtx $ handleArgTypes h
               ret = handleReturnType h in
@@ -326,9 +323,10 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
 heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->
                                [(String, String)] -> TopLevel ()
 heapster_typecheck_mut_funs bic opts henv fn_names_and_perms =
-  let some_lm = heapsterEnvLLVMModule henv in
-  case some_lm of
-    Some lm -> do
+  let fst_nm = fst $ head fn_names_and_perms in
+  case lookupModDefiningSym henv fst_nm of
+    Nothing -> fail ("Could not find symbol definition: " ++ fst_nm)
+    Just (some_lm@(Some lm)) -> do
       let arch = llvmArch $ _transContext (lm ^. modTrans)
       let w = archReprWidth arch
       env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
