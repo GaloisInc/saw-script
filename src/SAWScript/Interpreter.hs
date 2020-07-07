@@ -2257,6 +2257,14 @@ primitives = Map.fromList
     , " initialized with the module in the given SAW core file."
     ]
 
+  , prim "heapster_init_env_for_files"
+    "String -> [String] -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_for_files)
+    Experimental
+    [ "Create a new Heapster environment from the named LLVM bitcode files,"
+    , " initialized with the module in the given SAW core file."
+    ]
+
   , prim "heapster_define_opaque_perm"
     "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_perm)

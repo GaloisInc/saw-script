@@ -12,6 +12,7 @@
 module SAWScript.HeapsterBuiltins
        ( heapster_init_env
        , heapster_init_env_from_file
+       , heapster_init_env_for_files
        , heapster_typecheck_fun
        , heapster_typecheck_mut_funs
        , heapster_define_opaque_perm
@@ -205,6 +206,21 @@ heapster_init_env_from_file bic opts mod_filename llvm_filename =
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = perm_env_ref,
        heapsterEnvLLVMModules = [llvm_mod]
+       }
+
+heapster_init_env_for_files :: BuiltinContext -> Options -> String -> [String] ->
+                               TopLevel HeapsterEnv
+heapster_init_env_for_files bic opts mod_filename llvm_filenames =
+  do llvm_mods <- mapM llvm_load_module llvm_filenames
+     sc <- getSharedContext
+     (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
+     liftIO $ tcInsertModule sc saw_mod
+     let perm_env = unClosed heapster_default_env
+     perm_env_ref <- liftIO $ newIORef perm_env
+     return $ HeapsterEnv {
+       heapsterEnvSAWModule = saw_mod_name,
+       heapsterEnvPermEnvRef = perm_env_ref,
+       heapsterEnvLLVMModules = llvm_mods
        }
 
 -- | Define a new opaque named permission with the given name, arguments, and

@@ -175,7 +175,11 @@ data HeapsterEnv = HeapsterEnv {
   }
 
 showHeapsterEnv :: HeapsterEnv -> String
-showHeapsterEnv _ = "<FIXME: HeapsterEnv>"
+showHeapsterEnv env =
+  concat $ intersperse "\n\n" $
+  map (\some_lm -> case some_lm of
+          Some lm -> CMSLLVM.showLLVMModule lm) $
+  heapsterEnvLLVMModules env
 
 data ProofResult
   = Valid SolverStats
