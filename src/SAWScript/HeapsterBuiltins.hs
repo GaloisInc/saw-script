@@ -148,19 +148,22 @@ translateOpenTermToTerm :: SharedContext -> PermEnv -> [(SomeNamedPermName, Iden
 translateOpenTermToTerm sc env npnts m =
   liftIO $ completeOpenTerm sc $ runTransM m (TypeTransInfo MNil npnts env)
 
+-- | Parse the second given string as a term, check that it has the given type,
+-- and, if the parsed term is not already an identifier, add it as a
+-- definition in the current module using the first given string. Returns
+-- either the identifer of the new definition or the identifier parsed.
 parseAndInsDef :: HeapsterEnv -> String -> Term -> String -> TopLevel Ident
 parseAndInsDef henv nm term_tp term_string =
   do sc <- getSharedContext
      un_term <- parseTermFromString nm term_string
      let mnm = heapsterEnvSAWModule henv
      typed_term <- typecheckTerm mnm un_term
-     case typed_term of
-       TypedTerm (STApp _ _ (FTermF (GlobalDef term_ident))) _ -> do
-         eith <- liftIO $ runTCM (checkSubtype typed_term term_tp) sc (Just mnm) []
-         case eith of
-           Left err -> fail $ unlines $ prettyTCError err
-           Right _ -> return term_ident
-       TypedTerm term _ -> do
+     eith <- liftIO $ runTCM (checkSubtype typed_term term_tp) sc (Just mnm) []
+     case (eith, typedVal typed_term) of
+       (Left err, _) -> fail $ unlines $ prettyTCError err
+       (Right _, STApp _ _ (FTermF (GlobalDef term_ident))) ->
+         return term_ident
+       (Right _, term) -> do
          let term_ident = mkSafeIdent mnm nm
          liftIO $ scModifyModule sc mnm $ \m ->
            insDef m $ Def { defIdent = term_ident,
@@ -288,11 +291,6 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
       fail ("Could not find symbol: " ++ nm)
     Just (Some lm) -> do
       sc <- getSharedContext
-      let mnm = heapsterEnvSAWModule henv
-      un_term <- parseTermFromString nm term_string
-      TypedTerm term _ <- typecheckTerm mnm un_term
-      let term_ident = mkSafeIdent mnm nm
-          trans_tm = globalOpenTerm term_ident
       let arch = llvmArch $ _transContext (lm ^. modTrans)
       let w = archReprWidth arch
       leq_proof <- case decideLeq (knownNat @1) w of
@@ -307,17 +305,16 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
           withKnownNat w $ withLeqProof leq_proof $
           case parseFunPermString env args ret perms_string of
             Left err -> fail $ show err
-            Right (SomeFunPerm fun_perm) -> liftIO $ do
-              perm_env <- readIORef (heapsterEnvPermEnvRef henv)
-              fun_typ <- translateCompleteFunPerm sc perm_env fun_perm
-              scModifyModule sc mnm $ \m ->
-                insDef m $ Def { defIdent = term_ident,
-                                 defQualifier = NoQualifier,
-                                 defType = fun_typ,
-                                 defBody = Just term }
-              writeIORef (heapsterEnvPermEnvRef henv) $
-               permEnvAddGlobalSymFun env (GlobalSymbol $
-                                           fromString nm) w fun_perm trans_tm
+            Right (SomeFunPerm fun_perm) -> do
+              perm_env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
+              fun_typ <- liftIO $ translateCompleteFunPerm sc perm_env fun_perm
+              term_ident <- parseAndInsDef henv nm fun_typ term_string
+              let env' = permEnvAddGlobalSymFun env
+                                                (GlobalSymbol $ fromString nm)
+                                                w
+                                                fun_perm
+                                                (globalOpenTerm term_ident)
+              liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
 heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->
