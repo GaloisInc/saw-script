@@ -29,6 +29,7 @@ packages:
   - deps/macaw/symbolic
   - deps/macaw/x86
   - deps/macaw/x86_symbolic
+  - deps/heapster-saw
   - .
 extra-deps:
   - zenc-0.1.1@sha256:e4be3e5e9fe1a1ade05910909c6e5b5a8eff72e697868b03955c9781b0443947
@@ -42,6 +43,8 @@ extra-deps:
   - panic-0.4.0.1
   - itanium-abi-0.1.1.1
   - boomerang-1.4.5.6
+  - git: git@github.com:eddywestbrook/hobbits.git
+    commit: 4833731c98424ac39b042a77fcb91764b623f11e
   - th-abstraction-0.3.1.0
   - microlens-th-0.4.2.3
   - deriving-compat-0.5.6
