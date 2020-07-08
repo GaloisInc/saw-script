@@ -61,7 +61,6 @@ library
     , parsec
     , pretty
     , pretty-show
-    , prettyprinter
     , process
     , saw-core
     , saw-core-aig

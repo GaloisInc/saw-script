@@ -34,7 +34,6 @@ import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Maybe
-import qualified Data.Text.Lazy.IO as TIO
 import Data.Time.Clock
 import Data.Typeable
 import System.Directory
@@ -1388,4 +1387,4 @@ summarize_verification =
          lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | SV.VTheorem t <- values ]
          summary = computeVerificationSummary jspecs lspecs thms
-     io $ TIO.putStrLn $ prettyVerificationSummary summary
+     io $ putStrLn $ prettyVerificationSummary summary

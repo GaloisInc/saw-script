@@ -11,9 +11,7 @@ module SAWScript.VerificationSummary where
 import Control.Lens
 import qualified Data.Set as Set
 import Data.String
-import qualified Data.Text.Lazy as Text
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Render.Text
+import Text.PrettyPrint.ANSI.Leijen
 
 import qualified Lang.Crucible.JVM as CJ
 import SAWScript.Crucible.Common.MethodSpec
@@ -22,6 +20,8 @@ import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import qualified Verifier.SAW.Term.Pretty as PP
+import qualified What4.ProgramLoc as PL
 
 type JVMTheorem =  CMS.CrucibleMethodSpecIR CJ.JVM
 type LLVMTheorem = CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR
@@ -49,35 +49,51 @@ vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 computeVerificationSummary :: [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> VerificationSummary
 computeVerificationSummary = VerificationSummary
 
-prettyVerificationSummary :: VerificationSummary -> Text.Text
+prettyVerificationSummary :: VerificationSummary -> String
 prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
-  renderLazy . layoutPretty defaultLayoutOptions $
-  vsep
+  show $ vsep
   [ prettyJVMSpecs jspecs
   , prettyLLVMSpecs lspecs
   , prettyTheorems thms
-  , prettySolvers (map fromString (Set.toList (vsAllSolvers vs)))
+  , prettySolvers (Set.toList (vsAllSolvers vs))
   ] where
-      section n = "#" <+> n
+      section nm = "#" <+> nm
       item txt = "*" <+> txt
-      subitem txt = indent 4 . item
+      code txt = vsep ["~~~~", txt, "~~~~"]
+      subitem = indent 4 . item
       sectionWithItems _ _ [] = mempty
       sectionWithItems nm prt items =
         vsep [section nm, "", vsep (map prt items), ""]
       prettyJVMSpecs ss =
         sectionWithItems "JVM Methods Analyzed" prettyJVMSpec ss
       prettyJVMSpec s =
-          vsep [ fromString (s ^. CMSJVM.csMethodName)
-               , subitem "TODO"
-               ]
+        vsep [ item (fromString (s ^. CMSJVM.csMethodName))
+             , subitem (if null (s ^. (CMS.csPreState . CMS.csConditions))
+                        then "without"
+                        else "with") <+>
+               "conditions"
+             , subitem ("from location:" <+>
+                        pretty (PL.plSourceLoc (s ^. CMS.csLoc)))
+             ]
       prettyLLVMSpecs ss =
         sectionWithItems "LLVM Functions Analyzed" prettyLLVMSpec ss
       prettyLLVMSpec (CMSLLVM.SomeLLVM s) =
-          vsep [ item (fromString (s ^. CMSLLVM.csName))
-               , subitem "TODO"
-               ]
+        vsep [ item (fromString (s ^. CMSLLVM.csName))
+             , subitem (if null (s ^. (CMS.csPreState . CMS.csConditions))
+                        then "without"
+                        else "with") <+>
+               "conditions"
+             , subitem ("from location:" <+>
+                        pretty (PL.plSourceLoc (s ^. CMS.csLoc)))
+             ]
       prettyTheorems ts =
-        sectionWithItems "Theorems Asserted" prettyTheorem ts
-      prettyTheorem t = "TODO"
+        sectionWithItems "Theorems Proved or Assumed" (item . prettyTheorem) ts
+      prettyTheorem t =
+        vsep [ if Set.null (solverStatsSolvers (thmStats t))
+               then "Axiom:"
+               else "Theorem:"
+             , code (indent 2 (PP.ppTerm PP.defaultPPOpts (unProp (thmProp t))))
+             , ""
+             ]
       prettySolvers ss =
-        sectionWithItems "Solvers Used" item ss
+        sectionWithItems "Solvers Used" (item . fromString) ss
