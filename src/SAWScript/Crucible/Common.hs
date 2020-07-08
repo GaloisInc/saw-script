@@ -30,7 +30,7 @@ import System.FilePath ((</>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 
 -- | The symbolic backend we use for SAW verification
-type Sym = SAWCoreBackend Nonce.GlobalNonceGenerator (Yices.Connection Nonce.GlobalNonceGenerator) (W4.Flags W4.FloatReal)
+type Sym = SAWCoreBackend Nonce.GlobalNonceGenerator Yices.Connection (W4.Flags W4.FloatReal)
 
 ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc)
                 -> AbortedResult Sym ext
