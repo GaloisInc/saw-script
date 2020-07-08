@@ -541,6 +541,16 @@ Proof.
   constructor. apply I.
 Qed.
 
+(* CompM's returnM is injective wrt monadic equivalence *)
+Lemma MonadReturnOp_CompM_injects : forall (A : Type) (x y : A),
+    returnM (M:=CompM) x ~= returnM y -> x = y.
+Proof.
+  intros. unfold returnM in H. unfold MonadReturnOp_OptionT in H.
+  unfold eqM in H. unfold MonadEqOp_OptionT in H. unfold eqM in H. unfold MonadEqOp_SetM in H.
+  assert (Some x = Some y) as Hxy.
+  { rewrite H. reflexivity. }
+  inversion Hxy; subst. reflexivity.
+Qed.
 
 (***
  *** Refinement Proofs
@@ -592,6 +602,10 @@ Fixpoint refinesFun {lrt} : relation (lrtToType lrt) :=
   | LRT_Ret B => refinesM
   | LRT_Fun A lrtF => fun f1 f2 => forall a, refinesFun (f1 a) (f2 a)
   end.
+
+(* A convenient specialization of refinesFun *)
+Definition refinesFun1 {A} {B:A -> Type} : (forall a, CompM (B a)) -> (forall a, CompM (B a)) -> Prop :=
+  refinesFun (lrt:=LRT_Fun _ (fun _ => LRT_Ret _)).
 
 (* Lift refinesM to tuples of monadic functions *)
 Fixpoint refinesFunTuple {lrts} : relation (lrtTupleType lrts) :=
