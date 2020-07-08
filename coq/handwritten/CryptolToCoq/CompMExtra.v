@@ -43,6 +43,16 @@ Lemma refinesM_returnM_if_r A (b : bool) (x y : A) P :
   (P |= returnM (if b then x else y)).
 Proof. rewrite returnM_if. trivial. Qed.
 
+Lemma returnM_injective : forall (A : Type) (x y : A),
+    returnM (M:=CompM) x ~= returnM y -> x = y.
+Proof.
+  intros. unfold returnM in H. unfold MonadReturnOp_OptionT in H.
+  unfold eqM in H. unfold MonadEqOp_OptionT in H. unfold eqM in H. unfold MonadEqOp_SetM in H.
+  assert (Some x = Some y) as Hxy.
+  { rewrite H. reflexivity. }
+  inversion Hxy; subst. reflexivity.
+Qed.
+
 
 (***
  *** Automation for proving refinement

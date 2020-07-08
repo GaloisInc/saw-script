@@ -541,16 +541,6 @@ Proof.
   constructor. apply I.
 Qed.
 
-(* CompM's returnM is injective wrt monadic equivalence *)
-Lemma MonadReturnOp_CompM_injects : forall (A : Type) (x y : A),
-    returnM (M:=CompM) x ~= returnM y -> x = y.
-Proof.
-  intros. unfold returnM in H. unfold MonadReturnOp_OptionT in H.
-  unfold eqM in H. unfold MonadEqOp_OptionT in H. unfold eqM in H. unfold MonadEqOp_SetM in H.
-  assert (Some x = Some y) as Hxy.
-  { rewrite H. reflexivity. }
-  inversion Hxy; subst. reflexivity.
-Qed.
 
 (***
  *** Refinement Proofs
