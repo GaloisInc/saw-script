@@ -17,6 +17,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_typecheck_mut_funs
        , heapster_define_opaque_perm
        , heapster_define_recursive_perm
+       , heapster_define_perm
        , heapster_assume_fun
        , heapster_print_fun_trans
        , heapster_export_coq
@@ -296,6 +297,30 @@ heapster_define_recursive_perm _bic _opts henv
            let env' = permEnvAddRecPerm env nm args val_perm p_perms
                                         trans_ident fold_ident unfold_ident
            liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+-- | Define a new named permission with the given name, arguments, and type
+-- that is equivalent to the given permission.
+heapster_define_perm :: BuiltinContext -> Options -> HeapsterEnv ->
+                        String -> String -> String -> String ->
+                        TopLevel ()
+heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     let penv = mkParserEnv env
+     some_args <- case runParser parseCtx penv "" args_str  of
+       Left err -> fail ("Error parsing argument types: " ++ show err)
+       Right args -> return args
+     some_tp <- case parseTypeString env tp_str of
+       Left err -> fail ("Error parsing permission type: " ++ show err)
+       Right tp -> return tp
+     case (some_args, some_tp) of
+       (Some args_ctx@(ParsedCtx _ args), Some tp_perm) -> do
+         perm <- case runParser (parseValPermInCtx args_ctx tp_perm) penv "" perm_string of
+           Left err -> fail ("Error parsing disjunctive perm: " ++ show err)
+           Right perm -> pure perm
+         sc <- getSharedContext
+         term_tp <- liftIO $ translateTypePerm sc env (ValuePermRepr tp_perm)
+         let env' = permEnvAddDefinedPerm env nm args tp_perm perm
+         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by name

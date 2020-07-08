@@ -2286,6 +2286,15 @@ primitives = Map.fromList
     , " p1 \\/ ... \\/ pn, where the pi can contain name."
     ]
 
+  , prim "heapster_define_perm"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_perm)
+    Experimental
+    [ "heapster_define_perm nm args tp p defines a Heapster permission named"
+    , " nm with arguments x1,...,xn parsed from args and type parsed from tp"
+    , " such that nm<x1,...,xn> is equivalent to the permission p."
+    ]
+
   , prim "heapster_assume_fun"
     "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun)
