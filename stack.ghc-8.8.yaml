@@ -48,5 +48,6 @@ extra-deps:
   - bv-sized-1.0.1
   - bitwise-1.0.0.1
   - constraints-0.11.2
+  - libBF-0.5.1
 resolver: lts-16.1
 allow-newer: false

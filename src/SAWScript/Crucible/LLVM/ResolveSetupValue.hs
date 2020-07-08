@@ -27,7 +27,7 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
 
 import Control.Lens ((^.))
 import Control.Monad
-import Control.Monad.Fail (MonadFail)
+import qualified Control.Monad.Fail as Fail
 import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (toList)
@@ -133,7 +133,7 @@ resolveSetupFieldIndex cc env nameEnv v n =
     lc = ccTypeCtx cc
 
 resolveSetupFieldIndexOrFail ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   LLVMCrucibleContext arch {- ^ crucible context  -} ->
   Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
   Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
@@ -156,7 +156,7 @@ resolveSetupFieldIndexOrFail cc env nameEnv v n =
             _ -> unlines [msg, "No field names were found for this struct"]
 
 typeOfSetupValue ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   LLVMCrucibleContext arch ->
   Map AllocIndex LLVMAllocSpec ->
   Map AllocIndex Crucible.Ident ->
@@ -167,7 +167,7 @@ typeOfSetupValue cc env nameEnv val =
      typeOfSetupValue' cc env nameEnv val
 
 typeOfSetupValue' :: forall m arch.
-  MonadFail m =>
+  Fail.MonadFail m =>
   LLVMCrucibleContext arch ->
   Map AllocIndex LLVMAllocSpec ->
   Map AllocIndex Crucible.Ident ->
@@ -370,6 +370,8 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: unimplemented type Integer (FIXME)"
       Cryptol.TVIntMod _ ->
         fail "resolveSAWTerm: unimplemented type Z n (FIXME)"
+      Cryptol.TVFloat{} ->
+        fail "resolveSAWTerm: unimplemented type Float e p (FIXME)"
       Cryptol.TVArray{} ->
         fail "resolveSAWTerm: unimplemented type Array a b (FIXME)"
       Cryptol.TVRational ->
@@ -456,6 +458,7 @@ toLLVMType dl tp =
     Cryptol.TVBit -> Left (NotYetSupported "bit") -- FIXME
     Cryptol.TVInteger -> Left (NotYetSupported "integer")
     Cryptol.TVIntMod _ -> Left (NotYetSupported "integer (mod n)")
+    Cryptol.TVFloat{} -> Left (NotYetSupported "float e p")
     Cryptol.TVArray{} -> Left (NotYetSupported "array a b")
     Cryptol.TVRational -> Left (NotYetSupported "rational")
 
