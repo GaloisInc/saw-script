@@ -107,8 +107,8 @@ lookupModDeclaringSym env nm =
              Map.member (fromString nm) (lm ^. modTrans.transContext.symbolMap)) $
   heapsterEnvLLVMModules env
 
-heapster_default_env :: Closed PermEnv
-heapster_default_env = $(mkClosed [| PermEnv [] [] [] |])
+heapster_default_env :: PermEnv
+heapster_default_env = PermEnv [] [] [] []
 
 -- | Based on the function of the same name in Verifier.SAW.ParserUtils.
 -- Unlike that function, this calls 'fail' instead of 'error'.
@@ -188,8 +188,7 @@ heapster_init_env bic opts mod_str llvm_filename =
      preludeMod <- liftIO $ scFindModule sc preludeModuleName
      liftIO $ scLoadModule sc (insImport (const True) preludeMod $
                                  emptyModule saw_mod_name)
-     let perm_env = unClosed heapster_default_env
-     perm_env_ref <- liftIO $ newIORef perm_env
+     perm_env_ref <- liftIO $ newIORef heapster_default_env
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = perm_env_ref,
@@ -203,8 +202,7 @@ heapster_init_env_from_file bic opts mod_filename llvm_filename =
      sc <- getSharedContext
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
-     let perm_env = unClosed heapster_default_env
-     perm_env_ref <- liftIO $ newIORef perm_env
+     perm_env_ref <- liftIO $ newIORef heapster_default_env
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = perm_env_ref,
@@ -218,8 +216,7 @@ heapster_init_env_for_files bic opts mod_filename llvm_filenames =
      sc <- getSharedContext
      (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
      liftIO $ tcInsertModule sc saw_mod
-     let perm_env = unClosed heapster_default_env
-     perm_env_ref <- liftIO $ newIORef perm_env
+     perm_env_ref <- liftIO $ newIORef heapster_default_env
      return $ HeapsterEnv {
        heapsterEnvSAWModule = saw_mod_name,
        heapsterEnvPermEnvRef = perm_env_ref,
@@ -398,7 +395,7 @@ heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
 heapster_parse_test bic opts some_lm fn_name perms_string =
   case some_lm of
     Some lm -> do
-      let env = unClosed heapster_default_env -- FIXME: cl_env should be an argument
+      let env = heapster_default_env -- FIXME: env should be an argument
       let arch = llvmArch $ _transContext (lm ^. modTrans)
       any_cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts some_lm fn_name
       case any_cfg of
