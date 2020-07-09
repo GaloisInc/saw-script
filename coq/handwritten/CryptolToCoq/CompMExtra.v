@@ -113,8 +113,8 @@ Hint Extern 1 ((returnM _ >>= _) |= _) => rewrite returnM_bindM : refinesM.
 Hint Extern 1 (_ |= (returnM _ >>= _)) => rewrite returnM_bindM : refinesM.
 Hint Extern 1 ((existsM _ >>= _) |= _) => rewrite existsM_bindM : refinesM.
 Hint Extern 1 (_ |= (existsM _ >>= _)) => rewrite existsM_bindM : refinesM.
-Hint Extern 1 ((errorM >>= _) |= _) => rewrite errorM_bindM : refinesM.
-Hint Extern 1 (_ |= (errorM >>= _)) => rewrite errorM_bindM : refinesM.
+Hint Extern 1 ((errorM _ >>= _) |= _) => rewrite errorM_bindM : refinesM.
+Hint Extern 1 (_ |= (errorM _ >>= _)) => rewrite errorM_bindM : refinesM.
 Hint Extern 1 (((_ >>= _) >>= _) |= _) => rewrite bindM_bindM : refinesM.
 Hint Extern 1 (_ |= ((_ >>= _) >>= _)) => rewrite bindM_bindM : refinesM.
 
