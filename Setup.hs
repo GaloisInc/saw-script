@@ -8,6 +8,7 @@ import System.FilePath ((</>))
 import System.Process (readProcess)
 import System.Exit
 
+
 main = defaultMainWithHooks myHooks
   where myHooks = simpleUserHooks { buildHook = myBuild }
 
