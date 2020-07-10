@@ -32,6 +32,8 @@ import Data.IORef
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Fail (MonadFail)
+import qualified Control.Monad.Fail as Fail
 import Unsafe.Coerce
 import GHC.TypeNats
 import System.Directory
@@ -84,6 +86,13 @@ import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
+
+-- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
+-- the 'Either' is a 'Left'. The supplied 'String' describes the action (in
+-- "ing" form, as in, "parsing") that was performed to create this 'Either'.
+failOnLeft :: (MonadFail m, Show err) => String -> Either err a -> m a
+failOnLeft action (Left err) = Fail.fail ("Error" ++ action ++ ": " ++ show err)
+failOnLeft _ (Right a) = return a
 
 getLLVMCFG :: ArchRepr arch -> SAW_CFG -> AnyCFG (LLVM arch)
 getLLVMCFG _ (LLVM_CFG cfg) =
@@ -231,12 +240,8 @@ heapster_define_opaque_perm :: BuiltinContext -> Options -> HeapsterEnv ->
                                TopLevel ()
 heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_string =
   do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     some_args <- case parseCtxString env args_str of
-       Left err -> fail ("Error parsing argument types: " ++ show err)
-       Right args -> return args
-     some_tp <- case parseTypeString env tp_str of
-       Left err -> fail ("Error parsing permission type: " ++ show err)
-       Right tp -> return tp
+     some_args <- parseCtxString "argument types" env args_str
+     some_tp <- parseTypeString "permission type" env tp_str
      case (some_args, some_tp) of
        (Some args, Some tp_perm) -> do
          sc <- getSharedContext
@@ -258,9 +263,7 @@ heapster_define_recursive_perm _bic _opts henv
        some_args <- case runParser parseCtx penv "" args_str  of
          Left err -> fail ("Error parsing argument types: " ++ show err)
          Right argsCtx -> return argsCtx
-       some_val <- case parseTypeString env val_str of
-         Left err -> fail ("Error parsing permission type: " ++ show err)
-         Right tp -> return tp
+       some_val <- parseTypeString "permission type" env val_str
        case (some_args, some_val) of
          (Some args_ctx@(ParsedCtx _ args), Some val_perm) -> do
            let rpn = NamedPermName nm val_perm args
@@ -306,9 +309,7 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
      some_args <- case runParser parseCtx penv "" args_str  of
        Left err -> fail ("Error parsing argument types: " ++ show err)
        Right args -> return args
-     some_tp <- case parseTypeString env tp_str of
-       Left err -> fail ("Error parsing permission type: " ++ show err)
-       Right tp -> return tp
+     some_tp <- parseTypeString "permission type" env tp_str
      case (some_args, some_tp) of
        (Some args_ctx@(ParsedCtx _ args), Some tp_perm) -> do
          perm <- case runParser (parseValPermInCtx args_ctx tp_perm) penv "" perm_string of
@@ -341,9 +342,9 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
           let args = mkCruCtx $ handleArgTypes h
               ret = handleReturnType h in
           withKnownNat w $ withLeqProof leq_proof $
-          case parseFunPermString env args ret perms_string of
-            Left err -> fail $ show err
-            Right (SomeFunPerm fun_perm) -> do
+          parseFunPermString "permissions" env args ret perms_string >>=
+          \some_fun_perm -> case some_fun_perm of
+            SomeFunPerm fun_perm -> do
               perm_env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
               fun_typ <- liftIO $ translateCompleteFunPerm sc perm_env fun_perm
               term_ident <- parseAndInsDef henv nm fun_typ term_string
@@ -372,9 +373,9 @@ heapster_typecheck_mut_funs bic opts henv fn_names_and_perms =
           AnyCFG cfg ->
             do let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
                let ret = handleReturnType $ cfgHandle cfg
-               case parseFunPermString env args ret perms_string of
-                 Left err -> fail $ show err
-                 Right (SomeFunPerm fun_perm) ->
+               parseFunPermString "permissions" env args ret perms_string
+               >>= \some_fun_perm -> case some_fun_perm of
+                 SomeFunPerm fun_perm ->
                    return $ SomeCFGAndPerm (GlobalSymbol $
                                             fromString nm) cfg fun_perm
       sc <- getSharedContext
@@ -427,7 +428,7 @@ heapster_parse_test bic opts some_lm fn_name perms_string =
         AnyCFG cfg -> do
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
           let ret = handleReturnType $ cfgHandle cfg
-          case parseFunPermString env args ret perms_string of
-            Left err -> fail $ show err
-            Right (SomeFunPerm fun_perm) ->
+          parseFunPermString "permissions" env args ret perms_string
+          >>= \some_fun_perm -> case some_fun_perm of
+            SomeFunPerm fun_perm ->
               liftIO $ putStrLn $ permPrettyString emptyPPInfo fun_perm
