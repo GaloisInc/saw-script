@@ -587,6 +587,15 @@ Proof.
   apply in_fix. intros a' opt_b' in_F. apply F_closed. apply in_F.
 Qed.
 
+Lemma refinesM_fixM_lr A B (F G : (forall (a:A), CompM (B a)) ->
+                                  (forall (a:A), CompM (B a))) :
+  (forall f a, F f a |= G f a) -> forall a, fixM F a |= fixM G a.
+Proof.
+  intros leq_FG a opt_b in_fixF f G_closed.
+  apply (refinesM_fixM_l _ _ F); [ | assumption ].
+  intros a' opt_b' in_F. apply G_closed. apply leq_FG. assumption.
+Qed.
+
 (* Lift refinesM to monadic functions *)
 Fixpoint refinesFun {lrt} : relation (lrtToType lrt) :=
   match lrt return relation (lrtToType lrt) with
