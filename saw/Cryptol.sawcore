@@ -221,6 +221,20 @@ Rational = #();
 ecRatio : Integer -> Integer -> Rational;
 ecRatio x y = ();
 
+
+--------------------------------------------------------------------------------
+-- Parmap (Experimental)
+--
+-- This is implemented here as a bog-standard sequential `map`
+
+-- parmap : {a, b, n} (fin n) => (a -> b) -> [n]a -> [n]b
+ecParmap : (a:sort 0) -> (b:sort 0) -> (n: Num) -> (a -> b) -> seq n a -> seq n b;
+ecParmap a b n =
+  Num#rec (\ (n:Num) -> (a -> b) -> seq n a -> seq n b)
+    ( \ (n:Nat) -> \ (f: a -> b) -> \ (xs: Vec n a) -> map a b f n xs )
+    ( \ (f: a -> b) -> \ (xs:Stream a) -> error (Stream b) "Unexpected infinite stream in parmap" )
+    n;
+
 --------------------------------------------------------------------------------
 -- Type coercions
 
