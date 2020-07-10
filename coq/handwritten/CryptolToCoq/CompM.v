@@ -579,12 +579,13 @@ Qed.
 
 (* If a monadic function f is F-closed w.r.t. the refinement relation, then the
 least fixed-point of F refines f *)
-Lemma refinesM_fixM A B (F : (forall (a:A), CompM (B a)) ->
+Lemma refinesM_fixM_l A B (F : (forall (a:A), CompM (B a)) ->
                              (forall (a:A), CompM (B a))) f :
   (forall a, F f a |= f a) -> forall a, fixM F a |= f a.
 Proof.
-  admit. (* FIXME *)
-Admitted.
+  intros F_closed a opt_b in_fix.
+  apply in_fix. intros a' opt_b' in_F. apply F_closed. apply in_F.
+Qed.
 
 (* Lift refinesM to monadic functions *)
 Fixpoint refinesFun {lrt} : relation (lrtToType lrt) :=
