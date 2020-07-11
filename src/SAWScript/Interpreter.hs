@@ -2295,6 +2295,17 @@ primitives = Map.fromList
     , " such that nm<x1,...,xn> is equivalent to the permission p."
     ]
 
+  , prim "heapster_block_entry_hint"
+    "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel ()"
+    (bicVal heapster_block_entry_hint)
+    Experimental
+    [ "heapster_block_entry_hint env nm block top_args ghosts perms adds a hint"
+    , " to the Heapster type-checker that Crucible block number block in nm"
+    , " should have permissions perms on its inputs, assuming that top_args"
+    , " lists the top-level ghost and normal arguments to function nm and"
+    , " ghosts gives the ghost arguments to block"
+    ]
+
   , prim "heapster_assume_fun"
     "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun)

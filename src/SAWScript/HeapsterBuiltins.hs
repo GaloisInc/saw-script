@@ -18,6 +18,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_opaque_perm
        , heapster_define_recursive_perm
        , heapster_define_perm
+       , heapster_block_entry_hint
        , heapster_assume_fun
        , heapster_print_fun_trans
        , heapster_export_coq
@@ -42,6 +43,9 @@ import qualified Data.ByteString.Lazy.UTF8 as BL
 import Data.ByteString.Internal (c2w)
 
 import Data.Binding.Hobbits
+
+import qualified Data.Parameterized.Context as Ctx
+import Data.Parameterized.TraversableFC
 
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Module
@@ -104,6 +108,12 @@ getLLVMCFG _ (JVM_CFG _) =
 archReprWidth :: ArchRepr arch -> NatRepr (ArchWidth arch)
 archReprWidth (X86Repr w) = w
 
+llvmModuleArchRepr :: LLVMModule arch -> ArchRepr arch
+llvmModuleArchRepr lm = llvmArch $ _transContext (lm ^. modTrans)
+
+llvmModuleArchReprWidth :: LLVMModule arch -> NatRepr (ArchWidth arch)
+llvmModuleArchReprWidth = archReprWidth . llvmModuleArchRepr
+
 lookupModDefiningSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
 lookupModDefiningSym env nm =
   find (\some_lm -> case some_lm of
@@ -116,6 +126,24 @@ lookupModDeclaringSym env nm =
            Some lm ->
              Map.member (fromString nm) (lm ^. modTrans.transContext.symbolMap)) $
   heapsterEnvLLVMModules env
+
+lookupLLVMSymbolCFG :: BuiltinContext -> Options -> LLVMModule arch ->
+                       String -> TopLevel (AnyCFG (LLVM arch))
+lookupLLVMSymbolCFG bic opts lm nm =
+  getLLVMCFG (llvmModuleArchRepr lm) <$>
+  crucible_llvm_cfg bic opts (Some lm) nm
+
+data ModuleAndCFG arch =
+  ModuleAndCFG (LLVMModule arch) (AnyCFG (LLVM arch))
+
+lookupLLVMSymbolModAndCFG :: BuiltinContext -> Options -> HeapsterEnv ->
+                             String -> TopLevel (Maybe (Some ModuleAndCFG))
+lookupLLVMSymbolModAndCFG bic opts henv nm =
+  case lookupModDefiningSym henv nm of
+    Just (Some lm) ->
+      (Just . Some . ModuleAndCFG lm) <$> lookupLLVMSymbolCFG bic opts lm nm
+    Nothing -> return Nothing
+
 
 heapster_default_env :: PermEnv
 heapster_default_env = PermEnv [] [] [] []
@@ -320,6 +348,42 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
          let env' = permEnvAddDefinedPerm env nm args tp_perm perm
          liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
+-- | Add a hint to the Heapster type-checker that Crucible block number @block@ in
+-- function @fun@ should have permissions @perms@ on its inputs
+heapster_block_entry_hint :: BuiltinContext -> Options -> HeapsterEnv ->
+                             String -> Int -> String -> String -> String ->
+                             TopLevel ()
+heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     some_top_args_p <-
+       parseParsedCtxString "top-level argument context" env top_args_str
+     some_ghosts_p <-
+       parseParsedCtxString "ghost argument context" env ghosts_str
+     maybe_mod_cfg <- lookupLLVMSymbolModAndCFG bic opts henv nm
+     case (some_top_args_p, some_ghosts_p, maybe_mod_cfg) of
+       (Some top_args_p, Some ghosts_p,
+        Just (Some (ModuleAndCFG _ (AnyCFG cfg)))) ->
+         let top_args = parsedCtxCtx top_args_p
+             ghosts = parsedCtxCtx ghosts_p
+             h = cfgHandle cfg
+             blocks = fmapFC blockInputs $ cfgBlockMap cfg in
+         case Ctx.intIndex blk (Ctx.size blocks) of
+           Nothing -> fail ("Block ID " ++ show blk
+                            ++ " not found in function " ++ nm)
+           Just (Some blockIx) ->
+             do let blockID = BlockID blockIx
+                    block_args = blocks Ctx.! blockIx
+                perms <-
+                  parsePermsString "block entry permissions" env
+                  (appendParsedCtx (appendParsedCtx top_args_p ghosts_p)
+                   (mkArgsParsedCtx $ mkCruCtx block_args))
+                  perms_str
+                let env' =
+                      permEnvAddHint env $ Hint_BlockEntry $
+                      BlockEntryHint h blocks blockID top_args ghosts perms
+                liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by name
 heapster_assume_fun :: BuiltinContext -> Options -> HeapsterEnv ->
@@ -330,8 +394,7 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
       fail ("Could not find symbol: " ++ nm)
     Just (Some lm) -> do
       sc <- getSharedContext
-      let arch = llvmArch $ _transContext (lm ^. modTrans)
-      let w = archReprWidth arch
+      let w = llvmModuleArchReprWidth lm
       leq_proof <- case decideLeq (knownNat @1) w of
         Left pf -> return pf
         Right _ -> fail "LLVM arch width is 0!"
@@ -363,12 +426,10 @@ heapster_typecheck_mut_funs bic opts henv fn_names_and_perms =
   case lookupModDefiningSym henv fst_nm of
     Nothing -> fail ("Could not find symbol definition: " ++ fst_nm)
     Just (some_lm@(Some lm)) -> do
-      let arch = llvmArch $ _transContext (lm ^. modTrans)
-      let w = archReprWidth arch
+      let w = llvmModuleArchReprWidth lm
       env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
       some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm,perms_string) ->
-        (getLLVMCFG arch <$>
-         crucible_llvm_cfg bic opts some_lm nm) >>= \any_cfg ->
+        lookupLLVMSymbolCFG bic opts lm nm >>= \any_cfg ->
         case any_cfg of
           AnyCFG cfg ->
             do let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
