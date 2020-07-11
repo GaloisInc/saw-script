@@ -206,6 +206,7 @@ executable saw
     , cryptol
     , directory
     , either
+    , exceptions
     , filepath
     , haskeline
     , QuickCheck
