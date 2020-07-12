@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {- |
 Module      : SAWScript.REPL.Haskeline
 Description :
@@ -6,6 +5,7 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -15,7 +15,9 @@ import SAWScript.REPL.Command
 import SAWScript.REPL.Monad
 
 import Control.Monad (when)
+#if MIN_VERSION_haskeline(0,8,0)
 import qualified Control.Monad.Catch as E
+#endif
 import Data.Char (isAlphaNum, isSpace)
 import Data.Function (on)
 import Data.List (isPrefixOf,sortBy)
