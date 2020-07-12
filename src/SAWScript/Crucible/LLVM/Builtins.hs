@@ -45,6 +45,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_fresh_pointer
     , crucible_llvm_unsafe_assume_spec
     , crucible_fresh_var
+    , crucible_fresh_cryptol_var
     , crucible_alloc
     , crucible_alloc_aligned
     , crucible_alloc_readonly
@@ -1503,6 +1504,21 @@ crucible_fresh_var bic _opts name lty =
      case cryptolTypeOfActual dl lty' of
        Nothing -> throwCrucibleSetup loc $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
        Just cty -> Setup.freshVariable sc name cty
+
+crucible_fresh_cryptol_var ::
+  BuiltinContext ->
+  Options ->
+  String ->
+  Cryptol.Schema ->
+  LLVMCrucibleSetupM TypedTerm
+crucible_fresh_cryptol_var bic _opts name s =
+  LLVMCrucibleSetupM $
+  do loc <- getW4Position "crucible_fresh_var"
+     case s of
+       Cryptol.Forall [] [] ty ->
+         Setup.freshVariable (biSharedContext bic) name ty
+       _ ->
+         throwCrucibleSetup loc $ "Unsupported polymorphic Cryptol type schema: " ++ show s
 
 -- | Use the given LLVM type to compute a setup value that
 -- covers expands all of the struct, array, and pointer

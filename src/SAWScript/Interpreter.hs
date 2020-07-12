@@ -1861,8 +1861,17 @@ primitives = Map.fromList
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
     Current
-    [ "Create a fresh variable for use within a Crucible specification. The"
-    , "name is used only for pretty-printing."
+    [ "Create a fresh symbolic variable for use within a Crucible"
+    , "specification. The name is used only for pretty-printing."
+    ]
+
+  , prim "crucible_fresh_cryptol_var" "String -> Type -> CrucibleSetup Term"
+    (bicVal crucible_fresh_cryptol_var)
+    Experimental
+    [ "Create a fresh symbolic variable of the given Cryptol type for use"
+    , "within a Crucible specification. The given name is used only for"
+    , "pretty-printing. Unlike 'crucible_fresh_var', this can be used when"
+    , "there isn't an appropriate LLVM type, such as the Cryptol Array type."
     ]
 
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
