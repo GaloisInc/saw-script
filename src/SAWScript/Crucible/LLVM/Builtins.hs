@@ -110,6 +110,8 @@ import           Data.Parameterized.Some
 
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
+import qualified Cryptol.TypeCheck.PP as Cryptol
+import qualified Verifier.SAW.Cryptol as Cryptol
 
 -- what4
 import qualified What4.Concrete as W4
@@ -1770,10 +1772,18 @@ crucible_symbolic_alloc ::
   Int ->
   Term ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-crucible_symbolic_alloc _bic _opts ro align_bytes sz =
+crucible_symbolic_alloc bic _opts ro align_bytes sz =
   LLVMCrucibleSetupM $
   do alignment <- coerceAlignment align_bytes
      loc <- getW4Position "crucible_symbolic_alloc"
+     let sc = biSharedContext bic
+     sz_ty <- liftIO $ Cryptol.scCryptolType sc =<< scTypeOf sc sz
+     when (Just 64 /= asCryptolBVType sz_ty) $
+       throwCrucibleSetup loc $ unwords
+         [ "crucible_symbolic_alloc:"
+         , "unexpected type of size term, expected [64], found"
+         , Cryptol.pretty sz_ty
+         ]
      let spec = LLVMAllocSpec
            { _allocSpecMut = if ro then Crucible.Immutable else Crucible.Mutable
            , _allocSpecType = Crucible.i8p
@@ -1784,6 +1794,13 @@ crucible_symbolic_alloc _bic _opts ro align_bytes sz =
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= spec
      return $ mkAllLLVM $ SetupVar n
+
+asCryptolBVType :: Cryptol.Type -> Maybe Integer
+asCryptolBVType ty
+  | Just (n, ety) <- Cryptol.tIsSeq ty
+  , Cryptol.tIsBit ety =
+    Cryptol.tIsNum n
+  | otherwise = Nothing
 
 crucible_alloc_global ::
   BuiltinContext ->
