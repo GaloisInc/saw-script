@@ -95,7 +95,6 @@ import qualified Lang.Crucible.Simulator.OverrideSim as C
 import qualified Lang.Crucible.Simulator.RegMap as C
 import qualified Lang.Crucible.Simulator.SimError as C
 
-import qualified Lang.Crucible.LLVM.Bytes as C.LLVM
 import qualified Lang.Crucible.LLVM.DataLayout as C.LLVM
 import qualified Lang.Crucible.LLVM.Extension as C.LLVM
 import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
@@ -525,9 +524,10 @@ assumeAllocation ::
   (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
 assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc) = do
+  cc <- use x86CrucibleContext
   sym <- use x86Sym
   mem <- use x86Mem
-  sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToBV knownNat sz
+  sz' <- liftIO $ resolveSAWSymBV cc knownNat sz
   (ptr, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
     (show $ W4.plSourceLoc loc) mem sz' align
   x86Mem .= mem'

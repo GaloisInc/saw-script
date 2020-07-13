@@ -1922,6 +1922,15 @@ primitives = Map.fromList
     , "The specified size must be greater than the size of the LLVM type."
     ]
 
+  , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> CrucibleSetup SetupValue"
+    (bicVal crucible_symbolic_alloc)
+    Current
+    [ "Like `crucible_alloc`, but with a (symbolic) size instead of"
+    , "a LLVM type. The first argument specifies whether the allocation is"
+    , "read-only. The second argument specifies the alignment in bytes (which"
+    , "must be a power of 2). The third argument specifies the size in bytes."
+    ]
+
   , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
     (bicVal crucible_alloc_global)
     Current
