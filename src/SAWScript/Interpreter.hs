@@ -1045,7 +1045,7 @@ primitives = Map.fromList
     [ "Use the given proof script to attempt to prove that a term is"
     , "satisfiable (true for any input). Returns a proof result that can"
     , "be analyzed with 'caseSatResult' to determine whether it represents"
-    , "a satisfiying assignment or an indication of unsatisfiability."
+    , "a satisfying assignment or an indication of unsatisfiability."
     ]
 
   , prim "sat_print"           "ProofScript SatResult -> Term -> TopLevel ()"
