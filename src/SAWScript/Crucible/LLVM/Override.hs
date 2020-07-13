@@ -23,6 +23,7 @@ Stability   : provisional
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -106,6 +107,7 @@ import           SAWScript.Crucible.LLVM.CrucibleLLVM (LLVM)
 
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
+import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
 
 import           Verifier.SAW.Prelude (scEq)
@@ -627,8 +629,8 @@ learnCond opts sc cc cs prepost globals ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
-     enforcePointerValidity cc loc ss
-     enforceDisjointness cc loc globals ss
+     enforcePointerValidity sc cc loc ss
+     enforceDisjointness sc cc loc globals ss
      enforceCompleteSubstitution loc ss
 
 
@@ -677,7 +679,7 @@ executeCond opts sc cc cs ss = do
             (ss ^. MS.csFreshPointers)
   OM (setupValueSub %= Map.union ptrs)
 
-  traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
+  traverse_ (executeAllocation opts sc cc) (Map.assocs (ss ^. MS.csAllocs))
   overwritten_allocs <- invalidateMutableAllocs opts sc cc cs
   traverse_
     (executePointsTo opts sc cc cs overwritten_allocs)
@@ -707,11 +709,12 @@ refreshTerms sc ss =
 -- requirements for alignment and mutability.
 enforcePointerValidity ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  SharedContext ->
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
-enforcePointerValidity cc loc ss =
+enforcePointerValidity sc cc loc ss =
   do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub) -- Map AllocIndex (LLVMPtr (Crucible.ArchWidth arch))
      let allocs = view MS.csAllocs ss -- Map AllocIndex LLVMAllocSpec
@@ -721,8 +724,7 @@ enforcePointerValidity cc loc ss =
      mem <- readGlobal memVar
 
      sequence_
-       [ do psz' <-
-              liftIO $ W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth psz
+       [ do psz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth psz
             c <-
               liftIO $
               Crucible.isAllocatedAlignedPointer sym w alignment mut ptr (Just psz') mem
@@ -745,12 +747,13 @@ enforcePointerValidity cc loc ss =
 -- allowed to alias other read-only allocations, however.
 enforceDisjointness ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  SharedContext ->
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
   [MS.AllocGlobal (LLVM arch)] ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointness cc loc globals ss =
+enforceDisjointness sc cc loc globals ss =
   do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub)
      mem <- readGlobal $ Crucible.llvmMemVar $ ccLLVMContext cc
@@ -761,7 +764,7 @@ enforceDisjointness cc loc globals ss =
      -- Ensure that all RW regions are disjoint from each other, and
      -- that all RW regions are disjoint from all RO regions.
      sequence_
-        [ enforceDisjointAllocSpec sym loc p q
+        [ enforceDisjointAllocSpec sc cc sym loc p q
         | p : ps <- tails memsRW
         , q <- ps ++ memsRO
         ]
@@ -781,23 +784,24 @@ enforceDisjointness cc loc globals ss =
 -- | Assert that two LLVM allocations are disjoint from each other.
 enforceDisjointAllocSpec ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  SharedContext ->
+  LLVMCrucibleContext arch ->
   Sym -> W4.ProgramLoc ->
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointAllocSpec sym loc
+enforceDisjointAllocSpec sc cc sym loc
   (LLVMAllocSpec _pmut _pty _palign psz ploc, p)
   (LLVMAllocSpec _qmut _qty _qalign qsz qloc, q) =
-  do c <- liftIO $
-       do W4.setCurrentProgramLoc sym ploc
-          psz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth psz
-          W4.setCurrentProgramLoc sym qloc
-          qsz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth qsz
-          W4.setCurrentProgramLoc sym loc
-          Crucible.buildDisjointRegionsAssertion
-            sym Crucible.PtrWidth
-            p psz'
-            q qsz'
+  do liftIO $ W4.setCurrentProgramLoc sym ploc
+     psz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth psz
+     liftIO $ W4.setCurrentProgramLoc sym qloc
+     qsz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth qsz
+     liftIO $ W4.setCurrentProgramLoc sym loc
+     c <- liftIO $ Crucible.buildDisjointRegionsAssertion
+       sym Crucible.PtrWidth
+       p psz'
+       q qsz'
      let msg =
            "Memory regions not disjoint: "
            ++ "(base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ show psz ++ ")"
@@ -1383,6 +1387,17 @@ instantiateExtResolveSAWPred sc cc cond = do
   sub <- OM (use termSub)
   liftIO $ resolveSAWPred cc =<< scInstantiateExt sc sub cond
 
+instantiateExtResolveSAWSymBV ::
+  (1 <= w) =>
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  NatRepr w ->
+  Term ->
+  OverrideMatcher (LLVM arch) md (W4.SymBV Sym w)
+instantiateExtResolveSAWSymBV sc cc w tm = do
+  sub <- OM (use termSub)
+  liftIO $ resolveSAWSymBV cc w =<< scInstantiateExt sc sub tm
+
 ------------------------------------------------------------------------
 
 -- | Invalidate all mutable memory that was allocated in the method spec
@@ -1403,17 +1418,21 @@ invalidateMutableAllocs opts sc cc cs = do
   sub <- use setupValueSub
 
   let mutableAllocs = Map.filter (view isMut) $ cs ^. MS.csPreState . MS.csAllocs
-      allocPtrs =
-        (\(ptr, spec) ->
-           ( ptr
-           , _allocSpecBytes spec
-           , mconcat
-             [ "state of memory allocated in precondition (at "
-             , pack . show . W4.plSourceLoc $ spec ^. allocSpecLoc
-             , ") not described in postcondition"
-             ]
-           )
-        ) <$> Map.elems (Map.intersectionWith (,) sub mutableAllocs)
+      allocPtrs = catMaybes $ map
+        (\case
+          (ptr, spec)
+            | Just sz <- asUnsignedConcreteBv (_allocSpecBytes spec) ->
+              Just
+                ( ptr
+                , fromIntegral sz
+                , mconcat
+                  [ "state of memory allocated in precondition (at "
+                  , pack . show . W4.plSourceLoc $ spec ^. allocSpecLoc
+                  , ") not described in postcondition"
+                  ]
+                )
+            | otherwise -> Nothing)
+        (Map.elems (Map.intersectionWith (,) sub mutableAllocs))
       mtrans = ccLLVMModuleTrans cc
       gimap = Crucible.globalInitMap mtrans
       mutableGlobals = cs ^. MS.csGlobalAllocs
@@ -1473,10 +1492,11 @@ invalidateMutableAllocs opts sc cc cs = do
 executeAllocation ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->
+  SharedContext ->
   LLVMCrucibleContext arch          ->
   (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher (LLVM arch) RW ()
-executeAllocation opts cc (var, LLVMAllocSpec mut memTy alignment sz loc) =
+executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc) =
   do let sym = cc^.ccBackend
      {-
      memTy <- case Crucible.asMemType symTy of
@@ -1486,7 +1506,7 @@ executeAllocation opts cc (var, LLVMAllocSpec mut memTy alignment sz loc) =
      liftIO $ printOutLn opts Debug $ unwords ["executeAllocation:", show var, show memTy]
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
-     sz' <- liftIO $ W4.bvLit sym Crucible.PtrWidth (Crucible.bytesToBV Crucible.PtrWidth sz)
+     sz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc) ++ " (Poststate)"
      (ptr, mem') <- liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment

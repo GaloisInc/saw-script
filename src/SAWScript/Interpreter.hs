@@ -1045,7 +1045,7 @@ primitives = Map.fromList
     [ "Use the given proof script to attempt to prove that a term is"
     , "satisfiable (true for any input). Returns a proof result that can"
     , "be analyzed with 'caseSatResult' to determine whether it represents"
-    , "a satisfiying assignment or an indication of unsatisfiability."
+    , "a satisfying assignment or an indication of unsatisfiability."
     ]
 
   , prim "sat_print"           "ProofScript SatResult -> Term -> TopLevel ()"
@@ -1861,8 +1861,17 @@ primitives = Map.fromList
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
     Current
-    [ "Create a fresh variable for use within a Crucible specification. The"
-    , "name is used only for pretty-printing."
+    [ "Create a fresh symbolic variable for use within a Crucible"
+    , "specification. The name is used only for pretty-printing."
+    ]
+
+  , prim "crucible_fresh_cryptol_var" "String -> Type -> CrucibleSetup Term"
+    (bicVal crucible_fresh_cryptol_var)
+    Experimental
+    [ "Create a fresh symbolic variable of the given Cryptol type for use"
+    , "within a Crucible specification. The given name is used only for"
+    , "pretty-printing. Unlike 'crucible_fresh_var', this can be used when"
+    , "there isn't an appropriate LLVM type, such as the Cryptol Array type."
     ]
 
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
@@ -1911,6 +1920,15 @@ primitives = Map.fromList
     Experimental
     [ "Like `crucible_alloc`, but with a user-specified size (given in bytes)."
     , "The specified size must be greater than the size of the LLVM type."
+    ]
+
+  , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> CrucibleSetup SetupValue"
+    (bicVal crucible_symbolic_alloc)
+    Current
+    [ "Like `crucible_alloc`, but with a (symbolic) size instead of"
+    , "a LLVM type. The first argument specifies whether the allocation is"
+    , "read-only. The second argument specifies the alignment in bytes (which"
+    , "must be a power of 2). The third argument specifies the size in bytes."
     ]
 
   , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
