@@ -1,0 +1,21 @@
+// construct some fresh symbolic variables to play with
+x <- fresh_symbolic "x" {| [32] |};
+y <- fresh_symbolic "y" {| [32] |};
+
+let t = {{ x + y }};
+
+// get an abstraction over `t`
+let f1 = abstract_symbolic t;
+
+// manually put together an abstraction over `t`
+let f2 = lambda y (lambda x t);
+
+// alternative to `f2` using `lambdas`
+let f3 = lambdas [y, x] t;
+
+// verifying these are all behaviorally equivalent
+let thm1 = {{ \z w -> f1 z w == f2 z w}};
+let thm2 = {{ \z w -> f2 z w == f3 z w}};
+
+prove z3 thm1;
+prove z3 thm2;
