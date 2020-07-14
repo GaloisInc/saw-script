@@ -13,9 +13,13 @@ let f2 = lambda y (lambda x t);
 // alternative to `f2` using `lambdas`
 let f3 = lambdas [y, x] t;
 
-// verifying these are all behaviorally equivalent
+// dgenerate case of `lambdas`
+let f4 = lambdas [] t;
+
 let thm1 = {{ \z w -> f1 z w == f2 z w}};
 let thm2 = {{ \z w -> f2 z w == f3 z w}};
+let thm3 = {{ t == f4 }};
 
 prove z3 thm1;
 prove z3 thm2;
+prove z3 thm3;
