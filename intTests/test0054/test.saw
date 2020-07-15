@@ -4,16 +4,12 @@ y <- fresh_symbolic "y" {| [32] |};
 
 let t = {{ x + y }};
 
-// get an abstraction over `t`
+// various abstractions over `t` that should be operationally equivalent
 let f1 = abstract_symbolic t;
-
-// manually put together an abstraction over `t`
 let f2 = lambda y (lambda x t);
-
-// alternative to `f2` using `lambdas`
 let f3 = lambdas [y, x] t;
 
-// dgenerate case of `lambdas`
+// degenerate case of `lambdas`
 let f4 = lambdas [] t;
 
 let thm1 = {{ \z w -> f1 z w == f2 z w}};
