@@ -91,7 +91,7 @@ build() {
 }
 
 build_abc() {
-  arch=x86
+  arch=X86_64
   case "$RUNNER_OS" in
     Linux) os="Linux" ;;
     macOS) os="OSX" ;;
