@@ -1,0 +1,61 @@
+name: Saw-Script
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest] #, macos-latest, windows-latest]
+        ghc: ["8.6.5"] # , "8.8.3", "8.10.1"]
+    name: Saw-Script - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+
+      - uses: actions/setup-haskell@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+
+      - uses: actions/cache@v1
+        name: Cache cabal store
+        with:
+          path: ${{ steps.setup-haskell.outputs.cabal-store }}
+          # https://github.com/actions/cache/issues/109 "Enable always writing cache to support hermetic build systems"
+          # https://github.com/actions/cache/issues/239#issuecomment-606950711 Investigate this workaround if cache starts filling up
+          key: store-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+          restore-keys: |
+            store-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
+            store-${{ runner.os }}-${{ matrix.ghc }}-
+            store-${{ runner.os }}-
+
+      - uses: actions/cache@v1
+        name: Cache dist-newstyle
+        with:
+          path: dist-newstyle
+          key: dist-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+          restore-keys: |
+            dist-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
+            dist-${{ runner.os }}-${{ matrix.ghc }}-
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          Z3_VERSION: "4.8.7"
+          CVC4_VERSION: "4.1.8"
+          YICES_VERSION: "2.6.2"
+
+      - shell: bash
+        run: |
+          cabal update
+          .github/ci.sh build_abc
+
+      - shell: bash
+        run: .github/ci.sh build
