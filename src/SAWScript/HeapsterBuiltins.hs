@@ -43,6 +43,7 @@ import qualified Data.ByteString.Lazy.UTF8 as BL
 import Data.ByteString.Internal (c2w)
 
 import Data.Binding.Hobbits
+import Data.Binding.Hobbits.Mb (mbMap2)
 
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
@@ -83,7 +84,6 @@ import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.TypedCrucible
 import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.PermParser
-import Verifier.SAW.Heapster.Implication (mbMap2)
 import Text.Parsec (runParser)
 
 import SAWScript.Prover.Exporter

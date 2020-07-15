@@ -30,9 +30,4 @@ packages:
     deps/elf-edit
     deps/dwarf
     deps/heapster-saw
-
-source-repository-package
-    type: git
-    location: https://github.com/eddywestbrook/hobbits.git
-    tag: 4833731c98424ac39b042a77fcb91764b623f11e
-
+    deps/hobbits
