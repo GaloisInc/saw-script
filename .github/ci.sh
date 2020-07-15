@@ -100,8 +100,8 @@ build_abc() {
       pushd deps/abcBridge/abc-build
       sed -i 's#ABC_USE_PTHREADS"#ABC_DONT_USE_PTHREADS" /D "_XKEYCHECK_H"#g' -- *.dsp
       awk 'BEGIN { del=0; } /# Begin Group "uap"/ { del=1; } /# End Group/ { if( del > 0 ) {del=0; next;} } del==0 {print;} ' abclib.dsp > tmp.dsp
-      copy tmp.dsp abclib.dsp
-      del tmp.dsp
+      cp tmp.dsp abclib.dsp
+      rm tmp.dsp
       unix2dos -- *.dsp
       popd
       ;;
