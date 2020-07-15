@@ -118,43 +118,6 @@ test_dist() {
   RT_JAR=/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/rt.jar LOUD=true ./runtests.sh
 }
 
-bundle_files() {
-  doc=dist/share/doc/cryptol
-  mkdir -p $doc
-  cp -R examples/ $doc/examples/
-  cp docs/*md docs/*pdf $doc
-
-  # Copy the two interesting examples over
-  cp docs/ProgrammingCryptol/{aes/AES,enigma/Enigma}.cry $doc/examples/
-  $IS_WIN || chmod +x dist/bin/*
-}
-
-sign() {
-  gpg --batch --import <(echo "$SIGNING_KEY")
-  fingerprint="$(gpg --list-keys | grep galois -a1 | head -n1 | awk '{$1=$1};1')"
-  echo "$fingerprint:6" | gpg --import-ownertrust
-  gpg --yes --no-tty --batch --pinentry-mode loopback --default-key "$fingerprint" --detach-sign -o "$1".sig --passphrase-file <(echo "$SIGNING_PASSPHRASE") "$1"
-}
-
-zip_dist() {
-  : "${VERSION?VERSION is required as an environment variable}"
-  name="${name:-"cryptol-$VERSION-$RUNNER_OS-x86_64"}"
-  mv dist "$name"
-  tar -czf "$name".tar.gz "$name"
-  sign "$name".tar.gz
-  [[ -f "$name".tar.gz.sig ]] && [[ -f "$name".tar.gz ]]
-}
-
-output() { echo "::set-output name=$1::$2"; }
-ver() { grep Version cryptol.cabal | awk '{print $2}'; }
-set_version() { output cryptol-version "$(ver)"; }
-set_files() { output changed-files "$(files_since "$1" "$2")"; }
-files_since() {
-  changed_since="$(git log -1 --before="@{$2}")"
-  files="${changed_since:+"$(git diff-tree --no-commit-id --name-only -r "$1" | xargs)"}"
-  echo "$files"
-}
-
 COMMAND="$1"
 shift
 
