@@ -1,0 +1,19 @@
+// read an empty file into byte list
+empty <- read_bytes "empty";
+let actually_empty = {{ empty == [] }};
+prove z3 actually_empty;
+
+// non-empty file; should be ASCII rep. of "Hello, world!" (13 bytes)
+nonempty <- read_bytes "nonempty";
+let length_correct = {{ length nonempty == 13 }};
+let correct_seq = {{ nonempty == "Hello, world!" }};
+
+prove z3 length_correct;
+prove z3 correct_seq;
+
+// non-empty, but full of 255 bytes random noise
+// random data generated at https://random.org/bytes/
+noise <- read_bytes "noise";
+print_term noise;
+let length_correct = {{ length noise == 255 }};
+prove z3 length_correct;
