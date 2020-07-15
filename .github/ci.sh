@@ -95,10 +95,19 @@ build_abc() {
   case "$RUNNER_OS" in
     Linux) os="Linux" ;;
     macOS) os="OSX" ;;
-    Windows) os="Windows" ;;
+    Windows)
+      os="Windows"
+      pushd deps/abcBridge/abc-build
+      sed -i 's#ABC_USE_PTHREADS"#ABC_DONT_USE_PTHREADS" /D "_XKEYCHECK_H"#g' -- *.dsp
+      awk 'BEGIN { del=0; } /# Begin Group "uap"/ { del=1; } /# End Group/ { if( del > 0 ) {del=0; next;} } del==0 {print;} ' abclib.dsp > tmp.dsp
+      copy tmp.dsp abclib.dsp
+      del tmp.dsp
+      unix2dos -- *.dsp
+      popd
+      ;;
   esac
   pushd deps/abcBridge
-  scripts/build-abc.sh $arch $os --init
+  scripts/build-abc.sh $arch $os
 }
 
 install_system_deps() {
