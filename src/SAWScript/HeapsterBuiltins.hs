@@ -84,7 +84,6 @@ import Verifier.SAW.Heapster.TypedCrucible
 import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.PermParser
 import Verifier.SAW.Heapster.Implication (mbMap2)
-import Text.Parsec (runParser)
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
@@ -278,11 +277,8 @@ heapster_define_recursive_perm :: BuiltinContext -> Options -> HeapsterEnv ->
 heapster_define_recursive_perm _bic _opts henv
   nm args_str val_str p_strs trans_str fold_fun_str unfold_fun_str =
     do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-       let penv = mkParserEnv env
-       some_args <- case runParser parseCtx penv "" args_str  of
-         Left err -> fail ("Error parsing argument types: " ++ show err)
-         Right argsCtx -> return argsCtx
-       some_val <- parseTypeString "permission type" env val_str
+       some_args <- parseParsedCtxString "argument types" env args_str
+       some_val  <- parseTypeString "permission type" env val_str
        case (some_args, some_val) of
          (Some args_ctx@(ParsedCtx _ args), Some val_perm) -> do
            let rpn = NamedPermName nm val_perm args
@@ -293,11 +289,9 @@ heapster_define_recursive_perm _bic _opts henv
               (nus (cruCtxProxies args) . const $ ValuePermRepr val_perm)
            trans_ident <- parseAndInsDef henv nm trans_tp trans_str
            
-           let penv' = penv { parserEnvPermVars = [(nm, SomeNamedPermName rpn)] }
            p_perms <- forM p_strs $ \p_str ->
-             case runParser (parseValPermInCtx args_ctx val_perm) penv' "" p_str of
-               Left err -> fail ("Error parsing disjunctive perm: " ++ show err)
-               Right p_perm -> pure p_perm
+             parsePermInCtxString "disjunctive perm" env [(nm, SomeNamedPermName rpn)]
+                                  args_ctx val_perm p_str
           
            let npnts = [(SomeNamedPermName rpn, trans_ident)]
                or_tp = foldr1 (mbMap2 ValPerm_Or) p_perms
@@ -323,16 +317,12 @@ heapster_define_perm :: BuiltinContext -> Options -> HeapsterEnv ->
                         TopLevel ()
 heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
   do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     let penv = mkParserEnv env
-     some_args <- case runParser parseCtx penv "" args_str  of
-       Left err -> fail ("Error parsing argument types: " ++ show err)
-       Right args -> return args
-     some_tp <- parseTypeString "permission type" env tp_str
+     some_args <- parseParsedCtxString "argument types" env args_str
+     some_tp   <- parseTypeString "permission type" env tp_str
      case (some_args, some_tp) of
        (Some args_ctx@(ParsedCtx _ args), Some tp_perm) -> do
-         perm <- case runParser (parseValPermInCtx args_ctx tp_perm) penv "" perm_string of
-           Left err -> fail ("Error parsing disjunctive perm: " ++ show err)
-           Right perm -> pure perm
+         perm <- parsePermInCtxString "disjunctive perm" env []
+                                      args_ctx tp_perm perm_string
          sc <- getSharedContext
          term_tp <- liftIO $
            translateCompleteType sc (emptyTypeTransInfo env)
