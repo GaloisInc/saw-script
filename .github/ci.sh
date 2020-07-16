@@ -97,17 +97,27 @@ build_abc() {
     macOS) os="OSX" ;;
     Windows)
       os="Windows"
+      A="-m64 \
+           -DWIN32_NO_DLL \
+           -DABC_NO_DYNAMIC_LINKING \
+           -DNT64 \
+           -D_WIN64 \
+           -UWIN32 \
+           -DSIZEOF_VOID_P=8 -DSIZEOF_LONG=4 -DSIZEOF_INT=4 \
+           -UZLIB_DLL"
       pushd deps/abcBridge/abc-build
       sed -i 's#ABC_USE_PTHREADS"#ABC_DONT_USE_PTHREADS" /D "_XKEYCHECK_H"#g' -- *.dsp
       awk 'BEGIN { del=0; } /# Begin Group "uap"/ { del=1; } /# End Group/ { if( del > 0 ) {del=0; next;} } del==0 {print;} ' abclib.dsp > tmp.dsp
       cp tmp.dsp abclib.dsp
       rm tmp.dsp
       unix2dos -- *.dsp
+      make -j2 ARCHFLAGS="-DABC_LIB $A" ABC_USE_NO_PTHREADS=1 ABC_USE_NO_READLINE=1 ABC_USE_LIBSTDCXX=1 libabc.a
       popd
       ;;
   esac
   pushd deps/abcBridge
-  scripts/build-abc.sh $arch $os
+  $IS_WIN || scripts/build-abc.sh $arch $os
+  popd
 }
 
 install_system_deps() {
