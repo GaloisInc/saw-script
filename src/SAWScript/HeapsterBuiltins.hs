@@ -90,6 +90,13 @@ failOnLeft :: (MonadFail m, Show err) => String -> Either err a -> m a
 failOnLeft action (Left err) = Fail.fail ("Error" ++ action ++ ": " ++ show err)
 failOnLeft _ (Right a) = return a
 
+-- | Extract out the contents of the 'Just' of a 'Maybe' wrapped in a
+-- `MonadFail`, calling 'fail' on the given string if the `Maybe` is a
+-- `Nothing`.
+failOnNothing :: MonadFail m => String -> Maybe a -> m a
+failOnNothing err_str Nothing = Fail.fail err_str
+failOnNothing _ (Just a) = return a
+
 getLLVMCFG :: ArchRepr arch -> SAW_CFG -> AnyCFG (LLVM arch)
 getLLVMCFG _ (LLVM_CFG cfg) =
   -- FIXME: there should be an ArchRepr argument for LLVM_CFG to compare here!
@@ -300,9 +307,6 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
      Some tp_perm <- parseTypeString "permission type" env tp_str
      perm <- parsePermInCtxString "disjunctive perm" env []
                                    args_ctx tp_perm perm_string
-     sc <- getSharedContext
-     _ <- liftIO $ translateCompleteType sc (emptyTypeTransInfo env)
-                                            (ValuePermRepr tp_perm)
      let env' = permEnvAddDefinedPerm env nm args tp_perm perm
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
@@ -317,29 +321,25 @@ heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str
        parseParsedCtxString "top-level argument context" env top_args_str
      Some ghosts_p <-
        parseParsedCtxString "ghost argument context" env ghosts_str
-     maybe_mod_cfg <- lookupLLVMSymbolModAndCFG bic opts henv nm
-     case maybe_mod_cfg of
-       Nothing -> fail ("Could not find symbol definition: " ++ nm)
-       Just (Some (ModuleAndCFG _ (AnyCFG cfg))) ->
-         let top_args = parsedCtxCtx top_args_p
-             ghosts = parsedCtxCtx ghosts_p
-             h = cfgHandle cfg
-             blocks = fmapFC blockInputs $ cfgBlockMap cfg in
-         case Ctx.intIndex blk (Ctx.size blocks) of
-           Nothing -> fail ("Block ID " ++ show blk
-                            ++ " not found in function " ++ nm)
-           Just (Some blockIx) ->
-             do let block_ID = BlockID blockIx
-                    block_args = blocks Ctx.! blockIx
-                perms <-
-                  parsePermsString "block entry permissions" env
-                  (appendParsedCtx (appendParsedCtx top_args_p ghosts_p)
-                   (mkArgsParsedCtx $ mkCruCtx block_args))
-                  perms_str
-                let env' =
-                      permEnvAddHint env $ Hint_BlockEntry $
-                      BlockEntryHint h blocks block_ID top_args ghosts perms
-                liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+     Some (ModuleAndCFG _ (AnyCFG cfg)) <-
+       failOnNothing ("Could not find symbol definition: " ++ nm) =<<
+         lookupLLVMSymbolModAndCFG bic opts henv nm
+     let top_args = parsedCtxCtx top_args_p
+         ghosts = parsedCtxCtx ghosts_p
+         h = cfgHandle cfg
+         blocks = fmapFC blockInputs $ cfgBlockMap cfg
+     Some blockIx <-
+       failOnNothing ("Block ID " ++ show blk ++ " not found in function " ++ nm)
+                     (Ctx.intIndex blk (Ctx.size blocks))
+     let block_ID = BlockID blockIx
+         block_args = blocks Ctx.! blockIx
+     perms <- parsePermsString "block entry permissions" env
+               (appendParsedCtx (appendParsedCtx top_args_p ghosts_p)
+                (mkArgsParsedCtx $ mkCruCtx block_args))
+               perms_str
+     let env' = permEnvAddHint env $ Hint_BlockEntry $
+                 BlockEntryHint h blocks block_ID top_args ghosts perms
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
 -- | Assume that the given named function has the supplied type and translates
@@ -347,64 +347,59 @@ heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str
 heapster_assume_fun :: BuiltinContext -> Options -> HeapsterEnv ->
                        String -> String -> String -> TopLevel ()
 heapster_assume_fun _bic _opts henv nm perms_string term_string =
-  case lookupModDeclaringSym henv nm of
-    Nothing ->
-      fail ("Could not find symbol: " ++ nm)
-    Just (Some lm) -> do
-      sc <- getSharedContext
-      let w = llvmModuleArchReprWidth lm
-      leq_proof <- case decideLeq (knownNat @1) w of
-        Left pf -> return pf
-        Right _ -> fail "LLVM arch width is 0!"
-      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-      case lm ^. modTrans.transContext.symbolMap.at (L.Symbol nm) of
-        Nothing -> error ("Unreachable: could not find symbol: " ++ nm)
-        Just (LLVMHandleInfo _ h) -> 
-          let args = mkCruCtx $ handleArgTypes h
-              ret = handleReturnType h in
-          withKnownNat w $ withLeqProof leq_proof $ do
-            SomeFunPerm fun_perm <-
-              parseFunPermString "permissions" env args ret perms_string
-            perm_env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
-            fun_typ <- liftIO $
-              translateCompleteFunPerm sc (emptyTypeTransInfo perm_env)
+  do Some lm <- failOnNothing ("Could not find symbol: " ++ nm)
+                              (lookupModDeclaringSym henv nm)
+     sc <- getSharedContext
+     let w = llvmModuleArchReprWidth lm
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     LLVMHandleInfo _ h <-
+       failOnNothing ("Unreachable: could not find symbol: " ++ nm) $
+         lm ^. modTrans.transContext.symbolMap.at (L.Symbol nm)
+     let args = mkCruCtx $ handleArgTypes h
+         ret = handleReturnType h
+     withKnownNat w $ withLeqProof leq_proof $ do
+        SomeFunPerm fun_perm <-
+          parseFunPermString "permissions" env args ret perms_string
+        perm_env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
+        fun_typ <- liftIO $
+          translateCompleteFunPerm sc (emptyTypeTransInfo perm_env)
+                                      fun_perm
+        term_ident <- parseAndInsDef henv nm fun_typ term_string
+        let env' = permEnvAddGlobalSymFun env
+                                          (GlobalSymbol $ fromString nm)
+                                          w
                                           fun_perm
-            term_ident <- parseAndInsDef henv nm fun_typ term_string
-            let env' = permEnvAddGlobalSymFun env
-                                              (GlobalSymbol $ fromString nm)
-                                              w
-                                              fun_perm
-                                              (globalOpenTerm term_ident)
-            liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+                                          (globalOpenTerm term_ident)
+        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
 heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->
                                [(String, String)] -> TopLevel ()
 heapster_typecheck_mut_funs bic opts henv fn_names_and_perms =
-  let fst_nm = fst $ head fn_names_and_perms in
-  case lookupModDefiningSym henv fst_nm of
-    Nothing -> fail ("Could not find symbol definition: " ++ fst_nm)
-    Just (Some lm) -> do
-      let w = llvmModuleArchReprWidth lm
-      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-      some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm,perms_string) ->
-        lookupLLVMSymbolCFG bic opts lm nm >>= \any_cfg ->
-        case any_cfg of
-          AnyCFG cfg ->
-            do let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
-               let ret = handleReturnType $ cfgHandle cfg
-               SomeFunPerm fun_perm <-
-                 parseFunPermString "permissions" env args ret perms_string
-               return $ SomeCFGAndPerm (GlobalSymbol $ fromString nm)
-                                       cfg fun_perm
-      sc <- getSharedContext
-      let saw_modname = heapsterEnvSAWModule henv
-      leq_proof <- case decideLeq (knownNat @1) w of
-        Left pf -> return pf
-        Right _ -> fail "LLVM arch width is 0!"
-      env' <- liftIO $ withKnownNat w $ withLeqProof leq_proof $
-        tcTranslateAddCFGs sc saw_modname w env some_cfgs_and_perms
-      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+  do let fst_nm = fst $ head fn_names_and_perms
+     Some lm <- failOnNothing ("Could not find symbol definition: " ++ fst_nm)
+                              (lookupModDefiningSym henv fst_nm)
+     let w = llvmModuleArchReprWidth lm
+     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm,perms_string) ->
+       lookupLLVMSymbolCFG bic opts lm nm >>= \(AnyCFG cfg) ->
+           do let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
+              let ret = handleReturnType $ cfgHandle cfg
+              SomeFunPerm fun_perm <-
+                parseFunPermString "permissions" env args ret perms_string
+              return $ SomeCFGAndPerm (GlobalSymbol $ fromString nm)
+                                      cfg fun_perm
+     sc <- getSharedContext
+     let saw_modname = heapsterEnvSAWModule henv
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     env' <- liftIO $ withKnownNat w $ withLeqProof leq_proof $
+       tcTranslateAddCFGs sc saw_modname w env some_cfgs_and_perms
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
 heapster_typecheck_fun :: BuiltinContext -> Options -> HeapsterEnv ->
