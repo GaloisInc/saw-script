@@ -157,6 +157,8 @@ readModuleFromFile path = do
     (m@(Un.Module (Un.PosPair _ mnm) _ _),[]) -> pure (m, mnm)
     (_,errs) -> fail $ "Module parsing failed:\n" ++ show errs
 
+-- | Parse the second given string as a term, the first given string being
+-- used as the path for error reporting
 parseTermFromString :: String -> String -> TopLevel Un.Term
 parseTermFromString nm term_string = do
   let base = ""
@@ -164,16 +166,6 @@ parseTermFromString nm term_string = do
   case Un.parseSAWTerm base path (BL.fromString term_string) of
     (term,[]) -> pure term
     (_,errs) -> fail $ "Term parsing failed:\n" ++ show errs
-
--- based on 'inferCompleteTermCtx'
-typecheckTerm :: ModuleName -> Un.Term -> TopLevel TypedTerm
-typecheckTerm mnm t = do
-  sc <- getSharedContext
-  res <- liftIO $ runTCM (typeInferComplete t) sc (Just mnm) []
-  case res of
-    Right t' -> pure $ t'
-    Left err -> fail $ "Term failed to typecheck:\n" ++ unlines (prettyTCError err)
-
 
 -- | Parse the second given string as a term, check that it has the given type,
 -- and, if the parsed term is not already an identifier, add it as a
@@ -184,13 +176,12 @@ parseAndInsDef henv nm term_tp term_string =
   do sc <- getSharedContext
      un_term <- parseTermFromString nm term_string
      let mnm = heapsterEnvSAWModule henv
-     typed_term <- typecheckTerm mnm un_term
-     eith <- liftIO $ runTCM (checkSubtype typed_term term_tp) sc (Just mnm) []
-     case (eith, typedVal typed_term) of
-       (Left err, _) -> fail $ unlines $ prettyTCError err
-       (Right _, STApp _ _ (FTermF (GlobalDef term_ident))) ->
+     typed_term <- liftIO $ scTypeCheckCompleteError sc (Just mnm) un_term
+     liftIO $ scCheckSubtype sc (Just mnm) typed_term term_tp
+     case typedVal typed_term of
+       STApp _ _ (FTermF (GlobalDef term_ident)) ->
          return term_ident
-       (Right _, term) -> do
+       term -> do
          let term_ident = mkSafeIdent mnm nm
          liftIO $ scModifyModule sc mnm $ \m ->
            insDef m $ Def { defIdent = term_ident,
