@@ -175,17 +175,6 @@ typecheckTerm mnm t = do
     Right t' -> pure $ t'
     Left err -> fail $ "Term failed to typecheck:\n" ++ unlines (prettyTCError err)
 
--- | Translate a 'TypRepr' to the SAW core type it represents
-translateTypePerm :: SharedContext -> PermEnv -> TypeRepr tp -> IO Term
-translateTypePerm sc env typ_perm =
-  completeOpenTerm sc $
-  typeTransType1 $
-  runTransM (translate $ emptyMb typ_perm) (emptyTypeTransInfo env)
-
-translateOpenTermToTerm :: SharedContext -> PermEnv -> [(SomeNamedPermName, Ident)]
-                        -> TransM TypeTransInfo RNil OpenTerm -> TopLevel Term 
-translateOpenTermToTerm sc env npnts m =
-  liftIO $ completeOpenTerm sc $ runTransM m (TypeTransInfo MNil npnts env)
 
 -- | Parse the second given string as a term, check that it has the given type,
 -- and, if the parsed term is not already an identifier, add it as a
@@ -273,7 +262,9 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_string =
      case (some_args, some_tp) of
        (Some args, Some tp_perm) -> do
          sc <- getSharedContext
-         term_tp <- liftIO $ translateTypePerm sc env (ValuePermRepr tp_perm)
+         term_tp <- liftIO $
+           translateCompleteType sc (emptyTypeTransInfo env)
+                                    (ValuePermRepr tp_perm)
          term_ident <- parseAndInsDef henv nm term_tp term_string
          let env' = permEnvAddOpaquePerm env nm args tp_perm term_ident
          liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
@@ -297,9 +288,9 @@ heapster_define_recursive_perm _bic _opts henv
            let rpn = NamedPermName nm val_perm args
            sc <- getSharedContext
            
-           trans_tp <- translateOpenTermToTerm sc env [] $
-             piExprCtx args (typeTransType1 <$>
-               translateClosed (ValuePermRepr val_perm))
+           trans_tp <- liftIO $ 
+            translateCompleteTypeInCtx sc (emptyTypeTransInfo env) args
+              (nus (cruCtxProxies args) . const $ ValuePermRepr val_perm)
            trans_ident <- parseAndInsDef henv nm trans_tp trans_str
            
            let penv' = penv { parserEnvPermVars = [(nm, SomeNamedPermName rpn)] }
@@ -309,17 +300,16 @@ heapster_define_recursive_perm _bic _opts henv
                Right p_perm -> pure p_perm
           
            let npnts = [(SomeNamedPermName rpn, trans_ident)]
-               or_tp = mbCombine . emptyMb $
-                         foldr1 (mbMap2 ValPerm_Or) p_perms
-               nm_tp = mbCombine . emptyMb $
-                         nus (cruCtxProxies args) (ValPerm_Named rpn . pExprVars)
-           fold_fun_tp <- translateOpenTermToTerm sc env npnts $ 
-             piExprCtx args (piPermCtx (fmap (ValPerms_Cons ValPerms_Nil) or_tp)
-               (const $ typeTransType1 <$> translate nm_tp))
-           fold_ident <- parseAndInsDef henv nm fold_fun_tp fold_fun_str
-           unfold_fun_tp <- translateOpenTermToTerm sc env npnts $ 
-             piExprCtx args (piPermCtx (fmap (ValPerms_Cons ValPerms_Nil) nm_tp)
-               (const $ typeTransType1 <$> translate or_tp))
+               or_tp = foldr1 (mbMap2 ValPerm_Or) p_perms
+               nm_tp = nus (cruCtxProxies args) (ValPerm_Named rpn . pExprVars)
+           
+           fold_fun_tp   <- liftIO $
+             translateCompletePureFun sc (TypeTransInfo MNil npnts env) args
+                                         (singletonValuePerms <$> or_tp) nm_tp
+           unfold_fun_tp <- liftIO $
+             translateCompletePureFun sc (TypeTransInfo MNil npnts env) args
+                                         (singletonValuePerms <$> nm_tp) or_tp
+           fold_ident   <- parseAndInsDef henv nm fold_fun_tp fold_fun_str
            unfold_ident <- parseAndInsDef henv nm unfold_fun_tp unfold_fun_str
 
            let env' = permEnvAddRecPerm env nm args val_perm p_perms
@@ -344,7 +334,9 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
            Left err -> fail ("Error parsing disjunctive perm: " ++ show err)
            Right perm -> pure perm
          sc <- getSharedContext
-         term_tp <- liftIO $ translateTypePerm sc env (ValuePermRepr tp_perm)
+         term_tp <- liftIO $
+           translateCompleteType sc (emptyTypeTransInfo env)
+                                    (ValuePermRepr tp_perm)
          let env' = permEnvAddDefinedPerm env nm args tp_perm perm
          liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
@@ -409,7 +401,9 @@ heapster_assume_fun bic opts henv nm perms_string term_string =
           \some_fun_perm -> case some_fun_perm of
             SomeFunPerm fun_perm -> do
               perm_env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
-              fun_typ <- liftIO $ translateCompleteFunPerm sc perm_env fun_perm
+              fun_typ <- liftIO $
+                translateCompleteFunPerm sc (emptyTypeTransInfo perm_env)
+                                            fun_perm
               term_ident <- parseAndInsDef henv nm fun_typ term_string
               let env' = permEnvAddGlobalSymFun env
                                                 (GlobalSymbol $ fromString nm)
