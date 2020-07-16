@@ -17,8 +17,11 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.SCTypeCheck
   ( scTypeCheck
   , scTypeCheckError
+  , scTypeCheckComplete
+  , scTypeCheckCompleteError
   , scTypeCheckWHNF
   , scConvertible
+  , scCheckSubtype
   , TCError(..)
   , prettyTCError
   , throwTCError
@@ -261,6 +264,38 @@ scTypeCheckInCtx ::
   TypeInfer a => SharedContext -> Maybe ModuleName ->
   [(LocalName, Term)] -> a -> IO (Either TCError Term)
 scTypeCheckInCtx sc mnm ctx t0 = runTCM (typeInfer t0) sc mnm ctx
+
+-- | Infer the type of an @a@ and complete it to a term using
+-- 'scTypeCheckComplete', calling 'fail' on failure
+scTypeCheckCompleteError :: TypeInfer a => SharedContext ->
+                            Maybe ModuleName -> a -> IO TypedTerm
+scTypeCheckCompleteError sc mnm t0 =
+  either (fail . unlines . prettyTCError) return =<<
+  scTypeCheckComplete sc mnm t0
+
+-- | Infer the type of an @a@ and complete it to a term, ensuring in the
+-- process that the entire term is well-formed and that all internal type
+-- annotations are correct. Types are evaluated to WHNF as necessary, and the
+-- returned type is in WHNF, though the returned term may not be.
+scTypeCheckComplete :: TypeInfer a => SharedContext -> Maybe ModuleName ->
+                       a -> IO (Either TCError TypedTerm)
+scTypeCheckComplete sc mnm = scTypeCheckCompleteInCtx sc mnm []
+
+-- | Like 'scTypeCheckComplete', but type-check the term relative to a typing
+-- context, which assigns types to free variables in the term
+scTypeCheckCompleteInCtx :: TypeInfer a => SharedContext ->
+                            Maybe ModuleName -> [(LocalName, Term)] -> a ->
+                            IO (Either TCError TypedTerm)
+scTypeCheckCompleteInCtx sc mnm ctx t0 =
+  runTCM (typeInferComplete t0) sc mnm ctx
+
+-- | Check that one type is a subtype of another using 'checkSubtype', calling
+-- 'fail' on failure
+scCheckSubtype :: SharedContext -> Maybe ModuleName ->
+                  TypedTerm -> Term -> IO ()
+scCheckSubtype sc mnm arg req_tp =
+  either (fail . unlines . prettyTCError) return =<<
+  runTCM (checkSubtype arg req_tp) sc mnm []
 
 -- | A pair of a 'Term' and its type
 data TypedTerm = TypedTerm { typedVal :: Term, typedType :: Term }
