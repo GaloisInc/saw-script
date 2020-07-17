@@ -45,11 +45,13 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_fresh_pointer
     , crucible_llvm_unsafe_assume_spec
     , crucible_fresh_var
+    , crucible_fresh_cryptol_var
     , crucible_alloc
     , crucible_alloc_aligned
     , crucible_alloc_readonly
     , crucible_alloc_readonly_aligned
     , crucible_alloc_with_size
+    , crucible_symbolic_alloc
     , crucible_alloc_global
     , crucible_fresh_expanded_val
 
@@ -108,6 +110,8 @@ import           Data.Parameterized.Some
 
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
+import qualified Cryptol.TypeCheck.PP as Cryptol
+import qualified Verifier.SAW.Cryptol as Cryptol
 
 -- what4
 import qualified What4.Concrete as W4
@@ -136,6 +140,7 @@ import qualified Lang.Crucible.LLVM.DataLayout as Crucible
 import           Lang.Crucible.LLVM.Extension (LLVM)
 import qualified Lang.Crucible.LLVM.Bytes as Crucible
 import qualified Lang.Crucible.LLVM.MemModel as Crucible
+import qualified Lang.Crucible.LLVM.MemType as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
@@ -854,7 +859,7 @@ doAlloc ::
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
 doAlloc cc (LLVMAllocSpec mut _memTy alignment sz loc) = StateT $ \mem ->
   do let sym = cc^.ccBackend
-     sz' <- W4.bvLit sym Crucible.PtrWidth $ Crucible.bytesToBV Crucible.PtrWidth sz
+     sz' <- liftIO $ resolveSAWSymBV cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc)
      liftIO $
        Crucible.doMalloc sym Crucible.HeapAlloc mut l mem sz' alignment
@@ -1504,6 +1509,21 @@ crucible_fresh_var bic _opts name lty =
        Nothing -> throwCrucibleSetup loc $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
        Just cty -> Setup.freshVariable sc name cty
 
+crucible_fresh_cryptol_var ::
+  BuiltinContext ->
+  Options ->
+  String ->
+  Cryptol.Schema ->
+  LLVMCrucibleSetupM TypedTerm
+crucible_fresh_cryptol_var bic _opts name s =
+  LLVMCrucibleSetupM $
+  do loc <- getW4Position "crucible_fresh_var"
+     case s of
+       Cryptol.Forall [] [] ty ->
+         Setup.freshVariable (biSharedContext bic) name ty
+       _ ->
+         throwCrucibleSetup loc $ "Unsupported polymorphic Cryptol type schema: " ++ show s
+
 -- | Use the given LLVM type to compute a setup value that
 -- covers expands all of the struct, array, and pointer
 -- components of the LLVM type. Only the primitive types
@@ -1528,7 +1548,7 @@ crucible_fresh_expanded_val bic _opts lty =
 --
 -- This is the recursively-called worker function.
 constructExpandedSetupValue ::
-  (?lc :: Crucible.TypeContext) =>
+  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch ->
   SharedContext ->
   W4.ProgramLoc ->
@@ -1644,6 +1664,8 @@ crucible_alloc_with_mutability_and_size mut sz alignment bic opts lty =
               pure sz_
          Nothing -> pure (Crucible.toBytes memTySize)
 
+     sz'' <- liftIO $ scPtrWidthBvNat cctx sz'
+
      alignment' <-
        case alignment of
          Just a ->
@@ -1661,7 +1683,7 @@ crucible_alloc_with_mutability_and_size mut sz alignment bic opts lty =
        { _allocSpecMut = mut
        , _allocSpecType = memTy
        , _allocSpecAlign = alignment'
-       , _allocSpecBytes = sz'
+       , _allocSpecBytes = sz''
        , _allocSpecLoc = loc
        }
 
@@ -1707,23 +1729,26 @@ crucible_alloc_aligned_with_mutability ::
   L.Type ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
 crucible_alloc_aligned_with_mutability mut bic opts n lty =
+  do alignment <- LLVMCrucibleSetupM $ coerceAlignment n
+     crucible_alloc_with_mutability_and_size
+       mut
+       Nothing
+       (Just alignment)
+       bic
+       opts
+       lty
+
+coerceAlignment :: Int -> CrucibleSetup (LLVM arch) Crucible.Alignment
+coerceAlignment n =
   case Crucible.toAlignment (Crucible.toBytes n) of
     Nothing ->
-      LLVMCrucibleSetupM $ do
-        loc <- getW4Position "crucible_alloc_aligned_with_mutability"
-        throwCrucibleSetup loc $ unwords
-          [ "crucible_alloc_aligned/crucible_alloc_readonly_aligned:"
-          , "invalid non-power-of-2 alignment:"
-          , show n
-          ]
-    Just alignment ->
-      crucible_alloc_with_mutability_and_size
-        mut
-        Nothing
-        (Just alignment)
-        bic
-        opts
-        lty
+      do loc <- getW4Position "crucible_alloc_aligned_with_mutability"
+         throwCrucibleSetup loc $ unwords
+           [ "crucible_alloc_aligned/crucible_alloc_readonly_aligned:"
+           , "invalid non-power-of-2 alignment:"
+           , show n
+           ]
+    Just alignment -> return alignment
 
 crucible_alloc_with_size ::
   BuiltinContext ->
@@ -1739,6 +1764,43 @@ crucible_alloc_with_size bic opts sz lty =
     bic
     opts
     lty
+
+crucible_symbolic_alloc ::
+  BuiltinContext ->
+  Options ->
+  Bool ->
+  Int ->
+  Term ->
+  LLVMCrucibleSetupM (AllLLVM SetupValue)
+crucible_symbolic_alloc bic _opts ro align_bytes sz =
+  LLVMCrucibleSetupM $
+  do alignment <- coerceAlignment align_bytes
+     loc <- getW4Position "crucible_symbolic_alloc"
+     let sc = biSharedContext bic
+     sz_ty <- liftIO $ Cryptol.scCryptolType sc =<< scTypeOf sc sz
+     when (Just 64 /= asCryptolBVType sz_ty) $
+       throwCrucibleSetup loc $ unwords
+         [ "crucible_symbolic_alloc:"
+         , "unexpected type of size term, expected [64], found"
+         , Cryptol.pretty sz_ty
+         ]
+     let spec = LLVMAllocSpec
+           { _allocSpecMut = if ro then Crucible.Immutable else Crucible.Mutable
+           , _allocSpecType = Crucible.i8p
+           , _allocSpecAlign = alignment
+           , _allocSpecBytes = sz
+           , _allocSpecLoc = loc
+           }
+     n <- Setup.csVarCounter <<%= nextAllocIndex
+     Setup.currentState . MS.csAllocs . at n ?= spec
+     return $ mkAllLLVM $ SetupVar n
+
+asCryptolBVType :: Cryptol.Type -> Maybe Integer
+asCryptolBVType ty
+  | Just (n, ety) <- Cryptol.tIsSeq ty
+  , Cryptol.tIsBit ety =
+    Cryptol.tIsNum n
+  | otherwise = Nothing
 
 crucible_alloc_global ::
   BuiltinContext ->
@@ -1762,6 +1824,7 @@ crucible_fresh_pointer bic _opt lty =
      constructFreshPointer (llvmTypeAlias lty) loc memTy
 
 constructFreshPointer ::
+  Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   Maybe Crucible.Ident ->
   W4.ProgramLoc ->
   Crucible.MemType ->
@@ -1771,7 +1834,7 @@ constructFreshPointer mid loc memTy =
      let ?lc = ccTypeCtx cctx
      let ?dl = Crucible.llvmDataLayout ?lc
      n <- Setup.csVarCounter <<%= nextAllocIndex
-     let sz = Crucible.memTypeSize ?dl memTy
+     sz <- liftIO $ scPtrWidthBvNat cctx $ Crucible.memTypeSize ?dl memTy
      let alignment = Crucible.memTypeAlign ?dl memTy
      Setup.currentState . MS.csFreshPointers . at n ?=
        LLVMAllocSpec { _allocSpecMut = Crucible.Mutable
