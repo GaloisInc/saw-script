@@ -83,7 +83,6 @@ import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.TypedCrucible
 import Verifier.SAW.Heapster.SAWTranslation
 import Verifier.SAW.Heapster.PermParser
-import Verifier.SAW.Heapster.Implication (mbMap2)
 import Text.Parsec (runParser)
 
 import SAWScript.Prover.Exporter
@@ -296,18 +295,18 @@ heapster_define_recursive_perm _bic _opts henv
          (Some args_ctx@(ParsedCtx _ args), Some val_perm) -> do
            let rpn = NamedPermName nm val_perm args
            sc <- getSharedContext
-           
+
            trans_tp <- translateOpenTermToTerm sc env [] $
              piExprCtx args (typeTransType1 <$>
                translateClosed (ValuePermRepr val_perm))
            trans_ident <- parseAndInsDef henv nm trans_tp trans_str
-           
+
            let penv' = penv { parserEnvPermVars = [(nm, SomeNamedPermName rpn)] }
            p_perms <- forM p_strs $ \p_str ->
              case runParser (parseValPermInCtx args_ctx val_perm) penv' "" p_str of
                Left err -> fail ("Error parsing disjunctive perm: " ++ show err)
                Right p_perm -> pure p_perm
-          
+
            let npnts = [(SomeNamedPermName rpn, trans_ident)]
                or_tp = mbCombine . emptyMb $
                          foldr1 (mbMap2 ValPerm_Or) p_perms
@@ -375,8 +374,9 @@ heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str
                     block_args = blocks Ctx.! blockIx
                 perms <-
                   parsePermsString "block entry permissions" env
-                  (appendParsedCtx (appendParsedCtx top_args_p ghosts_p)
-                   (mkArgsParsedCtx $ mkCruCtx block_args))
+                  (appendParsedCtx
+                   (appendParsedCtx top_args_p
+                    (mkArgsParsedCtx $ mkCruCtx block_args)) ghosts_p)
                   perms_str
                 let env' =
                       permEnvAddHint env $ Hint_BlockEntry $
