@@ -9,9 +9,18 @@ let foo_spec = do {
   dest_ptr <- crucible_symbolic_alloc false 1 size;
   src_ptr <- crucible_symbolic_alloc false 1 size;
   src <- crucible_fresh_cryptol_var "src" {| ByteArray |};
-  crucible_array_points_to src_ptr src size;
+  crucible_points_to_array_prefix src_ptr src size;
   crucible_execute_func [dest_ptr, src_ptr, (crucible_term size)];
-  crucible_array_points_to dest_ptr {{ f size src }} size;
+  crucible_points_to_array_prefix dest_ptr {{ f size src }} size;
+};
+
+let foo_failure_spec = do {
+  size <- crucible_fresh_var "size" (llvm_int 64);
+  dest_ptr <- crucible_symbolic_alloc false 1 size;
+  src_ptr <- crucible_symbolic_alloc false 1 size;
+  src <- crucible_fresh_cryptol_var "src" {| ByteArray |};
+  crucible_points_to_array_prefix src_ptr src {{ drop`{32} size }};
+  crucible_execute_func [dest_ptr, src_ptr, (crucible_term size)];
 };
 
 let bar_spec = do {
@@ -20,11 +29,12 @@ let bar_spec = do {
   a_ptr <- crucible_symbolic_alloc false 8 byte_len;
   b_ptr <- crucible_symbolic_alloc false 8 byte_len;
   b <- crucible_fresh_cryptol_var "b" {| ByteArray |};
-  crucible_array_points_to b_ptr b byte_len;
+  crucible_points_to_array_prefix b_ptr b byte_len;
   crucible_execute_func [a_ptr, b_ptr, (crucible_term len)];
-  crucible_array_points_to a_ptr {{ f byte_len b }} byte_len;
+  crucible_points_to_array_prefix a_ptr {{ f byte_len b }} byte_len;
 };
 
 foo_ov <- crucible_llvm_unsafe_assume_spec m "foo" foo_spec;
+fails (crucible_llvm_unsafe_assume_spec m "foo" foo_failure_spec);
 crucible_llvm_verify m "bar" [foo_ov] false bar_spec (w4_unint_z3 ["f"]);
 
