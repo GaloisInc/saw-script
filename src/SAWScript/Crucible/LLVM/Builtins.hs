@@ -1933,6 +1933,15 @@ crucible_points_to_array_prefix _bic _opt (getAllLLVM -> ptr) arr sz =
   LLVMCrucibleSetupM $
   do cc <- getLLVMCrucibleContext
      loc <- getW4Position "crucible_points_to_array_prefix"
+     case ttSchema sz of
+       Cryptol.Forall [] [] ty
+         | Just 64 == asCryptolBVType ty ->
+           return ()
+       _ -> throwCrucibleSetup loc $ unwords
+         [ "crucible_points_to_array_prefix:"
+         , "unexpected type of size term, expected [64], found"
+         , Cryptol.pretty (ttSchema sz)
+         ]
      Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -> Crucible.withPtrWidth wptr $
        do let ?lc = ccTypeCtx cc
           st <- get
