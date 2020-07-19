@@ -1989,8 +1989,8 @@ primitives = Map.fromList
     , "reading or writing a prefix of larger array, for example."
     ]
 
-  , prim "crucible_array_points_to" "SetupValue -> Term -> Term -> CrucibleSetup ()"
-    (bicVal crucible_array_points_to)
+  , prim "crucible_points_to_array_prefix" "SetupValue -> Term -> Term -> CrucibleSetup ()"
+    (bicVal crucible_points_to_array_prefix)
     Experimental
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the prefix of the given array (second argument) of"

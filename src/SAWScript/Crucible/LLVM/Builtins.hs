@@ -42,7 +42,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_equal
     , crucible_points_to
     , crucible_conditional_points_to
-    , crucible_array_points_to
+    , crucible_points_to_array_prefix
     , crucible_fresh_pointer
     , crucible_llvm_unsafe_assume_spec
     , crucible_fresh_var
@@ -1922,17 +1922,17 @@ crucible_points_to_internal _bic _opt typed cond (getAllLLVM -> ptr) (getAllLLVM
           when typed (checkMemTypeCompatibility loc lhsTy valTy)
           Setup.addPointsTo (LLVMPointsTo loc cond ptr $ ConcreteSizeValue val)
 
-crucible_array_points_to ::
+crucible_points_to_array_prefix ::
   BuiltinContext ->
   Options ->
   AllLLVM SetupValue ->
   TypedTerm ->
   TypedTerm ->
   LLVMCrucibleSetupM ()
-crucible_array_points_to _bic _opt (getAllLLVM -> ptr) arr sz =
+crucible_points_to_array_prefix _bic _opt (getAllLLVM -> ptr) arr sz =
   LLVMCrucibleSetupM $
   do cc <- getLLVMCrucibleContext
-     loc <- getW4Position "crucible_points_to"
+     loc <- getW4Position "crucible_points_to_array_prefix"
      Crucible.llvmPtrWidth (ccLLVMContext cc) $ \wptr -> Crucible.withPtrWidth wptr $
        do let ?lc = ccTypeCtx cc
           st <- get
