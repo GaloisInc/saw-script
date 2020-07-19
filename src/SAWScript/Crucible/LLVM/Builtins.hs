@@ -371,21 +371,27 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
               =<< scTupleSelector shared_context applied_extracted_func i (length output_parameters)
           let output_parameter_substitution =
                 Map.fromList $
-                zip output_parameters applied_extracted_func_selectors
-          let substitute_output_parameter setup_value
-                | Just ext_cns <- setupValueAsExtCns setup_value
-                , Just x <- output_parameter_substitution Map.!? ext_cns =
-                  SetupTerm x
-                | otherwise = setup_value
-          let substitute_output_parameter' = \case
-                ConcreteSizeValue val -> ConcreteSizeValue $ substitute_output_parameter val
-                SymbolicSizeValue{} -> undefined
+                zip (map ecVarIndex output_parameters) (map ttTerm applied_extracted_func_selectors)
+          let substitute_output_parameters =
+                ttTermLens $ scInstantiateExt shared_context output_parameter_substitution
+          let setup_value_substitute_output_parameter setup_value
+                | SetupTerm term <- setup_value = SetupTerm <$> substitute_output_parameters term
+                | otherwise = return $ setup_value
+          let llvm_points_to_value_substitute_output_parameter = \case
+                ConcreteSizeValue val -> ConcreteSizeValue <$> setup_value_substitute_output_parameter val
+                SymbolicSizeValue arr sz ->
+                  SymbolicSizeValue <$> substitute_output_parameters arr <*> substitute_output_parameters sz
 
-          let extracted_method_spec =
-                res_method_spec &
-                MS.csRetValue %~ fmap substitute_output_parameter &
-                MS.csPostState . MS.csPointsTos %~ map
-                  (\(LLVMPointsTo x y z setup_value) -> LLVMPointsTo x y z $ substitute_output_parameter' setup_value)
+          extracted_ret_value <- liftIO $ mapM
+            setup_value_substitute_output_parameter
+            (res_method_spec ^. MS.csRetValue)
+          extracted_post_state_points_tos <- liftIO $ mapM
+            (\(LLVMPointsTo x y z value) ->
+              LLVMPointsTo x y z <$> llvm_points_to_value_substitute_output_parameter value)
+            (res_method_spec ^. MS.csPostState ^. MS.csPointsTos)
+          let extracted_method_spec = res_method_spec &
+                MS.csRetValue .~ extracted_ret_value &
+                MS.csPostState . MS.csPointsTos .~ extracted_post_state_points_tos
 
           typed_extracted_func_const <- io $ mkTypedTerm shared_context extracted_func_const
           modify' $
@@ -407,7 +413,7 @@ llvmPointsToValueAsExtCns :: LLVMPointsToValue arch -> Maybe (ExtCns Term)
 llvmPointsToValueAsExtCns =
   \case
     ConcreteSizeValue val -> setupValueAsExtCns val
-    SymbolicSizeValue{} -> undefined
+    SymbolicSizeValue arr _sz -> asExtCns $ ttTerm arr
 
 -- | Check that all the overrides/lemmas were actually from this module
 checkModuleCompatibility ::

@@ -1680,7 +1680,11 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
                     sym
                     ?ptrWidth
                     (Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)
-                SymbolicSizeValue{} -> undefined
+                SymbolicSizeValue{} -> fail $ unwords
+                  [ "internal error:"
+                  , "unsupported conditional invalidation of symbolic size points-to value"
+                  , show (PP.pretty val)
+                  ]
               Crucible.doInvalidate sym ?ptrWidth mem ptr invalidate_msg sz
         Crucible.mergeWriteOperations sym base_mem cond store_op invalidate_op
       Nothing ->
