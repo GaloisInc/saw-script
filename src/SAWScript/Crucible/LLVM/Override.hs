@@ -1357,14 +1357,15 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
        SymbolicSizeValue expected_arr_tm expected_sz_tm ->
          do maybe_allocation_array <- liftIO $
               Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr1 (Crucible.memImplHeap mem)
+            liftIO $ putStrLn $ "***" ++ show maybe_allocation_array
             case maybe_allocation_array of
               Just (arr, sz)
                 | Crucible.LLVMPointer _ off <- ptr1
                 , Just 0 <- BV.asUnsigned <$> W4.asBV off ->
                 do arr_tm <- liftIO $ Crucible.toSC sym arr
-                   matchTerm sc cc (spec ^. MS.csLoc) prepost arr_tm (ttTerm expected_arr_tm)
+                   instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost arr_tm (ttTerm expected_arr_tm)
                    sz_tm <- liftIO $ Crucible.toSC sym sz
-                   matchTerm sc cc (spec ^. MS.csLoc) prepost sz_tm (ttTerm expected_sz_tm)
+                   instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost sz_tm (ttTerm expected_sz_tm)
                    return Nothing
               _ -> return $ Just $ PP.text ""
 
