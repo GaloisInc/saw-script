@@ -1357,7 +1357,6 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
        SymbolicSizeValue expected_arr_tm expected_sz_tm ->
          do maybe_allocation_array <- liftIO $
               Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr1 (Crucible.memImplHeap mem)
-            liftIO $ putStrLn $ "***" ++ show maybe_allocation_array
             case maybe_allocation_array of
               Just (arr, sz)
                 | Crucible.LLVMPointer _ off <- ptr1
@@ -1367,7 +1366,11 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
                    sz_tm <- liftIO $ Crucible.toSC sym sz
                    instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost sz_tm (ttTerm expected_sz_tm)
                    return Nothing
-              _ -> return $ Just $ PP.text ""
+              _ -> return $ Just $ PP.vcat $ map (PP.text . unwords)
+                [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
+                , [ "in the ", stateCond prepost, "of an override" ]
+                , [ "Tried to read an array prefix of size:", show (MS.ppTypedTerm expected_sz_tm) ]
+                ]
 
 ------------------------------------------------------------------------
 
