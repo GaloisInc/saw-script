@@ -1,4 +1,4 @@
-name: Saw-Script
+name: SAWScript
 on:
   push:
     branches: [master]
