@@ -105,7 +105,6 @@ import qualified What4.Symbol as W4
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 import           SAWScript.Crucible.LLVM.CrucibleLLVM (LLVM)
 
-import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))

@@ -47,7 +47,6 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 
-import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
 
