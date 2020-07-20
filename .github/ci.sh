@@ -22,8 +22,8 @@ setup_dist_bins() {
   is_exe "dist/bin" "saw" && is_exe "dist/bin" "jss" && return
   extract_exe "saw" "dist/bin"
   extract_exe "jss" "dist/bin"
-  strip dist/bin/saw*
-  strip dist/bin/jss*
+  strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
+  strip dist/bin/jss* || echo "Strip failed: Ignoring harmless error"
 }
 
 install_z3() {
