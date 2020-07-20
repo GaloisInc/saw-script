@@ -598,9 +598,8 @@ sawscript> print (eval_bool b)
 true
 ~~~~
 
-Finally, anything with sequence type in Cryptol can be translated into a
-list of `Term` values in SAWScript using the `eval_list : Term -> [Term]`
-function.
+Anything with sequence type in Cryptol can be translated into a list of
+`Term` values in SAWScript using the `eval_list : Term -> [Term]` function.
 
 ~~~~
 sawscript> let l = {{ [0x01, 0x02, 0x03] }}
@@ -618,6 +617,22 @@ sawscript> print (eval_list l)
   (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))
 ,Cryptol.ecNumber (Cryptol.TCNum 3) (Prelude.Vec 8 Prelude.Bool)
   (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))]
+~~~~
+
+Finally, a list of `Term` values in SAWScript can be collapsed into a single
+`Term` with sequence type using the `list_term : [Term] -> Term` function,
+which is the inverse of `eval_list`.
+
+~~~~
+sawscript> let ts = eval_list l
+sawscript> let l = list_term ts
+sawscript> print_term l
+let { x@1 = Prelude.Vec 8 Prelude.Bool
+      x@2 = Cryptol.PLiteralSeqBool (Cryptol.TCNum 8)
+    }
+ in [Cryptol.ecNumber (Cryptol.TCNum 1) x@1 x@2
+    ,Cryptol.ecNumber (Cryptol.TCNum 2) x@1 x@2
+    ,Cryptol.ecNumber (Cryptol.TCNum 3) x@1 x@2]
 ~~~~
 
 In addition to being able to extract integer and Boolean values from
