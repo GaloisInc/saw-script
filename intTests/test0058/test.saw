@@ -1,0 +1,45 @@
+// `Bit`s
+let tru = {{ True }};
+let fls = {{ False }};
+
+print (eval_bool tru); // [..] true
+print (eval_bool fls); // [..] false
+
+// Bit vectors
+// Note: To prevent inference of the infinite numeric type `Integer`, type
+// annotations are necessary on decimal literals
+let zero  = {{ 0 : [0] }};
+let zero' = {{ 0 : [1] }};
+let x     = {{ 17 : [5] }};
+let neg_x = {{ -x }};
+
+print (eval_int zero);  // [..] 0
+print (eval_int zero'); // [..] 0
+print (eval_int x);     // [..] 17
+print (eval_int neg_x); // [..] 15 (which has the same base-2 representation as
+                        //          the two's complement negation of 17)
+
+// Sequences more generally
+
+// Note: Commented out due to bug #783, which crashes SAW
+// empty sequence
+// let l0 = {{ [] : [0]Bit }};
+// print (eval_list l0);
+
+// nonempty sequences
+let l1   = {{ [0x01, 0x02, 0x03 ]}};
+let l1'  = eval_list l1;
+print l1'; // [..] ... List of Cryptol terms representing 1, 2, and 3 ...
+
+let l2   = {{ ["the", "and", "for", "not"] }};
+let l2'  = eval_list l2;
+print l2'; // [..] ... List of Cryptol terms representing "the", "and", "for", "not" ...
+
+// eval_list and list_term should be inverses
+let l1'' = list_term l1';
+let thm1 = {{ l1 == l1'' }};
+prove z3 thm1;
+
+let l2'' = list_term l2';
+let thm2 = {{ l2 == l2'' }};
+prove z3 thm2;
