@@ -1071,7 +1071,7 @@ primitives = Map.fromList
     , "First argument is directory path (\"\" for stdout) for generating files."
     , "Second argument is the list of function names to leave uninterpreted."
     , "Third argument is C function name."
-    , "Fourth argument is the term to generated code for. It must be a"
+    , "Fourth argument is the term to generate code for. It must be a"
     , "first-order function whose arguments and result are all of type"
     , "Bit, [8], [16], [32], or [64]."
     ]
