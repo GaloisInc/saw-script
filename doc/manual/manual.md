@@ -1135,12 +1135,12 @@ that context.
 * `print_goal : ProofScript ()` prints the entire goal in SAWCore
 syntax.
 
-* `print_goal_consts : ProofScript ()` takes an integer argument, `n`,
+* `print_goal_consts : ProofScript ()` prints a list of unfoldable constants
+in the current goal.
+
+* `print_goal_depth : Int -> ProofScript ()` takes an integer argument, `n`,
 and prints the goal up to depth `n`. Any elided subterms are printed
 with a `...` notation.
-
-* `print_goal_depth : Int -> ProofScript ()` prints a list of the names
-of subterms that are folded in the current goal.
 
 * `print_goal_size : ProofScript ()` prints the number of nodes in the
 DAG representation of the goal.
