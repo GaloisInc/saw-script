@@ -113,6 +113,8 @@ install_system_deps() {
 }
 
 test_dist() {
+  # To be replaced with a working implementation
+  # Copied from legacy CI
   setup_dist_bins
   pushd intTests
   for t in test0001 test0019_jss_switch_statement test_crucible_jvm test_ecdsa test_examples test_issue108 test_tutorial1 test_tutorial2 test_tutorial_w4; do echo $t >> disabled_tests.txt; done
