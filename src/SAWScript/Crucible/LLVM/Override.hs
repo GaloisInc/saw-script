@@ -1046,7 +1046,7 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
         -> do sym      <- Ov.getSymInterface
               failMsg  <- mkStructuralMismatch opts cc sc cs actual expected expectedTy
               realTerm <- valueToSC sym (cs ^. MS.csLoc) failMsg tval actual
-              matchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
+              instantiateExtMatchTerm sc cc (cs ^. MS.csLoc) prepost realTerm (ttTerm expectedTT)
 
     -- match arrays point-wise
     (Crucible.LLVMValArray _ xs, Crucible.ArrayType _len y, SetupArray () zs)
@@ -1192,6 +1192,18 @@ typeToSC sc t =
 ------------------------------------------------------------------------
 
 -- | NOTE: The two 'Term' arguments must have the same type.
+instantiateExtMatchTerm ::
+  SharedContext   {- ^ context for constructing SAW terms    -} ->
+  LLVMCrucibleContext arch {- ^ context for interacting with Crucible -} ->
+  W4.ProgramLoc ->
+  PrePost                                                       ->
+  Term            {- ^ exported concrete term                -} ->
+  Term            {- ^ expected specification term           -} ->
+  OverrideMatcher (LLVM arch) md ()
+instantiateExtMatchTerm sc cc loc prepost actual expected = do
+  sub <- OM (use termSub)
+  matchTerm sc cc loc prepost actual =<< liftIO (scInstantiateExt sc sub expected)
+
 matchTerm ::
   SharedContext   {- ^ context for constructing SAW terms    -} ->
   LLVMCrucibleContext arch {- ^ context for interacting with Crucible -} ->
@@ -1259,7 +1271,7 @@ learnGhost sc cc loc prepost var expected =
        , "- Expected: " ++ show (Cryptol.pp (ttSchema expected))
        , "- Actual:   " ++ show (Cryptol.pp (ttSchema actual))
        ]
-     matchTerm sc cc loc prepost (ttTerm actual) (ttTerm expected)
+     instantiateExtMatchTerm sc cc loc prepost (ttTerm actual) (ttTerm expected)
 
 ------------------------------------------------------------------------
 
