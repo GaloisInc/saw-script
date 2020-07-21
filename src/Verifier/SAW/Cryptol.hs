@@ -668,6 +668,9 @@ prelPrims =
     --                            --              , first != next
     --                            --              , lengthFromThenTo first next last == len) => [len]a
 
+    -- Experimental: parmap
+  , ("parmap",       flip scGlobalDef "Cryptol.ecParmap")      -- {a, b, n} (fin n) => (a -> b) -> [n]a -> [n]b
+
   , ("error",        flip scGlobalDef "Cryptol.ecError")       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
   , ("random",       flip scGlobalDef "Cryptol.ecRandom")      -- {a} => [32] -> a -- Random values
   , ("trace",        flip scGlobalDef "Cryptol.ecTrace")       -- {n,a,b} [n][8] -> a -> b -> b
