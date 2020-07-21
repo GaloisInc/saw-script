@@ -943,7 +943,8 @@ ecExp : (a b: sort 0) -> PRing a -> PIntegral b -> a -> b -> a;
 ecExp a b pa pi x =
   pi.posNegCases a
     (expByNat a (pa.int (natToInt 1)) pa.mul x)
-    (error (Nat -> a) "ecExp : negative exponent");
+    (\ (_:Nat) -> pa.int (natToInt 1));
+    -- (error (Nat -> a) "ecExp : negative exponent");
 
 -- Field
 
@@ -1245,11 +1246,13 @@ ecAt n =
     (\ (n:Nat) -> \ (a:sort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
           pix.posNegCases a
 	    (at n a xs)
-	    (error (Nat -> a) "ecAt : negative index"))
+	    (\ (_:Nat) -> at n a xs 0))
+	    -- (error (Nat -> a) "ecAt : negative index"))
     (\ (a:sort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Stream a) ->
           pix.posNegCases a
 	    (streamGet a xs)
-	    (error (Nat -> a) "ecAt : negative index"))
+	    (\ (_:Nat) -> streamGet a xs 0))
+--	    (error (Nat -> a) "ecAt : negative index"))
     n;
 
 ecAtBack : (n : Num) -> (a ix : sort 0) -> PIntegral ix -> seq n a -> ix -> a;
@@ -1374,11 +1377,13 @@ ecUpdate n =
        -- Case for (TCNum n, TCNum w)
        pix.posNegCases (a -> Vec n a)
          (upd n a xs)
-	 (error (Nat -> a -> Vec n a) "ecUpdate: negative index"))
+	 (\ (_:Nat) -> \ (_:a) -> xs))
+	 -- (error (Nat -> a -> Vec n a) "ecUpdate: negative index"))
     (\ (a:sort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs : Stream a) ->
        pix.posNegCases (a -> Stream a)
          (streamUpd a xs)
-	 (error (Nat -> a -> Stream a) "ecUpdate: negative index"))
+	 (\ (_:Nat) -> \ (_:a) -> xs))
+	 --(error (Nat -> a -> Stream a) "ecUpdate: negative index"))
     n;
 
 
@@ -1389,7 +1394,8 @@ ecUpdateEnd =
     (\ (n:Nat) -> \ (a:sort 0) -> \ (ix:sort 0) -> \ (pix:PIntegral ix) -> \ (xs:Vec n a) ->
        pix.posNegCases (a -> Vec n a)
          (\ (i:Nat) -> upd n a xs (subNat (subNat n 1) i))
-	 (error (Nat -> a -> Vec n a) "ecUpdateEnd: negative index"));
+	 (\ (_:Nat) -> \ (_:a) -> xs));
+	 -- (error (Nat -> a -> Vec n a) "ecUpdateEnd: negative index"));
 
 
 -- Bitvector truncation
