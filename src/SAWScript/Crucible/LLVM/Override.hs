@@ -109,6 +109,7 @@ import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.NatRepr
 import           Data.Parameterized.Some (Some(..))
+import qualified Data.BitVector.Sized as BV
 
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.SharedTerm
@@ -200,9 +201,9 @@ ppPointsToAsLLVMVal ::
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   PointsTo (LLVM arch) ->
   OverrideMatcher (LLVM arch) w PP.Doc
-ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc cond setupVal1 setupVal2) = do
-  pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec setupVal1
-  let pretty2 = MS.ppSetupValue setupVal2
+ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc cond ptr val) = do
+  pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec ptr
+  let pretty2 = PP.pretty val
   pure $ PP.vcat [ PP.text "Pointer:" PP.<+> pretty1
                  , PP.text "Pointee:" PP.<+> pretty2
                  , maybe PP.empty (\tt -> PP.text "Condition:" PP.<+> MS.ppTypedTerm tt) cond
@@ -1293,63 +1294,83 @@ learnPointsTo ::
 learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
   do let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
-     memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
-     (_memTy, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
-
-     -- In case the types are different (from crucible_points_to_untyped)
-     -- then the load type should be determined by the rhs.
-     storTy <- Crucible.toStorableType memTy
      sym    <- Ov.getSymInterface
 
      mem    <- readGlobal $ Crucible.llvmMemVar
                           $ ccLLVMContext cc
 
+     (_memTy, ptr1) <- resolveSetupValue opts cc sc spec Crucible.PtrRepr ptr
+
      let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-     res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
-     let summarizeBadLoad =
-          let dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)
-              sz = Crucible.memTypeSize dataLayout memTy
-          in map (PP.text . unwords)
-             [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
-             , [ "in the ", stateCond prepost, "of an override" ]
-             , [ "Tried to read something of size:"
-               , show (Crucible.bytesToInteger sz)
-               ]
-             , [ "And type:", show (Crucible.ppMemType memTy) ]
-             ]
-     case res of
-       Crucible.NoErr pred_ res_val -> do
-         pred_' <- case maybe_cond of
-           Just cond -> do
-             cond' <- instantiateExtResolveSAWPred sc cc (ttTerm cond)
-             liftIO $ W4.impliesPred sym cond' pred_
-           Nothing -> return pred_
-         addAssert pred_' $ Crucible.SimError loc $
-           Crucible.AssertFailureSimError (show $ PP.vcat $ summarizeBadLoad) ""
-         pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val
-       _ -> do
-         -- When we have a concrete failure, we do a little more computation to
-         -- try and find out why.
-         let (blk, _offset) = Crucible.llvmPointerView ptr1
-         pure $ Just $ PP.vcat . (summarizeBadLoad ++) $
-           case W4.asNat blk of
-             Nothing -> [PP.text "<Read from unknown allocation>"]
-             Just blk' ->
-               let possibleAllocs =
-                     Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
-               in [ PP.text $ unwords
-                    [ "Found"
-                    , show (length possibleAllocs)
-                    , "possibly matching allocation(s):"
+
+     case val of
+       ConcreteSizeValue val' ->
+         do memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val'
+            -- In case the types are different (from crucible_points_to_untyped)
+            -- then the load type should be determined by the rhs.
+            storTy <- Crucible.toStorableType memTy
+            res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
+            let summarizeBadLoad =
+                 let dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)
+                     sz = Crucible.memTypeSize dataLayout memTy
+                 in map (PP.text . unwords)
+                    [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
+                    , [ "in the ", stateCond prepost, "of an override" ]
+                    , [ "Tried to read something of size:"
+                      , show (Crucible.bytesToInteger sz)
+                      ]
+                    , [ "And type:", show (Crucible.ppMemType memTy) ]
                     ]
-                  , bullets '-' (map Crucible.ppSomeAlloc possibleAllocs)
-                  ]
-               -- This information tends to be overwhelming, but might be useful?
-               -- We should brainstorm about better ways of presenting it.
-               -- PP.<$$> PP.text (unwords [ "Here are the details on why reading"
-               --                          , "from each matching write failed"
-               --                          ])
-               -- PP.<$$> PP.text (show err)
+            case res of
+              Crucible.NoErr pred_ res_val -> do
+                pred_' <- case maybe_cond of
+                  Just cond -> do
+                    cond' <- instantiateExtResolveSAWPred sc cc (ttTerm cond)
+                    liftIO $ W4.impliesPred sym cond' pred_
+                  Nothing -> return pred_
+                addAssert pred_' $ Crucible.SimError loc $
+                  Crucible.AssertFailureSimError (show $ PP.vcat $ summarizeBadLoad) ""
+                pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val'
+              _ -> do
+                -- When we have a concrete failure, we do a little more computation to
+                -- try and find out why.
+                let (blk, _offset) = Crucible.llvmPointerView ptr1
+                pure $ Just $ PP.vcat . (summarizeBadLoad ++) $
+                  case W4.asNat blk of
+                    Nothing -> [PP.text "<Read from unknown allocation>"]
+                    Just blk' ->
+                      let possibleAllocs =
+                            Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
+                      in [ PP.text $ unwords
+                           [ "Found"
+                           , show (length possibleAllocs)
+                           , "possibly matching allocation(s):"
+                           ]
+                         , bullets '-' (map Crucible.ppSomeAlloc possibleAllocs)
+                         ]
+                      -- This information tends to be overwhelming, but might be useful?
+                      -- We should brainstorm about better ways of presenting it.
+                      -- PP.<$$> PP.text (unwords [ "Here are the details on why reading"
+                      --                          , "from each matching write failed"
+                      --                          ])
+                      -- PP.<$$> PP.text (show err)
+       SymbolicSizeValue expected_arr_tm expected_sz_tm ->
+         do maybe_allocation_array <- liftIO $
+              Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr1 (Crucible.memImplHeap mem)
+            case maybe_allocation_array of
+              Just (arr, sz)
+                | Crucible.LLVMPointer _ off <- ptr1
+                , Just 0 <- BV.asUnsigned <$> W4.asBV off ->
+                do arr_tm <- liftIO $ Crucible.toSC sym arr
+                   instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost arr_tm (ttTerm expected_arr_tm)
+                   sz_tm <- liftIO $ Crucible.toSC sym sz
+                   instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost sz_tm (ttTerm expected_sz_tm)
+                   return Nothing
+              _ -> return $ Just $ PP.vcat $ map (PP.text . unwords)
+                [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
+                , [ "in the ", stateCond prepost, "of an override" ]
+                , [ "Tried to read an array prefix of size:", show (MS.ppTypedTerm expected_sz_tm) ]
+                ]
 
 ------------------------------------------------------------------------
 
@@ -1467,13 +1488,15 @@ invalidateMutableAllocs opts sc cc cs = do
       _ -> pure Nothing
 
   -- set of (concrete base pointer, size) for each postcondition memory write
-  postPtrs <- Set.fromList <$> mapM
-    (\(LLVMPointsTo _loc _cond ptr val) -> do
-      (_, Crucible.LLVMPointer blk _) <- resolveSetupValue opts cc sc cs Crucible.PtrRepr ptr
-      sz <- (return . Crucible.storageTypeSize)
-        =<< Crucible.toStorableType
-        =<< typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val
-      return (W4.asNat blk, sz))
+  postPtrs <- Set.fromList <$> catMaybes <$> mapM
+    (\(LLVMPointsTo _loc _cond ptr val) -> case val of
+      ConcreteSizeValue val' -> do
+        (_, Crucible.LLVMPointer blk _) <- resolveSetupValue opts cc sc cs Crucible.PtrRepr ptr
+        sz <- (return . Crucible.storageTypeSize)
+          =<< Crucible.toStorableType
+          =<< typeOfSetupValue cc (MS.csAllocations cs) (MS.csTypeNames cs) val'
+        return $ Just (W4.asNat blk, sz)
+      SymbolicSizeValue{} -> return Nothing)
     (cs ^. MS.csPostState ^. MS.csPointsTos)
 
   -- partition allocations into those overwritten by a postcondition write
@@ -1582,7 +1605,10 @@ executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr v
      s <- OM (use termSub)
      let tyenv = MS.csAllocations spec
      let nameEnv = MS.csTypeNames spec
-     val' <- liftIO $ instantiateSetupValue sc s val
+     val' <- liftIO $ case val of
+       ConcreteSizeValue val'' -> ConcreteSizeValue <$> instantiateSetupValue sc s val''
+       SymbolicSizeValue arr sz ->
+         SymbolicSizeValue <$> ttTermLens (scInstantiateExt sc s) arr <*> ttTermLens (scInstantiateExt sc s) sz
      cond' <- mapM (instantiateExtResolveSAWPred sc cc . ttTerm) cond
      let Crucible.LLVMPointer blk _ = ptr'
      let invalidate_msg = Map.lookup blk overwritten_allocs
@@ -1600,48 +1626,68 @@ storePointsToValue ::
   Crucible.MemImpl Sym ->
   Maybe (W4.Pred Sym) ->
   LLVMPtr (Crucible.ArchWidth arch) ->
-  SetupValue (Crucible.LLVM arch) ->
+  LLVMPointsToValue arch ->
   Maybe Text ->
   IO (Crucible.MemImpl Sym)
 storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_invalidate_msg = do
   let sym = cc ^. ccBackend
 
   let alignment = Crucible.noAlignment -- default to byte alignment (FIXME)
-  memTy <- typeOfSetupValue cc tyenv nameEnv val
-  storTy <- Crucible.toStorableType memTy
 
   smt_array_memory_model_enabled <- W4.getOpt
     =<< W4.getOptionSetting enableSMTArrayMemoryModel (W4.getConfiguration sym)
 
   let store_op = \mem -> case val of
-        SetupTerm tm
-          | Crucible.storageTypeSize storTy > 16
-          , smt_array_memory_model_enabled -> do
-            arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
-            arr <- Crucible.bindSAWTerm
-              sym
-              (W4.BaseArrayRepr
-                (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
-                (W4.BaseBVRepr (W4.knownNat @8)))
-              arr_tm
-            sz <- W4.bvLit
-              sym
-              ?ptrWidth
-              (Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)
-            Crucible.doArrayConstStore sym mem ptr alignment arr sz
-        _ -> do
-          val' <- X.handle (handleException opts) $
-            resolveSetupVal cc mem env tyenv nameEnv val
-          Crucible.storeConstRaw sym mem ptr storTy alignment val'
+        ConcreteSizeValue val' -> do
+          memTy <- typeOfSetupValue cc tyenv nameEnv val'
+          storTy <- Crucible.toStorableType memTy
+          case val' of
+            SetupTerm tm
+              | Crucible.storageTypeSize storTy > 16
+              , smt_array_memory_model_enabled -> do
+                arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
+                arr <- Crucible.bindSAWTerm
+                  sym
+                  (W4.BaseArrayRepr
+                    (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
+                    (W4.BaseBVRepr (W4.knownNat @8)))
+                  arr_tm
+                sz <- W4.bvLit
+                  sym
+                  ?ptrWidth
+                  (Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)
+                Crucible.doArrayConstStore sym mem ptr alignment arr sz
+            _ -> do
+              val'' <- X.handle (handleException opts) $
+                resolveSetupVal cc mem env tyenv nameEnv val'
+              Crucible.storeConstRaw sym mem ptr storTy alignment val''
+        SymbolicSizeValue arr_tm sz_tm -> do
+          arr <- Crucible.bindSAWTerm
+            sym
+            (W4.BaseArrayRepr
+              (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
+              (W4.BaseBVRepr (W4.knownNat @8)))
+            (ttTerm arr_tm)
+          sz <- resolveSAWSymBV cc ?ptrWidth $ ttTerm sz_tm
+          Crucible.doArrayConstStore sym mem ptr alignment arr sz
 
   case maybe_cond of
     Just cond -> case maybe_invalidate_msg of
       Just invalidate_msg -> do
         let invalidate_op = \mem -> do
-              sz <- W4.bvLit
-                sym
-                ?ptrWidth
-                (Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)
+              sz <- case val of
+                ConcreteSizeValue val' -> do
+                  memTy <- typeOfSetupValue cc tyenv nameEnv val'
+                  storTy <- Crucible.toStorableType memTy
+                  W4.bvLit
+                    sym
+                    ?ptrWidth
+                    (Crucible.bytesToBV ?ptrWidth $ Crucible.storageTypeSize storTy)
+                SymbolicSizeValue{} -> fail $ unwords
+                  [ "internal error:"
+                  , "unsupported conditional invalidation of symbolic size points-to value"
+                  , show (PP.pretty val)
+                  ]
               Crucible.doInvalidate sym ?ptrWidth mem ptr invalidate_msg sz
         Crucible.mergeWriteOperations sym base_mem cond store_op invalidate_op
       Nothing ->

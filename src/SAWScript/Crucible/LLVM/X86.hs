@@ -541,8 +541,9 @@ assumePointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   X86Sim ()
-assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
+assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
   when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  tval <- checkConcreteSizePointsToValue tptval
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
@@ -565,6 +566,11 @@ assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
   storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
   mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
   x86Mem .= mem'
+
+checkConcreteSizePointsToValue :: LLVMPointsToValue LLVMArch -> X86Sim (MS.SetupValue LLVM)
+checkConcreteSizePointsToValue = \case
+  ConcreteSizeValue val -> return val
+  SymbolicSizeValue{} -> throwX86 "unsupported x86_64 command: crucible_points_to_array_prefix"
 
 -- | Write each SetupValue passed to crucible_execute_func to the appropriate
 -- x86_64 register from the calling convention.
@@ -685,8 +691,9 @@ assertPointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr texpected) = do
+assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
   when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  texpected <- checkConcreteSizePointsToValue tptexpected
   sym <- use x86Sym
   opts <- use x86Options
   sc <- use x86SharedContext
