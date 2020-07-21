@@ -21,10 +21,9 @@ print (eval_int neg_x); // [..] 15 (which has the same base-2 representation as
 
 // Sequences more generally
 
-// Note: Commented out due to bug #783, which crashes SAW
 // empty sequence
-// let l0 = {{ [] : [0]Bit }};
-// print (eval_list l0);
+let l0 = {{ [] : [0]Bit }};
+print (eval_list l0);
 
 // nonempty sequences
 let l1   = {{ [0x01, 0x02, 0x03 ]}};
