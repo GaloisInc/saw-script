@@ -44,7 +44,7 @@ extra-deps:
   - itanium-abi-0.1.1.1
   - boomerang-1.4.5.6
   - git: git@github.com:eddywestbrook/hobbits.git
-    commit: 3b48d9a848c04cabff0b0a8170c9720cd43e04d2
+    commit: 2917244e2995718597aaccf53dc6c7ed3b046c20
   - th-abstraction-0.3.1.0
   - microlens-th-0.4.2.3
   - deriving-compat-0.5.6
