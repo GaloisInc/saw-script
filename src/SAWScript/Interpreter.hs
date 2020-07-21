@@ -2306,6 +2306,15 @@ primitives = Map.fromList
     , " ghosts gives the ghost arguments to block"
     ]
 
+  , prim "heapster_find_symbol"
+    "HeapsterEnv -> String -> TopLevel String"
+    (bicVal heapster_find_symbol)
+    Experimental
+    [ "Search for a symbol in any module contained in a HeapsterEnv that"
+    , " contains the supplied string as a substring. Raise an error if there"
+    , " is not exactly one such symbol"
+    ]
+
   , prim "heapster_assume_fun"
     "HeapsterEnv -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun)
@@ -2320,6 +2329,15 @@ primitives = Map.fromList
     Experimental
     [ "Translate an LLVM function to a SAW core term using Heapster"
     , " type-checking, and store the result in the current Heapster SAW module."
+    ]
+
+  , prim "heapster_typecheck_fun_rename"
+    "HeapsterEnv -> String -> String -> String -> TopLevel ()"
+    (bicVal heapster_typecheck_fun_rename)
+    Experimental
+    [ "Translate the LLVM function named by the first String to a SAW core term"
+    , " using Heapster type-checking, and store the result in the current"
+    , " Heapster SAW module as a definition named with the second string."
     ]
 
   , prim "heapster_typecheck_mut_funs"

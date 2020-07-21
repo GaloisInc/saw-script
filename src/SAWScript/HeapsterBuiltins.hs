@@ -15,10 +15,13 @@ module SAWScript.HeapsterBuiltins
        , heapster_init_env_for_files
        , heapster_typecheck_fun
        , heapster_typecheck_mut_funs
+       , heapster_typecheck_fun_rename
+       , heapster_typecheck_mut_funs_rename
        , heapster_define_opaque_perm
        , heapster_define_recursive_perm
        , heapster_define_perm
        , heapster_block_entry_hint
+       , heapster_find_symbol
        , heapster_assume_fun
        , heapster_print_fun_trans
        , heapster_export_coq
@@ -96,6 +99,8 @@ failOnNothing :: MonadFail m => String -> Maybe a -> m a
 failOnNothing err_str Nothing = Fail.fail err_str
 failOnNothing _ (Just a) = return a
 
+-- | Extract an LLVM CFG of the specified archetecture from a `SAW_CFG` or raise
+-- an error
 getLLVMCFG :: ArchRepr arch -> SAW_CFG -> AnyCFG (LLVM arch)
 getLLVMCFG _ (LLVM_CFG cfg) =
   -- FIXME: there should be an ArchRepr argument for LLVM_CFG to compare here!
@@ -103,35 +108,43 @@ getLLVMCFG _ (LLVM_CFG cfg) =
 getLLVMCFG _ (JVM_CFG _) =
   error "getLLVMCFG: expected LLVM CFG, found JVM CFG!"
 
+-- | Extract the bit width of an architecture
 archReprWidth :: ArchRepr arch -> NatRepr (ArchWidth arch)
 archReprWidth (X86Repr w) = w
 
+-- | Get the architecture of an LLVM module
 llvmModuleArchRepr :: LLVMModule arch -> ArchRepr arch
 llvmModuleArchRepr lm = llvmArch $ _transContext (lm ^. modTrans)
 
+-- | Get the bit width of the architecture of an LLVM module
 llvmModuleArchReprWidth :: LLVMModule arch -> NatRepr (ArchWidth arch)
 llvmModuleArchReprWidth = archReprWidth . llvmModuleArchRepr
 
+-- | Look for the LLVM module in a 'HeapsterEnv' where a symbol is defined
 lookupModDefiningSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
 lookupModDefiningSym env nm =
   find (\(Some lm) -> Map.member (fromString nm) (cfgMap (lm ^. modTrans))) $
   heapsterEnvLLVMModules env
 
+-- | Look for any LLVM module in a 'HeapsterEnv' where a symbol is declared
 lookupModDeclaringSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
 lookupModDeclaringSym env nm =
   find (\(Some lm) -> 
          Map.member (fromString nm) (lm ^. modTrans.transContext.symbolMap)) $
   heapsterEnvLLVMModules env
 
+-- | Get the CFG for a symbol out of an LLVM module
 lookupLLVMSymbolCFG :: BuiltinContext -> Options -> LLVMModule arch ->
                        String -> TopLevel (AnyCFG (LLVM arch))
 lookupLLVMSymbolCFG bic opts lm nm =
   getLLVMCFG (llvmModuleArchRepr lm) <$>
   crucible_llvm_cfg bic opts (Some lm) nm
 
+-- | An LLVM module plus a CFG for a specific function in that module
 data ModuleAndCFG arch =
   ModuleAndCFG (LLVMModule arch) (AnyCFG (LLVM arch))
 
+-- | Look up the LLVM module and associated CFG for a symobl
 lookupLLVMSymbolModAndCFG :: BuiltinContext -> Options -> HeapsterEnv ->
                              String -> TopLevel (Maybe (Some ModuleAndCFG))
 lookupLLVMSymbolModAndCFG bic opts henv nm =
@@ -342,6 +355,23 @@ heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
+-- | Search for a symbol name in any LLVM module in a 'HeapsterEnv' that
+-- contains the supplied string as a substring, failing if there is not exactly
+-- one such symbol
+heapster_find_symbol :: BuiltinContext -> Options -> HeapsterEnv -> String ->
+                        TopLevel String
+heapster_find_symbol _bic _opts henv str =
+  let syms =
+        concatMap (\(Some lm) ->
+                    filter (\(L.Symbol nm) -> isInfixOf str nm) $
+                    Map.keys (lm ^. modTrans.transContext.symbolMap)) $
+        heapsterEnvLLVMModules henv in
+  case syms of
+    [L.Symbol sym] -> return sym
+    [] -> fail ("No symbol found matching string: " ++ str)
+    _ -> fail ("Found multiple symbols matching string " ++ str ++ ": " ++
+               concat (intersperse ", " $ map show syms))
+
 -- | Assume that the given named function has the supplied type and translates
 -- to a SAW core definition given by name
 heapster_assume_fun :: BuiltinContext -> Options -> HeapsterEnv ->
@@ -378,20 +408,27 @@ heapster_assume_fun _bic _opts henv nm perms_string term_string =
 
 heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->
                                [(String, String)] -> TopLevel ()
-heapster_typecheck_mut_funs bic opts henv fn_names_and_perms =
-  do let fst_nm = fst $ head fn_names_and_perms
+heapster_typecheck_mut_funs bic opts henv =
+  heapster_typecheck_mut_funs_rename bic opts henv .
+  map (\(nm, perms_string) -> (nm, nm, perms_string)) 
+
+heapster_typecheck_mut_funs_rename ::
+  BuiltinContext -> Options -> HeapsterEnv ->
+  [(String, String, String)] -> TopLevel ()
+heapster_typecheck_mut_funs_rename bic opts henv fn_names_and_perms =
+  do let (fst_nm, _, _) = head fn_names_and_perms
      Some lm <- failOnNothing ("Could not find symbol definition: " ++ fst_nm)
                               (lookupModDefiningSym henv fst_nm)
      let w = llvmModuleArchReprWidth lm
      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm,perms_string) ->
+     some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm, nm_to, perms_string) ->
        lookupLLVMSymbolCFG bic opts lm nm >>= \(AnyCFG cfg) ->
            do let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
               let ret = handleReturnType $ cfgHandle cfg
               SomeFunPerm fun_perm <-
                 parseFunPermString "permissions" env args ret perms_string
-              return $ SomeCFGAndPerm (GlobalSymbol $ fromString nm)
-                                      cfg fun_perm
+              return (SomeCFGAndPerm (GlobalSymbol $
+                                      fromString nm) nm_to cfg fun_perm)
      sc <- getSharedContext
      let saw_modname = heapsterEnvSAWModule henv
      leq_proof <- case decideLeq (knownNat @1) w of
@@ -406,6 +443,12 @@ heapster_typecheck_fun :: BuiltinContext -> Options -> HeapsterEnv ->
                           String -> String -> TopLevel ()
 heapster_typecheck_fun bic opts henv fn_name perms_string =
   heapster_typecheck_mut_funs bic opts henv [(fn_name, perms_string)]
+
+heapster_typecheck_fun_rename :: BuiltinContext -> Options -> HeapsterEnv ->
+                                 String -> String -> String -> TopLevel ()
+heapster_typecheck_fun_rename bic opts henv fn_name fn_name_to perms_string =
+  heapster_typecheck_mut_funs_rename bic opts henv [(fn_name, fn_name_to,
+                                                     perms_string)]
 
 heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->
                             String -> TopLevel ()
