@@ -34,4 +34,4 @@ packages:
 source-repository-package
   type: git
   location: https://github.com/eddywestbrook/hobbits.git
-  tag: 3b48d9a848c04cabff0b0a8170c9720cd43e04d2
+  tag: f85e93d5a2f8052a249f1e758f84dcd37f9207b8
