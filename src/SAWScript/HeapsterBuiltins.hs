@@ -44,7 +44,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.UTF8 as BL
 
 import Data.Binding.Hobbits
-import Data.Binding.Hobbits.Mb (mbMap2)
 
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableFC
@@ -280,18 +279,18 @@ heapster_define_recursive_perm _bic _opts henv
        let args = parsedCtxCtx args_ctx
        Some val_perm <- parseTypeString "permission type" env val_str
        let rpn = NamedPermName nm val_perm args
-       
+
        sc <- getSharedContext
        trans_tp <- liftIO $ 
          translateCompleteTypeInCtx sc (emptyTypeTransInfo env) args
            (nus (cruCtxProxies args) . const $ ValuePermRepr val_perm)
        trans_ident <- parseAndInsDef henv nm trans_tp trans_str
-       
+
        p_perms <- forM p_strs $ \p_str ->
           parsePermInCtxString "disjunctive perm" env
                                [(nm, SomeNamedPermName rpn)]
                                args_ctx val_perm p_str
-       
+
        let or_tp = foldr1 (mbMap2 ValPerm_Or) p_perms
            nm_tp = nus (cruCtxProxies args) (ValPerm_Named rpn . pExprVars)
            npnts = [(SomeNamedPermName rpn, trans_ident)]
