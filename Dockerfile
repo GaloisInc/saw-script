@@ -62,7 +62,6 @@ RUN mkdir -p rootfs/usr/local/bin \
 # Test solvers
 COPY --from=solvers /solvers/rootfs /
 ENV PATH=/usr/local/bin:/home/saw/rootfs/usr/local/bin:$PATH
-RUN chmod +x rootfs/usr/local/bin/*
 RUN echo "prove abc {{ True }}" | saw --no-color \
 #    && echo "prove mathsat {{ True }}" | saw --no-color \
     && echo "prove z3 {{ True }}" | saw --no-color \
