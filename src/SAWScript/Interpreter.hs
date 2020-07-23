@@ -2265,6 +2265,14 @@ primitives = Map.fromList
     , " initialized with the module in the given SAW core file."
     ]
 
+  , prim "heapster_get_cfg"
+    "HeapsterEnv -> String -> TopLevel CFG"
+    (bicVal heapster_get_cfg)
+    Experimental
+    [ "Extract out the Crucible CFG associated with a symbol in a"
+    , " Heapster environemnt"
+    ]
+
   , prim "heapster_define_opaque_perm"
     "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_opaque_perm)

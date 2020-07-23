@@ -13,6 +13,7 @@ module SAWScript.HeapsterBuiltins
        ( heapster_init_env
        , heapster_init_env_from_file
        , heapster_init_env_for_files
+       , heapster_get_cfg
        , heapster_typecheck_fun
        , heapster_typecheck_mut_funs
        , heapster_typecheck_fun_rename
@@ -249,6 +250,14 @@ heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
        heapsterEnvPermEnvRef = perm_env_ref,
        heapsterEnvLLVMModules = llvm_mods
        }
+
+heapster_get_cfg :: BuiltinContext -> Options -> HeapsterEnv ->
+                    String -> TopLevel SAW_CFG
+heapster_get_cfg bic opts henv nm =
+  case lookupModDefiningSym henv nm of
+    Just (Some lm) ->
+      crucible_llvm_cfg bic opts (Some lm) nm
+    Nothing -> fail ("Could not find CFG for symbol: " ++ nm)
 
 -- | Define a new opaque named permission with the given name, arguments, and
 -- type, that translates to the given named SAW core definition
