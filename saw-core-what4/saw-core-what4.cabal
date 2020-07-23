@@ -1,0 +1,39 @@
+Name:               saw-core-what4
+Version:            0.2
+License:            BSD3
+License-file:       LICENSE
+Author:             Galois, Inc.
+Maintainer:         sweirich@galois.com
+Copyright:          (c) 2018 Galois Inc.
+Category:           Formal Methods
+Build-type:         Simple
+cabal-version:      >= 1.8
+Synopsis:           SAWCore backend for What4
+Description:
+  A backend for symbolically evaluating terms in the SAWCore
+  intermediate language using the What4 library to generate SMT-Lib.
+
+library
+  build-depends:
+    ansi-wl-pprint,
+    base == 4.*,
+    bv-sized >= 1.0.0,
+    containers,
+    lens,
+    mtl,
+    saw-core,
+    what4,
+    crucible-saw,
+    panic,
+    transformers,
+    vector,
+    parameterized-utils >= 1.0.8 && < 2.2,
+    reflection
+  hs-source-dirs: src
+  exposed-modules:
+     Verifier.SAW.Simulator.What4
+     Verifier.SAW.Simulator.What4.SWord
+     Verifier.SAW.Simulator.What4.FirstOrder
+     Verifier.SAW.Simulator.What4.PosNat
+     Verifier.SAW.Simulator.What4.Panic
+  GHC-options: -Wall -Werror
