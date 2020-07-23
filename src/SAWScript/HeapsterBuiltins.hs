@@ -251,6 +251,7 @@ heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
        heapsterEnvLLVMModules = llvm_mods
        }
 
+-- | Look up the CFG associated with a symbol name in a Heapster environment
 heapster_get_cfg :: BuiltinContext -> Options -> HeapsterEnv ->
                     String -> TopLevel SAW_CFG
 heapster_get_cfg bic opts henv nm =
