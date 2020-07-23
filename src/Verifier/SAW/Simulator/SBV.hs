@@ -190,7 +190,7 @@ constMap =
   , ("Prelude.bvShr" , bvShROp)
   , ("Prelude.bvSShr", bvSShROp)
   -- Integers
-  --XXX , ("Prelude.intToNat", Prims.intToNatOp)
+  , ("Prelude.intToNat", intToNatOp)
   , ("Prelude.natToInt", natToIntOp)
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
@@ -358,6 +358,20 @@ bvSShROp = bvShiftOp bvOp natOp
 
 -----------------------------------------
 -- Integer/bitvector conversions
+
+-- primitive intToNat : Integer -> Nat;
+-- intToNat x == max 0 x
+intToNatOp :: SValue
+intToNatOp =
+  Prims.intFun "intToNat" $ \i ->
+    case svAsInteger i of
+      Just i'
+        | 0 <= i'   -> pure (VNat i')
+        | otherwise -> pure (VNat 0)
+      Nothing ->
+        let z  = svInteger KUnbounded 0
+            i' = svIte (svLessThan i z) z i
+         in pure (VToNat (VInt i'))
 
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: SValue
