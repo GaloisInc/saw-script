@@ -2257,6 +2257,13 @@ primitives = Map.fromList
     , " initialized with the module in the given SAW core file."
     ]
 
+  , prim "load_sawcore_from_file"
+    "String -> TopLevel ()"
+    (bicVal load_sawcore_from_file)
+    Experimental
+    [ "Load a SAW core module from a file"
+    ]
+
   , prim "heapster_init_env_for_files"
     "String -> [String] -> TopLevel HeapsterEnv"
     (bicVal heapster_init_env_for_files)

@@ -13,6 +13,7 @@ module SAWScript.HeapsterBuiltins
        ( heapster_init_env
        , heapster_init_env_from_file
        , heapster_init_env_for_files
+       , load_sawcore_from_file
        , heapster_get_cfg
        , heapster_typecheck_fun
        , heapster_typecheck_mut_funs
@@ -222,6 +223,12 @@ heapster_init_env _bic _opts mod_str llvm_filename =
        heapsterEnvPermEnvRef = perm_env_ref,
        heapsterEnvLLVMModules = [llvm_mod]
        }
+
+load_sawcore_from_file :: BuiltinContext -> Options -> String -> TopLevel ()
+load_sawcore_from_file _ _ mod_filename =
+  do sc <- getSharedContext
+     (saw_mod, saw_mod_name) <- readModuleFromFile mod_filename
+     liftIO $ tcInsertModule sc saw_mod
 
 heapster_init_env_from_file :: BuiltinContext -> Options -> String -> String ->
                                TopLevel HeapsterEnv
