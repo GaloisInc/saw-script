@@ -242,7 +242,7 @@ constMap =
   , ("Prelude.bvShr" , bvShROp)
   , ("Prelude.bvSShr", bvSShROp)
   -- Integers
-  --XXX , ("Prelude.intToNat", Prims.intToNatOp)
+  , ("Prelude.intToNat", intToNatOp)
   , ("Prelude.natToInt", natToIntOp)
   , ("Prelude.intToBv" , intToBvOp)
   , ("Prelude.bvToInt" , bvToIntOp)
@@ -308,6 +308,21 @@ symExprToValue tp expr = case tp of
 --
 -- Integer bit/vector conversions
 --
+
+-- primitive intToNat : Integer -> Nat;
+-- intToNat x == max 0 x
+intToNatOp :: forall sym. Sym sym => SValue sym
+intToNatOp =
+  Prims.intFun "intToNat" $ \i ->
+    case W.asInteger i of
+      Just i'
+        | 0 <= i'   -> pure (VNat i')
+        | otherwise -> pure (VNat 0)
+      Nothing ->
+        do z <- W.intLit (given :: sym) 0
+           pneg <- W.intLt (given :: sym) i z
+           i' <- W.intIte (given :: sym) pneg z i
+           pure (VToNat (VInt i'))
 
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: forall sym. (Sym sym) => SValue sym
