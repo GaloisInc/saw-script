@@ -63,6 +63,7 @@ executable css
     array,
     abcBridge,
     base,
+    bytestring,
     containers,
     cryptol,
     saw-core,
