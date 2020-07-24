@@ -277,8 +277,9 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_string =
      Some args <- parseCtxString "argument types" env args_str
      Some tp_perm <- parseTypeString "permission type" env tp_str
      sc <- getSharedContext
-     term_tp <- liftIO $ translateCompleteType sc (emptyTypeTransInfo env)
-                                                  (ValuePermRepr tp_perm)
+     term_tp <- liftIO $
+       translateCompleteTypeInCtx sc (emptyTypeTransInfo env) args
+       (nus (cruCtxProxies args) . const $ ValuePermRepr tp_perm)
      term_ident <- parseAndInsDef henv nm term_tp term_string
      let env' = permEnvAddOpaquePerm env nm args tp_perm term_ident
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
