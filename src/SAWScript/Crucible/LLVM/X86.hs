@@ -547,9 +547,25 @@ assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
+  ptr <- resolvePtrSetupValue env tyenv tptr
+  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
+  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
+  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  x86Mem .= mem'
+
+resolvePtrSetupValue ::
+  X86Constraints =>
+  Map MS.AllocIndex Ptr ->
+  Map MS.AllocIndex LLVMAllocSpec ->
+  MS.SetupValue LLVM ->
+  X86Sim Ptr
+resolvePtrSetupValue env tyenv tptr = do
+  sym <- use x86Sym
+  cc <- use x86CrucibleContext
+  mem <- use x86Mem
   elf <- use x86Elf
   base <- use x86GlobalBase
-  ptr <- case tptr of
+  case tptr of
     MS.SetupGlobal () nm -> case
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
@@ -562,10 +578,6 @@ assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
     _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
          =<< resolveSetupVal cc mem env tyenv Map.empty tptr
-  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
-  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
-  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
-  x86Mem .= mem'
 
 checkConcreteSizePointsToValue :: LLVMPointsToValue LLVMArch -> X86Sim (MS.SetupValue LLVM)
 checkConcreteSizePointsToValue = \case
@@ -700,8 +712,7 @@ assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
   mem <- use x86Mem
-  ptr <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-    =<< resolveSetupVal cc mem env tyenv Map.empty tptr
+  ptr <- resolvePtrSetupValue env tyenv tptr
   memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv texpected
   storTy <- liftIO $ C.LLVM.toStorableType memTy
   actual <- liftIO $ C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment
