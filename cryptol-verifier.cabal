@@ -85,5 +85,8 @@ test-suite cryptol-verifier-tc-test
 
   build-depends:
     base,
+    bytestring,
+    containers,
+    cryptol,
     cryptol-verifier,
     saw-core
