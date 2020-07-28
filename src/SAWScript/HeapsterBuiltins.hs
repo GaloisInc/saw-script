@@ -22,6 +22,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_opaque_perm
        , heapster_define_recursive_perm
        , heapster_define_perm
+       , heapster_define_llvm_shape
        , heapster_block_entry_hint
        , heapster_find_symbol
        , heapster_assume_fun
@@ -339,6 +340,28 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
                                    args_ctx tp_perm perm_string
      let env' = permEnvAddDefinedPerm env nm args tp_perm perm
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+-- | Define a named LLVM shape with the given name, bit width, and argument
+-- context to be equivalent to the given LLVM permissions
+heapster_define_llvm_shape :: BuiltinContext -> Options -> HeapsterEnv ->
+                              String -> Int -> String -> String ->
+                              TopLevel ()
+heapster_define_llvm_shape _bic _opts henv nm w_int args_str perm_string =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     Some w <- case someNat w_int of
+       Just some_w -> return some_w
+       _ -> fail "Bit width is negative"
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "Bit width is 0"
+     Some args_ctx <- parseParsedCtxString "argument types" env args_str
+     let args = parsedCtxCtx args_ctx
+     withKnownNat w $ withLeqProof leq_proof $ do
+       let tp = LLVMPointerRepr w
+       perms <- (parseAtomicPermsInCtxString
+                 "LLVM shape" env [] args_ctx tp perm_string)
+       let env' = permEnvAddLLVMShapePerm env nm args perms
+       liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Add a hint to the Heapster type-checker that Crucible block number @block@ in
 -- function @fun@ should have permissions @perms@ on its inputs
