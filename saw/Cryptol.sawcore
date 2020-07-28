@@ -568,6 +568,13 @@ PSignedCmpSeq n =
 PSignedCmpWord : (n : Nat) -> PSignedCmp (Vec n Bool);
 PSignedCmpWord n = { signedCmpEq = PEqWord n, scmp = bvSCmp n };
 
+PSignedCmpSeqBool : (n : Num) -> PSignedCmp (seq n Bool);
+PSignedCmpSeqBool n =
+  Num#rec (\ (n : Num) -> PSignedCmp (seq n Bool))
+          (\ (n:Nat) -> PSignedCmpWord n)
+          (error (PSignedCmp (Stream Bool)) "invalid SignedCmp instance")
+          n;
+
 PSignedCmpUnit : PSignedCmp #();
 PSignedCmpUnit = { signedCmpEq = PEqUnit, scmp = unitCmp };
 

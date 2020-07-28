@@ -515,7 +515,7 @@ proveProp sc env prop =
         -- instance (fin n) => SignedCmp [n]
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PSignedCmpWord" [n']
+                scGlobalApply sc "Cryptol.PSignedCmpSeqBool" [n']
         -- instance (fin n, SignedCmp a) => SignedCmp [n]a
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
