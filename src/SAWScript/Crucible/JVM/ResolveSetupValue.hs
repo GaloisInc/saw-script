@@ -185,6 +185,8 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unimplemented type Integer (FIXME)"
     Cryptol.TVIntMod _ ->
       fail "resolveSAWTerm: unimplemented type Z n (FIXME)"
+    Cryptol.TVFloat{} ->
+      fail "resolveSAWTerm: unimplemented type Float e p (FIXME)"
     Cryptol.TVArray{} ->
       fail "resolveSAWTerm: unimplemented type Array a b (FIXME)"
     Cryptol.TVRational ->
@@ -258,6 +260,7 @@ toJVMType tp =
     Cryptol.TVBit -> Just J.BooleanType
     Cryptol.TVInteger -> Nothing
     Cryptol.TVIntMod _ -> Nothing
+    Cryptol.TVFloat{} -> Nothing
     Cryptol.TVArray{} -> Nothing
     Cryptol.TVRational -> Nothing
     Cryptol.TVSeq n Cryptol.TVBit ->

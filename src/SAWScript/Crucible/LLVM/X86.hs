@@ -95,7 +95,6 @@ import qualified Lang.Crucible.Simulator.OverrideSim as C
 import qualified Lang.Crucible.Simulator.RegMap as C
 import qualified Lang.Crucible.Simulator.SimError as C
 
-import qualified Lang.Crucible.LLVM.Bytes as C.LLVM
 import qualified Lang.Crucible.LLVM.DataLayout as C.LLVM
 import qualified Lang.Crucible.LLVM.Extension as C.LLVM
 import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
@@ -525,9 +524,10 @@ assumeAllocation ::
   (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
 assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc) = do
+  cc <- use x86CrucibleContext
   sym <- use x86Sym
   mem <- use x86Mem
-  sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToBV knownNat sz
+  sz' <- liftIO $ resolveSAWSymBV cc knownNat sz
   (ptr, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
     (show $ W4.plSourceLoc loc) mem sz' align
   x86Mem .= mem'
@@ -541,14 +541,31 @@ assumePointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   X86Sim ()
-assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
+assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
   when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  tval <- checkConcreteSizePointsToValue tptval
+  sym <- use x86Sym
+  cc <- use x86CrucibleContext
+  mem <- use x86Mem
+  ptr <- resolvePtrSetupValue env tyenv tptr
+  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
+  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
+  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  x86Mem .= mem'
+
+resolvePtrSetupValue ::
+  X86Constraints =>
+  Map MS.AllocIndex Ptr ->
+  Map MS.AllocIndex LLVMAllocSpec ->
+  MS.SetupValue LLVM ->
+  X86Sim Ptr
+resolvePtrSetupValue env tyenv tptr = do
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   elf <- use x86Elf
   base <- use x86GlobalBase
-  ptr <- case tptr of
+  case tptr of
     MS.SetupGlobal () nm -> case
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
@@ -561,10 +578,11 @@ assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
     _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
          =<< resolveSetupVal cc mem env tyenv Map.empty tptr
-  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
-  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
-  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
-  x86Mem .= mem'
+
+checkConcreteSizePointsToValue :: LLVMPointsToValue LLVMArch -> X86Sim (MS.SetupValue LLVM)
+checkConcreteSizePointsToValue = \case
+  ConcreteSizeValue val -> return val
+  SymbolicSizeValue{} -> throwX86 "unsupported x86_64 command: crucible_points_to_array_prefix"
 
 -- | Write each SetupValue passed to crucible_execute_func to the appropriate
 -- x86_64 register from the calling convention.
@@ -685,16 +703,16 @@ assertPointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr texpected) = do
+assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
   when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  texpected <- checkConcreteSizePointsToValue tptexpected
   sym <- use x86Sym
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
   mem <- use x86Mem
-  ptr <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-    =<< resolveSetupVal cc mem env tyenv Map.empty tptr
+  ptr <- resolvePtrSetupValue env tyenv tptr
   memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv texpected
   storTy <- liftIO $ C.LLVM.toStorableType memTy
   actual <- liftIO $ C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment

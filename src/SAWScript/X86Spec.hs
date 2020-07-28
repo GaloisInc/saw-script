@@ -181,7 +181,7 @@ type Post = 'Post
 
 
 -- | The Crucible backend used for speicifcations.
-type Sym = SAWCoreBackend GlobalNonceGenerator (Yices.Connection GlobalNonceGenerator) (B.Flags B.FloatReal)
+type Sym = SAWCoreBackend GlobalNonceGenerator Yices.Connection (B.Flags B.FloatReal)
 
 data Opts = Opts
   { optsSym :: Sym

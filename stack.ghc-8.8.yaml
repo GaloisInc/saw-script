@@ -6,10 +6,11 @@ packages:
   - deps/aig/
   - deps/abcBridge/
   - deps/cryptol/
-  - deps/saw-core/
-  - deps/saw-core-aig/
-  - deps/saw-core-sbv/
-  - deps/saw-core-what4/
+  - deps/saw-core/saw-core/
+  - deps/saw-core/saw-core-aig/
+  - deps/saw-core/saw-core-sbv/
+  - deps/saw-core/saw-core-what4/
+  - deps/saw-core-coq/
   - deps/cryptol-verifier/
   - deps/jvm-verifier/
   - deps/what4/what4/
@@ -48,5 +49,6 @@ extra-deps:
   - bv-sized-1.0.1
   - bitwise-1.0.0.1
   - constraints-0.11.2
+  - libBF-0.5.1
 resolver: lts-16.1
 allow-newer: false

@@ -56,7 +56,7 @@ import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
 import           Control.Monad.Catch (MonadThrow)
-import           Control.Monad.Fail (MonadFail(..))
+import qualified Control.Monad.Fail as Fail
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
@@ -267,7 +267,7 @@ throwOverrideMatcher msg = do
   loc <- use osLocation
   X.throw $ OverrideMatcherException loc msg
 
-instance MonadFail (OverrideMatcher ext rorw) where
+instance Fail.MonadFail (OverrideMatcher ext rorw) where
   fail = throwOverrideMatcher
 
 -- | "Run" function for OverrideMatcher. The final result and state

@@ -25,7 +25,6 @@ import Data.Parameterized.Nonce
 
 import           What4.Config
 import           What4.Solver
-import           What4.SatResult
 import           What4.Interface
 import           What4.Expr.GroundEval
 import qualified Verifier.SAW.Simulator.What4 as W
