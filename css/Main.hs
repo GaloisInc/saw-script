@@ -6,6 +6,7 @@ import           System.Environment( getArgs )
 import           System.Exit( exitFailure )
 import           System.Console.GetOpt
 import           System.IO
+import qualified Data.ByteString as BS
 import           Data.Text ( pack )
 import           Data.Version
 
@@ -88,7 +89,7 @@ cssMain css [inputModule,name] | cssMode css == NormalMode = do
                  else (output css)
 
     modEnv <- CM.initialModuleEnv
-    (e,warn) <- CM.loadModuleByPath inputModule (defaultEvalOpts, modEnv)
+    (e,warn) <- CM.loadModuleByPath inputModule (defaultEvalOpts, BS.readFile, modEnv)
     mapM_ (print . pp) warn
     case e of
        Left msg -> print msg >> exitFailure
@@ -126,7 +127,7 @@ extractCryptol sc modEnv input = do
     case P.parseExpr (pack input) of
       Left err -> fail (show (P.ppError err))
       Right x -> return x
-  (exprResult, exprWarnings) <- CM.checkExpr pexpr (defaultEvalOpts, modEnv)
+  (exprResult, exprWarnings) <- CM.checkExpr pexpr (defaultEvalOpts, BS.readFile, modEnv)
   mapM_ (print . pp) exprWarnings
   ((_, expr, schema), _modEnv') <-
     case exprResult of

@@ -6,6 +6,7 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Verifier.SAW.CryptolEnv
@@ -33,6 +34,7 @@ module Verifier.SAW.CryptolEnv
   where
 
 --import qualified Control.Exception as X
+import Data.ByteString (ByteString)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -142,7 +144,9 @@ nameMatcher xs =
 
 -- Initialize ------------------------------------------------------------------
 
-initCryptolEnv :: SharedContext -> IO CryptolEnv
+initCryptolEnv ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> IO CryptolEnv
 initCryptolEnv sc = do
   modEnv0 <- M.initialModuleEnv
 
@@ -237,7 +241,9 @@ runInferOutput out =
 
 -- Translate -------------------------------------------------------------------
 
-mkCryEnv :: CryptolEnv -> IO C.Env
+mkCryEnv ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  CryptolEnv -> IO C.Env
 mkCryEnv env =
   do let modEnv = eModuleEnv env
      let ifaceDecls = getAllIfaceDecls modEnv
@@ -255,12 +261,16 @@ mkCryEnv env =
            }
      return cryEnv
 
-translateExpr :: SharedContext -> CryptolEnv -> T.Expr -> IO Term
+translateExpr ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> CryptolEnv -> T.Expr -> IO Term
 translateExpr sc env expr =
   do cryEnv <- mkCryEnv env
      C.importExpr sc cryEnv expr
 
-translateDeclGroups :: SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
+translateDeclGroups ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> CryptolEnv -> [T.DeclGroup] -> IO CryptolEnv
 translateDeclGroups sc env dgs =
   do cryEnv <- mkCryEnv env
      cryEnv' <- C.importTopLevelDeclGroups sc cryEnv dgs
@@ -295,8 +305,10 @@ checkNotParameterized m =
                    ]
 
 
-loadCryptolModule :: SharedContext -> CryptolEnv -> FilePath
-                     -> IO (CryptolModule, CryptolEnv)
+loadCryptolModule ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> CryptolEnv -> FilePath ->
+  IO (CryptolModule, CryptolEnv)
 loadCryptolModule sc env path = do
   let modEnv = eModuleEnv env
   (m, modEnv') <- liftModuleM modEnv (MB.loadModuleByPath path)
@@ -346,6 +358,7 @@ lookupCryptolModule (CryptolModule _ tm) name =
 --------------------------------------------------------------------------------
 
 importModule ::
+  (?fileReader :: FilePath -> IO ByteString) =>
   SharedContext             {- ^ Shared context for creating terms -} ->
   CryptolEnv                {- ^ Extend this environment -} ->
   Either FilePath P.ModName {- ^ Where to find the module -} ->
@@ -417,7 +430,9 @@ bindInteger (ident, n) env =
 
 --------------------------------------------------------------------------------
 
-parseTypedTerm :: SharedContext -> CryptolEnv -> InputText -> IO TypedTerm
+parseTypedTerm ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> CryptolEnv -> InputText -> IO TypedTerm
 parseTypedTerm sc env input = do
   let modEnv = eModuleEnv env
 
@@ -452,7 +467,9 @@ parseTypedTerm sc env input = do
   trm <- translateExpr sc env' expr
   return (TypedTerm schema trm)
 
-parseDecls :: SharedContext -> CryptolEnv -> InputText -> IO CryptolEnv
+parseDecls ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  SharedContext -> CryptolEnv -> InputText -> IO CryptolEnv
 parseDecls sc env input = do
   let modEnv = eModuleEnv env
   let ifaceDecls = getAllIfaceDecls modEnv
@@ -506,7 +523,9 @@ parseDecls sc env input = do
   let dgs = T.mDecls tmodule
   translateDeclGroups sc env' dgs
 
-parseSchema :: CryptolEnv -> InputText -> IO T.Schema
+parseSchema ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  CryptolEnv -> InputText -> IO T.Schema
 parseSchema env input = do
   let modEnv = eModuleEnv env
 
@@ -537,7 +556,9 @@ parseSchema env input = do
     --mapM_ (MM.io . print . TP.ppWithNames TP.emptyNameMap) goals
     return (schemaNoUser schema)
 
-declareName :: CryptolEnv -> P.ModName -> String -> IO (T.Name, CryptolEnv)
+declareName ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  CryptolEnv -> P.ModName -> String -> IO (T.Name, CryptolEnv)
 declareName env mname input = do
   let pname = P.mkUnqual (packIdent input)
   let modEnv = eModuleEnv env
@@ -560,8 +581,11 @@ schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)
 
 ------------------------------------------------------------
 
-liftModuleM :: ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
-liftModuleM env m = MM.runModuleM (defaultEvalOpts, env) m >>= moduleCmdResult
+liftModuleM ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
+liftModuleM env m =
+  MM.runModuleM (defaultEvalOpts, ?fileReader, env) m >>= moduleCmdResult
 
 defaultEvalOpts :: E.EvalOpts
 defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
