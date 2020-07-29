@@ -39,6 +39,7 @@ import Numeric.Natural (Natural)
 import Verifier.SAW.Term.Functor (Ident, alistAllFields)
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.Prim
+import qualified Verifier.SAW.Prim as Prim
 
 import qualified Verifier.SAW.Utils as Panic (panic)
 
@@ -1191,8 +1192,8 @@ errorOp =
   constFun $
   strictFun $ \x ->
   case x of
-    VString s -> panic s
-    _ -> panic "unknown error"
+    VString s -> Prim.userError s
+    _ -> Prim.userError "unknown error"
 
 ------------------------------------------------------------
 -- Conditionals
