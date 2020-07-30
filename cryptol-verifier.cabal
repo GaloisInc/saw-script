@@ -89,4 +89,5 @@ test-suite cryptol-verifier-tc-test
     containers,
     cryptol,
     cryptol-verifier,
+    heredoc >= 0.2,
     saw-core
