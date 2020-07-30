@@ -21,9 +21,13 @@ main =
      C.scLoadCryptolModule sc
      putStrLn "Loaded Cryptol.sawcore!"
      let ?fileReader = BS.readFile
-     cenv <- CEnv.initCryptolEnv sc
+     cenv0 <- CEnv.initCryptolEnv sc
      putStrLn "Translated Cryptol.cry!"
-     mapM_ (checkTranslation sc) $ Map.assocs (CEnv.eTermEnv cenv)
+     cenv1 <- CEnv.importModule sc cenv0 (Right N.floatName) Nothing Nothing
+     putStrLn "Translated Float.cry!"
+     cenv2 <- CEnv.importModule sc cenv1 (Right N.arrayName) Nothing Nothing
+     putStrLn "Translated Array.cry!"
+     mapM_ (checkTranslation sc) $ Map.assocs (CEnv.eTermEnv cenv2)
      putStrLn "Checked all terms!"
 
 checkTranslation :: SharedContext -> (N.Name, Term) -> IO ()
