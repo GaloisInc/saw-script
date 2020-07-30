@@ -689,15 +689,18 @@ floatPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 floatPrims =
   Map.fromList $
   first C.floatPrim <$>
-  [ ("fpNaN",      flip scGlobalDef "Cryptol.ecFpNaN")
-  , ("fpPosInf",   flip scGlobalDef "Cryptol.ecFpPosInf")
-  , ("fpFromBits", flip scGlobalDef "Cryptol.ecFpFromBits")
-  , ("fpToBits",   flip scGlobalDef "Cryptol.ecFpToBits")
-  , ("=.=",        flip scGlobalDef "Cryptol.ecFpEq")
-  , ("fpAdd",      flip scGlobalDef "Cryptol.ecFpAdd")
-  , ("fpSub",      flip scGlobalDef "Cryptol.ecFpSub")
-  , ("fpMul",      flip scGlobalDef "Cryptol.ecFpMul")
-  , ("fpDiv",      flip scGlobalDef "Cryptol.ecFpDiv")
+  [ ("fpNaN",          flip scGlobalDef "Cryptol.ecFpNaN")
+  , ("fpPosInf",       flip scGlobalDef "Cryptol.ecFpPosInf")
+  , ("fpFromBits",     flip scGlobalDef "Cryptol.ecFpFromBits")
+  , ("fpToBits",       flip scGlobalDef "Cryptol.ecFpToBits")
+  , ("=.=",            flip scGlobalDef "Cryptol.ecFpEq")
+  , ("fpAdd",          flip scGlobalDef "Cryptol.ecFpAdd")
+  , ("fpSub",          flip scGlobalDef "Cryptol.ecFpSub")
+  , ("fpMul",          flip scGlobalDef "Cryptol.ecFpMul")
+  , ("fpDiv",          flip scGlobalDef "Cryptol.ecFpDiv")
+  , ("fpIsFinite",     flip scGlobalDef "Cryptol.ecFpIsFinite")
+  , ("fpToRational",   flip scGlobalDef "Cryptol.ecFpToRational")
+  , ("fpFromRational", flip scGlobalDef "Cryptol.ecFpFromRational")
   ]
 
 

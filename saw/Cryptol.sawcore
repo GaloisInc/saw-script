@@ -1371,6 +1371,15 @@ ecFpMul e p _ _ _ = error (TCFloat e p) "Unimplemented: fpMul";
 ecFpDiv : (e : Num) -> (p : Num) -> bitvector 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpDiv e p _ _ _ = error (TCFloat e p) "Unimplemented: fpDiv";
 
+ecFpIsFinite : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
+ecFpIsFinite e p _ = error Bool "Unimplemented: fpIsFinite";
+
+ecFpToRational : (e : Num) -> (p : Num) -> TCFloat e p -> Rational;
+ecFpToRational e p _ = error Rational "Unimplemented: fpToRational";
+
+ecFpFromRational : (e : Num) -> (p : Num) -> bitvector 3 -> Rational -> TCFloat e p;
+ecFpFromRational e p _ _ = error (TCFloat e p) "Unimplemented: fpFromRational";
+
 
 --------------------------------------------------------------------------------
 -- Extra primitives
