@@ -17,6 +17,7 @@ Stability   : provisional
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module SAWScript.Builtins where
 
@@ -28,6 +29,7 @@ import Data.Monoid
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
+import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
@@ -1315,17 +1317,19 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       rw <- getTopLevelRW
       let cenv = rwCryptol rw
       let mname = C.packModName ["Prims"]
+      let ?fileReader = StrictBS.readFile
       (n', cenv') <- io $ CEnv.declareName cenv mname n
       s' <- io $ CEnv.parseSchema cenv' (noLoc s)
       t' <- io $ scGlobalDef sc i
       putTopLevelRW $ rw { rwCryptol = cenv' }
       return (n', TypedTerm s' t')
 
-cryptol_load :: FilePath -> TopLevel CryptolModule
-cryptol_load path = do
+cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CryptolModule
+cryptol_load fileReader path = do
   sc <- getSharedContext
   rw <- getTopLevelRW
   let ce = rwCryptol rw
+  let ?fileReader = fileReader
   (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m

@@ -189,18 +189,21 @@ type CallHandler = Sym -> Macaw.LookupFunctionHandle Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
-proof :: ArchitectureInfo X86_64 ->
-         FilePath {- ^ ELF binary -} ->
-         Maybe FilePath {- ^ Cryptol spec, if any -} ->
-         [(ByteString,Integer,Unit)] ->
-         Fun ->
-         IO (SharedContext,Integer,[Goal])
-proof archi file mbCry globs fun =
+proof ::
+  (FilePath -> IO ByteString) ->
+  ArchitectureInfo X86_64 ->
+  FilePath {- ^ ELF binary -} ->
+  Maybe FilePath {- ^ Cryptol spec, if any -} ->
+  [(ByteString,Integer,Unit)] ->
+  Fun ->
+  IO (SharedContext,Integer,[Goal])
+proof fileReader archi file mbCry globs fun =
   do sc  <- mkSharedContext
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
      sym <- newSAWCoreBackend FloatRealRepr sc globalNonceGenerator
+     let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
      mvar <- mkMemVar halloc
      proofWithOptions Options
@@ -352,7 +355,10 @@ posFn = OtherPos . Text.pack . show
 
 
 -- | Load a file with Cryptol decls.
-loadCry :: Sym -> Maybe FilePath -> IO CryptolEnv
+loadCry ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  Sym -> Maybe FilePath ->
+  IO CryptolEnv
 loadCry sym mb =
   do ctx <- sawBackendSharedContext sym
      env <- initCryptolEnv ctx
