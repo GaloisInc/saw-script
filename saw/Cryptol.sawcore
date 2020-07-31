@@ -221,6 +221,26 @@ Rational = #();
 ecRatio : Integer -> Integer -> Rational;
 ecRatio x y = ();
 
+eqRational : Rational -> Rational -> Bool;
+eqRational x y = error Bool "Unimplemented: (==) Rational";
+
+ltRational : Rational -> Rational -> Bool;
+ltRational x y = error Bool "Unimplemented: (<) Rational";
+
+addRational : Rational -> Rational -> Rational;
+addRational x y = error Rational "Unimplemented: (+) Rational";
+
+subRational : Rational -> Rational -> Rational;
+subRational x y = error Rational "Unimplemented: (-) Rational";
+
+mulRational : Rational -> Rational -> Rational;
+mulRational x y = error Rational "Unimplemented: (*) Rational";
+
+negRational : Rational -> Rational;
+negRational x = error Rational "Unimplemented: negate Rational";
+
+integerToRational : Integer -> Rational;
+integerToRational x = error Rational "Unimplemented: fromInteger Rational";
 
 --------------------------------------------------------------------------------
 -- Parmap (Experimental)
@@ -428,6 +448,9 @@ boolCmp x y k = ite Bool x (and y k) (or y k);
 integerCmp : Integer -> Integer -> Bool -> Bool;
 integerCmp x y k = or (intLt x y) (and (intEq x y) k);
 
+rationalCmp : Rational -> Rational -> Bool -> Bool;
+rationalCmp x y k = or (ltRational x y) (and (eqRational x y) k);
+
 bvCmp : (n : Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
 bvCmp n x y k = or (bvult n x y) (and (bvEq n x y) k);
 
@@ -466,6 +489,9 @@ PEqBit = { eq = boolEq };
 
 PEqInteger : PEq Integer;
 PEqInteger = { eq = intEq };
+
+PEqRational : PEq Rational;
+PEqRational = { eq = eqRational };
 
 PEqIntMod : (n : Nat) -> PEq (IntMod n);
 PEqIntMod n = { eq = intModEq n };
@@ -514,6 +540,9 @@ PCmpBit = { cmpEq = PEqBit, cmp = boolCmp };
 
 PCmpInteger : PCmp Integer;
 PCmpInteger = { cmpEq = PEqInteger, cmp = integerCmp };
+
+PCmpRational : PCmp Rational;
+PCmpRational = { cmpEq = PEqRational, cmp = rationalCmp };
 
 PCmpVec : (n : Nat) -> (a : sort 0) -> PCmp a -> PCmp (Vec n a);
 PCmpVec n a pa = { cmpEq = PEqVec n a pa.cmpEq, cmp = vecCmp n a pa.cmp };
@@ -598,6 +627,9 @@ PZeroInteger = natToInt 0;
 
 PZeroIntMod : (n : Nat) -> PZero (IntMod n);
 PZeroIntMod n = toIntMod n (natToInt 0);
+
+PZeroRational : PZero Rational;
+PZeroRational = integerToRational (natToInt 0);
 
 PZeroIntModNum : (num : Num) -> PZero (IntModNum num);
 PZeroIntModNum num = Num#rec (\ (n : Num) -> PZero (IntModNum n)) PZeroIntMod PZeroInteger num;
@@ -735,6 +767,16 @@ PRingIntModNum : (num : Num) -> PRing (IntModNum num);
 PRingIntModNum num =
   Num#rec (\ (n : Num) -> PRing (IntModNum n)) PRingIntMod PRingInteger num;
 
+PRingRational : PRing Rational;
+PRingRational =
+  { ringZero = PZeroRational
+  , add = addRational
+  , sub = subRational
+  , mul = mulRational
+  , neg = negRational
+  , int = integerToRational
+  };
+
 PRingVec : (n : Nat) -> (a : sort 0) -> PRing a -> PRing (Vec n a);
 PRingVec n a pa =
   { ringZero = replicate n a pa.ringZero
@@ -852,6 +894,7 @@ PIntegralSeqBool n =
           (error (PIntegral (Stream Bool)) "PIntegralSeqBool: no instance for streams")
 	  n;
 
+
 -- Field class
 
 PField : sort 0 -> sort 1;
@@ -861,7 +904,12 @@ PField a =
    , fieldDiv  : a -> a -> a
    };
 
--- TODO Field class instances
+PFieldRational : PField Rational;
+PFieldRational =
+  { fieldRing = PRingRational
+  , recip     = \(x : Rational) -> error Rational "Unimplemented: recip Rational"
+  , fieldDiv  = \(x y : Rational) -> error Rational "Unimplemented: (/.) Rational"
+  };
 
 
 -- Round class
@@ -877,7 +925,16 @@ PRound a =
    , roundToEven : a -> Integer
    };
 
--- TODO Round class instances
+PRoundRational : PRound Rational;
+PRoundRational =
+  { roundField	= PFieldRational
+  , roundCmp	= PCmpRational
+  , floor	= \(x : Rational) -> error Integer "Unimplemented: floor Rational"
+  , ceiling	= \(x : Rational) -> error Integer "Unimplemented: ceiling Rational"
+  , trunc	= \(x : Rational) -> error Integer "Unimplemented: trunc Rational"
+  , roundAway	= \(x : Rational) -> error Integer "Unimplemented: roundAway Rational"
+  , roundToEven = \(x : Rational) -> error Integer "Unimplemented: roundToEven Rational"
+  };
 
 
 -- Literal class
@@ -901,6 +958,9 @@ PLiteralIntMod n = \ (x : Nat) -> toIntMod n (natToInt x);
 PLiteralIntModNum : (num : Num) -> PLiteral (IntModNum num);
 PLiteralIntModNum num =
   Num#rec (\ (n : Num) -> PLiteral (IntModNum n)) PLiteralIntMod PLiteralInteger num;
+
+PLiteralRational : PLiteral Rational;
+PLiteralRational = \ (x : Nat) -> error Rational "Unimplemented: Literal Rational";
 
 -- TODO: FLiteral class
 
@@ -1331,6 +1391,15 @@ ecTrace _ _ _ _ _ x = x;
 TCFloat : Num -> Num -> sort 0;
 TCFloat _ _ = #();
 
+PEqFloat : (e p : Num) -> PEq (TCFloat e p);
+PEqFloat e p = { eq = \(x y : TCFloat e p) -> error Bool "Unimplemented: (==) Float" };
+
+PCmpFloat : (e p : Num) -> PCmp (TCFloat e p);
+PCmpFloat e p =
+  { cmpEq = PEqFloat e p
+  , cmp = \(x y : TCFloat e p) (k : Bool) -> error Bool "Unimplemented: Cmp Float"
+  };
+
 PZeroFloat : (e p : Num) -> PZero (TCFloat e p);
 PZeroFloat e p = error (TCFloat e p) "Unimplemented: Zero Float";
 
@@ -1342,6 +1411,24 @@ PRingFloat e p =
   , mul = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (*) Float"
   , neg = \(x : TCFloat e p) -> error (TCFloat e p) "Unimplemented: neg Float"
   , int = \ (i : Integer) -> error (TCFloat e p) "Unimplemented: toInteger Float"
+  };
+
+PFieldFloat : (e p : Num) -> PField (TCFloat e p);
+PFieldFloat e p =
+  { fieldRing = PRingFloat e p
+  , recip     = \(x : TCFloat e p) -> error (TCFloat e p) "Unimplemented: recip Float"
+  , fieldDiv  = \(x y : TCFloat e p) -> error (TCFloat e p) "Unimplemented: (/.) Float"
+  };
+
+PRoundFloat : (e p : Num) -> PRound (TCFloat e p);
+PRoundFloat e p =
+  { roundField  = PFieldFloat e p
+  , roundCmp    = PCmpFloat e p
+  , floor       = \(x : TCFloat e p) -> error Integer "Unimplemented: floor Float"
+  , ceiling     = \(x : TCFloat e p) -> error Integer "Unimplemented: ceiling Float"
+  , trunc       = \(x : TCFloat e p) -> error Integer "Unimplemented: trunc Float"
+  , roundAway   = \(x : TCFloat e p) -> error Integer "Unimplemented: roundAway Float"
+  , roundToEven = \(x : TCFloat e p) -> error Integer "Unimplemented: roundToEven Float"
   };
 
 ecFpNaN : (e : Num) -> (p : Num) -> TCFloat e p;
