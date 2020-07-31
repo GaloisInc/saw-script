@@ -333,7 +333,7 @@ proveProp sc env prop =
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PZeroSeqBool" [n']
         -- instance ValidFloat e p => Zero (Float e p)
-        (C.pIsZero -> Just (tIsFloat -> Just (e, p)))
+        (C.pIsZero -> Just (C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
                 scGlobalApply sc "Cryptol.PZeroFloat" [e', p']
@@ -407,7 +407,7 @@ proveProp sc env prop =
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PRingSeqBool" [n']
         -- instance ValidFloat e p => Ring (Float e p)
-        (C.pIsRing -> Just (tIsFloat -> Just (e, p)))
+        (C.pIsRing -> Just (C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
                 p' <- importType sc env p
                 scGlobalApply sc "Cryptol.PRingFloat" [e', p']
@@ -591,13 +591,6 @@ proveProp sc env prop =
                 scGlobalApply sc "Cryptol.PLiteralSeqBool" [n']
 
         _ -> do panic "proveProp" [pretty prop]
-  where
-    -- TODO: Move to Cryptol/TypeCheck/Type.hs in cryptol package
-    tIsFloat :: C.Type -> Maybe (C.Type, C.Type)
-    tIsFloat ty =
-      case C.tNoUser ty of
-        C.TCon (C.TC C.TCFloat) [e, p] -> Just (e, p)
-        _ -> Nothing
 
 
 importPrimitive :: SharedContext -> C.Name -> IO Term
