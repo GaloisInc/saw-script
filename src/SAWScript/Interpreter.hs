@@ -9,6 +9,7 @@ Stability   : provisional
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
@@ -34,6 +35,7 @@ import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
+import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -149,6 +151,7 @@ bindPatternEnv = bindPatternGeneric extendEnv
 
 interpret :: LocalEnv -> SS.Expr -> TopLevel Value
 interpret env expr =
+    let ?fileReader = BS.readFile in
     case expr of
       SS.Bool b              -> return $ VBool b
       SS.String s            -> return $ VString s
@@ -231,6 +234,7 @@ interpretDeclGroup env (SS.Recursive ds) = return env'
 
 interpretStmts :: LocalEnv -> [SS.Stmt] -> TopLevel Value
 interpretStmts env stmts =
+    let ?fileReader = BS.readFile in
     case stmts of
       [] -> fail "empty block"
       [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
@@ -242,6 +246,7 @@ interpretStmts env stmts =
       SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
              rw <- getMergedEnv env
+
              ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
              -- FIXME: Local bindings get saved into the global cryptol environment here.
              -- We should change parseDecls to return only the new bindings instead.
@@ -310,6 +315,7 @@ interpretStmt ::
   SS.Stmt ->
   TopLevel ()
 interpretStmt printBinds stmt =
+  let ?fileReader = BS.readFile in
   case stmt of
     SS.StmtBind pos pat mc expr -> withPosition pos (processStmtBind printBinds pat mc expr)
     SS.StmtLet _ dg           -> do rw <- getTopLevelRW
@@ -369,6 +375,7 @@ buildTopLevelEnv :: AIGProxy
 buildTopLevelEnv proxy opts =
     do let mn = mkModuleName ["SAWScript"]
        sc0 <- mkSharedContext
+       let ?fileReader = BS.readFile
        CryptolSAW.scLoadPreludeModule sc0
        JavaSAW.scLoadJavaModule sc0
        CryptolSAW.scLoadCryptolModule sc0
@@ -1395,7 +1402,7 @@ primitives = Map.fromList
     [ "Reduce the given term to beta-normal form." ]
 
   , prim "cryptol_load"        "String -> TopLevel CryptolModule"
-    (pureVal cryptol_load)
+    (pureVal (cryptol_load BS.readFile))
     Current
     [ "Load the given file as a Cryptol module." ]
 

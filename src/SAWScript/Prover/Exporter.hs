@@ -1,3 +1,4 @@
+{-# Language ImplicitParams #-}
 {-# Language OverloadedStrings #-}
 {-# Language ViewPatterns #-}
 
@@ -32,6 +33,7 @@ import Data.Foldable(toList)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
+import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import qualified Data.SBV.Dynamic as SBV
 import Text.PrettyPrint.ANSI.Leijen (vcat)
@@ -249,6 +251,7 @@ writeCoqCryptolModule inputFile outputFile notations skips = do
   ()  <- scLoadCryptolModule sc
   sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
   ctx <- sawBackendSharedContext sym
+  let ?fileReader = BS.readFile
   env <- initCryptolEnv ctx
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   (cm, _) <- loadCryptolModule ctx env inputFile

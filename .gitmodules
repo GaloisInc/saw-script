@@ -28,12 +28,6 @@
 [submodule "deps/parameterized-utils"]
 	path = deps/parameterized-utils
 	url = https://github.com/GaloisInc/parameterized-utils.git
-[submodule "deps/saw-core-aig"]
-	path = deps/saw-core-aig
-	url = https://github.com/GaloisInc/saw-core-aig.git
-[submodule "deps/saw-core-sbv"]
-	path = deps/saw-core-sbv
-	url = https://github.com/GaloisInc/saw-core-sbv.git
 [submodule "deps/saw-core"]
 	path = deps/saw-core
 	url = https://github.com/GaloisInc/saw-core.git
@@ -49,9 +43,6 @@
 [submodule "deps/dwarf"]
 	path = deps/dwarf
 	url = https://github.com/GaloisInc/dwarf.git
-[submodule "deps/saw-core-what4"]
-	path = deps/saw-core-what4
-	url = https://github.com/GaloisInc/saw-core-what4.git
 [submodule "deps/cryptol-specs"]
 	path = deps/cryptol-specs
 	url = https://github.com/galoisinc/cryptol-specs
