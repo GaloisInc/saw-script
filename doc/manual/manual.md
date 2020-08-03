@@ -1245,7 +1245,7 @@ techniques that do not require significant computation.
 * `assume_unsat : ProofScript SatResult` indicates that the current goal
 should be assumed to be unsatisfiable. At the moment,
 `crucible_jvm_verify` and `crucible_llvm_verify` (described below) run
-their proofs in the a satisfiability-checking (negated) context, so
+their proofs in a satisfiability-checking (negated) context, so
 `assume_unsat` indicates that the property being checked should be
 assumed to be true. This is likely to change in the future.
 
