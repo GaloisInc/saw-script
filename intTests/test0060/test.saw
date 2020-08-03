@@ -18,7 +18,7 @@ crucible_llvm_verify m "id_p" [] false id_spec z3;
 
 let add_two_spec = do {
     x <- crucible_fresh_var "x" (llvm_int 32);
-    xp <- crucible_alloc (llvm_int 32);
+    xp <- crucible_alloc (llvm_int 64);
     crucible_points_to_untyped xp (crucible_term x);
 
     crucible_execute_func [xp];
