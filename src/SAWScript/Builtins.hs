@@ -1043,8 +1043,13 @@ cryptolTypeOfFirstOrderType fot =
     FOTInt -> C.tInteger
     FOTVec n t -> C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)
     FOTTuple ts -> C.tTuple (map cryptolTypeOfFirstOrderType ts)
+    FOTArray a b ->
+      C.tArray
+      (cryptolTypeOfFirstOrderType a)
+      (cryptolTypeOfFirstOrderType b)
     FOTRec m ->
-      C.tRec
+      C.tRec $
+      C.recordFromFields $
       [ (C.packIdent l, cryptolTypeOfFirstOrderType t)
       | (l, t) <- Map.assocs m ]
 
