@@ -41,3 +41,17 @@ let array_swap_spec = do {
 };
 
 crucible_llvm_verify m "array_swap" [] false array_swap_spec z3;
+
+let struct_swap_spec = do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    y <- crucible_fresh_var "y" (llvm_int 32);
+    s <- crucible_alloc (llvm_struct "struct.foo");
+    crucible_points_to s (crucible_packed_struct [crucible_term x, crucible_term y]);
+
+    crucible_execute_func [s];
+
+    crucible_points_to (crucible_field s "x") (crucible_term y);
+    crucible_points_to (crucible_field s "y") (crucible_term x);
+};
+
+crucible_llvm_verify m "struct_swap" [] false struct_swap_spec z3;

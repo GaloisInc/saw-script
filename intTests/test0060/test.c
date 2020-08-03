@@ -18,3 +18,15 @@ void array_swap(uint32_t a[2]) {
     a[0] = a[1];
     a[1] = tmp;
 }
+
+/* packed attribute to get LLVM to not pad the struct */
+typedef struct __attribute__((packed)) {
+    uint32_t x;
+    uint32_t y;
+} foo;
+
+void struct_swap(foo *f) {
+    uint32_t tmp = f->x;
+    f->x = f->y;
+    f->y = tmp;
+}
