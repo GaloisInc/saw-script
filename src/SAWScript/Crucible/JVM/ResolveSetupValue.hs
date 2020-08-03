@@ -27,6 +27,7 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
 import           Control.Lens
 import qualified Control.Monad.Fail as Fail
 import           Data.IORef
+import qualified Data.BitVector.Sized as BV
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (absurd)
@@ -176,14 +177,20 @@ resolveSAWTerm cc tp tm =
   case tp of
     Cryptol.TVBit ->
       do b <- resolveBoolTerm sym tm
-         x0 <- W4.bvLit sym W4.knownNat 0
-         x1 <- W4.bvLit sym W4.knownNat 1
+         x0 <- W4.bvLit sym W4.knownNat (BV.zero W4.knownNat)
+         x1 <- W4.bvLit sym W4.knownNat (BV.one  W4.knownNat)
          x <- W4.bvIte sym b x1 x0
          return (IVal x)
     Cryptol.TVInteger ->
       fail "resolveSAWTerm: unimplemented type Integer (FIXME)"
     Cryptol.TVIntMod _ ->
       fail "resolveSAWTerm: unimplemented type Z n (FIXME)"
+    Cryptol.TVFloat{} ->
+      fail "resolveSAWTerm: unimplemented type Float e p (FIXME)"
+    Cryptol.TVArray{} ->
+      fail "resolveSAWTerm: unimplemented type Array a b (FIXME)"
+    Cryptol.TVRational ->
+      fail "resolveSAWTerm: unimplemented type Rational (FIXME)"
     Cryptol.TVSeq sz Cryptol.TVBit ->
       case sz of
         8  -> fail "resolveSAWTerm: unimplemented type char (FIXME)"
@@ -227,7 +234,7 @@ resolveBitvectorTerm sym w tm =
                   return (SBV.svAsInteger sbv)
              _ -> return Nothing
      case mx of
-       Just x  -> W4.bvLit sym w x
+       Just x  -> W4.bvLit sym w (BV.mkBV w x)
        Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
 
 -- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
@@ -253,6 +260,9 @@ toJVMType tp =
     Cryptol.TVBit -> Just J.BooleanType
     Cryptol.TVInteger -> Nothing
     Cryptol.TVIntMod _ -> Nothing
+    Cryptol.TVFloat{} -> Nothing
+    Cryptol.TVArray{} -> Nothing
+    Cryptol.TVRational -> Nothing
     Cryptol.TVSeq n Cryptol.TVBit ->
       case n of
         8  -> Just J.CharType

@@ -17,6 +17,7 @@ Stability   : provisional
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module SAWScript.Builtins where
 
@@ -28,6 +29,7 @@ import Data.Monoid
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
+import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
@@ -112,6 +114,7 @@ import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
 import qualified Cryptol.Eval.Concrete.Value as C (Concrete(..), bvVal)
 import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
+import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 import Cryptol.Utils.PP (pretty)
 
 import qualified SAWScript.SBVParser as SBV
@@ -186,7 +189,7 @@ readSBV path unintlst =
           SBV.TFun t1 t2 -> C.tFun (toCType t1) (toCType t2)
           SBV.TVec n t   -> C.tSeq (C.tNum n) (toCType t)
           SBV.TTuple ts  -> C.tTuple (map toCType ts)
-          SBV.TRecord bs -> C.tRec [ (C.packIdent n, toCType t) | (n, t) <- bs ]
+          SBV.TRecord bs -> C.tRec (C.recordFromFields [ (C.packIdent n, toCType t) | (n, t) <- bs ])
 
 
 
@@ -707,6 +710,14 @@ wrapProver f = do
     Nothing -> return (SV.Unsat stats, stats, Nothing)
     Just a  -> nope (SV.SatMulti stats a)
 
+wrapW4Prover ::
+  ( SharedContext -> Bool ->
+    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  ProofScript SV.SatResult
+wrapW4Prover f = do
+  hashConsing <- lift $ gets SV.rwWhat4HashConsing
+  wrapProver $ \sc -> f sc hashConsing
+
 --------------------------------------------------
 proveBoolector :: ProofScript SV.SatResult
 proveBoolector = proveSBV SBV.boolector
@@ -741,28 +752,28 @@ proveUnintYices = proveUnintSBV SBV.yices
 
 --------------------------------------------------
 w4_boolector :: ProofScript SV.SatResult
-w4_boolector = wrapProver $ Prover.proveWhat4_boolector []
+w4_boolector = wrapW4Prover $ Prover.proveWhat4_boolector []
 
 w4_z3 :: ProofScript SV.SatResult
-w4_z3 = wrapProver $ Prover.proveWhat4_z3 []
+w4_z3 = wrapW4Prover $ Prover.proveWhat4_z3 []
 
 w4_cvc4 :: ProofScript SV.SatResult
-w4_cvc4 = wrapProver $ Prover.proveWhat4_cvc4 []
+w4_cvc4 = wrapW4Prover $ Prover.proveWhat4_cvc4 []
 
 w4_yices :: ProofScript SV.SatResult
-w4_yices = wrapProver $ Prover.proveWhat4_yices []
+w4_yices = wrapW4Prover $ Prover.proveWhat4_yices []
 
 w4_unint_boolector :: [String] -> ProofScript SV.SatResult
-w4_unint_boolector = wrapProver . Prover.proveWhat4_boolector
+w4_unint_boolector = wrapW4Prover . Prover.proveWhat4_boolector
 
 w4_unint_z3 :: [String] -> ProofScript SV.SatResult
-w4_unint_z3 = wrapProver . Prover.proveWhat4_z3
+w4_unint_z3 = wrapW4Prover . Prover.proveWhat4_z3
 
 w4_unint_cvc4 :: [String] -> ProofScript SV.SatResult
-w4_unint_cvc4 = wrapProver . Prover.proveWhat4_cvc4
+w4_unint_cvc4 = wrapW4Prover . Prover.proveWhat4_cvc4
 
 w4_unint_yices :: [String] -> ProofScript SV.SatResult
-w4_unint_yices = wrapProver . Prover.proveWhat4_yices
+w4_unint_yices = wrapW4Prover . Prover.proveWhat4_yices
 
 proveWithExporter ::
   (SharedContext -> FilePath -> Prop -> IO ()) ->
@@ -785,6 +796,9 @@ offline_cnf :: FilePath -> ProofScript SV.SatResult
 offline_cnf path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
   proveWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
+
+offline_coq :: FilePath -> ProofScript SV.SatResult
+offline_coq path = proveWithExporter (const (Prover.writeCoqProp "goal" [] [])) path ".v"
 
 offline_extcore :: FilePath -> ProofScript SV.SatResult
 offline_extcore path = proveWithExporter (const Prover.writeCoreProp) path ".extcore"
@@ -1170,7 +1184,7 @@ eval_list t = do
       _ -> fail "eval_list: not a monomorphic array type"
   n' <- io $ scNat sc (fromInteger n)
   a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
-  idxs <- io $ traverse (scNat sc) [0 .. fromInteger n - 1]
+  idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
   ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
   return (map (TypedTerm (C.tMono a)) ts)
 
@@ -1213,7 +1227,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
       case ty of
         C.TCon tc ts   -> C.TCon tc (map (plainSubst s) ts)
         C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
-        C.TRec fs      -> C.TRec [ (x, plainSubst s t) | (x, t) <- fs ]
+        C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
         C.TVar x       -> C.apSubst s (C.TVar x)
 
 eval_size :: C.Schema -> TopLevel Integer
@@ -1321,17 +1335,19 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       rw <- getTopLevelRW
       let cenv = rwCryptol rw
       let mname = C.packModName ["Prims"]
+      let ?fileReader = StrictBS.readFile
       (n', cenv') <- io $ CEnv.declareName cenv mname n
       s' <- io $ CEnv.parseSchema cenv' (noLoc s)
       t' <- io $ scGlobalDef sc i
       putTopLevelRW $ rw { rwCryptol = cenv' }
       return (n', TypedTerm s' t')
 
-cryptol_load :: FilePath -> TopLevel CryptolModule
-cryptol_load path = do
+cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CryptolModule
+cryptol_load fileReader path = do
   sc <- getSharedContext
   rw <- getTopLevelRW
   let ce = rwCryptol rw
+  let ?fileReader = fileReader
   (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m

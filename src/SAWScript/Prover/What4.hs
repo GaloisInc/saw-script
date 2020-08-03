@@ -23,7 +23,6 @@ import Data.Parameterized.Nonce
 
 import           What4.Config
 import           What4.Solver
-import           What4.SatResult
 import           What4.Interface
 import           What4.Expr.GroundEval
 import qualified Verifier.SAW.Simulator.What4 as W
@@ -41,11 +40,14 @@ proveWhat4_sym ::
   SolverAdapter St ->
   [String] ->
   SharedContext ->
+  Bool ->
   Prop ->
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
-proveWhat4_sym solver un sc t =
+proveWhat4_sym solver un sc hashConsing t =
   do -- TODO: get rid of GlobalNonceGenerator ???
      sym <- B.newExprBuilder B.FloatRealRepr St globalNonceGenerator
+     cacheTermsSetting <- getOptionSetting B.cacheTerms $ getConfiguration sym
+     _ <- setOpt cacheTermsSetting hashConsing
      proveWhat4_solver solver sym un sc t
 
 
@@ -53,6 +55,7 @@ proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices ::
   [String]      {- ^ Uninterpreted functions -} ->
   SharedContext {- ^ Context for working with terms -} ->
+  Bool          {- ^ Hash-consing of What4 terms -}->
   Prop          {- ^ A proposition to be proved -} ->
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
 

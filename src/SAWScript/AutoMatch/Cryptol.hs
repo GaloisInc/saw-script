@@ -11,6 +11,7 @@ import SAWScript.AutoMatch.Interaction
 
 import Control.Monad
 import Control.Monad.Free
+import qualified Data.ByteString as BS (readFile)
 import Data.List hiding (sort)
 import Data.Maybe
 import Data.Ord
@@ -29,7 +30,7 @@ getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
 getDeclsCryptol path = do
    let evalOpts = EvalOpts quietLogger defaultPPOpts
    modEnv <- M.initialModuleEnv
-   (result, warnings) <- M.loadModuleByPath path (evalOpts, modEnv)
+   (result, warnings) <- M.loadModuleByPath path (evalOpts, BS.readFile, modEnv)
    return $ do
       forM_ warnings $ liftF . flip Warning () . pretty
       case result of

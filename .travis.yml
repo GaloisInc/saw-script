@@ -22,7 +22,7 @@ language: haskell
 cabal: 2.4
 ghc:
   - 8.6.5
-  - 8.4.4
+  - 8.6.4
 
 cache:
   directories:
@@ -84,7 +84,7 @@ jobs:
         - mkdir -p s2n/test-deps/saw/bin
         - cp bin/saw s2n/test-deps/saw/bin
         - cd s2n
-        - git checkout fc861ca412cd50f3b1d264f940e6251aef63c94d
+        - git checkout cd7282102bf5e65cc8b324c4127c7943c71c8513
       before_script:
         - export TESTS=sawHMAC
       script:

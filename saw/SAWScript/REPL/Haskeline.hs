@@ -5,6 +5,7 @@ License     : BSD3
 Maintainer  : huffman
 Stability   : provisional
 -}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -14,6 +15,9 @@ import SAWScript.REPL.Command
 import SAWScript.REPL.Monad
 
 import Control.Monad (when)
+#if MIN_VERSION_haskeline(0,8,0)
+import qualified Control.Monad.Catch as E
+#endif
 import Data.Char (isAlphaNum, isSpace)
 import Data.Function (on)
 import Data.List (isPrefixOf,sortBy)
@@ -78,7 +82,7 @@ setHistoryFile ss =
   do dir <- getAppUserDataDirectory "saw"
      createDirectoryIfMissing True dir
      return ss { historyFile = Just (dir </> "history") }
-   `X.catch` \(SomeException {}) -> return ss
+   `X.catch` \(X.SomeException {}) -> return ss
 
 -- | Haskeline settings for the REPL.
 replSettings :: Settings REPL
@@ -94,12 +98,38 @@ replSettings  = Settings
 instance MTL.MonadIO REPL where
   liftIO = io
 
+#if !MIN_VERSION_haskeline(0,8,0)
+-- older haskeline provides a MonadException class internally
+
 instance MonadException REPL where
   controlIO branchIO = REPL $ \ ref -> do
     runBody <- branchIO $ RunIO $ \ m -> do
       a <- unREPL m ref
       return (return a)
     unREPL runBody ref
+
+#else
+
+-- haskeline requires instances of MonadMask
+
+instance E.MonadThrow REPL where
+  throwM e = REPL $ \_ -> X.throwIO e
+
+instance E.MonadCatch REPL where
+  catch repl_op handler = REPL $ \ioref ->
+    E.catch (unREPL repl_op ioref) (\e -> unREPL (handler e) ioref)
+
+instance E.MonadMask REPL where
+  mask repl_op = REPL $ \ioref ->
+    E.mask (\runIO -> unREPL (repl_op (\f -> REPL (\ioref' -> runIO (unREPL f ioref')))) ioref)
+  uninterruptibleMask repl_op = REPL $ \ioref ->
+    E.uninterruptibleMask (\runIO -> unREPL (repl_op (\f -> REPL (\ioref' -> runIO (unREPL f ioref')))) ioref)
+  generalBracket acquire release repl_op = REPL $ \ioref ->
+    E.generalBracket
+    (unREPL acquire ioref)
+    (\rsrc exitCase -> unREPL (release rsrc exitCase) ioref)
+    (\rsrc -> unREPL (repl_op rsrc) ioref)
+#endif
 
 
 -- Completion ------------------------------------------------------------------
