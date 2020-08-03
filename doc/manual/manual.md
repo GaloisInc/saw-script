@@ -2135,7 +2135,7 @@ pointer points to a value that does not agree with its static type.
 * `crucible_points_to_untyped : SetupValue -> SetupValue ->
 CrucibleSetup ()` works like `crucible_points_to` but omits type
 checking. Rather than omitting type checking across the board, we
-introducted this additional function to make it clear when a type
+introduced this additional function to make it clear when a type
 reinterpretation is intentional.
 
 ## Working with Compound Types
