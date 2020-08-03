@@ -9,5 +9,6 @@ uint32_t *incr_p(uint32_t *p) {
 }
 
 void add_two(uint32_t *p) {
-    *(uint64_t *)p = *(uint64_t *)p + 2;
+    p = (uint64_t *)p;
+    *p = *p + 2;
 }
