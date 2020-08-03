@@ -12,3 +12,9 @@ void add_two(uint32_t *p) {
     p = (uint64_t *)p;
     *p = *p + 2;
 }
+
+void array_swap(uint32_t a[2]) {
+    uint32_t tmp = a[0];
+    a[0] = a[1];
+    a[1] = tmp;
+}

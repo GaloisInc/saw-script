@@ -27,3 +27,17 @@ let add_two_spec = do {
 };
 
 crucible_llvm_verify m "add_two" [] false add_two_spec z3;
+
+let array_swap_spec = do {
+    a0 <- crucible_fresh_var "a0" (llvm_int 32);
+    a1 <- crucible_fresh_var "a1" (llvm_int 32);
+    a  <- crucible_alloc (llvm_array 2 (llvm_int 32));
+    crucible_points_to a (crucible_array [crucible_term a0, crucible_term a1]);
+
+    crucible_execute_func [a];
+
+    crucible_points_to (crucible_elem a 0) (crucible_term a1);
+    crucible_points_to (crucible_elem a 1) (crucible_term a0);
+};
+
+crucible_llvm_verify m "array_swap" [] false array_swap_spec z3;
