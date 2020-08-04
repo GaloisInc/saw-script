@@ -22,7 +22,6 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_opaque_perm
        , heapster_define_recursive_perm
        , heapster_define_perm
-       , heapster_define_llvm_shape
        , heapster_block_entry_hint
        , heapster_find_symbol
        , heapster_assume_fun
@@ -279,8 +278,8 @@ heapster_define_opaque_perm _bic _opts henv nm args_str tp_str term_string =
      Some tp_perm <- parseTypeString "permission type" env tp_str
      sc <- getSharedContext
      term_tp <- liftIO $
-       translateCompleteTypeInCtx sc (emptyTypeTransInfo env) args
-       (nus (cruCtxProxies args) . const $ ValuePermRepr tp_perm)
+       translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
+                                               const $ ValuePermRepr tp_perm)
      term_ident <- parseAndInsDef henv nm term_tp term_string
      let env' = permEnvAddOpaquePerm env nm args tp_perm term_ident
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
@@ -292,38 +291,40 @@ heapster_define_recursive_perm :: BuiltinContext -> Options -> HeapsterEnv ->
                                   String -> String -> String ->
                                   TopLevel ()
 heapster_define_recursive_perm _bic _opts henv
-  nm args_str val_str p_strs trans_str fold_fun_str unfold_fun_str =
+  nm args_str tp_str p_strs trans_str fold_fun_str unfold_fun_str =
     do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+       sc <- getSharedContext
+
+       -- Parse the arguments, the type, and the translation type
        Some args_ctx <- parseParsedCtxString "argument types" env args_str
        let args = parsedCtxCtx args_ctx
-       Some val_perm <- parseTypeString "permission type" env val_str
-       let rpn = NamedPermName nm val_perm args
-
-       sc <- getSharedContext
+       Some tp <- parseTypeString "permission type" env tp_str
        trans_tp <- liftIO $ 
-         translateCompleteTypeInCtx sc (emptyTypeTransInfo env) args
-           (nus (cruCtxProxies args) . const $ ValuePermRepr val_perm)
+         translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
+                                                 const $ ValuePermRepr tp)
        trans_ident <- parseAndInsDef henv nm trans_tp trans_str
 
-       p_perms <- forM p_strs $ \p_str ->
-          parsePermInCtxString "disjunctive perm" env
-                               [(nm, SomeNamedPermName rpn)]
-                               args_ctx val_perm p_str
-
-       let or_tp = foldr1 (mbMap2 ValPerm_Or) p_perms
-           nm_tp = nus (cruCtxProxies args) (ValPerm_Named rpn . pExprVars)
-           npnts = [(SomeNamedPermName rpn, trans_ident)]
-       fold_fun_tp   <- liftIO $
-          translateCompletePureFun sc (TypeTransInfo MNil npnts env) args
-                                      (singletonValuePerms <$> or_tp) nm_tp
-       unfold_fun_tp <- liftIO $
-          translateCompletePureFun sc (TypeTransInfo MNil npnts env) args
-                                      (singletonValuePerms <$> nm_tp) or_tp
-       fold_ident   <- parseAndInsDef henv nm fold_fun_tp fold_fun_str
-       unfold_ident <- parseAndInsDef henv nm unfold_fun_tp unfold_fun_str
-
-       let env' = permEnvAddRecPerm env nm args val_perm p_perms
-                                    trans_ident fold_ident unfold_ident
+       -- Use permEnvAddRecPermM to tie the knot of adding a recursive
+       -- permission whose cases and fold/unfold identifiers depend on that
+       -- recursive permission being defined
+       env' <-
+         permEnvAddRecPermM env nm args tp trans_ident
+         (\_ tmp_env ->
+           forM p_strs $
+           parsePermInCtxString "disjunctive perm" tmp_env args_ctx tp)
+         (\npn cases tmp_env ->
+           do let or_tp = foldr1 (mbMap2 ValPerm_Or) cases
+                  nm_tp = nus (cruCtxProxies args)
+                    (\ns -> ValPerm_Named npn (namesToExprs ns) NoPermOffset)
+              fold_fun_tp <- liftIO $
+                translateCompletePureFun sc tmp_env args (singletonValuePerms
+                                                          <$> or_tp) nm_tp
+              unfold_fun_tp <- liftIO $
+                translateCompletePureFun sc tmp_env args (singletonValuePerms
+                                                          <$> nm_tp) or_tp
+              fold_ident   <- parseAndInsDef henv nm fold_fun_tp fold_fun_str
+              unfold_ident <- parseAndInsDef henv nm unfold_fun_tp unfold_fun_str
+              return (fold_ident, unfold_ident))
        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Define a new named permission with the given name, arguments, and type
@@ -336,32 +337,10 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
      Some args_ctx <- parseParsedCtxString "argument types" env args_str
      let args = parsedCtxCtx args_ctx
      Some tp_perm <- parseTypeString "permission type" env tp_str
-     perm <- parsePermInCtxString "disjunctive perm" env []
+     perm <- parsePermInCtxString "disjunctive perm" env
                                    args_ctx tp_perm perm_string
      let env' = permEnvAddDefinedPerm env nm args tp_perm perm
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
-
--- | Define a named LLVM shape with the given name, bit width, and argument
--- context to be equivalent to the given LLVM permissions
-heapster_define_llvm_shape :: BuiltinContext -> Options -> HeapsterEnv ->
-                              String -> Int -> String -> String ->
-                              TopLevel ()
-heapster_define_llvm_shape _bic _opts henv nm w_int args_str perm_string =
-  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     Some w <- case someNat w_int of
-       Just some_w -> return some_w
-       _ -> fail "Bit width is negative"
-     leq_proof <- case decideLeq (knownNat @1) w of
-       Left pf -> return pf
-       Right _ -> fail "Bit width is 0"
-     Some args_ctx <- parseParsedCtxString "argument types" env args_str
-     let args = parsedCtxCtx args_ctx
-     withKnownNat w $ withLeqProof leq_proof $ do
-       let tp = LLVMPointerRepr w
-       perms <- (parseAtomicPermsInCtxString
-                 "LLVM shape" env [] args_ctx tp perm_string)
-       let env' = permEnvAddLLVMShapePerm env nm args perms
-       liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Add a hint to the Heapster type-checker that Crucible block number @block@ in
 -- function @fun@ should have permissions @perms@ on its inputs
@@ -434,10 +413,8 @@ heapster_assume_fun _bic _opts henv nm perms_string term_string =
      withKnownNat w $ withLeqProof leq_proof $ do
         SomeFunPerm fun_perm <-
           parseFunPermString "permissions" env args ret perms_string
-        perm_env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
-        fun_typ <- liftIO $
-          translateCompleteFunPerm sc (emptyTypeTransInfo perm_env)
-                                      fun_perm
+        env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
+        fun_typ <- liftIO $ translateCompleteFunPerm sc env fun_perm
         term_ident <- parseAndInsDef henv nm fun_typ term_string
         let env' = permEnvAddGlobalSymFun env
                                           (GlobalSymbol $ fromString nm)
