@@ -269,7 +269,11 @@ readAIGPrim f = do
   et <- io $ readAIG proxy opts sc f
   case et of
     Left err -> fail $ "Reading AIG failed: " ++ err
-    Right t -> io $ mkTypedTerm sc t
+    Right (inLen, outLen, t) -> pure $ TypedTerm schema t
+      where
+        t1 = C.tWord (C.tNum inLen)
+        t2 = C.tWord (C.tNum outLen)
+        schema = C.tMono (C.tFun t1 t2)
 
 replacePrim :: TypedTerm -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 replacePrim pat replace t = do
