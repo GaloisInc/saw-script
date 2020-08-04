@@ -37,6 +37,14 @@ import SAWScript.Crucible.LLVM.MethodSpecIR
 import SAWScript.Crucible.LLVM.Skeleton
 
 --------------------------------------------------------------------------------
+-- ** Helper functions
+
+throwSkeletonLLVM :: Text -> String -> LLVMCrucibleSetupM a
+throwSkeletonLLVM nm msg = do
+  loc <- LLVMCrucibleSetupM $ getW4Position nm
+  throwLLVM loc msg
+
+--------------------------------------------------------------------------------
 -- ** Manipulating skeletons
 
 module_skeleton ::
@@ -53,7 +61,7 @@ function_skeleton ::
 function_skeleton mskel nm =
   case mskel ^. modSkelFunctions . at (Text.pack nm) of
     Just fskel -> pure fskel
-    Nothing -> fail $ mconcat ["No skeleton exists for function \"", nm, "\""]
+    Nothing -> throwTopLevel $ mconcat ["No skeleton exists for function \"", nm, "\""]
 
 -- | Manually add a new guess for the size of the argument at the given index
 skeleton_resize_arg_index ::
@@ -89,7 +97,7 @@ skeleton_resize_arg ::
 skeleton_resize_arg skel nm sz initialized
   | Just idx <- skelArgIndex skel nm
   = skeleton_resize_arg_index skel idx sz initialized
-  | otherwise = fail $ mconcat
+  | otherwise = throwTopLevel $ mconcat
     [ "No argument named \""
     , nm
     , "\" (enabling debug symbols when compiling might help)"
@@ -122,7 +130,7 @@ skeleton_guess_arg_sizes skel (Some m) profiles =
         | otherwise = a
       uargs args = updateArg <$> zip args (prof ^. funProfileArgs)
       in pure (skel & funSkelArgs %~ uargs)
-    _ -> fail $ mconcat
+    _ -> throwTopLevel $ mconcat
       [ "No profile for \""
       , Text.unpack $ skel ^. funSkelName
       , "\" was generated."
@@ -209,7 +217,7 @@ skeleton_exec bic opts prestate = do
     case (mval, mptr) of
       (_, Just ptr) -> pure ptr
       (Just val, Nothing) -> pure $ anySetupTerm val
-      (Nothing, Nothing) -> fail ""
+      (Nothing, Nothing) -> throwSkeletonLLVM "skeleton_exec" "Invalid pointer-pointee combination on skeleton argument"
   crucible_execute_func bic opts args
 
 rebuildArg ::
@@ -263,7 +271,7 @@ skeleton_arg_index _bic _opts state idx
   | idx < length (state ^. skelArgs)
   , (Just t, _, _) <- (state ^. skelArgs) !! idx
   = pure t
-  | otherwise = fail $ mconcat
+  | otherwise = throwSkeletonLLVM "skeleton_arg_index" $ mconcat
     [ "No initialized argument at index "
     , show idx
     ]
@@ -284,7 +292,7 @@ skeleton_arg ::
 skeleton_arg bic opts state nm
   | Just idx <- stateArgIndex state nm
   = skeleton_arg_index bic opts state idx
-  | otherwise = fail $ mconcat
+  | otherwise = throwSkeletonLLVM "skeleton_arg" $ mconcat
     [ "No initialized argument named \""
     , nm
     , "\" (enabling debug symbols when compiling might help)"
@@ -301,12 +309,12 @@ skeleton_arg_index_pointer _bic _opts state idx
   , (_, mp, _) <- (state ^. skelArgs) !! idx
   = case mp of
       Just p -> pure p
-      Nothing -> fail $ mconcat
+      Nothing -> throwSkeletonLLVM "skeleton_arg_index_pointer" $ mconcat
         [ "Argument at index "
         , show idx
         , " is not a pointer or array"
         ]
-  | otherwise = fail $ mconcat
+  | otherwise = throwSkeletonLLVM "skeleton_arg_index_pointer" $ mconcat
     [ "No argument at index "
     , show idx
     ]
@@ -320,8 +328,9 @@ skeleton_arg_pointer ::
 skeleton_arg_pointer bic opts state nm
   | Just idx <- stateArgIndex state nm
   = skeleton_arg_index_pointer bic opts state idx
-  | otherwise = fail $ mconcat
-    [ "No argument named \""
-    , nm
-    , "\" (enabling debug symbols when compiling might help)"
-    ]
+  | otherwise = do
+      throwSkeletonLLVM "skeleton_arg_pointer" $ mconcat
+        [ "No argument named \""
+        , nm
+        , "\" (enabling debug symbols when compiling might help)"
+        ]

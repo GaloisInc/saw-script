@@ -15,7 +15,6 @@ module SAWScript.Crucible.LLVM.Boilerplate
 
 import System.IO
 
-import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Control.Lens
 

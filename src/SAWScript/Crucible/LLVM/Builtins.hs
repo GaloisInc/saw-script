@@ -282,18 +282,20 @@ crucible_llvm_unsafe_assume_spec bic opts (Some lm) nm setup =
        unwords ["Assume override", (method_spec ^. csName)]
      return $ SomeLLVM method_spec
 
--- crucible_llvm_array_size_profile ::
---   BuiltinContext ->
---   Options ->
---   Some LLVMModule ->
---   String ->
---   LLVMCrucibleSetupM () ->
---   TopLevel [(String, [Crucible.FunctionProfile])]
--- crucible_llvm_array_size_profile bic opts (Some lm) nm setup = do
---   cell <- io $ newIORef Map.empty
---   void $ createMethodSpec (Just ([], False, undefined)) (Just cell) bic opts lm nm setup
---   profiles <- io $ readIORef cell
---   pure . fmap (\(fnm, prof) -> (Text.unpack fnm, prof)) $ Map.toList profiles
+crucible_llvm_array_size_profile ::
+  ProofScript SatResult  ->
+  BuiltinContext ->
+  Options ->
+  Some LLVMModule ->
+  String ->
+  LLVMCrucibleSetupM () ->
+  TopLevel [(String, [Crucible.FunctionProfile])]
+crucible_llvm_array_size_profile assume bic opts (Some lm) nm setup = do
+  cell <- io $ newIORef (Map.empty :: Map Text.Text [Crucible.FunctionProfile])
+  withMethodSpec bic opts lm nm setup $ \cc ms -> do
+    void $ verifyMethodSpec bic opts cc ms [] False assume Nothing
+    profiles <- io $ readIORef cell
+    pure . fmap (\(fnm, prof) -> (Text.unpack fnm, prof)) $ Map.toList profiles
 
 crucible_llvm_compositional_extract ::
   BuiltinContext ->
@@ -436,10 +438,6 @@ checkModuleCompatibility llvmModule = foldM step []
 
 
 -- -- | The real work of 'crucible_llvm_verify' and 'crucible_llvm_unsafe_assume_spec'.
--- createMethodSpec ::
---   Maybe ([MS.CrucibleMethodSpecIR (LLVM arch)], Bool, ProofScript SatResult)
---   {- ^ If verifying, provide lemmas, branch sat checking, tactic -} ->
---   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
 withMethodSpec ::
   BuiltinContext   ->
   Options          ->
@@ -497,7 +495,7 @@ verifyMethodSpec ::
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
   Bool ->
   ProofScript SatResult ->
-  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
+  Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   TopLevel (MS.CrucibleMethodSpecIR (LLVM arch), OverrideState (LLVM arch))
 verifyMethodSpec bic opts cc methodSpec lemmas checkSat tactic asp =
   do printOutLnTop Info $

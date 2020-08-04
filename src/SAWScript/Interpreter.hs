@@ -2168,7 +2168,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_array_size_profile"
     "LLVMModule -> String -> CrucibleSetup () -> TopLevel [(String, FunctionProfile)]"
-    (bicVal crucible_llvm_array_size_profile)
+    (bicVal $ crucible_llvm_array_size_profile assumeUnsat)
     Experimental
     [ "Symbolically execute the function named by the second parameter in"
     , "the module specified by the first. The third parameter may be used"
