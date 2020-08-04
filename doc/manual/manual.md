@@ -21,7 +21,7 @@ The process of extracting models from programs, manipulating them,
 forming queries about them, and sending them to external provers is
 orchestrated using a special purpose language called SAWScript.
 SAWScript is a typed functional language with support for sequencing of
-imperative commmands.
+imperative commands.
 
 The rest of this document first describes how to use the SAW tool,
 `saw`, and outlines the structure of the SAWScript language and its
@@ -208,7 +208,13 @@ The basic types available are similar to those in many other languages.
 * Functions are given types that indicate what type they consume and
   what type they produce. For example, the type `Int -> Bool` indicates
   a function that takes an `Int` as input and produces a `Bool` as
-  output.
+  output. Functions with multiple arguments use multiple arrows. For
+  example, the type `Int -> String -> Bool` indicates a function in
+  which the first argument is an `Int`, the second is a `String`, and
+  the result is a `Bool`. It is possible, but not necessary, to group
+  arguments in tuples, as well, so the type `(Int, String) -> Bool`
+  describes a function that takes one argument, a pair of an `Int` and a
+  `String`, and returns a `Bool`.
 
 SAWScript also includes some more specialized types that do not have
 straightforward counterparts in most other languages. These will appear
@@ -592,9 +598,8 @@ sawscript> print (eval_bool b)
 true
 ~~~~
 
-Finally, anything with sequence type in Cryptol can be translated into a
-list of `Term` values in SAWScript using the `eval_list : Term -> [Term]`
-function.
+Anything with sequence type in Cryptol can be translated into a list of
+`Term` values in SAWScript using the `eval_list : Term -> [Term]` function.
 
 ~~~~
 sawscript> let l = {{ [0x01, 0x02, 0x03] }}
@@ -612,6 +617,22 @@ sawscript> print (eval_list l)
   (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))
 ,Cryptol.ecNumber (Cryptol.TCNum 3) (Prelude.Vec 8 Prelude.Bool)
   (Cryptol.PLiteralSeqBool (Cryptol.TCNum 8))]
+~~~~
+
+Finally, a list of `Term` values in SAWScript can be collapsed into a single
+`Term` with sequence type using the `list_term : [Term] -> Term` function,
+which is the inverse of `eval_list`.
+
+~~~~
+sawscript> let ts = eval_list l
+sawscript> let l = list_term ts
+sawscript> print_term l
+let { x@1 = Prelude.Vec 8 Prelude.Bool
+      x@2 = Cryptol.PLiteralSeqBool (Cryptol.TCNum 8)
+    }
+ in [Cryptol.ecNumber (Cryptol.TCNum 1) x@1 x@2
+    ,Cryptol.ecNumber (Cryptol.TCNum 2) x@1 x@2
+    ,Cryptol.ecNumber (Cryptol.TCNum 3) x@1 x@2]
 ~~~~
 
 In addition to being able to extract integer and Boolean values from
@@ -688,9 +709,9 @@ So far, we have talked about using Cryptol *value* expressions. However,
 SAWScript can also work with Cryptol *types*. The most direct way to
 refer to a Cryptol type is to use type brackets: `{|` and `|}`. Any
 Cryptol type written between these brackets becomes a `Type` value in
-SAWScript. Some types in Cryptol are *size* types, and isomorphic to
-integers. These can be translated into SAWScript integers with the
-`eval_size` function. For example:
+SAWScript. Some types in Cryptol are *numeric* (also known as *size*)
+types, and correspond to non-negative integers. These can be translated
+into SAWScript integers with the `eval_size` function. For example:
 
 ~~~~
 sawscript> let {{ type n = 16 }}
@@ -700,7 +721,7 @@ sawscript> eval_size {| 16 |}
 16
 ~~~~
 
-For non-size types, `eval_size` fails at runtime:
+For non-numeric types, `eval_size` fails at runtime:
 
 ~~~~
 sawscript> eval_size {| [16] |}
@@ -1114,12 +1135,12 @@ that context.
 * `print_goal : ProofScript ()` prints the entire goal in SAWCore
 syntax.
 
-* `print_goal_consts : ProofScript ()` takes an integer argument, `n`,
+* `print_goal_consts : ProofScript ()` prints a list of unfoldable constants
+in the current goal.
+
+* `print_goal_depth : Int -> ProofScript ()` takes an integer argument, `n`,
 and prints the goal up to depth `n`. Any elided subterms are printed
 with a `...` notation.
-
-* `print_goal_depth : Int -> ProofScript ()` prints a list of the names
-of subterms that are folded in the current goal.
 
 * `print_goal_size : ProofScript ()` prints the number of nodes in the
 DAG representation of the goal.
@@ -1224,7 +1245,7 @@ techniques that do not require significant computation.
 * `assume_unsat : ProofScript SatResult` indicates that the current goal
 should be assumed to be unsatisfiable. At the moment,
 `crucible_jvm_verify` and `crucible_llvm_verify` (described below) run
-their proofs in the a satisfiability-checking (negated) context, so
+their proofs in a satisfiability-checking (negated) context, so
 `assume_unsat` indicates that the property being checked should be
 assumed to be true. This is likely to change in the future.
 
@@ -1542,20 +1563,81 @@ easier or more likely to succeed. For generating LLVM with `clang`, it
 can be helpful to:
 
 * Turn on debugging symbols with `-g` so that SAW can find source
-locations of functions, names of variables, etc.
+  locations of functions, names of variables, etc.
 
 * Optimize with `-O1` so that the generated bitcode more closely matches
-the C/C++ source, making the results more comprehensible.
+  the C/C++ source, making the results more comprehensible.
 
 * Use `-fno-threadsafe-statics` to prevent `clang` from emitting
-unnecessary pthread code.
+  unnecessary pthread code.
 
 * Link all relevant bitcode with `llvm-link` (including, *e.g.*, the C++
   standard library when analyzing C++ code).
 
+All SAW proofs include side conditions to rule out undefined behavior,
+and proofs will only succeed if all of these side conditions have been
+discharged. However the default SAW notion of undefined behavior is with
+respect to the semantics of LLVM, rather than C or C++. If you want to
+rule out undefined behavior according to the C or C++ standards,
+consider compiling your code with `-fsanitize=undefined` or one of the
+related flags[^1] to `clang`.
+
+Generally, you'll also want to use `-fsanitize-trap=undefined`, or one
+of the related flags, to cause the compiled code to use `llvm.trap` to
+indicate the presence of undefined behavior. Otherwise, the compiled
+code will call a separate function, such as
+`__ubsan_handle_shift_out_of_bounds`, for each type of undefined
+behavior, and SAW currently does not have built in support for these
+functions (though you could manually create overrides for them in a
+verification script).
+
 For Java, the only compilation flag that tends to be valuable is `-g` to
 retain information about the names of function arguments and local
 variables.
+
+[^1]: https://clang.llvm.org/docs/UsersManual.html#controlling-code-generation
+
+## Notes on C++ Analysis
+
+The distance between C++ code and LLVM is greater than between C and
+LLVM, so some additional considerations come into play when analyzing
+C++ code with SAW.
+
+The first key issue is that the C++ standard library is large and
+complex, and tends to be widely used by C++ applications. To analyze
+most C++ code, it will be necessary to link your code with a version of
+the `libc++` library[^2] compiled to LLVM bitcode. The `wllvm` program
+can[^3] be useful for this.
+
+The C++ standard library includes a number of key global variables, and
+any code that touches them will require that they be initialized using
+`crucible_alloc_global`.
+
+Many C++ names are slightly awkward to deal with in SAW. They may be
+mangled relative to the text that appears in the C++ source code. SAW
+currently only understands the mangled names. The `llvm-nm` program can
+be used to show the list of symbols in an LLVM bitcode file, and the
+`c++filt` program can be used to demangle them, which can help in
+identifying the symbol you want to refer to. In addition, C++ names from
+namespaces can sometimes include quote marks in their LLVM encoding. For
+example:
+
+~~~~
+%"class.quux::Foo" = type { i32, i32 }
+~~~~
+
+This can be mentioned in SAW by saying:
+
+~~~~
+llvm_type "%\"class.quux::Foo\""
+~~~~
+
+Finally, there is no support for calling constructors in specifications,
+so you will need to construct objects piece-by-piece using, *e.g.*,
+`crucible_alloc` and `crucible_points_to`.
+
+[^2]: https://libcxx.llvm.org/docs/BuildingLibcxx.html
+[^3]: https://github.com/travitch/whole-program-llvm
 
 # Direct Extraction
 
@@ -2073,7 +2155,7 @@ available in the bitcode
 Either of these functions can be used with `crucible_points_to` to
 specify the value of a particular array element or `struct` field.
 Sometimes, however, it is more convenient to specify all array elements
-or field values at onces. The `crucible_array` and `crucible_struct`
+or field values at once. The `crucible_array` and `crucible_struct`
 functions construct compound values from lists of element values.
 
 * `crucible_array : [SetupValue] -> SetupValue`

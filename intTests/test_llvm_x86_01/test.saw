@@ -11,7 +11,7 @@ let foo_setup = do {
   val <- crucible_fresh_var "val'" (llvm_int 64);
   crucible_points_to ptr (crucible_term val);
 };
-foo_method_spec <- crucible_llvm_verify_x86 m "./test" "foo" [] false foo_setup;
+foo_method_spec <- crucible_llvm_verify_x86 m "./test" "foo" [] false foo_setup w4;
 
 let bar_setup = do {
   crucible_execute_func [];

@@ -65,6 +65,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , ccTypeCtx
     -- * PointsTo
   , LLVMPointsTo(..)
+  , LLVMPointsToValue(..)
   , ppPointsTo
     -- * AllocGlobal
   , LLVMAllocGlobal(..)
@@ -103,7 +104,6 @@ import           Control.Lens
 import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
 import           Data.IORef
-import           Data.Monoid ((<>))
 import           Data.Type.Equality (TestEquality(..))
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
@@ -185,7 +185,7 @@ data LLVMAllocSpec =
     { _allocSpecMut   :: CL.Mutability
     , _allocSpecType  :: CL.MemType
     , _allocSpecAlign :: CL.Alignment
-    , _allocSpecBytes :: CL.Bytes
+    , _allocSpecBytes :: Term
     , _allocSpecLoc   :: ProgramLoc
     }
   deriving (Eq, Show)
@@ -338,16 +338,27 @@ ccTypeCtx = view CL.llvmTypeCtx . ccLLVMContext
 type instance MS.PointsTo (CL.LLVM arch) = LLVMPointsTo arch
 
 data LLVMPointsTo arch =
-  LLVMPointsTo ProgramLoc (MS.SetupValue (CL.LLVM arch)) (MS.SetupValue (CL.LLVM arch))
+  LLVMPointsTo ProgramLoc (Maybe TypedTerm) (MS.SetupValue (CL.LLVM arch)) (LLVMPointsToValue arch)
+
+data LLVMPointsToValue arch
+  = ConcreteSizeValue (MS.SetupValue (CL.LLVM arch))
+  | SymbolicSizeValue TypedTerm TypedTerm
 
 ppPointsTo :: LLVMPointsTo arch -> PPL.Doc
-ppPointsTo (LLVMPointsTo _loc ptr val) =
+ppPointsTo (LLVMPointsTo _loc cond ptr val) =
   MS.ppSetupValue ptr
   PPL.<+> PPL.text "points to"
-  PPL.<+> MS.ppSetupValue val
+  PPL.<+> PPL.pretty val
+  PPL.<+> maybe PPL.empty (\tt -> PPL.text "if" PPL.<+> MS.ppTypedTerm tt) cond
 
 instance PPL.Pretty (LLVMPointsTo arch) where
   pretty = ppPointsTo
+
+instance PPL.Pretty (LLVMPointsToValue arch) where
+  pretty = \case
+    ConcreteSizeValue val -> MS.ppSetupValue val
+    SymbolicSizeValue arr sz ->
+      MS.ppTypedTerm arr PPL.<+> PPL.text "[" PPL.<+> MS.ppTypedTerm sz PPL.<+> PPL.text "]"
 
 --------------------------------------------------------------------------------
 -- ** AllocGlobal

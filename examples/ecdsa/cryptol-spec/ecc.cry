@@ -58,8 +58,8 @@ ecdsa_sign(c,d,e,k) = if is_zero(r) || is_zero(s) then (0,0) else (r, s)
     /* Compute x coordinate of public key. */
     j = (c.affinify(c.mul(k, c.base))).x
     /* c) Set r = j mod n */
-    r = g.norm(j)
-    s = g.div(g.add(g.norm(e), g.mul(d, r)), k)
+    r = g.normalize(j)
+    s = g.div(g.add(g.normalize(e), g.mul(d, r)), k)
 
 /**
  * Reference ECDSA signature verification algorithm as formalized from [ANSI X9.62-2005, pg 9]
@@ -90,7 +90,7 @@ ecdsa_public_verify(c, e, (r, s), q)
     /* f) Convert the field element x_r to an integer j as described in A.5 */
     j = f.mul(r2.x, f.sq(f.div(f.field_unit, r2.z)))
     /* g) v = j mod n */
-    v = g.norm(j)
+    v = g.normalize(j)
 
 /* This version performs a cheaper sequence of operations, and matches
  * the Java implementation. Correspondence between the reference and
@@ -111,7 +111,7 @@ ecdsa_public_verify_imp(c, e, (r, s), q)
     is_zero(x) = g.is_equal(x, g.field_zero)
     in_range(x) = ~is_zero(x) && g.is_val(x)
     s_inv = div(1, s)
-    u1 = mul(g.norm(e), s_inv)
+    u1 = mul(g.normalize(e), s_inv)
     u2 = mul(r, s_inv)
     r2 = c.twin_mul(u1, c.base, u2, q)
     r2zsq = f.sq(r2.z)

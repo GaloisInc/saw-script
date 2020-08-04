@@ -31,7 +31,6 @@ import           Data.Void (Void)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
-import           Data.Monoid ((<>))
 import           Data.Kind (Type)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 

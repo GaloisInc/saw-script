@@ -1,0 +1,15 @@
+m <- llvm_load_module "test.bc";
+
+let foo_spec = do {
+  x <- crucible_fresh_var "x" (llvm_int 32);
+  crucible_execute_func [(crucible_term x), (crucible_term {{ x + 1 }})];
+  crucible_return (crucible_term {{ 0 : [32] }});
+};
+
+let bar_spec = do {
+  crucible_execute_func [];
+};
+
+foo_ov <- crucible_llvm_verify m "foo" [] false foo_spec abc;
+crucible_llvm_verify m "bar" [foo_ov] false bar_spec abc;
+

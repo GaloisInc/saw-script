@@ -1,4 +1,7 @@
+{-# Language ImplicitParams #-}
+{-# Language OverloadedStrings #-}
 {-# Language ViewPatterns #-}
+
 module SAWScript.Prover.Exporter
   ( proveWithExporter
   , adaptExporter
@@ -13,6 +16,11 @@ module SAWScript.Prover.Exporter
   , writeSMTLib2
   , write_smtlib2
   , writeUnintSMTLib2
+  , writeCoqCryptolPrimitivesForSAWCore
+  , writeCoqCryptolModule
+  , writeCoqSAWCorePrelude
+  , writeCoqTerm
+  , writeCoqProp
   , writeCore
   , writeCoreProp
 
@@ -23,18 +31,29 @@ module SAWScript.Prover.Exporter
 import Data.Foldable(toList)
 
 import Control.Monad.IO.Class (liftIO)
+import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
+import qualified Data.ByteString as BS
+import Data.Parameterized.Nonce (globalNonceGenerator)
 import qualified Data.SBV.Dynamic as SBV
+import Text.PrettyPrint.ANSI.Leijen (vcat)
 
 import Cryptol.Utils.PP(pretty)
 
-import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedTerm
-import Verifier.SAW.FiniteValue
-import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
+import Lang.Crucible.Backend.SAWCore (newSAWCoreBackend, sawBackendSharedContext)
+import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
+import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
+import Verifier.SAW.FiniteValue
+import Verifier.SAW.Module (emptyModule, moduleDecls)
+import Verifier.SAW.Prelude (preludeModule)
+import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
+import Verifier.SAW.SharedTerm
+import qualified Verifier.SAW.Translation.Coq as Coq
+import Verifier.SAW.TypedAST (mkModuleName)
+import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
-
+import qualified Verifier.SAW.UntypedAST as Un
 
 import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
@@ -42,6 +61,8 @@ import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
 import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
+
+import qualified What4.Expr.Builder as W4
 
 
 proveWithExporter ::
@@ -100,7 +121,7 @@ writeSAIGInferLatches proxy sc file tt = do
   let numLatches = sizeFiniteType s
   writeSAIG proxy sc file (ttTerm tt) numLatches
   where
-    die :: Monad m => String -> m a
+    die :: Fail.MonadFail m => String -> m a
     die why = fail $
       "writeSAIGInferLatches: " ++ why ++ ":\n" ++
       "term must have type of the form '(i, s) -> (o, s)',\n" ++
@@ -151,24 +172,27 @@ write_cnf sc f (TypedTerm schema t) = do
   AIGProxy proxy <- getProxy
   io $ writeCNF proxy sc f t
 
--- | Write a proposition to an SMT-Lib version 2 file.
--- TODO: say something about convention for negation
+-- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
+-- assumed to have universally quantified variables, it will be negated.
 writeSMTLib2 :: SharedContext -> FilePath -> Prop -> IO ()
 writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
--- function returning a boolean) to an SMT-Lib version 2 file.
+-- function returning a boolean) to an SMT-Lib version 2 file. The goal
+-- is to pass the term through as directly as possible, so we interpret
+-- it as an existential.
 write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> IO ()
 write_smtlib2 sc f (TypedTerm schema t) = do
   checkBooleanSchema schema
-  p <- predicateToProp sc Universal [] t
+  p <- predicateToProp sc Existential [] t
   writeSMTLib2 sc f p
 
 -- | Write a proposition to an SMT-Lib version 2 file, treating some
--- constants as uninterpreted.
+-- constants as uninterpreted. Because @Prop@ is assumed to have
+-- universally quantified variables, it will be negated.
 writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
-writeUnintSMTLib2 unints sc f t =
-  do (_, _, l) <- prepNegatedSBV sc unints t
+writeUnintSMTLib2 unints sc f p =
+  do (_, _, l) <- prepNegatedSBV sc unints p
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
      writeFile f txt
@@ -179,6 +203,113 @@ writeCore path t = writeFile path (scWriteExternal t)
 writeCoreProp :: FilePath -> Prop -> IO ()
 writeCoreProp path (Prop t) = writeFile path (scWriteExternal t)
 
+coqTranslationConfiguration ::
+  [(String, String)] ->
+  [String] ->
+  Coq.TranslationConfiguration
+coqTranslationConfiguration notations skips = Coq.TranslationConfiguration
+  { Coq.notations          = notations
+  , Coq.monadicTranslation = False
+  , Coq.skipDefinitions    = skips
+  , Coq.vectorModule       = "SAWVectorsAsCoqVectors"
+  }
+
+writeCoqTerm ::
+  String ->
+  [(String, String)] ->
+  [String] ->
+  FilePath ->
+  Term ->
+  IO ()
+writeCoqTerm name notations skips path t = do
+  let configuration = coqTranslationConfiguration notations skips
+  case Coq.translateTermAsDeclImports configuration name t of
+    Left err -> putStrLn $ "Error translating: " ++ show err
+    Right doc -> case path of
+      "" -> print doc
+      _ -> writeFile path (show doc)
+
+writeCoqProp ::
+  String ->
+  [(String, String)] ->
+  [String] ->
+  FilePath ->
+  Prop ->
+  IO ()
+writeCoqProp name notations skips path (Prop t) =
+  writeCoqTerm name notations skips path t
+
+writeCoqCryptolModule ::
+  FilePath ->
+  FilePath ->
+  [(String, String)] ->
+  [String] ->
+  IO ()
+writeCoqCryptolModule inputFile outputFile notations skips = do
+  sc  <- mkSharedContext
+  ()  <- scLoadPreludeModule sc
+  ()  <- scLoadCryptolModule sc
+  sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
+  ctx <- sawBackendSharedContext sym
+  let ?fileReader = BS.readFile
+  env <- initCryptolEnv ctx
+  cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  (cm, _) <- loadCryptolModule ctx env inputFile
+  let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
+  let configuration = coqTranslationConfiguration notations skips
+  case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of
+    Left e -> putStrLn $ show e
+    Right cmDoc ->
+      writeFile outputFile
+      (show . vcat $ [ Coq.preamble configuration
+                     , "From CryptolToCoq Require Import SAWCorePrelude."
+                     , "Import SAWCorePrelude."
+                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
+                     , "Import CryptolPrimitives."
+                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
+                     , ""
+                     , cmDoc
+                     ])
+
+nameOfSAWCorePrelude :: Un.ModuleName
+nameOfSAWCorePrelude = Un.moduleName preludeModule
+
+nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
+nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule
+
+writeCoqSAWCorePrelude ::
+  FilePath ->
+  [(String, String)] ->
+  [String] ->
+  IO ()
+writeCoqSAWCorePrelude outputFile notations skips = do
+  sc  <- mkSharedContext
+  ()  <- scLoadPreludeModule sc
+  m   <- scFindModule sc nameOfSAWCorePrelude
+  let configuration = coqTranslationConfiguration notations skips
+  let doc = Coq.translateSAWModule configuration m
+  writeFile outputFile (show . vcat $ [ Coq.preamble configuration, doc ])
+
+writeCoqCryptolPrimitivesForSAWCore ::
+  FilePath ->
+  [(String, String)] ->
+  [String] ->
+  IO ()
+writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
+  sc <- mkSharedContext
+  () <- scLoadPreludeModule sc
+  () <- scLoadCryptolModule sc
+  () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
+  m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  let configuration = coqTranslationConfiguration notations skips
+  let doc = Coq.translateSAWModule configuration m
+  let extraPreamble = vcat $
+        [ "From CryptolToCoq Require Import SAWCorePrelude."
+        , "Import SAWCorePrelude."
+        ]
+  writeFile outputFile (show . vcat $ [ Coq.preamblePlus configuration extraPreamble
+                                      , doc
+                                      ])
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)

@@ -9,6 +9,7 @@ Stability   : provisional
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 #if !MIN_VERSION_base(4,8,0)
 {-# LANGUAGE OverlappingInstances #-}
@@ -34,12 +35,11 @@ import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
+import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
-import Data.Text (pack)
-import qualified Data.Vector as Vector
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
 import System.FilePath (takeDirectory)
 import System.Process (readProcess)
@@ -89,11 +89,10 @@ import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
 import Cryptol.ModuleSystem.Env (meSolverConfig)
-import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import qualified Cryptol.Eval as V (PPOpts(..))
 import qualified Cryptol.Eval.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
-import qualified Cryptol.TypeCheck.AST as C
+import qualified Cryptol.Eval.Concrete.Value as V (Concrete(..))
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
@@ -114,54 +113,6 @@ emptyLocal = []
 
 extendLocal :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> LocalEnv -> LocalEnv
 extendLocal x mt md v env = LocalLet x mt md v : env
-
-maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
-maybeInsert _ Nothing m = m
-maybeInsert k (Just x) m = Map.insert k x m
-
-extendEnv :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> TopLevelRW
-extendEnv x mt md v rw =
-  rw { rwValues  = Map.insert name v (rwValues rw)
-     , rwTypes   = maybeInsert name mt (rwTypes rw)
-     , rwDocs    = maybeInsert (getVal name) md (rwDocs rw)
-     , rwCryptol = ce'
-     }
-  where
-    name = x
-    ident = T.packIdent (getOrig x)
-    modname = T.packModName [pack (getOrig x)]
-    ce = rwCryptol rw
-    ce' = case v of
-            VTerm t
-              -> CEnv.bindTypedTerm (ident, t) ce
-            VType s
-              -> CEnv.bindType (ident, s) ce
-            VInteger n
-              -> CEnv.bindInteger (ident, n) ce
-            VCryptolModule m
-              -> CEnv.bindCryptolModule (modname, m) ce
-            VString s
-              -> CEnv.bindTypedTerm (ident, typedTermOfString s) ce
-            _ -> ce
-
-typedTermOfString :: String -> TypedTerm
-typedTermOfString cs = TypedTerm schema trm
-  where
-    nat :: Integer -> Term
-    nat n = Unshared (FTermF (NatLit (fromInteger n)))
-    bvNat :: Term
-    bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
-    bvNat8 :: Term
-    bvNat8 = Unshared (App bvNat (nat 8))
-    encodeChar :: Char -> Term
-    encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
-    bitvector :: Term
-    bitvector = Unshared (FTermF (GlobalDef "Prelude.bitvector"))
-    byteT :: Term
-    byteT = Unshared (App bitvector (nat 8))
-    trm :: Term
-    trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
-    schema = C.Forall [] [] (C.tString (length cs))
 
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
@@ -201,6 +152,7 @@ bindPatternEnv = bindPatternGeneric extendEnv
 
 interpret :: LocalEnv -> SS.Expr -> TopLevel Value
 interpret env expr =
+    let ?fileReader = BS.readFile in
     case expr of
       SS.Bool b              -> return $ VBool b
       SS.String s            -> return $ VString s
@@ -283,6 +235,7 @@ interpretDeclGroup env (SS.Recursive ds) = return env'
 
 interpretStmts :: LocalEnv -> [SS.Stmt] -> TopLevel Value
 interpretStmts env stmts =
+    let ?fileReader = BS.readFile in
     case stmts of
       [] -> fail "empty block"
       [SS.StmtBind _ (SS.PWild _) _ e] -> interpret env e
@@ -294,6 +247,7 @@ interpretStmts env stmts =
       SS.StmtCode _ s : ss ->
           do sc <- getSharedContext
              rw <- getMergedEnv env
+
              ce' <- io $ CEnv.parseDecls sc (rwCryptol rw) $ locToInput s
              -- FIXME: Local bindings get saved into the global cryptol environment here.
              -- We should change parseDecls to return only the new bindings instead.
@@ -362,6 +316,7 @@ interpretStmt ::
   SS.Stmt ->
   TopLevel ()
 interpretStmt printBinds stmt =
+  let ?fileReader = BS.readFile in
   case stmt of
     SS.StmtBind pos pat mc expr -> withPosition pos (processStmtBind printBinds pat mc expr)
     SS.StmtLet _ dg           -> do rw <- getTopLevelRW
@@ -421,6 +376,7 @@ buildTopLevelEnv :: AIGProxy
 buildTopLevelEnv proxy opts =
     do let mn = mkModuleName ["SAWScript"]
        sc0 <- mkSharedContext
+       let ?fileReader = BS.readFile
        CryptolSAW.scLoadPreludeModule sc0
        JavaSAW.scLoadJavaModule sc0
        CryptolSAW.scLoadCryptolModule sc0
@@ -473,8 +429,10 @@ buildTopLevelEnv proxy opts =
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
                    , rwSMTArrayMemoryModel = False
+                   , rwCrucibleAssertThenAssume = False
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
+                   , rwWhat4HashConsing = False
                    }
        return (bic, ro0, rw0)
 
@@ -514,20 +472,40 @@ disable_smt_array_memory_model = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwSMTArrayMemoryModel = False }
 
+enable_crucible_assert_then_assume :: TopLevel ()
+enable_crucible_assert_then_assume = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwCrucibleAssertThenAssume = True }
+
+disable_crucible_assert_then_assume :: TopLevel ()
+disable_crucible_assert_then_assume = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwCrucibleAssertThenAssume = False }
+
 enable_crucible_profiling :: FilePath -> TopLevel ()
 enable_crucible_profiling f = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwProfilingFile = Just f }
+
+disable_crucible_profiling :: TopLevel ()
+disable_crucible_profiling = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProfilingFile = Nothing }
 
 enable_lax_arithmetic :: TopLevel ()
 enable_lax_arithmetic = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwLaxArith = True }
 
-disable_crucible_profiling :: TopLevel ()
-disable_crucible_profiling = do
+enable_what4_hash_consing :: TopLevel ()
+enable_what4_hash_consing = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwProfilingFile = Nothing }
+  putTopLevelRW rw { rwWhat4HashConsing = True }
+
+disable_what4_hash_consing :: TopLevel ()
+disable_what4_hash_consing = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4HashConsing = False }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -567,7 +545,7 @@ print_value (VTerm t) = do
                               , V.useBase = ppOptsBase opts
                               }
   evaled_t <- io $ evaluateTypedTerm sc t'
-  doc <- io $ V.runEval quietEvalOpts (V.ppValue opts' evaled_t)
+  doc <- io $ V.runEval quietEvalOpts (V.ppValue V.Concrete opts' evaled_t)
   sawOpts <- getOptions
   io (rethrowEvalError $ printOutLn sawOpts Info $ show $ doc)
 
@@ -692,10 +670,30 @@ primitives = Map.fromList
     Current
     [ "Disable the SMT array memory model." ]
 
+ , prim "enable_crucible_assert_then_assume" "TopLevel ()"
+    (pureVal enable_crucible_assert_then_assume)
+    Current
+    [ "Assume predicate after asserting it during Crucible symbolic simulation." ]
+
+  , prim "disable_crucible_assert_then_assume" "TopLevel ()"
+    (pureVal disable_crucible_assert_then_assume)
+    Current
+    [ "Do not assume predicate after asserting it during Crucible symbolic simulation." ]
+
   , prim "enable_lax_arithmetic" "TopLevel ()"
     (pureVal enable_lax_arithmetic)
     Current
     [ "Enable lax rules for arithmetic overflow in Crucible." ]
+
+  , prim "enable_what4_hash_consing" "TopLevel ()"
+    (pureVal enable_what4_hash_consing)
+    Current
+    [ "Enable hash consing for What4 expressions." ]
+
+  , prim "disable_what4_hash_consing" "TopLevel ()"
+    (pureVal disable_what4_hash_consing)
+    Current
+    [ "Disable hash consing for What4 expressions." ]
 
   , prim "env"                 "TopLevel ()"
     (pureVal envCmd)
@@ -964,6 +962,67 @@ primitives = Map.fromList
     Current
     [ "Write out a representation of a term in SAWCore external format." ]
 
+  , prim "write_coq_term" "String -> [(String, String)] -> [String] -> String -> Term -> TopLevel ()"
+    (pureVal writeCoqTerm)
+    Experimental
+    [ "Write out a representation of a term in Gallina syntax for Coq."
+    , "The first argument is the name to use in a Definition."
+    , "The second argument is a list of pairs of notation substitutions:"
+    , "the operator on the left will be replaced with the identifier on"
+    , "the right, as we do not support notations on the Coq side."
+    , "The third argument is a list of identifiers to skip translating."
+    , "The fourth argument is the name of the file to output into,"
+    , "use an empty string to output to standard output."
+    , "The fifth argument is the term to export."
+    ]
+
+  , prim "write_coq_cryptol_module" "String -> String -> [(String, String)] -> [String] -> TopLevel ()"
+    (pureVal writeCoqCryptolModule)
+    Experimental
+    [ "Write out a representation of a Cryptol module in Gallina syntax for"
+    , "Coq."
+    , "The first argument is the file containing the module to export."
+    , "The second argument is the name of the file to output into,"
+    , "use an empty string to output to standard output."
+    , "The third argument is a list of pairs of notation substitutions:"
+    , "the operator on the left will be replaced with the identifier on"
+    , "the right, as we do not support notations on the Coq side."
+    , "The fourth argument is a list of identifiers to skip translating."
+    ]
+
+  , prim "write_coq_sawcore_prelude" "String -> [(String, String)] -> [String] -> TopLevel ()"
+    (pureVal writeCoqSAWCorePrelude)
+    Experimental
+    [ "Write out a representation of the SAW Core prelude in Gallina syntax for"
+    , "Coq."
+    , "The first argument is the name of the file to output into,"
+    , "use an empty string to output to standard output."
+    , "The second argument is a list of pairs of notation substitutions:"
+    , "the operator on the left will be replaced with the identifier on"
+    , "the right, as we do not support notations on the Coq side."
+    , "The third argument is a list of identifiers to skip translating."
+    ]
+
+  , prim "write_coq_cryptol_primitives_for_sawcore" "String -> [(String, String)] -> [String] -> TopLevel ()"
+    (pureVal writeCoqCryptolPrimitivesForSAWCore)
+    Experimental
+    [ "Write out a representation of cryptol-verifier's Cryptol.sawcore in"
+    , "Gallina syntax for Coq."
+    , "The first argument is the name of the file to output into,"
+    , "use an empty string to output to standard output."
+    , "The second argument is a list of pairs of notation substitutions:"
+    , "the operator on the left will be replaced with the identifier on"
+    , "the right, as we do not support notations on the Coq side."
+    , "The third argument is a list of identifiers to skip translating."
+    ]
+
+  , prim "offline_coq" "String -> ProofScript SatResult"
+    (pureVal offline_coq)
+    Experimental
+    [ "Write out a representation of the current goal in Gallina syntax"
+    , "(for Coq). The argument is a prefix to use for file names."
+    ]
+
   , prim "auto_match" "String -> String -> TopLevel ()"
     (pureVal (autoMatch stmtInterpreter :: FilePath -> FilePath -> TopLevel ()))
     Current
@@ -994,7 +1053,7 @@ primitives = Map.fromList
     [ "Use the given proof script to attempt to prove that a term is"
     , "satisfiable (true for any input). Returns a proof result that can"
     , "be analyzed with 'caseSatResult' to determine whether it represents"
-    , "a satisfiying assignment or an indication of unsatisfiability."
+    , "a satisfying assignment or an indication of unsatisfiability."
     ]
 
   , prim "sat_print"           "ProofScript SatResult -> Term -> TopLevel ()"
@@ -1020,7 +1079,7 @@ primitives = Map.fromList
     , "First argument is directory path (\"\" for stdout) for generating files."
     , "Second argument is the list of function names to leave uninterpreted."
     , "Third argument is C function name."
-    , "Fourth argument is the term to generated code for. It must be a"
+    , "Fourth argument is the term to generate code for. It must be a"
     , "first-order function whose arguments and result are all of type"
     , "Bit, [8], [16], [32], or [64]."
     ]
@@ -1344,7 +1403,7 @@ primitives = Map.fromList
     [ "Reduce the given term to beta-normal form." ]
 
   , prim "cryptol_load"        "String -> TopLevel CryptolModule"
-    (pureVal cryptol_load)
+    (pureVal (cryptol_load BS.readFile))
     Current
     [ "Load the given file as a Cryptol module." ]
 
@@ -1884,11 +1943,35 @@ primitives = Map.fromList
     , "flexibility, see 'crucible_llvm_verify'."
     ]
 
+  , prim "crucible_llvm_compositional_extract"
+    "LLVMModule -> String -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
+    (bicVal crucible_llvm_compositional_extract)
+    Experimental
+    [ "Translate an LLVM function directly to a Term. The parameters of the"
+    , "Term are the input parameters of the LLVM function: the parameters"
+    , "passed by value (in the order given by `crucible_exec_func`), then"
+    , "the parameters passed by reference (in the order given by"
+    , "`crucible_points_to`). The Term is the tuple consisting of the"
+    , "output parameters of the LLVM function: the return parameter, then"
+    , "the parameters passed by reference (in the order given by"
+    , "`crucible_points_to`). For more flexibility, see"
+    , "`crucible_llvm_verify`."
+    ]
+
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
     (bicVal crucible_fresh_var)
     Current
-    [ "Create a fresh variable for use within a Crucible specification. The"
-    , "name is used only for pretty-printing."
+    [ "Create a fresh symbolic variable for use within a Crucible"
+    , "specification. The name is used only for pretty-printing."
+    ]
+
+  , prim "crucible_fresh_cryptol_var" "String -> Type -> CrucibleSetup Term"
+    (bicVal crucible_fresh_cryptol_var)
+    Experimental
+    [ "Create a fresh symbolic variable of the given Cryptol type for use"
+    , "within a Crucible specification. The given name is used only for"
+    , "pretty-printing. Unlike 'crucible_fresh_var', this can be used when"
+    , "there isn't an appropriate LLVM type, such as the Cryptol Array type."
     ]
 
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
@@ -1939,6 +2022,15 @@ primitives = Map.fromList
     , "The specified size must be greater than the size of the LLVM type."
     ]
 
+  , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> CrucibleSetup SetupValue"
+    (bicVal crucible_symbolic_alloc)
+    Current
+    [ "Like `crucible_alloc`, but with a (symbolic) size instead of"
+    , "a LLVM type. The first argument specifies whether the allocation is"
+    , "read-only. The second argument specifies the alignment in bytes (which"
+    , "must be a power of 2). The third argument specifies the size in bytes."
+    ]
+
   , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
     (bicVal crucible_alloc_global)
     Current
@@ -1976,12 +2068,38 @@ primitives = Map.fromList
     , "about the final memory state after running the function."
     ]
 
+  , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal crucible_conditional_points_to)
+    Current
+    [ "Declare that the memory location indicated by the given pointer (second"
+    , "argument) contains the given value (third argument) if the given"
+    , "condition (first argument) holds."
+    , ""
+    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after crucible_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
   , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> CrucibleSetup ()"
     (bicVal (crucible_points_to False))
     Current
     [ "A variant of crucible_points_to that does not check for compatibility"
     , "between the pointer type and the value type. This may be useful when"
     , "reading or writing a prefix of larger array, for example."
+    ]
+
+  , prim "crucible_points_to_array_prefix" "SetupValue -> Term -> Term -> CrucibleSetup ()"
+    (bicVal crucible_points_to_array_prefix)
+    Experimental
+    [ "Declare that the memory location indicated by the given pointer (first"
+    , "argument) contains the prefix of the given array (second argument) of"
+    , "the given size (third argument)."
+    , ""
+    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after crucible_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
     ]
 
   , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
@@ -2060,12 +2178,18 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_llvm_verify_x86"
-    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
     (bicVal crucible_llvm_verify_x86)
     Experimental
-    [ "Load the ELF file specified by the second argument and verify the function"
-    , "named by the third. Returns a method spec that can be used as an override"
-    , "when verifying other LLVM functions."
+    [ "Verify an x86 function from an ELF file for use as an override in an"
+    , "LLVM verification. The first argument specifies the LLVM module"
+    , "containing the _caller_. The second and third specify the ELF file"
+    , "name and symbol name of the function to be verifier. The fourth"
+    , "specifies the names and sizes (in bytes) of global variables to"
+    , "initialize, and the fifth whether to perform path satisfiability"
+    , "checking. The last argument is the LLVM specification of the calling"
+    , "context against which to verify the function.Returns a method spec"
+    , "that can be used as an override when verifying other LLVM functions."
     ]
 
   , prim "crucible_array"

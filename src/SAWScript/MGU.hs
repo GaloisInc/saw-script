@@ -625,7 +625,7 @@ inferRecDecls ds =
                  $ sequence [ withExprPos pos $ inferE (patternLName p, e)
                             | Decl pos p _ e <- ds
                             ]
-     sequence_ $ zipWith (constrainTypeWithPattern (error "FIXME")) ts pats'
+     sequence_ $ zipWith (constrainTypeWithPattern (patternLName (head pats))) ts pats'
      ess <- generalize es ts
      return [ Decl pos p (Just s) e1
             | (pos, p, (e1, s)) <- zip3 (map getPos ds) pats ess

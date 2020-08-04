@@ -6,14 +6,15 @@ packages:
     deps/aig
     deps/abcBridge
     deps/cryptol
-    deps/saw-core
-    deps/saw-core-aig
-    deps/saw-core-sbv
-    deps/saw-core-what4
+    deps/saw-core/saw-core
+    deps/saw-core/saw-core-aig
+    deps/saw-core/saw-core-sbv
+    deps/saw-core/saw-core-what4
+    deps/saw-core-coq
     deps/cryptol-verifier
     deps/jvm-verifier
-    deps/crucible/what4
-    deps/crucible/what4-abc
+    deps/what4/what4
+    deps/what4/what4-abc
     deps/crucible/crucible
     deps/crucible/crucible-jvm
     deps/crucible/crucible-llvm

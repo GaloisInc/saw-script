@@ -85,7 +85,7 @@ propToPredicate sc (Prop goal) =
   do let (args, t1) = asPiList goal
      case asEqTrue t1 of
        Just t2 -> scLambdaList sc args t2
-       Nothing -> fail "propToPredicate: expected EqTrue"
+       Nothing -> fail $ "propToPredicate: expected EqTrue, actual " ++ show t1
 
 -- | A ProofState represents a sequent, where the collection of goals
 -- implies the conclusion.

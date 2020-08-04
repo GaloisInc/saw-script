@@ -58,6 +58,7 @@ import SAWScript.Value as SS
 
 import qualified Cryptol.Eval.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
+import qualified Cryptol.Eval.Concrete.Value as Cryptol (Concrete(..))
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
@@ -306,7 +307,8 @@ showCexResults vpopts sc opts ms vs exts vals = do
   printOutLn vpopts Info $ "When verifying " ++ specName ms ++ ":"
   printOutLn vpopts Info $ "Proof of " ++ vsVCName vs ++ " failed."
   printOutLn vpopts Info $ "Counterexample:"
-  let showVal v = show <$> (Cryptol.runEval SS.quietEvalOpts (Cryptol.ppValue (cryptolPPOpts opts) (exportFirstOrderValue v)))
+  let showVal v = show <$> (Cryptol.runEval SS.quietEvalOpts
+                    (Cryptol.ppValue Cryptol.Concrete (cryptolPPOpts opts) (exportFirstOrderValue v)))
   mapM_ (\(n, v) -> do vdoc <- showVal v
                        printOutLn vpopts Info ("  " ++ n ++ ": " ++ vdoc)) vals
   if (length exts == length vals)
@@ -359,19 +361,19 @@ exportJavaType cb jty =
       do cls <- liftIO $ lookupClass cb fixPos (mkClassName (dotsToSlashes name))
          return (ClassInstance cls)
 
-checkCompatibleType :: (Monad m, MonadIO m) =>
-                       SharedContext
-                    -> String
-                    -> JavaActualType
-                    -> Cryptol.Schema
-                    -> m ()
+checkCompatibleType
+  :: SharedContext
+  -> String
+  -> JavaActualType
+  -> Cryptol.Schema
+  -> JavaSetup ()
 checkCompatibleType sc msg aty schema = do
   cty <- liftIO $ cryptolTypeOfActual sc aty
   case cty of
     Nothing ->
-      fail $ "Type is not translatable: " ++ show aty ++ " (" ++ msg ++ ")"
+      throwJava $ "Type is not translatable: " ++ show aty ++ " (" ++ msg ++ ")"
     Just lt -> do
-      unless (Cryptol.Forall [] [] lt == schemaNoUser schema) $ fail $
+      unless (Cryptol.Forall [] [] lt == schemaNoUser schema) $ throwJava $
         unlines [ "Incompatible type:"
                 , "  Expected: " ++ Cryptol.pretty lt
                 , "  Got: " ++ Cryptol.pretty schema
@@ -393,7 +395,7 @@ getJavaExpr ctx name = do
   e <- parseJavaExpr' cb cls meth name
   case Map.lookup e (bsActualTypeMap (specBehaviors ms)) of
     Just ty -> return (e, ty)
-    Nothing -> fail $ renderDoc $
+    Nothing -> throwJava $ renderDoc $
       hsep [ "Unknown expression", ftext name, "in",  ftext ctx ] <> "."
       <$$>
       ftext "Maybe you're missing a `java_var` or `java_class_var`?"
@@ -411,7 +413,7 @@ typeJavaExpr bic name ty = do
 
 checkEqualTypes :: Type -> Type -> String -> JavaSetup ()
 checkEqualTypes declared actual name =
-  when (declared /= actual) $ fail $ show $
+  when (declared /= actual) $ throwJava $ show $
     hsep [ text "WARNING: Declared type"
          , text (show (ppType declared)) -- TODO: change pretty-printer
          , text "doesn't match actual type"
@@ -443,7 +445,7 @@ javaClassVar bic _ name t = do
   (expr, aty) <- typeJavaExpr bic name t
   case aty of
     ClassInstance _ -> return ()
-    _ -> fail "Can't use `java_class_var` with variable of non-class type."
+    _ -> throwJava "Can't use `java_class_var` with variable of non-class type."
   modifySpec (specAddVarDecl expr aty)
 
 javaVar :: BuiltinContext -> Options -> String -> JavaType
@@ -451,7 +453,7 @@ javaVar :: BuiltinContext -> Options -> String -> JavaType
 javaVar bic _ name t = do
   (expr, aty) <- typeJavaExpr bic name t
   case aty of
-    ClassInstance _ -> fail "Can't use `java_var` with variable of class type."
+    ClassInstance _ -> throwJava "Can't use `java_var` with variable of class type."
     _ -> return ()
   modifySpec (specAddVarDecl expr aty)
   let sc = biSharedContext bic
@@ -463,7 +465,7 @@ javaMayAlias :: [String] -> JavaSetup ()
 javaMayAlias exprs = do
   exprList <- mapM (getJavaExpr "java_may_alias") exprs
   forM_ exprList $ \(e, _) ->
-    unless (isRefJavaExpr e) $ fail $
+    unless (isRefJavaExpr e) $ throwJava $
       "Can't use `java_may_alias` with non-reference variable: " ++
       ppJavaExpr e
   modifySpec (specAddAliasSet (map fst exprList))
@@ -471,11 +473,11 @@ javaMayAlias exprs = do
 javaAssert :: TypedTerm -> JavaSetup ()
 javaAssert (TypedTerm schema v) = do
   unless (schemaNoUser schema == Cryptol.Forall [] [] Cryptol.tBit) $
-    fail $ "java_assert passed expression of non-boolean type: " ++ show schema
+    throwJava $ "java_assert passed expression of non-boolean type: " ++ show schema
   me <- mkMixedExpr v
   case me of
     LE le -> modifySpec (specAddAssumption le)
-    JE je -> fail $ "Used java_assert with Java expression: " ++ show je
+    JE je -> throwJava $ "Used java_assert with Java expression: " ++ show je
 
 javaAssertEq :: BuiltinContext -> Options -> String -> TypedTerm -> JavaSetup ()
 javaAssertEq bic _ name (TypedTerm schema t) = do
@@ -488,7 +490,7 @@ javaEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm -> JavaSetup ()
 javaEnsureEq bic _ name (TypedTerm schema t) = do
   ms <- gets jsSpec
   (expr, aty) <- (getJavaExpr "java_ensure_eq") name
-  when (isArg (specMethod ms) expr && isScalarExpr expr) $ fail $
+  when (isArg (specMethod ms) expr && isScalarExpr expr) $ throwJava $
     "The `java_ensure_eq` function cannot be used " ++
     "to set the value of a scalar argument."
   checkCompatibleType (biSharedContext bic) "java_ensure_eq" aty schema
@@ -497,21 +499,21 @@ javaEnsureEq bic _ name (TypedTerm schema t) = do
     (_, ArrayInstance _ _) -> return (EnsureArray fixPos expr me)
     (InstanceField r f, _) -> return (EnsureInstanceField fixPos r f me)
     (StaticField f, _) -> return (EnsureStaticField fixPos f me)
-    _ -> fail $ "invalid java_ensure target: " ++ name
+    _ -> throwJava $ "invalid java_ensure target: " ++ name
   modifySpec (specAddBehaviorCommand cmd)
 
 javaModify :: String -> JavaSetup ()
 javaModify name = do
   ms <- gets jsSpec
   (expr, aty) <- (getJavaExpr "java_modify") name
-  when (isArg (specMethod ms) expr && isScalarExpr expr) $ fail $
+  when (isArg (specMethod ms) expr && isScalarExpr expr) $ throwJava $
     "The `java_modify` function cannot be used " ++
     "to set the value of a scalar argument."
   cmd <- case (CC.unTerm expr, aty) of
     (_, ArrayInstance _ _) -> return (ModifyArray expr aty)
     (InstanceField r f, _) -> return (ModifyInstanceField r f)
     (StaticField f, _) -> return (ModifyStaticField f)
-    _ -> fail $ "invalid java_modify target: " ++ name
+    _ -> throwJava $ "invalid java_modify target: " ++ name
   modifySpec (specAddBehaviorCommand cmd)
 
 javaReturn :: TypedTerm -> JavaSetup ()
@@ -524,7 +526,7 @@ javaReturn (TypedTerm _ t) = do
       me <- mkMixedExpr t
       modifySpec (specAddBehaviorCommand (ReturnValue me))
     Nothing ->
-      fail $ "can't use `java_return` on void method " ++ methodName meth
+      throwJava $ "can't use `java_return` on void method " ++ methodName meth
 
 javaVerifyTactic :: ProofScript SatResult -> JavaSetup ()
 javaVerifyTactic script =

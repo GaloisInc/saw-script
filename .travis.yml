@@ -22,7 +22,7 @@ language: haskell
 cabal: 2.4
 ghc:
   - 8.6.5
-  - 8.4.4
+  - 8.6.4
 
 cache:
   directories:
@@ -39,9 +39,12 @@ script:
   # `libabc.a` is built in by `cabal configure`, not by `cabal build`.
   # caching `dist-newstyle` means it must be manually built each time
   - (pushd deps/abcBridge && scripts/build-abc.sh X86_64 Linux --init && popd)
-  - cabal new-build -j saw jss
-  - cp `cabal new-exec --verbose=silent -- sh -c 'which saw'` bin
-  - cp `cabal new-exec --verbose=silent -- sh -c 'which jss'` bin
+  # Ideally, we'd like to pass --ghc-options=-Werror to cabal build.
+  # However, this currently enables -Werror for all dependencies as well.
+  # See: https://github.com/haskell/cabal/issues/3883
+  - cabal new-build --project-file=cabal.project.ci -j saw jss
+  - cp `cabal new-exec --project-file=cabal.project.ci --verbose=silent -- sh -c 'which saw'` bin
+  - cp `cabal new-exec --project-file=cabal.project.ci --verbose=silent -- sh -c 'which jss'` bin
 
 jobs:
   include:
@@ -69,7 +72,7 @@ jobs:
     # instead of using the `env` key.
     - &s2n-test-staging
       stage: test s2n
-      name: hmac md5
+      name: hmac
       addons:
         apt:
           packages:
@@ -81,59 +84,25 @@ jobs:
         - mkdir -p s2n/test-deps/saw/bin
         - cp bin/saw s2n/test-deps/saw/bin
         - cd s2n
-        - git checkout sike-r2-bike-r2
+        - git checkout cd7282102bf5e65cc8b324c4127c7943c71c8513
       before_script:
         - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=md5
       script:
-        - source .travis/s2n_setup_env.sh
-        - SAW=true travis_retry .travis/s2n_install_test_dependencies.sh
-        - .travis/s2n_travis_build.sh
-    - <<: *s2n-test-staging
-      name: hmac sha1
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha1
-    - <<: *s2n-test-staging
-      name: hmac sha224
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha224
-    - <<: *s2n-test-staging
-      name: hmac sha256
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha256
-    - <<: *s2n-test-staging
-      name: hmac sha384
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha384
-    - <<: *s2n-test-staging
-      name: hmac sha512
-      before_script:
-        - export TESTS=sawHMAC
-        - export SAW_HMAC_TEST=sha512
+        - source codebuild/bin/s2n_setup_env.sh
+        - SAW=true SAW_INSTALL_DIR=tmp-saw travis_retry codebuild/bin/s2n_install_test_dependencies.sh
+        - codebuild/bin/s2n_codebuild.sh
     - <<: *s2n-test-staging
       name: drbg
       before_script:
         - export TESTS=sawDRBG
     - <<: *s2n-test-staging
-      name: sike_r2_generic
+      name: sike
       before_script:
-        - export TESTS=sawSIKE_r2
+        - export TESTS=sawSIKE
     - <<: *s2n-test-staging
-      name: sike_r2_x86
+      name: bike
       before_script:
-        - export TESTS=sawSIKE_r2_x86
-    - <<: *s2n-test-staging
-      name: sike_r1
-      before_script:
-        - export TESTS=sawSIKE_r1
-    - <<: *s2n-test-staging
-      name: bike_r2
-      before_script:
-        - export TESTS=sawBIKE_r2
+        - export TESTS=sawBIKE
         - export S2N_LIBCRYPTO=openssl-1.0.2
     - <<: *s2n-test-staging
       name: tls

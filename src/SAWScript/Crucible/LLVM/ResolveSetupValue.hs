@@ -12,6 +12,7 @@ Stability   : provisional
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
 module SAWScript.Crucible.LLVM.ResolveSetupValue
   ( LLVMVal, LLVMPtr
@@ -20,22 +21,25 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , typeOfSetupValue
   , resolveTypedTerm
   , resolveSAWPred
+  , resolveSAWSymBV
   , resolveSetupFieldIndex
   , equalValsPred
   , memArrayToSawCoreTerm
+  , scPtrWidthBvNat
   ) where
 
-import Control.Lens
+import Control.Lens ((^.))
 import Control.Monad
-import Control.Monad.Fail (MonadFail)
+import qualified Control.Monad.Fail as Fail
 import Control.Monad.State
+import qualified Data.BitVector.Sized as BV
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
 import Data.IORef
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Vector (Vector)
 import qualified Data.Vector as V
+import           Numeric.Natural
 
 import qualified Text.LLVM.AST as L
 
@@ -46,12 +50,12 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
-                   (NatRepr(..), someNat, natValue, LeqProof(..), isPosNat)
 
 import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
 import qualified What4.Expr.Builder as W4
 
+import qualified Lang.Crucible.LLVM.Bytes       as Crucible
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
 import qualified Lang.Crucible.Backend.SAWCore  as Crucible
@@ -61,7 +65,6 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 import Verifier.SAW.TypedTerm
-import Verifier.SAW.Term.Functor
 import Text.LLVM.DebugUtils as L
 
 import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
@@ -87,17 +90,24 @@ resolveSetupValueInfo ::
   L.Info                          {- ^ field index       -}
 resolveSetupValueInfo cc env nameEnv v =
   case v of
-    -- SetupGlobal g ->
+    SetupGlobal _ name ->
+      case lookup (L.Symbol name) globalTys of
+        Just (L.Alias alias) -> L.Pointer (guessAliasInfo mdMap alias)
+        _ -> L.Unknown
+
     SetupVar i
       | Just alias <- Map.lookup i nameEnv
-      , let mdMap = Crucible.llvmMetadataMap (ccTypeCtx cc)
       -> L.Pointer (guessAliasInfo mdMap alias)
+
     SetupField () a n ->
        fromMaybe L.Unknown $
        do L.Pointer (L.Structure xs) <- return (resolveSetupValueInfo cc env nameEnv a)
           listToMaybe [L.Pointer i | (n',_,i) <- xs, n == n' ]
 
     _ -> L.Unknown
+  where
+    globalTys = [ (L.globalSym g, L.globalType g) | g <- L.modGlobals (ccLLVMModuleAST cc) ]
+    mdMap = Crucible.llvmMetadataMap (ccTypeCtx cc)
 
 -- | Use the LLVM metadata to determine the struct field index
 -- corresponding to the given field name.
@@ -125,7 +135,7 @@ resolveSetupFieldIndex cc env nameEnv v n =
     lc = ccTypeCtx cc
 
 resolveSetupFieldIndexOrFail ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   LLVMCrucibleContext arch {- ^ crucible context  -} ->
   Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
   Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
@@ -148,7 +158,7 @@ resolveSetupFieldIndexOrFail cc env nameEnv v n =
             _ -> unlines [msg, "No field names were found for this struct"]
 
 typeOfSetupValue ::
-  MonadFail m =>
+  Fail.MonadFail m =>
   LLVMCrucibleContext arch ->
   Map AllocIndex LLVMAllocSpec ->
   Map AllocIndex Crucible.Ident ->
@@ -159,7 +169,7 @@ typeOfSetupValue cc env nameEnv val =
      typeOfSetupValue' cc env nameEnv val
 
 typeOfSetupValue' :: forall m arch.
-  MonadFail m =>
+  Fail.MonadFail m =>
   LLVMCrucibleContext arch ->
   Map AllocIndex LLVMAllocSpec ->
   Map AllocIndex Crucible.Ident ->
@@ -305,7 +315,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
          ptr <- resolveSetupVal cc mem env tyenv nameEnv v
          case ptr of
            Crucible.LLVMValInt blk off ->
-             do delta' <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToInteger delta)
+             do delta' <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
                 off' <- W4.bvAdd sym off delta'
                 return (Crucible.LLVMValInt blk off')
            _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
@@ -348,6 +358,28 @@ resolveSAWPred ::
 resolveSAWPred cc tm =
   Crucible.bindSAWTerm (cc^.ccBackend) W4.BaseBoolRepr tm
 
+resolveSAWSymBV ::
+  (1 <= w) =>
+  LLVMCrucibleContext arch ->
+  NatRepr w ->
+  Term ->
+  IO (W4.SymBV Sym w)
+resolveSAWSymBV cc w tm =
+  do let sym = cc^.ccBackend
+     sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+     let ss = cc^.ccBasicSS
+     tm' <- rewriteSharedTerm sc ss tm
+     mx <- case getAllExts tm' of
+             [] -> do
+               -- Evaluate in SBV to test whether 'tm' is a concrete value
+               modmap <- scGetModuleMap sc
+               sbv <- SBV.toWord =<< SBV.sbvSolveBasic modmap Map.empty [] tm'
+               return (SBV.svAsInteger sbv)
+             _ -> return Nothing
+     case mx of
+       Just x  -> W4.bvLit sym w (BV.mkBV w x)
+       Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+
 resolveSAWTerm ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
   LLVMCrucibleContext arch ->
@@ -362,23 +394,18 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: unimplemented type Integer (FIXME)"
       Cryptol.TVIntMod _ ->
         fail "resolveSAWTerm: unimplemented type Z n (FIXME)"
+      Cryptol.TVFloat{} ->
+        fail "resolveSAWTerm: unimplemented type Float e p (FIXME)"
+      Cryptol.TVArray{} ->
+        fail "resolveSAWTerm: unimplemented type Array a b (FIXME)"
+      Cryptol.TVRational ->
+        fail "resolveSAWTerm: unimplemented type Rational (FIXME)"
+
       Cryptol.TVSeq sz Cryptol.TVBit ->
         case someNat sz of
           Just (Some w)
             | Just LeqProof <- isPosNat w ->
-              do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
-                 let ss = cc^.ccBasicSS
-                 tm' <- rewriteSharedTerm sc ss tm
-                 mx <- case getAllExts tm' of
-                         [] -> do
-                           -- Evaluate in SBV to test whether 'tm' is a concrete value
-                           modmap <- scGetModuleMap sc
-                           sbv <- SBV.toWord =<< SBV.sbvSolveBasic modmap Map.empty [] tm'
-                           return (SBV.svAsInteger sbv)
-                         _ -> return Nothing
-                 v <- case mx of
-                        Just x  -> W4.bvLit sym w x
-                        Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+              do v <- resolveSAWSymBV cc w tm
                  Crucible.ptrToPtrVal <$> Crucible.llvmPointer_bv sym v
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
@@ -412,9 +439,21 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: unimplemented record type (FIXME)"
       Cryptol.TVFun _ _ ->
         fail "resolveSAWTerm: invalid function type"
+      Cryptol.TVAbstract _ _ ->
+        fail "resolveSAWTerm: invalid abstract type"
   where
     sym = cc^.ccBackend
     dl = Crucible.llvmDataLayout (ccTypeCtx cc)
+
+scPtrWidthBvNat ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Integral a) =>
+  LLVMCrucibleContext arch ->
+  a ->
+  IO Term
+scPtrWidthBvNat cc n =
+  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager $ cc^.ccBackend)
+     w <- scNat sc $ natValue Crucible.PtrWidth
+     scBvNat sc w =<< scNat sc (fromIntegral n)
 
 data ToLLVMTypeErr = NotYetSupported String | Impossible String
 
@@ -441,6 +480,10 @@ toLLVMType dl tp =
     Cryptol.TVBit -> Left (NotYetSupported "bit") -- FIXME
     Cryptol.TVInteger -> Left (NotYetSupported "integer")
     Cryptol.TVIntMod _ -> Left (NotYetSupported "integer (mod n)")
+    Cryptol.TVFloat{} -> Left (NotYetSupported "float e p")
+    Cryptol.TVArray{} -> Left (NotYetSupported "array a b")
+    Cryptol.TVRational -> Left (NotYetSupported "rational")
+
     Cryptol.TVSeq n Cryptol.TVBit
       | n > 0 -> Right (Crucible.IntType (fromInteger n))
       | otherwise -> Left (Impossible "infinite sequence")
@@ -455,6 +498,7 @@ toLLVMType dl tp =
       return (Crucible.StructType si)
     Cryptol.TVRec _flds -> Left (NotYetSupported "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
+    Cryptol.TVAbstract _ _ -> Left (Impossible "abstract")
 
 toLLVMStorageType ::
   forall w .
@@ -553,7 +597,18 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
   saw_context <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
 
-  let setBytes :: Cryptol.TValue -> Term -> Crucible.Bytes -> StateT (Vector Term) IO ()
+  byte_type_term <- importType saw_context emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
+  offset_type_term <- scBitvector saw_context $ natValue ?ptrWidth
+
+  let updateArray :: Natural -> Term -> StateT Term IO ()
+      updateArray offset byte_term = do
+        ptr_width_term <- liftIO $ scNat saw_context $ natValue ?ptrWidth
+        offset_term <- liftIO $ scBvNat saw_context ptr_width_term =<< scNat saw_context offset
+        array_term <- get
+        updated_array_term <- liftIO $
+          scArrayUpdate saw_context offset_type_term byte_type_term array_term offset_term byte_term
+        put updated_array_term
+      setBytes :: Cryptol.TValue -> Term -> Crucible.Bytes -> StateT Term IO ()
       setBytes cryptol_type saw_term offset = case cryptol_type of
         Cryptol.TVSeq size Cryptol.TVBit
           | (byte_count, 0) <- quotRem (fromInteger size) 8 ->
@@ -578,10 +633,10 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
                 let byte_storage_index = case endianess of
                       Crucible.BigEndian -> byte_index
                       Crucible.LittleEndian -> byte_count - byte_index - 1
-                let vector_index = (fromIntegral offset) + (fromIntegral byte_storage_index)
-                modify' $ \vector -> vector V.// [(vector_index, saw_byte_term)]
+                let byte_offset = ((fromIntegral offset) + (fromIntegral byte_storage_index))
+                updateArray byte_offset saw_byte_term
             else
-              modify' $ \vector -> vector V.// [(fromIntegral offset, saw_term)]
+              updateArray (fromIntegral offset) saw_term
           | otherwise -> fail $ "unexpected bit count: " ++ show size
 
         Cryptol.TVSeq size element_cryptol_type -> do
@@ -628,29 +683,10 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
   case ttSchema typed_term of
     Cryptol.Forall [] [] cryptol_type -> do
       let evaluated_type = (Cryptol.evalValType Map.empty cryptol_type)
-      storage_size <- Crucible.storageTypeSize <$> toLLVMStorageType
-        data_layout
-        evaluated_type
-      padding_byte_term <- scBvConst saw_context 8 0xff
-
-      byte_terms <- execStateT (setBytes evaluated_type (ttTerm typed_term) 0)
-        (V.replicate (fromIntegral storage_size) padding_byte_term)
-      byte_array_type_term <- importType saw_context emptyEnv $ Cryptol.tValTy $
-        Cryptol.TVSeq
-          (fromIntegral storage_size)
-          (Cryptol.TVSeq 8 Cryptol.TVBit)
-      vector_term <- scVectorReduced
-        saw_context
-        byte_array_type_term
-        (V.toList byte_terms)
-
-      storage_size_term <- scNat saw_context $ fromIntegral storage_size
-      ptr_width_term <- scNat saw_context $ natValue ?ptrWidth
-      scGlobalApply saw_context (parseIdent "Prelude.bvAt")
-        [ storage_size_term
-        , byte_array_type_term
-        , ptr_width_term
-        , vector_term
-        ]
+      fresh_array_const <- scFreshGlobal saw_context "arr"
+        =<< scArrayType saw_context offset_type_term byte_type_term
+      execStateT
+        (setBytes evaluated_type (ttTerm typed_term) 0)
+        fresh_array_const
 
     _ -> fail $ "expected monomorphic typed term: " ++ show typed_term
