@@ -57,6 +57,8 @@ import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
+  , FirstOrderType(..)
+  , firstOrderTypeOf
   , FirstOrderValue(..)
   , toFirstOrderValue, scFirstOrderValue
   )
@@ -267,7 +269,11 @@ readAIGPrim f = do
   et <- io $ readAIG proxy opts sc f
   case et of
     Left err -> fail $ "Reading AIG failed: " ++ err
-    Right t -> io $ mkTypedTerm sc t
+    Right (inLen, outLen, t) -> pure $ TypedTerm schema t
+      where
+        t1 = C.tWord (C.tNum inLen)
+        t2 = C.tWord (C.tNum outLen)
+        schema = C.tMono (C.tFun t1 t2)
 
 replacePrim :: TypedTerm -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 replacePrim pat replace t = do
@@ -1034,6 +1040,23 @@ toValueCase prim =
   SV.VLambda $ \v2 ->
   prim (SV.fromValue b) v1 v2
 
+cryptolTypeOfFirstOrderType :: FirstOrderType -> C.Type
+cryptolTypeOfFirstOrderType fot =
+  case fot of
+    FOTBit -> C.tBit
+    FOTInt -> C.tInteger
+    FOTVec n t -> C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)
+    FOTTuple ts -> C.tTuple (map cryptolTypeOfFirstOrderType ts)
+    FOTArray a b ->
+      C.tArray
+      (cryptolTypeOfFirstOrderType a)
+      (cryptolTypeOfFirstOrderType b)
+    FOTRec m ->
+      C.tRec $
+      C.recordFromFields $
+      [ (C.packIdent l, cryptolTypeOfFirstOrderType t)
+      | (l, t) <- Map.assocs m ]
+
 caseProofResultPrim :: SV.ProofResult
                     -> SV.Value -> SV.Value
                     -> TopLevel SV.Value
@@ -1045,7 +1068,9 @@ caseProofResultPrim pr vValid vInvalid = do
       let fvs = map snd pairs
       ts <- io $ mapM (scFirstOrderValue sc) fvs
       t <- io $ scTuple sc ts
-      tt <- io $ mkTypedTerm sc t
+      let fot = firstOrderTypeOf (FOVTuple fvs)
+      let cty = cryptolTypeOfFirstOrderType fot
+      let tt = TypedTerm (C.tMono cty) t
       SV.applyValue vInvalid (SV.toValue tt)
 
 caseSatResultPrim :: SV.SatResult
@@ -1059,7 +1084,9 @@ caseSatResultPrim sr vUnsat vSat = do
       let fvs = map snd pairs
       ts <- io $ mapM (scFirstOrderValue sc) fvs
       t <- io $ scTuple sc ts
-      tt <- io $ mkTypedTerm sc t
+      let fot = firstOrderTypeOf (FOVTuple fvs)
+      let cty = cryptolTypeOfFirstOrderType fot
+      let tt = TypedTerm (C.tMono cty) t
       SV.applyValue vSat (SV.toValue tt)
 
 envCmd :: TopLevel ()

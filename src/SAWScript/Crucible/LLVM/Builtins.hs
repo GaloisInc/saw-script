@@ -62,6 +62,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , setupArgs
     , getGlobalPair
     , runCFG
+    , baseCryptolType
 
     , displayVerifExceptionOpts
     , findDecl
@@ -155,6 +156,8 @@ import Verifier.SAW.FiniteValue (ppFirstOrderValue)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
+
+-- cryptol-verifier
 import Verifier.SAW.TypedTerm
 
 -- saw-script
@@ -1269,24 +1272,55 @@ setupLLVMCrucibleContext bic opts lm action =
 
 --------------------------------------------------------------------------------
 
+baseCryptolType :: Crucible.BaseTypeRepr tp -> Maybe Cryptol.Type
+baseCryptolType bt =
+  case bt of
+    Crucible.BaseBoolRepr -> pure $ Cryptol.tBit
+    Crucible.BaseBVRepr w -> pure $ Cryptol.tWord (Cryptol.tNum (natValue w))
+    Crucible.BaseNatRepr  -> Nothing
+    Crucible.BaseIntegerRepr -> pure $ Cryptol.tInteger
+    Crucible.BaseArrayRepr indexTypes range ->
+      do ts <- baseCryptolTypes indexTypes
+         t <- baseCryptolType range
+         pure $ foldr Cryptol.tFun t ts
+    Crucible.BaseFloatRepr _ -> Nothing
+    Crucible.BaseStringRepr _ -> Nothing
+    Crucible.BaseComplexRepr  -> Nothing
+    Crucible.BaseRealRepr     -> Nothing
+    Crucible.BaseStructRepr ts ->
+      Cryptol.tTuple <$> baseCryptolTypes ts
+  where
+    baseCryptolTypes :: Ctx.Assignment Crucible.BaseTypeRepr args -> Maybe [Cryptol.Type]
+    baseCryptolTypes Ctx.Empty = pure []
+    baseCryptolTypes (xs Ctx.:> x) =
+      do ts <- baseCryptolTypes xs
+         t <- baseCryptolType x
+         pure (ts ++ [t])
+
 setupArg ::
   forall tp.
   SharedContext ->
   Sym ->
-  IORef (Seq (ExtCns Term)) ->
+  IORef (Seq (Cryptol.Type, ExtCns Term)) ->
   Crucible.TypeRepr tp ->
   IO (Crucible.RegEntry Sym tp)
 setupArg sc sym ecRef tp =
   case (Crucible.asBaseType tp, tp) of
     (Crucible.AsBaseType btp, _) ->
-      do sc_tp <- CrucibleSAW.baseSCType sym sc btp
-         t     <- freshGlobal sc_tp
+      do cty <-
+           case baseCryptolType btp of
+             Just cty -> pure cty
+             Nothing ->
+               fail $ unwords ["Unsupported type for Crucible extraction:", show btp]
+         sc_tp <- CrucibleSAW.baseSCType sym sc btp
+         t     <- freshGlobal cty sc_tp
          elt   <- CrucibleSAW.bindSAWTerm sym btp t
          return (Crucible.RegEntry tp elt)
 
     (Crucible.NotBaseType, Crucible.LLVMPointerRepr w) ->
-      do sc_tp <- scBitvector sc (natValue w)
-         t     <- freshGlobal sc_tp
+      do let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
+         sc_tp <- scBitvector sc (natValue w)
+         t     <- freshGlobal cty sc_tp
          elt   <- CrucibleSAW.bindSAWTerm sym (Crucible.BaseBVRepr w) t
          elt'  <- Crucible.llvmPointer_bv sym elt
          return (Crucible.RegEntry tp elt')
@@ -1294,19 +1328,19 @@ setupArg sc sym ecRef tp =
     (Crucible.NotBaseType, _) ->
       fail $ unwords ["Crucible extraction currently only supports Crucible base types", show tp]
   where
-    freshGlobal sc_tp =
+    freshGlobal cty sc_tp =
       do i     <- scFreshGlobalVar sc
          ecs   <- readIORef ecRef
          let len = Seq.length ecs
          let ec = EC i ("arg_"++show len) sc_tp
-         writeIORef ecRef (ecs Seq.|> ec)
+         writeIORef ecRef (ecs Seq.|> (cty, ec))
          scFlatTermF sc (ExtCns ec)
 
 setupArgs ::
   SharedContext ->
   Sym ->
   Crucible.FnHandle init ret ->
-  IO (Seq (ExtCns Term), Crucible.RegMap Sym init)
+  IO (Seq (Cryptol.Type, ExtCns Term), Crucible.RegMap Sym init)
 setupArgs sc sym fn =
   do ecRef  <- newIORef Seq.empty
      regmap <- Crucible.RegMap <$> Ctx.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
@@ -1357,15 +1391,21 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
             let regv = gp^.Crucible.gpValue
                 rt = Crucible.regType regv
                 rv = Crucible.regValue regv
-            t <-
+            (cty, t) <-
               case rt of
-                Crucible.LLVMPointerRepr _ ->
+                Crucible.LLVMPointerRepr w ->
                   do bv <- Crucible.projectLLVM_bv sym rv
-                     CrucibleSAW.toSC sym bv
-                Crucible.BVRepr _ -> CrucibleSAW.toSC sym rv
+                     t <- CrucibleSAW.toSC sym bv
+                     let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
+                     return (cty, t)
+                Crucible.BVRepr w ->
+                  do t <- CrucibleSAW.toSC sym rv
+                     let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
+                     return (cty, t)
                 _ -> fail $ unwords ["Unexpected return type:", show rt]
-            t' <- scAbstractExts sc (toList ecs) t
-            mkTypedTerm sc t'
+            t' <- scAbstractExts sc (map snd (toList ecs)) t
+            let cty' = foldr Cryptol.tFun cty (map fst (toList ecs))
+            return $ TypedTerm (Cryptol.tMono cty') t'
        Crucible.AbortedResult _ ar ->
          do let resultDoc = ppAbortedResult cc ar
             fail $ unlines [ "Symbolic execution failed."

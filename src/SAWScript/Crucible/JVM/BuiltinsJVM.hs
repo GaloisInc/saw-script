@@ -54,6 +54,9 @@ import qualified Lang.Crucible.Simulator.RegMap        as Crucible
 import qualified Lang.Crucible.Simulator.OverrideSim   as Crucible
 import qualified Lang.Crucible.Analysis.Postdom        as Crucible
 
+-- cryptol
+import qualified Cryptol.TypeCheck.Type as Cryptol
+
 -- crucible/what4
 import qualified What4.Expr as W4
 import qualified What4.Config as W4
@@ -62,13 +65,15 @@ import qualified What4.Solver.Yices as Yices
 
 -- saw-core
 import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies, scAbstractExts)
-import Verifier.SAW.TypedTerm(TypedTerm, mkTypedTerm)
+
+-- cryptol-verifier
+import Verifier.SAW.TypedTerm(TypedTerm(..))
 
 -- saw-script
 import SAWScript.Builtins(fixPos)
 import SAWScript.Value
 import SAWScript.Options(Options,simVerbose)
-import SAWScript.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, runCFG)
+import SAWScript.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, runCFG, baseCryptolType)
 
 -- jvm-verifier
 import qualified Language.JVM.Common as J
@@ -164,13 +169,20 @@ crucible_java_extract bic opts c mname = do
           case res of
             Crucible.FinishedResult _ pr -> do
               gp <- getGlobalPair opts pr
-              t <- Crucible.asSymExpr
-                   (gp^.Crucible.gpValue)
-                   (CrucibleSAW.toSC sym)
-                   (fail $ unwords ["Unexpected return type:",
-                                    show (Crucible.regType (gp^.Crucible.gpValue))])
-              t' <- scAbstractExts sc (toList ecs) t
-              mkTypedTerm sc t'
+              let regval = gp^.Crucible.gpValue
+              let regty = Crucible.regType regval
+              let failure = fail $ unwords ["Unexpected return type:", show regty]
+              t <- Crucible.asSymExpr regval (CrucibleSAW.toSC sym) failure
+              cty <-
+                case Crucible.asBaseType regty of
+                  Crucible.NotBaseType -> failure
+                  Crucible.AsBaseType bt ->
+                    case baseCryptolType bt of
+                      Nothing -> failure
+                      Just cty -> return cty
+              t' <- scAbstractExts sc (map snd (toList ecs)) t
+              let cty' = foldr Cryptol.tFun cty (map fst (toList ecs))
+              return $ TypedTerm (Cryptol.tMono cty') t'
             Crucible.AbortedResult _ _ar -> do
               fail $ unlines [ "Symbolic execution failed." ]
             Crucible.TimeoutResult _cxt -> do
