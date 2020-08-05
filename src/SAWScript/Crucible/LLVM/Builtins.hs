@@ -316,7 +316,7 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
                 (method_spec ^. MS.csPreState ^. MS.csPointsTos)
           let input_parameters = nub $ value_input_parameters ++ reference_input_parameters
           let pre_free_variables = Map.fromList $
-                map (\x -> (fromJust $ asExtCns $ ttTerm x, x)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars
+                map (\x -> (fromJust $ typedTermAsExtCns x, x)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars
           let unsupported_input_parameters = Set.difference
                 (Map.keysSet pre_free_variables)
                 (Set.fromList input_parameters)
@@ -340,7 +340,7 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
                 maybeToList return_output_parameter ++ reference_output_parameters
           let post_free_variables =
                 Map.fromList $
-                map (\x -> (fromJust $ asExtCns $ ttTerm x, x)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars
+                map (\x -> (fromJust $ typedTermAsExtCns x, x)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars
           let unsupported_output_parameters =
                 Set.difference (Map.keysSet post_free_variables) (Set.fromList output_parameters)
           when (not $ Set.null unsupported_output_parameters) $
@@ -355,10 +355,10 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
           let shared_context = biSharedContext bic
 
           let output_values =
-                map (((Map.!) $ post_override_state ^. termSub) . ecVarIndex) output_parameters
+                map (((Map.!) $ post_override_state ^. termSub) . ecVarIndex . snd) output_parameters
 
           extracted_func <-
-            io $ scAbstractExts shared_context input_parameters
+            io $ scAbstractExts shared_context (map snd input_parameters)
             =<< scTuple shared_context output_values
           when ([] /= getAllExts extracted_func) $
             fail "Non-functional simulation summary."
@@ -368,13 +368,15 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
             =<< scTypeOf shared_context extracted_func
           let input_terms = map ttTerm $ map ((Map.!) pre_free_variables) input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
-          applied_extracted_func_selectors <-
-            io $ forM [1 .. (length output_parameters)] $ \i ->
-            mkTypedTerm shared_context
-              =<< scTupleSelector shared_context applied_extracted_func i (length output_parameters)
+          applied_extracted_func_selector_terms <-
+            io $ forM [1 .. (length output_parameters)] $
+            \i -> scTupleSelector shared_context applied_extracted_func i (length output_parameters)
+          let output_types = map fst output_parameters
+          let applied_extracted_func_selectors =
+                zipWith TypedTerm (map Cryptol.tMono output_types) applied_extracted_func_selector_terms
           let output_parameter_substitution =
                 Map.fromList $
-                zip (map ecVarIndex output_parameters) (map ttTerm applied_extracted_func_selectors)
+                zip (map (ecVarIndex . snd) output_parameters) (map ttTerm applied_extracted_func_selectors)
           let substitute_output_parameters =
                 ttTermLens $ scInstantiateExt shared_context output_parameter_substitution
           let setup_value_substitute_output_parameter setup_value
@@ -396,7 +398,14 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
                 MS.csRetValue .~ extracted_ret_value &
                 MS.csPostState . MS.csPointsTos .~ extracted_post_state_points_tos
 
-          typed_extracted_func_const <- io $ mkTypedTerm shared_context extracted_func_const
+          let input_types = map fst input_parameters
+          let output_type =
+                case output_types of
+                  [t] -> t
+                  ts -> Cryptol.tTuple ts
+          let extracted_func_type = foldr Cryptol.tFun output_type input_types
+          let typed_extracted_func_const =
+                TypedTerm (Cryptol.tMono extracted_func_type) extracted_func_const
           modify' $
             extendEnv
               (Located func_name func_name $ PosInternal "crucible_llvm_compositional_extract")
@@ -406,17 +415,21 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
 
           return $ SomeLLVM extracted_method_spec
 
-setupValueAsExtCns :: SetupValue (Crucible.LLVM arch) -> Maybe (ExtCns Term)
+typedTermAsExtCns :: TypedTerm -> Maybe (Cryptol.Type, ExtCns Term)
+typedTermAsExtCns (TypedTerm schema term) =
+  (,) <$> Cryptol.isMono schema <*> asExtCns term
+
+setupValueAsExtCns :: SetupValue (Crucible.LLVM arch) -> Maybe (Cryptol.Type, ExtCns Term)
 setupValueAsExtCns =
   \case
-    SetupTerm term -> asExtCns $ ttTerm term
+    SetupTerm term -> typedTermAsExtCns term
     _ -> Nothing
 
-llvmPointsToValueAsExtCns :: LLVMPointsToValue arch -> Maybe (ExtCns Term)
+llvmPointsToValueAsExtCns :: LLVMPointsToValue arch -> Maybe (Cryptol.Type, ExtCns Term)
 llvmPointsToValueAsExtCns =
   \case
     ConcreteSizeValue val -> setupValueAsExtCns val
-    SymbolicSizeValue arr _sz -> asExtCns $ ttTerm arr
+    SymbolicSizeValue arr _sz -> typedTermAsExtCns arr
 
 -- | Check that all the overrides/lemmas were actually from this module
 checkModuleCompatibility ::
