@@ -7,7 +7,6 @@ import Verifier.SAW.FiniteValue
 
 import qualified Verifier.SAW.Simulator.RME as RME
 import qualified Verifier.SAW.Simulator.RME.Base as RME
-import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
 import Verifier.SAW.Recognizer(asPiList)
 
 import SAWScript.Proof(Prop, propToPredicate)
@@ -22,9 +21,7 @@ proveRME ::
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
 proveRME sc goal =
   do t0 <- propToPredicate sc goal
-     TypedTerm schema t <-
-        bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc
-     checkBooleanSchema schema
+     t <- bindAllExts sc t0 >>= rewriteEqs sc
      tp <- scWhnf sc =<< scTypeOf sc t
      let (args, _) = asPiList tp
          argNames = map fst args
