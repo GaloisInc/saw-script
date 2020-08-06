@@ -66,7 +66,7 @@ import qualified What4.Solver.Yices as Yices
 -- saw-core
 import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies, scAbstractExts)
 
--- cryptol-verifier
+-- cryptol-saw-core
 import Verifier.SAW.TypedTerm(TypedTerm(..))
 
 -- saw-script

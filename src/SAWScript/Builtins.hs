@@ -76,7 +76,7 @@ import Verifier.SAW.TypedAST
 
 import SAWScript.Position
 
--- cryptol-verifier
+-- cryptol-saw-core
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
 -- saw-core-aig
