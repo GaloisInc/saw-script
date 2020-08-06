@@ -325,6 +325,9 @@ proveProp sc env prop =
         (C.pIsZero -> Just (C.tIsIntMod -> Just n))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PZeroIntModNum" [n']
+        -- instance Zero Rational
+        (C.pIsZero -> Just (C.tIsRational -> True))
+          -> do scGlobalApply sc "Cryptol.PZeroRational" []
         -- instance Zero [n]
         (C.pIsZero -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -396,6 +399,9 @@ proveProp sc env prop =
         (C.pIsRing -> Just (C.tIsIntMod -> Just n))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PRingIntModNum" [n']
+        -- instance Ring Rational
+        (C.pIsRing -> Just (C.tIsRational -> True))
+          -> do scGlobalApply sc "Cryptol.PRingRational" []
         -- instance (fin n) => Ring [n]
         (C.pIsRing -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -435,14 +441,29 @@ proveProp sc env prop =
 
         -- instance Integral Integer
         (C.pIsIntegral -> Just (C.tIsInteger -> True))
-          -> scGlobalApply sc "Cryptol.PIntegralInteger" []
+          -> do scGlobalApply sc "Cryptol.PIntegralInteger" []
         -- instance Integral [n]
         (C.pIsIntegral -> Just (C.tIsSeq -> (Just (n, C.tIsBit -> True))))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PIntegralSeqBool" [n']
 
-        -- TODO, Field instances
-        -- TODO, Round instances
+        -- instance Field Rational
+        (C.pIsField -> Just (C.tIsRational -> True))
+          -> do scGlobalApply sc "Cryptol.PFieldRational" []
+        -- instance (ValidFloat e p) => Field (Float e p)
+        (C.pIsField -> Just (C.tIsFloat -> Just (e, p)))
+          -> do e' <- importType sc env e
+                p' <- importType sc env p
+                scGlobalApply sc "Cryptol.PFieldFloat" [e', p']
+
+        -- instance Round Rational
+        (C.pIsRound -> Just (C.tIsRational -> True))
+          -> do scGlobalApply sc "Cryptol.PRoundRational" []
+        -- instance (ValidFloat e p) => Round (Float e p)
+        (C.pIsRound -> Just (C.tIsFloat -> Just (e, p)))
+          -> do e' <- importType sc env e
+                p' <- importType sc env p
+                scGlobalApply sc "Cryptol.PRoundFloat" [e', p']
 
         -- instance Eq Bit
         (C.pIsEq -> Just (C.tIsBit -> True))
@@ -454,6 +475,14 @@ proveProp sc env prop =
         (C.pIsEq -> Just (C.tIsIntMod -> Just n))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PEqIntModNum" [n']
+        -- instance Eq Rational
+        (C.pIsEq -> Just (C.tIsRational -> True))
+          -> do scGlobalApply sc "Cryptol.PEqRational" []
+        -- instance Eq (Float e p)
+        (C.pIsEq -> Just (C.tIsFloat -> Just (e, p)))
+          -> do e' <- importType sc env e
+                p' <- importType sc env p
+                scGlobalApply sc "Cryptol.PEqFloat" [e', p']
         -- instance (fin n) => Eq [n]
         (C.pIsEq -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -486,6 +515,14 @@ proveProp sc env prop =
         -- instance Cmp Integer
         (C.pIsCmp -> Just (C.tIsInteger -> True))
           -> do scGlobalApply sc "Cryptol.PCmpInteger" []
+        -- instance Cmp Rational
+        (C.pIsCmp -> Just (C.tIsRational -> True))
+          -> do scGlobalApply sc "Cryptol.PCmpRational" []
+        -- instance Cmp (Float e p)
+        (C.pIsCmp -> Just (C.tIsFloat -> Just (e, p)))
+          -> do e' <- importType sc env e
+                p' <- importType sc env p
+                scGlobalApply sc "Cryptol.PCmpFloat" [e', p']
         -- instance (fin n) => Cmp [n]
         (C.pIsCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -515,7 +552,7 @@ proveProp sc env prop =
         -- instance (fin n) => SignedCmp [n]
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
-                scGlobalApply sc "Cryptol.PSignedCmpWord" [n']
+                scGlobalApply sc "Cryptol.PSignedCmpSeqBool" [n']
         -- instance (fin n, SignedCmp a) => SignedCmp [n]a
         (C.pIsSignedCmp -> Just (C.tIsSeq -> Just (n, a)))
           -> do n' <- importType sc env n
@@ -545,6 +582,9 @@ proveProp sc env prop =
         (C.pIsLiteral -> Just (_, C.tIsIntMod -> Just n))
           -> do n' <- importType sc env n
                 scGlobalApply sc "Cryptol.PLiteralIntModNum" [n']
+        -- instance Literal val Rational
+        (C.pIsLiteral -> Just (_, C.tIsRational -> True))
+          -> do scGlobalApply sc "Cryptol.PLiteralRational" []
         -- instance (fin n, n >= width val) => Literal val [n]
         (C.pIsLiteral -> Just (_, C.tIsSeq -> Just (n, C.tIsBit -> True)))
           -> do n' <- importType sc env n
@@ -689,15 +729,18 @@ floatPrims :: Map C.PrimIdent (SharedContext -> IO Term)
 floatPrims =
   Map.fromList $
   first C.floatPrim <$>
-  [ ("fpNaN",      flip scGlobalDef "Cryptol.ecFpNaN")
-  , ("fpPosInf",   flip scGlobalDef "Cryptol.ecFpPosInf")
-  , ("fpFromBits", flip scGlobalDef "Cryptol.ecFpFromBits")
-  , ("fpToBits",   flip scGlobalDef "Cryptol.ecFpToBits")
-  , ("=.=",        flip scGlobalDef "Cryptol.ecFpEq")
-  , ("fpAdd",      flip scGlobalDef "Cryptol.ecFpAdd")
-  , ("fpSub",      flip scGlobalDef "Cryptol.ecFpSub")
-  , ("fpMul",      flip scGlobalDef "Cryptol.ecFpMul")
-  , ("fpDiv",      flip scGlobalDef "Cryptol.ecFpDiv")
+  [ ("fpNaN",          flip scGlobalDef "Cryptol.ecFpNaN")
+  , ("fpPosInf",       flip scGlobalDef "Cryptol.ecFpPosInf")
+  , ("fpFromBits",     flip scGlobalDef "Cryptol.ecFpFromBits")
+  , ("fpToBits",       flip scGlobalDef "Cryptol.ecFpToBits")
+  , ("=.=",            flip scGlobalDef "Cryptol.ecFpEq")
+  , ("fpAdd",          flip scGlobalDef "Cryptol.ecFpAdd")
+  , ("fpSub",          flip scGlobalDef "Cryptol.ecFpSub")
+  , ("fpMul",          flip scGlobalDef "Cryptol.ecFpMul")
+  , ("fpDiv",          flip scGlobalDef "Cryptol.ecFpDiv")
+  , ("fpIsFinite",     flip scGlobalDef "Cryptol.ecFpIsFinite")
+  , ("fpToRational",   flip scGlobalDef "Cryptol.ecFpToRational")
+  , ("fpFromRational", flip scGlobalDef "Cryptol.ecFpFromRational")
   ]
 
 
