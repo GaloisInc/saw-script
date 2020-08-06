@@ -7,14 +7,14 @@ module Verifier.SAW.Cryptol.Panic
 import Panic hiding (panic)
 import qualified Panic as Panic
 
-data CryptolVerifier = CryptolVerifier
+data CryptolSawCore = CryptolSawCore
 
 panic :: HasCallStack => String -> [String] -> a
-panic = Panic.panic CryptolVerifier
+panic = Panic.panic CryptolSawCore
 
-instance PanicComponent CryptolVerifier where
-  panicComponentName _ = "cryptol-verifier"
-  panicComponentIssues _ = "https://github.com/GaloisInc/cryptol-verifier/issues"
+instance PanicComponent CryptolSawCore where
+  panicComponentName _ = "cryptol-saw-core"
+  panicComponentIssues _ = "https://github.com/GaloisInc/saw-core/issues"
 
   {-# Noinline panicComponentRevision #-}
   panicComponentRevision = $useGitRevision

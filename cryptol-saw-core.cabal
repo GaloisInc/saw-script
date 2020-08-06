@@ -1,4 +1,4 @@
-Name:              cryptol-verifier
+Name:              cryptol-saw-core
 Version:           0.1
 Author:            Galois, Inc.
 License:           BSD3
@@ -69,14 +69,14 @@ executable css
     saw-core,
     saw-core-aig,
     text,
-    cryptol-verifier
+    cryptol-saw-core
 
   hs-source-dirs : css
   main-is : Main.hs
   GHC-options: -Wall -O2 -rtsopts -pgmlc++
   extra-libraries:      stdc++
 
-test-suite cryptol-verifier-tc-test
+test-suite cryptol-saw-core-tc-test
   type: exitcode-stdio-1.0
   default-language: Haskell2010
 
@@ -88,6 +88,6 @@ test-suite cryptol-verifier-tc-test
     bytestring,
     containers,
     cryptol,
-    cryptol-verifier,
+    cryptol-saw-core,
     heredoc >= 0.2,
     saw-core
