@@ -157,7 +157,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
 
--- cryptol-verifier
+-- cryptol-saw-core
 import Verifier.SAW.TypedTerm
 
 -- saw-script

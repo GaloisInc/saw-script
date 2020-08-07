@@ -33,7 +33,7 @@ library
     , containers
     , constraints >= 0.6
     , cryptol
-    , cryptol-verifier
+    , cryptol-saw-core
     , crucible >= 0.4
     , crucible-jvm
     , crucible-llvm >= 0.2
@@ -213,4 +213,4 @@ executable saw
     , transformers
     , saw-script
     , saw-core
-    , cryptol-verifier
+    , cryptol-saw-core
