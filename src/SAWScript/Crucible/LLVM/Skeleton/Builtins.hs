@@ -9,7 +9,22 @@ Stability   : provisional
 {-# Language RecordWildCards #-}
 {-# Language ImplicitParams #-}
 
-module SAWScript.Crucible.LLVM.Skeleton.Builtins where
+module SAWScript.Crucible.LLVM.Skeleton.Builtins
+  ( module_skeleton
+  , function_skeleton
+  , skeleton_resize_arg_index
+  , skeleton_resize_arg
+  , skeleton_guess_arg_sizes
+  , skeleton_globals_pre
+  , skeleton_prestate
+  , skeleton_exec
+  , skeleton_globals_post
+  , skeleton_poststate
+  , skeleton_arg_index
+  , skeleton_arg
+  , skeleton_arg_index_pointer
+  , skeleton_arg_pointer
+  ) where
 
 import Control.Monad
 import Control.Monad.IO.Class

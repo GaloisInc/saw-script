@@ -9,7 +9,17 @@ Stability   : provisional
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
 
-module SAWScript.Crucible.LLVM.Skeleton where
+module SAWScript.Crucible.LLVM.Skeleton
+  ( Location(..), locationLine, locationColumn
+  , SizeGuess(..), sizeGuessElems, sizeGuessInitialized, sizeGuessSource
+  , TypeSkeleton(..), typeSkelLLVMType, typeSkelIsPointer, typeSkelSizeGuesses
+  , GlobalSkeleton(..), globSkelName, globSkelLoc, globSkelType, globSkelMutable, globSkelInitialized
+  , ArgSkeleton(..), argSkelName, argSkelLoc, argSkelType
+  , FunctionSkeleton(..), funSkelName, funSkelLoc, funSkelArgs, funSkelRet, funSkelCalls
+  , ModuleSkeleton(..), modSkelGlobals, modSkelFunctions
+
+  , moduleSkeleton
+  ) where
 
 import Control.Lens.TH
 
