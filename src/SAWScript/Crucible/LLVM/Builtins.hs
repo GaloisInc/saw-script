@@ -1029,10 +1029,10 @@ verifySimulate ::
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   [(Crucible.MemType, LLVMVal)] ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
-  W4.ProgramLoc                 ->
-  [MS.CrucibleMethodSpecIR (LLVM arch)]        ->
-  Crucible.SymGlobalState Sym   ->
-  Bool                          ->
+  W4.ProgramLoc ->
+  [MS.CrucibleMethodSpecIR (LLVM arch)] ->
+  Crucible.SymGlobalState Sym ->
+  Bool ->
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp =
