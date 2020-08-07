@@ -8,7 +8,7 @@ let id_spec = do {
 
 crucible_llvm_verify m "id_p" [] false id_spec z3;
 
-// NOTE: Commented out due to bug #31 in crucible-verifier
+// NOTE: Commented out due to bug #31 in cryptol-verifier
 // let incr_spec = do {
 //     p <- crucible_fresh_pointer (llvm_array 10 (llvm_int 32));
 //     crucible_execute_func [p];
