@@ -57,7 +57,7 @@ executable css
      buildable: False
 
   other-modules:
-    Paths_cryptol_verifier
+    Paths_cryptol_saw_core
 
   build-depends:
     array,

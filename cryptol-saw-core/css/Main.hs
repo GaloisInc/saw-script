@@ -27,7 +27,7 @@ import           Verifier.SAW.CryptolEnv (schemaNoUser)
 import qualified Data.ABC as ABC
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import qualified Paths_cryptol_verifier as Paths
+import qualified Paths_cryptol_saw_core as Paths
 
 data CSS = CSS
   { output :: FilePath
