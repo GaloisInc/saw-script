@@ -313,6 +313,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("bvsle",         mapsTo vectorsModule "bvsle")
   , ("bvslt",         mapsTo vectorsModule "bvslt")
   , ("bvult",         mapsTo vectorsModule "bvult")
+  , ("bvule",         mapsTo vectorsModule "bvule")
   , ("coerceVec",     mapsTo vectorsModule "coerceVec")
   , ("eq_Vec",        skip)
   , ("foldr",         mapsTo vectorsModule "foldr")

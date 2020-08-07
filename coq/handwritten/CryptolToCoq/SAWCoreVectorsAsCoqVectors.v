@@ -277,6 +277,9 @@ Opaque shiftR.
 Definition bvult (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   ltB (bvToBITS a) (bvToBITS b).
 
+Definition bvule (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+  leB (bvToBITS a) (bvToBITS b).
+
 (* FIXME not implemented *)
 Definition bvslt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   false.
