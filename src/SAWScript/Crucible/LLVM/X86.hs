@@ -473,7 +473,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     , globalEnd . fst <$> globs
     , allocGlobalEnd <$> ms ^. MS.csGlobalAllocs
     ]
-  (base, mem) <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Mutable
+  (base, mem) <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Immutable
     "globals" emptyMem sz align
   pure $ X86State
     { _x86Sym = sym
