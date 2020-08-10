@@ -1084,66 +1084,88 @@ scDefTerm sc d = scGlobalDef sc (defIdent d)
 scApplyCtor :: SharedContext -> Ctor -> [Term] -> IO Term
 scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
--- Create a term from a sort.
+-- | Create a term from a sort.
 scSort :: SharedContext -> Sort -> IO Term
 scSort sc s = scFlatTermF sc (Sort s)
 
--- Create a literal term from a natural number.
+-- | Create a literal term from a natural number.
 scNat :: SharedContext -> Natural -> IO Term
 scNat sc n = scFlatTermF sc (NatLit n)
 
--- Create a literal term from a string.
+-- | Create a literal term from a string.
 scString :: SharedContext -> String -> IO Term
 scString sc s = scFlatTermF sc (StringLit s)
 
+-- | Create a term representing the global type of strings.
 scStringType :: SharedContext -> IO Term
 scStringType sc = scFlatTermF sc preludeStringType
 
--- Create a vector term from a type (as a term) and a list of terms.
+-- | Create a vector term from a type (as a term) and a list of terms.
 scVector :: SharedContext -> Term -> [Term] -> IO Term
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 
+-- | Create a record term from a map from field names to terms.
 scRecord :: SharedContext -> Map FieldName Term -> IO Term
 scRecord sc m = scFlatTermF sc (RecordValue $ Map.assocs m)
 
+-- | Create a record field access term from a term representing a record and
+-- a field name.
 scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
 scRecordSelect sc t fname = scFlatTermF sc (RecordProj t fname)
 
+-- | Create a term representing the type of a record from a list associating
+-- field names (as @String@s) and types (as @Term@s).
 scRecordType :: SharedContext -> [(String,Term)] -> IO Term
 scRecordType sc elem_tps = scFlatTermF sc (RecordType elem_tps)
 
+-- | Create a unit-valued term.
 scUnitValue :: SharedContext -> IO Term
 scUnitValue sc = scFlatTermF sc UnitValue
 
+-- | Create a term representing the unit type.
 scUnitType :: SharedContext -> IO Term
 scUnitType sc = scFlatTermF sc UnitType
 
+-- | Create a pair term from two terms.
 scPairValue :: SharedContext -> Term -> Term -> IO Term
 scPairValue sc x y = scFlatTermF sc (PairValue x y)
 
+-- | Create a term representing a pair type from two other terms, each
+-- representing a type.
 scPairType :: SharedContext -> Term -> Term -> IO Term
 scPairType sc x y = scFlatTermF sc (PairType x y)
 
+-- | Create an n-place tuple from a list (of length n) of terms.
+-- Note that tuples are nested pairs, associating to the right e.g.
+--                      (a, (b, (c, d)))
 scTuple :: SharedContext -> [Term] -> IO Term
 scTuple sc [] = scUnitValue sc
 scTuple _ [t] = return t
 scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
 
+-- | Create a term representing the type of an n-place tuple, from a list
+-- (of length n) of terms, each representing a type.
 scTupleType :: SharedContext -> [Term] -> IO Term
 scTupleType sc [] = scUnitType sc
 scTupleType _ [t] = return t
 scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 
+-- | Create a term giving the left projection of a term repesenting a pair.
 scPairLeft :: SharedContext -> Term -> IO Term
 scPairLeft sc t = scFlatTermF sc (PairLeft t)
 
+-- | Create a term giving the right projection of a term representing a pair.
 scPairRight :: SharedContext -> Term -> IO Term
 scPairRight sc t = scFlatTermF sc (PairRight t)
 
+-- | Create a term representing either the left or right projection of th
+-- given term, depending on the given @Bool@; left if @False@, right if @True@.
 scPairSelector :: SharedContext -> Term -> Bool -> IO Term
 scPairSelector sc t False = scPairLeft sc t
 scPairSelector sc t True = scPairRight sc t
 
+-- | @scTupleSelector sc t i n@ returns a term selecting the @i@th component of
+-- an @n@-place tuple, @t@.
 scTupleSelector ::
   SharedContext -> Term ->
   Int {- ^ 1-based index -} ->
