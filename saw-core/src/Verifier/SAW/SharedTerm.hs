@@ -305,6 +305,7 @@ data SharedContext = SharedContext
   , scFreshGlobalVar :: IO VarIndex
   }
 
+-- | Create a new term from a lower-level 'flat' term.
 scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
 scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 
@@ -319,6 +320,7 @@ scFreshGlobal sc sym tp = do
 scGlobalDef :: SharedContext -> Ident -> IO Term
 scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 
+-- | Create a function application term.
 scApply :: SharedContext -> Term -> Term -> IO Term
 scApply sc f = scTermF sc . App f
 
@@ -745,14 +747,17 @@ reducePi sc t arg = do
     _ ->
       fail $ unlines ["reducePi: not a Pi term", showTerm t']
 
+-- | Copmute the type of a global variable.
 scTypeOfGlobal :: SharedContext -> Ident -> IO Term
 scTypeOfGlobal sc ident =
   defType <$> scRequireDef sc ident
 
+-- | Compute the type of a datatype.
 scTypeOfDataType :: SharedContext -> Ident -> IO Term
 scTypeOfDataType sc ident =
   dtType <$> scRequireDataType sc ident
 
+-- | Compute the type of an element of the @llvm.global_ctors@ array.
 scTypeOfCtor :: SharedContext -> Ident -> IO Term
 scTypeOfCtor sc ident =
   ctorType <$> scRequireCtor sc ident
@@ -1024,6 +1029,7 @@ instantiateVarList sc k ts t =
 --------------------------------------------------------------------------------
 -- Beta Normalization
 
+-- | Beta-reduce a term to normal form.
 betaNormalize :: SharedContext -> Term -> IO Term
 betaNormalize sc t0 =
   do cache <- newCache
@@ -1058,6 +1064,7 @@ betaNormalize sc t0 =
 --------------------------------------------------------------------------------
 -- Building shared terms
 
+-- | Apply a function term to zero or more argument terms.
 scApplyAll :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAll sc = foldlM (scApply sc)
 
@@ -1077,18 +1084,22 @@ scDefTerm sc d = scGlobalDef sc (defIdent d)
 scApplyCtor :: SharedContext -> Ctor -> [Term] -> IO Term
 scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
+-- Create a term from a sort.
 scSort :: SharedContext -> Sort -> IO Term
 scSort sc s = scFlatTermF sc (Sort s)
 
+-- Create a literal term from a natural number.
 scNat :: SharedContext -> Natural -> IO Term
 scNat sc n = scFlatTermF sc (NatLit n)
 
+-- Create a literal term from a string.
 scString :: SharedContext -> String -> IO Term
 scString sc s = scFlatTermF sc (StringLit s)
 
 scStringType :: SharedContext -> IO Term
 scStringType sc = scFlatTermF sc preludeStringType
 
+-- Create a vector term from a type (as a term) and a list of terms.
 scVector :: SharedContext -> Term -> [Term] -> IO Term
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 
