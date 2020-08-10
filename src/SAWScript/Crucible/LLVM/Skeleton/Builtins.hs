@@ -126,30 +126,28 @@ llvmTypeSize tc t =
       Right m -> fromIntegral $ C.LLVM.memTypeSize (C.LLVM.llvmDataLayout ?lc) m
 
 skeleton_guess_arg_sizes ::
-  FunctionSkeleton ->
+  ModuleSkeleton ->
   Some LLVMModule ->
   [(String, [FunctionProfile])] ->
-  TopLevel FunctionSkeleton
-skeleton_guess_arg_sizes skel (Some m) profiles =
+  TopLevel ModuleSkeleton
+skeleton_guess_arg_sizes mskel (Some m) profiles = do
   let (_, tc) = C.LLVM.typeContextFromModule $ modAST m
-  in case lookup (Text.unpack $ skel ^. funSkelName) profiles of
-    Just (prof:_) -> let
-      updateArg (a, p)
-        | a ^. argSkelType . typeSkelIsPointer
-        , Just s <- p ^. argProfileSize
-        = a & argSkelType . typeSkelSizeGuesses
-          %~ (SizeGuess
-               (quot s $ llvmTypeSize tc $ a ^. argSkelType . typeSkelLLVMType)
-               (p ^. argProfileInitialized)
-               "checking sizes in the simulator":)
-        | otherwise = a
-      uargs args = updateArg <$> zip args (prof ^. funProfileArgs)
-      in pure (skel & funSkelArgs %~ uargs)
-    _ -> throwTopLevel $ mconcat
-      [ "No profile for \""
-      , Text.unpack $ skel ^. funSkelName
-      , "\" was generated."
-      ]
+  fskels <- forM (mskel ^. modSkelFunctions) $ \skel -> do
+    case lookup (Text.unpack $ skel ^. funSkelName) profiles of
+      Just (prof:_) -> let
+        updateArg (a, p)
+          | a ^. argSkelType . typeSkelIsPointer
+          , Just s <- p ^. argProfileSize
+          = a & argSkelType . typeSkelSizeGuesses
+            %~ (SizeGuess
+                 (quot s $ llvmTypeSize tc $ a ^. argSkelType . typeSkelLLVMType)
+                 (p ^. argProfileInitialized)
+                 "checking sizes in the simulator":)
+          | otherwise = a
+        uargs args = updateArg <$> zip args (prof ^. funProfileArgs)
+        in pure (skel & funSkelArgs %~ uargs)
+      _ -> pure skel
+  pure $ mskel & modSkelFunctions .~ fskels
 
 --------------------------------------------------------------------------------
 -- ** Writing SAWScript specifications using skeletons 

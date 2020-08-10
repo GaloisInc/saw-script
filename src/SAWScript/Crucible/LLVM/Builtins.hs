@@ -293,7 +293,7 @@ crucible_llvm_array_size_profile ::
 crucible_llvm_array_size_profile assume bic opts (Some lm) nm setup = do
   cell <- io $ newIORef (Map.empty :: Map Text.Text [Crucible.FunctionProfile])
   withMethodSpec bic opts lm nm setup $ \cc ms -> do
-    void $ verifyMethodSpec bic opts cc ms [] False assume Nothing
+    void . verifyMethodSpec bic opts cc ms [] False assume $ Just cell
     profiles <- io $ readIORef cell
     pure . fmap (\(fnm, prof) -> (Text.unpack fnm, prof)) $ Map.toList profiles
 

@@ -1702,10 +1702,10 @@ primitives = Map.fromList
     , "the assumed length/initialization of the given argument is updated."
     ]
 
-  , prim "skeleton_guess_arg_sizes" "FunctionSkeleton -> LLVMModule -> [(String, [FunctionProfile])] -> TopLevel FunctionSkeleton"
+  , prim "skeleton_guess_arg_sizes" "ModuleSkeleton -> LLVMModule -> [(String, [FunctionProfile])] -> TopLevel ModuleSkeleton"
     (pureVal skeleton_guess_arg_sizes)
     Experimental
-    [ "Update the sizes of all arguments of the given function skeleton using"
+    [ "Update the sizes of all arguments of the given module skeleton using"
     , "information obtained from 'crucible_llvm_array_size_profile'."
     ]
 
@@ -1770,10 +1770,13 @@ primitives = Map.fromList
     , "in 'skeleton_prestate'."
     ]
 
-  , prim "llvm_boilerplate" "String -> LLVMModule -> TopLevel ()"
+  , prim "llvm_boilerplate" "String -> ModuleSkeleton -> Bool -> TopLevel ()"
     (pureVal llvm_boilerplate)
     Experimental
-    [ "Generate boilerplate for the definitions in an LLVM module." ]
+    [ "Generate boilerplate for the definitions in the given LLVM module skeleton."
+    , "Output is written to the path passed as the first argument."
+    , "The third argument controls whether skeleton builtins are emitted."
+    ]
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
@@ -2167,7 +2170,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_llvm_array_size_profile"
-    "LLVMModule -> String -> CrucibleSetup () -> TopLevel [(String, FunctionProfile)]"
+    "LLVMModule -> String -> CrucibleSetup () -> TopLevel [(String, [FunctionProfile])]"
     (bicVal $ crucible_llvm_array_size_profile assumeUnsat)
     Experimental
     [ "Symbolically execute the function named by the second parameter in"
