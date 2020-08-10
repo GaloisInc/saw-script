@@ -1634,6 +1634,13 @@ primitives = Map.fromList
     , "scalar argument and return types are currently supported."
     ]
 
+  , prim "llvm_sizeof"         "LLVMModule -> LLVMType -> Int"
+    (funVal2 llvm_sizeof)
+    Current
+    [ "In the context of the given LLVM module, compute the size of the"
+    , "given LLVM type in bytes. The module determines details of struct"
+    , "layout and the meaning of type aliases." ]
+
   , prim "llvm_type"           "String -> LLVMType"
     (funVal1 llvm_type)
     Current
