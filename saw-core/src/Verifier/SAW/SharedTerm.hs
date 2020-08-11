@@ -747,7 +747,7 @@ reducePi sc t arg = do
     _ ->
       fail $ unlines ["reducePi: not a Pi term", showTerm t']
 
--- | Copmute the type of a global variable.
+-- | Compute the type of a global variable.
 scTypeOfGlobal :: SharedContext -> Ident -> IO Term
 scTypeOfGlobal sc ident =
   defType <$> scRequireDef sc ident
