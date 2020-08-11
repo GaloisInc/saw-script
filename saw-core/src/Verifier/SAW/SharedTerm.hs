@@ -1092,7 +1092,7 @@ scSort sc s = scFlatTermF sc (Sort s)
 scNat :: SharedContext -> Natural -> IO Term
 scNat sc n = scFlatTermF sc (NatLit n)
 
--- | Create a literal term from a string.
+-- | Create a literal term (of saw-core type @String@) from a string.
 scString :: SharedContext -> String -> IO Term
 scString sc s = scFlatTermF sc (StringLit s)
 
