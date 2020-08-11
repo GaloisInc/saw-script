@@ -1096,7 +1096,7 @@ scNat sc n = scFlatTermF sc (NatLit n)
 scString :: SharedContext -> String -> IO Term
 scString sc s = scFlatTermF sc (StringLit s)
 
--- | Create a term representing the global type of strings.
+-- | Create a term representing the primitive saw-core type @String@.
 scStringType :: SharedContext -> IO Term
 scStringType sc = scFlatTermF sc preludeStringType
 
