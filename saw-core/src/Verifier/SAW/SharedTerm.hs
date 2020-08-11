@@ -1302,52 +1302,66 @@ scVectorReduced sc ety xs
 ------------------------------------------------------------
 -- Building terms using prelude functions
 
+-- | Create a term applying @Prelude.EqTrue@ to the given term.
 scEqTrue :: SharedContext -> Term -> IO Term
 scEqTrue sc t = scGlobalApply sc "Prelude.EqTrue" [t]
 
+-- | Create a @Prelude.Bool@-typed term from the given Boolean: @Prelude.True@
+-- for @True@, @Prelude.False@ for @False@.
 scBool :: SharedContext -> Bool -> IO Term
 scBool sc True  = scGlobalDef sc "Prelude.True"
 scBool sc False = scGlobalDef sc "Prelude.False"
 
+-- | Create a term representing the prelude Boolean type, @Prelude.Bool@.
 scBoolType :: SharedContext -> IO Term
 scBoolType sc = scGlobalDef sc "Prelude.Bool"
 
+-- | Create a term representing the prelude Natural type.
 scNatType :: SharedContext -> IO Term
 scNatType sc = scFlatTermF sc preludeNatType
 
+-- | Create a term representing a vector type, from a term giving the length
+-- and a term giving the element type.
 scVecType :: SharedContext -> Term -> Term -> IO Term
 scVecType sc n e =
   do vec_f <- scFlatTermF sc preludeVecTypeFun
      scApplyAll sc vec_f [n, e]
 
+-- | Create a term applying @Prelude.not@ to the given term.
 scNot :: SharedContext -> Term -> IO Term
 scNot sc t = scGlobalApply sc "Prelude.not" [t]
 
+-- | Create a term applying @Prelude.and@ to the two given terms.
 scAnd :: SharedContext -> Term -> Term -> IO Term
 scAnd sc x y = scGlobalApply sc "Prelude.and" [x,y]
 
+-- | Create a term applying @Prelude.or@ to the two given terms.
 scOr :: SharedContext -> Term -> Term -> IO Term
 scOr sc x y = scGlobalApply sc "Prelude.or" [x,y]
 
+-- | Create a term applying @Prelude.implies@ to the two given terms.
 scImplies :: SharedContext -> Term -> Term
           -> IO Term
 scImplies sc x y = scGlobalApply sc "Prelude.implies" [x,y]
 
+-- | Create a term applying @Prelude.xor@ to the two given terms.
 scXor :: SharedContext -> Term -> Term -> IO Term
 scXor sc x y = scGlobalApply sc "Prelude.xor" [x,y]
 
+-- | Create a term applying @Prelude.boolEq@ to the two given terms.
 scBoolEq :: SharedContext -> Term -> Term -> IO Term
 scBoolEq sc x y = scGlobalApply sc "Prelude.boolEq" [x,y]
 
+-- | Create a universally quantified bitvector term.
 scBvForall :: SharedContext -> Term -> Term -> IO Term
 scBvForall sc w f = scGlobalApply sc "Prelude.bvForall" [w, f]
 
--- ite :: (a :: sort 1) -> Bool -> a -> a -> a;
+-- | ite :: (a :: sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
 scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
 
--- append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
+-- | append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 scAppend :: SharedContext -> Term -> Term -> Term ->
             Term -> Term -> IO Term
 scAppend sc t m n x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
@@ -1389,9 +1403,13 @@ scAt sc n a xs idx = scGlobalApply sc (mkIdent preludeName "at") [n, a, xs, idx]
 scSingle :: SharedContext -> Term -> Term -> IO Term
 scSingle sc e x = scGlobalApply sc (mkIdent preludeName "single") [e, x]
 
+-- | Create a term computing the least significant bit of a bitvector, given a
+-- length and bitvector.
 scLsb :: SharedContext -> Term -> Term -> IO Term
 scLsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
 
+-- | Create a term computing the most significant bit of a bitvector, given a
+-- length and bitvector.
 scMsb :: SharedContext -> Term -> Term -> IO Term
 scMsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
 
