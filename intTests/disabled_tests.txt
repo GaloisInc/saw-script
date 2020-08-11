@@ -12,3 +12,6 @@ test0010_jss_cnf_exp
 
 # Missing LLVM intrinsic
 test0039_rust
+
+# Boilerplate generation has been overhauled
+test_boilerplate
