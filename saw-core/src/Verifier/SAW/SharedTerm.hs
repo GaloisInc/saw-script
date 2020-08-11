@@ -757,7 +757,7 @@ scTypeOfDataType :: SharedContext -> Ident -> IO Term
 scTypeOfDataType sc ident =
   dtType <$> scRequireDataType sc ident
 
--- | Compute the type of an element of the @llvm.global_ctors@ array.
+-- | Compute the type of a data constructor given its name.
 scTypeOfCtor :: SharedContext -> Ident -> IO Term
 scTypeOfCtor sc ident =
   ctorType <$> scRequireCtor sc ident
