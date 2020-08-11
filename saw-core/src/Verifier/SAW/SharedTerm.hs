@@ -1158,14 +1158,14 @@ scPairLeft sc t = scFlatTermF sc (PairLeft t)
 scPairRight :: SharedContext -> Term -> IO Term
 scPairRight sc t = scFlatTermF sc (PairRight t)
 
--- | Create a term representing either the left or right projection of th
--- given term, depending on the given @Bool@; left if @False@, right if @True@.
+-- | Create a term representing either the left or right projection of the
+-- given term, depending on the given @Bool@: left if @False@, right if @True@.
 scPairSelector :: SharedContext -> Term -> Bool -> IO Term
 scPairSelector sc t False = scPairLeft sc t
 scPairSelector sc t True = scPairRight sc t
 
 -- | @scTupleSelector sc t i n@ returns a term selecting the @i@th component of
--- an @n@-place tuple, @t@.
+-- an @n@-place tuple term, @t@.
 scTupleSelector ::
   SharedContext -> Term ->
   Int {- ^ 1-based index -} ->
@@ -1178,16 +1178,22 @@ scTupleSelector sc t i n
                    scTupleSelector sc t' (i - 1) (n - 1)
   | otherwise = fail "scTupleSelector: non-positive index"
 
+-- | Create a term representing the type of a function, given a parameter and
+-- result type (as terms).
 scFun :: SharedContext -> Term -> Term -> IO Term
 scFun sc a b = do b' <- incVars sc 0 1 b
                   scTermF sc (Pi "_" a b')
 
+-- | Create a term representing the type of a function, given a list of
+-- parameter types and a result type (as terms).
 scFunAll :: SharedContext
          -> [Term]
          -> Term
          -> IO Term
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
+-- | Create a lambda term from a parameter name, parameter type (as a term),
+-- and a body.
 scLambda :: SharedContext
          -> String
          -> Term
@@ -1195,6 +1201,8 @@ scLambda :: SharedContext
          -> IO Term
 scLambda sc varname ty body = scTermF sc (Lambda varname ty body)
 
+-- | Create a lambda term of multiple arguments (curried) from a list
+-- associating parameter names to types (as terms) and a body.
 scLambdaList :: SharedContext
              -> [(String, Term)]
              -> Term
@@ -1203,6 +1211,8 @@ scLambdaList _ [] rhs = return rhs
 scLambdaList sc ((nm,tp):r) rhs =
   scLambda sc nm tp =<< scLambdaList sc r rhs
 
+-- | Create a (possibly dependent) function given a parameter name, parameter
+-- type (as a term), and a body.
 scPi :: SharedContext
      -> String
      -> Term
@@ -1210,6 +1220,8 @@ scPi :: SharedContext
      -> IO Term
 scPi sc nm tp body = scTermF sc (Pi nm tp body)
 
+-- | Create a (possibly dependent) function of multiple arguments (curried)
+-- from a list associating parameter names to types (as terms) and a body.
 scPiList :: SharedContext
              -> [(String, Term)]
              -> Term
@@ -1217,6 +1229,7 @@ scPiList :: SharedContext
 scPiList _ [] rhs = return rhs
 scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 
+-- | Create a local variable term from a deBruijn index.
 scLocalVar :: SharedContext
            -> DeBruijnIndex
            -> IO Term
@@ -1238,6 +1251,8 @@ scConstant sc name rhs ty =
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
 
+-- | Create a function application term from a global identifier and a list of
+-- arguments (as terms).
 scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
 scGlobalApply sc i ts =
     do c <- scGlobalDef sc i
