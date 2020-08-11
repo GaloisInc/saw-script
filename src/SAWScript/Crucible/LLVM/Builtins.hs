@@ -514,12 +514,13 @@ verifyMethodSpec bic opts cc methodSpec lemmas checkSat tactic asp =
          Nothing   -> fail "internal error: LLVM Memory global not found"
          Just mem0 -> return mem0
      -- push a memory stack frame if starting from a breakpoint
-     let mem = if isJust (methodSpec^.csParentName)
-               then mem0
+     let mem = case methodSpec^.csParentName of
+               Just parent -> mem0
                  { Crucible.memImplHeap = Crucible.pushStackFrameMem
+                   (Text.pack $ mconcat [methodSpec ^. csName, "#", parent])
                    (Crucible.memImplHeap mem0)
                  }
-               else mem0
+               Nothing -> mem0
      let globals1 = Crucible.llvmGlobals (ccLLVMContext cc) mem
 
      -- construct the initial state for verifications
@@ -902,7 +903,7 @@ ppGlobalPair cc gp =
       globals = gp ^. Crucible.gpGlobals in
   case Crucible.lookupGlobal mvar globals of
     Nothing -> text "LLVM Memory global variable not initialized"
-    Just mem -> Crucible.ppMem mem
+    Just mem -> Crucible.ppMem $ Crucible.memImplHeap mem
 
 
 --------------------------------------------------------------------------------
