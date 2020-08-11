@@ -29,7 +29,7 @@ import qualified Control.Monad.Except                          as Except
 import qualified Control.Monad.Fail                            as Fail
 import           Control.Monad.Reader                          hiding (fail, fix)
 import           Control.Monad.State                           hiding (fail, fix, state)
-import           Data.List                                     (intersperse, sortOn)
+import           Data.List                                     (intersperse, sortOn, find)
 import           Data.Maybe                                    (fromMaybe)
 import           Prelude                                       hiding (fail)
 import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
@@ -66,7 +66,7 @@ data TranslationState = TranslationState
   -- for the term being translated.
 
   , _localEnvironment  :: [String]
-  -- ^ TODO: describe me
+  -- ^ Associates string names to all of the deBruijn indices in scope
 
   , _currentModule :: Maybe ModuleName
   }
@@ -253,23 +253,34 @@ mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Decl
 mkDefinition name (Coq.Lambda bs t) = Coq.Definition name bs Nothing t
 mkDefinition name t = Coq.Definition name [] Nothing t
 
+-- | Make sure a name is not used in the current environment, adding @"_N"@ for
+-- some number @N@ that we continue to increment until we find an unused
+-- name. When we get one, add it to the current environment and return it.
+freshenAndBindName :: TermTranslationMonad m => String -> m String
+freshenAndBindName n =
+  do ns <- view localEnvironment <$> get
+     let Just n' = find (flip notElem ns) (n : map (((n++"_")++) . show) [0::Int ..])
+     modify $ over localEnvironment (n' :)
+     return n'
+
 translateParams ::
   TermTranslationMonad m =>
   [(String, Term)] -> m [Coq.Binder]
 translateParams [] = return []
 translateParams ((n, ty):ps) = do
   ty' <- translateTerm ty
-  modify $ over localEnvironment (n :)
+  n' <- freshenAndBindName n
   ps' <- translateParams ps
-  return (Coq.Binder n (Just ty') : ps')
+  return (Coq.Binder n' (Just ty') : ps')
 
 translatePi :: TermTranslationMonad m => [(String, Term)] -> Term -> m Coq.Term
 translatePi binders body = withLocalLocalEnvironment $ do
   bindersT <- forM binders $ \ (b, bType) -> do
     bTypeT <- translateTerm bType
-    modify $ over localEnvironment (b :)
-    let n = if b == "_" then Nothing else Just b
-    return (Coq.PiBinder n bTypeT)
+    b' <-
+      if b == "_" then freshenAndBindName "unused" >> return Nothing
+      else Just <$> freshenAndBindName b
+    return (Coq.PiBinder b' bTypeT)
   bodyT <- translateTerm body
   return $ Coq.Pi bindersT bodyT
 
@@ -290,14 +301,10 @@ translateTerm t = withLocalLocalEnvironment $ do
 
     (asLambda -> Just _) -> do
       paramTerms <- translateParams params
-      Coq.Lambda <$> pure paramTerms
-                 -- env is in innermost first (reverse) binder order
-                 <*> go ((reverse paramNames) ++ env) e
+      Coq.Lambda <$> pure paramTerms <*> translateTerm e
         where
           -- params are in normal, outermost first, order
           (params, e) = asLambdaList t
-          -- param names are in normal, outermost first, order
-          paramNames = map fst $ params
 
     (asApp -> Just _) ->
       -- asApplyAll: innermost argument first
@@ -311,10 +318,10 @@ translateTerm t = withLocalLocalEnvironment $ do
           -- `rest` can be non-empty in examples like:
           -- (if b then f else g) arg1 arg2
           _ty : c : tt : ft : rest -> do
-            ite <- Coq.If <$> go env c <*> go env tt <*> go env ft
+            ite <- Coq.If <$> translateTerm c <*> translateTerm tt <*> translateTerm ft
             case rest of
               [] -> return ite
-              _  -> Coq.App ite <$> mapM (go env) rest
+              _  -> Coq.App ite <$> mapM translateTerm rest
           _ -> badTerm
         -- NOTE: the following works for something like CBC, because computing
         -- the n-th block only requires n steps of recursion
@@ -331,19 +338,23 @@ translateTerm t = withLocalLocalEnvironment $ do
 
               (asLambda -> Just (x, seqType, body)) | seqType == resultType ->
                   do
-                    len <- go env n
-                    expr <- go (x:env) body
-                    seqTypeT <- go env seqType
+                    len <- translateTerm n
+                    (x', expr) <-
+                      withLocalLocalEnvironment $
+                      do x' <- freshenAndBindName x
+                         expr <- translateTerm body
+                         return (x', expr)
+                    seqTypeT <- translateTerm seqType
                     defaultValueT <- defaultTermForType resultType
                     let iter =
                           Coq.App (Coq.Var "iter")
                           [ len
-                          , Coq.Lambda [Coq.Binder x (Just seqTypeT)] expr
+                          , Coq.Lambda [Coq.Binder x' (Just seqTypeT)] expr
                           , defaultValueT
                           ]
                     case rest of
                       [] -> return iter
-                      _  -> Coq.App iter <$> mapM (go env) rest
+                      _  -> Coq.App iter <$> mapM translateTerm rest
               _ -> badTerm
             -- NOTE: there is currently one instance of `fix` that will trigger
             -- `errorTermM`.  It is used in `Cryptol.cry` when translating
@@ -356,22 +367,20 @@ translateTerm t = withLocalLocalEnvironment $ do
               case lambda of
               (asLambdaList -> ((recFn, _) : binders, body)) -> do
                 let (_binderPis, otherPis) = splitAt (length binders) pis
-                (bindersT, typeT, bodyT) <- withLocalLocalEnvironment $ do
+                (recFn', bindersT, typeT, bodyT) <- withLocalLocalEnvironment $ do
                   -- this is very ugly...
-                  modify $ over localEnvironment (recFn :)
+                  recFn' <- freshenAndBindName recFn
                   bindersT <- mapM
                     (\ (b, bType) -> do
-                      env' <- view localEnvironment <$> get
-                      bTypeT <- go env' bType
-                      modify $ over localEnvironment (b :)
-                      return $ Coq.Binder b (Just bTypeT)
+                      bTypeT <- translateTerm bType
+                      b' <- freshenAndBindName b
+                      return $ Coq.Binder b' (Just bTypeT)
                     )
                     binders
                   typeT <- translatePi otherPis afterPis
-                  env' <- view localEnvironment <$> get
-                  bodyT <- go env' body
-                  return (bindersT, typeT, bodyT)
-                let fix = Coq.Fix recFn bindersT typeT bodyT
+                  bodyT <- translateTerm body
+                  return (recFn', bindersT, typeT, bodyT)
+                let fix = Coq.Fix recFn' bindersT typeT bodyT
                 case rest of
                   [] -> return fix
                   _  -> errorTermM "THAT" -- Coq.App fix <$> mapM (go env) rest
@@ -379,7 +388,7 @@ translateTerm t = withLocalLocalEnvironment $ do
 
         _ ->
           translateIdentWithArgs i args
-      _ -> Coq.App <$> go env f <*> traverse (go env) args
+      _ -> Coq.App <$> translateTerm f <*> traverse translateTerm args
 
     (asLocalVar -> Just n)
       | n < length env -> Coq.Var <$> pure (env !! n)
@@ -394,7 +403,7 @@ translateTerm t = withLocalLocalEnvironment $ do
       if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
         then Coq.Var <$> pure renamed
         else do
-        b <- go env body
+        b <- translateTerm body
         modify $ over localDeclarations $ (mkDefinition renamed b :)
         Coq.Var <$> pure renamed
 
@@ -403,9 +412,6 @@ translateTerm t = withLocalLocalEnvironment $ do
 
   where
     badTerm          = Except.throwError $ BadTerm t
-    go env term      = do
-      modify $ set localEnvironment env
-      translateTerm term
 
 -- | In order to turn fixpoint computations into iterative computations, we need
 -- to be able to create "dummy" values at the type of the computation.  For now,
