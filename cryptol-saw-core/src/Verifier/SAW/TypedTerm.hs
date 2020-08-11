@@ -15,6 +15,7 @@ import qualified Cryptol.TypeCheck.AST as C
 import Cryptol.Utils.PP (pretty)
 
 import Verifier.SAW.Cryptol (scCryptolType)
+import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
 
 -- Typed terms -----------------------------------------------------------------
@@ -34,11 +35,36 @@ data TypedTerm =
 ttTermLens :: Functor f => (Term -> f Term) -> TypedTerm -> f TypedTerm
 ttTermLens f tt = tt `seq` fmap (\x -> tt{ttTerm = x}) (f (ttTerm tt))
 
+-- | Deprecated.
 mkTypedTerm :: SharedContext -> Term -> IO TypedTerm
 mkTypedTerm sc trm = do
   ty <- scTypeOf sc trm
   ct <- scCryptolType sc ty
   return $ TypedTerm (C.Forall [] [] ct) trm
+
+-- Typed external constants ----------------------------------------------------
+
+data TypedExtCns =
+  TypedExtCns
+  { tecType :: C.Type
+  , tecExt :: ExtCns Term
+  }
+  deriving Show
+
+-- | Recognize 'TypedTerm's that are external constants.
+asTypedExtCns :: TypedTerm -> Maybe TypedExtCns
+asTypedExtCns (TypedTerm schema t) =
+  do cty <- C.isMono schema
+     ec <- asExtCns t
+     pure $ TypedExtCns cty ec
+
+abstractTypedExts :: SharedContext -> [TypedExtCns] -> TypedTerm -> IO TypedTerm
+abstractTypedExts sc tecs (TypedTerm (C.Forall params props ty) trm) =
+  do let tys = map tecType tecs
+     let exts = map tecExt tecs
+     let ty' = foldr C.tFun ty tys
+     trm' <- scAbstractExts sc exts trm
+     pure $ TypedTerm (C.Forall params props ty') trm'
 
 -- Typed modules ---------------------------------------------------------------
 
