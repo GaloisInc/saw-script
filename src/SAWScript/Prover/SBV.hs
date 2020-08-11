@@ -20,14 +20,11 @@ import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
-import Verifier.SAW.TypedTerm(TypedTerm(..), mkTypedTerm)
 import Verifier.SAW.Recognizer(asPi, asPiList)
 
 import SAWScript.Proof(Prop, propToPredicate)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite(rewriteEqs)
-import SAWScript.Prover.Util(checkBooleanSchema)
-
 
 
 -- | Bit-blast a proposition and check its validity using SBV.
@@ -93,10 +90,8 @@ prepNegatedSBV sc unints goal =
      let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
      exts <- filterM nonFun (getAllExts t0)
 
-     TypedTerm schema t' <-
-         scAbstractExts sc exts t0 >>= rewriteEqs sc >>= mkTypedTerm sc
+     t' <- scAbstractExts sc exts t0 >>= rewriteEqs sc
 
-     checkBooleanSchema schema
      (labels, lit) <- SBVSim.sbvSolve sc mempty unints t'
      let lit' = liftM SBV.svNot lit
      return (t', labels, lit')
