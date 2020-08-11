@@ -48,24 +48,6 @@ script:
 
 jobs:
   include:
-    - stage: test
-      addons:
-        apt:
-          packages:
-            - openjdk-8-jdk
-            - yasm
-      before_install:
-        - sudo add-apt-repository -y ppa:sri-csl/formal-methods
-        - sudo apt-get update -q
-        - sudo apt-get install -y yices2
-        - wget -t 3 https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-ubuntu-16.04.zip
-        - unzip z3-4.8.7-x64-ubuntu-16.04.zip
-        - cp z3-4.8.7-x64-ubuntu-16.04/bin/z3 bin
-      script:
-        - cd intTests
-        - for t in test0001 test0019_jss_switch_statement test_crucible_jvm test_ecdsa test_examples test_issue108 test_tutorial1 test_tutorial2 test_tutorial_w4; do echo $t >> disabled_tests.txt; done
-        - BIN=$TRAVIS_BUILD_DIR/bin RT_JAR=/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/rt.jar LOUD=true ./runtests.sh
-        - sh -c "! grep '<failure>' results.xml"
     # jobs share the cache if they have identical parameters, including
     # identical environmental variables. In order to share the cache with the
     # build job, each `s2n` test job exports environment variables manually,
@@ -84,7 +66,7 @@ jobs:
         - mkdir -p s2n/test-deps/saw/bin
         - cp bin/saw s2n/test-deps/saw/bin
         - cd s2n
-        - git checkout cd7282102bf5e65cc8b324c4127c7943c71c8513
+        - git checkout aa7092d9309fee2e49bd89deaa99c31bb1d35b6e
       before_script:
         - export TESTS=sawHMAC
       script:
