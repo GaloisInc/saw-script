@@ -752,12 +752,12 @@ scTypeOfGlobal :: SharedContext -> Ident -> IO Term
 scTypeOfGlobal sc ident =
   defType <$> scRequireDef sc ident
 
--- | Compute the type of a datatype.
+-- | Compute the type of a datatype given its name as an 'Ident'.
 scTypeOfDataType :: SharedContext -> Ident -> IO Term
 scTypeOfDataType sc ident =
   dtType <$> scRequireDataType sc ident
 
--- | Compute the type of a data constructor given its name.
+-- | Compute the type of a data constructor given its name as an 'Ident'.
 scTypeOfCtor :: SharedContext -> Ident -> IO Term
 scTypeOfCtor sc ident =
   ctorType <$> scRequireCtor sc ident
@@ -1084,15 +1084,15 @@ scDefTerm sc d = scGlobalDef sc (defIdent d)
 scApplyCtor :: SharedContext -> Ctor -> [Term] -> IO Term
 scApplyCtor sc c args = scCtorApp sc (ctorName c) args
 
--- | Create a term from a sort.
+-- | Create a term from a 'Sort'.
 scSort :: SharedContext -> Sort -> IO Term
 scSort sc s = scFlatTermF sc (Sort s)
 
--- | Create a literal term from a natural number.
+-- | Create a literal term from a 'Natural'.
 scNat :: SharedContext -> Natural -> IO Term
 scNat sc n = scFlatTermF sc (NatLit n)
 
--- | Create a literal term (of saw-core type @String@) from a string.
+-- | Create a literal term (of saw-core type @String@) from a 'String'.
 scString :: SharedContext -> String -> IO Term
 scString sc s = scFlatTermF sc (StringLit s)
 
@@ -1100,21 +1100,21 @@ scString sc s = scFlatTermF sc (StringLit s)
 scStringType :: SharedContext -> IO Term
 scStringType sc = scFlatTermF sc preludeStringType
 
--- | Create a vector term from a type (as a term) and a list of terms.
+-- | Create a vector term from a type (as a 'Term') and a list of terms.
 scVector :: SharedContext -> Term -> [Term] -> IO Term
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 
--- | Create a record term from a map from field names to terms.
+-- | Create a record term from a map from 'FieldName's to 'Term's.
 scRecord :: SharedContext -> Map FieldName Term -> IO Term
 scRecord sc m = scFlatTermF sc (RecordValue $ Map.assocs m)
 
--- | Create a record field access term from a term representing a record and
--- a field name.
+-- | Create a record field access term from a 'Term' representing a record and
+-- a 'FieldName'.
 scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
 scRecordSelect sc t fname = scFlatTermF sc (RecordProj t fname)
 
 -- | Create a term representing the type of a record from a list associating
--- field names (as @String@s) and types (as @Term@s).
+-- field names (as 'String's) and types (as 'Term's).
 scRecordType :: SharedContext -> [(String,Term)] -> IO Term
 scRecordType sc elem_tps = scFlatTermF sc (RecordType elem_tps)
 
@@ -1150,7 +1150,7 @@ scTupleType sc [] = scUnitType sc
 scTupleType _ [t] = return t
 scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 
--- | Create a term giving the left projection of a term repesenting a pair.
+-- | Create a term giving the left projection of a term representing a pair.
 scPairLeft :: SharedContext -> Term -> IO Term
 scPairLeft sc t = scFlatTermF sc (PairLeft t)
 
@@ -1178,14 +1178,14 @@ scTupleSelector sc t i n
                    scTupleSelector sc t' (i - 1) (n - 1)
   | otherwise = fail "scTupleSelector: non-positive index"
 
--- | Create a term representing the type of a function, given a parameter and
--- result type (as terms).
+-- | Create a term representing the type of a non-dependent function, given a
+-- parameter and result type (as terms).
 scFun :: SharedContext -> Term -> Term -> IO Term
 scFun sc a b = do b' <- incVars sc 0 1 b
                   scTermF sc (Pi "_" a b')
 
--- | Create a term representing the type of a function, given a list of
--- parameter types and a result type (as terms).
+-- | Create a term representing the type of a non-dependent n-ary function,
+-- given a list of parameter types and a result type (as terms).
 scFunAll :: SharedContext
          -> [Term]
          -> Term
