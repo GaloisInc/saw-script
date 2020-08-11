@@ -25,6 +25,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_block_entry_hint
        , heapster_find_symbol
        , heapster_assume_fun
+       , heapster_assume_fun_multi
        , heapster_print_fun_trans
        , heapster_export_coq
        , heapster_parse_test
@@ -422,6 +423,45 @@ heapster_assume_fun _bic _opts henv nm perms_string term_string =
                                           fun_perm
                                           (globalOpenTerm term_ident)
         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+
+-- | Assume that the given named function has one or more permissions and
+-- associated translations, each of which is as given in 'heapster_assume_fun'
+heapster_assume_fun_multi :: BuiltinContext -> Options -> HeapsterEnv ->
+                             String -> [(String, String)] -> TopLevel ()
+heapster_assume_fun_multi _bic _opts henv nm perms_terms_strings =
+  do Some lm <- failOnNothing ("Could not find symbol: " ++ nm)
+                              (lookupModDeclaringSym henv nm)
+     sc <- getSharedContext
+     let w = llvmModuleArchReprWidth lm
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     LLVMHandleInfo _ (h :: FnHandle cargs ret) <-
+       failOnNothing ("Unreachable: could not find symbol: " ++ nm) $
+         lm ^. modTrans.transContext.symbolMap.at (L.Symbol nm)
+     let args = mkCruCtx $ handleArgTypes h
+         ret = handleReturnType h
+     env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
+     perms_terms :: [(SomeFunPerm (CtxToRList cargs) ret, OpenTerm)] <-
+       forM (zip perms_terms_strings [0::Int ..]) $ \((perms_string,
+                                                       term_string), i) ->
+       withKnownNat w $ withLeqProof leq_proof $
+       do some_fun_perm <-
+            parseFunPermString "permissions" env args ret perms_string
+          fun_typ <-
+            case some_fun_perm of
+              SomeFunPerm fun_perm ->
+                liftIO $ translateCompleteFunPerm sc env fun_perm
+          term_ident <-
+            parseAndInsDef henv (nm ++ "__" ++ show i) fun_typ term_string
+          return (some_fun_perm, globalOpenTerm term_ident)
+     let env' =
+           withKnownNat w $ withLeqProof leq_proof $
+           permEnvAddGlobalSymFunMulti env (GlobalSymbol $
+                                            fromString nm) w perms_terms
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
 heapster_typecheck_mut_funs :: BuiltinContext -> Options -> HeapsterEnv ->

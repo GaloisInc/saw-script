@@ -2338,6 +2338,15 @@ primitives = Map.fromList
     , " permissions perms and translates to the SAW core term trans"
     ]
 
+  , prim "heapster_assume_fun_multi"
+    "HeapsterEnv -> String -> [(String, String)] -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun_multi)
+    Experimental
+    [ "heapster_assume_fun_multi nm [(perm1, trans1), ...] assumes that function"
+    , " nm can be typed with 0 or more permissions, each with the corresponding"
+    , " translation to SAW core"
+    ]
+
   , prim "heapster_typecheck_fun"
     "HeapsterEnv -> String -> String -> TopLevel ()"
     (bicVal heapster_typecheck_fun)
