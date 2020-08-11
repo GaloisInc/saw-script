@@ -1415,36 +1415,52 @@ scMsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
 
 -- Primitive operations on nats
 
+-- | Create a term computing the sum of the two given (natural number) terms.
 scAddNat :: SharedContext -> Term -> Term -> IO Term
 scAddNat sc x y = scGlobalApply sc "Prelude.addNat" [x,y]
 
+-- | Create a term computing the difference between the two given
+-- (natural number) terms.
 scSubNat :: SharedContext -> Term -> Term -> IO Term
 scSubNat sc x y = scGlobalApply sc "Prelude.subNat" [x,y]
 
+-- | Create a term computing the product of the two given (natural number)
+-- terms.
 scMulNat :: SharedContext -> Term -> Term -> IO Term
 scMulNat sc x y = scGlobalApply sc "Prelude.mulNat" [x,y]
 
--- divNat :: Nat -> Nat -> Nat;
+-- | Create a term computing the quotient of the two given (natural number)
+-- terms.
 scDivNat :: SharedContext -> Term -> Term -> IO Term
 scDivNat sc x y = scGlobalApply sc "Prelude.divNat" [x,y]
 
--- modNat :: Nat -> Nat -> Nat;
+-- | Create a term computing the remainder upon division of the two given
+-- (natural number) terms.
 scModNat :: SharedContext -> Term -> Term -> IO Term
 scModNat sc x y = scGlobalApply sc "Prelude.modNat" [x,y]
 
--- divModNat :: Nat -> Nat -> #(Nat, Nat);
+-- | Create a term computing the quotient and remainder upon division of the
+-- two given (natural number) terms, giving the result as a pair.
 scDivModNat :: SharedContext -> Term -> Term -> IO Term
 scDivModNat sc x y = scGlobalApply sc "Prelude.divModNat" [x,y]
 
+-- | Create a term computing whether the two given (natural number) terms are
+-- equal.
 scEqualNat :: SharedContext -> Term -> Term -> IO Term
 scEqualNat sc x y = scGlobalApply sc "Prelude.equalNat" [x,y]
 
+-- | Create a term computing whether the first term (a natural number) is less
+-- than the second term (also a natural number).
 scLtNat :: SharedContext -> Term -> Term -> IO Term
 scLtNat sc x y = scGlobalApply sc "Prelude.ltNat" [x,y]
 
+-- | Create a term computing the minimum of the two given (natural number)
+-- terms.
 scMinNat :: SharedContext -> Term -> Term -> IO Term
 scMinNat sc x y = scGlobalApply sc "Prelude.minNat" [x,y]
 
+-- | Create a term computing the maximum of the two given (natural number)
+-- terms.
 scMaxNat :: SharedContext -> Term -> Term -> IO Term
 scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 
