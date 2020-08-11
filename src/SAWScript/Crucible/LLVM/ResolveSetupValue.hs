@@ -39,6 +39,7 @@ import Data.IORef
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
+import qualified Data.ByteString as BS
 import           Numeric.Natural
 
 import qualified Text.LLVM.AST as L
@@ -552,6 +553,7 @@ typeOfLLVMVal _dl val =
     Crucible.LLVMValFloat _ _   -> error "FIXME: typeOfLLVMVal LLVMValFloat"
     Crucible.LLVMValStruct flds -> Crucible.mkStructType (fmap fieldType flds)
     Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
+    Crucible.LLVMValString bs -> Crucible.arrayType (fromIntegral (BS.length bs)) (Crucible.bitvectorType (Crucible.Bytes 1))
     Crucible.LLVMValZero tp     -> tp
     Crucible.LLVMValUndef tp    -> tp
   where
