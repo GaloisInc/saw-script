@@ -323,8 +323,8 @@ heapster_define_recursive_perm _bic _opts henv
               unfold_fun_tp <- liftIO $
                 translateCompletePureFun sc tmp_env args (singletonValuePerms
                                                           <$> nm_tp) or_tp
-              fold_ident   <- parseAndInsDef henv nm fold_fun_tp fold_fun_str
-              unfold_ident <- parseAndInsDef henv nm unfold_fun_tp unfold_fun_str
+              fold_ident   <- parseAndInsDef henv ("fold" ++ nm) fold_fun_tp fold_fun_str
+              unfold_ident <- parseAndInsDef henv ("unfold" ++ nm) unfold_fun_tp unfold_fun_str
               return (fold_ident, unfold_ident))
        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
