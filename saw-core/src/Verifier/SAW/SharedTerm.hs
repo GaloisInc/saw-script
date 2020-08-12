@@ -1329,6 +1329,8 @@ scVectorReduced sc ety xs
 -- Building terms using prelude functions
 
 -- | Create a term applying @Prelude.EqTrue@ to the given term.
+--
+-- > EqTrue : Bool -> sort 1;
 scEqTrue :: SharedContext -> Term -> IO Term
 scEqTrue sc t = scGlobalApply sc "Prelude.EqTrue" [t]
 
@@ -1348,94 +1350,137 @@ scNatType sc = scFlatTermF sc preludeNatType
 
 -- | Create a term representing a vector type, from a term giving the length
 -- and a term giving the element type.
-scVecType :: SharedContext -> Term -> Term -> IO Term
+scVecType :: SharedContext
+          -> Term -- ^ The length of the vector
+          -> Term -- ^ The element type
+          -> IO Term
 scVecType sc n e =
   do vec_f <- scFlatTermF sc preludeVecTypeFun
      scApplyAll sc vec_f [n, e]
 
 -- | Create a term applying @Prelude.not@ to the given term.
+--
+-- > not : Bool -> Bool;
 scNot :: SharedContext -> Term -> IO Term
 scNot sc t = scGlobalApply sc "Prelude.not" [t]
 
 -- | Create a term applying @Prelude.and@ to the two given terms.
+--
+-- > and : Bool -> Bool -> Bool;
 scAnd :: SharedContext -> Term -> Term -> IO Term
 scAnd sc x y = scGlobalApply sc "Prelude.and" [x,y]
 
 -- | Create a term applying @Prelude.or@ to the two given terms.
+--
+-- > or : Bool -> Bool -> Bool;
 scOr :: SharedContext -> Term -> Term -> IO Term
 scOr sc x y = scGlobalApply sc "Prelude.or" [x,y]
 
 -- | Create a term applying @Prelude.implies@ to the two given terms.
+--
+-- > implies : Bool -> Bool -> Bool;
 scImplies :: SharedContext -> Term -> Term
           -> IO Term
 scImplies sc x y = scGlobalApply sc "Prelude.implies" [x,y]
 
 -- | Create a term applying @Prelude.xor@ to the two given terms.
+--
+-- > xor : Bool -> Bool -> Bool;
 scXor :: SharedContext -> Term -> Term -> IO Term
 scXor sc x y = scGlobalApply sc "Prelude.xor" [x,y]
 
 -- | Create a term applying @Prelude.boolEq@ to the two given terms.
+--
+-- > boolEq : Bool -> Bool -> Bool;
 scBoolEq :: SharedContext -> Term -> Term -> IO Term
 scBoolEq sc x y = scGlobalApply sc "Prelude.boolEq" [x,y]
 
 -- | Create a universally quantified bitvector term.
+--
+-- > bvForall : (n : Nat) -> (bitvector n -> Bool) -> Bool;
 scBvForall :: SharedContext -> Term -> Term -> IO Term
 scBvForall sc w f = scGlobalApply sc "Prelude.bvForall" [w, f]
 
--- | ite :: (a :: sort 1) -> Bool -> a -> a -> a;
+-- | Create a non-dependent if-then-else term.
+--
+-- > ite : (a : sort 1) -> Bool -> a -> a -> a;
 scIte :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
 scIte sc t b x y = scGlobalApply sc "Prelude.ite" [t, b, x, y]
 
--- | append :: (m n :: Nat) -> (e :: sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
+-- | Create a term applying @Prelude.append@ to two vectors.
+--
+-- > append : (m n : Nat) -> (e : sort 0) -> Vec m e -> Vec n e -> Vec (addNat m n) e;
 scAppend :: SharedContext -> Term -> Term -> Term ->
             Term -> Term -> IO Term
 scAppend sc t m n x y = scGlobalApply sc "Prelude.append" [m, n, t, x, y]
 
--- | join  : (m n : Nat) -> (a : sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
+-- | Create a term applying @Prelude.join@ to a vector of vectors.
+--
+-- > join  : (m n : Nat) -> (a : sort 0) -> Vec m (Vec n a) -> Vec (mulNat m n) a;
 scJoin :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
 scJoin sc m n a v = scGlobalApply sc "Prelude.join" [m, n, a, v]
 
--- | split : (m n : Nat) -> (a : sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
+-- | Create a term splitting a vector with @Prelude.split@.
+--
+-- > split : (m n : Nat) -> (a : sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 scSplit :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
 scSplit sc m n a v = scGlobalApply sc "Prelude.split" [m, n, a, v]
 
--- | slice :: (e :: sort 1) -> (i n o :: Nat) -> Vec (addNat (addNat i n) o) e -> Vec n e;
+-- | Create a term selecting a range of values from a vector with @Prelude.slice@.
+--
+-- > slice : (e : sort 1) -> (i n o : Nat) -> Vec (addNat (addNat i n) o) e -> Vec n e;
 scSlice :: SharedContext -> Term -> Term ->
            Term -> Term -> Term -> IO Term
 scSlice sc e i n o a = scGlobalApply sc "Prelude.slice" [e, i, n, o, a]
 
--- | get :: (n :: Nat) -> (e :: sort 0) -> Vec n e -> Fin n -> e;
+-- | Create a term accessing a particular element of a vector with @get@.
+--
+-- > get : (n : Nat) -> (e : sort 0) -> Vec n e -> Fin n -> e;
 scGet :: SharedContext -> Term -> Term ->
          Term -> Term -> IO Term
 scGet sc n e v i = scGlobalApply sc (mkIdent preludeName "get") [n, e, v, i]
 
--- | bvAt :: (n :: Nat) -> (a :: sort 0) -> (i :: Nat) -> Vec n a -> bitvector i -> a;
+-- | Create a term accessing a particular element of a vector with @bvAt@,
+-- which uses a bitvector for indexing.
+--
+-- > bvAt : (n : Nat) -> (a : sort 0) -> (i : Nat) -> Vec n a -> bitvector i -> a;
 scBvAt :: SharedContext -> Term -> Term ->
          Term -> Term -> Term -> IO Term
 scBvAt sc n a i xs idx = scGlobalApply sc (mkIdent preludeName "bvAt") [n, a, i, xs, idx]
 
--- | atWithDefault :: (n :: Nat) -> (a :: sort 0) -> a -> Vec n a -> Nat -> a;
+-- | Create a term accessing a particular element of a vector, with a default
+-- to return if the index is out of bounds.
+--
+-- > atWithDefault : (n : Nat) -> (a : sort 0) -> a -> Vec n a -> Nat -> a;
 scAtWithDefault :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
 scAtWithDefault sc n a v xs idx = scGlobalApply sc (mkIdent preludeName "atWithDefault") [n, a, v, xs, idx]
 
--- | at :: (n :: Nat) -> (a :: sort 0) -> Vec n a -> Nat -> a;
+-- | Create a term accessing a particular element of a vector, failing if the
+-- index is out of bounds.
+--
+-- > at : (n : Nat) -> (a : sort 0) -> Vec n a -> Nat -> a;
 scAt :: SharedContext -> Term -> Term ->
         Term -> Term -> IO Term
 scAt sc n a xs idx = scGlobalApply sc (mkIdent preludeName "at") [n, a, xs, idx]
 
--- | single :: (e :: sort 1) -> e -> Vec 1 e;
--- single e x = generate 1 e (\(i :: Fin 1) -> x);
+-- | Create a term evaluating to a vector containing a single element.
+--
+-- > single : (e : sort 1) -> e -> Vec 1 e;
 scSingle :: SharedContext -> Term -> Term -> IO Term
 scSingle sc e x = scGlobalApply sc (mkIdent preludeName "single") [e, x]
 
 -- | Create a term computing the least significant bit of a bitvector, given a
 -- length and bitvector.
+--
+-- > lsb : (n : Nat) -> bitvector (Succ n) -> Bool;
 scLsb :: SharedContext -> Term -> Term -> IO Term
 scLsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
 
 -- | Create a term computing the most significant bit of a bitvector, given a
 -- length and bitvector.
+--
+-- > msb : (n : Nat) -> bitvector (Succ n) -> Bool;
 scMsb :: SharedContext -> Term -> Term -> IO Term
 scMsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
 
