@@ -1557,15 +1557,19 @@ scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 
 -- Primitive operations on Integer
 
+-- | Create a term representing the prelude Integer type.
 scIntegerType :: SharedContext -> IO Term
 scIntegerType sc = scFlatTermF sc preludeIntegerType
 
+-- | Create an integer constant term from an 'Integer'.
 scIntegerConst :: SharedContext -> Integer -> IO Term
 scIntegerConst sc i
   | i >= 0    = scNatToInt sc =<< scNat sc (fromInteger i)
   | otherwise = scIntNeg sc =<< scNatToInt sc =<< scNat sc (fromInteger (- i))
 
--- primitive intAdd/intSub/intMul/intDiv/intMod :: Integer -> Integer -> Integer;
+-- | Create terms applying the (binary) integer primitives.
+--
+-- > intAdd/intSub/intMul/intDiv/intMod : Integer -> Integer -> Integer;
 scIntAdd, scIntSub, scIntMul, scIntDiv, scIntMod, scIntMax, scIntMin
    :: SharedContext -> Term -> Term -> IO Term
 scIntAdd sc x y = scGlobalApply sc "Prelude.intAdd" [x, y]
@@ -1576,40 +1580,57 @@ scIntMod sc x y = scGlobalApply sc "Prelude.intMod" [x, y]
 scIntMin sc x y = scGlobalApply sc "Prelude.intMin" [x, y]
 scIntMax sc x y = scGlobalApply sc "Prelude.intMax" [x, y]
 
--- primitive intNeg/intAbs :: Integer -> Integer;
+-- | Create terms applying the (unary) integer primitives.
+--
+-- > intNeg/intAbs : Integer -> Integer;
 scIntNeg, scIntAbs
    :: SharedContext -> Term -> IO Term
 scIntNeg sc x = scGlobalApply sc "Prelude.intNeg" [x]
 scIntAbs sc x = scGlobalApply sc "Prelude.intAbs" [x]
 
--- primitive intEq/intLe/intLt  :: Integer -> Integer -> Bool;
+-- | Create terms applying the integer comparison primitives.
+--
+-- > intEq/intLe/intLt : Integer -> Integer -> Bool;
 scIntEq, scIntLe, scIntLt
    :: SharedContext -> Term -> Term -> IO Term
 scIntEq sc x y = scGlobalApply sc "Prelude.intEq" [x, y]
 scIntLe sc x y = scGlobalApply sc "Prelude.intLe" [x, y]
 scIntLt sc x y = scGlobalApply sc "Prelude.intLt" [x, y]
 
--- primitive intToNat :: Integer -> Nat;
+-- | Create a term computing a @Nat@ from an @Integer@, if possible.
+--
+-- > intToNat : Integer -> Nat;
 scIntToNat
    :: SharedContext -> Term -> IO Term
 scIntToNat sc x = scGlobalApply sc "Prelude.intToNat" [x]
 
--- primitive natToInt :: Nat -> Integer;
+-- | Create a term computing an @Integer@ from a @Nat@.
+--
+-- > natToInt : Nat -> Integer;
 scNatToInt
    :: SharedContext -> Term -> IO Term
 scNatToInt sc x = scGlobalApply sc "Prelude.natToInt" [x]
 
--- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+-- | Create a term computing a bitvector of length n from an @Integer@, if
+-- possible.
+--
+-- > intToBv : (n::Nat) -> Integer -> bitvector n;
 scIntToBv
    :: SharedContext -> Term -> Term -> IO Term
 scIntToBv sc n x = scGlobalApply sc "Prelude.intToBv" [n,x]
 
--- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- | Create a term computing an @Integer@ from a bitvector of length n.
+-- This produces the unsigned value of the bitvector.
+--
+-- > bvToInt : (n : Nat) -> bitvector n -> Integer;
 scBvToInt
    :: SharedContext -> Term -> Term -> IO Term
 scBvToInt sc n x = scGlobalApply sc "Prelude.bvToInt" [n,x]
 
--- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- | Create a term computing an @Integer@ from a bitvector of length n.
+-- This produces the 2's complement signed value of the bitvector.
+--
+-- > sbvToInt : (n : Nat) -> bitvector n -> Integer;
 scSbvToInt
    :: SharedContext -> Term -> Term -> IO Term
 scSbvToInt sc n x = scGlobalApply sc "Prelude.sbvToInt" [n,x]
