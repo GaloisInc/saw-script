@@ -1215,7 +1215,8 @@ scFunAll :: SharedContext
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
 -- | Create a lambda term from a parameter name (as a 'String'), parameter type
--- (as a 'Term'), and a body.
+-- (as a 'Term'), and a body. Regarding deBruijn indices, in the body of the
+-- function, an index of 0 refers to the bound parameter.
 scLambda :: SharedContext
          -> String -- ^ The parameter name
          -> Term   -- ^ The parameter type
@@ -1224,7 +1225,10 @@ scLambda :: SharedContext
 scLambda sc varname ty body = scTermF sc (Lambda varname ty body)
 
 -- | Create a lambda term of multiple arguments (curried) from a list
--- associating parameter names to types (as 'Term's) and a body.
+-- associating parameter names to types (as 'Term's) and a body. As for
+-- 'scLambda', there is a convention for deBruijn indices: 0 refers to the last
+-- parameter in the list, and n-1 (where n is the list length) refers to the
+-- first.
 scLambdaList :: SharedContext
              -> [(String, Term)] -- ^ List of parameter / parameter type pairs
              -> Term -- ^ The body
@@ -1234,7 +1238,8 @@ scLambdaList sc ((nm,tp):r) rhs =
   scLambda sc nm tp =<< scLambdaList sc r rhs
 
 -- | Create a (possibly dependent) function given a parameter name, parameter
--- type (as a 'Term'), and a body.
+-- type (as a 'Term'), and a body. This function follows the same deBruijn
+-- index convention as 'scLambda'.
 scPi :: SharedContext
      -> String -- ^ The parameter name
      -> Term   -- ^ The parameter type
@@ -1244,6 +1249,7 @@ scPi sc nm tp body = scTermF sc (Pi nm tp body)
 
 -- | Create a (possibly dependent) function of multiple arguments (curried)
 -- from a list associating parameter names to types (as 'Term's) and a body.
+-- This function follows the same deBruijn index convention as 'scLambdaList'.
 scPiList :: SharedContext
          -> [(String, Term)] -- ^ List of parameter / parameter type pairs
          -> Term -- ^ The body
