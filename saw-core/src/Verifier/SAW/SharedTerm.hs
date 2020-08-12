@@ -305,7 +305,7 @@ data SharedContext = SharedContext
   , scFreshGlobalVar :: IO VarIndex
   }
 
--- | Create a new term from a lower-level 'flat' term.
+-- | Create a new term from a lower-level 'FlatTermF' term.
 scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
 scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 
@@ -321,12 +321,19 @@ scGlobalDef :: SharedContext -> Ident -> IO Term
 scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
 
 -- | Create a function application term.
-scApply :: SharedContext -> Term -> Term -> IO Term
+scApply :: SharedContext
+        -> Term -- ^ The function to apply
+        -> Term -- ^ The argument to apply to
+        -> IO Term
 scApply sc f = scTermF sc . App f
 
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
-scDataTypeAppParams :: SharedContext -> Ident -> [Term] -> [Term] -> IO Term
+scDataTypeAppParams :: SharedContext
+                    -> Ident  -- ^ The constructor name
+                    -> [Term] -- ^ The parameters
+                    -> [Term] -- ^ The arguments
+                    -> IO Term
 scDataTypeAppParams sc ident params args =
   scFlatTermF sc (DataTypeApp ident params args)
 
@@ -340,7 +347,11 @@ scDataTypeApp sc d_id args =
 
 -- | Applies the constructor with the given name to the list of parameters and
 -- arguments. This version does no checking against the module.
-scCtorAppParams :: SharedContext -> Ident -> [Term] -> [Term] -> IO Term
+scCtorAppParams :: SharedContext
+                -> Ident  -- ^ The constructor name
+                -> [Term] -- ^ The parameters
+                -> [Term] -- ^ The arguments
+                -> IO Term
 scCtorAppParams sc ident params args =
   scFlatTermF sc (CtorApp ident params args)
 
@@ -1064,11 +1075,11 @@ betaNormalize sc t0 =
 --------------------------------------------------------------------------------
 -- Building shared terms
 
--- | Apply a function term to zero or more argument terms.
+-- | Apply a function 'Term' to zero or more argument 'Term's.
 scApplyAll :: SharedContext -> Term -> [Term] -> IO Term
 scApplyAll sc = foldlM (scApply sc)
 
--- | Returns the defined constant with the given name. Fails if no
+-- | Returns the defined constant with the given 'Ident'. Fails if no
 -- such constant exists in the module.
 scLookupDef :: SharedContext -> Ident -> IO Term
 scLookupDef sc ident = scGlobalDef sc ident --FIXME: implement module check.
@@ -1100,11 +1111,12 @@ scString sc s = scFlatTermF sc (StringLit s)
 scStringType :: SharedContext -> IO Term
 scStringType sc = scFlatTermF sc preludeStringType
 
--- | Create a vector term from a type (as a 'Term') and a list of terms.
+-- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
+-- that type.
 scVector :: SharedContext -> Term -> [Term] -> IO Term
 scVector sc e xs = scFlatTermF sc (ArrayValue e (V.fromList xs))
 
--- | Create a record term from a map from 'FieldName's to 'Term's.
+-- | Create a record term from a 'Map' from 'FieldName's to 'Term's.
 scRecord :: SharedContext -> Map FieldName Term -> IO Term
 scRecord sc m = scFlatTermF sc (RecordValue $ Map.assocs m)
 
@@ -1114,7 +1126,8 @@ scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
 scRecordSelect sc t fname = scFlatTermF sc (RecordProj t fname)
 
 -- | Create a term representing the type of a record from a list associating
--- field names (as 'String's) and types (as 'Term's).
+-- field names (as 'String's) and types (as 'Term's). Note that the order of
+-- the given list is irrelevant, as record fields are not ordered.
 scRecordType :: SharedContext -> [(String,Term)] -> IO Term
 scRecordType sc elem_tps = scFlatTermF sc (RecordType elem_tps)
 
@@ -1127,45 +1140,51 @@ scUnitType :: SharedContext -> IO Term
 scUnitType sc = scFlatTermF sc UnitType
 
 -- | Create a pair term from two terms.
-scPairValue :: SharedContext -> Term -> Term -> IO Term
+scPairValue :: SharedContext
+            -> Term -- ^ The left projection
+            -> Term -- ^ The right projection
+            -> IO Term
 scPairValue sc x y = scFlatTermF sc (PairValue x y)
 
 -- | Create a term representing a pair type from two other terms, each
 -- representing a type.
-scPairType :: SharedContext -> Term -> Term -> IO Term
+scPairType :: SharedContext
+           -> Term -- ^ Left projection type
+           -> Term -- ^ Right projection type
+           -> IO Term
 scPairType sc x y = scFlatTermF sc (PairType x y)
 
--- | Create an n-place tuple from a list (of length n) of terms.
+-- | Create an n-place tuple from a list (of length n) of 'Term's.
 -- Note that tuples are nested pairs, associating to the right e.g.
---                      (a, (b, (c, d)))
+-- @(a, (b, (c, d)))@.
 scTuple :: SharedContext -> [Term] -> IO Term
 scTuple sc [] = scUnitValue sc
 scTuple _ [t] = return t
 scTuple sc (t : ts) = scPairValue sc t =<< scTuple sc ts
 
 -- | Create a term representing the type of an n-place tuple, from a list
--- (of length n) of terms, each representing a type.
+-- (of length n) of 'Term's, each representing a type.
 scTupleType :: SharedContext -> [Term] -> IO Term
 scTupleType sc [] = scUnitType sc
 scTupleType _ [t] = return t
 scTupleType sc (t : ts) = scPairType sc t =<< scTupleType sc ts
 
--- | Create a term giving the left projection of a term representing a pair.
+-- | Create a term giving the left projection of a 'Term' representing a pair.
 scPairLeft :: SharedContext -> Term -> IO Term
 scPairLeft sc t = scFlatTermF sc (PairLeft t)
 
--- | Create a term giving the right projection of a term representing a pair.
+-- | Create a term giving the right projection of a 'Term' representing a pair.
 scPairRight :: SharedContext -> Term -> IO Term
 scPairRight sc t = scFlatTermF sc (PairRight t)
 
 -- | Create a term representing either the left or right projection of the
--- given term, depending on the given @Bool@: left if @False@, right if @True@.
+-- given 'Term', depending on the given 'Bool': left if @False@, right if @True@.
 scPairSelector :: SharedContext -> Term -> Bool -> IO Term
 scPairSelector sc t False = scPairLeft sc t
 scPairSelector sc t True = scPairRight sc t
 
 -- | @scTupleSelector sc t i n@ returns a term selecting the @i@th component of
--- an @n@-place tuple term, @t@.
+-- an @n@-place tuple 'Term', @t@.
 scTupleSelector ::
   SharedContext -> Term ->
   Int {- ^ 1-based index -} ->
@@ -1179,57 +1198,60 @@ scTupleSelector sc t i n
   | otherwise = fail "scTupleSelector: non-positive index"
 
 -- | Create a term representing the type of a non-dependent function, given a
--- parameter and result type (as terms).
-scFun :: SharedContext -> Term -> Term -> IO Term
+-- parameter and result type (as 'Term's).
+scFun :: SharedContext
+      -> Term -- ^ The parameter type
+      -> Term -- ^ The result type
+      -> IO Term
 scFun sc a b = do b' <- incVars sc 0 1 b
                   scTermF sc (Pi "_" a b')
 
 -- | Create a term representing the type of a non-dependent n-ary function,
 -- given a list of parameter types and a result type (as terms).
 scFunAll :: SharedContext
-         -> [Term]
-         -> Term
+         -> [Term] -- ^ The parameter types
+         -> Term   -- ^ The result type
          -> IO Term
 scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 
--- | Create a lambda term from a parameter name, parameter type (as a term),
--- and a body.
+-- | Create a lambda term from a parameter name (as a 'String'), parameter type
+-- (as a 'Term'), and a body.
 scLambda :: SharedContext
-         -> String
-         -> Term
-         -> Term
+         -> String -- ^ The parameter name
+         -> Term   -- ^ The parameter type
+         -> Term   -- ^ The body
          -> IO Term
 scLambda sc varname ty body = scTermF sc (Lambda varname ty body)
 
 -- | Create a lambda term of multiple arguments (curried) from a list
--- associating parameter names to types (as terms) and a body.
+-- associating parameter names to types (as 'Term's) and a body.
 scLambdaList :: SharedContext
-             -> [(String, Term)]
-             -> Term
+             -> [(String, Term)] -- ^ List of parameter / parameter type pairs
+             -> Term -- ^ The body
              -> IO Term
 scLambdaList _ [] rhs = return rhs
 scLambdaList sc ((nm,tp):r) rhs =
   scLambda sc nm tp =<< scLambdaList sc r rhs
 
 -- | Create a (possibly dependent) function given a parameter name, parameter
--- type (as a term), and a body.
+-- type (as a 'Term'), and a body.
 scPi :: SharedContext
-     -> String
-     -> Term
-     -> Term
+     -> String -- ^ The parameter name
+     -> Term   -- ^ The parameter type
+     -> Term   -- ^ The body
      -> IO Term
 scPi sc nm tp body = scTermF sc (Pi nm tp body)
 
 -- | Create a (possibly dependent) function of multiple arguments (curried)
--- from a list associating parameter names to types (as terms) and a body.
+-- from a list associating parameter names to types (as 'Term's) and a body.
 scPiList :: SharedContext
-             -> [(String, Term)]
-             -> Term
-             -> IO Term
+         -> [(String, Term)] -- ^ List of parameter / parameter type pairs
+         -> Term -- ^ The body
+         -> IO Term
 scPiList _ [] rhs = return rhs
 scPiList sc ((nm,tp):r) rhs = scPi sc nm tp =<< scPiList sc r rhs
 
--- | Create a local variable term from a deBruijn index.
+-- | Create a local variable term from a 'DeBruijnIndex'.
 scLocalVar :: SharedContext
            -> DeBruijnIndex
            -> IO Term
@@ -1239,7 +1261,11 @@ scLocalVar sc i = scTermF sc (LocalVar i)
 -- type. The term for the body must not have any loose de Bruijn
 -- indices. If the body contains any ExtCns variables, they will be
 -- abstracted over and reapplied to the resulting constant.
-scConstant :: SharedContext -> String -> Term -> Term -> IO Term
+scConstant :: SharedContext
+           -> String -- ^ The name
+           -> Term   -- ^ The body
+           -> Term   -- ^ The type
+           -> IO Term
 scConstant sc name rhs ty =
   do unless (looseVars rhs == emptyBitSet) $
        fail "scConstant: term contains loose variables"
@@ -1252,7 +1278,7 @@ scConstant sc name rhs ty =
      scApplyAll sc t args
 
 -- | Create a function application term from a global identifier and a list of
--- arguments (as terms).
+-- arguments (as 'Term's).
 scGlobalApply :: SharedContext -> Ident -> [Term] -> IO Term
 scGlobalApply sc i ts =
     do c <- scGlobalDef sc i
