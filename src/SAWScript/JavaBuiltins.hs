@@ -34,7 +34,7 @@ import Verifier.Java.Codebase hiding (lookupClass)
 import Verifier.Java.Simulator as JSS hiding (lookupClass)
 import Verifier.Java.SAWBackend
 
-import Verifier.SAW.Cryptol (exportFirstOrderValue)
+import Verifier.SAW.Cryptol (importType, emptyEnv, exportFirstOrderValue)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
@@ -367,9 +367,8 @@ checkCompatibleType
   -> JavaActualType
   -> Cryptol.Schema
   -> JavaSetup ()
-checkCompatibleType sc msg aty schema = do
-  cty <- liftIO $ cryptolTypeOfActual sc aty
-  case cty of
+checkCompatibleType _sc msg aty schema =
+  case cryptolTypeOfActual aty of
     Nothing ->
       throwJava $ "Type is not translatable: " ++ show aty ++ " (" ++ msg ++ ")"
     Just lt -> do
@@ -457,9 +456,13 @@ javaVar bic _ name t = do
     _ -> return ()
   modifySpec (specAddVarDecl expr aty)
   let sc = biSharedContext bic
-  liftIO $ do
-    Just lty <- narrowTypeOfActual sc aty
-    scJavaValue sc lty name >>= mkTypedTerm sc
+  case cryptolTypeOfActual aty of
+    Nothing -> throwJava $ "Unsupported type for `java_var`: " ++ show aty
+    Just cty ->
+      liftIO $
+      do lty <- importType sc emptyEnv cty
+         v <- scJavaValue sc lty name
+         return $ TypedTerm (Cryptol.tMono cty) v
 
 javaMayAlias :: [String] -> JavaSetup ()
 javaMayAlias exprs = do

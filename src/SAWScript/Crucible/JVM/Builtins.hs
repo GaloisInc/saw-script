@@ -65,7 +65,7 @@ import qualified Verifier.Java.Codebase as CB
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
 
--- cryptol-verifier
+-- cryptol-saw-core
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 
 -- what4

@@ -30,8 +30,7 @@ import Control.Lens.TH (makeLenses)
 
 import System.IO (stdout)
 import Control.Exception (throw)
-import Control.Lens (view, use, (&), (^.), (.~), (.=))
-import Control.Monad.ST (stToIO)
+import Control.Lens (view, use, (&), (^.), (.~), (%~), (.=))
 import Control.Monad.State
 import Control.Monad.Catch (MonadThrow)
 
@@ -41,7 +40,7 @@ import Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -54,9 +53,10 @@ import Data.Parameterized.NatRepr
 import Data.Parameterized.Context hiding (view)
 import Data.Parameterized.Nonce
 
+import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer
-import Verifier.SAW.Term.Functor
+import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
 import SAWScript.Proof
@@ -95,7 +95,6 @@ import qualified Lang.Crucible.Simulator.OverrideSim as C
 import qualified Lang.Crucible.Simulator.RegMap as C
 import qualified Lang.Crucible.Simulator.SimError as C
 
-import qualified Lang.Crucible.LLVM.Bytes as C.LLVM
 import qualified Lang.Crucible.LLVM.DataLayout as C.LLVM
 import qualified Lang.Crucible.LLVM.Extension as C.LLVM
 import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
@@ -173,6 +172,26 @@ getReg reg regs = case Macaw.lookupX86Reg reg regs of
   Just (C.RV val) -> pure val
   Nothing -> throwX86 $ mconcat ["Invalid register: ", show reg]
 
+cryptolUninterpreted ::
+  (MonadIO m, MonadThrow m) =>
+  CryptolEnv ->
+  String ->
+  SharedContext ->
+  [Term] ->
+  m Term
+cryptolUninterpreted env nm sc xs@[_, _] =
+  case lookupIn nm $ eTermEnv env of
+    Left _err -> throwX86 $ mconcat
+      [ "Failed to lookup Cryptol name \"", nm
+      , "\" in Cryptol environment"
+      ]
+    Right t -> liftIO $ scApplyAll sc t xs
+cryptolUninterpreted _ nm _ xs = throwX86 $ mconcat
+  [ "Type error in call to \"", nm
+  , "\": Expected 2 arguments, given ", show $ length xs
+  , " arguments"
+  ]
+
 -------------------------------------------------------------------------------
 -- ** Entrypoint
 
@@ -201,8 +220,11 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
+      cenv <- rwCryptol <$> getTopLevelRW
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
 
-      (C.SomeCFG cfg, elf, relf, addr) <- liftIO $ buildCFG opts halloc path nm
+      (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc path nm
       addrInt <- if Macaw.segmentBase (Macaw.segoffSegment addr) == 0
         then pure . toInteger $ Macaw.segmentOffset (Macaw.segoffSegment addr) + Macaw.segoffOffset addr
         else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
@@ -237,8 +259,31 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
       (env, preState) <- liftIO . runX86Sim emptyState $ setupMemory globsyms
 
       let
-        funcLookup = Macaw.LookupFunctionHandle $ \_ _ _ ->
-          fail "Attempted to call a function during x86 verification"
+        funcLookup = Macaw.LookupFunctionHandle $ \st _mem regs -> do
+          C.LLVM.LLVMPointer _base off <- getReg Macaw.X86_IP regs
+          case BV.asUnsigned <$> W4.asBV off of
+            Nothing -> fail $ mconcat
+              [ "Attempted to call a function with non-concrete address "
+              , show $ W4.ppExpr off
+              ]
+            Just funcAddr -> do
+              case Macaw.resolveRegionOff (memory relf) 0 $ fromIntegral funcAddr of
+                Nothing -> fail $ mconcat
+                  [ "Failed to resolve function address "
+                  , show $ W4.ppExpr off
+                  ]
+                Just funcAddrOff -> do
+                  case Map.lookup funcAddrOff cfgs of
+                    Just (C.SomeCFG funcCFG) ->
+                      pure
+                        ( C.cfgHandle funcCFG
+                        , st & C.stateContext . C.functionBindings
+                          %~ C.insertHandleMap (C.cfgHandle funcCFG) (C.UseCFG funcCFG $ C.postdomInfo funcCFG)
+                        )
+                    Nothing -> fail $ mconcat
+                      [ "Unable to find CFG for function at address "
+                      , show $ W4.ppExpr off
+                      ]
         noExtraValidityPred _ _ _ _ = return Nothing
         ctx :: C.SimContext (Macaw.MacawSimulatorState Sym) Sym (Macaw.MacawExt Macaw.X86_64)
         ctx = C.SimContext
@@ -301,6 +346,12 @@ buildCFG ::
      , Elf.Elf 64
      , RelevantElf
      , Macaw.MemSegmentOff 64
+     , Map
+       (Macaw.MemSegmentOff 64)
+       (C.SomeCFG
+         (Macaw.MacawExt Macaw.X86_64)
+         (EmptyCtx ::> Macaw.ArchRegStruct Macaw.X86_64)
+         (Macaw.ArchRegStruct Macaw.X86_64))
      )
 buildCFG opts halloc path nm = do
   printOutLn opts Info $ mconcat ["Finding symbol for \"", nm, "\""]
@@ -315,11 +366,17 @@ buildCFG opts halloc path nm = do
     initialDiscoveryState =
       Macaw.emptyDiscoveryState (memory relf) (funSymMap relf) Macaw.x86_64_linux_info
       & Macaw.trustedFunctionEntryPoints .~ Set.empty
-  (_fstate, Some finfo) <-
-    stToIO $ Macaw.analyzeFunction (const $ pure ()) addr Macaw.UserRequest initialDiscoveryState
-  scfg <- Macaw.mkFunCFG Macaw.x86_64MacawSymbolicFns halloc
-    (W4.functionNameFromText $ Text.pack nm) posFn finfo
-  pure (scfg, elf, relf, addr)
+  let
+    finalState = Macaw.cfgFromAddrsAndState initialDiscoveryState [addr] []
+    finfos = finalState ^. Macaw.funInfo
+  cfgs <- forM finfos $ \(Some finfo) ->
+    Macaw.mkFunCFG Macaw.x86_64MacawSymbolicFns halloc
+    (W4.functionNameFromText . decodeUtf8 $ Macaw.discoveredFunName finfo)
+    posFn finfo
+
+  case Map.lookup addr cfgs of
+    Nothing -> throwX86 $ "Unable to discover CFG from address " <> show addr
+    Just scfg -> pure (scfg, elf, relf, addr, cfgs)
 
 --------------------------------------------------------------------------------
 -- ** Computing the specification
@@ -525,9 +582,10 @@ assumeAllocation ::
   (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
 assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc) = do
+  cc <- use x86CrucibleContext
   sym <- use x86Sym
   mem <- use x86Mem
-  sz' <- liftIO $ W4.bvLit sym knownNat $ C.LLVM.bytesToBV knownNat sz
+  sz' <- liftIO $ resolveSAWSymBV cc knownNat sz
   (ptr, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc mut
     (show $ W4.plSourceLoc loc) mem sz' align
   x86Mem .= mem'
@@ -541,14 +599,31 @@ assumePointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   X86Sim ()
-assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
+assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
   when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  tval <- checkConcreteSizePointsToValue tptval
+  sym <- use x86Sym
+  cc <- use x86CrucibleContext
+  mem <- use x86Mem
+  ptr <- resolvePtrSetupValue env tyenv tptr
+  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
+  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
+  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
+  x86Mem .= mem'
+
+resolvePtrSetupValue ::
+  X86Constraints =>
+  Map MS.AllocIndex Ptr ->
+  Map MS.AllocIndex LLVMAllocSpec ->
+  MS.SetupValue LLVM ->
+  X86Sim Ptr
+resolvePtrSetupValue env tyenv tptr = do
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
   elf <- use x86Elf
   base <- use x86GlobalBase
-  ptr <- case tptr of
+  case tptr of
     MS.SetupGlobal () nm -> case
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
@@ -561,10 +636,11 @@ assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tval) = do
         liftIO $ C.LLVM.doPtrAddOffset sym mem base =<< W4.bvLit sym knownNat (BV.mkBV knownNat addr)
     _ -> liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
          =<< resolveSetupVal cc mem env tyenv Map.empty tptr
-  val <- liftIO $ resolveSetupVal cc mem env tyenv Map.empty tval
-  storTy <- liftIO $ C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv tval
-  mem' <- liftIO $ C.LLVM.storeConstRaw sym mem ptr storTy C.LLVM.noAlignment val
-  x86Mem .= mem'
+
+checkConcreteSizePointsToValue :: LLVMPointsToValue LLVMArch -> X86Sim (MS.SetupValue LLVM)
+checkConcreteSizePointsToValue = \case
+  ConcreteSizeValue val -> return val
+  SymbolicSizeValue{} -> throwX86 "unsupported x86_64 command: crucible_points_to_array_prefix"
 
 -- | Write each SetupValue passed to crucible_execute_func to the appropriate
 -- x86_64 register from the calling convention.
@@ -685,16 +761,16 @@ assertPointsTo ::
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
-assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr texpected) = do
+assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
   when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  texpected <- checkConcreteSizePointsToValue tptexpected
   sym <- use x86Sym
   opts <- use x86Options
   sc <- use x86SharedContext
   cc <- use x86CrucibleContext
   ms <- use x86MethodSpec
   mem <- use x86Mem
-  ptr <- liftIO $ C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
-    =<< resolveSetupVal cc mem env tyenv Map.empty tptr
+  ptr <- resolvePtrSetupValue env tyenv tptr
   memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv texpected
   storTy <- liftIO $ C.LLVM.toStorableType memTy
   actual <- liftIO $ C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment

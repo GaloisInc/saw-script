@@ -17,6 +17,7 @@ Stability   : provisional
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module SAWScript.Builtins where
 
@@ -28,6 +29,7 @@ import Data.Monoid
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import qualified Control.Exception as Ex
+import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
@@ -55,6 +57,8 @@ import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
+  , FirstOrderType(..)
+  , firstOrderTypeOf
   , FirstOrderValue(..)
   , toFirstOrderValue, scFirstOrderValue
   )
@@ -72,7 +76,7 @@ import Verifier.SAW.TypedAST
 
 import SAWScript.Position
 
--- cryptol-verifier
+-- cryptol-saw-core
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
 -- saw-core-aig
@@ -266,7 +270,11 @@ readAIGPrim f = do
   et <- io $ readAIG proxy opts sc f
   case et of
     Left err -> fail $ "Reading AIG failed: " ++ err
-    Right t -> io $ mkTypedTerm sc t
+    Right (inLen, outLen, t) -> pure $ TypedTerm schema t
+      where
+        t1 = C.tWord (C.tNum inLen)
+        t2 = C.tWord (C.tNum outLen)
+        schema = C.tMono (C.tFun t1 t2)
 
 replacePrim :: TypedTerm -> TypedTerm -> TypedTerm -> TopLevel TypedTerm
 replacePrim pat replace t = do
@@ -1033,6 +1041,23 @@ toValueCase prim =
   SV.VLambda $ \v2 ->
   prim (SV.fromValue b) v1 v2
 
+cryptolTypeOfFirstOrderType :: FirstOrderType -> C.Type
+cryptolTypeOfFirstOrderType fot =
+  case fot of
+    FOTBit -> C.tBit
+    FOTInt -> C.tInteger
+    FOTVec n t -> C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)
+    FOTTuple ts -> C.tTuple (map cryptolTypeOfFirstOrderType ts)
+    FOTArray a b ->
+      C.tArray
+      (cryptolTypeOfFirstOrderType a)
+      (cryptolTypeOfFirstOrderType b)
+    FOTRec m ->
+      C.tRec $
+      C.recordFromFields $
+      [ (C.packIdent l, cryptolTypeOfFirstOrderType t)
+      | (l, t) <- Map.assocs m ]
+
 caseProofResultPrim :: SV.ProofResult
                     -> SV.Value -> SV.Value
                     -> TopLevel SV.Value
@@ -1044,7 +1069,9 @@ caseProofResultPrim pr vValid vInvalid = do
       let fvs = map snd pairs
       ts <- io $ mapM (scFirstOrderValue sc) fvs
       t <- io $ scTuple sc ts
-      tt <- io $ mkTypedTerm sc t
+      let fot = firstOrderTypeOf (FOVTuple fvs)
+      let cty = cryptolTypeOfFirstOrderType fot
+      let tt = TypedTerm (C.tMono cty) t
       SV.applyValue vInvalid (SV.toValue tt)
 
 caseSatResultPrim :: SV.SatResult
@@ -1058,7 +1085,9 @@ caseSatResultPrim sr vUnsat vSat = do
       let fvs = map snd pairs
       ts <- io $ mapM (scFirstOrderValue sc) fvs
       t <- io $ scTuple sc ts
-      tt <- io $ mkTypedTerm sc t
+      let fot = firstOrderTypeOf (FOVTuple fvs)
+      let cty = cryptolTypeOfFirstOrderType fot
+      let tt = TypedTerm (C.tMono cty) t
       SV.applyValue vSat (SV.toValue tt)
 
 envCmd :: TopLevel ()
@@ -1165,7 +1194,7 @@ eval_list t = do
       _ -> fail "eval_list: not a monomorphic array type"
   n' <- io $ scNat sc (fromInteger n)
   a' <- io $ Cryptol.importType sc Cryptol.emptyEnv a
-  idxs <- io $ traverse (scNat sc) [0 .. fromInteger n - 1]
+  idxs <- io $ traverse (scNat sc) $ map fromInteger [0 .. n - 1]
   ts <- io $ traverse (scAt sc n' a' (ttTerm t)) idxs
   return (map (TypedTerm (C.tMono a)) ts)
 
@@ -1316,17 +1345,19 @@ cryptol_prims = CryptolModule Map.empty <$> Map.fromList <$> traverse parsePrim 
       rw <- getTopLevelRW
       let cenv = rwCryptol rw
       let mname = C.packModName ["Prims"]
+      let ?fileReader = StrictBS.readFile
       (n', cenv') <- io $ CEnv.declareName cenv mname n
       s' <- io $ CEnv.parseSchema cenv' (noLoc s)
       t' <- io $ scGlobalDef sc i
       putTopLevelRW $ rw { rwCryptol = cenv' }
       return (n', TypedTerm s' t')
 
-cryptol_load :: FilePath -> TopLevel CryptolModule
-cryptol_load path = do
+cryptol_load :: (FilePath -> IO StrictBS.ByteString) -> FilePath -> TopLevel CryptolModule
+cryptol_load fileReader path = do
   sc <- getSharedContext
   rw <- getTopLevelRW
   let ce = rwCryptol rw
+  let ?fileReader = fileReader
   (m, ce') <- io $ CEnv.loadCryptolModule sc ce path
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
