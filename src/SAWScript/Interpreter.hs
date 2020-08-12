@@ -647,13 +647,6 @@ primitives = Map.fromList
     Current
     [ "Concatenate two strings to yield a third." ]
 
-  , prim "mapM"          "{a,b} (a -> TopLevel b) -> [a] -> TopLevel [b]"
-    (\_ _ -> VLambda $ \fval -> case fval of
-        VLambda f -> return (toValue (mapM f . fromValue :: Value -> TopLevel [Value]))
-        _ -> error "fromValue (->)")
-    Current
-    [ "Map a computation across a list" ]
-
   , prim "define"              "String -> Term -> TopLevel Term"
     (pureVal definePrim)
     Current
@@ -2339,7 +2332,7 @@ primitives = Map.fromList
 
   , prim "heapster_find_symbols"
     "HeapsterEnv -> String -> TopLevel [String]"
-    (bicVal heapster_find_symbol)
+    (bicVal heapster_find_symbols)
     Experimental
     [ "Search for all symbols in any module contained in a HeapsterEnv that"
     , " contain the supplied string as a substring"
