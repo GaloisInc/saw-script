@@ -24,6 +24,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_perm
        , heapster_block_entry_hint
        , heapster_find_symbol
+       , heapster_find_symbols
        , heapster_assume_fun
        , heapster_assume_fun_multi
        , heapster_print_fun_trans
@@ -376,19 +377,27 @@ heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
+-- | Search for all symbol names in any LLVM module in a 'HeapsterEnv' that
+-- contain the supplied string as a substring
+heapster_find_symbols :: BuiltinContext -> Options -> HeapsterEnv -> String ->
+                         TopLevel [String]
+heapster_find_symbols _bic _opts henv str =
+  return $
+  concatMap (\(Some lm) ->
+              mapMaybe (\(L.Symbol nm) ->
+                         if isInfixOf str nm then Just nm else Nothing) $
+              Map.keys (lm ^. modTrans.transContext.symbolMap)) $
+  heapsterEnvLLVMModules henv
+
 -- | Search for a symbol name in any LLVM module in a 'HeapsterEnv' that
 -- contains the supplied string as a substring, failing if there is not exactly
 -- one such symbol
 heapster_find_symbol :: BuiltinContext -> Options -> HeapsterEnv -> String ->
                         TopLevel String
-heapster_find_symbol _bic _opts henv str =
-  let syms =
-        concatMap (\(Some lm) ->
-                    filter (\(L.Symbol nm) -> isInfixOf str nm) $
-                    Map.keys (lm ^. modTrans.transContext.symbolMap)) $
-        heapsterEnvLLVMModules henv in
+heapster_find_symbol bic opts henv str =
+  heapster_find_symbols bic opts henv str >>= \syms ->
   case syms of
-    [L.Symbol sym] -> return sym
+    [sym] -> return sym
     [] -> fail ("No symbol found matching string: " ++ str)
     _ -> fail ("Found multiple symbols matching string " ++ str ++ ": " ++
                concat (intersperse ", " $ map show syms))
