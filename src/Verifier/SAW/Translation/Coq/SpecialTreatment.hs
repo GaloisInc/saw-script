@@ -274,6 +274,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ++
   [ ("String", mapsTo sawDefinitionsModule "String")
   , ("equalString", mapsTo sawDefinitionsModule "equalString")
+  , ("appendString", mapsTo sawDefinitionsModule "appendString")
   ]
 
   -- Utility functions

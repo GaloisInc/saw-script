@@ -18,6 +18,9 @@ Definition equalString (s1 s2: String) : bool :=
   | right _ => false
   end.
 
+Definition appendString : String -> String -> String :=
+  String.append.
+
 Definition Unit        := tt.
 Definition UnitType    := unit.
 Definition UnitType__rec := unit_rect.
