@@ -1806,19 +1806,29 @@ scUpdBvFun :: SharedContext -> Term -> Term
            -> Term -> Term -> Term -> IO Term
 scUpdBvFun sc n a f i v = scGlobalApply sc "Prelude.updBvFun" [n, a, f, i, v]
 
--- | Array :: sort 0 -> sort 0 -> sort 0
+-- | Create a term representing the type of arrays, given an index type and
+-- element type (as 'Term's).
+--
+-- > Array : sort 0 -> sort 0 -> sort 0
 scArrayType :: SharedContext -> Term -> Term -> IO Term
 scArrayType sc a b = scGlobalApply sc "Prelude.Array" [a, b]
 
--- arrayConstant :: (a b :: sort 0) -> b -> (Array a b);
+-- Create a term computing a constant array, given an index type, element type,
+-- and element (all as 'Term's).
+--
+-- > arrayConstant : (a b : sort 0) -> b -> (Array a b);
 scArrayConstant :: SharedContext -> Term -> Term -> Term -> IO Term
 scArrayConstant sc a b e = scGlobalApply sc "Prelude.arrayConstant" [a, b, e]
 
--- | arrayLookup :: (a b :: sort 0) -> (Array a b) -> a -> b;
+-- Create a term computing the value at a particular index of an array.
+--
+-- > arrayLookup : (a b : sort 0) -> (Array a b) -> a -> b;
 scArrayLookup :: SharedContext -> Term -> Term -> Term -> Term -> IO Term
 scArrayLookup sc a b f i = scGlobalApply sc "Prelude.arrayLookup" [a, b, f, i]
 
--- | arrayUpdate :: (a b :: sort 0) -> (Array a b) -> a -> b -> (Array a b);
+-- Create a term computing an array updated at a particular index.
+--
+-- > arrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 scArrayUpdate :: SharedContext -> Term -> Term -> Term -> Term -> Term -> IO Term
 scArrayUpdate sc a b f i e = scGlobalApply sc "Prelude.arrayUpdate" [a, b, f, i, e]
 
