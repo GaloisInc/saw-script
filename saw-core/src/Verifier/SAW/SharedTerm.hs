@@ -1832,22 +1832,59 @@ scBvNot sc n x = scGlobalApply sc "Prelude.bvNot" [n, x]
 -- are equal.
 --
 -- > bvEq : (n : Nat) -> bitvector n -> bitvector n -> Bool;
-scBvEq, scBvUGe, scBvUGt, scBvULe, scBvULt
-    :: SharedContext -> Term -> Term -> Term -> IO Term
+scBvEq :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvEq  sc n x y = scGlobalApply sc "Prelude.bvEq"  [n, x, y]
+
+-- | Create a term applying the bitvector (unsigned) greater-than-or-equal
+-- primitive.
+--
+-- > bvuge : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+scBvUGe :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvUGe sc n x y = scGlobalApply sc "Prelude.bvuge" [n, x, y]
+
+-- | Create a term applying the bitvector (unsigned) less-than-or-equal
+-- primitive.
+--
+-- > bvule : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+scBvULe :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvULe sc n x y = scGlobalApply sc "Prelude.bvule" [n, x, y]
+
+-- | Create a term applying the bitvector (unsigned) greater-than primitive.
+--
+-- > bvugt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+scBvUGt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvUGt sc n x y = scGlobalApply sc "Prelude.bvugt" [n, x, y]
+
+-- | Create a term applying the bitvector (unsigned) less-than primitive.
+--
+-- > bvult : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+scBvULt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvULt sc n x y = scGlobalApply sc "Prelude.bvult" [n, x, y]
 
--- | Create terms applying the bitvector comparison primitives.
+-- | Create a term applying the bitvector (signed) greater-than-or-equal
+-- primitive.
 --
--- > bvsgt/bvsge/bvslt/bvsle : (n : Nat) -> bitvector n -> bitvector n -> Bool;
-scBvSGt, scBvSGe, scBvSLt, scBvSLe
-    :: SharedContext -> Term -> Term -> Term -> IO Term
+-- > bvsge : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+scBvSGe :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSGe sc n x y = scGlobalApply sc "Prelude.bvsge" [n, x, y]
+
+-- | Create a term applying the bitvector (signed) less-than-or-equal
+-- primitive.
+--
+-- > bvsle : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+scBvSLe :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSLe sc n x y = scGlobalApply sc "Prelude.bvsle" [n, x, y]
+
+-- | Create a term applying the bitvector (signed) greater-than primitive.
+--
+-- > bvsgt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+scBvSGt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSGt sc n x y = scGlobalApply sc "Prelude.bvsgt" [n, x, y]
+
+-- | Create a term applying the bitvector (signed) less-than primitive.
+--
+-- > bvslt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+scBvSLt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSLt sc n x y = scGlobalApply sc "Prelude.bvslt" [n, x, y]
 
 -- | Create terms applying the (logical) bit-shifting primitives.
