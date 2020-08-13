@@ -32,7 +32,9 @@ module Verifier.SAW.SharedTerm
   , TermIndex
   , looseVars
   , smallestFreeVar
+  , scSharedTerm
   , unshare
+  , scImport
   , alphaEquiv
   , alistAllFields
     -- * Re-exported pretty-printing functions
@@ -74,44 +76,35 @@ module Verifier.SAW.SharedTerm
   , scRequireDataType
   , scRequireCtor
     -- ** Term construction
-  , scApply
-  , scApplyAll
-  , scRecord
-  , scRecordSelect
-  , scRecordType
+    -- *** Datatypes and constructors
   , scDataTypeAppParams
   , scDataTypeApp
   , scCtorAppParams
   , scCtorApp
   , scApplyCtor
+  , scSort
+    -- *** Variables and constants
+  , scLocalVar
+  , scConstant
+  , scLookupDef
+    -- *** Functions and function application
+  , scApply
+  , scApplyAll
+  , scGlobalApply
   , scFun
-  , scString
-  , scStringType
-  , scNat
-  , scNatType
-  , scAddNat
-  , scSubNat
-  , scMulNat
-  , scDivNat
-  , scModNat
-  , scDivModNat
-  , scEqualNat
-  , scLtNat
-  , scMinNat
-  , scMaxNat
-
-  , scEqTrue
-  , scBool
-  , scBoolType
   , scFunAll
   , scLambda
   , scLambdaList
   , scPi
   , scPiList
-  , scLocalVar
-  , scConstant
-  , scLookupDef
-  , scSort
+    -- *** Strings
+  , scString
+  , scStringType
+    -- *** Booleans
+  , scEqTrue
+  , scBool
+  , scBoolType
+    -- *** Unit, pairs, and tuples
   , scUnitValue
   , scUnitType
   , scPairValue
@@ -123,14 +116,14 @@ module Verifier.SAW.SharedTerm
   , scTupleType
   , scTupleSelector
   , scTupleReduced
+    -- *** Records
+  , scRecord
+  , scRecordSelect
+  , scRecordType
+    -- *** Vectors
   , scVector
   , scVecType
   , scVectorReduced
-  , scUpdNatFun
-  , scUpdBvFun
-  , scGlobalApply
-  , scSharedTerm
-  , scImport
     -- ** Normalization
   , asCtorOrNat
   , scWhnf
@@ -145,27 +138,29 @@ module Verifier.SAW.SharedTerm
   , scTypeOfDataType
   , scTypeOfGlobal
     -- ** Prelude operations
-  , scAppend
-  , scJoin
-  , scSplit
-  , scGet
-  , scAtWithDefault
-  , scAt
+    -- *** Booleans
   , scNot
   , scAnd
   , scOr
   , scImplies
   , scXor
   , scBoolEq
-  , scBvForall
   , scIte
-  , scSingle
-  , scSlice
-  , scArrayType
-  , scArrayConstant
-  , scArrayLookup
-  , scArrayUpdate
-  -- *** Integer primitives
+  -- *** Natural numbers
+  , scNat
+  , scNatType
+  , scAddNat
+  , scSubNat
+  , scMulNat
+  , scDivNat
+  , scModNat
+  , scDivModNat
+  , scEqualNat
+  , scLtNat
+  , scMinNat
+  , scMaxNat
+  , scUpdNatFun
+    -- *** Integers
   , scIntegerType
   , scIntegerConst
   , scIntAdd, scIntSub, scIntMul
@@ -174,14 +169,24 @@ module Verifier.SAW.SharedTerm
   , scIntEq, scIntLe, scIntLt
   , scIntToNat, scNatToInt
   , scIntToBv, scBvToInt, scSbvToInt
-
-    -- *** Bitvector primitives
+    -- *** Vectors
+  , scAppend
+  , scJoin
+  , scSplit
+  , scGet
+  , scAtWithDefault
+  , scAt
+  , scSingle
+  , scSlice
+    -- *** Bitvectors
   , scBitvector
   , scBvNat
   , scBvToNat
   , scBvAt
   , scBvConst
   , scFinVal
+  , scBvForall
+  , scUpdBvFun
   , scBvNonzero, scBvBool
   , scBvAdd, scBvSub, scBvMul, scBvNeg
   , scBvURem, scBvUDiv, scBvSRem, scBvSDiv
@@ -196,6 +201,11 @@ module Verifier.SAW.SharedTerm
   , scBvCountLeadingZeros
   , scBvCountTrailingZeros
   , scLsb, scMsb
+    -- *** Arrays
+  , scArrayType
+  , scArrayConstant
+  , scArrayLookup
+  , scArrayUpdate
     -- ** Utilities
 --  , scTrue
 --  , scFalse
