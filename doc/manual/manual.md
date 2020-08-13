@@ -2476,3 +2476,43 @@ Currently, this function can only be used for LLVM verification, though
 that will likely be generalized in the future. It can be used in either
 the pre state or the post state, to specify the value of ghost state
 either before or after the execution of the function, respectively.
+
+# An Extended Example
+
+In order to tie together many of the concepts in this manual, we now present a
+non-trivial verification task in its entirety. All of the code for this example
+can be found in the `examples/salsa20` directory of
+[the SAWScript repository](https://github.com/GaloisInc/saw-script).
+
+## Salsa20 Overview
+
+Salsa20 is a stream cipher developed in 2005 by Daniel J. Bernstein, built on a
+pseudorandom function utilizing add-rotate-XOR (ARX) operations on 32-bit
+words[^4]. Bernstein himself has provided a number of public domain
+implementations of the cipher, optimized for common machine architectures.
+
+The full example code referenced above contains three implementations of
+Salsa20: A reference Cryptol implementation (which we take as correct), and two
+C implmentations, one of which is from Bernstein himself. For the purposes of
+this example, we focus on the second of these implementations, which more
+closely matches the Cryptol implementation. A full verification of Bernstein's
+implementation is available in `examples/salsa20/djb`.
+
+We now give a brief description of each function to verify, presented using
+both the Cryptol and C names.
+
+### `quarterround` / `s20_quarterround`
+
+### `rowround` / `s20_rowround`
+
+### `columnround` / `s20_columnround`
+
+### `doubleround` / `s20_doubleround`
+
+### `Salsa20` / `s20_hash`
+
+### `Salsa20_expansion` / `s20_expand32`
+
+### `Salsa20_encrypt` / `s20_crypt32`
+
+[^4]: https://en.wikipedia.org/wiki/Salsa20
