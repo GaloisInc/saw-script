@@ -1804,13 +1804,22 @@ scBvCountLeadingZeros sc n x = scGlobalApply sc "Prelude.bvCountLeadingZeros" [n
 scBvCountTrailingZeros :: SharedContext -> Term -> Term -> IO Term
 scBvCountTrailingZeros sc n x = scGlobalApply sc "Prelude.bvCountTrailingZeros" [n, x]
 
--- | Create terms applying the (binary) bit-wise logical primitives.
+-- | Create a term applying the bit-wise and primitive.
 --
--- > bvOr/And/Xor : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
-scBvOr, scBvAnd, scBvXor
-    :: SharedContext -> Term -> Term -> Term -> IO Term
+-- > bvAnd : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+scBvAnd :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvAnd sc n x y = scGlobalApply sc "Prelude.bvAnd" [n, x, y]
+
+-- | Create a term applying the bit-wise xor primitive.
+--
+-- > bvXor : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+scBvXor :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvXor sc n x y = scGlobalApply sc "Prelude.bvXor" [n, x, y]
+
+-- | Create a term applying the bit-wise or primitive.
+--
+-- > bvOr : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+scBvOr :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvOr  sc n x y = scGlobalApply sc "Prelude.bvOr"  [n, x, y]
 
 -- | Create a term applying the bit-wise negation primitive.
