@@ -21,7 +21,6 @@ import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
-import qualified What4.ProgramLoc as PL
 
 type JVMTheorem =  CMS.CrucibleMethodSpecIR CJ.JVM
 type LLVMTheorem = CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR
@@ -63,28 +62,26 @@ prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
       subitem = indent 4 . item
       sectionWithItems _ _ [] = mempty
       sectionWithItems nm prt items =
-        vsep [section nm, "", vsep (map prt items), ""]
+        vsep [section nm, "", vsep (map prt items)]
+      verifStatus s = if Set.null (solverStatsSolvers (s ^. CMS.csSolverStats))
+                      then "assumed"
+                      else "verified"
+      condStatus s = (if null (s ^. (CMS.csPreState . CMS.csConditions))
+                      then "without"
+                      else "with") <+> "conditions"
       prettyJVMSpecs ss =
         sectionWithItems "JVM Methods Analyzed" prettyJVMSpec ss
       prettyJVMSpec s =
         vsep [ item (fromString (s ^. CMSJVM.csMethodName))
-             , subitem (if null (s ^. (CMS.csPreState . CMS.csConditions))
-                        then "without"
-                        else "with") <+>
-               "conditions"
-             , subitem ("from location:" <+>
-                        pretty (PL.plSourceLoc (s ^. CMS.csLoc)))
+             , subitem (condStatus s)
+             , subitem (verifStatus s)
              ]
       prettyLLVMSpecs ss =
         sectionWithItems "LLVM Functions Analyzed" prettyLLVMSpec ss
       prettyLLVMSpec (CMSLLVM.SomeLLVM s) =
         vsep [ item (fromString (s ^. CMSLLVM.csName))
-             , subitem (if null (s ^. (CMS.csPreState . CMS.csConditions))
-                        then "without"
-                        else "with") <+>
-               "conditions"
-             , subitem ("from location:" <+>
-                        pretty (PL.plSourceLoc (s ^. CMS.csLoc)))
+             , subitem (condStatus s)
+             , subitem (verifStatus s)
              ]
       prettyTheorems ts =
         sectionWithItems "Theorems Proved or Assumed" (item . prettyTheorem) ts
