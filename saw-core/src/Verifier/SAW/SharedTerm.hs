@@ -1615,12 +1615,16 @@ scIntMin sc x y = scGlobalApply sc "Prelude.intMin" [x, y]
 scIntMax :: SharedContext -> Term -> Term -> IO Term
 scIntMax sc x y = scGlobalApply sc "Prelude.intMax" [x, y]
 
--- | Create terms applying the (unary) integer primitives.
+-- | Create a term applying the negation integer primitive.
 --
--- > intNeg/intAbs : Integer -> Integer;
-scIntNeg, scIntAbs
-   :: SharedContext -> Term -> IO Term
+-- > intNeg : Integer -> Integer;
+scIntNeg :: SharedContext -> Term -> IO Term
 scIntNeg sc x = scGlobalApply sc "Prelude.intNeg" [x]
+
+-- | Create a term applying the absolute value integer primitive.
+--
+-- > intAbs : Integer -> Integer;
+scIntAbs :: SharedContext -> Term -> IO Term
 scIntAbs sc x = scGlobalApply sc "Prelude.intAbs" [x]
 
 -- | Create terms applying the integer comparison primitives.
