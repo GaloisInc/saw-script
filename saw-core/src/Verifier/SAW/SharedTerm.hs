@@ -1786,13 +1786,22 @@ scBvSRem sc n x y = scGlobalApply sc "Prelude.bvSRem" [n, x, y]
 scBvSDiv :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSDiv sc n x y = scGlobalApply sc "Prelude.bvSDiv" [n, x, y]
 
--- | Create terms applying the bit-counting bitvector primitives.
+-- | Create a term applying the population count bitvector primitive.
 --
--- > bvPopcount/bvCountLeadingZeros/bvCountTrailingZeros : (x : Nat) -> bitvector n -> bitvector n;
-scBvPopcount, scBvCountLeadingZeros, scBvCountTrailingZeros
-    :: SharedContext -> Term -> Term -> IO Term
+-- > bvPopcount : (x : Nat) -> bitvector n -> bitvector n;
+scBvPopcount :: SharedContext -> Term -> Term -> IO Term
 scBvPopcount sc n x = scGlobalApply sc "Prelude.bvPopcount" [n, x]
+
+-- | Create a term applying the leading zero counting bitvector primitive.
+--
+-- > bvCountLeadingZeros : (x : Nat) -> bitvector n -> bitvector n;
+scBvCountLeadingZeros :: SharedContext -> Term -> Term -> IO Term
 scBvCountLeadingZeros sc n x = scGlobalApply sc "Prelude.bvCountLeadingZeros" [n, x]
+
+-- | Create a term applying the trailing zero counting bitvector primitive.
+--
+-- > bvCountTrailingZeros : (x : Nat) -> bitvector n -> bitvector n;
+scBvCountTrailingZeros :: SharedContext -> Term -> Term -> IO Term
 scBvCountTrailingZeros sc n x = scGlobalApply sc "Prelude.bvCountTrailingZeros" [n, x]
 
 -- | Create terms applying the (binary) bit-wise logical primitives.
