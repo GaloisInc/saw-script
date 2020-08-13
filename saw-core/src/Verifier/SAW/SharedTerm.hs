@@ -1744,17 +1744,46 @@ scBvNonzero sc n x = scGlobalApply sc "Prelude.bvNonzero" [n, x]
 scBvNeg :: SharedContext -> Term -> Term -> IO Term
 scBvNeg sc n x = scGlobalApply sc "Prelude.bvNeg" [n, x]
 
--- | Create terms applying the arithmetic (binary) bitvector primitives
+-- | Create a term applying the bitvector addition primitive.
 --
--- > bvAdd/Sub/Mul : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
-scBvAdd, scBvSub, scBvMul, scBvURem, scBvUDiv, scBvSRem, scBvSDiv
-    :: SharedContext -> Term -> Term -> Term -> IO Term
+-- > bvAdd : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+scBvAdd :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvAdd sc n x y = scGlobalApply sc "Prelude.bvAdd" [n, x, y]
+
+-- | Create a term applying the bitvector subtraction primitive.
+--
+-- > bvSub : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+scBvSub :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSub sc n x y = scGlobalApply sc "Prelude.bvSub" [n, x, y]
+
+-- | Create a term applying the bitvector multiplication primitive.
+--
+-- > bvMul : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+scBvMul :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvMul sc n x y = scGlobalApply sc "Prelude.bvMul" [n, x, y]
+
+-- | Create a term applying the bitvector (unsigned) modulus primitive.
+--
+-- > bvURem : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+scBvURem :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvURem sc n x y = scGlobalApply sc "Prelude.bvURem" [n, x, y]
+
+-- | Create a term applying the bitvector (unsigned) division primitive.
+--
+-- > bvUDiv : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+scBvUDiv :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvUDiv sc n x y = scGlobalApply sc "Prelude.bvUDiv" [n, x, y]
+
+-- | Create a term applying the bitvector (signed) modulus primitive.
+--
+-- > bvSRem : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+scBvSRem :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSRem sc n x y = scGlobalApply sc "Prelude.bvSRem" [n, x, y]
+
+-- | Create a term applying the bitvector (signed) division primitive.
+--
+-- > bvSDiv : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+scBvSDiv :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSDiv sc n x y = scGlobalApply sc "Prelude.bvSDiv" [n, x, y]
 
 -- | Create terms applying the bit-counting bitvector primitives.
