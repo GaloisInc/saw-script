@@ -1627,13 +1627,22 @@ scIntNeg sc x = scGlobalApply sc "Prelude.intNeg" [x]
 scIntAbs :: SharedContext -> Term -> IO Term
 scIntAbs sc x = scGlobalApply sc "Prelude.intAbs" [x]
 
--- | Create terms applying the integer comparison primitives.
+-- | Create a term applying the integer equality testing primitive.
 --
--- > intEq/intLe/intLt : Integer -> Integer -> Bool;
-scIntEq, scIntLe, scIntLt
-   :: SharedContext -> Term -> Term -> IO Term
+-- > intEq : Integer -> Integer -> Bool;
+scIntEq :: SharedContext -> Term -> Term -> IO Term
 scIntEq sc x y = scGlobalApply sc "Prelude.intEq" [x, y]
+
+-- | Create a term applying the integer less-than-or-equal primitive.
+--
+-- > intLe : Integer -> Integer -> Bool;
+scIntLe :: SharedContext -> Term -> Term -> IO Term
 scIntLe sc x y = scGlobalApply sc "Prelude.intLe" [x, y]
+
+-- | Create a term applying the integer less-than primitive.
+--
+-- > intLt : Integer -> Integer -> Bool;
+scIntLt :: SharedContext -> Term -> Term -> IO Term
 scIntLt sc x y = scGlobalApply sc "Prelude.intLt" [x, y]
 
 -- | Create a term computing a @Nat@ from an @Integer@, if possible.
