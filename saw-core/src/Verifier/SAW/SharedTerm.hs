@@ -1887,12 +1887,16 @@ scBvSGt sc n x y = scGlobalApply sc "Prelude.bvsgt" [n, x, y]
 scBvSLt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSLt sc n x y = scGlobalApply sc "Prelude.bvslt" [n, x, y]
 
--- | Create terms applying the (logical) bit-shifting primitives.
+-- | Create a term applying the left-shift primitive.
 --
--- > bvShl, bvShr : (n : Nat) -> bitvector n -> Nat -> bitvector n;
-scBvShl, scBvShr
-    :: SharedContext -> Term -> Term -> Term -> IO Term
+-- > bvShl : (n : Nat) -> bitvector n -> Nat -> bitvector n;
+scBvShl :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvShl sc n x y = scGlobalApply sc "Prelude.bvShl" [n, x, y]
+
+-- | Create a term applying the logical right-shift primitive.
+--
+-- > bvShr : (n : Nat) -> bitvector n -> Nat -> bitvector n;
+scBvShr :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvShr sc n x y = scGlobalApply sc "Prelude.bvShr" [n, x, y]
 
 -- | Create a term applying the arithmetic/signed right-shift primitive.
