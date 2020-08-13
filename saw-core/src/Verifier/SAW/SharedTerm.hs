@@ -1573,17 +1573,46 @@ scIntegerConst sc i
   | i >= 0    = scNatToInt sc =<< scNat sc (fromInteger i)
   | otherwise = scIntNeg sc =<< scNatToInt sc =<< scNat sc (fromInteger (- i))
 
--- | Create terms applying the (binary) integer primitives.
+-- | Create a term applying the integer addition primitive.
 --
--- > intAdd/intSub/intMul/intDiv/intMod : Integer -> Integer -> Integer;
-scIntAdd, scIntSub, scIntMul, scIntDiv, scIntMod, scIntMax, scIntMin
-   :: SharedContext -> Term -> Term -> IO Term
+-- > intAdd : Integer -> Integer -> Integer
+scIntAdd :: SharedContext -> Term -> Term -> IO Term
 scIntAdd sc x y = scGlobalApply sc "Prelude.intAdd" [x, y]
+
+-- | Create a term applying the integer subtraction primitive.
+--
+-- > intSub : Integer -> Integer -> Integer
+scIntSub :: SharedContext -> Term -> Term -> IO Term
 scIntSub sc x y = scGlobalApply sc "Prelude.intSub" [x, y]
+
+-- | Create a term applying the integer multiplication primitive.
+--
+-- > intMul : Integer -> Integer -> Integer
+scIntMul :: SharedContext -> Term -> Term -> IO Term
 scIntMul sc x y = scGlobalApply sc "Prelude.intMul" [x, y]
+
+-- | Create a term applying the integer division primitive.
+--
+-- > intDiv : Integer -> Integer -> Integer
+scIntDiv :: SharedContext -> Term -> Term -> IO Term
 scIntDiv sc x y = scGlobalApply sc "Prelude.intDiv" [x, y]
+
+-- | Create a term applying the integer modulus primitive.
+--
+-- > intMod : Integer -> Integer -> Integer
+scIntMod :: SharedContext -> Term -> Term -> IO Term
 scIntMod sc x y = scGlobalApply sc "Prelude.intMod" [x, y]
+
+-- | Create a term applying the integer min primitive.
+--
+-- > intMin : Integer -> Integer -> Integer
+scIntMin :: SharedContext -> Term -> Term -> IO Term
 scIntMin sc x y = scGlobalApply sc "Prelude.intMin" [x, y]
+
+-- | Create a term applying the integer max primitive.
+--
+-- > intMax : Integer -> Integer -> Integer
+scIntMax :: SharedContext -> Term -> Term -> IO Term
 scIntMax sc x y = scGlobalApply sc "Prelude.intMax" [x, y]
 
 -- | Create terms applying the (unary) integer primitives.
