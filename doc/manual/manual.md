@@ -2477,14 +2477,14 @@ that will likely be generalized in the future. It can be used in either
 the pre state or the post state, to specify the value of ghost state
 either before or after the execution of the function, respectively.
 
-# An Extended Example
+## An Extended Example
 
 In order to tie together many of the concepts in this manual, we now present a
 non-trivial verification task in its entirety. All of the code for this example
 can be found in the `examples/salsa20` directory of
 [the SAWScript repository](https://github.com/GaloisInc/saw-script).
 
-## Salsa20 Overview
+### Salsa20 Overview
 
 Salsa20 is a stream cipher developed in 2005 by Daniel J. Bernstein, built on a
 pseudorandom function utilizing add-rotate-XOR (ARX) operations on 32-bit
@@ -2502,7 +2502,7 @@ Bernstein's implementation is available in `examples/salsa20/djb`, for the
 interested. The code for this verification task can be found in the files named
 according to the pattern `examples/salsa20/(s|S)alsa20.*`.
 
-## Verifications
+### Verifications
 
 We now take on the actual verification task. This will be done in two stages:
 We first define some useful utility functions for constructing common patterns
@@ -2511,7 +2511,7 @@ functions are modified in-place.) We then demonstrate how one might construct a
 specification for each of the functions in the Salsa20 implementation described
 above.
 
-### Utility Functions
+#### Utility Functions
 
 We first define the function
 `alloc_init : LLVMType -> Term -> CrucibleSetup SetupValue`.
@@ -2575,7 +2575,7 @@ let oneptr_update_func n ty f = do {
 };
 ~~~~
 
-### The `quarterround` operation
+#### The `quarterround` operation
 
 The C function we wish to verify has type
 `void s20_quarterround(uint32_t *y0, uint32_t *y1, uint32_t *y2, uint32_t *y3)`.
@@ -2604,7 +2604,7 @@ let quarterround_setup : CrucibleSetup () = do {
 };
 ~~~~
 
-### Simple Updating Functions
+#### Simple Updating Functions
 
 The following functions can all have their specifications given by the utility
 function `oneptr_update_func` implemented above, so there isn't much to say
@@ -2624,7 +2624,7 @@ let salsa20_setup =
     oneptr_update_func "seq" (llvm_array 64 (llvm_int 8)) {{ Salsa20 }};
 ~~~~
 
-### 32-Bit Key Expansion
+#### 32-Bit Key Expansion
 
 The next function of substantial behavior that we wish to verify has type
 
@@ -2658,7 +2658,7 @@ let salsa20_expansion_32 = do {
 };
 ~~~~
 
-### 32-bit Key Encryption
+#### 32-bit Key Encryption
 
 Finally, we write a specification for the encryption function itself, which has
 type
@@ -2697,7 +2697,7 @@ let s20_encrypt32 n = do {
 };
 ~~~~
 
-### Verifying
+#### Verifying
 
 Finally, we can verify all of the functions. Notice the use of compositional
 verification, and that path satisfiability checking is enabled for those
