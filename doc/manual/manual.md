@@ -2490,29 +2490,102 @@ Salsa20 is a stream cipher developed in 2005 by Daniel J. Bernstein, built on a
 pseudorandom function utilizing add-rotate-XOR (ARX) operations on 32-bit
 words[^4]. Bernstein himself has provided a number of public domain
 implementations of the cipher, optimized for common machine architectures.
+For the mathematically inclined, his specification for the cipher can be
+found [here](http://cr.yp.to/snuffle/spec.pdf).
 
-The full example code referenced above contains three implementations of
-Salsa20: A reference Cryptol implementation (which we take as correct), and two
-C implmentations, one of which is from Bernstein himself. For the purposes of
-this example, we focus on the second of these implementations, which more
-closely matches the Cryptol implementation. A full verification of Bernstein's
-implementation is available in `examples/salsa20/djb`.
+The repository referenced above contains three implementations of the Salsa20
+cipher: A reference Cryptol implementation (which we take as correct in this
+example), and two C implmentations, one of which is from Bernstein himself. For
+the purposes of this example, we focus on the second of these C implementations,
+which more closely matches the Cryptol implementation. A full verification of
+Bernstein's implementation is available in `examples/salsa20/djb`, for the
+interested. The code for this verification task can be found in the files named
+according to the pattern `examples/salsa20/(s|S)alsa20.*`.
 
-We now give a brief description of each function to verify, presented using
-both the Cryptol and C names.
+## Verifications
 
-### `quarterround` / `s20_quarterround`
+We now take on the actual verification task. This will be done in two stages:
+We first define some useful utility functions for constructing common patterns
+in the specifications for this type of program (i.e. one where the arguments to
+functions are modified in-place.) We then demonstrate how one might construct a
+specification for each of the functions in the Salsa20 implementation described
+above.
 
-### `rowround` / `s20_rowround`
+### Utility Functions
 
-### `columnround` / `s20_columnround`
+We define the following utility functions:
 
-### `doubleround` / `s20_doubleround`
+~~~
+import "Salsa20.cry";
 
-### `Salsa20` / `s20_hash`
+// alloc_init : LLVMType -> Term -> CrucibleSetup SetupValue
+// alloc_init ty v returns a SetupValue consisting of a pointer to memory
+// allocated and initialized to a value v of type ty.
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p (crucible_term v);
+    return p;
+};
 
-### `Salsa20_expansion` / `s20_expand32`
+// ptr_to_fresh : String -> LLVMType -> CrucibleSetup (Term, SetupValue)
+// ptr_to_fresh n ty returns a pair (x, p) consisting of a fresh symbolic
+// variable x of type ty and a pointer p to it. The String n specifies the
+// name that SAW should use when printing x.
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty x;
+    return (x, p);
+};
 
-### `Salsa20_encrypt` / `s20_crypt32`
+// oneptr_update_func : String -> LLVMType -> Term -> CrucibleSetup ()
+// oneptr_update_func n ty f specifies the behavior of a function that takes
+// a single pointer (with printable name given by the String n) to memory
+// containing a value of type ty and mutates the contents of that memory.
+// The specification asserts that the contents of this memory after execution
+// are equal to the value given by the application of the Term f to the value
+// in that memory before execution.
+let oneptr_update_func n ty f = do {
+    (x, p) <- ptr_to_fresh n ty;
+    crucible_execute_func [p];
+    crucible_points_to p (crucible_term {{ f x }});
+};
+~~~
+
+### `void s20_quarterround(uint32_t *y0, uint32_t *y1, uint32_t *y2, uint32_t *y3)`
+
+~~~
+// The quarterround specification generates four symbolic variables and
+// pointers to them in the precondition / setup stage. They are passed to the
+// function during symbolic execution via `crucible_execute_fun`. Finally, in
+// the postcondition / return stage, the expected values are computed using the
+// trusted Cryptol implementation and it is asserted that the pointers do in
+// fact point to these expected values.
+let quarterround_setup : CrucibleSetup () = do {
+    (y0, p0) <- ptr_to_fresh "y0" (llvm_int 32);
+    (y1, p1) <- ptr_to_fresh "y1" (llvm_int 32);
+    (y2, p2) <- ptr_to_fresh "y2" (llvm_int 32);
+    (y3, p3) <- ptr_to_fresh "y3" (llvm_int 32);
+
+    crucible_execute_func [p0, p1, p2, p3];
+
+    let zs = {{ quarterround [y0,y1,y2,y3] }}; // from Salsa20.cry
+    crucible_points_to p0 (crucible_term {{ zs@0 }});
+    crucible_points_to p1 (crucible_term {{ zs@1 }});
+    crucible_points_to p2 (crucible_term {{ zs@2 }});
+    crucible_points_to p3 (crucible_term {{ zs@3 }});
+};
+~~~
+
+### `void s20_rowround(uint32_t y[static 16])`
+
+### `s20_columnround`
+
+### `s20_doubleround`
+
+### `s20_hash`
+
+### `s20_expand32`
+
+### `s20_crypt32`
 
 [^4]: https://en.wikipedia.org/wiki/Salsa20
