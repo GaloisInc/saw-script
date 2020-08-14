@@ -2503,7 +2503,7 @@ verification of Bernstein's implementation is available in
 can be found in the files named according to the pattern
 `examples/salsa20/(s|S)alsa20.*`.
 
-### Verifications
+### Specifications
 
 We now take on the actual verification task. This will be done in two stages:
 We first define some useful utility functions for constructing common patterns
@@ -2698,7 +2698,7 @@ let s20_encrypt32 n = do {
 };
 ~~~~
 
-#### Verifying
+### Verifying Everything
 
 Finally, we can verify all of the functions. Notice the use of compositional
 verification and that path satisfiability checking is enabled for those
