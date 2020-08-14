@@ -2346,6 +2346,15 @@ primitives = Map.fromList
     , " permissions perms and translates to the SAW core term trans"
     ]
 
+  , prim "heapster_assume_fun_rename"
+    "HeapsterEnv -> String -> String -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_assume_fun)
+    Experimental
+    [ "heapster_assume_fun_rename nm nm_t perms trans assumes that function nm"
+    , " has permissions perms and translates to the SAW core term trans. If"
+    , " trans is not an identifier then it is bound to the defined name nm_to."
+    ]
+
   , prim "heapster_assume_fun_multi"
     "HeapsterEnv -> String -> [(String, String)] -> TopLevel HeapsterEnv"
     (bicVal heapster_assume_fun_multi)

@@ -26,6 +26,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_find_symbol
        , heapster_find_symbols
        , heapster_assume_fun
+       , heapster_assume_fun_rename
        , heapster_assume_fun_multi
        , heapster_print_fun_trans
        , heapster_export_coq
@@ -403,10 +404,11 @@ heapster_find_symbol bic opts henv str =
                concat (intersperse ", " $ map show syms))
 
 -- | Assume that the given named function has the supplied type and translates
--- to a SAW core definition given by name
-heapster_assume_fun :: BuiltinContext -> Options -> HeapsterEnv ->
-                       String -> String -> String -> TopLevel ()
-heapster_assume_fun _bic _opts henv nm perms_string term_string =
+-- to a SAW core definition given by the second name
+heapster_assume_fun_rename :: BuiltinContext -> Options -> HeapsterEnv ->
+                              String -> String -> String -> String ->
+                              TopLevel ()
+heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
   do Some lm <- failOnNothing ("Could not find symbol: " ++ nm)
                               (lookupModDeclaringSym henv nm)
      sc <- getSharedContext
@@ -425,7 +427,7 @@ heapster_assume_fun _bic _opts henv nm perms_string term_string =
           parseFunPermString "permissions" env args ret perms_string
         env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
         fun_typ <- liftIO $ translateCompleteFunPerm sc env fun_perm
-        term_ident <- parseAndInsDef henv nm fun_typ term_string
+        term_ident <- parseAndInsDef henv nm_to fun_typ term_string
         let env' = permEnvAddGlobalSymFun env
                                           (GlobalSymbol $ fromString nm)
                                           w
@@ -433,6 +435,12 @@ heapster_assume_fun _bic _opts henv nm perms_string term_string =
                                           (globalOpenTerm term_ident)
         liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
+-- | Assume that the given named function has the supplied type and translates
+-- to a SAW core definition given by name
+heapster_assume_fun :: BuiltinContext -> Options -> HeapsterEnv ->
+                       String -> String -> String -> TopLevel ()
+heapster_assume_fun _bic _opts henv nm perms_string term_string =
+  heapster_assume_fun_rename _bic _opts henv nm nm perms_string term_string
 
 -- | Assume that the given named function has one or more permissions and
 -- associated translations, each of which is as given in 'heapster_assume_fun'
