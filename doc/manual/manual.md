@@ -2513,53 +2513,81 @@ above.
 
 ### Utility Functions
 
-We define the following utility functions:
+We first define the function
+`alloc_init : LLVMType -> Term -> CrucibleSetup SetupValue`.
 
-~~~
+`alloc_init ty v` returns a `SetupValue` consisting of a pointer to memory
+allocated and initialized to a value `v` of type `ty`. `alloc_init_readonly`
+does the same, except the memory allocated cannot be written to.
+
+~~~~
 import "Salsa20.cry";
 
-// alloc_init : LLVMType -> Term -> CrucibleSetup SetupValue
-// alloc_init ty v returns a SetupValue consisting of a pointer to memory
-// allocated and initialized to a value v of type ty.
 let alloc_init ty v = do {
     p <- crucible_alloc ty;
     crucible_points_to p (crucible_term v);
     return p;
 };
 
-// ptr_to_fresh : String -> LLVMType -> CrucibleSetup (Term, SetupValue)
-// ptr_to_fresh n ty returns a pair (x, p) consisting of a fresh symbolic
-// variable x of type ty and a pointer p to it. The String n specifies the
-// name that SAW should use when printing x.
+let alloc_init_readonly ty v = do {
+    p <- crucible_alloc_readonly ty;
+    crucible_points_to p (crucible_term v);
+    return p;
+};
+~~~~
+
+We now define
+`ptr_to_fresh : String -> LLVMType -> CrucibleSetup (Term, SetupValue)`.
+
+`ptr_to_fresh n ty` returns a pair `(x, p)` consisting of a fresh symbolic
+variable `x` of type `ty` and a pointer `p` to it. `n` specifies the
+name that SAW should use when printing `x`. `ptr_to_fresh_readonly` does the
+same, the variable cannot be written to.
+
+~~~~
 let ptr_to_fresh n ty = do {
     x <- crucible_fresh_var n ty;
     p <- alloc_init ty x;
     return (x, p);
 };
 
-// oneptr_update_func : String -> LLVMType -> Term -> CrucibleSetup ()
-// oneptr_update_func n ty f specifies the behavior of a function that takes
-// a single pointer (with printable name given by the String n) to memory
-// containing a value of type ty and mutates the contents of that memory.
-// The specification asserts that the contents of this memory after execution
-// are equal to the value given by the application of the Term f to the value
-// in that memory before execution.
+let ptr_to_fresh_readonly n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init_readonly ty x;
+    return (x, p);
+};
+~~~~
+
+Finally, we define
+`oneptr_update_func : String -> LLVMType -> Term -> CrucibleSetup ()`.
+
+`oneptr_update_func n ty f` specifies the behavior of a function that takes
+a single pointer (with printable name given by `n`) to memory containing a
+value of type `ty` and mutates the contents of that memory. The specification
+asserts that the contents of this memory after execution are equal to the value
+given by the application of `f` to the value in that memory before execution.
+
+~~~~
 let oneptr_update_func n ty f = do {
     (x, p) <- ptr_to_fresh n ty;
     crucible_execute_func [p];
     crucible_points_to p (crucible_term {{ f x }});
 };
-~~~
+~~~~
 
-### `void s20_quarterround(uint32_t *y0, uint32_t *y1, uint32_t *y2, uint32_t *y3)`
+### The `quarterround` operation
 
-~~~
-// The quarterround specification generates four symbolic variables and
-// pointers to them in the precondition / setup stage. They are passed to the
-// function during symbolic execution via `crucible_execute_fun`. Finally, in
-// the postcondition / return stage, the expected values are computed using the
-// trusted Cryptol implementation and it is asserted that the pointers do in
-// fact point to these expected values.
+The C function we wish to verify has type
+`void s20_quarterround(uint32_t *y0, uint32_t *y1, uint32_t *y2, uint32_t *y3)`.
+
+The function's specification generates four symbolic variables and pointers to
+them in the precondition / setup stage. The pointers are passed to the function
+during symbolic execution via `crucible_execute_fun`. Finally, in the
+postcondition / return stage, the expected values are computed using the trusted
+Cryptol implementation and it is asserted that the pointers do in fact point to
+these expected values.
+
+~~~~
 let quarterround_setup : CrucibleSetup () = do {
     (y0, p0) <- ptr_to_fresh "y0" (llvm_int 32);
     (y1, p1) <- ptr_to_fresh "y1" (llvm_int 32);
@@ -2574,18 +2602,122 @@ let quarterround_setup : CrucibleSetup () = do {
     crucible_points_to p2 (crucible_term {{ zs@2 }});
     crucible_points_to p3 (crucible_term {{ zs@3 }});
 };
-~~~
+~~~~
 
-### `void s20_rowround(uint32_t y[static 16])`
+### Simple Updating Functions
 
-### `s20_columnround`
+The following functions can all have their specifications given by the utility
+function `oneptr_update_func` implemented above, so there isn't much to say
+about them.
 
-### `s20_doubleround`
+~~~~
+let rowround_setup =
+    oneptr_update_func "y" (llvm_array 16 (llvm_int 32)) {{ rowround }};
 
-### `s20_hash`
+let columnround_setup =
+    oneptr_update_func "x" (llvm_array 16 (llvm_int 32)) {{ columnround }};
 
-### `s20_expand32`
+let doubleround_setup =
+    oneptr_update_func "x" (llvm_array 16 (llvm_int 32)) {{ doubleround }};
 
-### `s20_crypt32`
+let salsa20_setup =
+    oneptr_update_func "seq" (llvm_array 64 (llvm_int 8)) {{ Salsa20 }};
+~~~~
+
+### 32-Bit Key Expansion
+
+The next function of substantial behavior that we wish to verify has type
+
+~~~~c
+void s20_expand32( uint8_t *k
+                 , uint8_t n[static 16]
+                 , uint8_t keystream[static 64]
+                 )
+~~~~
+
+This function's specification follows a similar pattern to that of
+`s20_quarterround`, though for extra assurance we can make sure that the
+function does not write to the memory pointed to by `k` or `n` using the
+utility `ptr_to_fresh_readonly`, as this function should only modify
+`keystream`. Besides this, we see the call to the trusted Cryptol
+implementation specialized to `a=2`, which does 32-bit key expansion (since the
+Cryptol implementation can also specialize to `a=1` for 16-bit keys.) This
+specification can easily be changed to work with 16-bit keys.
+
+~~~~
+let salsa20_expansion_32 = do {
+    (k, pk) <- ptr_to_fresh_readonly "k" (llvm_array 32 (llvm_int 8));
+    (n, pn) <- ptr_to_fresh_readonly "n" (llvm_array 16 (llvm_int 8));
+
+    pks <- crucible_alloc (llvm_array 64 (llvm_int 8));
+
+    crucible_execute_fun [pk, pn, pks];
+
+    let rks = {{ Salsa20_expansion`{a=2}(k, n) }};
+    crucible_points_to pks (crucible_term rks);
+};
+~~~~
+
+### 32-bit Key Encryption
+
+Finally, we write a specification for the encryption function itself, which has
+type
+
+~~~~c
+enum s20_status_t s20_crypt32( uint8_t *key
+                             , uint8_t nonce[static 8]
+                             , uint32_t si
+                             , uint8_t *buf
+                             , uint32_t buflen
+                             )
+~~~~
+
+As before, we can ensure this function does not modify the memory pointed to by
+`key` or `nonce`. We take `si`, the stream index, to be 0. The specification is
+parameterized on a number `n`, which corresponds to `buflen`. Finally, to deal
+with the fact that this function returns a status code, we simply specify that
+we expect a success (status code 0) as the return value in the postcondition
+stage of the specification.
+
+~~~~
+let s20_encrypt32 n = do {
+    (key, pkey) <- ptr_to_fresh_readonly "key" (llvm_array 32 (llvm_int 8));
+    (v, pv) <- ptr_to_fresh_readonly "nonce" (llvm_array 8 (llvm_int 8));
+    (m, pm) <- ptr_to_fresh "buf" (llvm_array n (llvm_int 8));
+
+    crucible_execute_func [ pkey
+                          , pv
+                          , crucible_term {{ 0 : [32] }}
+                          , pm
+                          , crucible_term {{ `n : [32] }}
+                          ];
+
+    crucible_points_to pm (crucible_term {{ Salsa20_encrypt (key, v, m) }});
+    crucible_return (crucible_term {{ 0 : [32] }});
+};
+~~~~
+
+### Verifying
+
+Finally, we can verify all of the functions. Notice the use of compositional
+verification, and that path satisfiability checking is enabled for those
+functions with loops not bounded by explicit constants.
+
+~~~~
+let main : TopLevel () = do {
+    m      <- llvm_load_module "salsa20.bc";
+    qr     <- crucible_llvm_verify m "s20_quarterround" []      false quarterround_setup   abc;
+    rr     <- crucible_llvm_verify m "s20_rowround"     [qr]    false rowround_setup       abc;
+    cr     <- crucible_llvm_verify m "s20_columnround"  [qr]    false columnround_setup    abc;
+    dr     <- crucible_llvm_verify m "s20_doubleround"  [cr,rr] false doubleround_setup    abc;
+    s20    <- crucible_llvm_verify m "s20_hash"         [dr]    false salsa20_setup        abc;
+    s20e32 <- crucible_llvm_verify m "s20_expand32"     [s20]   true  salsa20_expansion_32 abc;
+    s20encrypt_63 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 63) abc;
+    s20encrypt_64 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 64) abc;
+    s20encrypt_65 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 65) abc;
+
+    print "Done!";
+};
+~~~~
 
 [^4]: https://en.wikipedia.org/wiki/Salsa20
