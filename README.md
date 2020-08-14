@@ -124,7 +124,6 @@ downloaded dependencies include:
 * `deps/abcBridge/`:        [Haskell bindings for ABC](https://github.com/GaloisInc/abcBridge)
 * `deps/crucible/`:         [Crucible symbolic execution engine](https://github.com/GaloisInc/crucible)
 * `deps/cryptol/`:          [Cryptol](https://github.com/GaloisInc/cryptol)
-* `deps/cryptol-verifier/`: [Cryptol Symbolic Simulator (CSS)](https://github.com/GaloisInc/cryptol-verifier)
 * `deps/jvm-verifier/`:     [Java Symbolic Simulator (JSS)](https://github.com/GaloisInc/jvm-verifier)
 * `deps/saw-core/`:         [SAWCore intermediate language](https://github.com/GaloisInc/saw-core), used by CSS, JSS, and SAWScript
 

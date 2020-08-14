@@ -64,7 +64,7 @@ prove_print w4 {{ [1,2,3:[8]]@ (2:[2]) == 3 }};
 print ".";
 prove_print w4 {{ [1,2,3:[8]]@ (2:[8]) == 3 }};
 print ".";
-prove_print w4 {{ [1,2,3:[8]]@ 5 == 3 }};
+fails (prove_print w4 {{ [1,2,3:[8]]@ 5 == 3 }});
 
 print "Sequences !";
 
@@ -76,7 +76,7 @@ prove_print w4 {{ [1,2,3:[8]]! (2:[2]) == 1 }};
 print ".";
 prove_print w4 {{ [1,2,3:[8]]! (2:[8]) == 1 }};
 print ".";
-prove_print w4 {{ [1,2,3:[8]]! 5 == 1 }};
+fails (prove_print w4 {{ [1,2,3:[8]]! 5 == 1 }});
 
 print "Shifting, rotating";
 

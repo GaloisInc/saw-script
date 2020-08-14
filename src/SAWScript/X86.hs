@@ -31,6 +31,7 @@ import Control.Exception(Exception(..),throwIO)
 import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class(liftIO)
 
+import qualified Data.BitVector.Sized as BV
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -50,7 +51,7 @@ import Data.Parameterized.Context(EmptyCtx,(::>),singleton)
 import Data.Parameterized.Nonce(globalNonceGenerator)
 
 -- What4
-import What4.Interface(asNat,asUnsignedBV)
+import What4.Interface(asNat,asBV)
 import What4.Expr(FloatModeRepr(..))
 import qualified What4.Interface as W4
 import qualified What4.Config as W4
@@ -188,18 +189,21 @@ type CallHandler = Sym -> Macaw.LookupFunctionHandle Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
-proof :: ArchitectureInfo X86_64 ->
-         FilePath {- ^ ELF binary -} ->
-         Maybe FilePath {- ^ Cryptol spec, if any -} ->
-         [(ByteString,Integer,Unit)] ->
-         Fun ->
-         IO (SharedContext,Integer,[Goal])
-proof archi file mbCry globs fun =
+proof ::
+  (FilePath -> IO ByteString) ->
+  ArchitectureInfo X86_64 ->
+  FilePath {- ^ ELF binary -} ->
+  Maybe FilePath {- ^ Cryptol spec, if any -} ->
+  [(ByteString,Integer,Unit)] ->
+  Fun ->
+  IO (SharedContext,Integer,[Goal])
+proof fileReader archi file mbCry globs fun =
   do sc  <- mkSharedContext
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
      sym <- newSAWCoreBackend FloatRealRepr sc globalNonceGenerator
+     let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
      mvar <- mkMemVar halloc
      proofWithOptions Options
@@ -351,7 +355,10 @@ posFn = OtherPos . Text.pack . show
 
 
 -- | Load a file with Cryptol decls.
-loadCry :: Sym -> Maybe FilePath -> IO CryptolEnv
+loadCry ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  Sym -> Maybe FilePath ->
+  IO CryptolEnv
 loadCry sym mb =
   do ctx <- sawBackendSharedContext sym
      env <- initCryptolEnv ctx
@@ -367,7 +374,7 @@ callHandler :: Overrides -> CallHandler
 callHandler callMap sym = Macaw.LookupFunctionHandle $ \st mem regs -> do
   case lookupX86Reg X86_IP regs of
     Just (RV ptr) | LLVMPointer base off <- ptr ->
-      case (asNat base, asUnsignedBV off) of
+      case (asNat base, BV.asUnsigned <$> asBV off) of
         (Just b, Just o) ->
            case Map.lookup (b,o) callMap of
              Just h  -> case h sym of

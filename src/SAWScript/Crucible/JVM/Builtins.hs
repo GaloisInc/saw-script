@@ -42,6 +42,7 @@ import           Control.Lens
 
 import           Control.Monad.State
 import qualified Control.Monad.State.Strict as Strict
+import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
 import           Data.Function
 import           Data.IORef
@@ -64,7 +65,7 @@ import qualified Verifier.Java.Codebase as CB
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
 
--- cryptol-verifier
+-- cryptol-saw-core
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 
 -- what4
@@ -741,7 +742,7 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
     setupClass cls =
       do let cname = J.className cls
          name <- W4.stringLit sym (W4S.UnicodeLiteral $ CJ.classNameText (J.className cls))
-         status <- W4.bvLit sym knownRepr 0
+         status <- W4.bvLit sym knownRepr (BV.zero knownRepr)
          super <-
            case J.superClass cls of
              Nothing -> return W4.Unassigned

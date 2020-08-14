@@ -1,5 +1,6 @@
-{-# Language ViewPatterns #-}
+{-# Language ImplicitParams #-}
 {-# Language OverloadedStrings #-}
+{-# Language ViewPatterns #-}
 {-# Language ExplicitForAll #-}
 {-# Language FlexibleContexts #-}
 module SAWScript.Prover.Exporter
@@ -16,6 +17,11 @@ module SAWScript.Prover.Exporter
   , writeSMTLib2
   , write_smtlib2
   , writeUnintSMTLib2
+  , writeCoqCryptolPrimitivesForSAWCore
+  , writeCoqCryptolModule
+  , writeCoqSAWCorePrelude
+  , writeCoqTerm
+  , writeCoqProp
   , writeCore
   , writeVerilog
   , write_verilog
@@ -33,25 +39,33 @@ import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
 import qualified Data.Map as Map
 import qualified Data.SBV.Dynamic as SBV
+import qualified Data.ByteString as BS
 import System.IO
 import Data.Text.Prettyprint.Doc.Render.Text
+import Data.Parameterized.Nonce(globalNonceGenerator)
+import Text.PrettyPrint.ANSI.Leijen (vcat)
 
 import Cryptol.Utils.PP(pretty)
 
-import Data.Parameterized.Nonce(globalNonceGenerator)
+import Lang.Crucible.Backend.SAWCore (newSAWCoreBackend, sawBackendSharedContext)
 
-import qualified Lang.Crucible.Backend.SAWCore as Crucible (newSAWCoreBackend)
-
-import Verifier.SAW.SharedTerm as SC
-import Verifier.SAW.TypedTerm
-import Verifier.SAW.FiniteValue
-import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
+import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
+import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
+import Verifier.SAW.FiniteValue
+import Verifier.SAW.Module (emptyModule, moduleDecls)
+import Verifier.SAW.Prelude (preludeModule)
+import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
+import Verifier.SAW.SharedTerm as SC
+import qualified Verifier.SAW.Translation.Coq as Coq
+import Verifier.SAW.TypedAST (mkModuleName)
+import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.What4.SWord as W4Sim
 
+import qualified Verifier.SAW.UntypedAST as Un
 
 import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
@@ -205,7 +219,7 @@ write_verilog path t = do
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
-  sym <- Crucible.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
+  sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
   (_, (_, bval)) <- W4Sim.w4EvalAny sym sc Map.empty [] t
   edoc <- runExceptT $
     case bval of
@@ -231,6 +245,114 @@ writeVerilogProp sc path prop = writeVerilog sc path (unProp prop)
 
 writeCoreProp :: FilePath -> Prop -> IO ()
 writeCoreProp path (Prop t) = writeFile path (scWriteExternal t)
+
+coqTranslationConfiguration ::
+  [(String, String)] ->
+  [String] ->
+  Coq.TranslationConfiguration
+coqTranslationConfiguration notations skips = Coq.TranslationConfiguration
+  { Coq.notations          = notations
+  , Coq.monadicTranslation = False
+  , Coq.skipDefinitions    = skips
+  , Coq.vectorModule       = "SAWVectorsAsCoqVectors"
+  }
+
+writeCoqTerm ::
+  String ->
+  [(String, String)] ->
+  [String] ->
+  FilePath ->
+  Term ->
+  IO ()
+writeCoqTerm name notations skips path t = do
+  let configuration = coqTranslationConfiguration notations skips
+  case Coq.translateTermAsDeclImports configuration name t of
+    Left err -> putStrLn $ "Error translating: " ++ show err
+    Right doc -> case path of
+      "" -> print doc
+      _ -> writeFile path (show doc)
+
+writeCoqProp ::
+  String ->
+  [(String, String)] ->
+  [String] ->
+  FilePath ->
+  Prop ->
+  IO ()
+writeCoqProp name notations skips path (Prop t) =
+  writeCoqTerm name notations skips path t
+
+writeCoqCryptolModule ::
+  FilePath ->
+  FilePath ->
+  [(String, String)] ->
+  [String] ->
+  IO ()
+writeCoqCryptolModule inputFile outputFile notations skips = do
+  sc  <- mkSharedContext
+  ()  <- scLoadPreludeModule sc
+  ()  <- scLoadCryptolModule sc
+  sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
+  ctx <- sawBackendSharedContext sym
+  let ?fileReader = BS.readFile
+  env <- initCryptolEnv ctx
+  cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  (cm, _) <- loadCryptolModule ctx env inputFile
+  let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
+  let configuration = coqTranslationConfiguration notations skips
+  case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of
+    Left e -> putStrLn $ show e
+    Right cmDoc ->
+      writeFile outputFile
+      (show . vcat $ [ Coq.preamble configuration
+                     , "From CryptolToCoq Require Import SAWCorePrelude."
+                     , "Import SAWCorePrelude."
+                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
+                     , "Import CryptolPrimitives."
+                     , "From CryptolToCoq Require Import CryptolPrimitivesForSAWCoreExtra."
+                     , ""
+                     , cmDoc
+                     ])
+
+nameOfSAWCorePrelude :: Un.ModuleName
+nameOfSAWCorePrelude = Un.moduleName preludeModule
+
+nameOfCryptolPrimitivesForSAWCoreModule :: Un.ModuleName
+nameOfCryptolPrimitivesForSAWCoreModule = Un.moduleName cryptolModule
+
+writeCoqSAWCorePrelude ::
+  FilePath ->
+  [(String, String)] ->
+  [String] ->
+  IO ()
+writeCoqSAWCorePrelude outputFile notations skips = do
+  sc  <- mkSharedContext
+  ()  <- scLoadPreludeModule sc
+  m   <- scFindModule sc nameOfSAWCorePrelude
+  let configuration = coqTranslationConfiguration notations skips
+  let doc = Coq.translateSAWModule configuration m
+  writeFile outputFile (show . vcat $ [ Coq.preamble configuration, doc ])
+
+writeCoqCryptolPrimitivesForSAWCore ::
+  FilePath ->
+  [(String, String)] ->
+  [String] ->
+  IO ()
+writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
+  sc <- mkSharedContext
+  () <- scLoadPreludeModule sc
+  () <- scLoadCryptolModule sc
+  () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
+  m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
+  let configuration = coqTranslationConfiguration notations skips
+  let doc = Coq.translateSAWModule configuration m
+  let extraPreamble = vcat $
+        [ "From CryptolToCoq Require Import SAWCorePrelude."
+        , "Import SAWCorePrelude."
+        ]
+  writeFile outputFile (show . vcat $ [ Coq.preamblePlus configuration extraPreamble
+                                      , doc
+                                      ])
 
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)

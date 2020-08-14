@@ -6,11 +6,12 @@ packages:
   - deps/aig/
   - deps/abcBridge/
   - deps/cryptol/
-  - deps/saw-core/
-  - deps/saw-core-aig/
-  - deps/saw-core-sbv/
-  - deps/saw-core-what4/
-  - deps/cryptol-verifier/
+  - deps/saw-core/cryptol-saw-core/
+  - deps/saw-core/saw-core/
+  - deps/saw-core/saw-core-aig/
+  - deps/saw-core/saw-core-sbv/
+  - deps/saw-core/saw-core-what4/
+  - deps/saw-core-coq/
   - deps/jvm-verifier/
   - deps/what4/what4/
   - deps/what4/what4-abc/
@@ -35,25 +36,21 @@ extra-deps:
   - QuickCheck-2.14
   - splitmix-0.0.4
   - fgl-visualize-0.1.0.1
-  - dotgen-0.4.2
   - simple-smt-0.9.4
   - GraphSCC-1.0.4
-  - monadLib-3.9
-  - sbv-8.3
+  - monadLib-3.10
   - panic-0.4.0.1
   - itanium-abi-0.1.1.1
-  - boomerang-1.4.5.6
-  - th-abstraction-0.3.1.0
-  - microlens-th-0.4.2.3
-  - deriving-compat-0.5.6
-  - bifunctors-5.5.4
-  - generic-deriving-1.12.4
-  - invariant-0.5.3
-  - lens-4.17.1
-  - th-lift-0.8.0.1
-  - config-schema-1.1.0.0
-  - config-value-0.6.3.1
+  - boomerang-1.4.6
+  - config-schema-1.2.0.0
+  - config-value-0.7.0.1
   - simple-get-opt-0.3
   - base-orphans-0.8.2
+  - bv-sized-1.0.1
+  - bitwise-1.0.0.1
+  - sbv-8.6
+  - libBF-0.5.1
+  - hashable-1.3.0.0
+  - lens-4.19.2
 resolver: lts-14.27
 allow-newer: false

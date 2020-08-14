@@ -7,7 +7,6 @@ module SAWScript.Prover.ABC
 import qualified Data.AIG as AIG
 
 import           Verifier.SAW.SharedTerm
-import           Verifier.SAW.TypedTerm
 import           Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
@@ -16,7 +15,7 @@ import SAWScript.Proof(Prop, propToPredicate, unProp)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.Util
-         (liftCexBB, bindAllExts, checkBooleanSchema)
+         (liftCexBB, bindAllExts)
 
 -- | Bit-blast a proposition and check its validity using ABC.
 proveABC ::
@@ -27,9 +26,7 @@ proveABC ::
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
 proveABC proxy sc goal =
   do t0 <- propToPredicate sc goal
-     TypedTerm schema t <-
-        (bindAllExts sc t0 >>= rewriteEqs sc >>= mkTypedTerm sc)
-     checkBooleanSchema schema
+     t <- bindAllExts sc t0 >>= rewriteEqs sc
      BBSim.withBitBlastedPred proxy sc mempty t $
       \be lit0 shapes ->
          do let lit = AIG.not lit0

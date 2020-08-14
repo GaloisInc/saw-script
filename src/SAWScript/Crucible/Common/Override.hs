@@ -56,7 +56,7 @@ import           Control.Monad.Trans.State hiding (get, put)
 import           Control.Monad.State.Class (MonadState(..))
 import           Control.Monad.Error.Class (MonadError)
 import           Control.Monad.Catch (MonadThrow)
-import           Control.Monad.Fail (MonadFail(..))
+import qualified Control.Monad.Fail as Fail
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.IO.Class
@@ -180,10 +180,10 @@ ppOverrideFailureReason ::
   ) => OverrideFailureReason ext -> PP.Doc
 ppOverrideFailureReason rsn = case rsn of
   AmbiguousPointsTos pts ->
-    PP.text "ambiguous collection of points-to assertions" PP.<$$>
+    PP.text "LHS of points-to assertion(s) not reachable via points-tos from inputs/outputs:" PP.<$$>
     (PP.indent 2 $ PP.vcat (map PP.pretty pts))
   AmbiguousVars vs ->
-    PP.text "ambiguous collection of variables" PP.<$$>
+    PP.text "Fresh variable(s) not reachable via points-tos from function inputs/outputs:" PP.<$$>
     (PP.indent 2 $ PP.vcat (map MS.ppTypedTerm vs))
   BadTermMatch x y ->
     PP.text "terms do not match" PP.<$$>
@@ -267,7 +267,7 @@ throwOverrideMatcher msg = do
   loc <- use osLocation
   X.throw $ OverrideMatcherException loc msg
 
-instance MonadFail (OverrideMatcher ext rorw) where
+instance Fail.MonadFail (OverrideMatcher ext rorw) where
   fail = throwOverrideMatcher
 
 -- | "Run" function for OverrideMatcher. The final result and state

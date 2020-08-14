@@ -384,8 +384,8 @@ refreshTerms sc ss =
   where
     freshenTerm tt =
       case asExtCns (ttTerm tt) of
-        Just ec -> do new <- liftIO (mkTypedTerm sc =<< scFreshGlobal sc (ecName ec) (ecType ec))
-                      return (termId (ttTerm tt), ttTerm new)
+        Just ec -> do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
+                      return (termId (ttTerm tt), new)
         Nothing -> error "refreshTerms: not a variable"
 
 ------------------------------------------------------------------------
