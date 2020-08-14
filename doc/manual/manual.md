@@ -2479,7 +2479,7 @@ either before or after the execution of the function, respectively.
 
 ## An Extended Example
 
-In order to tie together many of the concepts in this manual, we now present a
+To tie together many of the concepts in this manual, we now present a
 non-trivial verification task in its entirety. All of the code for this example
 can be found in the `examples/salsa20` directory of
 [the SAWScript repository](https://github.com/GaloisInc/saw-script).
@@ -2488,19 +2488,20 @@ can be found in the `examples/salsa20` directory of
 
 Salsa20 is a stream cipher developed in 2005 by Daniel J. Bernstein, built on a
 pseudorandom function utilizing add-rotate-XOR (ARX) operations on 32-bit
-words[^4]. Bernstein himself has provided a number of public domain
+words[^4]. Bernstein himself has provided several public domain
 implementations of the cipher, optimized for common machine architectures.
 For the mathematically inclined, his specification for the cipher can be
 found [here](http://cr.yp.to/snuffle/spec.pdf).
 
 The repository referenced above contains three implementations of the Salsa20
 cipher: A reference Cryptol implementation (which we take as correct in this
-example), and two C implmentations, one of which is from Bernstein himself. For
-the purposes of this example, we focus on the second of these C implementations,
-which more closely matches the Cryptol implementation. A full verification of
-Bernstein's implementation is available in `examples/salsa20/djb`, for the
-interested. The code for this verification task can be found in the files named
-according to the pattern `examples/salsa20/(s|S)alsa20.*`.
+example), and two C implementations, one of which is from Bernstein himself.
+For this example, we focus on the second of these C
+implementations, which more closely matches the Cryptol implementation. Full
+verification of Bernstein's implementation is available in
+`examples/salsa20/djb`, for the interested. The code for this verification task
+can be found in the files named according to the pattern
+`examples/salsa20/(s|S)alsa20.*`.
 
 ### Verifications
 
@@ -2562,7 +2563,7 @@ Finally, we define
 `oneptr_update_func : String -> LLVMType -> Term -> CrucibleSetup ()`.
 
 `oneptr_update_func n ty f` specifies the behavior of a function that takes
-a single pointer (with printable name given by `n`) to memory containing a
+a single pointer (with a printable name given by `n`) to memory containing a
 value of type `ty` and mutates the contents of that memory. The specification
 asserts that the contents of this memory after execution are equal to the value
 given by the application of `f` to the value in that memory before execution.
@@ -2581,9 +2582,9 @@ The C function we wish to verify has type
 `void s20_quarterround(uint32_t *y0, uint32_t *y1, uint32_t *y2, uint32_t *y3)`.
 
 The function's specification generates four symbolic variables and pointers to
-them in the precondition / setup stage. The pointers are passed to the function
+them in the precondition/setup stage. The pointers are passed to the function
 during symbolic execution via `crucible_execute_fun`. Finally, in the
-postcondition / return stage, the expected values are computed using the trusted
+postcondition/return stage, the expected values are computed using the trusted
 Cryptol implementation and it is asserted that the pointers do in fact point to
 these expected values.
 
@@ -2700,7 +2701,7 @@ let s20_encrypt32 n = do {
 #### Verifying
 
 Finally, we can verify all of the functions. Notice the use of compositional
-verification, and that path satisfiability checking is enabled for those
+verification and that path satisfiability checking is enabled for those
 functions with loops not bounded by explicit constants.
 
 ~~~~
