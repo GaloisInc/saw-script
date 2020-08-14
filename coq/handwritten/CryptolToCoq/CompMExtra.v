@@ -86,11 +86,15 @@ Hint Resolve refinesM_returnM : refinesM.
 Hint Extern 1 (SAWCorePrelude.either _ _ _ _ _ _ |= _) =>
   apply refinesM_either_l;
     let e := fresh "e_either" in
-    (intro; intro e; try discriminate e; try rewrite e) : refinesM.
+    let e' := fresh "e_either_arg" in
+    (intro; intro e; try discriminate e; try rewrite e;
+    try (injection e; intro e'; try rewrite <- e')) : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.either _ _ _ _ _ _) =>
   apply refinesM_either_r;
     let e := fresh "e_either" in
-    (intro; intro e; try discriminate e; try rewrite e) : refinesM.
+    let e' := fresh "e_either_arg" in
+    (intro; intro e; try discriminate e; try rewrite e;
+    try (injection e; intro e'; try rewrite <- e')) : refinesM.
 Hint Extern 1 (sigT_rect _ _ _ |= _) =>
   apply refinesM_sigT_rect_l;
     let e := fresh "e_sigT_rect" in
