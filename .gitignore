@@ -15,6 +15,7 @@ stack.yaml
 .ghc.environment*
 .class
 dist-newstyle
+cabal.project.freeze
 *~
 *#
 .#*
