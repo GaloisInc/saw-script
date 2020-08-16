@@ -102,7 +102,7 @@ install_yices() {
 install_yasm() {
   is_exe "$BIN" "yasm" && return
   if [[ "$RUNNER_OS" = "Linux" ]]; then
-    apt-get install -y yasm
+    sudo apt-get install -y yasm
   else
     brew install yasm
   fi
