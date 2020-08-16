@@ -30,7 +30,6 @@ jobs:
         with:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
-            ${{ steps.setup-haskell.outputs.cabal-store }}/../packages
             dist-newstyle
           key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
           restore-keys: |

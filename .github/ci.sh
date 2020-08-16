@@ -149,7 +149,6 @@ test_dist() {
   find_java
   pushd intTests
   for t in test0001 test0019_jss_switch_statement test_crucible_jvm test_ecdsa test_examples test_issue108 test_tutorial1 test_tutorial2 test_tutorial_w4; do echo $t >> disabled_tests.txt; done
-  # RT_JAR=/usr/lib/jvm/java-8-openjdk-amd64/jre/lib/rt.jar LOUD=true ./runtests.sh
   LOUD=true ./runtests.sh
   sh -c "! grep '<failure>' results.xml"
 }
@@ -157,7 +156,7 @@ test_dist() {
 find_java() {
   pushd .github
   javac PropertiesTest.java
-  RT_JAR="$(java PropertiesTest.class | tr : '\n' | grep rt.jar | head -n 1)"
+  RT_JAR="$(java PropertiesTest | tr : '\n' | grep rt.jar | head -n 1)"
   export RT_JAR
   echo "::set-env name=RT_JAR::$RT_JAR"
   rm PropertiesTest.class
