@@ -1,0 +1,59 @@
+name: SAWScript
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        ghc: ["8.6.5", "8.8.3"]
+    name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+
+      - uses: actions/setup-haskell@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+
+      - uses: actions/cache@v2
+        name: Cache cabal store
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: store-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+          restore-keys: |
+            store-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
+            store-${{ runner.os }}-${{ matrix.ghc }}-
+            store-${{ runner.os }}-
+
+      - shell: bash
+        run: .github/ci.sh build_abc
+
+      - shell: bash
+        run: .github/ci.sh build
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          Z3_VERSION: "4.8.7"
+          CVC4_VERSION: "4.1.8"
+          YICES_VERSION: "2.6.2"
+
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "8"
+          java-package: jdk
+          architecture: x64
+
+      - shell: bash
+        run: .github/ci.sh test_dist
