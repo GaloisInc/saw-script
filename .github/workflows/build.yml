@@ -30,12 +30,12 @@ jobs:
         with:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
+            ${{ steps.setup-haskell.outputs.cabal-store }}/../packages
             dist-newstyle
-          key: store-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+          key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
           restore-keys: |
-            store-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
-            store-${{ runner.os }}-${{ matrix.ghc }}-
-            store-${{ runner.os }}-
+            cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
+            cabal-${{ runner.os }}-${{ matrix.ghc }}-
 
       - shell: bash
         run: .github/ci.sh build_abc
