@@ -29,6 +29,3 @@ packages:
     deps/macaw/x86_symbolic
     deps/elf-edit
     deps/dwarf
-
-package saw-script
-  ghc-options: -Werror
