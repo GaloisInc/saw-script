@@ -63,6 +63,7 @@ jobs:
           architecture: x64
 
       - shell: bash
+        id: test
         continue-on-error: ${{ matrix.continue-on-error }}
         name: Test
         run: |
@@ -71,6 +72,6 @@ jobs:
           .github/ci.sh test_dist
 
       - shell: bash
-        if: ${{ failure() }}
+        if: "steps.test.outcome == 'failure'"
         name: Warn if tests failed
         run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
