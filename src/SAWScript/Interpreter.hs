@@ -2397,7 +2397,7 @@ primitives = Map.fromList
   , prim "summarize_verification" "TopLevel ()"
     (pureVal summarize_verification)
     Experimental
-    [ "Provide a human-readable summary of all verifications performed"
+    [ "Print a human-readable summary of all verifications performed"
     , "so far."
     ]
   ]

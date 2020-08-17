@@ -6,7 +6,10 @@ License     : BSD3
 Maintainer  : atomb
 -}
 
-module SAWScript.VerificationSummary where
+module SAWScript.VerificationSummary
+  ( computeVerificationSummary
+  , prettyVerificationSummary
+  ) where
 
 import Control.Lens
 import qualified Data.Set as Set
@@ -66,21 +69,26 @@ prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
       verifStatus s = if Set.null (solverStatsSolvers (s ^. CMS.csSolverStats))
                       then "assumed"
                       else "verified"
+      -- TODO: ultimately the goal is for the following to summarize all
+      -- preconditions made by this verification, but we need to extract
+      -- a bunch more information for that to be meaningful.
+      {-
       condStatus s = (if null (s ^. (CMS.csPreState . CMS.csConditions))
                       then "without"
                       else "with") <+> "conditions"
+                      -}
       prettyJVMSpecs ss =
         sectionWithItems "JVM Methods Analyzed" prettyJVMSpec ss
       prettyJVMSpec s =
         vsep [ item (fromString (s ^. CMSJVM.csMethodName))
-             , subitem (condStatus s)
+             -- , subitem (condStatus s)
              , subitem (verifStatus s)
              ]
       prettyLLVMSpecs ss =
         sectionWithItems "LLVM Functions Analyzed" prettyLLVMSpec ss
       prettyLLVMSpec (CMSLLVM.SomeLLVM s) =
         vsep [ item (fromString (s ^. CMSLLVM.csName))
-             , subitem (condStatus s)
+             -- , subitem (condStatus s)
              , subitem (verifStatus s)
              ]
       prettyTheorems ts =

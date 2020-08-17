@@ -790,8 +790,7 @@ checkGoals sym opts sc tactic = do
     , show $ length gs
     , " goals"
     ]
-  stats <-
-    forM (zip [0..] gs) $ \(n, g) -> do
+  stats <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
     r <- evalStateT tactic $ startProof proofgoal
