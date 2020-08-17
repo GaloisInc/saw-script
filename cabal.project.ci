@@ -1,3 +1,0 @@
--- concatenated with cabal.project when run in the CI
-package saw-script
-  ghc-options: -Werror
