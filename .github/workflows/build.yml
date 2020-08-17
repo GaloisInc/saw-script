@@ -10,8 +10,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         ghc: ["8.6.5", "8.8.3"]
+        include:
+          - os: macos-latest
+            ghc: 8.6.5,
+            continue-on-error: true
+          - os: macos-latest
+            ghc: 8.8.3,
+            continue-on-error: true
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -56,8 +63,14 @@ jobs:
           architecture: x64
 
       - shell: bash
-        continue-on-error: true
+        continue-on-error: ${{ matrix.continue-on-error }}
+        name: Test
         run: |
           mkdir -p ~/.stack
           echo "system-ghc: true" >> ~/.stack/config.yaml
           .github/ci.sh test_dist
+
+      - shell: bash
+        if: ${{ failure() }}
+        name: Warn if tests failed
+        run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
