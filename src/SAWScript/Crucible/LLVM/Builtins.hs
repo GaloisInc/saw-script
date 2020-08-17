@@ -513,7 +513,7 @@ verifyMethodSpec bic opts cc methodSpec lemmas checkSat tactic asp =
      -- push a memory stack frame if starting from a breakpoint
      let mem = if isJust (methodSpec^.csParentName)
                then mem0
-                 { Crucible.memImplHeap = Crucible.pushStackFrameMem ""
+                 { Crucible.memImplHeap = Crucible.pushStackFrameMem
                    (Crucible.memImplHeap mem0)
                  }
                else mem0
@@ -899,7 +899,7 @@ ppGlobalPair cc gp =
       globals = gp ^. Crucible.gpGlobals in
   case Crucible.lookupGlobal mvar globals of
     Nothing -> text "LLVM Memory global variable not initialized"
-    Just mem -> Crucible.ppMem $ Crucible.memImplHeap mem
+    Just mem -> Crucible.ppMem mem
 
 
 --------------------------------------------------------------------------------
