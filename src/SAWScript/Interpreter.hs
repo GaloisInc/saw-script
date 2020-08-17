@@ -1189,16 +1189,6 @@ primitives = Map.fromList
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
--- TODO: currently incomplete
-{-
-  , prim "abc_external"        "ProofScript SatResult"
-    (pureVal proveABCExternal)
-    Experimental
-    [ "Use the ABC theorem prover as an external process to prove the"
-    , "current goal."
-    ]
--}
-
   , prim "abc_sbv"             "ProofScript SatResult"
     (pureVal proveABC_SBV)
     Current
@@ -1334,6 +1324,20 @@ primitives = Map.fromList
     Current
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "w4_abc_smtlib2"        "ProofScript SatResult"
+    (pureVal w4_abc_smtlib2)
+    Experimental
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with SMT-Lib2 as an interchange format."
+    ]
+
+  , prim "w4_abc_verilog"        "ProofScript SatResult"
+    (pureVal w4_abc_verilog)
+    Experimental
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with Verilog as an interchange format."
     ]
 
   , prim "split_goal"          "ProofScript ()"
