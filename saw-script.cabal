@@ -48,7 +48,7 @@ library
     , free
     , haskeline
     , heapster-saw
-    , hobbits >= 1.2.5
+    , hobbits >= 1.3
     , IfElse
     , jvm-parser
     , jvm-verifier
