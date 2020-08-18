@@ -774,7 +774,7 @@ assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
   ptr <- resolvePtrSetupValue env tyenv tptr
   memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv texpected
   storTy <- liftIO $ C.LLVM.toStorableType memTy
-  actual <- liftIO $ C.LLVM.assertSafe sym storTy =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment
+  actual <- liftIO $ C.LLVM.assertSafe sym ptr storTy =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment
   pure $ LO.matchArg opts sc cc ms MS.PostState actual memTy texpected
 
 -- | Gather and run the solver on goals from the simulator.
