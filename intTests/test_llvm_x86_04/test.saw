@@ -1,0 +1,19 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+let addvar_setup = do {
+  crucible_alloc_global "var";
+  var <- crucible_fresh_var "var" (llvm_int 64);
+  crucible_points_to (crucible_global "var") (crucible_term {{ 2 : [64] }});
+
+  ptr <- crucible_alloc (llvm_int 64);
+  val <- crucible_fresh_var "val" (llvm_int 64);
+  crucible_points_to ptr (crucible_term val);
+
+  crucible_execute_func [ptr];
+
+  valprime <- crucible_fresh_var "_val" (llvm_int 64);
+  crucible_points_to ptr (crucible_term valprime);
+};
+crucible_llvm_verify_x86 m "./test" "addvar" [] false addvar_setup w4;

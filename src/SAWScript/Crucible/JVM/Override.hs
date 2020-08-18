@@ -43,7 +43,12 @@ module SAWScript.Crucible.JVM.Override
   , decodeJVMVal
   ) where
 
-import           Control.Lens
+import           Control.Lens.At
+import           Control.Lens.Each
+import           Control.Lens.Fold
+import           Control.Lens.Getter
+import           Control.Lens.Lens
+import           Control.Lens.Setter
 import           Control.Exception as X
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad
@@ -379,8 +384,8 @@ refreshTerms sc ss =
   where
     freshenTerm tt =
       case asExtCns (ttTerm tt) of
-        Just ec -> do new <- liftIO (mkTypedTerm sc =<< scFreshGlobal sc (ecName ec) (ecType ec))
-                      return (termId (ttTerm tt), ttTerm new)
+        Just ec -> do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
+                      return (termId (ttTerm tt), new)
         Nothing -> error "refreshTerms: not a variable"
 
 ------------------------------------------------------------------------
@@ -400,7 +405,7 @@ enforceDisjointness _cc loc ss =
              addAssert c a
 
         | let a = Crucible.SimError loc $
-                    Crucible.AssertFailureSimError "Memory regions not disjoint"
+                    Crucible.AssertFailureSimError "Memory regions not disjoint" ""
         , ((_ploc, _pty), p) : ps <- tails mems
         , ((_qloc, _qty), q)      <- ps
         ]
@@ -523,7 +528,7 @@ assignVar cc loc var ref =
      let sym = cc ^. jccBackend
      for_ old $ \ref' ->
        do p <- liftIO (CJ.refIsEqual sym ref ref')
-          addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased pointers"))
+          addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError "equality of aliased pointers" ""))
 
 ------------------------------------------------------------------------
 
@@ -575,7 +580,7 @@ matchArg opts sc cc cs prepost actual@(RVal ref) expectedTy setupval =
     MS.SetupNull () ->
       do sym <- Ov.getSymInterface
          p   <- liftIO (CJ.refIsNull sym ref)
-         addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost)))
+         addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost) ""))
 
     MS.SetupGlobal () name ->
       do let mem = () -- FIXME cc^.ccLLVMEmptyMem
@@ -583,7 +588,7 @@ matchArg opts sc cc cs prepost actual@(RVal ref) expectedTy setupval =
          ref' <- liftIO $ doResolveGlobal sym mem name
 
          p  <- liftIO (CJ.refIsEqual sym ref ref')
-         addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost)))
+         addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost) ""))
 
     _ -> failure (cs ^. MS.csLoc) =<<
            mkStructuralMismatch opts cc sc cs actual setupval expectedTy
@@ -639,7 +644,7 @@ matchTerm sc cc loc prepost real expect =
        _ ->
          do t <- liftIO $ scEq sc real expect
             p <- liftIO $ resolveBoolTerm (cc ^. jccBackend) t
-            addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost)))
+            addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError ("literal equality " ++ stateCond prepost) ""))
 
 ------------------------------------------------------------------------
 
@@ -717,7 +722,7 @@ learnEqual opts sc cc spec loc prepost v1 v2 =
      (_, val2) <- resolveSetupValueJVM opts cc sc spec v2
      p         <- liftIO (equalValsPred cc val1 val2)
      let name = "equality " ++ stateCond prepost
-     addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError name))
+     addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
 -- | Process a "crucible_precond" statement from the precondition
 -- section of the CrucibleSetup block.
@@ -732,7 +737,7 @@ learnPred sc cc loc prepost t =
   do s <- OM (use termSub)
      u <- liftIO $ scInstantiateExt sc s t
      p <- liftIO $ resolveBoolTerm (cc ^. jccBackend) u
-     addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost)))
+     addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost) ""))
 
 ------------------------------------------------------------------------
 

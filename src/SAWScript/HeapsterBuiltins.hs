@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module SAWScript.HeapsterBuiltins
        ( heapster_init_env
@@ -69,6 +70,8 @@ import Lang.Crucible.CFG.Core
 import Lang.Crucible.LLVM.Extension
 import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Translation
+-- import Lang.Crucible.LLVM.Translation.Types
+import Lang.Crucible.LLVM.TypeContext
 
 import qualified Text.LLVM.AST as L
 
@@ -119,23 +122,51 @@ archReprWidth (X86Repr w) = w
 
 -- | Get the architecture of an LLVM module
 llvmModuleArchRepr :: LLVMModule arch -> ArchRepr arch
-llvmModuleArchRepr lm = llvmArch $ _transContext (lm ^. modTrans)
+llvmModuleArchRepr lm = llvmArch $ _transContext $ modTrans lm
 
 -- | Get the bit width of the architecture of an LLVM module
 llvmModuleArchReprWidth :: LLVMModule arch -> NatRepr (ArchWidth arch)
 llvmModuleArchReprWidth = archReprWidth . llvmModuleArchRepr
 
+-- | Get the 'TypeContext' of an LLVM module
+llvmModuleTypeContext :: LLVMModule arch -> TypeContext
+llvmModuleTypeContext lm = modTrans lm ^. transContext . llvmTypeCtx
+
+-- | Look up the 'L.Declare' for an external symbol in an 'LLVMModule'
+lookupFunctionDecl :: LLVMModule arch -> String -> Maybe L.Declare
+lookupFunctionDecl lm nm =
+  find ((fromString nm ==) . L.decName) $ L.modDeclares $ modAST lm
+
+-- | Look up the argument and return types of a named function
+lookupFunctionType :: LLVMModule arch -> String ->
+                      TopLevel (Some CtxRepr, Some TypeRepr)
+lookupFunctionType (lm :: LLVMModule arch) nm =
+  do decl <-
+       failOnNothing ("Could not find symbol: " ++ nm) $
+       lookupFunctionDecl lm nm
+     let w = llvmModuleArchReprWidth lm
+     leq1_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
+     leq16_proof <- case decideLeq (knownNat @16) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is too small!"
+     let ?ptrWidth = w
+     let ?lc = llvmModuleTypeContext lm
+     withLeqProof leq1_proof $ withLeqProof leq16_proof $
+       llvmDeclToFunHandleRepr' @(ArchWidth arch) decl $ \args ret ->
+       return (Some args, Some ret)
+
 -- | Look for the LLVM module in a 'HeapsterEnv' where a symbol is defined
 lookupModDefiningSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
 lookupModDefiningSym env nm =
-  find (\(Some lm) -> Map.member (fromString nm) (cfgMap (lm ^. modTrans))) $
+  find (\(Some lm) -> Map.member (fromString nm) (cfgMap $ modTrans lm)) $
   heapsterEnvLLVMModules env
 
 -- | Look for any LLVM module in a 'HeapsterEnv' where a symbol is declared
 lookupModDeclaringSym :: HeapsterEnv -> String -> Maybe (Some LLVMModule)
 lookupModDeclaringSym env nm =
-  find (\(Some lm) -> 
-         Map.member (fromString nm) (lm ^. modTrans.transContext.symbolMap)) $
+  find (\(Some lm) -> isJust $ lookupFunctionDecl lm nm) $
   heapsterEnvLLVMModules env
 
 -- | Get the CFG for a symbol out of an LLVM module
@@ -158,7 +189,6 @@ lookupLLVMSymbolModAndCFG bic opts henv nm =
       (Just . Some . ModuleAndCFG lm) <$> lookupLLVMSymbolCFG bic opts lm nm
     Nothing -> return Nothing
 
-
 heapster_default_env :: PermEnv
 heapster_default_env = PermEnv [] [] [] []
 
@@ -169,8 +199,8 @@ readModuleFromFile path = do
   base <- liftIO getCurrentDirectory
   b <- liftIO $ BL.readFile path
   case Un.parseSAW base path b of
-    (m@(Un.Module (Un.PosPair _ mnm) _ _),[]) -> pure (m, mnm)
-    (_,errs) -> fail $ "Module parsing failed:\n" ++ show errs
+    Right m@(Un.Module (Un.PosPair _ mnm) _ _) -> pure (m, mnm)
+    Left err -> fail $ "Module parsing failed:\n" ++ show err
 
 -- | Parse the second given string as a term, the first given string being
 -- used as the path for error reporting
@@ -179,8 +209,8 @@ parseTermFromString nm term_string = do
   let base = ""
       path = "<" ++ nm ++ ">"
   case Un.parseSAWTerm base path (BL.fromString term_string) of
-    (term,[]) -> pure term
-    (_,errs) -> fail $ "Term parsing failed:\n" ++ show errs
+    Right term -> pure term
+    Left err -> fail $ "Term parsing failed:\n" ++ show err
 
 -- | Parse the second given string as a term, check that it has the given type,
 -- and, if the parsed term is not already an identifier, add it as a
@@ -387,7 +417,8 @@ heapster_find_symbols _bic _opts henv str =
   concatMap (\(Some lm) ->
               mapMaybe (\(L.Symbol nm) ->
                          if isInfixOf str nm then Just nm else Nothing) $
-              Map.keys (lm ^. modTrans.transContext.symbolMap)) $
+              map L.decName (L.modDeclares $ modAST lm) ++
+              map L.defName (L.modDefines $ modAST lm)) $
   heapsterEnvLLVMModules henv
 
 -- | Search for a symbol name in any LLVM module in a 'HeapsterEnv' that
@@ -417,11 +448,8 @@ heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is 0!"
      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     LLVMHandleInfo _ h <-
-       failOnNothing ("Unreachable: could not find symbol: " ++ nm) $
-         lm ^. modTrans.transContext.symbolMap.at (L.Symbol nm)
-     let args = mkCruCtx $ handleArgTypes h
-         ret = handleReturnType h
+     (Some cargs, Some ret) <- lookupFunctionType lm nm
+     let args = mkCruCtx cargs
      withKnownNat w $ withLeqProof leq_proof $ do
         SomeFunPerm fun_perm <-
           parseFunPermString "permissions" env args ret perms_string
@@ -455,11 +483,9 @@ heapster_assume_fun_multi _bic _opts henv nm perms_terms_strings =
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is 0!"
      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     LLVMHandleInfo _ (h :: FnHandle cargs ret) <-
-       failOnNothing ("Unreachable: could not find symbol: " ++ nm) $
-         lm ^. modTrans.transContext.symbolMap.at (L.Symbol nm)
-     let args = mkCruCtx $ handleArgTypes h
-         ret = handleReturnType h
+     (Some (cargs :: CtxRepr cargs),
+      Some (ret :: TypeRepr ret)) <- lookupFunctionType lm nm
+     let args = mkCruCtx cargs
      env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
      perms_terms :: [(SomeFunPerm (CtxToRList cargs) ret, OpenTerm)] <-
        forM (zip perms_terms_strings [0::Int ..]) $ \((perms_string,
@@ -552,7 +578,7 @@ heapster_parse_test :: BuiltinContext -> Options -> Some LLVMModule ->
                        String -> String ->  TopLevel ()
 heapster_parse_test bic opts some_lm@(Some lm) fn_name perms_string =
   do let env = heapster_default_env -- FIXME: env should be an argument
-     let arch = llvmArch $ _transContext (lm ^. modTrans)
+     let arch = llvmModuleArchRepr lm
      AnyCFG cfg <- getLLVMCFG arch <$> crucible_llvm_cfg bic opts some_lm fn_name
      let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
      let ret = handleReturnType $ cfgHandle cfg

@@ -1,0 +1,57 @@
+m <- llvm_load_module "./test.bc";
+
+let id_spec = do {
+    p <- crucible_fresh_pointer (llvm_int 32);
+    crucible_execute_func [p];
+    crucible_return p;
+};
+
+crucible_llvm_verify m "id_p" [] false id_spec z3;
+
+// NOTE: Commented out due to bug #31 in cryptol-verifier
+// let incr_spec = do {
+//     p <- crucible_fresh_pointer (llvm_array 10 (llvm_int 32));
+//     crucible_execute_func [p];
+//     crucible_return (crucible_elem p 1);
+// };
+// crucible_llvm_verify m "incr_p" [] false incr_spec z3;
+
+let add_two_spec = do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    xp <- crucible_alloc (llvm_int 64);
+    crucible_points_to_untyped xp (crucible_term x);
+
+    crucible_execute_func [xp];
+
+    crucible_points_to_untyped xp (crucible_term {{ x + 2 }});
+};
+
+crucible_llvm_verify m "add_two" [] false add_two_spec z3;
+
+let array_swap_spec = do {
+    a0 <- crucible_fresh_var "a0" (llvm_int 32);
+    a1 <- crucible_fresh_var "a1" (llvm_int 32);
+    a  <- crucible_alloc (llvm_array 2 (llvm_int 32));
+    crucible_points_to a (crucible_array [crucible_term a0, crucible_term a1]);
+
+    crucible_execute_func [a];
+
+    crucible_points_to (crucible_elem a 0) (crucible_term a1);
+    crucible_points_to (crucible_elem a 1) (crucible_term a0);
+};
+
+crucible_llvm_verify m "array_swap" [] false array_swap_spec z3;
+
+let struct_swap_spec = do {
+    x <- crucible_fresh_var "x" (llvm_int 32);
+    y <- crucible_fresh_var "y" (llvm_int 32);
+    s <- crucible_alloc (llvm_struct "struct.foo");
+    crucible_points_to s (crucible_packed_struct [crucible_term x, crucible_term y]);
+
+    crucible_execute_func [s];
+
+    crucible_points_to (crucible_field s "x") (crucible_term y);
+    crucible_points_to (crucible_field s "y") (crucible_term x);
+};
+
+crucible_llvm_verify m "struct_swap" [] false struct_swap_spec z3;

@@ -1,6 +1,7 @@
 {-# Language DataKinds, OverloadedStrings #-}
 {-# Language RankNTypes, TypeOperators #-}
 {-# Language PatternSynonyms #-}
+{-# LANGUAGE ImplicitParams #-}
 module SAWScript.X86
   ( Options(..)
   , proof
@@ -10,11 +11,18 @@ module SAWScript.X86
   , Fun(..)
   , Goal(..)
   , gGoal
+  , getGoals
   , X86Error(..)
   , X86Unsupported(..)
   , SharedContext
   , CallHandler
   , Sym
+  , RelevantElf(..)
+  , getElf
+  , getRelevant
+  , findSymbols
+  , posFn
+  , loadGlobal
   ) where
 
 
@@ -23,9 +31,11 @@ import Control.Exception(Exception(..),throwIO)
 import Control.Monad.ST (stToIO)
 import Control.Monad.IO.Class(liftIO)
 
+import qualified Data.BitVector.Sized as BV
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
+import           Data.IORef
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
@@ -41,7 +51,7 @@ import Data.Parameterized.Context(EmptyCtx,(::>),singleton)
 import Data.Parameterized.Nonce(globalNonceGenerator)
 
 -- What4
-import What4.Interface(asNat,asUnsignedBV)
+import What4.Interface(asNat,asBV)
 import What4.Expr(FloatModeRepr(..))
 import qualified What4.Interface as W4
 import qualified What4.Config as W4
@@ -73,6 +83,7 @@ import SAWScript.Crucible.LLVM.CrucibleLLVM
   (Mem, ppPtr, pattern LLVMPointer, bytesToInteger)
 import Lang.Crucible.LLVM.Intrinsics(llvmIntrinsicTypes)
 import Lang.Crucible.LLVM.MemModel (mkMemVar)
+import qualified Lang.Crucible.LLVM.MemModel as Crucible
 
 -- Crucible SAW
 import Lang.Crucible.Backend.SAWCore
@@ -124,8 +135,8 @@ import Verifier.SAW.CryptolEnv(CryptolEnv,initCryptolEnv,loadCryptolModule)
 import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
-import SAWScript.X86Spec
-import SAWScript.Proof(predicateToProp, Quantification(Universal))
+import SAWScript.X86Spec hiding (Prop)
+import SAWScript.Proof(predicateToProp, Quantification(Universal), Prop)
 
 
 
@@ -178,18 +189,21 @@ type CallHandler = Sym -> Macaw.LookupFunctionHandle Sym X86_64
 
 -- | Run a top-level proof.
 -- Should be used when making a standalone proof script.
-proof :: ArchitectureInfo X86_64 ->
-         FilePath {- ^ ELF binary -} ->
-         Maybe FilePath {- ^ Cryptol spec, if any -} ->
-         [(ByteString,Integer,Unit)] ->
-         Fun ->
-         IO (SharedContext,Integer,[Goal])
-proof archi file mbCry globs fun =
+proof ::
+  (FilePath -> IO ByteString) ->
+  ArchitectureInfo X86_64 ->
+  FilePath {- ^ ELF binary -} ->
+  Maybe FilePath {- ^ Cryptol spec, if any -} ->
+  [(ByteString,Integer,Unit)] ->
+  Fun ->
+  IO (SharedContext,Integer,[Goal])
+proof fileReader archi file mbCry globs fun =
   do sc  <- mkSharedContext
      halloc  <- newHandleAllocator
      scLoadPreludeModule sc
      scLoadCryptolModule sc
      sym <- newSAWCoreBackend FloatRealRepr sc globalNonceGenerator
+     let ?fileReader = fileReader
      cenv <- loadCry sym mbCry
      mvar <- mkMemVar halloc
      proofWithOptions Options
@@ -341,7 +355,10 @@ posFn = OtherPos . Text.pack . show
 
 
 -- | Load a file with Cryptol decls.
-loadCry :: Sym -> Maybe FilePath -> IO CryptolEnv
+loadCry ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  Sym -> Maybe FilePath ->
+  IO CryptolEnv
 loadCry sym mb =
   do ctx <- sawBackendSharedContext sym
      env <- initCryptolEnv ctx
@@ -357,7 +374,7 @@ callHandler :: Overrides -> CallHandler
 callHandler callMap sym = Macaw.LookupFunctionHandle $ \st mem regs -> do
   case lookupX86Reg X86_IP regs of
     Just (RV ptr) | LLVMPointer base off <- ptr ->
-      case (asNat base, asUnsignedBV off) of
+      case (asNat base, BV.asUnsigned <$> asBV off) of
         (Just b, Just o) ->
            case Map.lookup (b,o) callMap of
              Just h  -> case h sym of
@@ -379,6 +396,9 @@ translate ::
 translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
+
+     bbMapRef <- newIORef mempty
+     let ?badBehaviorMap = bbMapRef
 
      let sym   = backend opts
          sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }
@@ -411,11 +431,12 @@ setSimulatorVerbosity verbosity sym = do
 
 
 doSim ::
+  Crucible.HasLLVMAnn Sym =>
   Options ->
   RelevantElf ->
   SymFuns Sym ->
   ByteString ->
-  (GlobalMap Sym 64, Overrides) ->
+  (GlobalMap Sym Crucible.Mem 64, Overrides) ->
   State ->
   (State -> IO ()) ->
   IO Integer
@@ -444,13 +465,20 @@ doSim opts elf sfs name (globs,overs) st checkPost =
      execResult <- statusBlock "  Simulating... " $ do
        let crucRegTypes = crucArchRegTypes x86
        let macawStructRepr = StructRepr crucRegTypes
+       -- The global pointer validity predicate is required if your memory
+       -- representation has gaps that are not supposed to be mapped and you
+       -- want to verify that no memory accesses touch unmapped regions.
+       --
+       -- The memory setup for this verifier does not have that problem, and
+       -- thus does not need any additional validity predicates.
+       let noExtraValidityPred _ _ _ _ = return Nothing
        let ctx :: SimContext (MacawSimulatorState Sym) Sym (MacawExt X86_64)
            ctx = SimContext { _ctxSymInterface = sym
                               , ctxSolverProof = \a -> a
                               , ctxIntrinsicTypes = llvmIntrinsicTypes
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
-                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym)
+                              , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym) noExtraValidityPred
                               , _functionBindings =
                                    insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) $
                                    emptyHandleMap
@@ -514,8 +542,8 @@ data Goal = Goal
   , gMessage :: SimErrorReason        -- ^ We should say this if the proof fails
   }
 
--- | The boolean term that needs proving (i.e., assumptions imply conclusion)
-gGoal :: SharedContext -> Goal -> IO Term
+-- | The proposition that needs proving (i.e., assumptions imply conclusion)
+gGoal :: SharedContext -> Goal -> IO Prop
 gGoal sc g0 = predicateToProp sc Universal [] =<< go (gAssumes g)
   where
   g = g0 { gAssumes = mapMaybe skip (gAssumes g0) }

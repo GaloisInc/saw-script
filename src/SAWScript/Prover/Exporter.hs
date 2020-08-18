@@ -1,8 +1,9 @@
+{-# Language ImplicitParams #-}
 {-# Language OverloadedStrings #-}
 {-# Language ViewPatterns #-}
 
 module SAWScript.Prover.Exporter
-  ( satWithExporter
+  ( proveWithExporter
   , adaptExporter
 
     -- * External formats
@@ -20,7 +21,9 @@ module SAWScript.Prover.Exporter
   , writeCoqSAWCorePrelude
   , writeCoqTerm
   , coqTranslationConfiguration
+  , writeCoqProp
   , writeCore
+  , writeCoreProp
 
     -- * Misc
   , bitblastPrim
@@ -29,7 +32,9 @@ module SAWScript.Prover.Exporter
 import Data.Foldable(toList)
 
 import Control.Monad.IO.Class (liftIO)
+import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
+import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import qualified Data.SBV.Dynamic as SBV
 import Text.PrettyPrint.ANSI.Leijen (vcat)
@@ -51,37 +56,39 @@ import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.UntypedAST as Un
 
-import SAWScript.SAWCorePrimitives( bitblastPrimitives )
-import SAWScript.Proof (predicateToProp, Quantification(..))
+import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
-import SAWScript.Prover.SBV(prepSBV)
+import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
 
 
-satWithExporter ::
-  (SharedContext -> FilePath -> Term -> IO ()) ->
+proveWithExporter ::
+  (SharedContext -> FilePath -> Prop -> IO ()) ->
   String ->
   SharedContext ->
-  Term ->
+  Prop ->
   IO SolverStats
-satWithExporter exporter path sc goal =
+proveWithExporter exporter path sc goal =
   do exporter sc path goal
-     let stats = solverStats ("offline: "++ path) (scSharedSize goal)
+     let stats = solverStats ("offline: "++ path) (scSharedSize (unProp goal))
      return stats
 
 -- | Converts an old-style exporter (which expects to take a predicate
 -- as an argument) into a new-style one (which takes a pi-type proposition).
 adaptExporter ::
   (SharedContext -> FilePath -> Term -> IO ()) ->
-  (SharedContext -> FilePath -> Term -> IO ())
-adaptExporter exporter sc path goal =
+  (SharedContext -> FilePath -> Prop -> IO ())
+adaptExporter exporter sc path (Prop goal) =
   do let (args, concl) = asPiList goal
-     p <- asEqTrue concl
-     p' <- scNot sc p
+     p <-
+       case asEqTrue concl of
+         Just p -> return p
+         Nothing -> fail "adaptExporter: expected EqTrue"
+     p' <- scNot sc p -- is this right?
      t <- scLambdaList sc args p'
      exporter sc path t
 
@@ -115,7 +122,7 @@ writeSAIGInferLatches proxy sc file tt = do
   let numLatches = sizeFiniteType s
   writeSAIG proxy sc file (ttTerm tt) numLatches
   where
-    die :: Monad m => String -> m a
+    die :: Fail.MonadFail m => String -> m a
     die why = fail $
       "writeSAIGInferLatches: " ++ why ++ ":\n" ++
       "term must have type of the form '(i, s) -> (o, s)',\n" ++
@@ -166,30 +173,36 @@ write_cnf sc f (TypedTerm schema t) = do
   AIGProxy proxy <- getProxy
   io $ writeCNF proxy sc f t
 
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file.
-writeSMTLib2 :: SharedContext -> FilePath -> Term -> IO ()
+-- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
+-- assumed to have universally quantified variables, it will be negated.
+writeSMTLib2 :: SharedContext -> FilePath -> Prop -> IO ()
 writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
--- function returning a boolean) to an SMT-Lib version 2 file.
+-- function returning a boolean) to an SMT-Lib version 2 file. The goal
+-- is to pass the term through as directly as possible, so we interpret
+-- it as an existential.
 write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> IO ()
 write_smtlib2 sc f (TypedTerm schema t) = do
   checkBooleanSchema schema
-  p <- predicateToProp sc Universal [] t
+  p <- predicateToProp sc Existential [] t
   writeSMTLib2 sc f p
 
--- | Write a @Term@ representing a theorem to an SMT-Lib version
--- 2 file, treating some constants as uninterpreted.
-writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
-writeUnintSMTLib2 unints sc f t = do
-  (_, _, l) <- prepSBV sc unints t
-  let isSat = False -- term is a proof goal with universally-quantified variables
-  txt <- SBV.generateSMTBenchmark isSat l
-  writeFile f txt
+-- | Write a proposition to an SMT-Lib version 2 file, treating some
+-- constants as uninterpreted. Because @Prop@ is assumed to have
+-- universally quantified variables, it will be negated.
+writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
+writeUnintSMTLib2 unints sc f p =
+  do (_, _, l) <- prepNegatedSBV sc unints p
+     let isSat = True -- l is encoded as an existential formula
+     txt <- SBV.generateSMTBenchmark isSat l
+     writeFile f txt
 
 writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)
+
+writeCoreProp :: FilePath -> Prop -> IO ()
+writeCoreProp path (Prop t) = writeFile path (scWriteExternal t)
 
 coqTranslationConfiguration ::
   [(String, String)] ->
@@ -217,6 +230,16 @@ writeCoqTerm name notations skips path t = do
       "" -> print doc
       _ -> writeFile path (show doc)
 
+writeCoqProp ::
+  String ->
+  [(String, String)] ->
+  [String] ->
+  FilePath ->
+  Prop ->
+  IO ()
+writeCoqProp name notations skips path (Prop t) =
+  writeCoqTerm name notations skips path t
+
 writeCoqCryptolModule ::
   FilePath ->
   FilePath ->
@@ -229,6 +252,7 @@ writeCoqCryptolModule inputFile outputFile notations skips = do
   ()  <- scLoadCryptolModule sc
   sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
   ctx <- sawBackendSharedContext sym
+  let ?fileReader = BS.readFile
   env <- initCryptolEnv ctx
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   (cm, _) <- loadCryptolModule ctx env inputFile
@@ -298,5 +322,5 @@ bitblastPrim proxy sc t = do
     C.Forall [] [] _ -> return ()
     _ -> fail $ "Attempting to bitblast a term with a polymorphic type: " ++ pretty s
 -}
-  BBSim.withBitBlastedTerm proxy sc bitblastPrimitives t' $ \be ls -> do
+  BBSim.withBitBlastedTerm proxy sc mempty t' $ \be ls -> do
     return (AIG.Network be (toList ls))

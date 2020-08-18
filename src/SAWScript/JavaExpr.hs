@@ -266,37 +266,34 @@ javaTypeToActual tp
   | JSS.isPrimitiveType tp = Just (PrimitiveType tp)
   | otherwise = Nothing
 
-narrowTypeOfActual :: SharedContext -> JavaActualType
-                  -> IO (Maybe Term)
-narrowTypeOfActual _ (ClassInstance _) = return Nothing
-narrowTypeOfActual sc (ArrayInstance l tp) = do
-  case javaTypeToActual tp of
-    Just at -> do
-      melTy <- narrowTypeOfActual sc  at
-      case melTy of
-        Just elTy -> do
-          lTm <- scNat sc (fromIntegral l)
-          Just <$> scVecType sc lTm elTy
-        Nothing -> return Nothing
+narrowTypeOfActual :: SharedContext -> JavaActualType -> IO (Maybe Term)
+narrowTypeOfActual sc at =
+  case cryptolTypeOfActual at of
     Nothing -> return Nothing
-narrowTypeOfActual sc (PrimitiveType JSS.BooleanType) =
-  Just <$> scBoolType sc
-narrowTypeOfActual sc (PrimitiveType JSS.ByteType) =
-  Just <$> scBitvector sc 8
-narrowTypeOfActual sc (PrimitiveType JSS.CharType) =
-  Just <$> scBitvector sc 16
-narrowTypeOfActual sc (PrimitiveType JSS.ShortType) =
-  Just <$> scBitvector sc 16
-narrowTypeOfActual sc (PrimitiveType JSS.IntType) =
-  Just <$> scBitvector sc 32
-narrowTypeOfActual sc (PrimitiveType JSS.LongType) =
-  Just <$> scBitvector sc 64
-narrowTypeOfActual _ _ = return Nothing
+    Just cty ->
+      do t <- importType sc emptyEnv cty
+         return (Just t)
 
-cryptolTypeOfActual :: SharedContext -> JavaActualType -> IO (Maybe Cryptol.Type)
-cryptolTypeOfActual sc ty = do
-  mnty <- narrowTypeOfActual sc ty
-  maybe (return Nothing) (\nty -> Just <$> scCryptolType sc nty) mnty
+cryptolTypeOfActual :: JavaActualType -> Maybe Cryptol.Type
+cryptolTypeOfActual ty =
+  case ty of
+    ClassInstance _ -> Nothing
+    ArrayInstance l tp ->
+      do at <- javaTypeToActual tp
+         ct <- cryptolTypeOfActual at
+         Just (Cryptol.tSeq (Cryptol.tNum l) ct)
+    PrimitiveType pt ->
+      case pt of
+        JSS.BooleanType -> Just $ Cryptol.tBit
+        JSS.ByteType    -> Just $ Cryptol.tWord (Cryptol.tNum (8 :: Integer))
+        JSS.CharType    -> Just $ Cryptol.tWord (Cryptol.tNum (16 :: Integer))
+        JSS.ShortType   -> Just $ Cryptol.tWord (Cryptol.tNum (16 :: Integer))
+        JSS.IntType     -> Just $ Cryptol.tWord (Cryptol.tNum (32 :: Integer))
+        JSS.LongType    -> Just $ Cryptol.tWord (Cryptol.tNum (64 :: Integer))
+        JSS.ArrayType _ -> Nothing
+        JSS.ClassType _ -> Nothing
+        JSS.DoubleType  -> Nothing
+        JSS.FloatType   -> Nothing
 
 ppActualType :: JavaActualType -> String
 ppActualType (ClassInstance x) = JSS.slashesToDots (JSS.unClassName (JSS.className x))

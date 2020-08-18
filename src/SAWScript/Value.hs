@@ -18,6 +18,7 @@ Stability   : provisional
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -30,12 +31,12 @@ module SAWScript.Value where
 
 import Prelude hiding (fail)
 
-import Data.Semigroup ((<>))
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative (Applicative)
 #endif
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
+import Control.Monad.Catch (MonadThrow(..))
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
@@ -50,6 +51,7 @@ import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
 import Data.IORef
+import qualified Data.Vector as Vector
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 import Data.Typeable
@@ -58,6 +60,7 @@ import GHC.Generics (Generic, Generic1)
 import qualified Data.AIG as AIG
 
 import qualified SAWScript.AST as SS
+import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
 import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
@@ -73,7 +76,6 @@ import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
-import SAWScript.SAWCorePrimitives( concretePrimitives )
 
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
@@ -82,15 +84,17 @@ import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
                                        ppTerm, scPrettyTerm)
 import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
                                                        ppTerm, scPrettyTerm)
+import Verifier.SAW.TypedAST hiding (PPOpts(..), defaultPPOpts, ppTerm)
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Term.Functor (ModuleName)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
-import qualified Cryptol.Eval.Value as C
+import qualified Cryptol.Eval.Concrete.Value as C
 import Verifier.SAW.Cryptol (exportValueWithSchema)
-import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
+import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.Logger as C (quietLogger)
+import qualified Cryptol.Utils.Ident as T (packIdent, packModName)
 import Cryptol.Utils.PP (pretty)
 
 import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
@@ -99,7 +103,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
 
-import           What4.ProgramLoc (ProgramLoc)
+import           What4.ProgramLoc (ProgramLoc(..))
 
 import Verifier.SAW.Heapster.Permissions
 
@@ -296,7 +300,7 @@ showsPrecValue opts p v =
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
-    VTheorem (Theorem t) ->
+    VTheorem (Theorem (Prop t)) ->
       showString "Theorem " .
       showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
@@ -349,7 +353,7 @@ tupleLookupValue _ _ = error "tupleLookupValue"
 
 evaluate :: SharedContext -> Term -> IO Concrete.CValue
 evaluate sc t =
-  (\modmap -> Concrete.evalSharedTerm modmap concretePrimitives t) <$>
+  (\modmap -> Concrete.evalSharedTerm modmap mempty t) <$>
   scGetModuleMap sc
 
 evaluateTypedTerm :: SharedContext -> TypedTerm -> IO C.Value
@@ -358,7 +362,7 @@ evaluateTypedTerm sc (TypedTerm schema trm) =
 
 applyValue :: Value -> Value -> TopLevel Value
 applyValue (VLambda f) x = f x
-applyValue _ _ = fail "applyValue"
+applyValue _ _ = throwTopLevel "applyValue"
 
 thenValue :: SS.Pos -> Value -> Value -> Value
 thenValue pos v1 v2 = VBind pos v1 (VLambda (const (return v2)))
@@ -410,22 +414,32 @@ data TopLevelRW =
   -- ^ crucible-jvm: Handles and info for classes that have already been translated
   , rwPrimsAvail :: Set PrimitiveLifecycle
   , rwSMTArrayMemoryModel :: Bool
+  , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
+  , rwLaxArith :: Bool
+  , rwWhat4HashConsing :: Bool
   }
 
 newtype TopLevel a =
   TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
-  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadFail)
+  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow)
 
 deriving instance MonadReader TopLevelRO TopLevel
 deriving instance MonadState TopLevelRW TopLevel
 instance Wrapped (TopLevel a) where
+instance MonadFail TopLevel where
+  fail = throwTopLevel
 
 runTopLevel :: TopLevel a -> TopLevelRO -> TopLevelRW -> IO (a, TopLevelRW)
 runTopLevel (TopLevel m) ro rw = runStateT (runReaderT m ro) rw
 
 io :: IO a -> TopLevel a
 io = liftIO
+
+throwTopLevel :: String -> TopLevel a
+throwTopLevel msg = do
+  pos <- getPosition
+  X.throw $ SS.TopLevelException pos msg
 
 withPosition :: SS.Pos -> TopLevel a -> TopLevel a
 withPosition pos (TopLevel m) = TopLevel (local (\ro -> ro{ roPosition = pos }) m)
@@ -481,6 +495,54 @@ addJVMTrans trans = do
   let jvmt = rwJVMTrans rw
   putTopLevelRW ( rw { rwJVMTrans = trans <> jvmt })
 
+maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
+maybeInsert _ Nothing m = m
+maybeInsert k (Just x) m = M.insert k x m
+
+extendEnv :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> TopLevelRW
+extendEnv x mt md v rw =
+  rw { rwValues  = M.insert name v (rwValues rw)
+     , rwTypes   = maybeInsert name mt (rwTypes rw)
+     , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
+     , rwCryptol = ce'
+     }
+  where
+    name = x
+    ident = T.packIdent (SS.getOrig x)
+    modname = T.packModName [pack (SS.getOrig x)]
+    ce = rwCryptol rw
+    ce' = case v of
+            VTerm t
+              -> CEnv.bindTypedTerm (ident, t) ce
+            VType s
+              -> CEnv.bindType (ident, s) ce
+            VInteger n
+              -> CEnv.bindInteger (ident, n) ce
+            VCryptolModule m
+              -> CEnv.bindCryptolModule (modname, m) ce
+            VString s
+              -> CEnv.bindTypedTerm (ident, typedTermOfString s) ce
+            _ -> ce
+
+typedTermOfString :: String -> TypedTerm
+typedTermOfString cs = TypedTerm schema trm
+  where
+    nat :: Integer -> Term
+    nat n = Unshared (FTermF (NatLit (fromInteger n)))
+    bvNat :: Term
+    bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
+    bvNat8 :: Term
+    bvNat8 = Unshared (App bvNat (nat 8))
+    encodeChar :: Char -> Term
+    encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
+    bitvector :: Term
+    bitvector = Unshared (FTermF (GlobalDef "Prelude.bitvector"))
+    byteT :: Term
+    byteT = Unshared (App bitvector (nat 8))
+    trm :: Term
+    trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
+    schema = Cryptol.Forall [] [] (Cryptol.tString (length cs))
+
 
 -- Other SAWScript Monads ------------------------------------------------------
 
@@ -500,6 +562,9 @@ data JavaSetupState
     }
 
 type JavaSetup a = StateT JavaSetupState TopLevel a
+
+throwJava :: String -> JavaSetup a
+throwJava = lift . throwTopLevel
 
 type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
@@ -524,6 +589,12 @@ instance Monad LLVMCrucibleSetupM where
   return = pure
   LLVMCrucibleSetupM m >>= f =
     LLVMCrucibleSetupM (m >>= runLLVMCrucibleSetupM . f)
+
+throwCrucibleSetup :: ProgramLoc -> String -> CrucibleSetup ext a
+throwCrucibleSetup loc msg = X.throw $ SS.CrucibleSetupException loc msg
+
+throwLLVM :: ProgramLoc -> String -> LLVMCrucibleSetupM a
+throwLLVM loc msg = LLVMCrucibleSetupM $ throwCrucibleSetup loc msg
 
 -- | This gets more accurate locations than @lift (lift getPosition)@ because
 --   of the @local@ in the @fromValue@ instance for @CrucibleSetup@
@@ -881,13 +952,25 @@ addTrace str val =
 
 -- | Wrap an action with a handler that catches and rethrows user
 -- errors with an extended message.
-addTraceIO :: String -> IO a -> IO a
-addTraceIO str action = X.catchJust p action h
+addTraceIO :: forall a. String -> IO a -> IO a
+addTraceIO str action = X.catches action
+  [ X.Handler handleTopLevel
+  , X.Handler handleTrace
+  , X.Handler handleIO
+  ]
   where
-    -- TODO: Use a custom exception type instead of fail/userError
-    -- init/drop 12 is a hack to remove "user error (" and ")"
-    p e = if IOError.isUserError e then Just (init (drop 12 (show e))) else Nothing
-    h msg = X.throwIO (IOError.userError (str ++ ":\n" ++ msg))
+    rethrow msg = X.throwIO . SS.TraceException $ mconcat [str, ":\n", msg]
+    handleTopLevel :: SS.TopLevelException -> IO a
+    handleTopLevel (SS.TopLevelException _pos msg) = rethrow msg
+    handleTopLevel (SS.JavaException _pos msg) = rethrow msg
+    handleTopLevel (SS.CrucibleSetupException _loc msg) = rethrow msg
+    handleTopLevel (SS.OverrideMatcherException _loc msg) = rethrow msg
+    handleTopLevel (SS.LLVMMethodSpecException _loc msg) = rethrow msg
+    handleTrace (SS.TraceException msg) = rethrow msg
+    handleIO :: X.IOException -> IO a
+    handleIO e
+      | IOError.isUserError e = rethrow . init . drop 12 $ show e
+      | otherwise = X.throwIO e
 
 -- | Similar to 'addTraceIO', but for state monads built from 'TopLevel'.
 addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a

@@ -1,7 +1,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module SAWScript.Exceptions (TypeErrors(..), failTypecheck) where
+module SAWScript.Exceptions
+  ( TypeErrors(..), failTypecheck
+  , TopLevelException(..)
+  , TraceException(..)
+  ) where
 
 import Control.Exception
+
+import What4.ProgramLoc (ProgramLoc)
 
 import SAWScript.Position (Pos(..))
 
@@ -19,3 +25,18 @@ instance Exception TypeErrors where
 failTypecheck :: [(Pos, String)] -> a
 failTypecheck = throw . TypeErrors
 
+data TopLevelException
+  = TopLevelException Pos String
+  | JavaException Pos String
+  | CrucibleSetupException ProgramLoc String
+  | OverrideMatcherException ProgramLoc String
+  | LLVMMethodSpecException ProgramLoc String
+  deriving Show
+instance Exception TopLevelException
+
+data TraceException = TraceException String
+
+instance Show TraceException where
+  show (TraceException msg) = "Stack trace:\n" ++ msg
+
+instance Exception TraceException

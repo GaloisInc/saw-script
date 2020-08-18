@@ -28,7 +28,6 @@ Stability   : provisional
 module SAWScript.Crucible.JVM.MethodSpecIR where
 
 import           Control.Lens
-import           Data.Monoid ((<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 
 -- what4
@@ -81,7 +80,7 @@ data JVMMethodId =
 
 makeLenses ''JVMMethodId
 
-csMethodName :: Simple Lens (MS.CrucibleMethodSpecIR CJ.JVM) String
+csMethodName :: Lens' (MS.CrucibleMethodSpecIR CJ.JVM) String
 csMethodName = MS.csMethod . jvmMethodName
 
 instance PPL.Pretty JVMMethodId where

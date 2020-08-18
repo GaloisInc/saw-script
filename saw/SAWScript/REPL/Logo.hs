@@ -26,7 +26,7 @@ logo useColor =
   ver = sgr [SetColor Foreground Dull White]
         ++ replicate (lineLen - 20 - length versionText) ' '
         ++ versionText
-  ls = logo2 ver
+  ls = (if useColor then logo2 else logo1) ver
   lineLen   = length (head ls)
   slen      = length ls `div` 3
   (ws,rest) = splitAt slen ls

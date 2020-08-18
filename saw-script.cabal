@@ -29,10 +29,11 @@ library
     , binary
     , bimap
     , bytestring
+    , bv-sized >= 1.0 && < 1.1
     , containers
     , constraints >= 0.6
     , cryptol
-    , cryptol-verifier
+    , cryptol-saw-core
     , crucible >= 0.4
     , crucible-jvm
     , crucible-llvm >= 0.2
@@ -125,7 +126,6 @@ library
     SAWScript.Position
     SAWScript.SBVParser
     SAWScript.SBVModel
-    SAWScript.SAWCorePrimitives
     SAWScript.Token
     SAWScript.TopLevel
     SAWScript.MGU
@@ -147,6 +147,7 @@ library
     SAWScript.Crucible.LLVM.Override
     SAWScript.Crucible.LLVM.MethodSpecIR
     SAWScript.Crucible.LLVM.ResolveSetupValue
+    SAWScript.Crucible.LLVM.X86
 
     SAWScript.Crucible.JVM.Builtins
     SAWScript.Crucible.JVM.BuiltinsJVM
@@ -209,6 +210,7 @@ executable saw
     , cryptol
     , directory
     , either
+    , exceptions
     , filepath
     , haskeline
     , QuickCheck
@@ -216,4 +218,4 @@ executable saw
     , saw-script
     , saw-core
     , heapster-saw
-    , cryptol-verifier
+    , cryptol-saw-core

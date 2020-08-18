@@ -33,7 +33,6 @@ import qualified Data.AIG as AIG
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm hiding (scNot, scAnd, scOr)
-import Verifier.SAW.TypedAST (ppTerm, defaultPPOpts)
 import SAWScript.Options
 
 type TypeParser = StateT (V.Vector Term) (ExceptT String IO)
@@ -179,21 +178,20 @@ loadAIG p f = do
       Left e -> return (Left (show (e :: IOException)))
       Right ntk -> return $ Right ntk
 
+-- | The return tuple consists of (input bits, output bits, term).
 readAIG :: (AIG.IsAIG l g) =>
            AIG.Proxy l g
         -> Options
         -> SharedContext
         -> FilePath
-        -> IO (Either String Term)
+        -> IO (Either String (Int, Int, Term))
 readAIG proxy opts sc f =
   withReadAiger proxy f $ \(AIG.Network ntk outputLits) -> do
-    inputs <- AIG.inputCount ntk
-    inLen <- scNat sc (fromIntegral inputs)
-    outLen <- scNat sc (fromIntegral (length outputLits))
-    boolType <- scBoolType sc
-    inType <- scVecType sc inLen boolType
-    outType <- scVecType sc outLen boolType
-    runExceptT $
+    inLen <- AIG.inputCount ntk
+    let outLen = length outputLits
+    inType <- scBitvector sc (fromIntegral inLen)
+    outType <- scBitvector sc (fromIntegral outLen)
+    fmap (fmap (\t -> (inLen, outLen, t))) $ runExceptT $
       translateNetwork opts sc ntk outputLits [("x", inType)] outType
 
 -- | Check that the input and output counts of the given
