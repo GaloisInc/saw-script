@@ -102,7 +102,7 @@ install_yices() {
 install_yasm() {
   is_exe "$BIN" "yasm" && return
   if [[ "$RUNNER_OS" = "Linux" ]]; then
-    sudo apt-get install -y yasm
+    sudo apt-get update -q && sudo apt-get install -y yasm
   else
     brew install yasm
   fi
@@ -115,7 +115,7 @@ build() {
   # Limit jobs on windows due to: https://gitlab.haskell.org/ghc/ghc/issues/17926
   if [[ "$ghc_ver" =~ 8.8.3|8.10.1 && $IS_WIN ]]; then JOBS=1; else JOBS=2; fi
   cabal v2-configure -j$JOBS --minimize-conflict-set
-  tee -a cabal.project cabal.project.ci > /dev/null
+  tee -a cabal.project > /dev/null < cabal.project.ci
   retry cabal v2-build "$@" saw jss
 }
 
