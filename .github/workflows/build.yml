@@ -1,7 +1,7 @@
 name: SAWScript
 on:
   push:
-    branches: [master, actions/github-actions]
+    branches: [master]
   pull_request:
 
 jobs:
