@@ -2543,7 +2543,7 @@ We now define
 `ptr_to_fresh n ty` returns a pair `(x, p)` consisting of a fresh symbolic
 variable `x` of type `ty` and a pointer `p` to it. `n` specifies the
 name that SAW should use when printing `x`. `ptr_to_fresh_readonly` does the
-same, the variable cannot be written to.
+same, but returns a pointer to space that cannot be written to.
 
 ~~~~
 let ptr_to_fresh n ty = do {
@@ -2583,7 +2583,7 @@ The C function we wish to verify has type
 
 The function's specification generates four symbolic variables and pointers to
 them in the precondition/setup stage. The pointers are passed to the function
-during symbolic execution via `crucible_execute_fun`. Finally, in the
+during symbolic execution via `crucible_execute_func`. Finally, in the
 postcondition/return stage, the expected values are computed using the trusted
 Cryptol implementation and it is asserted that the pointers do in fact point to
 these expected values.
@@ -2627,7 +2627,8 @@ let salsa20_setup =
 
 #### 32-Bit Key Expansion
 
-The next function of substantial behavior that we wish to verify has type
+The next function of substantial behavior that we wish to verify has the
+following prototype:
 
 ~~~~c
 void s20_expand32( uint8_t *k
@@ -2642,7 +2643,7 @@ function does not write to the memory pointed to by `k` or `n` using the
 utility `ptr_to_fresh_readonly`, as this function should only modify
 `keystream`. Besides this, we see the call to the trusted Cryptol
 implementation specialized to `a=2`, which does 32-bit key expansion (since the
-Cryptol implementation can also specialize to `a=1` for 16-bit keys.) This
+Cryptol implementation can also specialize to `a=1` for 16-bit keys). This
 specification can easily be changed to work with 16-bit keys.
 
 ~~~~
@@ -2702,7 +2703,10 @@ let s20_encrypt32 n = do {
 
 Finally, we can verify all of the functions. Notice the use of compositional
 verification and that path satisfiability checking is enabled for those
-functions with loops not bounded by explicit constants.
+functions with loops not bounded by explicit constants. Notice that we prove
+the top-level function for several sizes; this is due to the limitation that
+SAW can only operate on finite programs (while Salsa20 can operate on any input
+size.)
 
 ~~~~
 let main : TopLevel () = do {
