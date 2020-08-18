@@ -424,6 +424,7 @@ buildTopLevelEnv proxy opts =
                    , rwTypedef    = Map.empty
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
+                   , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
@@ -2392,6 +2393,13 @@ primitives = Map.fromList
     (pureVal disable_crucible_profiling)
     Current
     ["Stop recording profiling information."]
+
+  , prim "summarize_verification" "TopLevel ()"
+    (pureVal summarize_verification)
+    Experimental
+    [ "Print a human-readable summary of all verifications performed"
+    , "so far."
+    ]
   ]
 
   where

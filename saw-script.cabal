@@ -163,6 +163,8 @@ library
     SAWScript.Prover.Exporter
     SAWScript.Prover.Versions
 
+    SAWScript.VerificationSummary
+
     SAWScript.X86
     SAWScript.X86Spec
 
