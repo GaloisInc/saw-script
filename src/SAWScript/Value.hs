@@ -278,7 +278,7 @@ showsPrecValue opts p v =
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
-    VTheorem (Theorem (Prop t)) ->
+    VTheorem (Theorem (Prop t) _stats) ->
       showString "Theorem " .
       showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
@@ -385,6 +385,7 @@ data TopLevelRW =
   , rwTypedef :: Map SS.Name SS.Type
   , rwDocs    :: Map SS.Name String
   , rwCryptol :: CEnv.CryptolEnv
+  , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext
@@ -460,6 +461,12 @@ getTopLevelRW = TopLevel get
 
 putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = TopLevel (put rw)
+
+returnProof :: IsValue v => v -> TopLevel v
+returnProof v = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
+  return v
 
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel  CJ.JVMContext
