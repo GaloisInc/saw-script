@@ -13,8 +13,11 @@ import qualified Data.Map as Map
 import Cryptol.ModuleSystem.Name (nameIdent)
 import qualified Cryptol.TypeCheck.AST as C
 import Cryptol.Utils.PP (pretty)
+import qualified Cryptol.Utils.Ident as C (packIdent)
+import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
 import Verifier.SAW.Cryptol (scCryptolType)
+import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer (asExtCns)
 import Verifier.SAW.SharedTerm
 
@@ -41,6 +44,32 @@ mkTypedTerm sc trm = do
   ty <- scTypeOf sc trm
   ct <- scCryptolType sc ty
   return $ TypedTerm (C.Forall [] [] ct) trm
+
+-- First order types and values ------------------------------------------------
+
+cryptolTypeOfFirstOrderType :: FirstOrderType -> C.Type
+cryptolTypeOfFirstOrderType fot =
+  case fot of
+    FOTBit -> C.tBit
+    FOTInt -> C.tInteger
+    FOTVec n t -> C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)
+    FOTTuple ts -> C.tTuple (map cryptolTypeOfFirstOrderType ts)
+    FOTArray a b ->
+      C.tArray
+      (cryptolTypeOfFirstOrderType a)
+      (cryptolTypeOfFirstOrderType b)
+    FOTRec m ->
+      C.tRec $
+      C.recordFromFields $
+      [ (C.packIdent l, cryptolTypeOfFirstOrderType t)
+      | (l, t) <- Map.assocs m ]
+
+typedTermOfFirstOrderValue :: SharedContext -> FirstOrderValue -> IO TypedTerm
+typedTermOfFirstOrderValue sc fov =
+  do let fot = firstOrderTypeOf fov
+     let cty = cryptolTypeOfFirstOrderType fot
+     t <- scFirstOrderValue sc fov
+     pure $ TypedTerm (C.tMono cty) t
 
 -- Typed external constants ----------------------------------------------------
 
