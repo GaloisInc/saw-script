@@ -513,7 +513,7 @@ verifyMethodSpec bic opts cc methodSpec lemmas checkSat tactic asp =
      -- push a memory stack frame if starting from a breakpoint
      let mem = if isJust (methodSpec^.csParentName)
                then mem0
-                 { Crucible.memImplHeap = Crucible.pushStackFrameMem
+                 { Crucible.memImplHeap = Crucible.pushStackFrameMem ""
                    (Crucible.memImplHeap mem0)
                  }
                else mem0
