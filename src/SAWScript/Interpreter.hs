@@ -424,6 +424,7 @@ buildTopLevelEnv proxy opts =
                    , rwTypedef    = Map.empty
                    , rwDocs       = primDocEnv primsAvail
                    , rwCryptol    = ce0
+                   , rwProofs     = []
                    , rwPPOpts     = SAWScript.Value.defaultPPOpts
                    , rwJVMTrans   = jvmTrans
                    , rwPrimsAvail = primsAvail
@@ -1005,7 +1006,7 @@ primitives = Map.fromList
   , prim "write_coq_cryptol_primitives_for_sawcore" "String -> [(String, String)] -> [String] -> TopLevel ()"
     (pureVal writeCoqCryptolPrimitivesForSAWCore)
     Experimental
-    [ "Write out a representation of cryptol-verifier's Cryptol.sawcore in"
+    [ "Write out a representation of cryptol-saw-core's Cryptol.sawcore in"
     , "Gallina syntax for Coq."
     , "The first argument is the name of the file to output into,"
     , "use an empty string to output to standard output."
@@ -1633,6 +1634,13 @@ primitives = Map.fromList
     , "value will be the return value of the method. Only methods with"
     , "scalar argument and return types are currently supported."
     ]
+
+  , prim "llvm_sizeof"         "LLVMModule -> LLVMType -> Int"
+    (funVal2 llvm_sizeof)
+    Current
+    [ "In the context of the given LLVM module, compute the size of the"
+    , "given LLVM type in bytes. The module determines details of struct"
+    , "layout and the meaning of type aliases." ]
 
   , prim "llvm_type"           "String -> LLVMType"
     (funVal1 llvm_type)
@@ -2385,6 +2393,13 @@ primitives = Map.fromList
     (pureVal disable_crucible_profiling)
     Current
     ["Stop recording profiling information."]
+
+  , prim "summarize_verification" "TopLevel ()"
+    (pureVal summarize_verification)
+    Experimental
+    [ "Print a human-readable summary of all verifications performed"
+    , "so far."
+    ]
   ]
 
   where

@@ -55,6 +55,7 @@ module SAWScript.Crucible.LLVM.Builtins
     , crucible_symbolic_alloc
     , crucible_alloc_global
     , crucible_fresh_expanded_val
+    , llvm_sizeof
 
     --
     -- These function are common to LLVM & JVM implementation (not for external use)
@@ -157,7 +158,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Recognizer
 
--- cryptol-verifier
+-- cryptol-saw-core
 import Verifier.SAW.TypedTerm
 
 -- saw-script
@@ -265,7 +266,7 @@ crucible_llvm_verify bic opts (Some lm) nm lemmas checkSat setup tactic =
   do lemmas' <- checkModuleCompatibility lm lemmas
      withMethodSpec bic opts lm nm setup $ \cc method_spec ->
        do (res_method_spec, _) <- verifyMethodSpec bic opts cc method_spec lemmas' checkSat tactic Nothing
-          return $ SomeLLVM res_method_spec
+          returnProof $ SomeLLVM res_method_spec
 
 crucible_llvm_unsafe_assume_spec ::
   BuiltinContext   ->
@@ -278,7 +279,7 @@ crucible_llvm_unsafe_assume_spec bic opts (Some lm) nm setup =
   withMethodSpec bic opts lm nm setup $ \_ method_spec ->
   do printOutLnTop Info $
        unwords ["Assume override", (method_spec ^. csName)]
-     return $ SomeLLVM method_spec
+     returnProof $ SomeLLVM method_spec
 
 crucible_llvm_array_size_profile ::
   BuiltinContext ->
@@ -1659,6 +1660,22 @@ memTypeForLLVMType loc _bic lty =
       , "Details:"
       , err
       ]
+
+llvm_sizeof ::
+  Some LLVMModule ->
+  L.Type ->
+  TopLevel Integer
+llvm_sizeof (Some lm) lty =
+  do let mtrans = modTrans lm
+     let ?lc = mtrans ^. Crucible.transContext . Crucible.llvmTypeCtx
+     let dl = Crucible.llvmDataLayout ?lc
+     case Crucible.liftMemType lty of
+       Right mty -> pure (Crucible.bytesToInteger (Crucible.memTypeSize dl mty))
+       Left err -> fail $ unlines
+         [ "llvm_sizeof: Unsupported type: " ++ show (L.ppType lty)
+         , "Details:"
+         , err
+         ]
 
 llvmTypeAlias :: L.Type -> Maybe Crucible.Ident
 llvmTypeAlias (L.Alias i) = Just i

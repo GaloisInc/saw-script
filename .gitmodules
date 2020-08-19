@@ -7,9 +7,6 @@
 [submodule "deps/crucible"]
 	path = deps/crucible
 	url = https://github.com/GaloisInc/crucible.git
-[submodule "deps/cryptol-verifier"]
-	path = deps/cryptol-verifier
-	url = https://github.com/GaloisInc/cryptol-verifier.git
 [submodule "deps/cryptol"]
 	path = deps/cryptol
 	url = https://github.com/GaloisInc/cryptol.git

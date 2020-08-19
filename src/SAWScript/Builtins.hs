@@ -76,7 +76,7 @@ import Verifier.SAW.TypedAST
 
 import SAWScript.Position
 
--- cryptol-verifier
+-- cryptol-saw-core
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
 -- saw-core-aig
@@ -136,6 +136,7 @@ import qualified SAWScript.Prover.ABC as Prover
 import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
 import qualified SAWScript.Prover.MRSolver as Prover
+import SAWScript.VerificationSummary
 
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do
@@ -506,7 +507,7 @@ beta_reduce_goal =
      return ((), mempty, Just (goal { goalProp = Prop trm' }))
 
 goal_apply :: Theorem -> ProofScript ()
-goal_apply (Theorem (Prop rule)) =
+goal_apply (Theorem (Prop rule) _stats) =
   StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "goal_apply failed: no subgoal"
@@ -551,7 +552,7 @@ goal_assume =
           | looseVars body /= emptyBitSet -> fail "goal_assume failed: dependent pi type"
           | otherwise ->
             let goal' = goal { goalProp = Prop body } in
-            return (Theorem (Prop tp), ProofState (goal' : goals') concl stats timeout)
+            return (Theorem (Prop tp) mempty, ProofState (goal' : goals') concl stats timeout)
 
 goal_intro :: String -> ProofScript TypedTerm
 goal_intro s =
@@ -571,7 +572,7 @@ goal_intro s =
              return (tt, ProofState (goal' : goals') concl stats timeout)
 
 goal_insert :: Theorem -> ProofScript ()
-goal_insert (Theorem (Prop t)) =
+goal_insert (Theorem (Prop t) _stats) =
   StateT $ \(ProofState goals concl stats timeout) ->
   case goals of
     [] -> fail "goal_insert failed: no subgoal"
@@ -839,7 +840,7 @@ provePrintPrim script t = do
   opts <- rwPPOpts <$> getTopLevelRW
   case finishProof pstate of
     (_,Just thm) -> do printOutLnTop Info "Valid"
-                       return thm
+                       SV.returnProof thm
     (_,Nothing) -> fail $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
                      ++ SV.showsProofResult opts (SV.flipSatResult r) ""
 
@@ -937,7 +938,7 @@ beta_reduce_term (TypedTerm schema t) = do
   return (TypedTerm schema t')
 
 addsimp :: Theorem -> Simpset -> Simpset
-addsimp (Theorem (Prop t)) ss = addRule (ruleOfProp t) ss
+addsimp (Theorem (Prop t) _stats) ss = addRule (ruleOfProp t) ss
 
 addsimp' :: Term -> Simpset -> Simpset
 addsimp' t ss = addRule (ruleOfProp t) ss
@@ -1293,21 +1294,21 @@ prove_core script input =
      let r = SV.flipSatResult r'
      opts <- rwPPOpts <$> getTopLevelRW
      case finishProof pstate of
-       (_,Just thm) -> return thm
+       (_,Just thm) -> SV.returnProof thm
        (_,Nothing)  -> fail $ "prove_core: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
                          ++ SV.showsProofResult opts r ""
 
 core_axiom :: String -> TopLevel Theorem
 core_axiom input =
   do t <- parseCore input
-     return (Theorem (Prop t))
+     SV.returnProof (Theorem (Prop t) mempty)
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =
   do t <- parseCore input
      sc <- getSharedContext
      ty <- io $ scTypeOf sc t
-     return (Theorem (Prop ty))
+     SV.returnProof (Theorem (Prop ty) mempty) -- TODO: this is proved, not assumed
 
 get_opt :: Int -> TopLevel String
 get_opt n = do
@@ -1409,3 +1410,12 @@ approxmc t = do
   case msg of
     [l] -> io $ putStrLn l
     _ -> fail $ "Garbled result from approxmc\n\n" ++ out
+
+summarize_verification :: TopLevel ()
+summarize_verification =
+  do values <- rwProofs <$> getTopLevelRW
+     let jspecs  = [ s | SV.VJVMMethodSpec s <- values ]
+         lspecs  = [ s | SV.VLLVMCrucibleMethodSpec s <- values ]
+         thms    = [ t | SV.VTheorem t <- values ]
+         summary = computeVerificationSummary jspecs lspecs thms
+     io $ putStrLn $ prettyVerificationSummary summary

@@ -65,7 +65,7 @@ import qualified Verifier.Java.Codebase as CB
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
 
--- cryptol-verifier
+-- cryptol-saw-core
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 
 -- what4
@@ -238,7 +238,7 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      -- attempt to verify the proof obligations
      stats <- verifyObligations cc methodSpec tactic assumes asserts
      io $ writeFinalProfile
-     return (methodSpec & MS.csSolverStats .~ stats)
+     returnProof (methodSpec & MS.csSolverStats .~ stats)
 
 
 crucible_jvm_unsafe_assume_spec ::
@@ -256,7 +256,8 @@ crucible_jvm_unsafe_assume_spec bic opts cls nm setup =
      (_cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let loc = SS.toW4Loc "_SAW_assume_spec" pos
      let st0 = initialCrucibleSetupState cc method loc
-     (view Setup.csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
+     ms <- (view Setup.csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
+     returnProof ms
 
 verifyObligations ::
   JVMCrucibleContext ->
