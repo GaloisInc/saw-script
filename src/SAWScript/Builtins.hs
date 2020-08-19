@@ -57,7 +57,6 @@ import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
-  , FirstOrderType(..)
   , firstOrderTypeOf
   , FirstOrderValue(..)
   , toFirstOrderValue, scFirstOrderValue
@@ -1040,23 +1039,6 @@ toValueCase prim =
   SV.VLambda $ \v1 -> return $
   SV.VLambda $ \v2 ->
   prim (SV.fromValue b) v1 v2
-
-cryptolTypeOfFirstOrderType :: FirstOrderType -> C.Type
-cryptolTypeOfFirstOrderType fot =
-  case fot of
-    FOTBit -> C.tBit
-    FOTInt -> C.tInteger
-    FOTVec n t -> C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)
-    FOTTuple ts -> C.tTuple (map cryptolTypeOfFirstOrderType ts)
-    FOTArray a b ->
-      C.tArray
-      (cryptolTypeOfFirstOrderType a)
-      (cryptolTypeOfFirstOrderType b)
-    FOTRec m ->
-      C.tRec $
-      C.recordFromFields $
-      [ (C.packIdent l, cryptolTypeOfFirstOrderType t)
-      | (l, t) <- Map.assocs m ]
 
 caseProofResultPrim :: SV.ProofResult
                     -> SV.Value -> SV.Value
