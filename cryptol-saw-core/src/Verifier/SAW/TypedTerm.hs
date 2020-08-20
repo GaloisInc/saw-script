@@ -87,6 +87,11 @@ asTypedExtCns (TypedTerm schema t) =
      ec <- asExtCns t
      pure $ TypedExtCns cty ec
 
+-- | Make a 'TypedTerm' from a 'TypedExtCns'.
+typedTermOfExtCns :: SharedContext -> TypedExtCns -> IO TypedTerm
+typedTermOfExtCns sc (TypedExtCns cty ec) =
+  TypedTerm (C.tMono cty) <$> scExtCns sc ec
+
 abstractTypedExts :: SharedContext -> [TypedExtCns] -> TypedTerm -> IO TypedTerm
 abstractTypedExts sc tecs (TypedTerm (C.Forall params props ty) trm) =
   do let tys = map tecType tecs
