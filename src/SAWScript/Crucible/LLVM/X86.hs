@@ -360,10 +360,16 @@ buildCFG opts halloc path nm = do
       _ -> fail $ mconcat ["Could not find symbol \"", nm, "\""]
   printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
   let
+    preservedRegs = Set.insert (Some Macaw.RAX) Macaw.x86CalleeSavedRegs
+    preserveFn r = Set.member (Some r) preservedRegs
+    macawCallParams = Macaw.x86_64CallParams { Macaw.preserveReg = preserveFn }
+    macawArchInfo = (Macaw.x86_64_info preserveFn)
+      { Macaw.archCallParams = macawCallParams
+      }
     initialDiscoveryState =
-      Macaw.emptyDiscoveryState (memory relf) (funSymMap relf) Macaw.x86_64_linux_info
+      Macaw.emptyDiscoveryState (memory relf) (funSymMap relf) macawArchInfo
+      -- "inline" any function addresses that we happen to jump to
       & Macaw.trustedFunctionEntryPoints .~ Set.empty
-  let
     finalState = Macaw.cfgFromAddrsAndState initialDiscoveryState [addr] []
     finfos = finalState ^. Macaw.funInfo
   cfgs <- forM finfos $ \(Some finfo) ->
@@ -470,7 +476,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     , globalEnd . fst <$> globs
     , allocGlobalEnd <$> ms ^. MS.csGlobalAllocs
     ]
-  (base, mem) <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Immutable
+  (base, mem) <- C.LLVM.doMalloc sym C.LLVM.GlobalAlloc C.LLVM.Mutable
     "globals" emptyMem sz align
   pure $ X86State
     { _x86Sym = sym
