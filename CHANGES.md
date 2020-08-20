@@ -1,3 +1,17 @@
+# Version 0.6
+
+## New Features
+
+TODO
+
+## Performance Improvements
+
+TODO
+
+## Bug Fixes
+
+TODO
+
 # Version 0.5
 
 ## New Features
