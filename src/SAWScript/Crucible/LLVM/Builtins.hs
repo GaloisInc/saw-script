@@ -292,12 +292,14 @@ crucible_llvm_array_size_profile ::
   Options ->
   Some LLVMModule ->
   String ->
+  [SomeLLVM MS.CrucibleMethodSpecIR] ->
   LLVMCrucibleSetupM () ->
   TopLevel [(String, [Crucible.FunctionProfile])]
-crucible_llvm_array_size_profile assume bic opts (Some lm) nm setup = do
+crucible_llvm_array_size_profile assume bic opts (Some lm) nm lemmas setup = do
   cell <- io $ newIORef (Map.empty :: Map Text.Text [Crucible.FunctionProfile])
+  lemmas' <- checkModuleCompatibility lm lemmas
   withMethodSpec bic opts lm nm setup $ \cc ms -> do
-    void . verifyMethodSpec bic opts cc ms [] False assume $ Just cell
+    void . verifyMethodSpec bic opts cc ms lemmas' True assume $ Just cell
     profiles <- io $ readIORef cell
     pure . fmap (\(fnm, prof) -> (Text.unpack fnm, prof)) $ Map.toList profiles
 

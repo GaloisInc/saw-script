@@ -2177,11 +2177,11 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_llvm_array_size_profile"
-    "LLVMModule -> String -> CrucibleSetup () -> TopLevel [(String, [FunctionProfile])]"
+    "LLVMModule -> String -> [CrucibleMethodSpec] -> CrucibleSetup () -> TopLevel [(String, [FunctionProfile])]"
     (bicVal $ crucible_llvm_array_size_profile assumeUnsat)
     Experimental
     [ "Symbolically execute the function named by the second parameter in"
-    , "the module specified by the first. The third parameter may be used"
+    , "the module specified by the first. The fourth parameter may be used"
     , "to specify arguments. Returns profiles specifying the sizes of buffers"
     , "referred to by pointer arguments for the function and all other functions"
     , "it calls (recursively), to be passed to llvm_boilerplate."
