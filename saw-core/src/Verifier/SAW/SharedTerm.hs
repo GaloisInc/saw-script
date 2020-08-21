@@ -54,6 +54,7 @@ module Verifier.SAW.SharedTerm
   , scDefTerm
   , scFreshGlobalVar
   , scFreshGlobal
+  , scExtCns
   , scGlobalDef
     -- ** Recursors and datatypes
   , scRecursorElimTypes
@@ -308,11 +309,15 @@ data SharedContext = SharedContext
 scFlatTermF :: SharedContext -> FlatTermF Term -> IO Term
 scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 
+-- | Create a 'Term' from an 'ExtCns'.
+scExtCns :: SharedContext -> ExtCns Term -> IO Term
+scExtCns sc ec = scFlatTermF sc (ExtCns ec)
+
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshGlobal :: SharedContext -> String -> Term -> IO Term
 scFreshGlobal sc sym tp = do
   i <- scFreshGlobalVar sc
-  scFlatTermF sc (ExtCns (EC i sym tp))
+  scExtCns sc (EC i sym tp)
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.

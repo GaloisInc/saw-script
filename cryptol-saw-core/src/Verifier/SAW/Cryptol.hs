@@ -1391,6 +1391,7 @@ asCryptolTypeValue v =
           return (C.tFun t1 t2)
     _ -> Nothing
 
+-- | Deprecated.
 scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
@@ -1398,6 +1399,7 @@ scCryptolType sc t =
        Just ty -> return ty
        Nothing -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
 
+-- | Deprecated.
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term
 scCryptolEq sc x y =
   do rules <- concat <$> traverse defRewrites (defs1 ++ defs2)
