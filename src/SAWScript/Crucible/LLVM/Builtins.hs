@@ -1281,10 +1281,7 @@ baseCryptolType bt =
     Crucible.BaseBVRepr w -> pure $ Cryptol.tWord (Cryptol.tNum (natValue w))
     Crucible.BaseNatRepr  -> Nothing
     Crucible.BaseIntegerRepr -> pure $ Cryptol.tInteger
-    Crucible.BaseArrayRepr indexTypes range ->
-      do ts <- baseCryptolTypes indexTypes
-         t <- baseCryptolType range
-         pure $ foldr Cryptol.tFun t ts
+    Crucible.BaseArrayRepr {} -> Nothing
     Crucible.BaseFloatRepr _ -> Nothing
     Crucible.BaseStringRepr _ -> Nothing
     Crucible.BaseComplexRepr  -> Nothing
