@@ -41,7 +41,6 @@ module SAWScript.Crucible.LLVM.Override
   , matchArg
   , methodSpecHandler
   , valueToSC
-  , termId
   , storePointsToValue
 
   , diffMemTypes
@@ -391,7 +390,7 @@ methodSpecHandler opts sc cc top_loc css h = do
   prestates <-
     do g0 <- Crucible.readGlobals
        forM css $ \cs -> liftIO $
-         let initialFree = Set.fromList (map (termId . ttTerm)
+         let initialFree = Set.fromList (map (ecVarIndex . tecExt)
                                            (view (MS.csPreState . MS.csFreshVars) cs))
           in runOverrideMatcher sym g0 Map.empty Map.empty initialFree (view MS.csLoc cs)
                       (do methodSpecHandler_prestate opts sc cc args cs
@@ -647,20 +646,12 @@ enforceCompleteSubstitution loc ss =
 
      let -- predicate matches terms that are not covered by the computed
          -- term substitution
-         isMissing tt = termId (ttTerm tt) `Map.notMember` sub
+         isMissing tt = ecVarIndex (tecExt tt) `Map.notMember` sub
 
          -- list of all terms not covered by substitution
          missing = filter isMissing (view MS.csFreshVars ss)
 
      unless (null missing) (failure loc (AmbiguousVars missing))
-
-
--- | Given a 'Term' that must be an external constant, extract the 'VarIndex'.
-termId :: Term -> VarIndex
-termId t =
-  case asExtCns t of
-    Just ec -> ecVarIndex ec
-    _       -> error "termId expected a variable"
 
 
 -- execute a pre/post condition
@@ -696,11 +687,9 @@ refreshTerms sc ss =
   do extension <- Map.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
      OM (termSub %= Map.union extension)
   where
-    freshenTerm tt =
-      case asExtCns (ttTerm tt) of
-        Just ec -> do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
-                      return (termId (ttTerm tt), new)
-        Nothing -> error "refreshTerms: not a variable"
+    freshenTerm (TypedExtCns _cty ec) =
+      do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
+         return (ecVarIndex ec, new)
 
 ------------------------------------------------------------------------
 

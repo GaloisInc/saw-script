@@ -35,10 +35,10 @@ import           Control.Lens
 import           Control.Monad.State (StateT)
 import           Control.Monad.IO.Class (MonadIO(liftIO))
 
-import qualified Cryptol.TypeCheck.Type as Cryptol (Type, tMono)
+import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
 import qualified Verifier.SAW.Cryptol as Cryptol (importType, emptyEnv)
-import           Verifier.SAW.TypedTerm (TypedTerm(..))
-import           Verifier.SAW.SharedTerm (SharedContext, scFreshGlobal)
+import           Verifier.SAW.TypedTerm (TypedExtCns(..))
+import           Verifier.SAW.SharedTerm (SharedContext, scFreshGlobalVar, ExtCns(..))
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 
@@ -102,10 +102,10 @@ freshVariable ::
   SharedContext {- ^ shared context -} ->
   String        {- ^ variable name  -} ->
   Cryptol.Type  {- ^ variable type  -} ->
-  CrucibleSetupT arch m TypedTerm
+  CrucibleSetupT arch m TypedExtCns
 freshVariable sc name cty =
   do ty <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv cty
-     trm <- liftIO $ scFreshGlobal sc name ty
-     let tt = TypedTerm (Cryptol.tMono cty) trm
+     i <- liftIO $ scFreshGlobalVar sc
+     let tt = TypedExtCns cty (EC i name ty)
      currentState . MS.csFreshVars %= cons tt
      return tt

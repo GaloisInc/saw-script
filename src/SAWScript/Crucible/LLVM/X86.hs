@@ -55,7 +55,6 @@ import Data.Parameterized.Nonce
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
-import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
@@ -733,12 +732,14 @@ assertPost globals env premem preregs = do
         $ ms ^. MS.csPostState . MS.csConditions
 
   let
-    initialTerms = Map.fromList
-      [ (ecVarIndex ec, ttTerm tt)
+    initialECs = Map.fromList
+      [ (ecVarIndex ec, ec)
       | tt <- ms ^. MS.csPreState . MS.csFreshVars
-      , let Just ec = asExtCns (ttTerm tt)
+      , let ec = tecExt tt
       ]
-    initialFree = Set.fromList . fmap (LO.termId . ttTerm) $ ms ^. MS.csPostState . MS.csFreshVars
+    initialFree = Set.fromList . fmap (ecVarIndex . tecExt) $ ms ^. MS.csPostState . MS.csFreshVars
+
+  initialTerms <- liftIO $ traverse (scExtCns sc) initialECs
 
   result <- liftIO
     . O.runOverrideMatcher sym globals env initialTerms initialFree (ms ^. MS.csLoc)
