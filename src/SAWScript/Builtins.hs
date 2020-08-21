@@ -994,24 +994,15 @@ lambda :: TypedTerm -> TypedTerm -> TopLevel TypedTerm
 lambda x = lambdas [x]
 
 lambdas :: [TypedTerm] -> TypedTerm -> TopLevel TypedTerm
-lambdas vars (TypedTerm schema0 term0) = do
-  (es, ts) <- unzip <$> mapM checkVar vars
-  ty <- checkMono schema0
-  sc <- getSharedContext
-  term' <- io $ scAbstractExts sc es term0
-  let schema' = C.Forall [] [] (foldr C.tFun ty ts)
-  return (TypedTerm schema' term')
+lambdas vars tt =
+  do tecs <- traverse checkVar vars
+     sc <- getSharedContext
+     io $ abstractTypedExts sc tecs tt
   where
-    checkMono schema =
-      case schema of
-        C.Forall [] [] t -> return t
-        _ -> fail "lambda: cannot abstract over polymorphic variable"
-    checkVar (TypedTerm schema term) = do
-      e <- case asExtCns term of
-             Just e -> return e
-             Nothing -> fail "lambda: argument not a symbolic variable"
-      t <- checkMono schema
-      return (e, t)
+    checkVar v =
+      case asTypedExtCns v of
+        Just tec -> pure tec
+        Nothing -> fail "lambda: argument not a valid symbolic variable"
 
 -- | Apply the given Term to the given values, and evaluate to a
 -- final value.
