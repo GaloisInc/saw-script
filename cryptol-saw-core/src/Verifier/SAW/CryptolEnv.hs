@@ -61,6 +61,7 @@ import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.Parser.Position as P
 import qualified Cryptol.TypeCheck as T
 import qualified Cryptol.TypeCheck.AST as T
+import qualified Cryptol.TypeCheck.Error as TE
 import qualified Cryptol.TypeCheck.Infer as TI
 import qualified Cryptol.TypeCheck.Kind as TK
 import qualified Cryptol.TypeCheck.Monad as TM
@@ -592,7 +593,17 @@ defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
 
 moduleCmdResult :: M.ModuleRes a -> IO (a, ME.ModuleEnv)
 moduleCmdResult (res, ws) = do
-  mapM_ (print . pp) ws
+  mapM_ (print . pp) (map suppressDefaulting ws)
   case res of
     Right (a, me) -> return (a, me)
     Left err      -> fail $ "Cryptol error:\n" ++ show (pp err) -- X.throwIO (ModuleSystemError err)
+  where
+    suppressDefaulting :: MM.ModuleWarning -> MM.ModuleWarning
+    suppressDefaulting w =
+      case w of
+        MM.TypeCheckWarnings xs -> MM.TypeCheckWarnings (filter (notDefaulting . snd) xs)
+        MM.RenamerWarnings xs -> MM.RenamerWarnings xs
+
+    notDefaulting :: TE.Warning -> Bool
+    notDefaulting (TE.DefaultingTo {}) = False
+    notDefaulting _ = True
