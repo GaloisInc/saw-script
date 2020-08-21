@@ -1303,7 +1303,7 @@ setupArg ::
   forall tp.
   SharedContext ->
   Sym ->
-  IORef (Seq (Cryptol.Type, ExtCns Term)) ->
+  IORef (Seq TypedExtCns) ->
   Crucible.TypeRepr tp ->
   IO (Crucible.RegEntry Sym tp)
 setupArg sc sym ecRef tp =
@@ -1335,14 +1335,14 @@ setupArg sc sym ecRef tp =
          ecs   <- readIORef ecRef
          let len = Seq.length ecs
          let ec = EC i ("arg_"++show len) sc_tp
-         writeIORef ecRef (ecs Seq.|> (cty, ec))
+         writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
          scFlatTermF sc (ExtCns ec)
 
 setupArgs ::
   SharedContext ->
   Sym ->
   Crucible.FnHandle init ret ->
-  IO (Seq (Cryptol.Type, ExtCns Term), Crucible.RegMap Sym init)
+  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
 setupArgs sc sym fn =
   do ecRef  <- newIORef Seq.empty
      regmap <- Crucible.RegMap <$> Ctx.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
@@ -1393,21 +1393,20 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
             let regv = gp^.Crucible.gpValue
                 rt = Crucible.regType regv
                 rv = Crucible.regValue regv
-            (cty, t) <-
+            tt <-
               case rt of
                 Crucible.LLVMPointerRepr w ->
                   do bv <- Crucible.projectLLVM_bv sym rv
                      t <- CrucibleSAW.toSC sym bv
                      let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
-                     return (cty, t)
+                     pure $ TypedTerm (Cryptol.tMono cty) t
                 Crucible.BVRepr w ->
                   do t <- CrucibleSAW.toSC sym rv
                      let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
-                     return (cty, t)
+                     pure $ TypedTerm (Cryptol.tMono cty) t
                 _ -> fail $ unwords ["Unexpected return type:", show rt]
-            t' <- scAbstractExts sc (map snd (toList ecs)) t
-            let cty' = foldr Cryptol.tFun cty (map fst (toList ecs))
-            return $ TypedTerm (Cryptol.tMono cty') t'
+            tt' <- abstractTypedExts sc (toList ecs) tt
+            pure tt'
        Crucible.AbortedResult _ ar ->
          do let resultDoc = ppAbortedResult cc ar
             fail $ unlines [ "Symbolic execution failed."
