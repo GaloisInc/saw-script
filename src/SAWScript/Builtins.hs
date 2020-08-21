@@ -57,7 +57,6 @@ import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
-  , firstOrderTypeOf
   , FirstOrderValue(..)
   , toFirstOrderValue, scFirstOrderValue
   )
@@ -1048,12 +1047,8 @@ caseProofResultPrim pr vValid vInvalid = do
   case pr of
     SV.Valid _ -> return vValid
     SV.InvalidMulti _ pairs -> do
-      let fvs = map snd pairs
-      ts <- io $ mapM (scFirstOrderValue sc) fvs
-      t <- io $ scTuple sc ts
-      let fot = firstOrderTypeOf (FOVTuple fvs)
-      let cty = cryptolTypeOfFirstOrderType fot
-      let tt = TypedTerm (C.tMono cty) t
+      let fov = FOVTuple (map snd pairs)
+      tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vInvalid (SV.toValue tt)
 
 caseSatResultPrim :: SV.SatResult
@@ -1064,12 +1059,8 @@ caseSatResultPrim sr vUnsat vSat = do
   case sr of
     SV.Unsat _ -> return vUnsat
     SV.SatMulti _ pairs -> do
-      let fvs = map snd pairs
-      ts <- io $ mapM (scFirstOrderValue sc) fvs
-      t <- io $ scTuple sc ts
-      let fot = firstOrderTypeOf (FOVTuple fvs)
-      let cty = cryptolTypeOfFirstOrderType fot
-      let tt = TypedTerm (C.tMono cty) t
+      let fov = FOVTuple (map snd pairs)
+      tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vSat (SV.toValue tt)
 
 envCmd :: TopLevel ()
