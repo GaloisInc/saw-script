@@ -96,6 +96,8 @@ jobs:
           - tls
           - hmac-failure
     steps:
+      - uses: actions/checkout@v2
+
       - name: Download previously-built SAW 
         uses: actions/download-artifact@v2
         with:
