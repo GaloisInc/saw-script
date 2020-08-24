@@ -97,11 +97,14 @@ jobs:
           - hmac-failure
     steps:
       - uses: actions/checkout@v2
+      - run: |
+          mkdir -p s2nTests/bin
 
       - name: Download previously-built SAW 
         uses: actions/download-artifact@v2
         with:
           name: "saw-Linux-8.6.5"
+          path: ./s2nTests/bin
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
