@@ -72,12 +72,12 @@ jobs:
           .github/ci.sh test_dist
 
       - shell: bash
-        if: "steps.test.outcome == 'failure'"
-        name: Warn if tests failed
-        run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
-
-      - shell: bash
         name: BIKE
         working-directory: s2nTests
         run: |
-          docker-compose up bike
+          docker-compose run bike
+
+      - shell: bash
+        if: "steps.test.outcome == 'failure'"
+        name: Warn if tests failed
+        run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
