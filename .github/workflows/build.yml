@@ -105,8 +105,10 @@ jobs:
         with:
           name: "saw-Linux-8.6.5"
           path: ./s2nTests/bin
+
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
+          chmod +x bin/saw
           docker-compose run ${{ matrix.s2n-target }}
