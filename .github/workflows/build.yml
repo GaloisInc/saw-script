@@ -73,42 +73,42 @@ jobs:
 
       - shell: bash
         if: "matrix.os == 'ubuntu-latest'"
-        name: S2N Tests: HMAC
+        name: "S2N Tests: HMAC"
         working-directory: s2nTests
         run: |
           docker-compose run hmac
 
       - shell: bash
         if: "matrix.os == 'ubuntu-latest'"
-        name: S2N Tests: DRBG
+        name: "S2N Tests: DRBG"
         working-directory: s2nTests
         run: |
           docker-compose run drbg
 
       - shell: bash
         if: "matrix.os == 'ubuntu-latest'"
-        name: S2N Tests: SIKE
+        name: "S2N Tests: SIKE"
         working-directory: s2nTests
         run: |
           docker-compose run sike
 
       - shell: bash
         if: "matrix.os == 'ubuntu-latest'"
-        name: S2N Tests: BIKE
+        name: "S2N Tests: BIKE"
         working-directory: s2nTests
         run: |
           docker-compose run bike
 
       - shell: bash
         if: "matrix.os == 'ubuntu-latest'"
-        name: S2N Tests: TLS
+        name: "S2N Tests: TLS"
         working-directory: s2nTests
         run: |
           docker-compose run tls
 
       - shell: bash
         if: "matrix.os == 'ubuntu-latest'"
-        name: S2N Tests: HMAC Failure
+        name: "S2N Tests: HMAC Failure"
         working-directory: s2nTests
         run: |
           docker-compose run hmac-failure
