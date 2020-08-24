@@ -7,8 +7,6 @@ services:
       - ./bin:/saw-bin:rw
 
   hmac:
-    depends_on:
-      - saw-script
     build:
       context: .
       args:
@@ -18,8 +16,6 @@ services:
       - ./bin:/saw-bin:rw
 
   drbg:
-    depends_on:
-      - saw-script
     build:
       context: .
       args:
@@ -29,8 +25,6 @@ services:
       - ./bin:/saw-bin:rw
 
   sike:
-    depends_on:
-      - saw-script
     build:
       context: .
       args:
@@ -40,8 +34,6 @@ services:
       - ./bin:/saw-bin:rw
 
   bike:
-    depends_on:
-      - saw-script
     build:
       context: .
       args:
@@ -52,8 +44,6 @@ services:
       - ./bin:/saw-bin:rw
 
   tls:
-    depends_on:
-      - saw-script
     build:
       context: .
       args:
@@ -63,8 +53,6 @@ services:
       - ./bin:/saw-bin:rw
 
   hmac-failure:
-    depends_on:
-      - saw-script
     build:
       context: .
       args:
