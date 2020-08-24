@@ -76,7 +76,7 @@ jobs:
         name: Warn if tests failed
         run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
 
-      - uses: bash
+      - shell: bash
         name: BIKE
         working-directory: s2nTests
         run: |
