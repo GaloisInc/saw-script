@@ -74,7 +74,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: saw
+          name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: s2nTests/bin/saw
 
       - shell: bash
@@ -105,7 +105,7 @@ jobs:
       - name: Download previously-built SAW 
         uses: actions/download-artifact@v2
         with:
-          name: saw
+          name: "saw-ubuntu-latest-8.6.5"
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-name }}"
         working-directory: s2nTests
