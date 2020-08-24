@@ -70,50 +70,44 @@ jobs:
           mkdir -p ~/.stack
           echo "system-ghc: true" >> ~/.stack/config.yaml
           .github/ci.sh test_dist
-
-      - shell: bash
-        if: "matrix.os == 'ubuntu-latest'"
-        name: "S2N Tests: HMAC"
-        working-directory: s2nTests
-        run: |
-          docker-compose run hmac
-
-      - shell: bash
-        if: "matrix.os == 'ubuntu-latest'"
-        name: "S2N Tests: DRBG"
-        working-directory: s2nTests
-        run: |
-          docker-compose run drbg
-
-      - shell: bash
-        if: "matrix.os == 'ubuntu-latest'"
-        name: "S2N Tests: SIKE"
-        working-directory: s2nTests
-        run: |
-          docker-compose run sike
-
-      - shell: bash
-        if: "matrix.os == 'ubuntu-latest'"
-        name: "S2N Tests: BIKE"
-        working-directory: s2nTests
-        run: |
-          docker-compose run bike
-
-      - shell: bash
-        if: "matrix.os == 'ubuntu-latest'"
-        name: "S2N Tests: TLS"
-        working-directory: s2nTests
-        run: |
-          docker-compose run tls
-
-      - shell: bash
-        if: "matrix.os == 'ubuntu-latest'"
-        name: "S2N Tests: HMAC Failure"
-        working-directory: s2nTests
-        run: |
-          docker-compose run hmac-failure
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: saw
+          path: s2nTests/bin/saw
 
       - shell: bash
         if: "steps.test.outcome == 'failure'"
         name: Warn if tests failed
         run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
+  s2n-tests:
+    name: "Test s2n proofs"
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - s2n-name: "HMAC"
+            s2n-target: hmac
+          - s2n-name: "DRBG"
+            s2n-target: drbg
+          - s2n-name: "SIKE"
+            s2n-target: sike
+          - s2n-name: "BIKE"
+            s2n-target: bike
+          - s2n-name: "TLS"
+            s2n-target: tls
+          - s2n-name: "HMAC Failure"
+            s2n-target: hmac-failure
+    steps:
+      - name: Download previously-built SAW 
+        uses: actions/download-artifact@v2
+        with:
+          name: saw
+      - shell: bash
+        name: "s2n tests: ${{ matrix.s2n-name }}"
+        working-directory: s2nTests
+        run: |
+          docker-compose run ${{ matrix.s2n-target }}
