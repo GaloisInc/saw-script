@@ -88,28 +88,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        s2n-name: ["HMAC"]
         s2n-target: [hmac]
         include:
-          - s2n-name: "HMAC"
-            s2n-target: hmac
-          - s2n-name: "DRBG"
-            s2n-target: drbg
-          - s2n-name: "SIKE"
-            s2n-target: sike
-          - s2n-name: "BIKE"
-            s2n-target: bike
-          - s2n-name: "TLS"
-            s2n-target: tls
-          - s2n-name: "HMAC Failure"
-            s2n-target: hmac-failure
+          - s2n-target: hmac
+          - s2n-target: drbg
+          - s2n-target: sike
+          - s2n-target: bike
+          - s2n-target: tls
+          - s2n-target: hmac-failure
     steps:
       - name: Download previously-built SAW 
         uses: actions/download-artifact@v2
         with:
           name: "saw-Linux-8.6.5"
       - shell: bash
-        name: "s2n tests: ${{ matrix.s2n-name }}"
+        name: "s2n tests: ${{ matrix.s2n-target }}"
         working-directory: s2nTests
         run: |
           docker-compose run ${{ matrix.s2n-target }}
