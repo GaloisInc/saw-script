@@ -75,3 +75,9 @@ jobs:
         if: "steps.test.outcome == 'failure'"
         name: Warn if tests failed
         run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
+
+      - uses: bash
+        name: BIKE
+        working-directory: s2nTests
+        run: |
+          docker-compose up bike
