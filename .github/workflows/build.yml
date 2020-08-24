@@ -107,7 +107,7 @@ jobs:
       - name: Download previously-built SAW 
         uses: actions/download-artifact@v2
         with:
-          name: "saw-ubuntu-latest-8.6.5"
+          name: "saw-Linux-8.6.5"
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-name }}"
         working-directory: s2nTests
