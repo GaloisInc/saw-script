@@ -70,7 +70,6 @@ jobs:
           mkdir -p ~/.stack
           echo "system-ghc: true" >> ~/.stack/config.yaml
           .github/ci.sh test_dist
-          cp dist/bin/saw s2nTests/bin/saw
 
       - shell: bash
         if: "steps.test.outcome == 'failure'"

@@ -45,6 +45,9 @@ setup_dist_bins() {
   echo "::add-path::$PWD/dist/bin"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
   strip dist/bin/jss* || echo "Strip failed: Ignoring harmless error"
+
+  mkdir -p s2nTests/bin
+  cp dist/bin/saw s2nTests/bin/saw
 }
 
 install_z3() {
