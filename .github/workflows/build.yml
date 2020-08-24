@@ -65,17 +65,53 @@ jobs:
       - shell: bash
         id: test
         continue-on-error: ${{ matrix.continue-on-error }}
-        name: Test
+        name: Integration Tests
         run: |
           mkdir -p ~/.stack
           echo "system-ghc: true" >> ~/.stack/config.yaml
           .github/ci.sh test_dist
 
       - shell: bash
-        name: BIKE
+        if: "matrix.os == 'ubuntu-latest'"
+        name: S2N Tests: HMAC
+        working-directory: s2nTests
+        run: |
+          docker-compose run hmac
+
+      - shell: bash
+        if: "matrix.os == 'ubuntu-latest'"
+        name: S2N Tests: DRBG
+        working-directory: s2nTests
+        run: |
+          docker-compose run drbg
+
+      - shell: bash
+        if: "matrix.os == 'ubuntu-latest'"
+        name: S2N Tests: SIKE
+        working-directory: s2nTests
+        run: |
+          docker-compose run sike
+
+      - shell: bash
+        if: "matrix.os == 'ubuntu-latest'"
+        name: S2N Tests: BIKE
         working-directory: s2nTests
         run: |
           docker-compose run bike
+
+      - shell: bash
+        if: "matrix.os == 'ubuntu-latest'"
+        name: S2N Tests: TLS
+        working-directory: s2nTests
+        run: |
+          docker-compose run tls
+
+      - shell: bash
+        if: "matrix.os == 'ubuntu-latest'"
+        name: S2N Tests: HMAC Failure
+        working-directory: s2nTests
+        run: |
+          docker-compose run hmac-failure
 
       - shell: bash
         if: "steps.test.outcome == 'failure'"
