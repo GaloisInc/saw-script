@@ -88,14 +88,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        s2n-target: [hmac]
-        include:
-          - s2n-target: hmac
-          - s2n-target: drbg
-          - s2n-target: sike
-          - s2n-target: bike
-          - s2n-target: tls
-          - s2n-target: hmac-failure
+        s2n-target:
+          - hmac
+          - drbg
+          - sike
+          - bike
+          - tls
+          - hmac-failure
     steps:
       - name: Download previously-built SAW 
         uses: actions/download-artifact@v2
