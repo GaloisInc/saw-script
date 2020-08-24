@@ -1,0 +1,74 @@
+version: '3'
+services:
+  saw-script:
+    build: ..
+    entrypoint: ["cp", "/usr/local/bin/saw", "/saw-bin"]
+    volumes:
+      - ./bin:/saw-bin:rw
+
+  hmac:
+    depends_on:
+      - saw-script
+    build:
+      context: .
+      args:
+        ARG_TEST: sawHMAC
+      dockerfile: docker/s2n.dockerfile
+    volumes:
+      - ./bin:/saw-bin:rw
+
+  drbg:
+    depends_on:
+      - saw-script
+    build:
+      context: .
+      args:
+        ARG_TEST: sawDRBG
+      dockerfile: docker/s2n.dockerfile
+    volumes:
+      - ./bin:/saw-bin:rw
+
+  sike:
+    depends_on:
+      - saw-script
+    build:
+      context: .
+      args:
+        ARG_TEST: sawSIKE
+      dockerfile: docker/s2n.dockerfile
+    volumes:
+      - ./bin:/saw-bin:rw
+
+  bike:
+    depends_on:
+      - saw-script
+    build:
+      context: .
+      args:
+        ARG_TEST: sawBIKE
+        ARG_LIBCRYPTO: openssl-1.0.2
+      dockerfile: docker/s2n.dockerfile
+    volumes:
+      - ./bin:/saw-bin:rw
+
+  tls:
+    depends_on:
+      - saw-script
+    build:
+      context: .
+      args:
+        ARG_TEST: tls
+      dockerfile: docker/s2n.dockerfile
+    volumes:
+      - ./bin:/saw-bin:rw
+
+  hmac-failure:
+    depends_on:
+      - saw-script
+    build:
+      context: .
+      args:
+        ARG_TEST: sawHMACFailure
+      dockerfile: docker/s2n.dockerfile
+    volumes:
+      - ./bin:/saw-bin:rw
