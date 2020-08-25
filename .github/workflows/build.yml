@@ -106,10 +106,10 @@ jobs:
           docker-compose run ${{ matrix.s2n-target }}
 
   build-macos:
+    runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest]
         ghc: ["8.6.5", "8.8.3"]
     name: SAWScript - GHC v${{ matrix.ghc }} - MacOS
     steps:
