@@ -821,9 +821,7 @@ jvm_fresh_var bic _opts name jty =
   do let sc = biSharedContext bic
      case cryptolTypeOfActual jty of
        Nothing -> fail $ "Unsupported type in jvm_fresh_var: " ++ show jty
-       Just cty ->
-         do tec <- Setup.freshVariable sc name cty
-            liftIO $ typedTermOfExtCns sc tec
+       Just cty -> Setup.freshVariable sc name cty
 
 jvm_alloc_object ::
   BuiltinContext ->

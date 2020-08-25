@@ -1561,9 +1561,7 @@ crucible_fresh_var bic _opts name lty =
      let dl = Crucible.llvmDataLayout (ccTypeCtx cctx)
      case cryptolTypeOfActual dl lty' of
        Nothing -> throwCrucibleSetup loc $ "Unsupported type in crucible_fresh_var: " ++ show (L.ppType lty)
-       Just cty ->
-         do tec <- Setup.freshVariable sc name cty
-            liftIO $ typedTermOfExtCns sc tec
+       Just cty -> Setup.freshVariable sc name cty
 
 crucible_fresh_cryptol_var ::
   BuiltinContext ->
@@ -1577,8 +1575,7 @@ crucible_fresh_cryptol_var bic _opts name s =
      case s of
        Cryptol.Forall [] [] ty ->
          do let sc = biSharedContext bic
-            tec <- Setup.freshVariable sc name ty
-            liftIO $ typedTermOfExtCns sc tec
+            Setup.freshVariable sc name ty
        _ ->
          throwCrucibleSetup loc $ "Unsupported polymorphic Cryptol type schema: " ++ show s
 
@@ -1616,8 +1613,7 @@ constructExpandedSetupValue cc sc loc t =
   case t of
     Crucible.IntType w ->
       do let cty = Cryptol.tWord (Cryptol.tNum w)
-         tec <- Setup.freshVariable sc "" cty
-         fv <- liftIO $ typedTermOfExtCns sc tec
+         fv <- Setup.freshVariable sc "" cty
          pure $ mkAllLLVM (SetupTerm fv)
 
     Crucible.StructType si -> do

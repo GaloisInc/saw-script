@@ -28,6 +28,7 @@ module SAWScript.Crucible.Common.Setup.Type
   , addPointsTo
   , addAllocGlobal
   , addCondition
+  , freshTypedExtCns
   , freshVariable
   ) where
 
@@ -37,7 +38,7 @@ import           Control.Monad.IO.Class (MonadIO(liftIO))
 
 import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
 import qualified Verifier.SAW.Cryptol as Cryptol (importType, emptyEnv)
-import           Verifier.SAW.TypedTerm (TypedExtCns(..))
+import           Verifier.SAW.TypedTerm (TypedTerm, TypedExtCns(..), typedTermOfExtCns)
 import           Verifier.SAW.SharedTerm (SharedContext, scFreshGlobalVar, ExtCns(..))
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -95,17 +96,29 @@ addAllocGlobal ag = csMethodSpec . MS.csGlobalAllocs %= (ag : )
 addCondition :: Monad m => MS.SetupCondition ext -> CrucibleSetupT ext m ()
 addCondition cond = currentState . MS.csConditions %= (cond : )
 
--- | Allocated a fresh variable and record this allocation in the
--- setup state.
-freshVariable ::
+-- | Allocate a fresh variable in the form of a 'TypedExtCns' and
+-- record this allocation in the setup state.
+freshTypedExtCns ::
   MonadIO m =>
   SharedContext {- ^ shared context -} ->
   String        {- ^ variable name  -} ->
   Cryptol.Type  {- ^ variable type  -} ->
   CrucibleSetupT arch m TypedExtCns
-freshVariable sc name cty =
+freshTypedExtCns sc name cty =
   do ty <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv cty
      i <- liftIO $ scFreshGlobalVar sc
      let tt = TypedExtCns cty (EC i name ty)
      currentState . MS.csFreshVars %= cons tt
      return tt
+
+-- | Allocate a fresh variable in the form of a 'TypedTerm' and record
+-- this allocation in the setup state.
+freshVariable ::
+  MonadIO m =>
+  SharedContext {- ^ shared context -} ->
+  String        {- ^ variable name  -} ->
+  Cryptol.Type  {- ^ variable type  -} ->
+  CrucibleSetupT arch m TypedTerm
+freshVariable sc name cty =
+  do tec <- freshTypedExtCns sc name cty
+     liftIO $ typedTermOfExtCns sc tec
