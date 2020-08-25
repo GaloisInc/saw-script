@@ -11,14 +11,9 @@ RUN apt-get update -y -q && \
     git \
     llvm-3.9 \
     make \
-    openjdk-8-jdk \
     sudo \
     unzip \
     wget \
-    yasm \
-    yices2 \
-    zlib1g \
-    zlib1g-dev \
     && \
     wget -t 3 https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-ubuntu-16.04.zip && \
     unzip z3-4.8.7-x64-ubuntu-16.04.zip && \
