@@ -665,11 +665,6 @@ executeCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.Arch
 executeCond opts sc cc cs ss = do
   refreshTerms sc ss
 
-  ptrs <- liftIO $ Map.traverseWithKey
-            (\k _memty -> executeFreshPointer cc k)
-            (ss ^. MS.csFreshPointers)
-  OM (setupValueSub %= Map.union ptrs)
-
   traverse_ (executeAllocation opts sc cc) (Map.assocs (ss ^. MS.csAllocs))
   overwritten_allocs <- invalidateMutableAllocs opts sc cc cs
   traverse_
@@ -726,7 +721,8 @@ enforcePointerValidity sc cc loc ss =
             addAssert c $ Crucible.SimError loc $
               Crucible.AssertFailureSimError msg ""
 
-       | (LLVMAllocSpec mut _pty alignment psz _ploc, ptr) <- mems
+       | (LLVMAllocSpec mut _pty alignment psz _ploc fresh, ptr) <- mems
+       , not fresh -- Fresh symbolic pointers are not assumed to be valid; don't check them
        ]
 
 ------------------------------------------------------------------------
@@ -746,7 +742,8 @@ enforceDisjointness sc cc loc globals ss =
   do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub)
      mem <- readGlobal $ Crucible.llvmMemVar $ ccLLVMContext cc
-     let (allocsRW, allocsRO) = Map.partition (view isMut) (view MS.csAllocs ss)
+     let allocs = Map.filter (not . view allocSpecFresh) (view MS.csAllocs ss)
+     let (allocsRW, allocsRO) = Map.partition (view isMut) allocs
          memsRW = Map.elems $ Map.intersectionWith (,) allocsRW sub
          memsRO = Map.elems $ Map.intersectionWith (,) allocsRO sub
 
@@ -780,8 +777,8 @@ enforceDisjointAllocSpec ::
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointAllocSpec sc cc sym loc
-  (LLVMAllocSpec _pmut _pty _palign psz ploc, p)
-  (LLVMAllocSpec _qmut _qty _qalign qsz qloc, q) =
+  (LLVMAllocSpec _pmut _pty _palign psz ploc _pfresh, p)
+  (LLVMAllocSpec _qmut _qty _qalign qsz qloc _qfresh, q) =
   do liftIO $ W4.setCurrentProgramLoc sym ploc
      psz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth psz
      liftIO $ W4.setCurrentProgramLoc sym qloc
@@ -806,7 +803,7 @@ enforceDisjointAllocGlobal ::
   (LLVMAllocGlobal arch, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointAllocGlobal sym loc
-  (LLVMAllocSpec _pmut _pty _palign psz _ploc, p)
+  (LLVMAllocSpec _pmut _pty _palign psz _ploc _pfresh, p)
   (LLVMAllocGlobal _qloc (L.Symbol qname), q) =
   do let Crucible.LLVMPointer pblk _ = p
      let Crucible.LLVMPointer qblk _ = q
@@ -1438,7 +1435,10 @@ invalidateMutableAllocs opts sc cc cs = do
   mem <- readGlobal . Crucible.llvmMemVar $ ccLLVMContext cc
   sub <- use setupValueSub
 
-  let mutableAllocs = Map.filter (view isMut) $ cs ^. MS.csPreState . MS.csAllocs
+  let mutableAllocs =
+        Map.filter (view isMut) $
+        Map.filter (not . view allocSpecFresh) $
+        cs ^. MS.csPreState . MS.csAllocs
       allocPtrs = catMaybes $ map
         (\case
           (ptr, spec)
@@ -1510,8 +1510,8 @@ invalidateMutableAllocs opts sc cc cs = do
 
 ------------------------------------------------------------------------
 
--- | Perform an allocation as indicated by a 'crucible_alloc'
--- statement from the postcondition section.
+-- | Perform an allocation as indicated by a 'crucible_alloc' or
+-- 'crucible_fresh_pointer' statement from the postcondition section.
 executeAllocation ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->
@@ -1519,7 +1519,11 @@ executeAllocation ::
   LLVMCrucibleContext arch          ->
   (AllocIndex, LLVMAllocSpec) ->
   OverrideMatcher (LLVM arch) RW ()
-executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc) =
+executeAllocation opts sc cc (var, LLVMAllocSpec mut memTy alignment sz loc fresh)
+  | fresh =
+  do ptr <- liftIO $ executeFreshPointer cc var
+     OM (setupValueSub %= Map.insert var ptr)
+  | otherwise =
   do let sym = cc^.ccBackend
      {-
      memTy <- case Crucible.asMemType symTy of
