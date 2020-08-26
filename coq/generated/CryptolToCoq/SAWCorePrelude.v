@@ -43,6 +43,8 @@ Definition uncurry : forall (a : Type), forall (b : Type), forall (c : Type), fo
 
 (* Prelude.error was skipped *)
 
+(* Prelude.appendString was skipped *)
+
 (* Prelude.EmptyType was skipped *)
 
 (* Prelude.EmptyType__rec was skipped *)
@@ -60,6 +62,9 @@ Definition uncurry : forall (a : Type), forall (b : Type), forall (c : Type), fo
 Definition eq_cong : forall (t : Type), forall (x : t), forall (y : t), (((@SAWCoreScaffolding.Eq) (t) (x) (y))) -> forall (u : Type), forall (f : (t) -> u), ((@SAWCoreScaffolding.Eq) (u) (((f) (x))) (((f) (y)))) :=
   (fun (t : Type) (x : t) (y : t) (eq : ((@SAWCoreScaffolding.Eq) (t) (x) (y))) (u : Type) (f : (t) -> u) => ((@SAWCoreScaffolding.Eq__rec) (t) (x) ((fun (y' : t) (eq' : ((@SAWCoreScaffolding.Eq) (t) (x) (y'))) => ((@SAWCoreScaffolding.Eq) (u) (((f) (x))) (((f) (y')))))) (((@SAWCoreScaffolding.Refl) (u) (((f) (x))))) (y) (eq))).
 
+Definition eq_eqP : forall (t : Type), forall (x : t), forall (y : t), (((@SAWCoreScaffolding.Eq) (t) (x) (y))) -> ((@SAWCoreScaffolding.EqP) (t) (x) (y)) :=
+  (fun (t : Type) (x : t) => ((@SAWCoreScaffolding.Eq__rec) (t) (x) ((fun (y : t) (_ : ((@SAWCoreScaffolding.Eq) (t) (x) (y))) => ((@SAWCoreScaffolding.EqP) (t) (x) (y)))) (((@SAWCoreScaffolding.ReflP) (t) (x))))).
+
 (* Prelude.EqP__rec was skipped *)
 
 Definition eqP_cong : forall (t : Type), forall (x : t), forall (y : t), (((@SAWCoreScaffolding.EqP) (t) (x) (y))) -> forall (u : Type), forall (f : (t) -> u), ((@SAWCoreScaffolding.EqP) (u) (((f) (x))) (((f) (y)))) :=
@@ -67,6 +72,9 @@ Definition eqP_cong : forall (t : Type), forall (x : t), forall (y : t), (((@SAW
 
 Definition sym : forall (a : Type), forall (x : a), forall (y : a), (((@SAWCoreScaffolding.Eq) (a) (x) (y))) -> ((@SAWCoreScaffolding.Eq) (a) (y) (x)) :=
   (fun (a : Type) (x : a) (y : a) (eq : ((@SAWCoreScaffolding.Eq) (a) (x) (y))) => ((@SAWCoreScaffolding.Eq__rec) (a) (x) ((fun (y' : a) (eq' : ((@SAWCoreScaffolding.Eq) (a) (x) (y'))) => ((@SAWCoreScaffolding.Eq) (a) (y') (x)))) (((@SAWCoreScaffolding.Refl) (a) (x))) (y) (eq))).
+
+Definition symP : forall (a : Type), forall (x : a), forall (y : a), (((@SAWCoreScaffolding.EqP) (a) (x) (y))) -> ((@SAWCoreScaffolding.EqP) (a) (y) (x)) :=
+  (fun (a : Type) (x : a) (y : a) (eq : ((@SAWCoreScaffolding.EqP) (a) (x) (y))) => ((@SAWCoreScaffolding.EqP__rec) (a) (x) ((fun (y' : a) (eq' : ((@SAWCoreScaffolding.EqP) (a) (x) (y'))) => ((@SAWCoreScaffolding.EqP) (a) (y') (x)))) (((@SAWCoreScaffolding.ReflP) (a) (x))) (y) (eq))).
 
 Definition trans : forall (a : Type), forall (x : a), forall (y : a), forall (z : a), (((@SAWCoreScaffolding.Eq) (a) (x) (y))) -> (((@SAWCoreScaffolding.Eq) (a) (y) (z))) -> ((@SAWCoreScaffolding.Eq) (a) (x) (z)) :=
   (fun (a : Type) (x : a) (y : a) (z : a) (eq1 : ((@SAWCoreScaffolding.Eq) (a) (x) (y))) (eq2 : ((@SAWCoreScaffolding.Eq) (a) (y) (z))) => ((@SAWCoreScaffolding.Eq__rec) (a) (y) ((fun (y' : a) (eq' : ((@SAWCoreScaffolding.Eq) (a) (y) (y'))) => ((@SAWCoreScaffolding.Eq) (a) (x) (y')))) (eq1) (z) (eq2))).
@@ -135,6 +143,12 @@ Definition ite_true : forall (a : Type), forall (x : a), forall (y : a), ((@SAWC
 
 Definition ite_false : forall (a : Type), forall (x : a), forall (y : a), ((@SAWCoreScaffolding.Eq) (a) (if ((@SAWCoreScaffolding.false)) then x else y) (y)) :=
   (fun (a : Type) (x : a) (y : a) => ((@trans) (a) (if ((@SAWCoreScaffolding.false)) then x else y) (((@SAWCoreScaffolding.iteDep) ((fun (b : ((@SAWCoreScaffolding.Bool))) => a)) (((@SAWCoreScaffolding.false))) (x) (y))) (y) (((@SAWCoreScaffolding.ite_eq_iteDep) (a) (((@SAWCoreScaffolding.false))) (x) (y))) (((@SAWCoreScaffolding.iteDep_False) ((fun (_ : ((@SAWCoreScaffolding.Bool))) => a)) (x) (y))))).
+
+Definition ite_trueP : forall (a : Type), forall (x : a), forall (y : a), ((@SAWCoreScaffolding.EqP) (a) (if ((@SAWCoreScaffolding.true)) then x else y) (x)) :=
+  (fun (a : Type) (x : a) (y : a) => ((@eq_eqP) (a) (if ((@SAWCoreScaffolding.true)) then x else y) (x) (((@ite_true) (a) (x) (y))))).
+
+Definition ite_falseP : forall (a : Type), forall (x : a), forall (y : a), ((@SAWCoreScaffolding.EqP) (a) (if ((@SAWCoreScaffolding.false)) then x else y) (y)) :=
+  (fun (a : Type) (x : a) (y : a) => ((@eq_eqP) (a) (if ((@SAWCoreScaffolding.false)) then x else y) (y) (((@ite_false) (a) (x) (y))))).
 
 Definition bool2bit : (((@SAWCoreScaffolding.Bool))) -> ((@Bit)) :=
   (fun (b : ((@SAWCoreScaffolding.Bool))) => ((@SAWCoreScaffolding.iteDep) ((fun (_ : ((@SAWCoreScaffolding.Bool))) => ((@Bit)))) (b) (((@Bit1))) (((@Bit0))))).
@@ -315,7 +329,7 @@ Definition andI : forall (x : ((@SAWCoreScaffolding.Bool))), forall (y : ((@SAWC
   (fun (x : ((@SAWCoreScaffolding.Bool))) (y : ((@SAWCoreScaffolding.Bool))) (p : ((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (x) (((@SAWCoreScaffolding.true))))) (q : ((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (y) (((@SAWCoreScaffolding.true))))) => ((@trans4) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.and) (x) (y))) (((@SAWCoreScaffolding.and) (x) (((@SAWCoreScaffolding.true))))) (x) (((@SAWCoreScaffolding.true))) (((@eq_cong) (((@SAWCoreScaffolding.Bool))) (y) (((@SAWCoreScaffolding.true))) (q) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.and) (x))))) (((@and_True2) (x))) (p))).
 
 Definition impliesI : forall (x : ((@SAWCoreScaffolding.Bool))), forall (y : ((@SAWCoreScaffolding.Bool))), ((((@EqTrue) (x))) -> ((@EqTrue) (y))) -> ((@EqTrue) (((@implies) (x) (y)))) :=
-  (fun (x : ((@SAWCoreScaffolding.Bool))) (y : ((@SAWCoreScaffolding.Bool))) => ((@SAWCoreScaffolding.iteDep) ((fun (x : ((@SAWCoreScaffolding.Bool))) => ((((@EqTrue) (x))) -> ((@EqTrue) (y))) -> ((@EqTrue) (((@implies) (x) (y)))))) (x) ((fun (H : (((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.true))) (((@SAWCoreScaffolding.true))))) -> ((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (y) (((@SAWCoreScaffolding.true))))) => ((@trans) (((@SAWCoreScaffolding.Bool))) (((@implies) (((@SAWCoreScaffolding.true))) (y))) (y) (((@SAWCoreScaffolding.true))) (((@implies_True1) (y))) (((H) (((@TrueI)))))))) ((fun (_ : (((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.false))) (((@SAWCoreScaffolding.true))))) -> ((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (y) (((@SAWCoreScaffolding.true))))) => ((@implies_False1) (y)))))).
+  (fun (x : ((@SAWCoreScaffolding.Bool))) (y : ((@SAWCoreScaffolding.Bool))) => ((@SAWCoreScaffolding.iteDep) ((fun (x_0 : ((@SAWCoreScaffolding.Bool))) => ((((@EqTrue) (x_0))) -> ((@EqTrue) (y))) -> ((@EqTrue) (((@implies) (x_0) (y)))))) (x) ((fun (H : (((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.true))) (((@SAWCoreScaffolding.true))))) -> ((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (y) (((@SAWCoreScaffolding.true))))) => ((@trans) (((@SAWCoreScaffolding.Bool))) (((@implies) (((@SAWCoreScaffolding.true))) (y))) (y) (((@SAWCoreScaffolding.true))) (((@implies_True1) (y))) (((H) (((@TrueI)))))))) ((fun (_ : (((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.false))) (((@SAWCoreScaffolding.true))))) -> ((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Bool))) (y) (((@SAWCoreScaffolding.true))))) => ((@implies_False1) (y)))))).
 
 (* Prelude.eq was skipped *)
 
@@ -361,10 +375,10 @@ Definition Nat__rec : forall (p : (((@SAWCoreScaffolding.Nat))) -> Type), (((p) 
   (fun (p : (((@SAWCoreScaffolding.Nat))) -> Type) (f1 : ((p) (0))) (f2 : forall (n : ((@SAWCoreScaffolding.Nat))), (((p) (n))) -> ((p) (((@SAWCoreScaffolding.Succ) (n))))) (n : ((@SAWCoreScaffolding.Nat))) => ((SAWCoreScaffolding.Nat_rect) (p) (f1) (f2) (n))).
 
 Definition Nat_cases : forall (a : Type), (a) -> ((((@SAWCoreScaffolding.Nat))) -> (a) -> a) -> (((@SAWCoreScaffolding.Nat))) -> a :=
-  (fun (a : Type) (f1 : a) (f2 : (((@SAWCoreScaffolding.Nat))) -> (a) -> a) (n : ((@SAWCoreScaffolding.Nat))) => ((@Nat__rec) ((fun (n : ((@SAWCoreScaffolding.Nat))) => a)) (f1) (f2) (n))).
+  (fun (a : Type) (f1 : a) (f2 : (((@SAWCoreScaffolding.Nat))) -> (a) -> a) (n : ((@SAWCoreScaffolding.Nat))) => ((@Nat__rec) ((fun (n_0 : ((@SAWCoreScaffolding.Nat))) => a)) (f1) (f2) (n))).
 
 Definition Nat_cases2 : forall (a : Type), ((((@SAWCoreScaffolding.Nat))) -> a) -> ((((@SAWCoreScaffolding.Nat))) -> a) -> ((((@SAWCoreScaffolding.Nat))) -> (((@SAWCoreScaffolding.Nat))) -> (a) -> a) -> (((@SAWCoreScaffolding.Nat))) -> (((@SAWCoreScaffolding.Nat))) -> a :=
-  (fun (a : Type) (f1 : (((@SAWCoreScaffolding.Nat))) -> a) (f2 : (((@SAWCoreScaffolding.Nat))) -> a) (f3 : (((@SAWCoreScaffolding.Nat))) -> (((@SAWCoreScaffolding.Nat))) -> (a) -> a) (n : ((@SAWCoreScaffolding.Nat))) (m : ((@SAWCoreScaffolding.Nat))) => ((@Nat__rec) ((fun (n : ((@SAWCoreScaffolding.Nat))) => (((@SAWCoreScaffolding.Nat))) -> a)) (f1) ((fun (n : ((@SAWCoreScaffolding.Nat))) (f_rec : (((@SAWCoreScaffolding.Nat))) -> a) (m : ((@SAWCoreScaffolding.Nat))) => ((@Nat__rec) ((fun (m' : ((@SAWCoreScaffolding.Nat))) => a)) (((f2) (n))) ((fun (m' : ((@SAWCoreScaffolding.Nat))) (frec' : a) => ((f3) (n) (m') (((f_rec) (m')))))) (m)))) (n) (m))).
+  (fun (a : Type) (f1 : (((@SAWCoreScaffolding.Nat))) -> a) (f2 : (((@SAWCoreScaffolding.Nat))) -> a) (f3 : (((@SAWCoreScaffolding.Nat))) -> (((@SAWCoreScaffolding.Nat))) -> (a) -> a) (n : ((@SAWCoreScaffolding.Nat))) (m : ((@SAWCoreScaffolding.Nat))) => ((@Nat__rec) ((fun (n_0 : ((@SAWCoreScaffolding.Nat))) => (((@SAWCoreScaffolding.Nat))) -> a)) (f1) ((fun (n_0 : ((@SAWCoreScaffolding.Nat))) (f_rec : (((@SAWCoreScaffolding.Nat))) -> a) (m_0 : ((@SAWCoreScaffolding.Nat))) => ((@Nat__rec) ((fun (m' : ((@SAWCoreScaffolding.Nat))) => a)) (((f2) (n_0))) ((fun (m' : ((@SAWCoreScaffolding.Nat))) (frec' : a) => ((f3) (n_0) (m') (((f_rec) (m')))))) (m_0)))) (n) (m))).
 
 Definition eqNat : (((@SAWCoreScaffolding.Nat))) -> (((@SAWCoreScaffolding.Nat))) -> Type :=
   (fun (x : ((@SAWCoreScaffolding.Nat))) (y : ((@SAWCoreScaffolding.Nat))) => ((@SAWCoreScaffolding.Eq) (((@SAWCoreScaffolding.Nat))) (x) (y))).
@@ -414,7 +428,7 @@ Definition mulNat : (((@SAWCoreScaffolding.Nat))) -> (((@SAWCoreScaffolding.Nat)
   (fun (x : ((@SAWCoreScaffolding.Nat))) (y : ((@SAWCoreScaffolding.Nat))) => ((@Nat__rec) ((fun (x' : ((@SAWCoreScaffolding.Nat))) => ((@SAWCoreScaffolding.Nat)))) (0) ((fun (x' : ((@SAWCoreScaffolding.Nat))) (prod : ((@SAWCoreScaffolding.Nat))) => ((@addNat) (y) (prod)))) (x))).
 
 Definition equal0Nat : (((@SAWCoreScaffolding.Nat))) -> ((@SAWCoreScaffolding.Bool)) :=
-  (fun (n : ((@SAWCoreScaffolding.Nat))) => ((@Nat_cases) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.true))) ((fun (n : ((@SAWCoreScaffolding.Nat))) (b : ((@SAWCoreScaffolding.Bool))) => ((@SAWCoreScaffolding.false)))) (n))).
+  (fun (n : ((@SAWCoreScaffolding.Nat))) => ((@Nat_cases) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.true))) ((fun (n_0 : ((@SAWCoreScaffolding.Nat))) (b : ((@SAWCoreScaffolding.Bool))) => ((@SAWCoreScaffolding.false)))) (n))).
 
 Definition equalNat : (((@SAWCoreScaffolding.Nat))) -> (((@SAWCoreScaffolding.Nat))) -> ((@SAWCoreScaffolding.Bool)) :=
   (fun (x : ((@SAWCoreScaffolding.Nat))) (y : ((@SAWCoreScaffolding.Nat))) => ((@Nat_cases) ((((@SAWCoreScaffolding.Nat))) -> ((@SAWCoreScaffolding.Bool))) (((@equal0Nat))) ((fun (n' : ((@SAWCoreScaffolding.Nat))) (eqN : (((@SAWCoreScaffolding.Nat))) -> ((@SAWCoreScaffolding.Bool))) (m : ((@SAWCoreScaffolding.Nat))) => ((@Nat_cases) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.false))) ((fun (m' : ((@SAWCoreScaffolding.Nat))) (b : ((@SAWCoreScaffolding.Bool))) => ((eqN) (m')))) (m)))) (x) (y))).
@@ -451,6 +465,8 @@ Definition natCase : forall (p : (((@SAWCoreScaffolding.Nat))) -> Type), (((p) (
 
 Definition if0Nat : forall (a : Type), (((@SAWCoreScaffolding.Nat))) -> (a) -> (a) -> a :=
   (fun (a : Type) (n : ((@SAWCoreScaffolding.Nat))) (x : a) (y : a) => ((@natCase) ((fun (_ : ((@SAWCoreScaffolding.Nat))) => a)) (x) ((fun (_ : ((@SAWCoreScaffolding.Nat))) => y)) (n))).
+
+Axiom expByNat : forall (a : Type), (a) -> ((a) -> (a) -> a) -> (a) -> (((@SAWCoreScaffolding.Nat))) -> a .
 
 (* Prelude.equalString was skipped *)
 
@@ -743,14 +759,11 @@ Definition streamJoin : forall (a : Type), forall (n : ((@SAWCoreScaffolding.Nat
 Definition streamSplit : forall (a : Type), forall (n : ((@SAWCoreScaffolding.Nat))), (((@Stream) (a))) -> ((@Stream) (((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a)))) :=
   (fun (a : Type) (n : ((@SAWCoreScaffolding.Nat))) (xs : ((@Stream) (a))) => ((@MkStream) (((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) ((fun (i : ((@SAWCoreScaffolding.Nat))) => ((@SAWCoreVectorsAsCoqVectors.gen) (n) (a) ((fun (j : ((@SAWCoreScaffolding.Nat))) => ((@streamGet) (a) (xs) (((@addNat) (((@mulNat) (i) (n))) (j))))))))))).
 
-Definition bvStreamGet : forall (a : Type), forall (w : ((@SAWCoreScaffolding.Nat))), (((@Stream) (a))) -> (((@bitvector) (w))) -> a :=
-  (fun (a : Type) (w : ((@SAWCoreScaffolding.Nat))) (xs : ((@Stream) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (((@SAWCoreScaffolding.Bool))))) => ((@streamGet) (a) (xs) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))))).
+Definition streamShiftL : forall (a : Type), (((@Stream) (a))) -> (((@SAWCoreScaffolding.Nat))) -> ((@Stream) (a)) :=
+  (fun (a : Type) (xs : ((@Stream) (a))) (i : ((@SAWCoreScaffolding.Nat))) => ((@streamDrop) (a) (i) (xs))).
 
-Definition bvStreamShiftL : forall (a : Type), forall (w : ((@SAWCoreScaffolding.Nat))), (((@Stream) (a))) -> (((@bitvector) (w))) -> ((@Stream) (a)) :=
-  (fun (a : Type) (w : ((@SAWCoreScaffolding.Nat))) (xs : ((@Stream) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (((@SAWCoreScaffolding.Bool))))) => ((@streamDrop) (a) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))) (xs))).
-
-Definition bvStreamShiftR : forall (a : Type), forall (w : ((@SAWCoreScaffolding.Nat))), (a) -> (((@Stream) (a))) -> (((@bitvector) (w))) -> ((@Stream) (a)) :=
-  (fun (a : Type) (w : ((@SAWCoreScaffolding.Nat))) (x : a) (xs : ((@Stream) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (((@SAWCoreScaffolding.Bool))))) => ((@streamAppend) (a) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))) (((@replicate) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))) (a) (x))) (xs))).
+Definition streamShiftR : forall (a : Type), (a) -> (((@Stream) (a))) -> (((@SAWCoreScaffolding.Nat))) -> ((@Stream) (a)) :=
+  (fun (a : Type) (z : a) (xs : ((@Stream) (a))) (i : ((@SAWCoreScaffolding.Nat))) => ((@streamAppend) (a) (i) (((@replicate) (i) (a) (z))) (xs))).
 
 (* Prelude.Integer was skipped *)
 
@@ -844,6 +857,8 @@ Definition is_bvult : forall (n : ((@SAWCoreScaffolding.Nat))), forall (x : ((@b
 Definition is_bvule : forall (n : ((@SAWCoreScaffolding.Nat))), forall (x : ((@bitvector) (n))), forall (y : ((@bitvector) (n))), Prop :=
   (fun (n : ((@SAWCoreScaffolding.Nat))) (x : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (y : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) => ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@bvule) (n) (x) (y))) (((@SAWCoreScaffolding.true))))).
 
+Axiom not_bvult_zero : forall (n : ((@SAWCoreScaffolding.Nat))), forall (x : ((@bitvector) (n))), ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (x) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))))) (((@SAWCoreScaffolding.false)))) .
+
 Axiom trans_bvult_bvule : forall (n : ((@SAWCoreScaffolding.Nat))), forall (x : ((@bitvector) (n))), forall (y : ((@bitvector) (n))), forall (z : ((@bitvector) (n))), (((@is_bvult) (n) (x) (y))) -> (((@is_bvule) (n) (y) (z))) -> ((@is_bvult) (n) (x) (z)) .
 
 Axiom bvult_sub_add_bvult : forall (n : ((@SAWCoreScaffolding.Nat))), forall (x : ((@bitvector) (n))), forall (y : ((@bitvector) (n))), forall (z : ((@bitvector) (n))), (((@is_bvule) (n) (y) (z))) -> (((@is_bvult) (n) (x) (((@SAWCoreVectorsAsCoqVectors.bvSub) (n) (z) (y))))) -> ((@is_bvult) (n) (((@SAWCoreVectorsAsCoqVectors.bvAdd) (n) (y) (x))) (z)) .
@@ -852,12 +867,24 @@ Axiom BVVec : forall (n : ((@SAWCoreScaffolding.Nat))), (((@bitvector) (n))) -> 
 
 Axiom genBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((@bitvector) (n))), forall (a : Type), (forall (i : ((@bitvector) (n))), (((@is_bvult) (n) (i) (len))) -> a) -> ((@BVVec) (n) (len) (a)) .
 
+Definition efq : forall (a : Type), (((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.true))) (((@SAWCoreScaffolding.false))))) -> a :=
+  (fun (a : Type) (contra : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.true))) (((@SAWCoreScaffolding.false))))) => ((@coerceP) (unit) (a) (((@transP) (Type) (unit) (if ((@SAWCoreScaffolding.true)) then unit else a) (a) (((@symP) (Type) (if ((@SAWCoreScaffolding.true)) then unit else a) (unit) (((@ite_trueP) (Type) (unit) (a))))) (((@transP) (Type) (if ((@SAWCoreScaffolding.true)) then unit else a) (if ((@SAWCoreScaffolding.false)) then unit else a) (a) (((@eqP_cong) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.true))) (((@SAWCoreScaffolding.false))) (contra) (Type) ((fun (b : ((@SAWCoreScaffolding.Bool))) => if b then unit else a)))) (((@ite_falseP) (Type) (unit) (a))))))) (tt))).
+
+Definition emptyBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (a : Type), ((@BVVec) (n) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))) (a)) :=
+  (fun (n : ((@SAWCoreScaffolding.Nat))) (a : Type) => ((@genBVVec) (n) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))) (a) ((fun (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (pf : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))))) (((@SAWCoreScaffolding.true))))) => ((@efq) (a) (((@transP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.true))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))))) (((@SAWCoreScaffolding.false))) (((@symP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))))) (((@SAWCoreScaffolding.true))) (pf))) (((@not_bvult_zero) (n) (i)))))))))).
+
+Definition singletonBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (a : Type), (a) -> ((@BVVec) (n) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (1))) (a)) :=
+  (fun (n : ((@SAWCoreScaffolding.Nat))) (a : Type) (x : a) => ((@genBVVec) (n) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (1))) (a) ((fun (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (_ : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (1))))) (((@SAWCoreScaffolding.true))))) => x)))).
+
 Axiom atBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((@bitvector) (n))), forall (a : Type), (((@BVVec) (n) (len) (a))) -> forall (ix : ((@bitvector) (n))), (((@is_bvult) (n) (ix) (len))) -> a .
 
 Axiom at_gen_BVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((@bitvector) (n))), forall (a : Type), forall (f : forall (i : ((@bitvector) (n))), (((@is_bvult) (n) (i) (len))) -> a), forall (ix : ((@bitvector) (n))), forall (pf : ((@is_bvult) (n) (ix) (len))), ((@SAWCoreScaffolding.EqP) (a) (((@atBVVec) (n) (len) (a) (((@genBVVec) (n) (len) (a) (f))) (ix) (pf))) (((f) (ix) (pf)))) .
 
 Definition updBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((@bitvector) (n))), forall (a : Type), (((@BVVec) (n) (len) (a))) -> forall (ix : ((@bitvector) (n))), (((@is_bvult) (n) (ix) (len))) -> (a) -> ((@BVVec) (n) (len) (a)) :=
   (fun (n : ((@SAWCoreScaffolding.Nat))) (len : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (a : Type) (v : ((@BVVec) (n) (len) (a))) (ix : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (pf : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (ix) (len))) (((@SAWCoreScaffolding.true))))) (elem : a) => ((@genBVVec) (n) (len) (a) ((fun (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (_ : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (len))) (((@SAWCoreScaffolding.true))))) => if ((@bvEq) (n) (i) (ix)) then elem else ((@atBVVec) (n) (len) (a) (v) (ix) (pf)))))).
+
+Definition adjustBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((@bitvector) (n))), forall (a : Type), (((@BVVec) (n) (len) (a))) -> ((a) -> a) -> (((@bitvector) (n))) -> ((@BVVec) (n) (len) (a)) :=
+  (fun (n : ((@SAWCoreScaffolding.Nat))) (len : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (a : Type) (v : ((@BVVec) (n) (len) (a))) (f : (a) -> a) (ix : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) => ((@genBVVec) (n) (len) (a) ((fun (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (pf : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (len))) (((@SAWCoreScaffolding.true))))) => if ((@bvEq) (n) (i) (ix)) then ((f) (((@atBVVec) (n) (len) (a) (v) (i) (pf)))) else ((@atBVVec) (n) (len) (a) (v) (i) (pf)))))).
 
 Definition takeBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((@bitvector) (n))), forall (a : Type), forall (i : ((@bitvector) (n))), (((@is_bvule) (n) (i) (len))) -> (((@BVVec) (n) (len) (a))) -> ((@BVVec) (n) (i) (a)) :=
   (fun (n : ((@SAWCoreScaffolding.Nat))) (len : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (a : Type) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (pf : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@bvule) (n) (i) (len))) (((@SAWCoreScaffolding.true))))) (v : ((@BVVec) (n) (len) (a))) => ((@genBVVec) (n) (i) (a) ((fun (j : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (pf2 : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (j) (i))) (((@SAWCoreScaffolding.true))))) => ((@atBVVec) (n) (len) (a) (v) (j) (((@trans_bvult_bvule) (n) (j) (i) (len) (pf2) (pf)))))))).
@@ -887,7 +914,7 @@ Definition List_def : forall (a : Type), Type :=
 (* Prelude.List__rec was skipped *)
 
 Definition unfoldList : forall (a : Type), (((@Datatypes.list) (a))) -> ((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit)))))) :=
-  (fun (a : Type) (l : ((@Datatypes.list) (a))) => ((@Datatypes.list_rect) (a) ((fun (_ : ((@Datatypes.list) (a))) => ((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit)))))))) (((@Left) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (tt))) ((fun (x : a) (l : ((@Datatypes.list) (a))) (_ : ((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))))) => ((@Right) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (((pair) (x) (((pair) (l) (tt)))))))) (l))).
+  (fun (a : Type) (l : ((@Datatypes.list) (a))) => ((@Datatypes.list_rect) (a) ((fun (_ : ((@Datatypes.list) (a))) => ((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit)))))))) (((@Left) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (tt))) ((fun (x : a) (l_0 : ((@Datatypes.list) (a))) (_ : ((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))))) => ((@Right) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (((pair) (x) (((pair) (l_0) (tt)))))))) (l))).
 
 Definition foldList : forall (a : Type), (((@Either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))))) -> ((@Datatypes.list) (a)) :=
   (fun (a : Type) => ((@either) (unit) (((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) (((@Datatypes.list) (a))) ((fun (_ : unit) => ((@Datatypes.nil) (a)))) ((fun (tup : ((prod) (a) (((prod) (((@Datatypes.list) (a))) (unit))))) => ((@Datatypes.cons) (a) (((SAWCoreScaffolding.fst) (tup))) (((SAWCoreScaffolding.fst) (((SAWCoreScaffolding.snd) (tup)))))))))).
@@ -901,7 +928,7 @@ Definition unfoldedW64List : Type :=
   ((@Either) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit)))))).
 
 Definition unfoldW64List : (((@W64List))) -> ((@unfoldedW64List)) :=
-  (fun (l : ((@W64List))) => ((SAWCorePrelude.W64List_rect) ((fun (_ : ((@W64List))) => ((@unfoldedW64List)))) (((@Left) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (tt))) ((fun (bv : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) (l' : ((@W64List))) (_ : ((@Either) (unit) (((prod) (((@sigT) (((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))))) => ((@Right) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (((pair) (((@existT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)) (bv) (tt))) (((pair) (l') (tt)))))))) (l))).
+  (fun (l : ((@W64List))) => ((SAWCorePrelude.W64List_rect) ((fun (_ : ((@W64List))) => ((@unfoldedW64List)))) (((@Left) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (tt))) ((fun (bv : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) (l' : ((@W64List))) (_ : ((@Either) (unit) (((prod) (((@sigT) (((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))))) => ((@Right) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (__0 : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (((pair) (((@existT) (((@bitvector) (64))) ((fun (__0 : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)) (bv) (tt))) (((pair) (l') (tt)))))))) (l))).
 
 Definition foldW64List : (((@unfoldedW64List))) -> ((@W64List)) :=
   ((@either) (unit) (((prod) (((@sigT) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) (((@W64List))) ((fun (_ : unit) => ((@W64Nil)))) ((fun (bv_l : ((prod) (((@sigT) (((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)))) (((prod) (((@W64List))) (unit))))) => ((@W64Cons) (((@projT1) (((@bitvector) (64))) ((fun (_ : ((@SAWCoreVectorsAsCoqVectors.Vec) (64) (((@SAWCoreScaffolding.Bool))))) => unit)) (((SAWCoreScaffolding.fst) (bv_l))))) (((SAWCoreScaffolding.fst) (((SAWCoreScaffolding.snd) (bv_l))))))))).
@@ -948,6 +975,14 @@ Definition letRecM1 : forall (a : Type), forall (b : Type), forall (c : Type), (
 (* Prelude.test_fun5 was skipped *)
 
 (* Prelude.test_fun6 was skipped *)
+
+Axiom Array : (Type) -> (Type) -> Type .
+
+Axiom arrayConstant : forall (a : Type), forall (b : Type), (b) -> ((@Array) (a) (b)) .
+
+Axiom arrayLookup : forall (a : Type), forall (b : Type), (((@Array) (a) (b))) -> (a) -> b .
+
+Axiom arrayUpdate : forall (a : Type), forall (b : Type), (((@Array) (a) (b))) -> (a) -> (b) -> ((@Array) (a) (b)) .
 
 (* Prelude.bveq_sameL was skipped *)
 

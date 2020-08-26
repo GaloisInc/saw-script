@@ -4,11 +4,11 @@
 -Q generated/S2N            S2N
 -Q handwritten/S2N          S2N
 
-generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
+# generated/CryptolToCoq/CryptolPrimitivesForSAWCore.v
 # generated/MEE_CBC.v
 generated/CryptolToCoq/SAWCorePrelude.v
 # generated/CryptolToCoq/SAWCorePreludeCopy.v
-handwritten/CryptolToCoq/CryptolPrimitivesForSAWCoreExtra.v
+# handwritten/CryptolToCoq/CryptolPrimitivesForSAWCoreExtra.v
 handwritten/CryptolToCoq/CompM.v
 handwritten/CryptolToCoq/CompMExtra.v
 handwritten/CryptolToCoq/SAWCoreScaffolding.v
