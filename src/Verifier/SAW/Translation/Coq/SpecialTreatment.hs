@@ -368,7 +368,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("drop0",                skip)
   , ("bvugt",                skip)
   , ("bvuge",                skip)
-  , ("bvule",                skip)
   , ("bvPopcount",           skip)
   , ("bvCountLeadingZeros",  skip)
   , ("bvCountTrailingZeros", skip)
