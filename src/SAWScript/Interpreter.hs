@@ -1327,6 +1327,7 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
+  {-
   , prim "w4_abc_smtlib2"        "ProofScript SatResult"
     (pureVal w4_abc_smtlib2)
     Experimental
@@ -1340,6 +1341,7 @@ primitives = Map.fromList
     [ "Use the ABC theorem prover as an external process to prove the"
     , "current goal, with Verilog as an interchange format."
     ]
+  -}
 
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
