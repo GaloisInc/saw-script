@@ -103,7 +103,7 @@ jobs:
         working-directory: s2nTests
         run: |
           chmod +x bin/saw
-          docker-compose run ${{ matrix.s2n-target }}
+          make ${{ matrix.s2n-target }}
 
   build-macos:
     runs-on: macos-latest
