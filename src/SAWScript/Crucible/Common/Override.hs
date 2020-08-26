@@ -148,7 +148,7 @@ initialState sym globals allocs terms free loc = OverrideState
 
 data OverrideFailureReason ext
   = AmbiguousPointsTos [MS.PointsTo ext]
-  | AmbiguousVars [TypedTerm]
+  | AmbiguousVars [TypedExtCns]
   | BadTermMatch Term Term -- ^ simulated and specified terms did not match
   | BadPointerCast -- ^ Pointer required to process points-to
   | BadReturnSpecification (Some Crucible.TypeRepr)
@@ -184,7 +184,7 @@ ppOverrideFailureReason rsn = case rsn of
     (PP.indent 2 $ PP.vcat (map PP.pretty pts))
   AmbiguousVars vs ->
     PP.text "Fresh variable(s) not reachable via points-tos from function inputs/outputs:" PP.<$$>
-    (PP.indent 2 $ PP.vcat (map MS.ppTypedTerm vs))
+    (PP.indent 2 $ PP.vcat (map MS.ppTypedExtCns vs))
   BadTermMatch x y ->
     PP.text "terms do not match" PP.<$$>
     (PP.indent 2 (ppTerm defaultPPOpts x)) PP.<$$>

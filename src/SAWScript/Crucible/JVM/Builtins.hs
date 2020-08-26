@@ -65,9 +65,6 @@ import qualified Verifier.Java.Codebase as CB
 -- cryptol
 import qualified Cryptol.TypeCheck.Type as Cryptol
 
--- cryptol-saw-core
-import Verifier.SAW.Cryptol (importType, emptyEnv)
-
 -- what4
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
@@ -662,12 +659,13 @@ verifyPoststate opts sc cc mspec env0 globals ret =
   do poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
-     let terms0 = Map.fromList
-           [ (ecVarIndex ec, ttTerm tt)
+     let ecs0 = Map.fromList
+           [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
-           , let Just ec = asExtCns (ttTerm tt) ]
+           , let ec = tecExt tt ]
+     terms0 <- io $ traverse (scExtCns sc) ecs0
 
-     let initialFree = Set.fromList (map (termId . ttTerm)
+     let initialFree = Set.fromList (map (ecVarIndex . tecExt)
                                     (view (MS.csPostState . MS.csFreshVars) mspec))
      matchPost <- io $
           runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
@@ -823,23 +821,7 @@ jvm_fresh_var bic _opts name jty =
   do let sc = biSharedContext bic
      case cryptolTypeOfActual jty of
        Nothing -> fail $ "Unsupported type in jvm_fresh_var: " ++ show jty
-       Just ty -> freshVariable sc name ty
-
--- | Allocate a fresh variable and record this allocation in the
--- setup state.
-freshVariable ::
-  SharedContext {- ^ shared context -} ->
-  String        {- ^ variable name  -} ->
-  Cryptol.Type  {- ^ variable type  -} ->
-  JVMSetup TypedTerm
-freshVariable sc name cty =
-  do let schema = Cryptol.Forall [] [] cty
-     ty <- liftIO $ importType sc emptyEnv cty
-     var <- liftIO $ scFreshGlobal sc name ty
-     let tt = TypedTerm schema var
-     Setup.currentState . MS.csFreshVars %= cons tt
-     return tt
-
+       Just cty -> Setup.freshVariable sc name cty
 
 jvm_alloc_object ::
   BuiltinContext ->

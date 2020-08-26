@@ -64,10 +64,10 @@ import qualified What4.Interface as W4
 import qualified What4.Solver.Yices as Yices
 
 -- saw-core
-import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies, scAbstractExts)
+import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies)
 
 -- cryptol-saw-core
-import Verifier.SAW.TypedTerm(TypedTerm(..))
+import Verifier.SAW.TypedTerm (TypedTerm(..), abstractTypedExts)
 
 -- saw-script
 import SAWScript.Builtins(fixPos)
@@ -180,9 +180,8 @@ crucible_java_extract bic opts c mname = do
                     case baseCryptolType bt of
                       Nothing -> failure
                       Just cty -> return cty
-              t' <- scAbstractExts sc (map snd (toList ecs)) t
-              let cty' = foldr Cryptol.tFun cty (map fst (toList ecs))
-              return $ TypedTerm (Cryptol.tMono cty') t'
+              let tt = TypedTerm (Cryptol.tMono cty) t
+              abstractTypedExts sc (toList ecs) tt
             Crucible.AbortedResult _ _ar -> do
               fail $ unlines [ "Symbolic execution failed." ]
             Crucible.TimeoutResult _cxt -> do
