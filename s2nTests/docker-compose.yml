@@ -6,57 +6,10 @@ services:
     volumes:
       - ./bin:/saw-bin:rw
 
-  hmac:
+  s2n:
     build:
       context: .
-      args:
-        ARG_TEST: sawHMAC
       dockerfile: docker/s2n.dockerfile
-    volumes:
-      - ./bin:/saw-bin:rw
-
-  drbg:
-    build:
-      context: .
-      args:
-        ARG_TEST: sawDRBG
-      dockerfile: docker/s2n.dockerfile
-    volumes:
-      - ./bin:/saw-bin:rw
-
-  sike:
-    build:
-      context: .
-      args:
-        ARG_TEST: sawSIKE
-      dockerfile: docker/s2n.dockerfile
-    volumes:
-      - ./bin:/saw-bin:rw
-
-  bike:
-    build:
-      context: .
-      args:
-        ARG_TEST: sawBIKE
-        ARG_LIBCRYPTO: openssl-1.0.2
-      dockerfile: docker/s2n.dockerfile
-    volumes:
-      - ./bin:/saw-bin:rw
-
-  tls:
-    build:
-      context: .
-      args:
-        ARG_TEST: tls
-      dockerfile: docker/s2n.dockerfile
-    volumes:
-      - ./bin:/saw-bin:rw
-
-  hmac-failure:
-    build:
-      context: .
-      args:
-        ARG_TEST: sawHMACFailure
-      dockerfile: docker/s2n.dockerfile
+    image: s2n
     volumes:
       - ./bin:/saw-bin:rw

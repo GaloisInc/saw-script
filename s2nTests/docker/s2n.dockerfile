@@ -28,15 +28,6 @@ RUN mkdir -p /saw-script && \
     cd s2n && \
     git checkout cd7282102bf5e65cc8b324c4127c7943c71c8513
 
-ARG ARG_TEST
-ARG ARG_LIBCRYPTO
-ENV TESTS=$ARG_TEST
-ENV S2N_LIBCRYPTO=$ARG_LIBCRYPTO
-
-WORKDIR /saw-script/s2n
-RUN echo 'JOBS=1' >> codebuild/bin/jobs.sh
-RUN SAW=true SAW_INSTALL_DIR=tmp-saw codebuild/bin/s2n_install_test_dependencies.sh
-
 COPY scripts/s2n-entrypoint.sh /entrypoint.sh
 ENTRYPOINT [ "/entrypoint.sh" ]
 CMD [ "/bin/bash" ]
