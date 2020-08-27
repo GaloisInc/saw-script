@@ -13,19 +13,30 @@ foo_ov <-
     do {
       x <- crucible_alloc i64;
       crucible_execute_func [x];
-      y <- crucible_alloc i64;
-      crucible_return y;
+      crucible_return x;
     }
     z3;
 
-bar_ov0 <-
+fails (
+  crucible_llvm_verify bc "foo" [] false
+    do {
+      x <- crucible_alloc i64;
+      crucible_execute_func [x];
+      y <- crucible_alloc i64;
+      crucible_return y;
+    }
+    z3
+  );
+
+fails (
   crucible_llvm_verify bc "bar" [foo_ov] false
     do {
       x <- crucible_alloc i64;
       crucible_execute_func [x];
       crucible_return (crucible_term {{ 0 : [32] }});
     }
-    z3;
+    z3
+  );
 
 bar_ov1 <-
   crucible_llvm_verify bc "bar" [] false
