@@ -594,7 +594,7 @@ methodSpecHandler_prestate opts sc cc args cs =
 
        sequence_ [ matchArg opts sc cc cs PreState x y z | (x, y, z) <- xs]
 
-       learnCond opts sc cc cs PreState (cs ^. MS.csGlobalAllocs) (cs ^. MS.csPreState)
+       learnCond opts sc cc cs PreState (cs ^. MS.csGlobalAllocs) Map.empty (cs ^. MS.csPreState)
 
 
 -- | Use a method spec to override the behavior of a function.
@@ -622,14 +622,15 @@ learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWi
           -> MS.CrucibleMethodSpecIR (LLVM arch)
           -> PrePost
           -> [MS.AllocGlobal (LLVM arch)]
+          -> Map AllocIndex (MS.AllocSpec (LLVM arch))
           -> MS.StateSpec (LLVM arch)
           -> OverrideMatcher (LLVM arch) md ()
-learnCond opts sc cc cs prepost globals ss =
+learnCond opts sc cc cs prepost globals extras ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      enforcePointerValidity sc cc loc ss
-     enforceDisjointness sc cc loc globals ss
+     enforceDisjointness sc cc loc globals extras ss
      enforceCompleteSubstitution loc ss
 
 
@@ -736,21 +737,24 @@ enforceDisjointness ::
   LLVMCrucibleContext arch ->
   W4.ProgramLoc ->
   [MS.AllocGlobal (LLVM arch)] ->
+  -- | Additional allocations to check disjointness from (from prestate)
+  (Map AllocIndex (MS.AllocSpec (LLVM arch))) ->
   MS.StateSpec (LLVM arch) ->
   OverrideMatcher (LLVM arch) md ()
-enforceDisjointness sc cc loc globals ss =
+enforceDisjointness sc cc loc globals extras ss =
   do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub)
      mem <- readGlobal $ Crucible.llvmMemVar $ ccLLVMContext cc
      -- every csAllocs entry should be present in sub
      let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
+     let mems2 = Map.elems $ Map.intersectionWith (,) extras sub
 
      -- Ensure that all RW regions are disjoint from each other, and
      -- that all RW regions are disjoint from all RO regions.
      sequence_
         [ enforceDisjointAllocSpec sc cc sym loc p q
         | p : ps <- tails mems
-        , q <- ps
+        , q <- ps ++ mems2
         ]
 
      -- Ensure that all RW and RO regions are disjoint from mutable

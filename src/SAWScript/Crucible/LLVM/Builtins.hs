@@ -1155,7 +1155,10 @@ verifyPoststate opts sc cc mspec env0 globals ret =
        io $
        runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
        do matchResult
-          learnCond opts sc cc mspec PostState (mspec ^. MS.csGlobalAllocs) (mspec ^. MS.csPostState)
+          learnCond opts sc cc mspec PostState
+            (mspec ^. MS.csGlobalAllocs)
+            (mspec ^. MS.csPreState . MS.csAllocs)
+            (mspec ^. MS.csPostState)
 
      st <-
        case matchPost of
