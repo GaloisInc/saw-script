@@ -2,7 +2,6 @@ FROM ubuntu:18.04
 
 RUN apt-get update -y -q && \
     apt-get install -y software-properties-common && \
-    add-apt-repository -y ppa:sri-csl/formal-methods && \
     apt-get update -q -y && \
     apt install -y \
     clang-3.9 \
@@ -12,13 +11,7 @@ RUN apt-get update -y -q && \
     llvm-3.9 \
     make \
     sudo \
-    unzip \
-    wget \
     && \
-    wget -t 3 https://github.com/Z3Prover/z3/releases/download/z3-4.8.7/z3-4.8.7-x64-ubuntu-16.04.zip && \
-    unzip z3-4.8.7-x64-ubuntu-16.04.zip && \
-    cp z3-4.8.7-x64-ubuntu-16.04/bin/z3 /usr/local/bin/z3 && \
-    rm -rf z3* && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /saw-script
