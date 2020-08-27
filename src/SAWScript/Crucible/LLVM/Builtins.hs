@@ -317,7 +317,7 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
                 (method_spec ^. MS.csPreState ^. MS.csPointsTos)
           let input_parameters = nub $ value_input_parameters ++ reference_input_parameters
           let pre_free_variables = Map.fromList $
-                map (\x -> (fromJust $ asExtCns $ ttTerm x, x)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars
+                map (\x -> (tecExt x, x)) $ method_spec ^. MS.csPreState ^. MS.csFreshVars
           let unsupported_input_parameters = Set.difference
                 (Map.keysSet pre_free_variables)
                 (Set.fromList input_parameters)
@@ -341,7 +341,7 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
                 maybeToList return_output_parameter ++ reference_output_parameters
           let post_free_variables =
                 Map.fromList $
-                map (\x -> (fromJust $ asExtCns $ ttTerm x, x)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars
+                map (\x -> (tecExt x, x)) $ method_spec ^. MS.csPostState ^. MS.csFreshVars
           let unsupported_output_parameters =
                 Set.difference (Map.keysSet post_free_variables) (Set.fromList output_parameters)
           when (not $ Set.null unsupported_output_parameters) $
@@ -367,7 +367,7 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
           extracted_func_const <-
             io $ scConstant shared_context func_name extracted_func
             =<< scTypeOf shared_context extracted_func
-          let input_terms = map ttTerm $ map ((Map.!) pre_free_variables) input_parameters
+          input_terms <- io $ traverse (scExtCns shared_context) input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
           applied_extracted_func_selectors <-
             io $ forM [1 .. (length output_parameters)] $ \i ->
@@ -1144,14 +1144,15 @@ verifyPoststate opts sc cc mspec env0 globals ret =
   do poststateLoc <- toW4Loc "_SAW_verify_poststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
-     let terms0 = Map.fromList
-           [ (ecVarIndex ec, ttTerm tt)
+     let ecs0 = Map.fromList
+           [ (ecVarIndex ec, ec)
            | tt <- mspec ^. MS.csPreState . MS.csFreshVars
-           , let Just ec = asExtCns (ttTerm tt) ]
+           , let ec = tecExt tt ]
+     terms0 <- io $ traverse (scExtCns sc) ecs0
 
      let initialFree =
            Set.fromList
-           (map (termId . ttTerm) (view (MS.csPostState . MS.csFreshVars) mspec))
+           (map (ecVarIndex . tecExt) (view (MS.csPostState . MS.csFreshVars) mspec))
      matchPost <-
        io $
        runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
@@ -1280,10 +1281,7 @@ baseCryptolType bt =
     Crucible.BaseBVRepr w -> pure $ Cryptol.tWord (Cryptol.tNum (natValue w))
     Crucible.BaseNatRepr  -> Nothing
     Crucible.BaseIntegerRepr -> pure $ Cryptol.tInteger
-    Crucible.BaseArrayRepr indexTypes range ->
-      do ts <- baseCryptolTypes indexTypes
-         t <- baseCryptolType range
-         pure $ foldr Cryptol.tFun t ts
+    Crucible.BaseArrayRepr {} -> Nothing
     Crucible.BaseFloatRepr _ -> Nothing
     Crucible.BaseStringRepr _ -> Nothing
     Crucible.BaseComplexRepr  -> Nothing
@@ -1302,7 +1300,7 @@ setupArg ::
   forall tp.
   SharedContext ->
   Sym ->
-  IORef (Seq (Cryptol.Type, ExtCns Term)) ->
+  IORef (Seq TypedExtCns) ->
   Crucible.TypeRepr tp ->
   IO (Crucible.RegEntry Sym tp)
 setupArg sc sym ecRef tp =
@@ -1334,14 +1332,14 @@ setupArg sc sym ecRef tp =
          ecs   <- readIORef ecRef
          let len = Seq.length ecs
          let ec = EC i ("arg_"++show len) sc_tp
-         writeIORef ecRef (ecs Seq.|> (cty, ec))
+         writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
          scFlatTermF sc (ExtCns ec)
 
 setupArgs ::
   SharedContext ->
   Sym ->
   Crucible.FnHandle init ret ->
-  IO (Seq (Cryptol.Type, ExtCns Term), Crucible.RegMap Sym init)
+  IO (Seq TypedExtCns, Crucible.RegMap Sym init)
 setupArgs sc sym fn =
   do ecRef  <- newIORef Seq.empty
      regmap <- Crucible.RegMap <$> Ctx.traverseFC (setupArg sc sym ecRef) (Crucible.handleArgTypes fn)
@@ -1392,21 +1390,20 @@ extractFromLLVMCFG opts sc cc (Crucible.AnyCFG cfg) =
             let regv = gp^.Crucible.gpValue
                 rt = Crucible.regType regv
                 rv = Crucible.regValue regv
-            (cty, t) <-
+            tt <-
               case rt of
                 Crucible.LLVMPointerRepr w ->
                   do bv <- Crucible.projectLLVM_bv sym rv
                      t <- CrucibleSAW.toSC sym bv
                      let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
-                     return (cty, t)
+                     pure $ TypedTerm (Cryptol.tMono cty) t
                 Crucible.BVRepr w ->
                   do t <- CrucibleSAW.toSC sym rv
                      let cty = Cryptol.tWord (Cryptol.tNum (natValue w))
-                     return (cty, t)
+                     pure $ TypedTerm (Cryptol.tMono cty) t
                 _ -> fail $ unwords ["Unexpected return type:", show rt]
-            t' <- scAbstractExts sc (map snd (toList ecs)) t
-            let cty' = foldr Cryptol.tFun cty (map fst (toList ecs))
-            return $ TypedTerm (Cryptol.tMono cty') t'
+            tt' <- abstractTypedExts sc (toList ecs) tt
+            pure tt'
        Crucible.AbortedResult _ ar ->
          do let resultDoc = ppAbortedResult cc ar
             fail $ unlines [ "Symbolic execution failed."
@@ -1577,7 +1574,8 @@ crucible_fresh_cryptol_var bic _opts name s =
   do loc <- getW4Position "crucible_fresh_var"
      case s of
        Cryptol.Forall [] [] ty ->
-         Setup.freshVariable (biSharedContext bic) name ty
+         do let sc = biSharedContext bic
+            Setup.freshVariable sc name ty
        _ ->
          throwCrucibleSetup loc $ "Unsupported polymorphic Cryptol type schema: " ++ show s
 
