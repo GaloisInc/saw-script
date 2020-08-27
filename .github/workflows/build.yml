@@ -6,20 +6,12 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
         ghc: ["8.6.5", "8.8.3"]
-        include:
-          - os: macos-latest
-            ghc: 8.6.5
-            continue-on-error: true
-          - os: macos-latest
-            ghc: 8.8.3
-            continue-on-error: true
-    name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
+    name: SAWScript - GHC v${{ matrix.ghc }} - Ubuntu
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -64,8 +56,109 @@ jobs:
 
       - shell: bash
         id: test
-        continue-on-error: ${{ matrix.continue-on-error }}
-        name: Test
+        name: Integration Tests
+        run: |
+          mkdir -p ~/.stack
+          echo "system-ghc: true" >> ~/.stack/config.yaml
+          .github/ci.sh test_dist
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
+          path: dist/bin/saw
+
+      - shell: bash
+        if: "steps.test.outcome == 'failure'"
+        name: Warn if tests failed
+        run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
+
+  s2n-tests:
+    name: "Test s2n proofs"
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        s2n-target:
+          - hmac
+          - drbg
+          - sike
+          - bike
+          - tls
+          - hmac-failure
+        ghc: ["8.6.5", "8.8.3"]
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          mkdir -p s2nTests/bin
+
+      - name: Download previously-built SAW 
+        uses: actions/download-artifact@v2
+        with:
+          name: "saw-Linux-${{ matrix.ghc }}"
+          path: ./s2nTests/bin
+
+      - shell: bash
+        name: "s2n tests: ${{ matrix.s2n-target }}"
+        working-directory: s2nTests
+        run: |
+          chmod +x bin/saw
+          make ${{ matrix.s2n-target }}
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ["8.6.5", "8.8.3"]
+    name: SAWScript - GHC v${{ matrix.ghc }} - MacOS
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+
+      - uses: actions/setup-haskell@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          enable-stack: true
+
+      - uses: actions/cache@v2
+        name: Cache cabal store
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+          restore-keys: |
+            cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
+            cabal-${{ runner.os }}-${{ matrix.ghc }}-
+
+      - shell: bash
+        run: .github/ci.sh build_abc
+
+      - shell: bash
+        run: .github/ci.sh build
+
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          Z3_VERSION: "4.8.7"
+          CVC4_VERSION: "4.1.8"
+          YICES_VERSION: "2.6.2"
+
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "8"
+          java-package: jdk
+          architecture: x64
+
+      - shell: bash
+        id: test
+        continue-on-error: true
+        name: Integration Tests
         run: |
           mkdir -p ~/.stack
           echo "system-ghc: true" >> ~/.stack/config.yaml
