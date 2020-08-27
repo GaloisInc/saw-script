@@ -742,17 +742,15 @@ enforceDisjointness sc cc loc globals ss =
   do sym <- Ov.getSymInterface
      sub <- OM (use setupValueSub)
      mem <- readGlobal $ Crucible.llvmMemVar $ ccLLVMContext cc
-     let allocs = Map.filter (not . view allocSpecFresh) (view MS.csAllocs ss)
-     let (allocsRW, allocsRO) = Map.partition (view isMut) allocs
-         memsRW = Map.elems $ Map.intersectionWith (,) allocsRW sub
-         memsRO = Map.elems $ Map.intersectionWith (,) allocsRO sub
+     -- every csAllocs entry should be present in sub
+     let mems = Map.elems $ Map.intersectionWith (,) (view MS.csAllocs ss) sub
 
      -- Ensure that all RW regions are disjoint from each other, and
      -- that all RW regions are disjoint from all RO regions.
      sequence_
         [ enforceDisjointAllocSpec sc cc sym loc p q
-        | p : ps <- tails memsRW
-        , q <- ps ++ memsRO
+        | p : ps <- tails mems
+        , q <- ps
         ]
 
      -- Ensure that all RW and RO regions are disjoint from mutable
@@ -763,11 +761,14 @@ enforceDisjointness sc cc loc globals ss =
      globals' <- traverse resolveAllocGlobal globals
      sequence_
        [ enforceDisjointAllocGlobal sym loc p q
-       | p <- memsRW ++ memsRO
+       | p <- mems
        , q <- globals'
        ]
 
--- | Assert that two LLVM allocations are disjoint from each other.
+-- | Assert that two LLVM allocations are disjoint from each other, if
+-- they need to be. If both allocations are read-only, then they need
+-- not be disjoint. Similarly, fresh pointers need not be checked for
+-- disjointness.
 enforceDisjointAllocSpec ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   SharedContext ->
@@ -777,8 +778,13 @@ enforceDisjointAllocSpec ::
   (LLVMAllocSpec, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointAllocSpec sc cc sym loc
-  (LLVMAllocSpec _pmut _pty _palign psz ploc _pfresh, p)
-  (LLVMAllocSpec _qmut _qty _qalign qsz qloc _qfresh, q) =
+  (LLVMAllocSpec pmut _pty _palign psz ploc pfresh, p)
+  (LLVMAllocSpec qmut _qty _qalign qsz qloc qfresh, q)
+  | (pmut, qmut) == (Crucible.Immutable, Crucible.Immutable) =
+    pure () -- Read-only allocations may alias each other
+  | pfresh || qfresh =
+    pure () -- Fresh pointers need not be disjoint
+  | otherwise =
   do liftIO $ W4.setCurrentProgramLoc sym ploc
      psz' <- instantiateExtResolveSAWSymBV sc cc Crucible.PtrWidth psz
      liftIO $ W4.setCurrentProgramLoc sym qloc
