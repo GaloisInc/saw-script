@@ -147,6 +147,12 @@ ppTypedTerm (TypedTerm tp tm) =
   PP.<+> PP.text ":" PP.<+>
   PP.text (show (Cryptol.ppPrec 0 tp))
 
+ppTypedExtCns :: TypedExtCns -> PP.Doc
+ppTypedExtCns (TypedExtCns tp ec) =
+  PP.text (ecName ec)
+  PP.<+> PP.text ":" PP.<+>
+  PP.text (show (Cryptol.ppPrec 0 tp))
+
 setupToTypedTerm ::
   Options {-^ Printing options -} ->
   SharedContext ->
@@ -326,7 +332,7 @@ data StateSpec ext = StateSpec
     -- ^ points-to statements
   , _csConditions    :: [SetupCondition ext]
     -- ^ equality, propositions, and ghost-variable conditions
-  , _csFreshVars     :: [TypedTerm]
+  , _csFreshVars     :: [TypedExtCns]
     -- ^ fresh variables created in this state
   , _csVarTypeNames  :: Map AllocIndex (TypeName ext)
     -- ^ names for types of variables, for diagnostics

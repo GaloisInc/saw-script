@@ -38,7 +38,6 @@ module SAWScript.Crucible.JVM.Override
   , matchArg
   , methodSpecHandler
   , valueToSC
-  , termId
   , injectJVMVal
   , decodeJVMVal
   ) where
@@ -93,7 +92,6 @@ import           Data.Parameterized.Some (Some(Some))
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
-import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
 
 import           SAWScript.Crucible.Common (Sym)
@@ -190,7 +188,7 @@ methodSpecHandler opts sc cc top_loc css h = do
     do g0 <- Crucible.readGlobals
        forM css $ \cs -> liftIO $
          let initialFree =
-               Set.fromList (cs ^.. MS.csPreState. MS.csFreshVars . each . to ttTerm . to termId)
+               Set.fromList (cs ^.. MS.csPreState. MS.csFreshVars . each . to tecExt . to ecVarIndex)
           in runOverrideMatcher sym g0 Map.empty Map.empty initialFree (view MS.csLoc cs)
                       (do methodSpecHandler_prestate opts sc cc args cs
                           return cs)
@@ -341,20 +339,12 @@ enforceCompleteSubstitution loc ss =
 
      let -- predicate matches terms that are not covered by the computed
          -- term substitution
-         isMissing tt = termId (ttTerm tt) `Map.notMember` sub
+         isMissing tt = ecVarIndex (tecExt tt) `Map.notMember` sub
 
          -- list of all terms not covered by substitution
          missing = filter isMissing (view MS.csFreshVars ss)
 
      unless (null missing) (failure loc (AmbiguousVars missing))
-
-
--- | Given a 'Term' that must be an external constant, extract the 'VarIndex'.
-termId :: Term -> VarIndex
-termId t =
-  case asExtCns t of
-    Just ec -> ecVarIndex ec
-    _       -> error "termId expected a variable"
 
 
 -- execute a pre/post condition
@@ -382,11 +372,9 @@ refreshTerms sc ss =
   do extension <- Map.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
      OM (termSub %= Map.union extension)
   where
-    freshenTerm tt =
-      case asExtCns (ttTerm tt) of
-        Just ec -> do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
-                      return (termId (ttTerm tt), new)
-        Nothing -> error "refreshTerms: not a variable"
+    freshenTerm (TypedExtCns _cty ec) =
+      do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
+         return (ecVarIndex ec, new)
 
 ------------------------------------------------------------------------
 
