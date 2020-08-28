@@ -801,8 +801,10 @@ enforceDisjointAllocSpec sc cc sym loc
      let msg =
            "Memory regions not disjoint:"
            ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ showTerm psz ++ ")"
+           ++ "\n  from " ++ ppProgramLoc ploc
            ++ "\n  and "
            ++ "\n  (base=" ++ show (Crucible.ppPtr q) ++ ", size=" ++ showTerm qsz ++ ")"
+           ++ "\n  from " ++ ppProgramLoc qloc
      addAssert c $ Crucible.SimError loc $
        Crucible.AssertFailureSimError msg ""
 
@@ -813,18 +815,24 @@ enforceDisjointAllocGlobal ::
   (LLVMAllocGlobal arch, LLVMPtr (Crucible.ArchWidth arch)) ->
   OverrideMatcher (LLVM arch) md ()
 enforceDisjointAllocGlobal sym loc
-  (LLVMAllocSpec _pmut _pty _palign psz _ploc _pfresh, p)
-  (LLVMAllocGlobal _qloc (L.Symbol qname), q) =
+  (LLVMAllocSpec _pmut _pty _palign psz ploc _pfresh, p)
+  (LLVMAllocGlobal qloc (L.Symbol qname), q) =
   do let Crucible.LLVMPointer pblk _ = p
      let Crucible.LLVMPointer qblk _ = q
      c <- liftIO $ W4.notPred sym =<< W4.natEq sym pblk qblk
      let msg =
            "Memory regions not disjoint:"
            ++ "\n  (base=" ++ show (Crucible.ppPtr p) ++ ", size=" ++ showTerm psz ++ ")"
+           ++ "\n  from " ++ ppProgramLoc ploc
            ++ "\n  and "
            ++ "\n  global " ++ show qname ++ " (base=" ++ show (Crucible.ppPtr q) ++ ")"
+           ++ "\n  from " ++ ppProgramLoc qloc
      addAssert c $ Crucible.SimError loc $
        Crucible.AssertFailureSimError msg ""
+
+ppProgramLoc :: W4.ProgramLoc -> String
+ppProgramLoc loc =
+  show (W4.plFunction loc) ++ " (" ++ show (W4.plSourceLoc loc) ++ ")"
 
 ------------------------------------------------------------------------
 
