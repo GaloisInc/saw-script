@@ -36,7 +36,7 @@
 
 * Added support for the `llvm.fshl.i32` funnel shift intrinsic.
 
-* Added experimentatal support for _verification summaries_. These
+* Added experimental support for _verification summaries_. These
   summaries list all verifications performed within a script in a
   concise way that can track arbitrarily complex proof orchestrations.
   Future releases will include more information in these summaries, and
