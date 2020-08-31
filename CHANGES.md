@@ -2,13 +2,13 @@
 
 ## New Features
 
-* Adedd experimental support for _compositional verification_.
+* Adedd experimental support for _compositional extraction_.
   Previously, `crucible_llvm_extract` and similar functions could
   translate very simple imperative functions into `Term` models but
   analysis of more complex programs typically required verification of
   equivalence to Cryptol specifications. Now, the
   `crucible_llvm_compositional_extract` function allows extraction of
-  any function that can specified using a `CrucibleSetup` block of the
+  any function that can be specified using a `CrucibleSetup` block of the
   sort used for `crucible_llvm_verify`. In addition, this extraction can
   be _compositional_, preserving the call structure that exists in the
   original program instead of inlining everything.
@@ -20,11 +20,11 @@
   proofs.
 
 * Added experimental support for arrays of symbolic size. The new
-  function `crucible_array_alloc` specifies the existence of an
+  `crucible_array_alloc` function specifies the existence of an
   allocated array where the size is given by its `Term` argument. The
   new `crucible_points_to_array_prefix` function specifies that the
-  given pointer points to (the prefix of) a symbolic value of a given
-  symbolic size.
+  given pointer points to (the prefix of) a symbolic array value of
+  a given symbolic size.
 
 * Improved x86 verification capabilities. Verification scripts for x86
   functions can now process functions with mutable globals and function
@@ -36,7 +36,7 @@
 
 * Added support for the `llvm.fshl.i32` funnel shift intrinsic.
 
-* Added experimentatal support for _verification summaries_. These
+* Added experimental support for _verification summaries_. These
   summaries list all verifications performed within a script in a
   concise way that can track arbitrarily complex proof orchestrations.
   Future releases will include more information in these summaries, and
