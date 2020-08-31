@@ -693,15 +693,9 @@ verifyPrestate opts cc mspec globals =
      let Just mem = Crucible.lookupGlobal lvar globals
 
      -- Allocate LLVM memory for each 'crucible_alloc'
-     (env1, mem') <- runStateT
-       (traverse (doAlloc cc)  $ mspec ^. MS.csPreState . MS.csAllocs)
+     (env, mem') <- runStateT
+       (Map.traverseWithKey (doAlloc cc) (mspec ^. MS.csPreState . MS.csAllocs))
        mem
-
-     env2 <-
-       Map.traverseWithKey
-         (\k _ -> executeFreshPointer cc k)
-         (mspec ^. MS.csPreState . MS.csFreshPointers)
-     let env = Map.unions [env1, env2]
 
      mem'' <- setupGlobalAllocs cc mspec mem'
 
@@ -875,9 +869,13 @@ assertEqualVals cc v1 v2 =
 doAlloc ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   LLVMCrucibleContext arch       ->
+  AllocIndex ->
   LLVMAllocSpec ->
   StateT MemImpl IO (LLVMPtr (Crucible.ArchWidth arch))
-doAlloc cc (LLVMAllocSpec mut _memTy alignment sz loc) = StateT $ \mem ->
+doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh)
+  | fresh = liftIO $ executeFreshPointer cc i
+  | otherwise =
+  StateT $ \mem ->
   do let sym = cc^.ccBackend
      sz' <- liftIO $ resolveSAWSymBV cc Crucible.PtrWidth sz
      let l = show (W4.plSourceLoc loc)
@@ -1157,7 +1155,10 @@ verifyPoststate opts sc cc mspec env0 globals ret =
        io $
        runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
        do matchResult
-          learnCond opts sc cc mspec PostState (mspec ^. MS.csGlobalAllocs) (mspec ^. MS.csPostState)
+          learnCond opts sc cc mspec PostState
+            (mspec ^. MS.csGlobalAllocs)
+            (mspec ^. MS.csPreState . MS.csAllocs)
+            (mspec ^. MS.csPostState)
 
      st <-
        case matchPost of
@@ -1756,6 +1757,7 @@ crucible_alloc_with_mutability_and_size mut sz alignment bic opts lty =
        , _allocSpecAlign = alignment'
        , _allocSpecBytes = sz''
        , _allocSpecLoc = loc
+       , _allocSpecFresh = False
        }
 
 crucible_alloc ::
@@ -1861,6 +1863,7 @@ crucible_symbolic_alloc bic _opts ro align_bytes sz =
            , _allocSpecAlign = alignment
            , _allocSpecBytes = sz
            , _allocSpecLoc = loc
+           , _allocSpecFresh = False
            }
      n <- Setup.csVarCounter <<%= nextAllocIndex
      Setup.currentState . MS.csAllocs . at n ?= spec
@@ -1907,12 +1910,13 @@ constructFreshPointer mid loc memTy =
      n <- Setup.csVarCounter <<%= nextAllocIndex
      sz <- liftIO $ scPtrWidthBvNat cctx $ Crucible.memTypeSize ?dl memTy
      let alignment = Crucible.memTypeAlign ?dl memTy
-     Setup.currentState . MS.csFreshPointers . at n ?=
+     Setup.currentState . MS.csAllocs . at n ?=
        LLVMAllocSpec { _allocSpecMut = Crucible.Mutable
                      , _allocSpecType = memTy
                      , _allocSpecAlign = alignment
                      , _allocSpecBytes = sz
                      , _allocSpecLoc = loc
+                     , _allocSpecFresh = True
                      }
      -- TODO: refactor
      case mid of
