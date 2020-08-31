@@ -1233,9 +1233,10 @@ the rest of the script.
 
 These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
 formats, respectively. The shared representation for SAWCore is
-described [in the `saw-script` repository](../extcore.md). The
-`offline_unint_smtlib2` command represents the folded subterms listed in
-its first argument as uninterpreted functions.
+described [in the `saw-script`
+repository](https://github.com/GaloisInc/saw-script/blob/master/doc/extcore.md).
+The `offline_unint_smtlib2` command represents the folded subterms
+listed in its first argument as uninterpreted functions.
 
 ## Finishing Proofs without External Solvers
 
