@@ -39,7 +39,7 @@ RUN curl -L https://github.com/CVC4/CVC4/releases/download/1.8/cvc4-1.8-x86_64-l
 # Set executable and run tests
 RUN chmod +x rootfs/usr/local/bin/*
 
-FROM haskell:8.8 AS build
+FROM haskell:8.8.4 AS build
 USER root
 RUN apt-get update && apt-get install -y wget libncurses-dev unzip
 COPY --from=solvers /solvers/rootfs /
@@ -50,6 +50,7 @@ WORKDIR /home/saw
 ENV PATH=/cryptol/rootfs/usr/local/bin:$PATH
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
+COPY cabal.GHC-8.8.4.config cabal.project.freeze
 RUN cabal v2-update
 RUN cabal v2-build
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
