@@ -1,4 +1,4 @@
-from debian:buster AS solvers
+FROM debian:buster AS solvers
 
 # Install needed packages for building
 RUN apt-get update \
@@ -47,14 +47,13 @@ RUN useradd -m saw
 COPY --chown=saw:saw . /home/saw
 USER saw
 WORKDIR /home/saw
-ENV PATH=/cryptol/rootfs/usr/local/bin:$PATH
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 COPY cabal.GHC-8.8.4.config cabal.project.freeze
 RUN cabal v2-update
 RUN cabal v2-build
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
-RUN cp dist-newstyle/build/*-linux/ghc-*/saw-script-*/build/saw/saw /home/saw/rootfs/usr/local/bin/saw
+RUN cp $(cabal v2-exec which saw) /home/saw/rootfs/usr/local/bin/saw
 WORKDIR /home/saw
 USER root
 RUN chown -R root:root /home/saw/rootfs
