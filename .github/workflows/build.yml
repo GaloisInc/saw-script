@@ -45,7 +45,7 @@ jobs:
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
-    continue-on-error: ${{ matrix.continue-on-error }}
+    continue-on-error: "${{ matrix.continue-on-error == 'true' }}"
     steps:
       - uses: actions/checkout@v2
       - run: |
