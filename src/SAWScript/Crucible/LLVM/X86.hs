@@ -580,7 +580,7 @@ assumeAllocation ::
   Map MS.AllocIndex Ptr ->
   (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
-assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc) = do
+assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False) = do
   cc <- use x86CrucibleContext
   sym <- use x86Sym
   mem <- use x86Mem
@@ -589,6 +589,9 @@ assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc) = do
     (show $ W4.plSourceLoc loc) mem sz' align
   x86Mem .= mem'
   pure $ Map.insert i ptr env
+assumeAllocation env _ = pure env
+  -- no allocation is done for crucible_fresh_pointer
+  -- TODO: support crucible_fresh_pointer in x86 verification
 
 -- | Process a crucible_points_to statement, writing some SetupValue to a pointer.
 assumePointsTo ::
