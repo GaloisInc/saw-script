@@ -123,6 +123,21 @@ jobs:
         name: Warn if tests failed
         run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
 
+  docker:
+    runs-on: ubuntu-latest
+    needs: [outputs]
+    if: contains(needs.outputs.outputs.changed, 'Dockerfile')
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+      - name: Publish to Registry
+        uses: docker/build-push-action@v1
+        with:
+          repository: galoisinc/saw
+          push: false
+
   s2n-tests:
     name: "Test s2n proofs"
     needs: build
