@@ -35,17 +35,18 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         ghc: ["8.6.5", "8.8.4"]
+        continue-on-error: [false]
         include:
           - os: macos-latest
             ghc: "8.6.5"
-            continue-on-eror: true
+            continue-on-error: true
           - os: macos-latest
             ghc: "8.8.4"
-            continue-on-eror: true
+            continue-on-error: true
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
-    continue-on-error: "${{ matrix.continue-on-error == 'true' }}"
+    continue-on-error: ${{ matrix.continue-on-error }}
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -67,7 +68,6 @@ jobs:
           key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
           restore-keys: |
             cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
-            cabal-${{ runner.os }}-${{ matrix.ghc }}-
 
       - shell: bash
         run: .github/ci.sh build_abc
@@ -90,6 +90,7 @@ jobs:
 
       - shell: bash
         id: test
+        continue-on-error: ${{ matrix.continue-on-error }}
         name: Integration Tests
         run: |
           mkdir -p ~/.stack
@@ -100,9 +101,7 @@ jobs:
           env.RELEASE && matrix.ghc == '8.8.4'
         run: |
           .github/ci.sh build_cryptol
-          cd deps/cryptol
-          exe="$(cabal exec which cryptol)"
-          cd -
+          exe="$(cd deps/cryptol && cabal exec which cryptol)"
           cp "$exe" "dist/bin"
 
       - if: >-
