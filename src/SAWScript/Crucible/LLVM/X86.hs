@@ -220,8 +220,12 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
       cenv <- rwCryptol <$> getTopLevelRW
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
 
       (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc path nm
+      liftIO $ print cfg
       addrInt <- if Macaw.segmentBase (Macaw.segoffSegment addr) == 0
         then pure . toInteger $ Macaw.segmentOffset (Macaw.segoffSegment addr) + Macaw.segoffOffset addr
         else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
