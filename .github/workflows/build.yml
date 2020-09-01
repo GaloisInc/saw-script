@@ -160,6 +160,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: needs.outputs.outputs.release
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         ghc: ["8.8.4"]

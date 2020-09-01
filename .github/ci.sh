@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
+set -Eeuxo pipefail
 
 [[ "$RUNNER_OS" == 'Windows' ]] && IS_WIN=true || IS_WIN=false
 BIN=bin
@@ -121,7 +121,11 @@ build() {
   if [[ "$ghc_ver" =~ 8.8.3|8.10.1 && $IS_WIN ]]; then JOBS=1; else JOBS=2; fi
   cabal v2-configure -j$JOBS --minimize-conflict-set
   tee -a cabal.project > /dev/null < cabal.project.ci
-  retry cabal v2-build "$@" saw jss
+  if ! retry cabal v2-build "$@" saw jss && [[ "$RUNNER_OS" == "macOS" ]]; then
+    echo "Working around a dylib issue on macos by removing the cache and trying again"
+    cabal v2-clean
+    retry cabal v2-build "$@" saw jss
+  fi
 }
 
 build_abc() {
