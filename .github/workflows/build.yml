@@ -1,17 +1,52 @@
 name: SAWScript
 on:
   push:
-    branches: [master]
+    branches: [master, "release-**"]
   pull_request:
 
 jobs:
-  build:
+  outputs:
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.outputs.outputs.changed-files }}
+      saw-version: ${{ steps.outputs.outputs.saw-version }}
+      name: ${{ steps.outputs.outputs.name }}
+      release: ${{ steps.env.outputs.release }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - id: env
+        if: |
+          startsWith(github.ref, 'refs/heads/release-')
+            || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'actions/'))
+        run: .github/ci.sh output release 1
+      - id: outputs
+        run: |
+          .github/ci.sh set_files ${{ github.sha }}
+          .github/ci.sh set_version
+          .github/ci.sh output name saw-$(.github/ci.sh ver)
+
+  build:
+    runs-on: ${{ matrix.os }}
+    needs: [outputs]
     strategy:
       fail-fast: false
       matrix:
-        ghc: ["8.6.5", "8.8.3"]
-    name: SAWScript - GHC v${{ matrix.ghc }} - Ubuntu
+        os: [ubuntu-latest]
+        ghc: ["8.6.5", "8.8.4"]
+        continue-on-error: [false]
+        include:
+          - os: macos-latest
+            ghc: "8.6.5"
+            continue-on-error: true
+          - os: macos-latest
+            ghc: "8.8.4"
+            continue-on-error: true
+    name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
+    env:
+      RELEASE: ${{ needs.outputs.outputs.release }}
+    continue-on-error: ${{ matrix.continue-on-error }}
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -33,7 +68,6 @@ jobs:
           key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
           restore-keys: |
             cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
-            cabal-${{ runner.os }}-${{ matrix.ghc }}-
 
       - shell: bash
         run: .github/ci.sh build_abc
@@ -44,7 +78,7 @@ jobs:
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
-          Z3_VERSION: "4.8.7"
+          Z3_VERSION: "4.8.8"
           CVC4_VERSION: "4.1.8"
           YICES_VERSION: "2.6.2"
 
@@ -56,17 +90,33 @@ jobs:
 
       - shell: bash
         id: test
+        continue-on-error: ${{ matrix.continue-on-error }}
         name: Integration Tests
         run: |
           mkdir -p ~/.stack
           echo "system-ghc: true" >> ~/.stack/config.yaml
           .github/ci.sh test_dist
-      
+
+      - if: >-
+          env.RELEASE && matrix.ghc == '8.8.4'
+        run: |
+          .github/ci.sh build_cryptol
+          exe="$(cd deps/cryptol && cabal exec which cryptol)"
+          cp "$exe" "dist/bin"
+
+      - if: >-
+          env.RELEASE && matrix.ghc == '8.8.4'
+        uses: actions/upload-artifact@v2
+        with:
+          path: dist/bin
+          name: ${{ runner.os }}-bins
+
       - name: Upload artifacts
+        if: "matrix.os == 'ubuntu-latest'"
         uses: actions/upload-artifact@v2
         with:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
-          path: dist/bin/saw
+          path: "dist/bin/saw"
 
       - shell: bash
         if: "steps.test.outcome == 'failure'"
@@ -87,13 +137,13 @@ jobs:
           - bike
           - tls
           - hmac-failure
-        ghc: ["8.6.5", "8.8.3"]
+        ghc: ["8.6.5", "8.8.4"]
     steps:
       - uses: actions/checkout@v2
       - run: |
           mkdir -p s2nTests/bin
 
-      - name: Download previously-built SAW 
+      - name: Download previously-built SAW
         uses: actions/download-artifact@v2
         with:
           name: "saw-Linux-${{ matrix.ghc }}"
@@ -106,65 +156,79 @@ jobs:
           chmod +x bin/saw
           make ${{ matrix.s2n-target }}
 
-  build-macos:
-    runs-on: macos-latest
+  bundle:
+    runs-on: ${{ matrix.os }}
+    if: needs.outputs.outputs.release
     strategy:
       fail-fast: false
       matrix:
-        ghc: ["8.6.5", "8.8.3"]
-    name: SAWScript - GHC v${{ matrix.ghc }} - MacOS
+        os: [ubuntu-latest, macos-latest]
+        ghc: ["8.8.4"]
+    needs: [outputs, build]
+    env:
+      VERSION: ${{ needs.outputs.outputs.saw-version }}
+      RELEASE: ${{ needs.outputs.outputs.release }}
     steps:
       - uses: actions/checkout@v2
       - run: |
           git submodule update --init
           git -C deps/abcBridge submodule update --init
 
-      - uses: actions/setup-haskell@v1
-        id: setup-haskell
+      - uses: actions/download-artifact@v2
         with:
-          ghc-version: ${{ matrix.ghc }}
-          enable-stack: true
-
-      - uses: actions/cache@v2
-        name: Cache cabal store
-        with:
-          path: |
-            ${{ steps.setup-haskell.outputs.cabal-store }}
-            dist-newstyle
-          key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
-          restore-keys: |
-            cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
-            cabal-${{ runner.os }}-${{ matrix.ghc }}-
+          path: dist/bin
+          name: ${{ runner.os }}-bins
 
       - shell: bash
-        run: .github/ci.sh build_abc
+        run: .github/ci.sh bundle_files
 
       - shell: bash
-        run: .github/ci.sh build
-
-      - shell: bash
-        run: .github/ci.sh install_system_deps
+        continue-on-error: true # temporary to test release without setting up secrets
         env:
-          Z3_VERSION: "4.8.7"
-          CVC4_VERSION: "4.1.8"
-          YICES_VERSION: "2.6.2"
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: .github/ci.sh zip_dist
 
-      - uses: actions/setup-java@v1
+      - uses: actions/upload-artifact@v2
         with:
-          java-version: "8"
-          java-package: jdk
-          architecture: x64
+          name: ${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64
+          path: "${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64.tar.gz*"
 
-      - shell: bash
-        id: test
-        continue-on-error: true
-        name: Integration Tests
+  release:
+    needs: [outputs, bundle]
+    if: needs.outputs.outputs.release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+
+      - uses: release-drafter/release-drafter@v5
+        id: release
+        with:
+          version: v${{ needs.outputs.outputs.saw-version }}
+          name: v${{ needs.outputs.outputs.saw-version }}
+          tag: v${{ needs.outputs.outputs.saw-version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/download-artifact@v2
+        with:
+          path: artifacts
+      - name: Upload artifacts to release
         run: |
-          mkdir -p ~/.stack
-          echo "system-ghc: true" >> ~/.stack/config.yaml
-          .github/ci.sh test_dist
-
-      - shell: bash
-        if: "steps.test.outcome == 'failure'"
-        name: Warn if tests failed
-        run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
+          # workaround for draft-releaser being hard to test in CI
+          tag="v${VERSION}"
+          body="${body:-$tag}"
+          if ! hub release show "$tag"; then
+            hub release create -d -m "$body" "$tag"
+          fi
+          assets=()
+          find ./artifacts \( -name 'saw*.tar.gz*' -o -name '*.msi*' \) -type f -print0 |
+            while IFS= read -r -d '' a; do assets+=("-a" "$a"); done
+          hub release edit -d "${assets[@]}" -m "" "$tag"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.outputs.outputs.saw-version }}
+          body: ${{ steps.release.outputs.body }}
