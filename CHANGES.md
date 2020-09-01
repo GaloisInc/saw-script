@@ -1,3 +1,67 @@
+# Version 0.6
+
+## New Features
+
+* Adedd experimental support for _compositional extraction_.
+  Previously, `crucible_llvm_extract` and similar functions could
+  translate very simple imperative functions into `Term` models but
+  analysis of more complex programs typically required verification of
+  equivalence to Cryptol specifications. Now, the
+  `crucible_llvm_compositional_extract` function allows extraction of
+  any function that can be specified using a `CrucibleSetup` block of the
+  sort used for `crucible_llvm_verify`. In addition, this extraction can
+  be _compositional_, preserving the call structure that exists in the
+  original program instead of inlining everything.
+
+* Added experimental support for interactive offline proofs using Coq.
+  The `write_coq_term` function and `offline_coq` tactic will export the
+  associated `Term` to a file in Gallina syntax. This file can be
+  imported into a Coq file that can do arbitrarily complex interactive
+  proofs.
+
+* Added experimental support for arrays of symbolic size. The new
+  `crucible_array_alloc` function specifies the existence of an
+  allocated array where the size is given by its `Term` argument. The
+  new `crucible_points_to_array_prefix` function specifies that the
+  given pointer points to (the prefix of) a symbolic array value of
+  a given symbolic size.
+
+* Improved x86 verification capabilities. Verification scripts for x86
+  functions can now process functions with mutable globals and function
+  calls (which are currently inlined), and can use proof scripts to
+  discharge proof obligations.
+
+* Added a new `llvm_sizeof` primitive, which works similarly to the
+  `sizeof` operator in C.
+
+* Added support for the `llvm.fshl.i32` funnel shift intrinsic.
+
+* Added experimental support for _verification summaries_. These
+  summaries list all verifications performed within a script in a
+  concise way that can track arbitrarily complex proof orchestrations.
+  Future releases will include more information in these summaries, and
+  more textual explanation of the assumptions made during each proof.
+
+## Other Changes
+
+* Made small improvements to documentation and error messages
+  throughout.
+
+* Improved the performance of expression hashing (closing #674).
+
+* Updated to include Cryptol 2.9.1 and all the associated changes.
+
+## Bug Fixes
+
+* Fixed handling of jumps in x86 verification.
+
+* Fixed matching for points-to and return values for x86.
+
+* Closed issues #140, #195, #225, #226, #387, #538, #542, #543, #556,
+  #635, #640, #642, #674, #691, #693, #698, #699, #700, #701, #702,
+  #704, #706, #707, #709, #720, #721, #730, #742, #744, #763, #768,
+  #773, #783, #785, #789, #782, #803, #807, and #815.
+
 # Version 0.5
 
 ## New Features
