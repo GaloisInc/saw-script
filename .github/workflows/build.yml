@@ -169,6 +169,9 @@ jobs:
       RELEASE: ${{ needs.outputs.outputs.release }}
     steps:
       - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
 
       - uses: actions/download-artifact@v2
         with:
@@ -196,6 +199,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
 
       - uses: release-drafter/release-drafter@v5
         id: release
