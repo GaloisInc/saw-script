@@ -172,14 +172,8 @@ bundle_files() {
 
   cp deps/abcBridge/abc-build/copyright.txt dist/ABC_LICENSE
   cp LICENSE README.md dist/
-  is_exe "dist/bin" "saw" || extract_exe "saw" "dist/bin"
-  is_exe "dist/bin" "jss" && rm -f "dist/bin/jss"
-  if ! is_exe "dist/bin" "cryptol"; then
-    build_cryptol
-    pushd deps/cryptol
-    extract_exe "cryptol" "../../dist/bin"
-    popd
-  fi
+  $IS_WIN || chmod +x dist/bin/*
+  rm -f "dist/bin/jss"
 
   cp doc/extcore.md dist/doc
   cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
