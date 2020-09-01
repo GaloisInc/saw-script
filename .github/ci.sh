@@ -159,7 +159,7 @@ test_dist() {
 build_cryptol() {
   is_exe "dist/bin" "cryptol" && return
   pushd deps/cryptol
-  ./deps/cryptol/.github/ci.sh build
+  .github/ci.sh build
   popd
 }
 
