@@ -2446,6 +2446,17 @@ primitives = Map.fromList
     , " ghosts gives the ghost arguments to block"
     ]
 
+  , prim "heapster_gen_block_perms_hint"
+    "HeapsterEnv -> String -> [Int] -> TopLevel ()"
+    (bicVal heapster_gen_block_perms_hint)
+    Experimental
+    [ "heapster_gen_block_perms_hint env nm blocks adds a hint to the Heapster"
+    , " type-checker to *generalize* (recursively replace all instances of"
+    , " eq(const) with (exists x. eq(x))) all permissions on the inputs of the"
+    , " given Crucible blocks numbers. If the given list is empty, do so for"
+    , " every block in the CFG."
+    ]
+
   , prim "heapster_find_symbol"
     "HeapsterEnv -> String -> TopLevel String"
     (bicVal heapster_find_symbol)

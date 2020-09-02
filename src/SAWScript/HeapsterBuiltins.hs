@@ -24,6 +24,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_recursive_perm
        , heapster_define_perm
        , heapster_block_entry_hint
+       , heapster_gen_block_perms_hint
        , heapster_find_symbol
        , heapster_find_symbols
        , heapster_assume_fun
@@ -399,6 +400,30 @@ heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str
                  BlockEntryHint h blocks block_ID top_args ghosts perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
+-- | Add a hint to the Heapster type-checker to *generalize* (recursively
+-- replace all instances of @eq(const)@ with @exists x. eq(x)@) all permissions
+-- on the inputs of the given Crucible blocks numbers. If the given list is
+-- empty, do so for every block in the CFG.
+heapster_gen_block_perms_hint :: BuiltinContext -> Options -> HeapsterEnv ->
+                                 String -> [Int] -> TopLevel ()
+heapster_gen_block_perms_hint bic opts henv nm blks =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     Some (ModuleAndCFG _ (AnyCFG cfg)) <-
+       failOnNothing ("Could not find symbol definition: " ++ nm) $
+       lookupLLVMSymbolModAndCFG henv nm
+     let h = cfgHandle cfg
+         blocks = fmapFC blockInputs $ cfgBlockMap cfg
+         block_idxs = fmapFC (blockIDIndex . blockID) $ cfgBlockMap cfg
+     blkIxs <- case blks of
+       -- If an empty list is given, add a hint to every block
+       [] -> pure $ toListFC Some block_idxs
+       _ -> forM blks $ \blk ->
+         failOnNothing ("Block ID " ++ show blk ++ " not found in function " ++ nm)
+                       (Ctx.intIndex blk (Ctx.size blocks))
+     let env' = foldl' (\env (Some blkIx) -> permEnvAddHint env $ Hint_GenPerms $
+                                              GenPermsHint h blocks (BlockID blkIx))
+                       env blkIxs
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Search for all symbol names in any LLVM module in a 'HeapsterEnv' that
 -- contain the supplied string as a substring
