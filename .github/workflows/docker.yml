@@ -8,8 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-        with:
-          submodules: true
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
       - run: .github/ci.sh set_version
         id: outputs
       - name: Publish to Registry

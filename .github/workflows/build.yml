@@ -240,7 +240,7 @@ jobs:
             hub release create -d -m "$body" "$tag"
           fi
           assets=()
-          find ./artifacts \( -name 'saw*.tar.gz*' -o -name '*.msi*' \) -type f -print0 |
+          find ./artifacts \( -name 'saw*.tar.gz*' \) -type f -print0 |
             while IFS= read -r -d '' a; do assets+=("-a" "$a"); done
           hub release edit -d "${assets[@]}" -m "" "$tag"
         env:
