@@ -123,6 +123,21 @@ jobs:
         name: Warn if tests failed
         run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
 
+  docker:
+    runs-on: ubuntu-latest
+    needs: [outputs]
+    if: contains(needs.outputs.outputs.changed, 'Dockerfile')
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+      - name: Publish to Registry
+        uses: docker/build-push-action@v1
+        with:
+          repository: galoisinc/saw
+          push: false
+
   s2n-tests:
     name: "Test s2n proofs"
     needs: build
@@ -225,7 +240,7 @@ jobs:
             hub release create -d -m "$body" "$tag"
           fi
           assets=()
-          find ./artifacts \( -name 'saw*.tar.gz*' -o -name '*.msi*' \) -type f -print0 |
+          find ./artifacts \( -name 'saw*.tar.gz*' \) -type f -print0 |
             while IFS= read -r -d '' a; do assets+=("-a" "$a"); done
           hub release edit -d "${assets[@]}" -m "" "$tag"
         env:
