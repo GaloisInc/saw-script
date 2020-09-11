@@ -36,7 +36,6 @@ import Control.Monad.Catch (MonadThrow)
 
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
-import Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
