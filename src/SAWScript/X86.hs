@@ -397,8 +397,7 @@ translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
-     bbMapRef <- newIORef mempty
-     let ?badBehaviorMap = bbMapRef
+     let ?recordLLVMAnnotation = \_ _ -> return ()
 
      let sym   = backend opts
          sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }

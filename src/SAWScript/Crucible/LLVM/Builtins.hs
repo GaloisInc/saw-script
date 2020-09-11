@@ -1219,8 +1219,7 @@ setupLLVMCrucibleContext bic opts lm action =
      Crucible.llvmPtrWidth ctx $ \wptr ->
        Crucible.withPtrWidth wptr $
        do let ?lc = ctx^.Crucible.llvmTypeCtx
-          bbMapRef <- io $ newIORef mempty
-          let ?badBehaviorMap = bbMapRef
+          let ?recordLLVMAnnotation = \_ _ -> return ()
           cc <-
             io $
             do let gen = globalNonceGenerator
