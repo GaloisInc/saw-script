@@ -36,7 +36,6 @@ import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
 import qualified Cryptol.Utils.Ident as C (Ident, PrimIdent(..), packIdent, unpackIdent, prelPrim, floatPrim, arrayPrim)
-import qualified Cryptol.Utils.Logger as C (quietLogger)
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
@@ -791,7 +790,7 @@ importExpr sc env expr =
              i' <- scNat sc (fromIntegral i)
              scGlobalApply sc "Cryptol.eListSel" [a', n', e', i']
 
-    C.ESet e1 sel e2 ->
+    C.ESet _ e1 sel e2 ->
       case sel of
         C.TupleSel i _maybeLen ->
           do e1' <- importExpr sc env e1
@@ -1529,7 +1528,7 @@ exportFirstOrderValue fv =
     FOVRec vm   -> V.VRecord $ C.recordFromFields [ (C.packIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
 
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
-importFirstOrderValue t0 v0 = V.runEval (V.EvalOpts C.quietLogger V.defaultPPOpts) (go t0 v0)
+importFirstOrderValue t0 v0 = V.runEval (go t0 v0)
   where
   go :: FirstOrderType -> V.Value -> V.Eval FirstOrderValue
   go t v = case (t,v) of
