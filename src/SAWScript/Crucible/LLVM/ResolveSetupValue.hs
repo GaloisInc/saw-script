@@ -37,6 +37,7 @@ import Data.IORef
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
+import qualified Data.ByteString as BS
 import           Numeric.Natural
 
 import qualified Text.LLVM.AST as L

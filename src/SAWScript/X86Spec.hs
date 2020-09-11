@@ -999,8 +999,10 @@ checkAlloc sym s (l := a) =
 -- If the region ID is concretely zero, it should be the case that the
 -- 'RegionIndex' map would translate it into a real 'LLVMPtr' since the only map
 -- entry (established in 'setupGlobals') is for 0.
-mkGlobalMap :: Crucible.HasLLVMAnn Sym =>
-  Map.Map RegionIndex (LLVMPtr Sym 64) -> GlobalMap Sym Crucible.Mem 64
+mkGlobalMap ::
+  Crucible.HasLLVMAnn Sym =>
+  Map.Map RegionIndex (LLVMPtr Sym 64) ->
+  GlobalMap Sym Crucible.Mem 64
 mkGlobalMap rmap sym mem region off =
   mapConcreteRegion <|> passThroughConcreteRegion <|> mapSymbolicRegion
   where
@@ -1261,7 +1263,11 @@ lookupCry x mp =
 
 adjustPtr ::
   Crucible.HasLLVMAnn Sym =>
-  Sym -> MemImpl Sym -> LLVMPtr Sym 64 -> Integer -> IO (LLVMPtr Sym 64)
+  Sym ->
+  MemImpl Sym ->
+  LLVMPtr Sym 64 ->
+  Integer ->
+  IO (LLVMPtr Sym 64)
 adjustPtr sym mem ptr amt
   | amt == 0  = return ptr
   | otherwise =
