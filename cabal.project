@@ -29,3 +29,6 @@ packages:
     deps/macaw/x86_symbolic
     deps/elf-edit
     deps/dwarf
+    deps/argo/argo
+    deps/argo/cryptol-remote-api
+    deps/argo/saw-remote-api
