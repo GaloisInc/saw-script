@@ -605,6 +605,9 @@ Definition bvShiftL : forall (n : ((@SAWCoreScaffolding.Nat))), forall (a : Type
 Definition bvShiftR : forall (n : ((@SAWCoreScaffolding.Nat))), forall (a : Type), forall (w : ((@SAWCoreScaffolding.Nat))), (a) -> (((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) -> (((@bitvector) (w))) -> ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a)) :=
   (fun (n : ((@SAWCoreScaffolding.Nat))) (a : Type) (w : ((@SAWCoreScaffolding.Nat))) (z : a) (xs : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (((@SAWCoreScaffolding.Bool))))) => ((@SAWCoreVectorsAsCoqVectors.shiftR) (n) (a) (z) (xs) (((@SAWCoreVectorsAsCoqVectors.bvToNat) (w) (i))))).
 
+Definition bvSShiftR : forall (n : ((@SAWCoreScaffolding.Nat))), forall (a : Type), forall (w : ((@SAWCoreScaffolding.Nat))), (((@SAWCoreVectorsAsCoqVectors.Vec) (((@SAWCoreScaffolding.Succ) (n))) (a))) -> (((@bitvector) (w))) -> ((@SAWCoreVectorsAsCoqVectors.Vec) (((@SAWCoreScaffolding.Succ) (n))) (a)) :=
+  (fun (n : ((@SAWCoreScaffolding.Nat))) (a : Type) (w : ((@SAWCoreScaffolding.Nat))) (xs : ((@SAWCoreVectorsAsCoqVectors.Vec) (((@SAWCoreScaffolding.Succ) (n))) (a))) (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (w) (((@SAWCoreScaffolding.Bool))))) => ((@bvShiftR) (((@SAWCoreScaffolding.Succ) (n))) (a) (w) (((@SAWCorePrelude.sawAt) (((@SAWCoreScaffolding.Succ) (n))) (a) (xs) (0))) (xs) (i))).
+
 (* Prelude.bvAdd was skipped *)
 
 (* Prelude.bvugt was skipped *)
@@ -873,8 +876,11 @@ Definition efq : forall (a : Type), (((@SAWCoreScaffolding.EqP) (((@SAWCoreScaff
 Definition emptyBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (a : Type), ((@BVVec) (n) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))) (a)) :=
   (fun (n : ((@SAWCoreScaffolding.Nat))) (a : Type) => ((@genBVVec) (n) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))) (a) ((fun (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (pf : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))))) (((@SAWCoreScaffolding.true))))) => ((@efq) (a) (((@transP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreScaffolding.true))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))))) (((@SAWCoreScaffolding.false))) (((@symP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (0))))) (((@SAWCoreScaffolding.true))) (pf))) (((@not_bvult_zero) (n) (i)))))))))).
 
+Definition repeatBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((@bitvector) (n))), forall (a : Type), (a) -> ((@BVVec) (n) (len) (a)) :=
+  (fun (n : ((@SAWCoreScaffolding.Nat))) (len : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (a : Type) (x : a) => ((@genBVVec) (n) (len) (a) ((fun (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (_ : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (len))) (((@SAWCoreScaffolding.true))))) => x)))).
+
 Definition singletonBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (a : Type), (a) -> ((@BVVec) (n) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (1))) (a)) :=
-  (fun (n : ((@SAWCoreScaffolding.Nat))) (a : Type) (x : a) => ((@genBVVec) (n) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (1))) (a) ((fun (i : ((@SAWCoreVectorsAsCoqVectors.Vec) (n) (((@SAWCoreScaffolding.Bool))))) (_ : ((@SAWCoreScaffolding.EqP) (((@SAWCoreScaffolding.Bool))) (((@SAWCoreVectorsAsCoqVectors.bvult) (n) (i) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (1))))) (((@SAWCoreScaffolding.true))))) => x)))).
+  (fun (n : ((@SAWCoreScaffolding.Nat))) (a : Type) (x : a) => ((@repeatBVVec) (n) (((@SAWCoreVectorsAsCoqVectors.bvNat) (n) (1))) (a) (x))).
 
 Axiom atBVVec : forall (n : ((@SAWCoreScaffolding.Nat))), forall (len : ((@bitvector) (n))), forall (a : Type), (((@BVVec) (n) (len) (a))) -> forall (ix : ((@bitvector) (n))), (((@is_bvult) (n) (ix) (len))) -> a .
 
