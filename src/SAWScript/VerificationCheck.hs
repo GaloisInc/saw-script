@@ -18,7 +18,7 @@ import Verifier.SAW.Simulator.Concrete (CValue)
 import Text.PrettyPrint.ANSI.Leijen
 
 import Verifier.SAW.Cryptol (scCryptolEq)
-import qualified SAWScript.Value as SV (PPOpts(..), cryptolPPOpts, quietEvalOpts)
+import qualified SAWScript.Value as SV (PPOpts(..), cryptolPPOpts)
 
 data VerificationCheck
   = AssertionCheck String Term
@@ -59,8 +59,8 @@ vcCounterexample sc opts (EqualityCheck nm impNode specNode) evalFn =
          sv = exportValueWithSchema sschema sn
          opts' = SV.cryptolPPOpts opts
      -- Grr. Different pretty-printers.
-     lv_doc <- CV.runEval SV.quietEvalOpts (CV.ppValue CV.Concrete opts' lv)
-     sv_doc <- CV.runEval SV.quietEvalOpts (CV.ppValue CV.Concrete opts' sv)
+     lv_doc <- CV.runEval (CV.ppValue CV.Concrete opts' lv)
+     sv_doc <- CV.runEval (CV.ppValue CV.Concrete opts' sv)
 
      return (text nm <$$>
         nest 2 (text "Encountered: " <+>
