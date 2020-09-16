@@ -132,6 +132,8 @@ jobs:
       - run: |
           git submodule update --init
           git -C deps/abcBridge submodule update --init
+      - uses: satackey/action-docker-layer-caching@v0.0.8
+        continue-on-error: true
       - name: Publish to Registry
         uses: docker/build-push-action@v1
         with:
@@ -164,6 +166,13 @@ jobs:
         with:
           name: "saw-Linux-${{ matrix.ghc }}"
           path: ./s2nTests/bin
+
+      - shell: bash
+        working-directory: s2nTests
+        run: docker-compose pull
+
+      - uses: satackey/action-docker-layer-caching@v0.0.8
+        continue-on-error: true
 
       - shell: bash
         name: "s2n tests: ${{ matrix.s2n-target }}"

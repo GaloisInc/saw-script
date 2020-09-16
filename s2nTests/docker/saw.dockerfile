@@ -58,7 +58,7 @@ WORKDIR /home/saw
 USER root
 RUN chown -R root:root /home/saw/rootfs
 
-FROM debian:buster-slim
+FROM debian:stretch-slim
 RUN apt-get update \
     && apt-get install -y libgmp10 libgomp1 libffi6 wget libncurses5 unzip
 COPY --from=build /home/saw/rootfs /
