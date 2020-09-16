@@ -12,4 +12,5 @@ source codebuild/bin/s2n_setup_env.sh
 SAW=true SAW_INSTALL_DIR=tmp-saw codebuild/bin/s2n_install_test_dependencies.sh
 export PATH=/saw-bin:$PATH
 cp /saw-bin/saw "$SAW_INSTALL_DIR"/bin/saw
+"$SAW_INSTALL_DIR"/bin/saw --version
 exec codebuild/bin/s2n_codebuild.sh
