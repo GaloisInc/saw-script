@@ -145,7 +145,7 @@ instance LiftTCM b => LiftTCM (a -> b) where
 -- | Errors that can occur during type-checking
 data TCError
   = NotSort Term
-  | NotFuncType Term
+  | NotFuncTypeInApp TypedTerm TypedTerm
   | NotTupleType Term
   | BadTupleIndex Int Term
   | NotStringLit Term
@@ -185,9 +185,14 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
 
   helper :: TCError -> PPErrM [String]
   helper (NotSort ty) = ppWithPos [ return "Not a sort" , ishow ty ]
-  helper (NotFuncType ty) =
-      ppWithPos [ return "Function application with non-function type" ,
-                  ishow ty ]
+  helper (NotFuncTypeInApp f arg) =
+      ppWithPos [ return "Function application with non-function type"
+                , return "For term:"
+                , ishow (typedVal f)
+                , return "With type:"
+                , ishow (typedType f)
+                , return "To argument:"
+                , ishow (typedVal arg) ]
   helper (NotTupleType ty) =
       ppWithPos [ return "Tuple field projection with non-tuple type" ,
                   ishow ty ]
@@ -390,7 +395,8 @@ instance TypeInfer (FlatTermF Term) where
 -- its (most general) type.
 instance TypeInfer (TermF TypedTerm) where
   typeInfer (FTermF ftf) = typeInfer ftf
-  typeInfer (App (TypedTerm _ x_tp) y) = applyPiTyped x_tp y
+  typeInfer (App x@(TypedTerm _ x_tp) y) =
+    applyPiTyped (NotFuncTypeInApp x y) x_tp y
   typeInfer (Lambda x (TypedTerm a a_tp) (TypedTerm _ b)) =
     void (ensureSort a_tp) >> liftTCM scTermF (Pi x a b)
   typeInfer (Pi _ (TypedTerm _ a_tp) (TypedTerm _ b_tp)) =
@@ -451,14 +457,16 @@ instance TypeInfer (FlatTermF TypedTerm) where
        dt <- case maybe_dt of
          Just dt -> return dt
          Nothing -> throwTCError $ NoSuchDataType d
+       let err =
+             BadParamsOrArgsLength True d
+             (map typedVal params) (map typedVal args)
        if length params == length (dtParams dt) &&
           length args == length (dtIndices dt) then return () else
-         throwTCError $
-         BadParamsOrArgsLength True d (map typedVal params) (map typedVal args)
+         throwTCError err
        -- NOTE: we assume dtType is already well-typed and in WHNF
        -- _ <- inferSort t
        -- t' <- typeCheckWHNF t
-       foldM applyPiTyped (dtType dt) (params ++ args)
+       foldM (applyPiTyped err) (dtType dt) (params ++ args)
 
   typeInfer (CtorApp c params args) =
     -- Look up the Ctor structure, check the length of the params and args, and
@@ -467,14 +475,16 @@ instance TypeInfer (FlatTermF TypedTerm) where
        ctor <- case maybe_ctor of
          Just ctor -> return ctor
          Nothing -> throwTCError $ NoSuchCtor c
+       let err =
+             BadParamsOrArgsLength False c
+             (map typedVal params) (map typedVal args)
        if length params == ctorNumParams ctor &&
           length args == ctorNumArgs ctor then return () else
-         throwTCError $
-         BadParamsOrArgsLength False c (map typedVal params) (map typedVal args)
+         throwTCError err
        -- NOTE: we assume ctorType is already well-typed and in WHNF
        -- _ <- inferSort t
        -- t' <- typeCheckWHNF t
-       foldM applyPiTyped (ctorType ctor) (params ++ args)
+       foldM (applyPiTyped err) (ctorType ctor) (params ++ args)
 
   typeInfer (RecursorApp d params p_ret cs_fs ixs arg) =
     inferRecursorApp d params p_ret cs_fs ixs arg
@@ -509,16 +519,17 @@ instance TypeInfer (FlatTermF TypedTerm) where
 
 -- | Check that @fun_tp=Pi x a b@ and that @arg@ has type @a@, and return the
 -- result of substituting @arg@ for @x@ in the result type @b@, i.e.,
--- @[arg/x]b@. This substitution could create redexes, so we call the evaluator.
-applyPiTyped :: Term -> TypedTerm -> TCM Term
-applyPiTyped fun_tp arg =
+-- @[arg/x]b@. This substitution could create redexes, so we call the
+-- evaluator. If @fun_tp@ is not a pi type, raise the supplied error.
+applyPiTyped :: TCError -> Term -> TypedTerm -> TCM Term
+applyPiTyped err fun_tp arg =
   case asPi fun_tp of
     Just (_, arg_tp, ret_tp) -> do
       -- _ <- ensureSort aty -- NOTE: we assume tx is well-formed and WHNF
       -- aty' <- scTypeCheckWHNF aty
       checkSubtype arg arg_tp
       liftTCM instantiateVar 0 (typedVal arg) ret_tp >>= typeCheckWHNF
-    _ -> throwTCError (NotFuncType fun_tp)
+    _ -> throwTCError err
 
 -- | Ensure that a 'Term' is a sort, and return that sort
 ensureSort :: Term -> TCM Sort
@@ -577,7 +588,12 @@ inferRecursorApp d params p_ret cs_fs ixs arg =
      if length params == length (dtParams dt) &&
         length ixs == length (dtIndices dt) then return () else
        throwTCError $ mk_err "Incorrect number of params or indices"
-     _ <- foldM applyPiTyped (dtType dt) (params ++ ixs)
+     _ <-
+       -- applyPiTyped cannot fail, because we have already checked the number
+       -- of params and indices
+       foldM (applyPiTyped
+              (error "Internal type-checking error: unexpected non-pi type!"))
+       (dtType dt) (params ++ ixs)
 
      -- Get the type of p_ret and make sure that it is of the form
      --
