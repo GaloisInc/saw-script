@@ -1,15 +1,18 @@
 version: '3'
 services:
   saw-script:
-    build: ..
+    build:
+      context: ..
+      dockerfile: ${PWD:-.}/docker/saw.dockerfile
     entrypoint: ["cp", "/usr/local/bin/saw", "/saw-bin"]
+    user: root
     volumes:
-      - ./bin:/saw-bin:rw
+      - ${PWD:-}/bin:/saw-bin:rw
 
   s2n:
     build:
       context: .
-      dockerfile: docker/s2n.dockerfile
+      dockerfile: ${PWD:-.}/docker/s2n.dockerfile
     image: s2n
     volumes:
-      - ./bin:/saw-bin:rw
+      - ${PWD:-.}/bin:/saw-bin:rw
