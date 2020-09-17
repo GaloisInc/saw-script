@@ -1442,7 +1442,10 @@ instantiateExtResolveSAWSymBV sc cc w tm = do
 -- is overwritten by a postcondition memory write is not invalidated.
 -- Return a map containing the overwritten memory allocations.
 invalidateMutableAllocs ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  ( ?lc :: Crucible.TypeContext
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options ->
   SharedContext ->
   LLVMCrucibleContext arch ->

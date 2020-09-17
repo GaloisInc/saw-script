@@ -69,6 +69,11 @@ module SAWScript.Crucible.LLVM.Builtins
     , findDecl
     , findDefMaybeStatic
     , setupLLVMCrucibleContext
+    , checkSpecReturnType
+    , verifyPrestate
+    , verifyPoststate
+    , withCfgAndBlockId
+    , registerOverride
     ) where
 
 import Prelude hiding (fail)
@@ -282,18 +287,21 @@ crucible_llvm_unsafe_assume_spec bic opts (Some lm) nm setup =
      returnProof $ SomeLLVM method_spec
 
 crucible_llvm_array_size_profile ::
+  ProofScript SatResult  ->
   BuiltinContext ->
   Options ->
   Some LLVMModule ->
   String ->
+  [SomeLLVM MS.CrucibleMethodSpecIR] ->
   LLVMCrucibleSetupM () ->
-  TopLevel [Crucible.Profile]
-crucible_llvm_array_size_profile bic opts (Some lm) nm setup =
-  withMethodSpec bic opts lm nm setup $ \cc method_spec ->
-  do cell <- io $ newIORef Map.empty
-     void $ verifyMethodSpec bic opts cc method_spec [] False undefined (Just cell)
-     profiles <- io $ readIORef cell
-     pure $ Map.toList profiles
+  TopLevel [(String, [Crucible.FunctionProfile])]
+crucible_llvm_array_size_profile assume bic opts (Some lm) nm lemmas setup = do
+  cell <- io $ newIORef (Map.empty :: Map Text.Text [Crucible.FunctionProfile])
+  lemmas' <- checkModuleCompatibility lm lemmas
+  withMethodSpec bic opts lm nm setup $ \cc ms -> do
+    void . verifyMethodSpec bic opts cc ms lemmas' True assume $ Just cell
+    profiles <- io $ readIORef cell
+    pure . fmap (\(fnm, prof) -> (Text.unpack fnm, prof)) $ Map.toList profiles
 
 crucible_llvm_compositional_extract ::
   BuiltinContext ->
@@ -435,6 +443,7 @@ checkModuleCompatibility llvmModule = foldM step []
         Just Refl -> pure (lemma:accum)
 
 
+-- -- | The real work of 'crucible_llvm_verify' and 'crucible_llvm_unsafe_assume_spec'.
 withMethodSpec ::
   BuiltinContext   ->
   Options          ->
@@ -492,7 +501,7 @@ verifyMethodSpec ::
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
   Bool ->
   ProofScript SatResult ->
-  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
+  Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   TopLevel (MS.CrucibleMethodSpecIR (LLVM arch), OverrideState (LLVM arch))
 verifyMethodSpec bic opts cc methodSpec lemmas checkSat tactic asp =
   do printOutLnTop Info $
@@ -511,12 +520,14 @@ verifyMethodSpec bic opts cc methodSpec lemmas checkSat tactic asp =
          Nothing   -> fail "internal error: LLVM Memory global not found"
          Just mem0 -> return mem0
      -- push a memory stack frame if starting from a breakpoint
-     let mem = if isJust (methodSpec^.csParentName)
-               then mem0
+     let mem = case methodSpec^.csParentName of
+               Just parent -> mem0
                  { Crucible.memImplHeap = Crucible.pushStackFrameMem
+                   (Text.pack $ mconcat [methodSpec ^. csName, "#", parent])
                    (Crucible.memImplHeap mem0)
                  }
-               else mem0
+               Nothing -> mem0
+
      let globals1 = Crucible.llvmGlobals (ccLLVMContext cc) mem
 
      -- construct the initial state for verifications
@@ -897,7 +908,7 @@ ppGlobalPair cc gp =
       globals = gp ^. Crucible.gpGlobals in
   case Crucible.lookupGlobal mvar globals of
     Nothing -> text "LLVM Memory global variable not initialized"
-    Just mem -> Crucible.ppMem mem
+    Just mem -> Crucible.ppMem (Crucible.memImplHeap mem)
 
 
 --------------------------------------------------------------------------------
@@ -1028,7 +1039,7 @@ verifySimulate ::
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
   Crucible.SymGlobalState Sym ->
   Bool ->
-  Maybe (IORef (Map Text.Text [[Maybe Int]])) ->
+  Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   IO (Maybe (Crucible.MemType, LLVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals checkSat asp =
   withCfgAndBlockId cc mspec $ \cfg entryId ->
@@ -1208,8 +1219,7 @@ setupLLVMCrucibleContext bic opts lm action =
      Crucible.llvmPtrWidth ctx $ \wptr ->
        Crucible.withPtrWidth wptr $
        do let ?lc = ctx^.Crucible.llvmTypeCtx
-          bbMapRef <- io $ newIORef mempty
-          let ?badBehaviorMap = bbMapRef
+          let ?recordLLVMAnnotation = \_ _ -> return ()
           cc <-
             io $
             do let gen = globalNonceGenerator
