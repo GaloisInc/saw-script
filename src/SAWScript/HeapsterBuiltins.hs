@@ -440,7 +440,7 @@ heapster_gen_block_perms_hint _bic _opts henv nm blks =
 heapster_join_point_hint :: BuiltinContext -> Options -> HeapsterEnv ->
                             String -> [Int] -> TopLevel ()
 heapster_join_point_hint _bic _opts henv nm blks =
-  heapster_add_block_hints henv nm blks $ \_ _ -> return GenPermsHintSort
+  heapster_add_block_hints henv nm blks $ \_ _ -> return JoinPointHintSort
 
 -- | Search for all symbol names in any LLVM module in a 'HeapsterEnv' that
 -- contain the supplied string as a substring
