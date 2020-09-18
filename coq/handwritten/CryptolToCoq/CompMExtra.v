@@ -3,6 +3,7 @@
  ***)
 
 From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Export CompM.
 
 (***
@@ -266,6 +267,7 @@ Hint Resolve refinesFunBase refinesFunStep | 5 : refinesFun.
  ***)
 
 Ltac prove_refinement :=
+  compute_bvLits;
   unshelve (typeclasses eauto with refinesM refinesFun);
   try (unshelve (rewrite_strat (bottomup (hints refinesM))));
   try reflexivity.

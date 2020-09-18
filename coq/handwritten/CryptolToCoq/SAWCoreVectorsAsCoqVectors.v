@@ -4,14 +4,18 @@ From Bits Require Import spec.
 From Coq Require Import Lists.List.
 From Coq Require        Numbers.NatInt.NZLog.
 From Coq Require Import PeanoNat.
-From Coq Require        Strings.String.
+From Coq Require Import Strings.String.
 From Coq Require Import Vectors.Vector.
+From Coq Require Import Bool.Bool.
+From Coq Require Import BinNums.
 
 From CryptolToCoq Require Import SAWCoreScaffolding.
 
 From mathcomp Require Import ssreflect.
 From mathcomp Require Import ssrnat.
+From mathcomp Require Import ssrbool.
 From mathcomp Require Import fintype.
+From mathcomp Require Import tuple.
 
 Import VectorNotations.
 
@@ -102,6 +106,21 @@ Fixpoint foldr (a b : Type) (n : Nat) (f : a -> b -> b) (base : b) (v : Vec n a)
   | Vector.cons hd _ tl => f hd (foldr _ _ _ f base tl)
   end.
 
+Fixpoint foldl_dep (a : Type) (b : Nat -> Type) (n : Nat)
+         (f : forall n, b n -> a -> b (S n)) (base : b O) (v : Vec n a) : b n :=
+  match v with
+  | Vector.nil => base
+  | Vector.cons hd _ tl => foldl_dep a (fun n => b (S n)) _ (fun n => f (S n)) (f _ base hd) tl
+  end.
+
+Fixpoint tuple_foldl_dep (a : Type) (b : Nat -> Type) (n : Nat)
+         (f : forall n, b n -> a -> b (S n)) (base : b O) (t : n .-tuple a) : b n :=
+  match n, t with
+  | O, _ => base
+  | S m, t => let (hd, tl) := (thead t, behead_tuple t)
+               in tuple_foldl_dep a (fun n => b (S n)) _ (fun n => f (S n)) (f _ base hd) tl
+  end.
+
 Definition EmptyVec := Vector.nil.
 
 Definition coerceVec (a : sort 0) (m n : Nat) (eq : Eq Nat m n) (v : Vec m a) : Vec n a :=
@@ -152,49 +171,83 @@ Definition zipWithFunctional
 
 Definition bitvector (n : Nat) : Type := Vector.t bool n.
 
+(* NOTE BITS are stored in reverse order than bitvector *)
+Definition bvToBITS {size : nat} : bitvector size -> BITS size
+  := foldl_dep bool BITS size (fun _ bs b => joinlsb (bs, b)) nilB.
+
+(* NOTE BITS are stored in reverse order than bitvector *)
+Definition bitsToBv {size : nat} : BITS size -> bitvector size
+  := tuple_foldl_dep bool bitvector size (fun _ bv b => Vector.cons _ b _ bv) (Vector.nil _).
+
+(* Use this to write decimal number literals of bitvector type, e.g. bvLit 64 3 *)
+Definition bvLit (size : Nat) (lit : Z) : bitvector size := bitsToBv (fromZ lit).
+
+Arguments bvLit : simpl never.
+
+(* Use this to write binary number literals of bitvector type, e.g. bvLit_0b"0011" : bitvector 4 *)
+Definition bvLit_0b s : bitvector (length s) := bitsToBv (fromBin s).
+
+Arguments bvLit_0b : simpl never.
+
+(* This tactic runs 'compute' on all bitvector literals in the current goal *)
+Ltac compute_bvLits :=
+  repeat (match goal with
+  | |- context bv [ bvLit ?s ?l ] =>
+    let bv' := eval compute in (bvLit s l) in
+    let new_goal := context bv [ bv' ] in
+        change new_goal; unfold SAWCoreScaffolding.true; unfold SAWCoreScaffolding.false
+  | |- context bv [ bvLit_0b ?s ] =>
+    let bv' := eval compute in (bvLit_0b s) in
+    let new_goal := context bv [ bv' ] in
+        change new_goal; unfold SAWCoreScaffolding.true; unfold SAWCoreScaffolding.false
+  end).
+
+(* Until we have numeral notations for non-inductive types, we use this for printing.
+   Note that this doesn't work for parsing, use bvLit or bvLit_0b instead. *)
+Notation "0" := Datatypes.false : type_scope.
+Notation "1" := Datatypes.true  : type_scope.
+Notation "0" := SAWCoreScaffolding.false : type_scope.
+Notation "1" := SAWCoreScaffolding.true  : type_scope.
+Notation "0b x" := (cons bool x _ (nil bool)) (at level 80) : type_scope.
+Notation "0b x y .. z" := (cons bool x _ (cons bool y _ .. (cons bool z _ (nil bool)) ..)) (at level 80) : type_scope.
+
 Definition joinLSB {n} (v : bitvector n) (lsb : bool) : bitvector n.+1 :=
   Vector.shiftin lsb v.
 
+(* NOTE This can cause Coq to stack overflow, avoid it as much as possible! *)
 Fixpoint bvNat (size : Nat) (number : Nat) : bitvector size :=
-  if size is size'.+1
-  then joinLSB (bvNat size' (number./2)) (odd number)
-  else Vector.nil _
-.
+  bitsToBv (fromNat number).
+(*   if size is size'.+1 *)
+(*   then joinLSB (bvNat size' (number./2)) (odd number) *)
+(*   else Vector.nil _ *)
+(* . *)
 
-Arguments bvNat : simpl never.
+(* Arguments bvNat : simpl never. *)
 
 Definition bvToNatFolder (n : nat) (b : bool) := b + n.*2.
 
 Fixpoint bvToNat (size : Nat) (v : bitvector size) : Nat :=
   Vector.fold_left bvToNatFolder 0 v.
 
-(* NOTE BITS are stored in reverse order than bitvector *)
-Definition bvToBITS {size : nat} (v : bitvector size)
-  : BITS size
-  := fromNat (bvToNat size v).
-
-(* This is annoyingto implement, so using BITS conversion *)
+(* This is annoying to implement, so using BITS conversion *)
 Definition bvAdd (n : nat) (a : bitvector n) (b : bitvector n)
   : bitvector n
-  := bvNat _ (toNat (addB (bvToBITS a) (bvToBITS b))).
+  := bitsToBv (addB (bvToBITS a) (bvToBITS b)).
 
-(* This is annoyingto implement, so using BITS conversion *)
+(* This is annoying to implement, so using BITS conversion *)
 Definition bvSub (n : nat) (a : bitvector n) (b : bitvector n)
   : bitvector n
-  := bvNat _ (toNat (subB (bvToBITS a) (bvToBITS b))).
+  := bitsToBv (subB (bvToBITS a) (bvToBITS b)).
 
-(* This is annoyingto implement, so using BITS conversion *)
+(* This is annoying to implement, so using BITS conversion *)
 Definition bvMul (n : nat) (a : bitvector n) (b : bitvector n)
   : bitvector n
-  := bvNat _ (toNat (mulB (bvToBITS a) (bvToBITS b))).
+  := bitsToBv (mulB (bvToBITS a) (bvToBITS b)).
 
-(* This is annoyingto implement, so using BITS conversion *)
+(* This is annoying to implement, so using BITS conversion *)
 Definition bvNeg (n : nat) (a : bitvector n)
   : bitvector n
-  := bvNat _ (toNat (invB (bvToBITS a))).
-
-Definition bvSExt (m n : Nat) (a:bitvector (Succ n)) : bitvector (m + (Succ n)) :=
-  bvNat _ (bvToNat _ a).
+  := bitsToBv (invB (bvToBITS a)).
 
 (* FIXME this is not implemented *)
 Definition bvUDiv (n : nat) (a : bitvector n) (b : bitvector n)
@@ -227,28 +280,10 @@ Definition bvLg2 (n : nat) (a : bitvector n)
 Opaque bvLg2.
 
 (* FIXME this is not implemented *)
-Definition bvShiftL (n : nat) (T : Type) (w : nat) (v : T) (a : Vector.t T n) (b : bitvector w)
-  : Vector.t T n
-  := a.
-Opaque bvShiftL.
-
-(* FIXME this is not implemented *)
-Definition bvShiftR (n : nat) (T : Type) (w : nat) (v : T) (a : Vector.t T n) (b : bitvector w)
-  : Vector.t T n
-  := a.
-Opaque bvShiftR.
-
-(* FIXME this is not implemented *)
 Definition bvSShr (w : nat) (a : bitvector w.+1) (n : nat)
   : bitvector w.+1
   := a.
 Opaque bvSShr.
-
-(* FIXME this is not implemented *)
-Definition bvCarry (w : nat) (a : bitvector w.+1) (n : nat)
-  : bitvector w.+1
-  := a.
-Opaque bvCarry.
 
 (* FIXME this is not implemented *)
 Definition rotateL (n : nat) (A : Type) (v : Vector.t A n) (i : nat)
@@ -274,31 +309,38 @@ Definition shiftR (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat)
   := v.
 Opaque shiftR.
 
+(* This is annoying to implement, so using BITS conversion *)
 Definition bvult (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   ltB (bvToBITS a) (bvToBITS b).
 
+Definition bvugt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+  bvult n b a.
+
+(* This is annoying to implement, so using BITS conversion *)
 Definition bvule (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   leB (bvToBITS a) (bvToBITS b).
 
-(* FIXME not implemented *)
+Definition bvuge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
+  bvule n b a.
+
+Definition sign {n : nat} (a : bitvector n) : Bool :=
+  match a with
+  | Vector.nil => false
+  | Vector.cons b _ _ => b
+  end.
+
 Definition bvslt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
-  false.
-Opaque bvslt.
+  let c := bvSub n a b
+   in (sign a && ~~ sign b) || (sign a && sign c) || (~~ sign b && sign c).
 
-(* FIXME not implemented *)
 Definition bvsgt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
-  false.
-Opaque bvsgt.
+  bvslt n b a.
 
-(* FIXME not implemented *)
 Definition bvsle (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
-  false.
-Opaque bvsle.
+  bvslt n a b || (Vector.eqb _ eqb a b).
 
-(* FIXME not implemented *)
 Definition bvsge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
-  false.
-Opaque bvsge.
+  bvsle n b a.
 
 (* Axiom intToBv : forall (n : Nat), Integer -> bitvector n. *)
 
