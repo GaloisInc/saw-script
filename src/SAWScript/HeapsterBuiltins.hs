@@ -25,6 +25,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_perm
        , heapster_block_entry_hint
        , heapster_gen_block_perms_hint
+       , heapster_join_point_hint
        , heapster_find_symbol
        , heapster_find_symbols
        , heapster_assume_fun
@@ -53,6 +54,7 @@ import qualified Data.ByteString.Lazy.UTF8 as BL
 import Data.Binding.Hobbits
 
 import qualified Data.Parameterized.Context as Ctx
+import Data.Parameterized.TraversableF
 import Data.Parameterized.TraversableFC
 
 import Verifier.SAW.Term.Functor
@@ -368,6 +370,36 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
      let env' = permEnvAddDefinedPerm env nm args tp_perm perm
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
+-- | Add Heapster type-checking hint for some blocks in a function given by
+-- name. The blocks to receive the hint are those specified in the list, or all
+-- blocks if the list is empty.
+heapster_add_block_hints :: HeapsterEnv -> String -> [Int] ->
+                            (forall ext blocks init ret args.
+                             CFG ext blocks init ret -> BlockID blocks args ->
+                             TopLevel (BlockHintSort args)) ->
+                            TopLevel ()
+heapster_add_block_hints henv nm blks hintF =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     Some (ModuleAndCFG _ (AnyCFG cfg)) <-
+       failOnNothing ("Could not find symbol definition: " ++ nm) $
+       lookupLLVMSymbolModAndCFG henv nm
+     let h = cfgHandle cfg
+         blocks = fmapFC blockInputs $ cfgBlockMap cfg
+         block_idxs = fmapFC (blockIDIndex . blockID) $ cfgBlockMap cfg
+     blkIDs <- case blks of
+       -- If an empty list is given, add a hint to every block
+       [] -> pure $ toListFC (Some . BlockID) block_idxs
+       _ -> forM blks $ \blk ->
+         failOnNothing ("Block ID " ++ show blk ++
+                        " not found in function " ++ nm)
+                       (fmapF BlockID <$> Ctx.intIndex blk (Ctx.size blocks))
+     env' <- foldM (\env (Some blkID) ->
+                     permEnvAddHint env <$> Hint_Block <$>
+                     BlockHint h blocks blkID <$>
+                     hintF cfg blkID)
+       env blkIDs
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
 -- | Add a hint to the Heapster type-checker that Crucible block number @block@ in
 -- function @fun@ should have permissions @perms@ on its inputs
 heapster_block_entry_hint :: BuiltinContext -> Options -> HeapsterEnv ->
@@ -379,26 +411,18 @@ heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str
        parseParsedCtxString "top-level argument context" env top_args_str
      Some ghosts_p <-
        parseParsedCtxString "ghost argument context" env ghosts_str
-     Some (ModuleAndCFG _ (AnyCFG cfg)) <-
-       failOnNothing ("Could not find symbol definition: " ++ nm) $
-       lookupLLVMSymbolModAndCFG henv nm
      let top_args = parsedCtxCtx top_args_p
          ghosts = parsedCtxCtx ghosts_p
-         h = cfgHandle cfg
-         blocks = fmapFC blockInputs $ cfgBlockMap cfg
-     Some blockIx <-
-       failOnNothing ("Block ID " ++ show blk ++ " not found in function " ++ nm)
-                     (Ctx.intIndex blk (Ctx.size blocks))
-     let block_ID = BlockID blockIx
-         block_args = blocks Ctx.! blockIx
-     perms <- parsePermsString "block entry permissions" env
-               (appendParsedCtx
-                (appendParsedCtx top_args_p
-                 (mkArgsParsedCtx $ mkCruCtx block_args)) ghosts_p)
-               perms_str
-     let env' = permEnvAddHint env $ Hint_BlockEntry $
-                 BlockEntryHint h blocks block_ID top_args ghosts perms
-     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+     heapster_add_block_hints henv nm [blk] $ \cfg blkID ->
+       let block_args =
+             mkCruCtx $ blockInputs $
+             (cfgBlockMap cfg) Ctx.! (blockIDIndex blkID) in
+       BlockEntryHintSort top_args ghosts <$>
+       parsePermsString "block entry permissions" env
+       (appendParsedCtx (appendParsedCtx
+                         top_args_p (mkArgsParsedCtx block_args)) ghosts_p)
+       perms_str
+
 
 -- | Add a hint to the Heapster type-checker to *generalize* (recursively
 -- replace all instances of @eq(const)@ with @exists x. eq(x)@) all permissions
@@ -406,24 +430,17 @@ heapster_block_entry_hint bic opts henv nm blk top_args_str ghosts_str perms_str
 -- empty, do so for every block in the CFG.
 heapster_gen_block_perms_hint :: BuiltinContext -> Options -> HeapsterEnv ->
                                  String -> [Int] -> TopLevel ()
-heapster_gen_block_perms_hint bic opts henv nm blks =
-  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
-     Some (ModuleAndCFG _ (AnyCFG cfg)) <-
-       failOnNothing ("Could not find symbol definition: " ++ nm) $
-       lookupLLVMSymbolModAndCFG henv nm
-     let h = cfgHandle cfg
-         blocks = fmapFC blockInputs $ cfgBlockMap cfg
-         block_idxs = fmapFC (blockIDIndex . blockID) $ cfgBlockMap cfg
-     blkIxs <- case blks of
-       -- If an empty list is given, add a hint to every block
-       [] -> pure $ toListFC Some block_idxs
-       _ -> forM blks $ \blk ->
-         failOnNothing ("Block ID " ++ show blk ++ " not found in function " ++ nm)
-                       (Ctx.intIndex blk (Ctx.size blocks))
-     let env' = foldl' (\env (Some blkIx) -> permEnvAddHint env $ Hint_GenPerms $
-                                              GenPermsHint h blocks (BlockID blkIx))
-                       env blkIxs
-     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+heapster_gen_block_perms_hint _bic _opts henv nm blks =
+  heapster_add_block_hints henv nm blks $ \_ _ -> return GenPermsHintSort
+
+-- | Add a hint to the Heapster type-checker to make a join point at each of the
+-- given block numbers, meaning that all entries to the given blocks are merged
+-- into a single entrypoint, whose permissions are given by the first call to
+-- the block
+heapster_join_point_hint :: BuiltinContext -> Options -> HeapsterEnv ->
+                            String -> [Int] -> TopLevel ()
+heapster_join_point_hint _bic _opts henv nm blks =
+  heapster_add_block_hints henv nm blks $ \_ _ -> return GenPermsHintSort
 
 -- | Search for all symbol names in any LLVM module in a 'HeapsterEnv' that
 -- contain the supplied string as a substring

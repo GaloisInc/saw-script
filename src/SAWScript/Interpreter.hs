@@ -2457,6 +2457,17 @@ primitives = Map.fromList
     , " every block in the CFG."
     ]
 
+  , prim "heapster_join_point_hint"
+    "HeapsterEnv -> String -> [Int] -> TopLevel ()"
+    (bicVal heapster_join_point_hint)
+    Experimental
+    [ "heapster_join_point_hint env nm blocks adds a hint to the Heapster"
+    , " type-checker to make a join point at each of the given block numbers,"
+    , " meaning that all entries to the given blocks are merged into a single"
+    , " entrypoint, whose permissions are given by the first call to the block."
+    , " If the given list is empty, do so for every block in the CFG."
+    ]
+
   , prim "heapster_find_symbol"
     "HeapsterEnv -> String -> TopLevel String"
     (bicVal heapster_find_symbol)
