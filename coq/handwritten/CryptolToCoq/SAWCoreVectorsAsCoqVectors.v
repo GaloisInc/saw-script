@@ -297,17 +297,19 @@ Definition rotateR (n : nat) (A : Type) (v : Vector.t A n) (i : nat)
   := v.
 Opaque rotateR.
 
-(* FIXME this is not implemented *)
-Definition shiftL (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat)
+Fixpoint shiftL (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat)
   : Vector.t A n
-  := v.
-Opaque shiftL.
+  := match i with
+     | O => v
+     | S i' => Vector.tl (Vector.shiftin x (shiftL n A x v i'))
+     end.
 
-(* FIXME this is not implemented *)
-Definition shiftR (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat)
+Fixpoint shiftR (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat)
   : Vector.t A n
-  := v.
-Opaque shiftR.
+  := match i with
+     | O => v
+     | S i' => Vector.shiftout (cons _ x _ (shiftL n A x v i'))
+     end.
 
 (* This is annoying to implement, so using BITS conversion *)
 Definition bvult (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
