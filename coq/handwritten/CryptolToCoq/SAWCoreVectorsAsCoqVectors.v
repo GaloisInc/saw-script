@@ -17,6 +17,8 @@ From mathcomp Require Import ssrbool.
 From mathcomp Require Import fintype.
 From mathcomp Require Import tuple.
 
+From Coq Require Export ZArith.BinIntDef.
+
 Import VectorNotations.
 
 Definition Vec (n : nat) (a : Type) : Type := VectorDef.t a n.
