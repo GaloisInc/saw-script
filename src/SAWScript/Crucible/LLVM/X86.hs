@@ -734,10 +734,10 @@ assertPost globals env premem preregs = do
                       offTrunc <- liftIO $ W4.bvTrunc sym rsz off
                       pure $ C.LLVM.LLVMValInt base offTrunc
                     _ -> pure $ C.LLVM.LLVMValInt base off
-                _ -> throwX86 "Return value is zero bits"
+                _ -> throwX86 "Width of return type is zero bits"
           postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
           pure [LO.matchArg opts sc cc ms MS.PostState postRAXTrunc retTy expectedRet]
-        _ -> throwX86 "Invalid return value"
+        _ -> throwX86 "Invalid return type"
     _ -> pure []
 
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
