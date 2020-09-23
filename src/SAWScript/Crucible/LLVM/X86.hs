@@ -737,7 +737,7 @@ assertPost globals env premem preregs = do
                 _ -> throwX86 "Width of return type is zero bits"
           postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
           pure [LO.matchArg opts sc cc ms MS.PostState postRAXTrunc retTy expectedRet]
-        _ -> throwX86 "Invalid return type"
+        _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
