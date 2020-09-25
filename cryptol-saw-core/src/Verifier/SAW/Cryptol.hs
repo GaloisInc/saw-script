@@ -700,8 +700,11 @@ prelPrims =
     --                            --              , first != next
     --                            --              , lengthFromThenTo first next last == len) => [len]a
 
-    -- Experimental: parmap
-  , ("parmap",       flip scGlobalDef "Cryptol.ecParmap")      -- {a, b, n} (fin n) => (a -> b) -> [n]a -> [n]b
+    -- Evaluation primitives: deepseq, parmap
+  , ("deepseq",      flip scGlobalDef "Cryptol.ecDeepseq")     -- {a, b} (Eq b) => a -> b -> b
+  , ("parmap",       flip scGlobalDef "Cryptol.ecParmap")      -- {a, b, n} (Eq b, fin n) => (a -> b) -> [n]a -> [n]b
+  , ("foldl",        flip scGlobalDef "Cryptol.ecFoldl")       -- {n, a, b} (fin n) => (a -> b -> a) -> a -> [n]b -> a
+  , ("foldl'",       flip scGlobalDef "Cryptol.ecFoldlPrime")  -- {n, a, b} (fin n, Eq a) => (a -> b -> a) -> a -> [n]b -> a
 
   , ("error",        flip scGlobalDef "Cryptol.ecError")       -- {at,len} (fin len) => [len][8] -> at -- Run-time error
   , ("random",       flip scGlobalDef "Cryptol.ecRandom")      -- {a} => [32] -> a -- Random values
