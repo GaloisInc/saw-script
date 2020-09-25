@@ -1432,7 +1432,7 @@ scCryptolEq sc x y =
 -- | Convert from SAWCore's Value type to Cryptol's, guided by the
 -- Cryptol type schema.
 exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
-exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType Map.empty ty) v
+exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType mempty ty) v
 exportValueWithSchema _ _ = V.VPoly (error "exportValueWithSchema")
 -- TODO: proper support for polymorphic values
 
