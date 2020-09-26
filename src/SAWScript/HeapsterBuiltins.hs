@@ -75,6 +75,7 @@ import Lang.Crucible.LLVM.MemModel
 import Lang.Crucible.LLVM.Translation
 -- import Lang.Crucible.LLVM.Translation.Types
 import Lang.Crucible.LLVM.TypeContext
+import Lang.Crucible.LLVM.DataLayout
 
 import qualified Text.LLVM.AST as L
 
@@ -555,6 +556,9 @@ heapster_typecheck_mut_funs_rename bic opts henv fn_names_and_perms =
      Some lm <- failOnNothing ("Could not find symbol definition: " ++ fst_nm)
                               (lookupModDefiningSym henv fst_nm)
      let w = llvmModuleArchReprWidth lm
+     let endianness =
+           llvmDataLayout (modTrans lm ^. transContext ^. llvmTypeCtx)
+           ^. intLayout
      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm, nm_to, perms_string) ->
        do AnyCFG cfg <-
@@ -572,7 +576,7 @@ heapster_typecheck_mut_funs_rename bic opts henv fn_names_and_perms =
        Left pf -> return pf
        Right _ -> fail "LLVM arch width is 0!"
      env' <- liftIO $ withKnownNat w $ withLeqProof leq_proof $
-       tcTranslateAddCFGs sc saw_modname w env some_cfgs_and_perms
+       tcTranslateAddCFGs sc saw_modname w env endianness some_cfgs_and_perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 
