@@ -243,19 +243,6 @@ integerToRational : Integer -> Rational;
 integerToRational x = error Rational "Unimplemented: fromInteger Rational";
 
 --------------------------------------------------------------------------------
--- Parmap (Experimental)
---
--- This is implemented here as a bog-standard sequential `map`
-
--- parmap : {a, b, n} (fin n) => (a -> b) -> [n]a -> [n]b
-ecParmap : (a:sort 0) -> (b:sort 0) -> (n: Num) -> (a -> b) -> seq n a -> seq n b;
-ecParmap a b n =
-  Num#rec (\ (n:Num) -> (a -> b) -> seq n a -> seq n b)
-    ( \ (n:Nat) -> \ (f: a -> b) -> \ (xs: Vec n a) -> map a b f n xs )
-    ( \ (f: a -> b) -> \ (xs:Stream a) -> error (Stream b) "Unexpected infinite stream in parmap" )
-    n;
-
---------------------------------------------------------------------------------
 -- Type coercions
 
 seq_cong : (m : Num) -> (n : Num) -> (a : sort 0) -> (b : sort 0) ->
@@ -1384,6 +1371,37 @@ ecRandom a _ = error a "Cryptol.random";
 ecTrace : (n : Num) -> (a b : sort 0) -> seq n (bitvector 8) -> a -> b -> b;
 ecTrace _ _ _ _ _ x = x;
 
+
+--------------------------------------------------------------------------------
+-- Strict evaluation primitives (Experimental)
+--
+-- These are implemented here as ordinary functions without special evaluation
+-- behavior: parmap is ordinary map, and foldl' is ordinary foldl.
+
+-- deepseq : {a, b} (Eq a) => a -> b -> b
+ecDeepseq : (a : sort 0) -> (b : sort 0) -> PEq a -> a -> b -> b;
+ecDeepseq a b pa x y = y;
+
+-- parmap : {a, b, n} (Eq b, fin n) => (a -> b) -> [n]a -> [n]b
+ecParmap : (a:sort 0) -> (b:sort 0) -> (n: Num) -> PEq b -> (a -> b) -> seq n a -> seq n b;
+ecParmap a b n pb =
+  Num#rec (\ (n:Num) -> (a -> b) -> seq n a -> seq n b)
+    ( \ (n:Nat) -> \ (f: a -> b) -> \ (xs: Vec n a) -> map a b f n xs )
+    ( \ (f: a -> b) -> \ (xs:Stream a) -> error (Stream b) "Unexpected infinite stream in parmap" )
+    n;
+
+-- foldl : {n, a, b} (fin n) => (a -> b -> a) -> a -> [n]b -> a
+ecFoldl : (n : Num) -> (a : sort 0) -> (b : sort 0) -> (a -> b -> a) -> a -> seq n b -> a;
+ecFoldl n a b f z =
+  Num#rec (\ (n : Num) -> seq n b -> a)
+    (\ (n : Nat) -> \ (xs : Vec n b) -> foldr b a n (\ (y : b) -> \ (x : a) -> f x y) z (reverse n b xs))
+    (\ (xs : Stream b) -> error a "Unexpected infinite stream in foldl" )
+    n;
+
+-- foldl' : {n, a, b} (fin n, Eq a) => (a -> b -> a) -> a -> [n]b -> a
+ecFoldlPrime :
+  (n : Num) -> (a : sort 0) -> (b : sort 0) -> PEq a -> (a -> b -> a) -> a -> seq n b -> a;
+ecFoldlPrime n a b pa = ecFoldl n a b;
 
 --------------------------------------------------------------------------------
 -- Floating point primitives (TODO)
