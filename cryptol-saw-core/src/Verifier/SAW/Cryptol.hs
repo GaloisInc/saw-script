@@ -574,6 +574,9 @@ proveProp sc env prop =
         (C.pIsSignedCmp -> Just (C.tIsRec -> Just fm))
           -> do proveProp sc env (C.pSignedCmp (C.tTuple (map snd (C.canonicalFields fm))))
 
+        -- instance Literal val Bit
+        (C.pIsLiteral -> Just (_, C.tIsBit -> True))
+          -> do scGlobalApply sc "Cryptol.PLiteralBit" []
         -- instance Literal val Integer
         (C.pIsLiteral -> Just (_, C.tIsInteger -> True))
           -> do scGlobalApply sc "Cryptol.PLiteralInteger" []
