@@ -936,6 +936,9 @@ PLiteralSeqBool n =
   Num#rec (\ (n : Num) -> PLiteral (seq n Bool)) bvNat
           (error (PLiteral (Stream Bool)) "PLiteralSeqBool: no instance for streams") n;
 
+PLiteralBit : PLiteral Bool;
+PLiteralBit = Nat_cases Bool False (\ (n:Nat) -> \ (b:Bool) -> True);
+
 PLiteralInteger : PLiteral Integer;
 PLiteralInteger = natToInt;
 
