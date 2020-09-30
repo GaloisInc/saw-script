@@ -182,7 +182,7 @@ typeOfSetupValue' cc env nameEnv val =
     SetupTerm tt ->
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
-          case toLLVMType dl (Cryptol.evalValType Map.empty ty) of
+          case toLLVMType dl (Cryptol.evalValType mempty ty) of
             Left err -> fail (toLLVMTypeErrToString err)
             Right memTy -> return memTy
         s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
@@ -345,7 +345,7 @@ resolveTypedTerm ::
 resolveTypedTerm cc tm =
   case ttSchema tm of
     Cryptol.Forall [] [] ty ->
-      resolveSAWTerm cc (Cryptol.evalValType Map.empty ty) (ttTerm tm)
+      resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
     _ -> fail "resolveSetupVal: expected monomorphic term"
 
 resolveSAWPred ::
@@ -650,7 +650,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
 
   case ttSchema typed_term of
     Cryptol.Forall [] [] cryptol_type -> do
-      let evaluated_type = (Cryptol.evalValType Map.empty cryptol_type)
+      let evaluated_type = Cryptol.evalValType mempty cryptol_type
       fresh_array_const <- scFreshGlobal saw_context "arr"
         =<< scArrayType saw_context offset_type_term byte_type_term
       execStateT
