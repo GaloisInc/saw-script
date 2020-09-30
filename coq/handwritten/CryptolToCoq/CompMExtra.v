@@ -30,6 +30,26 @@ Proof.
   - apply H0; reflexivity.
 Qed.
 
+Lemma refinesM_maybe_l {A B} (x : CompM B) (f : A -> CompM B) mb P :
+  (mb = SAWCorePrelude.Nothing _ -> x |= P) ->
+  (forall a, mb = SAWCorePrelude.Just _ a -> f a |= P) ->
+  SAWCorePrelude.maybe _ _ x f mb |= P.
+Proof.
+  destruct mb; intros; simpl.
+  - apply H; reflexivity.
+  - apply H0; reflexivity.
+Qed.
+
+Lemma refinesM_maybe_r {A B} (x : CompM B) (f : A -> CompM B) mb P :
+  (mb = SAWCorePrelude.Nothing _ -> P |= x) ->
+  (forall a, mb = SAWCorePrelude.Just _ a -> P |= f a) ->
+  P |= SAWCorePrelude.maybe _ _ x f mb.
+Proof.
+  destruct mb; intros; simpl.
+  - apply H; reflexivity.
+  - apply H0; reflexivity.
+Qed.
+
 Lemma returnM_if A (b : bool) (x y : A) :
   @returnM CompM _ A (if b then x else y) ~= if b then returnM x else returnM y.
 Proof. destruct b. setoid_reflexivity. setoid_reflexivity. Qed.
@@ -68,6 +88,10 @@ Hint Extern 2 (refinesFun _ _) => (apply refinesFun_multiFixM_fst;
 
 Hint Extern 999 (_ |= _) => shelve : refinesM.
 Hint Resolve refinesM_letRecM0 : refinesM.
+(* Hint Extern 1 (@letRecM LRT_Nil _ _ _ |= @letRecM LRT_Nil _ _ _) => *)
+(*   apply refinesM_letRecM0 : refinesM. *)
+Hint Extern 1 (@letRecM (LRT_Cons _ LRT_Nil) _ _ _ |= @letRecM (LRT_Cons _ LRT_Nil) _ _ _) =>
+  apply refinesM_letRecM1_fst; try apply ProperFun_any : refinesM.
 
 (*
 Hint Resolve refinesM_either_l : refinesM.
@@ -96,6 +120,20 @@ Hint Extern 1 (_ |= SAWCorePrelude.either _ _ _ _ _ _) =>
     let e' := fresh "e_either_arg" in
     (intro; intro e; try discriminate e; try rewrite e;
     try (injection e; intro e'; try rewrite <- e')) : refinesM.
+Hint Extern 1 (SAWCorePrelude.maybe _ _ _ _ _ |= _) =>
+  let e := fresh "e_maybe" in
+  let e' := fresh "e_maybe_arg" in
+    apply refinesM_maybe_l;
+    [ intro e; try discriminate e; try rewrite e
+    | intro; intro e; try discriminate e; try rewrite e;
+      try (injection e; intro e'; try rewrite <- e') ] : refinesM.
+Hint Extern 1 (_ |= SAWCorePrelude.maybe _ _ _ _ _) =>
+  let e := fresh "e_maybe" in
+  let e' := fresh "e_maybe_arg" in
+    apply refinesM_maybe_r;
+    [ intro e; try discriminate e; try rewrite e
+    | intro; intro e; try discriminate e; try rewrite e;
+      try (injection e; intro e'; try rewrite <- e') ] : refinesM.
 Hint Extern 1 (sigT_rect _ _ _ |= _) =>
   apply refinesM_sigT_rect_l;
     let e := fresh "e_sigT_rect" in
@@ -117,11 +155,17 @@ Hint Extern 1 (returnM (if _ then _ else _) |= _) =>
 Hint Extern 1 (_ |= returnM (if _ then _ else _)) =>
   apply refinesM_returnM_if_r : refinesM.
 
-Hint Extern 1 (existsM _ |= _) => apply refinesM_existsM_l; intros : refinesM.
-Hint Extern 1 (_ |= forallM _) => apply refinesM_forallM_r; intros : refinesM.
-Hint Extern 2 (_ |= existsM _) => eapply refinesM_existsM_r; shelve : refinesM.
-Hint Extern 2 (forallM _ |= _) => eapply refinesM_forallM_l; shelve : refinesM.
-(* Hint Extern 2 (returnM _ |= returnM _) => apply refinesM_returnM; intros; *)
+Hint Extern 1 (_ |= assumingM _ _) =>
+  apply refinesM_assumingM_r;
+    let e := fresh "e_assuming" in intro e : refinesM.
+Hint Extern 2 ((assumingM _ _) |= _) =>
+  eapply refinesM_assumingM_l; shelve : refinesM.
+
+Hint Extern 2 (existsM _ |= _) => apply refinesM_existsM_l; intros : refinesM.
+Hint Extern 2 (_ |= forallM _) => apply refinesM_forallM_r; intros : refinesM.
+Hint Extern 3 (_ |= existsM _) => eapply refinesM_existsM_r; shelve : refinesM.
+Hint Extern 3 (forallM _ |= _) => eapply refinesM_forallM_l; shelve : refinesM.
+(* Hint Extern 3 (returnM _ |= returnM _) => apply refinesM_returnM; intros; *)
 (*                                              (reflexivity || shelve) : refinesM. *)
 
 Hint Extern 1 ((returnM _ >>= _) |= _) => rewrite returnM_bindM : refinesM.

@@ -637,6 +637,57 @@ Proof.
   intro. apply H.
 Qed.
 
+Instance ProperFun_any lrt B (P : lrtToType lrt -> CompM B) : Proper (refinesFun ==> refinesM) P.
+Proof.
+  (* FIXME *)
+Admitted.
+
+Lemma refinesM_letRecM1 lrt B (F G : lrtPi (LRT_Cons lrt LRT_Nil) (lrtTupleType (LRT_Cons lrt LRT_Nil)))
+                              (P Q : lrtPi (LRT_Cons lrt LRT_Nil) (CompM B))
+  : Proper (refinesFun ==> refinesM) P ->
+    refinesFun (fst (multiFixM F)) (fst (multiFixM G)) ->
+    P (fst (multiFixM G)) |= Q (fst (multiFixM G)) ->
+    @letRecM (LRT_Cons lrt LRT_Nil) B F P |= @letRecM (LRT_Cons lrt LRT_Nil) B G Q.
+Proof.
+  intros.
+  unfold letRecM, lrtApply.
+  rewrite H0.
+  assumption.
+Qed.
+
+Instance ProperFixFun_const {A B M} `{MonadFix M} (f : forall (a:A), M (B a))
+  : ProperFixFun (fun _ => f).
+Proof.
+  split.
+  reflexivity.
+Qed.
+
+Lemma multiFixM_const_fst lrt (f : lrtToType lrt)
+  : refinesFun f (fst (multiFixM (lrts:=LRT_Cons lrt LRT_Nil) (fun _ : lrtToType lrt => (f, tt)))).
+Proof.
+  unfold multiFixM, multiTupleFixM, multiArgFixM; simpl.
+  induction lrt; simpl; simpl in f.
+  - rewrite fixM_F_fixM.
+    + reflexivity.
+    + apply ProperFixFun_const.
+  - intro. fold lrtToFlatArgs.
+    admit.
+Admitted.
+
+Lemma refinesM_letRecM1_fst lrt B (F : lrtPi (LRT_Cons lrt LRT_Nil) (lrtTupleType (LRT_Cons lrt LRT_Nil)))
+                              f (P Q : lrtPi (LRT_Cons lrt LRT_Nil) (CompM B))
+                              `{Proper _ (refinesFun ==> refinesM) P}
+                              `{Proper _ (refinesFun ==> refinesM) Q}
+  : refinesFun (fst (multiFixM F)) f ->
+    P f |= Q f ->
+    @letRecM (LRT_Cons lrt LRT_Nil) B F P |= @letRecM (LRT_Cons lrt LRT_Nil) B (fun _ => (f, tt)) Q.
+Proof.
+  intros.
+  unfold letRecM, lrtApply.
+  rewrite H1, H2, multiFixM_const_fst.
+  reflexivity.
+Qed.
+
 Lemma refinesM_if_l {A} (m1 m2:CompM A) b P :
   (b = true -> m1 |= P) -> (b = false -> m2 |= P) ->
   (if b then m1 else m2) |= P.
@@ -747,9 +798,17 @@ Proof.
 Qed.
 
 Lemma refinesM_bindM_assertM_r {A} (P:Prop) (m1 m2: CompM A) :
-  P -> refinesM m1 m2 -> refinesM m1 (assertM P >> m2).
+  P -> m1 |= m2 -> m1 |= assertM P >> m2.
 Proof.
   intro pf; rewrite (assertM_eq P pf). rewrite returnM_bindM. intro; assumption.
+Qed.
+
+Lemma refinesM_bindM_assertM_l {A} (P:Prop) (m1 m2: CompM A) :
+  (P -> m1 |= m2) -> assertM P >> m1 |= m2.
+Proof.
+  intro H. unfold assertM; rewrite existsM_bindM.
+  apply refinesM_existsM_l.
+  rewrite returnM_bindM; assumption.
 Qed.
 
 Definition assumingM {A} (P:Prop) (m:CompM A) : CompM A :=
@@ -758,5 +817,11 @@ Definition assumingM {A} (P:Prop) (m:CompM A) : CompM A :=
 Lemma refinesM_assumingM_r {A} (P:Prop) (m1 m2: CompM A) :
   (P -> m1 |= m2) -> m1 |= assumingM P m2.
 Proof.
-  intro H; apply refinesM_forallM_r. assumption.
+  apply refinesM_forallM_r.
+Qed.
+
+Lemma refinesM_assumingM_l {A} (P:Prop) (m1 m2 : CompM A) :
+  P -> m1 |= m2 -> assumingM P m1 |= m2.
+Proof.
+  apply refinesM_forallM_l.
 Qed.
