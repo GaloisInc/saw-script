@@ -899,6 +899,20 @@ PFieldRational =
   };
 
 
+PFieldIntMod : (n : Nat) -> PField (IntMod n);
+PFieldIntMod n =
+  { fieldRing = PRingIntMod n
+  , recip     = \(x : IntMod n) -> error (IntMod n) "Unimplemented: recip IntMod"
+  , fieldDiv  = \(x y : IntMod n) -> error (IntMod n) "Unimplemented: (/.) IntMod"
+  };
+
+PFieldIntModNum : (n : Num) -> PField (IntModNum n);
+PFieldIntModNum num =
+  Num#rec (\ (n : Num) -> PField (IntModNum n))
+    PFieldIntMod
+    (error (PField (IntModNum TCInf)) "PFieldIntModNum: no instance for inf")
+    num;
+
 -- Round class
 
 PRound : sort 0 -> sort 1;
