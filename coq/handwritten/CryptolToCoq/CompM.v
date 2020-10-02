@@ -603,6 +603,15 @@ Fixpoint refinesFun {lrt} : relation (lrtToType lrt) :=
   | LRT_Fun A lrtF => fun f1 f2 => forall a, refinesFun (f1 a) (f2 a)
   end.
 
+Instance PreOrder_refinesFun lrt : PreOrder (@refinesFun lrt).
+Proof.
+  induction lrt.
+  - apply PreOrder_refinesM.
+  - split.
+    { intros f a. apply (@PreOrder_Reflexive _ _ (H a)). }
+    { intros f1 f2 f3 H1 H2 a. apply (@PreOrder_Transitive _ _ (H a) _ _ _ (H1 a) (H2 a)). }
+Qed.
+
 (* A convenient specialization of refinesFun *)
 Definition refinesFun1 {A} {B:A -> Type} : (forall a, CompM (B a)) -> (forall a, CompM (B a)) -> Prop :=
   refinesFun (lrt:=LRT_Fun _ (fun _ => LRT_Ret _)).
