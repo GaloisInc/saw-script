@@ -165,8 +165,8 @@ Hint Extern 2 (existsM _ |= _) => apply refinesM_existsM_l; intros : refinesM.
 Hint Extern 2 (_ |= forallM _) => apply refinesM_forallM_r; intros : refinesM.
 Hint Extern 3 (_ |= existsM _) => eapply refinesM_existsM_r; shelve : refinesM.
 Hint Extern 3 (forallM _ |= _) => eapply refinesM_forallM_l; shelve : refinesM.
-(* Hint Extern 3 (returnM _ |= returnM _) => apply refinesM_returnM; intros; *)
-(*                                              (reflexivity || shelve) : refinesM. *)
+Hint Extern 3 (returnM _ |= returnM _) => apply refinesM_returnM; intros;
+                                              (reflexivity || shelve) : refinesM.
 
 Hint Extern 1 ((returnM _ >>= _) |= _) => rewrite returnM_bindM : refinesM.
 Hint Extern 1 (_ |= (returnM _ >>= _)) => rewrite returnM_bindM : refinesM.

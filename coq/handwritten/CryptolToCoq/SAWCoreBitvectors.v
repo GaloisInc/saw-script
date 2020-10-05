@@ -5,8 +5,12 @@
 From Coq Require Import Program.Basics.
 From Coq Require Import Vectors.Vector.
 
+From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
+
+Import SAWCorePrelude.
+
 
 (** Bitvector maximum and minimum values **)
 
@@ -23,6 +27,7 @@ Definition bvsmin w : bitvector w :=
 
 Definition bvumax w : bitvector w := gen w _ (fun _ => true).
 Definition bvumin w : bitvector w := gen w _ (fun _ => false).
+
 
 (** Bitvector inquality propositions, and their preorders **)
 
@@ -71,3 +76,24 @@ Admitted.
 
 Definition isBvslt_antirefl w a : ~ isBvslt w a a.
 Admitted.
+
+Definition isBvule_n_zero w a : isBvule w a (bvLit w 0) <-> a = bvLit w 0.
+Admitted.
+
+Definition isBvult_n_zero w a : ~ isBvult w a (bvLit w 0).
+Admitted.
+
+
+(** Lemmas about bitvector equality **)
+
+Lemma bvEq_wrapped_bool (b : bool)
+  : not (bvEq 1 (if b then bvLit 1 1 else bvLit 1 0) (bvLit 1 0)) = b.
+Proof. destruct b; reflexivity. Qed.
+
+
+(** Lemmas about bitvector addition **)
+
+Lemma bvAdd_id_l w a : bvAdd w (bvLit w 0) a = a. Admitted.
+Lemma bvAdd_id_r w a : bvAdd w a (bvLit w 0) = a. Admitted.
+Lemma bvAdd_comm w a b : bvAdd w a b = bvAdd w b a. Admitted.
+Lemma bvAdd_assoc w a b c : bvAdd w (bvAdd w a b) c = bvAdd w a (bvAdd w b c). Admitted.
