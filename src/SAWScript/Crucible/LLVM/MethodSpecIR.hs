@@ -64,6 +64,7 @@ module SAWScript.Crucible.LLVM.MethodSpecIR
   , ccLLVMModuleTrans
   , ccLLVMContext
   , ccTypeCtx
+  , ccUninterpCache
     -- * PointsTo
   , LLVMPointsTo(..)
   , LLVMPointsToValue(..)
@@ -139,6 +140,8 @@ import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import           Verifier.SAW.Rewriter (Simpset)
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
+
+import qualified Verifier.SAW.Simulator.What4 as W4SC
 
 --------------------------------------------------------------------------------
 -- ** Language features
@@ -318,6 +321,7 @@ data LLVMCrucibleContext arch =
   , _ccLLVMSimContext  :: Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym (CL.LLVM arch)
   , _ccLLVMGlobals     :: Crucible.SymGlobalState Sym
   , _ccBasicSS         :: Simpset
+  , _ccUninterpCache   :: IORef (W4SC.SymFnCache Sym)
   }
 
 makeLenses ''LLVMCrucibleContext

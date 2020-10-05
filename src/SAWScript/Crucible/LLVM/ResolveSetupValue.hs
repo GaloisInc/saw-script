@@ -31,7 +31,7 @@ import Control.Lens ((^.))
 import Control.Monad
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.State
-import qualified Data.BitVector.Sized as BV
+--import qualified Data.BitVector.Sized as BV
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
 import Data.IORef
 import           Data.Map (Map)
@@ -52,6 +52,10 @@ import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
 import qualified What4.Expr.Builder as W4
 
+import qualified Verifier.SAW.Simulator.What4 as W4SC
+import qualified Verifier.SAW.Simulator.What4.SWord as W4SC
+
+
 import qualified Lang.Crucible.LLVM.Bytes       as Crucible
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
@@ -62,10 +66,8 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 import Verifier.SAW.TypedTerm
+import qualified Verifier.SAW.Simulator.Value as Value
 import Text.LLVM.DebugUtils as L
-
-import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
-import qualified Data.SBV.Dynamic as SBV (svAsInteger)
 
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
@@ -353,7 +355,17 @@ resolveSAWPred ::
   Term ->
   IO (W4.Pred Sym)
 resolveSAWPred cc tm =
-  Crucible.bindSAWTerm (cc^.ccBackend) W4.BaseBoolRepr tm
+  do let sym = cc^.ccBackend
+     sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+     let ss = cc^.ccBasicSS
+     tm' <- rewriteSharedTerm sc ss tm
+     modmap <- scGetModuleMap sc
+     let ref = cc^.ccUninterpCache
+
+     w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref tm'
+     case w4val of
+       Value.VBool x -> return x
+       _ -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
 
 resolveSAWSymBV ::
   (1 <= w) =>
@@ -366,16 +378,14 @@ resolveSAWSymBV cc w tm =
      sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
      let ss = cc^.ccBasicSS
      tm' <- rewriteSharedTerm sc ss tm
-     mx <- case getAllExts tm' of
-             [] -> do
-               -- Evaluate in SBV to test whether 'tm' is a concrete value
-               modmap <- scGetModuleMap sc
-               sbv <- SBV.toWord =<< SBV.sbvSolveBasic modmap Map.empty [] tm'
-               return (SBV.svAsInteger sbv)
-             _ -> return Nothing
-     case mx of
-       Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+     modmap <- scGetModuleMap sc
+     let ref = cc^.ccUninterpCache
+
+     w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref tm'
+     case w4val of
+       Value.VWord (W4SC.DBV x) | Just Refl <- testEquality w (W4.bvWidth x) -> return x
+       _ -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+
 
 resolveSAWTerm ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>

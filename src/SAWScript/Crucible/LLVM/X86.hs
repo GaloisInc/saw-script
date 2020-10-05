@@ -36,6 +36,7 @@ import Control.Monad.Catch (MonadThrow)
 
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
+import Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
@@ -227,12 +228,15 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
       let maxAddr = addrInt + toInteger (Macaw.segmentSize $ Macaw.segoffSegment addr)
 
+      ref <- liftIO $ newIORef mempty
+
       let
         cc :: LLVMCrucibleContext x
         cc = LLVMCrucibleContext
           { _ccLLVMModule = llvmModule
           , _ccBackend = sym
           , _ccBasicSS = biBasicSS bic
+          , _ccUninterpCache = ref
 
           -- It's unpleasant that we need to do this to use resolveSetupVal.
           , _ccLLVMSimContext = error "Attempted to access ccLLVMSimContext"
@@ -323,7 +327,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         C.TimeoutResult{} -> fail "Execution timed out"
 
       stats <- checkGoals sym opts sc tactic
- 
+
       returnProof $ SomeLLVM (methodSpec & MS.csSolverStats .~ stats)
   | otherwise = fail "LLVM module must be 64-bit"
 
