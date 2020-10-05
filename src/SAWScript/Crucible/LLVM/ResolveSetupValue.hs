@@ -31,8 +31,8 @@ import Control.Lens ((^.))
 import Control.Monad
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.State
-import qualified Data.BitVector.Sized as BV
-import Data.Maybe (fromMaybe, listToMaybe, fromJust)
+--import qualified Data.BitVector.Sized as BV
+import Data.Maybe (fromMaybe, listToMaybe, fromJust, isJust)
 import Data.IORef
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -44,6 +44,7 @@ import qualified Text.LLVM.AST as L
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
+import qualified Cryptol.Utils.Ident as Cryptol
 
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
@@ -51,6 +52,9 @@ import           Data.Parameterized.NatRepr
 import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
 import qualified What4.Expr.Builder as W4
+import qualified What4.SWord as SW
+
+import qualified Verifier.SAW.Simulator.What4 as W4SC
 
 import qualified Lang.Crucible.LLVM.Bytes       as Crucible
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
@@ -60,12 +64,11 @@ import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Cryptol (importType, emptyEnv)
+import Verifier.SAW.Cryptol
+  (importType, emptyEnv, isCryptolModuleName, isCryptolInteractiveName)
 import Verifier.SAW.TypedTerm
+import qualified Verifier.SAW.Simulator.Value as Value
 import Text.LLVM.DebugUtils as L
-
-import qualified Verifier.SAW.Simulator.SBV as SBV
-import qualified Data.SBV.Dynamic as SBV
 
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
@@ -352,20 +355,25 @@ resolveSAWPred ::
   LLVMCrucibleContext arch ->
   Term ->
   IO (W4.Pred Sym)
-resolveSAWPred cc tm = do
+resolveSAWPred cc tm =
   do let sym = cc^.ccBackend
      sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
      let ss = cc^.ccBasicSS
      tm' <- rewriteSharedTerm sc ss tm
-     mx <- case getAllExts tm' of
-             [] -> do
-               -- Evaluate in SBV to test whether 'tm' is a concrete value
-               sbv <- SBV.toBool <$> SBV.sbvSolveBasic sc Map.empty mempty tm'
-               return (SBV.svAsBool sbv)
-             _ -> return Nothing
-     case mx of
-       Just x  -> return $ W4.backendPred sym x
-       Nothing -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
+     modmap <- scGetModuleMap sc
+     let ref = cc^.ccUninterpCache
+
+     -- unfold names defined in the cryptol prelude, or defined locally
+     -- with let statements.
+     let ecFilter ec =
+             (isJust $ isCryptolModuleName Cryptol.preludeName $ ecName ec) ||
+             (isJust $ isCryptolInteractiveName $ ecName ec)
+
+     w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref ecFilter tm'
+     case w4val of
+       Right (Value.VBool x) -> return x
+       Left _nm -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
+       _ -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
 
 resolveSAWSymBV ::
   (1 <= w) =>
@@ -378,15 +386,20 @@ resolveSAWSymBV cc w tm =
      sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
      let ss = cc^.ccBasicSS
      tm' <- rewriteSharedTerm sc ss tm
-     mx <- case getAllExts tm' of
-             [] -> do
-               -- Evaluate in SBV to test whether 'tm' is a concrete value
-               sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm'
-               return (SBV.svAsInteger sbv)
-             _ -> return Nothing
-     case mx of
-       Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+     modmap <- scGetModuleMap sc
+     let ref = cc^.ccUninterpCache
+
+     -- unfold names defined in the cryptol prelude, or defined locally
+     -- with let statements.
+     let ecFilter ec =
+             (isJust $ isCryptolModuleName Cryptol.preludeName $ ecName ec) ||
+             (isJust $ isCryptolInteractiveName $ ecName ec)
+
+     w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref ecFilter tm'
+     case w4val of
+       Right (Value.VWord (SW.DBV x)) | Just Refl <- testEquality w (W4.bvWidth x) -> return x
+       Left _nm -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+       _ -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
 
 resolveSAWTerm ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>

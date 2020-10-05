@@ -99,7 +99,6 @@ import qualified What4.Expr.Builder as W4
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
-import qualified What4.Symbol as W4
 
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 import           SAWScript.Crucible.LLVM.CrucibleLLVM (LLVM)
@@ -1766,7 +1765,7 @@ executeFreshPointer ::
   AllocIndex      {- ^ SetupVar allocation ID -} ->
   IO (LLVMPtr (Crucible.ArchWidth arch)) {- ^ Symbolic pointer value -}
 executeFreshPointer cc (AllocIndex i) =
-  do let mkName base = W4.systemSymbol (base ++ show i ++ "!")
+  do let mkName base = W4.safeSymbol (base ++ show i)
          sym         = cc^.ccBackend
      blk <- W4.freshConstant sym (mkName "blk") W4.BaseNatRepr
      off <- W4.freshConstant sym (mkName "off") (W4.BaseBVRepr Crucible.PtrWidth)

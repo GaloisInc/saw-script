@@ -1298,12 +1298,15 @@ setupLLVMCrucibleContext bic opts pathSat lm action =
                        return (gp^.Crucible.gpGlobals, st)
                      _ -> fail "simulator initialization failed!"
 
+               cacheRef <- newIORef mempty
+
                return
                   LLVMCrucibleContext{ _ccLLVMModule = lm
                                      , _ccBackend = sym
                                      , _ccLLVMSimContext = lsimctx
                                      , _ccLLVMGlobals = lglobals
                                      , _ccBasicSS = biBasicSS bic
+                                     , _ccUninterpCache = cacheRef
                                      }
           action cc
 
