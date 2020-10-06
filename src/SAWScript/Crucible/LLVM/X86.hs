@@ -722,7 +722,22 @@ assertPost globals env premem preregs = do
   returnMatches <- case (ms ^. MS.csRetValue, ms ^. MS.csRet) of
     (Just expectedRet, Just retTy) -> do
       postRAX <- C.LLVM.ptrToPtrVal <$> getReg Macaw.RAX postregs
-      pure [LO.matchArg opts sc cc ms MS.PostState postRAX retTy expectedRet]
+      case (postRAX, C.LLVM.memTypeBitwidth retTy) of
+        (C.LLVM.LLVMValInt base off, Just retTyBits) -> do
+          let
+            truncateRAX :: forall r. NatRepr r -> X86Sim (C.LLVM.LLVMVal Sym)
+            truncateRAX rsz =
+              case (testLeq (knownNat @1) rsz, testLeq rsz (W4.bvWidth off)) of
+                (Just LeqProof, Just LeqProof) ->
+                  case testStrictLeq rsz (W4.bvWidth off) of
+                    Left LeqProof -> do
+                      offTrunc <- liftIO $ W4.bvTrunc sym rsz off
+                      pure $ C.LLVM.LLVMValInt base offTrunc
+                    _ -> pure $ C.LLVM.LLVMValInt base off
+                _ -> throwX86 "Width of return type is zero bits"
+          postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
+          pure [LO.matchArg opts sc cc ms MS.PostState postRAXTrunc retTy expectedRet]
+        _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
