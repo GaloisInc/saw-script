@@ -324,15 +324,15 @@ translateTerm t = withLocalLocalEnvironment $ do
   env <- view localEnvironment <$> get
   -- let t' = trace ("translateTerm: " ++ "env = " ++ show env ++ ", t =" ++ showTerm t) t
   -- case t' of
-  case t of
+  case unwrapTermF t of
 
-    (asFTermF -> Just tf)  -> flatTermFToExpr tf
+    FTermF tf -> flatTermFToExpr tf
 
-    (asPi -> Just _) -> translatePi params e
+    Pi {} -> translatePi params e
       where
         (params, e) = asPiList t
 
-    (asLambda -> Just _) -> do
+    Lambda {} -> do
       paramTerms <- translateParams params
       Coq.Lambda <$> pure paramTerms
                  -- env is in innermost first (reverse) binder order
@@ -343,7 +343,7 @@ translateTerm t = withLocalLocalEnvironment $ do
           -- param names are in normal, outermost first, order
           paramNames = map fst $ params
 
-    (asApp -> Just _) ->
+    App {} ->
       -- asApplyAll: innermost argument first
       let (f, args) = asApplyAll t
       in
@@ -425,12 +425,12 @@ translateTerm t = withLocalLocalEnvironment $ do
           translateIdentWithArgs i args
       _ -> Coq.App <$> go env f <*> traverse (go env) args
 
-    (asLocalVar -> Just n)
+    LocalVar n
       | n < length env -> Coq.Var <$> pure (env !! n)
       | otherwise -> Except.throwError $ LocalVarOutOfBounds t
 
   -- Constants come with a body
-    (unwrapTermF -> Constant n body) -> do
+    Constant n body -> do
       configuration <- ask
       let renamed = translateConstant (notations configuration) n
       alreadyTranslatedDecls <- getNamesOfAllDeclarations
@@ -441,9 +441,6 @@ translateTerm t = withLocalLocalEnvironment $ do
         b <- go env body
         modify $ over localDeclarations $ (mkDefinition renamed b :)
         Coq.Var <$> pure renamed
-
-    _ -> {- trace "translateTerm fallthrough" -}
-      errorTermM "Unhandled case in translateTerm"
 
   where
     badTerm          = Except.throwError $ BadTerm t
