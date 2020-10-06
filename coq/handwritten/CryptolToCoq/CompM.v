@@ -794,7 +794,55 @@ Proof.
 Qed.
 
 
-(*** Assertions and Assumptions ***)
+(** Conjuctive and disjunctive specifications **)
+
+Definition orM {A} (m1 m2 : CompM A) : CompM A :=
+  fun b => m1 b \/ m2 b.
+
+Lemma refinesM_orM_r {A} (m1 m2 : CompM A) P :
+  P |= m1 \/ P |= m2 -> P |= (orM m1 m2).
+Proof.
+  intros r b in_b; destruct r; [ left | right ]; apply H; assumption.
+Qed.
+
+Lemma refinesM_orM_l {A} (m1 m2 : CompM A) P :
+  m1 |= P -> m2 |= P -> orM m1 m2 |= P.
+Proof.
+  intros r1 r2 b in_b; destruct in_b; [ apply r1 | apply r2 ]; assumption.
+Qed.
+
+Lemma orM_bindM A B (m1 m2 : CompM A) (P : A -> CompM B) :
+  (orM m1 m2) >>= P ~= orM (m1 >>= P) (m2 >>= P).
+Proof.
+  intros c; split.
+  - intros [ opt_b [ r1 | r2 ] in_c ]; [ left | right ]; exists opt_b; assumption.
+  - intros [ [ opt_b in_b in_c ] | [ opt_b in_b in_c ] ]; (exists opt_b; [ | assumption ]);
+    [ left | right ]; assumption.
+Qed.
+
+Definition andM {A} (m1 m2:CompM A) : CompM A :=
+  fun b => m1 b /\ m2 b.
+
+Lemma refinesM_andM_r {A} (m1 m2 : CompM A) P :
+  P |= m1 -> P |= m2 -> P |= andM m1 m2.
+Proof.
+  intros r1 r2 b in_b. split; [ apply r1 | apply r2 ]; assumption.
+Qed.
+
+Lemma refinesM_andM_l {A} (m1 m2 : CompM A) P :
+  m1 |= P \/ m2 |= P -> andM m1 m2 |= P.
+Proof.
+  intros r b in_b; destruct r; destruct in_b; apply H; assumption.
+Qed.
+
+Lemma andM_bindM A B (m1 m2 : CompM A) (P : A -> CompM B) :
+  refinesM ((andM m1 m2) >>= P) (andM (m1 >>= P) (m2 >>= P)).
+Proof.
+  intros c [ opt_b [ r1 r2 ] in_c ]; split; exists opt_b; assumption.
+Qed.
+
+
+(** Assertions and Assumptions **)
 
 Definition assertM (P:Prop) : CompM unit :=
   existsM (fun pf:P => returnM tt).
