@@ -261,6 +261,7 @@ flattenSValue v = do
         VVector (V.toList -> ts)  -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
                                         return (concat xss, concat ss)
         VBool sb                  -> return ([sb], "")
+        VInt si                   -> return ([si], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
         VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
                                         return (concat xss, "_" ++ identName i ++ concat ss)
