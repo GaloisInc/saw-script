@@ -115,9 +115,9 @@ install_yasm() {
 build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
-  echo "allow-newer: all" > cabal.project.local
   cabal v2-update
   cabal v2-configure -j2 --minimize-conflict-set
+  echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
   if ! retry cabal v2-build "$@" saw jss && [[ "$RUNNER_OS" == "macOS" ]]; then
     echo "Working around a dylib issue on macos by removing the cache and trying again"
