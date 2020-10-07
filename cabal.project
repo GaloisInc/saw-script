@@ -1,5 +1,6 @@
 packages:
     saw-script.cabal
+    saw-remote-api
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
     deps/jvm-parser
@@ -31,4 +32,3 @@ packages:
     deps/dwarf
     deps/argo/argo
     deps/argo/cryptol-remote-api
-    deps/argo/saw-remote-api
