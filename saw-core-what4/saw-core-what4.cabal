@@ -32,7 +32,6 @@ library
   hs-source-dirs: src
   exposed-modules:
      Verifier.SAW.Simulator.What4
-     Verifier.SAW.Simulator.What4.SWord
      Verifier.SAW.Simulator.What4.FirstOrder
      Verifier.SAW.Simulator.What4.PosNat
      Verifier.SAW.Simulator.What4.Panic
