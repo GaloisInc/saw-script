@@ -200,8 +200,8 @@ prims =
   , Prims.bpBvuge  = SW.bvuge sym
   , Prims.bpBvugt  = SW.bvugt sym
     -- Bitvector shift/rotate
-  , Prims.bpBvRolInt = liftShift sym (SW.bvRol sym)  --bvRolInt sym
-  , Prims.bpBvRorInt = liftShift sym (SW.bvRor sym) --bvRorInt sym
+  , Prims.bpBvRolInt = liftRotate sym (SW.bvRol sym)
+  , Prims.bpBvRorInt = liftRotate sym (SW.bvRor sym)
   , Prims.bpBvShlInt = \z -> liftShift sym (bvShl sym z)
   , Prims.bpBvShrInt = \z -> liftShift sym (bvShr sym z)
   , Prims.bpBvRol    = SW.bvRol sym
@@ -383,7 +383,15 @@ liftShift :: IsExprBuilder sym =>
   (SWord sym -> SWord sym -> IO (SWord sym)) ->
   SWord sym -> Integer -> IO (SWord sym)
 liftShift sym f w i =
-  f w =<< SW.bvLit sym (SW.bvWidth w) i
+  f w =<< SW.bvLit sym (SW.bvWidth w) (i `min` SW.bvWidth w)
+
+liftRotate :: IsExprBuilder sym =>
+  sym ->
+  (SWord sym -> SWord sym -> IO (SWord sym)) ->
+  SWord sym -> Integer -> IO (SWord sym)
+liftRotate sym f w i =
+  f w =<< SW.bvLit sym (SW.bvWidth w) (i `mod` SW.bvWidth w)
+
 
 -- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
 bvShiftOp :: (Sym sym) =>
