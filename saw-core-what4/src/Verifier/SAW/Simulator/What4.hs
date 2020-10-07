@@ -57,6 +57,7 @@ import qualified Control.Arrow as A
 
 import Data.Bits
 import Data.IORef
+import Data.List (genericTake)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -157,7 +158,7 @@ prims =
   , Prims.bpPack    = SW.bvPackBE sym
   , Prims.bpBvAt    = \w i -> SW.bvAtBE sym w (toInteger i)
   , Prims.bpBvLit   = \l x -> SW.bvLit sym (toInteger l) x
-  , Prims.bpBvSize  = fromInteger . SW.bvWidth
+  , Prims.bpBvSize  = swBvWidth
   , Prims.bpBvJoin  = SW.bvJoin   sym
   , Prims.bpBvSlice = \ a b -> SW.bvSliceBE sym (toInteger a) (toInteger b)
     -- Conditionals
@@ -267,6 +268,12 @@ constMap =
 
 -----------------------------------------------------------------------
 -- Implementation of constMap primitives
+
+swBvWidth :: SWord sym -> Int
+swBvWidth x
+  | w <= toInteger (maxBound :: Int) = fromInteger w
+  | otherwise = panic "swBvWidth" ["bitvector too long", show w]
+ where w = SW.bvWidth x
 
 toBool :: SValue sym -> IO (SBool sym)
 toBool (VBool b) = return b
@@ -548,7 +555,7 @@ selectV :: forall sym a b. (Sym sym, Ord a, Num a, Bits a) =>
 selectV merger maxValue valueFn vx =
   case SW.bvAsUnsignedInteger vx of
     Just i  -> valueFn (fromIntegral i)
-    Nothing -> impl (fromInteger (SW.bvWidth vx)) 0
+    Nothing -> impl (swBvWidth vx) 0
   where
     impl :: Int -> a -> IO b
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
@@ -880,8 +887,8 @@ vAsFirstOrderType v =
       -> return FOTBit
     VIntType
       -> return FOTInt
-    VVecType (VNat n) v2
-      -> FOTVec (fromInteger n) <$> vAsFirstOrderType v2
+    VVecType (VNat n) v2 | n >= 0
+      -> FOTVec (fromInteger n :: Natural) <$> vAsFirstOrderType v2
     VArrayType iv ev
       -> FOTArray <$> vAsFirstOrderType iv <*> vAsFirstOrderType ev
     VUnitType
@@ -1094,13 +1101,13 @@ parseUninterpretedSAW sym sc ref trm app ty =
       | Just (Some (PosNat w)) <- somePosNat n
       -> (VWord . DBV) <$> mkUninterpretedSAW sym ref trm app (BaseBVRepr w)
 
-    VVecType (VNat n) ety
+    VVecType (VNat n) ety | n >= 0
       ->  do ety' <- termOfSValue sc ety
              let mkElem i =
-                   do let trm' = ArgTermAt n ety' trm i
+                   do let trm' = ArgTermAt (fromInteger n :: Natural) ety' trm i
                       let app' = suffixUnintApp ("_a" ++ show i) app
                       parseUninterpretedSAW sym sc ref trm' app' ety
-             xs <- traverse mkElem [0 .. n-1]
+             xs <- traverse mkElem (genericTake n [0 ..])
              return (VVector (V.fromList (map ready xs)))
 
     VArrayType ity ety
@@ -1144,7 +1151,7 @@ data ArgTerm
   | ArgTermRecord [(String, ArgTerm)]
   | ArgTermConst Term
   | ArgTermApply ArgTerm ArgTerm
-  | ArgTermAt Integer Term ArgTerm Integer
+  | ArgTermAt Natural Term ArgTerm Natural
     -- ^ length, element type, list, index
   | ArgTermPairLeft ArgTerm
   | ArgTermPairRight ArgTerm
@@ -1194,9 +1201,9 @@ reconstructArgTerm atrm sc ts =
              x <- scApply sc x1 x2
              return (x, ts2)
         ArgTermAt n ty at1 i ->
-          do n' <- scNat sc (fromInteger n)
+          do n' <- scNat sc n
              (x1, ts1) <- parse at1 ts0
-             i' <- scNat sc (fromInteger i)
+             i' <- scNat sc i
              x <- scAt sc n' ty x1 i'
              return (x, ts1)
         ArgTermPairLeft at1 ->
@@ -1259,8 +1266,8 @@ termOfSValue sc val =
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
     VUnitType -> scUnitType sc
-    VVecType (VNat n) a ->
-      do n' <- scNat sc (fromInteger n)
+    VVecType (VNat n) a | n >= 0 ->
+      do n' <- scNat sc (fromInteger n :: Natural)
          a' <- termOfSValue sc a
          scVecType sc n' a'
     VPairType a b
@@ -1270,6 +1277,6 @@ termOfSValue sc val =
     VRecordType flds
       -> do flds' <- traverse (traverse (termOfSValue sc)) flds
             scRecordType sc flds'
-    VNat n
-      -> scNat sc (fromInteger n)
+    VNat n | n >= 0
+      -> scNat sc (fromInteger n :: Natural)
     _ -> fail $ "termOfSValue: " ++ show val
