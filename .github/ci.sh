@@ -156,7 +156,6 @@ test_dist() {
   for t in test0001 test0019_jss_switch_statement test_crucible_jvm test_ecdsa test_examples test_issue108 test_tutorial1 test_tutorial2 test_tutorial_w4; do echo $t >> disabled_tests.txt; done
   LOUD=true ./runtests.sh
   sh -c "! grep '<failure>' results.xml"
-  cabal v2-test saw-remote-api
 }
 
 build_cryptol() {

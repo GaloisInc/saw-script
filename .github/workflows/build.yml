@@ -89,6 +89,9 @@ jobs:
           CVC4_VERSION: "4.1.8"
           YICES_VERSION: "2.6.2"
 
+      - shell: bash
+        run: cabal v2-test saw-remote-api
+
       - uses: actions/setup-java@v1
         with:
           java-version: "8"
