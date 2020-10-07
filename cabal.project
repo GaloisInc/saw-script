@@ -31,4 +31,6 @@ packages:
     deps/elf-edit
     deps/dwarf
     deps/argo/argo
-    deps/argo/cryptol-remote-api
+    deps/argo/tasty-script-exitcode
+    deps/argo/python
+    deps/cryptol/cryptol-remote-api
