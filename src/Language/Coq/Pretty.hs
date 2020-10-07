@@ -15,6 +15,12 @@ import Text.PrettyPrint.ANSI.Leijen
 import Language.Coq.AST
 import Prelude hiding ((<$>), (<>))
 
+-- | Replace all occurrences of the double quote character @"@ with the string
+-- @""@, i.e., two copies of it, as this is how Coq escapes double quote
+-- characters.
+escapeStringLit :: String -> String
+escapeStringLit = concat . map (\c -> if c == '"' then "\"\"" else [c])
+
 -- TODO: import SAWCore pretty-printer?
 tightSepList :: Doc -> [Doc] -> Doc
 tightSepList _ [] = empty
@@ -94,7 +100,7 @@ ppTerm e =
     List ts ->
       brackets (semiSepList (map ppTerm ts))
     StringLit s ->
-      dquotes (string s)
+      dquotes (string $ escapeStringLit s)
     Scope term scope ->
       parens (ppTerm term) <> text "%" <> text scope
     Ltac s ->
