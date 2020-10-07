@@ -152,7 +152,7 @@ ppLLVMVal ::
 ppLLVMVal cc val = do
   sym <- Ov.getSymInterface
   mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))
-  liftIO $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplGlobalMap mem) val
+  pure $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) val
 
 -- | Resolve a 'SetupValue' into a 'LLVMVal' and pretty-print it
 ppSetupValueAsLLVMVal ::
@@ -336,7 +336,7 @@ ppArgs sym cc cs (Crucible.RegMap args) = do
   case Crucible.lookupGlobal (Crucible.llvmMemVar (ccLLVMContext cc)) (cc^.ccLLVMGlobals) of
     Nothing -> fail "Internal error: Couldn't find LLVM memory variable"
     Just mem -> do
-      traverse (Crucible.ppLLVMValWithGlobals sym (Crucible.memImplGlobalMap mem) . fst) =<<
+      map (Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) . fst) <$>
         liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
 -- | This function is responsible for implementing the \"override\" behavior
@@ -1442,7 +1442,10 @@ instantiateExtResolveSAWSymBV sc cc w tm = do
 -- is overwritten by a postcondition memory write is not invalidated.
 -- Return a map containing the overwritten memory allocations.
 invalidateMutableAllocs ::
-  (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
+  ( ?lc :: Crucible.TypeContext
+  , Crucible.HasPtrWidth (Crucible.ArchWidth arch)
+  , Crucible.HasLLVMAnn Sym
+  ) =>
   Options ->
   SharedContext ->
   LLVMCrucibleContext arch ->

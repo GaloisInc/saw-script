@@ -36,7 +36,6 @@ import Control.Monad.Catch (MonadThrow)
 
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
-import Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
@@ -212,9 +211,8 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64
+      let ?recordLLVMAnnotation = \_ _ -> return ()
       let sc = biSharedContext bic
-      bbMapRef <- liftIO $ newIORef mempty
-      let ?badBehaviorMap = bbMapRef
       sym <- liftIO $ C.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
@@ -724,7 +722,22 @@ assertPost globals env premem preregs = do
   returnMatches <- case (ms ^. MS.csRetValue, ms ^. MS.csRet) of
     (Just expectedRet, Just retTy) -> do
       postRAX <- C.LLVM.ptrToPtrVal <$> getReg Macaw.RAX postregs
-      pure [LO.matchArg opts sc cc ms MS.PostState postRAX retTy expectedRet]
+      case (postRAX, C.LLVM.memTypeBitwidth retTy) of
+        (C.LLVM.LLVMValInt base off, Just retTyBits) -> do
+          let
+            truncateRAX :: forall r. NatRepr r -> X86Sim (C.LLVM.LLVMVal Sym)
+            truncateRAX rsz =
+              case (testLeq (knownNat @1) rsz, testLeq rsz (W4.bvWidth off)) of
+                (Just LeqProof, Just LeqProof) ->
+                  case testStrictLeq rsz (W4.bvWidth off) of
+                    Left LeqProof -> do
+                      offTrunc <- liftIO $ W4.bvTrunc sym rsz off
+                      pure $ C.LLVM.LLVMValInt base offTrunc
+                    _ -> pure $ C.LLVM.LLVMValInt base off
+                _ -> throwX86 "Width of return type is zero bits"
+          postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
+          pure [LO.matchArg opts sc cc ms MS.PostState postRAXTrunc retTy expectedRet]
+        _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)

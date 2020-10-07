@@ -103,7 +103,7 @@ typeOfSetupValue _cc env _nameEnv val =
     MS.SetupTerm tt ->
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
-          case toJVMType (Cryptol.evalValType Map.empty ty) of
+          case toJVMType (Cryptol.evalValType mempty ty) of
             Nothing -> fail "typeOfSetupValue: non-representable type"
             Just jty -> return jty
         s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
@@ -158,7 +158,7 @@ resolveTypedTerm ::
 resolveTypedTerm cc tm =
   case ttSchema tm of
     Cryptol.Forall [] [] ty ->
-      resolveSAWTerm cc (Cryptol.evalValType Map.empty ty) (ttTerm tm)
+      resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
     _ -> fail "resolveSetupVal: expected monomorphic term"
 
 resolveSAWPred ::

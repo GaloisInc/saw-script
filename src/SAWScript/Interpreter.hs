@@ -84,6 +84,7 @@ import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
 import           SAWScript.Crucible.LLVM.X86
 import           SAWScript.Crucible.LLVM.Boilerplate
+import           SAWScript.Crucible.LLVM.Skeleton.Builtins
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 
 -- Cryptol
@@ -1680,15 +1681,110 @@ primitives = Map.fromList
     Current
     [ "Load an LLVM bitcode file and return a handle to it." ]
 
-  , prim "llvm_boilerplate_info" "LLVMModule -> [Profile] -> TopLevel ()"
-    (pureVal llvm_boilerplate_info)
+  , prim "module_skeleton" "LLVMModule -> TopLevel ModuleSkeleton"
+    (pureVal module_skeleton)
     Experimental
-    [ "Print information from an LLVM module relevant to boilerplate generation." ]
+    [ "Given a handle to an LLVM module, return a skeleton for that module."
+    ]
 
-  , prim "llvm_boilerplate" "String -> LLVMModule -> [Profile] -> TopLevel ()"
+  , prim "function_skeleton" "ModuleSkeleton -> String -> TopLevel FunctionSkeleton"
+    (pureVal function_skeleton)
+    Experimental
+    [ "Given a module skeleton and a function name, return the corresponding"
+    , "function skeleton."
+    ]
+
+  , prim "skeleton_resize_arg_index" "FunctionSkeleton -> Int -> Int -> Bool -> TopLevel FunctionSkeleton"
+    (pureVal skeleton_resize_arg_index)
+    Experimental
+    [ "Given a function skeleton, argument index, array length, and whether or"
+    , "not that argument is initialized, return a new function skeleton where"
+    , "the assumed length/initialization of the given argument is updated."
+    ]
+
+  , prim "skeleton_resize_arg" "FunctionSkeleton -> String -> Int -> Bool -> TopLevel FunctionSkeleton"
+    (pureVal skeleton_resize_arg)
+    Experimental
+    [ "Given a function skeleton, argument name, array length, and whether or"
+    , "not that argument is initialized, return a new function skeleton where"
+    , "the assumed length/initialization of the given argument is updated."
+    ]
+
+  , prim "skeleton_guess_arg_sizes" "ModuleSkeleton -> LLVMModule -> [(String, [FunctionProfile])] -> TopLevel ModuleSkeleton"
+    (pureVal skeleton_guess_arg_sizes)
+    Experimental
+    [ "Update the sizes of all arguments of the given module skeleton using"
+    , "information obtained from 'crucible_llvm_array_size_profile'."
+    ]
+
+  , prim "skeleton_globals_pre" "ModuleSkeleton -> CrucibleSetup ()"
+    (bicVal skeleton_globals_pre)
+    Experimental
+    [ "Allocate and initialize mutable globals from the given module skeleton."
+    ]
+
+  , prim "skeleton_globals_post" "ModuleSkeleton -> CrucibleSetup ()"
+    (bicVal skeleton_globals_post)
+    Experimental
+    [ "Assert that all mutable globals from the given module skeleton are unchanged."
+    ]
+
+  , prim "skeleton_prestate" "FunctionSkeleton -> CrucibleSetup SkeletonState"
+    (bicVal skeleton_prestate)
+    Experimental
+    [ "Allocate and initialize the arguments of the given function skeleton."
+    , "Return a 'SkeletonState' from which those arguments can be retrieved,"
+    , "so that preconditions can be imposed."
+    ]
+
+  , prim "skeleton_poststate" "FunctionSkeleton -> SkeletonState -> CrucibleSetup SkeletonState"
+    (bicVal skeleton_poststate)
+    Experimental
+    [ "Assert that pointer arguments of the given function skeleton remain"
+    , "initialized. Return a 'SkeletonState' from which those arguments can"
+    , "be retrieved, so that postconditions can be imposed."
+    ]
+
+  , prim "skeleton_arg_index" "SkeletonState -> Int -> CrucibleSetup Term"
+    (bicVal skeleton_arg_index)
+    Experimental
+    [ "Retrieve the argument value at the given index from the given 'SkeletonState'."
+    ]
+
+  , prim "skeleton_arg" "SkeletonState -> String -> CrucibleSetup Term"
+    (bicVal skeleton_arg)
+    Experimental
+    [ "Retrieve the argument value of the given name from the given 'SkeletonState'."
+    ]
+
+  , prim "skeleton_arg_index_pointer" "SkeletonState -> Int -> CrucibleSetup SetupValue"
+    (bicVal skeleton_arg_index_pointer)
+    Experimental
+    [ "Retrieve the argument pointer at the given indexfrom the given 'SkeletonState'."
+    , "Fails if the specified argument is not a pointer."
+    ]
+
+  , prim "skeleton_arg_pointer" "SkeletonState -> String -> CrucibleSetup SetupValue"
+    (bicVal skeleton_arg_pointer)
+    Experimental
+    [ "Retrieve the argument pointer of the given name from the given 'SkeletonState'."
+    , "Fails if the specified argument is not a pointer."
+    ]
+
+  , prim "skeleton_exec" "SkeletonState -> CrucibleSetup ()"
+    (bicVal skeleton_exec)
+    Experimental
+    [ "Wrapper around 'crucible_execute_func' that passes the arguments initialized"
+    , "in 'skeleton_prestate'."
+    ]
+
+  , prim "llvm_boilerplate" "String -> ModuleSkeleton -> Bool -> TopLevel ()"
     (pureVal llvm_boilerplate)
     Experimental
-    [ "Generate boilerplate for the definitions in an LLVM module." ]
+    [ "Generate boilerplate for the definitions in the given LLVM module skeleton."
+    , "Output is written to the path passed as the first argument."
+    , "The third argument controls whether skeleton builtins are emitted."
+    ]
 
   , prim "caseSatResult"       "{b} SatResult -> b -> (Term -> b) -> b"
     (\_ _ -> toValueCase caseSatResultPrim)
@@ -2082,11 +2178,11 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_llvm_array_size_profile"
-    "LLVMModule -> String -> CrucibleSetup () -> TopLevel [Profile]"
-    (bicVal crucible_llvm_array_size_profile)
+    "LLVMModule -> String -> [CrucibleMethodSpec] -> CrucibleSetup () -> TopLevel [(String, [FunctionProfile])]"
+    (bicVal $ crucible_llvm_array_size_profile assumeUnsat)
     Experimental
     [ "Symbolically execute the function named by the second parameter in"
-    , "the module specified by the first. The third parameter may be used"
+    , "the module specified by the first. The fourth parameter may be used"
     , "to specify arguments. Returns profiles specifying the sizes of buffers"
     , "referred to by pointer arguments for the function and all other functions"
     , "it calls (recursively), to be passed to llvm_boilerplate."
