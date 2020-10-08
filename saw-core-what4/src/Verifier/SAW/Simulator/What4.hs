@@ -57,6 +57,7 @@ import qualified Control.Arrow as A
 
 import Data.Bits
 import Data.IORef
+import Data.List (genericTake)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -86,6 +87,8 @@ import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
                                  IsExprBuilder,IsSymExprBuilder)
 import qualified What4.Interface as W
 import           What4.BaseTypes
+import qualified What4.SWord as SW
+import           What4.SWord (SWord(..))
 
 -- parameterized-utils
 import qualified Data.Parameterized.Context as Ctx
@@ -98,7 +101,6 @@ import Data.Parameterized.Some
 import qualified Lang.Crucible.Backend.SAWCore as CS
 
 -- saw-core-what4
-import Verifier.SAW.Simulator.What4.SWord
 import Verifier.SAW.Simulator.What4.PosNat
 import Verifier.SAW.Simulator.What4.FirstOrder
 import Verifier.SAW.Simulator.What4.Panic
@@ -152,16 +154,16 @@ prims =
   Prims.BasePrims
   { Prims.bpAsBool  = W.asConstantPred
     -- Bitvectors
-  , Prims.bpUnpack  = bvUnpack sym
-  , Prims.bpPack    = bvPack   sym
-  , Prims.bpBvAt    = bvAt     sym
-  , Prims.bpBvLit   = bvLit    sym
-  , Prims.bpBvSize  = intSizeOf
-  , Prims.bpBvJoin  = bvJoin   sym
-  , Prims.bpBvSlice = bvSlice  sym
+  , Prims.bpUnpack  = SW.bvUnpackBE sym
+  , Prims.bpPack    = SW.bvPackBE sym
+  , Prims.bpBvAt    = \w i -> SW.bvAtBE sym w (toInteger i)
+  , Prims.bpBvLit   = \l x -> SW.bvLit sym (toInteger l) x
+  , Prims.bpBvSize  = swBvWidth
+  , Prims.bpBvJoin  = SW.bvJoin   sym
+  , Prims.bpBvSlice = \ a b -> SW.bvSliceBE sym (toInteger a) (toInteger b)
     -- Conditionals
   , Prims.bpMuxBool  = W.itePred sym
-  , Prims.bpMuxWord  = bvIte     sym
+  , Prims.bpMuxWord  = SW.bvIte  sym
   , Prims.bpMuxInt   = W.intIte  sym
   , Prims.bpMuxExtra = muxWhat4Extra
     -- Booleans
@@ -173,43 +175,43 @@ prims =
   , Prims.bpXor    = W.xorPred   sym
   , Prims.bpBoolEq = W.isEq      sym
     -- Bitvector logical
-  , Prims.bpBvNot  = bvNot  sym
-  , Prims.bpBvAnd  = bvAnd  sym
-  , Prims.bpBvOr   = bvOr   sym
-  , Prims.bpBvXor  = bvXor  sym
+  , Prims.bpBvNot  = SW.bvNot  sym
+  , Prims.bpBvAnd  = SW.bvAnd  sym
+  , Prims.bpBvOr   = SW.bvOr   sym
+  , Prims.bpBvXor  = SW.bvXor  sym
     -- Bitvector arithmetic
-  , Prims.bpBvNeg  = bvNeg  sym
-  , Prims.bpBvAdd  = bvAdd  sym
-  , Prims.bpBvSub  = bvSub  sym
-  , Prims.bpBvMul  = bvMul  sym
-  , Prims.bpBvUDiv = bvUDiv sym
-  , Prims.bpBvURem = bvURem sym
-  , Prims.bpBvSDiv = bvSDiv sym
-  , Prims.bpBvSRem = bvSRem sym
-  , Prims.bpBvLg2  = bvLg2  sym
+  , Prims.bpBvNeg  = SW.bvNeg  sym
+  , Prims.bpBvAdd  = SW.bvAdd  sym
+  , Prims.bpBvSub  = SW.bvSub  sym
+  , Prims.bpBvMul  = SW.bvMul  sym
+  , Prims.bpBvUDiv = SW.bvUDiv sym
+  , Prims.bpBvURem = SW.bvURem sym
+  , Prims.bpBvSDiv = SW.bvSDiv sym
+  , Prims.bpBvSRem = SW.bvSRem sym
+  , Prims.bpBvLg2  = SW.bvLg2  sym
     -- Bitvector comparisons
-  , Prims.bpBvEq   = bvEq  sym
-  , Prims.bpBvsle  = bvsle sym
-  , Prims.bpBvslt  = bvslt sym
-  , Prims.bpBvule  = bvule sym
-  , Prims.bpBvult  = bvult sym
-  , Prims.bpBvsge  = bvsge sym
-  , Prims.bpBvsgt  = bvsgt sym
-  , Prims.bpBvuge  = bvuge sym
-  , Prims.bpBvugt  = bvugt sym
+  , Prims.bpBvEq   = SW.bvEq  sym
+  , Prims.bpBvsle  = SW.bvsle sym
+  , Prims.bpBvslt  = SW.bvslt sym
+  , Prims.bpBvule  = SW.bvule sym
+  , Prims.bpBvult  = SW.bvult sym
+  , Prims.bpBvsge  = SW.bvsge sym
+  , Prims.bpBvsgt  = SW.bvsgt sym
+  , Prims.bpBvuge  = SW.bvuge sym
+  , Prims.bpBvugt  = SW.bvugt sym
     -- Bitvector shift/rotate
-  , Prims.bpBvRolInt = bvRolInt sym
-  , Prims.bpBvRorInt = bvRorInt sym
-  , Prims.bpBvShlInt = bvShlInt sym
-  , Prims.bpBvShrInt = bvShrInt sym
-  , Prims.bpBvRol    = bvRol sym
-  , Prims.bpBvRor    = bvRor sym
+  , Prims.bpBvRolInt = liftRotate sym (SW.bvRol sym)
+  , Prims.bpBvRorInt = liftRotate sym (SW.bvRor sym)
+  , Prims.bpBvShlInt = \z -> liftShift sym (bvShl sym z)
+  , Prims.bpBvShrInt = \z -> liftShift sym (bvShr sym z)
+  , Prims.bpBvRol    = SW.bvRol sym
+  , Prims.bpBvRor    = SW.bvRor sym
   , Prims.bpBvShl    = bvShl sym
   , Prims.bpBvShr    = bvShr sym
     -- Bitvector misc
-  , Prims.bpBvPopcount = bvPopcount sym
-  , Prims.bpBvCountLeadingZeros = bvCountLeadingZeros sym
-  , Prims.bpBvCountTrailingZeros = bvCountTrailingZeros sym
+  , Prims.bpBvPopcount = SW.bvPopcount sym
+  , Prims.bpBvCountLeadingZeros = SW.bvCountLeadingZeros sym
+  , Prims.bpBvCountTrailingZeros = SW.bvCountTrailingZeros sym
   , Prims.bpBvForall = bvForall sym
     -- Integer operations
   , Prims.bpIntAbs = W.intAbs sym
@@ -267,6 +269,12 @@ constMap =
 -----------------------------------------------------------------------
 -- Implementation of constMap primitives
 
+swBvWidth :: SWord sym -> Int
+swBvWidth x
+  | w <= toInteger (maxBound :: Int) = fromInteger w
+  | otherwise = panic "swBvWidth" ["bitvector too long", show w]
+ where w = SW.bvWidth x
+
 toBool :: SValue sym -> IO (SBool sym)
 toBool (VBool b) = return b
 toBool x         = fail $ unwords ["Verifier.SAW.Simulator.What4.toBool", show x]
@@ -278,7 +286,7 @@ toWord (VVector vv) = do
   -- vec :: Vector (SBool sym))
   vec1 <- T.traverse force vv
   vec2 <- T.traverse toBool vec1
-  bvPack (given :: sym) vec2
+  SW.bvPackBE (given :: sym) vec2
 toWord x            = fail $ unwords ["Verifier.SAW.Simulator.What4.toWord", show x]
 
 wordFun :: (Sym sym) =>
@@ -334,25 +342,56 @@ natToIntOp =
 -- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
 bvToIntOp :: forall sym. (Sym sym) => SValue sym
 bvToIntOp = constFun $ wordFun $ \(v :: SWord sym) -> do
-  VInt <$> bvToInteger (given :: sym) v
+  VInt <$> SW.bvToInteger (given :: sym) v
 
 -- interpret bitvector as signed integer
 -- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
 sbvToIntOp :: forall sym. (Sym sym) => SValue sym
 sbvToIntOp = constFun $ wordFun $ \v -> do
-   VInt <$> sbvToInteger (given :: sym) v
+   VInt <$> SW.sbvToInteger (given :: sym) v
 
 -- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
 intToBvOp :: forall sym. (Sym sym) => SValue sym
 intToBvOp =
   Prims.natFun' "intToBv n" $ \n -> return $
   Prims.intFun "intToBv x" $ \(x :: SymInteger sym) ->
-    VWord <$> integerToBV (given :: sym) x n
+    VWord <$> SW.integerToBV (given :: sym) x n
 
 
 --
 -- Shifts
 --
+
+-- | Shift left, shifting in copies of the given bit
+bvShl :: IsExprBuilder sym => sym -> Pred sym -> SWord sym -> SWord sym -> IO (SWord sym)
+bvShl sym z w i =
+  W.iteM SW.bvIte sym z
+    (do w' <- SW.bvNot sym w
+        SW.bvNot sym =<< SW.bvShl sym w' i)
+    (SW.bvShl sym w i)
+
+-- | Shift right, shifting in copies of the given bit
+bvShr :: IsExprBuilder sym => sym -> Pred sym -> SWord sym -> SWord sym -> IO (SWord sym)
+bvShr sym z w i =
+  W.iteM SW.bvIte sym z
+    (do w' <- SW.bvNot sym w
+        SW.bvNot sym =<< SW.bvLshr sym w' i)
+    (SW.bvLshr sym w i)
+
+liftShift :: IsExprBuilder sym =>
+  sym ->
+  (SWord sym -> SWord sym -> IO (SWord sym)) ->
+  SWord sym -> Integer -> IO (SWord sym)
+liftShift sym f w i =
+  f w =<< SW.bvLit sym (SW.bvWidth w) (i `min` SW.bvWidth w)
+
+liftRotate :: IsExprBuilder sym =>
+  sym ->
+  (SWord sym -> SWord sym -> IO (SWord sym)) ->
+  SWord sym -> Integer -> IO (SWord sym)
+liftRotate sym f w i =
+  f w =<< SW.bvLit sym (SW.bvWidth w) (i `mod` SW.bvWidth w)
+
 
 -- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
 bvShiftOp :: (Sym sym) =>
@@ -365,26 +404,39 @@ bvShiftOp bvOp natOp =
   strictFun $ \y ->            -- amount to shift as a nat
     case y of
       VNat i   -> VWord <$> natOp x j
-        where j = i `min` toInteger (intSizeOf x)
+        where j = i `min` toInteger (SW.bvWidth x)
       VToNat v -> VWord <$> (bvOp x =<< toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.What4.bvShiftOp", show y]
 
 -- bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShLOp :: forall sym. (Sym sym) => SValue sym
-bvShLOp = bvShiftOp (bvShl    given (W.falsePred @sym given))
-                    (bvShlInt given (W.falsePred @sym given))
+bvShLOp = bvShiftOp (SW.bvShl given)
+                    (liftShift given (SW.bvShl given))
 
 -- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvShROp :: forall sym. (Sym sym) => SValue sym
-bvShROp = bvShiftOp (bvShr    given (W.falsePred @sym given))
-                    (bvShrInt given (W.falsePred @sym given))
+bvShROp = bvShiftOp (SW.bvLshr given)
+                    (liftShift given (SW.bvLshr given))
 
-
--- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+-- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
 bvSShROp :: forall sym. (Sym sym) => SValue sym
-bvSShROp = bvShiftOp (bvSShr    given (W.falsePred @sym given))
-                     (bvSShrInt given (W.falsePred @sym given))
+bvSShROp = bvShiftOp (SW.bvAshr given)
+                     (liftShift given (SW.bvAshr given))
 
+bvForall :: W.IsSymExprBuilder sym =>
+  sym -> Natural -> (SWord sym -> IO (Pred sym)) -> IO (Pred sym)
+bvForall sym n f =
+  case W.userSymbol "i" of
+    Left err -> fail $ show err
+    Right indexSymbol ->
+      case mkNatRepr n of
+        Some w
+          | Just LeqProof <- testLeq (knownNat @1) w ->
+            withKnownNat w $ do
+              i <- W.freshBoundVar sym indexSymbol $ W.BaseBVRepr w
+              body <- f . DBV $ W.varExpr sym i
+              W.forallPred sym i body
+          | otherwise -> f ZBV
 
 --
 -- missing integer operations
@@ -463,7 +515,7 @@ streamGetOp =
     VNat n -> lookupSStream xs (toInteger n)
     VToNat w ->
       do ilv <- toWord w
-         selectV (lazyMux @sym muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
+         selectV (lazyMux @sym muxBVal) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv
     v -> Prims.panic "streamGetOp" ["Expected Nat value", show v]
 
 lookupSStream :: SValue sym -> Integer -> IO (SValue sym)
@@ -509,15 +561,15 @@ lazyMux muxFn c tm fm =
 selectV :: forall sym a b. (Sym sym, Ord a, Num a, Bits a) =>
   (SBool sym -> IO b -> IO b -> IO b) -> a -> (a -> IO b) -> SWord sym -> IO b
 selectV merger maxValue valueFn vx =
-  case bvAsUnsignedInteger vx of
+  case SW.bvAsUnsignedInteger vx of
     Just i  -> valueFn (fromIntegral i)
-    Nothing -> impl (intSizeOf vx) 0
+    Nothing -> impl (swBvWidth vx) 0
   where
     impl :: Int -> a -> IO b
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
     impl i y = do
-      p <- bvAt (given :: sym) vx j
+      p <- SW.bvAtBE (given :: sym) vx (toInteger j)
       merger p (impl j (y `setBit` j)) (impl j y) where j = i - 1
 
 instance Show (SArray sym) where
@@ -843,8 +895,8 @@ vAsFirstOrderType v =
       -> return FOTBit
     VIntType
       -> return FOTInt
-    VVecType (VNat n) v2
-      -> FOTVec (fromInteger n) <$> vAsFirstOrderType v2
+    VVecType (VNat n) v2 | n >= 0
+      -> FOTVec (fromInteger n :: Natural) <$> vAsFirstOrderType v2
     VArrayType iv ev
       -> FOTArray <$> vAsFirstOrderType iv <*> vAsFirstOrderType ev
     VUnitType
@@ -1057,13 +1109,13 @@ parseUninterpretedSAW sym sc ref trm app ty =
       | Just (Some (PosNat w)) <- somePosNat n
       -> (VWord . DBV) <$> mkUninterpretedSAW sym ref trm app (BaseBVRepr w)
 
-    VVecType (VNat n) ety
+    VVecType (VNat n) ety | n >= 0
       ->  do ety' <- termOfSValue sc ety
              let mkElem i =
-                   do let trm' = ArgTermAt n ety' trm i
+                   do let trm' = ArgTermAt (fromInteger n :: Natural) ety' trm i
                       let app' = suffixUnintApp ("_a" ++ show i) app
                       parseUninterpretedSAW sym sc ref trm' app' ety
-             xs <- traverse mkElem [0 .. n-1]
+             xs <- traverse mkElem (genericTake n [0 ..])
              return (VVector (V.fromList (map ready xs)))
 
     VArrayType ity ety
@@ -1107,7 +1159,7 @@ data ArgTerm
   | ArgTermRecord [(String, ArgTerm)]
   | ArgTermConst Term
   | ArgTermApply ArgTerm ArgTerm
-  | ArgTermAt Integer Term ArgTerm Integer
+  | ArgTermAt Natural Term ArgTerm Natural
     -- ^ length, element type, list, index
   | ArgTermPairLeft ArgTerm
   | ArgTermPairRight ArgTerm
@@ -1157,9 +1209,9 @@ reconstructArgTerm atrm sc ts =
              x <- scApply sc x1 x2
              return (x, ts2)
         ArgTermAt n ty at1 i ->
-          do n' <- scNat sc (fromInteger n)
+          do n' <- scNat sc n
              (x1, ts1) <- parse at1 ts0
-             i' <- scNat sc (fromInteger i)
+             i' <- scNat sc i
              x <- scAt sc n' ty x1 i'
              return (x, ts1)
         ArgTermPairLeft at1 ->
@@ -1222,8 +1274,8 @@ termOfSValue sc val =
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
     VUnitType -> scUnitType sc
-    VVecType (VNat n) a ->
-      do n' <- scNat sc (fromInteger n)
+    VVecType (VNat n) a | n >= 0 ->
+      do n' <- scNat sc (fromInteger n :: Natural)
          a' <- termOfSValue sc a
          scVecType sc n' a'
     VPairType a b
@@ -1233,6 +1285,6 @@ termOfSValue sc val =
     VRecordType flds
       -> do flds' <- traverse (traverse (termOfSValue sc)) flds
             scRecordType sc flds'
-    VNat n
-      -> scNat sc (fromInteger n)
+    VNat n | n >= 0
+      -> scNat sc (fromInteger n :: Natural)
     _ -> fail $ "termOfSValue: " ++ show val
