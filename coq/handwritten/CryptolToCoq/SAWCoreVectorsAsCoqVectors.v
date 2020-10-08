@@ -316,16 +316,20 @@ Fixpoint shiftR (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat)
 (* This is annoying to implement, so using BITS conversion *)
 Definition bvult (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   ltB (bvToBITS a) (bvToBITS b).
+Opaque bvult.
 
 Definition bvugt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvult n b a.
+Opaque bvugt.
 
 (* This is annoying to implement, so using BITS conversion *)
 Definition bvule (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   leB (bvToBITS a) (bvToBITS b).
+Opaque bvule.
 
 Definition bvuge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvule n b a.
+Opaque bvuge.
 
 Definition sign {n : nat} (a : bitvector n) : Bool :=
   match a with
@@ -336,15 +340,19 @@ Definition sign {n : nat} (a : bitvector n) : Bool :=
 Definition bvslt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   let c := bvSub n a b
    in (sign a && ~~ sign b) || (sign a && sign c) || (~~ sign b && sign c).
+Opaque bvslt.
 
 Definition bvsgt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvslt n b a.
+Opaque bvsgt.
 
 Definition bvsle (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvslt n a b || (Vector.eqb _ eqb a b).
+Opaque bvsle.
 
 Definition bvsge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvsle n b a.
+Opaque bvsge.
 
 (* Axiom intToBv : forall (n : Nat), Integer -> bitvector n. *)
 
