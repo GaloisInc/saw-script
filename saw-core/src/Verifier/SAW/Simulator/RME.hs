@@ -125,7 +125,7 @@ bvShiftOp op =
   wordFun $ \x ->
   pureFun $ \y ->
     case y of
-      VNat n   -> vWord (op x n)
+      VNat n   -> vWord (op x (toInteger n))
       VToNat v -> vWord (genShift muxRMEV op x (toWord v))
       _        -> error $ unwords ["Verifier.SAW.Simulator.RME.shiftOp", show y]
 

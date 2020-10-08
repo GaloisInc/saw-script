@@ -130,7 +130,7 @@ bvShiftOp natOp =
   wordFun $ \x ->
   pureFun $ \y ->
     case y of
-      VNat n -> vWord (natOp x (fromInteger n))
+      VNat n | toInteger n < toInteger (maxBound :: Int) -> vWord (natOp x (fromIntegral n))
       _      -> error $ unwords ["Verifier.SAW.Simulator.Concrete.shiftOp", show y]
 
 ------------------------------------------------------------
@@ -273,7 +273,7 @@ constMap =
 
 -- primitive bvToNat :: (n::Nat) -> bitvector n -> Nat;
 bvToNatOp :: CValue
-bvToNatOp = constFun $ wordFun $ VNat . unsigned
+bvToNatOp = constFun $ wordFun $ VNat . fromInteger . unsigned
 
 -- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
 bvToIntOp :: CValue

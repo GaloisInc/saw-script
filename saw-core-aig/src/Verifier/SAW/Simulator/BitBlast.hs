@@ -98,7 +98,7 @@ type BValue l = Value (BitBlast l)
 type BThunk l = Thunk (BitBlast l)
 
 data BExtra l
-  = BStream (Integer -> IO (BValue l)) (IORef (Map Integer (BValue l)))
+  = BStream (Natural -> IO (BValue l)) (IORef (Map Natural (BValue l)))
 
 instance Show (BExtra l) where
   show (BStream _ _) = "BStream"
@@ -147,7 +147,7 @@ bvShiftOp bvOp natOp =
   wordFun $ \x -> return $
   strictFun $ \y ->
     case y of
-      VNat n   -> return (vWord (natOp x (fromInteger n)))
+      VNat n   -> return (vWord (natOp x n))
       VToNat v -> fmap vWord (bvOp x =<< toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.BitBlast.shiftOp", show y]
 
@@ -391,14 +391,14 @@ streamGetOp be =
   constFun $
   strictFun $ \xs -> return $
   strictFun $ \case
-    VNat n -> lookupBStream xs (toInteger n)
+    VNat n -> lookupBStream xs n
     VToNat w ->
        do bs <- toWord w
           AIG.muxInteger (lazyMux be (muxBVal be)) ((2 ^ AIG.length bs) - 1) bs (lookupBStream xs)
     v -> fail (unlines ["Verifier.SAW.Simulator.BitBlast.streamGetOp", "Expected Nat value", show v])
 
 
-lookupBStream :: BValue l -> Integer -> IO (BValue l)
+lookupBStream :: BValue l -> Natural -> IO (BValue l)
 lookupBStream (VExtra (BStream f r)) n = do
    m <- readIORef r
    case Map.lookup n m of
