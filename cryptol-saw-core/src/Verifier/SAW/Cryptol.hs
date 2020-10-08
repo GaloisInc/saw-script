@@ -189,6 +189,7 @@ importPC sc pc =
     C.PGeq       -> panic "importPC PGeq" []
     C.PFin       -> panic "importPC PFin" []
     C.PHas _     -> panic "importPC PHas" []
+    C.PPrime     -> panic "importPC PPrime" []
     C.PZero      -> scGlobalDef sc "Cryptol.PZero"
     C.PLogic     -> scGlobalDef sc "Cryptol.PLogic"
     C.PRing      -> scGlobalDef sc "Cryptol.PRing"
@@ -449,6 +450,10 @@ proveProp sc env prop =
         -- instance Field Rational
         (C.pIsField -> Just (C.tIsRational -> True))
           -> do scGlobalApply sc "Cryptol.PFieldRational" []
+        -- instance (prime p) => Field (Z p)
+        (C.pIsField -> Just (C.tIsIntMod -> Just n))
+          -> do n' <- importType sc env n
+                scGlobalApply sc "Cryptol.PFieldIntModNum" [n']
         -- instance (ValidFloat e p) => Field (Float e p)
         (C.pIsField -> Just (C.tIsFloat -> Just (e, p)))
           -> do e' <- importType sc env e
