@@ -26,6 +26,9 @@ module Verifier.SAW.Term.Pretty
   , ppTermDepth
   , PPModule(..), PPDecl(..)
   , ppPPModule
+  , scTermCount
+  , OccurrenceMap
+  , shouldMemoizeTerm
   ) where
 
 import Data.Maybe (isJust)
