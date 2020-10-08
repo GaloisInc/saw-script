@@ -2,7 +2,9 @@
  *** Extra Proofs for CompM that Rely on SAWCorePrelude
  ***)
 
+From Coq          Require Import Strings.String.
 From CryptolToCoq Require Import SAWCorePrelude.
+From CryptolToCoq Require Import SAWCoreScaffolding.
 From CryptolToCoq Require Import SAWCoreVectorsAsCoqVectors.
 From CryptolToCoq Require Import SAWCoreBitvectors.
 From CryptolToCoq Require Export CompM.
@@ -14,16 +16,55 @@ From CryptolToCoq Require Export CompM.
 Ltac get_last_hyp tt :=
   match goal with H: _ |- _ => constr:(H) end.
 
-Ltac in_all_hyps ltac :=
-  repeat match goal with H : _ |- _ => progress ltac H end.
+Tactic Notation "unfold_projs" :=
+  unfold SAWCoreScaffolding.fst;
+  cbn [ Datatypes.fst proj1 projT1 ].
 
-Ltac destruct_all_conjs_disjs :=
+Tactic Notation "unfold_projs" "in" constr(N) :=
+  unfold SAWCoreScaffolding.fst in N;
+  cbn [ Datatypes.fst proj1 projT1 ] in N.
+
+Tactic Notation "unfold_projs" "in" "*" :=
+  unfold SAWCoreScaffolding.fst in *;
+  cbn [ Datatypes.fst proj1 projT1 ] in *.
+
+Ltac destruct_prods_sums H x :=
+  match x with
+  | ?y /\ ?z        => let H0 := fresh H in
+                       let H1 := fresh H in
+                       destruct H as [ H0 H1 ];
+                       destruct_prods_sums H0 y;
+                       destruct_prods_sums H1 z
+  | { _ : ?y & ?z } => let H0 := fresh H in
+                       let H1 := fresh H in
+                       destruct H as [ H0 H1 ];
+                       destruct_prods_sums H0 y;
+                       destruct_prods_sums H1 z
+  | prod ?y ?z      => let H0 := fresh H in
+                       let H1 := fresh H in
+                       destruct H as [ H0 H1 ];
+                       destruct_prods_sums H0 y;
+                       destruct_prods_sums H1 z
+  | unit            => destruct H
+  | ?y \/ ?z        => destruct H as [ H | H ];
+                       [ destruct_prods_sums H y
+                       | destruct_prods_sums H z ]
+  | _ => idtac
+  end.
+
+Ltac destruct_prods_sums_last_hyp :=
+  match goal with
+  | H: ?x |- _ => destruct_prods_sums H x
+  end.
+
+Ltac intro_destruct_prods_sums := intro; destruct_prods_sums_last_hyp.
+
+Ltac split_prod_goal :=
   repeat match goal with
-         | H: ?P /\ ?Q |- _ => let H0 := fresh H in
-                               let H1 := fresh H in
-                               destruct H as [ H0 H1 ]
-         | H: ?P \/ ?Q |- _ => destruct H as [ H | H ]
-         | |- ?P /\ ?Q      => split
+         | |- _ /\ _        => split
+         | |- { _ : _ & _ } => split
+         | |- _ * _         => split
+         | |- unit          => exact tt
          end.
 
 
@@ -112,6 +153,7 @@ Hint Resolve refinesM_letRecM0 : refinesM.
 (* Hint Extern 1 (@letRecM LRT_Nil _ _ _ |= @letRecM LRT_Nil _ _ _) => *)
 (*   apply refinesM_letRecM0 : refinesM. *)
 Hint Extern 1 (@letRecM (LRT_Cons _ LRT_Nil) _ _ _ |= @letRecM (LRT_Cons _ LRT_Nil) _ _ _) =>
+  (* idtac "prove_refinement: refinesM_letRecM1_fst"; *)
   apply refinesM_letRecM1_fst; try apply ProperFun_any : refinesM.
 
 (*
@@ -130,83 +172,113 @@ Hint Resolve refinesM_returnM : refinesM.
 *)
 
 Hint Extern 1 (SAWCorePrelude.either _ _ _ _ _ _ |= _) =>
+  (* idtac "prove_refinement: refinesM_either_l"; *)
   apply refinesM_either_l;
     let e := fresh "e_either" in
     let e' := fresh "e_either_arg" in
-    (intro; intro e; (* autorewrite with SAWCoreBitvectors in e; *)
-                     try discriminate e; try rewrite e;
-    try (injection e; intro e'; try rewrite <- e')) : refinesM.
+    (intro_destruct_prods_sums;
+      intro e; unfold_projs in e; (* autorewrite with SAWCoreBitvectors in e; *)
+      try discriminate e; unfold_projs; try rewrite e;
+      try (injection e; intro e'; try rewrite <- e')) : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.either _ _ _ _ _ _) =>
+  (* idtac "prove_refinement: refinesM_either_r"; *)
   apply refinesM_either_r;
     let e := fresh "e_either" in
     let e' := fresh "e_either_arg" in
-    (intro; intro e; (* autorewrite with SAWCoreBitvectors in e; *)
-                     try discriminate e; try rewrite e;
-    try (injection e; intro e'; try rewrite <- e')) : refinesM.
+    (intro_destruct_prods_sums;
+      intro e; unfold_projs in e; (* autorewrite with SAWCoreBitvectors in e; *)
+      try discriminate e; unfold_projs; try rewrite e;
+      try (injection e; intro e'; try rewrite <- e')) : refinesM.
 
 Hint Extern 1 (SAWCorePrelude.maybe _ _ _ _ _ |= _) =>
+  (* idtac "prove_refinement: refinesM_maybe_l"; *)
   let e := fresh "e_maybe" in
   let e' := fresh "e_maybe_arg" in
     apply refinesM_maybe_l;
     [ intro e; (* autorewrite with SAWCoreBitvectors in e; *)
-               try discriminate e; try rewrite e
-    | intro; intro e; (* autorewrite with SAWCoreBitvectors in e; *)
-                      try discriminate e; try rewrite e;
+      try discriminate e; try rewrite e
+    | intro_destruct_prods_sums;
+      intro e; unfold_projs in e; (* autorewrite with SAWCoreBitvectors in e; *)
+      try discriminate e; unfold_projs; try rewrite e;
       try (injection e; intro e'; try rewrite <- e') ] : refinesM.
 Hint Extern 1 (_ |= SAWCorePrelude.maybe _ _ _ _ _) =>
+  (* idtac "prove_refinement: refinesM_maybe_r"; *)
   let e := fresh "e_maybe" in
   let e' := fresh "e_maybe_arg" in
     apply refinesM_maybe_r;
     [ intro e; (* autorewrite with SAWCoreBitvectors in e; *)
-               try discriminate e; try rewrite e
-    | intro; intro e; (* autorewrite with SAWCoreBitvectors in e; *)
-                      try discriminate e; try rewrite e;
+      try discriminate e; try rewrite e
+    | intro_destruct_prods_sums;
+      intro e; unfold_projs in e; (* autorewrite with SAWCoreBitvectors in e; *)
+      try discriminate e; unfold_projs; try rewrite e;
       try (injection e; intro e'; try rewrite <- e') ] : refinesM.
 
 Hint Extern 1 (sigT_rect _ _ _ |= _) =>
+  (* idtac "prove_refinement: refinesM_sigT_rect_l"; *)
   apply refinesM_sigT_rect_l;
     let e := fresh "e_sigT_rect" in
-    (intro; intro; (* autorewrite with SAWCoreBitvectors in e; *)
-                   intro e; try rewrite e) : refinesM.
+    let e' := fresh "e_sigT_arg0" in
+    let e'' := fresh "e_sigT_arg1" in
+    (intro_destruct_prods_sums; intro_destruct_prods_sums;
+     intro e; unfold_projs in e; unfold_projs; try rewrite e;
+     try (injection e; intros e' e''; try rewrite <- e'; try rewrite <- e'')) : refinesM.
 Hint Extern 1 (_ |= sigT_rect _ _ _) =>
+  (* idtac "prove_refinement: refinesM_sigT_rect_r"; *)
   apply refinesM_sigT_rect_r;
     let e := fresh "e_sigT_rect" in
-    (intro; intro; (* autorewrite with SAWCoreBitvectors in e; *)
-                   intro e; try rewrite e) : refinesM.
+    let e' := fresh "e_sigT_arg0" in
+    let e'' := fresh "e_sigT_arg1" in
+    (intro_destruct_prods_sums; intro_destruct_prods_sums;
+     intro e; unfold_projs in e; unfold_projs; try rewrite e;
+     try (injection e; intros e' e''; try rewrite <- e'; try rewrite <- e'')) : refinesM.
 
 Hint Extern 1 ((if _ then _ else _) |= _) =>
+  (* idtac "prove_refinement: refinesM_if_l"; *)
   apply refinesM_if_l;
     let e := fresh "e_if" in
-    (intro e; autorewrite with SAWCoreBitvectors in e;
-              try discriminate e; try rewrite e) : refinesM.
+    (intro e; (* time "bv rewrite (if_l)" *)
+              (autorewrite with SAWCoreBitvectors in e);
+              destruct_prods_sums_last_hyp;
+     try discriminate e; try rewrite e) : refinesM.
 Hint Extern 1 (_ |= (if _ then _ else _)) =>
+  (* idtac "prove_refinement: refinesM_if_r"; *)
   apply refinesM_if_r;
     let e := fresh "e_if" in
-    (intro e; autorewrite with SAWCoreBitvectors in e;
-              try discriminate e; try rewrite e) : refinesM.
+    (intro e; (* time "bv rewrite (if_r)" *)
+              (autorewrite with SAWCoreBitvectors in e);
+              destruct_prods_sums_last_hyp;
+     try discriminate e; try rewrite e) : refinesM.
 Hint Extern 1 (returnM (if _ then _ else _) |= _) =>
   apply refinesM_returnM_if_l : refinesM.
 Hint Extern 1 (_ |= returnM (if _ then _ else _)) =>
   apply refinesM_returnM_if_r : refinesM.
 
 Hint Extern 1 (assertM _ >> _ |= _) =>
+  (* idtac "prove_refinement: refinesM_assertM_l"; *)
   apply refinesM_bindM_assertM_l;
-    let e := fresh "e_assert" in intro e; autorewrite with SAWCoreBitvectors in e : refinesM.
+    let e := fresh "e_assert" in
+     (intro e; autorewrite with SAWCoreBitvectors in e;
+      destruct_prods_sums_last_hyp): refinesM.
 Hint Extern 1 (_ |= assumingM _ _) =>
+  (* idtac "prove_refinement: refinesM_assumingM_r"; *)
   apply refinesM_assumingM_r;
-    let e := fresh "e_assuming" in intro e; autorewrite with SAWCoreBitvectors in e : refinesM.
+    let e := fresh "e_assuming" in
+     (intro e; autorewrite with SAWCoreBitvectors in e;
+      destruct_prods_sums_last_hyp) : refinesM.
 Hint Extern 2 (_ |= assertM _ >> _) =>
+  (* idtac "prove_refinement: refinesM_assertM_r"; *)
   eapply refinesM_bindM_assertM_r; shelve : refinesM.
 Hint Extern 2 (assumingM _ _ |= _) =>
+  (* idtac "prove_refinement: refinesM_assumingM_l"; *)
   eapply refinesM_assumingM_l; shelve : refinesM.
 
-Hint Extern 2 (existsM _ |= _) => apply refinesM_existsM_l; intros : refinesM.
-Hint Extern 2 (_ |= forallM _) => apply refinesM_forallM_r; intros : refinesM.
+Hint Extern 2 (existsM _ |= _) => apply refinesM_existsM_l; intro_destruct_prods_sums : refinesM.
+Hint Extern 2 (_ |= forallM _) => apply refinesM_forallM_r; intro_destruct_prods_sums : refinesM.
 Hint Extern 3 (_ |= existsM _) => eapply refinesM_existsM_r; shelve : refinesM.
 Hint Extern 3 (forallM _ |= _) => eapply refinesM_forallM_l; shelve : refinesM.
 
 Hint Extern 3 (returnM _ |= returnM _) =>
-  apply refinesM_returnM; intros; (reflexivity || shelve) : refinesM.
+  apply refinesM_returnM; (reflexivity || shelve) : refinesM.
 
 Hint Extern 1 (orM _ _ |= _) => apply refinesM_orM_l : refinesM.
 Hint Extern 1 (_ |= andM _ _) => apply refinesM_andM_r : refinesM.
@@ -347,31 +419,41 @@ Definition refinesFunStep A lrtF f1 f2
            (r: forall a:A, MaybeDestructArg A a (@refinesFun (lrtF a) (f1 a) (f2 a))) :
   @refinesFun (LRT_Fun A lrtF) f1 f2 := r.
 
-Hint Resolve refinesFunBase refinesFunStep | 5 : refinesFun.
+Hint Extern 5 (@refinesFun (LRT_Ret _) _ _) =>
+  (* idtac "prove_refinement: refinesFunBase"; *)
+  simple apply refinesFunBase; unfold_projs : refinesFun.
+
+Hint Extern 5 (@refinesFun (LRT_Fun _ _) _ _) =>
+  (* idtac "prove_refinement: refinesFunStep"; *)
+  simple apply refinesFunStep; intro_destruct_prods_sums : refinesFun.
 
 
 (***
  *** Top-level tactics to put it all together
  ***)
 
-Ltac prove_refinement :=
-  compute_bvLits;
+Ltac prove_refinement_core :=
   unshelve (typeclasses eauto with refinesM refinesFun);
   try (unshelve (rewrite_strat (bottomup (hints refinesM))));
-  (* autorewrite with SAWCoreBitvectors in * |-; *)
-  destruct_all_conjs_disjs;
+  unfold_projs in *; split_prod_goal;
   try reflexivity || contradiction.
+
+Ltac prove_refinement :=
+  (* idtac "prove_refinement: start"; *)
+  compute_bvLits;
+  unfold_projs;
+  prove_refinement_core.
 
 (* Giving user input as to which disjunctive branch to continue proof automation in *)
 Ltac continue_prove_refinement_left :=
   match goal with
-  | |- ?P |= orM ?m1 ?m2 => apply refinesM_orM_r; left; prove_refinement
-  | |- andM ?m1 ?m2 |= ?P => apply refinesM_andM_l; left; prove_refinement
+  | |- _ |= orM _ _ => apply refinesM_orM_r; left; prove_refinement_core
+  | |- andM _ _ |= _ => apply refinesM_andM_l; left; prove_refinement_core
   end.
 Ltac continue_prove_refinement_right :=
   match goal with
-  | |- ?P |= orM ?m1 ?m2 => apply refinesM_orM_r; right; prove_refinement
-  | |- andM ?m1 ?m2 |= ?P => apply refinesM_andM_l; right; prove_refinement
+  | |- _ |= orM _ _ => apply refinesM_orM_r; right; prove_refinement_core
+  | |- andM _ _ |= _ => apply refinesM_andM_l; right; prove_refinement_core
   end.
 
 (* Ltac prove_refinesFun := unshelve (typeclasses eauto with refinesFun). *)

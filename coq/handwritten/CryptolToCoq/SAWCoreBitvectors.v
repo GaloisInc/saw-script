@@ -172,10 +172,10 @@ Proof. split; destruct b; auto. Qed.
 
 Hint Rewrite not_bool_eq_true_lemma not_bool_eq_false_lemma : SAWCoreBitvectors.
 
-Lemma sym_bool_true_eq_lemma (b : bool) : true = b <-> b = true.
-Proof. split; auto. Qed.
+(* Lemma sym_bool_true_eq_lemma (b : bool) : true = b <-> b = true. *)
+(* Proof. split; auto. Qed. *)
 
-Lemma sym_bool_false_eq_lemma (b : bool) : false = b <-> b = false.
-Proof. split; auto. Qed.
+(* Lemma sym_bool_false_eq_lemma (b : bool) : false = b <-> b = false. *)
+(* Proof. split; auto. Qed. *)
 
-Hint Rewrite sym_bool_true_eq_lemma sym_bool_false_eq_lemma : SAWCoreBitvectors.
+(* Hint Rewrite sym_bool_true_eq_lemma sym_bool_false_eq_lemma : SAWCoreBitvectors. *)

@@ -577,6 +577,20 @@ Proof.
   intro e; rewrite e. reflexivity.
 Qed.
 
+Lemma refinesM_errorM_returnM A s (a:A) : ~ errorM s |= returnM a.
+Proof.
+  intro H; vm_compute in H.
+  apply (fun H => H None eq_refl) in H.
+  discriminate H.
+Qed.
+
+Lemma refinesM_returnM_errorM A (a:A) s : ~ returnM a |= errorM s.
+Proof.
+  intro H; vm_compute in H.
+  apply (fun H => H (Some a) eq_refl) in H.
+  discriminate H.
+Qed.
+
 (* If a monadic function f is F-closed w.r.t. the refinement relation, then the
 least fixed-point of F refines f *)
 Lemma refinesM_fixM_l A B (F : (forall (a:A), CompM (B a)) ->
