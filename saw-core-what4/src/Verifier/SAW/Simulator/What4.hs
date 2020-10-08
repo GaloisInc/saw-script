@@ -558,14 +558,14 @@ lazyMux muxFn c tm fm =
 
 -- selectV merger maxValue valueFn index returns valueFn v when index has value v
 -- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
-selectV :: forall sym a b. (Sym sym, Ord a, Num a, Bits a) =>
-  (SBool sym -> IO b -> IO b -> IO b) -> a -> (a -> IO b) -> SWord sym -> IO b
+selectV :: forall sym b. Sym sym =>
+  (SBool sym -> IO b -> IO b -> IO b) -> Natural -> (Natural -> IO b) -> SWord sym -> IO b
 selectV merger maxValue valueFn vx =
   case SW.bvAsUnsignedInteger vx of
-    Just i  -> valueFn (fromIntegral i) -- TODO: dangerous fromIntegral
+    Just i  -> valueFn (fromInteger i :: Natural)
     Nothing -> impl (swBvWidth vx) 0
   where
-    impl :: Int -> a -> IO b
+    impl :: Int -> Natural -> IO b
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
     impl i y = do
