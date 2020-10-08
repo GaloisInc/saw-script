@@ -268,7 +268,7 @@ panic msg = Panic.panic "Verifier.SAW.Simulator.Prims" [msg]
 -- Value accessors and constructors
 
 vNat :: Natural -> Value l
-vNat n = VNat (fromIntegral n)
+vNat n = VNat n
 
 natFromValue :: Value l -> Natural
 natFromValue (VNat n) = n
@@ -570,7 +570,7 @@ natCaseOp =
     if n == 0
     then force z
     else do s' <- force s
-            apply s' (ready (VNat (fromIntegral n - 1)))
+            apply s' (ready (VNat (n - 1)))
 
 --------------------------------------------------------------------------------
 
@@ -585,7 +585,7 @@ genOp =
   constFun $
   strictFun $ \f -> do
     let g i = delay $ apply f (ready (VNat (fromIntegral i)))
-    if n > fromIntegral (maxBound :: Int) then
+    if toInteger n > toInteger (maxBound :: Int) then
       panic ("Verifier.SAW.Simulator.gen: vector size too large: " ++ show n)
       else liftM VVector $ V.generateM (fromIntegral n) g
 
@@ -635,16 +635,16 @@ atWithDefaultOp bp =
     case idx of
       VNat i ->
         case x of
-          VVector xv -> force (vecIdx d xv (fromIntegral i))
-          VWord xw -> VBool <$> bpBvAt bp xw (fromIntegral i)
+          VVector xv -> force (vecIdx d xv (fromIntegral i)) -- FIXME dangerous fromIntegral
+          VWord xw -> VBool <$> bpBvAt bp xw (fromIntegral i) -- FIXME dangerous fromIntegral
           _ -> panic "atOp: expected vector"
       VToNat i -> do
         iv <- toBits (bpUnpack bp) i
         case x of
           VVector xv ->
-            selectV (lazyMuxValue bp) (fromIntegral n - 1) (force . vecIdx d xv) iv
+            selectV (lazyMuxValue bp) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
           VWord xw ->
-            selectV (lazyMuxValue bp) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv
+            selectV (lazyMuxValue bp) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv -- FIXME dangerous fromIntegral
           _ -> panic "atOp: expected vector"
       _ -> panic $ "atOp: expected Nat, got " ++ show idx
 
@@ -672,7 +672,7 @@ updOp bp =
       VToNat (VVector iv) ->
         do let update i = return (VVector (xv V.// [(i, y)]))
            iv' <- V.mapM (liftM toBool . force) iv
-           selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv'
+           selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral
       _ -> panic $ "updOp: expected Nat, got " ++ show idx
 
 -- primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
@@ -683,7 +683,7 @@ emptyVec = constFun $ VVector V.empty
 takeOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 takeOp bp =
   constFun $
-  natFun $ \(fromIntegral -> m) -> return $
+  natFun $ \(fromIntegral -> m) -> return $ -- FIXME dangerous fromIntegral
   constFun $
   strictFun $ \v ->
     case v of
@@ -695,7 +695,7 @@ takeOp bp =
 dropOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 dropOp bp =
   constFun $
-  natFun $ \(fromIntegral -> m) -> return $
+  natFun $ \(fromIntegral -> m) -> return $ -- FIXME dangerous fromIntegral
   constFun $
   strictFun $ \v ->
   case v of
@@ -740,8 +740,8 @@ joinOp bp =
 -- split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 splitOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 splitOp bp =
-  natFun $ \(fromIntegral -> m) -> return $
-  natFun $ \(fromIntegral -> n) -> return $
+  natFun $ \(fromIntegral -> m) -> return $ -- FIXME dangerous fromIntegral
+  natFun $ \(fromIntegral -> n) -> return $ -- FIXME dangerous fromIntegral
   constFun $
   strictFun $ \x ->
   case x of
@@ -1185,7 +1185,7 @@ intToNatOp =
 
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: (VMonad l, VInt l ~ Integer) => Value l
-natToIntOp = natFun' "natToInt" $ \x -> return $ VInt (fromIntegral x)
+natToIntOp = natFun' "natToInt" $ \x -> return $ VInt (toInteger x)
 
 -- primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 bvLg2Op :: VMonad l => (Value l -> MWord l) -> (VWord l -> MWord l) -> Value l
