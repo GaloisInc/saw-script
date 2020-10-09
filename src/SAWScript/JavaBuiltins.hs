@@ -307,7 +307,7 @@ showCexResults vpopts sc opts ms vs exts vals = do
   printOutLn vpopts Info $ "When verifying " ++ specName ms ++ ":"
   printOutLn vpopts Info $ "Proof of " ++ vsVCName vs ++ " failed."
   printOutLn vpopts Info $ "Counterexample:"
-  let showVal v = show <$> (Cryptol.runEval SS.quietEvalOpts
+  let showVal v = show <$> (Cryptol.runEval
                     (Cryptol.ppValue Cryptol.Concrete (cryptolPPOpts opts) (exportFirstOrderValue v)))
   mapM_ (\(n, v) -> do vdoc <- showVal v
                        printOutLn vpopts Info ("  " ++ n ++ ": " ++ vdoc)) vals

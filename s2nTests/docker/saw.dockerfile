@@ -1,4 +1,4 @@
-FROM debian:buster AS solvers
+FROM debian:stretch AS solvers
 
 # Install needed packages for building
 RUN apt-get update \
@@ -39,7 +39,7 @@ RUN curl -L https://github.com/CVC4/CVC4/releases/download/1.8/cvc4-1.8-x86_64-l
 # Set executable and run tests
 RUN chmod +x rootfs/usr/local/bin/*
 
-FROM haskell:8.8.4 AS build
+FROM haskell:8.8.4-stretch AS build
 USER root
 RUN apt-get update && apt-get install -y wget libncurses-dev unzip
 COPY --from=solvers /solvers/rootfs /
@@ -58,7 +58,7 @@ WORKDIR /home/saw
 USER root
 RUN chown -R root:root /home/saw/rootfs
 
-FROM debian:buster-slim
+FROM debian:stretch-slim
 RUN apt-get update \
     && apt-get install -y libgmp10 libgomp1 libffi6 wget libncurses5 unzip
 COPY --from=build /home/saw/rootfs /

@@ -147,6 +147,12 @@ ppTypedTerm (TypedTerm tp tm) =
   PP.<+> PP.text ":" PP.<+>
   PP.text (show (Cryptol.ppPrec 0 tp))
 
+ppTypedExtCns :: TypedExtCns -> PP.Doc
+ppTypedExtCns (TypedExtCns tp ec) =
+  PP.text (ecName ec)
+  PP.<+> PP.text ":" PP.<+>
+  PP.text (show (Cryptol.ppPrec 0 tp))
+
 setupToTypedTerm ::
   Options {-^ Printing options -} ->
   SharedContext ->
@@ -319,14 +325,12 @@ deriving instance ( SetupValueHas Show ext
 -- | Verification state (either pre- or post-) specification
 data StateSpec ext = StateSpec
   { _csAllocs        :: Map AllocIndex (AllocSpec ext)
-    -- ^ allocated pointers
-  , _csFreshPointers :: Map AllocIndex (AllocSpec ext)
-    -- ^ symbolic pointers
+    -- ^ allocated or declared pointers
   , _csPointsTos     :: [PointsTo ext]
     -- ^ points-to statements
   , _csConditions    :: [SetupCondition ext]
     -- ^ equality, propositions, and ghost-variable conditions
-  , _csFreshVars     :: [TypedTerm]
+  , _csFreshVars     :: [TypedExtCns]
     -- ^ fresh variables created in this state
   , _csVarTypeNames  :: Map AllocIndex (TypeName ext)
     -- ^ names for types of variables, for diagnostics
@@ -337,7 +341,6 @@ makeLenses ''StateSpec
 initialStateSpec :: StateSpec ext
 initialStateSpec =  StateSpec
   { _csAllocs        = Map.empty
-  , _csFreshPointers = Map.empty -- TODO: this is LLVM-specific
   , _csPointsTos     = []
   , _csConditions    = []
   , _csFreshVars     = []
@@ -390,7 +393,7 @@ ppMethodSpec methodSpec =
 csAllocations :: CrucibleMethodSpecIR ext -> Map AllocIndex (AllocSpec ext)
 csAllocations
   = Map.unions
-  . toListOf ((csPreState <> csPostState) . (csAllocs <> csFreshPointers))
+  . toListOf ((csPreState <> csPostState) . csAllocs)
 
 csTypeNames :: CrucibleMethodSpecIR ext -> Map AllocIndex (TypeName ext)
 csTypeNames

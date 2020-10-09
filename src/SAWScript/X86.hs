@@ -35,7 +35,6 @@ import qualified Data.BitVector.Sized as BV
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
-import           Data.IORef
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.Text.Encoding(decodeUtf8)
@@ -397,8 +396,7 @@ translate opts elf fun =
   do let name = funName fun
      sayLn ("Translating function: " ++ BSC.unpack name)
 
-     bbMapRef <- newIORef mempty
-     let ?badBehaviorMap = bbMapRef
+     let ?recordLLVMAnnotation = \_ _ -> return ()
 
      let sym   = backend opts
          sopts = Opts { optsSym = sym, optsCry = cryEnv opts, optsMvar = memvar opts }

@@ -1,5 +1,5 @@
 Name:          saw-script
-Version:       0.4.0.99
+Version:       0.6.0.99
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
 Build-type:    Custom
@@ -67,7 +67,7 @@ library
     , saw-core-coq
     , saw-core-sbv
     , saw-core-what4
-    , sbv >= 7.0
+    , sbv >= 8.6 && < 8.8
     , split
     , temporary
     , template-haskell
@@ -144,6 +144,8 @@ library
     SAWScript.Crucible.LLVM.Override
     SAWScript.Crucible.LLVM.MethodSpecIR
     SAWScript.Crucible.LLVM.ResolveSetupValue
+    SAWScript.Crucible.LLVM.Skeleton
+    SAWScript.Crucible.LLVM.Skeleton.Builtins
     SAWScript.Crucible.LLVM.X86
 
     SAWScript.Crucible.JVM.Builtins

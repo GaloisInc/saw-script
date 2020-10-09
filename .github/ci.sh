@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
+set -Eeuxo pipefail
 
 [[ "$RUNNER_OS" == 'Windows' ]] && IS_WIN=true || IS_WIN=false
 BIN=bin
@@ -72,7 +72,12 @@ install_cvc4() {
     Windows) file="win64-opt.exe" ;;
     macOS) file="macos-opt" ;;
   esac
-  curl -o cvc4$EXT -sL "https://github.com/CVC4/CVC4/releases/download/$version/cvc4-$version-$file"
+  # Temporary workaround
+  if [[ "$RUNNER_OS" == "Linux" ]]; then
+    curl -o cvc4$EXT -sL "https://cvc4.cs.stanford.edu/downloads/builds/x86_64-linux-opt/unstable/cvc4-2020-08-18-x86_64-linux-opt"
+  else
+    curl -o cvc4$EXT -sL "https://github.com/CVC4/CVC4/releases/download/$version/cvc4-$version-$file"
+  fi
   $IS_WIN || chmod +x cvc4$EXT
   mv cvc4$EXT "$BIN/cvc4$EXT"
 }
@@ -112,11 +117,13 @@ build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
-  # Limit jobs on windows due to: https://gitlab.haskell.org/ghc/ghc/issues/17926
-  if [[ "$ghc_ver" =~ 8.8.3|8.10.1 && $IS_WIN ]]; then JOBS=1; else JOBS=2; fi
-  cabal v2-configure -j$JOBS --minimize-conflict-set
+  cabal v2-configure -j2 --minimize-conflict-set
   tee -a cabal.project > /dev/null < cabal.project.ci
-  retry cabal v2-build "$@" saw jss
+  if ! retry cabal v2-build "$@" saw jss && [[ "$RUNNER_OS" == "macOS" ]]; then
+    echo "Working around a dylib issue on macos by removing the cache and trying again"
+    cabal v2-clean
+    retry cabal v2-build "$@" saw jss
+  fi
 }
 
 build_abc() {
@@ -143,14 +150,36 @@ install_system_deps() {
 }
 
 test_dist() {
-  # To be replaced with a working implementation
-  # Copied from legacy CI
   setup_dist_bins
   find_java
   pushd intTests
   for t in test0001 test0019_jss_switch_statement test_crucible_jvm test_ecdsa test_examples test_issue108 test_tutorial1 test_tutorial2 test_tutorial_w4; do echo $t >> disabled_tests.txt; done
   LOUD=true ./runtests.sh
   sh -c "! grep '<failure>' results.xml"
+}
+
+build_cryptol() {
+  is_exe "dist/bin" "cryptol" && return
+  pushd deps/cryptol
+  .github/ci.sh build
+  popd
+}
+
+bundle_files() {
+  mkdir -p dist dist/{bin,doc,examples,include,lib}
+
+  cp deps/abcBridge/abc-build/copyright.txt dist/ABC_LICENSE
+  cp LICENSE README.md dist/
+  $IS_WIN || chmod +x dist/bin/*
+  rm -f "dist/bin/jss"
+
+  cp doc/extcore.md dist/doc
+  cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
+  cp doc/manual/manual.pdf dist/doc/manual.pdf
+  cp -r doc/tutorial/code dist/doc
+  cp deps/jvm-verifier/support/galois.jar dist/lib
+  cp -r deps/cryptol/lib/* dist/lib
+  cp -r examples/* dist/examples
 }
 
 find_java() {
@@ -161,6 +190,32 @@ find_java() {
   echo "::set-env name=RT_JAR::$RT_JAR"
   rm PropertiesTest.class
   popd
+}
+
+sign() {
+  gpg --batch --import <(echo "$SIGNING_KEY")
+  fingerprint="$(gpg --list-keys | grep galois -a1 | head -n1 | awk '{$1=$1};1')"
+  echo "$fingerprint:6" | gpg --import-ownertrust
+  gpg --yes --no-tty --batch --pinentry-mode loopback --default-key "$fingerprint" --detach-sign -o "$1".sig --passphrase-file <(echo "$SIGNING_PASSPHRASE") "$1"
+}
+
+zip_dist() {
+  : "${VERSION?VERSION is required as an environment variable}"
+  name="${name:-"saw-$VERSION-$RUNNER_OS-x86_64"}"
+  mv dist "$name"
+  tar -czf "$name".tar.gz "$name"
+  sign "$name".tar.gz
+  [[ -f "$name".tar.gz.sig ]] && [[ -f "$name".tar.gz ]]
+}
+
+output() { echo "::set-output name=$1::$2"; }
+ver() { grep Version saw-script.cabal | awk '{print $2}'; }
+set_version() { output saw-version "$(ver)"; }
+set_files() { output changed-files "$(files_since "$1" "$2")"; }
+files_since() {
+  changed_since="$(git log -1 --before="@{$2}")"
+  files="${changed_since:+"$(git diff-tree --no-commit-id --name-only -r "$1" | xargs)"}"
+  echo "$files"
 }
 
 COMMAND="$1"
