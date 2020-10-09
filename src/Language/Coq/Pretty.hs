@@ -39,19 +39,19 @@ ppIdent = text
 
 ppBinder :: Binder -> Doc
 ppBinder (Binder x Nothing)  = ppIdent x
-ppBinder (Binder x (Just t)) = parens (ppIdent x <+> colon <+> ppTerm t)
+ppBinder (Binder x (Just t)) = parens (ppIdent x <+> colon <+> ppTerm PrecNone t)
 
 ppPiBinder :: PiBinder -> Doc
-ppPiBinder (PiBinder Nothing t)  = parens (ppTerm t) <+> text "->"
+ppPiBinder (PiBinder Nothing t)  = ppTerm PrecApp t <+> text "->"
 ppPiBinder (PiBinder (Just x) t) =
-  text "forall" <+> lparen <> ppIdent x <+> colon <+> ppTerm t <> rparen <> comma
+  text "forall" <+> parens (ppIdent x <+> colon <+> ppTerm PrecNone t) <> comma
 
 ppBinders :: [Binder] -> Doc
 ppBinders = hsep . map ppBinder
 
 ppMaybeTy :: Maybe Type -> Doc
 ppMaybeTy Nothing = empty
-ppMaybeTy (Just ty) = colon <+> ppTerm ty
+ppMaybeTy (Just ty) = colon <+> ppTerm PrecNone ty
 
 ppSort :: Sort -> Doc
 ppSort Prop = text "Prop"
@@ -61,30 +61,43 @@ ppSort Type = text "Type"
 ppPi :: [PiBinder] -> Doc
 ppPi bs = hsep (map ppPiBinder bs)
 
-ppTerm :: Term -> Doc
-ppTerm e =
+data Prec
+  = PrecNone
+  | PrecLambda
+  | PrecApp
+  | PrecAtom
+  deriving (Eq, Ord)
+
+parensIf :: Bool -> Doc -> Doc
+parensIf p d = if p then parens d else d
+
+ppTerm :: Prec -> Term -> Doc
+ppTerm p e =
   case e of
     Lambda bs t ->
-      parens (text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm t)
+      parensIf (p > PrecLambda) $
+      (text "fun" <+> ppBinders bs <+> text "=>" <+> ppTerm PrecLambda t)
     Fix ident binders returnType body ->
-      parens (text "fix" <+> text ident <+> ppBinders binders <+> text ":"
-             <+> ppTerm returnType <+> text ":=" <+> ppTerm body)
+      parensIf (p > PrecLambda) $
+      (text "fix" <+> text ident <+> ppBinders binders <+> text ":"
+             <+> ppTerm PrecNone returnType <+> text ":=" <+> ppTerm PrecLambda body)
     Pi bs t ->
-      ppPi bs <+> ppTerm t
+      parensIf (p > PrecLambda) $
+      ppPi bs <+> ppTerm PrecLambda t
     Let x bs mty t body ->
+      parensIf (p > PrecLambda) $
       text "let" <+> ppIdent x <+> ppBinders bs <+> ppMaybeTy mty <+>
-      text ":=" <+> ppTerm t <+> text "in" <+> ppTerm body
+      text ":=" <+> ppTerm PrecNone t <+> text "in" <+> ppTerm PrecLambda body
     If c t f ->
-      text "if" <+> ppTerm c <+>
-      text "then" <+> ppTerm t <+>
-      text "else" <+> ppTerm f
+      parensIf (p > PrecLambda) $
+      text "if" <+> ppTerm PrecNone c <+>
+      text "then" <+> ppTerm PrecNone t <+>
+      text "else" <+> ppTerm PrecLambda f
+    App f [] ->
+      ppTerm p f
     App f args ->
-      -- FIXME: super conservative parenthesizing because precedence is not
-      -- implemented
-      -- NOTE: parens around f, because (App (If c a b) d) must print as
-      -- ((if c then a else b) d)
-      -- or else the d is applied to b only...
-      parens (hsep (parens (ppTerm f) : map (parens . ppTerm) args))
+      parensIf (p > PrecApp) $
+      hsep (ppTerm PrecApp f : map (ppTerm PrecAtom) args)
     Sort s ->
       ppSort s
     Var x ->
@@ -92,11 +105,11 @@ ppTerm e =
     NatLit i ->
       integer i
     List ts ->
-      brackets (semiSepList (map ppTerm ts))
+      brackets (semiSepList (map (ppTerm PrecNone) ts))
     StringLit s ->
       dquotes (string s)
     Scope term scope ->
-      parens (ppTerm term) <> text "%" <> text scope
+      ppTerm PrecAtom term <> text "%" <> text scope
     Ltac s ->
       text "ltac:" <> parens (string s)
 
@@ -104,7 +117,7 @@ ppDecl :: Decl -> Doc
 ppDecl decl = case decl of
   Axiom nm ty ->
     (nest 2 $
-     hsep ([text "Axiom", text nm, text ":", ppTerm ty, period])) <> hardline
+     hsep ([text "Axiom", text nm, text ":", ppTerm PrecNone ty, period])) <> hardline
   Comment s ->
     text "(*" <+> text s <+> text "*)" <> hardline
   Definition nm bs mty body ->
@@ -112,7 +125,7 @@ ppDecl decl = case decl of
      hsep ([text "Definition", text nm] ++
           map ppBinder bs ++
           [ppMaybeTy mty, text ":="]) <$>
-     ppTerm body <> period) <> hardline
+     ppTerm PrecNone body <> period) <> hardline
   InductiveDecl ind -> ppInductive ind
   Snippet s -> text s
 
@@ -122,7 +135,7 @@ ppConstructor (Constructor {..}) =
   hsep ([ text "|"
         , text constructorName
         , text ":"
-        , ppTerm constructorType
+        , ppTerm PrecNone constructorType
         ]
        )
 
