@@ -137,7 +137,7 @@ type Sym sym = (Given sym, IsSymExprBuilder sym)
 ---------------------------------------------------------------------
 
 data What4Extra sym =
-  SStream (Integer -> IO (SValue sym)) (IORef (Map Integer (SValue sym)))
+  SStream (Natural -> IO (SValue sym)) (IORef (Map Natural (SValue sym)))
 
 instance Show (What4Extra sym) where
   show (SStream _ _) = "<SStream>"
@@ -324,7 +324,7 @@ intToNatOp =
   Prims.intFun "intToNat" $ \i ->
     case W.asInteger i of
       Just i'
-        | 0 <= i'   -> pure (VNat i')
+        | 0 <= i'   -> pure (VNat (fromInteger i'))
         | otherwise -> pure (VNat 0)
       Nothing ->
         do z <- W.intLit (given :: sym) 0
@@ -404,7 +404,7 @@ bvShiftOp bvOp natOp =
   strictFun $ \y ->            -- amount to shift as a nat
     case y of
       VNat i   -> VWord <$> natOp x j
-        where j = i `min` toInteger (SW.bvWidth x)
+        where j = toInteger i `min` SW.bvWidth x
       VToNat v -> VWord <$> (bvOp x =<< toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.What4.bvShiftOp", show y]
 
@@ -512,13 +512,13 @@ streamGetOp =
   constFun $
   strictFun $ \xs -> return $
   strictFun $ \case
-    VNat n -> lookupSStream xs (toInteger n)
+    VNat n -> lookupSStream xs n
     VToNat w ->
       do ilv <- toWord w
          selectV (lazyMux @sym muxBVal) ((2 ^ SW.bvWidth ilv) - 1) (lookupSStream xs) ilv
     v -> Prims.panic "streamGetOp" ["Expected Nat value", show v]
 
-lookupSStream :: SValue sym -> Integer -> IO (SValue sym)
+lookupSStream :: SValue sym -> Natural -> IO (SValue sym)
 lookupSStream (VExtra (SStream f r)) n = do
    m <- readIORef r
    case Map.lookup n m of
@@ -558,14 +558,14 @@ lazyMux muxFn c tm fm =
 
 -- selectV merger maxValue valueFn index returns valueFn v when index has value v
 -- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
-selectV :: forall sym a b. (Sym sym, Ord a, Num a, Bits a) =>
-  (SBool sym -> IO b -> IO b -> IO b) -> a -> (a -> IO b) -> SWord sym -> IO b
+selectV :: forall sym b. Sym sym =>
+  (SBool sym -> IO b -> IO b -> IO b) -> Natural -> (Natural -> IO b) -> SWord sym -> IO b
 selectV merger maxValue valueFn vx =
   case SW.bvAsUnsignedInteger vx of
-    Just i  -> valueFn (fromIntegral i)
+    Just i  -> valueFn (fromInteger i :: Natural)
     Nothing -> impl (swBvWidth vx) 0
   where
-    impl :: Int -> a -> IO b
+    impl :: Int -> Natural -> IO b
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
     impl 0 y = valueFn y
     impl i y = do
@@ -895,8 +895,8 @@ vAsFirstOrderType v =
       -> return FOTBit
     VIntType
       -> return FOTInt
-    VVecType (VNat n) v2 | n >= 0
-      -> FOTVec (fromInteger n :: Natural) <$> vAsFirstOrderType v2
+    VVecType (VNat n) v2
+      -> FOTVec n <$> vAsFirstOrderType v2
     VArrayType iv ev
       -> FOTArray <$> vAsFirstOrderType iv <*> vAsFirstOrderType ev
     VUnitType
@@ -1112,7 +1112,7 @@ parseUninterpretedSAW sym sc ref trm app ty =
     VVecType (VNat n) ety | n >= 0
       ->  do ety' <- termOfSValue sc ety
              let mkElem i =
-                   do let trm' = ArgTermAt (fromInteger n :: Natural) ety' trm i
+                   do let trm' = ArgTermAt n ety' trm i
                       let app' = suffixUnintApp ("_a" ++ show i) app
                       parseUninterpretedSAW sym sc ref trm' app' ety
              xs <- traverse mkElem (genericTake n [0 ..])
@@ -1274,8 +1274,8 @@ termOfSValue sc val =
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
     VUnitType -> scUnitType sc
-    VVecType (VNat n) a | n >= 0 ->
-      do n' <- scNat sc (fromInteger n :: Natural)
+    VVecType (VNat n) a ->
+      do n' <- scNat sc n
          a' <- termOfSValue sc a
          scVecType sc n' a'
     VPairType a b
@@ -1285,6 +1285,6 @@ termOfSValue sc val =
     VRecordType flds
       -> do flds' <- traverse (traverse (termOfSValue sc)) flds
             scRecordType sc flds'
-    VNat n | n >= 0
-      -> scNat sc (fromInteger n :: Natural)
+    VNat n
+      -> scNat sc n
     _ -> fail $ "termOfSValue: " ++ show val

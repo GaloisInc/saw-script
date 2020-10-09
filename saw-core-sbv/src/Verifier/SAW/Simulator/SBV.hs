@@ -80,7 +80,7 @@ type SValue = Value SBV
 --type SThunk = Thunk SBV
 
 data SbvExtra =
-  SStream (Integer -> IO SValue) (IORef (Map Integer SValue))
+  SStream (Natural -> IO SValue) (IORef (Map Natural SValue))
 
 instance Show SbvExtra where
   show (SStream _ _) = "<SStream>"
@@ -299,10 +299,12 @@ lazyMux muxFn c tm fm =
 
 -- selectV merger maxValue valueFn index returns valueFn v when index has value v
 -- if index is greater than maxValue, it returns valueFn maxValue. Use the ite op from merger.
-selectV :: (Ord a, Num a, Bits a) => (SBool -> b -> b -> b) -> a -> (a -> b) -> SWord -> b
+selectV :: (SBool -> b -> b -> b) -> Natural -> (Natural -> b) -> SWord -> b
 selectV merger maxValue valueFn vx =
   case svAsInteger vx of
-    Just i  -> valueFn (fromIntegral i)
+    Just i
+      | i >= 0    -> valueFn (fromInteger i)
+      | otherwise -> Prims.panic "selectV" ["expected nonnegative integer", show i]
     Nothing -> impl (intSizeOf vx) 0
   where
     impl _ x | x > maxValue || x < 0 = valueFn maxValue
@@ -337,8 +339,8 @@ bvShiftOp bvOp natOp =
   wordFun $ \x -> return $
   strictFun $ \y ->
     case y of
-      VNat i   -> return (vWord (natOp x j))
-        where j = fromInteger (i `min` toInteger (intSizeOf x))
+      VNat i | j < toInteger (maxBound :: Int) -> return (vWord (natOp x (fromInteger j)))
+        where j = toInteger i `min` toInteger (intSizeOf x)
       VToNat v -> fmap (vWord . bvOp x) (toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.bvShiftOp", show y]
 
@@ -367,7 +369,7 @@ intToNatOp =
   Prims.intFun "intToNat" $ \i ->
     case svAsInteger i of
       Just i'
-        | 0 <= i'   -> pure (VNat i')
+        | 0 <= i'   -> pure (VNat (fromInteger i'))
         | otherwise -> pure (VNat 0)
       Nothing ->
         let z  = svInteger KUnbounded 0
@@ -479,18 +481,18 @@ streamGetOp =
   constFun $
   strictFun $ \xs -> return $
   strictFun $ \case
-    VNat n -> lookupSStream xs (toInteger n)
+    VNat n -> lookupSStream xs n
     VToNat w ->
       do ilv <- toWord w
          selectV (lazyMux muxBVal) ((2 ^ intSizeOf ilv) - 1) (lookupSStream xs) ilv
     v -> Prims.panic "SBV.streamGetOp" ["Expected Nat value", show v]
 
 
-lookupSStream :: SValue -> Integer -> IO SValue
+lookupSStream :: SValue -> Natural -> IO SValue
 lookupSStream (VExtra s) n = lookupSbvExtra s n
 lookupSStream _ _ = fail "expected Stream"
 
-lookupSbvExtra :: SbvExtra -> Integer -> IO SValue
+lookupSbvExtra :: SbvExtra -> Natural -> IO SValue
 lookupSbvExtra (SStream f r) n =
   do m <- readIORef r
      case Map.lookup n m of
@@ -626,7 +628,7 @@ vAsFirstOrderType v =
     VIntType
       -> return FOTInt
     VVecType (VNat n) v2
-      -> FOTVec (fromInteger n) <$> vAsFirstOrderType v2
+      -> FOTVec n <$> vAsFirstOrderType v2
     VUnitType
       -> return (FOTTuple [])
     VPairType v1 v2

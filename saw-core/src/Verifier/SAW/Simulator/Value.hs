@@ -29,6 +29,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
+import Numeric.Natural
 
 import Verifier.SAW.FiniteValue (FiniteType(..))
 import Verifier.SAW.SharedTerm
@@ -55,7 +56,7 @@ data Value l
   | VBoolType
   | VWord (VWord l)
   | VToNat (Value l)
-  | VNat !Integer
+  | VNat !Natural
   | VInt (VInt l)
   | VIntType
   | VArray (VArray l)
@@ -227,7 +228,7 @@ asFiniteTypeValue v =
     VBoolType -> return FTBit
     VVecType (VNat n) v1 -> do
       t1 <- asFiniteTypeValue v1
-      return (FTVec (fromInteger n) t1)
+      return (FTVec n t1)
     VUnitType -> return (FTTuple [])
     VPairType v1 v2 -> do
       t1 <- asFiniteTypeValue v1

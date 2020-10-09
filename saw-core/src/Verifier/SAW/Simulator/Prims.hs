@@ -26,7 +26,7 @@ import GHC.Stack( HasCallStack )
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
-import Control.Monad (foldM, liftM, zipWithM)
+import Control.Monad (foldM, liftM, zipWithM, unless)
 import Control.Monad.Fix (MonadFix(mfix))
 import Data.Bits
 import Data.Map (Map)
@@ -268,25 +268,25 @@ panic msg = Panic.panic "Verifier.SAW.Simulator.Prims" [msg]
 -- Value accessors and constructors
 
 vNat :: Natural -> Value l
-vNat n = VNat (fromIntegral n)
+vNat n = VNat n
 
-natFromValue :: Num a => Value l -> a
-natFromValue (VNat n) = fromInteger n
+natFromValue :: Value l -> Natural
+natFromValue (VNat n) = n
 natFromValue _ = panic "natFromValue"
 
 natFun'' :: (HasCallStack, VMonad l, Show (Extra l)) => String -> (Natural -> MValue l) -> Value l
 natFun'' s f = strictFun g
-  where g (VNat n) = f (fromInteger n)
+  where g (VNat n) = f n
         g v = panic $ "expected Nat (" ++ s ++ "): " ++ show v
 
 natFun' :: (HasCallStack, VMonad l) => String -> (Natural -> MValue l) -> Value l
 natFun' s f = strictFun g
-  where g (VNat n) = f (fromInteger n)
+  where g (VNat n) = f n
         g _ = panic $ "expected Nat: " ++ s
 
 natFun :: (HasCallStack, VMonad l) => (Natural -> MValue l) -> Value l
 natFun f = strictFun g
-  where g (VNat n) = f (fromInteger n)
+  where g (VNat n) = f n
         g _ = panic "expected Nat"
 
 intFun :: VMonad l => String -> (VInt l -> MValue l) -> Value l
@@ -431,12 +431,12 @@ coerceOp =
 
 -- | Return the number of bits necessary to represent the given value,
 -- which should be a value of type Nat.
-natSize :: BasePrims l -> Value l -> Int
+natSize :: BasePrims l -> Value l -> Natural
 natSize bp val =
   case val of
-    VNat n -> fromIntegral (widthNat (fromInteger n))
-    VToNat (VVector v) -> V.length v
-    VToNat (VWord w) -> bpBvSize bp w
+    VNat n -> widthNat n
+    VToNat (VVector v) -> fromIntegral (V.length v)
+    VToNat (VWord w) -> fromIntegral (bpBvSize bp w)
     _ -> panic "natSize: expected Nat"
 
 -- | Convert the given value (which should be of type Nat) to a word
@@ -445,7 +445,7 @@ natSize bp val =
 natToWord :: (VMonad l, Show (Extra l)) => BasePrims l -> Int -> Value l -> MWord l
 natToWord bp w val =
   case val of
-    VNat n -> bpBvLit bp w n
+    VNat n -> bpBvLit bp w (toInteger n)
     VToNat v ->
       do x <- toWord (bpPack bp) v
          let xsize = bpBvSize bp x
@@ -478,11 +478,13 @@ subNatOp bp =
   where
     g (VNat i) (VNat j) = return $ VNat (if i < j then 0 else i - j)
     g v1 v2 =
-      do let w = max (natSize bp v1) (natSize bp v2)
-         x1 <- natToWord bp w v1
-         x2 <- natToWord bp w v2
+      do let w = toInteger (max (natSize bp v1) (natSize bp v2))
+         unless (w <= toInteger (maxBound :: Int))
+                (panic "subNatOp" ["width too large", show w])
+         x1 <- natToWord bp (fromInteger w) v1
+         x2 <- natToWord bp (fromInteger w) v2
          lt <- bpBvult bp x1 x2
-         z <- bpBvLit bp w 0
+         z <- bpBvLit bp (fromInteger w) 0
          d <- bpBvSub bp x1 x2
          VToNat . VWord <$> bpMuxWord bp lt z d
 
@@ -536,9 +538,11 @@ equalNatOp bp =
   where
     g (VNat i) (VNat j) = VBool <$> bpBool bp (i == j)
     g v1 v2 =
-      do let w = max (natSize bp v1) (natSize bp v2)
-         x1 <- natToWord bp w v1
-         x2 <- natToWord bp w v2
+      do let w = toInteger (max (natSize bp v1) (natSize bp v2))
+         unless (w <= toInteger (maxBound :: Int))
+                (panic "equalNatOp" ["width too large", show w])
+         x1 <- natToWord bp (fromInteger w) v1
+         x2 <- natToWord bp (fromInteger w) v2
          VBool <$> bpBvEq bp x1 x2
 
 -- ltNat :: Nat -> Nat -> Bool;
@@ -549,9 +553,11 @@ ltNatOp bp =
   where
     g (VNat i) (VNat j) = VBool <$> bpBool bp (i < j)
     g v1 v2 =
-      do let w = max (natSize bp v1) (natSize bp v2)
-         x1 <- natToWord bp w v1
-         x2 <- natToWord bp w v2
+      do let w = toInteger (max (natSize bp v1) (natSize bp v2))
+         unless (w <= toInteger (maxBound :: Int))
+                (panic "ltNatOp" ["width too large", show w])
+         x1 <- natToWord bp (fromInteger w) v1
+         x2 <- natToWord bp (fromInteger w) v2
          VBool <$> bpBvult bp x1 x2
 
 -- natCase :: (p :: Nat -> sort 0) -> p Zero -> ((n :: Nat) -> p (Succ n)) -> (n :: Nat) -> p n;
@@ -564,7 +570,7 @@ natCaseOp =
     if n == 0
     then force z
     else do s' <- force s
-            apply s' (ready (VNat (fromIntegral n - 1)))
+            apply s' (ready (VNat (n - 1)))
 
 --------------------------------------------------------------------------------
 
@@ -579,7 +585,7 @@ genOp =
   constFun $
   strictFun $ \f -> do
     let g i = delay $ apply f (ready (VNat (fromIntegral i)))
-    if n > fromIntegral (maxBound :: Int) then
+    if toInteger n > toInteger (maxBound :: Int) then
       panic ("Verifier.SAW.Simulator.gen: vector size too large: " ++ show n)
       else liftM VVector $ V.generateM (fromIntegral n) g
 
@@ -629,16 +635,16 @@ atWithDefaultOp bp =
     case idx of
       VNat i ->
         case x of
-          VVector xv -> force (vecIdx d xv (fromIntegral i))
-          VWord xw -> VBool <$> bpBvAt bp xw (fromIntegral i)
+          VVector xv -> force (vecIdx d xv (fromIntegral i)) -- FIXME dangerous fromIntegral
+          VWord xw -> VBool <$> bpBvAt bp xw (fromIntegral i) -- FIXME dangerous fromIntegral
           _ -> panic "atOp: expected vector"
       VToNat i -> do
         iv <- toBits (bpUnpack bp) i
         case x of
           VVector xv ->
-            selectV (lazyMuxValue bp) (fromIntegral n - 1) (force . vecIdx d xv) iv
+            selectV (lazyMuxValue bp) (fromIntegral n - 1) (force . vecIdx d xv) iv -- FIXME dangerous fromIntegral
           VWord xw ->
-            selectV (lazyMuxValue bp) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv
+            selectV (lazyMuxValue bp) (fromIntegral n - 1) (liftM VBool . bpBvAt bp xw) iv -- FIXME dangerous fromIntegral
           _ -> panic "atOp: expected vector"
       _ -> panic $ "atOp: expected Nat, got " ++ show idx
 
@@ -652,7 +658,8 @@ updOp bp =
   VFun $ \y ->
     case idx of
       VNat i
-        | i < toInteger (V.length xv) -> return (VVector (xv V.// [(fromInteger i, y)]))
+        | toInteger i < toInteger (V.length xv)
+           -> return (VVector (xv V.// [(fromIntegral i, y)]))
         | otherwise                   -> return (VVector xv)
       VToNat (VWord w) ->
         do let wsize = bpBvSize bp w
@@ -665,7 +672,7 @@ updOp bp =
       VToNat (VVector iv) ->
         do let update i = return (VVector (xv V.// [(i, y)]))
            iv' <- V.mapM (liftM toBool . force) iv
-           selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv'
+           selectV (lazyMuxValue bp) (fromIntegral n - 1) update iv' -- FIXME dangerous fromIntegral
       _ -> panic $ "updOp: expected Nat, got " ++ show idx
 
 -- primitive EmptyVec :: (a :: sort 0) -> Vec 0 a;
@@ -676,7 +683,7 @@ emptyVec = constFun $ VVector V.empty
 takeOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 takeOp bp =
   constFun $
-  natFun $ \(fromIntegral -> m) -> return $
+  natFun $ \(fromIntegral -> m) -> return $ -- FIXME dangerous fromIntegral
   constFun $
   strictFun $ \v ->
     case v of
@@ -688,7 +695,7 @@ takeOp bp =
 dropOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 dropOp bp =
   constFun $
-  natFun $ \(fromIntegral -> m) -> return $
+  natFun $ \(fromIntegral -> m) -> return $ -- FIXME dangerous fromIntegral
   constFun $
   strictFun $ \v ->
   case v of
@@ -733,8 +740,8 @@ joinOp bp =
 -- split :: (m n :: Nat) -> (a :: sort 0) -> Vec (mulNat m n) a -> Vec m (Vec n a);
 splitOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 splitOp bp =
-  natFun $ \(fromIntegral -> m) -> return $
-  natFun $ \(fromIntegral -> n) -> return $
+  natFun $ \(fromIntegral -> m) -> return $ -- FIXME dangerous fromIntegral
+  natFun $ \(fromIntegral -> n) -> return $ -- FIXME dangerous fromIntegral
   constFun $
   strictFun $ \x ->
   case x of
@@ -800,7 +807,7 @@ expByNatOp bp =
                   sq_x <- applyAll mul [ ready sq, ready x ]
                   loop sq_x bs
 
-             w = toInteger (widthNat (fromInteger n :: Natural))
+             w = toInteger (widthNat n)
 
          if w > toInteger (maxBound :: Int) then
            panic "expByNatOp" ["Exponent too large", show n]
@@ -841,10 +848,10 @@ shiftOp bp vecOp wordIntOp wordOp =
     case y of
       VNat i ->
         case xs of
-          VVector xv -> return $ VVector (vecOp z xv i)
+          VVector xv -> return $ VVector (vecOp z xv (toInteger i))
           VWord xw -> do
             zb <- toBool <$> force z
-            VWord <$> wordIntOp zb xw (min i (toInteger n))
+            VWord <$> wordIntOp zb xw (toInteger (min i n))
           _ -> panic $ "shiftOp: " ++ show xs
       VToNat (VVector iv) -> do
         bs <- V.toList <$> traverse (fmap toBool . force) iv
@@ -887,8 +894,8 @@ rotateOp bp vecOp wordIntOp wordOp =
     case y of
       VNat i ->
         case xs of
-          VVector xv -> return $ VVector (vecOp xv i)
-          VWord xw -> VWord <$> wordIntOp xw i
+          VVector xv -> return $ VVector (vecOp xv (toInteger i))
+          VWord xw -> VWord <$> wordIntOp xw (toInteger i)
           _ -> panic $ "rotateOp: " ++ show xs
       VToNat (VVector iv) -> do
         bs <- V.toList <$> traverse (fmap toBool . force) iv
@@ -1174,11 +1181,11 @@ intLtOp = intBinCmp "intLt" (<)
 intToNatOp :: (VMonad l, VInt l ~ Integer) => Value l
 intToNatOp =
   intFun "intToNat" $ \x -> return $!
-    if x >= 0 then VNat x else VNat 0
+    if x >= 0 then VNat (fromInteger x) else VNat 0
 
 -- primitive natToInt :: Nat -> Integer;
 natToIntOp :: (VMonad l, VInt l ~ Integer) => Value l
-natToIntOp = natFun' "natToInt" $ \x -> return $ VInt (fromIntegral x)
+natToIntOp = natFun' "natToInt" $ \x -> return $ VInt (toInteger x)
 
 -- primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
 bvLg2Op :: VMonad l => (Value l -> MWord l) -> (VWord l -> MWord l) -> Value l
@@ -1263,9 +1270,11 @@ muxValue bp b = value
 
     nat :: Value l -> Value l -> MValue l
     nat v1 v2 =
-      do let w = max (natSize bp v1) (natSize bp v2)
-         x1 <- natToWord bp w v1
-         x2 <- natToWord bp w v2
+      do let w = toInteger (max (natSize bp v1) (natSize bp v2))
+         unless (w <= toInteger (maxBound :: Int))
+                (panic "muxValue" ["width too large", show w])
+         x1 <- natToWord bp (fromInteger w) v1
+         x2 <- natToWord bp (fromInteger w) v2
          VToNat . VWord <$> bpMuxWord bp b x1 x2
 
 -- fix :: (a :: sort 0) -> (a -> a) -> a;
