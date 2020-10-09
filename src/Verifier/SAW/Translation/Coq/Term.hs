@@ -313,6 +313,18 @@ translateTerm t = withLocalLocalEnvironment $ do
       case f of
       (asGlobalDef -> Just i) ->
         case i of
+        "Prelude.natToInt" ->
+          case args of
+          [n] -> translateTerm n >>= \case
+            Coq.NatLit n' -> pure $ Coq.ZLit n'
+            _ -> translateIdentWithArgs "Prelude.natToInt" [n]
+          _ -> badTerm
+        "Prelude.intNeg" ->
+          case args of
+          [z] -> translateTerm z >>= \case
+            Coq.ZLit z' -> pure $ Coq.ZLit (-z')
+            _ -> translateIdentWithArgs "Prelude.intNeg" [z]
+          _ -> badTerm
         "Prelude.ite" ->
           case args of
           -- `rest` can be non-empty in examples like:

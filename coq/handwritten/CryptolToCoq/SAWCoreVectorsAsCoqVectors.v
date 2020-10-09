@@ -181,38 +181,6 @@ Definition bvToBITS {size : nat} : bitvector size -> BITS size
 Definition bitsToBv {size : nat} : BITS size -> bitvector size
   := tuple_foldl_dep bool bitvector size (fun _ bv b => Vector.cons _ b _ bv) (Vector.nil _).
 
-(* Use this to write decimal number literals of bitvector type, e.g. bvLit 64 3 *)
-Definition bvLit (size : Nat) (lit : Z) : bitvector size := bitsToBv (fromZ lit).
-
-Arguments bvLit : simpl never.
-
-(* Use this to write binary number literals of bitvector type, e.g. bvLit_0b"0011" : bitvector 4 *)
-Definition bvLit_0b s : bitvector (length s) := bitsToBv (fromBin s).
-
-Arguments bvLit_0b : simpl never.
-
-(* This tactic runs 'compute' on all bitvector literals in the current goal *)
-Ltac compute_bvLits :=
-  repeat (match goal with
-  | |- context bv [ bvLit ?s ?l ] =>
-    let bv' := eval compute in (bvLit s l) in
-    let new_goal := context bv [ bv' ] in
-        change new_goal; unfold SAWCoreScaffolding.true; unfold SAWCoreScaffolding.false
-  | |- context bv [ bvLit_0b ?s ] =>
-    let bv' := eval compute in (bvLit_0b s) in
-    let new_goal := context bv [ bv' ] in
-        change new_goal; unfold SAWCoreScaffolding.true; unfold SAWCoreScaffolding.false
-  end).
-
-(* Until we have numeral notations for non-inductive types, we use this for printing.
-   Note that this doesn't work for parsing, use bvLit or bvLit_0b instead. *)
-Notation "0" := Datatypes.false : type_scope.
-Notation "1" := Datatypes.true  : type_scope.
-Notation "0" := SAWCoreScaffolding.false : type_scope.
-Notation "1" := SAWCoreScaffolding.true  : type_scope.
-Notation "0b x" := (cons bool x _ (nil bool)) (at level 80) : type_scope.
-Notation "0b x y .. z" := (cons bool x _ (cons bool y _ .. (cons bool z _ (nil bool)) ..)) (at level 80) : type_scope.
-
 Definition joinLSB {n} (v : bitvector n) (lsb : bool) : bitvector n.+1 :=
   Vector.shiftin lsb v.
 
@@ -230,6 +198,21 @@ Definition bvToNatFolder (n : nat) (b : bool) := b + n.*2.
 
 Fixpoint bvToNat (size : Nat) (v : bitvector size) : Nat :=
   Vector.fold_left bvToNatFolder 0 v.
+
+Definition intToBv (n : Nat) (z : Z) : bitvector n := bitsToBv (fromZ z).
+Opaque intToBv.
+
+Definition bvToInt (n : Nat) (z : Z) : bitvector n := bitsToBv (fromPosZ z).
+
+Definition sbvToInt (n : Nat) (b : bitvector n) : Z
+  := match n, b with
+     | O, _ => 0
+     | S n, b => toZ (bvToBITS b)
+     end.
+
+(* Useful notation for bools *)
+Definition boolToInt (b : bool) : Z := if b then 1%Z else 0%Z.
+Numeral Notation bool Z.odd boolToInt : bool_scope.
 
 (* This is annoying to implement, so using BITS conversion *)
 Definition bvAdd (n : nat) (a : bitvector n) (b : bitvector n)

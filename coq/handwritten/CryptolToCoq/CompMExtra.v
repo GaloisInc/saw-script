@@ -2,6 +2,7 @@
  *** Extra Proofs for CompM that Rely on SAWCorePrelude
  ***)
 
+From Coq          Require Import Logic.
 From Coq          Require Import Strings.String.
 From CryptolToCoq Require Import SAWCorePrelude.
 From CryptolToCoq Require Import SAWCoreScaffolding.
@@ -18,46 +19,45 @@ Ltac get_last_hyp tt :=
 
 Tactic Notation "unfold_projs" :=
   unfold SAWCoreScaffolding.fst;
-  cbn [ Datatypes.fst proj1 projT1 ].
+  cbn [ Datatypes.fst projT1 ].
 
 Tactic Notation "unfold_projs" "in" constr(N) :=
   unfold SAWCoreScaffolding.fst in N;
-  cbn [ Datatypes.fst proj1 projT1 ] in N.
+  cbn [ Datatypes.fst projT1 ] in N.
 
 Tactic Notation "unfold_projs" "in" "*" :=
   unfold SAWCoreScaffolding.fst in *;
-  cbn [ Datatypes.fst proj1 projT1 ] in *.
+  cbn [ Datatypes.fst projT1 ] in *.
 
-Ltac destruct_prods_sums H x :=
-  match x with
-  | ?y /\ ?z        => let H0 := fresh H in
-                       let H1 := fresh H in
-                       destruct H as [ H0 H1 ];
-                       destruct_prods_sums H0 y;
-                       destruct_prods_sums H1 z
-  | { _ : ?y & ?z } => let H0 := fresh H in
-                       let H1 := fresh H in
-                       destruct H as [ H0 H1 ];
-                       destruct_prods_sums H0 y;
-                       destruct_prods_sums H1 z
-  | prod ?y ?z      => let H0 := fresh H in
-                       let H1 := fresh H in
-                       destruct H as [ H0 H1 ];
-                       destruct_prods_sums H0 y;
-                       destruct_prods_sums H1 z
-  | unit            => destruct H
-  | ?y \/ ?z        => destruct H as [ H | H ];
-                       [ destruct_prods_sums H y
-                       | destruct_prods_sums H z ]
+Ltac destruct_prods_sums_in H :=
+  match type of H with
+  | _ /\ _        => let H0 := fresh H in
+                     let H1 := fresh H in
+                     destruct H as [ H0 H1 ];
+                     destruct_prods_sums_in H0;
+                     destruct_prods_sums_in H1
+  | { _ : _ & _ } => let H0 := fresh H in
+                     let H1 := fresh H in
+                     destruct H as [ H0 H1 ];
+                     destruct_prods_sums_in H0;
+                     destruct_prods_sums_in H1
+  | prod _ _      => let H0 := fresh H in
+                     let H1 := fresh H in
+                     destruct H as [ H0 H1 ];
+                     destruct_prods_sums_in H0;
+                     destruct_prods_sums_in H1
+  | unit          => destruct H
+  | _ \/ _        => destruct H as [ H | H ];
+                     [ destruct_prods_sums_in H
+                     | destruct_prods_sums_in H ]
   | _ => idtac
   end.
 
-Ltac destruct_prods_sums_last_hyp :=
-  match goal with
-  | H: ?x |- _ => destruct_prods_sums H x
-  end.
+Tactic Notation "destruct_prods_sums" "in" hyp(H) :=
+  destruct_prods_sums_in H.
 
-Ltac intro_destruct_prods_sums := intro; destruct_prods_sums_last_hyp.
+Ltac intro_destruct_prods_sums :=
+  intro; match goal with H: _ |- _ => destruct_prods_sums in H end.
 
 Ltac split_prod_goal :=
   repeat match goal with
@@ -236,17 +236,17 @@ Hint Extern 1 ((if _ then _ else _) |= _) =>
   (* idtac "prove_refinement: refinesM_if_l"; *)
   apply refinesM_if_l;
     let e := fresh "e_if" in
-    (intro e; (* time "bv rewrite (if_l)" *)
+    (intro e; (* let p := type of e in idtac p; time "bv rewrite (if_l)" *)
               (autorewrite with SAWCoreBitvectors in e);
-              destruct_prods_sums_last_hyp;
+              destruct_prods_sums in e;
      try discriminate e; try rewrite e) : refinesM.
 Hint Extern 1 (_ |= (if _ then _ else _)) =>
   (* idtac "prove_refinement: refinesM_if_r"; *)
   apply refinesM_if_r;
     let e := fresh "e_if" in
-    (intro e; (* time "bv rewrite (if_r)" *)
+    (intro e; (* let p := type of e in idtac p; time "bv rewrite (if_r)" *)
               (autorewrite with SAWCoreBitvectors in e);
-              destruct_prods_sums_last_hyp;
+              destruct_prods_sums in e;
      try discriminate e; try rewrite e) : refinesM.
 Hint Extern 1 (returnM (if _ then _ else _) |= _) =>
   apply refinesM_returnM_if_l : refinesM.
@@ -258,13 +258,13 @@ Hint Extern 1 (assertM _ >> _ |= _) =>
   apply refinesM_bindM_assertM_l;
     let e := fresh "e_assert" in
      (intro e; autorewrite with SAWCoreBitvectors in e;
-      destruct_prods_sums_last_hyp): refinesM.
+      destruct_prods_sums in e): refinesM.
 Hint Extern 1 (_ |= assumingM _ _) =>
   (* idtac "prove_refinement: refinesM_assumingM_r"; *)
   apply refinesM_assumingM_r;
     let e := fresh "e_assuming" in
      (intro e; autorewrite with SAWCoreBitvectors in e;
-      destruct_prods_sums_last_hyp) : refinesM.
+      destruct_prods_sums in e) : refinesM.
 Hint Extern 2 (_ |= assertM _ >> _) =>
   (* idtac "prove_refinement: refinesM_assertM_r"; *)
   eapply refinesM_bindM_assertM_r; shelve : refinesM.
@@ -440,7 +440,6 @@ Ltac prove_refinement_core :=
 
 Ltac prove_refinement :=
   (* idtac "prove_refinement: start"; *)
-  compute_bvLits;
   unfold_projs;
   prove_refinement_core.
 

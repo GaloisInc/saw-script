@@ -798,9 +798,9 @@ Definition streamShiftR : forall (a : Type), (a) -> (((@Stream) (a))) -> (((@SAW
 
 (* Prelude.natToInt was skipped *)
 
-Axiom intToBv : forall (n : ((@SAWCoreScaffolding.Nat))), (((@SAWCoreScaffolding.Integer))) -> ((@bitvector) (n)) .
+(* Prelude.intToBv was skipped *)
 
-Axiom bvToInt : forall (n : ((@SAWCoreScaffolding.Nat))), (((@bitvector) (n))) -> ((@SAWCoreScaffolding.Integer)) .
+(* Prelude.bvToInt was skipped *)
 
 (* Prelude.sbvToInt was skipped *)
 

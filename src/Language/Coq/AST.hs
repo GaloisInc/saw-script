@@ -27,6 +27,7 @@ data Term
   | Sort Sort
   | Var Ident
   | NatLit Integer
+  | ZLit Integer
   | List [Term]
   | StringLit String
   | Scope Term String

@@ -13,6 +13,8 @@ module Language.Coq.Pretty where
 
 import Text.PrettyPrint.ANSI.Leijen
 import Language.Coq.AST
+import Data.Word
+import Numeric (showHex)
 import Prelude hiding ((<$>), (<>))
 
 -- | Replace all occurrences of the double quote character @"@ with the string
@@ -97,6 +99,12 @@ ppTerm e =
       ppIdent x
     NatLit i ->
       integer i
+    ZLit i ->
+      -- we use hex unless our integer is a positive or negitive digit
+      if abs i > 9  then let ui = toInteger (fromInteger i :: Word64)
+                          in text ("0x" ++ showHex ui [] ++ "%Z")
+      else if i < 0 then text ("(" ++ show i ++ ")%Z")
+                    else text (show i ++ "%Z")
     List ts ->
       brackets (semiSepList (map ppTerm ts))
     StringLit s ->

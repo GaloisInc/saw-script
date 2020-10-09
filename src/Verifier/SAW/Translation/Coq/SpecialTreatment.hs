@@ -349,6 +349,9 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("intLt",    mapsTo sawDefinitionsModule "intLt")
   , ("intToNat", mapsTo sawDefinitionsModule "intToNat")
   , ("natToInt", mapsTo sawDefinitionsModule "natToInt")
+  , ("intToBv",  mapsTo vectorsModule "intToBv")
+  , ("bvToInt",  mapsTo vectorsModule "bvToInt")
+  , ("sbvToInt", mapsTo vectorsModule "sbvToInt")
   ]
 
   -- Modular integers
@@ -380,9 +383,6 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("bvShiftR_bvShr",       skip)
   , ("bvEq_refl",            skip)
   , ("equalNat_bv",          skip)
-  -- , ("intToBv",              skip)
-  -- , ("bvToInt",              skip)
-  , ("sbvToInt",             skip)
   , ("Float",                skip)
   , ("mkFloat",              skip)
   , ("Double",               skip)

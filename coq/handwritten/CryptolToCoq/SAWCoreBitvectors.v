@@ -67,11 +67,11 @@ Definition isBvult_to_isBvule w a b : isBvult w a b -> isBvule w a b. Admitted.
 Instance Proper_isBvult_isBvule w : Proper (isBvule w --> isBvule w ==> impl) (isBvult w). Admitted.
 
 Definition isBvslt_to_isBvsle_suc w a b : isBvslt w a b ->
-                                          isBvsle w (bvAdd w a (bvLit w 1)) b.
+                                          isBvsle w (bvAdd w a (intToBv w 1)) b.
 Admitted.
 
-Definition isBvult_to_isBvslt_pos w a b : isBvsle w (bvLit w 0) a ->
-                                          isBvsle w (bvLit w 0) b ->
+Definition isBvult_to_isBvslt_pos w a b : isBvsle w (intToBv w 0) a ->
+                                          isBvsle w (intToBv w 0) b ->
                                           isBvult w a b -> isBvslt w a b.
 Admitted.
 
@@ -79,16 +79,16 @@ Admitted.
 (** Other lemmas about bitvector inequalities **)
 
 Definition isBvsle_suc_r w (a : bitvector w) : isBvsle w a (bvsmax w) ->
-                                               isBvsle w a (bvAdd w a (bvLit w 1)).
+                                               isBvsle w a (bvAdd w a (intToBv w 1)).
 Admitted.
 
 Definition isBvslt_antirefl w a : ~ isBvslt w a a.
 Admitted.
 
-Definition isBvule_n_zero w a : isBvule w a (bvLit w 0) <-> a = bvLit w 0.
+Definition isBvule_n_zero w a : isBvule w a (intToBv w 0) <-> a = intToBv w 0.
 Admitted.
 
-Definition isBvult_n_zero w a : ~ isBvult w a (bvLit w 0).
+Definition isBvult_n_zero w a : ~ isBvult w a (intToBv w 0).
 Admitted.
 
 
@@ -98,21 +98,21 @@ Lemma bvEq_eq  w a b : bvEq w a b = true <-> a = b. Admitted.
 Lemma bvEq_neq w a b : bvEq w a b = false <-> a <> b. Admitted.
 Hint Rewrite bvEq_eq bvEq_neq : SAWCoreBitvectors.
 
-Lemma bv_eq_if_true (b : bool) : (if b then bvLit 1 1 else bvLit 1 0) = bvLit 1 1 <-> b = true.
+Lemma bv_eq_if_true (b : bool) : (if b then intToBv 1 1 else intToBv 1 0) = intToBv 1 1 <-> b = true.
 Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
-Lemma bv_eq_if_false (b : bool) : (if b then bvLit 1 1 else bvLit 1 0) = bvLit 1 0 <-> b = false.
+Lemma bv_eq_if_false (b : bool) : (if b then intToBv 1 1 else intToBv 1 0) = intToBv 1 0 <-> b = false.
 Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
 
 Hint Rewrite bv_eq_if_true bv_eq_if_false : SAWCoreBitvectors.
 
-Lemma bv_neq_if_true (b : bool) : (if b then bvLit 1 1 else bvLit 1 0) <> bvLit 1 1 <-> b = false.
+Lemma bv_neq_if_true (b : bool) : (if b then intToBv 1 1 else intToBv 1 0) <> intToBv 1 1 <-> b = false.
 Proof.
   split; intro H; destruct b; try reflexivity || inversion H.
   - pose (H0 := H (reflexivity _)); inversion H0.
   - intro H0; inversion H0.
 Qed.
 
-Lemma bv_neq_if_false (b : bool) : (if b then bvLit 1 1 else bvLit 1 0) <> bvLit 1 0 <-> b = true.
+Lemma bv_neq_if_false (b : bool) : (if b then intToBv 1 1 else intToBv 1 0) <> intToBv 1 0 <-> b = true.
 Proof.
   split; intro H; destruct b; try reflexivity || inversion H.
   - pose (H0 := H (reflexivity _)); inversion H0.
@@ -124,8 +124,8 @@ Hint Rewrite bv_neq_if_true bv_neq_if_false : SAWCoreBitvectors.
 
 (** Lemmas about bitvector addition **)
 
-Lemma bvAdd_id_l w a : bvAdd w (bvLit w 0) a = a. Admitted.
-Lemma bvAdd_id_r w a : bvAdd w a (bvLit w 0) = a. Admitted.
+Lemma bvAdd_id_l w a : bvAdd w (intToBv w 0) a = a. Admitted.
+Lemma bvAdd_id_r w a : bvAdd w a (intToBv w 0) = a. Admitted.
 Lemma bvAdd_comm w a b : bvAdd w a b = bvAdd w b a. Admitted.
 Lemma bvAdd_assoc w a b c : bvAdd w (bvAdd w a b) c = bvAdd w a (bvAdd w b c). Admitted.
 
