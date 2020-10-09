@@ -90,7 +90,12 @@ jobs:
           YICES_VERSION: "2.6.2"
 
       - shell: bash
+        run: .github/ci.sh setup_dist_bins
+
+      - shell: bash
         run: cabal v2-test saw-remote-api
+        env:
+          SAW_SERVER: ${{ GITHUB_WORKSPACE }}/dist/bin/saw-remote-api
 
       - uses: actions/setup-java@v1
         with:
