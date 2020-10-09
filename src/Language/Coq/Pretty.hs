@@ -87,7 +87,7 @@ ppTerm p e =
     Let x bs mty t body ->
       parensIf (p > PrecLambda) $
       text "let" <+> ppIdent x <+> ppBinders bs <+> ppMaybeTy mty <+>
-      text ":=" <+> ppTerm PrecNone t <+> text "in" <+> ppTerm PrecLambda body
+      text ":=" <+> ppTerm PrecNone t <+> text "in" </> ppTerm PrecLambda body
     If c t f ->
       parensIf (p > PrecLambda) $
       text "if" <+> ppTerm PrecNone c <+>
