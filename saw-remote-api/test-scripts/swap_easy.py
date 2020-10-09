@@ -3,6 +3,7 @@ from saw.llvm import uint32_t, Contract, void
 
 import os
 import os.path
+from env_server import *
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 swap_bc = os.path.join(dir_path, 'swap.bc')
@@ -28,7 +29,7 @@ class Swap(Contract):
         self.points_to(self.y_pointer, self.x)
         self.returns(void)
 
-connect("cabal new-exec --verbose=0 saw-remote-api")
+env_connect_global()
 
 mod = llvm_load_module(swap_bc)
 

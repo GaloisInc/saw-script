@@ -3,10 +3,11 @@ import os.path
 import saw.connection as saw
 from saw.llvm import uint32_t, Contract, void
 from saw.proofscript import *
+from env_server import *
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
-c = saw.connect("cabal new-exec --verbose=0 saw-remote-api")
+c = env_connect()
 
 swap_bc = os.path.join(dir_path, 'swap.bc')
 

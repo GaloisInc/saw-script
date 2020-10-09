@@ -2,11 +2,11 @@ import os
 import os.path
 import saw.connection as saw
 from saw.proofscript import *
+from env_server import *
+
+c = env_connect()
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-
-c = saw.connect("cabal new-exec --verbose=0 saw-remote-api")
-
 assume_bc = os.path.join(dir_path, 'assume.bc')
 
 c.llvm_load_module('m', assume_bc).result()

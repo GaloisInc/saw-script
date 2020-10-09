@@ -3,10 +3,11 @@ import os.path
 from cryptol.cryptoltypes import to_cryptol
 from saw import *
 from saw.llvm import Contract, LLVMArrayType, uint8_t, uint32_t, void
+from env_server import *
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
-connect("cabal new-exec --verbose=0 saw-remote-api")
+env_connect_global()
 view(LogResults())
 
 bcname = os.path.join(dir_path, 'salsa20.bc')
