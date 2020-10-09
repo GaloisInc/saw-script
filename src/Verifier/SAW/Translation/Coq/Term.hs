@@ -484,7 +484,14 @@ translateTermUnshared t = withLocalLocalEnvironment $ do
       if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
         then Coq.Var <$> pure renamed
         else do
-        b <- go env body
+        b <-
+          -- Translate body in a top-level name scope
+          withLocalLocalEnvironment $
+          do modify $ set localEnvironment []
+             modify $ set unavailableIdents reservedIdents
+             modify $ set sharedNames IntMap.empty
+             modify $ set nextSharedName "var__0"
+             translateTermLet body
         modify $ over localDeclarations $ (mkDefinition renamed b :)
         Coq.Var <$> pure renamed
 
