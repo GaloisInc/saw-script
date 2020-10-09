@@ -64,7 +64,6 @@ jobs:
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
-          enable-stack: true
 
       - uses: actions/cache@v2
         name: Cache cabal store
@@ -108,8 +107,6 @@ jobs:
         continue-on-error: ${{ matrix.continue-on-error }}
         name: Integration Tests
         run: |
-          mkdir -p ~/.stack
-          echo "system-ghc: true" >> ~/.stack/config.yaml
           .github/ci.sh test_dist
 
       - if: >-

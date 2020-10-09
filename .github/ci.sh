@@ -118,10 +118,10 @@ build() {
   cabal v2-update
   echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
-  if ! retry cabal v2-build "$@" saw jss && [[ "$RUNNER_OS" == "macOS" ]]; then
+  if ! retry cabal v2-build "$@" saw saw-remote-api && [[ "$RUNNER_OS" == "macOS" ]]; then
     echo "Working around a dylib issue on macos by removing the cache and trying again"
     cabal v2-clean
-    retry cabal v2-build "$@" saw jss
+    retry cabal v2-build "$@" saw saw-remote-api
   fi
 }
 
@@ -169,7 +169,6 @@ bundle_files() {
   cp deps/abcBridge/abc-build/copyright.txt dist/ABC_LICENSE
   cp LICENSE README.md dist/
   $IS_WIN || chmod +x dist/bin/*
-  rm -f "dist/bin/jss"
 
   cp doc/extcore.md dist/doc
   cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
