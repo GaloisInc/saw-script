@@ -16,6 +16,7 @@ module SAWScript.Prover.Exporter
   , write_cnf
   , writeSMTLib2
   , write_smtlib2
+  , write_smtlib2_w4
   , writeUnintSMTLib2
   , writeCoqCryptolPrimitivesForSAWCore
   , writeCoqCryptolModule
@@ -71,11 +72,15 @@ import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
+import SAWScript.Prover.What4
 import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
+import qualified What4.Interface as W4
+import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.VerilogWriter (exprVerilog, eqVerilog)
+import What4.Solver.Adapter
 
 proveWithExporter ::
   (SharedContext -> FilePath -> Prop -> IO ()) ->
@@ -199,6 +204,15 @@ write_smtlib2 sc f (TypedTerm schema t) = do
   p <- predicateToProp sc Existential [] t
   writeSMTLib2 sc f p
 
+-- | Write a @Term@ representing a predicate (i.e. a monomorphic
+-- function returning a boolean) to an SMT-Lib version 2 file. The goal
+-- is to pass the term through as directly as possible, so we interpret
+-- it as an existential. This version uses What4 instead of SBV.
+write_smtlib2_w4 :: SharedContext -> FilePath -> TypedTerm -> IO ()
+write_smtlib2_w4 sc f (TypedTerm schema t) = do
+  checkBooleanSchema schema
+  writeUnintSMTLib2What4 [] sc f t
+
 -- | Write a proposition to an SMT-Lib version 2 file, treating some
 -- constants as uninterpreted. Because @Prop@ is assumed to have
 -- universally quantified variables, it will be negated.
@@ -208,6 +222,17 @@ writeUnintSMTLib2 unints sc f p =
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
      writeFile f txt
+
+-- | Write a proposition to an SMT-Lib version 2 file, treating some
+-- constants as uninterpreted. Because @Prop@ is assumed to have
+-- universally quantified variables, it will be negated. This version
+-- uses What4 instead of SBV.
+writeUnintSMTLib2What4 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
+writeUnintSMTLib2What4 unints sc f term =
+  do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
+     (_, _, (_,lit0)) <- prepWhat4 sym sc unints term
+     withFile f WriteMode $ \h ->
+       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit0]
 
 writeCore :: FilePath -> Term -> IO ()
 writeCore path t = writeFile path (scWriteExternal t)

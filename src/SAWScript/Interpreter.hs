@@ -958,6 +958,13 @@ primitives = Map.fromList
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
+  , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
+    (scVal write_smtlib2_w4)
+    Current
+    [ "Write the given term to the named file in SMT-Lib version 2 format,"
+    , "using the What4 backend instead of the SBV backend."
+    ]
+
   , prim "write_core"          "String -> Term -> TopLevel ()"
     (pureVal writeCore)
     Current
