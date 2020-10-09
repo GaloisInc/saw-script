@@ -1,0 +1,96 @@
+name: SAWScript Heapster
+on:
+  push:
+    branches: [wip-heapster]
+  pull_request:
+    branches: [wip-heapster]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        ghc: ["8.6.5"]
+        continue-on-error: [false]
+        include:
+          - os: macos-latest
+            ghc: "8.6.5"
+            continue-on-error: true
+    runs-on: ${{ matrix.os }}
+    name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
+    continue-on-error: ${{ matrix.continue-on-error }}
+    env:
+      OCAML_VERSION: 4.09.1
+      # also change in setup-ocaml step based on value of opamVersion:
+      # https://github.com/avsm/setup-ocaml/blob/v1.1.2/src/installer.ts#L56
+      SETUP_OCAML_ACTION_VERSION: 1.1.2
+      COQBITS_VERSION: 1.0.0
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git config --global url.https://github.com/.insteadOf git@github.com:
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+
+      - name: Cache ~/.opam
+        uses: actions/cache@v2
+        with:
+          path: ~/.opam
+          key: ocaml-coqbits-${{ runner.os }}-${{ env.OCAML_VERSION }}-${{ env.SETUP_OCAML_ACTION_VERSION }}-${{ env.COQBITS_VERSION }}
+      - name: Set up ocaml and opam
+        uses: avsm/setup-ocaml@v1.1.2
+        with:
+          ocaml-version: ${{ env.OCAML_VERSION }}
+      - name: Install coq-bits
+        shell: bash
+        run: |
+          opam repo add coq-released https://coq.inria.fr/opam/released
+          opam install --unlock-base -y "coq-bits=$COQBITS_VERSION"
+
+      - uses: actions/setup-haskell@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          enable-stack: true
+
+      - uses: actions/cache@v2
+        name: Cache cabal store
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}-${{ github.sha }}
+          restore-keys: |
+            cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+
+      - shell: bash
+        run: .github/ci-heapster.sh build_abc
+
+      - shell: bash
+        run: .github/ci-heapster.sh build
+
+      - shell: bash
+        run: .github/ci-heapster.sh setup_dist_bins
+
+      - run: git submodule update --init deps/saw-core-coq
+      - name: Build deps/saw-core-coq/coq
+        shell: bash
+        working-directory: deps/saw-core-coq/coq
+        run: |
+          eval $(opam env)
+          make -j2
+
+      - shell: bash
+        run: .github/ci-heapster.sh install_system_deps
+        env:
+          Z3_VERSION: "4.8.8"
+          CVC4_VERSION: "4.1.8"
+          YICES_VERSION: "2.6.2"
+
+      - name: Build deps/heapster-saw/examples
+        shell: bash
+        working-directory: deps/heapster-saw/examples
+        run: |
+          eval $(opam env)
+          make -j2
