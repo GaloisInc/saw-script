@@ -194,6 +194,9 @@ Fixpoint bvNat (size : Nat) (number : Nat) : bitvector size :=
 
 (* Arguments bvNat : simpl never. *)
 
+(* Use this to write decimal number literals of bitvector type, e.g. bvLit 64 3 *)
+Definition bvLit (size : Nat) (lit : Z) : bitvector size := bitsToBv (fromZ lit).
+
 Definition bvToNatFolder (n : nat) (b : bool) := b + n.*2.
 
 Fixpoint bvToNat (size : Nat) (v : bitvector size) : Nat :=
