@@ -71,5 +71,5 @@ setupProfiling sym profSource (Just dir) =
                       , periodicProfileAction = saveProf
                       }
 
-     pfs <- profilingFeature tbl (Just profOpts)
+     pfs <- profilingFeature tbl profilingEventFilter (Just profOpts)
      return (saveProf tbl, [pfs])
