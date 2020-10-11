@@ -1,5 +1,5 @@
 {- |
-Module      : Verifier.SAW.Simulator.RME.Base
+Module      : Data.RME.Base
 Copyright   : Galois, Inc. 2016
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -9,7 +9,7 @@ Portability : portable
 Reed-Muller Expansion normal form for Boolean Formulas.
 -}
 
-module Verifier.SAW.Simulator.RME.Base
+module Data.RME.Base
   ( RME
   , true, false, lit
   , constant, isBool
@@ -22,14 +22,16 @@ module Verifier.SAW.Simulator.RME.Base
   ) where
 
 -- | Boolean formulas in Algebraic Normal Form, using a representation
--- based on the Reed-Muller expansion. Invariants: The last argument
--- to a `Node` constructor should never be `R0`. Also the `Int`
--- arguments should strictly increase as you go deeper in the tree.
+-- based on the Reed-Muller expansion.
+
+-- Invariants: The last argument to a `Node` constructor should never
+-- be `R0`. Also the `Int` arguments should strictly increase as you
+-- go deeper in the tree.
 
 data RME = Node !Int !RME !RME | R0 | R1
   deriving (Eq, Show)
 
--- | Evaluate formula with given variable assignment
+-- | Evaluate formula with given variable assignment.
 eval :: RME -> (Int -> Bool) -> Bool
 eval anf v =
   case anf of
@@ -37,40 +39,41 @@ eval anf v =
     R1 -> True
     Node n a b -> (eval a v) /= (v n && eval b v)
 
--- | Normalizing constructor
+-- | Normalizing constructor.
 node :: Int -> RME -> RME -> RME
 node _ a R0 = a
 node n a b = Node n a b
 
--- | Constant true formula
+-- | Constant true formula.
 true :: RME
 true = R1
 
--- | Constant false formula
+-- | Constant false formula.
 false :: RME
 false = R0
 
--- | Boolean constant formulas
+-- | Boolean constant formulas.
 constant :: Bool -> RME
 constant False = false
 constant True = true
 
+-- | Test whether an RME formula is a constant boolean.
 isBool :: RME -> Maybe Bool
 isBool R0 = Just False
 isBool R1 = Just True
 isBool _ = Nothing
 
--- | Boolean literals
+-- | Boolean literals.
 lit :: Int -> RME
 lit n = Node n R0 R1
 
--- | Logical complement
+-- | Logical complement.
 compl :: RME -> RME
 compl R0 = R1
 compl R1 = R0
 compl (Node n a b) = Node n (compl a) b
 
--- | Logical exclusive-or
+-- | Logical exclusive-or.
 xor :: RME -> RME -> RME
 xor R0 y = y
 xor R1 y = compl y
@@ -81,7 +84,7 @@ xor x@(Node i a b) y@(Node j c d)
   | j < i = Node j (xor x c) d
   | otherwise = node i (xor a c) (xor b d)
 
--- | Logical conjunction
+-- | Logical conjunction.
 conj :: RME -> RME -> RME
 conj R0 _ = R0
 conj R1 y = y
@@ -93,7 +96,7 @@ conj x@(Node i a b) y@(Node j c d)
   | otherwise = node i ac (xor ac (conj (xor a b) (xor c d)))
   where ac = conj a c
 
--- | Logical disjunction
+-- | Logical disjunction.
 disj :: RME -> RME -> RME
 disj R0 y = y
 disj R1 _ = R1
@@ -105,7 +108,7 @@ disj x@(Node i a b) y@(Node j c d)
   | otherwise = node i ac (xor ac (disj (xor a b) (xor c d)))
   where ac = disj a c
 
--- | Logical equivalence
+-- | Logical equivalence.
 iff :: RME -> RME -> RME
 iff x y = xor (compl x) y
 {-
@@ -119,7 +122,7 @@ iff x@(Node i a b) y@(Node j c d)
   | otherwise = node i (iff a c) (xor b d)
 -}
 
--- | Logical if-then-else
+-- | Logical if-then-else.
 mux :: RME -> RME -> RME -> RME
 --mux w x y = xor (conj w x) (conj (compl w) y)
 mux R0 _ y = y
@@ -140,7 +143,7 @@ mux w@(Node i a b) x@(Node j c d) y@(Node k e f)
   | i == j && i < k = node i (mux a c y) _
 -}
 
--- | Satisfiability checker
+-- | Satisfiability checker.
 sat :: RME -> Maybe [(Int, Bool)]
 sat R0 = Nothing
 sat R1 = Just []
@@ -149,32 +152,32 @@ sat (Node n a b) =
     Just xs -> Just ((n, False) : xs)
     Nothing -> fmap ((n, True) :) (sat b)
 
--- | List of all satisfying assignments
+-- | List of all satisfying assignments.
 allsat :: RME -> [[(Int, Bool)]]
 allsat R0 = []
 allsat R1 = [[]]
 allsat (Node n a b) =
   map ((n, False) :) (allsat a) ++ map ((n, True) :) (allsat (xor a b))
 
--- | Maximum polynomial degree
+-- | Maximum polynomial degree.
 degree :: RME -> Int
 degree R0 = 0
 degree R1 = 0
 degree (Node _ a b) = max (degree a) (1 + degree b)
 
--- | Tree depth
+-- | Tree depth.
 depth :: RME -> Int
 depth R0 = 0
 depth R1 = 0
 depth (Node _ a b) = 1 + max (depth a) (depth b)
 
--- | Tree size
+-- | Tree size.
 size :: RME -> Int
 size R0 = 1
 size R1 = 1
 size (Node _ a b) = 1 + size a + size b
 
--- | Convert to an explicit polynomial representation
+-- | Convert to an explicit polynomial representation.
 explode :: RME -> [[Int]]
 explode R0 = []
 explode R1 = [[]]

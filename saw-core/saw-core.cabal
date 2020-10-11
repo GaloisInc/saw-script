@@ -41,6 +41,7 @@ library
     parameterized-utils,
     pretty,
     random,
+    rme,
     template-haskell,
     text,
     th-lift-instances,
@@ -74,8 +75,6 @@ library
      Verifier.SAW.Simulator.MonadLazy
      Verifier.SAW.Simulator.Prims
      Verifier.SAW.Simulator.RME
-     Verifier.SAW.Simulator.RME.Base
-     Verifier.SAW.Simulator.RME.Vector
      Verifier.SAW.Simulator.Value
      Verifier.SAW.SharedTerm
      Verifier.SAW.Term.Functor

@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {- |
-Module      : Verifier.SAW.Simulator.RME.Vector
+Module      : Data.RME.Vector
 Copyright   : Galois, Inc. 2016
 License     : BSD3
 Maintainer  : huffman@galois.com
@@ -10,8 +10,9 @@ Portability : portable
 Operations on big-endian vectors of RME formulas.
 -}
 
-module Verifier.SAW.Simulator.RME.Vector
-  ( eq, ule, ult, sle, slt
+module Data.RME.Vector
+  ( RMEV
+  , eq, ule, ult, sle, slt
   , neg, add, sub, mul
   , udiv, urem, sdiv, srem
   , pmul, pmod, pdiv
@@ -21,8 +22,8 @@ module Verifier.SAW.Simulator.RME.Vector
   , countTrailingZeros
   ) where
 
-import Verifier.SAW.Simulator.RME.Base (RME)
-import qualified Verifier.SAW.Simulator.RME.Base as RME
+import Data.RME.Base (RME)
+import qualified Data.RME.Base as RME
 
 import qualified Data.Bits as Bits
 import Data.Vector (Vector)
@@ -30,15 +31,15 @@ import qualified Data.Vector as V
 
 type RMEV = Vector RME
 
--- | Constant integer literals
+-- | Constant integer literals.
 integer :: Int -> Integer -> RMEV
 integer width x = V.reverse (V.generate width (RME.constant . Bits.testBit x))
 
--- | Bitvector equality
+-- | Bitvector equality.
 eq :: RMEV -> RMEV -> RME
 eq x y = V.foldr RME.conj RME.true (V.zipWith RME.iff x y)
 
--- | Unsigned less-than-or-equal
+-- | Unsigned less-than-or-equal.
 ule :: RMEV -> RMEV -> RME
 ule xv yv = go (V.toList xv) (V.toList yv)
   where
@@ -47,7 +48,7 @@ ule xv yv = go (V.toList xv) (V.toList yv)
       in RME.xor (RME.conj y z) (RME.conj (RME.compl x) (RME.xor y z))
     go _ _ = RME.true
 
--- | Unsigned less-than
+-- | Unsigned less-than.
 ult :: RMEV -> RMEV -> RME
 ult x y = RME.compl (ule y x)
 
@@ -56,30 +57,30 @@ swap_sign x
   | V.null x = x
   | otherwise = V.singleton (RME.compl (V.head x)) V.++ V.tail x
 
--- | Signed less-than-or-equal
+-- | Signed less-than-or-equal.
 sle :: RMEV -> RMEV -> RME
 sle x y = ule (swap_sign x) (swap_sign y)
 
--- | Signed less-than
+-- | Signed less-than.
 slt :: RMEV -> RMEV -> RME
 slt x y = ult (swap_sign x) (swap_sign y)
 
--- | Big-endian bitvector increment with carry
+-- | Big-endian bitvector increment with carry.
 increment :: [RME] -> (RME, [RME])
 increment [] = (RME.true, [])
 increment (x : xs) = (RME.conj x c, RME.xor x c : ys)
   where (c, ys) = increment xs
 
--- | Two's complement bitvector negation
+-- | Two's complement bitvector negation.
 neg :: RMEV -> RMEV
 neg x = V.fromList (snd (increment (map RME.compl (V.toList x))))
 
--- | 1-bit full adder
+-- | 1-bit full adder.
 full_adder :: RME -> RME -> RME -> (RME, RME)
 full_adder a b c = (carry, RME.xor (RME.xor a b) c)
   where carry = RME.xor (RME.conj a b) (RME.conj (RME.xor a b) c)
 
--- | Big-endian ripple-carry adder
+-- | Big-endian ripple-carry adder.
 ripple_carry_adder :: [RME] -> [RME] -> RME -> (RME, [RME])
 ripple_carry_adder [] _ c = (c, [])
 ripple_carry_adder _ [] c = (c, [])
@@ -87,16 +88,17 @@ ripple_carry_adder (x : xs) (y : ys) c = (c'', z : zs)
   where (c', zs) = ripple_carry_adder xs ys c
         (c'', z) = full_adder x y c'
 
--- | Two's complement bitvector addition
+-- | Two's complement bitvector addition.
 add :: RMEV -> RMEV -> RMEV
 add x y =
   V.fromList (snd (ripple_carry_adder (V.toList x) (V.toList y) RME.false))
 
--- | Two's complement bitvector subtraction
+-- | Two's complement bitvector subtraction.
 sub :: RMEV -> RMEV -> RMEV
 sub x y =
   V.fromList (snd (ripple_carry_adder (V.toList x) (map RME.compl (V.toList y)) RME.true))
 
+-- | Two's complement bitvector multiplication.
 mul :: RMEV -> RMEV -> RMEV
 mul x y = V.foldl f zero y
   where
@@ -104,19 +106,19 @@ mul x y = V.foldl f zero y
     f acc c = V.zipWith (RME.mux c) (add acc2 x) acc2
       where acc2 = V.drop 1 (acc V.++ V.singleton RME.false)
 
--- | Unsigned bitvector division
+-- | Unsigned bitvector division.
 udiv :: RMEV -> RMEV -> RMEV
 udiv x y = fst (udivrem x y)
 
--- | Unsigned bitvector remainder
+-- | Unsigned bitvector remainder.
 urem :: RMEV -> RMEV -> RMEV
 urem x y = snd (udivrem x y)
 
--- | Signed bitvector division
+-- | Signed bitvector division.
 sdiv :: RMEV -> RMEV -> RMEV
 sdiv x y = fst (sdivrem x y)
 
--- | Signed bitvector remainder
+-- | Signed bitvector remainder.
 srem :: RMEV -> RMEV -> RMEV
 srem x y = snd (sdivrem x y)
 
@@ -161,15 +163,13 @@ sdivrem dividend divisor = (q',r')
 
 popcount :: RMEV -> RMEV
 popcount bits = if l == 0 then V.empty else (V.replicate (l-w-1) RME.false) <> pcnt
- where
- l = V.length bits
- w = Bits.countTrailingZeros l -- log_2 rounded down, w+1 is enough bits to hold popcount
- zs = V.replicate w RME.false
+  where
+    l = V.length bits
+    w = Bits.countTrailingZeros l -- log_2 rounded down, w+1 is enough bits to hold popcount
+    zs = V.replicate w RME.false
 
- pcnt = foldr1 add xs -- length is w+1
- xs = [ zs <> V.singleton b
-      | b <- V.toList bits
-      ]
+    pcnt = foldr1 add xs -- length is w+1
+    xs = [ zs <> V.singleton b | b <- V.toList bits ]
 
 countTrailingZeros :: RMEV -> RMEV
 countTrailingZeros bits = countLeadingZeros (V.reverse bits)
@@ -177,13 +177,13 @@ countTrailingZeros bits = countLeadingZeros (V.reverse bits)
 -- Big endian convention means its easier to count leading zeros
 countLeadingZeros :: RMEV -> RMEV
 countLeadingZeros bits = if l == 0 then V.empty else (V.replicate (l-w-1) RME.false) <> (go 0 (V.toList bits))
- where
- l = V.length bits
- w = Bits.countTrailingZeros l -- log_2 rounded down, w+1 is enough bits to hold count
+  where
+    l = V.length bits
+    w = Bits.countTrailingZeros l -- log_2 rounded down, w+1 is enough bits to hold count
 
- go :: Integer -> [RME] -> Vector RME
- go !i []      = integer (w+1) i
- go !i (b:bs)  = V.zipWith (RME.mux b) (integer (w+1) i) (go (i+1) bs)
+    go :: Integer -> [RME] -> Vector RME
+    go !i []      = integer (w+1) i
+    go !i (b:bs)  = V.zipWith (RME.mux b) (integer (w+1) i) (go (i+1) bs)
 
 -- | Polynomial multiplication. Note that the algorithm works the same
 -- no matter which endianness convention is used. Result length is
