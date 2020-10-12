@@ -38,12 +38,14 @@ retry() {
 }
 
 setup_dist_bins() {
-  is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
+  is_exe "dist/bin" "saw" && is_exe "dist/bin" "jss" && is_exe "dist/bin" "saw-remote-api" && return
   extract_exe "saw" "dist/bin"
+  extract_exe "jss" "dist/bin"
   extract_exe "saw-remote-api" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
   echo "::add-path::$PWD/dist/bin"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
+  strip dist/bin/jss* || echo "Strip failed: Ignoring harmless error"
 }
 
 install_z3() {
@@ -118,10 +120,10 @@ build() {
   cabal v2-update
   echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
-  if ! retry cabal v2-build "$@" saw saw-remote-api && [[ "$RUNNER_OS" == "macOS" ]]; then
+  if ! retry cabal v2-build "$@" jss saw saw-remote-api && [[ "$RUNNER_OS" == "macOS" ]]; then
     echo "Working around a dylib issue on macos by removing the cache and trying again"
     cabal v2-clean
-    retry cabal v2-build "$@" saw saw-remote-api
+    retry cabal v2-build "$@" jss saw saw-remote-api
   fi
 }
 
