@@ -39,8 +39,10 @@ import Data.Foldable (foldlM)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
+import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Set as Set
+import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -170,6 +172,27 @@ getReg reg regs = case Macaw.lookupX86Reg reg regs of
   Just (C.RV val) -> pure val
   Nothing -> throwX86 $ mconcat ["Invalid register: ", show reg]
 
+-- TODO: extend to more than general purpose registers
+stringToReg :: Text -> Maybe (Some Macaw.X86Reg)
+stringToReg s = case s of
+  "rax" -> Just $ Some Macaw.RAX
+  "rbx" -> Just $ Some Macaw.RBX
+  "rcx" -> Just $ Some Macaw.RCX
+  "rdx" -> Just $ Some Macaw.RDX
+  "rsp" -> Just $ Some Macaw.RSP
+  "rbp" -> Just $ Some Macaw.RBP
+  "rsi" -> Just $ Some Macaw.RSI
+  "rdi" -> Just $ Some Macaw.RDI
+  "r8" -> Just $ Some Macaw.R8
+  "r9" -> Just $ Some Macaw.R9
+  "r10" -> Just $ Some Macaw.R10
+  "r11" -> Just $ Some Macaw.R11
+  "r12" -> Just $ Some Macaw.R12
+  "r13" -> Just $ Some Macaw.R13
+  "r14" -> Just $ Some Macaw.R14
+  "r15" -> Just $ Some Macaw.R15
+  _ -> Nothing
+
 cryptolUninterpreted ::
   (MonadIO m, MonadThrow m) =>
   CryptolEnv ->
@@ -217,11 +240,17 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
-      cenv <- rwCryptol <$> getTopLevelRW
+      rw <- getTopLevelRW
+      let cenv = rwCryptol rw
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
 
-      (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc path nm
+      let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
+      (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc preserved path nm
       addrInt <- if Macaw.segmentBase (Macaw.segoffSegment addr) == 0
         then pure . toInteger $ Macaw.segmentOffset (Macaw.segoffSegment addr) + Macaw.segoffOffset addr
         else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
@@ -334,6 +363,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
 buildCFG ::
   Options ->
   C.HandleAllocator ->
+  Set (Some Macaw.X86Reg) {- ^ Registers to treat as callee-saved -} ->
   String {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
   IO ( C.SomeCFG
@@ -350,7 +380,7 @@ buildCFG ::
          (EmptyCtx ::> Macaw.ArchRegStruct Macaw.X86_64)
          (Macaw.ArchRegStruct Macaw.X86_64))
      )
-buildCFG opts halloc path nm = do
+buildCFG opts halloc preserved path nm = do
   printOutLn opts Info $ mconcat ["Finding symbol for \"", nm, "\""]
   elf <- getElf path
   relf <- getRelevant elf
@@ -360,10 +390,17 @@ buildCFG opts halloc path nm = do
       _ -> fail $ mconcat ["Could not find symbol \"", nm, "\""]
   printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
   let
+    preservedRegs = Set.union preserved Macaw.x86CalleeSavedRegs
+    preserveFn :: forall t. Macaw.X86Reg t -> Bool
+    preserveFn r = Set.member (Some r) preservedRegs
+    macawCallParams = Macaw.x86_64CallParams { Macaw.preserveReg = preserveFn }
+    macawArchInfo = (Macaw.x86_64_info preserveFn)
+      { Macaw.archCallParams = macawCallParams
+      }
     initialDiscoveryState =
-      Macaw.emptyDiscoveryState (memory relf) (funSymMap relf) Macaw.x86_64_linux_info
+      Macaw.emptyDiscoveryState (memory relf) (funSymMap relf) macawArchInfo
+      -- "inline" any function addresses that we happen to jump to
       & Macaw.trustedFunctionEntryPoints .~ Set.empty
-  let
     finalState = Macaw.cfgFromAddrsAndState initialDiscoveryState [addr] []
     finfos = finalState ^. Macaw.funInfo
   cfgs <- forM finfos $ \(Some finfo) ->
@@ -790,6 +827,7 @@ assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
   ptr <- resolvePtrSetupValue env tyenv tptr
   memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv texpected
   storTy <- liftIO $ C.LLVM.toStorableType memTy
+
   actual <- liftIO $ C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment
   pure $ LO.matchArg opts sc cc ms MS.PostState actual memTy texpected
 
