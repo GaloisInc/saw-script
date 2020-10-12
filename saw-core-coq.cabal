@@ -24,6 +24,8 @@ library
     lens,
     mtl,
     saw-core,
+    parameterized-utils,
+    bv-sized,
     vector
   hs-source-dirs: src
   exposed-modules:

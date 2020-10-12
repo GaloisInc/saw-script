@@ -12,6 +12,9 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PatternGuards #-}
 
 {- |
 Module      : Verifier.SAW.Translation.Coq
@@ -34,8 +37,10 @@ import           Data.Maybe                                    (fromMaybe)
 import           Prelude                                       hiding (fail)
 import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
 
-import           Data.Bits                                     ((.|.), bit)
-import qualified Data.Vector                                   as Vector (reverse, imap)
+import           Data.Parameterized.Pair
+import           Data.Parameterized.NatRepr
+import qualified Data.BitVector.Sized                          as BV
+import qualified Data.Vector                                   as Vector (reverse, toList)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
 import           Verifier.SAW.Recognizer
@@ -188,12 +193,11 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
          Coq.App rect_var <$> mapM translateTerm args
     Sort s -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))
-    ArrayValue (asBoolType -> Just ()) (traverse asBool -> Just bits) -> do
-      return (Coq.App (Coq.Var "bvLit")
-              [Coq.NatLit (toInteger $ length bits),
-               Coq.ZLit (foldl (.|.) 0 $
-                         Vector.imap (\i b -> if b then bit i else 0) $
-                         Vector.reverse bits)])
+    ArrayValue (asBoolType -> Just ()) (traverse asBool -> Just bits)
+      | Pair w bv <- BV.bitsBE (Vector.toList bits)
+      , Left LeqProof <- decideLeq (knownNat @1) w -> do
+          return (Coq.App (Coq.Var "intToBv")
+                  [Coq.NatLit (intValue w), Coq.ZLit (BV.asSigned w bv)])
     ArrayValue _ vec -> do
       let addElement accum element = do
             elementTerm <- translateTerm element
