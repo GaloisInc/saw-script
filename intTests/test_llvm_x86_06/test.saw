@@ -1,0 +1,13 @@
+enable_experimental;
+
+m <- llvm_load_module "test.bc";
+
+let discoverytest_setup = do {
+  crucible_execute_func [];
+};
+
+fails (crucible_llvm_verify_x86 m "./test" "discoverytest" [] false discoverytest_setup w4);
+
+add_x86_preserved_reg "rax";
+crucible_llvm_verify_x86 m "./test" "discoverytest" [] false discoverytest_setup w4;
+default_x86_preserved_reg;
