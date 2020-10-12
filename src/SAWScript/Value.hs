@@ -409,6 +409,7 @@ data TopLevelRW =
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
   , rwWhat4HashConsing :: Bool
+  , rwPreservedRegs :: [String]
   }
 
 newtype TopLevel a =

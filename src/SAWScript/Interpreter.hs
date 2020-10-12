@@ -434,6 +434,7 @@ buildTopLevelEnv proxy opts =
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
                    , rwWhat4HashConsing = False
+                   , rwPreservedRegs = []
                    }
        return (bic, ro0, rw0)
 
@@ -507,6 +508,16 @@ disable_what4_hash_consing :: TopLevel ()
 disable_what4_hash_consing = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwWhat4HashConsing = False }
+
+add_x86_preserved_reg :: String -> TopLevel ()
+add_x86_preserved_reg r = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPreservedRegs = r:rwPreservedRegs rw }
+
+default_x86_preserved_reg :: TopLevel ()
+default_x86_preserved_reg = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwPreservedRegs = [] }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -2202,6 +2213,16 @@ primitives = Map.fromList
     , "context against which to verify the function.Returns a method spec"
     , "that can be used as an override when verifying other LLVM functions."
     ]
+
+  , prim "add_x86_preserved_reg" "String -> TopLevel ()"
+    (pureVal add_x86_preserved_reg)
+    Current
+    [ "Treat the given register as callee-saved during x86 verification." ]
+
+  , prim "default_x86_preserved_reg" "TopLevel ()"
+    (pureVal default_x86_preserved_reg)
+    Current
+    [ "Use the default set of callee-saved registers during x86 verification.." ]
 
   , prim "crucible_array"
     "[SetupValue] -> SetupValue"
