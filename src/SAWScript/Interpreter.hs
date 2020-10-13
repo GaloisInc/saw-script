@@ -1324,6 +1324,36 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
+  , prim "offline_w4"             "String -> ProofScript SatResult"
+    (pureVal offline_w4_z3)
+    Current
+    [ "Write the current goal to the given file using What4 (Z3 backend) in"
+    , "SMT-Lib2 format."]
+
+  , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript SatResult"
+    (pureVal offline_w4_unint_z3)
+    Current
+    [ "Write the current goal to the given file using What4 (Z3 backend) in"
+    ," SMT-Lib2 format. Leave the given list of names, as defined with"
+    , "'define', as uninterpreted."
+    ]
+
+  , prim "offline_w4_unint_yices" "[String] -> String -> ProofScript SatResult"
+    (pureVal offline_w4_unint_yices)
+    Current
+    [ "Write the current goal to the given file using What4 (Yices backend) in"
+    ," SMT-Lib2 format. Leave the given list of names, as defined with"
+    , "'define', as uninterpreted."
+    ]
+
+  , prim "offline_w4_unint_cvc4"  "[String] -> String -> ProofScript SatResult"
+    (pureVal offline_w4_unint_cvc4)
+    Current
+    [ "Write the current goal to the given file using What4 (CVC4 backend) in"
+    ," SMT-Lib2 format. Leave the given list of names, as defined with"
+    , "'define', as uninterpreted."
+    ]
+
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
     Experimental
