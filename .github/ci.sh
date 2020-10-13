@@ -10,7 +10,7 @@ mkdir -p "$BIN"
 is_exe() { [[ -x "$1/$2$EXT" ]] || command -v "$2" > /dev/null 2>&1; }
 
 extract_exe() {
-  exe="$(cabal v2-exec which "$1$EXT")"
+  exe="$(find dist-newstyle -type f -name "$1$EXT")"
   name="$(basename "$exe")"
   echo "Copying $name to $2"
   mkdir -p "$2"
@@ -38,9 +38,10 @@ retry() {
 }
 
 setup_dist_bins() {
-  is_exe "dist/bin" "saw" && is_exe "dist/bin" "jss" && return
+  is_exe "dist/bin" "saw" && is_exe "dist/bin" "jss" && is_exe "dist/bin" "saw-remote-api" && return
   extract_exe "saw" "dist/bin"
   extract_exe "jss" "dist/bin"
+  extract_exe "saw-remote-api" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
   echo "::add-path::$PWD/dist/bin"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
@@ -117,12 +118,12 @@ build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
-  cabal v2-configure -j2 --minimize-conflict-set
+  echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
-  if ! retry cabal v2-build "$@" saw jss && [[ "$RUNNER_OS" == "macOS" ]]; then
+  if ! retry cabal v2-build "$@" jss saw saw-remote-api && [[ "$RUNNER_OS" == "macOS" ]]; then
     echo "Working around a dylib issue on macos by removing the cache and trying again"
     cabal v2-clean
-    retry cabal v2-build "$@" saw jss
+    retry cabal v2-build "$@" jss saw saw-remote-api
   fi
 }
 
@@ -150,7 +151,6 @@ install_system_deps() {
 }
 
 test_dist() {
-  setup_dist_bins
   find_java
   pushd intTests
   for t in test0001 test0019_jss_switch_statement test_crucible_jvm test_ecdsa test_examples test_issue108 test_tutorial1 test_tutorial2 test_tutorial_w4; do echo $t >> disabled_tests.txt; done
@@ -171,7 +171,6 @@ bundle_files() {
   cp deps/abcBridge/abc-build/copyright.txt dist/ABC_LICENSE
   cp LICENSE README.md dist/
   $IS_WIN || chmod +x dist/bin/*
-  rm -f "dist/bin/jss"
 
   cp doc/extcore.md dist/doc
   cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf

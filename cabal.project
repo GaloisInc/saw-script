@@ -1,5 +1,6 @@
 packages:
     saw-script.cabal
+    saw-remote-api
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
     deps/jvm-parser
@@ -29,3 +30,7 @@ packages:
     deps/macaw/x86_symbolic
     deps/elf-edit
     deps/dwarf
+    deps/argo/argo
+    deps/argo/tasty-script-exitcode
+    deps/argo/python
+    deps/cryptol/cryptol-remote-api

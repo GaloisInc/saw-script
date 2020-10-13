@@ -49,3 +49,6 @@
 [submodule "deps/saw-core-coq"]
 	path = deps/saw-core-coq
 	url = https://github.com/GaloisInc/saw-core-coq.git
+[submodule "deps/argo"]
+	path = deps/argo
+	url = https://github.com/galoisinc/argo
