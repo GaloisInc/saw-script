@@ -2,6 +2,7 @@
  *** A version of the computation monad using the option-set monad
  ***)
 
+From Coq Require Import Program.Basics.
 From Coq Require Export Morphisms Setoid.
 From Coq Require Import Strings.String.
 
@@ -532,16 +533,6 @@ Definition letRecM {lrts : LetRecTypes} {B} (F: lrtPi lrts (lrtTupleType lrts))
   lrtApply body (multiFixM F).
 
 
-(* FIXME: write this! *)
-Class ProperLRTFun {lrts} (F : lrtPi lrts (lrtTupleType lrts)) : Prop :=
-  { properLRTFun : True }.
-
-Instance ProperLRTFun_any lrts F : @ProperLRTFun lrts F.
-Proof.
-  constructor. apply I.
-Qed.
-
-
 (***
  *** Refinement Proofs
  ***)
@@ -622,8 +613,8 @@ Proof.
   induction lrt.
   - apply PreOrder_refinesM.
   - split.
-    { intros f a. apply (@PreOrder_Reflexive _ _ (H a)). }
-    { intros f1 f2 f3 H1 H2 a. apply (@PreOrder_Transitive _ _ (H a) _ _ _ (H1 a) (H2 a)). }
+    { intros f a. reflexivity. }
+    { intros f1 f2 f3 H1 H2 a. transitivity (f2 a); [ apply H1 | apply H2 ]. }
 Qed.
 
 (* A convenient specialization of refinesFun *)
@@ -638,6 +629,42 @@ Fixpoint refinesFunTuple {lrts} : relation (lrtTupleType lrts) :=
     fun tup1 tup2 => refinesFun (fst tup1) (fst tup2) /\
                      refinesFunTuple (snd tup1) (snd tup2)
   end.
+
+Fixpoint respectfulLRTPi {lrts} {B} : relation (lrtPi lrts (CompM B)) :=
+  match lrts with
+  | LRT_Nil => refinesM
+  | LRT_Cons _ _ => respectful refinesFun respectfulLRTPi
+  end.
+
+(* `ProperLRTFun F` is just `Proper (refinesFun ==> ... ==> refinesFun ==> refinesM) F` *)
+Class ProperLRTFun {lrts} {B} (F : lrtPi lrts (CompM B)) : Prop :=
+  { properLRTFun : Proper respectfulLRTPi F }.
+
+(* All constant functions are proper *)
+Instance ProperLRTFun_const lrts B b : @ProperLRTFun lrts B (lrtLambda (fun _ => b)).
+Proof.
+  split; induction lrts; vm_compute; intros; assumption.
+Qed.
+
+(* FIXME Get rid of this *)
+Instance ProperLRTFun_any lrts B F : @ProperLRTFun lrts B F.
+Proof.
+  admit. (* FIXME *)
+Admitted.
+
+Instance Proper_lrtApply lrts B
+  : Proper (respectfulLRTPi ==> refinesFunTuple ==> refinesM) (@lrtApply lrts (CompM B)).
+Proof.
+  unfold Proper, respectful; intros F G H1 fs gs H2.
+  induction lrts; simpl in F,G,H1,fs,gs,H2; simpl.
+  - exact H1.
+  - destruct fs as [f fs]; destruct gs as [g gs]; destruct H2 as [H2 H3]; simpl in *.
+    apply IHlrts.
+    + unfold respectful in H1.
+      apply H1.
+      assumption.
+    + assumption.
+Qed.
 
 Lemma refinesFunTuple_multiFixM lrts (F:lrtPi lrts (lrtTupleType lrts)) tup :
   refinesFunTuple (lrtApply F tup) tup -> refinesFunTuple (multiFixM F) tup.
@@ -655,59 +682,55 @@ Proof.
   apply ref_f.
 Qed.
 
-Lemma refinesM_letRecM0 B F P Q : P |= Q -> @letRecM LRT_Nil B F P |= Q.
+Lemma letRecM_Nil B F P : @letRecM LRT_Nil B F P = P.
 Proof.
-  intro. apply H.
-Qed.
-
-Instance ProperFun_any lrt B (P : lrtToType lrt -> CompM B) : Proper (refinesFun ==> refinesM) P.
-Proof.
-  (* FIXME *)
-Admitted.
-
-Lemma refinesM_letRecM1 lrt B (F G : lrtPi (LRT_Cons lrt LRT_Nil) (lrtTupleType (LRT_Cons lrt LRT_Nil)))
-                              (P Q : lrtPi (LRT_Cons lrt LRT_Nil) (CompM B))
-  : Proper (refinesFun ==> refinesM) P ->
-    refinesFun (fst (multiFixM F)) (fst (multiFixM G)) ->
-    P (fst (multiFixM G)) |= Q (fst (multiFixM G)) ->
-    @letRecM (LRT_Cons lrt LRT_Nil) B F P |= @letRecM (LRT_Cons lrt LRT_Nil) B G Q.
-Proof.
-  intros.
-  unfold letRecM, lrtApply.
-  rewrite H0.
-  assumption.
-Qed.
-
-Instance ProperFixFun_const {A B M} `{MonadFix M} (f : forall (a:A), M (B a))
-  : ProperFixFun (fun _ => f).
-Proof.
-  split.
   reflexivity.
 Qed.
 
-Lemma multiFixM_const_fst lrt (f : lrtToType lrt)
-  : refinesFun f (fst (multiFixM (lrts:=LRT_Cons lrt LRT_Nil) (fun _ : lrtToType lrt => (f, tt)))).
+Lemma refinesM_letRecM_Nil_l B F P Q : P |= Q -> @letRecM LRT_Nil B F P |= Q.
 Proof.
-  unfold multiFixM, multiTupleFixM, multiArgFixM; simpl.
-  induction lrt; simpl; simpl in f.
-  - rewrite fixM_F_fixM.
-    + reflexivity.
-    + apply ProperFixFun_const.
-  - intro. fold lrtToFlatArgs.
-    admit.
+  rewrite letRecM_Nil. trivial.
+Qed.
+
+Lemma multiFixM_const lrts fs
+  : multiFixM (lrts:=lrts) (lrtLambda (fun _ => fs)) = fs.
+Proof.
+  admit. (* FIXME *)
 Admitted.
 
-Lemma refinesM_letRecM1_fst lrt B (F : lrtPi (LRT_Cons lrt LRT_Nil) (lrtTupleType (LRT_Cons lrt LRT_Nil)))
-                              f (P Q : lrtPi (LRT_Cons lrt LRT_Nil) (CompM B))
-                              `{Proper _ (refinesFun ==> refinesM) P}
-                              `{Proper _ (refinesFun ==> refinesM) Q}
-  : refinesFun (fst (multiFixM F)) f ->
-    P f |= Q f ->
-    @letRecM (LRT_Cons lrt LRT_Nil) B F P |= @letRecM (LRT_Cons lrt LRT_Nil) B (fun _ => (f, tt)) Q.
+Lemma refinesM_letRecM_const_r lrts B (F : lrtPi lrts (lrtTupleType lrts))
+                               (G : lrtTupleType lrts) (P Q : lrtPi lrts (CompM B))
+                               `{ProperLRTFun _ _ P} `{ProperLRTFun _ _ Q}
+  : refinesFunTuple (multiFixM F) G ->
+    lrtApply P G |= lrtApply Q G ->
+    @letRecM lrts B F P |= @letRecM lrts B (lrtLambda (fun _ => G)) Q.
+Proof.
+  destruct H as [ProperP]; destruct H0 as [ProperQ].
+  intros.
+  unfold letRecM.
+  rewrite H, H0, multiFixM_const.
+  reflexivity.
+Qed.
+
+Lemma lrtApply_const lrts B (b : B) (F : lrtTupleType lrts)
+  : lrtApply (lrts:=lrts) (lrtLambda (fun _ => b)) F = b.
+Proof.
+  induction lrts.
+  - reflexivity.
+  - destruct F as [ F0 F1 ].
+    simpl; rewrite (IHlrts F1).
+    reflexivity.
+Qed.
+
+Lemma refinesM_letRecM_match_r lrts B F P Q `{ProperLRTFun _ _ P}
+  : forall (G : lrtTupleType lrts),
+    @letRecM lrts B F P |= @letRecM lrts B (lrtLambda (fun _ => G)) (lrtLambda (fun _ => Q)) ->
+    @letRecM lrts B F P |= Q.
 Proof.
   intros.
-  unfold letRecM, lrtApply.
-  rewrite H1, H2, multiFixM_const_fst.
+  rewrite H0.
+  unfold letRecM.
+  rewrite lrtApply_const.
   reflexivity.
 Qed.
 

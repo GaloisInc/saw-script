@@ -177,9 +177,13 @@ Definition bitvector (n : Nat) : Type := Vector.t bool n.
 Definition bvToBITS {size : nat} : bitvector size -> BITS size
   := foldl_dep bool BITS size (fun _ bs b => joinlsb (bs, b)) nilB.
 
+Arguments bvToBITS : simpl never.
+
 (* NOTE BITS are stored in reverse order than bitvector *)
 Definition bitsToBv {size : nat} : BITS size -> bitvector size
   := tuple_foldl_dep bool bitvector size (fun _ bv b => Vector.cons _ b _ bv) (Vector.nil _).
+
+Arguments bitsToBv : simpl never.
 
 Definition joinLSB {n} (v : bitvector n) (lsb : bool) : bitvector n.+1 :=
   Vector.shiftin lsb v.
@@ -201,7 +205,8 @@ Fixpoint bvToNat (size : Nat) (v : bitvector size) : Nat :=
 
 (* This is used to write literals of bitvector type, e.g. intToBv 64 3 *)
 Definition intToBv (n : Nat) (z : Z) : bitvector n := bitsToBv (fromZ z).
-Opaque intToBv.
+
+Arguments intToBv : simpl never.
 
 Definition bvToInt (n : Nat) (z : Z) : bitvector n := bitsToBv (fromPosZ z).
 

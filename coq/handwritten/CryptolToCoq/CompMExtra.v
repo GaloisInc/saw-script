@@ -19,15 +19,15 @@ Ltac get_last_hyp tt :=
 
 Tactic Notation "unfold_projs" :=
   unfold SAWCoreScaffolding.fst;
-  cbn [ Datatypes.fst projT1 ].
+  cbn [ Datatypes.fst Datatypes.snd projT1 ].
 
 Tactic Notation "unfold_projs" "in" constr(N) :=
   unfold SAWCoreScaffolding.fst in N;
-  cbn [ Datatypes.fst projT1 ] in N.
+  cbn [ Datatypes.fst Datatypes.snd projT1 ] in N.
 
 Tactic Notation "unfold_projs" "in" "*" :=
   unfold SAWCoreScaffolding.fst in *;
-  cbn [ Datatypes.fst projT1 ] in *.
+  cbn [ Datatypes.fst Datatypes.snd projT1 ] in *.
 
 Ltac destruct_prods_sums_in H :=
   match type of H with
@@ -65,6 +65,7 @@ Ltac split_prod_goal :=
          | |- { _ : _ & _ } => split
          | |- _ * _         => split
          | |- unit          => exact tt
+         | |- True          => trivial
          end.
 
 
@@ -149,12 +150,16 @@ Hint Extern 2 (refinesFun _ _) => (apply refinesFun_multiFixM_fst;
 *)
 
 Hint Extern 999 (_ |= _) => shelve : refinesM.
-Hint Resolve refinesM_letRecM0 : refinesM.
+
+Hint Resolve refinesM_letRecM_Nil_l : refinesM.
 (* Hint Extern 1 (@letRecM LRT_Nil _ _ _ |= @letRecM LRT_Nil _ _ _) => *)
 (*   apply refinesM_letRecM0 : refinesM. *)
-Hint Extern 1 (@letRecM (LRT_Cons _ LRT_Nil) _ _ _ |= @letRecM (LRT_Cons _ LRT_Nil) _ _ _) =>
-  (* idtac "prove_refinement: refinesM_letRecM1_fst"; *)
-  apply refinesM_letRecM1_fst; try apply ProperFun_any : refinesM.
+
+Hint Extern 1 (@letRecM ?lrts _ _ _ |= @letRecM ?lrts _ (lrtLambda (fun _ => _)) _) =>
+  (* idtac "prove_refinement: refinesM_letRecM_const_r"; *)
+  apply refinesM_letRecM_const_r; try apply ProperLRTFun_any;
+  try (apply refinesFunTuple_multiFixM; unfold refinesFunTuple; split_prod_goal);
+  unfold lrtApply, lrtLambda; unfold_projs : refinesM.
 
 (*
 Hint Resolve refinesM_either_l : refinesM.
@@ -455,6 +460,11 @@ Ltac continue_prove_refinement_right :=
   | |- andM _ _ |= _ => apply refinesM_andM_l; right; prove_refinement_core
   end.
 
+Ltac prove_refinement_match_letRecM_l :=
+  unshelve (typeclasses eauto with refinesM refinesFun);
+  unshelve (eapply refinesM_letRecM_match_r);
+  [ unfold lrtTupleType, lrtToType; repeat split | apply ProperLRTFun_any | ].
+
 (* Ltac prove_refinesFun := unshelve (typeclasses eauto with refinesFun). *)
 
 (*
@@ -479,7 +489,7 @@ Ltac old_prove_refinesM :=
   | |- _ |= ((_ >>= _) >>= _) => rewrite bindM_bindM; old_prove_refinesM
 
   (* letRecM cases *)
-  | |- letRecM tt _ |= _ => apply refinesM_letRecM0; old_prove_refinesM
+  | |- letRecM tt _ |= _ => apply refinesM_letRecM_Nil_l; old_prove_refinesM
 
   (* either *)
   | |- SAWCorePrelude.either _ _ _ _ _ _ |= _ =>

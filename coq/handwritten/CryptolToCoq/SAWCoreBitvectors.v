@@ -72,7 +72,12 @@ Admitted.
 
 Definition isBvult_to_isBvslt_pos w a b : isBvsle w (intToBv w 0) a ->
                                           isBvsle w (intToBv w 0) b ->
-                                          isBvult w a b -> isBvslt w a b.
+                                          isBvult w a b <-> isBvslt w a b.
+Admitted.
+
+Definition isBvule_to_isBvsle_pos w a b : isBvsle w (intToBv w 0) a ->
+                                          isBvsle w (intToBv w 0) b ->
+                                          isBvult w a b <-> isBvslt w a b.
 Admitted.
 
 
