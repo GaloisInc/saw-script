@@ -445,7 +445,7 @@ Ltac prove_refinement_core :=
 
 Ltac prove_refinement :=
   (* idtac "prove_refinement: start"; *)
-  unfold_projs;
+  unfold_projs; compute_bv_funs;
   prove_refinement_core.
 
 (* Giving user input as to which disjunctive branch to continue proof automation in *)

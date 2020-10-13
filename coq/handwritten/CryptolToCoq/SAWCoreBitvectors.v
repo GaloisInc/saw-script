@@ -14,6 +14,41 @@ Import SAWCorePrelude.
 Create HintDb SAWCoreBitvectors.
 
 
+(* Computing opaque bitvector functions *)
+
+Ltac compute_bv_rel f w a b :=
+  let e := eval vm_compute in (f w (intToBv w a) (intToBv w b)) in
+  replace (f w (intToBv w a) (intToBv w b)) with e by reflexivity.
+
+Ltac compute_bv_binop f w a b :=
+  let e := eval vm_compute in (sbvToInt w (f w (intToBv w a) (intToBv w b))) in
+  try (replace (f w (intToBv w a) (intToBv w b)) with (intToBv w e) by reflexivity).
+
+Ltac compute_bv_unop f w a :=
+  let e := eval vm_compute in (sbvToInt w (f w (intToBv w a))) in
+  try (replace (f w (intToBv w a)) with (intToBv w e) by reflexivity).
+
+Ltac compute_bv_funs :=
+  unfold bvultWithProof, bvuleWithProof, bvsge, bvsgt, bvuge, bvugt;
+  repeat match goal with
+         | |- context [?f ?w (intToBv ?w ?a) (intToBv ?w ?b)] =>
+           match f with
+           | bvsle => compute_bv_rel bvsle w a b
+           | bvslt => compute_bv_rel bvslt w a b
+           | bvule => compute_bv_rel bvule w a b
+           | bvult => compute_bv_rel bvult w a b
+           | bvEq  => compute_bv_rel bvEq w a b
+           | bvAdd => compute_bv_binop bvAdd w a b
+           | bvSub => compute_bv_binop bvSub w a b
+           | bvMul => compute_bv_binop bvMul w a b
+           end
+         | |- context [?f ?w (intToBv ?w ?a)] =>
+           match f with
+           | bvNeg => compute_bv_unop bvNeg w a
+           end
+         end.
+
+
 (** Bitvector maximum and minimum values **)
 
 Definition bvsmax w : bitvector w :=

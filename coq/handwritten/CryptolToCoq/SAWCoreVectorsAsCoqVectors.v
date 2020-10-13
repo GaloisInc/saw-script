@@ -224,69 +224,73 @@ Numeral Notation bool Z.odd boolToInt : bool_scope.
 Definition bvAdd (n : nat) (a : bitvector n) (b : bitvector n)
   : bitvector n
   := bitsToBv (addB (bvToBITS a) (bvToBITS b)).
+Global Opaque bvAdd.
 
 (* This is annoying to implement, so using BITS conversion *)
 Definition bvSub (n : nat) (a : bitvector n) (b : bitvector n)
   : bitvector n
   := bitsToBv (subB (bvToBITS a) (bvToBITS b)).
+Global Opaque bvSub.
 
 (* This is annoying to implement, so using BITS conversion *)
 Definition bvMul (n : nat) (a : bitvector n) (b : bitvector n)
   : bitvector n
   := bitsToBv (mulB (bvToBITS a) (bvToBITS b)).
+Global Opaque bvMul.
 
 (* This is annoying to implement, so using BITS conversion *)
 Definition bvNeg (n : nat) (a : bitvector n)
   : bitvector n
   := bitsToBv (invB (bvToBITS a)).
+Global Opaque bvNeg.
 
 (* FIXME this is not implemented *)
 Definition bvUDiv (n : nat) (a : bitvector n) (b : bitvector n)
   : bitvector n
   := a.
-Opaque bvUDiv.
+Global Opaque bvUDiv.
 
 (* FIXME this is not implemented *)
 Definition bvURem (n : nat) (a : bitvector n) (b : bitvector n)
   : bitvector n
   := a.
-Opaque bvURem.
+Global Opaque bvURem.
 
 (* FIXME this is not implemented *)
 Definition bvSDiv (n : nat) (a : bitvector n.+1) (b : bitvector n.+1)
   : bitvector n.+1
   := a.
-Opaque bvSDiv.
+Global Opaque bvSDiv.
 
 (* FIXME this is not implemented *)
 Definition bvSRem (n : nat) (a : bitvector n.+1) (b : bitvector n.+1)
   : bitvector n.+1
   := a.
-Opaque bvSRem.
+Global Opaque bvSRem.
 
 (* FIXME this is not implemented (base 2 logarithm) *)
 Definition bvLg2 (n : nat) (a : bitvector n)
   : bitvector n
   := a.
-Opaque bvLg2.
+Global Opaque bvLg2.
 
 (* FIXME this is not implemented *)
 Definition bvSShr (w : nat) (a : bitvector w.+1) (n : nat)
   : bitvector w.+1
   := a.
-Opaque bvSShr.
+Global Opaque bvSShr.
 
 (* FIXME this is not implemented *)
 Definition rotateL (n : nat) (A : Type) (v : Vector.t A n) (i : nat)
   : Vector.t A n
   := v.
-Opaque rotateL.
+Global Opaque rotateL.
 
 (* FIXME this is not implemented *)
 Definition rotateR (n : nat) (A : Type) (v : Vector.t A n) (i : nat)
   : Vector.t A n
   := v.
-Opaque rotateR.
+Global Opaque rotateR.
 
 Fixpoint shiftL (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat)
   : Vector.t A n
@@ -305,20 +309,18 @@ Fixpoint shiftR (n : nat) (A : Type) (x : A) (v : Vector.t A n) (i : nat)
 (* This is annoying to implement, so using BITS conversion *)
 Definition bvult (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   ltB (bvToBITS a) (bvToBITS b).
-Opaque bvult.
+Global Opaque bvult.
 
 Definition bvugt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvult n b a.
-Opaque bvugt.
 
 (* This is annoying to implement, so using BITS conversion *)
 Definition bvule (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   leB (bvToBITS a) (bvToBITS b).
-Opaque bvule.
+Global Opaque bvule.
 
 Definition bvuge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvule n b a.
-Opaque bvuge.
 
 Definition sign {n : nat} (a : bitvector n) : Bool :=
   match a with
@@ -329,20 +331,14 @@ Definition sign {n : nat} (a : bitvector n) : Bool :=
 Definition bvslt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   let c := bvSub n a b
    in (sign a && ~~ sign b) || (sign a && sign c) || (~~ sign b && sign c).
-Opaque bvslt.
+Global Opaque bvslt.
 
 Definition bvsgt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvslt n b a.
-Opaque bvsgt.
 
 Definition bvsle (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvslt n a b || (Vector.eqb _ eqb a b).
-Opaque bvsle.
+Global Opaque bvsle.
 
 Definition bvsge (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   bvsle n b a.
-Opaque bvsge.
-
-(* Axiom intToBv : forall (n : Nat), Integer -> bitvector n. *)
-
-(* Axiom bvToInt : forall (n : Nat), bitvector n -> Integer. *)
