@@ -331,6 +331,7 @@ Definition sign {n : nat} (a : bitvector n) : Bool :=
 Definition bvslt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=
   let c := bvSub n a b
    in (sign a && ~~ sign b) || (sign a && sign c) || (~~ sign b && sign c).
+      (* ^ equivalent to: boolEq (bvSBorrow s a b) (sign (bvSub n a b))  *)
 Global Opaque bvslt.
 
 Definition bvsgt (n : nat) (a : bitvector n) (b : bitvector n) : Bool :=

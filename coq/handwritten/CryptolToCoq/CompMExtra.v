@@ -142,23 +142,19 @@ Qed.
  *** Automation for proving refinement
  ***)
 
-Create HintDb refinesM_letRecM.
+Create HintDb refinesM.
 
-Hint Extern 999 (_ |= _) => shelve : refinesM_letRecM.
+Hint Extern 999 (_ |= _) => shelve : refinesM.
 
-Hint Resolve refinesM_letRecM_Nil_l : refinesM_letRecM.
+Hint Resolve refinesM_letRecM_Nil_l : refinesM.
 (* Hint Extern 1 (@letRecM LRT_Nil _ _ _ |= @letRecM LRT_Nil _ _ _) => *)
-(*   apply refinesM_letRecM0 : refinesM_letRecM. *)
+(*   apply refinesM_letRecM0 : refinesM. *)
 
 Hint Extern 1 (@letRecM ?lrts _ _ _ |= @letRecM ?lrts _ (lrtLambda (fun _ => _)) _) =>
   (* idtac "prove_refinement: refinesM_letRecM_const_r"; *)
   apply refinesM_letRecM_const_r; try apply ProperLRTFun_any;
   try (apply refinesFunTuple_multiFixM; unfold refinesFunTuple; split_prod_goal);
-  unfold lrtApply, lrtLambda; unfold_projs : refinesM_letRecM.
-
-Create HintDb refinesM.
-
-Hint Extern 999 (_ |= _) => shelve : refinesM.
+  unfold lrtApply, lrtLambda; unfold_projs : refinesM.
 
 (*
 Hint Resolve refinesM_either_l : refinesM.
@@ -240,7 +236,7 @@ Hint Extern 1 ((if _ then _ else _) |= _) =>
   (* idtac "prove_refinement: refinesM_if_l"; *)
   apply refinesM_if_l;
     let e := fresh "e_if" in
-    (intro e; (* let p := type of e in idtac p; time "bv rewrite (if_l)" *)
+    (intro e; compute_bv_funs in e; (* let p := type of e in idtac p; time "bv rewrite (if_l)" *)
               (autorewrite with SAWCoreBitvectors in e);
               destruct_prods_sums in e;
      try discriminate e; try rewrite e) : refinesM.
@@ -248,7 +244,7 @@ Hint Extern 1 (_ |= (if _ then _ else _)) =>
   (* idtac "prove_refinement: refinesM_if_r"; *)
   apply refinesM_if_r;
     let e := fresh "e_if" in
-    (intro e; (* let p := type of e in idtac p; time "bv rewrite (if_r)" *)
+    (intro e; compute_bv_funs in e; (* let p := type of e in idtac p; time "bv rewrite (if_r)" *)
               (autorewrite with SAWCoreBitvectors in e);
               destruct_prods_sums in e;
      try discriminate e; try rewrite e) : refinesM.
@@ -261,13 +257,13 @@ Hint Extern 1 (assertM _ >> _ |= _) =>
   (* idtac "prove_refinement: refinesM_assertM_l"; *)
   apply refinesM_bindM_assertM_l;
     let e := fresh "e_assert" in
-     (intro e; autorewrite with SAWCoreBitvectors in e;
+     (intro e; compute_bv_funs in e; autorewrite with SAWCoreBitvectors in e;
       destruct_prods_sums in e): refinesM.
 Hint Extern 1 (_ |= assumingM _ _) =>
   (* idtac "prove_refinement: refinesM_assumingM_r"; *)
   apply refinesM_assumingM_r;
     let e := fresh "e_assuming" in
-     (intro e; autorewrite with SAWCoreBitvectors in e;
+     (intro e; compute_bv_funs in e; autorewrite with SAWCoreBitvectors in e;
       destruct_prods_sums in e) : refinesM.
 Hint Extern 2 (_ |= assertM _ >> _) =>
   (* idtac "prove_refinement: refinesM_assertM_r"; *)
@@ -300,15 +296,13 @@ Hint Extern 1 (_ |= (errorM _ >>= _))  => rewrite errorM_bindM : refinesM.
 Hint Extern 1 (((_ >>= _) >>= _) |= _) => rewrite bindM_bindM : refinesM.
 Hint Extern 1 (_ |= ((_ >>= _) >>= _)) => rewrite bindM_bindM : refinesM.
 
+Create HintDb refinement_proofs.
+Hint Extern 1 (_ _ >>= _ |= _) =>
+  progress (try (rewrite_strat (outermost (hints refinement_proofs)))) : refinesM.
 
 (***
  *** Rewriting rules
  ***)
-
-(* FIXME I find that Coq often gets stuck trying to rewrite these next few lemmas too early,
-   so for now I'm putting them in their own hint database. This is a messy solution, so it
-   should almost certainly be resolved in some other way later on. *)
-Create HintDb refinesM_hard.
 
 Lemma existT_eta A (B:A -> Type) (s: {a:A & B a}) :
   existT B (projT1 s) (projT2 s) = s.
@@ -321,7 +315,7 @@ Proof.
   destruct s; destruct u; reflexivity.
 Qed.
 
-Hint Rewrite existT_eta existT_eta_unit : refinesM_hard.
+Hint Rewrite existT_eta existT_eta_unit : refinesM.
 
 (*
 Lemma function_eta A B (f:A -> B) : pointwise_relation A eq (fun x => f x) f.
@@ -441,11 +435,8 @@ Hint Extern 5 (@refinesFun (LRT_Fun _ _) _ _) =>
  *** Top-level tactics to put it all together
  ***)
 
-(* Automatically prove refinements of the form `P |= Q`, where P,Q do not
-   contain any calls to `letRecM`. *)
 Ltac prove_refinement_core :=
-  unshelve (typeclasses eauto with refinesM);
-  try (unshelve (rewrite_strat (bottomup (hints refinesM_hard))));
+  unshelve (typeclasses eauto with refinesM refinesFun);
   try (unshelve (rewrite_strat (bottomup (hints refinesM))));
   unfold_projs in *; split_prod_goal;
   try reflexivity || contradiction.
@@ -455,8 +446,6 @@ Ltac prove_refinement_core :=
 Ltac prove_refinement :=
   (* idtac "prove_refinement: start"; *)
   unfold_projs; compute_bv_funs;
-  unshelve (typeclasses eauto with refinesM_letRecM refinesFun);
-  try (unshelve (rewrite_strat (bottomup (hints refinesM))));
   prove_refinement_core.
 
 (* After a call to `prove_refinement`, give user input as to whether to continue

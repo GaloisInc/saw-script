@@ -16,37 +16,71 @@ Create HintDb SAWCoreBitvectors.
 
 (* Computing opaque bitvector functions *)
 
-Ltac compute_bv_rel f w a b :=
-  let e := eval vm_compute in (f w (intToBv w a) (intToBv w b)) in
-  replace (f w (intToBv w a) (intToBv w b)) with e by reflexivity.
+Ltac compute_bv_binrel_in_goal H f w1 w2 a b :=
+  let e := eval vm_compute in (f w1 (intToBv w2 a) (intToBv w2 b)) in
+  replace (f w1 (intToBv w2 a) (intToBv w2 b)) with e by reflexivity.
+Ltac compute_bv_binrel_in H f w1 w2 a b :=
+  let e := eval vm_compute in (f w1 (intToBv w2 a) (intToBv w2 b)) in
+  replace (f w1 (intToBv w2 a) (intToBv w2 b)) with e in H by reflexivity.
 
-Ltac compute_bv_binop f w a b :=
-  let e := eval vm_compute in (sbvToInt w (f w (intToBv w a) (intToBv w b))) in
-  try (replace (f w (intToBv w a) (intToBv w b)) with (intToBv w e) by reflexivity).
+Ltac compute_bv_binop_in_goal H f w1 w2 w3 a b :=
+  let e := eval vm_compute in (sbvToInt w2 (f w1 (intToBv w2 a) (intToBv w2 b))) in
+  try (replace (f w1 (intToBv w2 a) (intToBv w2 b)) with (intToBv w2 e) by reflexivity).
+Ltac compute_bv_binop_in H f w1 w2 a b :=
+  let e := eval vm_compute in (sbvToInt w2 (f w1 (intToBv w2 a) (intToBv w2 b))) in
+  try (replace (f w1 (intToBv w2 a) (intToBv w2 b)) with (intToBv w2 e) in H by reflexivity).
 
-Ltac compute_bv_unop f w a :=
-  let e := eval vm_compute in (sbvToInt w (f w (intToBv w a))) in
-  try (replace (f w (intToBv w a)) with (intToBv w e) by reflexivity).
+Ltac compute_bv_unrel_in_goal H f w1 w2 a :=
+  let e := eval vm_compute in (f w1 (intToBv w2 a)) in
+  try (replace (f w1 (intToBv w2 a)) with e by reflexivity).
+Ltac compute_bv_unrel_in H f w1 w2 a :=
+  let e := eval vm_compute in (f w1 (intToBv w2 a)) in
+  try (replace (f w1 (intToBv w2 a)) with e in H by reflexivity).
 
-Ltac compute_bv_funs :=
-  unfold bvultWithProof, bvuleWithProof, bvsge, bvsgt, bvuge, bvugt;
-  repeat match goal with
-         | |- context [?f ?w (intToBv ?w ?a) (intToBv ?w ?b)] =>
-           match f with
-           | bvsle => compute_bv_rel bvsle w a b
-           | bvslt => compute_bv_rel bvslt w a b
-           | bvule => compute_bv_rel bvule w a b
-           | bvult => compute_bv_rel bvult w a b
-           | bvEq  => compute_bv_rel bvEq w a b
-           | bvAdd => compute_bv_binop bvAdd w a b
-           | bvSub => compute_bv_binop bvSub w a b
-           | bvMul => compute_bv_binop bvMul w a b
-           end
-         | |- context [?f ?w (intToBv ?w ?a)] =>
-           match f with
-           | bvNeg => compute_bv_unop bvNeg w a
-           end
-         end.
+Ltac compute_bv_unop_in_goal H f w1 w2 a :=
+  let e := eval vm_compute in (sbvToInt w2 (f w1 (intToBv w2 a))) in
+  try (replace (f w1 (intToBv w2 a)) with (intToBv w2 e) by reflexivity).
+Ltac compute_bv_unop_in H f w1 w2 a :=
+  let e := eval vm_compute in (sbvToInt w2 (f w1 (intToBv w2 a))) in
+  try (replace (f w1 (intToBv w2 a)) with (intToBv w2 e) in H by reflexivity).
+
+Ltac compute_bv_funs_tac H t compute_bv_binrel compute_bv_binop
+                             compute_bv_unrel compute_bv_unop :=
+  match t with
+  | context [?f ?w1 (intToBv ?w2 ?a) (intToBv ?w2 ?b)] =>
+    match f with
+    | bvsle => compute_bv_binrel H bvsle w1 w2 a b
+    | bvslt => compute_bv_binrel H bvslt w1 w2 a b
+    | bvule => compute_bv_binrel H bvule w1 w2 a b
+    | bvult => compute_bv_binrel H bvult w1 w2 a b
+    | bvEq  => compute_bv_binrel H bvEq w1 w2 a b
+    | bvAdd => compute_bv_binop H bvAdd w1 w2 a b
+    | bvSub => compute_bv_binop H bvSub w1 w2 a b
+    | bvMul => compute_bv_binop H bvMul w1 w2 a b
+    end
+  | context [?f ?w1 (intToBv ?w2 ?a)] =>
+    match f with
+    | msb   => compute_bv_unrel H msb w1 w2 a
+    | bvNeg => compute_bv_unop H bvNeg w1 w2 a
+    end
+  end.
+
+Ltac unfold_bv_funs := unfold bvultWithProof, bvuleWithProof,
+                              bvsge, bvsgt, bvuge, bvugt, bvSCarry, bvSBorrow,
+                              xor, xorb.
+
+Tactic Notation "compute_bv_funs" :=
+  unfold_bv_funs; repeat match goal with
+                         | |- ?t => let H := fresh "H" in
+                                    try (compute_bv_funs_tac H t compute_bv_binrel_in_goal compute_bv_binop_in_goal compute_bv_unrel_in_goal compute_bv_unop_in_goal)
+                         end.
+
+Tactic Notation "compute_bv_funs" "in" ident(H) :=
+  unfold_bv_funs; repeat match goal with
+                  | H': ?t |- _ => match H' with
+                                   | H => try (compute_bv_funs_tac H t compute_bv_binrel_in compute_bv_binop_in compute_bv_unrel_in compute_bv_unop_in)
+                                   end
+                  end.
 
 
 (** Bitvector maximum and minimum values **)
@@ -173,6 +207,19 @@ Lemma bvAdd_comm w a b : bvAdd w a b = bvAdd w b a. Admitted.
 Lemma bvAdd_assoc w a b c : bvAdd w (bvAdd w a b) c = bvAdd w a (bvAdd w b c). Admitted.
 
 
+(** Lemmas about subtraction, negation, and sign bits **)
+
+Lemma bvSub_zero_bvNeg w a : bvSub w (intToBv w 0) a = bvNeg w a.
+Admitted.
+
+Hint Rewrite bvSub_zero_bvNeg : SAWCoreBitvectors.
+
+Lemma bvNeg_msb w a : msb w (bvNeg (Succ w) a) = not (msb w a).
+Admitted.
+
+Hint Rewrite bvNeg_msb : SAWCoreBitvectors.
+
+
 (** Other rewriting hints not directly imvolving bitvectors **)
 
 Lemma and_bool_eq_true_lemma (b c : bool) : and b c = true <-> (b = true) /\ (c = true).
@@ -222,3 +269,10 @@ Hint Rewrite not_bool_eq_true_lemma not_bool_eq_false_lemma : SAWCoreBitvectors.
 (* Proof. split; auto. Qed. *)
 
 (* Hint Rewrite sym_bool_true_eq_lemma sym_bool_false_eq_lemma : SAWCoreBitvectors. *)
+
+Lemma bool_eq_if_true (b : bool) : (if b then true else false) = true <-> b = true.
+Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
+Lemma bool_eq_if_false (b : bool) : (if b then true else false) = false <-> b = false.
+Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
+
+Hint Rewrite bool_eq_if_true bool_eq_if_false : SAWCoreBitvectors.

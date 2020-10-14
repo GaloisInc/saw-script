@@ -651,6 +651,9 @@ Definition bvAddWithCarry : forall (n : ((@SAWCoreScaffolding.Nat))), (((@bitvec
 
 (* Prelude.bvSub was skipped *)
 
+Definition bvSBorrow : forall (n : ((@SAWCoreScaffolding.Nat))), (((@bitvector) (((@SAWCoreScaffolding.Succ) (n))))) -> (((@bitvector) (((@SAWCoreScaffolding.Succ) (n))))) -> ((@SAWCoreScaffolding.Bool)) :=
+  (fun (n : ((@SAWCoreScaffolding.Nat))) (x : ((@SAWCoreVectorsAsCoqVectors.Vec) (((@SAWCoreScaffolding.Succ) (n))) (((@SAWCoreScaffolding.Bool))))) (y : ((@SAWCoreVectorsAsCoqVectors.Vec) (((@SAWCoreScaffolding.Succ) (n))) (((@SAWCoreScaffolding.Bool))))) => ((@SAWCoreScaffolding.and) (((@SAWCoreScaffolding.xor) (((@msb) (n) (x))) (((@msb) (n) (y))))) (((@SAWCoreScaffolding.xor) (((@msb) (n) (x))) (((@msb) (n) (((@SAWCoreVectorsAsCoqVectors.bvSub) (((@SAWCoreScaffolding.Succ) (n))) (x) (y))))))))).
+
 (* Prelude.bvMul was skipped *)
 
 (* Prelude.bvLg2 was skipped *)
