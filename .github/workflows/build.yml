@@ -53,11 +53,17 @@ jobs:
           git submodule update --init
           git -C deps/abcBridge submodule update --init
 
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - shell: bash
+        run: pip3 install virtualenv
+
       - uses: actions/setup-haskell@v1
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
-          enable-stack: true
 
       - uses: actions/cache@v2
         name: Cache cabal store
@@ -82,6 +88,16 @@ jobs:
           CVC4_VERSION: "4.1.8"
           YICES_VERSION: "2.6.2"
 
+      - shell: bash
+        run: .github/ci.sh setup_dist_bins
+
+      - shell: bash
+        # TODO: change this once we can get these tests working in CI
+        continue-on-error: true
+        run: cabal v2-test saw-remote-api
+        env:
+          SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
+
       - uses: actions/setup-java@v1
         with:
           java-version: "8"
@@ -93,8 +109,6 @@ jobs:
         continue-on-error: ${{ matrix.continue-on-error }}
         name: Integration Tests
         run: |
-          mkdir -p ~/.stack
-          echo "system-ghc: true" >> ~/.stack/config.yaml
           .github/ci.sh test_dist
 
       - if: >-
