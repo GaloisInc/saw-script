@@ -52,7 +52,8 @@ proveWhat4_sym solver un sc hashConsing t =
 
 
 proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
-  proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices ::
+  proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices,
+  proveWhat4_abc ::
   [String]      {- ^ Uninterpreted functions -} ->
   SharedContext {- ^ Context for working with terms -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
@@ -65,6 +66,7 @@ proveWhat4_cvc4      = proveWhat4_sym cvc4Adapter
 proveWhat4_dreal     = proveWhat4_sym drealAdapter
 proveWhat4_stp       = proveWhat4_sym stpAdapter
 proveWhat4_yices     = proveWhat4_sym yicesAdapter
+proveWhat4_abc       = proveWhat4_sym externalABCAdapter
 
 
 

@@ -1280,6 +1280,11 @@ primitives = Map.fromList
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
+  , prim "w4_offline_smtlib2"  "String -> ProofScript SatResult"
+    (pureVal offline_smtlib2)
+    Current
+    [ "Write the current goal to the given file in SMT-Lib2 format." ]
+
   , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript SatResult"
     (pureVal offline_unint_smtlib2)
     Current
@@ -1324,6 +1329,11 @@ primitives = Map.fromList
     (pureVal w4_z3)
     Current
     [ "Prove the current goal using What4 (Z3 backend)." ]
+
+  , prim "w4_abc"              "ProofScript SatResult"
+    (pureVal w4_abc)
+    Current
+    [ "Prove the current goal using What4 (External ABC backend)." ]
 
   , prim "w4_unint_z3"         "[String] -> ProofScript SatResult"
     (pureVal w4_unint_z3)

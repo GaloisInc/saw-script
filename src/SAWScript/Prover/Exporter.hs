@@ -15,9 +15,11 @@ module SAWScript.Prover.Exporter
   , writeCNF
   , write_cnf
   , writeSMTLib2
+  , writeSMTLib2What4
   , write_smtlib2
   , write_smtlib2_w4
   , writeUnintSMTLib2
+  , writeUnintSMTLib2What4
   , writeCoqCryptolPrimitivesForSAWCore
   , writeCoqCryptolModule
   , writeCoqSAWCorePrelude
@@ -64,7 +66,6 @@ import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
-import qualified Verifier.SAW.Simulator.What4.SWord as W4Sim
 
 import qualified Verifier.SAW.UntypedAST as Un
 
@@ -77,10 +78,10 @@ import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
-import qualified What4.Interface as W4
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.VerilogWriter (exprVerilog, eqVerilog)
 import What4.Solver.Adapter
+import qualified What4.SWord as W4Sim
 
 proveWithExporter ::
   (SharedContext -> FilePath -> Prop -> IO ()) ->
@@ -192,7 +193,13 @@ write_cnf sc f (TypedTerm schema t) = do
 -- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
 -- assumed to have universally quantified variables, it will be negated.
 writeSMTLib2 :: SharedContext -> FilePath -> Prop -> IO ()
-writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
+writeSMTLib2 sc f p = writeUnintSMTLib2 [] sc f p
+
+-- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
+-- assumed to have universally quantified variables, it will be negated.
+-- This version uses What4 instead of SBV.
+writeSMTLib2What4 :: SharedContext -> FilePath -> Prop -> IO ()
+writeSMTLib2What4 sc f p = writeUnintSMTLib2What4 [] sc f p
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
@@ -211,7 +218,8 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 write_smtlib2_w4 :: SharedContext -> FilePath -> TypedTerm -> IO ()
 write_smtlib2_w4 sc f (TypedTerm schema t) = do
   checkBooleanSchema schema
-  writeUnintSMTLib2What4 [] sc f t
+  p <- predicateToProp sc Existential [] t
+  writeUnintSMTLib2What4 [] sc f p
 
 -- | Write a proposition to an SMT-Lib version 2 file, treating some
 -- constants as uninterpreted. Because @Prop@ is assumed to have
@@ -227,8 +235,8 @@ writeUnintSMTLib2 unints sc f p =
 -- constants as uninterpreted. Because @Prop@ is assumed to have
 -- universally quantified variables, it will be negated. This version
 -- uses What4 instead of SBV.
-writeUnintSMTLib2What4 :: [String] -> SharedContext -> FilePath -> Term -> IO ()
-writeUnintSMTLib2What4 unints sc f term =
+writeUnintSMTLib2What4 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
+writeUnintSMTLib2What4 unints sc f (Prop term) =
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
      (_, _, (_,lit0)) <- prepWhat4 sym sc unints term
      withFile f WriteMode $ \h ->
@@ -261,12 +269,6 @@ writeVerilog sc path t = do
       hPutDoc h doc
       hPutStrLn h ""
       hClose h
-
--- TODO: negate goal
-{-
-writeVerilogProp :: SharedContext -> FilePath -> Prop -> IO ()
-writeVerilogProp sc path prop = writeVerilog sc path (unProp prop)
--}
 
 writeCoreProp :: FilePath -> Prop -> IO ()
 writeCoreProp path (Prop t) = writeFile path (scWriteExternal t)

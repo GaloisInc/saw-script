@@ -764,6 +764,9 @@ proveUnintYices = proveUnintSBV SBV.yices
 
 
 --------------------------------------------------
+w4_abc :: ProofScript SV.SatResult
+w4_abc = wrapW4Prover $ Prover.proveWhat4_abc []
+
 w4_boolector :: ProofScript SV.SatResult
 w4_boolector = wrapW4Prover $ Prover.proveWhat4_boolector []
 
@@ -818,6 +821,9 @@ offline_extcore path = proveWithExporter (const Prover.writeCoreProp) path ".ext
 
 offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
 offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2 path ".smt2"
+
+w4_offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
+w4_offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2What4 path ".smt2"
 
 offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript SV.SatResult
 offline_unint_smtlib2 unints path = proveWithExporter (Prover.writeUnintSMTLib2 unints) path ".smt2"
