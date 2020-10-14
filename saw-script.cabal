@@ -19,6 +19,10 @@ custom-setup
     , filepath
     , process
 
+flag builtin-abc
+  description: Link with ABC as a static library
+  default: True
+
 library
   default-language: Haskell2010
   build-depends:
@@ -218,3 +222,9 @@ executable saw
     , saw-script
     , saw-core
     , cryptol-saw-core
+
+  if flag(builtin-abc)
+    cpp-options: -DUSE_BUILTIN_ABC
+    build-depends: abcBridge
+  else
+    build-depends: aig
