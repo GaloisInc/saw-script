@@ -124,8 +124,9 @@ build() {
   cabal v2-update
   echo "allow-newer: all" >> cabal.project.local
   if $IS_WIN; then
-    echo "constraints: saw -builtin-abc, saw-remote-api -builtin-abc, jvm-verifier -builtin-abc, cryptol-saw-core -build-css" >> cabal.project.local
-    pkgs="saw saw-remote-api -f-builtin-abc"
+    echo "flags: -builtin-abc" >> cabal.project.local
+    echo "constraints: jvm-verifier -builtin-abc, cryptol-saw-core -build-css" >> cabal.project.local
+    pkgs="saw saw-remote-api"
   else
     pkgs="jss saw saw-remote-api"
   fi
