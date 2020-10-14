@@ -142,24 +142,23 @@ Qed.
  *** Automation for proving refinement
  ***)
 
-Create HintDb refinesM.
+Create HintDb refinesM_letRecM.
 
-(*
-Hint Extern 2 (refinesFun _ _) => (apply refinesFun_multiFixM_fst;
-                                     simpl; intros) : refinesFun.
-*)
+Hint Extern 999 (_ |= _) => shelve : refinesM_letRecM.
 
-Hint Extern 999 (_ |= _) => shelve : refinesM.
-
-Hint Resolve refinesM_letRecM_Nil_l : refinesM.
+Hint Resolve refinesM_letRecM_Nil_l : refinesM_letRecM.
 (* Hint Extern 1 (@letRecM LRT_Nil _ _ _ |= @letRecM LRT_Nil _ _ _) => *)
-(*   apply refinesM_letRecM0 : refinesM. *)
+(*   apply refinesM_letRecM0 : refinesM_letRecM. *)
 
 Hint Extern 1 (@letRecM ?lrts _ _ _ |= @letRecM ?lrts _ (lrtLambda (fun _ => _)) _) =>
   (* idtac "prove_refinement: refinesM_letRecM_const_r"; *)
   apply refinesM_letRecM_const_r; try apply ProperLRTFun_any;
   try (apply refinesFunTuple_multiFixM; unfold refinesFunTuple; split_prod_goal);
-  unfold lrtApply, lrtLambda; unfold_projs : refinesM.
+  unfold lrtApply, lrtLambda; unfold_projs : refinesM_letRecM.
+
+Create HintDb refinesM.
+
+Hint Extern 999 (_ |= _) => shelve : refinesM.
 
 (*
 Hint Resolve refinesM_either_l : refinesM.
@@ -306,6 +305,11 @@ Hint Extern 1 (_ |= ((_ >>= _) >>= _)) => rewrite bindM_bindM : refinesM.
  *** Rewriting rules
  ***)
 
+(* FIXME I find that Coq often gets stuck trying to rewrite these next few lemmas too early,
+   so for now I'm putting them in their own hint database. This is a messy solution, so it
+   should almost certainly be resolved in some other way later on. *)
+Create HintDb refinesM_hard.
+
 Lemma existT_eta A (B:A -> Type) (s: {a:A & B a}) :
   existT B (projT1 s) (projT2 s) = s.
 Proof.
@@ -317,7 +321,7 @@ Proof.
   destruct s; destruct u; reflexivity.
 Qed.
 
-Hint Rewrite existT_eta existT_eta_unit : refinesM.
+Hint Rewrite existT_eta existT_eta_unit : refinesM_hard.
 
 (*
 Lemma function_eta A B (f:A -> B) : pointwise_relation A eq (fun x => f x) f.
@@ -437,18 +441,26 @@ Hint Extern 5 (@refinesFun (LRT_Fun _ _) _ _) =>
  *** Top-level tactics to put it all together
  ***)
 
+(* Automatically prove refinements of the form `P |= Q`, where P,Q do not
+   contain any calls to `letRecM`. *)
 Ltac prove_refinement_core :=
-  unshelve (typeclasses eauto with refinesM refinesFun);
+  unshelve (typeclasses eauto with refinesM);
+  try (unshelve (rewrite_strat (bottomup (hints refinesM_hard))));
   try (unshelve (rewrite_strat (bottomup (hints refinesM))));
   unfold_projs in *; split_prod_goal;
   try reflexivity || contradiction.
 
+(* Automatically prove refinements of the form `refinesFun F G` or of the
+   form` P |= Q`, where P,Q may contain matching calls to `letRecM`. *)
 Ltac prove_refinement :=
   (* idtac "prove_refinement: start"; *)
   unfold_projs; compute_bv_funs;
+  unshelve (typeclasses eauto with refinesM_letRecM refinesFun);
+  try (unshelve (rewrite_strat (bottomup (hints refinesM))));
   prove_refinement_core.
 
-(* Giving user input as to which disjunctive branch to continue proof automation in *)
+(* After a call to `prove_refinement`, give user input as to whether to continue
+   proof automation in the left or right branch of an `orM`/`andM`. *)
 Ltac continue_prove_refinement_left :=
   match goal with
   | |- _ |= orM _ _ => apply refinesM_orM_r; left; prove_refinement_core
@@ -460,6 +472,12 @@ Ltac continue_prove_refinement_right :=
   | |- andM _ _ |= _ => apply refinesM_andM_l; right; prove_refinement_core
   end.
 
+(* For refinements of the form `refinesFun F G` or `P |= Q` where a subexpression
+   on the left has a call to `letRecM` which does not match one on the right,
+   this tactic tries to prove the refinement by transitivity, where the new
+   middle expression has a `letRecM` which matches the one on the left as per
+   `refinesM_letRecM_match_r`. After giving values for each of the needed
+   functions, call `prove_refinement` to continue automation. *)
 Ltac prove_refinement_match_letRecM_l :=
   unshelve (typeclasses eauto with refinesM refinesFun);
   unshelve (eapply refinesM_letRecM_match_r);

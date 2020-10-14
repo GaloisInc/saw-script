@@ -605,7 +605,7 @@ Qed.
 Fixpoint refinesFun {lrt} : relation (lrtToType lrt) :=
   match lrt return relation (lrtToType lrt) with
   | LRT_Ret B => refinesM
-  | LRT_Fun A lrtF => fun f1 f2 => forall a, refinesFun (f1 a) (f2 a)
+  | LRT_Fun A lrtF => forall_relation (fun a => @refinesFun (lrtF a))
   end.
 
 Instance PreOrder_refinesFun lrt : PreOrder (@refinesFun lrt).
@@ -616,6 +616,10 @@ Proof.
     { intros f a. reflexivity. }
     { intros f1 f2 f3 H1 H2 a. transitivity (f2 a); [ apply H1 | apply H2 ]. }
 Qed.
+
+Instance subrelation_forall_const_pointwise A B (R : relation B)
+  : subrelation (forall_relation (fun _ => R)) (pointwise_relation A R).
+Proof. vm_compute; auto. Qed.
 
 (* A convenient specialization of refinesFun *)
 Definition refinesFun1 {A} {B:A -> Type} : (forall a, CompM (B a)) -> (forall a, CompM (B a)) -> Prop :=

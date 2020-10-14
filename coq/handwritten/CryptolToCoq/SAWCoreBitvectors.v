@@ -131,6 +131,9 @@ Admitted.
 Definition isBvult_n_zero w a : ~ isBvult w a (intToBv w 0).
 Admitted.
 
+Definition isBvsle_antisymm w a b : isBvsle w a b -> isBvsle w b a -> a = b.
+Admitted.
+
 
 (** Lemmas about bitvector equality **)
 
