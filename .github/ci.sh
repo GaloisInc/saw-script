@@ -111,11 +111,11 @@ install_yices() {
 
 install_yasm() {
   is_exe "$BIN" "yasm" && return
-  if [[ "$RUNNER_OS" = "Linux" ]]; then
-    sudo apt-get update -q && sudo apt-get install -y yasm
-  else
-    brew install yasm
-  fi
+  case "$RUNNER_OS" in
+    Linux) sudo apt-get update -q && sudo apt-get install -y yasm ;;
+    macOS) brew install yasm ;;
+    Windows) choco install yasm ;;
+  esac
 }
 
 build() {
