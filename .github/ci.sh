@@ -119,6 +119,10 @@ build() {
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   echo "allow-newer: all" >> cabal.project.local
+  if $IS_WIN; then
+    echo "constraints: saw -builtin-abc, saw-remote-api -builtin-abc" >> cabal.project.local
+  fi
+  echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
   if ! retry cabal v2-build "$@" jss saw saw-remote-api && [[ "$RUNNER_OS" == "macOS" ]]; then
     echo "Working around a dylib issue on macos by removing the cache and trying again"
