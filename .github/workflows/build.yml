@@ -46,9 +46,6 @@ jobs:
           - os: windows-latest
             ghc: "8.6.5"
             continue-on-error: true
-          - os: windows-latest
-            ghc: "8.8.4"
-            continue-on-error: true
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
