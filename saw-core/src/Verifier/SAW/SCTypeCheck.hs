@@ -155,7 +155,7 @@ data TCError
   | NoSuchCtor Ident
   | NotFullyAppliedRec Ident
   | BadParamsOrArgsLength Bool Ident [Term] [Term]
-  | BadConstType String Term Term
+  | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
   | DeclError String String
   | ErrorPos Pos TCError

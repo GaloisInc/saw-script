@@ -65,7 +65,7 @@ evalSharedTerm m addlPrims t =
            extcns (const Nothing)
     Sim.evalSharedTerm cfg t
   where
-    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ ecName ec
+    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
 
 ------------------------------------------------------------
 -- Values
@@ -387,7 +387,7 @@ bitBlastBasic :: ModuleMap
               -> RValue
 bitBlastBasic m addlPrims t = runIdentity $ do
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-         (\ec -> error ("RME: unsupported ExtCns: " ++ ecName ec))
+         (\ec -> error ("RME: unsupported ExtCns: " ++ show (ecName ec)))
          (const Nothing)
   Sim.evalSharedTerm cfg t
 

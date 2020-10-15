@@ -30,6 +30,7 @@ import Control.Monad ((<=<))
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
@@ -489,7 +490,7 @@ bitBlastTerm be sc addlPrims t = do
   modmap <- scGetModuleMap sc
   bval <- bitBlastBasic be modmap addlPrims ecMap t
   bval' <- applyAll bval argVars
-  let names =  map fst args ++ map ecName ecs
+  let names =  map fst args ++ map (Text.unpack . toShortName . ecName) ecs
       shapes = argShapes ++ ecShapes
   return (bval', zip names shapes)
 

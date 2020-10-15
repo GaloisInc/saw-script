@@ -23,15 +23,22 @@ module Verifier.SAW.Term.Functor
   ( -- * Module Names
     ModuleName, mkModuleName
   , preludeName
+  , moduleNameText
+  , moduleNamePieces
     -- * Identifiers
   , Ident(identModule, identBaseName), identName, mkIdent
   , parseIdent
   , isIdent
+  , identText
+  , identPieces
     -- * Data types and definitions
   , DeBruijnIndex
   , FieldName
   , ExtCns(..)
   , VarIndex
+  , NameInfo(..)
+  , toShortName
+  , toAbsoluteName
     -- * Terms and associated operations
   , TermIndex
   , Term(..)
@@ -60,6 +67,7 @@ import Data.Foldable (Foldable)
 import qualified Data.Foldable as Foldable (all, and, foldl')
 import Data.Hashable
 import Data.List (intercalate)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -71,6 +79,7 @@ import Data.Word
 import GHC.Generics (Generic)
 import GHC.Exts (IsString(..))
 import Numeric.Natural
+import Text.URI
 
 import qualified Language.Haskell.TH.Syntax as TH
 import Instances.TH.Lift () -- for instance TH.Lift Text
@@ -90,13 +99,20 @@ instance Hashable a => Hashable (Vector a) where
 
 -- Module Names ----------------------------------------------------------------
 
-newtype ModuleName = ModuleName Text -- [String]
+newtype ModuleName = ModuleName Text
   deriving (Eq, Ord, Generic, TH.Lift)
 
 instance Hashable ModuleName -- automatically derived
 
 instance Show ModuleName where
   show (ModuleName s) = Text.unpack s
+
+
+moduleNameText :: ModuleName -> Text
+moduleNameText (ModuleName x) = x
+
+moduleNamePieces :: ModuleName -> [Text]
+moduleNamePieces (ModuleName x) = Text.splitOn (Text.pack ".") x
 
 -- | Create a module name given a list of strings with the top-most
 -- module name given first.
@@ -122,6 +138,15 @@ instance Hashable Ident -- automatically derived
 
 instance Show Ident where
   show (Ident m s) = shows m ('.' : Text.unpack s)
+
+identText :: Ident -> Text
+identText i = moduleNameText (identModule i) <> Text.pack "." <> identBaseName i
+
+identPieces :: Ident -> NonEmpty Text
+identPieces i =
+  case moduleNamePieces (identModule i) of
+    [] -> identBaseName i :| []
+    (x:xs) -> x :| (xs ++ [identBaseName i])
 
 identName :: Ident -> String
 identName = Text.unpack . identBaseName
@@ -207,15 +232,37 @@ maxSort ss = maximum ss
 
 type VarIndex = Word64
 
+-- | Descriptions of the origins of names that may be in scope
+data NameInfo
+  = -- | This name arises from an exported declaration from a module
+    ModuleIdentifier Ident
+
+  | -- | This name was imported from some other programming language/scope
+    ImportedName
+      URI      -- ^ An absolutely-qualified name, which is required to be unique
+      [Text]   -- ^ A collection of aliases for this name.  Sorter or "less-qualified"
+               --   aliases should be nearer the front of the list
+
+ deriving (Eq,Ord,Show)
+
 -- | An external constant with a name.
 -- Names are not necessarily unique, but the var index should be.
 data ExtCns e =
   EC
   { ecVarIndex :: !VarIndex
-  , ecName :: !String
+  , ecName :: !NameInfo
   , ecType :: !e
   }
   deriving (Show, Functor, Foldable, Traversable)
+
+toShortName :: NameInfo -> Text
+toShortName (ModuleIdentifier i) = identBaseName i
+toShortName (ImportedName uri []) = render uri
+toShortName (ImportedName _ (x:_)) = x
+
+toAbsoluteName :: NameInfo -> Text
+toAbsoluteName (ModuleIdentifier i) = identText i
+toAbsoluteName (ImportedName uri _) = render uri
 
 instance Eq (ExtCns e) where
   x == y = ecVarIndex x == ecVarIndex y
@@ -436,15 +483,15 @@ instance Net.Pattern Term where
 termToPat :: Term -> Net.Pat
 termToPat t =
     case unwrapTermF t of
-      Constant ec _             -> Net.Atom (Text.pack (ecName ec))
+      Constant ec _             -> Net.Atom (toAbsoluteName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (GlobalDef d)      -> Net.Atom (identBaseName d)
+      FTermF (GlobalDef d)      -> Net.Atom (identText d)
       FTermF (Sort s)           -> Net.Atom (Text.pack ('*' : show s))
-      FTermF (NatLit _)         -> Net.Var --Net.Atom (show n)
+      FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->
-        foldl Net.App (Net.Atom (identBaseName c)) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identText c)) (map termToPat (ps ++ ts))
       FTermF (CtorApp c ps ts)   ->
-        foldl Net.App (Net.Atom (identBaseName c)) (map termToPat (ps ++ ts))
+        foldl Net.App (Net.Atom (identText c)) (map termToPat (ps ++ ts))
       _                         -> Net.Var
 
 unwrapTermF :: Term -> TermF Term

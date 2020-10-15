@@ -31,6 +31,7 @@ library
     cryptol >= 2.3.0,
     data-inttrie >= 0.1.4,
     integer-gmp,
+    modern-uri,
     panic,
     saw-core,
     saw-core-aig,

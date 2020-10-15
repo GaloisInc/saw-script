@@ -21,6 +21,7 @@ import Data.Traversable
 #endif
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Data.List (elemIndex)
 import qualified Data.Vector as V
 import Text.Read (readMaybe)
@@ -79,7 +80,7 @@ scWriteExternal t0 =
         Lambda s t e   -> unwords ["Lam", s, show t, show e]
         Pi s t e       -> unwords ["Pi", s, show t, show e]
         LocalVar i     -> unwords ["Var", show i]
-        Constant ec e  -> unwords ["Constant", show (ecVarIndex ec), ecName ec, show (ecType ec), show e]
+        Constant ec e  -> unwords ["Constant", show (ecVarIndex ec), toShortName (ecName ec), show (ecType ec), show e]
         FTermF ftf     ->
           case ftf of
             GlobalDef ident     -> unwords ["Global", show ident]
@@ -108,7 +109,7 @@ scWriteExternal t0 =
                                             map show (V.toList v))
             StringLit s         -> unwords ["String", show s]
             ExtCns ext          -> unwords ("ExtCns" : writeExtCns ext)
-    writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
+    writeExtCns ec = [show (ecVarIndex ec), show (ecName ec), show (ecType ec)]
 
 -- | During parsing, we maintain two maps used for renumbering: The
 -- first is for the 'Int' values that appear in the external core

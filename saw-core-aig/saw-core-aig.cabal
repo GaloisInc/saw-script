@@ -20,6 +20,7 @@ library
     base == 4.*,
     containers,
     saw-core,
+    text,
     vector
   hs-source-dirs: src
   exposed-modules:

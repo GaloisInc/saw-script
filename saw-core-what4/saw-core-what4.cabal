@@ -25,6 +25,7 @@ library
     what4,
     crucible-saw,
     panic,
+    text,
     transformers,
     vector,
     parameterized-utils >= 1.0.8 && < 2.2,

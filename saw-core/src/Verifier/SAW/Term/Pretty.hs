@@ -29,6 +29,7 @@ module Verifier.SAW.Term.Pretty
   , scTermCount
   , OccurrenceMap
   , shouldMemoizeTerm
+  , ppName
   ) where
 
 import Data.Maybe (isJust)
@@ -421,8 +422,11 @@ ppFlatTermF prec tf =
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecNone) (V.toList args)
     StringLit s -> return $ text (show s)
-    ExtCns cns -> maybeColorM dullred $ text $ ecName cns
+    ExtCns cns -> maybeColorM dullred $ ppName (ecName cns)
 
+ppName :: NameInfo -> Doc
+ppName (ModuleIdentifier i) = ppIdent i
+ppName (ImportedName absName _) = text (show absName)
 
 -- | Pretty-print a non-shared term
 ppTermF :: Prec -> TermF Term -> PPM Doc
@@ -437,7 +441,7 @@ ppTermF prec (Pi x tp body) =
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
 ppTermF _ (LocalVar x) = (text <$> varLookupM x) >>= maybeColorM dullgreen
-ppTermF _ (Constant ec _) = maybeColorM dullblue $ text $ ecName ec
+ppTermF _ (Constant ec _) = maybeColorM dullblue $ ppName (ecName ec)
 
 
 -- | Internal function to recursively pretty-print a term

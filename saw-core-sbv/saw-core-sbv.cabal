@@ -21,6 +21,7 @@ library
     mtl,
     saw-core,
     sbv >= 8.0,
+    text,
     transformers,
     vector
   hs-source-dirs: src
