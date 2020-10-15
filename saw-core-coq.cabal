@@ -24,6 +24,7 @@ library
     lens,
     mtl,
     saw-core,
+    text,
     vector
   hs-source-dirs: src
   exposed-modules:
