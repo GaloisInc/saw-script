@@ -39,7 +39,7 @@ import           Control.Monad.IO.Class (MonadIO(liftIO))
 import qualified Cryptol.TypeCheck.Type as Cryptol (Type)
 import qualified Verifier.SAW.Cryptol as Cryptol (importType, emptyEnv)
 import           Verifier.SAW.TypedTerm (TypedTerm, TypedExtCns(..), typedTermOfExtCns)
-import           Verifier.SAW.SharedTerm (SharedContext, scFreshGlobalVar, ExtCns(..))
+import           Verifier.SAW.SharedTerm (SharedContext, scFreshEC)
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 
@@ -106,8 +106,8 @@ freshTypedExtCns ::
   CrucibleSetupT arch m TypedExtCns
 freshTypedExtCns sc name cty =
   do ty <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv cty
-     i <- liftIO $ scFreshGlobalVar sc
-     let tt = TypedExtCns cty (EC i name ty)
+     ec <- liftIO $ scFreshEC sc name ty
+     let tt = TypedExtCns cty ec
      currentState . MS.csFreshVars %= cons tt
      return tt
 

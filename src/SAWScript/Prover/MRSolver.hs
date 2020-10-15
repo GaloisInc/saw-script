@@ -127,7 +127,7 @@ instance Pretty Type where
   pretty (Type t) = prettyTerm t
 
 instance Pretty FunName where
-  pretty (LocalName (LocalFunName ec)) = text $ ecName ec
+  pretty (LocalName (LocalFunName ec)) = ppName $ ecName ec
   pretty (GlobalName i) = text $ show i
 
 instance Pretty Comp where
@@ -280,7 +280,7 @@ mrProvable bool_prop =
      path_prop <- mrPathCondition <$> get
      bool_prop' <- liftSC2 scImplies path_prop bool_prop
      prop <- liftSC1 scEqTrue bool_prop'
-     (smt_res, _) <- liftSC1 (SBV.proveUnintSBV smt_conf [] timeout) (Prop prop)
+     (smt_res, _) <- liftSC1 (SBV.proveUnintSBV smt_conf mempty timeout) (Prop prop)
      case smt_res of
        Just _ -> return False
        Nothing -> return True
@@ -362,9 +362,9 @@ mkFunVarsForTps (asCtor -> Just ("Prelude.TypesCons", [a, b, tps])) =
   do compM <- liftSC1 scGlobalDef "Prelude.CompM"
      comp_b <- liftSC2 scApply compM b
      tp <- liftSC3 scPi "x" a comp_b
-     var <- liftSC0 scFreshGlobalVar
      rest <- mkFunVarsForTps tps
-     return (LocalFunName (EC var "f" tp) : rest)
+     ec <- liftSC2 scFreshEC "f" tp
+     return (LocalFunName ec : rest)
 mkFunVarsForTps t = throwError (MalformedInOutTypes t)
 
 -- | Normalize a computation to weak head normal form

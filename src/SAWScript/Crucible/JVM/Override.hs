@@ -379,7 +379,8 @@ refreshTerms sc ss =
      OM (termSub %= Map.union extension)
   where
     freshenTerm (TypedExtCns _cty ec) =
-      do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
+      do new <- liftIO $ do i <- scFreshGlobalVar sc
+                            scExtCns sc (EC i (ecName ec) (ecType ec))
          return (ecVarIndex ec, new)
 
 ------------------------------------------------------------------------
