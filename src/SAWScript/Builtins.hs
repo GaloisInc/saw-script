@@ -38,6 +38,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Time.Clock
 import Data.Typeable
+import qualified Data.Text as Text
 import System.Directory
 import qualified System.Environment
 import qualified System.Exit as Exit
@@ -457,7 +458,10 @@ print_goal_depth n =
 printGoalConsts :: ProofScript ()
 printGoalConsts =
   withFirstGoal $ \goal ->
-  do mapM_ (printOutLnTop Info) $ Map.keys (getConstantSet (unProp (goalProp goal)))
+  do mapM_ (printOutLnTop Info) $
+       [ show nm
+       | (_,(nm,_,_)) <- Map.toList (getConstantSet (unProp (goalProp goal)))
+       ]
      return ((), mempty, Just goal)
 
 printGoalSize :: ProofScript ()
@@ -473,7 +477,8 @@ unfoldGoal names =
   withFirstGoal $ \goal ->
   do sc <- getSharedContext
      let Prop trm = goalProp goal
-     trm' <- io $ scUnfoldConstants sc names trm
+     nms <- io $ mapM (\x -> fst <$> scResolveUnambiguous sc (Text.pack x)) names
+     trm' <- io $ scUnfoldConstants sc nms trm
      return ((), mempty, Just (goal { goalProp = Prop trm' }))
 
 simplifyGoal :: Simpset -> ProofScript ()
@@ -958,7 +963,8 @@ rewritePrim ss (TypedTerm schema t) = do
 unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
 unfold_term names (TypedTerm schema t) = do
   sc <- getSharedContext
-  t' <- io $ scUnfoldConstants sc names t
+  nms <- io $ mapM (\x -> fst <$> scResolveUnambiguous sc (Text.pack x)) names
+  t' <- io $ scUnfoldConstants sc nms t
   return (TypedTerm schema t')
 
 beta_reduce_term :: TypedTerm -> TopLevel TypedTerm

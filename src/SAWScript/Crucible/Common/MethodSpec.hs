@@ -149,7 +149,7 @@ ppTypedTerm (TypedTerm tp tm) =
 
 ppTypedExtCns :: TypedExtCns -> PP.Doc
 ppTypedExtCns (TypedExtCns tp ec) =
-  PP.text (ecName ec)
+  ppName (ecName ec)
   PP.<+> PP.text ":" PP.<+>
   PP.text (show (Cryptol.ppPrec 0 tp))
 
