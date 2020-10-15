@@ -5,7 +5,9 @@ packages:
   - deps/jvm-parser/
   - deps/aig/
   - deps/abcBridge/
+  - deps/argo/argo/
   - deps/cryptol/
+  - deps/cryptol/cryptol-remote-api/
   - deps/saw-core/cryptol-saw-core/
   - deps/saw-core/saw-core/
   - deps/saw-core/saw-core-aig/
@@ -51,5 +53,6 @@ extra-deps:
   - bitwise-1.0.0.1
   - constraints-0.11.2
   - libBF-0.5.1
+  - scotty-0.12
 resolver: lts-16.2
 allow-newer: false
