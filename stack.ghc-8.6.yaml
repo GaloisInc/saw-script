@@ -46,7 +46,6 @@ extra-deps:
   - config-schema-1.2.0.0
   - config-value-0.7.0.1
   - simple-get-opt-0.3
-  - QuickCheck-2.14
   - splitmix-0.0.4
   - bv-sized-1.0.1
   - bitwise-1.0.0.1
