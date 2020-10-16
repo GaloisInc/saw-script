@@ -105,11 +105,11 @@ upd _ _ (Vec t v) i e = Vec t (v V.// [(i, e)])
 ----------------------------------------
 -- Bitvector operations
 
--- bvNat :: (x :: Nat) -> Nat -> bitvector x;
+-- bvNat : (n : Nat) -> Nat -> Vec n Bool;
 bvNat :: Int -> Integer -> BitVector
 bvNat w x = bv w x
 
--- bvAdd :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+-- bvAdd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 bvAdd, bvSub, bvMul :: Natural -> BitVector -> BitVector -> BitVector
 bvAdd _ (BV w x) (BV _ y) = bv w (x + y)
 bvSub _ (BV w x) (BV _ y) = bv w (x - y)
@@ -180,11 +180,11 @@ append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (shiftL x n .|. y)
 -- little-endian version:
 -- append_bv _ _ _ (BV m x) (BV n y) = BV (m + n) (x .|. shiftL y m)
 
--- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
+-- bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 bvToNat :: Int -> BitVector -> Integer
 bvToNat _ (BV _ x) = x
 
--- bvAddWithCarry :: (x :: Nat) -> bitvector x -> bitvector x -> #(Bool, bitvector x);
+-- bvAddWithCarry : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool * Vec n Bool;
 bvAddWithCarry :: Int -> BitVector -> BitVector -> (Bool, BitVector)
 bvAddWithCarry _ (BV w x) (BV _ y) = (testBit z w, bv w z)
     where z = x + y
@@ -218,15 +218,15 @@ bvShr _ (BV w x) i = bv w (x `shiftR` i)
 bvSShr :: Int -> BitVector -> Int -> BitVector
 bvSShr _ x i = bv (width x) (signed x `shiftR` i)
 
--- bvTrunc :: (x y :: Nat) -> bitvector (addNat y x) -> bitvector y;
+-- bvTrunc : (m n : Nat) -> Vec (addNat m n) Bool -> Vec n Bool;
 bvTrunc :: Int -> Int -> BitVector -> BitVector
 bvTrunc _ n (BV _ x) = bv n x
 
--- bvUExt :: (x y :: Nat) -> bitvector y -> bitvector (addNat y x);
+-- bvUExt : (m n : Nat) -> Vec n Bool -> Vec (addNat m n) Bool;
 bvUExt :: Int -> Int -> BitVector -> BitVector
 bvUExt m n x = BV (m + n) (unsigned x)
 
--- bvSExt :: (x y :: Nat) -> bitvector (Succ y) -> bitvector (addNat (Succ y) x);
+-- bvSExt : (m n : Nat) -> Vec (Succ n) Bool -> Vec (addNat m (Succ n)) Bool;
 bvSExt :: Int -> Int -> BitVector -> BitVector
 bvSExt m n x = bv (m + n + 1) (signed x)
 

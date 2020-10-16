@@ -14,10 +14,10 @@ const a b x y = x;
 compose : (a b c : sort 0) -> (b -> c) -> (a -> b) -> (a -> c);
 compose _ _ _ f g x = f (g x);
 
-bvExp : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
-bvExp n x y = foldr Bool (bitvector n) n
-  (\ (b : Bool) -> \ (a : bitvector n) ->
-    ite (bitvector n) b (bvMul n x (bvMul n a a)) (bvMul n a a))
+bvExp : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
+bvExp n x y = foldr Bool (Vec n Bool) n
+  (\ (b : Bool) -> \ (a : Vec n Bool) ->
+    ite (Vec n Bool) b (bvMul n x (bvMul n a a)) (bvMul n a a))
   (bvNat n 1)
   (reverse n Bool y);
 
@@ -438,10 +438,10 @@ integerCmp x y k = or (intLt x y) (and (intEq x y) k);
 rationalCmp : Rational -> Rational -> Bool -> Bool;
 rationalCmp x y k = or (ltRational x y) (and (eqRational x y) k);
 
-bvCmp : (n : Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+bvCmp : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool -> Bool;
 bvCmp n x y k = or (bvult n x y) (and (bvEq n x y) k);
 
-bvSCmp : (n : Nat) -> bitvector n -> bitvector n -> Bool -> Bool;
+bvSCmp : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool -> Bool;
 bvSCmp n x y k = or (bvslt n x y) (and (bvEq n x y) k);
 
 vecCmp : (n : Nat) -> (a : sort 0) -> (a -> a -> Bool -> Bool)
@@ -1163,10 +1163,10 @@ ecSShiftR =
     (\ (n:Nat) ->
          (\ (ix : sort 0) -> \ (pix : PIntegral ix) ->
             natCase
-              (\ (w : Nat) -> bitvector w -> ix -> bitvector w)
-              (\ (xs : bitvector 0) -> \ (_ : ix) -> xs)
-              (\ (w : Nat) -> \ (xs : bitvector (Succ w)) ->
-                   pix.posNegCases (bitvector (Succ w))
+              (\ (w : Nat) -> Vec w Bool -> ix -> Vec w Bool)
+              (\ (xs : Vec 0 Bool) -> \ (_ : ix) -> xs)
+              (\ (w : Nat) -> \ (xs : Vec (Succ w) Bool) ->
+                   pix.posNegCases (Vec (Succ w) Bool)
 		     (bvSShr w xs)
 		     (bvShl (Succ w) xs))
               n));
@@ -1368,24 +1368,24 @@ ecInfFromThen a pa x y =
 
 
 -- Run-time error
-ecError : (a : sort 0) -> (len : Num) -> seq len (bitvector 8) -> a;
+ecError : (a : sort 0) -> (len : Num) -> seq len (Vec 8 Bool) -> a;
 ecError a len msg = error a "encountered call to the Cryptol 'error' function"; -- FIXME: don't throw away message
 {-
-primitive cryError : (a : sort 0) -> (n : Nat) -> Vec n (bitvector 8) -> a;
+primitive cryError : (a : sort 0) -> (n : Nat) -> Vec n (Vec 8 Bool) -> a;
 
-ecError : (a : sort 0) -> (len : Num) -> seq len (bitvector 8) -> a;
+ecError : (a : sort 0) -> (len : Num) -> seq len (Vec 8 Bool) -> a;
 ecError a =
   finNumRec
-    (\ (len:Num) -> seq len (bitvector 8) -> a)
+    (\ (len:Num) -> seq len (Vec 8 Bool) -> a)
     (\ (len:Nat) -> cryError a len);
 -}
 
 -- Random values
-ecRandom : (a : sort 0) -> bitvector 32 -> a;
+ecRandom : (a : sort 0) -> Vec 32 Bool -> a;
 ecRandom a _ = error a "Cryptol.random";
 
 -- Trace function; simply return the final argument
-ecTrace : (n : Num) -> (a b : sort 0) -> seq n (bitvector 8) -> a -> b -> b;
+ecTrace : (n : Num) -> (a b : sort 0) -> seq n (Vec 8 Bool) -> a -> b -> b;
 ecTrace _ _ _ _ _ x = x;
 
 
@@ -1481,16 +1481,16 @@ ecFpToBits e p _ = error (seq (tcAdd e p) Bool) "Unimplemented: fpToBits";
 ecFpEq : (e : Num) -> (p : Num) -> TCFloat e p -> TCFloat e p -> Bool;
 ecFpEq e p _ _ = error Bool "Unimplemented: =.=";
 
-ecFpAdd : (e : Num) -> (p : Num) -> bitvector 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpAdd : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpAdd e p _ _ _ = error (TCFloat e p) "Unimplemented: fpAdd";
 
-ecFpSub : (e : Num) -> (p : Num) -> bitvector 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpSub : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpSub e p _ _ _ = error (TCFloat e p) "Unimplemented: fpSub";
 
-ecFpMul : (e : Num) -> (p : Num) -> bitvector 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpMul : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpMul e p _ _ _ = error (TCFloat e p) "Unimplemented: fpMul";
 
-ecFpDiv : (e : Num) -> (p : Num) -> bitvector 3 -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+ecFpDiv : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpDiv e p _ _ _ = error (TCFloat e p) "Unimplemented: fpDiv";
 
 ecFpIsFinite : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
@@ -1499,7 +1499,7 @@ ecFpIsFinite e p _ = error Bool "Unimplemented: fpIsFinite";
 ecFpToRational : (e : Num) -> (p : Num) -> TCFloat e p -> Rational;
 ecFpToRational e p _ = error Rational "Unimplemented: fpToRational";
 
-ecFpFromRational : (e : Num) -> (p : Num) -> bitvector 3 -> Rational -> TCFloat e p;
+ecFpFromRational : (e : Num) -> (p : Num) -> Vec 3 Bool -> Rational -> TCFloat e p;
 ecFpFromRational e p _ _ = error (TCFloat e p) "Unimplemented: fpFromRational";
 
 
@@ -1555,8 +1555,8 @@ ecSExt =
     (\ (m n : Num) -> seq n Bool -> seq (tcAdd m n) Bool)
     (\ (m n : Nat) ->
        natCase
-         (\ (n' : Nat) -> bitvector n' -> bitvector (addNat m n'))
-         (\ (_ : bitvector 0) -> bvNat (addNat m 0) 0)
+         (\ (n' : Nat) -> Vec n' Bool -> Vec (addNat m n') Bool)
+         (\ (_ : Vec 0 Bool) -> bvNat (addNat m 0) 0)
          (bvSExt m)
          n);
 
@@ -1593,7 +1593,7 @@ ecArrayUpdate = arrayUpdate;
 --------------------------------------------------------------------------------
 -- Rewrite rules
 
-axiom replicate_False : (n : Nat) -> Eq (bitvector n) (replicate n Bool False) (bvNat n 0);
+axiom replicate_False : (n : Nat) -> Eq (Vec n Bool) (replicate n Bool False) (bvNat n 0);
 
 axiom subNat_0 : (n : Nat) -> Eq Nat (subNat n 0) n;
 
@@ -1601,7 +1601,7 @@ axiom subNat_0 : (n : Nat) -> Eq Nat (subNat n 0) n;
 axiom demote_add_distr
   : (w : Nat)
   -> (x y : Num)
-  -> Eq (bitvector w)
+  -> Eq (Vec w Bool)
         (ecNumber (tcAdd x y) (TCNum w))
         (bvAdd w (ecNumber x (TCNum w)) (ecNumber y (TCNum w)));
 -}

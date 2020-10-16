@@ -332,7 +332,7 @@ svSlice i j x = svExtract (w - i - 1) (w - i - j) x
 ----------------------------------------
 -- Shift operations
 
--- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
+-- | op : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool
 bvShiftOp :: (SWord -> SWord -> SWord) -> (SWord -> Int -> SWord) -> SValue
 bvShiftOp bvOp natOp =
   constFun $
@@ -344,15 +344,15 @@ bvShiftOp bvOp natOp =
       VToNat v -> fmap (vWord . bvOp x) (toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.SBV.bvShiftOp", show y]
 
--- bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+-- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvShLOp :: SValue
 bvShLOp = bvShiftOp svShiftLeft svShl
 
--- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+-- bvShR : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvShROp :: SValue
 bvShROp = bvShiftOp svShiftRight svShr
 
--- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+-- bvSShR : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvSShROp :: SValue
 bvSShROp = bvShiftOp bvOp natOp
   where
@@ -382,21 +382,21 @@ natToIntOp =
   Prims.natFun' "natToInt" $ \n -> return $
     VInt (literalSInteger (toInteger n))
 
--- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
 bvToIntOp :: SValue
 bvToIntOp = constFun $ wordFun $ \v ->
    case svAsInteger v of
       Just i -> return $ VInt (literalSInteger i)
       Nothing -> return $ VInt (svFromIntegral KUnbounded v)
 
--- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
 sbvToIntOp :: SValue
 sbvToIntOp = constFun $ wordFun $ \v ->
    case svAsInteger (svSign v) of
       Just i -> return $ VInt (literalSInteger i)
       Nothing -> return $ VInt (svFromIntegral KUnbounded (svSign v))
 
--- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+-- primitive intToBv : (n : Nat) -> Integer -> Vec n Bool;
 intToBvOp :: SValue
 intToBvOp =
   Prims.natFun' "intToBv n" $ \n -> return $

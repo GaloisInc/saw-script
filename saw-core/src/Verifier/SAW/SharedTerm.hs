@@ -1418,7 +1418,7 @@ scBoolEq sc x y = scGlobalApply sc "Prelude.boolEq" [x,y]
 
 -- | Create a universally quantified bitvector term.
 --
--- > bvForall : (n : Nat) -> (bitvector n -> Bool) -> Bool;
+-- > bvForall : (n : Nat) -> (Vec n Bool -> Bool) -> Bool;
 scBvForall :: SharedContext -> Term -> Term -> IO Term
 scBvForall sc w f = scGlobalApply sc "Prelude.bvForall" [w, f]
 
@@ -1465,7 +1465,7 @@ scGet sc n e v i = scGlobalApply sc (mkIdent preludeName "get") [n, e, v, i]
 -- | Create a term accessing a particular element of a vector with @bvAt@,
 -- which uses a bitvector for indexing.
 --
--- > bvAt : (n : Nat) -> (a : sort 0) -> (i : Nat) -> Vec n a -> bitvector i -> a;
+-- > bvAt : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool -> a;
 scBvAt :: SharedContext -> Term -> Term ->
          Term -> Term -> Term -> IO Term
 scBvAt sc n a i xs idx = scGlobalApply sc (mkIdent preludeName "bvAt") [n, a, i, xs, idx]
@@ -1494,14 +1494,14 @@ scSingle sc e x = scGlobalApply sc (mkIdent preludeName "single") [e, x]
 -- | Create a term computing the least significant bit of a bitvector, given a
 -- length and bitvector.
 --
--- > lsb : (n : Nat) -> bitvector (Succ n) -> Bool;
+-- > lsb : (n : Nat) -> Vec (Succ n) Bool -> Bool;
 scLsb :: SharedContext -> Term -> Term -> IO Term
 scLsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
 
 -- | Create a term computing the most significant bit of a bitvector, given a
 -- length and bitvector.
 --
--- > msb : (n : Nat) -> bitvector (Succ n) -> Bool;
+-- > msb : (n : Nat) -> Vec (Succ n) Bool -> Bool;
 scMsb :: SharedContext -> Term -> Term -> IO Term
 scMsb sc n x = scGlobalApply sc (mkIdent preludeName "lsb") [n, x]
 
@@ -1677,7 +1677,7 @@ scNatToInt sc x = scGlobalApply sc "Prelude.natToInt" [x]
 -- | Create a term computing a bitvector of length n from an @Integer@, if
 -- possible.
 --
--- > intToBv : (n::Nat) -> Integer -> bitvector n;
+-- > intToBv : (n::Nat) -> Integer -> Vec n Bool;
 scIntToBv
    :: SharedContext -> Term -> Term -> IO Term
 scIntToBv sc n x = scGlobalApply sc "Prelude.intToBv" [n,x]
@@ -1685,7 +1685,7 @@ scIntToBv sc n x = scGlobalApply sc "Prelude.intToBv" [n,x]
 -- | Create a term computing an @Integer@ from a bitvector of length n.
 -- This produces the unsigned value of the bitvector.
 --
--- > bvToInt : (n : Nat) -> bitvector n -> Integer;
+-- > bvToInt : (n : Nat) -> Vec n Bool -> Integer;
 scBvToInt
    :: SharedContext -> Term -> Term -> IO Term
 scBvToInt sc n x = scGlobalApply sc "Prelude.bvToInt" [n,x]
@@ -1693,7 +1693,7 @@ scBvToInt sc n x = scGlobalApply sc "Prelude.bvToInt" [n,x]
 -- | Create a term computing an @Integer@ from a bitvector of length n.
 -- This produces the 2's complement signed value of the bitvector.
 --
--- > sbvToInt : (n : Nat) -> bitvector n -> Integer;
+-- > sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
 scSbvToInt
    :: SharedContext -> Term -> Term -> IO Term
 scSbvToInt sc n x = scGlobalApply sc "Prelude.sbvToInt" [n,x]
@@ -1705,20 +1705,20 @@ scSbvToInt sc n x = scGlobalApply sc "Prelude.sbvToInt" [n,x]
 --
 -- > bitvector : (n : Nat) -> sort 1
 scBitvector :: SharedContext -> Natural -> IO Term
-scBitvector sc size = do
-  c <- scGlobalDef sc "Prelude.bitvector"
-  s <- scNat sc size
-  scApply sc c s
+scBitvector sc size =
+  do s <- scNat sc size
+     t <- scBoolType sc
+     scVecType sc s t
 
 -- | Create a term computing a bitvector of length x from a @Nat@, if possible.
 --
--- > bvNat : (x : Nat) -> Nat -> bitvector x;
+-- > bvNat : (n : Nat) -> Nat -> Vec n Bool;
 scBvNat :: SharedContext -> Term -> Term -> IO Term
 scBvNat sc x y = scGlobalApply sc "Prelude.bvNat" [x, y]
 
 -- | Create a term computing a @Nat@ from a bitvector of length n.
 --
--- > bvToNat : (n : Nat) -> bitvector n -> Nat;
+-- > bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 scBvToNat :: SharedContext -> Natural -> Term -> IO Term
 scBvToNat sc n x = do
     n' <- scNat sc n
@@ -1742,200 +1742,200 @@ scFinVal sc a b = scCtorApp sc "Prelude.FinVal" [a, b]
 -- the other given term evaluates to @False@ and representing 1 if the other
 -- given term evaluates to @True@.
 --
--- > bvBool : (n : Nat) -> Bool -> bitvector n;
+-- > bvBool : (n : Nat) -> Bool -> Vec n Bool;
 scBvBool :: SharedContext -> Term -> Term -> IO Term
 scBvBool sc n x = scGlobalApply sc "Prelude.bvBool" [n, x]
 
 -- | Create a term returning true if and only if the given bitvector represents
 -- a nonzero value.
 --
--- > bvNonzero : (n : Nat) -> bitvector n -> Bool;
+-- > bvNonzero : (n : Nat) -> Vec n Bool -> Bool;
 scBvNonzero :: SharedContext -> Term -> Term -> IO Term
 scBvNonzero sc n x = scGlobalApply sc "Prelude.bvNonzero" [n, x]
 
 -- | Create a term computing the 2's complement negation of the given
 -- bitvector.
--- > bvNeg : (x : Nat) -> bitvector x -> bitvector x;
+-- > bvNeg : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvNeg :: SharedContext -> Term -> Term -> IO Term
 scBvNeg sc n x = scGlobalApply sc "Prelude.bvNeg" [n, x]
 
 -- | Create a term applying the bitvector addition primitive.
 --
--- > bvAdd : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+-- > bvAdd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvAdd :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvAdd sc n x y = scGlobalApply sc "Prelude.bvAdd" [n, x, y]
 
 -- | Create a term applying the bitvector subtraction primitive.
 --
--- > bvSub : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+-- > bvSub : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvSub :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSub sc n x y = scGlobalApply sc "Prelude.bvSub" [n, x, y]
 
 -- | Create a term applying the bitvector multiplication primitive.
 --
--- > bvMul : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+-- > bvMul : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvMul :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvMul sc n x y = scGlobalApply sc "Prelude.bvMul" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) modulus primitive.
 --
--- > bvURem : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+-- > bvURem : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvURem :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvURem sc n x y = scGlobalApply sc "Prelude.bvURem" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) division primitive.
 --
--- > bvUDiv : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+-- > bvUDiv : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvUDiv :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvUDiv sc n x y = scGlobalApply sc "Prelude.bvUDiv" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) modulus primitive.
 --
--- > bvSRem : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+-- > bvSRem : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvSRem :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSRem sc n x y = scGlobalApply sc "Prelude.bvSRem" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) division primitive.
 --
--- > bvSDiv : (x : Nat) -> bitvector x -> bitvector x -> bitvector x;
+-- > bvSDiv : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvSDiv :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSDiv sc n x y = scGlobalApply sc "Prelude.bvSDiv" [n, x, y]
 
 -- | Create a term applying the population count bitvector primitive.
 --
--- > bvPopcount : (x : Nat) -> bitvector n -> bitvector n;
+-- > bvPopcount : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvPopcount :: SharedContext -> Term -> Term -> IO Term
 scBvPopcount sc n x = scGlobalApply sc "Prelude.bvPopcount" [n, x]
 
 -- | Create a term applying the leading zero counting bitvector primitive.
 --
--- > bvCountLeadingZeros : (x : Nat) -> bitvector n -> bitvector n;
+-- > bvCountLeadingZeros : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvCountLeadingZeros :: SharedContext -> Term -> Term -> IO Term
 scBvCountLeadingZeros sc n x = scGlobalApply sc "Prelude.bvCountLeadingZeros" [n, x]
 
 -- | Create a term applying the trailing zero counting bitvector primitive.
 --
--- > bvCountTrailingZeros : (x : Nat) -> bitvector n -> bitvector n;
+-- > bvCountTrailingZeros : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvCountTrailingZeros :: SharedContext -> Term -> Term -> IO Term
 scBvCountTrailingZeros sc n x = scGlobalApply sc "Prelude.bvCountTrailingZeros" [n, x]
 
 -- | Create a term applying the bit-wise and primitive.
 --
--- > bvAnd : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+-- > bvAnd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvAnd :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvAnd sc n x y = scGlobalApply sc "Prelude.bvAnd" [n, x, y]
 
 -- | Create a term applying the bit-wise xor primitive.
 --
--- > bvXor : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+-- > bvXor : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvXor :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvXor sc n x y = scGlobalApply sc "Prelude.bvXor" [n, x, y]
 
 -- | Create a term applying the bit-wise or primitive.
 --
--- > bvOr : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+-- > bvOr : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 scBvOr :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvOr  sc n x y = scGlobalApply sc "Prelude.bvOr"  [n, x, y]
 
 -- | Create a term applying the bit-wise negation primitive.
 --
--- > bvNot : (n : Nat) -> bitvector n -> bitvector n;
+-- > bvNot : (n : Nat) -> Vec n Bool -> Vec n Bool;
 scBvNot :: SharedContext -> Term -> Term -> IO Term
 scBvNot sc n x = scGlobalApply sc "Prelude.bvNot" [n, x]
 
 -- | Create a term computing whether the two given bitvectors (of equal length)
 -- are equal.
 --
--- > bvEq : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+-- > bvEq : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvEq :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvEq  sc n x y = scGlobalApply sc "Prelude.bvEq"  [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) greater-than-or-equal
 -- primitive.
 --
--- > bvuge : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+-- > bvuge : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvUGe :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvUGe sc n x y = scGlobalApply sc "Prelude.bvuge" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) less-than-or-equal
 -- primitive.
 --
--- > bvule : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+-- > bvule : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvULe :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvULe sc n x y = scGlobalApply sc "Prelude.bvule" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) greater-than primitive.
 --
--- > bvugt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+-- > bvugt : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvUGt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvUGt sc n x y = scGlobalApply sc "Prelude.bvugt" [n, x, y]
 
 -- | Create a term applying the bitvector (unsigned) less-than primitive.
 --
--- > bvult : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+-- > bvult : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvULt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvULt sc n x y = scGlobalApply sc "Prelude.bvult" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) greater-than-or-equal
 -- primitive.
 --
--- > bvsge : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+-- > bvsge : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvSGe :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSGe sc n x y = scGlobalApply sc "Prelude.bvsge" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) less-than-or-equal
 -- primitive.
 --
--- > bvsle : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+-- > bvsle : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvSLe :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSLe sc n x y = scGlobalApply sc "Prelude.bvsle" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) greater-than primitive.
 --
--- > bvsgt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+-- > bvsgt : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvSGt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSGt sc n x y = scGlobalApply sc "Prelude.bvsgt" [n, x, y]
 
 -- | Create a term applying the bitvector (signed) less-than primitive.
 --
--- > bvslt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+-- > bvslt : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 scBvSLt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSLt sc n x y = scGlobalApply sc "Prelude.bvslt" [n, x, y]
 
 -- | Create a term applying the left-shift primitive.
 --
--- > bvShl : (n : Nat) -> bitvector n -> Nat -> bitvector n;
+-- > bvShl : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool;
 scBvShl :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvShl sc n x y = scGlobalApply sc "Prelude.bvShl" [n, x, y]
 
 -- | Create a term applying the logical right-shift primitive.
 --
--- > bvShr : (n : Nat) -> bitvector n -> Nat -> bitvector n;
+-- > bvShr : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool;
 scBvShr :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvShr sc n x y = scGlobalApply sc "Prelude.bvShr" [n, x, y]
 
 -- | Create a term applying the arithmetic/signed right-shift primitive.
 --
--- > bvSShr : (w : Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
+-- > bvSShr : (w : Nat) -> Vec (Succ w) Bool -> Nat -> Vec (Succ w) Bool;
 scBvSShr :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSShr sc n x y = scGlobalApply sc "Prelude.bvSShr" [n, x, y]
 
 -- | Create a term applying the unsigned bitvector extension primitive.
 --
--- > bvUExt : (x y : Nat) -> bitvector y -> bitvector (addNat x y);
+-- > bvUExt : (m n : Nat) -> Vec n Bool -> Vec (addNat m n) Bool;
 scBvUExt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvUExt sc n m x = scGlobalApply sc "Prelude.bvUExt" [n,m,x]
 
 -- | Create a term applying the signed bitvector extension primitive.
 --
--- > bvSExt : (x y : Nat) -> bitvector (Succ y) -> bitvector (addNat x (Succ y));
+-- > bvSExt : (m n : Nat) -> Vec (Succ n) Bool -> Vec (addNat m (Succ n)) Bool;
 scBvSExt :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvSExt sc n m x = scGlobalApply sc "Prelude.bvSExt" [n,m,x]
 
 -- | Create a term applying the bitvector truncation primitive. Note that this
 -- truncates starting from the most significant bit.
 --
--- > bvTrunc : (x y : Nat) -> bitvector (addNat x y) -> bitvector y;
+-- > bvTrunc : (m n : Nat) -> Vec (addNat m n) Bool -> Vec n Bool;
 scBvTrunc :: SharedContext -> Term -> Term -> Term -> IO Term
 scBvTrunc sc n m x = scGlobalApply sc "Prelude.bvTrunc" [n,m,x]
 
@@ -1952,7 +1952,7 @@ scUpdNatFun sc a f i v = scGlobalApply sc "Prelude.updNatFun" [a, f, i, v]
 -- | Create a term applying the @updBvFun@ primitive, which has the same
 -- behavior as @updNatFun@ but acts on bitvectors.
 --
--- > updBvFun : (n::Nat) -> (a : sort 0) -> (bitvector n -> a) -> bitvector n -> a -> (bitvector n -> a);
+-- > updBvFun : (n : Nat) -> (a : sort 0) -> (Vec n Bool -> a) -> Vec n Bool -> a -> (Vec n Bool -> a);
 scUpdBvFun :: SharedContext -> Term -> Term
            -> Term -> Term -> Term -> IO Term
 scUpdBvFun sc n a f i v = scGlobalApply sc "Prelude.updBvFun" [n, a, f, i, v]

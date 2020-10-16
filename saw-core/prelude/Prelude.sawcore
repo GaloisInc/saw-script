@@ -1038,80 +1038,78 @@ splitLittleEndian m n a v = reverse m (Vec n a) (split m n a v);
 --------------------------------------------------------------------------------
 -- Bitvectors
 
--- | Bitvector operations expect the most-significant bit first.
-bitvector : (n : Nat) -> sort 0;
-bitvector n = Vec n Bool;
+-- Bitvector operations expect the most-significant bit first.
 
 -- | Returns most-significant bit in a signed bitvector.
-msb : (n : Nat) -> bitvector (Succ n) -> Bool;
+msb : (n : Nat) -> Vec (Succ n) Bool -> Bool;
 msb n v = at (Succ n) Bool v 0;
 
 -- | Returns least-significant bit in a bitvector.
-lsb : (n : Nat) -> bitvector (Succ n) -> Bool;
+lsb : (n : Nat) -> Vec (Succ n) Bool -> Bool;
 lsb n v = at (Succ n) Bool v n;
 
 -- | (bvNat n x) yields (x mod 2^n) as an n-bit vector.
-primitive bvNat : (n : Nat) -> Nat -> bitvector n;
+primitive bvNat : (n : Nat) -> Nat -> Vec n Bool;
 
 -- | Satisfies @bvNat n (bvToNat n x) = x@.
-primitive bvToNat : (n : Nat) -> bitvector n -> Nat;
+primitive bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 
-bvAt : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> bitvector w
+bvAt : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool
      -> a;
 bvAt n a w xs i = at n a xs (bvToNat w i);
 
-bvUpd : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> bitvector w
+bvUpd : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool
       -> a -> Vec n a;
 bvUpd n a w xs i y = upd n a xs (bvToNat w i) y;
 
-bvRotateL : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateL : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool -> Vec n a;
 bvRotateL n a w xs i = rotateL n a xs (bvToNat w i);
 
-bvRotateR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> bitvector w -> Vec n a;
+bvRotateR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> Vec n a -> Vec w Bool -> Vec n a;
 bvRotateR n a w xs i = rotateR n a xs (bvToNat w i);
 
-bvShiftL : (n : Nat) -> (a : sort 0) -> (w : Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftL : (n : Nat) -> (a : sort 0) -> (w : Nat) -> a -> Vec n a -> Vec w Bool -> Vec n a;
 bvShiftL n a w z xs i = shiftL n a z xs (bvToNat w i);
 
-bvShiftR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> a -> Vec n a -> bitvector w -> Vec n a;
+bvShiftR : (n : Nat) -> (a : sort 0) -> (w : Nat) -> a -> Vec n a -> Vec w Bool -> Vec n a;
 bvShiftR n a w z xs i = shiftR n a z xs (bvToNat w i);
 
-primitive bvAdd : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+primitive bvAdd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 
 -- | Unsigned and signed comparison functions.
-primitive bvugt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvuge : (n : Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvult : (n : Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvule : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvugt : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
+primitive bvuge : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
+primitive bvult : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
+primitive bvule : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 
-primitive bvsgt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvsge : (n : Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvslt : (n : Nat) -> bitvector n -> bitvector n -> Bool;
-primitive bvsle : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+primitive bvsgt : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
+primitive bvsge : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
+primitive bvslt : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
+primitive bvsle : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 
-primitive bvPopcount : (n : Nat) -> bitvector n -> bitvector n;
-primitive bvCountLeadingZeros : (n : Nat) -> bitvector n -> bitvector n;
-primitive bvCountTrailingZeros : (n : Nat) -> bitvector n -> bitvector n;
+primitive bvPopcount : (n : Nat) -> Vec n Bool -> Vec n Bool;
+primitive bvCountLeadingZeros : (n : Nat) -> Vec n Bool -> Vec n Bool;
+primitive bvCountTrailingZeros : (n : Nat) -> Vec n Bool -> Vec n Bool;
 
 -- Universal quantification over bitvectors
-primitive bvForall : (n : Nat) -> (bitvector n -> Bool) -> Bool;
+primitive bvForall : (n : Nat) -> (Vec n Bool -> Bool) -> Bool;
 
-bvCarry : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+bvCarry : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 bvCarry n x y = bvult n (bvAdd n x y) x;
 
-bvSCarry : (n : Nat) -> bitvector (Succ n) -> bitvector (Succ n) -> Bool;
+bvSCarry : (n : Nat) -> Vec (Succ n) Bool -> Vec (Succ n) Bool -> Bool;
 bvSCarry n x y = and (boolEq (msb n x) (msb n y)) (xor (msb n x) (msb n (bvAdd (Succ n) x y)));
 
-bvAddWithCarry : (n : Nat) -> bitvector n -> bitvector n -> Bool * bitvector n;
+bvAddWithCarry : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool * Vec n Bool;
 bvAddWithCarry n x y = (bvCarry n x y, bvAdd n x y);
 
-axiom bvAddZeroL : (n : Nat) -> (x : bitvector n) -> Eq (bitvector n) (bvAdd n (bvNat n 0) x) x;
-axiom bvAddZeroR : (n : Nat) -> (x : bitvector n) -> Eq (bitvector n) (bvAdd n x (bvNat n 0)) x;
+axiom bvAddZeroL : (n : Nat) -> (x : Vec n Bool) -> Eq (Vec n Bool) (bvAdd n (bvNat n 0) x) x;
+axiom bvAddZeroR : (n : Nat) -> (x : Vec n Bool) -> Eq (Vec n Bool) (bvAdd n x (bvNat n 0)) x;
 
-primitive bvNeg : (n : Nat) -> bitvector n -> bitvector n;
-primitive bvSub : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
-primitive bvMul : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
-primitive bvLg2 : (n : Nat) -> bitvector n -> bitvector n;
+primitive bvNeg : (n : Nat) -> Vec n Bool -> Vec n Bool;
+primitive bvSub : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
+primitive bvMul : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
+primitive bvLg2 : (n : Nat) -> Vec n Bool -> Vec n Bool;
 
 -- Unsigned division and remainder.
 --
@@ -1120,8 +1118,8 @@ primitive bvLg2 : (n : Nat) -> bitvector n -> bitvector n;
 --
 -- These two functions satisfy the property that:
 --   bvAdd x (bvMul x (bvUDiv x u v) v) (bvURem x u v) == u
-primitive bvUDiv : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
-primitive bvURem : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+primitive bvUDiv : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
+primitive bvURem : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 
 
 -- Signed division.
@@ -1136,59 +1134,58 @@ primitive bvURem : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
 -- bvSDiv and bvSRem satisfy the property that:
 --
 --   bvAdd x (bvMul x (bvSDiv x u v) v) (bvSRem x u v) == u
-primitive bvSDiv : (x : Nat) -> bitvector (Succ x) -> bitvector (Succ x) -> bitvector (Succ x);
-primitive bvSRem : (x : Nat) -> bitvector (Succ x) -> bitvector (Succ x)
-       -> bitvector (Succ x);
+primitive bvSDiv : (n : Nat) -> Vec (Succ n) Bool -> Vec (Succ n) Bool -> Vec (Succ n) Bool;
+primitive bvSRem : (n : Nat) -> Vec (Succ n) Bool -> Vec (Succ n) Bool -> Vec (Succ n) Bool;
 --TODO:
 
 -- | Shift left by the given number of bits.
 -- New bits are False.
-primitive bvShl : (w : Nat) -> bitvector w -> Nat -> bitvector w;
+primitive bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 
 -- Logical right shift.  New bits are False.
-primitive bvShr : (w : Nat) -> bitvector w -> Nat -> bitvector w;
+primitive bvShr : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 
 -- | Signed right shift.  New bits are equal to most-significant bit.
-primitive bvSShr : (w : Nat) -> bitvector (Succ w) -> Nat -> bitvector (Succ w);
+primitive bvSShr : (w : Nat) -> Vec (Succ w) Bool -> Nat -> Vec (Succ w) Bool;
 
 axiom bvShiftL_bvShl :
-  (n : Nat) -> (w : Nat) -> (x : Vec n Bool) -> (i : bitvector w) ->
+  (n : Nat) -> (w : Nat) -> (x : Vec n Bool) -> (i : Vec w Bool) ->
   Eq (Vec n Bool) (bvShiftL n Bool w False x i) (bvShl n x (bvToNat w i));
 
 axiom bvShiftR_bvShr :
-  (n : Nat) -> (w : Nat) -> (x : Vec n Bool) -> (i : bitvector w) ->
+  (n : Nat) -> (w : Nat) -> (x : Vec n Bool) -> (i : Vec w Bool) ->
   Eq (Vec n Bool) (bvShiftR n Bool w False x i) (bvShr n x (bvToNat w i));
 
 -- | Zipwith specialized to bitvectors.
 bvZipWith : (Bool -> Bool -> Bool)
           -> (n : Nat)
-          -> bitvector n -> bitvector n -> bitvector n;
+          -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 bvZipWith = zipWith Bool Bool Bool;
 
 -- | Bitwise complement.
-bvNot : (n : Nat) -> bitvector n -> bitvector n;
+bvNot : (n : Nat) -> Vec n Bool -> Vec n Bool;
 bvNot = map Bool Bool not;
 
 -- | Pairwise conjunction
-bvAnd : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+bvAnd : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 bvAnd = bvZipWith and;
 
 -- | Pairwise disjunction
-bvOr : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+bvOr : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 bvOr  = bvZipWith or;
 
 -- | Pairwise exclusive or
-bvXor : (n : Nat) -> bitvector n -> bitvector n -> bitvector n;
+bvXor : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 bvXor = bvZipWith xor;
 
 -- | Return true if two bitvectors are equal.
-bvEq : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+bvEq : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 bvEq n x y = vecEq n Bool boolEq x y;
 
-axiom bvEq_refl : (n : Nat) -> (x : bitvector n) -> Eq Bool (bvEq n x x) True;
+axiom bvEq_refl : (n : Nat) -> (x : Vec n Bool) -> Eq Bool (bvEq n x x) True;
 
 -- | Axiom: bvEq implements *the* equality operation on bitvectors.
-axiom eq_bitvector : (n : Nat) -> Eq (bitvector n -> bitvector n -> Bool) (eq (bitvector n)) (bvEq n);
+axiom eq_bitvector : (n : Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool) (eq (Vec n Bool)) (bvEq n);
 
 axiom eq_VecBool : (n : Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool) (eq (Vec n Bool)) (bvEq n);
 
@@ -1197,50 +1194,50 @@ axiom eq_VecVec : (n : Nat) -> (m : Nat) -> (a : sort 0)
                 (eq (Vec n (Vec m a)))
                 (vecEq n (Vec m a) (eq (Vec m a)));
 
-axiom equalNat_bv : (n : Nat) -> (x : bitvector n) -> (i : Nat) ->
+axiom equalNat_bv : (n : Nat) -> (x : Vec n Bool) -> (i : Nat) ->
                Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
 
 -- | Returns the bitvector 1 if the boolean is true,
 --   and returns 0 otherwise
-bvBool : (n : Nat) -> Bool -> bitvector n;
-bvBool n b = ite (bitvector n) b (bvNat n 1) (bvNat n 0);
+bvBool : (n : Nat) -> Bool -> Vec n Bool;
+bvBool n b = ite (Vec n Bool) b (bvNat n 1) (bvNat n 0);
 
 -- | Return true if two bitvectors are not equal.
-bvNe : (n : Nat) -> bitvector n -> bitvector n -> Bool;
+bvNe : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 bvNe n x y = not (bvEq n x y);
 
 -- | Return true if the bitvector is nonzero
-bvNonzero : (n : Nat) -> bitvector n -> Bool;
+bvNonzero : (n : Nat) -> Vec n Bool -> Bool;
 bvNonzero n x = bvNe n x (bvNat n 0);
 
 -- | Truncates a vector a smaller size.
 -- msb implementation:
-bvTrunc : (x y : Nat) -> bitvector (addNat x y) -> bitvector y;
+bvTrunc : (m n : Nat) -> Vec (addNat m n) Bool -> Vec n Bool;
 bvTrunc = drop Bool;
 -- lsb implementation:
--- bvTrunc : (x y : Nat) -> bitvector (addNat y x) -> bitvector y;
--- bvTrunc x y = take Bool y x;
+-- bvTrunc : (m n : Nat) -> Vec (addNat n m) Bool -> Vec n Bool;
+-- bvTrunc m n = take Bool n m;
 
 -- | Perform a unsigned extension of the bitvector.
 -- @bvUExt m n x@ adds m bits of zeros to the most-significant bits of
 -- the n-bit vector x.
 -- msb implementation:
-bvUExt : (m n : Nat) -> bitvector n -> bitvector (addNat m n);
+bvUExt : (m n : Nat) -> Vec n Bool -> Vec (addNat m n) Bool;
 bvUExt m n x = append m n Bool (bvNat m 0) x;
 -- lsb implementation:
--- bvUExt : (m n : Nat) -> bitvector n -> bitvector (addNat n m);
+-- bvUExt : (m n : Nat) -> Vec n Bool -> Vec (addNat n m) Bool;
 -- bvUExt m n a = append n m Bool x (bvNat m 0);
 
 -- | 'replicateBool' is an version of 'replicate' optimized for type Bool.
-replicateBool : (n : Nat) -> Bool -> bitvector n;
-replicateBool n b = ite (bitvector n) b (bvNot n (bvNat n 0)) (bvNat n 0);
+replicateBool : (n : Nat) -> Bool -> Vec n Bool;
+replicateBool n b = ite (Vec n Bool) b (bvNot n (bvNat n 0)) (bvNat n 0);
 
 -- | Perform a signed extension of the bitvector.
 -- msb implementation:
-bvSExt : (m n : Nat) -> bitvector (Succ n) -> bitvector (addNat m (Succ n));
+bvSExt : (m n : Nat) -> Vec (Succ n) Bool -> Vec (addNat m (Succ n)) Bool;
 bvSExt m n x = append m (Succ n) Bool (replicateBool m (msb n x)) x;
 -- lsb implementation:
--- bvSExt : (m n : Nat) -> bitvector (Succ n) -> bitvector (addNat (Succ n) m);
+-- bvSExt : (m n : Nat) -> Vec (Succ n) Bool -> Vec (addNat (Succ n) m) Bool;
 -- bvSExt m n x = append (Succ n) m Bool x (replicateBool m (msb n x));
 
 --------------------------------------------------------------------------------
@@ -1261,7 +1258,7 @@ streamUpd a strm i y =
                  MkStream a (\ (j : Nat) -> ite a (equalNat i j) y (s j))) strm;
 
 bvStreamUpd : (a : sort 0) -> (w : Nat) ->
-     Stream a -> bitvector w -> a -> Stream a;
+     Stream a -> Vec w Bool -> a -> Stream a;
 bvStreamUpd a w xs i y = streamUpd a xs (bvToNat w i) y;
 
 streamGet : (a : sort 0) -> Stream a -> Nat -> a;
@@ -1335,13 +1332,13 @@ primitive natToInt : Nat -> Integer;
 
 -- for x >= 0, intToBv n x = x `mod` 2^n
 -- for x <  0, intToBv n x = bvNeg n (-x `mod` 2^n)
-primitive intToBv : (n:Nat) -> Integer -> bitvector n;
+primitive intToBv : (n:Nat) -> Integer -> Vec n Bool;
 
 -- return the unsigned value of the bitvector as an integer
-primitive bvToInt : (n:Nat) -> bitvector n -> Integer;
+primitive bvToInt : (n:Nat) -> Vec n Bool -> Integer;
 
 -- return the 2's complement signed value of the bitvector as an integer
-primitive sbvToInt : (n:Nat) -> bitvector n -> Integer;
+primitive sbvToInt : (n:Nat) -> Vec n Bool -> Integer;
 
 
 --------------------------------------------------------------------------------
@@ -1367,7 +1364,7 @@ updNatFun : (a:sort 0)
 updNatFun a f i v x = ite a (equalNat i x) v (f x);
 
 updBvFun : (n:Nat) -> (a:sort 0)
-	 -> (bitvector n -> a) -> bitvector n -> a -> (bitvector n -> a);
+	 -> (Vec n Bool -> a) -> Vec n Bool -> a -> (Vec n Bool -> a);
 updBvFun n a f i v x = ite a (bvEq n i x) v (f x);
 
 --------------------------------------------------------------------------------
@@ -1378,15 +1375,15 @@ primitive Float : sort 0;
 
 -- mkFloat m e = m * 2^^e
 primitive mkFloat : Integer -> Integer -> Float;
--- primitive bvToFloat : bitvector 32 -> Float;
--- primitive floatToBV : Float -> bitvector 32;
+-- primitive bvToFloat : Vec 32 Bool -> Float;
+-- primitive floatToBV : Float -> Vec 32 Bool;
 
 primitive Double : sort 0;
 
 -- mkDouble m e = m * 2^^e
 primitive mkDouble : Integer -> Integer -> Float;
--- primitive bvToDouble : bitvector 64 -> Double;
--- primitive doubleToBV : Double -> bitvector 64;
+-- primitive bvToDouble : Vec 64 Bool -> Double;
+-- primitive doubleToBV : Double -> Vec 64 Bool;
 
 
 --------------------------------------------------------------------------------
@@ -1451,63 +1448,63 @@ fixM a b f x =
 
 
 -- Test computations
-test_fun0 : bitvector 64 -> CompM (bitvector 64);
-test_fun0 _ = returnM (bitvector 64) (bvNat 64 0);
+test_fun0 : Vec 64 Bool -> CompM (Vec 64 Bool);
+test_fun0 _ = returnM (Vec 64 Bool) (bvNat 64 0);
 
-test_fun1 : bitvector 64 -> CompM (bitvector 64);
-test_fun1 _ = returnM (bitvector 64) (bvNat 64 1);
+test_fun1 : Vec 64 Bool -> CompM (Vec 64 Bool);
+test_fun1 _ = returnM (Vec 64 Bool) (bvNat 64 1);
 
-test_fun2 : bitvector 64 -> CompM (bitvector 64);
-test_fun2 x = returnM (bitvector 64) x;
+test_fun2 : Vec 64 Bool -> CompM (Vec 64 Bool);
+test_fun2 x = returnM (Vec 64 Bool) x;
 
 -- If x == 0 then x else 0; should be equal to 0
-test_fun3 : bitvector 64 -> CompM (bitvector 64);
+test_fun3 : Vec 64 Bool -> CompM (Vec 64 Bool);
 test_fun3 x =
-  ite (CompM (bitvector 64)) (bvEq 64 x (bvNat 64 0))
-      (returnM (bitvector 64) x)
-      (returnM (bitvector 64) (bvNat 64 0));
+  ite (CompM (Vec 64 Bool)) (bvEq 64 x (bvNat 64 0))
+      (returnM (Vec 64 Bool) x)
+      (returnM (Vec 64 Bool) (bvNat 64 0));
 
 -- let rec f x = 0 in f x
-test_fun4 : bitvector 64 -> CompM (bitvector 64);
+test_fun4 : Vec 64 Bool -> CompM (Vec 64 Bool);
 test_fun4 x =
   letRecM1
-    (bitvector 64) (bitvector 64) (bitvector 64)
-    (\ (f: bitvector 64 -> CompM (bitvector 64)) (y:bitvector 64) ->
-      returnM (bitvector 64) (bvNat 64 0))
-    (\ (f: bitvector 64 -> CompM (bitvector 64)) ->
+    (Vec 64 Bool) (Vec 64 Bool) (Vec 64 Bool)
+    (\ (f: Vec 64 Bool -> CompM (Vec 64 Bool)) (y:Vec 64 Bool) ->
+      returnM (Vec 64 Bool) (bvNat 64 0))
+    (\ (f: Vec 64 Bool -> CompM (Vec 64 Bool)) ->
       f x);
 
 {- Alternate version of test_fun4 that uses letRecM directly
-test_fun4 : bitvector 64 -> CompM (bitvector 64);
+test_fun4 : Vec 64 Bool -> CompM (Vec 64 Bool);
 test_fun4 x =
   letRecM
-    (TypesCons (bitvector 64) (bitvector 64) TypesNil) (bitvector 64)
-    (\ (funs:#((bitvector 64 -> CompM (bitvector 64)), #())) ->
-      ((\ (y:bitvector 64) -> returnM (bitvector 64) (bvNat 64 0)), ()))
-    (\ (funs:#((bitvector 64 -> CompM (bitvector 64)), #())) ->
+    (TypesCons (Vec 64 Bool) (Vec 64 Bool) TypesNil) (Vec 64 Bool)
+    (\ (funs:#((Vec 64 Bool -> CompM (Vec 64 Bool)), #())) ->
+      ((\ (y:Vec 64 Bool) -> returnM (Vec 64 Bool) (bvNat 64 0)), ()))
+    (\ (funs:#((Vec 64 Bool -> CompM (Vec 64 Bool)), #())) ->
       funs.1 x);
 -}
 
 -- let rec f = f in f x
-test_fun5 : bitvector 64 -> CompM (bitvector 64);
+test_fun5 : Vec 64 Bool -> CompM (Vec 64 Bool);
 test_fun5 x =
   letRecM1
-    (bitvector 64) (bitvector 64) (bitvector 64)
-    (\ (f: bitvector 64 -> CompM (bitvector 64)) -> f)
-    (\ (f: bitvector 64 -> CompM (bitvector 64)) -> f x);
+    (Vec 64 Bool) (Vec 64 Bool) (Vec 64 Bool)
+    (\ (f: Vec 64 Bool -> CompM (Vec 64 Bool)) -> f)
+    (\ (f: Vec 64 Bool -> CompM (Vec 64 Bool)) -> f x);
 
 -- let rec f = g and g = f in f x
-test_fun6 : bitvector 64 -> CompM (bitvector 64);
+test_fun6 : Vec 64 Bool -> CompM (Vec 64 Bool);
 test_fun6 x =
   letRecM
-    (TypesCons (bitvector 64) (bitvector 64)
-      (TypesCons (bitvector 64) (bitvector 64) TypesNil))
-    (bitvector 64)
-    (\ (funs:#((bitvector 64 -> CompM (bitvector 64)),
-                 #((bitvector 64 -> CompM (bitvector 64)), #()))) ->
+    (TypesCons (Vec 64 Bool) (Vec 64 Bool)
+      (TypesCons (Vec 64 Bool) (Vec 64 Bool) TypesNil))
+    (Vec 64 Bool)
+    (\ (funs:#((Vec 64 Bool -> CompM (Vec 64 Bool)),
+                 #((Vec 64 Bool -> CompM (Vec 64 Bool)), #()))) ->
       (funs.2, (funs.1, ())))
-    (\ (funs:#((bitvector 64 -> CompM (bitvector 64)),
-                 #((bitvector 64 -> CompM (bitvector 64)), #()))) ->
+    (\ (funs:#((Vec 64 Bool -> CompM (Vec 64 Bool)),
+                 #((Vec 64 Bool -> CompM (Vec 64 Bool)), #()))) ->
       funs.1 x);
 
 --------------------------------------------------------------------------------
@@ -1524,26 +1521,26 @@ primitive arrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 -- General axioms
 
 axiom bveq_sameL : (n : Nat)
-           -> (x z : bitvector n)
+           -> (x z : Vec n Bool)
            -> Eq Bool
                  (bvEq n x (bvAdd n x z))
                  (bvEq n (bvNat n 0) z);
 
 axiom bveq_sameR : (n : Nat)
-           -> (x y : bitvector n)
+           -> (x y : Vec n Bool)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) x)
                  (bvEq n y (bvNat n 0));
 
 axiom bveq_same2 : (n : Nat)
-           -> (x y z : bitvector n)
+           -> (x y z : Vec n Bool)
            -> Eq Bool
                  (bvEq n (bvAdd n x y) (bvAdd n x z))
                  (bvEq n y z);
 
 axiom bvNat_bvToNat : (n : Nat)
-              -> (x : bitvector n)
-              -> Eq (bitvector n)
+              -> (x : Vec n Bool)
+              -> Eq (Vec n Bool)
                     (bvNat n (bvToNat n x))
                     x;
 
