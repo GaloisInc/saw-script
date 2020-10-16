@@ -114,6 +114,8 @@ install_yasm() {
 }
 
 build() {
+  ghc_ver="$(ghc --numeric-version)"
+  cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   cabal v2-configure -j2 --minimize-conflict-set
   if ! retry cabal v2-build "$@" saw jss && [[ "$RUNNER_OS" == "macOS" ]]; then
