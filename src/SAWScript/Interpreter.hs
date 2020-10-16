@@ -90,9 +90,9 @@ import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 -- Cryptol
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Eval as V (PPOpts(..))
-import qualified Cryptol.Eval.Monad as V (runEval)
+import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
-import qualified Cryptol.Eval.Concrete.Value as V (Concrete(..))
+import qualified Cryptol.Eval.Concrete as V (Concrete(..))
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 

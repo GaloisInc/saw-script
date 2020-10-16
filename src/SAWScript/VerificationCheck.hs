@@ -9,9 +9,9 @@ module SAWScript.VerificationCheck where
 
 import Control.Monad
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.Eval.Monad as CV
+import qualified Cryptol.Backend.Monad as CV
 import qualified Cryptol.Eval.Value as CV
-import qualified Cryptol.Eval.Concrete.Value as CV
+import qualified Cryptol.Eval.Concrete as CV
 import Verifier.SAW.Cryptol (exportValueWithSchema, scCryptolType)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Concrete (CValue)
