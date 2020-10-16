@@ -339,18 +339,18 @@ natToIntOp =
     VInt <$> W.intLit (given :: sym) (toInteger n)
 
 -- interpret bitvector as unsigned integer
--- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
 bvToIntOp :: forall sym. (Sym sym) => SValue sym
 bvToIntOp = constFun $ wordFun $ \(v :: SWord sym) -> do
   VInt <$> SW.bvToInteger (given :: sym) v
 
 -- interpret bitvector as signed integer
--- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
 sbvToIntOp :: forall sym. (Sym sym) => SValue sym
 sbvToIntOp = constFun $ wordFun $ \v -> do
    VInt <$> SW.sbvToInteger (given :: sym) v
 
--- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+-- primitive intToBv : (n : Nat) -> Integer -> Vec n Bool;
 intToBvOp :: forall sym. (Sym sym) => SValue sym
 intToBvOp =
   Prims.natFun' "intToBv n" $ \n -> return $
@@ -393,7 +393,7 @@ liftRotate sym f w i =
   f w =<< SW.bvLit sym (SW.bvWidth w) (i `mod` SW.bvWidth w)
 
 
--- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
+-- | op : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool
 bvShiftOp :: (Sym sym) =>
              (SWord sym -> SWord sym -> IO (SWord sym)) ->
              (SWord sym -> Integer   -> IO (SWord sym)) -> SValue sym
@@ -408,17 +408,17 @@ bvShiftOp bvOp natOp =
       VToNat v -> VWord <$> (bvOp x =<< toWord v)
       _        -> error $ unwords ["Verifier.SAW.Simulator.What4.bvShiftOp", show y]
 
--- bvShl :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+-- bvShl : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvShLOp :: forall sym. (Sym sym) => SValue sym
 bvShLOp = bvShiftOp (SW.bvShl given)
                     (liftShift given (SW.bvShl given))
 
--- bvShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+-- bvShR : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvShROp :: forall sym. (Sym sym) => SValue sym
 bvShROp = bvShiftOp (SW.bvLshr given)
                     (liftShift given (SW.bvLshr given))
 
--- bvSShR :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+-- bvSShR : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvSShROp :: forall sym. (Sym sym) => SValue sym
 bvSShROp = bvShiftOp (SW.bvAshr given)
                      (liftShift given (SW.bvAshr given))

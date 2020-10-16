@@ -123,7 +123,7 @@ flattenBValue _ = error $ unwords ["Verifier.SAW.Simulator.Concrete.flattenBValu
 wordFun :: (BitVector -> CValue) -> CValue
 wordFun f = pureFun (\x -> f (toWord x))
 
--- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
+-- | op : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool
 bvShiftOp :: (BitVector -> Int -> BitVector) -> CValue
 bvShiftOp natOp =
   constFun $
@@ -271,19 +271,19 @@ constMap =
 
 ------------------------------------------------------------
 
--- primitive bvToNat :: (n::Nat) -> bitvector n -> Nat;
+-- primitive bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 bvToNatOp :: CValue
 bvToNatOp = constFun $ wordFun $ VNat . fromInteger . unsigned
 
--- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
 bvToIntOp :: CValue
 bvToIntOp = constFun $ wordFun $ VInt . unsigned
 
--- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
 sbvToIntOp :: CValue
 sbvToIntOp = constFun $ wordFun $ VInt . signed
 
--- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+-- primitive intToBv : (n : Nat) -> Integer -> Vec n Bool;
 intToBvOp :: CValue
 intToBvOp =
   Prims.natFun' "intToBv n" $ \n -> return $

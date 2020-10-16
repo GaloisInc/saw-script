@@ -118,7 +118,7 @@ genShift cond f x0 v = go x0 (V.toList v)
     go x [] = x
     go x (y : ys) = go (cond y (f x (2 ^ length ys)) x) ys
 
--- | op :: (w :: Nat) -> bitvector w -> Nat -> bitvector w;
+-- | op : (w : Nat) -> Vec w Bool -> Nat -> Vec w Bool;
 bvShiftOp :: (Vector RME -> Integer -> Vector RME) -> RValue
 bvShiftOp op =
   constFun $
@@ -256,15 +256,15 @@ constMap =
   , ("Prelude.expByNat", Prims.expByNatOp prims)
   ]
 
--- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
 bvToIntOp :: RValue
 bvToIntOp = unsupportedRMEPrimitive "bvToIntOp"
 
--- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
 sbvToIntOp :: RValue
 sbvToIntOp = unsupportedRMEPrimitive "sbvToIntOp"
 
--- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+-- primitive intToBv : (n : Nat) -> Integer -> Vec n Bool;
 intToBvOp :: RValue
 intToBvOp =
   Prims.natFun' "intToBv n" $ \n -> return $

@@ -356,9 +356,7 @@ asVecType :: Recognizer Term (Natural :*: Term)
 asVecType = isVecType return
 
 asBitvectorType :: Recognizer Term Natural
-asBitvectorType =
-  (isGlobalDef "Prelude.bitvector" @> asNat)
-  `orElse` ((isGlobalDef "Prelude.Vec" @> asNat) <@ asBoolType)
+asBitvectorType = (isGlobalDef "Prelude.Vec" @> asNat) <@ asBoolType
 
 asMux :: Recognizer Term (Term :*: Term :*: Term :*: Term)
 asMux = isGlobalDef "Prelude.ite" @> return <@> return <@> return <@> return

@@ -138,7 +138,7 @@ wordFun f = strictFun (\x -> toWord x >>= f)
 
 ------------------------------------------------------------
 
--- | op :: (n :: Nat) -> bitvector n -> Nat -> bitvector n
+-- | op : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool
 bvShiftOp :: (LitVector l -> LitVector l -> IO (LitVector l))
           -> (LitVector l -> Natural -> LitVector l)
           -> BValue l
@@ -324,21 +324,21 @@ bitblastLogBase2 g x = do
 -----------------------------------------
 -- Integer/bitvector conversions
 
--- primitive bvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive bvToInt : (n : Nat) -> Vec n Bool -> Integer;
 bvToIntOp :: AIG.IsAIG l g => g s -> BValue (l s)
 bvToIntOp g = constFun $ wordFun $ \v ->
    case AIG.asUnsigned g v of
       Just i -> return $ VInt i
       Nothing -> fail "Cannot convert symbolic bitvector to integer"
 
--- primitive sbvToInt :: (n::Nat) -> bitvector n -> Integer;
+-- primitive sbvToInt : (n : Nat) -> Vec n Bool -> Integer;
 sbvToIntOp :: AIG.IsAIG l g => g s -> BValue (l s)
 sbvToIntOp g = constFun $ wordFun $ \v ->
    case AIG.asSigned g v of
       Just i -> return $ VInt i
       Nothing -> fail "Cannot convert symbolic bitvector to integer"
 
--- primitive intToBv :: (n::Nat) -> Integer -> bitvector n;
+-- primitive intToBv : (n : Nat) -> Integer -> Vec n Bool;
 intToBvOp :: AIG.IsAIG l g => g s -> BValue (l s)
 intToBvOp g =
   Prims.natFun' "intToBv n" $ \n -> return $

@@ -1412,7 +1412,7 @@ scCryptolType sc t =
 -- | Deprecated.
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term
 scCryptolEq sc x y =
-  do rules <- concat <$> traverse defRewrites (defs1 ++ defs2)
+  do rules <- concat <$> traverse defRewrites defs
      let ss = addConvs natConversions (addRules rules emptySimpset)
      tx <- scTypeOf sc x >>= rewriteSharedTerm sc ss >>= scCryptolType sc
      ty <- scTypeOf sc y >>= rewriteSharedTerm sc ss >>= scCryptolType sc
@@ -1432,8 +1432,7 @@ scCryptolEq sc x y =
      scGlobalApply sc "Cryptol.ecEq" [k, eqPrf, x, y]
 
   where
-    defs1 = map (mkIdent (mkModuleName ["Prelude"])) ["bitvector"]
-    defs2 = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ty"]
+    defs = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ty"]
     defRewrites ident =
       do maybe_def <- scFindDef sc ident
          case maybe_def of

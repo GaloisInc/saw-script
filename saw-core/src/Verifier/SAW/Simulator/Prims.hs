@@ -354,7 +354,7 @@ boolBinOp op =
   strictFun $ \x -> return $
   strictFun $ \y -> VBool <$> op (toBool x) (toBool y)
 
--- op :: (n :: Nat) -> bitvector n -> bitvector n;
+-- op : (n : Nat) -> Vec n Bool -> Vec n Bool;
 wordUnOp ::
   (VMonad l, Show (Extra l)) =>
   Pack l -> (VWord l -> MWord l) -> Value l
@@ -364,7 +364,7 @@ wordUnOp pack op =
   do xw <- toWord pack x
      VWord <$> op xw
 
--- op :: (n :: Nat) -> bitvector n -> bitvector n -> bitvector n;
+-- op : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
 wordBinOp ::
   (VMonad l, Show (Extra l)) =>
   Pack l -> (VWord l -> VWord l -> MWord l) -> Value l
@@ -376,7 +376,7 @@ wordBinOp pack op =
      yw <- toWord pack y
      VWord <$> op xw yw
 
--- op :: (n :: Nat) -> bitvector n -> bitvector n -> Bool;
+-- op : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 wordBinRel ::
   (VMonad l, Show (Extra l)) =>
   Pack l -> (VWord l -> VWord l -> MBool l) -> Value l
@@ -407,14 +407,14 @@ selectV mux maxValue valueFn v = impl len 0
 ------------------------------------------------------------
 -- Values for common primitives
 
--- bvNat :: (n :: Nat) -> Nat -> bitvector n;
+-- bvNat : (n : Nat) -> Nat -> Vec n Bool;
 bvNatOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
 bvNatOp bp =
   natFun'' "bvNatOp1" $ \w -> return $
   natFun'' "bvNatOp2"  $ \x ->
   VWord <$> bpBvLit bp (fromIntegral w) (toInteger x) -- FIXME check for overflow on w
 
--- bvToNat :: (n :: Nat) -> bitvector n -> Nat;
+-- bvToNat : (n : Nat) -> Vec n Bool -> Nat;
 bvToNatOp :: VMonad l => Value l
 bvToNatOp = constFun $ pureFun VToNat
 
@@ -1187,7 +1187,7 @@ intToNatOp =
 natToIntOp :: (VMonad l, VInt l ~ Integer) => Value l
 natToIntOp = natFun' "natToInt" $ \x -> return $ VInt (toInteger x)
 
--- primitive bvLg2 :: (n :: Nat) -> bitvector n -> bitvector n;
+-- primitive bvLg2 : (n : Nat) -> Vec n Bool -> Vec n Bool;
 bvLg2Op :: VMonad l => (Value l -> MWord l) -> (VWord l -> MWord l) -> Value l
 bvLg2Op asWord wordLg2 =
   natFun' "bvLg2 1" $ \_n -> return $
