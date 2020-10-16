@@ -28,9 +28,9 @@ import Prelude ()
 import Prelude.Compat
 
 import qualified Cryptol.Eval.Type as TV
-import qualified Cryptol.Eval.Monad as V
+import qualified Cryptol.Backend.Monad as V
 import qualified Cryptol.Eval.Value as V
-import qualified Cryptol.Eval.Concrete.Value as V
+import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst)
