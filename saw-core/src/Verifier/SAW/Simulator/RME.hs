@@ -36,9 +36,9 @@ import qualified Data.Map as Map
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
-import Verifier.SAW.Simulator.RME.Base (RME)
-import qualified Verifier.SAW.Simulator.RME.Base as RME
-import qualified Verifier.SAW.Simulator.RME.Vector as RMEV
+import Data.RME (RME)
+import qualified Data.RME as RME
+import qualified Data.RME.Vector as RMEV
 
 import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator as Sim

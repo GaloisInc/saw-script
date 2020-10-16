@@ -1,0 +1,26 @@
+Name:               rme
+Version:            0.1
+License:            BSD3
+License-file:       LICENSE
+Author:             Galois, Inc.
+Maintainer:         huffman@galois.com
+Copyright:          (c) 2016 Galois Inc.
+Category:           Formal Methods
+Build-type:         Simple
+cabal-version:      >= 1.8
+Synopsis:           Reed-Muller Expansion normal form for Boolean Formulas
+Description:
+  A representation of the Algebraic Normal Form of boolean formulas
+  using the Reed-Muller Expansion.
+
+library
+  build-depends:
+    base == 4.*,
+    containers,
+    vector
+  hs-source-dirs: src
+  exposed-modules:
+    Data.RME
+    Data.RME.Base
+    Data.RME.Vector
+  GHC-options: -Wall -Werror -Wcompat
