@@ -11,10 +11,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        ghc: ["8.6.5", "8.8.4", "8.10.1"]
+        ghc: ["8.6.5", "8.8.4", "8.10.2"]
     runs-on: ${{ matrix.os }}
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
-    continue-on-error: ${{ matrix.ghc == "8.8.4" || matrix.ghc == "8.10.1" }}
+    continue-on-error: "${{ contains(matrix.ghc,'8.8.4') || contains(matrix.ghc, '8.10.2') }}"
     env:
       OCAML_VERSION: 4.09.1
       # also change in setup-ocaml step based on value of opamVersion:
