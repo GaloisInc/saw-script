@@ -259,3 +259,28 @@ asFiniteTypeTValue v =
       FTRec <$> Map.fromList <$>
       mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeTValue tp) elem_tps
     _ -> Nothing
+
+-- | A (partial) injective mapping from type values to strings. These
+-- are intended to be useful as suffixes for names of type instances
+-- of uninterpreted constants.
+suffixTValue :: TValue sym -> Maybe String
+suffixTValue tv =
+  case tv of
+    VVecType n a ->
+      do a' <- suffixTValue a
+         Just ("_Vec_" ++ show n ++ a')
+    VBoolType -> Just "_Bool"
+    VIntType -> Just "_Int"
+    VArrayType a b ->
+      do a' <- suffixTValue a
+         b' <- suffixTValue b
+         Just ("_Array" ++ a' ++ b')
+    VPiType _ _ -> Nothing
+    VUnitType -> Just "_Unit"
+    VPairType a b ->
+      do a' <- suffixTValue a
+         b' <- suffixTValue b
+         Just ("_Pair" ++ a' ++ b')
+    VDataType {} -> Nothing
+    VRecordType {} -> Nothing
+    VSort {} -> Nothing

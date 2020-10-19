@@ -266,6 +266,8 @@ flattenSValue v = do
         VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
                                         return (concat xss, "_" ++ identName i ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
+        TValue (suffixTValue -> Just s)
+                                  -> return ([], s)
         _ -> fail $ "Could not create sbv argument for " ++ show v
 
 vWord :: SWord -> SValue
