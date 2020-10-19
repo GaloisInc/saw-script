@@ -120,6 +120,7 @@ import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Map as MapF
 
 import qualified What4.Expr.Builder as B
+import           What4.Protocol.Online (OnlineSolver)
 import           What4.ProgramLoc (ProgramLoc)
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
@@ -139,6 +140,7 @@ import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import           Verifier.SAW.Rewriter (Simpset)
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedTerm
+
 
 --------------------------------------------------------------------------------
 -- ** Language features
@@ -291,7 +293,8 @@ showLLVMModule (LLVMModule name m _) =
 --------------------------------------------------------------------------------
 -- ** Ghost state
 
-instance Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue where
+instance OnlineSolver solver =>
+    Crucible.IntrinsicClass (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue where
   type Intrinsic (Crucible.SAWCoreBackend n solver (B.Flags B.FloatReal)) MS.GhostValue ctx = TypedTerm
   muxIntrinsic sym _ _namerep _ctx prd thn els =
     do when (ttSchema thn /= ttSchema els) $ fail $ unlines $

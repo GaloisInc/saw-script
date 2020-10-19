@@ -277,7 +277,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         ]
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
-      methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) setup
+      methodSpec <- buildMethodSpec bic opts {- TODO! checkSat -} llvmModule nm (show addr) setup
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
@@ -427,7 +427,7 @@ buildMethodSpec ::
   LLVMCrucibleSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR LLVM)
 buildMethodSpec bic opts lm nm loc setup =
-  setupLLVMCrucibleContext bic opts lm $ \cc -> do
+  setupLLVMCrucibleContext bic opts False {- TODO! checkSat -} lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
     let programLoc =
           W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm)
