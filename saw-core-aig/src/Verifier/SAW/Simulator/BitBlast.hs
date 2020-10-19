@@ -444,7 +444,7 @@ bitBlastBasic be m addlPrims ecMap t = do
   Sim.evalSharedTerm cfg t
 
 bitBlastExtCns ::
-  Map VarIndex (BValue (l s)) -> ExtCns (BValue (l s)) ->
+  Map VarIndex (BValue (l s)) -> ExtCns (TValue (BitBlast (l s))) ->
   IO (BValue (l s))
 bitBlastExtCns ecMap (EC idx name _v) =
   case Map.lookup idx ecMap of

@@ -578,7 +578,7 @@ instance Show (SArray sym) where
 arrayConstant ::
   W.IsSymExprBuilder sym =>
   sym ->
-  SValue sym ->
+  TValue (What4 sym) ->
   SValue sym ->
   IO (SArray sym)
 arrayConstant sym ity elm
@@ -717,51 +717,51 @@ parseUninterpreted ::
   (IsSymExprBuilder sym) =>
   sym -> IORef (SymFnCache sym) ->
   UnintApp (SymExpr sym) ->
-  SValue sym -> IO (SValue sym)
+  TValue (What4 sym) -> IO (SValue sym)
 parseUninterpreted sym ref app ty =
   case ty of
-    TValue (VPiType _ f)
+    VPiType _ f
       -> return $
          strictFun $ \x -> do
            app' <- applyUnintApp app x
            t2 <- f (ready x)
            parseUninterpreted sym ref app' t2
 
-    TValue VBoolType
+    VBoolType
       -> VBool <$> mkUninterpreted sym ref app BaseBoolRepr
 
-    TValue VIntType
+    VIntType
       -> VInt  <$> mkUninterpreted sym ref app BaseIntegerRepr
 
     -- 0 width bitvector is a constant
-    TValue (VVecType (VNat 0) (TValue VBoolType))
+    VVecType (VNat 0) VBoolType
       -> return $ VWord ZBV
 
-    TValue (VVecType (VNat n) (TValue VBoolType))
+    VVecType (VNat n) VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
       -> (VWord . DBV) <$> mkUninterpreted sym ref app (BaseBVRepr w)
 
-    TValue (VVecType (VNat n) ety)
+    VVecType (VNat n) ety
       ->  do xs <- sequence $
                   [ parseUninterpreted sym ref (suffixUnintApp ("_a" ++ show i) app) ety
                   | i <- [0 .. n-1] ]
              return (VVector (V.fromList (map ready xs)))
 
-    TValue (VArrayType ity ety)
+    VArrayType ity ety
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
       -> (VArray . SArray) <$>
           mkUninterpreted sym ref app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
-    TValue VUnitType
+    VUnitType
       -> return VUnit
 
-    TValue (VPairType ty1 ty2)
+    VPairType ty1 ty2
       -> do x1 <- parseUninterpreted sym ref (suffixUnintApp "_L" app) ty1
             x2 <- parseUninterpreted sym ref (suffixUnintApp "_R" app) ty2
             return (VPair (ready x1) (ready x2))
 
-    TValue (VRecordType elem_tps)
+    VRecordType elem_tps
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
@@ -845,7 +845,7 @@ w4SolveAny sym sc ps unints t = give sym $ do
   let moreNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
 
   -- and their types
-  argTs <- argTypes ty
+  argTs <- argTypes (toTValue ty)
 
   -- construct symbolic expressions for the variables
   vars' <-
@@ -876,10 +876,10 @@ w4Solve sym sc ps unints t =
 --
 -- Pull out argument types until bottoming out at a non-Pi type
 --
-argTypes :: IsSymExprBuilder sv => SValue sv -> IO [SValue sv]
+argTypes :: IsSymExprBuilder sym => TValue (What4 sym) -> IO [TValue (What4 sym)]
 argTypes v =
   case v of
-    TValue (VPiType v1 f) ->
+    VPiType v1 f ->
       do v2 <- f (error "argTypes: unsupported dependent SAW-Core type")
          vs <- argTypes v2
          return (v1 : vs)
@@ -888,31 +888,31 @@ argTypes v =
 --
 -- Convert a saw-core type expression to a FirstOrder type expression
 --
-vAsFirstOrderType :: forall sv. IsSymExprBuilder sv => SValue sv -> Maybe FirstOrderType
+vAsFirstOrderType :: forall sym. IsSymExprBuilder sym => TValue (What4 sym) -> Maybe FirstOrderType
 vAsFirstOrderType v =
   case v of
-    TValue VBoolType
+    VBoolType
       -> return FOTBit
-    TValue VIntType
+    VIntType
       -> return FOTInt
-    TValue (VVecType (VNat n) v2)
+    VVecType (VNat n) v2
       -> FOTVec n <$> vAsFirstOrderType v2
-    TValue (VArrayType iv ev)
+    VArrayType iv ev
       -> FOTArray <$> vAsFirstOrderType iv <*> vAsFirstOrderType ev
-    TValue VUnitType
+    VUnitType
       -> return (FOTTuple [])
-    TValue (VPairType v1 v2)
+    VPairType v1 v2
       -> do t1 <- vAsFirstOrderType v1
             t2 <- vAsFirstOrderType v2
             case t2 of
               FOTTuple ts -> return (FOTTuple (t1 : ts))
               _ -> return (FOTTuple [t1, t2])
-    TValue (VRecordType tps)
+    VRecordType tps
       -> (FOTRec <$> Map.fromList <$>
           mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
     _ -> Nothing
 
-valueAsBaseType :: IsSymExprBuilder sym => SValue sym -> Maybe (Some W.BaseTypeRepr)
+valueAsBaseType :: IsSymExprBuilder sym => TValue (What4 sym) -> Maybe (Some W.BaseTypeRepr)
 valueAsBaseType v = fmap fotToBaseType $ vAsFirstOrderType v
 
 ------------------------------------------------------------------------------
@@ -942,7 +942,7 @@ nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 
 newVarsForType :: forall sym. (Given sym, IsSymExprBuilder sym) =>
   IORef (SymFnCache sym) ->
-  SValue sym -> String -> StateT Int IO (Maybe (Labeler sym), SValue sym)
+  TValue (What4 sym) -> String -> StateT Int IO (Maybe (Labeler sym), SValue sym)
 newVarsForType ref v nm =
   case vAsFirstOrderType v of
     Just fot -> do
@@ -1019,7 +1019,7 @@ w4EvalAny sym sc ps unints t =
      let argNames = zipWith (++) varNames (map ("_" ++) lamNames ++ repeat "")
 
      -- and their types
-     argTs <- argTypes ty
+     argTs <- argTypes (toTValue ty)
 
      -- construct symbolic expressions for the variables
      vars' <-
@@ -1082,11 +1082,11 @@ parseUninterpretedSAW ::
   IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) ->
   ArgTerm {- ^ representation of function applied to arguments -} ->
   UnintApp (SymExpr (CS.SAWCoreBackend n solver fs)) ->
-  SValue (CS.SAWCoreBackend n solver fs) {- ^ return type -} ->
+  TValue (What4 (CS.SAWCoreBackend n solver fs)) {- ^ return type -} ->
   IO (SValue (CS.SAWCoreBackend n solver fs))
 parseUninterpretedSAW sym sc ref trm app ty =
   case ty of
-    TValue (VPiType t1 f)
+    VPiType t1 f
       -> return $
          strictFun $ \x -> do
            app' <- applyUnintApp app x
@@ -1095,22 +1095,22 @@ parseUninterpretedSAW sym sc ref trm app ty =
            t2 <- f (ready x)
            parseUninterpretedSAW sym sc ref trm' app' t2
 
-    TValue VBoolType
+    VBoolType
       -> VBool <$> mkUninterpretedSAW sym ref trm app BaseBoolRepr
 
-    TValue VIntType
+    VIntType
       -> VInt  <$> mkUninterpretedSAW sym ref trm app BaseIntegerRepr
 
     -- 0 width bitvector is a constant
-    TValue (VVecType (VNat 0) (TValue VBoolType))
+    VVecType (VNat 0) VBoolType
       -> return $ VWord ZBV
 
-    TValue (VVecType (VNat n) (TValue VBoolType))
+    VVecType (VNat n) VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
       -> (VWord . DBV) <$> mkUninterpretedSAW sym ref trm app (BaseBVRepr w)
 
-    TValue (VVecType (VNat n) ety) | n >= 0
-      ->  do ety' <- termOfSValue sc ety
+    VVecType (VNat n) ety | n >= 0
+      ->  do ety' <- termOfTValue sc ety
              let mkElem i =
                    do let trm' = ArgTermAt n ety' trm i
                       let app' = suffixUnintApp ("_a" ++ show i) app
@@ -1118,16 +1118,16 @@ parseUninterpretedSAW sym sc ref trm app ty =
              xs <- traverse mkElem (genericTake n [0 ..])
              return (VVector (V.fromList (map ready xs)))
 
-    TValue (VArrayType ity ety)
+    VArrayType ity ety
       | Just (Some idx_repr) <- valueAsBaseType ity
       , Just (Some elm_repr) <- valueAsBaseType ety
       -> (VArray . SArray) <$>
           mkUninterpretedSAW sym ref trm app (BaseArrayRepr (Ctx.Empty Ctx.:> idx_repr) elm_repr)
 
-    TValue VUnitType
+    VUnitType
       -> return VUnit
 
-    TValue (VPairType ty1 ty2)
+    VPairType ty1 ty2
       -> do let trm1 = ArgTermPairLeft trm
             let trm2 = ArgTermPairRight trm
             x1 <- parseUninterpretedSAW sym sc ref trm1 (suffixUnintApp "_L" app) ty1
@@ -1234,27 +1234,27 @@ reconstructArgTerm atrm sc ts =
 -- 'ArgTerm' that builds a term of that type from local variables with
 -- base types. The number of 'ArgTermVar' constructors should match
 -- the number of arguments appended by 'applyUnintApp'.
-mkArgTerm :: SharedContext -> SValue sym -> SValue sym -> IO ArgTerm
+mkArgTerm :: SharedContext -> TValue (What4 sym) -> SValue sym -> IO ArgTerm
 mkArgTerm sc ty val =
   case (ty, val) of
-    (TValue VBoolType, VBool _) -> return ArgTermVar
-    (TValue VIntType, VInt _)   -> return ArgTermVar
+    (VBoolType, VBool _) -> return ArgTermVar
+    (VIntType, VInt _)   -> return ArgTermVar
     (_, VWord ZBV)       -> return ArgTermBVZero     -- 0-width bitvector is a constant
     (_, VWord (DBV _))   -> return ArgTermVar
-    (TValue VUnitType, VUnit)   -> return ArgTermUnit
+    (VUnitType, VUnit)   -> return ArgTermUnit
 
-    (TValue (VVecType _ ety), VVector vv) ->
+    (VVecType _ ety, VVector vv) ->
       do vs <- traverse force (V.toList vv)
          xs <- traverse (mkArgTerm sc ety) vs
-         ety' <- termOfSValue sc ety
+         ety' <- termOfTValue sc ety
          return (ArgTermVector ety' xs)
 
-    (TValue (VPairType ty1 ty2), VPair v1 v2) ->
+    (VPairType ty1 ty2, VPair v1 v2) ->
       do x1 <- mkArgTerm sc ty1 =<< force v1
          x2 <- mkArgTerm sc ty2 =<< force v2
          return (ArgTermPair x1 x2)
 
-    (TValue (VRecordType tys), VRecordValue flds) | map fst tys == map fst flds ->
+    (VRecordType tys, VRecordValue flds) | map fst tys == map fst flds ->
       do let tags = map fst tys
          vs <- traverse (force . snd) flds
          xs <- sequence [ mkArgTerm sc t v | (t, v) <- zip (map snd tys) vs ]
@@ -1267,24 +1267,30 @@ mkArgTerm sc ty val =
 
     _ -> fail $ "could not create uninterpreted function argument of type " ++ show ty
 
+termOfTValue :: SharedContext -> TValue (What4 sym) -> IO Term
+termOfTValue sc val =
+  case val of
+    VBoolType -> scBoolType sc
+    VIntType -> scIntegerType sc
+    VUnitType -> scUnitType sc
+    VVecType (VNat n) a ->
+      do n' <- scNat sc n
+         a' <- termOfTValue sc a
+         scVecType sc n' a'
+    VPairType a b
+      -> do a' <- termOfTValue sc a
+            b' <- termOfTValue sc b
+            scPairType sc a' b'
+    VRecordType flds
+      -> do flds' <- traverse (traverse (termOfTValue sc)) flds
+            scRecordType sc flds'
+    _ -> fail $ "termOfTValue: " ++ show val
+
 termOfSValue :: SharedContext -> SValue sym -> IO Term
 termOfSValue sc val =
   case val of
     VUnit -> scUnitValue sc
-    TValue VBoolType -> scBoolType sc
-    TValue VIntType -> scIntegerType sc
-    TValue VUnitType -> scUnitType sc
-    TValue (VVecType (VNat n) a) ->
-      do n' <- scNat sc n
-         a' <- termOfSValue sc a
-         scVecType sc n' a'
-    TValue (VPairType a b)
-      -> do a' <- termOfSValue sc a
-            b' <- termOfSValue sc b
-            scPairType sc a' b'
-    TValue (VRecordType flds)
-      -> do flds' <- traverse (traverse (termOfSValue sc)) flds
-            scRecordType sc flds'
     VNat n
       -> scNat sc n
+    TValue tv -> termOfTValue sc tv
     _ -> fail $ "termOfSValue: " ++ show val

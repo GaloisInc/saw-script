@@ -125,7 +125,7 @@ data BasePrims l =
   , bpIntMin :: VInt l -> VInt l -> MInt l
   , bpIntMax :: VInt l -> VInt l -> MInt l
     -- Array operations
-  , bpArrayConstant :: Value l -> Value l -> MArray l
+  , bpArrayConstant :: TValue l -> Value l -> MArray l
   , bpArrayLookup :: VArray l -> Value l -> MValue l
   , bpArrayUpdate :: VArray l -> Value l -> Value l -> MArray l
   , bpArrayEq :: VArray l -> VArray l -> MBool l
@@ -577,7 +577,7 @@ natCaseOp =
 
 -- Vec :: (n :: Nat) -> (a :: sort 0) -> sort 0;
 vecTypeOp :: VMonad l => Value l
-vecTypeOp = pureFun $ \n -> pureFun $ \a -> TValue (VVecType n a)
+vecTypeOp = pureFun $ \n -> pureFun $ \a -> TValue (VVecType n (toTValue a))
 
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
 genOp :: (VMonadLazy l, Show (Extra l)) => Value l
@@ -1296,7 +1296,7 @@ fixOp =
 
 -- Array :: sort 0 -> sort 0 -> sort 0
 arrayTypeOp :: VMonad l => Value l
-arrayTypeOp = pureFun $ \a -> pureFun $ \b -> TValue (VArrayType a b)
+arrayTypeOp = pureFun $ \a -> pureFun $ \b -> TValue (VArrayType (toTValue a) (toTValue b))
 
 -- arrayConstant :: (a b :: sort 0) -> b -> (Array a b);
 arrayConstantOp :: VMonad l => BasePrims l -> Value l
@@ -1304,7 +1304,7 @@ arrayConstantOp bp =
   pureFun $ \a ->
   constFun $
   strictFun $ \e ->
-    VArray <$> (bpArrayConstant bp) a e
+    VArray <$> (bpArrayConstant bp) (toTValue a) e
 
 -- arrayLookup :: (a b :: sort 0) -> (Array a b) -> a -> b;
 arrayLookupOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l

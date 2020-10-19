@@ -565,40 +565,40 @@ sbvSolveBasic m addlPrims unints t = do
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted
   Sim.evalSharedTerm cfg t
 
-parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue
+parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
 parseUninterpreted cws nm ty =
   case ty of
-    TValue (VPiType _ f)
+    (VPiType _ f)
       -> return $
          strictFun $ \x -> do
            (cws', suffix) <- flattenSValue x
            t2 <- f (ready x)
            parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
 
-    TValue VBoolType
+    VBoolType
       -> return $ vBool $ mkUninterpreted KBool cws nm
 
-    TValue VIntType
+    VIntType
       -> return $ vInteger $ mkUninterpreted KUnbounded cws nm
 
-    TValue (VVecType (VNat n) (TValue VBoolType))
+    (VVecType (VNat n) VBoolType)
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
 
-    TValue (VVecType (VNat n) ety)
+    (VVecType (VNat n) ety)
       -> do xs <- sequence $
                   [ parseUninterpreted cws (nm ++ "@" ++ show i) ety
                   | i <- [0 .. n-1] ]
             return (VVector (V.fromList (map ready xs)))
 
-    TValue VUnitType
+    VUnitType
       -> return VUnit
 
-    TValue (VPairType ty1 ty2)
+    (VPairType ty1 ty2)
       -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             return (VPair (ready x1) (ready x2))
 
-    TValue (VRecordType elem_tps)
+    (VRecordType elem_tps)
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
@@ -610,35 +610,35 @@ mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
-asPredType :: SValue -> IO [SValue]
+asPredType :: TValue SBV -> IO [TValue SBV]
 asPredType v =
   case v of
-    TValue VBoolType -> return []
-    TValue (VPiType v1 f) ->
+    VBoolType -> return []
+    VPiType v1 f ->
       do v2 <- f (error "asPredType: unsupported dependent SAW-Core type")
          vs <- asPredType v2
          return (v1 : vs)
     _ -> fail $ "non-boolean result type: " ++ show v
 
-vAsFirstOrderType :: SValue -> Maybe FirstOrderType
+vAsFirstOrderType :: TValue SBV -> Maybe FirstOrderType
 vAsFirstOrderType v =
   case v of
-    TValue VBoolType
+    VBoolType
       -> return FOTBit
-    TValue VIntType
+    VIntType
       -> return FOTInt
-    TValue (VVecType (VNat n) v2)
+    VVecType (VNat n) v2
       -> FOTVec n <$> vAsFirstOrderType v2
-    TValue VUnitType
+    VUnitType
       -> return (FOTTuple [])
-    TValue (VPairType v1 v2)
+    VPairType v1 v2
       -> do t1 <- vAsFirstOrderType v1
             t2 <- vAsFirstOrderType v2
             case t2 of
               FOTTuple ts -> return (FOTTuple (t1 : ts))
               _ -> return (FOTTuple [t1, t2])
 
-    TValue (VRecordType tps)
+    VRecordType tps
       -> (FOTRec <$> Map.fromList <$>
           mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
     _ -> Nothing
@@ -655,7 +655,7 @@ sbvSolve sc addlPrims unints t = do
   let lamNames = map fst (fst (R.asLambdaList t))
   let varNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
   let argNames = zipWith (++) varNames (map ("_" ++) lamNames ++ repeat "")
-  argTs <- asPredType ty
+  argTs <- asPredType (toTValue ty)
   (labels, vars) <-
     flip evalStateT 0 $ unzip <$>
     sequence (zipWith newVarsForType argTs argNames)
@@ -685,7 +685,7 @@ nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 myfun ::(Map String (Labeler, Symbolic SValue)) -> (Map String Labeler, Map String (Symbolic SValue))
 myfun = fmap fst A.&&& fmap snd
 
-newVarsForType :: SValue -> String -> StateT Int IO (Maybe Labeler, Symbolic SValue)
+newVarsForType :: TValue SBV -> String -> StateT Int IO (Maybe Labeler, Symbolic SValue)
 newVarsForType v nm =
   case vAsFirstOrderType v of
     Just fot ->

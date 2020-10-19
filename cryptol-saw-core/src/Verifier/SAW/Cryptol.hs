@@ -1357,34 +1357,34 @@ pIsNeq ty = case C.tNoUser ty of
 --------------------------------------------------------------------------------
 -- Utilities
 
-asCryptolTypeValue :: SC.CValue -> Maybe C.Type
+asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe C.Type
 asCryptolTypeValue v =
   case v of
-    SC.TValue SC.VBoolType -> return C.tBit
-    SC.TValue SC.VIntType -> return C.tInteger
-    SC.TValue (SC.VArrayType v1 v2) -> do
+    SC.VBoolType -> return C.tBit
+    SC.VIntType -> return C.tInteger
+    SC.VArrayType v1 v2 -> do
       t1 <- asCryptolTypeValue v1
       t2 <- asCryptolTypeValue v2
       return $ C.tArray t1 t2
-    SC.TValue (SC.VVecType (SC.VNat n) v2) -> do
+    SC.VVecType (SC.VNat n) v2 -> do
       t2 <- asCryptolTypeValue v2
       return (C.tSeq (C.tNum n) t2)
-    SC.TValue (SC.VDataType "Prelude.Stream" [v1]) -> do
-      t1 <- asCryptolTypeValue v1
+    SC.VDataType "Prelude.Stream" [v1] -> do
+      t1 <- asCryptolTypeValue (SC.toTValue v1)
       return (C.tSeq C.tInf t1)
-    SC.TValue SC.VUnitType -> return (C.tTuple [])
-    SC.TValue (SC.VPairType v1 v2) -> do
+    SC.VUnitType -> return (C.tTuple [])
+    SC.VPairType v1 v2 -> do
       t1 <- asCryptolTypeValue v1
       t2 <- asCryptolTypeValue v2
       case C.tIsTuple t2 of
         Just ts -> return (C.tTuple (t1 : ts))
         Nothing -> return (C.tTuple [t1, t2])
-    SC.TValue (SC.VPiType v1 f) -> do
+    SC.VPiType v1 f -> do
       case v1 of
         -- if we see that the parameter is a Cryptol.Num, it's a
         -- pretty good guess that it originally was a
         -- polymorphic number type.
-        SC.TValue (SC.VDataType "Cryptol.Num" []) ->
+        SC.VDataType "Cryptol.Num" [] ->
           let msg= unwords ["asCryptolTypeValue: can't infer a polymorphic Cryptol"
                            ,"type. Please, make sure all numeric types are"
                            ,"specialized before constructing a typed term."
@@ -1405,7 +1405,7 @@ asCryptolTypeValue v =
 scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
-     case asCryptolTypeValue (SC.evalSharedTerm modmap Map.empty t) of
+     case asCryptolTypeValue (SC.toTValue (SC.evalSharedTerm modmap Map.empty t)) of
        Just ty -> return ty
        Nothing -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
 

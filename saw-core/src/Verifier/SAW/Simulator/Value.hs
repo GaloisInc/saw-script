@@ -66,15 +66,15 @@ data Value l
 
 -- | The subset of values that represent types.
 data TValue l
-  = VVecType (Value l) (Value l)
+  = VVecType !(Value l) !(TValue l)
   | VBoolType
   | VIntType
-  | VArrayType (Value l) (Value l)
-  | VPiType !(Value l) !(Thunk l -> MValue l)
+  | VArrayType !(TValue l) !(TValue l)
+  | VPiType !(TValue l) !(Thunk l -> EvalM l (TValue l))
   | VUnitType
-  | VPairType (Value l) (Value l)
-  | VDataType !Ident [Value l]
-  | VRecordType ![(String, Value l)]
+  | VPairType !(TValue l) !(TValue l)
+  | VDataType !Ident ![Value l]
+  | VRecordType ![(String, TValue l)]
   | VType -- ^ Other unknown type
 
 type Thunk l = Lazy (EvalM l) (Value l)
@@ -135,6 +135,10 @@ pureFun f = VFun (\x -> liftM f (force x))
 
 constFun :: VMonad l => Value l -> Value l
 constFun x = VFun (\_ -> return x)
+
+toTValue :: Value l -> TValue l
+toTValue (TValue x) = x
+toTValue _ = panic "Verifier.SAW.Simulator.Value.toTValue" ["Not a type value"]
 
 instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
@@ -197,10 +201,10 @@ vTuple [_] = error "vTuple: unsupported 1-tuple"
 vTuple [x, y] = VPair x y
 vTuple (x : xs) = VPair x (ready (vTuple xs))
 
-vTupleType :: VMonad l => [Value l] -> Value l
-vTupleType [] = TValue VUnitType
+vTupleType :: VMonad l => [TValue l] -> TValue l
+vTupleType [] = VUnitType
 vTupleType [t] = t
-vTupleType (t : ts) = TValue (VPairType t (vTupleType ts))
+vTupleType (t : ts) = VPairType t (vTupleType ts)
 
 valPairLeft :: (VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
@@ -225,7 +229,7 @@ valRecordProj v _ =
 
 apply :: (VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
-apply (TValue (VPiType _ f)) x = f x
+apply (TValue (VPiType _ f)) x = TValue <$> f x
 apply v _x = panic "Verifier.SAW.Simulator.Value.apply" ["Not a function value:", show v]
 
 applyAll :: (VMonad l, Show (Extra l)) => Value l -> [Thunk l] -> MValue l
@@ -234,18 +238,24 @@ applyAll = foldM apply
 asFiniteTypeValue :: Value l -> Maybe FiniteType
 asFiniteTypeValue v =
   case v of
-    TValue VBoolType -> return FTBit
-    TValue (VVecType (VNat n) v1) -> do
-      t1 <- asFiniteTypeValue v1
+    TValue tv -> asFiniteTypeTValue tv
+    _ -> Nothing
+
+asFiniteTypeTValue :: TValue l -> Maybe FiniteType
+asFiniteTypeTValue v =
+  case v of
+    VBoolType -> return FTBit
+    VVecType (VNat n) v1 -> do
+      t1 <- asFiniteTypeTValue v1
       return (FTVec n t1)
-    TValue VUnitType -> return (FTTuple [])
-    TValue (VPairType v1 v2) -> do
-      t1 <- asFiniteTypeValue v1
-      t2 <- asFiniteTypeValue v2
+    VUnitType -> return (FTTuple [])
+    VPairType v1 v2 -> do
+      t1 <- asFiniteTypeTValue v1
+      t2 <- asFiniteTypeTValue v2
       case t2 of
         FTTuple ts -> return (FTTuple (t1 : ts))
         _ -> return (FTTuple [t1, t2])
-    TValue (VRecordType elem_tps) ->
+    VRecordType elem_tps ->
       FTRec <$> Map.fromList <$>
-      mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeValue tp) elem_tps
+      mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeTValue tp) elem_tps
     _ -> Nothing

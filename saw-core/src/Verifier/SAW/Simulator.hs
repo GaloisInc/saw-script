@@ -62,6 +62,7 @@ type Id = Identity
 type ThunkIn m l           = Thunk (WithM m l)
 type OpenValueIn m l       = OpenValue (WithM m l)
 type ValueIn m l           = Value (WithM m l)
+type TValueIn m l          = TValue (WithM m l)
 type MValueIn m l          = MValue (WithM m l)
 type SimulatorConfigIn m l = SimulatorConfig (WithM m l)
 
@@ -74,8 +75,8 @@ panic msg = Panic.panic "Verifier.SAW.Simulator" [msg]
 data SimulatorConfig l =
   SimulatorConfig
   { simGlobal :: Ident -> MValue l
-  , simExtCns :: TermF Term -> ExtCns (Value l) -> MValue l
-  , simUninterpreted :: TermF Term -> ExtCns (Value l) -> Maybe (MValue l)
+  , simExtCns :: TermF Term -> ExtCns (TValue l) -> MValue l
+  , simUninterpreted :: TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)
   , simModMap :: ModuleMap
   }
 
@@ -131,10 +132,10 @@ evalTermF cfg lam recEval tf env =
                                   x <- recEvalDelay t2
                                   apply v x
     Lambda _ _ t            -> return $ VFun (\x -> lam t (x : env))
-    Pi _ t1 t2              -> do v <- recEval t1
-                                  return $ TValue $ VPiType v (\x -> lam t2 (x : env))
+    Pi _ t1 t2              -> do v <- toTValue <$> recEval t1
+                                  return $ TValue $ VPiType v (\x -> toTValue <$> lam t2 (x : env))
     LocalVar i              -> force (env !! i)
-    Constant ec t           -> do ec' <- traverse recEval ec
+    Constant ec t           -> do ec' <- traverse (fmap toTValue . recEval) ec
                                   maybe (recEval t) id (simUninterpreted cfg tf ec')
     FTermF ftf              ->
       case ftf of
@@ -144,8 +145,8 @@ evalTermF cfg lam recEval tf env =
         PairValue x y       -> do tx <- recEvalDelay x
                                   ty <- recEvalDelay y
                                   return $ VPair tx ty
-        PairType x y        -> do vx <- recEval x
-                                  vy <- recEval y
+        PairType x y        -> do vx <- toTValue <$> recEval x
+                                  vy <- toTValue <$> recEval y
                                   return $ TValue $ VPairType vx vy
         PairLeft x          -> valPairLeft =<< recEval x
         PairRight x         -> valPairRight =<< recEval x
@@ -161,7 +162,7 @@ evalTermF cfg lam recEval tf env =
              arg_v <- recEval arg
              evalRecursorApp (simModMap cfg) lam ps_th p_ret_th cs_fs_th arg_v
         RecordType elem_tps ->
-          TValue . VRecordType <$> mapM (\(fld,t) -> (fld,) <$> recEval t) elem_tps
+          TValue . VRecordType <$> traverse (traverse (fmap toTValue . recEval)) elem_tps
         RecordValue elems   ->
           VRecordValue <$> mapM (\(fld,t) -> (fld,) <$> recEvalDelay t) elems
         RecordProj t fld    -> recEval t >>= flip valRecordProj fld
@@ -169,7 +170,7 @@ evalTermF cfg lam recEval tf env =
         NatLit n            -> return $ VNat n
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
         StringLit s         -> return $ VString s
-        ExtCns ec           -> do ec' <- traverse recEval ec
+        ExtCns ec           -> do ec' <- traverse (fmap toTValue . recEval) ec
                                   simExtCns cfg tf ec'
   where
     recEvalDelay :: Term -> EvalM l (Thunk l)
@@ -202,20 +203,20 @@ evalTypedDef cfg = evalDef (evalTerm cfg)
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (ValueIn Id l) ->
-  (ExtCns (ValueIn Id l) -> MValueIn Id l) ->
-  (ExtCns (ValueIn Id l) -> Maybe (MValueIn Id l)) ->
+  (ExtCns (TValueIn Id l) -> MValueIn Id l) ->
+  (ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal ::
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (ValueIn IO l) ->
-  (ExtCns (ValueIn IO l) -> MValueIn IO l) ->
-  (ExtCns (ValueIn IO l) -> Maybe (MValueIn IO l)) ->
+  (ExtCns (TValueIn IO l) -> MValueIn IO l) ->
+  (ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
   IO (SimulatorConfigIn IO l) #-}
 evalGlobal :: forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
               ModuleMap -> Map Ident (Value l) ->
-              (ExtCns (Value l) -> MValue l) ->
-              (ExtCns (Value l) -> Maybe (EvalM l (Value l))) ->
+              (ExtCns (TValue l) -> MValue l) ->
+              (ExtCns (TValue l) -> Maybe (EvalM l (Value l))) ->
               EvalM l (SimulatorConfig l)
 evalGlobal modmap prims extcns uninterpreted =
   evalGlobal' modmap prims (const extcns) (const uninterpreted)
@@ -224,23 +225,23 @@ evalGlobal modmap prims extcns uninterpreted =
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (ValueIn Id l) ->
-  (TermF Term -> ExtCns (ValueIn Id l) -> MValueIn Id l) ->
-  (TermF Term -> ExtCns (ValueIn Id l) -> Maybe (MValueIn Id l)) ->
+  (TermF Term -> ExtCns (TValueIn Id l) -> MValueIn Id l) ->
+  (TermF Term -> ExtCns (TValueIn Id l) -> Maybe (MValueIn Id l)) ->
   Id (SimulatorConfigIn Id l) #-}
 {-# SPECIALIZE evalGlobal' ::
   Show (Extra l) =>
   ModuleMap ->
   Map Ident (ValueIn IO l) ->
-  (TermF Term -> ExtCns (ValueIn IO l) -> MValueIn IO l) ->
-  (TermF Term -> ExtCns (ValueIn IO l) -> Maybe (MValueIn IO l)) ->
+  (TermF Term -> ExtCns (TValueIn IO l) -> MValueIn IO l) ->
+  (TermF Term -> ExtCns (TValueIn IO l) -> Maybe (MValueIn IO l)) ->
   IO (SimulatorConfigIn IO l) #-}
 -- | A variant of 'evalGlobal' that lets the uninterpreted function
 -- symbol and external-constant callbacks have access to the 'TermF'.
 evalGlobal' ::
   forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
   ModuleMap -> Map Ident (Value l) ->
-  (TermF Term -> ExtCns (Value l) -> MValue l) ->
-  (TermF Term -> ExtCns (Value l) -> Maybe (EvalM l (Value l))) ->
+  (TermF Term -> ExtCns (TValue l) -> MValue l) ->
+  (TermF Term -> ExtCns (TValue l) -> Maybe (EvalM l (Value l))) ->
   EvalM l (SimulatorConfig l)
 evalGlobal' modmap prims extcns uninterpreted = do
    checkPrimitives modmap prims
