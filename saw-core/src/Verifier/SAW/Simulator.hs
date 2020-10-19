@@ -132,7 +132,7 @@ evalTermF cfg lam recEval tf env =
                                   apply v x
     Lambda _ _ t            -> return $ VFun (\x -> lam t (x : env))
     Pi _ t1 t2              -> do v <- recEval t1
-                                  return $ VPiType v (\x -> lam t2 (x : env))
+                                  return $ TValue $ VPiType v (\x -> lam t2 (x : env))
     LocalVar i              -> force (env !! i)
     Constant ec t           -> do ec' <- traverse recEval ec
                                   maybe (recEval t) id (simUninterpreted cfg tf ec')
@@ -140,20 +140,20 @@ evalTermF cfg lam recEval tf env =
       case ftf of
         GlobalDef ident     -> simGlobal cfg ident
         UnitValue           -> return VUnit
-        UnitType            -> return VUnitType
+        UnitType            -> return $ TValue VUnitType
         PairValue x y       -> do tx <- recEvalDelay x
                                   ty <- recEvalDelay y
                                   return $ VPair tx ty
         PairType x y        -> do vx <- recEval x
                                   vy <- recEval y
-                                  return $ VPairType vx vy
+                                  return $ TValue $ VPairType vx vy
         PairLeft x          -> valPairLeft =<< recEval x
         PairRight x         -> valPairRight =<< recEval x
         CtorApp ident ps ts -> do v <- simGlobal cfg ident
                                   ps' <- mapM recEvalDelay ps
                                   ts' <- mapM recEvalDelay ts
                                   foldM apply v (ps' ++ ts')
-        DataTypeApp i ps ts -> liftM (VDataType i) $ mapM recEval (ps ++ ts)
+        DataTypeApp i ps ts -> TValue . VDataType i <$> mapM recEval (ps ++ ts)
         RecursorApp _d ps p_ret cs_fs _ixs arg ->
           do ps_th <- mapM recEvalDelay ps
              p_ret_th <- recEvalDelay p_ret
@@ -161,11 +161,11 @@ evalTermF cfg lam recEval tf env =
              arg_v <- recEval arg
              evalRecursorApp (simModMap cfg) lam ps_th p_ret_th cs_fs_th arg_v
         RecordType elem_tps ->
-          VRecordType <$> mapM (\(fld,t) -> (fld,) <$> recEval t) elem_tps
+          TValue . VRecordType <$> mapM (\(fld,t) -> (fld,) <$> recEval t) elem_tps
         RecordValue elems   ->
           VRecordValue <$> mapM (\(fld,t) -> (fld,) <$> recEvalDelay t) elems
         RecordProj t fld    -> recEval t >>= flip valRecordProj fld
-        Sort {}             -> return VType
+        Sort {}             -> return $ TValue VType
         NatLit n            -> return $ VNat n
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
         StringLit s         -> return $ VString s

@@ -138,11 +138,12 @@ bpBool bp False = return (bpFalse bp)
 -- | Given implementations of the base primitives, construct a table
 -- containing implementations of all primitives.
 constMap ::
+  forall l.
   (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
   BasePrims l -> Map Ident (Value l)
 constMap bp = Map.fromList
   -- Boolean
-  [ ("Prelude.Bool"  , VBoolType)
+  [ ("Prelude.Bool"  , TValue VBoolType)
   , ("Prelude.True"  , VBool (bpTrue bp))
   , ("Prelude.False" , VBool (bpFalse bp))
   , ("Prelude.not"   , strictFun (liftM VBool . bpNot bp . toBool))
@@ -203,7 +204,7 @@ constMap bp = Map.fromList
   , ("Prelude.equalNat", equalNatOp bp)
   , ("Prelude.ltNat", ltNatOp bp)
   -- Integers
-  , ("Prelude.Integer", VIntType)
+  , ("Prelude.Integer", TValue VIntType)
   , ("Prelude.intAdd", intBinOp "intAdd" (bpIntAdd bp))
   , ("Prelude.intSub", intBinOp "intSub" (bpIntSub bp))
   , ("Prelude.intMul", intBinOp "intMul" (bpIntMul bp))
@@ -576,7 +577,7 @@ natCaseOp =
 
 -- Vec :: (n :: Nat) -> (a :: sort 0) -> sort 0;
 vecTypeOp :: VMonad l => Value l
-vecTypeOp = pureFun $ \n -> pureFun $ \a -> VVecType n a
+vecTypeOp = pureFun $ \n -> pureFun $ \a -> TValue (VVecType n a)
 
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
 genOp :: (VMonadLazy l, Show (Extra l)) => Value l
@@ -1250,13 +1251,19 @@ muxValue bp b = value
     value (VString x)       (VString y)       | x == y = return $ VString x
     value (VFloat x)        (VFloat y)        | x == y = return $ VFloat x
     value (VDouble x)       (VDouble y)       | x == y = return $ VDouble y
-    value VType             VType             = return VType
     value (VExtra x)        (VExtra y)        = VExtra <$> bpMuxExtra bp b x y
     value x@(VWord _)       y                 = toVector (bpUnpack bp) x >>= \xv -> value (VVector xv) y
     value x                 y@(VWord _)       = toVector (bpUnpack bp) y >>= \yv -> value x (VVector yv)
     value x@(VNat _)        y                 = nat x y
     value x@(VToNat _)      y                 = nat x y
+    value (TValue x)        (TValue y)        = TValue <$> tvalue x y
     value x                 y                 =
+      panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
+      ++ show x ++ " " ++ show y
+
+    tvalue :: TValue l -> TValue l -> EvalM l (TValue l)
+    tvalue VType             VType             = return VType
+    tvalue x                 y                 =
       panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y
 
@@ -1289,7 +1296,7 @@ fixOp =
 
 -- Array :: sort 0 -> sort 0 -> sort 0
 arrayTypeOp :: VMonad l => Value l
-arrayTypeOp = pureFun $ \a -> pureFun $ \b -> VArrayType a b
+arrayTypeOp = pureFun $ \a -> pureFun $ \b -> TValue (VArrayType a b)
 
 -- arrayConstant :: (a b :: sort 0) -> b -> (Array a b);
 arrayConstantOp :: VMonad l => BasePrims l -> Value l

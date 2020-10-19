@@ -196,7 +196,7 @@ constMap =
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.IntMod"    , constFun VIntType)
+  , ("Prelude.IntMod"    , constFun (TValue VIntType))
   , ("Prelude.toIntMod"  , constFun (VFun force))
   , ("Prelude.fromIntMod", fromIntModOp)
   , ("Prelude.intModEq"  , intModEqOp)
@@ -568,37 +568,37 @@ sbvSolveBasic m addlPrims unints t = do
 parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue
 parseUninterpreted cws nm ty =
   case ty of
-    (VPiType _ f)
+    TValue (VPiType _ f)
       -> return $
          strictFun $ \x -> do
            (cws', suffix) <- flattenSValue x
            t2 <- f (ready x)
            parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
 
-    VBoolType
+    TValue VBoolType
       -> return $ vBool $ mkUninterpreted KBool cws nm
 
-    VIntType
+    TValue VIntType
       -> return $ vInteger $ mkUninterpreted KUnbounded cws nm
 
-    (VVecType (VNat n) VBoolType)
+    TValue (VVecType (VNat n) (TValue VBoolType))
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
 
-    (VVecType (VNat n) ety)
+    TValue (VVecType (VNat n) ety)
       -> do xs <- sequence $
                   [ parseUninterpreted cws (nm ++ "@" ++ show i) ety
                   | i <- [0 .. n-1] ]
             return (VVector (V.fromList (map ready xs)))
 
-    VUnitType
+    TValue VUnitType
       -> return VUnit
 
-    (VPairType ty1 ty2)
+    TValue (VPairType ty1 ty2)
       -> do x1 <- parseUninterpreted cws (nm ++ ".L") ty1
             x2 <- parseUninterpreted cws (nm ++ ".R") ty2
             return (VPair (ready x1) (ready x2))
 
-    (VRecordType elem_tps)
+    TValue (VRecordType elem_tps)
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
@@ -613,8 +613,8 @@ mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
 asPredType :: SValue -> IO [SValue]
 asPredType v =
   case v of
-    VBoolType -> return []
-    VPiType v1 f ->
+    TValue VBoolType -> return []
+    TValue (VPiType v1 f) ->
       do v2 <- f (error "asPredType: unsupported dependent SAW-Core type")
          vs <- asPredType v2
          return (v1 : vs)
@@ -623,22 +623,22 @@ asPredType v =
 vAsFirstOrderType :: SValue -> Maybe FirstOrderType
 vAsFirstOrderType v =
   case v of
-    VBoolType
+    TValue VBoolType
       -> return FOTBit
-    VIntType
+    TValue VIntType
       -> return FOTInt
-    VVecType (VNat n) v2
+    TValue (VVecType (VNat n) v2)
       -> FOTVec n <$> vAsFirstOrderType v2
-    VUnitType
+    TValue VUnitType
       -> return (FOTTuple [])
-    VPairType v1 v2
+    TValue (VPairType v1 v2)
       -> do t1 <- vAsFirstOrderType v1
             t2 <- vAsFirstOrderType v2
             case t2 of
               FOTTuple ts -> return (FOTTuple (t1 : ts))
               _ -> return (FOTTuple [t1, t2])
 
-    VRecordType tps
+    TValue (VRecordType tps)
       -> (FOTRec <$> Map.fromList <$>
           mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
     _ -> Nothing

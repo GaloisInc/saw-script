@@ -21,7 +21,7 @@ import Verifier.SAW.Recognizer (asBoolType, asPi, asEq)
 import Verifier.SAW.SharedTerm
   (scApplyAll, scGetModuleMap, scWhnf, SharedContext, Term)
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm, CValue)
-import Verifier.SAW.Simulator.Value (Value(..))
+import Verifier.SAW.Simulator.Value (Value(..), TValue(..))
 import Verifier.SAW.TypedAST (FieldName)
 import Verifier.SAW.Utils (panic)
 
@@ -78,7 +78,7 @@ scRunTest sc fun gens = do
     VBool True -> return $ Nothing
     VBool False -> do
       return $ Just xs
-    VDataType "Prelude.Eq" [VBoolType, VBool x, VBool y] -> do
+    TValue (VDataType "Prelude.Eq" [TValue VBoolType, VBool x, VBool y]) -> do
       return $ if x == y then Nothing else Just xs
     _ -> panic "Type error while running test"
          [ "Expected a boolean, but got:"

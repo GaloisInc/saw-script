@@ -269,7 +269,7 @@ beConstMap be =
   , ("Prelude.bvToInt" , bvToIntOp be)
   , ("Prelude.sbvToInt", sbvToIntOp be)
   -- Integers mod n
-  , ("Prelude.IntMod"    , constFun VIntType)
+  , ("Prelude.IntMod"    , constFun (TValue VIntType))
   , ("Prelude.toIntMod"  , toIntModOp)
   , ("Prelude.fromIntMod", constFun (VFun force))
   , ("Prelude.intModEq"  , intModEqOp be)
