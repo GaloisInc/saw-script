@@ -38,9 +38,13 @@ retry() {
 }
 
 setup_dist_bins() {
-  is_exe "dist/bin" "saw" && is_exe "dist/bin" "jss" && is_exe "dist/bin" "saw-remote-api" && return
+  if $IS_WIN ; then
+    is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
+  else
+    is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && is_exe "dist/bin" "jss" && return
+    extract_exe "jss" "dist/bin"
+  fi
   extract_exe "saw" "dist/bin"
-  extract_exe "jss" "dist/bin"
   extract_exe "saw-remote-api" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
   echo "::add-path::$PWD/dist/bin"
@@ -107,11 +111,11 @@ install_yices() {
 
 install_yasm() {
   is_exe "$BIN" "yasm" && return
-  if [[ "$RUNNER_OS" = "Linux" ]]; then
-    sudo apt-get update -q && sudo apt-get install -y yasm
-  else
-    brew install yasm
-  fi
+  case "$RUNNER_OS" in
+    Linux) sudo apt-get update -q && sudo apt-get install -y yasm ;;
+    macOS) brew install yasm ;;
+    Windows) choco install yasm ;;
+  esac
 }
 
 build() {
@@ -119,11 +123,19 @@ build() {
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   echo "allow-newer: all" >> cabal.project.local
+  if $IS_WIN; then
+    echo "flags: -builtin-abc" >> cabal.project.local
+    echo "constraints: jvm-verifier -builtin-abc, cryptol-saw-core -build-css" >> cabal.project.local
+    pkgs="saw saw-remote-api"
+  else
+    pkgs="jss saw saw-remote-api"
+  fi
+  echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
-  if ! retry cabal v2-build "$@" jss saw saw-remote-api && [[ "$RUNNER_OS" == "macOS" ]]; then
+  if ! retry cabal v2-build "$@" $pkgs && [[ "$RUNNER_OS" == "macOS" ]]; then
     echo "Working around a dylib issue on macos by removing the cache and trying again"
     cabal v2-clean
-    retry cabal v2-build "$@" jss saw saw-remote-api
+    retry cabal v2-build "$@" $pkgs
   fi
 }
 

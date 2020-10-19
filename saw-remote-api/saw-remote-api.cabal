@@ -20,6 +20,10 @@ data-files:          test-scripts/*.py
                      test-scripts/*.bc
                      test-scripts/*.c
 
+flag builtin-abc
+  description: Link with ABC as a static library
+  default: True
+
 common warnings
   ghc-options:
     -Weverything
@@ -35,7 +39,6 @@ common warnings
 
 common deps
   build-depends: base >=4.11.1.0 && <4.15,
-                 abcBridge,
                  aeson,
                  argo,
                  bytestring,
@@ -61,6 +64,11 @@ common deps
                  vector >= 0.12 && < 0.13,
                  cryptol-remote-api
   default-language: Haskell2010
+  if flag(builtin-abc)
+    cpp-options: -DUSE_BUILTIN_ABC
+    build-depends: abcBridge
+  else
+    build-depends: aig
 
 library
   import: deps, warnings
