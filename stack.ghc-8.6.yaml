@@ -5,7 +5,9 @@ packages:
   - deps/jvm-parser/
   - deps/aig/
   - deps/abcBridge/
+  - deps/argo/argo/
   - deps/cryptol/
+  - deps/cryptol/cryptol-remote-api/
   - deps/saw-core/cryptol-saw-core/
   - deps/saw-core/saw-core/
   - deps/saw-core/saw-core-aig/
@@ -44,7 +46,6 @@ extra-deps:
   - config-schema-1.2.0.0
   - config-value-0.7.0.1
   - simple-get-opt-0.3
-  - QuickCheck-2.14
   - splitmix-0.0.4
   - bv-sized-1.0.1
   - bitwise-1.0.0.1
@@ -52,5 +53,7 @@ extra-deps:
   - libBF-0.5.1
   - hashable-1.3.0.0
   - lens-4.19.2
+  - network-3.1.1.1
+  - scotty-0.12
 resolver: lts-14.27
 allow-newer: false
