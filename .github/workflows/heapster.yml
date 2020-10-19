@@ -14,6 +14,8 @@ jobs:
         ghc: ["8.6.5", "8.8.4", "8.10.2"]
     runs-on: ${{ matrix.os }}
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
+    # continue-on-error controls whether a failed job should cause a failed
+    # workflow notification email to be sent to the committer.
     continue-on-error: "${{ matrix.ghc == '8.8.4' || matrix.ghc == '8.10.2' }}"
     env:
       OCAML_VERSION: 4.09.1
