@@ -734,14 +734,14 @@ parseUninterpreted sym ref app ty =
       -> VInt  <$> mkUninterpreted sym ref app BaseIntegerRepr
 
     -- 0 width bitvector is a constant
-    VVecType (VNat 0) VBoolType
+    VVecType 0 VBoolType
       -> return $ VWord ZBV
 
-    VVecType (VNat n) VBoolType
+    VVecType n VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
       -> (VWord . DBV) <$> mkUninterpreted sym ref app (BaseBVRepr w)
 
-    VVecType (VNat n) ety
+    VVecType n ety
       ->  do xs <- sequence $
                   [ parseUninterpreted sym ref (suffixUnintApp ("_a" ++ show i) app) ety
                   | i <- [0 .. n-1] ]
@@ -895,7 +895,7 @@ vAsFirstOrderType v =
       -> return FOTBit
     VIntType
       -> return FOTInt
-    VVecType (VNat n) v2
+    VVecType n v2
       -> FOTVec n <$> vAsFirstOrderType v2
     VArrayType iv ev
       -> FOTArray <$> vAsFirstOrderType iv <*> vAsFirstOrderType ev
@@ -1102,14 +1102,14 @@ parseUninterpretedSAW sym sc ref trm app ty =
       -> VInt  <$> mkUninterpretedSAW sym ref trm app BaseIntegerRepr
 
     -- 0 width bitvector is a constant
-    VVecType (VNat 0) VBoolType
+    VVecType 0 VBoolType
       -> return $ VWord ZBV
 
-    VVecType (VNat n) VBoolType
+    VVecType n VBoolType
       | Just (Some (PosNat w)) <- somePosNat n
       -> (VWord . DBV) <$> mkUninterpretedSAW sym ref trm app (BaseBVRepr w)
 
-    VVecType (VNat n) ety | n >= 0
+    VVecType n ety | n >= 0
       ->  do ety' <- termOfTValue sc ety
              let mkElem i =
                    do let trm' = ArgTermAt n ety' trm i
@@ -1273,7 +1273,7 @@ termOfTValue sc val =
     VBoolType -> scBoolType sc
     VIntType -> scIntegerType sc
     VUnitType -> scUnitType sc
-    VVecType (VNat n) a ->
+    VVecType n a ->
       do n' <- scNat sc n
          a' <- termOfTValue sc a
          scVecType sc n' a'

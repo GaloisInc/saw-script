@@ -577,7 +577,9 @@ natCaseOp =
 
 -- Vec :: (n :: Nat) -> (a :: sort 0) -> sort 0;
 vecTypeOp :: VMonad l => Value l
-vecTypeOp = pureFun $ \n -> pureFun $ \a -> TValue (VVecType n (toTValue a))
+vecTypeOp =
+  natFun' "VecType" $ \n -> return $
+  pureFun $ \a -> TValue (VVecType n (toTValue a))
 
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
 genOp :: (VMonadLazy l, Show (Extra l)) => Value l

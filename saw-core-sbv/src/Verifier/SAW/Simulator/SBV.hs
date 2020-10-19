@@ -581,10 +581,10 @@ parseUninterpreted cws nm ty =
     VIntType
       -> return $ vInteger $ mkUninterpreted KUnbounded cws nm
 
-    (VVecType (VNat n) VBoolType)
+    (VVecType n VBoolType)
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
 
-    (VVecType (VNat n) ety)
+    (VVecType n ety)
       -> do xs <- sequence $
                   [ parseUninterpreted cws (nm ++ "@" ++ show i) ety
                   | i <- [0 .. n-1] ]
@@ -627,7 +627,7 @@ vAsFirstOrderType v =
       -> return FOTBit
     VIntType
       -> return FOTInt
-    VVecType (VNat n) v2
+    VVecType n v2
       -> FOTVec n <$> vAsFirstOrderType v2
     VUnitType
       -> return (FOTTuple [])

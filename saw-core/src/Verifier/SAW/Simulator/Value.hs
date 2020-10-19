@@ -66,7 +66,7 @@ data Value l
 
 -- | The subset of values that represent types.
 data TValue l
-  = VVecType !(Value l) !(TValue l)
+  = VVecType !Natural !(TValue l)
   | VBoolType
   | VIntType
   | VArrayType !(TValue l) !(TValue l)
@@ -183,7 +183,7 @@ instance Show (Extra l) => Show (TValue l) where
       VRecordType [] -> showString "{}"
       VRecordType ((fld,_):_) ->
         showString "{" . showString fld . showString " :: _, ...}"
-      VVecType n a   -> showString "Vec " . showParen True (showsPrec p n)
+      VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
       VType          -> showString "_"
 
@@ -245,7 +245,7 @@ asFiniteTypeTValue :: TValue l -> Maybe FiniteType
 asFiniteTypeTValue v =
   case v of
     VBoolType -> return FTBit
-    VVecType (VNat n) v1 -> do
+    VVecType n v1 -> do
       t1 <- asFiniteTypeTValue v1
       return (FTVec n t1)
     VUnitType -> return (FTTuple [])

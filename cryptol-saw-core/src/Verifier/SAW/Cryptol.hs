@@ -1366,7 +1366,7 @@ asCryptolTypeValue v =
       t1 <- asCryptolTypeValue v1
       t2 <- asCryptolTypeValue v2
       return $ C.tArray t1 t2
-    SC.VVecType (SC.VNat n) v2 -> do
+    SC.VVecType n v2 -> do
       t2 <- asCryptolTypeValue v2
       return (C.tSeq (C.tNum n) t2)
     SC.VDataType "Prelude.Stream" [v1] -> do
