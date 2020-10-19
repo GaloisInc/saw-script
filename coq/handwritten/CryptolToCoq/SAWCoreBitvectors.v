@@ -219,6 +219,21 @@ Admitted.
 
 Hint Rewrite bvNeg_msb : SAWCoreBitvectors.
 
+Lemma bvslt_bvSub_r w a b : isBvslt w a b <-> isBvslt w (intToBv w 0) (bvSub w b a).
+Admitted.
+
+Lemma bvslt_bvSub_l w a b : isBvslt w a b <-> isBvslt w (bvSub w a b) (intToBv w 0).
+Admitted.
+
+Lemma bvEq_bvSub_r w a b : a = b <-> intToBv w 0 = bvSub w b a.
+Admitted.
+
+Lemma bvEq_bvSub_l w a b : a = b <-> bvSub w a b = intToBv w 0.
+Admitted.
+
+Lemma bvSub_eq_bvAdd_neg w a b : bvSub w a b = bvAdd w a (bvNeg w b).
+Admitted.
+
 
 (** Other rewriting hints not directly imvolving bitvectors **)
 
