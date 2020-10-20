@@ -798,22 +798,6 @@ w4_unint_cvc4 = wrapW4Prover . Prover.proveWhat4_cvc4
 w4_unint_yices :: [String] -> ProofScript SV.SatResult
 w4_unint_yices = wrapW4Prover . Prover.proveWhat4_yices
 
-offline_w4_boolector :: String -> ProofScript SV.SatResult
-offline_w4_boolector = offline_w4_unint_boolector []
-
-offline_w4_z3 :: String -> ProofScript SV.SatResult
-offline_w4_z3 = offline_w4_unint_z3 []
-
-offline_w4_cvc4 :: String -> ProofScript SV.SatResult
-offline_w4_cvc4 = offline_w4_unint_cvc4 []
-
-offline_w4_yices :: String -> ProofScript SV.SatResult
-offline_w4_yices = offline_w4_unint_yices []
-
-offline_w4_unint_boolector :: [String] -> String -> ProofScript SV.SatResult
-offline_w4_unint_boolector unints path =
-  wrapW4ProveExporter (Prover.proveExportWhat4_boolector unints) path ".smt2"
-
 offline_w4_unint_z3 :: [String] -> String -> ProofScript SV.SatResult
 offline_w4_unint_z3 unints path =
   wrapW4ProveExporter (Prover.proveExportWhat4_z3 unints) path ".smt2"

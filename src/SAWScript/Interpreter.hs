@@ -1324,12 +1324,6 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "offline_w4"             "String -> ProofScript SatResult"
-    (pureVal offline_w4_z3)
-    Current
-    [ "Write the current goal to the given file using What4 (Z3 backend) in"
-    , "SMT-Lib2 format."]
-
   , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript SatResult"
     (pureVal offline_w4_unint_z3)
     Current
