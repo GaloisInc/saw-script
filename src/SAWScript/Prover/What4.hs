@@ -148,7 +148,6 @@ proveWhat4_solver :: forall st t ff.
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
   -- ^ (example/counter-example, solver statistics)
 proveWhat4_solver solver sym unints sc goal =
-
   do
      (argNames, bvs, lit, stats) <- setupWhat4_solver solver sym unints sc goal
 
