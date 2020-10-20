@@ -268,7 +268,8 @@ flattenSValue v = do
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
-        _ -> fail $ "Could not create sbv argument for " ++ show v
+        VFun _ -> fail "Cannot create uninterpreted higher-order function"
+        _ -> fail $ "Cannot create uninterpreted function with argument " ++ show v
 
 vWord :: SWord -> SValue
 vWord lv = VWord lv

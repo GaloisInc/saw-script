@@ -828,7 +828,8 @@ applyUnintApp app0 v =
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     TValue (suffixTValue -> Just s)
                               -> return (suffixUnintApp s app0)
-    _ -> fail $ "Could not create argument for " ++ show v
+    VFun _ -> fail "Cannot create uninterpreted higher-order function"
+    _ -> fail $ "Cannot create uninterpreted function with argument " ++ show v
 
 
 ------------------------------------------------------------
