@@ -56,9 +56,9 @@ import SAWScript.Proof
 import SAWScript.Utils
 import SAWScript.Value as SS
 
-import qualified Cryptol.Eval.Monad as Cryptol (runEval)
+import qualified Cryptol.Backend.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
-import qualified Cryptol.Eval.Concrete.Value as Cryptol (Concrete(..))
+import qualified Cryptol.Eval.Concrete as Cryptol (Concrete(..))
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
 

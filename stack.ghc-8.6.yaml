@@ -9,6 +9,7 @@ packages:
   - deps/cryptol/
   - deps/cryptol/cryptol-remote-api/
   - deps/saw-core/cryptol-saw-core/
+  - deps/saw-core/rme/
   - deps/saw-core/saw-core/
   - deps/saw-core/saw-core-aig/
   - deps/saw-core/saw-core-sbv/
