@@ -123,7 +123,7 @@ Hint Extern 1 (@letRecM ?lrts _ _ _ |= @letRecM ?lrts _ (lrtLambda (fun _ => _))
   try (apply refinesFunTuple_multiFixM; unfold refinesFunTuple; split_prod_goal);
   unfold lrtApply, lrtLambda; unfold_projs : refinesM.
 
-Inductive ArgName := Any | Either | Maybe | SigT | If | Assert | Assuming.
+Inductive ArgName := Any | Either | Maybe | SigT | If | Assert | Assuming | Exists | Forall.
 Ltac argName n :=
   match n with
   | Any      => fresh "a"
@@ -133,6 +133,8 @@ Ltac argName n :=
   | If       => fresh "e_if"
   | Assert   => fresh "e_assert"
   | Assuming => fresh "e_assuming"
+  | Exists   => fresh "e_exists"
+  | Forall   => fresh "e_forall"
   end.
 
 Definition IntroArg (_ : ArgName) A (goal : A -> Prop) := forall a, goal a.
@@ -291,10 +293,10 @@ Hint Extern 2 (assumingM _ _ |= _) =>
   eapply refinesM_assumingM_l; shelve : refinesM.
 
 Definition refinesM_existsM_l' A B (P: A -> CompM B) Q :
-  (IntroArg Any _ (fun a => P a |= Q)) -> existsM P |= Q :=
+  (IntroArg Exists _ (fun a => P a |= Q)) -> existsM P |= Q :=
   refinesM_existsM_l A B P Q.
 Definition refinesM_forallM_r' {A B} P (Q: A -> CompM B) :
-  (IntroArg Any _ (fun a => P |= (Q a))) -> P |= (forallM Q) :=
+  (IntroArg Forall _ (fun a => P |= (Q a))) -> P |= (forallM Q) :=
   refinesM_forallM_r P Q.
 
 Hint Resolve refinesM_existsM_l' refinesM_forallM_r' | 2 : refinesM.
