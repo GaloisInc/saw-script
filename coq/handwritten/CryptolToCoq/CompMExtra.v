@@ -113,6 +113,7 @@ Qed.
  ***)
 
 Create HintDb refinesM.
+Create HintDb refinesFun.
 
 Hint Extern 999 (_ |= _) => shelve : refinesM.
 
@@ -180,34 +181,34 @@ Proof.
 Qed.
 
 Hint Resolve IntroArg_and IntroArg_or IntroArg_sigT IntroArg_prod IntroArg_sum
-             IntroArg_unit IntroArg_eq_sigT_const | 1 : refinesM.
+             IntroArg_unit IntroArg_eq_sigT_const | 1 : refinesFun.
 
 Hint Extern 2 (IntroArg ?n (@eq bool _ _) _) =>
   let e := fresh in
     apply IntroArg_unfold; intro e; unfold_projs in e;
     progress (compute_bv_funs in e; autorewrite with SAWCoreBitvectors in e);
-    apply (IntroArg_fold n _ _ e); clear e : refinesM.
+    apply (IntroArg_fold n _ _ e); clear e : refinesFun.
 
 Hint Extern 3 (IntroArg ?n (isBvsle _ _ _) _) =>
   let e := argName n in
   let e' := fresh in
     apply IntroArg_unfold; intro e; assert (e' := e);
-    unfold isBvsle in e'; try rewrite e'; clear e' : refinesM.
+    unfold isBvsle in e'; try rewrite e'; clear e' : refinesFun.
 Hint Extern 3 (IntroArg ?n (isBvslt _ _ _) _) =>
   let e := argName n in
   let e' := fresh in
     apply IntroArg_unfold; intro e; assert (e' := e);
-    unfold isBvslt in e'; try rewrite e'; clear e' : refinesM.
+    unfold isBvslt in e'; try rewrite e'; clear e' : refinesFun.
 Hint Extern 3 (IntroArg ?n (isBvule _ _ _) _) =>
   let e := argName n in
   let e' := fresh in
     apply IntroArg_unfold; intro e; assert (e' := e);
-    unfold isBvule in e'; try rewrite e'; clear e' : refinesM.
+    unfold isBvule in e'; try rewrite e'; clear e' : refinesFun.
 Hint Extern 3 (IntroArg ?n (isBvult _ _ _) _) =>
   let e := argName n in
   let e' := fresh in
     apply IntroArg_unfold; intro e; assert (e' := e);
-    unfold isBvult in e'; try rewrite e'; clear e' : refinesM.
+    unfold isBvult in e'; try rewrite e'; clear e' : refinesFun.
 
 Hint Extern 3 (IntroArg ?n (@eq ?T _ _) _) =>
   let e := argName n in
@@ -221,11 +222,11 @@ Hint Extern 3 (IntroArg ?n (@eq ?T _ _) _) =>
          | Maybe _    => let e' := argName n in injection e; intro e'; try rewrite <- e'
          | {_ : _ & _ } => let e' := argName n in let e'' := argName n in
                              injection e; intros e' e''; clear e'; try rewrite <- e''
-         end) : refinesM.
+         end) : refinesFun.
 
 Hint Extern 4 (IntroArg ?n _ _) =>
   let e := argName n in
-    apply IntroArg_unfold; intro e; compute_bv_funs in e : refinesM.
+    apply IntroArg_unfold; intro e; compute_bv_funs in e : refinesFun.
 
 Definition refinesM_either_l' {A B C} (f:A -> CompM C) (g:B -> CompM C) eith P :
   (IntroArg Any _ (fun a => IntroArg Either (eith = SAWCorePrelude.Left _ _ a) (fun _ => f a |= P))) ->
@@ -387,7 +388,7 @@ Admitted.
  *** Automation for proving function refinement
  ***)
 
-Create HintDb refinesFun.
+(* Create HintDb refinesFun. *)
 Hint Extern 999 (_ |= _) => shelve : refinesFun.
 Hint Extern 999 (refinesFun _ _) => shelve : refinesFun.
 
