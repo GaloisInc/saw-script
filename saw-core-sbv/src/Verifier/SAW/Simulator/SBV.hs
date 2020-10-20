@@ -196,7 +196,7 @@ constMap =
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.IntMod"    , constFun VIntType)
+  , ("Prelude.IntMod"    , constFun (TValue VIntType))
   , ("Prelude.toIntMod"  , constFun (VFun force))
   , ("Prelude.fromIntMod", fromIntModOp)
   , ("Prelude.intModEq"  , intModEqOp)
@@ -565,7 +565,7 @@ sbvSolveBasic m addlPrims unints t = do
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted
   Sim.evalSharedTerm cfg t
 
-parseUninterpreted :: [SVal] -> String -> SValue -> IO SValue
+parseUninterpreted :: [SVal] -> String -> TValue SBV -> IO SValue
 parseUninterpreted cws nm ty =
   case ty of
     (VPiType _ f)
@@ -581,10 +581,10 @@ parseUninterpreted cws nm ty =
     VIntType
       -> return $ vInteger $ mkUninterpreted KUnbounded cws nm
 
-    (VVecType (VNat n) VBoolType)
+    (VVecType n VBoolType)
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
 
-    (VVecType (VNat n) ety)
+    (VVecType n ety)
       -> do xs <- sequence $
                   [ parseUninterpreted cws (nm ++ "@" ++ show i) ety
                   | i <- [0 .. n-1] ]
@@ -610,7 +610,7 @@ mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
-asPredType :: SValue -> IO [SValue]
+asPredType :: TValue SBV -> IO [TValue SBV]
 asPredType v =
   case v of
     VBoolType -> return []
@@ -620,14 +620,14 @@ asPredType v =
          return (v1 : vs)
     _ -> fail $ "non-boolean result type: " ++ show v
 
-vAsFirstOrderType :: SValue -> Maybe FirstOrderType
+vAsFirstOrderType :: TValue SBV -> Maybe FirstOrderType
 vAsFirstOrderType v =
   case v of
     VBoolType
       -> return FOTBit
     VIntType
       -> return FOTInt
-    VVecType (VNat n) v2
+    VVecType n v2
       -> FOTVec n <$> vAsFirstOrderType v2
     VUnitType
       -> return (FOTTuple [])
@@ -655,7 +655,7 @@ sbvSolve sc addlPrims unints t = do
   let lamNames = map fst (fst (R.asLambdaList t))
   let varNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
   let argNames = zipWith (++) varNames (map ("_" ++) lamNames ++ repeat "")
-  argTs <- asPredType ty
+  argTs <- asPredType (toTValue ty)
   (labels, vars) <-
     flip evalStateT 0 $ unzip <$>
     sequence (zipWith newVarsForType argTs argNames)
@@ -685,7 +685,7 @@ nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 myfun ::(Map String (Labeler, Symbolic SValue)) -> (Map String Labeler, Map String (Symbolic SValue))
 myfun = fmap fst A.&&& fmap snd
 
-newVarsForType :: SValue -> String -> StateT Int IO (Maybe Labeler, Symbolic SValue)
+newVarsForType :: TValue SBV -> String -> StateT Int IO (Maybe Labeler, Symbolic SValue)
 newVarsForType v nm =
   case vAsFirstOrderType v of
     Just fot ->

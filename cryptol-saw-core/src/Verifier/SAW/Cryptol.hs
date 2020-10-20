@@ -1357,7 +1357,7 @@ pIsNeq ty = case C.tNoUser ty of
 --------------------------------------------------------------------------------
 -- Utilities
 
-asCryptolTypeValue :: SC.CValue -> Maybe C.Type
+asCryptolTypeValue :: SC.TValue SC.Concrete -> Maybe C.Type
 asCryptolTypeValue v =
   case v of
     SC.VBoolType -> return C.tBit
@@ -1366,11 +1366,11 @@ asCryptolTypeValue v =
       t1 <- asCryptolTypeValue v1
       t2 <- asCryptolTypeValue v2
       return $ C.tArray t1 t2
-    SC.VVecType (SC.VNat n) v2 -> do
+    SC.VVecType n v2 -> do
       t2 <- asCryptolTypeValue v2
       return (C.tSeq (C.tNum n) t2)
     SC.VDataType "Prelude.Stream" [v1] -> do
-      t1 <- asCryptolTypeValue v1
+      t1 <- asCryptolTypeValue (SC.toTValue v1)
       return (C.tSeq C.tInf t1)
     SC.VUnitType -> return (C.tTuple [])
     SC.VPairType v1 v2 -> do
@@ -1405,7 +1405,7 @@ asCryptolTypeValue v =
 scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
-     case asCryptolTypeValue (SC.evalSharedTerm modmap Map.empty t) of
+     case asCryptolTypeValue (SC.toTValue (SC.evalSharedTerm modmap Map.empty t)) of
        Just ty -> return ty
        Nothing -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
 

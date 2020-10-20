@@ -125,7 +125,7 @@ data BasePrims l =
   , bpIntMin :: VInt l -> VInt l -> MInt l
   , bpIntMax :: VInt l -> VInt l -> MInt l
     -- Array operations
-  , bpArrayConstant :: Value l -> Value l -> MArray l
+  , bpArrayConstant :: TValue l -> Value l -> MArray l
   , bpArrayLookup :: VArray l -> Value l -> MValue l
   , bpArrayUpdate :: VArray l -> Value l -> Value l -> MArray l
   , bpArrayEq :: VArray l -> VArray l -> MBool l
@@ -138,11 +138,12 @@ bpBool bp False = return (bpFalse bp)
 -- | Given implementations of the base primitives, construct a table
 -- containing implementations of all primitives.
 constMap ::
+  forall l.
   (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
   BasePrims l -> Map Ident (Value l)
 constMap bp = Map.fromList
   -- Boolean
-  [ ("Prelude.Bool"  , VBoolType)
+  [ ("Prelude.Bool"  , TValue VBoolType)
   , ("Prelude.True"  , VBool (bpTrue bp))
   , ("Prelude.False" , VBool (bpFalse bp))
   , ("Prelude.not"   , strictFun (liftM VBool . bpNot bp . toBool))
@@ -203,7 +204,7 @@ constMap bp = Map.fromList
   , ("Prelude.equalNat", equalNatOp bp)
   , ("Prelude.ltNat", ltNatOp bp)
   -- Integers
-  , ("Prelude.Integer", VIntType)
+  , ("Prelude.Integer", TValue VIntType)
   , ("Prelude.intAdd", intBinOp "intAdd" (bpIntAdd bp))
   , ("Prelude.intSub", intBinOp "intSub" (bpIntSub bp))
   , ("Prelude.intMul", intBinOp "intMul" (bpIntMul bp))
@@ -576,7 +577,9 @@ natCaseOp =
 
 -- Vec :: (n :: Nat) -> (a :: sort 0) -> sort 0;
 vecTypeOp :: VMonad l => Value l
-vecTypeOp = pureFun $ \n -> pureFun $ \a -> VVecType n a
+vecTypeOp =
+  natFun' "VecType" $ \n -> return $
+  pureFun $ \a -> TValue (VVecType n (toTValue a))
 
 -- gen :: (n :: Nat) -> (a :: sort 0) -> (Nat -> a) -> Vec n a;
 genOp :: (VMonadLazy l, Show (Extra l)) => Value l
@@ -1250,13 +1253,19 @@ muxValue bp b = value
     value (VString x)       (VString y)       | x == y = return $ VString x
     value (VFloat x)        (VFloat y)        | x == y = return $ VFloat x
     value (VDouble x)       (VDouble y)       | x == y = return $ VDouble y
-    value VType             VType             = return VType
     value (VExtra x)        (VExtra y)        = VExtra <$> bpMuxExtra bp b x y
     value x@(VWord _)       y                 = toVector (bpUnpack bp) x >>= \xv -> value (VVector xv) y
     value x                 y@(VWord _)       = toVector (bpUnpack bp) y >>= \yv -> value x (VVector yv)
     value x@(VNat _)        y                 = nat x y
     value x@(VToNat _)      y                 = nat x y
+    value (TValue x)        (TValue y)        = TValue <$> tvalue x y
     value x                 y                 =
+      panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
+      ++ show x ++ " " ++ show y
+
+    tvalue :: TValue l -> TValue l -> EvalM l (TValue l)
+    tvalue (VSort x)         (VSort y)         | x == y = return $ VSort y
+    tvalue x                 y                 =
       panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y
 
@@ -1289,7 +1298,7 @@ fixOp =
 
 -- Array :: sort 0 -> sort 0 -> sort 0
 arrayTypeOp :: VMonad l => Value l
-arrayTypeOp = pureFun $ \a -> pureFun $ \b -> VArrayType a b
+arrayTypeOp = pureFun $ \a -> pureFun $ \b -> TValue (VArrayType (toTValue a) (toTValue b))
 
 -- arrayConstant :: (a b :: sort 0) -> b -> (Array a b);
 arrayConstantOp :: VMonad l => BasePrims l -> Value l
@@ -1297,7 +1306,7 @@ arrayConstantOp bp =
   pureFun $ \a ->
   constFun $
   strictFun $ \e ->
-    VArray <$> (bpArrayConstant bp) a e
+    VArray <$> (bpArrayConstant bp) (toTValue a) e
 
 -- arrayLookup :: (a b :: sort 0) -> (Array a b) -> a -> b;
 arrayLookupOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l

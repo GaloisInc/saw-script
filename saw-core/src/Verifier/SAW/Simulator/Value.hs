@@ -51,27 +51,31 @@ data Value l
   | VPair (Thunk l) (Thunk l) -- TODO: should second component be strict?
   | VCtorApp !Ident !(Vector (Thunk l))
   | VVector !(Vector (Thunk l))
-  | VVecType (Value l) (Value l)
   | VBool (VBool l)
-  | VBoolType
   | VWord (VWord l)
   | VToNat (Value l)
   | VNat !Natural
   | VInt (VInt l)
-  | VIntType
   | VArray (VArray l)
-  | VArrayType (Value l) (Value l)
   | VString !String
   | VFloat !Float
   | VDouble !Double
-  | VPiType !(Value l) !(Thunk l -> MValue l)
-  | VUnitType
-  | VPairType (Value l) (Value l)
-  | VDataType !Ident [Value l]
-  | VRecordType ![(String, Value l)]
   | VRecordValue ![(String, Thunk l)]
-  | VType -- ^ Other unknown type
   | VExtra (Extra l)
+  | TValue (TValue l)
+
+-- | The subset of values that represent types.
+data TValue l
+  = VVecType !Natural !(TValue l)
+  | VBoolType
+  | VIntType
+  | VArrayType !(TValue l) !(TValue l)
+  | VPiType !(TValue l) !(Thunk l -> EvalM l (TValue l))
+  | VUnitType
+  | VPairType !(TValue l) !(TValue l)
+  | VDataType !Ident ![Value l]
+  | VRecordType ![(String, TValue l)]
+  | VSort !Sort
 
 type Thunk l = Lazy (EvalM l) (Value l)
 
@@ -132,6 +136,10 @@ pureFun f = VFun (\x -> liftM f (force x))
 constFun :: VMonad l => Value l -> Value l
 constFun x = VFun (\_ -> return x)
 
+toTValue :: Value l -> TValue l
+toTValue (TValue x) = x
+toTValue _ = panic "Verifier.SAW.Simulator.Value.toTValue" ["Not a type value"]
+
 instance Show (Extra l) => Show (Value l) where
   showsPrec p v =
     case v of
@@ -143,17 +151,28 @@ instance Show (Extra l) => Show (Value l) where
         | otherwise  -> shows s . showList (toList xv)
       VVector xv     -> showList (toList xv)
       VBool _        -> showString "<<boolean>>"
-      VBoolType      -> showString "Bool"
       VWord _        -> showString "<<bitvector>>"
       VToNat x       -> showString "bvToNat " . showParen True (shows x)
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
-      VIntType       -> showString "Integer"
       VArray{}       -> showString "<<array>>"
-      VArrayType{}   -> showString "Array"
       VFloat float   -> shows float
       VDouble double -> shows double
       VString s      -> shows s
+      VRecordValue [] -> showString "{}"
+      VRecordValue ((fld,_):_) ->
+        showString "{" . showString fld . showString " = _, ...}"
+      VExtra x       -> showsPrec p x
+      TValue x       -> showsPrec p x
+    where
+      toList = map (const Nil) . V.toList
+
+instance Show (Extra l) => Show (TValue l) where
+  showsPrec p v =
+    case v of
+      VBoolType      -> showString "Bool"
+      VIntType       -> showString "Integer"
+      VArrayType{}   -> showString "Array"
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
       VUnitType      -> showString "#()"
@@ -164,15 +183,9 @@ instance Show (Extra l) => Show (Value l) where
       VRecordType [] -> showString "{}"
       VRecordType ((fld,_):_) ->
         showString "{" . showString fld . showString " :: _, ...}"
-      VRecordValue [] -> showString "{}"
-      VRecordValue ((fld,_):_) ->
-        showString "{" . showString fld . showString " = _, ...}"
-      VVecType n a   -> showString "Vec " . showParen True (showsPrec p n)
+      VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
-      VType          -> showString "_"
-      VExtra x       -> showsPrec p x
-    where
-      toList = map (const Nil) . V.toList
+      VSort s        -> shows s
 
 data Nil = Nil
 
@@ -188,7 +201,7 @@ vTuple [_] = error "vTuple: unsupported 1-tuple"
 vTuple [x, y] = VPair x y
 vTuple (x : xs) = VPair x (ready (vTuple xs))
 
-vTupleType :: VMonad l => [Value l] -> Value l
+vTupleType :: VMonad l => [TValue l] -> TValue l
 vTupleType [] = VUnitType
 vTupleType [t] = t
 vTupleType (t : ts) = VPairType t (vTupleType ts)
@@ -216,7 +229,7 @@ valRecordProj v _ =
 
 apply :: (VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
-apply (VPiType _ f) x = f x
+apply (TValue (VPiType _ f)) x = TValue <$> f x
 apply v _x = panic "Verifier.SAW.Simulator.Value.apply" ["Not a function value:", show v]
 
 applyAll :: (VMonad l, Show (Extra l)) => Value l -> [Thunk l] -> MValue l
@@ -225,18 +238,24 @@ applyAll = foldM apply
 asFiniteTypeValue :: Value l -> Maybe FiniteType
 asFiniteTypeValue v =
   case v of
+    TValue tv -> asFiniteTypeTValue tv
+    _ -> Nothing
+
+asFiniteTypeTValue :: TValue l -> Maybe FiniteType
+asFiniteTypeTValue v =
+  case v of
     VBoolType -> return FTBit
-    VVecType (VNat n) v1 -> do
-      t1 <- asFiniteTypeValue v1
+    VVecType n v1 -> do
+      t1 <- asFiniteTypeTValue v1
       return (FTVec n t1)
     VUnitType -> return (FTTuple [])
     VPairType v1 v2 -> do
-      t1 <- asFiniteTypeValue v1
-      t2 <- asFiniteTypeValue v2
+      t1 <- asFiniteTypeTValue v1
+      t2 <- asFiniteTypeTValue v2
       case t2 of
         FTTuple ts -> return (FTTuple (t1 : ts))
         _ -> return (FTTuple [t1, t2])
     VRecordType elem_tps ->
       FTRec <$> Map.fromList <$>
-      mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeValue tp) elem_tps
+      mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeTValue tp) elem_tps
     _ -> Nothing
