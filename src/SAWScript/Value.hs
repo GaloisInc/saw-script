@@ -90,7 +90,7 @@ import Verifier.SAW.TypedTerm
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
-import qualified Cryptol.Eval.Concrete.Value as C
+import qualified Cryptol.Eval.Concrete as C
 import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.Logger as C (quietLogger)
@@ -533,10 +533,12 @@ typedTermOfString cs = TypedTerm schema trm
     bvNat8 = Unshared (App bvNat (nat 8))
     encodeChar :: Char -> Term
     encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
-    bitvector :: Term
-    bitvector = Unshared (FTermF (GlobalDef "Prelude.bitvector"))
+    vecT :: Term
+    vecT = Unshared (FTermF (GlobalDef "Prelude.Vec"))
+    boolT :: Term
+    boolT = Unshared (FTermF (GlobalDef "Prelude.Bool"))
     byteT :: Term
-    byteT = Unshared (App bitvector (nat 8))
+    byteT = Unshared (App (Unshared (App vecT (nat 8))) boolT)
     trm :: Term
     trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
     schema = Cryptol.Forall [] [] (Cryptol.tString (length cs))

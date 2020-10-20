@@ -2,11 +2,12 @@ module SAWScript.Prover.RME where
 
 import qualified Data.Map as Map
 
+import qualified Data.RME as RME
+
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 
 import qualified Verifier.SAW.Simulator.RME as RME
-import qualified Verifier.SAW.Simulator.RME.Base as RME
 import Verifier.SAW.Recognizer(asPiList)
 
 import SAWScript.Proof(Prop, propToPredicate)
