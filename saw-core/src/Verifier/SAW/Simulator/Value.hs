@@ -75,7 +75,7 @@ data TValue l
   | VPairType !(TValue l) !(TValue l)
   | VDataType !Ident ![Value l]
   | VRecordType ![(String, TValue l)]
-  | VType -- ^ Other unknown type
+  | VSort !Sort
 
 type Thunk l = Lazy (EvalM l) (Value l)
 
@@ -185,7 +185,7 @@ instance Show (Extra l) => Show (TValue l) where
         showString "{" . showString fld . showString " :: _, ...}"
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
-      VType          -> showString "_"
+      VSort s        -> shows s
 
 data Nil = Nil
 

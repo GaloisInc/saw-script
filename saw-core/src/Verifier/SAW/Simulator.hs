@@ -166,7 +166,7 @@ evalTermF cfg lam recEval tf env =
         RecordValue elems   ->
           VRecordValue <$> mapM (\(fld,t) -> (fld,) <$> recEvalDelay t) elems
         RecordProj t fld    -> recEval t >>= flip valRecordProj fld
-        Sort {}             -> return $ TValue VType
+        Sort s              -> return $ TValue (VSort s)
         NatLit n            -> return $ VNat n
         ArrayValue _ tv     -> liftM VVector $ mapM recEvalDelay tv
         StringLit s         -> return $ VString s

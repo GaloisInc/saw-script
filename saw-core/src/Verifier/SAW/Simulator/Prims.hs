@@ -1264,7 +1264,7 @@ muxValue bp b = value
       ++ show x ++ " " ++ show y
 
     tvalue :: TValue l -> TValue l -> EvalM l (TValue l)
-    tvalue VType             VType             = return VType
+    tvalue (VSort x)         (VSort y)         | x == y = return $ VSort y
     tvalue x                 y                 =
       panic $ "Verifier.SAW.Simulator.Prims.iteOp: malformed arguments: "
       ++ show x ++ " " ++ show y
