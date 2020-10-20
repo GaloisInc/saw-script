@@ -196,7 +196,6 @@ constMap =
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.IntMod"    , constFun (TValue VIntType))
   , ("Prelude.toIntMod"  , constFun (VFun force))
   , ("Prelude.fromIntMod", fromIntModOp)
   , ("Prelude.intModEq"  , intModEqOp)

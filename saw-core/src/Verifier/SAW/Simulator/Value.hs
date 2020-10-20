@@ -69,6 +69,7 @@ data TValue l
   = VVecType !Natural !(TValue l)
   | VBoolType
   | VIntType
+  | VIntModType !Natural
   | VArrayType !(TValue l) !(TValue l)
   | VPiType !(TValue l) !(Thunk l -> EvalM l (TValue l))
   | VUnitType
@@ -172,6 +173,7 @@ instance Show (Extra l) => Show (TValue l) where
     case v of
       VBoolType      -> showString "Bool"
       VIntType       -> showString "Integer"
+      VIntModType n  -> showParen True (showString "IntMod " . shows n)
       VArrayType{}   -> showString "Array"
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
@@ -271,6 +273,7 @@ suffixTValue tv =
          Just ("_Vec_" ++ show n ++ a')
     VBoolType -> Just "_Bool"
     VIntType -> Just "_Int"
+    VIntModType n -> Just ("_IntMod_" ++ show n)
     VArrayType a b ->
       do a' <- suffixTValue a
          b' <- suffixTValue b

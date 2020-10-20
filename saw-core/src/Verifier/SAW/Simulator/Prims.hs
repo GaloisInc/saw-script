@@ -226,6 +226,8 @@ constMap bp = Map.fromList
 -}
   , ("Prelude.intMin", intBinOp "intMin" (bpIntMin bp))
   , ("Prelude.intMax", intBinOp "intMax" (bpIntMax bp))
+  -- Modular Integers
+  , ("Prelude.IntMod", natFun $ \n -> pure $ TValue (VIntModType n))
   -- Vectors
   , ("Prelude.Vec", vecTypeOp)
   , ("Prelude.gen", genOp)
