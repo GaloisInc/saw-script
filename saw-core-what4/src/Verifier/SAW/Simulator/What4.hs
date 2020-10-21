@@ -826,7 +826,11 @@ applyUnintApp app0 v =
     VCtorApp i xv             -> foldM applyUnintApp app' =<< traverse force xv
                                    where app' = suffixUnintApp ("_" ++ identName i) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
-    _ -> fail $ "Could not create argument for " ++ show v
+    TValue (suffixTValue -> Just s)
+                              -> return (suffixUnintApp s app0)
+    VFun _ -> fail "Cannot create uninterpreted higher-order function"
+    _ -> fail $ "Cannot create uninterpreted function with argument " ++ show v
+
 
 ------------------------------------------------------------
 

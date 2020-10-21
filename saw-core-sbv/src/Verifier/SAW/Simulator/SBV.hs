@@ -266,7 +266,10 @@ flattenSValue v = do
         VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
                                         return (concat xss, "_" ++ identName i ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
-        _ -> fail $ "Could not create sbv argument for " ++ show v
+        TValue (suffixTValue -> Just s)
+                                  -> return ([], s)
+        VFun _ -> fail "Cannot create uninterpreted higher-order function"
+        _ -> fail $ "Cannot create uninterpreted function with argument " ++ show v
 
 vWord :: SWord -> SValue
 vWord lv = VWord lv
