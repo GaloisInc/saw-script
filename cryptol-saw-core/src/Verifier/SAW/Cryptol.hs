@@ -1462,7 +1462,7 @@ exportValue ty v = case ty of
     V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
   TV.TVIntMod _modulus ->
-    V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
+    V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod")
 
   TV.TVArray{} -> error $ "exportValue: (on array type " ++ show ty ++ ")"
 

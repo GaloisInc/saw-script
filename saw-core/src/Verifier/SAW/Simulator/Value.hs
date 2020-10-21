@@ -56,6 +56,7 @@ data Value l
   | VToNat (Value l)
   | VNat !Natural
   | VInt (VInt l)
+  | VIntMod !Natural (VInt l)
   | VArray (VArray l)
   | VString !String
   | VFloat !Float
@@ -156,6 +157,7 @@ instance Show (Extra l) => Show (Value l) where
       VToNat x       -> showString "bvToNat " . showParen True (shows x)
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
+      VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VArray{}       -> showString "<<array>>"
       VFloat float   -> shows float
       VDouble double -> shows double

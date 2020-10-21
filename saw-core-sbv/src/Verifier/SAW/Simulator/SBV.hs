@@ -196,7 +196,7 @@ constMap =
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , constFun (VFun force))
+  , ("Prelude.toIntMod"  , toIntModOp)
   , ("Prelude.fromIntMod", fromIntModOp)
   , ("Prelude.intModEq"  , intModEqOp)
   , ("Prelude.intModAdd" , intModBinOp svPlus)
@@ -433,6 +433,12 @@ svShiftR b x i = svIte b (svNot (svShiftRight (svNot x) i)) (svShiftRight x i)
 ------------------------------------------------------------
 -- Integers mod n
 
+toIntModOp :: SValue
+toIntModOp =
+  Prims.natFun' "toIntMod" $ \n -> pure $
+  Prims.intFun "toIntMod" $ \x -> pure $
+  VIntMod n x
+
 fromIntModOp :: SValue
 fromIntModOp =
   Prims.natFun $ \n -> return $
@@ -442,23 +448,23 @@ fromIntModOp =
 intModEqOp :: SValue
 intModEqOp =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModEqOp" $ \x -> return $
-  Prims.intFun "intModEqOp" $ \y -> return $
+  Prims.intModFun "intModEqOp" $ \x -> return $
+  Prims.intModFun "intModEqOp" $ \y -> return $
   let modulus = literalSInteger (toInteger n)
   in VBool (svEqual (svRem (svMinus x y) modulus) (literalSInteger 0))
 
 intModBinOp :: (SInteger -> SInteger -> SInteger) -> SValue
 intModBinOp f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModBinOp x" $ \x -> return $
-  Prims.intFun "intModBinOp y" $ \y -> return $
-  VInt (normalizeIntMod n (f x y))
+  Prims.intModFun "intModBinOp x" $ \x -> return $
+  Prims.intModFun "intModBinOp y" $ \y -> return $
+  VIntMod n (normalizeIntMod n (f x y))
 
 intModUnOp :: (SInteger -> SInteger) -> SValue
 intModUnOp f =
   Prims.natFun $ \n -> return $
   Prims.intFun "intModUnOp" $ \x -> return $
-  VInt (normalizeIntMod n (f x))
+  VIntMod n (normalizeIntMod n (f x))
 
 normalizeIntMod :: Natural -> SInteger -> SInteger
 normalizeIntMod n x =

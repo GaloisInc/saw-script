@@ -250,7 +250,7 @@ constMap =
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.toIntMod"  , constFun (VFun force))
+  , ("Prelude.toIntMod"  , toIntModOp)
   , ("Prelude.fromIntMod", fromIntModOp sym)
   , ("Prelude.intModEq"  , intModEqOp sym)
   , ("Prelude.intModAdd" , intModBinOp sym W.intAdd)
@@ -454,17 +454,23 @@ intMax sym i1 i2 = do
 ------------------------------------------------------------
 -- Integers mod n
 
+toIntModOp :: SValue sym
+toIntModOp =
+  Prims.natFun' "toIntMod" $ \n -> pure $
+  Prims.intFun "toIntMod" $ \x -> pure $
+  VIntMod n x
+
 fromIntModOp :: IsExprBuilder sym => sym -> SValue sym
 fromIntModOp sym =
   Prims.natFun $ \n -> return $
   Prims.intFun "fromIntModOp" $ \x ->
-  VInt <$> (W.intMod sym x =<< W.intLit sym (toInteger n))
+  VIntMod n <$> (W.intMod sym x =<< W.intLit sym (toInteger n))
 
 intModEqOp :: IsExprBuilder sym => sym -> SValue sym
 intModEqOp sym =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModEqOp" $ \x -> return $
-  Prims.intFun "intModEqOp" $ \y ->
+  Prims.intModFun "intModEqOp" $ \x -> return $
+  Prims.intModFun "intModEqOp" $ \y ->
   do modulus <- W.intLit sym (toInteger n)
      d <- W.intSub sym x y
      r <- W.intMod sym d modulus
@@ -476,17 +482,17 @@ intModBinOp ::
   (sym -> SInt sym -> SInt sym -> IO (SInt sym)) -> SValue sym
 intModBinOp sym f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModBinOp x" $ \x -> return $
-  Prims.intFun "intModBinOp y" $ \y ->
-  VInt <$> (normalizeIntMod sym n =<< f sym x y)
+  Prims.intModFun "intModBinOp x" $ \x -> return $
+  Prims.intModFun "intModBinOp y" $ \y ->
+  VIntMod n <$> (normalizeIntMod sym n =<< f sym x y)
 
 intModUnOp ::
   IsExprBuilder sym => sym ->
   (sym -> SInt sym -> IO (SInt sym)) -> SValue sym
 intModUnOp sym f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModUnOp" $ \x ->
-  VInt <$> (normalizeIntMod sym n =<< f sym x)
+  Prims.intModFun "intModUnOp" $ \x ->
+  VIntMod n <$> (normalizeIntMod sym n =<< f sym x)
 
 normalizeIntMod :: IsExprBuilder sym => sym -> Natural -> SInt sym -> IO (SInt sym)
 normalizeIntMod sym n x =

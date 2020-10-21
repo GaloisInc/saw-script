@@ -270,7 +270,7 @@ beConstMap be =
   , ("Prelude.sbvToInt", sbvToIntOp be)
   -- Integers mod n
   , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", constFun (VFun force))
+  , ("Prelude.fromIntMod", fromIntModOp)
   , ("Prelude.intModEq"  , intModEqOp be)
   , ("Prelude.intModAdd" , intModBinOp (+))
   , ("Prelude.intModSub" , intModBinOp (-))
@@ -352,27 +352,33 @@ toIntModOp :: BValue l
 toIntModOp =
   Prims.natFun $ \n -> return $
   Prims.intFun "toIntModOp" $ \x -> return $
-  VInt (x `mod` toInteger n)
+  VIntMod n (x `mod` toInteger n)
+
+fromIntModOp :: BValue l
+fromIntModOp =
+  constFun $
+  Prims.intModFun "fromIntModOp" $ \x -> return $
+  VInt x
 
 intModEqOp :: AIG.IsAIG l g => g s -> BValue (l s)
 intModEqOp be =
   constFun $
-  Prims.intFun "intModEqOp" $ \x -> return $
-  Prims.intFun "intModEqOp" $ \y -> return $
+  Prims.intModFun "intModEqOp" $ \x -> return $
+  Prims.intModFun "intModEqOp" $ \y -> return $
   VBool (AIG.constant be (x == y))
 
 intModBinOp :: (Integer -> Integer -> Integer) -> BValue l
 intModBinOp f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModBinOp x" $ \x -> return $
-  Prims.intFun "intModBinOp y" $ \y -> return $
-  VInt (f x y `mod` toInteger n)
+  Prims.intModFun "intModBinOp x" $ \x -> return $
+  Prims.intModFun "intModBinOp y" $ \y -> return $
+  VIntMod n (f x y `mod` toInteger n)
 
 intModUnOp :: (Integer -> Integer) -> BValue l
 intModUnOp f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModUnOp" $ \x -> return $
-  VInt (f x `mod` toInteger n)
+  Prims.intModFun "intModUnOp" $ \x -> return $
+  VIntMod n (f x `mod` toInteger n)
 
 ----------------------------------------
 
