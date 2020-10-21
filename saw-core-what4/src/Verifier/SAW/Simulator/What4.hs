@@ -883,7 +883,8 @@ argTypes :: IsSymExprBuilder sym => TValue (What4 sym) -> IO [TValue (What4 sym)
 argTypes v =
   case v of
     VPiType v1 f ->
-      do v2 <- f (error "argTypes: unsupported dependent SAW-Core type")
+      do x <- delay (fail "argTypes: unsupported dependent SAW-Core type")
+         v2 <- f x
          vs <- argTypes v2
          return (v1 : vs)
     _ -> return []
