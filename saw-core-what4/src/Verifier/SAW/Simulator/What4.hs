@@ -728,7 +728,7 @@ parseUninterpreted sym ref app ty =
     VPiType _ f
       -> return $
          strictFun $ \x -> do
-           app' <- applyUnintApp app x
+           app' <- applyUnintApp sym app x
            t2 <- f (ready x)
            parseUninterpreted sym ref app' t2
 
@@ -737,6 +737,9 @@ parseUninterpreted sym ref app ty =
 
     VIntType
       -> VInt  <$> mkUninterpreted sym ref app BaseIntegerRepr
+
+    VIntModType n
+      -> VIntMod n <$> mkUninterpreted sym ref app BaseIntegerRepr
 
     -- 0 width bitvector is a constant
     VVecType 0 VBoolType
@@ -812,23 +815,29 @@ extendUnintApp (UnintApp nm xs tys) x ty =
 -- encode them as suffixes on the function name of the 'UnintApp'.
 applyUnintApp ::
   forall sym.
+  (W.IsExprBuilder sym) =>
+  sym ->
   UnintApp (SymExpr sym) ->
   SValue sym ->
   IO (UnintApp (SymExpr sym))
-applyUnintApp app0 v =
+applyUnintApp sym app0 v =
   case v of
     VUnit                     -> return app0
-    VPair x y                 -> do app1 <- applyUnintApp app0 =<< force x
-                                    app2 <- applyUnintApp app1 =<< force y
+    VPair x y                 -> do app1 <- applyUnintApp sym app0 =<< force x
+                                    app2 <- applyUnintApp sym app1 =<< force y
                                     return app2
-    VRecordValue elems        -> foldM applyUnintApp app0 =<< traverse (force . snd) elems
-    VVector xv                -> foldM applyUnintApp app0 =<< traverse force xv
+    VRecordValue elems        -> foldM (applyUnintApp sym) app0 =<< traverse (force . snd) elems
+    VVector xv                -> foldM (applyUnintApp sym) app0 =<< traverse force xv
     VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
     VInt si                   -> return (extendUnintApp app0 si BaseIntegerRepr)
+    VIntMod 0 si              -> return (extendUnintApp app0 si BaseIntegerRepr)
+    VIntMod n si              -> do n' <- W.intLit sym (toInteger n)
+                                    si' <- W.intMod sym si n'
+                                    return (extendUnintApp app0 si' BaseIntegerRepr)
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
-    VCtorApp i xv             -> foldM applyUnintApp app' =<< traverse force xv
+    VCtorApp i xv             -> foldM (applyUnintApp sym) app' =<< traverse force xv
                                    where app' = suffixUnintApp ("_" ++ identName i) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     TValue (suffixTValue -> Just s)
@@ -1114,7 +1123,7 @@ parseUninterpretedSAW sym sc ref trm app ty =
     VPiType t1 f
       -> return $
          strictFun $ \x -> do
-           app' <- applyUnintApp app x
+           app' <- applyUnintApp sym app x
            arg <- mkArgTerm sc t1 x
            let trm' = ArgTermApply trm arg
            t2 <- f (ready x)

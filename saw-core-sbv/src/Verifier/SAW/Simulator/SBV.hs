@@ -261,6 +261,8 @@ flattenSValue v = do
                                         return (concat xss, concat ss)
         VBool sb                  -> return ([sb], "")
         VInt si                   -> return ([si], "")
+        VIntMod 0 si              -> return ([si], "")
+        VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
         VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
                                         return (concat xss, "_" ++ identName i ++ concat ss)
@@ -588,6 +590,9 @@ parseUninterpreted cws nm ty =
 
     VIntType
       -> return $ vInteger $ mkUninterpreted KUnbounded cws nm
+
+    VIntModType n
+      -> return $ VIntMod n $ mkUninterpreted KUnbounded cws nm
 
     (VVecType n VBoolType)
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
