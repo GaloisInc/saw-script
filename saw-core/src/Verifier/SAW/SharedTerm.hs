@@ -170,6 +170,8 @@ module Verifier.SAW.SharedTerm
   , scIntEq, scIntLe, scIntLt
   , scIntToNat, scNatToInt
   , scIntToBv, scBvToInt, scSbvToInt
+    -- *** IntMod
+  , scIntModType
     -- *** Vectors
   , scAppend
   , scJoin
@@ -1697,6 +1699,15 @@ scBvToInt sc n x = scGlobalApply sc "Prelude.bvToInt" [n,x]
 scSbvToInt
    :: SharedContext -> Term -> Term -> IO Term
 scSbvToInt sc n x = scGlobalApply sc "Prelude.sbvToInt" [n,x]
+
+
+-- Primitive operations on IntMod
+
+-- | Create a term representing the prelude @IntMod@ type.
+--
+-- > IntMod : Nat -> sort 0;
+scIntModType :: SharedContext -> Term -> IO Term
+scIntModType sc n = scGlobalApply sc "Prelude.IntMod" [n]
 
 
 -- Primitive operations on bitvectors
