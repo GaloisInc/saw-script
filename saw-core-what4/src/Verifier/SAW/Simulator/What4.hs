@@ -945,23 +945,23 @@ data TypedExpr sym where
   TypedExpr :: BaseTypeRepr ty -> SymExpr sym ty -> TypedExpr sym
 
 
-mkSymbol :: String -> IO W.SolverSymbol
-mkSymbol str =
-  case W.userSymbol str of
-    Right solverSymbol -> pure solverSymbol
-    Left _ -> fail $ "Cannot create solver symbol " ++ str
+-- | Create a fresh constant with the given name and type.
+mkConstant ::
+  forall sym ty.
+  (IsSymExprBuilder sym) =>
+  sym -> String -> BaseTypeRepr ty -> IO (SymExpr sym ty)
+mkConstant sym name ty =
+  case W.userSymbol name of
+    Right solverSymbol -> W.freshConstant sym solverSymbol ty
+    Left _ -> fail $ "Cannot create solver symbol " ++ name
 
 -- | Generate a new variable from a given BaseType
 
 freshVar :: forall sym ty. (IsSymExprBuilder sym, Given sym) =>
   BaseTypeRepr ty -> String -> IO (TypedExpr sym)
 freshVar ty str =
-  case W.userSymbol str of
-    Right solverSymbol -> do
-      c <- W.freshConstant (given :: sym) solverSymbol ty
-      return (TypedExpr ty c)
-    Left _ ->
-      fail $ "Cannot create solver symbol " ++ str
+  do c <- mkConstant (given :: sym) str ty
+     return (TypedExpr ty c)
 
 nextId :: StateT Int IO String
 nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
@@ -1013,8 +1013,7 @@ newVarFOT (FOTRec tm)
 newVarFOT (FOTIntMod n)
   = do nm <- nextId
        let r = BaseIntegerRepr
-       nm' <- lift $ mkSymbol nm
-       si <- lift $ W.freshConstant (given :: sym) nm' r
+       si <- lift $ mkConstant (given :: sym) nm r
        return (BaseLabel (TypedExpr r si), VIntMod n si)
 
 newVarFOT fot
