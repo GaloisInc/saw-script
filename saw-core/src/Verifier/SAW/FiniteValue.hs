@@ -48,6 +48,7 @@ data FiniteValue
 data FirstOrderType
   = FOTBit
   | FOTInt
+  | FOTIntMod Natural
   | FOTVec Natural FirstOrderType
   | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
@@ -201,6 +202,8 @@ asFirstOrderType sc t = do
       -> return FOTBit
     (R.asIntegerType -> Just ())
       -> return FOTInt
+    (R.asIntModType -> Just n)
+      -> return (FOTIntMod n)
     (R.isVecType return -> Just (n R.:*: tp))
       -> FOTVec n <$> asFirstOrderType sc tp
     (R.asArrayType -> Just (tp1 R.:*: tp2)) -> do
@@ -237,6 +240,7 @@ scFirstOrderType sc ft =
   case ft of
     FOTBit      -> scBoolType sc
     FOTInt      -> scIntegerType sc
+    FOTIntMod n -> scIntModType sc =<< scNat sc n
     FOTVec n t  -> do n' <- scNat sc n
                       t' <- scFirstOrderType sc t
                       scVecType sc n' t'

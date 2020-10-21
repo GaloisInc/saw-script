@@ -635,6 +635,8 @@ vAsFirstOrderType v =
       -> return FOTBit
     VIntType
       -> return FOTInt
+    VIntModType n
+      -> return (FOTIntMod n)
     VVecType n v2
       -> FOTVec n <$> vAsFirstOrderType v2
     VUnitType
@@ -706,6 +708,7 @@ newVarsForType v nm =
 newVars :: FirstOrderType -> StateT Int IO (Labeler, Symbolic SValue)
 newVars FOTBit = nextId <&> \s-> (BoolLabel s, vBool <$> existsSBool s)
 newVars FOTInt = nextId <&> \s-> (IntegerLabel s, vInteger <$> existsSInteger s)
+newVars (FOTIntMod n) = nextId <&> \s-> (IntegerLabel s, VIntMod n <$> existsSInteger s)
 newVars (FOTVec n FOTBit) =
   if n == 0
     then nextId <&> \s-> (WordLabel s, return (vWord (literalSWord 0 0)))
@@ -727,6 +730,7 @@ newVars (FOTRec tm) = do
 newCodeGenVars :: (Natural -> Bool) -> FirstOrderType -> StateT Int IO (SBVCodeGen SValue)
 newCodeGenVars _checkSz FOTBit = nextId <&> \s -> (vBool <$> svCgInput KBool s)
 newCodeGenVars _checkSz FOTInt = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
+newCodeGenVars _checkSz (FOTIntMod _) = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
 newCodeGenVars checkSz (FOTVec n FOTBit)
   | n == 0    = nextId <&> \_ -> return (vWord (literalSWord 0 0))
   | checkSz n = nextId <&> \s -> vWord <$> cgInputSWord s (fromIntegral n)

@@ -905,6 +905,8 @@ vAsFirstOrderType v =
       -> return FOTBit
     VIntType
       -> return FOTInt
+    VIntModType n
+      -> return (FOTIntMod n)
     VVecType n v2
       -> FOTVec n <$> vAsFirstOrderType v2
     VArrayType iv ev
@@ -933,6 +935,12 @@ valueAsBaseType v = fmap fotToBaseType $ vAsFirstOrderType v
 data TypedExpr sym where
   TypedExpr :: BaseTypeRepr ty -> SymExpr sym ty -> TypedExpr sym
 
+
+mkSymbol :: String -> IO W.SolverSymbol
+mkSymbol str =
+  case W.userSymbol str of
+    Right solverSymbol -> pure solverSymbol
+    Left _ -> fail $ "Cannot create solver symbol " ++ str
 
 -- | Generate a new variable from a given BaseType
 
@@ -992,6 +1000,13 @@ newVarFOT (FOTRec tm)
   = do (labels, vals) <- myfun <$> traverse newVarFOT tm
        args <- traverse (return . ready) (vals :: (Map String (SValue sym)))
        return (RecLabel labels, vRecord args)
+
+newVarFOT (FOTIntMod n)
+  = do nm <- nextId
+       let r = BaseIntegerRepr
+       nm' <- lift $ mkSymbol nm
+       si <- lift $ W.freshConstant (given :: sym) nm' r
+       return (BaseLabel (TypedExpr r si), VIntMod n si)
 
 newVarFOT fot
   | Some r <- fotToBaseType fot
