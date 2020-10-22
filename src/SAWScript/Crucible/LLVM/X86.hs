@@ -94,6 +94,7 @@ import qualified Lang.Crucible.Simulator.Operations as C
 import qualified Lang.Crucible.Simulator.OverrideSim as C
 import qualified Lang.Crucible.Simulator.RegMap as C
 import qualified Lang.Crucible.Simulator.SimError as C
+import qualified Lang.Crucible.Simulator.PathSatisfiability as C
 
 import qualified Lang.Crucible.LLVM.DataLayout as C.LLVM
 import qualified Lang.Crucible.LLVM.Extension as C.LLVM
@@ -226,11 +227,11 @@ crucible_llvm_verify_x86 ::
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
-  Bool {-^ Whether to enable path satisfiability checking (currently ignored) -} ->
+  Bool {- ^ Whether to enable path satisfiability checking -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms _checkSat setup tactic
+crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64
@@ -277,7 +278,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         ]
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
-      methodSpec <- buildMethodSpec bic opts {- TODO! checkSat -} llvmModule nm (show addr) setup
+      methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) checkSat setup
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
@@ -346,13 +347,23 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
           pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
-      liftIO $ C.executeCrucible [] initial >>= \case
+
+      psatf <-
+         if checkSat then
+           do f <- liftIO (C.pathSatisfiabilityFeature sym (C.considerSatisfiability sym))
+              pure [C.genericToExecutionFeature f]
+         else
+           pure []
+
+      let execFeatures = psatf
+
+      liftIO $ C.executeCrucible execFeatures initial >>= \case
         C.FinishedResult{} -> pure ()
         C.AbortedResult{} -> printOutLn opts Warn "Warning: function never returns"
         C.TimeoutResult{} -> fail "Execution timed out"
 
       stats <- checkGoals sym opts sc tactic
- 
+
       returnProof $ SomeLLVM (methodSpec & MS.csSolverStats .~ stats)
   | otherwise = fail "LLVM module must be 64-bit"
 
@@ -424,10 +435,11 @@ buildMethodSpec ::
   LLVMModule LLVMArch ->
   String {- ^ Name of method -} ->
   String {- ^ Source location for method spec (here, we use the address) -} ->
+  Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR LLVM)
-buildMethodSpec bic opts lm nm loc setup =
-  setupLLVMCrucibleContext bic opts False {- TODO! checkSat -} lm $ \cc -> do
+buildMethodSpec bic opts lm nm loc checkSat setup =
+  setupLLVMCrucibleContext bic opts checkSat lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
     let programLoc =
           W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm)
