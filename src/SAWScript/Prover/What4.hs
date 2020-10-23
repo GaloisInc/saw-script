@@ -73,7 +73,7 @@ proveExportWhat4_sym solver un sc hashConsing outFilePath t =
 
      -- Write smt out
      (_, _, lit, stats) <- setupWhat4_solver solver sym un sc t
-     withFile outFilePath AppendMode $ \handle ->
+     withFile outFilePath WriteMode $ \handle ->
        solver_adapter_write_smt2 solver sym handle [lit]
 
      -- Assume unsat
