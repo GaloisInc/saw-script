@@ -694,16 +694,12 @@ proveUnintSBV conf unints =
   do timeout <- psTimeout <$> get
      wrapProver (Prover.proveUnintSBV conf unints timeout)
 
-
-
-wrapProver ::
-  ( SharedContext ->
-    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
-  ProofScript SV.SatResult
-wrapProver f = do
-  sc <- lift $ SV.getSharedContext
-  withFirstGoal $ \g -> do
-
+applyProverToGoal :: (SharedContext
+                      -> Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats))
+                     -> SharedContext
+                     -> ProofGoal
+                     -> TopLevel (SV.SatResult, SolverStats, Maybe ProofGoal)
+applyProverToGoal f sc g = do
   (mb, stats) <- io $ f sc (goalProp g)
 
   let nope r = do ft <- io $ scEqTrue sc =<< scApplyPrelude_False sc
@@ -713,6 +709,17 @@ wrapProver f = do
     Nothing -> return (SV.Unsat stats, stats, Nothing)
     Just a  -> nope (SV.SatMulti stats a)
 
+
+
+wrapProver ::
+  ( SharedContext ->
+    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  ProofScript SV.SatResult
+wrapProver f = do
+  sc <- lift $ SV.getSharedContext
+  withFirstGoal (applyProverToGoal f sc)
+
+
 wrapW4Prover ::
   ( SharedContext -> Bool ->
     Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
@@ -720,6 +727,19 @@ wrapW4Prover ::
 wrapW4Prover f = do
   hashConsing <- lift $ gets SV.rwWhat4HashConsing
   wrapProver $ \sc -> f sc hashConsing
+
+wrapW4ProveExporter ::
+  ( SharedContext -> Bool -> FilePath ->
+    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  String ->
+  String ->
+  ProofScript SV.SatResult
+wrapW4ProveExporter f path ext = do
+  hashConsing <- lift $ gets SV.rwWhat4HashConsing
+  sc <- lift $ SV.getSharedContext
+  withFirstGoal $ \g -> do
+    let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
+    applyProverToGoal (\s -> f s hashConsing file) sc g
 
 --------------------------------------------------
 proveBoolector :: ProofScript SV.SatResult
@@ -777,6 +797,18 @@ w4_unint_cvc4 = wrapW4Prover . Prover.proveWhat4_cvc4
 
 w4_unint_yices :: [String] -> ProofScript SV.SatResult
 w4_unint_yices = wrapW4Prover . Prover.proveWhat4_yices
+
+offline_w4_unint_z3 :: [String] -> String -> ProofScript SV.SatResult
+offline_w4_unint_z3 unints path =
+  wrapW4ProveExporter (Prover.proveExportWhat4_z3 unints) path ".smt2"
+
+offline_w4_unint_cvc4 :: [String] -> String -> ProofScript SV.SatResult
+offline_w4_unint_cvc4 unints path =
+  wrapW4ProveExporter (Prover.proveExportWhat4_cvc4 unints) path ".smt2"
+
+offline_w4_unint_yices :: [String] -> String -> ProofScript SV.SatResult
+offline_w4_unint_yices unints path =
+  wrapW4ProveExporter (Prover.proveExportWhat4_yices unints) path ".smt2"
 
 proveWithExporter ::
   (SharedContext -> FilePath -> Prop -> IO ()) ->
