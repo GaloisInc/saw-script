@@ -15,16 +15,18 @@ module Verifier.SAW.ExternalFormat (
   scWriteExternal, scReadExternal
   ) where
 
-import Verifier.SAW.SharedTerm
+import Control.Monad.State.Strict as State
 #if !MIN_VERSION_base(4,8,0)
 import Data.Traversable
 #endif
-import Verifier.SAW.TypedAST
-import Control.Monad.State.Strict as State
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (elemIndex)
 import qualified Data.Vector as V
+import Text.Read (readMaybe)
+
+import Verifier.SAW.SharedTerm
+import Verifier.SAW.TypedAST
 
 --------------------------------------------------------------------------------
 -- External text format
@@ -108,52 +110,96 @@ scWriteExternal t0 =
             ExtCns ext          -> unwords ("ExtCns" : writeExtCns ext)
     writeExtCns ec = [show (ecVarIndex ec), ecName ec, show (ecType ec)]
 
+-- | During parsing, we maintain two maps used for renumbering: The
+-- first is for the 'Int' values that appear in the external core
+-- file, and the second is for the 'VarIndex' values that appear
+-- inside 'Constant' and 'ExtCns' constructors. We do not reuse any
+-- such numbers that appear in the external file, but generate fresh
+-- ones that are valid in the current 'SharedContext'.
+type ReadM = State.StateT (Map Int Term, Map VarIndex VarIndex) IO
+
 scReadExternal :: SharedContext -> String -> IO Term
 scReadExternal sc input =
   case map words (lines input) of
-    (["SAWCoreTerm", (read -> final)] : rows) ->
-      do m <- foldM go Map.empty rows
-         return $ (Map.!) m final
+    (["SAWCoreTerm", final] : rows) ->
+      State.evalStateT (mapM_ go rows >> readIdx final) (Map.empty, Map.empty)
     _ -> fail "scReadExternal: failed to parse input file"
   where
-    go :: Map Int Term -> [String] -> IO (Map Int Term)
-    go m (n : tokens) =
-        do
-          t <- scTermF sc (fmap ((Map.!) m) (parse tokens))
-          return (Map.insert (read n) t m)
-    go m [] = return m -- empty lines are ignored
-    parse :: [String] -> TermF Int
+    go :: [String] -> ReadM ()
+    go (tok : tokens) =
+      do i <- readM tok
+         tf <- parse tokens
+         t <- lift $ scTermF sc tf
+         (ts, vs) <- State.get
+         put (Map.insert i t ts, vs)
+    go [] = pure () -- empty lines are ignored
+
+    readM :: forall a. Read a => String -> ReadM a
+    readM tok =
+      case readMaybe tok of
+        Nothing -> fail $ "scReadExternal: parse error: " ++ show tok
+        Just x -> pure x
+
+    getTerm :: Int -> ReadM Term
+    getTerm i =
+      do ts <- fst <$> State.get
+         case Map.lookup i ts of
+           Nothing -> fail $ "scReadExternal: invalid term index: " ++ show i
+           Just t -> pure t
+
+    readIdx :: String -> ReadM Term
+    readIdx tok = getTerm =<< readM tok
+
+    readEC :: String -> String -> String -> ReadM (ExtCns Term)
+    readEC i x t =
+      do vi <- readM i
+         t' <- readIdx t
+         (ts, vs) <- State.get
+         case Map.lookup vi vs of
+           Just vi' -> pure $ EC vi' x t'
+           Nothing ->
+             do vi' <- lift $ scFreshGlobalVar sc
+                State.put (ts, Map.insert vi vi' vs)
+                pure $ EC vi' x t'
+
+    parse :: [String] -> ReadM (TermF Term)
     parse tokens =
       case tokens of
-        ["App", e1, e2]     -> App (read e1) (read e2)
-        ["Lam", x, t, e]    -> Lambda x (read t) (read e)
-        ["Pi", s, t, e]     -> Pi s (read t) (read e)
-        ["Var", i]          -> LocalVar (read i)
-        ["Constant",i,x,t,e]-> Constant (EC (read i) x (read t)) (read e)
-        ["Global", x]       -> FTermF (GlobalDef (parseIdent x))
-        ["Unit"]            -> FTermF UnitValue
-        ["UnitT"]           -> FTermF UnitType
-        ["Pair", x, y]      -> FTermF (PairValue (read x) (read y))
-        ["PairT", x, y]     -> FTermF (PairType (read x) (read y))
-        ["ProjL", x]        -> FTermF (PairLeft (read x))
-        ["ProjR", x]        -> FTermF (PairRight (read x))
+        ["App", e1, e2]     -> App <$> readIdx e1 <*> readIdx e2
+        ["Lam", x, t, e]    -> Lambda x <$> readIdx t <*> readIdx e
+        ["Pi", s, t, e]     -> Pi s <$> readIdx t <*> readIdx e
+        ["Var", i]          -> pure $ LocalVar (read i)
+        ["Constant",i,x,t,e]-> Constant <$> readEC i x t <*> readIdx e
+        ["Global", x]       -> pure $ FTermF (GlobalDef (parseIdent x))
+        ["Unit"]            -> pure $ FTermF UnitValue
+        ["UnitT"]           -> pure $ FTermF UnitType
+        ["Pair", x, y]      -> FTermF <$> (PairValue <$> readIdx x <*> readIdx y)
+        ["PairT", x, y]     -> FTermF <$> (PairType <$> readIdx x <*> readIdx y)
+        ["ProjL", x]        -> FTermF <$> (PairLeft <$> readIdx x)
+        ["ProjR", x]        -> FTermF <$> (PairRight <$> readIdx x)
         ("Ctor" : i : (separateArgs -> Just (ps, es))) ->
-          FTermF (CtorApp (parseIdent i) (map read ps) (map read es))
+          FTermF <$> (CtorApp (parseIdent i) <$> traverse readIdx ps <*> traverse readIdx es)
         ("Data" : i : (separateArgs -> Just (ps, es))) ->
-          FTermF (DataTypeApp (parseIdent i) (map read ps) (map read es))
+          FTermF <$> (DataTypeApp (parseIdent i) <$> traverse readIdx ps <*> traverse readIdx es)
         ("Recursor" : i :
          (separateArgs ->
           Just (ps, p_ret : cs_fs : (splitLast -> Just (ixs, arg))))) ->
-          FTermF (RecursorApp (parseIdent i) (map read ps) (read p_ret)
-                  (read cs_fs) (map read ixs) (read arg))
-        ["RecordType", elem_tps] -> FTermF (RecordType $ read elem_tps)
-        ["Record", elems]   -> FTermF (RecordValue $ read elems)
-        ["RecordProj", e, prj] -> FTermF (RecordProj (read e) prj)
-        ["Prop"]            -> FTermF (Sort propSort)
-        ["Sort", s]         -> FTermF (Sort (mkSort (read s)))
-        ["Nat", n]          -> FTermF (NatLit (read n))
-        ("Array" : e : es)  -> FTermF (ArrayValue (read e)
-                                       (V.fromList (map read es)))
-        ("String" : ts)     -> FTermF (StringLit (read (unwords ts)))
-        ["ExtCns", i, n, t] -> FTermF (ExtCns (EC (read i) n (read t)))
-        _ -> error $ "Parse error: " ++ unwords tokens
+          FTermF <$>
+          (RecursorApp (parseIdent i) <$>
+           traverse readIdx ps <*>
+           readIdx p_ret <*>
+           (traverse (traverse getTerm) =<< readM cs_fs) <*>
+           traverse readIdx ixs <*>
+           readIdx arg)
+        ["RecordType", elem_tps] ->
+          FTermF <$> (RecordType <$> (traverse (traverse getTerm) =<< readM elem_tps))
+        ["Record", elems] ->
+          FTermF <$> (RecordValue <$> (traverse (traverse getTerm) =<< readM elems))
+        ["RecordProj", e, prj] -> FTermF <$> (RecordProj <$> readIdx e <*> pure prj)
+        ["Prop"]            -> pure $ FTermF (Sort propSort)
+        ["Sort", s]         -> FTermF <$> (Sort <$> (mkSort <$> readM s))
+        ["Nat", n]          -> FTermF <$> (NatLit <$> readM n)
+        ("Array" : e : es)  -> FTermF <$> (ArrayValue <$> readIdx e <*> (V.fromList <$> traverse readIdx es))
+        ("String" : ts)     -> FTermF <$> (StringLit <$> (readM (unwords ts)))
+        ["ExtCns", i, n, t] -> FTermF <$> (ExtCns <$> readEC i n t)
+        _ -> fail $ "Parse error: " ++ unwords tokens
