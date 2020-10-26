@@ -1123,7 +1123,6 @@ let main = do {
     , "and"
     , "or"
     , "not"
-    , "bitvector"
     ] ss4;
 
   p384_point_ops_add_simp <- do {
