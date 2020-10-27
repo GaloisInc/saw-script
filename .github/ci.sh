@@ -47,7 +47,7 @@ setup_dist_bins() {
   extract_exe "saw" "dist/bin"
   extract_exe "saw-remote-api" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
-  echo "::add-path::$PWD/dist/bin"
+  echo "$PWD/dist/bin" >> $GITHUB_PATH
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
   strip dist/bin/jss* || echo "Strip failed: Ignoring harmless error"
 }
@@ -158,7 +158,7 @@ install_system_deps() {
   install_yasm &
   wait
   export PATH=$PWD/$BIN:$PATH
-  echo "::add-path::$PWD/$BIN"
+  echo "$PWD/$BIN" >> $GITHUB_PATH
   is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices && is_exe "$BIN" yasm
 }
 
@@ -198,7 +198,7 @@ find_java() {
   javac PropertiesTest.java
   RT_JAR="$(java PropertiesTest | tr : '\n' | grep rt.jar | head -n 1)"
   export RT_JAR
-  echo "::set-env name=RT_JAR::$RT_JAR"
+  echo "RT_JAR=$RT_JAR" >> $GITHUB_ENV
   rm PropertiesTest.class
   popd
 }
