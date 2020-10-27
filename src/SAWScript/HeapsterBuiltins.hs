@@ -53,6 +53,7 @@ import qualified Data.ByteString.Lazy.UTF8 as BL
 
 import Data.Binding.Hobbits
 
+import Data.Parameterized.BoolRepr
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.TraversableF
 import Data.Parameterized.TraversableFC
@@ -337,7 +338,8 @@ heapster_define_recursive_perm _bic _opts henv
        -- permission whose cases and fold/unfold identifiers depend on that
        -- recursive permission being defined
        env' <-
-         permEnvAddRecPermM env nm args tp trans_ident
+         permEnvAddRecPermM env nm args tp trans_ident FalseRepr
+         NameNonReachConstr
          (\_ tmp_env ->
            forM p_strs $
            parsePermInCtxString "disjunctive perm" tmp_env args_ctx tp)
@@ -354,6 +356,7 @@ heapster_define_recursive_perm _bic _opts henv
               fold_ident   <- parseAndInsDef henv ("fold" ++ nm) fold_fun_tp fold_fun_str
               unfold_ident <- parseAndInsDef henv ("unfold" ++ nm) unfold_fun_tp unfold_fun_str
               return (fold_ident, unfold_ident))
+         (\_ _ -> return NoReachMethods)
        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Define a new named permission with the given name, arguments, and type
