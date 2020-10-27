@@ -22,6 +22,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_typecheck_mut_funs_rename
        , heapster_define_opaque_perm
        , heapster_define_recursive_perm
+       , heapster_define_reachability_perm
        , heapster_define_perm
        , heapster_block_entry_hint
        , heapster_gen_block_perms_hint
@@ -338,8 +339,7 @@ heapster_define_recursive_perm _bic _opts henv
        -- permission whose cases and fold/unfold identifiers depend on that
        -- recursive permission being defined
        env' <-
-         permEnvAddRecPermM env nm args tp trans_ident FalseRepr
-         NameNonReachConstr
+         permEnvAddRecPermM env nm args tp trans_ident NameNonReachConstr
          (\_ tmp_env ->
            forM p_strs $
            parsePermInCtxString "disjunctive perm" tmp_env args_ctx tp)
@@ -357,6 +357,99 @@ heapster_define_recursive_perm _bic _opts henv
               unfold_ident <- parseAndInsDef henv ("unfold" ++ nm) unfold_fun_tp unfold_fun_str
               return (fold_ident, unfold_ident))
          (\_ _ -> return NoReachMethods)
+       liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+-- | Define a new reachability permission
+heapster_define_reachability_perm :: BuiltinContext -> Options -> HeapsterEnv ->
+                                     String -> String -> String -> String ->
+                                     String -> String -> String ->
+                                     String -> String -> String ->
+                                     TopLevel ()
+heapster_define_reachability_perm _bic _opts henv
+  nm args_str tp_str p_str trans_tp_str fold_fun_str unfold_fun_str
+  get_perm_fun_str put_fun_str trans_fun_str =
+    do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+       sc <- getSharedContext
+
+       -- Parse the arguments, the type, and the translation type
+       Some (tp :: TypeRepr tp) <- parseTypeString "permission type" env tp_str
+       (Some pre_args_ctx,
+        last_args_ctx :: ParsedCtx (RNil :> ValuePermType tp)) <-
+         do some_args_ctx <- parseParsedCtxString "argument types" env args_str
+            case some_args_ctx of
+              Some args_ctx
+                | CruCtxCons _ (ValuePermRepr tp')
+                  <- parsedCtxCtx args_ctx
+                , Just Refl <- testEquality tp tp' ->
+                  return (Some (parsedCtxUncons args_ctx), parsedCtxLast args_ctx)
+              _ -> Fail.fail "Incorrect type for last argument of reachability perm"
+       let args_ctx = appendParsedCtx pre_args_ctx last_args_ctx
+       let args = parsedCtxCtx args_ctx
+       trans_tp <- liftIO $ 
+         translateCompleteTypeInCtx sc env args (nus (cruCtxProxies args) $
+                                                 const $ ValuePermRepr tp)
+       trans_tp_ident <- parseAndInsDef henv nm trans_tp trans_tp_str
+
+       -- Use permEnvAddRecPermM to tie the knot of adding a recursive
+       -- permission whose cases and fold/unfold identifiers depend on that
+       -- recursive permission being defined
+       env' <-
+         permEnvAddRecPermM env nm args tp trans_tp_ident NameReachConstr
+         (\_ tmp_env ->
+           do p <- parsePermInCtxString "disjunctive perm" tmp_env args_ctx tp p_str
+              return [nus (cruCtxProxies args) (\(_ :>: n) ->
+                                                 ValPerm_Var n NoPermOffset),
+                      p])
+         (\npn cases tmp_env ->
+           do let or_tp = foldr1 (mbMap2 ValPerm_Or) cases
+                  nm_tp = nus (cruCtxProxies args)
+                    (\ns -> ValPerm_Named npn (namesToExprs ns) NoPermOffset)
+              fold_fun_tp <- liftIO $
+                translateCompletePureFun sc tmp_env args (singletonValuePerms
+                                                          <$> or_tp) nm_tp
+              unfold_fun_tp <- liftIO $
+                translateCompletePureFun sc tmp_env args (singletonValuePerms
+                                                          <$> nm_tp) or_tp
+              fold_ident   <- parseAndInsDef henv ("fold" ++ nm) fold_fun_tp fold_fun_str
+              unfold_ident <- parseAndInsDef henv ("unfold" ++ nm) unfold_fun_tp unfold_fun_str
+              return (fold_ident, unfold_ident))
+         (\npn tmp_env ->
+           do let rec_tp = nus (cruCtxProxies args)
+                    (\ns -> ValPerm_Named npn (namesToExprs ns) NoPermOffset)
+                  p_tp = nus (cruCtxProxies args) (\(_ :>: n) ->
+                                                    ValPerm_Var n NoPermOffset)
+              let get_expr_ident =
+                    fromString "Prelude.id" -- FIXME: this is just a dummy
+              get_perm_fun_tp <- liftIO $
+                translateCompletePureFun sc tmp_env args (singletonValuePerms
+                                                          <$> rec_tp) p_tp
+              get_perm_ident <-
+                parseAndInsDef henv ("get" ++ nm) get_perm_fun_tp get_perm_fun_str
+              put_fun_tp <- liftIO $
+                translateCompletePureFun sc tmp_env (CruCtxCons args $
+                                                     ValuePermRepr tp)
+                (nus (cruCtxProxies args :>: Proxy) $ \(ns :>: n1 :>: n2) ->
+                  MNil :>: ValPerm_Named npn (namesToExprs
+                                              (ns :>: n1)) NoPermOffset :>:
+                  ValPerm_Var n2 NoPermOffset)
+                (nus (cruCtxProxies args :>: Proxy) $ \(ns :>: n1 :>: n2) ->
+                  ValPerm_Named npn (namesToExprs (ns :>: n2)) NoPermOffset)
+              put_ident <-
+                parseAndInsDef henv ("put" ++ nm) put_fun_tp put_fun_str
+              trans_fun_tp <-
+                liftIO $
+                translateCompletePureFun sc tmp_env args
+                (nus (cruCtxProxies args) $ \(ns :>: n) ->
+                  MNil :>:
+                  ValPerm_Named npn (PExprs_Cons (namesToExprs ns) $
+                                     PExpr_ValPerm ValPerm_True) NoPermOffset :>:
+                  ValPerm_Named npn (namesToExprs (ns :>: n)) NoPermOffset)
+                (nus (cruCtxProxies args) $ \(ns :>: n) ->
+                  ValPerm_Named npn (namesToExprs (ns :>: n)) NoPermOffset)
+              trans_ident <-
+                parseAndInsDef henv ("trans" ++ nm) trans_fun_tp trans_fun_str
+              return (ReachMethods get_expr_ident get_perm_ident
+                      put_ident trans_ident))
        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Define a new named permission with the given name, arguments, and type
