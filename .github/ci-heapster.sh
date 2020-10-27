@@ -118,10 +118,14 @@ build() {
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   cabal v2-configure -j2 --minimize-conflict-set
-  if ! retry cabal v2-build "$@" saw jss && [[ "$RUNNER_OS" == "macOS" ]]; then
-    echo "Working around a dylib issue on macos by removing the cache and trying again"
-    cabal v2-clean
-    retry cabal v2-build "$@" saw jss
+  if ! retry cabal v2-build "$@" saw jss; then
+    if [[ "$RUNNER_OS" == "macOS" ]]; then
+      echo "Working around a dylib issue on macos by removing the cache and trying again"
+      cabal v2-clean
+      retry cabal v2-build "$@" saw jss
+    else
+      exit 1
+    fi
   fi
 }
 
