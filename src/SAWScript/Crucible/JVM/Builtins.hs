@@ -707,6 +707,10 @@ setupCrucibleContext bic opts jclass =
      let gen = globalNonceGenerator
      sym <- io $ Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
+
+     -- TODO! there's a lot of options setup we need to replicate
+     --  from SAWScript.Crucible.LLVM.Builtins
+
      return JVMCrucibleContext { _jccJVMClass = jclass
                                , _jccCodebase = cb
                                , _jccBackend = sym
