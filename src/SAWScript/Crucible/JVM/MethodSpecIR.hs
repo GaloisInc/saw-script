@@ -73,19 +73,25 @@ type instance MS.ExtType CJ.JVM = J.Type
 
 data JVMMethodId =
   JVMMethodId
-    { _jvmMethodName :: String
+    { _jvmMethodKey :: J.MethodKey
     , _jvmClassName  :: J.ClassName
     }
   deriving (Eq, Ord, Show)
 
 makeLenses ''JVMMethodId
 
-csMethodName :: Lens' (MS.CrucibleMethodSpecIR CJ.JVM) String
+jvmMethodName :: Getter JVMMethodId String
+jvmMethodName = jvmMethodKey . to J.methodKeyName
+
+csMethodKey :: Lens' (MS.CrucibleMethodSpecIR CJ.JVM) J.MethodKey
+csMethodKey = MS.csMethod . jvmMethodKey
+
+csMethodName :: Getter (MS.CrucibleMethodSpecIR CJ.JVM) String
 csMethodName = MS.csMethod . jvmMethodName
 
 instance PPL.Pretty JVMMethodId where
-  pretty (JVMMethodId methName className) =
-    PPL.text (concat [J.unClassName className ,".", methName])
+  pretty (JVMMethodId methKey className) =
+    PPL.text (concat [J.unClassName className ,".", J.methodKeyName methKey])
 
 type instance MS.MethodId CJ.JVM = JVMMethodId
 
@@ -158,7 +164,7 @@ initialDefCrucibleMethodSpecIR ::
   ProgramLoc ->
   MS.CrucibleMethodSpecIR CJ.JVM
 initialDefCrucibleMethodSpecIR cb cname method loc =
-  let methId = JVMMethodId (J.methodName method) cname
+  let methId = JVMMethodId (J.methodKey method) cname
       retTy = J.methodReturnType method
       argTys = thisType ++ J.methodParameterTypes method
   in MS.makeCrucibleMethodSpecIR methId argTys retTy loc cb
