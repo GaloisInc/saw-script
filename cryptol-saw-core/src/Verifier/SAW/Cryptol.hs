@@ -65,10 +65,11 @@ data Env = Env
               --   given field selectors (in reverse order!) to the term.
   , envC :: Map C.Name C.Schema    -- ^ Cryptol type environment
   , envS :: [Term]                 -- ^ SAW-Core bound variable environment (for type checking)
+  , envRefPrims :: Map C.PrimIdent C.Expr
   }
 
 emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty Map.empty Map.empty []
+emptyEnv = Env Map.empty Map.empty Map.empty Map.empty [] Map.empty
 
 liftTerm :: (Term, Int) -> (Term, Int)
 liftTerm (t, j) = (t, j + 1)
@@ -84,6 +85,7 @@ liftEnv env =
       , envP = fmap liftProp (envP env)
       , envC = envC env
       , envS = envS env
+      , envRefPrims = envRefPrims env
       }
 
 bindTParam :: SharedContext -> C.TParam -> Env -> IO Env
@@ -599,10 +601,13 @@ proveProp sc env prop =
 
         _ -> do panic "proveProp" [pretty prop]
 
-
-importPrimitive :: SharedContext -> C.Name -> IO Term
-importPrimitive sc n
+importPrimitive :: SharedContext -> Env -> C.Name -> C.Schema -> IO Term
+importPrimitive sc env n sch
   | Just nm <- C.asPrim n, Just term <- Map.lookup nm (prelPrims <> arrayPrims <> floatPrims) = term sc
+  | Just nm <- C.asPrim n, Just expr <- Map.lookup nm (envRefPrims env) =
+      do t <- importSchema sc env sch
+         e <- importExpr sc env expr
+         scConstant sc (nameToString n) e t
   | Just nm <- C.asPrim n = panic "Unknown Cryptol primitive name" [show nm]
   | otherwise = panic "Improper Cryptol primitive name" [show n]
 
@@ -1152,7 +1157,7 @@ importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
   case C.dDefinition decl of
     C.DPrim
      | isTopLevel -> do
-        rhs <- importPrimitive sc (C.dName decl)
+        rhs <- importPrimitive sc env (C.dName decl) (C.dSignature decl)
         let env' = env { envE = Map.insert (C.dName decl) (rhs, 0) (envE env)
                       , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
         return env'
