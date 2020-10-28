@@ -78,8 +78,10 @@ import qualified Cryptol.ModuleSystem.Name as MN
 import qualified Cryptol.ModuleSystem.Renamer as MR
 
 import Cryptol.Utils.PP
-import Cryptol.Utils.Ident (Ident, preludeName, packIdent, interactiveName
-                           , packModName, textToModName, modNameChunks)
+import Cryptol.Utils.Ident (Ident, preludeName, preludeReferenceName
+                           , packIdent, interactiveName, identText
+                           , packModName, textToModName, modNameChunks
+                           , prelPrim)
 import Cryptol.Utils.Logger (quietLogger)
 
 --import SAWScript.REPL.Monad (REPLException(..))
@@ -169,15 +171,30 @@ initCryptolEnv sc = do
                            (instDir </> "lib") : ME.meSearchPath modEnv0 }
 
   -- Load Cryptol prelude
-  (_, modEnv) <-
+  (_, modEnv2) <-
     liftModuleM modEnv1 $
-      MB.loadModuleFrom (MM.FromModule preludeName)
+      MB.loadModuleFrom False (MM.FromModule preludeName)
+
+  -- Load Cryptol reference implementations
+  ((_,refMod), modEnv) <-
+    liftModuleM modEnv2 $
+      MB.loadModuleFrom False (MM.FromModule preludeReferenceName)
+
+  -- Set up reference implementation redirections
+  let refDecls = T.mDecls refMod
+  let nms = fst <$> Map.toList (M.ifDecls (M.ifPublic (M.genIface refMod)))
+  let refPrims = Map.fromList
+                  [ (prelPrim (identText (MN.nameIdent nm)), T.EWhere (T.EVar nm) refDecls)
+                  | nm <- nms ]
+  let cryEnv0 = C.emptyEnv{ C.envRefPrims = refPrims }
 
   -- Generate SAWCore translations for all values in scope
-  termEnv <- genTermEnv sc modEnv
+  termEnv <- genTermEnv sc modEnv cryEnv0
 
   return CryptolEnv
-    { eImports    = [P.Import preludeName Nothing Nothing]
+    { eImports    = [P.Import preludeName Nothing Nothing
+                    ,P.Import preludeReferenceName (Just preludeReferenceName) Nothing
+                    ]
     , eModuleEnv  = modEnv
     , eExtraNames = mempty
     , eExtraTypes = Map.empty
@@ -288,12 +305,12 @@ translateDeclGroups sc env dgs =
            }
 
 -- | Translate all declarations in all loaded modules to SAWCore terms
-genTermEnv :: SharedContext -> ME.ModuleEnv -> IO (Map T.Name Term)
-genTermEnv sc modEnv = do
+genTermEnv :: SharedContext -> ME.ModuleEnv -> C.Env -> IO (Map T.Name Term)
+genTermEnv sc modEnv cryEnv0 = do
   let declGroups = concatMap T.mDecls
                  $ filter (not . T.isParametrizedModule)
                  $ ME.loadedModules modEnv
-  cryEnv <- C.importTopLevelDeclGroups sc C.emptyEnv declGroups
+  cryEnv <- C.importTopLevelDeclGroups sc cryEnv0 declGroups
   traverse (\(t, j) -> incVars sc 0 j t) (C.envE cryEnv)
 
 --------------------------------------------------------------------------------
@@ -372,7 +389,7 @@ importModule sc env src as imps = do
     liftModuleM modEnv $
     case src of
       Left path -> MB.loadModuleByPath path
-      Right mn -> snd <$> MB.loadModuleFrom (MM.FromModule mn)
+      Right mn -> snd <$> MB.loadModuleFrom True (MM.FromModule mn)
   checkNotParameterized m
 
   -- Regenerate SharedTerm environment.
