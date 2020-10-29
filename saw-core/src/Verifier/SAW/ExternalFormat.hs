@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
@@ -22,9 +23,11 @@ import Data.Traversable
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
+import Data.Text (Text)
 import Data.List (elemIndex)
 import qualified Data.Vector as V
 import Text.Read (readMaybe)
+import Text.URI
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
@@ -50,66 +53,114 @@ splitLast :: [a] -> Maybe ([a], a)
 splitLast [] = Nothing
 splitLast xs = Just (take (length xs - 1) xs, last xs)
 
+type WriteM = State.State (Map TermIndex Int, Map VarIndex NameInfo, [String], Int)
+
+renderNames :: Map VarIndex NameInfo -> String
+renderNames nms = show
+  [ (idx, f nmi)
+  | (idx,nmi) <- Map.toList nms
+  ]
+ where
+   f (ModuleIdentifier i)  = Left i
+   f (ImportedName uri as) = Right (render uri, as)
+
+readNames :: String -> Maybe (Map VarIndex NameInfo)
+readNames xs = Map.fromList <$> (mapM readName =<< readMaybe xs)
+ where
+   readName :: (VarIndex, Either Text (Text,[Text])) -> Maybe (VarIndex, NameInfo)
+   readName (idx, Left i) = pure (idx, ModuleIdentifier (parseIdent (Text.unpack i)))
+   readName (idx, Right (uri,as)) =
+       do uri' <- mkURI uri
+          pure (idx, ImportedName uri' as)
+
 -- | Render to external text format
 scWriteExternal :: Term -> String
 scWriteExternal t0 =
-    let (x, (_, output, _)) = State.runState (go t0) (Map.empty, [], 1)
-    in unlines (unwords ["SAWCoreTerm", show x] : reverse output)
+    let (x, (_, nms, lns, _)) = State.runState (go t0) (Map.empty, Map.empty, [], 1)
+    in unlines $
+        [ unwords ["SAWCoreTerm", show x]
+        , renderNames nms
+        ] ++ reverse lns
   where
-    go :: Term -> State.State (Map TermIndex Int, [String], Int) Int
+    nextId :: WriteM Int
+    nextId =
+       do (m, nms, lns, x) <- State.get
+          State.put (m, nms, lns, x+1)
+          return x
+    output :: String -> WriteM ()
+    output l =
+       do (m, nms, lns, x) <- State.get
+          State.put (m, nms, l:lns, x)
+    memoize :: TermIndex -> WriteM Int
+    memoize i =
+       do (m, nms, lns, x) <- State.get
+          State.put (Map.insert i x m, nms, lns, x+1)
+          return x
+    stashName :: ExtCns Int -> WriteM ()
+    stashName ec =
+       do (m, nms, lns, x) <- State.get
+          State.put (m, Map.insert (ecVarIndex ec) (ecName ec) nms, lns, x)
+
+    go :: Term -> WriteM Int
     go (Unshared tf) = do
       tf' <- traverse go tf
-      (m, output, x) <- State.get
-      let s = unwords [show x, writeTermF tf']
-      State.put (m, s : output, x + 1)
+      body <- writeTermF tf'
+      x <- nextId
+      output (unwords [show x, body])
       return x
+
     go STApp{ stAppIndex = i, stAppTermF = tf } = do
-      (memo, _, _) <- State.get
+      (memo, _, _, _) <- State.get
       case Map.lookup i memo of
         Just x -> return x
         Nothing -> do
           tf' <- traverse go tf
-          (m, output, x) <- State.get
-          let s = unwords [show x, writeTermF tf']
-          State.put (Map.insert i x m, s : output, x + 1)
+          body <- writeTermF tf'
+          x <- memoize i
+          output (unwords [show x, body])
           return x
-    writeTermF :: TermF Int -> String
+
+    writeTermF :: TermF Int -> WriteM String
     writeTermF tf =
       case tf of
-        App e1 e2      -> unwords ["App", show e1, show e2]
-        Lambda s t e   -> unwords ["Lam", s, show t, show e]
-        Pi s t e       -> unwords ["Pi", s, show t, show e]
-        LocalVar i     -> unwords ["Var", show i]
-        Constant ec e  -> unwords ["Constant", show (ecVarIndex ec), toShortName (ecName ec), show (ecType ec), show e]
+        App e1 e2      -> pure $ unwords ["App", show e1, show e2]
+        Lambda s t e   -> pure $ unwords ["Lam", s, show t, show e]
+        Pi s t e       -> pure $ unwords ["Pi", s, show t, show e]
+        LocalVar i     -> pure $ unwords ["Var", show i]
+        Constant ec e  ->
+            do stashName ec
+               pure $ unwords ["Constant", show (ecVarIndex ec), show (ecType ec), show e]
         FTermF ftf     ->
           case ftf of
-            GlobalDef ident     -> unwords ["Global", show ident]
-            UnitValue           -> unwords ["Unit"]
-            UnitType            -> unwords ["UnitT"]
-            PairValue x y       -> unwords ["Pair", show x, show y]
-            PairType x y        -> unwords ["PairT", show x, show y]
-            PairLeft e          -> unwords ["ProjL", show e]
-            PairRight e         -> unwords ["ProjR", show e]
-            CtorApp i ps es     ->
+            GlobalDef ident     -> pure $ unwords ["Global", show ident]
+            UnitValue           -> pure $ unwords ["Unit"]
+            UnitType            -> pure $ unwords ["UnitT"]
+            PairValue x y       -> pure $ unwords ["Pair", show x, show y]
+            PairType x y        -> pure $ unwords ["PairT", show x, show y]
+            PairLeft e          -> pure $ unwords ["ProjL", show e]
+            PairRight e         -> pure $ unwords ["ProjR", show e]
+            CtorApp i ps es     -> pure $
               unwords ("Ctor" : show i : map show ps ++ argsep : map show es)
-            DataTypeApp i ps es ->
+            DataTypeApp i ps es -> pure $
               unwords ("Data" : show i : map show ps ++ argsep : map show es)
-            RecursorApp i ps p_ret cs_fs ixs e ->
+            RecursorApp i ps p_ret cs_fs ixs e -> pure $
               unwords (["Recursor" , show i] ++ map show ps ++
                        [argsep, show p_ret, show cs_fs] ++
                        map show ixs ++ [show e])
-            RecordType elem_tps -> unwords ["RecordType", show elem_tps]
-            RecordValue elems   -> unwords ["Record", show elems]
-            RecordProj e prj    -> unwords ["RecordProj", show e, prj]
-            Sort s              ->
+            RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
+            RecordValue elems   -> pure $ unwords ["Record", show elems]
+            RecordProj e prj    -> pure $ unwords ["RecordProj", show e, prj]
+            Sort s              -> pure $
               if s == propSort then unwords ["Prop"] else
                 unwords ["Sort", drop 5 (show s)] -- Ugly hack to drop "sort "
-            NatLit n            -> unwords ["Nat", show n]
-            ArrayValue e v      -> unwords ("Array" : show e :
+            NatLit n            -> pure $ unwords ["Nat", show n]
+            ArrayValue e v      -> pure $ unwords ("Array" : show e :
                                             map show (V.toList v))
-            StringLit s         -> unwords ["String", show s]
-            ExtCns ext          -> unwords ("ExtCns" : writeExtCns ext)
-    writeExtCns ec = [show (ecVarIndex ec), show (ecName ec), show (ecType ec)]
+            StringLit s         -> pure $ unwords ["String", show s]
+            ExtCns ec ->
+               do stashName ec
+                  pure $ unwords ["ExtCns",show (ecVarIndex ec), show (ecType ec)]
+
 
 -- | During parsing, we maintain two maps used for renumbering: The
 -- first is for the 'Int' values that appear in the external core
@@ -117,13 +168,17 @@ scWriteExternal t0 =
 -- inside 'Constant' and 'ExtCns' constructors. We do not reuse any
 -- such numbers that appear in the external file, but generate fresh
 -- ones that are valid in the current 'SharedContext'.
-type ReadM = State.StateT (Map Int Term, Map VarIndex VarIndex) IO
+type ReadM = State.StateT (Map Int Term, Map VarIndex NameInfo, Map VarIndex VarIndex) IO
 
 scReadExternal :: SharedContext -> String -> IO Term
 scReadExternal sc input =
-  case map words (lines input) of
-    (["SAWCoreTerm", final] : rows) ->
-      State.evalStateT (mapM_ go rows >> readIdx final) (Map.empty, Map.empty)
+  case lines input of
+    ( (words -> ["SAWCoreTerm", final]) : nmlist : rows ) ->
+      case readNames nmlist of
+        Nothing -> fail "scReadExternal: failed to parse name table"
+        Just nms ->
+          State.evalStateT (mapM_ (go . words) rows >> readIdx final) (Map.empty, nms, Map.empty)
+
     _ -> fail "scReadExternal: failed to parse input file"
   where
     go :: [String] -> ReadM ()
@@ -131,8 +186,8 @@ scReadExternal sc input =
       do i <- readM tok
          tf <- parse tokens
          t <- lift $ scTermF sc tf
-         (ts, vs) <- State.get
-         put (Map.insert i t ts, vs)
+         (ts, nms, vs) <- State.get
+         put (Map.insert i t ts, nms, vs)
     go [] = pure () -- empty lines are ignored
 
     readM :: forall a. Read a => String -> ReadM a
@@ -143,7 +198,7 @@ scReadExternal sc input =
 
     getTerm :: Int -> ReadM Term
     getTerm i =
-      do ts <- fst <$> State.get
+      do (ts,_,_) <- State.get
          case Map.lookup i ts of
            Nothing -> fail $ "scReadExternal: invalid term index: " ++ show i
            Just t -> pure t
@@ -151,17 +206,20 @@ scReadExternal sc input =
     readIdx :: String -> ReadM Term
     readIdx tok = getTerm =<< readM tok
 
-    readEC :: String -> String -> String -> ReadM (ExtCns Term)
-    readEC i x t =
+    readEC :: String -> String -> ReadM (ExtCns Term)
+    readEC i t =
       do vi <- readM i
          t' <- readIdx t
-         (ts, vs) <- State.get
+         (ts, nms, vs) <- State.get
+         nmi <- case Map.lookup vi nms of
+                  Just nmi -> pure nmi
+                  Nothing -> lift $ fail $ "scReadExternal: ExtCns missing name info: " ++ show vi
          case Map.lookup vi vs of
-           Just vi' -> pure $ EC vi' x t'
+           Just vi' -> pure $ EC vi' nmi t'
            Nothing ->
              do vi' <- lift $ scFreshGlobalVar sc
-                State.put (ts, Map.insert vi vi' vs)
-                pure $ EC vi' x t'
+                State.put (ts, nms, Map.insert vi vi' vs)
+                pure $ EC vi' nmi t'
 
     parse :: [String] -> ReadM (TermF Term)
     parse tokens =
@@ -170,7 +228,7 @@ scReadExternal sc input =
         ["Lam", x, t, e]    -> Lambda x <$> readIdx t <*> readIdx e
         ["Pi", s, t, e]     -> Pi s <$> readIdx t <*> readIdx e
         ["Var", i]          -> pure $ LocalVar (read i)
-        ["Constant",i,x,t,e]-> Constant <$> readEC i x t <*> readIdx e
+        ["Constant",i,t,e]  -> Constant <$> readEC i t <*> readIdx e
         ["Global", x]       -> pure $ FTermF (GlobalDef (parseIdent x))
         ["Unit"]            -> pure $ FTermF UnitValue
         ["UnitT"]           -> pure $ FTermF UnitType
@@ -202,5 +260,5 @@ scReadExternal sc input =
         ["Nat", n]          -> FTermF <$> (NatLit <$> readM n)
         ("Array" : e : es)  -> FTermF <$> (ArrayValue <$> readIdx e <*> (V.fromList <$> traverse readIdx es))
         ("String" : ts)     -> FTermF <$> (StringLit <$> (readM (unwords ts)))
-        ["ExtCns", i, n, t] -> FTermF <$> (ExtCns <$> readEC i n t)
+        ["ExtCns", i, t] -> FTermF <$> (ExtCns <$> readEC i t)
         _ -> fail $ "Parse error: " ++ unwords tokens

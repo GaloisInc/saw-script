@@ -81,10 +81,8 @@ import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName)
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName, toShortName)
-import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 
 -- what4
 import qualified What4.Expr.Builder as B
