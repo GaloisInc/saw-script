@@ -579,7 +579,7 @@ let ec_full_add_spec ss = do {
     unfolding ["p384_ec_full_add"];
     simplify ss;
     unint_z3 [ "p384_field_add", "p384_field_sub", "p384_field_mul"
-             , "p384_full_add", "p384_mod_half", "p384_ec_double"
+             , "p384_mod_half", "p384_ec_double"
              ];
   };
 };
@@ -598,7 +598,7 @@ let ec_full_sub_spec ss = do {
     simplify ss;
     unint_z3 [ "p384_ec_full_add", "p384_ec_double", "p384_field_add"
              , "p384_field_sub", "p384_field_mul"
-             , "p384_full_add", "p384_mod_half"
+             , "p384_mod_half"
              ];
   };
 };
@@ -811,7 +811,7 @@ let ec_twin_mul_spec ss = do {
     beta_reduce_goal;
     simplify ss;
     unint_z3 [ "p384_ec_twin_mul_init", "p384_ec_twin_mul_aux1"
-             , "p384_ec_twin_mul_aux2", "p384_ec_twin_mul_aux_f"
+             , "p384_ec_twin_mul_aux2"
              ];
   };
 };
