@@ -8,6 +8,7 @@ module SAWScript.Prover.What4 where
 
 import System.IO
 
+import           Data.Set (Set)
 import qualified Data.Vector as V
 import           Control.Monad(filterM)
 import           Data.Maybe (catMaybes)
@@ -51,7 +52,7 @@ setupWhat4_sym hashConsing =
 
 proveWhat4_sym ::
   SolverAdapter St ->
-  [String] ->
+  Set VarIndex ->
   SharedContext ->
   Bool ->
   Prop ->
@@ -62,7 +63,7 @@ proveWhat4_sym solver un sc hashConsing t =
 
 proveExportWhat4_sym ::
   SolverAdapter St ->
-  [String] ->
+  Set VarIndex ->
   SharedContext ->
   Bool ->
   FilePath ->
@@ -81,7 +82,7 @@ proveExportWhat4_sym solver un sc hashConsing outFilePath t =
 
 proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
   proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices ::
-  [String]      {- ^ Uninterpreted functions -} ->
+  Set VarIndex  {- ^ Uninterpreted functions -} ->
   SharedContext {- ^ Context for working with terms -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
   Prop          {- ^ A proposition to be proved -} ->
@@ -96,7 +97,7 @@ proveWhat4_yices     = proveWhat4_sym yicesAdapter
 
 proveExportWhat4_z3, proveExportWhat4_boolector, proveExportWhat4_cvc4,
   proveExportWhat4_dreal, proveExportWhat4_stp, proveExportWhat4_yices ::
-  [String]      {- ^ Uninterpreted functions -} ->
+  Set VarIndex  {- ^ Uninterpreted functions -} ->
   SharedContext {- ^ Context for working with terms -} ->
   Bool          {- ^ Hash-consing of ExportWhat4 terms -}->
   FilePath      {- ^ Path of file to write SMT to -}->
@@ -114,19 +115,19 @@ proveExportWhat4_yices     = proveExportWhat4_sym yicesAdapter
 setupWhat4_solver :: forall st t ff.
   SolverAdapter st   {- ^ Which solver to use -} ->
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
-  [String]           {- ^ Uninterpreted functions -} ->
+  Set VarIndex       {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
   Prop               {- ^ A proposition to be proved/checked. -} ->
   IO ( [String]
      , [Maybe (W.Labeler (B.ExprBuilder t st ff))]
      , Pred (B.ExprBuilder t st ff)
      , SolverStats)
-setupWhat4_solver solver sym unints sc goal =
+setupWhat4_solver solver sym unintSet sc goal =
   do
      -- convert goal to lambda term
      term <- propToPredicate sc goal
      -- symbolically evaluate
-     (t', argNames, (bvs,lit0)) <- prepWhat4 sym sc unints term
+     (t', argNames, (bvs,lit0)) <- prepWhat4 sym sc unintSet term
 
      lit <- notPred sym lit0
 
@@ -142,14 +143,14 @@ setupWhat4_solver solver sym unints sc goal =
 proveWhat4_solver :: forall st t ff.
   SolverAdapter st   {- ^ Which solver to use -} ->
   B.ExprBuilder t st ff {- ^ The glorious sym -}  ->
-  [String]           {- ^ Uninterpreted functions -} ->
+  Set VarIndex       {- ^ Uninterpreted functions -} ->
   SharedContext      {- ^ Context for working with terms -} ->
   Prop               {- ^ A proposition to be proved/checked. -} ->
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
   -- ^ (example/counter-example, solver statistics)
-proveWhat4_solver solver sym unints sc goal =
+proveWhat4_solver solver sym unintSet sc goal =
   do
-     (argNames, bvs, lit, stats) <- setupWhat4_solver solver sym unints sc goal
+     (argNames, bvs, lit, stats) <- setupWhat4_solver solver sym unintSet sc goal
 
      -- log to stdout
      let logger _ str = putStrLn str
@@ -170,16 +171,16 @@ proveWhat4_solver solver sym unints sc goal =
 
 prepWhat4 ::
   forall sym. (IsSymExprBuilder sym) =>
-  sym -> SharedContext -> [String] -> Term ->
+  sym -> SharedContext -> Set VarIndex -> Term ->
   IO (Term, [String], ([Maybe (W.Labeler sym)], Pred sym))
-prepWhat4 sym sc unints t0 = do
+prepWhat4 sym sc unintSet t0 = do
   -- Abstract over all non-function ExtCns variables
   let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
   exts <- filterM nonFun (getAllExts t0)
 
   t' <- scAbstractExts sc exts t0 >>= rewriteEqs sc
 
-  (argNames, lit) <- W.w4Solve sym sc mempty unints t'
+  (argNames, lit) <- W.w4Solve sym sc mempty unintSet t'
   return (t', argNames, lit)
 
 

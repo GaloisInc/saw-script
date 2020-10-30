@@ -10,6 +10,7 @@ import System.Directory
 import           Data.Maybe
 import           Data.Map ( Map )
 import qualified Data.Map as Map
+import           Data.Set ( Set )
 import qualified Data.Vector as V
 import           Control.Monad
 
@@ -32,13 +33,13 @@ import SAWScript.Prover.Rewrite(rewriteEqs)
 -- functions.
 proveUnintSBV ::
   SBV.SMTConfig {- ^ SBV configuration -} ->
-  [String]      {- ^ Uninterpreted functions -} ->
+  Set VarIndex  {- ^ Uninterpreted functions -} ->
   Maybe Integer {- ^ Timeout in milliseconds -} ->
   SharedContext {- ^ Context for working with terms -} ->
   Prop          {- ^ A proposition to be proved -} ->
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
-proveUnintSBV conf unints timeout sc term =
+proveUnintSBV conf unintSet timeout sc term =
   do p <- findExecutable . SBV.executable $ SBV.solver conf
      unless (isJust p) . fail $ mconcat
        [ "Unable to locate the executable \""
@@ -47,7 +48,7 @@ proveUnintSBV conf unints timeout sc term =
        , show . SBV.name $ SBV.solver conf
        ]
 
-     (t', mlabels, lit) <- prepNegatedSBV sc unints term
+     (t', mlabels, lit) <- prepNegatedSBV sc unintSet term
 
      tp <- scWhnf sc =<< scTypeOf sc t'
      let (args, _) = asPiList tp
@@ -81,10 +82,10 @@ proveUnintSBV conf unints timeout sc term =
 -- specified function names are left uninterpreted.
 prepNegatedSBV ::
   SharedContext ->
-  [String] {- ^ Uninterpreted function names -} ->
+  Set VarIndex {- ^ Uninterpreted function names -} ->
   Prop     {- ^ Proposition to prove -} ->
   IO (Term, [Maybe SBVSim.Labeler], SBV.Symbolic SBV.SVal)
-prepNegatedSBV sc unints goal =
+prepNegatedSBV sc unintSet goal =
   do t0 <- propToPredicate sc goal
      -- Abstract over all non-function ExtCns variables
      let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
@@ -92,7 +93,7 @@ prepNegatedSBV sc unints goal =
 
      t' <- scAbstractExts sc exts t0 >>= rewriteEqs sc
 
-     (labels, lit) <- SBVSim.sbvSolve sc mempty unints t'
+     (labels, lit) <- SBVSim.sbvSolve sc mempty unintSet t'
      let lit' = liftM SBV.svNot lit
      return (t', labels, lit')
 

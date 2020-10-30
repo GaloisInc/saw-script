@@ -360,7 +360,7 @@ resolveSAWPred cc tm = do
      mx <- case getAllExts tm' of
              [] -> do
                -- Evaluate in SBV to test whether 'tm' is a concrete value
-               sbv <- SBV.toBool <$> SBV.sbvSolveBasic sc Map.empty [] tm'
+               sbv <- SBV.toBool <$> SBV.sbvSolveBasic sc Map.empty mempty tm'
                return (SBV.svAsBool sbv)
              _ -> return Nothing
      case mx of
@@ -381,7 +381,7 @@ resolveSAWSymBV cc w tm =
      mx <- case getAllExts tm' of
              [] -> do
                -- Evaluate in SBV to test whether 'tm' is a concrete value
-               sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty [] tm'
+               sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm'
                return (SBV.svAsInteger sbv)
              _ -> return Nothing
      case mx of

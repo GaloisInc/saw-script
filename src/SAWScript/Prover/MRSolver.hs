@@ -280,7 +280,7 @@ mrProvable bool_prop =
      path_prop <- mrPathCondition <$> get
      bool_prop' <- liftSC2 scImplies path_prop bool_prop
      prop <- liftSC1 scEqTrue bool_prop'
-     (smt_res, _) <- liftSC1 (SBV.proveUnintSBV smt_conf [] timeout) (Prop prop)
+     (smt_res, _) <- liftSC1 (SBV.proveUnintSBV smt_conf mempty timeout) (Prop prop)
      case smt_res of
        Just _ -> return False
        Nothing -> return True
