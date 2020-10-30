@@ -472,12 +472,35 @@ printGoalSize =
      printOutLnTop Info $ "Goal unshared size: " ++ show (scTreeSize t)
      return ((), mempty, Just goal)
 
+
+resolveName :: SharedContext -> String -> TopLevel VarIndex
+resolveName sc nm =
+  do cenv <- rwCryptol <$> getTopLevelRW
+     let ?fileReader = StrictBS.readFile
+     res <- io $ CEnv.resolveIdentifier cenv tnm
+     case res of
+       Just cnm ->
+         do x <- io $ Cryptol.importName cnm
+            case x of
+              ImportedName uri _ ->
+                do y <- io $ scResolveNameByURI sc uri
+                   case y of
+                     Just vi -> pure vi
+                     Nothing -> fallback
+              _ -> fallback
+       Nothing -> fallback
+
+ where
+ tnm = Text.pack nm
+ fallback = fst <$> io (scResolveUnambiguous sc tnm)
+
+
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal names =
   withFirstGoal $ \goal ->
   do sc <- getSharedContext
      let Prop trm = goalProp goal
-     nms <- io $ mapM (\x -> fst <$> scResolveUnambiguous sc (Text.pack x)) names
+     nms <- mapM (resolveName sc) names
      trm' <- io $ scUnfoldConstants sc nms trm
      return ((), mempty, Just (goal { goalProp = Prop trm' }))
 
@@ -963,7 +986,7 @@ rewritePrim ss (TypedTerm schema t) = do
 unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
 unfold_term names (TypedTerm schema t) = do
   sc <- getSharedContext
-  nms <- io $ mapM (\x -> fst <$> scResolveUnambiguous sc (Text.pack x)) names
+  nms <- mapM (resolveName sc) names
   t' <- io $ scUnfoldConstants sc nms t
   return (TypedTerm schema t')
 
