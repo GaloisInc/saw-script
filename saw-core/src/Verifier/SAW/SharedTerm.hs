@@ -41,6 +41,7 @@ module Verifier.SAW.SharedTerm
   , alistAllFields
   , scRegisterName
   , scResolveName
+  , scResolveNameByURI
   , scResolveUnambiguous
   , scFindBestName
   , DuplicateNameException(..)
@@ -423,6 +424,11 @@ scFindBestName sc (ImportedName uri as) = go as
        case vs of
          [_] -> return x
          _   -> go xs
+
+scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
+scResolveNameByURI sc uri =
+  do env <- readIORef (scNamingEnv sc)
+     pure $! Map.lookup uri (absoluteNames env)
 
 scResolveName :: SharedContext -> Text -> IO [(VarIndex, NameInfo)]
 scResolveName sc nm =
