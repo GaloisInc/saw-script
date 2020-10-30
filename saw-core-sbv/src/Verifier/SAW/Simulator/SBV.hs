@@ -47,6 +47,7 @@ import Data.Bits
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Text as Text
 import Data.Vector (Vector)
@@ -566,10 +567,9 @@ muxSbvExtra c x y =
 
 -- | Abstract constants with names in the list 'unints' are kept as
 -- uninterpreted constants; all others are unfolded.
-sbvSolveBasic :: SharedContext -> Map Ident SValue -> [String] -> Term -> IO SValue
-sbvSolveBasic sc addlPrims unints t = do
+sbvSolveBasic :: SharedContext -> Map Ident SValue -> Set VarIndex -> Term -> IO SValue
+sbvSolveBasic sc addlPrims unintSet t = do
   m <- scGetModuleMap sc
-  unintSet <- Set.fromList <$> mapM (\u -> fst <$> scResolveUnambiguous sc (Text.pack u)) unints
 
   let extcns (EC ix nm ty) = parseUninterpreted [] (Text.unpack (toShortName nm) ++ "#" ++ show ix) ty
   let uninterpreted ec
@@ -663,11 +663,11 @@ vAsFirstOrderType v =
 
 sbvSolve :: SharedContext
          -> Map Ident SValue
-         -> [String]
+         -> Set VarIndex
          -> Term
          -> IO ([Maybe Labeler], Symbolic SBool)
-sbvSolve sc addlPrims unints t = do
-  let eval = sbvSolveBasic sc addlPrims unints
+sbvSolve sc addlPrims unintSet t = do
+  let eval = sbvSolveBasic sc addlPrims unintSet
   ty <- eval =<< scTypeOf sc t
   let lamNames = map fst (fst (R.asLambdaList t))
   let varNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
@@ -775,16 +775,16 @@ argTypes sc t = do
 sbvCodeGen_definition
   :: SharedContext
   -> Map Ident SValue
-  -> [String]
+  -> Set VarIndex
   -> Term
   -> (Natural -> Bool) -- ^ Allowed word sizes
   -> IO (SBVCodeGen (), [FirstOrderType], FirstOrderType)
-sbvCodeGen_definition sc addlPrims unints t checkSz = do
+sbvCodeGen_definition sc addlPrims unintSet t checkSz = do
   ty <- scTypeOf sc t
   (argTs,resTy) <- argTypes sc ty
   shapes <- traverse (asFirstOrderType sc) argTs
   resultShape <- asFirstOrderType sc resTy
-  bval <- sbvSolveBasic sc addlPrims unints t
+  bval <- sbvSolveBasic sc addlPrims unintSet t
   vars <- evalStateT (traverse (newCodeGenVars checkSz) shapes) 0
   let codegen = do
         args <- traverse (fmap ready) vars
@@ -863,14 +863,14 @@ sbvSetOutput _checkSz _ft _v _i = do
 
 sbvCodeGen :: SharedContext
            -> Map Ident SValue
-           -> [String]
+           -> Set VarIndex
            -> Maybe FilePath
            -> String
            -> Term
            -> IO ()
-sbvCodeGen sc addlPrims unints path fname t = do
+sbvCodeGen sc addlPrims unintSet path fname t = do
   -- The SBV C code generator expects only these word sizes
   let checkSz n = n `elem` [8,16,32,64]
 
-  (codegen,_,_) <- sbvCodeGen_definition sc addlPrims unints t checkSz
+  (codegen,_,_) <- sbvCodeGen_definition sc addlPrims unintSet t checkSz
   compileToC path fname codegen
