@@ -40,10 +40,11 @@ import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst)
-import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent, nameInfo, NameInfo(..))
+import qualified Cryptol.ModuleSystem.Name as C
+  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), packIdent, unpackIdent, prelPrim, floatPrim, arrayPrim
-  , modNameToText, identText
+  , modNameToText, identText, interactiveName
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
@@ -1081,9 +1082,10 @@ plainSubst s ty =
     C.TVar x       -> C.apSubst s (C.TVar x)
 
 
-cryptolURI :: [Text] -> URI
-cryptolURI [] = panic "cryptolURI" ["Could not make URI from empty path"]
-cryptolURI (p:ps) = fromMaybe (panic "cryptolURI" ["Could not make URI from the given path", show (p:ps)]) $
+cryptolURI :: [Text] -> Maybe Int -> URI
+cryptolURI [] _ = panic "cryptolURI" ["Could not make URI from empty path"]
+cryptolURI (p:ps) Nothing =
+  fromMaybe (panic "cryptolURI" ["Could not make URI from the given path", show (p:ps)]) $
   do sch <- mkScheme "cryptol"
      path' <- mapM mkPathPiece (p:|ps)
      pure URI
@@ -1093,18 +1095,37 @@ cryptolURI (p:ps) = fromMaybe (panic "cryptolURI" ["Could not make URI from the 
        , uriQuery = []
        , uriFragment = Nothing
        }
+cryptolURI (p:ps) (Just uniq) =
+  fromMaybe (panic "cryptolURI" ["Could not make URI from the given path", show (p:ps), show uniq]) $
+  do sch <- mkScheme "cryptol"
+     path' <- mapM mkPathPiece (p:|ps)
+     frag <- mkFragment (Text.pack (show uniq))
+     pure URI
+       { uriScheme = Just sch
+       , uriAuthority = Left False -- relative path
+       , uriPath = Just (False, path')
+       , uriQuery = []
+       , uriFragment = Just frag
+       }
 
 importName :: C.Name -> IO NameInfo
 importName cnm =
   case C.nameInfo cnm of
     C.Parameter -> fail ("Cannot import non-top-level name: " ++ show cnm)
-    C.Declared modNm _ ->
-      let modNmTxt  = C.modNameToText modNm
-          modNms = Text.splitOn "::" modNmTxt
-          shortNm = C.identText (C.nameIdent cnm)
-          aliases = [shortNm, modNmTxt <> "::" <> shortNm]
-          uri = cryptolURI (modNms ++ [shortNm])
-       in pure (ImportedName uri aliases)
+    C.Declared modNm _
+      | modNm == C.interactiveName ->
+          let shortNm = C.identText (C.nameIdent cnm)
+              aliases = [shortNm]
+              uri = cryptolURI [shortNm] (Just (C.nameUnique cnm))
+           in pure (ImportedName uri aliases)
+
+      | otherwise ->
+          let modNmTxt  = C.modNameToText modNm
+              modNms = Text.splitOn "::" modNmTxt
+              shortNm = C.identText (C.nameIdent cnm)
+              aliases = [shortNm, modNmTxt <> "::" <> shortNm]
+              uri = cryptolURI (modNms ++ [shortNm]) Nothing
+           in pure (ImportedName uri aliases)
 
 -- | Currently this imports declaration groups by inlining all the
 -- definitions. (With subterm sharing, this is not as bad as it might

@@ -377,7 +377,8 @@ moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constru
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
 instance Show DuplicateNameException where
-  show (DuplicateNameException uri) = "Attempted to register the following name twice: " ++ show uri
+  show (DuplicateNameException uri) =
+      "Attempted to register the following name twice: " ++ Text.unpack (render uri)
 
 scRegisterName :: SharedContext -> VarIndex -> NameInfo -> IO ()
 scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
@@ -410,7 +411,7 @@ scResolveUnambiguous sc nm =
      [x] -> pure x
      xs  ->
        do nms <- mapM (scFindBestName sc . snd) xs
-          fail $ unlines (("Ambiguous name " ++ show nm ++ "might refer to any of the following:") : map show nms)
+          fail $ unlines (("Ambiguous name " ++ show nm ++ " might refer to any of the following:") : map show nms)
 
 scFindBestName :: SharedContext -> NameInfo -> IO Text
 scFindBestName _sc (ModuleIdentifier nm) = pure (identText nm)

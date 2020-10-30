@@ -30,6 +30,7 @@ module Verifier.SAW.CryptolEnv
   , getAllIfaceDecls
   , InputText(..)
   , lookupIn
+  , resolveIdentifier
   )
   where
 
@@ -39,7 +40,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe (fromMaybe)
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, splitOn)
 import Control.Monad(when)
 
 #if !MIN_VERSION_base(4,8,0)
@@ -76,6 +77,8 @@ import qualified Cryptol.ModuleSystem.Monad as MM
 import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import qualified Cryptol.ModuleSystem.Name as MN
 import qualified Cryptol.ModuleSystem.Renamer as MR
+
+import qualified Cryptol.Utils.Ident as C
 
 import Cryptol.Utils.PP
 import Cryptol.Utils.Ident (Ident, preludeName, preludeReferenceName
@@ -447,6 +450,27 @@ bindInteger (ident, n) env =
     tysyn = T.TySyn name [] [] (T.tNum n) Nothing
 
 --------------------------------------------------------------------------------
+
+resolveIdentifier ::
+  (?fileReader :: FilePath -> IO ByteString) =>
+  CryptolEnv -> Text -> IO (Maybe T.Name)
+resolveIdentifier env nm =
+  case splitOn (pack "::") nm of
+    []  -> pure Nothing
+    [i] -> doResolve (P.UnQual (C.mkIdent i))
+    xs  -> let (qs,i) = (init xs, last xs)
+            in doResolve (P.Qual (C.packModName qs) (C.mkIdent i))
+ where
+ modEnv = eModuleEnv env
+ nameEnv = getNamingEnv env
+
+ doResolve pnm =
+    do (res, _ws) <- MM.runModuleM (defaultEvalOpts, ?fileReader, modEnv) $
+          MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar pnm))
+       case res of
+         Left _ -> pure Nothing
+         Right (x,_) -> pure (Just x)
+
 
 parseTypedTerm ::
   (?fileReader :: FilePath -> IO ByteString) =>
