@@ -497,6 +497,15 @@ doAlloc cc alloc =
 
 --------------------------------------------------------------------------------
 
+getMethodHandle :: CJ.JVMContext -> J.ClassName -> J.MethodKey -> IO CJ.JVMHandleInfo
+getMethodHandle jc cname mkey =
+  case Map.lookup (cname, mkey) (CJ.methodHandles jc) of
+    Just handle -> return handle
+    Nothing ->
+      fail $
+      "BUG: cannot find handle for " ++ J.unClassName cname ++
+      "/" ++ J.methodKeyName mkey
+
 registerOverride ::
   Options ->
   JVMCrucibleContext ->
@@ -506,16 +515,13 @@ registerOverride ::
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc cs =
   do let sym = cc^.jccBackend
-     let cb = cc^.jccCodebase
      let jc = cc^.jccJVMContext
      let c0 = head cs
      let cname = c0 ^. MS.csMethod . jvmClassName
-     let mname = c0 ^. csMethodName
-     let pos = SS.PosInternal "registerOverride"
+     let mkey = c0 ^. csMethodKey
      sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
 
-     (mcls, meth) <- liftIO $ findMethod cb pos mname =<< lookupClass cb pos cname
-     mhandle <- liftIO $ CJ.findMethodHandle jc mcls meth
+     mhandle <- liftIO $ getMethodHandle jc cname mkey
      case mhandle of
        -- LLVMHandleInfo constructor has two existential type arguments,
        -- which are bound here. h :: FnHandle args' ret'
@@ -545,13 +551,11 @@ verifySimulate ::
   IO (Maybe (J.Type, JVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
   do let jc = cc^.jccJVMContext
-     let cb = cc^.jccCodebase
      let sym = cc^.jccBackend
      let cls = cc^.jccJVMClass
      let cname = J.className cls
-     let mname = mspec ^. csMethodName
+     let mkey = mspec ^. csMethodKey
      let verbosity = simVerbose opts
-     let pos = SS.PosInternal "verifySimulate"
      let halloc = cc^.jccHandleAllocator
 
      -- executeCrucibleJVM
@@ -561,11 +565,10 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
 
      CJ.setSimulatorVerbosity verbosity sym
 
-     (mcls, meth) <- findMethod cb pos mname =<< lookupClass cb pos cname
      --when (not (J.methodIsStatic meth)) $ do
      --  fail $ unlines [ "Crucible can only extract static methods" ]
 
-     (CJ.JVMHandleInfo _ h) <- CJ.findMethodHandle jc mcls meth
+     (CJ.JVMHandleInfo _ h) <- getMethodHandle jc cname mkey
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = pfs
