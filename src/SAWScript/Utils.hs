@@ -10,6 +10,7 @@ Stability   : provisional
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE LambdaCase #-}
 
 module SAWScript.Utils where
 
@@ -120,9 +121,15 @@ lookupClass cb site nm = do
 -- | Returns method with given name in this class or one of its subclasses.
 -- Throws an ExecException if method could not be found or is ambiguous.
 findMethod :: JSS.Codebase -> Pos -> String -> JSS.Class -> IO (JSS.Class, JSS.Method)
-findMethod cb site nm initClass = impl initClass
+findMethod cb site nm initClass =
+  do putStrLn $ "findMethod " ++ show nm
+     impl initClass
   where javaClassName = JSS.slashesToDots (JSS.unClassName (JSS.className initClass))
-        methodMatches m = JSS.methodName m == nm && not (JSS.methodIsAbstract m)
+        methodType m = (JSS.methodParameterTypes m, JSS.methodReturnType m)
+        baseName m = JSS.methodName m
+        typedName m = JSS.methodName m ++ unparseMethodDescriptor (methodType m)
+        methodMatches m =
+          nm `elem` [baseName m, typedName m] && not (JSS.methodIsAbstract m)
         impl cl =
           case filter methodMatches (JSS.classMethods cl) of
             [] -> do
@@ -135,10 +142,10 @@ findMethod cb site nm initClass = impl initClass
                 Just superName ->
                   impl =<< lookupClass cb site superName
             [method] -> return (cl,method)
-            _ -> let msg = "The method " ++ nm ++ " in class " ++ javaClassName
-                             ++ " is ambiguous.  SAWScript currently requires that "
-                             ++ "method names are unique."
-                     res = "Please rename the Java method so that it is unique."
+            l -> let msg = "The method " ++ show nm ++ " in class " ++ javaClassName ++ " is ambiguous. " ++
+                           "Methods can be disambiguated by appending a type descriptor: " ++
+                           unlines [ show (typedName m) | m <- l ]
+                     res = "Please disambiguate method name."
                   in throwIOExecException site (ftext msg) res
 
 throwFieldNotFound :: JSS.Type -> String -> ExceptT String IO a
@@ -200,3 +207,24 @@ exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
 exitProofFalse = exitWith (ExitFailure 1)
 exitProofUnknown = exitWith (ExitFailure 2)
 exitProofSuccess = exitSuccess
+
+--------------------------------------------------------------------------------
+
+unparseTypeDescriptor :: JSS.Type -> String
+unparseTypeDescriptor =
+  \case
+    JSS.ArrayType ty -> "[" ++ unparseTypeDescriptor ty
+    JSS.BooleanType  -> "Z"
+    JSS.ByteType     -> "B"
+    JSS.CharType     -> "C"
+    JSS.ClassType cn -> "L" ++ JSS.unClassName cn ++ ";"
+    JSS.DoubleType   -> "D"
+    JSS.FloatType    -> "F"
+    JSS.IntType      -> "I"
+    JSS.LongType     -> "J"
+    JSS.ShortType    -> "S"
+
+unparseMethodDescriptor :: ([JSS.Type], Maybe JSS.Type) -> String
+unparseMethodDescriptor (args, ret) =
+  "(" ++ concatMap unparseTypeDescriptor args ++ ")" ++
+  maybe "V" unparseTypeDescriptor ret
