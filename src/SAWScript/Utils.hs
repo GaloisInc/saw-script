@@ -128,15 +128,17 @@ findMethod cb site nm initClass =
         methodType m = (JSS.methodParameterTypes m, JSS.methodReturnType m)
         baseName m = JSS.methodName m
         typedName m = JSS.methodName m ++ unparseMethodDescriptor (methodType m)
-        methodMatches m =
-          nm `elem` [baseName m, typedName m] && not (JSS.methodIsAbstract m)
+        methodMatches m = nm `elem` [baseName m, typedName m]
         impl cl =
-          case filter methodMatches (JSS.classMethods cl) of
+          let candidates = filter (not . JSS.methodIsAbstract) (JSS.classMethods cl) in
+          case filter methodMatches candidates of
             [] -> do
               case JSS.superClass cl of
                 Nothing ->
                   let msg = ftext $ "Could not find method " ++ nm
-                              ++ " in class " ++ javaClassName ++ "."
+                              ++ " in class " ++ javaClassName ++ ".\n"
+                              ++ "Available methods: "
+                              ++ unlines [ show (baseName m) | m <- candidates ]
                       res = "Please check that the class and method are correct."
                    in throwIOExecException site msg res
                 Just superName ->
