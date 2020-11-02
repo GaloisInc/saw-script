@@ -44,7 +44,7 @@ import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
   ( Ident, PrimIdent(..), packIdent, unpackIdent, prelPrim, floatPrim, arrayPrim
-  , modNameToText, identText, interactiveName
+  , ModName, modNameToText, identText, interactiveName
   )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
@@ -1082,7 +1082,24 @@ plainSubst s ty =
     C.TVar x       -> C.apSubst s (C.TVar x)
 
 
-cryptolURI :: [Text] -> Maybe Int -> URI
+-- | Generate a URI representing a cryptol name from a sequence of 
+--   name parts representing the fully-qualified name.  IF a "unique"
+--   value is given, this represents a dynamically bonund name in
+--   the "<interactive>" pseudo-module, and the unique value will
+--   be incorporated into the name as a fragment identifier.
+--   At least one name component must be supplied.
+--
+--   Some examples:
+--   \"Cryptol::foldl\" -> \"cryptol:/Cryptol/foldl\"
+--   \"MyModule::SubModule::name\" -> \"cryptol:/MyModule/SubModule/name\"
+--   \"<interactive>::f\" -> \"cryptol:f#1234\"
+--
+--   In the above example, 1234 is the unique integer value provieded with the name.
+
+cryptolURI ::
+  [Text] {- ^ Name components  -} ->
+  Maybe Int {- ^ unique integer for dynamic names -} ->
+  URI
 cryptolURI [] _ = panic "cryptolURI" ["Could not make URI from empty path"]
 cryptolURI (p:ps) Nothing =
   fromMaybe (panic "cryptolURI" ["Could not make URI from the given path", show (p:ps)]) $
@@ -1107,6 +1124,46 @@ cryptolURI (p:ps) (Just uniq) =
        , uriQuery = []
        , uriFragment = Just frag
        }
+
+-- | Tests if the given `NameInfo` represents a name imported
+--   from the given Cryptol module name.  If so, it returns
+--   the identifier within that module.  Note, this does
+--   not match dynamic identifers from the "<interactive>"
+--   pseudo-module.
+isCryptolModuleName :: C.ModName -> NameInfo -> Maybe Text
+isCryptolModuleName modNm (ImportedName uri _)
+  | Just sch <- uriScheme uri
+  , unRText sch == "cryptol"
+  , Left True <- uriAuthority uri
+  , Just (False, x :| xs) <- uriPath uri
+  , [] <- uriQuery uri
+  , Nothing <- uriFragment uri
+  = checkModName (x:xs) (Text.splitOn "::" (C.modNameToText modNm))
+
+ where
+ checkModName [i] [] = Just (unRText i)
+ checkModName (x:xs) (m:ms) | unRText x == m = checkModName xs ms
+ checkModName _ _ = Nothing
+
+isCryptolModuleName _ _ = Nothing
+
+
+-- | Tests if the given `NameInfo` represents a name
+--   from the special \<interactive\> cryptol module.
+--   If so, returns the base identifier name.
+isCryptolInteractiveName :: NameInfo -> Maybe Text
+isCryptolInteractiveName (ImportedName uri _)
+  | Just sch <- uriScheme uri
+  , unRText sch == "cryptol"
+  , Left False <- uriAuthority uri
+  , Just (False, i :| []) <- uriPath uri
+  , [] <- uriQuery uri
+  , Just _ <- uriFragment uri
+  = Just (unRText i)
+
+isCryptolInteractiveName _ = Nothing
+
+
 
 importName :: C.Name -> IO NameInfo
 importName cnm =
