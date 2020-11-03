@@ -49,6 +49,7 @@ module Verifier.SAW.Simulator.What4
   , w4Eval
   , w4EvalAny
   , w4EvalBasic
+  , getLabelValues
   ) where
 
 
@@ -80,9 +81,11 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName)
-import Verifier.SAW.FiniteValue (FirstOrderType(..))
+import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 
 -- what4
+import qualified What4.Expr.Builder as B
+import           What4.Expr.GroundEval
 import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
                                  IsExprBuilder,IsSymExprBuilder)
 import qualified What4.Interface as W
@@ -250,8 +253,7 @@ constMap =
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.IntMod"    , constFun (TValue VIntType))
-  , ("Prelude.toIntMod"  , constFun (VFun force))
+  , ("Prelude.toIntMod"  , toIntModOp)
   , ("Prelude.fromIntMod", fromIntModOp sym)
   , ("Prelude.intModEq"  , intModEqOp sym)
   , ("Prelude.intModAdd" , intModBinOp sym W.intAdd)
@@ -455,17 +457,23 @@ intMax sym i1 i2 = do
 ------------------------------------------------------------
 -- Integers mod n
 
+toIntModOp :: SValue sym
+toIntModOp =
+  Prims.natFun' "toIntMod" $ \n -> pure $
+  Prims.intFun "toIntMod" $ \x -> pure $
+  VIntMod n x
+
 fromIntModOp :: IsExprBuilder sym => sym -> SValue sym
 fromIntModOp sym =
   Prims.natFun $ \n -> return $
   Prims.intFun "fromIntModOp" $ \x ->
-  VInt <$> (W.intMod sym x =<< W.intLit sym (toInteger n))
+  VIntMod n <$> (W.intMod sym x =<< W.intLit sym (toInteger n))
 
 intModEqOp :: IsExprBuilder sym => sym -> SValue sym
 intModEqOp sym =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModEqOp" $ \x -> return $
-  Prims.intFun "intModEqOp" $ \y ->
+  Prims.intModFun "intModEqOp" $ \x -> return $
+  Prims.intModFun "intModEqOp" $ \y ->
   do modulus <- W.intLit sym (toInteger n)
      d <- W.intSub sym x y
      r <- W.intMod sym d modulus
@@ -477,17 +485,17 @@ intModBinOp ::
   (sym -> SInt sym -> SInt sym -> IO (SInt sym)) -> SValue sym
 intModBinOp sym f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModBinOp x" $ \x -> return $
-  Prims.intFun "intModBinOp y" $ \y ->
-  VInt <$> (normalizeIntMod sym n =<< f sym x y)
+  Prims.intModFun "intModBinOp x" $ \x -> return $
+  Prims.intModFun "intModBinOp y" $ \y ->
+  VIntMod n <$> (normalizeIntMod sym n =<< f sym x y)
 
 intModUnOp ::
   IsExprBuilder sym => sym ->
   (sym -> SInt sym -> IO (SInt sym)) -> SValue sym
 intModUnOp sym f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModUnOp" $ \x ->
-  VInt <$> (normalizeIntMod sym n =<< f sym x)
+  Prims.intModFun "intModUnOp" $ \x ->
+  VIntMod n <$> (normalizeIntMod sym n =<< f sym x)
 
 normalizeIntMod :: IsExprBuilder sym => sym -> Natural -> SInt sym -> IO (SInt sym)
 normalizeIntMod sym n x =
@@ -723,7 +731,7 @@ parseUninterpreted sym ref app ty =
     VPiType _ f
       -> return $
          strictFun $ \x -> do
-           app' <- applyUnintApp app x
+           app' <- applyUnintApp sym app x
            t2 <- f (ready x)
            parseUninterpreted sym ref app' t2
 
@@ -732,6 +740,9 @@ parseUninterpreted sym ref app ty =
 
     VIntType
       -> VInt  <$> mkUninterpreted sym ref app BaseIntegerRepr
+
+    VIntModType n
+      -> VIntMod n <$> mkUninterpreted sym ref app BaseIntegerRepr
 
     -- 0 width bitvector is a constant
     VVecType 0 VBoolType
@@ -807,23 +818,29 @@ extendUnintApp (UnintApp nm xs tys) x ty =
 -- encode them as suffixes on the function name of the 'UnintApp'.
 applyUnintApp ::
   forall sym.
+  (W.IsExprBuilder sym) =>
+  sym ->
   UnintApp (SymExpr sym) ->
   SValue sym ->
   IO (UnintApp (SymExpr sym))
-applyUnintApp app0 v =
+applyUnintApp sym app0 v =
   case v of
     VUnit                     -> return app0
-    VPair x y                 -> do app1 <- applyUnintApp app0 =<< force x
-                                    app2 <- applyUnintApp app1 =<< force y
+    VPair x y                 -> do app1 <- applyUnintApp sym app0 =<< force x
+                                    app2 <- applyUnintApp sym app1 =<< force y
                                     return app2
-    VRecordValue elems        -> foldM applyUnintApp app0 =<< traverse (force . snd) elems
-    VVector xv                -> foldM applyUnintApp app0 =<< traverse force xv
+    VRecordValue elems        -> foldM (applyUnintApp sym) app0 =<< traverse (force . snd) elems
+    VVector xv                -> foldM (applyUnintApp sym) app0 =<< traverse force xv
     VBool sb                  -> return (extendUnintApp app0 sb BaseBoolRepr)
     VInt si                   -> return (extendUnintApp app0 si BaseIntegerRepr)
+    VIntMod 0 si              -> return (extendUnintApp app0 si BaseIntegerRepr)
+    VIntMod n si              -> do n' <- W.intLit sym (toInteger n)
+                                    si' <- W.intMod sym si n'
+                                    return (extendUnintApp app0 si' BaseIntegerRepr)
     VWord (DBV sw)            -> return (extendUnintApp app0 sw (W.exprType sw))
     VArray (SArray sa)        -> return (extendUnintApp app0 sa (W.exprType sa))
     VWord ZBV                 -> return app0
-    VCtorApp i xv             -> foldM applyUnintApp app' =<< traverse force xv
+    VCtorApp i xv             -> foldM (applyUnintApp sym) app' =<< traverse force xv
                                    where app' = suffixUnintApp ("_" ++ identName i) app0
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     TValue (suffixTValue -> Just s)
@@ -884,7 +901,8 @@ argTypes :: IsSymExprBuilder sym => TValue (What4 sym) -> IO [TValue (What4 sym)
 argTypes v =
   case v of
     VPiType v1 f ->
-      do v2 <- f (error "argTypes: unsupported dependent SAW-Core type")
+      do x <- delay (fail "argTypes: unsupported dependent SAW-Core type")
+         v2 <- f x
          vs <- argTypes v2
          return (v1 : vs)
     _ -> return []
@@ -899,6 +917,8 @@ vAsFirstOrderType v =
       -> return FOTBit
     VIntType
       -> return FOTInt
+    VIntModType n
+      -> return (FOTIntMod n)
     VVecType n v2
       -> FOTVec n <$> vAsFirstOrderType v2
     VArrayType iv ev
@@ -928,17 +948,20 @@ data TypedExpr sym where
   TypedExpr :: BaseTypeRepr ty -> SymExpr sym ty -> TypedExpr sym
 
 
+-- | Create a fresh constant with the given name and type.
+mkConstant ::
+  forall sym ty.
+  (IsSymExprBuilder sym) =>
+  sym -> String -> BaseTypeRepr ty -> IO (SymExpr sym ty)
+mkConstant sym name ty = W.freshConstant sym (W.safeSymbol name) ty
+
 -- | Generate a new variable from a given BaseType
 
 freshVar :: forall sym ty. (IsSymExprBuilder sym, Given sym) =>
   BaseTypeRepr ty -> String -> IO (TypedExpr sym)
 freshVar ty str =
-  case W.userSymbol str of
-    Right solverSymbol -> do
-      c <- W.freshConstant (given :: sym) solverSymbol ty
-      return (TypedExpr ty c)
-    Left _ ->
-      fail $ "Cannot create solver symbol " ++ str
+  do c <- mkConstant (given :: sym) str ty
+     return (TypedExpr ty c)
 
 nextId :: StateT Int IO String
 nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
@@ -962,10 +985,11 @@ myfun ::(Map String (Labeler sym, SValue sym)) -> (Map String (Labeler sym), Map
 myfun = fmap fst A.&&& fmap snd
 
 data Labeler sym
-   = BaseLabel  (TypedExpr sym)
-   | VecLabel   (Vector (Labeler sym))
-   | TupleLabel (Vector (Labeler sym))
-   | RecLabel   (Map FieldName (Labeler sym))
+  = BaseLabel (TypedExpr sym)
+  | IntModLabel Natural (SymInteger sym)
+  | VecLabel (Vector (Labeler sym))
+  | TupleLabel (Vector (Labeler sym))
+  | RecLabel (Map FieldName (Labeler sym))
 
 
 newVarFOT :: forall sym. (IsSymExprBuilder sym, Given sym) =>
@@ -987,6 +1011,12 @@ newVarFOT (FOTRec tm)
        args <- traverse (return . ready) (vals :: (Map String (SValue sym)))
        return (RecLabel labels, vRecord args)
 
+newVarFOT (FOTIntMod n)
+  = do nm <- nextId
+       let r = BaseIntegerRepr
+       si <- lift $ mkConstant (given :: sym) nm r
+       return (IntModLabel n si, VIntMod n si)
+
 newVarFOT fot
   | Some r <- fotToBaseType fot
   = do nm <- nextId
@@ -999,6 +1029,27 @@ newVarFOT fot
 typedToSValue :: (IsExpr (SymExpr sym)) => TypedExpr sym -> IO (SValue sym)
 typedToSValue (TypedExpr ty expr) =
   maybe (fail "Cannot handle") return $ symExprToValue ty expr
+
+getLabelValues ::
+  forall sym t.
+  (SymExpr sym ~ B.Expr t) =>
+  GroundEvalFn t -> Labeler sym -> IO FirstOrderValue
+getLabelValues f =
+  \case
+    TupleLabel labels ->
+      FOVTuple <$> traverse (getLabelValues f) (V.toList labels)
+    VecLabel labels ->
+      FOVVec vty <$> traverse (getLabelValues f) (V.toList labels)
+      where vty = error "TODO: compute vector type, or just store it"
+    RecLabel labels ->
+      FOVRec <$> traverse (getLabelValues f) labels
+    IntModLabel n x ->
+      FOVIntMod n <$> groundEval f x
+    BaseLabel (TypedExpr ty bv) ->
+      do gv <- groundEval f bv
+         case (groundToFOV ty gv) of
+           Left err  -> fail err
+           Right fov -> pure fov
 
 ----------------------------------------------------------------------
 -- Evaluation through crucible-saw backend
@@ -1093,7 +1144,7 @@ parseUninterpretedSAW sym sc ref trm app ty =
     VPiType t1 f
       -> return $
          strictFun $ \x -> do
-           app' <- applyUnintApp app x
+           app' <- applyUnintApp sym app x
            arg <- mkArgTerm sc t1 x
            let trm' = ArgTermApply trm arg
            t2 <- f (ready x)

@@ -48,6 +48,8 @@ fotToBaseType FOTBit
   = Some BaseBoolRepr
 fotToBaseType FOTInt
   = Some BaseIntegerRepr
+fotToBaseType (FOTIntMod _n)
+  = Some BaseIntegerRepr
 fotToBaseType (FOTVec nat FOTBit)
   | Just (Some (PosNat nr)) <- somePosNat nat
   = Some (BaseBVRepr nr)

@@ -96,6 +96,7 @@ cryptolTypeOfFirstOrderType fot =
   case fot of
     FOTBit -> C.tBit
     FOTInt -> C.tInteger
+    FOTIntMod n -> C.tIntMod (C.tNum n)
     FOTVec n t -> C.tSeq (C.tNum n) (cryptolTypeOfFirstOrderType t)
     FOTTuple ts -> C.tTuple (map cryptolTypeOfFirstOrderType ts)
     FOTArray a b ->

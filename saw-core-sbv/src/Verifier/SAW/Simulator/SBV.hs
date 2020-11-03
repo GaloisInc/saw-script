@@ -196,8 +196,7 @@ constMap =
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.IntMod"    , constFun (TValue VIntType))
-  , ("Prelude.toIntMod"  , constFun (VFun force))
+  , ("Prelude.toIntMod"  , toIntModOp)
   , ("Prelude.fromIntMod", fromIntModOp)
   , ("Prelude.intModEq"  , intModEqOp)
   , ("Prelude.intModAdd" , intModBinOp svPlus)
@@ -262,6 +261,8 @@ flattenSValue v = do
                                         return (concat xss, concat ss)
         VBool sb                  -> return ([sb], "")
         VInt si                   -> return ([si], "")
+        VIntMod 0 si              -> return ([si], "")
+        VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
         VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
                                         return (concat xss, "_" ++ identName i ++ concat ss)
@@ -434,6 +435,12 @@ svShiftR b x i = svIte b (svNot (svShiftRight (svNot x) i)) (svShiftRight x i)
 ------------------------------------------------------------
 -- Integers mod n
 
+toIntModOp :: SValue
+toIntModOp =
+  Prims.natFun' "toIntMod" $ \n -> pure $
+  Prims.intFun "toIntMod" $ \x -> pure $
+  VIntMod n x
+
 fromIntModOp :: SValue
 fromIntModOp =
   Prims.natFun $ \n -> return $
@@ -443,23 +450,23 @@ fromIntModOp =
 intModEqOp :: SValue
 intModEqOp =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModEqOp" $ \x -> return $
-  Prims.intFun "intModEqOp" $ \y -> return $
+  Prims.intModFun "intModEqOp" $ \x -> return $
+  Prims.intModFun "intModEqOp" $ \y -> return $
   let modulus = literalSInteger (toInteger n)
   in VBool (svEqual (svRem (svMinus x y) modulus) (literalSInteger 0))
 
 intModBinOp :: (SInteger -> SInteger -> SInteger) -> SValue
 intModBinOp f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModBinOp x" $ \x -> return $
-  Prims.intFun "intModBinOp y" $ \y -> return $
-  VInt (normalizeIntMod n (f x y))
+  Prims.intModFun "intModBinOp x" $ \x -> return $
+  Prims.intModFun "intModBinOp y" $ \y -> return $
+  VIntMod n (normalizeIntMod n (f x y))
 
 intModUnOp :: (SInteger -> SInteger) -> SValue
 intModUnOp f =
   Prims.natFun $ \n -> return $
   Prims.intFun "intModUnOp" $ \x -> return $
-  VInt (normalizeIntMod n (f x))
+  VIntMod n (normalizeIntMod n (f x))
 
 normalizeIntMod :: Natural -> SInteger -> SInteger
 normalizeIntMod n x =
@@ -584,6 +591,9 @@ parseUninterpreted cws nm ty =
     VIntType
       -> return $ vInteger $ mkUninterpreted KUnbounded cws nm
 
+    VIntModType n
+      -> return $ VIntMod n $ mkUninterpreted KUnbounded cws nm
+
     (VVecType n VBoolType)
       -> return $ vWord $ mkUninterpreted (KBounded False (fromIntegral n)) cws nm
 
@@ -630,6 +640,8 @@ vAsFirstOrderType v =
       -> return FOTBit
     VIntType
       -> return FOTInt
+    VIntModType n
+      -> return (FOTIntMod n)
     VVecType n v2
       -> FOTVec n <$> vAsFirstOrderType v2
     VUnitType
@@ -701,6 +713,7 @@ newVarsForType v nm =
 newVars :: FirstOrderType -> StateT Int IO (Labeler, Symbolic SValue)
 newVars FOTBit = nextId <&> \s-> (BoolLabel s, vBool <$> existsSBool s)
 newVars FOTInt = nextId <&> \s-> (IntegerLabel s, vInteger <$> existsSInteger s)
+newVars (FOTIntMod n) = nextId <&> \s-> (IntegerLabel s, VIntMod n <$> existsSInteger s)
 newVars (FOTVec n FOTBit) =
   if n == 0
     then nextId <&> \s-> (WordLabel s, return (vWord (literalSWord 0 0)))
@@ -722,6 +735,7 @@ newVars (FOTRec tm) = do
 newCodeGenVars :: (Natural -> Bool) -> FirstOrderType -> StateT Int IO (SBVCodeGen SValue)
 newCodeGenVars _checkSz FOTBit = nextId <&> \s -> (vBool <$> svCgInput KBool s)
 newCodeGenVars _checkSz FOTInt = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
+newCodeGenVars _checkSz (FOTIntMod _) = nextId <&> \s -> (vInteger <$> svCgInput KUnbounded s)
 newCodeGenVars checkSz (FOTVec n FOTBit)
   | n == 0    = nextId <&> \_ -> return (vWord (literalSWord 0 0))
   | checkSz n = nextId <&> \s -> vWord <$> cgInputSWord s (fromIntegral n)

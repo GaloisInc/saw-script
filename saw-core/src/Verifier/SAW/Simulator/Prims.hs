@@ -226,6 +226,8 @@ constMap bp = Map.fromList
 -}
   , ("Prelude.intMin", intBinOp "intMin" (bpIntMin bp))
   , ("Prelude.intMax", intBinOp "intMax" (bpIntMax bp))
+  -- Modular Integers
+  , ("Prelude.IntMod", natFun $ \n -> pure $ TValue (VIntModType n))
   -- Vectors
   , ("Prelude.Vec", vecTypeOp)
   , ("Prelude.gen", genOp)
@@ -294,6 +296,11 @@ intFun :: VMonad l => String -> (VInt l -> MValue l) -> Value l
 intFun msg f = strictFun g
   where g (VInt i) = f i
         g _ = panic $ "expected Integer "++ msg
+
+intModFun :: VMonad l => String -> (VInt l -> MValue l) -> Value l
+intModFun msg f = strictFun g
+  where g (VIntMod _ i) = f i
+        g _ = panic $ "expected IntMod "++ msg
 
 toBool :: Show (Extra l) => Value l -> VBool l
 toBool (VBool b) = b
@@ -1249,6 +1256,7 @@ muxValue bp b = value
     value (VBool x)         (VBool y)         = VBool <$> bpMuxBool bp b x y
     value (VWord x)         (VWord y)         = VWord <$> bpMuxWord bp b x y
     value (VInt x)          (VInt y)          = VInt <$> bpMuxInt bp b x y
+    value (VIntMod n x)     (VIntMod _ y)     = VIntMod n <$> bpMuxInt bp b x y
     value (VNat m)          (VNat n)          | m == n = return $ VNat m
     value (VString x)       (VString y)       | x == y = return $ VString x
     value (VFloat x)        (VFloat y)        | x == y = return $ VFloat x

@@ -1367,6 +1367,7 @@ asCryptolTypeValue v =
   case v of
     SC.VBoolType -> return C.tBit
     SC.VIntType -> return C.tInteger
+    SC.VIntModType n -> return (C.tIntMod (C.tNum n))
     SC.VArrayType v1 v2 -> do
       t1 <- asCryptolTypeValue v1
       t2 <- asCryptolTypeValue v2
@@ -1461,7 +1462,7 @@ exportValue ty v = case ty of
     V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
 
   TV.TVIntMod _modulus ->
-    V.VInteger (case v of SC.VInt x -> x; _ -> error "exportValue: expected integer")
+    V.VInteger (case v of SC.VIntMod _ x -> x; _ -> error "exportValue: expected intmod")
 
   TV.TVArray{} -> error $ "exportValue: (on array type " ++ show ty ++ ")"
 
@@ -1533,6 +1534,7 @@ exportFirstOrderValue fv =
   case fv of
     FOVBit b    -> V.VBit b
     FOVInt i    -> V.VInteger i
+    FOVIntMod _ i -> V.VInteger i
     FOVWord w x -> V.word V.Concrete (toInteger w) x
     FOVVec t vs
       | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap V.Concrete . map (V.ready . V.VBit . fvAsBool) $ vs)))

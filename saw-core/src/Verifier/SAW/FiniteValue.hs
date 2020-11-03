@@ -48,6 +48,7 @@ data FiniteValue
 data FirstOrderType
   = FOTBit
   | FOTInt
+  | FOTIntMod Natural
   | FOTVec Natural FirstOrderType
   | FOTArray FirstOrderType FirstOrderType
   | FOTTuple [FirstOrderType]
@@ -58,6 +59,7 @@ data FirstOrderType
 data FirstOrderValue
   = FOVBit Bool
   | FOVInt Integer
+  | FOVIntMod Natural Integer
   | FOVWord Natural Integer -- ^ a more efficient special case for 'FOVVec FOTBit _'.
   | FOVVec FirstOrderType [FirstOrderValue]
   | FOVArray FirstOrderType FirstOrderType
@@ -90,6 +92,7 @@ instance Show FirstOrderValue where
     case fv of
       FOVBit b    -> shows b
       FOVInt i    -> shows i
+      FOVIntMod _ i -> shows i
       FOVWord _ x -> shows x
       FOVVec _ vs -> showString "[" . commaSep (map shows vs) . showString "]"
       FOVArray{}  -> shows $ firstOrderTypeOf fv
@@ -110,6 +113,7 @@ ppFirstOrderValue opts = loop
      | b         -> text "True"
      | otherwise -> text "False"
    FOVInt i      -> integer i
+   FOVIntMod _ i -> integer i
    FOVWord _w i  -> ppNat opts i
    FOVVec _ xs   -> brackets (sep (punctuate comma (map loop xs)))
    FOVArray{}    -> text $ show $ firstOrderTypeOf fv
@@ -160,6 +164,7 @@ firstOrderTypeOf fv =
   case fv of
     FOVBit _    -> FOTBit
     FOVInt _    -> FOTInt
+    FOVIntMod n _ -> FOTIntMod n
     FOVWord n _ -> FOTVec n FOTBit
     FOVVec t vs -> FOTVec (fromIntegral (length vs)) t
     -- Note: FOVArray contains type information, but not an actual Array value,
@@ -201,6 +206,8 @@ asFirstOrderType sc t = do
       -> return FOTBit
     (R.asIntegerType -> Just ())
       -> return FOTInt
+    (R.asIntModType -> Just n)
+      -> return (FOTIntMod n)
     (R.isVecType return -> Just (n R.:*: tp))
       -> FOTVec n <$> asFirstOrderType sc tp
     (R.asArrayType -> Just (tp1 R.:*: tp2)) -> do
@@ -237,6 +244,7 @@ scFirstOrderType sc ft =
   case ft of
     FOTBit      -> scBoolType sc
     FOTInt      -> scIntegerType sc
+    FOTIntMod n -> scIntModType sc =<< scNat sc n
     FOTVec n t  -> do n' <- scNat sc n
                       t' <- scFirstOrderType sc t
                       scVecType sc n' t'
@@ -259,6 +267,13 @@ scFirstOrderValue sc fv =
     FOVInt i
       | i >= 0  -> scNatToInt sc =<< scNat sc (fromInteger i)
       | True    -> scIntNeg sc =<< scNatToInt sc =<< scNat sc (fromInteger (- i))
+    FOVIntMod 0 i ->
+      do n' <- scNat sc 0
+         scToIntMod sc n' =<< scFirstOrderValue sc (FOVInt i)
+    FOVIntMod n i ->
+      do n' <- scNat sc n
+         i' <- scNatToInt sc =<< scNat sc (fromInteger (i `mod` toInteger n))
+         scToIntMod sc n' i'
     FOVWord n x -> scBvConst sc n x
     FOVVec t vs -> do t' <- scFirstOrderType sc t
                       vs' <- traverse (scFirstOrderValue sc) vs

@@ -253,7 +253,6 @@ constMap =
   , ("Prelude.bvToInt" , bvToIntOp)
   , ("Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
-  , ("Prelude.IntMod"    , constFun (TValue VIntType))
   , ("Prelude.toIntMod"  , toIntModOp)
   , ("Prelude.fromIntMod", constFun (VFun force))
   , ("Prelude.intModEq"  , intModEqOp)
@@ -319,27 +318,27 @@ toIntModOp :: CValue
 toIntModOp =
   Prims.natFun $ \n -> return $
   Prims.intFun "toIntModOp" $ \x -> return $
-  VInt (x `mod` toInteger n)
+  VIntMod n (x `mod` toInteger n)
 
 intModEqOp :: CValue
 intModEqOp =
   constFun $
-  Prims.intFun "intModEqOp" $ \x -> return $
-  Prims.intFun "intModEqOp" $ \y -> return $
+  Prims.intModFun "intModEqOp" $ \x -> return $
+  Prims.intModFun "intModEqOp" $ \y -> return $
   VBool (x == y)
 
 intModBinOp :: (Integer -> Integer -> Integer) -> CValue
 intModBinOp f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModBinOp x" $ \x -> return $
-  Prims.intFun "intModBinOp y" $ \y -> return $
-  VInt (f x y `mod` toInteger n)
+  Prims.intModFun "intModBinOp x" $ \x -> return $
+  Prims.intModFun "intModBinOp y" $ \y -> return $
+  VIntMod n (f x y `mod` toInteger n)
 
 intModUnOp :: (Integer -> Integer) -> CValue
 intModUnOp f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModUnOp" $ \x -> return $
-  VInt (f x `mod` toInteger n)
+  Prims.intModFun "intModUnOp" $ \x -> return $
+  VIntMod n (f x `mod` toInteger n)
 
 ------------------------------------------------------------
 

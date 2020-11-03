@@ -56,6 +56,7 @@ data Value l
   | VToNat (Value l)
   | VNat !Natural
   | VInt (VInt l)
+  | VIntMod !Natural (VInt l)
   | VArray (VArray l)
   | VString !String
   | VFloat !Float
@@ -69,6 +70,7 @@ data TValue l
   = VVecType !Natural !(TValue l)
   | VBoolType
   | VIntType
+  | VIntModType !Natural
   | VArrayType !(TValue l) !(TValue l)
   | VPiType !(TValue l) !(Thunk l -> EvalM l (TValue l))
   | VUnitType
@@ -155,6 +157,7 @@ instance Show (Extra l) => Show (Value l) where
       VToNat x       -> showString "bvToNat " . showParen True (shows x)
       VNat n         -> shows n
       VInt _         -> showString "<<integer>>"
+      VIntMod n _    -> showString ("<<Z " ++ show n ++ ">>")
       VArray{}       -> showString "<<array>>"
       VFloat float   -> shows float
       VDouble double -> shows double
@@ -172,6 +175,7 @@ instance Show (Extra l) => Show (TValue l) where
     case v of
       VBoolType      -> showString "Bool"
       VIntType       -> showString "Integer"
+      VIntModType n  -> showParen True (showString "IntMod " . shows n)
       VArrayType{}   -> showString "Array"
       VPiType t _    -> showParen True
                         (shows t . showString " -> ...")
@@ -271,6 +275,7 @@ suffixTValue tv =
          Just ("_Vec_" ++ show n ++ a')
     VBoolType -> Just "_Bool"
     VIntType -> Just "_Int"
+    VIntModType n -> Just ("_IntMod_" ++ show n)
     VArrayType a b ->
       do a' <- suffixTValue a
          b' <- suffixTValue b
