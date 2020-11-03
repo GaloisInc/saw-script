@@ -953,10 +953,7 @@ mkConstant ::
   forall sym ty.
   (IsSymExprBuilder sym) =>
   sym -> String -> BaseTypeRepr ty -> IO (SymExpr sym ty)
-mkConstant sym name ty =
-  case W.userSymbol name of
-    Right solverSymbol -> W.freshConstant sym solverSymbol ty
-    Left _ -> fail $ "Cannot create solver symbol " ++ name
+mkConstant sym name ty = W.freshConstant sym (W.safeSymbol name) ty
 
 -- | Generate a new variable from a given BaseType
 
