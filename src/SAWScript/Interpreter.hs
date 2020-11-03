@@ -41,7 +41,7 @@ import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
-import System.FilePath (takeDirectory)
+import System.FilePath (takeDirectory, hasDrive, replaceDirectory)
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
@@ -348,18 +348,19 @@ interpretStmt printBinds stmt =
                                      putTopLevelRW $ addTypedef (getVal name) ty rw
 
 writeVerificationSummary :: TopLevel ()
--- TODO: set current directory?
 writeVerificationSummary = do
   do values <- rwProofs <$> getTopLevelRW
      let jspecs  = [ s | VJVMMethodSpec s <- values ]
          lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | VTheorem t <- values ]
-         summary = computeVerificationSummary jspecs lspecs thms
+         summary = computeVerificationSummary jspecs lspecs thms -- TODO: this is duplicated in Builtins.hs
      opts <- roOptions <$> getTopLevelRO
+     dir <- roInitWorkDir <$> getTopLevelRO
      case (summaryFile opts) of
        Nothing -> return ()
        Just f ->
-         io $ writeFile f $ prettyVerificationSummary summary
+         let f' = if hasDrive f then f else replaceDirectory f dir
+          in io $ writeFile f' $ prettyVerificationSummary summary
 
 
 interpretFile :: FilePath -> TopLevel ()
@@ -418,6 +419,7 @@ buildTopLevelEnv proxy opts =
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
+       currDir <- getCurrentDirectory
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roSharedContext = sc
@@ -426,6 +428,7 @@ buildTopLevelEnv proxy opts =
                    , roHandleAlloc = halloc
                    , roPosition = SS.Unknown
                    , roProxy = proxy
+                   , roInitWorkDir = currDir
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc

@@ -389,6 +389,7 @@ data TopLevelRO =
   , roHandleAlloc   :: Crucible.HandleAllocator
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
+  , roInitWorkDir   :: FilePath
   }
 
 data TopLevelRW =
