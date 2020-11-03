@@ -49,6 +49,7 @@ module Verifier.SAW.Simulator.What4
   , w4Eval
   , w4EvalAny
   , w4EvalBasic
+  , getLabelValues
   ) where
 
 
@@ -80,9 +81,11 @@ import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName)
-import Verifier.SAW.FiniteValue (FirstOrderType(..))
+import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
 
 -- what4
+import qualified What4.Expr.Builder as B
+import           What4.Expr.GroundEval
 import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
                                  IsExprBuilder,IsSymExprBuilder)
 import qualified What4.Interface as W
@@ -985,10 +988,11 @@ myfun ::(Map String (Labeler sym, SValue sym)) -> (Map String (Labeler sym), Map
 myfun = fmap fst A.&&& fmap snd
 
 data Labeler sym
-   = BaseLabel  (TypedExpr sym)
-   | VecLabel   (Vector (Labeler sym))
-   | TupleLabel (Vector (Labeler sym))
-   | RecLabel   (Map FieldName (Labeler sym))
+  = BaseLabel (TypedExpr sym)
+  | IntModLabel Natural (SymInteger sym)
+  | VecLabel (Vector (Labeler sym))
+  | TupleLabel (Vector (Labeler sym))
+  | RecLabel (Map FieldName (Labeler sym))
 
 
 newVarFOT :: forall sym. (IsSymExprBuilder sym, Given sym) =>
@@ -1014,7 +1018,7 @@ newVarFOT (FOTIntMod n)
   = do nm <- nextId
        let r = BaseIntegerRepr
        si <- lift $ mkConstant (given :: sym) nm r
-       return (BaseLabel (TypedExpr r si), VIntMod n si)
+       return (IntModLabel n si, VIntMod n si)
 
 newVarFOT fot
   | Some r <- fotToBaseType fot
@@ -1028,6 +1032,27 @@ newVarFOT fot
 typedToSValue :: (IsExpr (SymExpr sym)) => TypedExpr sym -> IO (SValue sym)
 typedToSValue (TypedExpr ty expr) =
   maybe (fail "Cannot handle") return $ symExprToValue ty expr
+
+getLabelValues ::
+  forall sym t.
+  (SymExpr sym ~ B.Expr t) =>
+  GroundEvalFn t -> Labeler sym -> IO FirstOrderValue
+getLabelValues f =
+  \case
+    TupleLabel labels ->
+      FOVTuple <$> traverse (getLabelValues f) (V.toList labels)
+    VecLabel labels ->
+      FOVVec vty <$> traverse (getLabelValues f) (V.toList labels)
+      where vty = error "TODO: compute vector type, or just store it"
+    RecLabel labels ->
+      FOVRec <$> traverse (getLabelValues f) labels
+    IntModLabel n x ->
+      FOVIntMod n <$> groundEval f x
+    BaseLabel (TypedExpr ty bv) ->
+      do gv <- groundEval f bv
+         case (groundToFOV ty gv) of
+           Left err  -> fail err
+           Right fov -> pure fov
 
 ----------------------------------------------------------------------
 -- Evaluation through crucible-saw backend
