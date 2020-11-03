@@ -41,7 +41,7 @@ import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
-import System.FilePath (takeDirectory, hasDrive, replaceDirectory)
+import System.FilePath (takeDirectory, hasDrive, (</>))
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
@@ -359,7 +359,7 @@ writeVerificationSummary = do
      case (summaryFile opts) of
        Nothing -> return ()
        Just f ->
-         let f' = if hasDrive f then f else replaceDirectory f dir
+         let f' = if hasDrive f then f else dir </> f
           in io $ writeFile f' $ prettyVerificationSummary summary
 
 
