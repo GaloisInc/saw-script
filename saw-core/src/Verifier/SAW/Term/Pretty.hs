@@ -39,10 +39,12 @@ import Control.Monad.State.Strict as State
 import Data.Foldable (Foldable)
 #endif
 import qualified Data.Foldable as Fold
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric (showIntAtBase)
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL ((<$>))
+import Text.URI
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
@@ -426,7 +428,7 @@ ppFlatTermF prec tf =
 
 ppName :: NameInfo -> Doc
 ppName (ModuleIdentifier i) = ppIdent i
-ppName (ImportedName absName _) = text (show absName)
+ppName (ImportedName absName _) = text (Text.unpack (render absName))
 
 -- | Pretty-print a non-shared term
 ppTermF :: Prec -> TermF Term -> PPM Doc

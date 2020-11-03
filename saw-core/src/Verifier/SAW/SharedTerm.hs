@@ -354,13 +354,13 @@ scFreshNameURI :: Text -> VarIndex -> URI
 scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed name URI", show nm, show i]) $
   do sch <- mkScheme "fresh"
      nm' <- mkPathPiece (if Text.null nm then "_" else nm)
-     i'  <- mkPathPiece (Text.pack (show i))
+     i'  <- mkFragment (Text.pack (show i))
      pure URI
        { uriScheme = Just sch
-       , uriAuthority = Left True -- absolute path
-       , uriPath   = Just (False, (nm' :| [i']))
+       , uriAuthority = Left False -- relative path
+       , uriPath   = Just (False, (nm' :| []))
        , uriQuery  = []
-       , uriFragment = Nothing
+       , uriFragment = Just i'
        }
 
 moduleIdentToURI :: Ident -> URI
