@@ -100,6 +100,8 @@ import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
 
+import SAWScript.VerificationSummary
+
 -- Environment -----------------------------------------------------------------
 
 data LocalBinding
@@ -345,11 +347,27 @@ interpretStmt printBinds stmt =
     SS.StmtTypedef _ name ty   -> do rw <- getTopLevelRW
                                      putTopLevelRW $ addTypedef (getVal name) ty rw
 
+writeVerificationSummary :: TopLevel ()
+-- TODO: set current directory?
+writeVerificationSummary = do
+  do values <- rwProofs <$> getTopLevelRW
+     let jspecs  = [ s | VJVMMethodSpec s <- values ]
+         lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
+         thms    = [ t | VTheorem t <- values ]
+         summary = computeVerificationSummary jspecs lspecs thms
+     opts <- roOptions <$> getTopLevelRO
+     case (summaryFile opts) of
+       Nothing -> return ()
+       Just f ->
+         io $ writeFile f $ prettyVerificationSummary summary
+
+
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
   opts <- getOptions
   stmts <- io $ SAWScript.Import.loadFile opts file
   mapM_ stmtWithPrint stmts
+  writeVerificationSummary
   where
     stmtWithPrint s = do let withPos str = unlines $
                                            ("[output] at " ++ show (SS.getPos s) ++ ": ") :

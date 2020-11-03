@@ -31,6 +31,7 @@ data Options = Options
   , printShowPos     :: Bool
   , useColor         :: Bool
   , printOutFn       :: Verbosity -> String -> IO ()
+  , summaryFile        :: Maybe FilePath
   } deriving (Show)
 
 -- | Verbosity is currently a linear setting (vs a mask or tree).  Any given
@@ -60,6 +61,7 @@ defaultOptions
     , showHelp = False
     , showVersion = False
     , useColor = True
+    , summaryFile = Nothing
     }
 
 printOutWith :: Verbosity -> Verbosity -> String -> IO ()
@@ -127,6 +129,11 @@ options =
   , Option [] ["no-color"]
     (NoArg (\opts -> opts { useColor = False }))
     "Disable ANSI color and Unicode output"
+  , Option "s" ["summary"]
+    (ReqArg
+     (\file opts -> opts { summaryFile = Just file })
+     "filename")
+    "Write a verification summary to the provided filename"
   ]
 
 -- Try to read verbosity as either a string or number and default to 'Debug'.
