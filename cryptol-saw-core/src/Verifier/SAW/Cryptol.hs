@@ -1534,6 +1534,7 @@ exportFirstOrderValue fv =
   case fv of
     FOVBit b    -> V.VBit b
     FOVInt i    -> V.VInteger i
+    FOVIntMod _ i -> V.VInteger i
     FOVWord w x -> V.word V.Concrete (toInteger w) x
     FOVVec t vs
       | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap V.Concrete . map (V.ready . V.VBit . fvAsBool) $ vs)))
