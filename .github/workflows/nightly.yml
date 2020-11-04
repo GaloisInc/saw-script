@@ -47,6 +47,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        ghc: [8.8.4]
     continue-on-error: true
     steps:
       - uses: actions/checkout@v2
@@ -57,7 +58,7 @@ jobs:
       - uses: actions/setup-haskell@v1
         id: setup-haskell
         with:
-          ghc-version: 8.6.5
+          ghc-version: ${{ matrix.ghc }}
 
       - uses: actions/cache@v2
         name: Cache cabal store

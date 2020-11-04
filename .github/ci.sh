@@ -38,7 +38,7 @@ retry() {
 }
 
 setup_dist_bins() {
-  if $IS_WIN ; then
+  if $IS_WIN; then
     is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
   else
     is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && is_exe "dist/bin" "jss" && return
@@ -173,6 +173,7 @@ test_dist() {
 build_cryptol() {
   is_exe "dist/bin" "cryptol" && return
   pushd deps/cryptol
+  git submodule update --init
   .github/ci.sh build
   popd
 }
