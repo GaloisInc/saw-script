@@ -353,10 +353,10 @@ writeVerificationSummary = do
      let jspecs  = [ s | VJVMMethodSpec s <- values ]
          lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
          thms    = [ t | VTheorem t <- values ]
-         summary = computeVerificationSummary jspecs lspecs thms -- TODO: this is duplicated in Builtins.hs
+         summary = computeVerificationSummary jspecs lspecs thms
      opts <- roOptions <$> getTopLevelRO
      dir <- roInitWorkDir <$> getTopLevelRO
-     case (summaryFile opts) of
+     case summaryFile opts of
        Nothing -> return ()
        Just f ->
          let f' = if hasDrive f then f else dir </> f
