@@ -34,3 +34,5 @@ packages:
     deps/argo/tasty-script-exitcode
     deps/argo/python
     deps/cryptol/cryptol-remote-api
+
+allow-newer: uuid:random
