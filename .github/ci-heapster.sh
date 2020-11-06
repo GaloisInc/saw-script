@@ -2,6 +2,7 @@
 set -Eeuxo pipefail
 
 [[ "$RUNNER_OS" == 'Windows' ]] && IS_WIN=true || IS_WIN=false
+[[ "$RUNNER_OS" == 'macOS' ]] && IS_MACOS=true || IS_MACOS=false
 BIN=bin
 EXT=""
 $IS_WIN && EXT=".exe"
@@ -118,6 +119,11 @@ build() {
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   cabal v2-configure -j2 --minimize-conflict-set
+  # Workaround for https://github.com/GaloisInc/abcBridge/issues/15
+  if $IS_MACOS; then
+    echo "flags: -builtin-abc" >> cabal.project.local
+    echo "constraints: jvm-verifier -builtin-abc" >> cabal.project.local
+  fi
   if ! retry cabal v2-build "$@" saw jss; then
     if [[ "$RUNNER_OS" == "macOS" ]]; then
       echo "Working around a dylib issue on macos by removing the cache and trying again"
