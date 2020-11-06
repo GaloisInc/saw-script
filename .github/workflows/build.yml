@@ -46,7 +46,7 @@ jobs:
             ghc: "8.6.5"
             xcode: "10.3"
             continue-on-error: true
-    name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
+    name: Xcode ${{ matrix.xcode }}
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
     continue-on-error: ${{ matrix.continue-on-error }}
@@ -81,6 +81,10 @@ jobs:
       - shell: bash
         run: .github/ci.sh build_abc
         if: runner.os != 'Windows'
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode }}
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
