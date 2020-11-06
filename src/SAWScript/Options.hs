@@ -31,7 +31,7 @@ data Options = Options
   , printShowPos     :: Bool
   , useColor         :: Bool
   , printOutFn       :: Verbosity -> String -> IO ()
-  , summaryFile        :: Maybe FilePath
+  , summaryFile      :: Maybe FilePath
   } deriving (Show)
 
 -- | Verbosity is currently a linear setting (vs a mask or tree).  Any given
