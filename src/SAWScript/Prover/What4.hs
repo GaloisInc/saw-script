@@ -8,7 +8,6 @@ module SAWScript.Prover.What4 where
 
 import System.IO
 
-import qualified Data.Vector as V
 import           Control.Monad(filterM)
 import           Data.Maybe (catMaybes)
 
@@ -187,31 +186,8 @@ getValues :: forall sym gt. (SymExpr sym ~ B.Expr gt) => GroundEvalFn gt ->
   (Maybe (W.Labeler sym), String) -> IO (Maybe (String, FirstOrderValue))
 getValues _ (Nothing, _) = return Nothing
 getValues f (Just labeler, orig) = do
-  fov <- getLabelValues f labeler
+  fov <- W.getLabelValues f labeler
   return $ Just (orig,fov)
-
-
-getLabelValues :: forall sym gt. (SymExpr sym ~ B.Expr gt) => GroundEvalFn gt ->
-  W.Labeler sym -> IO FirstOrderValue
-
-getLabelValues f (W.TupleLabel labels) = do
-  vals <- mapM (getLabelValues f) (V.toList labels)
-  return (FOVTuple vals)
-
-getLabelValues f (W.VecLabel labels) = do
-  let vty = error "TODO: compute vector type, or just store it"
-  vals <- mapM (getLabelValues f) (V.toList labels)
-  return (FOVVec vty vals)
-
-getLabelValues f (W.RecLabel m) = do
-  m' <- mapM (getLabelValues f) m
-  return (FOVRec m')
-
-getLabelValues f (W.BaseLabel (W.TypedExpr ty bv)) = do
-  gv <- groundEval f bv
-  case (groundToFOV ty gv) of
-    Left err  -> fail err
-    Right fov -> return fov
 
 
 -- | For debugging
