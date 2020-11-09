@@ -16,3 +16,11 @@ services:
     image: s2n
     volumes:
       - ${PWD:-.}/bin:/saw-bin:rw
+
+  awslc:
+    build:
+      context: .
+      dockerfile: ${PWD:-.}/docker/awslc.dockerfile
+    image: awslc
+    volumes:
+      - ${PWD:-.}/bin:/saw-bin:rw

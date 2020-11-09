@@ -1,6 +1,6 @@
-.PHONY: all saw-script s2n hmac drbg sike bike tls hmac-failure
+.PHONY: all saw-script s2n hmac drbg sike bike tls hmac-failure awslc
 
-all: hmac drbg sike bike tls hmac-failure
+all: hmac drbg sike bike tls hmac-failure awslc
 saw-script:
 	docker-compose build saw-script
 	docker-compose run saw-script
@@ -18,3 +18,8 @@ tls: s2n
 	docker-compose run s2n tls
 hmac-failure: s2n
 	docker-compose run s2n sawHMACFailure
+
+awslc-container:
+	docker-compose build awslc
+awslc: awslc-container
+	docker-compose run awslc
