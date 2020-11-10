@@ -37,11 +37,17 @@ jobs:
         ghc: ["8.6.5", "8.8.4"]
         continue-on-error: [false]
         include:
-          - os: macos-latest
+          - os: macos-10.15
             ghc: "8.6.5"
+            xcode: "12.0.1"  # macosx10.15 SDK
             continue-on-error: true
-          - os: macos-latest
+          - os: macos-10.15
             ghc: "8.8.4"
+            xcode: "12.0.1"  # macosx10.15 SDK
+            continue-on-error: true
+          - os: macos-10.14
+            ghc: "8.8.4"
+            xcode: "10.3"  # macosx10.14 SDK
             continue-on-error: true
           - os: windows-latest
             ghc: "8.6.5"
@@ -67,6 +73,11 @@ jobs:
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode }}
+        if: runner.os == 'macOS'
 
       - uses: actions/cache@v2
         name: Cache cabal store
