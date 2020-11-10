@@ -54,105 +54,24 @@ let {{
 implementation */
 
 let jvm_array12_is ref x =
-  do {
-    let xs = eval_list x;
-    for [0,1,2,3,4,5,6,7,8,9,10,11]
-      (\i -> jvm_elem_is ref i (jvm_term (nth xs i)));
-    return ();
-  };
+  jvm_array_is ref x;
 
 let jvm_array24_is ref x =
-  do {
-    let xs = eval_list x;
-    for [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
-      (\i -> jvm_elem_is ref i (jvm_term (nth xs i)));
-    return ();
-  };
+  jvm_array_is ref x;
 
 let jvm_fresh_array12 n =
   do {
     ref <- jvm_alloc_array 12 java_int;
-    x0 <- jvm_fresh_var (str_concat n ".0") java_int;
-    x1 <- jvm_fresh_var (str_concat n ".1") java_int;
-    x2 <- jvm_fresh_var (str_concat n ".2") java_int;
-    x3 <- jvm_fresh_var (str_concat n ".3") java_int;
-    x4 <- jvm_fresh_var (str_concat n ".4") java_int;
-    x5 <- jvm_fresh_var (str_concat n ".5") java_int;
-    x6 <- jvm_fresh_var (str_concat n ".6") java_int;
-    x7 <- jvm_fresh_var (str_concat n ".7") java_int;
-    x8 <- jvm_fresh_var (str_concat n ".8") java_int;
-    x9 <- jvm_fresh_var (str_concat n ".9") java_int;
-    x10 <- jvm_fresh_var (str_concat n ".10") java_int;
-    x11 <- jvm_fresh_var (str_concat n ".11") java_int;
-    jvm_elem_is ref 0 (jvm_term x0);
-    jvm_elem_is ref 1 (jvm_term x1);
-    jvm_elem_is ref 2 (jvm_term x2);
-    jvm_elem_is ref 3 (jvm_term x3);
-    jvm_elem_is ref 4 (jvm_term x4);
-    jvm_elem_is ref 5 (jvm_term x5);
-    jvm_elem_is ref 6 (jvm_term x6);
-    jvm_elem_is ref 7 (jvm_term x7);
-    jvm_elem_is ref 8 (jvm_term x8);
-    jvm_elem_is ref 9 (jvm_term x9);
-    jvm_elem_is ref 10 (jvm_term x10);
-    jvm_elem_is ref 11 (jvm_term x11);
-    let xs = {{ [x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11] }};
+    xs <- jvm_fresh_var n (java_array 12 java_int);
+    jvm_array_is ref xs;
     return (ref, xs);
   };
 
 let jvm_fresh_array24 n =
   do {
     ref <- jvm_alloc_array 24 java_int;
-    x0 <- jvm_fresh_var (str_concat n ".0") java_int;
-    x1 <- jvm_fresh_var (str_concat n ".1") java_int;
-    x2 <- jvm_fresh_var (str_concat n ".2") java_int;
-    x3 <- jvm_fresh_var (str_concat n ".3") java_int;
-    x4 <- jvm_fresh_var (str_concat n ".4") java_int;
-    x5 <- jvm_fresh_var (str_concat n ".5") java_int;
-    x6 <- jvm_fresh_var (str_concat n ".6") java_int;
-    x7 <- jvm_fresh_var (str_concat n ".7") java_int;
-    x8 <- jvm_fresh_var (str_concat n ".8") java_int;
-    x9 <- jvm_fresh_var (str_concat n ".9") java_int;
-    x10 <- jvm_fresh_var (str_concat n ".10") java_int;
-    x11 <- jvm_fresh_var (str_concat n ".11") java_int;
-    x12 <- jvm_fresh_var (str_concat n ".12") java_int;
-    x13 <- jvm_fresh_var (str_concat n ".13") java_int;
-    x14 <- jvm_fresh_var (str_concat n ".14") java_int;
-    x15 <- jvm_fresh_var (str_concat n ".15") java_int;
-    x16 <- jvm_fresh_var (str_concat n ".16") java_int;
-    x17 <- jvm_fresh_var (str_concat n ".17") java_int;
-    x18 <- jvm_fresh_var (str_concat n ".18") java_int;
-    x19 <- jvm_fresh_var (str_concat n ".19") java_int;
-    x20 <- jvm_fresh_var (str_concat n ".20") java_int;
-    x21 <- jvm_fresh_var (str_concat n ".21") java_int;
-    x22 <- jvm_fresh_var (str_concat n ".22") java_int;
-    x23 <- jvm_fresh_var (str_concat n ".23") java_int;
-    jvm_elem_is ref 0 (jvm_term x0);
-    jvm_elem_is ref 1 (jvm_term x1);
-    jvm_elem_is ref 2 (jvm_term x2);
-    jvm_elem_is ref 3 (jvm_term x3);
-    jvm_elem_is ref 4 (jvm_term x4);
-    jvm_elem_is ref 5 (jvm_term x5);
-    jvm_elem_is ref 6 (jvm_term x6);
-    jvm_elem_is ref 7 (jvm_term x7);
-    jvm_elem_is ref 8 (jvm_term x8);
-    jvm_elem_is ref 9 (jvm_term x9);
-    jvm_elem_is ref 10 (jvm_term x10);
-    jvm_elem_is ref 11 (jvm_term x11);
-    jvm_elem_is ref 12 (jvm_term x12);
-    jvm_elem_is ref 13 (jvm_term x13);
-    jvm_elem_is ref 14 (jvm_term x14);
-    jvm_elem_is ref 15 (jvm_term x15);
-    jvm_elem_is ref 16 (jvm_term x16);
-    jvm_elem_is ref 17 (jvm_term x17);
-    jvm_elem_is ref 18 (jvm_term x18);
-    jvm_elem_is ref 19 (jvm_term x19);
-    jvm_elem_is ref 20 (jvm_term x20);
-    jvm_elem_is ref 21 (jvm_term x21);
-    jvm_elem_is ref 22 (jvm_term x22);
-    jvm_elem_is ref 23 (jvm_term x23);
-    let xs = {{ [x0,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,
-      x12,x13,x14,x15,x16,x17,x18,x19,x20,x21,x22,x23] }};
+    xs <- jvm_fresh_var n (java_array 24 java_int);
+    jvm_array_is ref xs;
     return (ref, xs);
   };
 
