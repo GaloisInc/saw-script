@@ -172,14 +172,14 @@ initialDefCrucibleMethodSpecIR cb cname method loc =
 
 initialCrucibleSetupState ::
   JVMCrucibleContext ->
-  J.Method ->
+  (J.Class, J.Method) ->
   ProgramLoc ->
   Setup.CrucibleSetupState CJ.JVM
-initialCrucibleSetupState cc method loc =
+initialCrucibleSetupState cc (cls, method) loc =
   Setup.makeCrucibleSetupState cc $
     initialDefCrucibleMethodSpecIR
       (cc ^. jccCodebase)
-      (J.className $ cc ^. jccJVMClass)
+      (J.className cls)
       method
       loc
 
