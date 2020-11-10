@@ -33,6 +33,7 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_precond
     , jvm_field_is
     , jvm_elem_is
+    , jvm_array_is
     , jvm_fresh_var
     , jvm_alloc_object
     , jvm_alloc_array
@@ -441,6 +442,16 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
              CJ.doArrayStore sym mem lhs' idx (injectJVMVal sym rhs')
+        JVMPointsToArray _loc lhs rhs ->
+          do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+             lhs' <- resolveJVMRefVal lhs
+             (_ety, tts) <-
+               destVecTypedTerm sc rhs >>=
+               \case
+                 Nothing -> fail "setupPrePointsTos: not a monomorphic sequence type"
+                 Just x -> pure x
+             rhs' <- traverse (resolveSetupVal cc env tyenv nameEnv . MS.SetupTerm) tts
+             doEntireArrayStore sym mem lhs' (map (injectJVMVal sym) rhs')
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -897,6 +908,23 @@ jvm_elem_is _typed _bic _opt ptr idx val =
      -- let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      --     nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      Setup.addPointsTo (JVMPointsToElem loc ptr idx val)
+
+jvm_array_is ::
+  Bool {- ^ whether to check type compatibility -} ->
+  BuiltinContext ->
+  Options        ->
+  SetupValue {- ^ array reference -} ->
+  TypedTerm {- ^ array value -} ->
+  JVMSetupM ()
+jvm_array_is _typed _bic _opt ptr val =
+  JVMSetupM $
+  do loc <- SS.toW4Loc "jvm_array_is" <$> lift getPosition
+     st <- get
+     let rs = st ^. Setup.csResolvedState
+     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
+       then fail "Multiple points-to preconditions on same pointer"
+       else Setup.csResolvedState %= MS.markResolved ptr []
+     Setup.addPointsTo (JVMPointsToArray loc ptr val)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do

@@ -45,6 +45,9 @@ import qualified Verifier.Java.Codebase as CB
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
+-- cryptol-saw-core
+import           Verifier.SAW.TypedTerm (TypedTerm)
+
 import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
@@ -121,6 +124,7 @@ type instance MS.PointsTo CJ.JVM = JVMPointsTo
 data JVMPointsTo
   = JVMPointsToField ProgramLoc (MS.SetupValue CJ.JVM) String (MS.SetupValue CJ.JVM)
   | JVMPointsToElem ProgramLoc (MS.SetupValue CJ.JVM) Int (MS.SetupValue CJ.JVM)
+  | JVMPointsToArray ProgramLoc (MS.SetupValue CJ.JVM) TypedTerm
 
 ppPointsTo :: JVMPointsTo -> PPL.Doc
 ppPointsTo =
@@ -133,6 +137,10 @@ ppPointsTo =
       MS.ppSetupValue ptr <> PPL.text "[" <> PPL.text (show idx) <> PPL.text "]"
       PPL.<+> PPL.text "points to"
       PPL.<+> MS.ppSetupValue val
+    JVMPointsToArray _loc ptr val ->
+      MS.ppSetupValue ptr
+      PPL.<+> PPL.text "points to"
+      PPL.<+> MS.ppTypedTerm val
 
 instance PPL.Pretty JVMPointsTo where
   pretty = ppPointsTo

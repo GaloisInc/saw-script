@@ -2401,6 +2401,18 @@ primitives = Map.fromList
     , "about the final memory state after running the function."
     ]
 
+  , prim "jvm_array_is" "JVMValue -> Term -> JVMSetup ()"
+    (bicVal (jvm_array_is True))
+    Experimental
+    [ "Declare that the indicated array reference (first argument) contains"
+    , "the given sequence of values (second argument)."
+    , ""
+    , "In the pre-state section (before jvm_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after jvm_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
   , prim "jvm_precond" "Term -> JVMSetup ()"
     (pureVal jvm_precond)
     Experimental

@@ -17,6 +17,7 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
   , resolveSetupVal
   -- , typeOfJVMVal
   , typeOfSetupValue
+  , toJVMType
   , resolveTypedTerm
   , resolveBoolTerm
   , resolveSAWPred

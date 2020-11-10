@@ -40,6 +40,9 @@ module SAWScript.Crucible.JVM.Override
   , valueToSC
   , injectJVMVal
   , decodeJVMVal
+
+  , doEntireArrayStore
+  , destVecTypedTerm
   ) where
 
 import           Control.Lens.At
@@ -62,8 +65,8 @@ import           Data.Void (absurd)
 import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 
 -- cryptol
-import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
-import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
+import qualified Cryptol.TypeCheck.AST as Cryptol
+import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType, evalValType)
 
 -- what4
 import qualified What4.BaseTypes as W4
@@ -93,6 +96,9 @@ import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
 import           Verifier.SAW.TypedTerm
+
+-- cryptol-saw-core
+import qualified Verifier.SAW.Cryptol as Cryptol
 
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
@@ -443,6 +449,7 @@ matchPointsTos opts sc cc spec prepost = go False []
     checkPointsTo :: JVMPointsTo -> OverrideMatcher CJ.JVM w Bool
     checkPointsTo (JVMPointsToField _loc p _ _) = checkSetupValue p
     checkPointsTo (JVMPointsToElem _loc p _ _) = checkSetupValue p
+    checkPointsTo (JVMPointsToArray _loc p _) = checkSetupValue p
 
     checkSetupValue :: SetupValue -> OverrideMatcher CJ.JVM w Bool
     checkSetupValue v =
@@ -686,6 +693,37 @@ learnPointsTo opts sc cc spec prepost pt = do
          v <- liftIO $ projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
+    JVMPointsToArray loc ptr tt ->
+      do (len, ety) <-
+           case Cryptol.isMono (ttSchema tt) of
+             Nothing -> fail "jvm_array_is: invalid polymorphic value"
+             Just cty ->
+               case Cryptol.tIsSeq cty of
+                 Nothing -> fail "jvm_array_is: expected array type"
+                 Just (lty, ety) ->
+                   case Cryptol.tIsNum lty of
+                     Nothing -> fail "jvm_array_is: expected finite-sized array"
+                     Just len -> pure (len, ety)
+         jty <-
+           case toJVMType (Cryptol.evalValType mempty ety) of
+             Nothing -> fail "jvm_array_is: invalid element type"
+             Just jty -> pure jty
+         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
+         rval <- asRVal loc ptr'
+         let tval = Cryptol.evalValType mempty ety
+         let
+           load idx =
+             do dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
+                let msg = "array load " ++ show idx ++ ", " ++ show loc
+                jval <- liftIO $ projectJVMVal sym jty msg dyn
+                let failMsg = StructuralMismatch (ppJVMVal jval) mempty (Just jty) jty -- REVISIT
+                valueToSC sym loc failMsg tval jval
+
+         when (len > toInteger (maxBound :: Int)) $ fail "jvm_array_is: array length too long"
+         ety_tm <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv ety
+         ts <- traverse load [0 .. fromInteger len - 1]
+         realTerm <- liftIO $ scVector sc ety_tm ts
+         matchTerm sc cc loc prepost realTerm (ttTerm tt)
 
 ------------------------------------------------------------------------
 
@@ -800,6 +838,49 @@ executePointsTo opts sc cc spec pt = do
          let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
+
+    JVMPointsToArray loc ptr tt ->
+      do (_ety, tts) <-
+           liftIO (destVecTypedTerm sc tt) >>=
+           \case
+             Nothing -> fail "jvm_array_is: not a monomorphic sequence type"
+             Just x -> pure x
+         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
+         rval <- asRVal loc ptr'
+         jvs <- traverse (resolveSetupValueJVM opts cc sc spec . MS.SetupTerm) tts
+         let vs = map (injectJVMVal sym . snd) jvs
+         globals' <- liftIO $ doEntireArrayStore sym globals rval vs
+         OM (overrideGlobals .= globals')
+
+doEntireArrayStore ::
+  Crucible.IsSymInterface sym =>
+  sym ->
+  Crucible.SymGlobalState sym ->
+  Crucible.RegValue sym CJ.JVMRefType ->
+  [Crucible.RegValue sym CJ.JVMValueType] ->
+  IO (Crucible.SymGlobalState sym)
+doEntireArrayStore sym glob ref vs = foldM store glob (zip [0..] vs)
+  where store g (i, v) = CJ.doArrayStore sym g ref i v
+
+-- | Given a 'TypedTerm' with a vector type, return the element type
+-- along with a list of its projected components. Return 'Nothing' if
+-- the 'TypedTerm' does not have a vector type.
+destVecTypedTerm :: SharedContext -> TypedTerm -> IO (Maybe (Cryptol.Type, [TypedTerm]))
+destVecTypedTerm sc (TypedTerm schema t) =
+  case asVec of
+    Nothing -> pure Nothing
+    Just (len, ety) ->
+      do len_tm <- scNat sc (fromInteger len)
+         ty_tm <- Cryptol.importType sc Cryptol.emptyEnv ety
+         idxs <- traverse (scNat sc) (map fromInteger [0 .. len-1])
+         ts <- traverse (scAt sc len_tm ty_tm t) idxs
+         pure $ Just (ety, map (TypedTerm (Cryptol.tMono ety)) ts)
+  where
+    asVec =
+      do ty <- Cryptol.isMono schema
+         (n, a) <- Cryptol.tIsSeq ty
+         n' <- Cryptol.tIsNum n
+         Just (n', a)
 
 ------------------------------------------------------------------------
 
