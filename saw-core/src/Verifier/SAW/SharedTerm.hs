@@ -249,6 +249,7 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import qualified Data.IntSet as IntSet
 import Data.IORef (IORef,newIORef,readIORef,modifyIORef')
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -2035,25 +2036,25 @@ getAllExts t = Set.toList (getAllExtSet t)
 -- | Return a set of all ExtCns subterms in the given term.
 --   Does not traverse the unfoldings of @Constant@ terms.
 getAllExtSet :: Term -> Set.Set (ExtCns Term)
-getAllExtSet t = snd $ getExtCns (Set.empty, Set.empty) t
-    where getExtCns acc@(is, _) (STApp{ stAppIndex = idx }) | Set.member idx is = acc
+getAllExtSet t = snd $ getExtCns (IntSet.empty, Set.empty) t
+    where getExtCns acc@(is, _) (STApp{ stAppIndex = idx }) | IntSet.member idx is = acc
           getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = (FTermF (ExtCns ec)) }) =
-            (Set.insert idx is, Set.insert ec a)
+            (IntSet.insert idx is, Set.insert ec a)
           getExtCns (is, a) (Unshared (FTermF (ExtCns ec))) =
             (is, Set.insert ec a)
           getExtCns acc (STApp{ stAppTermF = Constant {} }) = acc
           getExtCns acc (Unshared (Constant {})) = acc
           getExtCns (is, a) (STApp{ stAppIndex = idx, stAppTermF = tf'}) =
-            foldl' getExtCns (Set.insert idx is, a) tf'
+            foldl' getExtCns (IntSet.insert idx is, a) tf'
           getExtCns acc (Unshared tf') =
             foldl' getExtCns acc tf'
 
 getConstantSet :: Term -> Map String (Term, Term)
-getConstantSet t = snd $ go (Set.empty, Map.empty) t
+getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
   where
     go acc@(idxs, names) (STApp{ stAppIndex = i, stAppTermF = tf})
-      | Set.member i idxs = acc
-      | otherwise         = termf (Set.insert i idxs, names) tf
+      | IntSet.member i idxs = acc
+      | otherwise = termf (IntSet.insert i idxs, names) tf
     go acc (Unshared tf) = termf acc tf
 
     termf acc@(idxs, names) tf =
