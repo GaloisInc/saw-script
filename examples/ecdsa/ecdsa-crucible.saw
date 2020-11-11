@@ -1264,6 +1264,22 @@ field_mul8_ov2 <- method "field_mul8" [field_dbl_ov, field_dbl_ov2]
   }
   (unint_z3 ["p384_field_add"]);
 
+/* FIXME: This rewrite rule, and the `goal_eval_unint` and `simplify`
+steps in the proof script below, are only necessary because the
+override for group_red does a bit too much evaluation and
+constant-folds the result of `p384_group_red (group_order, 0, 0)` to
+`0`. This is a problem because the proof later treats `p384_group_red`
+as an uninterpreted function, and the cryptol code is carefully
+designed to use the same pattern of calls to `p384_group_red` as the
+java code. However, if the first call on the symbolic simulation side
+is constant-folded, this means that the pattern of calls no longer
+matches, and the external solver will fail to complete the proof. We
+fix the problem by adding a rewrite rule to do the same constant
+folding on the cryptol spec before sending the goal to the solver. */
+group_red_0_0 <- prove_rule
+  {{ mul_java::p384_group_red
+    (0xffffffffffffffffffffffffffffffffffffffffffffffffc7634d81f4372ddf581a0db248b0a77aecec196accc52973, 0, 0) == 0 }};
+
 // TODO: compare with old version to see how to make this subproof work
 group_mul_ov <- method "group_mul"
   [ set_zero_ov
@@ -1285,9 +1301,10 @@ group_mul_ov <- method "group_mul"
   do {
     unfolding ["p384_group_mul"];
     simplify ss;
-    //print_goal;
-    //unint_z3 ["p384_group_red", "group_mul_aux_java"]; // this yields a counterexample (?)
-    quickcheck 100;
+    // FIXME: The next two steps should not be necessary; see note above.
+    goal_eval_unint ["p384_group_red", "group_mul_aux_java"];
+    simplify (addsimps [group_red_0_0] empty_ss);
+    unint_z3 ["p384_group_red", "group_mul_aux_java"];
   };
 
 ec_double_ov <- method "ec_double"
