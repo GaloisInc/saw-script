@@ -201,18 +201,13 @@ cryptolUninterpreted ::
   SharedContext ->
   [Term] ->
   m Term
-cryptolUninterpreted env nm sc xs@[_, _] =
+cryptolUninterpreted env nm sc xs =
   case lookupIn nm $ eTermEnv env of
     Left _err -> throwX86 $ mconcat
       [ "Failed to lookup Cryptol name \"", nm
       , "\" in Cryptol environment"
       ]
     Right t -> liftIO $ scApplyAll sc t xs
-cryptolUninterpreted _ nm _ xs = throwX86 $ mconcat
-  [ "Type error in call to \"", nm
-  , "\": Expected 2 arguments, given ", show $ length xs
-  , " arguments"
-  ]
 
 -------------------------------------------------------------------------------
 -- ** Entrypoint
@@ -248,6 +243,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesIMC sfs) $ cryptolUninterpreted cenv "aesIMC"
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
 
       let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
