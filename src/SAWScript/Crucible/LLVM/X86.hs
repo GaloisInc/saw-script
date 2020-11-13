@@ -754,6 +754,7 @@ assertPost globals env premem preregs = do
     tyenv = ms ^. MS.csPreState . MS.csAllocs
     nameEnv = MS.csTypeNames ms
 
+  -- Check that the final value of IP is the return address from the initial stack
   prersp <- getReg Macaw.RSP preregs
   expectedIP <- liftIO $ C.LLVM.doLoad sym premem prersp (C.LLVM.bitvectorType 8)
     (C.LLVM.LLVMPointerRepr $ knownNat @64) C.LLVM.noAlignment
@@ -762,12 +763,23 @@ assertPost globals env premem preregs = do
   liftIO . C.addAssertion sym . C.LabeledPred correctRetAddr . C.SimError W4.initializationLoc
     $ C.AssertFailureSimError "Instruction pointer not set to return address" ""
 
+  -- Check that the final stack is empty
   stack <- liftIO $ C.LLVM.doPtrAddOffset sym premem prersp =<< W4.bvLit sym knownNat (BV.mkBV knownNat 8)
   postrsp <- getReg Macaw.RSP postregs
   correctStack <- liftIO $ C.LLVM.ptrEq sym C.LLVM.PtrWidth stack postrsp
-  liftIO $ C.addAssertion sym . C.LabeledPred correctStack . C.SimError W4.initializationLoc
+  liftIO . C.addAssertion sym . C.LabeledPred correctStack . C.SimError W4.initializationLoc
     $ C.AssertFailureSimError "Stack not preserved" ""
 
+  -- Check that all other callee-saved registers are preserved
+  let calleeSaved = [Macaw.RBX, Macaw.RBP, Macaw.R12, Macaw.R13, Macaw.R14, Macaw.R15]
+  forM_ calleeSaved $ \reg -> do
+    preReg <- getReg reg preregs
+    postReg <- getReg reg postregs
+    correctReg <- liftIO $ C.LLVM.ptrEq sym C.LLVM.PtrWidth preReg postReg
+    liftIO . C.addAssertion sym . C.LabeledPred correctReg . C.SimError W4.initializationLoc
+      $ C.AssertFailureSimError (mconcat ["Callee-saved register ", show reg, " not preserved"]) ""
+
+  -- Check that RAX matches the expected return value from the specification
   returnMatches <- case (ms ^. MS.csRetValue, ms ^. MS.csRet) of
     (Just expectedRet, Just retTy) -> do
       postRAX <- C.LLVM.ptrToPtrVal <$> getReg Macaw.RAX postregs
@@ -789,6 +801,7 @@ assertPost globals env premem preregs = do
         _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
+  -- Check that all points-to assertions in the specification postcondition match
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
     $ assertPointsTo env tyenv nameEnv
 
