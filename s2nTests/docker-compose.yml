@@ -24,3 +24,11 @@ services:
     image: awslc
     volumes:
       - ${PWD:-.}/bin:/saw-bin:rw
+
+  blst:
+    build:
+      context: .
+      dockerfile: ${PWD:-.}/docker/blst.dockerfile
+    image: blst
+    volumes:
+      - ${PWD:-.}/bin:/saw-bin:rw
