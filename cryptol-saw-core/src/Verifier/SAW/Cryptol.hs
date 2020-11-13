@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -19,13 +20,18 @@ import Control.Monad (foldM, join, unless)
 import Data.Bifunctor (first)
 import qualified Data.Foldable as Fold
 import Data.List
+import Data.List.NonEmpty (NonEmpty(..))
+import Data.Maybe (fromMaybe)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 import Prelude ()
 import Prelude.Compat
+import Text.URI
 
 import qualified Cryptol.Eval.Type as TV
 import qualified Cryptol.Backend.Monad as V
@@ -34,8 +40,12 @@ import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst)
-import qualified Cryptol.ModuleSystem.Name as C (asPrim, nameIdent)
-import qualified Cryptol.Utils.Ident as C (Ident, PrimIdent(..), packIdent, unpackIdent, prelPrim, floatPrim, arrayPrim)
+import qualified Cryptol.ModuleSystem.Name as C
+  (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
+import qualified Cryptol.Utils.Ident as C
+  ( Ident, PrimIdent(..), packIdent, unpackIdent, prelPrim, floatPrim, arrayPrim
+  , modNameToText, identText, interactiveName
+  )
 import qualified Cryptol.Utils.RecordMap as C
 import Cryptol.TypeCheck.TypeOf (fastTypeOf, fastSchemaOf)
 import Cryptol.Utils.PP (pretty)
@@ -1071,6 +1081,52 @@ plainSubst s ty =
     C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
     C.TVar x       -> C.apSubst s (C.TVar x)
 
+
+cryptolURI :: [Text] -> Maybe Int -> URI
+cryptolURI [] _ = panic "cryptolURI" ["Could not make URI from empty path"]
+cryptolURI (p:ps) Nothing =
+  fromMaybe (panic "cryptolURI" ["Could not make URI from the given path", show (p:ps)]) $
+  do sch <- mkScheme "cryptol"
+     path' <- mapM mkPathPiece (p:|ps)
+     pure URI
+       { uriScheme = Just sch
+       , uriAuthority = Left True -- absolute path
+       , uriPath = Just (False, path')
+       , uriQuery = []
+       , uriFragment = Nothing
+       }
+cryptolURI (p:ps) (Just uniq) =
+  fromMaybe (panic "cryptolURI" ["Could not make URI from the given path", show (p:ps), show uniq]) $
+  do sch <- mkScheme "cryptol"
+     path' <- mapM mkPathPiece (p:|ps)
+     frag <- mkFragment (Text.pack (show uniq))
+     pure URI
+       { uriScheme = Just sch
+       , uriAuthority = Left False -- relative path
+       , uriPath = Just (False, path')
+       , uriQuery = []
+       , uriFragment = Just frag
+       }
+
+importName :: C.Name -> IO NameInfo
+importName cnm =
+  case C.nameInfo cnm of
+    C.Parameter -> fail ("Cannot import non-top-level name: " ++ show cnm)
+    C.Declared modNm _
+      | modNm == C.interactiveName ->
+          let shortNm = C.identText (C.nameIdent cnm)
+              aliases = [shortNm]
+              uri = cryptolURI [shortNm] (Just (C.nameUnique cnm))
+           in pure (ImportedName uri aliases)
+
+      | otherwise ->
+          let modNmTxt  = C.modNameToText modNm
+              modNms = Text.splitOn "::" modNmTxt
+              shortNm = C.identText (C.nameIdent cnm)
+              aliases = [shortNm, modNmTxt <> "::" <> shortNm]
+              uri = cryptolURI (modNms ++ [shortNm]) Nothing
+           in pure (ImportedName uri aliases)
+
 -- | Currently this imports declaration groups by inlining all the
 -- definitions. (With subterm sharing, this is not as bad as it might
 -- seem.) We might want to think about generating let or where
@@ -1088,7 +1144,11 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
          let x = nameToString (C.dName decl)
          f' <- scLambda sc x t' e'
          rhs <- scGlobalApply sc "Prelude.fix" [t', f']
-         rhs' <- if not isTopLevel then return rhs else scConstant sc x rhs t'
+         rhs' <- if isTopLevel then
+                    do nmi <- importName (C.dName decl)
+                       scConstant' sc nmi rhs t'
+                 else
+                   return rhs
          let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                         , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
          return env'
@@ -1145,7 +1205,11 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      let mkRhs d t =
            do let s = nameToString (C.dName d)
               r <- scRecordSelect sc rhs s
-              if isTopLevel then scConstant sc s r t else return r
+              if isTopLevel then
+                do nmi <- importName (C.dName d)
+                   scConstant' sc nmi r t
+              else
+                return r
      rhss <- sequence (Map.intersectionWith mkRhs dm tm)
 
      let env' = env { envE = Map.union (fmap (\v -> (v, 0)) rhss) (envE env)
@@ -1167,8 +1231,9 @@ importDeclGroup isTopLevel sc env (C.NonRecursive decl) =
     C.DExpr expr -> do
      rhs <- importExpr' sc env (C.dSignature decl) expr
      rhs' <- if not isTopLevel then return rhs else do
+       nmi <- importName (C.dName decl)
        t <- importSchema sc env (C.dSignature decl)
-       scConstant sc (nameToString (C.dName decl)) rhs t
+       scConstant' sc nmi rhs t
      let env' = env { envE = Map.insert (C.dName decl) (rhs', 0) (envE env)
                     , envC = Map.insert (C.dName decl) (C.dSignature decl) (envC env) }
      return env'

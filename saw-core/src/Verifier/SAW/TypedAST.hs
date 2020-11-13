@@ -68,6 +68,7 @@ module Verifier.SAW.TypedAST
    -- * Primitive types.
  , Sort, mkSort, propSort, sortOf, maxSort
  , Ident(..), identName, mkIdent
+ , NameInfo(..), toShortName, toAbsoluteName
  , parseIdent
  , isIdent
  , DeBruijnIndex

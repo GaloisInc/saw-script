@@ -27,6 +27,8 @@ module Verifier.SAW.SharedTerm
   , Ident, mkIdent
   , VarIndex
   , ExtCns(..)
+  , NameInfo(..)
+  , ppName
     -- * Shared terms
   , Term(..)
   , TermIndex
@@ -37,6 +39,12 @@ module Verifier.SAW.SharedTerm
   , scImport
   , alphaEquiv
   , alistAllFields
+  , scRegisterName
+  , scResolveName
+  , scResolveNameByURI
+  , scResolveUnambiguous
+  , scFindBestName
+  , DuplicateNameException(..)
     -- * Re-exported pretty-printing functions
   , PPOpts(..)
   , defaultPPOpts
@@ -56,6 +64,7 @@ module Verifier.SAW.SharedTerm
   , scDefTerm
   , scFreshGlobalVar
   , scFreshGlobal
+  , scFreshEC
   , scExtCns
   , scGlobalDef
     -- ** Recursors and datatypes
@@ -87,6 +96,7 @@ module Verifier.SAW.SharedTerm
     -- *** Variables and constants
   , scLocalVar
   , scConstant
+  , scConstant'
   , scLookupDef
     -- *** Functions and function application
   , scApply
@@ -246,19 +256,23 @@ import Data.Maybe
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM, maximum)
 import Data.HashMap.Strict (HashMap)
+import Data.List.NonEmpty ( NonEmpty(..) )
 import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.IntSet as IntSet
-import Data.IORef (IORef,newIORef,readIORef,modifyIORef')
+import Data.IORef (IORef,newIORef,readIORef,modifyIORef',atomicModifyIORef')
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Ref ( C )
 import Data.Set (Set)
+import Data.Text (Text)
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 import Prelude hiding (mapM, maximum)
+import Text.URI
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
@@ -266,9 +280,10 @@ import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
---import Verifier.SAW.Term.Pretty
+import Verifier.SAW.Term.Pretty
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Unique
+import Verifier.SAW.Utils
 
 #if !MIN_VERSION_base(4,8,0)
 countTrailingZeros :: (FiniteBits b) => b -> Int
@@ -314,9 +329,16 @@ insertTFM tf x tfm =
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building Terms.
 
+data SAWNamingEnv = SAWNamingEnv
+  { resolvedNames :: !(Map VarIndex NameInfo)
+  , absoluteNames :: !(Map URI VarIndex)
+  , aliasNames    :: !(Map Text (Set VarIndex))
+  }
+
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scTermF          :: TermF Term -> IO Term
+  , scNamingEnv      :: IORef SAWNamingEnv
   , scFreshGlobalVar :: IO VarIndex
   }
 
@@ -328,11 +350,111 @@ scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 scExtCns :: SharedContext -> ExtCns Term -> IO Term
 scExtCns sc ec = scFlatTermF sc (ExtCns ec)
 
+scFreshNameURI :: Text -> VarIndex -> URI
+scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed name URI", show nm, show i]) $
+  do sch <- mkScheme "fresh"
+     nm' <- mkPathPiece (if Text.null nm then "_" else nm)
+     i'  <- mkPathPiece (Text.pack (show i))
+     pure URI
+       { uriScheme = Just sch
+       , uriAuthority = Left True -- absolute path
+       , uriPath   = Just (False, (nm' :| [i']))
+       , uriQuery  = []
+       , uriFragment = Nothing
+       }
+
+moduleIdentToURI :: Ident -> URI
+moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constructed ident URI", show ident]) $
+  do sch  <- mkScheme "sawcore"
+     path <- mapM mkPathPiece (identPieces ident)
+     pure URI
+       { uriScheme = Just sch
+       , uriAuthority = Left True -- absolute path
+       , uriPath   = Just (False, path)
+       , uriQuery  = []
+       , uriFragment = Nothing
+       }
+
+data DuplicateNameException = DuplicateNameException URI
+instance Exception DuplicateNameException
+instance Show DuplicateNameException where
+  show (DuplicateNameException uri) =
+      "Attempted to register the following name twice: " ++ Text.unpack (render uri)
+
+scRegisterName :: SharedContext -> VarIndex -> NameInfo -> IO ()
+scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
+  where
+    uri = case nmi of
+            ImportedName x _ -> x
+            ModuleIdentifier x -> moduleIdentToURI x
+
+    aliases = case nmi of
+                ImportedName x xs -> render x : xs
+                ModuleIdentifier x  -> [identBaseName x, identText x, render uri]
+
+    insertAlias :: Text -> Map Text (Set VarIndex) -> Map Text (Set VarIndex)
+    insertAlias x m = Map.alter (Just . maybe (Set.singleton i) (Set.insert i)) x m
+
+    f env =
+      case Map.lookup uri (absoluteNames env) of
+        Just _ -> throw (DuplicateNameException uri)
+        Nothing ->
+            SAWNamingEnv
+            { resolvedNames = Map.insert i nmi (resolvedNames env)
+            , absoluteNames = Map.insert uri i (absoluteNames env)
+            , aliasNames    = foldr insertAlias (aliasNames env) aliases
+            }
+
+scResolveUnambiguous :: SharedContext -> Text -> IO (VarIndex, NameInfo)
+scResolveUnambiguous sc nm =
+  scResolveName sc nm >>= \case
+     []  -> fail ("Could not resolve name: " ++ show nm)
+     [x] -> pure x
+     xs  ->
+       do nms <- mapM (scFindBestName sc . snd) xs
+          fail $ unlines (("Ambiguous name " ++ show nm ++ " might refer to any of the following:") : map show nms)
+
+scFindBestName :: SharedContext -> NameInfo -> IO Text
+scFindBestName _sc (ModuleIdentifier nm) = pure (identText nm)
+scFindBestName sc (ImportedName uri as) = go as
+  where
+  go [] = pure (render uri)
+  go (x:xs) =
+    do vs <- scResolveName sc x
+       case vs of
+         [_] -> return x
+         _   -> go xs
+
+scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
+scResolveNameByURI sc uri =
+  do env <- readIORef (scNamingEnv sc)
+     pure $! Map.lookup uri (absoluteNames env)
+
+scResolveName :: SharedContext -> Text -> IO [(VarIndex, NameInfo)]
+scResolveName sc nm =
+  do env <- readIORef (scNamingEnv sc)
+     case Map.lookup nm (aliasNames env) of
+       Nothing -> pure []
+       Just vs -> pure [ (v, fndName v (resolvedNames env)) | v <- Set.toList vs ]
+ where
+ fndName v m =
+   case Map.lookup v m of
+     Just nmi -> nmi
+     Nothing -> panic "scResolveName" ["Unbound VarIndex when resolving name", show nm, show v]
+
+-- | Create a global variable with the given identifier (which may be "_") and type.
+scFreshEC :: SharedContext -> String -> Term -> IO (ExtCns Term)
+scFreshEC sc x tp = do
+  i   <- scFreshGlobalVar sc
+  let x' = Text.pack x
+  let uri = scFreshNameURI x' i
+  let nmi = ImportedName uri [x',Text.pack (x <> "#" <>  show i)]
+  scRegisterName sc i nmi
+  pure (EC i nmi tp)
+
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshGlobal :: SharedContext -> String -> Term -> IO Term
-scFreshGlobal sc sym tp = do
-  i <- scFreshGlobalVar sc
-  scExtCns sc (EC i sym tp)
+scFreshGlobal sc x tp = scExtCns sc =<< scFreshEC sc x tp
 
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
@@ -669,6 +791,7 @@ scWhnf sc t0 =
         p_ret cs_fs _ : xs)   (asCtorOrNat ->
                                Just (c, _, args))               = (scReduceRecursor sc d ps
                                                                    p_ret cs_fs c args) >>= go xs
+
     go xs                     (asGlobalDef -> Just c)           = scRequireDef sc c >>= tryDef c xs
     go xs                     (asRecursorApp ->
                                Just (d, params, p_ret, cs_fs, ixs,
@@ -1297,10 +1420,34 @@ scConstant sc name rhs ty =
      let ecs = getAllExts rhs
      rhs' <- scAbstractExts sc ecs rhs
      ty' <- scFunAll sc (map ecType ecs) ty
-     i <- scFreshGlobalVar sc
-     t <- scTermF sc (Constant (EC i name ty') rhs')
+     ec <- scFreshEC sc name ty'
+     t <- scTermF sc (Constant ec rhs')
      args <- mapM (scFlatTermF sc . ExtCns) ecs
      scApplyAll sc t args
+
+
+-- | Create an abstract constant with the specified name, body, and
+-- type. The term for the body must not have any loose de Bruijn
+-- indices. If the body contains any ExtCns variables, they will be
+-- abstracted over and reapplied to the resulting constant.
+scConstant' :: SharedContext
+           -> NameInfo -- ^ The name
+           -> Term   -- ^ The body
+           -> Term   -- ^ The type
+           -> IO Term
+scConstant' sc nmi rhs ty =
+  do unless (looseVars rhs == emptyBitSet) $
+       fail "scConstant: term contains loose variables"
+     let ecs = getAllExts rhs
+     rhs' <- scAbstractExts sc ecs rhs
+     ty' <- scFunAll sc (map ecType ecs) ty
+     i <- scFreshGlobalVar sc
+     scRegisterName sc i nmi
+     let ec = EC i nmi ty'
+     t <- scTermF sc (Constant ec rhs')
+     args <- mapM (scFlatTermF sc . ExtCns) ecs
+     scApplyAll sc t args
+
 
 -- | Create a function application term from a global identifier and a list of
 -- arguments (as 'Term's).
@@ -2010,10 +2157,12 @@ mkSharedContext = do
   cr <- newMVar emptyAppCache
   let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
   mod_map_ref <- newIORef HMap.empty
+  envRef <- newIORef (SAWNamingEnv mempty mempty mempty)
   return SharedContext {
              scModuleMap = mod_map_ref
            , scTermF = getTerm cr
            , scFreshGlobalVar = freshGlobalVar
+           , scNamingEnv = envRef
            }
 
 useChangeCache :: C m => Cache m k (Change v) -> k -> ChangeT m v -> ChangeT m v
@@ -2049,7 +2198,7 @@ getAllExtSet t = snd $ getExtCns (IntSet.empty, Set.empty) t
           getExtCns acc (Unshared tf') =
             foldl' getExtCns acc tf'
 
-getConstantSet :: Term -> Map String (Term, Term)
+getConstantSet :: Term -> Map VarIndex (NameInfo, Term, Term)
 getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
   where
     go acc@(idxs, names) (STApp{ stAppIndex = i, stAppTermF = tf})
@@ -2059,7 +2208,7 @@ getConstantSet t = snd $ go (IntSet.empty, Map.empty) t
 
     termf acc@(idxs, names) tf =
       case tf of
-        Constant (EC _ n ty) body -> (idxs, Map.insert n (ty, body) names)
+        Constant (EC vidx n ty) body -> (idxs, Map.insert vidx (n, ty, body) names)
         _ -> foldl' go acc tf
 
 -- | Instantiate some of the external constants
@@ -2125,7 +2274,7 @@ scExtsToLocals sc exts x = instantiateVars sc fn 0 x
 scAbstractExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
 scAbstractExts _ [] x = return x
 scAbstractExts sc exts x =
-   do let lams = [ (ecName ec, ecType ec) | ec <- exts ]
+   do let lams = [ (Text.unpack (toShortName (ecName ec)), ecType ec) | ec <- exts ]
       scLambdaList sc lams =<< scExtsToLocals sc exts x
 
 -- | Generalize over the given list of external constants by wrapping
@@ -2134,19 +2283,19 @@ scAbstractExts sc exts x =
 scGeneralizeExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
 scGeneralizeExts _ [] x = return x
 scGeneralizeExts sc exts x =
-  do let pis = [ (ecName ec, ecType ec) | ec <- exts ]
+  do let pis = [ (Text.unpack (toShortName (ecName ec)), ecType ec) | ec <- exts ]
      scPiList sc pis =<< scExtsToLocals sc exts x
 
-scUnfoldConstants :: SharedContext -> [String] -> Term -> IO Term
+scUnfoldConstants :: SharedContext -> [VarIndex] -> Term -> IO Term
 scUnfoldConstants sc names t0 = scUnfoldConstantSet sc True (Set.fromList names) t0
 
 -- | TODO: test whether this version is slower or faster.
-scUnfoldConstants' :: SharedContext -> [String] -> Term -> IO Term
+scUnfoldConstants' :: SharedContext -> [VarIndex] -> Term -> IO Term
 scUnfoldConstants' sc names t0 = scUnfoldConstantSet' sc True (Set.fromList names) t0
 
 scUnfoldConstantSet :: SharedContext
                     -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
-                    -> Set String -- ^ Set of constant names
+                    -> Set VarIndex -- ^ Set of constant names
                     -> Term
                     -> IO Term
 scUnfoldConstantSet sc b names t0 = do
@@ -2154,15 +2303,15 @@ scUnfoldConstantSet sc b names t0 = do
   let go :: Term -> IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC _ name _) rhs
-            | Set.member name names == b -> go rhs
-            | otherwise                  -> return t
+          Constant (EC idx _ _) rhs
+            | Set.member idx names == b -> go rhs
+            | otherwise                 -> return t
           _ -> Unshared <$> traverse go tf
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) = useCache cache idx $
         case tf of
-          Constant (EC _ name _) rhs
-            | Set.member name names == b -> go rhs
-            | otherwise         -> return t
+          Constant (EC ecidx _ _) rhs
+            | Set.member ecidx names == b -> go rhs
+            | otherwise                   -> return t
           _ -> scTermF sc =<< traverse go tf
   go t0
 
@@ -2170,7 +2319,7 @@ scUnfoldConstantSet sc b names t0 = do
 -- | TODO: test whether this version is slower or faster.
 scUnfoldConstantSet' :: SharedContext
                     -> Bool  -- ^ True: unfold constants in set. False: unfold constants NOT in set
-                    -> Set String -- ^ Set of constant names
+                    -> Set VarIndex -- ^ Set of constant names
                     -> Term
                     -> IO Term
 scUnfoldConstantSet' sc b names t0 = do
@@ -2178,15 +2327,15 @@ scUnfoldConstantSet' sc b names t0 = do
   let go :: Term -> ChangeT IO Term
       go t@(Unshared tf) =
         case tf of
-          Constant (EC _ name _) rhs
-            | Set.member name names == b -> taint (go rhs)
-            | otherwise                  -> pure t
+          Constant (EC idx _ _) rhs
+            | Set.member idx names == b -> taint (go rhs)
+            | otherwise                 -> pure t
           _ -> whenModified t (return . Unshared) (traverse go tf)
       go t@(STApp{ stAppIndex = idx, stAppTermF = tf }) =
         case tf of
-          Constant (EC _ name _) rhs
-            | Set.member name names == b -> taint (go rhs)
-            | otherwise                  -> pure t
+          Constant (EC ecidx _ _) rhs
+            | Set.member ecidx names == b -> taint (go rhs)
+            | otherwise                   -> pure t
           _ -> useChangeCache tcache idx $
                  whenModified t (scTermF sc) (traverse go tf)
   commitChangeT (go t0)
@@ -2226,8 +2375,7 @@ scOpenTerm :: SharedContext
          -> Term
          -> IO (ExtCns Term, Term)
 scOpenTerm sc nm tp idx body = do
-    v <- scFreshGlobalVar sc
-    let ec = EC v nm tp
+    ec <- scFreshEC sc nm tp
     ec_term <- scFlatTermF sc (ExtCns ec)
     body' <- instantiateVar sc idx ec_term body
     return (ec, body')
@@ -2243,4 +2391,4 @@ scCloseTerm :: (SharedContext -> String -> Term -> Term -> IO Term)
 scCloseTerm close sc ec body = do
     lv <- scLocalVar sc 0
     body' <- scInstantiateExt sc (Map.insert (ecVarIndex ec) lv Map.empty) =<< incVars sc 0 1 body
-    close sc (ecName ec) (ecType ec) body'
+    close sc (Text.unpack (toShortName (ecName ec))) (ecType ec) body'

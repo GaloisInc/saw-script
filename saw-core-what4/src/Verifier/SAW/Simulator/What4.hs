@@ -61,7 +61,9 @@ import Data.IORef
 import Data.List (genericTake)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
@@ -80,8 +82,8 @@ import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
-import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName)
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
+import Verifier.SAW.TypedAST (FieldName, ModuleMap, identName, toShortName)
 
 -- what4
 import qualified What4.Expr.Builder as B
@@ -656,19 +658,20 @@ arrayEq sym lhs_arr rhs_arr
 
 w4SolveBasic ::
   forall sym. (Given sym, IsSymExprBuilder sym) =>
-  ModuleMap ->
+  SharedContext ->
   Map Ident (SValue sym) {- ^ additional primitives -} ->
   IORef (SymFnCache sym) {- ^ cache for uninterpreted function symbols -} ->
-  [String] {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
+  Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
   IO (SValue sym)
-w4SolveBasic m addlPrims ref unints t =
-  do let unintSet = Set.fromList unints
+w4SolveBasic sc addlPrims ref unintSet t =
+  do m <- scGetModuleMap sc
      let sym = given :: sym
-     let extcns (EC ix nm ty) = parseUninterpreted sym ref (mkUnintApp (nm ++ "_" ++ show ix)) ty
+     let extcns (EC ix nm ty) =
+             parseUninterpreted sym ref (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
      let uninterpreted ec
-           | Set.member (ecName ec) unintSet = Just (extcns ec)
-           | otherwise                       = Nothing
+           | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
+           | otherwise                           = Nothing
      cfg <- Sim.evalGlobal m (constMap `Map.union` addlPrims) extcns uninterpreted
      Sim.evalSharedTerm cfg t
 
@@ -853,12 +856,11 @@ applyUnintApp sym app0 v =
 
 w4SolveAny ::
   forall sym. (IsSymExprBuilder sym) =>
-  sym -> SharedContext -> Map Ident (SValue sym) -> [String] -> Term ->
+  sym -> SharedContext -> Map Ident (SValue sym) -> Set VarIndex -> Term ->
   IO ([String], ([Maybe (Labeler sym)], SValue sym))
-w4SolveAny sym sc ps unints t = give sym $ do
-  modmap <- scGetModuleMap sc
+w4SolveAny sym sc ps unintSet t = give sym $ do
   ref <- newIORef Map.empty
-  let eval = w4SolveBasic modmap ps ref unints
+  let eval = w4SolveBasic sc ps ref unintSet
   ty <- eval =<< scTypeOf sc t
 
   -- get the names of the arguments to the function
@@ -885,10 +887,10 @@ w4SolveAny sym sc ps unints t = give sym $ do
 
 w4Solve ::
   forall sym. (IsSymExprBuilder sym) =>
-  sym -> SharedContext -> Map Ident (SValue sym) -> [String] -> Term ->
+  sym -> SharedContext -> Map Ident (SValue sym) -> Set VarIndex -> Term ->
   IO ([String], ([Maybe (Labeler sym)], SBool sym))
-w4Solve sym sc ps unints t =
-  do (argNames, (bvs, bval)) <- w4SolveAny sym sc ps unints t
+w4Solve sym sc ps unintSet t =
+  do (argNames, (bvs, bval)) <- w4SolveAny sym sc ps unintSet t
      case bval of
        VBool b -> return (argNames, (bvs, b))
        _ -> fail $ "w4Solve: non-boolean result type. " ++ show bval
@@ -1060,12 +1062,12 @@ getLabelValues f =
 w4EvalAny ::
   forall n solver fs.
   CS.SAWCoreBackend n solver fs -> SharedContext ->
-  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) -> [String] -> Term ->
+  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) -> Set VarIndex -> Term ->
   IO ([String], ([Maybe (Labeler (CS.SAWCoreBackend n solver fs))], SValue (CS.SAWCoreBackend n solver fs)))
-w4EvalAny sym sc ps unints t =
+w4EvalAny sym sc ps unintSet t =
   do modmap <- scGetModuleMap sc
      ref <- newIORef Map.empty
-     let eval = w4EvalBasic sym sc modmap ps ref unints
+     let eval = w4EvalBasic sym sc modmap ps ref unintSet
      ty <- eval =<< scTypeOf sc t
 
      -- get the names of the arguments to the function
@@ -1095,10 +1097,10 @@ w4EvalAny sym sc ps unints t =
 w4Eval ::
   forall n solver fs.
   CS.SAWCoreBackend n solver fs -> SharedContext ->
-  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) -> [String] -> Term ->
+  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) -> Set VarIndex -> Term ->
   IO ([String], ([Maybe (Labeler (CS.SAWCoreBackend n solver fs))], SBool (CS.SAWCoreBackend n solver fs)))
-w4Eval sym sc ps uints t =
-  do (argNames, (bvs, bval)) <- w4EvalAny sym sc ps uints t
+w4Eval sym sc ps uintSet t =
+  do (argNames, (bvs, bval)) <- w4EvalAny sym sc ps uintSet t
      case bval of
        VBool b -> return (argNames, (bvs, b))
        _ -> fail $ "w4Eval: non-boolean result type. " ++ show bval
@@ -1112,17 +1114,17 @@ w4EvalBasic ::
   ModuleMap ->
   Map Ident (SValue (CS.SAWCoreBackend n solver fs)) {- ^ additional primitives -} ->
   IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) {- ^ cache for uninterpreted function symbols -} ->
-  [String] {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
+  Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
   IO (SValue (CS.SAWCoreBackend n solver fs))
-w4EvalBasic sym sc m addlPrims ref unints t =
-  do let unintSet = Set.fromList unints
-     let extcns tf (EC ix nm ty) =
+w4EvalBasic sym sc m addlPrims ref unintSet t =
+  do let extcns tf (EC ix nm ty) =
            do trm <- ArgTermConst <$> scTermF sc tf
-              parseUninterpretedSAW sym sc ref trm (mkUnintApp (nm ++ "_" ++ show ix)) ty
+              parseUninterpretedSAW sym sc ref trm
+                 (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
      let uninterpreted tf ec
-           | Set.member (ecName ec) unintSet = Just (extcns tf ec)
-           | otherwise                       = Nothing
+           | Set.member (ecVarIndex ec) unintSet = Just (extcns tf ec)
+           | otherwise                           = Nothing
      cfg <- Sim.evalGlobal' m (give sym constMap `Map.union` addlPrims) extcns uninterpreted
      Sim.evalSharedTerm cfg t
 
@@ -1133,7 +1135,8 @@ w4EvalBasic sym sc m addlPrims ref unints t =
 -- 'Assignment'.
 parseUninterpretedSAW ::
   forall n solver fs.
-  CS.SAWCoreBackend n solver fs -> SharedContext ->
+  CS.SAWCoreBackend n solver fs ->
+  SharedContext ->
   IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) ->
   ArgTerm {- ^ representation of function applied to arguments -} ->
   UnintApp (SymExpr (CS.SAWCoreBackend n solver fs)) ->

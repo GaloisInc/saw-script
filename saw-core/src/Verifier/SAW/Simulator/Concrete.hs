@@ -55,7 +55,7 @@ evalSharedTerm m addlPrims t =
            extcns (const Nothing)
     Sim.evalSharedTerm cfg t
   where
-    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ ecName ec
+    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
 
 ------------------------------------------------------------
 -- Values
