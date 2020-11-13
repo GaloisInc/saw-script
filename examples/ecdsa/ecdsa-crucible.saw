@@ -1171,8 +1171,7 @@ group_red_aux_ov <- method "group_red_aux" []
     ecdsa_assign_arr384 pr {{ res.gra_r }};
     jvm_return (jvm_term {{ res.gra_b }});
   }
-  //z3; //FIXME: This has problems due to a bug (in SBV?) where the wrong right-shift instruction is generated.
-  assume_unsat;
+  z3;
 
 group_red_ov <- method "group_red" [sub_ov2, group_red_aux_ov]
   do {
