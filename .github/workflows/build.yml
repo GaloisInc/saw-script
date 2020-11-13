@@ -175,6 +175,7 @@ jobs:
           - tls
           - hmac-failure
           - awslc
+          - blst
         ghc: ["8.6.5", "8.8.4"]
     steps:
       - uses: actions/checkout@v2
