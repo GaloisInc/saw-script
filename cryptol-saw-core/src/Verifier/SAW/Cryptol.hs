@@ -1083,18 +1083,19 @@ plainSubst s ty =
 
 
 -- | Generate a URI representing a cryptol name from a sequence of 
---   name parts representing the fully-qualified name.  IF a "unique"
---   value is given, this represents a dynamically bonund name in
---   the "<interactive>" pseudo-module, and the unique value will
+--   name parts representing the fully-qualified name.  If a \"unique\"
+--   value is given, this represents a dynamically bound name in
+--   the \"\<interactive\>\" pseudo-module, and the unique value will
 --   be incorporated into the name as a fragment identifier.
 --   At least one name component must be supplied.
 --
 --   Some examples:
---   \"Cryptol::foldl\" -> \"cryptol:/Cryptol/foldl\"
---   \"MyModule::SubModule::name\" -> \"cryptol:/MyModule/SubModule/name\"
---   \"<interactive>::f\" -> \"cryptol:f#1234\"
 --
---   In the above example, 1234 is the unique integer value provieded with the name.
+--   * @Cryptol::foldl@ ---> @cryptol:\/Cryptol\/foldl@
+--   * @MyModule::SubModule::name@ ---> @cryptol:\/MyModule\/SubModule\/name@
+--   * @\<interactive\>::f@ ---> @cryptol:f#1234@
+--
+--   In the above example, 1234 is the unique integer value provided with the name.
 
 cryptolURI ::
   [Text] {- ^ Name components  -} ->
@@ -1125,10 +1126,10 @@ cryptolURI (p:ps) (Just uniq) =
        , uriFragment = Just frag
        }
 
--- | Tests if the given `NameInfo` represents a name imported
+-- | Tests if the given 'NameInfo' represents a name imported
 --   from the given Cryptol module name.  If so, it returns
 --   the identifier within that module.  Note, this does
---   not match dynamic identifers from the "<interactive>"
+--   not match dynamic identifiers from the \"\<interactive\>\"
 --   pseudo-module.
 isCryptolModuleName :: C.ModName -> NameInfo -> Maybe Text
 isCryptolModuleName modNm (ImportedName uri _)

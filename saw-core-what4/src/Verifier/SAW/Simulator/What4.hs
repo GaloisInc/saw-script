@@ -1132,7 +1132,7 @@ w4EvalBasic sym sc m addlPrims ref unintSet t =
 -- | Evaluate a saw-core term to a What4 value for the purposes of
 --   using it as an input for symbolic simulation.  This will evaluate
 --   primitives, but will cancel evaluation and return the associated
---   @NameInfo@ if it encounters a constant value with an @ExtCns@
+--   'NameInfo' if it encounters a constant value with an 'ExtCns'
 --   that is not accepted by the filter.
 w4SimulatorEval ::
   forall n solver fs.
@@ -1142,7 +1142,7 @@ w4SimulatorEval ::
   Map Ident (SValue (CS.SAWCoreBackend n solver fs)) {- ^ additional primitives -} ->
   IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) {- ^ cache for uninterpreted function symbols -} ->
   (ExtCns (TValue (What4 (CS.SAWCoreBackend n solver fs))) -> Bool)
-    {- ^ Filter for constant values.  True mean unfold, false means halt evaluation. -} ->
+    {- ^ Filter for constant values.  True means unfold, false means halt evaluation. -} ->
   Term {- ^ term to simulate -} ->
   IO (Either NameInfo (SValue (CS.SAWCoreBackend n solver fs)))
 w4SimulatorEval sym sc m addlPrims ref constantFilter t =
