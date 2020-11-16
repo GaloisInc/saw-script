@@ -244,35 +244,35 @@ toMaybeWord _ = return Nothing
 -- either a symbolic word or a symbolic boolean. If the SValue
 -- contains any values built from data constructors, then return them
 -- encoded as a String.
-flattenSValue :: SValue -> IO ([SVal], String)
-flattenSValue v = do
+flattenSValue :: String -> SValue -> IO ([SVal], String)
+flattenSValue nm v = do
   mw <- toMaybeWord v
   case mw of
     Just w -> return ([w], "")
     Nothing ->
       case v of
         VUnit                     -> return ([], "")
-        VPair x y                 -> do (xs, sx) <- flattenSValue =<< force x
-                                        (ys, sy) <- flattenSValue =<< force y
+        VPair x y                 -> do (xs, sx) <- flattenSValue nm =<< force x
+                                        (ys, sy) <- flattenSValue nm =<< force y
                                         return (xs ++ ys, sx ++ sy)
         VRecordValue elems        -> do (xss, sxs) <-
                                           unzip <$>
-                                          mapM (flattenSValue <=< force . snd) elems
+                                          mapM (flattenSValue nm <=< force . snd) elems
                                         return (concat xss, concat sxs)
-        VVector (V.toList -> ts)  -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
+        VVector (V.toList -> ts)  -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
                                         return (concat xss, concat ss)
         VBool sb                  -> return ([sb], "")
         VInt si                   -> return ([si], "")
         VIntMod 0 si              -> return ([si], "")
         VIntMod n si              -> return ([svRem si (svInteger KUnbounded (toInteger n))], "")
         VWord sw                  -> return (if intSizeOf sw > 0 then [sw] else [], "")
-        VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue) ts
+        VCtorApp i (V.toList->ts) -> do (xss, ss) <- unzip <$> traverse (force >=> flattenSValue nm) ts
                                         return (concat xss, "_" ++ identName i ++ concat ss)
         VNat n                    -> return ([], "_" ++ show n)
         TValue (suffixTValue -> Just s)
                                   -> return ([], s)
-        VFun _ -> fail "Cannot create uninterpreted higher-order function"
-        _ -> fail $ "Cannot create uninterpreted function with argument " ++ show v
+        VFun _ -> fail $ "Cannot create uninterpreted higher-order function " ++ show nm
+        _ -> fail $ "Cannot create uninterpreted function " ++ show nm ++ " with argument " ++ show v
 
 vWord :: SWord -> SValue
 vWord lv = VWord lv
@@ -584,7 +584,7 @@ parseUninterpreted cws nm ty =
     (VPiType _ f)
       -> return $
          strictFun $ \x -> do
-           (cws', suffix) <- flattenSValue x
+           (cws', suffix) <- flattenSValue nm x
            t2 <- f (ready x)
            parseUninterpreted (cws ++ cws') (nm ++ suffix) t2
 
