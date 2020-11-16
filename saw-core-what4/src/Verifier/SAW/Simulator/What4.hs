@@ -50,6 +50,9 @@ module Verifier.SAW.Simulator.What4
   , w4EvalAny
   , w4EvalBasic
   , getLabelValues
+
+  , w4SimulatorEval
+  , NeutralTermException(..)
   ) where
 
 
@@ -71,6 +74,7 @@ import Data.Traversable as T
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 #endif
+import qualified Control.Exception as X
 import Control.Monad.State as ST
 import Numeric.Natural (Natural)
 
@@ -430,10 +434,8 @@ bvSShROp = bvShiftOp (SW.bvAshr given)
 bvForall :: W.IsSymExprBuilder sym =>
   sym -> Natural -> (SWord sym -> IO (Pred sym)) -> IO (Pred sym)
 bvForall sym n f =
-  case W.userSymbol "i" of
-    Left err -> fail $ show err
-    Right indexSymbol ->
-      case mkNatRepr n of
+  do let indexSymbol = W.safeSymbol "i"
+     case mkNatRepr n of
         Some w
           | Just LeqProof <- testLeq (knownNat @1) w ->
             withKnownNat w $ do
@@ -706,16 +708,14 @@ mkSymFn ::
   String -> Assignment BaseTypeRepr args -> BaseTypeRepr ret ->
   IO (W.SymFn sym args ret)
 mkSymFn sym ref nm args ret =
-  case W.userSymbol nm of
-    Left err -> fail $ show err ++ ": Cannot create uninterpreted constant " ++ nm
-    Right s  ->
-      do cache <- readIORef ref
-         case lookupSymFn s args ret cache of
-           Just fn -> return fn
-           Nothing ->
-             do fn <- W.freshTotalUninterpFn sym s args ret
-                writeIORef ref (insertSymFn s args ret fn cache)
-                return fn
+  do let s = W.safeSymbol nm
+     cache <- readIORef ref
+     case lookupSymFn s args ret cache of
+       Just fn -> return fn
+       Nothing ->
+         do fn <- W.freshTotalUninterpFn sym s args ret
+            writeIORef ref (insertSymFn s args ret fn cache)
+            return fn
 
 ----------------------------------------------------------------------
 -- Given a constant nm of (saw-core) type ty, construct an uninterpreted
@@ -1127,6 +1127,39 @@ w4EvalBasic sym sc m addlPrims ref unintSet t =
            | otherwise                           = Nothing
      cfg <- Sim.evalGlobal' m (give sym constMap `Map.union` addlPrims) extcns uninterpreted
      Sim.evalSharedTerm cfg t
+
+
+-- | Evaluate a saw-core term to a What4 value for the purposes of
+--   using it as an input for symbolic simulation.  This will evaluate
+--   primitives, but will cancel evaluation and return the associated
+--   'NameInfo' if it encounters a constant value with an 'ExtCns'
+--   that is not accepted by the filter.
+w4SimulatorEval ::
+  forall n solver fs.
+  CS.SAWCoreBackend n solver fs ->
+  SharedContext ->
+  ModuleMap ->
+  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) {- ^ additional primitives -} ->
+  IORef (SymFnCache (CS.SAWCoreBackend n solver fs)) {- ^ cache for uninterpreted function symbols -} ->
+  (ExtCns (TValue (What4 (CS.SAWCoreBackend n solver fs))) -> Bool)
+    {- ^ Filter for constant values.  True means unfold, false means halt evaluation. -} ->
+  Term {- ^ term to simulate -} ->
+  IO (Either NameInfo (SValue (CS.SAWCoreBackend n solver fs)))
+w4SimulatorEval sym sc m addlPrims ref constantFilter t =
+  do let extcns tf (EC ix nm ty) =
+           do trm <- ArgTermConst <$> scTermF sc tf
+              parseUninterpretedSAW sym sc ref trm (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
+     let uninterpreted _tf ec =
+          if constantFilter ec then Nothing else Just (X.throwIO (NeutralTermEx (ecName ec)))
+     res <- X.try $ do
+              cfg <- Sim.evalGlobal' m (give sym constMap `Map.union` addlPrims) extcns uninterpreted
+              Sim.evalSharedTerm cfg t
+     case res of
+       Left (NeutralTermEx nmi) -> pure (Left nmi)
+       Right x -> pure (Right x)
+
+data NeutralTermException = NeutralTermEx NameInfo deriving Show
+instance X.Exception NeutralTermException
 
 -- | Given a constant nm of (saw-core) type ty, construct an
 -- uninterpreted constant with that type. The 'Term' argument should
