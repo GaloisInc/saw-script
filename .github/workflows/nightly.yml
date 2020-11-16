@@ -83,7 +83,7 @@ jobs:
       - shell: bash
         run: |
           .github/ci.sh build_cryptol
-          .github/ci.sh extract_exe "cryptol" "dist/bin"
+          .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
 
       - uses: actions/upload-artifact@v2
         with:
