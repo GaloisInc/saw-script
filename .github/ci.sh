@@ -132,10 +132,14 @@ build() {
   fi
   echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
-  if ! retry cabal v2-build "$@" "${pkgs[@]}" && [[ "$RUNNER_OS" == "macOS" ]]; then
-    echo "Working around a dylib issue on macos by removing the cache and trying again"
-    cabal v2-clean
-    retry cabal v2-build "$@" "${pkgs[@]}"
+  if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
+    if [[ "$RUNNER_OS" == "macOS" ]]; then
+      echo "Working around a dylib issue on macos by removing the cache and trying again"
+      cabal v2-clean
+      retry cabal v2-build "$@" "${pkgs[@]}"
+    else
+      return 1
+    fi
   fi
 }
 
