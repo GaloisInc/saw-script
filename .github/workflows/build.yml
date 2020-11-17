@@ -44,6 +44,9 @@ jobs:
             ghc: "8.8.4"
             continue-on-error: true
           - os: windows-latest
+            ghc: "8.8.4"
+            continue-on-error: true
+          - os: windows-latest
             ghc: "8.6.5"
             continue-on-error: true
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
@@ -84,6 +87,7 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh build
+        continue-on-error: false
 
       - shell: bash
         run: .github/ci.sh install_system_deps
@@ -96,8 +100,8 @@ jobs:
         run: .github/ci.sh setup_dist_bins
 
       - shell: bash
-        # TODO: change this once we can get these tests working in CI
-        continue-on-error: true
+        id: cabal-test
+        continue-on-error: ${{ matrix.continue-on-error }}
         run: cabal v2-test saw-remote-api
         env:
           SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
@@ -137,7 +141,7 @@ jobs:
           path: "dist/bin/saw"
 
       - shell: bash
-        if: "steps.test.outcome == 'failure'"
+        if: "steps.test.outcome == 'failure' || steps.cabal-test.outcome == 'failure'"
         name: Warn if tests failed
         run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
 
