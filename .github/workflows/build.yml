@@ -123,8 +123,7 @@ jobs:
           env.RELEASE && matrix.ghc == '8.8.4'
         run: |
           .github/ci.sh build_cryptol
-          exe="$(cd deps/cryptol && cabal exec which cryptol)"
-          cp "$exe" "dist/bin"
+          .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
 
       - if: >-
           env.RELEASE && matrix.ghc == '8.8.4'
