@@ -204,8 +204,8 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_jvm_verify" profFile
 
-     (_cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
-     let st0 = initialCrucibleSetupState cc method loc
+     (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
+     let st0 = initialCrucibleSetupState cc (cls', method) loc
 
      -- execute commands of the method spec
      io $ W4.setCurrentProgramLoc sym loc
@@ -250,9 +250,9 @@ crucible_jvm_unsafe_assume_spec bic opts cls nm setup =
      cb <- getJavaCodebase
      -- cls' is either cls or a subclass of cls
      pos <- getPosition
-     (_cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
+     (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let loc = SS.toW4Loc "_SAW_assume_spec" pos
-     let st0 = initialCrucibleSetupState cc method loc
+     let st0 = initialCrucibleSetupState cc (cls', method) loc
      ms <- (view Setup.csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
      returnProof ms
 
@@ -497,8 +497,8 @@ doAlloc cc alloc =
 
 --------------------------------------------------------------------------------
 
-getMethodHandle :: CJ.JVMContext -> J.ClassName -> J.MethodKey -> IO CJ.JVMHandleInfo
-getMethodHandle jc cname mkey =
+getMethodHandle :: CJ.JVMContext -> JVMMethodId -> IO CJ.JVMHandleInfo
+getMethodHandle jc (JVMMethodId mkey cname) =
   case Map.lookup (cname, mkey) (CJ.methodHandles jc) of
     Just handle -> return handle
     Nothing ->
@@ -517,11 +517,10 @@ registerOverride opts cc _ctx top_loc cs =
   do let sym = cc^.jccBackend
      let jc = cc^.jccJVMContext
      let c0 = head cs
-     let cname = c0 ^. MS.csMethod . jvmClassName
-     let mkey = c0 ^. csMethodKey
+     let method = c0 ^. MS.csMethod
      sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
 
-     mhandle <- liftIO $ getMethodHandle jc cname mkey
+     mhandle <- liftIO $ getMethodHandle jc method
      case mhandle of
        -- LLVMHandleInfo constructor has two existential type arguments,
        -- which are bound here. h :: FnHandle args' ret'
@@ -552,9 +551,7 @@ verifySimulate ::
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
   do let jc = cc^.jccJVMContext
      let sym = cc^.jccBackend
-     let cls = cc^.jccJVMClass
-     let cname = J.className cls
-     let mkey = mspec ^. csMethodKey
+     let method = mspec ^. MS.csMethod
      let verbosity = simVerbose opts
      let halloc = cc^.jccHandleAllocator
 
@@ -568,7 +565,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
      --when (not (J.methodIsStatic meth)) $ do
      --  fail $ unlines [ "Crucible can only extract static methods" ]
 
-     (CJ.JVMHandleInfo _ h) <- getMethodHandle jc cname mkey
+     (CJ.JVMHandleInfo _ h) <- getMethodHandle jc method
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = pfs

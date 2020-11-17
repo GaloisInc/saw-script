@@ -121,9 +121,7 @@ lookupClass cb site nm = do
 -- | Returns method with given name in this class or one of its subclasses.
 -- Throws an ExecException if method could not be found or is ambiguous.
 findMethod :: JSS.Codebase -> Pos -> String -> JSS.Class -> IO (JSS.Class, JSS.Method)
-findMethod cb site nm initClass =
-  do putStrLn $ "findMethod " ++ show nm
-     impl initClass
+findMethod cb site nm initClass = impl initClass
   where javaClassName = JSS.slashesToDots (JSS.unClassName (JSS.className initClass))
         methodType m = (JSS.methodParameterTypes m, JSS.methodReturnType m)
         baseName m = JSS.methodName m
