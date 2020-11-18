@@ -1969,14 +1969,15 @@ crucible_points_to typed bic opt =
   crucible_points_to_internal bic opt typed Nothing
 
 crucible_conditional_points_to ::
+  Bool {- ^ whether to check type compatibility -} ->
   BuiltinContext ->
   Options ->
   TypedTerm ->
   AllLLVM SetupValue ->
   AllLLVM SetupValue ->
   LLVMCrucibleSetupM ()
-crucible_conditional_points_to bic opt cond =
-  crucible_points_to_internal bic opt True (Just cond)
+crucible_conditional_points_to typed bic opt cond =
+  crucible_points_to_internal bic opt typed (Just cond)
 
 crucible_points_to_internal ::
   BuiltinContext ->
