@@ -124,7 +124,7 @@ prepareClassTopLevel bic str = do
      ctx <- io $ execStateT (CJ.extendJVMContext halloc c) ctx0
 
      -- update ctx
-     addJVMTrans ctx
+     putJVMTrans ctx
 
 
 -----------------------------------------------------------------------
