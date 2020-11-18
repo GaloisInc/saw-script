@@ -174,7 +174,8 @@ findField cb site tp@(JSS.ClassType clName) nm = impl [] =<< lift (lookupClass c
       where
         names f =
           do prefix <- ["", JSS.unClassName (JSS.className cl) ++ "."]
-             pure (prefix ++ JSS.fieldName f)
+             suffix <- ["", ":" ++ unparseTypeDescriptor (JSS.fieldType f)]
+             pure (prefix ++ JSS.fieldName f ++ suffix)
 
 findField _ _ _ _ =
   throwE "Primitive types cannot be dereferenced."
