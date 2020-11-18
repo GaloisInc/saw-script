@@ -652,8 +652,8 @@ checkSpecReturnType cc mspec =
   case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
     (Just _, Nothing) ->
          throwMethodSpec mspec $ unlines
-           [ "Could not resolve return type of " ++ mspec ^. csName
-           , "Raw type: " ++ show (mspec ^. MS.csRet)
+           [ "Return value specified, but function " ++ mspec ^. csName ++
+             " has void return type"
            ]
     (Just sv, Just retTy) ->
       do retTy' <-
