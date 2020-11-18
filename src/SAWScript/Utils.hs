@@ -121,13 +121,13 @@ lookupClass cb site nm = do
 -- | Returns method with given name in this class or one of its subclasses.
 -- Throws an ExecException if method could not be found or is ambiguous.
 findMethod :: JSS.Codebase -> Pos -> String -> JSS.Class -> IO (JSS.Class, JSS.Method)
-findMethod cb site nm initClass = impl initClass
+findMethod cb site nm initClass = impl [] initClass
   where javaClassName = JSS.slashesToDots (JSS.unClassName (JSS.className initClass))
         methodType m = (JSS.methodParameterTypes m, JSS.methodReturnType m)
         baseName m = JSS.methodName m
         typedName m = JSS.methodName m ++ unparseMethodDescriptor (methodType m)
         methodMatches m = nm `elem` [baseName m, typedName m]
-        impl cl =
+        impl names cl =
           let candidates = filter (not . JSS.methodIsAbstract) (JSS.classMethods cl) in
           case filter methodMatches candidates of
             [] -> do
@@ -136,11 +136,12 @@ findMethod cb site nm initClass = impl initClass
                   let msg = ftext $ "Could not find method " ++ nm
                               ++ " in class " ++ javaClassName ++ ".\n"
                               ++ "Available methods: "
-                              ++ unlines [ show (baseName m) | m <- candidates ]
+                              ++ unlines names
                       res = "Please check that the class and method are correct."
                    in throwIOExecException site msg res
                 Just superName ->
-                  impl =<< lookupClass cb site superName
+                  do super <- lookupClass cb site superName
+                     impl (names ++ map baseName candidates) super
             [method] -> return (cl,method)
             l -> let msg = "The method " ++ show nm ++ " in class " ++ javaClassName ++ " is ambiguous. " ++
                            "Methods can be disambiguated by appending a type descriptor: " ++
