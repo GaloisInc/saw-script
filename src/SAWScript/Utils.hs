@@ -148,26 +148,34 @@ findMethod cb site nm initClass = impl initClass
                      res = "Please disambiguate method name."
                   in throwIOExecException site (ftext msg) res
 
-throwFieldNotFound :: JSS.Type -> String -> ExceptT String IO a
-throwFieldNotFound tp fieldName = throwE msg
+throwFieldNotFound :: JSS.Type -> String -> [String] -> ExceptT String IO a
+throwFieldNotFound tp fieldName names = throwE msg
   where
     msg = "Values with type \'" ++ show tp ++
           "\' do not contain field named " ++
           fieldName ++ "."
+          ++ "\nAvailable fields:\n" ++ unlines names
 
 findField :: JSS.Codebase -> Pos -> JSS.Type -> String -> ExceptT String IO JSS.FieldId
-findField _  _ tp@(JSS.ArrayType _) nm = throwFieldNotFound tp nm
-findField cb site tp@(JSS.ClassType clName) nm = impl =<< lift (lookupClass cb site clName)
+findField _  _ tp@(JSS.ArrayType _) nm = throwFieldNotFound tp nm []
+findField cb site tp@(JSS.ClassType clName) nm = impl [] =<< lift (lookupClass cb site clName)
   where
-    impl cl =
-      case filter (\f -> JSS.fieldName f == nm) $ JSS.classFields cl of
+    impl nms cl =
+      case filter (\f -> nm `elem` names f) $ JSS.classFields cl of
         [] -> do
           case JSS.superClass cl of
-            Nothing -> throwFieldNotFound tp nm
-            Just superName -> impl =<< lift (lookupClass cb site superName)
-        [f] -> return $ JSS.FieldId (JSS.className cl) nm (JSS.fieldType f)
+            Nothing -> throwFieldNotFound tp nm nms
+            Just superName ->
+              do super <- lift $ lookupClass cb site superName
+                 impl (nms ++ map JSS.fieldName (JSS.classFields cl)) super
+        [f] -> return $ JSS.FieldId (JSS.className cl) (JSS.fieldName f) (JSS.fieldType f)
         _ -> throwE $
              "internal: Found multiple fields with the same name: " ++ nm
+      where
+        names f =
+          do prefix <- ["", JSS.unClassName (JSS.className cl) ++ "."]
+             pure (prefix ++ JSS.fieldName f)
+
 findField _ _ _ _ =
   throwE "Primitive types cannot be dereferenced."
 
