@@ -265,7 +265,7 @@ importType sc env ty =
           do tf' <- importTFun sc tf
              tyargs' <- traverse go tyargs
              scApplyAll sc tf' tyargs'
-        C.TError _k _msg ->
+        C.TError _k ->
           panic "importType TError" []
   where
     go = importType sc env
