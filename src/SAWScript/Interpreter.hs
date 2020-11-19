@@ -41,7 +41,7 @@ import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
-import System.FilePath (takeDirectory)
+import System.FilePath (takeDirectory, hasDrive, (</>))
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
@@ -99,6 +99,8 @@ import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
+
+import SAWScript.VerificationSummary
 
 -- Environment -----------------------------------------------------------------
 
@@ -345,11 +347,28 @@ interpretStmt printBinds stmt =
     SS.StmtTypedef _ name ty   -> do rw <- getTopLevelRW
                                      putTopLevelRW $ addTypedef (getVal name) ty rw
 
+writeVerificationSummary :: TopLevel ()
+writeVerificationSummary = do
+  do values <- rwProofs <$> getTopLevelRW
+     let jspecs  = [ s | VJVMMethodSpec s <- values ]
+         lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
+         thms    = [ t | VTheorem t <- values ]
+         summary = computeVerificationSummary jspecs lspecs thms
+     opts <- roOptions <$> getTopLevelRO
+     dir <- roInitWorkDir <$> getTopLevelRO
+     case summaryFile opts of
+       Nothing -> return ()
+       Just f ->
+         let f' = if hasDrive f then f else dir </> f
+          in io $ writeFile f' $ prettyVerificationSummary summary
+
+
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
   opts <- getOptions
   stmts <- io $ SAWScript.Import.loadFile opts file
   mapM_ stmtWithPrint stmts
+  writeVerificationSummary
   where
     stmtWithPrint s = do let withPos str = unlines $
                                            ("[output] at " ++ show (SS.getPos s) ++ ": ") :
@@ -400,6 +419,7 @@ buildTopLevelEnv proxy opts =
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
+       currDir <- getCurrentDirectory
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roSharedContext = sc
@@ -408,6 +428,7 @@ buildTopLevelEnv proxy opts =
                    , roHandleAlloc = halloc
                    , roPosition = SS.Unknown
                    , roProxy = proxy
+                   , roInitWorkDir = currDir
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
