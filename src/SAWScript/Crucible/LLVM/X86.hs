@@ -139,7 +139,6 @@ data X86State = X86State
   , _x86Options :: Options
   , _x86SharedContext :: SharedContext
   , _x86CrucibleContext :: LLVMCrucibleContext LLVMArch
-  , _x86Elf :: Elf.ElfHeaderInfo 64
   , _x86ElfSymtab :: Elf.Symtab 64
   , _x86RelevantElf :: RelevantElf
   , _x86MethodSpec :: MS.CrucibleMethodSpecIR LLVM
@@ -529,7 +528,6 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     , _x86Options = opts
     , _x86SharedContext = sc
     , _x86CrucibleContext = cc
-    , _x86Elf = elf
     , _x86ElfSymtab = symTab
     , _x86RelevantElf = relf
     , _x86MethodSpec = ms
