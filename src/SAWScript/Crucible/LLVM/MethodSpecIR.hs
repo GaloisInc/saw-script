@@ -120,8 +120,8 @@ import           Data.Parameterized.Some (Some(Some))
 import qualified Data.Parameterized.Map as MapF
 
 import qualified What4.Expr.Builder as B
-import           What4.Protocol.Online (OnlineSolver)
 import           What4.ProgramLoc (ProgramLoc)
+import           What4.Protocol.Online (OnlineSolver)
 
 import qualified Lang.Crucible.Backend.SAWCore as Crucible
   (SAWCoreBackend, saw_ctx, toSC, SAWCruciblePersonality)

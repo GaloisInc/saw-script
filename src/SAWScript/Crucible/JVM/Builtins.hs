@@ -336,8 +336,8 @@ verifyPrestate cc mspec globals0 =
      case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
        (Just _, Nothing) ->
             fail $ unlines
-              [ "Could not resolve return type of " ++ mspec ^. csMethodName
-              , "Raw type: " ++ show (mspec ^. MS.csRet)
+              [ "Return value specified, but method " ++ mspec ^. csMethodName ++
+                " has void return type"
               ]
        (Just sv, Just retTy) ->
          do retTy' <- typeOfSetupValue cc tyenv nameEnv sv

@@ -486,6 +486,12 @@ returnProof v = do
 getJVMTrans :: TopLevel  CJ.JVMContext
 getJVMTrans = TopLevel (gets rwJVMTrans)
 
+-- | Access the current state of Java Class translation
+putJVMTrans :: CJ.JVMContext -> TopLevel ()
+putJVMTrans jc =
+  do rw <- getTopLevelRW
+     putTopLevelRW rw { rwJVMTrans = jc }
+
 -- | Add a newly translated class to the translation
 addJVMTrans :: CJ.JVMContext -> TopLevel ()
 addJVMTrans trans = do

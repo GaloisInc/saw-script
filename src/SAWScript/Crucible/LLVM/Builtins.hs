@@ -103,11 +103,11 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           System.IO
-
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import           Text.URI
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
 -- parameterized-utils
@@ -304,6 +304,22 @@ crucible_llvm_array_size_profile assume bic opts (Some lm) nm lemmas setup = do
     profiles <- io $ readIORef cell
     pure . fmap (\(fnm, prof) -> (Text.unpack fnm, prof)) $ Map.toList profiles
 
+llvmURI :: String -> URI
+llvmURI symbol_name =
+  fromMaybe (error $ unwords ["mkLLVMName", "Could not create LLVM symbol name", symbol_name]) $
+  do sch <- mkScheme "llvm"
+     p   <- mkPathPiece (Text.pack symbol_name)
+     pure URI
+       { uriScheme = Just sch
+       , uriAuthority = Left True -- absolute path
+       , uriPath = Just (False, p NE.:| [])
+       , uriQuery = []
+       , uriFragment = Nothing
+       }
+
+llvmNameInfo :: String -> NameInfo
+llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ Text.pack symbol_name ]
+
 crucible_llvm_compositional_extract ::
   BuiltinContext ->
   Options ->
@@ -373,8 +389,10 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
           when ([] /= getAllExts extracted_func) $
             fail "Non-functional simulation summary."
 
+          let nmi = llvmNameInfo func_name
+
           extracted_func_const <-
-            io $ scConstant shared_context func_name extracted_func
+            io $ scConstant' shared_context nmi extracted_func
             =<< scTypeOf shared_context extracted_func
           input_terms <- io $ traverse (scExtCns shared_context) input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
@@ -652,8 +670,8 @@ checkSpecReturnType cc mspec =
   case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
     (Just _, Nothing) ->
          throwMethodSpec mspec $ unlines
-           [ "Could not resolve return type of " ++ mspec ^. csName
-           , "Raw type: " ++ show (mspec ^. MS.csRet)
+           [ "Return value specified, but function " ++ mspec ^. csName ++
+             " has void return type"
            ]
     (Just sv, Just retTy) ->
       do retTy' <-
@@ -1346,10 +1364,9 @@ setupArg sc sym ecRef tp =
       fail $ unwords ["Crucible extraction currently only supports Crucible base types", show tp]
   where
     freshGlobal cty sc_tp =
-      do i     <- scFreshGlobalVar sc
-         ecs   <- readIORef ecRef
+      do ecs <- readIORef ecRef
          let len = Seq.length ecs
-         let ec = EC i ("arg_"++show len) sc_tp
+         ec <- scFreshEC sc ("arg_"++show len) sc_tp
          writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
          scFlatTermF sc (ExtCns ec)
 
