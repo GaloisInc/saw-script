@@ -122,15 +122,15 @@ type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
 type instance MS.PointsTo CJ.JVM = JVMPointsTo
 
 data JVMPointsTo
-  = JVMPointsToField ProgramLoc (MS.SetupValue CJ.JVM) String (MS.SetupValue CJ.JVM)
+  = JVMPointsToField ProgramLoc (MS.SetupValue CJ.JVM) J.FieldId (MS.SetupValue CJ.JVM)
   | JVMPointsToElem ProgramLoc (MS.SetupValue CJ.JVM) Int (MS.SetupValue CJ.JVM)
   | JVMPointsToArray ProgramLoc (MS.SetupValue CJ.JVM) TypedTerm
 
 ppPointsTo :: JVMPointsTo -> PPL.Doc
 ppPointsTo =
   \case
-    JVMPointsToField _loc ptr fld val ->
-      MS.ppSetupValue ptr <> PPL.text "." <> PPL.text fld
+    JVMPointsToField _loc ptr fid val ->
+      MS.ppSetupValue ptr <> PPL.text "." <> PPL.text (J.fieldIdName fid)
       PPL.<+> PPL.text "points to"
       PPL.<+> MS.ppSetupValue val
     JVMPointsToElem _loc ptr idx val ->
