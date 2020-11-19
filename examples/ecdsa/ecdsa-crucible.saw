@@ -122,9 +122,9 @@ let ecdsa_uses_temps this =
     (t1, _) <- ecdsa_arr384 "t1";
     (t2, _) <- ecdsa_arr384 "t2";
     (t3, _) <- ecdsa_arr384 "t3";
-    jvm_field_is this "com/galois/ecc/ECCProvider.t1" t1;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t2" t2;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t3" t3;
+    jvm_field_is this "t1" t1;
+    jvm_field_is this "t2" t2;
+    jvm_field_is this "t3" t3;
   };
 
 let ecdsa_temps_allocated this =
@@ -132,9 +132,9 @@ let ecdsa_temps_allocated this =
     t1 <- jvm_alloc_array 12 java_int;
     t2 <- jvm_alloc_array 12 java_int;
     t3 <- jvm_alloc_array 12 java_int;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t1" t1;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t2" t2;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t3" t3;
+    jvm_field_is this "t1" t1;
+    jvm_field_is this "t2" t2;
+    jvm_field_is this "t3" t3;
   };
 
 let ecdsa_clobber12 ref =
@@ -155,7 +155,7 @@ let ecdsa_uses_a this =
   do {
     //pa <- jvm_alloc_array 24 java_int;
     (pa, _) <- jvm_fresh_array24 "a";
-    jvm_field_is this "com/galois/ecc/NIST64.a" pa;
+    jvm_field_is this "a" pa;
     return pa;
   };
 
@@ -164,8 +164,8 @@ let ecdsa_affine n =
     ref <- jvm_alloc_object "com/galois/ecc/AffinePoint";
     (px, x) <- ecdsa_arr384 (str_concat n ".x");
     (py, y) <- ecdsa_arr384 (str_concat n ".y");
-    jvm_field_is ref "com/galois/ecc/AffinePoint.x" px;
-    jvm_field_is ref "com/galois/ecc/AffinePoint.y" py;
+    jvm_field_is ref "x" px;
+    jvm_field_is ref "y" py;
     return ({ref = ref, x = px, y = py}, {{ { x = x, y = y } }});
   };
 
@@ -175,9 +175,9 @@ let ecdsa_jacobian n =
     (px, x) <- ecdsa_arr384 (str_concat n ".x");
     (py, y) <- ecdsa_arr384 (str_concat n ".y");
     (pz, z) <- ecdsa_arr384 (str_concat n ".z");
-    jvm_field_is ref "com/galois/ecc/JacobianPoint.x" px;
-    jvm_field_is ref "com/galois/ecc/JacobianPoint.y" py;
-    jvm_field_is ref "com/galois/ecc/JacobianPoint.z" pz;
+    jvm_field_is ref "x" px;
+    jvm_field_is ref "y" py;
+    jvm_field_is ref "z" pz;
     return ({ref = ref, x = px, y = py, z = pz}, {{ { x = x, y = y, z = z } }});
   };
 
@@ -187,8 +187,8 @@ let ecdsa_uses_base this fname v =
     px <- jvm_alloc_array 12 java_int;
     py <- jvm_alloc_array 12 java_int;
     jvm_field_is this fname ref;
-    jvm_field_is ref "com/galois/ecc/AffinePoint.x" px;
-    jvm_field_is ref "com/galois/ecc/AffinePoint.y" py;
+    jvm_field_is ref "x" px;
+    jvm_field_is ref "y" py;
     jvm_array12_is px {{ ec_split v.x }};
     jvm_array12_is py {{ ec_split v.y }};
   };
@@ -198,8 +198,8 @@ let ecdsa_signature n =
     ref <- jvm_alloc_object "com/galois/ecc/Signature";
     (pr, r) <- ecdsa_arr384 (str_concat n ".r");
     (ps, s) <- ecdsa_arr384 (str_concat n ".s");
-    jvm_field_is ref "com/galois/ecc/Signature.r" pr;
-    jvm_field_is ref "com/galois/ecc/Signature.s" ps;
+    jvm_field_is ref "r" pr;
+    jvm_field_is ref "s" ps;
     return ({ref = ref, r = pr, s = ps}, {{ { r = r, s = s } }});
   };
 
@@ -208,8 +208,8 @@ let ecdsa_public_key n =
     ref <- jvm_alloc_object "com/galois/ecc/PublicKey";
     (px, x) <- ecdsa_arr384 (str_concat n ".x");
     (py, y) <- ecdsa_arr384 (str_concat n ".y");
-    jvm_field_is ref "com/galois/ecc/PublicKey.x" px;
-    jvm_field_is ref "com/galois/ecc/PublicKey.y" py;
+    jvm_field_is ref "x" px;
+    jvm_field_is ref "y" py;
     return ({ref = ref, x = px, y = py}, {{ { x = x, y = y } }});
   };
 
@@ -224,13 +224,13 @@ let ecdsa_twin_mul_aux2_rslt n =
     re1p <- jvm_fresh_var (str_concat n ".e1p") java_int;
     rshp <- jvm_fresh_var (str_concat n ".shp") java_int;
 
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.u0" (jvm_term ru0);
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.u1" (jvm_term ru1);
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.c0p" (jvm_term rc0p);
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.c1p" (jvm_term rc1p);
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.e0p" (jvm_term re0p);
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.e1p" (jvm_term re1p);
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.shp" (jvm_term rshp);
+    jvm_field_is auxr "u0" (jvm_term ru0);
+    jvm_field_is auxr "u1" (jvm_term ru1);
+    jvm_field_is auxr "c0p" (jvm_term rc0p);
+    jvm_field_is auxr "c1p" (jvm_term rc1p);
+    jvm_field_is auxr "e0p" (jvm_term re0p);
+    jvm_field_is auxr "e1p" (jvm_term re1p);
+    jvm_field_is auxr "shp" (jvm_term rshp);
 
     return (auxr,
            {{ { u0 = ru0, u1 = ru1
@@ -1433,7 +1433,7 @@ ec_mul_init_ov <- method "ec_mul_init" [shr_ov, add_ov3, assign_ov, set_unit_ov,
     (pd, d) <- ecdsa_arr384 "d";
     (ps, s) <- ecdsa_affine "s";
     ph <- jvm_alloc_array 12 java_int;
-    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+    jvm_field_is this "h" ph;
     ecdsa_uses_field_prime this;
     ecdsa_uses_temps this;
     jvm_execute_func [this, pr.ref, pd, ps.ref];
@@ -1477,7 +1477,7 @@ ec_mul_ov <- method "ec_mul" [ec_mul_init_ov, ec_mul_aux_ov]
     this <- jvm_alloc_object "com.galois.ecc.P384ECC64";
     (pd, d) <- ecdsa_arr384 "d";
     ph <- jvm_alloc_array 12 java_int;
-    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+    jvm_field_is this "h" ph;
     (pr, _) <- ecdsa_jacobian "r";
     (ps, s) <- ecdsa_affine "s";
     ecdsa_uses_field_prime this;
@@ -1548,7 +1548,7 @@ ec_twin_mul_aux2_ov <- method "ec_twin_mul_aux2" []
     dv2 <- jvm_fresh_var "dv2" java_bool;
 
     auxr <- jvm_alloc_object "com/galois/ecc/TwinMulAux2Rslt";
-    jvm_field_is this "com/galois/ecc/ECCProvider.aux2Rslt" auxr;
+    jvm_field_is this "aux2Rslt" auxr;
 
     jvm_execute_func
       [ this, jvm_term c0, jvm_term c1, jvm_term e0, jvm_term e1, jvm_term shift
@@ -1557,13 +1557,13 @@ ec_twin_mul_aux2_ov <- method "ec_twin_mul_aux2" []
     let res =
       {{ p384_ec_mul::p384_ec_twin_mul_aux2 (c0, c1, e0, e1, shift, d0i, d1i, dv1, dv2) }};
 
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.u0" (jvm_term {{ res.tma2_u0 }});
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.u1" (jvm_term {{ res.tma2_u1 }});
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.c0p" (jvm_term {{ res.tma2_c0' }});
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.c1p" (jvm_term {{ res.tma2_c1' }});
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.e0p" (jvm_term {{ res.tma2_e0' }});
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.e1p" (jvm_term {{ res.tma2_e1' }});
-    jvm_field_is auxr "com/galois/ecc/TwinMulAux2Rslt.shp" (jvm_term {{ res.tma2_sh' }});
+    jvm_field_is auxr "u0" (jvm_term {{ res.tma2_u0 }});
+    jvm_field_is auxr "u1" (jvm_term {{ res.tma2_u1 }});
+    jvm_field_is auxr "c0p" (jvm_term {{ res.tma2_c0' }});
+    jvm_field_is auxr "c1p" (jvm_term {{ res.tma2_c1' }});
+    jvm_field_is auxr "e0p" (jvm_term {{ res.tma2_e0' }});
+    jvm_field_is auxr "e1p" (jvm_term {{ res.tma2_e1' }});
+    jvm_field_is auxr "shp" (jvm_term {{ res.tma2_sh' }});
   }
   abc;
 
@@ -1614,7 +1614,7 @@ ec_twin_mul_init_ov <- method "ec_twin_mul_init"
     (psPtP, sPtP) <- ecdsa_jacobian "sPtP";
     (psMtP, sMtP) <- ecdsa_jacobian "sMtP";
     ph <- jvm_alloc_array 12 java_int;
-    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+    jvm_field_is this "h" ph;
     ecdsa_uses_group_order this;
     ecdsa_uses_field_prime this;
     ecdsa_uses_field_unit this;
@@ -1684,11 +1684,11 @@ ec_twin_mul_ov <- method "ec_twin_mul"
     (pd1, d1) <- ecdsa_arr384 "d1";
     // TODO: factor out a function 'ecdsa_uses_h' with the next 2 lines
     ph <- jvm_alloc_array 12 java_int;
-    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
+    jvm_field_is this "h" ph;
 
     //aux2rslt <- ecdsa_twin_mul_aux2_rslt this;
     auxr <- jvm_alloc_object "com/galois/ecc/TwinMulAux2Rslt";
-    jvm_field_is this "com/galois/ecc/ECCProvider.aux2Rslt" auxr;
+    jvm_field_is this "aux2Rslt" auxr;
 
     ecdsa_uses_field_prime this;
     ecdsa_uses_field_unit this;
@@ -1757,14 +1757,14 @@ method "signHash"
     paux2rslt <- jvm_alloc_object "com/galois/ecc/TwinMulAux2Rslt";
     (pqPoint, qPoint) <- ecdsa_affine "this.qPoint";
 
-    jvm_field_is this "com/galois/ecc/ECCProvider.rP" prP.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.sPtP" psPtP.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.sMtP" psMtP.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.sPt" psPt.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.sMt" psMt.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.aux2Rslt" paux2rslt;
-    jvm_field_is this "com/galois/ecc/ECCProvider.width" (jvm_term {{ 12 : [32] }});
-    jvm_field_is this "com/galois/ecc/ECCProvider.qPoint" pqPoint.ref;
+    jvm_field_is this "rP" prP.ref;
+    jvm_field_is this "sPtP" psPtP.ref;
+    jvm_field_is this "sMtP" psMtP.ref;
+    jvm_field_is this "sPt" psPt.ref;
+    jvm_field_is this "sMt" psMt.ref;
+    jvm_field_is this "aux2Rslt" paux2rslt;
+    jvm_field_is this "width" (jvm_term {{ 12 : [32] }});
+    jvm_field_is this "qPoint" pqPoint.ref;
 
     ecdsa_uses_field_prime this;
     ecdsa_uses_field_unit this;
@@ -1778,16 +1778,16 @@ method "signHash"
     (pt2, _) <- ecdsa_arr384 "t2";
     (pt3, _) <- ecdsa_arr384 "t3";
 
-    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
-    jvm_field_is this "com/galois/ecc/ECCProvider.u1" pu1;
-    jvm_field_is this "com/galois/ecc/ECCProvider.u2" pu2;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t1" pt1;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t2" pt2;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t3" pt3;
+    jvm_field_is this "h" ph;
+    jvm_field_is this "u1" pu1;
+    jvm_field_is this "u2" pu2;
+    jvm_field_is this "t1" pt1;
+    jvm_field_is this "t2" pt2;
+    jvm_field_is this "t3" pt3;
 
-    ecdsa_uses_base this "com/galois/ecc/ECCProvider.basePoint" {{ ecc::p384_base }};
-    ecdsa_uses_base this "com/galois/ecc/ECCProvider.basePoint3" {{ ecc::p384_base3 }};
-    ecdsa_uses_base this "com/galois/ecc/ECCProvider.basePoint5" {{ ecc::p384_base5 }};
+    ecdsa_uses_base this "basePoint" {{ ecc::p384_base }};
+    ecdsa_uses_base this "basePoint3" {{ ecc::p384_base3 }};
+    ecdsa_uses_base this "basePoint5" {{ ecc::p384_base5 }};
 
     jvm_precond {{ d != (0:[384]) }};
     jvm_precond {{ k != (0:[384]) }};
@@ -1824,13 +1824,13 @@ method "signHash"
     ecdsa_assign_arr384 pqPoint.x     {{ 0 : [384] }};
     ecdsa_assign_arr384 pqPoint.y     {{ 0 : [384] }};
 
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.u0"  (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.u1"  (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.c0p" (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.c1p" (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.e0p" (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.e1p" (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.shp" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "u0"  (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "u1"  (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "c0p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "c1p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "e0p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "e1p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "shp" (jvm_term {{ 0:[32] }});
 
     jvm_return (jvm_term {{ res.r != 0 /\ res.s != 0 }});
   }
@@ -1873,14 +1873,14 @@ method "verifySignature"
     (psMt, sMt) <- ecdsa_affine "this.sMt";
     paux2rslt <- jvm_alloc_object "com/galois/ecc/TwinMulAux2Rslt";
 
-    jvm_field_is this "com/galois/ecc/ECCProvider.qPoint" pq.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.rP" prP.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.sPtP" psPtP.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.sMtP" psMtP.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.sPt" psPt.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.sMt" psMt.ref;
-    jvm_field_is this "com/galois/ecc/ECCProvider.aux2Rslt" paux2rslt;
-    jvm_field_is this "com/galois/ecc/ECCProvider.width" (jvm_term {{ 12 : [32] }});
+    jvm_field_is this "qPoint" pq.ref;
+    jvm_field_is this "rP" prP.ref;
+    jvm_field_is this "sPtP" psPtP.ref;
+    jvm_field_is this "sMtP" psMtP.ref;
+    jvm_field_is this "sPt" psPt.ref;
+    jvm_field_is this "sMt" psMt.ref;
+    jvm_field_is this "aux2Rslt" paux2rslt;
+    jvm_field_is this "width" (jvm_term {{ 12 : [32] }});
 
     ecdsa_uses_field_prime this;
     ecdsa_uses_field_unit this;
@@ -1894,12 +1894,12 @@ method "verifySignature"
     (pt2, _) <- ecdsa_arr384 "t2";
     (pt3, _) <- ecdsa_arr384 "t3";
 
-    jvm_field_is this "com/galois/ecc/ECCProvider.h" ph;
-    jvm_field_is this "com/galois/ecc/ECCProvider.u1" pu1;
-    jvm_field_is this "com/galois/ecc/ECCProvider.u2" pu2;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t1" pt1;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t2" pt2;
-    jvm_field_is this "com/galois/ecc/ECCProvider.t3" pt3;
+    jvm_field_is this "h" ph;
+    jvm_field_is this "u1" pu1;
+    jvm_field_is this "u2" pu2;
+    jvm_field_is this "t1" pt1;
+    jvm_field_is this "t2" pt2;
+    jvm_field_is this "t3" pt3;
 
     ecdsa_uses_base this "com/galois/ecc/ECCProvider.basePoint" {{ ecc::p384_base }};
 
@@ -1929,13 +1929,13 @@ method "verifySignature"
     ecdsa_assign_arr384 pq.x          {{ 0 : [384] }};
     ecdsa_assign_arr384 pq.y          {{ 0 : [384] }};
 
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.u0"  (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.u1"  (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.c0p" (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.c1p" (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.e0p" (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.e1p" (jvm_term {{ 0:[32] }});
-    jvm_field_is paux2rslt "com/galois/ecc/TwinMulAux2Rslt.shp" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "u0"  (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "u1"  (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "c0p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "c1p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "e0p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "e1p" (jvm_term {{ 0:[32] }});
+    jvm_field_is paux2rslt "shp" (jvm_term {{ 0:[32] }});
 
     jvm_return (jvm_term {{ ecc::p384_ecdsa_public_verify(e, sig.r, sig.s, publicKey) }});
   }
