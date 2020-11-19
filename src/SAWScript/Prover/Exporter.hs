@@ -35,6 +35,7 @@ import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
+import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import Text.PrettyPrint.ANSI.Leijen (vcat)
 
@@ -175,7 +176,7 @@ write_cnf sc f (TypedTerm schema t) = do
 -- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
 -- assumed to have universally quantified variables, it will be negated.
 writeSMTLib2 :: SharedContext -> FilePath -> Prop -> IO ()
-writeSMTLib2 sc f t = writeUnintSMTLib2 [] sc f t
+writeSMTLib2 sc f t = writeUnintSMTLib2 mempty sc f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
@@ -190,9 +191,9 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 -- | Write a proposition to an SMT-Lib version 2 file, treating some
 -- constants as uninterpreted. Because @Prop@ is assumed to have
 -- universally quantified variables, it will be negated.
-writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
-writeUnintSMTLib2 unints sc f p =
-  do (_, _, l) <- prepNegatedSBV sc unints p
+writeUnintSMTLib2 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> IO ()
+writeUnintSMTLib2 unintSet sc f p =
+  do (_, _, l) <- prepNegatedSBV sc unintSet p
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
      writeFile f txt
