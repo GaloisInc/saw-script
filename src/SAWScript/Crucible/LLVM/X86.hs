@@ -139,7 +139,7 @@ data X86State = X86State
   , _x86Options :: Options
   , _x86SharedContext :: SharedContext
   , _x86CrucibleContext :: LLVMCrucibleContext LLVMArch
-  , _x86Elf :: Elf.Elf 64
+  , _x86ElfSymtab :: Elf.Symtab 64
   , _x86RelevantElf :: RelevantElf
   , _x86MethodSpec :: MS.CrucibleMethodSpecIR LLVM
   , _x86Mem :: Mem
@@ -381,7 +381,7 @@ buildCFG ::
        (Macaw.MacawExt Macaw.X86_64)
        (EmptyCtx ::> Macaw.ArchRegStruct Macaw.X86_64)
        (Macaw.ArchRegStruct Macaw.X86_64)
-     , Elf.Elf 64
+     , Elf.ElfHeaderInfo 64
      , RelevantElf
      , Macaw.MemSegmentOff 64
      , Map
@@ -411,7 +411,7 @@ buildCFG opts halloc preserved path nm = do
     initialDiscoveryState =
       Macaw.emptyDiscoveryState (memory relf) (funSymMap relf) macawArchInfo
       -- "inline" any function addresses that we happen to jump to
-      & Macaw.trustedFunctionEntryPoints .~ Set.empty
+      & Macaw.trustedFunctionEntryPoints .~ Map.empty
     finalState = Macaw.cfgFromAddrsAndState initialDiscoveryState [addr] []
     finfos = finalState ^. Macaw.funInfo
   cfgs <- forM finfos $ \(Some finfo) ->
@@ -494,7 +494,7 @@ initialState ::
   Options ->
   SharedContext ->
   LLVMCrucibleContext LLVMArch ->
-  Elf.Elf 64 ->
+  Elf.ElfHeaderInfo 64 ->
   RelevantElf ->
   MS.CrucibleMethodSpecIR LLVM ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
@@ -503,6 +503,10 @@ initialState ::
 initialState sym opts sc cc elf relf ms globs maxAddr = do
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
+  symTab <- case Elf.decodeHeaderSymtab elf of
+    Nothing -> throwX86 "Elf file has no symbol table"
+    Just (Left _err) -> throwX86 "Failed to decode symbol table"
+    Just (Right st) -> pure st
   let
     align = C.LLVM.exponentToAlignment 4
     allocGlobalEnd :: MS.AllocGlobal LLVM -> Integer
@@ -511,9 +515,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     globalEnd nm = maybe 0 (\entry -> fromIntegral $ Elf.steValue entry + Elf.steSize entry) $
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
-      . mconcat
-      . fmap Elf.elfSymbolTableEntries
-      $ Elf.elfSymtab elf
+      $ Elf.symtabEntries symTab
   sz <- W4.bvLit sym knownNat . BV.mkBV knownNat . maximum $ mconcat
     [ [maxAddr, globalEnd "_end"]
     , globalEnd . fst <$> globs
@@ -526,7 +528,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     , _x86Options = opts
     , _x86SharedContext = sc
     , _x86CrucibleContext = cc
-    , _x86Elf = elf
+    , _x86ElfSymtab = symTab
     , _x86RelevantElf = relf
     , _x86MethodSpec = ms
     , _x86Mem = mem
@@ -670,15 +672,13 @@ resolvePtrSetupValue env tyenv tptr = do
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
-  elf <- use x86Elf
+  symTab <- use x86ElfSymtab
   base <- use x86GlobalBase
   case tptr of
     MS.SetupGlobal () nm -> case
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
-      . mconcat
-      . fmap Elf.elfSymbolTableEntries
-      $ Elf.elfSymtab elf of
+      $ Elf.symtabEntries symTab of
       Nothing -> throwX86 $ mconcat ["Global symbol \"", nm, "\" not found"]
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
