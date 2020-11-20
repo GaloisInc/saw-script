@@ -6,7 +6,7 @@ RUN pip3 install wllvm
 
 WORKDIR /saw-script
 RUN mkdir -p /saw-script && \
-    git clone https://github.com/awslabs/aws-lc-verification.git && \
+    git clone https://github.com/GaloisInc/aws-lc-verification.git && \
     cd aws-lc-verification && \
     git checkout 2a5598300748cbc6b5aac9ba2b44bd2982324763 && \
     git config --file=.gitmodules submodule.src.url https://github.com/awslabs/aws-lc && \
