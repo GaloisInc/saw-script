@@ -85,7 +85,16 @@ jobs:
           .github/ci.sh build_cryptol
           .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
 
+      - shell: bash
+        run: .github/ci.sh bundle_files
+
+      - shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: .github/ci.sh zip_dist
+
       - uses: actions/upload-artifact@v2
         with:
-          path: dist/bin
-          name: ${{ runner.os }}-bins
+          name: ${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64
+          path: "${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64.tar.gz*"
