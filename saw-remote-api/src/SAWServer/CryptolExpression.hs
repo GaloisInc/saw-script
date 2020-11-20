@@ -88,12 +88,12 @@ defaultEvalOpts = EvalOpts quietLogger defaultPPOpts
 runInferOutput :: InferOutput a -> ModuleM a
 runInferOutput out =
   case out of
-    InferOK warns seeds supply o ->
+    InferOK nm warns seeds supply o ->
       do setNameSeeds seeds
          setSupply supply
-         typeCheckWarnings warns
+         typeCheckWarnings nm warns
          return o
 
-    InferFailed warns errs ->
-      do typeCheckWarnings warns
-         typeCheckingFailed errs
+    InferFailed nm warns errs ->
+      do typeCheckWarnings nm warns
+         typeCheckingFailed nm errs
