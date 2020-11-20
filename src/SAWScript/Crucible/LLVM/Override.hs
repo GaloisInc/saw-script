@@ -684,7 +684,8 @@ refreshTerms sc ss =
      OM (termSub %= Map.union extension)
   where
     freshenTerm (TypedExtCns _cty ec) =
-      do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
+      do new <- liftIO $ do i <- scFreshGlobalVar sc
+                            scExtCns sc (EC i (ecName ec) (ecType ec))
          return (ecVarIndex ec, new)
 
 ------------------------------------------------------------------------
@@ -1357,23 +1358,27 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
                       --                          , "from each matching write failed"
                       --                          ])
                       -- PP.<$$> PP.text (show err)
+
        SymbolicSizeValue expected_arr_tm expected_sz_tm ->
          do maybe_allocation_array <- liftIO $
               Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr1 (Crucible.memImplHeap mem)
+            let errMsg = PP.vcat $ map (PP.text . unwords)
+                  [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
+                  , [ "in the ", stateCond prepost, "of an override" ]
+                  , [ "Tried to read an array prefix of size:", show (MS.ppTypedTerm expected_sz_tm) ]
+                  ]
             case maybe_allocation_array of
-              Just (arr, sz)
+              Just (ok, arr, sz)
                 | Crucible.LLVMPointer _ off <- ptr1
                 , Just 0 <- BV.asUnsigned <$> W4.asBV off ->
-                do arr_tm <- liftIO $ Crucible.toSC sym arr
+                do addAssert ok $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
+                   arr_tm <- liftIO $ Crucible.toSC sym arr
                    instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost arr_tm (ttTerm expected_arr_tm)
                    sz_tm <- liftIO $ Crucible.toSC sym sz
                    instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost sz_tm (ttTerm expected_sz_tm)
                    return Nothing
-              _ -> return $ Just $ PP.vcat $ map (PP.text . unwords)
-                [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
-                , [ "in the ", stateCond prepost, "of an override" ]
-                , [ "Tried to read an array prefix of size:", show (MS.ppTypedTerm expected_sz_tm) ]
-                ]
+
+              _ -> return $ Just errMsg
 
 ------------------------------------------------------------------------
 

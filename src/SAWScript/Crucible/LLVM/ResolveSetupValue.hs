@@ -64,8 +64,8 @@ import Verifier.SAW.Cryptol (importType, emptyEnv)
 import Verifier.SAW.TypedTerm
 import Text.LLVM.DebugUtils as L
 
-import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
-import qualified Data.SBV.Dynamic as SBV (svAsInteger)
+import qualified Verifier.SAW.Simulator.SBV as SBV
+import qualified Data.SBV.Dynamic as SBV
 
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
@@ -352,8 +352,20 @@ resolveSAWPred ::
   LLVMCrucibleContext arch ->
   Term ->
   IO (W4.Pred Sym)
-resolveSAWPred cc tm =
-  Crucible.bindSAWTerm (cc^.ccBackend) W4.BaseBoolRepr tm
+resolveSAWPred cc tm = do
+  do let sym = cc^.ccBackend
+     sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+     let ss = cc^.ccBasicSS
+     tm' <- rewriteSharedTerm sc ss tm
+     mx <- case getAllExts tm' of
+             [] -> do
+               -- Evaluate in SBV to test whether 'tm' is a concrete value
+               sbv <- SBV.toBool <$> SBV.sbvSolveBasic sc Map.empty mempty tm'
+               return (SBV.svAsBool sbv)
+             _ -> return Nothing
+     case mx of
+       Just x  -> return $ W4.backendPred sym x
+       Nothing -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
 
 resolveSAWSymBV ::
   (1 <= w) =>
@@ -369,8 +381,7 @@ resolveSAWSymBV cc w tm =
      mx <- case getAllExts tm' of
              [] -> do
                -- Evaluate in SBV to test whether 'tm' is a concrete value
-               modmap <- scGetModuleMap sc
-               sbv <- SBV.toWord =<< SBV.sbvSolveBasic modmap Map.empty [] tm'
+               sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm'
                return (SBV.svAsInteger sbv)
              _ -> return Nothing
      case mx of

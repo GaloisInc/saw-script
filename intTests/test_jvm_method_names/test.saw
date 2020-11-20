@@ -1,0 +1,125 @@
+enable_experimental;
+c <- java_load_class "Test";
+print c;
+
+crucible_jvm_verify c "get" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "Test.val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  }
+  z3;
+
+
+print "********************************************************************************";
+print "<init>";
+fails (
+crucible_jvm_verify c "<init>" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    jvm_execute_func [this];
+    jvm_field_is this "Test.val" (jvm_term {{ 0 : [64] }});
+  }
+  z3);
+
+print "********************************************************************************";
+print "<init>(J)V";
+crucible_jvm_verify c "<init>(J)V" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this, jvm_term x];
+    jvm_field_is this "Test.val" (jvm_term x);
+  }
+  z3;
+
+print "********************************************************************************";
+print "<init>(I)V";
+crucible_jvm_verify c "<init>(I)V" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_int;
+    jvm_execute_func [this, jvm_term x];
+    jvm_field_is this "Test.val" (jvm_term {{ sext x : [64] }});
+  }
+  z3;
+
+print "********************************************************************************";
+print "<init>()V";
+crucible_jvm_verify c "<init>()V" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    jvm_execute_func [this];
+    jvm_field_is this "Test.val" (jvm_term {{ 0 : [64] }});
+  }
+  z3;
+
+print "********************************************************************************";
+print "increment";
+fails (
+crucible_jvm_verify c "increment" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "Test.val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_field_is this "Test.val" (jvm_term {{ val + 1 }});
+  }
+  z3);
+
+print "********************************************************************************";
+print "increment()V";
+crucible_jvm_verify c "increment()V" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "Test.val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_field_is this "Test.val" (jvm_term {{ val + 1 }});
+  }
+  z3;
+
+print "********************************************************************************";
+print "increment(J)V";
+crucible_jvm_verify c "increment(J)V" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "Test.val" (jvm_term val);
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this, jvm_term x];
+    jvm_field_is this "Test.val" (jvm_term {{ val + x }});
+  }
+  z3;
+
+print "********************************************************************************";
+print "increment(I)V";
+crucible_jvm_verify c "increment(I)V" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "Test.val" (jvm_term val);
+    x <- jvm_fresh_var "x" java_int;
+    jvm_execute_func [this, jvm_term x];
+    jvm_field_is this "Test.val" (jvm_term {{ val + sext x }});
+  }
+  z3;
+
+print "********************************************************************************";
+print "increment(LTest;)V";
+crucible_jvm_verify c "increment(LTest;)V" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "Test.val" (jvm_term val);
+
+    x <- jvm_alloc_object "Test";
+    x_val <- jvm_fresh_var "x_val" java_long;
+    jvm_field_is x "Test.val" (jvm_term x_val);
+
+    jvm_execute_func [this, x];
+    jvm_field_is this "Test.val" (jvm_term {{ val + x_val }});
+  }
+  z3;

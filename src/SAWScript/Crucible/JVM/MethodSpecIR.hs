@@ -45,6 +45,9 @@ import qualified Verifier.Java.Codebase as CB
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
+-- cryptol-saw-core
+import           Verifier.SAW.TypedTerm (TypedTerm)
+
 import           SAWScript.Crucible.Common (Sym)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
@@ -73,19 +76,25 @@ type instance MS.ExtType CJ.JVM = J.Type
 
 data JVMMethodId =
   JVMMethodId
-    { _jvmMethodName :: String
+    { _jvmMethodKey :: J.MethodKey
     , _jvmClassName  :: J.ClassName
     }
   deriving (Eq, Ord, Show)
 
 makeLenses ''JVMMethodId
 
-csMethodName :: Lens' (MS.CrucibleMethodSpecIR CJ.JVM) String
+jvmMethodName :: Getter JVMMethodId String
+jvmMethodName = jvmMethodKey . to J.methodKeyName
+
+csMethodKey :: Lens' (MS.CrucibleMethodSpecIR CJ.JVM) J.MethodKey
+csMethodKey = MS.csMethod . jvmMethodKey
+
+csMethodName :: Getter (MS.CrucibleMethodSpecIR CJ.JVM) String
 csMethodName = MS.csMethod . jvmMethodName
 
 instance PPL.Pretty JVMMethodId where
-  pretty (JVMMethodId methName className) =
-    PPL.text (concat [J.unClassName className ,".", methName])
+  pretty (JVMMethodId methKey className) =
+    PPL.text (concat [J.unClassName className ,".", J.methodKeyName methKey])
 
 type instance MS.MethodId CJ.JVM = JVMMethodId
 
@@ -113,20 +122,25 @@ type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
 type instance MS.PointsTo CJ.JVM = JVMPointsTo
 
 data JVMPointsTo
-  = JVMPointsToField ProgramLoc (MS.SetupValue CJ.JVM) String (MS.SetupValue CJ.JVM)
+  = JVMPointsToField ProgramLoc (MS.SetupValue CJ.JVM) J.FieldId (MS.SetupValue CJ.JVM)
   | JVMPointsToElem ProgramLoc (MS.SetupValue CJ.JVM) Int (MS.SetupValue CJ.JVM)
+  | JVMPointsToArray ProgramLoc (MS.SetupValue CJ.JVM) TypedTerm
 
 ppPointsTo :: JVMPointsTo -> PPL.Doc
 ppPointsTo =
   \case
-    JVMPointsToField _loc ptr fld val ->
-      MS.ppSetupValue ptr <> PPL.text "." <> PPL.text fld
+    JVMPointsToField _loc ptr fid val ->
+      MS.ppSetupValue ptr <> PPL.text "." <> PPL.text (J.fieldIdName fid)
       PPL.<+> PPL.text "points to"
       PPL.<+> MS.ppSetupValue val
     JVMPointsToElem _loc ptr idx val ->
       MS.ppSetupValue ptr <> PPL.text "[" <> PPL.text (show idx) <> PPL.text "]"
       PPL.<+> PPL.text "points to"
       PPL.<+> MS.ppSetupValue val
+    JVMPointsToArray _loc ptr val ->
+      MS.ppSetupValue ptr
+      PPL.<+> PPL.text "points to"
+      PPL.<+> MS.ppTypedTerm val
 
 instance PPL.Pretty JVMPointsTo where
   pretty = ppPointsTo
@@ -158,7 +172,7 @@ initialDefCrucibleMethodSpecIR ::
   ProgramLoc ->
   MS.CrucibleMethodSpecIR CJ.JVM
 initialDefCrucibleMethodSpecIR cb cname method loc =
-  let methId = JVMMethodId (J.methodName method) cname
+  let methId = JVMMethodId (J.methodKey method) cname
       retTy = J.methodReturnType method
       argTys = thisType ++ J.methodParameterTypes method
   in MS.makeCrucibleMethodSpecIR methId argTys retTy loc cb
@@ -166,14 +180,14 @@ initialDefCrucibleMethodSpecIR cb cname method loc =
 
 initialCrucibleSetupState ::
   JVMCrucibleContext ->
-  J.Method ->
+  (J.Class, J.Method) ->
   ProgramLoc ->
   Setup.CrucibleSetupState CJ.JVM
-initialCrucibleSetupState cc method loc =
+initialCrucibleSetupState cc (cls, method) loc =
   Setup.makeCrucibleSetupState cc $
     initialDefCrucibleMethodSpecIR
       (cc ^. jccCodebase)
-      (J.className $ cc ^. jccJVMClass)
+      (J.className cls)
       method
       loc
 

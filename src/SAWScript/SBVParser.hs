@@ -142,7 +142,7 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
              -- Append bitvector components of result value in lsb order
              scAppendAll sc (reverse (zip results outSizes))
     where
-      -- | scMkOp :: (x :: Nat) -> bitvector x -> bitvector x -> bitvector x;
+      -- | scMkOp : (n : Nat) -> Vec n Bool -> Vec n Bool -> Vec n Bool;
       binop scMkOp [sbv1, sbv2] =
           do (size1, arg1) <- parseSBV sc nodes sbv1
              (size2, arg2) <- parseSBV sc nodes sbv2
@@ -150,7 +150,7 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
              s <- scNat sc size
              scMkOp sc s arg1 arg2
       binop _ _ = fail "parseSBVExpr: wrong number of arguments for binop"
-      -- | scMkRel :: (x :: Nat) -> bitvector x -> bitvector x -> Bool;
+      -- | scMkRel : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
       binrel scMkRel [sbv1, sbv2] =
           do (size1, arg1) <- parseSBV sc nodes sbv1
              (size2, arg2) <- parseSBV sc nodes sbv2
@@ -159,7 +159,7 @@ parseSBVExpr opts sc unint nodes size (SBV.SBVApp operator sbvs) =
              t <- scMkRel sc s arg1 arg2
              scBoolToBv1 sc t
       binrel _ _ = fail "parseSBVExpr: wrong number of arguments for binrel"
-      -- | scMkOp :: (x :: Nat) -> bitvector x -> Nat -> bitvector x;
+      -- | scMkOp : (n : Nat) -> Vec n Bool -> Nat -> Vec n Bool;
       shiftop scMkOp [sbv1, sbv2] =
           do (size1, arg1) <- parseSBV sc nodes sbv1
              (size2, arg2) <- parseSBV sc nodes sbv2
@@ -350,7 +350,7 @@ parseSBVPgm opts sc unint (SBV.SBVPgm (_version, irtype, revcmds, _vcs, _warning
 ----------------------------------------------------------------------
 -- New SharedContext operations; should eventually move to SharedTerm.hs.
 
--- | bv1ToBool :: bitvector 1 -> Bool
+-- | bv1ToBool : Vec 1 Bool -> Bool
 -- bv1ToBool x = bvAt 1 Bool 1 x (bv 1 0)
 scBv1ToBool :: SharedContext -> Term -> IO Term
 scBv1ToBool sc x =
@@ -360,7 +360,7 @@ scBv1ToBool sc x =
        bv <- scBvNat sc n1 n0
        scBvAt sc n1 b n1 x bv
 
--- | boolToBv1 :: Bool -> bitvector 1
+-- | boolToBv1 :: Bool -> Vec 1 Bool
 scBoolToBv1 :: SharedContext -> Term -> IO Term
 scBoolToBv1 sc x =
     do b <- scBoolType sc

@@ -38,12 +38,16 @@ retry() {
 }
 
 setup_dist_bins() {
-  is_exe "dist/bin" "saw" && is_exe "dist/bin" "jss" && is_exe "dist/bin" "saw-remote-api" && return
+  if $IS_WIN ; then
+    is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
+  else
+    is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && is_exe "dist/bin" "jss" && return
+    extract_exe "jss" "dist/bin"
+  fi
   extract_exe "saw" "dist/bin"
-  extract_exe "jss" "dist/bin"
   extract_exe "saw-remote-api" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
-  echo "::add-path::$PWD/dist/bin"
+  echo "$PWD/dist/bin" >> $GITHUB_PATH
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
   strip dist/bin/jss* || echo "Strip failed: Ignoring harmless error"
 }
@@ -107,11 +111,11 @@ install_yices() {
 
 install_yasm() {
   is_exe "$BIN" "yasm" && return
-  if [[ "$RUNNER_OS" = "Linux" ]]; then
-    sudo apt-get update -q && sudo apt-get install -y yasm
-  else
-    brew install yasm
-  fi
+  case "$RUNNER_OS" in
+    Linux) sudo apt-get update -q && sudo apt-get install -y yasm ;;
+    macOS) brew install yasm ;;
+    Windows) choco install yasm ;;
+  esac
 }
 
 build() {
@@ -119,11 +123,19 @@ build() {
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   echo "allow-newer: all" >> cabal.project.local
+  if $IS_WIN; then
+    echo "flags: -builtin-abc" >> cabal.project.local
+    echo "constraints: jvm-verifier -builtin-abc, cryptol-saw-core -build-css" >> cabal.project.local
+    pkgs="saw saw-remote-api"
+  else
+    pkgs="jss saw saw-remote-api"
+  fi
+  echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
-  if ! retry cabal v2-build "$@" jss saw saw-remote-api && [[ "$RUNNER_OS" == "macOS" ]]; then
+  if ! retry cabal v2-build "$@" $pkgs && [[ "$RUNNER_OS" == "macOS" ]]; then
     echo "Working around a dylib issue on macos by removing the cache and trying again"
     cabal v2-clean
-    retry cabal v2-build "$@" jss saw saw-remote-api
+    retry cabal v2-build "$@" $pkgs
   fi
 }
 
@@ -146,7 +158,7 @@ install_system_deps() {
   install_yasm &
   wait
   export PATH=$PWD/$BIN:$PATH
-  echo "::add-path::$PWD/$BIN"
+  echo "$PWD/$BIN" >> $GITHUB_PATH
   is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices && is_exe "$BIN" yasm
 }
 
@@ -186,7 +198,7 @@ find_java() {
   javac PropertiesTest.java
   RT_JAR="$(java PropertiesTest | tr : '\n' | grep rt.jar | head -n 1)"
   export RT_JAR
-  echo "::set-env name=RT_JAR::$RT_JAR"
+  echo "RT_JAR=$RT_JAR" >> $GITHUB_ENV
   rm PropertiesTest.class
   popd
 }

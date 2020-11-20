@@ -33,6 +33,7 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_precond
     , jvm_field_is
     , jvm_elem_is
+    , jvm_array_is
     , jvm_fresh_var
     , jvm_alloc_object
     , jvm_alloc_array
@@ -42,6 +43,7 @@ import           Control.Lens
 
 import           Control.Monad.State
 import qualified Control.Monad.State.Strict as Strict
+import           Control.Monad.Trans.Except (runExceptT)
 import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
 import           Data.Function
@@ -204,8 +206,8 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
      profFile <- rwProfilingFile <$> getTopLevelRW
      (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_jvm_verify" profFile
 
-     (_cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
-     let st0 = initialCrucibleSetupState cc method loc
+     (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
+     let st0 = initialCrucibleSetupState cc (cls', method) loc
 
      -- execute commands of the method spec
      io $ W4.setCurrentProgramLoc sym loc
@@ -250,9 +252,9 @@ crucible_jvm_unsafe_assume_spec bic opts cls nm setup =
      cb <- getJavaCodebase
      -- cls' is either cls or a subclass of cls
      pos <- getPosition
-     (_cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
+     (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let loc = SS.toW4Loc "_SAW_assume_spec" pos
-     let st0 = initialCrucibleSetupState cc method loc
+     let st0 = initialCrucibleSetupState cc (cls', method) loc
      ms <- (view Setup.csMethodSpec) <$> execStateT (runJVMSetupM setup) st0
      returnProof ms
 
@@ -335,8 +337,8 @@ verifyPrestate cc mspec globals0 =
      case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
        (Just _, Nothing) ->
             fail $ unlines
-              [ "Could not resolve return type of " ++ mspec ^. csMethodName
-              , "Raw type: " ++ show (mspec ^. MS.csRet)
+              [ "Return value specified, but method " ++ mspec ^. csMethodName ++
+                " has void return type"
               ]
        (Just sv, Just retTy) ->
          do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
@@ -433,14 +435,27 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
     doPointsTo :: Crucible.SymGlobalState Sym -> JVMPointsTo -> IO (Crucible.SymGlobalState Sym)
     doPointsTo mem pt =
       case pt of
-        JVMPointsToField _loc lhs fld rhs ->
+        JVMPointsToField _loc lhs fid rhs ->
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
-             CJ.doFieldStore sym mem lhs' fld (injectJVMVal sym rhs')
+             -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
+             -- Then we won't have to match the definition of 'fieldIdText' here.
+             let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
+             CJ.doFieldStore sym mem lhs' key (injectJVMVal sym rhs')
         JVMPointsToElem _loc lhs idx rhs ->
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
              CJ.doArrayStore sym mem lhs' idx (injectJVMVal sym rhs')
+        JVMPointsToArray _loc lhs rhs ->
+          do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+             lhs' <- resolveJVMRefVal lhs
+             (_ety, tts) <-
+               destVecTypedTerm sc rhs >>=
+               \case
+                 Nothing -> fail "setupPrePointsTos: not a monomorphic sequence type"
+                 Just x -> pure x
+             rhs' <- traverse (resolveSetupVal cc env tyenv nameEnv . MS.SetupTerm) tts
+             doEntireArrayStore sym mem lhs' (map (injectJVMVal sym) rhs')
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -497,6 +512,15 @@ doAlloc cc alloc =
 
 --------------------------------------------------------------------------------
 
+getMethodHandle :: CJ.JVMContext -> JVMMethodId -> IO CJ.JVMHandleInfo
+getMethodHandle jc (JVMMethodId mkey cname) =
+  case Map.lookup (cname, mkey) (CJ.methodHandles jc) of
+    Just handle -> return handle
+    Nothing ->
+      fail $
+      "BUG: cannot find handle for " ++ J.unClassName cname ++
+      "/" ++ J.methodKeyName mkey
+
 registerOverride ::
   Options ->
   JVMCrucibleContext ->
@@ -506,16 +530,12 @@ registerOverride ::
   Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc cs =
   do let sym = cc^.jccBackend
-     let cb = cc^.jccCodebase
      let jc = cc^.jccJVMContext
      let c0 = head cs
-     let cname = c0 ^. MS.csMethod . jvmClassName
-     let mname = c0 ^. csMethodName
-     let pos = SS.PosInternal "registerOverride"
+     let method = c0 ^. MS.csMethod
      sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
 
-     (mcls, meth) <- liftIO $ findMethod cb pos mname =<< lookupClass cb pos cname
-     mhandle <- liftIO $ CJ.findMethodHandle jc mcls meth
+     mhandle <- liftIO $ getMethodHandle jc method
      case mhandle of
        -- LLVMHandleInfo constructor has two existential type arguments,
        -- which are bound here. h :: FnHandle args' ret'
@@ -545,13 +565,9 @@ verifySimulate ::
   IO (Maybe (J.Type, JVMVal), Crucible.SymGlobalState Sym)
 verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
   do let jc = cc^.jccJVMContext
-     let cb = cc^.jccCodebase
      let sym = cc^.jccBackend
-     let cls = cc^.jccJVMClass
-     let cname = J.className cls
-     let mname = mspec ^. csMethodName
+     let method = mspec ^. MS.csMethod
      let verbosity = simVerbose opts
-     let pos = SS.PosInternal "verifySimulate"
      let halloc = cc^.jccHandleAllocator
 
      -- executeCrucibleJVM
@@ -561,11 +577,10 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
 
      CJ.setSimulatorVerbosity verbosity sym
 
-     (mcls, meth) <- findMethod cb pos mname =<< lookupClass cb pos cname
      --when (not (J.methodIsStatic meth)) $ do
      --  fail $ unlines [ "Crucible can only extract static methods" ]
 
-     (CJ.JVMHandleInfo _ h) <- CJ.findMethodHandle jc mcls meth
+     (CJ.JVMHandleInfo _ h) <- getMethodHandle jc method
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = pfs
@@ -707,6 +722,10 @@ setupCrucibleContext bic opts jclass =
      let gen = globalNonceGenerator
      sym <- io $ Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
+
+     -- TODO! there's a lot of options setup we need to replicate
+     --  from SAWScript.Crucible.LLVM.Builtins
+
      return JVMCrucibleContext { _jccJVMClass = jclass
                                , _jccCodebase = cb
                                , _jccBackend = sym
@@ -859,19 +878,23 @@ jvm_field_is ::
   JVMSetupM ()
 jvm_field_is _typed _bic _opt ptr fname val =
   JVMSetupM $
-  do loc <- SS.toW4Loc "jvm_field_is" <$> lift getPosition
+  do pos <- lift getPosition
+     loc <- SS.toW4Loc "jvm_field_is" <$> lift getPosition
      st <- get
      let rs = st ^. Setup.csResolvedState
+     let cc = st ^. Setup.csCrucibleContext
+     let cb = cc ^. jccCodebase
      let path = Left fname
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
        then fail $ "Multiple points-to preconditions on same pointer (field " ++ fname ++ ")"
        else Setup.csResolvedState %= MS.markResolved ptr [path]
-     -- let env = MS.csAllocations (st ^. Setup.csMethodSpec)
-     --     nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     -- ptrTy <- typeOfSetupValue cc env nameEnv ptr
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+     let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     ptrTy <- typeOfSetupValue cc env nameEnv ptr
      -- valTy <- typeOfSetupValue cc env nameEnv val
      --when typed (checkMemTypeCompatibility lhsTy valTy)
-     Setup.addPointsTo (JVMPointsToField loc ptr fname val)
+     fid <- either fail pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
+     Setup.addPointsTo (JVMPointsToField loc ptr fid val)
 
 jvm_elem_is ::
   Bool {- ^ whether to check type compatibility -} ->
@@ -893,6 +916,23 @@ jvm_elem_is _typed _bic _opt ptr idx val =
      -- let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      --     nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      Setup.addPointsTo (JVMPointsToElem loc ptr idx val)
+
+jvm_array_is ::
+  Bool {- ^ whether to check type compatibility -} ->
+  BuiltinContext ->
+  Options        ->
+  SetupValue {- ^ array reference -} ->
+  TypedTerm {- ^ array value -} ->
+  JVMSetupM ()
+jvm_array_is _typed _bic _opt ptr val =
+  JVMSetupM $
+  do loc <- SS.toW4Loc "jvm_array_is" <$> lift getPosition
+     st <- get
+     let rs = st ^. Setup.csResolvedState
+     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
+       then fail "Multiple points-to preconditions on same pointer"
+       else Setup.csResolvedState %= MS.markResolved ptr []
+     Setup.addPointsTo (JVMPointsToArray loc ptr val)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do

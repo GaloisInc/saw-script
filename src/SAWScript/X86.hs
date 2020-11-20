@@ -2,6 +2,7 @@
 {-# Language RankNTypes, TypeOperators #-}
 {-# Language PatternSynonyms #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE GADTs #-}
 module SAWScript.X86
   ( Options(..)
   , proof
@@ -43,7 +44,7 @@ import           Data.Maybe(mapMaybe)
 
 -- import Text.PrettyPrint.ANSI.Leijen(pretty)
 
-import Data.ElfEdit (Elf, parseElf, ElfGetResult(..))
+import qualified Data.ElfEdit as Elf
 
 import Data.Parameterized.Some(Some(..))
 import Data.Parameterized.Context(EmptyCtx,(::>),singleton)
@@ -259,19 +260,19 @@ data RelevantElf = RelevantElf
   }
 
 -- | Parse an elf file.
-getElf :: FilePath -> IO (Elf 64)
+getElf :: FilePath -> IO (Elf.ElfHeaderInfo 64)
 getElf path =
   do bs <- BS.readFile path
-     case parseElf bs of
-       Elf64Res [] e     -> return e
-       Elf64Res _ _      -> malformed "64-bit ELF input"
-       Elf32Res _ _      -> unsupported "32-bit ELF format"
-       ElfHeaderError {} -> malformed "Invalid ELF header"
+     case Elf.decodeElfHeaderInfo bs of
+       Right (Elf.SomeElf hdr)
+         | Elf.ELFCLASS64 <- Elf.headerClass (Elf.header hdr) -> pure hdr
+         | otherwise -> unsupported "32-bit ELF format"
+       Left _ -> malformed "Invalid ELF header"
 
 
 
 -- | Extract a Macaw "memory" from an ELF file and resolve symbols.
-getRelevant :: Elf 64 -> IO RelevantElf
+getRelevant :: Elf.ElfHeaderInfo 64 -> IO RelevantElf
 getRelevant elf =
   case (memoryForElf opts elf, memoryForElfAllSymbols opts elf) of
     (Left err, _) -> malformed err
@@ -341,6 +342,7 @@ loadGlobal elf (nm,n,u) =
                    is <- mapM readOne (addrsFor start)
                    return (sname, a, u, is)
 
+  err :: [Char] -> IO a
   err xs = fail $ unlines
                     [ "Failed to load global."
                     , "*** Global: " ++ show nm

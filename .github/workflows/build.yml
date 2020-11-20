@@ -43,6 +43,9 @@ jobs:
           - os: macos-latest
             ghc: "8.8.4"
             continue-on-error: true
+          - os: windows-latest
+            ghc: "8.6.5"
+            continue-on-error: true
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
@@ -77,6 +80,7 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh build_abc
+        if: runner.os != 'Windows'
 
       - shell: bash
         run: .github/ci.sh build
@@ -201,7 +205,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         ghc: ["8.8.4"]
     needs: [outputs, build]
     env:

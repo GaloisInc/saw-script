@@ -26,6 +26,7 @@ import Data.Maybe (mapMaybe)
 import Data.IORef
 import qualified Data.Map as Map
 import Data.Time.Clock
+import qualified Data.Text as Text
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Language.JVM.Common
@@ -40,6 +41,7 @@ import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.TypedAST (toShortName)
 import Verifier.SAW.CryptolEnv (schemaNoUser)
 
 import qualified SAWScript.CongruenceClosure as CC
@@ -56,9 +58,9 @@ import SAWScript.Proof
 import SAWScript.Utils
 import SAWScript.Value as SS
 
-import qualified Cryptol.Eval.Monad as Cryptol (runEval)
+import qualified Cryptol.Backend.Monad as Cryptol (runEval)
 import qualified Cryptol.Eval.Value as Cryptol (ppValue)
-import qualified Cryptol.Eval.Concrete.Value as Cryptol (Concrete(..))
+import qualified Cryptol.Eval.Concrete as Cryptol (Concrete(..))
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
@@ -327,7 +329,7 @@ mkMixedExpr t = do
   sc <- lift getSharedContext
   let exts = getAllExts t
       extNames = map ecName exts
-  jes <- mapM (getJavaExpr "mkMixedExpr") extNames
+  jes <- mapM (getJavaExpr "mkMixedExpr" . Text.unpack . toShortName) extNames -- TODO?????
   fn <- liftIO $ scAbstractExts sc exts t
   return $ LE $ LogicExpr fn (map fst jes)
 

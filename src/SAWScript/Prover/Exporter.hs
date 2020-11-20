@@ -40,7 +40,9 @@ import Control.Monad.Except (runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
-import qualified Data.Map as Map
+import qualified Data.ByteString as BS
+import Data.Parameterized.Nonce (globalNonceGenerator)
+import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import qualified Data.ByteString as BS
 import System.IO
@@ -193,13 +195,13 @@ write_cnf sc f (TypedTerm schema t) = do
 -- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
 -- assumed to have universally quantified variables, it will be negated.
 writeSMTLib2 :: SharedContext -> FilePath -> Prop -> IO ()
-writeSMTLib2 sc f p = writeUnintSMTLib2 [] sc f p
+writeSMTLib2 sc f p = writeUnintSMTLib2 mempty sc f p
 
 -- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
 -- assumed to have universally quantified variables, it will be negated.
 -- This version uses What4 instead of SBV.
 writeSMTLib2What4 :: SharedContext -> FilePath -> Prop -> IO ()
-writeSMTLib2What4 sc f p = writeUnintSMTLib2What4 [] sc f p
+writeSMTLib2What4 sc f p = writeUnintSMTLib2What4 mempty sc f p
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
@@ -219,14 +221,14 @@ write_smtlib2_w4 :: SharedContext -> FilePath -> TypedTerm -> IO ()
 write_smtlib2_w4 sc f (TypedTerm schema t) = do
   checkBooleanSchema schema
   p <- predicateToProp sc Existential [] t
-  writeUnintSMTLib2What4 [] sc f p
+  writeUnintSMTLib2What4 mempty sc f p
 
 -- | Write a proposition to an SMT-Lib version 2 file, treating some
 -- constants as uninterpreted. Because @Prop@ is assumed to have
 -- universally quantified variables, it will be negated.
-writeUnintSMTLib2 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
-writeUnintSMTLib2 unints sc f p =
-  do (_, _, l) <- prepNegatedSBV sc unints p
+writeUnintSMTLib2 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> IO ()
+writeUnintSMTLib2 unintSet sc f p =
+  do (_, _, l) <- prepNegatedSBV sc unintSet p
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
      writeFile f txt
@@ -235,7 +237,7 @@ writeUnintSMTLib2 unints sc f p =
 -- constants as uninterpreted. Because @Prop@ is assumed to have
 -- universally quantified variables, it will be negated. This version
 -- uses What4 instead of SBV.
-writeUnintSMTLib2What4 :: [String] -> SharedContext -> FilePath -> Prop -> IO ()
+writeUnintSMTLib2What4 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> IO ()
 writeUnintSMTLib2What4 unints sc f (Prop term) =
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
      (_, _, (_,lit0)) <- prepWhat4 sym sc unints term
@@ -253,13 +255,13 @@ write_verilog path t = do
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
   sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
-  (_, (_, bval)) <- W4Sim.w4EvalAny sym sc Map.empty [] t
+  (_, (_, bval)) <- W4Sim.w4EvalAny sym sc mempty mempty t
   edoc <- runExceptT $
     case bval of
       Sim.VBool b -> exprVerilog sym b "f"
       Sim.VWord (W4Sim.DBV w) -> exprVerilog sym w "f"
       --Sim.VPair u v -> undefined
-      Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> eqVerilog sym x y "f"
+      --Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> eqVerilog sym x y "f"
       _ -> throwError $ "write_verilog: unsupported result type: " ++ show bval
   case edoc of
     Left err -> do

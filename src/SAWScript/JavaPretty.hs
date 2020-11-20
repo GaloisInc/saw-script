@@ -61,10 +61,12 @@ prettyField f = hsep $
 
 prettyMethod :: Method -> Doc
 prettyMethod m =
-  hsep [ maybe (text "void") prettyType ret
-       , text name
-       , (parens . commas . map prettyType) params
-       ]
+  hsep $
+  (if methodIsStatic m then [text "static"] else []) ++
+  [ maybe (text "void") prettyType ret
+  , text name
+  , (parens . commas . map prettyType) params
+  ]
   where (MethodKey name params ret) = methodKey m
         prettyType = text . show . ppType -- TODO: Ick.
 

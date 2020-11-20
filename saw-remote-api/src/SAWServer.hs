@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -27,7 +28,11 @@ import System.IO.Silently (silence)
 
 import qualified Cryptol.Parser.AST as P
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema)
+#if USE_BUILTIN_ABC
 import qualified Data.ABC.GIA as GIA
+#else
+import qualified Data.AIG as AIG
+#endif
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
 import qualified Lang.Crucible.JVM.Types as CJ
@@ -177,7 +182,11 @@ initialState readFile =
                 , roOptions = defaultOptions
                 , roHandleAlloc = halloc
                 , roPosition = PosInternal "SAWServer"
+#if USE_BUILTIN_ABC
                 , roProxy = AIGProxy GIA.proxy
+#else
+                , roProxy = AIGProxy AIG.basicProxy
+#endif
                 }
          rw = TopLevelRW
                 { rwValues = mempty

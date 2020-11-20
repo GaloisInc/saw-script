@@ -103,11 +103,11 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           System.IO
-
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType, ppSymbol)
 import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import           Text.URI
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
 -- parameterized-utils
@@ -132,6 +132,7 @@ import qualified What4.Expr.Builder as W4
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
+import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.CFG.Core as Crucible
 import qualified Lang.Crucible.CFG.Extension as Crucible
@@ -269,7 +270,7 @@ crucible_llvm_verify ::
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_verify bic opts (Some lm) nm lemmas checkSat setup tactic =
   do lemmas' <- checkModuleCompatibility lm lemmas
-     withMethodSpec bic opts lm nm setup $ \cc method_spec ->
+     withMethodSpec bic opts checkSat lm nm setup $ \cc method_spec ->
        do (res_method_spec, _) <- verifyMethodSpec bic opts cc method_spec lemmas' checkSat tactic Nothing
           returnProof $ SomeLLVM res_method_spec
 
@@ -281,7 +282,7 @@ crucible_llvm_unsafe_assume_spec ::
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_unsafe_assume_spec bic opts (Some lm) nm setup =
-  withMethodSpec bic opts lm nm setup $ \_ method_spec ->
+  withMethodSpec bic opts False lm nm setup $ \_ method_spec ->
   do printOutLnTop Info $
        unwords ["Assume override", (method_spec ^. csName)]
      returnProof $ SomeLLVM method_spec
@@ -298,10 +299,26 @@ crucible_llvm_array_size_profile ::
 crucible_llvm_array_size_profile assume bic opts (Some lm) nm lemmas setup = do
   cell <- io $ newIORef (Map.empty :: Map Text.Text [Crucible.FunctionProfile])
   lemmas' <- checkModuleCompatibility lm lemmas
-  withMethodSpec bic opts lm nm setup $ \cc ms -> do
+  withMethodSpec bic opts False lm nm setup $ \cc ms -> do
     void . verifyMethodSpec bic opts cc ms lemmas' True assume $ Just cell
     profiles <- io $ readIORef cell
     pure . fmap (\(fnm, prof) -> (Text.unpack fnm, prof)) $ Map.toList profiles
+
+llvmURI :: String -> URI
+llvmURI symbol_name =
+  fromMaybe (error $ unwords ["mkLLVMName", "Could not create LLVM symbol name", symbol_name]) $
+  do sch <- mkScheme "llvm"
+     p   <- mkPathPiece (Text.pack symbol_name)
+     pure URI
+       { uriScheme = Just sch
+       , uriAuthority = Left True -- absolute path
+       , uriPath = Just (False, p NE.:| [])
+       , uriQuery = []
+       , uriFragment = Nothing
+       }
+
+llvmNameInfo :: String -> NameInfo
+llvmNameInfo symbol_name = ImportedName (llvmURI symbol_name) [ Text.pack symbol_name ]
 
 crucible_llvm_compositional_extract ::
   BuiltinContext ->
@@ -310,13 +327,13 @@ crucible_llvm_compositional_extract ::
   String ->
   String ->
   [SomeLLVM MS.CrucibleMethodSpecIR] ->
-  Bool ->
+  Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
   ProofScript SatResult ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas checkSat setup tactic =
   do lemmas' <- checkModuleCompatibility lm lemmas
-     withMethodSpec bic opts lm nm setup $ \cc method_spec ->
+     withMethodSpec bic opts checkSat lm nm setup $ \cc method_spec ->
        do let value_input_parameters = mapMaybe
                 (\(_, setup_value) -> setupValueAsExtCns setup_value)
                 (Map.elems $ method_spec ^. MS.csArgBindings)
@@ -372,8 +389,10 @@ crucible_llvm_compositional_extract bic opts (Some lm) nm func_name lemmas check
           when ([] /= getAllExts extracted_func) $
             fail "Non-functional simulation summary."
 
+          let nmi = llvmNameInfo func_name
+
           extracted_func_const <-
-            io $ scConstant shared_context func_name extracted_func
+            io $ scConstant' shared_context nmi extracted_func
             =<< scTypeOf shared_context extracted_func
           input_terms <- io $ traverse (scExtCns shared_context) input_parameters
           applied_extracted_func <- io $ scApplyAll shared_context extracted_func_const input_terms
@@ -447,13 +466,14 @@ checkModuleCompatibility llvmModule = foldM step []
 withMethodSpec ::
   BuiltinContext   ->
   Options          ->
+  Bool {- ^ path sat -} ->
   LLVMModule arch ->
   String            {- ^ Name of the function -} ->
   LLVMCrucibleSetupM () {- ^ Boundary specification -} ->
   ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
    LLVMCrucibleContext arch -> MS.CrucibleMethodSpecIR (LLVM arch) -> TopLevel a) ->
   TopLevel a
-withMethodSpec bic opts lm nm setup action =
+withMethodSpec bic opts pathSat lm nm setup action =
   do (nm', parent) <- resolveSpecName nm
      let edef = findDefMaybeStatic (modAST lm) nm'
      let edecl = findDecl (modAST lm) nm'
@@ -468,7 +488,7 @@ withMethodSpec bic opts lm nm setup action =
 
      Crucible.llvmPtrWidth (mtrans ^. Crucible.transContext) $ \_ ->
        fmap NE.head $ forM defOrDecls $ \defOrDecl ->
-         setupLLVMCrucibleContext bic opts lm $ \cc ->
+         setupLLVMCrucibleContext bic opts pathSat lm $ \cc ->
            do let sym = cc^.ccBackend
 
               pos <- getPosition
@@ -650,8 +670,8 @@ checkSpecReturnType cc mspec =
   case (mspec ^. MS.csRetValue, mspec ^. MS.csRet) of
     (Just _, Nothing) ->
          throwMethodSpec mspec $ unlines
-           [ "Could not resolve return type of " ++ mspec ^. csName
-           , "Raw type: " ++ show (mspec ^. MS.csRet)
+           [ "Return value specified, but function " ++ mspec ^. csName ++
+             " has void return type"
            ]
     (Just sv, Just retTy) ->
       do retTy' <-
@@ -1204,11 +1224,12 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 setupLLVMCrucibleContext ::
   BuiltinContext ->
   Options ->
+  Bool {- ^ enable path sat checking -} ->
   LLVMModule arch ->
   ((?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
    LLVMCrucibleContext arch -> TopLevel a) ->
   TopLevel a
-setupLLVMCrucibleContext bic opts lm action =
+setupLLVMCrucibleContext bic opts pathSat lm action =
   do halloc <- getHandleAlloc
      let llvm_mod = modAST lm
      let mtrans = modTrans lm
@@ -1233,6 +1254,10 @@ setupLLVMCrucibleContext bic opts lm action =
 
                cacheTermsSetting <- W4.getOptionSetting W4.cacheTerms cfg
                _ <- W4.setOpt cacheTermsSetting what4HashConsing
+
+               -- enable online solver interactions if path sat checking is on
+               enableOnlineSetting <- W4.getOptionSetting Crucible.enableOnlineBackend cfg
+               _ <- W4.setOpt enableOnlineSetting pathSat
 
                W4.extendConfig
                  [ W4.opt
@@ -1339,10 +1364,9 @@ setupArg sc sym ecRef tp =
       fail $ unwords ["Crucible extraction currently only supports Crucible base types", show tp]
   where
     freshGlobal cty sc_tp =
-      do i     <- scFreshGlobalVar sc
-         ecs   <- readIORef ecRef
+      do ecs <- readIORef ecRef
          let len = Seq.length ecs
-         let ec = EC i ("arg_"++show len) sc_tp
+         ec <- scFreshEC sc ("arg_"++show len) sc_tp
          writeIORef ecRef (ecs Seq.|> TypedExtCns cty ec)
          scFlatTermF sc (ExtCns ec)
 
@@ -1447,7 +1471,7 @@ crucible_llvm_extract bic opts (Some lm) fn_name =
             when (any L.isAlias defTypes) $
               throwTopLevel "Type aliases are not supported by `crucible_llvm_extract`."
        Left err -> throwTopLevel (displayVerifExceptionOpts opts err)
-     setupLLVMCrucibleContext bic opts lm $ \cc ->
+     setupLLVMCrucibleContext bic opts False lm $ \cc ->
        case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
          Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
          Just (_,cfg) -> io $ extractFromLLVMCFG opts (biSharedContext bic) cc cfg
@@ -1461,7 +1485,7 @@ crucible_llvm_cfg ::
 crucible_llvm_cfg bic opts (Some lm) fn_name =
   do let ctx = modTrans lm ^. Crucible.transContext
      let ?lc = ctx^.Crucible.llvmTypeCtx
-     setupLLVMCrucibleContext bic opts lm $ \cc ->
+     setupLLVMCrucibleContext bic opts False lm $ \cc ->
        case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
          Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
          Just (_,cfg) -> return (LLVM_CFG cfg)
@@ -1945,14 +1969,15 @@ crucible_points_to typed bic opt =
   crucible_points_to_internal bic opt typed Nothing
 
 crucible_conditional_points_to ::
+  Bool {- ^ whether to check type compatibility -} ->
   BuiltinContext ->
   Options ->
   TypedTerm ->
   AllLLVM SetupValue ->
   AllLLVM SetupValue ->
   LLVMCrucibleSetupM ()
-crucible_conditional_points_to bic opt cond =
-  crucible_points_to_internal bic opt True (Just cond)
+crucible_conditional_points_to typed bic opt cond =
+  crucible_points_to_internal bic opt typed (Just cond)
 
 crucible_points_to_internal ::
   BuiltinContext ->

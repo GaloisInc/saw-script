@@ -35,9 +35,12 @@ import qualified Data.ByteString.Lazy.UTF8 as B
 import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Maybe
 import Data.Time.Clock
 import Data.Typeable
+import qualified Data.Text as Text
 import System.Directory
 import qualified System.Environment
 import qualified System.Exit as Exit
@@ -107,10 +110,10 @@ import qualified Cryptol.TypeCheck.Solve as C (defaultReplExpr)
 import qualified Cryptol.TypeCheck.Solver.SMT as C (withSolver)
 import qualified Cryptol.TypeCheck.Solver.InfNat as C (Nat'(..))
 import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst)
-import qualified Cryptol.Eval.Monad as C (runEval)
+import qualified Cryptol.Backend.Monad as C (runEval)
 import qualified Cryptol.Eval.Type as C (evalType)
 import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
-import qualified Cryptol.Eval.Concrete.Value as C (Concrete(..), bvVal)
+import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
 import qualified Cryptol.Utils.Ident as C (packIdent, packModName)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 import Cryptol.Utils.PP (pretty)
@@ -457,7 +460,10 @@ print_goal_depth n =
 printGoalConsts :: ProofScript ()
 printGoalConsts =
   withFirstGoal $ \goal ->
-  do mapM_ (printOutLnTop Info) $ Map.keys (getConstantSet (unProp (goalProp goal)))
+  do mapM_ (printOutLnTop Info) $
+       [ show nm
+       | (_,(nm,_,_)) <- Map.toList (getConstantSet (unProp (goalProp goal)))
+       ]
      return ((), mempty, Just goal)
 
 printGoalSize :: ProofScript ()
@@ -468,12 +474,51 @@ printGoalSize =
      printOutLnTop Info $ "Goal unshared size: " ++ show (scTreeSize t)
      return ((), mempty, Just goal)
 
+resolveNames :: [String] -> TopLevel (Set VarIndex)
+resolveNames nms =
+  do sc <- getSharedContext
+     Set.fromList <$> mapM (resolveName sc) nms
+
+-- | Given a user-provided name, resolve it to some
+--   'ExtCns' that represents an unfoldable 'Constant'
+--   value or a fresh uninterpreted constant.
+--
+--   We first attempt to find the name in the local Cryptol
+--   environment; if the name is found, attempt to resolve it to
+--   an 'ExtCns' in the SAWCore environment.  If the given name
+--   does not resolve to a cryptol value in the current environment that
+--  maps to an 'ExtCns', then instead directly look it up
+--  in the SAWCore naming environment.  If both stages
+--  fail, then throw an exception.
+resolveName :: SharedContext -> String -> TopLevel VarIndex
+resolveName sc nm =
+  do cenv <- rwCryptol <$> getTopLevelRW
+     let ?fileReader = StrictBS.readFile
+     res <- io $ CEnv.resolveIdentifier cenv tnm
+     case res of
+       Just cnm ->
+         do importedName <- io $ Cryptol.importName cnm
+            case importedName of
+              ImportedName uri _ ->
+                do resolvedName <- io $ scResolveNameByURI sc uri
+                   case resolvedName of
+                     Just vi -> pure vi
+                     Nothing -> fallback
+              _ -> fallback
+       Nothing -> fallback
+
+ where
+ tnm = Text.pack nm
+ fallback = fst <$> io (scResolveUnambiguous sc tnm)
+
+
 unfoldGoal :: [String] -> ProofScript ()
-unfoldGoal names =
+unfoldGoal unints =
   withFirstGoal $ \goal ->
   do sc <- getSharedContext
+     unints' <- mapM (resolveName sc) unints
      let Prop trm = goalProp goal
-     trm' <- io $ scUnfoldConstants sc names trm
+     trm' <- io $ scUnfoldConstants sc unints' trm
      return ((), mempty, Just (goal { goalProp = Prop trm' }))
 
 simplifyGoal :: Simpset -> ProofScript ()
@@ -488,10 +533,11 @@ goal_eval :: [String] -> ProofScript ()
 goal_eval unints =
   withFirstGoal $ \goal ->
   do sc <- getSharedContext
+     unintSet <- resolveNames unints
      t0 <- liftIO $ propToPredicate sc (goalProp goal)
      let gen = globalNonceGenerator
      sym <- liftIO $ Crucible.newSAWCoreBackend FloatRealRepr sc gen
-     (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym sc Map.empty unints t0
+     (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym sc Map.empty unintSet t0
      t1 <- liftIO $ Crucible.toSC sym p
      t2 <- liftIO $ scEqTrue sc t1
      return ((), mempty, Just (goal { goalProp = Prop t2 }))
@@ -682,11 +728,11 @@ writeSAIGComputedPrim f t n = do
 proveRME :: ProofScript SV.SatResult
 proveRME = wrapProver Prover.proveRME
 
-codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> IO ()
+codegenSBV :: SharedContext -> FilePath -> [String] -> String -> TypedTerm -> TopLevel ()
 codegenSBV sc path unints fname (TypedTerm _schema t) =
-  SBVSim.sbvCodeGen sc mempty unints mpath fname t
-  where mpath = if null path then Nothing else Just path
-
+  do unintSet <- resolveNames unints
+     let mpath = if null path then Nothing else Just path
+     io $ SBVSim.sbvCodeGen sc mempty unintSet mpath fname t
 
 -- | Bit-blast a proposition and check its validity using SBV.
 -- (Currently ignores satisfying assignments.)
@@ -699,18 +745,15 @@ proveSBV conf = proveUnintSBV conf []
 proveUnintSBV :: SBV.SMTConfig -> [String] -> ProofScript SV.SatResult
 proveUnintSBV conf unints =
   do timeout <- psTimeout <$> get
-     wrapProver (Prover.proveUnintSBV conf unints timeout)
+     unintSet <- lift $ resolveNames unints
+     wrapProver (Prover.proveUnintSBV conf unintSet timeout)
 
-
-
-wrapProver ::
-  ( SharedContext ->
-    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
-  ProofScript SV.SatResult
-wrapProver f = do
-  sc <- lift $ SV.getSharedContext
-  withFirstGoal $ \g -> do
-
+applyProverToGoal :: (SharedContext
+                      -> Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats))
+                     -> SharedContext
+                     -> ProofGoal
+                     -> TopLevel (SV.SatResult, SolverStats, Maybe ProofGoal)
+applyProverToGoal f sc g = do
   (mb, stats) <- io $ f sc (goalProp g)
 
   let nope r = do ft <- io $ scEqTrue sc =<< scApplyPrelude_False sc
@@ -720,13 +763,41 @@ wrapProver f = do
     Nothing -> return (SV.Unsat stats, stats, Nothing)
     Just a  -> nope (SV.SatMulti stats a)
 
-wrapW4Prover ::
-  ( SharedContext -> Bool ->
+
+
+wrapProver ::
+  ( SharedContext ->
     Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
   ProofScript SV.SatResult
-wrapW4Prover f = do
+wrapProver f = do
+  sc <- lift $ SV.getSharedContext
+  withFirstGoal (applyProverToGoal f sc)
+
+
+wrapW4Prover ::
+  ( Set VarIndex -> SharedContext -> Bool ->
+    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  [String] ->
+  ProofScript SV.SatResult
+wrapW4Prover f unints = do
   hashConsing <- lift $ gets SV.rwWhat4HashConsing
-  wrapProver $ \sc -> f sc hashConsing
+  unintSet <- lift $ resolveNames unints
+  wrapProver $ \sc -> f unintSet sc hashConsing
+
+wrapW4ProveExporter ::
+  ( Set VarIndex -> SharedContext -> Bool -> FilePath ->
+    Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats)) ->
+  [String] ->
+  String ->
+  String ->
+  ProofScript SV.SatResult
+wrapW4ProveExporter f unints path ext = do
+  hashConsing <- lift $ gets SV.rwWhat4HashConsing
+  sc <- lift $ SV.getSharedContext
+  unintSet <- lift $ resolveNames unints
+  withFirstGoal $ \g -> do
+    let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
+    applyProverToGoal (\s -> f unintSet s hashConsing file) sc g
 
 --------------------------------------------------
 proveABC_SBV :: ProofScript SV.SatResult
@@ -765,31 +836,43 @@ proveUnintYices = proveUnintSBV SBV.yices
 
 --------------------------------------------------
 w4_abc :: ProofScript SV.SatResult
-w4_abc = wrapW4Prover $ Prover.proveWhat4_abc []
+w4_abc = wrapW4Prover Prover.proveWhat4_abc []
 
 w4_boolector :: ProofScript SV.SatResult
-w4_boolector = wrapW4Prover $ Prover.proveWhat4_boolector []
+w4_boolector = wrapW4Prover Prover.proveWhat4_boolector []
 
 w4_z3 :: ProofScript SV.SatResult
-w4_z3 = wrapW4Prover $ Prover.proveWhat4_z3 []
+w4_z3 = wrapW4Prover Prover.proveWhat4_z3 []
 
 w4_cvc4 :: ProofScript SV.SatResult
-w4_cvc4 = wrapW4Prover $ Prover.proveWhat4_cvc4 []
+w4_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4 []
 
 w4_yices :: ProofScript SV.SatResult
-w4_yices = wrapW4Prover $ Prover.proveWhat4_yices []
+w4_yices = wrapW4Prover Prover.proveWhat4_yices []
 
 w4_unint_boolector :: [String] -> ProofScript SV.SatResult
-w4_unint_boolector = wrapW4Prover . Prover.proveWhat4_boolector
+w4_unint_boolector = wrapW4Prover Prover.proveWhat4_boolector
 
 w4_unint_z3 :: [String] -> ProofScript SV.SatResult
-w4_unint_z3 = wrapW4Prover . Prover.proveWhat4_z3
+w4_unint_z3 = wrapW4Prover Prover.proveWhat4_z3
 
 w4_unint_cvc4 :: [String] -> ProofScript SV.SatResult
-w4_unint_cvc4 = wrapW4Prover . Prover.proveWhat4_cvc4
+w4_unint_cvc4 = wrapW4Prover Prover.proveWhat4_cvc4
 
 w4_unint_yices :: [String] -> ProofScript SV.SatResult
-w4_unint_yices = wrapW4Prover . Prover.proveWhat4_yices
+w4_unint_yices = wrapW4Prover Prover.proveWhat4_yices
+
+offline_w4_unint_z3 :: [String] -> String -> ProofScript SV.SatResult
+offline_w4_unint_z3 unints path =
+     wrapW4ProveExporter Prover.proveExportWhat4_z3 unints path ".smt2"
+
+offline_w4_unint_cvc4 :: [String] -> String -> ProofScript SV.SatResult
+offline_w4_unint_cvc4 unints path =
+     wrapW4ProveExporter Prover.proveExportWhat4_cvc4 unints path ".smt2"
+
+offline_w4_unint_yices :: [String] -> String -> ProofScript SV.SatResult
+offline_w4_unint_yices unints path =
+     wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
 
 proveWithExporter ::
   (SharedContext -> FilePath -> Prop -> IO ()) ->
@@ -826,7 +909,9 @@ w4_offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
 w4_offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2What4 path ".smt2"
 
 offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript SV.SatResult
-offline_unint_smtlib2 unints path = proveWithExporter (Prover.writeUnintSMTLib2 unints) path ".smt2"
+offline_unint_smtlib2 unints path =
+  do unintSet <- lift $ resolveNames unints
+     proveWithExporter (Prover.writeUnintSMTLib2 unintSet) path ".smt2"
 
 offline_verilog :: FilePath -> ProofScript SV.SatResult
 offline_verilog path =
@@ -944,9 +1029,10 @@ rewritePrim ss (TypedTerm schema t) = do
   return (TypedTerm schema t')
 
 unfold_term :: [String] -> TypedTerm -> TopLevel TypedTerm
-unfold_term names (TypedTerm schema t) = do
+unfold_term unints (TypedTerm schema t) = do
   sc <- getSharedContext
-  t' <- io $ scUnfoldConstants sc names t
+  unints' <- mapM (resolveName sc) unints
+  t' <- io $ scUnfoldConstants sc unints' t
   return (TypedTerm schema t')
 
 beta_reduce_term :: TypedTerm -> TopLevel TypedTerm

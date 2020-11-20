@@ -41,7 +41,7 @@ import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
 import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
-import System.FilePath (takeDirectory)
+import System.FilePath (takeDirectory, hasDrive, (</>))
 import System.Process (readProcess)
 
 import qualified SAWScript.AST as SS
@@ -90,15 +90,17 @@ import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
 -- Cryptol
 import Cryptol.ModuleSystem.Env (meSolverConfig)
 import qualified Cryptol.Eval as V (PPOpts(..))
-import qualified Cryptol.Eval.Monad as V (runEval)
+import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
-import qualified Cryptol.Eval.Concrete.Value as V (Concrete(..))
+import qualified Cryptol.Eval.Concrete as V (Concrete(..))
 
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
 
 import SAWScript.AutoMatch
 
 import qualified Lang.Crucible.FunctionHandle as Crucible
+
+import SAWScript.VerificationSummary
 
 -- Environment -----------------------------------------------------------------
 
@@ -345,11 +347,28 @@ interpretStmt printBinds stmt =
     SS.StmtTypedef _ name ty   -> do rw <- getTopLevelRW
                                      putTopLevelRW $ addTypedef (getVal name) ty rw
 
+writeVerificationSummary :: TopLevel ()
+writeVerificationSummary = do
+  do values <- rwProofs <$> getTopLevelRW
+     let jspecs  = [ s | VJVMMethodSpec s <- values ]
+         lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
+         thms    = [ t | VTheorem t <- values ]
+         summary = computeVerificationSummary jspecs lspecs thms
+     opts <- roOptions <$> getTopLevelRO
+     dir <- roInitWorkDir <$> getTopLevelRO
+     case summaryFile opts of
+       Nothing -> return ()
+       Just f ->
+         let f' = if hasDrive f then f else dir </> f
+          in io $ writeFile f' $ prettyVerificationSummary summary
+
+
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
   opts <- getOptions
   stmts <- io $ SAWScript.Import.loadFile opts file
   mapM_ stmtWithPrint stmts
+  writeVerificationSummary
   where
     stmtWithPrint s = do let withPos str = unlines $
                                            ("[output] at " ++ show (SS.getPos s) ++ ": ") :
@@ -400,6 +419,7 @@ buildTopLevelEnv proxy opts =
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
+       currDir <- getCurrentDirectory
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
                    { roSharedContext = sc
@@ -408,6 +428,7 @@ buildTopLevelEnv proxy opts =
                    , roHandleAlloc = halloc
                    , roPosition = SS.Unknown
                    , roProxy = proxy
+                   , roInitWorkDir = currDir
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -1372,6 +1393,30 @@ primitives = Map.fromList
     ]
   -}
 
+  , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript SatResult"
+    (pureVal offline_w4_unint_z3)
+    Current
+    [ "Write the current goal to the given file using What4 (Z3 backend) in"
+    ," SMT-Lib2 format. Leave the given list of names, as defined with"
+    , "'define', as uninterpreted."
+    ]
+
+  , prim "offline_w4_unint_yices" "[String] -> String -> ProofScript SatResult"
+    (pureVal offline_w4_unint_yices)
+    Current
+    [ "Write the current goal to the given file using What4 (Yices backend) in"
+    ," SMT-Lib2 format. Leave the given list of names, as defined with"
+    , "'define', as uninterpreted."
+    ]
+
+  , prim "offline_w4_unint_cvc4"  "[String] -> String -> ProofScript SatResult"
+    (pureVal offline_w4_unint_cvc4)
+    Current
+    [ "Write the current goal to the given file using What4 (CVC4 backend) in"
+    ," SMT-Lib2 format. Leave the given list of names, as defined with"
+    , "'define', as uninterpreted."
+    ]
+
   , prim "split_goal"          "ProofScript ()"
     (pureVal split_goal)
     Experimental
@@ -2139,7 +2184,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
-    (bicVal crucible_conditional_points_to)
+    (bicVal (crucible_conditional_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (second"
     , "argument) contains the given value (third argument) if the given"
@@ -2157,6 +2202,14 @@ primitives = Map.fromList
     [ "A variant of crucible_points_to that does not check for compatibility"
     , "between the pointer type and the value type. This may be useful when"
     , "reading or writing a prefix of larger array, for example."
+    ]
+
+  , prim "crucible_conditional_points_to_untyped" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal (crucible_conditional_points_to False))
+    Current
+    [ "A variant of crucible_conditional_points_to that does not check for"
+    , "compatibility between the pointer type and the value type. This may"
+    , "be useful when reading or writing a prefix of larger array, for example."
     ]
 
   , prim "crucible_points_to_array_prefix" "SetupValue -> Term -> Term -> CrucibleSetup ()"
@@ -2418,6 +2471,18 @@ primitives = Map.fromList
     Experimental
     [ "Declare that the indicated array (first argument) has an element"
     , "(second argument) containing the given value (third argument)."
+    , ""
+    , "In the pre-state section (before jvm_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after jvm_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "jvm_array_is" "JVMValue -> Term -> JVMSetup ()"
+    (bicVal (jvm_array_is True))
+    Experimental
+    [ "Declare that the indicated array reference (first argument) contains"
+    , "the given sequence of values (second argument)."
     , ""
     , "In the pre-state section (before jvm_execute_func) this specifies"
     , "the initial memory layout before function execution. In the post-state"
