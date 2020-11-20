@@ -20,12 +20,12 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Numeric.Natural (Natural)
 
+import Prettyprinter hiding (Doc)
+
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Term.Pretty
-
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 -- | Finite types that can be encoded as bits for a SAT/SMT solver.
 data FiniteType

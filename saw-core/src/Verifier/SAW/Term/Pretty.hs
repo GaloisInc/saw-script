@@ -15,7 +15,8 @@ Portability : non-portable (language extensions)
 -}
 
 module Verifier.SAW.Term.Pretty
-  ( PPOpts(..)
+  ( Doc
+  , PPOpts(..)
   , defaultPPOpts
   , depthPPOpts
   , ppNat
@@ -30,6 +31,7 @@ module Verifier.SAW.Term.Pretty
   , OccurrenceMap
   , shouldMemoizeTerm
   , ppName
+  , text, char, integer
   ) where
 
 import Data.Maybe (isJust)
@@ -40,10 +42,12 @@ import Data.Foldable (Foldable)
 #endif
 import qualified Data.Foldable as Fold
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Vector as V
 import Numeric (showIntAtBase)
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
-import qualified Text.PrettyPrint.ANSI.Leijen as PPL ((<$>))
+import Prettyprinter hiding (Doc)
+import qualified Prettyprinter (Doc)
+import Prettyprinter.Render.Terminal
 import Text.URI
 
 import Data.IntMap.Strict (IntMap)
@@ -51,6 +55,7 @@ import qualified Data.IntMap.Strict as IntMap
 
 import Verifier.SAW.Term.Functor
 
+type Doc = Prettyprinter.Doc AnsiStyle
 
 --------------------------------------------------------------------------------
 -- * Pretty-Printing Options and Precedences
@@ -199,12 +204,12 @@ instance MonadReader PPState PPM where
   ask = PPM ask
   local f (PPM m) = PPM $ local f m
 
--- | Color a document, using the supplied function (1st argument), if the
+-- | Color a document, using the supplied style (1st argument), if the
 -- 'ppColor' option is set
-maybeColorM :: (Doc -> Doc) -> Doc -> PPM Doc
-maybeColorM f d =
+maybeColorM :: AnsiStyle -> Doc -> PPM Doc
+maybeColorM style d =
   (ppColor <$> ppOpts <$> ask) >>= \b ->
-  return ((if b then f else id) d)
+  return ((if b then annotate style else id) d)
 
 -- | Look up the given local variable by deBruijn index to get its name
 varLookupM :: DeBruijnIndex -> PPM String
@@ -266,8 +271,20 @@ withMemoVar global_p idx f =
 -- * The Pretty-Printing of Specific Constructs
 --------------------------------------------------------------------------------
 
+text :: String -> Doc
+text = pretty
+
+char :: Char -> Doc
+char = pretty
+
+integer :: Integer -> Doc
+integer = pretty
+
+int :: Int -> Doc
+int = pretty
+
 (<<$>>) :: Doc -> Doc -> Doc
-x <<$>> y = (PPL.<$>) x y
+x <<$>> y = vsep [x, y]
 
 -- | Pretty-print an identifier
 ppIdent :: Ident -> Doc
@@ -276,13 +293,13 @@ ppIdent i = text (show i)
 -- | Pretty-print an integer in the correct base
 ppNat :: PPOpts -> Integer -> Doc
 ppNat (PPOpts{..}) i
-  | ppBase > 36 = integer i
+  | ppBase > 36 = pretty i
   | otherwise = prefix <> text value
   where
     prefix = case ppBase of
       2  -> text "0b"
       8  -> text "0o"
-      10 -> empty
+      10 -> mempty
       16 -> text "0x"
       _  -> text "0"  <> char '<' <> int ppBase <> char '>'
 
@@ -291,7 +308,7 @@ ppNat (PPOpts{..}) i
 
 -- | Pretty-print a memoization variable
 ppMemoVar :: MemoVar -> Doc
-ppMemoVar mv = text "x@" <> integer (toInteger mv)
+ppMemoVar mv = text "x@" <> pretty (toInteger mv)
 
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 ppTypeConstraint :: Doc -> Doc -> Doc
@@ -304,18 +321,20 @@ ppAppList _ f [] = f
 ppAppList p f args = ppParensPrec p PrecApp $ group $ hang 2 $ vsep (f : args)
 
 -- | Pretty-print "let x1 = t1 ... xn = tn in body"
-ppLetBlock :: [(MemoVar,Doc)] -> Doc -> Doc
+ppLetBlock :: [(MemoVar, Doc)] -> Doc -> Doc
 ppLetBlock defs body =
-  text "let" <+> lbrace <+> align (vcat (map ppEqn defs)) <$$>
-  indent 4 rbrace <$$>
-  text " in" <+> body
+  vcat
+  [ text "let" <+> lbrace <+> align (vcat (map ppEqn defs))
+  , indent 4 rbrace
+  , text " in" <+> body
+  ]
   where
     ppEqn (var,d) = ppMemoVar var <+> char '=' <+> d
 
 
 -- | Pretty-print pairs as "(x, y)"
 ppPair :: Prec -> Doc -> Doc -> Doc
-ppPair prec x y = ppParensPrec prec PrecNone (group (x <> char ',' <$$> y))
+ppPair prec x y = ppParensPrec prec PrecNone (group (vcat [x <> char ',', y]))
 
 -- | Pretty-print pair types as "x * y"
 ppPairType :: Prec -> Doc -> Doc -> Doc
@@ -328,7 +347,7 @@ ppPairType prec x y = ppParensPrec prec PrecProd (x <+> char '*' <+> y)
 --
 -- * @{ fld1 op val1, ..., fldn op valn }@ otherwise, where @op@ is @::@ for
 --   types and @=@ for values.
-ppRecord :: Bool -> [(String,Doc)] -> Doc
+ppRecord :: Bool -> [(String, Doc)] -> Doc
 ppRecord type_p alist =
   (if type_p then (char '#' <>) else id) $
   encloseSep lbrace rbrace comma $ map ppField alist
@@ -349,8 +368,7 @@ ppArrayValue = list
 ppLambda :: Doc -> (String, Doc) -> Doc
 ppLambda tp (name, body) =
   group $ hang 2 $
-  text "\\" <> parens (ppTypeConstraint (text name) tp)
-  <+> text "->" PPL.<$> body
+  vsep [text "\\" <> parens (ppTypeConstraint (text name) tp) <+> text "->", body]
 
 -- | Pretty-print a pi abstraction as @(x :: tp) -> body@, or as @tp -> body@ if
 -- @x == "_"@
@@ -369,16 +387,18 @@ ppDef d tp (Just body) = ppTypeConstraint d tp <+> equals <+> body
 -- >   c1 (x1_1:tp1_1)  .. (x1_N:tp1_N) : tp1
 -- >   ...
 -- > }
-ppDataType :: Ident -> (Doc, ((Doc,Doc), [Doc])) -> Doc
+ppDataType :: Ident -> (Doc, ((Doc, Doc), [Doc])) -> Doc
 ppDataType d (params, ((d_ctx,d_tp), ctors)) =
-  group $ (group
-           ((text "data" <+> ppIdent d <+> params <+> text ":" <+>
-             (d_ctx <+> text "->" <+> d_tp))
-            <<$>> (text "where" <+> lbrace)))
-          <<$>>
-          vcat (map (<> semi) ctors)
-          <$$>
-          rbrace
+  group $
+  vcat
+  [ (group
+     ((text "data" <+> ppIdent d <+> params <+> text ":" <+>
+       (d_ctx <+> text "->" <+> d_tp))
+      <<$>> (text "where" <+> lbrace)))
+    <<$>>
+    vcat (map (<> semi) ctors)
+  , rbrace
+  ]
 
 
 --------------------------------------------------------------------------------
@@ -424,7 +444,7 @@ ppFlatTermF prec tf =
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecNone) (V.toList args)
     StringLit s -> return $ text (show s)
-    ExtCns cns -> maybeColorM dullred $ ppName (ecName cns)
+    ExtCns cns -> maybeColorM (colorDull Red) $ ppName (ecName cns)
 
 ppName :: NameInfo -> Doc
 ppName (ModuleIdentifier i) = ppIdent i
@@ -442,8 +462,8 @@ ppTermF prec (Pi x tp body) =
   ppParensPrec prec PrecLambda <$>
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
-ppTermF _ (LocalVar x) = (text <$> varLookupM x) >>= maybeColorM dullgreen
-ppTermF _ (Constant ec _) = maybeColorM dullblue $ ppName (ecName ec)
+ppTermF _ (LocalVar x) = (text <$> varLookupM x) >>= maybeColorM (colorDull Green)
+ppTermF _ (Constant ec _) = maybeColorM (colorDull Blue) $ ppName (ecName ec)
 
 
 -- | Internal function to recursively pretty-print a term
@@ -535,7 +555,7 @@ ppTermWithMemoTable prec global_p trm = ppLets occ_map_elems [] where
   -- Term and then add it to the memoization table of subsequent printing. The
   -- pretty-printing of these terms is reverse-accumulated in the second
   -- list. Finally, print trm with a let-binding for the bound terms.
-  ppLets :: [(TermIndex, (Term, Int))] -> [(MemoVar,Doc)] -> PPM Doc
+  ppLets :: [(TermIndex, (Term, Int))] -> [(MemoVar, Doc)] -> PPM Doc
 
   -- Special case: don't print let-binding if there are no bound vars
   ppLets [] [] = ppTerm' prec trm
@@ -571,7 +591,7 @@ ppTermInBinder prec basename trm =
 -- tables for the inner computation; the justification is that this function is
 -- only used for printing datatypes, which we assume are not very big.
 ppWithBoundCtx :: [(String, Term)] -> PPM a -> PPM (Doc, a)
-ppWithBoundCtx [] m = (empty ,) <$> m
+ppWithBoundCtx [] m = (mempty ,) <$> m
 ppWithBoundCtx ((x,tp):ctx) m =
   (\tp_d (x', (ctx_d, ret)) ->
     (parens (ppTypeConstraint (text x') tp_d) <+> ctx_d, ret))
@@ -586,16 +606,20 @@ ppTerm opts trm = runPPM opts $ ppTermWithMemoTable PrecNone True trm
 ppTermDepth :: Int -> Term -> Doc
 ppTermDepth depth t = ppTerm (depthPPOpts depth) t
 
+renderDoc :: Doc -> String
+renderDoc doc = Text.Lazy.unpack (renderLazy (layoutPretty opts doc))
+  where opts = LayoutOptions (AvailablePerLine 80 0.8)
+
 -- | Pretty-print a term and render it to a string, using the given options
 scPrettyTerm :: PPOpts -> Term -> String
 scPrettyTerm opts t =
-  flip displayS "" $ renderPretty 0.8 80 $ ppTerm opts t
+  renderDoc $ ppTerm opts t
 
 -- | Like 'scPrettyTerm', but also supply a context of bound names, where the
 -- most recently-bound variable is listed first in the context
 scPrettyTermInCtx :: PPOpts -> [String] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
-  flip displayS "" $ renderPretty 0.8 80 $ runPPM opts $
+  renderDoc $ runPPM opts $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecNone False trm
 

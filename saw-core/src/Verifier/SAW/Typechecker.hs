@@ -36,7 +36,8 @@ import Control.Applicative
 import Control.Monad.State
 import Data.List (findIndex)
 import qualified Data.Vector as V
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+
+import Prettyprinter hiding (Doc)
 
 import Verifier.SAW.Utils (internalError)
 
@@ -44,6 +45,7 @@ import Verifier.SAW.Module
 import Verifier.SAW.Position
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
+import Verifier.SAW.Term.Pretty (Doc, text)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SCTypeCheck
@@ -64,7 +66,7 @@ inferCompleteTermCtx :: SharedContext -> Maybe ModuleName -> [(String,Term)] ->
 inferCompleteTermCtx sc mnm ctx t =
   do res <- runTCM (typeInferComplete t) sc mnm ctx
      case res of
-       Left err -> return $ Left $ vsep $ map string $ prettyTCError err
+       Left err -> return $ Left $ vsep $ map text $ prettyTCError err
        Right t' -> return $ Right $ typedVal t'
 
 -- | Look up the current module name, raising an error if it is not set
