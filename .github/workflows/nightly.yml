@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       saw-version: ${{ steps.saw.outputs.saw-version }}
-      saw-name: ${{ steps.saw.outputs.name }}
+      name: ${{ steps.saw.outputs.name }}
     steps:
       - uses: actions/checkout@v2
       - id: saw
@@ -91,6 +91,7 @@ jobs:
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          name: ${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64
         run: .github/ci.sh zip_dist
 
       - uses: actions/upload-artifact@v2
