@@ -835,8 +835,8 @@ proveUnintYices = proveUnintSBV SBV.yices
 
 
 --------------------------------------------------
-w4_abc :: ProofScript SV.SatResult
-w4_abc = wrapW4Prover Prover.proveWhat4_abc []
+w4_abc_smtlib2 :: ProofScript SV.SatResult
+w4_abc_smtlib2 = wrapW4Prover Prover.proveWhat4_abc []
 
 w4_boolector :: ProofScript SV.SatResult
 w4_boolector = wrapW4Prover Prover.proveWhat4_boolector []
@@ -916,6 +916,41 @@ offline_unint_smtlib2 unints path =
 offline_verilog :: FilePath -> ProofScript SV.SatResult
 offline_verilog path =
   proveWithExporter (Prover.adaptExporter Prover.writeVerilog) path ".v"
+
+w4_abc_verilog :: ProofScript SV.SatResult
+w4_abc_verilog = do
+  withFirstGoal $ \g ->
+    do let tpl = "abc_verilog-" ++ goalType g ++ show (goalNum g) ++ ".v"
+           tplCex = "abc_verilog-" ++ goalType g ++ show (goalNum g) ++ ".cex"
+       sc <- SV.getSharedContext
+       tmp <- io $ emptySystemTempFile tpl
+       tmpCex <- io $ emptySystemTempFile tplCex
+       io $ Prover.adaptExporter Prover.writeVerilog sc tmp (goalProp g)
+       let execName = "abc"
+           args = ["-q", "%read " ++ tmp ++"; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++ tmpCex]
+       (ec, out, err) <- io $ readProcessWithExitCode execName args ""
+       cexText <- io $ readFile tmpCex
+       io $ removeFile tmp
+       io $ removeFile tmpCex
+       let isEquivalent = "equivalent" `isInfixOf` out
+           isNotEquivalent = "NOT EQUIVALENT" `isInfixOf` out
+           stats = solverStats "abc_verilog" (scSharedSize (unProp (goalProp g)))
+       res <- case (isEquivalent, isNotEquivalent) of
+                (True, False) -> return $ SV.Unsat stats
+                (False, True) ->
+                  do --let cex = parseStats cexText
+                     io $ (putStrLn "Counterexample text:" >> putStrLn cexText)
+                     return $ SV.SatMulti stats [] -- TODO: parse results
+                _ -> do io $ do putStrLn "ABC returned unexpected result"
+                                putStrLn $ "== Exit code: " ++ show ec
+                                putStrLn "== Standard output"
+                                putStrLn out
+                                putStrLn "== Standard error"
+                                putStrLn err
+                                putStrLn "== Counterexample text"
+                                putStrLn cexText
+                        SV.throwTopLevel "Proof failed."
+       return (res, stats, Nothing) -- TODO: is Nothing right here?
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (\ps -> ps { psTimeout = Just to })

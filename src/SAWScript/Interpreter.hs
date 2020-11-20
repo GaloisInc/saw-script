@@ -1230,7 +1230,7 @@ primitives = Map.fromList
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
-  , prim "abc_sbv"             "ProofScript SatResult"
+  , prim "sbv_abc"             "ProofScript SatResult"
     (pureVal proveABC_SBV)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
@@ -1351,11 +1351,6 @@ primitives = Map.fromList
     Current
     [ "Prove the current goal using What4 (Z3 backend)." ]
 
-  , prim "w4_abc"              "ProofScript SatResult"
-    (pureVal w4_abc)
-    Current
-    [ "Prove the current goal using What4 (External ABC backend)." ]
-
   , prim "w4_unint_z3"         "[String] -> ProofScript SatResult"
     (pureVal w4_unint_z3)
     Current
@@ -1377,21 +1372,21 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  {-
   , prim "w4_abc_smtlib2"        "ProofScript SatResult"
     (pureVal w4_abc_smtlib2)
     Experimental
     [ "Use the ABC theorem prover as an external process to prove the"
-    , "current goal, with SMT-Lib2 as an interchange format."
+    , "current goal, with SMT-Lib2 as an interchange format, generated"
+    , "using the What4 backend."
     ]
 
   , prim "w4_abc_verilog"        "ProofScript SatResult"
     (pureVal w4_abc_verilog)
     Experimental
     [ "Use the ABC theorem prover as an external process to prove the"
-    , "current goal, with Verilog as an interchange format."
+    , "current goal, with Verilog as an interchange format, generated"
+    , "using the What4 backend."
     ]
-  -}
 
   , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript SatResult"
     (pureVal offline_w4_unint_z3)
