@@ -51,6 +51,7 @@ module Verifier.SAW.Simulator.What4
   , w4EvalBasic
   , getLabelValues
 
+  , w4EvalTerm
   , w4SimulatorEval
   , NeutralTermException(..)
   ) where
@@ -96,6 +97,7 @@ import           What4.Interface(SymExpr,Pred,SymInteger, IsExpr,
                                  IsExprBuilder,IsSymExprBuilder)
 import qualified What4.Interface as W
 import           What4.BaseTypes
+import           What4.Protocol.Online (OnlineSolver)
 import qualified What4.SWord as SW
 import           What4.SWord (SWord(..))
 
@@ -1066,6 +1068,88 @@ getLabelValues f =
 
 ----------------------------------------------------------------------
 -- Evaluation through crucible-saw backend
+
+-- | Simplify a saw-core term by evaluating it through the saw backend
+-- of what4. The term may have any first-order monomorphic function
+-- type. Return a term with the same type.
+w4EvalTerm ::
+  forall n solver fs.
+  OnlineSolver solver =>
+  CS.SAWCoreBackend n solver fs -> SharedContext ->
+  Map Ident (SValue (CS.SAWCoreBackend n solver fs)) -> Set VarIndex -> Term ->
+  IO Term
+w4EvalTerm sym sc ps unintSet t =
+  do modmap <- scGetModuleMap sc
+     ref <- newIORef Map.empty
+     let eval = w4EvalBasic sym sc modmap ps ref unintSet
+     ty <- eval =<< scTypeOf sc t
+     -- evaluate term to an SValue
+     val <- eval t
+     -- convert SValue back into a Term
+     rebuildTerm sym sc (toTValue ty) val
+
+rebuildTerm ::
+  OnlineSolver solver =>
+  CS.SAWCoreBackend n solver fs ->
+  SharedContext ->
+  TValue (What4 (CS.SAWCoreBackend n solver fs)) ->
+  SValue (CS.SAWCoreBackend n solver fs) ->
+  IO Term
+rebuildTerm sym sc tv =
+  \case
+    VFun _ ->
+      fail "rebuildTerm VFun"
+    VUnit ->
+      scUnitValue sc
+    VPair x y ->
+      case tv of
+        VPairType tx ty ->
+          do vx <- force x
+             vy <- force y
+             x' <- rebuildTerm sym sc tx vx
+             y' <- rebuildTerm sym sc ty vy
+             scPairValue sc x' y'
+        _ -> fail "panic: rebuildTerm: internal error"
+    VCtorApp _ _ ->
+      fail "rebuildTerm VCtorApp"
+    VVector xs ->
+      case tv of
+        VVecType _ tx ->
+          do vs <- traverse force (V.toList xs)
+             xs' <- traverse (rebuildTerm sym sc tx) vs
+             tx' <- termOfTValue sc tx
+             scVectorReduced sc tx' xs'
+        _ -> fail "panic: rebuildTerm: internal error"
+    VBool x ->
+      CS.toSC sym x
+    VWord x ->
+      case x of
+        DBV w -> CS.toSC sym w
+        ZBV ->
+          do z <- scNat sc 0
+             scBvNat sc z z
+    VToNat _ ->
+      fail "rebuildTerm VToNat"
+    VNat n ->
+      scNat sc n
+    VInt x ->
+      CS.toSC sym x
+    VIntMod _ _ ->
+      fail "rebuildTerm VIntMod"
+    VArray _ ->
+      fail "rebuildTerm VArray"
+    VString s ->
+      scString sc s
+    VFloat _ ->
+      fail "rebuildTerm VFloat"
+    VDouble _ ->
+      fail "rebuildTerm VDouble"
+    VRecordValue _ ->
+      fail "rebuildTerm VRecordValue"
+    VExtra _ ->
+      fail "rebuildTerm VExtra"
+    TValue _tval ->
+      fail "rebuildTerm TValue"
 
 
 -- | Simplify a saw-core term by evaluating it through the saw backend
