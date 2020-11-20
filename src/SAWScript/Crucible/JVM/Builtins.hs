@@ -357,6 +357,10 @@ checkRegisterCompatibility :: J.Type -> J.Type -> IO Bool
 checkRegisterCompatibility mt mt' =
   return (storageType mt == storageType mt')
 
+-- | Check two Types for register compatibility.
+registerCompatible :: J.Type -> J.Type -> Bool
+registerCompatible mt mt' = storageType mt == storageType mt'
+
 data StorageType = STInt | STLong | STFloat | STDouble | STRef
   deriving Eq
 
@@ -891,9 +895,14 @@ jvm_field_is _typed _bic _opt ptr fname val =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
-     -- valTy <- typeOfSetupValue cc env nameEnv val
-     --when typed (checkMemTypeCompatibility lhsTy valTy)
+     valTy <- typeOfSetupValue cc env nameEnv val
      fid <- either fail pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
+     unless (registerCompatible (J.fieldIdType fid) valTy) $
+       fail $ unlines
+       [ "Incompatible types for field " ++ fname
+       , "Expected: " ++ show (J.fieldIdType fid)
+       , "but given value of type: " ++ show valTy
+       ]
      Setup.addPointsTo (JVMPointsToField loc ptr fid val)
 
 jvm_elem_is ::
@@ -909,12 +918,25 @@ jvm_elem_is _typed _bic _opt ptr idx val =
   do loc <- SS.toW4Loc "jvm_elem_is" <$> lift getPosition
      st <- get
      let rs = st ^. Setup.csResolvedState
+     let cc = st ^. Setup.csCrucibleContext
      let path = Right idx
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
        then fail "Multiple points-to preconditions on same pointer"
        else Setup.csResolvedState %= MS.markResolved ptr [path]
-     -- let env = MS.csAllocations (st ^. Setup.csMethodSpec)
-     --     nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+     let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     ptrTy <- typeOfSetupValue cc env nameEnv ptr
+     valTy <- typeOfSetupValue cc env nameEnv val
+     elTy <-
+       case ptrTy of
+         J.ArrayType elTy -> pure elTy
+         _ -> fail $ "Not an array type: " ++ show ptrTy
+     unless (registerCompatible elTy valTy) $
+       fail $ unlines
+       [ "Incompatible types for array element"
+       , "Expected: " ++ show elTy
+       , "but given value of type: " ++ show valTy
+       ]
      Setup.addPointsTo (JVMPointsToElem loc ptr idx val)
 
 jvm_array_is ::
