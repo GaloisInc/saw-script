@@ -2136,7 +2136,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
-    (bicVal crucible_conditional_points_to)
+    (bicVal (crucible_conditional_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (second"
     , "argument) contains the given value (third argument) if the given"
@@ -2154,6 +2154,14 @@ primitives = Map.fromList
     [ "A variant of crucible_points_to that does not check for compatibility"
     , "between the pointer type and the value type. This may be useful when"
     , "reading or writing a prefix of larger array, for example."
+    ]
+
+  , prim "crucible_conditional_points_to_untyped" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
+    (bicVal (crucible_conditional_points_to False))
+    Current
+    [ "A variant of crucible_conditional_points_to that does not check for"
+    , "compatibility between the pointer type and the value type. This may"
+    , "be useful when reading or writing a prefix of larger array, for example."
     ]
 
   , prim "crucible_points_to_array_prefix" "SetupValue -> Term -> Term -> CrucibleSetup ()"
