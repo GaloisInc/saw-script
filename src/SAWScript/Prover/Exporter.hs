@@ -44,10 +44,8 @@ import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
 import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
-import qualified Data.ByteString as BS
 import System.IO
 import Data.Text.Prettyprint.Doc.Render.Text
-import Data.Parameterized.Nonce(globalNonceGenerator)
 import Text.PrettyPrint.ANSI.Leijen (vcat)
 
 import Cryptol.Utils.PP(pretty)
