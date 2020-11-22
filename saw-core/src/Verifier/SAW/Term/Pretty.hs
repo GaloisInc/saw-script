@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -55,7 +56,33 @@ import qualified Data.IntMap.Strict as IntMap
 
 import Verifier.SAW.Term.Functor
 
-type Doc = Prettyprinter.Doc AnsiStyle
+--------------------------------------------------------------------------------
+-- * Doc annotations
+
+data SawStyle
+  = GlobalDefStyle
+  | ConstantStyle
+  | ExtCnsStyle
+  | LocalVarStyle
+  | DataTypeStyle
+  | CtorAppStyle
+  | RecursorStyle
+  | FieldNameStyle
+
+-- TODO: assign colors for more styles
+colorStyle :: SawStyle -> AnsiStyle
+colorStyle =
+  \case
+    GlobalDefStyle -> mempty
+    ConstantStyle -> colorDull Blue
+    ExtCnsStyle -> colorDull Red
+    LocalVarStyle -> colorDull Green
+    DataTypeStyle -> mempty
+    CtorAppStyle -> mempty
+    RecursorStyle -> mempty
+    FieldNameStyle -> mempty
+
+type Doc = Prettyprinter.Doc SawStyle
 
 --------------------------------------------------------------------------------
 -- * Pretty-Printing Options and Precedences
@@ -204,13 +231,6 @@ instance MonadReader PPState PPM where
   ask = PPM ask
   local f (PPM m) = PPM $ local f m
 
--- | Color a document, using the supplied style (1st argument), if the
--- 'ppColor' option is set
-maybeColorM :: AnsiStyle -> Doc -> PPM Doc
-maybeColorM style d =
-  (ppColor <$> ppOpts <$> ask) >>= \b ->
-  return ((if b then annotate style else id) d)
-
 -- | Look up the given local variable by deBruijn index to get its name
 varLookupM :: DeBruijnIndex -> PPM String
 varLookupM idx =
@@ -313,7 +333,7 @@ ppMemoVar mv = text "x@" <> pretty (toInteger mv)
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 ppTypeConstraint :: Doc -> Doc -> Doc
 ppTypeConstraint x tp =
-  hang 2 $ group (x <<$>> text ":" <+> tp)
+  hang 2 $ group $ vsep [annotate LocalVarStyle x, text ":" <+> tp]
 
 -- | Pretty-print an application to 0 or more arguments at the given precedence
 ppAppList :: Prec -> Doc -> [Doc] -> Doc
@@ -409,7 +429,7 @@ ppDataType d (params, ((d_ctx,d_tp), ctors)) =
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM Doc
 ppFlatTermF prec tf =
   case tf of
-    GlobalDef i   -> return $ ppIdent i
+    GlobalDef i   -> return $ annotate GlobalDefStyle $ ppIdent i
     UnitValue     -> return $ text "(-empty-)"
     UnitType      -> return $ text "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecLambda x <*> ppTerm' PrecNone y
@@ -418,9 +438,9 @@ ppFlatTermF prec tf =
     PairRight t   -> ppProj "2" <$> ppTerm' PrecArg t
 
     CtorApp c params args ->
-      ppAppList prec (ppIdent c) <$> mapM (ppTerm' PrecArg) (params ++ args)
+      ppAppList prec (annotate CtorAppStyle (ppIdent c)) <$> mapM (ppTerm' PrecArg) (params ++ args)
     DataTypeApp dt params args ->
-      ppAppList prec (ppIdent dt) <$> mapM (ppTerm' PrecArg) (params ++ args)
+      ppAppList prec (annotate DataTypeStyle (ppIdent dt)) <$> mapM (ppTerm' PrecArg) (params ++ args)
     RecursorApp d params p_ret cs_fs ixs arg ->
       do params_pp <- mapM (ppTerm' PrecArg) params
          p_ret_pp <- ppTerm' PrecArg p_ret
@@ -428,7 +448,7 @@ ppFlatTermF prec tf =
          ixs_pp <- mapM (ppTerm' PrecArg) ixs
          arg_pp <- ppTerm' PrecArg arg
          return $
-           ppAppList prec (ppIdent d <> text "#rec")
+           ppAppList prec (annotate RecursorStyle (ppIdent d <> text "#rec"))
            (params_pp ++ [p_ret_pp] ++
             [tupled $
              zipWith (\(c,_) f_pp -> ppIdent c <<$>> text "=>" <<$>> f_pp)
@@ -444,7 +464,7 @@ ppFlatTermF prec tf =
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecNone) (V.toList args)
     StringLit s -> return $ text (show s)
-    ExtCns cns -> maybeColorM (colorDull Red) $ ppName (ecName cns)
+    ExtCns cns -> pure $ annotate ExtCnsStyle $ ppName (ecName cns)
 
 ppName :: NameInfo -> Doc
 ppName (ModuleIdentifier i) = ppIdent i
@@ -462,8 +482,8 @@ ppTermF prec (Pi x tp body) =
   ppParensPrec prec PrecLambda <$>
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
-ppTermF _ (LocalVar x) = (text <$> varLookupM x) >>= maybeColorM (colorDull Green)
-ppTermF _ (Constant ec _) = maybeColorM (colorDull Blue) $ ppName (ecName ec)
+ppTermF _ (LocalVar x) = annotate LocalVarStyle <$> text <$> varLookupM x
+ppTermF _ (Constant ec _) = pure $ annotate ConstantStyle $ ppName (ecName ec)
 
 
 -- | Internal function to recursively pretty-print a term
@@ -606,20 +626,21 @@ ppTerm opts trm = runPPM opts $ ppTermWithMemoTable PrecNone True trm
 ppTermDepth :: Int -> Term -> Doc
 ppTermDepth depth t = ppTerm (depthPPOpts depth) t
 
-renderDoc :: Doc -> String
-renderDoc doc = Text.Lazy.unpack (renderLazy (layoutPretty opts doc))
+renderDoc :: (SawStyle -> AnsiStyle) -> Doc -> String
+renderDoc style doc = Text.Lazy.unpack (renderLazy (reAnnotateS style (layoutPretty opts doc)))
   where opts = LayoutOptions (AvailablePerLine 80 0.8)
 
 -- | Pretty-print a term and render it to a string, using the given options
 scPrettyTerm :: PPOpts -> Term -> String
 scPrettyTerm opts t =
-  renderDoc $ ppTerm opts t
+  renderDoc (if ppColor opts then colorStyle else const mempty) $ ppTerm opts t
 
 -- | Like 'scPrettyTerm', but also supply a context of bound names, where the
 -- most recently-bound variable is listed first in the context
 scPrettyTermInCtx :: PPOpts -> [String] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
-  renderDoc $ runPPM opts $
+  renderDoc (if ppColor opts then colorStyle else const mempty) $
+  runPPM opts $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecNone False trm
 
