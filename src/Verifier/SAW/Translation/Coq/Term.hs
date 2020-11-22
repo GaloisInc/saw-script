@@ -35,7 +35,7 @@ import           Data.List                                     (intersperse, sor
 import           Data.Maybe                                    (fromMaybe)
 import qualified Data.Set                                      as Set
 import           Prelude                                       hiding (fail)
-import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
+import           Prettyprinter
 
 import qualified Data.Vector                                   as Vector (reverse)
 import qualified Language.Coq.AST                              as Coq
@@ -530,24 +530,26 @@ translateTermToDocWith ::
   Maybe ModuleName ->
   [String] ->
   [String] ->
-  (Coq.Term -> Doc) ->
+  (Coq.Term -> Doc ann) ->
   Term ->
-  Either (TranslationError Term) Doc
+  Either (TranslationError Term) (Doc ann)
 translateTermToDocWith configuration mn globalDecls localEnv f t = do
   (term, state) <-
     runTermTranslationMonad configuration mn globalDecls localEnv (translateTermLet t)
   let decls = view localDeclarations state
-  return
-    $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls)
-    <$$> (if null decls then empty else hardline)
-    <$$> f term
+  return $
+    vcat $
+    [ (vcat . intersperse hardline . map Coq.ppDecl . reverse) decls
+    , if null decls then mempty else hardline
+    , f term
+    ]
 
 translateDefDoc ::
   TranslationConfiguration ->
   Maybe ModuleName ->
   [String] ->
   Coq.Ident -> Term ->
-  Either (TranslationError Term) Doc
+  Either (TranslationError Term) (Doc ann)
 translateDefDoc configuration mn globalDecls name =
   translateTermToDocWith configuration mn globalDecls [name]
   (\ term -> Coq.ppDecl (mkDefinition name term))
