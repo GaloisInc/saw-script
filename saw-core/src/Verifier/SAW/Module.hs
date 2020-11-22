@@ -467,7 +467,7 @@ allModuleCtors modmap = concatMap moduleCtors (HMap.elems modmap)
 
 
 -- | Pretty-print a 'Module'
-ppModule :: PPOpts -> Module -> Doc
+ppModule :: PPOpts -> Module -> SawDoc
 ppModule opts m =
   ppPPModule opts (PPModule (moduleImportNames m) (map toDecl $ moduleDecls m))
   where

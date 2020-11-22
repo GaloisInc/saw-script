@@ -102,10 +102,10 @@ instance Show FirstOrderValue where
       commaSep ss = foldr (.) id (intersperse (showString ",") ss)
       showField (field, v) = showString field . showString " = " . shows v
 
-ppFiniteValue :: PPOpts -> FiniteValue -> Doc
+ppFiniteValue :: PPOpts -> FiniteValue -> SawDoc
 ppFiniteValue opts fv = ppFirstOrderValue opts (toFirstOrderValue fv)
 
-ppFirstOrderValue :: PPOpts -> FirstOrderValue -> Doc
+ppFirstOrderValue :: PPOpts -> FirstOrderValue -> SawDoc
 ppFirstOrderValue opts = loop
  where
  loop fv = case fv of

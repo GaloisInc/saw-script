@@ -45,7 +45,7 @@ import Verifier.SAW.Module
 import Verifier.SAW.Position
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
-import Verifier.SAW.Term.Pretty (Doc, text)
+import Verifier.SAW.Term.Pretty (SawDoc, text)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SCTypeCheck
@@ -56,13 +56,13 @@ import Debug.Trace
 -- | Infer the type of an untyped term and complete it to a 'Term', all in the
 -- empty typing context
 inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.Term ->
-                     IO (Either Doc Term)
+                     IO (Either SawDoc Term)
 inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm [] t
 
 -- | Infer the type of an untyped term and complete it to a 'Term' in a given
 -- typing context
 inferCompleteTermCtx :: SharedContext -> Maybe ModuleName -> [(String,Term)] ->
-                        Un.Term -> IO (Either Doc Term)
+                        Un.Term -> IO (Either SawDoc Term)
 inferCompleteTermCtx sc mnm ctx t =
   do res <- runTCM (typeInferComplete t) sc mnm ctx
      case res of
