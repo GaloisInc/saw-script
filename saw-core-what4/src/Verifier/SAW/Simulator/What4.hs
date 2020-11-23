@@ -801,6 +801,10 @@ mkUninterpreted sym ref (UnintApp nm args tys) ret =
 data UnintApp f =
   forall args. UnintApp String (Assignment f args) (Assignment BaseTypeRepr args)
 
+-- | Extract the string from an 'UnintApp'.
+stringOfUnintApp :: UnintApp f -> String
+stringOfUnintApp (UnintApp s _ _) = s
+
 -- | Make an 'UnintApp' with the given name and no arguments.
 mkUnintApp :: String -> UnintApp f
 mkUnintApp nm = UnintApp nm Ctx.empty Ctx.empty
@@ -848,8 +852,15 @@ applyUnintApp sym app0 v =
     VNat n                    -> return (suffixUnintApp ("_" ++ show n) app0)
     TValue (suffixTValue -> Just s)
                               -> return (suffixUnintApp s app0)
-    VFun _ -> fail "Cannot create uninterpreted higher-order function"
-    _ -> fail $ "Cannot create uninterpreted function with argument " ++ show v
+    VFun _ ->
+      fail $
+      "Cannot create uninterpreted higher-order function " ++
+      show (stringOfUnintApp app0)
+    _ ->
+      fail $
+      "Cannot create uninterpreted function " ++
+      show (stringOfUnintApp app0) ++
+      " with argument " ++ show v
 
 
 ------------------------------------------------------------
