@@ -51,4 +51,4 @@
 	url = https://github.com/GaloisInc/saw-core-coq.git
 [submodule "deps/heapster-saw"]
 	path = deps/heapster-saw
-	url = git@github.com:GaloisInc/heapster-saw.git
+	url = https://github.com/GaloisInc/heapster-saw.git
