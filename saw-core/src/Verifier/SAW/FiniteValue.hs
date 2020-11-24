@@ -110,16 +110,16 @@ ppFirstOrderValue opts = loop
  where
  loop fv = case fv of
    FOVBit b
-     | b         -> text "True"
-     | otherwise -> text "False"
-   FOVInt i      -> integer i
-   FOVIntMod _ i -> integer i
+     | b         -> pretty "True"
+     | otherwise -> pretty "False"
+   FOVInt i      -> pretty i
+   FOVIntMod _ i -> pretty i
    FOVWord _w i  -> ppNat opts i
    FOVVec _ xs   -> brackets (sep (punctuate comma (map loop xs)))
-   FOVArray{}    -> text $ show $ firstOrderTypeOf fv
+   FOVArray{}    -> viaShow $ firstOrderTypeOf fv
    FOVTuple xs   -> parens (sep (punctuate comma (map loop xs)))
    FOVRec xs     -> braces (sep (punctuate comma (map ppField (Map.toList xs))))
-      where ppField (f,x) = pretty f <+> char '=' <+> loop x
+      where ppField (f,x) = pretty f <+> pretty '=' <+> loop x
 
 
 -- | Smart constructor

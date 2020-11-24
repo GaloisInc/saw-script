@@ -45,7 +45,7 @@ import Verifier.SAW.Module
 import Verifier.SAW.Position
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
-import Verifier.SAW.Term.Pretty (SawDoc, text)
+import Verifier.SAW.Term.Pretty (SawDoc)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SCTypeCheck
@@ -66,7 +66,8 @@ inferCompleteTermCtx :: SharedContext -> Maybe ModuleName -> [(String,Term)] ->
 inferCompleteTermCtx sc mnm ctx t =
   do res <- runTCM (typeInferComplete t) sc mnm ctx
      case res of
-       Left err -> return $ Left $ vsep $ map text $ prettyTCError err
+       -- TODO: avoid intermediate 'String's from 'prettyTCError'
+       Left err -> return $ Left $ vsep $ map pretty $ prettyTCError err
        Right t' -> return $ Right $ typedVal t'
 
 -- | Look up the current module name, raising an error if it is not set
