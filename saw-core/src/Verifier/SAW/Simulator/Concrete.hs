@@ -254,7 +254,7 @@ constMap =
   , ("Prelude.sbvToInt", sbvToIntOp)
   -- Integers mod n
   , ("Prelude.toIntMod"  , toIntModOp)
-  , ("Prelude.fromIntMod", constFun (VFun force))
+  , ("Prelude.fromIntMod", fromIntModOp)
   , ("Prelude.intModEq"  , intModEqOp)
   , ("Prelude.intModAdd" , intModBinOp (+))
   , ("Prelude.intModSub" , intModBinOp (-))
@@ -319,6 +319,12 @@ toIntModOp =
   Prims.natFun $ \n -> return $
   Prims.intFun "toIntModOp" $ \x -> return $
   VIntMod n (x `mod` toInteger n)
+
+fromIntModOp :: CValue
+fromIntModOp =
+  constFun $
+  Prims.intModFun "fromIntModOp" $ \x -> pure $
+  VInt x
 
 intModEqOp :: CValue
 intModEqOp =
