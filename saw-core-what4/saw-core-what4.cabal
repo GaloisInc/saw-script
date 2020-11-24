@@ -15,7 +15,6 @@ Description:
 
 library
   build-depends:
-    ansi-wl-pprint,
     base == 4.*,
     bv-sized >= 1.0.0,
     containers,

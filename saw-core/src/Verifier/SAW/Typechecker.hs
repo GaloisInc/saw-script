@@ -36,7 +36,8 @@ import Control.Applicative
 import Control.Monad.State
 import Data.List (findIndex)
 import qualified Data.Vector as V
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+
+import Prettyprinter hiding (Doc)
 
 import Verifier.SAW.Utils (internalError)
 
@@ -44,6 +45,7 @@ import Verifier.SAW.Module
 import Verifier.SAW.Position
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
+import Verifier.SAW.Term.Pretty (SawDoc)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SCTypeCheck
@@ -54,17 +56,18 @@ import Debug.Trace
 -- | Infer the type of an untyped term and complete it to a 'Term', all in the
 -- empty typing context
 inferCompleteTerm :: SharedContext -> Maybe ModuleName -> Un.Term ->
-                     IO (Either Doc Term)
+                     IO (Either SawDoc Term)
 inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm [] t
 
 -- | Infer the type of an untyped term and complete it to a 'Term' in a given
 -- typing context
 inferCompleteTermCtx :: SharedContext -> Maybe ModuleName -> [(String,Term)] ->
-                        Un.Term -> IO (Either Doc Term)
+                        Un.Term -> IO (Either SawDoc Term)
 inferCompleteTermCtx sc mnm ctx t =
   do res <- runTCM (typeInferComplete t) sc mnm ctx
      case res of
-       Left err -> return $ Left $ vsep $ map string $ prettyTCError err
+       -- TODO: avoid intermediate 'String's from 'prettyTCError'
+       Left err -> return $ Left $ vsep $ map pretty $ prettyTCError err
        Right t' -> return $ Right $ typedVal t'
 
 -- | Look up the current module name, raising an error if it is not set

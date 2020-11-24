@@ -81,7 +81,6 @@ import qualified Data.Map.Strict as Map
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
 import GHC.Generics (Generic)
-import Text.PrettyPrint.ANSI.Leijen (Doc)
 
 import qualified Language.Haskell.TH.Syntax as TH
 
@@ -468,7 +467,7 @@ allModuleCtors modmap = concatMap moduleCtors (HMap.elems modmap)
 
 
 -- | Pretty-print a 'Module'
-ppModule :: PPOpts -> Module -> Doc
+ppModule :: PPOpts -> Module -> SawDoc
 ppModule opts m =
   ppPPModule opts (PPModule (moduleImportNames m) (map toDecl $ moduleDecls m))
   where

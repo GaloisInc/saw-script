@@ -20,12 +20,12 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Numeric.Natural (Natural)
 
+import Prettyprinter hiding (Doc)
+
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Term.Pretty
-
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 -- | Finite types that can be encoded as bits for a SAT/SMT solver.
 data FiniteType
@@ -102,24 +102,24 @@ instance Show FirstOrderValue where
       commaSep ss = foldr (.) id (intersperse (showString ",") ss)
       showField (field, v) = showString field . showString " = " . shows v
 
-ppFiniteValue :: PPOpts -> FiniteValue -> Doc
+ppFiniteValue :: PPOpts -> FiniteValue -> SawDoc
 ppFiniteValue opts fv = ppFirstOrderValue opts (toFirstOrderValue fv)
 
-ppFirstOrderValue :: PPOpts -> FirstOrderValue -> Doc
+ppFirstOrderValue :: PPOpts -> FirstOrderValue -> SawDoc
 ppFirstOrderValue opts = loop
  where
  loop fv = case fv of
    FOVBit b
-     | b         -> text "True"
-     | otherwise -> text "False"
-   FOVInt i      -> integer i
-   FOVIntMod _ i -> integer i
+     | b         -> pretty "True"
+     | otherwise -> pretty "False"
+   FOVInt i      -> pretty i
+   FOVIntMod _ i -> pretty i
    FOVWord _w i  -> ppNat opts i
    FOVVec _ xs   -> brackets (sep (punctuate comma (map loop xs)))
-   FOVArray{}    -> text $ show $ firstOrderTypeOf fv
+   FOVArray{}    -> viaShow $ firstOrderTypeOf fv
    FOVTuple xs   -> parens (sep (punctuate comma (map loop xs)))
    FOVRec xs     -> braces (sep (punctuate comma (map ppField (Map.toList xs))))
-      where ppField (f,x) = pretty f <+> char '=' <+> loop x
+      where ppField (f,x) = pretty f <+> pretty '=' <+> loop x
 
 
 -- | Smart constructor

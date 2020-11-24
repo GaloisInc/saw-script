@@ -25,7 +25,6 @@ library
 
   build-depends:
     base == 4.*,
-    ansi-wl-pprint,
     array,
     bytestring,
     containers,
@@ -41,6 +40,8 @@ library
     panic,
     parameterized-utils,
     pretty,
+    prettyprinter >= 1.7.0,
+    prettyprinter-ansi-terminal >= 1.1.2,
     random,
     rme,
     template-haskell,
@@ -118,7 +119,6 @@ test-suite test-sawcore
     , time
     , unordered-containers
     , vector
-    , ansi-wl-pprint
     , QuickCheck >= 2.7
     , tasty
     , tasty-ant-xml >= 1.1.0
