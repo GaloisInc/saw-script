@@ -1,0 +1,100 @@
+name: Nightly Builds
+on:
+  push:
+    branches: ["actions/**"]
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  outputs:
+    runs-on: ubuntu-latest
+    outputs:
+      saw-version: ${{ steps.saw.outputs.saw-version }}
+      name: ${{ steps.saw.outputs.name }}
+    steps:
+      - uses: actions/checkout@v2
+      - id: saw
+        run: |
+          .github/ci.sh set_version
+          .github/ci.sh output name saw-$(.github/ci.sh ver)-$(date -I)
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [outputs]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: git -C deps/abcBridge submodule update --init
+      - name: Publish to Registry
+        uses: docker/build-push-action@v1
+        with:
+          username: ${{ secrets.GITHUBSAW_USERNAME }}
+          password: ${{ secrets.GITHUBSAW }}
+          repository: galoisinc/saw
+          tags: "nightly"
+          add_git_labels: true
+          push: ${{ github.event_name == 'schedule' }}
+
+  build:
+    needs: [outputs]
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.outputs.outputs.saw-version }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ghc: [8.8.4]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: git -C deps/abcBridge submodule update --init
+
+      - uses: actions/setup-haskell@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+
+      - uses: actions/cache@v2
+        name: Cache cabal store
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
+          restore-keys: |
+            cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
+
+      - shell: bash
+        run: .github/ci.sh build_abc
+        if: runner.os != 'Windows'
+
+      - shell: bash
+        run: .github/ci.sh build
+
+      - shell: bash
+        run: .github/ci.sh setup_dist_bins
+
+      - shell: bash
+        run: |
+          .github/ci.sh build_cryptol
+          .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
+
+      - shell: bash
+        run: .github/ci.sh bundle_files
+
+      - shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          name: ${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64
+        run: .github/ci.sh zip_dist
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: ${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64
+          path: "${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64.tar.gz*"
