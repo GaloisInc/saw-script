@@ -15,7 +15,6 @@ description:
 
 library
   build-depends:
-    ansi-wl-pprint,
     base == 4.*,
     cryptol,
     cryptol-saw-core,
@@ -23,6 +22,7 @@ library
     interpolate,
     lens,
     mtl,
+    prettyprinter,
     saw-core,
     text,
     vector
