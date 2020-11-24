@@ -1374,7 +1374,7 @@ ec_full_add_ov <- method "ec_full_add"
     unfolding ["p384_ec_full_add"];
     simplify ss;
     unint_z3 [ "p384_field_add", "p384_field_sub", "p384_field_mul"
-             , "p384_full_add", "p384_mod_half", "p384_ec_double"
+             , "p384_mod_half", "p384_ec_double"
              ];
   };
 
@@ -1422,7 +1422,7 @@ ec_full_sub_ov <- method "ec_full_sub"
     simplify ec_full_sub_ss;
     unint_z3 [ "p384_ec_full_add", "p384_ec_double", "p384_field_add"
              , "p384_field_sub", "p384_field_mul"
-             , "p384_full_add", "p384_mod_half"
+             , "p384_mod_half"
              ];
   };
 
@@ -1724,7 +1724,7 @@ ec_twin_mul_ov <- method "ec_twin_mul"
     simplify ss;
     // TODO: see if some rules from twin_mul_init_ss can help.
     unint_z3 [ "p384_ec_twin_mul_init", "p384_ec_twin_mul_aux1"
-             , "p384_ec_twin_mul_aux2", "p384_ec_twin_mul_aux_f"
+             , "p384_ec_twin_mul_aux2"
              ];
   };
 
