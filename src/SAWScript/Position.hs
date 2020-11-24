@@ -22,7 +22,8 @@ import GHC.Generics (Generic)
 import System.Directory (makeRelativeToCurrentDirectory)
 import System.FilePath (makeRelative, isAbsolute, (</>), takeDirectory)
 import qualified Data.Text as Text
-import qualified Text.PrettyPrint.ANSI.Leijen as PP hiding ((</>), (<$>))
+import qualified Prettyprinter as PP
+import qualified Prettyprinter.Render.String as PP
 
 import qualified What4.ProgramLoc as W4
 import qualified What4.FunctionName as W4
@@ -37,8 +38,9 @@ data Pos = Range !FilePath -- file
          | PosREPL
   deriving (Data, Generic, Eq)
 
-renderDoc :: PP.Doc -> String
-renderDoc doc = PP.displayS (PP.renderPretty 0.8 80 doc) ""
+renderDoc :: PP.Doc ann -> String
+renderDoc doc = PP.renderString (PP.layoutPretty opts doc)
+  where opts = PP.LayoutOptions (PP.AvailablePerLine 80 0.8)
 
 endPos :: FilePath -> Pos
 endPos f = Range f 0 0 0 0

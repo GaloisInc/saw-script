@@ -62,7 +62,7 @@ import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Void (absurd)
-import qualified Text.PrettyPrint.ANSI.Leijen as PPL
+import qualified Prettyprinter as PP
 
 -- cryptol
 import qualified Cryptol.TypeCheck.AST as Cryptol
@@ -123,10 +123,10 @@ type SetupCondition = MS.SetupCondition CJ.JVM
 type instance Pointer CJ.JVM = JVMRefVal
 
 -- TODO: Improve?
-ppJVMVal :: JVMVal -> PPL.Doc
-ppJVMVal = PPL.text . show
+ppJVMVal :: JVMVal -> PP.Doc ann
+ppJVMVal = PP.viaShow
 
-instance PPL.Pretty JVMVal where
+instance PP.Pretty JVMVal where
   pretty = ppJVMVal
 
 
@@ -206,8 +206,10 @@ methodSpecHandler opts sc cc top_loc css h = do
   branches <- case partitionEithers prestates of
                 (e, []) ->
                   fail $ show $
-                    PPL.text "All overrides failed during structural matching:" PPL.<$$>
-                    PPL.vcat (map (\x -> PPL.text "*" PPL.<> PPL.indent 2 (ppOverrideFailure x)) e)
+                  PP.vcat
+                  [ "All overrides failed during structural matching:"
+                  , PP.vcat (map (\x -> "*" <> PP.indent 2 (ppOverrideFailure x)) e)
+                  ]
                 (_, ss) -> liftIO $
                   forM ss $ \(cs,st) ->
                     do precond <- W4.andAllOf sym (folded.labeledPred) (st^.osAsserts)

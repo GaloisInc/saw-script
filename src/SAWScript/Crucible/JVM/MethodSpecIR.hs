@@ -28,7 +28,7 @@ Stability   : provisional
 module SAWScript.Crucible.JVM.MethodSpecIR where
 
 import           Control.Lens
-import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
+import qualified Prettyprinter as PPL
 
 -- what4
 import           What4.ProgramLoc (ProgramLoc)
@@ -71,6 +71,10 @@ type instance MS.TypeName CJ.JVM = JIdent
 
 type instance MS.ExtType CJ.JVM = J.Type
 
+-- TODO: remove when jvm-parser switches to prettyprinter
+instance PPL.Pretty J.Type where
+  pretty = PPL.viaShow
+
 --------------------------------------------------------------------------------
 -- *** JVMMethodId
 
@@ -92,9 +96,10 @@ csMethodKey = MS.csMethod . jvmMethodKey
 csMethodName :: Getter (MS.CrucibleMethodSpecIR CJ.JVM) String
 csMethodName = MS.csMethod . jvmMethodName
 
+-- TODO: avoid intermediate 'String' values
 instance PPL.Pretty JVMMethodId where
   pretty (JVMMethodId methKey className) =
-    PPL.text (concat [J.unClassName className ,".", J.methodKeyName methKey])
+    PPL.pretty (concat [J.unClassName className ,".", J.methodKeyName methKey])
 
 type instance MS.MethodId CJ.JVM = JVMMethodId
 
@@ -126,20 +131,20 @@ data JVMPointsTo
   | JVMPointsToElem ProgramLoc (MS.SetupValue CJ.JVM) Int (MS.SetupValue CJ.JVM)
   | JVMPointsToArray ProgramLoc (MS.SetupValue CJ.JVM) TypedTerm
 
-ppPointsTo :: JVMPointsTo -> PPL.Doc
+ppPointsTo :: JVMPointsTo -> PPL.Doc ann
 ppPointsTo =
   \case
     JVMPointsToField _loc ptr fid val ->
-      MS.ppSetupValue ptr <> PPL.text "." <> PPL.text (J.fieldIdName fid)
-      PPL.<+> PPL.text "points to"
+      MS.ppSetupValue ptr <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
+      PPL.<+> PPL.pretty "points to"
       PPL.<+> MS.ppSetupValue val
     JVMPointsToElem _loc ptr idx val ->
-      MS.ppSetupValue ptr <> PPL.text "[" <> PPL.text (show idx) <> PPL.text "]"
-      PPL.<+> PPL.text "points to"
+      MS.ppSetupValue ptr <> PPL.pretty "[" <> PPL.pretty idx <> PPL.pretty "]"
+      PPL.<+> PPL.pretty "points to"
       PPL.<+> MS.ppSetupValue val
     JVMPointsToArray _loc ptr val ->
       MS.ppSetupValue ptr
-      PPL.<+> PPL.text "points to"
+      PPL.<+> PPL.pretty "points to"
       PPL.<+> MS.ppTypedTerm val
 
 instance PPL.Pretty JVMPointsTo where

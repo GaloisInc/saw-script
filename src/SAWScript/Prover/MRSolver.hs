@@ -14,7 +14,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import Data.Semigroup
 
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
+import Prettyprinter
 
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
@@ -117,23 +117,23 @@ data MRFailure
     -- ^ Records a disjunctive branch we took, where both cases failed
   deriving Show
 
-prettyTerm :: Term -> Doc
-prettyTerm = ppTerm defaultPPOpts
+prettyTerm :: Term -> Doc ann
+prettyTerm = unAnnotate . ppTerm defaultPPOpts
 
-prettyAppList :: [Doc] -> Doc
+prettyAppList :: [Doc ann] -> Doc ann
 prettyAppList = group . hang 2 . vsep
 
 instance Pretty Type where
   pretty (Type t) = prettyTerm t
 
 instance Pretty FunName where
-  pretty (LocalName (LocalFunName ec)) = ppName $ ecName ec
-  pretty (GlobalName i) = text $ show i
+  pretty (LocalName (LocalFunName ec)) = unAnnotate $ ppName $ ecName ec
+  pretty (GlobalName i) = viaShow i
 
 instance Pretty Comp where
   pretty (CompTerm t) = prettyTerm t
   pretty (CompBind c f) =
-    prettyAppList [pretty c, text ">>=", pretty f]
+    prettyAppList [pretty c, ">>=", pretty f]
   pretty (CompMark c _) =
     -- FIXME: print the mark?
     pretty c
@@ -141,26 +141,26 @@ instance Pretty Comp where
 instance Pretty CompFun where
   pretty (CompFunTerm t) = prettyTerm t
   pretty (CompFunComp f g) =
-    prettyAppList [pretty f, text ">=>", pretty g]
+    prettyAppList [pretty f, ">=>", pretty g]
   pretty (CompFunMark f _) =
     -- FIXME: print the mark?
     pretty f
 
 instance Pretty WHNFComp where
   pretty (Return t) =
-    prettyAppList [text "returnM", parens (prettyTerm t)]
-  pretty Error = text "errorM"
+    prettyAppList ["returnM", parens (prettyTerm t)]
+  pretty Error = "errorM"
   pretty (If cond t1 t2) =
-    prettyAppList [text "ite", prettyTerm cond,
+    prettyAppList ["ite", prettyTerm cond,
                    parens (pretty t1), parens (pretty t2)]
   pretty (FunBind f [] _ k) =
-    prettyAppList [pretty f, (text ">>="), pretty k]
+    prettyAppList [pretty f, ">>=", pretty k]
   pretty (FunBind f args _ k) =
     prettyAppList
     [parens (prettyAppList (pretty f : map prettyTerm args)),
-     (text ">>=") <+> pretty k]
+     ">>=" <+> pretty k]
 
-vsepIndent24 :: Doc -> Doc -> Doc -> Doc -> Doc
+vsepIndent24 :: Doc ann -> Doc ann -> Doc ann -> Doc ann -> Doc ann
 vsepIndent24 d1 d2 d3 d4 =
   group (d1 <> nest 2 (line <> d2) <> line <> d3 <> nest 2 (line <> d4))
 
@@ -170,50 +170,50 @@ instance Pretty MRTerm where
   pretty (MRTermComp comp) = pretty comp
   pretty (MRTermCompFun f) = pretty f
   pretty (MRTermWHNFComp norm) = pretty norm
-  pretty (MRTermFunName nm) = pretty ("function" :: String) <+> pretty nm
+  pretty (MRTermFunName nm) = "function" <+> pretty nm
 
 instance Pretty FailCtx where
   pretty (FailCtxCmp t1 t2) =
-    group $ nest 2 $ vsep [text "When comparing terms:", pretty t1, pretty t2]
+    group $ nest 2 $ vsep ["When comparing terms:", pretty t1, pretty t2]
   pretty (FailCtxWHNF t) =
-    group $ nest 2 $ vsep [text "When normalizing computation:", prettyTerm t]
+    group $ nest 2 $ vsep ["When normalizing computation:", prettyTerm t]
 
 instance Pretty MRFailure where
   pretty (TermsNotEq t1 t2) =
     vsepIndent24
-    (text "Terms not equal:") (prettyTerm t1)
-    (text "and") (prettyTerm t2)
+    "Terms not equal:" (prettyTerm t1)
+    "and" (prettyTerm t2)
   pretty (TypesNotEq tp1 tp2) =
     vsepIndent24
-    (text "Types not equal:") (pretty tp1)
-    (text "and") (pretty tp2)
+    "Types not equal:" (pretty tp1)
+    "and" (pretty tp2)
   pretty (ReturnNotError t) =
-    nest 2 (text "errorM not equal to" <+>
-            group (hang 2 $ vsep [text "returnM", prettyTerm t]))
+    nest 2 ("errorM not equal to" <+>
+            group (hang 2 $ vsep ["returnM", prettyTerm t]))
   pretty (FunsNotEq nm1 nm2) =
-    vsep [text "Named functions not equal:", pretty nm1, pretty nm2]
+    vsep ["Named functions not equal:", pretty nm1, pretty nm2]
   pretty (CannotLookupFunDef nm) =
-    vsep [text "Could not find definition for function:", pretty nm]
+    vsep ["Could not find definition for function:", pretty nm]
   pretty (RecursiveUnfold nm) =
-    vsep [text "Recursive unfolding of function inside its own body:",
+    vsep ["Recursive unfolding of function inside its own body:",
           pretty nm]
   pretty (MalformedInOutTypes t) =
-    text "Not a ground InputOutputTypes list:"
+    "Not a ground InputOutputTypes list:"
     <> nest 2 (line <> prettyTerm t)
   pretty (MalformedDefsFun t) =
-    text "Cannot handle letRecM recursive definitions term:"
+    "Cannot handle letRecM recursive definitions term:"
     <> nest 2 (line <> prettyTerm t)
   pretty (MalformedComp t) =
-    text "Could not handle computation:"
+    "Could not handle computation:"
     <> nest 2 (line <> prettyTerm t)
   pretty (NotCompFunType tp) =
-    text "Not a computation or computational function type:"
+    "Not a computation or computational function type:"
     <> nest 2 (line <> prettyTerm tp)
   pretty (MRFailureCtx ctx err) =
     pretty ctx <> line <> pretty err
   pretty (MRFailureDisj err1 err2) =
-    vsepIndent24 (text "Tried two comparisons:") (pretty err1)
-    (text "Backtracking...") (pretty err2)
+    vsepIndent24 "Tried two comparisons:" (pretty err1)
+    "Backtracking..." (pretty err2)
 
 showMRFailure :: MRFailure -> String
 showMRFailure = show . pretty

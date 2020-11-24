@@ -53,7 +53,7 @@ import Data.List (intercalate, sortBy)
 import qualified Data.Map.Strict as Map
 import Data.Maybe
 import qualified Data.Set as Set
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Prettyprinter
 import qualified Text.PrettyPrint.HughesPJ as PP
 
 import Language.JVM.Common (ppFldId)
@@ -78,6 +78,7 @@ import Verifier.Java.SAWBackend hiding (basic_ss)
 import Verifier.SAW.Prelude
 import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Term.Pretty (SawDoc)
 import Verifier.SAW.TypedTerm
 
 -- JSS Utilities {{{1
@@ -484,7 +485,7 @@ data VerifyState = VState {
          -- verification.
        -- , vsEvalContext :: EvalContext
        , vsCounterexampleFn :: CounterexampleFn
-       , vsStaticErrors :: [Doc]
+       , vsStaticErrors :: [SawDoc]
        }
 
 {- Alternative implementation of JavaMethodSpec -}
@@ -745,7 +746,7 @@ checkFinalState sc ms bs cl initPS = do
       let newClasses = Map.keys ((finalMem ^. memInitialization) `Map.difference`
                                  (initMem ^. memInitialization)) in
       unless (specAllowAlloc ms) $
-        pvcgFail (text ("Initializes extra classes " ++ show newClasses))
+        pvcgFail (pretty ("Initializes extra classes " ++ show newClasses))
     when (initMem ^. memClassObjects /= finalMem ^. memClassObjects) $
       pvcgFail "Allocates a class object."
     when (Map.keys initRefArrays /= Map.keys finalRefArrays) $
@@ -800,9 +801,9 @@ checkFinalState sc ms bs cl initPS = do
               pvcgAssertEq aname ival fval -- TODO: name
           | otherwise -> pvcgFail $ hsep
             [ "Array changed size from"
-            , int (fromIntegral ilen)
+            , pretty ilen
             , "to"
-            , int (fromIntegral flen)
+            , pretty flen
             ]
     -- TODO: check that return value has been specified if method returns a value
     pvcgAssert "final assertions" (finalPS ^. pathAssertions)

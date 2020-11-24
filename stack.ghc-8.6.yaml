@@ -56,5 +56,8 @@ extra-deps:
   - lens-4.19.2
   - network-3.1.1.1
   - scotty-0.12
+  - modern-uri-0.3.3.0
+  - prettyprinter-1.7.0
+  - prettyprinter-ansi-terminal-1.1.2
 resolver: lts-14.27
 allow-newer: false
