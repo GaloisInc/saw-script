@@ -35,12 +35,15 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         ghc: ["8.6.5", "8.8.4"]
-        continue-on-error: [false]
+        continue-on-error: [true]
         include:
           - os: macos-latest
             ghc: "8.6.5"
             continue-on-error: true
           - os: macos-latest
+            ghc: "8.8.4"
+            continue-on-error: true
+          - os: windows-latest
             ghc: "8.8.4"
             continue-on-error: true
           - os: windows-latest
@@ -58,7 +61,7 @@ jobs:
 
       - uses: actions/setup-python@v2
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
       - shell: bash
         run: pip3 install virtualenv
@@ -74,9 +77,9 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-${{ github.sha }}
+          key: cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-${{ github.sha }}
           restore-keys: |
-            cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('**/cabal.GHC-*') }}-
+            cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
       - shell: bash
         run: .github/ci.sh build_abc
@@ -84,6 +87,7 @@ jobs:
 
       - shell: bash
         run: .github/ci.sh build
+        continue-on-error: false
 
       - shell: bash
         run: .github/ci.sh install_system_deps
@@ -96,8 +100,8 @@ jobs:
         run: .github/ci.sh setup_dist_bins
 
       - shell: bash
-        # TODO: change this once we can get these tests working in CI
-        continue-on-error: true
+        id: cabal-test
+        continue-on-error: ${{ matrix.continue-on-error }}
         run: cabal v2-test saw-remote-api
         env:
           SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
@@ -119,8 +123,7 @@ jobs:
           env.RELEASE && matrix.ghc == '8.8.4'
         run: |
           .github/ci.sh build_cryptol
-          exe="$(cd deps/cryptol && cabal exec which cryptol)"
-          cp "$exe" "dist/bin"
+          .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
 
       - if: >-
           env.RELEASE && matrix.ghc == '8.8.4'
@@ -137,7 +140,7 @@ jobs:
           path: "dist/bin/saw"
 
       - shell: bash
-        if: "steps.test.outcome == 'failure'"
+        if: "steps.test.outcome == 'failure' || steps.cabal-test.outcome == 'failure'"
         name: Warn if tests failed
         run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
 
@@ -150,8 +153,6 @@ jobs:
       - run: |
           git submodule update --init
           git -C deps/abcBridge submodule update --init
-      - uses: satackey/action-docker-layer-caching@v0.0.8
-        continue-on-error: true
       - name: Publish to Registry
         uses: docker/build-push-action@v1
         with:
@@ -226,7 +227,6 @@ jobs:
         run: .github/ci.sh bundle_files
 
       - shell: bash
-        continue-on-error: true # temporary to test release without setting up secrets
         env:
           SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}

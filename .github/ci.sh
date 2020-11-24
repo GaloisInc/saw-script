@@ -10,7 +10,7 @@ mkdir -p "$BIN"
 is_exe() { [[ -x "$1/$2$EXT" ]] || command -v "$2" > /dev/null 2>&1; }
 
 extract_exe() {
-  exe="$(find dist-newstyle -type f -name "$1$EXT")"
+  exe="$(find "${3:-dist-newstyle}" -type f -name "$1$EXT")"
   name="$(basename "$exe")"
   echo "Copying $name to $2"
   mkdir -p "$2"
@@ -38,7 +38,7 @@ retry() {
 }
 
 setup_dist_bins() {
-  if $IS_WIN ; then
+  if $IS_WIN; then
     is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
   else
     is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && is_exe "dist/bin" "jss" && return
@@ -47,7 +47,7 @@ setup_dist_bins() {
   extract_exe "saw" "dist/bin"
   extract_exe "saw-remote-api" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
-  echo "$PWD/dist/bin" >> $GITHUB_PATH
+  echo "$PWD/dist/bin" >> "$GITHUB_PATH"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
   strip dist/bin/jss* || echo "Strip failed: Ignoring harmless error"
 }
@@ -123,19 +123,23 @@ build() {
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   echo "allow-newer: all" >> cabal.project.local
+  pkgs=(saw saw-remote-api)
   if $IS_WIN; then
     echo "flags: -builtin-abc" >> cabal.project.local
     echo "constraints: jvm-verifier -builtin-abc, cryptol-saw-core -build-css" >> cabal.project.local
-    pkgs="saw saw-remote-api"
   else
-    pkgs="jss saw saw-remote-api"
+    pkgs+=(jss)
   fi
   echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
-  if ! retry cabal v2-build "$@" $pkgs && [[ "$RUNNER_OS" == "macOS" ]]; then
-    echo "Working around a dylib issue on macos by removing the cache and trying again"
-    cabal v2-clean
-    retry cabal v2-build "$@" $pkgs
+  if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
+    if [[ "$RUNNER_OS" == "macOS" ]]; then
+      echo "Working around a dylib issue on macos by removing the cache and trying again"
+      cabal v2-clean
+      retry cabal v2-build "$@" "${pkgs[@]}"
+    else
+      return 1
+    fi
   fi
 }
 
@@ -158,7 +162,7 @@ install_system_deps() {
   install_yasm &
   wait
   export PATH=$PWD/$BIN:$PATH
-  echo "$PWD/$BIN" >> $GITHUB_PATH
+  echo "$PWD/$BIN" >> "$GITHUB_PATH"
   is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices && is_exe "$BIN" yasm
 }
 
@@ -173,6 +177,7 @@ test_dist() {
 build_cryptol() {
   is_exe "dist/bin" "cryptol" && return
   pushd deps/cryptol
+  git submodule update --init
   .github/ci.sh build
   popd
 }
@@ -198,7 +203,7 @@ find_java() {
   javac PropertiesTest.java
   RT_JAR="$(java PropertiesTest | tr : '\n' | grep rt.jar | head -n 1)"
   export RT_JAR
-  echo "RT_JAR=$RT_JAR" >> $GITHUB_ENV
+  echo "RT_JAR=$RT_JAR" >> "$GITHUB_ENV"
   rm PropertiesTest.class
   popd
 }
