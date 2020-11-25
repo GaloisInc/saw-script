@@ -819,7 +819,7 @@ typeOfJavaType jty =
     JavaChar      -> J.CharType
     JavaShort     -> J.ShortType
     JavaInt       -> J.IntType
-    JavaLong      -> J.IntType
+    JavaLong      -> J.LongType
     JavaFloat     -> J.FloatType
     JavaDouble    -> J.DoubleType
     JavaArray _ t -> J.ArrayType (typeOfJavaType t)
