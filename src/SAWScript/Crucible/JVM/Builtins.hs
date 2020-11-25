@@ -342,8 +342,8 @@ verifyPrestate cc mspec globals0 =
               ]
        (Just sv, Just retTy) ->
          do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
-            b <- liftIO $ checkRegisterCompatibility retTy retTy'
-            unless b $ fail $ unlines
+            unless (registerCompatible retTy retTy') $
+              fail $ unlines
               [ "Incompatible types for return value when verifying " ++ mspec ^. csMethodName
               , "Expected: " ++ show retTy
               , "but given value of type: " ++ show retTy'
@@ -351,11 +351,6 @@ verifyPrestate cc mspec globals0 =
        (Nothing, _) -> return ()
 
      return (args, cs, env, globals2)
-
--- | Check two Types for register compatibility.
-checkRegisterCompatibility :: J.Type -> J.Type -> IO Bool
-checkRegisterCompatibility mt mt' =
-  return (storageType mt == storageType mt')
 
 -- | Check two Types for register compatibility.
 registerCompatible :: J.Type -> J.Type -> Bool
@@ -391,8 +386,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
     nm = mspec ^. csMethodName
 
     checkArgTy i mt mt' =
-      do b <- checkRegisterCompatibility mt mt'
-         unless b $
+      unless (registerCompatible mt mt') $
            fail $ unlines [ "Type mismatch in argument " ++ show i ++ " when verifying " ++ show nm
                           , "Argument is declared with type: " ++ show mt
                           , "but provided argument has incompatible type: " ++ show mt'
