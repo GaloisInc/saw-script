@@ -7,14 +7,12 @@ Stability   : provisional
 
 {-# LANGUAGE Trustworthy, TemplateHaskell #-}
 module SAWScript.Panic
-  (HasCallStack, SawPanic, Saw, Panic, panic) where
+  (HasCallStack, panic) where
 
 import Panic hiding (panic)
 import qualified Panic as Panic
 
 data Saw = Saw
-
-type SawPanic = Panic Saw
 
 panic :: HasCallStack => String -> [String] -> a
 panic = Panic.panic Saw
