@@ -342,8 +342,8 @@ verifyPrestate cc mspec globals0 =
               ]
        (Just sv, Just retTy) ->
          do retTy' <- typeOfSetupValue cc tyenv nameEnv sv
-            b <- liftIO $ checkRegisterCompatibility retTy retTy'
-            unless b $ fail $ unlines
+            unless (registerCompatible retTy retTy') $
+              fail $ unlines
               [ "Incompatible types for return value when verifying " ++ mspec ^. csMethodName
               , "Expected: " ++ show retTy
               , "but given value of type: " ++ show retTy'
@@ -353,9 +353,8 @@ verifyPrestate cc mspec globals0 =
      return (args, cs, env, globals2)
 
 -- | Check two Types for register compatibility.
-checkRegisterCompatibility :: J.Type -> J.Type -> IO Bool
-checkRegisterCompatibility mt mt' =
-  return (storageType mt == storageType mt')
+registerCompatible :: J.Type -> J.Type -> Bool
+registerCompatible mt mt' = storageType mt == storageType mt'
 
 data StorageType = STInt | STLong | STFloat | STDouble | STRef
   deriving Eq
@@ -387,8 +386,7 @@ resolveArguments cc mspec env = mapM resolveArg [0..(nArgs-1)]
     nm = mspec ^. csMethodName
 
     checkArgTy i mt mt' =
-      do b <- checkRegisterCompatibility mt mt'
-         unless b $
+      unless (registerCompatible mt mt') $
            fail $ unlines [ "Type mismatch in argument " ++ show i ++ " when verifying " ++ show nm
                           , "Argument is declared with type: " ++ show mt
                           , "but provided argument has incompatible type: " ++ show mt'
@@ -821,7 +819,7 @@ typeOfJavaType jty =
     JavaChar      -> J.CharType
     JavaShort     -> J.ShortType
     JavaInt       -> J.IntType
-    JavaLong      -> J.IntType
+    JavaLong      -> J.LongType
     JavaFloat     -> J.FloatType
     JavaDouble    -> J.DoubleType
     JavaArray _ t -> J.ArrayType (typeOfJavaType t)
@@ -891,9 +889,14 @@ jvm_field_is _typed _bic _opt ptr fname val =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
-     -- valTy <- typeOfSetupValue cc env nameEnv val
-     --when typed (checkMemTypeCompatibility lhsTy valTy)
+     valTy <- typeOfSetupValue cc env nameEnv val
      fid <- either fail pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
+     unless (registerCompatible (J.fieldIdType fid) valTy) $
+       fail $ unlines
+       [ "Incompatible types for field " ++ fname
+       , "Expected: " ++ show (J.fieldIdType fid)
+       , "but given value of type: " ++ show valTy
+       ]
      Setup.addPointsTo (JVMPointsToField loc ptr fid val)
 
 jvm_elem_is ::
@@ -909,12 +912,25 @@ jvm_elem_is _typed _bic _opt ptr idx val =
   do loc <- SS.toW4Loc "jvm_elem_is" <$> lift getPosition
      st <- get
      let rs = st ^. Setup.csResolvedState
+     let cc = st ^. Setup.csCrucibleContext
      let path = Right idx
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
        then fail "Multiple points-to preconditions on same pointer"
        else Setup.csResolvedState %= MS.markResolved ptr [path]
-     -- let env = MS.csAllocations (st ^. Setup.csMethodSpec)
-     --     nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+     let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     ptrTy <- typeOfSetupValue cc env nameEnv ptr
+     valTy <- typeOfSetupValue cc env nameEnv val
+     elTy <-
+       case ptrTy of
+         J.ArrayType elTy -> pure elTy
+         _ -> fail $ "Not an array type: " ++ show ptrTy
+     unless (registerCompatible elTy valTy) $
+       fail $ unlines
+       [ "Incompatible types for array element"
+       , "Expected: " ++ show elTy
+       , "but given value of type: " ++ show valTy
+       ]
      Setup.addPointsTo (JVMPointsToElem loc ptr idx val)
 
 jvm_array_is ::
