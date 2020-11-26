@@ -14,7 +14,16 @@ import qualified Panic as Panic
 
 data Saw = Saw
 
-panic :: HasCallStack => String -> [String] -> a
+-- | Raise a fatal error. The purpose of 'panic' is to indicate
+-- conditions caused by programmer errors (e.g. violation of datatype
+-- invariants), not problems caused by bad user input.
+panic ::
+  HasCallStack =>
+  -- | Location of problem
+  String ->
+  -- | Problem description (lines)
+  [String] ->
+  a
 panic = Panic.panic Saw
 
 instance PanicComponent Saw where
