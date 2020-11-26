@@ -466,7 +466,7 @@ matchPointsTos opts sc cc spec prepost = go False []
         MS.SetupVar i                     -> Set.singleton i
         MS.SetupTerm _                    -> Set.empty
         MS.SetupNull ()                   -> Set.empty
-        MS.SetupGlobal () _               -> Set.empty
+        MS.SetupGlobal empty _            -> absurd empty
         MS.SetupStruct empty _ _          -> absurd empty
         MS.SetupArray empty _             -> absurd empty
         MS.SetupElem empty _ _            -> absurd empty
@@ -580,13 +580,7 @@ matchArg opts sc cc cs prepost actual@(RVal ref) expectedTy setupval =
          p   <- liftIO (CJ.refIsNull sym ref)
          addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost) ""))
 
-    MS.SetupGlobal () name ->
-      do let mem = () -- FIXME cc^.ccLLVMEmptyMem
-         sym  <- Ov.getSymInterface
-         ref' <- liftIO $ doResolveGlobal sym mem name
-
-         p  <- liftIO (CJ.refIsEqual sym ref ref')
-         addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost) ""))
+    MS.SetupGlobal empty _ -> absurd empty
 
     _ -> failure (cs ^. MS.csLoc) =<<
            mkStructuralMismatch opts cc sc cs actual setupval expectedTy
@@ -937,7 +931,7 @@ instantiateSetupValue sc s v =
     MS.SetupVar _                     -> return v
     MS.SetupTerm tt                   -> MS.SetupTerm <$> doTerm tt
     MS.SetupNull ()                   -> return v
-    MS.SetupGlobal () _               -> return v
+    MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct empty _ _          -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
@@ -1026,7 +1020,3 @@ decodeJVMVal ty v =
 asRVal :: W4.ProgramLoc -> JVMVal -> OverrideMatcher CJ.JVM w JVMRefVal
 asRVal _ (RVal ptr) = return ptr
 asRVal loc _ = failure loc BadPointerCast
-
-doResolveGlobal :: Sym -> () -> String -> IO JVMRefVal
-doResolveGlobal _sym _mem _name = fail "doResolveGlobal: FIXME"
--- FIXME: replace () with whatever type we need to look up global/static references

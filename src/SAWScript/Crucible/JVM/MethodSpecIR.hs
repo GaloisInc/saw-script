@@ -56,7 +56,7 @@ import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 -- ** Language features
 
 type instance MS.HasSetupNull CJ.JVM = 'True
-type instance MS.HasSetupGlobal CJ.JVM = 'True
+type instance MS.HasSetupGlobal CJ.JVM = 'False
 type instance MS.HasSetupStruct CJ.JVM = 'False
 type instance MS.HasSetupArray CJ.JVM = 'False
 type instance MS.HasSetupElem CJ.JVM = 'False

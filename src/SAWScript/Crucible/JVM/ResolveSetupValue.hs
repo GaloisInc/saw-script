@@ -117,8 +117,7 @@ typeOfSetupValue _cc env _nameEnv val =
       -- can be used at, and b) it prevents us from doing any
       -- type-safe field accesses.
       return (J.ClassType (J.mkClassName "java/lang/Object"))
-    MS.SetupGlobal () name ->
-      fail ("typeOfSetupValue: unimplemented jvm_global: " ++ name)
+    MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct empty _ _          -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
@@ -142,8 +141,7 @@ resolveSetupVal cc env _tyenv _nameEnv val =
     MS.SetupTerm tm -> resolveTypedTerm cc tm
     MS.SetupNull () ->
       return (RVal (W4.maybePartExpr sym Nothing))
-    MS.SetupGlobal () name ->
-      fail $ "resolveSetupVal: unimplemented jvm_global: " ++ name
+    MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct empty _ _          -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
