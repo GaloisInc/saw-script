@@ -12,7 +12,7 @@ module SAWScript.Panic
 import Panic hiding (panic)
 import qualified Panic as Panic
 
-data Saw = Saw
+data SAW = SAW
 
 -- | Raise a fatal error. The purpose of 'panic' is to indicate
 -- conditions caused by programmer errors (e.g. violation of datatype
@@ -24,10 +24,10 @@ panic ::
   -- | Problem description (lines)
   [String] ->
   a
-panic = Panic.panic Saw
+panic = Panic.panic SAW
 
-instance PanicComponent Saw where
-  panicComponentName _ = "Saw"
+instance PanicComponent SAW where
+  panicComponentName _ = "SAW"
   panicComponentIssues _ = "https://github.com/GaloisInc/saw-script/issues"
 
   {-# Noinline panicComponentRevision #-}
