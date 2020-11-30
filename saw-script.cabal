@@ -66,6 +66,7 @@ library
     , parameterized-utils
     , parsec
     , pretty
+    , prettyprinter
     , pretty-show
     , process
     , rme

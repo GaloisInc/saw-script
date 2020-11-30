@@ -8,8 +8,10 @@ Stability   : provisional
 module SAWScript.PathVC where
 
 import Control.Monad.State
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Prettyprinter
+
 import Verifier.SAW.SharedTerm
+import Verifier.SAW.Term.Pretty (SawDoc)
 
 import SAWScript.VerificationCheck
 
@@ -20,24 +22,24 @@ data PathVC l = PathVC {
           -- | Assumptions on inputs.
         , pvcAssumptions :: Term
           -- | Static errors found in path.
-        , pvcStaticErrors :: [Doc]
+        , pvcStaticErrors :: [SawDoc]
           -- | What to verify for this result.
         , pvcChecks :: [VerificationCheck]
         }
 
-ppPathVC :: PathVC l -> Doc
+ppPathVC :: PathVC l -> SawDoc
 ppPathVC pvc =
   nest 2 $
-  vcat [ text "Path VC:"
+  vcat [ pretty "Path VC:"
        , nest 2 $
-         vcat [ text "Assumptions:"
+         vcat [ pretty "Assumptions:"
               , ppTerm defaultPPOpts (pvcAssumptions pvc)
               ]
        , nest 2 $ vcat $
-         text "Static errors:" :
+         pretty "Static errors:" :
          pvcStaticErrors pvc
        , nest 2 $ vcat $
-         text "Checks:" :
+         pretty "Checks:" :
          map ppCheck (pvcChecks pvc)
        ]
 
@@ -56,7 +58,7 @@ pvcgAssert nm v =
   modify $ \pvc -> pvc { pvcChecks = AssertionCheck nm v : pvcChecks pvc }
 
 pvcgFail :: Monad m =>
-            Doc -> PathVCGenerator l m ()
+            SawDoc -> PathVCGenerator l m ()
 pvcgFail msg =
   modify $ \pvc -> pvc { pvcStaticErrors = msg : pvcStaticErrors pvc }
 

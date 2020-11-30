@@ -27,7 +27,7 @@ import Data.IORef
 import qualified Data.Map as Map
 import Data.Time.Clock
 import qualified Data.Text as Text
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Prettyprinter
 
 import Language.JVM.Common
 
@@ -397,9 +397,10 @@ getJavaExpr ctx name = do
   case Map.lookup e (bsActualTypeMap (specBehaviors ms)) of
     Just ty -> return (e, ty)
     Nothing -> throwJava $ renderDoc $
-      hsep [ "Unknown expression", ftext name, "in",  ftext ctx ] <> "."
-      <$$>
-      ftext "Maybe you're missing a `java_var` or `java_class_var`?"
+      vcat
+      [ hsep [ "Unknown expression", ftext name, "in",  ftext ctx ] <> "."
+      , ftext "Maybe you're missing a `java_var` or `java_class_var`?"
+      ]
 
 typeJavaExpr :: BuiltinContext -> String -> JavaType
              -> JavaSetup (JavaExpr, JavaActualType)
@@ -415,12 +416,12 @@ typeJavaExpr bic name ty = do
 checkEqualTypes :: Type -> Type -> String -> JavaSetup ()
 checkEqualTypes declared actual name =
   when (declared /= actual) $ throwJava $ show $
-    hsep [ text "WARNING: Declared type"
-         , text (show (ppType declared)) -- TODO: change pretty-printer
-         , text "doesn't match actual type"
-         , text (show (ppType actual)) -- TODO: change pretty-printer
-         , text "for variable"
-         , text name
+    hsep [ "WARNING: Declared type"
+         , viaShow (ppType declared) -- TODO: change pretty-printer
+         , "doesn't match actual type"
+         , viaShow (ppType actual) -- TODO: change pretty-printer
+         , "for variable"
+         , pretty name
          ]
 
 modifySpec :: (JavaMethodSpecIR -> JavaMethodSpecIR) -> JavaSetup ()

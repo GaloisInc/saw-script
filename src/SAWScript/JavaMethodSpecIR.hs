@@ -69,12 +69,13 @@ import qualified Data.Map as Map
 import Data.Maybe (catMaybes)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Prettyprinter
 
 import qualified Verifier.Java.Codebase as JSS
 import qualified Verifier.Java.Common as JSS
 
-import Verifier.SAW.TypedAST (ppTerm, defaultPPOpts)
+--import Verifier.SAW.TypedAST (ppTerm, defaultPPOpts)
+import Verifier.SAW.Term.Pretty (SawDoc, ppTerm, defaultPPOpts)
 
 import qualified SAWScript.CongruenceClosure as CC
 import SAWScript.CongruenceClosure (CCSet)
@@ -139,46 +140,58 @@ data BehaviorSpec = BS {
        , bsReversedCommands :: [BehaviorCommand]
        } deriving (Show)
 
-ppLogicExpr :: LogicExpr -> Doc
+-- TODO: Change this when 'ppJavaExpr' is converted to prettyprinter
+prettyJavaExpr :: JavaExpr -> Doc ann
+prettyJavaExpr = pretty . ppJavaExpr
+
+-- TODO: Change this when 'ppJavaExpr' is converted to prettyprinter
+prettyActualType :: JavaActualType -> Doc ann
+prettyActualType = pretty . ppActualType
+
+-- TODO: avoid intermediate conversion to 'String'
+prettyClassName :: JSS.ClassName -> Doc ann
+prettyClassName = pretty . JSS.unClassName
+
+ppLogicExpr :: LogicExpr -> SawDoc
 ppLogicExpr (LogicExpr t args) =
   vcat $
   parens (ppTerm defaultPPOpts t) :
-  map (text . ppJavaExpr) args
+  map prettyJavaExpr args
 
-ppMixedExpr :: MixedExpr -> Doc
-ppMixedExpr (JE je) = text (ppJavaExpr je)
+ppMixedExpr :: MixedExpr -> SawDoc
+ppMixedExpr (JE je) = prettyJavaExpr je
 ppMixedExpr (LE le) = ppLogicExpr le
 
-ppBehaviorCommand :: BehaviorCommand -> Doc
+ppBehaviorCommand :: BehaviorCommand -> SawDoc
 ppBehaviorCommand cmd =
   case cmd of
     (EnsureInstanceField _ je f me) ->
       "sets instance field" <+>
-      text (ppJavaExpr je) <> "." <> ppField f <+>
+      prettyJavaExpr je <> "." <> ppField f <+>
       "to" <+> ppMixedExpr me
     (EnsureStaticField _ f me) ->
       "sets static field" <+>
       ppStaticField f <+>
       "to" <+> ppMixedExpr me
     (EnsureArray _ je me) ->
-      "sets array" <+> text(ppJavaExpr je) <+>
+      "sets array" <+> prettyJavaExpr je <+>
       "to" <+> ppMixedExpr me
     (ModifyInstanceField je f) ->
       "modifies instance field" <+>
-      text (ppJavaExpr je) <> "." <> ppField f
+      prettyJavaExpr je <> "." <> ppField f
     (ModifyStaticField f) ->
       "modifies static field" <+>
       ppStaticField f
     (ModifyArray je _) ->
-      "modifies array" <+> text (ppJavaExpr je)
+      "modifies array" <+> prettyJavaExpr je
     (ReturnValue me) ->
       "returns" <+> ppMixedExpr me
   where
-    ppField f = text (JSS.fieldIdName f)
+    ppField f = pretty (JSS.fieldIdName f)
     ppStaticField f =
-      text (JSS.unClassName (JSS.fieldIdClass f)) <> "." <> text (JSS.fieldIdName f)
+      prettyClassName (JSS.fieldIdClass f) <> "." <> ppField f
 
-ppBehavior :: BehaviorSpec -> Doc
+ppBehavior :: BehaviorSpec -> SawDoc
 ppBehavior bs =
   vcat [ "Assumes the following types for Java locations:"
        , indent 2 $ vcat $ map ppActualTypeEntry $
@@ -202,22 +215,22 @@ ppBehavior bs =
        ]
   where
     ppActualTypeEntry (e, t) =
-      text (ppJavaExpr e) <+> "::" <+> text (ppActualType t)
+      prettyJavaExpr e <+> "::" <+> prettyActualType t
     ppSet =
-      hcat . map (text . ppJavaExpr)
+      hcat . map prettyJavaExpr
     ppAssign (_, je, me) =
-      text (ppJavaExpr je) <+> ":=" <+> ppMixedExpr me
+      prettyJavaExpr je <+> ":=" <+> ppMixedExpr me
 
-ppMethodSpec :: JavaMethodSpecIR -> Doc
+ppMethodSpec :: JavaMethodSpecIR -> SawDoc
 ppMethodSpec ms =
   vcat [ "Java Method specification."
        , ""
-       , "Instance class:" <+> text (JSS.unClassName (JSS.className (specThisClass ms)))
-       , "Definition class:" <+> text (JSS.unClassName (JSS.className (specMethodClass ms)))
-       , "Method:" <+> text (JSS.methodName (specMethod ms))
+       , "Instance class:" <+> prettyClassName (JSS.className (specThisClass ms))
+       , "Definition class:" <+> prettyClassName (JSS.className (specMethodClass ms))
+       , "Method:" <+> pretty (JSS.methodName (specMethod ms))
        , ""
        , "Requires these classes to be initialized:"
-       , indent 2 $ vcat $ map (text . JSS.unClassName) $ specInitializedClasses ms
+       , indent 2 $ vcat $ map prettyClassName $ specInitializedClasses ms
        , ""
        , if specAllowAlloc ms
          then "Allows allocation."
