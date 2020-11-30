@@ -617,7 +617,8 @@ importPrimitive sc env n sch
   | Just nm <- C.asPrim n, Just expr <- Map.lookup nm (envRefPrims env) =
       do t <- importSchema sc env sch
          e <- importExpr sc env expr
-         scConstant sc (nameToString n) e t
+         nmi <- importName n
+         scConstant' sc nmi e t
   | Just nm <- C.asPrim n = panic "Unknown Cryptol primitive name" [show nm]
   | otherwise = panic "Improper Cryptol primitive name" [show n]
 
