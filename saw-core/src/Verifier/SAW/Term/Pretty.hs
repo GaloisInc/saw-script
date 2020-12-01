@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -300,23 +301,23 @@ ppNat (PPOpts{..}) i
   | otherwise = prefix <> pretty value
   where
     prefix = case ppBase of
-      2  -> pretty "0b"
-      8  -> pretty "0o"
+      2  -> "0b"
+      8  -> "0o"
       10 -> mempty
-      16 -> pretty "0x"
-      _  -> pretty "0" <> pretty '<' <> pretty ppBase <> pretty '>'
+      16 -> "0x"
+      _  -> "0" <> pretty '<' <> pretty ppBase <> pretty '>'
 
     value  = showIntAtBase (toInteger ppBase) (digits !!) i ""
     digits = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 -- | Pretty-print a memoization variable
 ppMemoVar :: MemoVar -> SawDoc
-ppMemoVar mv = pretty "x@" <> pretty mv
+ppMemoVar mv = "x@" <> pretty mv
 
 -- | Pretty-print a type constraint (also known as an ascription) @x : tp@
 ppTypeConstraint :: SawDoc -> SawDoc -> SawDoc
 ppTypeConstraint x tp =
-  hang 2 $ group $ vsep [annotate LocalVarStyle x, pretty ":" <+> tp]
+  hang 2 $ group $ vsep [annotate LocalVarStyle x, ":" <+> tp]
 
 -- | Pretty-print an application to 0 or more arguments at the given precedence
 ppAppList :: Prec -> SawDoc -> [SawDoc] -> SawDoc
@@ -327,9 +328,9 @@ ppAppList p f args = ppParensPrec p PrecApp $ group $ hang 2 $ vsep (f : args)
 ppLetBlock :: [(MemoVar, SawDoc)] -> SawDoc -> SawDoc
 ppLetBlock defs body =
   vcat
-  [ pretty "let" <+> lbrace <+> align (vcat (map ppEqn defs))
+  [ "let" <+> lbrace <+> align (vcat (map ppEqn defs))
   , indent 4 rbrace
-  , pretty " in" <+> body
+  , " in" <+> body
   ]
   where
     ppEqn (var,d) = ppMemoVar var <+> pretty '=' <+> d
@@ -355,7 +356,7 @@ ppRecord type_p alist =
   (if type_p then (pretty '#' <>) else id) $
   encloseSep lbrace rbrace comma $ map ppField alist
   where
-    ppField (fld, rhs) = group (nest 2 (vsep [pretty fld <+> pretty op_str, rhs]))
+    ppField (fld, rhs) = group (nest 2 (vsep [pretty fld <+> op_str, rhs]))
     op_str = if type_p then ":" else "="
 
 -- | Pretty-print a projection / selector "x.f"
@@ -371,12 +372,12 @@ ppArrayValue = list
 ppLambda :: SawDoc -> (String, SawDoc) -> SawDoc
 ppLambda tp (name, body) =
   group $ hang 2 $
-  vsep [pretty "\\" <> parens (ppTypeConstraint (pretty name) tp) <+> pretty "->", body]
+  vsep ["\\" <> parens (ppTypeConstraint (pretty name) tp) <+> "->", body]
 
 -- | Pretty-print a pi abstraction as @(x :: tp) -> body@, or as @tp -> body@ if
 -- @x == "_"@
 ppPi :: SawDoc -> (String, SawDoc) -> SawDoc
-ppPi tp (name, body) = vsep [lhs, pretty "->" <+> body]
+ppPi tp (name, body) = vsep [lhs, "->" <+> body]
   where
     lhs = if name == "_" then tp else parens (ppTypeConstraint (pretty name) tp)
 
@@ -396,9 +397,9 @@ ppDataType d (params, ((d_ctx,d_tp), ctors)) =
   vcat
   [ vsep
     [ (group . vsep)
-      [ pretty "data" <+> ppIdent d <+> params <+> pretty ":" <+>
-         (d_ctx <+> pretty "->" <+> d_tp)
-      , pretty "where" <+> lbrace
+      [ "data" <+> ppIdent d <+> params <+> ":" <+>
+         (d_ctx <+> "->" <+> d_tp)
+      , "where" <+> lbrace
       ]
     , vcat (map (<> semi) ctors)
     ]
@@ -415,8 +416,8 @@ ppFlatTermF :: Prec -> FlatTermF Term -> PPM SawDoc
 ppFlatTermF prec tf =
   case tf of
     GlobalDef i   -> return $ annotate GlobalDefStyle $ ppIdent i
-    UnitValue     -> return $ pretty "(-empty-)"
-    UnitType      -> return $ pretty "#(-empty-)"
+    UnitValue     -> return "(-empty-)"
+    UnitType      -> return "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecLambda x <*> ppTerm' PrecNone y
     PairType x y  -> ppPairType prec <$> ppTerm' PrecApp x <*> ppTerm' PrecProd y
     PairLeft t    -> ppProj "1" <$> ppTerm' PrecArg t
@@ -433,10 +434,10 @@ ppFlatTermF prec tf =
          ixs_pp <- mapM (ppTerm' PrecArg) ixs
          arg_pp <- ppTerm' PrecArg arg
          return $
-           ppAppList prec (annotate RecursorStyle (ppIdent d <> pretty "#rec"))
+           ppAppList prec (annotate RecursorStyle (ppIdent d <> "#rec"))
            (params_pp ++ [p_ret_pp] ++
             [tupled $
-             zipWith (\(c,_) f_pp -> vsep [ppIdent c, pretty "=>", f_pp])
+             zipWith (\(c,_) f_pp -> vsep [ppIdent c, "=>", f_pp])
              cs_fs fs_pp]
             ++ ixs_pp ++ [arg_pp])
     RecordType alist ->
@@ -473,7 +474,7 @@ ppTermF _ (Constant ec _) = pure $ annotate ConstantStyle $ ppName (ecName ec)
 
 -- | Internal function to recursively pretty-print a term
 ppTerm' :: Prec -> Term -> PPM SawDoc
-ppTerm' prec = atNextDepthM (pretty "...") . ppTerm'' where
+ppTerm' prec = atNextDepthM "..." . ppTerm'' where
   ppTerm'' (Unshared tf) = ppTermF prec tf
   ppTerm'' (STApp {stAppIndex = idx, stAppTermF = tf}) =
     do maybe_memo_var <- memoLookupM idx
