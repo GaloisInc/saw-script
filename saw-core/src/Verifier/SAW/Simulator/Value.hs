@@ -61,7 +61,7 @@ data Value l
   | VString !String
   | VFloat !Float
   | VDouble !Double
-  | VRecordValue ![(String, Thunk l)]
+  | VRecordValue ![(FieldName, Thunk l)]
   | VExtra (Extra l)
   | TValue (TValue l)
 
@@ -76,7 +76,7 @@ data TValue l
   | VUnitType
   | VPairType !(TValue l) !(TValue l)
   | VDataType !Ident ![Value l]
-  | VRecordType ![(String, TValue l)]
+  | VRecordType ![(FieldName, TValue l)]
   | VSort !Sort
 
 type Thunk l = Lazy (EvalM l) (Value l)
@@ -221,7 +221,7 @@ valPairRight v = panic "Verifier.SAW.Simulator.Value.valPairRight" ["Not a pair 
 vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = VRecordValue (Map.assocs m)
 
-valRecordProj :: (VMonad l, Show (Extra l)) => Value l -> String -> MValue l
+valRecordProj :: (VMonad l, Show (Extra l)) => Value l -> FieldName -> MValue l
 valRecordProj (VRecordValue fld_map) fld
   | Just t <- lookup fld fld_map = force t
 valRecordProj v@(VRecordValue _) fld =

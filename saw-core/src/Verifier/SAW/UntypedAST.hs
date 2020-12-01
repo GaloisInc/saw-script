@@ -65,9 +65,9 @@ data Term
   | UnitValue Pos
   | UnitType Pos
     -- | New-style records
-  | RecordValue Pos [(PosPair String, Term)]
-  | RecordType Pos [(PosPair String, Term)]
-  | RecordProj Term String
+  | RecordValue Pos [(PosPair FieldName, Term)]
+  | RecordType Pos [(PosPair FieldName, Term)]
+  | RecordProj Term FieldName
     -- | Simple pairs
   | PairValue Pos Term Term
   | PairType Pos Term Term

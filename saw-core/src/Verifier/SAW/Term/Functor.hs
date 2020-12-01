@@ -312,13 +312,13 @@ data FlatTermF e
     -- | Non-dependent record types, i.e., N-ary tuple types with named
     -- fields. These are considered equal up to reordering of fields. Actual
     -- tuple types are represented with field names @"1"@, @"2"@, etc.
-  | RecordType ![(String, e)]
+  | RecordType ![(FieldName, e)]
     -- | Non-dependent records, i.e., N-ary tuples with named fields. These are
     -- considered equal up to reordering of fields. Actual tuples are
     -- represented with field names @"1"@, @"2"@, etc.
-  | RecordValue ![(String, e)]
+  | RecordValue ![(FieldName, e)]
     -- | Non-dependent record projection
-  | RecordProj e !String
+  | RecordProj e !FieldName
 
     -- | Sorts, aka universes, are the types of types; i.e., an object is a
     -- "type" iff it has type @Sort s@ for some s

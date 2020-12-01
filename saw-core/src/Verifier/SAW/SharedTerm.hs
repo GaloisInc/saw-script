@@ -740,7 +740,7 @@ scReduceRecursor sc d params p_ret cs_fs c args =
 -- | An elimination for 'scWhnf'
 data WHNFElim
   = ElimApp Term
-  | ElimProj String
+  | ElimProj FieldName
   | ElimPair Bool
   | ElimRecursor Ident [Term] Term [(Ident,Term)] [Term]
 
@@ -1268,9 +1268,9 @@ scRecordSelect :: SharedContext -> Term -> FieldName -> IO Term
 scRecordSelect sc t fname = scFlatTermF sc (RecordProj t fname)
 
 -- | Create a term representing the type of a record from a list associating
--- field names (as 'String's) and types (as 'Term's). Note that the order of
+-- field names (as 'FieldName's) and types (as 'Term's). Note that the order of
 -- the given list is irrelevant, as record fields are not ordered.
-scRecordType :: SharedContext -> [(String,Term)] -> IO Term
+scRecordType :: SharedContext -> [(FieldName, Term)] -> IO Term
 scRecordType sc elem_tps = scFlatTermF sc (RecordType elem_tps)
 
 -- | Create a unit-valued term.

@@ -191,10 +191,10 @@ Ident : ident { fmap tokIdent $1 }
 IdentRec :: { PosPair String }
 IdentRec : identrec { fmap tokRecursor $1 }
 
-FieldValue :: { (PosPair String, Term) }
+FieldValue :: { (PosPair FieldName, Term) }
 FieldValue : Ident '=' Term { ($1, $3) }
 
-FieldType :: { (PosPair String, Term) }
+FieldType :: { (PosPair FieldName, Term) }
 FieldType : Ident ':' LTerm { ($1, $3) }
 
 opt(q) :: { Maybe q }

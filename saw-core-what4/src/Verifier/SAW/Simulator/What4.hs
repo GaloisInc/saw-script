@@ -994,7 +994,7 @@ newVarsForType ref v nm =
          return (Nothing, sv)
   where sym = given :: sym
 
-myfun ::(Map String (Labeler sym, SValue sym)) -> (Map String (Labeler sym), Map String (SValue sym))
+myfun ::(Map FieldName (Labeler sym, SValue sym)) -> (Map FieldName (Labeler sym), Map FieldName (SValue sym))
 myfun = fmap fst A.&&& fmap snd
 
 data Labeler sym
@@ -1021,7 +1021,7 @@ newVarFOT (FOTVec n tp)
 
 newVarFOT (FOTRec tm)
   = do (labels, vals) <- myfun <$> traverse newVarFOT tm
-       args <- traverse (return . ready) (vals :: (Map String (SValue sym)))
+       args <- traverse (return . ready) (vals :: (Map FieldName (SValue sym)))
        return (RecLabel labels, vRecord args)
 
 newVarFOT (FOTIntMod n)
@@ -1258,7 +1258,7 @@ data ArgTerm
   | ArgTermVector Term [ArgTerm] -- ^ element type, elements
   | ArgTermUnit
   | ArgTermPair ArgTerm ArgTerm
-  | ArgTermRecord [(String, ArgTerm)]
+  | ArgTermRecord [(FieldName, ArgTerm)]
   | ArgTermConst Term
   | ArgTermApply ArgTerm ArgTerm
   | ArgTermAt Natural Term ArgTerm Natural

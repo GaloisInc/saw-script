@@ -351,7 +351,7 @@ ppPairType prec x y = ppParensPrec prec PrecProd (x <+> pretty '*' <+> y)
 --
 -- * @{ fld1 op val1, ..., fldn op valn }@ otherwise, where @op@ is @::@ for
 --   types and @=@ for values.
-ppRecord :: Bool -> [(String, SawDoc)] -> SawDoc
+ppRecord :: Bool -> [(FieldName, SawDoc)] -> SawDoc
 ppRecord type_p alist =
   (if type_p then (pretty '#' <>) else id) $
   encloseSep lbrace rbrace comma $ map ppField alist
@@ -360,7 +360,7 @@ ppRecord type_p alist =
     op_str = if type_p then ":" else "="
 
 -- | Pretty-print a projection / selector "x.f"
-ppProj :: String -> SawDoc -> SawDoc
+ppProj :: FieldName -> SawDoc -> SawDoc
 ppProj sel doc = doc <> pretty '.' <> pretty sel
 
 -- | Pretty-print an array value @[v1, ..., vn]@
