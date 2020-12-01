@@ -88,7 +88,7 @@ import qualified Verifier.SAW.TermNet as Net
 import Verifier.SAW.Utils (internalError)
 
 type DeBruijnIndex = Int
-type FieldName = String
+type FieldName = Text
 
 instance (Hashable k, Hashable a) => Hashable (Map k a) where
     hashWithSalt x m = hashWithSalt x (Map.assocs m)

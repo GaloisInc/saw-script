@@ -27,6 +27,7 @@ import Control.Monad (foldM, liftM, mapM)
 import Data.Kind (Type)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural
@@ -164,7 +165,7 @@ instance Show (Extra l) => Show (Value l) where
       VString s      -> shows s
       VRecordValue [] -> showString "{}"
       VRecordValue ((fld,_):_) ->
-        showString "{" . showString fld . showString " = _, ...}"
+        showString "{" . showString (Text.unpack fld) . showString " = _, ...}"
       VExtra x       -> showsPrec p x
       TValue x       -> showsPrec p x
     where
@@ -186,7 +187,7 @@ instance Show (Extra l) => Show (TValue l) where
         | otherwise  -> shows s . showList vs
       VRecordType [] -> showString "{}"
       VRecordType ((fld,_):_) ->
-        showString "{" . showString fld . showString " :: _, ...}"
+        showString "{" . showString (Text.unpack fld) . showString " :: _, ...}"
       VVecType n a   -> showString "Vec " . shows n
                         . showString " " . showParen True (showsPrec p a)
       VSort s        -> shows s
@@ -226,7 +227,7 @@ valRecordProj (VRecordValue fld_map) fld
   | Just t <- lookup fld fld_map = force t
 valRecordProj v@(VRecordValue _) fld =
   panic "Verifier.SAW.Simulator.Value.valRecordProj"
-  ["Record field not found:", fld, "in value:", show v]
+  ["Record field not found:", show fld, "in value:", show v]
 valRecordProj v _ =
   panic "Verifier.SAW.Simulator.Value.valRecordProj"
   ["Not a record value:", show v]

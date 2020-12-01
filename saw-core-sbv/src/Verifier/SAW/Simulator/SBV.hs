@@ -618,7 +618,7 @@ parseUninterpreted cws nm ty =
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
-                 parseUninterpreted cws (nm ++ "." ++ f) tp) elem_tps)
+                 parseUninterpreted cws (nm ++ "." ++ Text.unpack f) tp) elem_tps)
 
     _ -> fail $ "could not create uninterpreted type for " ++ show ty
 

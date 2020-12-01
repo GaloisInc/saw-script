@@ -149,7 +149,7 @@ scWriteExternal t0 =
                        map show ixs ++ [show e])
             RecordType elem_tps -> pure $ unwords ["RecordType", show elem_tps]
             RecordValue elems   -> pure $ unwords ["Record", show elems]
-            RecordProj e prj    -> pure $ unwords ["RecordProj", show e, prj]
+            RecordProj e prj    -> pure $ unwords ["RecordProj", show e, Text.unpack prj]
             Sort s              -> pure $
               if s == propSort then unwords ["Prop"] else
                 unwords ["Sort", drop 5 (show s)] -- Ugly hack to drop "sort "
@@ -254,7 +254,7 @@ scReadExternal sc input =
           FTermF <$> (RecordType <$> (traverse (traverse getTerm) =<< readM elem_tps))
         ["Record", elems] ->
           FTermF <$> (RecordValue <$> (traverse (traverse getTerm) =<< readM elems))
-        ["RecordProj", e, prj] -> FTermF <$> (RecordProj <$> readIdx e <*> pure prj)
+        ["RecordProj", e, prj] -> FTermF <$> (RecordProj <$> readIdx e <*> pure (Text.pack prj))
         ["Prop"]            -> pure $ FTermF (Sort propSort)
         ["Sort", s]         -> FTermF <$> (Sort <$> (mkSort <$> readM s))
         ["Nat", n]          -> FTermF <$> (NatLit <$> readM n)

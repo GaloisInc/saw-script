@@ -26,6 +26,7 @@ import Control.Monad.State (State, get, gets, modify, put, runState, evalState)
 import Control.Monad.Except (ExceptT, throwError, runExceptT)
 import qualified Data.ByteString.Lazy.UTF8 as B
 import Data.Maybe (isJust)
+import qualified Data.Text as Text
 import Data.Traversable
 import Data.Word
 import Numeric.Natural
@@ -175,7 +176,7 @@ AtomTerm
   | IdentRec                     { Recursor Nothing $1 }
   | 'Prop'                       { Sort (pos $1) propSort }
   | 'sort' nat                   { Sort (pos $1) (mkSort (tokNat (val $2))) }
-  | AtomTerm '.' Ident           { RecordProj $1 (val $3) }
+  | AtomTerm '.' Ident           { RecordProj $1 (Text.pack (val $3)) }
   | AtomTerm '.' IdentRec        {% parseRecursorProj $1 $3 }
   | AtomTerm '.' nat             {% parseTupleSelector $1 (fmap tokNat $3) }
   | '(' sepBy(Term, ',') ')'     { mkTupleValue (pos $1) $2 }
@@ -192,10 +193,10 @@ IdentRec :: { PosPair String }
 IdentRec : identrec { fmap tokRecursor $1 }
 
 FieldValue :: { (PosPair FieldName, Term) }
-FieldValue : Ident '=' Term { ($1, $3) }
+FieldValue : Ident '=' Term { (fmap Text.pack $1, $3) }
 
 FieldType :: { (PosPair FieldName, Term) }
-FieldType : Ident ':' LTerm { ($1, $3) }
+FieldType : Ident ':' LTerm { (fmap Text.pack $1, $3) }
 
 opt(q) :: { Maybe q }
   : { Nothing }
@@ -336,7 +337,7 @@ mkTupleProj t _ =
 
 -- | Parse a term as a dotted list of strings
 parseModuleName :: Term -> Maybe [String]
-parseModuleName (RecordProj t str) = (++ [str]) <$> parseModuleName t
+parseModuleName (RecordProj t str) = (++ [Text.unpack str]) <$> parseModuleName t
 parseModuleName _ = Nothing
 
 -- | Parse a qualified recursor @M1.M2...Mn.d#rec@

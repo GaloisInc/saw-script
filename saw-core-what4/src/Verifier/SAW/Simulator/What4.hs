@@ -779,7 +779,7 @@ parseUninterpreted sym ref app ty =
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
-                 parseUninterpreted sym ref (suffixUnintApp ("_" ++ f) app) tp) elem_tps)
+                 parseUninterpreted sym ref (suffixUnintApp ("_" ++ Text.unpack f) app) tp) elem_tps)
 
     _ -> fail $ "could not create uninterpreted symbol of type " ++ show ty
 

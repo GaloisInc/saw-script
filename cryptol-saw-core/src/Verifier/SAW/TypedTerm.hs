@@ -14,7 +14,7 @@ import qualified Data.Map as Map
 import Cryptol.ModuleSystem.Name (nameIdent)
 import qualified Cryptol.TypeCheck.AST as C
 import Cryptol.Utils.PP (pretty)
-import qualified Cryptol.Utils.Ident as C (packIdent)
+import qualified Cryptol.Utils.Ident as C (mkIdent)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
 
 import Verifier.SAW.Cryptol (scCryptolType)
@@ -106,7 +106,7 @@ cryptolTypeOfFirstOrderType fot =
     FOTRec m ->
       C.tRec $
       C.recordFromFields $
-      [ (C.packIdent l, cryptolTypeOfFirstOrderType t)
+      [ (C.mkIdent l, cryptolTypeOfFirstOrderType t)
       | (l, t) <- Map.assocs m ]
 
 typedTermOfFirstOrderValue :: SharedContext -> FirstOrderValue -> IO TypedTerm
