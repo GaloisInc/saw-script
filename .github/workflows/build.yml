@@ -89,12 +89,25 @@ jobs:
         run: .github/ci.sh build
         continue-on-error: false
 
+      # Temporary workaround to use latest unstable version of CVC4 on Linux
+      - name: Determine version of CVC4 to use
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+              cvc4_dir=$(mktemp -d)
+              curl -o "$cvc4_dir/cvc4" -sL "https://cvc4.cs.stanford.edu/downloads/builds/x86_64-linux-opt/unstable/cvc4-2020-10-26-x86_64-linux-opt"
+              echo "$cvc4_dir" >> "$GITHUB_PATH"
+          else
+              echo "CVC4_VERSION=1.8" >> "$GITHUB_ENV"
+          fi
+
+      - uses: LisannaAtGalois/bash-helpers@master
       - shell: bash
-        run: .github/ci.sh install_system_deps
+        run: $BASH_HELPERS github-setup-solvers
         env:
           Z3_VERSION: "4.8.8"
-          CVC4_VERSION: "4.1.8"
           YICES_VERSION: "2.6.2"
+          YASM_VERSION: "pkgmgr-latest"
 
       - shell: bash
         run: .github/ci.sh setup_dist_bins
