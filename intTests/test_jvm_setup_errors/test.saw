@@ -311,7 +311,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "jvm_array_is with null reference";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     let arr = jvm_null;
     xs <- jvm_fresh_var "xs" (java_array 8 java_long);
@@ -322,7 +322,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "jvm_array_is with non-reference";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     let arr = jvm_term {{ True }};
     xs <- jvm_fresh_var "xs" (java_array 8 java_long);

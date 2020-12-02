@@ -247,8 +247,8 @@ crucible_jvm_unsafe_assume_spec ::
 crucible_jvm_unsafe_assume_spec cls nm setup =
   do cc <- setupCrucibleContext cls
      cb <- getJavaCodebase
-     -- cls' is either cls or a subclass of cls
      pos <- getPosition
+     -- cls' is either cls or a (transitive) superclass of cls
      (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let loc = SS.toW4Loc "_SAW_assume_spec" pos
      let st0 = initialCrucibleSetupState cc (cls', method) loc
@@ -419,10 +419,10 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-    resolveJVMRefVal :: SetupValue -> IO JVMRefVal
+    resolveJVMRefVal :: AllocIndex -> IO JVMRefVal
     resolveJVMRefVal lhs =
       do let msg = Crucible.GenericSimError "Non-reference value found in points-to assertion"
-         lhs' <- resolveSetupVal cc env tyenv nameEnv lhs
+         lhs' <- resolveSetupVal cc env tyenv nameEnv (MS.SetupVar lhs)
          case lhs' of
            RVal ref -> return ref
            _ -> liftIO $ Crucible.addFailedAssertion sym msg
@@ -792,13 +792,16 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
 
 data JVMSetupError
   = JVMFreshVarInvalidType JavaType
+  | JVMFieldNonReference SetupValue String
   | JVMFieldMultiple SetupValue String -- reference and field name
   | JVMFieldFailure String -- TODO: switch to a more structured type
   | JVMFieldTypeMismatch String J.Type J.Type -- field name, expected, found
+  | JVMElemNonReference SetupValue Int
   | JVMElemNonArray J.Type
   | JVMElemInvalidIndex SetupValue Int Int -- reference, length, index
   | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
   | JVMElemMultiple SetupValue Int -- reference and array index
+  | JVMArrayNonReference SetupValue
   | JVMArrayMultiple SetupValue
 
 instance X.Exception JVMSetupError
@@ -808,6 +811,12 @@ instance Show JVMSetupError where
     case err of
       JVMFreshVarInvalidType jty ->
         "jvm_fresh_var: Invalid type: " ++ show jty
+      JVMFieldNonReference ptr fname ->
+        unlines
+        [ "jvm_field_is: Left-hand side is not a valid object reference"
+        , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        , "Field name: " ++ fname
+        ]
       JVMFieldMultiple _ptr fname ->
         "jvm_field_is: Multiple specifications for the same instance field (" ++ fname ++ ")"
       JVMFieldFailure msg ->
@@ -818,6 +827,12 @@ instance Show JVMSetupError where
         [ "jvm_field_is: Incompatible types for field " ++ show fname
         , "Expected type: " ++ show expected
         , "Given type: " ++ show found
+        ]
+      JVMElemNonReference ptr idx ->
+        unlines
+        [ "jvm_elem_is: Left-hand side is not a valid object reference"
+        , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        , "Index: " ++ show idx
         ]
       JVMElemNonArray jty ->
         "jvm_elem_is: Not an array type: " ++ show jty
@@ -835,6 +850,11 @@ instance Show JVMSetupError where
         ]
       JVMElemMultiple _ptr idx ->
         "jvm_elem_is: Multiple specifications for the same array index (" ++ show idx ++ ")"
+      JVMArrayNonReference ptr ->
+        unlines
+        [ "jvm_array_is: Left-hand side is not a valid object reference"
+        , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        ]
       JVMArrayMultiple _ptr ->
         "jvm_array_is: Multiple specifications for the same array reference"
 
@@ -915,6 +935,10 @@ jvm_field_is ptr fname val =
   JVMSetupM $
   do pos <- lift getPosition
      loc <- SS.toW4Loc "jvm_field_is" <$> lift getPosition
+     ptr' <-
+       case ptr of
+         MS.SetupVar ptr' -> pure ptr'
+         _ -> X.throwM $ JVMFieldNonReference ptr fname
      st <- get
      let rs = st ^. Setup.csResolvedState
      let cc = st ^. Setup.csCrucibleContext
@@ -930,7 +954,7 @@ jvm_field_is ptr fname val =
      fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
      unless (registerCompatible (J.fieldIdType fid) valTy) $
        X.throwM $ JVMFieldTypeMismatch fname (J.fieldIdType fid) valTy
-     Setup.addPointsTo (JVMPointsToField loc ptr fid val)
+     Setup.addPointsTo (JVMPointsToField loc ptr' fid val)
 
 jvm_elem_is ::
   SetupValue {- ^ array -} ->
@@ -940,6 +964,10 @@ jvm_elem_is ::
 jvm_elem_is ptr idx val =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_elem_is" <$> lift getPosition
+     ptr' <-
+       case ptr of
+         MS.SetupVar ptr' -> pure ptr'
+         _ -> X.throwM $ JVMElemNonReference ptr idx
      st <- get
      let rs = st ^. Setup.csResolvedState
      let cc = st ^. Setup.csCrucibleContext
@@ -957,7 +985,7 @@ jvm_elem_is ptr idx val =
          _ -> X.throwM $ JVMElemNonArray ptrTy
      unless (registerCompatible elTy valTy) $
        X.throwM $ JVMElemTypeMismatch idx elTy valTy
-     Setup.addPointsTo (JVMPointsToElem loc ptr idx val)
+     Setup.addPointsTo (JVMPointsToElem loc ptr' idx val)
 
 jvm_array_is ::
   SetupValue {- ^ array reference -} ->
@@ -966,12 +994,16 @@ jvm_array_is ::
 jvm_array_is ptr val =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_array_is" <$> lift getPosition
+     ptr' <-
+       case ptr of
+         MS.SetupVar ptr' -> pure ptr'
+         _ -> X.throwM $ JVMArrayNonReference ptr
      st <- get
      let rs = st ^. Setup.csResolvedState
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
        then X.throwM $ JVMArrayMultiple ptr
        else Setup.csResolvedState %= MS.markResolved ptr []
-     Setup.addPointsTo (JVMPointsToArray loc ptr val)
+     Setup.addPointsTo (JVMPointsToArray loc ptr' val)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do

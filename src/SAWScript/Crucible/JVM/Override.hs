@@ -59,7 +59,6 @@ import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Void (absurd)
 import qualified Prettyprinter as PP
@@ -450,28 +449,14 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- determine if a precondition is ready to be checked
     checkPointsTo :: JVMPointsTo -> OverrideMatcher CJ.JVM w Bool
-    checkPointsTo (JVMPointsToField _loc p _ _) = checkSetupValue p
-    checkPointsTo (JVMPointsToElem _loc p _ _) = checkSetupValue p
-    checkPointsTo (JVMPointsToArray _loc p _) = checkSetupValue p
+    checkPointsTo (JVMPointsToField _loc p _ _) = checkAllocIndex p
+    checkPointsTo (JVMPointsToElem _loc p _ _) = checkAllocIndex p
+    checkPointsTo (JVMPointsToArray _loc p _) = checkAllocIndex p
 
-    checkSetupValue :: SetupValue -> OverrideMatcher CJ.JVM w Bool
-    checkSetupValue v =
+    checkAllocIndex :: AllocIndex -> OverrideMatcher CJ.JVM w Bool
+    checkAllocIndex i =
       do m <- OM (use setupValueSub)
-         return (all (`Map.member` m) (setupVars v))
-
-    -- Compute the set of variable identifiers in a 'SetupValue'
-    setupVars :: SetupValue -> Set AllocIndex
-    setupVars v =
-      case v of
-        MS.SetupVar i                     -> Set.singleton i
-        MS.SetupTerm _                    -> Set.empty
-        MS.SetupNull ()                   -> Set.empty
-        MS.SetupGlobal empty _            -> absurd empty
-        MS.SetupStruct empty _ _          -> absurd empty
-        MS.SetupArray empty _             -> absurd empty
-        MS.SetupElem empty _ _            -> absurd empty
-        MS.SetupField empty _ _           -> absurd empty
-        MS.SetupGlobalInitializer empty _ -> absurd empty
+         return (Map.member i m)
 
 
 ------------------------------------------------------------------------
@@ -676,7 +661,7 @@ learnPointsTo opts sc cc spec prepost pt = do
 
     JVMPointsToField loc ptr fid val ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
+         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
          rval <- asRVal loc ptr'
          -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
          -- Then we won't have to match the definition of 'fieldIdText' here.
@@ -687,7 +672,7 @@ learnPointsTo opts sc cc spec prepost pt = do
 
     JVMPointsToElem loc ptr idx val ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
+         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
          rval <- asRVal loc ptr'
          dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
          v <- liftIO $ projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) dyn
@@ -708,7 +693,7 @@ learnPointsTo opts sc cc spec prepost pt = do
            case toJVMType (Cryptol.evalValType mempty ety) of
              Nothing -> fail "jvm_array_is: invalid element type"
              Just jty -> pure jty
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
+         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
          rval <- asRVal loc ptr'
          let tval = Cryptol.evalValType mempty ety
          let
@@ -825,7 +810,7 @@ executePointsTo opts sc cc spec pt = do
 
     JVMPointsToField loc ptr fid val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
+         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
          rval <- asRVal loc ptr'
          let dyn = injectJVMVal sym val'
          -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
@@ -836,7 +821,7 @@ executePointsTo opts sc cc spec pt = do
 
     JVMPointsToElem loc ptr idx val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
+         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
          rval <- asRVal loc ptr'
          let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
@@ -848,7 +833,7 @@ executePointsTo opts sc cc spec pt = do
            \case
              Nothing -> fail "jvm_array_is: not a monomorphic sequence type"
              Just x -> pure x
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
+         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
          rval <- asRVal loc ptr'
          jvs <- traverse (resolveSetupValueJVM opts cc sc spec . MS.SetupTerm) tts
          let vs = map (injectJVMVal sym . snd) jvs
