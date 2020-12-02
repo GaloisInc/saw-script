@@ -126,7 +126,7 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 ppSetupValue :: SetupValue ext -> PP.Doc ann
 ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
-  SetupVar i     -> PP.pretty ("@" ++ show i)
+  SetupVar i     -> ppAllocIndex i
   SetupNull _    -> PP.pretty "NULL"
   SetupStruct _ packed vs
     | packed     -> PP.angles (PP.braces (commaList (map ppSetupValue vs)))
@@ -140,6 +140,9 @@ ppSetupValue setupval = case setupval of
     commaList :: [PP.Doc ann] -> PP.Doc ann
     commaList []     = PP.emptyDoc
     commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
+
+ppAllocIndex :: AllocIndex -> PP.Doc ann
+ppAllocIndex i = PP.pretty '@' <> PP.viaShow i
 
 ppTypedTerm :: TypedTerm -> PP.Doc ann
 ppTypedTerm (TypedTerm tp tm) =
