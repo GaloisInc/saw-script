@@ -335,14 +335,11 @@ translateTerm t = withLocalLocalEnvironment $ do
 
     (asLambda -> Just _) -> do
       paramTerms <- translateParams params
-      Coq.Lambda <$> pure paramTerms
-                 -- env is in innermost first (reverse) binder order
-                 <*> go ((reverse paramNames) ++ env) e
+      e' <- translateTerm e
+      pure (Coq.Lambda paramTerms e')
         where
           -- params are in normal, outermost first, order
           (params, e) = asLambdaList t
-          -- param names are in normal, outermost first, order
-          paramNames = map fst $ params
 
     (asApp -> Just _) ->
       -- asApplyAll: innermost argument first
