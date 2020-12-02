@@ -292,8 +292,9 @@ translatePi :: TermTranslationMonad m => [(String, Term)] -> Term -> m Coq.Term
 translatePi binders body = withLocalLocalEnvironment $ do
   bindersT <- forM binders $ \ (b, bType) -> do
     bTypeT <- translateTerm bType
-    modify $ over localEnvironment (b :)
-    let n = if b == "_" then Nothing else Just b
+    b' <- translateLocalIdent b
+    modify $ over localEnvironment (b' :)
+    let n = if b == "_" then Nothing else Just b'
     return (Coq.PiBinder n bTypeT)
   bodyT <- translateTerm body
   return $ Coq.Pi bindersT bodyT
