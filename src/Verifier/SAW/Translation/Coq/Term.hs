@@ -32,8 +32,10 @@ import qualified Control.Monad.Except                          as Except
 import qualified Control.Monad.Fail                            as Fail
 import           Control.Monad.Reader                          hiding (fail, fix)
 import           Control.Monad.State                           hiding (fail, fix, state)
-import           Data.List                                     (intersperse, sortOn, find)
+import           Data.Char                                     (isDigit)
+import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
+import qualified Data.Set                                      as Set
 import           Prelude                                       hiding (fail)
 import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
 
@@ -71,14 +73,33 @@ data TranslationState = TranslationState
   -- the term.  The translation function itself will return only the declaration
   -- for the term being translated.
 
-  , _localEnvironment  :: [String]
-  -- ^ Associates string names to all of the deBruijn indices in scope
+  , _localEnvironment  :: [Coq.Ident]
+  -- ^ The list of Coq identifiers for de Bruijn-indexed local
+  -- variables, innermost (index 0) first.
+
+  , _unavailableIdents :: Set.Set Coq.Ident
+  -- ^ The set of Coq identifiers that are either reserved or already
+  -- in use. To avoid shadowing, fresh identifiers should be chosen to
+  -- be disjoint from this set.
 
   , _currentModule :: Maybe ModuleName
   }
   deriving (Show)
 
 makeLenses ''TranslationState
+
+-- | The set of reserved identifiers in Coq, obtained from section
+-- "Gallina Specification Language" of the Coq reference manual.
+-- <https://coq.inria.fr/refman/language/gallina-specification-language.html>
+reservedIdents :: Set.Set Coq.Ident
+reservedIdents =
+  Set.fromList $
+  concatMap words $
+  [ "_ Axiom CoFixpoint Definition Fixpoint Hypothesis IF Parameter Prop"
+  , "SProp Set Theorem Type Variable as at by cofix discriminated else"
+  , "end exists exists2 fix for forall fun if in lazymatch let match"
+  , "multimatch return then using where with"
+  ]
 
 -- | Extract the list of names from a list of Coq declarations.  Not all
 -- declarations have names, e.g. comments and code snippets come without names.
@@ -108,7 +129,7 @@ runTermTranslationMonad ::
   TranslationConfiguration ->
   Maybe ModuleName ->
   [String] ->
-  [String] ->
+  [Coq.Ident] ->
   (forall m. TermTranslationMonad m => m a) ->
   Either (TranslationError Term) (a, TranslationState)
 runTermTranslationMonad configuration modname globalDecls localEnv =
@@ -116,6 +137,7 @@ runTermTranslationMonad configuration modname globalDecls localEnv =
   (TranslationState { _globalDeclarations = globalDecls
                     , _localDeclarations  = []
                     , _localEnvironment   = localEnv
+                    , _unavailableIdents  = Set.union reservedIdents (Set.fromList localEnv)
                     , _currentModule      = modname
                     })
 
@@ -256,23 +278,24 @@ asApplyAllRecognizer t = do _ <- asApp t
 withLocalLocalEnvironment :: TermTranslationMonad m => m a -> m a
 withLocalLocalEnvironment action = do
   env <- view localEnvironment <$> get
+  used <- view unavailableIdents <$> get
   result <- action
   modify $ set localEnvironment env
+  modify $ set unavailableIdents used
   return result
 
 mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Decl
 mkDefinition name (Coq.Lambda bs t) = Coq.Definition name bs Nothing t
 mkDefinition name t = Coq.Definition name [] Nothing t
 
--- | Make sure a name is not used in the current environment, adding @"_N"@ for
--- some number @N@ that we continue to increment until we find an unused
--- name. When we get one, add it to the current environment and return it.
-freshenAndBindName :: TermTranslationMonad m => String -> m String
+-- | Make sure a name is not used in the current environment, adding
+-- or incrementing a numeric suffix until we find an unused name. When
+-- we get one, add it to the current environment and return it.
+freshenAndBindName :: TermTranslationMonad m => String -> m Coq.Ident
 freshenAndBindName n =
-  do ns <- view localEnvironment <$> get
-     let Just n' = find (flip notElem ns) (n : map (((n++"_")++) . show) [0::Int ..])
+  do n' <- translateLocalIdent n
      modify $ over localEnvironment (n' :)
-     return n'
+     pure n'
 
 translateParams ::
   TermTranslationMonad m =>
@@ -288,12 +311,30 @@ translatePi :: TermTranslationMonad m => [(String, Term)] -> Term -> m Coq.Term
 translatePi binders body = withLocalLocalEnvironment $ do
   bindersT <- forM binders $ \ (b, bType) -> do
     bTypeT <- translateTerm bType
-    b' <-
-      if b == "_" then freshenAndBindName "unused" >> return Nothing
-      else Just <$> freshenAndBindName b
-    return (Coq.PiBinder b' bTypeT)
+    b' <- freshenAndBindName b
+    let n = if b == "_" then Nothing else Just b'
+    return (Coq.PiBinder n bTypeT)
   bodyT <- translateTerm body
   return $ Coq.Pi bindersT bodyT
+
+-- | Translate a local name from a saw-core binder into a fresh Coq identifier.
+translateLocalIdent :: TermTranslationMonad m => String -> m Coq.Ident
+translateLocalIdent x =
+  do used <- view unavailableIdents <$> get
+     let ident0 = x -- TODO: use some string encoding to ensure lexically valid Coq identifiers
+     let findVariant i = if Set.member i used then findVariant (nextVariant i) else i
+     let ident = findVariant ident0
+     modify $ over unavailableIdents (Set.insert ident)
+     return ident
+
+nextVariant :: Coq.Ident -> Coq.Ident
+nextVariant = reverse . go . reverse
+  where
+    go :: String -> String
+    go (c : cs)
+      | c == '9'  = '0' : go cs
+      | isDigit c = succ c : cs
+    go cs = '1' : cs
 
 translateTerm :: TermTranslationMonad m => Term -> m Coq.Term
 translateTerm t = withLocalLocalEnvironment $ do
@@ -312,7 +353,8 @@ translateTerm t = withLocalLocalEnvironment $ do
 
     (asLambda -> Just _) -> do
       paramTerms <- translateParams params
-      Coq.Lambda <$> pure paramTerms <*> translateTerm e
+      e' <- translateTerm e
+      pure (Coq.Lambda paramTerms e')
         where
           -- params are in normal, outermost first, order
           (params, e) = asLambdaList t
@@ -366,7 +408,7 @@ translateTerm t = withLocalLocalEnvironment $ do
                       withLocalLocalEnvironment $
                       do x' <- freshenAndBindName x
                          expr <- translateTerm body
-                         return (x', expr)
+                         pure (x', expr)
                     seqTypeT <- translateTerm seqType
                     defaultValueT <- defaultTermForType resultType
                     let iter =
