@@ -41,6 +41,7 @@ module SAWScript.Crucible.JVM.Builtins
 
 import           Control.Lens
 
+import qualified Control.Monad.Catch as X
 import           Control.Monad.State
 import qualified Control.Monad.State.Strict as Strict
 import           Control.Monad.Trans.Except (runExceptT)
@@ -789,6 +790,54 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
 --------------------------------------------------------------------------------
 -- Setup builtins
 
+data JVMSetupError
+  = JVMFreshVarInvalidType JavaType
+  | JVMFieldMultiple SetupValue String -- reference and field name
+  | JVMFieldFailure String -- TODO: switch to a more structured type
+  | JVMFieldTypeMismatch String J.Type J.Type -- field name, expected, found
+  | JVMElemNonArray J.Type
+  | JVMElemInvalidIndex SetupValue Int Int -- reference, length, index
+  | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
+  | JVMElemMultiple SetupValue Int -- reference and array index
+  | JVMArrayMultiple SetupValue
+
+instance X.Exception JVMSetupError
+
+instance Show JVMSetupError where
+  show err =
+    case err of
+      JVMFreshVarInvalidType jty ->
+        "jvm_fresh_var: Invalid type: " ++ show jty
+      JVMFieldMultiple _ptr fname ->
+        "jvm_field_is: Multiple specifications for the same instance field (" ++ fname ++ ")"
+      JVMFieldFailure msg ->
+        "jvm_field_is: JVM field resolution failed:\n" ++ msg
+      JVMFieldTypeMismatch fname expected found ->
+         -- FIXME: use a pretty printing function for J.Type instead of show
+        unlines
+        [ "jvm_field_is: Incompatible types for field " ++ show fname
+        , "Expected type: " ++ show expected
+        , "Given type: " ++ show found
+        ]
+      JVMElemNonArray jty ->
+        "jvm_elem_is: Not an array type: " ++ show jty
+      JVMElemInvalidIndex _ptr len idx ->
+        unlines
+        [ "jvm_elem_is: Array index out of bounds"
+        , "Array length: " ++ show len
+        , "Given index: " ++ show idx
+        ]
+      JVMElemTypeMismatch idx expected found ->
+        unlines
+        [ "jvm_elem_is: Incompatible types for array index " ++ show idx
+        , "Expected type: " ++ show expected
+        , "Given type: " ++ show found
+        ]
+      JVMElemMultiple _ptr idx ->
+        "jvm_elem_is: Multiple specifications for the same array index (" ++ show idx ++ ")"
+      JVMArrayMultiple _ptr ->
+        "jvm_array_is: Multiple specifications for the same array reference"
+
 -- | Returns Cryptol type of actual type if it is an array or
 -- primitive type.
 cryptolTypeOfActual :: JavaType -> Maybe Cryptol.Type
@@ -832,7 +881,7 @@ jvm_fresh_var name jty =
   JVMSetupM $
   do sc <- lift getSharedContext
      case cryptolTypeOfActual jty of
-       Nothing -> fail $ "Unsupported type in jvm_fresh_var: " ++ show jty
+       Nothing -> X.throwM $ JVMFreshVarInvalidType jty
        Just cty -> Setup.freshVariable sc name cty
 
 jvm_alloc_object ::
@@ -872,19 +921,15 @@ jvm_field_is ptr fname val =
      let cb = cc ^. jccCodebase
      let path = Left fname
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
-       then fail $ "Multiple points-to preconditions on same pointer (field " ++ fname ++ ")"
+       then X.throwM $ JVMFieldMultiple ptr fname
        else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
      valTy <- typeOfSetupValue cc env nameEnv val
-     fid <- either fail pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
+     fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
      unless (registerCompatible (J.fieldIdType fid) valTy) $
-       fail $ unlines
-       [ "Incompatible types for field " ++ fname
-       , "Expected: " ++ show (J.fieldIdType fid)
-       , "but given value of type: " ++ show valTy
-       ]
+       X.throwM $ JVMFieldTypeMismatch fname (J.fieldIdType fid) valTy
      Setup.addPointsTo (JVMPointsToField loc ptr fid val)
 
 jvm_elem_is ::
@@ -900,7 +945,7 @@ jvm_elem_is ptr idx val =
      let cc = st ^. Setup.csCrucibleContext
      let path = Right idx
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
-       then fail "Multiple points-to preconditions on same pointer"
+       then X.throwM $ JVMElemMultiple ptr idx
        else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
@@ -909,13 +954,9 @@ jvm_elem_is ptr idx val =
      elTy <-
        case ptrTy of
          J.ArrayType elTy -> pure elTy
-         _ -> fail $ "Not an array type: " ++ show ptrTy
+         _ -> X.throwM $ JVMElemNonArray ptrTy
      unless (registerCompatible elTy valTy) $
-       fail $ unlines
-       [ "Incompatible types for array element"
-       , "Expected: " ++ show elTy
-       , "but given value of type: " ++ show valTy
-       ]
+       X.throwM $ JVMElemTypeMismatch idx elTy valTy
      Setup.addPointsTo (JVMPointsToElem loc ptr idx val)
 
 jvm_array_is ::
@@ -928,7 +969,7 @@ jvm_array_is ptr val =
      st <- get
      let rs = st ^. Setup.csResolvedState
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
-       then fail "Multiple points-to preconditions on same pointer"
+       then X.throwM $ JVMArrayMultiple ptr
        else Setup.csResolvedState %= MS.markResolved ptr []
      Setup.addPointsTo (JVMPointsToArray loc ptr val)
 

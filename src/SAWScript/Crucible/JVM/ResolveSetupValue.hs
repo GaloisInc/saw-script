@@ -26,7 +26,7 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
   ) where
 
 import           Control.Lens
-import qualified Control.Monad.Fail as Fail
+import qualified Control.Monad.Catch as X
 import           Data.IORef
 import qualified Data.BitVector.Sized as BV
 import           Data.Map (Map)
@@ -34,7 +34,7 @@ import qualified Data.Map as Map
 import           Data.Void (absurd)
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalValType)
-import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
+import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
@@ -68,6 +68,7 @@ import SAWScript.Crucible.Common (Sym)
 import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
 --import SAWScript.JavaExpr (JavaType(..))
+import SAWScript.Panic
 import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.JVM.MethodSpecIR
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -88,8 +89,27 @@ type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
 
 type SetupValue = MS.SetupValue CJ.JVM
 
+data JvmTypeOfError
+  = JvmPolymorphicType Cryptol.Schema
+  | JvmNonRepresentableType Cryptol.Type
+
+instance Show JvmTypeOfError where
+  show (JvmPolymorphicType s) =
+    unlines
+    [ "Expected monomorphic term"
+    , "instead got:"
+    , show (Cryptol.pp s)
+    ]
+  show (JvmNonRepresentableType ty) =
+    unlines
+    [ "Type not representable in JVM:"
+    , show (Cryptol.pp ty)
+    ]
+
+instance X.Exception JvmTypeOfError
+
 typeOfSetupValue ::
-  Fail.MonadFail m =>
+  X.MonadThrow m =>
   JVMCrucibleContext ->
   Map AllocIndex (W4.ProgramLoc, Allocation) ->
   Map AllocIndex JIdent ->
@@ -99,18 +119,16 @@ typeOfSetupValue _cc env _nameEnv val =
   case val of
     MS.SetupVar i ->
       case Map.lookup i env of
-        Nothing -> fail ("typeOfSetupValue: Unresolved prestate variable:" ++ show i)
+        Nothing -> panic "JVMSetup" ["typeOfSetupValue", "Unresolved prestate variable:" ++ show i]
         Just (_, alloc) -> return (allocationType alloc)
     MS.SetupTerm tt ->
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
           case toJVMType (Cryptol.evalValType mempty ty) of
-            Nothing -> fail "typeOfSetupValue: non-representable type"
+            Nothing -> X.throwM (JvmNonRepresentableType ty)
             Just jty -> return jty
-        s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
-                            , "instead got:"
-                            , show (Cryptol.pp s)
-                            ]
+        s -> X.throwM (JvmPolymorphicType s)
+
     MS.SetupNull () ->
       -- We arbitrarily set the type of NULL to java.lang.Object,
       -- because a) it is memory-compatible with any type that NULL
@@ -137,7 +155,7 @@ resolveSetupVal cc env _tyenv _nameEnv val =
   case val of
     MS.SetupVar i
       | Just v <- Map.lookup i env -> return (RVal v)
-      | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
+      | otherwise -> panic "JVMSetup" ["resolveSetupVal", "Unresolved prestate variable:" ++ show i]
     MS.SetupTerm tm -> resolveTypedTerm cc tm
     MS.SetupNull () ->
       return (RVal (W4.maybePartExpr sym Nothing))
