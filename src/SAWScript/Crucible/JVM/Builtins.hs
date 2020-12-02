@@ -920,7 +920,7 @@ jvm_field_is ptr fname val =
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
      let path = Left fname
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
+     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
        then X.throwM $ JVMFieldMultiple ptr fname
        else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
