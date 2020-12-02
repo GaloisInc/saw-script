@@ -53,5 +53,7 @@ extra-deps:
   - bitwise-1.0.0.1
   - libBF-0.5.1
   - scotty-0.12
+  - prettyprinter-1.7.0
+  - prettyprinter-ansi-terminal-1.1.2
 resolver: lts-16.2
 allow-newer: false

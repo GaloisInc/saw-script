@@ -106,9 +106,9 @@ import           Control.Monad (when)
 import           Data.Functor.Compose (Compose(..))
 import           Data.IORef
 import           Data.Type.Equality (TestEquality(..))
+import qualified Prettyprinter as PPL
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L
-import qualified Text.PrettyPrint.ANSI.Leijen as PPL hiding ((<$>), (<>))
 import qualified Text.PrettyPrint.HughesPJ as PP
 
 import qualified Data.LLVM.BitCode as LLVM
@@ -158,6 +158,10 @@ type instance MS.HasGhostState (CL.LLVM _) = 'True
 type instance MS.TypeName (CL.LLVM arch) = CL.Ident
 type instance MS.ExtType (CL.LLVM arch) = CL.MemType
 
+-- TODO: remove when crucible switches to prettyprinter
+instance PPL.Pretty CL.MemType where
+  pretty = PPL.viaShow . CL.ppMemType
+
 --------------------------------------------------------------------------------
 -- *** LLVMMethodId
 
@@ -176,7 +180,7 @@ csParentName :: Lens' (MS.CrucibleMethodSpecIR (CL.LLVM arch)) (Maybe String)
 csParentName = MS.csMethod . llvmMethodParent
 
 instance PPL.Pretty LLVMMethodId where
-  pretty = PPL.text . view llvmMethodName
+  pretty = PPL.pretty . view llvmMethodName
 
 type instance MS.MethodId (CL.LLVM _) = LLVMMethodId
 
@@ -349,12 +353,12 @@ data LLVMPointsToValue arch
   = ConcreteSizeValue (MS.SetupValue (CL.LLVM arch))
   | SymbolicSizeValue TypedTerm TypedTerm
 
-ppPointsTo :: LLVMPointsTo arch -> PPL.Doc
+ppPointsTo :: LLVMPointsTo arch -> PPL.Doc ann
 ppPointsTo (LLVMPointsTo _loc cond ptr val) =
   MS.ppSetupValue ptr
-  PPL.<+> PPL.text "points to"
+  PPL.<+> PPL.pretty "points to"
   PPL.<+> PPL.pretty val
-  PPL.<+> maybe PPL.empty (\tt -> PPL.text "if" PPL.<+> MS.ppTypedTerm tt) cond
+  PPL.<+> maybe PPL.emptyDoc (\tt -> PPL.pretty "if" PPL.<+> MS.ppTypedTerm tt) cond
 
 instance PPL.Pretty (LLVMPointsTo arch) where
   pretty = ppPointsTo
@@ -363,7 +367,7 @@ instance PPL.Pretty (LLVMPointsToValue arch) where
   pretty = \case
     ConcreteSizeValue val -> MS.ppSetupValue val
     SymbolicSizeValue arr sz ->
-      MS.ppTypedTerm arr PPL.<+> PPL.text "[" PPL.<+> MS.ppTypedTerm sz PPL.<+> PPL.text "]"
+      MS.ppTypedTerm arr PPL.<+> PPL.pretty "[" PPL.<+> MS.ppTypedTerm sz PPL.<+> PPL.pretty "]"
 
 --------------------------------------------------------------------------------
 -- ** AllocGlobal
@@ -372,10 +376,10 @@ type instance MS.AllocGlobal (CL.LLVM arch) = LLVMAllocGlobal arch
 
 data LLVMAllocGlobal arch = LLVMAllocGlobal ProgramLoc L.Symbol
 
-ppAllocGlobal :: LLVMAllocGlobal arch -> PPL.Doc
+ppAllocGlobal :: LLVMAllocGlobal arch -> PPL.Doc ann
 ppAllocGlobal (LLVMAllocGlobal _loc (L.Symbol name)) =
-  PPL.text "allocate global"
-  PPL.<+> PPL.text name
+  PPL.pretty "allocate global"
+  PPL.<+> PPL.pretty name
 
 instance PPL.Pretty (LLVMAllocGlobal arch) where
   pretty = ppAllocGlobal
@@ -397,15 +401,15 @@ data SetupError
   = InvalidReturnType L.Type
   | InvalidArgTypes [L.Type]
 
-ppSetupError :: SetupError -> PPL.Doc
+ppSetupError :: SetupError -> PPL.Doc ann
 ppSetupError (InvalidReturnType t) =
-  PPL.text "Can't lift return type" PPL.<+>
-  PPL.text (show (L.ppType t)) PPL.<+>
-  PPL.text "to a Crucible type."
+  PPL.pretty "Can't lift return type" PPL.<+>
+  PPL.viaShow (L.ppType t) PPL.<+>
+  PPL.pretty "to a Crucible type."
 ppSetupError (InvalidArgTypes ts) =
-  PPL.text "Can't lift argument types " PPL.<+>
-  PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.text . show . L.ppType) ts) PPL.<+>
-  PPL.text "to Crucible types."
+  PPL.pretty "Can't lift argument types " PPL.<+>
+  PPL.encloseSep PPL.lparen PPL.rparen PPL.comma (map (PPL.viaShow . L.ppType) ts) PPL.<+>
+  PPL.pretty "to Crucible types."
 
 resolveArgs ::
   (?lc :: CL.TypeContext) =>

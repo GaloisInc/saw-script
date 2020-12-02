@@ -71,7 +71,8 @@ import           Data.Text (Text, pack)
 import qualified Data.Vector as V
 import           GHC.Generics (Generic)
 import           Numeric.Natural
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import qualified Text.PrettyPrint.ANSI.Leijen as PPWL
+import qualified Prettyprinter as PP
 
 import qualified Text.LLVM.AST as L
 
@@ -148,11 +149,12 @@ makeLenses ''OverrideWithPreconditions
 ppLLVMVal ::
   LLVMCrucibleContext arch ->
   LLVMVal ->
-  OverrideMatcher (LLVM arch) w PP.Doc
+  OverrideMatcher (LLVM arch) w (PP.Doc ann)
 ppLLVMVal cc val = do
   sym <- Ov.getSymInterface
   mem <- readGlobal (Crucible.llvmMemVar (ccLLVMContext cc))
-  pure $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) val
+  -- TODO: remove viaShow when crucible switches to prettyprinter
+  pure $ PP.viaShow $ Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) val
 
 -- | Resolve a 'SetupValue' into a 'LLVMVal' and pretty-print it
 ppSetupValueAsLLVMVal ::
@@ -162,7 +164,7 @@ ppSetupValueAsLLVMVal ::
   SharedContext {- ^ context for constructing SAW terms -} ->
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   SetupValue (Crucible.LLVM arch) ->
-  OverrideMatcher (LLVM arch) w PP.Doc
+  OverrideMatcher (LLVM arch) w (PP.Doc ann)
 ppSetupValueAsLLVMVal opts cc sc spec setupval = do
   (_memTy, llvmval) <- resolveSetupValueLLVM opts cc sc spec setupval
   ppLLVMVal cc llvmval
@@ -184,7 +186,8 @@ mkStructuralMismatch _opts cc _sc spec llvmval setupval memTy =
       nameEnv = MS.csTypeNames spec
       maybeTy = typeOfSetupValue cc tyEnv nameEnv setupval
   in pure $ StructuralMismatch
-              (PP.pretty llvmval)
+              -- TODO: remove 'viaShow' when crucible switches to prettyprinter
+              (PP.viaShow (PPWL.pretty llvmval))
               (MS.ppSetupValue setupval)
               maybeTy
               memTy
@@ -198,15 +201,16 @@ ppPointsToAsLLVMVal ::
   SharedContext {- ^ context for constructing SAW terms -} ->
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   PointsTo (LLVM arch) ->
-  OverrideMatcher (LLVM arch) w PP.Doc
+  OverrideMatcher (LLVM arch) w (PP.Doc ann)
 ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc cond ptr val) = do
   pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec ptr
   let pretty2 = PP.pretty val
-  pure $ PP.vcat [ PP.text "Pointer:" PP.<+> pretty1
-                 , PP.text "Pointee:" PP.<+> pretty2
-                 , maybe PP.empty (\tt -> PP.text "Condition:" PP.<+> MS.ppTypedTerm tt) cond
-                 , PP.text "Assertion made at:" PP.<+>
-                   PP.pretty (W4.plSourceLoc loc)
+  pure $ PP.vcat [ "Pointer:" PP.<+> pretty1
+                 , "Pointee:" PP.<+> pretty2
+                 , maybe PP.emptyDoc (\tt -> "Condition:" PP.<+> MS.ppTypedTerm tt) cond
+                 , "Assertion made at:" PP.<+>
+                   -- TODO: replace 'viaShow' with 'pretty' when what4 switches to prettyprinter
+                   PP.viaShow (W4.plSourceLoc loc)
                  ]
 
 -- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
@@ -292,17 +296,20 @@ unsatPreconditions sym container getPreds = do
 ppFailure ::
   OverrideWithPreconditions arch ->
   [LabeledPred Sym] ->
-  PP.Doc
+  PP.Doc ann
 ppFailure owp false =
-  MS.ppMethodSpec (owp ^. owpMethodSpec)
-     PP.<$$> bullets '*' (map Crucible.ppSimError
-                              (false ^.. traverse . W4.labeledPredMsg))
+  PP.vcat
+  [ MS.ppMethodSpec (owp ^. owpMethodSpec)
+    -- TODO: remove viaShow when crucible switches to prettyprinter
+  , bullets '*' (map (PP.viaShow . Crucible.ppSimError)
+                  (false ^.. traverse . W4.labeledPredMsg))
+  ]
 
 -- | Print a message about concrete failure of an override's preconditions
 --
 -- Assumes that the override it's being passed does have concretely failing
 -- preconditions. Otherwise, the error won't make much sense.
-ppConcreteFailure :: OverrideWithPreconditions arch -> PP.Doc
+ppConcreteFailure :: OverrideWithPreconditions arch -> PP.Doc ann
 ppConcreteFailure owp =
   let (_, false, _) =
         W4.partitionLabeledPreds (Proxy :: Proxy Sym) (owp ^. owpPreconditions)
@@ -320,13 +327,13 @@ ppSymbolicFailure = uncurry ppFailure
 
 -- | Pretty-print the arguments passed to an override
 ppArgs ::
-  forall arch args.
+  forall arch args ann.
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Sym ->
   LLVMCrucibleContext arch            {- ^ context for interacting with Crucible        -} ->
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ specification for current function override  -} ->
   Crucible.RegMap Sym args            {- ^ arguments from the simulator -} ->
-  IO [PP.Doc]
+  IO [PP.Doc ann]
 ppArgs sym cc cs (Crucible.RegMap args) = do
   let expectedArgTypes = map fst (Map.elems (cs ^. MS.csArgBindings))
   let aux memTy (Crucible.AnyValue tyrep val) =
@@ -336,7 +343,8 @@ ppArgs sym cc cs (Crucible.RegMap args) = do
   case Crucible.lookupGlobal (Crucible.llvmMemVar (ccLLVMContext cc)) (cc^.ccLLVMGlobals) of
     Nothing -> fail "Internal error: Couldn't find LLVM memory variable"
     Just mem -> do
-      map (Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) . fst) <$>
+      -- TODO: remove viaShow when crucible switches to prettyprinter
+      map (PP.viaShow . Crucible.ppLLVMValWithGlobals sym (Crucible.memImplSymbolMap mem) . fst) <$>
         liftIO (zipWithM aux expectedArgTypes (assignmentToList args))
 
 -- | This function is responsible for implementing the \"override\" behavior
@@ -404,20 +412,21 @@ methodSpecHandler opts sc cc top_loc css h = do
     let prettyError methodSpec failureReason = do
           prettyArgs <- liftIO $ ppArgs sym cc methodSpec (Crucible.RegMap args)
           pure $
-            MS.ppMethodSpec methodSpec
-            PP.<$$> "Arguments:"
-            PP.<$$> bullets '-' prettyArgs
-            PP.<$$> ppOverrideFailure failureReason
+            PP.vcat
+            [ MS.ppMethodSpec methodSpec
+            , "Arguments:"
+            , bullets '-' prettyArgs
+            , ppOverrideFailure failureReason
+            ]
     in
       case partitionEithers (toList prestates) of
           (errs, []) -> do
             msgs <-
               mapM (\(cs, err) ->
-                      (PP.text "*" PP.<>) . PP.indent 2 <$> prettyError cs err)
+                      ("*" PP.<>) . PP.indent 2 <$> prettyError cs err)
                    (zip (toList css) errs)
             fail $ show $
-              PP.text "All overrides failed during structural matching:"
-              PP.<$$> PP.vcat msgs
+              PP.vcat ["All overrides failed during structural matching:", PP.vcat msgs]
           (_, ss) -> liftIO $
             forM ss $ \(cs,st) ->
               return (OverrideWithPreconditions (st^.osAsserts) cs st)
@@ -482,17 +491,20 @@ methodSpecHandler opts sc cc top_loc css h = do
          | (precond, cs, st) <- branches'
          ] ++
          [ let e prettyArgs symFalse unsat = show $ PP.vcat $ concat
-                 [ [ PP.text $
+                 [ [ PP.pretty $
                      "No override specification applies for " ++ fnName ++ "."
                    ]
-                 , [ PP.text "Arguments:"
+                 , [ "Arguments:"
                    , bullets '-' prettyArgs
                    ]
                  , if | not (null false) ->
-                        [ PP.text (unwords
-                            [ "The following overrides had some preconditions"
-                            , "that failed concretely:"
-                            ]) PP.<$$> bullets '-' (map ppConcreteFailure false)
+                        [ PP.vcat
+                          [ PP.pretty (unwords
+                              [ "The following overrides had some preconditions"
+                              , "that failed concretely:"
+                              ])
+                          , bullets '-' (map ppConcreteFailure false)
+                          ]
                         ]
                       -- See comment on ppSymbolicFailure: this needs more
                       -- examination to see if it's useful.
@@ -507,32 +519,35 @@ methodSpecHandler opts sc cc top_loc css h = do
                       -- individually (concretely or symbolically) false
                       -- preconditions.
                       | not (null unsat) && null false && null symFalse ->
-                        [ PP.text (unwords
-                          [ "The conjunction of these overrides' preconditions"
-                          , "was unsatisfiable, meaning your override can never"
-                          , "apply. You probably have unintentionally specified"
-                          , "mutually exclusive/inconsistent preconditions."
-                          ]) PP.<$$>
-                          bullets '-' (unsat ^.. each . owpMethodSpec . to MS.ppMethodSpec)
+                        [ PP.vcat
+                          [ PP.pretty (unwords
+                            [ "The conjunction of these overrides' preconditions"
+                            , "was unsatisfiable, meaning your override can never"
+                            , "apply. You probably have unintentionally specified"
+                            , "mutually exclusive/inconsistent preconditions."
+                            ])
+                          , bullets '-' (unsat ^.. each . owpMethodSpec . to MS.ppMethodSpec)
+                          ]
                         ]
                       | null false && null symFalse ->
-                        [ PP.text (unwords
+                        [ PP.pretty (unwords
                             [ "No overrides had any single concretely or"
                             , "symbolically failing preconditions."
                             ])
                         ]
                       | otherwise -> []
                  , if | simVerbose opts < 3 ->
-                        [ PP.text $ unwords
+                        [ PP.pretty $ unwords
                           [ "Run SAW with --sim-verbose=3 to see a description"
                           , "of each override."
                           ]
                         ]
                       | otherwise ->
-                        [ PP.text "Here are the descriptions of each override:"
-                          PP.<$$>
-                          bullets '-'
+                        [ PP.vcat
+                          [ "Here are the descriptions of each override:"
+                          , bullets '-'
                             (branches ^.. each . owpMethodSpec . to MS.ppMethodSpec)
+                          ]
                         ]
                  ]
            in ( W4.truePred sym
@@ -1286,7 +1301,7 @@ learnGhost sc cc loc prepost var expected =
 --
 -- Returns a string on failure describing a concrete memory load failure.
 learnPointsTo ::
-  forall arch md .
+  forall arch md ann.
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   Options                    ->
   SharedContext              ->
@@ -1294,7 +1309,7 @@ learnPointsTo ::
   MS.CrucibleMethodSpecIR (LLVM arch)       ->
   PrePost                    ->
   PointsTo (LLVM arch)       ->
-  OverrideMatcher (LLVM arch) md (Maybe PP.Doc)
+  OverrideMatcher (LLVM arch) md (Maybe (PP.Doc ann))
 learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
   do let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
@@ -1317,7 +1332,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
             let summarizeBadLoad =
                  let dataLayout = Crucible.llvmDataLayout (ccTypeCtx cc)
                      sz = Crucible.memTypeSize dataLayout memTy
-                 in map (PP.text . unwords)
+                 in map (PP.pretty . unwords)
                     [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
                     , [ "in the ", stateCond prepost, "of an override" ]
                     , [ "Tried to read something of size:"
@@ -1341,16 +1356,17 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
                 let (blk, _offset) = Crucible.llvmPointerView ptr1
                 pure $ Just $ PP.vcat . (summarizeBadLoad ++) $
                   case W4.asNat blk of
-                    Nothing -> [PP.text "<Read from unknown allocation>"]
+                    Nothing -> ["<Read from unknown allocation>"]
                     Just blk' ->
                       let possibleAllocs =
                             Crucible.possibleAllocs blk' (Crucible.memImplHeap mem)
-                      in [ PP.text $ unwords
+                      in [ PP.pretty $ unwords
                            [ "Found"
                            , show (length possibleAllocs)
                            , "possibly matching allocation(s):"
                            ]
-                         , bullets '-' (map Crucible.ppSomeAlloc possibleAllocs)
+                         , bullets '-' (map (PP.viaShow . Crucible.ppSomeAlloc) possibleAllocs)
+                           -- TODO: remove 'viaShow' when crucible switches to prettyprinter
                          ]
                       -- This information tends to be overwhelming, but might be useful?
                       -- We should brainstorm about better ways of presenting it.
@@ -1362,7 +1378,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
        SymbolicSizeValue expected_arr_tm expected_sz_tm ->
          do maybe_allocation_array <- liftIO $
               Crucible.asMemAllocationArrayStore sym Crucible.PtrWidth ptr1 (Crucible.memImplHeap mem)
-            let errMsg = PP.vcat $ map (PP.text . unwords)
+            let errMsg = PP.vcat $ map (PP.pretty . unwords)
                   [ [ "When reading through pointer:", show (Crucible.ppPtr ptr1) ]
                   , [ "in the ", stateCond prepost, "of an override" ]
                   , [ "Tried to read an array prefix of size:", show (MS.ppTypedTerm expected_sz_tm) ]

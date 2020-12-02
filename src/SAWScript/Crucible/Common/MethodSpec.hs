@@ -32,10 +32,10 @@ import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans (lift)
 import           Control.Lens
 import           Data.Kind (Type)
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import qualified Prettyprinter as PP
 
 -- what4
-import           What4.ProgramLoc (ProgramLoc(plSourceLoc))
+import           What4.ProgramLoc (ProgramLoc(plSourceLoc), Position)
 
 import qualified Lang.Crucible.Types as Crucible
   (IntrinsicType, EmptyCtx)
@@ -123,35 +123,35 @@ deriving instance (SetupValueHas Show ext) => Show (SetupValue ext)
 --   are implementation details and won't be familiar to users.
 --   Consider using 'resolveSetupValue' and printing an 'LLVMVal'
 --   with @PP.pretty@ instead.
-ppSetupValue :: SetupValue ext -> PP.Doc
+ppSetupValue :: SetupValue ext -> PP.Doc ann
 ppSetupValue setupval = case setupval of
   SetupTerm tm   -> ppTypedTerm tm
-  SetupVar i     -> PP.text ("@" ++ show i)
-  SetupNull _    -> PP.text "NULL"
+  SetupVar i     -> PP.pretty ("@" ++ show i)
+  SetupNull _    -> PP.pretty "NULL"
   SetupStruct _ packed vs
     | packed     -> PP.angles (PP.braces (commaList (map ppSetupValue vs)))
     | otherwise  -> PP.braces (commaList (map ppSetupValue vs))
   SetupArray _ vs  -> PP.brackets (commaList (map ppSetupValue vs))
-  SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ show i)
-  SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.text ("." ++ f)
-  SetupGlobal _ nm -> PP.text ("global(" ++ nm ++ ")")
-  SetupGlobalInitializer _ nm -> PP.text ("global_initializer(" ++ nm ++ ")")
+  SetupElem _ v i  -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ show i)
+  SetupField _ v f -> PP.parens (ppSetupValue v) PP.<> PP.pretty ("." ++ f)
+  SetupGlobal _ nm -> PP.pretty ("global(" ++ nm ++ ")")
+  SetupGlobalInitializer _ nm -> PP.pretty ("global_initializer(" ++ nm ++ ")")
   where
-    commaList :: [PP.Doc] -> PP.Doc
-    commaList []     = PP.empty
+    commaList :: [PP.Doc ann] -> PP.Doc ann
+    commaList []     = PP.emptyDoc
     commaList (x:xs) = x PP.<> PP.hcat (map (\y -> PP.comma PP.<+> y) xs)
 
-ppTypedTerm :: TypedTerm -> PP.Doc
+ppTypedTerm :: TypedTerm -> PP.Doc ann
 ppTypedTerm (TypedTerm tp tm) =
-  ppTerm defaultPPOpts tm
-  PP.<+> PP.text ":" PP.<+>
-  PP.text (show (Cryptol.ppPrec 0 tp))
+  PP.unAnnotate (ppTerm defaultPPOpts tm)
+  PP.<+> PP.pretty ":" PP.<+>
+  PP.viaShow (Cryptol.ppPrec 0 tp)
 
-ppTypedExtCns :: TypedExtCns -> PP.Doc
+ppTypedExtCns :: TypedExtCns -> PP.Doc ann
 ppTypedExtCns (TypedExtCns tp ec) =
-  ppName (ecName ec)
-  PP.<+> PP.text ":" PP.<+>
-  PP.text (show (Cryptol.ppPrec 0 tp))
+  PP.unAnnotate (ppName (ecName ec))
+  PP.<+> PP.pretty ":" PP.<+>
+  PP.viaShow (Cryptol.ppPrec 0 tp)
 
 setupToTypedTerm ::
   Options {-^ Printing options -} ->
@@ -375,20 +375,26 @@ data CrucibleMethodSpecIR ext =
 
 makeLenses ''CrucibleMethodSpecIR
 
+-- TODO: remove when what4 switches to prettyprinter
+prettyPosition :: Position -> PP.Doc ann
+prettyPosition = PP.viaShow
+
 ppMethodSpec ::
   ( PP.Pretty (MethodId ext)
   , PP.Pretty (ExtType ext)
   ) =>
   CrucibleMethodSpecIR ext ->
-  PP.Doc
+  PP.Doc ann
 ppMethodSpec methodSpec =
-  PP.text "Name: " <> PP.pretty (methodSpec ^. csMethod)
-  PP.<$$> PP.text "Location: " <> PP.pretty (plSourceLoc (methodSpec ^. csLoc))
-  PP.<$$> PP.text "Argument types: "
-  PP.<$$> bullets '-' (map PP.pretty (methodSpec ^. csArgs))
-  PP.<$$> PP.text "Return type: " <> case methodSpec ^. csRet of
-                                       Nothing  -> PP.text "<void>"
+  PP.vcat
+  [ PP.pretty "Name: " <> PP.pretty (methodSpec ^. csMethod)
+  , PP.pretty "Location: " <> prettyPosition (plSourceLoc (methodSpec ^. csLoc))
+  , PP.pretty "Argument types: "
+  , bullets '-' (map PP.pretty (methodSpec ^. csArgs))
+  , PP.pretty "Return type: " <> case methodSpec ^. csRet of
+                                       Nothing  -> PP.pretty "<void>"
                                        Just ret -> PP.pretty ret
+  ]
 
 csAllocations :: CrucibleMethodSpecIR ext -> Map AllocIndex (AllocSpec ext)
 csAllocations
