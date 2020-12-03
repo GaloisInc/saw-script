@@ -109,6 +109,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.JVM.MethodSpecIR
 import           SAWScript.Crucible.JVM.ResolveSetupValue
 import           SAWScript.Options
+import           SAWScript.Panic
 import           SAWScript.Utils (handleException)
 
 -- jvm-parser
@@ -661,8 +662,7 @@ learnPointsTo opts sc cc spec prepost pt = do
 
     JVMPointsToField loc ptr fid val ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
-         rval <- asRVal loc ptr'
+         rval <- resolveAllocIndexJVM ptr
          -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
          -- Then we won't have to match the definition of 'fieldIdText' here.
          let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
@@ -672,8 +672,7 @@ learnPointsTo opts sc cc spec prepost pt = do
 
     JVMPointsToElem loc ptr idx val ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
-         rval <- asRVal loc ptr'
+         rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
          v <- liftIO $ projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
@@ -693,8 +692,7 @@ learnPointsTo opts sc cc spec prepost pt = do
            case toJVMType (Cryptol.evalValType mempty ety) of
              Nothing -> fail "jvm_array_is: invalid element type"
              Just jty -> pure jty
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
-         rval <- asRVal loc ptr'
+         rval <- resolveAllocIndexJVM ptr
          let tval = Cryptol.evalValType mempty ety
          let
            load idx =
@@ -808,10 +806,9 @@ executePointsTo opts sc cc spec pt = do
   globals <- OM (use overrideGlobals)
   case pt of
 
-    JVMPointsToField loc ptr fid val ->
+    JVMPointsToField _loc ptr fid val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
-         rval <- asRVal loc ptr'
+         rval <- resolveAllocIndexJVM ptr
          let dyn = injectJVMVal sym val'
          -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
          -- Then we won't have to match the definition of 'fieldIdText' here.
@@ -819,22 +816,20 @@ executePointsTo opts sc cc spec pt = do
          globals' <- liftIO $ CJ.doFieldStore sym globals rval key dyn
          OM (overrideGlobals .= globals')
 
-    JVMPointsToElem loc ptr idx val ->
+    JVMPointsToElem _loc ptr idx val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
-         rval <- asRVal loc ptr'
+         rval <- resolveAllocIndexJVM ptr
          let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
 
-    JVMPointsToArray loc ptr tt ->
+    JVMPointsToArray _loc ptr tt ->
       do (_ety, tts) <-
            liftIO (destVecTypedTerm sc tt) >>=
            \case
              Nothing -> fail "jvm_array_is: not a monomorphic sequence type"
              Just x -> pure x
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec (MS.SetupVar ptr)
-         rval <- asRVal loc ptr'
+         rval <- resolveAllocIndexJVM ptr
          jvs <- traverse (resolveSetupValueJVM opts cc sc spec . MS.SetupTerm) tts
          let vs = map (injectJVMVal sym . snd) jvs
          globals' <- liftIO $ doEntireArrayStore sym globals rval vs
@@ -927,6 +922,14 @@ instantiateSetupValue sc s v =
 
 ------------------------------------------------------------------------
 
+resolveAllocIndexJVM :: AllocIndex -> OverrideMatcher CJ.JVM w JVMRefVal
+resolveAllocIndexJVM i =
+  do m <- OM (use setupValueSub)
+     case Map.lookup i m of
+       Just rval -> pure rval
+       Nothing ->
+         panic "JVMSetup" ["resolveAllocIndexJVM", "Unresolved prestate variable:" ++ show i]
+
 resolveSetupValueJVM ::
   Options              ->
   JVMCrucibleContext      ->
@@ -999,9 +1002,3 @@ decodeJVMVal ty v =
       case testEquality repr repr' of
         Just Refl -> Just (k rv)
         Nothing   -> Nothing
-
-------------------------------------------------------------------------
-
-asRVal :: W4.ProgramLoc -> JVMVal -> OverrideMatcher CJ.JVM w JVMRefVal
-asRVal _ (RVal ptr) = return ptr
-asRVal loc _ = failure loc BadPointerCast
