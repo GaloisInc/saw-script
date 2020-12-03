@@ -24,6 +24,7 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
   , resolveSAWPred
   -- , resolveSetupFieldIndex
   , equalValsPred
+  , JVMTypeOfError(..)
   ) where
 
 import           Control.Lens
@@ -90,24 +91,24 @@ type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
 
 type SetupValue = MS.SetupValue CJ.JVM
 
-data JvmTypeOfError
-  = JvmPolymorphicType Cryptol.Schema
-  | JvmNonRepresentableType Cryptol.Type
+data JVMTypeOfError
+  = JVMPolymorphicType Cryptol.Schema
+  | JVMNonRepresentableType Cryptol.Type
 
-instance Show JvmTypeOfError where
-  show (JvmPolymorphicType s) =
+instance Show JVMTypeOfError where
+  show (JVMPolymorphicType s) =
     unlines
     [ "Expected monomorphic term"
     , "instead got:"
     , show (Cryptol.pp s)
     ]
-  show (JvmNonRepresentableType ty) =
+  show (JVMNonRepresentableType ty) =
     unlines
     [ "Type not representable in JVM:"
     , show (Cryptol.pp ty)
     ]
 
-instance X.Exception JvmTypeOfError
+instance X.Exception JVMTypeOfError
 
 typeOfSetupValue ::
   X.MonadThrow m =>
@@ -126,9 +127,9 @@ typeOfSetupValue _cc env _nameEnv val =
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
           case toJVMType (Cryptol.evalValType mempty ty) of
-            Nothing -> X.throwM (JvmNonRepresentableType ty)
+            Nothing -> X.throwM (JVMNonRepresentableType ty)
             Just jty -> return jty
-        s -> X.throwM (JvmPolymorphicType s)
+        s -> X.throwM (JVMPolymorphicType s)
 
     MS.SetupNull () ->
       -- We arbitrarily set the type of NULL to java.lang.Object,
