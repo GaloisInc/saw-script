@@ -798,7 +798,7 @@ data JVMSetupError
   | JVMFieldTypeMismatch String J.Type J.Type -- field name, expected, found
   | JVMElemNonReference SetupValue Int
   | JVMElemNonArray J.Type
-  | JVMElemInvalidIndex SetupValue Int Int -- reference, length, index
+  | JVMElemInvalidIndex J.Type Int Int -- element type, length, index
   | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
   | JVMElemMultiple SetupValue Int -- reference and array index
   | JVMArrayNonReference SetupValue
@@ -836,9 +836,10 @@ instance Show JVMSetupError where
         ]
       JVMElemNonArray jty ->
         "jvm_elem_is: Not an array type: " ++ show jty
-      JVMElemInvalidIndex _ptr len idx ->
+      JVMElemInvalidIndex ty len idx ->
         unlines
         [ "jvm_elem_is: Array index out of bounds"
+        , "Element type: " ++ show ty
         , "Array length: " ++ show len
         , "Given index: " ++ show idx
         ]
@@ -977,12 +978,13 @@ jvm_elem_is ptr idx val =
        else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     ptrTy <- typeOfSetupValue cc env nameEnv ptr
+     (len, elTy) <-
+       case snd (lookupAllocIndex env ptr') of
+         AllocObject cname -> X.throwM $ JVMElemNonArray (J.ClassType cname)
+         AllocArray len elTy -> pure (len, elTy)
      valTy <- typeOfSetupValue cc env nameEnv val
-     elTy <-
-       case ptrTy of
-         J.ArrayType elTy -> pure elTy
-         _ -> X.throwM $ JVMElemNonArray ptrTy
+     unless (0 <= idx && idx < len) $
+       X.throwM $ JVMElemInvalidIndex elTy len idx
      unless (registerCompatible elTy valTy) $
        X.throwM $ JVMElemTypeMismatch idx elTy valTy
      Setup.addPointsTo (JVMPointsToElem loc ptr' idx val)

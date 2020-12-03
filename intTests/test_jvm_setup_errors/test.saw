@@ -198,7 +198,7 @@ check_fails test "lookup"
   };
 
 print "jvm_elem_is with index out of bounds";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_array 8 java_long;
     let idx = {{ 12 : [32] }};
