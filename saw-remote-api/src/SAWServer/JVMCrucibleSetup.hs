@@ -33,7 +33,6 @@ import SAWScript.Crucible.JVM.Builtins
 import SAWScript.Crucible.JVM.BuiltinsJVM
 import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMS
 import SAWScript.JavaExpr (JavaType(..))
-import SAWScript.Options (defaultOptions)
 import SAWScript.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
@@ -96,19 +95,19 @@ interpretJVMSetup ::
   JVMSetupM ()
 interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
   where
-    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= jvm_return bic opts
+    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= jvm_return
     -- TODO: do we really want two names here?
     go (SetupFresh name@(ServerName n) debugName ty) =
-      do t <- lift $ jvm_fresh_var bic opts (T.unpack debugName) ty
+      do t <- lift $ jvm_fresh_var (T.unpack debugName) ty
          (env, cenv) <- get
          put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
          save name (Val (MS.SetupTerm t))
     go (SetupAlloc name ty _ (Just _)) =
       error "attempted to allocate a Java object with alignment information"
     go (SetupAlloc name (JavaArray n ty) True Nothing) =
-      lift (jvm_alloc_array bic opts n ty) >>= save name . Val
+      lift (jvm_alloc_array n ty) >>= save name . Val
     go (SetupAlloc name (JavaClass c) True Nothing) =
-      lift (jvm_alloc_object bic opts c) >>= save name . Val
+      lift (jvm_alloc_object c) >>= save name . Val
     go (SetupAlloc name ty False Nothing) =
       error $ "cannot allocate type: " ++ show ty
     go (SetupPointsTo src tgt) = get >>= \env -> lift $
@@ -117,13 +116,12 @@ interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty,
          error "nyi: points-to"
     go (SetupExecuteFunction args) =
       get >>= \env ->
-      lift $ traverse (getSetupVal env) args >>= jvm_execute_func bic opts
+      lift $ traverse (getSetupVal env) args >>= jvm_execute_func
     go (SetupPrecond p) = get >>= \env -> lift $
       getTypedTerm env p >>= jvm_precond
     go (SetupPostcond p) = get >>= \env -> lift $
       getTypedTerm env p >>= jvm_postcond
 
-    opts = defaultOptions
     save name val = modify' (\(env, cenv) -> (Map.insert name val env, cenv))
 
     getSetupVal ::
@@ -190,7 +188,6 @@ jvmLoadClass (JVMLoadClassParams serverName cname) =
      case tasks of
        (_:_) -> raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do bic <- view sawBIC <$> getState
-            c <- tl $ loadJavaClass bic cname
+         do c <- tl $ loadJavaClass cname
             setServerVal serverName c
             ok

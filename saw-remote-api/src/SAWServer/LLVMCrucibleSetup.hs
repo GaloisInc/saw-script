@@ -45,7 +45,6 @@ import SAWScript.Crucible.LLVM.Builtins
     , crucible_precond
     , crucible_postcond )
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS
-import SAWScript.Options (defaultOptions)
 import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
@@ -109,28 +108,28 @@ interpretLLVMSetup ::
 interpretLLVMSetup fileReader bic cenv0 ss =
   runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
   where
-    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= crucible_return bic defaultOptions
+    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= crucible_return
     -- TODO: do we really want two names here?
     go (SetupFresh name@(ServerName n) debugName ty) =
-      do t <- lift $ crucible_fresh_var bic defaultOptions (T.unpack debugName) ty
+      do t <- lift $ crucible_fresh_var (T.unpack debugName) ty
          (env, cenv) <- get
          put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
          save name (Val (CMS.anySetupTerm t))
     go (SetupAlloc name ty True Nothing) =
-      lift (crucible_alloc bic defaultOptions ty) >>= save name . Val
+      lift (crucible_alloc ty) >>= save name . Val
     go (SetupAlloc name ty False Nothing) =
-      lift (crucible_alloc_readonly bic defaultOptions ty) >>= save name . Val
+      lift (crucible_alloc_readonly ty) >>= save name . Val
     go (SetupAlloc name ty True (Just align)) =
-      lift (crucible_alloc_aligned bic defaultOptions align ty) >>= save name . Val
+      lift (crucible_alloc_aligned align ty) >>= save name . Val
     go (SetupAlloc name ty False (Just align)) =
-      lift (crucible_alloc_readonly_aligned bic defaultOptions align ty) >>= save name . Val
+      lift (crucible_alloc_readonly_aligned align ty) >>= save name . Val
     go (SetupPointsTo src tgt) = get >>= \env -> lift $
       do ptr <- getSetupVal env src
          tgt' <- getSetupVal env tgt
-         crucible_points_to True bic defaultOptions ptr tgt'
+         crucible_points_to True ptr tgt'
     go (SetupExecuteFunction args) =
       get >>= \env ->
-      lift $ traverse (getSetupVal env) args >>= crucible_execute_func bic defaultOptions
+      lift $ traverse (getSetupVal env) args >>= crucible_execute_func
     go (SetupPrecond p) = get >>= \env -> lift $
       getTypedTerm env p >>= crucible_precond
     go (SetupPostcond p) = get >>= \env -> lift $

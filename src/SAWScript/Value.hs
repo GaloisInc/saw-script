@@ -389,6 +389,7 @@ data TopLevelRO =
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
+  , roBasicSS       :: Simpset
   }
 
 data TopLevelRW =
@@ -450,6 +451,9 @@ getOptions = TopLevel (asks roOptions)
 
 getProxy :: TopLevel AIGProxy
 getProxy = TopLevel (asks roProxy)
+
+getBasicSS :: TopLevel Simpset
+getBasicSS = TopLevel (asks roBasicSS)
 
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
 localOptions f (TopLevel m) = TopLevel (local (\x -> x {roOptions = f (roOptions x)}) m)
