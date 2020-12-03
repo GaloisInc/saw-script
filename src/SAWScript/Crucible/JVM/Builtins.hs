@@ -808,6 +808,8 @@ data JVMSetupError
   | JVMArrayMultiple SetupValue
   | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
   | JVMArgNumberWrong Int Int -- number expected, number found
+  | JVMReturnUnexpected J.Type -- found
+  | JVMReturnTypeMismatch J.Type J.Type -- expected, found
 
 instance X.Exception JVMSetupError
 
@@ -882,6 +884,17 @@ instance Show JVMSetupError where
         [ "jvm_execute_func: Wrong number of arguments"
         , "Expected: " ++ show expected
         , "Given: " ++ show found
+        ]
+      JVMReturnUnexpected found ->
+        unlines
+        [ "jvm_return: Unexpected return value for void method"
+        , "Given type: " ++ show found
+        ]
+      JVMReturnTypeMismatch expected found ->
+        unlines
+        [ "jvm_return: Return type mismatch"
+        , "Expected type: " ++ show expected
+        , "Given type: " ++ show found
         ]
 
 -- | Returns Cryptol type of actual type if it is an array or
@@ -1084,7 +1097,21 @@ jvm_execute_func args =
      Setup.crucible_execute_func args
 
 jvm_return :: SetupValue -> JVMSetupM ()
-jvm_return retVal = JVMSetupM $ Setup.crucible_return retVal
+jvm_return retVal =
+  JVMSetupM $
+  do st <- get
+     let cc = st ^. Setup.csCrucibleContext
+     let mspec = st ^. Setup.csMethodSpec
+     let env = MS.csAllocations mspec
+     let nameEnv = MS.csTypeNames mspec
+     valTy <- typeOfSetupValue cc env nameEnv retVal
+     case mspec ^. MS.csRet of
+       Nothing ->
+         X.throwM (JVMReturnUnexpected valTy)
+       Just retTy ->
+         unless (registerCompatible retTy valTy) $
+         X.throwM (JVMReturnTypeMismatch retTy valTy)
+     Setup.crucible_return retVal
 
 --------------------------------------------------------------------------------
 

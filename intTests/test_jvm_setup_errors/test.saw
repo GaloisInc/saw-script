@@ -429,7 +429,7 @@ check_fails test "set"
   };
 
 print "jvm_return with non-monomorphic type";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -439,7 +439,7 @@ KNOWN_FALSE_POSITIVE test "get"
   };
 
 print "jvm_return with non-jvm type";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -449,7 +449,7 @@ KNOWN_FALSE_POSITIVE test "get"
   };
 
 print "jvm_return with wrong base type";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -459,7 +459,7 @@ KNOWN_FALSE_POSITIVE test "get"
   };
 
 print "jvm_return with reference type when base type was expected";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -478,7 +478,7 @@ KNOWN_FALSE_POSITIVE test "get"
   };
 
 print "jvm_return when none was expected";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
