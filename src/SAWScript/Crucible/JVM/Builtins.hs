@@ -65,7 +65,9 @@ import           System.IO
 import qualified Verifier.Java.Codebase as CB
 
 -- cryptol
+import qualified Cryptol.Eval.Type as Cryptol (evalValType)
 import qualified Cryptol.TypeCheck.Type as Cryptol
+import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 -- what4
 import qualified What4.Partial as W4
@@ -802,6 +804,7 @@ data JVMSetupError
   | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
   | JVMElemMultiple SetupValue Int -- reference and array index
   | JVMArrayNonReference SetupValue
+  | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
   | JVMArrayMultiple SetupValue
 
 instance X.Exception JVMSetupError
@@ -855,6 +858,13 @@ instance Show JVMSetupError where
         unlines
         [ "jvm_array_is: Left-hand side is not a valid object reference"
         , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        ]
+      JVMArrayTypeMismatch len ty schema ->
+        unlines
+        [ "jvm_array_is: Specified value does not have the expected type"
+        , "Expected array length: " ++ show len
+        , "Expected element type: " ++ show ty
+        , "Given type: " ++ show (Cryptol.pp schema)
         ]
       JVMArrayMultiple _ptr ->
         "jvm_array_is: Multiple specifications for the same array reference"
@@ -1005,6 +1015,21 @@ jvm_array_is ptr val =
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
        then X.throwM $ JVMArrayMultiple ptr
        else Setup.csResolvedState %= MS.markResolved ptr []
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+     (len, elTy) <-
+       case snd (lookupAllocIndex env ptr') of
+         AllocObject cname -> X.throwM $ JVMElemNonArray (J.ClassType cname)
+         AllocArray len elTy -> pure (len, elTy)
+     let schema = ttSchema val
+     let checkVal =
+           do ty <- Cryptol.isMono schema
+              (n, a) <- Cryptol.tIsSeq ty
+              guard (Cryptol.tIsNum n == Just (toInteger len))
+              jty <- toJVMType (Cryptol.evalValType mempty a)
+              guard (registerCompatible elTy jty)
+     case checkVal of
+       Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
+       Just () -> pure ()
      Setup.addPointsTo (JVMPointsToArray loc ptr' val)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
