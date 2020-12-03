@@ -17,6 +17,7 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
   , resolveSetupVal
   -- , typeOfJVMVal
   , typeOfSetupValue
+  , lookupAllocIndex
   , toJVMType
   , resolveTypedTerm
   , resolveBoolTerm
@@ -141,6 +142,12 @@ typeOfSetupValue _cc env _nameEnv val =
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
+
+lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
+lookupAllocIndex env i =
+  case Map.lookup i env of
+    Nothing -> panic "JVMSetup" ["Unresolved prestate variable:" ++ show i]
+    Just x -> x
 
 -- | Translate a SetupValue into a Crucible JVM value, resolving
 -- references
