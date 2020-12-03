@@ -806,6 +806,8 @@ data JVMSetupError
   | JVMArrayNonReference SetupValue
   | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
   | JVMArrayMultiple SetupValue
+  | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
+  | JVMArgNumberWrong Int Int -- number expected, number found
 
 instance X.Exception JVMSetupError
 
@@ -868,6 +870,19 @@ instance Show JVMSetupError where
         ]
       JVMArrayMultiple _ptr ->
         "jvm_array_is: Multiple specifications for the same array reference"
+      JVMArgTypeMismatch i expected found ->
+        unlines
+        [ "jvm_execute_func: Argument type mismatch"
+        , "Argument position: " ++ show i
+        , "Expected type: " ++ show expected
+        , "Given type: " ++ show found
+        ]
+      JVMArgNumberWrong expected found ->
+        unlines
+        [ "jvm_execute_func: Wrong number of arguments"
+        , "Expected: " ++ show expected
+        , "Given: " ++ show found
+        ]
 
 -- | Returns Cryptol type of actual type if it is an array or
 -- primitive type.
@@ -1043,8 +1058,30 @@ jvm_postcond term = JVMSetupM $ do
   Setup.crucible_postcond loc term
 
 jvm_execute_func :: [SetupValue] -> JVMSetupM ()
-jvm_execute_func args = JVMSetupM $
-  Setup.crucible_execute_func args
+jvm_execute_func args =
+  JVMSetupM $
+  do st <- get
+     let cc = st ^. Setup.csCrucibleContext
+     let mspec = st ^. Setup.csMethodSpec
+     let env = MS.csAllocations mspec
+     let nameEnv = MS.csTypeNames mspec
+     let argTys = mspec ^. MS.csArgs
+     let
+       checkArg i expectedTy val =
+         do valTy <- typeOfSetupValue cc env nameEnv val
+            unless (registerCompatible expectedTy valTy) $
+              X.throwM (JVMArgTypeMismatch i expectedTy valTy)
+     let
+       checkArgs _ [] [] = pure ()
+       checkArgs i [] vals =
+         X.throwM (JVMArgNumberWrong i (i + length vals))
+       checkArgs i tys [] =
+         X.throwM (JVMArgNumberWrong (i + length tys) i)
+       checkArgs i (ty : tys) (val : vals) =
+         do checkArg i ty val
+            checkArgs (i + 1) tys vals
+     checkArgs 0 argTys args
+     Setup.crucible_execute_func args
 
 jvm_return :: SetupValue -> JVMSetupM ()
 jvm_return retVal = JVMSetupM $ Setup.crucible_return retVal

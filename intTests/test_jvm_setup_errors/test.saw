@@ -366,7 +366,7 @@ crucible_jvm_verify test "set" [] false
   } z3;
 
 print "jvm_execute_func with non-monomorphic types";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -375,7 +375,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with non-jvm types";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -384,7 +384,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with wrong types";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -393,7 +393,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with reference type when base type was expected";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -402,7 +402,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with base type when reference type was expected";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -411,7 +411,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with too few arguments";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -420,7 +420,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with too many arguments";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
