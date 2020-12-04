@@ -94,7 +94,7 @@ import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
 import qualified Cryptol.Eval.Concrete as V (Concrete(..))
 
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import qualified Prettyprinter.Render.Text as PP (putDoc)
 
 import SAWScript.AutoMatch
 
@@ -429,6 +429,7 @@ buildTopLevelEnv proxy opts =
                    , roPosition = SS.Unknown
                    , roProxy = proxy
                    , roInitWorkDir = currDir
+                   , roBasicSS = ss
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -1578,7 +1579,7 @@ primitives = Map.fromList
   --, prim "java_value"          "{a} String -> a"
 
   , prim "java_var"            "String -> JavaType -> JavaSetup Term"
-    (bicVal javaVar)
+    (pureVal javaVar)
     Deprecated
     [ "Return a term corresponding to the initial value of the named Java"
     , "variable, which should have the given type. The returned term can be"
@@ -1589,7 +1590,7 @@ primitives = Map.fromList
     ]
 
   , prim "java_class_var"      "String -> JavaType -> JavaSetup ()"
-    (bicVal javaClassVar)
+    (pureVal javaClassVar)
     Deprecated
     [ "Declare that the named Java variable should point to an object of the"
     , "given class type."
@@ -1610,14 +1611,14 @@ primitives = Map.fromList
     ]
 
   , prim "java_assert_eq"      "String -> Term -> JavaSetup ()"
-    (bicVal javaAssertEq)
+    (pureVal javaAssertEq)
     Deprecated
     [ "Assert that the given variable should have the given value in the"
     , "initial state of a Java method."
     ]
 
   , prim "java_ensure_eq"      "String -> Term -> JavaSetup ()"
-    (bicVal javaEnsureEq)
+    (pureVal javaEnsureEq)
     Deprecated
     [ "Specify that the given Java variable should have a value equal to the"
     , "given term when execution finishes."
@@ -1673,7 +1674,7 @@ primitives = Map.fromList
     [ "The empty specification for 'java_verify'. Equivalent to 'return ()'." ]
 
   , prim "java_load_class"     "String -> TopLevel JavaClass"
-    (bicVal (const . CJ.loadJavaClass))
+    (pureVal CJ.loadJavaClass)
     Current
     [ "Load the named Java class and return a handle to it." ]
 
@@ -1681,7 +1682,7 @@ primitives = Map.fromList
 
   , prim "java_extract"
     "JavaClass -> String -> JavaSetup () -> TopLevel Term"
-    (bicVal extractJava)
+    (pureVal extractJava)
     Deprecated
     [ "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
@@ -1692,7 +1693,7 @@ primitives = Map.fromList
 
   , prim "java_symexec"
     "JavaClass -> String -> [(String, Term)] -> [String] -> Bool -> TopLevel Term"
-    (bicVal symexecJava)
+    (pureVal symexecJava)
     Deprecated
     [ "Symbolically execute a Java method and construct a Term corresponding"
     , "to its result. The first list contains pairs of variable or field"
@@ -1706,7 +1707,7 @@ primitives = Map.fromList
 
   , prim "java_verify"
     "JavaClass -> String -> [JavaMethodSpec] -> JavaSetup () -> TopLevel JavaMethodSpec"
-    (bicVal verifyJava)
+    (pureVal verifyJava)
     Deprecated
     [ "Verify a Java method against a method specification. The first two"
     , "arguments are the same as for 'java_extract' and 'java_symexec'."
@@ -1727,7 +1728,7 @@ primitives = Map.fromList
     ] -}
 
   , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
-    (bicVal CJ.crucible_java_extract)
+    (pureVal CJ.crucible_java_extract)
     Current
     [ "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
@@ -1817,19 +1818,19 @@ primitives = Map.fromList
     ]
 
   , prim "skeleton_globals_pre" "ModuleSkeleton -> CrucibleSetup ()"
-    (bicVal skeleton_globals_pre)
+    (pureVal skeleton_globals_pre)
     Experimental
     [ "Allocate and initialize mutable globals from the given module skeleton."
     ]
 
   , prim "skeleton_globals_post" "ModuleSkeleton -> CrucibleSetup ()"
-    (bicVal skeleton_globals_post)
+    (pureVal skeleton_globals_post)
     Experimental
     [ "Assert that all mutable globals from the given module skeleton are unchanged."
     ]
 
   , prim "skeleton_prestate" "FunctionSkeleton -> CrucibleSetup SkeletonState"
-    (bicVal skeleton_prestate)
+    (pureVal skeleton_prestate)
     Experimental
     [ "Allocate and initialize the arguments of the given function skeleton."
     , "Return a 'SkeletonState' from which those arguments can be retrieved,"
@@ -1837,7 +1838,7 @@ primitives = Map.fromList
     ]
 
   , prim "skeleton_poststate" "FunctionSkeleton -> SkeletonState -> CrucibleSetup SkeletonState"
-    (bicVal skeleton_poststate)
+    (pureVal skeleton_poststate)
     Experimental
     [ "Assert that pointer arguments of the given function skeleton remain"
     , "initialized. Return a 'SkeletonState' from which those arguments can"
@@ -1845,33 +1846,33 @@ primitives = Map.fromList
     ]
 
   , prim "skeleton_arg_index" "SkeletonState -> Int -> CrucibleSetup Term"
-    (bicVal skeleton_arg_index)
+    (pureVal skeleton_arg_index)
     Experimental
     [ "Retrieve the argument value at the given index from the given 'SkeletonState'."
     ]
 
   , prim "skeleton_arg" "SkeletonState -> String -> CrucibleSetup Term"
-    (bicVal skeleton_arg)
+    (pureVal skeleton_arg)
     Experimental
     [ "Retrieve the argument value of the given name from the given 'SkeletonState'."
     ]
 
   , prim "skeleton_arg_index_pointer" "SkeletonState -> Int -> CrucibleSetup SetupValue"
-    (bicVal skeleton_arg_index_pointer)
+    (pureVal skeleton_arg_index_pointer)
     Experimental
     [ "Retrieve the argument pointer at the given indexfrom the given 'SkeletonState'."
     , "Fails if the specified argument is not a pointer."
     ]
 
   , prim "skeleton_arg_pointer" "SkeletonState -> String -> CrucibleSetup SetupValue"
-    (bicVal skeleton_arg_pointer)
+    (pureVal skeleton_arg_pointer)
     Experimental
     [ "Retrieve the argument pointer of the given name from the given 'SkeletonState'."
     , "Fails if the specified argument is not a pointer."
     ]
 
   , prim "skeleton_exec" "SkeletonState -> CrucibleSetup ()"
-    (bicVal skeleton_exec)
+    (pureVal skeleton_exec)
     Experimental
     [ "Wrapper around 'crucible_execute_func' that passes the arguments initialized"
     , "in 'skeleton_prestate'."
@@ -2038,13 +2039,13 @@ primitives = Map.fromList
     -- Crucible/LLVM interface
 
   , prim "crucible_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
-    (bicVal crucible_llvm_cfg)
+    (pureVal crucible_llvm_cfg)
     Current
     [ "Load a function from the given LLVM module into a Crucible CFG."
     ]
 
   , prim "crucible_llvm_extract"  "LLVMModule -> String -> TopLevel Term"
-    (bicVal crucible_llvm_extract)
+    (pureVal crucible_llvm_extract)
     Current
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term will be the parameters of the LLVM function, and the return"
@@ -2055,7 +2056,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_compositional_extract"
     "LLVMModule -> String -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
-    (bicVal crucible_llvm_compositional_extract)
+    (pureVal crucible_llvm_compositional_extract)
     Experimental
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term are the input parameters of the LLVM function: the parameters"
@@ -2069,14 +2070,14 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
-    (bicVal crucible_fresh_var)
+    (pureVal crucible_fresh_var)
     Current
     [ "Create a fresh symbolic variable for use within a Crucible"
     , "specification. The name is used only for pretty-printing."
     ]
 
   , prim "crucible_fresh_cryptol_var" "String -> Type -> CrucibleSetup Term"
-    (bicVal crucible_fresh_cryptol_var)
+    (pureVal crucible_fresh_cryptol_var)
     Experimental
     [ "Create a fresh symbolic variable of the given Cryptol type for use"
     , "within a Crucible specification. The given name is used only for"
@@ -2085,7 +2086,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
-    (bicVal crucible_alloc)
+    (pureVal crucible_alloc)
     Current
     [ "Declare that an object of the given type should be allocated in a"
     , "Crucible specification. Before `crucible_execute_func`, this states"
@@ -2095,7 +2096,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_aligned" "Int -> LLVMType -> CrucibleSetup SetupValue"
-    (bicVal crucible_alloc_aligned)
+    (pureVal crucible_alloc_aligned)
     Current
     [ "Declare that a memory region of the given type should be allocated in"
     , "a Crucible specification, and also specify that the start of the region"
@@ -2104,7 +2105,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_readonly" "LLVMType -> CrucibleSetup SetupValue"
-    (bicVal crucible_alloc_readonly)
+    (pureVal crucible_alloc_readonly)
     Current
     [ "Declare that a read-only memory region of the given type should be"
     , "allocated in a Crucible specification. The function must not attempt"
@@ -2114,7 +2115,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_readonly_aligned" "Int -> LLVMType -> CrucibleSetup SetupValue"
-    (bicVal crucible_alloc_readonly_aligned)
+    (pureVal crucible_alloc_readonly_aligned)
     Current
     [ "Declare that a read-only memory region of the given type should be"
     , "a Crucible specification, and also specify that the start of the region"
@@ -2126,14 +2127,14 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_with_size" "Int -> LLVMType -> CrucibleSetup SetupValue"
-    (bicVal crucible_alloc_with_size)
+    (pureVal crucible_alloc_with_size)
     Experimental
     [ "Like `crucible_alloc`, but with a user-specified size (given in bytes)."
     , "The specified size must be greater than the size of the LLVM type."
     ]
 
   , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> CrucibleSetup SetupValue"
-    (bicVal crucible_symbolic_alloc)
+    (pureVal crucible_symbolic_alloc)
     Current
     [ "Like `crucible_alloc`, but with a (symbolic) size instead of"
     , "a LLVM type. The first argument specifies whether the allocation is"
@@ -2142,7 +2143,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
-    (bicVal crucible_alloc_global)
+    (pureVal crucible_alloc_global)
     Current
     [ "Declare that memory for the named global should be allocated in a"
     , "Crucible specification. This is done implicitly for immutable globals."
@@ -2150,7 +2151,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
-    (bicVal crucible_fresh_pointer)
+    (pureVal crucible_fresh_pointer)
     Current
     [ "Create a fresh pointer value for use in a Crucible specification."
     , "This works like `crucible_alloc` except that the pointer is not"
@@ -2158,7 +2159,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
-    (bicVal crucible_fresh_expanded_val)
+    (pureVal crucible_fresh_expanded_val)
     Current
     [ "Create a compound type entirely populated with fresh symbolic variables."
     , "Equivalent to allocating a new struct or array of the given type and"
@@ -2167,7 +2168,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (bicVal (crucible_points_to True))
+    (pureVal (crucible_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the given value (second argument)."
@@ -2179,7 +2180,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
-    (bicVal (crucible_conditional_points_to True))
+    (pureVal (crucible_conditional_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (second"
     , "argument) contains the given value (third argument) if the given"
@@ -2192,7 +2193,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (bicVal (crucible_points_to False))
+    (pureVal (crucible_points_to False))
     Current
     [ "A variant of crucible_points_to that does not check for compatibility"
     , "between the pointer type and the value type. This may be useful when"
@@ -2200,7 +2201,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_conditional_points_to_untyped" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
-    (bicVal (crucible_conditional_points_to False))
+    (pureVal (crucible_conditional_points_to False))
     Current
     [ "A variant of crucible_conditional_points_to that does not check for"
     , "compatibility between the pointer type and the value type. This may"
@@ -2208,7 +2209,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_points_to_array_prefix" "SetupValue -> Term -> Term -> CrucibleSetup ()"
-    (bicVal crucible_points_to_array_prefix)
+    (pureVal crucible_points_to_array_prefix)
     Experimental
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the prefix of the given array (second argument) of"
@@ -2221,7 +2222,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (bicVal crucible_equal)
+    (pureVal crucible_equal)
     Current
     [ "State that two Crucible values should be equal. Can be used as either"
     , "a pre-condition or a post-condition. It is semantically equivalent to"
@@ -2244,7 +2245,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
-    (bicVal crucible_execute_func)
+    (pureVal crucible_execute_func)
     Current
     [ "Specify the given list of values as the arguments of the function."
     ,  ""
@@ -2256,7 +2257,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
-    (bicVal crucible_return)
+    (pureVal crucible_return)
     Current
     [ "Specify the given value as the return value of the function. A"
     , "crucible_return statement is required if and only if the function"
@@ -2264,7 +2265,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_verify"
     "LLVMModule -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
-    (bicVal crucible_llvm_verify)
+    (pureVal crucible_llvm_verify)
     Current
     [ "Verify the LLVM function named by the second parameter in the module"
     , "specified by the first. The third parameter lists the CrucibleMethodSpec"
@@ -2277,7 +2278,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_unsafe_assume_spec"
     "LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
-    (bicVal crucible_llvm_unsafe_assume_spec)
+    (pureVal crucible_llvm_unsafe_assume_spec)
     Current
     [ "Return a CrucibleMethodSpec corresponding to a CrucibleSetup block,"
     , "as would be returned by crucible_llvm_verify but without performing"
@@ -2286,7 +2287,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_array_size_profile"
     "LLVMModule -> String -> [CrucibleMethodSpec] -> CrucibleSetup () -> TopLevel [(String, [FunctionProfile])]"
-    (bicVal $ crucible_llvm_array_size_profile assumeUnsat)
+    (pureVal $ crucible_llvm_array_size_profile assumeUnsat)
     Experimental
     [ "Symbolically execute the function named by the second parameter in"
     , "the module specified by the first. The fourth parameter may be used"
@@ -2297,7 +2298,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_verify_x86"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
-    (bicVal crucible_llvm_verify_x86)
+    (pureVal crucible_llvm_verify_x86)
     Experimental
     [ "Verify an x86 function from an ELF file for use as an override in an"
     , "LLVM verification. The first argument specifies the LLVM module"
@@ -2384,7 +2385,7 @@ primitives = Map.fromList
 
   , prim "crucible_setup_val_to_term"
     " SetupValue -> TopLevel Term"
-    (bicVal crucible_setup_val_to_typed_term)
+    (pureVal crucible_setup_val_to_typed_term)
     Current
     [ "Convert from a setup value to a typed term. This can only be done for a"
     , "subset of setup values. Fails if a setup value is a global, variable or null."
@@ -2393,13 +2394,13 @@ primitives = Map.fromList
   -- Ghost state support
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
-    (bicVal crucible_declare_ghost_state)
+    (pureVal crucible_declare_ghost_state)
     Current
     [ "Allocates a unique ghost variable." ]
 
   , prim "crucible_ghost_value"
     "Ghost -> Term -> CrucibleSetup ()"
-    (bicVal crucible_ghost_value)
+    (pureVal crucible_ghost_value)
     Current
     [ "Specifies the value of a ghost variable. This can be used"
     , "in the pre- and post- conditions of a setup block."]
@@ -2421,14 +2422,14 @@ primitives = Map.fromList
     -- Crucible/JVM commands
 
   , prim "jvm_fresh_var" "String -> JavaType -> JVMSetup Term"
-    (bicVal jvm_fresh_var)
+    (pureVal jvm_fresh_var)
     Experimental
     [ "Create a fresh variable for use within a Crucible specification. The"
     , "name is used only for pretty-printing."
     ]
 
   , prim "jvm_alloc_object" "String -> JVMSetup JVMValue"
-    (bicVal jvm_alloc_object)
+    (pureVal jvm_alloc_object)
     Experimental
     [ "Declare that an instance of the given class should be allocated in a"
     , "Crucible specification. Before `jvm_execute_func`, this states"
@@ -2438,7 +2439,7 @@ primitives = Map.fromList
     ]
 
   , prim "jvm_alloc_array" "Int -> JavaType -> JVMSetup JVMValue"
-    (bicVal jvm_alloc_array)
+    (pureVal jvm_alloc_array)
     Experimental
     [ "Declare that an array of the given size and element type should be"
     , "allocated in a Crucible specification. Before `jvm_execute_func`, this"
@@ -2450,7 +2451,7 @@ primitives = Map.fromList
     -- TODO: jvm_alloc_multiarray
 
   , prim "jvm_field_is" "JVMValue -> String -> JVMValue -> JVMSetup ()"
-    (bicVal (jvm_field_is True))
+    (pureVal jvm_field_is)
     Experimental
     [ "Declare that the indicated object (first argument) has a field"
     , "(second argument) containing the given value (third argument)."
@@ -2462,7 +2463,7 @@ primitives = Map.fromList
     ]
 
   , prim "jvm_elem_is" "JVMValue -> Int -> JVMValue -> JVMSetup ()"
-    (bicVal (jvm_elem_is True))
+    (pureVal jvm_elem_is)
     Experimental
     [ "Declare that the indicated array (first argument) has an element"
     , "(second argument) containing the given value (third argument)."
@@ -2474,7 +2475,7 @@ primitives = Map.fromList
     ]
 
   , prim "jvm_array_is" "JVMValue -> Term -> JVMSetup ()"
-    (bicVal (jvm_array_is True))
+    (pureVal jvm_array_is)
     Experimental
     [ "Declare that the indicated array reference (first argument) contains"
     , "the given sequence of values (second argument)."
@@ -2500,7 +2501,7 @@ primitives = Map.fromList
     ]
 
   , prim "jvm_execute_func" "[JVMValue] -> JVMSetup ()"
-    (bicVal jvm_execute_func)
+    (pureVal jvm_execute_func)
     Experimental
     [ "Specify the given list of values as the arguments of the function."
     ,  ""
@@ -2512,7 +2513,7 @@ primitives = Map.fromList
     ]
 
   , prim "jvm_return" "JVMValue -> JVMSetup ()"
-    (bicVal jvm_return)
+    (pureVal jvm_return)
     Experimental
     [ "Specify the given value as the return value of the function. A"
     , "jvm_return statement is required if and only if the function"
@@ -2520,7 +2521,7 @@ primitives = Map.fromList
 
   , prim "crucible_jvm_verify"
     "JavaClass -> String -> [JVMMethodSpec] -> Bool -> JVMSetup () -> ProofScript SatResult -> TopLevel JVMMethodSpec"
-    (bicVal crucible_jvm_verify)
+    (pureVal crucible_jvm_verify)
     Experimental
     [ "Verify the JVM function named by the second parameter in the module"
     , "specified by the first. The third parameter lists the JVMMethodSpec"
@@ -2533,7 +2534,7 @@ primitives = Map.fromList
 
   , prim "crucible_jvm_unsafe_assume_spec"
     "JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec"
-    (bicVal crucible_jvm_unsafe_assume_spec)
+    (pureVal crucible_jvm_unsafe_assume_spec)
     Experimental
     [ "Return a JVMMethodSpec corresponding to a JVMSetup block,"
     , "as would be returned by jvm_verify but without performing any"
@@ -2569,13 +2570,6 @@ primitives = Map.fromList
     (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
     Experimental
     [ "A JVMValue representing a null pointer value." ]
-
-  , prim "jvm_global"
-    "String -> JVMValue"
-    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue CJ.JVM))
-    Experimental
-    [ "Return a JVMValue representing a pointer to the named global."
-    , "The String may be either the name of a global value or a function name." ]
 
   , prim "jvm_term"
     "Term -> JVMValue"

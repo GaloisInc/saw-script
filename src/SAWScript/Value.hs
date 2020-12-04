@@ -389,6 +389,7 @@ data TopLevelRO =
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
+  , roBasicSS       :: Simpset
   }
 
 data TopLevelRW =
@@ -450,6 +451,9 @@ getOptions = TopLevel (asks roOptions)
 
 getProxy :: TopLevel AIGProxy
 getProxy = TopLevel (asks roProxy)
+
+getBasicSS :: TopLevel Simpset
+getBasicSS = TopLevel (asks roBasicSS)
 
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
 localOptions f (TopLevel m) = TopLevel (local (\x -> x {roOptions = f (roOptions x)}) m)
@@ -988,11 +992,7 @@ addTraceIO str action = X.catches action
   where
     rethrow msg = X.throwIO . SS.TraceException $ mconcat [str, ":\n", msg]
     handleTopLevel :: SS.TopLevelException -> IO a
-    handleTopLevel (SS.TopLevelException _pos msg) = rethrow msg
-    handleTopLevel (SS.JavaException _pos msg) = rethrow msg
-    handleTopLevel (SS.CrucibleSetupException _loc msg) = rethrow msg
-    handleTopLevel (SS.OverrideMatcherException _loc msg) = rethrow msg
-    handleTopLevel (SS.LLVMMethodSpecException _loc msg) = rethrow msg
+    handleTopLevel e = rethrow $ show e
     handleTrace (SS.TraceException msg) = rethrow msg
     handleIO :: X.IOException -> IO a
     handleIO e

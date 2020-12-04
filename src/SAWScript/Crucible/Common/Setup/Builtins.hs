@@ -19,7 +19,6 @@ import qualified What4.ProgramLoc as W4
 
 import           Verifier.SAW.TypedTerm (TypedTerm)
 
-import           SAWScript.Options (Options)
 import           SAWScript.Value
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -51,22 +50,18 @@ crucible_postcond loc p = do
   addCondition (MS.SetupCond_Pred loc p)
 
 crucible_return ::
-  BuiltinContext ->
-  Options ->
   MS.SetupValue ext ->
   CrucibleSetup ext ()
-crucible_return _bic _opt retval = do
+crucible_return retval = do
   ret <- use (csMethodSpec . MS.csRetValue)
   case ret of
     Just _ -> fail "crucible_return: duplicate return value specification"
     Nothing -> csMethodSpec . MS.csRetValue .= Just retval
 
 crucible_execute_func ::
-  BuiltinContext ->
-  Options ->
   [MS.SetupValue ext] ->
   CrucibleSetup ext ()
-crucible_execute_func _bic _opt args = do
+crucible_execute_func args = do
   tps <- use (csMethodSpec . MS.csArgs)
   csPrePost .= MS.PostState
   csMethodSpec . MS.csArgBindings .= Map.fromList [ (i, (t,a))

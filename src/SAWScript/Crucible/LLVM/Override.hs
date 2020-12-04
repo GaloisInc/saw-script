@@ -71,7 +71,6 @@ import           Data.Text (Text, pack)
 import qualified Data.Vector as V
 import           GHC.Generics (Generic)
 import           Numeric.Natural
-import qualified Text.PrettyPrint.ANSI.Leijen as PPWL
 import qualified Prettyprinter as PP
 
 import qualified Text.LLVM.AST as L
@@ -186,8 +185,7 @@ mkStructuralMismatch _opts cc _sc spec llvmval setupval memTy =
       nameEnv = MS.csTypeNames spec
       maybeTy = typeOfSetupValue cc tyEnv nameEnv setupval
   in pure $ StructuralMismatch
-              -- TODO: remove 'viaShow' when crucible switches to prettyprinter
-              (PP.viaShow (PPWL.pretty llvmval))
+              (PP.pretty llvmval)
               (MS.ppSetupValue setupval)
               maybeTy
               memTy
@@ -209,8 +207,7 @@ ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc cond ptr val) = do
                  , "Pointee:" PP.<+> pretty2
                  , maybe PP.emptyDoc (\tt -> "Condition:" PP.<+> MS.ppTypedTerm tt) cond
                  , "Assertion made at:" PP.<+>
-                   -- TODO: replace 'viaShow' with 'pretty' when what4 switches to prettyprinter
-                   PP.viaShow (W4.plSourceLoc loc)
+                   PP.pretty (W4.plSourceLoc loc)
                  ]
 
 -- | Create an error stating that the 'LLVMVal' was not equal to the 'SetupValue'
