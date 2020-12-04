@@ -110,7 +110,7 @@ check_fails test "get"
   };
 
 print "jvm_field_is with previous jvm_field_is on same field";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -198,7 +198,7 @@ check_fails test "lookup"
   };
 
 print "jvm_elem_is with index out of bounds";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_array 8 java_long;
     let idx = {{ 12 : [32] }};
@@ -245,7 +245,7 @@ crucible_jvm_verify test "lookup" [] false
   } z3;
 
 print "jvm_array_is with non-monomorphic type";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_array 8 java_long;
     let xs = {{ zero }};
@@ -256,7 +256,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "jvm_array_is with non-array type";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_array 8 java_long;
     let xs = {{ (True, False) }};
@@ -267,7 +267,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "jvm_array_is with wrong array length";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_array 8 java_long;
     xs <- jvm_fresh_var "xs" (java_array 4 java_long);
@@ -278,7 +278,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "jvm_array_is with non-jvm element type";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_array 8 java_long;
     let xs = {{ zero : [8]Integer }};
@@ -289,7 +289,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "jvm_array_is with wrong array element type";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_array 8 java_long;
     xs <- jvm_fresh_var "xs" (java_array 8 java_int);
@@ -300,7 +300,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "jvm_array_is with object reference";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_object "Test";
     xs <- jvm_fresh_var "xs" (java_array 8 java_long);
@@ -311,7 +311,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "jvm_array_is with null reference";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     let arr = jvm_null;
     xs <- jvm_fresh_var "xs" (java_array 8 java_long);
@@ -322,7 +322,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "jvm_array_is with non-reference";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     let arr = jvm_term {{ True }};
     xs <- jvm_fresh_var "xs" (java_array 8 java_long);
@@ -366,7 +366,7 @@ crucible_jvm_verify test "set" [] false
   } z3;
 
 print "jvm_execute_func with non-monomorphic types";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -375,7 +375,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with non-jvm types";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -384,7 +384,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with wrong types";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -393,7 +393,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with reference type when base type was expected";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -402,7 +402,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with base type when reference type was expected";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -411,7 +411,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with too few arguments";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -420,7 +420,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_execute_func with too many arguments";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -429,7 +429,7 @@ KNOWN_FALSE_POSITIVE test "set"
   };
 
 print "jvm_return with non-monomorphic type";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -439,7 +439,7 @@ KNOWN_FALSE_POSITIVE test "get"
   };
 
 print "jvm_return with non-jvm type";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -449,7 +449,7 @@ KNOWN_FALSE_POSITIVE test "get"
   };
 
 print "jvm_return with wrong base type";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -459,7 +459,7 @@ KNOWN_FALSE_POSITIVE test "get"
   };
 
 print "jvm_return with reference type when base type was expected";
-KNOWN_FALSE_POSITIVE test "get"
+check_fails test "get"
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -478,7 +478,7 @@ KNOWN_FALSE_POSITIVE test "get"
   };
 
 print "jvm_return when none was expected";
-KNOWN_FALSE_POSITIVE test "set"
+check_fails test "set"
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -486,3 +486,5 @@ KNOWN_FALSE_POSITIVE test "set"
     jvm_field_is this "val" (jvm_term x);
     jvm_return (jvm_term x);
   };
+
+print "DONE!";

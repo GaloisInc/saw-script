@@ -56,7 +56,7 @@ import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 -- ** Language features
 
 type instance MS.HasSetupNull CJ.JVM = 'True
-type instance MS.HasSetupGlobal CJ.JVM = 'True
+type instance MS.HasSetupGlobal CJ.JVM = 'False
 type instance MS.HasSetupStruct CJ.JVM = 'False
 type instance MS.HasSetupArray CJ.JVM = 'False
 type instance MS.HasSetupElem CJ.JVM = 'False
@@ -127,23 +127,23 @@ type instance MS.AllocSpec CJ.JVM = (ProgramLoc, Allocation)
 type instance MS.PointsTo CJ.JVM = JVMPointsTo
 
 data JVMPointsTo
-  = JVMPointsToField ProgramLoc (MS.SetupValue CJ.JVM) J.FieldId (MS.SetupValue CJ.JVM)
-  | JVMPointsToElem ProgramLoc (MS.SetupValue CJ.JVM) Int (MS.SetupValue CJ.JVM)
-  | JVMPointsToArray ProgramLoc (MS.SetupValue CJ.JVM) TypedTerm
+  = JVMPointsToField ProgramLoc MS.AllocIndex J.FieldId (MS.SetupValue CJ.JVM)
+  | JVMPointsToElem ProgramLoc MS.AllocIndex Int (MS.SetupValue CJ.JVM)
+  | JVMPointsToArray ProgramLoc MS.AllocIndex TypedTerm
 
 ppPointsTo :: JVMPointsTo -> PPL.Doc ann
 ppPointsTo =
   \case
     JVMPointsToField _loc ptr fid val ->
-      MS.ppSetupValue ptr <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
+      MS.ppAllocIndex ptr <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
       PPL.<+> PPL.pretty "points to"
       PPL.<+> MS.ppSetupValue val
     JVMPointsToElem _loc ptr idx val ->
-      MS.ppSetupValue ptr <> PPL.pretty "[" <> PPL.pretty idx <> PPL.pretty "]"
+      MS.ppAllocIndex ptr <> PPL.pretty "[" <> PPL.pretty idx <> PPL.pretty "]"
       PPL.<+> PPL.pretty "points to"
       PPL.<+> MS.ppSetupValue val
     JVMPointsToArray _loc ptr val ->
-      MS.ppSetupValue ptr
+      MS.ppAllocIndex ptr
       PPL.<+> PPL.pretty "points to"
       PPL.<+> MS.ppTypedTerm val
 
