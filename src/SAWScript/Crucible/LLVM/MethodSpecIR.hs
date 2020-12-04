@@ -158,10 +158,6 @@ type instance MS.HasGhostState (CL.LLVM _) = 'True
 type instance MS.TypeName (CL.LLVM arch) = CL.Ident
 type instance MS.ExtType (CL.LLVM arch) = CL.MemType
 
--- TODO: remove when crucible switches to prettyprinter
-instance PPL.Pretty CL.MemType where
-  pretty = PPL.viaShow . CL.ppMemType
-
 --------------------------------------------------------------------------------
 -- *** LLVMMethodId
 

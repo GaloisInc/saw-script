@@ -12,7 +12,6 @@ import qualified Language.JVM.Common as JVM
 
 import SAWScript.Crucible.JVM.Builtins
 import SAWScript.JavaExpr (JavaType(..))
-import SAWScript.Options (defaultOptions)
 import SAWScript.Value (rwCryptol)
 
 import Argo
@@ -44,9 +43,9 @@ jvmVerifyAssume mode (VerifyParams className fun lemmaNames checkSat contract sc
               VerifyContract -> do
                 lemmas <- mapM getJVMMethodSpecIR lemmaNames
                 proofScript <- interpretProofScript script
-                tl $ crucible_jvm_verify bic defaultOptions cls fun lemmas checkSat setup proofScript
+                tl $ crucible_jvm_verify cls fun lemmas checkSat setup proofScript
               AssumeContract ->
-                tl $ crucible_jvm_unsafe_assume_spec bic defaultOptions cls fun setup
+                tl $ crucible_jvm_unsafe_assume_spec cls fun setup
             dropTask
             setServerVal lemmaName res
             ok

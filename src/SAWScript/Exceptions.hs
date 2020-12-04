@@ -31,7 +31,14 @@ data TopLevelException
   | CrucibleSetupException ProgramLoc String
   | OverrideMatcherException ProgramLoc String
   | LLVMMethodSpecException ProgramLoc String
-  deriving Show
+
+instance Show TopLevelException where
+  show (TopLevelException _ msg) = msg
+  show (JavaException _ msg) = msg
+  show (CrucibleSetupException _ msg) = msg
+  show (OverrideMatcherException _ msg) = msg
+  show (LLVMMethodSpecException _ msg) = msg
+
 instance Exception TopLevelException
 
 data TraceException = TraceException String

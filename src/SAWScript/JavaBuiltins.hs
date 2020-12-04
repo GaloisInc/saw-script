@@ -64,9 +64,9 @@ import qualified Cryptol.Eval.Concrete as Cryptol (Concrete(..))
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.PP as Cryptol (pretty)
 
-loadJavaClass :: BuiltinContext -> String -> IO Class
-loadJavaClass bic =
-  lookupClass (biJavaCodebase bic) fixPos . mkClassName . dotsToSlashes
+loadJavaClass :: JSS.Codebase -> String -> IO Class
+loadJavaClass cb =
+  lookupClass cb fixPos . mkClassName . dotsToSlashes
 
 getActualArgTypes :: JavaSetupState -> Either String [JavaActualType]
 getActualArgTypes s = mapM getActualType declaredTypes
@@ -87,18 +87,17 @@ getActualArgTypes s = mapM getActualType declaredTypes
 
 type Assign = (JavaExpr, TypedTerm)
 
-symexecJava :: BuiltinContext
-            -> Options
-            -> Class
+symexecJava :: Class
             -> String
             -> [(String, TypedTerm)]
             -> [String]
             -> Bool
             -> TopLevel TypedTerm
-symexecJava bic opts cls mname inputs outputs satBranches = do
-  let cb = biJavaCodebase bic
-      pos = fixPos
-      jsc = biSharedContext bic
+symexecJava cls mname inputs outputs satBranches = do
+  cb <- getJavaCodebase
+  jsc <- getSharedContext
+  opts <- getOptions
+  let pos = fixPos
       fl = defaultSimFlags { alwaysBitBlastBranchTerms = True
                            , satAtBranches = satBranches
                            }
@@ -151,13 +150,14 @@ symexecJava bic opts cls mname inputs outputs satBranches = do
                          _ -> scTuple jsc tms
       liftIO (mkTypedTerm jsc =<< bundle outtms)
 
-extractJava :: BuiltinContext -> Options -> Class -> String
+extractJava :: Class -> String
             -> JavaSetup ()
             -> TopLevel TypedTerm
-extractJava bic opts cls mname setup = do
-  let cb = biJavaCodebase bic
-      pos = fixPos
-      jsc = biSharedContext bic
+extractJava cls mname setup = do
+  cb <- getJavaCodebase
+  sc <- getSharedContext
+  opts <- getOptions
+  let pos = fixPos
   argsRef <- io $ newIORef []
   withSAWBackend (Just argsRef) $ \sbe -> do
     setupRes <- runJavaSetup pos cb cls mname setup
@@ -167,23 +167,22 @@ extractJava bic opts cls mname setup = do
     io $ runSimulator cb sbe defaultSEH (Just fl) $ do
       setVerbosity (simVerbose opts)
       argTypes <- either fail return (getActualArgTypes setupRes)
-      args <- mapM (freshJavaVal (Just argsRef) jsc) argTypes
+      args <- mapM (freshJavaVal (Just argsRef) sc) argTypes
       -- TODO: support initializing other state elements
       rslt <- case methodIsStatic meth of
                 True -> execStaticMethod (className cls) (methodKey meth) args
                 False -> do
-                  ~(RValue this) <- freshJavaVal (Just argsRef) jsc (ClassInstance cls)
+                  ~(RValue this) <- freshJavaVal (Just argsRef) sc (ClassInstance cls)
                   execInstanceMethod (className cls) (methodKey meth) this args
       dt <- case (rslt, methodReturnType meth) of
               (Nothing, _) -> fail $ "No return value from " ++ methodName meth
               (_, Nothing) -> fail $ "Return value from void method " ++ methodName meth
-              (Just v, Just tp) -> termOfValueSim jsc tp v
+              (Just v, Just tp) -> termOfValueSim sc tp v
       liftIO $ do
-        let sc = biSharedContext bic
         argBinds <- reverse <$> readIORef argsRef
         let exts = mapMaybe asExtCns argBinds
         -- TODO: group argBinds according to the declared types
-        scAbstractExts jsc exts dt >>= mkTypedTerm sc
+        scAbstractExts sc exts dt >>= mkTypedTerm sc
 
 withSAWBackend :: Maybe (IORef [Term])
                -> (Backend SharedContext -> TopLevel a)
@@ -208,21 +207,21 @@ runJavaSetup pos cb cls mname setup = do
                    }
   execStateT setup setupState
 
-verifyJava :: BuiltinContext -> Options -> Class -> String
+verifyJava :: Class -> String
            -> [JavaMethodSpecIR]
            -> JavaSetup ()
            -> TopLevel JavaMethodSpecIR
-verifyJava bic opts cls mname overrides setup = do
+verifyJava cls mname overrides setup = do
   startTime <- io $ getCurrentTime
+  cb <- getJavaCodebase
+  sc <- getSharedContext
+  opts <- getOptions
   let pos = fixPos -- TODO
-      cb = biJavaCodebase bic
-      bsc = biSharedContext bic
-      jsc = bsc
   setupRes <- runJavaSetup pos cb cls mname setup
   let ms = jsSpec setupRes
       vp = VerifyParams {
              vpCode = cb
-           , vpContext = jsc
+           , vpContext = sc
            , vpOpts = opts
            , vpSpec = ms
            , vpOver = overrides
@@ -253,27 +252,27 @@ verifyJava bic opts cls mname overrides setup = do
         setVerbosity (simVerbose opts)
         let prover script vs n g = do
               let exts = getAllExts g
-              gprop <- io $ scGeneralizeExts jsc exts =<< scEqTrue jsc g
-              io $ doExtraChecks opts bsc gprop
+              gprop <- io $ scGeneralizeExts sc exts =<< scEqTrue sc g
+              io $ doExtraChecks opts sc gprop
               let goal = ProofGoal n "vc" (vsVCName vs) (Prop gprop)
               r <- evalStateT script (startProof goal)
               case r of
                 SS.Unsat _ -> liftIO $ printOutLn opts Debug "Valid."
                 SS.SatMulti _ vals ->
-                       io $ showCexResults opts jsc (rwPPOpts rw) ms vs exts vals
+                       io $ showCexResults opts sc (rwPPOpts rw) ms vs exts vals
         let ovds = vpOver vp
-        initPS <- initializeVerification' jsc ms bs cl
+        initPS <- initializeVerification' sc ms bs cl
         liftIO $ printOutLn opts Debug $ "Overriding: " ++ show (map specName ovds)
-        mapM_ (overrideFromSpec jsc (specPos ms)) ovds
+        mapM_ (overrideFromSpec sc (specPos ms)) ovds
         liftIO $ printOutLn opts Debug $ "Running method: " ++ specName ms
         -- Execute code.
         run
         liftIO $ printOutLn opts Debug $ "Checking final state"
-        pvc <- checkFinalState jsc ms bs cl initPS
+        pvc <- checkFinalState sc ms bs cl initPS
         let pvcs = [pvc] -- Only one for now, but that might change
         liftIO $ printOutLn opts ExtraDebug "Verifying the following:"
         liftIO $ mapM_ (printOutLn opts ExtraDebug . show . ppPathVC) pvcs
-        let validator script = runValidation (prover script) vp jsc pvcs
+        let validator script = runValidation (prover script) vp sc pvcs
         case jsTactic setupRes of
           Skip -> liftIO $ printOutLn opts Warn $
                     "WARNING: skipping verification of " ++ specName ms
@@ -402,11 +401,10 @@ getJavaExpr ctx name = do
       , ftext "Maybe you're missing a `java_var` or `java_class_var`?"
       ]
 
-typeJavaExpr :: BuiltinContext -> String -> JavaType
+typeJavaExpr :: JSS.Codebase -> String -> JavaType
              -> JavaSetup (JavaExpr, JavaActualType)
-typeJavaExpr bic name ty = do
+typeJavaExpr cb name ty = do
   ms <- gets jsSpec
-  let cb = biJavaCodebase bic
   expr <- parseJavaExpr' cb (specThisClass ms) (specMethod ms) name
   jty' <- exportJSSType ty
   checkEqualTypes (exprType expr) jty' name
@@ -441,24 +439,26 @@ javaRequiresClass cls = modifySpec $ \ms ->
   let clss' = mkClassName (dotsToSlashes cls) : specInitializedClasses ms in
   ms { specInitializedClasses = clss' }
 
-javaClassVar :: BuiltinContext -> Options -> String -> JavaType
+javaClassVar :: String -> JavaType
              -> JavaSetup ()
-javaClassVar bic _ name t = do
-  (expr, aty) <- typeJavaExpr bic name t
+javaClassVar name t = do
+  cb <- lift getJavaCodebase
+  (expr, aty) <- typeJavaExpr cb name t
   case aty of
     ClassInstance _ -> return ()
     _ -> throwJava "Can't use `java_class_var` with variable of non-class type."
   modifySpec (specAddVarDecl expr aty)
 
-javaVar :: BuiltinContext -> Options -> String -> JavaType
+javaVar :: String -> JavaType
         -> JavaSetup TypedTerm
-javaVar bic _ name t = do
-  (expr, aty) <- typeJavaExpr bic name t
+javaVar name t = do
+  cb <- lift getJavaCodebase
+  (expr, aty) <- typeJavaExpr cb name t
   case aty of
     ClassInstance _ -> throwJava "Can't use `java_var` with variable of class type."
     _ -> return ()
   modifySpec (specAddVarDecl expr aty)
-  let sc = biSharedContext bic
+  sc <- lift getSharedContext
   case cryptolTypeOfActual aty of
     Nothing -> throwJava $ "Unsupported type for `java_var`: " ++ show aty
     Just cty ->
@@ -485,21 +485,23 @@ javaAssert (TypedTerm schema v) = do
     LE le -> modifySpec (specAddAssumption le)
     JE je -> throwJava $ "Used java_assert with Java expression: " ++ show je
 
-javaAssertEq :: BuiltinContext -> Options -> String -> TypedTerm -> JavaSetup ()
-javaAssertEq bic _ name (TypedTerm schema t) = do
+javaAssertEq :: String -> TypedTerm -> JavaSetup ()
+javaAssertEq name (TypedTerm schema t) = do
   (expr, aty) <- (getJavaExpr "java_assert_eq") name
-  checkCompatibleType (biSharedContext bic) "java_assert_eq" aty schema
+  sc <- lift getSharedContext
+  checkCompatibleType sc "java_assert_eq" aty schema
   me <- mkMixedExpr t
   modifySpec (specAddLogicAssignment fixPos expr me)
 
-javaEnsureEq :: BuiltinContext -> Options -> String -> TypedTerm -> JavaSetup ()
-javaEnsureEq bic _ name (TypedTerm schema t) = do
+javaEnsureEq :: String -> TypedTerm -> JavaSetup ()
+javaEnsureEq name (TypedTerm schema t) = do
   ms <- gets jsSpec
+  sc <- lift getSharedContext
   (expr, aty) <- (getJavaExpr "java_ensure_eq") name
   when (isArg (specMethod ms) expr && isScalarExpr expr) $ throwJava $
     "The `java_ensure_eq` function cannot be used " ++
     "to set the value of a scalar argument."
-  checkCompatibleType (biSharedContext bic) "java_ensure_eq" aty schema
+  checkCompatibleType sc "java_ensure_eq" aty schema
   me <- mkMixedExpr t
   cmd <- case (CC.unTerm expr, aty) of
     (_, ArrayInstance _ _) -> return (EnsureArray fixPos expr me)

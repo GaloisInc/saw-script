@@ -56,9 +56,8 @@ import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 import qualified Data.Vector as V
 import           Data.Void (absurd)
+import           Prettyprinter
 import           System.IO
-
-import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 
 -- jvm-verifier
 -- TODO: transition to Lang.JVM.Codebase from crucible-jvm
@@ -130,7 +129,7 @@ type SetupCondition = MS.SetupCondition CJ.JVM
 -- TODO: something useful with the global pair?
 ppAbortedResult :: JVMCrucibleContext
                 -> Crucible.AbortedResult Sym a
-                -> Doc
+                -> Doc ann
 ppAbortedResult _cc = Common.ppAbortedResult (\_gp -> mempty)
 
 -- FIXME: We need a better way to identify a set of class names to
@@ -179,8 +178,6 @@ excludedRefs = Set.fromList
   ]
 
 crucible_jvm_verify ::
-  BuiltinContext ->
-  Options ->
   J.Class ->
   String {- ^ method name -} ->
   [CrucibleMethodSpecIR] {- ^ overrides -} ->
@@ -188,15 +185,16 @@ crucible_jvm_verify ::
   JVMSetupM () ->
   ProofScript SatResult ->
   TopLevel CrucibleMethodSpecIR
-crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
+crucible_jvm_verify cls nm lemmas checkSat setup tactic =
   do cb <- getJavaCodebase
+     opts <- getOptions
      -- allocate all of the handles/static vars that are referenced
      -- (directly or indirectly) by this class
      allRefs <- io $ Set.toList <$> allClassRefs cb (J.className cls)
      let refs = CJ.initClasses ++ allRefs -- ++ superRefs
-     mapM_ (prepareClassTopLevel bic . J.unClassName) refs
+     mapM_ (prepareClassTopLevel . J.unClassName) refs
 
-     cc <- setupCrucibleContext bic opts cls
+     cc <- setupCrucibleContext cls
      let sym = cc^.jccBackend
      let jc = cc^.jccJVMContext
 
@@ -228,7 +226,7 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
        io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat
 
      -- collect the proof obligations
-     asserts <- verifyPoststate opts (biSharedContext bic) cc
+     asserts <- verifyPoststate cc
                     methodSpec env globals3 ret
 
      -- restore previous assumption state
@@ -241,14 +239,12 @@ crucible_jvm_verify bic opts cls nm lemmas checkSat setup tactic =
 
 
 crucible_jvm_unsafe_assume_spec ::
-  BuiltinContext   ->
-  Options          ->
   J.Class          ->
   String          {- ^ Name of the method -} ->
   JVMSetupM () {- ^ Boundary specification -} ->
   TopLevel CrucibleMethodSpecIR
-crucible_jvm_unsafe_assume_spec bic opts cls nm setup =
-  do cc <- setupCrucibleContext bic opts cls
+crucible_jvm_unsafe_assume_spec cls nm setup =
+  do cc <- setupCrucibleContext cls
      cb <- getJavaCodebase
      -- cls' is either cls or a subclass of cls
      pos <- getPosition
@@ -660,16 +656,16 @@ scAndList sc = conj . filter nontrivial
 --------------------------------------------------------------------------------
 
 verifyPoststate ::
-  Options                           {- ^ saw script debug and print options           -} ->
-  SharedContext                     {- ^ saw core context                             -} ->
   JVMCrucibleContext                   {- ^ crucible context                             -} ->
   CrucibleMethodSpecIR              {- ^ specification                                -} ->
   Map AllocIndex JVMRefVal          {- ^ allocation substitution                      -} ->
   Crucible.SymGlobalState Sym       {- ^ global variables                             -} ->
   Maybe (J.Type, JVMVal)            {- ^ optional return value                        -} ->
   TopLevel [(String, Term)]         {- ^ generated labels and verification conditions -}
-verifyPoststate opts sc cc mspec env0 globals ret =
-  do poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
+verifyPoststate cc mspec env0 globals ret =
+  do opts <- getOptions
+     sc <- getSharedContext
+     poststateLoc <- SS.toW4Loc "_SAW_verify_poststate" <$> getPosition
      io $ W4.setCurrentProgramLoc sym poststateLoc
 
      let ecs0 = Map.fromList
@@ -682,7 +678,7 @@ verifyPoststate opts sc cc mspec env0 globals ret =
                                     (view (MS.csPostState . MS.csFreshVars) mspec))
      matchPost <- io $
           runOverrideMatcher sym globals env0 terms0 initialFree poststateLoc $
-           do matchResult
+           do matchResult opts sc
               learnCond opts sc cc mspec PostState (mspec ^. MS.csPostState)
 
      st <- case matchPost of
@@ -692,18 +688,18 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
      obligations <- io $ Crucible.getProofObligations sym
      io $ Crucible.clearProofObligations sym
-     io $ mapM verifyObligation (Crucible.proofGoalsToList obligations)
+     io $ mapM (verifyObligation sc) (Crucible.proofGoalsToList obligations)
 
   where
     sym = cc^.jccBackend
 
-    verifyObligation (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError _loc err))) = do
+    verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError _loc err))) = do
       hypTerm    <- scAndList sc =<< mapM (Crucible.toSC sym) (toListOf (folded . Crucible.labeledPred) hyps)
       conclTerm  <- Crucible.toSC sym concl
       obligation <- scImplies sc hypTerm conclTerm
       return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
 
-    matchResult =
+    matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
         (Just (rty,r), Just expect) -> matchArg opts sc cc mspec PostState r rty expect
         (Nothing     , Just _ )     -> fail "verifyPoststate: unexpected jvm_return specification"
@@ -711,14 +707,15 @@ verifyPoststate opts sc cc mspec env0 globals ret =
 
 --------------------------------------------------------------------------------
 
-setupCrucibleContext :: BuiltinContext -> Options -> J.Class -> TopLevel JVMCrucibleContext
-setupCrucibleContext bic opts jclass =
+setupCrucibleContext :: J.Class -> TopLevel JVMCrucibleContext
+setupCrucibleContext jclass =
   do halloc <- getHandleAlloc
      jc <- getJVMTrans
      cb <- getJavaCodebase
-     let sc  = biSharedContext bic
+     sc <- getSharedContext
      let gen = globalNonceGenerator
      sym <- io $ Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
+     opts <- getOptions
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
 
      -- TODO! there's a lot of options setup we need to replicate
@@ -828,24 +825,20 @@ typeOfJavaType jty =
 -- | Generate a fresh variable term. The name will be used when
 -- pretty-printing the variable in debug output.
 jvm_fresh_var ::
-  BuiltinContext      {- ^ context          -} ->
-  Options             {- ^ options          -} ->
   String              {- ^ variable name    -} ->
   JavaType            {- ^ variable type    -} ->
   JVMSetupM TypedTerm {- ^ fresh typed term -}
-jvm_fresh_var bic _opts name jty =
+jvm_fresh_var name jty =
   JVMSetupM $
-  do let sc = biSharedContext bic
+  do sc <- lift getSharedContext
      case cryptolTypeOfActual jty of
        Nothing -> fail $ "Unsupported type in jvm_fresh_var: " ++ show jty
        Just cty -> Setup.freshVariable sc name cty
 
 jvm_alloc_object ::
-  BuiltinContext ->
-  Options        ->
   String {- ^ class name -} ->
   JVMSetupM SetupValue
-jvm_alloc_object _bic _opt cname =
+jvm_alloc_object cname =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_alloc_object" <$> lift getPosition
      n <- Setup.csVarCounter <<%= nextAllocIndex
@@ -854,12 +847,10 @@ jvm_alloc_object _bic _opt cname =
      return (MS.SetupVar n)
 
 jvm_alloc_array ::
-  BuiltinContext       ->
-  Options              ->
   Int {- array size -} ->
   JavaType             ->
   JVMSetupM SetupValue
-jvm_alloc_array _bic _opt len ety =
+jvm_alloc_array len ety =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_alloc_array" <$> lift getPosition
      n <- Setup.csVarCounter <<%= nextAllocIndex
@@ -867,14 +858,11 @@ jvm_alloc_array _bic _opt len ety =
      return (MS.SetupVar n)
 
 jvm_field_is ::
-  Bool {- ^ whether to check type compatibility -} ->
-  BuiltinContext ->
-  Options        ->
   SetupValue {- ^ object -} ->
   String     {- ^ field name -} ->
   SetupValue {- ^ field value -} ->
   JVMSetupM ()
-jvm_field_is _typed _bic _opt ptr fname val =
+jvm_field_is ptr fname val =
   JVMSetupM $
   do pos <- lift getPosition
      loc <- SS.toW4Loc "jvm_field_is" <$> lift getPosition
@@ -900,14 +888,11 @@ jvm_field_is _typed _bic _opt ptr fname val =
      Setup.addPointsTo (JVMPointsToField loc ptr fid val)
 
 jvm_elem_is ::
-  Bool {- ^ whether to check type compatibility -} ->
-  BuiltinContext ->
-  Options        ->
   SetupValue {- ^ array -} ->
   Int        {- ^ index -} ->
   SetupValue {- ^ element value -} ->
   JVMSetupM ()
-jvm_elem_is _typed _bic _opt ptr idx val =
+jvm_elem_is ptr idx val =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_elem_is" <$> lift getPosition
      st <- get
@@ -934,13 +919,10 @@ jvm_elem_is _typed _bic _opt ptr idx val =
      Setup.addPointsTo (JVMPointsToElem loc ptr idx val)
 
 jvm_array_is ::
-  Bool {- ^ whether to check type compatibility -} ->
-  BuiltinContext ->
-  Options        ->
   SetupValue {- ^ array reference -} ->
   TypedTerm {- ^ array value -} ->
   JVMSetupM ()
-jvm_array_is _typed _bic _opt ptr val =
+jvm_array_is ptr val =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_array_is" <$> lift getPosition
      st <- get
@@ -960,12 +942,12 @@ jvm_postcond term = JVMSetupM $ do
   loc <- SS.toW4Loc "jvm_postcond" <$> lift getPosition
   Setup.crucible_postcond loc term
 
-jvm_execute_func :: BuiltinContext -> Options -> [SetupValue] -> JVMSetupM ()
-jvm_execute_func bic opts args = JVMSetupM $
-  Setup.crucible_execute_func bic opts args
+jvm_execute_func :: [SetupValue] -> JVMSetupM ()
+jvm_execute_func args = JVMSetupM $
+  Setup.crucible_execute_func args
 
-jvm_return :: BuiltinContext -> Options -> SetupValue -> JVMSetupM ()
-jvm_return bic opts retVal = JVMSetupM $ Setup.crucible_return bic opts retVal
+jvm_return :: SetupValue -> JVMSetupM ()
+jvm_return retVal = JVMSetupM $ Setup.crucible_return retVal
 
 --------------------------------------------------------------------------------
 
