@@ -2497,31 +2497,7 @@ primitives = Map.fromList
     , "as would be returned by jvm_verify but without performing any"
     , "verification."
     ]
-{-
-  , prim "jvm_array"
-    "[JVMValue] -> JVMValue"
-    (pureVal JIR.SetupArray)
-    [ "Create a JVMValue representing an array, with the given list of"
-    , "values as elements. The list must be non-empty." ]
 
-  , prim "jvm_struct"
-    "[JVMValue] -> JVMValue"
-    (pureVal JIR.SetupStruct)
-    [ "Create a JVMValue representing a struct, with the given list of"
-    , "values as elements." ]
-
-  , prim "jvm_elem"
-    "JVMValue -> Int -> JVMValue"
-    (pureVal JIR.SetupElem)
-    [ "Turn a JVMValue representing a struct or array pointer into"
-    , "a pointer to an element of the struct or array by field index." ]
-
-  , prim "jvm_field"
-    "JVMValue -> String -> JVMValue"
-    (pureVal JIR.SetupField)
-    [ "Turn a JVMValue representing a struct pointer into"
-    , "a pointer to an element of the struct by field name." ]
--}
   , prim "jvm_null"
     "JVMValue"
     (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))
