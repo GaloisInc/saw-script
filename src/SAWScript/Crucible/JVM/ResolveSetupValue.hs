@@ -9,6 +9,7 @@ Stability   : provisional
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module SAWScript.Crucible.JVM.ResolveSetupValue
@@ -218,8 +219,10 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unimplemented type Rational (FIXME)"
     Cryptol.TVSeq sz Cryptol.TVBit ->
       case sz of
-        8  -> fail "resolveSAWTerm: unimplemented type char (FIXME)"
-        16 -> fail "resolveSAWTerm: unimplemented type short (FIXME)"
+        8  -> do x <- resolveBitvectorTerm sym (W4.knownNat @8) tm
+                 IVal <$> W4.bvZext sym (W4.knownNat @32) x
+        16 -> do x <- resolveBitvectorTerm sym (W4.knownNat @16) tm
+                 IVal <$> W4.bvZext sym (W4.knownNat @32) x
         32 -> IVal <$> resolveBitvectorTerm sym W4.knownNat tm
         64 -> LVal <$> resolveBitvectorTerm sym W4.knownNat tm
         _  -> fail ("Invalid bitvector width: " ++ show sz)

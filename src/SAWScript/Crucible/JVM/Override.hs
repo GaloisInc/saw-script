@@ -957,14 +957,14 @@ injectJVMVal sym jv =
 projectJVMVal :: Sym -> J.Type -> String -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
 projectJVMVal sym ty msg' v =
   case ty of
-    J.BooleanType -> err -- FIXME
-    J.ByteType    -> err -- FIXME
-    J.CharType    -> err -- FIXME
-    J.ShortType   -> err -- FIXME
+    J.BooleanType -> IVal <$> proj v CJ.tagI
+    J.ByteType    -> IVal <$> proj v CJ.tagI
+    J.CharType    -> IVal <$> proj v CJ.tagI
+    J.ShortType   -> IVal <$> proj v CJ.tagI
     J.IntType     -> IVal <$> proj v CJ.tagI
     J.LongType    -> LVal <$> proj v CJ.tagL
-    J.FloatType   -> err -- FIXME
-    J.DoubleType  -> err -- FIXME
+    J.FloatType   -> err -- FVal <$> proj v CJ.tagF
+    J.DoubleType  -> err -- DVal <$> proj v CJ.tagD
     J.ArrayType{} -> RVal <$> proj v CJ.tagR
     J.ClassType{} -> RVal <$> proj v CJ.tagR
   where
