@@ -43,7 +43,6 @@ import qualified Lang.Crucible.LLVM.TypeContext as C.LLVM
 
 import Verifier.SAW.TypedTerm
 
-import SAWScript.Options
 import SAWScript.Value
 import SAWScript.Crucible.Common.MethodSpec
 import SAWScript.Crucible.LLVM.Builtins
@@ -153,38 +152,32 @@ skeleton_guess_arg_sizes mskel (Some m) profiles = do
 -- ** Writing SAWScript specifications using skeletons 
 
 skeleton_globals_pre ::
-  BuiltinContext ->
-  Options ->
   ModuleSkeleton ->
   LLVMCrucibleSetupM ()
-skeleton_globals_pre bic opts mskel =
+skeleton_globals_pre mskel =
   forM_ (mskel ^. modSkelGlobals) $ \gskel ->
     when (gskel ^. globSkelMutable) $ do
       let gname = Text.unpack $ gskel ^. globSkelName
-      crucible_alloc_global bic opts gname
+      crucible_alloc_global gname
       when (gskel ^. globSkelInitialized)
-        . crucible_points_to True bic opts (anySetupGlobal gname)
+        . crucible_points_to True (anySetupGlobal gname)
         $ anySetupGlobalInitializer gname
 
 skeleton_globals_post ::
-  BuiltinContext ->
-  Options ->
   ModuleSkeleton ->
   LLVMCrucibleSetupM ()
-skeleton_globals_post bic opts mskel =
+skeleton_globals_post mskel =
   forM_ (mskel ^. modSkelGlobals) $ \gskel -> do
     when (gskel ^. globSkelMutable && gskel ^. globSkelInitialized) $ do
       let gname = Text.unpack $ gskel ^. globSkelName
-      crucible_points_to True bic opts (anySetupGlobal gname)
+      crucible_points_to True (anySetupGlobal gname)
         $ anySetupGlobalInitializer gname
 
 buildArg ::
-  BuiltinContext ->
-  Options ->
   ArgSkeleton ->
   Int ->
   LLVMCrucibleSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
-buildArg bic opts arg idx
+buildArg arg idx
   | arg ^. argSkelType . typeSkelIsPointer
   = let
       pt = arg ^. argSkelType . typeSkelLLVMType
@@ -195,51 +188,45 @@ buildArg bic opts arg idx
           | otherwise -> (pt, s ^. sizeGuessInitialized)
         _ -> (pt, False)
     in do
-      ptr <- crucible_alloc bic opts t
+      ptr <- crucible_alloc t
       mval <- if initialized
         then do
-        val <- crucible_fresh_var bic opts ident t
-        crucible_points_to True bic opts ptr (anySetupTerm val)
+        val <- crucible_fresh_var ident t
+        crucible_points_to True ptr (anySetupTerm val)
         pure $ Just val
         else pure Nothing
       pure (mval, Just ptr, arg ^. argSkelName)
   | otherwise
   = do
-      val <- crucible_fresh_var bic opts ident
+      val <- crucible_fresh_var ident
         $ arg ^. argSkelType . typeSkelLLVMType
       pure (Just val, Nothing, arg ^. argSkelName)
   where
     ident = maybe ("arg" <> show idx) Text.unpack $ arg ^. argSkelName
 
 skeleton_prestate ::
-  BuiltinContext ->
-  Options ->
   FunctionSkeleton ->
   LLVMCrucibleSetupM SkeletonState
-skeleton_prestate bic opts skel = do
-  _skelArgs <- mapM (uncurry $ buildArg bic opts) $ zip (skel ^. funSkelArgs) [1,2..]
+skeleton_prestate skel = do
+  _skelArgs <- mapM (uncurry buildArg) $ zip (skel ^. funSkelArgs) [1,2..]
   pure $ SkeletonState{..}
 
 skeleton_exec ::
-  BuiltinContext ->
-  Options ->
   SkeletonState ->
   LLVMCrucibleSetupM ()
-skeleton_exec bic opts prestate = do
+skeleton_exec prestate = do
   args <- forM (prestate ^. skelArgs) $ \(mval, mptr, _) ->
     case (mval, mptr) of
       (_, Just ptr) -> pure ptr
       (Just val, Nothing) -> pure $ anySetupTerm val
       (Nothing, Nothing) -> throwSkeletonLLVM "skeleton_exec" "Invalid pointer-pointee combination on skeleton argument"
-  crucible_execute_func bic opts args
+  crucible_execute_func args
 
 rebuildArg ::
-  BuiltinContext ->
-  Options ->
   (ArgSkeleton, (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text))  ->
   Int ->
   LLVMCrucibleSetupM (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text)
-rebuildArg bic opts (arg, prearg) idx
+rebuildArg (arg, prearg) idx
   | arg ^. argSkelType . typeSkelIsPointer
   , (_, Just ptr, nm) <- prearg
   = let
@@ -252,35 +239,31 @@ rebuildArg bic opts (arg, prearg) idx
         _ -> pt
       ident = maybe ("arg" <> show idx) Text.unpack nm
     in do
-      val' <- crucible_fresh_var bic opts ident t
-      crucible_points_to True bic opts ptr $ anySetupTerm val'
+      val' <- crucible_fresh_var ident t
+      crucible_points_to True ptr $ anySetupTerm val'
       pure (Just val', Just ptr, nm)
   | otherwise = pure prearg
 
 skeleton_poststate ::
-  BuiltinContext ->
-  Options ->
   FunctionSkeleton ->
   SkeletonState ->
   LLVMCrucibleSetupM SkeletonState
-skeleton_poststate bic opts skel prestate = do
-  _skelArgs <- zipWithM (rebuildArg bic opts)
+skeleton_poststate skel prestate = do
+  _skelArgs <- zipWithM rebuildArg
     (zip (skel ^. funSkelArgs) (prestate ^. skelArgs))
     [1,2..]
   case skel ^. funSkelRet . typeSkelLLVMType of
     LLVM.PrimType LLVM.Void -> pure ()
     t -> do
-      ret <- crucible_fresh_var bic opts ("return value of " <> (Text.unpack $ skel ^. funSkelName)) t
-      crucible_return bic opts $ anySetupTerm ret
+      ret <- crucible_fresh_var ("return value of " <> (Text.unpack $ skel ^. funSkelName)) t
+      crucible_return $ anySetupTerm ret
   pure $ SkeletonState{..}
 
 skeleton_arg_index ::
-  BuiltinContext ->
-  Options ->
   SkeletonState ->
   Int ->
   LLVMCrucibleSetupM TypedTerm
-skeleton_arg_index _bic _opts state idx
+skeleton_arg_index state idx
   | idx < length (state ^. skelArgs)
   , (Just t, _, _) <- (state ^. skelArgs) !! idx
   = pure t
@@ -297,14 +280,12 @@ stateArgIndex state nm = flip findIndex (state ^. skelArgs) $ \(_, _, mnm) ->
   mnm == Just (Text.pack nm)
 
 skeleton_arg ::
-  BuiltinContext ->
-  Options ->
   SkeletonState ->
   String ->
   LLVMCrucibleSetupM TypedTerm
-skeleton_arg bic opts state nm
+skeleton_arg state nm
   | Just idx <- stateArgIndex state nm
-  = skeleton_arg_index bic opts state idx
+  = skeleton_arg_index state idx
   | otherwise = throwSkeletonLLVM "skeleton_arg" $ mconcat
     [ "No initialized argument named \""
     , nm
@@ -312,12 +293,10 @@ skeleton_arg bic opts state nm
     ]
 
 skeleton_arg_index_pointer ::
-  BuiltinContext ->
-  Options ->
   SkeletonState ->
   Int ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-skeleton_arg_index_pointer _bic _opts state idx
+skeleton_arg_index_pointer state idx
   | idx < length (state ^. skelArgs)
   , (_, mp, _) <- (state ^. skelArgs) !! idx
   = case mp of
@@ -333,14 +312,12 @@ skeleton_arg_index_pointer _bic _opts state idx
     ]
 
 skeleton_arg_pointer ::
-  BuiltinContext ->
-  Options ->
   SkeletonState ->
   String ->
   LLVMCrucibleSetupM (AllLLVM SetupValue)
-skeleton_arg_pointer bic opts state nm
+skeleton_arg_pointer state nm
   | Just idx <- stateArgIndex state nm
-  = skeleton_arg_index_pointer bic opts state idx
+  = skeleton_arg_index_pointer state idx
   | otherwise = do
       throwSkeletonLLVM "skeleton_arg_pointer" $ mconcat
         [ "No argument named \""

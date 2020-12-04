@@ -221,8 +221,6 @@ cryptolUninterpreted _ nm _ xs = throwX86 $ mconcat
 -- to an LLVM specification. This allows for compositional verification of LLVM
 -- functions that call x86_64 functions (but not the other way around).
 crucible_llvm_verify_x86 ::
-  BuiltinContext ->
-  Options ->
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
@@ -231,12 +229,14 @@ crucible_llvm_verify_x86 ::
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
+crucible_llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64
       let ?recordLLVMAnnotation = \_ _ -> return ()
-      let sc = biSharedContext bic
+      sc <- getSharedContext
+      opts <- getOptions
+      basic_ss <- getBasicSS
       sym <- liftIO $ C.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
@@ -262,7 +262,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         cc = LLVMCrucibleContext
           { _ccLLVMModule = llvmModule
           , _ccBackend = sym
-          , _ccBasicSS = biBasicSS bic
+          , _ccBasicSS = basic_ss
 
           -- It's unpleasant that we need to do this to use resolveSetupVal.
           , _ccLLVMSimContext = error "Attempted to access ccLLVMSimContext"
@@ -278,7 +278,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         ]
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
-      methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) checkSat setup
+      methodSpec <- buildMethodSpec llvmModule nm (show addr) checkSat setup
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
@@ -430,21 +430,20 @@ buildCFG opts halloc preserved path nm = do
 -- Unlike in crucible_llvm_verify, we can't reuse the simulator state (due to the
 -- different memory layout / RegMap).
 buildMethodSpec ::
-  BuiltinContext ->
-  Options ->
   LLVMModule LLVMArch ->
   String {- ^ Name of method -} ->
   String {- ^ Source location for method spec (here, we use the address) -} ->
   Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR LLVM)
-buildMethodSpec bic opts lm nm loc checkSat setup =
-  setupLLVMCrucibleContext bic opts checkSat lm $ \cc -> do
+buildMethodSpec lm nm loc checkSat setup =
+  setupLLVMCrucibleContext checkSat lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
     let programLoc =
           W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm)
           . W4.OtherPos $ Text.pack loc
     let lc = modTrans lm ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
+    opts <- getOptions
     (args, ret) <- case llvmSignature opts lm nm of
       Left err -> fail $ mconcat ["Could not find declaration for \"", nm, "\": ", err]
       Right x -> pure x
