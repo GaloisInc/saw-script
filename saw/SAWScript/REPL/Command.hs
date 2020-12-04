@@ -140,11 +140,8 @@ runCommand :: Command -> REPL ()
 runCommand c = case c of
 
   Command cmd -> cmd `SAWScript.REPL.Monad.catch` handlerPP
-                     `SAWScript.REPL.Monad.catchIO` handlerPrint
-                     `SAWScript.REPL.Monad.catchTopLevel` handlerPrint
-                     `SAWScript.REPL.Monad.catchTrace` handlerPrint
                      `SAWScript.REPL.Monad.catchFail` handlerFail
-                     `SAWScript.REPL.Monad.catchTypeErrors` handlerPrint
+                     `SAWScript.REPL.Monad.catchOther` handlerPrint
     where
     handlerPP re = io (putStrLn "" >> print (pp re))
     handlerPrint e = io (putStrLn "" >> print e)

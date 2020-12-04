@@ -17,11 +17,8 @@ module SAWScript.REPL.Monad (
   , raise
   , stop
   , catch
-  , catchIO
-  , catchTopLevel
-  , catchTrace
   , catchFail
-  , catchTypeErrors
+  , catchOther
 
     -- ** Errors
   , REPLException(..)
@@ -84,7 +81,6 @@ import qualified Data.AIG as AIG
 --------------------
 
 import SAWScript.AST (Located(getVal))
-import SAWScript.Exceptions
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
 import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
@@ -216,22 +212,6 @@ raise exn = io (X.throwIO exn)
 catchEx :: X.Exception e => REPL a -> (e -> REPL a) -> REPL a
 catchEx m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
 
--- | Handle 'IOError' exceptions in 'REPL' actions.
-catchIO :: REPL a -> (IOError -> REPL a) -> REPL a
-catchIO = catchEx
-
--- | Handle exceptions in TopLevel
-catchTopLevel :: REPL a -> (TopLevelException -> REPL a) -> REPL a
-catchTopLevel = catchEx
-
--- | Handle stack trace messages
-catchTrace :: REPL a -> (TraceException -> REPL a) -> REPL a
-catchTrace = catchEx
-
--- | Handle SAWScript type error exceptions in 'REPL' actions.
-catchTypeErrors :: REPL a -> (TypeErrors -> REPL a) -> REPL a
-catchTypeErrors = catchEx
-
 -- | Handle 'REPLException' exceptions in 'REPL' actions.
 catch :: REPL a -> (REPLException -> REPL a) -> REPL a
 catch = catchEx
@@ -243,6 +223,10 @@ catchFail m k = REPL (\ ref -> X.catchJust sel (unREPL m ref) (\s -> unREPL (k s
     sel :: X.IOException -> Maybe String
     sel e | isUserError e = Just (ioeGetErrorString e)
           | otherwise     = Nothing
+
+-- | Handle any other exception
+catchOther :: REPL a -> (X.SomeException -> REPL a) -> REPL a
+catchOther = catchEx
 
 rethrowEvalError :: IO a -> IO a
 rethrowEvalError m = run `X.catch` rethrow
