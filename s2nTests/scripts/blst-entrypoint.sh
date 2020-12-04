@@ -6,7 +6,7 @@ cd /saw-script/blst-verification
 cp /saw-bin/saw bin/saw
 
 export PATH=/saw-script/blst-verification/bin:$PATH
-export CRYPTOLPATH=/saw-script/blst-verification/cryptol-specs
+export CRYPTOLPATH=/saw-script/blst-verification/cryptol-specs:/saw-script/blst-verification/spec
 
 ./scripts/build_x86.sh
 
