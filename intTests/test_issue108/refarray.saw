@@ -11,5 +11,5 @@ let test2_spec : JVMSetup() = do {
   jvm_execute_func [r, jvm_term x];
   jvm_return (jvm_term x);
 };
-crucible_jvm_verify Test_class "test1" [] false test1_spec abc;
-crucible_jvm_verify Test_class "test2" [] false test2_spec abc;
+jvm_verify Test_class "test1" [] false test1_spec abc;
+jvm_verify Test_class "test2" [] false test2_spec abc;

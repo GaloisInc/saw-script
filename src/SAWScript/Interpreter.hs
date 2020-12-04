@@ -2476,9 +2476,9 @@ primitives = Map.fromList
     , "jvm_return statement is required if and only if the method"
     , "has a non-void return type." ]
 
-  , prim "crucible_jvm_verify"
+  , prim "jvm_verify"
     "JavaClass -> String -> [JVMMethodSpec] -> Bool -> JVMSetup () -> ProofScript SatResult -> TopLevel JVMMethodSpec"
-    (pureVal crucible_jvm_verify)
+    (pureVal jvm_verify)
     Experimental
     [ "Verify the JVM method named by the second parameter in the class"
     , "specified by the first. The third parameter lists the JVMMethodSpec"
@@ -2489,9 +2489,9 @@ primitives = Map.fromList
     , "verification conditions."
     ]
 
-  , prim "crucible_jvm_unsafe_assume_spec"
+  , prim "jvm_unsafe_assume_spec"
     "JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec"
-    (pureVal crucible_jvm_unsafe_assume_spec)
+    (pureVal jvm_unsafe_assume_spec)
     Experimental
     [ "Return a JVMMethodSpec corresponding to a JVMSetup block,"
     , "as would be returned by jvm_verify but without performing any"

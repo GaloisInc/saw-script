@@ -43,9 +43,9 @@ jvmVerifyAssume mode (VerifyParams className fun lemmaNames checkSat contract sc
               VerifyContract -> do
                 lemmas <- mapM getJVMMethodSpecIR lemmaNames
                 proofScript <- interpretProofScript script
-                tl $ crucible_jvm_verify cls fun lemmas checkSat setup proofScript
+                tl $ jvm_verify cls fun lemmas checkSat setup proofScript
               AssumeContract ->
-                tl $ crucible_jvm_unsafe_assume_spec cls fun setup
+                tl $ jvm_unsafe_assume_spec cls fun setup
             dropTask
             setServerVal lemmaName res
             ok
