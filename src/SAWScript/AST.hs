@@ -248,7 +248,7 @@ instance Pretty Expr where
     Var (Located name _ _) ->
       PP.pretty name
     Function pat expr ->
-      "\\" PP.<+> PP.pretty pat PP.<+> "-> " PP.<+> PP.pretty expr
+      "\\" PP.<+> PP.pretty pat PP.<+> "->" PP.<+> PP.pretty expr
     -- FIXME, use precedence to minimize parentheses
     Application f a -> PP.parens (PP.pretty f PP.<+> PP.pretty a)
     Let (NonRecursive decl) expr ->
