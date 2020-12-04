@@ -56,9 +56,8 @@ import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 import qualified Data.Vector as V
 import           Data.Void (absurd)
+import           Prettyprinter
 import           System.IO
-
-import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
 
 -- jvm-verifier
 -- TODO: transition to Lang.JVM.Codebase from crucible-jvm
@@ -130,7 +129,7 @@ type SetupCondition = MS.SetupCondition CJ.JVM
 -- TODO: something useful with the global pair?
 ppAbortedResult :: JVMCrucibleContext
                 -> Crucible.AbortedResult Sym a
-                -> Doc
+                -> Doc ann
 ppAbortedResult _cc = Common.ppAbortedResult (\_gp -> mempty)
 
 -- FIXME: We need a better way to identify a set of class names to

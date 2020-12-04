@@ -59,7 +59,7 @@ import SAWScript.LLVMBuiltins
 --import SAWScript.JavaBuiltins
 import Language.JVM.Common (dotsToSlashes, mkClassName)
 
-import Text.PrettyPrint.ANSI.Leijen (putDoc, hPutDoc)
+import Prettyprinter.Render.Text (putDoc, hPutDoc)
 
 import System.IO
 

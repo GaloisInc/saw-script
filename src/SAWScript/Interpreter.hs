@@ -94,7 +94,7 @@ import qualified Cryptol.Backend.Monad as V (runEval)
 import qualified Cryptol.Eval.Value as V (defaultPPOpts, ppValue)
 import qualified Cryptol.Eval.Concrete as V (Concrete(..))
 
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import qualified Prettyprinter.Render.Text as PP (putDoc)
 
 import SAWScript.AutoMatch
 
