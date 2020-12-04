@@ -102,11 +102,10 @@ import           Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Vector as V
+import           Prettyprinter
 import           System.IO
 import qualified Text.LLVM.AST as L
 import qualified Text.LLVM.PP as L (ppType, ppSymbol)
-import           Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (<>))
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
 import           Text.URI
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
@@ -917,17 +916,17 @@ doAlloc cc i (LLVMAllocSpec mut _memTy alignment sz loc fresh)
 
 ppAbortedResult :: LLVMCrucibleContext arch
                 -> Crucible.AbortedResult Sym a
-                -> Doc
+                -> Doc ann
 ppAbortedResult cc = Common.ppAbortedResult (ppGlobalPair cc)
 
 ppGlobalPair :: LLVMCrucibleContext arch
              -> Crucible.GlobalPair Sym a
-             -> Doc
+             -> Doc ann
 ppGlobalPair cc gp =
   let mvar = Crucible.llvmMemVar (ccLLVMContext cc)
       globals = gp ^. Crucible.gpGlobals in
   case Crucible.lookupGlobal mvar globals of
-    Nothing -> text "LLVM Memory global variable not initialized"
+    Nothing -> "LLVM Memory global variable not initialized"
     Just mem -> Crucible.ppMem (Crucible.memImplHeap mem)
 
 
@@ -1263,7 +1262,7 @@ setupLLVMCrucibleContext bic opts pathSat lm action =
                  [ W4.opt
                      enableSMTArrayMemoryModel
                      (W4.ConcreteBool smt_array_memory_model_enabled)
-                     (PP.text "Enable SMT array memory model")
+                     ("Enable SMT array memory model" :: Text.Text)
                  ]
                  cfg
 
