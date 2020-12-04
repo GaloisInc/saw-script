@@ -62,9 +62,11 @@ library
     , mtl >= 2.1
     , old-locale
     , old-time
+    , panic
     , parameterized-utils
     , parsec
     , pretty
+    , prettyprinter
     , pretty-show
     , process
     , rme
@@ -125,6 +127,7 @@ library
     SAWScript.Lexer
     SAWScript.LLVMBuiltins
     SAWScript.Options
+    SAWScript.Panic
     SAWScript.Parser
     SAWScript.PathVC
     SAWScript.Proof

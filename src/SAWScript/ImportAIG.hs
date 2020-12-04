@@ -26,7 +26,7 @@ import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Except
 import qualified Data.Vector as V
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Prettyprinter
 
 import qualified Data.AIG as AIG
 
@@ -59,8 +59,10 @@ bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
       scApplyPrelude_at sc wt boolType v =<< scNat sc (fromIntegral i)
   modify (V.++ inputs)
 bitblastSharedTerm _ _ tp = throwTP $ show $
-  text "Could not parse AIG input type:" <$$>
-  indent 2 (ppTerm defaultPPOpts tp)
+  vcat
+  [ pretty "Could not parse AIG input type:"
+  , indent 2 (ppTerm defaultPPOpts tp)
+  ]
 
 parseAIGResultType :: SharedContext
                    -> Term -- ^ Term for type

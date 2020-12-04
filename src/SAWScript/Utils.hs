@@ -29,11 +29,12 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Ratio
 import Data.Time.Clock
+import Data.Void
+import Prettyprinter as PP
 import System.Time(TimeDiff(..), getClockTime, diffClockTimes, normalizeTimeDiff, toCalendarTime, formatCalendarTime)
 import System.Locale(defaultTimeLocale)
 import qualified System.IO.Error as IOE
 import System.Exit
-import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 import Text.Printf
 import Numeric(showFFloat)
 
@@ -42,14 +43,14 @@ import qualified Verifier.Java.Codebase as JSS
 import SAWScript.Options
 import SAWScript.Position
 
-bullets :: Char -> [PP.Doc] -> PP.Doc
-bullets c = PP.vcat . map (PP.hang 2 . (PP.text [c] PP.<+>))
+bullets :: Char -> [PP.Doc ann] -> PP.Doc ann
+bullets c = PP.vcat . map (PP.hang 2 . (PP.pretty c PP.<+>))
 
 data SSMode = Verify | Blif | CBlif deriving (Eq, Show, Data, Typeable)
 
 -- | Convert a string to a paragraph formatted document.
-ftext :: String -> Doc
-ftext msg = fillSep (map text $ words msg)
+ftext :: String -> Doc ann
+ftext msg = fillSep (map pretty $ words msg)
 
 -- | Insert multiple keys that map to the same value in a map.
 mapInsertKeys :: Ord k => [k] -> a -> Map k a -> Map k a
@@ -64,18 +65,18 @@ mapLookupAny keys m = listToMaybe $ catMaybes $ map (\k -> Map.lookup k m) keys
 
 -- | Class of exceptions thrown by SBV parser.
 data ExecException = ExecException Pos          -- Position
-                                   Doc          -- Error message
+                                   (Doc Void)   -- Error message
                                    String       -- Resolution tip
   deriving (Show, Typeable)
 
 instance Exception ExecException
 
 -- | Throw exec exception in a MonadIO.
-throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
+throwIOExecException :: MonadIO m => Pos -> Doc Void -> String -> m a
 throwIOExecException site errorMsg resolution = liftIO $ throwIO (ExecException site errorMsg resolution)
 
 -- | Throw exec exception in a MonadIO.
-throwExecException :: Pos -> Doc -> String -> m a
+throwExecException :: Pos -> Doc Void -> String -> m a
 throwExecException site errorMsg resolution = throw (ExecException site errorMsg resolution)
 
 -- Timing {{{1

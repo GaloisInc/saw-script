@@ -52,10 +52,10 @@ import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
 import qualified Data.Vector as Vector
-import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
+import qualified Prettyprinter as PP
 
 import qualified Data.AIG as AIG
 
@@ -255,11 +255,10 @@ showSimpset opts ss =
   unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
   where
     ppRule r =
-      PPL.char '*' PPL.<+>
-      (PPL.nest 2 $
-       SAWCorePP.ppTerm opts' (lhsRewriteRule r)
-       PPL.</> PPL.char '=' PPL.<+>
-       ppTerm (rhsRewriteRule r))
+      PP.pretty '*' PP.<+>
+      (PP.nest 2 $ PP.fillSep
+       [ ppTerm (lhsRewriteRule r)
+       , PP.pretty '=' PP.<+> ppTerm (rhsRewriteRule r) ])
     ppTerm t = SAWCorePP.ppTerm opts' t
     opts' = sawPPOpts opts
 

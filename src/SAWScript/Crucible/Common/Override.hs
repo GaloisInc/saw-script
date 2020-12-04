@@ -64,8 +64,9 @@ import           Data.Kind (Type)
 import           Data.Map (Map)
 import           Data.Set (Set)
 import           Data.Typeable (Typeable)
+import           Data.Void
 import           GHC.Generics (Generic, Generic1)
-import qualified Text.PrettyPrint.ANSI.Leijen as PP
+import qualified Prettyprinter as PP
 
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some (Some)
@@ -155,9 +156,9 @@ data OverrideFailureReason ext
     -- ^ type mismatch in return specification
   | NonlinearPatternNotSupported
   | BadEqualityComparison -- ^ Comparison on an undef value
-  | BadPointerLoad (Either (MS.PointsTo ext) PP.Doc) PP.Doc
+  | BadPointerLoad (Either (MS.PointsTo ext) (PP.Doc Void)) (PP.Doc Void)
     -- ^ @loadRaw@ failed due to type error
-  | StructuralMismatch PP.Doc PP.Doc (Maybe (ExtType ext)) (ExtType ext)
+  | StructuralMismatch (PP.Doc Void) (PP.Doc Void) (Maybe (ExtType ext)) (ExtType ext)
     -- ^
     -- * pretty-printed simulated value
     -- * pretty-printed specified value
@@ -177,44 +178,56 @@ instance ( PP.Pretty (ExtType ext)
 ppOverrideFailureReason ::
   ( PP.Pretty (ExtType ext)
   , PP.Pretty (MS.PointsTo ext)
-  ) => OverrideFailureReason ext -> PP.Doc
+  ) => OverrideFailureReason ext -> PP.Doc ann
 ppOverrideFailureReason rsn = case rsn of
   AmbiguousPointsTos pts ->
-    PP.text "LHS of points-to assertion(s) not reachable via points-tos from inputs/outputs:" PP.<$$>
-    (PP.indent 2 $ PP.vcat (map PP.pretty pts))
+    PP.vcat
+    [ PP.pretty "LHS of points-to assertion(s) not reachable via points-tos from inputs/outputs:"
+    , PP.indent 2 $ PP.vcat (map PP.pretty pts)
+    ]
   AmbiguousVars vs ->
-    PP.text "Fresh variable(s) not reachable via points-tos from function inputs/outputs:" PP.<$$>
-    (PP.indent 2 $ PP.vcat (map MS.ppTypedExtCns vs))
+    PP.vcat
+    [ PP.pretty "Fresh variable(s) not reachable via points-tos from function inputs/outputs:"
+    , PP.indent 2 $ PP.vcat (map MS.ppTypedExtCns vs)
+    ]
   BadTermMatch x y ->
-    PP.text "terms do not match" PP.<$$>
-    (PP.indent 2 (ppTerm defaultPPOpts x)) PP.<$$>
-    (PP.indent 2 (ppTerm defaultPPOpts y))
+    PP.vcat
+    [ PP.pretty "terms do not match"
+    , PP.indent 2 (PP.unAnnotate (ppTerm defaultPPOpts x))
+    , PP.indent 2 (PP.unAnnotate (ppTerm defaultPPOpts y))
+    ]
   BadPointerCast ->
-    PP.text "bad pointer cast"
-  BadReturnSpecification ty -> PP.vcat $ map PP.text $
-    [ "Spec had no return value, but the function returns a value of type:"
-    , show ty
+    PP.pretty "bad pointer cast"
+  BadReturnSpecification ty ->
+    PP.vcat
+    [ PP.pretty "Spec had no return value, but the function returns a value of type:"
+    , PP.viaShow ty
     ]
   NonlinearPatternNotSupported ->
-    PP.text "nonlinear pattern not supported"
+    PP.pretty "nonlinear pattern not supported"
   BadEqualityComparison ->
-    PP.text "value containing `undef` compared for equality"
+    PP.pretty "value containing `undef` compared for equality"
   BadPointerLoad pointsTo msg ->
-    PP.text "error when loading through pointer that" PP.<+>
-    PP.text "appeared in the override's points-to precondition(s):" PP.<$$>
-    PP.text "Precondition:" PP.<$$>
-      PP.indent 2 (either PP.pretty id pointsTo) PP.<$$>
-    PP.text "Failure reason: " PP.<$$> PP.indent 2 msg -- this can be long
+    PP.vcat
+    [ PP.pretty "error when loading through pointer that" PP.<+>
+      PP.pretty "appeared in the override's points-to precondition(s):"
+    , PP.pretty "Precondition:"
+    , PP.indent 2 (either PP.pretty PP.unAnnotate pointsTo)
+    , PP.pretty "Failure reason: "
+    , PP.indent 2 (PP.unAnnotate msg) -- this can be long
+    ]
   StructuralMismatch simVal setupVal setupValTy ty ->
-    PP.text "could not match specified value with actual value:" PP.<$$>
-    PP.vcat (map (PP.indent 2) $
-              [ PP.text "actual (simulator) value:" PP.<+> simVal
-              , PP.text "specified value:         " PP.<+> setupVal
-              , PP.text "type of actual value:   " PP.<+> PP.pretty ty
+    PP.vcat
+    [ PP.pretty "could not match specified value with actual value:"
+    , PP.vcat (map (PP.indent 2) $
+              [ PP.pretty "actual (simulator) value:" PP.<+> PP.unAnnotate simVal
+              , PP.pretty "specified value:         " PP.<+> PP.unAnnotate setupVal
+              , PP.pretty "type of actual value:   " PP.<+> PP.pretty ty
               ] ++ let msg ty_ =
-                         [PP.text "type of specified value:"
+                         [PP.pretty "type of specified value:"
                           PP.<+> PP.pretty ty_]
                    in maybe [] msg setupValTy)
+    ]
 
 --------------------------------------------------------------------------------
 -- ** OverrideFailure
@@ -223,10 +236,12 @@ data OverrideFailure ext = OF W4.ProgramLoc (OverrideFailureReason ext)
 
 ppOverrideFailure :: ( PP.Pretty (ExtType ext)
                      , PP.Pretty (MS.PointsTo ext)
-                     ) => OverrideFailure ext -> PP.Doc
+                     ) => OverrideFailure ext -> PP.Doc ann
 ppOverrideFailure (OF loc rsn) =
-  PP.text "at" PP.<+> PP.pretty (W4.plSourceLoc loc) PP.<$$>
-  ppOverrideFailureReason rsn
+  PP.vcat
+  [ PP.pretty "at" PP.<+> PP.viaShow (W4.plSourceLoc loc) -- TODO: fix when what4 switches to prettyprinter
+  , ppOverrideFailureReason rsn
+  ]
 
 instance ( PP.Pretty (ExtType ext)
          , PP.Pretty (MS.PointsTo ext)
