@@ -2381,7 +2381,7 @@ primitives = Map.fromList
   , prim "jvm_fresh_var" "String -> JavaType -> JVMSetup Term"
     (pureVal jvm_fresh_var)
     Experimental
-    [ "Create a fresh variable for use within a Crucible specification. The"
+    [ "Create a fresh variable for use within a JVM specification. The"
     , "name is used only for pretty-printing."
     ]
 
@@ -2389,19 +2389,19 @@ primitives = Map.fromList
     (pureVal jvm_alloc_object)
     Experimental
     [ "Declare that an instance of the given class should be allocated in a"
-    , "Crucible specification. Before `jvm_execute_func`, this states"
-    , "that the function expects the object to be allocated before it runs."
-    , "After `jvm_execute_func`, it states that the function being"
-    , "verified is expected to perform the allocation."
+    , "JVM specification. Before `jvm_execute_func`, this states that the"
+    , "method expects the object to be allocated before it runs. After"
+    , "`jvm_execute_func`, it states that the method being verified is"
+    , "expected to perform the allocation."
     ]
 
   , prim "jvm_alloc_array" "Int -> JavaType -> JVMSetup JVMValue"
     (pureVal jvm_alloc_array)
     Experimental
     [ "Declare that an array of the given size and element type should be"
-    , "allocated in a Crucible specification. Before `jvm_execute_func`, this"
-    , "states that the function expects the array to be allocated before it"
-    , "runs. After `jvm_execute_func`, it states that the function being"
+    , "allocated in a JVM specification. Before `jvm_execute_func`, this"
+    , "states that the method expects the array to be allocated before it"
+    , "runs. After `jvm_execute_func`, it states that the method being"
     , "verified is expected to perform the allocation."
     ]
 
@@ -2447,20 +2447,20 @@ primitives = Map.fromList
     (pureVal jvm_precond)
     Experimental
     [ "State that the given predicate is a pre-condition on execution of the"
-    , "function being verified."
+    , "method being verified."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"
     (pureVal jvm_postcond)
     Experimental
     [ "State that the given predicate is a post-condition of execution of the"
-    , "function being verified."
+    , "method being verified."
     ]
 
   , prim "jvm_execute_func" "[JVMValue] -> JVMSetup ()"
     (pureVal jvm_execute_func)
     Experimental
-    [ "Specify the given list of values as the arguments of the function."
+    [ "Specify the given list of values as the arguments of the method."
     ,  ""
     , "The jvm_execute_func statement also serves to separate the pre-state"
     , "section of the spec (before jvm_execute_func) from the post-state"
@@ -2472,15 +2472,15 @@ primitives = Map.fromList
   , prim "jvm_return" "JVMValue -> JVMSetup ()"
     (pureVal jvm_return)
     Experimental
-    [ "Specify the given value as the return value of the function. A"
-    , "jvm_return statement is required if and only if the function"
+    [ "Specify the given value as the return value of the method. A"
+    , "jvm_return statement is required if and only if the method"
     , "has a non-void return type." ]
 
   , prim "crucible_jvm_verify"
     "JavaClass -> String -> [JVMMethodSpec] -> Bool -> JVMSetup () -> ProofScript SatResult -> TopLevel JVMMethodSpec"
     (pureVal crucible_jvm_verify)
     Experimental
-    [ "Verify the JVM function named by the second parameter in the module"
+    [ "Verify the JVM method named by the second parameter in the class"
     , "specified by the first. The third parameter lists the JVMMethodSpec"
     , "values returned by previous calls to use as overrides. The fourth (Bool)"
     , "parameter enables or disables path satisfiability checking. The fifth"
