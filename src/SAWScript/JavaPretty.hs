@@ -10,8 +10,6 @@ Stability   : provisional
 
 module SAWScript.JavaPretty where
 
-import Data.Maybe (fromMaybe)
-
 import Prettyprinter
 
 import Language.JVM.Common
