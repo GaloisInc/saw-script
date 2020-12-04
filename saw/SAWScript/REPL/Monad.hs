@@ -18,6 +18,8 @@ module SAWScript.REPL.Monad (
   , stop
   , catch
   , catchIO
+  , catchTopLevel
+  , catchTrace
   , catchFail
   , catchTypeErrors
 
@@ -217,6 +219,14 @@ catchEx m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
 -- | Handle 'IOError' exceptions in 'REPL' actions.
 catchIO :: REPL a -> (IOError -> REPL a) -> REPL a
 catchIO = catchEx
+
+-- | Handle exceptions in TopLevel
+catchTopLevel :: REPL a -> (TopLevelException -> REPL a) -> REPL a
+catchTopLevel = catchEx
+
+-- | Handle stack trace messages
+catchTrace :: REPL a -> (TraceException -> REPL a) -> REPL a
+catchTrace = catchEx
 
 -- | Handle SAWScript type error exceptions in 'REPL' actions.
 catchTypeErrors :: REPL a -> (TypeErrors -> REPL a) -> REPL a
