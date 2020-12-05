@@ -112,7 +112,7 @@ SAWCoreVectorsAsCoqVectors (H)   SAWCoreVectorsAsCoqLists (H)
   does not provide.
 
 * `CryptolPrimitivesForSAWCore` is generated from `Cryptol.sawcore`, available
-  in the `cryptol-verifier` project.
+  in the `cryptol-saw-core` project.
 
 * `SAWCorePreludeExtra` defines useful functions for
   `CryptolPrimitivesForSAWCoreExtra` to use.

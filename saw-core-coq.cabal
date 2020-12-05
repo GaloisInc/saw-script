@@ -15,15 +15,16 @@ description:
 
 library
   build-depends:
-    ansi-wl-pprint,
     base == 4.*,
     cryptol,
-    cryptol-verifier,
+    cryptol-saw-core,
     containers,
     interpolate,
     lens,
     mtl,
+    prettyprinter,
     saw-core,
+    text,
     vector
   hs-source-dirs: src
   exposed-modules:
