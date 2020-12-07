@@ -96,7 +96,7 @@ import Verifier.SAW.Heapster.PermParser
 
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Prettyprinter
 
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
@@ -292,10 +292,10 @@ heapster_init_env_for_files _bic _opts mod_filename llvm_filenames =
 -- | Look up the CFG associated with a symbol name in a Heapster environment
 heapster_get_cfg :: BuiltinContext -> Options -> HeapsterEnv ->
                     String -> TopLevel SAW_CFG
-heapster_get_cfg bic opts henv nm =
+heapster_get_cfg _ _ henv nm =
   case lookupModDefiningSym henv nm of
     Just (Some lm) ->
-      crucible_llvm_cfg bic opts (Some lm) nm
+      crucible_llvm_cfg (Some lm) nm
     Nothing -> fail ("Could not find CFG for symbol: " ++ nm)
 
 -- | Define a new opaque named permission with the given name, arguments, and
@@ -706,7 +706,7 @@ heapster_export_coq _bic _opts henv filename =
      saw_mod <- liftIO $ scFindModule sc $ heapsterEnvSAWModule henv
      let coq_doc =
            vcat [preamblePlus coq_trans_conf
-                 (string "From CryptolToCoq Require Import SAWCorePrelude."),
+                 (pretty ("From CryptolToCoq Require Import SAWCorePrelude." :: String)),
                  translateSAWModule coq_trans_conf saw_mod]
      liftIO $ writeFile filename (show coq_doc)
 
