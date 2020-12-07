@@ -41,6 +41,7 @@ module SAWScript.Crucible.JVM.Builtins
 
 import           Control.Lens
 
+import qualified Control.Monad.Catch as X
 import           Control.Monad.State
 import qualified Control.Monad.State.Strict as Strict
 import           Control.Monad.Trans.Except (runExceptT)
@@ -64,7 +65,9 @@ import           System.IO
 import qualified Verifier.Java.Codebase as CB
 
 -- cryptol
+import qualified Cryptol.Eval.Type as Cryptol (evalValType)
 import qualified Cryptol.TypeCheck.Type as Cryptol
+import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 -- what4
 import qualified What4.Partial as W4
@@ -246,8 +249,8 @@ crucible_jvm_unsafe_assume_spec ::
 crucible_jvm_unsafe_assume_spec cls nm setup =
   do cc <- setupCrucibleContext cls
      cb <- getJavaCodebase
-     -- cls' is either cls or a subclass of cls
      pos <- getPosition
+     -- cls' is either cls or a (transitive) superclass of cls
      (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let loc = SS.toW4Loc "_SAW_assume_spec" pos
      let st0 = initialCrucibleSetupState cc (cls', method) loc
@@ -418,10 +421,10 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-    resolveJVMRefVal :: SetupValue -> IO JVMRefVal
+    resolveJVMRefVal :: AllocIndex -> IO JVMRefVal
     resolveJVMRefVal lhs =
       do let msg = Crucible.GenericSimError "Non-reference value found in points-to assertion"
-         lhs' <- resolveSetupVal cc env tyenv nameEnv lhs
+         lhs' <- resolveSetupVal cc env tyenv nameEnv (MS.SetupVar lhs)
          case lhs' of
            RVal ref -> return ref
            _ -> liftIO $ Crucible.addFailedAssertion sym msg
@@ -789,6 +792,111 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
 --------------------------------------------------------------------------------
 -- Setup builtins
 
+data JVMSetupError
+  = JVMFreshVarInvalidType JavaType
+  | JVMFieldNonReference SetupValue String
+  | JVMFieldMultiple SetupValue String -- reference and field name
+  | JVMFieldFailure String -- TODO: switch to a more structured type
+  | JVMFieldTypeMismatch String J.Type J.Type -- field name, expected, found
+  | JVMElemNonReference SetupValue Int
+  | JVMElemNonArray J.Type
+  | JVMElemInvalidIndex J.Type Int Int -- element type, length, index
+  | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
+  | JVMElemMultiple SetupValue Int -- reference and array index
+  | JVMArrayNonReference SetupValue
+  | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
+  | JVMArrayMultiple SetupValue
+  | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
+  | JVMArgNumberWrong Int Int -- number expected, number found
+  | JVMReturnUnexpected J.Type -- found
+  | JVMReturnTypeMismatch J.Type J.Type -- expected, found
+
+instance X.Exception JVMSetupError
+
+instance Show JVMSetupError where
+  show err =
+    case err of
+      JVMFreshVarInvalidType jty ->
+        "jvm_fresh_var: Invalid type: " ++ show jty
+      JVMFieldNonReference ptr fname ->
+        unlines
+        [ "jvm_field_is: Left-hand side is not a valid object reference"
+        , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        , "Field name: " ++ fname
+        ]
+      JVMFieldMultiple _ptr fname ->
+        "jvm_field_is: Multiple specifications for the same instance field (" ++ fname ++ ")"
+      JVMFieldFailure msg ->
+        "jvm_field_is: JVM field resolution failed:\n" ++ msg
+      JVMFieldTypeMismatch fname expected found ->
+         -- FIXME: use a pretty printing function for J.Type instead of show
+        unlines
+        [ "jvm_field_is: Incompatible types for field " ++ show fname
+        , "Expected type: " ++ show expected
+        , "Given type: " ++ show found
+        ]
+      JVMElemNonReference ptr idx ->
+        unlines
+        [ "jvm_elem_is: Left-hand side is not a valid object reference"
+        , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        , "Index: " ++ show idx
+        ]
+      JVMElemNonArray jty ->
+        "jvm_elem_is: Not an array type: " ++ show jty
+      JVMElemInvalidIndex ty len idx ->
+        unlines
+        [ "jvm_elem_is: Array index out of bounds"
+        , "Element type: " ++ show ty
+        , "Array length: " ++ show len
+        , "Given index: " ++ show idx
+        ]
+      JVMElemTypeMismatch idx expected found ->
+        unlines
+        [ "jvm_elem_is: Incompatible types for array index " ++ show idx
+        , "Expected type: " ++ show expected
+        , "Given type: " ++ show found
+        ]
+      JVMElemMultiple _ptr idx ->
+        "jvm_elem_is: Multiple specifications for the same array index (" ++ show idx ++ ")"
+      JVMArrayNonReference ptr ->
+        unlines
+        [ "jvm_array_is: Left-hand side is not a valid object reference"
+        , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
+        ]
+      JVMArrayTypeMismatch len ty schema ->
+        unlines
+        [ "jvm_array_is: Specified value does not have the expected type"
+        , "Expected array length: " ++ show len
+        , "Expected element type: " ++ show ty
+        , "Given type: " ++ show (Cryptol.pp schema)
+        ]
+      JVMArrayMultiple _ptr ->
+        "jvm_array_is: Multiple specifications for the same array reference"
+      JVMArgTypeMismatch i expected found ->
+        unlines
+        [ "jvm_execute_func: Argument type mismatch"
+        , "Argument position: " ++ show i
+        , "Expected type: " ++ show expected
+        , "Given type: " ++ show found
+        ]
+      JVMArgNumberWrong expected found ->
+        unlines
+        [ "jvm_execute_func: Wrong number of arguments"
+        , "Expected: " ++ show expected
+        , "Given: " ++ show found
+        ]
+      JVMReturnUnexpected found ->
+        unlines
+        [ "jvm_return: Unexpected return value for void method"
+        , "Given type: " ++ show found
+        ]
+      JVMReturnTypeMismatch expected found ->
+        unlines
+        [ "jvm_return: Return type mismatch"
+        , "Expected type: " ++ show expected
+        , "Given type: " ++ show found
+        ]
+
 -- | Returns Cryptol type of actual type if it is an array or
 -- primitive type.
 cryptolTypeOfActual :: JavaType -> Maybe Cryptol.Type
@@ -832,7 +940,7 @@ jvm_fresh_var name jty =
   JVMSetupM $
   do sc <- lift getSharedContext
      case cryptolTypeOfActual jty of
-       Nothing -> fail $ "Unsupported type in jvm_fresh_var: " ++ show jty
+       Nothing -> X.throwM $ JVMFreshVarInvalidType jty
        Just cty -> Setup.freshVariable sc name cty
 
 jvm_alloc_object ::
@@ -866,26 +974,26 @@ jvm_field_is ptr fname val =
   JVMSetupM $
   do pos <- lift getPosition
      loc <- SS.toW4Loc "jvm_field_is" <$> lift getPosition
+     ptr' <-
+       case ptr of
+         MS.SetupVar ptr' -> pure ptr'
+         _ -> X.throwM $ JVMFieldNonReference ptr fname
      st <- get
      let rs = st ^. Setup.csResolvedState
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
      let path = Left fname
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
-       then fail $ "Multiple points-to preconditions on same pointer (field " ++ fname ++ ")"
+     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
+       then X.throwM $ JVMFieldMultiple ptr fname
        else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
      valTy <- typeOfSetupValue cc env nameEnv val
-     fid <- either fail pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
+     fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
      unless (registerCompatible (J.fieldIdType fid) valTy) $
-       fail $ unlines
-       [ "Incompatible types for field " ++ fname
-       , "Expected: " ++ show (J.fieldIdType fid)
-       , "but given value of type: " ++ show valTy
-       ]
-     Setup.addPointsTo (JVMPointsToField loc ptr fid val)
+       X.throwM $ JVMFieldTypeMismatch fname (J.fieldIdType fid) valTy
+     Setup.addPointsTo (JVMPointsToField loc ptr' fid val)
 
 jvm_elem_is ::
   SetupValue {- ^ array -} ->
@@ -895,28 +1003,29 @@ jvm_elem_is ::
 jvm_elem_is ptr idx val =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_elem_is" <$> lift getPosition
+     ptr' <-
+       case ptr of
+         MS.SetupVar ptr' -> pure ptr'
+         _ -> X.throwM $ JVMElemNonReference ptr idx
      st <- get
      let rs = st ^. Setup.csResolvedState
      let cc = st ^. Setup.csCrucibleContext
      let path = Right idx
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
-       then fail "Multiple points-to preconditions on same pointer"
+       then X.throwM $ JVMElemMultiple ptr idx
        else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     ptrTy <- typeOfSetupValue cc env nameEnv ptr
+     (len, elTy) <-
+       case snd (lookupAllocIndex env ptr') of
+         AllocObject cname -> X.throwM $ JVMElemNonArray (J.ClassType cname)
+         AllocArray len elTy -> pure (len, elTy)
      valTy <- typeOfSetupValue cc env nameEnv val
-     elTy <-
-       case ptrTy of
-         J.ArrayType elTy -> pure elTy
-         _ -> fail $ "Not an array type: " ++ show ptrTy
+     unless (0 <= idx && idx < len) $
+       X.throwM $ JVMElemInvalidIndex elTy len idx
      unless (registerCompatible elTy valTy) $
-       fail $ unlines
-       [ "Incompatible types for array element"
-       , "Expected: " ++ show elTy
-       , "but given value of type: " ++ show valTy
-       ]
-     Setup.addPointsTo (JVMPointsToElem loc ptr idx val)
+       X.throwM $ JVMElemTypeMismatch idx elTy valTy
+     Setup.addPointsTo (JVMPointsToElem loc ptr' idx val)
 
 jvm_array_is ::
   SetupValue {- ^ array reference -} ->
@@ -925,12 +1034,31 @@ jvm_array_is ::
 jvm_array_is ptr val =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_array_is" <$> lift getPosition
+     ptr' <-
+       case ptr of
+         MS.SetupVar ptr' -> pure ptr'
+         _ -> X.throwM $ JVMArrayNonReference ptr
      st <- get
      let rs = st ^. Setup.csResolvedState
      if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
-       then fail "Multiple points-to preconditions on same pointer"
+       then X.throwM $ JVMArrayMultiple ptr
        else Setup.csResolvedState %= MS.markResolved ptr []
-     Setup.addPointsTo (JVMPointsToArray loc ptr val)
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+     (len, elTy) <-
+       case snd (lookupAllocIndex env ptr') of
+         AllocObject cname -> X.throwM $ JVMElemNonArray (J.ClassType cname)
+         AllocArray len elTy -> pure (len, elTy)
+     let schema = ttSchema val
+     let checkVal =
+           do ty <- Cryptol.isMono schema
+              (n, a) <- Cryptol.tIsSeq ty
+              guard (Cryptol.tIsNum n == Just (toInteger len))
+              jty <- toJVMType (Cryptol.evalValType mempty a)
+              guard (registerCompatible elTy jty)
+     case checkVal of
+       Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
+       Just () -> pure ()
+     Setup.addPointsTo (JVMPointsToArray loc ptr' val)
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do
@@ -943,11 +1071,47 @@ jvm_postcond term = JVMSetupM $ do
   Setup.crucible_postcond loc term
 
 jvm_execute_func :: [SetupValue] -> JVMSetupM ()
-jvm_execute_func args = JVMSetupM $
-  Setup.crucible_execute_func args
+jvm_execute_func args =
+  JVMSetupM $
+  do st <- get
+     let cc = st ^. Setup.csCrucibleContext
+     let mspec = st ^. Setup.csMethodSpec
+     let env = MS.csAllocations mspec
+     let nameEnv = MS.csTypeNames mspec
+     let argTys = mspec ^. MS.csArgs
+     let
+       checkArg i expectedTy val =
+         do valTy <- typeOfSetupValue cc env nameEnv val
+            unless (registerCompatible expectedTy valTy) $
+              X.throwM (JVMArgTypeMismatch i expectedTy valTy)
+     let
+       checkArgs _ [] [] = pure ()
+       checkArgs i [] vals =
+         X.throwM (JVMArgNumberWrong i (i + length vals))
+       checkArgs i tys [] =
+         X.throwM (JVMArgNumberWrong (i + length tys) i)
+       checkArgs i (ty : tys) (val : vals) =
+         do checkArg i ty val
+            checkArgs (i + 1) tys vals
+     checkArgs 0 argTys args
+     Setup.crucible_execute_func args
 
 jvm_return :: SetupValue -> JVMSetupM ()
-jvm_return retVal = JVMSetupM $ Setup.crucible_return retVal
+jvm_return retVal =
+  JVMSetupM $
+  do st <- get
+     let cc = st ^. Setup.csCrucibleContext
+     let mspec = st ^. Setup.csMethodSpec
+     let env = MS.csAllocations mspec
+     let nameEnv = MS.csTypeNames mspec
+     valTy <- typeOfSetupValue cc env nameEnv retVal
+     case mspec ^. MS.csRet of
+       Nothing ->
+         X.throwM (JVMReturnUnexpected valTy)
+       Just retTy ->
+         unless (registerCompatible retTy valTy) $
+         X.throwM (JVMReturnTypeMismatch retTy valTy)
+     Setup.crucible_return retVal
 
 --------------------------------------------------------------------------------
 

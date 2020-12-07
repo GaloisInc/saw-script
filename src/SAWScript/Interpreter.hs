@@ -2528,13 +2528,6 @@ primitives = Map.fromList
     Experimental
     [ "A JVMValue representing a null pointer value." ]
 
-  , prim "jvm_global"
-    "String -> JVMValue"
-    (pureVal (CMS.SetupGlobal () :: String -> CMS.SetupValue CJ.JVM))
-    Experimental
-    [ "Return a JVMValue representing a pointer to the named global."
-    , "The String may be either the name of a global value or a function name." ]
-
   , prim "jvm_term"
     "Term -> JVMValue"
     (pureVal (CMS.SetupTerm :: TypedTerm -> CMS.SetupValue CJ.JVM))
