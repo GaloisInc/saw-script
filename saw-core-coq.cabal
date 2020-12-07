@@ -24,9 +24,15 @@ library
     mtl,
     prettyprinter,
     saw-core,
+<<<<<<< HEAD
     text,
     parameterized-utils,
     bv-sized,
+=======
+    parameterized-utils,
+    bv-sized,
+    text,
+>>>>>>> fb95f86af900fc1ed4941c9d632c36a0c59581b8
     vector
   hs-source-dirs: src
   exposed-modules:
