@@ -24,6 +24,7 @@ library
     lens,
     mtl,
     saw-core,
+    text,
     parameterized-utils,
     bv-sized,
     vector
