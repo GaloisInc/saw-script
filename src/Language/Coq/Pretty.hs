@@ -121,6 +121,7 @@ ppTerm p e =
     Sort s ->
       ppSort s
     Var x ->
+      parensIf (p > PrecApp && head x == '@') $
       ppIdent x
     NatLit i ->
       integer i
