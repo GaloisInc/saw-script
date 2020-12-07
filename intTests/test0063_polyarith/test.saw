@@ -1,0 +1,13 @@
+let {{
+
+thm : {n,m} (fin n, fin m, n > m, m >= 1) => [n] -> [m] -> Bit
+thm x y = y != 0 ==> 
+    pmult y (pdiv x y) ^ (zero # pmod x y) == zero`{[m-1]}#x
+
+}};
+
+print_term (rewrite (cryptol_ss ())
+  (unfold_term ["thm"] {{ thm`{16,4} }}));
+
+prove_print rme {{ thm`{16,8} }};
+prove_print rme {{ thm`{20,10} }};

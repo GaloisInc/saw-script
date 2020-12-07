@@ -26,6 +26,7 @@ Stability   : provisional
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module SAWScript.Value where
 
@@ -52,10 +53,10 @@ import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
 import Data.IORef
 import qualified Data.Vector as Vector
-import qualified Text.PrettyPrint.ANSI.Leijen as PPL
 import Data.Parameterized.Some
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
+import qualified Prettyprinter as PP
 
 import qualified Data.AIG as AIG
 
@@ -76,6 +77,7 @@ import SAWScript.JavaPretty (prettyClass)
 import SAWScript.Options (Options(printOutFn),printOutLn,Verbosity)
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
+import SAWScript.Crucible.LLVM.Skeleton
 
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
@@ -90,7 +92,7 @@ import Verifier.SAW.Term.Functor (ModuleName)
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import qualified Cryptol.Eval as C
-import qualified Cryptol.Eval.Concrete.Value as C
+import qualified Cryptol.Eval.Concrete as C
 import Verifier.SAW.Cryptol (exportValueWithSchema)
 import qualified Cryptol.TypeCheck.AST as Cryptol
 import qualified Cryptol.Utils.Logger as C (quietLogger)
@@ -102,6 +104,8 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 import           Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
+
+import Lang.Crucible.LLVM.ArraySizeProfile
 
 import           What4.ProgramLoc (ProgramLoc(..))
 
@@ -138,6 +142,11 @@ data Value
   | VJVMSetup !(JVMSetupM Value)
   | VJVMMethodSpec !(CMS.CrucibleMethodSpecIR CJ.JVM)
   | VJVMSetupValue !(CMS.SetupValue CJ.JVM)
+  -----
+  | VLLVMModuleSkeleton ModuleSkeleton
+  | VLLVMFunctionSkeleton FunctionSkeleton
+  | VLLVMSkeletonState SkeletonState
+  | VLLVMFunctionProfile FunctionProfile
   -----
   | VJavaType JavaType
   | VLLVMType LLVM.Type
@@ -268,11 +277,10 @@ showSimpset opts ss =
   unlines ("Rewrite Rules" : "=============" : map (show . ppRule) (listRules ss))
   where
     ppRule r =
-      PPL.char '*' PPL.<+>
-      (PPL.nest 2 $
-       SAWCorePP.ppTerm opts' (lhsRewriteRule r)
-       PPL.</> PPL.char '=' PPL.<+>
-       ppTerm (rhsRewriteRule r))
+      PP.pretty '*' PP.<+>
+      (PP.nest 2 $ PP.fillSep
+       [ ppTerm (lhsRewriteRule r)
+       , PP.pretty '=' PP.<+> ppTerm (rhsRewriteRule r) ])
     ppTerm t = SAWCorePP.ppTerm opts' t
     opts' = sawPPOpts opts
 
@@ -300,7 +308,7 @@ showsPrecValue opts p v =
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
-    VTheorem (Theorem (Prop t)) ->
+    VTheorem (Theorem (Prop t) _stats) ->
       showString "Theorem " .
       showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
     VJavaSetup {} -> showString "<<Java Setup>>"
@@ -308,6 +316,10 @@ showsPrecValue opts p v =
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
+    VLLVMModuleSkeleton s -> shows s
+    VLLVMFunctionSkeleton s -> shows s
+    VLLVMSkeletonState _ -> showString "<<Skeleton state>>"
+    VLLVMFunctionProfile _ -> showString "<<Array sizes for function>>"
     VJavaType {} -> showString "<<Java type>>"
     VLLVMType t -> showString (show (LLVM.ppType t))
     VCryptolModule m -> showString (showCryptolModule m)
@@ -399,6 +411,8 @@ data TopLevelRO =
   , roHandleAlloc   :: Crucible.HandleAllocator
   , roPosition      :: SS.Pos
   , roProxy         :: AIGProxy
+  , roInitWorkDir   :: FilePath
+  , roBasicSS       :: Simpset
   }
 
 data TopLevelRW =
@@ -408,6 +422,7 @@ data TopLevelRW =
   , rwTypedef :: Map SS.Name SS.Type
   , rwDocs    :: Map SS.Name String
   , rwCryptol :: CEnv.CryptolEnv
+  , rwProofs  :: [Value] {- ^ Values, generated anywhere, that represent proofs. -}
   , rwPPOpts  :: PPOpts
   -- , rwCrucibleLLVMCtx :: Crucible.LLVMContext
   , rwJVMTrans :: CJ.JVMContext
@@ -418,6 +433,7 @@ data TopLevelRW =
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
   , rwWhat4HashConsing :: Bool
+  , rwPreservedRegs :: [String]
   }
 
 newtype TopLevel a =
@@ -459,6 +475,9 @@ getOptions = TopLevel (asks roOptions)
 getProxy :: TopLevel AIGProxy
 getProxy = TopLevel (asks roProxy)
 
+getBasicSS :: TopLevel Simpset
+getBasicSS = TopLevel (asks roBasicSS)
+
 localOptions :: (Options -> Options) -> TopLevel a -> TopLevel a
 localOptions f (TopLevel m) = TopLevel (local (\x -> x {roOptions = f (roOptions x)}) m)
 
@@ -484,9 +503,21 @@ getTopLevelRW = TopLevel get
 putTopLevelRW :: TopLevelRW -> TopLevel ()
 putTopLevelRW rw = TopLevel (put rw)
 
+returnProof :: IsValue v => v -> TopLevel v
+returnProof v = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwProofs = toValue v : rwProofs rw }
+  return v
+
 -- | Access the current state of Java Class translation
 getJVMTrans :: TopLevel  CJ.JVMContext
 getJVMTrans = TopLevel (gets rwJVMTrans)
+
+-- | Access the current state of Java Class translation
+putJVMTrans :: CJ.JVMContext -> TopLevel ()
+putJVMTrans jc =
+  do rw <- getTopLevelRW
+     putTopLevelRW rw { rwJVMTrans = jc }
 
 -- | Add a newly translated class to the translation
 addJVMTrans :: CJ.JVMContext -> TopLevel ()
@@ -535,10 +566,12 @@ typedTermOfString cs = TypedTerm schema trm
     bvNat8 = Unshared (App bvNat (nat 8))
     encodeChar :: Char -> Term
     encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
-    bitvector :: Term
-    bitvector = Unshared (FTermF (GlobalDef "Prelude.bitvector"))
+    vecT :: Term
+    vecT = Unshared (FTermF (GlobalDef "Prelude.Vec"))
+    boolT :: Term
+    boolT = Unshared (FTermF (GlobalDef "Prelude.Bool"))
     byteT :: Term
-    byteT = Unshared (App bitvector (nat 8))
+    byteT = Unshared (App (Unshared (App vecT (nat 8))) boolT)
     trm :: Term
     trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
     schema = Cryptol.Forall [] [] (Cryptol.tString (length cs))
@@ -766,6 +799,34 @@ instance FromValue (CMS.CrucibleMethodSpecIR CJ.JVM) where
     fromValue (VJVMMethodSpec t) = t
     fromValue _ = error "fromValue CrucibleMethodSpecIR"
 
+instance IsValue ModuleSkeleton where
+    toValue s = VLLVMModuleSkeleton s
+
+instance FromValue ModuleSkeleton where
+    fromValue (VLLVMModuleSkeleton s) = s
+    fromValue _ = error "fromValue ModuleSkeleton"
+
+instance IsValue FunctionSkeleton where
+    toValue s = VLLVMFunctionSkeleton s
+
+instance FromValue FunctionSkeleton where
+    fromValue (VLLVMFunctionSkeleton s) = s
+    fromValue _ = error "fromValue FunctionSkeleton"
+
+instance IsValue SkeletonState where
+    toValue s = VLLVMSkeletonState s
+
+instance FromValue SkeletonState where
+    fromValue (VLLVMSkeletonState s) = s
+    fromValue _ = error "fromValue SkeletonState"
+
+instance IsValue FunctionProfile where
+    toValue s = VLLVMFunctionProfile s
+
+instance FromValue FunctionProfile where
+    fromValue (VLLVMFunctionProfile s) = s
+    fromValue _ = error "fromValue FunctionProfile"
+
 -----------------------------------------------------------------------------------
 
 
@@ -961,11 +1022,7 @@ addTraceIO str action = X.catches action
   where
     rethrow msg = X.throwIO . SS.TraceException $ mconcat [str, ":\n", msg]
     handleTopLevel :: SS.TopLevelException -> IO a
-    handleTopLevel (SS.TopLevelException _pos msg) = rethrow msg
-    handleTopLevel (SS.JavaException _pos msg) = rethrow msg
-    handleTopLevel (SS.CrucibleSetupException _loc msg) = rethrow msg
-    handleTopLevel (SS.OverrideMatcherException _loc msg) = rethrow msg
-    handleTopLevel (SS.LLVMMethodSpecException _loc msg) = rethrow msg
+    handleTopLevel e = rethrow $ show e
     handleTrace (SS.TraceException msg) = rethrow msg
     handleIO :: X.IOException -> IO a
     handleIO e
@@ -984,3 +1041,8 @@ addTraceReaderT str = underReaderT (addTraceTopLevel str)
 addTraceTopLevel :: String -> TopLevel a -> TopLevel a
 addTraceTopLevel str action = action & _Wrapped' %~
   underReaderT (underStateT (liftIO . addTraceIO str))
+
+data SkeletonState = SkeletonState
+  { _skelArgs :: [(Maybe TypedTerm, Maybe (CMSLLVM.AllLLVM CMS.SetupValue), Maybe Text)]
+  }
+makeLenses ''SkeletonState

@@ -17,7 +17,6 @@ Stability   : provisional
 module SAWScript.Crucible.LLVM.ResolveSetupValue
   ( LLVMVal, LLVMPtr
   , resolveSetupVal
-  , typeOfLLVMVal
   , typeOfSetupValue
   , resolveTypedTerm
   , resolveSAWPred
@@ -33,7 +32,6 @@ import Control.Monad
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
-import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
 import Data.IORef
 import           Data.Map (Map)
@@ -47,7 +45,6 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 
-import           Data.Parameterized.Classes ((:~:)(..), testEquality)
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
 
@@ -67,8 +64,8 @@ import Verifier.SAW.Cryptol (importType, emptyEnv)
 import Verifier.SAW.TypedTerm
 import Text.LLVM.DebugUtils as L
 
-import qualified Verifier.SAW.Simulator.SBV as SBV (sbvSolveBasic, toWord)
-import qualified Data.SBV.Dynamic as SBV (svAsInteger)
+import qualified Verifier.SAW.Simulator.SBV as SBV
+import qualified Data.SBV.Dynamic as SBV
 
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
@@ -185,7 +182,7 @@ typeOfSetupValue' cc env nameEnv val =
     SetupTerm tt ->
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
-          case toLLVMType dl (Cryptol.evalValType Map.empty ty) of
+          case toLLVMType dl (Cryptol.evalValType mempty ty) of
             Left err -> fail (toLLVMTypeErrToString err)
             Right memTy -> return memTy
         s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
@@ -281,7 +278,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
     SetupTerm tm -> resolveTypedTerm cc tm
     SetupStruct () packed vs -> do
       vals <- mapM (resolveSetupVal cc mem env tyenv nameEnv) vs
-      let tps = map (typeOfLLVMVal dl) vals
+      let tps = map Crucible.llvmValStorableType vals
       let t = Crucible.mkStructType (V.fromList (mkFields packed dl Crucible.noAlignment 0 tps))
       let flds = case Crucible.storageTypeF t of
                    Crucible.Struct v -> v
@@ -290,7 +287,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
     SetupArray () [] -> fail "resolveSetupVal: invalid empty array"
     SetupArray () vs -> do
       vals <- V.mapM (resolveSetupVal cc mem env tyenv nameEnv) (V.fromList vs)
-      let tp = typeOfLLVMVal dl (V.head vals)
+      let tp = Crucible.llvmValStorableType (V.head vals)
       return $ Crucible.LLVMValArray tp vals
     SetupField () v n -> do
       i <- resolveSetupFieldIndexOrFail cc tyenv nameEnv v n
@@ -348,15 +345,27 @@ resolveTypedTerm ::
 resolveTypedTerm cc tm =
   case ttSchema tm of
     Cryptol.Forall [] [] ty ->
-      resolveSAWTerm cc (Cryptol.evalValType Map.empty ty) (ttTerm tm)
+      resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
     _ -> fail "resolveSetupVal: expected monomorphic term"
 
 resolveSAWPred ::
   LLVMCrucibleContext arch ->
   Term ->
   IO (W4.Pred Sym)
-resolveSAWPred cc tm =
-  Crucible.bindSAWTerm (cc^.ccBackend) W4.BaseBoolRepr tm
+resolveSAWPred cc tm = do
+  do let sym = cc^.ccBackend
+     sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+     let ss = cc^.ccBasicSS
+     tm' <- rewriteSharedTerm sc ss tm
+     mx <- case getAllExts tm' of
+             [] -> do
+               -- Evaluate in SBV to test whether 'tm' is a concrete value
+               sbv <- SBV.toBool <$> SBV.sbvSolveBasic sc Map.empty mempty tm'
+               return (SBV.svAsBool sbv)
+             _ -> return Nothing
+     case mx of
+       Just x  -> return $ W4.backendPred sym x
+       Nothing -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
 
 resolveSAWSymBV ::
   (1 <= w) =>
@@ -372,8 +381,7 @@ resolveSAWSymBV cc w tm =
      mx <- case getAllExts tm' of
              [] -> do
                -- Evaluate in SBV to test whether 'tm' is a concrete value
-               modmap <- scGetModuleMap sc
-               sbv <- SBV.toWord =<< SBV.sbvSolveBasic modmap Map.empty [] tm'
+               sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm'
                return (SBV.svAsInteger sbv)
              _ -> return Nothing
      case mx of
@@ -544,47 +552,18 @@ typeAlignment dl ty =
     Crucible.Array _sz ty'   -> typeAlignment dl ty'
     Crucible.Struct flds     -> V.foldl max Crucible.noAlignment (fmap (typeAlignment dl . (^. Crucible.fieldVal)) flds)
 
-typeOfLLVMVal :: Crucible.DataLayout -> LLVMVal -> Crucible.StorageType
-typeOfLLVMVal _dl val =
-  case val of
-    Crucible.LLVMValInt _bkl bv ->
-       Crucible.bitvectorType (Crucible.intWidthSize (fromIntegral (natValue (W4.bvWidth bv))))
-    Crucible.LLVMValFloat _ _   -> error "FIXME: typeOfLLVMVal LLVMValFloat"
-    Crucible.LLVMValStruct flds -> Crucible.mkStructType (fmap fieldType flds)
-    Crucible.LLVMValArray tp vs -> Crucible.arrayType (fromIntegral (V.length vs)) tp
-    Crucible.LLVMValZero tp     -> tp
-    Crucible.LLVMValUndef tp    -> tp
-  where
-    fieldType (f, _) = (f ^. Crucible.fieldVal, Crucible.fieldPad f)
 
 equalValsPred ::
   LLVMCrucibleContext wptr ->
   LLVMVal ->
   LLVMVal ->
   IO (W4.Pred Sym)
-equalValsPred cc v1 v2 = go (v1, v2)
+equalValsPred cc v1 v2 =
+   fromMaybe (W4.falsePred sym) <$> Crucible.testEqual sym v1 v2
+
   where
-  go :: (LLVMVal, LLVMVal) -> IO (W4.Pred Sym)
-
-  go (Crucible.LLVMValInt blk1 off1, Crucible.LLVMValInt blk2 off2)
-       | Just Refl <- testEquality (W4.bvWidth off1) (W4.bvWidth off2)
-       = do blk_eq <- W4.natEq sym blk1 blk2
-            off_eq <- W4.bvEq sym off1 off2
-            W4.andPred sym blk_eq off_eq
-  --go (Crucible.LLVMValFloat xsz x, Crucible.LLVMValFloat ysz y) | xsz == ysz
-  --     = W4.floatEq sym x y -- TODO
-  go (Crucible.LLVMValStruct xs, Crucible.LLVMValStruct ys)
-       | V.length xs == V.length ys
-       = do cs <- mapM go (zip (map snd (toList xs)) (map snd (toList ys)))
-            foldM (W4.andPred sym) (W4.truePred sym) cs
-  go (Crucible.LLVMValArray _tpx xs, Crucible.LLVMValArray _tpy ys)
-       | V.length xs == V.length ys
-       = do cs <- mapM go (zip (toList xs) (toList ys))
-            foldM (W4.andPred sym) (W4.truePred sym) cs
-
-  go _ = return (W4.falsePred sym)
-
   sym = cc^.ccBackend
+
 
 memArrayToSawCoreTerm ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
@@ -682,7 +661,7 @@ memArrayToSawCoreTerm crucible_context endianess typed_term = do
 
   case ttSchema typed_term of
     Cryptol.Forall [] [] cryptol_type -> do
-      let evaluated_type = (Cryptol.evalValType Map.empty cryptol_type)
+      let evaluated_type = Cryptol.evalValType mempty cryptol_type
       fresh_array_const <- scFreshGlobal saw_context "arr"
         =<< scArrayType saw_context offset_type_term byte_type_term
       execStateT

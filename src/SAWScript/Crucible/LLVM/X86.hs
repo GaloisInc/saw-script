@@ -36,12 +36,13 @@ import Control.Monad.Catch (MonadThrow)
 
 import qualified Data.BitVector.Sized as BV
 import Data.Foldable (foldlM)
-import Data.IORef
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Vector as Vector
 import qualified Data.Text as Text
+import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Set as Set
+import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
@@ -55,7 +56,6 @@ import Data.Parameterized.Nonce
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
-import Verifier.SAW.Recognizer
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
@@ -94,6 +94,7 @@ import qualified Lang.Crucible.Simulator.Operations as C
 import qualified Lang.Crucible.Simulator.OverrideSim as C
 import qualified Lang.Crucible.Simulator.RegMap as C
 import qualified Lang.Crucible.Simulator.SimError as C
+import qualified Lang.Crucible.Simulator.PathSatisfiability as C
 
 import qualified Lang.Crucible.LLVM.DataLayout as C.LLVM
 import qualified Lang.Crucible.LLVM.Extension as C.LLVM
@@ -138,7 +139,7 @@ data X86State = X86State
   , _x86Options :: Options
   , _x86SharedContext :: SharedContext
   , _x86CrucibleContext :: LLVMCrucibleContext LLVMArch
-  , _x86Elf :: Elf.Elf 64
+  , _x86ElfSymtab :: Elf.Symtab 64
   , _x86RelevantElf :: RelevantElf
   , _x86MethodSpec :: MS.CrucibleMethodSpecIR LLVM
   , _x86Mem :: Mem
@@ -172,6 +173,27 @@ getReg reg regs = case Macaw.lookupX86Reg reg regs of
   Just (C.RV val) -> pure val
   Nothing -> throwX86 $ mconcat ["Invalid register: ", show reg]
 
+-- TODO: extend to more than general purpose registers
+stringToReg :: Text -> Maybe (Some Macaw.X86Reg)
+stringToReg s = case s of
+  "rax" -> Just $ Some Macaw.RAX
+  "rbx" -> Just $ Some Macaw.RBX
+  "rcx" -> Just $ Some Macaw.RCX
+  "rdx" -> Just $ Some Macaw.RDX
+  "rsp" -> Just $ Some Macaw.RSP
+  "rbp" -> Just $ Some Macaw.RBP
+  "rsi" -> Just $ Some Macaw.RSI
+  "rdi" -> Just $ Some Macaw.RDI
+  "r8" -> Just $ Some Macaw.R8
+  "r9" -> Just $ Some Macaw.R9
+  "r10" -> Just $ Some Macaw.R10
+  "r11" -> Just $ Some Macaw.R11
+  "r12" -> Just $ Some Macaw.R12
+  "r13" -> Just $ Some Macaw.R13
+  "r14" -> Just $ Some Macaw.R14
+  "r15" -> Just $ Some Macaw.R15
+  _ -> Nothing
+
 cryptolUninterpreted ::
   (MonadIO m, MonadThrow m) =>
   CryptolEnv ->
@@ -199,32 +221,37 @@ cryptolUninterpreted _ nm _ xs = throwX86 $ mconcat
 -- to an LLVM specification. This allows for compositional verification of LLVM
 -- functions that call x86_64 functions (but not the other way around).
 crucible_llvm_verify_x86 ::
-  BuiltinContext ->
-  Options ->
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
-  Bool {-^ Whether to enable path satisfiability checking (currently ignored) -} ->
+  Bool {- ^ Whether to enable path satisfiability checking -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm globsyms _checkSat setup tactic
+crucible_llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64
-      let sc = biSharedContext bic
-      bbMapRef <- liftIO $ newIORef mempty
-      let ?badBehaviorMap = bbMapRef
+      let ?recordLLVMAnnotation = \_ _ -> return ()
+      sc <- getSharedContext
+      opts <- getOptions
+      basic_ss <- getBasicSS
       sym <- liftIO $ C.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
-      cenv <- rwCryptol <$> getTopLevelRW
+      rw <- getTopLevelRW
+      let cenv = rwCryptol rw
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
 
-      (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc path nm
+      let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
+      (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc preserved path nm
       addrInt <- if Macaw.segmentBase (Macaw.segoffSegment addr) == 0
         then pure . toInteger $ Macaw.segmentOffset (Macaw.segoffSegment addr) + Macaw.segoffOffset addr
         else fail $ mconcat ["Address of \"", nm, "\" is not an absolute address"]
@@ -235,7 +262,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         cc = LLVMCrucibleContext
           { _ccLLVMModule = llvmModule
           , _ccBackend = sym
-          , _ccBasicSS = biBasicSS bic
+          , _ccBasicSS = basic_ss
 
           -- It's unpleasant that we need to do this to use resolveSetupVal.
           , _ccLLVMSimContext = error "Attempted to access ccLLVMSimContext"
@@ -251,7 +278,7 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
         ]
 
       liftIO $ printOutLn opts Info "Examining specification to determine preconditions"
-      methodSpec <- buildMethodSpec bic opts llvmModule nm (show addr) setup
+      methodSpec <- buildMethodSpec llvmModule nm (show addr) checkSat setup
 
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
@@ -320,14 +347,24 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
           pure $ C.regValue r
 
       liftIO $ printOutLn opts Info "Simulating function"
-      liftIO $ C.executeCrucible [] initial >>= \case
+
+      psatf <-
+         if checkSat then
+           do f <- liftIO (C.pathSatisfiabilityFeature sym (C.considerSatisfiability sym))
+              pure [C.genericToExecutionFeature f]
+         else
+           pure []
+
+      let execFeatures = psatf
+
+      liftIO $ C.executeCrucible execFeatures initial >>= \case
         C.FinishedResult{} -> pure ()
         C.AbortedResult{} -> printOutLn opts Warn "Warning: function never returns"
         C.TimeoutResult{} -> fail "Execution timed out"
 
-      checkGoals sym opts sc tactic
- 
-      pure $ SomeLLVM methodSpec
+      stats <- checkGoals sym opts sc tactic
+
+      returnProof $ SomeLLVM (methodSpec & MS.csSolverStats .~ stats)
   | otherwise = fail "LLVM module must be 64-bit"
 
 --------------------------------------------------------------------------------
@@ -337,13 +374,14 @@ crucible_llvm_verify_x86 bic opts (Some (llvmModule :: LLVMModule x)) path nm gl
 buildCFG ::
   Options ->
   C.HandleAllocator ->
+  Set (Some Macaw.X86Reg) {- ^ Registers to treat as callee-saved -} ->
   String {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
   IO ( C.SomeCFG
        (Macaw.MacawExt Macaw.X86_64)
        (EmptyCtx ::> Macaw.ArchRegStruct Macaw.X86_64)
        (Macaw.ArchRegStruct Macaw.X86_64)
-     , Elf.Elf 64
+     , Elf.ElfHeaderInfo 64
      , RelevantElf
      , Macaw.MemSegmentOff 64
      , Map
@@ -353,7 +391,7 @@ buildCFG ::
          (EmptyCtx ::> Macaw.ArchRegStruct Macaw.X86_64)
          (Macaw.ArchRegStruct Macaw.X86_64))
      )
-buildCFG opts halloc path nm = do
+buildCFG opts halloc preserved path nm = do
   printOutLn opts Info $ mconcat ["Finding symbol for \"", nm, "\""]
   elf <- getElf path
   relf <- getRelevant elf
@@ -363,10 +401,17 @@ buildCFG opts halloc path nm = do
       _ -> fail $ mconcat ["Could not find symbol \"", nm, "\""]
   printOutLn opts Info $ mconcat ["Found symbol at address ", show addr, ", building CFG"]
   let
+    preservedRegs = Set.union preserved Macaw.x86CalleeSavedRegs
+    preserveFn :: forall t. Macaw.X86Reg t -> Bool
+    preserveFn r = Set.member (Some r) preservedRegs
+    macawCallParams = Macaw.x86_64CallParams { Macaw.preserveReg = preserveFn }
+    macawArchInfo = (Macaw.x86_64_info preserveFn)
+      { Macaw.archCallParams = macawCallParams
+      }
     initialDiscoveryState =
-      Macaw.emptyDiscoveryState (memory relf) (funSymMap relf) Macaw.x86_64_linux_info
-      & Macaw.trustedFunctionEntryPoints .~ Set.empty
-  let
+      Macaw.emptyDiscoveryState (memory relf) (funSymMap relf) macawArchInfo
+      -- "inline" any function addresses that we happen to jump to
+      & Macaw.trustedFunctionEntryPoints .~ Map.empty
     finalState = Macaw.cfgFromAddrsAndState initialDiscoveryState [addr] []
     finfos = finalState ^. Macaw.funInfo
   cfgs <- forM finfos $ \(Some finfo) ->
@@ -385,20 +430,20 @@ buildCFG opts halloc path nm = do
 -- Unlike in crucible_llvm_verify, we can't reuse the simulator state (due to the
 -- different memory layout / RegMap).
 buildMethodSpec ::
-  BuiltinContext ->
-  Options ->
   LLVMModule LLVMArch ->
   String {- ^ Name of method -} ->
   String {- ^ Source location for method spec (here, we use the address) -} ->
+  Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
   TopLevel (MS.CrucibleMethodSpecIR LLVM)
-buildMethodSpec bic opts lm nm loc setup =
-  setupLLVMCrucibleContext bic opts lm $ \cc -> do
+buildMethodSpec lm nm loc checkSat setup =
+  setupLLVMCrucibleContext checkSat lm $ \cc -> do
     let methodId = LLVMMethodId nm Nothing
     let programLoc =
           W4.mkProgramLoc (W4.functionNameFromText $ Text.pack nm)
           . W4.OtherPos $ Text.pack loc
     let lc = modTrans lm ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
+    opts <- getOptions
     (args, ret) <- case llvmSignature opts lm nm of
       Left err -> fail $ mconcat ["Could not find declaration for \"", nm, "\": ", err]
       Right x -> pure x
@@ -448,7 +493,7 @@ initialState ::
   Options ->
   SharedContext ->
   LLVMCrucibleContext LLVMArch ->
-  Elf.Elf 64 ->
+  Elf.ElfHeaderInfo 64 ->
   RelevantElf ->
   MS.CrucibleMethodSpecIR LLVM ->
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
@@ -457,6 +502,10 @@ initialState ::
 initialState sym opts sc cc elf relf ms globs maxAddr = do
   emptyMem <- C.LLVM.emptyMem C.LLVM.LittleEndian
   emptyRegs <- traverseWithIndex (freshRegister sym) C.knownRepr
+  symTab <- case Elf.decodeHeaderSymtab elf of
+    Nothing -> throwX86 "Elf file has no symbol table"
+    Just (Left _err) -> throwX86 "Failed to decode symbol table"
+    Just (Right st) -> pure st
   let
     align = C.LLVM.exponentToAlignment 4
     allocGlobalEnd :: MS.AllocGlobal LLVM -> Integer
@@ -465,9 +514,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     globalEnd nm = maybe 0 (\entry -> fromIntegral $ Elf.steValue entry + Elf.steSize entry) $
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
-      . mconcat
-      . fmap Elf.elfSymbolTableEntries
-      $ Elf.elfSymtab elf
+      $ Elf.symtabEntries symTab
   sz <- W4.bvLit sym knownNat . BV.mkBV knownNat . maximum $ mconcat
     [ [maxAddr, globalEnd "_end"]
     , globalEnd . fst <$> globs
@@ -480,7 +527,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
     , _x86Options = opts
     , _x86SharedContext = sc
     , _x86CrucibleContext = cc
-    , _x86Elf = elf
+    , _x86ElfSymtab = symTab
     , _x86RelevantElf = relf
     , _x86MethodSpec = ms
     , _x86Mem = mem
@@ -581,7 +628,7 @@ assumeAllocation ::
   Map MS.AllocIndex Ptr ->
   (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
-assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc) = do
+assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False) = do
   cc <- use x86CrucibleContext
   sym <- use x86Sym
   mem <- use x86Mem
@@ -590,6 +637,9 @@ assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc) = do
     (show $ W4.plSourceLoc loc) mem sz' align
   x86Mem .= mem'
   pure $ Map.insert i ptr env
+assumeAllocation env _ = pure env
+  -- no allocation is done for crucible_fresh_pointer
+  -- TODO: support crucible_fresh_pointer in x86 verification
 
 -- | Process a crucible_points_to statement, writing some SetupValue to a pointer.
 assumePointsTo ::
@@ -621,15 +671,13 @@ resolvePtrSetupValue env tyenv tptr = do
   sym <- use x86Sym
   cc <- use x86CrucibleContext
   mem <- use x86Mem
-  elf <- use x86Elf
+  symTab <- use x86ElfSymtab
   base <- use x86GlobalBase
   case tptr of
     MS.SetupGlobal () nm -> case
       (Vector.!? 0)
       . Vector.filter (\e -> Elf.steName e == encodeUtf8 (Text.pack nm))
-      . mconcat
-      . fmap Elf.elfSymbolTableEntries
-      $ Elf.elfSymtab elf of
+      $ Elf.symtabEntries symTab of
       Nothing -> throwX86 $ mconcat ["Global symbol \"", nm, "\" not found"]
       Just entry -> do
         let addr = fromIntegral $ Elf.steValue entry
@@ -722,7 +770,22 @@ assertPost globals env premem preregs = do
   returnMatches <- case (ms ^. MS.csRetValue, ms ^. MS.csRet) of
     (Just expectedRet, Just retTy) -> do
       postRAX <- C.LLVM.ptrToPtrVal <$> getReg Macaw.RAX postregs
-      pure [LO.matchArg opts sc cc ms MS.PostState postRAX retTy expectedRet]
+      case (postRAX, C.LLVM.memTypeBitwidth retTy) of
+        (C.LLVM.LLVMValInt base off, Just retTyBits) -> do
+          let
+            truncateRAX :: forall r. NatRepr r -> X86Sim (C.LLVM.LLVMVal Sym)
+            truncateRAX rsz =
+              case (testLeq (knownNat @1) rsz, testLeq rsz (W4.bvWidth off)) of
+                (Just LeqProof, Just LeqProof) ->
+                  case testStrictLeq rsz (W4.bvWidth off) of
+                    Left LeqProof -> do
+                      offTrunc <- liftIO $ W4.bvTrunc sym rsz off
+                      pure $ C.LLVM.LLVMValInt base offTrunc
+                    _ -> pure $ C.LLVM.LLVMValInt base off
+                _ -> throwX86 "Width of return type is zero bits"
+          postRAXTrunc <- viewSome truncateRAX (mkNatRepr retTyBits)
+          pure [LO.matchArg opts sc cc ms MS.PostState postRAXTrunc retTy expectedRet]
+        _ -> throwX86 $ "Invalid return type: " <> show (C.LLVM.ppMemType retTy)
     _ -> pure []
 
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
@@ -733,12 +796,14 @@ assertPost globals env premem preregs = do
         $ ms ^. MS.csPostState . MS.csConditions
 
   let
-    initialTerms = Map.fromList
-      [ (ecVarIndex ec, ttTerm tt)
+    initialECs = Map.fromList
+      [ (ecVarIndex ec, ec)
       | tt <- ms ^. MS.csPreState . MS.csFreshVars
-      , let Just ec = asExtCns (ttTerm tt)
+      , let ec = tecExt tt
       ]
-    initialFree = Set.fromList . fmap (LO.termId . ttTerm) $ ms ^. MS.csPostState . MS.csFreshVars
+    initialFree = Set.fromList . fmap (ecVarIndex . tecExt) $ ms ^. MS.csPostState . MS.csFreshVars
+
+  initialTerms <- liftIO $ traverse (scExtCns sc) initialECs
 
   result <- liftIO
     . O.runOverrideMatcher sym globals env initialTerms initialFree (ms ^. MS.csLoc)
@@ -773,6 +838,7 @@ assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
   ptr <- resolvePtrSetupValue env tyenv tptr
   memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv texpected
   storTy <- liftIO $ C.LLVM.toStorableType memTy
+
   actual <- liftIO $ C.LLVM.assertSafe sym =<< C.LLVM.loadRaw sym mem ptr storTy C.LLVM.noAlignment
   pure $ LO.matchArg opts sc cc ms MS.PostState actual memTy texpected
 
@@ -782,7 +848,7 @@ checkGoals ::
   Options ->
   SharedContext ->
   ProofScript SatResult ->
-  TopLevel ()
+  TopLevel SolverStats
 checkGoals sym opts sc tactic = do
   gs <- liftIO $ getGoals sym
   liftIO . printOutLn opts Info $ mconcat
@@ -790,13 +856,12 @@ checkGoals sym opts sc tactic = do
     , show $ length gs
     , " goals"
     ]
-  forM_ (zip [0..] gs) $ \(n, g) -> do
+  stats <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
     r <- evalStateT tactic $ startProof proofgoal
     case r of
-      Unsat stats -> do
-        liftIO . printOutLn opts Info $ ppStats stats
+      Unsat stats -> return stats
       SatMulti stats vals -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show stats)
@@ -810,3 +875,4 @@ checkGoals sym opts sc tactic = do
         printOutLnTop OnlyCounterExamples "----------------------------------"
         throwTopLevel "Proof failed."
   liftIO $ printOutLn opts Info "All goals succeeded"
+  return (mconcat stats)

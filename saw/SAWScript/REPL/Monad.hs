@@ -17,9 +17,8 @@ module SAWScript.REPL.Monad (
   , raise
   , stop
   , catch
-  , catchIO
   , catchFail
-  , catchTypeErrors
+  , catchOther
 
     -- ** Errors
   , REPLException(..)
@@ -73,19 +72,26 @@ import System.IO.Error (isUserError, ioeGetErrorString)
 
 import Verifier.SAW.SharedTerm (Term)
 import Verifier.SAW.CryptolEnv
+#ifdef USE_BUILTIN_ABC
 import qualified Data.ABC.GIA as GIA
+#else
+import qualified Data.AIG as AIG
+#endif
 
 --------------------
 
 import SAWScript.AST (Located(getVal))
-import SAWScript.Exceptions
 import SAWScript.Interpreter (buildTopLevelEnv)
 import SAWScript.Options (Options)
 import SAWScript.TopLevel (TopLevelRO(..), TopLevelRW(..))
 import SAWScript.Value (AIGProxy(..))
 import Verifier.SAW (SharedContext)
 
+#ifdef USE_BUILTIN_ABC
 deriving instance Typeable GIA.Proxy
+#else
+deriving instance Typeable AIG.Proxy
+#endif
 
 -- REPL Environment ------------------------------------------------------------
 
@@ -100,7 +106,11 @@ data RW = RW
 -- | Initial, empty environment.
 defaultRW :: Bool -> Options -> IO RW
 defaultRW isBatch opts = do
+#ifdef USE_BUILTIN_ABC
   (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy GIA.proxy) opts
+#else
+  (_biContext, ro, rw) <- buildTopLevelEnv (AIGProxy AIG.basicProxy) opts
+#endif
 
   return RW
     { eContinue   = True
@@ -202,14 +212,6 @@ raise exn = io (X.throwIO exn)
 catchEx :: X.Exception e => REPL a -> (e -> REPL a) -> REPL a
 catchEx m k = REPL (\ ref -> unREPL m ref `X.catch` \ e -> unREPL (k e) ref)
 
--- | Handle 'IOError' exceptions in 'REPL' actions.
-catchIO :: REPL a -> (IOError -> REPL a) -> REPL a
-catchIO = catchEx
-
--- | Handle SAWScript type error exceptions in 'REPL' actions.
-catchTypeErrors :: REPL a -> (TypeErrors -> REPL a) -> REPL a
-catchTypeErrors = catchEx
-
 -- | Handle 'REPLException' exceptions in 'REPL' actions.
 catch :: REPL a -> (REPLException -> REPL a) -> REPL a
 catch = catchEx
@@ -221,6 +223,10 @@ catchFail m k = REPL (\ ref -> X.catchJust sel (unREPL m ref) (\s -> unREPL (k s
     sel :: X.IOException -> Maybe String
     sel e | isUserError e = Just (ioeGetErrorString e)
           | otherwise     = Nothing
+
+-- | Handle any other exception
+catchOther :: REPL a -> (X.SomeException -> REPL a) -> REPL a
+catchOther = catchEx
 
 rethrowEvalError :: IO a -> IO a
 rethrowEvalError m = run `X.catch` rethrow

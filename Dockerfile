@@ -1,49 +1,70 @@
-FROM ubuntu:20.04
+FROM debian:buster AS solvers
 
-ARG heapster_commit=ca697c01ae9f3d2fbcae3169318d69f58e83efb2
+# Install needed packages for building
+RUN apt-get update \
+    && apt-get install -y curl cmake gcc g++ git libreadline-dev unzip
+RUN useradd -m user
+RUN install -d -o user -g user /solvers
+USER user
+WORKDIR /solvers
+RUN mkdir -p rootfs/usr/local/bin
 
-ENV PATH="/home/heapster/.local/bin:/home/heapster/.cabal/bin:/home/heapster/.ghcup/bin:${PATH}"
-ENV OPAMYES="true"
+# Get Z3 4.8.8 from GitHub
+RUN curl -L https://github.com/Z3Prover/z3/releases/download/z3-4.8.8/z3-4.8.8-x64-ubuntu-16.04.zip --output z3.zip
+RUN unzip z3.zip
+RUN mv z3-*/bin/z3 rootfs/usr/local/bin
 
-# Dependencies for installing Haskell and Coq, mainly
-RUN apt-get update && apt-get install -y \
-  curl gcc git m4 make libtinfo5 libgmp-dev locales locales-all opam xz-utils z3 zlib1g-dev 
+# Build abc from GitHub. (Latest version.)
+RUN git clone https://github.com/berkeley-abc/abc.git
+RUN cd abc && make -j$(nproc)
+RUN cp abc/abc rootfs/usr/local/bin
 
-ENV LC_ALL en_US.UTF-8
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US.UTF-8
+# Build Boolector release 3.2.1 from source
+RUN curl -L https://github.com/Boolector/boolector/archive/3.2.1.tar.gz | tar xz
+RUN cd boolector* && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh && cd build && make -j$(nproc)
+RUN cp boolector*/build/bin/boolector rootfs/usr/local/bin
 
-# Running GHCUP and Opam don't like to run as root
-RUN useradd -ms /bin/bash heapster
-USER heapster
+# Install Yices 2.6.2
+RUN curl -L https://yices.csl.sri.com/releases/2.6.2/yices-2.6.2-x86_64-pc-linux-gnu-static-gmp.tar.gz | tar xz
+RUN cp yices*/bin/yices-smt2 rootfs/usr/local/bin \
+    && cp yices*/bin/yices rootfs/usr/local/bin
 
-# Install Coq and libraries
-RUN opam init --disable-sandboxing -a && eval $(opam env) && \
-  opam switch create with-coq 4.09.1 && \
-  opam pin -y add coq 8.12.1 && eval $(opam env) && \
-  opam repo add coq-released https://coq.inria.fr/opam/released && \
-  opam update && opam install -y coq-bits
+# Install CVC4 1.8
+RUN curl -L https://github.com/CVC4/CVC4/releases/download/1.8/cvc4-1.8-x86_64-linux-opt --output rootfs/usr/local/bin/cvc4
 
-# Install GHCUP, and use that to install GHC and Cabal
-RUN mkdir -p ~/.ghcup/bin && \
-  curl https://downloads.haskell.org/~ghcup/x86_64-linux-ghcup > /home/heapster/.ghcup/bin/ghcup && \
-  chmod +x /home/heapster/.ghcup/bin/ghcup && \
-  ghcup install 8.6.5 && ghcup set 8.6.5 && \
-  ghcup install-cabal 3.2.0.0 && \
-  cabal update
+# Install MathSAT 5.6.3 - Uncomment if you are in compliance with MathSAT's license.
+# RUN curl -L https://mathsat.fbk.eu/download.php?file=mathsat-5.6.3-linux-x86_64.tar.gz | tar xz
+# RUN cp mathsat-5.6.3-linux-x86_64/bin/mathsat rootfs/usr/local/bin
 
-# Build and install SAW
-WORKDIR /home/heapster
-# Necessary to deal with SSH URLs in some submodules
-RUN git config --global url."https://github.com/".insteadOf git@github.com: && \
-  git config --global url."https://".insteadOf git://
-RUN git clone https://github.com/GaloisInc/saw-script.git && \
-  cd saw-script && \
-  git checkout ${heapster_commit} && \
-  git submodule update --init --recursive && \
-  ln -sf cabal.GHC-8.6.5.config cabal.project.freeze && \
-  cabal build && \
-  mkdir -p /home/heapster/.local/bin && \
-  ln -sf `cabal exec which saw` /home/heapster/.local/bin/saw
+# Set executable and run tests
+RUN chmod +x rootfs/usr/local/bin/*
 
-RUN eval $(opam env) && cd /home/heapster/saw-script/deps/saw-core-coq/coq && make
+FROM haskell:8.8.4 AS build
+USER root
+RUN apt-get update && apt-get install -y wget libncurses-dev unzip
+COPY --from=solvers /solvers/rootfs /
+RUN useradd -m saw
+COPY --chown=saw:saw . /home/saw
+USER saw
+WORKDIR /home/saw
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+COPY cabal.GHC-8.8.4.config cabal.project.freeze
+RUN cabal v2-update
+RUN cabal v2-build
+RUN mkdir -p /home/saw/rootfs/usr/local/bin
+RUN cp $(cabal v2-exec which saw) /home/saw/rootfs/usr/local/bin/saw
+WORKDIR /home/saw
+USER root
+RUN chown -R root:root /home/saw/rootfs
+
+FROM debian:buster-slim
+RUN apt-get update \
+    && apt-get install -y libgmp10 libgomp1 libffi6 wget libncurses5 unzip
+COPY --from=build /home/saw/rootfs /
+COPY --from=solvers /solvers/rootfs /
+RUN useradd -m saw && chown -R saw:saw /home/saw
+USER saw
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+ENTRYPOINT ["/usr/local/bin/saw"]

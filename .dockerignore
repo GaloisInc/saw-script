@@ -4,6 +4,7 @@
 .cabal-sandbox
 cabal.sandbox.config
 .ghc.environment.x86_64-darwin-*
+s2nTests
 
 # vim swap files
 .*.swp
@@ -12,7 +13,10 @@ cabal.sandbox.config
 **/*.a
 **/*.o
 
+.dockerignore
 Dockerfile*
+*.dockerfile
+docker-compose.yml
 
 **/.git
 **/.stack-work

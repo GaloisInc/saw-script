@@ -1,0 +1,490 @@
+/*
+
+This file is intended to test the error checking for ill-formed
+`JVMSetup` blocks. All setup blocks will be tested with
+`crucible_jvm_unsafe_assume_spec`, in order to make sure that the
+errors are caught at the early phase when the setup block is
+processed, and that we do not rely on run-time errors during symbolic
+simulation to catch problems.
+
+This file is necessarily incomplete, and should be extended with new
+additional tests as we add new checks to the SAW/JVM code.
+
+Any tests listed as "KNOWN FALSE POSITIVE" represent known bugs in
+saw-script.
+
+*/
+
+enable_experimental;
+test <- java_load_class "Test";
+
+print test;
+
+let check_fails cls name spec =
+  fails (crucible_jvm_unsafe_assume_spec cls name spec);
+
+let KNOWN_FALSE_POSITIVE cls name spec =
+  do {
+    print "KNOWN FALSE POSITIVE:";
+    fails (check_fails cls name spec);
+  };
+
+print "Working spec for method 'get'";
+crucible_jvm_verify test "get" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  } z3;
+
+print "jvm_field_is with non-monomorphic type";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    let val = {{ 0 }};
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  };
+
+print "jvm_field_is with non-jvm type";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    let val = {{ 0 : Integer }};
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  };
+
+print "jvm_field_is with wrong type";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    let val = {{ 0 : [32] }};
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  };
+
+print "jvm_field_is with array reference";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_array 12 java_int;
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  };
+
+print "jvm_field_is with null reference";
+check_fails test "get"
+  do {
+    let this = jvm_null;
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  };
+
+print "jvm_field_is with non-reference";
+check_fails test "get"
+  do {
+    let this = jvm_term {{ 0:[32] }};
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  };
+
+print "jvm_field_is with non-existent field name";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "var" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  };
+
+print "jvm_field_is with previous jvm_field_is on same field";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_field_is this "val" (jvm_term {{ 0 : [64] }});
+    jvm_execute_func [this];
+    jvm_return (jvm_term val);
+  };
+
+print "Working spec for method 'lookup'";
+crucible_jvm_verify test "lookup" [] false
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let idx = {{ 2 : [32] }};
+    x <- jvm_fresh_var "x" java_long;
+    jvm_elem_is arr 2 (jvm_term x);
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  } z3;
+
+print "jvm_elem_is with non-monomorphic type";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let idx = {{ 2 : [32] }};
+    let x = {{ 0 }};
+    jvm_elem_is arr 2 (jvm_term x);
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "jvm_elem_is with non-jvm type";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let idx = {{ 2 : [32] }};
+    let x = {{ zero : ([8], [8]) }};
+    jvm_elem_is arr 2 (jvm_term x);
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "jvm_elem_is with wrong type";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let idx = {{ 2 : [32] }};
+    x <- jvm_fresh_var "x" java_int;
+    jvm_elem_is arr 2 (jvm_term x);
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "jvm_elem_is with object reference";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_object "Test";
+    let idx = {{ 2 : [32] }};
+    x <- jvm_fresh_var "x" java_long;
+    jvm_elem_is arr 2 (jvm_term x);
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "jvm_elem_is with null reference";
+check_fails test "lookup"
+  do {
+    let arr = jvm_null;
+    let idx = {{ 2 : [32] }};
+    x <- jvm_fresh_var "x" java_long;
+    jvm_elem_is arr 2 (jvm_term x);
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "jvm_elem_is with non-reference";
+check_fails test "lookup"
+  do {
+    let arr = jvm_term {{ 5 : [32] }};
+    let idx = {{ 2 : [32] }};
+    x <- jvm_fresh_var "x" java_long;
+    jvm_elem_is arr 2 (jvm_term x);
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "jvm_elem_is with index out of bounds";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let idx = {{ 12 : [32] }};
+    x <- jvm_fresh_var "x" java_long;
+    jvm_elem_is arr 12 (jvm_term x);
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "jvm_elem_is with previous jvm_array_is";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    xs <- jvm_fresh_var "xs" (java_array 32 java_long);
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    x <- jvm_fresh_var "x" java_long;
+    jvm_elem_is arr 2 (jvm_term x);
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "jvm_elem_is with previous jvm_elem_is on same index";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let idx = {{ 2 : [32] }};
+    x <- jvm_fresh_var "x" java_long;
+    jvm_elem_is arr 2 (jvm_term x);
+    jvm_elem_is arr 2 (jvm_term {{ 0 : [64] }});
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term x);
+  };
+
+print "Working spec for method 'lookup' (jvm_array_is)";
+crucible_jvm_verify test "lookup" [] false
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    xs <- jvm_fresh_var "xs" (java_array 8 java_long);
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  } z3;
+
+print "jvm_array_is with non-monomorphic type";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let xs = {{ zero }};
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "jvm_array_is with non-array type";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let xs = {{ (True, False) }};
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ 0 : [64] }});
+  };
+
+print "jvm_array_is with wrong array length";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    xs <- jvm_fresh_var "xs" (java_array 4 java_long);
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "jvm_array_is with non-jvm element type";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    let xs = {{ zero : [8]Integer }};
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "jvm_array_is with wrong array element type";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    xs <- jvm_fresh_var "xs" (java_array 8 java_int);
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "jvm_array_is with object reference";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_object "Test";
+    xs <- jvm_fresh_var "xs" (java_array 8 java_long);
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "jvm_array_is with null reference";
+check_fails test "lookup"
+  do {
+    let arr = jvm_null;
+    xs <- jvm_fresh_var "xs" (java_array 8 java_long);
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "jvm_array_is with non-reference";
+check_fails test "lookup"
+  do {
+    let arr = jvm_term {{ True }};
+    xs <- jvm_fresh_var "xs" (java_array 8 java_long);
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "jvm_array_is with previous jvm_array_is";
+check_fails test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    xs <- jvm_fresh_var "xs" (java_array 8 java_long);
+    jvm_array_is arr xs;
+    jvm_array_is arr {{ zero : [8][64] }};
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "jvm_array_is with previous jvm_elem_is";
+KNOWN_FALSE_POSITIVE test "lookup"
+  do {
+    arr <- jvm_alloc_array 8 java_long;
+    xs <- jvm_fresh_var "xs" (java_array 8 java_long);
+    jvm_elem_is arr 2 (jvm_term {{ 0 : [64] }});
+    jvm_array_is arr xs;
+    let idx = {{ 2 : [32] }};
+    jvm_execute_func [arr, jvm_term idx];
+    jvm_return (jvm_term {{ xs @ idx }});
+  };
+
+print "Working spec for method 'set'";
+crucible_jvm_verify test "set" [] false
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this, jvm_term x];
+    jvm_field_is this "val" (jvm_term x);
+  } z3;
+
+print "jvm_execute_func with non-monomorphic types";
+check_fails test "set"
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this, jvm_term {{ 0 }}];
+    jvm_field_is this "val" (jvm_term x);
+  };
+
+print "jvm_execute_func with non-jvm types";
+check_fails test "set"
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this, jvm_term {{ 0 : Integer }}];
+    jvm_field_is this "val" (jvm_term x);
+  };
+
+print "jvm_execute_func with wrong types";
+check_fails test "set"
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this, jvm_term {{ drop`{32} x }} ];
+    jvm_field_is this "val" (jvm_term x);
+  };
+
+print "jvm_execute_func with reference type when base type was expected";
+check_fails test "set"
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this, this];
+    jvm_field_is this "val" (jvm_term x);
+  };
+
+print "jvm_execute_func with base type when reference type was expected";
+check_fails test "set"
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [jvm_term x, jvm_term x];
+    jvm_field_is this "val" (jvm_term x);
+  };
+
+print "jvm_execute_func with too few arguments";
+check_fails test "set"
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this];
+    jvm_field_is this "val" (jvm_term x);
+  };
+
+print "jvm_execute_func with too many arguments";
+check_fails test "set"
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this, jvm_term x, jvm_null];
+    jvm_field_is this "val" (jvm_term x);
+  };
+
+print "jvm_return with non-monomorphic type";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term {{ 0 }});
+  };
+
+print "jvm_return with non-jvm type";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term {{ 0 : Integer }});
+  };
+
+print "jvm_return with wrong base type";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return (jvm_term {{ 0 : [32] }});
+  };
+
+print "jvm_return with reference type when base type was expected";
+check_fails test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+    jvm_return this;
+  };
+
+print "jvm_return missing when one was expected";
+KNOWN_FALSE_POSITIVE test "get"
+  do {
+    this <- jvm_alloc_object "Test";
+    val <- jvm_fresh_var "val" java_long;
+    jvm_field_is this "val" (jvm_term val);
+    jvm_execute_func [this];
+  };
+
+print "jvm_return when none was expected";
+check_fails test "set"
+  do {
+    this <- jvm_alloc_object "Test";
+    x <- jvm_fresh_var "x" java_long;
+    jvm_execute_func [this, jvm_term x];
+    jvm_field_is this "val" (jvm_term x);
+    jvm_return (jvm_term x);
+  };
+
+print "DONE!";

@@ -1,5 +1,5 @@
 Name:          saw-script
-Version:       0.4.0.99
+Version:       0.6.0.99
 Author:        Galois Inc.
 Maintainer:    atomb@galois.com
 Build-type:    Custom
@@ -19,12 +19,15 @@ custom-setup
     , filepath
     , process
 
+flag builtin-abc
+  description: Link with ABC as a static library
+  default: True
+
 library
   default-language: Haskell2010
   build-depends:
       base >= 4
     , aig
-    , ansi-wl-pprint
     , array
     , binary
     , bimap
@@ -56,20 +59,24 @@ library
     , lens
     , llvm-pretty >= 0.8
     , llvm-pretty-bc-parser >= 0.1.3.1
+    , modern-uri >= 0.3.2 && < 0.4
     , mtl >= 2.1
     , old-locale
     , old-time
+    , panic
     , parameterized-utils
     , parsec
     , pretty
+    , prettyprinter
     , pretty-show
     , process
+    , rme
     , saw-core
     , saw-core-aig
     , saw-core-coq
     , saw-core-sbv
     , saw-core-what4
-    , sbv >= 7.0
+    , sbv >= 8.6 && < 8.8
     , split
     , temporary
     , template-haskell
@@ -120,6 +127,7 @@ library
     SAWScript.Lexer
     SAWScript.LLVMBuiltins
     SAWScript.Options
+    SAWScript.Panic
     SAWScript.Parser
     SAWScript.PathVC
     SAWScript.Proof
@@ -147,6 +155,8 @@ library
     SAWScript.Crucible.LLVM.Override
     SAWScript.Crucible.LLVM.MethodSpecIR
     SAWScript.Crucible.LLVM.ResolveSetupValue
+    SAWScript.Crucible.LLVM.Skeleton
+    SAWScript.Crucible.LLVM.Skeleton.Builtins
     SAWScript.Crucible.LLVM.X86
 
     SAWScript.Crucible.JVM.Builtins
@@ -167,6 +177,8 @@ library
     SAWScript.Prover.Exporter
     SAWScript.Prover.Versions
 
+    SAWScript.VerificationSummary
+
     SAWScript.X86
     SAWScript.X86Spec
 
@@ -181,9 +193,6 @@ library
 executable saw
   default-language: Haskell2010
   hs-source-dirs: saw
-
-  GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count -pgmlc++
-  extra-libraries:      stdc++
 
   main-is: Main.hs
 
@@ -204,7 +213,6 @@ executable saw
 
   build-depends:
       base >= 4
-    , abcBridge
     , ansi-terminal
     , containers
     , cryptol
@@ -219,3 +227,12 @@ executable saw
     , saw-core
     , heapster-saw
     , cryptol-saw-core
+
+  if flag(builtin-abc)
+    cpp-options: -DUSE_BUILTIN_ABC
+    build-depends: abcBridge
+    GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count -pgmlc++
+    extra-libraries:      stdc++
+  else
+    build-depends: aig
+    GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count

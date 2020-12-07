@@ -1233,9 +1233,10 @@ the rest of the script.
 
 These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
 formats, respectively. The shared representation for SAWCore is
-described [in the `saw-script` repository](../extcore.md). The
-`offline_unint_smtlib2` command represents the folded subterms listed in
-its first argument as uninterpreted functions.
+described [in the `saw-script`
+repository](https://github.com/GaloisInc/saw-script/blob/master/doc/extcore.md).
+The `offline_unint_smtlib2` command represents the folded subterms
+listed in its first argument as uninterpreted functions.
 
 ## Finishing Proofs without External Solvers
 
@@ -2476,3 +2477,253 @@ Currently, this function can only be used for LLVM verification, though
 that will likely be generalized in the future. It can be used in either
 the pre state or the post state, to specify the value of ghost state
 either before or after the execution of the function, respectively.
+
+## An Extended Example
+
+To tie together many of the concepts in this manual, we now present a
+non-trivial verification task in its entirety. All of the code for this example
+can be found in the `examples/salsa20` directory of
+[the SAWScript repository](https://github.com/GaloisInc/saw-script).
+
+### Salsa20 Overview
+
+Salsa20 is a stream cipher developed in 2005 by Daniel J. Bernstein, built on a
+pseudorandom function utilizing add-rotate-XOR (ARX) operations on 32-bit
+words[^4]. Bernstein himself has provided several public domain
+implementations of the cipher, optimized for common machine architectures.
+For the mathematically inclined, his specification for the cipher can be
+found [here](http://cr.yp.to/snuffle/spec.pdf).
+
+The repository referenced above contains three implementations of the Salsa20
+cipher: A reference Cryptol implementation (which we take as correct in this
+example), and two C implementations, one of which is from Bernstein himself.
+For this example, we focus on the second of these C
+implementations, which more closely matches the Cryptol implementation. Full
+verification of Bernstein's implementation is available in
+`examples/salsa20/djb`, for the interested. The code for this verification task
+can be found in the files named according to the pattern
+`examples/salsa20/(s|S)alsa20.*`.
+
+### Specifications
+
+We now take on the actual verification task. This will be done in two stages:
+We first define some useful utility functions for constructing common patterns
+in the specifications for this type of program (i.e. one where the arguments to
+functions are modified in-place.) We then demonstrate how one might construct a
+specification for each of the functions in the Salsa20 implementation described
+above.
+
+#### Utility Functions
+
+We first define the function
+`alloc_init : LLVMType -> Term -> CrucibleSetup SetupValue`.
+
+`alloc_init ty v` returns a `SetupValue` consisting of a pointer to memory
+allocated and initialized to a value `v` of type `ty`. `alloc_init_readonly`
+does the same, except the memory allocated cannot be written to.
+
+~~~~
+import "Salsa20.cry";
+
+let alloc_init ty v = do {
+    p <- crucible_alloc ty;
+    crucible_points_to p (crucible_term v);
+    return p;
+};
+
+let alloc_init_readonly ty v = do {
+    p <- crucible_alloc_readonly ty;
+    crucible_points_to p (crucible_term v);
+    return p;
+};
+~~~~
+
+We now define
+`ptr_to_fresh : String -> LLVMType -> CrucibleSetup (Term, SetupValue)`.
+
+`ptr_to_fresh n ty` returns a pair `(x, p)` consisting of a fresh symbolic
+variable `x` of type `ty` and a pointer `p` to it. `n` specifies the
+name that SAW should use when printing `x`. `ptr_to_fresh_readonly` does the
+same, but returns a pointer to space that cannot be written to.
+
+~~~~
+let ptr_to_fresh n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init ty x;
+    return (x, p);
+};
+
+let ptr_to_fresh_readonly n ty = do {
+    x <- crucible_fresh_var n ty;
+    p <- alloc_init_readonly ty x;
+    return (x, p);
+};
+~~~~
+
+Finally, we define
+`oneptr_update_func : String -> LLVMType -> Term -> CrucibleSetup ()`.
+
+`oneptr_update_func n ty f` specifies the behavior of a function that takes
+a single pointer (with a printable name given by `n`) to memory containing a
+value of type `ty` and mutates the contents of that memory. The specification
+asserts that the contents of this memory after execution are equal to the value
+given by the application of `f` to the value in that memory before execution.
+
+~~~~
+let oneptr_update_func n ty f = do {
+    (x, p) <- ptr_to_fresh n ty;
+    crucible_execute_func [p];
+    crucible_points_to p (crucible_term {{ f x }});
+};
+~~~~
+
+#### The `quarterround` operation
+
+The C function we wish to verify has type
+`void s20_quarterround(uint32_t *y0, uint32_t *y1, uint32_t *y2, uint32_t *y3)`.
+
+The function's specification generates four symbolic variables and pointers to
+them in the precondition/setup stage. The pointers are passed to the function
+during symbolic execution via `crucible_execute_func`. Finally, in the
+postcondition/return stage, the expected values are computed using the trusted
+Cryptol implementation and it is asserted that the pointers do in fact point to
+these expected values.
+
+~~~~
+let quarterround_setup : CrucibleSetup () = do {
+    (y0, p0) <- ptr_to_fresh "y0" (llvm_int 32);
+    (y1, p1) <- ptr_to_fresh "y1" (llvm_int 32);
+    (y2, p2) <- ptr_to_fresh "y2" (llvm_int 32);
+    (y3, p3) <- ptr_to_fresh "y3" (llvm_int 32);
+
+    crucible_execute_func [p0, p1, p2, p3];
+
+    let zs = {{ quarterround [y0,y1,y2,y3] }}; // from Salsa20.cry
+    crucible_points_to p0 (crucible_term {{ zs@0 }});
+    crucible_points_to p1 (crucible_term {{ zs@1 }});
+    crucible_points_to p2 (crucible_term {{ zs@2 }});
+    crucible_points_to p3 (crucible_term {{ zs@3 }});
+};
+~~~~
+
+#### Simple Updating Functions
+
+The following functions can all have their specifications given by the utility
+function `oneptr_update_func` implemented above, so there isn't much to say
+about them.
+
+~~~~
+let rowround_setup =
+    oneptr_update_func "y" (llvm_array 16 (llvm_int 32)) {{ rowround }};
+
+let columnround_setup =
+    oneptr_update_func "x" (llvm_array 16 (llvm_int 32)) {{ columnround }};
+
+let doubleround_setup =
+    oneptr_update_func "x" (llvm_array 16 (llvm_int 32)) {{ doubleround }};
+
+let salsa20_setup =
+    oneptr_update_func "seq" (llvm_array 64 (llvm_int 8)) {{ Salsa20 }};
+~~~~
+
+#### 32-Bit Key Expansion
+
+The next function of substantial behavior that we wish to verify has the
+following prototype:
+
+~~~~c
+void s20_expand32( uint8_t *k
+                 , uint8_t n[static 16]
+                 , uint8_t keystream[static 64]
+                 )
+~~~~
+
+This function's specification follows a similar pattern to that of
+`s20_quarterround`, though for extra assurance we can make sure that the
+function does not write to the memory pointed to by `k` or `n` using the
+utility `ptr_to_fresh_readonly`, as this function should only modify
+`keystream`. Besides this, we see the call to the trusted Cryptol
+implementation specialized to `a=2`, which does 32-bit key expansion (since the
+Cryptol implementation can also specialize to `a=1` for 16-bit keys). This
+specification can easily be changed to work with 16-bit keys.
+
+~~~~
+let salsa20_expansion_32 = do {
+    (k, pk) <- ptr_to_fresh_readonly "k" (llvm_array 32 (llvm_int 8));
+    (n, pn) <- ptr_to_fresh_readonly "n" (llvm_array 16 (llvm_int 8));
+
+    pks <- crucible_alloc (llvm_array 64 (llvm_int 8));
+
+    crucible_execute_fun [pk, pn, pks];
+
+    let rks = {{ Salsa20_expansion`{a=2}(k, n) }};
+    crucible_points_to pks (crucible_term rks);
+};
+~~~~
+
+#### 32-bit Key Encryption
+
+Finally, we write a specification for the encryption function itself, which has
+type
+
+~~~~c
+enum s20_status_t s20_crypt32( uint8_t *key
+                             , uint8_t nonce[static 8]
+                             , uint32_t si
+                             , uint8_t *buf
+                             , uint32_t buflen
+                             )
+~~~~
+
+As before, we can ensure this function does not modify the memory pointed to by
+`key` or `nonce`. We take `si`, the stream index, to be 0. The specification is
+parameterized on a number `n`, which corresponds to `buflen`. Finally, to deal
+with the fact that this function returns a status code, we simply specify that
+we expect a success (status code 0) as the return value in the postcondition
+stage of the specification.
+
+~~~~
+let s20_encrypt32 n = do {
+    (key, pkey) <- ptr_to_fresh_readonly "key" (llvm_array 32 (llvm_int 8));
+    (v, pv) <- ptr_to_fresh_readonly "nonce" (llvm_array 8 (llvm_int 8));
+    (m, pm) <- ptr_to_fresh "buf" (llvm_array n (llvm_int 8));
+
+    crucible_execute_func [ pkey
+                          , pv
+                          , crucible_term {{ 0 : [32] }}
+                          , pm
+                          , crucible_term {{ `n : [32] }}
+                          ];
+
+    crucible_points_to pm (crucible_term {{ Salsa20_encrypt (key, v, m) }});
+    crucible_return (crucible_term {{ 0 : [32] }});
+};
+~~~~
+
+### Verifying Everything
+
+Finally, we can verify all of the functions. Notice the use of compositional
+verification and that path satisfiability checking is enabled for those
+functions with loops not bounded by explicit constants. Notice that we prove
+the top-level function for several sizes; this is due to the limitation that
+SAW can only operate on finite programs (while Salsa20 can operate on any input
+size.)
+
+~~~~
+let main : TopLevel () = do {
+    m      <- llvm_load_module "salsa20.bc";
+    qr     <- crucible_llvm_verify m "s20_quarterround" []      false quarterround_setup   abc;
+    rr     <- crucible_llvm_verify m "s20_rowround"     [qr]    false rowround_setup       abc;
+    cr     <- crucible_llvm_verify m "s20_columnround"  [qr]    false columnround_setup    abc;
+    dr     <- crucible_llvm_verify m "s20_doubleround"  [cr,rr] false doubleround_setup    abc;
+    s20    <- crucible_llvm_verify m "s20_hash"         [dr]    false salsa20_setup        abc;
+    s20e32 <- crucible_llvm_verify m "s20_expand32"     [s20]   true  salsa20_expansion_32 abc;
+    s20encrypt_63 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 63) abc;
+    s20encrypt_64 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 64) abc;
+    s20encrypt_65 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 65) abc;
+
+    print "Done!";
+};
+~~~~
+
+[^4]: https://en.wikipedia.org/wiki/Salsa20

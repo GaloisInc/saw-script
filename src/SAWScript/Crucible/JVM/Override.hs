@@ -38,9 +38,11 @@ module SAWScript.Crucible.JVM.Override
   , matchArg
   , methodSpecHandler
   , valueToSC
-  , termId
   , injectJVMVal
   , decodeJVMVal
+
+  , doEntireArrayStore
+  , destVecTypedTerm
   ) where
 
 import           Control.Lens.At
@@ -57,14 +59,13 @@ import           Data.Foldable (for_, traverse_)
 import           Data.List (tails)
 import           Data.Map (Map)
 import qualified Data.Map as Map
-import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Void (absurd)
-import qualified Text.PrettyPrint.ANSI.Leijen as PPL
+import qualified Prettyprinter as PP
 
 -- cryptol
-import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
-import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
+import qualified Cryptol.TypeCheck.AST as Cryptol
+import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType, evalValType)
 
 -- what4
 import qualified What4.BaseTypes as W4
@@ -93,8 +94,10 @@ import           Data.Parameterized.Some (Some(Some))
 import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
-import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
+
+-- cryptol-saw-core
+import qualified Verifier.SAW.Cryptol as Cryptol
 
 import           SAWScript.Crucible.Common (Sym)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
@@ -106,6 +109,7 @@ import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.JVM.MethodSpecIR
 import           SAWScript.Crucible.JVM.ResolveSetupValue
 import           SAWScript.Options
+import           SAWScript.Panic
 import           SAWScript.Utils (handleException)
 
 -- jvm-parser
@@ -119,10 +123,10 @@ type SetupCondition = MS.SetupCondition CJ.JVM
 type instance Pointer CJ.JVM = JVMRefVal
 
 -- TODO: Improve?
-ppJVMVal :: JVMVal -> PPL.Doc
-ppJVMVal = PPL.text . show
+ppJVMVal :: JVMVal -> PP.Doc ann
+ppJVMVal = PP.viaShow
 
-instance PPL.Pretty JVMVal where
+instance PP.Pretty JVMVal where
   pretty = ppJVMVal
 
 
@@ -190,7 +194,7 @@ methodSpecHandler opts sc cc top_loc css h = do
     do g0 <- Crucible.readGlobals
        forM css $ \cs -> liftIO $
          let initialFree =
-               Set.fromList (cs ^.. MS.csPreState. MS.csFreshVars . each . to ttTerm . to termId)
+               Set.fromList (cs ^.. MS.csPreState. MS.csFreshVars . each . to tecExt . to ecVarIndex)
           in runOverrideMatcher sym g0 Map.empty Map.empty initialFree (view MS.csLoc cs)
                       (do methodSpecHandler_prestate opts sc cc args cs
                           return cs)
@@ -202,8 +206,10 @@ methodSpecHandler opts sc cc top_loc css h = do
   branches <- case partitionEithers prestates of
                 (e, []) ->
                   fail $ show $
-                    PPL.text "All overrides failed during structural matching:" PPL.<$$>
-                    PPL.vcat (map (\x -> PPL.text "*" PPL.<> PPL.indent 2 (ppOverrideFailure x)) e)
+                  PP.vcat
+                  [ "All overrides failed during structural matching:"
+                  , PP.vcat (map (\x -> "*" <> PP.indent 2 (ppOverrideFailure x)) e)
+                  ]
                 (_, ss) -> liftIO $
                   forM ss $ \(cs,st) ->
                     do precond <- W4.andAllOf sym (folded.labeledPred) (st^.osAsserts)
@@ -341,20 +347,12 @@ enforceCompleteSubstitution loc ss =
 
      let -- predicate matches terms that are not covered by the computed
          -- term substitution
-         isMissing tt = termId (ttTerm tt) `Map.notMember` sub
+         isMissing tt = ecVarIndex (tecExt tt) `Map.notMember` sub
 
          -- list of all terms not covered by substitution
          missing = filter isMissing (view MS.csFreshVars ss)
 
      unless (null missing) (failure loc (AmbiguousVars missing))
-
-
--- | Given a 'Term' that must be an external constant, extract the 'VarIndex'.
-termId :: Term -> VarIndex
-termId t =
-  case asExtCns t of
-    Just ec -> ecVarIndex ec
-    _       -> error "termId expected a variable"
 
 
 -- execute a pre/post condition
@@ -382,11 +380,10 @@ refreshTerms sc ss =
   do extension <- Map.fromList <$> traverse freshenTerm (view MS.csFreshVars ss)
      OM (termSub %= Map.union extension)
   where
-    freshenTerm tt =
-      case asExtCns (ttTerm tt) of
-        Just ec -> do new <- liftIO (scFreshGlobal sc (ecName ec) (ecType ec))
-                      return (termId (ttTerm tt), new)
-        Nothing -> error "refreshTerms: not a variable"
+    freshenTerm (TypedExtCns _cty ec) =
+      do new <- liftIO $ do i <- scFreshGlobalVar sc
+                            scExtCns sc (EC i (ecName ec) (ecType ec))
+         return (ecVarIndex ec, new)
 
 ------------------------------------------------------------------------
 
@@ -453,27 +450,14 @@ matchPointsTos opts sc cc spec prepost = go False []
 
     -- determine if a precondition is ready to be checked
     checkPointsTo :: JVMPointsTo -> OverrideMatcher CJ.JVM w Bool
-    checkPointsTo (JVMPointsToField _loc p _ _) = checkSetupValue p
-    checkPointsTo (JVMPointsToElem _loc p _ _) = checkSetupValue p
+    checkPointsTo (JVMPointsToField _loc p _ _) = checkAllocIndex p
+    checkPointsTo (JVMPointsToElem _loc p _ _) = checkAllocIndex p
+    checkPointsTo (JVMPointsToArray _loc p _) = checkAllocIndex p
 
-    checkSetupValue :: SetupValue -> OverrideMatcher CJ.JVM w Bool
-    checkSetupValue v =
+    checkAllocIndex :: AllocIndex -> OverrideMatcher CJ.JVM w Bool
+    checkAllocIndex i =
       do m <- OM (use setupValueSub)
-         return (all (`Map.member` m) (setupVars v))
-
-    -- Compute the set of variable identifiers in a 'SetupValue'
-    setupVars :: SetupValue -> Set AllocIndex
-    setupVars v =
-      case v of
-        MS.SetupVar i                     -> Set.singleton i
-        MS.SetupTerm _                    -> Set.empty
-        MS.SetupNull ()                   -> Set.empty
-        MS.SetupGlobal () _               -> Set.empty
-        MS.SetupStruct empty _ _          -> absurd empty
-        MS.SetupArray empty _             -> absurd empty
-        MS.SetupElem empty _ _            -> absurd empty
-        MS.SetupField empty _ _           -> absurd empty
-        MS.SetupGlobalInitializer empty _ -> absurd empty
+         return (Map.member i m)
 
 
 ------------------------------------------------------------------------
@@ -582,13 +566,7 @@ matchArg opts sc cc cs prepost actual@(RVal ref) expectedTy setupval =
          p   <- liftIO (CJ.refIsNull sym ref)
          addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("null-equality " ++ stateCond prepost) ""))
 
-    MS.SetupGlobal () name ->
-      do let mem = () -- FIXME cc^.ccLLVMEmptyMem
-         sym  <- Ov.getSymInterface
-         ref' <- liftIO $ doResolveGlobal sym mem name
-
-         p  <- liftIO (CJ.refIsEqual sym ref ref')
-         addAssert p (Crucible.SimError (cs ^. MS.csLoc) (Crucible.AssertFailureSimError ("global-equality " ++ stateCond prepost) ""))
+    MS.SetupGlobal empty _ -> absurd empty
 
     _ -> failure (cs ^. MS.csLoc) =<<
            mkStructuralMismatch opts cc sc cs actual setupval expectedTy
@@ -682,22 +660,53 @@ learnPointsTo opts sc cc spec prepost pt = do
   globals <- OM (use overrideGlobals)
   case pt of
 
-    JVMPointsToField loc ptr fname val ->
+    JVMPointsToField loc ptr fid val ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
-         rval <- asRVal loc ptr'
-         dyn <- liftIO $ CJ.doFieldLoad sym globals rval fname
-         v <- liftIO $ projectJVMVal sym ty ("field load " ++ fname ++ ", " ++ show loc) dyn
+         rval <- resolveAllocIndexJVM ptr
+         -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
+         -- Then we won't have to match the definition of 'fieldIdText' here.
+         let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
+         dyn <- liftIO $ CJ.doFieldLoad sym globals rval key
+         v <- liftIO $ projectJVMVal sym ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
     JVMPointsToElem loc ptr idx val ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
-         rval <- asRVal loc ptr'
+         rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
          v <- liftIO $ projectJVMVal sym ty ("array load " ++ show idx ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
+    JVMPointsToArray loc ptr tt ->
+      do (len, ety) <-
+           case Cryptol.isMono (ttSchema tt) of
+             Nothing -> fail "jvm_array_is: invalid polymorphic value"
+             Just cty ->
+               case Cryptol.tIsSeq cty of
+                 Nothing -> fail "jvm_array_is: expected array type"
+                 Just (lty, ety) ->
+                   case Cryptol.tIsNum lty of
+                     Nothing -> fail "jvm_array_is: expected finite-sized array"
+                     Just len -> pure (len, ety)
+         jty <-
+           case toJVMType (Cryptol.evalValType mempty ety) of
+             Nothing -> fail "jvm_array_is: invalid element type"
+             Just jty -> pure jty
+         rval <- resolveAllocIndexJVM ptr
+         let tval = Cryptol.evalValType mempty ety
+         let
+           load idx =
+             do dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
+                let msg = "array load " ++ show idx ++ ", " ++ show loc
+                jval <- liftIO $ projectJVMVal sym jty msg dyn
+                let failMsg = StructuralMismatch (ppJVMVal jval) mempty (Just jty) jty -- REVISIT
+                valueToSC sym loc failMsg tval jval
+
+         when (len > toInteger (maxBound :: Int)) $ fail "jvm_array_is: array length too long"
+         ety_tm <- liftIO $ Cryptol.importType sc Cryptol.emptyEnv ety
+         ts <- traverse load [0 .. fromInteger len - 1]
+         realTerm <- liftIO $ scVector sc ety_tm ts
+         matchTerm sc cc loc prepost realTerm (ttTerm tt)
 
 ------------------------------------------------------------------------
 
@@ -797,21 +806,64 @@ executePointsTo opts sc cc spec pt = do
   globals <- OM (use overrideGlobals)
   case pt of
 
-    JVMPointsToField loc ptr fname val ->
+    JVMPointsToField _loc ptr fid val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
-         rval <- asRVal loc ptr'
+         rval <- resolveAllocIndexJVM ptr
          let dyn = injectJVMVal sym val'
-         globals' <- liftIO $ CJ.doFieldStore sym globals rval fname dyn
+         -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
+         -- Then we won't have to match the definition of 'fieldIdText' here.
+         let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
+         globals' <- liftIO $ CJ.doFieldStore sym globals rval key dyn
          OM (overrideGlobals .= globals')
 
-    JVMPointsToElem loc ptr idx val ->
+    JVMPointsToElem _loc ptr idx val ->
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
-         (_, ptr') <- resolveSetupValueJVM opts cc sc spec ptr
-         rval <- asRVal loc ptr'
+         rval <- resolveAllocIndexJVM ptr
          let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
+
+    JVMPointsToArray _loc ptr tt ->
+      do (_ety, tts) <-
+           liftIO (destVecTypedTerm sc tt) >>=
+           \case
+             Nothing -> fail "jvm_array_is: not a monomorphic sequence type"
+             Just x -> pure x
+         rval <- resolveAllocIndexJVM ptr
+         jvs <- traverse (resolveSetupValueJVM opts cc sc spec . MS.SetupTerm) tts
+         let vs = map (injectJVMVal sym . snd) jvs
+         globals' <- liftIO $ doEntireArrayStore sym globals rval vs
+         OM (overrideGlobals .= globals')
+
+doEntireArrayStore ::
+  Crucible.IsSymInterface sym =>
+  sym ->
+  Crucible.SymGlobalState sym ->
+  Crucible.RegValue sym CJ.JVMRefType ->
+  [Crucible.RegValue sym CJ.JVMValueType] ->
+  IO (Crucible.SymGlobalState sym)
+doEntireArrayStore sym glob ref vs = foldM store glob (zip [0..] vs)
+  where store g (i, v) = CJ.doArrayStore sym g ref i v
+
+-- | Given a 'TypedTerm' with a vector type, return the element type
+-- along with a list of its projected components. Return 'Nothing' if
+-- the 'TypedTerm' does not have a vector type.
+destVecTypedTerm :: SharedContext -> TypedTerm -> IO (Maybe (Cryptol.Type, [TypedTerm]))
+destVecTypedTerm sc (TypedTerm schema t) =
+  case asVec of
+    Nothing -> pure Nothing
+    Just (len, ety) ->
+      do len_tm <- scNat sc (fromInteger len)
+         ty_tm <- Cryptol.importType sc Cryptol.emptyEnv ety
+         idxs <- traverse (scNat sc) (map fromInteger [0 .. len-1])
+         ts <- traverse (scAt sc len_tm ty_tm t) idxs
+         pure $ Just (ety, map (TypedTerm (Cryptol.tMono ety)) ts)
+  where
+    asVec =
+      do ty <- Cryptol.isMono schema
+         (n, a) <- Cryptol.tIsSeq ty
+         n' <- Cryptol.tIsNum n
+         Just (n', a)
 
 ------------------------------------------------------------------------
 
@@ -859,7 +911,7 @@ instantiateSetupValue sc s v =
     MS.SetupVar _                     -> return v
     MS.SetupTerm tt                   -> MS.SetupTerm <$> doTerm tt
     MS.SetupNull ()                   -> return v
-    MS.SetupGlobal () _               -> return v
+    MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct empty _ _          -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
@@ -869,6 +921,14 @@ instantiateSetupValue sc s v =
     doTerm (TypedTerm schema t) = TypedTerm schema <$> scInstantiateExt sc s t
 
 ------------------------------------------------------------------------
+
+resolveAllocIndexJVM :: AllocIndex -> OverrideMatcher CJ.JVM w JVMRefVal
+resolveAllocIndexJVM i =
+  do m <- OM (use setupValueSub)
+     case Map.lookup i m of
+       Just rval -> pure rval
+       Nothing ->
+         panic "JVMSetup" ["resolveAllocIndexJVM", "Unresolved prestate variable:" ++ show i]
 
 resolveSetupValueJVM ::
   Options              ->
@@ -942,13 +1002,3 @@ decodeJVMVal ty v =
       case testEquality repr repr' of
         Just Refl -> Just (k rv)
         Nothing   -> Nothing
-
-------------------------------------------------------------------------
-
-asRVal :: W4.ProgramLoc -> JVMVal -> OverrideMatcher CJ.JVM w JVMRefVal
-asRVal _ (RVal ptr) = return ptr
-asRVal loc _ = failure loc BadPointerCast
-
-doResolveGlobal :: Sym -> () -> String -> IO JVMRefVal
-doResolveGlobal _sym _mem _name = fail "doResolveGlobal: FIXME"
--- FIXME: replace () with whatever type we need to look up global/static references

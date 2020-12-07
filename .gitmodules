@@ -52,3 +52,6 @@
 [submodule "deps/heapster-saw"]
 	path = deps/heapster-saw
 	url = https://github.com/GaloisInc/heapster-saw.git
+[submodule "deps/argo"]
+	path = deps/argo
+	url = https://github.com/galoisinc/argo
