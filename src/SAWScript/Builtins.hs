@@ -205,12 +205,12 @@ readSBV path unintlst =
 -- arguments, in the style of 'cecPrim' below. This would require
 -- support for latches in the 'AIGNetwork' SAWScript type.
 dsecPrint :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
-dsecPrint sc t1 t2 = SV.getProxy >>= \(SV.AIGProxy proxy) -> liftIO $ do
+dsecPrint sc t1 t2 = SV.getProxy >>= \(SV.AIGProxy proxy) -> do
   withSystemTempFile ".aig" $ \path1 _handle1 -> do
   withSystemTempFile ".aig" $ \path2 _handle2 -> do
   Prover.writeSAIGInferLatches proxy sc path1 t1
   Prover.writeSAIGInferLatches proxy sc path2 t2
-  callCommand (abcDsec path1 path2)
+  io $ callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
@@ -703,19 +703,19 @@ writeAIGPrim :: FilePath -> Term -> TopLevel ()
 writeAIGPrim f t = do
   SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
-  liftIO $ Prover.writeAIG proxy sc f t
+  Prover.writeAIG proxy sc f t
 
 writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
 writeSAIGPrim f t = do
   SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
-  liftIO $ Prover.writeSAIGInferLatches proxy sc f t
+  Prover.writeSAIGInferLatches proxy sc f t
 
 writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
 writeSAIGComputedPrim f t n = do
   SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
-  liftIO $ Prover.writeSAIG proxy sc f t n
+  Prover.writeSAIG proxy sc f t n
 
 -- | Bit-blast a proposition check its validity using the RME library.
 proveRME :: ProofScript SV.SatResult
@@ -868,15 +868,14 @@ offline_w4_unint_yices unints path =
      wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
 
 proveWithExporter ::
-  (SharedContext -> FilePath -> Prop -> IO ()) ->
+  (SharedContext -> FilePath -> Prop -> TopLevel ()) ->
   String ->
   String ->
   ProofScript SV.SatResult
 proveWithExporter exporter path ext =
   withFirstGoal $ \g ->
   do let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-     sc <- SV.getSharedContext
-     stats <- io $ Prover.proveWithExporter exporter file sc (goalProp g)
+     stats <- Prover.proveWithExporter exporter file (goalProp g)
      return (SV.Unsat stats, stats, Nothing)
 
 offline_aig :: FilePath -> ProofScript SV.SatResult
@@ -938,9 +937,8 @@ w4_abc_verilog = do
        p <- case asEqTrue concl of
               Just p -> return p
               Nothing -> fail "adaptExporter: expected EqTrue"
-       p' <- io $ scNot sc p
-       t <- io $ scLambdaList sc goalArgs p'
-       io $ Prover.writeVerilog sc tmp t
+       t <- io (scLambdaList sc goalArgs =<< scNot sc p)
+       Prover.writeVerilog sc tmp t
 
        -- Run ABC and remove temporaries
        let execName = "abc"

@@ -38,7 +38,6 @@ import Data.Foldable(toList)
 
 import Control.Monad.Except (runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
-import qualified Control.Monad.Fail as Fail
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
@@ -51,7 +50,6 @@ import Prettyprinter (vcat)
 import Cryptol.Utils.PP(pretty)
 
 import Lang.Crucible.Backend.SAWCore (newSAWCoreBackend, sawBackendSharedContext)
-
 import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
@@ -79,34 +77,34 @@ import SAWScript.Value
 
 import qualified What4.Expr.Builder as W4
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
-import What4.Protocol.VerilogWriter (exprVerilog, eqVerilog)
+import What4.Protocol.VerilogWriter (exprVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
 
 proveWithExporter ::
-  (SharedContext -> FilePath -> Prop -> IO ()) ->
+  (SharedContext -> FilePath -> Prop -> TopLevel ()) ->
   String ->
-  SharedContext ->
   Prop ->
-  IO SolverStats
-proveWithExporter exporter path sc goal =
-  do exporter sc path goal
+  TopLevel SolverStats
+proveWithExporter exporter path goal =
+  do sc <- getSharedContext
+     exporter sc path goal
      let stats = solverStats ("offline: "++ path) (scSharedSize (unProp goal))
      return stats
 
 -- | Converts an old-style exporter (which expects to take a predicate
 -- as an argument) into a new-style one (which takes a pi-type proposition).
 adaptExporter ::
-  (SharedContext -> FilePath -> Term -> IO ()) ->
-  (SharedContext -> FilePath -> Prop -> IO ())
+  (SharedContext -> FilePath -> Term -> TopLevel ()) ->
+  (SharedContext -> FilePath -> Prop -> TopLevel ())
 adaptExporter exporter sc path (Prop goal) =
   do let (args, concl) = asPiList goal
      p <-
        case asEqTrue concl of
          Just p -> return p
-         Nothing -> fail "adaptExporter: expected EqTrue"
-     p' <- scNot sc p -- is this right?
-     t <- scLambdaList sc args p'
+         Nothing -> throwTopLevel "adaptExporter: expected EqTrue"
+     p' <- io $ scNot sc p -- is this right?
+     t <- io $ scLambdaList sc args p'
      exporter sc path t
 
 
@@ -114,9 +112,9 @@ adaptExporter exporter sc path (Prop goal) =
 
 -- | Write a @Term@ representing a theorem or an arbitrary
 -- function to an AIG file.
-writeAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> IO ()
+writeAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> TopLevel ()
 writeAIG proxy sc f t = do
-  liftIO $ do
+  io $ do
     aig <- bitblastPrim proxy sc t
     AIG.writeAiger f aig
 
@@ -124,7 +122,7 @@ writeAIG proxy sc f t = do
 -- specifying the number of input and output bits to be interpreted as
 -- latches. Used to implement more friendly SAIG writers
 -- @writeSAIGInferLatches@ and @writeSAIGComputedLatches@.
-writeSAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> Int -> IO ()
+writeSAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> Int -> TopLevel ()
 writeSAIG proxy sc file tt numLatches = do
   liftIO $ do
     aig <- bitblastPrim proxy sc tt
@@ -132,24 +130,24 @@ writeSAIG proxy sc file tt numLatches = do
 
 -- | Given a term a type '(i, s) -> (o, s)', call @writeSAIG@ on term
 -- with latch bits set to '|s|', the width of 's'.
-writeSAIGInferLatches :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> TypedTerm -> IO ()
+writeSAIGInferLatches :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> TypedTerm -> TopLevel ()
 writeSAIGInferLatches proxy sc file tt = do
-  ty <- scTypeOf sc (ttTerm tt)
+  ty <- io $ scTypeOf sc (ttTerm tt)
   s <- getStateType ty
   let numLatches = sizeFiniteType s
   writeSAIG proxy sc file (ttTerm tt) numLatches
   where
-    die :: Fail.MonadFail m => String -> m a
-    die why = fail $
+    die :: String -> TopLevel a
+    die why = throwTopLevel $
       "writeSAIGInferLatches: " ++ why ++ ":\n" ++
       "term must have type of the form '(i, s) -> (o, s)',\n" ++
       "where 'i', 's', and 'o' are all fixed-width types,\n" ++
       "but type of term is:\n" ++ (pretty . ttSchema $ tt)
 
     -- Decompose type as '(i, s) -> (o, s)' and return 's'.
-    getStateType :: Term -> IO FiniteType
+    getStateType :: Term -> TopLevel FiniteType
     getStateType ty = do
-      ty' <- scWhnf sc ty
+      ty' <- io $ scWhnf sc ty
       case ty' of
         (asPi -> Just (_nm, tp, body)) ->
           -- NB: if we get unexpected "state types are different"
@@ -171,61 +169,61 @@ writeSAIGInferLatches proxy sc file tt = do
 -- specifying the number of input and output bits to be interpreted as
 -- latches.
 writeAIGComputedLatches ::
-  (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> Int -> IO ()
+  (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> Int -> TopLevel ()
 writeAIGComputedLatches proxy sc file term numLatches =
   writeSAIG proxy sc file term numLatches
 
-writeCNF :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> IO ()
-writeCNF proxy sc f t = do
+writeCNF :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> TopLevel ()
+writeCNF proxy sc f t = io $ do
   AIG.Network be ls <- bitblastPrim proxy sc t
   case ls of
     [l] -> do
       _ <- AIG.writeCNF be l f
       return ()
-    _ -> fail "writeCNF: non-boolean term"
+    _ -> throwTopLevel "writeCNF: non-boolean term"
 
 write_cnf :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
 write_cnf sc f (TypedTerm schema t) = do
   liftIO $ checkBooleanSchema schema
   AIGProxy proxy <- getProxy
-  io $ writeCNF proxy sc f t
+  writeCNF proxy sc f t
 
 -- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
 -- assumed to have universally quantified variables, it will be negated.
-writeSMTLib2 :: SharedContext -> FilePath -> Prop -> IO ()
-writeSMTLib2 sc f p = writeUnintSMTLib2 mempty sc f p
+writeSMTLib2 :: SharedContext -> FilePath -> Prop -> TopLevel ()
+writeSMTLib2 sc f t = writeUnintSMTLib2 mempty sc f t
 
 -- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
 -- assumed to have universally quantified variables, it will be negated.
 -- This version uses What4 instead of SBV.
-writeSMTLib2What4 :: SharedContext -> FilePath -> Prop -> IO ()
-writeSMTLib2What4 sc f p = writeUnintSMTLib2What4 mempty sc f p
+writeSMTLib2What4 :: SharedContext -> FilePath -> Prop -> TopLevel ()
+writeSMTLib2What4 sc f t = writeUnintSMTLib2What4 mempty sc f t
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
 -- is to pass the term through as directly as possible, so we interpret
 -- it as an existential.
-write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> IO ()
+write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
 write_smtlib2 sc f (TypedTerm schema t) = do
-  checkBooleanSchema schema
-  p <- predicateToProp sc Existential [] t
+  io $ checkBooleanSchema schema
+  p <- io $ predicateToProp sc Existential [] t
   writeSMTLib2 sc f p
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
 -- is to pass the term through as directly as possible, so we interpret
 -- it as an existential. This version uses What4 instead of SBV.
-write_smtlib2_w4 :: SharedContext -> FilePath -> TypedTerm -> IO ()
+write_smtlib2_w4 :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
 write_smtlib2_w4 sc f (TypedTerm schema t) = do
-  checkBooleanSchema schema
-  p <- predicateToProp sc Existential [] t
+  io $ checkBooleanSchema schema
+  p <- io $ predicateToProp sc Existential [] t
   writeUnintSMTLib2What4 mempty sc f p
 
 -- | Write a proposition to an SMT-Lib version 2 file, treating some
 -- constants as uninterpreted. Because @Prop@ is assumed to have
 -- universally quantified variables, it will be negated.
-writeUnintSMTLib2 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> IO ()
-writeUnintSMTLib2 unintSet sc f p =
+writeUnintSMTLib2 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> TopLevel ()
+writeUnintSMTLib2 unintSet sc f p = io $
   do (_, _, l) <- prepNegatedSBV sc unintSet p
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
@@ -235,43 +233,38 @@ writeUnintSMTLib2 unintSet sc f p =
 -- constants as uninterpreted. Because @Prop@ is assumed to have
 -- universally quantified variables, it will be negated. This version
 -- uses What4 instead of SBV.
-writeUnintSMTLib2What4 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> IO ()
-writeUnintSMTLib2What4 unints sc f (Prop term) =
+writeUnintSMTLib2What4 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> TopLevel ()
+writeUnintSMTLib2What4 unints sc f (Prop term) = io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
      (_, _, (_,lit0)) <- prepWhat4 sym sc unints term
      withFile f WriteMode $ \h ->
        writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit0]
 
-writeCore :: FilePath -> Term -> IO ()
-writeCore path t = writeFile path (scWriteExternal t)
+writeCore :: FilePath -> Term -> TopLevel ()
+writeCore path t = io $ writeFile path (scWriteExternal t)
 
-write_verilog :: FilePath -> Term -> TopLevel ()
-write_verilog path t = do
-  sc <- getSharedContext
-  liftIO $ writeVerilog sc path t
+write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
+write_verilog sc path t = writeVerilog sc path t
 
-writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
+writeVerilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 writeVerilog sc path t = do
-  sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
-  (_, (_, bval)) <- W4Sim.w4EvalAny sym sc mempty mempty t
-  edoc <- runExceptT $
+  sym <- io $ newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
+  (_, (_, bval)) <- io $ W4Sim.w4EvalAny sym sc mempty mempty t
+  edoc <- io $ runExceptT $
     case bval of
       Sim.VBool b -> exprVerilog sym b "f"
       Sim.VWord (W4Sim.DBV w) -> exprVerilog sym w "f"
-      --Sim.VPair u v -> undefined
-      --Sim.VDataType "Prelude.Eq" [Sim.VBoolType, Sim.VBool x, Sim.VBool y] -> eqVerilog sym x y "f"
       _ -> throwError $ "write_verilog: unsupported result type: " ++ show bval
   case edoc of
-    Left err -> do
-      fail $ "Failed to translate to Verilog: " ++ err
-    Right doc -> do
+    Left err -> throwTopLevel $ "Failed to translate to Verilog: " ++ err
+    Right doc -> io $ do
       h <- openFile path WriteMode
       hPutDoc h doc
       hPutStrLn h ""
       hClose h
 
-writeCoreProp :: FilePath -> Prop -> IO ()
-writeCoreProp path (Prop t) = writeFile path (scWriteExternal t)
+writeCoreProp :: FilePath -> Prop -> TopLevel ()
+writeCoreProp path (Prop t) = io $ writeFile path (scWriteExternal t)
 
 coqTranslationConfiguration ::
   [(String, String)] ->
@@ -290,12 +283,12 @@ writeCoqTerm ::
   [String] ->
   FilePath ->
   Term ->
-  IO ()
+  TopLevel ()
 writeCoqTerm name notations skips path t = do
   let configuration = coqTranslationConfiguration notations skips
   case Coq.translateTermAsDeclImports configuration name t of
-    Left err -> putStrLn $ "Error translating: " ++ show err
-    Right doc -> case path of
+    Left err -> throwTopLevel $ "Error translating: " ++ show err
+    Right doc -> io $ case path of
       "" -> print doc
       _ -> writeFile path (show doc)
 
@@ -305,7 +298,7 @@ writeCoqProp ::
   [String] ->
   FilePath ->
   Prop ->
-  IO ()
+  TopLevel ()
 writeCoqProp name notations skips path (Prop t) =
   writeCoqTerm name notations skips path t
 
@@ -314,8 +307,8 @@ writeCoqCryptolModule ::
   FilePath ->
   [(String, String)] ->
   [String] ->
-  IO ()
-writeCoqCryptolModule inputFile outputFile notations skips = do
+  TopLevel ()
+writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc

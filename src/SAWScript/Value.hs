@@ -37,7 +37,7 @@ import Control.Applicative (Applicative)
 #endif
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
-import Control.Monad.Catch (MonadThrow(..))
+import Control.Monad.Catch (MonadThrow(..), MonadMask(..), MonadCatch(..))
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
@@ -415,7 +415,7 @@ data TopLevelRW =
 
 newtype TopLevel a =
   TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
-  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow)
+  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
 deriving instance MonadReader TopLevelRO TopLevel
 deriving instance MonadState TopLevelRW TopLevel
