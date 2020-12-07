@@ -387,13 +387,13 @@ inline). Because Java methods can operate on references, as well, which
 do not exist in Cryptol, Cryptol expressions must be translated to JVM
 values with `jvm_term`.
 
-To make use of these setup blocks, the `crucible_jvm_verify` command
-analyzes the method corresponding to the class and method name provided,
-using the setup block passed in as a parameter. It then returns an
-object that describes the proof it has just performed. This object can
-be passed into later instances of `java_verify` to indicate that calls
-to the analyzed method do not need to be followed, and the previous
-proof about that method can be used instead of re-analyzing it.
+To make use of these setup blocks, the `jvm_verify` command analyzes
+the method corresponding to the class and method name provided, using
+the setup block passed in as a parameter. It then returns an object
+that describes the proof it has just performed. This object can be
+passed into later instances of `jvm_verify` to indicate that calls to
+the analyzed method do not need to be followed, and the previous proof
+about that method can be used instead of re-analyzing it.
 
 Interactive Interpreter
 =======================
