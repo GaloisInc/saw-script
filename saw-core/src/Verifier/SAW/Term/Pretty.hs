@@ -611,20 +611,23 @@ ppTerm opts trm = runPPM opts $ ppTermWithMemoTable PrecNone True trm
 ppTermDepth :: Int -> Term -> SawDoc
 ppTermDepth depth t = ppTerm (depthPPOpts depth) t
 
-renderSawDoc :: (SawStyle -> AnsiStyle) -> SawDoc -> String
-renderSawDoc style doc = Text.Lazy.unpack (renderLazy (reAnnotateS style (layoutPretty opts doc)))
-  where opts = LayoutOptions (AvailablePerLine 80 0.8)
+renderSawDoc :: PPOpts -> SawDoc -> String
+renderSawDoc ppOpts doc =
+  Text.Lazy.unpack (renderLazy (style (layoutPretty layoutOpts doc)))
+  where
+    layoutOpts = LayoutOptions (AvailablePerLine 80 0.8)
+    style = if ppColor ppOpts then reAnnotateS colorStyle else unAnnotateS
 
 -- | Pretty-print a term and render it to a string, using the given options
 scPrettyTerm :: PPOpts -> Term -> String
 scPrettyTerm opts t =
-  renderSawDoc (if ppColor opts then colorStyle else const mempty) $ ppTerm opts t
+  renderSawDoc opts $ ppTerm opts t
 
 -- | Like 'scPrettyTerm', but also supply a context of bound names, where the
 -- most recently-bound variable is listed first in the context
 scPrettyTermInCtx :: PPOpts -> [String] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
-  renderSawDoc (if ppColor opts then colorStyle else const mempty) $
+  renderSawDoc opts $
   runPPM opts $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecNone False trm
