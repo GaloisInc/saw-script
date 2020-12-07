@@ -33,11 +33,12 @@ import qualified Control.Monad.Fail                            as Fail
 import           Control.Monad.Reader                          hiding (fail, fix)
 import           Control.Monad.State                           hiding (fail, fix, state)
 import           Data.Char                                     (isDigit)
+import qualified Data.IntMap                                   as IntMap
 import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
 import qualified Data.Set                                      as Set
 import           Prelude                                       hiding (fail)
-import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
+import           Prettyprinter
 
 import           Data.Parameterized.Pair
 import           Data.Parameterized.NatRepr
@@ -47,6 +48,7 @@ import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.SharedTerm
+import           Verifier.SAW.Term.Pretty
 import           Verifier.SAW.Term.Functor
 import           Verifier.SAW.Translation.Coq.Monad
 import           Verifier.SAW.Translation.Coq.SpecialTreatment
@@ -81,6 +83,14 @@ data TranslationState = TranslationState
   -- ^ The set of Coq identifiers that are either reserved or already
   -- in use. To avoid shadowing, fresh identifiers should be chosen to
   -- be disjoint from this set.
+
+  , _sharedNames :: IntMap.IntMap Coq.Ident
+  -- ^ Index of identifiers for repeated subterms that have been
+  -- lifted out into a let expression.
+
+  , _nextSharedName :: Coq.Ident
+  -- ^ The next available name to be used for a let-bound shared
+  -- sub-expression.
 
   , _currentModule :: Maybe ModuleName
   }
@@ -138,6 +148,8 @@ runTermTranslationMonad configuration modname globalDecls localEnv =
                     , _localDeclarations  = []
                     , _localEnvironment   = localEnv
                     , _unavailableIdents  = Set.union reservedIdents (Set.fromList localEnv)
+                    , _sharedNames        = IntMap.empty
+                    , _nextSharedName     = "var__0"
                     , _currentModule      = modname
                     })
 
@@ -297,6 +309,9 @@ freshenAndBindName n =
      modify $ over localEnvironment (n' :)
      pure n'
 
+mkLet :: (Coq.Ident, Coq.Term) -> Coq.Term -> Coq.Term
+mkLet (name, rhs) body = Coq.Let name [] Nothing rhs body
+
 translateParams ::
   TermTranslationMonad m =>
   [(String, Term)] -> m [Coq.Binder]
@@ -314,7 +329,7 @@ translatePi binders body = withLocalLocalEnvironment $ do
     b' <- freshenAndBindName b
     let n = if b == "_" then Nothing else Just b'
     return (Coq.PiBinder n bTypeT)
-  bodyT <- translateTerm body
+  bodyT <- translateTermLet body
   return $ Coq.Pi bindersT bodyT
 
 -- | Translate a local name from a saw-core binder into a fresh Coq identifier.
@@ -336,22 +351,53 @@ nextVariant = reverse . go . reverse
       | isDigit c = succ c : cs
     go cs = '1' : cs
 
+translateTermLet :: TermTranslationMonad m => Term -> m Coq.Term
+translateTermLet t =
+  withLocalLocalEnvironment $
+  do let counts = scTermCount False t
+     let locals = fmap fst $ IntMap.filter keep counts
+     names <- traverse (const nextName) locals
+     modify $ set sharedNames names
+     defs <- traverse translateTermUnshared locals
+     body <- translateTerm t
+     -- NOTE: Larger terms always have later IDs than their subterms,
+     -- so ordering by VarIndex is a valid dependency order.
+     let binds = IntMap.elems (IntMap.intersectionWith (,) names defs)
+     pure (foldr mkLet body binds)
+  where
+    keep (t', n) = n > 1 && shouldMemoizeTerm t'
+    nextName =
+      do x <- view nextSharedName <$> get
+         x' <- translateLocalIdent x
+         modify $ set nextSharedName (nextVariant x')
+         pure x'
+
 translateTerm :: TermTranslationMonad m => Term -> m Coq.Term
-translateTerm t = withLocalLocalEnvironment $ do
+translateTerm t =
+  case t of
+    Unshared {} -> translateTermUnshared t
+    STApp { stAppIndex = i } ->
+      do shared <- view sharedNames <$> get
+         case IntMap.lookup i shared of
+           Nothing -> translateTermUnshared t
+           Just x -> pure (Coq.Var x)
+
+translateTermUnshared :: TermTranslationMonad m => Term -> m Coq.Term
+translateTermUnshared t = withLocalLocalEnvironment $ do
   -- traceTerm "translateTerm" t $
   -- NOTE: env is in innermost-first order
   env <- view localEnvironment <$> get
   -- let t' = trace ("translateTerm: " ++ "env = " ++ show env ++ ", t =" ++ showTerm t) t
   -- case t' of
-  case t of
+  case unwrapTermF t of
 
-    (asFTermF -> Just tf)  -> flatTermFToExpr tf
+    FTermF ftf -> flatTermFToExpr ftf
 
-    (asPi -> Just _) -> translatePi params e
+    Pi {} -> translatePi params e
       where
         (params, e) = asPiList t
 
-    (asLambda -> Just _) -> do
+    Lambda {} -> do
       paramTerms <- translateParams params
       e' <- translateTerm e
       pure (Coq.Lambda paramTerms e')
@@ -359,7 +405,7 @@ translateTerm t = withLocalLocalEnvironment $ do
           -- params are in normal, outermost first, order
           (params, e) = asLambdaList t
 
-    (asApp -> Just _) ->
+    App {} ->
       -- asApplyAll: innermost argument first
       let (f, args) = asApplyAll t
       in
@@ -455,12 +501,12 @@ translateTerm t = withLocalLocalEnvironment $ do
           translateIdentWithArgs i args
       _ -> Coq.App <$> translateTerm f <*> traverse translateTerm args
 
-    (asLocalVar -> Just n)
+    LocalVar n
       | n < length env -> Coq.Var <$> pure (env !! n)
       | otherwise -> Except.throwError $ LocalVarOutOfBounds t
 
   -- Constants come with a body
-    (unwrapTermF -> Constant n body) -> do
+    Constant n body -> do
       configuration <- ask
       let renamed = translateConstant (notations configuration) n
       alreadyTranslatedDecls <- getNamesOfAllDeclarations
@@ -468,12 +514,16 @@ translateTerm t = withLocalLocalEnvironment $ do
       if elem renamed alreadyTranslatedDecls || elem renamed definitionsToSkip
         then Coq.Var <$> pure renamed
         else do
-        b <- translateTerm body
+        b <-
+          -- Translate body in a top-level name scope
+          withLocalLocalEnvironment $
+          do modify $ set localEnvironment []
+             modify $ set unavailableIdents reservedIdents
+             modify $ set sharedNames IntMap.empty
+             modify $ set nextSharedName "var__0"
+             translateTermLet body
         modify $ over localDeclarations $ (mkDefinition renamed b :)
         Coq.Var <$> pure renamed
-
-    _ -> {- trace "translateTerm fallthrough" -}
-      errorTermM "Unhandled case in translateTerm"
 
   where
     badTerm          = Except.throwError $ BadTerm t
@@ -507,24 +557,26 @@ translateTermToDocWith ::
   Maybe ModuleName ->
   [String] ->
   [String] ->
-  (Coq.Term -> Doc) ->
+  (Coq.Term -> Doc ann) ->
   Term ->
-  Either (TranslationError Term) Doc
+  Either (TranslationError Term) (Doc ann)
 translateTermToDocWith configuration mn globalDecls localEnv f t = do
   (term, state) <-
-    runTermTranslationMonad configuration mn globalDecls localEnv (translateTerm t)
+    runTermTranslationMonad configuration mn globalDecls localEnv (translateTermLet t)
   let decls = view localDeclarations state
-  return
-    $ ((vcat . intersperse hardline . map Coq.ppDecl . reverse) decls)
-    <$$> (if null decls then empty else hardline)
-    <$$> f term
+  return $
+    vcat $
+    [ (vcat . intersperse hardline . map Coq.ppDecl . reverse) decls
+    , if null decls then mempty else hardline
+    , f term
+    ]
 
 translateDefDoc ::
   TranslationConfiguration ->
   Maybe ModuleName ->
   [String] ->
   Coq.Ident -> Term ->
-  Either (TranslationError Term) Doc
+  Either (TranslationError Term) (Doc ann)
 translateDefDoc configuration mn globalDecls name =
   translateTermToDocWith configuration mn globalDecls [name]
   (\ term -> Coq.ppDecl (mkDefinition name term))

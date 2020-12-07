@@ -29,7 +29,7 @@ import qualified Control.Monad.Except                          as Except
 import           Control.Monad.Reader                          hiding (fail)
 import           Control.Monad.State                           hiding (fail)
 import           Prelude                                       hiding (fail)
-import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
+import           Prettyprinter                                 (Doc)
 
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
@@ -170,7 +170,7 @@ liftTermTranslationMonad n = do
     Right (a, _) -> do
       return a
 
-translateDecl :: TranslationConfiguration -> Maybe ModuleName -> ModuleDecl -> Doc
+translateDecl :: TranslationConfiguration -> Maybe ModuleName -> ModuleDecl -> Doc ann
 translateDecl configuration modname decl =
   case decl of
   TypeDecl td -> do

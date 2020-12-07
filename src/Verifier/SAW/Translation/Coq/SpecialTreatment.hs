@@ -29,6 +29,7 @@ import           Control.Monad.Reader               (ask)
 import qualified Data.Map                           as Map
 import           Data.String.Interpolate            (i)
 import           Prelude                            hiding (fail)
+import qualified Data.Text as Text
 
 import qualified Language.Coq.AST                   as Coq
 import           Verifier.SAW.SharedTerm
@@ -460,7 +461,10 @@ constantsRenamingMap notations = Map.fromList notations
 -- to check those here to avoid some captures?
 translateConstant :: [(String, String)] -> ExtCns e -> String
 translateConstant notations (EC {..}) =
-  Map.findWithDefault ecName ecName (constantsRenamingMap notations)
+  Map.findWithDefault
+    (Text.unpack (toShortName ecName))
+    (Text.unpack (toShortName ecName))
+    (constantsRenamingMap notations) -- TODO short name doesn't seem right
 
 zipSnippet :: String
 zipSnippet = [i|
