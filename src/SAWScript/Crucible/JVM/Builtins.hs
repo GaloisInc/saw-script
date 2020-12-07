@@ -25,8 +25,8 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.Crucible.JVM.Builtins
-    ( crucible_jvm_verify
-    , crucible_jvm_unsafe_assume_spec
+    ( jvm_verify
+    , jvm_unsafe_assume_spec
     , jvm_return
     , jvm_execute_func
     , jvm_postcond
@@ -180,7 +180,7 @@ excludedRefs = Set.fromList
   , "java/lang/invoke/MethodHandleInfo"
   ]
 
-crucible_jvm_verify ::
+jvm_verify ::
   J.Class ->
   String {- ^ method name -} ->
   [CrucibleMethodSpecIR] {- ^ overrides -} ->
@@ -188,7 +188,7 @@ crucible_jvm_verify ::
   JVMSetupM () ->
   ProofScript SatResult ->
   TopLevel CrucibleMethodSpecIR
-crucible_jvm_verify cls nm lemmas checkSat setup tactic =
+jvm_verify cls nm lemmas checkSat setup tactic =
   do cb <- getJavaCodebase
      opts <- getOptions
      -- allocate all of the handles/static vars that are referenced
@@ -205,7 +205,7 @@ crucible_jvm_verify cls nm lemmas checkSat setup tactic =
      let loc = SS.toW4Loc "_SAW_verify_prestate" pos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
-     (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_jvm_verify" profFile
+     (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "jvm_verify" profFile
 
      (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let st0 = initialCrucibleSetupState cc (cls', method) loc
@@ -224,7 +224,7 @@ crucible_jvm_verify cls nm lemmas checkSat setup tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
      -- run the symbolic execution
-     top_loc <- SS.toW4Loc "crucible_jvm_verify" <$> getPosition
+     top_loc <- SS.toW4Loc "jvm_verify" <$> getPosition
      (ret, globals3) <-
        io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat
 
@@ -241,12 +241,12 @@ crucible_jvm_verify cls nm lemmas checkSat setup tactic =
      returnProof (methodSpec & MS.csSolverStats .~ stats)
 
 
-crucible_jvm_unsafe_assume_spec ::
+jvm_unsafe_assume_spec ::
   J.Class          ->
   String          {- ^ Name of the method -} ->
   JVMSetupM () {- ^ Boundary specification -} ->
   TopLevel CrucibleMethodSpecIR
-crucible_jvm_unsafe_assume_spec cls nm setup =
+jvm_unsafe_assume_spec cls nm setup =
   do cc <- setupCrucibleContext cls
      cb <- getJavaCodebase
      pos <- getPosition
