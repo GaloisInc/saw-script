@@ -25,7 +25,7 @@ module Verifier.SAW.Translation.Coq (
 import           Control.Monad.Reader                          hiding (fail)
 import           Data.String.Interpolate                       (i)
 import           Prelude                                       hiding (fail)
-import           Text.PrettyPrint.ANSI.Leijen                  hiding ((<$>))
+import           Prettyprinter
 
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
@@ -90,9 +90,12 @@ traceTerm ctx t a = trace (ctx ++ ": " ++ showTerm t) a
 --   modify $ over environment (bindings ++)
 --   translateTerm term
 
+text :: String -> Doc ann
+text = pretty
+
 -- | Eventually, different modules may want different preambles.  For now,
 -- we hardcode a sufficient set of imports for all our purposes.
-preamblePlus :: TranslationConfiguration -> Doc -> Doc
+preamblePlus :: TranslationConfiguration -> Doc ann -> Doc ann
 preamblePlus (TranslationConfiguration {..}) extraImports = text [i|
 From Coq          Require Import Lists.List.
 From Coq          Require Import String.
@@ -105,16 +108,16 @@ From CryptolToCoq Require Import #{vectorModule}.
 Import ListNotations.
 |]
 
-preamble :: TranslationConfiguration -> Doc
+preamble :: TranslationConfiguration -> Doc ann
 preamble configuration = preamblePlus configuration $ vcat []
 
 translateTermAsDeclImports ::
-  TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) Doc
+  TranslationConfiguration -> Coq.Ident -> Term -> Either (TranslationError Term) (Doc ann)
 translateTermAsDeclImports configuration name t = do
   doc <- TermTranslation.translateDefDoc configuration Nothing [] name t
-  return (preamble configuration <$$> hardline <> doc)
+  return $ vcat [preamble configuration, hardline <> doc]
 
-translateSAWModule :: TranslationConfiguration -> Module -> Doc
+translateSAWModule :: TranslationConfiguration -> Module -> Doc ann
 translateSAWModule configuration m =
   let name = show $ translateModuleName (moduleName m)
   in
@@ -129,7 +132,7 @@ translateSAWModule configuration m =
      ]
 
 translateCryptolModule ::
-  TranslationConfiguration -> [String] -> CryptolModule -> Either (TranslationError Term) Doc
+  TranslationConfiguration -> [String] -> CryptolModule -> Either (TranslationError Term) (Doc ann)
 translateCryptolModule configuration globalDecls m =
   let decls = CryptolModuleTranslation.translateCryptolModule
               configuration
