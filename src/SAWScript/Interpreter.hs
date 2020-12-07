@@ -562,7 +562,10 @@ set_base b = do
 set_color :: Bool -> TopLevel ()
 set_color b = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b } }
+  opts <- getOptions
+  -- Keep color disabled if `--no-color` command-line option is present
+  let b' = b && useColor opts
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b' } }
 
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info s
