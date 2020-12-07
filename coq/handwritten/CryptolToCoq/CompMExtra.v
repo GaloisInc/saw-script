@@ -485,6 +485,10 @@ Ltac prove_refinement_match_letRecM_l :=
   unshelve (eapply refinesM_letRecM_match_r);
   [ unfold lrtTupleType, lrtToType; repeat split | apply ProperLRTFun_any | ].
 
+(* It's important for the tactic above that `letRecM` is opaque! Otherwise
+   `eauto` will unfold it too soon. *)
+Hint Opaque letRecM : refinesM refinesFun.
+
 (* Ltac prove_refinesFun := unshelve (typeclasses eauto with refinesFun). *)
 
 (*

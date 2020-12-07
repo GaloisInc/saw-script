@@ -139,6 +139,10 @@ Definition isBvslt_to_isBvsle_suc w a b : isBvslt w a b ->
                                           isBvsle w (bvAdd w a (intToBv w 1)) b.
 Admitted.
 
+Definition isBvult_to_isBvule_suc w a b : isBvult w a b ->
+                                          isBvule w (bvAdd w a (intToBv w 1)) b.
+Admitted.
+
 Definition isBvult_to_isBvslt_pos w a b : isBvsle w (intToBv w 0) a ->
                                           isBvsle w (intToBv w 0) b ->
                                           isBvult w a b <-> isBvslt w a b.
@@ -234,8 +238,14 @@ Admitted.
 Lemma bvSub_eq_bvAdd_neg w a b : bvSub w a b = bvAdd w a (bvNeg w b).
 Admitted.
 
+Lemma bvule_msb_l w a b : isBvule (Succ w) a b -> msb w a = true -> msb w b = true.
+Admitted.
 
-(** Other rewriting hints not directly imvolving bitvectors **)
+Lemma bvule_msb_r w a b : isBvule (Succ w) a b -> msb w b = false -> msb w a = false.
+Admitted.
+
+
+(** Other rewriting hints not directly involving bitvectors **)
 
 Lemma and_bool_eq_true_lemma (b c : bool) : and b c = true <-> (b = true) /\ (c = true).
 Proof.
@@ -285,9 +295,17 @@ Hint Rewrite not_bool_eq_true_lemma not_bool_eq_false_lemma : SAWCoreBitvectors.
 
 (* Hint Rewrite sym_bool_true_eq_lemma sym_bool_false_eq_lemma : SAWCoreBitvectors. *)
 
+Lemma boolEq_eq  a b : boolEq a b = true <-> a = b. Admitted.
+Lemma boolEq_neq a b : boolEq a b = false <-> a <> b. Admitted.
+Hint Rewrite boolEq_eq boolEq_neq : SAWCoreBitvectors.
+
 Lemma bool_eq_if_true (b : bool) : (if b then true else false) = true <-> b = true.
 Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
 Lemma bool_eq_if_false (b : bool) : (if b then true else false) = false <-> b = false.
 Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
+Lemma bool_eq_if_inv_true (b : bool) : (if b then false else true) = true <-> b = false.
+Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
+Lemma bool_eq_if_inv_false (b : bool) : (if b then false else true) = false <-> b = true.
+Proof. split; intro H; destruct b; reflexivity || inversion H. Qed.
 
-Hint Rewrite bool_eq_if_true bool_eq_if_false : SAWCoreBitvectors.
+Hint Rewrite bool_eq_if_true bool_eq_if_false bool_eq_if_false bool_eq_if_true : SAWCoreBitvectors.
