@@ -60,7 +60,7 @@ import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
-  , FirstOrderValue(..)
+  , FirstOrderValue(..), asFiniteTypePure
   , toFirstOrderValue, scFirstOrderValue
   )
 import Verifier.SAW.Prelude
@@ -917,30 +917,62 @@ offline_verilog :: FilePath -> ProofScript SV.SatResult
 offline_verilog path =
   proveWithExporter (Prover.adaptExporter Prover.writeVerilog) path ".v"
 
+parseAigerCex :: String -> TopLevel [Bool]
+parseAigerCex text =
+  case lines text of
+    [_, cex] ->
+      case words cex of
+        [bits, _] -> mapM bitToBool bits
+        _ -> SV.throwTopLevel $ "invalid counterexample line: " ++ cex
+    _ -> SV.throwTopLevel $ "invalid counterexample text: " ++ text
+  where
+    bitToBool '0' = return False
+    bitToBool '1' = return True
+    bitToBool c   = SV.throwTopLevel ("invalid bit: " ++ [c])
+
 w4_abc_verilog :: ProofScript SV.SatResult
 w4_abc_verilog = do
   withFirstGoal $ \g ->
+       -- Create temporary files
     do let tpl = "abc_verilog-" ++ goalType g ++ show (goalNum g) ++ ".v"
            tplCex = "abc_verilog-" ++ goalType g ++ show (goalNum g) ++ ".cex"
        sc <- SV.getSharedContext
        tmp <- io $ emptySystemTempFile tpl
        tmpCex <- io $ emptySystemTempFile tplCex
-       io $ Prover.adaptExporter Prover.writeVerilog sc tmp (goalProp g)
+
+       -- Get goal into the right form
+       let (goalArgs, concl) = asPiList (unProp (goalProp g))
+       p <- case asEqTrue concl of
+              Just p -> return p
+              Nothing -> fail "adaptExporter: expected EqTrue"
+       p' <- io $ scNot sc p
+       t <- io $ scLambdaList sc goalArgs p'
+       io $ Prover.writeVerilog sc tmp t
+
+       -- Run ABC and remove temporaries
        let execName = "abc"
            args = ["-q", "%read " ++ tmp ++"; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++ tmpCex]
        (ec, out, err) <- io $ readProcessWithExitCode execName args ""
        cexText <- io $ readFile tmpCex
        io $ removeFile tmp
        io $ removeFile tmpCex
+
+       -- Parse and report results
        let isEquivalent = "equivalent" `isInfixOf` out
            isNotEquivalent = "NOT EQUIVALENT" `isInfixOf` out
            stats = solverStats "abc_verilog" (scSharedSize (unProp (goalProp g)))
        res <- case (isEquivalent, isNotEquivalent) of
                 (True, False) -> return $ SV.Unsat stats
                 (False, True) ->
-                  do --let cex = parseStats cexText
-                     io $ (putStrLn "Counterexample text:" >> putStrLn cexText)
-                     return $ SV.SatMulti stats [] -- TODO: parse results
+                  do bits <- reverse <$> parseAigerCex cexText
+                     let goalArgs' = reverse goalArgs
+                         argTys = map snd goalArgs'
+                         argNms = map fst goalArgs'
+                         r = liftCexBB (mapMaybe asFiniteTypePure argTys) bits
+                     case r of
+                       Left parseErr -> SV.throwTopLevel parseErr
+                       Right vs -> return $ SV.SatMulti stats model
+                         where model = zip argNms (map toFirstOrderValue vs)
                 _ -> do io $ do putStrLn "ABC returned unexpected result"
                                 putStrLn $ "== Exit code: " ++ show ec
                                 putStrLn "== Standard output"
@@ -950,7 +982,7 @@ w4_abc_verilog = do
                                 putStrLn "== Counterexample text"
                                 putStrLn cexText
                         SV.throwTopLevel "Proof failed."
-       return (res, stats, Nothing) -- TODO: is Nothing right here?
+       return (res, stats, Nothing)
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (\ps -> ps { psTimeout = Just to })

@@ -46,7 +46,6 @@ import Data.Set (Set)
 import qualified Data.SBV.Dynamic as SBV
 import System.IO
 import Data.Text.Prettyprint.Doc.Render.Text
-import Text.PrettyPrint.ANSI.Leijen (vcat)
 import Prettyprinter (vcat)
 
 import Cryptol.Utils.PP(pretty)
