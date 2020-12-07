@@ -1,8 +1,4 @@
-module SAWScript.Prover.ABC
-    ( proveABC
-    --, proveABCExternal
-    ) where
-
+module SAWScript.Prover.ABC (proveABC) where
 
 import qualified Data.AIG as AIG
 
@@ -10,8 +6,7 @@ import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.FiniteValue
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import SAWScript.Proof(Prop, propToPredicate, unProp)
---import SAWScript.Prover.Exporter (writeVerilogProp)
+import SAWScript.Proof(Prop, propToPredicate)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
 import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.Util
@@ -59,19 +54,3 @@ getModel argNames shapes satRes =
 
     AIG.SatUnknown -> fail "Unknown result from ABC"
 
-
--- | Check the satisfiability of a @Term@ using ABC as an external
--- process.
--- TODO: currently incomplete
-{-
-proveABCExternal ::
-  SharedContext ->
-  Prop ->
-  IO (Maybe [(String,FirstOrderValue)], SolverStats)
-proveABCExternal sc goal =
-  do let file = undefined
-         stats = solverStats "ABCExternal" (scSharedSize (unProp goal))
-     writeVerilogProp sc file goal
-     -- TODO: invoke ABC and parse output
-     return (Nothing, stats)
-     -}

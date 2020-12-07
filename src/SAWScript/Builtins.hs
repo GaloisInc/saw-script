@@ -639,13 +639,6 @@ proveABC = do
   SV.AIGProxy proxy <- lift SV.getProxy
   wrapProver (Prover.proveABC proxy)
 
-{-
--- | Check the satisfiability of a @Term@ using ABC as an external
--- process.
-proveABCExternal :: ProofScript SV.SatResult
-proveABCExternal = wrapProver Prover.proveABCExternal
--}
-
 parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
                     -> [String] -- ^ The value lines from the solver
                     -> [Bool]
