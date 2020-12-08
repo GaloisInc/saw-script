@@ -160,14 +160,14 @@ translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Coq.Ter
 translateIdentWithArgs i args =
   (view currentModule <$> get) >>= \cur_modname ->
   let identToCoq ident =
-        if Just (identModule ident) == cur_modname then "@" ++ identName ident else
-          "@" ++ show (translateModuleName (identModule ident))
+        if Just (identModule ident) == cur_modname then identName ident else
+          show (translateModuleName (identModule ident))
           ++ "." ++ identName ident in
 
   (atUseSite <$> findSpecialTreatment i) >>= \case
-    UsePreserve -> Coq.App (Coq.Var $ identToCoq i) <$> mapM translateTerm args
+    UsePreserve -> Coq.App (Coq.ExplVar $ identToCoq i) <$> mapM translateTerm args
     UseRename targetModule targetName ->
-      Coq.App (Coq.Var $ identToCoq $
+      Coq.App (Coq.ExplVar $ identToCoq $
                mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
                targetName) <$>
       mapM translateTerm args

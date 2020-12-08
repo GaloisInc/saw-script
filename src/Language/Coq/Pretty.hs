@@ -120,9 +120,10 @@ ppTerm p e =
       hsep (ppTerm PrecApp f : map (ppTerm PrecAtom) args)
     Sort s ->
       ppSort s
-    Var x ->
-      parensIf (p > PrecApp && head x == '@') $
-      ppIdent x
+    Var x -> ppIdent x
+    ExplVar x ->
+      parensIf (p > PrecApp) $
+      string "@" <> ppIdent x
     NatLit i ->
       integer i
     ZLit i ->

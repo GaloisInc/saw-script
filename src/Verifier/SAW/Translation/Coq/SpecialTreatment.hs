@@ -407,16 +407,14 @@ sawCorePreludeSpecialTreatmentMap configuration =
   -- The computation monad
   ++
   [ ("CompM",                replace (Coq.Var "CompM"))
-  , ("returnM",              replace (Coq.App (Coq.Var "@returnM")
+  , ("returnM",              replace (Coq.App (Coq.ExplVar "returnM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
-  , ("bindM",                replace (Coq.App (Coq.Var "@bindM")
+  , ("bindM",                replace (Coq.App (Coq.ExplVar "bindM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
-  , ("errorM",               replace (Coq.App (Coq.Var "@errorM")
+  , ("errorM",               replace (Coq.App (Coq.ExplVar "errorM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
   , ("catchM",               skip)
-  , ("fixM",                 replace (Coq.App (Coq.Var "@fixM")
-                                       [Coq.Var "CompM", Coq.Var "_"]))
-  , ("fixM",                 replace (Coq.App (Coq.Var "@fixM")
+  , ("fixM",                 replace (Coq.App (Coq.ExplVar "fixM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
   , ("LetRecType",           mapsTo compMModule "LetRecType")
   , ("LRT_Ret",              mapsTo compMModule "LRT_Ret")
@@ -433,19 +431,19 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Dependent pairs
   ++
-  [ ("Sigma", replace (Coq.Var "@sigT"))
-  , ("exists", replace (Coq.Var "@existT"))
-  , ("Sigma__rec", replace (Coq.Var "@sigT_rect"))
-  , ("Sigma_proj1", replace (Coq.Var "@projT1"))
-  , ("Sigma_proj2", replace (Coq.Var "@projT2"))
+  [ ("Sigma", replace (Coq.ExplVar "sigT"))
+  , ("exists", replace (Coq.ExplVar "existT"))
+  , ("Sigma__rec", replace (Coq.ExplVar "sigT_rect"))
+  , ("Sigma_proj1", replace (Coq.ExplVar "projT1"))
+  , ("Sigma_proj2", replace (Coq.ExplVar "projT2"))
   ]
 
   -- Lists
   ++
-  [ ("List", replace (Coq.Var "@Datatypes.list"))
-  , ("Nil", replace (Coq.Var "@Datatypes.nil"))
-  , ("Cons", replace (Coq.Var "@Datatypes.cons"))
-  , ("List__rec", replace (Coq.Var "@Datatypes.list_rect"))
+  [ ("List", replace (Coq.ExplVar "Datatypes.list"))
+  , ("Nil", replace (Coq.ExplVar "Datatypes.nil"))
+  , ("Cons", replace (Coq.ExplVar "Datatypes.cons"))
+  , ("List__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
   ]
 
   -- Definitions that depend on axioms currently skipped

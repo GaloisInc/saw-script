@@ -26,6 +26,9 @@ data Term
   | App Term [Term]
   | Sort Sort
   | Var Ident
+    -- | A variable that needs to be printed with a leading at sign in order to
+    -- make all arguments explicit
+  | ExplVar Ident
   | NatLit Integer
   | ZLit Integer
   | List [Term]
