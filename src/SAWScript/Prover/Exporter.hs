@@ -174,11 +174,11 @@ writeAIGComputedLatches proxy sc file term numLatches =
   writeSAIG proxy sc file term numLatches
 
 writeCNF :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> TopLevel ()
-writeCNF proxy sc f t = io $ do
-  AIG.Network be ls <- bitblastPrim proxy sc t
+writeCNF proxy sc f t = do
+  AIG.Network be ls <- io $ bitblastPrim proxy sc t
   case ls of
     [l] -> do
-      _ <- AIG.writeCNF be l f
+      _ <- io $ AIG.writeCNF be l f
       return ()
     _ -> throwTopLevel "writeCNF: non-boolean term"
 
