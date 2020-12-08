@@ -1,0 +1,18 @@
+enable_experimental;
+
+// A formula that is universally true.
+let t = {{ \(x:[8]) (y:[8]) -> x == y ==> x+y == x+x }};
+
+prove_print w4_abc_smtlib2 t;
+prove_print w4_abc_verilog t;
+prove_print (offline_verilog "offline_verilog") t;
+
+// A formula that is unsatisfiable.
+let q_unsat = {{ \(x:[8]) -> x != 0 /\ x+x == x }};
+
+write_verilog "write_verilog_unsat.v" q_unsat;
+
+// A formula that is satisfiable.
+let q_sat = {{ \(x:[8]) -> x+x == x }};
+
+write_verilog "write_verilog_sat.v" q_sat;
