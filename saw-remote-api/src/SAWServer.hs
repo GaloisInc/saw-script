@@ -187,6 +187,7 @@ initialState readFile =
 #else
                 , roProxy = AIGProxy AIG.basicProxy
 #endif
+                , roBasicSS = ss
                 }
          rw = TopLevelRW
                 { rwValues = mempty
