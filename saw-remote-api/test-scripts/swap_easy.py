@@ -11,22 +11,20 @@ swap_bc = os.path.join(dir_path, 'swap.bc')
 class Swap(Contract):
     def __init__(self) -> None:
         super().__init__()
-        self.t = uint32_t
+        self.ty = uint32_t
 
-    def pre(self) -> None:
-        self.x = self.declare(self.t)
-        self.y = self.declare(self.t)
-        self.x_pointer = self.declare_pointer(self.t)
-        self.y_pointer = self.declare_pointer(self.t)
-        self.points_to(self.x_pointer, self.x)
-        self.points_to(self.y_pointer, self.y)
+    def specification(self) -> None:
+        x = self.declare_var(self.ty, "x")
+        y = self.declare_var(self.ty, "y")
+        x_ptr = self.declare_pointer(self.ty)
+        y_ptr = self.declare_pointer(self.ty)
+        self.points_to(x_ptr, x)
+        self.points_to(y_ptr, y)
 
-    def call(self) -> None:
-        self.arguments(self.x_pointer, self.y_pointer)
+        self.execute_func(x_ptr, y_ptr)
 
-    def post(self) -> None:
-        self.points_to(self.x_pointer, self.y)
-        self.points_to(self.y_pointer, self.x)
+        self.points_to(x_ptr, y)
+        self.points_to(y_ptr, x)
         self.returns(void)
 
 env_connect_global()
