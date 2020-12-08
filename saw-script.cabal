@@ -96,6 +96,7 @@ library
     , flexdis86
     , elf-edit
     , reflection
+    , jsonifier
 
   hs-source-dirs: src
 

@@ -36,6 +36,7 @@ import Data.Traversable hiding ( mapM )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as Char8ByteString
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -349,19 +350,22 @@ interpretStmt printBinds stmt =
 
 writeVerificationSummary :: TopLevel ()
 writeVerificationSummary = do
-  do values <- rwProofs <$> getTopLevelRW
-     let jspecs  = [ s | VJVMMethodSpec s <- values ]
-         lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
-         thms    = [ t | VTheorem t <- values ]
-         summary = computeVerificationSummary jspecs lspecs thms
-     opts <- roOptions <$> getTopLevelRO
-     dir <- roInitWorkDir <$> getTopLevelRO
-     case summaryFile opts of
-       Nothing -> return ()
-       Just f ->
-         let f' = if hasDrive f then f else dir </> f
-          in io $ writeFile f' $ prettyVerificationSummary summary
-
+  do
+    values <- rwProofs <$> getTopLevelRW
+    let jspecs  = [ s | VJVMMethodSpec s <- values ]
+        lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
+        thms    = [ t | VTheorem t <- values ]
+        summary = computeVerificationSummary jspecs lspecs thms
+    opts <- roOptions <$> getTopLevelRO
+    dir <- roInitWorkDir <$> getTopLevelRO
+    case summaryFile opts of
+      Nothing -> return ()
+      Just f -> let
+        f' = if hasDrive f then f else dir </> f
+        formatSummary = case summaryFormat opts of
+                       Just JSON -> jsonVerificationSummary
+                       Just Pretty -> Char8ByteString.pack . prettyVerificationSummary
+        in io $ BS.writeFile f' $ formatSummary summary
 
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
