@@ -289,11 +289,9 @@ asApplyAllRecognizer t = do _ <- asApp t
 -- restoring the current environment before returning.
 withLocalLocalEnvironment :: TermTranslationMonad m => m a -> m a
 withLocalLocalEnvironment action = do
-  env <- view localEnvironment <$> get
-  used <- view unavailableIdents <$> get
+  s <- get
   result <- action
-  modify $ set localEnvironment env
-  modify $ set unavailableIdents used
+  put s
   return result
 
 mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Decl
