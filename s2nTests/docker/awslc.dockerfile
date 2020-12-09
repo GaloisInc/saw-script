@@ -8,7 +8,7 @@ WORKDIR /saw-script
 RUN mkdir -p /saw-script && \
     git clone https://github.com/GaloisInc/aws-lc-verification.git && \
     cd aws-lc-verification && \
-    git checkout 2a5598300748cbc6b5aac9ba2b44bd2982324763 && \
+    git checkout 52c1840114f77ca2239921130b4adad130c99fbb && \
     git config --file=.gitmodules submodule.src.url https://github.com/awslabs/aws-lc && \
     git submodule sync && \
     git submodule update --init
