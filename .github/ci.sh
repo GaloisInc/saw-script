@@ -152,6 +152,7 @@ build_abc() {
   esac
   pushd deps/abcBridge
   $IS_WIN || scripts/build-abc.sh $arch $os
+  cp abc-build/abc $BIN/abc
   popd
 }
 
