@@ -98,20 +98,23 @@ instance IsCodebase JCB.Codebase where
 -- | Make sure the class is in the database and allocate handles for its
 -- methods and static fields
 --
-loadJavaClass :: BuiltinContext -> String -> TopLevel J.Class
-loadJavaClass bic str = do
-  c <- io $ findClass (biJavaCodebase bic) str
-  prepareClassTopLevel bic str
+loadJavaClass :: String -> TopLevel J.Class
+loadJavaClass str = do
+  cb <- getJavaCodebase
+  c <- io $ findClass cb str
+  prepareClassTopLevel str
   return c
 
 -----------------------------------------------------------------------
 -- | Allocate the method handles/global static variables for the given
 -- class and add them to the current translation context
-prepareClassTopLevel :: BuiltinContext -> String -> TopLevel ()
-prepareClassTopLevel bic str = do
+prepareClassTopLevel :: String -> TopLevel ()
+prepareClassTopLevel str = do
+
+   cb <- getJavaCodebase
 
    -- get class from codebase
-   c <- io $ findClass (biJavaCodebase bic) str
+   c <- io $ findClass cb str
 
    -- get current ctx
    ctx0 <- getJVMTrans
@@ -124,7 +127,7 @@ prepareClassTopLevel bic str = do
      ctx <- io $ execStateT (CJ.extendJVMContext halloc c) ctx0
 
      -- update ctx
-     addJVMTrans ctx
+     putJVMTrans ctx
 
 
 -----------------------------------------------------------------------
@@ -132,10 +135,11 @@ prepareClassTopLevel bic str = do
 
 -- | Extract a JVM method to saw-core
 --
-crucible_java_extract :: BuiltinContext -> Options -> J.Class -> String -> TopLevel TypedTerm
-crucible_java_extract bic opts c mname = do
-  let sc        = biSharedContext bic
-  let cb        = biJavaCodebase bic
+crucible_java_extract :: J.Class -> String -> TopLevel TypedTerm
+crucible_java_extract c mname = do
+  sc <- getSharedContext
+  cb <- getJavaCodebase
+  opts <- getOptions
   let verbosity = simVerbose opts
   let gen       = Nonce.globalNonceGenerator
 
@@ -150,7 +154,7 @@ crucible_java_extract bic opts c mname = do
   -- allocate all of the handles/static vars that are directly referenced by
   -- this class
   let refs = CJ.initClasses ++ Set.toList (CJ.classRefs c)
-  mapM_ (prepareClassTopLevel bic . J.unClassName) refs
+  mapM_ (prepareClassTopLevel . J.unClassName) refs
 
   halloc <- getHandleAlloc
   ctx <- getJVMTrans

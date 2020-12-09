@@ -29,7 +29,7 @@ rewriteEqs sc t =
 
 basic_ss :: SharedContext -> IO Simpset
 basic_ss sc =
-  do rs1 <- concat <$> traverse (defRewrites sc) (defs ++ defs')
+  do rs1 <- concat <$> traverse (defRewrites sc) defs
      rs2 <- scEqsRewriteRules sc eqs
      return $ addConvs procs (addRules (rs1 ++ rs2) emptySimpset)
      where
@@ -73,9 +73,7 @@ basic_ss sc =
          , "bveq_same2"
          , "bvNat_bvToNat"
          ]
-       defs = map (mkIdent preludeName) [ "bitvector" ]
-       defs' = map (mkIdent (mkModuleName ["Cryptol"]))
-               ["seq", "ecEq", "ecNotEq"]
+       defs = map (mkIdent (mkModuleName ["Cryptol"])) ["seq", "ecEq", "ecNotEq"]
        procs = [tupleConversion, recordConversion] ++
                bvConversions ++ natConversions ++ vecConversions
 

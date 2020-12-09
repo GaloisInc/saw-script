@@ -6,67 +6,73 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 
+{-# LANGUAGE OverloadedStrings #-}
+
 module SAWScript.JavaPretty where
 
-import Data.Maybe (fromMaybe)
-
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Prettyprinter
 
 import Language.JVM.Common
 
 import Verifier.Java.Codebase
 
-prettyClass :: Class -> Doc
+prettyClass :: Class -> Doc ann
 prettyClass cls = vcat $
-  [ empty
-  , text "Class name:" <+> text (unClassName (className cls)) <+>
+  [ emptyDoc
+  , "Class name:" <+> prettyClassName (className cls) <+>
     parens (commas attrs)
-  , text "Superclass:" <+> text (fromMaybe "none" (fmap unClassName (superClass cls)))
-  , empty
+  , "Superclass:" <+> maybe "none" prettyClassName (superClass cls)
+  , emptyDoc
   ] ++
   (if null (classInterfaces cls)
       then []
-      else [ text "Interfaces:"
-           , indent 2 (vcat (map (text . unClassName) (classInterfaces cls)))
-           , empty
+      else [ "Interfaces:"
+           , indent 2 (vcat (map prettyClassName (classInterfaces cls)))
+           , emptyDoc
            ]) ++
-  [ text "Fields:"
+  [ "Fields:"
   , indent 2 (vcat (map prettyField (classFields cls)))
-  , empty
-  , text "Methods:"
+  , emptyDoc
+  , "Methods:"
   , indent 2 (vcat (map prettyMethod (classMethods cls)))
-  , empty
+  , emptyDoc
   ]
   where attrs = concat
-          [ if classIsPublic cls then [text "public"] else []
-          , if classIsFinal cls then [text "final"] else []
-          , if classHasSuperAttribute cls then [text "super"] else []
-          , if classIsInterface cls then [text "interface"] else []
-          , if classIsAbstract cls then [text "abstract"] else []
+          [ if classIsPublic cls then ["public"] else []
+          , if classIsFinal cls then ["final"] else []
+          , if classHasSuperAttribute cls then ["super"] else []
+          , if classIsInterface cls then ["interface"] else []
+          , if classIsAbstract cls then ["abstract"] else []
           ]
 
-prettyField :: Field -> Doc
+-- FIXME: avoid unpacking via String
+prettyClassName :: ClassName -> Doc ann
+prettyClassName cname = pretty (unClassName cname)
+
+prettyField :: Field -> Doc ann
 prettyField f = hsep $
-  [ text (show (fieldVisibility f)) ] ++
+  [ viaShow (fieldVisibility f) ] ++
   attrs ++
-  [ text (show (ppType (fieldType f))) -- TODO: Ick. Different PPs.
-  , text (fieldName f)
+  [ viaShow (ppType (fieldType f)) -- TODO: Ick. Different PPs.
+  , pretty (fieldName f)
   ]
   where attrs = concat
-          [ if fieldIsStatic f then [text "static"] else []
-          , if fieldIsFinal f then [text "final"] else []
-          , if fieldIsVolatile f then [text "volatile"] else []
-          , if fieldIsTransient f then [text "transient"] else []
+          [ if fieldIsStatic f then ["static"] else []
+          , if fieldIsFinal f then ["final"] else []
+          , if fieldIsVolatile f then ["volatile"] else []
+          , if fieldIsTransient f then ["transient"] else []
           ]
 
-prettyMethod :: Method -> Doc
+prettyMethod :: Method -> Doc ann
 prettyMethod m =
-  hsep [ maybe (text "void") prettyType ret
-       , text name
-       , (parens . commas . map prettyType) params
-       ]
+  hsep $
+  (if methodIsStatic m then ["static"] else []) ++
+  [ maybe "void" prettyType ret
+  , pretty name
+  , (parens . commas . map prettyType) params
+  ]
   where (MethodKey name params ret) = methodKey m
-        prettyType = text . show . ppType -- TODO: Ick.
+        prettyType = viaShow . ppType -- TODO: Ick.
 
-commas :: [Doc] -> Doc
+commas :: [Doc ann] -> Doc ann
 commas = sep . punctuate comma

@@ -14,7 +14,7 @@ module SAWScript.VerificationSummary
 import Control.Lens
 import qualified Data.Set as Set
 import Data.String
-import Text.PrettyPrint.ANSI.Leijen
+import Prettyprinter
 
 import qualified Lang.Crucible.JVM as CJ
 import SAWScript.Crucible.Common.MethodSpec

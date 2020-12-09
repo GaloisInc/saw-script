@@ -10,6 +10,7 @@ Stability   : provisional
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE LambdaCase #-}
 
 module SAWScript.Utils where
 
@@ -28,11 +29,12 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.Ratio
 import Data.Time.Clock
+import Data.Void
+import Prettyprinter as PP
 import System.Time(TimeDiff(..), getClockTime, diffClockTimes, normalizeTimeDiff, toCalendarTime, formatCalendarTime)
 import System.Locale(defaultTimeLocale)
 import qualified System.IO.Error as IOE
 import System.Exit
-import Text.PrettyPrint.ANSI.Leijen as PP hiding ((<$>), (<>))
 import Text.Printf
 import Numeric(showFFloat)
 
@@ -41,14 +43,14 @@ import qualified Verifier.Java.Codebase as JSS
 import SAWScript.Options
 import SAWScript.Position
 
-bullets :: Char -> [PP.Doc] -> PP.Doc
-bullets c = PP.vcat . map (PP.hang 2 . (PP.text [c] PP.<+>))
+bullets :: Char -> [PP.Doc ann] -> PP.Doc ann
+bullets c = PP.vcat . map (PP.hang 2 . (PP.pretty c PP.<+>))
 
 data SSMode = Verify | Blif | CBlif deriving (Eq, Show, Data, Typeable)
 
 -- | Convert a string to a paragraph formatted document.
-ftext :: String -> Doc
-ftext msg = fillSep (map text $ words msg)
+ftext :: String -> Doc ann
+ftext msg = fillSep (map pretty $ words msg)
 
 -- | Insert multiple keys that map to the same value in a map.
 mapInsertKeys :: Ord k => [k] -> a -> Map k a -> Map k a
@@ -63,18 +65,18 @@ mapLookupAny keys m = listToMaybe $ catMaybes $ map (\k -> Map.lookup k m) keys
 
 -- | Class of exceptions thrown by SBV parser.
 data ExecException = ExecException Pos          -- Position
-                                   Doc          -- Error message
+                                   (Doc Void)   -- Error message
                                    String       -- Resolution tip
   deriving (Show, Typeable)
 
 instance Exception ExecException
 
 -- | Throw exec exception in a MonadIO.
-throwIOExecException :: MonadIO m => Pos -> Doc -> String -> m a
+throwIOExecException :: MonadIO m => Pos -> Doc Void -> String -> m a
 throwIOExecException site errorMsg resolution = liftIO $ throwIO (ExecException site errorMsg resolution)
 
 -- | Throw exec exception in a MonadIO.
-throwExecException :: Pos -> Doc -> String -> m a
+throwExecException :: Pos -> Doc Void -> String -> m a
 throwExecException site errorMsg resolution = throw (ExecException site errorMsg resolution)
 
 -- Timing {{{1
@@ -120,47 +122,63 @@ lookupClass cb site nm = do
 -- | Returns method with given name in this class or one of its subclasses.
 -- Throws an ExecException if method could not be found or is ambiguous.
 findMethod :: JSS.Codebase -> Pos -> String -> JSS.Class -> IO (JSS.Class, JSS.Method)
-findMethod cb site nm initClass = impl initClass
+findMethod cb site nm initClass = impl [] initClass
   where javaClassName = JSS.slashesToDots (JSS.unClassName (JSS.className initClass))
-        methodMatches m = JSS.methodName m == nm && not (JSS.methodIsAbstract m)
-        impl cl =
-          case filter methodMatches (JSS.classMethods cl) of
+        methodType m = (JSS.methodParameterTypes m, JSS.methodReturnType m)
+        baseName m = JSS.methodName m
+        typedName m = JSS.methodName m ++ unparseMethodDescriptor (methodType m)
+        methodMatches m = nm `elem` [baseName m, typedName m]
+        impl names cl =
+          let candidates = filter (not . JSS.methodIsAbstract) (JSS.classMethods cl) in
+          case filter methodMatches candidates of
             [] -> do
               case JSS.superClass cl of
                 Nothing ->
                   let msg = ftext $ "Could not find method " ++ nm
-                              ++ " in class " ++ javaClassName ++ "."
+                              ++ " in class " ++ javaClassName ++ ".\n"
+                              ++ "Available methods: "
+                              ++ unlines names
                       res = "Please check that the class and method are correct."
                    in throwIOExecException site msg res
                 Just superName ->
-                  impl =<< lookupClass cb site superName
+                  do super <- lookupClass cb site superName
+                     impl (names ++ map baseName candidates) super
             [method] -> return (cl,method)
-            _ -> let msg = "The method " ++ nm ++ " in class " ++ javaClassName
-                             ++ " is ambiguous.  SAWScript currently requires that "
-                             ++ "method names are unique."
-                     res = "Please rename the Java method so that it is unique."
+            l -> let msg = "The method " ++ show nm ++ " in class " ++ javaClassName ++ " is ambiguous. " ++
+                           "Methods can be disambiguated by appending a type descriptor: " ++
+                           unlines [ show (typedName m) | m <- l ]
+                     res = "Please disambiguate method name."
                   in throwIOExecException site (ftext msg) res
 
-throwFieldNotFound :: JSS.Type -> String -> ExceptT String IO a
-throwFieldNotFound tp fieldName = throwE msg
+throwFieldNotFound :: JSS.Type -> String -> [String] -> ExceptT String IO a
+throwFieldNotFound tp fieldName names = throwE msg
   where
     msg = "Values with type \'" ++ show tp ++
           "\' do not contain field named " ++
           fieldName ++ "."
+          ++ "\nAvailable fields:\n" ++ unlines names
 
 findField :: JSS.Codebase -> Pos -> JSS.Type -> String -> ExceptT String IO JSS.FieldId
-findField _  _ tp@(JSS.ArrayType _) nm = throwFieldNotFound tp nm
-findField cb site tp@(JSS.ClassType clName) nm = impl =<< lift (lookupClass cb site clName)
+findField _  _ tp@(JSS.ArrayType _) nm = throwFieldNotFound tp nm []
+findField cb site tp@(JSS.ClassType clName) nm = impl [] =<< lift (lookupClass cb site clName)
   where
-    impl cl =
-      case filter (\f -> JSS.fieldName f == nm) $ JSS.classFields cl of
+    impl nms cl =
+      case filter (\f -> nm `elem` names f) $ JSS.classFields cl of
         [] -> do
           case JSS.superClass cl of
-            Nothing -> throwFieldNotFound tp nm
-            Just superName -> impl =<< lift (lookupClass cb site superName)
-        [f] -> return $ JSS.FieldId (JSS.className cl) nm (JSS.fieldType f)
+            Nothing -> throwFieldNotFound tp nm nms
+            Just superName ->
+              do super <- lift $ lookupClass cb site superName
+                 impl (nms ++ map JSS.fieldName (JSS.classFields cl)) super
+        [f] -> return $ JSS.FieldId (JSS.className cl) (JSS.fieldName f) (JSS.fieldType f)
         _ -> throwE $
              "internal: Found multiple fields with the same name: " ++ nm
+      where
+        names f =
+          do prefix <- ["", JSS.unClassName (JSS.className cl) ++ "."]
+             suffix <- ["", ":" ++ unparseTypeDescriptor (JSS.fieldType f)]
+             pure (prefix ++ JSS.fieldName f ++ suffix)
+
 findField _ _ _ _ =
   throwE "Primitive types cannot be dereferenced."
 
@@ -200,3 +218,24 @@ exitProofFalse,exitProofUnknown,exitProofSuccess :: IO a
 exitProofFalse = exitWith (ExitFailure 1)
 exitProofUnknown = exitWith (ExitFailure 2)
 exitProofSuccess = exitSuccess
+
+--------------------------------------------------------------------------------
+
+unparseTypeDescriptor :: JSS.Type -> String
+unparseTypeDescriptor =
+  \case
+    JSS.ArrayType ty -> "[" ++ unparseTypeDescriptor ty
+    JSS.BooleanType  -> "Z"
+    JSS.ByteType     -> "B"
+    JSS.CharType     -> "C"
+    JSS.ClassType cn -> "L" ++ JSS.unClassName cn ++ ";"
+    JSS.DoubleType   -> "D"
+    JSS.FloatType    -> "F"
+    JSS.IntType      -> "I"
+    JSS.LongType     -> "J"
+    JSS.ShortType    -> "S"
+
+unparseMethodDescriptor :: ([JSS.Type], Maybe JSS.Type) -> String
+unparseMethodDescriptor (args, ret) =
+  "(" ++ concatMap unparseTypeDescriptor args ++ ")" ++
+  maybe "V" unparseTypeDescriptor ret

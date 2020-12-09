@@ -17,15 +17,18 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
   , resolveSetupVal
   -- , typeOfJVMVal
   , typeOfSetupValue
+  , lookupAllocIndex
+  , toJVMType
   , resolveTypedTerm
   , resolveBoolTerm
   , resolveSAWPred
   -- , resolveSetupFieldIndex
   , equalValsPred
+  , JVMTypeOfError(..)
   ) where
 
 import           Control.Lens
-import qualified Control.Monad.Fail as Fail
+import qualified Control.Monad.Catch as X
 import           Data.IORef
 import qualified Data.BitVector.Sized as BV
 import           Data.Map (Map)
@@ -33,7 +36,7 @@ import qualified Data.Map as Map
 import           Data.Void (absurd)
 
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalValType)
-import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
+import qualified Cryptol.TypeCheck.AST as Cryptol (Type, Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
@@ -67,6 +70,7 @@ import SAWScript.Crucible.Common (Sym)
 import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
 --import SAWScript.JavaExpr (JavaType(..))
+import SAWScript.Panic
 import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.JVM.MethodSpecIR
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -87,8 +91,27 @@ type JVMRefVal = Crucible.RegValue Sym CJ.JVMRefType
 
 type SetupValue = MS.SetupValue CJ.JVM
 
+data JVMTypeOfError
+  = JVMPolymorphicType Cryptol.Schema
+  | JVMNonRepresentableType Cryptol.Type
+
+instance Show JVMTypeOfError where
+  show (JVMPolymorphicType s) =
+    unlines
+    [ "Expected monomorphic term"
+    , "instead got:"
+    , show (Cryptol.pp s)
+    ]
+  show (JVMNonRepresentableType ty) =
+    unlines
+    [ "Type not representable in JVM:"
+    , show (Cryptol.pp ty)
+    ]
+
+instance X.Exception JVMTypeOfError
+
 typeOfSetupValue ::
-  Fail.MonadFail m =>
+  X.MonadThrow m =>
   JVMCrucibleContext ->
   Map AllocIndex (W4.ProgramLoc, Allocation) ->
   Map AllocIndex JIdent ->
@@ -98,31 +121,34 @@ typeOfSetupValue _cc env _nameEnv val =
   case val of
     MS.SetupVar i ->
       case Map.lookup i env of
-        Nothing -> fail ("typeOfSetupValue: Unresolved prestate variable:" ++ show i)
+        Nothing -> panic "JVMSetup" ["typeOfSetupValue", "Unresolved prestate variable:" ++ show i]
         Just (_, alloc) -> return (allocationType alloc)
     MS.SetupTerm tt ->
       case ttSchema tt of
         Cryptol.Forall [] [] ty ->
-          case toJVMType (Cryptol.evalValType Map.empty ty) of
-            Nothing -> fail "typeOfSetupValue: non-representable type"
+          case toJVMType (Cryptol.evalValType mempty ty) of
+            Nothing -> X.throwM (JVMNonRepresentableType ty)
             Just jty -> return jty
-        s -> fail $ unlines [ "typeOfSetupValue: expected monomorphic term"
-                            , "instead got:"
-                            , show (Cryptol.pp s)
-                            ]
+        s -> X.throwM (JVMPolymorphicType s)
+
     MS.SetupNull () ->
       -- We arbitrarily set the type of NULL to java.lang.Object,
       -- because a) it is memory-compatible with any type that NULL
       -- can be used at, and b) it prevents us from doing any
       -- type-safe field accesses.
       return (J.ClassType (J.mkClassName "java/lang/Object"))
-    MS.SetupGlobal () name ->
-      fail ("typeOfSetupValue: unimplemented jvm_global: " ++ name)
+    MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct empty _ _          -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
     MS.SetupField empty _ _           -> absurd empty
     MS.SetupGlobalInitializer empty _ -> absurd empty
+
+lookupAllocIndex :: Map AllocIndex a -> AllocIndex -> a
+lookupAllocIndex env i =
+  case Map.lookup i env of
+    Nothing -> panic "JVMSetup" ["Unresolved prestate variable:" ++ show i]
+    Just x -> x
 
 -- | Translate a SetupValue into a Crucible JVM value, resolving
 -- references
@@ -137,12 +163,11 @@ resolveSetupVal cc env _tyenv _nameEnv val =
   case val of
     MS.SetupVar i
       | Just v <- Map.lookup i env -> return (RVal v)
-      | otherwise -> fail ("resolveSetupVal: Unresolved prestate variable:" ++ show i)
+      | otherwise -> panic "JVMSetup" ["resolveSetupVal", "Unresolved prestate variable:" ++ show i]
     MS.SetupTerm tm -> resolveTypedTerm cc tm
     MS.SetupNull () ->
       return (RVal (W4.maybePartExpr sym Nothing))
-    MS.SetupGlobal () name ->
-      fail $ "resolveSetupVal: unimplemented jvm_global: " ++ name
+    MS.SetupGlobal empty _            -> absurd empty
     MS.SetupStruct empty _ _          -> absurd empty
     MS.SetupArray empty _             -> absurd empty
     MS.SetupElem empty _ _            -> absurd empty
@@ -158,7 +183,7 @@ resolveTypedTerm ::
 resolveTypedTerm cc tm =
   case ttSchema tm of
     Cryptol.Forall [] [] ty ->
-      resolveSAWTerm cc (Cryptol.evalValType Map.empty ty) (ttTerm tm)
+      resolveSAWTerm cc (Cryptol.evalValType mempty ty) (ttTerm tm)
     _ -> fail "resolveSetupVal: expected monomorphic term"
 
 resolveSAWPred ::
@@ -229,8 +254,7 @@ resolveBitvectorTerm sym w tm =
      mx <- case getAllExts tm' of
              [] ->
                do -- Evaluate in SBV to test whether 'tm' is a concrete value
-                  modmap <- scGetModuleMap sc
-                  sbv <- SBV.toWord =<< SBV.sbvSolveBasic modmap Map.empty [] tm'
+                  sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm'
                   return (SBV.svAsInteger sbv)
              _ -> return Nothing
      case mx of
@@ -246,8 +270,7 @@ resolveBoolTerm sym tm =
      mx <- case getAllExts tm' of
              [] ->
                do -- Evaluate in SBV to test whether 'tm' is a concrete value
-                  modmap <- scGetModuleMap sc
-                  sbv <- SBV.toBool <$> SBV.sbvSolveBasic modmap Map.empty [] tm'
+                  sbv <- SBV.toBool <$> SBV.sbvSolveBasic sc Map.empty mempty tm'
                   return (SBV.svAsBool sbv)
              _ -> return Nothing
      case mx of

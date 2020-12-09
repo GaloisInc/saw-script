@@ -1233,9 +1233,10 @@ the rest of the script.
 
 These support the AIGER, DIMACS CNF, shared SAWCore, and SMT-Lib v2
 formats, respectively. The shared representation for SAWCore is
-described [in the `saw-script` repository](../extcore.md). The
-`offline_unint_smtlib2` command represents the folded subterms listed in
-its first argument as uninterpreted functions.
+described [in the `saw-script`
+repository](https://github.com/GaloisInc/saw-script/blob/master/doc/extcore.md).
+The `offline_unint_smtlib2` command represents the folded subterms
+listed in its first argument as uninterpreted functions.
 
 ## Finishing Proofs without External Solvers
 
@@ -1244,7 +1245,7 @@ techniques that do not require significant computation.
 
 * `assume_unsat : ProofScript SatResult` indicates that the current goal
 should be assumed to be unsatisfiable. At the moment,
-`crucible_jvm_verify` and `crucible_llvm_verify` (described below) run
+`jvm_verify` and `crucible_llvm_verify` (described below) run
 their proofs in a satisfiability-checking (negated) context, so
 `assume_unsat` indicates that the property being checked should be
 assumed to be true. This is likely to change in the future.
@@ -1844,7 +1845,7 @@ A similar command for JVM programs is available if `enable_experimental`
 has been run.
 
 ~~~~
-crucible_jvm_verify :
+jvm_verify :
   JavaClass ->
   String ->
   [JVMMethodSpec] ->
@@ -2010,11 +2011,11 @@ of properties we have already proved about its callees rather than
 analyzing them anew. This enables us to reason about much larger
 and more complex systems than otherwise possible.
 
-The `crucible_llvm_verify` and `crucible_jvm_verify` functions return
-values of type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively.
-These values are opaque objects that internally contain both the
-information provided in the associated `JVMSetup` or `CrucibleSetup`
-blocks and the results of the verification process.
+The `crucible_llvm_verify` and `jvm_verify` functions return values of
+type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively. These
+values are opaque objects that internally contain both the information
+provided in the associated `JVMSetup` or `CrucibleSetup` blocks and
+the results of the verification process.
 
 Any of these `MethodSpec` objects can be passed in via the third
 argument of the `..._verify` functions. For any function or method
@@ -2329,7 +2330,7 @@ crucible_llvm_unsafe_assume_spec :
 Or, in the experimental JVM implementation:
 
 ~~~
-crucible_jvm_unsafe_assume_spec :
+jvm_unsafe_assume_spec :
   JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec
 ~~~
 
