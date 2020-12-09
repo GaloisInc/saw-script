@@ -208,11 +208,7 @@ Definition intToBv (n : Nat) (z : Z) : bitvector n := bitsToBv (fromZ z).
 
 Arguments intToBv : simpl never.
 
-Definition bvToInt (n : Nat) (bv : bitvector n) : Z :=
-  match n, bv with
-  | 0, _ => 0
-  | S n', b => toZ (bvToBITS b)
-  end.
+Definition bvToInt (n : Nat) (b : bitvector n) : Z := toPosZ (bvToBITS b).
 
 Definition sbvToInt (n : Nat) (b : bitvector n) : Z
   := match n, b with
