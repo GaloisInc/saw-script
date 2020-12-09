@@ -907,53 +907,59 @@ offline_unint_smtlib2 unints path =
 
 offline_verilog :: FilePath -> ProofScript SV.SatResult
 offline_verilog path =
-  proveWithExporter (Prover.adaptExporter Prover.writeVerilog) path ".v"
+  proveWithExporter (Prover.adaptExporter Prover.write_verilog) path ".v"
 
-parseAigerCex :: String -> TopLevel [Bool]
+parseAigerCex :: String -> IO [Bool]
 parseAigerCex text =
   case lines text of
     [_, cex] ->
       case words cex of
         [bits, _] -> mapM bitToBool bits
-        _ -> SV.throwTopLevel $ "invalid counterexample line: " ++ cex
-    _ -> SV.throwTopLevel $ "invalid counterexample text: " ++ text
+        _ -> fail $ "invalid counterexample line: " ++ cex
+    _ -> fail $ "invalid counterexample text: " ++ text
   where
     bitToBool '0' = return False
     bitToBool '1' = return True
-    bitToBool c   = SV.throwTopLevel ("invalid bit: " ++ [c])
+    bitToBool c   = fail ("invalid bit: " ++ [c])
 
 w4_abc_verilog :: ProofScript SV.SatResult
-w4_abc_verilog = do
-  withFirstGoal $ \g ->
+w4_abc_verilog = wrapW4Prover w4AbcVerilog []
+
+w4AbcVerilog ::
+  Set VarIndex ->
+  SharedContext ->
+  Bool ->
+  Prop ->
+  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+w4AbcVerilog _unints sc _hashcons g =
        -- Create temporary files
-    do let tpl = "abc_verilog-" ++ goalType g ++ show (goalNum g) ++ ".v"
-           tplCex = "abc_verilog-" ++ goalType g ++ show (goalNum g) ++ ".cex"
-       sc <- SV.getSharedContext
-       tmp <- io $ emptySystemTempFile tpl
-       tmpCex <- io $ emptySystemTempFile tplCex
+    do let tpl = "abc_verilog.v"
+           tplCex = "abc_verilog.cex"
+       tmp <- emptySystemTempFile tpl
+       tmpCex <- emptySystemTempFile tplCex
 
        -- Get goal into the right form
-       let (goalArgs, concl) = asPiList (unProp (goalProp g))
+       let (goalArgs, concl) = asPiList (unProp g)
        p <- case asEqTrue concl of
               Just p -> return p
               Nothing -> fail "adaptExporter: expected EqTrue"
-       t <- io (scLambdaList sc goalArgs =<< scNot sc p)
+       t <- scLambdaList sc goalArgs =<< scNot sc p
        Prover.writeVerilog sc tmp t
 
        -- Run ABC and remove temporaries
        let execName = "abc"
            args = ["-q", "%read " ++ tmp ++"; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++ tmpCex]
-       (ec, out, err) <- io $ readProcessWithExitCode execName args ""
-       cexText <- io $ readFile tmpCex
-       io $ removeFile tmp
-       io $ removeFile tmpCex
+       (ec, out, err) <- readProcessWithExitCode execName args ""
+       cexText <- readFile tmpCex
+       removeFile tmp
+       removeFile tmpCex
 
        -- Parse and report results
        let isEquivalent = "equivalent" `isInfixOf` out
            isNotEquivalent = "NOT EQUIVALENT" `isInfixOf` out
-           stats = solverStats "abc_verilog" (scSharedSize (unProp (goalProp g)))
+           stats = solverStats "abc_verilog" (scSharedSize (unProp g))
        res <- case (isEquivalent, isNotEquivalent) of
-                (True, False) -> return $ SV.Unsat stats
+                (True, False) -> return $ Nothing
                 (False, True) ->
                   do bits <- reverse <$> parseAigerCex cexText
                      let goalArgs' = reverse goalArgs
@@ -961,19 +967,19 @@ w4_abc_verilog = do
                          argNms = map fst goalArgs'
                          r = liftCexBB (mapMaybe asFiniteTypePure argTys) bits
                      case r of
-                       Left parseErr -> SV.throwTopLevel parseErr
-                       Right vs -> return $ SV.SatMulti stats model
+                       Left parseErr -> fail parseErr
+                       Right vs -> return $ Just model
                          where model = zip argNms (map toFirstOrderValue vs)
-                _ -> do io $ do putStrLn "ABC returned unexpected result"
-                                putStrLn $ "== Exit code: " ++ show ec
-                                putStrLn "== Standard output"
-                                putStrLn out
-                                putStrLn "== Standard error"
-                                putStrLn err
-                                putStrLn "== Counterexample text"
-                                putStrLn cexText
-                        SV.throwTopLevel "Proof failed."
-       return (res, stats, Nothing)
+                _ -> do putStrLn "ABC returned unexpected result"
+                        putStrLn $ "== Exit code: " ++ show ec
+                        putStrLn "== Standard output"
+                        putStrLn out
+                        putStrLn "== Standard error"
+                        putStrLn err
+                        putStrLn "== Counterexample text"
+                        putStrLn cexText
+                        fail "Proof failed."
+       return (res, stats)
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (\ps -> ps { psTimeout = Just to })

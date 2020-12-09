@@ -247,20 +247,20 @@ writeCore :: FilePath -> Term -> TopLevel ()
 writeCore path t = io $ writeFile path (scWriteExternal t)
 
 write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
-write_verilog sc path t = writeVerilog sc path t
+write_verilog sc path t = io $ writeVerilog sc path t
 
-writeVerilog :: SharedContext -> FilePath -> Term -> TopLevel ()
+writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
-  sym <- io $ newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
-  (_, (_, bval)) <- io $ W4Sim.w4EvalAny sym sc mempty mempty t
-  edoc <- io $ runExceptT $
+  sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
+  (_, (_, bval)) <- W4Sim.w4EvalAny sym sc mempty mempty t
+  edoc <- runExceptT $
     case bval of
       Sim.VBool b -> exprVerilog sym b "f"
       Sim.VWord (W4Sim.DBV w) -> exprVerilog sym w "f"
       _ -> throwError $ "write_verilog: unsupported result type: " ++ show bval
   case edoc of
-    Left err -> throwTopLevel $ "Failed to translate to Verilog: " ++ err
-    Right doc -> io $ do
+    Left err -> fail $ "Failed to translate to Verilog: " ++ err
+    Right doc -> do
       h <- openFile path WriteMode
       hPutDoc h doc
       hPutStrLn h ""
