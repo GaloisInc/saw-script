@@ -67,7 +67,7 @@ import qualified Verifier.SAW.Simulator.What4 as W4Sim
 
 import qualified Verifier.SAW.UntypedAST as Un
 
-import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..))
+import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..), propToPredicate)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
@@ -75,6 +75,7 @@ import SAWScript.Prover.What4
 import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
 
+import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.VerilogWriter (exprVerilog)
@@ -234,11 +235,13 @@ writeUnintSMTLib2 unintSet sc f p = io $
 -- universally quantified variables, it will be negated. This version
 -- uses What4 instead of SBV.
 writeUnintSMTLib2What4 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> TopLevel ()
-writeUnintSMTLib2What4 unints sc f (Prop term) = io $
+writeUnintSMTLib2What4 unints sc f goal = io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
+     term <- propToPredicate sc goal
      (_, _, (_,lit0)) <- prepWhat4 sym sc unints term
+     lit <- W4.notPred sym lit0 -- for symmetry with `prepNegatedSBV` above
      withFile f WriteMode $ \h ->
-       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit0]
+       writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit]
 
 writeCore :: FilePath -> Term -> TopLevel ()
 writeCore path t = io $ writeFile path (scWriteExternal t)
