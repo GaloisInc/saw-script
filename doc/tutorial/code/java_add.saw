@@ -13,6 +13,6 @@ let dbl_spec = do {
 };
 
 cls <- java_load_class "Add";
-ms <- crucible_jvm_verify cls "add" [] false add_spec abc;
-ms' <- crucible_jvm_verify cls "dbl" [ms] false dbl_spec abc;
+ms <- jvm_verify cls "add" [] false add_spec abc;
+ms' <- jvm_verify cls "dbl" [ms] false dbl_spec abc;
 print "Done.";

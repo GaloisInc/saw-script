@@ -264,7 +264,7 @@ c <- java_load_class ecc_class;
 let method_prove name specs setup tac =
   time do {
     print (str_concat "Verifying " name);
-    crucible_jvm_verify c name specs false setup tac;
+    jvm_verify c name specs false setup tac;
   };
 
 let method_assume name specs setup tac = method_prove name specs setup assume_unsat;
@@ -272,7 +272,7 @@ let method_assume name specs setup tac = method_prove name specs setup assume_un
 let method_skip name _specs setup _tac =
   time do {
     print (str_concat "Skipping verification of " name);
-    crucible_jvm_unsafe_assume_spec c name setup;
+    jvm_unsafe_assume_spec c name setup;
   };
 
 let method = method_prove;
