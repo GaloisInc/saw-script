@@ -3,6 +3,7 @@ import os
 import os.path
 import saw.connection as saw
 from saw.llvm import *
+from saw.llvm_types import i8, i32, LLVMArrayType
 from saw.proofscript import *
 from env_server import *
 
@@ -52,8 +53,8 @@ crypt_res = {"setup value": "Cryptol", "expression" : "Salsa20_encrypt (k, v, m)
 
 rotl_contract = {
     "pre vars": [
-        {"server name": "value", "name": "value", "type": uint32_t.to_json()},
-        {"server name": "shift", "name": "shift", "type": uint32_t.to_json()}
+        {"server name": "value", "name": "value", "type": i32.to_json()},
+        {"server name": "shift", "name": "shift", "type": i32.to_json()}
     ],
     "pre conds": ["0 < shift /\\ shift < 32"],
     "pre allocated": [],
@@ -68,27 +69,27 @@ rotl_contract = {
 
 qr_contract = {
     "pre vars": [
-        {"server name": "y0", "name": "y0", "type": uint32_t.to_json()},
-        {"server name": "y1", "name": "y1", "type": uint32_t.to_json()},
-        {"server name": "y2", "name": "y2", "type": uint32_t.to_json()},
-        {"server name": "y3", "name": "y3", "type": uint32_t.to_json()}
+        {"server name": "y0", "name": "y0", "type": i32.to_json()},
+        {"server name": "y1", "name": "y1", "type": i32.to_json()},
+        {"server name": "y2", "name": "y2", "type": i32.to_json()},
+        {"server name": "y3", "name": "y3", "type": i32.to_json()}
     ],
     "pre conds": [],
     "pre allocated": [
         {"server name": "y0p",
-         "type": uint32_t.to_json(),
+         "type": i32.to_json(),
          "mutable": True,
          "alignment": None},
         {"server name": "y1p",
-         "type": uint32_t.to_json(),
+         "type": i32.to_json(),
          "mutable": True,
          "alignment": None},
         {"server name": "y2p",
-         "type": uint32_t.to_json(),
+         "type": i32.to_json(),
          "mutable": True,
          "alignment": None},
         {"server name": "y3p",
-         "type": uint32_t.to_json(),
+         "type": i32.to_json(),
          "mutable": True,
          "alignment": None}
     ],
@@ -128,10 +129,10 @@ def oneptr_update_contract(ty, res):
         "return val": None
     }
 
-rr_contract = oneptr_update_contract(LLVMArrayType(uint32_t, 16), rr_res)
-cr_contract = oneptr_update_contract(LLVMArrayType(uint32_t, 16), cr_res)
-dr_contract = oneptr_update_contract(LLVMArrayType(uint32_t, 16), dr_res)
-hash_contract = oneptr_update_contract(LLVMArrayType(uint8_t, 64), hash_res)
+rr_contract = oneptr_update_contract(LLVMArrayType(i32, 16), rr_res)
+cr_contract = oneptr_update_contract(LLVMArrayType(i32, 16), cr_res)
+dr_contract = oneptr_update_contract(LLVMArrayType(i32, 16), dr_res)
+hash_contract = oneptr_update_contract(LLVMArrayType(i8, 64), hash_res)
 
 kp = {"setup value": "saved", "name" : "kp" }
 np = {"setup value": "saved", "name" : "np" }
@@ -142,21 +143,21 @@ zero = {"setup value": "Cryptol", "expression" : "0 : [32]" }
 
 expand_contract = {
     "pre vars": [
-        {"server name": "k", "name": "k", "type": LLVMArrayType(uint8_t, 32).to_json()},
-        {"server name": "n", "name": "n", "type": LLVMArrayType(uint8_t, 16).to_json()}
+        {"server name": "k", "name": "k", "type": LLVMArrayType(i8, 32).to_json()},
+        {"server name": "n", "name": "n", "type": LLVMArrayType(i8, 16).to_json()}
     ],
     "pre conds": [],
     "pre allocated": [
         {"server name": "kp",
-         "type": LLVMArrayType(uint8_t, 32).to_json(),
+         "type": LLVMArrayType(i8, 32).to_json(),
          "mutable": True,
          "alignment": None},
         {"server name": "np",
-         "type": LLVMArrayType(uint8_t, 16).to_json(),
+         "type": LLVMArrayType(i8, 16).to_json(),
          "mutable": True,
          "alignment": None},
         {"server name": "ksp",
-         "type": LLVMArrayType(uint8_t, 64).to_json(),
+         "type": LLVMArrayType(i8, 64).to_json(),
          "mutable": True,
          "alignment": None}
     ],
@@ -177,22 +178,22 @@ m = {"setup value": "Cryptol", "expression" : "m" }
 def crypt_contract(size : int):
     return {
         "pre vars": [
-            {"server name": "k", "name": "k", "type": LLVMArrayType(uint8_t, 32).to_json()},
-            {"server name": "v", "name": "v", "type": LLVMArrayType(uint8_t, 8).to_json()},
-            {"server name": "m", "name": "m", "type": LLVMArrayType(uint8_t, size).to_json()}
+            {"server name": "k", "name": "k", "type": LLVMArrayType(i8, 32).to_json()},
+            {"server name": "v", "name": "v", "type": LLVMArrayType(i8, 8).to_json()},
+            {"server name": "m", "name": "m", "type": LLVMArrayType(i8, size).to_json()}
         ],
         "pre conds": [],
         "pre allocated": [
             {"server name": "kp",
-             "type": LLVMArrayType(uint8_t, 32).to_json(),
+             "type": LLVMArrayType(i8, 32).to_json(),
              "mutable": True,
              "alignment": None},
             {"server name": "vp",
-             "type": LLVMArrayType(uint8_t, 8).to_json(),
+             "type": LLVMArrayType(i8, 8).to_json(),
              "mutable": True,
              "alignment": None},
             {"server name": "mp",
-             "type": LLVMArrayType(uint8_t, size).to_json(),
+             "type": LLVMArrayType(i8, size).to_json(),
              "mutable": True,
              "alignment": None}
         ],
