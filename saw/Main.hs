@@ -37,10 +37,6 @@ main = do
     (opts, files, []) -> do
       opts' <- foldl (>>=) (return defaultOptions) opts
       opts'' <- processEnv opts'
-      case (summaryFile opts'', summaryFormat opts'') of
-        (Just _, Just _) -> return ()
-        (Nothing, Nothing) -> return ()
-        _ -> err opts'' "Error: the '-s' option must be used in conjunction with the '-f' option to specify an output format."
       {- We have two modes of operation: batch processing, handled in
       'SAWScript.ProcessFile', and a REPL, defined in 'SAWScript.REPL'. -}
       case files of

@@ -35,7 +35,7 @@ data Options = Options
   , useColor         :: Bool
   , printOutFn       :: Verbosity -> String -> IO ()
   , summaryFile      :: Maybe FilePath
-  , summaryFormat    :: Maybe SummaryFormat
+  , summaryFormat    :: SummaryFormat
   } deriving (Show)
 
 -- | Verbosity is currently a linear setting (vs a mask or tree).  Any given
@@ -70,7 +70,7 @@ defaultOptions
     , showVersion = False
     , useColor = True
     , summaryFile = Nothing
-    , summaryFormat = Nothing
+    , summaryFormat = Pretty
     }
 
 printOutWith :: Verbosity -> Verbosity -> String -> IO ()
@@ -146,14 +146,14 @@ options =
   , Option "f" ["summary-format"]
     (ReqArg
      (\fmt opts -> case fmt of
-        "json" -> return opts { summaryFormat = Just JSON }
-        "pretty" -> return opts { summaryFormat = Just Pretty }
+        "json" -> return opts { summaryFormat = JSON }
+        "pretty" -> return opts { summaryFormat = Pretty }
         _ -> do
           hPutStrLn stderr "Error: the argument of the '-f' option must be either 'json' or 'pretty'"
           exitFailure
      )
-     "either 'json' or  'pretty'")
-    "Specify the format in which the verification summary should be written in"
+     "either 'json' or 'pretty'")
+    "Specify the format in which the verification summary should be written in ('json' or 'pretty'; defaults to 'json')"
   ]
 
 -- Try to read verbosity as either a string or number and default to 'Debug'.

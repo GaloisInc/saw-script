@@ -363,8 +363,8 @@ writeVerificationSummary = do
       Just f -> let
         f' = if hasDrive f then f else dir </> f
         formatSummary = case summaryFormat opts of
-                       Just JSON -> jsonVerificationSummary
-                       Just Pretty -> Char8ByteString.pack . prettyVerificationSummary
+                       JSON -> jsonVerificationSummary
+                       Pretty -> Char8ByteString.pack . prettyVerificationSummary
         in io $ BS.writeFile f' $ formatSummary summary
 
 interpretFile :: FilePath -> TopLevel ()
