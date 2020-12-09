@@ -304,23 +304,23 @@ ruleOfTerms l r = RewriteRule { ctxt = [], lhs = l, rhs = r }
 ruleOfProp :: Term -> Maybe RewriteRule
 ruleOfProp (R.asPi -> Just (_, ty, body)) =
   do rule <- ruleOfProp body
-     Just $ rule { ctxt = ty : ctxt rule }
+     Just rule { ctxt = ty : ctxt rule }
 ruleOfProp (R.asLambda -> Just (_, ty, body)) =
   do rule <- ruleOfProp body
-     Just $ rule { ctxt = ty : ctxt rule }
+     Just rule { ctxt = ty : ctxt rule }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef eqIdent' -> Just (), [_, x, y])) =
-  Just $ RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) =
-  Just $ RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef bvEqIdent -> Just (), [_, x, y])) =
-  Just $ RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
-  Just $ RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
-  Just $ RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (unwrapTermF -> Constant _ body) = ruleOfProp body
 ruleOfProp (R.asEq -> Just (_, x, y)) =
-  Just $ RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asEqTrue -> Just body) = ruleOfProp body
 ruleOfProp _ = Nothing
 
