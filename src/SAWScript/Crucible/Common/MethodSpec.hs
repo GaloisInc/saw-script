@@ -335,7 +335,7 @@ data StateSpec ext = StateSpec
     -- ^ equality, propositions, and ghost-variable conditions
   , _csFreshVars     :: [TypedExtCns]
     -- ^ fresh variables created in this state
-  , _csVarTypeNames  :: Map AllocIndex (TypeName ext)
+  , _csVarTypeNames  :: !(Map AllocIndex (TypeName ext))
     -- ^ names for types of variables, for diagnostics
   }
 
