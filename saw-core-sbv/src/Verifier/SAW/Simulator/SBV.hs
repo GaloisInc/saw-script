@@ -467,7 +467,7 @@ intModBinOp f =
 intModUnOp :: (SInteger -> SInteger) -> SValue
 intModUnOp f =
   Prims.natFun $ \n -> return $
-  Prims.intFun "intModUnOp" $ \x -> return $
+  Prims.intModFun "intModUnOp" $ \x -> return $
   VIntMod n (normalizeIntMod n (f x))
 
 normalizeIntMod :: Natural -> SInteger -> SInteger
