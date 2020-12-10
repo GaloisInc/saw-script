@@ -2,7 +2,6 @@
 module SAWServer.Term (JSONModuleName(..)) where
 
 import Control.Applicative
-import Data.Aeson (FromJSON(..), ToJSON(..))
 import Data.Aeson as JSON
 import qualified Data.Text as T
 import qualified Data.Vector as V

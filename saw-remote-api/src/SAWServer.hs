@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
@@ -87,7 +88,7 @@ data CrucibleSetupVal e
   | GlobalLValue String
   | ServerValue ServerName
   | CryptolExpr e
-  deriving (Foldable, Functor, Traversable)
+  deriving stock (Foldable, Functor, Traversable)
 
 data SetupStep ty
   = SetupReturn (CrucibleSetupVal CryptolAST) -- ^ The return value
@@ -238,13 +239,13 @@ validateSAWState sawState =
 
 newtype SAWEnv =
   SAWEnv { sawEnvBindings :: Map ServerName ServerVal }
-  deriving Show
+  deriving stock Show
 
 emptyEnv :: SAWEnv
 emptyEnv = SAWEnv M.empty
 
 newtype ServerName = ServerName Text
-  deriving (Eq, Show, Ord)
+  deriving stock (Eq, Show, Ord)
 
 instance ToJSON ServerName where
   toJSON (ServerName n) = toJSON n
