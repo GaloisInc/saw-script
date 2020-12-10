@@ -250,24 +250,40 @@ Definition recordTail {str tp rest_tp} (r:RecordTypeCons str tp rest_tp) : rest_
   | RecordCons _ _ rest => rest
   end.
 
-(* Give us a way to project a specific field out a record type *)
-Class RecordProjFun (str:String.string) (tp:Type) (rtp:Type) : Type :=
-  recordProjFun : rtp -> tp.
+(* An inductive description of a string being a field in a record type *)
+Inductive IsRecordField (str:String) : Type -> Type :=
+| IsRecordField_Base tp rtp : IsRecordField str (RecordTypeCons str tp rtp)
+| IsRecordField_Step str' tp rtp : IsRecordField str rtp ->
+                                   IsRecordField str (RecordTypeCons str' tp rtp).
 
-(* Projection function for the first field in a record type *)
-Instance RecordProjFun_Base str tp rtp : RecordProjFun str tp (RecordTypeCons str tp rtp) :=
-  recordHead.
+(* We want to use this as a typeclass, with its constructors for instances *)
+Existing Class IsRecordField.
+Hint Constructors IsRecordField : typeclass_instances.
 
-(* Projection function for some other field in a record type *)
-Instance RecordProjFun_Step str tp str' tp' rtp (rproj:RecordProjFun str tp rtp)
-  : RecordProjFun str tp (RecordTypeCons str' tp' rtp) :=
-  fun elem => rproj (recordTail elem).
+(* If str is a field in record type rtp, get its associated type *)
+Fixpoint getRecordFieldType rtp str `{irf:IsRecordField str rtp} : Type :=
+  match irf with
+  | IsRecordField_Base _ tp rtp => tp
+  | IsRecordField_Step _ _ _ _ irf' => @getRecordFieldType _ _ irf'
+  end.
 
-(* Perform a record projection, using typeclass resolution to find the
-projection we want using the string name *)
-Definition RecordProj {rtp} (x:rtp) str {tp} `{RecordProjFun str tp rtp} : tp :=
-  recordProjFun x.
-Arguments RecordProj {rtp} !x str%string_scope {tp} {_}.
+(* If str is a field in record r of record type rtp, get its associated value *)
+Fixpoint getRecordField {rtp} str `{irf:IsRecordField str rtp} :
+  rtp -> getRecordFieldType rtp str :=
+  match irf in IsRecordField _ rtp
+        return rtp -> getRecordFieldType rtp str (irf:=irf) with
+  | IsRecordField_Base _ tp rtp' => fun r => recordHead r
+  | IsRecordField_Step _ _ _ _ irf' =>
+    fun r => @getRecordField _ _ irf' (recordTail r)
+  end.
+
+(* Reorder the arguments of getRecordField *)
+Definition RecordProj {rtp} (r:rtp) str `{irf:IsRecordField str rtp} :
+  getRecordFieldType rtp str :=
+  getRecordField str r.
+
+Arguments RecordProj {_} r str%string {_}.
+
 
 (* Some tests *)
 
@@ -278,3 +294,8 @@ Definition recordTest2 := RecordProj recordTest1 "fld1".
 (* Check recordTest2. *)
 
 (* Definition recordTestFail := RecordProj recordTest1 "fld3". *)
+
+Definition recordTest4 :=
+ RecordCons "id_fun" (fun (X:Type) (x:X) => x) RecordNil.
+
+Definition recordTest5 := RecordProj recordTest4 "id_fun" nat 0.
