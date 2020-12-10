@@ -20,7 +20,8 @@ Stability   : provisional
 
 module SAWScript.Crucible.Common.Override
   ( Pointer
-  , OverrideState(..)
+  , OverrideState
+  , OverrideState'(..)
   , osAsserts
   , osAssumes
   , osFree
@@ -36,7 +37,8 @@ module SAWScript.Crucible.Common.Override
   , OverrideFailure(..)
   , ppOverrideFailure
   --
-  , OverrideMatcher(..)
+  , OverrideMatcher
+  , OverrideMatcher'(..)
   , throwOverrideMatcher
   , runOverrideMatcher
   , RO
@@ -97,7 +99,7 @@ type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
 type family Pointer ext :: Type
 
-data OverrideState ext = OverrideState
+data OverrideState' sym ext = OverrideState
   { -- | Substitution for memory allocations
     _setupValueSub :: Map AllocIndex (Pointer ext)
 
@@ -111,33 +113,35 @@ data OverrideState ext = OverrideState
   , _osFree :: Set VarIndex
 
     -- | Accumulated assertions
-  , _osAsserts :: [LabeledPred Sym]
+  , _osAsserts :: [LabeledPred sym]
 
     -- | Accumulated assumptions
-  , _osAssumes :: [W4.Pred Sym]
+  , _osAssumes :: [W4.Pred sym]
 
     -- | Symbolic simulation state
-  , _syminterface :: Sym
+  , _syminterface :: sym
 
     -- | Global variables
-  , _overrideGlobals :: Crucible.SymGlobalState Sym
+  , _overrideGlobals :: Crucible.SymGlobalState sym
 
     -- | Source location to associated with this override
   , _osLocation :: W4.ProgramLoc
   }
 
-makeLenses ''OverrideState
+type OverrideState = OverrideState' Sym
+
+makeLenses ''OverrideState'
 
 -- | The initial override matching state starts with an empty substitution
 -- and no assertions or assumptions.
 initialState ::
-  Sym                           {- ^ simulator                      -} ->
-  Crucible.SymGlobalState Sym   {- ^ initial global variables       -} ->
+  sym                           {- ^ simulator                      -} ->
+  Crucible.SymGlobalState sym   {- ^ initial global variables       -} ->
   Map AllocIndex (Pointer ext)  {- ^ initial allocation substituion -} ->
   Map VarIndex Term             {- ^ initial term substituion       -} ->
   Set VarIndex                  {- ^ initial free terms             -} ->
   W4.ProgramLoc                 {- ^ location information for the override -} ->
-  OverrideState ext
+  OverrideState' sym ext
 initialState sym globals allocs terms free loc = OverrideState
   { _osAsserts       = []
   , _osAssumes       = []
@@ -274,34 +278,36 @@ data RW
 -- to match a specification's arguments with the arguments provided by
 -- the Crucible simulation in order to compute the variable substitution
 -- and side-conditions needed to proceed.
-newtype OverrideMatcher ext rorw a =
-  OM (StateT (OverrideState ext) (ExceptT (OverrideFailure ext) IO) a)
+newtype OverrideMatcher' sym ext rorw a =
+  OM (StateT (OverrideState' sym ext) (ExceptT (OverrideFailure ext) IO) a)
   deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow)
 
-instance Wrapped (OverrideMatcher ext rorw a) where
+type OverrideMatcher = OverrideMatcher' Sym
 
-deriving instance MonadState (OverrideState ext) (OverrideMatcher ext rorw)
-deriving instance MonadError (OverrideFailure ext) (OverrideMatcher ext rorw)
+instance Wrapped (OverrideMatcher' sym ext rorw a) where
 
-throwOverrideMatcher :: String -> OverrideMatcher ext rorw a
+deriving instance MonadState (OverrideState' sym ext) (OverrideMatcher' sym ext rorw)
+deriving instance MonadError (OverrideFailure ext) (OverrideMatcher' sym ext rorw)
+
+throwOverrideMatcher :: String -> OverrideMatcher' sym ext rorw a
 throwOverrideMatcher msg = do
   loc <- use osLocation
   X.throw $ OverrideMatcherException loc msg
 
-instance Fail.MonadFail (OverrideMatcher ext rorw) where
+instance Fail.MonadFail (OverrideMatcher' sym ext rorw) where
   fail = throwOverrideMatcher
 
 -- | "Run" function for OverrideMatcher. The final result and state
 -- are returned. The state will contain the updated globals and substitutions
 runOverrideMatcher ::
-   Sym                         {- ^ simulator                       -} ->
-   Crucible.SymGlobalState Sym {- ^ initial global variables        -} ->
+   sym                         {- ^ simulator                       -} ->
+   Crucible.SymGlobalState sym {- ^ initial global variables        -} ->
    Map AllocIndex (Pointer ext) {- ^ initial allocation substitution -} ->
    Map VarIndex Term           {- ^ initial term substitution       -} ->
    Set VarIndex                {- ^ initial free variables          -} ->
    W4.ProgramLoc               {- ^ override location information   -} ->
-   OverrideMatcher ext md a   {- ^ matching action                 -} ->
-   IO (Either (OverrideFailure ext) (a, OverrideState ext))
+   OverrideMatcher' sym ext md a {- ^ matching action                 -} ->
+   IO (Either (OverrideFailure ext) (a, OverrideState' sym ext))
 runOverrideMatcher sym g a t free loc (OM m) =
   runExceptT (runStateT m (initialState sym g a t free loc))
 
@@ -313,20 +319,20 @@ addTermEq t r =
   OM (termEqs %= cons (t, r))
 
 addAssert ::
-  W4.Pred Sym       {- ^ property -} ->
+  W4.Pred sym       {- ^ property -} ->
   Crucible.SimError {- ^ reason   -} ->
-  OverrideMatcher ext rorw ()
+  OverrideMatcher' sym ext rorw ()
 addAssert p r =
   OM (osAsserts %= cons (W4.LabeledPred p r))
 
 addAssume ::
-  W4.Pred Sym       {- ^ property -} ->
-  OverrideMatcher ext rorw ()
+  W4.Pred sym       {- ^ property -} ->
+  OverrideMatcher' sym ext rorw ()
 addAssume p = OM (osAssumes %= cons p)
 
 readGlobal ::
   Crucible.GlobalVar tp ->
-  OverrideMatcher ext rorw (Crucible.RegValue Sym tp)
+  OverrideMatcher' sym ext rorw (Crucible.RegValue sym tp)
 readGlobal k =
   do mb <- OM (uses overrideGlobals (Crucible.lookupGlobal k))
      case mb of
@@ -335,8 +341,8 @@ readGlobal k =
 
 writeGlobal ::
   Crucible.GlobalVar    tp ->
-  Crucible.RegValue Sym tp ->
-  OverrideMatcher ext RW ()
+  Crucible.RegValue sym tp ->
+  OverrideMatcher' sym ext RW ()
 writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)
 
 -- | Abort the current computation by raising the given 'OverrideFailure'
@@ -344,10 +350,10 @@ writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)
 failure ::
   W4.ProgramLoc ->
   OverrideFailureReason ext ->
-  OverrideMatcher ext md a
+  OverrideMatcher' sym ext md a
 failure loc e = OM (lift (throwE (OF loc e)))
 
-getSymInterface :: OverrideMatcher ext md Sym
+getSymInterface :: OverrideMatcher' sym ext md sym
 getSymInterface = OM (use syminterface)
 
 ------------------------------------------------------------------------
