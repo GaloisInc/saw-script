@@ -28,7 +28,8 @@ Stability   : provisional
 {-# LANGUAGE ViewPatterns #-}
 
 module SAWScript.Crucible.LLVM.Override
-  ( OverrideMatcher(..)
+  ( OverrideMatcher
+  , OverrideMatcher'(..)
   , runOverrideMatcher
 
   , setupValueSub

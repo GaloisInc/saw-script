@@ -27,7 +27,8 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-orphans #-} -- Pretty JVMVal
 
 module SAWScript.Crucible.JVM.Override
-  ( OverrideMatcher(..)
+  ( OverrideMatcher
+  , OverrideMatcher'(..)
   , runOverrideMatcher
 
   , setupValueSub
