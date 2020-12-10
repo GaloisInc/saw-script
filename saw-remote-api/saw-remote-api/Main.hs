@@ -9,8 +9,8 @@ import Argo.DefaultMain
 
 import SAWServer
 import SAWServer.CryptolSetup
-import SAWServer.JVMCrucibleSetup
-import SAWServer.JVMVerify
+--import SAWServer.JVMCrucibleSetup
+--import SAWServer.JVMVerify
 import SAWServer.LLVMCrucibleSetup
 import SAWServer.LLVMVerify
 import SAWServer.ProofScript
@@ -34,9 +34,11 @@ sawMethods =
   , ("SAW/Cryptol/load file",    Command, method cryptolLoadFile)
   , ("SAW/Cryptol/save term",    Command, method saveTerm)
   -- JVM
+  {-
   , ("SAW/JVM/load class",       Command, method jvmLoadClass)
   , ("SAW/JVM/verify",           Command, method jvmVerify)
   , ("SAW/JVM/assume",           Command, method jvmAssume)
+  -}
   -- LLVM
   , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
   , ("SAW/LLVM/verify",          Command, method llvmVerify)

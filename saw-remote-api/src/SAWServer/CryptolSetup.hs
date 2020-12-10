@@ -17,12 +17,10 @@ import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (textToModName)
 import SAWScript.Value (biSharedContext, rwCryptol)
 import qualified Verifier.SAW.CryptolEnv as CEnv
-import Verifier.SAW.CryptolEnv (CryptolEnv)
 
 import Argo
 import SAWServer
 import SAWServer.Exceptions
-import SAWServer.NoParams
 import SAWServer.OK
 
 cryptolLoadModule :: CryptolLoadModuleParams -> Method SAWState OK

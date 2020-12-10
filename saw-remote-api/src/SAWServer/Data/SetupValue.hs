@@ -20,7 +20,7 @@ data SetupValTag
 
 instance FromJSON SetupValTag where
   parseJSON =
-    withText "tag for setup value"$
+    withText "tag for setup value" $
     \case
       "saved" -> pure TagServerValue
       "null value" -> pure TagNullValue

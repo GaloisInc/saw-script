@@ -8,8 +8,6 @@ module SAWServer.JVMVerify
 import Prelude hiding (mod)
 import Control.Lens
 
-import qualified Language.JVM.Common as JVM
-
 import SAWScript.Crucible.JVM.Builtins
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Value (rwCryptol)
@@ -18,7 +16,6 @@ import Argo
 import CryptolServer.Data.Expression
 import SAWServer
 import SAWServer.Data.Contract
-import SAWServer.Data.JVMType
 import SAWServer.Exceptions
 import SAWServer.JVMCrucibleSetup
 import SAWServer.OK

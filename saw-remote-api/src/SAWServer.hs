@@ -12,10 +12,9 @@ module SAWServer
 
 import Prelude hiding (mod)
 import Control.Lens
-import Control.Monad.ST
-import Data.Aeson (FromJSON(..), ToJSON(..), fromJSON, withText, (.:), withObject)
-import qualified Data.Aeson as JSON
+import Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import Data.ByteString (ByteString)
+import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.Parameterized.Pair
@@ -24,6 +23,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Crypto.Hash as Hash
 import qualified Crypto.Hash.Conduit as Hash
+import System.Directory (getCurrentDirectory)
 import System.IO.Silently (silence)
 
 import qualified Cryptol.Parser.AST as P
@@ -35,19 +35,17 @@ import qualified Data.AIG as AIG
 #endif
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
-import qualified Lang.Crucible.JVM.Types as CJ
 import qualified Text.LLVM.AST as LLVM
 import qualified Verifier.Java.Codebase as JSS
-import Verifier.SAW.CryptolEnv (CryptolEnv)
 import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
-import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule, Term)
+import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
 import Verifier.SAW.Term.Functor (mkModuleName)
 import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
 
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (CrucibleMethodSpecIR)
-import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (AllLLVM, SomeLLVM, LLVMModule(..))
+import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Options (defaultOptions)
 import SAWScript.Position (Pos(..))
@@ -60,7 +58,6 @@ import qualified Verifier.Java.SAWBackend as JavaSAW
 import qualified Cryptol.Utils.Ident as Cryptol
 
 import Argo
-import CryptolServer.Data.Expression
 import qualified CryptolServer (validateServerState, ServerState(..))
 import SAWServer.Exceptions
 
@@ -154,8 +151,8 @@ getHandleAlloc :: Method SAWState Crucible.HandleAllocator
 getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> getState
 
 initialState :: (FilePath -> IO ByteString) -> IO SAWState
-initialState readFile =
-  let ?fileReader = readFile in
+initialState readFileFn =
+  let ?fileReader = readFileFn in
   -- silence prevents output on stdout, which suppresses defaulting
   -- warnings from the Cryptol type checker
   silence $
@@ -176,6 +173,7 @@ initialState readFile =
      cenv <- initCryptolEnv sc
      halloc <- Crucible.newHandleAllocator
      jvmTrans <- CJ.mkInitialJVMContext halloc
+     cwd <- getCurrentDirectory
      let ro = TopLevelRO
                 { roSharedContext = sc
                 , roJavaCodebase = jcb
@@ -187,6 +185,8 @@ initialState readFile =
 #else
                 , roProxy = AIGProxy AIG.basicProxy
 #endif
+                , roInitWorkDir = cwd
+                , roBasicSS = undefined
                 }
          rw = TopLevelRW
                 { rwValues = mempty
@@ -202,6 +202,8 @@ initialState readFile =
                 , rwCrucibleAssertThenAssume = False
                 , rwLaxArith = False
                 , rwWhat4HashConsing = False
+                , rwProofs = undefined
+                , rwPreservedRegs = undefined
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 
@@ -250,7 +252,7 @@ instance ToJSON ServerName where
 instance FromJSON ServerName where
   parseJSON = withText "name" (pure . ServerName)
 
-data CrucibleSetupTypeRepr :: * -> * where
+data CrucibleSetupTypeRepr :: Type -> Type where
   UnitRepr :: CrucibleSetupTypeRepr ()
   TypedTermRepr :: CrucibleSetupTypeRepr TypedTerm
 
