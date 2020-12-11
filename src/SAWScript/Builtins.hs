@@ -102,7 +102,7 @@ import qualified Data.SBV.Dynamic as SBV
 import qualified Data.AIG as AIG
 
 -- cryptol
-import qualified Cryptol.ModuleSystem.Env as C (meSolverConfig)
+import qualified Cryptol.ModuleSystem.Env as C (meSolverConfig, meSearchPath)
 import qualified Cryptol.TypeCheck as C (SolverConfig)
 import qualified Cryptol.TypeCheck.AST as C
 import qualified Cryptol.TypeCheck.PP as C (ppWithNames, pp, text, (<+>))
@@ -1502,6 +1502,15 @@ cryptol_load fileReader path = do
   putTopLevelRW $ rw { rwCryptol = ce' }
   return m
 
+cryptol_add_path :: FilePath -> TopLevel ()
+cryptol_add_path path =
+  do rw <- getTopLevelRW
+     let ce = rwCryptol rw
+     let me = CEnv.eModuleEnv ce
+     let me' = me { C.meSearchPath = path : C.meSearchPath me }
+     let ce' = ce { CEnv.eModuleEnv = me' }
+     let rw' = rw { rwCryptol = ce' }
+     putTopLevelRW rw'
 
 mr_solver_tests :: [SharedContext -> IO Term]
 mr_solver_tests =
