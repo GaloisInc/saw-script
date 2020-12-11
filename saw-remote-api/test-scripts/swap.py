@@ -19,8 +19,8 @@ xp_name = {"name": "xp"}
 yp_name = {"name": "yp"}
 
 # SetupVals
-xp = {"setup value": "saved", "name": "xp"}
-yp = {"setup value": "saved", "name": "yp"}
+xp = {"setup value": "named", "name": "xp"}
+yp = {"setup value": "named", "name": "yp"}
 x = {"setup value": "Cryptol", "expression": "x" }
 y = {"setup value": "Cryptol", "expression": "x" }
 

@@ -2,7 +2,7 @@ import os
 import os.path
 from cryptol.cryptoltypes import to_cryptol
 from saw import *
-from saw.llvm import Contract, LLVMType, LLVMArrayType, uint8_t, uint32_t, void, SetupVal, FreshVar, cryptol
+from saw.llvm import Contract, LLVMType, LLVMArrayType, uint8_t, uint32_t, void, SetupVal, FreshVar, cryptol, struct
 import saw.llvm_types as ty
 from env_server import *
 
@@ -88,7 +88,7 @@ def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None, *, re
 # };
 
 
-def setup_hash_state(c : Contract, statePtr : SetupVal) -> Tuple[Any, FreshVar]:
+def setup_hash_state(c : Contract, pstate : SetupVal) -> Tuple[Any, FreshVar]:
     alg0 = c.fresh_var(ty.i32, "alg")
     h0 = c.fresh_var(ty.array(8, ty.i64), "h0")
     Nl0 = c.fresh_var(ty.i64, "Nl")
@@ -99,26 +99,15 @@ def setup_hash_state(c : Contract, statePtr : SetupVal) -> Tuple[Any, FreshVar]:
     currently_in_hash0 = c.fresh_var(ty.i64, "currently_in_hash")
     md_len0 = c.fresh_var(ty.i32, "md_len")
     (_, pimpl) = ptr_to_fresh(c, ty.alias('struct.s2n_hash'), "impl", read_only=True)
+    c.points_to(pstate, 
+        struct(
+            pimpl,
+            alg0,
+            is_ready_for_input0,
+            currently_in_hash0,
+            struct(struct(struct(h0, Nl0, Nh0, struct(u0), num0, md_len0))
+            )))
     # BOOKMARK
-#     crucible_points_to pstate
-#       (crucible_struct
-#         [ pimpl
-#         , crucible_term alg0
-#         , crucible_term is_ready_for_input0
-#         , crucible_term currently_in_hash0
-#         , crucible_struct
-#           [ crucible_struct
-#             [ crucible_struct
-#               [ crucible_term h0
-#               , crucible_term Nl0
-#               , crucible_term Nh0
-#               , crucible_struct [ crucible_term u0 ]
-#               , crucible_term num0
-#               , crucible_term md_len0
-#               ]
-#             ]
-#           ]
-#         ]);
 #     let st = {{
 #       { h = h0
 #       , Nl = Nl0

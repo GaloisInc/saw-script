@@ -9,10 +9,11 @@ import Data.Aeson (FromJSON(..), withObject, withText, (.:))
 import SAWServer
 
 data SetupValTag
-  = TagServerValue
+  = TagNamedValue
   | TagNullValue
   | TagCryptol
   | TagArrayValue
+  | TagStructValue
   | TagFieldLValue
   | TagElemLValue
   | TagGlobalInit
@@ -22,11 +23,12 @@ instance FromJSON SetupValTag where
   parseJSON =
     withText "tag for setup value"$
     \case
-      "saved" -> pure TagServerValue
-      "null value" -> pure TagNullValue
+      "named" -> pure TagNamedValue
+      "null" -> pure TagNullValue
       "Cryptol" -> pure TagCryptol
-      "array value" -> pure TagArrayValue
-      "field lvalue" -> pure TagFieldLValue
+      "array" -> pure TagArrayValue
+      "struct" -> pure TagStructValue
+      "field" -> pure TagFieldLValue
       "element lvalue" -> pure TagElemLValue
       "global initializer" -> pure TagGlobalInit
       "global lvalue" -> pure TagGlobalLValue
@@ -38,10 +40,11 @@ instance FromJSON cryptolExpr => FromJSON (CrucibleSetupVal cryptolExpr) where
       fromObject = withObject "saved value or Cryptol expression" $ \o ->
         o .: "setup value" >>=
         \case
-          TagServerValue -> ServerValue <$> o .: "name"
+          TagNamedValue -> NamedValue <$> o .: "name"
           TagNullValue -> pure NullValue
           TagCryptol -> CryptolExpr <$> o .: "expression"
           TagArrayValue -> ArrayValue <$> o .: "elements"
+          TagStructValue -> StructValue <$> o .: "fields"
           TagFieldLValue -> FieldLValue <$> o .: "base" <*> o .: "field"
           TagElemLValue -> ElementLValue <$> o .: "base" <*> o .: "index"
           TagGlobalInit -> GlobalInitializer <$> o .: "name"

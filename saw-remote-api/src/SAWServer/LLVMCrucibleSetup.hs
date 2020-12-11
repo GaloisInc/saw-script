@@ -32,7 +32,7 @@ import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
 import qualified Text.LLVM.AST as LLVM
 import qualified Data.LLVM.BitCode as LLVM
-import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
+import qualified SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
 import SAWScript.Crucible.LLVM.Builtins
     ( crucible_alloc
     , crucible_alloc_aligned
@@ -73,7 +73,7 @@ instance FromJSON StartLLVMCrucibleSetupParams where
     withObject "params for \"SAW/Crucible setup\"" $ \o ->
     StartLLVMCrucibleSetupParams <$> o .: "name"
 
-data ServerSetupVal = Val (CMS.AllLLVM SetupValue)
+data ServerSetupVal = Val (CMS.AllLLVM MS.SetupValue)
 
 -- TODO: this is an extra layer of indirection that could be collapsed, but is easy to implement for now.
 compileLLVMContract ::
@@ -145,6 +145,9 @@ interpretLLVMSetup fileReader bic cenv0 ss =
     getSetupVal env (ArrayValue elts) =
       do elts' <- mapM (getSetupVal env) elts
          LLVMCrucibleSetupM $ return $ CMS.anySetupArray elts'
+    getSetupVal env (StructValue elts) =
+      do elts' <- mapM (getSetupVal env) elts
+         LLVMCrucibleSetupM $ return $ CMS.anySetupStruct False elts'
     getSetupVal env (FieldLValue base fld) =
       do base' <- getSetupVal env base
          LLVMCrucibleSetupM $ return $ CMS.anySetupField base' fld
@@ -155,10 +158,10 @@ interpretLLVMSetup fileReader bic cenv0 ss =
       LLVMCrucibleSetupM $ return $ CMS.anySetupGlobalInitializer name
     getSetupVal _ (GlobalLValue name) =
       LLVMCrucibleSetupM $ return $ CMS.anySetupGlobal name
-    getSetupVal (env, _) (ServerValue n) = LLVMCrucibleSetupM $
+    getSetupVal (env, _) (NamedValue n) = LLVMCrucibleSetupM $
       resolve env n >>=
       \case
-        Val x -> return x -- TODO add cases for the server values that
+        Val x -> return x -- TODO add cases for the named server values that
                           -- are not coming from the setup monad
                           -- (e.g. surrounding context)
     getSetupVal (_, cenv) (CryptolExpr expr) = LLVMCrucibleSetupM $

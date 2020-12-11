@@ -144,7 +144,7 @@ interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty,
     getSetupVal _ (GlobalLValue name) =
       JVMSetupM $ return $ MS.SetupGlobal () name
          -}
-    getSetupVal (env, _) (ServerValue n) = JVMSetupM $
+    getSetupVal (env, _) (NamedValue n) = JVMSetupM $
       resolve env n >>=
       \case
         Val x -> return x -- TODO add cases for the server values that
