@@ -19,8 +19,8 @@ import Control.Lens ((^.))
 import qualified Data.Set as Set
 import Data.String
 import Prettyprinter
-import Jsonifier as J
-import qualified Data.ByteString.Char8 as Char8ByteString
+import Data.Aeson (encode, (.=), Value(..), object)
+import qualified Data.ByteString.Lazy.UTF8 as BLU
 
 import qualified Lang.Crucible.JVM as CJ
 import SAWScript.Crucible.Common.MethodSpec
@@ -59,27 +59,27 @@ computeVerificationSummary :: [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> Veri
 computeVerificationSummary = VerificationSummary
 
 -- TODO: we could make things instances of a ToJSON typeclass instead of using the two methods below.
-msToJSON :: forall ext . Pretty (MethodId ext) => CMS.CrucibleMethodSpecIR ext -> J.Json
-msToJSON cms = J.object [
-    ("type",  J.textString "method")
-    , ("method", J.textString . fromString . show . pretty $ cms ^. csMethod)
-    , ("loc", J.textString . fromString . show . pretty . plSourceLoc $ cms ^. csLoc)
-    , ("status", J.textString $ if Set.null (solverStatsSolvers (cms ^. csSolverStats)) then "assumed" else "verified")
-    , ("specification", J.textString "unknown") -- TODO
+msToJSON :: forall ext . Pretty (MethodId ext) => CMS.CrucibleMethodSpecIR ext -> Value
+msToJSON cms = object [
+    ("type" .= ("method" :: String))
+    , ("method" .= (show $ pretty $ cms ^. csMethod))
+    , ("loc" .= (show $ pretty $ plSourceLoc $ cms ^. csLoc))
+    , ("status", if Set.null $ solverStatsSolvers $ cms ^. csSolverStats then "assumed" else "verified")
+    , ("specification" .= ("unknown" :: String)) -- TODO
   ]
 
-thmToJSON :: Theorem -> J.Json
+thmToJSON :: Theorem -> Value
 thmToJSON thm = object [
-    ("type", J.textString "property")
-    , ("loc", J.textString "unknown") -- TODO: Theorem has no attached location information
-    , ("status", J.textString $ if Set.null (solverStatsSolvers (thmStats thm)) then "assumed" else "verified") -- TODO: add solver used?
-    , ("term", J.textString . fromString . show $ PP.ppTerm PP.defaultPPOpts (unProp (thmProp thm)))
+    ("type" .= ("property" :: String))
+    , ("loc" .= ("unknown" :: String)) -- TODO: Theorem has no attached location information
+    , ("status" .= if Set.null $ solverStatsSolvers $ thmStats thm then "assumed" else "verified" :: String) -- TODO: add solver used?
+    , ("term" .= (show $ PP.ppTerm PP.defaultPPOpts $ unProp $ thmProp thm)) 
   ]
 
-jsonVerificationSummary :: VerificationSummary -> Char8ByteString.ByteString
+jsonVerificationSummary :: VerificationSummary -> String
 jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =
-  J.toByteString $ J.array js where
-    js = concat [jvals, lvals, thmvals]
+  BLU.toString $ encode vals where
+    vals = foldr (++) [] [jvals, lvals, thmvals]
     jvals = msToJSON <$> jspecs
     lvals = (\(CMSLLVM.SomeLLVM ls) -> msToJSON ls) <$> lspecs -- TODO: why is the type annotation required here?
     thmvals = thmToJSON <$> thms

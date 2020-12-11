@@ -36,7 +36,6 @@ import Data.Traversable hiding ( mapM )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as Char8ByteString
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -364,8 +363,8 @@ writeVerificationSummary = do
         f' = if hasDrive f then f else dir </> f
         formatSummary = case summaryFormat opts of
                        JSON -> jsonVerificationSummary
-                       Pretty -> Char8ByteString.pack . prettyVerificationSummary
-        in io $ BS.writeFile f' $ formatSummary summary
+                       Pretty -> prettyVerificationSummary
+        in io $ writeFile f' $ formatSummary summary
 
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
