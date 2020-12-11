@@ -26,10 +26,10 @@ value = {"setup value": "Cryptol", "expression": "value" }
 shift = {"setup value": "Cryptol", "expression": "shift" }
 res = {"setup value": "Cryptol", "expression": "value <<< shift" }
 
-y0p = {"setup value": "saved", "name" : "y0p" }
-y1p = {"setup value": "saved", "name" : "y1p" }
-y2p = {"setup value": "saved", "name" : "y2p" }
-y3p = {"setup value": "saved", "name" : "y3p" }
+y0p = {"setup value": "named", "name" : "y0p" }
+y1p = {"setup value": "named", "name" : "y1p" }
+y2p = {"setup value": "named", "name" : "y2p" }
+y3p = {"setup value": "named", "name" : "y3p" }
 
 y0 = {"setup value": "Cryptol", "expression" : "y0" }
 y1 = {"setup value": "Cryptol", "expression" : "y1" }
@@ -41,7 +41,7 @@ y1f = {"setup value": "Cryptol", "expression" : "(quarterround [y0, y1, y2, y3])
 y2f = {"setup value": "Cryptol", "expression" : "(quarterround [y0, y1, y2, y3]) @ 2" }
 y3f = {"setup value": "Cryptol", "expression" : "(quarterround [y0, y1, y2, y3]) @ 3" }
 
-yp = {"setup value": "saved", "name" : "yp" }
+yp = {"setup value": "named", "name" : "yp" }
 y = {"setup value": "Cryptol", "expression" : "y" }
 
 rr_res = {"setup value": "Cryptol", "expression" : "rowround y" }
@@ -134,9 +134,9 @@ cr_contract = oneptr_update_contract(LLVMArrayType(i32, 16), cr_res)
 dr_contract = oneptr_update_contract(LLVMArrayType(i32, 16), dr_res)
 hash_contract = oneptr_update_contract(LLVMArrayType(i8, 64), hash_res)
 
-kp = {"setup value": "saved", "name" : "kp" }
-np = {"setup value": "saved", "name" : "np" }
-ksp = {"setup value": "saved", "name" : "ksp" }
+kp = {"setup value": "named", "name" : "kp" }
+np = {"setup value": "named", "name" : "np" }
+ksp = {"setup value": "named", "name" : "ksp" }
 k = {"setup value": "Cryptol", "expression" : "k" }
 n = {"setup value": "Cryptol", "expression" : "n" }
 zero = {"setup value": "Cryptol", "expression" : "0 : [32]" }
@@ -171,8 +171,8 @@ expand_contract = {
     "return val": None
 }
 
-vp = {"setup value": "saved", "name" : "vp" }
-mp = {"setup value": "saved", "name" : "mp" }
+vp = {"setup value": "named", "name" : "vp" }
+mp = {"setup value": "named", "name" : "mp" }
 v = {"setup value": "Cryptol", "expression" : "v" }
 m = {"setup value": "Cryptol", "expression" : "m" }
 def crypt_contract(size : int):
