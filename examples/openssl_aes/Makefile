@@ -7,7 +7,7 @@ DEPS?=../../deps
 CRYPTOL?=${DEPS}/cryptol
 CRYPTOLPATH?=${CRYPTOL}/examples
 
-OPENSSL_VERSION?=1.1.0g
+OPENSSL_VERSION?=1.1.1g
 SRCDIR=openssl-${OPENSSL_VERSION}
 TARBALL=${SRCDIR}.tar.gz
 

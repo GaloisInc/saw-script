@@ -11,7 +11,6 @@ module Main where
 import Control.Exception
 import Control.Monad
 import Data.Maybe
-import Data.List
 
 import System.IO
 import System.Console.GetOpt
@@ -36,7 +35,7 @@ main = do
   argv <- getArgs
   case getOpt Permute options argv of
     (opts, files, []) -> do
-      let opts' = foldl' (flip id) defaultOptions opts
+      opts' <- foldl (>>=) (return defaultOptions) opts
       opts'' <- processEnv opts'
       {- We have two modes of operation: batch processing, handled in
       'SAWScript.ProcessFile', and a REPL, defined in 'SAWScript.REPL'. -}

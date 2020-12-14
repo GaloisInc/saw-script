@@ -1755,7 +1755,7 @@ crucible_alloc_with_mutability_and_size mut sz alignment lty =
                 , "Specified alignment: " ++ show (Crucible.fromAlignment a) ++ "-byte"
                 ]
               pure a
-         Nothing -> pure memTyAlign
+         Nothing -> pure $! memTyAlign
 
      crucible_alloc_internal lty $
        LLVMAllocSpec
