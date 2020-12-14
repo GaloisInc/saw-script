@@ -187,7 +187,7 @@ initialState readFileFn =
                 , roProxy = AIGProxy AIG.basicProxy
 #endif
                 , roInitWorkDir = cwd
-                , roBasicSS = undefined
+                , roBasicSS = ss
                 }
          rw = TopLevelRW
                 { rwValues = mempty
@@ -203,8 +203,8 @@ initialState readFileFn =
                 , rwCrucibleAssertThenAssume = False
                 , rwLaxArith = False
                 , rwWhat4HashConsing = False
-                , rwProofs = undefined
-                , rwPreservedRegs = undefined
+                , rwProofs = []
+                , rwPreservedRegs = []
                 }
      return (SAWState emptyEnv bic [] ro rw M.empty)
 
