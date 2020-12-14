@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer.Data.Contract
   ( ContractMode(..)
@@ -34,7 +35,7 @@ data Contract ty cryptolExpr =
     , postPointsTos :: [PointsTo cryptolExpr]
     , returnVal     :: Maybe (CrucibleSetupVal cryptolExpr)
     }
-    deriving (Functor, Foldable, Traversable)
+    deriving stock (Functor, Foldable, Traversable)
 
 data ContractVar ty =
   ContractVar
@@ -55,7 +56,7 @@ data PointsTo cryptolExpr =
   PointsTo
     { pointer  :: CrucibleSetupVal cryptolExpr
     , pointsTo :: CrucibleSetupVal cryptolExpr
-    } deriving (Functor, Foldable, Traversable)
+    } deriving stock (Functor, Foldable, Traversable)
 
 instance FromJSON cryptolExpr => FromJSON (PointsTo cryptolExpr) where
   parseJSON =

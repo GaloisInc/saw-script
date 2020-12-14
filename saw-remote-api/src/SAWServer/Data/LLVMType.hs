@@ -6,8 +6,6 @@ module SAWServer.Data.LLVMType (JSONLLVMType, llvmType) where
 import Control.Applicative
 import qualified Data.Aeson as JSON
 import Data.Aeson (withObject, withText, (.:))
-import Data.Int (Int32, Int64)
-import Data.Text (Text)
 import qualified Data.Text as T
 
 
@@ -80,6 +78,7 @@ instance JSON.FromJSON JSONFloatType where
       "fp128" -> pure Fp128
       "x86_fp80" -> pure X86_fp80
       "PPC_fp128" -> pure PPC_fp128
+      _ -> empty
 
 
 instance JSON.FromJSON JSONLLVMType where

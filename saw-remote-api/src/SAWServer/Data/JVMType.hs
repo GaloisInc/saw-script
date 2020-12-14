@@ -6,11 +6,6 @@ module SAWServer.Data.JVMType () where
 import Control.Applicative
 import qualified Data.Aeson as JSON
 import Data.Aeson (withObject, withText, (.:))
-    {-
-import Data.Int (Int32, Int64)
-import Data.Text (Text)
-import qualified Data.Text as T
--}
 
 import SAWScript.JavaExpr
 

@@ -27,11 +27,9 @@ import qualified Data.Text as T
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
 import qualified Lang.Crucible.JVM as CJ
-import qualified Language.JVM.Common as JVM
 import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
 import SAWScript.Crucible.JVM.Builtins
 import SAWScript.Crucible.JVM.BuiltinsJVM
-import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMS
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -41,13 +39,11 @@ import Verifier.SAW.TypedTerm (TypedTerm)
 import Argo
 import SAWServer
 import SAWServer.Data.Contract
-import SAWServer.Data.JVMType
 import SAWServer.Data.SetupValue ()
 import SAWServer.CryptolExpression (getTypedTermOfCExp)
 import SAWServer.Exceptions
 import SAWServer.OK
 import SAWServer.TopLevel
-import SAWServer.TrackFile
 
 startJVMSetup :: StartJVMSetupParams -> Method SAWState OK
 startJVMSetup (StartJVMSetupParams n) =
@@ -102,17 +98,17 @@ interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty,
          (env, cenv) <- get
          put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
          save name (Val (MS.SetupTerm t))
-    go (SetupAlloc name ty _ (Just _)) =
-      error "attempted to allocate a Java object with alignment information"
+    go (SetupAlloc name _ _ (Just _)) =
+      error $ "attempted to allocate a Java object with alignment information: " ++ show name
     go (SetupAlloc name (JavaArray n ty) True Nothing) =
       lift (jvm_alloc_array n ty) >>= save name . Val
     go (SetupAlloc name (JavaClass c) True Nothing) =
       lift (jvm_alloc_object c) >>= save name . Val
-    go (SetupAlloc name ty False Nothing) =
+    go (SetupAlloc _ ty _ Nothing) =
       error $ "cannot allocate type: " ++ show ty
     go (SetupPointsTo src tgt) = get >>= \env -> lift $
-      do ptr <- getSetupVal env src
-         tgt' <- getSetupVal env tgt
+      do _ptr <- getSetupVal env src
+         _tgt' <- getSetupVal env tgt
          error "nyi: points-to"
     go (SetupExecuteFunction args) =
       get >>= \env ->
