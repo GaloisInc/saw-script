@@ -96,7 +96,6 @@ library
     , flexdis86
     , elf-edit
     , reflection
-    , prettyprinter
     , aeson
 
   hs-source-dirs: src
