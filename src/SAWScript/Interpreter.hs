@@ -349,19 +349,22 @@ interpretStmt printBinds stmt =
 
 writeVerificationSummary :: TopLevel ()
 writeVerificationSummary = do
-  do values <- rwProofs <$> getTopLevelRW
-     let jspecs  = [ s | VJVMMethodSpec s <- values ]
-         lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
-         thms    = [ t | VTheorem t <- values ]
-         summary = computeVerificationSummary jspecs lspecs thms
-     opts <- roOptions <$> getTopLevelRO
-     dir <- roInitWorkDir <$> getTopLevelRO
-     case summaryFile opts of
-       Nothing -> return ()
-       Just f ->
-         let f' = if hasDrive f then f else dir </> f
-          in io $ writeFile f' $ prettyVerificationSummary summary
-
+  do
+    values <- rwProofs <$> getTopLevelRW
+    let jspecs  = [ s | VJVMMethodSpec s <- values ]
+        lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
+        thms    = [ t | VTheorem t <- values ]
+        summary = computeVerificationSummary jspecs lspecs thms
+    opts <- roOptions <$> getTopLevelRO
+    dir <- roInitWorkDir <$> getTopLevelRO
+    case summaryFile opts of
+      Nothing -> return ()
+      Just f -> let
+        f' = if hasDrive f then f else dir </> f
+        formatSummary = case summaryFormat opts of
+                       JSON -> jsonVerificationSummary
+                       Pretty -> prettyVerificationSummary
+        in io $ writeFile f' $ formatSummary summary
 
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
@@ -1427,22 +1430,22 @@ primitives = Map.fromList
     ]
 
   , prim "addsimp"             "Theorem -> Simpset -> Simpset"
-    (pureVal addsimp)
+    (funVal2 addsimp)
     Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
 
   , prim "addsimp'"            "Term -> Simpset -> Simpset"
-    (pureVal addsimp')
+    (funVal2 addsimp')
     Current
     [ "Add an arbitrary equality term to a given simplification rule set." ]
 
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
-    (pureVal addsimps)
+    (funVal2 addsimps)
     Current
     [ "Add proved equality theorems to a given simplification rule set." ]
 
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
-    (pureVal addsimps')
+    (funVal2 addsimps')
     Current
     [ "Add arbitrary equality terms to a given simplification rule set." ]
 
