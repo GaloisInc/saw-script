@@ -1470,22 +1470,22 @@ primitives = Map.fromList
     ]
 
   , prim "addsimp"             "Theorem -> Simpset -> Simpset"
-    (pureVal addsimp)
+    (funVal2 addsimp)
     Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
 
   , prim "addsimp'"            "Term -> Simpset -> Simpset"
-    (pureVal addsimp')
+    (funVal2 addsimp')
     Current
     [ "Add an arbitrary equality term to a given simplification rule set." ]
 
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
-    (pureVal addsimps)
+    (funVal2 addsimps)
     Current
     [ "Add proved equality theorems to a given simplification rule set." ]
 
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
-    (pureVal addsimps')
+    (funVal2 addsimps')
     Current
     [ "Add arbitrary equality terms to a given simplification rule set." ]
 

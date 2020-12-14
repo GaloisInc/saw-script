@@ -1105,17 +1105,23 @@ beta_reduce_term (TypedTerm schema t) = do
   t' <- io $ betaNormalize sc t
   return (TypedTerm schema t')
 
-addsimp :: Theorem -> Simpset -> Simpset
-addsimp (Theorem (Prop t) _stats) ss = addRule (ruleOfProp t) ss
+addsimp :: Theorem -> Simpset -> TopLevel Simpset
+addsimp (Theorem (Prop t) _stats) ss =
+  case ruleOfProp t of
+    Nothing -> fail "addsimp: theorem not an equation"
+    Just rule -> pure (addRule rule ss)
 
-addsimp' :: Term -> Simpset -> Simpset
-addsimp' t ss = addRule (ruleOfProp t) ss
+addsimp' :: Term -> Simpset -> TopLevel Simpset
+addsimp' t ss =
+  case ruleOfProp t of
+    Nothing -> fail "addsimp': theorem not an equation"
+    Just rule -> pure (addRule rule ss)
 
-addsimps :: [Theorem] -> Simpset -> Simpset
-addsimps thms ss = foldr addsimp ss thms
+addsimps :: [Theorem] -> Simpset -> TopLevel Simpset
+addsimps thms ss = foldM (flip addsimp) ss thms
 
-addsimps' :: [Term] -> Simpset -> Simpset
-addsimps' ts ss = foldr (\t -> addRule (ruleOfProp t)) ss ts
+addsimps' :: [Term] -> Simpset -> TopLevel Simpset
+addsimps' ts ss = foldM (flip addsimp') ss ts
 
 print_type :: Term -> TopLevel ()
 print_type t = do
