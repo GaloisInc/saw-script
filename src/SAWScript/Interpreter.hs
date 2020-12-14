@@ -2400,7 +2400,7 @@ primitives = Map.fromList
   , prim "crucible_setup_val_to_term"
     " SetupValue -> TopLevel Term"
     (pureVal crucible_setup_val_to_typed_term)
-    Current
+    Deprecated
     [ "Convert from a setup value to a typed term. This can only be done for a"
     , "subset of setup values. Fails if a setup value is a global, variable or null."
     ]
