@@ -97,6 +97,7 @@ library
     , elf-edit
     , reflection
     , prettyprinter
+    , aeson
 
   hs-source-dirs: src
 
