@@ -60,7 +60,7 @@ import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
-  , FirstOrderValue(..), asFiniteTypePure
+  , FirstOrderValue(..), asFiniteType
   , toFirstOrderValue, scFirstOrderValue
   )
 import Verifier.SAW.Prelude
@@ -965,8 +965,8 @@ w4AbcVerilog _unints sc _hashcons g =
                      let goalArgs' = reverse goalArgs
                          argTys = map snd goalArgs'
                          argNms = map fst goalArgs'
-                         r = liftCexBB (mapMaybe asFiniteTypePure argTys) bits
-                     case r of
+                     finiteArgTys <- traverse (asFiniteType sc) argTys
+                     case liftCexBB finiteArgTys bits of
                        Left parseErr -> fail parseErr
                        Right vs -> return $ Just model
                          where model = zip argNms (map toFirstOrderValue vs)
