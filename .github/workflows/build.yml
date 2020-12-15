@@ -101,7 +101,7 @@ jobs:
 
       - shell: bash
         id: cabal-test
-        continue-on-error: ${{ matrix.continue-on-error }}
+        continue-on-error: true
         run: cabal v2-test saw-remote-api
         env:
           SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
