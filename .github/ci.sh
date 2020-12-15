@@ -163,7 +163,7 @@ install_system_deps() {
   install_yasm &
   wait
   export PATH=$PWD/$BIN:$PATH
-  echo "$PWD/$BIN" >> "$GITHUB_PATH"
+  echo "$BIN" >> "$GITHUB_PATH"
   is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices && is_exe "$BIN" yasm
 }
 

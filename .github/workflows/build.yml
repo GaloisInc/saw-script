@@ -35,7 +35,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         ghc: ["8.6.5", "8.8.4"]
-        continue-on-error: [true]
+        continue-on-error: [false]
         include:
           - os: macos-latest
             ghc: "8.6.5"
@@ -140,9 +140,9 @@ jobs:
           path: "dist/bin/saw"
 
       - shell: bash
-        if: "steps.test.outcome == 'failure' || steps.cabal-test.outcome == 'failure'"
+        if: steps.cabal-test.outcome == 'failure'"
         name: Warn if tests failed
-        run: echo "::error ::Test Suite Failed. Pipeline allowed to pass until tests are reliable."
+        run: echo "::error :: Test suite failed for saw-remote-api. Pipeline allowed to pass until tests are reliable."
 
   docker:
     runs-on: ubuntu-latest
