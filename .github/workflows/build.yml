@@ -142,7 +142,7 @@ jobs:
       - shell: bash
         if: "steps.cabal-test.outcome == 'failure'"
         name: Warn if tests failed
-        run: echo "::error :: Test suite failed for saw-remote-api. Pipeline allowed to pass until tests are reliable."
+        run: echo "::error ::Test suite failed for saw-remote-api. Pipeline allowed to pass until tests are reliable."
 
   docker:
     runs-on: ubuntu-latest
