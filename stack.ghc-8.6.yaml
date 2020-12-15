@@ -37,6 +37,8 @@ packages:
 extra-deps:
   - zenc-0.1.1@sha256:e4be3e5e9fe1a1ade05910909c6e5b5a8eff72e697868b03955c9781b0443947
   - IfElse-0.85
+  - QuickCheck-2.14
+  - splitmix-0.0.4
   - fgl-visualize-0.1.0.1
   - simple-smt-0.9.4
   - GraphSCC-1.0.4
@@ -47,6 +49,7 @@ extra-deps:
   - config-schema-1.2.0.0
   - config-value-0.7.0.1
   - simple-get-opt-0.3
+  - base-orphans-0.8.2
   - splitmix-0.0.4
   - bv-sized-1.0.1
   - bitwise-1.0.0.1

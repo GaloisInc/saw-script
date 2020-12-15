@@ -2,7 +2,7 @@
 set -Eeuxo pipefail
 
 [[ "$RUNNER_OS" == 'Windows' ]] && IS_WIN=true || IS_WIN=false
-BIN=bin
+BIN=$(pwd)/bin
 EXT=""
 $IS_WIN && EXT=".exe"
 mkdir -p "$BIN"
@@ -152,6 +152,7 @@ build_abc() {
   esac
   pushd deps/abcBridge
   $IS_WIN || scripts/build-abc.sh $arch $os
+  cp abc-build/abc $BIN/abc
   popd
 }
 
