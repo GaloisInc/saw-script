@@ -44,11 +44,11 @@ jobs:
             ghc: "8.8.4"
             continue-on-error: true
           - os: windows-latest
-            ghc: "8.8.4"
-            continue-on-error: true
-          - os: windows-latest
             ghc: "8.6.5"
             continue-on-error: true
+        exclude:
+          - os: windows-latest
+            ghc: "8.8.4"
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
@@ -120,13 +120,13 @@ jobs:
           .github/ci.sh test_dist
 
       - if: >-
-          env.RELEASE && matrix.ghc == '8.8.4'
+          env.RELEASE && matrix.ghc == '8.6.5'
         run: |
           .github/ci.sh build_cryptol
           .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
 
       - if: >-
-          env.RELEASE && matrix.ghc == '8.8.4'
+          env.RELEASE && matrix.ghc == '8.6.5'
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
@@ -209,7 +209,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        ghc: ["8.8.4"]
+        ghc: ["8.6.5"]
     needs: [outputs, build]
     env:
       VERSION: ${{ needs.outputs.outputs.saw-version }}

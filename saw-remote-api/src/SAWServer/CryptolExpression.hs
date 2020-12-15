@@ -72,9 +72,6 @@ getTypedTermOfCExp fileReader sc cenv expr =
             return (Right (TypedTerm schema trm, modEnv'), ws)
        (Left err, ws) -> return (Left err, ws)
 
-liftModuleM :: ModuleEnv -> ModuleM a -> Method SAWState (a, ModuleEnv)
-liftModuleM env m = liftIO (runModuleM (defaultEvalOpts, B.readFile, env) m) >>= moduleCmdResult
-
 moduleCmdResult :: ModuleRes a -> Method SAWState (a, ModuleEnv)
 moduleCmdResult (result, warnings) =
   do mapM_ (liftIO . print . pp) warnings

@@ -997,10 +997,22 @@ primitives = Map.fromList
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
+  , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
+    (scVal write_smtlib2_w4)
+    Current
+    [ "Write the given term to the named file in SMT-Lib version 2 format,"
+    , "using the What4 backend instead of the SBV backend."
+    ]
+
   , prim "write_core"          "String -> Term -> TopLevel ()"
     (pureVal writeCore)
     Current
     [ "Write out a representation of a term in SAWCore external format." ]
+
+  , prim "write_verilog"       "String -> Term -> TopLevel ()"
+    (scVal writeVerilog)
+    Experimental
+    [ "Write out a representation of a term in Verilog format." ]
 
   , prim "write_coq_term" "String -> [(String, String)] -> [String] -> String -> Term -> TopLevel ()"
     (pureVal writeCoqTerm)
@@ -1225,6 +1237,11 @@ primitives = Map.fromList
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
+  , prim "sbv_abc"             "ProofScript SatResult"
+    (pureVal proveABC_SBV)
+    Current
+    [ "Use the ABC theorem prover to prove the current goal." ]
+
   , prim "boolector"           "ProofScript SatResult"
     (pureVal proveBoolector)
     Current
@@ -1291,12 +1308,22 @@ primitives = Map.fromList
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
+  , prim "w4_offline_smtlib2"  "String -> ProofScript SatResult"
+    (pureVal offline_smtlib2)
+    Current
+    [ "Write the current goal to the given file in SMT-Lib2 format." ]
+
   , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript SatResult"
     (pureVal offline_unint_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format,"
     , "leaving the listed functions uninterpreted."
     ]
+
+  , prim "offline_verilog"        "String -> ProofScript SatResult"
+    (pureVal offline_verilog)
+    Experimental
+    [ "Write the current goal to the given file in Verilog format." ]
 
   , prim "external_cnf_solver" "String -> [String] -> ProofScript SatResult"
     (pureVal (satExternal True))
@@ -1350,6 +1377,22 @@ primitives = Map.fromList
     Current
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "w4_abc_smtlib2"        "ProofScript SatResult"
+    (pureVal w4_abc_smtlib2)
+    Experimental
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with SMT-Lib2 as an interchange format, generated"
+    , "using the What4 backend."
+    ]
+
+  , prim "w4_abc_verilog"        "ProofScript SatResult"
+    (pureVal w4_abc_verilog)
+    Experimental
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with Verilog as an interchange format, generated"
+    , "using the What4 backend."
     ]
 
   , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript SatResult"
