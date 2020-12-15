@@ -1,0 +1,15 @@
+// NOTE: in the current design, contradictions are indicated as a warning
+// message, so the following script should succeed, but contain a message about
+// the detected contradiction in its output.
+
+let bad_spec = do {
+    a <- crucible_fresh_var "a" (llvm_int 32);
+    crucible_precond {{ a == 0 }};
+    crucible_precond {{ a == 1 }};
+    crucible_execute_func [crucible_term a];
+    crucible_postcond {{ a == 2 }};
+};
+
+m <- llvm_load_module "test.bc";
+
+crucible_llvm_verify m "double_imp" [] true bad_spec z3;

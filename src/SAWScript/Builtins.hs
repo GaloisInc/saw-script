@@ -60,7 +60,7 @@ import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
-  , FirstOrderValue(..)
+  , FirstOrderValue(..), asFiniteType
   , toFirstOrderValue, scFirstOrderValue
   )
 import Verifier.SAW.Prelude
@@ -205,12 +205,12 @@ readSBV path unintlst =
 -- arguments, in the style of 'cecPrim' below. This would require
 -- support for latches in the 'AIGNetwork' SAWScript type.
 dsecPrint :: SharedContext -> TypedTerm -> TypedTerm -> TopLevel ()
-dsecPrint sc t1 t2 = SV.getProxy >>= \(SV.AIGProxy proxy) -> liftIO $ do
+dsecPrint sc t1 t2 = SV.getProxy >>= \(SV.AIGProxy proxy) -> do
   withSystemTempFile ".aig" $ \path1 _handle1 -> do
   withSystemTempFile ".aig" $ \path2 _handle2 -> do
   Prover.writeSAIGInferLatches proxy sc path1 t1
   Prover.writeSAIGInferLatches proxy sc path2 t2
-  callCommand (abcDsec path1 path2)
+  io $ callCommand (abcDsec path1 path2)
   where
     -- The '-w' here may be overkill ...
     abcDsec path1 path2 = printf "abc -c 'read %s; dsec -v -w %s;'" path1 path2
@@ -703,19 +703,19 @@ writeAIGPrim :: FilePath -> Term -> TopLevel ()
 writeAIGPrim f t = do
   SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
-  liftIO $ Prover.writeAIG proxy sc f t
+  Prover.writeAIG proxy sc f t
 
 writeSAIGPrim :: FilePath -> TypedTerm -> TopLevel ()
 writeSAIGPrim f t = do
   SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
-  liftIO $ Prover.writeSAIGInferLatches proxy sc f t
+  Prover.writeSAIGInferLatches proxy sc f t
 
 writeSAIGComputedPrim :: FilePath -> Term -> Int -> TopLevel ()
 writeSAIGComputedPrim f t n = do
   SV.AIGProxy proxy <- SV.getProxy
   sc <- SV.getSharedContext
-  liftIO $ Prover.writeSAIG proxy sc f t n
+  Prover.writeSAIG proxy sc f t n
 
 -- | Bit-blast a proposition check its validity using the RME library.
 proveRME :: ProofScript SV.SatResult
@@ -793,6 +793,9 @@ wrapW4ProveExporter f unints path ext = do
     applyProverToGoal (\s -> f unintSet s hashConsing file) sc g
 
 --------------------------------------------------
+proveABC_SBV :: ProofScript SV.SatResult
+proveABC_SBV = proveSBV SBV.abc
+
 proveBoolector :: ProofScript SV.SatResult
 proveBoolector = proveSBV SBV.boolector
 
@@ -825,6 +828,9 @@ proveUnintYices = proveUnintSBV SBV.yices
 
 
 --------------------------------------------------
+w4_abc_smtlib2 :: ProofScript SV.SatResult
+w4_abc_smtlib2 = wrapW4Prover Prover.proveWhat4_abc []
+
 w4_boolector :: ProofScript SV.SatResult
 w4_boolector = wrapW4Prover Prover.proveWhat4_boolector []
 
@@ -862,15 +868,14 @@ offline_w4_unint_yices unints path =
      wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
 
 proveWithExporter ::
-  (SharedContext -> FilePath -> Prop -> IO ()) ->
+  (SharedContext -> FilePath -> Prop -> TopLevel ()) ->
   String ->
   String ->
   ProofScript SV.SatResult
 proveWithExporter exporter path ext =
   withFirstGoal $ \g ->
   do let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-     sc <- SV.getSharedContext
-     stats <- io $ Prover.proveWithExporter exporter file sc (goalProp g)
+     stats <- Prover.proveWithExporter exporter file (goalProp g)
      return (SV.Unsat stats, stats, Nothing)
 
 offline_aig :: FilePath -> ProofScript SV.SatResult
@@ -892,10 +897,89 @@ offline_extcore path = proveWithExporter (const Prover.writeCoreProp) path ".ext
 offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
 offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2 path ".smt2"
 
+w4_offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
+w4_offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2What4 path ".smt2"
+
 offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript SV.SatResult
 offline_unint_smtlib2 unints path =
   do unintSet <- lift $ resolveNames unints
      proveWithExporter (Prover.writeUnintSMTLib2 unintSet) path ".smt2"
+
+offline_verilog :: FilePath -> ProofScript SV.SatResult
+offline_verilog path =
+  proveWithExporter (Prover.adaptExporter Prover.write_verilog) path ".v"
+
+parseAigerCex :: String -> IO [Bool]
+parseAigerCex text =
+  case lines text of
+    [_, cex] ->
+      case words cex of
+        [bits, _] -> mapM bitToBool bits
+        _ -> fail $ "invalid counterexample line: " ++ cex
+    _ -> fail $ "invalid counterexample text: " ++ text
+  where
+    bitToBool '0' = return False
+    bitToBool '1' = return True
+    bitToBool c   = fail ("invalid bit: " ++ [c])
+
+w4_abc_verilog :: ProofScript SV.SatResult
+w4_abc_verilog = wrapW4Prover w4AbcVerilog []
+
+w4AbcVerilog ::
+  Set VarIndex ->
+  SharedContext ->
+  Bool ->
+  Prop ->
+  IO (Maybe [(String, FirstOrderValue)], SolverStats)
+w4AbcVerilog _unints sc _hashcons g =
+       -- Create temporary files
+    do let tpl = "abc_verilog.v"
+           tplCex = "abc_verilog.cex"
+       tmp <- emptySystemTempFile tpl
+       tmpCex <- emptySystemTempFile tplCex
+
+       -- Get goal into the right form
+       let (goalArgs, concl) = asPiList (unProp g)
+       p <- case asEqTrue concl of
+              Just p -> return p
+              Nothing -> fail "adaptExporter: expected EqTrue"
+       t <- scLambdaList sc goalArgs =<< scNot sc p
+       Prover.writeVerilog sc tmp t
+
+       -- Run ABC and remove temporaries
+       let execName = "abc"
+           args = ["-q", "%read " ++ tmp ++"; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++ tmpCex]
+       (ec, out, err) <- readProcessWithExitCode execName args ""
+       cexText <- readFile tmpCex
+       removeFile tmp
+       removeFile tmpCex
+
+       -- Parse and report results
+       let isEquivalent = "equivalent" `isInfixOf` out
+           isNotEquivalent = "NOT EQUIVALENT" `isInfixOf` out
+           stats = solverStats "abc_verilog" (scSharedSize (unProp g))
+       res <- case (isEquivalent, isNotEquivalent) of
+                (True, False) -> return $ Nothing
+                (False, True) ->
+                  do bits <- reverse <$> parseAigerCex cexText
+                     let goalArgs' = reverse goalArgs
+                         argTys = map snd goalArgs'
+                         argNms = map fst goalArgs'
+                     finiteArgTys <- traverse (asFiniteType sc) argTys
+                     case liftCexBB finiteArgTys bits of
+                       Left parseErr -> fail parseErr
+                       Right vs -> return $ Just model
+                         where model = zip argNms (map toFirstOrderValue vs)
+                _ -> do putStrLn "ABC returned unexpected result"
+                        putStrLn $ "== Exit code: " ++ show ec
+                        putStrLn "== Standard output"
+                        putStrLn out
+                        putStrLn "== Standard error"
+                        putStrLn err
+                        putStrLn "== Counterexample text"
+                        putStrLn cexText
+                        fail "Proof failed."
+       return (res, stats)
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (\ps -> ps { psTimeout = Just to })

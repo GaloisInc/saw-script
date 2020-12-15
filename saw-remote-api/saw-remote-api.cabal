@@ -36,6 +36,7 @@ common warnings
     -Wno-missing-local-signatures
     -Wno-monomorphism-restriction
     -Wno-implicit-prelude
+    -Wno-orphans
 
 common deps
   build-depends: base >=4.11.1.0 && <4.15,
