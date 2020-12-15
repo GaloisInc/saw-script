@@ -140,7 +140,7 @@ jobs:
           path: "dist/bin/saw"
 
       - shell: bash
-        if: steps.cabal-test.outcome == 'failure'"
+        if: "steps.cabal-test.outcome == 'failure'"
         name: Warn if tests failed
         run: echo "::error :: Test suite failed for saw-remote-api. Pipeline allowed to pass until tests are reliable."
 
