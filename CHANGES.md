@@ -62,6 +62,10 @@ that is assumed to be callee-saved, and path satisfiability checking is
 now performed when passing `True` as the fifth argument to
 `crucible_llvm_verify_x86`.
 
+The new `cryptol_add_path` command adds a directory to the search path
+used when loading Cryptol modules (and following imports within
+explicitly-loaded modules).
+
 ## Bug Fixes
 
 * Catch more exceptions at the REPL (issues #138, #560, #745, and #814).
