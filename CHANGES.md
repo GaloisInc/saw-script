@@ -1,3 +1,78 @@
+# Version 0.7
+
+## New Features
+
+SAW can now use the ABC prover as an external process in addition to the
+linked-in version. This change is in preparation for removing the
+linked-in version in a future release. This change has several parts:
+
+* The new proof tactics `w4_abc_verilog` and `w4_abc_smtlib2` allow
+  using ABC to discharge proof goals using either Verilog or SMT-Lib2 as
+  the intermediate file format, respectively.
+* The new `offline_verilog` tactic writes a proof goal in the subset of
+  Verilog supported by ABC, which can allow the use of custom ABC
+  commands to discharge it.
+* The new `w4_offline_smtlib2` writes a proof goal in SMT-Lib2 syntax
+  using What4 instead of SBV.
+* The new `write_verilog` command will write a `Term` to a file in
+  Verilog syntax from the top level of a script.
+* The new `write_smtlib2_w4` command will write a `Term` to a file in
+  SMT-Lib2 syntax from the top level of a script, using What4 instead of
+  SBV.
+* The new proof tactics `sbv_abc`, `sbv_boolector`, `sbv_cvc4`,
+  `sbv_mathsat`, `sbv_yices`, `sbv_z3`, `sbv_unint_cvc4`,
+  `sbv_unint_yices`, and `sbv_unint_z3` are now aliases for the same
+  tactics without the `sbv_` prefixes in preparation for making the
+  unprefixed tactics refer to the What4 versions of the same
+  functionality.
+
+Java verification using the Crucible symbolic execution engine is now
+more flexible and performant.
+
+* The new `jvm_array_is` command specifies the entire contents of an
+  array together.
+* The new `jvm_field_is` command allows disambiguation by type for
+  fields of the same name but different types.
+* JVM method names can be disambiguated using type descriptors.
+* JVM constructors can be referred to by the name `<init>`.
+* Error messages in JVM verification are significantly more helpful.
+
+These changes, and various internal performance improvements, mean that
+the ECDSA verification example included with SAW now runs in around 5
+minutes on a modern laptop.
+
+New features exist to summarize any verifications performed with SAW.
+The `summarize_verification` command will print a list of all functions
+or methods verified or assumed, and all lemmas proved with commands such
+as `prove`. These summaries include the status (verified or assumed) of
+each item along with the provers used to complete the proof. The `-s
+<filename>` flag will instruct SAW to automatically write a summary to
+the given file, and the `-f <format>` flag will instruct SAW to use
+either a human-readable (`pretty`) format or JSON (`json`) for
+consumption by other tools.
+
+An experimental RPC server for SAW now exists, which provides an
+alternative to SAWScript for controlling SAW execution. A client library
+for interacting with the server from Python exists
+[here](https://github.com/GaloisInc/argo/tree/master/python).
+
+Verification of x86 code called from LLVM is now more flexible. The
+`add_x86_preserved_reg` command can add a specific register to the set
+that is assumed to be callee-saved, and path satisfiability checking is
+now performed when passing `True` as the fifth argument to
+`crucible_llvm_verify_x86`.
+
+## Bug Fixes
+
+* Catch more exceptions at the REPL (issues #138, #560, #745, and #814).
+* Ensure global memory is immutable in x86 verification.
+* Fix path sat checking (issues #683 and #723).
+
+* Closed issues #61, #138, #158, #162, #212, #215, #265, #314, #319,
+  #399, #412, #422, #439, #456, #544, #560, #562, #683, #686, #719,
+  #723, #745, #814, #844, #845, #856, #866, #874, #888, #901, #902,
+  #904, #911, #920, #936, #937, #945, and #957.
+
 # Version 0.6
 
 ## New Features
