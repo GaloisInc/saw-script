@@ -1579,6 +1579,14 @@ primitives = Map.fromList
     , "including array updates, truncate/extend, and signed comparisons."
     ]
 
+  , prim "cryptol_add_path"    "String -> TopLevel ()"
+    (pureVal cryptol_add_path)
+    Current
+    [ "Add a directory to the Cryptol search path. The Cryptol file loader"
+    , "will look in this directory when following `import` statements in"
+    , "Cryptol source files."
+    ]
+
   -- Java stuff
 
   , prim "java_bool"           "JavaType"
