@@ -902,15 +902,15 @@ primitives = Map.fromList
 
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
-    Current
+    Deprecated
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
   , prim "save_aig"            "String -> AIG -> TopLevel ()"
     (pureVal saveAIGPrim)
-    Current
+    Deprecated
     [ "Write an AIG to a file in binary AIGER format." ]
   , prim "save_aig_as_cnf"     "String -> AIG -> TopLevel ()"
     (pureVal saveAIGasCNFPrim)
-    Current
+    Deprecated
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
@@ -928,14 +928,14 @@ primitives = Map.fromList
 
   , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
     (pureVal cecPrim)
-    Current
+    Deprecated
     [ "Perform a Combinatorial Equivalence Check between two AIGs."
     , "The AIGs must have the same number of inputs and outputs."
     ]
 
   , prim "bitblast"            "Term -> TopLevel AIG"
     (pureVal bbPrim)
-    Current
+    Deprecated
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
@@ -1282,6 +1282,57 @@ primitives = Map.fromList
     ]
 
   , prim "unint_yices"           "[String] -> ProofScript SatResult"
+    (pureVal proveUnintYices)
+    Current
+    [ "Use the Yices theorem prover to prove the current goal. Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "sbv_abc"             "ProofScript SatResult"
+    (pureVal proveABC)
+    Current
+    [ "Use the ABC theorem prover to prove the current goal." ]
+
+  , prim "sbv_boolector"       "ProofScript SatResult"
+    (pureVal proveBoolector)
+    Current
+    [ "Use the Boolector theorem prover to prove the current goal." ]
+
+  , prim "sbv_cvc4"            "ProofScript SatResult"
+    (pureVal proveCVC4)
+    Current
+    [ "Use the CVC4 theorem prover to prove the current goal." ]
+
+  , prim "sbv_z3"              "ProofScript SatResult"
+    (pureVal proveZ3)
+    Current
+    [ "Use the Z3 theorem prover to prove the current goal." ]
+
+  , prim "sbv_mathsat"         "ProofScript SatResult"
+    (pureVal proveMathSAT)
+    Current
+    [ "Use the MathSAT theorem prover to prove the current goal." ]
+
+  , prim "sbv_yices"           "ProofScript SatResult"
+    (pureVal proveYices)
+    Current
+    [ "Use the Yices theorem prover to prove the current goal." ]
+
+  , prim "sbv_unint_z3"        "[String] -> ProofScript SatResult"
+    (pureVal proveUnintZ3)
+    Current
+    [ "Use the Z3 theorem prover to prove the current goal. Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "sbv_unint_cvc4"        "[String] -> ProofScript SatResult"
+    (pureVal proveUnintCVC4)
+    Current
+    [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "sbv_unint_yices"       "[String] -> ProofScript SatResult"
     (pureVal proveUnintYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
@@ -2392,7 +2443,7 @@ primitives = Map.fromList
   , prim "crucible_setup_val_to_term"
     " SetupValue -> TopLevel Term"
     (pureVal crucible_setup_val_to_typed_term)
-    Current
+    Deprecated
     [ "Convert from a setup value to a typed term. This can only be done for a"
     , "subset of setup values. Fails if a setup value is a global, variable or null."
     ]
