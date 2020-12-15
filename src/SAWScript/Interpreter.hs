@@ -1288,11 +1288,6 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "sbv_abc"             "ProofScript SatResult"
-    (pureVal proveABC)
-    Current
-    [ "Use the ABC theorem prover to prove the current goal." ]
-
   , prim "sbv_boolector"       "ProofScript SatResult"
     (pureVal proveBoolector)
     Current
