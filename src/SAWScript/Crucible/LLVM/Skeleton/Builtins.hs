@@ -158,9 +158,9 @@ skeleton_globals_pre mskel =
   forM_ (mskel ^. modSkelGlobals) $ \gskel ->
     when (gskel ^. globSkelMutable) $ do
       let gname = Text.unpack $ gskel ^. globSkelName
-      crucible_alloc_global gname
+      llvm_alloc_global gname
       when (gskel ^. globSkelInitialized)
-        . crucible_points_to True (anySetupGlobal gname)
+        . llvm_points_to True (anySetupGlobal gname)
         $ anySetupGlobalInitializer gname
 
 skeleton_globals_post ::
@@ -170,7 +170,7 @@ skeleton_globals_post mskel =
   forM_ (mskel ^. modSkelGlobals) $ \gskel -> do
     when (gskel ^. globSkelMutable && gskel ^. globSkelInitialized) $ do
       let gname = Text.unpack $ gskel ^. globSkelName
-      crucible_points_to True (anySetupGlobal gname)
+      llvm_points_to True (anySetupGlobal gname)
         $ anySetupGlobalInitializer gname
 
 buildArg ::
@@ -188,17 +188,17 @@ buildArg arg idx
           | otherwise -> (pt, s ^. sizeGuessInitialized)
         _ -> (pt, False)
     in do
-      ptr <- crucible_alloc t
+      ptr <- llvm_alloc t
       mval <- if initialized
         then do
-        val <- crucible_fresh_var ident t
-        crucible_points_to True ptr (anySetupTerm val)
+        val <- llvm_fresh_var ident t
+        llvm_points_to True ptr (anySetupTerm val)
         pure $ Just val
         else pure Nothing
       pure (mval, Just ptr, arg ^. argSkelName)
   | otherwise
   = do
-      val <- crucible_fresh_var ident
+      val <- llvm_fresh_var ident
         $ arg ^. argSkelType . typeSkelLLVMType
       pure (Just val, Nothing, arg ^. argSkelName)
   where
@@ -220,7 +220,7 @@ skeleton_exec prestate = do
       (_, Just ptr) -> pure ptr
       (Just val, Nothing) -> pure $ anySetupTerm val
       (Nothing, Nothing) -> throwSkeletonLLVM "skeleton_exec" "Invalid pointer-pointee combination on skeleton argument"
-  crucible_execute_func args
+  llvm_execute_func args
 
 rebuildArg ::
   (ArgSkeleton, (Maybe TypedTerm, Maybe (AllLLVM SetupValue), Maybe Text))  ->
@@ -239,8 +239,8 @@ rebuildArg (arg, prearg) idx
         _ -> pt
       ident = maybe ("arg" <> show idx) Text.unpack nm
     in do
-      val' <- crucible_fresh_var ident t
-      crucible_points_to True ptr $ anySetupTerm val'
+      val' <- llvm_fresh_var ident t
+      llvm_points_to True ptr $ anySetupTerm val'
       pure (Just val', Just ptr, nm)
   | otherwise = pure prearg
 
@@ -255,8 +255,8 @@ skeleton_poststate skel prestate = do
   case skel ^. funSkelRet . typeSkelLLVMType of
     LLVM.PrimType LLVM.Void -> pure ()
     t -> do
-      ret <- crucible_fresh_var ("return value of " <> (Text.unpack $ skel ^. funSkelName)) t
-      crucible_return $ anySetupTerm ret
+      ret <- llvm_fresh_var ("return value of " <> (Text.unpack $ skel ^. funSkelName)) t
+      llvm_return $ anySetupTerm ret
   pure $ SkeletonState{..}
 
 skeleton_arg_index ::

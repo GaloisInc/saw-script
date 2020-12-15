@@ -23,7 +23,7 @@ Stability   : provisional
 {-# Language TemplateHaskell #-}
 
 module SAWScript.Crucible.LLVM.X86
-  ( crucible_llvm_verify_x86
+  ( llvm_verify_x86
   ) where
 
 import Control.Lens.TH (makeLenses)
@@ -220,7 +220,7 @@ cryptolUninterpreted _ nm _ xs = throwX86 $ mconcat
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
 -- functions that call x86_64 functions (but not the other way around).
-crucible_llvm_verify_x86 ::
+llvm_verify_x86 ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
@@ -229,7 +229,7 @@ crucible_llvm_verify_x86 ::
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-crucible_llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
+llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64

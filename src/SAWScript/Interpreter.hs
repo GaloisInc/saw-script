@@ -1788,7 +1788,7 @@ primitives = Map.fromList
     ] -}
 
   , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
-    (pureVal CJ.crucible_java_extract)
+    (pureVal CJ.java_extract)
     Current
     [ "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
@@ -2098,14 +2098,14 @@ primitives = Map.fromList
     ---------------------------------------------------------------------
     -- Crucible/LLVM interface
 
-  , prim "crucible_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
-    (pureVal crucible_llvm_cfg)
+  , prim "llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
+    (pureVal llvm_cfg)
     Current
     [ "Load a function from the given LLVM module into a Crucible CFG."
     ]
 
   , prim "crucible_llvm_extract"  "LLVMModule -> String -> TopLevel Term"
-    (pureVal crucible_llvm_extract)
+    (pureVal llvm_extract)
     Current
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term will be the parameters of the LLVM function, and the return"
@@ -2116,7 +2116,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_compositional_extract"
     "LLVMModule -> String -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
-    (pureVal crucible_llvm_compositional_extract)
+    (pureVal llvm_compositional_extract)
     Experimental
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term are the input parameters of the LLVM function: the parameters"
@@ -2130,14 +2130,14 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
-    (pureVal crucible_fresh_var)
+    (pureVal llvm_fresh_var)
     Current
     [ "Create a fresh symbolic variable for use within a Crucible"
     , "specification. The name is used only for pretty-printing."
     ]
 
   , prim "crucible_fresh_cryptol_var" "String -> Type -> CrucibleSetup Term"
-    (pureVal crucible_fresh_cryptol_var)
+    (pureVal llvm_fresh_cryptol_var)
     Experimental
     [ "Create a fresh symbolic variable of the given Cryptol type for use"
     , "within a Crucible specification. The given name is used only for"
@@ -2146,7 +2146,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc)
+    (pureVal llvm_alloc)
     Current
     [ "Declare that an object of the given type should be allocated in a"
     , "Crucible specification. Before `crucible_execute_func`, this states"
@@ -2156,7 +2156,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_aligned" "Int -> LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc_aligned)
+    (pureVal llvm_alloc_aligned)
     Current
     [ "Declare that a memory region of the given type should be allocated in"
     , "a Crucible specification, and also specify that the start of the region"
@@ -2165,7 +2165,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_readonly" "LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc_readonly)
+    (pureVal llvm_alloc_readonly)
     Current
     [ "Declare that a read-only memory region of the given type should be"
     , "allocated in a Crucible specification. The function must not attempt"
@@ -2175,7 +2175,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_readonly_aligned" "Int -> LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc_readonly_aligned)
+    (pureVal llvm_alloc_readonly_aligned)
     Current
     [ "Declare that a read-only memory region of the given type should be"
     , "a Crucible specification, and also specify that the start of the region"
@@ -2187,14 +2187,14 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_with_size" "Int -> LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc_with_size)
+    (pureVal llvm_alloc_with_size)
     Experimental
     [ "Like `crucible_alloc`, but with a user-specified size (given in bytes)."
     , "The specified size must be greater than the size of the LLVM type."
     ]
 
   , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> CrucibleSetup SetupValue"
-    (pureVal crucible_symbolic_alloc)
+    (pureVal llvm_symbolic_alloc)
     Current
     [ "Like `crucible_alloc`, but with a (symbolic) size instead of"
     , "a LLVM type. The first argument specifies whether the allocation is"
@@ -2203,7 +2203,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
-    (pureVal crucible_alloc_global)
+    (pureVal llvm_alloc_global)
     Current
     [ "Declare that memory for the named global should be allocated in a"
     , "Crucible specification. This is done implicitly for immutable globals."
@@ -2211,7 +2211,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_fresh_pointer)
+    (pureVal llvm_fresh_pointer)
     Current
     [ "Create a fresh pointer value for use in a Crucible specification."
     , "This works like `crucible_alloc` except that the pointer is not"
@@ -2219,7 +2219,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_fresh_expanded_val)
+    (pureVal llvm_fresh_expanded_val)
     Current
     [ "Create a compound type entirely populated with fresh symbolic variables."
     , "Equivalent to allocating a new struct or array of the given type and"
@@ -2228,7 +2228,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal (crucible_points_to True))
+    (pureVal (llvm_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the given value (second argument)."
@@ -2240,7 +2240,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal (crucible_conditional_points_to True))
+    (pureVal (llvm_conditional_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (second"
     , "argument) contains the given value (third argument) if the given"
@@ -2253,7 +2253,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal (crucible_points_to False))
+    (pureVal (llvm_points_to False))
     Current
     [ "A variant of crucible_points_to that does not check for compatibility"
     , "between the pointer type and the value type. This may be useful when"
@@ -2261,7 +2261,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_conditional_points_to_untyped" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal (crucible_conditional_points_to False))
+    (pureVal (llvm_conditional_points_to False))
     Current
     [ "A variant of crucible_conditional_points_to that does not check for"
     , "compatibility between the pointer type and the value type. This may"
@@ -2269,7 +2269,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_points_to_array_prefix" "SetupValue -> Term -> Term -> CrucibleSetup ()"
-    (pureVal crucible_points_to_array_prefix)
+    (pureVal llvm_points_to_array_prefix)
     Experimental
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the prefix of the given array (second argument) of"
@@ -2282,7 +2282,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal crucible_equal)
+    (pureVal llvm_equal)
     Current
     [ "State that two Crucible values should be equal. Can be used as either"
     , "a pre-condition or a post-condition. It is semantically equivalent to"
@@ -2291,21 +2291,21 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_precond" "Term -> CrucibleSetup ()"
-    (pureVal crucible_precond)
+    (pureVal llvm_precond)
     Current
     [ "State that the given predicate is a pre-condition on execution of the"
     , "function being verified."
     ]
 
   , prim "crucible_postcond" "Term -> CrucibleSetup ()"
-    (pureVal crucible_postcond)
+    (pureVal llvm_postcond)
     Current
     [ "State that the given predicate is a post-condition of execution of the"
     , "function being verified."
     ]
 
   , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
-    (pureVal crucible_execute_func)
+    (pureVal llvm_execute_func)
     Current
     [ "Specify the given list of values as the arguments of the function."
     ,  ""
@@ -2317,7 +2317,7 @@ primitives = Map.fromList
     ]
 
   , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
-    (pureVal crucible_return)
+    (pureVal llvm_return)
     Current
     [ "Specify the given value as the return value of the function. A"
     , "crucible_return statement is required if and only if the function"
@@ -2325,7 +2325,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_verify"
     "LLVMModule -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
-    (pureVal crucible_llvm_verify)
+    (pureVal llvm_verify)
     Current
     [ "Verify the LLVM function named by the second parameter in the module"
     , "specified by the first. The third parameter lists the CrucibleMethodSpec"
@@ -2338,7 +2338,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_unsafe_assume_spec"
     "LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
-    (pureVal crucible_llvm_unsafe_assume_spec)
+    (pureVal llvm_unsafe_assume_spec)
     Current
     [ "Return a CrucibleMethodSpec corresponding to a CrucibleSetup block,"
     , "as would be returned by crucible_llvm_verify but without performing"
@@ -2347,7 +2347,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_array_size_profile"
     "LLVMModule -> String -> [CrucibleMethodSpec] -> CrucibleSetup () -> TopLevel [(String, [FunctionProfile])]"
-    (pureVal $ crucible_llvm_array_size_profile assumeUnsat)
+    (pureVal $ llvm_array_size_profile assumeUnsat)
     Experimental
     [ "Symbolically execute the function named by the second parameter in"
     , "the module specified by the first. The fourth parameter may be used"
@@ -2358,7 +2358,7 @@ primitives = Map.fromList
 
   , prim "crucible_llvm_verify_x86"
     "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
-    (pureVal crucible_llvm_verify_x86)
+    (pureVal llvm_verify_x86)
     Experimental
     [ "Verify an x86 function from an ELF file for use as an override in an"
     , "LLVM verification. The first argument specifies the LLVM module"
@@ -2454,25 +2454,25 @@ primitives = Map.fromList
   -- Ghost state support
   , prim "crucible_declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal crucible_declare_ghost_state)
+    (pureVal llvm_declare_ghost_state)
     Current
     [ "Allocates a unique ghost variable." ]
 
   , prim "crucible_ghost_value"
     "Ghost -> Term -> CrucibleSetup ()"
-    (pureVal crucible_ghost_value)
+    (pureVal llvm_ghost_value)
     Current
     [ "Specifies the value of a ghost variable. This can be used"
     , "in the pre- and post- conditions of a setup block."]
 
   , prim "crucible_spec_solvers"  "CrucibleMethodSpec -> [String]"
-    (\_ _ -> toValue crucible_spec_solvers)
+    (\_ _ -> toValue llvm_spec_solvers)
     Current
     [ "Extract a list of all the solvers used when verifying the given method spec."
     ]
 
   , prim "crucible_spec_size"  "CrucibleMethodSpec -> Int"
-    (\_ _ -> toValue crucible_spec_size)
+    (\_ _ -> toValue llvm_spec_size)
     Current
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
