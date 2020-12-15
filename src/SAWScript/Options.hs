@@ -27,6 +27,7 @@ data Options = Options
   , jarList          :: [FilePath]
   , verbLevel        :: Verbosity
   , simVerbose       :: Int
+  , detectVacuity    :: Bool
   , extraChecks      :: Bool
   , runInteractively :: Bool
   , showHelp         :: Bool
@@ -64,6 +65,7 @@ defaultOptions
     , printShowPos = False
     , printOutFn = printOutWith Info
     , simVerbose = 1
+    , detectVacuity = False
     , extraChecks = False
     , runInteractively = False
     , showHelp = False
@@ -103,6 +105,10 @@ options =
      "path"
     )
     pathDesc
+  , Option "t" ["detect-vacuity"]
+    (NoArg
+     (\opts -> return opts { detectVacuity = True }))
+    "Checks and warns the user about contradictory assumptions. (default: false)"
   , Option "t" ["extra-type-checking"]
     (NoArg
      (\opts -> return opts { extraChecks = True }))

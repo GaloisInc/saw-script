@@ -81,6 +81,7 @@ import Prelude hiding (fail)
 import qualified Control.Exception as X
 import           Control.Lens
 
+import           Control.Monad.Extra (findM, whenM)
 import           Control.Monad.State hiding (fail)
 import           Control.Monad.Fail (MonadFail(..))
 import qualified Data.Bimap as Bimap
@@ -543,6 +544,9 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
      (args, assumes, env, globals2) <-
        io $ verifyPrestate opts cc methodSpec globals1
 
+     when (detectVacuity opts)
+       $ checkAssumptionsForContradictions cc tactic assumes
+
      -- save initial path conditions
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
@@ -727,6 +731,66 @@ verifyPrestate opts cc mspec globals =
      args <- resolveArguments cc mem''' mspec env
 
      return (args, cs, env, globals2)
+
+-- | Checks for contradictions within the given list of assumptions, by asking
+-- the solver about whether their conjunction entails falsehood.
+assumptionsContainContradiction ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  LLVMCrucibleContext arch ->
+  ProofScript SatResult ->
+  [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  TopLevel Bool
+assumptionsContainContradiction cc tactic assumptions =
+  do
+     proofGoal <- io $
+      do
+         let sym = cc^.ccBackend
+         st <- readIORef $ W4.sbStateManager sym
+         let sc  = CrucibleSAW.saw_ctx st
+         -- conjunction of all assumptions
+         assume <- scAndList sc (toListOf (folded . Crucible.labeledPred) assumptions)
+         -- implies falsehood
+         goal  <- scImplies sc assume =<< CrucibleSAW.toSC sym (W4.falsePred sym)
+         goal' <- scEqTrue sc goal
+         return $ ProofGoal 0 "vc" "vacuousness check" (Prop goal')
+     evalStateT tactic (startProof proofGoal) >>= \case
+       Unsat _stats -> return True
+       SatMulti _stats _vals -> return False
+
+-- | Given a list of assumptions, computes and displays a smallest subset of
+-- them that are contradictory among each themselves.  This is **not**
+-- implemented efficiently.
+computeMinimalContradictingCore ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  LLVMCrucibleContext arch ->
+  ProofScript SatResult ->
+  [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  TopLevel ()
+computeMinimalContradictingCore cc tactic assumes =
+  do
+     printOutLnTop Warn "Contradiction detected! Computing minimal core of contradictory assumptions:"
+     -- test subsets of assumptions of increasing sizes until we find a
+     -- contradictory one
+     let cores = sortBy (compare `on` length) (subsequences assumes)
+     findM (assumptionsContainContradiction cc tactic) cores >>= \case
+      Nothing -> printOutLnTop Warn "No minimal core: the assumptions did not contains a contradiction."
+      Just core ->
+        forM_ core $ \ assumption ->
+          printOutLnTop Warn (show . Crucible.ppAssumptionReason $ assumption ^. Crucible.labeledPredMsg)
+     printOutLnTop Warn "Because of the contradiction, the following proofs may be vacuous."
+
+-- | Checks whether the given list of assumptions contains a contradiction, and
+-- if so, computes and displays a minimal set of contradictory assumptions.
+checkAssumptionsForContradictions ::
+  (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
+  LLVMCrucibleContext arch ->
+  ProofScript SatResult ->
+  [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
+  TopLevel ()
+checkAssumptionsForContradictions cc tactic assumes =
+  whenM
+    (assumptionsContainContradiction cc tactic assumes)
+    (computeMinimalContradictingCore cc tactic assumes)
 
 -- | Check two MemTypes for register compatiblity.  This is a stricter
 --   check than the memory compatiblity check that is done for points-to
