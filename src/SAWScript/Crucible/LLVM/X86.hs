@@ -426,8 +426,8 @@ buildCFG opts halloc preserved path nm = do
 --------------------------------------------------------------------------------
 -- ** Computing the specification
 
--- | Construct the method spec like we normally would in crucible_llvm_verify.
--- Unlike in crucible_llvm_verify, we can't reuse the simulator state (due to the
+-- | Construct the method spec like we normally would in llvm_verify.
+-- Unlike in llvm_verify, we can't reuse the simulator state (due to the
 -- different memory layout / RegMap).
 buildMethodSpec ::
   LLVMModule LLVMArch ->
@@ -621,12 +621,12 @@ allocateStack szInt = do
   finalRegs <- setReg Macaw.RSP ptr regs
   x86Regs .= finalRegs
 
--- | Process a crucible_alloc statement, allocating the requested memory and
+-- | Process an llvm_alloc statement, allocating the requested memory and
 -- associating a pointer to that memory with the appropriate index.
 assumeAllocation ::
   X86Constraints =>
   Map MS.AllocIndex Ptr ->
-  (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
+  (MS.AllocIndex, LLVMAllocSpec) {- ^ llvm_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
 assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False) = do
   cc <- use x86CrucibleContext
@@ -638,19 +638,19 @@ assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False) = do
   x86Mem .= mem'
   pure $ Map.insert i ptr env
 assumeAllocation env _ = pure env
-  -- no allocation is done for crucible_fresh_pointer
-  -- TODO: support crucible_fresh_pointer in x86 verification
+  -- no allocation is done for llvm_fresh_pointer
+  -- TODO: support llvm_fresh_pointer in x86 verification
 
--- | Process a crucible_points_to statement, writing some SetupValue to a pointer.
+-- | Process an llvm_points_to statement, writing some SetupValue to a pointer.
 assumePointsTo ::
   X86Constraints =>
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
-  LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
+  LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim ()
 assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
   tval <- checkConcreteSizePointsToValue tptval
   sym <- use x86Sym
   cc <- use x86CrucibleContext
@@ -688,16 +688,16 @@ resolvePtrSetupValue env tyenv tptr = do
 checkConcreteSizePointsToValue :: LLVMPointsToValue LLVMArch -> X86Sim (MS.SetupValue LLVM)
 checkConcreteSizePointsToValue = \case
   ConcreteSizeValue val -> return val
-  SymbolicSizeValue{} -> throwX86 "unsupported x86_64 command: crucible_points_to_array_prefix"
+  SymbolicSizeValue{} -> throwX86 "unsupported x86_64 command: llvm_points_to_array_prefix"
 
--- | Write each SetupValue passed to crucible_execute_func to the appropriate
+-- | Write each SetupValue passed to llvm_execute_func to the appropriate
 -- x86_64 register from the calling convention.
 setArgs ::
   X86Constraints =>
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
-  [MS.SetupValue LLVM] {- ^ Arguments passed to crucible_execute_func -} ->
+  [MS.SetupValue LLVM] {- ^ Arguments passed to llvm_execute_func -} ->
   X86Sim ()
 setArgs env tyenv nameEnv args
   | length args > length argRegs = throwX86 "More arguments than would fit into general-purpose registers"
@@ -824,10 +824,10 @@ assertPointsTo ::
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
-  LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
+  LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
 assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
   texpected <- checkConcreteSizePointsToValue tptexpected
   sym <- use x86Sym
   opts <- use x86Options
