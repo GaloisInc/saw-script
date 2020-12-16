@@ -409,7 +409,7 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                   [SAWScript.StmtBind Unknown (SAWScript.PVar boundName Nothing) Nothing
                      (SAWScript.Application
                         (SAWScript.Application
-                           (SAWScript.Var . locate $ "java_extract")
+                           (SAWScript.Var . locate $ "jvm_extract")
                            (SAWScript.Var loadedModule))
                         (SAWScript.String function))]
 

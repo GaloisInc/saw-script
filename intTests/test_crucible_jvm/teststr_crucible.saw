@@ -9,10 +9,10 @@ sob <- java_load_class "java/lang/StringIndexOutOfBoundsException";
 teststr <- java_load_class "TestStr";
 
 print "**Extracting methods";
-m      <- java_extract teststr "main";
-append <- java_extract teststr "append";
-pr     <- java_extract teststr "pr";
-//trim   <- java_extract teststr "trim";
+m      <- jvm_extract teststr "main";
+append <- jvm_extract teststr "append";
+pr     <- jvm_extract teststr "pr";
+//trim   <- jvm_extract teststr "trim";
 
 
 

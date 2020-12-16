@@ -2,7 +2,7 @@ enable_experimental;
 a <- java_load_class "Arr";
 
 print "**Extracting main";
-main <- java_extract j "main";
+main <- jvm_extract j "main";
 
 
 print "**Evaluating: single array ref";

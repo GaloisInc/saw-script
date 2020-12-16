@@ -1787,8 +1787,8 @@ primitives = Map.fromList
     [ "Convert a Java method to a Crucible CFG."
     ] -}
 
-  , prim "java_extract"  "JavaClass -> String -> TopLevel Term"
-    (pureVal CJ.java_extract)
+  , prim "jvm_extract"  "JavaClass -> String -> TopLevel Term"
+    (pureVal CJ.jvm_extract)
     Current
     [ "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
@@ -1796,9 +1796,9 @@ primitives = Map.fromList
     , "scalar argument and return types are currently supported."
     ]
   , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
-    (pureVal CJ.java_extract)
+    (pureVal CJ.jvm_extract)
     Current
-    [ "Legacy alternative name for `java_extract`."
+    [ "Legacy alternative name for `jvm_extract`."
     ]
 
   , prim "llvm_sizeof"         "LLVMModule -> LLVMType -> Int"

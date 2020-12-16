@@ -254,7 +254,7 @@ Now we can do the proof both within and across languages (from
 $include all code/ffs_compare.saw
 ```
 
-Here, the `java_extract` function works like `llvm_extract`, but on a
+Here, the `jvm_extract` function works like `llvm_extract`, but on a
 Java class and method name. The `prove_print` command works similarly
 to the `prove` followed by `print` combination used for the LLVM
 example above.
@@ -378,7 +378,7 @@ In this example, the definitions of `add_spec` and `dbl_spec` provide
 extra information about how to configure the symbolic simulator when
 analyzing Java code. In this case, the setup blocks provide explicit
 descriptions of the implicit configuration used by
-`java_extract` (used in the earlier Java FFS example and in the
+`jvm_extract` (used in the earlier Java FFS example and in the
 next section). The `jvm_fresh_var` commands instruct the simulator to
 create fresh symbolic inputs to correspond to the Java variables `x` and
 `y`. Then, the `jvm_return` commands indicate the expected return value

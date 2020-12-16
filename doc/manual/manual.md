@@ -1655,7 +1655,7 @@ such simple code. The first, for LLVM is the more stable of the two:
 
 A similar function exists for Java, but is more experimental.
 
-* `java_extract : JavaClass -> String -> TopLevel Term`
+* `jvm_extract : JavaClass -> String -> TopLevel Term`
 
 Because of its lack of maturity, it (and later Java-related commands)
 must be enabled by running the `enable_experimental` command beforehand.
