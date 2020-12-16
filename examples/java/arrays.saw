@@ -45,8 +45,8 @@ let main : TopLevel () = do {
     sum_ms <- java_verify c "sum" [] sum_setup;
     comp_ms <- java_verify c "comp" [unit_ms] comp_setup;
     print "Extracting model of sum, which has type:";
-    sum_tm <- java_extract c "sum" sum_setup';
-    id_tm <- java_extract c "arr_id" id_setup;
+    sum_tm <- jvm_extract c "sum" sum_setup';
+    id_tm <- jvm_extract c "arr_id" id_setup;
     check_term sum_tm;
     print "Running sum on ten 1 inputs:";
     print {{ sum_tm [1, 1, 1, 1, 1, 1, 1, 1, 1, 1] }};

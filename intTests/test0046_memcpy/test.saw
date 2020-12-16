@@ -1,21 +1,21 @@
 m <- llvm_load_module "test.bc";
 
 let f_setup = do {
-  xp <- crucible_alloc_readonly (llvm_array 4 (llvm_int 8));
-  crucible_execute_func [xp];
+  xp <- llvm_alloc_readonly (llvm_array 4 (llvm_int 8));
+  llvm_execute_func [xp];
   };
 
 // should fail because destination is not mutable,
 // even though the memcpy is 0 length
-fails (crucible_llvm_verify m "f" [] false f_setup z3);
+fails (llvm_verify m "f" [] false f_setup z3);
 
 let g_setup = do {
-  xp <- crucible_alloc (llvm_array 4 (llvm_int 8));
-  crucible_execute_func [xp];
+  xp <- llvm_alloc (llvm_array 4 (llvm_int 8));
+  llvm_execute_func [xp];
   };
 
 // should succeed because memcpy is allowed to copy uninitilized bytes
-crucible_llvm_verify m "g" [] false g_setup z3;
+llvm_verify m "g" [] false g_setup z3;
 
 // fails because direct reading of uninitialized bytes is not allowed
-fails (crucible_llvm_verify m "h" [] false g_setup z3); // as it should
+fails (llvm_verify m "h" [] false g_setup z3); // as it should

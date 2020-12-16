@@ -34,16 +34,16 @@ import qualified Text.LLVM.AST as LLVM
 import qualified Data.LLVM.BitCode as LLVM
 import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
 import SAWScript.Crucible.LLVM.Builtins
-    ( crucible_alloc
-    , crucible_alloc_aligned
-    , crucible_alloc_readonly
-    , crucible_alloc_readonly_aligned
-    , crucible_execute_func
-    , crucible_fresh_var
-    , crucible_points_to
-    , crucible_return
-    , crucible_precond
-    , crucible_postcond )
+    ( llvm_alloc
+    , llvm_alloc_aligned
+    , llvm_alloc_readonly
+    , llvm_alloc_readonly_aligned
+    , llvm_execute_func
+    , llvm_fresh_var
+    , llvm_points_to
+    , llvm_return
+    , llvm_precond
+    , llvm_postcond )
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS
 import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
@@ -108,32 +108,32 @@ interpretLLVMSetup ::
 interpretLLVMSetup fileReader bic cenv0 ss =
   runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
   where
-    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= crucible_return
+    go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= llvm_return
     -- TODO: do we really want two names here?
     go (SetupFresh name@(ServerName n) debugName ty) =
-      do t <- lift $ crucible_fresh_var (T.unpack debugName) ty
+      do t <- lift $ llvm_fresh_var (T.unpack debugName) ty
          (env, cenv) <- get
          put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
          save name (Val (CMS.anySetupTerm t))
     go (SetupAlloc name ty True Nothing) =
-      lift (crucible_alloc ty) >>= save name . Val
+      lift (llvm_alloc ty) >>= save name . Val
     go (SetupAlloc name ty False Nothing) =
-      lift (crucible_alloc_readonly ty) >>= save name . Val
+      lift (llvm_alloc_readonly ty) >>= save name . Val
     go (SetupAlloc name ty True (Just align)) =
-      lift (crucible_alloc_aligned align ty) >>= save name . Val
+      lift (llvm_alloc_aligned align ty) >>= save name . Val
     go (SetupAlloc name ty False (Just align)) =
-      lift (crucible_alloc_readonly_aligned align ty) >>= save name . Val
+      lift (llvm_alloc_readonly_aligned align ty) >>= save name . Val
     go (SetupPointsTo src tgt) = get >>= \env -> lift $
       do ptr <- getSetupVal env src
          tgt' <- getSetupVal env tgt
-         crucible_points_to True ptr tgt'
+         llvm_points_to True ptr tgt'
     go (SetupExecuteFunction args) =
       get >>= \env ->
-      lift $ traverse (getSetupVal env) args >>= crucible_execute_func
+      lift $ traverse (getSetupVal env) args >>= llvm_execute_func
     go (SetupPrecond p) = get >>= \env -> lift $
-      getTypedTerm env p >>= crucible_precond
+      getTypedTerm env p >>= llvm_precond
     go (SetupPostcond p) = get >>= \env -> lift $
-      getTypedTerm env p >>= crucible_postcond
+      getTypedTerm env p >>= llvm_postcond
 
     save name val = modify' (\(env, cenv) -> (Map.insert name val env, cenv))
 

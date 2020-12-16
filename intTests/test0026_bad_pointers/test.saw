@@ -4,9 +4,9 @@ let bad_pointer_no_biscuit nm =
   do { print "=======================================";
        print (str_concat "Testing failure case: " nm);
        print "";
-       fails (crucible_llvm_verify m nm [] false
-         do { crucible_execute_func [];
-              crucible_return (crucible_term {{ 1:[32] }});
+       fails (llvm_verify m nm [] false
+         do { llvm_execute_func [];
+              llvm_return (llvm_term {{ 1:[32] }});
             }
          trivial);
   };

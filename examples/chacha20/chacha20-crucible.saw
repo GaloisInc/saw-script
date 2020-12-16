@@ -4,16 +4,16 @@ import "../../deps/cryptol-specs/Primitive/Symmetric/Cipher/Stream/chacha20.cry"
 
 // Allocate a pointer of type 'ty', referring to the value 'v'
 let alloc_init ty v = do {
-  p <- crucible_alloc ty;
-  crucible_points_to p v;
+  p <- llvm_alloc ty;
+  llvm_points_to p v;
   return p;
 };
 
 // Allocate a pointer to a fresh symbolic value
 // Returns a pair of the symbolic variable and the pointer
 let ptr_to_fresh n ty = do {
-  x <- crucible_fresh_var n ty;
-  p <- alloc_init ty (crucible_term x);
+  x <- llvm_fresh_var n ty;
+  p <- alloc_init ty (llvm_term x);
   return (x, p);
 };
 
@@ -33,16 +33,16 @@ crypto_stream_chacha20(unsigned char* out,
 
   (_, out_p)       <- ptr_to_fresh       "out"     (llvm_array 256 (llvm_int 8));
   let olen         =                                            {{ 256 : [64] }};
-  counter          <- crucible_fresh_var "counter"                 (llvm_int 32);
+  counter          <- llvm_fresh_var     "counter"                 (llvm_int 32);
   (nonce, nonce_p) <- ptr_to_fresh       "nonce"   (llvm_array 12  (llvm_int 8));
   (key, key_p)     <- ptr_to_fresh       "key"     (llvm_array 32  (llvm_int 8));
 
   // symbolically executing the function
 
-  crucible_execute_func
+  llvm_execute_func
     [ out_p
-    , crucible_term olen
-    , crucible_term counter
+    , llvm_term olen
+    , llvm_term counter
     , nonce_p
     , key_p
     ];
@@ -50,9 +50,9 @@ crypto_stream_chacha20(unsigned char* out,
   // assert the specification
 
   let spec_result =
-    crucible_term {{ chacha20::stream key counter nonce : [256][8] }};
+    llvm_term {{ chacha20::stream key counter nonce : [256][8] }};
 
-  crucible_points_to out_p spec_result;
+  llvm_points_to out_p spec_result;
 
 };
 
@@ -62,4 +62,4 @@ mod <- llvm_load_module "chacha20.bc";
 let solver = abc;
 
 print "Testing equality...";
-time (crucible_llvm_verify mod "crypto_stream_chacha20" [] false chacha20_setup solver);
+time (llvm_verify mod "crypto_stream_chacha20" [] false chacha20_setup solver);

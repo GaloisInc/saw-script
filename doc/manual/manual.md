@@ -1245,7 +1245,7 @@ techniques that do not require significant computation.
 
 * `assume_unsat : ProofScript SatResult` indicates that the current goal
 should be assumed to be unsatisfiable. At the moment,
-`jvm_verify` and `crucible_llvm_verify` (described below) run
+`jvm_verify` and `llvm_verify` (described below) run
 their proofs in a satisfiability-checking (negated) context, so
 `assume_unsat` indicates that the property being checked should be
 assumed to be true. This is likely to change in the future.
@@ -1612,7 +1612,7 @@ can[^3] be useful for this.
 
 The C++ standard library includes a number of key global variables, and
 any code that touches them will require that they be initialized using
-`crucible_alloc_global`.
+`llvm_alloc_global`.
 
 Many C++ names are slightly awkward to deal with in SAW. They may be
 mangled relative to the text that appears in the C++ source code. SAW
@@ -1635,7 +1635,7 @@ llvm_type "%\"class.quux::Foo\""
 
 Finally, there is no support for calling constructors in specifications,
 so you will need to construct objects piece-by-piece using, *e.g.*,
-`crucible_alloc` and `crucible_points_to`.
+`llvm_alloc` and `llvm_points_to`.
 
 [^2]: https://libcxx.llvm.org/docs/BuildingLibcxx.html
 [^3]: https://github.com/travitch/whole-program-llvm
@@ -1651,11 +1651,11 @@ In cases like this, a direct translation is possible, given only an
 identification of which code to execute. Two functions exist to handle
 such simple code. The first, for LLVM is the more stable of the two:
 
-* `crucible_llvm_extract : LLVMModule -> String -> TopLevel Term`
+* `llvm_extract : LLVMModule -> String -> TopLevel Term`
 
 A similar function exists for Java, but is more experimental.
 
-* `crucible_java_extract : JavaClass -> String -> TopLevel Term`
+* `jvm_extract : JavaClass -> String -> TopLevel Term`
 
 Because of its lack of maturity, it (and later Java-related commands)
 must be enabled by running the `enable_experimental` command beforehand.
@@ -1817,11 +1817,10 @@ verifications, allowing the proof process to be decomposed.
 
 ## Running a Verification
 
-Verification of LLVM is controlled by the `crucible_llvm_verify`
-command.
+Verification of LLVM is controlled by the `llvm_verify` command.
 
 ~~~~
-crucible_llvm_verify :
+llvm_verify :
   LLVMModule ->
   String ->
   [CrucibleMethodSpec] ->
@@ -1870,11 +1869,11 @@ A specifications for Crucible consists of three logical components:
 
 These three portions of the specification are written in sequence within
 a `do` block of `CrucibleSetup` (or `JVMSetup`) type. The command
-`crucible_execute_func` (or `jvm_execute_func`) separates the
+`llvm_execute_func` (or `jvm_execute_func`) separates the
 specification of the initial state from the specification of the final
 state, and specifies the arguments to the function in terms of the
 initial state. Most of the commands available for state description will
-work either before or after `crucible_execute_func`, though with
+work either before or after `llvm_execute_func`, though with
 slightly different meaning, as described below.
 
 ## Creating Fresh Variables
@@ -1883,10 +1882,10 @@ In any case where you want to prove a property of a function for an
 entire class of inputs (perhaps all inputs) rather than concrete values,
 the initial values of at least some elements of the program state must
 contain fresh variables. These are created in a specification with the
-`crucible_fresh_var` and `jvm_fresh_var` commands rather than
+`llvm_fresh_var` and `jvm_fresh_var` commands rather than
 `fresh_symbolic`.
 
-* `crucible_fresh_var : String -> LLVMType -> CrucibleSetup Term`
+* `llvm_fresh_var : String -> LLVMType -> CrucibleSetup Term`
 
 * `jvm_fresh_var : String -> JavaType -> JVMSetup Term`
 
@@ -1937,8 +1936,8 @@ particular function should have the specified behaviour for arbitrary
 initial values of the variables in question. Sometimes, however, it can
 be useful to specify that a function returns (or stores, more about this
 later) an arbitrary value, without specifying what that value should be.
-To express such a pattern, you can also run `crucible_fresh_var` from
-the post state (i.e., after `crucible_execute_func`).
+To express such a pattern, you can also run `llvm_fresh_var` from
+the post state (i.e., after `llvm_execute_func`).
 
 ## The SetupValue and JVMValue Types
 
@@ -1948,26 +1947,26 @@ values that can occur during symbolic execution, which includes both
 `Term` values, pointers, and composite types consisting of either of
 these (both structures and arrays).
 
-The `crucible_term` and `jvm_term` functions create a `SetupValue` or
+The `llvm_term` and `jvm_term` functions create a `SetupValue` or
 `JVMValue` from a `Term`:
 
-* `crucible_term : Term -> SetupValue`
+* `llvm_term : Term -> SetupValue`
 * `jvm_term : Term -> JVMValue`
 
 ## Executing
 
-Once the initial state has been configured, the `crucible_execute_func`
+Once the initial state has been configured, the `llvm_execute_func`
 command specifies the parameters of the function being analyzed in terms
 of the state elements already configured.
 
-* `crucible_execute_func : [SetupValue] -> CrucibleSetup ()`
+* `llvm_execute_func : [SetupValue] -> CrucibleSetup ()`
 
 ## Return Values
 
 To specify the value that should be returned by the function being
-verified use the `crucible_return` or `jvm_return` command.
+verified use the `llvm_return` or `jvm_return` command.
 
-* `crucible_return : SetupValue -> CrucibleSetup ()`
+* `llvm_return : SetupValue -> CrucibleSetup ()`
 * `jvm_return : JVMValue -> JVMSetup ()`
 
 ## A First Simple Example
@@ -1987,10 +1986,10 @@ We can specify this function's expected behavior as follows:
 
 ~~~~
 let add_setup = do {
-    x <- crucible_fresh_var "x" (llvm_int 32);
-    y <- crucible_fresh_var "y" (llvm_int 32);
-    crucible_execute_func [crucible_term x, crucible_term y];
-    crucible_return (crucible_term {{ x + y : [32] }});
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    y <- llvm_fresh_var "y" (llvm_int 32);
+    llvm_execute_func [llvm_term x, llvm_term y];
+    llvm_return (llvm_term {{ x + y : [32] }});
 };
 ~~~~
 
@@ -1999,7 +1998,7 @@ and verify it with ABC:
 
 ~~~~
 m <- llvm_load_module "add.bc";
-add_ms <- crucible_llvm_verify m "add" [] false add_setup abc;
+add_ms <- llvm_verify m "add" [] false add_setup abc;
 ~~~~
 
 ## Compositional Verification
@@ -2011,7 +2010,7 @@ of properties we have already proved about its callees rather than
 analyzing them anew. This enables us to reason about much larger
 and more complex systems than otherwise possible.
 
-The `crucible_llvm_verify` and `jvm_verify` functions return values of
+The `llvm_verify` and `jvm_verify` functions return values of
 type `CrucibleMethodSpec` and `JVMMethodSpec`, respectively. These
 values are opaque objects that internally contain both the information
 provided in the associated `JVMSetup` or `CrucibleSetup` blocks and
@@ -2023,7 +2022,7 @@ specified by one of these parameters, the simulator will not follow
 calls to the associated target. Instead, it will perform the following
 steps:
 
-* Check that all `crucible_points_to` and `crucible_precond` statements
+* Check that all `llvm_points_to` and `llvm_precond` statements
   (or the corresponding JVM statements) in the specification are
   satisfied.
 
@@ -2043,16 +2042,16 @@ It has a similar specification to `add`:
 
 ~~~~
 let dbl_setup = do {
-    x <- crucible_fresh_var "x" (llvm_int 32);
-    crucible_execute_func [crucible_term x];
-    crucible_return (crucible_term {{ x + x : [32] }});
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    llvm_execute_func [llvm_term x];
+    llvm_return (llvm_term {{ x + x : [32] }});
 };
 ~~~~
 
 And we can verify it using what we've already proved about `add`:
 
 ~~~~
-crucible_llvm_verify m "dbl" [add_ms] false dbl_setup abc;
+llvm_verify m "dbl" [add_ms] false dbl_setup abc;
 ~~~~
 
 In this case, doing the verification compositionally doesn't save
@@ -2062,17 +2061,17 @@ illustrates the approach.
 ## Specifying Heap Layout
 
 Most functions that operate on pointers expect that certain pointers
-point to allocated memory before they are called. The `crucible_alloc`
+point to allocated memory before they are called. The `llvm_alloc`
 command allows you to specify that a function expects a particular
 pointer to refer to an allocated region appropriate for a specific type.
 
-* `crucible_alloc : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_alloc : LLVMType -> CrucibleSetup SetupValue`
 
 This command returns a `SetupValue` consisting of a pointer to the
 allocated space, which can be used wherever a pointer-valued
 `SetupValue` can be used.
 
-In the initial state, `crucible_alloc` specifies that the function
+In the initial state, `llvm_alloc` specifies that the function
 expects a pointer to allocated space to exist. In the final state, it
 specifies that the function itself performs an allocation.
 
@@ -2089,27 +2088,27 @@ In LLVM, it's also possible to construct fresh pointers that do not
 point to allocated memory (which can be useful for functions that
 manipulate pointers but not the values they point to):
 
-* `crucible_fresh_pointer : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_fresh_pointer : LLVMType -> CrucibleSetup SetupValue`
 
-The NULL pointer is called `crucible_null` in LLVM and `jvm_null` in
+The NULL pointer is called `llvm_null` in LLVM and `jvm_null` in
 JVM:
 
-* `crucible_null : SetupValue`
+* `llvm_null : SetupValue`
 * `jvm_null : JVMValue`
 
 One final, slightly more obscure command is the following:
 
-* `crucible_alloc_readonly : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_alloc_readonly : LLVMType -> CrucibleSetup SetupValue`
 
-This works like `crucible_alloc` except that writes to the space
+This works like `llvm_alloc` except that writes to the space
 allocated are forbidden. This can be useful for specifying that a
 function should take as an argument a pointer to allocated space that it
-will not modify. Unlike `crucible_alloc`, regions allocated with
-`crucible_alloc_readonly` are allowed to alias other read-only regions.
+will not modify. Unlike `llvm_alloc`, regions allocated with
+`llvm_alloc_readonly` are allowed to alias other read-only regions.
 
 ## Specifying Heap Values
 
-Pointers returned by `crucible_alloc` don't, initially, point to
+Pointers returned by `llvm_alloc` don't, initially, point to
 anything. So if you pass such a pointer directly into a function that
 tried to dereference it, symbolic execution will fail with a message
 about an invalid load. For some functions, such as those that are
@@ -2117,15 +2116,15 @@ intended to initialize data structures (writing to the memory pointed
 to, but never reading from it), this sort of uninitialized memory is
 appropriate. In most cases, however, it's more useful to state that a
 pointer points to some specific (usually symbolic) value, which you can
-do with the `crucible_points_to` command.
+do with the `llvm_points_to` command.
 
-* `crucible_points_to : SetupValue -> SetupValue -> CrucibleSetup ()`
+* `llvm_points_to : SetupValue -> SetupValue -> CrucibleSetup ()`
 takes two `SetupValue` arguments, the first of which must be a pointer,
 and states that the memory specified by that pointer should contain the
 value given in the second argument (which may be any type of
 `SetupValue`).
 
-When used in the final state, `crucible_points_to` specifies that the
+When used in the final state, `llvm_points_to` specifies that the
 given pointer *should* point to the given value when the function
 finishes.
 
@@ -2133,8 +2132,8 @@ Occasionally, because C programs frequently reinterpret memory of one
 type as another through casts, it can be useful to specify that a
 pointer points to a value that does not agree with its static type.
 
-* `crucible_points_to_untyped : SetupValue -> SetupValue ->
-CrucibleSetup ()` works like `crucible_points_to` but omits type
+* `llvm_points_to_untyped : SetupValue -> SetupValue ->
+CrucibleSetup ()` works like `llvm_points_to` but omits type
 checking. Rather than omitting type checking across the board, we
 introduced this additional function to make it clear when a type
 reinterpretation is intentional.
@@ -2145,42 +2144,42 @@ The commands mentioned so far give us no way to specify the values of
 compound types (arrays or `struct`s). Compound values can be dealt with
 either piecewise or in their entirety.
 
-* `crucible_elem : SetupValue -> Int -> SetupValue` yields a pointer to
+* `llvm_elem : SetupValue -> Int -> SetupValue` yields a pointer to
 an internal element of a compound value. For arrays, the `Int` parameter
 is the array index. For `struct` values, it is the field index.
 
-* `crucible_field : SetupValue -> String -> SetupValue` yields a pointer
+* `llvm_field : SetupValue -> String -> SetupValue` yields a pointer
 to a particular named `struct` field, if debugging information is
 available in the bitcode
 
-Either of these functions can be used with `crucible_points_to` to
+Either of these functions can be used with `llvm_points_to` to
 specify the value of a particular array element or `struct` field.
 Sometimes, however, it is more convenient to specify all array elements
-or field values at once. The `crucible_array` and `crucible_struct`
+or field values at once. The `llvm_array_value` and `llvm_struct_value`
 functions construct compound values from lists of element values.
 
-* `crucible_array : [SetupValue] -> SetupValue`
-* `crucible_struct : [SetupValue] -> SetupValue`
+* `llvm_array_value : [SetupValue] -> SetupValue`
+* `llvm_struct_value : [SetupValue] -> SetupValue`
 
 To specify an array or struct in which each element or field is
 symbolic, it would be possible, but tedious, to use a large combination
-of `crucible_fresh_var` and `crucible_elem` or `crucible_field`
-commands. However, the following function can simplify the common case
+of `llvm_fresh_var` and `llvm_elem` or `llvm_field` commands.
+However, the following function can simplify the common case
 where you want every element or field to have a fresh value.
 
-* `crucible_fresh_expanded_val : LLVMType -> CrucibleSetup SetupValue`
+* `llvm_fresh_expanded_val : LLVMType -> CrucibleSetup SetupValue`
 
-The `crucible_struct` function normally creates a `struct` whose layout
+The `llvm_struct_value` function normally creates a `struct` whose layout
 obeys the alignment rules of the platform specified in the LLVM file
 being analyzed. Structs in LLVM can explicitly be "packed", however, so
 that every field immediately follows the previous in memory. The
 following command will create values of such types:
 
-* `crucible_packed_struct : [SetupValue] -> SetupValue`
+* `llvm_packed_struct_value : [SetupValue] -> SetupValue`
 
 In the experimental Java verification implementation, the following
 functions can be used to state the equivalent of a combination of
-`crucible_points_to` and either `crucible_elem` or `crucible_field`.
+`llvm_points_to` and either `llvm_elem` or `llvm_field`.
 
 * `jvm_elem_is : JVMValue -> Int -> JVMValue -> JVMSetup ()` specifies
 the value of an array element.
@@ -2191,26 +2190,26 @@ specifies the name of an object field.
 ## Global variables
 
 Mutable global variables that are accessed in a function must first be allocated
-by calling `crucible_alloc_global` on the name of the global.
+by calling `llvm_alloc_global` on the name of the global.
 
-* `crucible_alloc_global : String -> CrucibleSetup ()`
+* `llvm_alloc_global : String -> CrucibleSetup ()`
 
 This ensures that all global variables that might influence the function are
-accounted for explicitly in the specification: if `crucible_alloc_global` is
-used in the precondition, there must be a corresponding `crucible_points_to`
+accounted for explicitly in the specification: if `llvm_alloc_global` is
+used in the precondition, there must be a corresponding `llvm_points_to`
 in the postcondition describing the new state of that global. Otherwise, a
 specification might not fully capture the behavior of the function, potentially
 leading to unsoundness in the presence of compositional verification.
 
 Immutable (i.e. `const`) global variables are allocated implicitly, and do not
-require a call to `crucible_alloc_global`.
+require a call to `llvm_alloc_global`.
 
 Pointers to global variables or functions can be accessed with
-`crucible_global`:
+`llvm_global`:
 
-* `crucible_global : String -> SetupValue`
+* `llvm_global : String -> SetupValue`
 
-Like the pointers returned by `crucible_alloc`, however, these aren't
+Like the pointers returned by `llvm_alloc`, however, these aren't
 initialized at the beginning of symbolic -- setting global variables may
 be unsound in the presence of [compositional
 verification](#compositional-verification).
@@ -2239,16 +2238,16 @@ One might initially write the following specifications for `f` and `g`:
 ~~~
 m <- llvm_load_module "./test.bc";
 
-f_spec <- crucible_llvm_verify m "f" [] true (do {
-    y <- crucible_fresh_var "y" (llvm_int 32);
-    crucible_execute_func [crucible_term y];
-    crucible_return (crucible_term {{ 1 + y : [32] }});
+f_spec <- llvm_verify m "f" [] true (do {
+    y <- llvm_fresh_var "y" (llvm_int 32);
+    llvm_execute_func [llvm_term y];
+    llvm_return (llvm_term {{ 1 + y : [32] }});
 }) abc;
 
-g_spec <- crucible_llvm_verify m "g" [] true (do {
-    z <- crucible_fresh_var "z" (llvm_int 32);
-    crucible_execute_func [crucible_term z];
-    crucible_return (crucible_term {{ 2 + z : [32] }});
+g_spec <- llvm_llvm_verify m "g" [] true (do {
+    z <- llvm_fresh_var "z" (llvm_int 32);
+    llvm_execute_func [llvm_term z];
+    llvm_return (llvm_term {{ 2 + z : [32] }});
 }) abc;
 ~~~
 
@@ -2260,7 +2259,7 @@ z + 3` for all `z`, because both `f` and `g` modify the global variable
 
 To deal with this, we can use the following function:
 
-* `crucible_global_initializer : String -> SetupValue` returns the value
+* `llvm_global_initializer : String -> SetupValue` returns the value
   of the constant global initializer for the named global variable.
 
 Given this function, the specifications for `f` and `g` can make this
@@ -2272,15 +2271,15 @@ m <- llvm_load_module "./test.bc";
 
 
 let init_global name = do {
-  crucible_points_to (crucible_global name)
-                     (crucible_global_initializer name);
+  llvm_points_to (llvm_global name)
+                 (llvm_global_initializer name);
 };
 
-f_spec <- crucible_llvm_verify m "f" [] true (do {
-    y <- crucible_fresh_var "y" (llvm_int 32);
+f_spec <- llvm_verify m "f" [] true (do {
+    y <- llvm_fresh_var "y" (llvm_int 32);
     init_global "x";
-    crucible_execute_func [crucible_term y];
-    crucible_return (crucible_term {{ 1 + y : [32] }});
+    llvm_execute_func [llvm_term y];
+    llvm_return (llvm_term {{ 1 + y : [32] }});
 }) abc;
 ~~~
 
@@ -2298,19 +2297,19 @@ rise to specific final conditions. For these cases, you can specify an
 arbitrary predicate as a precondition or post-condition, using any
 values in scope at the time.
 
-* `crucible_precond : Term -> CrucibleSetup ()`
-* `crucible_postcond : Term -> CrucibleSetup ()`
+* `llvm_precond : Term -> CrucibleSetup ()`
+* `llvm_postcond : Term -> CrucibleSetup ()`
 * `jvm_precond : Term -> JVMSetup ()`
 * `jvm_postcond : Term -> JVMSetup ()`
 
 These two commands take `Term` arguments, and therefore cannot describe
-the values of pointers. The `crucible_equal` command states that two
+the values of pointers. The `llvm_equal` command states that two
 `SetupValue`s should be equal, and can be used in either the initial or
 the final state.
 
-* `crucible_equal : SetupValue -> SetupValue -> CrucibleSetup ()`
+* `llvm_equal : SetupValue -> SetupValue -> CrucibleSetup ()`
 
-The use of `crucible_equal` can also sometimes lead to more efficient
+The use of `llvm_equal` can also sometimes lead to more efficient
 symbolic execution when the predicate of interest is an equality.
 
 ## Assuming specifications
@@ -2323,7 +2322,7 @@ tactic](#miscellaneous-tactics) omits proof but does not prevent
 simulation of the function. To skip simulation altogether, one can use:
 
 ~~~
-crucible_llvm_unsafe_assume_spec :
+llvm_unsafe_assume_spec :
   LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec
 ~~~
 
@@ -2385,8 +2384,8 @@ initialization to a specific value can make many scripts more concise:
 
 ~~~~
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p v;
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
     return p;
 };
 ~~~~
@@ -2400,8 +2399,8 @@ initial value should be entirely symbolic.
 
 ~~~~
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
-    p <- alloc_init ty (crucible_term x);
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
 ~~~~
@@ -2414,15 +2413,15 @@ specified as follows:
 
 ~~~~
 let dotprod_spec n = do {
-    let nt = crucible_term {{ `n : [32] }};
+    let nt = llvm_term {{ `n : [32] }};
     (xs, xsp) <- ptr_to_fresh "xs" (llvm_array n (llvm_int 32));
     (ys, ysp) <- ptr_to_fresh "ys" (llvm_array n (llvm_int 32));
-    let xval = crucible_struct [ xsp, nt ];
-    let yval = crucible_struct [ ysp, nt ];
+    let xval = llvm_struct [ xsp, nt ];
+    let yval = llvm_struct [ ysp, nt ];
     xp <- alloc_init (llvm_struct "struct.vec_t") xval;
     yp <- alloc_init (llvm_struct "struct.vec_t") yval;
-    crucible_execute_func [xp, yp];
-    crucible_return (crucible_term {{ dotprod xs ys }});
+    llvm_execute_func [xp, yp];
+    llvm_return (llvm_term {{ dotprod xs ys }});
 };
 ~~~~
 
@@ -2465,13 +2464,13 @@ thought of as additional global state that is visible only to the
 verifier. Ghost state with a given name can be declared at the top level
 with the following function:
 
-* `crucible_declare_ghost_state : String -> TopLevel Ghost`
+* `llvm_declare_ghost_state : String -> TopLevel Ghost`
 
 Ghost state variables do not initially have any particluar type, and can
 store data of any type. Given an existing ghost variable the following
 function can be used to specify its value:
 
-* `crucible_ghost_value : Ghost -> Term -> CrucibleSetup ()`
+* `llvm_ghost_value : Ghost -> Term -> CrucibleSetup ()`
 
 Currently, this function can only be used for LLVM verification, though
 that will likely be generalized in the future. It can be used in either
@@ -2526,14 +2525,14 @@ does the same, except the memory allocated cannot be written to.
 import "Salsa20.cry";
 
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p (crucible_term v);
+    p <- llvm_alloc ty;
+    llvm_points_to p (llvm_term v);
     return p;
 };
 
 let alloc_init_readonly ty v = do {
-    p <- crucible_alloc_readonly ty;
-    crucible_points_to p (crucible_term v);
+    p <- llvm_alloc_readonly ty;
+    llvm_points_to p (llvm_term v);
     return p;
 };
 ~~~~
@@ -2548,13 +2547,13 @@ same, but returns a pointer to space that cannot be written to.
 
 ~~~~
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
+    x <- llvm_fresh_var n ty;
     p <- alloc_init ty x;
     return (x, p);
 };
 
 let ptr_to_fresh_readonly n ty = do {
-    x <- crucible_fresh_var n ty;
+    x <- llvm_fresh_var n ty;
     p <- alloc_init_readonly ty x;
     return (x, p);
 };
@@ -2572,8 +2571,8 @@ given by the application of `f` to the value in that memory before execution.
 ~~~~
 let oneptr_update_func n ty f = do {
     (x, p) <- ptr_to_fresh n ty;
-    crucible_execute_func [p];
-    crucible_points_to p (crucible_term {{ f x }});
+    llvm_execute_func [p];
+    llvm_points_to p (llvm_term {{ f x }});
 };
 ~~~~
 
@@ -2584,7 +2583,7 @@ The C function we wish to verify has type
 
 The function's specification generates four symbolic variables and pointers to
 them in the precondition/setup stage. The pointers are passed to the function
-during symbolic execution via `crucible_execute_func`. Finally, in the
+during symbolic execution via `llvm_execute_func`. Finally, in the
 postcondition/return stage, the expected values are computed using the trusted
 Cryptol implementation and it is asserted that the pointers do in fact point to
 these expected values.
@@ -2596,13 +2595,13 @@ let quarterround_setup : CrucibleSetup () = do {
     (y2, p2) <- ptr_to_fresh "y2" (llvm_int 32);
     (y3, p3) <- ptr_to_fresh "y3" (llvm_int 32);
 
-    crucible_execute_func [p0, p1, p2, p3];
+    llvm_execute_func [p0, p1, p2, p3];
 
     let zs = {{ quarterround [y0,y1,y2,y3] }}; // from Salsa20.cry
-    crucible_points_to p0 (crucible_term {{ zs@0 }});
-    crucible_points_to p1 (crucible_term {{ zs@1 }});
-    crucible_points_to p2 (crucible_term {{ zs@2 }});
-    crucible_points_to p3 (crucible_term {{ zs@3 }});
+    llvm_points_to p0 (llvm_term {{ zs@0 }});
+    llvm_points_to p1 (llvm_term {{ zs@1 }});
+    llvm_points_to p2 (llvm_term {{ zs@2 }});
+    llvm_points_to p3 (llvm_term {{ zs@3 }});
 };
 ~~~~
 
@@ -2652,12 +2651,12 @@ let salsa20_expansion_32 = do {
     (k, pk) <- ptr_to_fresh_readonly "k" (llvm_array 32 (llvm_int 8));
     (n, pn) <- ptr_to_fresh_readonly "n" (llvm_array 16 (llvm_int 8));
 
-    pks <- crucible_alloc (llvm_array 64 (llvm_int 8));
+    pks <- llvm_alloc (llvm_array 64 (llvm_int 8));
 
-    crucible_execute_fun [pk, pn, pks];
+    llvm_execute_func [pk, pn, pks];
 
     let rks = {{ Salsa20_expansion`{a=2}(k, n) }};
-    crucible_points_to pks (crucible_term rks);
+    llvm_points_to pks (llvm_term rks);
 };
 ~~~~
 
@@ -2688,15 +2687,15 @@ let s20_encrypt32 n = do {
     (v, pv) <- ptr_to_fresh_readonly "nonce" (llvm_array 8 (llvm_int 8));
     (m, pm) <- ptr_to_fresh "buf" (llvm_array n (llvm_int 8));
 
-    crucible_execute_func [ pkey
-                          , pv
-                          , crucible_term {{ 0 : [32] }}
-                          , pm
-                          , crucible_term {{ `n : [32] }}
-                          ];
+    llvm_execute_func [ pkey
+                      , pv
+                      , llvm_term {{ 0 : [32] }}
+                      , pm
+                      , llvm_term {{ `n : [32] }}
+                      ];
 
-    crucible_points_to pm (crucible_term {{ Salsa20_encrypt (key, v, m) }});
-    crucible_return (crucible_term {{ 0 : [32] }});
+    llvm_points_to pm (llvm_term {{ Salsa20_encrypt (key, v, m) }});
+    llvm_return (llvm_term {{ 0 : [32] }});
 };
 ~~~~
 
@@ -2712,15 +2711,15 @@ size.)
 ~~~~
 let main : TopLevel () = do {
     m      <- llvm_load_module "salsa20.bc";
-    qr     <- crucible_llvm_verify m "s20_quarterround" []      false quarterround_setup   abc;
-    rr     <- crucible_llvm_verify m "s20_rowround"     [qr]    false rowround_setup       abc;
-    cr     <- crucible_llvm_verify m "s20_columnround"  [qr]    false columnround_setup    abc;
-    dr     <- crucible_llvm_verify m "s20_doubleround"  [cr,rr] false doubleround_setup    abc;
-    s20    <- crucible_llvm_verify m "s20_hash"         [dr]    false salsa20_setup        abc;
-    s20e32 <- crucible_llvm_verify m "s20_expand32"     [s20]   true  salsa20_expansion_32 abc;
-    s20encrypt_63 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 63) abc;
-    s20encrypt_64 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 64) abc;
-    s20encrypt_65 <- crucible_llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 65) abc;
+    qr     <- llvm_verify m "s20_quarterround" []      false quarterround_setup   abc;
+    rr     <- llvm_verify m "s20_rowround"     [qr]    false rowround_setup       abc;
+    cr     <- llvm_verify m "s20_columnround"  [qr]    false columnround_setup    abc;
+    dr     <- llvm_verify m "s20_doubleround"  [cr,rr] false doubleround_setup    abc;
+    s20    <- llvm_verify m "s20_hash"         [dr]    false salsa20_setup        abc;
+    s20e32 <- llvm_verify m "s20_expand32"     [s20]   true  salsa20_expansion_32 abc;
+    s20encrypt_63 <- llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 63) abc;
+    s20encrypt_64 <- llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 64) abc;
+    s20encrypt_65 <- llvm_verify m "s20_crypt32" [s20e32] true (s20_encrypt32 65) abc;
 
     print "Done!";
 };

@@ -10,14 +10,14 @@ l_64_128 <- llvm_load_module "simon-64-128.bc";
 l_128_128 <- llvm_load_module "simon-128-128.bc";
 
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p v;
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
     return p;
 };
 
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
-    p <- alloc_init ty (crucible_term x);
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
 
@@ -25,11 +25,11 @@ let block_spec keyt wsz tn fn = do {
   let msgt = llvm_array 2 (llvm_int wsz);
   (key, keyp) <- ptr_to_fresh "key" keyt;
   (msg, msgp) <- ptr_to_fresh "msg" msgt;
-  cryptp <- crucible_alloc msgt;
-  crucible_points_to (crucible_global "z") (crucible_global_initializer "z");
-  crucible_execute_func [msgp, cryptp, keyp];
+  cryptp <- llvm_alloc msgt;
+  llvm_points_to (llvm_global "z") (llvm_global_initializer "z");
+  llvm_execute_func [msgp, cryptp, keyp];
   let res = {{ fn (reverse (take `{tn} key)) (msg@0, msg@1) }};
-  crucible_points_to cryptp (crucible_term {{ split (res.0 # res.1) : [2][wsz] }});
+  llvm_points_to cryptp (llvm_term {{ split (res.0 # res.1) : [2][wsz] }});
 };
 
 let i32 = llvm_int 32;
@@ -40,9 +40,9 @@ let enc_128_128_spec = block_spec (llvm_array 68 i64) 64 2 {{ Simon128_128 }};
 let dec_128_128_spec = block_spec (llvm_array 68 i64) 64 2 {{ Simon128_128' }};
 
 print "Proving Simon 64/128 C encrypt & decrypt";
-crucible_llvm_verify l_64_128 "Encrypt" [] true enc_64_128_spec abc;
-crucible_llvm_verify l_64_128 "Decrypt" [] true dec_64_128_spec abc;
+llvm_verify l_64_128 "Encrypt" [] true enc_64_128_spec abc;
+llvm_verify l_64_128 "Decrypt" [] true dec_64_128_spec abc;
 
 print "Proving Simon 128/128 C encrypt & decrypt";
-crucible_llvm_verify l_128_128 "Encrypt" [] true enc_128_128_spec abc;
-crucible_llvm_verify l_128_128 "Decrypt" [] true dec_128_128_spec abc;
+llvm_verify l_128_128 "Encrypt" [] true enc_128_128_spec abc;
+llvm_verify l_128_128 "Decrypt" [] true dec_128_128_spec abc;

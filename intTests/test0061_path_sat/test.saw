@@ -1,12 +1,12 @@
 m <- llvm_load_module "termination.bc";
 
 let g_spec = do {
-  x <- crucible_fresh_var "x" (llvm_int 64);
-  crucible_execute_func [crucible_term x];
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_execute_func [llvm_term x];
   };
 
-crucible_llvm_verify m "g1" [] false g_spec z3;
+llvm_verify m "g1" [] false g_spec z3;
 
 // NB: path sat checking is required for this
 // to terminate in a reasonable time
-crucible_llvm_verify m "g2" [] true g_spec z3;
+llvm_verify m "g2" [] true g_spec z3;

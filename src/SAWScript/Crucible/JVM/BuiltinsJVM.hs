@@ -22,7 +22,7 @@ module SAWScript.Crucible.JVM.BuiltinsJVM
        (
          loadJavaClass           -- java_load_class: reads a class from the codebase
        , prepareClassTopLevel
-       , crucible_java_extract   --
+       , jvm_extract   --
        ) where
 
 import           Data.List (isPrefixOf)
@@ -135,8 +135,8 @@ prepareClassTopLevel str = do
 
 -- | Extract a JVM method to saw-core
 --
-crucible_java_extract :: J.Class -> String -> TopLevel TypedTerm
-crucible_java_extract c mname = do
+jvm_extract :: J.Class -> String -> TopLevel TypedTerm
+jvm_extract c mname = do
   sc <- getSharedContext
   cb <- getJavaCodebase
   opts <- getOptions

@@ -4,7 +4,7 @@ str <- java_load_class "java/lang/String";
 teststr <- java_load_class "TestStr";
 
 print "**Extracting m";
-m <- crucible_java_extract teststr "main";
+m <- jvm_extract teststr "main";
 
 print "**Evaluating: main, should be 3";
 sat_print abc {{ \(x:[32]) -> (m 3 == x) }};

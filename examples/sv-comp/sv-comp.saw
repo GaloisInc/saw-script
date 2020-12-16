@@ -4,22 +4,22 @@
  */
 
 let error_spec = do {
-    crucible_precond {{ False }};
-    crucible_execute_func [];
+    llvm_precond {{ False }};
+    llvm_execute_func [];
 };
 
 let assume_spec = do {
-    p <- crucible_fresh_var "p" (llvm_int 32);
-    crucible_execute_func [crucible_term p];
-    crucible_postcond {{ p != 0 }};
+    p <- llvm_fresh_var "p" (llvm_int 32);
+    llvm_execute_func [llvm_term p];
+    llvm_postcond {{ p != 0 }};
 };
 
 let nondet_int_spec = do {
-    crucible_execute_func [];
-    x <- crucible_fresh_var "x" (llvm_int 32);
-    crucible_return (crucible_term x);
+    llvm_execute_func [];
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    llvm_return (llvm_term x);
 };
 
 let main_spec = do {
-    crucible_execute_func [];
+    llvm_execute_func [];
 };

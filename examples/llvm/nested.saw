@@ -1,18 +1,18 @@
 let f_spec = do {
-    tp <- crucible_alloc (llvm_struct "struct.t");
-    b <- crucible_fresh_var "b" (llvm_int 32);
+    tp <- llvm_alloc (llvm_struct "struct.t");
+    b <- llvm_fresh_var "b" (llvm_int 32);
 
     // The following will work if nested.bc is compiled with debug info
     // with Clang 3.7 or greater
-    crucible_points_to (crucible_field (crucible_field tp "n") "b") (crucible_term b);
+    llvm_points_to (llvm_field (llvm_field tp "n") "b") (llvm_term b);
 
     // The following can be a workaround if debug info is not available
-    //crucible_points_to (crucible_elem (crucible_elem tp 1) 1) (crucible_term b);
+    //llvm_points_to (llvm_elem (llvm_elem tp 1) 1) (llvm_term b);
 
-    crucible_execute_func [tp];
-    crucible_return (crucible_term b);
+    llvm_execute_func [tp];
+    llvm_return (llvm_term b);
 };
 
 m <- llvm_load_module "nested.bc";
 
-crucible_llvm_verify m "f" [] false f_spec abc;
+llvm_verify m "f" [] false f_spec abc;

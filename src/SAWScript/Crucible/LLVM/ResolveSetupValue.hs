@@ -193,7 +193,7 @@ typeOfSetupValue' cc env nameEnv val =
       do memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
          let si = Crucible.mkStructInfo dl packed memTys
          return (Crucible.StructType si)
-    SetupArray () [] -> fail "typeOfSetupValue: invalid empty crucible_array"
+    SetupArray () [] -> fail "typeOfSetupValue: invalid empty llvm_array_value"
     SetupArray () (v : vs) ->
       do memTy <- typeOfSetupValue cc env nameEnv v
          _memTys <- traverse (typeOfSetupValue cc env nameEnv) vs
@@ -204,7 +204,7 @@ typeOfSetupValue' cc env nameEnv val =
       typeOfSetupValue' cc env nameEnv (SetupElem () v i)
     SetupElem () v i ->
       do memTy <- typeOfSetupValue cc env nameEnv v
-         let msg = "typeOfSetupValue: crucible_elem requires pointer to struct or array, found " ++ show memTy
+         let msg = "typeOfSetupValue: llvm_elem requires pointer to struct or array, found " ++ show memTy
          case memTy of
            Crucible.PtrType symTy ->
              case let ?lc = lc in Crucible.asMemType symTy of
@@ -294,7 +294,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
       resolveSetupVal cc mem env tyenv nameEnv (SetupElem () v i)
     SetupElem () v i ->
       do memTy <- typeOfSetupValue cc tyenv nameEnv v
-         let msg = "resolveSetupVal: crucible_elem requires pointer to struct or array, found " ++ show memTy
+         let msg = "resolveSetupVal: llvm_elem requires pointer to struct or array, found " ++ show memTy
          delta <- case memTy of
            Crucible.PtrType symTy ->
              case let ?lc = lc in Crucible.asMemType symTy of
@@ -315,7 +315,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
              do delta' <- W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) delta)
                 off' <- W4.bvAdd sym off delta'
                 return (Crucible.LLVMValInt blk off')
-           _ -> fail "resolveSetupVal: crucible_elem requires pointer value"
+           _ -> fail "resolveSetupVal: llvm_elem requires pointer value"
     SetupNull () ->
       Crucible.ptrToPtrVal <$> Crucible.mkNullPointer sym Crucible.PtrWidth
     SetupGlobal () name ->

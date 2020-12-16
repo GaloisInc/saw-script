@@ -5,25 +5,25 @@ iface <- java_load_class "Iface";
 j <- java_load_class "Dyn";
 
 print "**Extracting f_ref";
-f_ref <- crucible_java_extract j "f_ref";
+f_ref <- jvm_extract j "f_ref";
 
 print "**Extracting f_imp";
-f_imp <- crucible_java_extract j "f_imp";
+f_imp <- jvm_extract j "f_imp";
 
 print "**Extracting f_virt";
-f_virt <- crucible_java_extract j "f_virt";
+f_virt <- jvm_extract j "f_virt";
 
 print "**Extracting h_ref";
-h_ref <- crucible_java_extract j "h_ref";
+h_ref <- jvm_extract j "h_ref";
 
 print "**Extracting h_imp";
-h_imp <- crucible_java_extract j "h_imp";
+h_imp <- jvm_extract j "h_imp";
 
 print "**Extracting i_imp";
-i_imp <- crucible_java_extract j "i_imp";
+i_imp <- jvm_extract j "i_imp";
 
 print "**Extracting b";
-b <- crucible_java_extract j "b";
+b <- jvm_extract j "b";
 
 
 print "**Evaluating: instance variable";

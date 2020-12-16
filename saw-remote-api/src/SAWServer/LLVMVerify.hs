@@ -42,9 +42,9 @@ llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scr
               VerifyContract -> do
                 lemmas <- mapM getLLVMMethodSpecIR lemmaNames
                 proofScript <- interpretProofScript script
-                tl $ crucible_llvm_verify mod fun lemmas checkSat setup proofScript
+                tl $ llvm_verify mod fun lemmas checkSat setup proofScript
               AssumeContract ->
-                tl $ crucible_llvm_unsafe_assume_spec mod fun setup
+                tl $ llvm_unsafe_assume_spec mod fun setup
             dropTask
             setServerVal lemmaName res
             ok
@@ -71,7 +71,7 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
             proofScript <- interpretProofScript script
             fileReader <- getFileReader
             setup <- compileLLVMContract fileReader bic cenv <$> traverse getExpr contract
-            res <- tl $ crucible_llvm_verify_x86 mod objName fun allocs checkSat setup proofScript
+            res <- tl $ llvm_verify_x86 mod objName fun allocs checkSat setup proofScript
             dropTask
             setServerVal lemmaName res
             ok

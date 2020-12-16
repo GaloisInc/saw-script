@@ -3,22 +3,22 @@
 m <- llvm_load_module "test.bc";
 
 let f_spec y = do {
-  x_p <- crucible_alloc (llvm_int 32);
-  crucible_execute_func [x_p, (crucible_term {{ `y : [32] }})];
-  crucible_points_to x_p (crucible_term {{ `y : [32] }});
+  x_p <- llvm_alloc (llvm_int 32);
+  llvm_execute_func [x_p, (llvm_term {{ `y : [32] }})];
+  llvm_points_to x_p (llvm_term {{ `y : [32] }});
 };
 
 let g_spec y = do {
-  x_p <- crucible_alloc (llvm_int 32);
-  crucible_execute_func [x_p, (crucible_term {{ `y : [32] }})];
-  crucible_points_to x_p (crucible_term {{ `y : [32] }});
+  x_p <- llvm_alloc (llvm_int 32);
+  llvm_execute_func [x_p, (llvm_term {{ `y : [32] }})];
+  llvm_points_to x_p (llvm_term {{ `y : [32] }});
 };
 
-f_0_ov <- crucible_llvm_verify m "f" [] false (f_spec 0) (w4_unint_z3 []);
-f_1_ov <- crucible_llvm_verify m "f" [] false (f_spec 1) (w4_unint_z3 []);
+f_0_ov <- llvm_verify m "f" [] false (f_spec 0) (w4_unint_z3 []);
+f_1_ov <- llvm_verify m "f" [] false (f_spec 1) (w4_unint_z3 []);
 let f_ovs =
   [ f_0_ov
   , f_1_ov
   ];
-g_ov <- crucible_llvm_verify m "g" f_ovs false (g_spec 0) trivial;
+g_ov <- llvm_verify m "g" f_ovs false (g_spec 0) trivial;
 

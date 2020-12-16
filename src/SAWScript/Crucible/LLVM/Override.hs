@@ -1322,7 +1322,7 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
      case val of
        ConcreteSizeValue val' ->
          do memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val'
-            -- In case the types are different (from crucible_points_to_untyped)
+            -- In case the types are different (from llvm_points_to_untyped)
             -- then the load type should be determined by the rhs.
             storTy <- Crucible.toStorableType memTy
             res <- liftIO $ Crucible.loadRaw sym mem ptr1 storTy alignment
@@ -1399,7 +1399,7 @@ stateCond :: PrePost -> String
 stateCond PreState = "precondition"
 stateCond PostState = "postcondition"
 
--- | Process a "crucible_equal" statement from the precondition
+-- | Process an @llvm_equal@ statement from the precondition
 -- section of the CrucibleSetup block.
 learnEqual ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
@@ -1419,7 +1419,7 @@ learnEqual opts sc cc spec loc prepost v1 v2 = do
   let name = "equality " ++ stateCond prepost
   addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
--- | Process a "crucible_precond" statement from the precondition
+-- | Process an @llvm_precond@ statement from the precondition
 -- section of the CrucibleSetup block.
 learnPred ::
   SharedContext                                                       ->
@@ -1455,8 +1455,8 @@ instantiateExtResolveSAWSymBV sc cc w tm = do
 ------------------------------------------------------------------------
 
 -- | Invalidate all mutable memory that was allocated in the method spec
--- precondition, either through explicit calls to "crucible_alloc" or to
--- "crucible_alloc_global". As an optimization, a memory allocation that
+-- precondition, either through explicit calls to @llvm_alloc@ or to
+-- @llvm_alloc_global@. As an optimization, a memory allocation that
 -- is overwritten by a postcondition memory write is not invalidated.
 -- Return a map containing the overwritten memory allocations.
 invalidateMutableAllocs ::
@@ -1549,8 +1549,8 @@ invalidateMutableAllocs opts sc cc cs = do
 
 ------------------------------------------------------------------------
 
--- | Perform an allocation as indicated by a 'crucible_alloc' or
--- 'crucible_fresh_pointer' statement from the postcondition section.
+-- | Perform an allocation as indicated by an @llvm_alloc@ or
+-- @llvm_fresh_pointer@ statement from the postcondition section.
 executeAllocation ::
   (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWidth arch)) =>
   Options                        ->
@@ -1630,7 +1630,7 @@ executePointsTo opts sc cc spec overwritten_allocs (LLVMPointsTo _loc cond ptr v
      let memVar = Crucible.llvmMemVar (ccLLVMContext cc)
      mem <- readGlobal memVar
 
-     -- In case the types are different (from crucible_points_to_untyped)
+     -- In case the types are different (from llvm_points_to_untyped)
      -- then the load type should be determined by the rhs.
      m <- OM (use setupValueSub)
      s <- OM (use termSub)
@@ -1729,7 +1729,7 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
 ------------------------------------------------------------------------
 
 
--- | Process a "crucible_equal" statement from the postcondition
+-- | Process an @llvm_equal@ statement from the postcondition
 -- section of the CrucibleSetup block.
 executeEqual ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
@@ -1746,7 +1746,7 @@ executeEqual opts sc cc spec v1 v2 = do
   p         <- liftIO (equalValsPred cc val1 val2)
   addAssume p
 
--- | Process a "crucible_postcond" statement from the postcondition
+-- | Process an @llvm_postcond@ statement from the postcondition
 -- section of the CrucibleSetup block.
 executePred ::
   SharedContext ->

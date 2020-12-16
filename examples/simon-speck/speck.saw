@@ -10,14 +10,14 @@ l_64_128 <- llvm_load_module "speck-64-128.bc";
 l_128_128 <- llvm_load_module "speck-128-128.bc";
 
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p v;
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
     return p;
 };
 
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
-    p <- alloc_init ty (crucible_term x);
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
 
@@ -25,9 +25,9 @@ let block_spec keyt wsz tn fn = do {
   let msgt = llvm_array 2 (llvm_int wsz);
   (key, keyp) <- ptr_to_fresh "key" keyt;
   (msg, msgp) <- ptr_to_fresh "msg" msgt;
-  crucible_execute_func [msgp, keyp];
+  llvm_execute_func [msgp, keyp];
   let res = {{ fn (reverse (take `{tn} key)) (msg@1, msg@0) }};
-  crucible_points_to msgp (crucible_term {{ split (res.1 # res.0) : [2][wsz] }});
+  llvm_points_to msgp (llvm_term {{ split (res.1 # res.0) : [2][wsz] }});
 };
 
 let i32 = llvm_int 32;
@@ -38,9 +38,9 @@ let enc_128_128_spec = block_spec (llvm_array 68 i64) 64 2 {{ Speck128_128 }};
 let dec_128_128_spec = block_spec (llvm_array 68 i64) 64 2 {{ Speck128_128' }};
 
 print "Proving Speck 64/128 C encrypt & decrypt";
-crucible_llvm_verify l_64_128 "speck_encrypt" [] false enc_64_128_spec yices;
-crucible_llvm_verify l_64_128 "speck_decrypt" [] false dec_64_128_spec yices;
+llvm_verify l_64_128 "speck_encrypt" [] false enc_64_128_spec yices;
+llvm_verify l_64_128 "speck_decrypt" [] false dec_64_128_spec yices;
 
 print "Proving Speck 128/128 C encrypt & decrypt";
-crucible_llvm_verify l_128_128 "speck_encrypt" [] false enc_128_128_spec yices;
-crucible_llvm_verify l_128_128 "speck_decrypt" [] false dec_128_128_spec yices;
+llvm_verify l_128_128 "speck_encrypt" [] false enc_128_128_spec yices;
+llvm_verify l_128_128 "speck_decrypt" [] false dec_128_128_spec yices;
