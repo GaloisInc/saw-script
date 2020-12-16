@@ -1,0 +1,130 @@
+enable_experimental;
+a <- java_load_class "A";
+print a;
+b <- java_load_class "B";
+c <- java_load_class "C";
+
+print "Verifying class A";
+
+a_setX <-
+  jvm_verify a "setX" [] false
+    do {
+      x <- jvm_fresh_var "x" java_long;
+      v <- jvm_fresh_var "v" java_long;
+      jvm_static_field_is a "x" (jvm_term x);
+      jvm_execute_func [jvm_term v];
+      jvm_static_field_is a "x" (jvm_term v);
+    }
+    z3;
+
+a_setY <-
+  jvm_verify a "setY" [] false
+    do {
+      y <- jvm_fresh_var "y" java_long;
+      v <- jvm_fresh_var "v" java_long;
+      jvm_static_field_is a "y" (jvm_term y);
+      jvm_execute_func [jvm_term v];
+      jvm_static_field_is a "y" (jvm_term v);
+    }
+    z3;
+
+a_getSum <-
+  jvm_verify a "getSum" [] false
+    do {
+      x <- jvm_fresh_var "x" java_long;
+      y <- jvm_fresh_var "y" java_long;
+      jvm_static_field_is a "x" (jvm_term x);
+      jvm_static_field_is a "y" (jvm_term y);
+      jvm_execute_func [];
+      jvm_return (jvm_term {{ x + y }});
+    }
+    z3;
+
+print "Verifying class B";
+
+b_setX <-
+  jvm_verify b "setX" [] false
+    do {
+      x <- jvm_fresh_var "x" java_long;
+      v <- jvm_fresh_var "v" java_long;
+      jvm_static_field_is b "x" (jvm_term x);
+      jvm_execute_func [jvm_term v];
+      jvm_static_field_is b "x" (jvm_term v);
+    }
+    z3;
+
+b_setY <-
+  jvm_verify b "setY" [] false
+    do {
+      y <- jvm_fresh_var "y" java_long;
+      v <- jvm_fresh_var "v" java_long;
+      jvm_static_field_is b "y" (jvm_term y);
+      jvm_execute_func [jvm_term v];
+      jvm_static_field_is b "y" (jvm_term v);
+    }
+    z3;
+
+fails (
+  jvm_verify b "getSum" [] false
+    do {
+      x <- jvm_fresh_var "x" java_long;
+      y <- jvm_fresh_var "y" java_long;
+      jvm_static_field_is b "x" (jvm_term x);
+      // This fails because "getSum" is inherited from class A,
+      // which has its own static field called "y", which in turn
+      // is shadowed by field "y" from class B.
+      jvm_static_field_is b "y" (jvm_term y);
+      jvm_execute_func [];
+      jvm_return (jvm_term {{ x + y }});
+    }
+    z3);
+
+b_getSum <-
+  jvm_verify b "getSum" [] false
+    do {
+      x <- jvm_fresh_var "x" java_long;
+      y <- jvm_fresh_var "y" java_long;
+      jvm_static_field_is b "x" (jvm_term x);
+      jvm_static_field_is a "y" (jvm_term y);
+      jvm_execute_func [];
+      jvm_return (jvm_term {{ x + y }});
+    }
+    z3;
+
+print "Verifying class C";
+
+c_setX <-
+  jvm_verify c "setX" [] false
+    do {
+      x <- jvm_fresh_var "x" java_long;
+      v <- jvm_fresh_var "v" java_long;
+      jvm_static_field_is c "x" (jvm_term x);
+      jvm_execute_func [jvm_term v];
+      jvm_static_field_is c "x" (jvm_term v);
+    }
+    z3;
+
+c_setY <-
+  jvm_verify c "setY" [] false
+    do {
+      y <- jvm_fresh_var "y" java_long;
+      v <- jvm_fresh_var "v" java_long;
+      jvm_static_field_is c "y" (jvm_term y);
+      jvm_execute_func [jvm_term v];
+      jvm_static_field_is c "y" (jvm_term v);
+    }
+    z3;
+
+// FIXME: this causes a translation error due to a bug in crucible-jvm
+//c_getSum <-
+fails (
+  jvm_verify c "getSum" [] false
+    do {
+      x <- jvm_fresh_var "x" java_long;
+      y <- jvm_fresh_var "y" java_long;
+      jvm_static_field_is c "x" (jvm_term x);
+      jvm_static_field_is c "y" (jvm_term y);
+      jvm_execute_func [];
+      jvm_return (jvm_term {{ x + y }});
+    }
+    z3);
