@@ -32,6 +32,7 @@ import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
+import Data.Char (isSpace)
 import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
@@ -950,35 +951,30 @@ w4AbcVerilog _unints sc _hashcons g =
        let execName = "abc"
            args = ["-q", "%read " ++ tmp ++"; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++ tmpCex]
        (ec, out, err) <- readProcessWithExitCode execName args ""
+       when (ec /= Exit.ExitSuccess) $
+          fail $ unlines [ "ABC returned non-zero exit code: " ++ show ec
+                         , "Standard output:"
+                         , out
+                         , "Standard error:"
+                         , err
+                         ]
        cexText <- readFile tmpCex
        removeFile tmp
        removeFile tmpCex
 
        -- Parse and report results
-       let isEquivalent = "equivalent" `isInfixOf` out
-           isNotEquivalent = "NOT EQUIVALENT" `isInfixOf` out
-           stats = solverStats "abc_verilog" (scSharedSize (unProp g))
-       res <- case (isEquivalent, isNotEquivalent) of
-                (True, False) -> return $ Nothing
-                (False, True) ->
-                  do bits <- reverse <$> parseAigerCex cexText
-                     let goalArgs' = reverse goalArgs
-                         argTys = map snd goalArgs'
-                         argNms = map fst goalArgs'
-                     finiteArgTys <- traverse (asFiniteType sc) argTys
-                     case liftCexBB finiteArgTys bits of
-                       Left parseErr -> fail parseErr
-                       Right vs -> return $ Just model
-                         where model = zip argNms (map toFirstOrderValue vs)
-                _ -> do putStrLn "ABC returned unexpected result"
-                        putStrLn $ "== Exit code: " ++ show ec
-                        putStrLn "== Standard output"
-                        putStrLn out
-                        putStrLn "== Standard error"
-                        putStrLn err
-                        putStrLn "== Counterexample text"
-                        putStrLn cexText
-                        fail "Proof failed."
+       let stats = solverStats "abc_verilog" (scSharedSize (unProp g))
+       res <- if all isSpace cexText
+              then return Nothing
+              else do bits <- reverse <$> parseAigerCex cexText
+                      let goalArgs' = reverse goalArgs
+                          argTys = map snd goalArgs'
+                          argNms = map fst goalArgs'
+                      finiteArgTys <- traverse (asFiniteType sc) argTys
+                      case liftCexBB finiteArgTys bits of
+                        Left parseErr -> fail parseErr
+                        Right vs -> return $ Just model
+                          where model = zip argNms (map toFirstOrderValue vs)
        return (res, stats)
 
 set_timeout :: Integer -> ProofScript ()
