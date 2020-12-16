@@ -139,7 +139,7 @@ $include all code/ffs_llvm.saw
 ```
 
 In this script, the `print` commands simply display text for the user.
-The `crucible_llvm_extract` command instructs the SAWScript interpreter
+The `llvm_extract` command instructs the SAWScript interpreter
 to perform symbolic simulation of the given C function (e.g., `ffs_ref`)
 from a given bitcode file (e.g., `ffs.bc`), and return a term
 representing the semantics of the function.
@@ -254,10 +254,10 @@ Now we can do the proof both within and across languages (from
 $include all code/ffs_compare.saw
 ```
 
-Here, the `crucible_java_extract` function works like
-`crucible_llvm_extract`, but on a Java class and method name. The
-`prove_print` command works similarly to the `prove` followed by `print`
-combination used for the LLVM example above.
+Here, the `java_extract` function works like `llvm_extract`, but on a
+Java class and method name. The `prove_print` command works similarly
+to the `prove` followed by `print` combination used for the LLVM
+example above.
 
 Using SMT-Lib Solvers
 =====================
@@ -378,7 +378,7 @@ In this example, the definitions of `add_spec` and `dbl_spec` provide
 extra information about how to configure the symbolic simulator when
 analyzing Java code. In this case, the setup blocks provide explicit
 descriptions of the implicit configuration used by
-`crucible_java_extract` (used in the earlier Java FFS example and in the
+`java_extract` (used in the earlier Java FFS example and in the
 next section). The `jvm_fresh_var` commands instruct the simulator to
 create fresh symbolic inputs to correspond to the Java variables `x` and
 `y`. Then, the `jvm_return` commands indicate the expected return value
