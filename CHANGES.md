@@ -66,6 +66,19 @@ The new `cryptol_add_path` command adds a directory to the search path
 used when loading Cryptol modules (and following imports within
 explicitly-loaded modules).
 
+New, shorter names are available for all LLVM commands starting with
+the `crucible_` prefix. The new names use the `llvm_` prefix instead.
+The top-level function `crucible_llvm_verify` is now `llvm_verify`,
+and `crucible_llvm_unsafe_assume_spec` is `llvm_unsafe_assume_spec`.
+The old names are still supported for now. The in-REPL documentation
+(`:? <command>`) gives the new name for each command.
+
+Shorter names are available for some saw-script types: `CrucibleSetup`
+is now `LLVMSetup`, `CrucibleMethodSpec` is now simply `LLVMSpec`, and
+`JVMMethodSpec` is `JVMSpec`. The old type names are still supported
+for backward compatibility.
+
+
 ## Bug Fixes
 
 * Catch more exceptions at the REPL (issues #138, #560, #745, and #814).
