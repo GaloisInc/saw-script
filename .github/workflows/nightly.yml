@@ -19,7 +19,7 @@ jobs:
           .github/ci.sh set_version
           .github/ci.sh output name saw-$(.github/ci.sh ver)-$(date -I)
 
-  docker:
+  docker-saw:
     runs-on: ubuntu-latest
     needs: [outputs]
     continue-on-error: true
@@ -34,6 +34,25 @@ jobs:
           username: ${{ secrets.GITHUBSAW_USERNAME }}
           password: ${{ secrets.GITHUBSAW }}
           repository: galoisinc/saw
+          tags: "nightly"
+          add_git_labels: true
+          push: ${{ github.event_name == 'schedule' }}
+
+  docker-saw-remote-api:
+    runs-on: ubuntu-latest
+    needs: [outputs]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - run: git -C deps/abcBridge submodule update --init
+      - name: Publish to Registry
+        uses: docker/build-push-action@v1
+        with:
+          username: ${{ secrets.GITHUBSAW_USERNAME }}
+          password: ${{ secrets.GITHUBSAW }}
+          repository: galoisinc/saw-remote-api
           tags: "nightly"
           add_git_labels: true
           push: ${{ github.event_name == 'schedule' }}
