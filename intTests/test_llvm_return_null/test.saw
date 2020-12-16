@@ -8,19 +8,19 @@ bc <- llvm_load_module "test.bc";
 let i64 = llvm_int 64;
 
 fails (
-  crucible_llvm_verify bc "foo" [] false
+  llvm_verify bc "foo" [] false
     do {
-      crucible_execute_func [];
-      x <- crucible_alloc i64;
-      crucible_return x;
+      llvm_execute_func [];
+      x <- llvm_alloc i64;
+      llvm_return x;
     }
     z3
   );
 
 bar_ov1 <-
-  crucible_llvm_verify bc "bar" [] false
+  llvm_verify bc "bar" [] false
     do {
-      crucible_execute_func [];
-      crucible_return (crucible_term {{ 1 : [32] }});
+      llvm_execute_func [];
+      llvm_return (llvm_term {{ 1 : [32] }});
     }
     z3;

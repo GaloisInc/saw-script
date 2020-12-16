@@ -1,7 +1,7 @@
 m <- llvm_load_module "ffs.bc";
 
-ffs_imp_correct <- crucible_llvm_extract m "ffs_imp_correct";
-ffs_bug_correct <- crucible_llvm_extract m "ffs_bug_correct";
+ffs_imp_correct <- llvm_extract m "ffs_imp_correct";
+ffs_bug_correct <- llvm_extract m "ffs_bug_correct";
 
 set_base 16;
 print "Proving ffs_imp_correct always returns true...";

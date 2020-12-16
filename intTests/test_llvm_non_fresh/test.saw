@@ -9,40 +9,40 @@ bc <- llvm_load_module "test.bc";
 let i64 = llvm_int 64;
 
 foo_ov <-
-  crucible_llvm_verify bc "foo" [] false
+  llvm_verify bc "foo" [] false
     do {
-      x <- crucible_alloc i64;
-      crucible_execute_func [x];
-      crucible_return x;
+      x <- llvm_alloc i64;
+      llvm_execute_func [x];
+      llvm_return x;
     }
     z3;
 
 fails (
-  crucible_llvm_verify bc "foo" [] false
+  llvm_verify bc "foo" [] false
     do {
-      x <- crucible_alloc i64;
-      crucible_execute_func [x];
-      y <- crucible_alloc i64;
-      crucible_return y;
+      x <- llvm_alloc i64;
+      llvm_execute_func [x];
+      y <- llvm_alloc i64;
+      llvm_return y;
     }
     z3
   );
 
 fails (
-  crucible_llvm_verify bc "bar" [foo_ov] false
+  llvm_verify bc "bar" [foo_ov] false
     do {
-      x <- crucible_alloc i64;
-      crucible_execute_func [x];
-      crucible_return (crucible_term {{ 0 : [32] }});
+      x <- llvm_alloc i64;
+      llvm_execute_func [x];
+      llvm_return (llvm_term {{ 0 : [32] }});
     }
     z3
   );
 
 bar_ov1 <-
-  crucible_llvm_verify bc "bar" [] false
+  llvm_verify bc "bar" [] false
     do {
-      x <- crucible_alloc i64;
-      crucible_execute_func [x];
-      crucible_return (crucible_term {{ 1 : [32] }});
+      x <- llvm_alloc i64;
+      llvm_execute_func [x];
+      llvm_return (llvm_term {{ 1 : [32] }});
     }
     z3;

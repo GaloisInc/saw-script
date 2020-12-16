@@ -1,56 +1,56 @@
-/** 
- * spec for mockup of subroutine that clears the given number of bytes from the 
- * arbitrary array pointed to by a given void * 
+/**
+ * spec for mockup of subroutine that clears the given number of bytes from the
+ * arbitrary array pointed to by a given void *
  */
 let clear_void_spec : CrucibleSetup() = do {
     let voidArrayType = (llvm_array 12 (llvm_int 8));
-    
-    arr <- (crucible_fresh_var "arr" voidArrayType);
-    p_arr <- (crucible_alloc voidArrayType);
-    let v_arr = (crucible_term arr);
-    
-    //size <- (crucible_fresh_var "size" (llvm_int 32));
-    //let v_size = (crucible_term size); 
-    //crucible_equal v_size (crucible_term {{ 12:[32] }});
 
-    let v_size = crucible_term {{ 12:[32] }};
+    arr <- (llvm_fresh_var "arr" voidArrayType);
+    p_arr <- (llvm_alloc voidArrayType);
+    let v_arr = (llvm_term arr);
 
-    crucible_points_to p_arr v_arr;
-    
-    crucible_execute_func [p_arr, v_size];
-    
-    crucible_points_to p_arr (crucible_term {{ zero:[12][8] }});
+    //size <- (llvm_fresh_var "size" (llvm_int 32));
+    //let v_size = (llvm_term size);
+    //llvm_equal v_size (llvm_term {{ 12:[32] }});
+
+    let v_size = llvm_term {{ 12:[32] }};
+
+    llvm_points_to p_arr v_arr;
+
+    llvm_execute_func [p_arr, v_size];
+
+    llvm_points_to p_arr (llvm_term {{ zero:[12][8] }});
 };
 
-/** 
- * spec for function that calls the subroutine to clear the given number of 
- * unsigned ints from the array pointed to by a specified unsigned int * 
- */ 
+/**
+ * spec for function that calls the subroutine to clear the given number of
+ * unsigned ints from the array pointed to by a specified unsigned int *
+ */
 let clear_uints_spec : CrucibleSetup() = do {
     let uintsType = (llvm_array 3 (llvm_int 32));
-    
-    uints <- (crucible_fresh_var "uints" uintsType);
-    p_uints <- (crucible_alloc uintsType);
-    let v_uints = (crucible_term uints);
-    
-    numUInts <- (crucible_fresh_var "numUInts" (llvm_int 32));
-    let v_numUInts = (crucible_term numUInts); 
-    crucible_equal v_numUInts (crucible_term {{ 3:[32] }});
-    //let v_numUInts = (crucible_term {{ 3:[32] }});
 
-    crucible_points_to p_uints v_uints;
-    
-    crucible_execute_func [p_uints, v_numUInts];
-    
-    crucible_points_to p_uints (crucible_term {{ zero:[3][32] }});
+    uints <- (llvm_fresh_var "uints" uintsType);
+    p_uints <- (llvm_alloc uintsType);
+    let v_uints = (llvm_term uints);
+
+    numUInts <- (llvm_fresh_var "numUInts" (llvm_int 32));
+    let v_numUInts = (llvm_term numUInts);
+    llvm_equal v_numUInts (llvm_term {{ 3:[32] }});
+    //let v_numUInts = (llvm_term {{ 3:[32] }});
+
+    llvm_points_to p_uints v_uints;
+
+    llvm_execute_func [p_uints, v_numUInts];
+
+    llvm_points_to p_uints (llvm_term {{ zero:[3][32] }});
 };
 
 let main : TopLevel () = do {
     voidTest <- llvm_load_module "test.bc";
-    
-    // The actual subroutine result would be "crucible_llvm_unsafe_assume_spec ..."
-    clear_void_12_result <- crucible_llvm_verify voidTest "clear_void" [] false clear_void_spec z3;
-    clear_uints_3_result <- crucible_llvm_verify voidTest "clear_uints" [clear_void_12_result] false clear_uints_spec z3;
-    
+
+    // The actual subroutine result would be "llvm_unsafe_assume_spec ..."
+    clear_void_12_result <- llvm_verify voidTest "clear_void" [] false clear_void_spec z3;
+    clear_uints_3_result <- llvm_verify voidTest "clear_uints" [clear_void_12_result] false clear_uints_spec z3;
+
     print "Done!";
 };

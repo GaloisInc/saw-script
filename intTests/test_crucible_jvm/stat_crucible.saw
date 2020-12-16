@@ -1,10 +1,10 @@
 enable_experimental;
 print "**Extracting reference term";
 j <- java_load_class "Stat";
-f_ref <- crucible_java_extract j "f_ref";
+f_ref <- java_extract j "f_ref";
 
 print "**Extracting implementation term";
-f_imp <- crucible_java_extract j "f_imp";
+f_imp <- java_extract j "f_imp";
 
 print "**Proving equivalence";
 let thm1 = {{ \x -> f_ref x == f_imp x }};

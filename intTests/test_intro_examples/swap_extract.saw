@@ -2,7 +2,7 @@
 m <- llvm_load_module "swap-correct.bc";
 
 // Extract a formal model of the `swap_correct` property
-model <- crucible_llvm_extract m "swap_correct";
+model <- llvm_extract m "swap_correct";
 
 // Use the ABC prover to show that it always returns non-zero.
 thm <- prove_print abc {{ \x y -> model x y != 0 }};

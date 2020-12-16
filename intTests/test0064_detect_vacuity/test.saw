@@ -3,13 +3,13 @@
 // the detected contradiction in its output.
 
 let bad_spec = do {
-    a <- crucible_fresh_var "a" (llvm_int 32);
-    crucible_precond {{ a == 0 }};
-    crucible_precond {{ a == 1 }};
-    crucible_execute_func [crucible_term a];
-    crucible_postcond {{ a == 2 }};
+    a <- llvm_fresh_var "a" (llvm_int 32);
+    llvm_precond {{ a == 0 }};
+    llvm_precond {{ a == 1 }};
+    llvm_execute_func [llvm_term a];
+    llvm_postcond {{ a == 2 }};
 };
 
 m <- llvm_load_module "test.bc";
 
-crucible_llvm_verify m "double_imp" [] true bad_spec z3;
+llvm_verify m "double_imp" [] true bad_spec z3;

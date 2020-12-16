@@ -1,17 +1,17 @@
 /** f clears the 2x4 array of 32-bit unsigned ints in the referenced struct */
     let f_spec : CrucibleSetup() = do {
-        i <- crucible_fresh_var "w.i" (llvm_array 2 (llvm_array 4 (llvm_int 32)));
-        pw <- crucible_alloc (llvm_struct "struct.BI");
-        crucible_points_to pw (crucible_struct [crucible_term i]);
-        
-        crucible_execute_func [pw];
-        crucible_points_to pw (crucible_struct [crucible_term {{ zero:[2][4][32] }} ]);
+        i <- llvm_fresh_var "w.i" (llvm_array 2 (llvm_array 4 (llvm_int 32)));
+        pw <- llvm_alloc (llvm_struct "struct.BI");
+        llvm_points_to pw (llvm_struct_value [llvm_term i]);
+
+        llvm_execute_func [pw];
+        llvm_points_to pw (llvm_struct_value [llvm_term {{ zero:[2][4][32] }} ]);
     };
-    
+
     let main : TopLevel () = do {
         structTest <- llvm_load_module "test.bc";
-        
-        f_result <- crucible_llvm_verify structTest "f" [] false f_spec z3;
-        
+
+        f_result <- llvm_verify structTest "f" [] false f_spec z3;
+
         print "Done!";
     };

@@ -1,7 +1,7 @@
 m <- llvm_load_module "ffs.bc";
 print "Extracting functional models...";
-ref <- crucible_llvm_extract m "ffs_ref";
-imp <- crucible_llvm_extract m "ffs_imp";
+ref <- llvm_extract m "ffs_ref";
+imp <- llvm_extract m "ffs_imp";
 print "Comparing reference and implementation...";
 r <- time (prove abc {{ ref === imp }});
 print r;

@@ -3,18 +3,18 @@ let {{ f x = if x == (0:[8]) then (1:[8]) else 4
 
 
 m1 <- llvm_load_module "test_switch.bc";
-l1 <- crucible_llvm_extract m1 "test_case";
-l2 <- crucible_llvm_extract m1 "test_case_indirect";
+l1 <- llvm_extract m1 "test_case";
+l2 <- llvm_extract m1 "test_case_indirect";
 
 prove_print abc {{ \x -> f x == l1 x }};
 prove_print abc {{ \x -> f x == l2 x }};
 
 m2 <- llvm_load_module "test_switch2.bc";
-l3 <- crucible_llvm_extract m2 "test_case_wrapper";
+l3 <- llvm_extract m2 "test_case_wrapper";
 
 prove_print abc {{ \x -> f x == l3 x }};
 
 m3 <- llvm_load_module "test_switch3.bc";
-l4 <- crucible_llvm_extract m3 "test_case_wrapper";
+l4 <- llvm_extract m3 "test_case_wrapper";
 
 prove_print abc {{ \x -> f x == l4 x }};

@@ -1,7 +1,7 @@
 set_base 2;
 m <- llvm_load_module "ffs.bc";
 print "Extracting functional model...";
-imp <- crucible_llvm_extract m "ffs_imp";
+imp <- llvm_extract m "ffs_imp";
 print "Finding input for implementation that yields result of 4...";
 r <- time (sat abc {{ \x -> imp x == 4 }});
 print r;

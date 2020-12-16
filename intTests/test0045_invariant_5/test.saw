@@ -1,9 +1,9 @@
 m <- llvm_load_module "test.bc";
 
 let ptr_to_fresh n ty = do {
-  p <- crucible_alloc ty;
-  x <- crucible_fresh_var n ty;
-  crucible_points_to p (crucible_term x);
+  p <- llvm_alloc ty;
+  x <- llvm_fresh_var n ty;
+  llvm_points_to p (llvm_term x);
   return (p, x);
 };
 
@@ -11,47 +11,47 @@ let len = 100;
 
 let multiple_array_inc_spec = do {
   (pa, a) <- ptr_to_fresh "a" (llvm_array len (llvm_int 8));
-  let n = crucible_term {{ `len : [64] }};
-  m <- crucible_fresh_var "m" (llvm_int 64);
-  crucible_execute_func [pa, n, crucible_term m];
+  let n = llvm_term {{ `len : [64] }};
+  m <- llvm_fresh_var "m" (llvm_int 64);
+  llvm_execute_func [pa, n, llvm_term m];
 };
 
 let outer_inv_spec = do {
   (pa, a) <- ptr_to_fresh "a" (llvm_array len (llvm_int 8));
-  ppa <- crucible_alloc (llvm_int 64);
-  crucible_points_to ppa pa;
-  let n = crucible_term {{ `len : [64] }};
-  pn <- crucible_alloc (llvm_int 64);
-  crucible_points_to pn n;
+  ppa <- llvm_alloc (llvm_int 64);
+  llvm_points_to ppa pa;
+  let n = llvm_term {{ `len : [64] }};
+  pn <- llvm_alloc (llvm_int 64);
+  llvm_points_to pn n;
   (pm, m) <- ptr_to_fresh "m" (llvm_int 64);
-  pi <- crucible_alloc (llvm_int 64);
+  pi <- llvm_alloc (llvm_int 64);
   (pj, j) <- ptr_to_fresh "j" (llvm_int 64);
-  crucible_precond {{ 0 <= j /\ j <= m }};
-  crucible_execute_func [ppa, pn, pm, pi, pj];
+  llvm_precond {{ 0 <= j /\ j <= m }};
+  llvm_execute_func [ppa, pn, pm, pi, pj];
 };
 
 let inner_inv_spec = do {
   (pa, a) <- ptr_to_fresh "a" (llvm_array len (llvm_int 8));
-  ppa <- crucible_alloc (llvm_int 64);
-  crucible_points_to ppa pa;
-  let n = crucible_term {{ `len : [64] }};
-  pn <- crucible_alloc (llvm_int 64);
-  crucible_points_to pn n;
+  ppa <- llvm_alloc (llvm_int 64);
+  llvm_points_to ppa pa;
+  let n = llvm_term {{ `len : [64] }};
+  pn <- llvm_alloc (llvm_int 64);
+  llvm_points_to pn n;
   (pm, m) <- ptr_to_fresh "m" (llvm_int 64);
   (pi, i) <- ptr_to_fresh "i" (llvm_int 64);
   (pj, j) <- ptr_to_fresh "j" (llvm_int 64);
-  crucible_precond {{ 0 <= j /\ j < m }};
-  crucible_precond {{ 0 <= i /\ i <= `len }};
-  crucible_execute_func [ppa, pn, pm, pi, pj];
+  llvm_precond {{ 0 <= j /\ j < m }};
+  llvm_precond {{ 0 <= i /\ i <= `len }};
+  llvm_execute_func [ppa, pn, pm, pi, pj];
 };
 
-inner_inv <- crucible_llvm_unsafe_assume_spec m "__breakpoint__inner_inv#multiple_array_inc" inner_inv_spec;
-outer_inv <- crucible_llvm_unsafe_assume_spec m "__breakpoint__outer_inv#multiple_array_inc" outer_inv_spec;
+inner_inv <- llvm_unsafe_assume_spec m "__breakpoint__inner_inv#multiple_array_inc" inner_inv_spec;
+outer_inv <- llvm_unsafe_assume_spec m "__breakpoint__outer_inv#multiple_array_inc" outer_inv_spec;
 
-crucible_llvm_verify m "__breakpoint__inner_inv#multiple_array_inc" [inner_inv, outer_inv] false inner_inv_spec abc;
-crucible_llvm_verify m "__breakpoint__outer_inv#multiple_array_inc" [inner_inv, outer_inv] false outer_inv_spec abc;
-crucible_llvm_verify m "multiple_array_inc" [inner_inv, outer_inv] false multiple_array_inc_spec abc;
+llvm_verify m "__breakpoint__inner_inv#multiple_array_inc" [inner_inv, outer_inv] false inner_inv_spec abc;
+llvm_verify m "__breakpoint__outer_inv#multiple_array_inc" [inner_inv, outer_inv] false outer_inv_spec abc;
+llvm_verify m "multiple_array_inc" [inner_inv, outer_inv] false multiple_array_inc_spec abc;
 
-crucible_llvm_verify m "__breakpoint__inner_inv#multiple_array_inc" [inner_inv] false inner_inv_spec abc;
-crucible_llvm_verify m "multiple_array_inc" [inner_inv] false multiple_array_inc_spec abc;
+llvm_verify m "__breakpoint__inner_inv#multiple_array_inc" [inner_inv] false inner_inv_spec abc;
+llvm_verify m "multiple_array_inc" [inner_inv] false multiple_array_inc_spec abc;
 
