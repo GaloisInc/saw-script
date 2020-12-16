@@ -32,6 +32,7 @@ module SAWScript.AST
        , toLName
        , tMono, tForall, tTuple, tRecord, tArray, tFun
        , tString, tTerm, tType, tBool, tInt, tAIG, tCFG
+       , tJVMSpec, tLLVMSpec
        , tBlock, tContext, tVar
 
        , PrettyPrint(..), pShow, commaSepAll, prettyWholeModule
@@ -209,6 +210,8 @@ data TyCon
   | BlockCon
   | AIGCon
   | CFGCon
+  | JVMSpecCon
+  | LLVMSpecCon
   | ContextCon Context
   deriving (Eq, Show)
 
@@ -389,6 +392,8 @@ instance PrettyPrint TyCon where
     IntCon         -> "Int"
     AIGCon         -> "AIG"
     CFGCon         -> "CFG"
+    JVMSpecCon     -> "JVMSpec"
+    LLVMSpecCon    -> "LLVMSpec"
     BlockCon       -> "<Block>"
     ContextCon cxt -> pretty par cxt
 
@@ -459,6 +464,12 @@ tCFG = TyCon CFGCon []
 
 tInt :: Type
 tInt = TyCon IntCon []
+
+tJVMSpec :: Type
+tJVMSpec = TyCon JVMSpecCon []
+
+tLLVMSpec :: Type
+tLLVMSpec = TyCon LLVMSpecCon []
 
 tBlock :: Type -> Type -> Type
 tBlock c t = TyCon BlockCon [c,t]
