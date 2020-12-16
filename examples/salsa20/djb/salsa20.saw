@@ -86,9 +86,9 @@ let u32 = (llvm_int 32);
 let salsa20_doubleround_setup : CrucibleSetup () = do {
     (x, p_x) <- ptr_to_fresh "output" (llvm_array 16 u32);
 
-    crucible_execute_func [p_x];
+    llvm_execute_func [p_x];
 
-    crucible_points_to p_x (crucible_term {{ Salsa20::doubleround x }});
+    llvm_points_to p_x (llvm_term {{ Salsa20::doubleround x }});
 };
 
 /*
@@ -112,13 +112,13 @@ let salsa20_doubleround_setup : CrucibleSetup () = do {
  * static void salsa20_wordtobyte(u8 output[64], const u32 input[16])
  */
 let salsa20_wordtobyte_setup : CrucibleSetup () = do {
-    p_output <- crucible_alloc (llvm_array 64 u8);
+    p_output <- llvm_alloc (llvm_array 64 u8);
     (input, p_input) <- ptr_to_fresh "input" (llvm_array 16 u32);
 
-    crucible_execute_func [p_output, p_input];
+    llvm_execute_func [p_output, p_input];
 
-    crucible_points_to p_output (crucible_term {{ Salsa20::Salsa20 (U32TO8_LITTLE input) }});
-    crucible_points_to p_input (crucible_term {{ input }});
+    llvm_points_to p_output (llvm_term {{ Salsa20::Salsa20 (U32TO8_LITTLE input) }});
+    llvm_points_to p_input (llvm_term {{ input }});
 };
 
 /*
@@ -178,21 +178,21 @@ let {{
  * ECRYPT validation framework
  */
 let ECRYPT_keysetup_setup (kBytes: Int) : CrucibleSetup () = do {
-    x_input <- crucible_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
-    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (crucible_struct [ crucible_term x_input ]);
+    x_input <- llvm_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
+    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (llvm_struct_value [ llvm_term x_input ]);
     (k, p_k) <- ptr_to_fresh "k" (llvm_array kBytes u8);
-    let kbits = {{ (`kBytes * 8):u32 }}; let ct_kbits = crucible_term kbits;
-    let ivbits = {{ 0:u32 }}; let ct_ivbits = crucible_term ivbits; // ignored (ECRYPT test suite compatibility)
+    let kbits = {{ (`kBytes * 8):u32 }}; let ct_kbits = llvm_term kbits;
+    let ivbits = {{ 0:u32 }}; let ct_ivbits = llvm_term ivbits; // ignored (ECRYPT test suite compatibility)
 
-    crucible_precond {{ ks_guard (x, k, kbits, ivbits) }};
+    llvm_precond {{ ks_guard (x, k, kbits, ivbits) }};
 
-    crucible_execute_func [p_x, p_k, ct_kbits, ct_ivbits];
+    llvm_execute_func [p_x, p_k, ct_kbits, ct_ivbits];
 
     let {{ (_, (x', k', _, _)) = ECRYPT_keysetup (x, k, kbits, undefined) }};
     let x_input' = {{ x'.input }};
 
-    crucible_points_to p_x (crucible_struct [ crucible_term x_input' ]);
-    crucible_points_to p_k (crucible_term {{ k' }});
+    llvm_points_to p_x (llvm_struct_value [ llvm_term x_input' ]);
+    llvm_points_to p_k (llvm_term {{ k' }});
 };
 
 // void ECRYPT_ivsetup(ECRYPT_ctx *x,const u8 *iv)
@@ -212,17 +212,17 @@ let {{
 
 /** method specification for ECRYPT_ivsetup, which initializes the IV and counter component of a "context" for encryption in a manner compatible with the ECRYPT validation framework */
 let ECRYPT_ivsetup_setup : CrucibleSetup () = do {
-    x_input <- crucible_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
-    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (crucible_struct [ crucible_term x_input ]);
+    x_input <- llvm_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
+    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (llvm_struct [ llvm_term x_input ]);
     (iv, p_iv) <- ptr_to_fresh "iv" (llvm_array 8 u8);
 
-    crucible_execute_func [p_x, p_iv];
+    llvm_execute_func [p_x, p_iv];
 
     let {{ (_, (x', iv')) = ECRYPT_ivsetup (x, iv) }};
-    let ct_x_input' = crucible_term {{ x'.input }};
+    let ct_x_input' = llvm_term {{ x'.input }};
 
-    crucible_points_to p_x (crucible_struct [ ct_x_input' ]);
-    crucible_points_to p_iv (crucible_term {{ iv' }});
+    llvm_points_to p_x (llvm_struct_value [ ct_x_input' ]);
+    llvm_points_to p_iv (llvm_term {{ iv' }});
 };
 
 // void ECRYPT_encrypt_bytes(ECRYPT_ctx *x, const u8 *m, u8 *c, u32 bytes)
@@ -253,21 +253,21 @@ let {{
 
 /** method specification of ECRYPT_encrypt_bytes */
 let ECRYPT_encrypt_bytes_setup (bytes: Int) : CrucibleSetup () = do {
-    x_input <- crucible_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
-    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (crucible_struct [ crucible_term x_input ]);
+    x_input <- llvm_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
+    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (llvm_struct_value [ llvm_term x_input ]);
     (m, p_m) <- ptr_to_fresh "m" (llvm_array bytes u8);
-    p_c <- crucible_alloc (llvm_array bytes u8);
+    p_c <- llvm_alloc (llvm_array bytes u8);
     let {{ bytes = `bytes:u32 }};
-    let ct_bytes = crucible_term {{ bytes }};
+    let ct_bytes = llvm_term {{ bytes }};
 
-    crucible_execute_func [p_x, p_m, p_c, ct_bytes];
+    llvm_execute_func [p_x, p_m, p_c, ct_bytes];
 
     let {{ (_, (x', m', c', _)) = ECRYPT_encrypt_bytes (x, m, undefined, bytes) }};
     let x_input' = {{ x'.input }};
 
-    crucible_points_to p_x (crucible_struct [ crucible_term x_input' ]);
-    crucible_points_to p_m (crucible_term {{ m' }});
-    crucible_points_to p_c (crucible_term {{ c' }});
+    llvm_points_to p_x (llvm_struct_value [ llvm_term x_input' ]);
+    llvm_points_to p_m (llvm_term {{ m' }});
+    llvm_points_to p_c (llvm_term {{ c' }});
 };
 
 /*
@@ -313,8 +313,8 @@ let {{
  */
 // void ECRYPT_encrypt_bytes(ECRYPT_ctx *x, const u8 *m, u8 *c, u32 bytes)
 let ECRYPT_encrypt_bytes_setup' (bytes: Int) (a: Int) : CrucibleSetup () = do {
-    k <- crucible_fresh_var "k" (llvm_array (eval_int {{ `(a * 16):[6] }}) u8);
-    v <- crucible_fresh_var "v" (llvm_array 8 u8);
+    k <- llvm_fresh_var "k" (llvm_array (eval_int {{ `(a * 16):[6] }}) u8);
+    v <- llvm_fresh_var "v" (llvm_array 8 u8);
 
     let x_input = {{ (if (`a == (2:[2])) then [s0] # k0 # [s1] # n # [s2] # k1 # [s3]
                                          else [t0] # k0 # [t1] # n # [t2] # k0 # [t3])
@@ -323,16 +323,16 @@ let ECRYPT_encrypt_bytes_setup' (bytes: Int) (a: Int) : CrucibleSetup () = do {
                 [t0, t1, t2, t3] = U8TO32_LITTLE "expand 16-byte k"
                 n = (U8TO32_LITTLE v) # (zero:[2][32])
                 [k0, k1] = (split ((U8TO32_LITTLE k) # zero)):[2][4][32] }};
-    // x_input <- crucible_fresh_var "x->input" (llvm_array 16 u32);
-    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (crucible_struct [ crucible_term x_input ]);
+    // x_input <- llvm_fresh_var "x->input" (llvm_array 16 u32);
+    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (llvm_struct_value [ llvm_term x_input ]);
 
     (m, p_m) <- ptr_to_fresh "m" (llvm_array bytes u8);
-    p_c <- crucible_alloc (llvm_array bytes u8);
+    p_c <- llvm_alloc (llvm_array bytes u8);
 
     let {{ bytes = `bytes:u32 }};
-    let ct_bytes = crucible_term {{ bytes }};
+    let ct_bytes = llvm_term {{ bytes }};
 
-    crucible_execute_func [p_x, p_m, p_c, ct_bytes];
+    llvm_execute_func [p_x, p_m, p_c, ct_bytes];
 
     let x_input' = {{
       updates x_input indices ((reverse (split chunks)):[2][32])
@@ -341,9 +341,9 @@ let ECRYPT_encrypt_bytes_setup' (bytes: Int) (a: Int) : CrucibleSetup () = do {
           indices = [8..9]:[2]size_t
     }};
 
-    crucible_points_to p_x (crucible_struct [ crucible_term x_input' ]);
-    crucible_points_to p_m (crucible_term {{ m }});
-    crucible_points_to p_c (crucible_term {{ Salsa20::Salsa20_encrypt (k, v, m) }});
+    llvm_points_to p_x (llvm_struct_value [ llvm_term x_input' ]);
+    llvm_points_to p_m (llvm_term {{ m }});
+    llvm_points_to p_c (llvm_term {{ Salsa20::Salsa20_encrypt (k, v, m) }});
 };
 
 let main : TopLevel() = do {
@@ -352,49 +352,49 @@ let main : TopLevel() = do {
     print m;
 
     // print "Verifying salsa20_doubleround...";
-    // salsa20_doubleround_result <- time (crucible_llvm_verify m "salsa20_doubleround" [] false salsa20_doubleround_setup abc);
+    // salsa20_doubleround_result <- time (llvm_verify m "salsa20_doubleround" [] false salsa20_doubleround_setup abc);
 
     print "Verifying salsa20_wordtobyte...";
-    salsa20_wordtobyte_result <- time (crucible_llvm_verify m "salsa20_wordtobyte" [/*salsa20_doubleround_result*/] false salsa20_wordtobyte_setup abc);
+    salsa20_wordtobyte_result <- time (llvm_verify m "salsa20_wordtobyte" [/*salsa20_doubleround_result*/] false salsa20_wordtobyte_setup abc);
 
     print "Verifying ECRYPT_keysetup (kbits=128)...";
-    ECRYPT_keysetup_16_result <- time (crucible_llvm_verify m "ECRYPT_keysetup" [] false (ECRYPT_keysetup_setup 16) abc);
+    ECRYPT_keysetup_16_result <- time (llvm_verify m "ECRYPT_keysetup" [] false (ECRYPT_keysetup_setup 16) abc);
 
     print "Verifying ECRYPT_keysetup (kbits=256)...";
-    ECRYPT_keysetup_32_result <- time (crucible_llvm_verify m "ECRYPT_keysetup" [] false (ECRYPT_keysetup_setup 32) abc);
+    ECRYPT_keysetup_32_result <- time (llvm_verify m "ECRYPT_keysetup" [] false (ECRYPT_keysetup_setup 32) abc);
 
     print "Verifying ECRYPT_ivsetup...";
-    ECRYPT_ivsetup_result <- time (crucible_llvm_verify m "ECRYPT_ivsetup" [] false ECRYPT_ivsetup_setup abc);
+    ECRYPT_ivsetup_result <- time (llvm_verify m "ECRYPT_ivsetup" [] false ECRYPT_ivsetup_setup abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (1 byte message)...";
-    ECRYPT_encrypt_bytes_1_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 1) abc);
+    ECRYPT_encrypt_bytes_1_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 1) abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (2 byte message)...";
-    ECRYPT_encrypt_bytes_2_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 2) abc);
+    ECRYPT_encrypt_bytes_2_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 2) abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (4 byte message)...";
-    ECRYPT_encrypt_bytes_4_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 4) abc);
+    ECRYPT_encrypt_bytes_4_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 4) abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (8 byte message)...";
-    ECRYPT_encrypt_bytes_8_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 8) abc);
+    ECRYPT_encrypt_bytes_8_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 8) abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (16 byte message)...";
-    ECRYPT_encrypt_bytes_16_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 16) abc);
+    ECRYPT_encrypt_bytes_16_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 16) abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (32 byte message)...";
-    ECRYPT_encrypt_bytes_32_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 32) abc);
+    ECRYPT_encrypt_bytes_32_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 32) abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (64 byte message)...";
-    ECRYPT_encrypt_bytes_64_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 64) abc);
+    ECRYPT_encrypt_bytes_64_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 64) abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (65 byte message)...";
-    ECRYPT_encrypt_bytes_65_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 65) abc);
+    ECRYPT_encrypt_bytes_65_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 65) abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (96 byte message)...";
-    ECRYPT_encrypt_bytes_96_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 96) abc);
+    ECRYPT_encrypt_bytes_96_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 96) abc);
 
     print "Verifying ECRYPT_encrypt_bytes based on context (128 byte message)...";
-    ECRYPT_encrypt_bytes_128_result <- time (crucible_llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 128) abc);
+    ECRYPT_encrypt_bytes_128_result <- time (llvm_verify m "ECRYPT_encrypt_bytes" [salsa20_wordtobyte_result] false (ECRYPT_encrypt_bytes_setup 128) abc);
 
     print "Verifying that the implementation is actually related to the spec for various key/message sizes...";
 

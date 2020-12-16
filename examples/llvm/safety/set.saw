@@ -1,38 +1,38 @@
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p v;
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
     return p;
 };
 
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
-    p <- alloc_init ty (crucible_term x);
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
 
 let set_bad_spec n = do {
     (a, ap) <- ptr_to_fresh "a" (llvm_array n (llvm_int 32));
-    i <- crucible_fresh_var "i" (llvm_int 32);
-    v <- crucible_fresh_var "v" (llvm_int 32);
-    crucible_execute_func [ap, crucible_term i, crucible_term v];
-    crucible_points_to ap (crucible_term {{ update a i v }});
+    i <- llvm_fresh_var "i" (llvm_int 32);
+    v <- llvm_fresh_var "v" (llvm_int 32);
+    llvm_execute_func [ap, llvm_term i, llvm_term v];
+    llvm_points_to ap (llvm_term {{ update a i v }});
 };
 
 let set_good_spec n = do {
     (a, ap) <- ptr_to_fresh "a" (llvm_array n (llvm_int 32));
-    i <- crucible_fresh_var "i" (llvm_int 32);
-    v <- crucible_fresh_var "v" (llvm_int 32);
+    i <- llvm_fresh_var "i" (llvm_int 32);
+    v <- llvm_fresh_var "v" (llvm_int 32);
 
     // The ` in the following is to convert an unbounded integer into a
     // fixed-size bit vector.
-    crucible_precond {{ i < (`n : [32]) }};
-    
-    crucible_execute_func [ap, crucible_term i, crucible_term v];
+    llvm_precond {{ i < (`n : [32]) }};
 
-    crucible_points_to ap (crucible_term {{ update a i v }});
+    llvm_execute_func [ap, llvm_term i, llvm_term v];
+
+    llvm_points_to ap (llvm_term {{ update a i v }});
 };
 
 m <- llvm_load_module "set.bc";
 
-crucible_llvm_verify m "set" [] false (set_good_spec 10) abc;
-fails (crucible_llvm_verify m "set" [] false (set_bad_spec 10) abc);
+llvm_verify m "set" [] false (set_good_spec 10) abc;
+fails (llvm_verify m "set" [] false (set_bad_spec 10) abc);

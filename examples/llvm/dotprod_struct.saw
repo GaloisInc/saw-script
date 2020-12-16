@@ -1,30 +1,30 @@
 import "dotprod.cry";
 
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p v;
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
     return p;
 };
 
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
-    p <- alloc_init ty (crucible_term x);
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
 
 let dotprod_spec n = do {
-    let nt = crucible_term {{ `n : [32] }};
+    let nt = llvm_term {{ `n : [32] }};
     (xs, xsp) <- ptr_to_fresh "xs" (llvm_array n (llvm_int 32));
     (ys, ysp) <- ptr_to_fresh "ys" (llvm_array n (llvm_int 32));
-    let xval = crucible_struct [ xsp, nt ];
-    let yval = crucible_struct [ ysp, nt ];
+    let xval = llvm_struct_value [ xsp, nt ];
+    let yval = llvm_struct_value [ ysp, nt ];
     xp <- alloc_init (llvm_struct "struct.vec_t") xval;
     yp <- alloc_init (llvm_struct "struct.vec_t") yval;
-    crucible_execute_func [xp, yp];
-    crucible_return (crucible_term {{ dotprod xs ys }});
+    llvm_execute_func [xp, yp];
+    llvm_return (llvm_term {{ dotprod xs ys }});
 };
 
 m <- llvm_load_module "dotprod_struct.bc";
 
-dotprod_ov <- crucible_llvm_verify m "dotprod_struct" [] true (dotprod_spec 2) z3;
-crucible_llvm_verify m "dotprod_wrap" [dotprod_ov] true (dotprod_spec 2) z3;
+dotprod_ov <- llvm_verify m "dotprod_struct" [] true (dotprod_spec 2) z3;
+llvm_verify m "dotprod_wrap" [dotprod_ov] true (dotprod_spec 2) z3;

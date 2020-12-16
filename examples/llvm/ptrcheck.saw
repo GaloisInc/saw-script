@@ -1,19 +1,19 @@
 m <- llvm_load_module "ptrcheck.bc";
 
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p v;
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
     return p;
 };
 
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
-    p <- alloc_init ty (crucible_term x);
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
 
-crucible_llvm_verify m "f" [] false do {
+llvm_verify m "f" [] false do {
     (s, sp) <- ptr_to_fresh "s" (llvm_struct "struct.s");
-    crucible_execute_func [sp];
-    crucible_return (crucible_term {{ 0 : [32] }});
+    llvm_execute_func [sp];
+    llvm_return (llvm_term {{ 0 : [32] }});
 } abc;
