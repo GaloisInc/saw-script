@@ -163,7 +163,7 @@ install_system_deps() {
   install_yasm &
   wait
   export PATH=$PWD/$BIN:$PATH
-  echo "$PWD/$BIN" >> "$GITHUB_PATH"
+  echo "$BIN" >> "$GITHUB_PATH"
   is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices && is_exe "$BIN" yasm
 }
 
@@ -171,6 +171,7 @@ test_dist() {
   find_java
   pushd intTests
   for t in test0001 test0019_jss_switch_statement test_crucible_jvm test_ecdsa test_examples test_issue108 test_tutorial1 test_tutorial2 test_tutorial_w4; do echo $t >> disabled_tests.txt; done
+  env
   LOUD=true ./runtests.sh
   sh -c "! grep '<failure>' results.xml"
 }
