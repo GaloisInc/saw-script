@@ -760,7 +760,11 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
     setupClass cls =
       do let cname = J.className cls
          name <- W4.stringLit sym (W4S.UnicodeLiteral $ CJ.classNameText (J.className cls))
-         status <- W4.bvLit sym knownRepr (BV.zero knownRepr)
+         -- Set every class to status 2 (initialized). In the absence
+         -- of JVMSetup commands for specifying initialization status,
+         -- this will allow verifications to proceed without the
+         -- interference of any static initializers.
+         status <- W4.bvLit sym knownRepr (BV.mkBV knownRepr 2)
          super <-
            case J.superClass cls of
              Nothing -> return W4.Unassigned
