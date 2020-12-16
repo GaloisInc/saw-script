@@ -2415,7 +2415,7 @@ primitives = Map.fromList
     [ "Specify the given value as the return value of the function. A"
     , "crucible_return statement is required if and only if the function"
     , "has a non-void return type." ]
-  , prim "llvm_return" "SetupValue -> CrucibleSetup ()"
+  , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
     (pureVal llvm_return)
     Current
     [ "Legacy alternative name for `llvm_return`." ]
