@@ -13,8 +13,6 @@ jobs:
           git -C deps/abcBridge submodule update --init
       - run: .github/ci.sh set_version
         id: outputs
-      - uses: satackey/action-docker-layer-caching@v0.0.8
-        continue-on-error: true
       - name: Publish to Registry
         uses: docker/build-push-action@v1
         with:
@@ -33,8 +31,6 @@ jobs:
           git -C deps/abcBridge submodule update --init
       - run: .github/ci.sh set_version
         id: outputs
-      - uses: satackey/action-docker-layer-caching@v0.0.8
-        continue-on-error: true
       - name: Publish to Registry
         uses: docker/build-push-action@v1
         with:
