@@ -24,6 +24,7 @@ module SAWScript.HeapsterBuiltins
        , heapster_define_recursive_perm
        , heapster_define_reachability_perm
        , heapster_define_perm
+       , heapster_define_llvmshape
        , heapster_block_entry_hint
        , heapster_gen_block_perms_hint
        , heapster_join_point_hint
@@ -42,6 +43,7 @@ import qualified Data.Map as Map
 import Data.String
 import Data.List
 import Data.IORef
+import Data.Functor.Product
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class
@@ -188,7 +190,7 @@ lookupLLVMSymbolModAndCFG henv nm =
     Nothing -> Nothing
 
 heapster_default_env :: PermEnv
-heapster_default_env = PermEnv [] [] [] []
+heapster_default_env = emptyPermEnv
 
 -- | Based on the function of the same name in Verifier.SAW.ParserUtils.
 -- Unlike that function, this calls 'fail' instead of 'error'.
@@ -465,6 +467,20 @@ heapster_define_perm _bic _opts henv nm args_str tp_str perm_string =
      perm <- parsePermInCtxString "disjunctive perm" env
                                    args_ctx tp_perm perm_string
      let env' = permEnvAddDefinedPerm env nm args tp_perm perm
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+-- | Define a new named llvm shape with the given name, arguments, and width
+heapster_define_llvmshape :: BuiltinContext -> Options -> HeapsterEnv ->
+                             String -> Int -> String -> String ->
+                             TopLevel ()
+heapster_define_llvmshape _bic _opts henv nm w_int args_str sh_str =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     (Some (Pair w LeqProof)) <-
+       failOnNothing "Shape width must be positive" $ someNatGeq1 w_int
+     Some args_ctx <- parseParsedCtxString "argument types" env args_str
+     let args = parsedCtxCtx args_ctx
+     sh <- parseExprString env (LLVMShapeRepr w) sh_str
+     let env' = env -- permEnvAddDefinedShape env nm args w sh
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Add Heapster type-checking hint for some blocks in a function given by
