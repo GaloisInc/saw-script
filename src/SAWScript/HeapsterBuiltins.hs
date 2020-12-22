@@ -479,8 +479,8 @@ heapster_define_llvmshape _bic _opts henv nm w_int args_str sh_str =
        failOnNothing "Shape width must be positive" $ someNatGeq1 w_int
      Some args_ctx <- parseParsedCtxString "argument types" env args_str
      let args = parsedCtxCtx args_ctx
-     sh <- parseExprString env (LLVMShapeRepr w) sh_str
-     let env' = env -- permEnvAddDefinedShape env nm args w sh
+     mb_sh <- parseExprInCtxString env (LLVMShapeRepr w) args_ctx sh_str
+     let env' = withKnownNat w $ permEnvAddNamedShape env nm args mb_sh
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Add Heapster type-checking hint for some blocks in a function given by
@@ -679,6 +679,8 @@ heapster_typecheck_mut_funs_rename bic opts henv fn_names_and_perms =
           let args = mkCruCtx $ handleArgTypes $ cfgHandle cfg
           let ret = handleReturnType $ cfgHandle cfg
           SomeFunPerm fun_perm <-
+            tracePretty (pretty ("Fun args:" :: String) <+>
+                         permPretty emptyPPInfo args) $
             parseFunPermString "permissions" env args ret perms_string
           return (SomeCFGAndPerm (GlobalSymbol $
                                   fromString nm) nm_to cfg fun_perm)

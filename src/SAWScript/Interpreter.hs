@@ -2624,6 +2624,15 @@ primitives = Map.fromList
     , " such that nm<x1,...,xn> is equivalent to the permission p."
     ]
 
+  , prim "heapster_define_llvmshape"
+    "HeapsterEnv -> String -> Int -> String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_llvmshape)
+    Experimental
+    [ "heapster_define_llvmshape nm w args sh defines a Heapster LLVM shape"
+    , " nm with type llvmshape w and arguments x1,...,xn parsed from args"
+    , " such that nm<x1,...,xn> is equivalent to the permission p."
+    ]
+
   , prim "heapster_block_entry_hint"
     "HeapsterEnv -> String -> Int -> String -> String -> String -> TopLevel ()"
     (bicVal heapster_block_entry_hint)
