@@ -627,11 +627,11 @@ goal_insert (Theorem (Prop t) _stats) =
          let goal' = goal { goalProp = Prop body' }
          return ((), ProofState (goal' : goals') concl stats timeout)
 
-goal_when_num :: Int -> ProofScript () -> ProofScript ()
-goal_when_num n script =
+goal_num_when :: Int -> ProofScript () -> ProofScript ()
+goal_num_when n script =
   StateT $ \s ->
   case psGoals s of
-    g : _ | ((goalNum g) == n) -> runStateT script s
+    g : _ | goalNum g == n -> runStateT script s
     _ -> return ((), s)
 
 goal_when :: String -> ProofScript () -> ProofScript ()

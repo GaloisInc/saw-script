@@ -1196,8 +1196,8 @@ primitives = Map.fromList
     Experimental
     [ "If the goal number is the given number, runs the first script."
     , "Otherwise runs the second script" ]
-  , prim "goal_when_num"       "Int -> ProofScript () -> ProofScript ()"
-    (pureVal goal_when_num)
+  , prim "goal_num_when"       "Int -> ProofScript () -> ProofScript ()"
+    (pureVal goal_num_when)
     Experimental
     [ "Run the given proof script only when the goal number is the"
     , "the given number."
