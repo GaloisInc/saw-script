@@ -83,6 +83,7 @@ import qualified SAWScript.Crucible.JVM.BuiltinsJVM as CJ
 import           SAWScript.Crucible.LLVM.Builtins
 import           SAWScript.Crucible.JVM.Builtins
 import           SAWScript.Crucible.LLVM.X86
+import           SAWScript.Crucible.LLVM.AArch32
 import           SAWScript.Crucible.LLVM.Boilerplate
 import           SAWScript.Crucible.LLVM.Skeleton.Builtins
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CIR
@@ -2497,6 +2498,21 @@ primitives = Map.fromList
     (pureVal default_x86_preserved_reg)
     Current
     [ "Use the default set of callee-saved registers during x86 verification.." ]
+
+  , prim "llvm_verify_aarch32"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_aarch32)
+    Experimental
+    [ "Verify an AArch32 function from an ELF file for use as an override in an"
+    , "LLVM verification. The first argument specifies the LLVM module"
+    , "containing the _caller_. The second and third specify the ELF file"
+    , "name and symbol name of the function to be verifier. The fourth"
+    , "specifies the names and sizes (in bytes) of global variables to"
+    , "initialize, and the fifth whether to perform path satisfiability"
+    , "checking. The last argument is the LLVM specification of the calling"
+    , "context against which to verify the function. Returns a method spec"
+    , "that can be used as an override when verifying other LLVM functions."
+    ]
 
   , prim "llvm_array_value"
     "[SetupValue] -> SetupValue"
