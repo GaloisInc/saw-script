@@ -91,9 +91,12 @@ library
     , GraphSCC
     , macaw-base
     , macaw-x86
+    , macaw-aarch32
     , macaw-symbolic
     , macaw-x86-symbolic
+    , macaw-aarch32-symbolic
     , flexdis86
+    , asl-translator
     , elf-edit
     , reflection
     , aeson
@@ -155,6 +158,7 @@ library
     SAWScript.Crucible.LLVM.Skeleton
     SAWScript.Crucible.LLVM.Skeleton.Builtins
     SAWScript.Crucible.LLVM.X86
+    SAWScript.Crucible.LLVM.AArch32
 
     SAWScript.Crucible.JVM.Builtins
     SAWScript.Crucible.JVM.BuiltinsJVM

@@ -52,3 +52,18 @@
 [submodule "deps/argo"]
 	path = deps/argo
 	url = https://github.com/galoisinc/argo
+[submodule "deps/what4-serialize"]
+	path = deps/what4-serialize
+	url = https://github.com/GaloisInc/what4-serialize
+[submodule "deps/asl-translator"]
+	path = deps/asl-translator
+	url = https://github.com/GaloisInc/asl-translator
+[submodule "deps/arm-asl-parser"]
+	path = deps/arm-asl-parser
+	url = https://github.com/GaloisInc/arm-asl-parser
+[submodule "deps/dismantle"]
+	path = deps/dismantle
+	url = https://github.com/travitch/dismantle
+[submodule "deps/semmc"]
+	path = deps/semmc
+	url = https://github.com/GaloisInc/semmc

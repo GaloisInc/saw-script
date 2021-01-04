@@ -24,10 +24,21 @@ packages:
     deps/parameterized-utils
     deps/flexdis86
     deps/flexdis86/binary-symbols
+    deps/what4-serialize
+    deps/asl-translator
+    deps/arm-asl-parser
+    deps/dismantle/dismantle-tablegen
+    deps/dismantle/dismantle-arm-xml
+    deps/semmc/semmc
+    deps/semmc/semmc-synthesis
+    deps/semmc/semmc-aarch32
     deps/macaw/base
     deps/macaw/symbolic
     deps/macaw/x86
     deps/macaw/x86_symbolic
+    deps/macaw/macaw-semmc
+    deps/macaw/macaw-aarch32
+    deps/macaw/macaw-aarch32-symbolic
     deps/elf-edit
     deps/dwarf
     deps/argo/argo
