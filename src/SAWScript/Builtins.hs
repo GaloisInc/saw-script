@@ -445,7 +445,7 @@ print_goal :: ProofScript ()
 print_goal =
   withFirstGoal $ \goal ->
   do opts <- getTopLevelPPOpts
-     printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
+     printOutLnTop Info ("Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "):")
      printOutLnTop Info (scPrettyTerm opts (unProp (goalProp goal)))
      return ((), mempty, Just goal)
 
@@ -627,12 +627,26 @@ goal_insert (Theorem (Prop t) _stats) =
          let goal' = goal { goalProp = Prop body' }
          return ((), ProofState (goal' : goals') concl stats timeout)
 
+goal_num_when :: Int -> ProofScript () -> ProofScript ()
+goal_num_when n script =
+  StateT $ \s ->
+  case psGoals s of
+    g : _ | goalNum g == n -> runStateT script s
+    _ -> return ((), s)
+
 goal_when :: String -> ProofScript () -> ProofScript ()
 goal_when str script =
   StateT $ \s ->
   case psGoals s of
     g : _ | str `isInfixOf` goalName g -> runStateT script s
     _ -> return ((), s)
+
+goal_num_ite :: Int -> ProofScript SV.SatResult -> ProofScript SV.SatResult -> ProofScript SV.SatResult
+goal_num_ite n s1 s2 =
+  StateT $ \s ->
+  case psGoals s of
+       g : _ | goalNum g == n -> runStateT s1 s
+       _ -> runStateT s2 s
 
 -- | Bit-blast a proposition and check its validity using ABC.
 proveABC :: ProofScript SV.SatResult

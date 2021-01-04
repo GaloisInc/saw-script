@@ -1191,6 +1191,17 @@ primitives = Map.fromList
     [ "Run the given proof script only when the goal name contains"
     , "the given string."
     ]
+  , prim "goal_num_ite"       "Int -> ProofScript SatResult -> ProofScript SatResult -> ProofScript SatResult"
+    (pureVal goal_num_ite)
+    Experimental
+    [ "If the goal number is the given number, runs the first script."
+    , "Otherwise runs the second script" ]
+  , prim "goal_num_when"       "Int -> ProofScript () -> ProofScript ()"
+    (pureVal goal_num_when)
+    Experimental
+    [ "Run the given proof script only when the goal number is the"
+    , "the given number."
+    ]
   , prim "print_goal"          "ProofScript ()"
     (pureVal print_goal)
     Current
