@@ -16,6 +16,6 @@ else
 fi
 cp=${BASE}${DIRSEP}a${CPSEP}${BASE}${DIRSEP}b${CPSEP}.
 sawfile=${BASE}${DIRSEP}test.saw
-(cd / && $JSS -c "'$cp'" org/example/Test)
-(cd / && $JSS -c "'$cp'" com/example/Test)
-(cd / && $SAW -c "'$cp'" "'$sawfile'")
+(mkdir tmp1 && cd tmp1 && $JSS -c "'$cp'" org/example/Test)
+(mkdir tmp2 && cd tmp2 && $JSS -c "'$cp'" com/example/Test)
+(mkdir tmp3 && cd tmp3 && $SAW -c "'$cp'" "'$sawfile'")
