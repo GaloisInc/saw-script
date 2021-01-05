@@ -1,3 +1,4 @@
+{-# Language GADTs #-}
 {-# Language ImplicitParams #-}
 {-# Language OverloadedStrings #-}
 {-# Language ViewPatterns #-}
