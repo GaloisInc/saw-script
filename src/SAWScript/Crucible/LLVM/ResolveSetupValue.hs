@@ -22,6 +22,8 @@ module SAWScript.Crucible.LLVM.ResolveSetupValue
   , resolveSAWPred
   , resolveSAWSymBV
   , resolveSetupFieldIndex
+  , resolveSetupFieldIndexOrFail
+  , resolveSetupElemIndexOrFail
   , equalValsPred
   , memArrayToSawCoreTerm
   , scPtrWidthBvNat
@@ -259,6 +261,35 @@ typeOfSetupValue' cc env nameEnv val =
     lc = ccTypeCtx cc
     dl = Crucible.llvmDataLayout lc
 
+resolveSetupElemIndexOrFail ::
+  Fail.MonadFail m =>
+  LLVMCrucibleContext arch {- ^ crucible context  -} ->
+  Map AllocIndex LLVMAllocSpec {- ^ allocation types  -} ->
+  Map AllocIndex Crucible.Ident   {- ^ allocation type names -} ->
+  SetupValue (Crucible.LLVM arch) {- ^ base pointer -} ->
+  Int                             {- ^ element index -} ->
+  m Crucible.Bytes                {- ^ element offset -}
+resolveSetupElemIndexOrFail cc env nameEnv v i = do
+  do memTy <- typeOfSetupValue cc env nameEnv v
+     let msg = "resolveSetupVal: llvm_elem requires pointer to struct or array, found " ++ show memTy
+     case memTy of
+       Crucible.PtrType symTy ->
+         case let ?lc = lc in Crucible.asMemType symTy of
+           Right memTy' ->
+             case memTy' of
+               Crucible.ArrayType n memTy''
+                 | fromIntegral i <= n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
+               Crucible.StructType si ->
+                 case Crucible.siFieldOffset si i of
+                   Just d -> return d
+                   Nothing -> fail $ "resolveSetupVal: struct type index out of bounds: " ++ show (i, memTy')
+               _ -> fail msg
+           Left err -> fail $ unlines [msg, "Details:", err]
+       _ -> fail msg
+  where
+    lc = ccTypeCtx cc
+    dl = Crucible.llvmDataLayout lc
+
 -- | Translate a SetupValue into a Crucible LLVM value, resolving
 -- references
 resolveSetupVal :: forall arch.
@@ -293,22 +324,7 @@ resolveSetupVal cc mem env tyenv nameEnv val = do
       i <- resolveSetupFieldIndexOrFail cc tyenv nameEnv v n
       resolveSetupVal cc mem env tyenv nameEnv (SetupElem () v i)
     SetupElem () v i ->
-      do memTy <- typeOfSetupValue cc tyenv nameEnv v
-         let msg = "resolveSetupVal: llvm_elem requires pointer to struct or array, found " ++ show memTy
-         delta <- case memTy of
-           Crucible.PtrType symTy ->
-             case let ?lc = lc in Crucible.asMemType symTy of
-               Right memTy' ->
-                 case memTy' of
-                   Crucible.ArrayType n memTy''
-                     | fromIntegral i <= n -> return (fromIntegral i * Crucible.memTypeSize dl memTy'')
-                   Crucible.StructType si ->
-                     case Crucible.siFieldOffset si i of
-                       Just d -> return d
-                       Nothing -> fail $ "resolveSetupVal: struct type index out of bounds: " ++ show (i, memTy')
-                   _ -> fail msg
-               Left err -> fail $ unlines [msg, "Details:", err]
-           _ -> fail msg
+      do delta <- resolveSetupElemIndexOrFail cc tyenv nameEnv v i
          ptr <- resolveSetupVal cc mem env tyenv nameEnv v
          case ptr of
            Crucible.LLVMValInt blk off ->
