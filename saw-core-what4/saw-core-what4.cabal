@@ -22,7 +22,6 @@ library
     mtl,
     saw-core,
     what4,
-    crucible-saw,
     panic,
     text,
     transformers,
