@@ -183,16 +183,26 @@ data HeapsterEnv = HeapsterEnv {
   -- ^ The SAW module containing all our Heapster definitions
   heapsterEnvPermEnvRef :: IORef PermEnv,
   -- ^ The current permissions environment
-  heapsterEnvLLVMModules :: [Some CMSLLVM.LLVMModule]
-  -- ^ The list of underlying 'LLVMModule's that we are translating
+  heapsterEnvModules :: [Some IRModule]
+  -- ^ The list of underlying 'IRModule's that we are translating
   }
+
+data IRModule arch
+  = IRLLVMModule (CMSLLVM.LLVMModule arch)
+  | IRMIRModule MIRModule
+
+data MIRModule = MIRModule
+
+showMIRModule :: MIRModule -> String
+showMIRModule _ = "MIR Module"
 
 showHeapsterEnv :: HeapsterEnv -> String
 showHeapsterEnv env =
   concat $ intersperse "\n\n" $
   map (\some_lm -> case some_lm of
-          Some lm -> CMSLLVM.showLLVMModule lm) $
-  heapsterEnvLLVMModules env
+          Some (IRLLVMModule lm) -> CMSLLVM.showLLVMModule lm
+          Some (IRMIRModule mm) -> showMIRModule mm) $
+  heapsterEnvModules env
 
 data ProofResult
   = Valid SolverStats
