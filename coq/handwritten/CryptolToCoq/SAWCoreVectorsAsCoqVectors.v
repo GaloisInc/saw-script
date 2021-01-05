@@ -280,6 +280,16 @@ Definition bvSShr (w : nat) (a : bitvector w.+1) (n : nat)
   := a.
 Global Opaque bvSShr.
 
+Definition bvShl (w : nat) (a : bitvector w) (n : nat)
+  : bitvector w
+  := a.
+Global Opaque bvShl.
+
+Definition bvShr (w : nat) (a : bitvector w) (n : nat)
+  : bitvector w
+  := a.
+Global Opaque bvShr.
+
 (* FIXME this is not implemented *)
 Definition rotateL (n : nat) (A : Type) (v : Vector.t A n) (i : nat)
   : Vector.t A n

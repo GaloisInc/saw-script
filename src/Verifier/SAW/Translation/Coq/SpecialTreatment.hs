@@ -61,7 +61,7 @@ moduleRenamingMap :: Map.Map ModuleName ModuleName
 moduleRenamingMap = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   over _2 (mkModuleName . (: [])) <$>
-  [ ("Cryptol", "CryptolPrimitives")
+  [ ("Cryptol", "CryptolPrimitivesForSAWCore")
   , ("Prelude", "SAWCorePrelude")
   ]
 
@@ -149,7 +149,7 @@ sawVectorDefinitionsModule (TranslationConfiguration {..}) =
   mkModuleName [vectorModule]
 
 cryptolPrimitivesModule :: ModuleName
-cryptolPrimitivesModule = mkModuleName ["CryptolPrimitives"]
+cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCORE"]
 
 sawCoreScaffoldingModule :: ModuleName
 sawCoreScaffoldingModule = mkModuleName ["SAWCoreScaffolding"]
@@ -378,8 +378,8 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("bvForall",             skip)
   , ("bvAddZeroL",           skip)
   , ("bvAddZeroR",           skip)
-  , ("bvShl",                skip)
-  , ("bvShr",                skip)
+  , ("bvShl",                mapsTo vectorsModule "bvShl")
+  , ("bvShr",                mapsTo vectorsModule "bvShr")
   , ("bvShiftL_bvShl",       skip)
   , ("bvShiftR_bvShr",       skip)
   , ("bvEq_refl",            skip)
