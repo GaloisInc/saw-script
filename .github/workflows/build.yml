@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        ghc: ["8.6.5", "8.8.4"]
+        ghc: ["8.6.5", "8.8.4", "8.10.2"]
         continue-on-error: [false]
         include:
           - os: macos-latest
@@ -176,7 +176,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.6.5", "8.8.4"]
+        ghc: ["8.6.5", "8.8.4", "8.10.2"]
     steps:
       - uses: actions/checkout@v2
       - run: |
