@@ -8,7 +8,7 @@ WORKDIR /saw-script
 RUN mkdir -p /saw-script && \
     git clone https://github.com/GaloisInc/blst-verification.git && \
     cd blst-verification && \
-    git checkout cb8a2c3c57902a957d4a7ac7872fc78e51118262 && \
+    git checkout e15494b46b84962a20b7af8af83a75fe14a37f99 && \
     git config --file=.gitmodules submodule.blst.url https://github.com/supranational/blst && \
     git submodule sync && \
     git submodule update --init
