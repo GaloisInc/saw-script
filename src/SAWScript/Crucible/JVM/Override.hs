@@ -663,10 +663,7 @@ learnPointsTo opts sc cc spec prepost pt = do
     JVMPointsToField loc ptr fid val ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
-         -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
-         -- Then we won't have to match the definition of 'fieldIdText' here.
-         let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
-         dyn <- liftIO $ CJ.doFieldLoad sym globals rval key
+         dyn <- liftIO $ CJ.doFieldLoad sym globals rval fid
          v <- liftIO $ projectJVMVal sym ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
@@ -810,10 +807,7 @@ executePointsTo opts sc cc spec pt = do
       do (_, val') <- resolveSetupValueJVM opts cc sc spec val
          rval <- resolveAllocIndexJVM ptr
          let dyn = injectJVMVal sym val'
-         -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
-         -- Then we won't have to match the definition of 'fieldIdText' here.
-         let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
-         globals' <- liftIO $ CJ.doFieldStore sym globals rval key dyn
+         globals' <- liftIO $ CJ.doFieldStore sym globals rval fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToElem _loc ptr idx val ->
