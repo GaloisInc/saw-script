@@ -6,6 +6,8 @@ Stability   : provisional
 -}
 
 
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE NoMonoLocalBinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE PackageImports #-}

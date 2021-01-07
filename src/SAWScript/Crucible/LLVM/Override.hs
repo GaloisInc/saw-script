@@ -1080,8 +1080,19 @@ matchArg opts sc cc cs prepost actual expectedTy expected = do
                               (V.toList (Crucible.fiType <$> Crucible.siFields fields))
                               zs ]
 
-    (_, Crucible.PtrType _, SetupElem () _ _) -> resolveAndMatch
-    (_, Crucible.PtrType _, SetupField () _ _) -> resolveAndMatch
+    (Crucible.LLVMValInt blk off, Crucible.PtrType _, SetupElem () v i) ->
+      do let tyenv = MS.csAllocations cs
+             nameEnv = MS.csTypeNames cs
+             sym = cc^.ccBackend
+         i' <- resolveSetupElemIndexOrFail cc tyenv nameEnv v i
+         off' <- liftIO $ W4.bvSub sym off
+           =<< W4.bvLit sym (W4.bvWidth off) (Crucible.bytesToBV (W4.bvWidth off) i')
+         matchArg opts sc cc cs prepost (Crucible.LLVMValInt blk off') expectedTy v
+    (_, Crucible.PtrType _, SetupField () v n) ->
+      do let tyenv = MS.csAllocations cs
+             nameEnv = MS.csTypeNames cs
+         i <- resolveSetupFieldIndexOrFail cc tyenv nameEnv v n
+         matchArg opts sc cc cs prepost actual expectedTy (SetupElem () v i)
     (_, _, SetupGlobalInitializer () _) -> resolveAndMatch
 
     (Crucible.LLVMValInt blk off, _, _) ->
