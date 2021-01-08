@@ -45,14 +45,16 @@ import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import qualified What4.ProgramLoc as W4
 
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
-
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
+import Verifier.SAW.Simulator.What4.ReturnTrip
+
 -- crucible
+
 import qualified Lang.Crucible.Simulator as Crucible (RegValue)
+import qualified Lang.Crucible.Backend.Online as Crucible
 
 -- what4
 import qualified What4.Partial as W4
@@ -67,16 +69,14 @@ import qualified Data.SBV.Dynamic as SBV (svAsInteger, svAsBool)
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
-import SAWScript.Crucible.Common (Sym)
+import SAWScript.Crucible.Common
 import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
---import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Panic
 import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.JVM.MethodSpecIR
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 
---import qualified SAWScript.LLVMBuiltins as LB
 
 data JVMVal
   = RVal (Crucible.RegValue Sym CJ.JVMRefType)
@@ -191,7 +191,9 @@ resolveSAWPred ::
   Term ->
   IO (W4.Pred Sym)
 resolveSAWPred cc tm =
-  Crucible.bindSAWTerm (cc^.jccBackend) W4.BaseBoolRepr tm
+  do let sym = cc^.jccBackend
+     st <- sawCoreState sym
+     bindSAWTerm sym st W4.BaseBoolRepr tm
 
 resolveSAWTerm ::
   JVMCrucibleContext ->
@@ -251,7 +253,8 @@ resolveBitvectorTerm ::
   Term ->
   IO (W4.SymBV Sym w)
 resolveBitvectorTerm sym w tm =
-  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+  do st <- sawCoreState sym
+     let sc = saw_ctx st
      --ss <- basic_ss sc
      --tm' <- rewriteSharedTerm sc ss tm
      let tm' = tm
@@ -263,12 +266,13 @@ resolveBitvectorTerm sym w tm =
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm'
 
 -- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
 resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
 resolveBoolTerm sym tm =
-  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+  do st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+     let sc = saw_ctx st
      ss <- basic_ss sc
      tm' <- rewriteSharedTerm sc ss tm
      mx <- case getAllExts tm' of
@@ -279,7 +283,7 @@ resolveBoolTerm sym tm =
              _ -> return Nothing
      case mx of
        Just x  -> return (W4.backendPred sym x)
-       Nothing -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
+       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm'
 
 toJVMType :: Cryptol.TValue -> Maybe J.Type
 toJVMType tp =

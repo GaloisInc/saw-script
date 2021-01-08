@@ -57,13 +57,14 @@ import qualified What4.Expr.Builder as W4
 import qualified Lang.Crucible.LLVM.Bytes       as Crucible
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.Backend.SAWCore  as Crucible
+import qualified Lang.Crucible.Backend.Online   as Crucible
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.Simulator.What4.ReturnTrip
 import Text.LLVM.DebugUtils as L
 
 import qualified Verifier.SAW.Simulator.SBV as SBV
@@ -370,7 +371,8 @@ resolveSAWPred ::
   IO (W4.Pred Sym)
 resolveSAWPred cc tm = do
   do let sym = cc^.ccBackend
-     sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+     st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+     let sc = saw_ctx st
      let ss = cc^.ccBasicSS
      tm' <- rewriteSharedTerm sc ss tm
      mx <- case getAllExts tm' of
@@ -381,7 +383,7 @@ resolveSAWPred cc tm = do
              _ -> return Nothing
      case mx of
        Just x  -> return $ W4.backendPred sym x
-       Nothing -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
+       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm'
 
 resolveSAWSymBV ::
   (1 <= w) =>
@@ -391,7 +393,8 @@ resolveSAWSymBV ::
   IO (W4.SymBV Sym w)
 resolveSAWSymBV cc w tm =
   do let sym = cc^.ccBackend
-     sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+     st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+     let sc = saw_ctx st
      let ss = cc^.ccBasicSS
      tm' <- rewriteSharedTerm sc ss tm
      mx <- case getAllExts tm' of
@@ -402,7 +405,7 @@ resolveSAWSymBV cc w tm =
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm'
 
 resolveSAWTerm ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
@@ -433,7 +436,8 @@ resolveSAWTerm cc tp tm =
                  Crucible.ptrToPtrVal <$> Crucible.llvmPointer_bv sym v
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
-        do sc    <- Crucible.saw_ctx <$> (readIORef (W4.sbStateManager sym))
+        do st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+           let sc = saw_ctx st
            sz_tm <- scNat sc (fromIntegral sz)
            tp_tm <- importType sc emptyEnv (Cryptol.tValTy tp')
            let f i = do i_tm <- scNat sc (fromIntegral i)
@@ -447,7 +451,8 @@ resolveSAWTerm cc tp tm =
       Cryptol.TVStream _tp' ->
         fail "resolveSAWTerm: invalid infinite stream type"
       Cryptol.TVTuple tps ->
-        do sc <- Crucible.saw_ctx <$> (readIORef (W4.sbStateManager sym))
+        do st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+           let sc = saw_ctx st
            tms <- mapM (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
            vals <- zipWithM (resolveSAWTerm cc) tps tms
            storTy <-
@@ -477,7 +482,9 @@ scPtrWidthBvNat ::
   a ->
   IO Term
 scPtrWidthBvNat cc n =
-  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager $ cc^.ccBackend)
+  do let sym = cc^.ccBackend
+     st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+     let sc = saw_ctx st
      w <- scNat sc $ natValue Crucible.PtrWidth
      scBvNat sc w =<< scNat sc (fromIntegral n)
 
@@ -593,7 +600,8 @@ memArrayToSawCoreTerm ::
 memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let sym = crucible_context ^. ccBackend
   let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
-  saw_context <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+  st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+  let saw_context = saw_ctx st
 
   byte_type_term <- importType saw_context emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit
   offset_type_term <- scBitvector saw_context $ natValue ?ptrWidth

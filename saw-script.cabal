@@ -40,7 +40,6 @@ library
     , crucible >= 0.4
     , crucible-jvm
     , crucible-llvm >= 0.2
-    , crucible-saw
     , deepseq
     , either
     , exceptions

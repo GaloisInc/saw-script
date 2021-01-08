@@ -52,8 +52,6 @@ import System.Process (callCommand, readProcessWithExitCode)
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 
-import What4.Expr(FloatModeRepr(..))
-
 import qualified Verifier.SAW.Cryptol as Cryptol
 import qualified Verifier.SAW.Cryptol.Simpset as Cryptol
 
@@ -90,12 +88,7 @@ import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
 -- saw-core-what4
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
-
--- parameterized-utils
-import Data.Parameterized.Nonce
-
--- crucible-saw
-import qualified Lang.Crucible.Backend.SAWCore as Crucible (newSAWCoreBackend, toSC)
+import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim
 
 -- sbv
 import qualified Data.SBV.Dynamic as SBV
@@ -141,6 +134,7 @@ import qualified SAWScript.Prover.What4 as Prover
 import qualified SAWScript.Prover.Exporter as Prover
 import qualified SAWScript.Prover.MRSolver as Prover
 import SAWScript.VerificationSummary
+import SAWScript.Crucible.Common as Common
 
 showPrim :: SV.Value -> TopLevel String
 showPrim v = do
@@ -542,6 +536,7 @@ goal_eval unints =
   withFirstGoal $ \goal ->
   do sc <- getSharedContext
      unintSet <- resolveNames unints
+
      -- replace all pi-bound quantified variables with new free variables
      let (args, body) = asPiList (unProp (goalProp goal))
      body' <-
@@ -551,10 +546,12 @@ goal_eval unints =
      ecs <- liftIO $ traverse (\(nm, ty) -> scFreshEC sc (Text.unpack nm) ty) args
      vars <- liftIO $ traverse (scExtCns sc) ecs
      t0 <- liftIO $ instantiateVarList sc 0 (reverse vars) body'
-     let gen = globalNonceGenerator
-     sym <- liftIO $ Crucible.newSAWCoreBackend FloatRealRepr sc gen
-     (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym sc Map.empty unintSet t0
-     t1 <- liftIO $ Crucible.toSC sym p
+
+     sym <- liftIO $ Common.newSAWCoreBackend sc
+     st <- liftIO $ Common.sawCoreState sym
+     (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym st sc Map.empty unintSet t0
+     t1 <- liftIO $ W4Sim.toSC sym st p
+
      t2 <- liftIO $ scEqTrue sc t1
      -- turn the free variables we generated back into pi-bound variables
      t3 <- liftIO $ scGeneralizeExts sc ecs t2
