@@ -58,8 +58,6 @@ import qualified Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.TypedAST as SC
 import           Verifier.SAW.Utils (panic)
 
-data SAWCruciblePersonality sym = SAWCruciblePersonality
-
 data SAWCoreState n
   = SAWCoreState
     { saw_ctx       :: SC.SharedContext                         -- ^ the main SAWCore datastructure for building shared terms
@@ -80,6 +78,22 @@ data SAWCoreState n
       -- SAWCore terms and What4 variables.
 
     }
+
+newSAWCoreState ::
+  SC.SharedContext ->
+  IO (SAWCoreState n)
+newSAWCoreState sc =
+  do inpr <- newIORef Seq.empty
+     ch   <- B.newIdxCache
+     ch_r <- newIORef IntMap.empty
+     mr   <- newIORef Map.empty
+     return SAWCoreState
+            { saw_ctx = sc
+            , saw_inputs = inpr
+            , saw_symMap = mr
+            , saw_elt_cache = ch
+            , saw_elt_cache_r = ch_r
+            }
 
 data SAWExpr (bt :: BaseType) where
   SAWExpr :: !SC.Term -> SAWExpr bt
