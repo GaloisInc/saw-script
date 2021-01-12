@@ -243,7 +243,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesIMC sfs) $ cryptolUninterpreted cenv "aesIMC"
+      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesIMC sfs) $ cryptolUninterpreted cenv "aesimc"
       liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
 
       let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
