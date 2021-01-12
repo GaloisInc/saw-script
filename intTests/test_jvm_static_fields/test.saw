@@ -11,9 +11,9 @@ a_setX <-
     do {
       x <- jvm_fresh_var "x" java_long;
       v <- jvm_fresh_var "v" java_long;
-      jvm_static_field_is a "x" (jvm_term x);
+      jvm_static_field_is "x" (jvm_term x);
       jvm_execute_func [jvm_term v];
-      jvm_static_field_is a "x" (jvm_term v);
+      jvm_static_field_is "x" (jvm_term v);
     }
     z3;
 
@@ -22,9 +22,9 @@ a_setY <-
     do {
       y <- jvm_fresh_var "y" java_long;
       v <- jvm_fresh_var "v" java_long;
-      jvm_static_field_is a "y" (jvm_term y);
+      jvm_static_field_is "y" (jvm_term y);
       jvm_execute_func [jvm_term v];
-      jvm_static_field_is a "y" (jvm_term v);
+      jvm_static_field_is "y" (jvm_term v);
     }
     z3;
 
@@ -33,8 +33,8 @@ a_getSum <-
     do {
       x <- jvm_fresh_var "x" java_long;
       y <- jvm_fresh_var "y" java_long;
-      jvm_static_field_is a "x" (jvm_term x);
-      jvm_static_field_is a "y" (jvm_term y);
+      jvm_static_field_is "x" (jvm_term x);
+      jvm_static_field_is "y" (jvm_term y);
       jvm_execute_func [];
       jvm_return (jvm_term {{ x + y }});
     }
@@ -47,9 +47,9 @@ b_setX <-
     do {
       x <- jvm_fresh_var "x" java_long;
       v <- jvm_fresh_var "v" java_long;
-      jvm_static_field_is b "x" (jvm_term x);
+      jvm_static_field_is "x" (jvm_term x);
       jvm_execute_func [jvm_term v];
-      jvm_static_field_is b "x" (jvm_term v);
+      jvm_static_field_is "x" (jvm_term v);
     }
     z3;
 
@@ -58,9 +58,9 @@ b_setY <-
     do {
       y <- jvm_fresh_var "y" java_long;
       v <- jvm_fresh_var "v" java_long;
-      jvm_static_field_is b "y" (jvm_term y);
+      jvm_static_field_is "y" (jvm_term y);
       jvm_execute_func [jvm_term v];
-      jvm_static_field_is b "y" (jvm_term v);
+      jvm_static_field_is "y" (jvm_term v);
     }
     z3;
 
@@ -69,11 +69,11 @@ fails (
     do {
       x <- jvm_fresh_var "x" java_long;
       y <- jvm_fresh_var "y" java_long;
-      jvm_static_field_is b "x" (jvm_term x);
+      jvm_static_field_is "x" (jvm_term x);
       // This fails because "getSum" is inherited from class A,
       // which has its own static field called "y", which in turn
       // is shadowed by field "y" from class B.
-      jvm_static_field_is b "y" (jvm_term y);
+      jvm_static_field_is "y" (jvm_term y);
       jvm_execute_func [];
       jvm_return (jvm_term {{ x + y }});
     }
@@ -84,8 +84,10 @@ b_getSum <-
     do {
       x <- jvm_fresh_var "x" java_long;
       y <- jvm_fresh_var "y" java_long;
-      jvm_static_field_is b "x" (jvm_term x);
-      jvm_static_field_is a "y" (jvm_term y);
+      jvm_static_field_is "x" (jvm_term x);
+      // Because field "A.y" is shadowed by another field named "y"
+      // in class "B", we must use the qualified field name.
+      jvm_static_field_is "A.y" (jvm_term y);
       jvm_execute_func [];
       jvm_return (jvm_term {{ x + y }});
     }
@@ -98,9 +100,9 @@ c_setX <-
     do {
       x <- jvm_fresh_var "x" java_long;
       v <- jvm_fresh_var "v" java_long;
-      jvm_static_field_is c "x" (jvm_term x);
+      jvm_static_field_is "x" (jvm_term x);
       jvm_execute_func [jvm_term v];
-      jvm_static_field_is c "x" (jvm_term v);
+      jvm_static_field_is "x" (jvm_term v);
     }
     z3;
 
@@ -109,9 +111,9 @@ c_setY <-
     do {
       y <- jvm_fresh_var "y" java_long;
       v <- jvm_fresh_var "v" java_long;
-      jvm_static_field_is c "y" (jvm_term y);
+      jvm_static_field_is "y" (jvm_term y);
       jvm_execute_func [jvm_term v];
-      jvm_static_field_is c "y" (jvm_term v);
+      jvm_static_field_is "y" (jvm_term v);
     }
     z3;
 
@@ -122,8 +124,8 @@ fails (
     do {
       x <- jvm_fresh_var "x" java_long;
       y <- jvm_fresh_var "y" java_long;
-      jvm_static_field_is c "x" (jvm_term x);
-      jvm_static_field_is c "y" (jvm_term y);
+      jvm_static_field_is "x" (jvm_term x);
+      jvm_static_field_is "y" (jvm_term y);
       jvm_execute_func [];
       jvm_return (jvm_term {{ x + y }});
     }

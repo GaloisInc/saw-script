@@ -2713,11 +2713,14 @@ primitives = Map.fromList
     , "about the final memory state after running the function."
     ]
 
-  , prim "jvm_static_field_is" "JavaClass -> String -> JVMValue -> JVMSetup ()"
+  , prim "jvm_static_field_is" "String -> JVMValue -> JVMSetup ()"
     (bicVal jvm_static_field_is)
     Experimental
-    [ "Declare that the indicated class (first argument) has a static field"
-    , "(second argument) containing the given value (third argument)."
+    [ "Declare that the named static field contains the given value."
+    , "By default the field name is assumed to belong to the same class"
+    , "as the method being specified. Static fields belonging to other"
+    , "classes can be selected using the \"<classname>.<fieldname>\""
+    , "syntax in the string argument."
     , ""
     , "In the pre-state section (before jvm_execute_func) this specifies"
     , "the initial memory layout before function execution. In the post-state"

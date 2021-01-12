@@ -1015,27 +1015,30 @@ jvm_field_is ptr fname val =
 jvm_static_field_is ::
   BuiltinContext ->
   Options        ->
-  J.Class ->
   String     {- ^ field name -} ->
   SetupValue {- ^ field value -} ->
   JVMSetupM ()
-jvm_static_field_is _bic _opt cls fname val =
+jvm_static_field_is _bic _opt fname val =
   JVMSetupM $
   do pos <- lift getPosition
      loc <- SS.toW4Loc "jvm_static_field_is" <$> lift getPosition
      st <- get
-     liftIO $ putStrLn $ "jvm_static_field_is " ++ J.unClassName (J.className cls) ++ " " ++ fname
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
-     let ptrTy = J.ClassType (J.className cls)
+     let cname =
+           case dropWhileEnd (/= '.') fname of
+             "" -> J.className (cc ^. jccJVMClass)
+             s -> J.mkClassName (init s)
+     -- liftIO $ putStrLn $ "jvm_static_field_is " ++ J.unClassName cname ++ " " ++ fname
+     let ptrTy = J.ClassType cname
      valTy <- typeOfSetupValue cc env nameEnv val
      fid <- either (X.throwM . JVMStaticFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
      unless (registerCompatible (J.fieldIdType fid) valTy) $
        X.throwM $ JVMStaticTypeMismatch fname (J.fieldIdType fid) valTy
-     let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
-     liftIO $ putStrLn $ "resolved to: " ++ name
+     -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
+     -- liftIO $ putStrLn $ "resolved to: " ++ name
      -- TODO: test for multiple points-to conditions on same static field
      Setup.addPointsTo (JVMPointsToStatic loc fid val)
 
