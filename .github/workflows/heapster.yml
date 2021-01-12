@@ -36,7 +36,7 @@ jobs:
           path: ~/.opam
           key: ocaml-coqbits-${{ runner.os }}-${{ env.OCAML_VERSION }}-${{ env.SETUP_OCAML_ACTION_VERSION }}-${{ env.COQBITS_VERSION }}
       - name: Set up ocaml and opam
-        uses: avsm/setup-ocaml@v1.1.2
+        uses: avsm/setup-ocaml@v1
         with:
           ocaml-version: ${{ env.OCAML_VERSION }}
       - name: Install coq-bits
@@ -45,7 +45,7 @@ jobs:
           opam repo add coq-released https://coq.inria.fr/opam/released
           opam install --unlock-base -y "coq-bits=$COQBITS_VERSION"
 
-      - uses: actions/setup-haskell@v1
+      - uses: haskell/actions/setup@v1
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
