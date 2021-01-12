@@ -117,9 +117,7 @@ c_setY <-
     }
     z3;
 
-// FIXME: this causes a translation error due to a bug in crucible-jvm
-//c_getSum <-
-fails (
+c_getSum <-
   jvm_verify c "getSum" [] false
     do {
       x <- jvm_fresh_var "x" java_long;
@@ -129,4 +127,4 @@ fails (
       jvm_execute_func [];
       jvm_return (jvm_term {{ x + y }});
     }
-    z3);
+    z3;
