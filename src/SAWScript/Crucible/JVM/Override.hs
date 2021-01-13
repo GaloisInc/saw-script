@@ -119,7 +119,7 @@ type SetupValue = MS.SetupValue CJ.JVM
 type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
 type StateSpec = MS.StateSpec CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
-type instance Pointer CJ.JVM = JVMRefVal
+type instance Pointer' CJ.JVM Sym = JVMRefVal
 
 -- TODO: Improve?
 ppJVMVal :: JVMVal -> PP.Doc ann

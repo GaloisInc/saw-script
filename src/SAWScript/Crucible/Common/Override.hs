@@ -20,6 +20,7 @@ Stability   : provisional
 
 module SAWScript.Crucible.Common.Override
   ( Pointer
+  , Pointer'
   , OverrideState
   , OverrideState'(..)
   , osAsserts
@@ -97,11 +98,13 @@ import           SAWScript.Crucible.Common.MethodSpec as MS
 
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
-type family Pointer ext :: Type
+type family Pointer' ext sym :: Type
+
+type Pointer ext = Pointer' ext Sym
 
 data OverrideState' sym ext = OverrideState
   { -- | Substitution for memory allocations
-    _setupValueSub :: Map AllocIndex (Pointer ext)
+    _setupValueSub :: Map AllocIndex (Pointer' ext sym)
 
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term
@@ -137,7 +140,7 @@ makeLenses ''OverrideState'
 initialState ::
   sym                           {- ^ simulator                      -} ->
   Crucible.SymGlobalState sym   {- ^ initial global variables       -} ->
-  Map AllocIndex (Pointer ext)  {- ^ initial allocation substituion -} ->
+  Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substituion -} ->
   Map VarIndex Term             {- ^ initial term substituion       -} ->
   Set VarIndex                  {- ^ initial free terms             -} ->
   W4.ProgramLoc                 {- ^ location information for the override -} ->
@@ -302,7 +305,7 @@ instance Fail.MonadFail (OverrideMatcher' sym ext rorw) where
 runOverrideMatcher ::
    sym                         {- ^ simulator                       -} ->
    Crucible.SymGlobalState sym {- ^ initial global variables        -} ->
-   Map AllocIndex (Pointer ext) {- ^ initial allocation substitution -} ->
+   Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substitution -} ->
    Map VarIndex Term           {- ^ initial term substitution       -} ->
    Set VarIndex                {- ^ initial free variables          -} ->
    W4.ProgramLoc               {- ^ override location information   -} ->
