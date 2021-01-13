@@ -2328,6 +2328,22 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_conditional_points_to`." ]
 
+  , prim "llvm_points_to_at_type" "SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()"
+    (pureVal llvm_points_to_at_type)
+    Current
+    [ "A variant of `llvm_points_to` that casts the pointer to another type."
+    , "This may be useful when reading or writing a prefix of larger array,"
+    , "for example."
+    ]
+
+  , prim "llvm_conditional_points_to_at_type" "Term -> SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()"
+    (pureVal llvm_conditional_points_to_at_type)
+    Current
+    [ "A variant of `llvm_conditional_points_to` that casts the pointer to"
+    , "another type. This may be useful when reading or writing a prefix"
+    , "of larger array, for example."
+    ]
+
   , prim "llvm_points_to_untyped" "SetupValue -> SetupValue -> LLVMSetup ()"
     (pureVal (llvm_points_to False))
     Current
