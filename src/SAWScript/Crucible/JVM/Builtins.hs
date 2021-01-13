@@ -32,6 +32,7 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_postcond
     , jvm_precond
     , jvm_field_is
+    , jvm_static_field_is
     , jvm_elem_is
     , jvm_array_is
     , jvm_fresh_var
@@ -418,6 +419,7 @@ setupPrePointsTos ::
 setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
   where
     sym = cc^.jccBackend
+    jc = cc ^. jccJVMContext
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
@@ -436,6 +438,9 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
              CJ.doFieldStore sym mem lhs' fid (injectJVMVal sym rhs')
+        JVMPointsToStatic _loc fid rhs ->
+          do rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
+             CJ.doStaticFieldStore sym jc mem fid (injectJVMVal sym rhs')
         JVMPointsToElem _loc lhs idx rhs ->
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
@@ -755,7 +760,11 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
     setupClass cls =
       do let cname = J.className cls
          name <- W4.stringLit sym (W4S.UnicodeLiteral $ CJ.classNameText (J.className cls))
-         status <- W4.bvLit sym knownRepr (BV.zero knownRepr)
+         -- Set every class to status 2 (initialized). In the absence
+         -- of JVMSetup commands for specifying initialization status,
+         -- this will allow verifications to proceed without the
+         -- interference of any static initializers.
+         status <- W4.bvLit sym knownRepr (BV.mkBV knownRepr 2)
          super <-
            case J.superClass cls of
              Nothing -> return W4.Unassigned
@@ -795,6 +804,8 @@ data JVMSetupError
   | JVMFieldMultiple SetupValue String -- reference and field name
   | JVMFieldFailure String -- TODO: switch to a more structured type
   | JVMFieldTypeMismatch String J.Type J.Type -- field name, expected, found
+  | JVMStaticFailure String -- TODO: switch to a more structured type
+  | JVMStaticTypeMismatch String J.Type J.Type -- field name, expected, found
   | JVMElemNonReference SetupValue Int
   | JVMElemNonArray J.Type
   | JVMElemInvalidIndex J.Type Int Int -- element type, length, index
@@ -829,6 +840,15 @@ instance Show JVMSetupError where
          -- FIXME: use a pretty printing function for J.Type instead of show
         unlines
         [ "jvm_field_is: Incompatible types for field " ++ show fname
+        , "Expected type: " ++ show expected
+        , "Given type: " ++ show found
+        ]
+      JVMStaticFailure msg ->
+        "jvm_static_field_is: JVM field resolution failed:\n" ++ msg
+      JVMStaticTypeMismatch fname expected found ->
+         -- FIXME: use a pretty printing function for J.Type instead of show
+        unlines
+        [ "jvm_static_field_is: Incompatible types for field " ++ show fname
         , "Expected type: " ++ show expected
         , "Given type: " ++ show found
         ]
@@ -991,6 +1011,36 @@ jvm_field_is ptr fname val =
      unless (registerCompatible (J.fieldIdType fid) valTy) $
        X.throwM $ JVMFieldTypeMismatch fname (J.fieldIdType fid) valTy
      Setup.addPointsTo (JVMPointsToField loc ptr' fid val)
+
+jvm_static_field_is ::
+  BuiltinContext ->
+  Options        ->
+  String     {- ^ field name -} ->
+  SetupValue {- ^ field value -} ->
+  JVMSetupM ()
+jvm_static_field_is _bic _opt fname val =
+  JVMSetupM $
+  do pos <- lift getPosition
+     loc <- SS.toW4Loc "jvm_static_field_is" <$> lift getPosition
+     st <- get
+     let cc = st ^. Setup.csCrucibleContext
+     let cb = cc ^. jccCodebase
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+     let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     let cname =
+           case dropWhileEnd (/= '.') fname of
+             "" -> J.className (cc ^. jccJVMClass)
+             s -> J.mkClassName (init s)
+     -- liftIO $ putStrLn $ "jvm_static_field_is " ++ J.unClassName cname ++ " " ++ fname
+     let ptrTy = J.ClassType cname
+     valTy <- typeOfSetupValue cc env nameEnv val
+     fid <- either (X.throwM . JVMStaticFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
+     unless (registerCompatible (J.fieldIdType fid) valTy) $
+       X.throwM $ JVMStaticTypeMismatch fname (J.fieldIdType fid) valTy
+     -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
+     -- liftIO $ putStrLn $ "resolved to: " ++ name
+     -- TODO: test for multiple points-to conditions on same static field
+     Setup.addPointsTo (JVMPointsToStatic loc fid val)
 
 jvm_elem_is ::
   SetupValue {- ^ array -} ->

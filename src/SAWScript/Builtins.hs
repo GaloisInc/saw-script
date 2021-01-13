@@ -1016,8 +1016,9 @@ provePrintPrim script t = do
   (r, pstate) <- runStateT script (startProof goal)
   opts <- rwPPOpts <$> getTopLevelRW
   case finishProof pstate of
-    (_,Just thm) -> do printOutLnTop Info "Valid"
-                       SV.returnProof thm
+    (_,Just thm) -> do
+      printOutLnTop Debug $ "Valid: " ++ show (ppTerm (SV.sawPPOpts opts) $ ttTerm t)
+      SV.returnProof thm
     (_,Nothing) -> fail $ "prove: " ++ show (length (psGoals pstate)) ++ " unsolved subgoal(s)\n"
                      ++ SV.showsProofResult opts (SV.flipSatResult r) ""
 

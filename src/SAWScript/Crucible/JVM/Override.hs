@@ -451,6 +451,7 @@ matchPointsTos opts sc cc spec prepost = go False []
     -- determine if a precondition is ready to be checked
     checkPointsTo :: JVMPointsTo -> OverrideMatcher CJ.JVM w Bool
     checkPointsTo (JVMPointsToField _loc p _ _) = checkAllocIndex p
+    checkPointsTo (JVMPointsToStatic _loc _ _) = pure True
     checkPointsTo (JVMPointsToElem _loc p _ _) = checkAllocIndex p
     checkPointsTo (JVMPointsToArray _loc p _) = checkAllocIndex p
 
@@ -656,6 +657,7 @@ learnPointsTo ::
 learnPointsTo opts sc cc spec prepost pt = do
   let tyenv = MS.csAllocations spec
   let nameEnv = MS.csTypeNames spec
+  let jc = cc ^. jccJVMContext
   sym <- Ov.getSymInterface
   globals <- OM (use overrideGlobals)
   case pt of
@@ -665,6 +667,12 @@ learnPointsTo opts sc cc spec prepost pt = do
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doFieldLoad sym globals rval fid
          v <- liftIO $ projectJVMVal sym ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
+         matchArg opts sc cc spec prepost v ty val
+
+    JVMPointsToStatic loc fid val ->
+      do ty <- typeOfSetupValue cc tyenv nameEnv val
+         dyn <- liftIO $ CJ.doStaticFieldLoad sym jc globals fid
+         v <- liftIO $ projectJVMVal sym ty ("static field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
     JVMPointsToElem loc ptr idx val ->
@@ -801,6 +809,7 @@ executePointsTo ::
 executePointsTo opts sc cc spec pt = do
   sym <- Ov.getSymInterface
   globals <- OM (use overrideGlobals)
+  let jc = cc ^. jccJVMContext
   case pt of
 
     JVMPointsToField _loc ptr fid val ->
@@ -808,6 +817,12 @@ executePointsTo opts sc cc spec pt = do
          rval <- resolveAllocIndexJVM ptr
          let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doFieldStore sym globals rval fid dyn
+         OM (overrideGlobals .= globals')
+
+    JVMPointsToStatic _loc fid val ->
+      do (_, val') <- resolveSetupValueJVM opts cc sc spec val
+         let dyn = injectJVMVal sym val'
+         globals' <- liftIO $ CJ.doStaticFieldStore sym jc globals fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToElem _loc ptr idx val ->
