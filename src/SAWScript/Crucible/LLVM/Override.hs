@@ -129,7 +129,7 @@ import           SAWScript.Utils (bullets, handleException)
 
 type LabeledPred sym = W4.LabeledPred (W4.Pred sym) Crucible.SimError
 
-type instance Pointer (LLVM arch) = LLVMPtr (Crucible.ArchWidth arch)
+type instance Pointer' (LLVM arch) Sym = LLVMPtr (Crucible.ArchWidth arch)
 
 -- | An override packaged together with its preconditions, labeled with some
 --   human-readable info about each condition.
