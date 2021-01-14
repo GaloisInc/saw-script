@@ -800,20 +800,20 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
 data JVMSetupError
   = JVMFreshVarInvalidType JavaType
   | JVMFieldNonReference SetupValue String
-  | JVMFieldMultiple SetupValue String -- reference and field name
+  | JVMFieldMultiple AllocIndex J.FieldId
   | JVMFieldFailure String -- TODO: switch to a more structured type
-  | JVMFieldTypeMismatch String J.Type J.Type -- field name, expected, found
-  | JVMStaticMultiple String -- field name
+  | JVMFieldTypeMismatch J.FieldId J.Type
+  | JVMStaticMultiple J.FieldId
   | JVMStaticFailure String -- TODO: switch to a more structured type
-  | JVMStaticTypeMismatch String J.Type J.Type -- field name, expected, found
+  | JVMStaticTypeMismatch J.FieldId J.Type
   | JVMElemNonReference SetupValue Int
   | JVMElemNonArray J.Type
   | JVMElemInvalidIndex J.Type Int Int -- element type, length, index
   | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
-  | JVMElemMultiple SetupValue Int -- reference and array index
+  | JVMElemMultiple AllocIndex Int -- reference and array index
   | JVMArrayNonReference SetupValue
   | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
-  | JVMArrayMultiple SetupValue
+  | JVMArrayMultiple AllocIndex
   | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
   | JVMArgNumberWrong Int Int -- number expected, number found
   | JVMReturnUnexpected J.Type -- found
@@ -832,26 +832,26 @@ instance Show JVMSetupError where
         , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
         , "Field name: " ++ fname
         ]
-      JVMFieldMultiple _ptr fname ->
-        "jvm_field_is: Multiple specifications for the same instance field (" ++ fname ++ ")"
+      JVMFieldMultiple _ptr fid ->
+        "jvm_field_is: Multiple specifications for the same instance field (" ++ J.fieldIdName fid ++ ")"
       JVMFieldFailure msg ->
         "jvm_field_is: JVM field resolution failed:\n" ++ msg
-      JVMFieldTypeMismatch fname expected found ->
+      JVMFieldTypeMismatch fid found ->
          -- FIXME: use a pretty printing function for J.Type instead of show
         unlines
-        [ "jvm_field_is: Incompatible types for field " ++ show fname
-        , "Expected type: " ++ show expected
+        [ "jvm_field_is: Incompatible types for field " ++ show (J.fieldIdName fid)
+        , "Expected type: " ++ show (J.fieldIdType fid)
         , "Given type: " ++ show found
         ]
-      JVMStaticMultiple fname ->
-        "jvm_static_field_is: Multiple specifications for the same static field (" ++ fname ++ ")"
+      JVMStaticMultiple fid ->
+        "jvm_static_field_is: Multiple specifications for the same static field (" ++ J.fieldIdName fid ++ ")"
       JVMStaticFailure msg ->
         "jvm_static_field_is: JVM field resolution failed:\n" ++ msg
-      JVMStaticTypeMismatch fname expected found ->
+      JVMStaticTypeMismatch fid found ->
          -- FIXME: use a pretty printing function for J.Type instead of show
         unlines
-        [ "jvm_static_field_is: Incompatible types for field " ++ show fname
-        , "Expected type: " ++ show expected
+        [ "jvm_static_field_is: Incompatible types for field " ++ show (J.fieldIdName fid)
+        , "Expected type: " ++ show (J.fieldIdType fid)
         , "Given type: " ++ show found
         ]
       JVMElemNonReference ptr idx ->
@@ -1006,11 +1006,11 @@ jvm_field_is ptr fname val =
      valTy <- typeOfSetupValue cc env nameEnv val
      fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
      unless (registerCompatible (J.fieldIdType fid) valTy) $
-       X.throwM $ JVMFieldTypeMismatch fname (J.fieldIdType fid) valTy
+       X.throwM $ JVMFieldTypeMismatch fid valTy
      let pt = JVMPointsToField loc ptr' fid val
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
-       X.throwM $ JVMFieldMultiple ptr fname
+       X.throwM $ JVMFieldMultiple ptr' fid
      Setup.addPointsTo pt
 
 jvm_static_field_is ::
@@ -1037,13 +1037,13 @@ jvm_static_field_is _bic _opt fname val =
      valTy <- typeOfSetupValue cc env nameEnv val
      fid <- either (X.throwM . JVMStaticFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
      unless (registerCompatible (J.fieldIdType fid) valTy) $
-       X.throwM $ JVMStaticTypeMismatch fname (J.fieldIdType fid) valTy
+       X.throwM $ JVMStaticTypeMismatch fid valTy
      -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
      -- liftIO $ putStrLn $ "resolved to: " ++ name
      let pt = JVMPointsToStatic loc fid val
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
-       X.throwM $ JVMStaticMultiple fname
+       X.throwM $ JVMStaticMultiple fid
      Setup.addPointsTo pt
 
 jvm_elem_is ::
@@ -1074,7 +1074,7 @@ jvm_elem_is ptr idx val =
      let pt = JVMPointsToElem loc ptr' idx val
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
-       X.throwM $ JVMElemMultiple ptr idx
+       X.throwM $ JVMElemMultiple ptr' idx
      Setup.addPointsTo pt
 
 jvm_array_is ::
@@ -1107,7 +1107,7 @@ jvm_array_is ptr val =
      let pt = JVMPointsToArray loc ptr' val
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
-       X.throwM $ JVMArrayMultiple ptr
+       X.throwM $ JVMArrayMultiple ptr'
      Setup.addPointsTo pt
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
