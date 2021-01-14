@@ -128,6 +128,7 @@ type instance MS.PointsTo CJ.JVM = JVMPointsTo
 
 data JVMPointsTo
   = JVMPointsToField ProgramLoc MS.AllocIndex J.FieldId (MS.SetupValue CJ.JVM)
+  | JVMPointsToStatic ProgramLoc J.FieldId (MS.SetupValue CJ.JVM)
   | JVMPointsToElem ProgramLoc MS.AllocIndex Int (MS.SetupValue CJ.JVM)
   | JVMPointsToArray ProgramLoc MS.AllocIndex TypedTerm
 
@@ -136,6 +137,10 @@ ppPointsTo =
   \case
     JVMPointsToField _loc ptr fid val ->
       MS.ppAllocIndex ptr <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
+      PPL.<+> PPL.pretty "points to"
+      PPL.<+> MS.ppSetupValue val
+    JVMPointsToStatic _loc fid val ->
+      PPL.pretty (J.unClassName (J.fieldIdClass fid)) <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
       PPL.<+> PPL.pretty "points to"
       PPL.<+> MS.ppSetupValue val
     JVMPointsToElem _loc ptr idx val ->
