@@ -27,7 +27,7 @@ library
   default-language: Haskell2010
   build-depends:
       base >= 4
-    , aig
+    -- , aig
     , array
     , binary
     , bimap
@@ -38,8 +38,8 @@ library
     , cryptol
     , cryptol-saw-core
     , crucible >= 0.4
-    , crucible-jvm
-    , crucible-llvm >= 0.2
+    -- , crucible-jvm
+    -- , crucible-llvm >= 0.2
     , crucible-saw
     , deepseq
     , either
@@ -52,11 +52,11 @@ library
     , free
     , haskeline
     , IfElse
-    , jvm-parser
-    , jvm-verifier
+    -- , jvm-parser
+    -- , jvm-verifier
     , lens
-    , llvm-pretty >= 0.8
-    , llvm-pretty-bc-parser >= 0.1.3.1
+    -- , llvm-pretty >= 0.8
+    -- , llvm-pretty-bc-parser >= 0.1.3.1
     , modern-uri >= 0.3.2 && < 0.4
     , mtl >= 2.1
     , old-locale
@@ -68,12 +68,12 @@ library
     , prettyprinter
     , pretty-show
     , process
-    , rme
+    -- , rme
     , saw-core
-    , saw-core-aig
-    , saw-core-coq
-    , saw-core-sbv
-    , saw-core-what4
+    -- , saw-core-aig
+    -- , saw-core-coq
+    -- , saw-core-sbv
+    -- , saw-core-what4
     , sbv >= 8.6 && < 8.8
     , split
     , temporary
@@ -89,95 +89,95 @@ library
     , vector
     , xdg-basedir
     , GraphSCC
-    , macaw-base
-    , macaw-x86
-    , macaw-symbolic
-    , macaw-x86-symbolic
-    , flexdis86
-    , elf-edit
+    -- , macaw-base
+    -- , macaw-x86
+    -- , macaw-symbolic
+    -- , macaw-x86-symbolic
+    -- , flexdis86
+    -- , elf-edit
     , reflection
     , aeson
 
   hs-source-dirs: src
 
   exposed-modules:
-    SAWScript.AST
-    SAWScript.AutoMatch
-    SAWScript.AutoMatch.Interaction
-    SAWScript.AutoMatch.ArgMapping
-    SAWScript.AutoMatch.Declaration
-    SAWScript.AutoMatch.Cryptol
-    SAWScript.AutoMatch.LLVM
-    SAWScript.AutoMatch.JVM
-    SAWScript.AutoMatch.Util
-    SAWScript.Builtins
-    SAWScript.CongruenceClosure
+    --SAWScript.AST
+    --SAWScript.AutoMatch
+    --SAWScript.AutoMatch.Interaction
+    --SAWScript.AutoMatch.ArgMapping
+    --SAWScript.AutoMatch.Declaration
+    --SAWScript.AutoMatch.Cryptol
+    --SAWScript.AutoMatch.LLVM
+    --SAWScript.AutoMatch.JVM
+    --SAWScript.AutoMatch.Util
+    --SAWScript.Builtins
+    --SAWScript.CongruenceClosure
     SAWScript.Exceptions
-    SAWScript.Import
-    SAWScript.ImportAIG
-    SAWScript.Interpreter
-    SAWScript.JavaBuiltins
-    SAWScript.JavaExpr
-    SAWScript.JavaMethodSpec
-    SAWScript.JavaMethodSpec.Evaluator
-    SAWScript.JavaMethodSpecIR
-    SAWScript.JavaUtils
-    SAWScript.JavaPretty
-    SAWScript.Lexer
-    SAWScript.LLVMBuiltins
+    --SAWScript.Import
+    --SAWScript.ImportAIG
+    --SAWScript.Interpreter
+    --SAWScript.JavaBuiltins
+    --SAWScript.JavaExpr
+    --SAWScript.JavaMethodSpec
+    --SAWScript.JavaMethodSpec.Evaluator
+    --SAWScript.JavaMethodSpecIR
+    --SAWScript.JavaUtils
+    --SAWScript.JavaPretty
+    --SAWScript.Lexer
+    --SAWScript.LLVMBuiltins
     SAWScript.Options
-    SAWScript.Panic
-    SAWScript.Parser
-    SAWScript.PathVC
-    SAWScript.Proof
+    --SAWScript.Panic
+    --SAWScript.Parser
+    --SAWScript.PathVC
+    --SAWScript.Proof
     SAWScript.Position
-    SAWScript.SBVParser
-    SAWScript.SBVModel
-    SAWScript.Token
-    SAWScript.TopLevel
-    SAWScript.MGU
+    --SAWScript.SBVParser
+    --SAWScript.SBVModel
+    --SAWScript.Token
+    --SAWScript.TopLevel
+    --SAWScript.MGU
     SAWScript.Utils
-    SAWScript.Value
-    SAWScript.VerificationCheck
+    --SAWScript.Value
+    --SAWScript.VerificationCheck
 
     SAWScript.Crucible.Common
     SAWScript.Crucible.Common.MethodSpec
     SAWScript.Crucible.Common.Override
-    SAWScript.Crucible.Common.Setup.Builtins
-    SAWScript.Crucible.Common.Setup.Type
+    -- SAWScript.Crucible.Common.Setup.Builtins
+    -- SAWScript.Crucible.Common.Setup.Type
 
-    SAWScript.Crucible.LLVM.Builtins
-    SAWScript.Crucible.LLVM.Boilerplate
-    SAWScript.Crucible.LLVM.CrucibleLLVM
-    SAWScript.Crucible.LLVM.Override
-    SAWScript.Crucible.LLVM.MethodSpecIR
-    SAWScript.Crucible.LLVM.ResolveSetupValue
-    SAWScript.Crucible.LLVM.Skeleton
-    SAWScript.Crucible.LLVM.Skeleton.Builtins
-    SAWScript.Crucible.LLVM.X86
+    -- SAWScript.Crucible.LLVM.Builtins
+    -- SAWScript.Crucible.LLVM.Boilerplate
+    -- SAWScript.Crucible.LLVM.CrucibleLLVM
+    -- SAWScript.Crucible.LLVM.Override
+    -- SAWScript.Crucible.LLVM.MethodSpecIR
+    -- SAWScript.Crucible.LLVM.ResolveSetupValue
+    -- SAWScript.Crucible.LLVM.Skeleton
+    -- SAWScript.Crucible.LLVM.Skeleton.Builtins
+    -- SAWScript.Crucible.LLVM.X86
 
-    SAWScript.Crucible.JVM.Builtins
-    SAWScript.Crucible.JVM.BuiltinsJVM
-    SAWScript.Crucible.JVM.MethodSpecIR
-    SAWScript.Crucible.JVM.Override
-    SAWScript.Crucible.JVM.ResolveSetupValue
+    -- SAWScript.Crucible.JVM.Builtins
+    -- SAWScript.Crucible.JVM.BuiltinsJVM
+    -- SAWScript.Crucible.JVM.MethodSpecIR
+    -- SAWScript.Crucible.JVM.Override
+    -- SAWScript.Crucible.JVM.ResolveSetupValue
 
-    SAWScript.Prover.Mode
-    SAWScript.Prover.Rewrite
+    -- SAWScript.Prover.Mode
+    -- SAWScript.Prover.Rewrite
     SAWScript.Prover.SolverStats
-    SAWScript.Prover.Util
-    SAWScript.Prover.SBV
-    SAWScript.Prover.MRSolver
-    SAWScript.Prover.RME
-    SAWScript.Prover.ABC
-    SAWScript.Prover.What4
-    SAWScript.Prover.Exporter
-    SAWScript.Prover.Versions
+    -- SAWScript.Prover.Util
+    -- SAWScript.Prover.SBV
+    -- SAWScript.Prover.MRSolver
+    -- SAWScript.Prover.RME
+    -- SAWScript.Prover.ABC
+    -- SAWScript.Prover.What4
+    -- SAWScript.Prover.Exporter
+    -- SAWScript.Prover.Versions
 
-    SAWScript.VerificationSummary
+    -- SAWScript.VerificationSummary
 
-    SAWScript.X86
-    SAWScript.X86Spec
+    -- SAWScript.X86
+    -- SAWScript.X86Spec
 
   GHC-options: -O2 -Wall -fno-ignore-asserts -fno-spec-constr-count
   if impl(ghc == 8.0.1)

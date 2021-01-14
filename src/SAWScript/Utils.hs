@@ -20,7 +20,7 @@ import Data.Traversable (traverse)
 #endif
 import Control.Exception as CE
 import Control.Monad.State
-import Control.Monad.Trans.Except
+--import Control.Monad.Trans.Except
 import Control.DeepSeq(rnf, NFData(..))
 import Data.Char(isSpace)
 import Data.Data
@@ -38,7 +38,7 @@ import System.Exit
 import Text.Printf
 import Numeric(showFFloat)
 
-import qualified Verifier.Java.Codebase as JSS
+--import qualified Verifier.Java.Codebase as JSS
 
 import SAWScript.Options
 import SAWScript.Position
@@ -105,6 +105,7 @@ showDuration n = printf "%02d:%s" m (show s)
         m :: Int
         m = floor ((toRational n) * (1 % 60))
 
+{-
 -- Java lookup functions {{{1
 
 -- | Atempt to find class with given name, or throw ExecException if no class
@@ -181,6 +182,7 @@ findField cb site tp@(JSS.ClassType clName) nm = impl [] =<< lift (lookupClass c
 
 findField _ _ _ _ =
   throwE "Primitive types cannot be dereferenced."
+-}
 
 
 -- | Convert a non-negative integer to to an ordinal string.
@@ -221,6 +223,7 @@ exitProofSuccess = exitSuccess
 
 --------------------------------------------------------------------------------
 
+{-
 unparseTypeDescriptor :: JSS.Type -> String
 unparseTypeDescriptor =
   \case
@@ -239,3 +242,4 @@ unparseMethodDescriptor :: ([JSS.Type], Maybe JSS.Type) -> String
 unparseMethodDescriptor (args, ret) =
   "(" ++ concatMap unparseTypeDescriptor args ++ ")" ++
   maybe "V" unparseTypeDescriptor ret
+-}
