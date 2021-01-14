@@ -115,7 +115,6 @@ library
     SAWScript.Import
     SAWScript.ImportAIG
     SAWScript.Interpreter
-    SAWScript.JavaBuiltins
     SAWScript.JavaExpr
     SAWScript.JavaMethodSpec
     SAWScript.JavaMethodSpec.Evaluator

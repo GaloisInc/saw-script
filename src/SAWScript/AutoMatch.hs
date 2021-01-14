@@ -56,7 +56,6 @@ import SAWScript.AutoMatch.LLVM
 import SAWScript.AutoMatch.Cryptol
 
 import SAWScript.LLVMBuiltins
---import SAWScript.JavaBuiltins
 import Language.JVM.Common (dotsToSlashes, mkClassName)
 
 import Prettyprinter.Render.Text (putDoc, hPutDoc)
