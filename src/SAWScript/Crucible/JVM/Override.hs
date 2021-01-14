@@ -819,22 +819,19 @@ executePointsTo opts sc cc spec pt = do
   case pt of
 
     JVMPointsToField _loc ptr fid val ->
-      do val' <- resolveSetupValueJVM opts cc sc spec val
+      do dyn <- injectSetupValueJVM sym opts cc sc spec val
          rval <- resolveAllocIndexJVM ptr
-         let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doFieldStore sym globals rval fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToStatic _loc fid val ->
-      do val' <- resolveSetupValueJVM opts cc sc spec val
-         let dyn = injectJVMVal sym val'
+      do dyn <- injectSetupValueJVM sym opts cc sc spec val
          globals' <- liftIO $ CJ.doStaticFieldStore sym jc globals fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToElem _loc ptr idx val ->
-      do val' <- resolveSetupValueJVM opts cc sc spec val
+      do dyn <- injectSetupValueJVM sym opts cc sc spec val
          rval <- resolveAllocIndexJVM ptr
-         let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
 
@@ -845,10 +842,20 @@ executePointsTo opts sc cc spec pt = do
              Nothing -> fail "jvm_array_is: not a monomorphic sequence type"
              Just x -> pure x
          rval <- resolveAllocIndexJVM ptr
-         jvs <- traverse (resolveSetupValueJVM opts cc sc spec . MS.SetupTerm) tts
-         let vs = map (injectJVMVal sym) jvs
+         vs <- traverse (injectSetupValueJVM sym opts cc sc spec . MS.SetupTerm) tts
          globals' <- liftIO $ doEntireArrayStore sym globals rval vs
          OM (overrideGlobals .= globals')
+
+injectSetupValueJVM ::
+  Sym                  ->
+  Options              ->
+  JVMCrucibleContext   ->
+  SharedContext        ->
+  CrucibleMethodSpecIR ->
+  SetupValue           ->
+  OverrideMatcher CJ.JVM w (Crucible.RegValue Sym CJ.JVMValueType)
+injectSetupValueJVM sym opts cc sc spec val =
+  injectJVMVal sym <$> resolveSetupValueJVM opts cc sc spec val
 
 doEntireArrayStore ::
   Crucible.IsSymInterface sym =>
