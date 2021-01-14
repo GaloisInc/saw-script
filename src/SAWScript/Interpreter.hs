@@ -50,7 +50,6 @@ import SAWScript.AST (Located(..),Import(..))
 import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
-import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
@@ -1647,156 +1646,10 @@ primitives = Map.fromList
     Current
     [ "The Java type corresponding to the named class." ]
 
-  --, prim "java_value"          "{a} String -> a"
-
-  , prim "java_var"            "String -> JavaType -> JavaSetup Term"
-    (pureVal javaVar)
-    Deprecated
-    [ "Return a term corresponding to the initial value of the named Java"
-    , "variable, which should have the given type. The returned term can be"
-    , "used to construct more complex expressions. For example it can be used"
-    , "with 'java_return' to describe the expected return value in terms"
-    , "of the initial value of a variable. The Java variable can also be of"
-    , "the form \"args[n]\" to refer to the (0-based) nth argument of a method."
-    ]
-
-  , prim "java_class_var"      "String -> JavaType -> JavaSetup ()"
-    (pureVal javaClassVar)
-    Deprecated
-    [ "Declare that the named Java variable should point to an object of the"
-    , "given class type."
-    ]
-
-  , prim "java_may_alias"      "[String] -> JavaSetup ()"
-    (pureVal javaMayAlias)
-    Deprecated
-    [ "Indicate that the given set of Java variables are allowed to alias"
-    , "each other."
-    ]
-
-  , prim "java_assert"         "Term -> JavaSetup ()"
-    (pureVal javaAssert)
-    Deprecated
-    [ "Assert that the given term should evaluate to true in the initial"
-    , "state of a Java method."
-    ]
-
-  , prim "java_assert_eq"      "String -> Term -> JavaSetup ()"
-    (pureVal javaAssertEq)
-    Deprecated
-    [ "Assert that the given variable should have the given value in the"
-    , "initial state of a Java method."
-    ]
-
-  , prim "java_ensure_eq"      "String -> Term -> JavaSetup ()"
-    (pureVal javaEnsureEq)
-    Deprecated
-    [ "Specify that the given Java variable should have a value equal to the"
-    , "given term when execution finishes."
-    ]
-
-  , prim "java_modify"         "String -> JavaSetup ()"
-    (pureVal javaModify)
-    Deprecated
-    [ "Indicate that a Java method may modify the named portion of the state." ]
-
-  , prim "java_return"         "Term -> JavaSetup ()"
-    (pureVal javaReturn)
-    Deprecated
-    [ "Indicate the expected return value of a Java method." ]
-
-  , prim "java_verify_tactic"  "ProofScript SatResult -> JavaSetup ()"
-    (pureVal javaVerifyTactic)
-    Deprecated
-    [ "Use the given proof script to prove the specified properties about"
-    , "a Java method."
-    ]
-
-  , prim "java_sat_branches"   "Bool -> JavaSetup ()"
-    (pureVal javaSatBranches)
-    Deprecated
-    [ "Turn on or off satisfiability checking of branch conditions during"
-    , "symbolic execution."
-    ]
-
-  , prim "java_no_simulate"    "JavaSetup ()"
-    (pureVal javaNoSimulate)
-    Deprecated
-    [ "Skip symbolic simulation for this Java method." ]
-
-  , prim "java_allow_alloc"    "JavaSetup ()"
-    (pureVal javaAllowAlloc)
-    Deprecated
-    [ "Allow allocation of new objects or arrays during simulation,"
-    , "as long as the behavior of the method can still be described"
-    , "as a pure function."
-    ]
-
-   , prim "java_requires_class"  "String -> JavaSetup ()"
-     (pureVal javaRequiresClass)
-     Deprecated
-     [ "Declare that the given method can only be executed if the given"
-     , "class has already been initialized."
-     ]
-
-  , prim "java_pure"           "JavaSetup ()"
-    (pureVal javaPure)
-    Deprecated
-    [ "The empty specification for 'java_verify'. Equivalent to 'return ()'." ]
-
   , prim "java_load_class"     "String -> TopLevel JavaClass"
     (pureVal CJ.loadJavaClass)
     Current
     [ "Load the named Java class and return a handle to it." ]
-
-  --, prim "java_class_info"     "JavaClass -> TopLevel ()"
-
-  , prim "java_extract"
-    "JavaClass -> String -> JavaSetup () -> TopLevel Term"
-    (pureVal extractJava)
-    Deprecated
-    [ "Translate a Java method directly to a Term. The parameters of the"
-    , "Term will be the parameters of the Java method, and the return"
-    , "value will be the return value of the method. Only static methods"
-    , "with scalar argument and return types are currently supported. For"
-    , "more flexibility, see 'java_symexec' or 'java_verify'."
-    ]
-
-  , prim "java_symexec"
-    "JavaClass -> String -> [(String, Term)] -> [String] -> Bool -> TopLevel Term"
-    (pureVal symexecJava)
-    Deprecated
-    [ "Symbolically execute a Java method and construct a Term corresponding"
-    , "to its result. The first list contains pairs of variable or field"
-    , "names along with Terms specifying their initial (possibly symbolic)"
-    , "values. The second list contains the names of the variables or fields"
-    , "to treat as outputs. The resulting Term will be of tuple type, with"
-    , "as many elements as there are names in the output list."
-    , "The final boolean value indicates if path conditions should be checked for"
-    , "satisfiability at branch points."
-    ]
-
-  , prim "java_verify"
-    "JavaClass -> String -> [JavaMethodSpec] -> JavaSetup () -> TopLevel JavaMethodSpec"
-    (pureVal verifyJava)
-    Deprecated
-    [ "Verify a Java method against a method specification. The first two"
-    , "arguments are the same as for 'java_extract' and 'java_symexec'."
-    , "The list of JavaMethodSpec values in the third argument makes it"
-    , "possible to use the results of previous verifications to take the"
-    , "place of actual execution when encountering a method call. The last"
-    , "parameter is a setup block, containing a sequence of commands of type"
-    , "'JavaSetup a' that configure the symbolic simulator and specify the"
-    , "types of variables in scope, the expected results of execution, and"
-    , "the tactics to use to verify that the method produces the expected"
-    , "results."
-    ]
-
-{-  , prim "crucible_java_cfg"
-    "JavaClass -> String -> TopLevel CFG"
-    (bicVal crucible_java_cfg)
-    [ "Convert a Java method to a Crucible CFG."
-    ] -}
 
   , prim "jvm_extract"  "JavaClass -> String -> TopLevel Term"
     (pureVal CJ.jvm_extract)
