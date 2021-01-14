@@ -71,7 +71,6 @@ import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
 import qualified Lang.JVM.Codebase as JCB
-import qualified Verifier.Java.SAWBackend as JavaSAW
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
@@ -399,7 +398,6 @@ buildTopLevelEnv proxy opts =
        sc0 <- mkSharedContext
        let ?fileReader = BS.readFile
        CryptolSAW.scLoadPreludeModule sc0
-       JavaSAW.scLoadJavaModule sc0
        CryptolSAW.scLoadCryptolModule sc0
        scLoadModule sc0 (emptyModule mn)
        cryptol_mod <- scFindModule sc0 $ mkModuleName ["Cryptol"]
