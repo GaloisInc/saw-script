@@ -430,20 +430,24 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
            RVal ref -> return ref
            _ -> liftIO $ Crucible.addFailedAssertion sym msg
 
+    injectSetupVal :: SetupValue -> IO (Crucible.RegValue Sym CJ.JVMValueType)
+    injectSetupVal rhs =
+      injectJVMVal sym <$> resolveSetupVal cc env tyenv nameEnv rhs
+
     doPointsTo :: Crucible.SymGlobalState Sym -> JVMPointsTo -> IO (Crucible.SymGlobalState Sym)
     doPointsTo mem pt =
       case pt of
         JVMPointsToField _loc lhs fid rhs ->
           do lhs' <- resolveJVMRefVal lhs
-             rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
-             CJ.doFieldStore sym mem lhs' fid (injectJVMVal sym rhs')
+             rhs' <- injectSetupVal rhs
+             CJ.doFieldStore sym mem lhs' fid rhs'
         JVMPointsToStatic _loc fid rhs ->
-          do rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
-             CJ.doStaticFieldStore sym jc mem fid (injectJVMVal sym rhs')
+          do rhs' <- injectSetupVal rhs
+             CJ.doStaticFieldStore sym jc mem fid rhs'
         JVMPointsToElem _loc lhs idx rhs ->
           do lhs' <- resolveJVMRefVal lhs
-             rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
-             CJ.doArrayStore sym mem lhs' idx (injectJVMVal sym rhs')
+             rhs' <- injectSetupVal rhs
+             CJ.doArrayStore sym mem lhs' idx rhs'
         JVMPointsToArray _loc lhs rhs ->
           do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
              lhs' <- resolveJVMRefVal lhs
@@ -452,8 +456,8 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
                \case
                  Nothing -> fail "setupPrePointsTos: not a monomorphic sequence type"
                  Just x -> pure x
-             rhs' <- traverse (resolveSetupVal cc env tyenv nameEnv . MS.SetupTerm) tts
-             doEntireArrayStore sym mem lhs' (map (injectJVMVal sym) rhs')
+             rhs' <- traverse (injectSetupVal . MS.SetupTerm) tts
+             doEntireArrayStore sym mem lhs' rhs'
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
