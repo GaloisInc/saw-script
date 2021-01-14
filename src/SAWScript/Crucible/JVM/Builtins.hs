@@ -31,6 +31,9 @@ module SAWScript.Crucible.JVM.Builtins
     , jvm_execute_func
     , jvm_postcond
     , jvm_precond
+    , jvm_modifies_field
+    , jvm_modifies_static_field
+    , jvm_modifies_elem
     , jvm_field_is
     , jvm_static_field_is
     , jvm_elem_is
@@ -988,12 +991,25 @@ jvm_alloc_array len ety =
      Setup.currentState . MS.csAllocs . at n ?= (loc, AllocArray len (typeOfJavaType ety))
      return (MS.SetupVar n)
 
+jvm_modifies_field ::
+  SetupValue {- ^ object -} ->
+  String     {- ^ field name -} ->
+  JVMSetupM ()
+jvm_modifies_field ptr fname = generic_field_is ptr fname Nothing
+
 jvm_field_is ::
   SetupValue {- ^ object -} ->
   String     {- ^ field name -} ->
   SetupValue {- ^ field value -} ->
   JVMSetupM ()
-jvm_field_is ptr fname val =
+jvm_field_is ptr fname val = generic_field_is ptr fname (Just val)
+
+generic_field_is ::
+  SetupValue {- ^ object -} ->
+  String {- ^ field name -} ->
+  Maybe SetupValue {- ^ field value -} ->
+  JVMSetupM ()
+generic_field_is ptr fname mval =
   JVMSetupM $
   do pos <- lift getPosition
      loc <- SS.toW4Loc "jvm_field_is" <$> lift getPosition
@@ -1007,21 +1023,35 @@ jvm_field_is ptr fname val =
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
-     valTy <- typeOfSetupValue cc env nameEnv val
      fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
-     unless (registerCompatible (J.fieldIdType fid) valTy) $
-       X.throwM $ JVMFieldTypeMismatch fid valTy
-     let pt = JVMPointsToField loc ptr' fid (Just val)
+     case mval of
+       Nothing -> pure ()
+       Just val ->
+         do valTy <- typeOfSetupValue cc env nameEnv val
+            unless (registerCompatible (J.fieldIdType fid) valTy) $
+              X.throwM $ JVMFieldTypeMismatch fid valTy
+     let pt = JVMPointsToField loc ptr' fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMFieldMultiple ptr' fid
      Setup.addPointsTo pt
 
+jvm_modifies_static_field ::
+  String {- ^ field name -} ->
+  JVMSetupM ()
+jvm_modifies_static_field fname = generic_static_field_is fname Nothing
+
 jvm_static_field_is ::
   String     {- ^ field name -} ->
   SetupValue {- ^ field value -} ->
   JVMSetupM ()
-jvm_static_field_is fname val =
+jvm_static_field_is fname val = generic_static_field_is fname (Just val)
+
+generic_static_field_is ::
+  String {- ^ field name -} ->
+  Maybe SetupValue {- ^ field value -} ->
+  JVMSetupM ()
+generic_static_field_is fname mval =
   JVMSetupM $
   do pos <- lift getPosition
      loc <- SS.toW4Loc "jvm_static_field_is" <$> lift getPosition
@@ -1036,24 +1066,40 @@ jvm_static_field_is fname val =
              s -> J.mkClassName (init s)
      -- liftIO $ putStrLn $ "jvm_static_field_is " ++ J.unClassName cname ++ " " ++ fname
      let ptrTy = J.ClassType cname
-     valTy <- typeOfSetupValue cc env nameEnv val
      fid <- either (X.throwM . JVMStaticFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
-     unless (registerCompatible (J.fieldIdType fid) valTy) $
-       X.throwM $ JVMStaticTypeMismatch fid valTy
+     case mval of
+       Nothing -> pure ()
+       Just val ->
+         do valTy <- typeOfSetupValue cc env nameEnv val
+            unless (registerCompatible (J.fieldIdType fid) valTy) $
+              X.throwM $ JVMStaticTypeMismatch fid valTy
      -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
      -- liftIO $ putStrLn $ "resolved to: " ++ name
-     let pt = JVMPointsToStatic loc fid (Just val)
+     let pt = JVMPointsToStatic loc fid mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMStaticMultiple fid
      Setup.addPointsTo pt
+
+jvm_modifies_elem ::
+  SetupValue {- ^ array -} ->
+  Int        {- ^ index -} ->
+  JVMSetupM ()
+jvm_modifies_elem ptr idx = generic_elem_is ptr idx Nothing
 
 jvm_elem_is ::
   SetupValue {- ^ array -} ->
   Int        {- ^ index -} ->
   SetupValue {- ^ element value -} ->
   JVMSetupM ()
-jvm_elem_is ptr idx val =
+jvm_elem_is ptr idx val = generic_elem_is ptr idx (Just val)
+
+generic_elem_is ::
+  SetupValue {- ^ array -} ->
+  Int {- ^ index -} ->
+  Maybe SetupValue {- ^ element value -} ->
+  JVMSetupM ()
+generic_elem_is ptr idx mval =
   JVMSetupM $
   do loc <- SS.toW4Loc "jvm_elem_is" <$> lift getPosition
      ptr' <-
@@ -1068,12 +1114,15 @@ jvm_elem_is ptr idx val =
        case snd (lookupAllocIndex env ptr') of
          AllocObject cname -> X.throwM $ JVMElemNonArray (J.ClassType cname)
          AllocArray len elTy -> pure (len, elTy)
-     valTy <- typeOfSetupValue cc env nameEnv val
      unless (0 <= idx && idx < len) $
        X.throwM $ JVMElemInvalidIndex elTy len idx
-     unless (registerCompatible elTy valTy) $
-       X.throwM $ JVMElemTypeMismatch idx elTy valTy
-     let pt = JVMPointsToElem loc ptr' idx (Just val)
+     case mval of
+       Nothing -> pure ()
+       Just val ->
+         do valTy <- typeOfSetupValue cc env nameEnv val
+            unless (registerCompatible elTy valTy) $
+              X.throwM $ JVMElemTypeMismatch idx elTy valTy
+     let pt = JVMPointsToElem loc ptr' idx mval
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMElemMultiple ptr' idx
