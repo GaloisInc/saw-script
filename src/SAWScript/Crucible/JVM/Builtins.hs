@@ -1018,12 +1018,10 @@ jvm_field_is ptr fname val =
      Setup.addPointsTo pt
 
 jvm_static_field_is ::
-  BuiltinContext ->
-  Options        ->
   String     {- ^ field name -} ->
   SetupValue {- ^ field value -} ->
   JVMSetupM ()
-jvm_static_field_is _bic _opt fname val =
+jvm_static_field_is fname val =
   JVMSetupM $
   do pos <- lift getPosition
      loc <- SS.toW4Loc "jvm_static_field_is" <$> lift getPosition
