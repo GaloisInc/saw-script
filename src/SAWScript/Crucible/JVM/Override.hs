@@ -672,20 +672,20 @@ learnPointsTo opts sc cc spec prepost pt = do
   globals <- OM (use overrideGlobals)
   case pt of
 
-    JVMPointsToField loc ptr fid val ->
+    JVMPointsToField loc ptr fid (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doFieldLoad sym globals rval fid
          v <- liftIO $ projectJVMVal sym ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
-    JVMPointsToStatic loc fid val ->
+    JVMPointsToStatic loc fid (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          dyn <- liftIO $ CJ.doStaticFieldLoad sym jc globals fid
          v <- liftIO $ projectJVMVal sym ty ("static field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
-    JVMPointsToElem loc ptr idx val ->
+    JVMPointsToElem loc ptr idx (Just val) ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
          dyn <- liftIO $ CJ.doArrayLoad sym globals rval idx
@@ -722,6 +722,10 @@ learnPointsTo opts sc cc spec prepost pt = do
          ts <- traverse load [0 .. fromInteger len - 1]
          realTerm <- liftIO $ scVector sc ety_tm ts
          matchTerm sc cc loc prepost realTerm (ttTerm tt)
+
+    -- If the right-hand-side is 'Nothing', this is indicates a "modifies" declaration,
+    -- which should probably not appear in the pre-state section, and has no effect.
+    _ -> pure ()
 
 ------------------------------------------------------------------------
 
@@ -823,18 +827,18 @@ executePointsTo opts sc cc spec pt = do
   case pt of
 
     JVMPointsToField _loc ptr fid val ->
-      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+      do dyn <- maybe (pure CJ.unassignedJVMValue) (injectSetupValueJVM sym opts cc sc spec) val
          rval <- resolveAllocIndexJVM ptr
          globals' <- liftIO $ CJ.doFieldStore sym globals rval fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToStatic _loc fid val ->
-      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+      do dyn <- maybe (pure CJ.unassignedJVMValue) (injectSetupValueJVM sym opts cc sc spec) val
          globals' <- liftIO $ CJ.doStaticFieldStore sym jc globals fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToElem _loc ptr idx val ->
-      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+      do dyn <- maybe (pure CJ.unassignedJVMValue) (injectSetupValueJVM sym opts cc sc spec) val
          rval <- resolveAllocIndexJVM ptr
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')

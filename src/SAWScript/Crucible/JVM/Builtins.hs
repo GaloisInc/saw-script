@@ -434,14 +434,14 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
       case pt of
         JVMPointsToField _loc lhs fid rhs ->
           do let lhs' = lookupAllocIndex env lhs
-             rhs' <- injectSetupVal rhs
+             rhs' <- maybe (pure CJ.unassignedJVMValue) injectSetupVal rhs
              CJ.doFieldStore sym mem lhs' fid rhs'
         JVMPointsToStatic _loc fid rhs ->
-          do rhs' <- injectSetupVal rhs
+          do rhs' <- maybe (pure CJ.unassignedJVMValue) injectSetupVal rhs
              CJ.doStaticFieldStore sym jc mem fid rhs'
         JVMPointsToElem _loc lhs idx rhs ->
           do let lhs' = lookupAllocIndex env lhs
-             rhs' <- injectSetupVal rhs
+             rhs' <- maybe (pure CJ.unassignedJVMValue) injectSetupVal rhs
              CJ.doArrayStore sym mem lhs' idx rhs'
         JVMPointsToArray _loc lhs rhs ->
           do sc <- saw_ctx <$> sawCoreState sym
@@ -1011,7 +1011,7 @@ jvm_field_is ptr fname val =
      fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
      unless (registerCompatible (J.fieldIdType fid) valTy) $
        X.throwM $ JVMFieldTypeMismatch fid valTy
-     let pt = JVMPointsToField loc ptr' fid val
+     let pt = JVMPointsToField loc ptr' fid (Just val)
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMFieldMultiple ptr' fid
@@ -1042,7 +1042,7 @@ jvm_static_field_is fname val =
        X.throwM $ JVMStaticTypeMismatch fid valTy
      -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
      -- liftIO $ putStrLn $ "resolved to: " ++ name
-     let pt = JVMPointsToStatic loc fid val
+     let pt = JVMPointsToStatic loc fid (Just val)
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMStaticMultiple fid
@@ -1073,7 +1073,7 @@ jvm_elem_is ptr idx val =
        X.throwM $ JVMElemInvalidIndex elTy len idx
      unless (registerCompatible elTy valTy) $
        X.throwM $ JVMElemTypeMismatch idx elTy valTy
-     let pt = JVMPointsToElem loc ptr' idx val
+     let pt = JVMPointsToElem loc ptr' idx (Just val)
      let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
      when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
        X.throwM $ JVMElemMultiple ptr' idx
