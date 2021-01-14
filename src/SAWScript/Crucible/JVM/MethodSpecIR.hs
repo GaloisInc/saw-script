@@ -132,6 +132,28 @@ data JVMPointsTo
   | JVMPointsToElem ProgramLoc MS.AllocIndex Int (MS.SetupValue CJ.JVM)
   | JVMPointsToArray ProgramLoc MS.AllocIndex TypedTerm
 
+overlapPointsTo :: JVMPointsTo -> JVMPointsTo -> Bool
+overlapPointsTo =
+  \case
+    JVMPointsToField _ p1 f1 _ ->
+      \case
+        JVMPointsToField _ p2 f2 _ -> p1 == p2 && f1 == f2
+        _                          -> False
+    JVMPointsToStatic _ f1 _ ->
+      \case
+        JVMPointsToStatic _ f2 _   -> f1 == f2
+        _                          -> False
+    JVMPointsToElem _ p1 i1 _ ->
+      \case
+        JVMPointsToElem _ p2 i2 _  -> p1 == p2 && i1 == i2
+        JVMPointsToArray _ p2 _    -> p1 == p2
+        _                          -> False
+    JVMPointsToArray _ p1 _ ->
+      \case
+        JVMPointsToElem _ p2 _ _   -> p1 == p2
+        JVMPointsToArray _ p2 _    -> p1 == p2
+        _                          -> False
+
 ppPointsTo :: JVMPointsTo -> PPL.Doc ann
 ppPointsTo =
   \case
