@@ -60,10 +60,6 @@ import           Data.Void (absurd)
 import           Prettyprinter
 import           System.IO
 
--- jvm-verifier
--- TODO: transition to Lang.JVM.Codebase from crucible-jvm
-import qualified Verifier.Java.Codebase as CB
-
 -- cryptol
 import qualified Cryptol.Eval.Type as Cryptol (evalValType)
 import qualified Cryptol.TypeCheck.Type as Cryptol
@@ -88,6 +84,7 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 -- crucible-jvm
+import qualified Lang.JVM.Codebase as CB
 import qualified Lang.Crucible.JVM as CJ
 
 -- parameterized-utils

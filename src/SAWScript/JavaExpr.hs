@@ -72,7 +72,7 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Text.Read hiding (lift)
 
-import Verifier.Java.Codebase as JSS
+import Lang.JVM.Codebase as JSS
 import Verifier.Java.SAWBackend hiding (basic_ss)
 
 import Verifier.SAW.Cryptol

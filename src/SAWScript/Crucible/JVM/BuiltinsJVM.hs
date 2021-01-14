@@ -83,20 +83,13 @@ import SAWScript.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, run
 import qualified Language.JVM.Common as J
 import qualified Language.JVM.Parser as J
 import qualified SAWScript.Utils as J
-import qualified "jvm-verifier" Verifier.Java.Codebase as JCB
+import qualified Lang.JVM.Codebase as JCB
 
 -- crucible-jvm
 import           Lang.Crucible.JVM (IsCodebase(..))
 import qualified Lang.Crucible.JVM as CJ
 
 import Debug.Trace
-
---
--- | Use the Codebase implementation from the old Java static simulator
---
-instance IsCodebase JCB.Codebase where
-  lookupClass cb = J.lookupClass cb fixPos
-  findMethod  cb = J.findMethod  cb fixPos
 
 -----------------------------------------------------------------------
 -- | Make sure the class is in the database and allocate handles for its

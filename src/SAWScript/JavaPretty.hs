@@ -14,7 +14,7 @@ import Prettyprinter
 
 import Language.JVM.Common
 
-import Verifier.Java.Codebase
+import Lang.JVM.Codebase
 
 prettyClass :: Class -> Doc ann
 prettyClass cls = vcat $

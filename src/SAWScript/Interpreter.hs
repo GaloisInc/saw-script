@@ -70,7 +70,7 @@ import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
-import qualified Verifier.Java.Codebase as JCB
+import qualified Lang.JVM.Codebase as JCB
 import qualified Verifier.Java.SAWBackend as JavaSAW
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW

@@ -37,10 +37,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
-
--- jvm-verifier
--- TODO: transition to Lang.JVM.Codebase from crucible-jvm
-import qualified Verifier.Java.Codebase as CB
+import qualified Lang.JVM.Codebase as CB
 
 -- jvm-parser
 import qualified Language.JVM.Parser as J

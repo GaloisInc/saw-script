@@ -71,7 +71,7 @@ import qualified Data.Set as Set
 import qualified Data.Vector as V
 import Prettyprinter
 
-import qualified Verifier.Java.Codebase as JSS
+import qualified Lang.JVM.Codebase as JSS
 import qualified Verifier.Java.Common as JSS
 
 --import Verifier.SAW.TypedAST (ppTerm, defaultPPOpts)

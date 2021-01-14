@@ -38,7 +38,7 @@ import System.Exit
 import Text.Printf
 import Numeric(showFFloat)
 
-import qualified Verifier.Java.Codebase as JSS
+import qualified Lang.JVM.Codebase as JSS
 
 import SAWScript.Options
 import SAWScript.Position
