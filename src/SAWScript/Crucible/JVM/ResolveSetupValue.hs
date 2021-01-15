@@ -288,7 +288,7 @@ toJVMType tp =
     Cryptol.TVRational -> Nothing
     Cryptol.TVSeq n Cryptol.TVBit ->
       case n of
-        8  -> Just J.CharType
+        8  -> Just J.ByteType
         16 -> Just J.ShortType
         32 -> Just J.IntType
         64 -> Just J.LongType
