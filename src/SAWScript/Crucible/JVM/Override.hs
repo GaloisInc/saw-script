@@ -590,15 +590,20 @@ valueToSC sym _ _ Cryptol.TVBit (IVal x) =
       -- TODO: assert that x is 0 or 1
      liftIO (CrucibleSAW.toSC sym b)
 
-valueToSC sym _ _ (Cryptol.TVSeq _n Cryptol.TVBit) (IVal x) =
+valueToSC sym _ _ (Cryptol.TVSeq 8 Cryptol.TVBit) (IVal x) =
+  liftIO (CrucibleSAW.toSC sym =<< W4.bvTrunc sym (W4.knownNat @8) x)
+
+valueToSC sym _ _ (Cryptol.TVSeq 16 Cryptol.TVBit) (IVal x) =
+  liftIO (CrucibleSAW.toSC sym =<< W4.bvTrunc sym (W4.knownNat @16) x)
+
+valueToSC sym _ _ (Cryptol.TVSeq 32 Cryptol.TVBit) (IVal x) =
   liftIO (CrucibleSAW.toSC sym x)
 
-valueToSC sym _ _ (Cryptol.TVSeq _n Cryptol.TVBit) (LVal x) =
+valueToSC sym _ _ (Cryptol.TVSeq 64 Cryptol.TVBit) (LVal x) =
   liftIO (CrucibleSAW.toSC sym x)
 
 valueToSC _sym loc failMsg _tval _val =
   failure loc failMsg
--- TODO: check sizes on bitvectors, support bool, char, and short types
 
 ------------------------------------------------------------------------
 
@@ -966,10 +971,10 @@ injectJVMVal sym jv =
 projectJVMVal :: Sym -> J.Type -> String -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
 projectJVMVal sym ty msg' v =
   case ty of
-    J.BooleanType -> err -- FIXME
-    J.ByteType    -> err -- FIXME
-    J.CharType    -> err -- FIXME
-    J.ShortType   -> err -- FIXME
+    J.BooleanType -> IVal <$> proj v CJ.tagI
+    J.ByteType    -> IVal <$> proj v CJ.tagI
+    J.CharType    -> IVal <$> proj v CJ.tagI
+    J.ShortType   -> IVal <$> proj v CJ.tagI
     J.IntType     -> IVal <$> proj v CJ.tagI
     J.LongType    -> LVal <$> proj v CJ.tagL
     J.FloatType   -> err -- FIXME
@@ -991,9 +996,9 @@ decodeJVMVal :: J.Type -> Crucible.AnyValue Sym -> Maybe JVMVal
 decodeJVMVal ty v =
   case ty of
     J.BooleanType -> go v CJ.intRepr IVal
-    J.ByteType    -> Nothing -- FIXME
-    J.CharType    -> Nothing -- FIXME
-    J.ShortType   -> Nothing -- FIXME
+    J.ByteType    -> go v CJ.intRepr IVal
+    J.CharType    -> go v CJ.intRepr IVal
+    J.ShortType   -> go v CJ.intRepr IVal
     J.IntType     -> go @CJ.JVMIntType v CJ.intRepr IVal
     J.LongType    -> go @CJ.JVMLongType v CJ.longRepr LVal
     J.FloatType   -> Nothing -- FIXME
