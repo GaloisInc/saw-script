@@ -1,0 +1,106 @@
+enable_experimental;
+c <- java_load_class "Test";
+
+jvm_verify c "addBoolean" [] false
+  do {
+    x <- jvm_fresh_var "x" java_bool;
+    y <- jvm_fresh_var "y" java_bool;
+    jvm_execute_func [jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ x ^ y }});
+  }
+  do {
+    check_goal;
+    z3;
+  };
+
+jvm_verify c "addByte" [] false
+  do {
+    x <- jvm_fresh_var "x" java_byte;
+    y <- jvm_fresh_var "y" java_byte;
+    jvm_execute_func [jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ x + y }});
+  }
+  do {
+    check_goal;
+    z3;
+  };
+
+jvm_verify c "addChar" [] false
+  do {
+    x <- jvm_fresh_var "x" java_char;
+    y <- jvm_fresh_var "y" java_char;
+    jvm_execute_func [jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ x + y }});
+  }
+  do {
+    check_goal;
+    z3;
+  };
+
+jvm_verify c "addShort" [] false
+  do {
+    x <- jvm_fresh_var "x" java_short;
+    y <- jvm_fresh_var "y" java_short;
+    jvm_execute_func [jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ x + y }});
+  }
+  do {
+    check_goal;
+    z3;
+  };
+
+jvm_verify c "updBoolean" [] false
+  do {
+    a <- jvm_fresh_var "x" (java_array 4 java_bool);
+    x <- jvm_fresh_var "x" java_bool;
+    aref <- jvm_alloc_array 4 java_bool;
+    jvm_array_is aref a;
+    jvm_execute_func [aref, jvm_term x];
+    jvm_array_is aref {{ update a 0x0 x }};
+  }
+  do {
+    check_goal;
+    z3;
+  };
+
+jvm_verify c "updByte" [] false
+  do {
+    a <- jvm_fresh_var "x" (java_array 4 java_byte);
+    x <- jvm_fresh_var "x" java_byte;
+    aref <- jvm_alloc_array 4 java_byte;
+    jvm_array_is aref a;
+    jvm_execute_func [aref, jvm_term x];
+    jvm_array_is aref {{ update a 0x0 x }};
+  }
+  do {
+    check_goal;
+    z3;
+  };
+
+jvm_verify c "updChar" [] false
+  do {
+    a <- jvm_fresh_var "x" (java_array 4 java_char);
+    x <- jvm_fresh_var "x" java_char;
+    aref <- jvm_alloc_array 4 java_char;
+    jvm_array_is aref a;
+    jvm_execute_func [aref, jvm_term x];
+    jvm_array_is aref {{ update a 0x0 x }};
+  }
+  do {
+    check_goal;
+    z3;
+  };
+
+jvm_verify c "updShort" [] false
+  do {
+    a <- jvm_fresh_var "x" (java_array 4 java_short);
+    x <- jvm_fresh_var "x" java_short;
+    aref <- jvm_alloc_array 4 java_short;
+    jvm_array_is aref a;
+    jvm_execute_func [aref, jvm_term x];
+    jvm_array_is aref {{ update a 0x0 x }};
+  }
+  do {
+    check_goal;
+    z3;
+  };

@@ -1,0 +1,2 @@
+%.class: %.java
+	javac -g $<
