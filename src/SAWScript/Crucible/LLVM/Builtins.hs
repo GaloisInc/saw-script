@@ -42,6 +42,8 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_equal
     , llvm_points_to
     , llvm_conditional_points_to
+    , llvm_points_to_at_type
+    , llvm_conditional_points_to_at_type
     , llvm_points_to_array_prefix
     , llvm_fresh_pointer
     , llvm_unsafe_assume_spec
@@ -1979,7 +1981,7 @@ llvm_points_to ::
   AllLLVM SetupValue     ->
   LLVMCrucibleSetupM ()
 llvm_points_to typed =
-  llvm_points_to_internal typed Nothing
+  llvm_points_to_internal typed Nothing Nothing
 
 llvm_conditional_points_to ::
   Bool {- ^ whether to check type compatibility -} ->
@@ -1988,15 +1990,33 @@ llvm_conditional_points_to ::
   AllLLVM SetupValue ->
   LLVMCrucibleSetupM ()
 llvm_conditional_points_to typed cond =
-  llvm_points_to_internal typed (Just cond)
+  llvm_points_to_internal typed Nothing (Just cond)
+
+llvm_points_to_at_type ::
+  AllLLVM SetupValue ->
+  L.Type             ->
+  AllLLVM SetupValue ->
+  LLVMCrucibleSetupM ()
+llvm_points_to_at_type ptr ty val =
+  llvm_points_to_internal False (Just ty) Nothing ptr val
+
+llvm_conditional_points_to_at_type ::
+  TypedTerm ->
+  AllLLVM SetupValue ->
+  L.Type             ->
+  AllLLVM SetupValue ->
+  LLVMCrucibleSetupM ()
+llvm_conditional_points_to_at_type cond ptr ty val =
+  llvm_points_to_internal False (Just ty) (Just cond) ptr val
 
 llvm_points_to_internal ::
   Bool {- ^ whether to check type compatibility -} ->
+  Maybe L.Type {- ^ optional type constraint for rhs -} ->
   Maybe TypedTerm ->
-  AllLLVM SetupValue ->
-  AllLLVM SetupValue ->
+  AllLLVM SetupValue {- ^ lhs pointer -} ->
+  AllLLVM SetupValue {- ^ rhs value -} ->
   LLVMCrucibleSetupM ()
-llvm_points_to_internal typed cond (getAllLLVM -> ptr) (getAllLLVM -> val) =
+llvm_points_to_internal typed rhsTy cond (getAllLLVM -> ptr) (getAllLLVM -> val) =
   LLVMCrucibleSetupM $
   do cc <- getLLVMCrucibleContext
      loc <- getW4Position "llvm_points_to"
@@ -2021,7 +2041,14 @@ llvm_points_to_internal typed cond (getAllLLVM -> ptr) (getAllLLVM -> val) =
                   ]
 
             _ -> throwCrucibleSetup loc $ "lhs not a pointer type: " ++ show ptrTy
+
           valTy <- typeOfSetupValue cc env nameEnv val
+          case rhsTy of
+            Nothing -> pure ()
+            Just ty ->
+              do ty' <- memTypeForLLVMType loc ty
+                 checkMemTypeCompatibility loc ty' valTy
+
           when typed (checkMemTypeCompatibility loc lhsTy valTy)
           Setup.addPointsTo (LLVMPointsTo loc cond ptr $ ConcreteSizeValue val)
 
