@@ -256,7 +256,6 @@ import Data.Maybe
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM, maximum)
 import Data.HashMap.Strict (HashMap)
-import Data.List.NonEmpty ( NonEmpty(..) )
 import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -330,12 +329,6 @@ insertTFM tf x tfm =
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building Terms.
 
-data SAWNamingEnv = SAWNamingEnv
-  { resolvedNames :: !(Map VarIndex NameInfo)
-  , absoluteNames :: !(Map URI VarIndex)
-  , aliasNames    :: !(Map Text (Set VarIndex))
-  }
-
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scTermF          :: TermF Term -> IO Term
@@ -350,19 +343,6 @@ scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 -- | Create a 'Term' from an 'ExtCns'.
 scExtCns :: SharedContext -> ExtCns Term -> IO Term
 scExtCns sc ec = scFlatTermF sc (ExtCns ec)
-
-scFreshNameURI :: Text -> VarIndex -> URI
-scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed name URI", show nm, show i]) $
-  do sch <- mkScheme "fresh"
-     nm' <- mkPathPiece (if Text.null nm then "_" else nm)
-     i'  <- mkFragment (Text.pack (show i))
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left False -- relative path
-       , uriPath   = Just (False, (nm' :| []))
-       , uriQuery  = []
-       , uriFragment = Just i'
-       }
 
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException

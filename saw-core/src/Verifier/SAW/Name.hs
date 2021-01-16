@@ -39,6 +39,9 @@ module Verifier.SAW.Name
     -- * ExtCns
   , VarIndex
   , ExtCns(..)
+  , scFreshNameURI
+    -- * Naming Environments
+  , SAWNamingEnv(..)
   ) where
 
 import           Control.Exception (assert)
@@ -46,7 +49,10 @@ import           Data.Char
 import           Data.Hashable
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
+import           Data.Map (Map)
+-- import qualified Data.Map as Map
 import           Data.Maybe
+import           Data.Set (Set)
 import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
@@ -223,3 +229,25 @@ instance Ord (ExtCns e) where
 
 instance Hashable (ExtCns e) where
   hashWithSalt x ec = hashWithSalt x (ecVarIndex ec)
+
+scFreshNameURI :: Text -> VarIndex -> URI
+scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed name URI", show nm, show i]) $
+  do sch <- mkScheme "fresh"
+     nm' <- mkPathPiece (if Text.null nm then "_" else nm)
+     i'  <- mkFragment (Text.pack (show i))
+     pure URI
+       { uriScheme = Just sch
+       , uriAuthority = Left False -- relative path
+       , uriPath   = Just (False, (nm' :| []))
+       , uriQuery  = []
+       , uriFragment = Just i'
+       }
+
+
+-- Naming Environments ---------------------------------------------------------
+
+data SAWNamingEnv = SAWNamingEnv
+  { resolvedNames :: !(Map VarIndex NameInfo)
+  , absoluteNames :: !(Map URI VarIndex)
+  , aliasNames    :: !(Map Text (Set VarIndex))
+  }
