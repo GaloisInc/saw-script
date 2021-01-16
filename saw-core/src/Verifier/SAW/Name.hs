@@ -9,8 +9,11 @@ Portability : non-portable (language extensions)
 Various kinds of names.
 -}
 
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveLift #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -33,6 +36,9 @@ module Verifier.SAW.Name
   , moduleIdentToURI
   , nameURI
   , nameAliases
+    -- * ExtCns
+  , VarIndex
+  , ExtCns(..)
   ) where
 
 import           Control.Exception (assert)
@@ -44,6 +50,7 @@ import           Data.Maybe
 import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import           Data.Word
 import           GHC.Generics (Generic)
 import           Text.URI
 import qualified Language.Haskell.TH.Syntax as TH
@@ -193,3 +200,26 @@ moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constru
        , uriFragment = Nothing
        }
 
+
+-- External Constants ----------------------------------------------------------
+
+type VarIndex = Word64
+
+-- | An external constant with a name.
+-- Names are not necessarily unique, but the var index should be.
+data ExtCns e =
+  EC
+  { ecVarIndex :: !VarIndex
+  , ecName :: !NameInfo
+  , ecType :: !e
+  }
+  deriving (Show, Functor, Foldable, Traversable)
+
+instance Eq (ExtCns e) where
+  x == y = ecVarIndex x == ecVarIndex y
+
+instance Ord (ExtCns e) where
+  compare x y = compare (ecVarIndex x) (ecVarIndex y)
+
+instance Hashable (ExtCns e) where
+  hashWithSalt x ec = hashWithSalt x (ecVarIndex ec)

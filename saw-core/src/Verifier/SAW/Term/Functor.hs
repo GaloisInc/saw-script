@@ -131,30 +131,6 @@ maxSort [] = propSort
 maxSort ss = maximum ss
 
 
--- External Constants ----------------------------------------------------------
-
-type VarIndex = Word64
-
--- | An external constant with a name.
--- Names are not necessarily unique, but the var index should be.
-data ExtCns e =
-  EC
-  { ecVarIndex :: !VarIndex
-  , ecName :: !NameInfo
-  , ecType :: !e
-  }
-  deriving (Show, Functor, Foldable, Traversable)
-
-instance Eq (ExtCns e) where
-  x == y = ecVarIndex x == ecVarIndex y
-
-instance Ord (ExtCns e) where
-  compare x y = compare (ecVarIndex x) (ecVarIndex y)
-
-instance Hashable (ExtCns e) where
-  hashWithSalt x ec = hashWithSalt x (ecVarIndex ec)
-
-
 -- Flat Terms ------------------------------------------------------------------
 
 -- | The "flat terms", which are the built-in atomic constructs of SAW core.
