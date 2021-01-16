@@ -241,16 +241,25 @@ evalGlobal' ::
   forall l. (VMonadLazy l, MonadFix (EvalM l), Show (Extra l)) =>
   ModuleMap -> Map Ident (Value l) ->
   (TermF Term -> ExtCns (TValue l) -> MValue l) ->
-  (TermF Term -> ExtCns (TValue l) -> Maybe (EvalM l (Value l))) ->
+  (TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)) ->
   EvalM l (SimulatorConfig l)
 evalGlobal' modmap prims extcns uninterpreted = do
    checkPrimitives modmap prims
    mfix $ \cfg -> do
      thunks <- mapM delay (globals cfg)
-     return (SimulatorConfig (global thunks) extcns uninterpreted modmap)
+     return (SimulatorConfig (global thunks) extcns uninterpreted' modmap)
   where
     ms :: [Module]
     ms = HashMap.elems modmap
+
+    uninterpreted' :: TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)
+    uninterpreted' tf ec =
+      case uninterpreted tf ec of
+        Just v -> Just v
+        Nothing ->
+          case ecName ec of
+            ModuleIdentifier ident -> pure <$> Map.lookup ident prims
+            _ -> Nothing
 
     global :: HashMap Ident (Thunk l) -> Ident -> MValue l
     global thunks ident =

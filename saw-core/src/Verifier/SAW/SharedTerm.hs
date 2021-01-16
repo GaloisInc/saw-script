@@ -67,6 +67,7 @@ module Verifier.SAW.SharedTerm
   , scFreshEC
   , scExtCns
   , scGlobalDef
+  , scRegisterGlobal
     -- ** Recursors and datatypes
   , scRecursorElimTypes
   , scRecursorRetTypeType
@@ -332,6 +333,7 @@ data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scTermF          :: TermF Term -> IO Term
   , scNamingEnv      :: IORef SAWNamingEnv
+  , scGlobalEnv      :: MVar (HashMap Ident Term)
   , scFreshGlobalVar :: IO VarIndex
   }
 
@@ -400,7 +402,21 @@ scFreshGlobal sc x tp = scExtCns sc =<< scFreshEC sc x tp
 -- | Returns shared term associated with ident.
 -- Does not check module namespace.
 scGlobalDef :: SharedContext -> Ident -> IO Term
-scGlobalDef sc ident = scFlatTermF sc (GlobalDef ident)
+scGlobalDef sc ident =
+  do m <- readMVar (scGlobalEnv sc)
+     case HMap.lookup ident m of
+       Nothing -> fail ("Could not find global: " ++ show ident)
+       Just t -> pure t
+
+scRegisterGlobal :: SharedContext -> Ident -> Term -> IO ()
+scRegisterGlobal sc ident t =
+  do m <- takeMVar (scGlobalEnv sc)
+     case HMap.lookup ident m of
+       Just _ ->
+         do putMVar (scGlobalEnv sc) m
+            fail ("Global identifier already registered: " ++ show ident)
+       Nothing ->
+         do putMVar (scGlobalEnv sc) $! HMap.insert ident t m
 
 -- | Create a function application term.
 scApply :: SharedContext
@@ -2096,6 +2112,7 @@ mkSharedContext :: IO SharedContext
 mkSharedContext = do
   vr <- newMVar 0 -- Reference for getting variables.
   cr <- newMVar emptyAppCache
+  gr <- newMVar HMap.empty
   let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
   mod_map_ref <- newIORef HMap.empty
   envRef <- newIORef emptySAWNamingEnv
@@ -2104,6 +2121,7 @@ mkSharedContext = do
            , scTermF = getTerm cr
            , scFreshGlobalVar = freshGlobalVar
            , scNamingEnv = envRef
+           , scGlobalEnv = gr
            }
 
 useChangeCache :: C m => Cache m k (Change v) -> k -> ChangeT m v -> ChangeT m v
