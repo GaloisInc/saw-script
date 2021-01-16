@@ -89,7 +89,7 @@ let s20_encrypt32 n = do {
 };
 
 let main : TopLevel () = do {
-    m      <- load_module "salsa20.bc";
+    m      <- llvm_load_module "salsa20.bc";
     qr     <- llvm_verify m "s20_quarterround" []      false quarterround_setup   abc;
     rr     <- llvm_verify m "s20_rowround"     [qr]    false rowround_setup       abc;
     cr     <- llvm_verify m "s20_columnround"  [qr]    false columnround_setup    abc;
