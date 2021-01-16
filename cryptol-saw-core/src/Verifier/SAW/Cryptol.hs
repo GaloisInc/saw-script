@@ -1329,7 +1329,7 @@ proveEq sc env t1 t2
            a2' <- importType sc env a2
            num <- scDataTypeApp sc "Cryptol.Num" []
            nEq <- if n1 == n2
-                  then scGlobalApply sc "Prelude.Refl" [num, n1']
+                  then scCtorApp sc "Prelude.Refl" [num, n1']
                   else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
            aEq <- proveEq sc env a1 a2
            if a1 == a2
