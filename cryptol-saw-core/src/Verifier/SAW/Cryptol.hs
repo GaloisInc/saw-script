@@ -43,7 +43,7 @@ import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
-  ( Ident, PrimIdent(..), packIdent, unpackIdent, prelPrim, floatPrim, arrayPrim
+  ( Ident, PrimIdent(..), mkIdent, unpackIdent, prelPrim, floatPrim, arrayPrim
   , ModName, modNameToText, identText, interactiveName
   )
 import qualified Cryptol.Utils.RecordMap as C
@@ -296,6 +296,9 @@ importPropsType sc env (prop : props) ty
 
 nameToString :: C.Name -> String
 nameToString = C.unpackIdent . C.nameIdent
+
+nameToFieldName :: C.Name -> FieldName
+nameToFieldName = C.identText . C.nameIdent
 
 tparamToString :: C.TParam -> String
 --tparamToString tp = maybe "_" nameToString (C.tpName tp)
@@ -1226,12 +1229,12 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      v0 <- scLocalVar sc 0
 
      -- build a list of projections from a record variable
-     vm <- traverse (scRecordSelect sc v0 . nameToString . C.dName) dm
+     vm <- traverse (scRecordSelect sc v0 . nameToFieldName . C.dName) dm
 
      -- the types of the declarations
      tm <- traverse (importSchema sc env . C.dSignature) dm
      -- the type of the recursive record
-     rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToString tm)
+     rect <- scRecordType sc (Map.assocs $ Map.mapKeys nameToFieldName tm)
 
      let env1 = liftEnv env
      let env2 = env1 { envE = Map.union (fmap (\v -> (v, 0)) vm) (envE env1)
@@ -1251,7 +1254,7 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      em <- traverse extractDeclExpr dm
 
      -- the body of the recursive record
-     recv <- scRecord sc (Map.mapKeys nameToString em)
+     recv <- scRecord sc (Map.mapKeys nameToFieldName em)
 
      -- build a lambda from the record body...
      f <- scLambda sc "fixRecord" rect recv
@@ -1262,7 +1265,7 @@ importDeclGroup isTopLevel sc env (C.Recursive decls) =
      -- finally, build projections from the fixed record to shove into the environment
      -- if toplevel, then wrap each binding with a Constant constructor
      let mkRhs d t =
-           do let s = nameToString (C.dName d)
+           do let s = nameToFieldName (C.dName d)
               r <- scRecordSelect sc rhs s
               if isTopLevel then
                 do nmi <- importName (C.dName d)
@@ -1643,7 +1646,7 @@ exportRecordValue fields v =
     ((n, t) : ts, SC.VPair x y) ->
       (n, V.ready $ exportValue t (run x)) : exportRecordValue ts (run y)
     (_, SC.VRecordValue (alistAllFields
-                         (map (C.unpackIdent . fst) fields) -> Just ths)) ->
+                         (map (C.identText . fst) fields) -> Just ths)) ->
       zipWith (\(n,t) x -> (n, V.ready $ exportValue t (run x))) fields ths
     _                              -> error $ "exportValue: expected record"
   where
@@ -1666,7 +1669,7 @@ exportFirstOrderValue fv =
       where len = toInteger (length vs)
     FOVArray{}  -> error $ "exportFirstOrderValue: unsupported FOT Array"
     FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
-    FOVRec vm   -> V.VRecord $ C.recordFromFields [ (C.packIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
+    FOVRec vm   -> V.VRecord $ C.recordFromFields [ (C.mkIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
 
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
 importFirstOrderValue t0 v0 = V.runEval (go t0 v0)
@@ -1680,14 +1683,14 @@ importFirstOrderValue t0 v0 = V.runEval (go t0 v0)
     (FOTTuple tys   , V.VTuple xs)     -> FOVTuple <$> traverse (\(ty, x) -> go ty =<< x) (zip tys xs)
     (FOTRec fs      , V.VRecord xs)    ->
         do xs' <- Map.fromList <$> mapM importField (C.canonicalFields xs)
-           let missing = Set.difference (Map.keysSet fs) (Set.fromList (map C.unpackIdent (C.displayOrder xs)))
+           let missing = Set.difference (Map.keysSet fs) (Set.fromList (map C.identText (C.displayOrder xs)))
            unless (Set.null missing)
                   (panic "importFirstOrderValue" $
                          ["Missing fields while importing finite value:"] ++ (map show (Set.toList missing)))
            return $ FOVRec $ xs'
       where
-       importField :: (C.Ident, V.Eval V.Value) -> V.Eval (String, FirstOrderValue)
-       importField (C.unpackIdent -> nm,x)
+       importField :: (C.Ident, V.Eval V.Value) -> V.Eval (FieldName, FirstOrderValue)
+       importField (C.identText -> nm, x)
          | Just ty <- Map.lookup nm fs = do
                 x' <- go ty =<< x
                 return (nm, x')

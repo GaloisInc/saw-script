@@ -618,7 +618,7 @@ parseUninterpreted cws nm ty =
       -> (VRecordValue <$>
           mapM (\(f,tp) ->
                  (f,) <$> ready <$>
-                 parseUninterpreted cws (nm ++ "." ++ f) tp) elem_tps)
+                 parseUninterpreted cws (nm ++ "." ++ Text.unpack f) tp) elem_tps)
 
     _ -> fail $ "could not create uninterpreted type for " ++ show ty
 
@@ -699,7 +699,7 @@ nextId = ST.get >>= (\s-> modify (+1) >> return ("x" ++ show s))
 --unzipMap :: Map k (a, b) -> (Map k a, Map k b)
 --unzipMap m = (fmap fst m, fmap snd m)
 
-myfun ::(Map String (Labeler, Symbolic SValue)) -> (Map String Labeler, Map String (Symbolic SValue))
+myfun ::(Map FieldName (Labeler, Symbolic SValue)) -> (Map FieldName Labeler, Map FieldName (Symbolic SValue))
 myfun = fmap fst A.&&& fmap snd
 
 newVarsForType :: TValue SBV -> String -> StateT Int IO (Maybe Labeler, Symbolic SValue)
@@ -728,8 +728,8 @@ newVars (FOTTuple ts) = do
   (labels, vals) <- V.unzip <$> traverse newVars (V.fromList ts)
   return (TupleLabel labels, vTuple <$> traverse (fmap ready) (V.toList vals))
 newVars (FOTRec tm) = do
-  (labels, vals) <- myfun <$> (traverse newVars tm :: StateT Int IO (Map String (Labeler, Symbolic SValue)))
-  return (RecLabel labels, vRecord <$> traverse (fmap ready) (vals :: (Map String (Symbolic SValue))))
+  (labels, vals) <- myfun <$> (traverse newVars tm :: StateT Int IO (Map FieldName (Labeler, Symbolic SValue)))
+  return (RecLabel labels, vRecord <$> traverse (fmap ready) (vals :: (Map FieldName (Symbolic SValue))))
 
 ------------------------------------------------------------
 -- Code Generation

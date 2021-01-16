@@ -18,6 +18,7 @@ import qualified Control.Monad.State as S
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Numeric.Natural (Natural)
 
 import Prettyprinter hiding (Doc)
@@ -100,7 +101,7 @@ instance Show FirstOrderValue where
       FOVRec vm   -> showString "{" . commaSep (map showField (Map.assocs vm)) . showString "}"
     where
       commaSep ss = foldr (.) id (intersperse (showString ",") ss)
-      showField (field, v) = showString field . showString " = " . shows v
+      showField (field, v) = showString (Text.unpack field) . showString " = " . shows v
 
 ppFiniteValue :: PPOpts -> FiniteValue -> SawDoc
 ppFiniteValue opts fv = ppFirstOrderValue opts (toFirstOrderValue fv)
