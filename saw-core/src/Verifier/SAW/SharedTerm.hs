@@ -276,6 +276,7 @@ import Text.URI
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
+import Verifier.SAW.Name
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Term.Functor
@@ -363,18 +364,6 @@ scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed 
        , uriFragment = Just i'
        }
 
-moduleIdentToURI :: Ident -> URI
-moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constructed ident URI", show ident]) $
-  do sch  <- mkScheme "sawcore"
-     path <- mapM mkPathPiece (identPieces ident)
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left True -- absolute path
-       , uriPath   = Just (False, path)
-       , uriQuery  = []
-       , uriFragment = Nothing
-       }
-
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
 instance Show DuplicateNameException where
@@ -384,13 +373,8 @@ instance Show DuplicateNameException where
 scRegisterName :: SharedContext -> VarIndex -> NameInfo -> IO ()
 scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
   where
-    uri = case nmi of
-            ImportedName x _ -> x
-            ModuleIdentifier x -> moduleIdentToURI x
-
-    aliases = case nmi of
-                ImportedName x xs -> render x : xs
-                ModuleIdentifier x  -> [identBaseName x, identText x, render uri]
+    uri = nameURI nmi
+    aliases = render uri : nameAliases nmi
 
     insertAlias :: Text -> Map Text (Set VarIndex) -> Map Text (Set VarIndex)
     insertAlias x m = Map.alter (Just . maybe (Set.singleton i) (Set.insert i)) x m

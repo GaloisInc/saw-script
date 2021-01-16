@@ -64,6 +64,7 @@ library
      Verifier.SAW.Grammar
      Verifier.SAW.Lexer
      Verifier.SAW.Module
+     Verifier.SAW.Name
      Verifier.SAW.ParserUtils
      Verifier.SAW.Position
      Verifier.SAW.Prelude
