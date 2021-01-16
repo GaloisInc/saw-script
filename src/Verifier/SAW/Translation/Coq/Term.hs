@@ -34,6 +34,7 @@ import qualified Data.IntMap                                   as IntMap
 import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
 import qualified Data.Set                                      as Set
+import qualified Data.Text                                     as Text
 import           Prelude                                       hiding (fail)
 import           Prettyprinter
 
@@ -241,7 +242,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
               do rest <- rest_m
                  tp_trans <- translateTerm tp
                  return (Coq.App (Coq.Var "RecordTypeCons")
-                         [Coq.StringLit name, tp_trans, rest]))
+                         [Coq.StringLit (Text.unpack name), tp_trans, rest]))
       (return (Coq.Var "RecordTypeNil"))
       (sortOn fst fs)
 
@@ -254,13 +255,13 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
               do rest <- rest_m
                  trm_trans <- translateTerm trm
                  return (Coq.App (Coq.Var "RecordCons")
-                         [Coq.StringLit name, trm_trans, rest]))
+                         [Coq.StringLit (Text.unpack name), trm_trans, rest]))
       (return (Coq.Var "RecordNil"))
       (sortOn fst fs)
 
     RecordProj r f -> do
       r_trans <- translateTerm r
-      return (Coq.App (Coq.Var "RecordProj") [r_trans, Coq.StringLit f])
+      return (Coq.App (Coq.Var "RecordProj") [r_trans, Coq.StringLit (Text.unpack f)])
 
 -- | Recognizes an $App (App "Cryptol.seq" n) x$ and returns ($n$, $x$).
 asSeq :: Recognizer Term (Term, Term)
