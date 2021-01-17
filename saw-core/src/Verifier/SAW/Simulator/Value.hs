@@ -27,6 +27,7 @@ import Control.Monad (foldM, liftM, mapM)
 import Data.Kind (Type)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -59,7 +60,7 @@ data Value l
   | VInt (VInt l)
   | VIntMod !Natural (VInt l)
   | VArray (VArray l)
-  | VString !String
+  | VString !Text
   | VFloat !Float
   | VDouble !Double
   | VRecordValue ![(FieldName, Thunk l)]

@@ -75,6 +75,7 @@ import Control.Lens
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Text (Text)
 import Numeric.Natural (Natural)
 
 import Verifier.SAW.Term.Functor
@@ -287,7 +288,7 @@ asUnsignedConcreteBv term = do
   (n :*: v) <- asBvNat term
   return $ mod v (2 ^ n)
 
-asStringLit :: Recognizer Term String
+asStringLit :: Recognizer Term Text
 asStringLit t = do StringLit i <- asFTermF t; return i
 
 asLambda :: Recognizer Term (LocalName, Term, Term)

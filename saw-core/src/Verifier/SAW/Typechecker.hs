@@ -264,7 +264,7 @@ typeInferCompleteTerm (Un.TypeConstraint t _ tp) =
 typeInferCompleteTerm (Un.NatLit _ i) =
   typeInferComplete (NatLit i :: FlatTermF TypedTerm)
 typeInferCompleteTerm (Un.StringLit _ str) =
-  typeInferComplete (StringLit str :: FlatTermF TypedTerm)
+  typeInferComplete (StringLit (Text.pack str) :: FlatTermF TypedTerm)
 typeInferCompleteTerm (Un.VecLit _ []) = throwTCError EmptyVectorLit
 typeInferCompleteTerm (Un.VecLit _ ts) =
   do typed_ts <- mapM typeInferComplete ts

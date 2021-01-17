@@ -189,7 +189,7 @@ data FlatTermF e
     -- | Array value includes type of elements followed by elements.
   | ArrayValue e (Vector e)
     -- | String literal
-  | StringLit !String
+  | StringLit !Text
 
     -- | An external constant with a name.
   | ExtCns !(ExtCns e)
