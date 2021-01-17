@@ -875,7 +875,7 @@ w4SolveAny sym sc ps unintSet t = give sym $ do
   ty <- eval =<< scTypeOf sc t
 
   -- get the names of the arguments to the function
-  let argNames = map fst (fst (R.asLambdaList t))
+  let argNames = map (Text.unpack . fst) (fst (R.asLambdaList t))
   let moreNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
 
   -- and their types
@@ -1082,7 +1082,7 @@ w4EvalAny sym sc ps unintSet t =
      ty <- eval =<< scTypeOf sc t
 
      -- get the names of the arguments to the function
-     let lamNames = map fst (fst (R.asLambdaList t))
+     let lamNames = map (Text.unpack . fst) (fst (R.asLambdaList t))
      let varNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
      let argNames = zipWith (++) varNames (map ("_" ++) lamNames ++ repeat "")
 

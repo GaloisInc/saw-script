@@ -73,6 +73,7 @@ module Verifier.SAW.TypedAST
  , isIdent
  , DeBruijnIndex
  , FieldName
+ , LocalName
  , ExtCns(..)
  , VarIndex
    -- * Utility functions

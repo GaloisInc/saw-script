@@ -669,7 +669,7 @@ sbvSolve :: SharedContext
 sbvSolve sc addlPrims unintSet t = do
   let eval = sbvSolveBasic sc addlPrims unintSet
   ty <- eval =<< scTypeOf sc t
-  let lamNames = map fst (fst (R.asLambdaList t))
+  let lamNames = map (Text.unpack . fst) (fst (R.asLambdaList t))
   let varNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
   let argNames = zipWith (++) varNames (map ("_" ++) lamNames ++ repeat "")
   argTs <- asPredType (toTValue ty)

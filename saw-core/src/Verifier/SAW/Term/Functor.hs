@@ -34,6 +34,7 @@ module Verifier.SAW.Term.Functor
     -- * Data types and definitions
   , DeBruijnIndex
   , FieldName
+  , LocalName
   , ExtCns(..)
   , VarIndex
   , NameInfo(..)
@@ -83,6 +84,7 @@ import qualified Verifier.SAW.TermNet as Net
 
 type DeBruijnIndex = Int
 type FieldName = Text
+type LocalName = Text
 
 instance (Hashable k, Hashable a) => Hashable (Map k a) where
     hashWithSalt x m = hashWithSalt x (Map.assocs m)
@@ -266,9 +268,9 @@ data TermF e
       -- ^ The atomic, or builtin, term constructs
     | App !e !e
       -- ^ Applications of functions
-    | Lambda !String !e !e
+    | Lambda !LocalName !e !e
       -- ^ Function abstractions
-    | Pi !String !e !e
+    | Pi !LocalName !e !e
       -- ^ The type of a (possibly) dependent function
     | LocalVar !DeBruijnIndex
       -- ^ Local variables are referenced by deBruijn index.

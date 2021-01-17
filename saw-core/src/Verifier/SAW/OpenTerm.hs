@@ -107,20 +107,20 @@ openTermTopVar =
 
 -- | Build an open term inside a binder of a variable with the given name and
 -- type, where the binder is represented as a Haskell function on 'OpenTerm's
-bindOpenTerm :: String -> TypedTerm -> (OpenTerm -> OpenTerm) -> TCM TypedTerm
+bindOpenTerm :: LocalName -> TypedTerm -> (OpenTerm -> OpenTerm) -> TCM TypedTerm
 bindOpenTerm x tp body_f =
   do tp_whnf <- typeCheckWHNF $ typedVal tp
      withVar x tp_whnf (openTermTopVar >>= (unOpenTerm . body_f))
 
 -- | Build a lambda abstraction as an 'OpenTerm'
-lambdaOpenTerm :: String -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
+lambdaOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
 lambdaOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
      body <- bindOpenTerm x tp body_f
      typeInferComplete $ Lambda x tp body
 
 -- | Build a Pi abstraction as an 'OpenTerm'
-piOpenTerm :: String -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
+piOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
 piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
      body <- bindOpenTerm x tp body_f
@@ -154,9 +154,10 @@ dedupOpenTermM (OpenTerm trmM) =
 -- 'OpenTerm's that also returns an auxiliary value. Returns the normalized type
 -- and the body, along with the auxiliary result returned by the body-generating
 -- function.
-bindOpenTermAuxM :: String -> OpenTerm ->
-                    (OpenTerm -> OpenTermM (OpenTerm, a)) ->
-                    OpenTermM (TypedTerm, TypedTerm, a)
+bindOpenTermAuxM ::
+  LocalName -> OpenTerm ->
+  (OpenTerm -> OpenTermM (OpenTerm, a)) ->
+  OpenTermM (TypedTerm, TypedTerm, a)
 bindOpenTermAuxM x (OpenTerm tpM) body_f =
   OpenTermM $
   do TypedTerm tp tp_tp <- tpM
@@ -167,30 +168,34 @@ bindOpenTermAuxM x (OpenTerm tpM) body_f =
      return (TypedTerm tp_whnf tp_tp, body, a)
 
 -- | Build a lambda abstraction in the 'OpenTermM' monad
-lambdaOpenTermM :: String -> OpenTerm -> (OpenTerm -> OpenTermM OpenTerm) ->
-                   OpenTermM OpenTerm
+lambdaOpenTermM ::
+  LocalName -> OpenTerm -> (OpenTerm -> OpenTermM OpenTerm) ->
+  OpenTermM OpenTerm
 lambdaOpenTermM x tp body_f =
   fst <$> lambdaOpenTermAuxM x tp (body_f >=> (\t -> return (t, ())))
 
 -- | Build a pi abstraction in the 'OpenTermM' monad
-piOpenTermM :: String -> OpenTerm -> (OpenTerm -> OpenTermM OpenTerm) ->
-               OpenTermM OpenTerm
+piOpenTermM ::
+  LocalName -> OpenTerm -> (OpenTerm -> OpenTermM OpenTerm) ->
+  OpenTermM OpenTerm
 piOpenTermM x tp body_f =
   fst <$> piOpenTermAuxM x tp (body_f >=> (\t -> return (t, ())))
 
 -- | Build a lambda abstraction with an auxiliary return value in the
 -- 'OpenTermM' monad
-lambdaOpenTermAuxM :: String -> OpenTerm ->
-                      (OpenTerm -> OpenTermM (OpenTerm, a)) ->
-                      OpenTermM (OpenTerm, a)
+lambdaOpenTermAuxM ::
+  LocalName -> OpenTerm ->
+  (OpenTerm -> OpenTermM (OpenTerm, a)) ->
+  OpenTermM (OpenTerm, a)
 lambdaOpenTermAuxM x tp body_f =
   do (tp', body, a) <- bindOpenTermAuxM x tp body_f
      return (OpenTerm (typeInferComplete $ Lambda x tp' body), a)
 
 -- | Build a pi abstraction with an auxiliary return value in the 'OpenTermM'
 -- monad
-piOpenTermAuxM :: String -> OpenTerm -> (OpenTerm -> OpenTermM (OpenTerm, a)) ->
-                  OpenTermM (OpenTerm, a)
+piOpenTermAuxM ::
+  LocalName -> OpenTerm -> (OpenTerm -> OpenTermM (OpenTerm, a)) ->
+  OpenTermM (OpenTerm, a)
 piOpenTermAuxM x tp body_f =
   do (tp', body, a) <- bindOpenTermAuxM x tp body_f
      return (OpenTerm (typeInferComplete $ Pi x tp' body), a)

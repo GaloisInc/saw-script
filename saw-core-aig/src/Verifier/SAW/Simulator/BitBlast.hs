@@ -463,7 +463,7 @@ asAIGType :: SharedContext -> Term -> IO [(String, Term)]
 asAIGType sc t = do
   t' <- scWhnf sc t
   case t' of
-    (R.asPi -> Just (n, t1, t2)) -> ((n, t1) :) <$> asAIGType sc t2
+    (R.asPi -> Just (n, t1, t2)) -> ((Text.unpack n, t1) :) <$> asAIGType sc t2
     (R.asBoolType -> Just ())    -> return []
     (R.asVecType -> Just _)      -> return []
     (R.asTupleType -> Just _)    -> return []

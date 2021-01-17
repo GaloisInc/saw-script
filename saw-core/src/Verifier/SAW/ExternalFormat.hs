@@ -124,8 +124,8 @@ scWriteExternal t0 =
     writeTermF tf =
       case tf of
         App e1 e2      -> pure $ unwords ["App", show e1, show e2]
-        Lambda s t e   -> pure $ unwords ["Lam", s, show t, show e]
-        Pi s t e       -> pure $ unwords ["Pi", s, show t, show e]
+        Lambda s t e   -> pure $ unwords ["Lam", Text.unpack s, show t, show e]
+        Pi s t e       -> pure $ unwords ["Pi", Text.unpack s, show t, show e]
         LocalVar i     -> pure $ unwords ["Var", show i]
         Constant ec e  ->
             do stashName ec
@@ -225,8 +225,8 @@ scReadExternal sc input =
     parse tokens =
       case tokens of
         ["App", e1, e2]     -> App <$> readIdx e1 <*> readIdx e2
-        ["Lam", x, t, e]    -> Lambda x <$> readIdx t <*> readIdx e
-        ["Pi", s, t, e]     -> Pi s <$> readIdx t <*> readIdx e
+        ["Lam", x, t, e]    -> Lambda (Text.pack x) <$> readIdx t <*> readIdx e
+        ["Pi", s, t, e]     -> Pi (Text.pack s) <$> readIdx t <*> readIdx e
         ["Var", i]          -> pure $ LocalVar (read i)
         ["Constant",i,t,e]  -> Constant <$> readEC i t <*> readIdx e
         ["Global", x]       -> pure $ FTermF (GlobalDef (parseIdent x))

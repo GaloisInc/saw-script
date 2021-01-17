@@ -43,7 +43,7 @@ import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
-  ( Ident, PrimIdent(..), mkIdent, unpackIdent, prelPrim, floatPrim, arrayPrim
+  ( Ident, PrimIdent(..), mkIdent, prelPrim, floatPrim, arrayPrim
   , ModName, modNameToText, identText, interactiveName
   )
 import qualified Cryptol.Utils.RecordMap as C
@@ -58,7 +58,7 @@ import Verifier.SAW.Prim (BitVector(..))
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.MonadLazy (force)
-import Verifier.SAW.TypedAST (mkSort, mkModuleName, FieldName)
+import Verifier.SAW.TypedAST (mkSort, mkModuleName, FieldName, LocalName)
 
 import GHC.Stack
 
@@ -294,15 +294,14 @@ importPropsType sc env (prop : props) ty
        t <- importPropsType sc env props ty
        scFun sc p t
 
-nameToString :: C.Name -> String
-nameToString = C.unpackIdent . C.nameIdent
+nameToLocalName :: C.Name -> LocalName
+nameToLocalName = C.identText . C.nameIdent
 
 nameToFieldName :: C.Name -> FieldName
 nameToFieldName = C.identText . C.nameIdent
 
-tparamToString :: C.TParam -> String
---tparamToString tp = maybe "_" nameToString (C.tpName tp)
-tparamToString tp = maybe ("u" ++ show (C.tpUnique tp)) nameToString (C.tpName tp)
+tparamToLocalName :: C.TParam -> LocalName
+tparamToLocalName tp = maybe (Text.pack ("u" ++ show (C.tpUnique tp))) nameToLocalName (C.tpName tp)
 
 importPolyType :: SharedContext -> Env -> [C.TParam] -> [C.Prop] -> C.Type -> IO Term
 importPolyType sc env [] props ty = importPropsType sc env props ty
@@ -310,7 +309,7 @@ importPolyType sc env (tp : tps) props ty =
   do k <- importKind sc (C.tpKind tp)
      env' <- bindTParam sc tp env
      t <- importPolyType sc env' tps props ty
-     scPi sc (tparamToString tp) k t
+     scPi sc (tparamToLocalName tp) k t
 
 importSchema :: SharedContext -> Env -> C.Schema -> IO Term
 importSchema sc env (C.Forall tparams props ty) = importPolyType sc env tparams props ty
@@ -870,7 +869,7 @@ importExpr sc env expr =
       do env' <- bindTParam sc tp env
          k <- importKind sc (C.tpKind tp)
          e' <- importExpr sc env' e
-         scLambda sc (tparamToString tp) k e'
+         scLambda sc (tparamToLocalName tp) k e'
 
     C.ETApp e t ->
       do e' <- importExpr sc env e
@@ -891,7 +890,7 @@ importExpr sc env expr =
       do t' <- importType sc env t
          env' <- bindName sc x (C.tMono t) env
          e' <- importExpr sc env' e
-         scLambda sc (nameToString x) t' e'
+         scLambda sc (nameToLocalName x) t' e'
 
     C.EProofAbs prop e
       | isErasedProp prop -> importExpr sc env e
@@ -958,7 +957,7 @@ importExpr' sc env schema expr =
          env' <- bindTParam sc tp env
          k <- importKind sc (C.tpKind tp)
          e' <- importExpr' sc env' schema' e
-         scLambda sc (tparamToString tp) k e'
+         scLambda sc (tparamToLocalName tp) k e'
 
     C.EAbs x _ e ->
       do ty <- the (C.isMono schema)
@@ -966,7 +965,7 @@ importExpr' sc env schema expr =
          a' <- importType sc env a
          env' <- bindName sc x (C.tMono a) env
          e' <- importExpr' sc env' (C.tMono b) e
-         scLambda sc (nameToString x) a' e'
+         scLambda sc (nameToLocalName x) a' e'
 
     C.EProofAbs _ e ->
       do (prop, schema') <-
@@ -1203,7 +1202,7 @@ importDeclGroup isTopLevel sc env (C.Recursive [decl]) =
       do env1 <- bindName sc (C.dName decl) (C.dSignature decl) env
          t' <- importSchema sc env (C.dSignature decl)
          e' <- importExpr' sc env1 (C.dSignature decl) expr
-         let x = nameToString (C.dName decl)
+         let x = nameToLocalName (C.dName decl)
          f' <- scLambda sc x t' e'
          rhs <- scGlobalApply sc "Prelude.fix" [t', f']
          rhs' <- if isTopLevel then
@@ -1409,7 +1408,7 @@ lambdaTuple sc env ty expr argss ((x, t) : args) =
   do a <- importType sc env t
      env' <- bindName sc x (C.Forall [] [] t) env
      e <- lambdaTuple sc env' ty expr argss args
-     f <- scLambda sc (nameToString x) a e
+     f <- scLambda sc (nameToLocalName x) a e
      if null args
         then return f
         else do b <- importType sc env (tNestedTuple (map snd args))
@@ -1447,7 +1446,7 @@ importMatches sc env (C.From name _len _eltty expr : matches) = do
   (body, len2, ty2, args) <- importMatches sc env' matches
   n <- importType sc env len2
   b <- importType sc env ty2
-  f <- scLambda sc (nameToString name) a body
+  f <- scLambda sc (nameToLocalName name) a body
   result <- scGlobalApply sc "Cryptol.from" [a, b, m, n, xs, f]
   return (result, C.tMul len1 len2, C.tTuple [ty1, ty2], (name, ty1) : args)
 
@@ -1477,7 +1476,7 @@ importMatches sc env (C.Let decl : matches) =
      (body, len, ty2, args) <- importMatches sc env' matches
      n <- importType sc env len
      b <- importType sc env ty2
-     f <- scLambda sc (nameToString (C.dName decl)) a body
+     f <- scLambda sc (nameToLocalName (C.dName decl)) a body
      result <- scGlobalApply sc "Cryptol.mlet" [a, b, n, e, f]
      return (result, len, C.tTuple [ty1, ty2], (C.dName decl, ty1) : args)
 

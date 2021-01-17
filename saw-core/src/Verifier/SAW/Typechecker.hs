@@ -35,6 +35,7 @@ import Control.Applicative
 #endif
 import Control.Monad.State
 import Data.List (findIndex)
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 
 import Prettyprinter hiding (Doc)
@@ -61,8 +62,9 @@ inferCompleteTerm sc mnm t = inferCompleteTermCtx sc mnm [] t
 
 -- | Infer the type of an untyped term and complete it to a 'Term' in a given
 -- typing context
-inferCompleteTermCtx :: SharedContext -> Maybe ModuleName -> [(String,Term)] ->
-                        Un.Term -> IO (Either SawDoc Term)
+inferCompleteTermCtx ::
+  SharedContext -> Maybe ModuleName -> [(LocalName, Term)] ->
+  Un.Term -> IO (Either SawDoc Term)
 inferCompleteTermCtx sc mnm ctx t =
   do res <- runTCM (typeInferComplete t) sc mnm ctx
      case res of
@@ -95,7 +97,7 @@ inferResolveNameApp :: String -> [TypedTerm] -> TCM TypedTerm
 inferResolveNameApp n args =
   do ctx <- askCtx
      m <- getModule
-     case (findIndex ((== n) . fst) ctx, resolveName m n) of
+     case (findIndex ((== Text.pack n) . fst) ctx, resolveName m n) of
        (Just i, _) ->
          do t <- typeInferComplete (LocalVar i :: TermF TypedTerm)
             inferApplyAll t args
@@ -201,7 +203,7 @@ typeInferCompleteTerm (Un.App f arg) =
   (App <$> typeInferComplete f <*> typeInferComplete arg)
   >>= typeInferComplete
 typeInferCompleteTerm (Un.Lambda _ [] t) = typeInferComplete t
-typeInferCompleteTerm (Un.Lambda p ((Un.termVarString -> x,tp):ctx) t) =
+typeInferCompleteTerm (Un.Lambda p ((Un.termVarLocalName -> x, tp) : ctx) t) =
   do tp_trm <- typeInferCompleteWHNF tp
      -- Normalize (the Term value of) tp before putting it into the context. See
      -- the documentation for withVar.
@@ -209,7 +211,7 @@ typeInferCompleteTerm (Un.Lambda p ((Un.termVarString -> x,tp):ctx) t) =
        typeInferComplete $ Un.Lambda p ctx t
      typeInferComplete (Lambda x tp_trm body)
 typeInferCompleteTerm (Un.Pi _ [] t) = typeInferComplete t
-typeInferCompleteTerm (Un.Pi p ((Un.termVarString -> x,tp):ctx) t) =
+typeInferCompleteTerm (Un.Pi p ((Un.termVarLocalName -> x, tp) : ctx) t) =
   do tp_trm <- typeInferComplete tp
      -- NOTE: we need the type of x to be normalized when we add it to the
      -- context in withVar, but we do not want to normalize this type in the
@@ -281,7 +283,7 @@ typeInferCompleteTerm (Un.BadTerm _) =
 
 instance TypeInferCtx Un.TermVar Un.Term where
   typeInferCompleteCtx =
-    typeInferCompleteCtx . map (\(x,tp) -> (Un.termVarString x, tp))
+    typeInferCompleteCtx . map (\(x,tp) -> (Un.termVarLocalName x, tp))
 
 
 --
@@ -309,7 +311,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
      -- peeling off the pi-abstraction variables in the type annotation. Any
      -- remaining body of the pi-type is the required type for the def body.
      (ctx, req_body_tp) <-
-       case matchPiWithNames (map Un.termVarString vars) def_tp_whnf of
+       case matchPiWithNames (map Un.termVarLocalName vars) def_tp_whnf of
          Just x -> return x
          Nothing ->
              throwTCError $
@@ -445,7 +447,7 @@ tcInsertModule sc (Un.Module (PosPair _ mnm) imports decls) = do
 
 -- | Pattern match a nested pi-abstraction, like 'asPiList', but only match as
 -- far as the supplied list of variables, and use them as the new names
-matchPiWithNames :: [String] -> Term -> Maybe ([(String,Term)],Term)
+matchPiWithNames :: [LocalName] -> Term -> Maybe ([(LocalName, Term)], Term)
 matchPiWithNames [] tp = return ([], tp)
 matchPiWithNames (var:vars) (asPi -> Just (_, arg_tp, body_tp)) =
   do (ctx,body) <- matchPiWithNames vars body_tp
