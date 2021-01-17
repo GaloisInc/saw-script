@@ -283,7 +283,6 @@ import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Unique
-import Verifier.SAW.Utils
 
 #if !MIN_VERSION_base(4,8,0)
 countTrailingZeros :: (FiniteBits b) => b -> Int
@@ -353,21 +352,10 @@ instance Show DuplicateNameException where
 scRegisterName :: SharedContext -> VarIndex -> NameInfo -> IO ()
 scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
   where
-    uri = nameURI nmi
-    aliases = render uri : nameAliases nmi
-
-    insertAlias :: Text -> Map Text (Set VarIndex) -> Map Text (Set VarIndex)
-    insertAlias x m = Map.alter (Just . maybe (Set.singleton i) (Set.insert i)) x m
-
     f env =
-      case Map.lookup uri (absoluteNames env) of
-        Just _ -> throw (DuplicateNameException uri)
-        Nothing ->
-            SAWNamingEnv
-            { resolvedNames = Map.insert i nmi (resolvedNames env)
-            , absoluteNames = Map.insert uri i (absoluteNames env)
-            , aliasNames    = foldr insertAlias (aliasNames env) aliases
-            }
+      case registerName i nmi env of
+        Left uri -> throw (DuplicateNameException uri)
+        Right env' -> env'
 
 scResolveUnambiguous :: SharedContext -> Text -> IO (VarIndex, NameInfo)
 scResolveUnambiguous sc nm =
@@ -378,6 +366,8 @@ scResolveUnambiguous sc nm =
        do nms <- mapM (scFindBestName sc . snd) xs
           fail $ unlines (("Ambiguous name " ++ show nm ++ " might refer to any of the following:") : map show nms)
 
+-- TODO: This differs from 'Verifier.SAW.Name.bestAlias' in the
+-- 'ModuleIdentifier' case. Should we redefine this to match?
 scFindBestName :: SharedContext -> NameInfo -> IO Text
 scFindBestName _sc (ModuleIdentifier nm) = pure (identText nm)
 scFindBestName sc (ImportedName uri as) = go as
@@ -392,19 +382,12 @@ scFindBestName sc (ImportedName uri as) = go as
 scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
 scResolveNameByURI sc uri =
   do env <- readIORef (scNamingEnv sc)
-     pure $! Map.lookup uri (absoluteNames env)
+     pure $! resolveURI env uri
 
 scResolveName :: SharedContext -> Text -> IO [(VarIndex, NameInfo)]
 scResolveName sc nm =
   do env <- readIORef (scNamingEnv sc)
-     case Map.lookup nm (aliasNames env) of
-       Nothing -> pure []
-       Just vs -> pure [ (v, fndName v (resolvedNames env)) | v <- Set.toList vs ]
- where
- fndName v m =
-   case Map.lookup v m of
-     Just nmi -> nmi
-     Nothing -> panic "scResolveName" ["Unbound VarIndex when resolving name", show nm, show v]
+     pure (resolveName env nm)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> String -> Term -> IO (ExtCns Term)
@@ -2121,7 +2104,7 @@ mkSharedContext = do
   cr <- newMVar emptyAppCache
   let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
   mod_map_ref <- newIORef HMap.empty
-  envRef <- newIORef (SAWNamingEnv mempty mempty mempty)
+  envRef <- newIORef emptySAWNamingEnv
   return SharedContext {
              scModuleMap = mod_map_ref
            , scTermF = getTerm cr

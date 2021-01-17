@@ -42,6 +42,11 @@ module Verifier.SAW.Name
   , scFreshNameURI
     -- * Naming Environments
   , SAWNamingEnv(..)
+  , emptySAWNamingEnv
+  , registerName
+  , resolveURI
+  , resolveName
+  , bestAlias
   ) where
 
 import           Control.Exception (assert)
@@ -50,9 +55,10 @@ import           Data.Hashable
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
--- import qualified Data.Map as Map
+import qualified Data.Map as Map
 import           Data.Maybe
 import           Data.Set (Set)
+import qualified Data.Set as Set
 import           Data.String (IsString(..))
 import           Data.Text (Text)
 import qualified Data.Text as Text
@@ -251,3 +257,59 @@ data SAWNamingEnv = SAWNamingEnv
   , absoluteNames :: !(Map URI VarIndex)
   , aliasNames    :: !(Map Text (Set VarIndex))
   }
+-- Invariants: The 'resolvedNames' and 'absoluteNames' maps should be
+-- inverses of each other. That is, 'resolvedNames' maps @i@ to @n@ if
+-- and only if 'absoluteNames' maps @nameURI n@ to @i@. Also, every
+-- 'VarIndex' appearing in 'aliasNames' must be present as a key in
+-- 'resolvedNames'.
+
+emptySAWNamingEnv :: SAWNamingEnv
+emptySAWNamingEnv = SAWNamingEnv mempty mempty mempty
+
+-- | Add a new name entry in a 'SAWNamingEnv'. Returns 'Left' if
+-- there is already an entry under the same URI.
+registerName :: VarIndex -> NameInfo -> SAWNamingEnv -> Either URI SAWNamingEnv
+registerName i nmi env =
+  case Map.lookup uri (absoluteNames env) of
+    Just _ -> Left uri
+    Nothing ->
+      Right $
+      SAWNamingEnv
+      { resolvedNames = Map.insert i nmi (resolvedNames env)
+      , absoluteNames = Map.insert uri i (absoluteNames env)
+      , aliasNames    = foldr insertAlias (aliasNames env) aliases
+      }
+  where
+    uri = nameURI nmi
+    aliases = render uri : nameAliases nmi
+
+    insertAlias :: Text -> Map Text (Set VarIndex) -> Map Text (Set VarIndex)
+    insertAlias x m = Map.insertWith Set.union x (Set.singleton i) m
+
+resolveURI :: SAWNamingEnv -> URI -> Maybe VarIndex
+resolveURI env uri = Map.lookup uri (absoluteNames env)
+
+resolveName :: SAWNamingEnv -> Text -> [(VarIndex, NameInfo)]
+resolveName env nm =
+  case Map.lookup nm (aliasNames env) of
+    Nothing -> []
+    Just vs -> [ (v, findName v (resolvedNames env)) | v <- Set.toList vs ]
+  where
+    findName v m =
+      case Map.lookup v m of
+        Just nmi -> nmi
+        Nothing -> panic "resolveName" ["Unbound VarIndex when resolving name", show nm, show v]
+
+-- | Return the first alias (according to 'nameAliases') that is
+-- unambiguous in the naming environment. If there is no unambiguous
+-- alias, then return the URI.
+bestAlias :: SAWNamingEnv -> NameInfo -> Either URI Text
+bestAlias env nmi = go (nameAliases nmi)
+  where
+    go [] = Left (nameURI nmi)
+    go (x : xs) =
+      case Map.lookup x (aliasNames env) of
+        Nothing -> go xs
+        Just vs
+          | Set.size vs == 1 -> Right x
+          | otherwise -> go xs
