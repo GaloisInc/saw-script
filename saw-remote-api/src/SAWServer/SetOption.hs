@@ -10,6 +10,7 @@ import Data.Aeson.Types (Parser)
 import SAWScript.Value
 
 import Argo
+import qualified Argo.Doc as Doc
 
 import SAWServer
 import SAWServer.OK
@@ -44,3 +45,13 @@ instance FromJSON SetOptionParams where
   parseJSON =
     withObject "parameters for setting options" $ \o -> o .: "option" >>= parseOption o
 
+
+instance Doc.DescribedParams SetOptionParams where
+  parameterFieldDescription =
+    [ ("option",
+       Doc.Paragraph [Doc.Text "The option to set and its accompanying value (i.e., true or false); one of the following:"
+                     , Doc.Literal "lax arithmetic", Doc.Text ", "
+                     , Doc.Literal "SMT array memory model", Doc.Text ", or "
+                     , Doc.Literal "What4 hash consing"
+                     ])
+    ]

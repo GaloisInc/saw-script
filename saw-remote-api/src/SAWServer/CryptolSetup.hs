@@ -19,6 +19,7 @@ import SAWScript.Value (biSharedContext, rwCryptol)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
 import Argo
+import qualified Argo.Doc as Doc
 import SAWServer
 import SAWServer.Exceptions
 import SAWServer.OK
@@ -46,6 +47,12 @@ instance FromJSON CryptolLoadModuleParams where
     withObject "params for \"SAW/Cryptol setup/load module\"" $ \o ->
     CryptolLoadModuleParams . textToModName <$> o .: "module name"
 
+instance Doc.DescribedParams CryptolLoadModuleParams where
+  parameterFieldDescription =
+    [ ("module name",
+       Doc.Paragraph [Doc.Text "Name of module to load."])
+    ]
+
 cryptolLoadFile :: CryptolLoadFileParams -> Method SAWState OK
 cryptolLoadFile (CryptolLoadFileParams fileName) =
   do sc <- biSharedContext . view sawBIC <$> getState
@@ -68,3 +75,9 @@ instance FromJSON CryptolLoadFileParams where
   parseJSON =
     withObject "params for \"SAW/Cryptol setup/load file\"" $ \o ->
     CryptolLoadFileParams . T.unpack <$> o .: "file"
+
+instance Doc.DescribedParams CryptolLoadFileParams where
+  parameterFieldDescription =
+    [ ("file",
+       Doc.Paragraph [Doc.Text "File to load as a Cryptol module."])
+    ]

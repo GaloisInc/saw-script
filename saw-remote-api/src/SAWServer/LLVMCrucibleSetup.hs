@@ -51,6 +51,7 @@ import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)
 
 import Argo
+import qualified Argo.Doc as Doc
 import SAWServer
 import SAWServer.Data.Contract
 import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
@@ -191,6 +192,15 @@ instance FromJSON LLVMLoadModuleParams where
   parseJSON =
     withObject "params for \"SAW/LLVM/load module\"" $ \o ->
     LLVMLoadModuleParams <$> o .: "name" <*> o .: "bitcode file"
+
+
+instance Doc.DescribedParams LLVMLoadModuleParams where
+  parameterFieldDescription =
+    [ ("name",
+        Doc.Paragraph [Doc.Text "The name to refer to the loaded module by later."])
+    , ("bitcode file",
+       Doc.Paragraph [Doc.Text "The file containing the bitcode LLVM module to load."])
+    ]
 
 llvmLoadModule :: LLVMLoadModuleParams -> Method SAWState OK
 llvmLoadModule (LLVMLoadModuleParams serverName fileName) =

@@ -13,6 +13,7 @@ import Data.Aeson
 import Data.Text (Text)
 
 import Argo
+import qualified Argo.Doc as Doc
 import qualified SAWScript.Builtins as SB
 import qualified SAWScript.Value as SV
 import SAWServer
@@ -83,6 +84,14 @@ instance FromJSON MakeSimpsetParams where
     MakeSimpsetParams <$> o .: "elements"
                       <*> o .: "result"
 
+instance Doc.DescribedParams MakeSimpsetParams where
+  parameterFieldDescription =
+    [ ("elements",
+       Doc.Paragraph [Doc.Text "The items to include in the simpset."])
+    , ("result",
+       Doc.Paragraph [Doc.Text "The name to assign to this simpset."])
+    ]
+
 makeSimpset :: MakeSimpsetParams -> Method SAWState OK
 makeSimpset params = do
   let add ss n = do
@@ -106,6 +115,14 @@ instance FromJSON ProveParams where
     withObject "SAW/prove params" $ \o ->
     ProveParams <$> o .: "script"
                 <*> o .: "term"
+
+instance Doc.DescribedParams ProveParams where
+  parameterFieldDescription =
+    [ ("script",
+       Doc.Paragraph [Doc.Text "Script to use to prove the term."])
+    , ("term",
+       Doc.Paragraph [Doc.Text "The term to interpret as a theorm and prove."])
+    ]
 
 --data CexValue = CexValue String TypedTerm
 
