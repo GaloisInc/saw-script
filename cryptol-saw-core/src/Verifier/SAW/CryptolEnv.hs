@@ -238,7 +238,8 @@ getNamingEnv env = eExtraNames env `MR.shadowing` nameEnv
     nameEnv = mconcat $ fromMaybe [] $ traverse loadImport (eImports env)
     loadImport i = do
       lm <- ME.lookupModule (T.iModule i) (eModuleEnv env)
-      return $ MN.interpImport i (MI.ifPublic (ME.lmInterface lm))
+      let ifc = ME.lmInterface lm
+      return $ MN.interpImport i (MI.ifPublic ifc `mappend` M.ifPrivate ifc)
 
 getAllIfaceDecls :: ME.ModuleEnv -> M.IfaceDecls
 getAllIfaceDecls me = mconcat (map (both . ME.lmInterface) (ME.getLoadedModules (ME.meLoadedModules me)))
