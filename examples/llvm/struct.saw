@@ -12,22 +12,22 @@ let ptr_to_fresh n ty = do {
 
 let set_spec = do {
     (x, px) <- ptr_to_fresh "x" (llvm_array 2 (llvm_int 32));
-    po <- alloc_init (llvm_struct "struct.s") (llvm_struct [px]);
+    po <- alloc_init (llvm_struct "struct.s") (llvm_struct_value [px]);
     llvm_execute_func [po];
-    llvm_points_to po (llvm_struct [px]);
+    llvm_points_to po (llvm_struct_value [px]);
     llvm_points_to px (llvm_term {{ [0, 0] : [2][32] }});
 };
 
 let add_spec = do {
     (x, px) <- ptr_to_fresh "x" (llvm_array 2 (llvm_int 32));
-    po <- alloc_init (llvm_struct "struct.s") (llvm_struct [px]);
+    po <- alloc_init (llvm_struct "struct.s") (llvm_struct_value [px]);
     llvm_execute_func [po];
     llvm_return (llvm_term {{ x@0 + x@1 }});
 };
 
 let id_spec = do {
     (x, px) <- ptr_to_fresh "x" (llvm_array 2 (llvm_int 32));
-    po <- alloc_init (llvm_struct "struct.s") (llvm_struct [px]);
+    po <- alloc_init (llvm_struct "struct.s") (llvm_struct_value [px]);
     llvm_execute_func [po];
     llvm_return po;
 };
