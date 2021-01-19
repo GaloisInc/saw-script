@@ -37,6 +37,7 @@ import qualified Data.IntMap                                   as IntMap
 import           Data.List                                     (intersperse, sortOn)
 import           Data.Maybe                                    (fromMaybe)
 import qualified Data.Set                                      as Set
+import qualified Data.Text                                     as Text
 import           Prelude                                       hiding (fail)
 import           Prettyprinter
 
@@ -240,7 +241,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
                    )
         in
         foldM addElement (Coq.App (Coq.Var "Vector.nil") [Coq.Var "_"]) (Vector.reverse vec)
-    StringLit s -> pure (Coq.Scope (Coq.StringLit s) "string")
+    StringLit s -> pure (Coq.Scope (Coq.StringLit (Text.unpack s)) "string")
     ExtCns (EC _ _ _) -> errorTermM "External constants not supported"
 
     -- The translation of a record type {fld1:tp1, ..., fldn:tpn} is
@@ -252,7 +253,7 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
               do rest <- rest_m
                  tp_trans <- translateTerm tp
                  return (Coq.App (Coq.Var "RecordTypeCons")
-                         [Coq.StringLit name, tp_trans, rest]))
+                         [Coq.StringLit (Text.unpack name), tp_trans, rest]))
       (return (Coq.Var "RecordTypeNil"))
       (sortOn fst fs)
 
@@ -265,13 +266,13 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
               do rest <- rest_m
                  trm_trans <- translateTerm trm
                  return (Coq.App (Coq.Var "RecordCons")
-                         [Coq.StringLit name, trm_trans, rest]))
+                         [Coq.StringLit (Text.unpack name), trm_trans, rest]))
       (return (Coq.Var "RecordNil"))
       (sortOn fst fs)
 
     RecordProj r f -> do
       r_trans <- translateTerm r
-      return (Coq.App (Coq.Var "RecordProj") [r_trans, Coq.StringLit f])
+      return (Coq.App (Coq.Var "RecordProj") [r_trans, Coq.StringLit (Text.unpack f)])
 
 -- | Recognizes an $App (App "Cryptol.seq" n) x$ and returns ($n$, $x$).
 asSeq :: Recognizer Term (Term, Term)
@@ -301,7 +302,7 @@ mkDefinition name t = Coq.Definition name [] Nothing t
 -- | Make sure a name is not used in the current environment, adding
 -- or incrementing a numeric suffix until we find an unused name. When
 -- we get one, add it to the current environment and return it.
-freshenAndBindName :: TermTranslationMonad m => String -> m Coq.Ident
+freshenAndBindName :: TermTranslationMonad m => LocalName -> m Coq.Ident
 freshenAndBindName n =
   do n' <- translateLocalIdent n
      modify $ over localEnvironment (n' :)
@@ -312,7 +313,7 @@ mkLet (name, rhs) body = Coq.Let name [] Nothing rhs body
 
 translateParams ::
   TermTranslationMonad m =>
-  [(String, Term)] -> m [Coq.Binder]
+  [(LocalName, Term)] -> m [Coq.Binder]
 translateParams [] = return []
 translateParams ((n, ty):ps) = do
   ty' <- translateTerm ty
@@ -320,7 +321,7 @@ translateParams ((n, ty):ps) = do
   ps' <- translateParams ps
   return (Coq.Binder n' (Just ty') : ps')
 
-translatePi :: TermTranslationMonad m => [(String, Term)] -> Term -> m Coq.Term
+translatePi :: TermTranslationMonad m => [(LocalName, Term)] -> Term -> m Coq.Term
 translatePi binders body = withLocalLocalEnvironment $ do
   bindersT <- forM binders $ \ (b, bType) -> do
     bTypeT <- translateTerm bType
@@ -331,10 +332,15 @@ translatePi binders body = withLocalLocalEnvironment $ do
   return $ Coq.Pi bindersT bodyT
 
 -- | Translate a local name from a saw-core binder into a fresh Coq identifier.
-translateLocalIdent :: TermTranslationMonad m => String -> m Coq.Ident
-translateLocalIdent x =
+translateLocalIdent :: TermTranslationMonad m => LocalName -> m Coq.Ident
+translateLocalIdent x = freshVariant ident0
+  where ident0 = Text.unpack x -- TODO: use some string encoding to ensure lexically valid Coq identifiers
+
+-- | Find an fresh, as-yet-unused variant of the given Coq identifier.
+freshVariant :: TermTranslationMonad m => Coq.Ident -> m Coq.Ident
+freshVariant x =
   do used <- view unavailableIdents <$> get
-     let ident0 = x -- TODO: use some string encoding to ensure lexically valid Coq identifiers
+     let ident0 = x
      let findVariant i = if Set.member i used then findVariant (nextVariant i) else i
      let ident = findVariant ident0
      modify $ over unavailableIdents (Set.insert ident)
@@ -366,7 +372,7 @@ translateTermLet t =
     keep (t', n) = n > 1 && shouldMemoizeTerm t'
     nextName =
       do x <- view nextSharedName <$> get
-         x' <- translateLocalIdent x
+         x' <- freshVariant x
          modify $ set nextSharedName (nextVariant x')
          pure x'
 
