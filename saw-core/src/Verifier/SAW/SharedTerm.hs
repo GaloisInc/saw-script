@@ -256,7 +256,6 @@ import Data.Maybe
 import qualified Data.Foldable as Fold
 import Data.Foldable (foldl', foldlM, foldrM, maximum)
 import Data.HashMap.Strict (HashMap)
-import Data.List.NonEmpty ( NonEmpty(..) )
 import qualified Data.HashMap.Strict as HMap
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -276,6 +275,7 @@ import Text.URI
 
 import Verifier.SAW.Cache
 import Verifier.SAW.Change
+import Verifier.SAW.Name
 import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Term.Functor
@@ -283,7 +283,6 @@ import Verifier.SAW.Term.CtxTerm
 import Verifier.SAW.Term.Pretty
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Unique
-import Verifier.SAW.Utils
 
 #if !MIN_VERSION_base(4,8,0)
 countTrailingZeros :: (FiniteBits b) => b -> Int
@@ -329,12 +328,6 @@ insertTFM tf x tfm =
 ----------------------------------------------------------------------
 -- SharedContext: a high-level interface for building Terms.
 
-data SAWNamingEnv = SAWNamingEnv
-  { resolvedNames :: !(Map VarIndex NameInfo)
-  , absoluteNames :: !(Map URI VarIndex)
-  , aliasNames    :: !(Map Text (Set VarIndex))
-  }
-
 data SharedContext = SharedContext
   { scModuleMap      :: IORef ModuleMap
   , scTermF          :: TermF Term -> IO Term
@@ -350,31 +343,6 @@ scFlatTermF sc ftf = scTermF sc (FTermF ftf)
 scExtCns :: SharedContext -> ExtCns Term -> IO Term
 scExtCns sc ec = scFlatTermF sc (ExtCns ec)
 
-scFreshNameURI :: Text -> VarIndex -> URI
-scFreshNameURI nm i = fromMaybe (panic "scFreshNameURI" ["Failed to constructed name URI", show nm, show i]) $
-  do sch <- mkScheme "fresh"
-     nm' <- mkPathPiece (if Text.null nm then "_" else nm)
-     i'  <- mkFragment (Text.pack (show i))
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left False -- relative path
-       , uriPath   = Just (False, (nm' :| []))
-       , uriQuery  = []
-       , uriFragment = Just i'
-       }
-
-moduleIdentToURI :: Ident -> URI
-moduleIdentToURI ident = fromMaybe (panic "moduleIdentToURI" ["Failed to constructed ident URI", show ident]) $
-  do sch  <- mkScheme "sawcore"
-     path <- mapM mkPathPiece (identPieces ident)
-     pure URI
-       { uriScheme = Just sch
-       , uriAuthority = Left True -- absolute path
-       , uriPath   = Just (False, path)
-       , uriQuery  = []
-       , uriFragment = Nothing
-       }
-
 data DuplicateNameException = DuplicateNameException URI
 instance Exception DuplicateNameException
 instance Show DuplicateNameException where
@@ -384,26 +352,10 @@ instance Show DuplicateNameException where
 scRegisterName :: SharedContext -> VarIndex -> NameInfo -> IO ()
 scRegisterName sc i nmi = atomicModifyIORef' (scNamingEnv sc) (\env -> (f env, ()))
   where
-    uri = case nmi of
-            ImportedName x _ -> x
-            ModuleIdentifier x -> moduleIdentToURI x
-
-    aliases = case nmi of
-                ImportedName x xs -> render x : xs
-                ModuleIdentifier x  -> [identBaseName x, identText x, render uri]
-
-    insertAlias :: Text -> Map Text (Set VarIndex) -> Map Text (Set VarIndex)
-    insertAlias x m = Map.alter (Just . maybe (Set.singleton i) (Set.insert i)) x m
-
     f env =
-      case Map.lookup uri (absoluteNames env) of
-        Just _ -> throw (DuplicateNameException uri)
-        Nothing ->
-            SAWNamingEnv
-            { resolvedNames = Map.insert i nmi (resolvedNames env)
-            , absoluteNames = Map.insert uri i (absoluteNames env)
-            , aliasNames    = foldr insertAlias (aliasNames env) aliases
-            }
+      case registerName i nmi env of
+        Left uri -> throw (DuplicateNameException uri)
+        Right env' -> env'
 
 scResolveUnambiguous :: SharedContext -> Text -> IO (VarIndex, NameInfo)
 scResolveUnambiguous sc nm =
@@ -415,32 +367,21 @@ scResolveUnambiguous sc nm =
           fail $ unlines (("Ambiguous name " ++ show nm ++ " might refer to any of the following:") : map show nms)
 
 scFindBestName :: SharedContext -> NameInfo -> IO Text
-scFindBestName _sc (ModuleIdentifier nm) = pure (identText nm)
-scFindBestName sc (ImportedName uri as) = go as
-  where
-  go [] = pure (render uri)
-  go (x:xs) =
-    do vs <- scResolveName sc x
-       case vs of
-         [_] -> return x
-         _   -> go xs
+scFindBestName sc nmi =
+  do env <- readIORef (scNamingEnv sc)
+     case bestAlias env nmi of
+       Left uri -> pure (render uri)
+       Right nm -> pure nm
 
 scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
 scResolveNameByURI sc uri =
   do env <- readIORef (scNamingEnv sc)
-     pure $! Map.lookup uri (absoluteNames env)
+     pure $! resolveURI env uri
 
 scResolveName :: SharedContext -> Text -> IO [(VarIndex, NameInfo)]
 scResolveName sc nm =
   do env <- readIORef (scNamingEnv sc)
-     case Map.lookup nm (aliasNames env) of
-       Nothing -> pure []
-       Just vs -> pure [ (v, fndName v (resolvedNames env)) | v <- Set.toList vs ]
- where
- fndName v m =
-   case Map.lookup v m of
-     Just nmi -> nmi
-     Nothing -> panic "scResolveName" ["Unbound VarIndex when resolving name", show nm, show v]
+     pure (resolveName env nm)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> String -> Term -> IO (ExtCns Term)
@@ -2157,7 +2098,7 @@ mkSharedContext = do
   cr <- newMVar emptyAppCache
   let freshGlobalVar = modifyMVar vr (\i -> return (i+1, i))
   mod_map_ref <- newIORef HMap.empty
-  envRef <- newIORef (SAWNamingEnv mempty mempty mempty)
+  envRef <- newIORef emptySAWNamingEnv
   return SharedContext {
              scModuleMap = mod_map_ref
            , scTermF = getTerm cr
