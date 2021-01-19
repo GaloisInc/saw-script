@@ -52,7 +52,7 @@ module Verifier.SAW.Name
 import           Control.Exception (assert)
 import           Data.Char
 import           Data.Hashable
-import           Data.List
+import qualified Data.List as L
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -93,7 +93,7 @@ moduleNamePieces (ModuleName x) = Text.splitOn (Text.pack ".") x
 mkModuleName :: [String] -> ModuleName
 mkModuleName [] = error "internal: mkModuleName given empty module name"
 mkModuleName nms = assert (all isCtor nms) $ ModuleName (Text.pack s)
-  where s = intercalate "." (reverse nms)
+  where s = L.intercalate "." (reverse nms)
 
 preludeName :: ModuleName
 preludeName = mkModuleName ["Prelude"]
