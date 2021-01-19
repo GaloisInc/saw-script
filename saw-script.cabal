@@ -41,6 +41,7 @@ library
     , crucible-jvm
     , crucible-llvm >= 0.2
     , crucible-saw
+    , crux-mir
     , deepseq
     , either
     , exceptions
@@ -126,6 +127,7 @@ library
     SAWScript.JavaPretty
     SAWScript.Lexer
     SAWScript.LLVMBuiltins
+    SAWScript.MIRBuiltins
     SAWScript.Options
     SAWScript.Panic
     SAWScript.Parser

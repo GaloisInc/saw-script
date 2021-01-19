@@ -87,6 +87,7 @@ import SAWScript.TopLevel
 import SAWScript.Value
 import SAWScript.Options
 import SAWScript.LLVMBuiltins
+import SAWScript.MIRBuiltins
 import SAWScript.Builtins
 import SAWScript.Crucible.LLVM.Builtins
 import SAWScript.Crucible.LLVM.MethodSpecIR
@@ -249,9 +250,8 @@ heapster_init_env _bic _opts mod_str llvm_filename =
      sc <- getSharedContext
      let saw_mod_name = mkModuleName [mod_str]
      mod_loaded <- liftIO $ scModuleIsLoaded sc saw_mod_name
-     if mod_loaded then
+     when mod_loaded $
        fail ("SAW module with name " ++ show mod_str ++ " already defined!")
-       else return ()
      -- import Prelude by default
      preludeMod <- liftIO $ scFindModule sc preludeModuleName
      liftIO $ scLoadModule sc (insImport (const True) preludeMod $
@@ -263,6 +263,30 @@ heapster_init_env _bic _opts mod_str llvm_filename =
        heapsterEnvModules = [Some $ IRLLVMModule llvm_mod]
        }
 
+heapster_init_env_mir :: BuiltinContext -> Options -> String -> String -> TopLevel HeapsterEnv
+heapster_init_env_mir _bic _opts mod_str mir_filename =
+  do
+    mir_mod <- mir_load_module mir_filename
+    sc <- getSharedContext
+    let saw_mod_name = mkModuleName [mod_str]
+    mod_loaded <- liftIO $ scModuleIsLoaded sc saw_mod_name
+    when mod_loaded $
+      fail ("SAW module with name " ++ show mod_str ++ " already defined!")
+    -- import Prelude by default
+    preludeMod <- liftIO $ scFindModule sc preludeModuleName
+    liftIO $
+      scLoadModule
+        sc
+        ( insImport (const True) preludeMod $
+            emptyModule saw_mod_name
+        )
+    perm_env_ref <- liftIO $ newIORef heapster_default_env
+    return $
+      HeapsterEnv
+        { heapsterEnvSAWModule = saw_mod_name,
+          heapsterEnvPermEnvRef = perm_env_ref,
+          heapsterEnvModules = [Some $ IRMIRModule mir_mod]
+        }
 load_sawcore_from_file :: BuiltinContext -> Options -> String -> TopLevel ()
 load_sawcore_from_file _ _ mod_filename =
   do sc <- getSharedContext

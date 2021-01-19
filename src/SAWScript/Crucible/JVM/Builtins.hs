@@ -435,10 +435,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
         JVMPointsToField _loc lhs fid rhs ->
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
-             -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
-             -- Then we won't have to match the definition of 'fieldIdText' here.
-             let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
-             CJ.doFieldStore sym mem lhs' key (injectJVMVal sym rhs')
+             CJ.doFieldStore sym mem lhs' fid (injectJVMVal sym rhs')
         JVMPointsToElem _loc lhs idx rhs ->
           do lhs' <- resolveJVMRefVal lhs
              rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
