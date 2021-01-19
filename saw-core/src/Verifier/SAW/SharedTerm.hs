@@ -366,18 +366,12 @@ scResolveUnambiguous sc nm =
        do nms <- mapM (scFindBestName sc . snd) xs
           fail $ unlines (("Ambiguous name " ++ show nm ++ " might refer to any of the following:") : map show nms)
 
--- TODO: This differs from 'Verifier.SAW.Name.bestAlias' in the
--- 'ModuleIdentifier' case. Should we redefine this to match?
 scFindBestName :: SharedContext -> NameInfo -> IO Text
-scFindBestName _sc (ModuleIdentifier nm) = pure (identText nm)
-scFindBestName sc (ImportedName uri as) = go as
-  where
-  go [] = pure (render uri)
-  go (x:xs) =
-    do vs <- scResolveName sc x
-       case vs of
-         [_] -> return x
-         _   -> go xs
+scFindBestName sc nmi =
+  do env <- readIORef (scNamingEnv sc)
+     case bestAlias env nmi of
+       Left uri -> pure (render uri)
+       Right nm -> pure nm
 
 scResolveNameByURI :: SharedContext -> URI -> IO (Maybe VarIndex)
 scResolveNameByURI sc uri =
