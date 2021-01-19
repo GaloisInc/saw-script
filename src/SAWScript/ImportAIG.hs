@@ -6,6 +6,7 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -25,6 +26,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.State.Strict
 import Control.Monad.Trans.Except
+import Data.Text (Text)
 import qualified Data.Vector as V
 import Prettyprinter
 
@@ -60,7 +62,7 @@ bitblastSharedTerm sc v (asBitvectorType -> Just w) = do
   modify (V.++ inputs)
 bitblastSharedTerm _ _ tp = throwTP $ show $
   vcat
-  [ pretty "Could not parse AIG input type:"
+  [ "Could not parse AIG input type:"
   , indent 2 (ppTerm defaultPPOpts tp)
   ]
 
@@ -149,7 +151,7 @@ translateNetwork :: AIG.IsAIG l g
                  -> SharedContext    -- ^ Context to build in term.
                  -> g x              -- ^ Network to bitblast
                  -> [l x]            -- ^ Outputs for network.
-                 -> [(String, Term)] -- ^ Expected types
+                 -> [(Text, Term)]   -- ^ Expected types
                  -> Term             -- ^ Expected output type.
                  -> ExceptT String IO Term
 translateNetwork opts sc ntk outputLits args resultType = do
