@@ -1,13 +1,53 @@
-enable_deprecated;
+enable_experimental;
 import "../../deps/cryptol-specs/Primitive/Keyless/Hash/MD5.cry";
 
-
 let md5_spec = do {
-    msg <- java_var "msg" (java_array 16 java_byte);
-    java_var "out" (java_array 16 java_byte);
-    java_sat_branches true;
-    java_ensure_eq "out" {{ md5_ref msg }};
+    msgref <- jvm_alloc_array 16 java_byte;
+    msg <- jvm_fresh_var "msg" (java_array 16 java_byte);
+    jvm_array_is msgref msg;
+    outref <- jvm_alloc_array 16 java_byte;
+    jvm_execute_func [msgref, outref];
+    jvm_array_is outref {{ groupBy`{8} (md5 (join msg)) }};
 };
 
+let lemma = prove_core w4;
+
+// FIXME: It would be nice if what4 could finish the proof without the
+// aid of all these rewrite rules. It seems like most of these are the
+// kind of thing it should know how to simplify itself.
+
+t0 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x  4) (bvShr 32 x 28)) (rotateL 32 Bool x  4))";
+t1 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x  5) (bvShr 32 x 27)) (rotateL 32 Bool x  5))";
+t2 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x  6) (bvShr 32 x 26)) (rotateL 32 Bool x  6))";
+t3 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x  7) (bvShr 32 x 25)) (rotateL 32 Bool x  7))";
+t4 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x  9) (bvShr 32 x 23)) (rotateL 32 Bool x  9))";
+t5 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 10) (bvShr 32 x 22)) (rotateL 32 Bool x 10))";
+t6 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 11) (bvShr 32 x 21)) (rotateL 32 Bool x 11))";
+t7 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 12) (bvShr 32 x 20)) (rotateL 32 Bool x 12))";
+t8 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 14) (bvShr 32 x 18)) (rotateL 32 Bool x 14))";
+t9 <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 15) (bvShr 32 x 17)) (rotateL 32 Bool x 15))";
+ta <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 16) (bvShr 32 x 16)) (rotateL 32 Bool x 16))";
+tb <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 17) (bvShr 32 x 15)) (rotateL 32 Bool x 17))";
+tc <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 20) (bvShr 32 x 12)) (rotateL 32 Bool x 20))";
+td <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 21) (bvShr 32 x 11)) (rotateL 32 Bool x 21))";
+te <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 22) (bvShr 32 x 10)) (rotateL 32 Bool x 22))";
+tf <- lemma "(x : Vec 32 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvShl 32 x 23) (bvShr 32 x  9)) (rotateL 32 Bool x 23))";
+
+r1 <- lemma "(x : Vec 8 Bool) -> EqTrue (bvEq 32 (bvAnd 32 (bvNat 32 255) (bvSExt 24 7 x)) (bvUExt 24 8 x))";
+r2 <- lemma "(a b c d : Vec 8 Bool) -> EqTrue (bvEq 32 (bvOr 32 (bvOr 32 (bvOr 32 (bvUExt 24 8 a) (bvShl 32 (bvUExt 24 8 b) 8)) (bvShl 32 (bvUExt 24 8 c) 16)) (bvShl 32 (bvUExt 24 8 d) 24)) (append 24 8 Bool (append 16 8 Bool (append 8 8 Bool d c) b) a))";
+
+// FIXME: This rewrite rule (as well as the unfolding of "md5" and
+// "pad" in the proof script below) are a workaround for saw-script
+// issue #1010. When that is fixed, we should get rid of them.
+r3 <- lemma "EqTrue (bvEq 1 [True] (bvNat 1 1))";
+
+let ss = addsimps [t0,t1,t2,t3,t4,t5,t6,t7,t8,t9,ta,tb,tc,td,te,tf,r1,r2,r3] empty_ss;
+
 c <- java_load_class "JavaMD5";
-java_verify c "computeMD5" [] md5_spec;
+jvm_verify c "computeMD5" [] false md5_spec
+  do {
+    unfolding ["md5", "pad"];
+    simplify ss;
+    goal_eval;
+    w4;
+  };
