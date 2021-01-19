@@ -68,6 +68,7 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Text as Text
 import Control.Monad.Trans.Writer.Strict
 import Numeric.Natural
 
@@ -205,7 +206,7 @@ scMatch sc pat term =
               | j < depth -> go (j : js) t
             _ -> Nothing
 
-    match :: Int -> [(String, Term)] -> Term -> Term -> MatchState -> MaybeT IO MatchState
+    match :: Int -> [(LocalName, Term)] -> Term -> Term -> MatchState -> MaybeT IO MatchState
     match _ _ (STApp i fv _) (STApp j _ _) s
       | fv == emptyBitSet && i == j = return s
     match depth env x y s@(MatchState m cs) =
@@ -221,7 +222,7 @@ scMatch sc pat term =
              let fvy = looseVars y `intersectBitSets` (completeBitSet depth)
              guard (fvy `unionBitSets` fvj == fvj)
              let fixVar t (nm, ty) =
-                   do v <- scFreshGlobal sc nm ty
+                   do v <- scFreshGlobal sc (Text.unpack nm) ty
                       let Just ec = R.asExtCns v
                       t' <- instantiateVar sc 0 v t
                       return (t', ec)
@@ -481,7 +482,7 @@ listRules ss = [ r | Left r <- Net.content ss ]
 ----------------------------------------------------------------------
 -- Destructors for terms
 
-asBetaRedex :: R.Recognizer Term (String, Term, Term, Term)
+asBetaRedex :: R.Recognizer Term (LocalName, Term, Term, Term)
 asBetaRedex t =
     do (f, arg) <- R.asApp t
        (s, ty, body) <- R.asLambda f
@@ -821,7 +822,7 @@ doHoistIfs sc ss hoistCache itePat = go
        goF _ (Pi nm tp body) = goBinder scPi nm tp body
 
        goBinder close nm tp body = do
-           (ec, body') <- scOpenTerm sc nm tp 0 body
+           (ec, body') <- scOpenTerm sc (Text.unpack nm) tp 0 body
            (body'', conds) <- go body'
            let (stuck, float) = List.partition (\(_,ecs) -> Set.member ec ecs) conds
 

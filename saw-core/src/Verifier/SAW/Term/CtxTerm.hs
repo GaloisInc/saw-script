@@ -1,22 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-
 {- |
 Module      : Verifier.SAW.Term.CtxTerm
 Copyright   : Galois, Inc. 2018
@@ -35,6 +16,25 @@ really hard to track down. Although GADT programming can be a pain sometimes,
 this file is organized so at least you will always get the deBruijn indices
 right when you finally get GHC to accept your code. :)
 -}
+
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Verifier.SAW.Term.CtxTerm
   (
@@ -119,7 +119,7 @@ type CtxInv as = CtxInvApp EmptyCtx as
 -- and just write "represent" in quotes.
 data Bindings (tp :: Ctx Type -> Type -> Type) (ctx :: Ctx Type) (as :: [Type]) where
   NoBind :: Bindings tp ctx '[]
-  Bind :: String -> tp ctx (Typ a) -> Bindings tp (ctx ::> a) as ->
+  Bind :: LocalName -> tp ctx (Typ a) -> Bindings tp (ctx ::> a) as ->
           Bindings tp ctx (a ': as)
 
 -- | Compute the number of bindings in a bindings list
@@ -130,7 +130,7 @@ bindingsLength (Bind _ _ bs) = 1 + bindingsLength bs
 -- | An inverted list of bindings, seen from the "inside out"
 data InvBindings (tp :: Ctx Type -> Type -> Type) (ctx :: Ctx Type) (as :: Ctx Type) where
   InvNoBind :: InvBindings tp ctx EmptyCtx
-  InvBind :: InvBindings tp ctx as -> String -> tp (ctx <+> as) (Typ a) ->
+  InvBind :: InvBindings tp ctx as -> LocalName -> tp (ctx <+> as) (Typ a) ->
              InvBindings tp ctx (as ::> a)
 
 -- | Compute the number of bindings in an inverted bindings list
@@ -252,7 +252,7 @@ data ExistsTp tp ctx = forall a. ExistsTp (tp ctx a)
 -- the Haskell type system is not powerful enough to represent all the SAW types
 -- anyway, and any code that consumes this 'Bindings' list cannot know that
 -- anyway. See also the comments for 'CtxTerm'.
-ctxBindingsOfTerms :: [(String,Term)] -> ExistsTp (Bindings CtxTerm) ctx
+ctxBindingsOfTerms :: [(LocalName, Term)] -> ExistsTp (Bindings CtxTerm) ctx
 ctxBindingsOfTerms [] = ExistsTp NoBind
 ctxBindingsOfTerms ((x,tp):ctx) =
   case ctxBindingsOfTerms ctx of
@@ -424,7 +424,7 @@ ctxApplyMulti fm argsm =
          helper f' args
 
 -- | Form a lambda-abstraction as a 'CtxTerm'
-ctxLambda1 :: MonadTerm m => String -> CtxTerm ctx (Typ a) ->
+ctxLambda1 :: MonadTerm m => LocalName -> CtxTerm ctx (Typ a) ->
               (CtxTerm (ctx ::> a) a -> m (CtxTerm (ctx ::> a) b)) ->
               m (CtxTerm ctx (a -> b))
 ctxLambda1 x (CtxTerm tp) body_f =
@@ -445,7 +445,7 @@ ctxLambda (Bind x tp xs) body_f =
      body_f (CtxTermsCons var vars)
 
 -- | Form a pi-abstraction as a 'CtxTerm'
-ctxPi1 :: MonadTerm m => String -> CtxTerm ctx (Typ a) ->
+ctxPi1 :: MonadTerm m => LocalName -> CtxTerm ctx (Typ a) ->
           (CtxTerm (ctx ::> a) a ->
            m (CtxTerm (ctx ::> a) (Typ b))) ->
           m (CtxTerm ctx (Typ (a -> b)))
@@ -477,7 +477,7 @@ ctxPiProxy _ = ctxPi
 -- | Existential return type of 'ctxAsPi'
 data CtxPi ctx =
   forall b c.
-  CtxPi String (CtxTerm ctx (Typ b)) (CtxTerm (ctx ::> b) (Typ c))
+  CtxPi LocalName (CtxTerm ctx (Typ b)) (CtxTerm (ctx ::> b) (Typ c))
 
 -- | Test if a 'CtxTerm' is a pi-abstraction, returning its components if so.
 -- Note that we are not returning any equality constraints on the input type,
@@ -759,8 +759,9 @@ ctxPRetTp (_ :: Proxy (Typ a)) (d :: DataIdent d) params ixs s =
 
 -- | Like 'ctxPRetTp', but also take in a list of parameters and substitute them
 -- for the parameter variables returned by that function
-mkPRetTp :: MonadTerm m => Ident -> [(String,Term)] -> [(String,Term)] ->
-            [Term] -> Sort -> m Term
+mkPRetTp ::
+  MonadTerm m => Ident -> [(LocalName, Term)] -> [(LocalName, Term)] ->
+  [Term] -> Sort -> m Term
 mkPRetTp d untyped_p_ctx untyped_ix_ctx untyped_params s =
   case ctxBindingsOfTerms untyped_p_ctx of
     ExistsTp p_ctx ->
@@ -1083,7 +1084,7 @@ asCtorArg _ _ _ _ _ = Nothing
 -- | Existential return type of 'asPiCtorArg'
 data CtxPiCtorArg d ixs ctx =
   forall a b .
-  CtxPiCtorArg String (CtorArg d ixs ctx (Typ a))
+  CtxPiCtorArg LocalName (CtorArg d ixs ctx (Typ a))
   (CtxTerm (ctx ::> a) (Typ b))
 
 -- | Check that a constructor type is a pi-abstraction that takes as input an

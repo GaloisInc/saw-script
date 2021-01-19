@@ -1187,7 +1187,7 @@ scNat :: SharedContext -> Natural -> IO Term
 scNat sc n = scFlatTermF sc (NatLit n)
 
 -- | Create a literal term (of saw-core type @String@) from a 'String'.
-scString :: SharedContext -> String -> IO Term
+scString :: SharedContext -> Text -> IO Term
 scString sc s = scFlatTermF sc (StringLit s)
 
 -- | Create a term representing the primitive saw-core type @String@.
@@ -1301,7 +1301,7 @@ scFunAll sc argTypes resultType = foldrM (scFun sc) resultType argTypes
 -- (as a 'Term'), and a body. Regarding deBruijn indices, in the body of the
 -- function, an index of 0 refers to the bound parameter.
 scLambda :: SharedContext
-         -> String -- ^ The parameter name
+         -> LocalName -- ^ The parameter name
          -> Term   -- ^ The parameter type
          -> Term   -- ^ The body
          -> IO Term
@@ -1313,7 +1313,7 @@ scLambda sc varname ty body = scTermF sc (Lambda varname ty body)
 -- parameter in the list, and n-1 (where n is the list length) refers to the
 -- first.
 scLambdaList :: SharedContext
-             -> [(String, Term)] -- ^ List of parameter / parameter type pairs
+             -> [(LocalName, Term)] -- ^ List of parameter / parameter type pairs
              -> Term -- ^ The body
              -> IO Term
 scLambdaList _ [] rhs = return rhs
@@ -1324,7 +1324,7 @@ scLambdaList sc ((nm,tp):r) rhs =
 -- type (as a 'Term'), and a body. This function follows the same deBruijn
 -- index convention as 'scLambda'.
 scPi :: SharedContext
-     -> String -- ^ The parameter name
+     -> LocalName -- ^ The parameter name
      -> Term   -- ^ The parameter type
      -> Term   -- ^ The body
      -> IO Term
@@ -1334,7 +1334,7 @@ scPi sc nm tp body = scTermF sc (Pi nm tp body)
 -- from a list associating parameter names to types (as 'Term's) and a body.
 -- This function follows the same deBruijn index convention as 'scLambdaList'.
 scPiList :: SharedContext
-         -> [(String, Term)] -- ^ List of parameter / parameter type pairs
+         -> [(LocalName, Term)] -- ^ List of parameter / parameter type pairs
          -> Term -- ^ The body
          -> IO Term
 scPiList _ [] rhs = return rhs
@@ -2215,7 +2215,7 @@ scExtsToLocals sc exts x = instantiateVars sc fn 0 x
 scAbstractExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
 scAbstractExts _ [] x = return x
 scAbstractExts sc exts x =
-   do let lams = [ (Text.unpack (toShortName (ecName ec)), ecType ec) | ec <- exts ]
+   do let lams = [ (toShortName (ecName ec), ecType ec) | ec <- exts ]
       scLambdaList sc lams =<< scExtsToLocals sc exts x
 
 -- | Generalize over the given list of external constants by wrapping
@@ -2224,7 +2224,7 @@ scAbstractExts sc exts x =
 scGeneralizeExts :: SharedContext -> [ExtCns Term] -> Term -> IO Term
 scGeneralizeExts _ [] x = return x
 scGeneralizeExts sc exts x =
-  do let pis = [ (Text.unpack (toShortName (ecName ec)), ecType ec) | ec <- exts ]
+  do let pis = [ (toShortName (ecName ec), ecType ec) | ec <- exts ]
      scPiList sc pis =<< scExtsToLocals sc exts x
 
 scUnfoldConstants :: SharedContext -> [VarIndex] -> Term -> IO Term
@@ -2324,7 +2324,7 @@ scOpenTerm sc nm tp idx body = do
 -- | `closeTerm closer sc ec body` replaces the external constant `ec` in `body` by
 --   a new deBruijn variable and binds it using the binding form given by 'close'.
 --   The name and type of the new bound variable are given by the name and type of `ec`.
-scCloseTerm :: (SharedContext -> String -> Term -> Term -> IO Term)
+scCloseTerm :: (SharedContext -> LocalName -> Term -> Term -> IO Term)
           -> SharedContext
           -> ExtCns Term
           -> Term
@@ -2332,4 +2332,4 @@ scCloseTerm :: (SharedContext -> String -> Term -> Term -> IO Term)
 scCloseTerm close sc ec body = do
     lv <- scLocalVar sc 0
     body' <- scInstantiateExt sc (Map.insert (ecVarIndex ec) lv Map.empty) =<< incVars sc 0 1 body
-    close sc (Text.unpack (toShortName (ecName ec))) (ecType ec) body'
+    close sc (toShortName (ecName ec)) (ecType ec) body'

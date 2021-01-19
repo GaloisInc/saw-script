@@ -43,6 +43,7 @@ import Control.Monad.State.Strict as State
 import Data.Foldable (Foldable)
 #endif
 import qualified Data.Foldable as Fold
+import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Vector as V
 import Numeric (showIntAtBase)
@@ -154,7 +155,7 @@ ppParensPrec p1 p2 d
 
 -- | Local variable namings, which map each deBruijn index in scope to a unique
 -- string to be used to print it. This mapping is given by position in a list.
-newtype VarNaming = VarNaming [String]
+newtype VarNaming = VarNaming [LocalName]
 
 -- | The empty local variable context
 emptyVarNaming :: VarNaming
@@ -162,24 +163,24 @@ emptyVarNaming = VarNaming []
 
 -- | Look up a string to use for a variable, if the first argument is 'True', or
 -- just print the variable number if the first argument is 'False'
-lookupVarName :: Bool -> VarNaming -> DeBruijnIndex -> String
+lookupVarName :: Bool -> VarNaming -> DeBruijnIndex -> LocalName
 lookupVarName True (VarNaming names) i
-  | i >= length names = '!' : show (i - length names)
+  | i >= length names = Text.pack ('!' : show (i - length names))
 lookupVarName True (VarNaming names) i = names!!i
-lookupVarName False _ i = '!' : show i
+lookupVarName False _ i = Text.pack ('!' : show i)
 
 -- | Generate a fresh name from a base name that does not clash with any names
 -- already in a given list, unless it is "_", in which case return it as is
-freshName :: [String] -> String -> String
+freshName :: [LocalName] -> LocalName -> LocalName
 freshName used name
   | name == "_" = name
-  | elem name used = freshName used (name ++ "'")
+  | elem name used = freshName used (name <> "'")
   | otherwise = name
 
 -- | Add a new variable with the given base name to the local variable list,
 -- returning both the fresh name actually used and the new variable list. As a
 -- special case, if the base name is "_", it is not modified.
-consVarNaming :: VarNaming -> String -> (String, VarNaming)
+consVarNaming :: VarNaming -> LocalName -> (LocalName, VarNaming)
 consVarNaming (VarNaming names) name =
   let nm = freshName names name in (nm, VarNaming (nm : names))
 
@@ -231,7 +232,7 @@ instance MonadReader PPState PPM where
   local f (PPM m) = PPM $ local f m
 
 -- | Look up the given local variable by deBruijn index to get its name
-varLookupM :: DeBruijnIndex -> PPM String
+varLookupM :: DeBruijnIndex -> PPM LocalName
 varLookupM idx =
   lookupVarName <$> (ppShowLocalNames <$> ppOpts <$> ask)
   <*> (ppNaming <$> ask) <*> return idx
@@ -261,7 +262,7 @@ atNextDepthM dflt m =
 -- also erasing the local memoization table (which is no longer valid in an
 -- extended variable context) during that computation. Return the result of the
 -- computation and also the name that was actually used for the bound variable.
-withBoundVarM :: String -> PPM a -> PPM (String, a)
+withBoundVarM :: LocalName -> PPM a -> PPM (LocalName, a)
 withBoundVarM basename m =
   do st <- ask
      let (var, naming) = consVarNaming (ppNaming st) basename
@@ -369,14 +370,14 @@ ppArrayValue = list
 
 -- | Pretty-print a lambda abstraction as @\(x :: tp) -> body@, where the
 -- variable name to use for @x@ is bundled with @body@
-ppLambda :: SawDoc -> (String, SawDoc) -> SawDoc
+ppLambda :: SawDoc -> (LocalName, SawDoc) -> SawDoc
 ppLambda tp (name, body) =
   group $ hang 2 $
   vsep ["\\" <> parens (ppTypeConstraint (pretty name) tp) <+> "->", body]
 
 -- | Pretty-print a pi abstraction as @(x :: tp) -> body@, or as @tp -> body@ if
 -- @x == "_"@
-ppPi :: SawDoc -> (String, SawDoc) -> SawDoc
+ppPi :: SawDoc -> (LocalName, SawDoc) -> SawDoc
 ppPi tp (name, body) = vsep [lhs, "->" <+> body]
   where
     lhs = if name == "_" then tp else parens (ppTypeConstraint (pretty name) tp)
@@ -585,7 +586,7 @@ ppTermWithMemoTable prec global_p trm = ppLets occ_map_elems [] where
 --
 -- Also, pretty-print let-bindings around the term for all subterms that occur
 -- more than once at the same binding level.
-ppTermInBinder :: Prec -> String -> Term -> PPM (String, SawDoc)
+ppTermInBinder :: Prec -> LocalName -> Term -> PPM (LocalName, SawDoc)
 ppTermInBinder prec basename trm =
   let nm = if basename == "_" && inBitSet 0 (looseVars trm) then "_x"
            else basename in
@@ -596,7 +597,7 @@ ppTermInBinder prec basename trm =
 -- pretty-printing of the context. Note: we do not use any local memoization
 -- tables for the inner computation; the justification is that this function is
 -- only used for printing datatypes, which we assume are not very big.
-ppWithBoundCtx :: [(String, Term)] -> PPM a -> PPM (SawDoc, a)
+ppWithBoundCtx :: [(LocalName, Term)] -> PPM a -> PPM (SawDoc, a)
 ppWithBoundCtx [] m = (mempty ,) <$> m
 ppWithBoundCtx ((x,tp):ctx) m =
   (\tp_d (x', (ctx_d, ret)) ->
@@ -626,7 +627,7 @@ scPrettyTerm opts t =
 
 -- | Like 'scPrettyTerm', but also supply a context of bound names, where the
 -- most recently-bound variable is listed first in the context
-scPrettyTermInCtx :: PPOpts -> [String] -> Term -> String
+scPrettyTermInCtx :: PPOpts -> [LocalName] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   renderSawDoc opts $
   runPPM opts $
@@ -649,7 +650,7 @@ showTerm t = scPrettyTerm defaultPPOpts t
 data PPModule = PPModule [ModuleName] [PPDecl]
 
 data PPDecl
-  = PPTypeDecl Ident [(String,Term)] [(String,Term)] Sort [(Ident,Term)]
+  = PPTypeDecl Ident [(LocalName, Term)] [(LocalName, Term)] Sort [(Ident, Term)]
   | PPDefDecl Ident Term (Maybe Term)
 
 -- | Pretty-print a 'PPModule'

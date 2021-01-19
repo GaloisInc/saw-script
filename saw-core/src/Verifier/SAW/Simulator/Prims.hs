@@ -31,6 +31,7 @@ import Control.Monad.Fix (MonadFix(mfix))
 import Data.Bits
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Data.Traversable
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -1209,7 +1210,7 @@ errorOp =
   constFun $
   strictFun $ \x ->
   case x of
-    VString s -> Prim.userError s
+    VString s -> Prim.userError (Text.unpack s)
     _ -> Prim.userError "unknown error"
 
 ------------------------------------------------------------

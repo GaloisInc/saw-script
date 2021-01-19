@@ -23,6 +23,7 @@ module Verifier.SAW.UntypedAST
   , Term(..)
   , TermVar(..)
   , termVarString
+  , termVarLocalName
   , TermCtx
   , asApp
   , asPiList
@@ -44,6 +45,7 @@ module Verifier.SAW.UntypedAST
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>))
 #endif
+import qualified Data.Text as Text
 
 import qualified Language.Haskell.TH.Syntax as TH
 import Numeric.Natural
@@ -53,6 +55,7 @@ import Verifier.SAW.TypedAST
   ( ModuleName, mkModuleName
   , Sort, mkSort, propSort, sortOf
   , FieldName, DefQualifier
+  , LocalName
   )
 
 data Term
@@ -92,6 +95,11 @@ data TermVar
 termVarString :: TermVar -> String
 termVarString (TermVar (PosPair _ str)) = str
 termVarString (UnusedVar _) = "_"
+
+-- | Return the 'LocalName' associated with a 'TermVar'
+termVarLocalName :: TermVar -> LocalName
+termVarLocalName (TermVar (PosPair _ str)) = Text.pack str
+termVarLocalName (UnusedVar _) = Text.pack "_"
 
 -- | A context of 0 or more variable bindings, with types
 type TermCtx = [(TermVar,Term)]

@@ -191,9 +191,9 @@ data DataType =
   DataType
   { dtName :: Ident
     -- ^ The name of this datatype
-  , dtParams :: [(String,Term)]
+  , dtParams :: [(LocalName, Term)]
     -- ^ The context of parameters of this datatype
-  , dtIndices :: [(String,Term)]
+  , dtIndices :: [(LocalName, Term)]
     -- ^ The context of indices of this datatype
   , dtSort :: Sort
     -- ^ The universe of this datatype
