@@ -185,7 +185,7 @@ isCtor [] = False
 
 -- | Returns true if character can appear in identifier.
 isIdChar :: Char -> Bool
-isIdChar c = isAlphaNum c || (c == '_') || (c == '\'')
+isIdChar c = isAlphaNum c || (c == '_') || (c == '\'') || (c == '.')
 
 
 -- Sorts -----------------------------------------------------------------------
