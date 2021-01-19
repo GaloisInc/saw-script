@@ -62,6 +62,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
 import Lang.Crucible.LLVM.ArraySizeProfile
+import Mir.Generator (RustModule (..))
 import qualified Prettyprinter as PP
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
@@ -184,11 +185,9 @@ data HeapsterEnv = HeapsterEnv
 
 data IRModule arch where
   IRLLVMModule :: CMSLLVM.LLVMModule arch -> IRModule arch
-  IRMIRModule :: MIRModule -> IRModule arch
+  IRMIRModule :: RustModule -> IRModule arch
 
-data MIRModule = MIRModule
-
-showMIRModule :: MIRModule -> String
+showMIRModule :: RustModule -> String
 showMIRModule _ = "MIR Module"
 
 showHeapsterEnv :: HeapsterEnv -> String

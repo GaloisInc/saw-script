@@ -17,10 +17,16 @@ import Mir.Mir (Collection (..))
 import Mir.Pass (rewriteCollection)
 import Mir.Trans (transCollection)
 import Mir.TransCustom (customOps)
-import SAWScript.Value (MIRModule, TopLevel)
+import SAWScript.Value (TopLevel, getHandleAlloc, io)
 
-mir_load_module :: FilePath -> TopLevel MIRModule
-mir_load_module = undefined
+mir_load_module :: FilePath -> TopLevel RustModule
+mir_load_module file = do
+  halloc <- getHandleAlloc
+  let ?debug = 0
+      ?assertFalseOnError = False
+      ?printCrucible = False
+  io $ loadAndTranslateMIR file halloc
+  
 
 -- llvm_load_module :: FilePath -> TopLevel (Some CMS.LLVMModule)
 -- llvm_load_module file =
