@@ -2,8 +2,11 @@
 
 module SAWServer.LLVMVerify
   ( llvmVerify
+  , llvmVerifyDescr
   , llvmVerifyX86
+  , llvmVerifyX86Descr
   , llvmAssume
+  , llvmAssumeDescr
   ) where
 
 import Prelude hiding (mod)
@@ -14,6 +17,7 @@ import SAWScript.Crucible.LLVM.X86
 import SAWScript.Value (rwCryptol)
 
 import Argo
+import qualified Argo.Doc as Doc
 import CryptolServer.Data.Expression
 import SAWServer
 import SAWServer.Data.Contract
@@ -49,12 +53,35 @@ llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scr
             setServerVal lemmaName res
             ok
 
+
+
+llvmVerifyDescr :: Doc.Block
+llvmVerifyDescr =
+  Doc.Paragraph [Doc.Text "Verify the named LLVM function meets its specification."]
+
 llvmVerify :: VerifyParams JSONLLVMType -> Method SAWState OK
 llvmVerify = llvmVerifyAssume VerifyContract
+
+
+
+
+
+llvmAssumeDescr :: Doc.Block
+llvmAssumeDescr =
+  Doc.Paragraph [Doc.Text $ "Assume the function meets its specification."]
 
 llvmAssume :: AssumeParams JSONLLVMType -> Method SAWState OK
 llvmAssume (AssumeParams modName fun contract lemmaName) =
   llvmVerifyAssume AssumeContract (VerifyParams modName fun [] False contract (ProofScript []) lemmaName)
+
+
+
+
+
+llvmVerifyX86Descr :: Doc.Block
+llvmVerifyX86Descr =
+  Doc.Paragraph [ Doc.Text "Verify an x86 function from an ELF file for use as"
+                , Doc.Text " an override in an LLVM verification meets its specification."]
 
 llvmVerifyX86 :: X86VerifyParams JSONLLVMType -> Method SAWState OK
 llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat contract script lemmaName) =

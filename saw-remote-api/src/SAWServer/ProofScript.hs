@@ -4,7 +4,9 @@ module SAWServer.ProofScript
   ( ProofScript(..)
   , interpretProofScript
   , makeSimpset
+  , makeSimpsetDescr
   , prove
+  , proveDescr
   ) where
 
 import Control.Applicative
@@ -13,6 +15,7 @@ import Data.Aeson
 import Data.Text (Text)
 
 import Argo
+import qualified Argo.Doc as Doc
 import qualified SAWScript.Builtins as SB
 import qualified SAWScript.Value as SV
 import SAWServer
@@ -83,6 +86,19 @@ instance FromJSON MakeSimpsetParams where
     MakeSimpsetParams <$> o .: "elements"
                       <*> o .: "result"
 
+instance Doc.DescribedParams MakeSimpsetParams where
+  parameterFieldDescription =
+    [ ("elements",
+       Doc.Paragraph [Doc.Text "The items to include in the simpset."])
+    , ("result",
+       Doc.Paragraph [Doc.Text "The name to assign to this simpset."])
+    ]
+
+
+makeSimpsetDescr :: Doc.Block
+makeSimpsetDescr =
+  Doc.Paragraph [Doc.Text "Create a simplification rule set from the given rules."]
+
 makeSimpset :: MakeSimpsetParams -> Method SAWState OK
 makeSimpset params = do
   let add ss n = do
@@ -107,6 +123,14 @@ instance FromJSON ProveParams where
     ProveParams <$> o .: "script"
                 <*> o .: "term"
 
+instance Doc.DescribedParams ProveParams where
+  parameterFieldDescription =
+    [ ("script",
+       Doc.Paragraph [Doc.Text "Script to use to prove the term."])
+    , ("term",
+       Doc.Paragraph [Doc.Text "The term to interpret as a theorm and prove."])
+    ]
+
 --data CexValue = CexValue String TypedTerm
 
 data ProveResult
@@ -120,6 +144,12 @@ instance ToJSON ProveResult where
   toJSON ProofValid = object [ "status" .= ("valid" :: Text)]
   toJSON ProofInvalid {-cex-} =
     object [ "status" .= ("invalid" :: Text) ] -- , "counterexample" .= cex]
+
+
+proveDescr :: Doc.Block
+proveDescr =
+  Doc.Paragraph [ Doc.Text "Attempt to prove the given term representing a"
+                , Doc.Text " theorem, given a proof script context."]
 
 prove :: ProveParams -> Method SAWState ProveResult
 prove params = do
