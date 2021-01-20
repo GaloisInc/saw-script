@@ -25,8 +25,10 @@ main =
 
 serverDocs :: [Doc.Block]
 serverDocs =
-  [ Doc.Paragraph [Doc.Text "A remote server for SAW."]
-  ]
+  [ Doc.Section "Summary" $ [ Doc.Paragraph
+    [Doc.Text "A remote server for ",
+     Doc.Link (Doc.URL "https://saw.galois.com/") "SAW",
+     Doc.Text " for verifying programs with a featureset similar to SAWScript."]]]
 
 description :: String
 description =
@@ -38,16 +40,17 @@ sawMethods =
   [ method
      "SAW/Cryptol/load module"
      Command
-     (Doc.Paragraph [Doc.Text "Load the specified Cryptol module."])
+     cryptolLoadModuleDescr
      cryptolLoadModule
   , method
      "SAW/Cryptol/load file"
      Command
-     (Doc.Paragraph [Doc.Text "Load the given file as a Cryptol module."])
+     cryptolLoadFileDescr
      cryptolLoadFile
   , method
      "SAW/Cryptol/save term"
      Command
+     saveTermDescr
      (Doc.Paragraph [Doc.Text "Save a term to be referenced later by name."])
      saveTerm
   -- JVM
@@ -60,41 +63,37 @@ sawMethods =
   , method
      "SAW/LLVM/load module"
      Command
-     (Doc.Paragraph [Doc.Text "Load the specified LLVM module."])
+     llvmLoadModuleDescr
      llvmLoadModule
   , method
      "SAW/LLVM/verify"
      Command
-     (Doc.Paragraph [Doc.Text "Verify the named LLVM function meets its specification."])
+     llvmVerifyDescr
      llvmVerify
   , method
      "SAW/LLVM/verify x86"
      Command
-     (Doc.Paragraph [Doc.Text $ T.pack
-                              $ "Verify an x86 function from an ELF file for use as "
-                                ++ "an override in an LLVM verification meets its specification."])
+     llvmVerifyX86Descr
      llvmVerifyX86
   , method
      "SAW/LLVM/assume"
      Command
-     (Doc.Paragraph [Doc.Text $ "Assume the function meets its specification."])
+     llvmAssumeDescr
      llvmAssume
   -- General
   , method
      "SAW/make simpset"
      Command
-     (Doc.Paragraph [Doc.Text "Create a simplification rule from the given rules."])
+     makeSimpsetDescr
      makeSimpset
   , method
      "SAW/prove"
      Command
-     (Doc.Paragraph [Doc.Text $ T.pack
-                              $ "Attempt to prove the given term representing a "
-                                ++ "theorem, given a proof script context."])
+     proveDescr
      prove
   , method
      "SAW/set option"
      Command
-     (Doc.Paragraph [Doc.Text "Set a SAW option in the server."])
+     setOptionDescr
      setOption
   ]

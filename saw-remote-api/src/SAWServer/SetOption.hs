@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
-module SAWServer.SetOption (setOption) where
+module SAWServer.SetOption
+  ( setOption
+  , setOptionDescr
+  ) where
 
 import Control.Applicative
 import Control.Lens (view, set)
@@ -14,6 +17,11 @@ import qualified Argo.Doc as Doc
 
 import SAWServer
 import SAWServer.OK
+
+
+setOptionDescr :: Doc.Block
+setOptionDescr =
+  Doc.Paragraph [Doc.Text "Set a SAW option in the server."]
 
 setOption :: SetOptionParams -> Method SAWState OK
 setOption opt =

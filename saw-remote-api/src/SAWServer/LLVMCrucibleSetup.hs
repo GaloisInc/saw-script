@@ -10,6 +10,7 @@
 module SAWServer.LLVMCrucibleSetup
   ( startLLVMCrucibleSetup
   , llvmLoadModule
+  , llvmLoadModuleDescr
   , Contract(..)
   , ContractVar(..)
   , Allocated(..)
@@ -201,6 +202,10 @@ instance Doc.DescribedParams LLVMLoadModuleParams where
     , ("bitcode file",
        Doc.Paragraph [Doc.Text "The file containing the bitcode LLVM module to load."])
     ]
+
+llvmLoadModuleDescr :: Doc.Block
+llvmLoadModuleDescr =
+  Doc.Paragraph [Doc.Text "Load the specified LLVM module."]
 
 llvmLoadModule :: LLVMLoadModuleParams -> Method SAWState OK
 llvmLoadModule (LLVMLoadModuleParams serverName fileName) =

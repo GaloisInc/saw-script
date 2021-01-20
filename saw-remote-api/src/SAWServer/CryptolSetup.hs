@@ -4,7 +4,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module SAWServer.CryptolSetup
   ( cryptolLoadFile
+  , cryptolLoadFileDescr
   , cryptolLoadModule
+  , cryptolLoadModuleDescr
   ) where
 
 import Control.Exception (SomeException, try)
@@ -23,6 +25,10 @@ import qualified Argo.Doc as Doc
 import SAWServer
 import SAWServer.Exceptions
 import SAWServer.OK
+
+cryptolLoadModuleDescr :: Doc.Block
+cryptolLoadModuleDescr =
+  Doc.Paragraph [Doc.Text "Load the specified Cryptol module."]
 
 cryptolLoadModule :: CryptolLoadModuleParams -> Method SAWState OK
 cryptolLoadModule (CryptolLoadModuleParams modName) =
@@ -52,6 +58,12 @@ instance Doc.DescribedParams CryptolLoadModuleParams where
     [ ("module name",
        Doc.Paragraph [Doc.Text "Name of module to load."])
     ]
+
+
+cryptolLoadFileDescr :: Doc.Block
+cryptolLoadFileDescr =
+  Doc.Paragraph [Doc.Text "Load the given file as a Cryptol module."]
+
 
 cryptolLoadFile :: CryptolLoadFileParams -> Method SAWState OK
 cryptolLoadFile (CryptolLoadFileParams fileName) =

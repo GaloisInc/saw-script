@@ -4,7 +4,9 @@ module SAWServer.ProofScript
   ( ProofScript(..)
   , interpretProofScript
   , makeSimpset
+  , makeSimpsetDescr
   , prove
+  , proveDescr
   ) where
 
 import Control.Applicative
@@ -92,6 +94,11 @@ instance Doc.DescribedParams MakeSimpsetParams where
        Doc.Paragraph [Doc.Text "The name to assign to this simpset."])
     ]
 
+
+makeSimpsetDescr :: Doc.Block
+makeSimpsetDescr =
+  Doc.Paragraph [Doc.Text "Create a simplification rule set from the given rules."]
+
 makeSimpset :: MakeSimpsetParams -> Method SAWState OK
 makeSimpset params = do
   let add ss n = do
@@ -137,6 +144,12 @@ instance ToJSON ProveResult where
   toJSON ProofValid = object [ "status" .= ("valid" :: Text)]
   toJSON ProofInvalid {-cex-} =
     object [ "status" .= ("invalid" :: Text) ] -- , "counterexample" .= cex]
+
+
+proveDescr :: Doc.Block
+proveDescr =
+  Doc.Paragraph [ Doc.Text "Attempt to prove the given term representing a"
+                , Doc.Text " theorem, given a proof script context."]
 
 prove :: ProveParams -> Method SAWState ProveResult
 prove params = do

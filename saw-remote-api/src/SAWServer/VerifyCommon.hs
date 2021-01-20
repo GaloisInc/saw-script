@@ -103,7 +103,7 @@ instance Doc.DescribedParams (X86VerifyParams a) where
   parameterFieldDescription =
     [ ("module",
         Doc.Paragraph [Doc.Text "The LLVM  module of the caller."])
-    ,  ("object file",
+    , ("object file",
         Doc.Paragraph [Doc.Text "The ELF file containing the function to be verified."])
     , ("function",
        Doc.Paragraph [Doc.Text "The function to be verified's symbol name."])
@@ -112,7 +112,7 @@ instance Doc.DescribedParams (X86VerifyParams a) where
     , ("lemmas",
        Doc.Paragraph [Doc.Text "The specifications to use for other functions during this verification."])
     , ("check sat",
-       Doc.Paragraph [Doc.Text "Whether or not to check path satisfiability checking."])
+       Doc.Paragraph [Doc.Text "Whether or not to enable path satisfiability checking."])
     , ("contract",
        Doc.Paragraph [Doc.Text "The specification to verify for the function."])
     , ("script",
