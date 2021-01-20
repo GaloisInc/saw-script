@@ -1,12 +1,14 @@
-enable_deprecated;
-let init_spec = do {
-  a <- java_var "this.a" (java_array 5 java_int);
-  x <- java_var "x" java_int;
-  java_assert_eq "x" {{ 22 : [32] }};
-  java_ensure_eq "this.a" {{ [x, x, x, x, x] }};
-  java_allow_alloc;
-  java_verify_tactic abc;
-};
+enable_experimental;
 
 c <- java_load_class "ArrayField";
-java_verify c "init" [] init_spec;
+
+jvm_verify c "init" [] false
+  do {
+    this <- jvm_alloc_object "ArrayField";
+    x <- jvm_fresh_var "x" java_int;
+    jvm_execute_func [this, jvm_term x];
+    na <- jvm_alloc_array 5 java_int;
+    jvm_field_is this "a" na;
+    jvm_array_is na {{ [x, x, x, x, x] }};
+  }
+  abc;

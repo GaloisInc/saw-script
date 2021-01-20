@@ -1,43 +1,38 @@
-enable_deprecated;
-let fill_spec = do {
-  x <- java_var "n" java_int;
-  java_var "return" (java_array 5 java_int);
-  java_assert_eq "n" {{ 22 : [32] }};
-  java_ensure_eq "return" {{ [x, x, x, x, x] }};
-  // This also works, and means the same thing.
-  // java_return {{ [x, x, x, x, x] }};
-  java_allow_alloc;
-  java_verify_tactic abc;
-};
-
-let newSimple_spec = do {
-  x <- java_var "x" java_int;
-  y <- java_var "y" java_int;
-  java_class_var "return" (java_class "SimpleObj");
-  java_var "return.x" java_int;
-  java_var "return.y" java_int;
-  java_assert_eq "x" {{ 43 : [32] }};
-  java_assert_eq "y" {{ 77 : [32] }};
-  java_ensure_eq "return.x" {{ x }};
-  java_ensure_eq "return.y" {{ y }};
-  java_allow_alloc;
-  java_verify_tactic abc;
-};
-
-let simpleWrap2_spec = do {
-  java_requires_class "SimpleObj";
-  x <- java_var "x" java_int;
-  y <- java_var "y" java_int;
-  java_assert_eq "x" {{ 43 : [32] }};
-  java_assert_eq "y" {{ 77 : [32] }};
-  java_return {{ 2 : [32] }};
-  java_allow_alloc;
-  java_verify_tactic abc;
-};
+enable_experimental;
 
 c <- java_load_class "Return";
-fill_ov <- java_verify c "fill" [] fill_spec;
-java_verify c "fillwrap" [fill_ov] fill_spec;
-newSimple_ov <- java_verify c "newSimple" [] newSimple_spec;
-java_verify c "newSimpleWrap" [newSimple_ov] newSimple_spec;
-java_verify c "newSimpleWrap2" [newSimple_ov] simpleWrap2_spec;
+
+let fill_spec =
+  do {
+    x <- jvm_fresh_var "x" java_int;
+    jvm_execute_func [jvm_term x];
+    aref <- jvm_alloc_array 5 java_int;
+    jvm_array_is aref {{ [x, x, x, x, x] }};
+    jvm_return aref;
+  };
+
+fill_ov <- jvm_verify c "fill" [] false fill_spec abc;
+jvm_verify c "fillwrap" [fill_ov] false fill_spec abc;
+
+let newSimple_spec =
+  do {
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [jvm_term x, jvm_term y];
+    ref <- jvm_alloc_object "SimpleObj";
+    jvm_field_is ref "x" (jvm_term x);
+    jvm_field_is ref "y" (jvm_term y);
+    jvm_return ref;
+  };
+
+newSimple_ov <- jvm_verify c "newSimple" [] false newSimple_spec abc;
+jvm_verify c "newSimpleWrap" [newSimple_ov] false newSimple_spec abc;
+
+jvm_verify c "newSimpleWrap2" [newSimple_ov] false
+  do {
+    x <- jvm_fresh_var "x" java_int;
+    y <- jvm_fresh_var "y" java_int;
+    jvm_execute_func [jvm_term x, jvm_term y];
+    jvm_return (jvm_term {{ 2 : [32] }});
+  }
+  abc;

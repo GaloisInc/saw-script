@@ -1,21 +1,34 @@
-enable_deprecated;
-let setup (add : Term) : JavaSetup () = do {
-    x <- java_var "x" java_int;
-    y <- java_var "y" java_int;
-    java_return {{ add x y }};
-    java_verify_tactic (do { unfolding ["add"]; z3; });
-};
+enable_experimental;
 
-let setup' (add : Term) : JavaSetup () = do {
-    x <- java_var "x" java_int;
-    java_return {{ add x x }};
-    java_verify_tactic z3;
-};
+c <- java_load_class "Add";
 
-let main : TopLevel () = do {
-    c <- java_load_class "Add";
-    add <- define "add" {{ \x y -> (x : [32]) + y }};
-    ms <- java_verify c "add" [] (setup add);
-    ms' <- java_verify c "dbl" [ms] (setup' add);
-    print "Done.";
-};
+let {{
+  add : [32] -> [32] -> [32]
+  add x y = x + y
+}};
+
+ms <-
+  jvm_verify c "add" [] false
+    do {
+      this <- jvm_alloc_object "Add";
+      x <- jvm_fresh_var "x" java_int;
+      y <- jvm_fresh_var "y" java_int;
+      jvm_execute_func [this, jvm_term x, jvm_term y];
+      jvm_return (jvm_term {{ add x y }});
+    }
+    do {
+      unfolding ["add"];
+      z3;
+    };
+
+ms' <-
+  jvm_verify c "dbl" [ms] false
+    do {
+      this <- jvm_alloc_object "Add";
+      x <- jvm_fresh_var "x" java_int;
+      jvm_execute_func [this, jvm_term x];
+      jvm_return (jvm_term {{ add x x }});
+    }
+    z3;
+
+print "Done.";
