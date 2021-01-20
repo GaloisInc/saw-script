@@ -61,7 +61,7 @@ renderNames nms = show
   | (idx,nmi) <- Map.toList nms
   ]
  where
-   f (ModuleIdentifier i)  = Left i
+   f (ModuleIdentifier i)  = Left (show i)
    f (ImportedName uri as) = Right (render uri, as)
 
 readNames :: String -> Maybe (Map VarIndex NameInfo)

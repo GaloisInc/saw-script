@@ -120,7 +120,11 @@ asFTermF (unwrapTermF -> FTermF ftf) = return ftf
 asFTermF _ = Nothing
 
 asGlobalDef :: Recognizer Term Ident
-asGlobalDef t = do GlobalDef i <- asFTermF t; return i
+asGlobalDef t =
+  case unwrapTermF t of
+    FTermF (GlobalDef ident) -> pure ident
+    Constant (EC _ (ModuleIdentifier ident) _) _ -> pure ident
+    _ -> Nothing
 
 isGlobalDef :: Ident -> Recognizer Term ()
 isGlobalDef i t = do

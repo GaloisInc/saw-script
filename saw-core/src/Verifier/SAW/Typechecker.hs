@@ -112,8 +112,8 @@ inferResolveNameApp n args =
          -- of indices
          typeInferComplete (DataTypeApp (dtName dt) params ixs)
        (_, Just (ResolvedDef d)) ->
-         do f <- typeInferComplete (GlobalDef (defIdent d)
-                                    :: FlatTermF TypedTerm)
+         do t <- liftTCM scGlobalDef (defIdent d)
+            f <- typeInferComplete t
             inferApplyAll f args
        (Nothing, Nothing) ->
          throwTCError $ UnboundName n
@@ -329,8 +329,11 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
 
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
+     let ident = mkIdent mnm nm
+     t <- liftTCM scConstant' (ModuleIdentifier ident) def_tm def_tp
+     liftTCM scRegisterGlobal ident t
      liftTCM scModifyModule mnm $ \m ->
-       insDef m $ Def { defIdent = mkIdent mnm nm,
+       insDef m $ Def { defIdent = ident,
                         defQualifier = NoQualifier,
                         defType = def_tp,
                         defBody = Just def_tm }) >>
@@ -346,8 +349,11 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
    do typed_tp <- typeInferComplete tp
       void $ ensureSort $ typedType typed_tp
       mnm <- getModuleName
+      let ident = mkIdent mnm nm
+      t <- liftTCM scFlatTermF (GlobalDef ident)
+      liftTCM scRegisterGlobal ident t
       liftTCM scModifyModule mnm $ \m ->
-        insDef m $ Def { defIdent = mkIdent mnm nm,
+        insDef m $ Def { defIdent = ident,
                          defQualifier = q,
                          defType = typedVal typed_tp,
                          defBody = Nothing }) >>
