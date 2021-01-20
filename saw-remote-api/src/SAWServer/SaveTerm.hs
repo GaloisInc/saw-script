@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
-module SAWServer.SaveTerm (saveTerm) where
+module SAWServer.SaveTerm
+  ( saveTerm
+  , saveTermDescr
+  ) where
 
 import Data.Aeson (FromJSON(..), withObject, (.:))
 
@@ -10,6 +13,10 @@ import CryptolServer.Data.Expression
 import SAWServer
 import SAWServer.CryptolExpression
 import SAWServer.OK
+
+saveTermDescr :: Doc.Block
+saveTermDescr =
+  Doc.Paragraph [Doc.Text "Save a term to be referenced later by name."]
 
 saveTerm :: SaveTermParams -> Method SAWState OK
 saveTerm (SaveTermParams name e) =
