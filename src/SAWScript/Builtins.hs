@@ -427,36 +427,41 @@ getTopLevelPPOpts = do
   return (SV.sawPPOpts opts)
 
 show_term :: Term -> TopLevel String
-show_term t = do
-  opts <- getTopLevelPPOpts
-  return (scPrettyTerm opts t)
+show_term t =
+  do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     liftIO $ scShowTerm sc opts t
 
 print_term :: Term -> TopLevel ()
-print_term t = do
-  opts <- getTopLevelPPOpts
-  printOutLnTop Info (scPrettyTerm opts t)
+print_term t = printOutLnTop Info =<< show_term t
 
 print_term_depth :: Int -> Term -> TopLevel ()
-print_term_depth d t = do
-  opts <- getTopLevelPPOpts
-  let opts' = opts { ppMaxDepth = Just d }
-  printOutLnTop Info $ show (scPrettyTerm opts' t)
+print_term_depth d t =
+  do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     let opts' = opts { ppMaxDepth = Just d }
+     output <- liftIO $ scShowTerm sc opts' t
+     printOutLnTop Info output
 
 print_goal :: ProofScript ()
 print_goal =
   withFirstGoal $ \goal ->
   do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
+     output <- liftIO $ scShowTerm sc opts (unProp (goalProp goal))
      printOutLnTop Info ("Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "):")
-     printOutLnTop Info (scPrettyTerm opts (unProp (goalProp goal)))
+     printOutLnTop Info output
      return ((), mempty, Just goal)
 
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n =
   withFirstGoal $ \goal ->
   do opts <- getTopLevelPPOpts
+     sc <- getSharedContext
      let opts' = opts { ppMaxDepth = Just n }
+     output <- liftIO $ scShowTerm sc opts' (unProp (goalProp goal))
      printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
-     printOutLnTop Info $ scPrettyTerm opts' (unProp (goalProp goal))
+     printOutLnTop Info output
      return ((), mempty, Just goal)
 
 printGoalConsts :: ProofScript ()
