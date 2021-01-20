@@ -70,6 +70,7 @@ import SAWScript.X86 hiding (Options)
 import SAWScript.X86Spec
 import SAWScript.Crucible.Common
 
+import qualified SAWScript.Crucible.Common as Common
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Override as O
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
@@ -376,7 +377,15 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
 
       liftIO $ C.executeCrucible execFeatures initial >>= \case
         C.FinishedResult{} -> pure ()
-        C.AbortedResult{} -> printOutLn opts Warn "Warning: function never returns"
+        C.AbortedResult _ ar -> do
+          printOutLn opts Warn "Warning: function never returns"
+          print $ Common.ppAbortedResult
+            ( \gp ->
+                case C.lookupGlobal mvar $ gp ^. C.gpGlobals of
+                  Nothing -> "LLVM memory global variable not initialized"
+                  Just mem -> C.LLVM.ppMem $ C.LLVM.memImplHeap mem
+            )
+            ar
         C.TimeoutResult{} -> fail "Execution timed out"
 
       stats <- checkGoals sym opts sc tactic
@@ -809,7 +818,10 @@ assertPost globals env premem preregs = do
   pointsToMatches <- forM (ms ^. MS.csPostState . MS.csPointsTos)
     $ assertPointsTo env tyenv nameEnv
 
-  let setupConditionMatches = fmap
+  let setupConditionMatchesPre = fmap -- assume preconditions
+        (LO.executeSetupCondition opts sc cc ms)
+        $ ms ^. MS.csPreState . MS.csConditions
+  let setupConditionMatchesPost = fmap -- assert postconditions
         (LO.learnSetupCondition opts sc cc ms MS.PostState)
         $ ms ^. MS.csPostState . MS.csConditions
 
@@ -828,12 +840,15 @@ assertPost globals env premem preregs = do
     . sequence_ $ mconcat
     [ returnMatches
     , pointsToMatches
-    , setupConditionMatches
+    , setupConditionMatchesPre
+    , setupConditionMatchesPost
     , [LO.assertTermEqualities sc cc]
     ]
   st <- case result of
     Left err -> throwX86 $ show err
     Right (_, st) -> pure st
+  liftIO . forM_ (view O.osAssumes st) $ \p ->
+    C.addAssumption sym . C.LabeledPred p $ C.AssumptionReason (st ^. O.osLocation) "precondition"
   liftIO . forM_ (view LO.osAsserts st) $ \(W4.LabeledPred p r) ->
     C.addAssertion sym $ C.LabeledPred p r
 

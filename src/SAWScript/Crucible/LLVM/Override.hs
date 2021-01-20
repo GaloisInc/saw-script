@@ -38,6 +38,7 @@ module SAWScript.Crucible.LLVM.Override
 
   , learnCond
   , learnSetupCondition
+  , executeSetupCondition
   , matchArg
   , assertTermEqualities
   , methodSpecHandler
