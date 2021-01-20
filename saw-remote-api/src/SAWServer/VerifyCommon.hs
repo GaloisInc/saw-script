@@ -69,7 +69,7 @@ instance Doc.DescribedParams (VerifyParams a) where
     , ("lemmas",
        Doc.Paragraph [Doc.Text "The specifications to use for other functions during this verification."])
     , ("check sat",
-       Doc.Paragraph [Doc.Text "Whether or not to check path satisfiability checking."])
+       Doc.Paragraph [Doc.Text "Whether or not to enable path satisfiability checking."])
     , ("contract",
        Doc.Paragraph [Doc.Text "The specification to verify for the function."])
     , ("script",
