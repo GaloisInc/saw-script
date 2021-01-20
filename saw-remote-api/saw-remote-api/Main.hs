@@ -1,8 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import qualified Data.Text as T
-
 import Argo
 import Argo.DefaultMain
 import qualified Argo.Doc as Doc
@@ -51,7 +49,6 @@ sawMethods =
      "SAW/Cryptol/save term"
      Command
      saveTermDescr
-     (Doc.Paragraph [Doc.Text "Save a term to be referenced later by name."])
      saveTerm
   -- JVM
   {-
