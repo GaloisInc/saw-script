@@ -41,6 +41,7 @@ import qualified Data.Set as Set
 import Data.Maybe
 import Data.Time.Clock
 import Data.Typeable
+import Data.Text (Text)
 import qualified Data.Text as Text
 import System.Directory
 import qualified System.Environment
@@ -578,7 +579,7 @@ goal_apply (Theorem (Prop rule) _stats) =
                          return ((), ProofState (newgoals ++ goals') concl stats timeout)
          applyFirst (asPiLists rule)
   where
-    asPiLists :: Term -> [([(String, Term)], Term)]
+    asPiLists :: Term -> [([(Text, Term)], Term)]
     asPiLists t =
       case asPi t of
         Nothing -> [([], t)]
@@ -608,7 +609,7 @@ goal_intro s =
       case asPi (unProp (goalProp goal)) of
         Nothing -> fail "goal_intro failed: not a pi type"
         Just (nm, tp, body) ->
-          do let name = if null s then nm else s
+          do let name = if null s then Text.unpack nm else s
              sc <- SV.getSharedContext
              x <- io $ scFreshGlobal sc name tp
              tt <- io $ mkTypedTerm sc x
@@ -983,7 +984,7 @@ w4AbcVerilog _unints sc _hashcons g =
               else do bits <- reverse <$> parseAigerCex cexText
                       let goalArgs' = reverse goalArgs
                           argTys = map snd goalArgs'
-                          argNms = map fst goalArgs'
+                          argNms = map (Text.unpack . fst) goalArgs'
                       finiteArgTys <- traverse (asFiniteType sc) argTys
                       case liftCexBB finiteArgTys bits of
                         Left parseErr -> fail parseErr

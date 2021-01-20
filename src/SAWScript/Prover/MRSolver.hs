@@ -13,6 +13,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 import Data.Semigroup
+import qualified Data.Text as Text
 
 import Prettyprinter
 
@@ -612,7 +613,7 @@ askMRSolver sc smt_conf timeout t1 t2 =
        flip evalStateT init_st $ runExceptT $
        do mrSolveEq (Type tp1) (Type tp2)
           let (pi_args, ret_tp) = asPiList tp1
-          vars <- mapM (\(x, x_tp) -> liftSC2 scFreshGlobal x x_tp) pi_args
+          vars <- mapM (\(x, x_tp) -> liftSC2 scFreshGlobal (Text.unpack x) x_tp) pi_args
           case asCompMApp ret_tp of
             Just _ -> return ()
             Nothing -> throwError (NotCompFunType tp1)
