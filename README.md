@@ -1,5 +1,4 @@
-[![Build
-Status](https://travis-ci.org/GaloisInc/saw-script.svg?branch=master)](https://travis-ci.org/GaloisInc/saw-script)
+![Build Status](https://github.com/actions/GaloisInc/saw-script/workflows/.github/workflows/nightly.yml/badge.svg)
 
 # SAWScript
 
