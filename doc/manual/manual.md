@@ -72,6 +72,11 @@ command-line options:
   ~ Specify a colon-delimited list of paths to `.jar` files to search
   for Java classes.
 
+`-b path, --java-bin-dirs`
+
+  ~ Specfy a colon-delimited list of paths to search for a Java
+    executable.
+
 `-d num, --sim-verbose=num`
 
   ~ Set the verbosity level of the Java and LLVM simulators.
@@ -87,6 +92,11 @@ SAW also uses several environment variables for configuration:
   ~ Specify a colon-delimited list of directory paths to search for Cryptol
   imports (including the Cryptol prelude).
 
+`PATH`
+
+  ~ If the `--java-bin-dirs` option is not set, then the `PATH` will be
+    searched to find a Java executable.
+
 `SAW_IMPORT_PATH`
 
   ~ Specify a colon-delimited list of directory paths to search for imports.
@@ -94,7 +104,9 @@ SAW also uses several environment variables for configuration:
 `SAW_JDK_JAR`
 
   ~ Specify the path of the `.jar` file containing the core Java
-  libraries.
+  libraries. Note that that is not necessary if the `--java-bin-dirs` option
+  or the `PATH` environment variable is used, as SAW can use this information
+  to determine the location of the core Java libraries' `.jar` file.
 
 On Windows, semicolon-delimited lists are used instead of colon-delimited
 lists.
@@ -1530,18 +1542,23 @@ after 3.5, however, so report any parsing failures as [on
 GitHub](https://github.com/GaloisInc/saw-script/issues).
 
 Loading Java code is slightly more complex, because of the more
-structured nature of Java packages. First, when running `saw`, two flags
-control where to look for classes. The `-j` flag takes the name of a JAR
-file as an argument and adds the contents of that file to the class
-database. The `-c` flag takes the name of a directory as an argument and
-adds all class files found in that directory (and its subdirectories) to
-the class database. By default, the current directory is included in the
-class path. However, the Java runtime and standard library (usually
-called `rt.jar`) is generally required for any non-trivial Java code,
-and can be installed in a wide variety of different locations.
-Therefore, for most Java analysis, you must provide the `-j` argument or
-the `SAW_JDK_JAR` environment variable to specify where to find this
-file.
+structured nature of Java packages. First, when running `saw`, three flags
+control where to look for classes:
+
+* The `-b` flag takes the path where the `java` executable lives, which is used
+  to locate the Java standard library classes and add them to the class
+  database. Alternatively, one can put the directory where `java` lives on the
+  `PATH`, which SAW will search if `-b` is not set.
+
+* The `-j` flag takes the name of a JAR file as an argument and adds the
+  contents of that file to the class database.
+
+* The `-c` flag takes the name of a directory as an argument and adds all class
+  files found in that directory (and its subdirectories) to the class database.
+  By default, the current directory is included in the class path.
+
+Most Java programs will only require setting the `-b` flag, as that is enough
+to bring in the standard Java libraries.
 
 Once the class path is configured, you can pass the name of a class to
 the `java_load_class` function.

@@ -228,19 +228,13 @@ First, we compile the Java code to a JVM class file.
 Like with `clang`, the `-g` flag instructs `javac` to include debugging
 information, which can be useful to preserve variable names.
 
-Using `saw` with Java code requires a command-line option `-j` that
-locates the Java standard libraries. Run the code in this section with
-the command:
+Using `saw` with Java code requires a command-line option `-b` that
+locates Java. Run the code in this section with the command:
 
-    > saw -j <path to rt.jar or classes.jar from JDK> ffs_compare.saw
+    > saw -b <path to directory where Java lives> ffs_compare.saw
 
-This path can also be specified in the `SAW_JDK_JAR` environment
-variable.
-
-For many versions of Java you can find the standard libraries JAR by
-grepping the output of `java -v`:
-
-    > java -v 2>&1 | grep Opened
+Alternatively, if Java is located on your `PATH`, you can omit the `-b`
+option entirely.
 
 Both Oracle JDK and OpenJDK versions 6 through 8 work well with SAW.
 From version 9 onward, the core libraries are no longer stored in a
@@ -372,7 +366,7 @@ $include all code/java_add.saw
 
 This can be run as follows:
 
-    > saw -j <path to rt.jar or classes.jar from JDK> java_add.saw
+    > saw -b <path to directory where Java lives> java_add.saw
 
 In this example, the definitions of `add_spec` and `dbl_spec` provide
 extra information about how to configure the symbolic simulator when
@@ -481,11 +475,10 @@ implementations, instead.
 $include all code/ffs_java.saw
 ````
 
-As with previous Java examples, this one needs to be run with the `-j`
-flag to tell the interpreter where to find the Java standard
-libraries.
+As with previous Java examples, this one needs to be run with the `-b`
+flag to tell the interpreter where to find Java:
 
-    > saw -j <path to rt.jar or classes.jar from JDK> ffs_java.saw
+    > saw -b <path to directory where Java lives> ffs_java.saw
 
 AIG Export and Import
 ---------------------
@@ -515,7 +508,7 @@ We can use external AIGs to verify the equivalence as follows,
 generating the AIGs with the first script and comparing them with the
 second:
 
-    > saw -j <path to rt.jar or classes.jar from JDK> ffs_gen_aig.saw
+    > saw -b <path to directory where Java lives> ffs_gen_aig.saw
     > saw ffs_compare_aig.saw
 
 Files in AIGER format can be produced and processed by several
