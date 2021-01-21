@@ -77,7 +77,7 @@ jobs:
           submodules: true
       - run: git -C deps/abcBridge submodule update --init
 
-      - uses: actions/setup-haskell@v1
+      - uses: actions/setup-haskell@v1.1
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
