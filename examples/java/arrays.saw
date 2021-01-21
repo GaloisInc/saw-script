@@ -1,49 +1,69 @@
+enable_experimental;
+
+c <- java_load_class "ArrayTest";
+
+copy_ms <-
+jvm_verify c "copy" [] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    b_ref <- jvm_alloc_array 10 java_int;
+    a <- jvm_fresh_var "a" (java_array 10 java_int);
+    jvm_array_is a_ref a;
+    jvm_execute_func [this, a_ref, b_ref];
+    jvm_array_is b_ref a;
+  }
+  abc;
+
+unit_ms <-
+jvm_verify c "unit" [] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    jvm_execute_func [this, a_ref];
+    jvm_array_is a_ref {{ [1, 0, 0, 0, 0, 0, 0, 0, 0, 0] : [10][32] }};
+  }
+  abc;
+
+clear_ms <-
+jvm_verify c "clear" [] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    jvm_execute_func [this, a_ref];
+    jvm_array_is a_ref {{ zero : [10][32] }};
+  }
+  abc;
+
+sum_ms <-
+jvm_verify c "sum" [] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    a <- jvm_fresh_var "a" (java_array 10 java_int);
+    jvm_array_is a_ref a;
+    jvm_execute_func [this, a_ref];
+    jvm_return (jvm_term {{ sum a }});
+  }
+  abc;
+
+comp_ms <-
+jvm_verify c "comp" [unit_ms] false
+  do {
+    this <- jvm_alloc_object "ArrayTest";
+    a_ref <- jvm_alloc_array 10 java_int;
+    jvm_execute_func [this, a_ref];
+    jvm_array_is a_ref {{ [1, 0, 0, 0, 0, 0, 0, 0, 0, 0] : [10][32] }};
+  }
+  abc;
+
 enable_deprecated;
-let copy_setup : JavaSetup () = do {
-    a <- java_var "a" (java_array 10 java_int);
-    java_var "b" (java_array 10 java_int);
-    java_ensure_eq "b" {{ a : [10][32] }};
-    java_verify_tactic abc;
-};
-
-let unit_setup : JavaSetup () = do {
-    java_var "a" (java_array 10 java_int);
-    java_ensure_eq "a" {{ [1, 0, 0, 0, 0, 0, 0, 0, 0, 0] : [10][32] }};
-    java_verify_tactic abc;
-};
-
-let clear_setup : JavaSetup () = do {
-    java_requires_class "java.util.Arrays";
-    java_var "a" (java_array 10 java_int);
-    java_ensure_eq "a" {{ zero : [10][32] }};
-    java_verify_tactic abc;
-};
-
-let sum_setup : JavaSetup () = do {
-    a <- java_var "a" (java_array 10 java_int);
-    // Silly way to write it, but works as a test.
-    java_return {{ (a@0) + (a@1) + (a@2) + (a@3) + (a@4) +
-                   (a@5) + (a@6) + (a@7) + (a@8) + (a@9)  }};
-    java_verify_tactic abc;
-};
 
 let sum_setup' : JavaSetup () = do { java_var "a" (java_array 10 java_int); return (); };
 
 let id_setup : JavaSetup () = do { java_var "a" (java_array 10 java_int); return (); };
 
-let comp_setup : JavaSetup () = do {
-    java_var "a" (java_array 10 java_int);
-    java_ensure_eq "a" {{ [1, 0, 0, 0, 0, 0, 0, 0, 0, 0] : [10][32] }};
-    java_verify_tactic abc;
-};
-
 let main : TopLevel () = do {
-    c <- java_load_class "ArrayTest";
-    copy_ms <- java_verify c "copy" [] copy_setup;
-    unit_ms <- java_verify c "unit" [] unit_setup;
-    clear_ms <- java_verify c "clear" [] clear_setup;
-    sum_ms <- java_verify c "sum" [] sum_setup;
-    comp_ms <- java_verify c "comp" [unit_ms] comp_setup;
     print "Extracting model of sum, which has type:";
     sum_tm <- java_extract c "sum" sum_setup';
     id_tm <- java_extract c "arr_id" id_setup;
