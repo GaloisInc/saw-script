@@ -1,7 +1,8 @@
 import os
 import os.path
 import saw.connection as saw
-from saw.llvm import uint32_t, Contract, void
+from saw.llvm import Contract, void
+from saw.llvm_types import i32
 from saw.proofscript import *
 from env_server import *
 
@@ -16,22 +17,18 @@ c.llvm_load_module('m', swap_bc).result()
 class Swap(Contract):
     def __init__(self) -> None:
         super().__init__()
-        self.t = uint32_t
+        self.ty = i32
 
-    def pre(self) -> None:
-        self.x = self.declare(self.t)
-        self.y = self.declare(self.t)
-        self.x_pointer = self.declare_pointer(self.t)
-        self.y_pointer = self.declare_pointer(self.t)
-        self.points_to(self.x_pointer, self.x)
-        self.points_to(self.y_pointer, self.y)
+    def specification(self) -> None:
+        x = self.fresh_var(self.ty)
+        y = self.fresh_var(self.ty)
+        x_ptr = self.alloc(self.ty, points_to=x)
+        y_ptr = self.alloc(self.ty, points_to=y)
 
-    def call(self) -> None:
-        self.arguments(self.x_pointer, self.y_pointer)
+        self.execute_func(x_ptr, y_ptr)
 
-    def post(self) -> None:
-        self.points_to(self.x_pointer, self.y)
-        self.points_to(self.y_pointer, self.x)
+        self.points_to(x_ptr, y)
+        self.points_to(y_ptr, x)
         self.returns(void)
 
 contract = Swap()

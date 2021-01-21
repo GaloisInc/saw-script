@@ -12,31 +12,31 @@ swap_bc = os.path.join(dir_path, 'swap.bc')
 
 c.llvm_load_module('m', swap_bc).result()
 
-uint32_t = {"type": "primitive type", "primitive": "integer", "size": 32}
+i32 = {"type": "primitive type", "primitive": "integer", "size": 32}
 
 # ServerNames
 xp_name = {"name": "xp"}
 yp_name = {"name": "yp"}
 
 # SetupVals
-xp = {"setup value": "saved", "name": "xp"}
-yp = {"setup value": "saved", "name": "yp"}
+xp = {"setup value": "named", "name": "xp"}
+yp = {"setup value": "named", "name": "yp"}
 x = {"setup value": "Cryptol", "expression": "x" }
 y = {"setup value": "Cryptol", "expression": "x" }
 
 contract = {
     "pre vars": [
-        {"server name": "x", "name": "x", "type": uint32_t},
-        {"server name": "y", "name": "y", "type": uint32_t}
+        {"server name": "x", "name": "x", "type": i32},
+        {"server name": "y", "name": "y", "type": i32}
     ],
     "pre conds": [],
     "pre allocated": [
         {"server name": "xp",
-         "type": uint32_t,
+         "type": i32,
          "mutable": True,
          "alignment": None},
         {"server name": "yp",
-         "type": uint32_t,
+         "type": i32,
          "mutable": True,
          "alignment": None}
     ],

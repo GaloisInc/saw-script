@@ -18,7 +18,7 @@ import SAWServer.SetOption
 
 main :: IO ()
 main =
-  do theApp <- mkApp "SAW RPC Server" serverDocs initialState sawMethods
+  do theApp <- mkDefaultApp "SAW RPC Server" serverDocs initialState sawMethods
      defaultMain description theApp
 
 serverDocs :: [Doc.Block]
