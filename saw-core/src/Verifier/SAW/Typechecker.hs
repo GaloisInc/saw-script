@@ -113,7 +113,7 @@ inferResolveNameApp n args =
          typeInferComplete (DataTypeApp (dtName dt) params ixs)
        (_, Just (ResolvedDef d)) ->
          do t <- liftTCM scGlobalDef (defIdent d)
-            f <- typeInferComplete t
+            f <- TypedTerm t <$> liftTCM scTypeOf t
             inferApplyAll f args
        (Nothing, Nothing) ->
          throwTCError $ UnboundName n
