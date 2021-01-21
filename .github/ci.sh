@@ -39,12 +39,12 @@ retry() {
 
 setup_dist_bins() {
   if $IS_WIN; then
-    is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
+    is_exe "dist/bin" "saw" && return
   else
     is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
+    extract_exe "saw-remote-api" "dist/bin"
   fi
   extract_exe "saw" "dist/bin"
-  extract_exe "saw-remote-api" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
   echo "$PWD/dist/bin" >> "$GITHUB_PATH"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
@@ -121,10 +121,12 @@ build() {
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
   echo "allow-newer: all" >> cabal.project.local
-  pkgs=(saw saw-remote-api)
+  pkgs=(saw)
   if $IS_WIN; then
     echo "flags: -builtin-abc" >> cabal.project.local
     echo "constraints: cryptol-saw-core -build-css" >> cabal.project.local
+  else
+    pkgs+=(saw-remote-api)
   fi
   echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
