@@ -38,7 +38,7 @@ cryptolLoadModule (CryptolLoadModuleParams modName) =
      let importSpec = Nothing -- TODO add field to params
      fileReader <- getFileReader
      let ?fileReader = fileReader
-     cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Right modName) qual importSpec
+     cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Right modName) qual CEnv.PublicAndPrivate importSpec
      case cenv' of
        Left (ex :: SomeException) -> raise $ cryptolError (show ex)
        Right cenv'' ->
@@ -73,7 +73,7 @@ cryptolLoadFile (CryptolLoadFileParams fileName) =
      let importSpec = Nothing -- TODO add field to params
      fileReader <- getFileReader
      let ?fileReader = fileReader
-     cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Left fileName) qual importSpec
+     cenv' <- liftIO $ try $ CEnv.importModule sc cenv (Left fileName) qual CEnv.PublicAndPrivate importSpec
      case cenv' of
        Left (ex :: SomeException) -> raise $ cryptolError (show ex)
        Right cenv'' ->
