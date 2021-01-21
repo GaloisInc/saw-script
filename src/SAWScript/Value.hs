@@ -165,6 +165,7 @@ data AIGProxy where
 data SAW_CFG where
   LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> SAW_CFG
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
+  MIR_CFG :: SAW_CFG
 
 data BuiltinContext = BuiltinContext
   { biSharedContext :: SharedContext,

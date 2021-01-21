@@ -2551,6 +2551,14 @@ primitives = Map.fromList
     , " from the named LLVM bitcode file."
     ]
 
+  , prim "heapster_init_env_mir"
+    "String -> String -> TopLevel HeapsterEnv"
+    (bicVal heapster_init_env_mir)
+    Experimental
+    [ "Create a new Heapster environment with the given SAW module name"
+    , " from the named MIR JSON file."
+    ]
+
   , prim "heapster_init_env_from_file"
     "String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_init_env_from_file)

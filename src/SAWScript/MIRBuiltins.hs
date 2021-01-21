@@ -1,5 +1,4 @@
 {-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Module      : SAWScript.MIRBuiltins
@@ -8,34 +7,45 @@
 -- Stability   : provisional
 module SAWScript.MIRBuiltins where
 
-import Control.Lens ((^.))
-import GHC.Stack (HasCallStack)
-import Lang.Crucible.FunctionHandle (HandleAllocator (..))
-import Mir.Generate (generateMIR)
-import Mir.Generator (CollectionState (..), RustModule (..), collection)
-import Mir.Mir (Collection (..))
-import Mir.Pass (rewriteCollection)
-import Mir.Trans (transCollection)
-import Mir.TransCustom (customOps)
-import SAWScript.Value (TopLevel, getHandleAlloc, io)
+import           Control.Lens ((^.))
+import qualified Data.Map.Strict as Map
+import           GHC.Stack (HasCallStack)
+import           Lang.Crucible.FunctionHandle (HandleAllocator)
+import           Mir.Generate (generateMIR)
+import           Mir.Generator (CollectionState (..), RustModule (..), collection, rmCFGs)
+import           Mir.Mir (Collection (..))
+import           Mir.Pass (rewriteCollection)
+import           Mir.Trans (transCollection)
+import           Mir.TransCustom (customOps)
+import           SAWScript.Value (TopLevel, SAW_CFG (..), getHandleAlloc, io)
 
 mir_load_module :: FilePath -> TopLevel RustModule
 mir_load_module file = do
   halloc <- getHandleAlloc
-  let ?debug = 0
-      ?assertFalseOnError = False
-      ?printCrucible = False
+  let ?debug = 1
+      ?assertFalseOnError = True
+      ?printCrucible = True
   io $ loadAndTranslateMIR file halloc
   
+crucible_mir_cfg :: RustModule -> String -> TopLevel SAW_CFG
+crucible_mir_cfg rm fn_name = do
+  io $ mapM_ print $ Map.keys $ rm ^. rmCFGs 
+  return MIR_CFG 
+  
 
--- llvm_load_module :: FilePath -> TopLevel (Some CMS.LLVMModule)
--- llvm_load_module file =
---   do laxArith <- gets rwLaxArith
---      let ?laxArith = laxArith
---      halloc <- getHandleAlloc
---      io (CMS.loadLLVMModule file halloc) >>= \case
---        Left err -> fail (LLVM.formatError err)
---        Right llvm_mod -> return llvm_mod
+
+--   crucible_llvm_cfg ::
+--   Some LLVMModule ->
+--   String ->
+--   TopLevel SAW_CFG
+-- crucible_llvm_cfg (Some lm) fn_name =
+--   do let ctx = modTrans lm ^. Crucible.transContext
+--      let ?lc = ctx^.Crucible.llvmTypeCtx
+--      setupLLVMCrucibleContext False lm $ \cc ->
+--        case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
+--          Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
+--          Just (_,cfg) -> return (LLVM_CFG cfg)
+
 
 -- These functions borrowed from Stuart's branch of crucible/crux-mir.
 -- Temporarily moved here so that we can make changes without having to move

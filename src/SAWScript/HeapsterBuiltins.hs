@@ -12,6 +12,7 @@
 
 module SAWScript.HeapsterBuiltins
        ( heapster_init_env
+       , heapster_init_env_mir
        , heapster_init_env_from_file
        , heapster_init_env_for_files
        , load_sawcore_from_file
@@ -287,6 +288,7 @@ heapster_init_env_mir _bic _opts mod_str mir_filename =
           heapsterEnvPermEnvRef = perm_env_ref,
           heapsterEnvModules = [Some $ IRMIRModule mir_mod]
         }
+
 load_sawcore_from_file :: BuiltinContext -> Options -> String -> TopLevel ()
 load_sawcore_from_file _ _ mod_filename =
   do sc <- getSharedContext
@@ -329,7 +331,7 @@ heapster_get_cfg _ _ henv nm =
     Just (Some (IRLLVMModule lm)) ->
       crucible_llvm_cfg (Some lm) nm
     Just (Some (IRMIRModule lm)) ->
-      undefined
+      crucible_mir_cfg lm nm
     Nothing -> fail ("Could not find CFG for symbol: " ++ nm)
 
 -- | Define a new opaque named permission with the given name, arguments, and
@@ -599,7 +601,7 @@ heapster_find_symbols _bic _opts henv str =
                           if isInfixOf str nm then Just nm else Nothing) $
                 map L.decName (L.modDeclares $ modAST lm) ++
                 map L.defName (L.modDefines $ modAST lm)
-              IRMIRModule _ -> undefined) $
+              IRMIRModule mm -> undefined) $
   heapsterEnvModules henv
 
 -- | Search for a symbol name in any LLVM module in a 'HeapsterEnv' that
