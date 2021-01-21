@@ -2,7 +2,9 @@
  *** A version of the computation monad using the option-set monad
  ***)
 
+From Coq Require Import Program.Basics.
 From Coq Require Export Morphisms Setoid.
+From Coq Require Import Strings.String.
 
 (***
  *** The Monad Typeclasses
@@ -49,11 +51,11 @@ Qed.
 
 (* The error operation *)
 Class MonadErrorOp (M:Type -> Type) : Type :=
-  errorM : forall {A}, M A.
+  errorM : forall {A}, string -> M A.
 
 (* A monad with errors *)
 Class MonadError M `{Monad M} `{MonadErrorOp M} : Prop :=
-  { errorM_bindM : forall A B (f:A -> M B), errorM >>= f ~= errorM }.
+  { errorM_bindM : forall A B str (f:A -> M B), errorM str >>= f ~= errorM str }.
 
 
 (** Monads with Fixed-points **)
@@ -239,7 +241,7 @@ Qed.
 
 
 Instance MonadErrorOp_OptionT M `{MonadReturnOp M} : MonadErrorOp (OptionT M) :=
-  fun A => returnM None.
+  fun A _ => returnM None.
 
 Instance MonadError_OptionT M `{Monad M} : MonadError (OptionT M).
 Proof.
@@ -531,16 +533,6 @@ Definition letRecM {lrts : LetRecTypes} {B} (F: lrtPi lrts (lrtTupleType lrts))
   lrtApply body (multiFixM F).
 
 
-(* FIXME: write this! *)
-Class ProperLRTFun {lrts} (F : lrtPi lrts (lrtTupleType lrts)) : Prop :=
-  { properLRTFun : True }.
-
-Instance ProperLRTFun_any lrts F : @ProperLRTFun lrts F.
-Proof.
-  constructor. apply I.
-Qed.
-
-
 (***
  *** Refinement Proofs
  ***)
@@ -576,21 +568,62 @@ Proof.
   intro e; rewrite e. reflexivity.
 Qed.
 
+Lemma refinesM_errorM_returnM A s (a:A) : ~ errorM s |= returnM a.
+Proof.
+  intro H; vm_compute in H.
+  apply (fun H => H None eq_refl) in H.
+  discriminate H.
+Qed.
+
+Lemma refinesM_returnM_errorM A (a:A) s : ~ returnM a |= errorM s.
+Proof.
+  intro H; vm_compute in H.
+  apply (fun H => H (Some a) eq_refl) in H.
+  discriminate H.
+Qed.
+
 (* If a monadic function f is F-closed w.r.t. the refinement relation, then the
 least fixed-point of F refines f *)
-Lemma refinesM_fixM A B (F : (forall (a:A), CompM (B a)) ->
+Lemma refinesM_fixM_l A B (F : (forall (a:A), CompM (B a)) ->
                              (forall (a:A), CompM (B a))) f :
   (forall a, F f a |= f a) -> forall a, fixM F a |= f a.
 Proof.
-  admit. (* FIXME *)
-Admitted.
+  intros F_closed a opt_b in_fix.
+  apply in_fix. intros a' opt_b' in_F. apply F_closed. apply in_F.
+Qed.
+
+Lemma refinesM_fixM_lr A B (F G : (forall (a:A), CompM (B a)) ->
+                                  (forall (a:A), CompM (B a))) :
+  (forall f a, F f a |= G f a) -> forall a, fixM F a |= fixM G a.
+Proof.
+  intros leq_FG a opt_b in_fixF f G_closed.
+  apply (refinesM_fixM_l _ _ F); [ | assumption ].
+  intros a' opt_b' in_F. apply G_closed. apply leq_FG. assumption.
+Qed.
 
 (* Lift refinesM to monadic functions *)
 Fixpoint refinesFun {lrt} : relation (lrtToType lrt) :=
   match lrt return relation (lrtToType lrt) with
   | LRT_Ret B => refinesM
-  | LRT_Fun A lrtF => fun f1 f2 => forall a, refinesFun (f1 a) (f2 a)
+  | LRT_Fun A lrtF => forall_relation (fun a => @refinesFun (lrtF a))
   end.
+
+Instance PreOrder_refinesFun lrt : PreOrder (@refinesFun lrt).
+Proof.
+  induction lrt.
+  - apply PreOrder_refinesM.
+  - split.
+    { intros f a. reflexivity. }
+    { intros f1 f2 f3 H1 H2 a. transitivity (f2 a); [ apply H1 | apply H2 ]. }
+Qed.
+
+Instance subrelation_forall_const_pointwise A B (R : relation B)
+  : subrelation (forall_relation (fun _ => R)) (pointwise_relation A R).
+Proof. vm_compute; auto. Qed.
+
+(* A convenient specialization of refinesFun *)
+Definition refinesFun1 {A} {B:A -> Type} : (forall a, CompM (B a)) -> (forall a, CompM (B a)) -> Prop :=
+  refinesFun (lrt:=LRT_Fun _ (fun _ => LRT_Ret _)).
 
 (* Lift refinesM to tuples of monadic functions *)
 Fixpoint refinesFunTuple {lrts} : relation (lrtTupleType lrts) :=
@@ -600,6 +633,42 @@ Fixpoint refinesFunTuple {lrts} : relation (lrtTupleType lrts) :=
     fun tup1 tup2 => refinesFun (fst tup1) (fst tup2) /\
                      refinesFunTuple (snd tup1) (snd tup2)
   end.
+
+Fixpoint respectfulLRTPi {lrts} {B} : relation (lrtPi lrts (CompM B)) :=
+  match lrts with
+  | LRT_Nil => refinesM
+  | LRT_Cons _ _ => respectful refinesFun respectfulLRTPi
+  end.
+
+(* `ProperLRTFun F` is just `Proper (refinesFun ==> ... ==> refinesFun ==> refinesM) F` *)
+Class ProperLRTFun {lrts} {B} (F : lrtPi lrts (CompM B)) : Prop :=
+  { properLRTFun : Proper respectfulLRTPi F }.
+
+(* All constant functions are proper *)
+Instance ProperLRTFun_const lrts B b : @ProperLRTFun lrts B (lrtLambda (fun _ => b)).
+Proof.
+  split; induction lrts; vm_compute; intros; assumption.
+Qed.
+
+(* FIXME Get rid of this *)
+Instance ProperLRTFun_any lrts B F : @ProperLRTFun lrts B F.
+Proof.
+  admit. (* FIXME *)
+Admitted.
+
+Instance Proper_lrtApply lrts B
+  : Proper (respectfulLRTPi ==> refinesFunTuple ==> refinesM) (@lrtApply lrts (CompM B)).
+Proof.
+  unfold Proper, respectful; intros F G H1 fs gs H2.
+  induction lrts; simpl in F,G,H1,fs,gs,H2; simpl.
+  - exact H1.
+  - destruct fs as [f fs]; destruct gs as [g gs]; destruct H2 as [H2 H3]; simpl in *.
+    apply IHlrts.
+    + unfold respectful in H1.
+      apply H1.
+      assumption.
+    + assumption.
+Qed.
 
 Lemma refinesFunTuple_multiFixM lrts (F:lrtPi lrts (lrtTupleType lrts)) tup :
   refinesFunTuple (lrtApply F tup) tup -> refinesFunTuple (multiFixM F) tup.
@@ -617,9 +686,56 @@ Proof.
   apply ref_f.
 Qed.
 
-Lemma refinesM_letRecM0 B F P Q : P |= Q -> @letRecM LRT_Nil B F P |= Q.
+Lemma letRecM_Nil B F P : @letRecM LRT_Nil B F P = P.
 Proof.
-  intro. apply H.
+  reflexivity.
+Qed.
+
+Lemma refinesM_letRecM_Nil_l B F P Q : P |= Q -> @letRecM LRT_Nil B F P |= Q.
+Proof.
+  rewrite letRecM_Nil. trivial.
+Qed.
+
+Lemma multiFixM_const lrts fs
+  : multiFixM (lrts:=lrts) (lrtLambda (fun _ => fs)) = fs.
+Proof.
+  admit. (* FIXME *)
+Admitted.
+
+Lemma refinesM_letRecM_const_r lrts B (F : lrtPi lrts (lrtTupleType lrts))
+                               (G : lrtTupleType lrts) (P Q : lrtPi lrts (CompM B))
+                               `{ProperLRTFun _ _ P} `{ProperLRTFun _ _ Q}
+  : refinesFunTuple (multiFixM F) G ->
+    lrtApply P G |= lrtApply Q G ->
+    @letRecM lrts B F P |= @letRecM lrts B (lrtLambda (fun _ => G)) Q.
+Proof.
+  destruct H as [ProperP]; destruct H0 as [ProperQ].
+  intros.
+  unfold letRecM.
+  rewrite H, H0, multiFixM_const.
+  reflexivity.
+Qed.
+
+Lemma lrtApply_const lrts B (b : B) (F : lrtTupleType lrts)
+  : lrtApply (lrts:=lrts) (lrtLambda (fun _ => b)) F = b.
+Proof.
+  induction lrts.
+  - reflexivity.
+  - destruct F as [ F0 F1 ].
+    simpl; rewrite (IHlrts F1).
+    reflexivity.
+Qed.
+
+Lemma refinesM_letRecM_match_r lrts B F P Q `{ProperLRTFun _ _ P}
+  : forall (G : lrtTupleType lrts),
+    @letRecM lrts B F P |= @letRecM lrts B (lrtLambda (fun _ => G)) (lrtLambda (fun _ => Q)) ->
+    @letRecM lrts B F P |= Q.
+Proof.
+  intros.
+  rewrite H0.
+  unfold letRecM.
+  rewrite lrtApply_const.
+  reflexivity.
 Qed.
 
 Lemma refinesM_if_l {A} (m1 m2:CompM A) b P :
@@ -709,4 +825,101 @@ Lemma refinesM_forallM_l {A B} (P: A -> CompM B) Q a :
   P a |= Q -> forallM P |= Q.
 Proof.
   intros r b in_b. apply r. apply in_b.
+Qed.
+
+(* NOTE: the other direction does not hold *)
+Lemma forallM_bindM A B C (P: A -> CompM B) (Q: B -> CompM C) :
+  refinesM ((forallM P) >>= Q) (forallM (fun x => P x >>= Q)).
+Proof.
+  intros c [ opt_b H ] a. exists opt_b; [ apply (H _) | assumption ].
+Qed.
+
+
+(** Conjuctive and disjunctive specifications **)
+
+Definition orM {A} (m1 m2 : CompM A) : CompM A :=
+  fun b => m1 b \/ m2 b.
+
+Lemma refinesM_orM_r {A} (m1 m2 : CompM A) P :
+  P |= m1 \/ P |= m2 -> P |= (orM m1 m2).
+Proof.
+  intros r b in_b; destruct r; [ left | right ]; apply H; assumption.
+Qed.
+
+Lemma refinesM_orM_l {A} (m1 m2 : CompM A) P :
+  m1 |= P -> m2 |= P -> orM m1 m2 |= P.
+Proof.
+  intros r1 r2 b in_b; destruct in_b; [ apply r1 | apply r2 ]; assumption.
+Qed.
+
+Lemma orM_bindM A B (m1 m2 : CompM A) (P : A -> CompM B) :
+  (orM m1 m2) >>= P ~= orM (m1 >>= P) (m2 >>= P).
+Proof.
+  intros c; split.
+  - intros [ opt_b [ r1 | r2 ] in_c ]; [ left | right ]; exists opt_b; assumption.
+  - intros [ [ opt_b in_b in_c ] | [ opt_b in_b in_c ] ]; (exists opt_b; [ | assumption ]);
+    [ left | right ]; assumption.
+Qed.
+
+Definition andM {A} (m1 m2:CompM A) : CompM A :=
+  fun b => m1 b /\ m2 b.
+
+Lemma refinesM_andM_r {A} (m1 m2 : CompM A) P :
+  P |= m1 -> P |= m2 -> P |= andM m1 m2.
+Proof.
+  intros r1 r2 b in_b. split; [ apply r1 | apply r2 ]; assumption.
+Qed.
+
+Lemma refinesM_andM_l {A} (m1 m2 : CompM A) P :
+  m1 |= P \/ m2 |= P -> andM m1 m2 |= P.
+Proof.
+  intros r b in_b; destruct r; destruct in_b; apply H; assumption.
+Qed.
+
+Lemma andM_bindM A B (m1 m2 : CompM A) (P : A -> CompM B) :
+  refinesM ((andM m1 m2) >>= P) (andM (m1 >>= P) (m2 >>= P)).
+Proof.
+  intros c [ opt_b [ r1 r2 ] in_c ]; split; exists opt_b; assumption.
+Qed.
+
+
+(** Assertions and Assumptions **)
+
+Definition assertM (P:Prop) : CompM unit :=
+  existsM (fun pf:P => returnM tt).
+
+Definition assertM_eq (P:Prop) (pf:P) : assertM P ~= returnM tt.
+Proof.
+  intro opt_a; split.
+  - intros [ _ H ]; assumption.
+  - intros H. exists pf. assumption.
+Qed.
+
+Lemma refinesM_bindM_assertM_r {A} (P:Prop) (m1 m2: CompM A) :
+  P -> m1 |= m2 -> m1 |= assertM P >> m2.
+Proof.
+  intro pf; rewrite (assertM_eq P pf). rewrite returnM_bindM. intro; assumption.
+Qed.
+
+Lemma refinesM_bindM_assertM_l {A} (P:Prop) (m1 m2: CompM A) :
+  (P -> m1 |= m2) -> assertM P >> m1 |= m2.
+Proof.
+  intro H. unfold assertM; rewrite existsM_bindM.
+  apply refinesM_existsM_l.
+  rewrite returnM_bindM; assumption.
+Qed.
+
+Definition assumingM {A} (P:Prop) (m:CompM A) : CompM A :=
+  forallM (fun pf:P => m).
+
+Lemma refinesM_assumingM_r {A} (P:Prop) (m1 m2: CompM A) :
+  (P -> m1 |= m2) -> m1 |= assumingM P m2.
+Proof.
+  apply refinesM_forallM_r.
+Qed.
+
+Lemma refinesM_assumingM_l {A} (P:Prop) (m1 m2 : CompM A) :
+  P -> m1 |= m2 -> assumingM P m1 |= m2.
+Proof.
+  apply refinesM_forallM_l.
 Qed.

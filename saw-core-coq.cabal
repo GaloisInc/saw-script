@@ -25,6 +25,8 @@ library
     prettyprinter,
     saw-core,
     text,
+    parameterized-utils,
+    bv-sized,
     vector
   hs-source-dirs: src
   exposed-modules:

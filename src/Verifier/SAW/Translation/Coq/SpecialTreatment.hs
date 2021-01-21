@@ -28,8 +28,8 @@ import           Control.Lens                       (_1, _2, over)
 import           Control.Monad.Reader               (ask)
 import qualified Data.Map                           as Map
 import           Data.String.Interpolate            (i)
+import qualified Data.Text                          as Text
 import           Prelude                            hiding (fail)
-import qualified Data.Text as Text
 
 import qualified Language.Coq.AST                   as Coq
 import           Verifier.SAW.SharedTerm
@@ -61,7 +61,7 @@ moduleRenamingMap :: Map.Map ModuleName ModuleName
 moduleRenamingMap = Map.fromList $
   over _1 (mkModuleName . (: [])) <$>
   over _2 (mkModuleName . (: [])) <$>
-  [ ("Cryptol", "CryptolPrimitives")
+  [ ("Cryptol", "CryptolPrimitivesForSAWCore")
   , ("Prelude", "SAWCorePrelude")
   ]
 
@@ -149,7 +149,7 @@ sawVectorDefinitionsModule (TranslationConfiguration {..}) =
   mkModuleName [vectorModule]
 
 cryptolPrimitivesModule :: ModuleName
-cryptolPrimitivesModule = mkModuleName ["CryptolPrimitives"]
+cryptolPrimitivesModule = mkModuleName ["CryptolPrimitivesForSAWCORE"]
 
 sawCoreScaffoldingModule :: ModuleName
 sawCoreScaffoldingModule = mkModuleName ["SAWCoreScaffolding"]
@@ -275,6 +275,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   ++
   [ ("String", mapsTo sawDefinitionsModule "String")
   , ("equalString", mapsTo sawDefinitionsModule "equalString")
+  , ("appendString", mapsTo sawDefinitionsModule "appendString")
   ]
 
   -- Utility functions
@@ -314,6 +315,7 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("bvsle",         mapsTo vectorsModule "bvsle")
   , ("bvslt",         mapsTo vectorsModule "bvslt")
   , ("bvult",         mapsTo vectorsModule "bvult")
+  , ("bvule",         mapsTo vectorsModule "bvule")
   , ("coerceVec",     mapsTo vectorsModule "coerceVec")
   , ("eq_Vec",        skip)
   , ("foldr",         mapsTo vectorsModule "foldr")
@@ -348,6 +350,9 @@ sawCorePreludeSpecialTreatmentMap configuration =
   , ("intLt",    mapsTo sawDefinitionsModule "intLt")
   , ("intToNat", mapsTo sawDefinitionsModule "intToNat")
   , ("natToInt", mapsTo sawDefinitionsModule "natToInt")
+  , ("intToBv",  mapsTo vectorsModule "intToBv")
+  , ("bvToInt",  mapsTo vectorsModule "bvToInt")
+  , ("sbvToInt", mapsTo vectorsModule "sbvToInt")
   ]
 
   -- Modular integers
@@ -367,22 +372,18 @@ sawCorePreludeSpecialTreatmentMap configuration =
   [ ("drop0",                skip)
   , ("bvugt",                skip)
   , ("bvuge",                skip)
-  , ("bvule",                skip)
   , ("bvPopcount",           skip)
   , ("bvCountLeadingZeros",  skip)
   , ("bvCountTrailingZeros", skip)
   , ("bvForall",             skip)
   , ("bvAddZeroL",           skip)
   , ("bvAddZeroR",           skip)
-  , ("bvShl",                skip)
-  , ("bvShr",                skip)
+  , ("bvShl",                mapsTo vectorsModule "bvShl")
+  , ("bvShr",                mapsTo vectorsModule "bvShr")
   , ("bvShiftL_bvShl",       skip)
   , ("bvShiftR_bvShr",       skip)
   , ("bvEq_refl",            skip)
   , ("equalNat_bv",          skip)
-  -- , ("intToBv",              skip)
-  -- , ("bvToInt",              skip)
-  , ("sbvToInt",             skip)
   , ("Float",                skip)
   , ("mkFloat",              skip)
   , ("Double",               skip)
@@ -406,16 +407,14 @@ sawCorePreludeSpecialTreatmentMap configuration =
   -- The computation monad
   ++
   [ ("CompM",                replace (Coq.Var "CompM"))
-  , ("returnM",              replace (Coq.App (Coq.Var "@returnM")
+  , ("returnM",              replace (Coq.App (Coq.ExplVar "returnM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
-  , ("bindM",                replace (Coq.App (Coq.Var "@bindM")
+  , ("bindM",                replace (Coq.App (Coq.ExplVar "bindM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
-  , ("errorM",               replace (Coq.App (Coq.Var "@errorM")
+  , ("errorM",               replace (Coq.App (Coq.ExplVar "errorM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
   , ("catchM",               skip)
-  , ("fixM",                 replace (Coq.App (Coq.Var "@fixM")
-                                       [Coq.Var "CompM", Coq.Var "_"]))
-  , ("fixM",                 replace (Coq.App (Coq.Var "@fixM")
+  , ("fixM",                 replace (Coq.App (Coq.ExplVar "fixM")
                                        [Coq.Var "CompM", Coq.Var "_"]))
   , ("LetRecType",           mapsTo compMModule "LetRecType")
   , ("LRT_Ret",              mapsTo compMModule "LRT_Ret")
@@ -432,19 +431,19 @@ sawCorePreludeSpecialTreatmentMap configuration =
 
   -- Dependent pairs
   ++
-  [ ("Sigma", replace (Coq.Var "@sigT"))
-  , ("exists", replace (Coq.Var "@existT"))
-  , ("Sigma__rec", replace (Coq.Var "@sigT_rect"))
-  , ("Sigma_proj1", replace (Coq.Var "@projT1"))
-  , ("Sigma_proj2", replace (Coq.Var "@projT2"))
+  [ ("Sigma", replace (Coq.ExplVar "sigT"))
+  , ("exists", replace (Coq.ExplVar "existT"))
+  , ("Sigma__rec", replace (Coq.ExplVar "sigT_rect"))
+  , ("Sigma_proj1", replace (Coq.ExplVar "projT1"))
+  , ("Sigma_proj2", replace (Coq.ExplVar "projT2"))
   ]
 
   -- Lists
   ++
-  [ ("List", replace (Coq.Var "@Datatypes.list"))
-  , ("Nil", replace (Coq.Var "@Datatypes.nil"))
-  , ("Cons", replace (Coq.Var "@Datatypes.cons"))
-  , ("List__rec", replace (Coq.Var "@Datatypes.list_rect"))
+  [ ("List", replace (Coq.ExplVar "Datatypes.list"))
+  , ("Nil", replace (Coq.ExplVar "Datatypes.nil"))
+  , ("Cons", replace (Coq.ExplVar "Datatypes.cons"))
+  , ("List__rec", replace (Coq.ExplVar "Datatypes.list_rect"))
   ]
 
   -- Definitions that depend on axioms currently skipped

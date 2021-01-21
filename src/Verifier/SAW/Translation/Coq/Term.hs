@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -12,6 +13,9 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PatternGuards #-}
 
 {- |
 Module      : Verifier.SAW.Translation.Coq
@@ -38,7 +42,10 @@ import qualified Data.Text                                     as Text
 import           Prelude                                       hiding (fail)
 import           Prettyprinter
 
-import qualified Data.Vector                                   as Vector (reverse)
+import           Data.Parameterized.Pair
+import           Data.Parameterized.NatRepr
+import qualified Data.BitVector.Sized                          as BV
+import qualified Data.Vector                                   as Vector (reverse, toList)
 import qualified Language.Coq.AST                              as Coq
 import qualified Language.Coq.Pretty                           as Coq
 import           Verifier.SAW.Recognizer
@@ -155,14 +162,14 @@ translateIdentWithArgs :: TermTranslationMonad m => Ident -> [Term] -> m Coq.Ter
 translateIdentWithArgs i args =
   (view currentModule <$> get) >>= \cur_modname ->
   let identToCoq ident =
-        if Just (identModule ident) == cur_modname then "@" ++ identName ident else
-          "@" ++ show (translateModuleName (identModule ident))
+        if Just (identModule ident) == cur_modname then identName ident else
+          show (translateModuleName (identModule ident))
           ++ "." ++ identName ident in
 
   (atUseSite <$> findSpecialTreatment i) >>= \case
-    UsePreserve -> Coq.App (Coq.Var $ identToCoq i) <$> mapM translateTerm args
+    UsePreserve -> Coq.App (Coq.ExplVar $ identToCoq i) <$> mapM translateTerm args
     UseRename targetModule targetName ->
-      Coq.App (Coq.Var $ identToCoq $
+      Coq.App (Coq.ExplVar $ identToCoq $
                mkIdent (fromMaybe (translateModuleName $ identModule i) targetModule)
                targetName) <$>
       mapM translateTerm args
@@ -222,6 +229,11 @@ flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
          Coq.App rect_var <$> mapM translateTerm args
     Sort s -> pure (Coq.Sort (translateSort s))
     NatLit i -> pure (Coq.NatLit (toInteger i))
+    ArrayValue (asBoolType -> Just ()) (traverse asBool -> Just bits)
+      | Pair w bv <- BV.bitsBE (Vector.toList bits)
+      , Left LeqProof <- decideLeq (knownNat @1) w -> do
+          return (Coq.App (Coq.Var "intToBv")
+                  [Coq.NatLit (intValue w), Coq.ZLit (BV.asSigned w bv)])
     ArrayValue _ vec -> do
       let addElement accum element = do
             elementTerm <- translateTerm element
@@ -279,11 +291,9 @@ asApplyAllRecognizer t = do _ <- asApp t
 -- restoring the current environment before returning.
 withLocalLocalEnvironment :: TermTranslationMonad m => m a -> m a
 withLocalLocalEnvironment action = do
-  env <- view localEnvironment <$> get
-  used <- view unavailableIdents <$> get
+  s <- get
   result <- action
-  modify $ set localEnvironment env
-  modify $ set unavailableIdents used
+  put s
   return result
 
 mkDefinition :: Coq.Ident -> Coq.Term -> Coq.Decl
@@ -407,6 +417,18 @@ translateTermUnshared t = withLocalLocalEnvironment $ do
       case f of
       (asGlobalDef -> Just i) ->
         case i of
+        "Prelude.natToInt" ->
+          case args of
+          [n] -> translateTerm n >>= \case
+            Coq.NatLit n' -> pure $ Coq.ZLit n'
+            _ -> translateIdentWithArgs "Prelude.natToInt" [n]
+          _ -> badTerm
+        "Prelude.intNeg" ->
+          case args of
+          [z] -> translateTerm z >>= \case
+            Coq.ZLit z' -> pure $ Coq.ZLit (-z')
+            _ -> translateIdentWithArgs "Prelude.intNeg" [z]
+          _ -> badTerm
         "Prelude.ite" ->
           case args of
           -- `rest` can be non-empty in examples like:

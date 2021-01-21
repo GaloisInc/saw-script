@@ -14,7 +14,15 @@ module Language.Coq.Pretty where
 import Prettyprinter
 
 import Language.Coq.AST
+import Data.Word
+import Numeric (showHex)
 import Prelude hiding ((<$>), (<>))
+
+-- | Replace all occurrences of the double quote character @"@ with the string
+-- @""@, i.e., two copies of it, as this is how Coq escapes double quote
+-- characters.
+escapeStringLit :: String -> String
+escapeStringLit = concat . map (\c -> if c == '"' then "\"\"" else [c])
 
 text :: String -> Doc ann
 text = pretty
@@ -112,14 +120,22 @@ ppTerm p e =
       hsep (ppTerm PrecApp f : map (ppTerm PrecAtom) args)
     Sort s ->
       ppSort s
-    Var x ->
-      ppIdent x
+    Var x -> ppIdent x
+    ExplVar x ->
+      parensIf (p > PrecApp) $
+      string "@" <> ppIdent x
     NatLit i ->
       integer i
+    ZLit i ->
+      -- we use hex unless our integer is a positive or negitive digit
+      if abs i > 9  then let ui = toInteger (fromInteger i :: Word64)
+                          in text ("0x" ++ showHex ui [] ++ "%Z")
+      else if i < 0 then text ("(" ++ show i ++ ")%Z")
+                    else text (show i ++ "%Z")
     List ts ->
       brackets (semiSepList (map (ppTerm PrecNone) ts))
     StringLit s ->
-      dquotes (string s)
+      dquotes (string $ escapeStringLit s)
     Scope term scope ->
       ppTerm PrecAtom term <> text "%" <> text scope
     Ltac s ->
