@@ -1,20 +1,24 @@
-enable_deprecated;
-let setx_spec : JavaSetup () = do {
-    newx <- java_var "newx" java_int;
-    java_var "sfield.StaticField.x" java_int;
-    java_ensure_eq "sfield.StaticField.x" {{ newx : [32] }};
-    java_verify_tactic abc;
-};
+enable_experimental;
 
-let getx_spec : JavaSetup () = do {
-    x <- java_var "sfield.StaticField.x" java_int;
-    java_return {{ x : [32] }};
-    java_verify_tactic abc;
-};
+c <- java_load_class "sfield.StaticField";
 
-let main : TopLevel () = do {
-    c <- java_load_class "sfield.StaticField";
-    ms_setx <- java_verify c "setx" [] setx_spec;
-    ms_getx <- java_verify c "getx" [] getx_spec;
-    print "Done.";
-};
+ms_setx <-
+  jvm_verify c "setx" [] false
+    do {
+      newx <- jvm_fresh_var "newx" java_int;
+      jvm_execute_func [jvm_term newx];
+      jvm_static_field_is "sfield/StaticField.x" (jvm_term newx);
+    }
+    abc;
+
+ms_getx <-
+  jvm_verify c "getx" [] false
+    do {
+      x <- jvm_fresh_var "newx" java_int;
+      jvm_static_field_is "sfield/StaticField.x" (jvm_term x);
+      jvm_execute_func [];
+      jvm_return (jvm_term x);
+    }
+    abc;
+
+print "Done.";

@@ -172,7 +172,6 @@ excludedClassName cname
 excludedRefs :: Set J.ClassName
 excludedRefs = Set.fromList
   [ "java/util/Comparator"
-  , "java/util/Arrays"
   , "java/lang/reflect/AccessibleObject"
   , "java/lang/reflect/AnnotatedElement"
   , "java/lang/invoke/SerializedLambda"

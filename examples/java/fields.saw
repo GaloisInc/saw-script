@@ -1,35 +1,43 @@
-enable_deprecated;
-let setx_spec : JavaSetup () = do {
-    newx <- java_var "newx" java_int;
-    java_var "this.x" java_int;
-    java_ensure_eq "this.x" {{ newx : [32] }};
-    java_verify_tactic abc;
-};
+enable_experimental;
 
-let sety_spec : JavaSetup () = do {
-    newy <- java_var "newy" java_long;
-    java_var "this.y" java_long;
-    java_ensure_eq "this.y" {{ newy : [64] }};
-    java_verify_tactic abc;
-};
+c <- java_load_class "Fields";
 
-let unitx_spec : JavaSetup () = do {
-    java_var "this.x" java_int;
-    java_ensure_eq "this.x" {{ 1 : [32] }};
-    java_verify_tactic abc;
-};
+ms_setx <-
+jvm_verify c "setx" [] false
+  do {
+    this <- jvm_alloc_object "Fields";
+    newx <- jvm_fresh_var "newx" java_int;
+    jvm_execute_func [this, jvm_term newx];
+    jvm_field_is this "x" (jvm_term newx);
+  }
+  abc;
 
-let unity_spec : JavaSetup () = do {
-    java_var "this.y" java_long;
-    java_ensure_eq "this.y" {{ 1 : [64] }};
-    java_verify_tactic abc;
-};
+ms_sety <-
+jvm_verify c "sety" [] false
+  do {
+    this <- jvm_alloc_object "Fields";
+    newy <- jvm_fresh_var "newy" java_long;
+    jvm_execute_func [this, jvm_term newy];
+    jvm_field_is this "y" (jvm_term newy);
+  }
+  abc;
 
-let main : TopLevel () = do {
-    c <- java_load_class "Fields";
-    ms_setx <- java_verify c "setx" [] setx_spec;
-    ms_sety <- java_verify c "sety" [] sety_spec;
-    ms_unitx <- java_verify c "unitx" [] unitx_spec;
-    ms_unity <- java_verify c "unity" [] unity_spec;
-    print "Done.";
-};
+ms_unitx <-
+jvm_verify c "unitx" [] false
+  do {
+    this <- jvm_alloc_object "Fields";
+    jvm_execute_func [this];
+    jvm_field_is this "x" (jvm_term {{ 1 : [32] }});
+  }
+  abc;
+
+ms_unity <-
+jvm_verify c "unity" [] false
+  do {
+    this <- jvm_alloc_object "Fields";
+    jvm_execute_func [this];
+    jvm_field_is this "y" (jvm_term {{ 1 : [64] }});
+  }
+  abc;
+
+print "Done.";

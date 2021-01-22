@@ -1,48 +1,71 @@
-enable_deprecated;
+enable_experimental;
 set_base 16;
 
 c <- java_load_class "JavaTypes";
 
-let set_spec fname ty = do {
-    x <- java_var "args[0]" ty;
-    java_var fname ty;
-    java_ensure_eq fname x;
-    java_verify_tactic abc;
-};
+let set_spec fname ty =
+  do {
+    this <- jvm_alloc_object "JavaTypes";
+    x <- jvm_fresh_var "x" ty;
+    jvm_execute_func [this, jvm_term x];
+    jvm_field_is this fname (jvm_term x);
+  };
 
-let get_spec fname ty = do {
-    x <- java_var fname ty;
-    java_return x;
-    java_verify_tactic abc;
-};
+let get_spec fname ty =
+  do {
+    this <- jvm_alloc_object "JavaTypes";
+    x <- jvm_fresh_var "x" ty;
+    jvm_field_is this fname (jvm_term x);
+    jvm_execute_func [this];
+    jvm_return (jvm_term x);
+  };
 
-let verify_get mname fname ty = java_verify c mname [] (get_spec fname ty);
-let verify_set mname fname ty = java_verify c mname [] (set_spec fname ty);
+let aset_spec fname len ty =
+  do {
+    this <- jvm_alloc_object "JavaTypes";
+    aref <- jvm_alloc_array len ty;
+    jvm_execute_func [this, aref];
+    jvm_field_is this fname aref;
+  };
 
-verify_set "bool_set"  "this.boolfld" java_bool;
-verify_set "byte_set"  "this.bfld" java_byte;
-verify_set "char_set"  "this.cfld" java_char;
-verify_set "short_set" "this.sfld" java_short;
-verify_set "int_set"   "this.ifld" java_int;
-verify_set "long_set"  "this.lfld" java_long;
+let aget_spec fname len ty =
+  do {
+    this <- jvm_alloc_object "JavaTypes";
+    aref <- jvm_alloc_array len ty;
+    jvm_field_is this fname aref;
+    jvm_execute_func [this];
+    jvm_return aref;
+  };
 
-verify_get "bool_get"  "this.boolfld" java_bool;
-verify_get "byte_get"  "this.bfld" java_byte;
-verify_get "char_get"  "this.cfld" java_char;
-verify_get "short_get" "this.sfld" java_short;
-verify_get "int_get"   "this.ifld" java_int;
-verify_get "long_get"  "this.lfld" java_long;
+let verify_set mname fname ty = jvm_verify c mname [] false (set_spec fname ty) abc;
+let verify_get mname fname ty = jvm_verify c mname [] false (get_spec fname ty) abc;
+let verify_aset mname fname n ty = jvm_verify c mname [] false (aset_spec fname n ty) abc;
+let verify_aget mname fname n ty = jvm_verify c mname [] false (aget_spec fname n ty) abc;
 
-verify_set "bool_aset"  "this.boolafld" (java_array 4 java_bool);
-verify_set "byte_aset"  "this.bafld" (java_array 4 java_byte);
-verify_set "char_aset"  "this.cafld" (java_array 4 java_char);
-verify_set "short_aset" "this.safld" (java_array 4 java_short);
-verify_set "int_aset"   "this.iafld" (java_array 4 java_int);
-verify_set "long_aset"  "this.lafld" (java_array 4 java_long);
+verify_set "bool_set"  "boolfld" java_bool;
+verify_set "byte_set"  "bfld" java_byte;
+verify_set "char_set"  "cfld" java_char;
+verify_set "short_set" "sfld" java_short;
+verify_set "int_set"   "ifld" java_int;
+verify_set "long_set"  "lfld" java_long;
 
-verify_get "bool_aget"  "this.boolafld" (java_array 4 java_bool);
-verify_get "byte_aget"  "this.bafld" (java_array 4 java_byte);
-verify_get "char_aget"  "this.cafld" (java_array 4 java_char);
-verify_get "short_aget" "this.safld" (java_array 4 java_short);
-verify_get "int_aget"   "this.iafld" (java_array 4 java_int);
-verify_get "long_aget"  "this.lafld" (java_array 4 java_long);
+verify_get "bool_get"  "boolfld" java_bool;
+verify_get "byte_get"  "bfld" java_byte;
+verify_get "char_get"  "cfld" java_char;
+verify_get "short_get" "sfld" java_short;
+verify_get "int_get"   "ifld" java_int;
+verify_get "long_get"  "lfld" java_long;
+
+verify_aset "bool_aset"  "boolafld" 4 java_bool;
+verify_aset "byte_aset"  "bafld" 4 java_byte;
+verify_aset "char_aset"  "cafld" 4 java_char;
+verify_aset "short_aset" "safld" 4 java_short;
+verify_aset "int_aset"   "iafld" 4 java_int;
+verify_aset "long_aset"  "lafld" 4 java_long;
+
+verify_aget "bool_aget"  "boolafld" 4 java_bool;
+verify_aget "byte_aget"  "bafld" 4 java_byte;
+verify_aget "char_aget"  "cafld" 4 java_char;
+verify_aget "short_aget" "safld" 4 java_short;
+verify_aget "int_aget"   "iafld" 4 java_int;
+verify_aget "long_aget"  "lafld" 4 java_long;
