@@ -57,6 +57,9 @@ jvm_verify c "comp" [unit_ms] false
   }
   abc;
 
+/*
+// FIXME: jvm_extract does not yet support array types for input/output.
+
 enable_deprecated;
 
 let sum_setup' : JavaSetup () = do { java_var "a" (java_array 10 java_int); return (); };
@@ -75,3 +78,4 @@ let main : TopLevel () = do {
     print {{ id_tm [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }};
     print "Done.";
 };
+*/
