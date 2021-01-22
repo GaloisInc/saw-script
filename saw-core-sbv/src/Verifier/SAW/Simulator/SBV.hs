@@ -446,7 +446,7 @@ toIntModOp =
 fromIntModOp :: SValue
 fromIntModOp =
   Prims.natFun $ \n -> return $
-  Prims.intFun "fromIntModOp" $ \x -> return $
+  Prims.intModFun "fromIntModOp" $ \x -> return $
   VInt (svRem x (literalSInteger (toInteger n)))
 
 intModEqOp :: SValue
