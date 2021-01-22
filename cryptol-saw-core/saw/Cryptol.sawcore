@@ -258,6 +258,11 @@ seq_cong1 : (m : Num) -> (n : Num) -> (a : sort 0) ->
 seq_cong1 m n a eq_mn =
   eq_cong Num m n eq_mn (sort 0) (\ (x:Num) -> seq x a);
 
+IntModNum_cong :
+  (m : Num) -> (n : Num) -> Eq Num m n -> Eq (sort 0) (IntModNum m) (IntModNum n);
+IntModNum_cong m n eq_mn =
+  eq_cong Num m n eq_mn (sort 0) IntModNum;
+
 fun_cong : (a : sort 0) -> (b : sort 0) -> (c : sort 0) -> (d : sort 0) ->
   Eq (sort 0) a b -> Eq (sort 0) c d -> Eq (sort 0) (a -> c) (b -> d);
 fun_cong a b c d eq_ab eq_cd =
