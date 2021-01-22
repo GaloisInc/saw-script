@@ -1,4 +1,11 @@
-enable_deprecated;
+enable_experimental;
 c <- java_load_class "ByteArray";
-t <- java_symexec c "id" [("x", {{ [1,2,3] : [3][8] }})] ["return"] false;
-print t;
+
+jvm_verify c "id" [] false
+  do {
+    this <- jvm_alloc_object "ByteArray";
+    xref <- jvm_alloc_array 10 java_byte;
+    jvm_execute_func [this, xref];
+    jvm_return xref;
+  }
+  abc;
