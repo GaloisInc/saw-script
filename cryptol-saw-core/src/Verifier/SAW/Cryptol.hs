@@ -1335,6 +1335,14 @@ proveEq sc env t1 t2
            if a1 == a2
              then scGlobalApply sc "Cryptol.seq_cong1" [n1', n2', a1', nEq]
              else scGlobalApply sc "Cryptol.seq_cong" [n1', n2', a1', a2', nEq, aEq]
+      (C.tIsIntMod -> Just n1, C.tIsIntMod -> Just n2) ->
+        do n1' <- importType sc env n1
+           n2' <- importType sc env n2
+           num <- scDataTypeApp sc "Cryptol.Num" []
+           nEq <- if n1 == n2
+                  then scCtorApp sc "Prelude.Refl" [num, n1']
+                  else scGlobalApply sc "Prelude.unsafeAssert" [num, n1', n2']
+           scGlobalApply sc "Cryptol.IntModNum_cong" [n1', n2', nEq]
       (C.tIsFun -> Just (a1, b1), C.tIsFun -> Just (a2, b2)) ->
         do a1' <- importType sc env a1
            a2' <- importType sc env a2
