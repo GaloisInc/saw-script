@@ -24,7 +24,6 @@ Grow\", and is prevalent across the Crucible codebase.
 module SAWScript.Crucible.Common.MethodSpec where
 
 import           Data.Constraint (Constraint)
-import           Data.List (isPrefixOf)
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Void (Void)
@@ -286,8 +285,11 @@ testResolved val0 path0 rs = go path0 val0
         _                  -> False
 
     test _ Nothing = False
-    test path (Just paths) = any (`isPrefixOf` path) paths
+    test path (Just paths) = any (overlap path) paths
 
+    overlap (x : xs) (y : ys) = x == y && overlap xs ys
+    overlap [] _ = True
+    overlap _ [] = True
 
 --------------------------------------------------------------------------------
 -- *** Extension-specific information

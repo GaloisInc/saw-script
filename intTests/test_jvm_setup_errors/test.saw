@@ -345,7 +345,7 @@ check_fails test "lookup"
   };
 
 print "jvm_array_is with previous jvm_elem_is";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_array 8 java_long;
     xs <- jvm_fresh_var "xs" (java_array 8 java_long);
