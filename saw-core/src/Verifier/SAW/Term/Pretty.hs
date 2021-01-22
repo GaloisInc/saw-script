@@ -28,6 +28,8 @@ module Verifier.SAW.Term.Pretty
   , scPrettyTerm
   , scPrettyTermInCtx
   , ppTermDepth
+  , ppTermWithNames
+  , showTermWithNames
   , PPModule(..), PPDecl(..)
   , ppPPModule
   , scTermCount
@@ -54,6 +56,7 @@ import Text.URI
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 
+import Verifier.SAW.Name
 import Verifier.SAW.Term.Functor
 
 --------------------------------------------------------------------------------
@@ -203,6 +206,8 @@ data PPState =
     ppDepth :: Int,
     -- | The current naming for the local variables
     ppNaming :: VarNaming,
+    -- | The top-level naming environment
+    ppNamingEnv :: SAWNamingEnv,
     -- | The next "memoization variable" to generate
     ppNextMemoVar :: MemoVar,
     -- | Memoization table for the global, closed terms, mapping term indices to
@@ -213,9 +218,10 @@ data PPState =
     ppLocalMemoTable :: IntMap MemoVar
   }
 
-emptyPPState :: PPOpts -> PPState
-emptyPPState opts =
+emptyPPState :: PPOpts -> SAWNamingEnv -> PPState
+emptyPPState opts ne =
   PPState { ppOpts = opts, ppDepth = 0, ppNaming = emptyVarNaming,
+            ppNamingEnv = ne,
             ppNextMemoVar = 1, ppGlobalMemoTable = IntMap.empty,
             ppLocalMemoTable = IntMap.empty }
 
@@ -224,8 +230,8 @@ newtype PPM a = PPM (Reader PPState a)
               deriving (Functor, Applicative, Monad)
 
 -- | Run a pretty-printing computation in a top-level, empty context
-runPPM :: PPOpts -> PPM a -> a
-runPPM opts (PPM m) = runReader m $ emptyPPState opts
+runPPM :: PPOpts -> SAWNamingEnv -> PPM a -> a
+runPPM opts ne (PPM m) = runReader m $ emptyPPState opts ne
 
 instance MonadReader PPState PPM where
   ask = PPM ask
@@ -451,7 +457,16 @@ ppFlatTermF prec tf =
     ArrayValue _ args   ->
       ppArrayValue <$> mapM (ppTerm' PrecNone) (V.toList args)
     StringLit s -> return $ viaShow s
-    ExtCns cns -> pure $ annotate ExtCnsStyle $ ppName (ecName cns)
+    ExtCns cns -> annotate ExtCnsStyle <$> ppBestName (ecName cns)
+
+-- | Pretty-print a name, using the best unambiguous alias from the
+-- naming environment.
+ppBestName :: NameInfo -> PPM SawDoc
+ppBestName ni =
+  do ne <- asks ppNamingEnv
+     case bestAlias ne ni of
+       Left _ -> pure $ ppName ni
+       Right alias -> pure $ pretty alias
 
 ppName :: NameInfo -> SawDoc
 ppName (ModuleIdentifier i) = ppIdent i
@@ -470,7 +485,7 @@ ppTermF prec (Pi x tp body) =
   (ppPi <$> ppTerm' PrecApp tp <*>
    ppTermInBinder PrecLambda x body)
 ppTermF _ (LocalVar x) = annotate LocalVarStyle <$> pretty <$> varLookupM x
-ppTermF _ (Constant ec _) = pure $ annotate ConstantStyle $ ppName (ecName ec)
+ppTermF _ (Constant ec _) = annotate ConstantStyle <$> ppBestName (ecName ec)
 
 
 -- | Internal function to recursively pretty-print a term
@@ -607,7 +622,7 @@ ppWithBoundCtx ((x,tp):ctx) m =
 -- | Pretty-print a term, also adding let-bindings for all subterms that occur
 -- more than once at the same binding level
 ppTerm :: PPOpts -> Term -> SawDoc
-ppTerm opts trm = runPPM opts $ ppTermWithMemoTable PrecNone True trm
+ppTerm opts = ppTermWithNames opts emptySAWNamingEnv
 
 -- | Pretty-print a term, but only to a maximum depth
 ppTermDepth :: Int -> Term -> SawDoc
@@ -630,7 +645,7 @@ scPrettyTerm opts t =
 scPrettyTermInCtx :: PPOpts -> [LocalName] -> Term -> String
 scPrettyTermInCtx opts ctx trm =
   renderSawDoc opts $
-  runPPM opts $
+  runPPM opts emptySAWNamingEnv $
   flip (Fold.foldl' (\m x -> snd <$> withBoundVarM x m)) ctx $
   ppTermWithMemoTable PrecNone False trm
 
@@ -639,6 +654,20 @@ scPrettyTermInCtx opts ctx trm =
 showTerm :: Term -> String
 showTerm t = scPrettyTerm defaultPPOpts t
 
+
+--------------------------------------------------------------------------------
+-- * Pretty-printers with naming environments
+--------------------------------------------------------------------------------
+
+-- | Pretty-print a term, also adding let-bindings for all subterms that occur
+-- more than once at the same binding level
+ppTermWithNames :: PPOpts -> SAWNamingEnv -> Term -> SawDoc
+ppTermWithNames opts ne trm =
+  runPPM opts ne $ ppTermWithMemoTable PrecNone True trm
+
+showTermWithNames :: PPOpts -> SAWNamingEnv -> Term -> String
+showTermWithNames opts ne trm =
+  renderSawDoc opts $ ppTermWithNames opts ne trm
 
 --------------------------------------------------------------------------------
 -- * Pretty-printers for Modules and Top-level Constructs
@@ -658,7 +687,7 @@ ppPPModule :: PPOpts -> PPModule -> SawDoc
 ppPPModule opts (PPModule importNames decls) =
   vcat $ concat $ fmap (map (<> line)) $
   [ map ppImport importNames
-  , map (runPPM opts . ppDecl) decls
+  , map (runPPM opts emptySAWNamingEnv . ppDecl) decls
   ]
   where
     ppImport nm = pretty $ "import " ++ show nm

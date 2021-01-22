@@ -44,6 +44,7 @@ module Verifier.SAW.SharedTerm
   , scResolveNameByURI
   , scResolveUnambiguous
   , scFindBestName
+  , scShowTerm
   , DuplicateNameException(..)
     -- * Re-exported pretty-printing functions
   , PPOpts(..)
@@ -384,6 +385,11 @@ scResolveName :: SharedContext -> Text -> IO [(VarIndex, NameInfo)]
 scResolveName sc nm =
   do env <- readIORef (scNamingEnv sc)
      pure (resolveName env nm)
+
+scShowTerm :: SharedContext -> PPOpts -> Term -> IO String
+scShowTerm sc opts t =
+  do env <- readIORef (scNamingEnv sc)
+     pure (showTermWithNames opts env t)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
 scFreshEC :: SharedContext -> String -> Term -> IO (ExtCns Term)
