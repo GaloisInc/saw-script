@@ -536,13 +536,23 @@ goal_eval unints =
   withFirstGoal $ \goal ->
   do sc <- getSharedContext
      unintSet <- resolveNames unints
-     t0 <- liftIO $ propToPredicate sc (goalProp goal)
+     -- replace all pi-bound quantified variables with new free variables
+     let (args, body) = asPiList (unProp (goalProp goal))
+     body' <-
+       case asEqTrue body of
+         Just t -> pure t
+         Nothing -> fail "goal_eval: expected EqTrue"
+     ecs <- liftIO $ traverse (\(nm, ty) -> scFreshEC sc (Text.unpack nm) ty) args
+     vars <- liftIO $ traverse (scExtCns sc) ecs
+     t0 <- liftIO $ instantiateVarList sc 0 (reverse vars) body'
      let gen = globalNonceGenerator
      sym <- liftIO $ Crucible.newSAWCoreBackend FloatRealRepr sc gen
      (_names, (_mlabels, p)) <- liftIO $ W4Sim.w4Eval sym sc Map.empty unintSet t0
      t1 <- liftIO $ Crucible.toSC sym p
      t2 <- liftIO $ scEqTrue sc t1
-     return ((), mempty, Just (goal { goalProp = Prop t2 }))
+     -- turn the free variables we generated back into pi-bound variables
+     t3 <- liftIO $ scGeneralizeExts sc ecs t2
+     return ((), mempty, Just (goal { goalProp = Prop t3 }))
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
