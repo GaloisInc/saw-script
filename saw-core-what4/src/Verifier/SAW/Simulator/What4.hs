@@ -470,8 +470,8 @@ toIntModOp =
 fromIntModOp :: IsExprBuilder sym => sym -> SValue sym
 fromIntModOp sym =
   Prims.natFun $ \n -> return $
-  Prims.intFun "fromIntModOp" $ \x ->
-  VIntMod n <$> (W.intMod sym x =<< W.intLit sym (toInteger n))
+  Prims.intModFun "fromIntModOp" $ \x ->
+  VInt <$> (W.intMod sym x =<< W.intLit sym (toInteger n))
 
 intModEqOp :: IsExprBuilder sym => sym -> SValue sym
 intModEqOp sym =
