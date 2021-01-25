@@ -572,7 +572,7 @@ rewriteSharedTerm sc ss t0 =
            -- print (Net.toPat conv)
            case runConversion conv t of
              Nothing -> apply rules t
-             Just tb -> rewriteAll =<< runTermBuilder tb (scTermF sc)
+             Just tb -> rewriteAll =<< runTermBuilder tb (scGlobalDef sc) (scTermF sc)
 
 -- | Type-safe rewriter for shared terms
 rewriteSharedTermTypeSafe
@@ -644,7 +644,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t
-        Just tb -> rewriteAll =<< runTermBuilder tb (scTermF sc)
+        Just tb -> rewriteAll =<< runTermBuilder tb (scGlobalDef sc) (scTermF sc)
 
 -- | Generate a new SharedContext that normalizes terms as it builds them.
 rewritingSharedContext :: SharedContext -> Simpset -> SharedContext
@@ -677,7 +677,7 @@ rewritingSharedContext sc ss = sc'
     apply (Right conv : rules) t =
       case runConversion conv t of
         Nothing -> apply rules t
-        Just tb -> runTermBuilder tb (scTermF sc')
+        Just tb -> runTermBuilder tb (scGlobalDef sc) (scTermF sc')
 
 
 -- FIXME: is there some way to have sensable term replacement in the presence of loose variables

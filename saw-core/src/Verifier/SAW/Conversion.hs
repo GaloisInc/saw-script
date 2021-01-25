@@ -352,13 +352,16 @@ instance Matchable (Prim.Vec Term Term) where
 -- Term builders
 
 newtype TermBuilder v =
-    TermBuilder { runTermBuilder :: forall m. Monad m => (TermF Term -> m Term) -> m v }
+  TermBuilder
+  { runTermBuilder ::
+      forall m. Monad m => (Ident -> m Term) -> (TermF Term -> m Term) -> m v
+  }
 
 instance Monad TermBuilder where
-  m >>= h = TermBuilder $ \mk -> do
-    r <- runTermBuilder m mk
-    runTermBuilder (h r) mk
-  return v = TermBuilder $ \_ -> return v
+  m >>= h = TermBuilder $ \mg mk -> do
+    r <- runTermBuilder m mg mk
+    runTermBuilder (h r) mg mk
+  return v = TermBuilder $ \_ _ -> return v
 
 instance Functor TermBuilder where
     fmap = liftM
@@ -368,10 +371,10 @@ instance Applicative TermBuilder where
     (<*>) = ap
 
 mkTermF :: TermF Term -> TermBuilder Term
-mkTermF tf = TermBuilder (\mk -> mk tf)
+mkTermF tf = TermBuilder (\_ mk -> mk tf)
 
 mkGlobalDef :: Ident -> TermBuilder Term
-mkGlobalDef i = mkTermF (FTermF (GlobalDef i))
+mkGlobalDef i = TermBuilder (\mg _ -> mg i)
 
 infixl 9 `mkApp`
 infixl 9 `pureApp`
