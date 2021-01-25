@@ -22,7 +22,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 scMkTerm :: SharedContext -> TermBuilder Term -> IO Term
-scMkTerm sc t = runTermBuilder t (scTermF sc)
+scMkTerm sc t = runTermBuilder t (scGlobalDef sc) (scTermF sc)
 
 rewriter_tests :: [TestTree]
 rewriter_tests =
