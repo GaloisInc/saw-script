@@ -1,0 +1,60 @@
+name: Type-check handwritten and generated Coq files
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    branches: [master]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # coq-bits does not support coq >= 8.13 yet
+        coq: [8.12.2, 8.11.2, 8.10.2]
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    name: saw-core-coq - ${{ matrix.os }} - coq-${{ matrix.coq }}
+    env:
+      COQ_VERSION: ${{ matrix.coq }}
+      OCAML_VERSION: 4.11.0
+      COQBITS_VERSION: 1.0.0
+    steps:
+
+      - uses: actions/checkout@v2
+
+      - run: |
+          git config --global url.https://github.com/.insteadOf git@github.com:
+
+      - name: Cache ~/.opam
+        uses: actions/cache@v2
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-${{ env.OCAML_VERSION }}-${{ env.COQ_VERSION }}-${{ env.COQBITS_VERSION }}
+
+      - name: Set up ocaml and opam
+        uses: avsm/setup-ocaml@v1.1.5
+        with:
+          ocaml-version: ${{ env.OCAML_VERSION }}
+
+      - name: Install coq
+        shell: bash
+        run: |
+          opam pin add coq ${{ env.COQ_VERSION }}
+          opam install --unlock-base -y coq
+
+      - name: Install coq-bits
+        shell: bash
+        run: |
+          opam repo add coq-released https://coq.inria.fr/opam/released
+          opam install --unlock-base -y "coq-bits=$COQBITS_VERSION"
+
+      - name: Build saw-core-coq/coq
+        shell: bash
+        working-directory: saw-core-coq/coq
+        run: |
+          eval $(opam env)
+          coq_makefile -f _CoqProject -o Makefile.coq
+          make -j2
