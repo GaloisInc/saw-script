@@ -422,14 +422,6 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-    resolveJVMRefVal :: AllocIndex -> IO JVMRefVal
-    resolveJVMRefVal lhs =
-      do let msg = Crucible.GenericSimError "Non-reference value found in points-to assertion"
-         lhs' <- resolveSetupVal cc env tyenv nameEnv (MS.SetupVar lhs)
-         case lhs' of
-           RVal ref -> return ref
-           _ -> liftIO $ Crucible.addFailedAssertion sym msg
-
     injectSetupVal :: SetupValue -> IO (Crucible.RegValue Sym CJ.JVMValueType)
     injectSetupVal rhs =
       injectJVMVal sym <$> resolveSetupVal cc env tyenv nameEnv rhs
@@ -438,19 +430,19 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
     doPointsTo mem pt =
       case pt of
         JVMPointsToField _loc lhs fid rhs ->
-          do lhs' <- resolveJVMRefVal lhs
+          do let lhs' = lookupAllocIndex env lhs
              rhs' <- injectSetupVal rhs
              CJ.doFieldStore sym mem lhs' fid rhs'
         JVMPointsToStatic _loc fid rhs ->
           do rhs' <- injectSetupVal rhs
              CJ.doStaticFieldStore sym jc mem fid rhs'
         JVMPointsToElem _loc lhs idx rhs ->
-          do lhs' <- resolveJVMRefVal lhs
+          do let lhs' = lookupAllocIndex env lhs
              rhs' <- injectSetupVal rhs
              CJ.doArrayStore sym mem lhs' idx rhs'
         JVMPointsToArray _loc lhs rhs ->
           do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
-             lhs' <- resolveJVMRefVal lhs
+             let lhs' = lookupAllocIndex env lhs
              (_ety, tts) <-
                destVecTypedTerm sc rhs >>=
                \case
