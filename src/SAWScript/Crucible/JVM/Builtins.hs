@@ -803,6 +803,7 @@ data JVMSetupError
   | JVMFieldMultiple SetupValue String -- reference and field name
   | JVMFieldFailure String -- TODO: switch to a more structured type
   | JVMFieldTypeMismatch String J.Type J.Type -- field name, expected, found
+  | JVMStaticMultiple String -- field name
   | JVMStaticFailure String -- TODO: switch to a more structured type
   | JVMStaticTypeMismatch String J.Type J.Type -- field name, expected, found
   | JVMElemNonReference SetupValue Int
@@ -842,6 +843,8 @@ instance Show JVMSetupError where
         , "Expected type: " ++ show expected
         , "Given type: " ++ show found
         ]
+      JVMStaticMultiple fname ->
+        "jvm_static_field_is: Multiple specifications for the same static field (" ++ fname ++ ")"
       JVMStaticFailure msg ->
         "jvm_static_field_is: JVM field resolution failed:\n" ++ msg
       JVMStaticTypeMismatch fname expected found ->
@@ -995,13 +998,8 @@ jvm_field_is ptr fname val =
          MS.SetupVar ptr' -> pure ptr'
          _ -> X.throwM $ JVMFieldNonReference ptr fname
      st <- get
-     let rs = st ^. Setup.csResolvedState
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
-     let path = Left fname
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
-       then X.throwM $ JVMFieldMultiple ptr fname
-       else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
@@ -1009,7 +1007,11 @@ jvm_field_is ptr fname val =
      fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
      unless (registerCompatible (J.fieldIdType fid) valTy) $
        X.throwM $ JVMFieldTypeMismatch fname (J.fieldIdType fid) valTy
-     Setup.addPointsTo (JVMPointsToField loc ptr' fid val)
+     let pt = JVMPointsToField loc ptr' fid val
+     let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
+       X.throwM $ JVMFieldMultiple ptr fname
+     Setup.addPointsTo pt
 
 jvm_static_field_is ::
   BuiltinContext ->
@@ -1038,8 +1040,11 @@ jvm_static_field_is _bic _opt fname val =
        X.throwM $ JVMStaticTypeMismatch fname (J.fieldIdType fid) valTy
      -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
      -- liftIO $ putStrLn $ "resolved to: " ++ name
-     -- TODO: test for multiple points-to conditions on same static field
-     Setup.addPointsTo (JVMPointsToStatic loc fid val)
+     let pt = JVMPointsToStatic loc fid val
+     let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
+       X.throwM $ JVMStaticMultiple fname
+     Setup.addPointsTo pt
 
 jvm_elem_is ::
   SetupValue {- ^ array -} ->
@@ -1054,12 +1059,7 @@ jvm_elem_is ptr idx val =
          MS.SetupVar ptr' -> pure ptr'
          _ -> X.throwM $ JVMElemNonReference ptr idx
      st <- get
-     let rs = st ^. Setup.csResolvedState
      let cc = st ^. Setup.csCrucibleContext
-     let path = Right idx
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
-       then X.throwM $ JVMElemMultiple ptr idx
-       else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      (len, elTy) <-
@@ -1071,7 +1071,11 @@ jvm_elem_is ptr idx val =
        X.throwM $ JVMElemInvalidIndex elTy len idx
      unless (registerCompatible elTy valTy) $
        X.throwM $ JVMElemTypeMismatch idx elTy valTy
-     Setup.addPointsTo (JVMPointsToElem loc ptr' idx val)
+     let pt = JVMPointsToElem loc ptr' idx val
+     let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
+       X.throwM $ JVMElemMultiple ptr idx
+     Setup.addPointsTo pt
 
 jvm_array_is ::
   SetupValue {- ^ array reference -} ->
@@ -1085,10 +1089,6 @@ jvm_array_is ptr val =
          MS.SetupVar ptr' -> pure ptr'
          _ -> X.throwM $ JVMArrayNonReference ptr
      st <- get
-     let rs = st ^. Setup.csResolvedState
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
-       then X.throwM $ JVMArrayMultiple ptr
-       else Setup.csResolvedState %= MS.markResolved ptr []
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      (len, elTy) <-
        case snd (lookupAllocIndex env ptr') of
@@ -1104,7 +1104,11 @@ jvm_array_is ptr val =
      case checkVal of
        Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
        Just () -> pure ()
-     Setup.addPointsTo (JVMPointsToArray loc ptr' val)
+     let pt = JVMPointsToArray loc ptr' val
+     let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
+       X.throwM $ JVMArrayMultiple ptr
+     Setup.addPointsTo pt
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do
