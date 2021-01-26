@@ -192,7 +192,7 @@ jobs:
         working-directory: s2nTests
         run: |
           docker-compose pull
-          grep -h '^FROM' "$f" docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
+          grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
 
       - uses: satackey/action-docker-layer-caching@v0.0.11
         continue-on-error: true
