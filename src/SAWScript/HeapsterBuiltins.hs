@@ -42,6 +42,7 @@ module SAWScript.HeapsterBuiltins
 import Data.Maybe
 import qualified Data.Map as Map
 import Data.String
+import qualified Data.Text as Text
 import Data.List
 import Data.IORef
 import Data.Functor.Product
@@ -82,6 +83,8 @@ import Lang.Crucible.LLVM.Translation
 import Lang.Crucible.LLVM.TypeContext
 import Lang.Crucible.LLVM.DataLayout
 
+import Mir.Generator
+
 import qualified Text.LLVM.AST as L
 
 import SAWScript.TopLevel
@@ -101,6 +104,8 @@ import Verifier.SAW.Heapster.PermParser
 import SAWScript.Prover.Exporter
 import Verifier.SAW.Translation.Coq
 import Prettyprinter
+
+import Debug.Trace
 
 
 -- | Extract out the contents of the 'Right' of an 'Either', calling 'fail' if
@@ -172,7 +177,10 @@ lookupModDefiningSym env nm =
   find (\(Some mod) -> 
         case mod of
           IRLLVMModule lm -> Map.member (fromString nm) (cfgMap $ modTrans lm)
-          IRMIRModule mm -> undefined) $
+          IRMIRModule mm -> 
+            -- TODO: This is very approximate and makes no attempt to 
+            -- handle Rust's name mangling
+            any (\x -> isInfixOf nm (Text.unpack x)) (Map.keys (mm ^. rmCFGs))) $
   heapsterEnvModules env
 
 -- | Look for any LLVM module in a 'HeapsterEnv' containing a symbol
@@ -601,7 +609,9 @@ heapster_find_symbols _bic _opts henv str =
                           if isInfixOf str nm then Just nm else Nothing) $
                 map L.decName (L.modDeclares $ modAST lm) ++
                 map L.defName (L.modDefines $ modAST lm)
-              IRMIRModule mm -> undefined) $
+              IRMIRModule mm -> 
+                mapMaybe (\(fn) -> if isInfixOf str fn then Just fn else Nothing) $ 
+                rustModuleFunctions mm) $
   heapsterEnvModules henv
 
 -- | Search for a symbol name in any LLVM module in a 'HeapsterEnv' that

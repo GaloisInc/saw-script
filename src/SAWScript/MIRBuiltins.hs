@@ -8,43 +8,48 @@
 module SAWScript.MIRBuiltins where
 
 import           Control.Lens ((^.))
+import           Data.List (find, isInfixOf)
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
 import           GHC.Stack (HasCallStack)
 import           Lang.Crucible.FunctionHandle (HandleAllocator)
+import           Mir.DefId (DefId)
 import           Mir.Generate (generateMIR)
 import           Mir.Generator (CollectionState (..), RustModule (..), collection, rmCFGs)
 import           Mir.Mir (Collection (..))
 import           Mir.Pass (rewriteCollection)
 import           Mir.Trans (transCollection)
 import           Mir.TransCustom (customOps)
-import           SAWScript.Value (TopLevel, SAW_CFG (..), getHandleAlloc, io)
+import           SAWScript.Value (TopLevel, SAW_CFG (..), getHandleAlloc, io, throwTopLevel)
+
+import Debug.Trace
 
 mir_load_module :: FilePath -> TopLevel RustModule
 mir_load_module file = do
   halloc <- getHandleAlloc
   let ?debug = 1
       ?assertFalseOnError = True
-      ?printCrucible = True
+      ?printCrucible = False
   io $ loadAndTranslateMIR file halloc
   
 crucible_mir_cfg :: RustModule -> String -> TopLevel SAW_CFG
 crucible_mir_cfg rm fn_name = do
-  io $ mapM_ print $ Map.keys $ rm ^. rmCFGs 
-  return MIR_CFG 
-  
+  -- TODO: This just does infix matching instead of actually getting the RefId
+  let keys = Map.keys $ rm ^. rmCFGs
+  case find (isInfixOf fn_name . Text.unpack) keys of
+    Nothing -> throwTopLevel "No matching function found in the environment"
+    Just key -> do
+      traceM $ "Matched function with RefId: " <> Text.unpack key
+      case Map.lookup key (rm ^. rmCFGs) of
+        Just cfg -> return $ MIR_CFG cfg
+        Nothing -> throwTopLevel "This should never happen"
 
+rustModuleFunctions :: RustModule -> [String]
+rustModuleFunctions rm = undefined
 
---   crucible_llvm_cfg ::
---   Some LLVMModule ->
---   String ->
---   TopLevel SAW_CFG
--- crucible_llvm_cfg (Some lm) fn_name =
---   do let ctx = modTrans lm ^. Crucible.transContext
---      let ?lc = ctx^.Crucible.llvmTypeCtx
---      setupLLVMCrucibleContext False lm $ \cc ->
---        case Map.lookup (fromString fn_name) (Crucible.cfgMap (ccLLVMModuleTrans cc)) of
---          Nothing  -> throwTopLevel $ unwords ["function", fn_name, "not found"]
---          Just (_,cfg) -> return (LLVM_CFG cfg)
+rustModuleDefs :: RustModule -> DefId
+rustModuleDefs rm = undefined
+
 
 
 -- These functions borrowed from Stuart's branch of crucible/crux-mir.

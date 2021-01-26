@@ -61,8 +61,9 @@ import qualified Lang.Crucible.CFG.Core as Crucible (AnyCFG)
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 import Lang.Crucible.JVM (JVM)
 import qualified Lang.Crucible.JVM as CJ
-import Lang.Crucible.LLVM.ArraySizeProfile
+import Lang.Crucible.LLVM.ArraySizeProfile ( FunctionProfile )
 import Mir.Generator (RustModule (..))
+import Mir.Intrinsics (MIR)
 import qualified Prettyprinter as PP
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
@@ -165,7 +166,7 @@ data AIGProxy where
 data SAW_CFG where
   LLVM_CFG :: Crucible.AnyCFG (Crucible.LLVM arch) -> SAW_CFG
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
-  MIR_CFG :: SAW_CFG
+  MIR_CFG :: Crucible.AnyCFG MIR -> SAW_CFG
 
 data BuiltinContext = BuiltinContext
   { biSharedContext :: SharedContext,
@@ -338,6 +339,7 @@ showsPrecValue opts p v =
     VAIG _ -> showString "<<AIG>>"
     VCFG (LLVM_CFG g) -> showString (show g)
     VCFG (JVM_CFG g) -> showString (show g)
+    VCFG (MIR_CFG g) -> showString (show g)
     VGhostVar x ->
       showParen (p > 10) $
         showString "Ghost " . showsPrec 11 x
