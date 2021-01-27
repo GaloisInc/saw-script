@@ -2730,7 +2730,7 @@ primitives = Map.fromList
     ]
 
   , prim "jvm_static_field_is" "String -> JVMValue -> JVMSetup ()"
-    (bicVal jvm_static_field_is)
+    (pureVal jvm_static_field_is)
     Experimental
     [ "Declare that the named static field contains the given value."
     , "By default the field name is assumed to belong to the same class"

@@ -162,9 +162,8 @@ resolveSetupVal ::
   IO JVMVal
 resolveSetupVal cc env _tyenv _nameEnv val =
   case val of
-    MS.SetupVar i
-      | Just v <- Map.lookup i env -> return (RVal v)
-      | otherwise -> panic "JVMSetup" ["resolveSetupVal", "Unresolved prestate variable:" ++ show i]
+    MS.SetupVar i ->
+      pure (RVal (lookupAllocIndex env i))
     MS.SetupTerm tm -> resolveTypedTerm cc tm
     MS.SetupNull () ->
       return (RVal (W4.maybePartExpr sym Nothing))
