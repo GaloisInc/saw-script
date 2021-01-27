@@ -36,4 +36,9 @@ packages:
     deps/argo/python
     deps/cryptol/cryptol-remote-api
 
+source-repository-package
+    type: git
+    location: https://github.com/eddywestbrook/hobbits
+    tag: d39aaee7a40ae050ff5ebe4196c5c85ebeabbe6e
+
 allow-newer: uuid:random
