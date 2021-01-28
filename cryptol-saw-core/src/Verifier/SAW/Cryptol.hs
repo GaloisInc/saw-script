@@ -914,6 +914,9 @@ importExpr sc env expr =
       do env' <- importDeclGroups sc env dgs
          importExpr sc env' e
 
+    C.ELocated _ e ->
+      importExpr sc env e
+
   where
     the :: Maybe a -> IO a
     the = maybe (panic "importExpr" ["internal type error"]) return
@@ -982,6 +985,9 @@ importExpr' sc env schema expr =
     C.EWhere e dgs ->
       do env' <- importDeclGroups sc env dgs
          importExpr' sc env' schema e
+
+    C.ELocated _ e ->
+      importExpr' sc env schema e
 
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
@@ -1583,7 +1589,7 @@ scCryptolEq sc x y =
 -- Cryptol type schema.
 exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
 exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType mempty ty) v
-exportValueWithSchema _ _ = V.VPoly (error "exportValueWithSchema")
+exportValueWithSchema _ _ = V.VPoly mempty (error "exportValueWithSchema")
 -- TODO: proper support for polymorphic values
 
 exportValue :: TV.TValue -> SC.CValue -> V.Value
@@ -1609,8 +1615,8 @@ exportValue ty v = case ty of
       SC.VWord w -> V.word V.Concrete (toInteger (width w)) (unsigned w)
       SC.VVector xs
         | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.LargeBitsVal (fromIntegral (Vector.length xs))
-                            (V.finiteSeqMap V.Concrete . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
-        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap V.Concrete $
+                            (V.finiteSeqMap . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
+        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
                             map (V.ready . exportValue e . SC.runIdentity . force) $ Vector.toList xs
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
@@ -1629,7 +1635,7 @@ exportValue ty v = case ty of
 
   -- functions
   TV.TVFun _aty _bty ->
-    V.VFun (error "exportValue: TODO functions")
+    V.VFun mempty (error "exportValue: TODO functions")
 
   -- abstract types
   TV.TVAbstract{} ->
@@ -1671,15 +1677,15 @@ exportFirstOrderValue fv =
     FOVIntMod _ i -> V.VInteger i
     FOVWord w x -> V.word V.Concrete (toInteger w) x
     FOVVec t vs
-      | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap V.Concrete . map (V.ready . V.VBit . fvAsBool) $ vs)))
-      | otherwise   -> V.VSeq  len (V.finiteSeqMap V.Concrete (map (V.ready . exportFirstOrderValue) vs))
+      | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap . map (V.ready . V.VBit . fvAsBool) $ vs)))
+      | otherwise   -> V.VSeq  len (V.finiteSeqMap (map (V.ready . exportFirstOrderValue) vs))
       where len = toInteger (length vs)
     FOVArray{}  -> error $ "exportFirstOrderValue: unsupported FOT Array"
     FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
     FOVRec vm   -> V.VRecord $ C.recordFromFields [ (C.mkIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
 
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
-importFirstOrderValue t0 v0 = V.runEval (go t0 v0)
+importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
   where
   go :: FirstOrderType -> V.Value -> V.Eval FirstOrderValue
   go t v = case (t,v) of
