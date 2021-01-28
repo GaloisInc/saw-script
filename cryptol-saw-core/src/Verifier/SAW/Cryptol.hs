@@ -39,7 +39,7 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst)
+import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
@@ -231,6 +231,11 @@ importType sc env ty =
     C.TRec fm ->
       importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
 
+    C.TNewtype nt ts ->
+      do let s = C.listSubst (zip (map C.TVBound (C.ntParams nt)) ts)
+         let t = plainSubst s (C.TRec (C.ntFields nt))
+         go t
+
     C.TCon tcon tyargs ->
       case tcon of
         C.TC tc ->
@@ -250,7 +255,6 @@ importType sc env ty =
                                b <- go (tyargs !! 1)
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
-            C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
             C.TCAbstract{} -> panic "importType TODO: abstract type" []
         C.PC pc ->
           case pc of
@@ -914,6 +918,9 @@ importExpr sc env expr =
       do env' <- importDeclGroups sc env dgs
          importExpr sc env' e
 
+    C.ELocated _ e ->
+      importExpr sc env e
+
   where
     the :: Maybe a -> IO a
     the = maybe (panic "importExpr" ["internal type error"]) return
@@ -982,6 +989,9 @@ importExpr' sc env schema expr =
     C.EWhere e dgs ->
       do env' <- importDeclGroups sc env dgs
          importExpr' sc env' schema e
+
+    C.ELocated _ e ->
+      importExpr' sc env schema e
 
     C.EList     {} -> fallback
     C.ESel      {} -> fallback
@@ -1083,9 +1093,10 @@ plainSubst s ty =
     C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
     C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
     C.TVar x       -> C.apSubst s (C.TVar x)
+    C.TNewtype nt ts -> C.TNewtype nt (fmap (plainSubst s) ts)
 
 
--- | Generate a URI representing a cryptol name from a sequence of 
+-- | Generate a URI representing a cryptol name from a sequence of
 --   name parts representing the fully-qualified name.  If a \"unique\"
 --   value is given, this represents a dynamically bound name in
 --   the \"\<interactive\>\" pseudo-module, and the unique value will
@@ -1583,7 +1594,7 @@ scCryptolEq sc x y =
 -- Cryptol type schema.
 exportValueWithSchema :: C.Schema -> SC.CValue -> V.Value
 exportValueWithSchema (C.Forall [] [] ty) v = exportValue (evalValType mempty ty) v
-exportValueWithSchema _ _ = V.VPoly (error "exportValueWithSchema")
+exportValueWithSchema _ _ = V.VPoly mempty (error "exportValueWithSchema")
 -- TODO: proper support for polymorphic values
 
 exportValue :: TV.TValue -> SC.CValue -> V.Value
@@ -1609,8 +1620,8 @@ exportValue ty v = case ty of
       SC.VWord w -> V.word V.Concrete (toInteger (width w)) (unsigned w)
       SC.VVector xs
         | TV.isTBit e -> V.VWord (toInteger (Vector.length xs)) (V.ready (V.LargeBitsVal (fromIntegral (Vector.length xs))
-                            (V.finiteSeqMap V.Concrete . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
-        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap V.Concrete $
+                            (V.finiteSeqMap . map (V.ready . V.VBit . SC.toBool . SC.runIdentity . force) $ Fold.toList xs)))
+        | otherwise   -> V.VSeq (toInteger (Vector.length xs)) $ V.finiteSeqMap $
                             map (V.ready . exportValue e . SC.runIdentity . force) $ Vector.toList xs
       _ -> error $ "exportValue (on seq type " ++ show ty ++ ")"
 
@@ -1629,11 +1640,16 @@ exportValue ty v = case ty of
 
   -- functions
   TV.TVFun _aty _bty ->
-    V.VFun (error "exportValue: TODO functions")
+    V.VFun mempty (error "exportValue: TODO functions")
 
   -- abstract types
   TV.TVAbstract{} ->
     error "exportValue: TODO abstract types"
+
+  -- newtypes
+  TV.TVNewtype _ _ fields ->
+    exportValue (TV.TVRec fields) v
+
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
@@ -1671,15 +1687,15 @@ exportFirstOrderValue fv =
     FOVIntMod _ i -> V.VInteger i
     FOVWord w x -> V.word V.Concrete (toInteger w) x
     FOVVec t vs
-      | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap V.Concrete . map (V.ready . V.VBit . fvAsBool) $ vs)))
-      | otherwise   -> V.VSeq  len (V.finiteSeqMap V.Concrete (map (V.ready . exportFirstOrderValue) vs))
+      | t == FOTBit -> V.VWord len (V.ready (V.LargeBitsVal len (V.finiteSeqMap . map (V.ready . V.VBit . fvAsBool) $ vs)))
+      | otherwise   -> V.VSeq  len (V.finiteSeqMap (map (V.ready . exportFirstOrderValue) vs))
       where len = toInteger (length vs)
     FOVArray{}  -> error $ "exportFirstOrderValue: unsupported FOT Array"
     FOVTuple vs -> V.VTuple (map (V.ready . exportFirstOrderValue) vs)
     FOVRec vm   -> V.VRecord $ C.recordFromFields [ (C.mkIdent n, V.ready $ exportFirstOrderValue v) | (n, v) <- Map.assocs vm ]
 
 importFirstOrderValue :: FirstOrderType -> V.Value -> IO FirstOrderValue
-importFirstOrderValue t0 v0 = V.runEval (go t0 v0)
+importFirstOrderValue t0 v0 = V.runEval mempty (go t0 v0)
   where
   go :: FirstOrderType -> V.Value -> V.Eval FirstOrderValue
   go t v = case (t,v) of

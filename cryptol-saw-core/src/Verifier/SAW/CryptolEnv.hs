@@ -479,7 +479,8 @@ resolveIdentifier env nm =
  nameEnv = getNamingEnv env
 
  doResolve pnm =
-    do (res, _ws) <- MM.runModuleM (defaultEvalOpts, ?fileReader, modEnv) $
+    do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader modEnv
+       (res, _ws) <- MM.runModuleM minp $
           MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar pnm))
        case res of
          Left _ -> pure Nothing
@@ -631,6 +632,7 @@ typeNoUser t =
     T.TVar {}      -> t
     T.TUser _ _ ty -> typeNoUser ty
     T.TRec fields  -> T.TRec (fmap typeNoUser fields)
+    T.TNewtype nt ts -> T.TNewtype nt (fmap typeNoUser ts)
 
 schemaNoUser :: T.Schema -> T.Schema
 schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)
@@ -641,7 +643,8 @@ liftModuleM ::
   (?fileReader :: FilePath -> IO ByteString) =>
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
-  MM.runModuleM (defaultEvalOpts, ?fileReader, env) m >>= moduleCmdResult
+  do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader env
+     MM.runModuleM minp m >>= moduleCmdResult
 
 defaultEvalOpts :: E.EvalOpts
 defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
