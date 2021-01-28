@@ -1328,7 +1328,7 @@ eval_int t = do
     C.Forall [] [] (isInteger -> True) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
   v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
-  io $ C.runEval (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
+  io $ C.runEval mempty (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
 
 -- Predicate on Cryptol types true of integer types, i.e. types
 -- @[n]Bit@ for *finite* @n@.
@@ -1406,6 +1406,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
         C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
         C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
         C.TVar x       -> C.apSubst s (C.TVar x)
+        C.TNewtype nt ts -> C.TNewtype nt (fmap (plainSubst s) ts)
 
 eval_size :: C.Schema -> TopLevel Integer
 eval_size s =

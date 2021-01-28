@@ -13,8 +13,8 @@ import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Value (rwCryptol)
 
 import Argo
-import CryptolServer.Data.Expression
 import SAWServer
+import SAWServer.CryptolExpression (getCryptolExpr)
 import SAWServer.Data.Contract
 import SAWServer.Exceptions
 import SAWServer.JVMCrucibleSetup
@@ -35,7 +35,7 @@ jvmVerifyAssume mode (VerifyParams className fun lemmaNames checkSat contract sc
             let bic = view sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
             fileReader <- getFileReader
-            setup <- compileJVMContract fileReader bic cenv <$> traverse getExpr contract
+            setup <- compileJVMContract fileReader bic cenv <$> traverse getCryptolExpr contract
             res <- case mode of
               VerifyContract -> do
                 lemmas <- mapM getJVMMethodSpecIR lemmaNames

@@ -585,7 +585,7 @@ print_value (VTerm t) = do
                               , V.useBase = ppOptsBase opts
                               }
   evaled_t <- io $ evaluateTypedTerm sc t'
-  doc <- io $ V.runEval (V.ppValue V.Concrete opts' evaled_t)
+  doc <- io $ V.runEval mempty (V.ppValue V.Concrete opts' evaled_t)
   sawOpts <- getOptions
   io (rethrowEvalError $ printOutLn sawOpts Info $ show $ doc)
 

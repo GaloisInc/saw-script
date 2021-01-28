@@ -252,7 +252,8 @@ loadLLVMModule file halloc =
      case parseResult of
        Left err -> return (Left err)
        Right llvm_mod ->
-         do Some mtrans <- CL.translateModule halloc llvm_mod
+         do let ?optLoopMerge = False
+            Some mtrans <- CL.translateModule halloc llvm_mod
             return (Right (Some (LLVMModule file llvm_mod mtrans)))
 
 instance TestEquality LLVMModule where
