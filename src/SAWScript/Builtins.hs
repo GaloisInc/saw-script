@@ -1328,7 +1328,7 @@ eval_int t = do
     C.Forall [] [] (isInteger -> True) -> return ()
     _ -> fail "eval_int: argument is not a finite bitvector"
   v <- io $ rethrowEvalError $ SV.evaluateTypedTerm sc t'
-  io $ C.runEval (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
+  io $ C.runEval mempty (C.bvVal <$> C.fromVWord C.Concrete "eval_int" v)
 
 -- Predicate on Cryptol types true of integer types, i.e. types
 -- @[n]Bit@ for *finite* @n@.

@@ -9,7 +9,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 
 import Cryptol.Eval (EvalOpts(..), defaultPPOpts)
-import Cryptol.ModuleSystem (ModuleRes)
+import Cryptol.ModuleSystem (ModuleRes, ModuleInput(..))
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
 import Cryptol.ModuleSystem.Env (ModuleEnv)
 import Cryptol.ModuleSystem.Interface (noIfaceParams)
@@ -47,7 +47,8 @@ getTypedTermOfCExp ::
 getTypedTermOfCExp fileReader sc cenv expr =
   do let ?fileReader = fileReader
      let env = eModuleEnv cenv
-     mres <- runModuleM (defaultEvalOpts, B.readFile, env) $
+     let minp = ModuleInput True defaultEvalOpts B.readFile env
+     mres <- runModuleM minp $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names

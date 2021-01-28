@@ -30,7 +30,8 @@ getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
 getDeclsCryptol path = do
    let evalOpts = EvalOpts quietLogger defaultPPOpts
    modEnv <- M.initialModuleEnv
-   (result, warnings) <- M.loadModuleByPath path (evalOpts, BS.readFile, modEnv)
+   let minp = M.ModuleInput True evalOpts BS.readFile modEnv
+   (result, warnings) <- M.loadModuleByPath path minp
    return $ do
       forM_ warnings $ liftF . flip Warning () . pretty
       case result of
