@@ -479,7 +479,7 @@ resolveIdentifier env nm =
  nameEnv = getNamingEnv env
 
  doResolve pnm =
-    do let minp = MM.ModuleInput True defaultEvalOpts ?fileReader modEnv
+    do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader modEnv
        (res, _ws) <- MM.runModuleM minp $
           MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar pnm))
        case res of
@@ -642,7 +642,7 @@ liftModuleM ::
   (?fileReader :: FilePath -> IO ByteString) =>
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
-  do let minp = MM.ModuleInput True defaultEvalOpts ?fileReader env
+  do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader env
      MM.runModuleM minp m >>= moduleCmdResult
 
 defaultEvalOpts :: E.EvalOpts
