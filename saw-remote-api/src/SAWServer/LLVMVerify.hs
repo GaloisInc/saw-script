@@ -18,8 +18,8 @@ import SAWScript.Value (rwCryptol)
 
 import Argo
 import qualified Argo.Doc as Doc
-import CryptolServer.Data.Expression
 import SAWServer
+import SAWServer.CryptolExpression (getCryptolExpr)
 import SAWServer.Data.Contract
 import SAWServer.Data.LLVMType
 import SAWServer.Exceptions
@@ -41,7 +41,7 @@ llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scr
             let bic = view sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
             fileReader <- getFileReader
-            setup <- compileLLVMContract fileReader bic cenv <$> traverse getExpr contract
+            setup <- compileLLVMContract fileReader bic cenv <$> traverse getCryptolExpr contract
             res <- case mode of
               VerifyContract -> do
                 lemmas <- mapM getLLVMMethodSpecIR lemmaNames
@@ -97,7 +97,7 @@ llvmVerifyX86 (X86VerifyParams modName objName fun globals _lemmaNames checkSat 
                 allocs = map (\(X86Alloc name size) -> (name, size)) globals
             proofScript <- interpretProofScript script
             fileReader <- getFileReader
-            setup <- compileLLVMContract fileReader bic cenv <$> traverse getExpr contract
+            setup <- compileLLVMContract fileReader bic cenv <$> traverse getCryptolExpr contract
             res <- tl $ llvm_verify_x86 mod objName fun allocs checkSat setup proofScript
             dropTask
             setServerVal lemmaName res

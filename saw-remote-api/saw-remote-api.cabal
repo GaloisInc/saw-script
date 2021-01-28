@@ -42,6 +42,7 @@ common deps
   build-depends: base >=4.11.1.0 && <4.15,
                  aeson,
                  argo,
+                 base64-bytestring,
                  bytestring,
                  containers >= 0.6 && < 0.7,
                  cryptol >= 2.8.1,
@@ -62,6 +63,7 @@ common deps
                  saw-script,
                  silently,
                  text,
+                 unordered-containers,
                  vector >= 0.12 && < 0.13,
                  cryptol-remote-api
   default-language: Haskell2010
