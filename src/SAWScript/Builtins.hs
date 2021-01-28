@@ -1406,6 +1406,7 @@ defaultTypedTerm opts sc cfg tt@(TypedTerm schema trm)
         C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
         C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
         C.TVar x       -> C.apSubst s (C.TVar x)
+        C.TNewtype nt ts -> C.TNewtype nt (fmap (plainSubst s) ts)
 
 eval_size :: C.Schema -> TopLevel Integer
 eval_size s =

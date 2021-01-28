@@ -465,6 +465,8 @@ resolveSAWTerm cc tp tm =
         fail "resolveSAWTerm: invalid function type"
       Cryptol.TVAbstract _ _ ->
         fail "resolveSAWTerm: invalid abstract type"
+      Cryptol.TVNewtype{} ->
+        fail "resolveSAWTerm: invalid newtype"
   where
     sym = cc^.ccBackend
     dl = Crucible.llvmDataLayout (ccTypeCtx cc)
@@ -523,6 +525,7 @@ toLLVMType dl tp =
     Cryptol.TVRec _flds -> Left (NotYetSupported "record")
     Cryptol.TVFun _ _ -> Left (Impossible "function")
     Cryptol.TVAbstract _ _ -> Left (Impossible "abstract")
+    Cryptol.TVNewtype{} -> Left (Impossible "newtype")
 
 toLLVMStorageType ::
   forall w .
