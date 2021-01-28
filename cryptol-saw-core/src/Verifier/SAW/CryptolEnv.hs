@@ -632,6 +632,7 @@ typeNoUser t =
     T.TVar {}      -> t
     T.TUser _ _ ty -> typeNoUser ty
     T.TRec fields  -> T.TRec (fmap typeNoUser fields)
+    T.TNewtype nt ts -> T.TNewtype nt (fmap typeNoUser ts)
 
 schemaNoUser :: T.Schema -> T.Schema
 schemaNoUser (T.Forall params props ty) = T.Forall params props (typeNoUser ty)

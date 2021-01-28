@@ -39,7 +39,7 @@ import qualified Cryptol.Eval.Value as V
 import qualified Cryptol.Eval.Concrete as V
 import Cryptol.Eval.Type (evalValType)
 import qualified Cryptol.TypeCheck.AST as C
-import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, singleTParamSubst)
+import qualified Cryptol.TypeCheck.Subst as C (Subst, apSubst, listSubst, singleTParamSubst)
 import qualified Cryptol.ModuleSystem.Name as C
   (asPrim, nameUnique, nameIdent, nameInfo, NameInfo(..))
 import qualified Cryptol.Utils.Ident as C
@@ -231,6 +231,11 @@ importType sc env ty =
     C.TRec fm ->
       importType sc env (C.tTuple (map snd (C.canonicalFields fm)))
 
+    C.TNewtype nt ts ->
+      do let s = C.listSubst (zip (map C.TVBound (C.ntParams nt)) ts)
+         let t = plainSubst s (C.TRec (C.ntFields nt))
+         go t
+
     C.TCon tcon tyargs ->
       case tcon of
         C.TC tc ->
@@ -250,7 +255,6 @@ importType sc env ty =
                                b <- go (tyargs !! 1)
                                scFun sc a b
             C.TCTuple _n -> scTupleType sc =<< traverse go tyargs
-            C.TCNewtype (C.UserTC _qn _k) -> unimplemented "TCNewtype" -- user-defined, @T@
             C.TCAbstract{} -> panic "importType TODO: abstract type" []
         C.PC pc ->
           case pc of
@@ -1089,9 +1093,10 @@ plainSubst s ty =
     C.TUser f ts t -> C.TUser f (map (plainSubst s) ts) (plainSubst s t)
     C.TRec fs      -> C.TRec (fmap (plainSubst s) fs)
     C.TVar x       -> C.apSubst s (C.TVar x)
+    C.TNewtype nt ts -> C.TNewtype nt (fmap (plainSubst s) ts)
 
 
--- | Generate a URI representing a cryptol name from a sequence of 
+-- | Generate a URI representing a cryptol name from a sequence of
 --   name parts representing the fully-qualified name.  If a \"unique\"
 --   value is given, this represents a dynamically bound name in
 --   the \"\<interactive\>\" pseudo-module, and the unique value will
@@ -1640,6 +1645,11 @@ exportValue ty v = case ty of
   -- abstract types
   TV.TVAbstract{} ->
     error "exportValue: TODO abstract types"
+
+  -- newtypes
+  TV.TVNewtype _ _ fields ->
+    exportValue (TV.TVRec fields) v
+
 
 exportTupleValue :: [TV.TValue] -> SC.CValue -> [V.Eval V.Value]
 exportTupleValue tys v =
