@@ -21,7 +21,7 @@ import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8)
 import Data.Traversable (for)
 
-import Cryptol.Eval (EvalOpts(..), defaultPPOpts)
+import Cryptol.Eval (EvalOpts(..))
 import Cryptol.ModuleSystem (ModuleRes, ModuleInput(..))
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
 import Cryptol.ModuleSystem.Env (ModuleEnv)
@@ -63,7 +63,7 @@ getTypedTermOfCExp ::
 getTypedTermOfCExp fileReader sc cenv expr =
   do let ?fileReader = fileReader
      let env = eModuleEnv cenv
-     let minp = ModuleInput True defaultEvalOpts B.readFile env
+     let minp = ModuleInput True (pure defaultEvalOpts) B.readFile env
      mres <- runModuleM minp $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
