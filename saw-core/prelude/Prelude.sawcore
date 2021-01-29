@@ -113,7 +113,7 @@ RecordType__rec
 --------------------------------------------------------------------------------
 -- Equality proofs.
 
-data Eq (t : sort 1) (x : t) : t -> sort 1 where {
+data Eq (t : sort 1) (x : t) : t -> Prop where {
     Refl : Eq t x x;
   }
 
