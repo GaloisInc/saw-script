@@ -1,13 +1,11 @@
 -----------------------------------------------------------------------
 -- |
--- Module           : Lang.Crucible.Backend.SAWCore
--- Description      : Crucible interface for generating SAWCore
--- Copyright        : (c) Galois, Inc 2014-2016
+-- Module           : Verifier.SAW.Simulator.What4.ReturnTrip
+-- Description      : Translation from What4 back to SawCore
+-- Copyright        : (c) Galois, Inc 2014-2021
 -- License          : BSD3
 -- Maintainer       : Rob Dockins <rdockins@galois.com>
 -- Stability        : provisional
---
--- This module provides a Crucible backend that produces SAWCore terms.
 ------------------------------------------------------------------------
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -20,9 +18,18 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Verifier.SAW.Simulator.What4.ReturnTrip where
+module Verifier.SAW.Simulator.What4.ReturnTrip
+  ( newSAWCoreState
+  , SAWCoreState(..)
+  , SAWExpr(..)
+  , baseSCType
+  , bindSAWTerm
+  , toSC
+  , sawCreateVar
+  , sawRegisterSymFunInterp
+  , getInputs
+  ) where
 
---import           Control.Exception ( bracket )
 import           Control.Lens
 import           Control.Monad
 import qualified Data.BitVector.Sized as BV
@@ -105,43 +112,6 @@ data SAWExpr (bt :: BaseType) where
   -- implicit nat-to-integer conversion.
   NatToIntSAWExpr :: !(SAWExpr BaseNatType) -> SAWExpr BaseIntegerType
 
-{-
-
--- | Run the given IO action with the given SAW backend.
---   While while running the action, the SAW backend is
---   set up with a fresh naming context.  This means that all
---   symbolic inputs, symMap entries, element cache entires,
---   assertions and proof obligations start empty while
---   running the action.  After the action completes, the
---   state of these fields is restored.
-inFreshNamingContext :: SAWCoreBackend n solver fs -> IO a -> IO a
-inFreshNamingContext sym f =
-  do old <- readIORef (B.sbStateManager sym)
-     bracket (mkNew (B.exprCounter sym) old) (restore old) action
-
- where
- action new =
-   do writeIORef (B.sbStateManager sym) new
-      f
-
- restore old _new =
-   do writeIORef (B.sbStateManager sym) old
-
- mkNew _gen old =
-   do ch <- B.newIdxCache
-      ch_r <- newIORef IntMap.empty
-      iref <- newIORef mempty
-      let new = SAWCoreState
-                { saw_ctx = saw_ctx old
-                , saw_inputs = iref
-                , saw_symMap = mempty
-                , saw_elt_cache = ch
-                , saw_elt_cache_r = ch_r
-                }
-      return new
--}
-
-
 getInputs :: SAWCoreState n -> IO (Seq (SC.ExtCns SC.Term))
 getInputs st = readIORef (saw_inputs st)
 
@@ -217,36 +187,6 @@ bindSAWTerm sym st bt t = do
         Nothing -> pure ()
       return sbVar
 
-{-
-newSAWCoreBackend ::
-  B.FloatModeRepr fm ->
-  SC.SharedContext ->
-  NonceGenerator IO s ->
-  IO (SAWCoreBackend s Yices.Connection (B.Flags fm))
-newSAWCoreBackend fm sc gen = do
-  inpr <- newIORef Seq.empty
-  ch   <- B.newIdxCache
-  ch_r <- newIORef IntMap.empty
-  let feats = Yices.yicesDefaultFeatures
-  let st0 = SAWCoreState
-              { saw_ctx = sc
-              , saw_inputs = inpr
-              , saw_symMap = Map.empty
-              , saw_elt_cache = ch
-              , saw_elt_cache_r = ch_r
-              }
-  sym <- B.newExprBuilder fm st0 gen
-  let options = backendOptions ++ onlineBackendOptions ob_st0 ++ Yices.yicesOptions
-  extendConfig options (getConfiguration sym)
-
-  enableOpt <- getOptionSetting enableOnlineBackend (getConfiguration sym)
-  --let st = st0{ saw_online_state = ob_st0{ onlineEnabled = getOpt enableOpt } }
-
-  writeIORef (B.sbStateManager sym) st0
-  return sym
--}
-
-
 -- | Register an interpretation for a symbolic function. This is not
 -- used during simulation, but rather, when we translate Crucible
 -- values back into SAW. The interpretation function takes a list of
@@ -262,16 +202,6 @@ sawRegisterSymFunInterp st f i =
 toSC :: B.ExprBuilder n st fs -> SAWCoreState n -> B.Expr n tp -> IO SC.Term
 toSC sym st elt = evaluateExpr sym st (saw_ctx st) (saw_elt_cache st) elt
 
--- | Return a shared term with type nat from a SAWExpr.
-scAsIntExpr ::
-  sym ->
-  SC.SharedContext ->
-  SAWExpr BaseRealType ->
-  IO SC.Term
-scAsIntExpr _ sc (IntToRealSAWExpr (NatToIntSAWExpr (SAWExpr t))) = SC.scNatToInt sc t
-scAsIntExpr _ _ (IntToRealSAWExpr (SAWExpr t)) = return t
-scAsIntExpr sym _ SAWExpr{} = unsupported sym
-                                  "SAWbackend does not support real values."
 
 -- | Create a Real SAWELT value from a Rational.
 --
@@ -500,21 +430,6 @@ scEq sym sc tp x y =
     _ -> unsupported sym ("SAW backend: equality comparison on unsupported type:" ++ show tp)
 
 
-scAllEq ::
-  sym ->
-  SC.SharedContext ->
-  Ctx.Assignment BaseTypeRepr ctx ->
-  Ctx.Assignment SAWExpr ctx ->
-  Ctx.Assignment SAWExpr ctx ->
-  IO (SAWExpr BaseBoolType)
-scAllEq _sym sc Ctx.Empty _ _ = SAWExpr <$> SC.scBool sc True
-scAllEq sym sc (ctx Ctx.:> tp) (xs Ctx.:> x) (ys Ctx.:> y)
-  | Ctx.null ctx = scEq sym sc tp x y
-  | otherwise =
-    do SAWExpr p <- scAllEq sym sc ctx xs ys
-       SAWExpr q <- scEq sym sc tp x y
-       SAWExpr <$> SC.scAnd sc p q
-
 scRealLe, scRealLt ::
   sym ->
   SC.SharedContext ->
@@ -640,7 +555,6 @@ fail in some other way, or just ignore them. -}
 unsupported :: {- OnlineSolver solver => -} sym -> String -> IO a
 unsupported _sym x = fail ("Unsupported " <> x) -- TODO, something better here....
 
--- = addFailedAssertion sym (Unsupported x)
 
 evaluateExpr :: forall n st tp fs.
   B.ExprBuilder n st fs->
