@@ -1,0 +1,21 @@
+pull_request_rules:
+  - name: Automatic merge on approval, CI, and ready-to-merge label
+    conditions:
+      - "#approved-reviews-by>=1"
+      - check-success=mergify
+      - label=ready-to-merge
+    actions:
+      merge:
+        method: merge
+        strict: smart+fasttrack
+  - name: Delete head branch after merge
+    conditions:
+      - merged
+      - label!=keep-branch-after-merge
+    actions:
+      delete_head_branch: {}
+  - name: Keep pull requests with keep-updated label updated
+    conditions:
+      - label=keep-updated
+    actions:
+      update: {}
