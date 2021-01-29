@@ -80,6 +80,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
+import Data.Text (Text)
 import GHC.Generics (Generic)
 
 import qualified Language.Haskell.TH.Syntax as TH
@@ -232,7 +233,7 @@ instance Show DataType where
 data ModuleDecl = TypeDecl DataType
                 | DefDecl Def
 
--- | The different sorts of things that a 'String' name can be resolved to
+-- | The different sorts of things that a 'Text' name can be resolved to
 data ResolvedName
   = ResolvedCtor Ctor
   | ResolvedDataType DataType
@@ -245,14 +246,14 @@ resolvedNameIdent (ResolvedDataType dt) = dtName dt
 resolvedNameIdent (ResolvedDef d) = defIdent d
 
 -- | Modules define namespaces of datatypes, constructors, and definitions,
--- i.e., mappings from 'String' names to these objects. A module is allowed to
--- map a 'String' name to an object defined in a different module. Modules also
+-- i.e., mappings from 'Text' names to these objects. A module is allowed to
+-- map a 'Text' name to an object defined in a different module. Modules also
 -- keep a record of the top-level declarations and the imports that were used to
 -- build them.
 data Module = Module {
           moduleName    :: !ModuleName
         , moduleImports :: !(Map ModuleName Module)
-        , moduleResolveMap :: !(Map String ResolvedName)
+        , moduleResolveMap :: !(Map Text ResolvedName)
         , moduleRDecls   :: [ModuleDecl] -- ^ All declarations in reverse order they were added.
         }
 
@@ -269,35 +270,35 @@ emptyModule nm =
          }
 
 
--- | Resolve a 'String' name in the namespace defined by a 'Module', to either a
+-- | Resolve a 'Text' name in the namespace defined by a 'Module', to either a
 -- 'Ctor', 'DataType', or 'Def'
-resolveName :: Module -> String -> Maybe ResolvedName
+resolveName :: Module -> Text -> Maybe ResolvedName
 resolveName m str = Map.lookup str (moduleResolveMap m)
 
--- | Resolve a 'String' name to a 'Ctor'
-findCtor :: Module -> String -> Maybe Ctor
+-- | Resolve a 'Text' name to a 'Ctor'
+findCtor :: Module -> Text -> Maybe Ctor
 findCtor m str =
   resolveName m str >>= \case { ResolvedCtor ctor -> Just ctor; _ -> Nothing }
 
--- | Resolve a 'String' name to a 'DataType'
-findDataType :: Module -> String -> Maybe DataType
+-- | Resolve a 'Text' name to a 'DataType'
+findDataType :: Module -> Text -> Maybe DataType
 findDataType m str =
   resolveName m str >>= \case { ResolvedDataType d -> Just d; _ -> Nothing }
 
--- | Resolve a 'String' name to a 'Def'
-findDef :: Module -> String -> Maybe Def
+-- | Resolve a 'Text' name to a 'Def'
+findDef :: Module -> Text -> Maybe Def
 findDef m str =
   resolveName m str >>= \case { ResolvedDef d -> Just d; _ -> Nothing }
 
 
--- | Insert a 'ResolvedName' into a 'Module', adding a mapping from the 'String'
+-- | Insert a 'ResolvedName' into a 'Module', adding a mapping from the 'Text'
 -- name of that resolved name to it. Signal an error in the case of a name
--- clash, i.e., an existing binding for the same 'String' name.
+-- clash, i.e., an existing binding for the same 'Text' name.
 insResolvedName :: Module -> ResolvedName -> Module
 insResolvedName m nm =
-  let str = identName $ resolvedNameIdent nm in
+  let str = identBaseName $ resolvedNameIdent nm in
   if Map.member str (moduleResolveMap m) then
-    internalError ("Duplicate name " ++ str ++ " being inserted into module "
+    internalError ("Duplicate name " ++ show str ++ " being inserted into module "
                    ++ show (moduleName m))
   else
     m { moduleResolveMap = Map.insert str nm (moduleResolveMap m) }
@@ -329,7 +330,7 @@ beginDataType m dt =
 
 -- | Complete a datatype, by adding its constructors
 completeDataType :: Module -> Ident -> [Ctor] -> Module
-completeDataType m (identName -> str) ctors =
+completeDataType m (identBaseName -> str) ctors =
   case resolveName m str of
     Just (ResolvedDataType dt)
       | null (dtCtors dt) ->
@@ -339,11 +340,11 @@ completeDataType m (identName -> str) ctors =
               Map.insert str (ResolvedDataType dt') (moduleResolveMap m),
               moduleRDecls = TypeDecl dt' : moduleRDecls m }
     Just (ResolvedDataType _) ->
-      internalError $ "completeDataType: datatype already completed: " ++ str
+      internalError $ "completeDataType: datatype already completed: " ++ show str
     Just _ ->
-      internalError $ "completeDataType: not a datatype: " ++ str
+      internalError $ "completeDataType: not a datatype: " ++ show str
     Nothing ->
-      internalError $ "completeDataType: datatype not found: " ++ str
+      internalError $ "completeDataType: datatype not found: " ++ show str
 
 
 -- | Insert a definition into a module
@@ -413,12 +414,12 @@ type ModuleMap = HashMap ModuleName Module
 -- | Resolve an 'Ident' to a 'Ctor' in a 'ModuleMap'
 findCtorInMap :: ModuleMap -> Ident -> Maybe Ctor
 findCtorInMap m i =
-  HMap.lookup (identModule i) m >>= flip findCtor (identName i)
+  HMap.lookup (identModule i) m >>= flip findCtor (identBaseName i)
 
 -- | Resolve an 'Ident' to a 'DataType' in a 'ModuleMap'
 findDataTypeInMap :: ModuleMap -> Ident -> Maybe DataType
 findDataTypeInMap m i =
-  HMap.lookup (identModule i) m >>= flip findDataType (identName i)
+  HMap.lookup (identModule i) m >>= flip findDataType (identBaseName i)
 
 -- | Get all definitions defined in any module in an entire module map. Note
 -- that the returned list might have redundancies if a definition is visible /

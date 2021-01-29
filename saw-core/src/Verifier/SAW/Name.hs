@@ -25,6 +25,7 @@ module Verifier.SAW.Name
   , moduleNamePieces
    -- * Identifiers
   , Ident(identModule, identBaseName), identName, mkIdent
+  , mkIdentText
   , parseIdent
   , isIdent
   , identText
@@ -132,6 +133,9 @@ instance Read Ident where
 
 mkIdent :: ModuleName -> String -> Ident
 mkIdent m s = Ident m (Text.pack s)
+
+mkIdentText :: ModuleName -> Text -> Ident
+mkIdentText m s = Ident m s
 
 -- | Parse a fully qualified identifier.
 parseIdent :: String -> Ident

@@ -35,7 +35,7 @@ import Control.Applicative
 #endif
 import Control.Monad.State
 import Data.List (findIndex)
-import qualified Data.Text as Text
+import Data.Text (Text)
 import qualified Data.Vector as V
 
 import Prettyprinter hiding (Doc)
@@ -43,6 +43,7 @@ import Prettyprinter hiding (Doc)
 import Verifier.SAW.Utils (internalError)
 
 import Verifier.SAW.Module
+import Verifier.SAW.Name (mkIdentText)
 import Verifier.SAW.Position
 import Verifier.SAW.Term.Functor
 import Verifier.SAW.Term.CtxTerm
@@ -93,11 +94,11 @@ inferApplyAll t (arg:args) =
      inferApplyAll app1 args
 
 -- | Resolve a name in the current module and apply it to some arguments
-inferResolveNameApp :: String -> [TypedTerm] -> TCM TypedTerm
+inferResolveNameApp :: Text -> [TypedTerm] -> TCM TypedTerm
 inferResolveNameApp n args =
   do ctx <- askCtx
      m <- getModule
-     case (findIndex ((== Text.pack n) . fst) ctx, resolveName m n) of
+     case (findIndex ((== n) . fst) ctx, resolveName m n) of
        (Just i, _) ->
          do t <- typeInferComplete (LocalVar i :: TermF TypedTerm)
             inferApplyAll t args
@@ -119,7 +120,7 @@ inferResolveNameApp n args =
          throwTCError $ UnboundName n
 
 -- | Match an untyped term as a name applied to 0 or more arguments
-matchAppliedName :: Un.Term -> Maybe (String, [Un.Term])
+matchAppliedName :: Un.Term -> Maybe (Text, [Un.Term])
 matchAppliedName (Un.Name (PosPair _ n)) = Just (n, [])
 matchAppliedName (Un.App f arg) =
   do (n, args) <- matchAppliedName f
@@ -127,7 +128,7 @@ matchAppliedName (Un.App f arg) =
 matchAppliedName _ = Nothing
 
 -- | Match an untyped term as a recursor applied to 0 or more arguments
-matchAppliedRecursor :: Un.Term -> Maybe (Maybe ModuleName, String, [Un.Term])
+matchAppliedRecursor :: Un.Term -> Maybe (Maybe ModuleName, Text, [Un.Term])
 matchAppliedRecursor (Un.Recursor mnm (PosPair _ n)) = Just (mnm, n, [])
 matchAppliedRecursor (Un.App f arg) =
   do (mnm, n, args) <- matchAppliedRecursor f
@@ -177,7 +178,7 @@ typeInferCompleteTerm (matchAppliedRecursor -> Just (maybe_mnm, str, args)) =
          Just mnm -> return mnm
          Nothing -> getModuleName
      m <- liftTCM scFindModule mnm
-     let dt_ident = mkIdent mnm str
+     let dt_ident = mkIdentText mnm str
      dt <- case findDataType m str of
        Just d -> return d
        Nothing -> throwTCError $ NoSuchDataType dt_ident
@@ -264,7 +265,7 @@ typeInferCompleteTerm (Un.TypeConstraint t _ tp) =
 typeInferCompleteTerm (Un.NatLit _ i) =
   typeInferComplete (NatLit i :: FlatTermF TypedTerm)
 typeInferCompleteTerm (Un.StringLit _ str) =
-  typeInferComplete (StringLit (Text.pack str) :: FlatTermF TypedTerm)
+  typeInferComplete (StringLit str :: FlatTermF TypedTerm)
 typeInferCompleteTerm (Un.VecLit _ []) = throwTCError EmptyVectorLit
 typeInferCompleteTerm (Un.VecLit _ ts) =
   do typed_ts <- mapM typeInferComplete ts
@@ -329,7 +330,7 @@ processDecls (Un.TypeDecl NoQualifier (PosPair p nm) tp :
 
      -- Step 4: add the definition to the current module
      mnm <- getModuleName
-     let ident = mkIdent mnm nm
+     let ident = mkIdentText mnm nm
      t <- liftTCM scConstant' (ModuleIdentifier ident) def_tm def_tp
      liftTCM scRegisterGlobal ident t
      liftTCM scModifyModule mnm $ \m ->
@@ -349,7 +350,7 @@ processDecls (Un.TypeDecl q (PosPair p nm) tp : rest) =
    do typed_tp <- typeInferComplete tp
       void $ ensureSort $ typedType typed_tp
       mnm <- getModuleName
-      let ident = mkIdent mnm nm
+      let ident = mkIdentText mnm nm
       let nmi = ModuleIdentifier ident
       i <- liftTCM scFreshGlobalVar
       liftTCM scRegisterName i nmi
@@ -405,7 +406,7 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
 
   -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
   mnm <- getModuleName
-  let dtName = mkIdent mnm nm
+  let dtName = mkIdentText mnm nm
   let dt = DataType { dtCtors = [], .. }
   liftTCM scModifyModule mnm (\m -> beginDataType m dt)
 
@@ -421,10 +422,10 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
             forM typed_ctors $ \(c, tp) ->
             case mkCtorArgStruct dtName p_ctx ix_ctx tp of
               Just arg_struct ->
-                liftTCM scBuildCtor dtName (mkIdent mnm c)
-                (map (mkIdent mnm . fst) typed_ctors)
+                liftTCM scBuildCtor dtName (mkIdentText mnm c)
+                (map (mkIdentText mnm . fst) typed_ctors)
                 arg_struct
-              Nothing -> err ("Malformed type form constructor: " ++ c)
+              Nothing -> err ("Malformed type form constructor: " ++ show c)
 
   -- Step 6: complete the datatype with the given ctors
   liftTCM scModifyModule mnm (\m -> completeDataType m dtName ctors)
