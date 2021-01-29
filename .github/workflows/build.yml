@@ -251,7 +251,7 @@ jobs:
 # instance of each job in the mergify configuration for a number of reasons:
 # - continue-on-error is respected, won't block merge
 # - changes to jobs or job instances don't require a mergify config update
-# - dependencies through `needs:` are validated, CI will fail
+# - dependencies through `needs:` are validated, CI will fail if it's invalid
 mergify:
   runs-on: ubuntu-latest
   needs: [build, s2n-tests]
