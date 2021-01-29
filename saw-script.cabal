@@ -46,7 +46,7 @@ library
     , exceptions
     , executable-path
     , extra
-    , directory
+    , directory >= 1.2.4.0
     , fgl
     , filepath
     , free
@@ -121,6 +121,7 @@ library
     SAWScript.JavaMethodSpec
     SAWScript.JavaMethodSpec.Evaluator
     SAWScript.JavaMethodSpecIR
+    SAWScript.JavaTools
     SAWScript.JavaUtils
     SAWScript.JavaPretty
     SAWScript.Lexer
@@ -129,6 +130,7 @@ library
     SAWScript.Panic
     SAWScript.Parser
     SAWScript.PathVC
+    SAWScript.ProcessUtils
     SAWScript.Proof
     SAWScript.Position
     SAWScript.SBVParser

@@ -6,6 +6,7 @@ Maintainer  : atomb
 Stability   : provisional
 -}
 {-# LANGUAGE CPP                 #-}
+{-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module SAWScript.Options where
@@ -20,11 +21,14 @@ import System.IO
 import Text.Read (readMaybe)
 import Text.Show.Functions ()
 
+import SAWScript.JavaTools
+
 -- TODO: wouldn't it be better to extract the options-processing code from this file and put it in saw/Main.hs (which already does part of the options processing)? It seems that other parts of SAW only need the datatype definition below, and not the rest.
 data Options = Options
   { importPath       :: [FilePath]
   , classPath        :: [FilePath]
   , jarList          :: [FilePath]
+  , javaBinDirs      :: [FilePath]
   , verbLevel        :: Verbosity
   , simVerbose       :: Int
   , detectVacuity    :: Bool
@@ -61,6 +65,7 @@ defaultOptions
       importPath = ["."]
     , classPath = ["."]
     , jarList = []
+    , javaBinDirs = []
     , verbLevel = Info
     , printShowPos = False
     , printOutFn = printOutWith Info
@@ -120,6 +125,12 @@ options =
   , Option "j" ["jars"]
     (ReqArg
      (\p opts -> return opts { jarList = jarList opts ++ splitSearchPath p })
+     "path"
+    )
+    pathDesc
+  , Option "b" ["java-bin-dirs"]
+    (ReqArg
+     (\p opts -> return opts { javaBinDirs = javaBinDirs opts ++ splitSearchPath p })
      "path"
     )
     pathDesc
@@ -184,14 +195,47 @@ readVerbosity s =
         "debug"               -> Debug
         _                     -> Debug
 
+-- | Perform some additional post-processing on an 'Options' value based on
+-- whether certain environment variables are defined.
 processEnv :: Options -> IO Options
 processEnv opts = do
   curEnv <- getEnvironment
-  return $ foldr addOpt opts curEnv
-    where addOpt ("SAW_IMPORT_PATH", p) os =
-            os { importPath = importPath os ++ splitSearchPath p }
-          addOpt ("SAW_JDK_JAR", p) os = os { jarList = p : jarList opts }
-          addOpt _ os = os
+  opts' <- addJavaBinDirInducedOpts opts
+  return $ foldr addSawOpt opts' curEnv
+  where
+    -- If a Java executable's path is specified (either by way of
+    -- --java-bin-dirs or PATH, see the Haddocks for findJavaIn), then use that
+    -- to detect the path to Java's standard rt.jar file and add it to the
+    -- jarList on Java 8 or earlier. (Later versions of Java do not use
+    -- rt.jar—see #861.) If Java's path is not specified, return the Options
+    -- unchanged.
+    addJavaBinDirInducedOpts :: Options -> IO Options
+    addJavaBinDirInducedOpts os@Options{javaBinDirs} = do
+      mbJavaPath <- findJavaIn javaBinDirs
+      case mbJavaPath of
+        Nothing       -> pure os
+        Just javaPath -> do
+          javaMajorVersion <- findJavaMajorVersion javaPath
+          if javaMajorVersion >= 9
+             then pure os
+             else addRTJar javaPath os
+
+    -- rt.jar lives in a standard location relative to @java.home@. At least,
+    -- this is the case on every operating system I've tested.
+    addRTJar :: FilePath -> Options -> IO Options
+    addRTJar javaPath os = do
+      mbJavaHome <- findJavaProperty javaPath "java.home"
+      case mbJavaHome of
+        Nothing -> fail $ "Could not find where rt.jar lives for " ++ javaPath
+        Just javaHome ->
+          let rtJarPath = javaHome </> "lib" </> "rt.jar" in
+          pure $ os{ jarList = rtJarPath : jarList os }
+
+    addSawOpt :: (String, String) -> Options -> Options
+    addSawOpt ("SAW_IMPORT_PATH", p) os =
+      os { importPath = importPath os ++ splitSearchPath p }
+    addSawOpt ("SAW_JDK_JAR", p) os = os { jarList = p : jarList os }
+    addSawOpt _ os = os
 
 pathDesc, pathDelim :: String
 

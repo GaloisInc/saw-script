@@ -1,3 +1,14 @@
+# Unreleased version
+
+## New Features
+
+When verifying Java code, the path to Java can be specified with the new
+`--java-bin-dirs`/`-b` command-line option. Alternatively, if
+`--java-bin-dirs` is not set, then SAW searches the `PATH` to find Java.
+When the path to Java is known, SAW can automatically add system-related
+JAR files to the JAR path, which eliminates the need to manually specify
+these files with `-j`.
+
 # Version 0.7
 
 ## New Features
