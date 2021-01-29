@@ -1410,6 +1410,22 @@ Sigma_proj2 (a : sort 0) (b : a -> sort 0)
 
 
 --------------------------------------------------------------------------------
+-- Lists
+
+data List (a : sort 0) : sort 0
+  where {
+    Nil : List a;
+    Cons : a -> List a -> List a;
+  }
+
+List__rec :
+  (a : sort 0) -> (P : List a -> sort 0) -> P (Nil a) ->
+  ((x : a) -> (l : List a) -> P l -> P (Cons a x l)) ->
+  (l : List a) -> P l;
+List__rec a P f1 f2 l = List#rec a P f1 f2 l;
+
+
+--------------------------------------------------------------------------------
 -- Computation monad
 
 primitive CompM : sort 0 -> sort 0;
