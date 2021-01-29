@@ -115,7 +115,11 @@ lookupClass cb site nm = do
   case maybeCl of
     Nothing -> do
      let msg = ftext ("The Java class " ++ JSS.slashesToDots (JSS.unClassName nm) ++ " could not be found.")
-         res = "Please check that the --classpath and --jars options are set correctly."
+         res = unwords [ "Please check that the path to Java is set correctly"
+                       , "(either through the --java-bin-dirs option or your PATH)"
+                       , "and you are using Java 8 or earlier"
+                       , "(SAW does not support 9+ currently)."
+                       ]
       in throwIOExecException site msg res
     Just cl -> return cl
 

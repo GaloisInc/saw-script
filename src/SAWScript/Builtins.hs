@@ -125,6 +125,7 @@ import SAWScript.ImportAIG
 
 import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
+import SAWScript.ProcessUtils
 import SAWScript.Proof
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
@@ -980,14 +981,7 @@ w4AbcVerilog _unints sc _hashcons g =
        -- Run ABC and remove temporaries
        let execName = "abc"
            args = ["-q", "%read " ++ tmp ++"; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++ tmpCex]
-       (ec, out, err) <- readProcessWithExitCode execName args ""
-       when (ec /= Exit.ExitSuccess) $
-          fail $ unlines [ "ABC returned non-zero exit code: " ++ show ec
-                         , "Standard output:"
-                         , out
-                         , "Standard error:"
-                         , err
-                         ]
+       (_out, _err) <- readProcessExitIfFailure execName args
        cexText <- readFile tmpCex
        removeFile tmp
        removeFile tmpCex
