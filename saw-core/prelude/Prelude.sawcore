@@ -1386,6 +1386,29 @@ primitive mkDouble : Integer -> Integer -> Float;
 -- primitive doubleToBV : Double -> Vec 64 Bool;
 
 
+-------------------------------------------------------------------------------
+-- Dependent sums
+
+data Sigma (a : sort 0) (b : a -> sort 0) : sort 0
+  where {
+    exists : (pa : a) -> b pa -> Sigma a b;
+  }
+
+Sigma__rec
+  (a : sort 0) (b : a -> sort 0) (p : Sigma a b -> sort 0)
+  (f1 : (pa : a) -> (pb : b pa) -> p (exists a b pa pb)) (u : Sigma a b) : p u
+  = Sigma#rec a b p f1 u;
+
+Sigma_proj1 (a : sort 0) (b : a -> sort 0) : Sigma a b -> a
+  = Sigma__rec a b (\ (_ : Sigma a b) -> a) (\ (pa : a) (_ : b pa) -> pa);
+
+Sigma_proj2 (a : sort 0) (b : a -> sort 0)
+  : (p : Sigma a b) -> b (Sigma_proj1 a b p)
+  = Sigma__rec a b
+      (\ (p : Sigma a b) -> b (Sigma_proj1 a b p))
+      (\ (pa : a) (pb : b pa) -> pb);
+
+
 --------------------------------------------------------------------------------
 -- Computation monad
 
