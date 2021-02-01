@@ -52,12 +52,13 @@ import qualified Text.LLVM.AST as LLVM
 import Data.Parameterized.Some
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Context hiding (view)
-import Data.Parameterized.Nonce
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
+
+import Verifier.SAW.Simulator.What4.ReturnTrip
 
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
@@ -66,6 +67,7 @@ import SAWScript.Value
 import SAWScript.Options
 import SAWScript.X86 hiding (Options)
 import SAWScript.X86Spec
+import SAWScript.Crucible.Common
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Override as O
@@ -84,7 +86,7 @@ import qualified What4.ProgramLoc as W4
 
 import qualified Lang.Crucible.Analysis.Postdom as C
 import qualified Lang.Crucible.Backend as C
-import qualified Lang.Crucible.Backend.SAWCore as C
+import qualified Lang.Crucible.Backend.Online as C
 import qualified Lang.Crucible.CFG.Core as C
 import qualified Lang.Crucible.FunctionHandle as C
 import qualified Lang.Crucible.Simulator.EvalStmt as C
@@ -232,19 +234,20 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       sc <- getSharedContext
       opts <- getOptions
       basic_ss <- getBasicSS
-      sym <- liftIO $ C.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
+      sym <- liftIO $ newSAWCoreBackend sc
+      sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
       rw <- getTopLevelRW
       let cenv = rwCryptol rw
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesIMC sfs) $ cryptolUninterpreted cenv "aesimc"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesIMC sfs) $ cryptolUninterpreted cenv "aesimc"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
 
       let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
       (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc preserved path nm
