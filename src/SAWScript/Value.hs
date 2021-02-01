@@ -62,13 +62,12 @@ import qualified Data.AIG as AIG
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
-import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 import qualified SAWScript.Crucible.JVM.MethodSpecIR ()
-import qualified Verifier.Java.Codebase as JSS
+import qualified Lang.JVM.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
@@ -128,8 +127,6 @@ data Value
   | VProofScript (ProofScript Value)
   | VSimpset Simpset
   | VTheorem Theorem
-  | VJavaSetup (JavaSetup Value)
-  | VJavaMethodSpec JIR.JavaMethodSpecIR
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
   | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR)
@@ -289,10 +286,8 @@ showsPrecValue opts p v =
     VTheorem (Theorem (Prop t) _stats) ->
       showString "Theorem " .
       showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
-    VJavaSetup {} -> showString "<<Java Setup>>"
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
-    VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VLLVMModuleSkeleton s -> shows s
     VLLVMFunctionSkeleton s -> shows s
@@ -556,26 +551,6 @@ typedTermOfString cs = TypedTerm schema trm
 
 -- Other SAWScript Monads ------------------------------------------------------
 
--- The ProofScript in RunVerify is in the SAWScript context, and
--- should stay there.
-data ValidationPlan
-  = Skip
-  | RunVerify (ProofScript SatResult)
-
-data JavaSetupState
-  = JavaSetupState {
-      jsSpec :: JIR.JavaMethodSpecIR
-    , jsContext :: SharedContext
-    , jsTactic :: ValidationPlan
-    , jsSimulate :: Bool
-    , jsSatBranches :: Bool
-    }
-
-type JavaSetup a = StateT JavaSetupState TopLevel a
-
-throwJava :: String -> JavaSetup a
-throwJava = lift . throwTopLevel
-
 type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
 -- | 'CrucibleMethodSpecIR' requires a specific syntax extension, but our method
@@ -702,18 +677,6 @@ instance FromValue a => FromValue (StateT ProofState TopLevel a) where
       m2 <- lift $ applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue ProofScript"
-
-instance IsValue a => IsValue (StateT JavaSetupState TopLevel a) where
-    toValue m = VJavaSetup (fmap toValue m)
-
-instance FromValue a => FromValue (StateT JavaSetupState TopLevel a) where
-    fromValue (VJavaSetup m) = fmap fromValue m
-    fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = do
-      v1 <- fromValue m1
-      m2 <- lift $ applyValue v2 v1
-      fromValue m2
-    fromValue _ = error "fromValue JavaSetup"
 
 ---------------------------------------------------------------------------------
 instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
@@ -883,13 +846,6 @@ instance FromValue Theorem where
     fromValue (VTheorem t) = t
     fromValue _ = error "fromValue Theorem"
 
-instance IsValue JIR.JavaMethodSpecIR where
-    toValue ms = VJavaMethodSpec ms
-
-instance FromValue JIR.JavaMethodSpecIR where
-    fromValue (VJavaMethodSpec ms) = ms
-    fromValue _ = error "fromValue JavaMethodSpec"
-
 instance IsValue JavaType where
     toValue t = VJavaType t
 
@@ -975,7 +931,6 @@ addTrace str val =
     VLambda        f -> VLambda        (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
     VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
-    VJavaSetup     m -> VJavaSetup     (addTrace str `fmap` addTraceStateT str m)
     VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
     VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
         addTrace str `fmap` underStateT (addTraceTopLevel str) m
