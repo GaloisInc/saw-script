@@ -6,7 +6,7 @@ on:
 
 jobs:
   outputs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     outputs:
       changed: ${{ steps.outputs.outputs.changed-files }}
       saw-version: ${{ steps.outputs.outputs.saw-version }}
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-18.04]
         ghc: ["8.6.5", "8.8.4", "8.10.2"]
         continue-on-error: [false]
         include:
@@ -133,7 +133,7 @@ jobs:
           name: ${{ runner.os }}-bins
 
       - name: Upload artifacts
-        if: "matrix.os == 'ubuntu-latest'"
+        if: "matrix.os == 'ubuntu-18.04'"
         uses: actions/upload-artifact@v2
         with:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
@@ -145,7 +145,7 @@ jobs:
         run: echo "::error ::Test suite failed for saw-remote-api. Pipeline allowed to pass until tests are reliable."
 
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     needs: [outputs]
     if: contains(needs.outputs.outputs.changed, 'Dockerfile')
     steps:
@@ -163,7 +163,7 @@ jobs:
     name: "Test s2n proofs"
     timeout-minutes: 60
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     strategy:
       fail-fast: false
       matrix:
@@ -215,7 +215,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-18.04, macos-latest, windows-latest]
         ghc: ["8.6.5"]
     needs: [outputs, build]
     env:

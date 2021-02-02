@@ -8,7 +8,7 @@ on:
 
 jobs:
   outputs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     outputs:
       saw-version: ${{ steps.saw.outputs.saw-version }}
       name: ${{ steps.saw.outputs.name }}
@@ -20,7 +20,7 @@ jobs:
           .github/ci.sh output name saw-$(.github/ci.sh ver)-$(date -I)
 
   docker-saw:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     needs: [outputs]
     continue-on-error: true
     steps:
@@ -39,7 +39,7 @@ jobs:
           push: ${{ github.event_name == 'schedule' }}
 
   docker-saw-remote-api:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     needs: [outputs]
     continue-on-error: true
     steps:
@@ -65,7 +65,7 @@ jobs:
       VERSION: ${{ needs.outputs.outputs.saw-version }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-18.04, macos-latest, windows-latest]
         ghc: [8.8.4]
     continue-on-error: true
     steps:
