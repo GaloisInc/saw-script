@@ -68,10 +68,6 @@ type instance MS.TypeName CJ.JVM = JIdent
 
 type instance MS.ExtType CJ.JVM = J.Type
 
--- TODO: remove when jvm-parser switches to prettyprinter
-instance PPL.Pretty J.Type where
-  pretty = PPL.viaShow
-
 --------------------------------------------------------------------------------
 -- *** JVMMethodId
 
