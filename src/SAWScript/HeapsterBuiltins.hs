@@ -20,6 +20,8 @@ module SAWScript.HeapsterBuiltins
        , heapster_typecheck_mut_funs
        , heapster_typecheck_fun_rename
        , heapster_typecheck_mut_funs_rename
+       -- , heapster_typecheck_fun_rs
+       -- , heapster_typecheck_fun_rename_rs
        , heapster_define_opaque_perm
        , heapster_define_recursive_perm
        , heapster_define_reachability_perm
@@ -599,7 +601,7 @@ heapster_assume_fun_rename _bic _opts henv nm nm_to perms_string term_string =
      let args = mkCruCtx cargs
      withKnownNat w $ withLeqProof leq_proof $ do
         SomeFunPerm fun_perm <-
-          parseFunPermString "permissions" env args ret perms_string
+          parseFunPermStringMaybeRust "permissions" w env args ret perms_string
         env <- liftIO $ readIORef (heapsterEnvPermEnvRef henv)
         fun_typ <- liftIO $ translateCompleteFunPerm sc env fun_perm
         term_ident <- parseAndInsDef henv nm_to fun_typ term_string
@@ -639,7 +641,7 @@ heapster_assume_fun_multi _bic _opts henv nm perms_terms_strings =
                                                        term_string), i) ->
        withKnownNat w $ withLeqProof leq_proof $
        do some_fun_perm <-
-            parseFunPermString "permissions" env args ret perms_string
+            parseFunPermStringMaybeRust "permissions" w env args ret perms_string
           fun_typ <-
             case some_fun_perm of
               SomeFunPerm fun_perm ->
@@ -671,6 +673,9 @@ heapster_typecheck_mut_funs_rename bic opts henv fn_names_and_perms =
      let endianness =
            llvmDataLayout (modTrans lm ^. transContext ^. llvmTypeCtx)
            ^. intLayout
+     leq_proof <- case decideLeq (knownNat @1) w of
+       Left pf -> return pf
+       Right _ -> fail "LLVM arch width is 0!"
      env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
      some_cfgs_and_perms <- forM fn_names_and_perms $ \(nm, nm_to, perms_string) ->
        do AnyCFG cfg <-
@@ -681,14 +686,12 @@ heapster_typecheck_mut_funs_rename bic opts henv fn_names_and_perms =
           SomeFunPerm fun_perm <-
             tracePretty (pretty ("Fun args:" :: String) <+>
                          permPretty emptyPPInfo args) $
-            parseFunPermString "permissions" env args ret perms_string
+            withKnownNat w $ withLeqProof leq_proof $
+            parseFunPermStringMaybeRust "permissions" w env args ret perms_string
           return (SomeCFGAndPerm (GlobalSymbol $
                                   fromString nm) nm_to cfg fun_perm)
      sc <- getSharedContext
      let saw_modname = heapsterEnvSAWModule henv
-     leq_proof <- case decideLeq (knownNat @1) w of
-       Left pf -> return pf
-       Right _ -> fail "LLVM arch width is 0!"
      env' <- liftIO $ withKnownNat w $ withLeqProof leq_proof $
        tcTranslateAddCFGs sc saw_modname w env endianness some_cfgs_and_perms
      liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
@@ -704,6 +707,19 @@ heapster_typecheck_fun_rename :: BuiltinContext -> Options -> HeapsterEnv ->
 heapster_typecheck_fun_rename bic opts henv fn_name fn_name_to perms_string =
   heapster_typecheck_mut_funs_rename bic opts henv [(fn_name, fn_name_to,
                                                      perms_string)]
+
+{-
+heapster_typecheck_fun_rs :: BuiltinContext -> Options -> HeapsterEnv ->
+                             String -> String -> TopLevel ()
+heapster_typecheck_fun_rs bic opts henv fn_name perms_string =
+  heapster_typecheck_fun bic opts henv 
+
+heapster_typecheck_fun_rename_rs :: BuiltinContext -> Options -> HeapsterEnv ->
+                                    String -> String -> String -> TopLevel ()
+heapster_typecheck_fun_rename_rs bic opts henv fn_name fn_name_to perms_string =
+  heapster_typecheck_mut_funs_rename bic opts henv [(fn_name, fn_name_to,
+                                                     perms_string)]
+-}
 
 heapster_print_fun_trans :: BuiltinContext -> Options -> HeapsterEnv ->
                             String -> TopLevel ()
