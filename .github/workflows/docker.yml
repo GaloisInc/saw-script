@@ -6,7 +6,7 @@ on:
 
 jobs:
   saw:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -24,7 +24,7 @@ jobs:
           add_git_labels: true
           push: true
   saw-remote-api:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
       - run: |
