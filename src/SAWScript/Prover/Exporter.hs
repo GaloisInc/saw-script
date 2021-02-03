@@ -4,6 +4,7 @@
 {-# Language ViewPatterns #-}
 {-# Language ExplicitForAll #-}
 {-# Language FlexibleContexts #-}
+{-# Language TypeApplications #-}
 module SAWScript.Prover.Exporter
   ( proveWithExporter
   , adaptExporter
@@ -50,7 +51,6 @@ import Prettyprinter (vcat)
 
 import Cryptol.Utils.PP(pretty)
 
-import Lang.Crucible.Backend.SAWCore (newSAWCoreBackend, sawBackendSharedContext)
 import Verifier.SAW.CryptolEnv (initCryptolEnv, loadCryptolModule)
 import Verifier.SAW.Cryptol.Prelude (cryptolModule, scLoadPreludeModule, scLoadCryptolModule)
 import Verifier.SAW.ExternalFormat(scWriteExternal)
@@ -68,6 +68,7 @@ import qualified Verifier.SAW.Simulator.What4 as W4Sim
 
 import qualified Verifier.SAW.UntypedAST as Un
 
+import SAWScript.Crucible.Common
 import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..), propToPredicate)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Rewrite
@@ -252,8 +253,9 @@ write_verilog sc path t = io $ writeVerilog sc path t
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
-  sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
-  (_, (_, bval)) <- W4Sim.w4EvalAny sym sc mempty mempty t
+  sym <- newSAWCoreBackend sc
+  st  <- sawCoreState sym
+  (_, (_, bval)) <- W4Sim.w4EvalAny sym st sc mempty mempty t
   edoc <- runExceptT $
     case bval of
       Sim.VBool b -> exprVerilog sym b "f"
@@ -316,12 +318,10 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   sc  <- mkSharedContext
   ()  <- scLoadPreludeModule sc
   ()  <- scLoadCryptolModule sc
-  sym <- newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
-  ctx <- sawBackendSharedContext sym
   let ?fileReader = BS.readFile
-  env <- initCryptolEnv ctx
+  env <- initCryptolEnv sc
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  (cm, _) <- loadCryptolModule ctx env inputFile
+  (cm, _) <- loadCryptolModule sc env inputFile
   let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
   let configuration = coqTranslationConfiguration notations skips
   case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of

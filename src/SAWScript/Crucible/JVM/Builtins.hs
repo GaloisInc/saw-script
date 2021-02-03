@@ -49,7 +49,6 @@ import           Control.Monad.Trans.Except (runExceptT)
 import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
 import           Data.Function
-import           Data.IORef
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -61,10 +60,6 @@ import           Data.Void (absurd)
 import           Prettyprinter
 import           System.IO
 
--- jvm-verifier
--- TODO: transition to Lang.JVM.Codebase from crucible-jvm
-import qualified Verifier.Java.Codebase as CB
-
 -- cryptol
 import qualified Cryptol.Eval.Type as Cryptol (evalValType)
 import qualified Cryptol.TypeCheck.Type as Cryptol
@@ -74,7 +69,6 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
-import qualified What4.Expr.Builder as W4
 import qualified What4.Utils.StringLiteral as W4S
 
 -- jvm-parser
@@ -83,7 +77,6 @@ import qualified Language.JVM.Common as J (dotsToSlashes)
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(..))
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
@@ -91,17 +84,19 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 -- crucible-jvm
+import qualified Lang.JVM.Codebase as CB
 import qualified Lang.Crucible.JVM as CJ
 
 -- parameterized-utils
 import           Data.Parameterized.Classes
-import           Data.Parameterized.Nonce
 import qualified Data.Parameterized.Context as Ctx
 
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
+
+import Verifier.SAW.Simulator.What4.ReturnTrip
 
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
@@ -115,7 +110,7 @@ import SAWScript.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 import SAWScript.JavaExpr (JavaType(..))
 
 import qualified SAWScript.Crucible.Common as Common
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -131,10 +126,10 @@ type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
 
 -- TODO: something useful with the global pair?
-ppAbortedResult :: JVMCrucibleContext
+ppJVMAbortedResult :: JVMCrucibleContext
                 -> Crucible.AbortedResult Sym a
                 -> Doc ann
-ppAbortedResult _cc = Common.ppAbortedResult (\_gp -> mempty)
+ppJVMAbortedResult _cc = Common.ppAbortedResult (\_gp -> mempty)
 
 -- FIXME: We need a better way to identify a set of class names to
 -- load. This function has two problems: First, unless we put in a
@@ -205,7 +200,7 @@ jvm_verify cls nm lemmas checkSat setup tactic =
      let loc = SS.toW4Loc "_SAW_verify_prestate" pos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
-     (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "jvm_verify" profFile
+     (writeFinalProfile, pfs) <- io $ setupProfiling sym "jvm_verify" profFile
 
      (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let st0 = initialCrucibleSetupState cc (cls', method) loc
@@ -266,8 +261,8 @@ verifyObligations ::
   TopLevel SolverStats
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.jccBackend
-     st <- io $ readIORef $ W4.sbStateManager sym
-     let sc = Crucible.saw_ctx st
+     st <- io $ sawCoreState sym
+     let sc = saw_ctx st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm = mspec ^. csMethodName
      stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
@@ -441,7 +436,7 @@ setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
              rhs' <- injectSetupVal rhs
              CJ.doArrayStore sym mem lhs' idx rhs'
         JVMPointsToArray _loc lhs rhs ->
-          do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+          do sc <- saw_ctx <$> sawCoreState sym
              let lhs' = lookupAllocIndex env lhs
              (_ety, tts) <-
                destVecTypedTerm sc rhs >>=
@@ -487,7 +482,9 @@ assertEqualVals ::
   JVMVal ->
   IO Term
 assertEqualVals cc v1 v2 =
-  Crucible.toSC (cc^.jccBackend) =<< equalValsPred cc v1 v2
+  do let sym = cc^.jccBackend
+     st <- sawCoreState sym
+     toSC sym st =<< equalValsPred cc v1 v2
 
 --------------------------------------------------------------------------------
 
@@ -518,16 +515,17 @@ getMethodHandle jc (JVMMethodId mkey cname) =
 registerOverride ::
   Options ->
   JVMCrucibleContext ->
-  Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM ->
+  Crucible.SimContext (SAWCruciblePersonality Sym) Sym CJ.JVM ->
   W4.ProgramLoc ->
   [CrucibleMethodSpecIR] ->
-  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc cs =
   do let sym = cc^.jccBackend
      let jc = cc^.jccJVMContext
      let c0 = head cs
      let method = c0 ^. MS.csMethod
-     sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
+
+     sc <- saw_ctx <$> liftIO (sawCoreState sym)
 
      mhandle <- liftIO $ getMethodHandle jc method
      case mhandle of
@@ -578,7 +576,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = pfs
-          let simctx = CJ.jvmSimContext sym halloc stdout jc verbosity Crucible.SAWCruciblePersonality
+          let simctx = CJ.jvmSimContext sym halloc stdout jc verbosity SAWCruciblePersonality
           let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h)
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
           let overrideSim =
@@ -616,7 +614,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
             return (retval', globals1)
 
        Crucible.AbortedResult _ ar ->
-         do let resultDoc = ppAbortedResult cc ar
+         do let resultDoc = ppJVMAbortedResult cc ar
             fail $ unlines [ "Symbolic execution failed."
                            , show resultDoc
                            ]
@@ -693,11 +691,12 @@ verifyPoststate cc mspec env0 globals ret =
   where
     sym = cc^.jccBackend
 
-    verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError _loc err))) = do
-      hypTerm    <- scAndList sc =<< mapM (Crucible.toSC sym) (toListOf (folded . Crucible.labeledPred) hyps)
-      conclTerm  <- Crucible.toSC sym concl
-      obligation <- scImplies sc hypTerm conclTerm
-      return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
+    verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError _loc err))) =
+      do st         <- sawCoreState sym
+         hypTerm    <- scAndList sc =<< mapM (toSC sym st) (toListOf (folded . Crucible.labeledPred) hyps)
+         conclTerm  <- toSC sym st concl
+         obligation <- scImplies sc hypTerm conclTerm
+         return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
@@ -713,8 +712,7 @@ setupCrucibleContext jclass =
      jc <- getJVMTrans
      cb <- getJavaCodebase
      sc <- getSharedContext
-     let gen = globalNonceGenerator
-     sym <- io $ Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
+     sym <- io $ newSAWCoreBackend sc
      opts <- getOptions
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
 

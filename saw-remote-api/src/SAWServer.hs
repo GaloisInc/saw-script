@@ -37,7 +37,7 @@ import qualified Data.AIG as AIG
 import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator, newHandleAllocator)
 import qualified Lang.Crucible.JVM as CJ
 import qualified Text.LLVM.AST as LLVM
-import qualified Verifier.Java.Codebase as JSS
+import qualified Lang.JVM.Codebase as JSS
 import qualified Verifier.SAW.CryptolEnv as CryptolEnv
 import Verifier.SAW.Module (emptyModule)
 import Verifier.SAW.SharedTerm (mkSharedContext, scLoadModule)
@@ -55,7 +55,6 @@ import SAWScript.Value (AIGProxy(..), BuiltinContext(..), JVMSetupM, LLVMCrucibl
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import Verifier.SAW.Rewriter (Simpset)
-import qualified Verifier.Java.SAWBackend as JavaSAW
 import qualified Cryptol.Utils.Ident as Cryptol
 
 import Argo
@@ -160,7 +159,6 @@ initialState readFileFn =
   silence $
   do sc <- mkSharedContext
      CryptolSAW.scLoadPreludeModule sc
-     JavaSAW.scLoadJavaModule sc
      CryptolSAW.scLoadCryptolModule sc
      let mn = mkModuleName ["SAWScript"]
      scLoadModule sc (emptyModule mn)

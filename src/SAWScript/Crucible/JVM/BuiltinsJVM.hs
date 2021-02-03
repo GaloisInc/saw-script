@@ -42,8 +42,6 @@ import           Control.Monad.State.Strict
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.Nonce as Nonce
 
--- crucible/crucible-saw
-import qualified Lang.Crucible.Backend.SAWCore         as CrucibleSAW
 -- crucible/crucible
 import qualified Lang.Crucible.FunctionHandle          as Crucible
 import qualified Lang.Crucible.Simulator.Operations    as Crucible
@@ -71,30 +69,27 @@ import Verifier.SAW.SharedTerm(Term, SharedContext, mkSharedContext, scImplies)
 -- cryptol-saw-core
 import Verifier.SAW.TypedTerm (TypedTerm(..), abstractTypedExts)
 
+-- saw-core-what4
+import Verifier.SAW.Simulator.What4.ReturnTrip
+
 -- saw-script
 import SAWScript.Builtins(fixPos)
 import SAWScript.Value
 import SAWScript.Options(Options,simVerbose)
+import SAWScript.Crucible.Common
 import SAWScript.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, runCFG, baseCryptolType)
 
 -- jvm-verifier
 import qualified Language.JVM.Common as J
 import qualified Language.JVM.Parser as J
 import qualified SAWScript.Utils as J
-import qualified "jvm-verifier" Verifier.Java.Codebase as JCB
+import qualified Lang.JVM.Codebase as JCB
 
 -- crucible-jvm
 import           Lang.Crucible.JVM (IsCodebase(..))
 import qualified Lang.Crucible.JVM as CJ
 
 import Debug.Trace
-
---
--- | Use the Codebase implementation from the old Java static simulator
---
-instance IsCodebase JCB.Codebase where
-  lookupClass cb = J.lookupClass cb fixPos
-  findMethod  cb = J.findMethod  cb fixPos
 
 -----------------------------------------------------------------------
 -- | Make sure the class is in the database and allocate handles for its
@@ -162,14 +157,15 @@ jvm_extract c mname = do
   ctx <- getJVMTrans
 
   io $ do -- only the IO monad, nothing else
-          sym <- CrucibleSAW.newSAWCoreBackend W4.FloatRealRepr sc gen
+          sym <- newSAWCoreBackend sc
+          st  <- sawCoreState sym
           CJ.setSimulatorVerbosity verbosity sym
 
           (CJ.JVMHandleInfo _m2 h) <- CJ.findMethodHandle ctx mcls meth
 
           (ecs, args) <- setupArgs sc sym h
 
-          res <- CJ.runMethodHandle sym CrucibleSAW.SAWCruciblePersonality halloc
+          res <- CJ.runMethodHandle sym SAWCruciblePersonality halloc
                      ctx verbosity className h args
 
           case res of
@@ -178,7 +174,7 @@ jvm_extract c mname = do
               let regval = gp^.Crucible.gpValue
               let regty = Crucible.regType regval
               let failure = fail $ unwords ["Unexpected return type:", show regty]
-              t <- Crucible.asSymExpr regval (CrucibleSAW.toSC sym) failure
+              t <- Crucible.asSymExpr regval (toSC sym st) failure
               cty <-
                 case Crucible.asBaseType regty of
                   Crucible.NotBaseType -> failure

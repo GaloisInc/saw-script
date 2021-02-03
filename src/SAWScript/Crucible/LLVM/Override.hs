@@ -80,8 +80,6 @@ import qualified Cryptol.Eval.Type as Cryptol (TValue(..), evalType)
 import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified Lang.Crucible.Backend as Crucible
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
-import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
 import qualified Lang.Crucible.Backend.Online as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(UnitRepr))
 import qualified Lang.Crucible.FunctionHandle as Crucible
@@ -114,8 +112,9 @@ import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.TypedAST
 import           Verifier.SAW.Recognizer
 import           Verifier.SAW.TypedTerm
+import           Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState(..), toSC, bindSAWTerm)
 
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common
 import           SAWScript.Crucible.Common.MethodSpec (SetupValue(..), PointsTo)
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
@@ -261,7 +260,7 @@ partitionBySymbolicPreds ::
   IO (Map Crucible.BranchResult [a])
 partitionBySymbolicPreds sym getPred =
   let step mp a =
-        CrucibleSAW.considerSatisfiability sym Nothing (getPred a) <&> \k ->
+        Crucible.considerSatisfiability sym Nothing (getPred a) <&> \k ->
           Map.insertWith (++) k [a] mp
   in foldM step Map.empty
 
@@ -284,7 +283,7 @@ unsatPreconditions ::
   IO Bool
 unsatPreconditions sym container getPreds = do
   conj <- W4.andAllOf sym container getPreds
-  CrucibleSAW.considerSatisfiability sym Nothing conj >>=
+  Crucible.considerSatisfiability sym Nothing conj >>=
     \case
       Crucible.NoBranch False -> pure True
       _ -> pure False
@@ -375,7 +374,7 @@ methodSpecHandler ::
   [MS.CrucibleMethodSpecIR (LLVM arch)]
     {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ the handle for this function -} ->
-  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym (Crucible.LLVM arch) rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc top_loc css h = do
   let fnName = head css ^. csName
@@ -1162,18 +1161,21 @@ valueToSC ::
   OverrideMatcher (LLVM arch) md Term
 valueToSC sym _loc _failMsg _ts (Crucible.LLVMValZero gtp)
   = liftIO $
-     do sc <- Crucible.sawBackendSharedContext sym
+     do st <- liftIO (sawCoreState sym)
+        let sc = saw_ctx st
         zeroValueSC sc gtp
 
 valueToSC sym loc failMsg (Cryptol.TVTuple tys) (Crucible.LLVMValStruct vals)
   | length tys == length vals
   = do terms <- traverse (\(ty, tm) -> valueToSC sym loc failMsg ty (snd tm)) (zip tys (V.toList vals))
-       sc <- liftIO $ Crucible.sawBackendSharedContext sym
+       st <- liftIO (sawCoreState sym)
+       let sc = saw_ctx st
        liftIO (scTupleReduced sc terms)
 
 valueToSC sym loc failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt base off) =
   do baseZero <- liftIO (W4.natEq sym base =<< W4.natLit sym 0)
-     offTm    <- liftIO (Crucible.toSC sym off)
+     st <- liftIO (sawCoreState sym)
+     offTm <- liftIO (toSC sym st off)
      case W4.asConstantPred baseZero of
        Just True  -> return offTm
        Just False -> failure loc failMsg
@@ -1184,13 +1186,14 @@ valueToSC sym loc failMsg (Cryptol.TVSeq _n Cryptol.TVBit) (Crucible.LLVMValInt 
 -- valueToSC sym _tval (Crucible.LLVMValInt base off) =
 --   do base' <- Crucible.toSC sym base
 --      off'  <- Crucible.toSC sym off
---      sc    <- Crucible.saw_ctx <$> readIORef (Crucible.sbStateManager sym)
+--      sc    <- Crucible.saw_ctx <$> sawCoreState sym
 --      Just <$> scTuple sc [base', off']
 
 valueToSC sym loc failMsg (Cryptol.TVSeq n cryty) (Crucible.LLVMValArray ty vals)
   | toInteger (length vals) == n
   = do terms <- V.toList <$> traverse (valueToSC sym loc failMsg cryty) vals
-       sc <- liftIO $ Crucible.sawBackendSharedContext sym
+       st <- liftIO (sawCoreState sym)
+       let sc = saw_ctx st
        t <- liftIO (typeToSC sc ty)
        liftIO (scVectorReduced sc t terms)
 
@@ -1396,9 +1399,10 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
                 | Crucible.LLVMPointer _ off <- ptr1
                 , Just 0 <- BV.asUnsigned <$> W4.asBV off ->
                 do addAssert ok $ Crucible.SimError loc $ Crucible.GenericSimError $ show errMsg
-                   arr_tm <- liftIO $ Crucible.toSC sym arr
+                   st <- liftIO (sawCoreState sym)
+                   arr_tm <- liftIO $ toSC sym st arr
                    instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost arr_tm (ttTerm expected_arr_tm)
-                   sz_tm <- liftIO $ Crucible.toSC sym sz
+                   sz_tm <- liftIO $ toSC sym st sz
                    instantiateExtMatchTerm sc cc (spec ^. MS.csLoc) prepost sz_tm (ttTerm expected_sz_tm)
                    return Nothing
 
@@ -1688,8 +1692,9 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
               | Crucible.storageTypeSize storTy > 16
               , smt_array_memory_model_enabled -> do
                 arr_tm <- memArrayToSawCoreTerm cc (Crucible.memEndian mem) tm
-                arr <- Crucible.bindSAWTerm
-                  sym
+                st <- sawCoreState sym
+                arr <- bindSAWTerm
+                  sym st
                   (W4.BaseArrayRepr
                     (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
                     (W4.BaseBVRepr (W4.knownNat @8)))
@@ -1704,8 +1709,9 @@ storePointsToValue opts cc env tyenv nameEnv base_mem maybe_cond ptr val maybe_i
                 resolveSetupVal cc mem env tyenv nameEnv val'
               Crucible.storeConstRaw sym mem ptr storTy alignment val''
         SymbolicSizeValue arr_tm sz_tm -> do
-          arr <- Crucible.bindSAWTerm
-            sym
+          st <- sawCoreState sym
+          arr <- bindSAWTerm
+            sym st
             (W4.BaseArrayRepr
               (Ctx.singleton $ W4.BaseBVRepr ?ptrWidth)
               (W4.BaseBVRepr (W4.knownNat @8)))

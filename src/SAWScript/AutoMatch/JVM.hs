@@ -5,8 +5,6 @@ module SAWScript.AutoMatch.JVM where
 
 import qualified Language.JVM.Parser as JVM
 
-import qualified Verifier.Java.Simulator as JSS hiding (lookupClass)
-
 --import SAWScript.Builtins
 --import SAWScript.Options
 import SAWScript.AutoMatch.Declaration
@@ -19,22 +17,22 @@ import Data.Either
 
 -- | Parse a Java class into a list of declarations
 --   Yields an Interaction so that we can talk to the user about what went wrong
-getDeclsJVM :: JSS.Class -> IO (Interaction (Maybe [Decl]))
+getDeclsJVM :: JVM.Class -> IO (Interaction (Maybe [Decl]))
 getDeclsJVM cls = return $ do
 
    let (untranslateable, translations) =
-         partitionEithers . for (JSS.classMethods cls) $ \method ->
-            maybe (Left $ JSS.methodName method) Right $ do
-               returnType <- jssTypeToStdType =<< JSS.methodReturnType method
-               argTypes <- mapM jssTypeToStdType $ JSS.methodParameterTypes method
-               let argIndices = map (JSS.localIndexOfParameter method) [0 .. length argTypes - 1]
-               tableEntries <- forM argIndices $ JSS.lookupLocalVariableByIdx method 0
-               let args = zipWith Arg (map JSS.localName tableEntries) argTypes
-               return $ Decl (JSS.methodName method) returnType args
+         partitionEithers . for (JVM.classMethods cls) $ \method ->
+            maybe (Left $ JVM.methodName method) Right $ do
+               returnType <- jssTypeToStdType =<< JVM.methodReturnType method
+               argTypes <- mapM jssTypeToStdType $ JVM.methodParameterTypes method
+               let argIndices = map (JVM.localIndexOfParameter method) [0 .. length argTypes - 1]
+               tableEntries <- forM argIndices $ JVM.lookupLocalVariableByIdx method 0
+               let args = zipWith Arg (map JVM.localName tableEntries) argTypes
+               return $ Decl (JVM.methodName method) returnType args
 
    when (not . null $ untranslateable) $ do
       separator ThinSep
-      liftF . flip Warning () $ "No translation for the following signatures in " ++ JVM.unClassName (JSS.className cls) ++ ".class:"
+      liftF . flip Warning () $ "No translation for the following signatures in " ++ JVM.unClassName (JVM.className cls) ++ ".class:"
       bulleted $ map (("'" ++) . (++ "'")) untranslateable
 
    return $ Just translations

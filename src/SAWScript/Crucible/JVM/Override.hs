@@ -79,9 +79,6 @@ import qualified Lang.Crucible.CFG.Core as Crucible ( TypeRepr(UnitRepr) )
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 
--- crucible-saw
-import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
-
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
 
@@ -96,15 +93,16 @@ import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
 import           Verifier.SAW.TypedTerm
 
+import           Verifier.SAW.Simulator.What4.ReturnTrip (toSC)
+
 -- cryptol-saw-core
 import qualified Verifier.SAW.Cryptol as Cryptol
 
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
 import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
 import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
 
---import           SAWScript.JavaExpr (JavaType(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.JVM.MethodSpecIR
 import           SAWScript.Crucible.JVM.ResolveSetupValue
@@ -182,7 +180,7 @@ methodSpecHandler ::
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ a handle for the function -} ->
-  Crucible.OverrideSim (CrucibleSAW.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc top_loc css h = do
   sym <- Crucible.getSymInterface
@@ -589,19 +587,24 @@ valueToSC ::
 valueToSC sym _ _ Cryptol.TVBit (IVal x) =
   do b <- liftIO $ W4.bvIsNonzero sym x
       -- TODO: assert that x is 0 or 1
-     liftIO (CrucibleSAW.toSC sym b)
+     st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st b)
 
 valueToSC sym _ _ (Cryptol.TVSeq 8 Cryptol.TVBit) (IVal x) =
-  liftIO (CrucibleSAW.toSC sym =<< W4.bvTrunc sym (W4.knownNat @8) x)
+  do st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st =<< W4.bvTrunc sym (W4.knownNat @8) x)
 
 valueToSC sym _ _ (Cryptol.TVSeq 16 Cryptol.TVBit) (IVal x) =
-  liftIO (CrucibleSAW.toSC sym =<< W4.bvTrunc sym (W4.knownNat @16) x)
+  do st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st =<< W4.bvTrunc sym (W4.knownNat @16) x)
 
 valueToSC sym _ _ (Cryptol.TVSeq 32 Cryptol.TVBit) (IVal x) =
-  liftIO (CrucibleSAW.toSC sym x)
+  do st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st x)
 
 valueToSC sym _ _ (Cryptol.TVSeq 64 Cryptol.TVBit) (LVal x) =
-  liftIO (CrucibleSAW.toSC sym x)
+  do st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st x)
 
 valueToSC _sym loc failMsg _tval _val =
   failure loc failMsg
