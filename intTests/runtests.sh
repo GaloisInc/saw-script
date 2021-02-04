@@ -53,7 +53,6 @@ export CP
 # We need the 'eval's here to interpret the single quotes protecting
 # the spaces and semi-colons in the Windows class path.
 export SAW="eval cabal run ${CABAL_FLAGS} saw -- -j '$CP'"
-export JSS="eval cabal run ${CABAL_FLAGS} jss -- -j '$CP' -c ."
 
 # Figure out what tests to run
 if [[ -z "$*" ]]; then
