@@ -195,7 +195,7 @@ bundle_files() {
   cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
   cp doc/manual/manual.pdf dist/doc/manual.pdf
   cp -r doc/tutorial/code dist/doc
-  cp deps/jvm-verifier/support/galois.jar dist/lib
+  cp intTests/jars/galois.jar dist/lib
   cp -r deps/cryptol/lib/* dist/lib
   cp -r examples/* dist/examples
 }
