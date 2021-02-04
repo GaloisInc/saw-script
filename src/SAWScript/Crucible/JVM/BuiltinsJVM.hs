@@ -79,9 +79,10 @@ import SAWScript.Options(Options,simVerbose)
 import SAWScript.Crucible.Common
 import SAWScript.Crucible.LLVM.Builtins (setupArg, setupArgs, getGlobalPair, runCFG, baseCryptolType)
 
--- jvm-verifier
+-- jvm-parser
 import qualified Language.JVM.Common as J
 import qualified Language.JVM.Parser as J
+
 import qualified SAWScript.Utils as J
 import qualified Lang.JVM.Codebase as JCB
 

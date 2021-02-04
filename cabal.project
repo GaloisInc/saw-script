@@ -14,7 +14,6 @@ packages:
     deps/saw-core/saw-core-sbv
     deps/saw-core/saw-core-what4
     deps/saw-core/saw-core-coq
-    deps/jvm-verifier
     deps/what4/what4
     deps/crucible/crucible
     deps/crucible/crucible-jvm
