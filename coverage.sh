@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cabal build --enable-coverage exe:jss exe:saw
+cabal build --enable-coverage exe:saw
 
 # This conflicts with GitRev.mix in `saw-script`. Yuck.
 rm -f ./dist-newstyle/build/*/ghc-*/cryptol-*/**/GitRev.mix

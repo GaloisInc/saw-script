@@ -57,7 +57,7 @@ cp doc/extcore.md                             ${TARGET}/doc
 cp doc/tutorial/sawScriptTutorial.pdf         ${TARGET}/doc/tutorial.pdf
 cp doc/manual/manual.pdf                      ${TARGET}/doc/manual.pdf
 cp -r doc/tutorial/code                       ${TARGET}/doc
-cp deps/jvm-verifier/support/galois.jar       ${TARGET}/lib
+cp intTests/jars/galois.jar                   ${TARGET}/lib
 cp -r deps/cryptol/lib/*                      ${TARGET}/lib
 cp -r examples/*                              ${TARGET}/examples
 

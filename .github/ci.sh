@@ -41,15 +41,13 @@ setup_dist_bins() {
   if $IS_WIN; then
     is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
   else
-    is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && is_exe "dist/bin" "jss" && return
-    extract_exe "jss" "dist/bin"
+    is_exe "dist/bin" "saw" && is_exe "dist/bin" "saw-remote-api" && return
   fi
   extract_exe "saw" "dist/bin"
   extract_exe "saw-remote-api" "dist/bin"
   export PATH=$PWD/dist/bin:$PATH
   echo "$PWD/dist/bin" >> "$GITHUB_PATH"
   strip dist/bin/saw* || echo "Strip failed: Ignoring harmless error"
-  strip dist/bin/jss* || echo "Strip failed: Ignoring harmless error"
 }
 
 install_z3() {
@@ -126,9 +124,7 @@ build() {
   pkgs=(saw saw-remote-api)
   if $IS_WIN; then
     echo "flags: -builtin-abc" >> cabal.project.local
-    echo "constraints: jvm-verifier -builtin-abc, cryptol-saw-core -build-css" >> cabal.project.local
-  else
-    pkgs+=(jss)
+    echo "constraints: cryptol-saw-core -build-css" >> cabal.project.local
   fi
   echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
@@ -195,7 +191,7 @@ bundle_files() {
   cp doc/tutorial/sawScriptTutorial.pdf dist/doc/tutorial.pdf
   cp doc/manual/manual.pdf dist/doc/manual.pdf
   cp -r doc/tutorial/code dist/doc
-  cp deps/jvm-verifier/support/galois.jar dist/lib
+  cp intTests/jars/galois.jar dist/lib
   cp -r deps/cryptol/lib/* dist/lib
   cp -r examples/* dist/examples
 }

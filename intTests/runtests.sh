@@ -26,8 +26,6 @@ if [ -z "$TESTBASE" ]; then
   export TESTBASE
 fi
 
-JSS_BASE=$TESTBASE/../deps/jvm-verifier
-
 if [ "${OS}" == "Windows_NT" ]; then
   export CPSEP=";"
   export DIRSEP="\\"
@@ -41,10 +39,10 @@ fi
 #
 # Locate rt.jar. This is already a Windows path on windows, so no need
 # to 'cygpath' it.
-JDK=$("$JSS_BASE"/find-java-rt-jar.sh)
+JDK=$(support/find-java-rt-jar.sh)
 CP="$JDK"
 # Add our bundled .jars to the class path.
-for i in "$TESTBASE"/jars/*.jar "$JSS_BASE"/jars/*.jar; do
+for i in "$TESTBASE"/jars/*.jar; do
   if [ "$OS" == "Windows_NT" ]; then
     i=$(cygpath -w "$i")
   fi
@@ -55,7 +53,6 @@ export CP
 # We need the 'eval's here to interpret the single quotes protecting
 # the spaces and semi-colons in the Windows class path.
 export SAW="eval cabal run ${CABAL_FLAGS} saw -- -j '$CP'"
-export JSS="eval cabal run ${CABAL_FLAGS} jss -- -j '$CP' -c ."
 
 # Figure out what tests to run
 if [[ -z "$*" ]]; then
