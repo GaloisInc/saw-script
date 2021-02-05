@@ -79,7 +79,6 @@ listToAssn (fot:rest) =
 
 typeReprToFOT :: BaseTypeRepr ty -> Either String FirstOrderType
 typeReprToFOT BaseBoolRepr            = pure FOTBit
-typeReprToFOT BaseNatRepr             = pure FOTInt
 typeReprToFOT BaseIntegerRepr         = pure FOTInt
 typeReprToFOT (BaseBVRepr w)          = pure $ FOTVec (natValue w) FOTBit
 typeReprToFOT BaseRealRepr            = Left "No FO Real"
@@ -104,7 +103,6 @@ assnToList = foldrFC g (Right []) where
 
 groundToFOV :: BaseTypeRepr ty -> GroundValue ty -> Either String FirstOrderValue
 groundToFOV BaseBoolRepr    b         = pure $ FOVBit b
-groundToFOV BaseNatRepr     n         = pure $ FOVInt (toInteger n)
 groundToFOV BaseIntegerRepr i         = pure $ FOVInt i
 groundToFOV (BaseBVRepr w) bv         = pure $ FOVWord (natValue w) (BV.asUnsigned bv)
 groundToFOV BaseRealRepr    _         = Left "Real is not FOV"
