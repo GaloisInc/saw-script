@@ -2,6 +2,12 @@
 
 ## New Features
 
+SAW now includes experimental support for verifying Java code using JDK 9 or
+later. Verifying Java code that only uses primitive data types is known to work
+well, but code that imports certain classes (e.g., `String`) is known to suffer
+from issues documented
+[here](https://github.com/GaloisInc/crucible/issues/641).
+
 When verifying Java code, the path to Java can be specified with the new
 `--java-bin-dirs`/`-b` command-line option. Alternatively, if
 `--java-bin-dirs` is not set, then SAW searches the `PATH` to find Java.

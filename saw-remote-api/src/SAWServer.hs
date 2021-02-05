@@ -165,9 +165,9 @@ initialState readFileFn =
      ss <- basic_ss sc
      let jarFiles = []
          classPaths = []
-     jcb <- JSS.loadCodebase jarFiles classPaths
+         javaBinDirs = []
+     jcb <- JSS.loadCodebase jarFiles classPaths javaBinDirs
      let bic = BuiltinContext { biSharedContext = sc
-                              , biJavaCodebase = jcb
                               , biBasicSS = ss
                               }
      cenv <- initCryptolEnv sc

@@ -418,7 +418,7 @@ buildTopLevelEnv proxy opts =
        simps <- scSimpset sc0 cryptolDefs [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
-       jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
+       jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
@@ -433,7 +433,6 @@ buildTopLevelEnv proxy opts =
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
-                 , biJavaCodebase = jcb
                  , biBasicSS = ss
                  }
            primsAvail = Set.fromList [Current]

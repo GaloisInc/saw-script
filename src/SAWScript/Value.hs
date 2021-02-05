@@ -164,7 +164,6 @@ data SAW_CFG where
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
-                                     , biJavaCodebase  :: JSS.Codebase
                                      , biBasicSS       :: Simpset
                                      }
   deriving Generic

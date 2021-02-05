@@ -21,7 +21,7 @@ import System.IO
 import Text.Read (readMaybe)
 import Text.Show.Functions ()
 
-import SAWScript.JavaTools
+import Lang.JVM.JavaTools
 
 -- TODO: wouldn't it be better to extract the options-processing code from this file and put it in saw/Main.hs (which already does part of the options processing)? It seems that other parts of SAW only need the datatype definition below, and not the rest.
 data Options = Options
@@ -207,8 +207,9 @@ processEnv opts = do
     -- --java-bin-dirs or PATH, see the Haddocks for findJavaIn), then use that
     -- to detect the path to Java's standard rt.jar file and add it to the
     -- jarList on Java 8 or earlier. (Later versions of Java do not use
-    -- rt.jar—see #861.) If Java's path is not specified, return the Options
-    -- unchanged.
+    -- rt.jar—see Note [Loading classes from JIMAGE files] in
+    -- Lang.JVM.Codebase in crucible-jvm.)
+    -- If Java's path is not specified, return the Options unchanged.
     addJavaBinDirInducedOpts :: Options -> IO Options
     addJavaBinDirInducedOpts os@Options{javaBinDirs} = do
       mbJavaPath <- findJavaIn javaBinDirs
