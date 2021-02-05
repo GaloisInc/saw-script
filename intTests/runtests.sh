@@ -36,17 +36,17 @@ fi
 
 # Build the class path. On Windows, Java requires Windows-style paths
 # here, even in Cygwin.
-#
-# Locate rt.jar. This is already a Windows path on windows, so no need
-# to 'cygpath' it.
-JDK=$(support/find-java-rt-jar.sh)
-CP="$JDK"
+CP=""
 # Add our bundled .jars to the class path.
 for i in "$TESTBASE"/jars/*.jar; do
   if [ "$OS" == "Windows_NT" ]; then
     i=$(cygpath -w "$i")
   fi
-  CP=$CP$CPSEP$i
+  if [ -z "$CP" ]; then
+    CP=$i
+  else
+    CP=$CP$CPSEP$i
+  fi
 done
 export CP
 
