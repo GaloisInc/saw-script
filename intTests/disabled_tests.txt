@@ -5,6 +5,7 @@
 
 # Timeout.
 test0000
+test0002
 test_FNV_a1_rev
 
 # Symbolic simulators can't tell that the loops terminate.

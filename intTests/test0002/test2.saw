@@ -20,5 +20,5 @@ let main = do {
    print "";
 
    let thm = {{ \x -> md5_ref' x == java_md5 x }};
-   prove_print abc thm;
+   prove_print yices thm;
 };

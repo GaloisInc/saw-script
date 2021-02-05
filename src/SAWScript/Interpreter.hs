@@ -1240,15 +1240,26 @@ primitives = Map.fromList
     , "of these inputs."
     ]
 
-  , prim "abc"                 "ProofScript SatResult"
+  , prim "abc_internal"        "ProofScript SatResult"
     (pureVal proveABC)
     Current
-    [ "Use the ABC theorem prover to prove the current goal." ]
+    [ "Use the ABC theorem prover to prove the current goal (through"
+    , "the linked-in version of ABC)."
+    ]
+
+  , prim "abc"                 "ProofScript SatResult"
+    (pureVal w4_abc_verilog)
+    Current
+    [ "Use the ABC theorem prover to prove the current goal (through"
+    , "the What4 library and an SMT-Lib2 model)."
+    ]
 
   , prim "sbv_abc"             "ProofScript SatResult"
     (pureVal proveABC_SBV)
     Current
-    [ "Use the ABC theorem prover to prove the current goal." ]
+    [ "Use the ABC theorem prover to prove the current goal (through"
+    , "the SBV library)."
+    ]
 
   , prim "boolector"           "ProofScript SatResult"
     (pureVal proveBoolector)
