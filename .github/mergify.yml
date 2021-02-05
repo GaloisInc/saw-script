@@ -5,6 +5,7 @@ pull_request_rules:
       - check-success=mergify
       - label=ready-to-merge
     actions:
+      update: {}
       merge:
         method: merge
         strict: smart+fasttrack
