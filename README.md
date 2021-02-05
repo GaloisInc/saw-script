@@ -112,6 +112,33 @@ project, place the following snippet in the file `src/.dir-locals.el`:
   (intero-targets "saw-script:lib")))
 ```
 
+## Notes on Freeze Files
+
+We use the `cabal.GHC-*.config` files to constrain dependency versions
+in CI, and recommend using the following command for best results before
+building locally:
+
+```
+ln -s cabal.GHC-<VER>.config cabal.project.freeze
+```
+
+These configuration files were generated using `cabal freeze`, but with
+some manual changes to allow cross-platfom builds, since Unix-like
+systems and Windows systems end up with different package dependencies.
+Specifically, we remove lines for the following packages or flags:
+
+```
+abcBridge
+cryptol-saw-core
+regex-posix
+saw-remote-api
+saw-script
+tasty +unix
+unix
+unix-compat
+unix-time
+```
+
 ## Acknowledgements
 
 Much of the work on SAW has been funded by, and lots of design input was
