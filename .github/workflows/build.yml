@@ -37,7 +37,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-18.04]
-        ghc: ["8.6.5", "8.8.4", "8.10.2"]
+        ghc: ["8.6.5", "8.8.4", "8.10.3"]
         continue-on-error: [false]
         include:
           - os: macos-latest
@@ -69,7 +69,7 @@ jobs:
       - shell: bash
         run: pip3 install virtualenv
 
-      - uses: actions/setup-haskell@v1
+      - uses: haskell/actions/setup@v1
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
@@ -179,7 +179,7 @@ jobs:
           - hmac-failure
           - awslc
           - blst
-        ghc: ["8.6.5", "8.8.4", "8.10.2"]
+        ghc: ["8.6.5", "8.8.4", "8.10.3"]
     steps:
       - uses: actions/checkout@v2
       - run: |
