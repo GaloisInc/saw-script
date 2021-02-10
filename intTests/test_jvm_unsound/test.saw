@@ -8,6 +8,7 @@
 enable_experimental;
 c <- java_load_class "Test";
 
+// An incomplete spec for method "set".
 let set_spec_1 =
   do {
     this <- jvm_alloc_object "Test";
@@ -16,6 +17,7 @@ let set_spec_1 =
     jvm_field_is this "b" (jvm_term x);
   };
 
+// Another incomplete spec for method "set".
 let set_spec_2 =
   do {
     this <- jvm_alloc_object "Test";
@@ -24,8 +26,8 @@ let set_spec_2 =
     jvm_static_field_is "a" (jvm_term x);
   };
 
-set_ov_1 <- jvm_unsafe_assume_spec c "set" set_spec_1;
-set_ov_2 <- jvm_unsafe_assume_spec c "set" set_spec_2;
+set_ov_1 <- jvm_verify c "set" [] false set_spec_1 z3;
+set_ov_2 <- jvm_verify c "set" [] false set_spec_2 z3;
 
 let one = jvm_term {{ 1:[32] }};
 let two = jvm_term {{ 2:[32] }};
@@ -44,6 +46,7 @@ jvm_verify c "test_a" [] false
 
 // An incorrect spec for test_a, which can be proven using the bogus
 // spec set_ov_1.
+// FIXME: this should fail
 jvm_verify c "test_a" [set_ov_1] false
   do {
     this <- jvm_alloc_object "Test";
@@ -68,8 +71,9 @@ jvm_verify c "test_b" [] false
   }
   z3;
 
-// An incorrect spec for test_b, which can be proven using the bogus
-// spec set_ov_2.
+// An incorrect spec for test_b, which would be provable using the
+// incomplete spec set_ov_2, if not for the memory invalidation pass.
+fails (
 jvm_verify c "test_b" [set_ov_2] false
   do {
     this <- jvm_alloc_object "Test";
@@ -80,12 +84,5 @@ jvm_verify c "test_b" [set_ov_2] false
     jvm_field_is this "b" one;
     jvm_return one;
   }
-  z3;
-
-// It should be impossible to verify the bogus set_spec_1.
-// FIXME: this should fail
-jvm_verify c "set" [] false set_spec_1 z3;
-
-// It should be impossible to verify the bogus set_spec_2.
-// FIXME: this should fail
-jvm_verify c "set" [] false set_spec_2 z3;
+  z3
+);

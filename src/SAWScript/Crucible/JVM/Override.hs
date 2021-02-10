@@ -308,13 +308,13 @@ methodSpecHandler_prestate opts sc cc args cs =
 --   which involves writing values into memory, computing the return value,
 --   and computing postcondition predicates.
 methodSpecHandler_poststate ::
-  forall ret w.
+  forall ret.
   Options                  {- ^ output/verbosity options                     -} ->
   SharedContext            {- ^ context for constructing SAW terms           -} ->
   JVMCrucibleContext          {- ^ context for interacting with Crucible        -} ->
   Crucible.TypeRepr ret    {- ^ type representation of function return value -} ->
   CrucibleMethodSpecIR     {- ^ specification for current function override  -} ->
-  OverrideMatcher CJ.JVM w (Crucible.RegValue Sym ret)
+  OverrideMatcher CJ.JVM RW (Crucible.RegValue Sym ret)
 methodSpecHandler_poststate opts sc cc retTy cs =
   do executeCond opts sc cc cs (cs ^. MS.csPostState)
      computeReturnValue opts cc sc cs retTy (cs ^. MS.csRetValue)
@@ -354,16 +354,17 @@ enforceCompleteSubstitution loc ss =
      unless (null missing) (failure loc (AmbiguousVars missing))
 
 
--- execute a pre/post condition
+-- | Execute a post condition.
 executeCond ::
   Options ->
   SharedContext ->
   JVMCrucibleContext ->
   CrucibleMethodSpecIR ->
   StateSpec ->
-  OverrideMatcher CJ.JVM w ()
+  OverrideMatcher CJ.JVM RW ()
 executeCond opts sc cc cs ss =
   do refreshTerms sc ss
+     invalidateAllocs cc cs
      traverse_ (executeAllocation opts cc) (Map.assocs (ss ^. MS.csAllocs))
      traverse_ (executePointsTo opts sc cc cs) (ss ^. MS.csPointsTos)
      traverse_ (executeSetupCondition opts sc cc cs) (ss ^. MS.csConditions)
@@ -761,6 +762,38 @@ learnPred sc cc loc prepost t =
      u <- liftIO $ scInstantiateExt sc s t
      p <- liftIO $ resolveBoolTerm (cc ^. jccBackend) u
      addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError (stateCond prepost) ""))
+
+------------------------------------------------------------------------
+
+-- | Invalidate all memory that was allocated in the method spec
+-- precondition using either @jvm_alloc_object@ or @jvm_alloc_array@.
+invalidateAllocs ::
+  JVMCrucibleContext ->
+  MS.CrucibleMethodSpecIR CJ.JVM ->
+  OverrideMatcher CJ.JVM RW ()
+invalidateAllocs cc cs =
+  do let allocs = cs ^. MS.csPreState . MS.csAllocs
+     void $ Map.traverseWithKey invalidateAlloc allocs
+  where
+    invalidateAlloc :: AllocIndex -> (W4.ProgramLoc, Allocation) -> OverrideMatcher CJ.JVM RW ()
+    invalidateAlloc i (_loc, alloc) =
+      do sym <- Ov.getSymInterface
+         globals <- OM (use overrideGlobals)
+         ref <- resolveAllocIndexJVM i
+         -- TODO: annotate the value with a descriptive error message.
+         let val = CJ.unassignedJVMValue
+         case alloc of
+           AllocObject cName ->
+             do let jc = cc ^. jccJVMContext
+                let fids = CJ.fieldsOfClassName jc cName
+                let clear g fid = liftIO $ CJ.doFieldStore sym g ref fid val
+                globals' <- foldM clear globals fids
+                OM (overrideGlobals .= globals')
+           AllocArray len _ty ->
+             do let idxs = take len [0..]
+                let clear g idx = liftIO $ CJ.doArrayStore sym g ref idx val
+                globals' <- foldM clear globals idxs
+                OM (overrideGlobals .= globals')
 
 ------------------------------------------------------------------------
 
