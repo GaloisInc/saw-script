@@ -64,7 +64,7 @@ msToJSON cms = object [
     ("type" .= ("method" :: String))
     , ("method" .= (show $ pretty $ cms ^. csMethod))
     , ("loc" .= (show $ pretty $ plSourceLoc $ cms ^. csLoc))
-    , ("status", if Set.null $ solverStatsSolvers $ cms ^. csSolverStats then "assumed" else "verified")
+    , ("status" .= (statusString $ cms ^. csSolverStats))
     , ("specification" .= ("unknown" :: String)) -- TODO
   ]
 
@@ -72,9 +72,13 @@ thmToJSON :: Theorem -> Value
 thmToJSON thm = object [
     ("type" .= ("property" :: String))
     , ("loc" .= ("unknown" :: String)) -- TODO: Theorem has no attached location information
-    , ("status" .= if Set.null $ solverStatsSolvers $ thmStats thm then "assumed" else "verified" :: String) -- TODO: add solver used?
-    , ("term" .= (show $ PP.ppTerm PP.defaultPPOpts $ unProp $ thmProp thm)) 
+    , ("status" .= (statusString $ thmStats thm))
+    , ("term" .= (show $ PP.ppTerm PP.defaultPPOpts $ unProp $ thmProp thm))
   ]
+
+statusString :: SolverStats -> String
+statusString stats = if ((Set.null s) || (Set.member "ADMITTED" s)) then "assumed" else "verified"
+  where s = solverStatsSolvers stats
 
 jsonVerificationSummary :: VerificationSummary -> String
 jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =
