@@ -37,3 +37,8 @@ packages:
     deps/cryptol/cryptol-remote-api
 
 allow-newer: uuid:random
+
+source-repository-package
+    type: git
+    location: https://github.com/harpocrates/language-rust.git
+    tag: 9d509c450d009cc99f1180b3f2f30247dfb1cfce
