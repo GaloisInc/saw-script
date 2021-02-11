@@ -1557,8 +1557,14 @@ control where to look for classes:
   files found in that directory (and its subdirectories) to the class database.
   By default, the current directory is included in the class path.
 
-Most Java programs will only require setting the `-b` flag, as that is enough
-to bring in the standard Java libraries.
+Most Java programs will only require setting the `-b` flag (or the `PATH`), as
+that is enough to bring in the standard Java libraries. Note that when
+searching the `PATH`, SAW makes assumptions about where the standard library
+classes live. These assumptions are likely to hold on JDK 7 or later, but they
+may not hold on older JDKs on certain operating systems. If you are using an
+old version of the JDK and SAW is unable to find a standard Java class, you may
+need to specify the location of the standard classes' JAR file with the `-j`
+flag (or, alternatively, with the `SAW_JDK_JAR` environment variable).
 
 Once the class path is configured, you can pass the name of a class to
 the `java_load_class` function.

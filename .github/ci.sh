@@ -166,7 +166,6 @@ install_system_deps() {
 }
 
 test_dist() {
-  find_java
   pushd intTests
   env
   LOUD=true ./runtests.sh
@@ -195,16 +194,6 @@ bundle_files() {
   cp intTests/jars/galois.jar dist/lib
   cp -r deps/cryptol/lib/* dist/lib
   cp -r examples/* dist/examples
-}
-
-find_java() {
-  pushd .github
-  javac PropertiesTest.java
-  RT_JAR="$(java PropertiesTest | tr : '\n' | grep rt.jar | head -n 1)"
-  export RT_JAR
-  echo "RT_JAR=$RT_JAR" >> "$GITHUB_ENV"
-  rm PropertiesTest.class
-  popd
 }
 
 sign() {
