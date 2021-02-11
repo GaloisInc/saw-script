@@ -77,6 +77,9 @@ import Verifier.SAW.TypedAST
 
 import SAWScript.Position
 
+-- crucible-jvm
+import Lang.JVM.ProcessUtils
+
 -- cryptol-saw-core
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
@@ -118,7 +121,6 @@ import SAWScript.ImportAIG
 
 import SAWScript.AST (getVal, pShow, Located(..))
 import SAWScript.Options as Opts
-import SAWScript.ProcessUtils
 import SAWScript.Proof
 import SAWScript.TopLevel
 import qualified SAWScript.Value as SV

@@ -85,7 +85,6 @@ library
     , utf8-string
     , what4 >= 0.4
     , vector
-    , xdg-basedir
     , GraphSCC
     , macaw-base
     , macaw-x86
@@ -115,7 +114,6 @@ library
     SAWScript.ImportAIG
     SAWScript.Interpreter
     SAWScript.JavaExpr
-    SAWScript.JavaTools
     SAWScript.JavaPretty
     SAWScript.Lexer
     SAWScript.LLVMBuiltins
@@ -123,7 +121,6 @@ library
     SAWScript.Panic
     SAWScript.Parser
     SAWScript.PathVC
-    SAWScript.ProcessUtils
     SAWScript.Proof
     SAWScript.Position
     SAWScript.SBVParser

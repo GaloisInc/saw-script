@@ -237,9 +237,11 @@ Alternatively, if Java is located on your `PATH`, you can omit the `-b`
 option entirely.
 
 Both Oracle JDK and OpenJDK versions 6 through 8 work well with SAW.
-From version 9 onward, the core libraries are no longer stored in a
-standard JAR file, making them inacessible to SAW. We're currently
-considering strategies for working with newer Java versions.
+SAW also includes experimental support for JDK 9 and later. Code that only
+involves primitive data types (such as `FFS.java` above) is known to work well
+under JDK 9+, but there are some as-of-yet unresolved issues in verifying code
+involving classes such as `String`. For more information on these issues, refer
+to [this GitHub issue](https://github.com/GaloisInc/crucible/issues/641).
 
 Now we can do the proof both within and across languages (from
 `ffs_compare.saw`):

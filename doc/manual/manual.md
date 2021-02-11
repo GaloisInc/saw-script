@@ -1575,9 +1575,11 @@ The resulting `JavaClass` can be passed into the various functions
 described below to perform analysis of specific Java methods.
 
 Java class files from any JDK newer than version 6 should work. However,
-JDK version 9 and newer do not contain a JAR file containing the
-standard libraries, and therefore do not currently work with SAW. We are
-investigating the best way to resolve this issue.
+support for JDK 9 and later is experimental. Verifying code that only uses
+primitive data types is known to work well, but there are some as-of-yet
+unresolved issues in verifying code involving classes such as `String`. For
+more information on these issues, refer to
+[this GitHub issue](https://github.com/GaloisInc/crucible/issues/641).
 
 ## Notes on Compiling Code for SAW
 
