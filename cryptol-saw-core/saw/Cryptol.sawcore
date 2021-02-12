@@ -218,8 +218,8 @@ IntModNum num =
 Rational : sort 0;
 Rational = #();
 
-ecRatio : Integer -> Integer -> Rational;
-ecRatio x y = ();
+ratio : Integer -> Integer -> Rational;
+ratio x y = ();
 
 eqRational : Rational -> Rational -> Bool;
 eqRational x y = error Bool "Unimplemented: (==) Rational";
@@ -977,21 +977,21 @@ PLiteralRational = \ (x : Nat) -> error Rational "Unimplemented: Literal Rationa
 --------------------------------------------------------------------------------
 -- Primitive Cryptol functions
 
-ecNumber : (val : Num) -> (a : sort 0) -> PLiteral a -> a;
-ecNumber val a pa =
+number : (val : Num) -> (a : sort 0) -> PLiteral a -> a;
+number val a pa =
   Num#rec (\ (_ : Num) -> a) pa (pa 0) val;
   -- Dummy case: treat `inf as `0 (this never happens anyway)
 
-ecFromZ : (n : Num) -> IntModNum n -> Integer;
-ecFromZ n =
+fromZ : (n : Num) -> IntModNum n -> Integer;
+fromZ n =
   Num#rec (\ (n : Num) -> IntModNum n -> Integer)
           fromIntMod
 	  (\ (x : Integer) -> x)
 	  n;
 
 -- Ring
-ecFromInteger : (a : sort 0) -> PRing a -> Integer -> a;
-ecFromInteger a pa = pa.int;
+fromInteger : (a : sort 0) -> PRing a -> Integer -> a;
+fromInteger a pa = pa.int;
 
 ecPlus : (a : sort 0) -> PRing a -> a -> a -> a;
 ecPlus a pa = pa.add;
@@ -1002,8 +1002,8 @@ ecMinus a pa = pa.sub;
 ecMul : (a : sort 0) -> PRing a -> a -> a -> a;
 ecMul a pa = pa.mul;
 
-ecNeg : (a : sort 0) -> PRing a -> a -> a;
-ecNeg a pa = pa.neg;
+negate : (a : sort 0) -> PRing a -> a -> a;
+negate a pa = pa.neg;
 
 -- Integral
 ecToInteger : (a : sort 0) -> PIntegral a -> a -> Integer;
@@ -1024,33 +1024,33 @@ ecExp a b pa pi x =
 
 -- Field
 
-ecRecip : (a: sort 0) -> PField a -> a -> a;
-ecRecip a pf = pf.recip;
+recip : (a: sort 0) -> PField a -> a -> a;
+recip a pf = pf.recip;
 
 ecFieldDiv : (a: sort 0) -> PField a -> a -> a -> a;
 ecFieldDiv a pf = pf.fieldDiv;
 
 -- Round
 
-ecCeiling : (a: sort 0) -> PRound a -> a -> Integer;
-ecCeiling a pr = pr.ceiling;
+ceiling : (a: sort 0) -> PRound a -> a -> Integer;
+ceiling a pr = pr.ceiling;
 
-ecFloor : (a: sort 0) -> PRound a -> a -> Integer;
-ecFloor a pr = pr.floor;
+floor : (a: sort 0) -> PRound a -> a -> Integer;
+floor a pr = pr.floor;
 
-ecTruncate : (a: sort 0) -> PRound a -> a -> Integer;
-ecTruncate a pr = pr.trunc;
+truncate : (a: sort 0) -> PRound a -> a -> Integer;
+truncate a pr = pr.trunc;
 
-ecRoundAway : (a: sort 0) -> PRound a -> a -> Integer;
-ecRoundAway a pr = pr.roundAway;
+roundAway : (a: sort 0) -> PRound a -> a -> Integer;
+roundAway a pr = pr.roundAway;
 
-ecRoundToEven : (a: sort 0) -> PRound a -> a -> Integer;
-ecRoundToEven a pr = pr.roundToEven;
+roundToEven : (a: sort 0) -> PRound a -> a -> Integer;
+roundToEven a pr = pr.roundToEven;
 
 -- Bitvector ops
 
-ecLg2 : (n : Num) -> seq n Bool -> seq n Bool;
-ecLg2 n =
+lg2 : (n : Num) -> seq n Bool -> seq n Bool;
+lg2 n =
   Num#rec (\ (n:Num) -> seq n Bool -> seq n Bool)
     bvLg2
     (error (Stream Bool -> Stream Bool) "ecLg2: expected finite word")
@@ -1109,16 +1109,16 @@ ecOr a pa = pa.or;
 ecXor : (a : sort 0) -> PLogic a -> a -> a -> a;
 ecXor a pa = pa.xor;
 
-ecCompl : (a : sort 0) -> PLogic a -> a -> a;
-ecCompl a pa = pa.not;
+complement : (a : sort 0) -> PLogic a -> a -> a;
+complement a pa = pa.not;
 
-ecZero : (a : sort 0) -> PZero a -> a;
-ecZero a pa = pa;
+zero : (a : sort 0) -> PZero a -> a;
+zero a pa = pa;
 
 -- FLiteral
 
-ecFraction : (a : sort 0) -> a;
-ecFraction a = error a "Unimplemented: fraction";
+fraction : (a : sort 0) -> a;
+fraction a = error a "Unimplemented: fraction";
 
 
 -- Sequences
@@ -1131,8 +1131,8 @@ ecShiftL m =
     -- Case for (TCNum m)
     (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec m a) ->
         pix.posNegCases (Vec m a)
-	  (shiftL m a (ecZero a pz) xs)
-	  (shiftR m a (ecZero a pz) xs))
+	  (shiftL m a (zero a pz) xs)
+	  (shiftR m a (zero a pz) xs))
 
     -- Case for (infinity)
     (\ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) ->
@@ -1151,8 +1151,8 @@ ecShiftR m =
     -- Case for (TCNum m)
     (\ (m:Nat) -> \ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Vec m a) ->
         pix.posNegCases (Vec m a)
-	  (shiftR m a (ecZero a pz) xs)
-	  (shiftL m a (ecZero a pz) xs))
+	  (shiftR m a (zero a pz) xs)
+	  (shiftL m a (zero a pz) xs))
 
     -- Case for (infinity)
     (\ (ix:sort 0) -> \ (a:sort 0) -> \ (pix : PIntegral ix) -> \ (pz:PZero a) -> \ (xs:Stream a) ->
@@ -1208,9 +1208,9 @@ ecCat =
          -- Case for (TCNum m, TCInf)
          (\ (a:sort 0) -> streamAppend a m));
 
-ecSplitAt : (m n : Num) -> (a : sort 0) -> seq (tcAdd m n) a ->
-             #(seq m a, seq n a);
-ecSplitAt =
+splitAt : (m n : Num) -> (a : sort 0) -> seq (tcAdd m n) a ->
+          #(seq m a, seq n a);
+splitAt =
   finNumRec
     (\ (m:Num) -> (n:Num) -> (a:sort 0) -> seq (tcAdd m n) a ->
        #(seq m a, seq n a))
@@ -1380,12 +1380,12 @@ ecFromThenTo first next _ a =
                          (mulNat i (getFinNat first)))));
 
 -- Infinite word sequences
-ecInfFrom : (a : sort 0) -> PIntegral a -> a -> seq TCInf a;
-ecInfFrom a pa x =
+infFrom : (a : sort 0) -> PIntegral a -> a -> seq TCInf a;
+infFrom a pa x =
   MkStream a (\ (i : Nat) -> pa.integralRing.add x (pa.integralRing.int (natToInt i)));
 
-ecInfFromThen : (a : sort 0) -> PIntegral a -> a -> a -> seq TCInf a;
-ecInfFromThen a pa x y =
+infFromThen : (a : sort 0) -> PIntegral a -> a -> a -> seq TCInf a;
+infFromThen a pa x y =
   MkStream a (\ (i : Nat) ->
     pa.integralRing.add x (pa.integralRing.mul (pa.integralRing.sub y x) (pa.integralRing.int (natToInt i))));
 

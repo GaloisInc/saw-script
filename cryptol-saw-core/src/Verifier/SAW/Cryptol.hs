@@ -667,45 +667,45 @@ prelPrims =
   first C.prelPrim <$>
   [ ("True",         flip scBool True)
   , ("False",        flip scBool False)
-  , ("number",       flip scGlobalDef "Cryptol.ecNumber")      -- Converts a numeric type into its corresponding value.
+  , ("number",       flip scGlobalDef "Cryptol.number")        -- Converts a numeric type into its corresponding value.
      --                                                        -- {val, a} (Literal val a) => a
 
-  , ("fromZ",        flip scGlobalDef "Cryptol.ecFromZ")       -- {n} (fin n, n >= 1) => Z n -> Integer
+  , ("fromZ",        flip scGlobalDef "Cryptol.fromZ")         -- {n} (fin n, n >= 1) => Z n -> Integer
 
     -- -- Zero
-  , ("zero",         flip scGlobalDef "Cryptol.ecZero")        -- {a} (Zero a) => a
+  , ("zero",         flip scGlobalDef "Cryptol.zero")          -- {a} (Zero a) => a
 
     -- -- Logic
   , ("&&",           flip scGlobalDef "Cryptol.ecAnd")         -- {a} (Logic a) => a -> a -> a
   , ("||",           flip scGlobalDef "Cryptol.ecOr")          -- {a} (Logic a) => a -> a -> a
   , ("^",            flip scGlobalDef "Cryptol.ecXor")         -- {a} (Logic a) => a -> a -> a
-  , ("complement",   flip scGlobalDef "Cryptol.ecCompl")       -- {a} (Logic a) => a -> a
+  , ("complement",   flip scGlobalDef "Cryptol.complement")    -- {a} (Logic a) => a -> a
 
     -- -- Ring
-  , ("fromInteger",  flip scGlobalDef "Cryptol.ecFromInteger") -- {a} (Ring a) => Integer -> a
+  , ("fromInteger",  flip scGlobalDef "Cryptol.fromInteger")   -- {a} (Ring a) => Integer -> a
   , ("+",            flip scGlobalDef "Cryptol.ecPlus")        -- {a} (Ring a) => a -> a -> a
   , ("-",            flip scGlobalDef "Cryptol.ecMinus")       -- {a} (Ring a) => a -> a -> a
   , ("*",            flip scGlobalDef "Cryptol.ecMul")         -- {a} (Ring a) => a -> a -> a
-  , ("negate",       flip scGlobalDef "Cryptol.ecNeg")         -- {a} (Ring a) => a -> a
+  , ("negate",       flip scGlobalDef "Cryptol.negate")        -- {a} (Ring a) => a -> a
 
     -- -- Integral
   , ("toInteger",    flip scGlobalDef "Cryptol.ecToInteger")   -- {a} (Integral a) => a -> Integer
   , ("/",            flip scGlobalDef "Cryptol.ecDiv")         -- {a} (Integral a) => a -> a -> a
   , ("%",            flip scGlobalDef "Cryptol.ecMod")         -- {a} (Integral a) => a -> a -> a
   , ("^^",           flip scGlobalDef "Cryptol.ecExp")         -- {a} (Ring a, Integral b) => a -> b -> a
-  , ("infFrom",      flip scGlobalDef "Cryptol.ecInfFrom")     -- {a} (Integral a) => a -> [inf]a
-  , ("infFromThen",  flip scGlobalDef "Cryptol.ecInfFromThen") -- {a} (Integral a) => a -> a -> [inf]a
+  , ("infFrom",      flip scGlobalDef "Cryptol.infFrom")       -- {a} (Integral a) => a -> [inf]a
+  , ("infFromThen",  flip scGlobalDef "Cryptol.infFromThen")   -- {a} (Integral a) => a -> a -> [inf]a
 
     -- -- Field
-  , ("recip",        flip scGlobalDef "Cryptol.ecRecip")       -- {a} (Field a) => a -> a
+  , ("recip",        flip scGlobalDef "Cryptol.recip")         -- {a} (Field a) => a -> a
   , ("/.",           flip scGlobalDef "Cryptol.ecFieldDiv")    -- {a} (Field a) => a -> a -> a
 
     -- -- Round
-  , ("ceiling",      flip scGlobalDef "Cryptol.ecCeiling")     -- {a} (Round a) => a -> Integer
-  , ("floor",        flip scGlobalDef "Cryptol.ecFloor")       -- {a} (Round a) => a -> Integer
-  , ("trunc",        flip scGlobalDef "Cryptol.ecTruncate")    -- {a} (Round a) => a -> Integer
-  , ("roundAway",    flip scGlobalDef "Cryptol.ecRoundAway")   -- {a} (Round a) => a -> Integer
-  , ("roundToEven",  flip scGlobalDef "Cryptol.ecRoundToEven") -- {a} (Round a) => a -> Integer
+  , ("ceiling",      flip scGlobalDef "Cryptol.ceiling")     -- {a} (Round a) => a -> Integer
+  , ("floor",        flip scGlobalDef "Cryptol.floor")       -- {a} (Round a) => a -> Integer
+  , ("trunc",        flip scGlobalDef "Cryptol.truncate")    -- {a} (Round a) => a -> Integer
+  , ("roundAway",    flip scGlobalDef "Cryptol.roundAway")   -- {a} (Round a) => a -> Integer
+  , ("roundToEven",  flip scGlobalDef "Cryptol.roundToEven") -- {a} (Round a) => a -> Integer
 
     -- -- Eq
   , ("==",           flip scGlobalDef "Cryptol.ecEq")          -- {a} (Eq a) => a -> a -> Bit
@@ -723,14 +723,14 @@ prelPrims =
     -- -- Bitvector primitives
   , ("/$",           flip scGlobalDef "Cryptol.ecSDiv")        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
   , ("%$",           flip scGlobalDef "Cryptol.ecSMod")        -- {n} (fin n, n>=1) => [n] -> [n] -> [n]
-  , ("lg2",          flip scGlobalDef "Cryptol.ecLg2")         -- {n} (fin n) => [n] -> [n]
+  , ("lg2",          flip scGlobalDef "Cryptol.lg2")           -- {n} (fin n) => [n] -> [n]
   , (">>$",          flip scGlobalDef "Cryptol.ecSShiftR")     -- {n, ix} (fin n, n >= 1, Integral ix) => [n] -> ix -> [n]
 
     -- -- Rational primitives
-  , ("ratio",        flip scGlobalDef "Cryptol.ecRatio")       -- Integer -> Integer -> Rational
+  , ("ratio",        flip scGlobalDef "Cryptol.ratio")         -- Integer -> Integer -> Rational
 
     -- -- FLiteral
-  , ("fraction",     flip scGlobalDef "Cryptol.ecFraction")    -- {m, n, r, a} FLiteral m n r a => a
+  , ("fraction",     flip scGlobalDef "Cryptol.fraction")      -- {m, n, r, a} FLiteral m n r a => a
 
     -- -- Shifts/rotates
   , ("<<",           flip scGlobalDef "Cryptol.ecShiftL")      -- {n, ix, a} (Integral ix, Zero a) => [n]a -> ix -> [n]a
@@ -740,7 +740,7 @@ prelPrims =
 
     -- -- Sequences primitives
   , ("#",            flip scGlobalDef "Cryptol.ecCat")         -- {a,b,d} (fin a) => [a] d -> [b] d -> [a + b] d
-  , ("splitAt",      flip scGlobalDef "Cryptol.ecSplitAt")     -- {a,b,c} (fin a) => [a+b] c -> ([a]c,[b]c)
+  , ("splitAt",      flip scGlobalDef "Cryptol.splitAt")       -- {a,b,c} (fin a) => [a+b] c -> ([a]c,[b]c)
   , ("join",         flip scGlobalDef "Cryptol.ecJoin")        -- {a,b,c} (fin b) => [a][b]c -> [a * b]c
   , ("split",        flip scGlobalDef "Cryptol.ecSplit")       -- {a,b,c} (fin b) => [a * b] c -> [a][b] c
   , ("reverse",      flip scGlobalDef "Cryptol.ecReverse")     -- {a,b} (fin a) => [a] b -> [a] b
