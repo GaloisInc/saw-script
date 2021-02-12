@@ -33,6 +33,10 @@ opam repo add coq-released https://coq.inria.fr/opam/released
 opam install coq-bits
 ```
 
+If you run into any issue that is probably due to the version mismatch between the `ocamlc` 
+and the `ocaml` base system installed on your machine and it can be fixed as explained 
+[here](https://github.com/ocaml/opam/issues/3708).
+
 
 ## Building the and Using the Coq Support Libraries
 
