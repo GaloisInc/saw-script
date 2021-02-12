@@ -1,6 +1,7 @@
 packages:
     saw-script.cabal
     saw-remote-api
+    crux-mir-comp
     deps/llvm-pretty
     deps/llvm-pretty-bc-parser
     deps/jvm-parser
@@ -20,6 +21,7 @@ packages:
     deps/crucible/crucible-llvm
     deps/crucible/crucible-saw
     deps/crucible/crux
+    deps/crucible/crux-mir
     deps/parameterized-utils
     deps/flexdis86
     deps/flexdis86/binary-symbols
