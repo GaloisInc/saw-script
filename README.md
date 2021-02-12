@@ -20,3 +20,6 @@ This repository contains multiple Haskell packages:
   * **`saw-core-what4`** provides a backend for translating SAWCore
       terms into symbolic values in the Haskell What4 library, which
       can be send to external SMT solvers.
+   
+  * **`saw-core-coq`** provides a backend for translating SAWCore
+      terms into Gallina syntax for Coq.
