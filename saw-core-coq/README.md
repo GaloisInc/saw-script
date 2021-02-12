@@ -50,8 +50,8 @@ To use these libraries, the following lines can be added to a `_CoqProject`
 file, where PATH_TO_SAW is replaced by the path to the `saw-script` directory:
 
 ```
--Q PATH_TO_SAW/deps/saw-core-coq/coq/generated/CryptolToCoq   CryptolToCoq
--Q PATH_TO_SAW/deps/saw-core-coq/coq/handwritten/CryptolToCoq   CryptolToCoq
+-Q PATH_TO_SAW/deps/saw-core/saw-core-coq/coq/generated/CryptolToCoq   CryptolToCoq
+-Q PATH_TO_SAW/deps/saw-core/saw-core-coq/coq/handwritten/CryptolToCoq   CryptolToCoq
 ```
 
 
