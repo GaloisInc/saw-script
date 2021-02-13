@@ -39,6 +39,7 @@ module SAWScript.Crucible.LLVM.Override
   , learnCond
   , learnSetupCondition
   , matchArg
+  , assertTermEqualities
   , methodSpecHandler
   , valueToSC
   , storePointsToValue
@@ -639,10 +640,22 @@ learnCond :: (?lc :: Crucible.TypeContext, Crucible.HasPtrWidth (Crucible.ArchWi
 learnCond opts sc cc cs prepost globals extras ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
+     assertTermEqualities sc cc
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
      enforcePointerValidity sc cc loc ss
      enforceDisjointness sc cc loc globals extras ss
      enforceCompleteSubstitution loc ss
+
+
+assertTermEqualities ::
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  OverrideMatcher (LLVM arch) md ()
+assertTermEqualities sc cc = do
+  let assertTermEquality (t, e) = do
+        p <- instantiateExtResolveSAWPred sc cc t
+        addAssert p e
+  traverse_ assertTermEquality =<< OM (use termEqs)
 
 
 -- | Verify that all of the fresh variables for the given
@@ -1254,13 +1267,12 @@ matchTerm sc cc loc prepost real expect =
 
        _ ->
          do t <- liftIO $ scEq sc real expect
-            p <- liftIO $ resolveSAWPred cc t
             let msg = unlines $
                   [ "Literal equality " ++ stateCond prepost
                   , "Expected term: " ++ prettyTerm expect
                   , "Actual term:   " ++ prettyTerm real
                   ]
-            addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
+            addTermEq t $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
   where prettyTerm = show . ppTermDepth 20
 
 
