@@ -21,6 +21,7 @@ jobs:
           password: ${{ secrets.GITHUBSAW }}
           repository: galoisinc/saw
           tags: "latest,${{ steps.outputs.outputs.saw-version }}"
+          dockerfile: saw/Dockerfile
           add_git_labels: true
           push: true
   saw-remote-api:
@@ -39,6 +40,6 @@ jobs:
           password: ${{ secrets.GITHUBSAW }}
           repository: galoisinc/saw-remote-api
           tags: "latest,${{ steps.outputs.outputs.saw-version }}"
-          file: Dockerfile-remote-api
+          dockerfile: saw-remote-api/Dockerfile
           add_git_labels: true
           push: true

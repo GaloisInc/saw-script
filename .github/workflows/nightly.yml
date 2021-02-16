@@ -38,6 +38,7 @@ jobs:
           password: ${{ secrets.GITHUBSAW }}
           repository: galoisinc/saw
           tags: "nightly"
+          dockerfile: saw/Dockerfile
           add_git_labels: true
           push: ${{ github.event_name == 'schedule' }}
 
@@ -57,7 +58,7 @@ jobs:
           password: ${{ secrets.GITHUBSAW }}
           repository: galoisinc/saw-remote-api
           tags: "nightly"
-          file: Dockerfile-remote-api
+          dockerfile: saw-remote-api/Dockerfile
           add_git_labels: true
           push: ${{ github.event_name == 'schedule' }}
 
