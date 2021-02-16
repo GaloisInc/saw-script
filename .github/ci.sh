@@ -176,6 +176,8 @@ build_cryptol() {
   is_exe "dist/bin" "cryptol" && return
   pushd deps/cryptol
   git submodule update --init
+  echo "::warning::Temporary workaround. Adding constraints libBF < 0.6 to deps/cryptol/cabal.project"
+  echo 'constraints: libBF < 0.6' >> cabal.project
   .github/ci.sh build
   popd
 }
