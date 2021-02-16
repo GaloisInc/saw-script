@@ -35,7 +35,9 @@ import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
+import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
+import Data.Foldable (foldrM)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -66,7 +68,7 @@ import Verifier.SAW.Conversion
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
+import Verifier.SAW.TypedAST hiding (FlatTermF(..))
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
@@ -117,36 +119,50 @@ extendLocal x mt md v env = LocalLet x mt md v : env
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
 
-mergeLocalEnv :: LocalEnv -> TopLevelRW -> TopLevelRW
-mergeLocalEnv env rw = foldr addBinding rw env
-  where addBinding (LocalLet x mt md v) = extendEnv x mt md v
-        addBinding (LocalTypedef n ty) = addTypedef n ty
+mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
+mergeLocalEnv sc env rw = foldrM addBinding rw env
+  where addBinding (LocalLet x mt md v) = extendEnv sc x mt md v
+        addBinding (LocalTypedef n ty) = pure . addTypedef n ty
 
 getMergedEnv :: LocalEnv -> TopLevel TopLevelRW
-getMergedEnv env = mergeLocalEnv env `fmap` getTopLevelRW
+getMergedEnv env =
+  do sc <- getSharedContext
+     rw <- getTopLevelRW
+     liftIO $ mergeLocalEnv sc env rw
 
-bindPatternGeneric :: (SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> e -> e)
-                   -> SS.Pattern -> Maybe SS.Schema -> Value -> e -> e
-bindPatternGeneric ext pat ms v env =
+bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
+bindPatternLocal pat ms v env =
   case pat of
     SS.PWild _   -> env
-    SS.PVar x _  -> ext x ms Nothing v env
+    SS.PVar x _  -> extendLocal x ms Nothing v env
     SS.PTuple ps ->
       case v of
-        VTuple vs -> foldr ($) env (zipWith3 (bindPatternGeneric ext) ps mss vs)
+        VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
           where mss = case ms of
                   Nothing -> repeat Nothing
                   Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   _ -> error "bindPattern: expected tuple value"
         _ -> error "bindPattern: expected tuple value"
-    SS.LPattern _ pat' -> bindPatternGeneric ext pat' ms v env
+    SS.LPattern _ pat' -> bindPatternLocal pat' ms v env
 
-bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
-bindPatternLocal = bindPatternGeneric extendLocal
-
-bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevelRW
-bindPatternEnv = bindPatternGeneric extendEnv
+bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
+bindPatternEnv pat ms v env =
+  case pat of
+    SS.PWild _   -> pure env
+    SS.PVar x _  ->
+      do sc <- getSharedContext
+         liftIO $ extendEnv sc x ms Nothing v env
+    SS.PTuple ps ->
+      case v of
+        VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
+          where mss = case ms of
+                  Nothing -> repeat Nothing
+                  Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
+                    -> [ Just (SS.Forall ks t) | t <- ts ]
+                  _ -> error "bindPattern: expected tuple value"
+        _ -> error "bindPattern: expected tuple value"
+    SS.LPattern _ pat' -> bindPatternEnv pat' ms v env
 
 -- Interpretation of SAWScript -------------------------------------------------
 
@@ -308,7 +324,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
     _ -> return ()
 
   rw' <- getTopLevelRW
-  putTopLevelRW $ bindPatternEnv pat (Just (SS.tMono ty)) result rw'
+  putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
 -- | Interpret a block-level statement in the TopLevel monad.
 interpretStmt ::
