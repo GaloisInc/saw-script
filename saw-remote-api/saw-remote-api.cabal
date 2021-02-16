@@ -25,6 +25,9 @@ common warnings
   ghc-options:
     -Wall
     -Wno-orphans
+    -Wno-prepositive-qualified-module
+    -Wno-unused-packages
+    -Wno-missing-safe-haskell-mode
 
 common errors
   ghc-options:
@@ -79,6 +82,7 @@ library
                    SAWServer.Data.LLVMType,
                    SAWServer.Data.SetupValue,
                    SAWServer.Exceptions,
+                   SAWServer.Ghost,
                    SAWServer.JVMCrucibleSetup,
                    SAWServer.JVMVerify,
                    SAWServer.LLVMCrucibleSetup,

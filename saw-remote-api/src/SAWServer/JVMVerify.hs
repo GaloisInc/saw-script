@@ -42,7 +42,7 @@ jvmVerifyAssume mode (VerifyParams className fun lemmaNames checkSat contract sc
      case tasks of
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
-         do pushTask (JVMSetup lemmaName [])
+         do pushTask (JVMSetup lemmaName)
             state <- Argo.getState
             cls <- getJVMClass className
             let bic = view sawBIC state

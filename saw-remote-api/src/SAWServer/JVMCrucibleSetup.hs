@@ -8,8 +8,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 module SAWServer.JVMCrucibleSetup
-  ( startJVMSetup
-  , jvmLoadClass
+  ( jvmLoadClass
   , compileJVMContract
   ) where
 
@@ -71,11 +70,6 @@ import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCE
 import SAWServer.Exceptions ( notAtTopLevel )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TopLevel ( tl )
-
-startJVMSetup :: StartJVMSetupParams -> Argo.Command SAWState OK
-startJVMSetup (StartJVMSetupParams n) =
-  do pushTask (JVMSetup n [])
-     ok
 
 newtype StartJVMSetupParams
   = StartJVMSetupParams ServerName
