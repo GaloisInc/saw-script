@@ -3,6 +3,12 @@ on:
   push:
     branches: [master, "release-**"]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      releaseArtifacts:
+        description: 'Set to 1 to upload the release bundles as workflow artifacts'
+        required: true
+        default: '0'
 
 env:
   CACHE_VERSION: 1
@@ -23,6 +29,7 @@ jobs:
         if: |
           startsWith(github.ref, 'refs/heads/release-')
             || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'actions/'))
+            || (github.event_name == 'workflow_dispatch' && github.event.inputs.releaseArtifacts == '1')
         run: .github/ci.sh output release 1
       - id: outputs
         run: |
