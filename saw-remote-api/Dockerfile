@@ -50,8 +50,7 @@ WORKDIR /home/saw
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 COPY cabal.GHC-8.8.4.config cabal.project.freeze
-RUN cabal v2-update
-RUN cabal v2-build saw-remote-api
+RUN cabal v2-update && cabal v2-build -j exe:saw-remote-api
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal v2-exec which saw-remote-api) /home/saw/rootfs/usr/local/bin/saw-remote-api
 WORKDIR /home/saw
