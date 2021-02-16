@@ -29,35 +29,17 @@ preludeSuccIdent =  mkIdent preludeModuleName "Succ"
 preludeIntegerIdent :: Ident
 preludeIntegerIdent =  mkIdent preludeModuleName "Integer"
 
-preludeIntegerType :: FlatTermF e
-preludeIntegerType = GlobalDef preludeIntegerIdent
-
 preludeVecIdent :: Ident
 preludeVecIdent =  mkIdent preludeModuleName "Vec"
-
-preludeVecTypeFun :: FlatTermF e
-preludeVecTypeFun = GlobalDef preludeVecIdent
 
 preludeFloatIdent :: Ident
 preludeFloatIdent =  mkIdent preludeModuleName "Float"
 
-preludeFloatType :: FlatTermF e
-preludeFloatType = GlobalDef preludeFloatIdent
-
 preludeDoubleIdent :: Ident
 preludeDoubleIdent =  mkIdent preludeModuleName "Double"
-
-preludeDoubleType :: FlatTermF e
-preludeDoubleType = GlobalDef preludeDoubleIdent
 
 preludeStringIdent :: Ident
 preludeStringIdent =  mkIdent preludeModuleName "String"
 
-preludeStringType :: FlatTermF e
-preludeStringType = GlobalDef preludeStringIdent
-
 preludeArrayIdent :: Ident
 preludeArrayIdent =  mkIdent preludeModuleName "Array"
-
-preludeArrayTypeFun :: FlatTermF e
-preludeArrayTypeFun = GlobalDef preludeArrayIdent
