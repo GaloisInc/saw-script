@@ -419,12 +419,16 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                 MS.csPostState . MS.csPointsTos .~ extracted_post_state_points_tos
 
           typed_extracted_func_const <- io $ mkTypedTerm shared_context extracted_func_const
-          modify' $
-            extendEnv
+          rw <- getTopLevelRW
+          rw' <-
+            liftIO $
+            extendEnv shared_context
               (Located func_name func_name $ PosInternal "llvm_compositional_extract")
               Nothing
               Nothing
               (VTerm typed_extracted_func_const)
+              rw
+          putTopLevelRW rw'
 
           return $ SomeLLVM extracted_method_spec
 
