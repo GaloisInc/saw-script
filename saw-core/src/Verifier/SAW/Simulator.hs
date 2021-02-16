@@ -139,7 +139,11 @@ evalTermF cfg lam recEval tf env =
                                   maybe (recEval t) id (simUninterpreted cfg tf ec')
     FTermF ftf              ->
       case ftf of
-        GlobalDef ident     -> simGlobal cfg ident
+        Primitive ec ->
+          do ec' <- traverse (fmap toTValue . recEval) ec
+             case ecName ec' of
+               ModuleIdentifier ident -> simGlobal cfg ident
+               _ -> simExtCns cfg tf ec'
         UnitValue           -> return VUnit
         UnitType            -> return $ TValue VUnitType
         PairValue x y       -> do tx <- recEvalDelay x

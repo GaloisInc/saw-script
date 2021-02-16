@@ -132,7 +132,9 @@ scWriteExternal t0 =
                pure $ unwords ["Constant", show (ecVarIndex ec), show (ecType ec), show e]
         FTermF ftf     ->
           case ftf of
-            GlobalDef ident     -> pure $ unwords ["Global", show ident]
+            Primitive ec ->
+               do stashName ec
+                  pure $ unwords ["Primitive", show (ecVarIndex ec), show (ecType ec)]
             UnitValue           -> pure $ unwords ["Unit"]
             UnitType            -> pure $ unwords ["UnitT"]
             PairValue x y       -> pure $ unwords ["Pair", show x, show y]
@@ -229,7 +231,7 @@ scReadExternal sc input =
         ["Pi", s, t, e]     -> Pi (Text.pack s) <$> readIdx t <*> readIdx e
         ["Var", i]          -> pure $ LocalVar (read i)
         ["Constant",i,t,e]  -> Constant <$> readEC i t <*> readIdx e
-        ["Global", x]       -> pure $ FTermF (GlobalDef (parseIdent x))
+        ["Primitive", i, t] -> FTermF <$> (Primitive <$> readEC i t)
         ["Unit"]            -> pure $ FTermF UnitValue
         ["UnitT"]           -> pure $ FTermF UnitType
         ["Pair", x, y]      -> FTermF <$> (PairValue <$> readIdx x <*> readIdx y)

@@ -627,7 +627,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
           Sort{}           -> return ftf -- doesn't matter
           NatLit{}         -> return ftf -- doesn't matter
           ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
-          GlobalDef{}      -> return ftf
+          Primitive{}      -> return ftf
           StringLit{}      -> return ftf
           ExtCns{}         -> return ftf
     rewriteTop :: (?cache :: Cache IO TermIndex Term) =>

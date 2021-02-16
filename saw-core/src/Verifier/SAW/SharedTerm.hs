@@ -927,7 +927,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
       case tf of
-        GlobalDef d -> lift $ scTypeOfGlobal sc d
+        Primitive ec -> return $ ecType ec
         UnitValue -> lift $ scUnitType sc
         UnitType -> lift $ scSort sc (mkSort 0)
         PairValue x y -> do

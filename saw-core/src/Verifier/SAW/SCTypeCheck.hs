@@ -389,9 +389,8 @@ instance TypeInfer (TermF TypedTerm) where
 -- terms. Intuitively, this represents the case where each immediate subterm of
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF TypedTerm) where
-  typeInfer (GlobalDef d) =
-    do ty <- liftTCM scTypeOfGlobal d
-       typeCheckWHNF ty
+  typeInfer (Primitive ec) =
+    typeCheckWHNF $ typedVal $ ecType ec
   typeInfer UnitValue = liftTCM scUnitType
   typeInfer UnitType = liftTCM scSort (mkSort 0)
   typeInfer (PairValue (TypedTerm _ tx) (TypedTerm _ ty)) =

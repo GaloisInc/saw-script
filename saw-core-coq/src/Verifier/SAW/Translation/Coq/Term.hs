@@ -202,7 +202,10 @@ flatTermFToExpr ::
   m Coq.Term
 flatTermFToExpr tf = -- traceFTermF "flatTermFToExpr" tf $
   case tf of
-    GlobalDef i   -> translateIdent i
+    Primitive (EC _ nmi _) ->
+      case nmi of
+        ModuleIdentifier i -> translateIdent i
+        ImportedName{} -> errorTermM "Invalid name for saw-core primitive"
     UnitValue     -> pure (Coq.Var "tt")
     UnitType      -> pure (Coq.Var "unit")
     PairValue x y -> Coq.App (Coq.Var "pair") <$> traverse translateTerm [x, y]

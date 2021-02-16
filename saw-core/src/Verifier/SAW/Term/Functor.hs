@@ -140,7 +140,8 @@ maxSort ss = maximum ss
 -- NB: If you add constructors to FlatTermF, make sure you update
 --     zipWithFlatTermF!
 data FlatTermF e
-  = GlobalDef !Ident  -- ^ Global variables are referenced by label.
+    -- | A primitive or axiom without a definition.
+  = Primitive !(ExtCns e)
 
     -- Tuples are represented as nested pairs, grouped to the right,
     -- terminated with unit at the end.
@@ -219,7 +220,8 @@ zipWithFlatTermF :: (x -> y -> z) -> FlatTermF x -> FlatTermF y ->
                     Maybe (FlatTermF z)
 zipWithFlatTermF f = go
   where
-    go (GlobalDef x) (GlobalDef y) | x == y = Just $ GlobalDef x
+    go (Primitive (EC xi xn xt)) (Primitive (EC yi _ yt))
+      | xi == yi = Just (Primitive (EC xi xn (f xt yt)))
 
     go UnitValue UnitValue = Just UnitValue
     go UnitType UnitType = Just UnitType
@@ -344,7 +346,7 @@ termToPat t =
     case unwrapTermF t of
       Constant ec _             -> Net.Atom (toAbsoluteName (ecName ec))
       App t1 t2                 -> Net.App (termToPat t1) (termToPat t2)
-      FTermF (GlobalDef d)      -> Net.Atom (identText d)
+      FTermF (Primitive ec)     -> Net.Atom (toAbsoluteName (ecName ec))
       FTermF (Sort s)           -> Net.Atom (Text.pack ('*' : show s))
       FTermF (NatLit _)         -> Net.Var
       FTermF (DataTypeApp c ps ts) ->

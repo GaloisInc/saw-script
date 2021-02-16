@@ -119,11 +119,17 @@ asFTermF :: Recognizer Term (FlatTermF Term)
 asFTermF (unwrapTermF -> FTermF ftf) = return ftf
 asFTermF _ = Nothing
 
+asModuleIdentifier :: Recognizer (ExtCns e) Ident
+asModuleIdentifier (EC _ nmi _) =
+  case nmi of
+    ModuleIdentifier ident -> Just ident
+    _ -> Nothing
+
 asGlobalDef :: Recognizer Term Ident
 asGlobalDef t =
   case unwrapTermF t of
-    FTermF (GlobalDef ident) -> pure ident
-    Constant (EC _ (ModuleIdentifier ident) _) _ -> pure ident
+    FTermF (Primitive ec) -> asModuleIdentifier ec
+    Constant ec _ -> asModuleIdentifier ec
     _ -> Nothing
 
 isGlobalDef :: Ident -> Recognizer Term ()
