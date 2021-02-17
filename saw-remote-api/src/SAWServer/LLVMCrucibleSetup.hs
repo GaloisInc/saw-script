@@ -48,6 +48,7 @@ import SAWScript.Crucible.LLVM.Builtins
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (GhostGlobal)
 import SAWScript.Value (BuiltinContext, LLVMCrucibleSetupM(..), biSharedContext)
+import Text.LLVM.AST (Type)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)
@@ -95,13 +96,13 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
      (envPre, cenvPre) <- setupState allocsPre cenv0 (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= llvm_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
-     mapM_ (setupGhostPointsTo ghostEnv cenvPre) (preGhostPointsTos c)
+     --mapM_ (setupGhostPointsTo ghostEnv cenvPre) (preGhostPointsTos c)
      traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= llvm_execute_func
      allocsPost <- mapM setupAlloc (postAllocated c)
-     (envPost, cenvPost) <- setupState allocsPost cenvPre (postVars c)
+     (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) cenvPre (postVars c)
      mapM_ (\p -> getTypedTerm cenvPost p >>= llvm_postcond) (postConds c)
      mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
-     mapM_ (setupGhostPointsTo ghostEnv cenvPost) (postGhostPointsTos c)
+     --mapM_ (setupGhostPointsTo ghostEnv cenvPost) (postGhostPointsTos c)
      case returnVal c of
        Just v -> getSetupVal (envPost, cenvPost) v >>= llvm_return
        Nothing -> return ()
@@ -130,8 +131,9 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
     setupPointsTo env (PointsTo p v chkTgt cond) =
       do ptr <- getSetupVal env p
          val <- getSetupVal env v
-         cond' <- traverse (getTypedTerm env) cond
-         llvm_points_to_internal chkTgt cond' ptr val
+         cond' <- traverse (getTypedTerm (snd env)) cond
+         let chkTgt' = fmap (fmap llvmType) chkTgt
+         llvm_points_to_internal chkTgt' cond' ptr val
 
     setupGhostPointsTo genv cenv (GhostPointsTo n e) =
       do g <- resolve genv n
@@ -143,7 +145,10 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
       LLVMCrucibleSetupM $
       case Map.lookup name env of
         Just v -> return v
-        Nothing -> fail "Server value not found - impossible!" -- rule out elsewhere
+        Nothing -> fail $ unlines
+                   [ "Server value " ++ show name ++ " not found - impossible!" -- rule out elsewhere
+                   , show (Map.keys env)
+                   ]
 
     getTypedTerm ::
       CryptolEnv ->

@@ -71,7 +71,6 @@ data CheckAgainstTag
   = TagCheckAgainstPointerType
   | TagCheckAgainstCastedType
 
-instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (PointsTo ty cryptolExpr) where
 
 data GhostPointsTo cryptolExpr =
   GhostPointsTo
@@ -79,7 +78,7 @@ data GhostPointsTo cryptolExpr =
     , ghostValue   :: cryptolExpr
     } deriving stock (Functor, Foldable, Traversable)
 
-instance FromJSON cryptolExpr => FromJSON (PointsTo cryptolExpr) where
+instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (PointsTo ty cryptolExpr) where
   parseJSON =
     withObject "Points-to relationship" $ \o ->
       PointsTo <$> o .:  "pointer"
