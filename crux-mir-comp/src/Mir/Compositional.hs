@@ -23,6 +23,7 @@ import Crux
 import Crux.Types
 
 import Mir.DefId
+import Mir.Generator (CollectionState)
 import Mir.Intrinsics
 import Mir.Language (BindExtraOverridesFn)
 
@@ -30,9 +31,12 @@ import Mir.Language (BindExtraOverridesFn)
 compositionalOverrides ::
     forall args ret blocks sym rtp a r .
     (IsSymInterface sym) =>
-    Maybe (SomeOnlineSolver sym) -> Text -> CFG MIR blocks args ret ->
+    Maybe (SomeOnlineSolver sym) ->
+    CollectionState ->
+    Text ->
+    CFG MIR blocks args ret ->
     Maybe (OverrideSim (Model sym) sym MIR rtp a r ())
-compositionalOverrides symOnline name cfg
+compositionalOverrides symOnline _cs name cfg
 
   | (normDefId "crucible::method_spec::raw::builder_new" <> "::_inst") `Text.isPrefixOf` name
   , Empty <- cfgArgTypes cfg
