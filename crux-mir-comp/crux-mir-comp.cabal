@@ -38,6 +38,7 @@ library
                  crux-mir,
                  template-haskell,
                  saw-core,
+                 saw-core-what4,
                  cryptol-saw-core,
                  saw-script
 

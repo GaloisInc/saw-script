@@ -36,6 +36,7 @@ import qualified Data.Vector as V
 import GHC.Stack (HasCallStack)
 
 import qualified What4.Expr.Builder as W4
+import What4.FunctionName (functionNameFromText)
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
 import qualified What4.Partial as W4
@@ -47,7 +48,10 @@ import Lang.Crucible.Simulator.OverrideSim
 import Lang.Crucible.Simulator.RegValue
 import Lang.Crucible.Types
 
+import qualified Verifier.SAW.Prelude as SAW
 import qualified Verifier.SAW.SharedTerm as SAW
+import qualified Verifier.SAW.Simulator.What4 as SAW
+import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -56,6 +60,8 @@ import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified Crux.Model as Crux
 import Crux.Types (Model)
 
+import Mir.DefId
+import Mir.Generator (CollectionState, collection)
 import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)
 import qualified Mir.Intrinsics as M
 import qualified Mir.Mir as M
@@ -152,6 +158,46 @@ instance (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
 
 -- MethodSpecBuilder implementation.  This is the code that actually runs when
 -- Rust invokes `msb.add_arg(...)` or similar.
+
+builderNew :: forall sym t st fs rtp.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    CollectionState ->
+    -- | `DefId` of the `builder_new` monomorphization.  Its `Instance` should
+    -- have one type argument, which is the `TyFnDef` of the function that the
+    -- spec applies to.
+    DefId ->
+    OverrideSim (Model sym) sym MIR rtp
+        EmptyCtx MethodSpecBuilderType (MethodSpecBuilder sym t)
+builderNew cs defId = do
+    sym <- getSymInterface
+    snapFrame <- liftIO $ pushAssumptionFrame sym
+
+    let tyArg = cs ^? collection . M.intrinsics . ix defId .
+            M.intrInst . M.inSubsts . _Wrapped . ix 0
+    fnDefId <- case tyArg of
+        Just (M.TyFnDef did) -> return did
+        _ -> error $ "expected TyFnDef argument, but got " ++ show tyArg
+    let sig = case cs ^? collection . M.functions . ix fnDefId . M.fsig of
+            Just x -> x
+            _ -> error $ "failed to look up sig of " ++ show fnDefId
+
+    let loc = mkProgramLoc (functionNameFromText $ idText defId) InternalPos
+    let ms :: MIRMethodSpec = MS.makeCrucibleMethodSpecIR fnDefId
+            (sig ^. M.fsarg_tys) (Just $ sig ^. M.fsreturn_ty) loc cs
+    visitCache <- W4.newIdxCache
+
+    let col = cs ^. collection
+
+    sc <- liftIO $ SAW.mkSharedContext
+    liftIO $ SAW.scLoadPreludeModule sc
+    let ng = W4.exprCounter sym
+    --sawSym <- liftIO $ SAW.newSAWCoreBackend W4.FloatUninterpretedRepr sc ng
+
+    cache <- W4.newIdxCache
+    let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
+        eval x = SAW.toSC sym undefined x
+
+    return $ initMethodSpecBuilder col sc eval ms snapFrame visitCache
 
 -- | Add a value to the MethodSpec's argument list.  The value is obtained by
 -- dereferencing `argRef`.

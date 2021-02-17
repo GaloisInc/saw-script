@@ -19,6 +19,8 @@ import Lang.Crucible.Simulator
 import Lang.Crucible.Simulator.OverrideSim
 import Lang.Crucible.Simulator.RegMap
 
+import qualified What4.Expr.Builder as W4
+
 import Crux
 import Crux.Types
 
@@ -27,23 +29,26 @@ import Mir.Generator (CollectionState)
 import Mir.Intrinsics
 import Mir.Language (BindExtraOverridesFn)
 
+import Mir.Compositional.Builder (builderNew)
+
 
 compositionalOverrides ::
-    forall args ret blocks sym rtp a r .
-    (IsSymInterface sym) =>
+    forall sym t st fs args ret blocks rtp a r .
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     Maybe (SomeOnlineSolver sym) ->
     CollectionState ->
     Text ->
     CFG MIR blocks args ret ->
     Maybe (OverrideSim (Model sym) sym MIR rtp a r ())
-compositionalOverrides symOnline _cs name cfg
+compositionalOverrides symOnline cs name cfg
 
   | (normDefId "crucible::method_spec::raw::builder_new" <> "::_inst") `Text.isPrefixOf` name
   , Empty <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_new" MethodSpecBuilderRepr $ do
-        error "TODO method_spec_builder_new requires a MethodSpecBuilderImpl instance"
+        msb <- builderNew cs (textId name)
+        return $ MethodSpecBuilder msb
 
   | (normDefId "crucible::method_spec::raw::builder_add_arg" <> "::_inst") `Text.isPrefixOf` name
   , Empty :> MethodSpecBuilderRepr :> MirReferenceRepr tpr <- cfgArgTypes cfg
