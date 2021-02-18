@@ -51,7 +51,7 @@ ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 COPY cabal.GHC-8.8.4.config cabal.project.freeze
 RUN cabal v2-update
-RUN cabal v2-build
+RUN cabal v2-build -j --allow-newer
 RUN mkdir -p /home/saw/rootfs/usr/local/bin
 RUN cp $(cabal v2-exec which saw) /home/saw/rootfs/usr/local/bin/saw
 WORKDIR /home/saw
