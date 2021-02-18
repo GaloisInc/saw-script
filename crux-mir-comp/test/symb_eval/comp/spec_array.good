@@ -1,0 +1,11 @@
+test spec_array/3a1fbbbh::f_test[0]: ok
+test spec_array/3a1fbbbh::use_f[0]: FAILED
+
+failures:
+
+---- spec_array/3a1fbbbh::use_f[0] counterexamples ----
+Failure for ./lib/crucible/lib.rs:36:41: 36:58 !test/symb_eval/comp/spec_array.rs:42:5: 42:30: error: in spec_array/3a1fbbbh::use_f[0]
+MIR assertion at test/symb_eval/comp/spec_array.rs:42:5:
+	d < 10
+
+[Crux] Overall status: Invalid.

@@ -1,0 +1,11 @@
+test spec_box/3a1fbbbh::f_test[0]: ok
+test spec_box/3a1fbbbh::use_f[0]: FAILED
+
+failures:
+
+---- spec_box/3a1fbbbh::use_f[0] counterexamples ----
+Failure for ./lib/crucible/lib.rs:36:41: 36:58 !test/symb_eval/comp/spec_box.rs:57:5: 57:30: error: in spec_box/3a1fbbbh::use_f[0]
+MIR assertion at test/symb_eval/comp/spec_box.rs:57:5:
+	d < 10
+
+[Crux] Overall status: Invalid.

@@ -1,0 +1,43 @@
+extern crate crucible;
+use crucible::*;
+use crucible::method_spec::{MethodSpec, MethodSpecBuilder};
+
+fn f(x: [u8; 2]) -> [u8; 2] {
+    [x[1], x[0]]
+}
+
+#[crux_test]
+fn f_test() {
+    let x = <[u8; 2]>::symbolic("x");
+    crucible_assume!(x[0] > 0);
+    let y = f(x);
+    crucible_assert!(y[1] > 0);
+}
+
+fn f_spec() -> MethodSpec {
+    let x = <[u8; 2]>::symbolic("x");
+    crucible_assume!(x[0] > 0);
+
+    let mut msb = MethodSpecBuilder::new(f);
+    msb.add_arg(&x);
+    msb.gather_assumes();
+
+    let y = <[u8; 2]>::symbolic("result");
+    crucible_assert!(y[1] > 0);
+
+    msb.set_return(&y);
+    msb.gather_asserts();
+    msb.finish()
+}
+
+#[crux_test]
+fn use_f() {
+    f_spec().enable();
+
+    let a = u8::symbolic("a");
+    let b = u8::symbolic("b");
+    crucible_assume!(0 < a && a < 10);
+    let [c, d] = f([a, b]);
+    crucible_assert!(0 < d);
+    crucible_assert!(d < 10);
+}

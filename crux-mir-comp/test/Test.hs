@@ -85,7 +85,8 @@ runCrux rustFile outHandle mode = do
                                             RcmCoverage -> getOutputDir rustFile
                                             _ -> "",
                                         Crux.branchCoverage = (mode == RcmCoverage) } ,
-                   Mir.defaultMirOptions { Mir.printResultOnly = (mode == RcmConcrete) })
+                   Mir.defaultMirOptions { Mir.printResultOnly = (mode == RcmConcrete),
+                                           Mir.defaultRlibsDir = "../deps/crucible/crux-mir/rlibs" })
     let ?outputConfig = Crux.OutputConfig False outHandle outHandle quiet
     _exitCode <- Mir.runTestsWithExtraOverrides Mir.compositionalOverrides options
     return ()
