@@ -5,6 +5,11 @@ on:
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
+    inputs:
+      publishNightly:
+        description: "If true, upload the docker images if they build successfully (with tag: nightly)"
+        required: false
+        default: "false"
 
 env:
   CACHE_VERSION: 1
@@ -15,12 +20,18 @@ jobs:
     outputs:
       saw-version: ${{ steps.saw.outputs.saw-version }}
       name: ${{ steps.saw.outputs.name }}
+      publish: ${{ steps.publish.outputs.publish }}
     steps:
       - uses: actions/checkout@v2
       - id: saw
         run: |
           .github/ci.sh set_version
           .github/ci.sh output name saw-$(.github/ci.sh ver)-$(date -I)
+      - id: publish
+        if: |
+          github.event_name == 'schedule' ||
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.publishNightly == 'true')
+        run: .github/ci.sh output publish 1
 
   docker-saw:
     runs-on: ubuntu-18.04
@@ -39,7 +50,7 @@ jobs:
           tags: "nightly"
           dockerfile: saw/Dockerfile
           add_git_labels: true
-          push: ${{ github.event_name == 'schedule' }}
+          push: ${{ github.event_name == 'schedule' || needs.outputs.outputs.publish }}
 
   docker-saw-remote-api:
     runs-on: ubuntu-18.04
@@ -58,7 +69,7 @@ jobs:
           tags: "nightly"
           dockerfile: saw-remote-api/Dockerfile
           add_git_labels: true
-          push: ${{ github.event_name == 'schedule' }}
+          push: ${{ github.event_name == 'schedule' || needs.outputs.outputs.publish }}
 
   build:
     needs: [outputs]
