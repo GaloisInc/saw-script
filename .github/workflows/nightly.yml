@@ -25,7 +25,6 @@ jobs:
   docker-saw:
     runs-on: ubuntu-18.04
     needs: [outputs]
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v2
         with:
@@ -45,7 +44,6 @@ jobs:
   docker-saw-remote-api:
     runs-on: ubuntu-18.04
     needs: [outputs]
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v2
         with:
@@ -71,7 +69,6 @@ jobs:
       matrix:
         os: [ubuntu-18.04, macos-latest, windows-latest]
         ghc: [8.8.4]
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v2
         with:
