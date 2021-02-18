@@ -55,7 +55,6 @@ import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
---import qualified SAWScript.Crucible.Common.Override as MS
 
 import qualified Crux.Model as Crux
 import Crux.Types (Model)
@@ -194,12 +193,10 @@ builderNew cs defId = do
 
     sc <- liftIO $ SAW.mkSharedContext
     liftIO $ SAW.scLoadPreludeModule sc
-    let ng = W4.exprCounter sym
-    --sawSym <- liftIO $ SAW.newSAWCoreBackend W4.FloatUninterpretedRepr sc ng
+    scs <- liftIO $ SAW.newSAWCoreState sc
 
-    cache <- W4.newIdxCache
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
-        eval x = SAW.toSC sym undefined x
+        eval x = SAW.toSC sym scs x
 
     return $ initMethodSpecBuilder cs sc eval ms snapFrame visitCache
 

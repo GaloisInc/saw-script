@@ -60,6 +60,7 @@ import qualified Verifier.SAW.Recognizer as SAW
 import qualified Verifier.SAW.SharedTerm as SAW
 import qualified Verifier.SAW.Simulator.Value as SAW
 import qualified Verifier.SAW.Simulator.What4 as SAW
+import qualified Verifier.SAW.Simulator.What4.ReturnTrip as SAW
 import qualified Verifier.SAW.Term.Functor as SAW
 import qualified Verifier.SAW.TypedTerm as SAW
 
@@ -151,8 +152,7 @@ runSpec col mh ms = do
 
     sc <- liftIO $ SAW.mkSharedContext
     liftIO $ SAW.scLoadPreludeModule sc
-    let ng = W4.exprCounter sym
-    --sawSym <- liftIO $ SAW.newSAWCoreBackend W4.FloatUninterpretedRepr sc ng
+    scs <- liftIO $ SAW.newSAWCoreState sc
 
     -- `eval` converts `W4.Expr`s to `SAW.Term`s.  We take what4 exprs from the
     -- context (e.g., in the actual arguments passed to the override) and
@@ -160,11 +160,10 @@ runSpec col mh ms = do
     -- Later, we need to convert some SAWCore terms back to what4, so during
     -- this conversion, we also build up a mapping from SAWCore variables
     -- (`SAW.ExtCns`) to what4 ones (`W4.ExprBoundVar`).
-    cache <- W4.newIdxCache
     visitCache <- W4.newIdxCache
     w4VarMapRef <- liftIO $ newIORef Map.empty
     let eval' :: forall tp. W4.Expr t tp -> IO SAW.Term
-        eval' x = undefined --SAW.evaluateExpr sawSym sc cache x
+        eval' x = SAW.toSC sym scs x
         eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval x = do
             -- When translating W4 vars to SAW `ExtCns`s, also record the
