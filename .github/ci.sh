@@ -120,7 +120,6 @@ build() {
   ghc_ver="$(ghc --numeric-version)"
   cp cabal.GHC-"$ghc_ver".config cabal.project.freeze
   cabal v2-update
-  echo "allow-newer: all" >> cabal.project.local
   pkgs=(saw)
   if $IS_WIN; then
     echo "flags: -builtin-abc" >> cabal.project.local
@@ -128,7 +127,6 @@ build() {
   else
     pkgs+=(saw-remote-api)
   fi
-  echo "allow-newer: all" >> cabal.project.local
   tee -a cabal.project > /dev/null < cabal.project.ci
   if ! retry cabal v2-build "$@" "${pkgs[@]}"; then
     if [[ "$RUNNER_OS" == "macOS" ]]; then
