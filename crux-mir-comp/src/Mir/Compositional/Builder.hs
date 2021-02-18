@@ -68,10 +68,11 @@ import qualified Mir.Mir as M
 
 import Mir.Compositional.Convert
 import Mir.Compositional.MethodSpec
+import Mir.Compositional.Override (MethodSpec(..))
 
 
 data MethodSpecBuilder sym t = MethodSpecBuilder
-    { _msbCollection :: M.Collection
+    { _msbCollectionState :: CollectionState
     , _msbSharedContext :: SAW.SharedContext
     , _msbEval :: forall tp. W4.Expr t tp -> IO SAW.Term
 
@@ -90,15 +91,15 @@ data StateExtra sym t = StateExtra
     }
 
 initMethodSpecBuilder ::
-    M.Collection ->
+    CollectionState ->
     SAW.SharedContext ->
     (forall tp. W4.Expr t tp -> IO SAW.Term) ->
     MIRMethodSpec ->
     FrameIdentifier ->
     W4.IdxCache t (Const ()) ->
     MethodSpecBuilder sym t
-initMethodSpecBuilder col sc eval spec snap cache = MethodSpecBuilder
-    { _msbCollection = col
+initMethodSpecBuilder cs sc eval spec snap cache = MethodSpecBuilder
+    { _msbCollectionState = cs
     , _msbSharedContext = sc
     , _msbEval = eval
     , _msbSpec = spec
@@ -118,6 +119,11 @@ initStateExtra = StateExtra
 
 makeLenses ''MethodSpecBuilder
 makeLenses ''StateExtra
+
+msbCollection :: Functor f =>
+    (M.Collection -> f M.Collection) ->
+    (MethodSpecBuilder sym t -> f (MethodSpecBuilder sym t))
+msbCollection = msbCollectionState . collection
 
 
 data PrePost = Pre | Post
@@ -186,8 +192,6 @@ builderNew cs defId = do
             (sig ^. M.fsarg_tys) (Just $ sig ^. M.fsreturn_ty) loc cs
     visitCache <- W4.newIdxCache
 
-    let col = cs ^. collection
-
     sc <- liftIO $ SAW.mkSharedContext
     liftIO $ SAW.scLoadPreludeModule sc
     let ng = W4.exprCounter sym
@@ -197,7 +201,7 @@ builderNew cs defId = do
     let eval :: forall tp. W4.Expr t tp -> IO SAW.Term
         eval x = SAW.toSC sym undefined x
 
-    return $ initMethodSpecBuilder col sc eval ms snapFrame visitCache
+    return $ initMethodSpecBuilder cs sc eval ms snapFrame visitCache
 
 -- | Add a value to the MethodSpec's argument list.  The value is obtained by
 -- dereferencing `argRef`.
@@ -442,8 +446,9 @@ finish msb = do
             & MS.csPostState . MS.csFreshVars .~ postVars'
             & MS.csPostState . MS.csAllocs .~ postAllocs
     nonce <- liftIO $ freshNonce ng
-    error "TODO: `finish` return value needs a MethodSpecImpl instance"
-    --return $ M.MethodSpec ms (indexValue nonce)
+
+    let ms' = MethodSpec (msb ^. msbCollectionState) ms
+    return $ M.MethodSpec ms' (indexValue nonce)
 
   where
     col = msb ^. msbCollection
