@@ -22,10 +22,12 @@ import Data.Parameterized.TraversableFC
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+import Lang.Crucible.Backend
 import Lang.Crucible.Simulator.RegValue
 import Lang.Crucible.Types
 
 import qualified What4.Expr.Builder as W4
+import qualified What4.Interface as W4
 import qualified What4.Partial as W4
 
 import Mir.Intrinsics
@@ -228,3 +230,18 @@ visitExprVars cache e f = go Set.empty e
         W4.StringExpr _ _ -> return ()
         W4.BoolExpr _ _ -> return ()
         W4.SemiRingLiteral _ _ _ -> return ()
+
+
+readMaybeType :: forall tp sym. IsSymInterface sym =>
+    sym -> String -> TypeRepr tp -> RegValue sym (MaybeType tp) ->
+    IO (RegValue sym tp)
+readMaybeType sym desc tpr rv = readPartExprMaybe sym rv >>= \x -> case x of
+    Just x -> return x
+    Nothing -> error $ "regToSetup: accessed possibly-uninitialized " ++ desc ++
+        " of type " ++ show tpr
+
+readPartExprMaybe :: IsSymInterface sym => sym -> W4.PartExpr (W4.Pred sym) a -> IO (Maybe a)
+readPartExprMaybe sym W4.Unassigned = return Nothing
+readPartExprMaybe sym (W4.PE p v)
+  | Just True <- W4.asConstantPred p = return $ Just v
+  | otherwise = return Nothing

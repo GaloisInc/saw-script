@@ -34,6 +34,8 @@ library
                  tasty-hunit      >= 0.10,
                  tasty-quickcheck >= 0.8,
                  tasty-golden     >= 2.3,
+                 bv-sized,
+                 bytestring,
                  crux,
                  crux-mir,
                  template-haskell,
@@ -47,6 +49,7 @@ library
                    Mir.Compositional.Builder
                    Mir.Compositional.Convert
                    Mir.Compositional.MethodSpec
+                   Mir.Compositional.Override
 
 
 executable crux-mir

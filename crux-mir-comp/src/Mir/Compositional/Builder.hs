@@ -555,20 +555,6 @@ refToAlloc sym p mutbl ty tpr ref = do
                 Nothing -> error $ "refToAlloc: ref aliasing depends on symbolic values"
         Nothing -> lookupAlloc ref rs
 
-readMaybeType :: forall tp sym. IsSymInterface sym =>
-    sym -> String -> TypeRepr tp -> RegValue sym (MaybeType tp) ->
-    IO (RegValue sym tp)
-readMaybeType sym desc tpr rv = readPartExprMaybe sym rv >>= \x -> case x of
-    Just x -> return x
-    Nothing -> error $ "regToSetup: accessed possibly-uninitialized " ++ desc ++
-        " of type " ++ show tpr
-
-readPartExprMaybe :: IsSymInterface sym => sym -> W4.PartExpr (W4.Pred sym) a -> IO (Maybe a)
-readPartExprMaybe sym W4.Unassigned = return Nothing
-readPartExprMaybe sym (W4.PE p v)
-  | Just True <- W4.asConstantPred p = return $ Just v
-  | otherwise = return Nothing
-
 -- | Run `f` on any newly-added refs/allocations in the MethodSpecBuilder.  If
 -- `f` adds more refs, then repeat until there are no more new refs remaining.
 forNewRefs ::
