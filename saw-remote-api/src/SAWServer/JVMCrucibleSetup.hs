@@ -82,12 +82,12 @@ compileJVMContract fileReader bic cenv c = interpretJVMSetup fileReader bic cenv
       map setupFresh (preVars c) ++
       map SetupPrecond (preConds c) ++
       map setupAlloc (preAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (prePointsTos c) ++
+      map (\(PointsTo p v chkV cond) -> SetupPointsTo p v chkV cond) (prePointsTos c) ++
       [ SetupExecuteFunction (argumentVals c) ] ++
       map setupFresh (postVars c) ++
       map SetupPostcond (postConds c) ++
       map setupAlloc (postAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
+      map (\(PointsTo p v chkV cond) -> SetupPointsTo p v chkV cond) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
 
 interpretJVMSetup ::
@@ -113,7 +113,7 @@ interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty,
       lift (jvm_alloc_object c) >>= save name . Val
     go (SetupAlloc _ ty _ Nothing) =
       error $ "cannot allocate type: " ++ show ty
-    go (SetupPointsTo src tgt) = get >>= \env -> lift $
+    go (SetupPointsTo src tgt _chkTgt _cond) = get >>= \env -> lift $
       do _ptr <- getSetupVal env src
          _tgt' <- getSetupVal env tgt
          error "nyi: points-to"

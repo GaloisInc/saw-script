@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer.Data.Contract
   ( ContractMode(..)
@@ -11,8 +12,11 @@ module SAWServer.Data.Contract
   , PointsTo(..)
   ) where
 
-import Data.Aeson (FromJSON(..), withObject, (.:))
-import Data.Text
+import Control.Applicative
+import Data.Aeson (FromJSON(..), withObject, withText, (.:))
+import Data.Text (Text)
+
+import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType(..))
 
 import SAWServer
 import SAWServer.Data.SetupValue ()
@@ -27,12 +31,12 @@ data Contract ty cryptolExpr =
     { preVars       :: [ContractVar ty]
     , preConds      :: [cryptolExpr]
     , preAllocated  :: [Allocated ty]
-    , prePointsTos  :: [PointsTo cryptolExpr]
+    , prePointsTos  :: [PointsTo ty cryptolExpr]
     , argumentVals  :: [CrucibleSetupVal cryptolExpr]
     , postVars      :: [ContractVar ty]
     , postConds     :: [cryptolExpr]
     , postAllocated :: [Allocated ty]
-    , postPointsTos :: [PointsTo cryptolExpr]
+    , postPointsTos :: [PointsTo ty cryptolExpr]
     , returnVal     :: Maybe (CrucibleSetupVal cryptolExpr)
     }
     deriving stock (Functor, Foldable, Traversable)
@@ -52,17 +56,25 @@ data Allocated ty =
     , allocatedAlignment  :: Maybe Int
     }
 
-data PointsTo cryptolExpr =
+data PointsTo ty cryptolExpr =
   PointsTo
-    { pointer  :: CrucibleSetupVal cryptolExpr
-    , pointsTo :: CrucibleSetupVal cryptolExpr
+    { pointer           :: CrucibleSetupVal cryptolExpr
+    , pointsTo          :: CrucibleSetupVal cryptolExpr
+    , checkPointsToType :: Maybe (CheckPointsToType ty)
+    , condition         :: Maybe cryptolExpr
     } deriving stock (Functor, Foldable, Traversable)
 
-instance FromJSON cryptolExpr => FromJSON (PointsTo cryptolExpr) where
+data CheckAgainstTag
+  = TagCheckAgainstPointerType
+  | TagCheckAgainstCastedType
+
+instance (FromJSON ty, FromJSON cryptolExpr) => FromJSON (PointsTo ty cryptolExpr) where
   parseJSON =
     withObject "Points-to relationship" $ \o ->
       PointsTo <$> o .: "pointer"
                <*> o .: "points to"
+               <*> o .: "check points to type"
+               <*> o .: "condition"
 
 instance FromJSON ty => FromJSON (Allocated ty) where
   parseJSON =
@@ -92,3 +104,19 @@ instance (FromJSON ty, FromJSON e) => FromJSON (Contract ty e) where
              <*> o .: "post allocated"
              <*> o .: "post points tos"
              <*> o .: "return val"
+
+instance FromJSON CheckAgainstTag where
+  parseJSON =
+    withText "`check points to type` tag" $
+    \case
+      "pointer type" -> pure TagCheckAgainstPointerType
+      "casted type"  -> pure TagCheckAgainstCastedType
+      _ -> empty
+
+instance FromJSON ty => FromJSON (CheckPointsToType ty) where
+  parseJSON =
+    withObject "check points to type" $ \o ->
+      o .: "check against" >>=
+      \case
+        TagCheckAgainstPointerType -> pure CheckAgainstPointerType
+        TagCheckAgainstCastedType  -> CheckAgainstCastedType <$> o .: "type"

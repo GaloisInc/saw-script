@@ -41,7 +41,7 @@ import SAWScript.Crucible.LLVM.Builtins
     , llvm_alloc_readonly_aligned
     , llvm_execute_func
     , llvm_fresh_var
-    , llvm_points_to
+    , llvm_points_to_internal
     , llvm_return
     , llvm_precond
     , llvm_postcond )
@@ -53,7 +53,7 @@ import Verifier.SAW.TypedTerm (TypedTerm)
 
 import Argo
 import qualified Argo.Doc as Doc
-import SAWServer
+import SAWServer as Server
 import SAWServer.Data.Contract
 import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
 import SAWServer.Data.SetupValue ()
@@ -93,12 +93,12 @@ compileLLVMContract fileReader bic cenv c =
       map setupFresh (preVars c) ++
       map SetupPrecond (preConds c) ++
       map setupAlloc (preAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (prePointsTos c) ++
+      map (\(PointsTo p v chkV cond) -> SetupPointsTo p v (fmap (fmap llvmType) chkV) cond) (prePointsTos c) ++
       [ SetupExecuteFunction (argumentVals c) ] ++
       map setupFresh (postVars c) ++
       map SetupPostcond (postConds c) ++
       map setupAlloc (postAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
+      map (\(PointsTo p v chkV cond) -> SetupPointsTo p v (fmap (fmap llvmType) chkV) cond) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
 
 interpretLLVMSetup ::
@@ -125,10 +125,11 @@ interpretLLVMSetup fileReader bic cenv0 ss =
       lift (llvm_alloc_aligned align ty) >>= save name . Val
     go (SetupAlloc name ty False (Just align)) =
       lift (llvm_alloc_readonly_aligned align ty) >>= save name . Val
-    go (SetupPointsTo src tgt) = get >>= \env -> lift $
+    go (SetupPointsTo src tgt chkTgt cond) = get >>= \env -> lift $
       do ptr <- getSetupVal env src
          tgt' <- getSetupVal env tgt
-         llvm_points_to True ptr tgt'
+         cond' <- traverse (getTypedTerm env) cond
+         llvm_points_to_internal chkTgt cond' ptr tgt'
     go (SetupExecuteFunction args) =
       get >>= \env ->
       lift $ traverse (getSetupVal env) args >>= llvm_execute_func
