@@ -52,7 +52,7 @@ library
                    Mir.Compositional.Override
 
 
-executable crux-mir
+executable crux-mir-comp
   hs-source-dirs: exe
   main-is: Main.hs
 
