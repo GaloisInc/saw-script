@@ -24,6 +24,7 @@ import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Parameterized.Context (Ctx(..), pattern Empty, pattern (:>), Assignment)
+import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Nonce
 import Data.Parameterized.Pair
 import Data.Parameterized.Some
@@ -64,6 +65,7 @@ import Mir.Generator (CollectionState, collection)
 import Mir.Intrinsics hiding (MethodSpec, MethodSpecBuilder)
 import qualified Mir.Intrinsics as M
 import qualified Mir.Mir as M
+import Mir.TransTy (pattern CTyUnsafeCell)
 
 import Mir.Compositional.Convert
 import Mir.Compositional.MethodSpec
@@ -231,15 +233,13 @@ addArg tpr argRef msb = execBuilderT msb $ do
         msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo alloc sv :)
 
         -- Clobber the current value
-        case mutbl of
-            M.Mut -> do
-                rv' <- lift $ clobberSymbolic sym loc "clobberArg" shp rv
-                lift $ writeMirRefSim tpr ref rv'
-                -- Gather fresh vars created by the clobber operation
-                sv' <- regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv'
-                msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo alloc sv' :)
-            -- TODO: clobber UnsafeCell contents within imm memory
-            M.Immut -> return ()
+        rv' <- case mutbl of
+            M.Mut -> lift $ clobberSymbolic sym loc "clobberArg" shp rv
+            M.Immut -> lift $ clobberImmutSymbolic sym loc "clobberArg" shp rv
+        lift $ writeMirRefSim tpr ref rv'
+        -- Gather fresh vars created by the clobber operation
+        sv' <- regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv'
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo alloc sv' :)
 
     msbSpec . MS.csArgBindings . at (fromIntegral idx) .= Just (ty, sv)
   where
@@ -596,8 +596,62 @@ clobberSymbolic sym loc nameStr shp rv = go shp rv
         MirVector_PartialVector pv ->
             MirVector_PartialVector <$> mapM (mapM (go shp)) pv
         MirVector_Array _ -> error $ "clobberSymbolic: MirVector_Array is unsupported"
-    -- TODO: support at least TupleShape and StructShape too
+    go (TupleShape _ _ flds) rvs =
+        Ctx.zipWithM goField flds rvs
+    go (StructShape _ _ flds) (AnyValue tpr rvs)
+      | Just Refl <- testEquality tpr shpTpr = AnyValue tpr <$> Ctx.zipWithM goField flds rvs
+      | otherwise = error $ "clobberSymbolic: type error: expected " ++ show shpTpr ++
+        ", but got Any wrapping " ++ show tpr
+      where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go shp _rv = error $ "clobberSymbolic: " ++ show (shapeType shp) ++ " NYI"
+
+    goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
+        OverrideSim (Model sym) sym MIR rtp args ret (RegValue' sym tp)
+    goField (ReqField shp) (RV rv) = RV <$> go shp rv
+    goField (OptField shp) (RV rv) = do
+        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+        rv'' <- go shp rv'
+        return $ RV $ W4.justPartExpr sym rv''
+
+-- | Like `clobberSymbolic`, but for values in "immutable" memory.  Values
+-- inside an `UnsafeCell<T>` wrapper can still be modified even with only
+-- immutable (`&`) access.  So this function modifies only the portions of `rv`
+-- that lie within an `UnsafeCell` and leaves the rest unchanged.
+clobberImmutSymbolic :: forall sym t st fs tp rtp args ret.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
+    sym -> ProgramLoc -> String -> TypeShape tp -> RegValue sym tp ->
+    OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym tp)
+clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
+  where
+    go :: forall tp. TypeShape tp -> RegValue sym tp ->
+        OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym tp)
+    go (UnitShape _) () = return ()
+    -- If we reached a leaf value without entering an `UnsafeCell`, then
+    -- there's nothing to change.
+    go (PrimShape _ _) rv = return rv
+    go (ArrayShape _ _ shp) mirVec = case mirVec of
+        MirVector_Vector v -> MirVector_Vector <$> mapM (go shp) v
+        MirVector_PartialVector pv ->
+            MirVector_PartialVector <$> mapM (mapM (go shp)) pv
+        MirVector_Array _ -> error $ "clobberSymbolic: MirVector_Array is unsupported"
+    go shp@(StructShape (CTyUnsafeCell _) _ _) rv =
+        clobberSymbolic sym loc nameStr shp rv
+    go (TupleShape _ _ flds) rvs =
+        Ctx.zipWithM goField flds rvs
+    go (StructShape _ _ flds) (AnyValue tpr rvs)
+      | Just Refl <- testEquality tpr shpTpr = AnyValue tpr <$> Ctx.zipWithM goField flds rvs
+      | otherwise = error $ "clobberSymbolic: type error: expected " ++ show shpTpr ++
+        ", but got Any wrapping " ++ show tpr
+      where shpTpr = StructRepr $ fmapFC fieldShapeType flds
+    go shp _rv = error $ "clobberSymbolic: " ++ show (shapeType shp) ++ " NYI"
+
+    goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
+        OverrideSim (Model sym) sym MIR rtp args ret (RegValue' sym tp)
+    goField (ReqField shp) (RV rv) = RV <$> go shp rv
+    goField (OptField shp) (RV rv) = do
+        rv' <- liftIO $ readMaybeType sym "field" (shapeType shp) rv
+        rv'' <- go shp rv'
+        return $ RV $ W4.justPartExpr sym rv''
 
 -- | Construct a fresh symbolic `RegValue` of type `tp`.
 freshSymbolic :: forall sym t st fs tp rtp args ret.
