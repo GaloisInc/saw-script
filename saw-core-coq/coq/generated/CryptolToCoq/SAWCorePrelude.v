@@ -432,27 +432,27 @@ Axiom expByNat : forall (a : Type), a -> (a -> a -> a) -> a -> @SAWCoreScaffoldi
 
 (* Prelude.atWithDefault was skipped *)
 
-Definition sawAt : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWVectorsAsCoqVectors.Vec n a -> @SAWCoreScaffolding.Nat -> a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWVectorsAsCoqVectors.Vec n a) (i : @SAWCoreScaffolding.Nat) => @SAWVectorsAsCoqVectors.atWithDefault n a (@SAWCoreScaffolding.error a "at: index out of bounds"%string) v i.
+Definition sawAt : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreScaffolding.Nat -> a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWCoreVectorsAsCoqVectors.Vec n a) (i : @SAWCoreScaffolding.Nat) => @SAWCoreVectorsAsCoqVectors.atWithDefault n a (@SAWCoreScaffolding.error a "at: index out of bounds"%string) v i.
 
 (* Prelude.EmptyVec was skipped *)
 
-Definition ConsVec : forall (a : Type), a -> forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a :=
-  fun (a : Type) (x : a) (n : @SAWCoreScaffolding.Nat) (v : @SAWVectorsAsCoqVectors.Vec n a) => @SAWVectorsAsCoqVectors.gen (@SAWCoreScaffolding.Succ n) a (@Nat_cases a x (fun (i : @SAWCoreScaffolding.Nat) (a' : a) => @SAWCorePrelude.sawAt n a v i)).
+Definition ConsVec : forall (a : Type), a -> forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a :=
+  fun (a : Type) (x : a) (n : @SAWCoreScaffolding.Nat) (v : @SAWCoreVectorsAsCoqVectors.Vec n a) => @SAWCoreVectorsAsCoqVectors.gen (@SAWCoreScaffolding.Succ n) a (@Nat_cases a x (fun (i : @SAWCoreScaffolding.Nat) (a' : a) => @SAWCorePrelude.sawAt n a v i)).
 
-Definition upd : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWVectorsAsCoqVectors.Vec n a -> @SAWCoreScaffolding.Nat -> a -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWVectorsAsCoqVectors.Vec n a) (j : @SAWCoreScaffolding.Nat) (x : a) => @SAWVectorsAsCoqVectors.gen n a (fun (i : @SAWCoreScaffolding.Nat) => if @equalNat i j then x else @SAWCorePrelude.sawAt n a v i).
+Definition upd : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreScaffolding.Nat -> a -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWCoreVectorsAsCoqVectors.Vec n a) (j : @SAWCoreScaffolding.Nat) (x : a) => @SAWCoreVectorsAsCoqVectors.gen n a (fun (i : @SAWCoreScaffolding.Nat) => if @equalNat i j then x else @SAWCorePrelude.sawAt n a v i).
 
-Definition map : forall (a : Type), forall (b : Type), (a -> b) -> forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec n b :=
-  fun (a : Type) (b : Type) (f : a -> b) (n : @SAWCoreScaffolding.Nat) (v : @SAWVectorsAsCoqVectors.Vec n a) => @SAWVectorsAsCoqVectors.gen n b (fun (i : @SAWCoreScaffolding.Nat) => f (@SAWCorePrelude.sawAt n a v i)).
+Definition map : forall (a : Type), forall (b : Type), (a -> b) -> forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec n b :=
+  fun (a : Type) (b : Type) (f : a -> b) (n : @SAWCoreScaffolding.Nat) (v : @SAWCoreVectorsAsCoqVectors.Vec n a) => @SAWCoreVectorsAsCoqVectors.gen n b (fun (i : @SAWCoreScaffolding.Nat) => f (@SAWCorePrelude.sawAt n a v i)).
 
-Definition zipWith : forall (a : Type), forall (b : Type), forall (c : Type), (a -> b -> c) -> forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec n b -> @SAWVectorsAsCoqVectors.Vec n c :=
-  fun (a : Type) (b : Type) (c : Type) (f : a -> b -> c) (n : @SAWCoreScaffolding.Nat) (x : @SAWVectorsAsCoqVectors.Vec n a) (y : @SAWVectorsAsCoqVectors.Vec n b) => @SAWVectorsAsCoqVectors.gen n c (fun (i : @SAWCoreScaffolding.Nat) => f (@SAWCorePrelude.sawAt n a x i) (@SAWCorePrelude.sawAt n b y i)).
+Definition zipWith : forall (a : Type), forall (b : Type), forall (c : Type), (a -> b -> c) -> forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec n b -> @SAWCoreVectorsAsCoqVectors.Vec n c :=
+  fun (a : Type) (b : Type) (c : Type) (f : a -> b -> c) (n : @SAWCoreScaffolding.Nat) (x : @SAWCoreVectorsAsCoqVectors.Vec n a) (y : @SAWCoreVectorsAsCoqVectors.Vec n b) => @SAWCoreVectorsAsCoqVectors.gen n c (fun (i : @SAWCoreScaffolding.Nat) => f (@SAWCorePrelude.sawAt n a x i) (@SAWCorePrelude.sawAt n b y i)).
 
-Definition replicate : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), a -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (x : a) => @SAWVectorsAsCoqVectors.gen n a (fun (_1 : @SAWCoreScaffolding.Nat) => x).
+Definition replicate : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), a -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (x : a) => @SAWCoreVectorsAsCoqVectors.gen n a (fun (_1 : @SAWCoreScaffolding.Nat) => x).
 
-Definition single : forall (a : Type), a -> @SAWVectorsAsCoqVectors.Vec 1 a :=
+Definition single : forall (a : Type), a -> @SAWCoreVectorsAsCoqVectors.Vec 1 a :=
   @replicate 1.
 
 (* Prelude.at_single was skipped *)
@@ -478,43 +478,43 @@ Fixpoint zip (a b : sort 0) (m n : Nat) (xs : Vec m a) (ys : Vec n b)
 
 (* Prelude.foldr was skipped *)
 
-Definition reverse : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (xs : @SAWVectorsAsCoqVectors.Vec n a) => @SAWVectorsAsCoqVectors.gen n a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt n a xs (@subNat (@subNat n 1) i)).
+Definition reverse : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (xs : @SAWCoreVectorsAsCoqVectors.Vec n a) => @SAWCoreVectorsAsCoqVectors.gen n a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt n a xs (@subNat (@subNat n 1) i)).
 
-Definition transpose : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWVectorsAsCoqVectors.Vec m (@SAWVectorsAsCoqVectors.Vec n a) -> @SAWVectorsAsCoqVectors.Vec n (@SAWVectorsAsCoqVectors.Vec m a) :=
-  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (xss : @SAWVectorsAsCoqVectors.Vec m (@SAWVectorsAsCoqVectors.Vec n a)) => @SAWVectorsAsCoqVectors.gen n (@SAWVectorsAsCoqVectors.Vec m a) (fun (j : @SAWCoreScaffolding.Nat) => @SAWVectorsAsCoqVectors.gen m a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt n a (@SAWCorePrelude.sawAt m (@SAWVectorsAsCoqVectors.Vec n a) xss i) j)).
+Definition transpose : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec m (@SAWCoreVectorsAsCoqVectors.Vec n a) -> @SAWCoreVectorsAsCoqVectors.Vec n (@SAWCoreVectorsAsCoqVectors.Vec m a) :=
+  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (xss : @SAWCoreVectorsAsCoqVectors.Vec m (@SAWCoreVectorsAsCoqVectors.Vec n a)) => @SAWCoreVectorsAsCoqVectors.gen n (@SAWCoreVectorsAsCoqVectors.Vec m a) (fun (j : @SAWCoreScaffolding.Nat) => @SAWCoreVectorsAsCoqVectors.gen m a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt n a (@SAWCorePrelude.sawAt m (@SAWCoreVectorsAsCoqVectors.Vec n a) xss i) j)).
 
-Definition vecEq : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), (a -> a -> @SAWCoreScaffolding.Bool) -> @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec n a -> @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (eqFn : a -> a -> @SAWCoreScaffolding.Bool) (x : @SAWVectorsAsCoqVectors.Vec n a) (y : @SAWVectorsAsCoqVectors.Vec n a) => @SAWVectorsAsCoqVectors.foldr @SAWCoreScaffolding.Bool @SAWCoreScaffolding.Bool n @SAWCoreScaffolding.and @SAWCoreScaffolding.true (@zipWith a a @SAWCoreScaffolding.Bool eqFn n x y).
+Definition vecEq : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), (a -> a -> @SAWCoreScaffolding.Bool) -> @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (eqFn : a -> a -> @SAWCoreScaffolding.Bool) (x : @SAWCoreVectorsAsCoqVectors.Vec n a) (y : @SAWCoreVectorsAsCoqVectors.Vec n a) => @SAWCoreVectorsAsCoqVectors.foldr @SAWCoreScaffolding.Bool @SAWCoreScaffolding.Bool n @SAWCoreScaffolding.and @SAWCoreScaffolding.true (@zipWith a a @SAWCoreScaffolding.Bool eqFn n x y).
 
 (* Prelude.eq_Vec was skipped *)
 
-Definition take : forall (a : Type), forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec (@addNat m n) a -> @SAWVectorsAsCoqVectors.Vec m a :=
-  fun (a : Type) (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (v : @SAWVectorsAsCoqVectors.Vec (@addNat m n) a) => @SAWVectorsAsCoqVectors.gen m a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt (@addNat m n) a v i).
+Definition take : forall (a : Type), forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec (@addNat m n) a -> @SAWCoreVectorsAsCoqVectors.Vec m a :=
+  fun (a : Type) (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (v : @SAWCoreVectorsAsCoqVectors.Vec (@addNat m n) a) => @SAWCoreVectorsAsCoqVectors.gen m a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt (@addNat m n) a v i).
 
-Definition vecCong : forall (a : Type), forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWCoreScaffolding.Eq @SAWCoreScaffolding.Nat m n -> @SAWCoreScaffolding.Eq Type (@SAWVectorsAsCoqVectors.Vec m a) (@SAWVectorsAsCoqVectors.Vec n a) :=
-  fun (a : Type) (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (eq : @SAWCoreScaffolding.Eq @SAWCoreScaffolding.Nat m n) => @eq_cong @SAWCoreScaffolding.Nat m n eq Type (fun (i : @SAWCoreScaffolding.Nat) => @SAWVectorsAsCoqVectors.Vec i a).
+Definition vecCong : forall (a : Type), forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWCoreScaffolding.Eq @SAWCoreScaffolding.Nat m n -> @SAWCoreScaffolding.Eq Type (@SAWCoreVectorsAsCoqVectors.Vec m a) (@SAWCoreVectorsAsCoqVectors.Vec n a) :=
+  fun (a : Type) (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (eq : @SAWCoreScaffolding.Eq @SAWCoreScaffolding.Nat m n) => @eq_cong @SAWCoreScaffolding.Nat m n eq Type (fun (i : @SAWCoreScaffolding.Nat) => @SAWCoreVectorsAsCoqVectors.Vec i a).
 
 (* Prelude.coerceVec was skipped *)
 
 (* Prelude.take0 was skipped *)
 
-Definition drop : forall (a : Type), forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec (@addNat m n) a -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (a : Type) (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (v : @SAWVectorsAsCoqVectors.Vec (@addNat m n) a) => @SAWVectorsAsCoqVectors.gen n a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt (@addNat m n) a v (@addNat m i)).
+Definition drop : forall (a : Type), forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec (@addNat m n) a -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (a : Type) (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (v : @SAWCoreVectorsAsCoqVectors.Vec (@addNat m n) a) => @SAWCoreVectorsAsCoqVectors.gen n a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt (@addNat m n) a v (@addNat m i)).
 
 (* Prelude.drop0 was skipped *)
 
-Definition slice : forall (a : Type), forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (o : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec (@addNat (@addNat m n) o) a -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (a : Type) (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (o : @SAWCoreScaffolding.Nat) (v : @SAWVectorsAsCoqVectors.Vec (@addNat (@addNat m n) o) a) => @drop a m n (@take a (@addNat m n) o v).
+Definition slice : forall (a : Type), forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (o : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec (@addNat (@addNat m n) o) a -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (a : Type) (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (o : @SAWCoreScaffolding.Nat) (v : @SAWCoreVectorsAsCoqVectors.Vec (@addNat (@addNat m n) o) a) => @drop a m n (@take a (@addNat m n) o v).
 
-Definition join : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWVectorsAsCoqVectors.Vec m (@SAWVectorsAsCoqVectors.Vec n a) -> @SAWVectorsAsCoqVectors.Vec (@mulNat m n) a :=
-  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWVectorsAsCoqVectors.Vec m (@SAWVectorsAsCoqVectors.Vec n a)) => @SAWVectorsAsCoqVectors.gen (@mulNat m n) a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt n a (@SAWCorePrelude.sawAt m (@SAWVectorsAsCoqVectors.Vec n a) v (@divNat i n)) (@modNat i n)).
+Definition join : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec m (@SAWCoreVectorsAsCoqVectors.Vec n a) -> @SAWCoreVectorsAsCoqVectors.Vec (@mulNat m n) a :=
+  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWCoreVectorsAsCoqVectors.Vec m (@SAWCoreVectorsAsCoqVectors.Vec n a)) => @SAWCoreVectorsAsCoqVectors.gen (@mulNat m n) a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt n a (@SAWCorePrelude.sawAt m (@SAWCoreVectorsAsCoqVectors.Vec n a) v (@divNat i n)) (@modNat i n)).
 
-Definition split : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWVectorsAsCoqVectors.Vec (@mulNat m n) a -> @SAWVectorsAsCoqVectors.Vec m (@SAWVectorsAsCoqVectors.Vec n a) :=
-  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWVectorsAsCoqVectors.Vec (@mulNat m n) a) => @SAWVectorsAsCoqVectors.gen m (@SAWVectorsAsCoqVectors.Vec n a) (fun (i : @SAWCoreScaffolding.Nat) => @SAWVectorsAsCoqVectors.gen n a (fun (j : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt (@mulNat m n) a v (@addNat (@mulNat i n) j))).
+Definition split : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec (@mulNat m n) a -> @SAWCoreVectorsAsCoqVectors.Vec m (@SAWCoreVectorsAsCoqVectors.Vec n a) :=
+  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWCoreVectorsAsCoqVectors.Vec (@mulNat m n) a) => @SAWCoreVectorsAsCoqVectors.gen m (@SAWCoreVectorsAsCoqVectors.Vec n a) (fun (i : @SAWCoreScaffolding.Nat) => @SAWCoreVectorsAsCoqVectors.gen n a (fun (j : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt (@mulNat m n) a v (@addNat (@mulNat i n) j))).
 
-Definition append : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWVectorsAsCoqVectors.Vec m a -> @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec (@addNat m n) a :=
-  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (x : @SAWVectorsAsCoqVectors.Vec m a) (y : @SAWVectorsAsCoqVectors.Vec n a) => @SAWVectorsAsCoqVectors.gen (@addNat m n) a (fun (i : @SAWCoreScaffolding.Nat) => if @ltNat i m then @SAWCorePrelude.sawAt m a x i else @SAWCorePrelude.sawAt n a y (@subNat i m)).
+Definition append : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec m a -> @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec (@addNat m n) a :=
+  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (x : @SAWCoreVectorsAsCoqVectors.Vec m a) (y : @SAWCoreVectorsAsCoqVectors.Vec n a) => @SAWCoreVectorsAsCoqVectors.gen (@addNat m n) a (fun (i : @SAWCoreScaffolding.Nat) => if @ltNat i m then @SAWCorePrelude.sawAt m a x i else @SAWCorePrelude.sawAt n a y (@subNat i m)).
 
 (* Prelude.rotateL was skipped *)
 
@@ -524,39 +524,39 @@ Definition append : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreSc
 
 (* Prelude.shiftR was skipped *)
 
-Definition joinLittleEndian : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWVectorsAsCoqVectors.Vec m (@SAWVectorsAsCoqVectors.Vec n a) -> @SAWVectorsAsCoqVectors.Vec (@mulNat m n) a :=
-  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWVectorsAsCoqVectors.Vec m (@SAWVectorsAsCoqVectors.Vec n a)) => @join m n a (@reverse m (@SAWVectorsAsCoqVectors.Vec n a) v).
+Definition joinLittleEndian : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec m (@SAWCoreVectorsAsCoqVectors.Vec n a) -> @SAWCoreVectorsAsCoqVectors.Vec (@mulNat m n) a :=
+  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWCoreVectorsAsCoqVectors.Vec m (@SAWCoreVectorsAsCoqVectors.Vec n a)) => @join m n a (@reverse m (@SAWCoreVectorsAsCoqVectors.Vec n a) v).
 
-Definition splitLittleEndian : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWVectorsAsCoqVectors.Vec (@mulNat m n) a -> @SAWVectorsAsCoqVectors.Vec m (@SAWVectorsAsCoqVectors.Vec n a) :=
-  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWVectorsAsCoqVectors.Vec (@mulNat m n) a) => @reverse m (@SAWVectorsAsCoqVectors.Vec n a) (@split m n a v).
+Definition splitLittleEndian : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), @SAWCoreVectorsAsCoqVectors.Vec (@mulNat m n) a -> @SAWCoreVectorsAsCoqVectors.Vec m (@SAWCoreVectorsAsCoqVectors.Vec n a) :=
+  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (a : Type) (v : @SAWCoreVectorsAsCoqVectors.Vec (@mulNat m n) a) => @reverse m (@SAWCoreVectorsAsCoqVectors.Vec n a) (@split m n a v).
 
-Definition msb : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (v : @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) => @SAWCorePrelude.sawAt (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool v 0.
+Definition msb : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (v : @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) => @SAWCorePrelude.sawAt (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool v 0.
 
-Definition lsb : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (v : @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) => @SAWCorePrelude.sawAt (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool v n.
+Definition lsb : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (v : @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) => @SAWCorePrelude.sawAt (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool v n.
 
 (* Prelude.bvNat was skipped *)
 
 (* Prelude.bvToNat was skipped *)
 
-Definition bvAt : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @SAWVectorsAsCoqVectors.Vec n a) (i : @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWCorePrelude.sawAt n a xs (@SAWVectorsAsCoqVectors.bvToNat w i).
+Definition bvAt : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @SAWCoreVectorsAsCoqVectors.Vec n a) (i : @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWCorePrelude.sawAt n a xs (@SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
-Definition bvUpd : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> a -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @SAWVectorsAsCoqVectors.Vec n a) (i : @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) (y : a) => @upd n a xs (@SAWVectorsAsCoqVectors.bvToNat w i) y.
+Definition bvUpd : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> a -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @SAWCoreVectorsAsCoqVectors.Vec n a) (i : @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) (y : a) => @upd n a xs (@SAWCoreVectorsAsCoqVectors.bvToNat w i) y.
 
-Definition bvRotateL : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @SAWVectorsAsCoqVectors.Vec n a) (i : @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWVectorsAsCoqVectors.rotateL n a xs (@SAWVectorsAsCoqVectors.bvToNat w i).
+Definition bvRotateL : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @SAWCoreVectorsAsCoqVectors.Vec n a) (i : @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWCoreVectorsAsCoqVectors.rotateL n a xs (@SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
-Definition bvRotateR : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @SAWVectorsAsCoqVectors.Vec n a) (i : @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWVectorsAsCoqVectors.rotateR n a xs (@SAWVectorsAsCoqVectors.bvToNat w i).
+Definition bvRotateR : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @SAWCoreVectorsAsCoqVectors.Vec n a) (i : @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWCoreVectorsAsCoqVectors.rotateR n a xs (@SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
-Definition bvShiftL : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), a -> @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (z : a) (xs : @SAWVectorsAsCoqVectors.Vec n a) (i : @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWVectorsAsCoqVectors.shiftL n a z xs (@SAWVectorsAsCoqVectors.bvToNat w i).
+Definition bvShiftL : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), a -> @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (z : a) (xs : @SAWCoreVectorsAsCoqVectors.Vec n a) (i : @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWCoreVectorsAsCoqVectors.shiftL n a z xs (@SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
-Definition bvShiftR : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), a -> @SAWVectorsAsCoqVectors.Vec n a -> @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (z : a) (xs : @SAWVectorsAsCoqVectors.Vec n a) (i : @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWVectorsAsCoqVectors.shiftR n a z xs (@SAWVectorsAsCoqVectors.bvToNat w i).
+Definition bvShiftR : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), a -> @SAWCoreVectorsAsCoqVectors.Vec n a -> @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (w : @SAWCoreScaffolding.Nat) (z : a) (xs : @SAWCoreVectorsAsCoqVectors.Vec n a) (i : @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) => @SAWCoreVectorsAsCoqVectors.shiftR n a z xs (@SAWCoreVectorsAsCoqVectors.bvToNat w i).
 
 (* Prelude.bvAdd was skipped *)
 
@@ -584,14 +584,14 @@ Definition bvShiftR : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), f
 
 (* Prelude.bvForall was skipped *)
 
-Definition bvCarry : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (y : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @SAWVectorsAsCoqVectors.bvult n (@SAWVectorsAsCoqVectors.bvAdd n x y) x.
+Definition bvCarry : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (y : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @SAWCoreVectorsAsCoqVectors.bvult n (@SAWCoreVectorsAsCoqVectors.bvAdd n x y) x.
 
-Definition bvSCarry : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) (y : @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) => @SAWCoreScaffolding.and (@SAWCoreScaffolding.boolEq (@msb n x) (@msb n y)) (@SAWCoreScaffolding.xor (@msb n x) (@msb n (@SAWVectorsAsCoqVectors.bvAdd (@SAWCoreScaffolding.Succ n) x y))).
+Definition bvSCarry : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) (y : @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) => @SAWCoreScaffolding.and (@SAWCoreScaffolding.boolEq (@msb n x) (@msb n y)) (@SAWCoreScaffolding.xor (@msb n x) (@msb n (@SAWCoreVectorsAsCoqVectors.bvAdd (@SAWCoreScaffolding.Succ n) x y))).
 
-Definition bvAddWithCarry : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> prod @SAWCoreScaffolding.Bool (@SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) :=
-  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (y : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => pair (@bvCarry n x y) (@SAWVectorsAsCoqVectors.bvAdd n x y).
+Definition bvAddWithCarry : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> prod @SAWCoreScaffolding.Bool (@SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) :=
+  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (y : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => pair (@bvCarry n x y) (@SAWCoreVectorsAsCoqVectors.bvAdd n x y).
 
 (* Prelude.bvAddZeroL was skipped *)
 
@@ -623,23 +623,23 @@ Definition bvAddWithCarry : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsC
 
 (* Prelude.bvShiftR_bvShr was skipped *)
 
-Definition bvZipWith : (@SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool) -> forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
+Definition bvZipWith : (@SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool) -> forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
   @zipWith @SAWCoreScaffolding.Bool @SAWCoreScaffolding.Bool @SAWCoreScaffolding.Bool.
 
-Definition bvNot : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
+Definition bvNot : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
   @map @SAWCoreScaffolding.Bool @SAWCoreScaffolding.Bool @SAWCoreScaffolding.not.
 
-Definition bvAnd : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
+Definition bvAnd : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
   @bvZipWith @SAWCoreScaffolding.and.
 
-Definition bvOr : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
+Definition bvOr : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
   @bvZipWith @SAWCoreScaffolding.or.
 
-Definition bvXor : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
+Definition bvXor : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
   @bvZipWith @SAWCoreScaffolding.xor.
 
-Definition bvEq : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (y : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @vecEq n @SAWCoreScaffolding.Bool @SAWCoreScaffolding.boolEq x y.
+Definition bvEq : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (y : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @vecEq n @SAWCoreScaffolding.Bool @SAWCoreScaffolding.boolEq x y.
 
 (* Prelude.bvEq_refl was skipped *)
 
@@ -651,26 +651,26 @@ Definition bvEq : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.
 
 (* Prelude.equalNat_bv was skipped *)
 
-Definition bvBool : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (b : @SAWCoreScaffolding.Bool) => if b then @SAWVectorsAsCoqVectors.bvNat n 1 else @SAWVectorsAsCoqVectors.bvNat n 0.
+Definition bvBool : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (b : @SAWCoreScaffolding.Bool) => if b then @SAWCoreVectorsAsCoqVectors.bvNat n 1 else @SAWCoreVectorsAsCoqVectors.bvNat n 0.
 
-Definition bvNe : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (y : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @SAWCoreScaffolding.not (@bvEq n x y).
+Definition bvNe : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (y : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @SAWCoreScaffolding.not (@bvEq n x y).
 
-Definition bvNonzero : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @bvNe n x (@SAWVectorsAsCoqVectors.bvNat n 0).
+Definition bvNonzero : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (x : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @bvNe n x (@SAWCoreVectorsAsCoqVectors.bvNat n 0).
 
-Definition bvTrunc : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec (@addNat m n) @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
+Definition bvTrunc : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec (@addNat m n) @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
   @drop @SAWCoreScaffolding.Bool.
 
-Definition bvUExt : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec (@addNat m n) @SAWCoreScaffolding.Bool :=
-  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (x : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @append m n @SAWCoreScaffolding.Bool (@SAWVectorsAsCoqVectors.bvNat m 0) x.
+Definition bvUExt : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec (@addNat m n) @SAWCoreScaffolding.Bool :=
+  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (x : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => @append m n @SAWCoreScaffolding.Bool (@SAWCoreVectorsAsCoqVectors.bvNat m 0) x.
 
-Definition replicateBool : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
-  fun (n : @SAWCoreScaffolding.Nat) (b : @SAWCoreScaffolding.Bool) => if b then @bvNot n (@SAWVectorsAsCoqVectors.bvNat n 0) else @SAWVectorsAsCoqVectors.bvNat n 0.
+Definition replicateBool : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool :=
+  fun (n : @SAWCoreScaffolding.Nat) (b : @SAWCoreScaffolding.Bool) => if b then @bvNot n (@SAWCoreVectorsAsCoqVectors.bvNat n 0) else @SAWCoreVectorsAsCoqVectors.bvNat n 0.
 
-Definition bvSExt : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWVectorsAsCoqVectors.Vec (@addNat m (@SAWCoreScaffolding.Succ n)) @SAWCoreScaffolding.Bool :=
-  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (x : @SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) => @append m (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool (@replicateBool m (@msb n x)) x.
+Definition bvSExt : forall (m : @SAWCoreScaffolding.Nat), forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool -> @SAWCoreVectorsAsCoqVectors.Vec (@addNat m (@SAWCoreScaffolding.Succ n)) @SAWCoreScaffolding.Bool :=
+  fun (m : @SAWCoreScaffolding.Nat) (n : @SAWCoreScaffolding.Nat) (x : @SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool) => @append m (@SAWCoreScaffolding.Succ n) @SAWCoreScaffolding.Bool (@replicateBool m (@msb n x)) x.
 
 Inductive Stream (a : Type) : Type :=
 | MkStream : (@SAWCoreScaffolding.Nat -> a) -> @Stream a
@@ -682,8 +682,8 @@ Definition Stream__rec : forall (a : Type), forall (p : @Stream a -> Type), (for
 Definition streamUpd : forall (a : Type), @Stream a -> @SAWCoreScaffolding.Nat -> a -> @Stream a :=
   fun (a : Type) (strm : @Stream a) (i : @SAWCoreScaffolding.Nat) (y : a) => @Stream__rec a (fun (strm' : @Stream a) => @Stream a) (fun (s : @SAWCoreScaffolding.Nat -> a) => @MkStream a (fun (j : @SAWCoreScaffolding.Nat) => if @equalNat i j then y else s j)) strm.
 
-Definition bvStreamUpd : forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @Stream a -> @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> a -> @Stream a :=
-  fun (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @Stream a) (i : @SAWVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) (y : a) => @streamUpd a xs (@SAWVectorsAsCoqVectors.bvToNat w i) y.
+Definition bvStreamUpd : forall (a : Type), forall (w : @SAWCoreScaffolding.Nat), @Stream a -> @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool -> a -> @Stream a :=
+  fun (a : Type) (w : @SAWCoreScaffolding.Nat) (xs : @Stream a) (i : @SAWCoreVectorsAsCoqVectors.Vec w @SAWCoreScaffolding.Bool) (y : a) => @streamUpd a xs (@SAWCoreVectorsAsCoqVectors.bvToNat w i) y.
 
 Definition streamGet : forall (a : Type), @Stream a -> @SAWCoreScaffolding.Nat -> a :=
   fun (a : Type) (strm : @Stream a) (i : @SAWCoreScaffolding.Nat) => @Stream__rec a (fun (strm' : @Stream a) => a) (fun (s : @SAWCoreScaffolding.Nat -> a) => s i) strm.
@@ -697,20 +697,20 @@ Definition streamMap : forall (a : Type), forall (b : Type), (a -> b) -> @Stream
 Definition streamMap2 : forall (a : Type), forall (b : Type), forall (c : Type), (a -> b -> c) -> @Stream a -> @Stream b -> @Stream c :=
   fun (a : Type) (b : Type) (c : Type) (f : a -> b -> c) (xs : @Stream a) (ys : @Stream b) => @MkStream c (fun (i : @SAWCoreScaffolding.Nat) => f (@streamGet a xs i) (@streamGet b ys i)).
 
-Definition streamTake : forall (a : Type), forall (n : @SAWCoreScaffolding.Nat), @Stream a -> @SAWVectorsAsCoqVectors.Vec n a :=
-  fun (a : Type) (n : @SAWCoreScaffolding.Nat) (xs : @Stream a) => @SAWVectorsAsCoqVectors.gen n a (fun (i : @SAWCoreScaffolding.Nat) => @streamGet a xs i).
+Definition streamTake : forall (a : Type), forall (n : @SAWCoreScaffolding.Nat), @Stream a -> @SAWCoreVectorsAsCoqVectors.Vec n a :=
+  fun (a : Type) (n : @SAWCoreScaffolding.Nat) (xs : @Stream a) => @SAWCoreVectorsAsCoqVectors.gen n a (fun (i : @SAWCoreScaffolding.Nat) => @streamGet a xs i).
 
 Definition streamDrop : forall (a : Type), forall (n : @SAWCoreScaffolding.Nat), @Stream a -> @Stream a :=
   fun (a : Type) (n : @SAWCoreScaffolding.Nat) (xs : @Stream a) => @MkStream a (fun (i : @SAWCoreScaffolding.Nat) => @streamGet a xs (@addNat n i)).
 
-Definition streamAppend : forall (a : Type), forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n a -> @Stream a -> @Stream a :=
-  fun (a : Type) (n : @SAWCoreScaffolding.Nat) (xs : @SAWVectorsAsCoqVectors.Vec n a) (ys : @Stream a) => @MkStream a (fun (i : @SAWCoreScaffolding.Nat) => @SAWVectorsAsCoqVectors.atWithDefault n a (@streamGet a ys (@subNat i n)) xs i).
+Definition streamAppend : forall (a : Type), forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n a -> @Stream a -> @Stream a :=
+  fun (a : Type) (n : @SAWCoreScaffolding.Nat) (xs : @SAWCoreVectorsAsCoqVectors.Vec n a) (ys : @Stream a) => @MkStream a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCoreVectorsAsCoqVectors.atWithDefault n a (@streamGet a ys (@subNat i n)) xs i).
 
-Definition streamJoin : forall (a : Type), forall (n : @SAWCoreScaffolding.Nat), @Stream (@SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a) -> @Stream a :=
-  fun (a : Type) (n : @SAWCoreScaffolding.Nat) (s : @Stream (@SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a)) => @MkStream a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt (@SAWCoreScaffolding.Succ n) a (@streamGet (@SAWVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a) s (@divNat i (@SAWCoreScaffolding.Succ n))) (@modNat i (@SAWCoreScaffolding.Succ n))).
+Definition streamJoin : forall (a : Type), forall (n : @SAWCoreScaffolding.Nat), @Stream (@SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a) -> @Stream a :=
+  fun (a : Type) (n : @SAWCoreScaffolding.Nat) (s : @Stream (@SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a)) => @MkStream a (fun (i : @SAWCoreScaffolding.Nat) => @SAWCorePrelude.sawAt (@SAWCoreScaffolding.Succ n) a (@streamGet (@SAWCoreVectorsAsCoqVectors.Vec (@SAWCoreScaffolding.Succ n) a) s (@divNat i (@SAWCoreScaffolding.Succ n))) (@modNat i (@SAWCoreScaffolding.Succ n))).
 
-Definition streamSplit : forall (a : Type), forall (n : @SAWCoreScaffolding.Nat), @Stream a -> @Stream (@SAWVectorsAsCoqVectors.Vec n a) :=
-  fun (a : Type) (n : @SAWCoreScaffolding.Nat) (xs : @Stream a) => @MkStream (@SAWVectorsAsCoqVectors.Vec n a) (fun (i : @SAWCoreScaffolding.Nat) => @SAWVectorsAsCoqVectors.gen n a (fun (j : @SAWCoreScaffolding.Nat) => @streamGet a xs (@addNat (@mulNat i n) j))).
+Definition streamSplit : forall (a : Type), forall (n : @SAWCoreScaffolding.Nat), @Stream a -> @Stream (@SAWCoreVectorsAsCoqVectors.Vec n a) :=
+  fun (a : Type) (n : @SAWCoreScaffolding.Nat) (xs : @Stream a) => @MkStream (@SAWCoreVectorsAsCoqVectors.Vec n a) (fun (i : @SAWCoreScaffolding.Nat) => @SAWCoreVectorsAsCoqVectors.gen n a (fun (j : @SAWCoreScaffolding.Nat) => @streamGet a xs (@addNat (@mulNat i n) j))).
 
 Definition streamShiftL : forall (a : Type), @Stream a -> @SAWCoreScaffolding.Nat -> @Stream a :=
   fun (a : Type) (xs : @Stream a) (i : @SAWCoreScaffolding.Nat) => @streamDrop a i xs.
@@ -748,9 +748,9 @@ Definition streamShiftR : forall (a : Type), a -> @Stream a -> @SAWCoreScaffoldi
 
 (* Prelude.natToInt was skipped *)
 
-Axiom intToBv : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreScaffolding.Integer -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool .
+Axiom intToBv : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreScaffolding.Integer -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool .
 
-Axiom bvToInt : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Integer .
+Axiom bvToInt : forall (n : @SAWCoreScaffolding.Nat), @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> @SAWCoreScaffolding.Integer .
 
 (* Prelude.sbvToInt was skipped *)
 
@@ -773,8 +773,8 @@ Axiom bvToInt : forall (n : @SAWCoreScaffolding.Nat), @SAWVectorsAsCoqVectors.Ve
 Definition updNatFun : forall (a : Type), (@SAWCoreScaffolding.Nat -> a) -> @SAWCoreScaffolding.Nat -> a -> @SAWCoreScaffolding.Nat -> a :=
   fun (a : Type) (f : @SAWCoreScaffolding.Nat -> a) (i : @SAWCoreScaffolding.Nat) (v : a) (x : @SAWCoreScaffolding.Nat) => if @equalNat i x then v else f x.
 
-Definition updBvFun : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), (@SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> a) -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> a -> @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> a :=
-  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (f : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> a) (i : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (v : a) (x : @SAWVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => if @bvEq n i x then v else f x.
+Definition updBvFun : forall (n : @SAWCoreScaffolding.Nat), forall (a : Type), (@SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> a) -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> a -> @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> a :=
+  fun (n : @SAWCoreScaffolding.Nat) (a : Type) (f : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool -> a) (i : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) (v : a) (x : @SAWCoreVectorsAsCoqVectors.Vec n @SAWCoreScaffolding.Bool) => if @bvEq n i x then v else f x.
 
 (* Prelude.Float was skipped *)
 
