@@ -80,9 +80,10 @@ dataTypeOpenTerm d all_args = OpenTerm $ do
       Nothing -> throwTCError $ NoSuchDataType d
   typeInferComplete $ DataTypeApp d params args
 
--- | Build an 'OpenTermm' for a global name
+-- | Build an 'OpenTerm' for a global name.
 globalOpenTerm :: Ident -> OpenTerm
-globalOpenTerm = flatOpenTerm . GlobalDef
+globalOpenTerm ident =
+  OpenTerm (liftTCM scGlobalDef ident >>= typeInferComplete)
 
 -- | Apply an 'OpenTerm' to another
 applyOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm

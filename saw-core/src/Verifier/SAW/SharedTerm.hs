@@ -927,7 +927,7 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
            -> State.StateT (Map TermIndex Term) IO Term
     ftermf tf =
       case tf of
-        GlobalDef d -> lift $ scTypeOfGlobal sc d
+        Primitive ec -> return $ ecType ec
         UnitValue -> lift $ scUnitType sc
         UnitType -> lift $ scSort sc (mkSort 0)
         PairValue x y -> do
@@ -972,9 +972,8 @@ scTypeOf' sc env t0 = State.evalStateT (memo t0) Map.empty
         NatLit _ -> lift $ scNatType sc
         ArrayValue tp vs -> lift $ do
           n <- scNat sc (fromIntegral (V.length vs))
-          vec_f <- scFlatTermF sc preludeVecTypeFun
-          scApplyAll sc vec_f [n, tp]
-        StringLit{} -> lift $ scFlatTermF sc preludeStringType
+          scVecType sc n tp
+        StringLit{} -> lift $ scStringType sc
         ExtCns ec   -> return $ ecType ec
 
 --------------------------------------------------------------------------------
@@ -1214,7 +1213,7 @@ scString sc s = scFlatTermF sc (StringLit s)
 
 -- | Create a term representing the primitive saw-core type @String@.
 scStringType :: SharedContext -> IO Term
-scStringType sc = scFlatTermF sc preludeStringType
+scStringType sc = scGlobalDef sc preludeStringIdent
 
 -- | Create a vector term from a type (as a 'Term') and a list of 'Term's of
 -- that type.
@@ -1489,9 +1488,7 @@ scVecType :: SharedContext
           -> Term -- ^ The length of the vector
           -> Term -- ^ The element type
           -> IO Term
-scVecType sc n e =
-  do vec_f <- scFlatTermF sc preludeVecTypeFun
-     scApplyAll sc vec_f [n, e]
+scVecType sc n e = scGlobalApply sc preludeVecIdent [n, e]
 
 -- | Create a term applying @Prelude.not@ to the given term.
 --
@@ -1694,7 +1691,7 @@ scMaxNat sc x y = scGlobalApply sc "Prelude.maxNat" [x,y]
 
 -- | Create a term representing the prelude Integer type.
 scIntegerType :: SharedContext -> IO Term
-scIntegerType sc = scFlatTermF sc preludeIntegerType
+scIntegerType sc = scGlobalDef sc preludeIntegerIdent
 
 -- | Create an integer constant term from an 'Integer'.
 scIntegerConst :: SharedContext -> Integer -> IO Term

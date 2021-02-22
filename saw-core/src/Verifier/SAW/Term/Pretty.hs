@@ -63,7 +63,7 @@ import Verifier.SAW.Term.Functor
 -- * Doc annotations
 
 data SawStyle
-  = GlobalDefStyle
+  = PrimitiveStyle
   | ConstantStyle
   | ExtCnsStyle
   | LocalVarStyle
@@ -76,7 +76,7 @@ data SawStyle
 colorStyle :: SawStyle -> AnsiStyle
 colorStyle =
   \case
-    GlobalDefStyle -> mempty
+    PrimitiveStyle -> mempty
     ConstantStyle -> colorDull Blue
     ExtCnsStyle -> colorDull Red
     LocalVarStyle -> colorDull Green
@@ -422,7 +422,7 @@ ppDataType d (params, ((d_ctx,d_tp), ctors)) =
 ppFlatTermF :: Prec -> FlatTermF Term -> PPM SawDoc
 ppFlatTermF prec tf =
   case tf of
-    GlobalDef i   -> return $ annotate GlobalDefStyle $ ppIdent i
+    Primitive ec  -> annotate PrimitiveStyle <$> ppBestName (ecName ec)
     UnitValue     -> return "(-empty-)"
     UnitType      -> return "#(-empty-)"
     PairValue x y -> ppPair prec <$> ppTerm' PrecLambda x <*> ppTerm' PrecNone y
@@ -542,7 +542,7 @@ scTermCount doBinders t0 = execState (go [t0]) IntMap.empty
 shouldMemoizeTerm :: Term -> Bool
 shouldMemoizeTerm t =
   case unwrapTermF t of
-    FTermF GlobalDef{} -> False
+    FTermF Primitive{} -> False
     FTermF UnitValue -> False
     FTermF UnitType -> False
     FTermF (CtorApp _ [] []) -> False

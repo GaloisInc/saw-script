@@ -627,7 +627,7 @@ rewriteSharedTermTypeSafe sc ss t0 =
           Sort{}           -> return ftf -- doesn't matter
           NatLit{}         -> return ftf -- doesn't matter
           ArrayValue t es  -> ArrayValue t <$> traverse rewriteAll es
-          GlobalDef{}      -> return ftf
+          Primitive{}      -> return ftf
           StringLit{}      -> return ftf
           ExtCns{}         -> return ftf
     rewriteTop :: (?cache :: Cache IO TermIndex Term) =>
@@ -700,9 +700,9 @@ replaceTerm sc ss (pat, repl) t = do
 -- If/then/else hoisting
 
 -- | Find all instances of Prelude.ite in the given term and hoist them
---   higher.  An if/then/else floats upward until it hits a binder that
+--   higher.  An if-then-else floats upward until it hits a binder that
 --   binds one of its free variables, or until it bubbles to the top of
---   the term.  When multiple if/then/else branches bubble to the same
+--   the term.  When multiple if-then-else branches bubble to the same
 --   place, they will be nested via a canonical term ordering.  This transformation
 --   also does rewrites by basic boolean identities.
 hoistIfs :: SharedContext
@@ -713,15 +713,15 @@ hoistIfs sc t = do
 
    let app x y = join (scTermF sc <$> (pure App <*> x <*> y))
    itePat <-
-          (scFlatTermF sc $ GlobalDef $ "Prelude.ite")
+          (scGlobalDef sc "Prelude.ite")
           `app`
-          (scTermF sc $ LocalVar 0)
+          (scLocalVar sc 0)
           `app`
-          (scTermF sc $ LocalVar 1)
+          (scLocalVar sc 1)
           `app`
-          (scTermF sc $ LocalVar 2)
+          (scLocalVar sc 2)
           `app`
-          (scTermF sc $ LocalVar 3)
+          (scLocalVar sc 3)
 
    rules <- map ruleOfTerm <$> mapM (scTypeOfGlobal sc)
               [ "Prelude.ite_true"

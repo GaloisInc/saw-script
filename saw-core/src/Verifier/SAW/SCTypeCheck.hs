@@ -56,7 +56,6 @@ import qualified Data.Vector as V
 import Prelude hiding (mapM, maximum)
 
 import Verifier.SAW.Conversion (natConversions)
-import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
@@ -390,9 +389,8 @@ instance TypeInfer (TermF TypedTerm) where
 -- terms. Intuitively, this represents the case where each immediate subterm of
 -- a term has already been labeled with its (most general) type.
 instance TypeInfer (FlatTermF TypedTerm) where
-  typeInfer (GlobalDef d) =
-    do ty <- liftTCM scTypeOfGlobal d
-       typeCheckWHNF ty
+  typeInfer (Primitive ec) =
+    typeCheckWHNF $ typedVal $ ecType ec
   typeInfer UnitValue = liftTCM scUnitType
   typeInfer UnitType = liftTCM scSort (mkSort 0)
   typeInfer (PairValue (TypedTerm _ tx) (TypedTerm _ ty)) =
@@ -465,7 +463,7 @@ instance TypeInfer (FlatTermF TypedTerm) where
        tp' <- typeCheckWHNF tp
        forM_ vs $ \v_elem -> checkSubtype v_elem tp'
        liftTCM scVecType n tp'
-  typeInfer (StringLit{}) = liftTCM scFlatTermF preludeStringType
+  typeInfer (StringLit{}) = liftTCM scStringType
   typeInfer (ExtCns ec) =
     -- FIXME: should we check that the type of ecType is a sort?
     typeCheckWHNF $ typedVal $ ecType ec
