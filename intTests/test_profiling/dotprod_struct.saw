@@ -18,8 +18,8 @@ let dotprod_spec n = do {
     (ys, ysp) <- ptr_to_fresh "ys" (llvm_array n (llvm_int 32));
     let xval = llvm_struct_value [ xsp, nt ];
     let yval = llvm_struct_value [ ysp, nt ];
-    xp <- alloc_init (llvm_struct "struct.vec_t") xval;
-    yp <- alloc_init (llvm_struct "struct.vec_t") yval;
+    xp <- alloc_init (llvm_alias "struct.vec_t") xval;
+    yp <- alloc_init (llvm_alias "struct.vec_t") yval;
     llvm_execute_func [xp, yp];
     llvm_return (llvm_term {{ dotprod xs ys }});
 };

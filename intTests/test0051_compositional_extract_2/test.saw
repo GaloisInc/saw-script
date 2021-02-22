@@ -10,19 +10,19 @@ let ptr_to_fresh nm ty = do {
 };
 
 let add_spec = do {
-  r_p <- llvm_alloc (llvm_struct "struct.uint128_t");
-  (_, a_p) <- ptr_to_fresh "a" (llvm_struct "struct.uint128_t");
-  (_, b_p) <- ptr_to_fresh "b" (llvm_struct "struct.uint128_t");
+  r_p <- llvm_alloc (llvm_alias "struct.uint128_t");
+  (_, a_p) <- ptr_to_fresh "a" (llvm_alias "struct.uint128_t");
+  (_, b_p) <- ptr_to_fresh "b" (llvm_alias "struct.uint128_t");
   llvm_execute_func [r_p, a_p, b_p];
-  r <- llvm_fresh_var "r" (llvm_struct "struct.uint128_t");
+  r <- llvm_fresh_var "r" (llvm_alias "struct.uint128_t");
   llvm_points_to r_p (llvm_term r);
 };
 
 let sum_spec n = do {
-  s_p <- llvm_alloc (llvm_struct "struct.uint128_t");
-  (_, a_p) <- ptr_to_fresh "a" (llvm_array n (llvm_struct "struct.uint128_t"));
+  s_p <- llvm_alloc (llvm_alias "struct.uint128_t");
+  (_, a_p) <- ptr_to_fresh "a" (llvm_array n (llvm_alias "struct.uint128_t"));
   llvm_execute_func [s_p, a_p, (llvm_term {{ `n:[64] }})];
-  s <- llvm_fresh_var "s" (llvm_struct "struct.uint128_t");
+  s <- llvm_fresh_var "s" (llvm_alias "struct.uint128_t");
   llvm_points_to s_p (llvm_term s);
 };
 

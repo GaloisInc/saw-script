@@ -45,7 +45,7 @@ llvm_verify m "array_swap" [] false array_swap_spec z3;
 let struct_swap_spec = do {
     x <- llvm_fresh_var "x" (llvm_int 32);
     y <- llvm_fresh_var "y" (llvm_int 32);
-    s <- llvm_alloc (llvm_struct "struct.foo");
+    s <- llvm_alloc (llvm_alias "struct.foo");
     llvm_points_to s (llvm_packed_struct_value [llvm_term x, llvm_term y]);
 
     llvm_execute_func [s];
@@ -54,7 +54,7 @@ let struct_swap_spec = do {
     llvm_points_to (llvm_field s "y") (llvm_term x);
 };
 
-// A variant of struct_swap_spec that uses llvm_struct_type instead of llvm_struct.
+// A variant of struct_swap_spec that uses llvm_struct_type instead of llvm_alias.
 let struct_swap_spec2 = do {
     x <- llvm_fresh_var "x" (llvm_int 32);
     y <- llvm_fresh_var "y" (llvm_int 32);

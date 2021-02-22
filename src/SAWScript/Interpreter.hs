@@ -1712,10 +1712,16 @@ primitives = Map.fromList
     , "given type."
     ]
 
-  , prim "llvm_struct"         "String -> LLVMType"
-    (pureVal llvm_struct)
+  , prim "llvm_alias"          "String -> LLVMType"
+    (pureVal llvm_alias)
     Current
-    [ "The type of an LLVM struct of the given name."
+    [ "The type of an LLVM alias for the given name. Often times, this is used"
+    , "to alias a struct type."
+    ]
+  , prim "llvm_struct"         "String -> LLVMType"
+    (pureVal llvm_alias)
+    Current
+    [ "Legacy alternative name for `llvm_alias`."
     ]
 
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"

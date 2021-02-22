@@ -15,7 +15,7 @@ let {{
 swap_ov <-
   llvm_verify bc "swap" [] false
     do {
-      let t = llvm_struct "struct.triple";
+      let t = llvm_alias "struct.triple";
       p <- llvm_alloc t;
       x <- llvm_fresh_var "x" t;
       llvm_points_to p (llvm_term x);

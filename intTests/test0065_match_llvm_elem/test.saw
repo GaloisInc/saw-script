@@ -21,7 +21,7 @@ let g_false_spec = do {
 };
 
 let h_spec = do {
-  s_p <- llvm_alloc (llvm_struct "struct.s");
+  s_p <- llvm_alloc (llvm_alias "struct.s");
   llvm_execute_func [(llvm_field s_p "y"), s_p];
 };
 

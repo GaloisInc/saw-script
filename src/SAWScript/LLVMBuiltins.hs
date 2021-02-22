@@ -61,8 +61,8 @@ llvm_double = LLVM.PrimType (LLVM.FloatType LLVM.Double)
 llvm_array :: Int -> LLVM.Type -> LLVM.Type
 llvm_array n t = LLVM.Array (fromIntegral n) t
 
-llvm_struct :: String -> LLVM.Type
-llvm_struct n = LLVM.Alias (fromString n)
+llvm_alias :: String -> LLVM.Type
+llvm_alias n = LLVM.Alias (fromString n)
 
 llvm_packed_struct_type :: [LLVM.Type] -> LLVM.Type
 llvm_packed_struct_type = LLVM.PackedStruct

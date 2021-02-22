@@ -1,14 +1,14 @@
 /** f clears the 2x4 array of 32-bit unsigned ints in the referenced struct */
     let f_spec : CrucibleSetup() = do {
         i <- llvm_fresh_var "w.i" (llvm_array 2 (llvm_array 4 (llvm_int 32)));
-        pw <- llvm_alloc (llvm_struct "struct.BI");
+        pw <- llvm_alloc (llvm_alias "struct.BI");
         llvm_points_to pw (llvm_struct_value [llvm_term i]);
 
         llvm_execute_func [pw];
         llvm_points_to pw (llvm_struct_value [llvm_term {{ zero:[2][4][32] }} ]);
     };
 
-    // A variant of f_spec that uses llvm_struct_type instead of llvm_struct.
+    // A variant of f_spec that uses llvm_struct_type instead of llvm_alias.
     let f_spec2 : CrucibleSetup() = do {
         i <- llvm_fresh_var "w.i" (llvm_array 2 (llvm_array 4 (llvm_int 32)));
         pw <- llvm_alloc (llvm_struct_type [llvm_array 2 (llvm_array 4 (llvm_int 32))]);
