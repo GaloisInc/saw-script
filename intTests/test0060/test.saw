@@ -54,4 +54,18 @@ let struct_swap_spec = do {
     llvm_points_to (llvm_field s "y") (llvm_term x);
 };
 
+// A variant of struct_swap_spec that uses llvm_struct_type instead of llvm_struct.
+let struct_swap_spec2 = do {
+    x <- llvm_fresh_var "x" (llvm_int 32);
+    y <- llvm_fresh_var "y" (llvm_int 32);
+    s <- llvm_alloc (llvm_packed_struct_type [llvm_int 32, llvm_int 32]);
+    llvm_points_to s (llvm_packed_struct_value [llvm_term x, llvm_term y]);
+
+    llvm_execute_func [s];
+
+    llvm_points_to (llvm_elem s 0) (llvm_term y);
+    llvm_points_to (llvm_elem s 1) (llvm_term x);
+};
+
 llvm_verify m "struct_swap" [] false struct_swap_spec z3;
+llvm_verify m "struct_swap" [] false struct_swap_spec2 z3;

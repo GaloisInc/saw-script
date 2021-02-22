@@ -2403,6 +2403,12 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_array_value`." ]
 
+  , prim "llvm_struct_type"
+    "[LLVMType] -> LLVMType"
+    (pureVal llvm_struct_type)
+    Current
+    [ "The type of an LLVM struct with elements of the given types." ]
+
   , prim "llvm_struct_value"
     "[SetupValue] -> SetupValue"
     (pureVal (CIR.anySetupStruct False))
@@ -2414,6 +2420,12 @@ primitives = Map.fromList
     (pureVal (CIR.anySetupStruct False))
     Current
     [ "Legacy alternative name for `llvm_struct_value`." ]
+
+  , prim "llvm_packed_struct_type"
+    "[LLVMType] -> LLVMType"
+    (pureVal llvm_packed_struct_type)
+    Current
+    [ "The type of a packed LLVM struct with elements of the given types." ]
 
   , prim "llvm_packed_struct_value"
     "[SetupValue] -> SetupValue"

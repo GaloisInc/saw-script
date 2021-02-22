@@ -63,3 +63,9 @@ llvm_array n t = LLVM.Array (fromIntegral n) t
 
 llvm_struct :: String -> LLVM.Type
 llvm_struct n = LLVM.Alias (fromString n)
+
+llvm_packed_struct_type :: [LLVM.Type] -> LLVM.Type
+llvm_packed_struct_type = LLVM.PackedStruct
+
+llvm_struct_type :: [LLVM.Type] -> LLVM.Type
+llvm_struct_type = LLVM.Struct

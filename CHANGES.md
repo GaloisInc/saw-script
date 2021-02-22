@@ -15,6 +15,10 @@ When the path to Java is known, SAW can automatically add system-related
 JAR files to the JAR path, which eliminates the need to manually specify
 these files with `-j`.
 
+SAWScript includes two new functions, `llvm_struct_type` and
+`llvm_packed_struct_type`, for constructing an LLVM struct type from a list
+of other LLVM types.
+
 # Version 0.7
 
 ## New Features

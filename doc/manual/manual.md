@@ -1928,6 +1928,8 @@ LLVM types are built with this set of functions:
 * `llvm_struct : String -> LLVMType`
 * `llvm_float : LLVMType`
 * `llvm_double : LLVMType`
+* `llvm_packed_struct : [LLVMType] -> LLVMType`
+* `llvm_struct : [LLVMType] -> LLVMType`
 
 Java types are built up using the following functions:
 

@@ -8,10 +8,21 @@
         llvm_points_to pw (llvm_struct_value [llvm_term {{ zero:[2][4][32] }} ]);
     };
 
+    // A variant of f_spec that uses llvm_struct_type instead of llvm_struct.
+    let f_spec2 : CrucibleSetup() = do {
+        i <- llvm_fresh_var "w.i" (llvm_array 2 (llvm_array 4 (llvm_int 32)));
+        pw <- llvm_alloc (llvm_struct_type [llvm_array 2 (llvm_array 4 (llvm_int 32))]);
+        llvm_points_to pw (llvm_struct_value [llvm_term i]);
+
+        llvm_execute_func [pw];
+        llvm_points_to pw (llvm_struct_value [llvm_term {{ zero:[2][4][32] }} ]);
+    };
+
     let main : TopLevel () = do {
         structTest <- llvm_load_module "test.bc";
 
         f_result <- llvm_verify structTest "f" [] false f_spec z3;
+        f_result2 <- llvm_verify structTest "f" [] false f_spec2 z3;
 
         print "Done!";
     };
