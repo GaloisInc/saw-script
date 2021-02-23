@@ -8,7 +8,6 @@ where
 import Data.Parameterized.Pair
 import Data.Parameterized.Some
 import Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Prettyprinter as PP
 
 import Lang.Crucible.Types

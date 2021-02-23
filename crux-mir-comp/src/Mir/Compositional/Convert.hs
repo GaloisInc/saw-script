@@ -13,9 +13,8 @@ import Control.Lens ((^.), (^..), each)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Functor.Const
-import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Parameterized.Context (Ctx(..), pattern Empty, pattern (:>), Assignment)
+import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
@@ -93,6 +92,8 @@ tyToShape col ty = go ty
     goPrim :: M.Ty -> Some TypeShape
     goPrim ty | Some tpr <- tyToRepr ty, AsBaseType btpr <- asBaseType tpr =
         Some $ PrimShape ty btpr
+    goPrim ty | Some tpr <- tyToRepr ty =
+        error $ "tyToShape: type " ++ show ty ++ " produced non-primitive type " ++ show tpr
 
     goUnit :: M.Ty -> Some TypeShape
     goUnit ty = Some $ UnitShape ty
@@ -140,7 +141,7 @@ shapeType shp = go shp
     go (PrimShape _ btpr) = baseToType btpr
     go (TupleShape _ _ flds) = StructRepr $ fmapFC fieldShapeType flds
     go (ArrayShape _ _ shp) = MirVectorRepr $ shapeType shp
-    go (StructShape _ _ flds) = AnyRepr
+    go (StructShape _ _ _flds) = AnyRepr
     go (RefShape _ _ tpr) = MirReferenceRepr tpr
 
 fieldShapeType :: FieldShape tp -> TypeRepr tp
@@ -172,10 +173,10 @@ visitRegValueExprs ::
 visitRegValueExprs _sym tpr_ v_ f = go tpr_ v_
   where
     go :: forall tp'. TypeRepr tp' -> RegValue sym tp' -> m ()
-    go tpr v | AsBaseType btpr <- asBaseType tpr = f v
+    go tpr v | AsBaseType _btpr <- asBaseType tpr = f v
     go AnyRepr (AnyValue tpr' v') = go tpr' v'
     go UnitRepr () = return ()
-    go (MaybeRepr tpr') W4.Unassigned = return ()
+    go (MaybeRepr _tpr) W4.Unassigned = return ()
     go (MaybeRepr tpr') (W4.PE p v') = f p >> go tpr' v'
     go (VectorRepr tpr') vec = mapM_ (go tpr') vec
     go (StructRepr ctxr) fields = forMWithRepr_ ctxr fields $ \tpr' (RV v') -> go tpr' v'
@@ -241,7 +242,7 @@ readMaybeType sym desc tpr rv = readPartExprMaybe sym rv >>= \x -> case x of
         " of type " ++ show tpr
 
 readPartExprMaybe :: IsSymInterface sym => sym -> W4.PartExpr (W4.Pred sym) a -> IO (Maybe a)
-readPartExprMaybe sym W4.Unassigned = return Nothing
-readPartExprMaybe sym (W4.PE p v)
+readPartExprMaybe _sym W4.Unassigned = return Nothing
+readPartExprMaybe _sym (W4.PE p v)
   | Just True <- W4.asConstantPred p = return $ Just v
   | otherwise = return Nothing

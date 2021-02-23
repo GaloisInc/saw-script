@@ -8,7 +8,7 @@
 module Mir.Compositional
 where
 
-import Data.Parameterized.Context (Ctx(..), pattern Empty, pattern (:>), Assignment)
+import Data.Parameterized.Context (pattern Empty, pattern (:>))
 import Data.Parameterized.NatRepr
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -16,8 +16,6 @@ import qualified Data.Text as Text
 import Lang.Crucible.Backend
 import Lang.Crucible.CFG.Core
 import Lang.Crucible.Simulator
-import Lang.Crucible.Simulator.OverrideSim
-import Lang.Crucible.Simulator.RegMap
 
 import qualified What4.Expr.Builder as W4
 
@@ -27,7 +25,6 @@ import Crux.Types
 import Mir.DefId
 import Mir.Generator (CollectionState)
 import Mir.Intrinsics
-import Mir.Language (BindExtraOverridesFn)
 
 import Mir.Compositional.Builder (builderNew)
 import Mir.Compositional.Clobber (clobberGlobalsOverride)
@@ -41,7 +38,7 @@ compositionalOverrides ::
     Text ->
     CFG MIR blocks args ret ->
     Maybe (OverrideSim (Model sym) sym MIR rtp a r ())
-compositionalOverrides symOnline cs name cfg
+compositionalOverrides _symOnline cs name cfg
 
   | (normDefId "crucible::method_spec::raw::builder_new" <> "::_inst") `Text.isPrefixOf` name
   , Empty <- cfgArgTypes cfg
@@ -52,7 +49,7 @@ compositionalOverrides symOnline cs name cfg
         return $ MethodSpecBuilder msb
 
   | (normDefId "crucible::method_spec::raw::builder_add_arg" <> "::_inst") `Text.isPrefixOf` name
-  , Empty :> MethodSpecBuilderRepr :> MirReferenceRepr tpr <- cfgArgTypes cfg
+  , Empty :> MethodSpecBuilderRepr :> MirReferenceRepr _tpr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_add_arg" MethodSpecBuilderRepr $ do
@@ -62,7 +59,7 @@ compositionalOverrides symOnline cs name cfg
         return $ MethodSpecBuilder msb'
 
   | (normDefId "crucible::method_spec::raw::builder_set_return" <> "::_inst") `Text.isPrefixOf` name
-  , Empty :> MethodSpecBuilderRepr :> MirReferenceRepr tpr <- cfgArgTypes cfg
+  , Empty :> MethodSpecBuilderRepr :> MirReferenceRepr _tpr <- cfgArgTypes cfg
   , MethodSpecBuilderRepr <- cfgReturnType cfg
   = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
     mkOverride' "method_spec_builder_set_return" MethodSpecBuilderRepr $ do

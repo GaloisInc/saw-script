@@ -15,27 +15,22 @@ module Mir.Compositional.Override
 where
 
 import Control.Applicative ((<|>))
-import Control.Lens
-    (makeLenses, (^.), (^..), (^?), (%=), (.=), (&), (.~), (%~), use, at, ix,
-        each, to, folded, _Wrapped)
+import Control.Lens (makeLenses, (^.), (^..), (^?), (%=), use, ix, each, to)
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import qualified Data.ByteString as BS
 import Data.Foldable
-import Data.Functor.Const
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Parameterized.Context (Ctx(..), pattern Empty, pattern (:>), Assignment)
+import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import qualified Data.Parameterized.Context as Ctx
 import Data.Parameterized.Pair
 import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
-import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Vector as V
@@ -50,9 +45,6 @@ import What4.ProgramLoc
 import Lang.Crucible.Backend
 import Lang.Crucible.FunctionHandle
 import Lang.Crucible.Simulator
-import Lang.Crucible.Simulator.OverrideSim
-import Lang.Crucible.Simulator.RegMap
-import Lang.Crucible.Simulator.RegValue
 import Lang.Crucible.Types
 
 import qualified Verifier.SAW.Prelude as SAW
@@ -122,7 +114,7 @@ enable ::
     OverrideSim (Model sym) sym MIR rtp args ret ()
 enable ms = do
     let funcName = ms ^. msSpec . MS.csMethod
-    MirHandle _name sig mh <- case cs ^? handleMap . ix funcName of
+    MirHandle _name _sig mh <- case cs ^? handleMap . ix funcName of
         Just x -> return x
         Nothing -> error $ "MethodSpec has bad method name " ++
             show (ms ^. msSpec . MS.csMethod) ++ "?"
@@ -209,10 +201,12 @@ runSpec cs mh ms = do
         -- Match argument SetupValues against argVals.
         forM_ (Map.toList $ ms ^. MS.csArgBindings) $ \(i, (_, sv)) -> do
             ty <- case ms ^. MS.csArgs ^? ix (fromIntegral i) of
-                Nothing -> error $ show ("wrong number of args", ms ^. MS.csMethod, i)
+                Nothing -> error $ "wrong number of args for " ++ show (ms ^. MS.csMethod) ++
+                    ": no arg at index " ++ show i
                 Just x -> return x
             AnyValue tpr rv <- case argVals' ^? ix i of
-                Nothing -> error $ show ("wrong number of args", ms ^. MS.csMethod, i)
+                Nothing -> error $ "wrong number of args for " ++ show (ms ^. MS.csMethod) ++
+                    ": no arg at index " ++ show i
                 Just x -> return x
             let shp = tyToShapeEq col ty tpr
             matchArg sym eval shp rv sv
@@ -274,7 +268,7 @@ runSpec cs mh ms = do
 
     let preAllocMap = os ^. MS.setupValueSub
 
-    let postAllocDefs = filter (\(k,v) -> not $ Map.member k preAllocMap) $
+    let postAllocDefs = filter (\(k,_v) -> not $ Map.member k preAllocMap) $
             Map.toList $ ms ^. MS.csPostState . MS.csAllocs
     postAllocMap <- liftM Map.fromList $ forM postAllocDefs $ \(alloc, (Some tpr, _, _)) -> do
         ref <- newMirRefSim tpr
@@ -344,7 +338,7 @@ matchArg sym eval shp rv sv = go shp rv sv
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MS.OverrideMatcher' sym MIR rorw ()
     go (UnitShape _) () (MS.SetupStruct () False []) = return ()
-    go (PrimShape _ btpr) expr (MS.SetupTerm tt) = do
+    go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
         loc <- use MS.osLocation
         exprTerm <- liftIO $ eval expr
         var <- case SAW.asExtCns $ SAW.ttTerm tt of
@@ -457,6 +451,9 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
                 OptField shp' -> W4.justPartExpr sym <$> go shp' sv
             rvs <- loop shps svs
             return $ rvs :> RV rv
+        loop shps svs = error $ "setupToReg: type error: got TypeShapes for " ++
+            show (Ctx.sizeInt $ Ctx.size shps) ++ " fields, but got " ++
+            show (length svs) ++ " SetupValues"
 
 
 -- | Convert a `SetupCondition` from the MethodSpec into a boolean `SAW.Term`
@@ -467,12 +464,14 @@ condTerm ::
     SAW.SharedContext ->
     MS.SetupCondition MIR ->
     MS.OverrideMatcher' sym MIR rorw SAW.Term
-condTerm sc (MS.SetupCond_Equal loc sv1 sv2) = do
-    error $ "learnCond SetupCond_Equal NYI" -- TODO
-condTerm sc (MS.SetupCond_Pred loc tt) = do
+condTerm _sc (MS.SetupCond_Equal _loc _sv1 _sv2) = do
+    error $ "learnCond: SetupCond_Equal NYI" -- TODO
+condTerm sc (MS.SetupCond_Pred _loc tt) = do
     sub <- use MS.termSub
     t' <- liftIO $ SAW.scInstantiateExt sc sub $ SAW.ttTerm tt
     return t'
+condTerm _ (MS.SetupCond_Ghost _ _ _ _) = do
+    error $ "learnCond: SetupCond_Ghost is not supported"
 
 -- | Convert a `SAW.Term` into a `W4.Expr`.
 termToExpr :: forall sym t st fs.

@@ -102,8 +102,7 @@ clobberImmutSymbolic sym loc nameStr shp rv = go shp rv
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     -- Since this ref is in immutable memory, whatever behavior we're
     -- approximating with this clobber can't possibly modify it.
-    go (RefShape _ _ tpr) rv = return rv
-    go shp _rv = error $ "clobberImmutSymbolic: " ++ show (shapeType shp) ++ " NYI"
+    go (RefShape _ _ _tpr) rv = return rv
 
     goField :: forall tp. FieldShape tp -> RegValue' sym tp ->
         OverrideSim (Model sym) sym MIR rtp args ret (RegValue' sym tp)
