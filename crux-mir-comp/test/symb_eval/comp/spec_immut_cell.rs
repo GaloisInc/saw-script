@@ -1,7 +1,7 @@
 use std::cell::Cell;
 extern crate crucible;
 use crucible::*;
-use crucible::method_spec::{MethodSpec, MethodSpecBuilder};
+use crucible::method_spec::{MethodSpec, MethodSpecBuilder, clobber_globals};
 
 fn f(x: &[Cell<u8>; 2]) {
     x[0].swap(&x[1])
@@ -9,6 +9,7 @@ fn f(x: &[Cell<u8>; 2]) {
 
 #[crux_test]
 fn f_test() {
+    clobber_globals();
     let mut x = [
         Cell::new(u8::symbolic("x0")),
         Cell::new(u8::symbolic("x1")),

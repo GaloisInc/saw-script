@@ -1,6 +1,6 @@
 extern crate crucible;
 use crucible::*;
-use crucible::method_spec::{MethodSpec, MethodSpecBuilder};
+use crucible::method_spec::{MethodSpec, MethodSpecBuilder, clobber_globals};
 
 struct S(u8, u8);
 
@@ -16,6 +16,7 @@ fn f(x: S) -> S {
 
 #[crux_test]
 fn f_test() {
+    clobber_globals();
     let x = <S>::symbolic("x");
     crucible_assume!(x.0 > 0);
     let y = f(x);

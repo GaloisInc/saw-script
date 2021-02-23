@@ -4,8 +4,8 @@ test spec_immut_cell/3a1fbbbh::use_f[0]: FAILED
 failures:
 
 ---- spec_immut_cell/3a1fbbbh::use_f[0] counterexamples ----
-Failure for ./lib/crucible/lib.rs:36:41: 36:58 !test/symb_eval/comp/spec_immut_cell.rs:67:5: 67:36: error: in spec_immut_cell/3a1fbbbh::use_f[0]
-MIR assertion at test/symb_eval/comp/spec_immut_cell.rs:67:5:
+Failure for ./lib/crucible/lib.rs:36:41: 36:58 !test/symb_eval/comp/spec_immut_cell.rs:68:5: 68:36: error: in spec_immut_cell/3a1fbbbh::use_f[0]
+MIR assertion at test/symb_eval/comp/spec_immut_cell.rs:68:5:
 	d.get() < 10
 
 [Crux] Overall status: Invalid.

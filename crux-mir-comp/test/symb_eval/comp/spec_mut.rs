@@ -1,6 +1,6 @@
 extern crate crucible;
 use crucible::*;
-use crucible::method_spec::{MethodSpec, MethodSpecBuilder};
+use crucible::method_spec::{MethodSpec, MethodSpecBuilder, clobber_globals};
 
 fn f(x: &mut [u8; 2]) {
     x.swap(0, 1);
@@ -8,6 +8,7 @@ fn f(x: &mut [u8; 2]) {
 
 #[crux_test]
 fn f_test() {
+    clobber_globals();
     let mut x = <[u8; 2]>::symbolic("x");
     crucible_assume!(x[0] > 0);
     f(&mut x);
