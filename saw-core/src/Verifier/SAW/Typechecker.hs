@@ -413,13 +413,23 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- Step 5: typecheck the constructors, and build Ctors for them
   typed_ctors <-
     mapM (\(Un.Ctor (PosPair p' c) ctx body) ->
-           (c,) <$> typedVal <$> typeInferComplete (Un.Pi p' ctx body)) c_decls
+           (c,) <$> typeInferComplete (Un.Pi p' ctx body)) c_decls
   ctors <-
     case ctxBindingsOfTerms dtParams of
       ExistsTp p_ctx ->
         case ctxBindingsOfTerms dtIndices of
           ExistsTp ix_ctx ->
-            forM typed_ctors $ \(c, tp) ->
+            forM typed_ctors $ \(c, typed_tp) ->
+            -- Check that the universe level of the type of each constructor
+            (case asSort (typedType typed_tp) of
+                Just ctor_sort
+                  | dtSort /= propSort && ctor_sort > dtSort ->
+                    err ("Universe level of constructors should be strictly \
+                         contained in that of the datatype")
+                Just _ -> return ()
+                Nothing -> error "Internal error: type of the type of constructor \
+                                 is not a sort!") >>
+            let tp = typedVal typed_tp in
             case mkCtorArgStruct dtName p_ctx ix_ctx tp of
               Just arg_struct ->
                 liftTCM scBuildCtor dtName (mkIdentText mnm c)
