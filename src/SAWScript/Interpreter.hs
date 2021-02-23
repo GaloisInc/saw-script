@@ -1712,10 +1712,16 @@ primitives = Map.fromList
     , "given type."
     ]
 
-  , prim "llvm_struct"         "String -> LLVMType"
-    (pureVal llvm_struct)
+  , prim "llvm_alias"          "String -> LLVMType"
+    (pureVal llvm_alias)
     Current
-    [ "The type of an LLVM struct of the given name."
+    [ "The type of an LLVM alias for the given name. Often times, this is used"
+    , "to alias a struct type."
+    ]
+  , prim "llvm_struct"         "String -> LLVMType"
+    (pureVal llvm_alias)
+    Current
+    [ "Legacy alternative name for `llvm_alias`."
     ]
 
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"
@@ -2403,6 +2409,12 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_array_value`." ]
 
+  , prim "llvm_struct_type"
+    "[LLVMType] -> LLVMType"
+    (pureVal llvm_struct_type)
+    Current
+    [ "The type of an LLVM struct with elements of the given types." ]
+
   , prim "llvm_struct_value"
     "[SetupValue] -> SetupValue"
     (pureVal (CIR.anySetupStruct False))
@@ -2414,6 +2426,12 @@ primitives = Map.fromList
     (pureVal (CIR.anySetupStruct False))
     Current
     [ "Legacy alternative name for `llvm_struct_value`." ]
+
+  , prim "llvm_packed_struct_type"
+    "[LLVMType] -> LLVMType"
+    (pureVal llvm_packed_struct_type)
+    Current
+    [ "The type of a packed LLVM struct with elements of the given types." ]
 
   , prim "llvm_packed_struct_value"
     "[SetupValue] -> SetupValue"

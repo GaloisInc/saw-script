@@ -9,7 +9,7 @@ from env_server import *
 
 def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tuple[FreshVar, SetupVal]:
     """Add to``Contract`` ``c`` an allocation of a pointer of type ``ty`` initialized to an unknown fresh value.
-    
+
     :returns A fresh variable bound to the pointers initial value and the newly allocated pointer. (The fresh
              variable will be assigned ``name`` if provided/available.)"""
     var = c.fresh_var(ty, name)
@@ -18,7 +18,7 @@ def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tu
 
 # let set_spec = do {
 #     (x, px) <- ptr_to_fresh "x" (llvm_array 2 (llvm_int 32));
-#     po <- alloc_init (llvm_struct "struct.s") (crucible_struct [px]);
+#     po <- alloc_init (llvm_alias "struct.s") (crucible_struct [px]);
 #     crucible_execute_func [po];
 #     crucible_points_to po (crucible_struct [px]);
 #     crucible_points_to px (crucible_term {{ [0, 0] : [2][32] }});
@@ -36,7 +36,7 @@ class SetContract(Contract):
 
 # let add_spec = do {
 #     (x, px) <- ptr_to_fresh "x" (llvm_array 2 (llvm_int 32));
-#     po <- alloc_init (llvm_struct "struct.s") (crucible_struct [px]);
+#     po <- alloc_init (llvm_alias "struct.s") (crucible_struct [px]);
 #     crucible_execute_func [po];
 #     crucible_return (crucible_term {{ x@0 + x@1 }});
 # };
@@ -51,7 +51,7 @@ class AddContract(Contract):
 
 # let id_spec = do {
 #     (x, px) <- ptr_to_fresh "x" (llvm_array 2 (llvm_int 32));
-#     po <- alloc_init (llvm_struct "struct.s") (crucible_struct [px]);
+#     po <- alloc_init (llvm_alias "struct.s") (crucible_struct [px]);
 #     crucible_execute_func [po];
 #     crucible_return po;
 # };

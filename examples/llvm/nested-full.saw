@@ -10,7 +10,7 @@ let f_spec = do {
     x <- llvm_fresh_var "x" (llvm_int 32);
     z <- llvm_fresh_var "z" (llvm_int 32);
     let s = (llvm_term {{ (x, (a, b), z) }});
-    p <- alloc_init (llvm_struct "struct.t") s;
+    p <- alloc_init (llvm_alias "struct.t") s;
     llvm_execute_func [p];
     llvm_return (llvm_term {{ b }});
 };

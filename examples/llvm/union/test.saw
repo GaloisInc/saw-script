@@ -18,7 +18,7 @@ let ptr_to_fresh n ty = do {
 // The argument 'INC' specifies which 'alg' enum to test.
 let inc_spec INC = do {
 
-  stp <- llvm_alloc (llvm_struct "struct.st");
+  stp <- llvm_alloc (llvm_alias "struct.st");
 
   // The union is represented by the largest element type,
   // i.e. 'inc_2_st'. The inner '.0' dereferences the union itself.
