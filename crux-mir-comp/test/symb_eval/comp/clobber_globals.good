@@ -1,0 +1,16 @@
+test clobber_globals/3a1fbbbh::f_test[0]: FAILED
+test clobber_globals/3a1fbbbh::use_f[0]: FAILED
+
+failures:
+
+---- clobber_globals/3a1fbbbh::f_test[0] counterexamples ----
+Failure for test/symb_eval/comp/clobber_globals.rs:16:9: 16:70: error: in clobber_globals/3a1fbbbh::f_test[0]
+MIR assertion at test/symb_eval/comp/clobber_globals.rs:15:5:
+	expected failure; ATOMIC was clobbered by clobber_globals()
+
+---- clobber_globals/3a1fbbbh::use_f[0] counterexamples ----
+Failure for test/symb_eval/comp/clobber_globals.rs:38:9: 38:61: error: in clobber_globals/3a1fbbbh::use_f[0]
+MIR assertion at test/symb_eval/comp/clobber_globals.rs:37:5:
+	expected failure; ATOMIC was clobbered by f's spec
+
+[Crux] Overall status: Invalid.
