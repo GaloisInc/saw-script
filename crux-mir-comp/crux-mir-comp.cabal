@@ -47,6 +47,7 @@ library
   hs-source-dirs: src
   exposed-modules: Mir.Compositional
                    Mir.Compositional.Builder
+                   Mir.Compositional.Clobber
                    Mir.Compositional.Convert
                    Mir.Compositional.MethodSpec
                    Mir.Compositional.Override

@@ -30,6 +30,7 @@ import Mir.Intrinsics
 import Mir.Language (BindExtraOverridesFn)
 
 import Mir.Compositional.Builder (builderNew)
+import Mir.Compositional.Clobber (clobberGlobalsOverride)
 
 
 compositionalOverrides ::
@@ -95,6 +96,14 @@ compositionalOverrides symOnline cs name cfg
     mkOverride' "method_spec_builder_finish" MethodSpecRepr $ do
         RegMap (Empty :> RegEntry _tpr (MethodSpecBuilder msb)) <- getOverrideArgs
         msbFinish msb
+
+
+  | normDefId "crucible::method_spec::raw::clobber_globals" == name
+  , Empty <- cfgArgTypes cfg
+  , UnitRepr <- cfgReturnType cfg
+  = Just $ bindFnHandle (cfgHandle cfg) $ UseOverride $
+    mkOverride' "method_spec_clobber_globals" UnitRepr $ do
+        clobberGlobalsOverride cs
 
 
   | normDefId "crucible::method_spec::raw::spec_pretty_print" == name

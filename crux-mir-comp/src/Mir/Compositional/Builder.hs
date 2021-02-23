@@ -411,7 +411,7 @@ finish msb = do
     -- TODO: also undo any changes to Crucible global variables / refcells
     -- (correct spec functions shouldn't make such changes, but it would be
     -- nice to warn the user if they accidentally do)
-    liftIO $ popAssumptionFrameAndObligations sym (msb ^. msbSnapshotFrame)
+    _ <- liftIO $ popAssumptionFrameAndObligations sym (msb ^. msbSnapshotFrame)
 
     let preVars = msb ^. msbPre . seVars
     let postVars = msb ^. msbPost . seVars
@@ -425,7 +425,6 @@ finish msb = do
     let postAllocs = Map.fromList [(alloc, (Some tpr, mutbl, ty))
             | (Pair tpr _, mutbl, ty, alloc) <- toList $ msb ^. msbPost . seRefs]
 
-    let loc = msb ^. msbSpec . MS.csLoc
     let ms = msb ^. msbSpec
             & MS.csPreState . MS.csFreshVars .~ preVars'
             & MS.csPreState . MS.csAllocs .~ preAllocs
@@ -437,7 +436,6 @@ finish msb = do
     return $ M.MethodSpec ms' (indexValue nonce)
 
   where
-    col = msb ^. msbCollection
     sc = msb ^. msbSharedContext
     eval :: forall tp. W4.Expr t tp -> IO SAW.Term
     eval = msb ^. msbEval
@@ -536,7 +534,7 @@ refToAlloc sym p mutbl ty tpr ref = do
         MirReferenceMux sym tp ->
         [(Pair TypeRepr (MirReferenceMux sym), M.Mutability, M.Ty, MS.AllocIndex)] ->
         IO (Maybe MS.AllocIndex)
-    lookupAlloc ref [] = return Nothing
+    lookupAlloc _ref [] = return Nothing
     lookupAlloc ref ((Pair tpr' ref', _, _, alloc) : rs) = case testEquality tpr tpr' of
         Just Refl -> do
             eq <- mirRef_eqIO sym ref ref'
