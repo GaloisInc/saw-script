@@ -1377,7 +1377,6 @@ baseCryptolType bt =
   case bt of
     Crucible.BaseBoolRepr -> pure $ Cryptol.tBit
     Crucible.BaseBVRepr w -> pure $ Cryptol.tWord (Cryptol.tNum (natValue w))
-    Crucible.BaseNatRepr  -> Nothing
     Crucible.BaseIntegerRepr -> pure $ Cryptol.tInteger
     Crucible.BaseArrayRepr {} -> Nothing
     Crucible.BaseFloatRepr _ -> Nothing

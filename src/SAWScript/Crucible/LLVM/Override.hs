@@ -1785,7 +1785,7 @@ executeFreshPointer ::
 executeFreshPointer cc (AllocIndex i) =
   do let mkName base = W4.systemSymbol (base ++ show i ++ "!")
          sym         = cc^.ccBackend
-     blk <- W4.freshConstant sym (mkName "blk") W4.BaseNatRepr
+     blk <- W4.freshNat sym (mkName "blk")
      off <- W4.freshConstant sym (mkName "off") (W4.BaseBVRepr Crucible.PtrWidth)
      return (Crucible.LLVMPointer blk off)
 
