@@ -49,6 +49,7 @@ import Control.Monad.Reader
 import Data.List ( (\\) )
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Text (Text)
 #if !MIN_VERSION_base(4,8,0)
 import Data.Traversable (Traversable(..))
 #endif
@@ -148,7 +149,7 @@ data TCError
   | NotRecordType TypedTerm
   | BadRecordField FieldName Term
   | DanglingVar Int
-  | UnboundName String
+  | UnboundName Text
   | SubtypeFailure TypedTerm Term
   | EmptyVectorLit
   | NoSuchDataType Ident
@@ -157,7 +158,7 @@ data TCError
   | BadParamsOrArgsLength Bool Ident [Term] [Term]
   | BadConstType NameInfo Term Term
   | MalformedRecursor Term String
-  | DeclError String String
+  | DeclError Text String
   | ErrorPos Pos TCError
   | ErrorCtx LocalName Term TCError
 
@@ -202,7 +203,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
                 , ishow ty ]
   helper (DanglingVar n) =
       ppWithPos [ return ("Dangling bound variable index: " ++ show n)]
-  helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ str)]
+  helper (UnboundName str) = ppWithPos [ return ("Unbound name: " ++ show str)]
   helper (SubtypeFailure trm tp2) =
       ppWithPos [ return "Inferred type", ishow (typedType trm),
                   return "Not a subtype of expected type", ishow tp2,
@@ -228,7 +229,7 @@ prettyTCError e = runReader (helper e) ([], Nothing) where
       ppWithPos [ return "Malformed recursor application",
                   ishow trm, return reason ]
   helper (DeclError nm reason) =
-    ppWithPos [ return ("Malformed declaration for " ++ nm), return reason ]
+    ppWithPos [ return ("Malformed declaration for " ++ show nm), return reason ]
   helper (ErrorPos p err) =
     local (\(ctx,_) -> (ctx, Just p)) $ helper err
   helper (ErrorCtx x _ err) =

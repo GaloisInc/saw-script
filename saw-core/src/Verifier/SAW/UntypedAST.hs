@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveLift #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
 {- |
@@ -45,6 +46,7 @@ module Verifier.SAW.UntypedAST
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>))
 #endif
+import Data.Text (Text)
 import qualified Data.Text as Text
 
 import qualified Language.Haskell.TH.Syntax as TH
@@ -59,12 +61,12 @@ import Verifier.SAW.TypedAST
   )
 
 data Term
-  = Name (PosPair String)
+  = Name (PosPair Text)
   | Sort Pos Sort
   | App Term Term
   | Lambda Pos TermCtx Term
   | Pi Pos TermCtx Term
-  | Recursor (Maybe ModuleName) (PosPair String)
+  | Recursor (Maybe ModuleName) (PosPair Text)
   | UnitValue Pos
   | UnitType Pos
     -- | New-style records
@@ -79,7 +81,7 @@ data Term
     -- | Identifies a type constraint on the term, i.e., a type ascription
   | TypeConstraint Term Pos Term
   | NatLit Pos Natural
-  | StringLit Pos String
+  | StringLit Pos Text
     -- | Vector literal.
   | VecLit Pos [Term]
   | BadTerm Pos
@@ -87,19 +89,19 @@ data Term
 
 -- | A pattern used for matching a variable.
 data TermVar
-  = TermVar (PosPair String)
+  = TermVar (PosPair LocalName)
   | UnusedVar Pos
   deriving (Eq, Ord, Show, TH.Lift)
 
 -- | Return the 'String' name associated with a 'TermVar'
 termVarString :: TermVar -> String
-termVarString (TermVar (PosPair _ str)) = str
+termVarString (TermVar (PosPair _ str)) = Text.unpack str
 termVarString (UnusedVar _) = "_"
 
 -- | Return the 'LocalName' associated with a 'TermVar'
 termVarLocalName :: TermVar -> LocalName
-termVarLocalName (TermVar (PosPair _ str)) = Text.pack str
-termVarLocalName (UnusedVar _) = Text.pack "_"
+termVarLocalName (TermVar (PosPair _ str)) = str
+termVarLocalName (UnusedVar _) = "_"
 
 -- | A context of 0 or more variable bindings, with types
 type TermCtx = [(TermVar,Term)]
@@ -136,20 +138,20 @@ badTerm :: Pos -> Term
 badTerm = BadTerm
 
 -- | A constructor declaration of the form @c (x1 :: tp1) .. (xn :: tpn) :: tp@
-data CtorDecl = Ctor (PosPair String) TermCtx Term
+data CtorDecl = Ctor (PosPair Text) TermCtx Term
   deriving (Show, TH.Lift)
 
 -- | A top-level declaration in a saw-core file
 data Decl
-   = TypeDecl DefQualifier (PosPair String) Term
+   = TypeDecl DefQualifier (PosPair Text) Term
      -- ^ A declaration of something having a type, where the declaration
      -- qualifier states what flavor of thing it is
-   | DataDecl (PosPair String) TermCtx Term [CtorDecl]
+   | DataDecl (PosPair Text) TermCtx Term [CtorDecl]
      -- ^ A declaration of an inductive data types, with a name, a parameter
      -- context, a return type, and a list of constructor declarations
-   | TermDef (PosPair String) [TermVar] Term
+   | TermDef (PosPair Text) [TermVar] Term
      -- ^ A declaration of a term having a definition, with variables
-   | TypedDef (PosPair String) [(TermVar, Term)] Term Term
+   | TypedDef (PosPair Text) [(TermVar, Term)] Term Term
      -- ^ A definition of something with a specific type, with parameters
   deriving (Show, TH.Lift)
 
@@ -188,20 +190,20 @@ moduleName (Module (PosPair _ mnm) _ _) = mnm
 
 -- | Get a list of all names (i.e., definitions, axioms, or primitives) declared
 -- in a module, along with their types and qualifiers
-moduleTypedDecls :: Module -> [(String, Term)]
+moduleTypedDecls :: Module -> [(Text, Term)]
 moduleTypedDecls (Module _ _ decls) = concatMap helper decls where
-  helper :: Decl -> [(String, Term)]
+  helper :: Decl -> [(Text, Term)]
   helper (TypeDecl _ (PosPair _ nm) tm) = [(nm,tm)]
   helper _ = []
 
 -- | Get a list of all datatypes declared in a module
-moduleDataDecls :: Module -> [(String,TermCtx,Term,[CtorDecl])]
+moduleDataDecls :: Module -> [(Text, TermCtx, Term, [CtorDecl])]
 moduleDataDecls (Module _ _ decls) = concatMap helper decls where
-  helper :: Decl -> [(String,TermCtx,Term,[CtorDecl])]
+  helper :: Decl -> [(Text, TermCtx, Term, [CtorDecl])]
   helper (DataDecl (PosPair _ nm) params tp ctors) = [(nm, params, tp, ctors)]
   helper _ = []
 
-moduleTypedDataDecls :: Module -> [(String,Term)]
+moduleTypedDataDecls :: Module -> [(Text, Term)]
 moduleTypedDataDecls =
   map (\(nm,p_ctx,tp,_) ->
         (nm, Pi (pos tp) p_ctx tp)) . moduleDataDecls
@@ -213,7 +215,7 @@ moduleCtorDecls =
   concatMap (\(_,p_ctx,_,ctors) -> map (p_ctx,) ctors) . moduleDataDecls
 
 -- | Get a list of the names and types of all the constructors in a module
-moduleTypedCtorDecls :: Module -> [(String,Term)]
+moduleTypedCtorDecls :: Module -> [(Text, Term)]
 moduleTypedCtorDecls =
   concatMap (\(_,p_ctx,_,ctors) ->
               map (\(Ctor (PosPair _ nm) ctx tp) ->

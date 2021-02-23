@@ -32,6 +32,8 @@ import qualified Data.ByteString.Lazy as BL
 #if !MIN_VERSION_template_haskell(2,8,0)
 import qualified Data.ByteString.Lazy.UTF8 as UTF8
 #endif
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Language.Haskell.TH
 #if MIN_VERSION_template_haskell(2,7,0)
 import Language.Haskell.TH.Syntax (qAddDependentFile)
@@ -135,13 +137,13 @@ declareTermApplyFun nm n tf =
 --
 -- The number of 'Term's to take as arguments is given by the arity of @tp@,
 -- i.e., the number of nested pi-abstractions it contains at top level.
-declareTypedNameFun :: Q Exp -> ModuleName -> String -> Bool -> Un.Term ->
+declareTypedNameFun :: Q Exp -> ModuleName -> Text -> Bool -> Un.Term ->
                        DecWriter ()
 declareTypedNameFun sc_fun mnm nm apply_p tp =
-  let th_nm = (if apply_p then "scApply" else "sc") ++ show mnm ++ "_" ++ nm in
+  let th_nm = (if apply_p then "scApply" else "sc") ++ show mnm ++ "_" ++ Text.unpack nm in
   declareTermApplyFun th_nm (length $ fst $ Un.asPiList tp) $ \sc ts ->
   [| $(sc_fun) $(varE sc)
-   (mkIdent mnm $(stringE nm))
+   (mkIdent mnm $(stringE (Text.unpack nm)))
    $(ts) |]
 
 -- | Declare a Haskell function
@@ -150,7 +152,7 @@ declareTypedNameFun sc_fun mnm nm apply_p tp =
 --
 -- for declared name (primitive, axiom, or definition) @d@ with type @tp@ in
 -- module @MMM@
-declareDefFun :: ModuleName -> String -> Un.Term -> DecWriter ()
+declareDefFun :: ModuleName -> Text -> Un.Term -> DecWriter ()
 declareDefFun mnm d tp =
   declareTypedNameFun [| scGlobalApply |] mnm d True tp
 
@@ -159,7 +161,7 @@ declareDefFun mnm d tp =
 -- > scMMM_d :: SharedContext -> Term -> ... -> Term -> IO Term
 --
 -- for datatype @d@ with parameters @p_ctx@ and type @tp@ in module @MMM@
-declareDataTypeFun :: ModuleName -> String -> Un.Term -> DecWriter ()
+declareDataTypeFun :: ModuleName -> Text -> Un.Term -> DecWriter ()
 declareDataTypeFun mnm d tp =
   declareTypedNameFun [| scDataTypeApp |] mnm d False tp
 
@@ -168,7 +170,7 @@ declareDataTypeFun mnm d tp =
 -- > scApplyMMM_c :: SharedContext -> Term -> ... -> Term -> IO Term
 --
 -- for constructor @c@ with type (including parameters) @tp@ in module @MMM@
-declareCtorFun :: ModuleName -> String -> Un.Term -> DecWriter ()
+declareCtorFun :: ModuleName -> Text -> Un.Term -> DecWriter ()
 declareCtorFun mnm c tp =
   declareTypedNameFun [| scCtorApp |] mnm c True tp
 
