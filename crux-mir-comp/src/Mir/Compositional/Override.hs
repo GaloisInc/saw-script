@@ -74,6 +74,7 @@ import Mir.Generator
 import Mir.Intrinsics hiding (MethodSpec)
 import qualified Mir.Mir as M
 
+import Mir.Compositional.Clobber
 import Mir.Compositional.Convert
 import Mir.Compositional.MethodSpec
 
@@ -129,7 +130,7 @@ enable ms = do
     -- TODO: handle multiple specs for the same function
 
     bindFnHandle mh $ UseOverride $ mkOverride' (handleName mh) (handleReturnType mh) $
-        runSpec (cs ^. collection) mh (ms ^. msSpec)
+        runSpec cs mh (ms ^. msSpec)
   where
     cs = ms ^. msCollectionState
 
@@ -137,9 +138,10 @@ enable ms = do
 -- variables for its outputs, and assert its postconditions.
 runSpec :: forall sym t st fs args ret rtp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
-    M.Collection -> FnHandle args ret -> MIRMethodSpec ->
+    CollectionState -> FnHandle args ret -> MIRMethodSpec ->
     OverrideSim (Model sym) sym MIR rtp args ret (RegValue sym ret)
-runSpec col mh ms = do
+runSpec cs mh ms = do
+    let col = cs ^. collection
     sym <- getSymInterface
     simState <- get
     RegMap argVals <- getOverrideArgs
@@ -316,6 +318,13 @@ runSpec col mh ms = do
         let shp = tyToShapeEq col ty tpr
         rv <- liftIO $ setupToReg sym sc termSub w4VarMap allocMap shp sv
         writeMirRefSim tpr ref rv
+
+    -- Clobber all globals.  We don't yet support mentioning globals in specs.
+    -- However, we also don't prevent the subject function from modifying
+    -- globals.  Since we have no idea what the subject function might do to
+    -- globals during a normal call, we conservatively clobber all globals as
+    -- part of the spec override.
+    clobberGlobals sym loc "run_spec_clobber_globals" cs
 
     return retVal
 
