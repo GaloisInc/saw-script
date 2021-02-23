@@ -208,12 +208,26 @@ these specifications are represented by a JSON object with the following fields:
 
 ``pre points to``
   A list of 'points-to' relationships in the initial state section of the specification. These
-  relationships are captured in a JSON object containing two fields:
+  relationships are captured in a JSON object containing four fields, two of which are optional:
 
 .. _points-to:
 
   - ``pointer``: A :ref:`Crucible Setup value<setup-values>` representing the pointer.
   - ``points to``: A :ref:`Crucible Setup value<setup-values>` representing the referent of ``pointer``.
+  - ``check points to type``: An optional description of a type to check the ``points to`` value against.
+    If the description is ``null``, then this has no effect. The description is represented as a JSON
+    object containing a tag named ``check against``, with any further fields determined by this tag.
+    These tag values can be:
+
+    + ``pointer type``: Check the type of the ``points to`` value against the type that the ``pointer``
+      value's type points to.
+    + ``casted type``: Check the type of the ``points to`` value against the provided type. There is
+      an additional field ``type``, which contains the :ref:`LLVM<llvm-types>` or :ref:`JVM<jvm-types>`
+      type to check against.
+
+  - ``condition``: An optional condition, represented as a :ref:`Cryptol term<cryptol-json-expression>`.
+    If the ``condition`` is not ``null``, then the ``pointer`` value will only point to the ``points to``
+    value if the ``condition`` holds.
 
 ``argument vals``
   A list of :ref:`Crucible Setup values<setup-values>` representing the arguments to the function being verified.
