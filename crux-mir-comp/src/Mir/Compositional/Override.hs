@@ -233,8 +233,26 @@ runSpec cs mh ms = do
             let shp = tyToShapeEq col ty tpr
             matchArg sym eval shp rv sv
 
-        -- TODO: check that all pre fresh vars are bound
-        -- TODO: check that all pre allocs are bound
+
+        -- Validity checks
+
+        -- All pre-state and post-state fresh vars must be bound.
+        termSub <- use MS.termSub
+        let allFresh = ms ^. MS.csPreState . MS.csFreshVars ++
+                ms ^. MS.csPostState . MS.csFreshVars
+        forM_ allFresh $ \tec -> do
+            let var = SAW.ecVarIndex $ SAW.tecExt tec
+            when (not $ Map.member var termSub) $ do
+                error $ "argument matching failed to produce a binding for " ++
+                    show (MS.ppTypedExtCns tec)
+
+        -- All pre-state allocs must be bound.
+        allocSub <- use MS.setupValueSub
+        forM_ (Map.toList $ ms ^. MS.csPreState . MS.csAllocs) $ \(alloc, info) -> do
+            when (not $ Map.member alloc allocSub) $ do
+                error $ "argument matching failed to produce a binding for " ++
+                    show alloc ++ " (info: " ++ show info ++ ")"
+
         -- TODO: check disjointness of refs
         -- TODO: see if we need any other assertions from LLVM OverrideMatcher
 
