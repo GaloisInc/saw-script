@@ -35,7 +35,7 @@ import qualified Control.Monad.Fail as Fail
 import Control.Monad.State
 import qualified Data.BitVector.Sized as BV
 import Data.Maybe (fromMaybe, listToMaybe, fromJust)
-import Data.IORef
+
 import           Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Vector as V
@@ -52,12 +52,10 @@ import           Data.Parameterized.NatRepr
 
 import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
-import qualified What4.Expr.Builder as W4
 
 import qualified Lang.Crucible.LLVM.Bytes       as Crucible
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
 import qualified Lang.Crucible.LLVM.Translation as Crucible
-import qualified Lang.Crucible.Backend.Online   as Crucible
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import Verifier.SAW.Rewriter
@@ -70,7 +68,7 @@ import Text.LLVM.DebugUtils as L
 import qualified Verifier.SAW.Simulator.SBV as SBV
 import qualified Data.SBV.Dynamic as SBV
 
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common (Sym, sawCoreState)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
 
 import SAWScript.Crucible.LLVM.MethodSpecIR
@@ -371,7 +369,7 @@ resolveSAWPred ::
   IO (W4.Pred Sym)
 resolveSAWPred cc tm = do
   do let sym = cc^.ccBackend
-     st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+     st <- sawCoreState sym
      let sc = saw_ctx st
      let ss = cc^.ccBasicSS
      tm' <- rewriteSharedTerm sc ss tm
@@ -393,7 +391,7 @@ resolveSAWSymBV ::
   IO (W4.SymBV Sym w)
 resolveSAWSymBV cc w tm =
   do let sym = cc^.ccBackend
-     st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+     st <- sawCoreState sym
      let sc = saw_ctx st
      let ss = cc^.ccBasicSS
      tm' <- rewriteSharedTerm sc ss tm
@@ -436,7 +434,7 @@ resolveSAWTerm cc tp tm =
                  Crucible.ptrToPtrVal <$> Crucible.llvmPointer_bv sym v
           _ -> fail ("Invalid bitvector width: " ++ show sz)
       Cryptol.TVSeq sz tp' ->
-        do st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+        do st <- sawCoreState sym
            let sc = saw_ctx st
            sz_tm <- scNat sc (fromIntegral sz)
            tp_tm <- importType sc emptyEnv (Cryptol.tValTy tp')
@@ -451,7 +449,7 @@ resolveSAWTerm cc tp tm =
       Cryptol.TVStream _tp' ->
         fail "resolveSAWTerm: invalid infinite stream type"
       Cryptol.TVTuple tps ->
-        do st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+        do st <- sawCoreState sym
            let sc = saw_ctx st
            tms <- mapM (\i -> scTupleSelector sc tm i (length tps)) [1 .. length tps]
            vals <- zipWithM (resolveSAWTerm cc) tps tms
@@ -483,7 +481,7 @@ scPtrWidthBvNat ::
   IO Term
 scPtrWidthBvNat cc n =
   do let sym = cc^.ccBackend
-     st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+     st <- sawCoreState sym
      let sc = saw_ctx st
      w <- scNat sc $ natValue Crucible.PtrWidth
      scBvNat sc w =<< scNat sc (fromIntegral n)
@@ -600,7 +598,7 @@ memArrayToSawCoreTerm ::
 memArrayToSawCoreTerm crucible_context endianess typed_term = do
   let sym = crucible_context ^. ccBackend
   let data_layout = Crucible.llvmDataLayout $ ccTypeCtx crucible_context
-  st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+  st <- sawCoreState sym
   let saw_context = saw_ctx st
 
   byte_type_term <- importType saw_context emptyEnv $ Cryptol.tValTy $ Cryptol.TVSeq 8 Cryptol.TVBit

@@ -17,8 +17,6 @@ module SAWScript.Crucible.Common
   , sawCoreState
   ) where
 
-import           Data.IORef
-
 import           Lang.Crucible.Simulator (GenericExecutionFeature)
 import           Lang.Crucible.Simulator.ExecutionTree (AbortedResult(..), GlobalPair)
 import           Lang.Crucible.Simulator.CallFrame (SimFrame)
@@ -55,7 +53,7 @@ newSAWCoreBackend sc =
      return sym
 
 sawCoreState :: Sym -> IO (SAWCoreState Nonce.GlobalNonceGenerator)
-sawCoreState sym = onlineUserState <$> readIORef (W4.sbStateManager sym)
+sawCoreState sym = pure (onlineUserState (W4.sbUserState sym))
 
 ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc ann)
                 -> AbortedResult Sym ext
