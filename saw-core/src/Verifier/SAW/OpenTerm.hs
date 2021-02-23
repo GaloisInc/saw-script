@@ -17,13 +17,18 @@ built.
 
 module Verifier.SAW.OpenTerm (
   -- * Open terms and converting to closed terms
-  OpenTerm, completeOpenTerm,
+  OpenTerm(..), completeOpenTerm, completeOpenTermType,
   -- * Basic operations for building open terms
-  closedOpenTerm, flatOpenTerm,
-  natOpenTerm, ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
-  applyOpenTerm, applyOpenTermMulti, lambdaOpenTerm, piOpenTerm,
+  closedOpenTerm, flatOpenTerm, sortOpenTerm, natOpenTerm,
+  unitOpenTerm, unitTypeOpenTerm,
+  pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
+  tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
+  ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
+  applyOpenTerm, applyOpenTermMulti,
+  lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
+  letOpenTerm,
   -- * Monadic operations for building terms with binders
-  OpenTermM, completeOpenTermM,
+  OpenTermM(..), completeOpenTermM,
   dedupOpenTermM, lambdaOpenTermM, piOpenTermM,
   lambdaOpenTermAuxM, piOpenTermAuxM
   ) where
@@ -47,6 +52,12 @@ completeOpenTerm sc (OpenTerm termM) =
   either (fail . show) return =<<
   runTCM (typedVal <$> termM) sc Nothing []
 
+-- | "Complete" an 'OpenTerm' to a closed term for its type
+completeOpenTermType :: SharedContext -> OpenTerm -> IO Term
+completeOpenTermType sc (OpenTerm termM) =
+  either (fail . show) return =<<
+  runTCM (typedType <$> termM) sc Nothing []
+
 -- | Embed a closed 'Term' into an 'OpenTerm'
 closedOpenTerm :: Term -> OpenTerm
 closedOpenTerm t = OpenTerm $ typeInferComplete t
@@ -56,9 +67,50 @@ flatOpenTerm :: FlatTermF OpenTerm -> OpenTerm
 flatOpenTerm ftf = OpenTerm $
   (sequence (fmap unOpenTerm ftf) >>= typeInferComplete)
 
--- | Build an 'OpenTermm' for a natural number literal
+-- | Build an 'OpenTerm' for a sort
+sortOpenTerm :: Sort -> OpenTerm
+sortOpenTerm s = flatOpenTerm (Sort s)
+
+-- | Build an 'OpenTerm' for a natural number literal
 natOpenTerm :: Natural -> OpenTerm
 natOpenTerm = flatOpenTerm . NatLit
+
+-- | The 'OpenTerm' for the unit value
+unitOpenTerm :: OpenTerm
+unitOpenTerm = flatOpenTerm UnitValue
+
+-- | The 'OpenTerm' for the unit type
+unitTypeOpenTerm :: OpenTerm
+unitTypeOpenTerm = flatOpenTerm UnitType
+
+-- | Build an 'OpenTerm' for a pair
+pairOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+pairOpenTerm t1 t2 = flatOpenTerm $ PairValue t1 t2
+
+-- | Build an 'OpenTerm' for a pair type
+pairTypeOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
+pairTypeOpenTerm t1 t2 = flatOpenTerm $ PairType t1 t2
+
+-- | Build an 'OpenTerm' for the left projection of a pair
+pairLeftOpenTerm :: OpenTerm -> OpenTerm
+pairLeftOpenTerm t = flatOpenTerm $ PairLeft t
+
+-- | Build an 'OpenTerm' for the right projection of a pair
+pairRightOpenTerm :: OpenTerm -> OpenTerm
+pairRightOpenTerm t = flatOpenTerm $ PairRight t
+
+-- | Build a right-nested tuple as an 'OpenTerm'
+tupleOpenTerm :: [OpenTerm] -> OpenTerm
+tupleOpenTerm = foldr pairOpenTerm unitOpenTerm
+
+-- | Build a right-nested tuple type as an 'OpenTerm'
+tupleTypeOpenTerm :: [OpenTerm] -> OpenTerm
+tupleTypeOpenTerm = foldr pairTypeOpenTerm unitTypeOpenTerm
+
+-- | Project the @n@th element of a right-nested tuple type
+projTupleOpenTerm :: Integer -> OpenTerm -> OpenTerm
+projTupleOpenTerm 0 t = pairLeftOpenTerm t
+projTupleOpenTerm i t = projTupleOpenTerm (i-1) (pairRightOpenTerm t)
 
 -- | Build an 'OpenTerm' for a constructor applied to its arguments
 ctorOpenTerm :: Ident -> [OpenTerm] -> OpenTerm
@@ -120,12 +172,32 @@ lambdaOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
      body <- bindOpenTerm x tp body_f
      typeInferComplete $ Lambda x tp body
 
+-- | Build a nested sequence of lambda abstractions as an 'OpenTerm'
+lambdaOpenTermMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
+                       OpenTerm
+lambdaOpenTermMulti xs_tps body_f =
+  foldr (\(x,tp) rest_f xs ->
+          lambdaOpenTerm x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
+
 -- | Build a Pi abstraction as an 'OpenTerm'
 piOpenTerm :: LocalName -> OpenTerm -> (OpenTerm -> OpenTerm) -> OpenTerm
 piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
      body <- bindOpenTerm x tp body_f
      typeInferComplete $ Pi x tp body
+
+-- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
+piOpenTermMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
+                       OpenTerm
+piOpenTermMulti xs_tps body_f =
+  foldr (\(x,tp) rest_f xs ->
+          piOpenTerm x tp (rest_f . (:xs))) (body_f . reverse) xs_tps []
+
+-- | Build a let expression as an 'OpenTerm'. This is equivalent to
+-- > 'applyOpenTerm' ('lambdaOpenTerm' x tp body) rhs
+letOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> (OpenTerm -> OpenTerm) ->
+               OpenTerm
+letOpenTerm x tp rhs body_f = applyOpenTerm (lambdaOpenTerm x tp body_f) rhs
 
 -- | The monad for building 'OpenTerm's if you want to add in 'IO' actions. This
 -- is just the type-checking monad, but we give it a new name to keep this
