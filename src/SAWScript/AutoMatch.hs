@@ -435,7 +435,8 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
 
       cryptolAbstractNamesSAW :: [SAWScript.LName] -> Cryptol.Expr Cryptol.PName -> Cryptol.Expr Cryptol.PName
       cryptolAbstractNamesSAW names expr =
-         Cryptol.EFun (for names $ Cryptol.PVar . cryptolLocate . SAWScript.getVal) expr
+         Cryptol.EFun Cryptol.emptyFunDesc
+         (for names $ Cryptol.PVar . cryptolLocate . SAWScript.getVal) expr
 
       cryptolApplyFunctionSAW :: SAWScript.LName -> [SAWScript.LName] -> Cryptol.Expr Cryptol.PName
       cryptolApplyFunctionSAW function args =
