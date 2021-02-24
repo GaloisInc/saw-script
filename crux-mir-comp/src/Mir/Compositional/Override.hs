@@ -253,8 +253,11 @@ runSpec cs mh ms = do
                 error $ "argument matching failed to produce a binding for " ++
                     show alloc ++ " (info: " ++ show info ++ ")"
 
-        -- TODO: check disjointness of refs
+        -- All references in `allocSub` must point to disjoint memory regions.
+        liftIO $ checkDisjoint sym (Map.toList allocSub)
+
         -- TODO: see if we need any other assertions from LLVM OverrideMatcher
+
 
         -- Handle preconditions and postconditions.  
 
@@ -548,3 +551,19 @@ termToType sym sc term = do
                 Nothing -> error "termToPred: zero-width bitvector"
             return $ Some $ BaseBVRepr w
         _ -> error $ "termToType: bad SValue"
+
+
+checkDisjoint ::
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    sym ->
+    [(MS.AllocIndex, Pair TypeRepr (MirReferenceMux sym))] ->
+    IO ()
+checkDisjoint sym refs = go refs
+  where
+    go [] = return ()
+    go ((alloc, Pair _tpr ref) : rest) = do
+        forM_ rest $ \(alloc', Pair _tpr' ref') -> do
+            disjoint <- W4.notPred sym =<< mirRef_overlapsIO sym ref ref'
+            assert sym disjoint $ GenericSimError $
+                "references " ++ show alloc ++ " and " ++ show alloc' ++ " must not overlap"
+        go rest
