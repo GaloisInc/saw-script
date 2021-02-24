@@ -1,0 +1,13 @@
+test alias_array_bad2/3a1fbbbh::f_test[0]: ok
+test alias_array_bad2/3a1fbbbh::use_f[0]: FAILED
+
+failures:
+
+---- alias_array_bad2/3a1fbbbh::use_f[0] counterexamples ----
+Failure for test/symb_eval/comp/alias_array_bad2.rs:45:14: 45:16: error: in alias_array_bad2/3a1fbbbh::use_f[0]
+references AllocIndex 0 and AllocIndex 1 must not overlap
+Failure for ./lib/crucible/lib.rs:36:41: 36:58 !test/symb_eval/comp/alias_array_bad2.rs:47:5: 47:39: error: in alias_array_bad2/3a1fbbbh::use_f[0]
+MIR assertion at test/symb_eval/comp/alias_array_bad2.rs:47:5:
+	b[0].get() < 10
+
+[Crux] Overall status: Invalid.
