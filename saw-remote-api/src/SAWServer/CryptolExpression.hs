@@ -24,7 +24,7 @@ import Data.Traversable (for)
 import Cryptol.Eval (EvalOpts(..))
 import Cryptol.ModuleSystem (ModuleRes, ModuleInput(..))
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
-import Cryptol.ModuleSystem.Env (ModuleEnv)
+import Cryptol.ModuleSystem.Env (ModuleEnv, meSolverConfig)
 import Cryptol.ModuleSystem.Interface (noIfaceParams)
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
@@ -33,6 +33,7 @@ import qualified Cryptol.Parser as CP
 import Cryptol.Parser.Position (emptyRange, getLoc)
 import Cryptol.TypeCheck (tcExpr)
 import Cryptol.TypeCheck.Monad (InferOutput(..), inpVars, inpTSyns)
+import Cryptol.TypeCheck.Solver.SMT (withSolver)
 import Cryptol.Utils.Ident (interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
 import Cryptol.Utils.PP
@@ -64,7 +65,9 @@ getTypedTermOfCExp fileReader sc cenv expr =
   do let ?fileReader = fileReader
      let env = eModuleEnv cenv
      let minp = ModuleInput True (pure defaultEvalOpts) B.readFile env
-     mres <- runModuleM minp $
+     mres <-
+       withSolver (meSolverConfig env) $ \s ->
+       runModuleM (minp s) $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
