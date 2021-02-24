@@ -396,12 +396,12 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
   -- 1. All ix types must be of sort dtSort; AND
   -- 2. All param types must be of sort dtSort+1
   if dtSort /= propSort && param_sort > sortOf dtSort then
-    err ("Universe level of parameters should be no greater \
-         than that of the datatype")
+    err ("Universe level of parameters should be no greater" ++
+         " than that of the datatype")
     else return ()
   if dtSort /= propSort && ixs_max_sort > dtSort then
-    err ("Universe level of indices should be strictly contained \
-         in that of the datatype")
+    err ("Universe level of indices should be strictly contained" ++
+         " in that of the datatype")
     else return ()
 
   -- Step 4: Add d as an empty datatype, so we can typecheck the constructors
@@ -424,11 +424,11 @@ processDecls (Un.DataDecl (PosPair p nm) param_ctx dt_tp c_decls : rest) =
             (case asSort (typedType typed_tp) of
                 Just ctor_sort
                   | dtSort /= propSort && ctor_sort > dtSort ->
-                    err ("Universe level of constructors should be strictly \
-                         contained in that of the datatype")
+                    err ("Universe level of constructors should be strictly" ++
+                         " contained in that of the datatype")
                 Just _ -> return ()
-                Nothing -> error "Internal error: type of the type of constructor \
-                                 is not a sort!") >>
+                Nothing -> error ("Internal error: type of the type of" ++
+                                  " constructor is not a sort!")) >>
             let tp = typedVal typed_tp in
             case mkCtorArgStruct dtName p_ctx ix_ctx tp of
               Just arg_struct ->
