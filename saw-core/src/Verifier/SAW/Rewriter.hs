@@ -517,6 +517,46 @@ asIotaRedex t =
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
 
+-- | Term ordering
+-- The existing "<" on terms is not adequate for deciding how to handle permutative rules,
+-- as then associativity and commutativity can loop.
+-- The following rather unsophisticated functions *might* prevent looping.
+-- More analysis is needed!
+
+-- here we get the "fringe" of arguments in an application, looking at either curried or
+-- tupled arguments.  That is
+--   for `f x y z`, return [x,y,z]
+--   for `f (x,y)` return [x,y]
+--   for `f (f x y) z`, return [x,y,z]
+--   for `f (x, f (y,z))`, return [x,y,z]
+appCollectedArgs :: Term -> [Term]
+appCollectedArgs t = step0 (unshared t) []
+  where
+    unshared (STApp{stAppIndex = _, stAppTermF = tf1}) = tf1
+    unshared (Unshared tf1) = tf1
+    -- step 0: accumulate curried args, find the function
+    step0 ::  TermF Term -> [Term] -> [Term]
+    step0 (App f a) args = step0 (unshared f) (a:args)
+    step0 other args = step1 other args
+    -- step 1: analyse each arg, knowing the called function, append together
+    step1 :: TermF Term -> [Term] -> [Term]
+    -- step1 _ args = args -- for debugging
+    step1 f args = foldl (++) [] (map (\ x -> step2 f $ unshared x) args)
+    -- step2: analyse an arg.  look inside tuples, sequences (TBD), more calls to f
+    step2 :: TermF Term -> TermF Term -> [Term]
+    step2 f (FTermF (PairValue x y)) = (step2 f $ unshared x) ++ (step2 f $ unshared y)
+    step2 f (s@(App g a)) = possibly_curried_args s f (unshared g) (step2 f $ unshared a) 
+    step2 _ a = [Unshared a]
+    --
+    possibly_curried_args :: TermF Term -> TermF Term -> TermF Term -> [Term] -> [Term]
+    possibly_curried_args s f (App g a) args = possibly_curried_args s f (unshared g) ((step2 f $ unshared a) ++ args)
+    possibly_curried_args s f h args = if f == h then args else [Unshared s]
+
+
+termWeightLt :: Term -> Term -> Bool
+termWeightLt t t' =
+  (appCollectedArgs t) < (appCollectedArgs t')
+
 -- | Do a single reduction step (beta, record or tuple selector) at top
 -- level, if possible.
 reduceSharedTerm :: SharedContext -> Term -> Maybe (IO Term)
@@ -546,11 +586,24 @@ rewriteSharedTerm sc ss t0 =
         case reduceSharedTerm sc t of
           Nothing -> apply (Net.unify_term ss t) t
           Just io -> rewriteAll =<< io
+
+    rulePermutes :: Term -> Term -> IO Bool
+    rulePermutes lhs rhs = do
+      match1 <- scMatch sc lhs rhs
+      case match1 of
+        Nothing -> return False
+        Just _ -> do
+          match2 <- scMatch sc rhs lhs
+          case match2 of
+            Nothing -> return False -- but here we have a looping rule, not good!
+            Just _ -> return True
+
     apply :: (?cache :: Cache IO TermIndex Term) =>
              [Either RewriteRule Conversion] -> Term -> IO Term
     apply [] t = return t
     apply (Left (RewriteRule {ctxt, lhs, rhs}) : rules) t = do
       result <- scMatch sc lhs t
+      permutative <- rulePermutes lhs rhs
       case result of
         Nothing -> apply rules t
         Just inst
@@ -564,6 +617,12 @@ rewriteSharedTerm sc ss t0 =
             do putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
                  ++ scPrettyTerm defaultPPOpts lhs
                apply rules t
+          | permutative ->
+            do
+              t' <- instantiateVarList sc 0 (Map.elems inst) rhs
+              case termWeightLt t' t of
+                True -> rewriteAll t' -- keep the result only if it is "smaller"
+                False -> apply rules t
           | otherwise ->
             do -- putStrLn "REWRITING:"
                -- print lhs
