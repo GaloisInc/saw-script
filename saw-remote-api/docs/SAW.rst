@@ -306,21 +306,25 @@ pointers, arrays, and structures. They are used extensively when writing the spe
 ``verify`` commands. Setup Values are represented as JSON objects containing a tag field, ``setup value``,
 that determines the other fields. This tag value can be:
 
-``saved``
+``named``
   A term previously saved on the server. There is an additional field ``name`` giving the name bound to the
   term on the server.
 
-``null value``
+``null``
   A null/empty value.
 
 ``Cryptol``
   A Cryptol term. There is an additional field ``expression`` containing a Cryptol expression.
 
-``array value``
+``array``
   An array value. There is an additional field ``elements`` which is a list of :ref:`Crucible Setup values<setup-values>`
   to populate the array with.
 
-``field lvalue``
+``struct``
+  A struct value. There is an additional field ``fields`` which is a list of :ref:`Crucible Setup values<setup-values>`
+  to populate the struct with.
+
+``field``
   A field of a struct. There are two additional fields:
 
   - ``base``: A :ref:`Crucible Setup value<setup-values>`, the structure containing the field to assign to.
