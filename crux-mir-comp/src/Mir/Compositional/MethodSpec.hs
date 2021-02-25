@@ -1,11 +1,13 @@
 {-# Language DataKinds #-}
 {-# Language TypeFamilies #-}
 {-# Language OverloadedStrings #-}
+{-# Language TemplateHaskell #-}
 
 module Mir.Compositional.MethodSpec
 where
 
-import Data.Parameterized.Pair
+import Control.Lens (makeLenses)
+import Data.Parameterized.Classes
 import Data.Parameterized.Some
 import Data.Text (Text)
 import qualified Prettyprinter as PP
@@ -35,14 +37,14 @@ type instance MS.TypeName MIR = Text
 type instance MS.ExtType MIR = M.Ty
 
 type instance MS.MethodId MIR = DefId
-type instance MS.AllocSpec MIR = (Some TypeRepr, M.Mutability, M.Ty)
+type instance MS.AllocSpec MIR = Some MirAllocSpec
 type instance MS.PointsTo MIR = MirPointsTo
 
 type instance MS.Codebase MIR = CollectionState
 
 type instance MS.CrucibleContext MIR = ()
 
-type instance MS.Pointer' MIR sym = Pair TypeRepr (MirReferenceMux sym)
+type instance MS.Pointer' MIR sym = Some (MirPointer sym)
 
 
 data MirPointsTo = MirPointsTo MS.AllocIndex (MS.SetupValue MIR)
@@ -52,4 +54,21 @@ instance PP.Pretty MirPointsTo where
     pretty (MirPointsTo alloc sv) = PP.parens $
         PP.pretty (show alloc) PP.<+> "->" PP.<+> MS.ppSetupValue sv
 
+data MirAllocSpec tp = MirAllocSpec
+    { _maType :: TypeRepr tp
+    , _maMutbl :: M.Mutability
+    , _maMirType :: M.Ty
+    }
+  deriving (Show)
+
+instance ShowF MirAllocSpec where
+
+data MirPointer sym tp = MirPointer
+    { _mpType :: TypeRepr tp
+    , _mpRef :: MirReferenceMux sym tp
+    }
+
 type MIRMethodSpec = MS.CrucibleMethodSpecIR MIR
+
+makeLenses ''MirAllocSpec
+makeLenses ''MirPointer

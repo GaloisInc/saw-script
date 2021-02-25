@@ -27,7 +27,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import qualified Data.Parameterized.Context as Ctx
-import Data.Parameterized.Pair
 import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
 import qualified Data.Set as Set
@@ -221,16 +220,16 @@ runSpec cs mh ms = do
         -- see.
         forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo alloc sv) -> do
             allocSub <- use MS.setupValueSub
-            Pair tpr ref <- case Map.lookup alloc allocSub of
+            Some ptr <- case Map.lookup alloc allocSub of
                 Just x -> return x
                 Nothing -> error $
                     "PointsTos are out of order: no ref is available for " ++ show alloc
             ty <- case ms ^? MS.csPreState . MS.csAllocs . ix alloc of
-                Just (_, _, ty) -> return ty
+                Just (Some allocSpec) -> return $ allocSpec ^. maMirType
                 Nothing -> error $
                     "impossible: alloc mentioned in csPointsTo is absent from csAllocs?"
-            rv <- liftIO $ readMirRefIO sym simState tpr ref
-            let shp = tyToShapeEq col ty tpr
+            rv <- liftIO $ readMirRefIO sym simState (ptr ^. mpType) (ptr ^. mpRef)
+            let shp = tyToShapeEq col ty (ptr ^. mpType)
             matchArg sym eval shp rv sv
 
 
@@ -291,9 +290,9 @@ runSpec cs mh ms = do
 
     let postAllocDefs = filter (\(k,_v) -> not $ Map.member k preAllocMap) $
             Map.toList $ ms ^. MS.csPostState . MS.csAllocs
-    postAllocMap <- liftM Map.fromList $ forM postAllocDefs $ \(alloc, (Some tpr, _, _)) -> do
-        ref <- newMirRefSim tpr
-        return (alloc, Pair tpr ref)
+    postAllocMap <- liftM Map.fromList $ forM postAllocDefs $ \(alloc, Some allocSpec) -> do
+        ref <- newMirRefSim (allocSpec ^. maType)
+        return (alloc, Some $ MirPointer (allocSpec ^. maType) ref)
     let allocMap = preAllocMap <> postAllocMap
 
     -- Handle return value and post-state PointsTos
@@ -321,18 +320,18 @@ runSpec cs mh ms = do
     -- clobbered, and for adding appropriate fresh variables and `PointsTo`s to
     -- the post state.
     forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo alloc sv) -> do
-        Pair tpr ref <- case Map.lookup alloc allocMap of
+        Some ptr <- case Map.lookup alloc allocMap of
             Just x -> return x
             Nothing -> error $ "post PointsTos are out of order: no ref for " ++ show alloc
         let optAlloc = (ms ^? MS.csPostState . MS.csAllocs . ix alloc) <|>
                 (ms ^? MS.csPreState . MS.csAllocs . ix alloc)
         ty <- case optAlloc of
-            Just (_, _, ty) -> return ty
+            Just (Some allocSpec) -> return $ allocSpec ^. maMirType
             Nothing -> error $
                 "impossible: alloc mentioned in post csPointsTo is absent from csAllocs?"
-        let shp = tyToShapeEq col ty tpr
+        let shp = tyToShapeEq col ty (ptr ^. mpType)
         rv <- liftIO $ setupToReg sym sc termSub w4VarMap allocMap shp sv
-        writeMirRefSim tpr ref rv
+        writeMirRefSim (ptr ^. mpType) (ptr ^. mpRef) rv
 
     -- Clobber all globals.  We don't yet support mentioning globals in specs.
     -- However, we also don't prevent the subject function from modifying
@@ -386,15 +385,15 @@ matchArg sym eval shp rv sv = go shp rv sv
         m <- use MS.setupValueSub
         case Map.lookup alloc m of
             Nothing -> return ()
-            Just (Pair tpr' ref')
-              | Just Refl <- testEquality tpr tpr' -> do
-                eq <- liftIO $ mirRef_eqIO sym ref ref'
+            Just (Some ptr)
+              | Just Refl <- testEquality tpr (ptr ^. mpType) -> do
+                eq <- liftIO $ mirRef_eqIO sym ref (ptr ^. mpRef)
                 let loc = mkProgramLoc "matchArg" InternalPos
                 MS.addAssert eq $
                     SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
               | otherwise -> error $ "mismatched types for " ++ show alloc ++ ": " ++
-                    show tpr ++ " does not match " ++ show tpr'
-        MS.setupValueSub %= Map.insert alloc (Pair tpr ref)
+                    show tpr ++ " does not match " ++ show (ptr ^. mpType)
+        MS.setupValueSub %= Map.insert alloc (Some $ MirPointer tpr ref)
     go shp _ _ = error $ "matchArg: type error: bad SetupValue for " ++ show (shapeType shp)
 
     goFields :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
@@ -428,7 +427,7 @@ setupToReg :: forall sym t st fs tp.
     -- | `regMap`: maps `VarIndex`es in the context's namespace to the
     -- corresponding W4 variables in the context's namespace.
     Map SAW.VarIndex (Some (W4.Expr t)) ->
-    Map MS.AllocIndex (MS.Pointer' MIR sym) ->
+    Map MS.AllocIndex (Some (MirPointer sym)) ->
     TypeShape tp ->
     MS.SetupValue MIR ->
     IO (RegValue sym tp)
@@ -451,10 +450,10 @@ setupToReg sym sc termSub regMap allocMap shp sv = go shp sv
     go (StructShape _ _ flds) (MS.SetupStruct _ False svs) =
         AnyValue (StructRepr $ fmapFC fieldShapeType flds) <$> goFields flds svs
     go (RefShape _ _ tpr) (MS.SetupVar alloc) = case Map.lookup alloc allocMap of
-        Just (Pair tpr' ref) -> case testEquality tpr tpr' of
-            Just Refl -> return ref
+        Just (Some ptr) -> case testEquality tpr (ptr ^. mpType) of
+            Just Refl -> return $ ptr ^. mpRef
             Nothing -> error $ "setupToReg: type error: bad reference type for " ++ show alloc ++
-                ": got " ++ show tpr' ++ " but expected " ++ show tpr
+                ": got " ++ show (ptr ^. mpType) ++ " but expected " ++ show tpr
         Nothing -> error $ "setupToReg: no definition for " ++ show alloc
     go shp sv = error $ "setupToReg: type error: bad SetupValue for " ++ show (shapeType shp) ++
         ": " ++ show (MS.ppSetupValue sv)
@@ -556,14 +555,14 @@ termToType sym sc term = do
 checkDisjoint ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     sym ->
-    [(MS.AllocIndex, Pair TypeRepr (MirReferenceMux sym))] ->
+    [(MS.AllocIndex, Some (MirPointer sym))] ->
     IO ()
 checkDisjoint sym refs = go refs
   where
     go [] = return ()
-    go ((alloc, Pair _tpr ref) : rest) = do
-        forM_ rest $ \(alloc', Pair _tpr' ref') -> do
-            disjoint <- W4.notPred sym =<< mirRef_overlapsIO sym ref ref'
+    go ((alloc, Some ptr) : rest) = do
+        forM_ rest $ \(alloc', Some ptr') -> do
+            disjoint <- W4.notPred sym =<< mirRef_overlapsIO sym (ptr ^. mpRef) (ptr' ^. mpRef)
             assert sym disjoint $ GenericSimError $
                 "references " ++ show alloc ++ " and " ++ show alloc' ++ " must not overlap"
         go rest

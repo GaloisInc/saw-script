@@ -420,9 +420,9 @@ finish msb = do
     preVars' <- liftIO $ mapM (\(Some x) -> evalVar x) $ toList preVars
     postVars' <- liftIO $ mapM (\(Some x) -> evalVar x) $ toList postOnlyVars
 
-    let preAllocs = Map.fromList [(alloc, (Some tpr, mutbl, ty))
+    let preAllocs = Map.fromList [(alloc, Some $ MirAllocSpec tpr mutbl ty)
             | (Pair tpr _, mutbl, ty, alloc) <- toList $ msb ^. msbPre . seRefs]
-    let postAllocs = Map.fromList [(alloc, (Some tpr, mutbl, ty))
+    let postAllocs = Map.fromList [(alloc, Some $ MirAllocSpec tpr mutbl ty)
             | (Pair tpr _, mutbl, ty, alloc) <- toList $ msb ^. msbPost . seRefs]
 
     let ms = msb ^. msbSpec
