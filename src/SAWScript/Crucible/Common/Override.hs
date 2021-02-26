@@ -281,36 +281,37 @@ data RW
 -- to match a specification's arguments with the arguments provided by
 -- the Crucible simulation in order to compute the variable substitution
 -- and side-conditions needed to proceed.
-newtype OverrideMatcher' sym ext rorw a =
-  OM (StateT (OverrideState' sym ext) (ExceptT (OverrideFailure ext) IO) a)
+newtype OverrideMatcher' sym ext rorw m a =
+  OM (StateT (OverrideState' sym ext) (ExceptT (OverrideFailure ext) m) a)
   deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow)
 
-type OverrideMatcher = OverrideMatcher' Sym
+type OverrideMatcher ext rorw a = OverrideMatcher' Sym ext rorw IO a
 
-instance Wrapped (OverrideMatcher' sym ext rorw a) where
+instance Wrapped (OverrideMatcher' sym ext rorw m a) where
 
-deriving instance MonadState (OverrideState' sym ext) (OverrideMatcher' sym ext rorw)
-deriving instance MonadError (OverrideFailure ext) (OverrideMatcher' sym ext rorw)
+deriving instance Monad m => MonadState (OverrideState' sym ext) (OverrideMatcher' sym ext rorw m)
+deriving instance Monad m => MonadError (OverrideFailure ext) (OverrideMatcher' sym ext rorw m)
 
-throwOverrideMatcher :: String -> OverrideMatcher' sym ext rorw a
+throwOverrideMatcher :: Monad m => String -> OverrideMatcher' sym ext rorw m a
 throwOverrideMatcher msg = do
   loc <- use osLocation
   X.throw $ OverrideMatcherException loc msg
 
-instance Fail.MonadFail (OverrideMatcher' sym ext rorw) where
+instance Monad m => Fail.MonadFail (OverrideMatcher' sym ext rorw m) where
   fail = throwOverrideMatcher
 
 -- | "Run" function for OverrideMatcher. The final result and state
 -- are returned. The state will contain the updated globals and substitutions
 runOverrideMatcher ::
+   Monad m =>
    sym                         {- ^ simulator                       -} ->
    Crucible.SymGlobalState sym {- ^ initial global variables        -} ->
    Map AllocIndex (Pointer' ext sym) {- ^ initial allocation substitution -} ->
    Map VarIndex Term           {- ^ initial term substitution       -} ->
    Set VarIndex                {- ^ initial free variables          -} ->
    W4.ProgramLoc               {- ^ override location information   -} ->
-   OverrideMatcher' sym ext md a {- ^ matching action                 -} ->
-   IO (Either (OverrideFailure ext) (a, OverrideState' sym ext))
+   OverrideMatcher' sym ext md m a {- ^ matching action                 -} ->
+   m (Either (OverrideFailure ext) (a, OverrideState' sym ext))
 runOverrideMatcher sym g a t free loc (OM m) =
   runExceptT (runStateT m (initialState sym g a t free loc))
 
@@ -322,20 +323,23 @@ addTermEq t r =
   OM (termEqs %= cons (t, r))
 
 addAssert ::
+  Monad m =>
   W4.Pred sym       {- ^ property -} ->
   Crucible.SimError {- ^ reason   -} ->
-  OverrideMatcher' sym ext rorw ()
+  OverrideMatcher' sym ext rorw m ()
 addAssert p r =
   OM (osAsserts %= cons (W4.LabeledPred p r))
 
 addAssume ::
+  Monad m =>
   W4.Pred sym       {- ^ property -} ->
-  OverrideMatcher' sym ext rorw ()
+  OverrideMatcher' sym ext rorw m ()
 addAssume p = OM (osAssumes %= cons p)
 
 readGlobal ::
+  Monad m =>
   Crucible.GlobalVar tp ->
-  OverrideMatcher' sym ext rorw (Crucible.RegValue sym tp)
+  OverrideMatcher' sym ext rorw m (Crucible.RegValue sym tp)
 readGlobal k =
   do mb <- OM (uses overrideGlobals (Crucible.lookupGlobal k))
      case mb of
@@ -343,20 +347,22 @@ readGlobal k =
        Just v  -> return v
 
 writeGlobal ::
+  Monad m =>
   Crucible.GlobalVar    tp ->
   Crucible.RegValue sym tp ->
-  OverrideMatcher' sym ext RW ()
+  OverrideMatcher' sym ext RW m ()
 writeGlobal k v = OM (overrideGlobals %= Crucible.insertGlobal k v)
 
 -- | Abort the current computation by raising the given 'OverrideFailure'
 -- exception.
 failure ::
+  Monad m =>
   W4.ProgramLoc ->
   OverrideFailureReason ext ->
-  OverrideMatcher' sym ext md a
+  OverrideMatcher' sym ext md m a
 failure loc e = OM (lift (throwE (OF loc e)))
 
-getSymInterface :: OverrideMatcher' sym ext md sym
+getSymInterface :: Monad m => OverrideMatcher' sym ext md m sym
 getSymInterface = OM (use syminterface)
 
 ------------------------------------------------------------------------

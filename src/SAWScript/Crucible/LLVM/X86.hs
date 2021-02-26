@@ -130,7 +130,7 @@ import qualified Data.ElfEdit as Elf
 
 type LLVMArch = C.LLVM.X86 64
 type LLVM = LMS.LLVM LLVMArch
-type LLVMOverrideMatcher = O.OverrideMatcher LLVM
+type LLVMOverrideMatcher rorw a = O.OverrideMatcher LLVM rorw a
 type Regs = Assignment (C.RegValue' Sym) (Macaw.MacawCrucibleRegTypes Macaw.X86_64)
 type Register = Macaw.X86Reg (Macaw.BVType 64)
 type Mem = C.LLVM.MemImpl Sym

@@ -70,6 +70,9 @@ import Mir.Compositional.Convert
 import Mir.Compositional.MethodSpec
 
 
+type MirOverrideMatcher sym a = forall rorw rtp args ret.
+    MS.OverrideMatcher' sym MIR rorw (OverrideSim (Model sym) sym MIR rtp args ret) a
+
 data MethodSpec = MethodSpec 
     { _msCollectionState :: CollectionState
     , _msSpec :: MIRMethodSpec
@@ -192,7 +195,7 @@ runSpec cs mh ms = do
         term <- liftIO $ eval expr
         return (SAW.ecVarIndex ec, term)
 
-    result <- liftIO $ MS.runOverrideMatcher sym sgs mempty postFreshTermSub freeVars loc $ do
+    result <- MS.runOverrideMatcher sym sgs mempty postFreshTermSub freeVars loc $ do
         -- Match the override's inputs against the MethodSpec inputs.  This
         -- sets up the `termSub` (symbolic variable bindings) and
         -- `setupValueSub` (allocation bindings) in the OverrideMatcher state.
@@ -347,16 +350,16 @@ runSpec cs mh ms = do
 -- this may update `termSub` and `setupValueSub` with new bindings for the
 -- MethodSpec's symbolic variables and allocations.
 matchArg ::
-    forall sym t st fs tp rorw.
+    forall sym t st fs tp.
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
     TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
-    MS.OverrideMatcher' sym MIR rorw ()
+    MirOverrideMatcher sym ()
 matchArg sym eval shp rv sv = go shp rv sv
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
-        MS.OverrideMatcher' sym MIR rorw ()
+        MirOverrideMatcher sym ()
     go (UnitShape _) () (MS.SetupStruct () False []) = return ()
     go (PrimShape _ _btpr) expr (MS.SetupTerm tt) = do
         loc <- use MS.osLocation
@@ -398,11 +401,11 @@ matchArg sym eval shp rv sv = go shp rv sv
         show (MS.ppSetupValue sv) ++ " for " ++ show (shapeType shp)
 
     goFields :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
-        [MS.SetupValue MIR] -> MS.OverrideMatcher' sym MIR rorw ()
+        [MS.SetupValue MIR] -> MirOverrideMatcher sym ()
     goFields flds rvs svs = loop flds rvs (reverse svs)
       where
         loop :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
-            [MS.SetupValue MIR] -> MS.OverrideMatcher' sym MIR rorw ()
+            [MS.SetupValue MIR] -> MirOverrideMatcher sym ()
         loop Empty Empty [] = return ()
         loop (flds :> fld) (rvs :> RV rv) (sv : svs) = do
             case fld of
@@ -484,7 +487,7 @@ condTerm ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
     SAW.SharedContext ->
     MS.SetupCondition MIR ->
-    MS.OverrideMatcher' sym MIR rorw SAW.Term
+    MirOverrideMatcher sym SAW.Term
 condTerm _sc (MS.SetupCond_Equal _loc _sv1 _sv2) = do
     error $ "learnCond: SetupCond_Equal NYI" -- TODO
 condTerm sc (MS.SetupCond_Pred _loc tt) = do
