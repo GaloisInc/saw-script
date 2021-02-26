@@ -15,6 +15,7 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
+import qualified Data.BitVector.Sized as BV
 import Data.Foldable
 import Data.Functor.Const
 import Data.IORef
@@ -471,14 +472,16 @@ finish msb = do
 -- RegValue will be converted into fresh variables in the MethodSpec (in either
 -- the pre or post state, depending on the pre/post flag `p`), and any
 -- MirReferences will be converted into MethodSpec allocations/pointers.
-regToSetup :: forall sym t st fs tp m.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack, MonadIO m) =>
+regToSetup :: forall sym t st fs tp p rtp args ret.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym -> PrePost ->
     (forall tp'. BaseTypeRepr tp' -> W4.Expr t tp' -> IO SAW.TypedTerm) ->
-    TypeShape tp -> RegValue sym tp -> BuilderT sym t m (MS.SetupValue MIR)
+    TypeShape tp -> RegValue sym tp ->
+    BuilderT sym t (OverrideSim p sym MIR rtp args ret) (MS.SetupValue MIR)
 regToSetup sym p eval shp rv = go shp rv
   where
-    go :: forall tp. TypeShape tp -> RegValue sym tp -> BuilderT sym t m (MS.SetupValue MIR)
+    go :: forall tp. TypeShape tp -> RegValue sym tp ->
+        BuilderT sym t (OverrideSim p sym MIR rtp args ret) (MS.SetupValue MIR)
     go (UnitShape _) () = return $ MS.SetupStruct () False []
     go (PrimShape _ btpr) expr = do
         -- Record all vars used in `expr`
@@ -502,21 +505,41 @@ regToSetup sym p eval shp rv = go shp rv
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
     go (RefShape refTy ty' tpr) ref = do
+        partIdxLen <- lift $ mirRef_indexAndLenSim ref
+        optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
+        let (optIdx, optLen) =
+                (BV.asUnsigned <$> (W4.asBV =<< (fst <$> optIdxLen)),
+                    BV.asUnsigned <$> (W4.asBV =<< (snd <$> optIdxLen)))
+        idx <- case optIdx of
+            Just x -> return $ fromIntegral x
+            Nothing -> error $ "unsupported: reference has symbolic offset within allocation " ++
+                "(for a ref of type " ++ show refTy ++ ")"
+        len <- case optLen of
+            Just x -> return $ fromIntegral x
+            Nothing -> error $ "unsupported: memory allocation has symbolic size " ++
+                "(for a ref of type " ++ show refTy ++ ")"
+        -- Offset backward by `idx` to get a pointer to the start of the accessible
+        -- allocation.
+        offsetSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral $ negate idx
+        startRef <- lift $ mirRef_offsetWrapSim tpr ref offsetSym
+
         -- Casting &T -> &mut T is undefined behavior, so we can safely mark
         -- Immut refs as Immut.  But casting *const T -> *mut T is allowed, so
         -- we conservatively mark *const T as Mut.
         let mutbl = case refTy of
                 M.TyRef _ M.Immut -> M.Immut
                 _ -> M.Mut
-        alloc <- refToAlloc sym p mutbl ty' tpr ref
-        return $ MS.SetupVar alloc
+        alloc <- refToAlloc sym p mutbl ty' tpr startRef len
+        let offsetSv idx sv = if idx == 0 then sv else MS.SetupElem () sv idx
+        return $ offsetSv idx $ MS.SetupVar alloc
 
     goFields :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
-        BuilderT sym t m [MS.SetupValue MIR]
+        BuilderT sym t (OverrideSim p sym MIR rtp args ret) [MS.SetupValue MIR]
     goFields flds rvs = loop flds rvs []
       where
         loop :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
-            [MS.SetupValue MIR] -> BuilderT sym t m [MS.SetupValue MIR]
+            [MS.SetupValue MIR] ->
+            BuilderT sym t (OverrideSim p sym MIR rtp args ret) [MS.SetupValue MIR]
         loop Empty Empty svs = return svs
         loop (flds :> fld) (rvs :> RV rv) svs = do
             sv <- case fld of
@@ -524,18 +547,18 @@ regToSetup sym p eval shp rv = go shp rv
                 OptField shp -> liftIO (readMaybeType sym "field" (shapeType shp) rv) >>= go shp
             loop flds rvs (sv : svs)
 
-refToAlloc :: forall sym t st fs tp m.
-    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, MonadIO m) =>
-    sym -> PrePost -> M.Mutability -> M.Ty -> TypeRepr tp -> MirReferenceMux sym tp ->
-    BuilderT sym t m MS.AllocIndex
-refToAlloc sym p mutbl ty tpr ref = do
+refToAlloc :: forall sym t st fs tp p rtp args ret.
+    (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs) =>
+    sym -> PrePost -> M.Mutability -> M.Ty -> TypeRepr tp -> MirReferenceMux sym tp -> Int ->
+    BuilderT sym t (OverrideSim p sym MIR rtp args ret) MS.AllocIndex
+refToAlloc sym p mutbl ty tpr ref len = do
     refs <- use $ msbPrePost p . seRefs
     mAlloc <- liftIO $ lookupAlloc ref (toList refs)
     case mAlloc of
         Nothing -> do
             alloc <- use msbNextAlloc
             msbNextAlloc %= MS.nextAllocIndex
-            let fr = FoundRef alloc (MirAllocSpec tpr mutbl ty) ref
+            let fr = FoundRef alloc (MirAllocSpec tpr mutbl ty len) ref
             msbPrePost p . seRefs %= (Seq.|> Some fr)
             msbPrePost p . seNewRefs %= (Seq.|> Some fr)
             return alloc

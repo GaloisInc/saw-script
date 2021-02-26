@@ -394,7 +394,8 @@ matchArg sym eval shp rv sv = go shp rv sv
               | otherwise -> error $ "mismatched types for " ++ show alloc ++ ": " ++
                     show tpr ++ " does not match " ++ show (ptr ^. mpType)
         MS.setupValueSub %= Map.insert alloc (Some $ MirPointer tpr ref)
-    go shp _ _ = error $ "matchArg: type error: bad SetupValue for " ++ show (shapeType shp)
+    go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
+        show (MS.ppSetupValue sv) ++ " for " ++ show (shapeType shp)
 
     goFields :: forall ctx. Assignment FieldShape ctx -> Assignment (RegValue' sym) ctx ->
         [MS.SetupValue MIR] -> MS.OverrideMatcher' sym MIR rorw ()

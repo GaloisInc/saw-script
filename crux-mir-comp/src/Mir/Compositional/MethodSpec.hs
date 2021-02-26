@@ -58,6 +58,7 @@ data MirAllocSpec tp = MirAllocSpec
     { _maType :: TypeRepr tp
     , _maMutbl :: M.Mutability
     , _maMirType :: M.Ty
+    , _maLen :: Int
     }
   deriving (Show)
 
