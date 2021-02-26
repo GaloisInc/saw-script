@@ -21,7 +21,6 @@ import Data.IORef
 import qualified Data.Map as Map
 import Data.Parameterized.Context (pattern Empty, pattern (:>), Assignment)
 import Data.Parameterized.Nonce
-import Data.Parameterized.Pair
 import Data.Parameterized.Some
 import Data.Parameterized.TraversableFC
 import Data.Sequence (Seq)
@@ -76,8 +75,14 @@ data MethodSpecBuilder sym t = MethodSpecBuilder
 
 data StateExtra sym t = StateExtra
     { _seVars :: Set (Some (W4.ExprBoundVar t))
-    , _seRefs :: Seq (Pair TypeRepr (MirReferenceMux sym), M.Mutability, M.Ty, MS.AllocIndex)
-    , _seNewRefs :: Seq (Pair TypeRepr (MirReferenceMux sym), M.Mutability, M.Ty, MS.AllocIndex)
+    , _seRefs :: Seq (Some (FoundRef sym))
+    , _seNewRefs :: Seq (Some (FoundRef sym))
+    }
+
+data FoundRef sym tp = FoundRef
+    { _frAlloc :: MS.AllocIndex
+    , _frAllocSpec :: MirAllocSpec tp
+    , _frRef :: MirReferenceMux sym tp
     }
 
 initMethodSpecBuilder ::
@@ -109,11 +114,22 @@ initStateExtra = StateExtra
 
 makeLenses ''MethodSpecBuilder
 makeLenses ''StateExtra
+makeLenses ''FoundRef
 
 msbCollection :: Functor f =>
     (M.Collection -> f M.Collection) ->
     (MethodSpecBuilder sym t -> f (MethodSpecBuilder sym t))
 msbCollection = msbCollectionState . collection
+
+frType :: Functor f =>
+    (TypeRepr tp -> f (TypeRepr tp)) ->
+    (FoundRef sym tp -> f (FoundRef sym tp))
+frType = frAllocSpec . maType
+
+frMirType :: Functor f =>
+    (M.Ty -> f M.Ty) ->
+    (FoundRef sym tp -> f (FoundRef sym tp))
+frMirType = frAllocSpec . maMirType
 
 
 data PrePost = Pre | Post
@@ -214,21 +230,21 @@ addArg tpr argRef msb = execBuilderT msb $ do
     rv <- lift $ readMirRefSim tpr argRef
     sv <- regToSetup sym Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
-    void $ forNewRefs Pre $ \tpr ref mutbl ty alloc -> do
+    void $ forNewRefs Pre $ \fr -> do
         -- Record a points-to entry
-        rv <- lift $ readMirRefSim tpr ref
-        let shp = tyToShapeEq col ty tpr
+        rv <- lift $ readMirRefSim (fr ^. frType) (fr ^. frRef)
+        let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
         sv <- regToSetup sym Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
-        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo alloc sv :)
+        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) sv :)
 
         -- Clobber the current value
-        rv' <- case mutbl of
+        rv' <- case fr ^. frAllocSpec . maMutbl of
             M.Mut -> lift $ clobberSymbolic sym loc "clobberArg" shp rv
             M.Immut -> lift $ clobberImmutSymbolic sym loc "clobberArg" shp rv
-        lift $ writeMirRefSim tpr ref rv'
+        lift $ writeMirRefSim (fr ^. frType) (fr ^. frRef) rv'
         -- Gather fresh vars created by the clobber operation
         sv' <- regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv'
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo alloc sv' :)
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) sv' :)
 
     msbSpec . MS.csArgBindings . at (fromIntegral idx) .= Just (ty, sv)
   where
@@ -254,11 +270,11 @@ setReturn tpr argRef msb = execBuilderT msb $ do
     rv <- lift $ readMirRefSim tpr argRef
     sv <- regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
-    void $ forNewRefs Post $ \tpr ref _mutbl ty alloc -> do
-        rv <- lift $ readMirRefSim tpr ref
-        let shp = tyToShapeEq col ty tpr
+    void $ forNewRefs Post $ \fr -> do
+        rv <- lift $ readMirRefSim (fr ^. frType) (fr ^. frRef)
+        let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
         sv <- regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo alloc sv :)
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) sv :)
 
     msbSpec . MS.csRetValue .= Just sv
   where
@@ -420,10 +436,10 @@ finish msb = do
     preVars' <- liftIO $ mapM (\(Some x) -> evalVar x) $ toList preVars
     postVars' <- liftIO $ mapM (\(Some x) -> evalVar x) $ toList postOnlyVars
 
-    let preAllocs = Map.fromList [(alloc, Some $ MirAllocSpec tpr mutbl ty)
-            | (Pair tpr _, mutbl, ty, alloc) <- toList $ msb ^. msbPre . seRefs]
-    let postAllocs = Map.fromList [(alloc, Some $ MirAllocSpec tpr mutbl ty)
-            | (Pair tpr _, mutbl, ty, alloc) <- toList $ msb ^. msbPost . seRefs]
+    let preAllocs = Map.fromList [(fr ^. frAlloc, Some $ fr ^. frAllocSpec)
+            | Some fr <- toList $ msb ^. msbPre . seRefs]
+    let postAllocs = Map.fromList [(fr ^. frAlloc, Some $ fr ^. frAllocSpec)
+            | Some fr <- toList $ msb ^. msbPost . seRefs]
 
     let ms = msb ^. msbSpec
             & MS.csPreState . MS.csFreshVars .~ preVars'
@@ -519,8 +535,9 @@ refToAlloc sym p mutbl ty tpr ref = do
         Nothing -> do
             alloc <- use msbNextAlloc
             msbNextAlloc %= MS.nextAllocIndex
-            msbPrePost p . seRefs %= (Seq.|> (Pair tpr ref, mutbl, ty, alloc))
-            msbPrePost p . seNewRefs %= (Seq.|> (Pair tpr ref, mutbl, ty, alloc))
+            let fr = FoundRef alloc (MirAllocSpec tpr mutbl ty) ref
+            msbPrePost p . seRefs %= (Seq.|> Some fr)
+            msbPrePost p . seNewRefs %= (Seq.|> Some fr)
             return alloc
         Just alloc -> return alloc
   where
@@ -532,25 +549,24 @@ refToAlloc sym p mutbl ty tpr ref = do
     -- assignments to the symbolic variables but not under others.
     lookupAlloc ::
         MirReferenceMux sym tp ->
-        [(Pair TypeRepr (MirReferenceMux sym), M.Mutability, M.Ty, MS.AllocIndex)] ->
+        [Some (FoundRef sym)] ->
         IO (Maybe MS.AllocIndex)
     lookupAlloc _ref [] = return Nothing
-    lookupAlloc ref ((Pair tpr' ref', _, _, alloc) : rs) = case testEquality tpr tpr' of
+    lookupAlloc ref (Some fr : frs) = case testEquality tpr (fr ^. frType) of
         Just Refl -> do
-            eq <- mirRef_eqIO sym ref ref'
+            eq <- mirRef_eqIO sym ref (fr ^. frRef)
             case W4.asConstantPred eq of
-                Just True -> return $ Just alloc
-                Just False -> lookupAlloc ref rs
+                Just True -> return $ Just $ fr ^. frAlloc
+                Just False -> lookupAlloc ref frs
                 Nothing -> error $ "refToAlloc: ref aliasing depends on symbolic values"
-        Nothing -> lookupAlloc ref rs
+        Nothing -> lookupAlloc ref frs
 
 -- | Run `f` on any newly-added refs/allocations in the MethodSpecBuilder.  If
 -- `f` adds more refs, then repeat until there are no more new refs remaining.
 forNewRefs ::
     Monad m =>
     PrePost ->
-    (forall tp. TypeRepr tp -> MirReferenceMux sym tp -> M.Mutability -> M.Ty -> MS.AllocIndex ->
-        BuilderT sym t m a) ->
+    (forall tp. FoundRef sym tp -> BuilderT sym t m a) ->
     BuilderT sym t m (Seq a)
 forNewRefs p f = go
   where
@@ -560,6 +576,6 @@ forNewRefs p f = go
         if Seq.null new then
             return Seq.empty
           else do
-            a <- mapM (\(Pair tpr ref, mutbl, ty, alloc) -> f tpr ref mutbl ty alloc) new
+            a <- mapM (\(Some fr) -> f fr) new
             b <- go
             return $ a <> b
