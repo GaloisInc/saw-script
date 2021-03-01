@@ -98,6 +98,7 @@ import Verifier.SAW.TypedTerm
 
 import Verifier.SAW.Simulator.What4.ReturnTrip
 
+import SAWScript.Exceptions
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -813,7 +814,9 @@ data JVMSetupError
   | JVMReturnUnexpected J.Type -- found
   | JVMReturnTypeMismatch J.Type J.Type -- expected, found
 
-instance X.Exception JVMSetupError
+instance X.Exception JVMSetupError where
+  toException = topLevelExceptionToException
+  fromException = topLevelExceptionFromException
 
 instance Show JVMSetupError where
   show err =
