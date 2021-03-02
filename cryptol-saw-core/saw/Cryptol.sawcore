@@ -1498,14 +1498,40 @@ ecFpMul e p _ _ _ = error (TCFloat e p) "Unimplemented: fpMul";
 ecFpDiv : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p -> TCFloat e p;
 ecFpDiv e p _ _ _ = error (TCFloat e p) "Unimplemented: fpDiv";
 
-ecFpIsFinite : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
-ecFpIsFinite e p _ = error Bool "Unimplemented: fpIsFinite";
-
 ecFpToRational : (e : Num) -> (p : Num) -> TCFloat e p -> Rational;
 ecFpToRational e p _ = error Rational "Unimplemented: fpToRational";
 
 ecFpFromRational : (e : Num) -> (p : Num) -> Vec 3 Bool -> Rational -> TCFloat e p;
 ecFpFromRational e p _ _ = error (TCFloat e p) "Unimplemented: fpFromRational";
+
+fpIsNaN : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
+fpIsNaN e p x = error Bool "Unimplemented: fpIsNaN";
+
+fpIsInf : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
+fpIsInf e p x = error Bool "Unimplemented: fpIsInf";
+
+fpIsZero : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
+fpIsZero e p x = error Bool "Unimplemented: fpIsZero";
+
+fpIsNeg : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
+fpIsNeg e p x = error Bool "Unimplemented: fpIsNeg";
+
+fpIsNormal : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
+fpIsNormal e p x = error Bool "Unimplemented: fpIsNormal";
+
+fpIsSubnormal : (e : Num) -> (p : Num) -> TCFloat e p -> Bool;
+fpIsSubnormal e p x = error Bool "Unimplemented: fpIsSubnormal";
+
+fpFMA :
+  (e : Num) -> (p : Num) -> Vec 3 Bool ->
+  TCFloat e p -> TCFloat e p -> TCFloat e p -> TCFloat e p;
+fpFMA e p r x y z = error (TCFloat e p) "Unimplemented: fpFMA";
+
+fpAbs : (e : Num) -> (p : Num) -> TCFloat e p -> TCFloat e p;
+fpAbs e p x = error (TCFloat e p) "Unimplemented: fpAbs";
+
+fpSqrt : (e : Num) -> (p : Num) -> Vec 3 Bool -> TCFloat e p -> TCFloat e p;
+fpSqrt e p r x = error (TCFloat e p) "Unimplemented: fpSqrt";
 
 
 --------------------------------------------------------------------------------

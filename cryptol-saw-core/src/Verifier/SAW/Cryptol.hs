@@ -763,9 +763,17 @@ floatPrims =
   , ("fpSub",          flip scGlobalDef "Cryptol.ecFpSub")
   , ("fpMul",          flip scGlobalDef "Cryptol.ecFpMul")
   , ("fpDiv",          flip scGlobalDef "Cryptol.ecFpDiv")
-  , ("fpIsFinite",     flip scGlobalDef "Cryptol.ecFpIsFinite")
   , ("fpToRational",   flip scGlobalDef "Cryptol.ecFpToRational")
   , ("fpFromRational", flip scGlobalDef "Cryptol.ecFpFromRational")
+  , ("fpIsNaN",        flip scGlobalDef "Cryptol.fpIsNaN")
+  , ("fpIsInf",        flip scGlobalDef "Cryptol.fpIsInf")
+  , ("fpIsZero",       flip scGlobalDef "Cryptol.fpIsZero")
+  , ("fpIsNeg",        flip scGlobalDef "Cryptol.fpIsNeg")
+  , ("fpIsNormal",     flip scGlobalDef "Cryptol.fpIsNormal")
+  , ("fpIsSubnormal",  flip scGlobalDef "Cryptol.fpIsSubnormal")
+  , ("fpFMA",          flip scGlobalDef "Cryptol.fpFMA")
+  , ("fpAbs",          flip scGlobalDef "Cryptol.fpAbs")
+  , ("fpSqrt",         flip scGlobalDef "Cryptol.fpSqrt")
   ]
 
 
