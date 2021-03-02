@@ -598,9 +598,9 @@ verifyObligations cc mspec tactic assumes asserts =
      stats <-
        forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) ->
        do goal   <- io $ scImplies sc assume assert
-          goal'  <- io $ scEqTrue sc goal
+          goal'  <- io $ predicateToProp sc Universal [] goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
-              proofgoal = ProofGoal n "vc" goalname (Prop goal')
+              proofgoal = ProofGoal n "vc" goalname goal'
           r <- evalStateT tactic (startProof proofgoal)
           case r of
             Unsat stats -> return stats
@@ -760,8 +760,8 @@ assumptionsContainContradiction cc tactic assumptions =
          assume <- scAndList sc (toListOf (folded . Crucible.labeledPred) assumptions)
          -- implies falsehood
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
-         goal' <- scEqTrue sc goal
-         return $ ProofGoal 0 "vc" "vacuousness check" (Prop goal')
+         goal' <- predicateToProp sc Universal [] goal
+         return $ ProofGoal 0 "vc" "vacuousness check" goal'
      evalStateT tactic (startProof proofGoal) >>= \case
        Unsat _stats -> return True
        SatMulti _stats _vals -> return False

@@ -280,9 +280,9 @@ showsPrecValue opts p v =
     VTopLevel {} -> showString "<<TopLevel>>"
     VSimpset ss -> showString (showSimpset opts ss)
     VProofScript {} -> showString "<<proof script>>"
-    VTheorem (Theorem (Prop t) _stats) ->
+    VTheorem (Theorem t _stats) ->
       showString "Theorem " .
-      showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
+      showParen True (showString (prettyProp opts' t))
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"

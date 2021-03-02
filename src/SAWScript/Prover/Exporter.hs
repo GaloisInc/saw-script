@@ -69,7 +69,7 @@ import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.UntypedAST as Un
 
 import SAWScript.Crucible.Common
-import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..), propToPredicate)
+import SAWScript.Proof (Prop, propSize, propToTerm, predicateToProp, Quantification(..), propToPredicate)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 import SAWScript.Prover.What4
@@ -91,7 +91,7 @@ proveWithExporter ::
 proveWithExporter exporter path goal =
   do sc <- getSharedContext
      exporter sc path goal
-     let stats = solverStats ("offline: "++ path) (scSharedSize (unProp goal))
+     let stats = solverStats ("offline: "++ path) (propSize goal)
      return stats
 
 -- | Converts an old-style exporter (which expects to take a predicate
@@ -99,8 +99,9 @@ proveWithExporter exporter path goal =
 adaptExporter ::
   (SharedContext -> FilePath -> Term -> TopLevel ()) ->
   (SharedContext -> FilePath -> Prop -> TopLevel ())
-adaptExporter exporter sc path (Prop goal) =
-  do let (args, concl) = asPiList goal
+adaptExporter exporter sc path goal =
+  -- TODO, move this into Proof.hs
+  do (args, concl) <- asPiList <$> io (propToTerm sc goal)
      p <-
        case asEqTrue concl of
          Just p -> return p
@@ -268,7 +269,10 @@ writeVerilog sc path t = do
       hClose h
 
 writeCoreProp :: FilePath -> Prop -> TopLevel ()
-writeCoreProp path (Prop t) = io $ writeFile path (scWriteExternal t)
+writeCoreProp path t =
+  do sc <- getSharedContext
+     tm <- io (propToTerm sc t)
+     io $ writeFile path (scWriteExternal tm)
 
 coqTranslationConfiguration ::
   [(String, String)] ->
@@ -303,8 +307,10 @@ writeCoqProp ::
   FilePath ->
   Prop ->
   TopLevel ()
-writeCoqProp name notations skips path (Prop t) =
-  writeCoqTerm name notations skips path t
+writeCoqProp name notations skips path t =
+  do sc <- getSharedContext
+     tm <- io (propToTerm sc t)
+     writeCoqTerm name notations skips path tm
 
 writeCoqCryptolModule ::
   FilePath ->
