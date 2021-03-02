@@ -15,6 +15,7 @@ import qualified Cryptol.TypeCheck.AST as T
 import qualified Cryptol.ModuleSystem as CM
 import qualified Cryptol.ModuleSystem.Env as CME
 import qualified Cryptol.Parser as P
+import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import           Cryptol.Utils.PP
 import           Cryptol.Utils.Logger (quietLogger)
 
@@ -90,7 +91,9 @@ cssMain css [inputModule,name] | cssMode css == NormalMode = do
 
     modEnv <- CM.initialModuleEnv
     let minp = CM.ModuleInput True (pure defaultEvalOpts) BS.readFile modEnv
-    (e,warn) <- CM.loadModuleByPath inputModule minp
+    (e,warn) <-
+      SMT.withSolver (CME.meSolverConfig modEnv) $ \s ->
+      CM.loadModuleByPath inputModule (minp s)
     mapM_ (print . pp) warn
     case e of
        Left msg -> print msg >> exitFailure
@@ -129,7 +132,9 @@ extractCryptol sc modEnv input = do
       Left err -> fail (show (P.ppError err))
       Right x -> return x
   let minp = CM.ModuleInput True (pure defaultEvalOpts) BS.readFile modEnv
-  (exprResult, exprWarnings) <- CM.checkExpr pexpr minp
+  (exprResult, exprWarnings) <-
+    SMT.withSolver (CME.meSolverConfig modEnv) $ \s ->
+    CM.checkExpr pexpr (minp s)
   mapM_ (print . pp) exprWarnings
   ((_, expr, schema), _modEnv') <-
     case exprResult of
