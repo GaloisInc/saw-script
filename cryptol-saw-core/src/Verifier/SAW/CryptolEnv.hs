@@ -67,6 +67,7 @@ import qualified Cryptol.TypeCheck.Error as TE
 import qualified Cryptol.TypeCheck.Infer as TI
 import qualified Cryptol.TypeCheck.Kind as TK
 import qualified Cryptol.TypeCheck.Monad as TM
+import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 --import qualified Cryptol.TypeCheck.PP as TP
 
 import qualified Cryptol.ModuleSystem as M
@@ -474,13 +475,14 @@ resolveIdentifier env nm =
     [i] -> doResolve (P.UnQual (C.mkIdent i))
     xs  -> let (qs,i) = (init xs, last xs)
             in doResolve (P.Qual (C.packModName qs) (C.mkIdent i))
- where
- modEnv = eModuleEnv env
- nameEnv = getNamingEnv env
+  where
+  modEnv = eModuleEnv env
+  nameEnv = getNamingEnv env
 
- doResolve pnm =
+  doResolve pnm =
+    SMT.withSolver (ME.meSolverConfig modEnv) $ \s ->
     do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader modEnv
-       (res, _ws) <- MM.runModuleM minp $
+       (res, _ws) <- MM.runModuleM (minp s) $
           MM.interactive (MB.rename interactiveName nameEnv (MR.renameVar pnm))
        case res of
          Left _ -> pure Nothing
@@ -644,7 +646,8 @@ liftModuleM ::
   ME.ModuleEnv -> MM.ModuleM a -> IO (a, ME.ModuleEnv)
 liftModuleM env m =
   do let minp = MM.ModuleInput True (pure defaultEvalOpts) ?fileReader env
-     MM.runModuleM minp m >>= moduleCmdResult
+     SMT.withSolver (ME.meSolverConfig env) $ \s ->
+       MM.runModuleM (minp s) m >>= moduleCmdResult
 
 defaultEvalOpts :: E.EvalOpts
 defaultEvalOpts = E.EvalOpts quietLogger E.defaultPPOpts
