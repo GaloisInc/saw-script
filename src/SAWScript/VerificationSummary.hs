@@ -50,7 +50,7 @@ vsVerifSolvers vs =
 
 vsTheoremSolvers :: VerificationSummary -> Set.Set String
 vsTheoremSolvers = Set.unions . map getSolvers . vsTheorems
-  where getSolvers (Theorem _ ss) = solverStatsSolvers ss
+  where getSolvers thm = solverStatsSolvers (thmStats thm)
 
 vsAllSolvers :: VerificationSummary -> Set.Set String
 vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)

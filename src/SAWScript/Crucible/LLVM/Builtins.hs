@@ -751,7 +751,7 @@ assumptionsContainContradiction ::
   TopLevel Bool
 assumptionsContainContradiction cc tactic assumptions =
   do
-     proofGoal <- io $
+     pgl <- io $
       do
          let sym = cc^.ccBackend
          st <- Common.sawCoreState sym
@@ -762,7 +762,7 @@ assumptionsContainContradiction cc tactic assumptions =
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
          goal' <- predicateToProp sc Universal [] goal
          return $ ProofGoal 0 "vc" "vacuousness check" goal'
-     evalStateT tactic (startProof proofGoal) >>= \case
+     evalStateT tactic (startProof pgl) >>= \case
        Unsat _stats -> return True
        SatMulti _stats _vals -> return False
 

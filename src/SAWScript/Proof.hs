@@ -6,6 +6,7 @@ Maintainer  : huffman
 Stability   : provisional
 -}
 
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
@@ -25,26 +26,63 @@ module SAWScript.Proof
   , prettyProp
   , ppProp
 
-  , Theorem(..)
+  , Theorem
+  , admitTheorem
+  , solverTheorem
+  , proofByTerm
+  , thmProp
+  , thmStats
+  , thmEvidence
+
+  , Evidence(..)
+  , checkEvidence
+
+  , impossibleEvidence
+  , splitEvidence
+  , passthroughEvidence
+  , forallEvidence
+  , assumeEvidence
+  , cutEvidence
+  , unfoldEvidence
+  , evalEvidence
+  , rewriteEvidence
+  , leafEvidence
 
   , ProofGoal(..)
+  , withFirstGoal
   , goalApply
   , goalIntro
   , goalAssume
   , goalInsert
 
+  , Tactic
+  , tacticIntro
+  , tacticCut
+  , tacticAssume
+  , tacticApply
+  , tacticSplit
+  , tacticTrivial
+  , tacticId
+
   , Quantification(..)
   , makeProofGoal
   , predicateToProp
   , propToPredicate
-  , ProofState(..)
+
+  , ProofState
+  , psTimeout
+  , psGoals
+  , setProofTimeout
   , startProof
   , finishProof
   ) where
 
+import qualified Control.Monad.Fail as F
+import           Control.Monad.State
 import           Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import           Data.Set (Set)
+import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
 
@@ -55,6 +93,7 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Term.Pretty (SawDoc)
+import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.Common as Common
@@ -154,8 +193,75 @@ ppProp opts (Prop tm) = ppTerm opts tm
 -- constructor indicating that it has already been proved.
 data Theorem =
   Theorem
-  { thmProp :: Prop
-  , thmStats :: SolverStats
+  { _thmProp :: Prop
+  , _thmStats :: SolverStats
+  , _thmEvidence :: Evidence
+  }
+
+data Evidence
+  = ProofTerm Term
+  | LocalAssumption Prop
+  | SolverEvidence SolverStats Prop
+  | Admitted Prop
+  | QuickcheckEvidence Integer Prop
+  | TrivialEvidence
+  | SplitEvidence Evidence Evidence
+  | ApplyEvidence Theorem [Evidence]
+  | AssumeEvidence Prop Evidence
+  | ForallEvidence TypedTerm Evidence
+  | CutEvidence Theorem Evidence
+  | RewriteEvidence Simpset Evidence
+  | UnfoldEvidence (Set VarIndex) Evidence
+  | EvalEvidence (Set VarIndex) Evidence
+
+thmProp :: Theorem -> Prop
+thmProp thm = _thmProp thm
+
+thmStats :: Theorem -> SolverStats
+thmStats thm = _thmStats thm
+
+thmEvidence :: Theorem -> Evidence
+thmEvidence thm = _thmEvidence thm
+
+impossibleEvidence :: [Evidence] -> IO Evidence
+impossibleEvidence _ = fail "impossibleEvidence: attempted to check an impossible proof!"
+
+splitEvidence :: [Evidence] -> IO Evidence
+splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
+splitEvidence _ = fail "splitEvidence: expected two evidence values"
+
+assumeEvidence :: Prop -> [Evidence] -> IO Evidence
+assumeEvidence p [e] = pure (AssumeEvidence p e)
+assumeEvidence _ _ = fail "assumeEvidence: expected one evidence value"
+
+forallEvidence :: TypedTerm -> [Evidence] -> IO Evidence
+forallEvidence tt [e] = pure (ForallEvidence tt e)
+forallEvidence _ _ = fail "forallEvidence: expected one evidence value"
+
+cutEvidence :: Theorem -> [Evidence] -> IO Evidence
+cutEvidence thm [e] = pure (CutEvidence thm e)
+cutEvidence _ _ = fail "cutEvidence: expected one evidence value"
+
+proofByTerm :: SharedContext -> Term -> IO Theorem
+proofByTerm sc prf =
+  do ty <- scTypeOf sc prf
+     p  <- termToProp sc ty
+     return (Theorem p mempty (ProofTerm prf))
+
+admitTheorem :: Prop -> Theorem
+admitTheorem p =
+  Theorem
+  { _thmProp     = p
+  , _thmStats    = solverStats "ADMITTED" (propSize p)
+  , _thmEvidence = Admitted p
+  }
+
+solverTheorem :: Prop -> SolverStats -> Theorem
+solverTheorem p stats =
+  Theorem
+  { _thmProp     = p
+  , _thmStats    = stats
+  , _thmEvidence = SolverEvidence stats p
   }
 
 -- | A @ProofGoal@ contains a proposition to be proved, along with
@@ -167,6 +273,7 @@ data ProofGoal =
   , goalName :: String
   , goalProp :: Prop
   }
+
 
 data Quantification = Existential | Universal
   deriving Eq
@@ -228,20 +335,203 @@ propToPredicate sc (Prop goal) =
 -- implies the conclusion.
 data ProofState =
   ProofState
-  { psGoals :: [ProofGoal]
-  , psConcl :: ProofGoal
-  , psStats :: SolverStats
-  , psTimeout :: Maybe Integer
+  { _psGoals :: [ProofGoal]
+  , _psConcl :: ProofGoal
+  , _psStats :: SolverStats
+  , _psTimeout :: Maybe Integer
+  , _psEvidence :: [Evidence] -> IO Evidence
   }
 
-startProof :: ProofGoal -> ProofState
-startProof g = ProofState [g] g mempty Nothing
+psTimeout :: ProofState -> Maybe Integer
+psTimeout = _psTimeout
 
-finishProof :: ProofState -> (SolverStats, Maybe Theorem)
-finishProof (ProofState gs concl stats _) =
+psGoals :: ProofState -> [ProofGoal]
+psGoals = _psGoals
+
+-- | Verify that the given evidence in fact supports
+--   the given proposition.
+checkEvidence :: SharedContext -> Evidence -> Prop -> IO ()
+checkEvidence sc e0 p0 = check mempty e0 p0
+  where
+    checkApply _hyps (Prop p) [] = return p
+    checkApply hyps (Prop p) (e:es)
+      | Just (_lnm, tp, body) <- asPi p
+      , looseVars body == emptyBitSet
+      = do check hyps e (Prop tp) -- TODO, check that tp is a prop
+           checkApply hyps (Prop body) es
+      | otherwise = fail $ unlines
+           [ "Apply evidence mismatch: non-function or dependent function"
+           , showTerm p
+           ]
+
+    check :: Set Term -> Evidence -> Prop -> IO ()
+    check hyps e p@(Prop ptm) = case e of
+      ProofTerm tm ->
+        do ty <- scTypeCheckError sc tm
+           ok <- scConvertible sc False ptm ty
+           if ok then return () else
+             fail $ unlines
+               [ "Proof term does not prove the required proposition"
+               , showTerm ptm
+               , showTerm tm
+               ]
+
+      LocalAssumption (Prop l) ->
+        if Set.member l hyps then return () else
+          fail $ unlines
+             [ "Illegal use of local hypothesis"
+             , showTerm l
+             ]
+
+      SolverEvidence _ (Prop p') ->
+        do ok <- scConvertible sc False ptm p'
+           if ok then return () else
+             fail $ unlines
+               [ "Solver proof does not prove the required proposition"
+               , showTerm ptm
+               , showTerm p'
+               ]
+
+      Admitted (Prop p') ->
+        do ok <- scConvertible sc False ptm p'
+           if ok then return () else
+             fail $ unlines
+               [ "Admitted proof does not match the required proposition"
+               , showTerm ptm
+               , showTerm p'
+               ]
+
+      QuickcheckEvidence _ (Prop p') ->
+        do ok <- scConvertible sc False ptm p'
+           if ok then return () else
+             fail $ unlines
+               [ "Quickcheck evidence does not match the required proposition"
+               , showTerm ptm
+               , showTerm p'
+               ]
+
+      TrivialEvidence ->
+        if propIsTrivial p then return () else
+          fail $ unlines
+            [ "Proposition is not trivial"
+            , showTerm ptm
+            ]
+
+      SplitEvidence e1 e2 ->
+        splitProp sc p >>= \case
+          Nothing -> fail $ unlines
+                       [ "Split evidence does not apply to non-conjunction prop"
+                       , showTerm ptm
+                       ]
+          Just (p1,p2) ->
+            do check hyps e1 p1
+               check hyps e2 p2
+
+      ApplyEvidence thm es ->
+        do p' <- checkApply hyps (thmProp thm) es
+           ok <- scConvertible sc False ptm p'
+           if ok then return () else
+             fail $ unlines
+               [ "Apply evidence does not match the required proposition"
+               , showTerm ptm
+               , showTerm p'
+               ]
+
+      CutEvidence thm e' ->
+        do p' <- scFun sc (unProp (thmProp thm)) ptm
+           check hyps e' (Prop p')
+
+      UnfoldEvidence vars e' ->
+        do p' <- unfoldProp sc vars p
+           check hyps e' p'
+
+      RewriteEvidence ss e' ->
+        do p' <- simplifyProp sc ss p
+           check hyps e' p'
+
+      EvalEvidence vars e' ->
+        do p' <- evalProp sc vars p
+           check hyps e' p'
+
+      AssumeEvidence (Prop p') e' ->
+        case asPi ptm of
+          Nothing -> fail $ unlines ["Assume evidence expected function prop", showTerm ptm]
+          Just (_lnm, ty, body) ->
+            do ok <- scConvertible sc False ty p'
+               if ok && looseVars body == emptyBitSet then
+                 check (Set.insert p' hyps) e' p
+               else
+                 fail $ unlines
+                   [ "Assume evidence types do not match"
+                   , showTerm ty
+                   , showTerm p'
+                   ]
+
+      ForallEvidence tt e' ->
+        case asPi ptm of
+          Nothing -> fail $ unlines ["Assume evidence expected function prop", showTerm ptm]
+          Just (_lnm, ty, body) ->
+            do ty' <- scTypeOf sc (ttTerm tt)
+               ok <- scConvertible sc False ty ty'
+               if ok then
+                 do body' <- instantiateVar sc 0 (ttTerm tt) body
+                    check hyps e' (Prop body')
+               else
+                 fail $ unlines ["Forall evidence types do not match"
+                                , showTerm (ttTerm tt)
+                                , showTerm ty
+                                ]
+
+rewriteEvidence :: Simpset -> [Evidence] -> IO Evidence
+rewriteEvidence ss [e] = pure (RewriteEvidence ss e)
+rewriteEvidence _ _ = fail "rewriteEvidence: incorrect arity"
+
+unfoldEvidence :: Set VarIndex -> [Evidence] -> IO Evidence
+unfoldEvidence vs [e] = pure (UnfoldEvidence vs e)
+unfoldEvidence _ _ = fail "unfoldEvidence: incorrect arity"
+
+evalEvidence :: Set VarIndex -> [Evidence] -> IO Evidence
+evalEvidence vs [e] = pure (EvalEvidence vs e)
+evalEvidence _ _ = fail "evalEvidence: incorrect arity"
+
+passthroughEvidence :: [Evidence] -> IO Evidence
+passthroughEvidence [e] = pure e
+passthroughEvidence _   = fail "passthroughEvidence: incorrect arity"
+
+leafEvidence :: Evidence -> [Evidence] -> IO Evidence
+leafEvidence e [] = pure e
+leafEvidence _ _  = fail "leafEvidence: incorrect arity"
+
+setProofTimeout :: Integer -> ProofState -> ProofState
+setProofTimeout to ps = ps { _psTimeout = Just to }
+
+startProof :: ProofGoal -> ProofState
+startProof g = ProofState [g] g mempty Nothing passthroughEvidence
+
+finishProof :: SharedContext -> ProofState -> IO (SolverStats, Maybe Theorem)
+finishProof sc (ProofState gs concl stats _ checkEv) =
   case gs of
-    []    -> (stats, Just (Theorem (goalProp concl) stats))
-    _ : _ -> (stats, Nothing)
+    [] ->
+      do e <- checkEv []
+         checkEvidence sc e (goalProp concl)
+         let thm = Theorem (goalProp concl) stats e
+         pure (stats, Just thm)
+    _ : _ ->
+         pure (stats, Nothing)
+
+type Tactic m a = ProofGoal -> m (a, SolverStats, [ProofGoal], [Evidence] -> IO Evidence)
+
+withFirstGoal :: F.MonadFail m => Tactic m a -> StateT ProofState m a
+withFirstGoal f =
+  StateT $ \(ProofState goals concl stats timeout ev) ->
+  case goals of
+    [] -> fail "ProofScript failed: no subgoal"
+    g : gs -> do
+      (x, stats', gs', ev') <- f g
+      let ev'' es = do let (es1, es2) = splitAt (length gs') es
+                       e <- ev' es1
+                       ev (e:es2)
+      return (x, ProofState (gs' <> gs) concl (stats <> stats') timeout ev'')
 
 {-
 propToSATQuery :: SharedContext -> Prop -> IO SATQuery
@@ -259,14 +549,16 @@ goalAssume goal =
   case asPi (unProp (goalProp goal)) of
     Just (_nm, tp, body)
       | looseVars body == emptyBitSet ->
-          let goal' = goal{ goalProp = Prop body }
-           in return (Just (Theorem (Prop tp) mempty, goal'))
+          do let goal' = goal{ goalProp = Prop body }
+             let p     = Prop tp
+             let thm'  = Theorem p mempty (LocalAssumption p)
+             return (Just (thm', goal'))
 
     _ -> return Nothing
 
 goalInsert :: SharedContext -> Theorem -> ProofGoal -> IO ProofGoal
-goalInsert sc (Theorem t _stats) goal =
-  do body' <- scFun sc (unProp t) (unProp (goalProp goal))
+goalInsert sc thm goal =
+  do body' <- scFun sc (unProp (thmProp thm)) (unProp (goalProp goal))
      let goal' = goal{ goalProp = Prop body' }
      return goal'
 
@@ -283,8 +575,10 @@ goalIntro sc s goal =
          return (Just (tt, goal'))
 
 goalApply :: SharedContext -> Theorem -> ProofGoal -> IO (Maybe [ProofGoal])
-goalApply sc (Theorem rule _stats) goal = applyFirst (asPiLists (unProp rule))
+goalApply sc thm goal = applyFirst (asPiLists (unProp rule))
   where
+    rule = thmProp thm
+
     applyFirst [] = pure Nothing
     applyFirst ((ruleArgs, ruleConcl) : rest) =
       do result <- scMatch sc ruleConcl (unProp (goalProp goal))
@@ -310,3 +604,47 @@ goalApply sc (Theorem rule _stats) goal = applyFirst (asPiLists (unProp rule))
         Nothing -> [([], t)]
         Just (nm, tp, body) ->
           [ ((nm, tp) : args, concl) | (args, concl) <- asPiLists body ] ++ [([], t)]
+
+
+tacticIntro :: (F.MonadFail m, MonadIO m) => SharedContext -> String -> Tactic m TypedTerm
+tacticIntro sc nm goal =
+  liftIO (goalIntro sc nm goal) >>= \case
+    Nothing -> fail "intro tactic failed: no a pi type"
+    Just (tt, goal') -> return (tt, mempty, [goal'], forallEvidence tt)
+
+tacticAssume :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m Theorem
+tacticAssume _sc goal =
+  liftIO (goalAssume goal) >>= \case
+    Nothing -> fail "assume tactic failed: not a function, or a dependent function"
+    Just (thm, goal') -> return (thm, mempty, [goal'], assumeEvidence (thmProp thm))
+
+tacticCut :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
+tacticCut sc thm goal =
+  do goal' <- liftIO (goalInsert sc thm goal)
+     return ((), mempty, [goal'], cutEvidence thm)
+
+tacticApply :: (F.MonadFail m, MonadIO m) => SharedContext -> Theorem -> Tactic m ()
+tacticApply sc thm goal =
+  liftIO (goalApply sc thm goal) >>= \case
+    Nothing -> fail "apply tactic failed: no match"
+    Just newgoals ->
+      return ((), mempty, newgoals, pure . ApplyEvidence thm)
+
+tacticSplit :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
+tacticSplit sc (ProofGoal num ty name prop) =
+  liftIO (splitProp sc prop) >>= \case
+    Nothing -> fail "split tactic failed: goal not a conjunction"
+    Just (p1,p2) ->
+      do let g1 = ProofGoal num (ty ++ ".left")  name p1
+         let g2 = ProofGoal num (ty ++ ".right") name p2
+         return ((), mempty, [g1,g2], splitEvidence)
+
+tacticTrivial :: (F.MonadFail m, MonadIO m) => SharedContext -> Tactic m ()
+tacticTrivial _sc goal =
+  if (propIsTrivial (goalProp goal)) then
+    return ((), mempty, [], leafEvidence TrivialEvidence)
+  else
+    fail "trivial tactic: not a trivial goal"
+
+tacticId :: Monad m => Tactic m ()
+tacticId goal = return ((), mempty, [goal], passthroughEvidence)
