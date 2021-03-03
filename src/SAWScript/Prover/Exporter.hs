@@ -72,8 +72,8 @@ import SAWScript.Crucible.Common
 import SAWScript.Proof (Prop, propSize, propToTerm, predicateToProp, Quantification(..), propToPredicate)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
-import SAWScript.Prover.What4
 import SAWScript.Prover.SBV (prepNegatedSBV)
+import SAWScript.Prover.What4
 import SAWScript.Value
 
 import qualified What4.Interface as W4

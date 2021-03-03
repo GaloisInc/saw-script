@@ -580,6 +580,7 @@ satExternal doCNF execName args = withFirstGoal $ tacticSolve $ \g -> do
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
   (path, fh) <- openTempFile "." cnfName
   hClose fh -- Yuck. TODO: allow writeCNF et al. to work on handles.
+
   let args' = map replaceFileName args
       replaceFileName "%f" = path
       replaceFileName a = a

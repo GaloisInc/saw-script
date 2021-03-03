@@ -26,6 +26,7 @@ module SAWScript.Proof
   , propSize
   , prettyProp
   , ppProp
+  , propToSATQuery
 
   , Theorem
   , thmProp
@@ -70,6 +71,7 @@ module SAWScript.Proof
 
 import qualified Control.Monad.Fail as F
 import           Control.Monad.State
+import           Control.Monad.Trans.Maybe (runMaybeT)
 import           Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -77,9 +79,11 @@ import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
 
+import Verifier.SAW.FiniteValue
 import Verifier.SAW.Prelude (scApplyPrelude_False)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
+import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
@@ -675,19 +679,52 @@ withFirstGoal f =
       (x, stats', gs', buildTacticEvidence) <- runTactic f g
       let evidenceCont' es =
               do let (es1, es2) = splitAt (length gs') es
-                     e <- buildTacticEvidence es1
-                     evidenceCont (e:es2)
+                 e <- buildTacticEvidence es1
+                 evidenceCont (e:es2)
       return (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont')
 
-{-
-propToSATQuery :: SharedContext -> Prop -> IO SATQuery
-propToSATQuery sc (Prop goal) =
-  do let (args, t1) = asPiList goal
-     case asEqTrue t1 of
-       Nothing -> fail $ "propToSATQuery: expected EqTrue, actual " ++ show t1
-       Just t2 ->
--}
+-- | Given a proposition, compute a SAT query which will prove the proposition
+--   iff the SAT query is unsatisfiable.
+propToSATQuery :: SharedContext -> Set VarIndex -> Prop -> IO SATQuery
+propToSATQuery sc unintSet prop =
+    do tm <- propToTerm sc prop
+       (initVars, abstractVars) <- filterFirstOrderVars mempty mempty (getAllExts tm)
+       (finalVars, asserts)     <- processTerm initVars [] tm
+       return SATQuery
+              { satVariables = finalVars
+              , satUninterp  = Set.union unintSet abstractVars
+              , satAsserts   = asserts
+              }
 
+  where
+    filterFirstOrderVars fovars absvars [] = pure (fovars, absvars)
+    filterFirstOrderVars fovars absvars (e:es) =
+      runMaybeT (asFirstOrderTypeMaybe sc (ecType e)) >>= \case
+        Nothing  -> filterFirstOrderVars fovars (Set.insert (ecVarIndex e) absvars) es
+        Just fot -> filterFirstOrderVars (Map.insert e fot fovars) absvars es
+
+    processTerm vars xs tm =
+      case asPi tm of
+        Just (lnm, tp, body)
+          | Just x <- asEqTrue tp
+          , looseVars body == emptyBitSet ->
+              do processTerm vars (x:xs) body
+
+            -- TODO? Allow first-order hypotheses...
+
+          | otherwise ->
+              do fot <- asFirstOrderType sc tp
+                 ec  <- scFreshEC sc (Text.unpack lnm) tp
+                 etm <- scExtCns sc ec
+                 body' <- instantiateVar sc 0 etm body
+                 processTerm (Map.insert ec fot vars) xs body'
+
+        Nothing ->
+          case asEqTrue tm of
+            Nothing  -> fail $ "propToSATQuery: expected EqTrue, actual " ++ showTerm tm
+            Just tmBool ->
+              do tmNeg <- scNot sc tmBool
+                 return (vars, reverse (tmNeg:xs))
 
 -- | Given a goal to prove, attempt to apply the given proposition, producing
 --   new subgoals for any necessary hypotheses of the proposition.  Returns
