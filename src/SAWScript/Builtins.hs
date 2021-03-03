@@ -339,7 +339,7 @@ readCore path = do
 quickcheckGoal :: SharedContext -> Integer -> ProofScript SV.SatResult
 quickcheckGoal sc n = do
   opts <- Control.Monad.State.lift getOptions
-  withFirstGoal $ \goal -> io $ do
+  withFirstGoal $ tacticSolve $ \goal -> io $ do
     printOutLn opts Warn $ "WARNING: using quickcheck to prove goal..."
     hFlush stdout
     tm0 <- propToPredicate sc (goalProp goal)
@@ -353,26 +353,26 @@ quickcheckGoal sc n = do
         case result of
           Nothing -> do
             printOutLn opts Info $ "checked " ++ show n ++ " cases."
-            return (SV.Unsat stats, stats, [], leafEvidence (QuickcheckEvidence n (goalProp goal)))
+            return (SV.Unsat stats, stats, Just (QuickcheckEvidence n (goalProp goal)))
           -- TODO: use reasonable names here
-          Just cex -> return (SV.SatMulti stats (zip (repeat "_") (map toFirstOrderValue cex)), stats, [goal], impossibleEvidence)
+          Just cex -> return (SV.SatMulti stats (zip (repeat "_") (map toFirstOrderValue cex)), stats, Nothing)
       Nothing -> fail $ "quickcheck:\n" ++
         "term has non-testable type:\n" ++
         showTerm ty ++ ", for term: " ++ showTerm tm
 
 assumeValid :: ProofScript SV.ProofResult
 assumeValid =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (SV.Valid stats, stats, [], leafEvidence (Admitted (goalProp goal)))
+     return (SV.Valid stats, stats, Just (Admitted (goalProp goal)))
 
 assumeUnsat :: ProofScript SV.SatResult
 assumeUnsat =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (SV.Unsat stats, stats, [], leafEvidence (Admitted (goalProp goal)))
+     return (SV.Unsat stats, stats, Just (Admitted (goalProp goal)))
 
 trivial :: ProofScript SV.SatResult
 trivial =
@@ -409,44 +409,40 @@ print_term_depth d t =
 
 print_goal :: ProofScript ()
 print_goal =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      output <- liftIO (scShowTerm sc opts =<< propToTerm sc (goalProp goal))
      printOutLnTop Info ("Goal " ++ goalName goal ++ " (goal number " ++ (show $ goalNum goal) ++ "):")
      printOutLnTop Info output
-     tacticId goal
 
 print_goal_depth :: Int -> ProofScript ()
 print_goal_depth n =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticId $ \goal ->
   do opts <- getTopLevelPPOpts
      sc <- getSharedContext
      let opts' = opts { ppMaxDepth = Just n }
      output <- liftIO (scShowTerm sc opts' =<< propToTerm sc (goalProp goal))
      printOutLnTop Info ("Goal " ++ goalName goal ++ ":")
      printOutLnTop Info output
-     tacticId goal
 
 printGoalConsts :: ProofScript ()
 printGoalConsts =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticId $ \goal ->
   do sc <- getSharedContext
      tm <- io (propToTerm sc (goalProp goal))
      mapM_ (printOutLnTop Info) $
        [ show nm
        | (_,(nm,_,_)) <- Map.toList (getConstantSet tm)
        ]
-     tacticId goal
 
 printGoalSize :: ProofScript ()
 printGoalSize =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticId $ \goal ->
   do sc <- getSharedContext
      t  <- io (propToTerm sc (goalProp goal))
      printOutLnTop Info $ "Goal shared size: " ++ show (scSharedSize t)
      printOutLnTop Info $ "Goal unshared size: " ++ show (scTreeSize t)
-     tacticId goal
 
 resolveNames :: [String] -> TopLevel (Set VarIndex)
 resolveNames nms =
@@ -488,33 +484,33 @@ resolveName sc nm =
 
 unfoldGoal :: [String] -> ProofScript ()
 unfoldGoal unints =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unints' <- resolveNames unints
      prop' <- io (unfoldProp sc unints' (goalProp goal))
-     return ((), mempty, [goal { goalProp = prop' }], unfoldEvidence unints')
+     return (prop', UnfoldEvidence unints')
 
 simplifyGoal :: Simpset -> ProofScript ()
 simplifyGoal ss =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticChange $ \goal ->
   do sc <- getSharedContext
      prop' <- io (simplifyProp sc ss (goalProp goal))
-     return ((), mempty, [goal { goalProp = prop' }], rewriteEvidence ss)
+     return (prop', RewriteEvidence ss)
 
 goal_eval :: [String] -> ProofScript ()
 goal_eval unints =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticChange $ \goal ->
   do sc <- getSharedContext
      unintSet <- resolveNames unints
      prop' <- io (evalProp sc unintSet (goalProp goal))
-     return ((), mempty, [goal { goalProp = prop' }], evalEvidence unintSet)
+     return (prop', EvalEvidence unintSet)
 
 beta_reduce_goal :: ProofScript ()
 beta_reduce_goal =
-  withFirstGoal $ \goal ->
+  withFirstGoal $ tacticChange $ \goal ->
   do sc <- getSharedContext
      prop' <- io (betaReduceProp sc (goalProp goal))
-     return ((), mempty, [goal { goalProp = prop' }], passthroughEvidence)
+     return (prop', id)
 
 goal_apply :: Theorem -> ProofScript ()
 goal_apply thm =
@@ -576,7 +572,7 @@ parseDimacsSolution vars ls = map lkup vars
     lkup v = Map.findWithDefault False v assgnMap
 
 satExternal :: Bool -> String -> [String] -> ProofScript SV.SatResult
-satExternal doCNF execName args = withFirstGoal $ \g -> do
+satExternal doCNF execName args = withFirstGoal $ tacticSolve $ \g -> do
   sc <- SV.getSharedContext
   SV.AIGProxy proxy <- SV.getProxy
   io $ do
@@ -598,7 +594,6 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   let ls = lines out
       sls = filter ("s " `isPrefixOf`) ls
       vls = filter ("v " `isPrefixOf`) ls
-  ft <- falseProp sc
   let stats = solverStats ("external SAT:" ++ execName) (scSharedSize t)
   case (sls, vls) of
     (["s SATISFIABLE"], _) -> do
@@ -610,10 +605,10 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
         Right vs
           | length argNames == length vs -> do
             let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
-            return (r', stats, [g { goalProp = ft }], impossibleEvidence)
+            return (r', stats, Nothing)
           | otherwise -> fail $ unwords ["external SAT results do not match expected arguments", show argNames, show vs]
     (["s UNSATISFIABLE"], []) ->
-      return (SV.Unsat stats, stats, [], leafEvidence (SolverEvidence stats (goalProp g)))
+      return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
     _ -> fail $ "Unexpected result from SAT solver:\n" ++ out
 
 writeAIGWithMapping :: AIG.IsAIG l g => g s -> l s -> FilePath -> IO [Int]
@@ -668,17 +663,12 @@ applyProverToGoal :: (SharedContext
                       -> Prop -> IO (Maybe [(String, FirstOrderValue)], SolverStats))
                      -> SharedContext
                      -> ProofGoal
-                     -> TopLevel (SV.SatResult, SolverStats, [ProofGoal], [Evidence] -> IO Evidence)
+                     -> TopLevel (SV.SatResult, SolverStats, Maybe Evidence)
 applyProverToGoal f sc g = do
   (mb, stats) <- io $ f sc (goalProp g)
-
-  let nope r = do ft <- io $ falseProp sc
-                  return (r, stats, [ g { goalProp = ft } ], impossibleEvidence)
-
   case mb of
-    Nothing -> return (SV.Unsat stats, stats, [], leafEvidence (SolverEvidence stats (goalProp g)))
-    Just a  -> nope (SV.SatMulti stats a)
-
+    Nothing -> return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
+    Just a  -> return (SV.SatMulti stats a, stats, Nothing)
 
 
 wrapProver ::
@@ -687,8 +677,7 @@ wrapProver ::
   ProofScript SV.SatResult
 wrapProver f = do
   sc <- lift $ SV.getSharedContext
-  withFirstGoal (applyProverToGoal f sc)
-
+  withFirstGoal $ tacticSolve $ applyProverToGoal f sc
 
 wrapW4Prover ::
   ( Set VarIndex -> SharedContext -> Bool ->
@@ -711,7 +700,7 @@ wrapW4ProveExporter f unints path ext = do
   hashConsing <- lift $ gets SV.rwWhat4HashConsing
   sc <- lift $ SV.getSharedContext
   unintSet <- lift $ resolveNames unints
-  withFirstGoal $ \g -> do
+  withFirstGoal $ tacticSolve $ \g -> do
     let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
     applyProverToGoal (\s -> f unintSet s hashConsing file) sc g
 
@@ -796,10 +785,10 @@ proveWithExporter ::
   String ->
   ProofScript SV.SatResult
 proveWithExporter exporter path ext =
-  withFirstGoal $ \g ->
+  withFirstGoal $ tacticSolve $ \g ->
   do let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
      stats <- Prover.proveWithExporter exporter file (goalProp g)
-     return (SV.Unsat stats, stats, [], leafEvidence (SolverEvidence stats (goalProp g)))
+     return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
 
 offline_aig :: FilePath -> ProofScript SV.SatResult
 offline_aig path = do
