@@ -810,6 +810,7 @@ assertPost globals env premem preregs = do
     [ returnMatches
     , pointsToMatches
     , setupConditionMatches
+    , [LO.assertTermEqualities sc cc]
     ]
   st <- case result of
     Left err -> throwX86 $ show err
