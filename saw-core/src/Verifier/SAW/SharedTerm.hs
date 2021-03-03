@@ -392,7 +392,7 @@ scShowTerm sc opts t =
      pure (showTermWithNames opts env t)
 
 -- | Create a global variable with the given identifier (which may be "_") and type.
-scFreshEC :: SharedContext -> String -> Term -> IO (ExtCns Term)
+scFreshEC :: SharedContext -> String -> a -> IO (ExtCns a)
 scFreshEC sc x tp = do
   i   <- scFreshGlobalVar sc
   let x' = Text.pack x
