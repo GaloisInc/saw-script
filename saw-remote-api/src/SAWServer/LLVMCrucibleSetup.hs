@@ -93,13 +93,13 @@ compileLLVMContract ::
   LLVMCrucibleSetupM ()
 compileLLVMContract fileReader bic ghostEnv cenv0 c =
   do allocsPre <- mapM setupAlloc (preAllocated c)
-     (envPre, cenvPre) <- setupState allocsPre cenv0 (preVars c)
+     (envPre, cenvPre) <- setupState allocsPre (Map.empty, cenv0) (preVars c)
      mapM_ (\p -> getTypedTerm cenvPre p >>= llvm_precond) (preConds c)
      mapM_ (setupPointsTo (envPre, cenvPre)) (prePointsTos c)
      --mapM_ (setupGhostPointsTo ghostEnv cenvPre) (preGhostPointsTos c)
      traverse (getSetupVal (envPre, cenvPre)) (argumentVals c) >>= llvm_execute_func
      allocsPost <- mapM setupAlloc (postAllocated c)
-     (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) cenvPre (postVars c)
+     (envPost, cenvPost) <- setupState (allocsPre ++ allocsPost) (envPre, cenvPre) (postVars c)
      mapM_ (\p -> getTypedTerm cenvPost p >>= llvm_postcond) (postConds c)
      mapM_ (setupPointsTo (envPost, cenvPost)) (postPointsTos c)
      --mapM_ (setupGhostPointsTo ghostEnv cenvPost) (postGhostPointsTos c)
@@ -111,13 +111,13 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
       do t <- llvm_fresh_var (T.unpack dn) (llvmType ty)
          return (n, t)
 
-    setupState allocs cenv vars =
+    setupState allocs (env, cenv) vars =
       do freshTerms <- mapM setupFresh vars
          let cenv' = foldr (\(ServerName n, t) -> CEnv.bindTypedTerm (mkIdent n, t)) cenv freshTerms
-         let env = Map.fromList $
+         let env' = Map.union env $ Map.fromList $
                    [ (n, Val (CMS.anySetupTerm t)) | (n, t) <- freshTerms ] ++
                    [ (n, Val v) | (n, v) <- allocs ]
-         return (env, cenv')
+         return (env', cenv')
 
     setupAlloc (Allocated n ty mut malign) =
       case (mut, malign) of
