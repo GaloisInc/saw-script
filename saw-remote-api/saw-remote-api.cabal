@@ -25,9 +25,6 @@ common warnings
   ghc-options:
     -Wall
     -Wno-orphans
-    -Wno-prepositive-qualified-module
-    -Wno-unused-packages
-    -Wno-missing-safe-haskell-mode
 
 common errors
   ghc-options:
