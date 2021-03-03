@@ -15,6 +15,7 @@ module SAWServer.Data.Contract
 
 import Control.Applicative
 import Data.Aeson (FromJSON(..), withObject, withText, (.:), (.:?))
+import Data.Maybe (maybeToList)
 import Data.Text (Text)
 
 import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType(..))
@@ -32,13 +33,13 @@ data Contract ty cryptolExpr =
     { preVars       :: [ContractVar ty]
     , preConds      :: [cryptolExpr]
     , preAllocated  :: [Allocated ty]
-    --, preGhostPointsTos  :: [GhostPointsTo cryptolExpr]
+    , preGhostPointsTos  :: [GhostPointsTo cryptolExpr]
     , prePointsTos  :: [PointsTo ty cryptolExpr]
     , argumentVals  :: [CrucibleSetupVal cryptolExpr]
     , postVars      :: [ContractVar ty]
     , postConds     :: [cryptolExpr]
     , postAllocated :: [Allocated ty]
-    --, postGhostPointsTos :: [GhostPointsTo cryptolExpr]
+    , postGhostPointsTos :: [GhostPointsTo cryptolExpr]
     , postPointsTos :: [PointsTo ty cryptolExpr]
     , returnVal     :: Maybe (CrucibleSetupVal cryptolExpr)
     }
@@ -113,13 +114,13 @@ instance (FromJSON ty, FromJSON e) => FromJSON (Contract ty e) where
     Contract <$> o .:  "pre vars"
              <*> o .:  "pre conds"
              <*> o .:  "pre allocated"
-             -- <*> o .: pure [] -- TODO
+             <*> (maybeToList <$> o .:? "pre ghost vars")
              <*> o .:  "pre points tos"
              <*> o .:  "argument vals"
              <*> o .:  "post vars"
              <*> o .:  "post conds"
              <*> o .:  "post allocated"
-             -- <*> o .: pure [] -- TODO
+             <*> (maybeToList <$> o .:? "post ghost vars")
              <*> o .:  "post points tos"
              <*> o .:? "return val"
 
