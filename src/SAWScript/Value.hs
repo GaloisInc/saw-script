@@ -550,7 +550,7 @@ type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 --   specifications should be polymorphic in the underlying architecture
 -- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
 
-data LLVMCrucibleSetupM a =
+newtype LLVMCrucibleSetupM a =
   LLVMCrucibleSetupM
     { runLLVMCrucibleSetupM ::
         forall arch.
