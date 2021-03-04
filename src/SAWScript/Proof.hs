@@ -42,10 +42,8 @@ module SAWScript.Proof
   , Evidence(..)
   , checkEvidence
 
-  , ProofGoal(..)
-  , withFirstGoal
-
   , Tactic
+  , withFirstGoal
   , tacticIntro
   , tacticCut
   , tacticAssume
@@ -57,7 +55,6 @@ module SAWScript.Proof
   , tacticSolve
 
   , Quantification(..)
-  , makeProofGoal
   , predicateToProp
   , propToPredicate
 
@@ -65,8 +62,11 @@ module SAWScript.Proof
   , psTimeout
   , psGoals
   , setProofTimeout
+  , ProofGoal(..)
   , startProof
   , finishProof
+
+  , predicateToSATQuery
   ) where
 
 import qualified Control.Monad.Fail as F
@@ -411,47 +411,32 @@ data ProofGoal =
 data Quantification = Existential | Universal
   deriving Eq
 
--- | Construct a 'ProofGoal' from a term of type @Bool@, or a function
--- of any arity with a boolean result type. Any function arguments are
--- treated as quantified variables. If the 'Quantification' argument
--- is 'Existential', then the predicate is negated and turned into a
--- universally-quantified goal.
-makeProofGoal ::
-  SharedContext ->
-  Quantification ->
-  Int    {- goal number    -} ->
-  String {- goal type      -} ->
-  String {- goal name      -} ->
-  Term   {- goal predicate -} ->
-  IO ProofGoal
-makeProofGoal sc quant gnum gtype gname t =
-  do t' <- predicateToProp sc quant [] t
-     return (ProofGoal gnum gtype gname t')
-
 -- | Convert a term with a function type of any arity into a pi type.
 -- Negate the term if the result type is @Bool@ and the quantification
 -- is 'Existential'.
-predicateToProp :: SharedContext -> Quantification -> [Term] -> Term -> IO Prop
-predicateToProp sc quant env t =
-  case asLambda t of
-    Just (x, ty, body) ->
-      do Prop body' <- predicateToProp sc quant (ty : env) body
-         Prop <$> scPi sc x ty body'
-    Nothing ->
-      do (argTs, resT) <- asPiList <$> scTypeOf' sc env t
-         let toPi [] t0 =
-               case asBoolType resT of
-                 Nothing -> return t0 -- TODO: check quantification
-                 Just () ->
-                   case quant of
-                     Universal -> scEqTrue sc t0
-                     Existential -> scEqTrue sc =<< scNot sc t0
-             toPi ((x, xT) : tys) t0 =
-               do t1 <- incVars sc 0 1 t0
-                  t2 <- scApply sc t1 =<< scLocalVar sc 0
-                  t3 <- toPi tys t2
-                  scPi sc x xT t3
-         Prop <$> toPi argTs t
+predicateToProp :: SharedContext -> Quantification -> Term -> IO Prop
+predicateToProp sc quant = loop []
+  where
+  loop env t =
+    case asLambda t of
+      Just (x, ty, body) ->
+        do Prop body' <- loop (ty : env) body
+           Prop <$> scPi sc x ty body'
+      Nothing ->
+        do (argTs, resT) <- asPiList <$> scTypeOf' sc env t
+           let toPi [] t0 =
+                 case asBoolType resT of
+                   Nothing -> return t0 -- TODO: check quantification  TODO2: should this just be an error?
+                   Just () ->
+                     case quant of
+                       Universal -> scEqTrue sc t0
+                       Existential -> scEqTrue sc =<< scNot sc t0
+               toPi ((x, xT) : tys) t0 =
+                 do t1 <- incVars sc 0 1 t0
+                    t2 <- scApply sc t1 =<< scLocalVar sc 0
+                    t3 <- toPi tys t2
+                    scPi sc x xT t3
+           Prop <$> toPi argTs t
 
 -- | Turn a pi type with an @EqTrue@ result into a lambda term with a
 -- boolean result type. This function exists to interface the new
@@ -683,6 +668,42 @@ withFirstGoal f =
                  evidenceCont (e:es2)
       return (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont')
 
+predicateToSATQuery :: SharedContext -> Set VarIndex -> Term -> IO SATQuery
+predicateToSATQuery sc unintSet tm0 =
+    do (initVars, abstractVars) <- filterFirstOrderVars mempty mempty (getAllExts tm0)
+       (finalVars, tm') <- processTerm initVars tm0
+       return SATQuery
+              { satVariables = finalVars
+              , satUninterp  = Set.union unintSet abstractVars
+              , satAsserts   = [tm']
+              }
+  where
+    filterFirstOrderVars fovars absvars [] = pure (fovars, absvars)
+    filterFirstOrderVars fovars absvars (e:es) =
+      runMaybeT (asFirstOrderTypeMaybe sc (ecType e)) >>= \case
+        Nothing  -> filterFirstOrderVars fovars (Set.insert (ecVarIndex e) absvars) es
+        Just fot -> filterFirstOrderVars (Map.insert e fot fovars) absvars es
+
+    processTerm vars tm =
+      case asLambda tm of
+        Just (lnm,tp,body) ->
+          do fot <- asFirstOrderType sc tp
+             ec  <- scFreshEC sc (Text.unpack lnm) tp
+             etm <- scExtCns sc ec
+             body' <- instantiateVar sc 0 etm body
+             processTerm (Map.insert ec fot vars) body'
+
+          -- TODO: check that the type is a boolean
+        Nothing ->
+          do ty <- scTypeOf sc tm
+             ok <- scConvertible sc True ty =<< scBoolType sc
+             unless ok $ fail $ unlines
+               [ "predicateToSATQuery: expected boolean result but got:"
+               , showTerm ty
+               , showTerm tm0
+               ]
+             return (vars, tm)
+
 -- | Given a proposition, compute a SAT query which will prove the proposition
 --   iff the SAT query is unsatisfiable.
 propToSATQuery :: SharedContext -> Set VarIndex -> Prop -> IO SATQuery
@@ -710,7 +731,7 @@ propToSATQuery sc unintSet prop =
           , looseVars body == emptyBitSet ->
               do processTerm vars (x:xs) body
 
-            -- TODO? Allow first-order hypotheses...
+            -- TODO? Allow universal hypotheses...
 
           | otherwise ->
               do fot <- asFirstOrderType sc tp
@@ -749,6 +770,7 @@ goalApply sc rule goal = applyFirst (asPiLists (unProp rule))
                       mkNewGoals mts args
                     mkNewGoals _ _ = return []
                 newgoalterms <- mkNewGoals inst' (reverse ruleArgs)
+                -- TODO, change the "ty" field to list the hypotheses?
                 let newgoals = reverse [ goal { goalProp = t } | t <- newgoalterms ]
                 return (Just newgoals)
 

@@ -64,6 +64,7 @@ import Verifier.SAW.FiniteValue
   , FirstOrderValue(..), asFiniteType
   , toFirstOrderValue, scFirstOrderValue
   )
+import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
 import qualified Verifier.SAW.SCTypeCheck as TC (TypedTerm(..))
 import Verifier.SAW.SharedTerm
@@ -780,47 +781,60 @@ offline_w4_unint_yices :: [String] -> String -> ProofScript SV.SatResult
 offline_w4_unint_yices unints path =
      wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
 
-proveWithExporter ::
+proveWithSATExporter ::
+  (SharedContext -> FilePath -> SATQuery -> TopLevel ()) ->
+  Set VarIndex ->
+  String ->
+  String ->
+  ProofScript SV.SatResult
+proveWithSATExporter exporter unintSet path ext =
+  withFirstGoal $ tacticSolve $ \g ->
+  do let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
+     stats <- Prover.proveWithSATExporter exporter unintSet file (goalProp g)
+     return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
+
+proveWithPropExporter ::
   (SharedContext -> FilePath -> Prop -> TopLevel ()) ->
   String ->
   String ->
   ProofScript SV.SatResult
-proveWithExporter exporter path ext =
+proveWithPropExporter exporter path ext =
   withFirstGoal $ tacticSolve $ \g ->
   do let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
-     stats <- Prover.proveWithExporter exporter file (goalProp g)
+     stats <- Prover.proveWithPropExporter exporter file (goalProp g)
      return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
+
 
 offline_aig :: FilePath -> ProofScript SV.SatResult
 offline_aig path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  proveWithExporter (Prover.adaptExporter (Prover.writeAIG proxy)) path ".aig"
+  proveWithSATExporter (Prover.writeAIG_SAT proxy) mempty path ".aig"
 
 offline_cnf :: FilePath -> ProofScript SV.SatResult
 offline_cnf path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  proveWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
+  proveWithSATExporter (Prover.writeCNF proxy) mempty path ".cnf"
 
 offline_coq :: FilePath -> ProofScript SV.SatResult
-offline_coq path = proveWithExporter (const (Prover.writeCoqProp "goal" [] [])) path ".v"
+offline_coq path = proveWithPropExporter (const (Prover.writeCoqProp "goal" [] [])) path ".v"
 
 offline_extcore :: FilePath -> ProofScript SV.SatResult
-offline_extcore path = proveWithExporter (const Prover.writeCoreProp) path ".extcore"
+offline_extcore path = proveWithPropExporter (const Prover.writeCoreProp) path ".extcore"
 
 offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
-offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2 path ".smt2"
+offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2 mempty path ".smt2"
 
 w4_offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
-w4_offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2What4 path ".smt2"
+w4_offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2What4 mempty path ".smt2"
 
 offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript SV.SatResult
 offline_unint_smtlib2 unints path =
   do unintSet <- lift $ resolveNames unints
-     proveWithExporter (Prover.writeUnintSMTLib2 unintSet) path ".smt2"
+     proveWithSATExporter Prover.writeSMTLib2 unintSet path ".smt2"
 
 offline_verilog :: FilePath -> ProofScript SV.SatResult
 offline_verilog path =
-  proveWithExporter (Prover.adaptExporter Prover.write_verilog) path ".v"
+  proveWithSATExporter Prover.writeVerilogSAT mempty path ".v"
 
 parseAigerCex :: String -> IO [Bool]
 parseAigerCex text =
@@ -892,7 +906,8 @@ provePrim :: ProofScript SV.SatResult
 provePrim script t = do
   io $ checkBooleanSchema (ttSchema t)
   sc <- getSharedContext
-  goal <- io $ makeProofGoal sc Universal 0 "prove" "prove" (ttTerm t)
+  prop <- io $ predicateToProp sc Universal (ttTerm t)
+  let goal = ProofGoal 0 "prove" "prove" prop
   (r, pstate) <- runStateT script (startProof goal)
   io (finishProof sc pstate) >>= \case
     (_stats, Just _) -> return ()
@@ -904,7 +919,8 @@ provePrintPrim :: ProofScript SV.SatResult
                -> TypedTerm -> TopLevel Theorem
 provePrintPrim script t = do
   sc <- getSharedContext
-  goal <- io $ makeProofGoal sc Universal 0 "prove" "prove" (ttTerm t)
+  prop <- io $ predicateToProp sc Universal (ttTerm t)
+  let goal = ProofGoal 0 "prove" "prove" prop
   (r, pstate) <- runStateT script (startProof goal)
   opts <- rwPPOpts <$> getTopLevelRW
   io (finishProof sc pstate) >>= \case
@@ -919,7 +935,8 @@ satPrim :: ProofScript SV.SatResult -> TypedTerm
 satPrim script t =
   do io $ checkBooleanSchema (ttSchema t)
      sc <- getSharedContext
-     goal <- io $ makeProofGoal sc Existential 0 "sat" "sat" (ttTerm t)
+     prop <- io $ predicateToProp sc Existential (ttTerm t)
+     let goal = ProofGoal 0 "sat" "sat" prop
      evalStateT script (startProof goal)
 
 satPrintPrim :: ProofScript SV.SatResult
