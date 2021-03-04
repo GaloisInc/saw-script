@@ -29,6 +29,7 @@ import Data.Monoid
 #endif
 import Control.Monad.State
 import Control.Monad.Reader (ask)
+import Control.Monad.Trans.Maybe (runMaybeT)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
@@ -346,17 +347,18 @@ quickcheckGoal sc n = do
     tm0 <- propToPredicate sc (goalProp goal)
     tm <- scAbstractExts sc (getAllExts tm0) tm0
     ty <- scTypeOf sc tm
-    maybeInputs <- scTestableType sc ty
+    maybeInputs <- runMaybeT (scTestableType sc ty)
     let stats = solverStats "quickcheck" (scSharedSize tm)
     case maybeInputs of
       Just inputs -> do
-        result <- scRunTestsTFIO sc n tm inputs
+        result <- scRunTestsTFIO sc n tm (map snd inputs)
         case result of
           Nothing -> do
             printOutLn opts Info $ "checked " ++ show n ++ " cases."
             return (SV.Unsat stats, stats, Just (QuickcheckEvidence n (goalProp goal)))
-          -- TODO: use reasonable names here
-          Just cex -> return (SV.SatMulti stats (zip (repeat "_") (map toFirstOrderValue cex)), stats, Nothing)
+          Just cexVals ->
+            let cex = zip (map (Text.unpack . fst) inputs) cexVals
+             in return (SV.SatMulti stats cex, stats, Nothing)
       Nothing -> fail $ "quickcheck:\n" ++
         "term has non-testable type:\n" ++
         showTerm ty ++ ", for term: " ++ showTerm tm
@@ -952,15 +954,17 @@ quickCheckPrintPrim :: Options -> SharedContext -> Integer -> TypedTerm -> IO ()
 quickCheckPrintPrim opts sc numTests tt = do
   let tm = ttTerm tt
   ty <- scTypeOf sc tm
-  maybeInputs <- scTestableType sc ty
+  maybeInputs <- runMaybeT (scTestableType sc ty)
   case maybeInputs of
     Just inputs -> do
-      result <- scRunTestsTFIO sc numTests tm inputs
+      result <- scRunTestsTFIO sc numTests tm (map snd inputs)
       case result of
         Nothing -> printOutLn opts Info $ "All " ++ show numTests ++ " tests passed!"
-        Just counterExample -> printOutLn opts OnlyCounterExamples $
-          "----------Counterexample----------\n" ++
-          showList counterExample ""
+        Just cexVals ->
+          let cex = zip (map fst inputs) cexVals in
+          printOutLn opts OnlyCounterExamples $
+            "----------Counterexample----------\n" ++
+            showList cex ""
     Nothing -> fail $ "quickCheckPrintPrim:\n" ++
       "term has non-testable type:\n" ++
       pretty (ttSchema tt)
