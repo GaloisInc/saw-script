@@ -9,8 +9,8 @@ USER user
 WORKDIR /solvers
 RUN mkdir -p rootfs/usr/local/bin
 
-# Get Z3 4.8.8 from GitHub
-RUN curl -L https://github.com/Z3Prover/z3/releases/download/z3-4.8.8/z3-4.8.8-x64-ubuntu-16.04.zip --output z3.zip
+# Get Z3 4.8.10 from GitHub
+RUN curl -L https://github.com/Z3Prover/z3/releases/download/z3-4.8.10/z3-4.8.10-x64-ubuntu-18.04.zip --output z3.zip
 RUN unzip z3.zip
 RUN mv z3-*/bin/z3 rootfs/usr/local/bin
 
