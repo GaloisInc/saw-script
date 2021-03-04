@@ -137,11 +137,9 @@ runSpec :: forall sym t st fs args ret rtp.
 runSpec cs mh ms = do
     let col = cs ^. collection
     sym <- getSymInterface
-    simState <- get
     RegMap argVals <- getOverrideArgs
     let argVals' = Map.fromList $ zip [0..] $ MS.assignmentToList argVals
 
-    sgs <- readGlobals
     loc <- liftIO $ W4.getCurrentProgramLoc sym
     let freeVars = Set.fromList $
             ms ^.. MS.csPreState . MS.csFreshVars . each . to SAW.tecExt . to SAW.ecVarIndex
@@ -195,6 +193,9 @@ runSpec cs mh ms = do
         term <- liftIO $ eval expr
         return (SAW.ecVarIndex ec, term)
 
+    -- Accesses to globals should go through the underlying OverrideSim monad,
+    -- rather than using OverrideMatcher's `readGlobal`/`writeGlobal` methods.
+    let sgs = error "tried to access SimGlobalState through OverrideMatcher"
     result <- MS.runOverrideMatcher sym sgs mempty postFreshTermSub freeVars loc $ do
         -- Match the override's inputs against the MethodSpec inputs.  This
         -- sets up the `termSub` (symbolic variable bindings) and
@@ -211,7 +212,7 @@ runSpec cs mh ms = do
                     ": no arg at index " ++ show i
                 Just x -> return x
             let shp = tyToShapeEq col ty tpr
-            matchArg sym eval shp rv sv
+            matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
 
         -- Match PointsTo SetupValues against accessible memory.
         --
@@ -231,9 +232,9 @@ runSpec cs mh ms = do
                 Just (Some allocSpec) -> return $ allocSpec ^. maMirType
                 Nothing -> error $
                     "impossible: alloc mentioned in csPointsTo is absent from csAllocs?"
-            rv <- liftIO $ readMirRefIO sym simState (ptr ^. mpType) (ptr ^. mpRef)
+            rv <- lift $ readMirRefSim (ptr ^. mpType) (ptr ^. mpRef)
             let shp = tyToShapeEq col ty (ptr ^. mpType)
-            matchArg sym eval shp rv sv
+            matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
 
 
         -- Validity checks
@@ -354,9 +355,10 @@ matchArg ::
     (IsSymInterface sym, sym ~ W4.ExprBuilder t st fs, HasCallStack) =>
     sym ->
     (forall tp'. W4.Expr t tp' -> IO SAW.Term) ->
+    Map MS.AllocIndex (Some MirAllocSpec) ->
     TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
     MirOverrideMatcher sym ()
-matchArg sym eval shp rv sv = go shp rv sv
+matchArg sym eval allocSpecs shp rv sv = go shp rv sv
   where
     go :: forall tp. TypeShape tp -> RegValue sym tp -> MS.SetupValue MIR ->
         MirOverrideMatcher sym ()
@@ -384,19 +386,10 @@ matchArg sym eval shp rv sv = go shp rv sv
       | otherwise = error $ "matchArg: type error: expected " ++ show shpTpr ++
         ", but got Any wrapping " ++ show tpr
       where shpTpr = StructRepr $ fmapFC fieldShapeType flds
-    go (RefShape _ _ tpr) ref (MS.SetupVar alloc) = do
-        m <- use MS.setupValueSub
-        case Map.lookup alloc m of
-            Nothing -> return ()
-            Just (Some ptr)
-              | Just Refl <- testEquality tpr (ptr ^. mpType) -> do
-                eq <- liftIO $ mirRef_eqIO sym ref (ptr ^. mpRef)
-                let loc = mkProgramLoc "matchArg" InternalPos
-                MS.addAssert eq $
-                    SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
-              | otherwise -> error $ "mismatched types for " ++ show alloc ++ ": " ++
-                    show tpr ++ " does not match " ++ show (ptr ^. mpType)
-        MS.setupValueSub %= Map.insert alloc (Some $ MirPointer tpr ref)
+    go (RefShape refTy _ tpr) ref (MS.SetupVar alloc) =
+        goRef refTy tpr ref alloc 0
+    go (RefShape refTy _ tpr) ref (MS.SetupElem () (MS.SetupVar alloc) idx) =
+        goRef refTy tpr ref alloc idx
     go shp _ sv = error $ "matchArg: type error: bad SetupValue " ++
         show (MS.ppSetupValue sv) ++ " for " ++ show (shapeType shp)
 
@@ -417,6 +410,63 @@ matchArg sym eval shp rv sv = go shp rv sv
         loop _ rvs svs = error $ "matchArg: type error: got RegValues for " ++
             show (Ctx.sizeInt $ Ctx.size rvs) ++ " fields, but got " ++
             show (length svs) ++ " SetupValues"
+
+    goRef :: forall tp'.
+        M.Ty ->
+        TypeRepr tp' ->
+        MirReferenceMux sym tp' ->
+        MS.AllocIndex ->
+        -- | The expected offset of `ref` past the start of the allocation.
+        Int ->
+        MirOverrideMatcher sym ()
+    goRef refTy tpr ref alloc refOffset = do
+        partIdxLen <- lift $ mirRef_indexAndLenSim ref
+        optIdxLen <- liftIO $ readPartExprMaybe sym partIdxLen
+        let (optIdx, optLen) =
+                (BV.asUnsigned <$> (W4.asBV =<< (fst <$> optIdxLen)),
+                    BV.asUnsigned <$> (W4.asBV =<< (snd <$> optIdxLen)))
+        idx <- case optIdx of
+            Just x -> return $ fromIntegral x
+            Nothing -> error $ "unsupported: reference has symbolic offset within allocation " ++
+                "(for a ref of type " ++ show refTy ++ ")"
+        len <- case optLen of
+            Just x -> return $ fromIntegral x
+            Nothing -> error $ "unsupported: memory allocation has symbolic size " ++
+                "(for a ref of type " ++ show refTy ++ ")"
+        -- Offset backward by `idx` to get a pointer to the start of the accessible
+        -- allocation.
+        --offsetSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral $ negate idx
+        --startRef <- lift $ mirRef_offsetWrapSim tpr ref offsetSym
+        when (idx < refOffset) $ error $
+            "matchArg: expected at least " ++ show refOffset ++ " accessible elements " ++
+                "before reference, but only got " ++ show idx
+
+        Some allocSpec <- return $ case Map.lookup alloc allocSpecs of
+            Just x -> x
+            Nothing -> error $ "no such alloc " ++ show alloc
+        let numAfter = allocSpec ^. maLen - refOffset
+        when (len - idx < numAfter) $ error $
+            "matchArg: expected at least " ++ show numAfter ++ " accessible elements " ++
+                "after reference, but only got " ++ show (len - idx)
+
+        -- Offset backward by `idx` to get a pointer to the start of the accessible
+        -- allocation.
+        offsetSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $
+            fromIntegral $ negate refOffset
+        ref' <- lift $ mirRef_offsetWrapSim tpr ref offsetSym
+
+        m <- use MS.setupValueSub
+        case Map.lookup alloc m of
+            Nothing -> return ()
+            Just (Some ptr)
+              | Just Refl <- testEquality tpr (ptr ^. mpType) -> do
+                eq <- liftIO $ mirRef_eqIO sym ref' (ptr ^. mpRef)
+                let loc = mkProgramLoc "matchArg" InternalPos
+                MS.addAssert eq $
+                    SimError loc (AssertFailureSimError ("mismatch on " ++ show alloc) "")
+              | otherwise -> error $ "mismatched types for " ++ show alloc ++ ": " ++
+                    show tpr ++ " does not match " ++ show (ptr ^. mpType)
+        MS.setupValueSub %= Map.insert alloc (Some $ MirPointer tpr ref')
 
 
 -- | Convert a SetupValue to a RegValue.  This is used for MethodSpec outputs,

@@ -292,6 +292,9 @@ instance Wrapped (OverrideMatcher' sym ext rorw m a) where
 deriving instance Monad m => MonadState (OverrideState' sym ext) (OverrideMatcher' sym ext rorw m)
 deriving instance Monad m => MonadError (OverrideFailure ext) (OverrideMatcher' sym ext rorw m)
 
+instance MonadTrans (OverrideMatcher' sym ext rorw) where
+    lift f = OM $ lift $ lift f
+
 throwOverrideMatcher :: Monad m => String -> OverrideMatcher' sym ext rorw m a
 throwOverrideMatcher msg = do
   loc <- use osLocation
