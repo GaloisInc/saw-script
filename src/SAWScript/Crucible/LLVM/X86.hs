@@ -78,11 +78,13 @@ import SAWScript.Crucible.LLVM.MethodSpecIR
 import SAWScript.Crucible.LLVM.ResolveSetupValue
 import qualified SAWScript.Crucible.LLVM.Override as LO
 
+import qualified What4.Config as W4
 import qualified What4.Expr as W4
 import qualified What4.FunctionName as W4
 import qualified What4.Interface as W4
 import qualified What4.LabeledPred as W4
 import qualified What4.ProgramLoc as W4
+import qualified What4.Expr.Builder as W4.B
 
 import qualified Lang.Crucible.Analysis.Postdom as C
 import qualified Lang.Crucible.Backend as C
@@ -235,11 +237,13 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       opts <- getOptions
       basic_ss <- getBasicSS
       sym <- liftIO $ newSAWCoreBackend sc
+      rw <- getTopLevelRW
+      cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
+      _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsing rw
       sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
-      rw <- getTopLevelRW
       let cenv = rwCryptol rw
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
@@ -304,7 +308,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
                       pure
                         ( C.cfgHandle funcCFG
                         , st & C.stateContext . C.functionBindings
-                          %~ C.insertHandleMap (C.cfgHandle funcCFG) (C.UseCFG funcCFG $ C.postdomInfo funcCFG)
+                          %~ C.FnBindings . C.insertHandleMap (C.cfgHandle funcCFG) (C.UseCFG funcCFG $ C.postdomInfo funcCFG) . C.fnBindings
                         )
                     Nothing -> fail $ mconcat
                       [ "Unable to find CFG for function at address "
@@ -322,7 +326,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
                 Macaw.macawExtensions (Macaw.x86_64MacawEvalFn sfs) mvar
                 (mkGlobalMap . Map.singleton 0 $ preState ^. x86GlobalBase)
                 funcLookup noExtraValidityPred
-              , C._functionBindings = C.insertHandleMap (C.cfgHandle cfg) (C.UseCFG cfg $ C.postdomInfo cfg) C.emptyHandleMap
+              , C._functionBindings = C.FnBindings $ C.insertHandleMap (C.cfgHandle cfg) (C.UseCFG cfg $ C.postdomInfo cfg) C.emptyHandleMap
               , C._cruciblePersonality = Macaw.MacawSimulatorState
               , C._profilingMetrics = Map.empty
               }
@@ -545,8 +549,8 @@ setupMemory ::
 setupMemory globsyms = do
   setupGlobals globsyms
 
-  -- Allocate a reasonable amount of stack (4 KiB + 1 qword for IP)
-  allocateStack 4096
+  -- Allocate a reasonable amount of stack (4 KiB + 0b10000 for least valid alignment + 1 qword for IP)
+  allocateStack $ 4096 + 16
 
   ms <- use x86MethodSpec
 
@@ -602,10 +606,10 @@ allocateStack szInt = do
   sym <- use x86Sym
   mem <- use x86Mem
   regs <- use x86Regs
-  let align = C.LLVM.exponentToAlignment 4
   sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt + 8
-  (base, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable
-    "stack_alloc" mem sz align
+  (base, mem') <- liftIO
+    $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz
+    $ C.LLVM.exponentToAlignment 16
   sn <- case W4.userSymbol "stack" of
     Left err -> throwX86 $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn
@@ -615,7 +619,7 @@ allocateStack szInt = do
   ptr <- liftIO $ C.LLVM.doPtrAddOffset sym mem' base =<< W4.bvLit sym knownNat (BV.mkBV knownNat szInt)
   finalMem <- liftIO $ C.LLVM.doStore sym mem' ptr
     (C.LLVM.LLVMPointerRepr $ knownNat @64)
-    (C.LLVM.bitvectorType 8) align fresh
+    (C.LLVM.bitvectorType 8) (C.LLVM.exponentToAlignment 4) fresh
   x86Mem .= finalMem
   finalRegs <- setReg Macaw.RSP ptr regs
   x86Regs .= finalRegs
