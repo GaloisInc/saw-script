@@ -16,23 +16,31 @@
 module Verifier.SAW.Testing.Random where
 
 import Verifier.SAW.FiniteValue
-  (asFiniteTypePure, scFiniteValue, FiniteType(..), FiniteValue(..))
+  ( FirstOrderType(..), FirstOrderValue(..)
+  , scFirstOrderValue, asFirstOrderTypeMaybe
+  )
+
 import Verifier.SAW.Recognizer (asBoolType, asPi, asEq)
 import Verifier.SAW.SharedTerm
-  (scApplyAll, scGetModuleMap, scWhnf, SharedContext, Term)
+  ( scApplyAll, scGetModuleMap, scWhnf, SharedContext, Term
+  , looseVars
+  )
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm, CValue)
 import Verifier.SAW.Simulator.Value (Value(..), TValue(..))
-import Verifier.SAW.TypedAST (FieldName)
+import Verifier.SAW.Term.Functor (emptyBitSet)
+--import Verifier.SAW.TypedAST (FieldName)
 import Verifier.SAW.Utils (panic)
+
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>), Applicative)
 import Data.Traversable (traverse)
 #endif
+import Control.Monad.Trans.Maybe (MaybeT)
 import Control.Monad.Random
-import Data.Map (Map)
+import Data.Functor.Compose (Compose(..))
 import qualified Data.Map as Map
-import Numeric.Natural (Natural)
+import Data.Text (Text)
 import System.Random.TF (newTFGen, TFGen)
 
 ----------------------------------------------------------------
@@ -42,15 +50,15 @@ import System.Random.TF (newTFGen, TFGen)
 --
 -- The caller should use @scTestableType@ to (maybe) compute the 'gens'.
 scRunTestsTFIO ::
-  SharedContext -> Integer -> Term -> [RandT TFGen IO FiniteValue] ->
-  IO (Maybe [FiniteValue])
+  SharedContext -> Integer -> Term -> [RandT TFGen IO FirstOrderValue] ->
+  IO (Maybe [FirstOrderValue])
 scRunTestsTFIO sc numTests fun gens = do
   g <- newTFGen
   evalRandT (scRunTests sc numTests fun gens) g
 
 -- | Call @scRunTest@ many times, returning the first failure if any.
 scRunTests :: (Functor m, MonadIO m, MonadRandom m) => SharedContext ->
-  Integer -> Term -> [m FiniteValue] -> m (Maybe [FiniteValue])
+  Integer -> Term -> [m FirstOrderValue] -> m (Maybe [FirstOrderValue])
 scRunTests sc numTests fun gens =
   if numTests < 0 then
     panic "scRunTests:" ["number of tests must be non-negative"]
@@ -70,12 +78,12 @@ scRunTests sc numTests fun gens =
     the supplied value, otherwise we'll panic.
  -}
 scRunTest :: (MonadIO m, MonadRandom m) => SharedContext ->
-  Term -> [m FiniteValue] -> m (Maybe [FiniteValue])
+  Term -> [m FirstOrderValue] -> m (Maybe [FirstOrderValue])
 scRunTest sc fun gens = do
   xs <- sequence gens
   result <- liftIO $ apply xs
   case result of
-    VBool True -> return $ Nothing
+    VBool True -> return Nothing
     VBool False -> do
       return $ Just xs
     TValue (VDataType "Prelude.Eq" [TValue VBoolType, VBool x, VBool y]) -> do
@@ -84,9 +92,9 @@ scRunTest sc fun gens = do
          [ "Expected a boolean, but got:"
          , show result ]
   where
-    apply :: [FiniteValue] -> IO CValue
+    apply :: [FirstOrderValue] -> IO CValue
     apply xs = do
-      xs' <- mapM (scFiniteValue sc) xs
+      xs' <- mapM (scFirstOrderValue sc) xs
       app <- scApplyAll sc fun xs'
       modmap <- scGetModuleMap sc
       return $ evalSharedTerm modmap Map.empty app
@@ -94,68 +102,53 @@ scRunTest sc fun gens = do
 -- | Given a function type, compute generators for the function's
 -- arguments. The supported function types are of the form
 --
---   'FiniteType -> ... -> FiniteType -> Bool'
+--   'FirstOrderType -> ... -> FirstOrderType -> Bool'
 --   or
---   'FiniteType -> ... -> FiniteType -> Eq (...) (...)'
+--   'FirstOrderType -> ... -> FirstOrderType -> Eq (...) (...)'
+--      for equalities on boolean values.
 --
--- and 'Nothing' is returned when attempting to generate arguments for
+-- 'Nothing' is returned when attempting to generate arguments for
 -- functions of unsupported type.
 scTestableType :: (Applicative m, Functor m, MonadRandom m) =>
-  SharedContext -> Term -> IO (Maybe [m FiniteValue])
-scTestableType sc ty = do
-  ty' <- scWhnf sc ty
-  case ty' of
-    (asPi -> Just (_nm, asFiniteTypePure -> Just dom, rng)) -> do
-      let domGen = randomFiniteValue dom
-      rngGens <- scTestableType sc rng
-      return $ (domGen :) <$> rngGens
-    (asBoolType -> Just ()) -> return $ Just []
-    (asEq -> Just _) -> return $ Just []
-    _ -> return Nothing
+  SharedContext -> Term -> MaybeT IO [(Text, m FirstOrderValue)]
+scTestableType sc ty =
+  do ty' <- lift (scWhnf sc ty)
+     case ty' of
+       (asPi -> Just (nm, dom, rng)) | looseVars rng == emptyBitSet ->
+         do fot <- asFirstOrderTypeMaybe sc dom
+            case getCompose (randomFirstOrderValue fot) of
+              Nothing -> mzero
+              Just domGen ->
+                do rngGens <- scTestableType sc rng
+                   return ((nm,domGen) : rngGens)
+
+       (asBoolType -> Just ()) -> return []
+       (asEq -> Just (asBoolType -> Just (),_,_)) -> return []
+       _ -> mzero
 
 ----------------------------------------------------------------
 
-randomFiniteValue :: (Applicative m, Functor m, MonadRandom m) =>
-  FiniteType -> m FiniteValue
-randomFiniteValue FTBit = randomBit
-randomFiniteValue (FTVec n FTBit) = randomWord n
-randomFiniteValue (FTVec n t) = randomVec n t
-randomFiniteValue (FTTuple ts) = randomTuple ts
-randomFiniteValue (FTRec fields) = randomRec fields
 
-----------------------------------------------------------------
--- The value generators below follow a pattern made clear in the
--- definition of 'randomFiniteValue' above: each 'FiniteValue' value
--- generator takes the same (non-constant) arguments as the
--- corresponding 'FiniteType' type constructor.
+randomFirstOrderValue :: (Applicative m, Functor m, MonadRandom m) =>
+  FirstOrderType -> Compose Maybe m FirstOrderValue
+randomFirstOrderValue FOTBit =
+  Compose (Just (FOVBit <$> getRandom))
+randomFirstOrderValue FOTInt =
+  Compose (Just (FOVInt <$> randomInt))
+randomFirstOrderValue (FOTIntMod m) =
+  Compose (Just (FOVIntMod m <$> getRandomR (0, toInteger m - 1)))
+randomFirstOrderValue (FOTVec n FOTBit) =
+  Compose (Just (FOVWord n <$> getRandomR (0, 2^n - 1)))
+randomFirstOrderValue (FOTVec n t) =
+  FOVVec t <$> replicateM (fromIntegral n) (randomFirstOrderValue t)
+randomFirstOrderValue (FOTTuple ts) =
+  FOVTuple <$> traverse randomFirstOrderValue ts
+randomFirstOrderValue (FOTRec fs) =
+  FOVRec <$> traverse randomFirstOrderValue fs
+randomFirstOrderValue (FOTArray _ _) = Compose Nothing
 
--- | Generate a random bit value.
-randomBit :: (Functor m, MonadRandom m) => m FiniteValue
-randomBit = FVBit <$> getRandom
 
--- | Generate a random word of the given length (i.e., a value of type @[w]@)
-randomWord :: (Functor m, MonadRandom m) => Natural -> m FiniteValue
-randomWord w = FVWord w <$> getRandomR (0, 2^w - 1)
+-- TODO this is really a hack
+randomInt :: MonadRandom m => m Integer
+randomInt = getRandomR (-10^(6::Int), 10^(6::Int))
 
-{- | Generate a random vector.  Generally, this should be used for sequences
-other than bits.  For sequences of bits use "randomWord".  The difference
-is mostly about how the results will be displayed. -}
-randomVec :: (Applicative m, Functor m, MonadRandom m) =>
-  Natural -> FiniteType -> m FiniteValue
-randomVec w t =
-  FVVec t <$> replicateM (fromIntegral w) (randomFiniteValue t)
-
--- | Generate a random tuple value.
-randomTuple :: (Applicative m, Functor m, MonadRandom m) =>
-  [FiniteType] -> m FiniteValue
-randomTuple ts = FVTuple <$> mapM randomFiniteValue ts
-
--- | Generate a random record value.
-randomRec :: (Applicative m, Functor m, MonadRandom m) =>
-  Map FieldName FiniteType -> m FiniteValue
-randomRec fieldTys = FVRec <$> traverse randomFiniteValue fieldTys
-
-_test :: IO ()
-_test = do
-  s <- evalRandIO $ randomFiniteValue (FTVec 16 (FTVec 1 FTBit))
-  print s
