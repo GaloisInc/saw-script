@@ -47,12 +47,12 @@ type instance MS.CrucibleContext MIR = ()
 type instance MS.Pointer' MIR sym = Some (MirPointer sym)
 
 
-data MirPointsTo = MirPointsTo MS.AllocIndex (MS.SetupValue MIR)
+data MirPointsTo = MirPointsTo MS.AllocIndex [MS.SetupValue MIR]
     deriving (Show)
 
 instance PP.Pretty MirPointsTo where
     pretty (MirPointsTo alloc sv) = PP.parens $
-        PP.pretty (show alloc) PP.<+> "->" PP.<+> MS.ppSetupValue sv
+        PP.pretty (show alloc) PP.<+> "->" PP.<+> PP.list (map MS.ppSetupValue sv)
 
 data MirAllocSpec tp = MirAllocSpec
     { _maType :: TypeRepr tp

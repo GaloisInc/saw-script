@@ -232,20 +232,28 @@ addArg tpr argRef msb = execBuilderT msb $ do
     sv <- regToSetup sym Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
     void $ forNewRefs Pre $ \fr -> do
-        -- Record a points-to entry
-        rv <- lift $ readMirRefSim (fr ^. frType) (fr ^. frRef)
-        let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
-        sv <- regToSetup sym Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
-        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) sv :)
+        let len = fr ^. frAllocSpec . maLen
+        svPairs <- forM [0 .. len - 1] $ \i -> do
+            -- Record a points-to entry
+            iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
+            ref' <- lift $ mirRef_offsetSim (fr ^. frType) (fr ^. frRef) iSym
+            rv <- lift $ readMirRefSim (fr ^. frType) ref'
+            let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
+            sv <- regToSetup sym Pre (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
-        -- Clobber the current value
-        rv' <- case fr ^. frAllocSpec . maMutbl of
-            M.Mut -> lift $ clobberSymbolic sym loc "clobberArg" shp rv
-            M.Immut -> lift $ clobberImmutSymbolic sym loc "clobberArg" shp rv
-        lift $ writeMirRefSim (fr ^. frType) (fr ^. frRef) rv'
-        -- Gather fresh vars created by the clobber operation
-        sv' <- regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv'
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) sv' :)
+            -- Clobber the current value
+            rv' <- case fr ^. frAllocSpec . maMutbl of
+                M.Mut -> lift $ clobberSymbolic sym loc "clobberArg" shp rv
+                M.Immut -> lift $ clobberImmutSymbolic sym loc "clobberArg" shp rv
+            lift $ writeMirRefSim (fr ^. frType) ref' rv'
+            -- Gather fresh vars created by the clobber operation
+            sv' <- regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv'
+
+            return (sv, sv')
+
+        let (svs, svs') = unzip svPairs
+        msbSpec . MS.csPreState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) svs :)
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) svs' :)
 
     msbSpec . MS.csArgBindings . at (fromIntegral idx) .= Just (ty, sv)
   where
@@ -272,10 +280,16 @@ setReturn tpr argRef msb = execBuilderT msb $ do
     sv <- regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
 
     void $ forNewRefs Post $ \fr -> do
-        rv <- lift $ readMirRefSim (fr ^. frType) (fr ^. frRef)
-        let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
-        sv <- regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
-        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) sv :)
+        let len = fr ^. frAllocSpec . maLen
+        svs <- forM [0 .. len - 1] $ \i -> do
+            -- Record a points-to entry
+            iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
+            ref' <- lift $ mirRef_offsetSim (fr ^. frType) (fr ^. frRef) iSym
+            rv <- lift $ readMirRefSim (fr ^. frType) ref'
+            let shp = tyToShapeEq col (fr ^. frMirType) (fr ^. frType)
+            regToSetup sym Post (\_tpr expr -> SAW.mkTypedTerm sc =<< eval expr) shp rv
+
+        msbSpec . MS.csPostState . MS.csPointsTos %= (MirPointsTo (fr ^. frAlloc) svs :)
 
     msbSpec . MS.csRetValue .= Just sv
   where

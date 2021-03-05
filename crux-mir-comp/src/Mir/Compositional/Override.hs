@@ -222,19 +222,22 @@ runSpec cs mh ms = do
         -- to allocation `alloc` before we see the PointsTo for `alloc` itself.
         -- This ensures we can obtain a MirReference for each PointsTo that we
         -- see.
-        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo alloc sv) -> do
+        forM_ (reverse $ ms ^. MS.csPreState . MS.csPointsTos) $ \(MirPointsTo alloc svs) -> do
             allocSub <- use MS.setupValueSub
             Some ptr <- case Map.lookup alloc allocSub of
                 Just x -> return x
                 Nothing -> error $
                     "PointsTos are out of order: no ref is available for " ++ show alloc
-            ty <- case ms ^? MS.csPreState . MS.csAllocs . ix alloc of
-                Just (Some allocSpec) -> return $ allocSpec ^. maMirType
+            (ty, len) <- case ms ^? MS.csPreState . MS.csAllocs . ix alloc of
+                Just (Some allocSpec) -> return $ (allocSpec ^. maMirType, allocSpec ^. maLen)
                 Nothing -> error $
                     "impossible: alloc mentioned in csPointsTo is absent from csAllocs?"
-            rv <- lift $ readMirRefSim (ptr ^. mpType) (ptr ^. mpRef)
-            let shp = tyToShapeEq col ty (ptr ^. mpType)
-            matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
+            forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
+                iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
+                ref' <- lift $ mirRef_offsetSim (ptr ^. mpType) (ptr ^. mpRef) iSym
+                rv <- lift $ readMirRefSim (ptr ^. mpType) ref'
+                let shp = tyToShapeEq col ty (ptr ^. mpType)
+                matchArg sym eval (ms ^. MS.csPreState . MS.csAllocs) shp rv sv
 
 
         -- Validity checks
@@ -323,19 +326,23 @@ runSpec cs mh ms = do
     -- figuring out which memory is accessible and mutable and thus needs to be
     -- clobbered, and for adding appropriate fresh variables and `PointsTo`s to
     -- the post state.
-    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo alloc sv) -> do
+    forM_ (ms ^. MS.csPostState . MS.csPointsTos) $ \(MirPointsTo alloc svs) -> do
         Some ptr <- case Map.lookup alloc allocMap of
             Just x -> return x
             Nothing -> error $ "post PointsTos are out of order: no ref for " ++ show alloc
         let optAlloc = (ms ^? MS.csPostState . MS.csAllocs . ix alloc) <|>
                 (ms ^? MS.csPreState . MS.csAllocs . ix alloc)
-        ty <- case optAlloc of
-            Just (Some allocSpec) -> return $ allocSpec ^. maMirType
+        (ty, len) <- case optAlloc of
+            Just (Some allocSpec) -> return $ (allocSpec ^. maMirType, allocSpec ^. maLen)
             Nothing -> error $
                 "impossible: alloc mentioned in post csPointsTo is absent from csAllocs?"
         let shp = tyToShapeEq col ty (ptr ^. mpType)
-        rv <- liftIO $ setupToReg sym sc termSub w4VarMap allocMap shp sv
-        writeMirRefSim (ptr ^. mpType) (ptr ^. mpRef) rv
+
+        forM_ (zip svs [0 .. len - 1]) $ \(sv, i) -> do
+            iSym <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ fromIntegral i
+            ref' <- mirRef_offsetSim (ptr ^. mpType) (ptr ^. mpRef) iSym
+            rv <- liftIO $ setupToReg sym sc termSub w4VarMap allocMap shp sv
+            writeMirRefSim (ptr ^. mpType) ref' rv
 
     -- Clobber all globals.  We don't yet support mentioning globals in specs.
     -- However, we also don't prevent the subject function from modifying
