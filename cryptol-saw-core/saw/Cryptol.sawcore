@@ -458,11 +458,6 @@ vecCmp n a f xs ys k =
 unitCmp : #() -> #() -> Bool -> Bool;
 unitCmp _ _ _ = False;
 
-pairEq : (a b : sort 0) -> (a -> a -> Bool) -> (b -> b -> Bool) ->
-  a * b -> a * b -> Bool;
-pairEq a b f g x y =
-  and (f (fst a b x) (fst a b y)) (g (snd a b x) (snd a b y));
-
 pairCmp : (a b : sort 0) -> (a -> a -> Bool -> Bool) -> (b -> b -> Bool -> Bool)
         -> a * b -> a * b -> Bool -> Bool;
 pairCmp a b f g x12 y12 k =
