@@ -89,6 +89,16 @@ toFirstOrderValue fv =
     FVTuple vs -> FOVTuple (map toFirstOrderValue vs)
     FVRec vm   -> FOVRec (fmap toFirstOrderValue vm)
 
+
+toFiniteType :: FirstOrderType -> Maybe FiniteType
+toFiniteType FOTBit        = pure FTBit
+toFiniteType (FOTVec n t)  = FTVec n <$> toFiniteType t
+toFiniteType (FOTTuple ts) = FTTuple <$> traverse toFiniteType ts
+toFiniteType (FOTRec fs)   = FTRec   <$> traverse toFiniteType fs
+toFiniteType FOTInt{}      = Nothing
+toFiniteType FOTIntMod{}   = Nothing
+toFiniteType FOTArray{}    = Nothing
+
 instance Show FiniteValue where
   showsPrec p fv = showsPrec p (toFirstOrderValue fv)
 
