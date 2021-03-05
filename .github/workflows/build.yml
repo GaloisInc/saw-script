@@ -44,21 +44,22 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-18.04]
-        ghc: ["8.6.5", "8.8.4", "8.10.3"]
+        # ghc: ["8.6.5", "8.8.4", "8.10.3"]
+        ghc: ["8.6.5"]
         continue-on-error: [false]
-        include:
-          - os: macos-latest
-            ghc: "8.6.5"
-            continue-on-error: true
-          - os: macos-latest
-            ghc: "8.8.4"
-            continue-on-error: true
-          - os: windows-latest
-            ghc: "8.6.5"
-            continue-on-error: true
-        exclude:
-          - os: windows-latest
-            ghc: "8.8.4"
+        # include:
+        #   - os: macos-latest
+        #     ghc: "8.6.5"
+        #     continue-on-error: true
+        #   - os: macos-latest
+        #     ghc: "8.8.4"
+        #     continue-on-error: true
+        #   - os: windows-latest
+        #     ghc: "8.6.5"
+        #     continue-on-error: true
+        # exclude:
+        #   - os: windows-latest
+        #     ghc: "8.8.4"
     name: SAWScript - GHC v${{ matrix.ghc }} - ${{ matrix.os }}
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
@@ -99,171 +100,216 @@ jobs:
         run: .github/ci.sh build
         continue-on-error: false
 
-      - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          Z3_VERSION: "4.8.8"
-          CVC4_VERSION: "4.1.8"
-          YICES_VERSION: "2.6.2"
-
-      - shell: bash
-        run: .github/ci.sh setup_dist_bins
-
-      - shell: bash
-        id: cabal-test
-        continue-on-error: true
-        run: cabal v2-test saw-remote-api
-        env:
-          SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
-
-      - uses: actions/setup-java@v1
-        with:
-          java-version: "8"
-          java-package: jdk
-          architecture: x64
-
-      - shell: bash
-        id: test
-        continue-on-error: ${{ matrix.continue-on-error }}
-        name: Integration Tests
-        run: |
-          .github/ci.sh test_dist
-
-      - if: >-
-          env.RELEASE && matrix.ghc == '8.6.5'
-        run: |
-          .github/ci.sh build_cryptol
-          .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
-
-      - if: >-
-          env.RELEASE && matrix.ghc == '8.6.5'
+      - if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
-          path: dist/bin
-          name: ${{ runner.os }}-bins
+          path: |
+            dist-newstyle
+            cabal.project.local
+            cabal.project.freeze
+          name: dist-newstyle-${{ runner.os }}-${{ matrix.ghc }}
 
-      - name: Upload artifacts
-        if: "matrix.os == 'ubuntu-18.04'"
+      - if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
-          name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
-          path: "dist/bin/saw"
+          path: ${{ steps.setup-haskell.outputs.cabal-store }}
+          name: cabal-store-${{ runner.os }}-${{ matrix.ghc }}
 
-      - shell: bash
-        if: "steps.cabal-test.outcome == 'failure'"
-        name: Warn if tests failed
-        run: echo "::error ::Test suite failed for saw-remote-api. Pipeline allowed to pass until tests are reliable."
+      # - shell: bash
+      #   run: .github/ci.sh install_system_deps
+      #   env:
+      #     Z3_VERSION: "4.8.8"
+      #     CVC4_VERSION: "4.1.8"
+      #     YICES_VERSION: "2.6.2"
 
-  docker:
-    runs-on: ubuntu-18.04
-    needs: [outputs]
-    if: contains(needs.outputs.outputs.changed, 'Dockerfile')
-    steps:
-      - uses: actions/checkout@v2
-      - run: |
-          git submodule update --init
-          git -C deps/abcBridge submodule update --init
-      - name: Publish to Registry
-        uses: docker/build-push-action@v1
-        with:
-          repository: galoisinc/saw
-          push: false
+      # - shell: bash
+      #   run: .github/ci.sh setup_dist_bins
 
-  s2n-tests:
-    name: "Test s2n proofs"
-    timeout-minutes: 60
-    needs: build
-    runs-on: ubuntu-18.04
-    strategy:
-      fail-fast: false
-      matrix:
-        s2n-target:
-          - hmac
-          - drbg
-          - sike
-          - bike
-          - tls
-          - hmac-failure
-          - awslc
-          - blst
-        ghc: ["8.6.5", "8.8.4", "8.10.3"]
-    steps:
-      - uses: actions/checkout@v2
-      - run: |
-          mkdir -p s2nTests/bin
+      # - shell: bash
+      #   id: cabal-test
+      #   continue-on-error: true
+      #   run: cabal v2-test saw-remote-api
+      #   env:
+      #     SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
 
-      - name: Download previously-built SAW
-        uses: actions/download-artifact@v2
-        with:
-          name: "saw-Linux-${{ matrix.ghc }}"
-          path: ./s2nTests/bin
+      # - uses: actions/setup-java@v1
+      #   with:
+      #     java-version: "8"
+      #     java-package: jdk
+      #     architecture: x64
 
-      - shell: bash
-        working-directory: s2nTests
-        run: |
-          docker-compose pull
-          grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
+      # - shell: bash
+      #   id: test
+      #   continue-on-error: ${{ matrix.continue-on-error }}
+      #   name: Integration Tests
+      #   run: |
+      #     .github/ci.sh test_dist
 
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
+      # - if: >-
+      #     env.RELEASE && matrix.ghc == '8.6.5'
+      #   run: |
+      #     .github/ci.sh build_cryptol
+      #     .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
 
-      - shell: bash
-        name: "make s2n"
-        working-directory: s2nTests
-        run: docker-compose build s2n
+      # - if: >-
+      #     env.RELEASE && matrix.ghc == '8.6.5'
+      #   uses: actions/upload-artifact@v2
+      #   with:
+      #     path: dist/bin
+      #     name: ${{ runner.os }}-bins
 
-      - shell: bash
-        name: "s2n tests: ${{ matrix.s2n-target }}"
-        working-directory: s2nTests
-        run: |
-          chmod +x bin/saw
-          make ${{ matrix.s2n-target }}
+      # - name: Upload artifacts
+      #   if: "matrix.os == 'ubuntu-18.04'"
+      #   uses: actions/upload-artifact@v2
+      #   with:
+      #     name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
+      #     path: "dist/bin/saw"
 
-  bundle:
+      # - shell: bash
+      #   if: "steps.cabal-test.outcome == 'failure'"
+      #   name: Warn if tests failed
+      #   run: echo "::error ::Test suite failed for saw-remote-api. Pipeline allowed to pass until tests are reliable."
+
+  cryptol-saw-core-tests:
     runs-on: ${{ matrix.os }}
-    if: needs.outputs.outputs.release
+    needs: [build]
     strategy:
-      fail-fast: false
       matrix:
-        os: [ubuntu-18.04, macos-latest, windows-latest]
-        ghc: ["8.6.5"]
-    needs: [outputs, build]
-    env:
-      VERSION: ${{ needs.outputs.outputs.saw-version }}
-      RELEASE: ${{ needs.outputs.outputs.release }}
+        os:
+          - ubuntu-18.04
+          # - macos-latest
+          # - windows-latest
+        ghc: [8.6.5]
     steps:
       - uses: actions/checkout@v2
       - run: |
           git submodule update --init
           git -C deps/abcBridge submodule update --init
-
+      - uses: haskell/actions/setup@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
       - uses: actions/download-artifact@v2
         with:
-          path: dist/bin
-          name: ${{ runner.os }}-bins
-
-      - shell: bash
-        run: .github/ci.sh bundle_files
-
-      - shell: bash
-        env:
-          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-        run: .github/ci.sh zip_dist
-
-      - uses: actions/upload-artifact@v2
+          name: dist-newstyle-${{ runner.os }}-${{ matrix.ghc }}
+      - uses: actions/download-artifact@v2
         with:
-          name: ${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64
-          path: "${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64.tar.gz*"
+          name: cabal-store-${{ runner.os }}-${{ matrix.ghc }}
+          path: ${{ steps.setup-haskell.outputs.cabal-store }}
+      - uses: mxschmitt/action-tmate@v3
+      - shell: bash
+        run: cabal v2-test cryptol-saw-core
 
-  # Indicates sufficient CI success for the purposes of mergify merging the pull
-  # request, see .github/mergify.yml. This is done instead of enumerating each
-  # instance of each job in the mergify configuration for a number of reasons:
-  # - continue-on-error is respected, won't block merge
-  # - changes to jobs or job instances don't require a mergify config update
-  # - dependencies through `needs:` are validated, CI will fail if it's invalid
-  mergify:
-    runs-on: ubuntu-latest
-    needs: [build, s2n-tests]
-    steps:
-      - run: "true"
+  # docker:
+  #   runs-on: ubuntu-18.04
+  #   needs: [outputs]
+  #   if: contains(needs.outputs.outputs.changed, 'Dockerfile')
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - run: |
+  #         git submodule update --init
+  #         git -C deps/abcBridge submodule update --init
+  #     - name: Publish to Registry
+  #       uses: docker/build-push-action@v1
+  #       with:
+  #         repository: galoisinc/saw
+  #         push: false
+
+  # s2n-tests:
+  #   name: "Test s2n proofs"
+  #   timeout-minutes: 60
+  #   needs: build
+  #   runs-on: ubuntu-18.04
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       s2n-target:
+  #         - hmac
+  #         - drbg
+  #         - sike
+  #         - bike
+  #         - tls
+  #         - hmac-failure
+  #         - awslc
+  #         - blst
+  #       ghc: ["8.6.5", "8.8.4", "8.10.3"]
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - run: |
+  #         mkdir -p s2nTests/bin
+
+  #     - name: Download previously-built SAW
+  #       uses: actions/download-artifact@v2
+  #       with:
+  #         name: "saw-Linux-${{ matrix.ghc }}"
+  #         path: ./s2nTests/bin
+
+  #     - shell: bash
+  #       working-directory: s2nTests
+  #       run: |
+  #         docker-compose pull
+  #         grep -h '^FROM' docker/*.dockerfile | sort -u | awk '{print $2}' | xargs -n1 -P8 docker pull
+
+  #     - uses: satackey/action-docker-layer-caching@v0.0.11
+  #       continue-on-error: true
+
+  #     - shell: bash
+  #       name: "make s2n"
+  #       working-directory: s2nTests
+  #       run: docker-compose build s2n
+
+  #     - shell: bash
+  #       name: "s2n tests: ${{ matrix.s2n-target }}"
+  #       working-directory: s2nTests
+  #       run: |
+  #         chmod +x bin/saw
+  #         make ${{ matrix.s2n-target }}
+
+  # bundle:
+  #   runs-on: ${{ matrix.os }}
+  #   if: needs.outputs.outputs.release
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       os: [ubuntu-18.04, macos-latest, windows-latest]
+  #       ghc: ["8.6.5"]
+  #   needs: [outputs, build]
+  #   env:
+  #     VERSION: ${{ needs.outputs.outputs.saw-version }}
+  #     RELEASE: ${{ needs.outputs.outputs.release }}
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - run: |
+  #         git submodule update --init
+  #         git -C deps/abcBridge submodule update --init
+
+  #     - uses: actions/download-artifact@v2
+  #       with:
+  #         path: dist/bin
+  #         name: ${{ runner.os }}-bins
+
+  #     - shell: bash
+  #       run: .github/ci.sh bundle_files
+
+  #     - shell: bash
+  #       env:
+  #         SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+  #         SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+  #       run: .github/ci.sh zip_dist
+
+  #     - uses: actions/upload-artifact@v2
+  #       with:
+  #         name: ${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64
+  #         path: "${{ needs.outputs.outputs.name }}-${{ runner.os }}-x86_64.tar.gz*"
+
+  # # Indicates sufficient CI success for the purposes of mergify merging the pull
+  # # request, see .github/mergify.yml. This is done instead of enumerating each
+  # # instance of each job in the mergify configuration for a number of reasons:
+  # # - continue-on-error is respected, won't block merge
+  # # - changes to jobs or job instances don't require a mergify config update
+  # # - dependencies through `needs:` are validated, CI will fail if it's invalid
+  # mergify:
+  #   runs-on: ubuntu-latest
+  #   needs: [build, s2n-tests]
+  #   steps:
+  #     - run: "true"
