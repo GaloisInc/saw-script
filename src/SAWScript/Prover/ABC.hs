@@ -9,7 +9,6 @@ import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 import SAWScript.Proof(Prop, propToPredicate)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
-import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.Util
          (liftCexBB, bindAllExts)
 
@@ -22,7 +21,7 @@ proveABC ::
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
 proveABC proxy sc goal =
   do t0 <- propToPredicate sc goal
-     t <- bindAllExts sc t0 >>= rewriteEqs sc
+     t <- bindAllExts sc t0
      BBSim.withBitBlastedPred proxy sc mempty t $
       \be lit0 shapes ->
          do let lit = AIG.not lit0

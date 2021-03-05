@@ -26,7 +26,6 @@ import Verifier.SAW.Recognizer(asPi, asPiList)
 
 import SAWScript.Proof(Prop, propToPredicate)
 import SAWScript.Prover.SolverStats
-import SAWScript.Prover.Rewrite(rewriteEqs)
 
 
 -- | Bit-blast a proposition and check its validity using SBV.
@@ -92,7 +91,7 @@ prepNegatedSBV sc unintSet goal =
      let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
      exts <- filterM nonFun (getAllExts t0)
 
-     t' <- scAbstractExts sc exts t0 >>= rewriteEqs sc
+     t' <- scAbstractExts sc exts t0
 
      (labels, lit) <- SBVSim.sbvSolve sc mempty unintSet t'
      let lit' = liftM SBV.svNot lit
