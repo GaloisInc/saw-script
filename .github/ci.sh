@@ -159,7 +159,7 @@ install_system_deps() {
   install_yices &
   install_yasm &
   wait
-  export PATH=$PWD/$BIN:$PATH
+  export PATH="$BIN:$PATH"
   echo "$BIN" >> "$GITHUB_PATH"
   is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices && is_exe "$BIN" yasm
 }
