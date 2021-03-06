@@ -114,13 +114,13 @@ jobs:
         run: |
           SUITES=""
           BINS_DIR=test-suite-bins
+          mkdir -p $BINS_DIR
           for TARGET in $TEST_TARGETS; do
               export FILE=$(mktemp)
-              mkdir -p $BINS_DIR/$TARGET
               cabal v2-test --test-wrapper=$PWD/.github/arg2file.sh $TARGET
               while IFS="" read -r BIN; do
                   SUITE=$(basename $BIN)
-                  ln -s $BIN $BINS_DIR/$TARGET/$SUITE
+                  ln -s $BIN $BINS_DIR/$SUITE
                   SUITES="$SUITES $SUITE"
               done < $FILE
               rm $FILE
