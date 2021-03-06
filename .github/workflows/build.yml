@@ -155,7 +155,8 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: test-suite-bins-${{ matrix.os }}
-      - run: ${{ needs.build.outputs.test-suite-bins }}/${{ matrix.suite }}
+          path: test-suite-bins
+      - run: test-suite-bins/${{ matrix.suite }}
         continue-on-error: true  # debug
       - uses: mxschmitt/action-tmate@v3
 
