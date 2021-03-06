@@ -12,6 +12,7 @@ on:
 
 env:
   CACHE_VERSION: 1
+  TEST_TARGETS: "cryptol-saw-core"
 
 jobs:
   outputs:
@@ -64,6 +65,9 @@ jobs:
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
     continue-on-error: ${{ matrix.continue-on-error }}
+    outputs:
+      test-suites: ${{ steps.test-suites.outputs.suites }}
+      test-suite-bins: ${{ steps.test-suites.outputs.bins }}
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -100,20 +104,70 @@ jobs:
         run: .github/ci.sh build
         continue-on-error: false
 
-      - if: "matrix.ghc == '8.6.5'"
-        uses: actions/upload-artifact@v2
-        with:
-          path: |
-            dist-newstyle
-            cabal.project.local
-            cabal.project.freeze
-          name: dist-newstyle-${{ runner.os }}-${{ matrix.ghc }}
+      # - uses: galoisinc/.github/actions/cabal-suites-bins
+      #   id: test-suites
+
+      - shell: bash
+        id: test-suites
+        run: |
+          SUITES=""
+          BINS_DIR=test-suite-bins
+          for TARGET in $TEST_TARGETS; do
+              export SUITE_BINS=$(mktemp)
+              mkdir -p $BINS_DIR/$TARGET
+              cabal v2-test --test-wrapper=$PWD/.github/arg2file.sh $TARGET
+              while IFS="" read -r BIN; do
+                  SUITE=$(basename $BIN)
+                  ln -s $BIN ./cabal-test-bins/$TARGET/$SUITE
+                  SUITES="$SUITES $SUITE"
+              done < $SUITE_BINS
+              rm $SUITE_BINS
+          done
+          .github/ci.sh output suites "$(echo -n $SUITES | jq -Rsc 'split(" ")')"
+          .github/ci.sh output bins $BINS_DIR
 
       - if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
-          path: ${{ steps.setup-haskell.outputs.cabal-store }}
-          name: cabal-store-${{ runner.os }}-${{ matrix.ghc }}
+          path: ${{ steps.test-suites.outputs.bins }}
+          name: test-suite-bins-${{ matrix.os }}
+
+  cabal-test:
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    name: "Cabal Test Suite - ${{ matrix.suite }} - ${{ matrix.os }}"
+    strategy:
+      matrix:
+        suite: ${{ fromJson(needs.build.outputs.test-suites) }}
+        os: [ubuntu-18.04]
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          git submodule update --init
+          git -C deps/abcBridge submodule update --init
+      - uses: haskell/actions/setup@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+      - uses: actions/download-artifact@v2
+        with:
+          name: test-suite-bins-${{ matrix.os }}
+      - run: ${{ needs.build.outputs.test-suite-bins }}/${{ matrix.suite }}
+
+      # - if: "matrix.ghc == '8.6.5'"
+      #   uses: actions/upload-artifact@v2
+      #   with:
+      #     path: |
+      #       dist-newstyle
+      #       cabal.project.local
+      #       cabal.project.freeze
+      #     name: dist-newstyle-${{ runner.os }}-${{ matrix.ghc }}
+
+      # - if: "matrix.ghc == '8.6.5'"
+      #   uses: actions/upload-artifact@v2
+      #   with:
+      #     path: ${{ steps.setup-haskell.outputs.cabal-store }}
+      #     name: cabal-store-${{ runner.os }}-${{ matrix.ghc }}
 
       # - shell: bash
       #   run: .github/ci.sh install_system_deps
@@ -170,35 +224,35 @@ jobs:
       #   name: Warn if tests failed
       #   run: echo "::error ::Test suite failed for saw-remote-api. Pipeline allowed to pass until tests are reliable."
 
-  cryptol-saw-core-tests:
-    runs-on: ${{ matrix.os }}
-    needs: [build]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-18.04
-          # - macos-latest
-          # - windows-latest
-        ghc: [8.6.5]
-    steps:
-      - uses: actions/checkout@v2
-      - run: |
-          git submodule update --init
-          git -C deps/abcBridge submodule update --init
-      - uses: haskell/actions/setup@v1
-        id: setup-haskell
-        with:
-          ghc-version: ${{ matrix.ghc }}
-      - uses: actions/download-artifact@v2
-        with:
-          name: dist-newstyle-${{ runner.os }}-${{ matrix.ghc }}
-      - uses: actions/download-artifact@v2
-        with:
-          name: cabal-store-${{ runner.os }}-${{ matrix.ghc }}
-          path: ${{ steps.setup-haskell.outputs.cabal-store }}
-      - uses: mxschmitt/action-tmate@v3
-      - shell: bash
-        run: cabal v2-test cryptol-saw-core
+  # cryptol-saw-core-tests:
+  #   runs-on: ${{ matrix.os }}
+  #   needs: [build]
+  #   strategy:
+  #     matrix:
+  #       os:
+  #         - ubuntu-18.04
+  #         # - macos-latest
+  #         # - windows-latest
+  #       ghc: [8.6.5]
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - run: |
+  #         git submodule update --init
+  #         git -C deps/abcBridge submodule update --init
+  #     - uses: haskell/actions/setup@v1
+  #       id: setup-haskell
+  #       with:
+  #         ghc-version: ${{ matrix.ghc }}
+  #     - uses: actions/download-artifact@v2
+  #       with:
+  #         name: dist-newstyle-${{ runner.os }}-${{ matrix.ghc }}
+  #     - uses: actions/download-artifact@v2
+  #       with:
+  #         name: cabal-store-${{ runner.os }}-${{ matrix.ghc }}
+  #         path: ${{ steps.setup-haskell.outputs.cabal-store }}
+  #     - uses: mxschmitt/action-tmate@v3
+  #     - shell: bash
+  #       run: cabal v2-test cryptol-saw-core
 
   # docker:
   #   runs-on: ubuntu-18.04
