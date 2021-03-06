@@ -115,15 +115,15 @@ jobs:
           SUITES=""
           BINS_DIR=test-suite-bins
           for TARGET in $TEST_TARGETS; do
-              export SUITE_BINS=$(mktemp)
+              export FILE=$(mktemp)
               mkdir -p $BINS_DIR/$TARGET
               cabal v2-test --test-wrapper=$PWD/.github/arg2file.sh $TARGET
               while IFS="" read -r BIN; do
                   SUITE=$(basename $BIN)
                   ln -s $BIN ./cabal-test-bins/$TARGET/$SUITE
                   SUITES="$SUITES $SUITE"
-              done < $SUITE_BINS
-              rm $SUITE_BINS
+              done < $FILE
+              rm $FILE
           done
           .github/ci.sh output suites "$(echo -n $SUITES | jq -Rsc 'split(" ")')"
           .github/ci.sh output bins $BINS_DIR
