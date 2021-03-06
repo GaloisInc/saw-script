@@ -107,8 +107,10 @@ jobs:
       # - uses: galoisinc/.github/actions/cabal-suites-bins
       #   id: test-suites
 
-      - shell: bash
+      - name: Cabal Suites Bins
+        shell: bash
         id: test-suites
+        continue-on-error: true  # debug
         run: |
           SUITES=""
           BINS_DIR=test-suite-bins
@@ -125,7 +127,7 @@ jobs:
           done
           .github/ci.sh output suites "$(echo -n $SUITES | jq -Rsc 'split(" ")')"
           .github/ci.sh output bins $BINS_DIR
-
+      - uses: mxschmitt/action-tmate@v3
       - if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
@@ -136,6 +138,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: [build]
     name: "Cabal Test Suite - ${{ matrix.suite }} - ${{ matrix.os }}"
+    continue-on-error: true  # debug
     strategy:
       matrix:
         suite: ${{ fromJson(needs.build.outputs.test-suites) }}
@@ -153,6 +156,8 @@ jobs:
         with:
           name: test-suite-bins-${{ matrix.os }}
       - run: ${{ needs.build.outputs.test-suite-bins }}/${{ matrix.suite }}
+        continue-on-error: true  # debug
+      - uses: mxschmitt/action-tmate@v3
 
       # - if: "matrix.ghc == '8.6.5'"
       #   uses: actions/upload-artifact@v2
