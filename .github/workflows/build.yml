@@ -152,6 +152,12 @@ jobs:
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          Z3_VERSION: "4.8.8"
+          CVC4_VERSION: "4.1.8"
+          YICES_VERSION: "2.6.2"
       - uses: actions/download-artifact@v2
         with:
           name: test-suite-bins-${{ matrix.os }}
