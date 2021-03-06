@@ -120,7 +120,7 @@ jobs:
               cabal v2-test --test-wrapper=$PWD/.github/arg2file.sh $TARGET
               while IFS="" read -r BIN; do
                   SUITE=$(basename $BIN)
-                  ln -s $BIN ./cabal-test-bins/$TARGET/$SUITE
+                  ln -s $BIN $BINS_DIR/$TARGET/$SUITE
                   SUITES="$SUITES $SUITE"
               done < $FILE
               rm $FILE
@@ -137,7 +137,7 @@ jobs:
   cabal-test:
     runs-on: ${{ matrix.os }}
     needs: [build]
-    name: "Cabal Test Suite - ${{ matrix.suite }} - ${{ matrix.os }}"
+    name: Cabal Test Suite - ${{ matrix.suite }} - ${{ matrix.os }}
     continue-on-error: true  # debug
     strategy:
       matrix:
