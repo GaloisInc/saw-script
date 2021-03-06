@@ -156,7 +156,9 @@ jobs:
         with:
           name: test-suite-bins-${{ matrix.os }}
           path: test-suite-bins
-      - run: test-suite-bins/${{ matrix.suite }}
+      - run: |
+          chmod -R +x test-suite-bins
+          test-suite-bins/${{ matrix.suite }}
         continue-on-error: true  # debug
       - uses: mxschmitt/action-tmate@v3
 
