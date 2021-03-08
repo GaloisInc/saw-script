@@ -20,24 +20,27 @@ module Verifier.SAW.Simulator.BitBlast
   ( BValue
   , withBitBlastedPred
   , withBitBlastedTerm
+  , withBitBlastedSATQuery
   ) where
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
 import Data.Traversable
 #endif
-import Control.Monad ((<=<))
+import Control.Monad ((<=<),unless)
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import Numeric.Natural (Natural)
 
-import Verifier.SAW.FiniteValue (FiniteType(..))
+import Verifier.SAW.FiniteValue (FiniteType(..),FirstOrderType(..),toFiniteType)
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
+import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
@@ -526,3 +529,34 @@ asFiniteType sc t =
     Just ft -> return ft
     Nothing ->
       fail $ "asFiniteType: unsupported type " ++ scPrettyTerm defaultPPOpts t
+
+processVar ::
+  (ExtCns Term, FirstOrderType) ->
+  IO (ExtCns Term, FiniteType)
+processVar (ec, fot) =
+  case toFiniteType fot of
+    Nothing -> fail ("ABC solver does not support variables of type " ++ show fot)
+    Just ft -> pure (ec, ft)
+
+
+withBitBlastedSATQuery ::
+  AIG.IsAIG l g =>
+  AIG.Proxy l g ->
+  SharedContext ->
+  PrimMap l g ->
+  SATQuery ->
+  (forall s. g s -> l s -> [(ExtCns Term, FiniteType)] -> IO a) ->
+  IO a
+withBitBlastedSATQuery proxy sc addlPrims satq cont =
+  do unless (Set.null (satUninterp satq)) $ fail
+        "RME prover does not support uninterpreted symbols"
+     t <- satQueryAsTerm sc satq
+     varShapes <- mapM processVar (Map.toList (satVariables satq))
+     modmap <- scGetModuleMap sc
+     AIG.withNewGraph proxy $ \be ->
+       do vars <- traverse (traverse (newVars be)) varShapes
+          let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) <- vars ]
+          x <- bitBlastBasic be modmap addlPrims varMap t
+          case x of
+            VBool l -> cont be l varShapes
+            _ -> fail "Verifier.SAW.Simulator.BitBlast.withBitBlastedSATQuery: non-boolean result type."
