@@ -1,16 +1,17 @@
 module SAWScript.Prover.ABC (proveABC) where
 
+import qualified Data.Text as Text
 
 import qualified Data.AIG as AIG
 
-import           Verifier.SAW.SharedTerm
 import           Verifier.SAW.FiniteValue
+import           Verifier.SAW.Name
+import           Verifier.SAW.SharedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
-import SAWScript.Proof(Prop, propToPredicate)
+import SAWScript.Proof(Prop, propToSATQuery, propSize)
 import SAWScript.Prover.SolverStats (SolverStats, solverStats)
-import SAWScript.Prover.Util
-         (liftCexBB, bindAllExts)
+import SAWScript.Prover.Util (liftCexBB)
 
 -- | Bit-blast a proposition and check its validity using ABC.
 proveABC ::
@@ -20,15 +21,13 @@ proveABC ::
   Prop ->
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
 proveABC proxy sc goal =
-  do t0 <- propToPredicate sc goal
-     t <- bindAllExts sc t0
-     BBSim.withBitBlastedPred proxy sc mempty t $
-      \be lit0 shapes ->
-         do let lit = AIG.not lit0
-            satRes <- getModel (map fst shapes) (map snd shapes) =<< AIG.checkSat be lit
-            let stats = solverStats "ABC" (scSharedSize t0)
-            return (satRes, stats)
-
+  do satq <- propToSATQuery sc mempty goal
+     BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \be lit shapes ->
+       do let (ecs,fts) = unzip shapes
+          let nms = map (Text.unpack . toShortName . ecName) ecs
+          res <- getModel nms fts =<< AIG.checkSat be lit
+          let stats = solverStats "ABC" (propSize goal)
+          return (res, stats)
 
 getModel ::
   Show name =>
