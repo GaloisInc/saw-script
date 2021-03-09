@@ -12,21 +12,21 @@ import Data.Aeson.Types (Parser)
 
 import SAWScript.Value
 
-import Argo
+import qualified Argo
 import qualified Argo.Doc as Doc
 
-import SAWServer
-import SAWServer.OK
+import SAWServer ( SAWState, sawTopLevelRW )
+import SAWServer.OK ( OK, ok )
 
 
 setOptionDescr :: Doc.Block
 setOptionDescr =
   Doc.Paragraph [Doc.Text "Set a SAW option in the server."]
 
-setOption :: SetOptionParams -> Method SAWState OK
+setOption :: SetOptionParams -> Argo.Command SAWState OK
 setOption opt =
-  do rw <- view sawTopLevelRW <$> getState
-     let updateRW = modifyState . set sawTopLevelRW
+  do rw <- view sawTopLevelRW <$> Argo.getState
+     let updateRW = Argo.modifyState . set sawTopLevelRW
      case opt of
        EnableLaxArithmetic enabled ->
          updateRW rw { rwLaxArith = enabled }
