@@ -67,6 +67,7 @@ import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.SBV as SBV
+import qualified Verifier.SAW.Simulator.What4 as W
 
 import qualified Verifier.SAW.UntypedAST as Un
 
@@ -224,11 +225,9 @@ writeSMTLib2 sc f satq = io $
 writeSMTLib2What4 :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2What4 sc f satq = io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
-     term <- satQueryAsTerm sc satq
-     (_, _, (_,lit)) <- prepWhat4 sym sc (satUninterp satq) term
+     (_argNames, _labels, lit) <- W.w4Solve sym sc satq
      withFile f WriteMode $ \h ->
        writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit]
-
 
 writeCore :: FilePath -> Term -> TopLevel ()
 writeCore path t = io $ writeFile path (scWriteExternal t)
