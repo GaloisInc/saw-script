@@ -154,8 +154,7 @@ jobs:
           .github/ci.sh build_cryptol
           .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
 
-      - if: >-
-          env.RELEASE && matrix.ghc == '8.6.5'
+      - if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
           path: dist/bin
@@ -173,6 +172,7 @@ jobs:
     needs: [build]
     name: Cabal Test Suite - ${{ matrix.suite }} - ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         suite: ${{ fromJson(needs.build.outputs.test-suites) }}
         os: [ubuntu-18.04]
