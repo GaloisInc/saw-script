@@ -655,7 +655,7 @@ scRecursorElimTypes :: SharedContext -> Ident -> [Term] -> Term ->
 scRecursorElimTypes sc d_id params p_ret =
   do d <- scRequireDataType sc d_id
      forM (dtCtors d) $ \ctor ->
-       do elim_type <- ctorElimTypeFun ctor params p_ret
+       do elim_type <- ctorElimTypeFun ctor params p_ret >>= scWhnf sc
           return (ctorName ctor, elim_type)
 
 

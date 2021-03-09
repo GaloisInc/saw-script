@@ -906,6 +906,10 @@ ctxCtorElimType ret (a_top :: Proxy (Typ a)) (d_top :: DataIdent d) c
 -- for the given constructor. We return the substitution function in the monad
 -- so that we only call 'ctxCtorElimType' once but can call the function many
 -- times, in order to amortize the overhead of 'ctxCtorElimType'.
+--
+-- NOTE: Because this function is defined *before* the @SharedTerm@ module, it
+-- cannot call the normalization function @scWHNF@ defined in that module, and
+-- so the terms return by the function it generates are not normalized.
 mkCtorElimTypeFun :: MonadTerm m => Ident -> Ident ->
                      CtorArgStruct d params ixs -> m ([Term] -> Term -> m Term)
 mkCtorElimTypeFun d c argStruct@(CtorArgStruct {..}) =
