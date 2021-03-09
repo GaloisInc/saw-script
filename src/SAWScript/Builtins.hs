@@ -579,7 +579,7 @@ satExternal doCNF execName args = withFirstGoal $ tacticSolve $ \g -> do
   sc <- SV.getSharedContext
   SV.AIGProxy proxy <- SV.getProxy
   io $ do
-  t <- propToPredicate sc (goalProp g)
+  satq <- propToSATQuery sc mempty (goalProp g)
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
   (path, fh) <- openTempFile "." cnfName
   hClose fh -- Yuck. TODO: allow writeCNF et al. to work on handles.
@@ -587,9 +587,9 @@ satExternal doCNF execName args = withFirstGoal $ tacticSolve $ \g -> do
   let args' = map replaceFileName args
       replaceFileName "%f" = path
       replaceFileName a = a
-  BBSim.withBitBlastedPred proxy sc mempty t $ \be l0 shapes -> do
-  -- negate formula to turn it into an existentially-quantified SAT query
-  let l = AIG.not l0
+
+  BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \be l shapes -> do
+
   variables <- (if doCNF then AIG.writeCNF else writeAIGWithMapping) be l path
   (_ec, out, err) <- readProcessWithExitCode execName args' ""
   removeFile path
@@ -598,12 +598,12 @@ satExternal doCNF execName args = withFirstGoal $ tacticSolve $ \g -> do
   let ls = lines out
       sls = filter ("s " `isPrefixOf`) ls
       vls = filter ("v " `isPrefixOf`) ls
-  let stats = solverStats ("external SAT:" ++ execName) (scSharedSize t)
+  let stats = solverStats ("external SAT:" ++ execName) (propSize (goalProp g))
   case (sls, vls) of
     (["s SATISFIABLE"], _) -> do
       let bs = parseDimacsSolution variables vls
       let r = liftCexBB (map snd shapes) bs
-          argNames = map fst shapes
+          argNames = map (Text.unpack . toShortName . ecName . fst) shapes
       case r of
         Left msg -> fail $ "Can't parse counterexample: " ++ msg
         Right vs
