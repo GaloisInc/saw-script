@@ -12,7 +12,7 @@ on:
 
 env:
   CACHE_VERSION: 1
-  TEST_TARGETS: "cryptol-saw-core saw-remote-api"
+  TEST_TARGETS: "cryptol-saw-core"
 
 jobs:
   outputs:
@@ -200,17 +200,12 @@ jobs:
           path: test-suite-bins
       - name: Run suite
         id: run-suite
-        continue-on-error: ${{ contains(fromJson('["test-saw-remote-api"]'), matrix.suite) }}
         env:
           SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
         run: |
           export PATH="$PATH:$PWD/dist/bin"
           chmod -R +x test-suite-bins
           test-suite-bins/${{ matrix.suite }}
-      - shell: bash
-        if: "steps.run-suite.outcome == 'failure'"
-        name: Warn if tests failed
-        run: echo "::error ::${{ matrix.suite }} failed. Pipeline allowed to pass until suite is reliable."
 
   # docker:
   #   runs-on: ubuntu-18.04

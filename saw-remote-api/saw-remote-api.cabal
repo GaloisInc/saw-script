@@ -95,19 +95,3 @@ executable saw-remote-api
   -- other-modules:
   -- other-extensions:
   hs-source-dirs: saw-remote-api
-
-test-suite test-saw-remote-api
-  import:              deps, warnings
-  type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
-  main-is:             Test.hs
-  other-modules:       Paths_saw_remote_api
-  build-depends:       argo-python,
-                       cryptol-remote-api,
-                       filepath,
-                       process,
-                       quickcheck-instances,
-                       tasty,
-                       tasty-hunit,
-                       tasty-quickcheck,
-                       tasty-script-exitcode
