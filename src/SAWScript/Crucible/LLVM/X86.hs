@@ -24,6 +24,7 @@ Stability   : provisional
 
 module SAWScript.Crucible.LLVM.X86
   ( llvm_verify_x86
+  , defaultStackBaseAlign
   ) where
 
 import Control.Lens.TH (makeLenses)
@@ -158,6 +159,9 @@ runX86Sim st m = runStateT (unX86Sim m) st
 throwX86 :: MonadThrow m => String -> m a
 throwX86 = throw . X86Error
 
+defaultStackBaseAlign :: Integer
+defaultStackBaseAlign = 4
+
 setReg ::
   (MonadIO m, MonadThrow m) =>
   Register ->
@@ -286,7 +290,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
       emptyState <- liftIO $ initialState sym opts sc cc elf relf methodSpec globsyms maxAddr
-      (env, preState) <- liftIO . runX86Sim emptyState $ setupMemory globsyms
+      (env, preState) <- liftIO . runX86Sim emptyState . setupMemory globsyms $ rwStackBaseAlign rw
 
       let
         funcLookup = Macaw.LookupFunctionHandle $ \st _mem regs -> do
@@ -545,12 +549,13 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
 setupMemory ::
   X86Constraints =>
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
+  Integer {- ^ Stack base alignment exponent -} ->
   X86Sim (Map MS.AllocIndex Ptr)
-setupMemory globsyms = do
+setupMemory globsyms balign = do
   setupGlobals globsyms
 
   -- Allocate a reasonable amount of stack (4 KiB + 0b10000 for least valid alignment + 1 qword for IP)
-  allocateStack $ 4096 + 16
+  allocateStack (4096 + 16) balign
 
   ms <- use x86MethodSpec
 
@@ -601,15 +606,16 @@ setupGlobals globsyms = do
 allocateStack ::
   X86Constraints =>
   Integer {- ^ Stack size in bytes -} ->
+  Integer {- ^ Stack base alignment exponent -} ->
   X86Sim ()
-allocateStack szInt = do
+allocateStack szInt balign = do
   sym <- use x86Sym
   mem <- use x86Mem
   regs <- use x86Regs
   sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt + 8
   (base, mem') <- liftIO
     $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz
-    $ C.LLVM.exponentToAlignment 16
+    $ C.LLVM.exponentToAlignment (fromIntegral $ if balign < 0 then defaultStackBaseAlign else balign)
   sn <- case W4.userSymbol "stack" of
     Left err -> throwX86 $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn

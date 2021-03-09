@@ -403,6 +403,7 @@ data TopLevelRW =
   , rwLaxArith :: Bool
   , rwWhat4HashConsing :: Bool
   , rwPreservedRegs :: [String]
+  , rwStackBaseAlign :: Integer
   }
 
 newtype TopLevel a =

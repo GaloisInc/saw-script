@@ -472,6 +472,7 @@ buildTopLevelEnv proxy opts =
                    , rwLaxArith = False
                    , rwWhat4HashConsing = False
                    , rwPreservedRegs = []
+                   , rwStackBaseAlign = defaultStackBaseAlign
                    }
        return (bic, ro0, rw0)
 
@@ -555,6 +556,16 @@ default_x86_preserved_reg :: TopLevel ()
 default_x86_preserved_reg = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwPreservedRegs = [] }
+
+set_x86_stack_base_align :: Integer -> TopLevel ()
+set_x86_stack_base_align a = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwStackBaseAlign = a }
+
+default_x86_stack_base_align :: TopLevel ()
+default_x86_stack_base_align = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwStackBaseAlign = defaultStackBaseAlign }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -2395,7 +2406,17 @@ primitives = Map.fromList
   , prim "default_x86_preserved_reg" "TopLevel ()"
     (pureVal default_x86_preserved_reg)
     Current
-    [ "Use the default set of callee-saved registers during x86 verification.." ]
+    [ "Use the default set of callee-saved registers during x86 verification." ]
+
+  , prim "set_x86_stack_base_align" "Int -> TopLevel ()"
+    (pureVal set_x86_stack_base_align)
+    Experimental
+    [ "Set the alignment of the stack allocation base to 2^n during x86 verification." ]
+
+  , prim "default_x86_stack_base_align" "TopLevel ()"
+    (pureVal default_x86_stack_base_align)
+    Experimental
+    [ "Use the default stack allocation base alignment during x86 verification." ]
 
   , prim "llvm_array_value"
     "[SetupValue] -> SetupValue"
