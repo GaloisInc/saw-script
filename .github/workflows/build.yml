@@ -180,10 +180,6 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: true
-      - uses: haskell/actions/setup@v1
-        id: setup-haskell
-        with:
-          ghc-version: ${{ matrix.ghc }}
       - shell: bash
         run: .github/ci.sh install_system_deps
         env:
@@ -200,8 +196,6 @@ jobs:
           path: test-suite-bins
       - name: Run suite
         id: run-suite
-        env:
-          SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
         run: |
           export PATH="$PATH:$PWD/dist/bin"
           chmod -R +x test-suite-bins
