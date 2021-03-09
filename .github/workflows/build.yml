@@ -104,6 +104,13 @@ jobs:
         run: .github/ci.sh build
         continue-on-error: false
 
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          Z3_VERSION: "4.8.10"
+          CVC4_VERSION: "4.1.8"
+          YICES_VERSION: "2.6.2"
+
       # - uses: galoisinc/.github/actions/cabal-suites-bins
       #   id: test-suites
 

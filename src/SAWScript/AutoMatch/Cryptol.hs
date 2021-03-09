@@ -22,6 +22,7 @@ import Cryptol.ModuleSystem.Name
 import Cryptol.Utils.Ident (unpackIdent)
 import Cryptol.Utils.Logger (quietLogger)
 import qualified Cryptol.TypeCheck.AST as AST
+import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import Cryptol.Utils.PP
 
 -- | Parse a Cryptol module into a list of declarations
@@ -31,7 +32,9 @@ getDeclsCryptol path = do
    let evalOpts = EvalOpts quietLogger defaultPPOpts
    modEnv <- M.initialModuleEnv
    let minp = M.ModuleInput True (pure evalOpts) BS.readFile modEnv
-   (result, warnings) <- M.loadModuleByPath path minp
+   (result, warnings) <-
+     SMT.withSolver (M.meSolverConfig modEnv) $ \s ->
+     M.loadModuleByPath path (minp s)
    return $ do
       forM_ warnings $ liftF . flip Warning () . pretty
       case result of
