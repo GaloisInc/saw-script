@@ -54,8 +54,8 @@ install_z3() {
   is_exe "$BIN" "z3" && return
 
   case "$RUNNER_OS" in
-    Linux) file="ubuntu-16.04.zip" ;;
-    macOS) file="osx-10.14.6.zip" ;;
+    Linux) file="ubuntu-18.04.zip" ;;
+    macOS) file="osx-10.15.7.zip" ;;
     Windows) file="win.zip" ;;
   esac
   curl -o z3.zip -sL "https://github.com/Z3Prover/z3/releases/download/z3-$Z3_VERSION/z3-$Z3_VERSION-x64-$file"
