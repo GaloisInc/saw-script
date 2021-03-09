@@ -12,7 +12,7 @@ on:
 
 env:
   CACHE_VERSION: 1
-  TEST_TARGETS: "cryptol-saw-core"
+  TEST_TARGETS: "cryptol-saw-core saw-remote-api"
 
 jobs:
   outputs:
@@ -110,7 +110,6 @@ jobs:
       - name: Cabal Suites Bins
         shell: bash
         id: test-suites
-        continue-on-error: true  # debug
         run: |
           SUITES=""
           BINS_DIR=test-suite-bins
@@ -127,78 +126,14 @@ jobs:
           done
           .github/ci.sh output suites "$(echo -n $SUITES | jq -Rsc 'split(" ")')"
           .github/ci.sh output bins $BINS_DIR
-      - uses: mxschmitt/action-tmate@v3
       - if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
           path: ${{ steps.test-suites.outputs.bins }}
           name: test-suite-bins-${{ matrix.os }}
 
-  cabal-test:
-    runs-on: ${{ matrix.os }}
-    needs: [build]
-    name: Cabal Test Suite - ${{ matrix.suite }} - ${{ matrix.os }}
-    continue-on-error: true  # debug
-    strategy:
-      matrix:
-        suite: ${{ fromJson(needs.build.outputs.test-suites) }}
-        os: [ubuntu-18.04]
-    steps:
-      - uses: actions/checkout@v2
-      - run: |
-          git submodule update --init
-          git -C deps/abcBridge submodule update --init
-      - uses: haskell/actions/setup@v1
-        id: setup-haskell
-        with:
-          ghc-version: ${{ matrix.ghc }}
       - shell: bash
-        run: .github/ci.sh install_system_deps
-        env:
-          Z3_VERSION: "4.8.8"
-          CVC4_VERSION: "4.1.8"
-          YICES_VERSION: "2.6.2"
-      - uses: actions/download-artifact@v2
-        with:
-          name: test-suite-bins-${{ matrix.os }}
-          path: test-suite-bins
-      - run: |
-          chmod -R +x test-suite-bins
-          test-suite-bins/${{ matrix.suite }}
-        continue-on-error: true  # debug
-      - uses: mxschmitt/action-tmate@v3
-
-      # - if: "matrix.ghc == '8.6.5'"
-      #   uses: actions/upload-artifact@v2
-      #   with:
-      #     path: |
-      #       dist-newstyle
-      #       cabal.project.local
-      #       cabal.project.freeze
-      #     name: dist-newstyle-${{ runner.os }}-${{ matrix.ghc }}
-
-      # - if: "matrix.ghc == '8.6.5'"
-      #   uses: actions/upload-artifact@v2
-      #   with:
-      #     path: ${{ steps.setup-haskell.outputs.cabal-store }}
-      #     name: cabal-store-${{ runner.os }}-${{ matrix.ghc }}
-
-      # - shell: bash
-      #   run: .github/ci.sh install_system_deps
-      #   env:
-      #     Z3_VERSION: "4.8.8"
-      #     CVC4_VERSION: "4.1.8"
-      #     YICES_VERSION: "2.6.2"
-
-      # - shell: bash
-      #   run: .github/ci.sh setup_dist_bins
-
-      # - shell: bash
-      #   id: cabal-test
-      #   continue-on-error: true
-      #   run: cabal v2-test saw-remote-api
-      #   env:
-      #     SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
+        run: .github/ci.sh setup_dist_bins
 
       # - uses: actions/setup-java@v1
       #   with:
@@ -213,60 +148,68 @@ jobs:
       #   run: |
       #     .github/ci.sh test_dist
 
-      # - if: >-
-      #     env.RELEASE && matrix.ghc == '8.6.5'
-      #   run: |
-      #     .github/ci.sh build_cryptol
-      #     .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
+      - if: >-
+          env.RELEASE && matrix.ghc == '8.6.5'
+        run: |
+          .github/ci.sh build_cryptol
+          .github/ci.sh extract_exe "cryptol" "dist/bin" "deps/cryptol/dist-newstyle"
 
-      # - if: >-
-      #     env.RELEASE && matrix.ghc == '8.6.5'
-      #   uses: actions/upload-artifact@v2
-      #   with:
-      #     path: dist/bin
-      #     name: ${{ runner.os }}-bins
+      - if: >-
+          env.RELEASE && matrix.ghc == '8.6.5'
+        uses: actions/upload-artifact@v2
+        with:
+          path: dist/bin
+          name: ${{ runner.os }}-bins
 
-      # - name: Upload artifacts
-      #   if: "matrix.os == 'ubuntu-18.04'"
-      #   uses: actions/upload-artifact@v2
-      #   with:
-      #     name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
-      #     path: "dist/bin/saw"
+      - name: Upload artifacts
+        if: "matrix.os == 'ubuntu-18.04'"
+        uses: actions/upload-artifact@v2
+        with:
+          name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
+          path: dist/bin/saw
 
-      # - shell: bash
-      #   if: "steps.cabal-test.outcome == 'failure'"
-      #   name: Warn if tests failed
-      #   run: echo "::error ::Test suite failed for saw-remote-api. Pipeline allowed to pass until tests are reliable."
-
-  # cryptol-saw-core-tests:
-  #   runs-on: ${{ matrix.os }}
-  #   needs: [build]
-  #   strategy:
-  #     matrix:
-  #       os:
-  #         - ubuntu-18.04
-  #         # - macos-latest
-  #         # - windows-latest
-  #       ghc: [8.6.5]
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - run: |
-  #         git submodule update --init
-  #         git -C deps/abcBridge submodule update --init
-  #     - uses: haskell/actions/setup@v1
-  #       id: setup-haskell
-  #       with:
-  #         ghc-version: ${{ matrix.ghc }}
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: dist-newstyle-${{ runner.os }}-${{ matrix.ghc }}
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: cabal-store-${{ runner.os }}-${{ matrix.ghc }}
-  #         path: ${{ steps.setup-haskell.outputs.cabal-store }}
-  #     - uses: mxschmitt/action-tmate@v3
-  #     - shell: bash
-  #       run: cabal v2-test cryptol-saw-core
+  cabal-test:
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    name: Cabal Test Suite - ${{ matrix.suite }} - ${{ matrix.os }}
+    strategy:
+      matrix:
+        suite: ${{ fromJson(needs.build.outputs.test-suites) }}
+        os: [ubuntu-18.04]
+    steps:
+      - uses: actions/checkout@v2
+        submodules: true
+      - uses: haskell/actions/setup@v1
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+      - shell: bash
+        run: .github/ci.sh install_system_deps
+        env:
+          Z3_VERSION: "4.8.8"
+          CVC4_VERSION: "4.1.8"
+          YICES_VERSION: "2.6.2"
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ runner.os }}-bins"
+          path: dist/bin
+      - uses: actions/download-artifact@v2
+        with:
+          name: test-suite-bins-${{ matrix.os }}
+          path: test-suite-bins
+      - name: Run suite
+        id: run-suite
+        continue-on-error: ${{ contains(fromJson('["test-saw-remote-api"]'), matrix.suite) }}
+        env:
+          SAW_SERVER: ${GITHUB_WORKSPACE}/dist/bin/saw-remote-api
+        run: |
+          export PATH="$PATH:$PWD/dist/bin"
+          chmod -R +x test-suite-bins
+          test-suite-bins/${{ matrix.suite }}
+      - shell: bash
+        if: "steps.run-suite.outcome == 'failure'"
+        name: Warn if tests failed
+        run: echo "::error ::${{ matrix.suite }} failed. Pipeline allowed to pass until suite is reliable."
 
   # docker:
   #   runs-on: ubuntu-18.04
