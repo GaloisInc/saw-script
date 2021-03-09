@@ -178,7 +178,7 @@ jobs:
         os: [ubuntu-18.04]
     steps:
       - uses: actions/checkout@v2
-        submodules: true
+        submodule: true
       - uses: haskell/actions/setup@v1
         id: setup-haskell
         with:
