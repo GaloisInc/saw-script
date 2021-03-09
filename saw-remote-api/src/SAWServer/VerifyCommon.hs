@@ -11,10 +11,10 @@ import qualified Argo.Doc as Doc
 import Prelude hiding (mod)
 import Data.Aeson (FromJSON(..), withObject, (.:))
 
-import CryptolServer.Data.Expression
-import SAWServer
-import SAWServer.Data.Contract
-import SAWServer.ProofScript
+import CryptolServer.Data.Expression ( Expression )
+import SAWServer ( ServerName )
+import SAWServer.Data.Contract ( Contract )
+import SAWServer.ProofScript ( ProofScript )
 
 data VerifyParams ty =
   VerifyParams

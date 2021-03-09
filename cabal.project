@@ -31,5 +31,4 @@ packages:
     deps/dwarf
     deps/argo/argo
     deps/argo/tasty-script-exitcode
-    deps/argo/python
     deps/cryptol/cryptol-remote-api
