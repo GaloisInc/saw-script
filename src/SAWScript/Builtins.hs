@@ -29,7 +29,6 @@ import Data.Monoid
 #endif
 import Control.Monad.State
 import Control.Monad.Reader (ask)
-import Control.Monad.Trans.Maybe (runMaybeT)
 import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
@@ -74,7 +73,7 @@ import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
-import Verifier.SAW.Testing.Random (scRunTestsTFIO, scTestableType)
+import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
 
 import SAWScript.Position
@@ -112,7 +111,6 @@ import qualified Cryptol.Eval.Value as C (fromVBit, fromVWord)
 import qualified Cryptol.Eval.Concrete as C (Concrete(..), bvVal)
 import qualified Cryptol.Utils.Ident as C (mkIdent, packModName)
 import qualified Cryptol.Utils.RecordMap as C (recordFromFields)
-import Cryptol.Utils.PP (pretty)
 
 import qualified SAWScript.SBVParser as SBV
 import SAWScript.ImportAIG
@@ -344,24 +342,16 @@ quickcheckGoal sc n = do
   withFirstGoal $ tacticSolve $ \goal -> io $ do
     printOutLn opts Warn $ "WARNING: using quickcheck to prove goal..."
     hFlush stdout
-    tm0 <- propToPredicate sc (goalProp goal)
-    tm <- scAbstractExts sc (getAllExts tm0) tm0
-    ty <- scTypeOf sc tm
-    maybeInputs <- runMaybeT (scTestableType sc ty)
-    let stats = solverStats "quickcheck" (scSharedSize tm)
-    case maybeInputs of
-      Just inputs -> do
-        result <- scRunTestsTFIO sc n tm (map snd inputs)
-        case result of
-          Nothing -> do
-            printOutLn opts Info $ "checked " ++ show n ++ " cases."
+    satq <- propToSATQuery sc mempty (goalProp goal)
+    testGen <- prepareSATQuery sc satq
+    let stats = solverStats "quickcheck" (propSize (goalProp goal))
+    runManyTests testGen n >>= \case
+       Nothing ->
+         do printOutLn opts Info $ "checked " ++ show n ++ " cases."
             return (SV.Unsat stats, stats, Just (QuickcheckEvidence n (goalProp goal)))
-          Just cexVals ->
-            let cex = zip (map (Text.unpack . fst) inputs) cexVals
-             in return (SV.SatMulti stats cex, stats, Nothing)
-      Nothing -> fail $ "quickcheck:\n" ++
-        "term has non-testable type:\n" ++
-        showTerm ty ++ ", for term: " ++ showTerm tm
+       Just cex ->
+         let cex' = [ (Text.unpack (toShortName (ecName ec)), v) | (ec,v) <- cex ]
+          in return (SV.SatMulti stats cex', stats, Nothing)
 
 assumeValid :: ProofScript SV.ProofResult
 assumeValid =
@@ -951,23 +941,18 @@ satPrintPrim script t = do
 -- | Quick check (random test) a term and print the result. The
 -- 'Integer' parameter is the number of random tests to run.
 quickCheckPrintPrim :: Options -> SharedContext -> Integer -> TypedTerm -> IO ()
-quickCheckPrintPrim opts sc numTests tt = do
-  let tm = ttTerm tt
-  ty <- scTypeOf sc tm
-  maybeInputs <- runMaybeT (scTestableType sc ty)
-  case maybeInputs of
-    Just inputs -> do
-      result <- scRunTestsTFIO sc numTests tm (map snd inputs)
-      case result of
+quickCheckPrintPrim opts sc numTests tt =
+  do let tm = ttTerm tt
+     prop <- predicateToProp sc Universal tm
+     satq <- propToSATQuery sc mempty prop
+     testGen <- prepareSATQuery sc satq
+     runManyTests testGen numTests >>= \case
         Nothing -> printOutLn opts Info $ "All " ++ show numTests ++ " tests passed!"
-        Just cexVals ->
-          let cex = zip (map fst inputs) cexVals in
-          printOutLn opts OnlyCounterExamples $
-            "----------Counterexample----------\n" ++
-            showList cex ""
-    Nothing -> fail $ "quickCheckPrintPrim:\n" ++
-      "term has non-testable type:\n" ++
-      pretty (ttSchema tt)
+        Just cex ->
+          do let cex' = [ (Text.unpack (toShortName (ecName ec)), v) | (ec,v) <- cex ]
+             printOutLn opts OnlyCounterExamples $
+               "----------Counterexample----------\n" ++
+               showList cex' ""
 
 cryptolSimpset :: TopLevel Simpset
 cryptolSimpset =
@@ -1120,9 +1105,14 @@ cexEvalFn sc args tm = do
   args' <- mapM (scFirstOrderValue sc . snd) args
   let is = map ecVarIndex exts
       argMap = Map.fromList (zip is args')
+
+  -- TODO, instead of instantiating and then evaluating, we should
+  -- evaluate in the context of an EC map instead.  argMap is almost
+  -- what we need, but the values syould be @Concrete.CValue@ instead.
+
   tm' <- scInstantiateExt sc argMap tm
   modmap <- scGetModuleMap sc
-  return $ Concrete.evalSharedTerm modmap mempty tm'
+  return $ Concrete.evalSharedTerm modmap mempty mempty tm'
 
 toValueCase :: (SV.FromValue b) =>
                (b -> SV.Value -> SV.Value -> TopLevel SV.Value)

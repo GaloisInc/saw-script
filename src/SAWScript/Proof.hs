@@ -56,7 +56,6 @@ module SAWScript.Proof
 
   , Quantification(..)
   , predicateToProp
-  , propToPredicate
 
   , ProofState
   , psTimeout
@@ -438,16 +437,6 @@ predicateToProp sc quant = loop []
                     scPi sc x xT t3
            Prop <$> toPi argTs t
 
--- | Turn a pi type with an @EqTrue@ result into a lambda term with a
--- boolean result type. This function exists to interface the new
--- pi-type proof goals with older proof tactic implementations that
--- expect the old lambda-term representation.
-propToPredicate :: SharedContext -> Prop -> IO Term
-propToPredicate sc (Prop goal) =
-  do let (args, t1) = asPiList goal
-     case asEqTrue t1 of
-       Just t2 -> scLambdaList sc args t2
-       Nothing -> fail $ "propToPredicate: expected EqTrue, actual " ++ show t1
 
 -- | A ProofState represents a sequent, where the collection of goals
 -- implies the conclusion.
