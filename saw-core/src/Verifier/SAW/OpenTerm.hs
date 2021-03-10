@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module      : Verifier.SAW.OpenTerm
@@ -21,6 +22,7 @@ module Verifier.SAW.OpenTerm (
   -- * Basic operations for building open terms
   closedOpenTerm, flatOpenTerm, sortOpenTerm, natOpenTerm,
   unitOpenTerm, unitTypeOpenTerm,
+  stringLitOpenTerm, stringTypeOpenTerm,
   pairOpenTerm, pairTypeOpenTerm, pairLeftOpenTerm, pairRightOpenTerm,
   tupleOpenTerm, tupleTypeOpenTerm, projTupleOpenTerm,
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
@@ -36,6 +38,7 @@ module Verifier.SAW.OpenTerm (
 
 import Control.Monad
 import Control.Monad.IO.Class
+import Data.Text (Text)
 import Numeric.Natural
 
 import Verifier.SAW.Term.Functor
@@ -83,6 +86,14 @@ unitOpenTerm = flatOpenTerm UnitValue
 -- | The 'OpenTerm' for the unit type
 unitTypeOpenTerm :: OpenTerm
 unitTypeOpenTerm = flatOpenTerm UnitType
+
+-- | Build a SAW core string literal.
+stringLitOpenTerm :: Text -> OpenTerm
+stringLitOpenTerm = flatOpenTerm . StringLit
+
+-- | Return the SAW core type @String@ of strings.
+stringTypeOpenTerm :: OpenTerm
+stringTypeOpenTerm = globalOpenTerm "Prelude.String"
 
 -- | Build an 'OpenTerm' for a pair
 pairOpenTerm :: OpenTerm -> OpenTerm -> OpenTerm
