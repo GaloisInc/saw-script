@@ -1,17 +1,16 @@
-import os
-import os.path
+from pathlib import Path
 import unittest
 import saw
 from saw.proofscript import *
 
 class SevenTest(unittest.TestCase):
     def test_seven(self):
-        dir_path = os.path.dirname(os.path.realpath(__file__))
 
-        c = saw.connection.connect(saw.find_saw_server() + " socket")
+        c = saw.connection.connect(reset_server=True)
+        c.reset()
         if __name__ == "__main__": saw.view(saw.LogResults())
 
-        seven_bc = os.path.join(dir_path, '../seven.bc')
+        seven_bc = str(Path('tests','saw','test-files', 'seven.bc'))
 
         c.llvm_load_module('m', seven_bc).result()
 

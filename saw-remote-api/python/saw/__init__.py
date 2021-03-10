@@ -108,25 +108,34 @@ def connect(command: Union[str, ServerConnection, None] = None,
             *, 
             cryptol_path: Optional[str] = None,
             persist: bool = False,
-            url : Optional[str] = None) -> None:
+            url : Optional[str] = None,
+            reset_server : bool = False) -> None:
     """
     Connect to a (possibly new) Saw server process.
 
-    :param command: A command to launch a new Saw server in socket mode (if provided).
+    :param command: A command to launch a new Saw server in socket mode (if
+    provided).
 
-    :param url: A URL at which to connect to an already running SAW
-    HTTP server.
+    :param url: A URL at which to connect to an already running SAW HTTP server.
 
-    If no parameters are provided, the following are attempted in order:
+    : param reset_server: If ``True``, the server that is connected to will be
+    reset. (This ensures any states from previous server usages have been
+    cleared.)
 
-    1. If the environment variable ``SAW_SERVER`` is set and referse to an executable,
-    it is assumed to be a SAW server and will be used for a new ``stdio`` connection.
+    If no parameters specifying how to connect to the server are provided, the
+    following are attempted in order:
 
-    2. If the environment variable ``SAW_SERVER_URL`` is set, it is assumed to be
-    the URL for a running SAW server in ``http`` mode and will be connected to.
+    1. If the environment variable ``SAW_SERVER`` is set and refers to an
+       executable, it is assumed to be a SAW server and will be used for a new
+       ``stdio`` connection.
 
-    3. If an executable ``saw-remote-api`` is available on the ``PATH``
-    it is assumed to be a SAW server and will be used for a new ``stdio`` connection.
+    2. If the environment variable ``SAW_SERVER_URL`` is set, it is assumed to
+       be the URL for a running SAW server in ``http`` mode and will be
+       connected to.
+
+    3. If an executable ``saw-remote-api`` is available on the ``PATH`` it is
+       assumed to be a SAW server and will be used for a new ``stdio``
+       connection.
 
     """
     global __designated_connection
@@ -138,6 +147,8 @@ def connect(command: Union[str, ServerConnection, None] = None,
             cryptol_path=cryptol_path,
             persist=persist,
             url=url)
+    elif reset_server:
+        __designated_connection.reset_server()
     else:
         raise ValueError("There is already a designated connection."
                          " Did you call `connect()` more than once?")
@@ -155,19 +166,31 @@ def connect(command: Union[str, ServerConnection, None] = None,
                     pass
         atexit.register(print_if_still_running)
 
+
+def reset() -> None:
+    """Reset the current SAW connection to the initial state.
+    
+    If the connection is inactive, ``connect()`` is called to initialize it."""
+    if __designated_connection is not None:
+        __designated_connection.reset()
+    else:
+        connect()
+
+def reset_server() -> None:
+    """Reset the SAW server, clearing all states.
+    
+    If the connection is inactive, ``connect()`` is called to initialize it."""
+    if __designated_connection is not None:
+        __designated_connection.reset_server()
+    else:
+        connect()
+        __designated_connection.reset_server()
+
 def disconnect() -> None:
     global __designated_connection
     if __designated_connection is not None:
-        try:
-            pid = __designated_connection.pid()
-            if pid:
-                os.killpg(os.getpgid(pid), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        __designated_connection = None
-    else:
-        raise ValueError("There is no connection to disconnect from."
-                         " Did you call `disconnect()` more than once?")
+        __designated_connection.disconnect()
+    __designated_connection = None
 
 
 class View:

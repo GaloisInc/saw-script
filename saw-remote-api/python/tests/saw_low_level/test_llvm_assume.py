@@ -1,5 +1,4 @@
-import os
-import os.path
+from pathlib import Path
 import saw
 from saw.proofscript import *
 import unittest
@@ -8,11 +7,10 @@ import unittest
 class LLVMAssumeTest(unittest.TestCase):
 
     def test_llvm_assume(self):
-        c = saw.connection.connect(saw.find_saw_server() + " socket")
+        c = saw.connection.connect(reset_server=True)
         if __name__ == "__main__": saw.view(saw.LogResults())
 
-        dir_path = os.path.dirname(os.path.realpath(__file__))
-        assume_bc = os.path.join(dir_path, '../assume.bc')
+        assume_bc = str(Path('tests','saw','test-files', 'assume.bc'))
 
         c.llvm_load_module('m', assume_bc).result()
 
@@ -45,6 +43,7 @@ class LLVMAssumeTest(unittest.TestCase):
         prover = ProofScript([abc]).to_json()
         c.llvm_assume('m', 'seven', seven_contract, 'seven_ov').result()
         c.llvm_verify('m', 'addone', ['seven_ov'], False, addone_contract, prover, 'addone_ov').result()
+        c.reset_server()
         c.disconnect()
 
 if __name__ == "__main__":

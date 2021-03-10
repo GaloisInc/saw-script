@@ -62,8 +62,16 @@ class BufferCopySpec(Contract):
 
 
 class LLVMNestedStructTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        connect(reset_server=True)
+
+    @classmethod
+    def tearDownClass(self):
+        disconnect()
+
     def test_llvm_struct(self):
-        connect()
         if __name__ == "__main__": view(LogResults())
 
         bcname = str(Path('tests','saw','test-files', 'alloc_aligned.bc'))

@@ -1,5 +1,4 @@
-import os
-import os.path
+from pathlib import Path
 import unittest
 import saw
 from saw.llvm import *
@@ -11,13 +10,11 @@ from saw.proofscript import *
 
 class Salsa20LowLevelTest(unittest.TestCase):
     def test_salsa20(self):
-        dir_path = os.path.dirname(os.path.realpath(__file__))
-
-        c = saw.connection.connect(saw.find_saw_server() + " socket")
+        c = saw.connection.connect(reset_server=True)
         if __name__ == "__main__": saw.view(saw.LogResults())
 
-        bcname = os.path.join(dir_path, '../salsa20.bc')
-        cryname = os.path.join(dir_path, '../Salsa20.cry')
+        bcname = str(Path('tests','saw','test-files', 'salsa20.bc'))
+        cryname = str(Path('tests','saw','test-files', 'Salsa20.cry'))
 
         c.cryptol_load_file(cryname).result()
         c.llvm_load_module('m', bcname).result()

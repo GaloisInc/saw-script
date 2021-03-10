@@ -81,3 +81,20 @@ class LLVMVerify(SAWCommand):
 
     def process_result(self, _res : Any) -> Any:
         return None
+
+class SAWReset(argo.Notification):
+    def __init__(self, connection : argo.HasProtocolState) -> None:
+        super(SAWReset, self).__init__(
+            'SAW/clear state',
+            {'state to clear': connection.protocol_state()},
+            connection
+        )
+
+
+class SAWResetServer(argo.Notification):
+    def __init__(self, connection : argo.HasProtocolState) -> None:
+        super(SAWResetServer, self).__init__(
+            'SAW/clear all states',
+            {},
+            connection
+        )

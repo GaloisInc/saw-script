@@ -1,5 +1,4 @@
-import os
-import os.path
+from pathlib import Path
 import unittest
 import saw
 from saw.proofscript import *
@@ -7,12 +6,12 @@ from saw.proofscript import *
 
 class SwapLowLevelTest(unittest.TestCase):
     def test_swap(self):
-        dir_path = os.path.dirname(os.path.realpath(__file__))
 
-        c = saw.connection.connect(saw.find_saw_server() + " socket")
+        c = saw.connection.connect(reset_server=True)
+        c.reset_server()
         if __name__ == "__main__": saw.view(saw.LogResults())
 
-        swap_bc = os.path.join(dir_path, '../swap.bc')
+        swap_bc = str(Path('tests','saw','test-files', 'swap.bc'))
 
         c.llvm_load_module('m', swap_bc).result()
 
@@ -58,6 +57,7 @@ class SwapLowLevelTest(unittest.TestCase):
         prover = ProofScript([abc]).to_json()
         c.llvm_verify('m', 'swap', [], False, contract, prover, 'ok').result()
         c.disconnect()
+
 
 if __name__ == "__main__":
     unittest.main()

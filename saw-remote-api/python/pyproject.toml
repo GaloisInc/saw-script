@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "saw"
+version = "0.0.1"
+description = "SAW client"
+authors = ["Andrew Kent <andrew@galois.com>", "Aaron Tomb <atomb@galois.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+requests = "^2.25.1"
+BitVector = "^3.4.9"
+cryptol = { path = "../../deps/cryptol/cryptol-remote-api/python/", develop = true }
+argo-client = "0.0.4"
+
+[build-system]
+requires = ["poetry>=1.1.4"]

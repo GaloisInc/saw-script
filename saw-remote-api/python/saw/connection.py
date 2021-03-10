@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import signal
 from distutils.spawn import find_executable
-from argo_client.connection import ServerConnection, DynamicSocketProcess, StdIOProcess, HttpProcess
+from argo_client.connection import ServerConnection, DynamicSocketProcess, ServerProcess, HttpProcess
 from argo_client.interaction import Interaction, Command
 from .commands import *
 
@@ -13,39 +13,48 @@ def connect(command: Union[str, ServerConnection, None] = None,
             *,
             cryptol_path: Optional[str] = None,
             persist: bool = False,
-            url : Optional[str] = None) -> SAWConnection:
+            url : Optional[str] = None,
+            reset_server : bool = False) -> SAWConnection:
     """
     Connect to a (possibly new) Saw server process.
 
-    :param command: A command to launch a new Saw server in socket mode (if provided).
+    :param command: A command to launch a new Saw server in socket mode (if
+    provided).
 
-    :param url: A URL at which to connect to an already running SAW 
-    HTTP server.
+    :param url: A URL at which to connect to an already running SAW HTTP server.
 
-    If no parameters are provided, the following are attempted in order:
+    : param reset_server: If ``True``, the server that is connected to will be
+    reset. (This ensures any states from previous server usages have been cleared.)
 
-    1. If the environment variable ``SAW_SERVER`` is set and referse to an executable,
-    it is assumed to be a SAW server and will be used for a new ``socket`` connection.
+    If no parameters specifying how to connect to the server are provided, the
+    following are attempted in order:
 
-    2. If the environment variable ``SAW_SERVER_URL`` is set, it is assumed to be
-    the URL for a running SAW server in ``http`` mode and will be connected to.
+    1. If the environment variable ``SAW_SERVER`` is set and referse to an
+       executable, it is assumed to be a SAW server and will be used for a new
+       ``socket`` connection.
 
-    3. If an executable ``saw-remote-api`` is available on the ``PATH``
-    it is assumed to be a SAW server and will be used for a new ``socket`` connection.
+    2. If the environment variable ``SAW_SERVER_URL`` is set, it is assumed to
+       be the URL for a running SAW server in ``http`` mode and will be
+       connected to.
+
+    3. If an executable ``saw-remote-api`` is available on the ``PATH`` it is
+       assumed to be a SAW server and will be used for a new ``socket``
+       connection.
 
     """
+    c = None
     if command is not None:
         if url is not None:
             raise ValueError("A SAW server URL cannot be specified with a command currently.")
-        return SAWConnection(command)
+        c = SAWConnection(command)
     elif url is not None:
-        return SAWConnection(ServerConnection(HttpProcess(url)))
+        c = SAWConnection(ServerConnection(HttpProcess(url)))
     elif (command := os.getenv('SAW_SERVER')) is not None and (command := find_executable(command)) is not None:
-        return SAWConnection(command+" socket") # SAWConnection(ServerConnection(StdIOProcess(command+" stdio")))
+        c = SAWConnection(command+" socket") # SAWConnection(ServerConnection(StdIOProcess(command+" stdio")))
     elif (url := os.getenv('SAW_SERVER_URL')) is not None:
-        return SAWConnection(ServerConnection(HttpProcess(url)))
+        c = SAWConnection(ServerConnection(HttpProcess(url)))
     elif (command := find_executable('saw-remote-api')) is not None:
-        return SAWConnection(command+" socket")
+        c = SAWConnection(command+" socket")
     else:
         raise ValueError(
             """saw.connection.connect requires one of the following:",
@@ -53,18 +62,22 @@ def connect(command: Union[str, ServerConnection, None] = None,
             2) a URL to connect to a running SAW server is provided via the `url` keyword argument,
             3) the environment variable `SAW_SERVER` must refer to a valid server executable, or
             4) the environment variable `SAW_SERVER_URL` must refer to the URL of a running SAW server.""")
-
-    return SAWConnection(command, persist=persist)
+    if reset_server:
+        SAWResetServer(c)
+    return c
 
 
 class SAWConnection:
     """A representation of a current user state in a session with SAW."""
 
     most_recent_result: Optional[Interaction]
+    server_connection: ServerConnection
+    proc: ServerProcess
 
     def __init__(self,
                  command_or_connection: Union[str, ServerConnection],
                  *, persist: bool = False) -> None:
+        self.proc = None
         self.most_recent_result = None
         self.persist = persist
         if isinstance(command_or_connection, str):
@@ -73,11 +86,35 @@ class SAWConnection:
         else:
             self.server_connection = command_or_connection
 
+    def reset(self) -> None:
+        """Resets the connection, causing its unique state on the server to be freed (if applicable).
+        
+        After a reset a connection may be treated as if it were a fresh connection with the server if desired."""
+        SAWReset(self)
+        self.most_recent_result = None
+
+    def reset_server(self) -> None:
+        """Resets the server, causing all states on the server to be freed."""
+        SAWResetServer(self)
+        self.most_recent_result = None
+
     def disconnect(self) -> None:
+        """Clears the state from the server and closes any underlying
+        server/connection process launched by this object."""
+        self.reset()
         if not self.persist:
             if self.proc and (pid := self.proc.pid()):
                 os.killpg(os.getpgid(pid), signal.SIGKILL)
-            del self.server_connection
+                self.proc = None
+
+
+    def __del__(self):
+        # when being deleted, ensure we don't have a lingering state on the server
+        if self.most_recent_result is not None:
+            SAWReset(self)
+        if not self.persist:
+            if self.proc and (pid := self.proc.pid()):
+                os.killpg(os.getpgid(pid), signal.SIGKILL)
         
 
     def pid(self) -> Optional[int]:

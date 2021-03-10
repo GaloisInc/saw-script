@@ -18,8 +18,16 @@ class FContract(Contract):
 
 
 class LLVMStructTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        connect(reset_server=True)
+
+    @classmethod
+    def tearDownClass(self):
+        disconnect()
+
     def test_llvm_struct(self):
-        connect()
         if __name__ == "__main__": view(LogResults())
         bcname = str(Path('tests','saw','test-files', 'llvm_struct_type.bc'))
         mod = llvm_load_module(bcname)

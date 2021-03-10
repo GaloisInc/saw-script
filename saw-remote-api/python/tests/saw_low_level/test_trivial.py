@@ -1,5 +1,4 @@
-import os
-import os.path
+from pathlib import Path
 import unittest
 import saw
 from saw.proofscript import *
@@ -7,16 +6,15 @@ from saw.proofscript import *
 
 class TrivialTest(unittest.TestCase):
     def test_trivial(self):
-        dir_path = os.path.dirname(os.path.realpath(__file__))
 
-        c = saw.connection.connect(saw.find_saw_server() + " socket")
+        c = saw.connection.connect(reset_server=True)
         if __name__ == "__main__": saw.view(saw.LogResults())
 
-        cry_file = os.path.join(dir_path, '../Foo.cry')
+        cry_file = str(Path('tests','saw','test-files', 'Foo.cry'))
         c.cryptol_load_file(cry_file)
 
 
-        null_bc = os.path.join(dir_path, '../null.bc')
+        null_bc = str(Path('tests','saw','test-files', 'null.bc'))
 
         c.llvm_load_module('m', null_bc).result()
 
@@ -36,6 +34,7 @@ class TrivialTest(unittest.TestCase):
         prover = ProofScript([abc]).to_json()
         c.llvm_verify('m', 'always_null', [], False, contract, prover, 'ok').result()
         c.disconnect()
+
 
 if __name__ == "__main__":
     unittest.main()
