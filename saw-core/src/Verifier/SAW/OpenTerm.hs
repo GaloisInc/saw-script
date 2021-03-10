@@ -26,6 +26,7 @@ module Verifier.SAW.OpenTerm (
   ctorOpenTerm, dataTypeOpenTerm, globalOpenTerm,
   applyOpenTerm, applyOpenTermMulti,
   lambdaOpenTerm, lambdaOpenTermMulti, piOpenTerm, piOpenTermMulti,
+  arrowOpenTerm,
   letOpenTerm,
   -- * Monadic operations for building terms with binders
   OpenTermM(..), completeOpenTermM,
@@ -185,6 +186,10 @@ piOpenTerm x (OpenTerm tpM) body_f = OpenTerm $
   do tp <- tpM
      body <- bindOpenTerm x tp body_f
      typeInferComplete $ Pi x tp body
+
+-- | Build a non-dependent function type.
+arrowOpenTerm :: LocalName -> OpenTerm -> OpenTerm -> OpenTerm
+arrowOpenTerm x tp body = piOpenTerm x tp (const body)
 
 -- | Build a nested sequence of Pi abstractions as an 'OpenTerm'
 piOpenTermMulti :: [(LocalName, OpenTerm)] -> ([OpenTerm] -> OpenTerm) ->
