@@ -243,7 +243,7 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       sym <- liftIO $ newSAWCoreBackend sc
       rw <- getTopLevelRW
       cacheTermsSetting <- liftIO $ W4.getOptionSetting W4.B.cacheTerms $ W4.getConfiguration sym
-      _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsing rw
+      _ <- liftIO $ W4.setOpt cacheTermsSetting $ rwWhat4HashConsingX86 rw
       sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule

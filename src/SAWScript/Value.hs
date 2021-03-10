@@ -402,6 +402,7 @@ data TopLevelRW =
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
   , rwWhat4HashConsing :: Bool
+  , rwWhat4HashConsingX86 :: Bool
   , rwPreservedRegs :: [String]
   , rwStackBaseAlign :: Integer
   }

@@ -471,6 +471,7 @@ buildTopLevelEnv proxy opts =
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
                    , rwWhat4HashConsing = False
+                   , rwWhat4HashConsingX86 = False
                    , rwPreservedRegs = []
                    , rwStackBaseAlign = defaultStackBaseAlign
                    }
@@ -546,6 +547,16 @@ disable_what4_hash_consing :: TopLevel ()
 disable_what4_hash_consing = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwWhat4HashConsing = False }
+
+enable_x86_what4_hash_consing :: TopLevel ()
+enable_x86_what4_hash_consing = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4HashConsingX86 = True }
+
+disable_x86_what4_hash_consing :: TopLevel ()
+disable_x86_what4_hash_consing = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4HashConsingX86 = False }
 
 add_x86_preserved_reg :: String -> TopLevel ()
 add_x86_preserved_reg r = do
@@ -2397,6 +2408,16 @@ primitives = Map.fromList
     (pureVal llvm_verify_x86)
     Experimental
     [ "Legacy alternative name for `llvm_verify_x86`." ]
+
+  , prim "enable_x86_what4_hash_consing" "TopLevel ()"
+    (pureVal enable_x86_what4_hash_consing)
+    Experimental
+    [ "Enable hash consing for What4 expressions during x86 verification." ]
+
+  , prim "disable_x86_what4_hash_consing" "TopLevel ()"
+    (pureVal disable_x86_what4_hash_consing)
+    Current
+    [ "Disable hash consing for What4 expressions during x86 verification." ]
 
   , prim "add_x86_preserved_reg" "String -> TopLevel ()"
     (pureVal add_x86_preserved_reg)
