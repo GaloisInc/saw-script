@@ -33,7 +33,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural
 
-import Verifier.SAW.FiniteValue (FiniteType(..))
+import Verifier.SAW.FiniteValue (FiniteType(..), FirstOrderType(..))
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.Utils (panic)
@@ -265,6 +265,36 @@ asFiniteTypeTValue v =
       FTRec <$> Map.fromList <$>
       mapM (\(fld,tp) -> (fld,) <$> asFiniteTypeTValue tp) elem_tps
     _ -> Nothing
+
+asFirstOrderTypeValue :: Value l -> Maybe FirstOrderType
+asFirstOrderTypeValue v =
+  case v of
+    TValue tv -> asFirstOrderTypeTValue tv
+    _ -> Nothing
+
+asFirstOrderTypeTValue :: TValue l -> Maybe FirstOrderType
+asFirstOrderTypeTValue v =
+  case v of
+    VBoolType     -> return FOTBit
+    VVecType n v1 -> FOTVec n <$> asFirstOrderTypeTValue v1
+    VIntType      -> return FOTInt
+    VIntModType m -> return (FOTIntMod m)
+    VArrayType a b ->
+      FOTArray <$> asFirstOrderTypeTValue a <*> asFirstOrderTypeTValue b
+    VUnitType -> return (FOTTuple [])
+    VPairType v1 v2 -> do
+      t1 <- asFirstOrderTypeTValue v1
+      t2 <- asFirstOrderTypeTValue v2
+      case t2 of
+        FOTTuple ts -> return (FOTTuple (t1 : ts))
+        _ -> return (FOTTuple [t1, t2])
+    VRecordType elem_tps ->
+      FOTRec . Map.fromList <$>
+        mapM (traverse asFirstOrderTypeTValue) elem_tps
+
+    VPiType{}   -> Nothing
+    VDataType{} -> Nothing
+    VSort{}     -> Nothing
 
 -- | A (partial) injective mapping from type values to strings. These
 -- are intended to be useful as suffixes for names of type instances

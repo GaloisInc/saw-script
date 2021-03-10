@@ -24,6 +24,10 @@ import Verifier.SAW.Prelude.Constants
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
 
+import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
+import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue)
+
+
 $(defineModuleFromFileWithFns
   "preludeModule" "scLoadPreludeModule" "prelude/Prelude.sawcore")
 
@@ -34,8 +38,10 @@ $(defineModuleFromFileWithFns
 scEq :: SharedContext -> Term -> Term -> IO Term
 scEq sc x y = do
   xty <- scTypeOf sc x
-  fot <- asFirstOrderType sc xty
-  scDecEq sc fot (Just (x,y))
+  mmap <- scGetModuleMap sc
+  case asFirstOrderTypeValue (evalSharedTerm mmap mempty xty) of
+    Just fot -> scDecEq sc fot (Just (x,y))
+    Nothing  -> fail ("scEq: expected first order type, but got: " ++ showTerm xty)
 
 -- | Given a first-order type, return the decidable equality
 --   operation on that type.  If arguments are provided, they
