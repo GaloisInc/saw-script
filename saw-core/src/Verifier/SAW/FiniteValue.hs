@@ -216,7 +216,9 @@ asFiniteType sc t = do
 asFirstOrderType :: SharedContext -> Term -> IO FirstOrderType
 asFirstOrderType sc t = maybe err pure =<< runMaybeT (asFirstOrderTypeMaybe sc t)
   where
-    err = fail ("asFirstOrderType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t)
+    err =
+      do t' <- scWhnf sc t
+         fail ("asFirstOrderType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t')
 
 asFirstOrderTypeMaybe :: SharedContext -> Term -> MaybeT IO FirstOrderType
 asFirstOrderTypeMaybe sc t =

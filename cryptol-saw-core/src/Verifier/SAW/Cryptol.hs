@@ -1565,7 +1565,7 @@ asCryptolTypeValue v =
 scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
-     case SC.evalSharedTerm modmap Map.empty t of
+     case SC.evalSharedTerm modmap Map.empty Map.empty t of
        SC.TValue (asCryptolTypeValue -> Just ty) -> return ty
        _ -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
 

@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- |
 -- Module      :  Verifier.SAW.Testing.Random
@@ -16,117 +17,29 @@
 module Verifier.SAW.Testing.Random where
 
 import Verifier.SAW.FiniteValue
-  ( FirstOrderType(..), FirstOrderValue(..)
-  , scFirstOrderValue, asFirstOrderTypeMaybe
-  )
+  ( FirstOrderType(..), FirstOrderValue(..), scFirstOrderValue )
 
-import Verifier.SAW.Recognizer (asBoolType, asPi, asEq)
+import Verifier.SAW.Module (ModuleMap)
+import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
-  ( scApplyAll, scGetModuleMap, scWhnf, SharedContext, Term
-  , looseVars
+  ( scGetModuleMap, SharedContext, Term
+  , ExtCns(..), scInstantiateExt
   )
-import Verifier.SAW.Simulator.Concrete (evalSharedTerm, CValue)
-import Verifier.SAW.Simulator.Value (Value(..), TValue(..))
-import Verifier.SAW.Term.Functor (emptyBitSet)
---import Verifier.SAW.TypedAST (FieldName)
-import Verifier.SAW.Utils (panic)
+import Verifier.SAW.Simulator.Concrete (evalSharedTerm) -- , CValue)
+import Verifier.SAW.Simulator.Value (Value(..)) -- , TValue(..))
 
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative ((<$>), Applicative)
 import Data.Traversable (traverse)
 #endif
-import Control.Monad.Trans.Maybe (MaybeT)
+import qualified Control.Monad.Fail as F
 import Control.Monad.Random
 import Data.Functor.Compose (Compose(..))
 import qualified Data.Map as Map
-import Data.Text (Text)
+import qualified Data.Set as Set
 import System.Random.TF (newTFGen, TFGen)
 
-----------------------------------------------------------------
--- Interface.
-
--- | Run @scRunTests@ in 'IO' using 'System.Random.TF.TFGen' for generation.
---
--- The caller should use @scTestableType@ to (maybe) compute the 'gens'.
-scRunTestsTFIO ::
-  SharedContext -> Integer -> Term -> [RandT TFGen IO FirstOrderValue] ->
-  IO (Maybe [FirstOrderValue])
-scRunTestsTFIO sc numTests fun gens = do
-  g <- newTFGen
-  evalRandT (scRunTests sc numTests fun gens) g
-
--- | Call @scRunTest@ many times, returning the first failure if any.
-scRunTests :: (Functor m, MonadIO m, MonadRandom m) => SharedContext ->
-  Integer -> Term -> [m FirstOrderValue] -> m (Maybe [FirstOrderValue])
-scRunTests sc numTests fun gens =
-  if numTests < 0 then
-    panic "scRunTests:" ["number of tests must be non-negative"]
-  else do
-    let oneTest = scRunTest sc fun gens
-    -- Use 'msum' to collapse the embedded 'Maybe's, retaining the
-    -- first counter example, if any.
-    msum <$> replicateM (fromIntegral numTests) oneTest
-
-{- | Apply a testable value to some randomly-generated arguments.
-     Returns `Nothing` if the function returned `True`, or
-     `Just counterexample` if it returned `False`.
-
-    Use @scTestableType@ to compute the input generators.
-
-    Please note that this function assumes that the generators match
-    the supplied value, otherwise we'll panic.
- -}
-scRunTest :: (MonadIO m, MonadRandom m) => SharedContext ->
-  Term -> [m FirstOrderValue] -> m (Maybe [FirstOrderValue])
-scRunTest sc fun gens = do
-  xs <- sequence gens
-  result <- liftIO $ apply xs
-  case result of
-    VBool True -> return Nothing
-    VBool False -> do
-      return $ Just xs
-    TValue (VDataType "Prelude.Eq" [TValue VBoolType, VBool x, VBool y]) -> do
-      return $ if x == y then Nothing else Just xs
-    _ -> panic "Type error while running test"
-         [ "Expected a boolean, but got:"
-         , show result ]
-  where
-    apply :: [FirstOrderValue] -> IO CValue
-    apply xs = do
-      xs' <- mapM (scFirstOrderValue sc) xs
-      app <- scApplyAll sc fun xs'
-      modmap <- scGetModuleMap sc
-      return $ evalSharedTerm modmap Map.empty app
-
--- | Given a function type, compute generators for the function's
--- arguments. The supported function types are of the form
---
---   'FirstOrderType -> ... -> FirstOrderType -> Bool'
---   or
---   'FirstOrderType -> ... -> FirstOrderType -> Eq (...) (...)'
---      for equalities on boolean values.
---
--- 'Nothing' is returned when attempting to generate arguments for
--- functions of unsupported type.
-scTestableType :: (Applicative m, Functor m, MonadRandom m) =>
-  SharedContext -> Term -> MaybeT IO [(Text, m FirstOrderValue)]
-scTestableType sc ty =
-  do ty' <- lift (scWhnf sc ty)
-     case ty' of
-       (asPi -> Just (nm, dom, rng)) | looseVars rng == emptyBitSet ->
-         do fot <- asFirstOrderTypeMaybe sc dom
-            case getCompose (randomFirstOrderValue fot) of
-              Nothing -> mzero
-              Just domGen ->
-                do rngGens <- scTestableType sc rng
-                   return ((nm,domGen) : rngGens)
-
-       (asBoolType -> Just ()) -> return []
-       (asEq -> Just (asBoolType -> Just (),_,_)) -> return []
-       _ -> mzero
-
-----------------------------------------------------------------
 
 
 randomFirstOrderValue :: (Applicative m, Functor m, MonadRandom m) =>
@@ -152,3 +65,57 @@ randomFirstOrderValue (FOTArray _ _) = Compose Nothing
 randomInt :: MonadRandom m => m Integer
 randomInt = getRandomR (-10^(6::Int), 10^(6::Int))
 
+
+
+execTest ::
+  (F.MonadFail m, MonadRandom m, MonadIO m) =>
+  SharedContext ->
+  ModuleMap ->
+  Map.Map (ExtCns Term) (m FirstOrderValue) ->
+  Term ->
+  m (Maybe [(ExtCns Term, FirstOrderValue)])
+execTest sc mmap vars tm =
+  do testVec <- sequence vars
+     tm' <- liftIO $
+             do argMap0 <- traverse (scFirstOrderValue sc) testVec
+                let argMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) <- Map.toList argMap0 ]
+                scInstantiateExt sc argMap tm
+     case evalSharedTerm mmap Map.empty Map.empty tm' of
+       -- satisfaible, return counterexample
+       VBool True  -> return (Just (Map.toList testVec))
+       -- not satisfied by this test vector
+       VBool False -> return Nothing
+       _ -> fail "execTest: expected boolean result from random testing"
+
+prepareSATQuery ::
+  (MonadRandom m, F.MonadFail m, MonadIO m) =>
+  SharedContext ->
+  SATQuery ->
+  IO (m (Maybe [(ExtCns Term, FirstOrderValue)]))
+prepareSATQuery sc satq
+  | Set.null (satUninterp satq) =
+       do varmap <- traverse prepareVar (satVariables satq)
+          t <- satQueryAsTerm sc satq
+          mmap <- scGetModuleMap sc
+          return (execTest sc mmap varmap t)
+  | otherwise = fail "Random testing cannot handle uninterpreted functions"
+
+ where
+   prepareVar fot =
+     case randomFirstOrderValue fot of
+       Compose (Just v) -> pure v
+       _ -> fail ("Cannot randomly test argument of type: " ++ show fot)
+
+runManyTests ::
+  RandT TFGen IO (Maybe [(ExtCns Term, FirstOrderValue)]) ->
+  Integer ->
+  IO (Maybe [(ExtCns Term, FirstOrderValue)])
+runManyTests m numtests = evalRandT (loop numtests) =<< newTFGen
+  where
+    loop n
+      | n > 0 =
+          m >>= \case
+            Nothing  -> loop (n-1)
+            Just cex -> return (Just cex)
+
+      | otherwise = return Nothing

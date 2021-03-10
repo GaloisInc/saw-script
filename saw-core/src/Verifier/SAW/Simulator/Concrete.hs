@@ -48,14 +48,16 @@ import Verifier.SAW.SharedTerm
 -- type ExtCnsEnv = VarIndex -> String -> CValue
 
 -- | Evaluator for shared terms.
-evalSharedTerm :: ModuleMap -> Map Ident CValue -> Term -> CValue
-evalSharedTerm m addlPrims t =
+evalSharedTerm :: ModuleMap -> Map Ident CValue -> Map VarIndex CValue -> Term -> CValue
+evalSharedTerm m addlPrims ecVals t =
   runIdentity $ do
-    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-           extcns (const Nothing)
+    cfg <- Sim.evalGlobal m (Map.union constMap addlPrims) extcns (const Nothing)
     Sim.evalSharedTerm cfg t
   where
-    extcns ec = return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
+    extcns ec =
+      case Map.lookup (ecVarIndex ec) ecVals of
+        Just v  -> return v
+        Nothing -> return $ Prim.userError $ "Unimplemented: external constant " ++ show (ecName ec)
 
 ------------------------------------------------------------
 -- Values

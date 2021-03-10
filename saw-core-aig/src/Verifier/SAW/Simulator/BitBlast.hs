@@ -525,7 +525,7 @@ withBitBlastedTerm proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
 asFiniteType :: SharedContext -> Term -> IO FiniteType
 asFiniteType sc t =
   scGetModuleMap sc >>= \modmap ->
-  case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty t) of
+  case asFiniteTypeValue (Concrete.evalSharedTerm modmap Map.empty Map.empty t) of
     Just ft -> return ft
     Nothing ->
       fail $ "asFiniteType: unsupported type " ++ scPrettyTerm defaultPPOpts t

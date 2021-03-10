@@ -39,7 +39,7 @@ scEq :: SharedContext -> Term -> Term -> IO Term
 scEq sc x y = do
   xty <- scTypeOf sc x
   mmap <- scGetModuleMap sc
-  case asFirstOrderTypeValue (evalSharedTerm mmap mempty xty) of
+  case asFirstOrderTypeValue (evalSharedTerm mmap mempty mempty xty) of
     Just fot -> scDecEq sc fot (Just (x,y))
     Nothing  -> fail ("scEq: expected first order type, but got: " ++ showTerm xty)
 
