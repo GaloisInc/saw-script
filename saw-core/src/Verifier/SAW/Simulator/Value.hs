@@ -32,6 +32,7 @@ import qualified Data.Text as Text
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Numeric.Natural
+import GHC.Stack
 
 import Verifier.SAW.FiniteValue (FiniteType(..), FirstOrderType(..))
 import Verifier.SAW.SharedTerm
@@ -140,7 +141,7 @@ pureFun f = VFun (\x -> liftM f (force x))
 constFun :: VMonad l => Value l -> Value l
 constFun x = VFun (\_ -> return x)
 
-toTValue :: Value l -> TValue l
+toTValue :: HasCallStack => Value l -> TValue l
 toTValue (TValue x) = x
 toTValue _ = panic "Verifier.SAW.Simulator.Value.toTValue" ["Not a type value"]
 
@@ -212,18 +213,18 @@ vTupleType [] = VUnitType
 vTupleType [t] = t
 vTupleType (t : ts) = VPairType t (vTupleType ts)
 
-valPairLeft :: (VMonad l, Show (Extra l)) => Value l -> MValue l
+valPairLeft :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairLeft (VPair t1 _) = force t1
 valPairLeft v = panic "Verifier.SAW.Simulator.Value.valPairLeft" ["Not a pair value:", show v]
 
-valPairRight :: (VMonad l, Show (Extra l)) => Value l -> MValue l
+valPairRight :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> MValue l
 valPairRight (VPair _ t2) = force t2
 valPairRight v = panic "Verifier.SAW.Simulator.Value.valPairRight" ["Not a pair value:", show v]
 
 vRecord :: Map FieldName (Thunk l) -> Value l
 vRecord m = VRecordValue (Map.assocs m)
 
-valRecordProj :: (VMonad l, Show (Extra l)) => Value l -> FieldName -> MValue l
+valRecordProj :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> FieldName -> MValue l
 valRecordProj (VRecordValue fld_map) fld
   | Just t <- lookup fld fld_map = force t
 valRecordProj v@(VRecordValue _) fld =
@@ -233,7 +234,7 @@ valRecordProj v _ =
   panic "Verifier.SAW.Simulator.Value.valRecordProj"
   ["Not a record value:", show v]
 
-apply :: (VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
+apply :: (HasCallStack, VMonad l, Show (Extra l)) => Value l -> Thunk l -> MValue l
 apply (VFun f) x = f x
 apply (TValue (VPiType _ f)) x = TValue <$> f x
 apply v _x = panic "Verifier.SAW.Simulator.Value.apply" ["Not a function value:", show v]
