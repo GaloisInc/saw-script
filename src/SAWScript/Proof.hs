@@ -70,7 +70,6 @@ module SAWScript.Proof
 
 import qualified Control.Monad.Fail as F
 import           Control.Monad.State
-import           Control.Monad.Trans.Maybe (runMaybeT)
 import           Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -78,7 +77,6 @@ import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
 
-import Verifier.SAW.FiniteValue
 import Verifier.SAW.Prelude (scApplyPrelude_False)
 import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
@@ -88,6 +86,9 @@ import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Term.Pretty (SawDoc)
 import Verifier.SAW.SCTypeCheck (scTypeCheckError)
+
+import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
+import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue)
 
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.Common as Common
@@ -659,28 +660,34 @@ withFirstGoal f =
 
 predicateToSATQuery :: SharedContext -> Set VarIndex -> Term -> IO SATQuery
 predicateToSATQuery sc unintSet tm0 =
-    do (initVars, abstractVars) <- filterFirstOrderVars mempty mempty (getAllExts tm0)
-       (finalVars, tm') <- processTerm initVars tm0
+    do mmap <- scGetModuleMap sc
+       (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (getAllExts tm0)
+       (finalVars, tm') <- processTerm mmap initVars tm0
        return SATQuery
               { satVariables = finalVars
               , satUninterp  = Set.union unintSet abstractVars
               , satAsserts   = [tm']
               }
   where
-    filterFirstOrderVars fovars absvars [] = pure (fovars, absvars)
-    filterFirstOrderVars fovars absvars (e:es) =
-      runMaybeT (asFirstOrderTypeMaybe sc (ecType e)) >>= \case
-        Nothing  -> filterFirstOrderVars fovars (Set.insert (ecVarIndex e) absvars) es
-        Just fot -> filterFirstOrderVars (Map.insert e fot fovars) absvars es
+    evalFOT mmap t =
+      asFirstOrderTypeValue (evalSharedTerm mmap mempty mempty t)
 
-    processTerm vars tm =
+    filterFirstOrderVars _ fovars absvars [] = pure (fovars, absvars)
+    filterFirstOrderVars mmap fovars absvars (e:es) =
+      case evalFOT mmap (ecType e) of
+        Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
+        Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
+
+    processTerm mmap vars tm =
       case asLambda tm of
         Just (lnm,tp,body) ->
-          do fot <- asFirstOrderType sc tp
-             ec  <- scFreshEC sc (Text.unpack lnm) tp
-             etm <- scExtCns sc ec
-             body' <- instantiateVar sc 0 etm body
-             processTerm (Map.insert ec fot vars) body'
+          case evalFOT mmap tp of
+            Nothing -> fail ("predicateToSATQuery: expected first order type: " ++ showTerm tp)
+            Just fot ->
+              do ec  <- scFreshEC sc (Text.unpack lnm) tp
+                 etm <- scExtCns sc ec
+                 body' <- instantiateVar sc 0 etm body
+                 processTerm mmap (Map.insert ec fot vars) body'
 
           -- TODO: check that the type is a boolean
         Nothing ->
@@ -697,9 +704,10 @@ predicateToSATQuery sc unintSet tm0 =
 --   iff the SAT query is unsatisfiable.
 propToSATQuery :: SharedContext -> Set VarIndex -> Prop -> IO SATQuery
 propToSATQuery sc unintSet prop =
-    do tm <- propToTerm sc prop
-       (initVars, abstractVars) <- filterFirstOrderVars mempty mempty (getAllExts tm)
-       (finalVars, asserts)     <- processTerm initVars [] tm
+    do mmap <- scGetModuleMap sc
+       tm <- propToTerm sc prop
+       (initVars, abstractVars) <- filterFirstOrderVars mmap mempty mempty (getAllExts tm)
+       (finalVars, asserts)     <- processTerm mmap initVars [] tm
        return SATQuery
               { satVariables = finalVars
               , satUninterp  = Set.union unintSet abstractVars
@@ -707,27 +715,32 @@ propToSATQuery sc unintSet prop =
               }
 
   where
-    filterFirstOrderVars fovars absvars [] = pure (fovars, absvars)
-    filterFirstOrderVars fovars absvars (e:es) =
-      runMaybeT (asFirstOrderTypeMaybe sc (ecType e)) >>= \case
-        Nothing  -> filterFirstOrderVars fovars (Set.insert (ecVarIndex e) absvars) es
-        Just fot -> filterFirstOrderVars (Map.insert e fot fovars) absvars es
+    evalFOT mmap t =
+      asFirstOrderTypeValue (evalSharedTerm mmap mempty mempty t)
 
-    processTerm vars xs tm =
+    filterFirstOrderVars _ fovars absvars [] = pure (fovars, absvars)
+    filterFirstOrderVars mmap fovars absvars (e:es) =
+      case evalFOT mmap (ecType e) of
+         Nothing  -> filterFirstOrderVars mmap fovars (Set.insert (ecVarIndex e) absvars) es
+         Just fot -> filterFirstOrderVars mmap (Map.insert e fot fovars) absvars es
+
+    processTerm mmap vars xs tm =
       case asPi tm of
         Just (lnm, tp, body)
           | Just x <- asEqTrue tp
           , looseVars body == emptyBitSet ->
-              do processTerm vars (x:xs) body
+              do processTerm mmap vars (x:xs) body
 
             -- TODO? Allow universal hypotheses...
 
           | otherwise ->
-              do fot <- asFirstOrderType sc tp
-                 ec  <- scFreshEC sc (Text.unpack lnm) tp
-                 etm <- scExtCns sc ec
-                 body' <- instantiateVar sc 0 etm body
-                 processTerm (Map.insert ec fot vars) xs body'
+              case evalFOT mmap tp of
+                Nothing -> fail ("propToSATQuery: expected first order type: " ++ showTerm tp)
+                Just fot ->
+                  do ec  <- scFreshEC sc (Text.unpack lnm) tp
+                     etm <- scExtCns sc ec
+                     body' <- instantiateVar sc 0 etm body
+                     processTerm mmap (Map.insert ec fot vars) xs body'
 
         Nothing ->
           case asEqTrue tm of
