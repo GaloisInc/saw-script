@@ -35,7 +35,9 @@ import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
+import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
+import Data.Foldable (foldrM)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -51,7 +53,6 @@ import SAWScript.Builtins
 import SAWScript.Exceptions (failTypecheck)
 import qualified SAWScript.Import
 import SAWScript.HeapsterBuiltins
-import SAWScript.JavaBuiltins
 import SAWScript.JavaExpr
 import SAWScript.LLVMBuiltins
 import SAWScript.Options
@@ -68,12 +69,11 @@ import Verifier.SAW.Conversion
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
+import Verifier.SAW.TypedAST hiding (FlatTermF(..))
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
-import qualified Verifier.Java.Codebase as JCB
-import qualified Verifier.Java.SAWBackend as JavaSAW
+import qualified Lang.JVM.Codebase as JCB
 
 import qualified Verifier.SAW.Cryptol.Prelude as CryptolSAW
 
@@ -120,36 +120,50 @@ extendLocal x mt md v env = LocalLet x mt md v : env
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
 
-mergeLocalEnv :: LocalEnv -> TopLevelRW -> TopLevelRW
-mergeLocalEnv env rw = foldr addBinding rw env
-  where addBinding (LocalLet x mt md v) = extendEnv x mt md v
-        addBinding (LocalTypedef n ty) = addTypedef n ty
+mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
+mergeLocalEnv sc env rw = foldrM addBinding rw env
+  where addBinding (LocalLet x mt md v) = extendEnv sc x mt md v
+        addBinding (LocalTypedef n ty) = pure . addTypedef n ty
 
 getMergedEnv :: LocalEnv -> TopLevel TopLevelRW
-getMergedEnv env = mergeLocalEnv env `fmap` getTopLevelRW
+getMergedEnv env =
+  do sc <- getSharedContext
+     rw <- getTopLevelRW
+     liftIO $ mergeLocalEnv sc env rw
 
-bindPatternGeneric :: (SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> e -> e)
-                   -> SS.Pattern -> Maybe SS.Schema -> Value -> e -> e
-bindPatternGeneric ext pat ms v env =
+bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
+bindPatternLocal pat ms v env =
   case pat of
     SS.PWild _   -> env
-    SS.PVar x _  -> ext x ms Nothing v env
+    SS.PVar x _  -> extendLocal x ms Nothing v env
     SS.PTuple ps ->
       case v of
-        VTuple vs -> foldr ($) env (zipWith3 (bindPatternGeneric ext) ps mss vs)
+        VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
           where mss = case ms of
                   Nothing -> repeat Nothing
                   Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   _ -> error "bindPattern: expected tuple value"
         _ -> error "bindPattern: expected tuple value"
-    SS.LPattern _ pat' -> bindPatternGeneric ext pat' ms v env
+    SS.LPattern _ pat' -> bindPatternLocal pat' ms v env
 
-bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
-bindPatternLocal = bindPatternGeneric extendLocal
-
-bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevelRW
-bindPatternEnv = bindPatternGeneric extendEnv
+bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
+bindPatternEnv pat ms v env =
+  case pat of
+    SS.PWild _   -> pure env
+    SS.PVar x _  ->
+      do sc <- getSharedContext
+         liftIO $ extendEnv sc x ms Nothing v env
+    SS.PTuple ps ->
+      case v of
+        VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
+          where mss = case ms of
+                  Nothing -> repeat Nothing
+                  Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
+                    -> [ Just (SS.Forall ks t) | t <- ts ]
+                  _ -> error "bindPattern: expected tuple value"
+        _ -> error "bindPattern: expected tuple value"
+    SS.LPattern _ pat' -> bindPatternEnv pat' ms v env
 
 -- Interpretation of SAWScript -------------------------------------------------
 
@@ -311,7 +325,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
     _ -> return ()
 
   rw' <- getTopLevelRW
-  putTopLevelRW $ bindPatternEnv pat (Just (SS.tMono ty)) result rw'
+  putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
 -- | Interpret a block-level statement in the TopLevel monad.
 interpretStmt ::
@@ -341,7 +355,7 @@ interpretStmt printBinds stmt =
          let mLoc = iModule imp
              qual = iAs imp
              spec = iSpec imp
-         cenv' <- io $ CEnv.importModule sc (rwCryptol rw) mLoc qual spec
+         cenv' <- io $ CEnv.importModule sc (rwCryptol rw) mLoc qual CEnv.PublicAndPrivate spec
          putTopLevelRW $ rw { rwCryptol = cenv' }
          --showCryptolEnv
 
@@ -350,19 +364,22 @@ interpretStmt printBinds stmt =
 
 writeVerificationSummary :: TopLevel ()
 writeVerificationSummary = do
-  do values <- rwProofs <$> getTopLevelRW
-     let jspecs  = [ s | VJVMMethodSpec s <- values ]
-         lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
-         thms    = [ t | VTheorem t <- values ]
-         summary = computeVerificationSummary jspecs lspecs thms
-     opts <- roOptions <$> getTopLevelRO
-     dir <- roInitWorkDir <$> getTopLevelRO
-     case summaryFile opts of
-       Nothing -> return ()
-       Just f ->
-         let f' = if hasDrive f then f else dir </> f
-          in io $ writeFile f' $ prettyVerificationSummary summary
-
+  do
+    values <- rwProofs <$> getTopLevelRW
+    let jspecs  = [ s | VJVMMethodSpec s <- values ]
+        lspecs  = [ s | VLLVMCrucibleMethodSpec s <- values ]
+        thms    = [ t | VTheorem t <- values ]
+        summary = computeVerificationSummary jspecs lspecs thms
+    opts <- roOptions <$> getTopLevelRO
+    dir <- roInitWorkDir <$> getTopLevelRO
+    case summaryFile opts of
+      Nothing -> return ()
+      Just f -> let
+        f' = if hasDrive f then f else dir </> f
+        formatSummary = case summaryFormat opts of
+                       JSON -> jsonVerificationSummary
+                       Pretty -> prettyVerificationSummary
+        in io $ writeFile f' $ formatSummary summary
 
 interpretFile :: FilePath -> TopLevel ()
 interpretFile file = do
@@ -398,7 +415,6 @@ buildTopLevelEnv proxy opts =
        sc0 <- mkSharedContext
        let ?fileReader = BS.readFile
        CryptolSAW.scLoadPreludeModule sc0
-       JavaSAW.scLoadJavaModule sc0
        CryptolSAW.scLoadCryptolModule sc0
        scLoadModule sc0 (emptyModule mn)
        cryptol_mod <- scFindModule sc0 $ mkModuleName ["Cryptol"]
@@ -419,7 +435,7 @@ buildTopLevelEnv proxy opts =
        simps <- scSimpset sc0 cryptolDefs [] convs
        let sc = rewritingSharedContext sc0 simps
        ss <- basic_ss sc
-       jcb <- JCB.loadCodebase (jarList opts) (classPath opts)
+       jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
        Crucible.withHandleAllocator $ \halloc -> do
        let ro0 = TopLevelRO
@@ -434,7 +450,6 @@ buildTopLevelEnv proxy opts =
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
-                 , biJavaCodebase = jcb
                  , biBasicSS = ss
                  }
            primsAvail = Set.fromList [Current]
@@ -563,7 +578,10 @@ set_base b = do
 set_color :: Bool -> TopLevel ()
 set_color b = do
   rw <- getTopLevelRW
-  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b } }
+  opts <- getOptions
+  -- Keep color disabled if `--no-color` command-line option is present
+  let b' = b && useColor opts
+  putTopLevelRW rw { rwPPOpts = (rwPPOpts rw) { ppOptsColor = b' } }
 
 print_value :: Value -> TopLevel ()
 print_value (VString s) = printOutLnTop Info s
@@ -580,7 +598,7 @@ print_value (VTerm t) = do
                               , V.useBase = ppOptsBase opts
                               }
   evaled_t <- io $ evaluateTypedTerm sc t'
-  doc <- io $ V.runEval (V.ppValue V.Concrete opts' evaled_t)
+  doc <- io $ V.runEval mempty (V.ppValue V.Concrete opts' evaled_t)
   sawOpts <- getOptions
   io (rethrowEvalError $ printOutLn sawOpts Info $ show $ doc)
 
@@ -897,15 +915,15 @@ primitives = Map.fromList
 
   , prim "load_aig"            "String -> TopLevel AIG"
     (pureVal loadAIGPrim)
-    Current
+    Deprecated
     [ "Read an AIG file in binary AIGER format, yielding an AIG value." ]
   , prim "save_aig"            "String -> AIG -> TopLevel ()"
     (pureVal saveAIGPrim)
-    Current
+    Deprecated
     [ "Write an AIG to a file in binary AIGER format." ]
   , prim "save_aig_as_cnf"     "String -> AIG -> TopLevel ()"
     (pureVal saveAIGasCNFPrim)
-    Current
+    Deprecated
     [ "Write an AIG representing a boolean function to a file in DIMACS"
     , "CNF format."
     ]
@@ -923,14 +941,14 @@ primitives = Map.fromList
 
   , prim "cec"                 "AIG -> AIG -> TopLevel ProofResult"
     (pureVal cecPrim)
-    Current
+    Deprecated
     [ "Perform a Combinatorial Equivalence Check between two AIGs."
     , "The AIGs must have the same number of inputs and outputs."
     ]
 
   , prim "bitblast"            "Term -> TopLevel AIG"
     (pureVal bbPrim)
-    Current
+    Deprecated
     [ "Translate a term into an AIG.  The term must be representable as a"
     , "function from a finite number of bits to a finite number of bits."
     ]
@@ -992,10 +1010,22 @@ primitives = Map.fromList
     Current
     [ "Write the given term to the named file in SMT-Lib version 2 format." ]
 
+  , prim "write_smtlib2_w4"    "String -> Term -> TopLevel ()"
+    (scVal write_smtlib2_w4)
+    Current
+    [ "Write the given term to the named file in SMT-Lib version 2 format,"
+    , "using the What4 backend instead of the SBV backend."
+    ]
+
   , prim "write_core"          "String -> Term -> TopLevel ()"
     (pureVal writeCore)
     Current
     [ "Write out a representation of a term in SAWCore external format." ]
+
+  , prim "write_verilog"       "String -> Term -> TopLevel ()"
+    (scVal writeVerilog)
+    Experimental
+    [ "Write out a representation of a term in Verilog format." ]
 
   , prim "write_coq_term" "String -> [(String, String)] -> [String] -> String -> Term -> TopLevel ()"
     (pureVal writeCoqTerm)
@@ -1174,6 +1204,17 @@ primitives = Map.fromList
     [ "Run the given proof script only when the goal name contains"
     , "the given string."
     ]
+  , prim "goal_num_ite"       "Int -> ProofScript SatResult -> ProofScript SatResult -> ProofScript SatResult"
+    (pureVal goal_num_ite)
+    Experimental
+    [ "If the goal number is the given number, runs the first script."
+    , "Otherwise runs the second script" ]
+  , prim "goal_num_when"       "Int -> ProofScript () -> ProofScript ()"
+    (pureVal goal_num_when)
+    Experimental
+    [ "Run the given proof script only when the goal number is the"
+    , "the given number."
+    ]
   , prim "print_goal"          "ProofScript ()"
     (pureVal print_goal)
     Current
@@ -1217,6 +1258,11 @@ primitives = Map.fromList
 
   , prim "abc"                 "ProofScript SatResult"
     (pureVal proveABC)
+    Current
+    [ "Use the ABC theorem prover to prove the current goal." ]
+
+  , prim "sbv_abc"             "ProofScript SatResult"
+    (pureVal proveABC_SBV)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
@@ -1266,6 +1312,52 @@ primitives = Map.fromList
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
+  , prim "sbv_boolector"       "ProofScript SatResult"
+    (pureVal proveBoolector)
+    Current
+    [ "Use the Boolector theorem prover to prove the current goal." ]
+
+  , prim "sbv_cvc4"            "ProofScript SatResult"
+    (pureVal proveCVC4)
+    Current
+    [ "Use the CVC4 theorem prover to prove the current goal." ]
+
+  , prim "sbv_z3"              "ProofScript SatResult"
+    (pureVal proveZ3)
+    Current
+    [ "Use the Z3 theorem prover to prove the current goal." ]
+
+  , prim "sbv_mathsat"         "ProofScript SatResult"
+    (pureVal proveMathSAT)
+    Current
+    [ "Use the MathSAT theorem prover to prove the current goal." ]
+
+  , prim "sbv_yices"           "ProofScript SatResult"
+    (pureVal proveYices)
+    Current
+    [ "Use the Yices theorem prover to prove the current goal." ]
+
+  , prim "sbv_unint_z3"        "[String] -> ProofScript SatResult"
+    (pureVal proveUnintZ3)
+    Current
+    [ "Use the Z3 theorem prover to prove the current goal. Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "sbv_unint_cvc4"        "[String] -> ProofScript SatResult"
+    (pureVal proveUnintCVC4)
+    Current
+    [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "sbv_unint_yices"       "[String] -> ProofScript SatResult"
+    (pureVal proveUnintYices)
+    Current
+    [ "Use the Yices theorem prover to prove the current goal. Leave the"
+    , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
   , prim "offline_aig"         "String -> ProofScript SatResult"
     (pureVal offline_aig)
     Current
@@ -1286,12 +1378,22 @@ primitives = Map.fromList
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
+  , prim "w4_offline_smtlib2"  "String -> ProofScript SatResult"
+    (pureVal offline_smtlib2)
+    Current
+    [ "Write the current goal to the given file in SMT-Lib2 format." ]
+
   , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript SatResult"
     (pureVal offline_unint_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format,"
     , "leaving the listed functions uninterpreted."
     ]
+
+  , prim "offline_verilog"        "String -> ProofScript SatResult"
+    (pureVal offline_verilog)
+    Experimental
+    [ "Write the current goal to the given file in Verilog format." ]
 
   , prim "external_cnf_solver" "String -> [String] -> ProofScript SatResult"
     (pureVal (satExternal True))
@@ -1345,6 +1447,22 @@ primitives = Map.fromList
     Current
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
+    ]
+
+  , prim "w4_abc_smtlib2"        "ProofScript SatResult"
+    (pureVal w4_abc_smtlib2)
+    Experimental
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with SMT-Lib2 as an interchange format, generated"
+    , "using the What4 backend."
+    ]
+
+  , prim "w4_abc_verilog"        "ProofScript SatResult"
+    (pureVal w4_abc_verilog)
+    Experimental
+    [ "Use the ABC theorem prover as an external process to prove the"
+    , "current goal, with Verilog as an interchange format, generated"
+    , "using the What4 backend."
     ]
 
   , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript SatResult"
@@ -1425,22 +1543,22 @@ primitives = Map.fromList
     ]
 
   , prim "addsimp"             "Theorem -> Simpset -> Simpset"
-    (pureVal addsimp)
+    (funVal2 addsimp)
     Current
     [ "Add a proved equality theorem to a given simplification rule set." ]
 
   , prim "addsimp'"            "Term -> Simpset -> Simpset"
-    (pureVal addsimp')
+    (funVal2 addsimp')
     Current
     [ "Add an arbitrary equality term to a given simplification rule set." ]
 
   , prim "addsimps"            "[Theorem] -> Simpset -> Simpset"
-    (pureVal addsimps)
+    (funVal2 addsimps)
     Current
     [ "Add proved equality theorems to a given simplification rule set." ]
 
   , prim "addsimps'"           "[Term] -> Simpset -> Simpset"
-    (pureVal addsimps')
+    (funVal2 addsimps')
     Current
     [ "Add arbitrary equality terms to a given simplification rule set." ]
 
@@ -1478,6 +1596,14 @@ primitives = Map.fromList
     Current
     [ "Return a Cryptol module containing extra primitive operations,"
     , "including array updates, truncate/extend, and signed comparisons."
+    ]
+
+  , prim "cryptol_add_path"    "String -> TopLevel ()"
+    (pureVal cryptol_add_path)
+    Current
+    [ "Add a directory to the Cryptol search path. The Cryptol file loader"
+    , "will look in this directory when following `import` statements in"
+    , "Cryptol source files."
     ]
 
   -- Java stuff
@@ -1534,164 +1660,23 @@ primitives = Map.fromList
     Current
     [ "The Java type corresponding to the named class." ]
 
-  --, prim "java_value"          "{a} String -> a"
-
-  , prim "java_var"            "String -> JavaType -> JavaSetup Term"
-    (pureVal javaVar)
-    Deprecated
-    [ "Return a term corresponding to the initial value of the named Java"
-    , "variable, which should have the given type. The returned term can be"
-    , "used to construct more complex expressions. For example it can be used"
-    , "with 'java_return' to describe the expected return value in terms"
-    , "of the initial value of a variable. The Java variable can also be of"
-    , "the form \"args[n]\" to refer to the (0-based) nth argument of a method."
-    ]
-
-  , prim "java_class_var"      "String -> JavaType -> JavaSetup ()"
-    (pureVal javaClassVar)
-    Deprecated
-    [ "Declare that the named Java variable should point to an object of the"
-    , "given class type."
-    ]
-
-  , prim "java_may_alias"      "[String] -> JavaSetup ()"
-    (pureVal javaMayAlias)
-    Deprecated
-    [ "Indicate that the given set of Java variables are allowed to alias"
-    , "each other."
-    ]
-
-  , prim "java_assert"         "Term -> JavaSetup ()"
-    (pureVal javaAssert)
-    Deprecated
-    [ "Assert that the given term should evaluate to true in the initial"
-    , "state of a Java method."
-    ]
-
-  , prim "java_assert_eq"      "String -> Term -> JavaSetup ()"
-    (pureVal javaAssertEq)
-    Deprecated
-    [ "Assert that the given variable should have the given value in the"
-    , "initial state of a Java method."
-    ]
-
-  , prim "java_ensure_eq"      "String -> Term -> JavaSetup ()"
-    (pureVal javaEnsureEq)
-    Deprecated
-    [ "Specify that the given Java variable should have a value equal to the"
-    , "given term when execution finishes."
-    ]
-
-  , prim "java_modify"         "String -> JavaSetup ()"
-    (pureVal javaModify)
-    Deprecated
-    [ "Indicate that a Java method may modify the named portion of the state." ]
-
-  , prim "java_return"         "Term -> JavaSetup ()"
-    (pureVal javaReturn)
-    Deprecated
-    [ "Indicate the expected return value of a Java method." ]
-
-  , prim "java_verify_tactic"  "ProofScript SatResult -> JavaSetup ()"
-    (pureVal javaVerifyTactic)
-    Deprecated
-    [ "Use the given proof script to prove the specified properties about"
-    , "a Java method."
-    ]
-
-  , prim "java_sat_branches"   "Bool -> JavaSetup ()"
-    (pureVal javaSatBranches)
-    Deprecated
-    [ "Turn on or off satisfiability checking of branch conditions during"
-    , "symbolic execution."
-    ]
-
-  , prim "java_no_simulate"    "JavaSetup ()"
-    (pureVal javaNoSimulate)
-    Deprecated
-    [ "Skip symbolic simulation for this Java method." ]
-
-  , prim "java_allow_alloc"    "JavaSetup ()"
-    (pureVal javaAllowAlloc)
-    Deprecated
-    [ "Allow allocation of new objects or arrays during simulation,"
-    , "as long as the behavior of the method can still be described"
-    , "as a pure function."
-    ]
-
-   , prim "java_requires_class"  "String -> JavaSetup ()"
-     (pureVal javaRequiresClass)
-     Deprecated
-     [ "Declare that the given method can only be executed if the given"
-     , "class has already been initialized."
-     ]
-
-  , prim "java_pure"           "JavaSetup ()"
-    (pureVal javaPure)
-    Deprecated
-    [ "The empty specification for 'java_verify'. Equivalent to 'return ()'." ]
-
   , prim "java_load_class"     "String -> TopLevel JavaClass"
     (pureVal CJ.loadJavaClass)
     Current
     [ "Load the named Java class and return a handle to it." ]
 
-  --, prim "java_class_info"     "JavaClass -> TopLevel ()"
-
-  , prim "java_extract"
-    "JavaClass -> String -> JavaSetup () -> TopLevel Term"
-    (pureVal extractJava)
-    Deprecated
-    [ "Translate a Java method directly to a Term. The parameters of the"
-    , "Term will be the parameters of the Java method, and the return"
-    , "value will be the return value of the method. Only static methods"
-    , "with scalar argument and return types are currently supported. For"
-    , "more flexibility, see 'java_symexec' or 'java_verify'."
-    ]
-
-  , prim "java_symexec"
-    "JavaClass -> String -> [(String, Term)] -> [String] -> Bool -> TopLevel Term"
-    (pureVal symexecJava)
-    Deprecated
-    [ "Symbolically execute a Java method and construct a Term corresponding"
-    , "to its result. The first list contains pairs of variable or field"
-    , "names along with Terms specifying their initial (possibly symbolic)"
-    , "values. The second list contains the names of the variables or fields"
-    , "to treat as outputs. The resulting Term will be of tuple type, with"
-    , "as many elements as there are names in the output list."
-    , "The final boolean value indicates if path conditions should be checked for"
-    , "satisfiability at branch points."
-    ]
-
-  , prim "java_verify"
-    "JavaClass -> String -> [JavaMethodSpec] -> JavaSetup () -> TopLevel JavaMethodSpec"
-    (pureVal verifyJava)
-    Deprecated
-    [ "Verify a Java method against a method specification. The first two"
-    , "arguments are the same as for 'java_extract' and 'java_symexec'."
-    , "The list of JavaMethodSpec values in the third argument makes it"
-    , "possible to use the results of previous verifications to take the"
-    , "place of actual execution when encountering a method call. The last"
-    , "parameter is a setup block, containing a sequence of commands of type"
-    , "'JavaSetup a' that configure the symbolic simulator and specify the"
-    , "types of variables in scope, the expected results of execution, and"
-    , "the tactics to use to verify that the method produces the expected"
-    , "results."
-    ]
-
-{-  , prim "crucible_java_cfg"
-    "JavaClass -> String -> TopLevel CFG"
-    (bicVal crucible_java_cfg)
-    [ "Convert a Java method to a Crucible CFG."
-    ] -}
-
-  , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
-    (pureVal CJ.crucible_java_extract)
+  , prim "jvm_extract"  "JavaClass -> String -> TopLevel Term"
+    (pureVal CJ.jvm_extract)
     Current
     [ "Translate a Java method directly to a Term. The parameters of the"
     , "Term will be the parameters of the Java method, and the return"
     , "value will be the return value of the method. Only methods with"
     , "scalar argument and return types are currently supported."
+    ]
+  , prim "crucible_java_extract"  "JavaClass -> String -> TopLevel Term"
+    (pureVal CJ.jvm_extract)
+    Current
+    [ "Legacy alternative name for `jvm_extract`."
     ]
 
   , prim "llvm_sizeof"         "LLVMModule -> LLVMType -> Int"
@@ -1728,10 +1713,16 @@ primitives = Map.fromList
     , "given type."
     ]
 
-  , prim "llvm_struct"         "String -> LLVMType"
-    (pureVal llvm_struct)
+  , prim "llvm_alias"          "String -> LLVMType"
+    (pureVal llvm_alias)
     Current
-    [ "The type of an LLVM struct of the given name."
+    [ "The type of an LLVM alias for the given name. Often times, this is used"
+    , "to alias a struct type."
+    ]
+  , prim "llvm_struct"         "String -> LLVMType"
+    (pureVal llvm_alias)
+    Current
+    [ "Legacy alternative name for `llvm_alias`."
     ]
 
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"
@@ -1775,19 +1766,19 @@ primitives = Map.fromList
     , "information obtained from 'crucible_llvm_array_size_profile'."
     ]
 
-  , prim "skeleton_globals_pre" "ModuleSkeleton -> CrucibleSetup ()"
+  , prim "skeleton_globals_pre" "ModuleSkeleton -> LLVMSetup ()"
     (pureVal skeleton_globals_pre)
     Experimental
     [ "Allocate and initialize mutable globals from the given module skeleton."
     ]
 
-  , prim "skeleton_globals_post" "ModuleSkeleton -> CrucibleSetup ()"
+  , prim "skeleton_globals_post" "ModuleSkeleton -> LLVMSetup ()"
     (pureVal skeleton_globals_post)
     Experimental
     [ "Assert that all mutable globals from the given module skeleton are unchanged."
     ]
 
-  , prim "skeleton_prestate" "FunctionSkeleton -> CrucibleSetup SkeletonState"
+  , prim "skeleton_prestate" "FunctionSkeleton -> LLVMSetup SkeletonState"
     (pureVal skeleton_prestate)
     Experimental
     [ "Allocate and initialize the arguments of the given function skeleton."
@@ -1795,7 +1786,7 @@ primitives = Map.fromList
     , "so that preconditions can be imposed."
     ]
 
-  , prim "skeleton_poststate" "FunctionSkeleton -> SkeletonState -> CrucibleSetup SkeletonState"
+  , prim "skeleton_poststate" "FunctionSkeleton -> SkeletonState -> LLVMSetup SkeletonState"
     (pureVal skeleton_poststate)
     Experimental
     [ "Assert that pointer arguments of the given function skeleton remain"
@@ -1803,33 +1794,33 @@ primitives = Map.fromList
     , "be retrieved, so that postconditions can be imposed."
     ]
 
-  , prim "skeleton_arg_index" "SkeletonState -> Int -> CrucibleSetup Term"
+  , prim "skeleton_arg_index" "SkeletonState -> Int -> LLVMSetup Term"
     (pureVal skeleton_arg_index)
     Experimental
     [ "Retrieve the argument value at the given index from the given 'SkeletonState'."
     ]
 
-  , prim "skeleton_arg" "SkeletonState -> String -> CrucibleSetup Term"
+  , prim "skeleton_arg" "SkeletonState -> String -> LLVMSetup Term"
     (pureVal skeleton_arg)
     Experimental
     [ "Retrieve the argument value of the given name from the given 'SkeletonState'."
     ]
 
-  , prim "skeleton_arg_index_pointer" "SkeletonState -> Int -> CrucibleSetup SetupValue"
+  , prim "skeleton_arg_index_pointer" "SkeletonState -> Int -> LLVMSetup SetupValue"
     (pureVal skeleton_arg_index_pointer)
     Experimental
     [ "Retrieve the argument pointer at the given indexfrom the given 'SkeletonState'."
     , "Fails if the specified argument is not a pointer."
     ]
 
-  , prim "skeleton_arg_pointer" "SkeletonState -> String -> CrucibleSetup SetupValue"
+  , prim "skeleton_arg_pointer" "SkeletonState -> String -> LLVMSetup SetupValue"
     (pureVal skeleton_arg_pointer)
     Experimental
     [ "Retrieve the argument pointer of the given name from the given 'SkeletonState'."
     , "Fails if the specified argument is not a pointer."
     ]
 
-  , prim "skeleton_exec" "SkeletonState -> CrucibleSetup ()"
+  , prim "skeleton_exec" "SkeletonState -> LLVMSetup ()"
     (pureVal skeleton_exec)
     Experimental
     [ "Wrapper around 'crucible_execute_func' that passes the arguments initialized"
@@ -1996,256 +1987,374 @@ primitives = Map.fromList
     ---------------------------------------------------------------------
     -- Crucible/LLVM interface
 
-  , prim "crucible_llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
-    (pureVal crucible_llvm_cfg)
+  , prim "llvm_cfg"     "LLVMModule -> String -> TopLevel CFG"
+    (pureVal llvm_cfg)
     Current
     [ "Load a function from the given LLVM module into a Crucible CFG."
     ]
 
-  , prim "crucible_llvm_extract"  "LLVMModule -> String -> TopLevel Term"
-    (pureVal crucible_llvm_extract)
+  , prim "llvm_extract"  "LLVMModule -> String -> TopLevel Term"
+    (pureVal llvm_extract)
     Current
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term will be the parameters of the LLVM function, and the return"
     , "value will be the return value of the functions. Only functions with"
     , "scalar argument and return types are currently supported. For more"
-    , "flexibility, see 'crucible_llvm_verify'."
+    , "flexibility, see 'llvm_verify'."
     ]
+  , prim "crucible_llvm_extract"  "LLVMModule -> String -> TopLevel Term"
+    (pureVal llvm_extract)
+    Current
+    [ "Legacy alternative name for `llvm_extract`." ]
 
-  , prim "crucible_llvm_compositional_extract"
-    "LLVMModule -> String -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
-    (pureVal crucible_llvm_compositional_extract)
+  , prim "llvm_compositional_extract"
+    "LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    (pureVal llvm_compositional_extract)
     Experimental
     [ "Translate an LLVM function directly to a Term. The parameters of the"
     , "Term are the input parameters of the LLVM function: the parameters"
-    , "passed by value (in the order given by `crucible_exec_func`), then"
+    , "passed by value (in the order given by `llvm_exec_func`), then"
     , "the parameters passed by reference (in the order given by"
-    , "`crucible_points_to`). The Term is the tuple consisting of the"
+    , "`llvm_points_to`). The Term is the tuple consisting of the"
     , "output parameters of the LLVM function: the return parameter, then"
     , "the parameters passed by reference (in the order given by"
-    , "`crucible_points_to`). For more flexibility, see"
-    , "`crucible_llvm_verify`."
+    , "`llvm_points_to`). For more flexibility, see `llvm_verify`."
     ]
+  , prim "crucible_llvm_compositional_extract"
+    "LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    (pureVal llvm_compositional_extract)
+    Experimental
+    [ "Legacy alternative name for `llvm_compositional_extract`." ]
 
-  , prim "crucible_fresh_var" "String -> LLVMType -> CrucibleSetup Term"
-    (pureVal crucible_fresh_var)
+  , prim "llvm_fresh_var" "String -> LLVMType -> LLVMSetup Term"
+    (pureVal llvm_fresh_var)
     Current
-    [ "Create a fresh symbolic variable for use within a Crucible"
+    [ "Create a fresh symbolic variable for use within an LLVM"
     , "specification. The name is used only for pretty-printing."
     ]
+  , prim "crucible_fresh_var" "String -> LLVMType -> LLVMSetup Term"
+    (pureVal llvm_fresh_var)
+    Current
+    [ "Legacy alternative name for `llvm_fresh_var`." ]
 
-  , prim "crucible_fresh_cryptol_var" "String -> Type -> CrucibleSetup Term"
-    (pureVal crucible_fresh_cryptol_var)
+  , prim "llvm_fresh_cryptol_var" "String -> Type -> LLVMSetup Term"
+    (pureVal llvm_fresh_cryptol_var)
     Experimental
     [ "Create a fresh symbolic variable of the given Cryptol type for use"
     , "within a Crucible specification. The given name is used only for"
-    , "pretty-printing. Unlike 'crucible_fresh_var', this can be used when"
+    , "pretty-printing. Unlike 'llvm_fresh_var', this can be used when"
     , "there isn't an appropriate LLVM type, such as the Cryptol Array type."
     ]
+  , prim "crucible_fresh_cryptol_var" "String -> Type -> LLVMSetup Term"
+    (pureVal llvm_fresh_cryptol_var)
+    Experimental
+    [ "Legacy alternative name for `llvm_fresh_cryptol_var`." ]
 
-  , prim "crucible_alloc" "LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc)
+  , prim "llvm_alloc" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc)
     Current
-    [ "Declare that an object of the given type should be allocated in a"
-    , "Crucible specification. Before `crucible_execute_func`, this states"
-    , "that the function expects the object to be allocated before it runs."
-    , "After `crucible_execute_func`, it states that the function being"
+    [ "Declare that an object of the given type should be allocated in an"
+    , "LLVM specification. Before `llvm_execute_func`, this states that"
+    , "the function expects the object to be allocated before it runs."
+    , "After `llvm_execute_func`, it states that the function being"
     , "verified is expected to perform the allocation."
     ]
+  , prim "crucible_alloc" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc)
+    Current
+    [ "Legacy alternative name for `llvm_alloc`." ]
 
-  , prim "crucible_alloc_aligned" "Int -> LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc_aligned)
+  , prim "llvm_alloc_aligned" "Int -> LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_aligned)
     Current
     [ "Declare that a memory region of the given type should be allocated in"
-    , "a Crucible specification, and also specify that the start of the region"
+    , "an LLVM specification, and also specify that the start of the region"
     , "should be aligned to a multiple of the specified number of bytes (which"
     , "must be a power of 2)."
     ]
+  , prim "crucible_alloc_aligned" "Int -> LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_aligned)
+    Current
+    [ "Legacy alternative name for `llvm_alloc_aligned`." ]
 
-  , prim "crucible_alloc_readonly" "LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc_readonly)
+  , prim "llvm_alloc_readonly" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_readonly)
     Current
     [ "Declare that a read-only memory region of the given type should be"
-    , "allocated in a Crucible specification. The function must not attempt"
-    , "to write to this memory region. Unlike `crucible_alloc`, regions"
-    , "allocated with `crucible_alloc_readonly` are allowed to alias other"
+    , "allocated in an LLVM specification. The function must not attempt"
+    , "to write to this memory region. Unlike `llvm_alloc`, regions"
+    , "allocated with `llvm_alloc_readonly` are allowed to alias other"
     , "read-only regions."
     ]
+  , prim "crucible_alloc_readonly" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_readonly)
+    Current
+    [ "Legacy alternative name for `llvm_alloc_readonly`." ]
 
-  , prim "crucible_alloc_readonly_aligned" "Int -> LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc_readonly_aligned)
+  , prim "llvm_alloc_readonly_aligned" "Int -> LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_readonly_aligned)
     Current
     [ "Declare that a read-only memory region of the given type should be"
-    , "a Crucible specification, and also specify that the start of the region"
-    , "should be aligned to a multiple of the specified number of bytes (which"
-    , "must be a power of 2). The function must not attempt to write to this"
-    , "memory region. Unlike `crucible_alloc`/`crucible_alloc_aligned`,"
-    , "regions allocated with `crucible_alloc_readonly_aligned` are allowed to"
+    , "allocated in an LLVM specification, and also specify that the start of"
+    , "the region should be aligned to a multiple of the specified number of"
+    , "bytes (which must be a power of 2). The function must not attempt to"
+    , "write to this memory region. Unlike `llvm_alloc`/`llvm_alloc_aligned`,"
+    , "regions allocated with `llvm_alloc_readonly_aligned` are allowed to"
     , "alias other read-only regions."
     ]
+  , prim "crucible_alloc_readonly_aligned" "Int -> LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_readonly_aligned)
+    Current
+    [ "Legacy alternative name for `llvm_alloc_readonly_aligned`." ]
 
-  , prim "crucible_alloc_with_size" "Int -> LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_alloc_with_size)
+  , prim "llvm_alloc_with_size" "Int -> LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_with_size)
     Experimental
-    [ "Like `crucible_alloc`, but with a user-specified size (given in bytes)."
+    [ "Like `llvm_alloc`, but with a user-specified size (given in bytes)."
     , "The specified size must be greater than the size of the LLVM type."
     ]
+  , prim "crucible_alloc_with_size" "Int -> LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_alloc_with_size)
+    Experimental
+    [ "Legacy alternative name for `llvm_alloc_with_size`." ]
 
-  , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> CrucibleSetup SetupValue"
-    (pureVal crucible_symbolic_alloc)
+  , prim "llvm_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup SetupValue"
+    (pureVal llvm_symbolic_alloc)
     Current
-    [ "Like `crucible_alloc`, but with a (symbolic) size instead of"
-    , "a LLVM type. The first argument specifies whether the allocation is"
-    , "read-only. The second argument specifies the alignment in bytes (which"
-    , "must be a power of 2). The third argument specifies the size in bytes."
+    [ "Like `llvm_alloc`, but with a (symbolic) size instead of an LLVM type."
+    , "The first argument specifies whether the allocation is read-only. The"
+    , "second argument specifies the alignment in bytes (which must be a power"
+    , "of 2). The third argument specifies the size in bytes."
     ]
-
-  , prim "crucible_alloc_global" "String -> CrucibleSetup ()"
-    (pureVal crucible_alloc_global)
+  , prim "crucible_symbolic_alloc" "Bool -> Int -> Term -> LLVMSetup SetupValue"
+    (pureVal llvm_symbolic_alloc)
     Current
-    [ "Declare that memory for the named global should be allocated in a"
-    , "Crucible specification. This is done implicitly for immutable globals."
-    , "A pointer to the allocated memory may be obtained using `crucible_global`."
+    [ "Legacy alternative name for `llvm_symbolic_alloc`." ]
+
+  , prim "llvm_alloc_global" "String -> LLVMSetup ()"
+    (pureVal llvm_alloc_global)
+    Current
+    [ "Declare that memory for the named global should be allocated in an"
+    , "LLVM specification. This is done implicitly for immutable globals."
+    , "A pointer to the allocated memory may be obtained using `llvm_global`."
     ]
-
-  , prim "crucible_fresh_pointer" "LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_fresh_pointer)
+  , prim "crucible_alloc_global" "String -> LLVMSetup ()"
+    (pureVal llvm_alloc_global)
     Current
-    [ "Create a fresh pointer value for use in a Crucible specification."
-    , "This works like `crucible_alloc` except that the pointer is not"
+    [ "Legacy alternative name for `llvm_alloc_global`." ]
+
+  , prim "llvm_fresh_pointer" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_fresh_pointer)
+    Current
+    [ "Create a fresh pointer value for use in an LLVM specification."
+    , "This works like `llvm_alloc` except that the pointer is not"
     , "required to point to allocated memory."
     ]
+  , prim "crucible_fresh_pointer" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_fresh_pointer)
+    Current
+    [ "Legacy alternative name for `llvm_fresh_pointer`." ]
 
-  , prim "crucible_fresh_expanded_val" "LLVMType -> CrucibleSetup SetupValue"
-    (pureVal crucible_fresh_expanded_val)
+  , prim "llvm_fresh_expanded_val" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_fresh_expanded_val)
     Current
     [ "Create a compound type entirely populated with fresh symbolic variables."
     , "Equivalent to allocating a new struct or array of the given type and"
-    , "eplicitly setting each field or element to contain a fresh symbolic"
+    , "explicitly setting each field or element to contain a fresh symbolic"
     , "variable."
     ]
+  , prim "crucible_fresh_expanded_val" "LLVMType -> LLVMSetup SetupValue"
+    (pureVal llvm_fresh_expanded_val)
+    Current
+    [ "Legacy alternative name for `llvm_fresh_expanded_val`." ]
 
-  , prim "crucible_points_to" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal (crucible_points_to True))
+  , prim "llvm_points_to" "SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the given value (second argument)."
     , ""
-    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "In the pre-state section (before `llvm_execute_func`) this specifies"
     , "the initial memory layout before function execution. In the post-state"
-    , "section (after crucible_execute_func), this specifies an assertion"
+    , "section (after `llvm_execute_func`), this specifies an assertion"
     , "about the final memory state after running the function."
     ]
+    , prim "crucible_points_to" "SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_points_to True))
+    Current
+    [ "Legacy alternative name for `llvm_points_to`." ]
 
-  , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal (crucible_conditional_points_to True))
+  , prim "llvm_conditional_points_to" "Term -> SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_conditional_points_to True))
     Current
     [ "Declare that the memory location indicated by the given pointer (second"
     , "argument) contains the given value (third argument) if the given"
     , "condition (first argument) holds."
     , ""
-    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "In the pre-state section (before `llvm_execute_func`) this specifies"
     , "the initial memory layout before function execution. In the post-state"
-    , "section (after crucible_execute_func), this specifies an assertion"
+    , "section (after `llvm_execute_func`), this specifies an assertion"
     , "about the final memory state after running the function."
     ]
-
-  , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal (crucible_points_to False))
+  , prim "crucible_conditional_points_to" "Term -> SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_conditional_points_to True))
     Current
-    [ "A variant of crucible_points_to that does not check for compatibility"
+    [ "Legacy alternative name for `llvm_conditional_points_to`." ]
+
+  , prim "llvm_points_to_at_type" "SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()"
+    (pureVal llvm_points_to_at_type)
+    Current
+    [ "A variant of `llvm_points_to` that casts the pointer to another type."
+    , "This may be useful when reading or writing a prefix of larger array,"
+    , "for example."
+    ]
+
+  , prim "llvm_conditional_points_to_at_type" "Term -> SetupValue -> LLVMType -> SetupValue -> LLVMSetup ()"
+    (pureVal llvm_conditional_points_to_at_type)
+    Current
+    [ "A variant of `llvm_conditional_points_to` that casts the pointer to"
+    , "another type. This may be useful when reading or writing a prefix"
+    , "of larger array, for example."
+    ]
+
+  , prim "llvm_points_to_untyped" "SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_points_to False))
+    Current
+    [ "A variant of `llvm_points_to` that does not check for compatibility"
     , "between the pointer type and the value type. This may be useful when"
     , "reading or writing a prefix of larger array, for example."
     ]
-
-  , prim "crucible_conditional_points_to_untyped" "Term -> SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal (crucible_conditional_points_to False))
+  , prim "crucible_points_to_untyped" "SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_points_to False))
     Current
-    [ "A variant of crucible_conditional_points_to that does not check for"
+    [ "Legacy alternative name for `llvm_points_to`." ]
+
+  , prim "llvm_conditional_points_to_untyped" "Term -> SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_conditional_points_to False))
+    Current
+    [ "A variant of `llvm_conditional_points_to` that does not check for"
     , "compatibility between the pointer type and the value type. This may"
     , "be useful when reading or writing a prefix of larger array, for example."
     ]
+  , prim "crucible_conditional_points_to_untyped" "Term -> SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal (llvm_conditional_points_to False))
+    Current
+    [ "Legacy alternative name for `llvm_conditional_points_to`." ]
 
-  , prim "crucible_points_to_array_prefix" "SetupValue -> Term -> Term -> CrucibleSetup ()"
-    (pureVal crucible_points_to_array_prefix)
+  , prim "llvm_points_to_array_prefix" "SetupValue -> Term -> Term -> LLVMSetup ()"
+    (pureVal llvm_points_to_array_prefix)
     Experimental
     [ "Declare that the memory location indicated by the given pointer (first"
     , "argument) contains the prefix of the given array (second argument) of"
     , "the given size (third argument)."
     , ""
-    , "In the pre-state section (before crucible_execute_func) this specifies"
+    , "In the pre-state section (before `llvm_execute_func`) this specifies"
     , "the initial memory layout before function execution. In the post-state"
-    , "section (after crucible_execute_func), this specifies an assertion"
+    , "section (after `llvm_execute_func`), this specifies an assertion"
     , "about the final memory state after running the function."
     ]
+  , prim "crucible_points_to_array_prefix" "SetupValue -> Term -> Term -> LLVMSetup ()"
+    (pureVal llvm_points_to_array_prefix)
+    Experimental
+    [ "Legacy alternative name for `llvm_points_to_array_prefix`." ]
 
-  , prim "crucible_equal" "SetupValue -> SetupValue -> CrucibleSetup ()"
-    (pureVal crucible_equal)
+  , prim "llvm_equal" "SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal llvm_equal)
     Current
-    [ "State that two Crucible values should be equal. Can be used as either"
-    , "a pre-condition or a post-condition. It is semantically equivalent to"
-    , "a `crucible_precond` or `crucible_postcond` statement which is an"
-    , "equality predicate, but potentially more efficient."
+    [ "State that two LLVM values should be equal. Can be used as either a"
+    , "pre-condition or a post-condition. It is semantically equivalent to"
+    , "an `llvm_precond` or `llvm_postcond` statement which is an equality"
+    , "predicate, but potentially more efficient."
     ]
+  , prim "crucible_equal" "SetupValue -> SetupValue -> LLVMSetup ()"
+    (pureVal llvm_equal)
+    Current
+    [ "Legacy alternative name for `llvm_equal`." ]
 
-  , prim "crucible_precond" "Term -> CrucibleSetup ()"
-    (pureVal crucible_precond)
+  , prim "llvm_precond" "Term -> LLVMSetup ()"
+    (pureVal llvm_precond)
     Current
     [ "State that the given predicate is a pre-condition on execution of the"
     , "function being verified."
     ]
+  , prim "crucible_precond" "Term -> LLVMSetup ()"
+    (pureVal llvm_precond)
+    Current
+    [ "Legacy alternative name for `llvm_precond`." ]
 
-  , prim "crucible_postcond" "Term -> CrucibleSetup ()"
-    (pureVal crucible_postcond)
+  , prim "llvm_postcond" "Term -> LLVMSetup ()"
+    (pureVal llvm_postcond)
     Current
     [ "State that the given predicate is a post-condition of execution of the"
     , "function being verified."
     ]
+  , prim "crucible_postcond" "Term -> LLVMSetup ()"
+    (pureVal llvm_postcond)
+    Current
+    [ "Legacy alternative name for `llvm_postcond`." ]
 
-  , prim "crucible_execute_func" "[SetupValue] -> CrucibleSetup ()"
-    (pureVal crucible_execute_func)
+  , prim "llvm_execute_func" "[SetupValue] -> LLVMSetup ()"
+    (pureVal llvm_execute_func)
     Current
     [ "Specify the given list of values as the arguments of the function."
     ,  ""
-    , "The crucible_execute_func statement also serves to separate the pre-state"
-    , "section of the spec (before crucible_execute_func) from the post-state"
-    , "section (after crucible_execute_func). The effects of some CrucibleSetup"
+    , "The `llvm_execute_func` statement also serves to separate the pre-state"
+    , "section of the spec (before `llvm_execute_func`) from the post-state"
+    , "section (after `llvm_execute_func`). The effects of some LLVMSetup"
     , "statements depend on whether they occur in the pre-state or post-state"
     , "section."
     ]
+  , prim "crucible_execute_func" "[SetupValue] -> LLVMSetup ()"
+    (pureVal llvm_execute_func)
+    Current
+    [ "Legacy alternative name for `llvm_execute_func`." ]
 
-  , prim "crucible_return" "SetupValue -> CrucibleSetup ()"
-    (pureVal crucible_return)
+  , prim "llvm_return" "SetupValue -> LLVMSetup ()"
+    (pureVal llvm_return)
     Current
     [ "Specify the given value as the return value of the function. A"
     , "crucible_return statement is required if and only if the function"
     , "has a non-void return type." ]
+  , prim "crucible_return" "SetupValue -> LLVMSetup ()"
+    (pureVal llvm_return)
+    Current
+    [ "Legacy alternative name for `llvm_return`." ]
 
-  , prim "crucible_llvm_verify"
-    "LLVMModule -> String -> [CrucibleMethodSpec] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
-    (pureVal crucible_llvm_verify)
+  , prim "llvm_verify"
+    "LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    (pureVal llvm_verify)
     Current
     [ "Verify the LLVM function named by the second parameter in the module"
-    , "specified by the first. The third parameter lists the CrucibleMethodSpec"
+    , "specified by the first. The third parameter lists the LLVMSpec"
     , "values returned by previous calls to use as overrides. The fourth (Bool)"
     , "parameter enables or disables path satisfiability checking. The fifth"
     , "describes how to set up the symbolic execution engine before verification."
     , "And the last gives the script to use to prove the validity of the resulting"
     , "verification conditions."
     ]
-
-  , prim "crucible_llvm_unsafe_assume_spec"
-    "LLVMModule -> String -> CrucibleSetup () -> TopLevel CrucibleMethodSpec"
-    (pureVal crucible_llvm_unsafe_assume_spec)
+  , prim "crucible_llvm_verify"
+    "LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    (pureVal llvm_verify)
     Current
-    [ "Return a CrucibleMethodSpec corresponding to a CrucibleSetup block,"
+    [ "Legacy alternative name for `llvm_verify`." ]
+
+  , prim "llvm_unsafe_assume_spec"
+    "LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec"
+    (pureVal llvm_unsafe_assume_spec)
+    Current
+    [ "Return an LLVMSpec corresponding to an LLVMSetup block,"
     , "as would be returned by crucible_llvm_verify but without performing"
     , "any verification."
     ]
+  , prim "crucible_llvm_unsafe_assume_spec"
+    "LLVMModule -> String -> LLVMSetup () -> TopLevel LLVMSpec"
+    (pureVal llvm_unsafe_assume_spec)
+    Current
+    [ "Legacy alternative name for `llvm_unsafe_assume_spec`." ]
 
-  , prim "crucible_llvm_array_size_profile"
-    "LLVMModule -> String -> [CrucibleMethodSpec] -> CrucibleSetup () -> TopLevel [(String, [FunctionProfile])]"
-    (pureVal $ crucible_llvm_array_size_profile assumeUnsat)
+  , prim "llvm_array_size_profile"
+    "LLVMModule -> String -> [LLVMSpec] -> LLVMSetup () -> TopLevel [(String, [FunctionProfile])]"
+    (pureVal $ llvm_array_size_profile assumeUnsat)
     Experimental
     [ "Symbolically execute the function named by the second parameter in"
     , "the module specified by the first. The fourth parameter may be used"
@@ -2253,10 +2362,15 @@ primitives = Map.fromList
     , "referred to by pointer arguments for the function and all other functions"
     , "it calls (recursively), to be passed to llvm_boilerplate."
     ]
+  , prim "crucible_llvm_array_size_profile"
+    "LLVMModule -> String -> [LLVMSpec] -> LLVMSetup () -> TopLevel [(String, [FunctionProfile])]"
+    (pureVal $ llvm_array_size_profile assumeUnsat)
+    Experimental
+    [ "Legacy alternative name for `llvm_array_size_profile`." ]
 
-  , prim "crucible_llvm_verify_x86"
-    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> CrucibleSetup () -> ProofScript SatResult -> TopLevel CrucibleMethodSpec"
-    (pureVal crucible_llvm_verify_x86)
+  , prim "llvm_verify_x86"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_x86)
     Experimental
     [ "Verify an x86 function from an ELF file for use as an override in an"
     , "LLVM verification. The first argument specifies the LLVM module"
@@ -2265,9 +2379,14 @@ primitives = Map.fromList
     , "specifies the names and sizes (in bytes) of global variables to"
     , "initialize, and the fifth whether to perform path satisfiability"
     , "checking. The last argument is the LLVM specification of the calling"
-    , "context against which to verify the function.Returns a method spec"
+    , "context against which to verify the function. Returns a method spec"
     , "that can be used as an override when verifying other LLVM functions."
     ]
+  , prim "crucible_llvm_verify_x86"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    (pureVal llvm_verify_x86)
+    Experimental
+    [ "Legacy alternative name for `llvm_verify_x86`." ]
 
   , prim "add_x86_preserved_reg" "String -> TopLevel ()"
     (pureVal add_x86_preserved_reg)
@@ -2279,102 +2398,177 @@ primitives = Map.fromList
     Current
     [ "Use the default set of callee-saved registers during x86 verification.." ]
 
-  , prim "crucible_array"
+  , prim "llvm_array_value"
     "[SetupValue] -> SetupValue"
     (pureVal CIR.anySetupArray)
     Current
     [ "Create a SetupValue representing an array, with the given list of"
     , "values as elements. The list must be non-empty." ]
+  , prim "crucible_array"
+    "[SetupValue] -> SetupValue"
+    (pureVal CIR.anySetupArray)
+    Current
+    [ "Legacy alternative name for `llvm_array_value`." ]
 
-  , prim "crucible_struct"
+  , prim "llvm_struct_type"
+    "[LLVMType] -> LLVMType"
+    (pureVal llvm_struct_type)
+    Current
+    [ "The type of an LLVM struct with elements of the given types." ]
+
+  , prim "llvm_struct_value"
     "[SetupValue] -> SetupValue"
     (pureVal (CIR.anySetupStruct False))
     Current
     [ "Create a SetupValue representing a struct, with the given list of"
     , "values as elements." ]
+  , prim "crucible_struct"
+    "[SetupValue] -> SetupValue"
+    (pureVal (CIR.anySetupStruct False))
+    Current
+    [ "Legacy alternative name for `llvm_struct_value`." ]
 
-  , prim "crucible_packed_struct"
+  , prim "llvm_packed_struct_type"
+    "[LLVMType] -> LLVMType"
+    (pureVal llvm_packed_struct_type)
+    Current
+    [ "The type of a packed LLVM struct with elements of the given types." ]
+
+  , prim "llvm_packed_struct_value"
     "[SetupValue] -> SetupValue"
     (pureVal (CIR.anySetupStruct True))
     Current
     [ "Create a SetupValue representing a packed struct, with the given"
     , "list of values as elements." ]
+  , prim "crucible_packed_struct"
+    "[SetupValue] -> SetupValue"
+    (pureVal (CIR.anySetupStruct True))
+    Current
+    [ "Legacy alternative name for `llvm_packed_struct_value`." ]
 
-  , prim "crucible_elem"
+  , prim "llvm_elem"
     "SetupValue -> Int -> SetupValue"
     (pureVal CIR.anySetupElem)
     Current
     [ "Turn a SetupValue representing a struct or array pointer into"
     , "a pointer to an element of the struct or array by field index." ]
+  , prim "crucible_elem"
+    "SetupValue -> Int -> SetupValue"
+    (pureVal CIR.anySetupElem)
+    Current
+    [ "Legacy alternative name for `llvm_elem`." ]
 
-  , prim "crucible_field"
+  , prim "llvm_field"
     "SetupValue -> String -> SetupValue"
     (pureVal CIR.anySetupField)
     Current
     [ "Turn a SetupValue representing a struct pointer into"
     , "a pointer to an element of the struct by field name." ]
+  , prim "crucible_field"
+    "SetupValue -> String -> SetupValue"
+    (pureVal CIR.anySetupField)
+    Current
+    [ "Legacy alternative name for `llvm_field`." ]
 
-  , prim "crucible_null"
+  , prim "llvm_null"
     "SetupValue"
     (pureVal CIR.anySetupNull)
     Current
     [ "A SetupValue representing a null pointer value." ]
+  , prim "crucible_null"
+    "SetupValue"
+    (pureVal CIR.anySetupNull)
+    Current
+    [ "Legacy alternative name for `llvm_null`." ]
 
-  , prim "crucible_global"
+  , prim "llvm_global"
     "String -> SetupValue"
     (pureVal CIR.anySetupGlobal)
     Current
     [ "Return a SetupValue representing a pointer to the named global."
     , "The String may be either the name of a global value or a function name." ]
+  , prim "crucible_global"
+    "String -> SetupValue"
+    (pureVal CIR.anySetupGlobal)
+    Current
+    [ "Legacy alternative name for `llvm_global`." ]
 
-  , prim "crucible_global_initializer"
+  , prim "llvm_global_initializer"
     "String -> SetupValue"
     (pureVal CIR.anySetupGlobalInitializer)
     Current
     [ "Return a SetupValue representing the value of the initializer of a named"
     , "global. The String should be the name of a global value."
     ]
+  , prim "crucible_global_initializer"
+    "String -> SetupValue"
+    (pureVal CIR.anySetupGlobalInitializer)
+    Current
+    [ "Legacy alternative name for `llvm_global_initializer`." ]
 
-  , prim "crucible_term"
+  , prim "llvm_term"
     "Term -> SetupValue"
     (pureVal CIR.anySetupTerm)
     Current
     [ "Construct a `SetupValue` from a `Term`." ]
+  , prim "crucible_term"
+    "Term -> SetupValue"
+    (pureVal CIR.anySetupTerm)
+    Current
+    [ "Legacy alternative name for `llvm_term`." ]
 
   , prim "crucible_setup_val_to_term"
     " SetupValue -> TopLevel Term"
     (pureVal crucible_setup_val_to_typed_term)
-    Current
+    Deprecated
     [ "Convert from a setup value to a typed term. This can only be done for a"
     , "subset of setup values. Fails if a setup value is a global, variable or null."
     ]
 
   -- Ghost state support
-  , prim "crucible_declare_ghost_state"
+  , prim "llvm_declare_ghost_state"
     "String -> TopLevel Ghost"
-    (pureVal crucible_declare_ghost_state)
+    (pureVal llvm_declare_ghost_state)
     Current
     [ "Allocates a unique ghost variable." ]
+  , prim "crucible_declare_ghost_state"
+    "String -> TopLevel Ghost"
+    (pureVal llvm_declare_ghost_state)
+    Current
+    [ "Legacy alternative name for `llvm_declare_ghost_state`." ]
 
-  , prim "crucible_ghost_value"
-    "Ghost -> Term -> CrucibleSetup ()"
-    (pureVal crucible_ghost_value)
+  , prim "llvm_ghost_value"
+    "Ghost -> Term -> LLVMSetup ()"
+    (pureVal llvm_ghost_value)
     Current
     [ "Specifies the value of a ghost variable. This can be used"
     , "in the pre- and post- conditions of a setup block."]
+  , prim "crucible_ghost_value"
+    "Ghost -> Term -> LLVMSetup ()"
+    (pureVal llvm_ghost_value)
+    Current
+    [ "Legacy alternative name for `llvm_ghost_value`."]
 
-  , prim "crucible_spec_solvers"  "CrucibleMethodSpec -> [String]"
-    (\_ _ -> toValue crucible_spec_solvers)
+  , prim "llvm_spec_solvers"  "LLVMSpec -> [String]"
+    (\_ _ -> toValue llvm_spec_solvers)
     Current
     [ "Extract a list of all the solvers used when verifying the given method spec."
     ]
+  , prim "crucible_spec_solvers"  "LLVMSpec -> [String]"
+    (\_ _ -> toValue llvm_spec_solvers)
+    Current
+    [ "Legacy alternative name for `llvm_spec_solvers`." ]
 
-  , prim "crucible_spec_size"  "CrucibleMethodSpec -> Int"
-    (\_ _ -> toValue crucible_spec_size)
+  , prim "llvm_spec_size"  "LLVMSpec -> Int"
+    (\_ _ -> toValue llvm_spec_size)
     Current
     [ "Return a count of the combined size of all verification goals proved as part of"
     , "the given method spec."
     ]
+  , prim "crucible_spec_size"  "LLVMSpec -> Int"
+    (\_ _ -> toValue llvm_spec_size)
+    Current
+    [ "Legacy alternative name for `llvm_spec_size`." ]
 
     ---------------------------------------------------------------------
     -- Crucible/JVM commands
@@ -2382,7 +2576,7 @@ primitives = Map.fromList
   , prim "jvm_fresh_var" "String -> JavaType -> JVMSetup Term"
     (pureVal jvm_fresh_var)
     Experimental
-    [ "Create a fresh variable for use within a Crucible specification. The"
+    [ "Create a fresh variable for use within a JVM specification. The"
     , "name is used only for pretty-printing."
     ]
 
@@ -2390,19 +2584,19 @@ primitives = Map.fromList
     (pureVal jvm_alloc_object)
     Experimental
     [ "Declare that an instance of the given class should be allocated in a"
-    , "Crucible specification. Before `jvm_execute_func`, this states"
-    , "that the function expects the object to be allocated before it runs."
-    , "After `jvm_execute_func`, it states that the function being"
-    , "verified is expected to perform the allocation."
+    , "JVM specification. Before `jvm_execute_func`, this states that the"
+    , "method expects the object to be allocated before it runs. After"
+    , "`jvm_execute_func`, it states that the method being verified is"
+    , "expected to perform the allocation."
     ]
 
   , prim "jvm_alloc_array" "Int -> JavaType -> JVMSetup JVMValue"
     (pureVal jvm_alloc_array)
     Experimental
     [ "Declare that an array of the given size and element type should be"
-    , "allocated in a Crucible specification. Before `jvm_execute_func`, this"
-    , "states that the function expects the array to be allocated before it"
-    , "runs. After `jvm_execute_func`, it states that the function being"
+    , "allocated in a JVM specification. Before `jvm_execute_func`, this"
+    , "states that the method expects the array to be allocated before it"
+    , "runs. After `jvm_execute_func`, it states that the method being"
     , "verified is expected to perform the allocation."
     ]
 
@@ -2413,6 +2607,21 @@ primitives = Map.fromList
     Experimental
     [ "Declare that the indicated object (first argument) has a field"
     , "(second argument) containing the given value (third argument)."
+    , ""
+    , "In the pre-state section (before jvm_execute_func) this specifies"
+    , "the initial memory layout before function execution. In the post-state"
+    , "section (after jvm_execute_func), this specifies an assertion"
+    , "about the final memory state after running the function."
+    ]
+
+  , prim "jvm_static_field_is" "String -> JVMValue -> JVMSetup ()"
+    (pureVal jvm_static_field_is)
+    Experimental
+    [ "Declare that the named static field contains the given value."
+    , "By default the field name is assumed to belong to the same class"
+    , "as the method being specified. Static fields belonging to other"
+    , "classes can be selected using the \"<classname>.<fieldname>\""
+    , "syntax in the string argument."
     , ""
     , "In the pre-state section (before jvm_execute_func) this specifies"
     , "the initial memory layout before function execution. In the post-state"
@@ -2448,20 +2657,20 @@ primitives = Map.fromList
     (pureVal jvm_precond)
     Experimental
     [ "State that the given predicate is a pre-condition on execution of the"
-    , "function being verified."
+    , "method being verified."
     ]
 
   , prim "jvm_postcond" "Term -> JVMSetup ()"
     (pureVal jvm_postcond)
     Experimental
     [ "State that the given predicate is a post-condition of execution of the"
-    , "function being verified."
+    , "method being verified."
     ]
 
   , prim "jvm_execute_func" "[JVMValue] -> JVMSetup ()"
     (pureVal jvm_execute_func)
     Experimental
-    [ "Specify the given list of values as the arguments of the function."
+    [ "Specify the given list of values as the arguments of the method."
     ,  ""
     , "The jvm_execute_func statement also serves to separate the pre-state"
     , "section of the spec (before jvm_execute_func) from the post-state"
@@ -2473,56 +2682,31 @@ primitives = Map.fromList
   , prim "jvm_return" "JVMValue -> JVMSetup ()"
     (pureVal jvm_return)
     Experimental
-    [ "Specify the given value as the return value of the function. A"
-    , "jvm_return statement is required if and only if the function"
+    [ "Specify the given value as the return value of the method. A"
+    , "jvm_return statement is required if and only if the method"
     , "has a non-void return type." ]
 
-  , prim "crucible_jvm_verify"
-    "JavaClass -> String -> [JVMMethodSpec] -> Bool -> JVMSetup () -> ProofScript SatResult -> TopLevel JVMMethodSpec"
-    (pureVal crucible_jvm_verify)
+  , prim "jvm_verify"
+    "JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript SatResult -> TopLevel JVMSpec"
+    (pureVal jvm_verify)
     Experimental
-    [ "Verify the JVM function named by the second parameter in the module"
-    , "specified by the first. The third parameter lists the JVMMethodSpec"
-    , "values returned by previous calls to use as overrides. The fourth (Bool)"
+    [ "Verify the JVM method named by the second parameter in the class"
+    , "specified by the first. The third parameter lists the JVMSpec values"
+    , "returned by previous calls to use as overrides. The fourth (Bool)"
     , "parameter enables or disables path satisfiability checking. The fifth"
     , "describes how to set up the symbolic execution engine before verification."
     , "And the last gives the script to use to prove the validity of the resulting"
     , "verification conditions."
     ]
 
-  , prim "crucible_jvm_unsafe_assume_spec"
-    "JavaClass -> String -> JVMSetup () -> TopLevel JVMMethodSpec"
-    (pureVal crucible_jvm_unsafe_assume_spec)
+  , prim "jvm_unsafe_assume_spec"
+    "JavaClass -> String -> JVMSetup () -> TopLevel JVMSpec"
+    (pureVal jvm_unsafe_assume_spec)
     Experimental
-    [ "Return a JVMMethodSpec corresponding to a JVMSetup block,"
-    , "as would be returned by jvm_verify but without performing any"
-    , "verification."
+    [ "Return a JVMSpec corresponding to a JVMSetup block, as would be"
+    , "returned by jvm_verify but without performing any verification."
     ]
-{-
-  , prim "jvm_array"
-    "[JVMValue] -> JVMValue"
-    (pureVal JIR.SetupArray)
-    [ "Create a JVMValue representing an array, with the given list of"
-    , "values as elements. The list must be non-empty." ]
 
-  , prim "jvm_struct"
-    "[JVMValue] -> JVMValue"
-    (pureVal JIR.SetupStruct)
-    [ "Create a JVMValue representing a struct, with the given list of"
-    , "values as elements." ]
-
-  , prim "jvm_elem"
-    "JVMValue -> Int -> JVMValue"
-    (pureVal JIR.SetupElem)
-    [ "Turn a JVMValue representing a struct or array pointer into"
-    , "a pointer to an element of the struct or array by field index." ]
-
-  , prim "jvm_field"
-    "JVMValue -> String -> JVMValue"
-    (pureVal JIR.SetupField)
-    [ "Turn a JVMValue representing a struct pointer into"
-    , "a pointer to an element of the struct by field name." ]
--}
   , prim "jvm_null"
     "JVMValue"
     (pureVal (CMS.SetupNull () :: CMS.SetupValue CJ.JVM))

@@ -1,11 +1,16 @@
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
 module SAWScript.Exceptions
   ( TypeErrors(..), failTypecheck
   , TopLevelException(..)
   , TraceException(..)
+  , topLevelExceptionToException
+  , topLevelExceptionFromException
   ) where
 
 import Control.Exception
+import Data.Typeable (cast)
 
 import What4.ProgramLoc (ProgramLoc)
 
@@ -31,6 +36,7 @@ data TopLevelException
   | CrucibleSetupException ProgramLoc String
   | OverrideMatcherException ProgramLoc String
   | LLVMMethodSpecException ProgramLoc String
+  | forall e. Exception e => SomeTopLevelException e
 
 instance Show TopLevelException where
   show (TopLevelException _ msg) = msg
@@ -38,6 +44,23 @@ instance Show TopLevelException where
   show (CrucibleSetupException _ msg) = msg
   show (OverrideMatcherException _ msg) = msg
   show (LLVMMethodSpecException _ msg) = msg
+  show (SomeTopLevelException e) = show e
+
+-- | To use a custom structured exception type that works with the
+-- saw-script REPL's exception handlers and stack tracing, define
+-- 'toException' as 'topLevelExceptionToException' in the custom
+-- exception type's 'Exception' class instance.
+topLevelExceptionToException :: Exception e => e -> SomeException
+topLevelExceptionToException = toException . SomeTopLevelException
+
+-- | To use a custom structured exception type that works with the
+-- saw-script REPL's exception handlers and stack tracing, define
+-- 'fromException' as 'topLevelExceptionFromException' in the custom
+-- exception type's 'Exception' class instance.
+topLevelExceptionFromException :: Exception e => SomeException -> Maybe e
+topLevelExceptionFromException x =
+  do SomeTopLevelException a <- fromException x
+     cast a
 
 instance Exception TopLevelException
 

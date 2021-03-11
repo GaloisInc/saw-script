@@ -25,13 +25,14 @@ Stability   : provisional
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module SAWScript.Crucible.JVM.Builtins
-    ( crucible_jvm_verify
-    , crucible_jvm_unsafe_assume_spec
+    ( jvm_verify
+    , jvm_unsafe_assume_spec
     , jvm_return
     , jvm_execute_func
     , jvm_postcond
     , jvm_precond
     , jvm_field_is
+    , jvm_static_field_is
     , jvm_elem_is
     , jvm_array_is
     , jvm_fresh_var
@@ -48,7 +49,6 @@ import           Control.Monad.Trans.Except (runExceptT)
 import qualified Data.BitVector.Sized as BV
 import           Data.Foldable (for_)
 import           Data.Function
-import           Data.IORef
 import           Data.List
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -60,10 +60,6 @@ import           Data.Void (absurd)
 import           Prettyprinter
 import           System.IO
 
--- jvm-verifier
--- TODO: transition to Lang.JVM.Codebase from crucible-jvm
-import qualified Verifier.Java.Codebase as CB
-
 -- cryptol
 import qualified Cryptol.Eval.Type as Cryptol (evalValType)
 import qualified Cryptol.TypeCheck.Type as Cryptol
@@ -73,7 +69,6 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 import qualified What4.Partial as W4
 import qualified What4.ProgramLoc as W4
 import qualified What4.Interface as W4
-import qualified What4.Expr.Builder as W4
 import qualified What4.Utils.StringLiteral as W4S
 
 -- jvm-parser
@@ -82,7 +77,6 @@ import qualified Language.JVM.Common as J (dotsToSlashes)
 
 -- crucible
 import qualified Lang.Crucible.Backend as Crucible
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
 import qualified Lang.Crucible.CFG.Core as Crucible (TypeRepr(..))
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
@@ -90,11 +84,11 @@ import qualified Lang.Crucible.Simulator.GlobalState as Crucible
 import qualified Lang.Crucible.Simulator.SimError as Crucible
 
 -- crucible-jvm
+import qualified Lang.JVM.Codebase as CB
 import qualified Lang.Crucible.JVM as CJ
 
 -- parameterized-utils
 import           Data.Parameterized.Classes
-import           Data.Parameterized.Nonce
 import qualified Data.Parameterized.Context as Ctx
 
 import Verifier.SAW.FiniteValue (ppFirstOrderValue)
@@ -102,6 +96,9 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 import Verifier.SAW.TypedTerm
 
+import Verifier.SAW.Simulator.What4.ReturnTrip
+
+import SAWScript.Exceptions
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.TopLevel
@@ -114,7 +111,7 @@ import SAWScript.Crucible.JVM.BuiltinsJVM (prepareClassTopLevel)
 import SAWScript.JavaExpr (JavaType(..))
 
 import qualified SAWScript.Crucible.Common as Common
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), nextAllocIndex, PrePost(..))
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
@@ -130,10 +127,10 @@ type CrucibleMethodSpecIR = MS.CrucibleMethodSpecIR CJ.JVM
 type SetupCondition = MS.SetupCondition CJ.JVM
 
 -- TODO: something useful with the global pair?
-ppAbortedResult :: JVMCrucibleContext
+ppJVMAbortedResult :: JVMCrucibleContext
                 -> Crucible.AbortedResult Sym a
                 -> Doc ann
-ppAbortedResult _cc = Common.ppAbortedResult (\_gp -> mempty)
+ppJVMAbortedResult _cc = Common.ppAbortedResult (\_gp -> mempty)
 
 -- FIXME: We need a better way to identify a set of class names to
 -- load. This function has two problems: First, unless we put in a
@@ -171,7 +168,6 @@ excludedClassName cname
 excludedRefs :: Set J.ClassName
 excludedRefs = Set.fromList
   [ "java/util/Comparator"
-  , "java/util/Arrays"
   , "java/lang/reflect/AccessibleObject"
   , "java/lang/reflect/AnnotatedElement"
   , "java/lang/invoke/SerializedLambda"
@@ -180,7 +176,7 @@ excludedRefs = Set.fromList
   , "java/lang/invoke/MethodHandleInfo"
   ]
 
-crucible_jvm_verify ::
+jvm_verify ::
   J.Class ->
   String {- ^ method name -} ->
   [CrucibleMethodSpecIR] {- ^ overrides -} ->
@@ -188,7 +184,7 @@ crucible_jvm_verify ::
   JVMSetupM () ->
   ProofScript SatResult ->
   TopLevel CrucibleMethodSpecIR
-crucible_jvm_verify cls nm lemmas checkSat setup tactic =
+jvm_verify cls nm lemmas checkSat setup tactic =
   do cb <- getJavaCodebase
      opts <- getOptions
      -- allocate all of the handles/static vars that are referenced
@@ -205,7 +201,7 @@ crucible_jvm_verify cls nm lemmas checkSat setup tactic =
      let loc = SS.toW4Loc "_SAW_verify_prestate" pos
 
      profFile <- rwProfilingFile <$> getTopLevelRW
-     (writeFinalProfile, pfs) <- io $ Common.setupProfiling sym "crucible_jvm_verify" profFile
+     (writeFinalProfile, pfs) <- io $ setupProfiling sym "jvm_verify" profFile
 
      (cls', method) <- io $ findMethod cb pos nm cls -- TODO: switch to crucible-jvm version
      let st0 = initialCrucibleSetupState cc (cls', method) loc
@@ -224,7 +220,7 @@ crucible_jvm_verify cls nm lemmas checkSat setup tactic =
      frameIdent <- io $ Crucible.pushAssumptionFrame sym
 
      -- run the symbolic execution
-     top_loc <- SS.toW4Loc "crucible_jvm_verify" <$> getPosition
+     top_loc <- SS.toW4Loc "jvm_verify" <$> getPosition
      (ret, globals3) <-
        io $ verifySimulate opts cc pfs methodSpec args assumes top_loc lemmas globals2 checkSat
 
@@ -241,12 +237,12 @@ crucible_jvm_verify cls nm lemmas checkSat setup tactic =
      returnProof (methodSpec & MS.csSolverStats .~ stats)
 
 
-crucible_jvm_unsafe_assume_spec ::
+jvm_unsafe_assume_spec ::
   J.Class          ->
   String          {- ^ Name of the method -} ->
   JVMSetupM () {- ^ Boundary specification -} ->
   TopLevel CrucibleMethodSpecIR
-crucible_jvm_unsafe_assume_spec cls nm setup =
+jvm_unsafe_assume_spec cls nm setup =
   do cc <- setupCrucibleContext cls
      cb <- getJavaCodebase
      pos <- getPosition
@@ -266,8 +262,8 @@ verifyObligations ::
   TopLevel SolverStats
 verifyObligations cc mspec tactic assumes asserts =
   do let sym = cc^.jccBackend
-     st <- io $ readIORef $ W4.sbStateManager sym
-     let sc = Crucible.saw_ctx st
+     st <- io $ sawCoreState sym
+     let sc = saw_ctx st
      assume <- io $ scAndList sc (toListOf (folded . Crucible.labeledPred) assumes)
      let nm = mspec ^. csMethodName
      stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
@@ -418,41 +414,38 @@ setupPrePointsTos ::
 setupPrePointsTos mspec cc env pts mem0 = foldM doPointsTo mem0 pts
   where
     sym = cc^.jccBackend
+    jc = cc ^. jccJVMContext
     tyenv = MS.csAllocations mspec
     nameEnv = mspec ^. MS.csPreState . MS.csVarTypeNames
 
-    resolveJVMRefVal :: AllocIndex -> IO JVMRefVal
-    resolveJVMRefVal lhs =
-      do let msg = Crucible.GenericSimError "Non-reference value found in points-to assertion"
-         lhs' <- resolveSetupVal cc env tyenv nameEnv (MS.SetupVar lhs)
-         case lhs' of
-           RVal ref -> return ref
-           _ -> liftIO $ Crucible.addFailedAssertion sym msg
+    injectSetupVal :: SetupValue -> IO (Crucible.RegValue Sym CJ.JVMValueType)
+    injectSetupVal rhs =
+      injectJVMVal sym <$> resolveSetupVal cc env tyenv nameEnv rhs
 
     doPointsTo :: Crucible.SymGlobalState Sym -> JVMPointsTo -> IO (Crucible.SymGlobalState Sym)
     doPointsTo mem pt =
       case pt of
         JVMPointsToField _loc lhs fid rhs ->
-          do lhs' <- resolveJVMRefVal lhs
-             rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
-             -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
-             -- Then we won't have to match the definition of 'fieldIdText' here.
-             let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
-             CJ.doFieldStore sym mem lhs' key (injectJVMVal sym rhs')
+          do let lhs' = lookupAllocIndex env lhs
+             rhs' <- injectSetupVal rhs
+             CJ.doFieldStore sym mem lhs' fid rhs'
+        JVMPointsToStatic _loc fid rhs ->
+          do rhs' <- injectSetupVal rhs
+             CJ.doStaticFieldStore sym jc mem fid rhs'
         JVMPointsToElem _loc lhs idx rhs ->
-          do lhs' <- resolveJVMRefVal lhs
-             rhs' <- resolveSetupVal cc env tyenv nameEnv rhs
-             CJ.doArrayStore sym mem lhs' idx (injectJVMVal sym rhs')
+          do let lhs' = lookupAllocIndex env lhs
+             rhs' <- injectSetupVal rhs
+             CJ.doArrayStore sym mem lhs' idx rhs'
         JVMPointsToArray _loc lhs rhs ->
-          do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
-             lhs' <- resolveJVMRefVal lhs
+          do sc <- saw_ctx <$> sawCoreState sym
+             let lhs' = lookupAllocIndex env lhs
              (_ety, tts) <-
                destVecTypedTerm sc rhs >>=
                \case
                  Nothing -> fail "setupPrePointsTos: not a monomorphic sequence type"
                  Just x -> pure x
-             rhs' <- traverse (resolveSetupVal cc env tyenv nameEnv . MS.SetupTerm) tts
-             doEntireArrayStore sym mem lhs' (map (injectJVMVal sym) rhs')
+             rhs' <- traverse (injectSetupVal . MS.SetupTerm) tts
+             doEntireArrayStore sym mem lhs' rhs'
 
 -- | Collects boolean terms that should be assumed to be true.
 setupPrestateConditions ::
@@ -490,7 +483,9 @@ assertEqualVals ::
   JVMVal ->
   IO Term
 assertEqualVals cc v1 v2 =
-  Crucible.toSC (cc^.jccBackend) =<< equalValsPred cc v1 v2
+  do let sym = cc^.jccBackend
+     st <- sawCoreState sym
+     toSC sym st =<< equalValsPred cc v1 v2
 
 --------------------------------------------------------------------------------
 
@@ -521,16 +516,17 @@ getMethodHandle jc (JVMMethodId mkey cname) =
 registerOverride ::
   Options ->
   JVMCrucibleContext ->
-  Crucible.SimContext (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM ->
+  Crucible.SimContext (SAWCruciblePersonality Sym) Sym CJ.JVM ->
   W4.ProgramLoc ->
   [CrucibleMethodSpecIR] ->
-  Crucible.OverrideSim (Crucible.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret ()
 registerOverride opts cc _ctx top_loc cs =
   do let sym = cc^.jccBackend
      let jc = cc^.jccJVMContext
      let c0 = head cs
      let method = c0 ^. MS.csMethod
-     sc <- Crucible.saw_ctx <$> liftIO (readIORef (W4.sbStateManager sym))
+
+     sc <- saw_ctx <$> liftIO (sawCoreState sym)
 
      mhandle <- liftIO $ getMethodHandle jc method
      case mhandle of
@@ -581,7 +577,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
      regmap <- prepareArgs (Crucible.handleArgTypes h) (map snd args)
      res <-
        do let feats = pfs
-          let simctx = CJ.jvmSimContext sym halloc stdout jc verbosity Crucible.SAWCruciblePersonality
+          let simctx = CJ.jvmSimContext sym halloc stdout jc verbosity SAWCruciblePersonality
           let simSt = Crucible.InitialState simctx globals Crucible.defaultAbortHandler (Crucible.handleReturnType h)
           let fnCall = Crucible.regValue <$> Crucible.callFnVal (Crucible.HandleFnVal h) regmap
           let overrideSim =
@@ -619,7 +615,7 @@ verifySimulate opts cc pfs mspec args assumes top_loc lemmas globals _checkSat =
             return (retval', globals1)
 
        Crucible.AbortedResult _ ar ->
-         do let resultDoc = ppAbortedResult cc ar
+         do let resultDoc = ppJVMAbortedResult cc ar
             fail $ unlines [ "Symbolic execution failed."
                            , show resultDoc
                            ]
@@ -696,11 +692,12 @@ verifyPoststate cc mspec env0 globals ret =
   where
     sym = cc^.jccBackend
 
-    verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError _loc err))) = do
-      hypTerm    <- scAndList sc =<< mapM (Crucible.toSC sym) (toListOf (folded . Crucible.labeledPred) hyps)
-      conclTerm  <- Crucible.toSC sym concl
-      obligation <- scImplies sc hypTerm conclTerm
-      return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
+    verifyObligation sc (Crucible.ProofGoal hyps (Crucible.LabeledPred concl (Crucible.SimError _loc err))) =
+      do st         <- sawCoreState sym
+         hypTerm    <- scAndList sc =<< mapM (toSC sym st) (toListOf (folded . Crucible.labeledPred) hyps)
+         conclTerm  <- toSC sym st concl
+         obligation <- scImplies sc hypTerm conclTerm
+         return ("safety assertion: " ++ Crucible.simErrorReasonMsg err, obligation)
 
     matchResult opts sc =
       case (ret, mspec ^. MS.csRetValue) of
@@ -716,8 +713,7 @@ setupCrucibleContext jclass =
      jc <- getJVMTrans
      cb <- getJavaCodebase
      sc <- getSharedContext
-     let gen = globalNonceGenerator
-     sym <- io $ Crucible.newSAWCoreBackend W4.FloatRealRepr sc gen
+     sym <- io $ newSAWCoreBackend sc
      opts <- getOptions
      io $ CJ.setSimulatorVerbosity (simVerbose opts) sym
 
@@ -758,7 +754,11 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
     setupClass cls =
       do let cname = J.className cls
          name <- W4.stringLit sym (W4S.UnicodeLiteral $ CJ.classNameText (J.className cls))
-         status <- W4.bvLit sym knownRepr (BV.zero knownRepr)
+         -- Set every class to status 2 (initialized). In the absence
+         -- of JVMSetup commands for specifying initialization status,
+         -- this will allow verifications to proceed without the
+         -- interference of any static initializers.
+         status <- W4.bvLit sym knownRepr (BV.mkBV knownRepr 2)
          super <-
            case J.superClass cls of
              Nothing -> return W4.Unassigned
@@ -795,23 +795,28 @@ setupDynamicClassTable sym jc = foldM addClass Map.empty (Map.assocs (CJ.classTa
 data JVMSetupError
   = JVMFreshVarInvalidType JavaType
   | JVMFieldNonReference SetupValue String
-  | JVMFieldMultiple SetupValue String -- reference and field name
+  | JVMFieldMultiple AllocIndex J.FieldId
   | JVMFieldFailure String -- TODO: switch to a more structured type
-  | JVMFieldTypeMismatch String J.Type J.Type -- field name, expected, found
+  | JVMFieldTypeMismatch J.FieldId J.Type
+  | JVMStaticMultiple J.FieldId
+  | JVMStaticFailure String -- TODO: switch to a more structured type
+  | JVMStaticTypeMismatch J.FieldId J.Type
   | JVMElemNonReference SetupValue Int
   | JVMElemNonArray J.Type
   | JVMElemInvalidIndex J.Type Int Int -- element type, length, index
   | JVMElemTypeMismatch Int J.Type J.Type -- index, expected, found
-  | JVMElemMultiple SetupValue Int -- reference and array index
+  | JVMElemMultiple AllocIndex Int -- reference and array index
   | JVMArrayNonReference SetupValue
   | JVMArrayTypeMismatch Int J.Type Cryptol.Schema
-  | JVMArrayMultiple SetupValue
+  | JVMArrayMultiple AllocIndex
   | JVMArgTypeMismatch Int J.Type J.Type -- argument position, expected, found
   | JVMArgNumberWrong Int Int -- number expected, number found
   | JVMReturnUnexpected J.Type -- found
   | JVMReturnTypeMismatch J.Type J.Type -- expected, found
 
-instance X.Exception JVMSetupError
+instance X.Exception JVMSetupError where
+  toException = topLevelExceptionToException
+  fromException = topLevelExceptionFromException
 
 instance Show JVMSetupError where
   show err =
@@ -824,15 +829,26 @@ instance Show JVMSetupError where
         , "Left-hand side: " ++ show (MS.ppSetupValue ptr)
         , "Field name: " ++ fname
         ]
-      JVMFieldMultiple _ptr fname ->
-        "jvm_field_is: Multiple specifications for the same instance field (" ++ fname ++ ")"
+      JVMFieldMultiple _ptr fid ->
+        "jvm_field_is: Multiple specifications for the same instance field (" ++ J.fieldIdName fid ++ ")"
       JVMFieldFailure msg ->
         "jvm_field_is: JVM field resolution failed:\n" ++ msg
-      JVMFieldTypeMismatch fname expected found ->
+      JVMFieldTypeMismatch fid found ->
          -- FIXME: use a pretty printing function for J.Type instead of show
         unlines
-        [ "jvm_field_is: Incompatible types for field " ++ show fname
-        , "Expected type: " ++ show expected
+        [ "jvm_field_is: Incompatible types for field " ++ show (J.fieldIdName fid)
+        , "Expected type: " ++ show (J.fieldIdType fid)
+        , "Given type: " ++ show found
+        ]
+      JVMStaticMultiple fid ->
+        "jvm_static_field_is: Multiple specifications for the same static field (" ++ J.fieldIdName fid ++ ")"
+      JVMStaticFailure msg ->
+        "jvm_static_field_is: JVM field resolution failed:\n" ++ msg
+      JVMStaticTypeMismatch fid found ->
+         -- FIXME: use a pretty printing function for J.Type instead of show
+        unlines
+        [ "jvm_static_field_is: Incompatible types for field " ++ show (J.fieldIdName fid)
+        , "Expected type: " ++ show (J.fieldIdType fid)
         , "Given type: " ++ show found
         ]
       JVMElemNonReference ptr idx ->
@@ -979,21 +995,51 @@ jvm_field_is ptr fname val =
          MS.SetupVar ptr' -> pure ptr'
          _ -> X.throwM $ JVMFieldNonReference ptr fname
      st <- get
-     let rs = st ^. Setup.csResolvedState
      let cc = st ^. Setup.csCrucibleContext
      let cb = cc ^. jccCodebase
-     let path = Left fname
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
-       then X.throwM $ JVMFieldMultiple ptr fname
-       else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      ptrTy <- typeOfSetupValue cc env nameEnv ptr
      valTy <- typeOfSetupValue cc env nameEnv val
      fid <- either (X.throwM . JVMFieldFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
      unless (registerCompatible (J.fieldIdType fid) valTy) $
-       X.throwM $ JVMFieldTypeMismatch fname (J.fieldIdType fid) valTy
-     Setup.addPointsTo (JVMPointsToField loc ptr' fid val)
+       X.throwM $ JVMFieldTypeMismatch fid valTy
+     let pt = JVMPointsToField loc ptr' fid val
+     let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
+       X.throwM $ JVMFieldMultiple ptr' fid
+     Setup.addPointsTo pt
+
+jvm_static_field_is ::
+  String     {- ^ field name -} ->
+  SetupValue {- ^ field value -} ->
+  JVMSetupM ()
+jvm_static_field_is fname val =
+  JVMSetupM $
+  do pos <- lift getPosition
+     loc <- SS.toW4Loc "jvm_static_field_is" <$> lift getPosition
+     st <- get
+     let cc = st ^. Setup.csCrucibleContext
+     let cb = cc ^. jccCodebase
+     let env = MS.csAllocations (st ^. Setup.csMethodSpec)
+     let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
+     let cname =
+           case dropWhileEnd (/= '.') fname of
+             "" -> J.className (cc ^. jccJVMClass)
+             s -> J.mkClassName (init s)
+     -- liftIO $ putStrLn $ "jvm_static_field_is " ++ J.unClassName cname ++ " " ++ fname
+     let ptrTy = J.ClassType cname
+     valTy <- typeOfSetupValue cc env nameEnv val
+     fid <- either (X.throwM . JVMStaticFailure) pure =<< (liftIO $ runExceptT $ findField cb pos ptrTy fname)
+     unless (registerCompatible (J.fieldIdType fid) valTy) $
+       X.throwM $ JVMStaticTypeMismatch fid valTy
+     -- let name = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
+     -- liftIO $ putStrLn $ "resolved to: " ++ name
+     let pt = JVMPointsToStatic loc fid val
+     let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
+       X.throwM $ JVMStaticMultiple fid
+     Setup.addPointsTo pt
 
 jvm_elem_is ::
   SetupValue {- ^ array -} ->
@@ -1008,12 +1054,7 @@ jvm_elem_is ptr idx val =
          MS.SetupVar ptr' -> pure ptr'
          _ -> X.throwM $ JVMElemNonReference ptr idx
      st <- get
-     let rs = st ^. Setup.csResolvedState
      let cc = st ^. Setup.csCrucibleContext
-     let path = Right idx
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [path] rs
-       then X.throwM $ JVMElemMultiple ptr idx
-       else Setup.csResolvedState %= MS.markResolved ptr [path]
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      let nameEnv = MS.csTypeNames (st ^. Setup.csMethodSpec)
      (len, elTy) <-
@@ -1025,7 +1066,11 @@ jvm_elem_is ptr idx val =
        X.throwM $ JVMElemInvalidIndex elTy len idx
      unless (registerCompatible elTy valTy) $
        X.throwM $ JVMElemTypeMismatch idx elTy valTy
-     Setup.addPointsTo (JVMPointsToElem loc ptr' idx val)
+     let pt = JVMPointsToElem loc ptr' idx val
+     let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
+       X.throwM $ JVMElemMultiple ptr' idx
+     Setup.addPointsTo pt
 
 jvm_array_is ::
   SetupValue {- ^ array reference -} ->
@@ -1039,10 +1084,6 @@ jvm_array_is ptr val =
          MS.SetupVar ptr' -> pure ptr'
          _ -> X.throwM $ JVMArrayNonReference ptr
      st <- get
-     let rs = st ^. Setup.csResolvedState
-     if st ^. Setup.csPrePost == PreState && MS.testResolved ptr [] rs
-       then X.throwM $ JVMArrayMultiple ptr
-       else Setup.csResolvedState %= MS.markResolved ptr []
      let env = MS.csAllocations (st ^. Setup.csMethodSpec)
      (len, elTy) <-
        case snd (lookupAllocIndex env ptr') of
@@ -1058,7 +1099,11 @@ jvm_array_is ptr val =
      case checkVal of
        Nothing -> X.throwM (JVMArrayTypeMismatch len elTy schema)
        Just () -> pure ()
-     Setup.addPointsTo (JVMPointsToArray loc ptr' val)
+     let pt = JVMPointsToArray loc ptr' val
+     let pts = st ^. Setup.csMethodSpec . MS.csPreState . MS.csPointsTos
+     when (st ^. Setup.csPrePost == PreState && any (overlapPointsTo pt) pts) $
+       X.throwM $ JVMArrayMultiple ptr'
+     Setup.addPointsTo pt
 
 jvm_precond :: TypedTerm -> JVMSetupM ()
 jvm_precond term = JVMSetupM $ do

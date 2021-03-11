@@ -1,12 +1,12 @@
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p v;
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
     return p;
 };
 
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
-    p <- alloc_init ty (crucible_term x);
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
 

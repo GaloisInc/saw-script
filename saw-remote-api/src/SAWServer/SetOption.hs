@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
-module SAWServer.SetOption (setOption) where
+module SAWServer.SetOption
+  ( setOption
+  , setOptionDescr
+  ) where
 
 import Control.Applicative
 import Control.Lens (view, set)
@@ -9,15 +12,21 @@ import Data.Aeson.Types (Parser)
 
 import SAWScript.Value
 
-import Argo
+import qualified Argo
+import qualified Argo.Doc as Doc
 
-import SAWServer
-import SAWServer.OK
+import SAWServer ( SAWState, sawTopLevelRW )
+import SAWServer.OK ( OK, ok )
 
-setOption :: SetOptionParams -> Method SAWState OK
+
+setOptionDescr :: Doc.Block
+setOptionDescr =
+  Doc.Paragraph [Doc.Text "Set a SAW option in the server."]
+
+setOption :: SetOptionParams -> Argo.Command SAWState OK
 setOption opt =
-  do rw <- view sawTopLevelRW <$> getState
-     let updateRW = modifyState . set sawTopLevelRW
+  do rw <- view sawTopLevelRW <$> Argo.getState
+     let updateRW = Argo.modifyState . set sawTopLevelRW
      case opt of
        EnableLaxArithmetic enabled ->
          updateRW rw { rwLaxArith = enabled }
@@ -44,3 +53,13 @@ instance FromJSON SetOptionParams where
   parseJSON =
     withObject "parameters for setting options" $ \o -> o .: "option" >>= parseOption o
 
+
+instance Doc.DescribedParams SetOptionParams where
+  parameterFieldDescription =
+    [ ("option",
+       Doc.Paragraph [Doc.Text "The option to set and its accompanying value (i.e., true or false); one of the following:"
+                     , Doc.Literal "lax arithmetic", Doc.Text ", "
+                     , Doc.Literal "SMT array memory model", Doc.Text ", or "
+                     , Doc.Literal "What4 hash consing"
+                     ])
+    ]

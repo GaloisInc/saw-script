@@ -1,67 +1,67 @@
 m <- llvm_load_module "test.bc";
 
 let get_val_impl_spec = do {
-  p <- crucible_alloc (llvm_int 32);
-  x <- crucible_fresh_var "x" (llvm_int 32);
-  crucible_execute_func [p, crucible_term x];
-  crucible_conditional_points_to {{ x >$ 0 }} p (crucible_term x);
-  crucible_return (crucible_term {{ (if x >$ 0 then 0 else 1) : [32] }});
+  p <- llvm_alloc (llvm_int 32);
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_execute_func [p, llvm_term x];
+  llvm_conditional_points_to {{ x >$ 0 }} p (llvm_term x);
+  llvm_return (llvm_term {{ (if x >$ 0 then 0 else 1) : [32] }});
 };
 
 let get_val_impl_failure_spec = do {
-  p <- crucible_alloc (llvm_int 32);
-  x <- crucible_fresh_var "x" (llvm_int 32);
-  crucible_execute_func [p, crucible_term x];
+  p <- llvm_alloc (llvm_int 32);
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_execute_func [p, llvm_term x];
   // incorrect spec: {{ x > 0 }} instead of {{ x >$ 0 }}
-  crucible_conditional_points_to {{ x > 0 }} p (crucible_term x);
+  llvm_conditional_points_to {{ x > 0 }} p (llvm_term x);
 };
 
 let get_val_spec = do {
-  p <- crucible_alloc (llvm_int 32);
-  x <- crucible_fresh_var "x" (llvm_int 32);
-  crucible_execute_func [p, crucible_term x];
-  ret <- crucible_fresh_var "ret" (llvm_int 32);
-  y <- crucible_fresh_var "y" (llvm_int 32);
-  crucible_conditional_points_to {{ ret == 0 }} p (crucible_term y);
-  crucible_postcond {{ ret == 0 ==> y >$ 0 }};
-  crucible_return (crucible_term ret);
+  p <- llvm_alloc (llvm_int 32);
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_execute_func [p, llvm_term x];
+  ret <- llvm_fresh_var "ret" (llvm_int 32);
+  y <- llvm_fresh_var "y" (llvm_int 32);
+  llvm_conditional_points_to {{ ret == 0 }} p (llvm_term y);
+  llvm_postcond {{ ret == 0 ==> y >$ 0 }};
+  llvm_return (llvm_term ret);
 };
 
 let get_val_failure0_spec = do {
-  p <- crucible_alloc (llvm_int 32);
-  x <- crucible_fresh_var "x" (llvm_int 32);
-  crucible_execute_func [p, crucible_term x];
-  ret <- crucible_fresh_var "ret" (llvm_int 32);
-  y <- crucible_fresh_var "y" (llvm_int 32);
-  crucible_conditional_points_to {{ ret == 0 }} p (crucible_term y);
+  p <- llvm_alloc (llvm_int 32);
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_execute_func [p, llvm_term x];
+  ret <- llvm_fresh_var "ret" (llvm_int 32);
+  y <- llvm_fresh_var "y" (llvm_int 32);
+  llvm_conditional_points_to {{ ret == 0 }} p (llvm_term y);
   // incorrect spec: {{ y >$ 0 }} instead of {{ ret == 0 ==> y >$ 0 }}
-  crucible_postcond {{ y >$ 0 }};
-  crucible_return (crucible_term ret);
+  llvm_postcond {{ y >$ 0 }};
+  llvm_return (llvm_term ret);
 };
 
 let get_val_failure1_spec = do {
-  p <- crucible_alloc (llvm_int 32);
-  v <- crucible_fresh_var "v" (llvm_int 32);
-  crucible_points_to p (crucible_term v);
-  x <- crucible_fresh_var "x" (llvm_int 32);
-  crucible_execute_func [p, crucible_term x];
-  y <- crucible_fresh_var "y" (llvm_int 32);
+  p <- llvm_alloc (llvm_int 32);
+  v <- llvm_fresh_var "v" (llvm_int 32);
+  llvm_points_to p (llvm_term v);
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_execute_func [p, llvm_term x];
+  y <- llvm_fresh_var "y" (llvm_int 32);
   // incorrect spec: p is invalidated by get_val_impl_spec
-  crucible_points_to p (crucible_term y);
+  llvm_points_to p (llvm_term y);
 };
 
 let get_val_default_spec = do {
-  x <- crucible_fresh_var "x" (llvm_int 32);
-  crucible_execute_func [crucible_term x];
-  ret <- crucible_fresh_var "ret" (llvm_int 32);
-  crucible_postcond {{ ret >= 0 }};
-  crucible_return (crucible_term ret);
+  x <- llvm_fresh_var "x" (llvm_int 32);
+  llvm_execute_func [llvm_term x];
+  ret <- llvm_fresh_var "ret" (llvm_int 32);
+  llvm_postcond {{ ret >= 0 }};
+  llvm_return (llvm_term ret);
 };
 
-get_val_imp_ov <- crucible_llvm_verify m "get_val_impl" [] false get_val_impl_spec (w4_unint_yices []);
-fails (crucible_llvm_verify m "get_val_impl" [] false get_val_impl_failure_spec (w4_unint_yices []));
-get_val_ov <- crucible_llvm_verify m "get_val" [get_val_imp_ov] false get_val_spec (w4_unint_yices []);
-fails (crucible_llvm_verify m "get_val" [get_val_imp_ov] false get_val_failure0_spec (w4_unint_yices []));
-fails (crucible_llvm_verify m "get_val" [get_val_imp_ov] false get_val_failure1_spec (w4_unint_yices []));
-crucible_llvm_verify m "get_val_default" [get_val_ov] false get_val_default_spec (w4_unint_yices []);
+get_val_imp_ov <- llvm_verify m "get_val_impl" [] false get_val_impl_spec (w4_unint_yices []);
+fails (llvm_verify m "get_val_impl" [] false get_val_impl_failure_spec (w4_unint_yices []));
+get_val_ov <- llvm_verify m "get_val" [get_val_imp_ov] false get_val_spec (w4_unint_yices []);
+fails (llvm_verify m "get_val" [get_val_imp_ov] false get_val_failure0_spec (w4_unint_yices []));
+fails (llvm_verify m "get_val" [get_val_imp_ov] false get_val_failure1_spec (w4_unint_yices []));
+llvm_verify m "get_val_default" [get_val_ov] false get_val_default_spec (w4_unint_yices []);
 

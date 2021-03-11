@@ -1,0 +1,46 @@
+m <- llvm_load_module "test.bc";
+
+let f_spec = do {
+  xp <- llvm_alloc (llvm_int 64);
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_points_to xp (crucible_term x);
+  llvm_execute_func [xp];
+  llvm_points_to xp (crucible_term {{ 6*x }});
+};
+
+let g_spec = do {
+  xp <- llvm_alloc (llvm_int 64);
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_points_to xp (crucible_term x);
+  llvm_execute_func [xp];
+  llvm_points_to xp (crucible_term {{(2*x):[64]}});
+};
+
+let h_spec = do {
+  xp <- llvm_alloc (llvm_int 64);
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_points_to xp (crucible_term {{x}});
+  llvm_precond {{ x > 1 }};
+  llvm_execute_func [xp];
+  llvm_points_to xp (crucible_term {{(3*x):[64]}});
+};
+
+g_ov <- llvm_verify m "g" [] false g_spec z3;
+h_ov <- llvm_verify m "h" [] false h_spec z3;
+
+enable_experimental;
+
+// we get two verification conditions: on for the precondition of h, and one for the postcondition of f
+// the override precondition of h is violated, but if we assume it's unsat then verification succeeds:
+llvm_verify m "f" [g_ov, h_ov] false f_spec
+  (goal_num_ite 0
+    assume_unsat
+    w4);
+
+// on the other hand, if we provide the wrong goal number, then it fails.
+fails (
+  llvm_verify m "f" [g_ov, h_ov] false f_spec
+    (goal_num_ite 1
+      assume_unsat
+      w4)
+);

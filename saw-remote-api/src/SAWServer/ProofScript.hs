@@ -4,21 +4,37 @@ module SAWServer.ProofScript
   ( ProofScript(..)
   , interpretProofScript
   , makeSimpset
+  , makeSimpsetDescr
   , prove
+  , proveDescr
   ) where
 
-import Control.Applicative
+import Control.Applicative ( Alternative(empty) )
 import Control.Monad (foldM)
 import Data.Aeson
+    ( (.:),
+      withObject,
+      object,
+      FromJSON(parseJSON),
+      KeyValue((.=)),
+      ToJSON(toJSON) )
 import Data.Text (Text)
 
-import Argo
+import qualified Argo
+import qualified Argo.Doc as Doc
 import qualified SAWScript.Builtins as SB
 import qualified SAWScript.Value as SV
 import SAWServer
-import SAWServer.Exceptions
-import SAWServer.OK
-import SAWServer.TopLevel
+    ( ServerVal(VTerm, VSimpset),
+      ServerName,
+      SAWState,
+      setServerVal,
+      getServerVal,
+      getSimpset,
+      getTerm )
+import SAWServer.Exceptions ( notASimpset )
+import SAWServer.OK ( OK, ok )
+import SAWServer.TopLevel ( tl )
 import Verifier.SAW.Rewriter (addSimp, emptySimpset)
 import Verifier.SAW.TermNet (merge)
 import Verifier.SAW.TypedTerm (TypedTerm(..))
@@ -83,14 +99,27 @@ instance FromJSON MakeSimpsetParams where
     MakeSimpsetParams <$> o .: "elements"
                       <*> o .: "result"
 
-makeSimpset :: MakeSimpsetParams -> Method SAWState OK
+instance Doc.DescribedParams MakeSimpsetParams where
+  parameterFieldDescription =
+    [ ("elements",
+       Doc.Paragraph [Doc.Text "The items to include in the simpset."])
+    , ("result",
+       Doc.Paragraph [Doc.Text "The name to assign to this simpset."])
+    ]
+
+
+makeSimpsetDescr :: Doc.Block
+makeSimpsetDescr =
+  Doc.Paragraph [Doc.Text "Create a simplification rule set from the given rules."]
+
+makeSimpset :: MakeSimpsetParams -> Argo.Command SAWState OK
 makeSimpset params = do
   let add ss n = do
         v <- getServerVal n
         case v of
           VSimpset ss' -> return (merge ss ss')
           VTerm t -> return (addSimp (ttTerm t) ss)
-          _ -> raise (notASimpset n)
+          _ -> Argo.raise (notASimpset n)
   ss <- foldM add emptySimpset (ssElements params)
   setServerVal (ssResult params) ss
   ok
@@ -107,6 +136,14 @@ instance FromJSON ProveParams where
     ProveParams <$> o .: "script"
                 <*> o .: "term"
 
+instance Doc.DescribedParams ProveParams where
+  parameterFieldDescription =
+    [ ("script",
+       Doc.Paragraph [Doc.Text "Script to use to prove the term."])
+    , ("term",
+       Doc.Paragraph [Doc.Text "The term to interpret as a theorm and prove."])
+    ]
+
 --data CexValue = CexValue String TypedTerm
 
 data ProveResult
@@ -121,7 +158,13 @@ instance ToJSON ProveResult where
   toJSON ProofInvalid {-cex-} =
     object [ "status" .= ("invalid" :: Text) ] -- , "counterexample" .= cex]
 
-prove :: ProveParams -> Method SAWState ProveResult
+
+proveDescr :: Doc.Block
+proveDescr =
+  Doc.Paragraph [ Doc.Text "Attempt to prove the given term representing a"
+                , Doc.Text " theorem, given a proof script context."]
+
+prove :: ProveParams -> Argo.Command SAWState ProveResult
 prove params = do
   t <- getTerm (ppTermName params)
   proofScript <- interpretProofScript (ppScript params)
@@ -130,7 +173,7 @@ prove params = do
     SV.Valid _ -> return ProofValid
     SV.InvalidMulti _  _ -> return ProofInvalid
 
-interpretProofScript :: ProofScript -> Method SAWState (SV.ProofScript SV.SatResult)
+interpretProofScript :: ProofScript -> Argo.Command SAWState (SV.ProofScript SV.SatResult)
 interpretProofScript (ProofScript ts) = go ts
   where go [UseProver ABC]            = return $ SB.proveABC
         go [UseProver (CVC4 unints)]  = return $ SB.proveUnintCVC4 unints

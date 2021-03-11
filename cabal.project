@@ -14,7 +14,6 @@ packages:
     deps/saw-core/saw-core-sbv
     deps/saw-core/saw-core-what4
     deps/saw-core/saw-core-coq
-    deps/jvm-verifier
     deps/what4/what4
     deps/crucible/crucible
     deps/crucible/crucible-jvm
@@ -33,12 +32,5 @@ packages:
     deps/heapster-saw
     deps/argo/argo
     deps/argo/tasty-script-exitcode
-    deps/argo/python
     deps/cryptol/cryptol-remote-api
-
-allow-newer: uuid:random
-
-source-repository-package
-    type: git
-    location: https://github.com/harpocrates/language-rust.git
-    tag: 9d509c450d009cc99f1180b3f2f30247dfb1cfce
+    deps/language-rust

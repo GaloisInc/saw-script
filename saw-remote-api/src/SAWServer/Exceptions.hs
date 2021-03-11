@@ -23,11 +23,11 @@ module SAWServer.Exceptions (
   , verificationException
   ) where
 
-import Control.Exception
-import Data.Aeson as JSON
+import Control.Exception ( Exception(displayException) )
+import Data.Aeson as JSON ( object, KeyValue((.=)), ToJSON )
 import qualified Data.Text as T
 
-import Argo
+import Argo ( makeJSONRPCException, JSONRPCException )
 
 --------------------------------------------------------------------------------
 -- NOTE: IF YOU MODIFY EXCEPTION CODES OR ADD NEW ONES, THESE CHANGES MUST BE

@@ -16,12 +16,13 @@ import Data.List hiding (sort)
 import Data.Maybe
 import Data.Ord
 
-import Cryptol.Eval (EvalOpts(..), defaultPPOpts)
+import Cryptol.Eval (EvalOpts(..))
 import qualified Cryptol.ModuleSystem as M
 import Cryptol.ModuleSystem.Name
 import Cryptol.Utils.Ident (unpackIdent)
 import Cryptol.Utils.Logger (quietLogger)
 import qualified Cryptol.TypeCheck.AST as AST
+import qualified Cryptol.TypeCheck.Solver.SMT as SMT
 import Cryptol.Utils.PP
 
 -- | Parse a Cryptol module into a list of declarations
@@ -30,7 +31,10 @@ getDeclsCryptol :: FilePath -> IO (Interaction (Maybe [Decl]))
 getDeclsCryptol path = do
    let evalOpts = EvalOpts quietLogger defaultPPOpts
    modEnv <- M.initialModuleEnv
-   (result, warnings) <- M.loadModuleByPath path (evalOpts, BS.readFile, modEnv)
+   let minp = M.ModuleInput True (pure evalOpts) BS.readFile modEnv
+   (result, warnings) <-
+     SMT.withSolver (M.meSolverConfig modEnv) $ \s ->
+     M.loadModuleByPath path (minp s)
    return $ do
       forM_ warnings $ liftF . flip Warning () . pretty
       case result of

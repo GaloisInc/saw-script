@@ -2,73 +2,73 @@ import "test.cry";
 m <- llvm_load_module "tmp/test.bc";
 
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p v;
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
     return p;
 };
 
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
-    p <- alloc_init ty (crucible_term x);
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
 
 // Verify 'init'.
 
 let init_spec = do {
-  (s, sp) <- ptr_to_fresh "st" (llvm_struct "struct.state");
+  (s, sp) <- ptr_to_fresh "st" (llvm_alias "struct.state");
 
-  crucible_execute_func [sp];
+  llvm_execute_func [sp];
 
-  let res = crucible_struct [ crucible_term {{ init.sum }}
-                            , crucible_term {{ init.len }}
-                            ];
-  crucible_points_to sp res;
+  let res = llvm_struct_value [ llvm_term {{ init.sum }}
+                              , llvm_term {{ init.len }}
+                              ];
+  llvm_points_to sp res;
 };
-print "Verifying 'init' using 'crucible_llvm_verify':";
-init_ov <- crucible_llvm_verify m "init" [] true init_spec abc;
+print "Verifying 'init' using 'llvm_verify':";
+init_ov <- llvm_verify m "init" [] true init_spec abc;
 print "";
 
 // Verify 'update'.
 
 let update_spec xs_len = do {
-  (st0, stp) <- ptr_to_fresh "st" (llvm_struct "struct.state");
+  (st0, stp) <- ptr_to_fresh "st" (llvm_alias "struct.state");
   (xs0, xsp) <- ptr_to_fresh "xs" (llvm_array xs_len (llvm_int 32));
 
-  crucible_execute_func [stp, xsp, crucible_term {{ `xs_len : [32] }}];
+  llvm_execute_func [stp, xsp, llvm_term {{ `xs_len : [32] }}];
 
   let st1 = {{ updatef {sum = st0.0, len = st0.1} xs0 }};
 
-  
-  let res = crucible_struct [ crucible_term {{ st1.sum }}
-                            , crucible_term {{ st1.len }}
-                            ];
-  crucible_points_to stp res;
+
+  let res = llvm_struct_value [ llvm_term {{ st1.sum }}
+                              , llvm_term {{ st1.len }}
+                              ];
+  llvm_points_to stp res;
   // Also prove that the content of xs is unchanged.
-  crucible_points_to xsp (crucible_term xs0);
+  llvm_points_to xsp (llvm_term xs0);
 };
-print "Verifying 'update' using 'crucible_llvm_verify':";
-update_ov <- crucible_llvm_verify m "update" [] true (update_spec 3) abc;
+print "Verifying 'update' using 'llvm_verify':";
+update_ov <- llvm_verify m "update" [] true (update_spec 3) abc;
 print "";
 
 // Verify 'digest'.
 
 let digest_spec = do {
-  (st0, stp) <- ptr_to_fresh "st" (llvm_struct "struct.state");
-  avgp <- crucible_alloc (llvm_int 32);
+  (st0, stp) <- ptr_to_fresh "st" (llvm_alias "struct.state");
+  avgp <- llvm_alloc (llvm_int 32);
 
   // Avoid division by zero
-  crucible_precond {{ st0.1 != 0 }};
+  llvm_precond {{ st0.1 != 0 }};
 
-  crucible_execute_func [stp, avgp];
+  llvm_execute_func [stp, avgp];
 
-  crucible_points_to avgp (crucible_term {{ digest {sum = st0.0, len = st0.1} }});
+  llvm_points_to avgp (llvm_term {{ digest {sum = st0.0, len = st0.1} }});
   // Also prove that the content of 'st' is unchanged.
-  crucible_points_to stp (crucible_term st0);
+  llvm_points_to stp (llvm_term st0);
 
 };
-print "Verifying 'digest' using 'crucible_llvm_verify':";
-digest_ov <- crucible_llvm_verify m "digest" [] true digest_spec abc;
+print "Verifying 'digest' using 'llvm_verify':";
+digest_ov <- llvm_verify m "digest" [] true digest_spec abc;
 print "";
 
 // Verify imperative spec against pure spec.

@@ -9,6 +9,7 @@ Stability   : provisional
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
 module SAWScript.Crucible.JVM.ResolveSetupValue
@@ -29,7 +30,6 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
 
 import           Control.Lens
 import qualified Control.Monad.Catch as X
-import           Data.IORef
 import qualified Data.BitVector.Sized as BV
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -41,16 +41,16 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.Expr.Builder as W4
 import qualified What4.ProgramLoc as W4
-
-import qualified Lang.Crucible.Backend.SAWCore as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
+import Verifier.SAW.Simulator.What4.ReturnTrip
+
 -- crucible
+
 import qualified Lang.Crucible.Simulator as Crucible (RegValue)
 
 -- what4
@@ -66,16 +66,14 @@ import qualified Data.SBV.Dynamic as SBV (svAsInteger, svAsBool)
 -- jvm-parser
 import qualified Language.JVM.Parser as J
 
-import SAWScript.Crucible.Common (Sym)
+import SAWScript.Crucible.Common
 import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
---import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Panic
 import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.JVM.MethodSpecIR
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 
---import qualified SAWScript.LLVMBuiltins as LB
 
 data JVMVal
   = RVal (Crucible.RegValue Sym CJ.JVMRefType)
@@ -161,9 +159,8 @@ resolveSetupVal ::
   IO JVMVal
 resolveSetupVal cc env _tyenv _nameEnv val =
   case val of
-    MS.SetupVar i
-      | Just v <- Map.lookup i env -> return (RVal v)
-      | otherwise -> panic "JVMSetup" ["resolveSetupVal", "Unresolved prestate variable:" ++ show i]
+    MS.SetupVar i ->
+      pure (RVal (lookupAllocIndex env i))
     MS.SetupTerm tm -> resolveTypedTerm cc tm
     MS.SetupNull () ->
       return (RVal (W4.maybePartExpr sym Nothing))
@@ -191,7 +188,9 @@ resolveSAWPred ::
   Term ->
   IO (W4.Pred Sym)
 resolveSAWPred cc tm =
-  Crucible.bindSAWTerm (cc^.jccBackend) W4.BaseBoolRepr tm
+  do let sym = cc^.jccBackend
+     st <- sawCoreState sym
+     bindSAWTerm sym st W4.BaseBoolRepr tm
 
 resolveSAWTerm ::
   JVMCrucibleContext ->
@@ -218,8 +217,10 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unimplemented type Rational (FIXME)"
     Cryptol.TVSeq sz Cryptol.TVBit ->
       case sz of
-        8  -> fail "resolveSAWTerm: unimplemented type char (FIXME)"
-        16 -> fail "resolveSAWTerm: unimplemented type short (FIXME)"
+        8  -> do x <- resolveBitvectorTerm sym (W4.knownNat @8) tm
+                 IVal <$> W4.bvSext sym W4.knownNat x
+        16 -> do x <- resolveBitvectorTerm sym (W4.knownNat @16) tm
+                 IVal <$> W4.bvSext sym W4.knownNat x
         32 -> IVal <$> resolveBitvectorTerm sym W4.knownNat tm
         64 -> LVal <$> resolveBitvectorTerm sym W4.knownNat tm
         _  -> fail ("Invalid bitvector width: " ++ show sz)
@@ -235,6 +236,8 @@ resolveSAWTerm cc tp tm =
       fail "resolveSAWTerm: unsupported function type"
     Cryptol.TVAbstract _ _ ->
       fail "resolveSAWTerm: unsupported abstract type"
+    Cryptol.TVNewtype{} ->
+      fail "resolveSAWTerm: unsupported newtype"
   where
     sym = cc^.jccBackend
 
@@ -247,7 +250,8 @@ resolveBitvectorTerm ::
   Term ->
   IO (W4.SymBV Sym w)
 resolveBitvectorTerm sym w tm =
-  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+  do st <- sawCoreState sym
+     let sc = saw_ctx st
      --ss <- basic_ss sc
      --tm' <- rewriteSharedTerm sc ss tm
      let tm' = tm
@@ -259,12 +263,13 @@ resolveBitvectorTerm sym w tm =
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm'
 
 -- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
 resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
 resolveBoolTerm sym tm =
-  do sc <- Crucible.saw_ctx <$> readIORef (W4.sbStateManager sym)
+  do st <- sawCoreState sym
+     let sc = saw_ctx st
      ss <- basic_ss sc
      tm' <- rewriteSharedTerm sc ss tm
      mx <- case getAllExts tm' of
@@ -275,7 +280,7 @@ resolveBoolTerm sym tm =
              _ -> return Nothing
      case mx of
        Just x  -> return (W4.backendPred sym x)
-       Nothing -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
+       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm'
 
 toJVMType :: Cryptol.TValue -> Maybe J.Type
 toJVMType tp =
@@ -288,7 +293,7 @@ toJVMType tp =
     Cryptol.TVRational -> Nothing
     Cryptol.TVSeq n Cryptol.TVBit ->
       case n of
-        8  -> Just J.CharType
+        8  -> Just J.ByteType
         16 -> Just J.ShortType
         32 -> Just J.IntType
         64 -> Just J.LongType
@@ -301,6 +306,7 @@ toJVMType tp =
     Cryptol.TVRec _flds -> Nothing
     Cryptol.TVFun _ _ -> Nothing
     Cryptol.TVAbstract _ _ -> Nothing
+    Cryptol.TVNewtype{} -> Nothing
 
 equalValsPred ::
   JVMCrucibleContext ->

@@ -1,8 +1,8 @@
 set_base 16;
 m <- llvm_load_module "ffs.bc";
 print "Extracting functional models...";
-ref <- crucible_llvm_extract m "ffs_ref";
-bug <- crucible_llvm_extract m "ffs_bug";
+ref <- llvm_extract m "ffs_ref";
+bug <- llvm_extract m "ffs_bug";
 print "Checking for bug via random testing...";
 r <- time (prove (quickcheck 1000) {{ ref === bug }});
 print r;

@@ -38,7 +38,7 @@ import System.Exit
 import Text.Printf
 import Numeric(showFFloat)
 
-import qualified Verifier.Java.Codebase as JSS
+import qualified Lang.JVM.Codebase as JSS
 
 import SAWScript.Options
 import SAWScript.Position
@@ -115,7 +115,11 @@ lookupClass cb site nm = do
   case maybeCl of
     Nothing -> do
      let msg = ftext ("The Java class " ++ JSS.slashesToDots (JSS.unClassName nm) ++ " could not be found.")
-         res = "Please check that the --classpath and --jars options are set correctly."
+         res = unwords [ "Please check that the path to Java is set correctly"
+                       , "(either through the --java-bin-dirs option or your PATH)"
+                       , "and you are using Java 8 or earlier"
+                       , "(SAW does not support 9+ currently)."
+                       ]
       in throwIOExecException site msg res
     Just cl -> return cl
 
@@ -126,7 +130,7 @@ findMethod cb site nm initClass = impl [] initClass
   where javaClassName = JSS.slashesToDots (JSS.unClassName (JSS.className initClass))
         methodType m = (JSS.methodParameterTypes m, JSS.methodReturnType m)
         baseName m = JSS.methodName m
-        typedName m = JSS.methodName m ++ unparseMethodDescriptor (methodType m)
+        typedName m = JSS.methodName m ++ ":" ++ unparseMethodDescriptor (methodType m)
         methodMatches m = nm `elem` [baseName m, typedName m]
         impl names cl =
           let candidates = filter (not . JSS.methodIsAbstract) (JSS.classMethods cl) in

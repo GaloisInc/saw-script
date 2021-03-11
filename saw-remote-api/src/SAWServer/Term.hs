@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer.Term (JSONModuleName(..)) where
 
-import Control.Applicative
-import Data.Aeson (FromJSON(..), ToJSON(..))
+import Control.Applicative ( Alternative((<|>)) )
 import Data.Aeson as JSON
+    ( withArray, withText, FromJSON(parseJSON), ToJSON(toJSON) )
 import qualified Data.Text as T
 import qualified Data.Vector as V
 
-import Verifier.SAW.Term.Functor
+import Verifier.SAW.Term.Functor ( mkModuleName, ModuleName )
 
 newtype JSONModuleName = JSONModuleName ModuleName
 

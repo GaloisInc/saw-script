@@ -14,7 +14,7 @@ import Prettyprinter
 
 import Language.JVM.Common
 
-import Verifier.Java.Codebase
+import Lang.JVM.Codebase
 
 prettyClass :: Class -> Doc ann
 prettyClass cls = vcat $
@@ -53,7 +53,7 @@ prettyField :: Field -> Doc ann
 prettyField f = hsep $
   [ viaShow (fieldVisibility f) ] ++
   attrs ++
-  [ viaShow (ppType (fieldType f)) -- TODO: Ick. Different PPs.
+  [ ppType (fieldType f)
   , pretty (fieldName f)
   ]
   where attrs = concat
@@ -67,12 +67,11 @@ prettyMethod :: Method -> Doc ann
 prettyMethod m =
   hsep $
   (if methodIsStatic m then ["static"] else []) ++
-  [ maybe "void" prettyType ret
+  [ maybe "void" ppType ret
   , pretty name
-  , (parens . commas . map prettyType) params
+  , (parens . commas . map ppType) params
   ]
   where (MethodKey name params ret) = methodKey m
-        prettyType = viaShow . ppType -- TODO: Ick.
 
 commas :: [Doc ann] -> Doc ann
 commas = sep . punctuate comma

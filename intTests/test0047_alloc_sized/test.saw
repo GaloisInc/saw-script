@@ -1,12 +1,12 @@
 // Ultimately, this spec is unsound when used as an override due to issue #30,
-// but it demonstrates the crucible_alloc_with_size feature.
+// but it demonstrates the llvm_alloc_with_size feature.
 m <- llvm_load_module "test.bc";
 enable_experimental;
 let set_spec = do {
   // sizeof(A_t) + sizeof(B_t) = 8
-  both_ptr <- crucible_alloc_with_size 8 (llvm_type "%struct.A");
-  crucible_points_to (crucible_field both_ptr "x") (crucible_term {{ 0 : [32] }});
-  crucible_execute_func [both_ptr];
-  crucible_points_to (crucible_field both_ptr "x") (crucible_term {{ 10 : [32] }});
+  both_ptr <- llvm_alloc_with_size 8 (llvm_type "%struct.A");
+  llvm_points_to (llvm_field both_ptr "x") (llvm_term {{ 0 : [32] }});
+  llvm_execute_func [both_ptr];
+  llvm_points_to (llvm_field both_ptr "x") (llvm_term {{ 10 : [32] }});
 };
-crucible_llvm_verify m "set" [] false set_spec z3;
+llvm_verify m "set" [] false set_spec z3;

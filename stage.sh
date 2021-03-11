@@ -42,9 +42,7 @@ mkdir -p ${TARGET}/lib
 
 echo Staging ...
 
-# Workaround bug which prevents using `stack path --local-install-root`:
-# https://github.com/commercialhaskell/stack/issues/604.
-BIN=$(stack path | sed -ne 's/local-install-root: //p')/bin
+BIN=`pwd`/bin
 
 if [ "${OS}" != "Windows_NT" ]; then
   strip "$BIN"/*
@@ -59,7 +57,7 @@ cp doc/extcore.md                             ${TARGET}/doc
 cp doc/tutorial/sawScriptTutorial.pdf         ${TARGET}/doc/tutorial.pdf
 cp doc/manual/manual.pdf                      ${TARGET}/doc/manual.pdf
 cp -r doc/tutorial/code                       ${TARGET}/doc
-cp deps/jvm-verifier/support/galois.jar       ${TARGET}/lib
+cp intTests/jars/galois.jar                   ${TARGET}/lib
 cp -r deps/cryptol/lib/*                      ${TARGET}/lib
 cp -r examples/*                              ${TARGET}/examples
 

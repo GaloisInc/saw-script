@@ -1,11 +1,16 @@
-enable_deprecated;
-let alloc_spec = do {
-    java_var "dst" (java_array 10 java_int);
-    src <- java_var "src" (java_array 10 java_int);
-    java_allow_alloc;
-    java_ensure_eq "dst" src;
-    java_verify_tactic abc;
-};
+enable_experimental;
 
 c <- java_load_class "Alloc";
-java_verify c "alloc" [] alloc_spec;
+
+jvm_verify c "alloc" [] false
+  do {
+    this <- jvm_alloc_object "Alloc";
+    dst_ref <- jvm_alloc_array 10 java_int;
+    src_ref <- jvm_alloc_array 10 java_int;
+    src <- jvm_fresh_var "src" (java_array 10 java_int);
+    jvm_array_is src_ref src;
+    jvm_execute_func [this, dst_ref, src_ref];
+    jvm_array_is src_ref src;
+    jvm_array_is dst_ref src;
+  }
+  abc;

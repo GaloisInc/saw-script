@@ -79,9 +79,6 @@ import qualified Lang.Crucible.CFG.Core as Crucible ( TypeRepr(UnitRepr) )
 import qualified Lang.Crucible.FunctionHandle as Crucible
 import qualified Lang.Crucible.Simulator as Crucible
 
--- crucible-saw
-import qualified Lang.Crucible.Backend.SAWCore as CrucibleSAW
-
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
 
@@ -96,15 +93,16 @@ import           Verifier.SAW.Prelude (scEq)
 import           Verifier.SAW.TypedAST
 import           Verifier.SAW.TypedTerm
 
+import           Verifier.SAW.Simulator.What4.ReturnTrip (toSC)
+
 -- cryptol-saw-core
 import qualified Verifier.SAW.Cryptol as Cryptol
 
-import           SAWScript.Crucible.Common (Sym)
+import           SAWScript.Crucible.Common
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), PrePost(..))
 import           SAWScript.Crucible.Common.Override hiding (getSymInterface)
 import qualified SAWScript.Crucible.Common.Override as Ov (getSymInterface)
 
---import           SAWScript.JavaExpr (JavaType(..))
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import           SAWScript.Crucible.JVM.MethodSpecIR
 import           SAWScript.Crucible.JVM.ResolveSetupValue
@@ -142,7 +140,8 @@ mkStructuralMismatch ::
   J.Type     {- ^ the expected type -} ->
   OverrideMatcher CJ.JVM w (OverrideFailureReason CJ.JVM)
 mkStructuralMismatch opts cc sc spec jvmval setupval jty = do
-  (setupTy, setupJVal) <- resolveSetupValueJVM opts cc sc spec setupval
+  setupTy <- typeOfSetupValueJVM cc spec setupval
+  setupJVal <- resolveSetupValueJVM opts cc sc spec setupval
   pure $ StructuralMismatch
             (ppJVMVal jvmval)
             (ppJVMVal setupJVal)
@@ -181,7 +180,7 @@ methodSpecHandler ::
   W4.ProgramLoc            {- ^ Location of the call site for error reporting-} ->
   [CrucibleMethodSpecIR]   {- ^ specification for current function override  -} ->
   Crucible.FnHandle args ret {- ^ a handle for the function -} ->
-  Crucible.OverrideSim (CrucibleSAW.SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
+  Crucible.OverrideSim (SAWCruciblePersonality Sym) Sym CJ.JVM rtp args ret
      (Crucible.RegValue Sym ret)
 methodSpecHandler opts sc cc top_loc css h = do
   sym <- Crucible.getSymInterface
@@ -451,6 +450,7 @@ matchPointsTos opts sc cc spec prepost = go False []
     -- determine if a precondition is ready to be checked
     checkPointsTo :: JVMPointsTo -> OverrideMatcher CJ.JVM w Bool
     checkPointsTo (JVMPointsToField _loc p _ _) = checkAllocIndex p
+    checkPointsTo (JVMPointsToStatic _loc _ _) = pure True
     checkPointsTo (JVMPointsToElem _loc p _ _) = checkAllocIndex p
     checkPointsTo (JVMPointsToArray _loc p _) = checkAllocIndex p
 
@@ -478,7 +478,7 @@ computeReturnValue _opts _cc _sc spec ty Nothing =
     _ -> failure (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
 
 computeReturnValue opts cc sc spec ty (Just val) =
-  do (_memTy, val') <- resolveSetupValueJVM opts cc sc spec val
+  do val' <- resolveSetupValueJVM opts cc sc spec val
      let fail_ = failure (spec ^. MS.csLoc) (BadReturnSpecification (Some ty))
      case val' of
        IVal i ->
@@ -587,17 +587,27 @@ valueToSC ::
 valueToSC sym _ _ Cryptol.TVBit (IVal x) =
   do b <- liftIO $ W4.bvIsNonzero sym x
       -- TODO: assert that x is 0 or 1
-     liftIO (CrucibleSAW.toSC sym b)
+     st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st b)
 
-valueToSC sym _ _ (Cryptol.TVSeq _n Cryptol.TVBit) (IVal x) =
-  liftIO (CrucibleSAW.toSC sym x)
+valueToSC sym _ _ (Cryptol.TVSeq 8 Cryptol.TVBit) (IVal x) =
+  do st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st =<< W4.bvTrunc sym (W4.knownNat @8) x)
 
-valueToSC sym _ _ (Cryptol.TVSeq _n Cryptol.TVBit) (LVal x) =
-  liftIO (CrucibleSAW.toSC sym x)
+valueToSC sym _ _ (Cryptol.TVSeq 16 Cryptol.TVBit) (IVal x) =
+  do st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st =<< W4.bvTrunc sym (W4.knownNat @16) x)
+
+valueToSC sym _ _ (Cryptol.TVSeq 32 Cryptol.TVBit) (IVal x) =
+  do st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st x)
+
+valueToSC sym _ _ (Cryptol.TVSeq 64 Cryptol.TVBit) (LVal x) =
+  do st <- liftIO (sawCoreState sym)
+     liftIO (toSC sym st x)
 
 valueToSC _sym loc failMsg _tval _val =
   failure loc failMsg
--- TODO: check sizes on bitvectors, support bool, char, and short types
 
 ------------------------------------------------------------------------
 
@@ -656,6 +666,7 @@ learnPointsTo ::
 learnPointsTo opts sc cc spec prepost pt = do
   let tyenv = MS.csAllocations spec
   let nameEnv = MS.csTypeNames spec
+  let jc = cc ^. jccJVMContext
   sym <- Ov.getSymInterface
   globals <- OM (use overrideGlobals)
   case pt of
@@ -663,11 +674,14 @@ learnPointsTo opts sc cc spec prepost pt = do
     JVMPointsToField loc ptr fid val ->
       do ty <- typeOfSetupValue cc tyenv nameEnv val
          rval <- resolveAllocIndexJVM ptr
-         -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
-         -- Then we won't have to match the definition of 'fieldIdText' here.
-         let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
-         dyn <- liftIO $ CJ.doFieldLoad sym globals rval key
+         dyn <- liftIO $ CJ.doFieldLoad sym globals rval fid
          v <- liftIO $ projectJVMVal sym ty ("field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
+         matchArg opts sc cc spec prepost v ty val
+
+    JVMPointsToStatic loc fid val ->
+      do ty <- typeOfSetupValue cc tyenv nameEnv val
+         dyn <- liftIO $ CJ.doStaticFieldLoad sym jc globals fid
+         v <- liftIO $ projectJVMVal sym ty ("static field load " ++ J.fieldIdName fid ++ ", " ++ show loc) dyn
          matchArg opts sc cc spec prepost v ty val
 
     JVMPointsToElem loc ptr idx val ->
@@ -727,9 +741,9 @@ learnEqual ::
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher CJ.JVM w ()
 learnEqual opts sc cc spec loc prepost v1 v2 =
-  do (_, val1) <- resolveSetupValueJVM opts cc sc spec v1
-     (_, val2) <- resolveSetupValueJVM opts cc sc spec v2
-     p         <- liftIO (equalValsPred cc val1 val2)
+  do val1 <- resolveSetupValueJVM opts cc sc spec v1
+     val2 <- resolveSetupValueJVM opts cc sc spec v2
+     p <- liftIO (equalValsPred cc val1 val2)
      let name = "equality " ++ stateCond prepost
      addAssert p (Crucible.SimError loc (Crucible.AssertFailureSimError name ""))
 
@@ -804,22 +818,23 @@ executePointsTo ::
 executePointsTo opts sc cc spec pt = do
   sym <- Ov.getSymInterface
   globals <- OM (use overrideGlobals)
+  let jc = cc ^. jccJVMContext
   case pt of
 
     JVMPointsToField _loc ptr fid val ->
-      do (_, val') <- resolveSetupValueJVM opts cc sc spec val
+      do dyn <- injectSetupValueJVM sym opts cc sc spec val
          rval <- resolveAllocIndexJVM ptr
-         let dyn = injectJVMVal sym val'
-         -- TODO: Change type of CJ.doFieldStore to take a FieldId instead of a String.
-         -- Then we won't have to match the definition of 'fieldIdText' here.
-         let key = J.unClassName (J.fieldIdClass fid) ++ "." ++ J.fieldIdName fid
-         globals' <- liftIO $ CJ.doFieldStore sym globals rval key dyn
+         globals' <- liftIO $ CJ.doFieldStore sym globals rval fid dyn
+         OM (overrideGlobals .= globals')
+
+    JVMPointsToStatic _loc fid val ->
+      do dyn <- injectSetupValueJVM sym opts cc sc spec val
+         globals' <- liftIO $ CJ.doStaticFieldStore sym jc globals fid dyn
          OM (overrideGlobals .= globals')
 
     JVMPointsToElem _loc ptr idx val ->
-      do (_, val') <- resolveSetupValueJVM opts cc sc spec val
+      do dyn <- injectSetupValueJVM sym opts cc sc spec val
          rval <- resolveAllocIndexJVM ptr
-         let dyn = injectJVMVal sym val'
          globals' <- liftIO $ CJ.doArrayStore sym globals rval idx dyn
          OM (overrideGlobals .= globals')
 
@@ -830,10 +845,20 @@ executePointsTo opts sc cc spec pt = do
              Nothing -> fail "jvm_array_is: not a monomorphic sequence type"
              Just x -> pure x
          rval <- resolveAllocIndexJVM ptr
-         jvs <- traverse (resolveSetupValueJVM opts cc sc spec . MS.SetupTerm) tts
-         let vs = map (injectJVMVal sym . snd) jvs
+         vs <- traverse (injectSetupValueJVM sym opts cc sc spec . MS.SetupTerm) tts
          globals' <- liftIO $ doEntireArrayStore sym globals rval vs
          OM (overrideGlobals .= globals')
+
+injectSetupValueJVM ::
+  Sym                  ->
+  Options              ->
+  JVMCrucibleContext   ->
+  SharedContext        ->
+  CrucibleMethodSpecIR ->
+  SetupValue           ->
+  OverrideMatcher CJ.JVM w (Crucible.RegValue Sym CJ.JVMValueType)
+injectSetupValueJVM sym opts cc sc spec val =
+  injectJVMVal sym <$> resolveSetupValueJVM opts cc sc spec val
 
 doEntireArrayStore ::
   Crucible.IsSymInterface sym =>
@@ -879,9 +904,9 @@ executeEqual ::
   SetupValue       {- ^ second value to compare -} ->
   OverrideMatcher CJ.JVM w ()
 executeEqual opts sc cc spec v1 v2 =
-  do (_, val1) <- resolveSetupValueJVM opts cc sc spec v1
-     (_, val2) <- resolveSetupValueJVM opts cc sc spec v2
-     p         <- liftIO (equalValsPred cc val1 val2)
+  do val1 <- resolveSetupValueJVM opts cc sc spec v1
+     val2 <- resolveSetupValueJVM opts cc sc spec v2
+     p <- liftIO (equalValsPred cc val1 val2)
      addAssume p
 
 -- | Process a "crucible_postcond" statement from the postcondition
@@ -932,20 +957,28 @@ resolveAllocIndexJVM i =
 
 resolveSetupValueJVM ::
   Options              ->
-  JVMCrucibleContext      ->
+  JVMCrucibleContext   ->
   SharedContext        ->
   CrucibleMethodSpecIR ->
   SetupValue           ->
-  OverrideMatcher CJ.JVM w (J.Type, JVMVal)
+  OverrideMatcher CJ.JVM w JVMVal
 resolveSetupValueJVM opts cc sc spec sval =
   do m <- OM (use setupValueSub)
      s <- OM (use termSub)
      let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
-     memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv sval
      sval' <- liftIO $ instantiateSetupValue sc s sval
-     lval  <- liftIO $ resolveSetupVal cc m tyenv nameEnv sval' `X.catch` handleException opts
-     return (memTy, lval)
+     liftIO $ resolveSetupVal cc m tyenv nameEnv sval' `X.catch` handleException opts
+
+typeOfSetupValueJVM ::
+  JVMCrucibleContext   ->
+  CrucibleMethodSpecIR ->
+  SetupValue           ->
+  OverrideMatcher CJ.JVM w J.Type
+typeOfSetupValueJVM cc spec sval =
+  do let tyenv = MS.csAllocations spec
+         nameEnv = MS.csTypeNames spec
+     liftIO $ typeOfSetupValue cc tyenv nameEnv sval
 
 injectJVMVal :: Sym -> JVMVal -> Crucible.RegValue Sym CJ.JVMValueType
 injectJVMVal sym jv =
@@ -957,10 +990,10 @@ injectJVMVal sym jv =
 projectJVMVal :: Sym -> J.Type -> String -> Crucible.RegValue Sym CJ.JVMValueType -> IO JVMVal
 projectJVMVal sym ty msg' v =
   case ty of
-    J.BooleanType -> err -- FIXME
-    J.ByteType    -> err -- FIXME
-    J.CharType    -> err -- FIXME
-    J.ShortType   -> err -- FIXME
+    J.BooleanType -> IVal <$> proj v CJ.tagI
+    J.ByteType    -> IVal <$> proj v CJ.tagI
+    J.CharType    -> IVal <$> proj v CJ.tagI
+    J.ShortType   -> IVal <$> proj v CJ.tagI
     J.IntType     -> IVal <$> proj v CJ.tagI
     J.LongType    -> LVal <$> proj v CJ.tagL
     J.FloatType   -> err -- FIXME
@@ -982,9 +1015,9 @@ decodeJVMVal :: J.Type -> Crucible.AnyValue Sym -> Maybe JVMVal
 decodeJVMVal ty v =
   case ty of
     J.BooleanType -> go v CJ.intRepr IVal
-    J.ByteType    -> Nothing -- FIXME
-    J.CharType    -> Nothing -- FIXME
-    J.ShortType   -> Nothing -- FIXME
+    J.ByteType    -> go v CJ.intRepr IVal
+    J.CharType    -> go v CJ.intRepr IVal
+    J.ShortType   -> go v CJ.intRepr IVal
     J.IntType     -> go @CJ.JVMIntType v CJ.intRepr IVal
     J.LongType    -> go @CJ.JVMLongType v CJ.longRepr LVal
     J.FloatType   -> Nothing -- FIXME

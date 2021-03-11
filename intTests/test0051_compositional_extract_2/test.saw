@@ -3,31 +3,31 @@ enable_experimental;
 m <- llvm_load_module "test.bc";
 
 let ptr_to_fresh nm ty = do {
-    x <- crucible_fresh_var nm ty;
-    p <- crucible_alloc ty;
-    crucible_points_to p (crucible_term x);
+    x <- llvm_fresh_var nm ty;
+    p <- llvm_alloc ty;
+    llvm_points_to p (llvm_term x);
     return (x, p);
 };
 
 let add_spec = do {
-  r_p <- crucible_alloc (llvm_struct "struct.uint128_t");
-  (_, a_p) <- ptr_to_fresh "a" (llvm_struct "struct.uint128_t");
-  (_, b_p) <- ptr_to_fresh "b" (llvm_struct "struct.uint128_t");
-  crucible_execute_func [r_p, a_p, b_p];
-  r <- crucible_fresh_var "r" (llvm_struct "struct.uint128_t");
-  crucible_points_to r_p (crucible_term r);
+  r_p <- llvm_alloc (llvm_alias "struct.uint128_t");
+  (_, a_p) <- ptr_to_fresh "a" (llvm_alias "struct.uint128_t");
+  (_, b_p) <- ptr_to_fresh "b" (llvm_alias "struct.uint128_t");
+  llvm_execute_func [r_p, a_p, b_p];
+  r <- llvm_fresh_var "r" (llvm_alias "struct.uint128_t");
+  llvm_points_to r_p (llvm_term r);
 };
 
 let sum_spec n = do {
-  s_p <- crucible_alloc (llvm_struct "struct.uint128_t");
-  (_, a_p) <- ptr_to_fresh "a" (llvm_array n (llvm_struct "struct.uint128_t"));
-  crucible_execute_func [s_p, a_p, (crucible_term {{ `n:[64] }})];
-  s <- crucible_fresh_var "s" (llvm_struct "struct.uint128_t");
-  crucible_points_to s_p (crucible_term s);
+  s_p <- llvm_alloc (llvm_alias "struct.uint128_t");
+  (_, a_p) <- ptr_to_fresh "a" (llvm_array n (llvm_alias "struct.uint128_t"));
+  llvm_execute_func [s_p, a_p, (llvm_term {{ `n:[64] }})];
+  s <- llvm_fresh_var "s" (llvm_alias "struct.uint128_t");
+  llvm_points_to s_p (llvm_term s);
 };
 
-add_ov <- crucible_llvm_compositional_extract m "add" "add" [] false add_spec abc;
-_ <- crucible_llvm_compositional_extract m "sum" "sum" [add_ov] false (sum_spec 10) abc;
+add_ov <- llvm_compositional_extract m "add" "add" [] false add_spec abc;
+_ <- llvm_compositional_extract m "sum" "sum" [add_ov] false (sum_spec 10) abc;
 
 add_thm <- prove_print abc
   {{ \a b -> add a b == reverse (split ((join (reverse a)) + (join (reverse b)))) }};

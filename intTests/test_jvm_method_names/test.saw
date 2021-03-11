@@ -2,7 +2,7 @@ enable_experimental;
 c <- java_load_class "Test";
 print c;
 
-crucible_jvm_verify c "get" [] false
+jvm_verify c "get" [] false
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -16,7 +16,7 @@ crucible_jvm_verify c "get" [] false
 print "********************************************************************************";
 print "<init>";
 fails (
-crucible_jvm_verify c "<init>" [] false
+jvm_verify c "<init>" [] false
   do {
     this <- jvm_alloc_object "Test";
     jvm_execute_func [this];
@@ -25,8 +25,8 @@ crucible_jvm_verify c "<init>" [] false
   z3);
 
 print "********************************************************************************";
-print "<init>(J)V";
-crucible_jvm_verify c "<init>(J)V" [] false
+print "<init>:(J)V";
+jvm_verify c "<init>:(J)V" [] false
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
@@ -36,8 +36,8 @@ crucible_jvm_verify c "<init>(J)V" [] false
   z3;
 
 print "********************************************************************************";
-print "<init>(I)V";
-crucible_jvm_verify c "<init>(I)V" [] false
+print "<init>:(I)V";
+jvm_verify c "<init>:(I)V" [] false
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_int;
@@ -47,8 +47,8 @@ crucible_jvm_verify c "<init>(I)V" [] false
   z3;
 
 print "********************************************************************************";
-print "<init>()V";
-crucible_jvm_verify c "<init>()V" [] false
+print "<init>:()V";
+jvm_verify c "<init>:()V" [] false
   do {
     this <- jvm_alloc_object "Test";
     jvm_execute_func [this];
@@ -59,7 +59,7 @@ crucible_jvm_verify c "<init>()V" [] false
 print "********************************************************************************";
 print "increment";
 fails (
-crucible_jvm_verify c "increment" [] false
+jvm_verify c "increment" [] false
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -70,8 +70,8 @@ crucible_jvm_verify c "increment" [] false
   z3);
 
 print "********************************************************************************";
-print "increment()V";
-crucible_jvm_verify c "increment()V" [] false
+print "increment:()V";
+jvm_verify c "increment:()V" [] false
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -82,8 +82,8 @@ crucible_jvm_verify c "increment()V" [] false
   z3;
 
 print "********************************************************************************";
-print "increment(J)V";
-crucible_jvm_verify c "increment(J)V" [] false
+print "increment:(J)V";
+jvm_verify c "increment:(J)V" [] false
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -95,8 +95,8 @@ crucible_jvm_verify c "increment(J)V" [] false
   z3;
 
 print "********************************************************************************";
-print "increment(I)V";
-crucible_jvm_verify c "increment(I)V" [] false
+print "increment:(I)V";
+jvm_verify c "increment:(I)V" [] false
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -108,8 +108,8 @@ crucible_jvm_verify c "increment(I)V" [] false
   z3;
 
 print "********************************************************************************";
-print "increment(LTest;)V";
-crucible_jvm_verify c "increment(LTest;)V" [] false
+print "increment:(LTest;)V";
+jvm_verify c "increment:(LTest;)V" [] false
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;

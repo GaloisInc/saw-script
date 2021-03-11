@@ -37,7 +37,7 @@ import Control.Applicative (Applicative)
 #endif
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
-import Control.Monad.Catch (MonadThrow(..))
+import Control.Monad.Catch (MonadThrow(..), MonadMask(..), MonadCatch(..))
 import Control.Monad.Except (ExceptT(..), runExceptT)
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
@@ -52,7 +52,6 @@ import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
 import Data.IORef
-import qualified Data.Vector as Vector
 import Data.Parameterized.Some
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
@@ -63,13 +62,12 @@ import qualified Data.AIG as AIG
 import qualified SAWScript.AST as SS
 import qualified SAWScript.Exceptions as SS
 import qualified SAWScript.Position as SS
-import qualified SAWScript.JavaMethodSpecIR as JIR
 import qualified SAWScript.Crucible.Common.Setup.Type as Setup
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
 import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 import qualified SAWScript.Crucible.JVM.MethodSpecIR ()
-import qualified Verifier.Java.Codebase as JSS
+import qualified Lang.JVM.Codebase as JSS
 import qualified Text.LLVM.AST as LLVM (Type)
 import qualified Text.LLVM.PP as LLVM (ppType)
 import SAWScript.JavaExpr (JavaType(..))
@@ -86,7 +84,6 @@ import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
                                        ppTerm, scPrettyTerm)
 import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
                                                        ppTerm, scPrettyTerm)
-import Verifier.SAW.TypedAST hiding (PPOpts(..), defaultPPOpts, ppTerm)
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Term.Functor (ModuleName)
 
@@ -132,8 +129,6 @@ data Value
   | VProofScript (ProofScript Value)
   | VSimpset Simpset
   | VTheorem Theorem
-  | VJavaSetup (JavaSetup Value)
-  | VJavaMethodSpec JIR.JavaMethodSpecIR
   -----
   | VLLVMCrucibleSetup !(LLVMCrucibleSetupM Value)
   | VLLVMCrucibleMethodSpec (CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR)
@@ -172,7 +167,6 @@ data SAW_CFG where
   JVM_CFG :: Crucible.AnyCFG JVM -> SAW_CFG
 
 data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
-                                     , biJavaCodebase  :: JSS.Codebase
                                      , biBasicSS       :: Simpset
                                      }
   deriving Generic
@@ -311,10 +305,8 @@ showsPrecValue opts p v =
     VTheorem (Theorem (Prop t) _stats) ->
       showString "Theorem " .
       showParen True (showString (SAWCorePP.scPrettyTerm opts' t))
-    VJavaSetup {} -> showString "<<Java Setup>>"
     VLLVMCrucibleSetup{} -> showString "<<Crucible Setup>>"
     VLLVMCrucibleSetupValue{} -> showString "<<Crucible SetupValue>>"
-    VJavaMethodSpec ms -> shows (JIR.ppMethodSpec ms)
     VLLVMCrucibleMethodSpec{} -> showString "<<Crucible MethodSpec>>"
     VLLVMModuleSkeleton s -> shows s
     VLLVMFunctionSkeleton s -> shows s
@@ -438,7 +430,7 @@ data TopLevelRW =
 
 newtype TopLevel a =
   TopLevel (ReaderT TopLevelRO (StateT TopLevelRW IO) a)
-  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow)
+  deriving (Applicative, Functor, Generic, Generic1, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
 deriving instance MonadReader TopLevelRO TopLevel
 deriving instance MonadState TopLevelRW TopLevel
@@ -530,74 +522,50 @@ maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
 maybeInsert _ Nothing m = m
 maybeInsert k (Just x) m = M.insert k x m
 
-extendEnv :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> TopLevelRW
-extendEnv x mt md v rw =
-  rw { rwValues  = M.insert name v (rwValues rw)
-     , rwTypes   = maybeInsert name mt (rwTypes rw)
-     , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
-     , rwCryptol = ce'
-     }
+extendEnv ::
+  SharedContext ->
+  SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
+extendEnv sc x mt md v rw =
+  do ce' <-
+       case v of
+         VTerm t ->
+           pure $ CEnv.bindTypedTerm (ident, t) ce
+         VType s ->
+           pure $ CEnv.bindType (ident, s) ce
+         VInteger n ->
+           pure $ CEnv.bindInteger (ident, n) ce
+         VCryptolModule m ->
+           pure $ CEnv.bindCryptolModule (modname, m) ce
+         VString s ->
+           do tt <- typedTermOfString sc s
+              pure $ CEnv.bindTypedTerm (ident, tt) ce
+         _ ->
+           pure ce
+     pure $
+      rw { rwValues  = M.insert name v (rwValues rw)
+         , rwTypes   = maybeInsert name mt (rwTypes rw)
+         , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
+         , rwCryptol = ce'
+         }
   where
     name = x
     ident = T.packIdent (SS.getOrig x)
     modname = T.packModName [pack (SS.getOrig x)]
     ce = rwCryptol rw
-    ce' = case v of
-            VTerm t
-              -> CEnv.bindTypedTerm (ident, t) ce
-            VType s
-              -> CEnv.bindType (ident, s) ce
-            VInteger n
-              -> CEnv.bindInteger (ident, n) ce
-            VCryptolModule m
-              -> CEnv.bindCryptolModule (modname, m) ce
-            VString s
-              -> CEnv.bindTypedTerm (ident, typedTermOfString s) ce
-            _ -> ce
 
-typedTermOfString :: String -> TypedTerm
-typedTermOfString cs = TypedTerm schema trm
-  where
-    nat :: Integer -> Term
-    nat n = Unshared (FTermF (NatLit (fromInteger n)))
-    bvNat :: Term
-    bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
-    bvNat8 :: Term
-    bvNat8 = Unshared (App bvNat (nat 8))
-    encodeChar :: Char -> Term
-    encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
-    vecT :: Term
-    vecT = Unshared (FTermF (GlobalDef "Prelude.Vec"))
-    boolT :: Term
-    boolT = Unshared (FTermF (GlobalDef "Prelude.Bool"))
-    byteT :: Term
-    byteT = Unshared (App (Unshared (App vecT (nat 8))) boolT)
-    trm :: Term
-    trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
-    schema = Cryptol.Forall [] [] (Cryptol.tString (length cs))
+typedTermOfString :: SharedContext -> String -> IO TypedTerm
+typedTermOfString sc str =
+  do let schema = Cryptol.Forall [] [] (Cryptol.tString (length str))
+     bvNat <- scGlobalDef sc "Prelude.bvNat"
+     bvNat8 <- scApply sc bvNat =<< scNat sc 8
+     byteT <- scBitvector sc 8
+     let scChar c = scApply sc bvNat8 =<< scNat sc (fromIntegral (fromEnum c))
+     ts <- traverse scChar str
+     trm <- scVector sc byteT ts
+     pure (TypedTerm schema trm)
 
 
 -- Other SAWScript Monads ------------------------------------------------------
-
--- The ProofScript in RunVerify is in the SAWScript context, and
--- should stay there.
-data ValidationPlan
-  = Skip
-  | RunVerify (ProofScript SatResult)
-
-data JavaSetupState
-  = JavaSetupState {
-      jsSpec :: JIR.JavaMethodSpecIR
-    , jsContext :: SharedContext
-    , jsTactic :: ValidationPlan
-    , jsSimulate :: Bool
-    , jsSatBranches :: Bool
-    }
-
-type JavaSetup a = StateT JavaSetupState TopLevel a
-
-throwJava :: String -> JavaSetup a
-throwJava = lift . throwTopLevel
 
 type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 
@@ -605,7 +573,7 @@ type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 --   specifications should be polymorphic in the underlying architecture
 -- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
 
-data LLVMCrucibleSetupM a =
+newtype LLVMCrucibleSetupM a =
   LLVMCrucibleSetupM
     { runLLVMCrucibleSetupM ::
         forall arch.
@@ -725,18 +693,6 @@ instance FromValue a => FromValue (StateT ProofState TopLevel a) where
       m2 <- lift $ applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue ProofScript"
-
-instance IsValue a => IsValue (StateT JavaSetupState TopLevel a) where
-    toValue m = VJavaSetup (fmap toValue m)
-
-instance FromValue a => FromValue (StateT JavaSetupState TopLevel a) where
-    fromValue (VJavaSetup m) = fmap fromValue m
-    fromValue (VReturn v) = return (fromValue v)
-    fromValue (VBind _pos m1 v2) = do
-      v1 <- fromValue m1
-      m2 <- lift $ applyValue v2 v1
-      fromValue m2
-    fromValue _ = error "fromValue JavaSetup"
 
 ---------------------------------------------------------------------------------
 instance IsValue a => IsValue (LLVMCrucibleSetupM a) where
@@ -906,13 +862,6 @@ instance FromValue Theorem where
     fromValue (VTheorem t) = t
     fromValue _ = error "fromValue Theorem"
 
-instance IsValue JIR.JavaMethodSpecIR where
-    toValue ms = VJavaMethodSpec ms
-
-instance FromValue JIR.JavaMethodSpecIR where
-    fromValue (VJavaMethodSpec ms) = ms
-    fromValue _ = error "fromValue JavaMethodSpec"
-
 instance IsValue JavaType where
     toValue t = VJavaType t
 
@@ -1005,7 +954,6 @@ addTrace str val =
     VLambda        f -> VLambda        (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
     VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
     VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
-    VJavaSetup     m -> VJavaSetup     (addTrace str `fmap` addTraceStateT str m)
     VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
     VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
         addTrace str `fmap` underStateT (addTraceTopLevel str) m

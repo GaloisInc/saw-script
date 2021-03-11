@@ -139,7 +139,7 @@ $include all code/ffs_llvm.saw
 ```
 
 In this script, the `print` commands simply display text for the user.
-The `crucible_llvm_extract` command instructs the SAWScript interpreter
+The `llvm_extract` command instructs the SAWScript interpreter
 to perform symbolic simulation of the given C function (e.g., `ffs_ref`)
 from a given bitcode file (e.g., `ffs.bc`), and return a term
 representing the semantics of the function.
@@ -228,24 +228,20 @@ First, we compile the Java code to a JVM class file.
 Like with `clang`, the `-g` flag instructs `javac` to include debugging
 information, which can be useful to preserve variable names.
 
-Using `saw` with Java code requires a command-line option `-j` that
-locates the Java standard libraries. Run the code in this section with
-the command:
+Using `saw` with Java code requires a command-line option `-b` that
+locates Java. Run the code in this section with the command:
 
-    > saw -j <path to rt.jar or classes.jar from JDK> ffs_compare.saw
+    > saw -b <path to directory where Java lives> ffs_compare.saw
 
-This path can also be specified in the `SAW_JDK_JAR` environment
-variable.
-
-For many versions of Java you can find the standard libraries JAR by
-grepping the output of `java -v`:
-
-    > java -v 2>&1 | grep Opened
+Alternatively, if Java is located on your `PATH`, you can omit the `-b`
+option entirely.
 
 Both Oracle JDK and OpenJDK versions 6 through 8 work well with SAW.
-From version 9 onward, the core libraries are no longer stored in a
-standard JAR file, making them inacessible to SAW. We're currently
-considering strategies for working with newer Java versions.
+SAW also includes experimental support for JDK 9 and later. Code that only
+involves primitive data types (such as `FFS.java` above) is known to work well
+under JDK 9+, but there are some as-of-yet unresolved issues in verifying code
+involving classes such as `String`. For more information on these issues, refer
+to [this GitHub issue](https://github.com/GaloisInc/crucible/issues/641).
 
 Now we can do the proof both within and across languages (from
 `ffs_compare.saw`):
@@ -254,10 +250,10 @@ Now we can do the proof both within and across languages (from
 $include all code/ffs_compare.saw
 ```
 
-Here, the `crucible_java_extract` function works like
-`crucible_llvm_extract`, but on a Java class and method name. The
-`prove_print` command works similarly to the `prove` followed by `print`
-combination used for the LLVM example above.
+Here, the `jvm_extract` function works like `llvm_extract`, but on a
+Java class and method name. The `prove_print` command works similarly
+to the `prove` followed by `print` combination used for the LLVM
+example above.
 
 Using SMT-Lib Solvers
 =====================
@@ -372,13 +368,13 @@ $include all code/java_add.saw
 
 This can be run as follows:
 
-    > saw -j <path to rt.jar or classes.jar from JDK> java_add.saw
+    > saw -b <path to directory where Java lives> java_add.saw
 
 In this example, the definitions of `add_spec` and `dbl_spec` provide
 extra information about how to configure the symbolic simulator when
 analyzing Java code. In this case, the setup blocks provide explicit
 descriptions of the implicit configuration used by
-`crucible_java_extract` (used in the earlier Java FFS example and in the
+`jvm_extract` (used in the earlier Java FFS example and in the
 next section). The `jvm_fresh_var` commands instruct the simulator to
 create fresh symbolic inputs to correspond to the Java variables `x` and
 `y`. Then, the `jvm_return` commands indicate the expected return value
@@ -387,13 +383,13 @@ inline). Because Java methods can operate on references, as well, which
 do not exist in Cryptol, Cryptol expressions must be translated to JVM
 values with `jvm_term`.
 
-To make use of these setup blocks, the `crucible_jvm_verify` command
-analyzes the method corresponding to the class and method name provided,
-using the setup block passed in as a parameter. It then returns an
-object that describes the proof it has just performed. This object can
-be passed into later instances of `java_verify` to indicate that calls
-to the analyzed method do not need to be followed, and the previous
-proof about that method can be used instead of re-analyzing it.
+To make use of these setup blocks, the `jvm_verify` command analyzes
+the method corresponding to the class and method name provided, using
+the setup block passed in as a parameter. It then returns an object
+that describes the proof it has just performed. This object can be
+passed into later instances of `jvm_verify` to indicate that calls to
+the analyzed method do not need to be followed, and the previous proof
+about that method can be used instead of re-analyzing it.
 
 Interactive Interpreter
 =======================
@@ -481,11 +477,10 @@ implementations, instead.
 $include all code/ffs_java.saw
 ````
 
-As with previous Java examples, this one needs to be run with the `-j`
-flag to tell the interpreter where to find the Java standard
-libraries.
+As with previous Java examples, this one needs to be run with the `-b`
+flag to tell the interpreter where to find Java:
 
-    > saw -j <path to rt.jar or classes.jar from JDK> ffs_java.saw
+    > saw -b <path to directory where Java lives> ffs_java.saw
 
 AIG Export and Import
 ---------------------
@@ -515,7 +510,7 @@ We can use external AIGs to verify the equivalence as follows,
 generating the AIGs with the first script and comparing them with the
 second:
 
-    > saw -j <path to rt.jar or classes.jar from JDK> ffs_gen_aig.saw
+    > saw -b <path to directory where Java lives> ffs_gen_aig.saw
     > saw ffs_compare_aig.saw
 
 Files in AIGER format can be produced and processed by several

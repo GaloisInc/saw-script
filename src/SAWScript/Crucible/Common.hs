@@ -12,6 +12,9 @@ module SAWScript.Crucible.Common
   ( ppAbortedResult
   , Sym
   , setupProfiling
+  , SAWCruciblePersonality(..)
+  , newSAWCoreBackend
+  , sawCoreState
   ) where
 
 import           Lang.Crucible.Simulator (GenericExecutionFeature)
@@ -19,18 +22,38 @@ import           Lang.Crucible.Simulator.ExecutionTree (AbortedResult(..), Globa
 import           Lang.Crucible.Simulator.CallFrame (SimFrame)
 import           Lang.Crucible.Simulator.Profiling
 import           Lang.Crucible.Backend (AbortExecReason(..), ppAbortExecReason, IsSymInterface)
-import           Lang.Crucible.Backend.SAWCore (SAWCoreBackend)
+import           Lang.Crucible.Backend.Online
 import qualified Data.Parameterized.Nonce as Nonce
 import qualified What4.Solver.Yices as Yices
+import qualified What4.Config as W4
 import qualified What4.Expr as W4
+import qualified What4.Interface as W4
+import qualified What4.Expr.Builder as W4
 import qualified What4.ProgramLoc as W4 (plSourceLoc)
 
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 import qualified Prettyprinter as PP
 
+
+import Verifier.SAW.SharedTerm as SC
+import Verifier.SAW.Simulator.What4.ReturnTrip (SAWCoreState, newSAWCoreState)
+
 -- | The symbolic backend we use for SAW verification
-type Sym = SAWCoreBackend Nonce.GlobalNonceGenerator Yices.Connection (W4.Flags W4.FloatReal)
+type Sym = OnlineBackendUserSt Nonce.GlobalNonceGenerator Yices.Connection SAWCoreState (W4.Flags W4.FloatReal)
+
+data SAWCruciblePersonality sym = SAWCruciblePersonality
+
+
+newSAWCoreBackend :: SC.SharedContext -> IO Sym
+newSAWCoreBackend sc =
+  do st <- newSAWCoreState sc
+     sym <- newOnlineBackend W4.FloatRealRepr Nonce.globalNonceGenerator Yices.yicesDefaultFeatures st
+     W4.extendConfig Yices.yicesOptions (W4.getConfiguration sym)
+     return sym
+
+sawCoreState :: Sym -> IO (SAWCoreState Nonce.GlobalNonceGenerator)
+sawCoreState sym = pure (onlineUserState (W4.sbUserState sym))
 
 ppAbortedResult :: (forall l args. GlobalPair Sym (SimFrame Sym ext l args) -> PP.Doc ann)
                 -> AbortedResult Sym ext

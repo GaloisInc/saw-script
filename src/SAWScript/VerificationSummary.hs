@@ -1,4 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 {- |
 Module      : SAWScript.VerificationSummary
 Description : Summaries of verification for human consumption.
@@ -8,13 +11,16 @@ Maintainer  : atomb
 
 module SAWScript.VerificationSummary
   ( computeVerificationSummary
+  , jsonVerificationSummary
   , prettyVerificationSummary
   ) where
 
-import Control.Lens
+import Control.Lens ((^.))
 import qualified Data.Set as Set
 import Data.String
 import Prettyprinter
+import Data.Aeson (encode, (.=), Value(..), object)
+import qualified Data.ByteString.Lazy.UTF8 as BLU
 
 import qualified Lang.Crucible.JVM as CJ
 import SAWScript.Crucible.Common.MethodSpec
@@ -24,6 +30,7 @@ import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
+import What4.ProgramLoc (ProgramLoc(plSourceLoc))
 
 type JVMTheorem =  CMS.CrucibleMethodSpecIR CJ.JVM
 type LLVMTheorem = CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR
@@ -50,6 +57,36 @@ vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 
 computeVerificationSummary :: [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> VerificationSummary
 computeVerificationSummary = VerificationSummary
+
+-- TODO: we could make things instances of a ToJSON typeclass instead of using the two methods below.
+msToJSON :: forall ext . Pretty (MethodId ext) => CMS.CrucibleMethodSpecIR ext -> Value
+msToJSON cms = object [
+    ("type" .= ("method" :: String))
+    , ("method" .= (show $ pretty $ cms ^. csMethod))
+    , ("loc" .= (show $ pretty $ plSourceLoc $ cms ^. csLoc))
+    , ("status" .= (statusString $ cms ^. csSolverStats))
+    , ("specification" .= ("unknown" :: String)) -- TODO
+  ]
+
+thmToJSON :: Theorem -> Value
+thmToJSON thm = object [
+    ("type" .= ("property" :: String))
+    , ("loc" .= ("unknown" :: String)) -- TODO: Theorem has no attached location information
+    , ("status" .= (statusString $ thmStats thm))
+    , ("term" .= (show $ PP.ppTerm PP.defaultPPOpts $ unProp $ thmProp thm))
+  ]
+
+statusString :: SolverStats -> String
+statusString stats = if ((Set.null s) || (Set.member "ADMITTED" s)) then "assumed" else "verified"
+  where s = solverStatsSolvers stats
+
+jsonVerificationSummary :: VerificationSummary -> String
+jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =
+  BLU.toString $ encode vals where
+    vals = foldr (++) [] [jvals, lvals, thmvals]
+    jvals = msToJSON <$> jspecs
+    lvals = (\(CMSLLVM.SomeLLVM ls) -> msToJSON ls) <$> lspecs -- TODO: why is the type annotation required here?
+    thmvals = thmToJSON <$> thms
 
 prettyVerificationSummary :: VerificationSummary -> String
 prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =

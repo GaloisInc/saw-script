@@ -3,12 +3,12 @@ enable_experimental;
 m <- llvm_load_module "test.bc";
 
 let increment_setup = do {
-  ptr <- crucible_alloc (llvm_int 64);
-  val <- crucible_fresh_var "val" (llvm_int 64);
-  crucible_points_to ptr (crucible_term val);
-  crucible_execute_func [ptr];
-  valprime <- crucible_fresh_var "val'" (llvm_int 64);
-  crucible_points_to ptr (crucible_term valprime);
-  crucible_postcond {{ valprime == val }};
+  ptr <- llvm_alloc (llvm_int 64);
+  val <- llvm_fresh_var "val" (llvm_int 64);
+  llvm_points_to ptr (llvm_term val);
+  llvm_execute_func [ptr];
+  valprime <- llvm_fresh_var "val'" (llvm_int 64);
+  llvm_points_to ptr (llvm_term valprime);
+  llvm_postcond {{ valprime == val }};
 };
-fails (crucible_llvm_verify_x86 m "./test" "increment" [] false increment_setup w4);
+fails (llvm_verify_x86 m "./test" "increment" [] false increment_setup w4);

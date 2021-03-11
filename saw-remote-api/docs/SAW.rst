@@ -208,12 +208,26 @@ these specifications are represented by a JSON object with the following fields:
 
 ``pre points to``
   A list of 'points-to' relationships in the initial state section of the specification. These
-  relationships are captured in a JSON object containing two fields:
+  relationships are captured in a JSON object containing four fields, two of which are optional:
 
 .. _points-to:
 
   - ``pointer``: A :ref:`Crucible Setup value<setup-values>` representing the pointer.
   - ``points to``: A :ref:`Crucible Setup value<setup-values>` representing the referent of ``pointer``.
+  - ``check points to type``: An optional description of a type to check the ``points to`` value against.
+    If the description is ``null``, then this has no effect. The description is represented as a JSON
+    object containing a tag named ``check against``, with any further fields determined by this tag.
+    These tag values can be:
+
+    + ``pointer type``: Check the type of the ``points to`` value against the type that the ``pointer``
+      value's type points to.
+    + ``casted type``: Check the type of the ``points to`` value against the provided type. There is
+      an additional field ``type``, which contains the :ref:`LLVM<llvm-types>` or :ref:`JVM<jvm-types>`
+      type to check against.
+
+  - ``condition``: An optional condition, represented as a :ref:`Cryptol term<cryptol-json-expression>`.
+    If the ``condition`` is not ``null``, then the ``pointer`` value will only point to the ``points to``
+    value if the ``condition`` holds.
 
 ``argument vals``
   A list of :ref:`Crucible Setup values<setup-values>` representing the arguments to the function being verified.
@@ -292,21 +306,25 @@ pointers, arrays, and structures. They are used extensively when writing the spe
 ``verify`` commands. Setup Values are represented as JSON objects containing a tag field, ``setup value``,
 that determines the other fields. This tag value can be:
 
-``saved``
+``named``
   A term previously saved on the server. There is an additional field ``name`` giving the name bound to the
   term on the server.
 
-``null value``
+``null``
   A null/empty value.
 
 ``Cryptol``
   A Cryptol term. There is an additional field ``expression`` containing a Cryptol expression.
 
-``array value``
+``array``
   An array value. There is an additional field ``elements`` which is a list of :ref:`Crucible Setup values<setup-values>`
   to populate the array with.
 
-``field lvalue``
+``struct``
+  A struct value. There is an additional field ``fields`` which is a list of :ref:`Crucible Setup values<setup-values>`
+  to populate the struct with.
+
+``field``
   A field of a struct. There are two additional fields:
 
   - ``base``: A :ref:`Crucible Setup value<setup-values>`, the structure containing the field to assign to.

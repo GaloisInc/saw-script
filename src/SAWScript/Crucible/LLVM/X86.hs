@@ -23,7 +23,7 @@ Stability   : provisional
 {-# Language TemplateHaskell #-}
 
 module SAWScript.Crucible.LLVM.X86
-  ( crucible_llvm_verify_x86
+  ( llvm_verify_x86
   ) where
 
 import Control.Lens.TH (makeLenses)
@@ -52,12 +52,13 @@ import qualified Text.LLVM.AST as LLVM
 import Data.Parameterized.Some
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Context hiding (view)
-import Data.Parameterized.Nonce
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
+
+import Verifier.SAW.Simulator.What4.ReturnTrip
 
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
@@ -66,6 +67,7 @@ import SAWScript.Value
 import SAWScript.Options
 import SAWScript.X86 hiding (Options)
 import SAWScript.X86Spec
+import SAWScript.Crucible.Common
 
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 import qualified SAWScript.Crucible.Common.Override as O
@@ -84,7 +86,7 @@ import qualified What4.ProgramLoc as W4
 
 import qualified Lang.Crucible.Analysis.Postdom as C
 import qualified Lang.Crucible.Backend as C
-import qualified Lang.Crucible.Backend.SAWCore as C
+import qualified Lang.Crucible.Backend.Online as C
 import qualified Lang.Crucible.CFG.Core as C
 import qualified Lang.Crucible.FunctionHandle as C
 import qualified Lang.Crucible.Simulator.EvalStmt as C
@@ -201,18 +203,13 @@ cryptolUninterpreted ::
   SharedContext ->
   [Term] ->
   m Term
-cryptolUninterpreted env nm sc xs@[_, _] =
+cryptolUninterpreted env nm sc xs =
   case lookupIn nm $ eTermEnv env of
     Left _err -> throwX86 $ mconcat
       [ "Failed to lookup Cryptol name \"", nm
       , "\" in Cryptol environment"
       ]
     Right t -> liftIO $ scApplyAll sc t xs
-cryptolUninterpreted _ nm _ xs = throwX86 $ mconcat
-  [ "Type error in call to \"", nm
-  , "\": Expected 2 arguments, given ", show $ length xs
-  , " arguments"
-  ]
 
 -------------------------------------------------------------------------------
 -- ** Entrypoint
@@ -220,7 +217,7 @@ cryptolUninterpreted _ nm _ xs = throwX86 $ mconcat
 -- | Verify that an x86_64 function (following the System V AMD64 ABI) conforms
 -- to an LLVM specification. This allows for compositional verification of LLVM
 -- functions that call x86_64 functions (but not the other way around).
-crucible_llvm_verify_x86 ::
+llvm_verify_x86 ::
   Some LLVMModule {- ^ Module to associate with method spec -} ->
   FilePath {- ^ Path to ELF file -} ->
   String {- ^ Function's symbol in ELF file -} ->
@@ -229,7 +226,7 @@ crucible_llvm_verify_x86 ::
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
   ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
-crucible_llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
+llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
                  $ modTrans llvmModule ^. C.LLVM.transContext = do
       let ?ptrWidth = knownNat @64
@@ -237,18 +234,20 @@ crucible_llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms ch
       sc <- getSharedContext
       opts <- getOptions
       basic_ss <- getBasicSS
-      sym <- liftIO $ C.newSAWCoreBackend W4.FloatRealRepr sc globalNonceGenerator
+      sym <- liftIO $ newSAWCoreBackend sc
+      sawst <- liftIO $ sawCoreState sym
       halloc <- getHandleAlloc
       let mvar = C.LLVM.llvmMemVar . view C.LLVM.transContext $ modTrans llvmModule
       sfs <- liftIO $ Macaw.newSymFuns sym
       rw <- getTopLevelRW
       let cenv = rwCryptol rw
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
-      liftIO $ C.sawRegisterSymFunInterp sym (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEnc sfs) $ cryptolUninterpreted cenv "aesenc"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesEncLast sfs) $ cryptolUninterpreted cenv "aesenclast"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesDec sfs) $ cryptolUninterpreted cenv "aesdec"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesDecLast sfs) $ cryptolUninterpreted cenv "aesdeclast"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesKeyGenAssist sfs) $ cryptolUninterpreted cenv "aeskeygenassist"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesIMC sfs) $ cryptolUninterpreted cenv "aesimc"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
 
       let preserved = Set.fromList . catMaybes $ stringToReg . Text.toLower . Text.pack <$> rwPreservedRegs rw
       (C.SomeCFG cfg, elf, relf, addr, cfgs) <- liftIO $ buildCFG opts halloc preserved path nm
@@ -426,8 +425,8 @@ buildCFG opts halloc preserved path nm = do
 --------------------------------------------------------------------------------
 -- ** Computing the specification
 
--- | Construct the method spec like we normally would in crucible_llvm_verify.
--- Unlike in crucible_llvm_verify, we can't reuse the simulator state (due to the
+-- | Construct the method spec like we normally would in llvm_verify.
+-- Unlike in llvm_verify, we can't reuse the simulator state (due to the
 -- different memory layout / RegMap).
 buildMethodSpec ::
   LLVMModule LLVMArch ->
@@ -621,12 +620,12 @@ allocateStack szInt = do
   finalRegs <- setReg Macaw.RSP ptr regs
   x86Regs .= finalRegs
 
--- | Process a crucible_alloc statement, allocating the requested memory and
+-- | Process an llvm_alloc statement, allocating the requested memory and
 -- associating a pointer to that memory with the appropriate index.
 assumeAllocation ::
   X86Constraints =>
   Map MS.AllocIndex Ptr ->
-  (MS.AllocIndex, LLVMAllocSpec) {- ^ crucible_alloc statement -} ->
+  (MS.AllocIndex, LLVMAllocSpec) {- ^ llvm_alloc statement -} ->
   X86Sim (Map MS.AllocIndex Ptr)
 assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False) = do
   cc <- use x86CrucibleContext
@@ -638,19 +637,19 @@ assumeAllocation env (i, LLVMAllocSpec mut _memTy align sz loc False) = do
   x86Mem .= mem'
   pure $ Map.insert i ptr env
 assumeAllocation env _ = pure env
-  -- no allocation is done for crucible_fresh_pointer
-  -- TODO: support crucible_fresh_pointer in x86 verification
+  -- no allocation is done for llvm_fresh_pointer
+  -- TODO: support llvm_fresh_pointer in x86 verification
 
--- | Process a crucible_points_to statement, writing some SetupValue to a pointer.
+-- | Process an llvm_points_to statement, writing some SetupValue to a pointer.
 assumePointsTo ::
   X86Constraints =>
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
-  LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
+  LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim ()
 assumePointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptval) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
   tval <- checkConcreteSizePointsToValue tptval
   sym <- use x86Sym
   cc <- use x86CrucibleContext
@@ -688,16 +687,16 @@ resolvePtrSetupValue env tyenv tptr = do
 checkConcreteSizePointsToValue :: LLVMPointsToValue LLVMArch -> X86Sim (MS.SetupValue LLVM)
 checkConcreteSizePointsToValue = \case
   ConcreteSizeValue val -> return val
-  SymbolicSizeValue{} -> throwX86 "unsupported x86_64 command: crucible_points_to_array_prefix"
+  SymbolicSizeValue{} -> throwX86 "unsupported x86_64 command: llvm_points_to_array_prefix"
 
--- | Write each SetupValue passed to crucible_execute_func to the appropriate
+-- | Write each SetupValue passed to llvm_execute_func to the appropriate
 -- x86_64 register from the calling convention.
 setArgs ::
   X86Constraints =>
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
-  [MS.SetupValue LLVM] {- ^ Arguments passed to crucible_execute_func -} ->
+  [MS.SetupValue LLVM] {- ^ Arguments passed to llvm_execute_func -} ->
   X86Sim ()
 setArgs env tyenv nameEnv args
   | length args > length argRegs = throwX86 "More arguments than would fit into general-purpose registers"
@@ -811,6 +810,7 @@ assertPost globals env premem preregs = do
     [ returnMatches
     , pointsToMatches
     , setupConditionMatches
+    , [LO.assertTermEqualities sc cc]
     ]
   st <- case result of
     Left err -> throwX86 $ show err
@@ -824,10 +824,10 @@ assertPointsTo ::
   Map MS.AllocIndex Ptr {- ^ Associates each AllocIndex with the corresponding allocation -} ->
   Map MS.AllocIndex LLVMAllocSpec {- ^ Associates each AllocIndex with its specification -} ->
   Map MS.AllocIndex C.LLVM.Ident {- ^ Associates each AllocIndex with its name -} ->
-  LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
+  LLVMPointsTo LLVMArch {- ^ llvm_points_to statement from the precondition -} ->
   X86Sim (LLVMOverrideMatcher md ())
 assertPointsTo env tyenv nameEnv (LLVMPointsTo _ cond tptr tptexpected) = do
-  when (isJust cond) $ throwX86 "unsupported x86_64 command: crucible_conditional_points_to"
+  when (isJust cond) $ throwX86 "unsupported x86_64 command: llvm_conditional_points_to"
   texpected <- checkConcreteSizePointsToValue tptexpected
   sym <- use x86Sym
   opts <- use x86Options

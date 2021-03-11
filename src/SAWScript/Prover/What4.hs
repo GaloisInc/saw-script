@@ -80,7 +80,8 @@ proveExportWhat4_sym solver un sc hashConsing outFilePath t =
      return (Nothing, stats)
 
 proveWhat4_z3, proveWhat4_boolector, proveWhat4_cvc4,
-  proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices ::
+  proveWhat4_dreal, proveWhat4_stp, proveWhat4_yices,
+  proveWhat4_abc ::
   Set VarIndex  {- ^ Uninterpreted functions -} ->
   SharedContext {- ^ Context for working with terms -} ->
   Bool          {- ^ Hash-consing of What4 terms -}->
@@ -93,6 +94,7 @@ proveWhat4_cvc4      = proveWhat4_sym cvc4Adapter
 proveWhat4_dreal     = proveWhat4_sym drealAdapter
 proveWhat4_stp       = proveWhat4_sym stpAdapter
 proveWhat4_yices     = proveWhat4_sym yicesAdapter
+proveWhat4_abc       = proveWhat4_sym externalABCAdapter
 
 proveExportWhat4_z3, proveExportWhat4_boolector, proveExportWhat4_cvc4,
   proveExportWhat4_dreal, proveExportWhat4_stp, proveExportWhat4_yices ::

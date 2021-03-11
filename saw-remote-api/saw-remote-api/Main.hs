@@ -1,49 +1,104 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import qualified Data.Aeson as JSON
-import Data.Text (Text)
+import qualified Argo
+import qualified Argo.DefaultMain as Argo (defaultMain)
+import qualified Argo.Doc as Doc
 
-import Argo
-import Argo.DefaultMain
-
-import SAWServer
+import SAWServer ( SAWState, initialState )
 import SAWServer.CryptolSetup
-import SAWServer.JVMCrucibleSetup
-import SAWServer.JVMVerify
+    ( cryptolLoadModuleDescr,
+      cryptolLoadModule,
+      cryptolLoadFileDescr,
+      cryptolLoadFile )
+--import SAWServer.JVMCrucibleSetup
+--import SAWServer.JVMVerify
 import SAWServer.LLVMCrucibleSetup
+    ( llvmLoadModuleDescr, llvmLoadModule )
 import SAWServer.LLVMVerify
+    ( llvmVerifyDescr,
+      llvmVerify,
+      llvmAssumeDescr,
+      llvmAssume,
+      llvmVerifyX86Descr,
+      llvmVerifyX86 )
 import SAWServer.ProofScript
-import SAWServer.SaveTerm
-import SAWServer.SetOption
+    ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
+import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
+import SAWServer.SetOption ( setOptionDescr, setOption )
 
 
 main :: IO ()
-main =
-  do theApp <- mkApp initialState sawMethods
-     defaultMain description theApp
+main = do
+  theApp <- Argo.mkApp
+               "SAW RPC Server"
+               serverDocs
+               (Argo.defaultAppOpts
+               Argo.MutableState)
+               initialState
+               sawMethods
+  Argo.defaultMain description theApp
+
+serverDocs :: [Doc.Block]
+serverDocs =
+  [ Doc.Section "Summary" $ [ Doc.Paragraph
+    [Doc.Text "A remote server for ",
+     Doc.Link (Doc.URL "https://saw.galois.com/") "SAW",
+     Doc.Text " for verifying programs with a featureset similar to SAWScript."]]]
 
 description :: String
 description =
   "An RPC server for SAW."
 
-sawMethods :: [(Text, MethodType, JSON.Value -> Method SAWState JSON.Value)]
+sawMethods :: [Argo.AppMethod SAWState]
 sawMethods =
   -- Cryptol
-  [ ("SAW/Cryptol/load module",  Command, method cryptolLoadModule)
-  , ("SAW/Cryptol/load file",    Command, method cryptolLoadFile)
-  , ("SAW/Cryptol/save term",    Command, method saveTerm)
+  [ Argo.command
+     "SAW/Cryptol/load module"
+     cryptolLoadModuleDescr
+     cryptolLoadModule
+  , Argo.command
+     "SAW/Cryptol/load file"
+     cryptolLoadFileDescr
+     cryptolLoadFile
+  , Argo.command
+     "SAW/Cryptol/save term"
+     saveTermDescr
+     saveTerm
   -- JVM
-  , ("SAW/JVM/load class",       Command, method jvmLoadClass)
-  , ("SAW/JVM/verify",           Command, method jvmVerify)
-  , ("SAW/JVM/assume",           Command, method jvmAssume)
+  {-
+  , Argo.command "SAW/JVM/load class" (Doc.Paragraph [Doc.Text "TODO"]) jvmLoadClass
+  , Argo.command "SAW/JVM/verify"     (Doc.Paragraph [Doc.Text "TODO"]) jvmVerify
+  , Argo.command "SAW/JVM/assume"     (Doc.Paragraph [Doc.Text "TODO"]) jvmAssume
+  -}
   -- LLVM
-  , ("SAW/LLVM/load module",     Command, method llvmLoadModule)
-  , ("SAW/LLVM/verify",          Command, method llvmVerify)
-  , ("SAW/LLVM/verify x86",      Command, method llvmVerifyX86)
-  , ("SAW/LLVM/assume",          Command, method llvmAssume)
+  , Argo.command
+     "SAW/LLVM/load module"
+     llvmLoadModuleDescr
+     llvmLoadModule
+  , Argo.command
+     "SAW/LLVM/verify"
+     llvmVerifyDescr
+     llvmVerify
+  , Argo.command
+     "SAW/LLVM/verify x86"
+     llvmVerifyX86Descr
+     llvmVerifyX86
+  , Argo.command
+     "SAW/LLVM/assume"
+     llvmAssumeDescr
+     llvmAssume
   -- General
-  , ("SAW/make simpset",         Command, method makeSimpset)
-  , ("SAW/prove",                Command, method prove)
-  , ("SAW/set option",           Command, method setOption)
+  , Argo.command
+     "SAW/make simpset"
+     makeSimpsetDescr
+     makeSimpset
+  , Argo.command
+     "SAW/prove"
+     proveDescr
+     prove
+  , Argo.command
+     "SAW/set option"
+     setOptionDescr
+     setOption
   ]

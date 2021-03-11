@@ -1,14 +1,15 @@
-enable_deprecated;
-let f_spec = do {
-   x <- java_var "x" java_int;
-   java_assert_eq "x" {{ 4:[32] }};
-   java_sat_branches true;
-   java_return {{ 6 : [32] }};
-   java_verify_tactic abc;
-};
+enable_experimental;
 
 c <- java_load_class "BranchTest";
+
+// FIXME: make this terminate with the symbolic precondition
 // The following will not terminate if the last parameter is `false`
-f <- java_symexec c "f" [("x", {{ 4:[32] }})] ["return"] true;
-print_term f;
-java_verify c "f" [] f_spec;
+jvm_verify c "f" [] true
+  do {
+    let x = {{ 6 : [32] }}; // FIXME
+    // x <- jvm_fresh_var "x" java_int;
+    // jvm_precond {{ x < 10 }};
+    jvm_execute_func [jvm_term x];
+    jvm_return (jvm_term {{ x * (x - 1) / 2 }});
+  }
+  abc;

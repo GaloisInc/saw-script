@@ -1,44 +1,55 @@
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PartialTypeSignatures #-}
-module SAWServer.CryptolExpression (getTypedTerm, getTypedTermOfCExp) where
+{-# LANGUAGE TupleSections #-}
+module SAWServer.CryptolExpression
+ ( getCryptolExpr
+ , getTypedTerm
+ , getTypedTermOfCExp
+ ) where
 
-import Control.Lens hiding (re)
-import Control.Monad.IO.Class
+import Control.Lens ( view )
+import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import qualified Data.ByteString as B
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 
-import Cryptol.Eval (EvalOpts(..), defaultPPOpts)
-import Cryptol.ModuleSystem (ModuleRes)
+import Cryptol.Eval (EvalOpts(..))
+import Cryptol.ModuleSystem (ModuleRes, ModuleInput(..))
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
-import Cryptol.ModuleSystem.Env (ModuleEnv)
+import Cryptol.ModuleSystem.Env (ModuleEnv, meSolverConfig)
 import Cryptol.ModuleSystem.Interface (noIfaceParams)
 import Cryptol.ModuleSystem.Monad (ModuleM, interactive, runModuleM, setNameSeeds, setSupply, typeCheckWarnings, typeCheckingFailed)
 import qualified Cryptol.ModuleSystem.Renamer as MR
-import Cryptol.Parser.AST
+import Cryptol.Parser.AST ( Expr, PName )
 import Cryptol.Parser.Position (emptyRange, getLoc)
 import Cryptol.TypeCheck (tcExpr)
 import Cryptol.TypeCheck.Monad (InferOutput(..), inpVars, inpTSyns)
+import Cryptol.TypeCheck.Solver.SMT (withSolver)
 import Cryptol.Utils.Ident (interactiveName)
 import Cryptol.Utils.Logger (quietLogger)
-import Cryptol.Utils.PP
+import Cryptol.Utils.PP ( defaultPPOpts, pp )
 import SAWScript.Value (biSharedContext, TopLevelRW(..))
 import Verifier.SAW.CryptolEnv
+    ( getAllIfaceDecls,
+      getNamingEnv,
+      translateExpr,
+      CryptolEnv(eExtraTypes, eExtraTSyns, eModuleEnv) )
 import Verifier.SAW.SharedTerm (SharedContext)
 import Verifier.SAW.TypedTerm(TypedTerm(..))
 
-import Argo
-import CryptolServer.Data.Expression
-import SAWServer
+import qualified Argo
+import CryptolServer.Data.Expression (Expression, getCryptolExpr)
 import CryptolServer.Exceptions (cryptolError)
+import SAWServer
 
-getTypedTerm :: Expression -> Method SAWState TypedTerm
+getTypedTerm :: Expression -> Argo.Command SAWState TypedTerm
 getTypedTerm inputExpr =
-  do cenv <- rwCryptol . view sawTopLevelRW <$> getState
-     fileReader <- getFileReader
-     expr <- getExpr inputExpr
-     sc <- biSharedContext . view sawBIC <$> getState
-     (t, _) <- moduleCmdResult =<< (liftIO $ getTypedTermOfCExp fileReader sc cenv expr)
+  do cenv <- rwCryptol . view sawTopLevelRW <$> Argo.getState
+     fileReader <- Argo.getFileReader
+     expr <- getCryptolExpr inputExpr
+     sc <- biSharedContext . view sawBIC <$> Argo.getState
+     (t, _) <- moduleCmdResult =<< liftIO (getTypedTermOfCExp fileReader sc cenv expr)
      return t
 
 getTypedTermOfCExp ::
@@ -47,7 +58,10 @@ getTypedTermOfCExp ::
 getTypedTermOfCExp fileReader sc cenv expr =
   do let ?fileReader = fileReader
      let env = eModuleEnv cenv
-     mres <- runModuleM (defaultEvalOpts, B.readFile, env) $
+     let minp = ModuleInput True (pure defaultEvalOpts) B.readFile env
+     mres <-
+       withSolver (meSolverConfig env) $ \s ->
+       runModuleM (minp s) $
        do npe <- interactive (noPat expr) -- eliminate patterns
 
           -- resolve names
@@ -72,15 +86,12 @@ getTypedTermOfCExp fileReader sc cenv expr =
             return (Right (TypedTerm schema trm, modEnv'), ws)
        (Left err, ws) -> return (Left err, ws)
 
-liftModuleM :: ModuleEnv -> ModuleM a -> Method SAWState (a, ModuleEnv)
-liftModuleM env m = liftIO (runModuleM (defaultEvalOpts, B.readFile, env) m) >>= moduleCmdResult
-
-moduleCmdResult :: ModuleRes a -> Method SAWState (a, ModuleEnv)
+moduleCmdResult :: ModuleRes a -> Argo.Command SAWState (a, ModuleEnv)
 moduleCmdResult (result, warnings) =
   do mapM_ (liftIO . print . pp) warnings
      case result of
        Right (a, me) -> return (a, me)
-       Left err      -> raise $ cryptolError err warnings
+       Left err      -> Argo.raise $ cryptolError err warnings
 
 defaultEvalOpts :: EvalOpts
 defaultEvalOpts = EvalOpts quietLogger defaultPPOpts

@@ -1,38 +1,38 @@
 let alloc_init ty v = do {
-    p <- crucible_alloc ty;
-    crucible_points_to p v;
+    p <- llvm_alloc ty;
+    llvm_points_to p v;
     return p;
 };
 
 let ptr_to_fresh n ty = do {
-    x <- crucible_fresh_var n ty;
-    p <- alloc_init ty (crucible_term x);
+    x <- llvm_fresh_var n ty;
+    p <- alloc_init ty (llvm_term x);
     return (x, p);
 };
 
 let set_spec = do {
     (x, px) <- ptr_to_fresh "x" (llvm_array 2 (llvm_int 32));
-    po <- alloc_init (llvm_struct "struct.s") (crucible_struct [px]);
-    crucible_execute_func [po];
-    crucible_points_to po (crucible_struct [px]);
-    crucible_points_to px (crucible_term {{ [0, 0] : [2][32] }});
+    po <- alloc_init (llvm_alias "struct.s") (llvm_struct_value [px]);
+    llvm_execute_func [po];
+    llvm_points_to po (llvm_struct_value [px]);
+    llvm_points_to px (llvm_term {{ [0, 0] : [2][32] }});
 };
 
 let add_spec = do {
     (x, px) <- ptr_to_fresh "x" (llvm_array 2 (llvm_int 32));
-    po <- alloc_init (llvm_struct "struct.s") (crucible_struct [px]);
-    crucible_execute_func [po];
-    crucible_return (crucible_term {{ x@0 + x@1 }});
+    po <- alloc_init (llvm_alias "struct.s") (llvm_struct_value [px]);
+    llvm_execute_func [po];
+    llvm_return (llvm_term {{ x@0 + x@1 }});
 };
 
 let id_spec = do {
     (x, px) <- ptr_to_fresh "x" (llvm_array 2 (llvm_int 32));
-    po <- alloc_init (llvm_struct "struct.s") (crucible_struct [px]);
-    crucible_execute_func [po];
-    crucible_return po;
+    po <- alloc_init (llvm_alias "struct.s") (llvm_struct_value [px]);
+    llvm_execute_func [po];
+    llvm_return po;
 };
 
 m <- llvm_load_module "struct.bc";
-crucible_llvm_verify m "set_indirect" [] false set_spec abc;
-crucible_llvm_verify m "add_indirect" [] false add_spec abc;
-crucible_llvm_verify m "s_id" [] false id_spec abc;
+llvm_verify m "set_indirect" [] false set_spec abc;
+llvm_verify m "add_indirect" [] false add_spec abc;
+llvm_verify m "s_id" [] false id_spec abc;

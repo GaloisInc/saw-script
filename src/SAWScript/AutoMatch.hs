@@ -56,7 +56,6 @@ import SAWScript.AutoMatch.LLVM
 import SAWScript.AutoMatch.Cryptol
 
 import SAWScript.LLVMBuiltins
---import SAWScript.JavaBuiltins
 import Language.JVM.Common (dotsToSlashes, mkClassName)
 
 import Prettyprinter.Render.Text (putDoc, hPutDoc)
@@ -402,14 +401,14 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
                   [SAWScript.StmtBind Unknown (SAWScript.PVar boundName Nothing) Nothing
                      (SAWScript.Application
                         (SAWScript.Application
-                           (SAWScript.Var . locate $ "crucible_llvm_extract")
+                           (SAWScript.Var . locate $ "llvm_extract")
                            (SAWScript.Var loadedModule))
                         (SAWScript.String function))]
                JVM ->
                   [SAWScript.StmtBind Unknown (SAWScript.PVar boundName Nothing) Nothing
                      (SAWScript.Application
                         (SAWScript.Application
-                           (SAWScript.Var . locate $ "crucible_java_extract")
+                           (SAWScript.Var . locate $ "jvm_extract")
                            (SAWScript.Var loadedModule))
                         (SAWScript.String function))]
 
@@ -436,7 +435,8 @@ processResults (TaggedSourceFile leftLang  leftFile) (TaggedSourceFile rightLang
 
       cryptolAbstractNamesSAW :: [SAWScript.LName] -> Cryptol.Expr Cryptol.PName -> Cryptol.Expr Cryptol.PName
       cryptolAbstractNamesSAW names expr =
-         Cryptol.EFun (for names $ Cryptol.PVar . cryptolLocate . SAWScript.getVal) expr
+         Cryptol.EFun Cryptol.emptyFunDesc
+         (for names $ Cryptol.PVar . cryptolLocate . SAWScript.getVal) expr
 
       cryptolApplyFunctionSAW :: SAWScript.LName -> [SAWScript.LName] -> Cryptol.Expr Cryptol.PName
       cryptolApplyFunctionSAW function args =

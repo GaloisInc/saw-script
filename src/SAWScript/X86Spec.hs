@@ -71,12 +71,8 @@ import Data.IORef(newIORef,atomicModifyIORef')
 import Data.String
 import Control.Monad.Reader
 
-import qualified What4.Expr.Builder as B
-import qualified What4.Solver.Yices as Yices
-
 import Data.Parameterized.NatRepr
 import Data.Parameterized.Classes
-import Data.Parameterized.Nonce(GlobalNonceGenerator)
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import Data.Parameterized.Pair
@@ -84,7 +80,7 @@ import Data.Parameterized.Pair
 import Data.Foldable(foldlM, toList)
 
 import What4.Interface
-          (bvLit,isEq, Pred, notPred, orPred, natEq
+          (bvLit,isEq, Pred, notPred, orPred, natEq, freshNat
           , bvUle, truePred, natLit, asNat, andPred, userSymbol, freshConstant )
 import What4.ProgramLoc
 
@@ -110,13 +106,14 @@ import Lang.Crucible.Backend
           (addAssumption, getProofObligations, proofGoalsToList
           ,assert, AssumptionReason(..)
           ,LabeledPred(..), ProofGoal(..), labeledPredMsg)
+
 import Lang.Crucible.Simulator.ExecutionTree
 import Lang.Crucible.Simulator.OverrideSim
 import Lang.Crucible.CFG.Common
 import Lang.Crucible.Simulator.RegMap
 
-import Lang.Crucible.Backend.SAWCore
-  (bindSAWTerm,sawBackendSharedContext,toSC,SAWCoreBackend)
+--import Lang.Crucible.Backend.SAWCore
+--  (bindSAWTerm,sawBackendSharedContext,toSC,SAWCoreBackend)
 import Lang.Crucible.Types
   (TypeRepr(..),BaseTypeRepr(..),BaseToType,CrucibleType)
 
@@ -132,7 +129,7 @@ import Data.Macaw.X86.ArchTypes(X86_64)
 import qualified Data.Macaw.Types as M
 
 import Verifier.SAW.CryptolEnv(CryptolEnv(..), lookupIn, getAllIfaceDecls)
-
+import Verifier.SAW.Simulator.What4.ReturnTrip
 
 import Cryptol.ModuleSystem.Name(Name)
 import Cryptol.ModuleSystem.Interface(ifTySyns)
@@ -140,6 +137,8 @@ import Cryptol.TypeCheck.AST(TySyn(tsDef))
 import Cryptol.TypeCheck.TypePat(aNat)
 import Cryptol.Utils.PP(alwaysQualify,runDoc,pp)
 import Cryptol.Utils.Patterns(matchMaybe)
+
+import SAWScript.Crucible.Common (Sym, sawCoreState)
 
 
 data Specification = Specification
@@ -178,10 +177,6 @@ type Pre  = 'Pre
 type Post = 'Post
 
 
-
-
--- | The Crucible backend used for speicifcations.
-type Sym = SAWCoreBackend GlobalNonceGenerator Yices.Connection (B.Flags B.FloatReal)
 
 data Opts = Opts
   { optsSym :: Sym
@@ -453,7 +448,7 @@ freshVal sym t ptrOk nm =
       | ptrOk, Just Refl <- testEquality w (knownNat @64) -> do
           sn_base <- symName (nm ++ "_base")
           sn_off <- symName (nm ++ "_off")
-          base <- freshConstant sym sn_base BaseNatRepr
+          base <- freshNat sym sn_base
           off <- freshConstant sym sn_off (BaseBVRepr w)
           return (LLVMPointer base off)
       | otherwise -> do
@@ -558,30 +553,27 @@ instance Eval Post where
 
 evalCry :: forall p. (Eval p, Crucible.HasLLVMAnn Sym) => Opts -> CryArg p -> S p -> IO Term
 evalCry opts cry s =
-  case cry of
-    CryNat n -> do sc <- sawBackendSharedContext sym
-                   scNat sc (fromInteger n)
+  do let sym = optsSym opts
+     st <- sawCoreState sym
+     let sc = saw_ctx st
+     case cry of
+       CryNat n -> scNat sc (fromInteger n)
 
-    Cry v -> toSC sym =<< projectLLVM_bv sym =<< eval v opts s
+       Cry v -> toSC sym st =<< projectLLVM_bv sym =<< eval v opts s
 
-    CryArrCur ptr n u ->
-      unitByteSize u $ \byteW ->
-      do vs <- readArr opts ptr n byteW s (curState (Proxy @p) s)
-         terms <- mapM (\x -> toSC sym =<< projectLLVM_bv sym x) vs
-         sc <- sawBackendSharedContext sym
-         ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
-         scVector sc ty terms
+       CryArrCur ptr n u ->
+         unitByteSize u $ \byteW ->
+         do vs <- readArr opts ptr n byteW s (curState (Proxy @p) s)
+            terms <- mapM (\x -> toSC sym st =<< projectLLVM_bv sym x) vs
+            ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
+            scVector sc ty terms
 
-    CryArrPre ptr n u ->
-      unitByteSize u $ \byteW ->
-      do vs <- readArr opts ptr n byteW s (fst s)
-         terms <- mapM (\x -> toSC sym =<< projectLLVM_bv sym x) vs
-         sc <- sawBackendSharedContext sym
-         ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
-         scVector sc ty terms
-
-  where
-  sym = optsSym opts
+       CryArrPre ptr n u ->
+         unitByteSize u $ \byteW ->
+         do vs <- readArr opts ptr n byteW s (fst s)
+            terms <- mapM (\x -> toSC sym st =<< projectLLVM_bv sym x) vs
+            ty <- scBitvector sc (fromIntegral (8 * natValue byteW))
+            scVector sc ty terms
 
 evalCryFunGen ::
   (Eval p, Crucible.HasLLVMAnn Sym) =>
@@ -592,8 +584,10 @@ evalCryFunGen ::
   [CryArg p] ->
   IO (RegValue Sym (BaseToType t))
 evalCryFunGen opts s ty f xs =
-  do ts <- mapM (\x -> evalCry opts x s) xs
-     bindSAWTerm (optsSym opts) ty =<< cryTerm opts f ts
+  do let sym = optsSym opts
+     st <- sawCoreState sym
+     ts <- mapM (\x -> evalCry opts x s) xs
+     bindSAWTerm sym st ty =<< cryTerm opts f ts
 
 
 -- | Cryptol function that returns a list of bit-vectors.
@@ -609,12 +603,13 @@ evalCryFunArr ::
 evalCryFunArr opts s n w f xs =
   do term <- cryTerm opts f =<< mapM (\x -> evalCry opts x s) xs
      let sym = optsSym opts
-     sc  <- sawBackendSharedContext sym
+     st  <- sawCoreState sym
+     let sc = saw_ctx st
      len <- scNat sc (fromInteger n)
      ty  <- scBitvector sc (natValue w)
      let atIx i = do ind    <- scNat sc (fromInteger i)
                      term_i <- scAt sc len ty term ind
-                     bv <- bindSAWTerm sym (BaseBVRepr w) term_i
+                     bv <- bindSAWTerm sym st (BaseBVRepr w) term_i
                      llvmPointer_bv sym bv
      mapM atIx [ 0 .. n - 1 ]
 
@@ -1180,7 +1175,7 @@ checkOverlaps sym = check
            (_, x2) = llvmPointerView p2
            (b1,y1) = llvmPointerView q1
            (_,y2)  = llvmPointerView q2
-       opt1 <- notPred sym =<< isEq sym a1 b1
+       opt1 <- notPred sym =<< natEq sym a1 b1
        opt2 <- bvUle sym x2 y1
        opt3 <- bvUle sym y2 x1
        ok <- orPred sym opt1 =<< orPred sym opt2 opt3
@@ -1230,7 +1225,8 @@ cryTerm opts x xs =
   case lookupCry x (eTermEnv (optsCry opts)) of
     Left err -> fail err
     Right t ->
-     do sc <- sawBackendSharedContext (optsSym opts)
+     do let sym = optsSym opts
+        sc <- saw_ctx <$> sawCoreState sym
         scApplyAll sc t xs
 
 -- | Lookup a Crytpol type synonym, which should resolve to a constant.

@@ -29,6 +29,7 @@ module SAWScript.Crucible.Common.Override
   , syminterface
   , setupValueSub
   , termSub
+  , termEqs
   --
   , OverrideFailureReason(..)
   , ppOverrideFailureReason
@@ -40,6 +41,7 @@ module SAWScript.Crucible.Common.Override
   , runOverrideMatcher
   , RO
   , RW
+  , addTermEq
   , addAssert
   , addAssume
   , readGlobal
@@ -102,6 +104,9 @@ data OverrideState ext = OverrideState
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term
 
+    -- | Equalities of SAW Core terms
+  , _termEqs :: [(Term, Crucible.SimError)]
+
     -- | Free variables available for unification
   , _osFree :: Set VarIndex
 
@@ -139,6 +144,7 @@ initialState sym globals allocs terms free loc = OverrideState
   , _syminterface    = sym
   , _overrideGlobals = globals
   , _termSub         = terms
+  , _termEqs         = []
   , _osFree          = free
   , _setupValueSub   = allocs
   , _osLocation      = loc
@@ -298,6 +304,13 @@ runOverrideMatcher ::
    IO (Either (OverrideFailure ext) (a, OverrideState ext))
 runOverrideMatcher sym g a t free loc (OM m) =
   runExceptT (runStateT m (initialState sym g a t free loc))
+
+addTermEq ::
+  Term {- ^ term equality -} ->
+  Crucible.SimError {- ^ reason   -} ->
+  OverrideMatcher ext rorw ()
+addTermEq t r =
+  OM (termEqs %= cons (t, r))
 
 addAssert ::
   W4.Pred Sym       {- ^ property -} ->

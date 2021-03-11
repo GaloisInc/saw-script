@@ -37,10 +37,7 @@ import qualified Lang.Crucible.FunctionHandle as Crucible (HandleAllocator)
 
 -- crucible-jvm
 import qualified Lang.Crucible.JVM as CJ
-
--- jvm-verifier
--- TODO: transition to Lang.JVM.Codebase from crucible-jvm
-import qualified Verifier.Java.Codebase as CB
+import qualified Lang.JVM.Codebase as CB
 
 -- jvm-parser
 import qualified Language.JVM.Parser as J
@@ -70,10 +67,6 @@ type JIdent = String -- FIXME(huffman): what to put here?
 type instance MS.TypeName CJ.JVM = JIdent
 
 type instance MS.ExtType CJ.JVM = J.Type
-
--- TODO: remove when jvm-parser switches to prettyprinter
-instance PPL.Pretty J.Type where
-  pretty = PPL.viaShow
 
 --------------------------------------------------------------------------------
 -- *** JVMMethodId
@@ -128,14 +121,41 @@ type instance MS.PointsTo CJ.JVM = JVMPointsTo
 
 data JVMPointsTo
   = JVMPointsToField ProgramLoc MS.AllocIndex J.FieldId (MS.SetupValue CJ.JVM)
+  | JVMPointsToStatic ProgramLoc J.FieldId (MS.SetupValue CJ.JVM)
   | JVMPointsToElem ProgramLoc MS.AllocIndex Int (MS.SetupValue CJ.JVM)
   | JVMPointsToArray ProgramLoc MS.AllocIndex TypedTerm
+
+overlapPointsTo :: JVMPointsTo -> JVMPointsTo -> Bool
+overlapPointsTo =
+  \case
+    JVMPointsToField _ p1 f1 _ ->
+      \case
+        JVMPointsToField _ p2 f2 _ -> p1 == p2 && f1 == f2
+        _                          -> False
+    JVMPointsToStatic _ f1 _ ->
+      \case
+        JVMPointsToStatic _ f2 _   -> f1 == f2
+        _                          -> False
+    JVMPointsToElem _ p1 i1 _ ->
+      \case
+        JVMPointsToElem _ p2 i2 _  -> p1 == p2 && i1 == i2
+        JVMPointsToArray _ p2 _    -> p1 == p2
+        _                          -> False
+    JVMPointsToArray _ p1 _ ->
+      \case
+        JVMPointsToElem _ p2 _ _   -> p1 == p2
+        JVMPointsToArray _ p2 _    -> p1 == p2
+        _                          -> False
 
 ppPointsTo :: JVMPointsTo -> PPL.Doc ann
 ppPointsTo =
   \case
     JVMPointsToField _loc ptr fid val ->
       MS.ppAllocIndex ptr <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
+      PPL.<+> PPL.pretty "points to"
+      PPL.<+> MS.ppSetupValue val
+    JVMPointsToStatic _loc fid val ->
+      PPL.pretty (J.unClassName (J.fieldIdClass fid)) <> PPL.pretty "." <> PPL.pretty (J.fieldIdName fid)
       PPL.<+> PPL.pretty "points to"
       PPL.<+> MS.ppSetupValue val
     JVMPointsToElem _loc ptr idx val ->

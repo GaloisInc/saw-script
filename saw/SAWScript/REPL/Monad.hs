@@ -47,7 +47,7 @@ module SAWScript.REPL.Monad (
   , getSAWScriptNames
   ) where
 
-import Cryptol.Eval (EvalError)
+import Cryptol.Eval (EvalError, EvalErrorEx(..))
 import qualified Cryptol.ModuleSystem as M
 import qualified Cryptol.ModuleSystem.NamingEnv as MN
 import Cryptol.ModuleSystem.NamingEnv (NamingEnv)
@@ -235,8 +235,8 @@ rethrowEvalError m = run `X.catch` rethrow
     a <- m
     return $! a
 
-  rethrow :: EvalError -> IO a
-  rethrow exn = X.throwIO (EvalError exn)
+  rethrow :: EvalErrorEx -> IO a
+  rethrow (EvalErrorEx _ exn) = X.throwIO (EvalError exn)
 
 
 

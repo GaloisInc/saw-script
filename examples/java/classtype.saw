@@ -1,11 +1,12 @@
-enable_deprecated;
-let id_spec = do {
-    java_class_var "x" (java_class "java.lang.Object");
-    java_return {{ 0 : [32] }};
-    java_verify_tactic abc;
-};
+enable_experimental;
 
-let main = do {
-    c <- java_load_class "ClassType";
-    java_verify c "id" [] id_spec;
-};
+c <- java_load_class "ClassType";
+
+jvm_verify c "id" [] false
+  do {
+    this <- jvm_alloc_object "ClassType";
+    x_ref <- jvm_alloc_object "java.lang.Object";
+    jvm_execute_func [this, x_ref];
+    jvm_return (jvm_term {{ 0 : [32] }});
+  }
+  abc;

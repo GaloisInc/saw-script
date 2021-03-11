@@ -24,6 +24,7 @@ import Control.Monad.State hiding (mapM)
 import Data.List (intercalate)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 import Data.Traversable (mapM)
 import Numeric.Natural (Natural)
 
@@ -210,7 +211,7 @@ data Typ
   | TFun Typ Typ
   | TVec SBV.Size Typ
   | TTuple [Typ]
-  | TRecord [(String, Typ)]
+  | TRecord [(FieldName, Typ)]
 
 instance Show Typ where
   show TBool = "."
@@ -218,7 +219,7 @@ instance Show Typ where
   show (TVec size t) = "[" ++ show size ++ "]" ++ show t
   show (TTuple ts) = "(" ++ intercalate "," (map show ts) ++ ")"
   show (TRecord fields) = "{" ++ intercalate "," (map showField fields) ++ "}"
-    where showField (s, t) = s ++ ":" ++ show t
+    where showField (s, t) = Text.unpack s ++ ":" ++ show t
 
 parseIRType :: SBV.IRType -> Typ
 parseIRType (SBV.TApp "." []) = TBool
@@ -227,7 +228,7 @@ parseIRType (SBV.TApp ":" [SBV.TInt n, a]) = TVec n (parseIRType a)
 parseIRType (SBV.TApp c ts)
   | c == "(" ++ replicate (length ts - 1) ',' ++ ")" = TTuple (map parseIRType ts)
 parseIRType (SBV.TRecord fields) =
-    TRecord [ (name, parseIRType t) | (name, SBV.Scheme [] [] [] t) <- fields ]
+    TRecord [ (Text.pack name, parseIRType t) | (name, SBV.Scheme [] [] [] t) <- fields ]
 parseIRType t = error ("parseIRType: " ++ show t)
 
 typSizes :: Typ -> [SBV.Size]

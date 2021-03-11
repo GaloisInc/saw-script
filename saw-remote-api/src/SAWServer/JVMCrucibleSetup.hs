@@ -13,48 +13,71 @@ module SAWServer.JVMCrucibleSetup
   , compileJVMContract
   ) where
 
-import Control.Lens
-import Control.Monad.IO.Class
+import Control.Lens ( view )
+import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import Control.Monad.State
+    ( evalStateT,
+      MonadState(get, put),
+      MonadTrans(lift),
+      modify' )
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
-import Data.Foldable
+import Data.Foldable ( traverse_ )
+import Data.Functor (($>))
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe
+import Data.Maybe ( maybeToList )
 import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
 import Cryptol.Utils.Ident (mkIdent)
 import qualified Lang.Crucible.JVM as CJ
-import qualified Language.JVM.Common as JVM
 import SAWScript.Crucible.Common.MethodSpec as MS (SetupValue(..))
 import SAWScript.Crucible.JVM.Builtins
-import SAWScript.Crucible.JVM.BuiltinsJVM
-import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMS
+    ( jvm_alloc_array,
+      jvm_alloc_object,
+      jvm_execute_func,
+      jvm_fresh_var,
+      jvm_postcond,
+      jvm_precond,
+      jvm_return )
+import SAWScript.Crucible.JVM.BuiltinsJVM ( loadJavaClass )
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Value (BuiltinContext, JVMSetupM(..), biSharedContext)
 import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)
 
-import Argo
+import qualified Argo
+import qualified Argo.Doc as Doc
 import SAWServer
+    ( ServerName(..),
+      SAWState,
+      SetupStep(..),
+      CrucibleSetupVal(CryptolExpr, NullValue, NamedValue),
+      SAWTask(JVMSetup),
+      sawTask,
+      pushTask,
+      setServerVal )
 import SAWServer.Data.Contract
-import SAWServer.Data.JVMType
+    ( PointsTo(PointsTo),
+      Allocated(Allocated),
+      ContractVar(ContractVar),
+      Contract(preVars, preConds, preAllocated, prePointsTos,
+               argumentVals, postVars, postConds, postAllocated, postPointsTos,
+               returnVal) )
 import SAWServer.Data.SetupValue ()
 import SAWServer.CryptolExpression (getTypedTermOfCExp)
-import SAWServer.Exceptions
-import SAWServer.OK
-import SAWServer.TopLevel
-import SAWServer.TrackFile
+import SAWServer.Exceptions ( notAtTopLevel )
+import SAWServer.OK ( OK, ok )
+import SAWServer.TopLevel ( tl )
 
-startJVMSetup :: StartJVMSetupParams -> Method SAWState OK
+startJVMSetup :: StartJVMSetupParams -> Argo.Command SAWState OK
 startJVMSetup (StartJVMSetupParams n) =
   do pushTask (JVMSetup n [])
      ok
 
-data StartJVMSetupParams
+newtype StartJVMSetupParams
   = StartJVMSetupParams ServerName
 
 instance FromJSON StartJVMSetupParams where
@@ -62,7 +85,13 @@ instance FromJSON StartJVMSetupParams where
     withObject "params for \"SAW/Crucible setup\"" $ \o ->
     StartJVMSetupParams <$> o .: "name"
 
-data ServerSetupVal = Val (SetupValue CJ.JVM)
+instance Doc.DescribedParams StartJVMSetupParams where
+  parameterFieldDescription =
+    [ ("name",
+       Doc.Paragraph [Doc.Text "The name of the item to setup on the server."])
+    ]
+
+newtype ServerSetupVal = Val (SetupValue CJ.JVM)
 
 -- TODO: this is an extra layer of indirection that could be collapsed, but is easy to implement for now.
 compileJVMContract ::
@@ -79,12 +108,12 @@ compileJVMContract fileReader bic cenv c = interpretJVMSetup fileReader bic cenv
       map setupFresh (preVars c) ++
       map SetupPrecond (preConds c) ++
       map setupAlloc (preAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (prePointsTos c) ++
+      map (\(PointsTo p v chkV cond) -> SetupPointsTo p v chkV cond) (prePointsTos c) ++
       [ SetupExecuteFunction (argumentVals c) ] ++
       map setupFresh (postVars c) ++
       map SetupPostcond (postConds c) ++
       map setupAlloc (postAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
+      map (\(PointsTo p v chkV cond) -> SetupPointsTo p v chkV cond) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
 
 interpretJVMSetup ::
@@ -93,7 +122,7 @@ interpretJVMSetup ::
   CryptolEnv ->
   [SetupStep JavaType] ->
   JVMSetupM ()
-interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
+interpretJVMSetup fileReader bic cenv0 ss = evalStateT (traverse_ go ss) (mempty, cenv0)
   where
     go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= jvm_return
     -- TODO: do we really want two names here?
@@ -102,17 +131,17 @@ interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty,
          (env, cenv) <- get
          put (env, CEnv.bindTypedTerm (mkIdent n, t) cenv)
          save name (Val (MS.SetupTerm t))
-    go (SetupAlloc name ty _ (Just _)) =
-      error "attempted to allocate a Java object with alignment information"
+    go (SetupAlloc name _ _ (Just _)) =
+      error $ "attempted to allocate a Java object with alignment information: " ++ show name
     go (SetupAlloc name (JavaArray n ty) True Nothing) =
       lift (jvm_alloc_array n ty) >>= save name . Val
     go (SetupAlloc name (JavaClass c) True Nothing) =
       lift (jvm_alloc_object c) >>= save name . Val
-    go (SetupAlloc name ty False Nothing) =
+    go (SetupAlloc _ ty _ Nothing) =
       error $ "cannot allocate type: " ++ show ty
-    go (SetupPointsTo src tgt) = get >>= \env -> lift $
-      do ptr <- getSetupVal env src
-         tgt' <- getSetupVal env tgt
+    go (SetupPointsTo src tgt _chkTgt _cond) = get >>= \env -> lift $
+      do _ptr <- getSetupVal env src
+         _tgt' <- getSetupVal env tgt
          error "nyi: points-to"
     go (SetupExecuteFunction args) =
       get >>= \env ->
@@ -144,7 +173,7 @@ interpretJVMSetup fileReader bic cenv0 ss = runStateT (traverse_ go ss) (mempty,
     getSetupVal _ (GlobalLValue name) =
       JVMSetupM $ return $ MS.SetupGlobal () name
          -}
-    getSetupVal (env, _) (ServerValue n) = JVMSetupM $
+    getSetupVal (env, _) (NamedValue n) = JVMSetupM $
       resolve env n >>=
       \case
         Val x -> return x -- TODO add cases for the server values that
@@ -182,12 +211,20 @@ instance FromJSON JVMLoadClassParams where
     withObject "params for \"SAW/JVM/load class\"" $ \o ->
     JVMLoadClassParams <$> o .: "name" <*> o .: "class"
 
-jvmLoadClass :: JVMLoadClassParams -> Method SAWState OK
+jvmLoadClass :: JVMLoadClassParams -> Argo.Command SAWState OK
 jvmLoadClass (JVMLoadClassParams serverName cname) =
-  do tasks <- view sawTask <$> getState
+  do tasks <- view sawTask <$> Argo.getState
      case tasks of
-       (_:_) -> raise $ notAtTopLevel $ map fst tasks
+       (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
          do c <- tl $ loadJavaClass cname
             setServerVal serverName c
             ok
+
+instance Doc.DescribedParams JVMLoadClassParams where
+  parameterFieldDescription =
+    [ ("name",
+        Doc.Paragraph [Doc.Text "The name of the class on the server."])
+    , ("class",
+      Doc.Paragraph [Doc.Text "The java class to load."])
+    ]

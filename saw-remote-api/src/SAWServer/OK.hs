@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module SAWServer.OK (OK(..), ok) where
 
-import Data.Aeson
+import Data.Aeson ( ToJSON(toJSON) )
 
 data OK = OK
 

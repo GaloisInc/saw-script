@@ -1,0 +1,49 @@
+// This is a test to demonstrate the use of the saw-script LLVM setup
+// declaration `llvm_points_to_at_type`.
+
+bc <- llvm_load_module "test.bc";
+
+let i32 = llvm_int 32;
+
+// The function `f` copies the first half of an array into the second
+// half. So the full array needs to be allocated, but only the first
+// half needs to be initialized.
+
+// This first example fails because the types don't match in the first
+// `llvm_points_to` declaration.
+fails (
+  llvm_verify bc "f" [] false
+    do {
+      x <- llvm_fresh_var "x" (llvm_array 2 i32);
+      p <- llvm_alloc (llvm_array 4 i32);
+      llvm_points_to p (llvm_term x);
+      llvm_execute_func [p];
+      llvm_points_to p (llvm_term {{ x # x }});
+    }
+    z3);
+
+// Changing `llvm_points_to` to `llvm_points_to_at_type` will work, as
+// long as the specified type matches the type of the rhs.
+f_ov <-
+  llvm_verify bc "f" [] false
+    do {
+      x <- llvm_fresh_var "x" (llvm_array 2 i32);
+      p <- llvm_alloc (llvm_array 4 i32);
+      llvm_points_to_at_type p (llvm_array 2 i32) (llvm_term x);
+      llvm_execute_func [p];
+      llvm_points_to p (llvm_term {{ x # x }});
+    }
+    z3;
+
+// But if the specified type does not match the rhs, the declaration
+// will fail with another type mismatch error.
+fails (
+  llvm_verify bc "f" [] false
+    do {
+      x <- llvm_fresh_var "x" (llvm_array 2 i32);
+      p <- llvm_alloc (llvm_array 4 i32);
+      llvm_points_to_at_type p (llvm_array 3 i32) (llvm_term x);
+      llvm_execute_func [p];
+      llvm_points_to p (llvm_term {{ x # x }});
+    }
+    z3);

@@ -1,26 +1,26 @@
 m <- llvm_load_module "test.bc";
 
 let ptr_to_fresh n ty = do {
-  p <- crucible_alloc ty;
-  x <- crucible_fresh_var n ty;
-  crucible_points_to p (crucible_term x);
+  p <- llvm_alloc ty;
+  x <- llvm_fresh_var n ty;
+  llvm_points_to p (llvm_term x);
   return (p, x);
 };
 
 let zero_inc_spec = do {
-  x <- crucible_fresh_var "x" (llvm_int 64);
-  crucible_execute_func [crucible_term x];
-  r <- crucible_fresh_var "r" (llvm_int 64);
-  crucible_postcond {{ r > 0 }};
-  crucible_return (crucible_term {{ r }});
+  x <- llvm_fresh_var "x" (llvm_int 64);
+  llvm_execute_func [llvm_term x];
+  r <- llvm_fresh_var "r" (llvm_int 64);
+  llvm_postcond {{ r > 0 }};
+  llvm_return (llvm_term {{ r }});
 };
 
 let inv_spec = do {
   (px, x) <- ptr_to_fresh "x" (llvm_int 64);
-  crucible_execute_func [px];
-  crucible_return (crucible_term {{ x + 1 }});
+  llvm_execute_func [px];
+  llvm_return (llvm_term {{ x + 1 }});
 };
 
-inv <- crucible_llvm_verify m "__breakpoint__inv#zero_inc" [] false inv_spec abc;
-crucible_llvm_verify m "zero_inc" [inv] false zero_inc_spec abc;
+inv <- llvm_verify m "__breakpoint__inv#zero_inc" [] false inv_spec abc;
+llvm_verify m "zero_inc" [inv] false zero_inc_spec abc;
 

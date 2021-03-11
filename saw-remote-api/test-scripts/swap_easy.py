@@ -1,5 +1,6 @@
 from saw import *
-from saw.llvm import uint32_t, Contract, void
+from saw.llvm import Contract, void
+from saw.llvm_types import i32
 
 import os
 import os.path
@@ -11,22 +12,18 @@ swap_bc = os.path.join(dir_path, 'swap.bc')
 class Swap(Contract):
     def __init__(self) -> None:
         super().__init__()
-        self.t = uint32_t
+        self.ty = i32
 
-    def pre(self) -> None:
-        self.x = self.declare(self.t)
-        self.y = self.declare(self.t)
-        self.x_pointer = self.declare_pointer(self.t)
-        self.y_pointer = self.declare_pointer(self.t)
-        self.points_to(self.x_pointer, self.x)
-        self.points_to(self.y_pointer, self.y)
+    def specification(self) -> None:
+        x = self.fresh_var(self.ty, "x")
+        y = self.fresh_var(self.ty, "y")
+        x_ptr = self.alloc(self.ty, points_to=x)
+        y_ptr = self.alloc(self.ty, points_to=y)
 
-    def call(self) -> None:
-        self.arguments(self.x_pointer, self.y_pointer)
+        self.execute_func(x_ptr, y_ptr)
 
-    def post(self) -> None:
-        self.points_to(self.x_pointer, self.y)
-        self.points_to(self.y_pointer, self.x)
+        self.points_to(x_ptr, y)
+        self.points_to(y_ptr, x)
         self.returns(void)
 
 env_connect_global()

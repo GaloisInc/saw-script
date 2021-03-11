@@ -1,5 +1,4 @@
-[![Build
-Status](https://travis-ci.org/GaloisInc/saw-script.svg?branch=master)](https://travis-ci.org/GaloisInc/saw-script)
+![Build Status](https://github.com/actions/GaloisInc/saw-script/workflows/.github/workflows/nightly.yml/badge.svg)
 
 # SAWScript
 
@@ -38,11 +37,9 @@ is on your PATH.
 
 To build SAWScript and related utilities from source:
 
-  * Ensure that you have the
-    [Stack](https://github.com/commercialhaskell/stack) program on your
-    `PATH`. If you don't already have Stack, then `cabal install stack`,
-    or download a precompiled binary from
-    https://github.com/commercialhaskell/stack/releases.
+  * Ensure that you have the `cabal` and `ghc` executables in your
+    `PATH`. If you don't already have them, we recommend using `ghcup`
+    to install them: <https://www.haskell.org/ghcup/>
 
   * Ensure that you have the C libraries and header files for
     `terminfo`, which generally comes as part of `ncurses` on most
@@ -53,49 +50,15 @@ To build SAWScript and related utilities from source:
     `PATH`. Z3 binaries are available at
     https://github.com/Z3Prover/z3/releases
 
-  * Setup a `stack.yaml` for your OS and preferred GHC.
+  * Optionally, put in place dependency version freeze files:
 
-    Choose one of the Stack YAML config files and link it to
-    `stack.yaml`:
-
-        ln -s stack.<ghc version and os>.yaml stack.yaml
-
-    The `stack-<ghc version>-unix.yaml` files are for both Linux and
-    OS X.
-
-    (Alternatively, you can
-
-        export STACK_YAML=stack.<ghc version and os>.yaml
-
-    instead of creating a symlink.
-
-    **Developers**: defining a `STACK_YAML` env var also overrides the
-    `stack.yaml` file, if any, and so is useful for testing a
-    alternative build without permanently changing your default. You
-    can even define `STACK_YAML` only for the current command: e.g.
-
-        STACK_YAML=stack.<ghc version and os>.yaml stack build
-
-    will build SAWScript using the given Stack YAML.)
+        ln -s cabal.<ghc version>.config cabal.project.freeze
 
   * Build SAWScript by running
 
         ./build.sh
 
-    The SAWScript executables will be created in
-
-        echo `stack path --local-install-root`/bin
-
-    a path under the SAWScript repo. You can install SAWScript into
-    a more predictable location by running
-
-        stack install
-
-    which installs into
-
-        stack path --local-bin-path
-
-    which is `$HOME/.local/bin` by default.
+    The SAWScript executables will be available in the `bin` directory.
 
   * Optionally, run ./stage.sh to create a binary tarball.
 
@@ -124,7 +87,6 @@ downloaded dependencies include:
 * `deps/abcBridge/`:        [Haskell bindings for ABC](https://github.com/GaloisInc/abcBridge)
 * `deps/crucible/`:         [Crucible symbolic execution engine](https://github.com/GaloisInc/crucible)
 * `deps/cryptol/`:          [Cryptol](https://github.com/GaloisInc/cryptol)
-* `deps/jvm-verifier/`:     [Java Symbolic Simulator (JSS)](https://github.com/GaloisInc/jvm-verifier)
 * `deps/saw-core/`:         [SAWCore intermediate language](https://github.com/GaloisInc/saw-core), used by CSS, JSS, and SAWScript
 
 ## For SAW developers
@@ -139,12 +101,6 @@ If you are using `cabal` to build, select the `saw-script` target:
 $ cabal new-repl saw-script
 ```
 
-If you are using `stack` to build, select the `saw-script` *library* target:
-
-```
-$ stack repl saw-script:lib
-```
-
 In order to use interactive tools like `intero`, you need to configure them with
 this target. You can configure `intero-mode` in Emacs to use the `saw-script`
 library target by setting the variable `intero-targets` to the string
@@ -154,6 +110,33 @@ project, place the following snippet in the file `src/.dir-locals.el`:
 ```elisp
 ((haskell-mode
   (intero-targets "saw-script:lib")))
+```
+
+## Notes on Freeze Files
+
+We use the `cabal.GHC-*.config` files to constrain dependency versions
+in CI, and recommend using the following command for best results before
+building locally:
+
+```
+ln -s cabal.GHC-<VER>.config cabal.project.freeze
+```
+
+These configuration files were generated using `cabal freeze`, but with
+some manual changes to allow cross-platfom builds, since Unix-like
+systems and Windows systems end up with different package dependencies.
+Specifically, we remove lines for the following packages or flags:
+
+```
+abcBridge
+cryptol-saw-core
+regex-posix
+saw-remote-api
+saw-script
+tasty +unix
+unix
+unix-compat
+unix-time
 ```
 
 ## Acknowledgements

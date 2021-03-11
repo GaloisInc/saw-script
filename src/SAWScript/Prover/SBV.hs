@@ -11,6 +11,7 @@ import           Data.Maybe
 import           Data.Map ( Map )
 import qualified Data.Map as Map
 import           Data.Set ( Set )
+import qualified Data.Text as Text
 import qualified Data.Vector as V
 import           Control.Monad
 
@@ -65,7 +66,7 @@ proveUnintSBV conf unintSet timeout sc term =
 
        SBV.Satisfiable {} ->
          do let dict = SBV.getModelDictionary r
-                r'   = getLabels labels dict argNames
+                r'   = getLabels labels dict (map Text.unpack argNames)
             return (r', stats)
 
        SBV.SatExtField {} -> fail "Prover returned model in extension field"

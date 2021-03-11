@@ -9,11 +9,11 @@ let s1 = llvm_sizeof bc1 (llvm_int 8);
 let s2 = llvm_sizeof bc1 (llvm_int 16);
 let s3 = llvm_sizeof bc1 (llvm_int 32);
 let s4 = llvm_sizeof bc1 (llvm_int 64);
-let s5 = llvm_sizeof bc1 (llvm_struct "struct.foo");
-let s6 = llvm_sizeof bc1 (llvm_struct "struct.bar");
-let s7 = llvm_sizeof bc1 (llvm_array 2 (llvm_struct "struct.foo"));
-let s8 = llvm_sizeof bc2 (llvm_struct "struct.baz");
-let s9 = llvm_sizeof bc2 (llvm_array 8 (llvm_struct "struct.baz"));
+let s5 = llvm_sizeof bc1 (llvm_alias "struct.foo");
+let s6 = llvm_sizeof bc1 (llvm_alias "struct.bar");
+let s7 = llvm_sizeof bc1 (llvm_array 2 (llvm_alias "struct.foo"));
+let s8 = llvm_sizeof bc2 (llvm_alias "struct.baz");
+let s9 = llvm_sizeof bc2 (llvm_array 8 (llvm_alias "struct.baz"));
 let s0 = llvm_sizeof bc2 (llvm_type "void*");
 
 // This is a workaround to delay evaluation of a pure function
@@ -21,8 +21,8 @@ let s0 = llvm_sizeof bc2 (llvm_type "void*");
 let apply f x = do { () <- return (); return (f x); };
 
 fails (apply (llvm_sizeof bc1) (llvm_type "void"));
-fails (apply (llvm_sizeof bc1) (llvm_struct "baz"));
-fails (apply (llvm_sizeof bc2) (llvm_struct "foo"));
+fails (apply (llvm_sizeof bc1) (llvm_alias "baz"));
+fails (apply (llvm_sizeof bc2) (llvm_alias "foo"));
 
 prove_print z3 {{
   `s1 == (1 : Integer) /\

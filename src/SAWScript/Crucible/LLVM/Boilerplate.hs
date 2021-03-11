@@ -83,15 +83,15 @@ bodyBoilerplate True _fskel skelName = mconcat
   ]
 bodyBoilerplate False fskel _ = mconcat
   [ mconcat $ uncurry argPrecondition <$> numberedArgs
-  , "  crucible_execute_func ["
+  , "  llvm_execute_func ["
   , Text.intercalate ", " $ uncurry argTerm <$> numberedArgs
   , "];\n\n"
   , if | LLVM.PrimType LLVM.Void <- fskel ^. funSkelRet . typeSkelLLVMType -> ""
-       | fskel ^. funSkelRet . typeSkelIsPointer -> "  crucible_return undefined;\n\n"
+       | fskel ^. funSkelRet . typeSkelIsPointer -> "  llvm_return undefined;\n\n"
        | otherwise -> mconcat
-         [ "  __return <- crucible_fresh_var \"(return ", fskel ^. funSkelName
+         [ "  __return <- llvm_fresh_var \"(return ", fskel ^. funSkelName
          , ")\" ", typeBoilerplate $ fskel ^. funSkelRet, ";\n"
-         , "  crucible_return (crucible_term __return);\n\n"
+         , "  llvm_return (llvm_term __return);\n\n"
          ]
   , mconcat $ uncurry argPostcondition <$> numberedArgs
   ]
@@ -107,24 +107,24 @@ bodyBoilerplate False fskel _ = mconcat
       , (s:_) <- a ^. argSkelType . typeSkelSizeGuesses
       , s ^. sizeGuessInitialized
       = mconcat
-        [ "  ", argName i a, " <- crucible_fresh_var \"", argName i a, "\" ", typeBoilerplate (a ^. argSkelType), ";\n"
-        , "  ", argName i a, "_ptr <- crucible_alloc ", typeBoilerplate (a ^. argSkelType), ";\n"
-        , "  crucible_points_to ", argName i a, "_ptr (crucible_term ", argName i a, ");\n\n"
+        [ "  ", argName i a, " <- llvm_fresh_var \"", argName i a, "\" ", typeBoilerplate (a ^. argSkelType), ";\n"
+        , "  ", argName i a, "_ptr <- llvm_alloc ", typeBoilerplate (a ^. argSkelType), ";\n"
+        , "  llvm_points_to ", argName i a, "_ptr (llvm_term ", argName i a, ");\n\n"
         ]
       | a ^. argSkelType . typeSkelIsPointer
       = mconcat
-        [ "  ", argName i a, "_ptr <- crucible_alloc ", typeBoilerplate (a ^. argSkelType), ";\n\n"
+        [ "  ", argName i a, "_ptr <- llvm_alloc ", typeBoilerplate (a ^. argSkelType), ";\n\n"
         ]
       | otherwise
       = mconcat
-        [ "  ", argName i a, " <- crucible_fresh_var \"", argName i a, "\" ", typeBoilerplate (a ^. argSkelType), ";\n\n"
+        [ "  ", argName i a, " <- llvm_fresh_var \"", argName i a, "\" ", typeBoilerplate (a ^. argSkelType), ";\n\n"
         ]
     argPostcondition :: Int -> ArgSkeleton -> Text
     argPostcondition i a
       | a ^. argSkelType . typeSkelIsPointer
       = mconcat
-        [ "  ", argName i a, "_post <- crucible_fresh_var \"", argName i a, "_post\" ", typeBoilerplate (a ^. argSkelType), ";\n"
-        , "  crucible_points_to ", argName i a, "_ptr (crucible_term ", argName i a, "_post);\n\n"
+        [ "  ", argName i a, "_post <- llvm_fresh_var \"", argName i a, "_post\" ", typeBoilerplate (a ^. argSkelType), ";\n"
+        , "  llvm_points_to ", argName i a, "_ptr (llvm_term ", argName i a, "_post);\n\n"
         ]
       | otherwise = ""
     argTerm :: Int -> ArgSkeleton -> Text
@@ -132,7 +132,7 @@ bodyBoilerplate False fskel _ = mconcat
       | a ^. argSkelType . typeSkelIsPointer
       = argName i a <> "_ptr"
       | otherwise
-      = "(crucible_term " <> argName i a <> ")"
+      = "(llvm_term " <> argName i a <> ")"
 
 functionBoilerplate :: Bool -> ModuleSkeleton -> FunctionSkeleton -> Text
 functionBoilerplate skelBuiltins mskel fskel = mconcat
@@ -144,7 +144,7 @@ functionBoilerplate skelBuiltins mskel fskel = mconcat
   , bodyBoilerplate skelBuiltins fskel skelName
   , "  ", globalsPostBoilerplate skelBuiltins mskel
   , "};\n"
-  , overrideName, " <- crucible_llvm_verify MODULE \"", name, "\" ["
+  , overrideName, " <- llvm_verify MODULE \"", name, "\" ["
   , Text.intercalate ", " $ (<>"_override") <$> (Set.toList $ fskel ^. funSkelCalls)
   , "] false ", specName, " z3;\n"
   ]

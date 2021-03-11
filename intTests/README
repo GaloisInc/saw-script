@@ -42,7 +42,7 @@ works.
 
 Tests generally consist of a SAW script that is expected to succeed
 together with the artifacts that are needed. The "runtests.sh" script
-defines environment variables "JAVA", "SAW", and "JSS", pointing to the
+defines environment variables "JAVA" and "SAW", pointing to the
 corresponding executables, and with appropriate Java classpaths
 included. It's a good idea to include a README in each test directory.
 

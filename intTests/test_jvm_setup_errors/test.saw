@@ -2,10 +2,10 @@
 
 This file is intended to test the error checking for ill-formed
 `JVMSetup` blocks. All setup blocks will be tested with
-`crucible_jvm_unsafe_assume_spec`, in order to make sure that the
-errors are caught at the early phase when the setup block is
-processed, and that we do not rely on run-time errors during symbolic
-simulation to catch problems.
+`jvm_unsafe_assume_spec`, in order to make sure that the errors are
+caught at the early phase when the setup block is processed, and that
+we do not rely on run-time errors during symbolic simulation to catch
+problems.
 
 This file is necessarily incomplete, and should be extended with new
 additional tests as we add new checks to the SAW/JVM code.
@@ -21,7 +21,7 @@ test <- java_load_class "Test";
 print test;
 
 let check_fails cls name spec =
-  fails (crucible_jvm_unsafe_assume_spec cls name spec);
+  fails (jvm_unsafe_assume_spec cls name spec);
 
 let KNOWN_FALSE_POSITIVE cls name spec =
   do {
@@ -30,7 +30,7 @@ let KNOWN_FALSE_POSITIVE cls name spec =
   };
 
 print "Working spec for method 'get'";
-crucible_jvm_verify test "get" [] false
+jvm_verify test "get" [] false
   do {
     this <- jvm_alloc_object "Test";
     val <- jvm_fresh_var "val" java_long;
@@ -121,7 +121,7 @@ check_fails test "get"
   };
 
 print "Working spec for method 'lookup'";
-crucible_jvm_verify test "lookup" [] false
+jvm_verify test "lookup" [] false
   do {
     arr <- jvm_alloc_array 8 java_long;
     let idx = {{ 2 : [32] }};
@@ -234,7 +234,7 @@ check_fails test "lookup"
   };
 
 print "Working spec for method 'lookup' (jvm_array_is)";
-crucible_jvm_verify test "lookup" [] false
+jvm_verify test "lookup" [] false
   do {
     arr <- jvm_alloc_array 8 java_long;
     xs <- jvm_fresh_var "xs" (java_array 8 java_long);
@@ -345,7 +345,7 @@ check_fails test "lookup"
   };
 
 print "jvm_array_is with previous jvm_elem_is";
-KNOWN_FALSE_POSITIVE test "lookup"
+check_fails test "lookup"
   do {
     arr <- jvm_alloc_array 8 java_long;
     xs <- jvm_fresh_var "xs" (java_array 8 java_long);
@@ -357,7 +357,7 @@ KNOWN_FALSE_POSITIVE test "lookup"
   };
 
 print "Working spec for method 'set'";
-crucible_jvm_verify test "set" [] false
+jvm_verify test "set" [] false
   do {
     this <- jvm_alloc_object "Test";
     x <- jvm_fresh_var "x" java_long;
