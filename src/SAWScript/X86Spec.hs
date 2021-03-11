@@ -1082,7 +1082,7 @@ setupGlobals opts gs fs s
                             let halloc = simHandleAllocator (st ^. stateContext)
                             h <- mkHandle halloc fname
                             let addBinding = over (stateContext . functionBindings)
-                                               (insertHandleMap h (UseOverride o))
+                                               (FnBindings . insertHandleMap h (UseOverride o) . fnBindings)
                             return (h, addBinding st)
                       )
 
