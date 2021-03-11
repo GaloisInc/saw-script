@@ -101,6 +101,7 @@ import qualified Lang.Crucible.Simulator.RegMap as C
 import qualified Lang.Crucible.Simulator.SimError as C
 import qualified Lang.Crucible.Simulator.PathSatisfiability as C
 
+import qualified Lang.Crucible.LLVM.Bytes as C.LLVM
 import qualified Lang.Crucible.LLVM.DataLayout as C.LLVM
 import qualified Lang.Crucible.LLVM.Extension as C.LLVM
 import qualified Lang.Crucible.LLVM.Intrinsics as C.LLVM
@@ -160,7 +161,15 @@ throwX86 :: MonadThrow m => String -> m a
 throwX86 = throw . X86Error
 
 defaultStackBaseAlign :: Integer
-defaultStackBaseAlign = 4
+defaultStackBaseAlign = 16
+
+integerToAlignment ::
+  (MonadIO m, MonadThrow m) =>
+  Integer ->
+  m C.LLVM.Alignment
+integerToAlignment i
+  | Just ba <- C.LLVM.toAlignment (C.LLVM.toBytes i) = pure ba
+  | otherwise = throwX86 $ mconcat ["Invalid alignment specified: ", show i]
 
 setReg ::
   (MonadIO m, MonadThrow m) =>
@@ -290,7 +299,8 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       let ?lc = modTrans llvmModule ^. C.LLVM.transContext . C.LLVM.llvmTypeCtx
 
       emptyState <- liftIO $ initialState sym opts sc cc elf relf methodSpec globsyms maxAddr
-      (env, preState) <- liftIO . runX86Sim emptyState . setupMemory globsyms $ rwStackBaseAlign rw
+      balign <- integerToAlignment $ rwStackBaseAlign rw
+      (env, preState) <- liftIO . runX86Sim emptyState $ setupMemory globsyms balign
 
       let
         funcLookup = Macaw.LookupFunctionHandle $ \st _mem regs -> do
@@ -549,7 +559,7 @@ initialState sym opts sc cc elf relf ms globs maxAddr = do
 setupMemory ::
   X86Constraints =>
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
-  Integer {- ^ Stack base alignment exponent -} ->
+  C.LLVM.Alignment {- ^ Stack base alignment -} ->
   X86Sim (Map MS.AllocIndex Ptr)
 setupMemory globsyms balign = do
   setupGlobals globsyms
@@ -606,16 +616,14 @@ setupGlobals globsyms = do
 allocateStack ::
   X86Constraints =>
   Integer {- ^ Stack size in bytes -} ->
-  Integer {- ^ Stack base alignment exponent -} ->
+  C.LLVM.Alignment {- ^ Stack base alignment -} ->
   X86Sim ()
 allocateStack szInt balign = do
   sym <- use x86Sym
   mem <- use x86Mem
   regs <- use x86Regs
   sz <- liftIO $ W4.bvLit sym knownNat $ BV.mkBV knownNat $ szInt + 8
-  (base, mem') <- liftIO
-    $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz
-    $ C.LLVM.exponentToAlignment (fromIntegral $ if balign < 0 then defaultStackBaseAlign else balign)
+  (base, mem') <- liftIO $ C.LLVM.doMalloc sym C.LLVM.HeapAlloc C.LLVM.Mutable "stack_alloc" mem sz balign
   sn <- case W4.userSymbol "stack" of
     Left err -> throwX86 $ "Invalid symbol for stack: " <> show err
     Right sn -> pure sn
@@ -623,9 +631,10 @@ allocateStack szInt balign = do
     <$> W4.natLit sym 0
     <*> W4.freshConstant sym sn (W4.BaseBVRepr $ knownNat @64)
   ptr <- liftIO $ C.LLVM.doPtrAddOffset sym mem' base =<< W4.bvLit sym knownNat (BV.mkBV knownNat szInt)
+  writeAlign <- integerToAlignment defaultStackBaseAlign
   finalMem <- liftIO $ C.LLVM.doStore sym mem' ptr
     (C.LLVM.LLVMPointerRepr $ knownNat @64)
-    (C.LLVM.bitvectorType 8) (C.LLVM.exponentToAlignment 4) fresh
+    (C.LLVM.bitvectorType 8) writeAlign fresh
   x86Mem .= finalMem
   finalRegs <- setReg Macaw.RSP ptr regs
   x86Regs .= finalRegs
