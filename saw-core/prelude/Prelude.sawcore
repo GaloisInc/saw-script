@@ -35,7 +35,6 @@ data UnitType : sort 0 where {
 UnitType__rec (p : UnitType -> sort 0) (f1 : p Unit) (u : UnitType) : p u
   = UnitType#rec p f1 u;
 
-
 --------------------------------------------------------------------------------
 -- Pair types
 
@@ -71,7 +70,6 @@ snd a b tup = tup.(2);
 
 uncurry (a b c : sort 0) (f : a -> b -> c) : a * b -> c
   = (\ (x : a * b) -> f x.(1) x.(2));
-
 
 --------------------------------------------------------------------------------
 -- String values
@@ -263,7 +261,6 @@ ite_false (a : sort 1) (x y : a) : Eq a (ite a False x y) y =
   trans a (ite a False x y) (iteDep (\ (b:Bool) -> a) False x y) y
         (ite_eq_iteDep a False x y) (iteDep_False (\ (_:Bool) -> a) x y);
 
-
 --
 -- Converting between Bools and Bits (cause why not?)
 --
@@ -317,6 +314,15 @@ implies = \ (a:Bool) (b:Bool) -> or (not a) b;
 -- FIXME: this rule should be derived by scDefRewriteRules
 implies__eq : (a b:Bool) -> Eq Bool (implies a b) (or (not a) b);
 implies__eq a b = Refl Bool (implies a b);
+
+
+
+unitEq : UnitType -> UnitType -> Bool;
+unitEq _ _ = True;
+
+pairEq : (a b : sort 0) -> (a -> a -> Bool) -> (b -> b -> Bool) -> a * b -> a * b -> Bool;
+pairEq a b f g x y = and ( f x.(1) y.(1) ) ( g x.(2) y.(2) );
+
 
 --
 -- Rewrite rules for booleans
@@ -654,26 +660,6 @@ impliesI (x y : Bool) : (EqTrue x -> EqTrue y) -> EqTrue (implies x y) =
 
 
 --------------------------------------------------------------------------------
--- Decidable equality
-
--- FIXME: replace universal decidable equality with a typeclass that determines
--- which types have an equality tester
-
-primitive eq : (a : sort 0) -> a -> a -> Bool;
-
-axiom eq_refl : (a : sort 0) -> (x : a) -> Eq Bool (eq a x x) True;
-
-axiom eq_Bool : Eq (Bool -> Bool -> Bool) (eq Bool) boolEq;
-
-axiom ite_eq_cong_1 : (a : sort 0)
-              -> (b : Bool) -> (x : a) -> (y : a) -> (z : a)
-              -> Eq Bool (eq a (ite a b x y) z) (ite Bool b (eq a x z) (eq a y z));
-axiom ite_eq_cong_2 : (a : sort 0)
-              -> (b : Bool) -> (x : a) -> (y : a) -> (z : a)
-              -> Eq Bool (eq a z (ite a b x y)) (ite Bool b (eq a z x) (eq a z y));
-
-
---------------------------------------------------------------------------------
 -- Either
 
 data Either (s t : sort 0) : sort 0 where {
@@ -850,9 +836,6 @@ maxNat x y =
 -- | Width(n) = 1 + floor(log_2(n))
 primitive widthNat : Nat -> Nat;
 
--- | Axiom: equalNat implements *the* equality on type Nat.
-axiom eq_Nat : Eq (Nat -> Nat -> Bool) (eq Nat) equalNat;
-
 -- | Natural exponentiation
 expNat : Nat -> Nat -> Nat;
 expNat b e =
@@ -947,9 +930,6 @@ vecEq : (n : Nat) -> (a : sort 0) -> (a -> a -> Bool)
       -> Vec n a -> Vec n a -> Bool;
 vecEq n a eqFn x y =
   foldr Bool Bool n and True (zipWith a a Bool eqFn n x y);
-
-axiom eq_Vec : (n : Nat) -> (a : sort 0)
-       -> Eq (Vec n a -> Vec n a -> Bool) (eq (Vec n a)) (vecEq n a (eq a));
 
 -- | Take a prefix of a vector.
 take : (a : sort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec m a;
@@ -1183,16 +1163,6 @@ bvEq : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 bvEq n x y = vecEq n Bool boolEq x y;
 
 axiom bvEq_refl : (n : Nat) -> (x : Vec n Bool) -> Eq Bool (bvEq n x x) True;
-
--- | Axiom: bvEq implements *the* equality operation on bitvectors.
-axiom eq_bitvector : (n : Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool) (eq (Vec n Bool)) (bvEq n);
-
-axiom eq_VecBool : (n : Nat) -> Eq (Vec n Bool -> Vec n Bool -> Bool) (eq (Vec n Bool)) (bvEq n);
-
-axiom eq_VecVec : (n : Nat) -> (m : Nat) -> (a : sort 0)
-          -> Eq (Vec n (Vec m a) -> Vec n (Vec m a) -> Bool)
-                (eq (Vec n (Vec m a)))
-                (vecEq n (Vec m a) (eq (Vec m a)));
 
 axiom equalNat_bv : (n : Nat) -> (x : Vec n Bool) -> (i : Nat) ->
                Eq Bool (equalNat i (bvToNat n x)) (bvEq n (bvNat n i) x);
@@ -1554,7 +1524,7 @@ primitive Array : sort 0 -> sort 0 -> sort 0;
 primitive arrayConstant : (a b : sort 0) -> b -> (Array a b);
 primitive arrayLookup : (a b : sort 0) -> (Array a b) -> a -> b;
 primitive arrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
-
+primitive arrayEq     : (a b : sort 0) -> (Array a b) -> (Array a b) -> Bool;
 
 --------------------------------------------------------------------------------
 -- General axioms

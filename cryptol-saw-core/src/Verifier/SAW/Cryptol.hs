@@ -1528,9 +1528,10 @@ asCryptolTypeValue v =
     SC.VVecType n v2 -> do
       t2 <- asCryptolTypeValue v2
       return (C.tSeq (C.tNum n) t2)
-    SC.VDataType "Prelude.Stream" [v1] -> do
-      t1 <- asCryptolTypeValue (SC.toTValue v1)
-      return (C.tSeq C.tInf t1)
+    SC.VDataType "Prelude.Stream" [v1] ->
+      case v1 of
+        SC.TValue tv -> C.tSeq C.tInf <$> asCryptolTypeValue tv
+        _ -> Nothing
     SC.VUnitType -> return (C.tTuple [])
     SC.VPairType v1 v2 -> do
       t1 <- asCryptolTypeValue v1
@@ -1564,9 +1565,9 @@ asCryptolTypeValue v =
 scCryptolType :: SharedContext -> Term -> IO C.Type
 scCryptolType sc t =
   do modmap <- scGetModuleMap sc
-     case asCryptolTypeValue (SC.toTValue (SC.evalSharedTerm modmap Map.empty t)) of
-       Just ty -> return ty
-       Nothing -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
+     case SC.evalSharedTerm modmap Map.empty t of
+       SC.TValue (asCryptolTypeValue -> Just ty) -> return ty
+       _ -> panic "scCryptolType" ["scCryptolType: unsupported type " ++ showTerm t]
 
 -- | Deprecated.
 scCryptolEq :: SharedContext -> Term -> Term -> IO Term

@@ -16,7 +16,7 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Simulator.Concrete
        ( evalSharedTerm
-       , CValue, Concrete, Value(..), TValue(..), toTValue
+       , CValue, Concrete, Value(..), TValue(..)
        , CExtra(..)
        , toBool
        , toWord

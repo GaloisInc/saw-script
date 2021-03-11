@@ -253,7 +253,6 @@ constMap bp = Map.fromList
   , ("Prelude.error", errorOp)
   , ("Prelude.fix", fixOp)
   -- Overloaded
-  , ("Prelude.eq", eqOp bp)
   , ("Prelude.ite", iteOp bp)
   , ("Prelude.iteDep", iteOp bp)
   -- SMT Arrays
@@ -261,6 +260,7 @@ constMap bp = Map.fromList
   , ("Prelude.arrayConstant", arrayConstantOp bp)
   , ("Prelude.arrayLookup", arrayLookupOp bp)
   , ("Prelude.arrayUpdate", arrayUpdateOp bp)
+  , ("Prelude.arrayEq", arrayEqOp bp)
   ]
 
 -- | Call this function to indicate that a programming error has
@@ -1337,3 +1337,14 @@ arrayUpdateOp bp =
   strictFun $ \e -> do
     f' <- toArray f
     VArray <$> (bpArrayUpdate bp) f' i e
+
+-- arrayEq : (a b : sort 0) -> (Array a b) -> (Array a b) -> Bool;
+arrayEqOp :: (VMonad l, Show (Extra l)) => BasePrims l -> Value l
+arrayEqOp bp =
+  constFun $
+  constFun $
+  pureFun $ \x ->
+  strictFun $ \y -> do
+    x' <- toArray x
+    y' <- toArray y
+    VBool <$> bpArrayEq bp x' y'

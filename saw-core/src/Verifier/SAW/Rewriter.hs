@@ -267,9 +267,6 @@ scMatch sc pat term =
 eqIdent :: Ident
 eqIdent = mkIdent (mkModuleName ["Prelude"]) "Eq"
 
-eqIdent' :: Ident
-eqIdent' = mkIdent (mkModuleName ["Prelude"]) "eq"
-
 ecEqIdent :: Ident
 ecEqIdent = mkIdent (mkModuleName ["Cryptol"]) "ecEq"
 
@@ -281,6 +278,9 @@ boolEqIdent = mkIdent (mkModuleName ["Prelude"]) "boolEq"
 
 vecEqIdent :: Ident
 vecEqIdent = mkIdent (mkModuleName ["Prelude"]) "vecEq"
+
+equalNatIdent :: Ident
+equalNatIdent = mkIdent (mkModuleName ["Prelude"]) "equalNat"
 
 -- | Converts a universally quantified equality proposition from a
 -- Term representation to a RewriteRule.
@@ -309,11 +309,12 @@ ruleOfProp (R.asPi -> Just (_, ty, body)) =
 ruleOfProp (R.asLambda -> Just (_, ty, body)) =
   do rule <- ruleOfProp body
      Just rule { ctxt = ty : ctxt rule }
-ruleOfProp (R.asApplyAll -> (R.isGlobalDef eqIdent' -> Just (), [_, x, y])) =
-  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
+
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) =
   Just RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef bvEqIdent -> Just (), [_, x, y])) =
+  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
+ruleOfProp (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) =
   Just RewriteRule { ctxt = [], lhs = x, rhs = y }
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
   Just RewriteRule { ctxt = [], lhs = x, rhs = y }
