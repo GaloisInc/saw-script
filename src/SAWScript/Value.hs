@@ -401,8 +401,13 @@ data TopLevelRW =
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+
+  -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
+  , rwWhat4HashConsingX86 :: Bool
+
   , rwPreservedRegs :: [String]
+  , rwStackBaseAlign :: Integer
   }
 
 newtype TopLevel a =
