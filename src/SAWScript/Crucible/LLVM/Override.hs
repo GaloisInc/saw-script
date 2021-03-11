@@ -1231,7 +1231,7 @@ typeToSC sc t =
          scVecType sc n ty'
     Crucible.Struct fields ->
       do fields' <- V.toList <$> traverse (typeToSC sc . view Crucible.fieldVal) fields
-         scTuple sc fields'
+         scTupleType sc fields'
 
 ------------------------------------------------------------------------
 
