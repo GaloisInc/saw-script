@@ -19,7 +19,9 @@ RUN mkdir -p /saw-script && \
     git clone https://github.com/GaloisInc/s2n.git && \
     mkdir -p s2n/test-deps/saw/bin && \
     cd s2n && \
-    git checkout 90b8913a01c6421444d19aaab798d413872cf6f0
+    git checkout 6586f1ad3b35efcd2287ab98a4be124449dcb780
+
+
 
 COPY scripts/s2n-entrypoint.sh /entrypoint.sh
 ENTRYPOINT [ "/entrypoint.sh" ]

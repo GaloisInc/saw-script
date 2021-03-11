@@ -18,7 +18,6 @@ import Verifier.SAW.FiniteValue
 import Verifier.SAW.Recognizer(asPi)
 
 import           SAWScript.Proof(Prop, propToPredicate)
-import           SAWScript.Prover.Rewrite(rewriteEqs)
 import           SAWScript.Prover.SolverStats
 
 import Data.Parameterized.Nonce
@@ -179,7 +178,7 @@ prepWhat4 sym sc unintSet t0 = do
   let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
   exts <- filterM nonFun (getAllExts t0)
 
-  t' <- scAbstractExts sc exts t0 >>= rewriteEqs sc
+  t' <- scAbstractExts sc exts t0
 
   (argNames, lit) <- W.w4Solve sym sc mempty unintSet t'
   return (t', argNames, lit)
