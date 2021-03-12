@@ -71,7 +71,6 @@ import qualified Verifier.SAW.UntypedAST as Un
 import SAWScript.Crucible.Common
 import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..), propToPredicate)
 import SAWScript.Prover.SolverStats
-import SAWScript.Prover.Rewrite
 import SAWScript.Prover.Util
 import SAWScript.Prover.What4
 import SAWScript.Prover.SBV (prepNegatedSBV)
@@ -109,7 +108,6 @@ adaptExporter exporter sc path (Prop goal) =
      p' <- io $ scNot sc p -- is this right?
      t <- io $ scLambdaList sc args p'
      exporter sc path t
-
 
 --------------------------------------------------------------------------------
 
@@ -280,7 +278,7 @@ coqTranslationConfiguration notations skips = Coq.TranslationConfiguration
   { Coq.notations          = notations
   , Coq.monadicTranslation = False
   , Coq.skipDefinitions    = skips
-  , Coq.vectorModule       = "SAWVectorsAsCoqVectors"
+  , Coq.vectorModule       = "SAWCoreVectorsAsCoqVectors"
   }
 
 writeCoqTerm ::
@@ -381,12 +379,11 @@ writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
 -- | Tranlsate a SAWCore term into an AIG
 bitblastPrim :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> Term -> IO (AIG.Network l g)
 bitblastPrim proxy sc t = do
-  t' <- rewriteEqs sc t
 {-
   let s = ttSchema t'
   case s of
     C.Forall [] [] _ -> return ()
     _ -> fail $ "Attempting to bitblast a term with a polymorphic type: " ++ pretty s
 -}
-  BBSim.withBitBlastedTerm proxy sc mempty t' $ \be ls -> do
+  BBSim.withBitBlastedTerm proxy sc mempty t $ \be ls -> do
     return (AIG.Network be (toList ls))

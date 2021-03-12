@@ -35,7 +35,9 @@ import Data.Traversable hiding ( mapM )
 #endif
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
+import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as BS
+import Data.Foldable (foldrM)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -66,7 +68,7 @@ import Verifier.SAW.Conversion
 import Verifier.SAW.Prim (rethrowEvalError)
 import Verifier.SAW.Rewriter (emptySimpset, rewritingSharedContext, scSimpset)
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.TypedAST
+import Verifier.SAW.TypedAST hiding (FlatTermF(..))
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.CryptolEnv as CEnv
 
@@ -117,36 +119,50 @@ extendLocal x mt md v env = LocalLet x mt md v : env
 addTypedef :: SS.Name -> SS.Type -> TopLevelRW -> TopLevelRW
 addTypedef name ty rw = rw { rwTypedef = Map.insert name ty (rwTypedef rw) }
 
-mergeLocalEnv :: LocalEnv -> TopLevelRW -> TopLevelRW
-mergeLocalEnv env rw = foldr addBinding rw env
-  where addBinding (LocalLet x mt md v) = extendEnv x mt md v
-        addBinding (LocalTypedef n ty) = addTypedef n ty
+mergeLocalEnv :: SharedContext -> LocalEnv -> TopLevelRW -> IO TopLevelRW
+mergeLocalEnv sc env rw = foldrM addBinding rw env
+  where addBinding (LocalLet x mt md v) = extendEnv sc x mt md v
+        addBinding (LocalTypedef n ty) = pure . addTypedef n ty
 
 getMergedEnv :: LocalEnv -> TopLevel TopLevelRW
-getMergedEnv env = mergeLocalEnv env `fmap` getTopLevelRW
+getMergedEnv env =
+  do sc <- getSharedContext
+     rw <- getTopLevelRW
+     liftIO $ mergeLocalEnv sc env rw
 
-bindPatternGeneric :: (SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> e -> e)
-                   -> SS.Pattern -> Maybe SS.Schema -> Value -> e -> e
-bindPatternGeneric ext pat ms v env =
+bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
+bindPatternLocal pat ms v env =
   case pat of
     SS.PWild _   -> env
-    SS.PVar x _  -> ext x ms Nothing v env
+    SS.PVar x _  -> extendLocal x ms Nothing v env
     SS.PTuple ps ->
       case v of
-        VTuple vs -> foldr ($) env (zipWith3 (bindPatternGeneric ext) ps mss vs)
+        VTuple vs -> foldr ($) env (zipWith3 bindPatternLocal ps mss vs)
           where mss = case ms of
                   Nothing -> repeat Nothing
                   Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
                     -> [ Just (SS.Forall ks t) | t <- ts ]
                   _ -> error "bindPattern: expected tuple value"
         _ -> error "bindPattern: expected tuple value"
-    SS.LPattern _ pat' -> bindPatternGeneric ext pat' ms v env
+    SS.LPattern _ pat' -> bindPatternLocal pat' ms v env
 
-bindPatternLocal :: SS.Pattern -> Maybe SS.Schema -> Value -> LocalEnv -> LocalEnv
-bindPatternLocal = bindPatternGeneric extendLocal
-
-bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevelRW
-bindPatternEnv = bindPatternGeneric extendEnv
+bindPatternEnv :: SS.Pattern -> Maybe SS.Schema -> Value -> TopLevelRW -> TopLevel TopLevelRW
+bindPatternEnv pat ms v env =
+  case pat of
+    SS.PWild _   -> pure env
+    SS.PVar x _  ->
+      do sc <- getSharedContext
+         liftIO $ extendEnv sc x ms Nothing v env
+    SS.PTuple ps ->
+      case v of
+        VTuple vs -> foldr (=<<) (pure env) (zipWith3 bindPatternEnv ps mss vs)
+          where mss = case ms of
+                  Nothing -> repeat Nothing
+                  Just (SS.Forall ks (SS.TyCon (SS.TupleCon _) ts))
+                    -> [ Just (SS.Forall ks t) | t <- ts ]
+                  _ -> error "bindPattern: expected tuple value"
+        _ -> error "bindPattern: expected tuple value"
+    SS.LPattern _ pat' -> bindPatternEnv pat' ms v env
 
 -- Interpretation of SAWScript -------------------------------------------------
 
@@ -308,7 +324,7 @@ processStmtBind printBinds pat _mc expr = do -- mx mt
     _ -> return ()
 
   rw' <- getTopLevelRW
-  putTopLevelRW $ bindPatternEnv pat (Just (SS.tMono ty)) result rw'
+  putTopLevelRW =<< bindPatternEnv pat (Just (SS.tMono ty)) result rw'
 
 -- | Interpret a block-level statement in the TopLevel monad.
 interpretStmt ::
@@ -455,7 +471,9 @@ buildTopLevelEnv proxy opts =
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
                    , rwWhat4HashConsing = False
+                   , rwWhat4HashConsingX86 = False
                    , rwPreservedRegs = []
+                   , rwStackBaseAlign = defaultStackBaseAlign
                    }
        return (bic, ro0, rw0)
 
@@ -530,6 +548,16 @@ disable_what4_hash_consing = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwWhat4HashConsing = False }
 
+enable_x86_what4_hash_consing :: TopLevel ()
+enable_x86_what4_hash_consing = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4HashConsingX86 = True }
+
+disable_x86_what4_hash_consing :: TopLevel ()
+disable_x86_what4_hash_consing = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4HashConsingX86 = False }
+
 add_x86_preserved_reg :: String -> TopLevel ()
 add_x86_preserved_reg r = do
   rw <- getTopLevelRW
@@ -539,6 +567,16 @@ default_x86_preserved_reg :: TopLevel ()
 default_x86_preserved_reg = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwPreservedRegs = [] }
+
+set_x86_stack_base_align :: Integer -> TopLevel ()
+set_x86_stack_base_align a = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwStackBaseAlign = a }
+
+default_x86_stack_base_align :: TopLevel ()
+default_x86_stack_base_align = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwStackBaseAlign = defaultStackBaseAlign }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -1696,10 +1734,16 @@ primitives = Map.fromList
     , "given type."
     ]
 
-  , prim "llvm_struct"         "String -> LLVMType"
-    (pureVal llvm_struct)
+  , prim "llvm_alias"          "String -> LLVMType"
+    (pureVal llvm_alias)
     Current
-    [ "The type of an LLVM struct of the given name."
+    [ "The type of an LLVM alias for the given name. Often times, this is used"
+    , "to alias a struct type."
+    ]
+  , prim "llvm_struct"         "String -> LLVMType"
+    (pureVal llvm_alias)
+    Current
+    [ "Legacy alternative name for `llvm_alias`."
     ]
 
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"
@@ -2365,6 +2409,16 @@ primitives = Map.fromList
     Experimental
     [ "Legacy alternative name for `llvm_verify_x86`." ]
 
+  , prim "enable_x86_what4_hash_consing" "TopLevel ()"
+    (pureVal enable_x86_what4_hash_consing)
+    Experimental
+    [ "Enable hash consing for What4 expressions during x86 verification." ]
+
+  , prim "disable_x86_what4_hash_consing" "TopLevel ()"
+    (pureVal disable_x86_what4_hash_consing)
+    Current
+    [ "Disable hash consing for What4 expressions during x86 verification." ]
+
   , prim "add_x86_preserved_reg" "String -> TopLevel ()"
     (pureVal add_x86_preserved_reg)
     Current
@@ -2373,7 +2427,17 @@ primitives = Map.fromList
   , prim "default_x86_preserved_reg" "TopLevel ()"
     (pureVal default_x86_preserved_reg)
     Current
-    [ "Use the default set of callee-saved registers during x86 verification.." ]
+    [ "Use the default set of callee-saved registers during x86 verification." ]
+
+  , prim "set_x86_stack_base_align" "Int -> TopLevel ()"
+    (pureVal set_x86_stack_base_align)
+    Experimental
+    [ "Set the alignment of the stack allocation base to 2^n during x86 verification." ]
+
+  , prim "default_x86_stack_base_align" "TopLevel ()"
+    (pureVal default_x86_stack_base_align)
+    Experimental
+    [ "Use the default stack allocation base alignment during x86 verification." ]
 
   , prim "llvm_array_value"
     "[SetupValue] -> SetupValue"
@@ -2387,6 +2451,12 @@ primitives = Map.fromList
     Current
     [ "Legacy alternative name for `llvm_array_value`." ]
 
+  , prim "llvm_struct_type"
+    "[LLVMType] -> LLVMType"
+    (pureVal llvm_struct_type)
+    Current
+    [ "The type of an LLVM struct with elements of the given types." ]
+
   , prim "llvm_struct_value"
     "[SetupValue] -> SetupValue"
     (pureVal (CIR.anySetupStruct False))
@@ -2398,6 +2468,12 @@ primitives = Map.fromList
     (pureVal (CIR.anySetupStruct False))
     Current
     [ "Legacy alternative name for `llvm_struct_value`." ]
+
+  , prim "llvm_packed_struct_type"
+    "[LLVMType] -> LLVMType"
+    (pureVal llvm_packed_struct_type)
+    Current
+    [ "The type of a packed LLVM struct with elements of the given types." ]
 
   , prim "llvm_packed_struct_value"
     "[SetupValue] -> SetupValue"

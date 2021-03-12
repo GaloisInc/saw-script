@@ -9,8 +9,8 @@ USER user
 WORKDIR /solvers
 RUN mkdir -p rootfs/usr/local/bin
 
-# Get Z3 4.8.8 from GitHub
-RUN curl -L https://github.com/Z3Prover/z3/releases/download/z3-4.8.8/z3-4.8.8-x64-ubuntu-16.04.zip --output z3.zip
+# Get Z3 4.8.10 from GitHub
+RUN curl -L https://github.com/Z3Prover/z3/releases/download/z3-4.8.10/z3-4.8.10-x64-ubuntu-18.04.zip --output z3.zip
 RUN unzip z3.zip
 RUN mv z3-*/bin/z3 rootfs/usr/local/bin
 
@@ -47,28 +47,26 @@ RUN useradd -m saw
 COPY --chown=saw:saw . /home/saw
 USER saw
 WORKDIR /home/saw
-ARG CRYPTOLPATH="/cryptol/.cryptol"
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 COPY cabal.GHC-8.8.4.config cabal.project.freeze
-RUN mkdir -p rootfs/usr/local/bin
-RUN cabal v2-update && \
-    cabal v2-build -j saw-remote-api:exe:saw-remote-api && \
-    cp $(cabal v2-exec which saw-remote-api) rootfs/usr/local/bin
-RUN mkdir -p rootfs/"${CRYPTOLPATH}" \
-    && cp -r deps/cryptol/lib/* rootfs/"${CRYPTOLPATH}"
+RUN cabal v2-update && cabal v2-build -j exe:saw-remote-api
+RUN mkdir -p /home/saw/rootfs/usr/local/bin
+RUN cp $(cabal v2-exec which saw-remote-api) /home/saw/rootfs/usr/local/bin/saw-remote-api
+WORKDIR /home/saw
 USER root
 RUN chown -R root:root /home/saw/rootfs
 
 FROM debian:buster-slim
 RUN apt-get update \
-    && apt-get install -y libgmp10 libgomp1 libffi6 wget libncurses5 unzip \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-RUN useradd -m saw && chown -R saw:saw /home/saw
+    && apt-get install -y libgmp10 libgomp1 libffi6 wget libncurses5 unzip
 COPY --from=build /home/saw/rootfs /
 COPY --from=solvers /solvers/rootfs /
+RUN useradd -m saw && chown -R saw:saw /home/saw
+USER saw
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 ENTRYPOINT ["/usr/local/bin/saw-remote-api"]
+WORKDIR /home/saw
 CMD ["http", "--host", "0.0.0.0", "--port", "8080", "/"]
 EXPOSE 8080

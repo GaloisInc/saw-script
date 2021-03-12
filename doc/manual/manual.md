@@ -1584,7 +1584,7 @@ more information on these issues, refer to
 ## Notes on Compiling Code for SAW
 
 SAW will generally be able to load arbitrary LLVM bitcode and JVM
-bytecode files, but several guidelines can be help make verification
+bytecode files, but several guidelines can help make verification
 easier or more likely to succeed. For generating LLVM with `clang`, it
 can be helpful to:
 
@@ -1924,10 +1924,12 @@ commands.
 LLVM types are built with this set of functions:
 
 * `llvm_int : Int -> LLVMType`
+* `llvm_alias : String -> LLVMType`
 * `llvm_array : Int -> LLVMType -> LLVMType`
-* `llvm_struct : String -> LLVMType`
 * `llvm_float : LLVMType`
 * `llvm_double : LLVMType`
+* `llvm_packed_struct : [LLVMType] -> LLVMType`
+* `llvm_struct : [LLVMType] -> LLVMType`
 
 Java types are built up using the following functions:
 
@@ -2441,10 +2443,10 @@ let dotprod_spec n = do {
     let nt = llvm_term {{ `n : [32] }};
     (xs, xsp) <- ptr_to_fresh "xs" (llvm_array n (llvm_int 32));
     (ys, ysp) <- ptr_to_fresh "ys" (llvm_array n (llvm_int 32));
-    let xval = llvm_struct [ xsp, nt ];
-    let yval = llvm_struct [ ysp, nt ];
-    xp <- alloc_init (llvm_struct "struct.vec_t") xval;
-    yp <- alloc_init (llvm_struct "struct.vec_t") yval;
+    let xval = llvm_struct_value [ xsp, nt ];
+    let yval = llvm_struct_value [ ysp, nt ];
+    xp <- alloc_init (llvm_alias "struct.vec_t") xval;
+    yp <- alloc_init (llvm_alias "struct.vec_t") yval;
     llvm_execute_func [xp, yp];
     llvm_return (llvm_term {{ dotprod xs ys }});
 };

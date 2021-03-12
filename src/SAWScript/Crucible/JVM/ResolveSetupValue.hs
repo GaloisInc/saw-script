@@ -30,7 +30,6 @@ module SAWScript.Crucible.JVM.ResolveSetupValue
 
 import           Control.Lens
 import qualified Control.Monad.Catch as X
-import           Data.IORef
 import qualified Data.BitVector.Sized as BV
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -42,7 +41,6 @@ import qualified Cryptol.Utils.PP as Cryptol (pp)
 
 import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
-import qualified What4.Expr.Builder as W4
 import qualified What4.ProgramLoc as W4
 
 import Verifier.SAW.Rewriter
@@ -54,7 +52,6 @@ import Verifier.SAW.Simulator.What4.ReturnTrip
 -- crucible
 
 import qualified Lang.Crucible.Simulator as Crucible (RegValue)
-import qualified Lang.Crucible.Backend.Online as Crucible
 
 -- what4
 import qualified What4.Partial as W4
@@ -271,7 +268,7 @@ resolveBitvectorTerm sym w tm =
 -- TODO: Instead of evaluating in SBV backend, just evaluate in W4 backend directly.
 resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
 resolveBoolTerm sym tm =
-  do st <- Crucible.onlineUserState <$> readIORef (W4.sbStateManager sym)
+  do st <- sawCoreState sym
      let sc = saw_ctx st
      ss <- basic_ss sc
      tm' <- rewriteSharedTerm sc ss tm

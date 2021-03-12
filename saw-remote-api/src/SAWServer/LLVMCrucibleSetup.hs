@@ -18,15 +18,19 @@ module SAWServer.LLVMCrucibleSetup
   , compileLLVMContract
   ) where
 
-import Control.Lens
-import Control.Monad.IO.Class
+import Control.Lens ( view )
 import Control.Monad.State
+    ( evalStateT,
+      MonadIO(liftIO),
+      MonadState(get, put),
+      MonadTrans(lift),
+      modify' )
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
-import Data.Foldable
+import Data.Foldable ( traverse_ )
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe
+import Data.Maybe ( maybeToList )
 import qualified Data.Text as T
 
 import qualified Cryptol.Parser.AST as P
@@ -41,7 +45,7 @@ import SAWScript.Crucible.LLVM.Builtins
     , llvm_alloc_readonly_aligned
     , llvm_execute_func
     , llvm_fresh_var
-    , llvm_points_to
+    , llvm_points_to_internal
     , llvm_return
     , llvm_precond
     , llvm_postcond )
@@ -51,23 +55,33 @@ import qualified Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.CryptolEnv (CryptolEnv)
 import Verifier.SAW.TypedTerm (TypedTerm)
 
-import Argo
+import qualified Argo
 import qualified Argo.Doc as Doc
-import SAWServer
+import SAWServer as Server
+    ( ServerName(..),
+      SAWState,
+      SetupStep(..),
+      CrucibleSetupVal(..),
+      SAWTask(LLVMCrucibleSetup),
+      sawTask,
+      pushTask,
+      getHandleAlloc,
+      setServerVal )
 import SAWServer.Data.Contract
+    ( PointsTo(..), Allocated(..), ContractVar(..), Contract(..) )
 import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
 import SAWServer.Data.SetupValue ()
 import SAWServer.CryptolExpression (getTypedTermOfCExp)
-import SAWServer.Exceptions
-import SAWServer.OK
-import SAWServer.TrackFile
+import SAWServer.Exceptions ( notAtTopLevel, cantLoadLLVMModule )
+import SAWServer.OK ( OK, ok )
+import SAWServer.TrackFile ( trackFile )
 
-startLLVMCrucibleSetup :: StartLLVMCrucibleSetupParams -> Method SAWState OK
+startLLVMCrucibleSetup :: StartLLVMCrucibleSetupParams -> Argo.Command SAWState OK
 startLLVMCrucibleSetup (StartLLVMCrucibleSetupParams n) =
   do pushTask (LLVMCrucibleSetup n [])
      ok
 
-data StartLLVMCrucibleSetupParams
+newtype StartLLVMCrucibleSetupParams
   = StartLLVMCrucibleSetupParams ServerName
 
 instance FromJSON StartLLVMCrucibleSetupParams where
@@ -75,7 +89,7 @@ instance FromJSON StartLLVMCrucibleSetupParams where
     withObject "params for \"SAW/Crucible setup\"" $ \o ->
     StartLLVMCrucibleSetupParams <$> o .: "name"
 
-data ServerSetupVal = Val (CMS.AllLLVM MS.SetupValue)
+newtype ServerSetupVal = Val (CMS.AllLLVM MS.SetupValue)
 
 -- TODO: this is an extra layer of indirection that could be collapsed, but is easy to implement for now.
 compileLLVMContract ::
@@ -93,12 +107,12 @@ compileLLVMContract fileReader bic cenv c =
       map setupFresh (preVars c) ++
       map SetupPrecond (preConds c) ++
       map setupAlloc (preAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (prePointsTos c) ++
+      map (\(PointsTo p v chkV cond) -> SetupPointsTo p v (fmap (fmap llvmType) chkV) cond) (prePointsTos c) ++
       [ SetupExecuteFunction (argumentVals c) ] ++
       map setupFresh (postVars c) ++
       map SetupPostcond (postConds c) ++
       map setupAlloc (postAllocated c) ++
-      map (\(PointsTo p v) -> SetupPointsTo p v) (postPointsTos c) ++
+      map (\(PointsTo p v chkV cond) -> SetupPointsTo p v (fmap (fmap llvmType) chkV) cond) (postPointsTos c) ++
       [ SetupReturn v | v <- maybeToList (returnVal c) ]
 
 interpretLLVMSetup ::
@@ -108,7 +122,7 @@ interpretLLVMSetup ::
   [SetupStep LLVM.Type] ->
   LLVMCrucibleSetupM ()
 interpretLLVMSetup fileReader bic cenv0 ss =
-  runStateT (traverse_ go ss) (mempty, cenv0) *> pure ()
+  evalStateT (traverse_ go ss) (mempty, cenv0)
   where
     go (SetupReturn v) = get >>= \env -> lift $ getSetupVal env v >>= llvm_return
     -- TODO: do we really want two names here?
@@ -125,10 +139,11 @@ interpretLLVMSetup fileReader bic cenv0 ss =
       lift (llvm_alloc_aligned align ty) >>= save name . Val
     go (SetupAlloc name ty False (Just align)) =
       lift (llvm_alloc_readonly_aligned align ty) >>= save name . Val
-    go (SetupPointsTo src tgt) = get >>= \env -> lift $
+    go (SetupPointsTo src tgt chkTgt cond) = get >>= \env -> lift $
       do ptr <- getSetupVal env src
          tgt' <- getSetupVal env tgt
-         llvm_points_to True ptr tgt'
+         cond' <- traverse (getTypedTerm env) cond
+         llvm_points_to_internal chkTgt cond' ptr tgt'
     go (SetupExecuteFunction args) =
       get >>= \env ->
       lift $ traverse (getSetupVal env) args >>= llvm_execute_func
@@ -210,17 +225,17 @@ llvmLoadModuleDescr :: Doc.Block
 llvmLoadModuleDescr =
   Doc.Paragraph [Doc.Text "Load the specified LLVM module."]
 
-llvmLoadModule :: LLVMLoadModuleParams -> Method SAWState OK
+llvmLoadModule :: LLVMLoadModuleParams -> Argo.Command SAWState OK
 llvmLoadModule (LLVMLoadModuleParams serverName fileName) =
-  do tasks <- view sawTask <$> getState
+  do tasks <- view sawTask <$> Argo.getState
      case tasks of
-       (_:_) -> raise $ notAtTopLevel $ map fst tasks
+       (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
          do let ?laxArith = False -- TODO read from config
             halloc <- getHandleAlloc
             loaded <- liftIO (CMS.loadLLVMModule fileName halloc)
             case loaded of
-              Left err -> raise (cantLoadLLVMModule (LLVM.formatError err))
+              Left err -> Argo.raise (cantLoadLLVMModule (LLVM.formatError err))
               Right llvmMod ->
                 do setServerVal serverName llvmMod
                    trackFile fileName

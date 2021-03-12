@@ -179,7 +179,7 @@ let {{
  */
 let ECRYPT_keysetup_setup (kBytes: Int) : CrucibleSetup () = do {
     x_input <- llvm_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
-    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (llvm_struct_value [ llvm_term x_input ]);
+    p_x <- alloc_init (llvm_alias "struct.ECRYPT_ctx") (llvm_struct_value [ llvm_term x_input ]);
     (k, p_k) <- ptr_to_fresh "k" (llvm_array kBytes u8);
     let kbits = {{ (`kBytes * 8):u32 }}; let ct_kbits = llvm_term kbits;
     let ivbits = {{ 0:u32 }}; let ct_ivbits = llvm_term ivbits; // ignored (ECRYPT test suite compatibility)
@@ -213,7 +213,7 @@ let {{
 /** method specification for ECRYPT_ivsetup, which initializes the IV and counter component of a "context" for encryption in a manner compatible with the ECRYPT validation framework */
 let ECRYPT_ivsetup_setup : CrucibleSetup () = do {
     x_input <- llvm_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
-    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (llvm_struct [ llvm_term x_input ]);
+    p_x <- alloc_init (llvm_alias "struct.ECRYPT_ctx") (llvm_alias [ llvm_term x_input ]);
     (iv, p_iv) <- ptr_to_fresh "iv" (llvm_array 8 u8);
 
     llvm_execute_func [p_x, p_iv];
@@ -254,7 +254,7 @@ let {{
 /** method specification of ECRYPT_encrypt_bytes */
 let ECRYPT_encrypt_bytes_setup (bytes: Int) : CrucibleSetup () = do {
     x_input <- llvm_fresh_var "x->input" (llvm_array 16 u32); let x = {{ {input = x_input} }};
-    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (llvm_struct_value [ llvm_term x_input ]);
+    p_x <- alloc_init (llvm_alias "struct.ECRYPT_ctx") (llvm_struct_value [ llvm_term x_input ]);
     (m, p_m) <- ptr_to_fresh "m" (llvm_array bytes u8);
     p_c <- llvm_alloc (llvm_array bytes u8);
     let {{ bytes = `bytes:u32 }};
@@ -324,7 +324,7 @@ let ECRYPT_encrypt_bytes_setup' (bytes: Int) (a: Int) : CrucibleSetup () = do {
                 n = (U8TO32_LITTLE v) # (zero:[2][32])
                 [k0, k1] = (split ((U8TO32_LITTLE k) # zero)):[2][4][32] }};
     // x_input <- llvm_fresh_var "x->input" (llvm_array 16 u32);
-    p_x <- alloc_init (llvm_struct "struct.ECRYPT_ctx") (llvm_struct_value [ llvm_term x_input ]);
+    p_x <- alloc_init (llvm_alias "struct.ECRYPT_ctx") (llvm_struct_value [ llvm_term x_input ]);
 
     (m, p_m) <- ptr_to_fresh "m" (llvm_array bytes u8);
     p_c <- llvm_alloc (llvm_array bytes u8);

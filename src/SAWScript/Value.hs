@@ -51,7 +51,6 @@ import qualified Data.Map as M
 import Data.Map ( Map )
 import Data.Set ( Set )
 import Data.Text (Text, pack, unpack)
-import qualified Data.Vector as Vector
 import Data.Parameterized.Some
 import Data.Typeable
 import GHC.Generics (Generic, Generic1)
@@ -84,7 +83,6 @@ import Verifier.SAW.SharedTerm hiding (PPOpts(..), defaultPPOpts,
                                        ppTerm, scPrettyTerm)
 import qualified Verifier.SAW.SharedTerm as SAWCorePP (PPOpts(..), defaultPPOpts,
                                                        ppTerm, scPrettyTerm)
-import Verifier.SAW.TypedAST hiding (PPOpts(..), defaultPPOpts, ppTerm)
 import Verifier.SAW.TypedTerm
 
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
@@ -403,8 +401,13 @@ data TopLevelRW =
   , rwCrucibleAssertThenAssume :: Bool
   , rwProfilingFile :: Maybe FilePath
   , rwLaxArith :: Bool
+
+  -- FIXME: These might be better split into "simulator hash-consing" and "tactic hash-consing"
   , rwWhat4HashConsing :: Bool
+  , rwWhat4HashConsingX86 :: Bool
+
   , rwPreservedRegs :: [String]
+  , rwStackBaseAlign :: Integer
   }
 
 newtype TopLevel a =
@@ -501,51 +504,47 @@ maybeInsert :: Ord k => k -> Maybe a -> Map k a -> Map k a
 maybeInsert _ Nothing m = m
 maybeInsert k (Just x) m = M.insert k x m
 
-extendEnv :: SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> TopLevelRW
-extendEnv x mt md v rw =
-  rw { rwValues  = M.insert name v (rwValues rw)
-     , rwTypes   = maybeInsert name mt (rwTypes rw)
-     , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
-     , rwCryptol = ce'
-     }
+extendEnv ::
+  SharedContext ->
+  SS.LName -> Maybe SS.Schema -> Maybe String -> Value -> TopLevelRW -> IO TopLevelRW
+extendEnv sc x mt md v rw =
+  do ce' <-
+       case v of
+         VTerm t ->
+           pure $ CEnv.bindTypedTerm (ident, t) ce
+         VType s ->
+           pure $ CEnv.bindType (ident, s) ce
+         VInteger n ->
+           pure $ CEnv.bindInteger (ident, n) ce
+         VCryptolModule m ->
+           pure $ CEnv.bindCryptolModule (modname, m) ce
+         VString s ->
+           do tt <- typedTermOfString sc s
+              pure $ CEnv.bindTypedTerm (ident, tt) ce
+         _ ->
+           pure ce
+     pure $
+      rw { rwValues  = M.insert name v (rwValues rw)
+         , rwTypes   = maybeInsert name mt (rwTypes rw)
+         , rwDocs    = maybeInsert (SS.getVal name) md (rwDocs rw)
+         , rwCryptol = ce'
+         }
   where
     name = x
     ident = T.packIdent (SS.getOrig x)
     modname = T.packModName [pack (SS.getOrig x)]
     ce = rwCryptol rw
-    ce' = case v of
-            VTerm t
-              -> CEnv.bindTypedTerm (ident, t) ce
-            VType s
-              -> CEnv.bindType (ident, s) ce
-            VInteger n
-              -> CEnv.bindInteger (ident, n) ce
-            VCryptolModule m
-              -> CEnv.bindCryptolModule (modname, m) ce
-            VString s
-              -> CEnv.bindTypedTerm (ident, typedTermOfString s) ce
-            _ -> ce
 
-typedTermOfString :: String -> TypedTerm
-typedTermOfString cs = TypedTerm schema trm
-  where
-    nat :: Integer -> Term
-    nat n = Unshared (FTermF (NatLit (fromInteger n)))
-    bvNat :: Term
-    bvNat = Unshared (FTermF (GlobalDef "Prelude.bvNat"))
-    bvNat8 :: Term
-    bvNat8 = Unshared (App bvNat (nat 8))
-    encodeChar :: Char -> Term
-    encodeChar c = Unshared (App bvNat8 (nat (toInteger (fromEnum c))))
-    vecT :: Term
-    vecT = Unshared (FTermF (GlobalDef "Prelude.Vec"))
-    boolT :: Term
-    boolT = Unshared (FTermF (GlobalDef "Prelude.Bool"))
-    byteT :: Term
-    byteT = Unshared (App (Unshared (App vecT (nat 8))) boolT)
-    trm :: Term
-    trm = Unshared (FTermF (ArrayValue byteT (Vector.fromList (map encodeChar cs))))
-    schema = Cryptol.Forall [] [] (Cryptol.tString (length cs))
+typedTermOfString :: SharedContext -> String -> IO TypedTerm
+typedTermOfString sc str =
+  do let schema = Cryptol.Forall [] [] (Cryptol.tString (length str))
+     bvNat <- scGlobalDef sc "Prelude.bvNat"
+     bvNat8 <- scApply sc bvNat =<< scNat sc 8
+     byteT <- scBitvector sc 8
+     let scChar c = scApply sc bvNat8 =<< scNat sc (fromIntegral (fromEnum c))
+     ts <- traverse scChar str
+     trm <- scVector sc byteT ts
+     pure (TypedTerm schema trm)
 
 
 -- Other SAWScript Monads ------------------------------------------------------
@@ -556,7 +555,7 @@ type CrucibleSetup ext = Setup.CrucibleSetupT ext TopLevel
 --   specifications should be polymorphic in the underlying architecture
 -- type LLVMCrucibleMethodSpecIR = CMSLLVM.AllLLVM CMS.CrucibleMethodSpecIR
 
-data LLVMCrucibleSetupM a =
+newtype LLVMCrucibleSetupM a =
   LLVMCrucibleSetupM
     { runLLVMCrucibleSetupM ::
         forall arch.

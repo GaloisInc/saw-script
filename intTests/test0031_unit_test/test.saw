@@ -2,7 +2,7 @@
 let setup = do {
   x <- llvm_fresh_var "x" (llvm_int 32);
 
-  p_a <- llvm_alloc (llvm_struct "struct.a_t");
+  p_a <- llvm_alloc (llvm_alias "struct.a_t");
   llvm_points_to p_a ( llvm_term {{ x }} );
 
   llvm_execute_func [ p_a ];

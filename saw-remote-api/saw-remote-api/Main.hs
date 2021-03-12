@@ -1,25 +1,48 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import Argo
-import Argo.DefaultMain
+import qualified Argo
+import qualified Argo.DefaultMain as Argo (defaultMain)
 import qualified Argo.Doc as Doc
 
-import SAWServer
+import SAWServer ( SAWState, initialState )
+import SAWServer.ClearState
+    ( clearStateDescr,
+      clearState,
+      clearAllStatesDescr,
+      clearAllStates )
 import SAWServer.CryptolSetup
+    ( cryptolLoadModuleDescr,
+      cryptolLoadModule,
+      cryptolLoadFileDescr,
+      cryptolLoadFile )
 --import SAWServer.JVMCrucibleSetup
 --import SAWServer.JVMVerify
 import SAWServer.LLVMCrucibleSetup
+    ( llvmLoadModuleDescr, llvmLoadModule )
 import SAWServer.LLVMVerify
+    ( llvmVerifyDescr,
+      llvmVerify,
+      llvmAssumeDescr,
+      llvmAssume,
+      llvmVerifyX86Descr,
+      llvmVerifyX86 )
 import SAWServer.ProofScript
-import SAWServer.SaveTerm
-import SAWServer.SetOption
+    ( makeSimpsetDescr, makeSimpset, proveDescr, prove )
+import SAWServer.SaveTerm ( saveTermDescr, saveTerm )
+import SAWServer.SetOption ( setOptionDescr, setOption )
 
 
 main :: IO ()
-main =
-  do theApp <- mkDefaultApp "SAW RPC Server" serverDocs initialState sawMethods
-     defaultMain description theApp
+main = do
+  theApp <- Argo.mkApp
+               "SAW RPC Server"
+               serverDocs
+               (Argo.defaultAppOpts
+               Argo.MutableState)
+               initialState
+               sawMethods
+  Argo.defaultMain description theApp
 
 serverDocs :: [Doc.Block]
 serverDocs =
@@ -32,65 +55,63 @@ description :: String
 description =
   "An RPC server for SAW."
 
-sawMethods :: [AppMethod SAWState]
+sawMethods :: [Argo.AppMethod SAWState]
 sawMethods =
   -- Cryptol
-  [ method
+  [ Argo.command
      "SAW/Cryptol/load module"
-     Command
      cryptolLoadModuleDescr
      cryptolLoadModule
-  , method
+  , Argo.command
      "SAW/Cryptol/load file"
-     Command
      cryptolLoadFileDescr
      cryptolLoadFile
-  , method
+  , Argo.command
      "SAW/Cryptol/save term"
-     Command
      saveTermDescr
      saveTerm
   -- JVM
   {-
-  , method "SAW/JVM/load class" Command (Doc.Paragraph [Doc.Text "TODO"]) jvmLoadClass
-  , method "SAW/JVM/verify"     Command (Doc.Paragraph [Doc.Text "TODO"]) jvmVerify
-  , method "SAW/JVM/assume"     Command (Doc.Paragraph [Doc.Text "TODO"]) jvmAssume
+  , Argo.command "SAW/JVM/load class" (Doc.Paragraph [Doc.Text "TODO"]) jvmLoadClass
+  , Argo.command "SAW/JVM/verify"     (Doc.Paragraph [Doc.Text "TODO"]) jvmVerify
+  , Argo.command "SAW/JVM/assume"     (Doc.Paragraph [Doc.Text "TODO"]) jvmAssume
   -}
   -- LLVM
-  , method
+  , Argo.command
      "SAW/LLVM/load module"
-     Command
      llvmLoadModuleDescr
      llvmLoadModule
-  , method
+  , Argo.command
      "SAW/LLVM/verify"
-     Command
      llvmVerifyDescr
      llvmVerify
-  , method
+  , Argo.command
      "SAW/LLVM/verify x86"
-     Command
      llvmVerifyX86Descr
      llvmVerifyX86
-  , method
+  , Argo.command
      "SAW/LLVM/assume"
-     Command
      llvmAssumeDescr
      llvmAssume
   -- General
-  , method
+  , Argo.command
      "SAW/make simpset"
-     Command
      makeSimpsetDescr
      makeSimpset
-  , method
+  , Argo.command
      "SAW/prove"
-     Command
      proveDescr
      prove
-  , method
+  , Argo.command
      "SAW/set option"
-     Command
      setOptionDescr
      setOption
+  , Argo.notification
+     "SAW/clear state"
+     clearStateDescr
+     clearState
+  , Argo.notification
+     "SAW/clear all states"
+     clearAllStatesDescr
+     clearAllStates
   ]

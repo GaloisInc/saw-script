@@ -80,7 +80,7 @@ import Data.Parameterized.Pair
 import Data.Foldable(foldlM, toList)
 
 import What4.Interface
-          (bvLit,isEq, Pred, notPred, orPred, natEq
+          (bvLit,isEq, Pred, notPred, orPred, natEq, freshNat
           , bvUle, truePred, natLit, asNat, andPred, userSymbol, freshConstant )
 import What4.ProgramLoc
 
@@ -448,7 +448,7 @@ freshVal sym t ptrOk nm =
       | ptrOk, Just Refl <- testEquality w (knownNat @64) -> do
           sn_base <- symName (nm ++ "_base")
           sn_off <- symName (nm ++ "_off")
-          base <- freshConstant sym sn_base BaseNatRepr
+          base <- freshNat sym sn_base
           off <- freshConstant sym sn_off (BaseBVRepr w)
           return (LLVMPointer base off)
       | otherwise -> do
@@ -1082,7 +1082,7 @@ setupGlobals opts gs fs s
                             let halloc = simHandleAllocator (st ^. stateContext)
                             h <- mkHandle halloc fname
                             let addBinding = over (stateContext . functionBindings)
-                                               (insertHandleMap h (UseOverride o))
+                                               (FnBindings . insertHandleMap h (UseOverride o) . fnBindings)
                             return (h, addBinding st)
                       )
 
@@ -1175,7 +1175,7 @@ checkOverlaps sym = check
            (_, x2) = llvmPointerView p2
            (b1,y1) = llvmPointerView q1
            (_,y2)  = llvmPointerView q2
-       opt1 <- notPred sym =<< isEq sym a1 b1
+       opt1 <- notPred sym =<< natEq sym a1 b1
        opt2 <- bvUle sym x2 y1
        opt3 <- bvUle sym y2 x1
        ok <- orPred sym opt1 =<< orPred sym opt2 opt3

@@ -7,19 +7,20 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 module SAWServer
   ( module SAWServer
   ) where
 
 import Prelude hiding (mod)
-import Control.Lens
+import Control.Lens ( Lens', view, lens, over )
 import Data.Aeson (FromJSON(..), ToJSON(..), withText)
 import Data.ByteString (ByteString)
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import Data.Parameterized.Pair
-import Data.Parameterized.Some
+import Data.Parameterized.Pair ( Pair(..) )
+import Data.Parameterized.Some ( Some(..) )
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Crypto.Hash as Hash
@@ -46,6 +47,8 @@ import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
 
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (CrucibleMethodSpecIR)
+import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType)
+import SAWScript.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Options (defaultOptions)
@@ -57,9 +60,17 @@ import Verifier.SAW.CryptolEnv (initCryptolEnv, bindTypedTerm)
 import Verifier.SAW.Rewriter (Simpset)
 import qualified Cryptol.Utils.Ident as Cryptol
 
-import Argo
+import qualified Argo
 import qualified CryptolServer (validateServerState, ServerState(..))
 import SAWServer.Exceptions
+    ( serverValNotFound,
+      notAnLLVMModule,
+      notAnLLVMSetup,
+      notAnLLVMMethodSpecIR,
+      notASimpset,
+      notATerm,
+      notAJVMClass,
+      notAJVMMethodSpecIR )
 
 type SAWCont = (SAWEnv, SAWTask)
 
@@ -94,10 +105,16 @@ data SetupStep ty
   = SetupReturn (CrucibleSetupVal CryptolAST) -- ^ The return value
   | SetupFresh ServerName Text ty -- ^ Server name to save in, debug name, fresh variable type
   | SetupAlloc ServerName ty Bool (Maybe Int) -- ^ Server name to save in, type of allocation, mutability, alignment
-  | SetupPointsTo (CrucibleSetupVal CryptolAST) (CrucibleSetupVal CryptolAST) -- ^ Source, target
+  | SetupPointsTo (CrucibleSetupVal CryptolAST)
+                  (CrucibleSetupVal CryptolAST)
+                  (Maybe (CheckPointsToType ty))
+                  (Maybe CryptolAST)
+                  -- ^ The source, the target, the type to check the target,
+                  --   and the condition that must hold in order for the source to point to the target
   | SetupExecuteFunction [CrucibleSetupVal CryptolAST] -- ^ Function's arguments
   | SetupPrecond CryptolAST -- ^ Function's precondition
   | SetupPostcond CryptolAST -- ^ Function's postcondition
+  deriving stock (Foldable, Functor, Traversable)
 
 instance Show (SetupStep ty) where
   show _ = "⟨SetupStep⟩" -- TODO
@@ -137,19 +154,19 @@ trackedFiles :: Lens' SAWState (Map FilePath (Hash.Digest Hash.SHA256))
 trackedFiles = lens _trackedFiles (\v tf -> v { _trackedFiles = tf })
 
 
-pushTask :: SAWTask -> Method SAWState ()
-pushTask t = modifyState mod
+pushTask :: SAWTask -> Argo.Command SAWState ()
+pushTask t = Argo.modifyState mod
   where mod (SAWState env bic stack ro rw tf) =
           SAWState env bic ((t, env) : stack) ro rw tf
 
-dropTask :: Method SAWState ()
-dropTask = modifyState mod
+dropTask :: Argo.Command SAWState ()
+dropTask = Argo.modifyState mod
   where mod (SAWState _ _ [] _ _ _) = error "Internal error - stack underflow"
         mod (SAWState _ sc ((_t, env):stack) ro rw tf) =
           SAWState env sc stack ro rw tf
 
-getHandleAlloc :: Method SAWState Crucible.HandleAllocator
-getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> getState
+getHandleAlloc :: Argo.Command SAWState Crucible.HandleAllocator
+getHandleAlloc = roHandleAlloc . view sawTopLevelRO <$> Argo.getState
 
 initialState :: (FilePath -> IO ByteString) -> IO SAWState
 initialState readFileFn =
@@ -202,6 +219,8 @@ initialState readFileFn =
                 , rwCrucibleAssertThenAssume = False
                 , rwLaxArith = False
                 , rwWhat4HashConsing = False
+                , rwWhat4HashConsingX86 = False
+                , rwStackBaseAlign = defaultStackBaseAlign
                 , rwProofs = []
                 , rwPreservedRegs = []
                 }
@@ -319,77 +338,77 @@ instance KnownCrucibleSetupType a => IsServerVal (LLVMCrucibleSetupM a) where
 instance IsServerVal (Some CMS.LLVMModule) where
   toServerVal = VLLVMModule
 
-setServerVal :: IsServerVal val => ServerName -> val -> Method SAWState ()
+setServerVal :: IsServerVal val => ServerName -> val -> Argo.Command SAWState ()
 setServerVal name val =
-  do debugLog $ "Saving " <> (T.pack (show name))
-     modifyState $
+  do Argo.debugLog $ "Saving " <> (T.pack (show name))
+     Argo.modifyState $
        over sawEnv $
        \(SAWEnv env) ->
          SAWEnv (M.insert name (toServerVal val) env)
-     debugLog $ "Saved " <> (T.pack (show name))
-     st <- getState
-     debugLog $ "State is " <> T.pack (show st)
+     Argo.debugLog $ "Saved " <> (T.pack (show name))
+     st <- Argo.getState @SAWState
+     Argo.debugLog $ "State is " <> T.pack (show st)
 
 
-getServerVal :: ServerName -> Method SAWState ServerVal
+getServerVal :: ServerName -> Argo.Command SAWState ServerVal
 getServerVal n =
-  do SAWEnv serverEnv <- view sawEnv <$> getState
-     st <- getState
-     debugLog $ "Looking up " <> T.pack (show n) <> " in " <> T.pack (show st)
+  do SAWEnv serverEnv <- view sawEnv <$> Argo.getState
+     st <- Argo.getState @SAWState
+     Argo.debugLog $ "Looking up " <> T.pack (show n) <> " in " <> T.pack (show st)
      case M.lookup n serverEnv of
-       Nothing -> raise (serverValNotFound n)
+       Nothing -> Argo.raise (serverValNotFound n)
        Just val -> return val
 
-bindCryptolVar :: Text -> TypedTerm -> Method SAWState ()
+bindCryptolVar :: Text -> TypedTerm -> Argo.Command SAWState ()
 bindCryptolVar x t =
-  do modifyState $ over sawTopLevelRW $ \rw ->
+  do Argo.modifyState $ over sawTopLevelRW $ \rw ->
        rw { rwCryptol = bindTypedTerm (Cryptol.mkIdent x, t) (rwCryptol rw) }
 
-getJVMClass :: ServerName -> Method SAWState JSS.Class
+getJVMClass :: ServerName -> Argo.Command SAWState JSS.Class
 getJVMClass n =
   do v <- getServerVal n
      case v of
        VJVMClass c -> return c
-       _other -> raise (notAJVMClass n)
+       _other -> Argo.raise (notAJVMClass n)
 
-getJVMMethodSpecIR :: ServerName -> Method SAWState (CMS.CrucibleMethodSpecIR CJ.JVM)
+getJVMMethodSpecIR :: ServerName -> Argo.Command SAWState (CMS.CrucibleMethodSpecIR CJ.JVM)
 getJVMMethodSpecIR n =
   do v <- getServerVal n
      case v of
        VJVMMethodSpecIR ir -> return ir
-       _other -> raise (notAJVMMethodSpecIR n)
+       _other -> Argo.raise (notAJVMMethodSpecIR n)
 
-getLLVMModule :: ServerName -> Method SAWState (Some CMS.LLVMModule)
+getLLVMModule :: ServerName -> Argo.Command SAWState (Some CMS.LLVMModule)
 getLLVMModule n =
   do v <- getServerVal n
      case v of
        VLLVMModule m -> return m
-       _other -> raise (notAnLLVMModule n)
+       _other -> Argo.raise (notAnLLVMModule n)
 
-getLLVMSetup :: ServerName -> Method SAWState (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
+getLLVMSetup :: ServerName -> Argo.Command SAWState (Pair CrucibleSetupTypeRepr LLVMCrucibleSetupM)
 getLLVMSetup n =
   do v <- getServerVal n
      case v of
        VLLVMCrucibleSetup setup -> return setup
-       _other -> raise (notAnLLVMSetup n)
+       _other -> Argo.raise (notAnLLVMSetup n)
 
-getLLVMMethodSpecIR :: ServerName -> Method SAWState (CMS.SomeLLVM CMS.CrucibleMethodSpecIR)
+getLLVMMethodSpecIR :: ServerName -> Argo.Command SAWState (CMS.SomeLLVM CMS.CrucibleMethodSpecIR)
 getLLVMMethodSpecIR n =
   do v <- getServerVal n
      case v of
        VLLVMMethodSpecIR ir -> return ir
-       _other -> raise (notAnLLVMMethodSpecIR n)
+       _other -> Argo.raise (notAnLLVMMethodSpecIR n)
 
-getSimpset :: ServerName -> Method SAWState Simpset
+getSimpset :: ServerName -> Argo.Command SAWState Simpset
 getSimpset n =
   do v <- getServerVal n
      case v of
        VSimpset ss -> return ss
-       _other -> raise (notASimpset n)
+       _other -> Argo.raise (notASimpset n)
 
-getTerm :: ServerName -> Method SAWState TypedTerm
+getTerm :: ServerName -> Argo.Command SAWState TypedTerm
 getTerm n =
   do v <- getServerVal n
      case v of
        VTerm t -> return t
-       _other -> raise (notATerm n)
+       _other -> Argo.raise (notATerm n)

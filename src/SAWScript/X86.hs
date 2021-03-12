@@ -69,6 +69,7 @@ import Lang.Crucible.Simulator.EvalStmt(executeCrucible)
 import Lang.Crucible.Simulator.ExecutionTree
           (ExecResult(..), SimContext(..), FnState(..)
           , ExecState(InitialState)
+          , FunctionBindings(..)
           )
 import Lang.Crucible.Simulator.SimError(SimError(..), SimErrorReason)
 import Lang.Crucible.Backend
@@ -475,9 +476,8 @@ doSim opts elf sfs name (globs,overs) st checkPost =
                               , simHandleAllocator = allocator opts
                               , printHandle = stdout
                               , extensionImpl = macawExtensions (x86_64MacawEvalFn sfs) mvar globs (callHandler overs sym) noExtraValidityPred
-                              , _functionBindings =
-                                   insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) $
-                                   emptyHandleMap
+                              , _functionBindings = FnBindings $
+                                insertHandleMap (cfgHandle cfg) (UseCFG cfg (postdomInfo cfg)) emptyHandleMap
                               , _cruciblePersonality = MacawSimulatorState
                               , _profilingMetrics = Map.empty
                               }

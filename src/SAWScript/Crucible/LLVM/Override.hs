@@ -39,6 +39,7 @@ module SAWScript.Crucible.LLVM.Override
   , learnCond
   , learnSetupCondition
   , matchArg
+  , assertTermEqualities
   , methodSpecHandler
   , valueToSC
   , storePointsToValue
@@ -640,9 +641,21 @@ learnCond opts sc cc cs prepost globals extras ss =
   do let loc = cs ^. MS.csLoc
      matchPointsTos opts sc cc cs prepost (ss ^. MS.csPointsTos)
      traverse_ (learnSetupCondition opts sc cc cs prepost) (ss ^. MS.csConditions)
+     assertTermEqualities sc cc
      enforcePointerValidity sc cc loc ss
      enforceDisjointness sc cc loc globals extras ss
      enforceCompleteSubstitution loc ss
+
+
+assertTermEqualities ::
+  SharedContext ->
+  LLVMCrucibleContext arch ->
+  OverrideMatcher (LLVM arch) md ()
+assertTermEqualities sc cc = do
+  let assertTermEquality (t, e) = do
+        p <- instantiateExtResolveSAWPred sc cc t
+        addAssert p e
+  traverse_ assertTermEquality =<< OM (use termEqs)
 
 
 -- | Verify that all of the fresh variables for the given
@@ -1218,7 +1231,7 @@ typeToSC sc t =
          scVecType sc n ty'
     Crucible.Struct fields ->
       do fields' <- V.toList <$> traverse (typeToSC sc . view Crucible.fieldVal) fields
-         scTuple sc fields'
+         scTupleType sc fields'
 
 ------------------------------------------------------------------------
 
@@ -1254,13 +1267,12 @@ matchTerm sc cc loc prepost real expect =
 
        _ ->
          do t <- liftIO $ scEq sc real expect
-            p <- liftIO $ resolveSAWPred cc t
             let msg = unlines $
                   [ "Literal equality " ++ stateCond prepost
                   , "Expected term: " ++ prettyTerm expect
                   , "Actual term:   " ++ prettyTerm real
                   ]
-            addAssert p $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
+            addTermEq t $ Crucible.SimError loc $ Crucible.AssertFailureSimError msg ""
   where prettyTerm = show . ppTermDepth 20
 
 
@@ -1785,7 +1797,7 @@ executeFreshPointer ::
 executeFreshPointer cc (AllocIndex i) =
   do let mkName base = W4.systemSymbol (base ++ show i ++ "!")
          sym         = cc^.ccBackend
-     blk <- W4.freshConstant sym (mkName "blk") W4.BaseNatRepr
+     blk <- W4.freshNat sym (mkName "blk")
      off <- W4.freshConstant sym (mkName "off") (W4.BaseBVRepr Crucible.PtrWidth)
      return (Crucible.LLVMPointer blk off)
 

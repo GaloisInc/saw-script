@@ -11,6 +11,7 @@ Stability   : provisional
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
@@ -40,10 +41,12 @@ module SAWScript.Crucible.LLVM.Builtins
     , llvm_ghost_value
     , llvm_declare_ghost_state
     , llvm_equal
+    , CheckPointsToType(..)
     , llvm_points_to
     , llvm_conditional_points_to
     , llvm_points_to_at_type
     , llvm_conditional_points_to_at_type
+    , llvm_points_to_internal
     , llvm_points_to_array_prefix
     , llvm_fresh_pointer
     , llvm_unsafe_assume_spec
@@ -419,12 +422,16 @@ llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
                 MS.csPostState . MS.csPointsTos .~ extracted_post_state_points_tos
 
           typed_extracted_func_const <- io $ mkTypedTerm shared_context extracted_func_const
-          modify' $
-            extendEnv
+          rw <- getTopLevelRW
+          rw' <-
+            liftIO $
+            extendEnv shared_context
               (Located func_name func_name $ PosInternal "llvm_compositional_extract")
               Nothing
               Nothing
               (VTerm typed_extracted_func_const)
+              rw
+          putTopLevelRW rw'
 
           return $ SomeLLVM extracted_method_spec
 
@@ -1373,7 +1380,6 @@ baseCryptolType bt =
   case bt of
     Crucible.BaseBoolRepr -> pure $ Cryptol.tBit
     Crucible.BaseBVRepr w -> pure $ Cryptol.tWord (Cryptol.tNum (natValue w))
-    Crucible.BaseNatRepr  -> Nothing
     Crucible.BaseIntegerRepr -> pure $ Cryptol.tInteger
     Crucible.BaseArrayRepr {} -> Nothing
     Crucible.BaseFloatRepr _ -> Nothing
@@ -1986,7 +1992,7 @@ llvm_points_to ::
   AllLLVM SetupValue     ->
   LLVMCrucibleSetupM ()
 llvm_points_to typed =
-  llvm_points_to_internal typed Nothing Nothing
+  llvm_points_to_internal (shouldCheckAgainstPointerType typed) Nothing
 
 llvm_conditional_points_to ::
   Bool {- ^ whether to check type compatibility -} ->
@@ -1995,7 +2001,7 @@ llvm_conditional_points_to ::
   AllLLVM SetupValue ->
   LLVMCrucibleSetupM ()
 llvm_conditional_points_to typed cond =
-  llvm_points_to_internal typed Nothing (Just cond)
+  llvm_points_to_internal (shouldCheckAgainstPointerType typed) (Just cond)
 
 llvm_points_to_at_type ::
   AllLLVM SetupValue ->
@@ -2003,7 +2009,7 @@ llvm_points_to_at_type ::
   AllLLVM SetupValue ->
   LLVMCrucibleSetupM ()
 llvm_points_to_at_type ptr ty val =
-  llvm_points_to_internal False (Just ty) Nothing ptr val
+  llvm_points_to_internal (Just (CheckAgainstCastedType ty)) Nothing ptr val
 
 llvm_conditional_points_to_at_type ::
   TypedTerm ->
@@ -2012,16 +2018,35 @@ llvm_conditional_points_to_at_type ::
   AllLLVM SetupValue ->
   LLVMCrucibleSetupM ()
 llvm_conditional_points_to_at_type cond ptr ty val =
-  llvm_points_to_internal False (Just ty) (Just cond) ptr val
+  llvm_points_to_internal (Just (CheckAgainstCastedType ty)) (Just cond) ptr val
+
+-- | When invoking @llvm_points_to@ and friends, against what should SAW check
+-- the type of the RHS value?
+data CheckPointsToType ty
+  = CheckAgainstPointerType
+    -- ^ Check the type of the RHS value against the type that the LHS points to.
+    --   Used for @llvm_{conditional_}points_to@.
+  | CheckAgainstCastedType ty
+    -- ^ Check the type of the RHS value against the provided @ty@, which
+    --   the LHS pointer is casted to.
+    --   Used for @llvm_{conditional_}points_to_at_type@.
+  deriving (Functor, Foldable, Traversable)
+
+-- | If the argument is @True@, check the type of the RHS value against the
+-- type that the LHS points to (i.e., @'Just' 'CheckAgainstPointerType'@).
+-- Otherwise, don't check the type of the RHS value at all (i.e., 'Nothing').
+shouldCheckAgainstPointerType :: Bool -> Maybe (CheckPointsToType ty)
+shouldCheckAgainstPointerType b = if b then Just CheckAgainstPointerType else Nothing
 
 llvm_points_to_internal ::
-  Bool {- ^ whether to check type compatibility -} ->
-  Maybe L.Type {- ^ optional type constraint for rhs -} ->
+  Maybe (CheckPointsToType L.Type) {- ^ If 'Just', check the type of the RHS value.
+                                        If 'Nothing', don't check the type of the
+                                        RHS value at all. -} ->
   Maybe TypedTerm ->
   AllLLVM SetupValue {- ^ lhs pointer -} ->
   AllLLVM SetupValue {- ^ rhs value -} ->
   LLVMCrucibleSetupM ()
-llvm_points_to_internal typed rhsTy cond (getAllLLVM -> ptr) (getAllLLVM -> val) =
+llvm_points_to_internal mbCheckType cond (getAllLLVM -> ptr) (getAllLLVM -> val) =
   LLVMCrucibleSetupM $
   do cc <- getLLVMCrucibleContext
      loc <- getW4Position "llvm_points_to"
@@ -2048,13 +2073,13 @@ llvm_points_to_internal typed rhsTy cond (getAllLLVM -> ptr) (getAllLLVM -> val)
             _ -> throwCrucibleSetup loc $ "lhs not a pointer type: " ++ show ptrTy
 
           valTy <- typeOfSetupValue cc env nameEnv val
-          case rhsTy of
-            Nothing -> pure ()
-            Just ty ->
-              do ty' <- memTypeForLLVMType loc ty
-                 checkMemTypeCompatibility loc ty' valTy
+          case mbCheckType of
+            Nothing                          -> pure ()
+            Just CheckAgainstPointerType     -> checkMemTypeCompatibility loc lhsTy valTy
+            Just (CheckAgainstCastedType ty) -> do
+              ty' <- memTypeForLLVMType loc ty
+              checkMemTypeCompatibility loc ty' valTy
 
-          when typed (checkMemTypeCompatibility loc lhsTy valTy)
           Setup.addPointsTo (LLVMPointsTo loc cond ptr $ ConcreteSizeValue val)
 
 llvm_points_to_array_prefix ::

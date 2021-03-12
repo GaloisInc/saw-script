@@ -1,22 +1,11 @@
-import os
-import os.path
+from pathlib import Path
+import unittest
 from cryptol.cryptoltypes import to_cryptol
 from saw import *
 from saw.llvm import Contract, void, SetupVal, FreshVar, cryptol
 from saw.llvm_types import i8, i32, LLVMType, LLVMArrayType
-from env_server import *
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
 
-env_connect_global()
-view(LogResults())
-
-bcname = os.path.join(dir_path, 'salsa20.bc')
-cryname = os.path.join(dir_path, 'Salsa20.cry')
-
-cryptol_load_file(cryname)
-
-mod = llvm_load_module(bcname)
 
 def ptr_to_fresh(c : Contract, ty : LLVMType, name : Optional[str] = None) -> Tuple[FreshVar, SetupVal]:
     """Add to``Contract`` ``c`` an allocation of a pointer of type ``ty`` initialized to an unknown fresh value.
@@ -52,7 +41,6 @@ class RotlContract(Contract):
         self.returns(cryptol("(<<<)")(value, shift))
 
 
-rotl_result = llvm_verify(mod, 'rotl', RotlContract())
 
 class QuarterRoundContract(Contract):
     def specification(self) -> None:
@@ -76,35 +64,29 @@ class QuarterRoundContract(Contract):
         self.returns(void)
 
 
-qr_result = llvm_verify(mod, 's20_quarterround', QuarterRoundContract(), lemmas=[rotl_result])
-
 
 class RowRoundContract(Contract):
     def specification(self) -> None:
         oneptr_update_func(self, LLVMArrayType(i32, 16), "rowround")
 
-rr_result = llvm_verify(mod, 's20_rowround', RowRoundContract(), lemmas=[qr_result])
 
 
 class ColumnRoundContract(Contract):
     def specification(self) -> None:
         oneptr_update_func(self, LLVMArrayType(i32, 16), "columnround")
 
-cr_result = llvm_verify(mod, 's20_columnround', ColumnRoundContract(), lemmas=[rr_result])
 
 
 class DoubleRoundContract(Contract):
     def specification(self) -> None:
         oneptr_update_func(self, LLVMArrayType(i32, 16), "doubleround")
 
-dr_result = llvm_verify(mod, 's20_doubleround', DoubleRoundContract(), lemmas=[cr_result, rr_result])
 
 
 class HashContract(Contract):
     def specification(self) -> None:
         oneptr_update_func(self, LLVMArrayType(i8, 64), "Salsa20")
 
-hash_result = llvm_verify(mod, 's20_hash', HashContract(), lemmas=[dr_result])
 
 
 
@@ -123,7 +105,6 @@ class ExpandContract(Contract):
         self.returns(void)
         self.points_to(ks_p, cryptol("Salsa20_expansion`{a=2}")((k, n)))
 
-expand_result = llvm_verify(mod, 's20_expand32', ExpandContract(), lemmas=[hash_result])
 
 
 class Salsa20CryptContract(Contract):
@@ -141,4 +122,42 @@ class Salsa20CryptContract(Contract):
         self.returns(cryptol('0 : [32]'))
         self.points_to(m_p, cryptol("Salsa20_encrypt")((k, v, m)))
 
-crypt_result = llvm_verify(mod, 's20_crypt32', Salsa20CryptContract(63), lemmas=[expand_result])
+class Salsa20EasyTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        connect(reset_server=True)
+
+    @classmethod
+    def tearDownClass(self):
+        disconnect()
+
+    def test_salsa20(self):
+        if __name__ == "__main__": view(LogResults())
+
+        bcname = str(Path('tests','saw','test-files', 'salsa20.bc'))
+        cryname = str(Path('tests','saw','test-files', 'Salsa20.cry'))
+
+        cryptol_load_file(cryname)
+
+        mod = llvm_load_module(bcname)
+
+        rotl_result = llvm_verify(mod, 'rotl', RotlContract())
+
+        qr_result = llvm_verify(mod, 's20_quarterround', QuarterRoundContract(), lemmas=[rotl_result])
+        self.assertIs(qr_result.is_success(), True)
+        rr_result = llvm_verify(mod, 's20_rowround', RowRoundContract(), lemmas=[qr_result])
+        self.assertIs(rr_result.is_success(), True)
+        cr_result = llvm_verify(mod, 's20_columnround', ColumnRoundContract(), lemmas=[rr_result])
+        self.assertIs(cr_result.is_success(), True)
+        dr_result = llvm_verify(mod, 's20_doubleround', DoubleRoundContract(), lemmas=[cr_result, rr_result])
+        self.assertIs(dr_result.is_success(), True)
+        hash_result = llvm_verify(mod, 's20_hash', HashContract(), lemmas=[dr_result])
+        self.assertIs(hash_result.is_success(), True)
+        expand_result = llvm_verify(mod, 's20_expand32', ExpandContract(), lemmas=[hash_result])
+        self.assertIs(expand_result.is_success(), True)
+        crypt_result = llvm_verify(mod, 's20_crypt32', Salsa20CryptContract(63), lemmas=[expand_result])
+        self.assertIs(crypt_result.is_success(), True)
+
+if __name__ == "__main__":
+    unittest.main()

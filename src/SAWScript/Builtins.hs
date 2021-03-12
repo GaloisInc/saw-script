@@ -128,7 +128,6 @@ import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 
 import SAWScript.Prover.Util(checkBooleanSchema,liftCexBB)
 import SAWScript.Prover.SolverStats
-import SAWScript.Prover.Rewrite(rewriteEqs)
 import qualified SAWScript.Prover.SBV as Prover
 import qualified SAWScript.Prover.RME as Prover
 import qualified SAWScript.Prover.ABC as Prover
@@ -687,8 +686,7 @@ satExternal doCNF execName args = withFirstGoal $ \g -> do
   sc <- SV.getSharedContext
   SV.AIGProxy proxy <- SV.getProxy
   io $ do
-  t0 <- propToPredicate sc (goalProp g)
-  t <- rewriteEqs sc t0
+  t <- propToPredicate sc (goalProp g)
   let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
   (path, fh) <- openTempFile "." cnfName
   hClose fh -- Yuck. TODO: allow writeCNF et al. to work on handles.

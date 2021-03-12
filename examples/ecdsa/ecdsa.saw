@@ -301,11 +301,8 @@ let ss1 = add_prelude_eqs
   , "ite_bit"
   , "ite_bit_false_1"
   , "ite_bit_true_1"
-  , "ite_eq_cong_1"
-  , "ite_eq_cong_2"
   , "ite_split_cong"
   , "ite_join_cong"
-  , "eq_refl"
   , "at_single"
   , "and_True1", "and_True2", "and_False1", "and_False2", "and_idem"
   , "or_True1", "or_True2", "or_False1", "or_False2"
@@ -349,7 +346,11 @@ ite24 <- prove_rule {{
   else [y0,y1,y2,y3,y4,y5,y6,y7,y8,y9,y10,y11,y12,y13,y14,y15,y16,y17,y18,y19,y20,y21,y22,y23])
   }};
 
-at12 <- prove_core abc "(x : Vec 12 (Vec 32 Bool)) -> EqTrue (eq (Vec 12 (Vec 32 Bool)) [at 12 (Vec 32 Bool) x 0, at 12 (Vec 32 Bool) x 1, at 12 (Vec 32 Bool) x 2, at 12 (Vec 32 Bool) x 3, at 12 (Vec 32 Bool) x 4, at 12 (Vec 32 Bool) x 5, at 12 (Vec 32 Bool) x 6, at 12 (Vec 32 Bool) x 7, at 12 (Vec 32 Bool) x 8, at 12 (Vec 32 Bool) x 9, at 12 (Vec 32 Bool) x 10, at 12 (Vec 32 Bool) x 11] x)";
+at12 <- prove_rule {{
+  \(x:[12][32]) ->
+  [ x @ 0x00, x @ 0x01, x @ 0x02, x @ 0x03, x @ 0x04, x @ 0x05
+  , x @ 0x06, x @ 0x07, x @ 0x08, x @ 0x09, x @ 0x0a, x @ 0x0b
+  ] == x }};
 
 at24 <- prove_rule {{
   \(x:[24][32]) ->
