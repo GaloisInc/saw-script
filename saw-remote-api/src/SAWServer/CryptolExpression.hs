@@ -6,8 +6,10 @@ module SAWServer.CryptolExpression
  ( getCryptolExpr
  , getTypedTerm
  , getTypedTermOfCExp
+ , CryptolModuleException(..)
  ) where
 
+import Control.Exception (Exception)
 import Control.Lens ( view )
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 import qualified Data.ByteString as B
@@ -15,7 +17,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 
 import Cryptol.Eval (EvalOpts(..))
-import Cryptol.ModuleSystem (ModuleRes, ModuleInput(..))
+import Cryptol.ModuleSystem (ModuleError, ModuleInput(..), ModuleRes, ModuleWarning)
 import Cryptol.ModuleSystem.Base (genInferInput, getPrimMap, noPat, rename)
 import Cryptol.ModuleSystem.Env (ModuleEnv, meSolverConfig)
 import Cryptol.ModuleSystem.Interface (noIfaceParams)
@@ -108,3 +110,10 @@ runInferOutput out =
     InferFailed nm warns errs ->
       do typeCheckWarnings nm warns
          typeCheckingFailed nm errs
+
+data CryptolModuleException = CryptolModuleException
+  { cmeError    :: ModuleError
+  , cmeWarnings :: [ModuleWarning]
+  } deriving Show
+
+instance Exception CryptolModuleException
