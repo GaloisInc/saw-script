@@ -393,17 +393,15 @@ resolveSAWSymBV cc w tm =
   do let sym = cc^.ccBackend
      st <- sawCoreState sym
      let sc = saw_ctx st
-     let ss = cc^.ccBasicSS
-     tm' <- rewriteSharedTerm sc ss tm
-     mx <- case getAllExts tm' of
+     mx <- case getAllExts tm of
              [] -> do
                -- Evaluate in SBV to test whether 'tm' is a concrete value
-               sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm'
+               sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm
                return (SBV.svAsInteger sbv)
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm'
+       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm
 
 resolveSAWTerm ::
   Crucible.HasPtrWidth (Crucible.ArchWidth arch) =>
