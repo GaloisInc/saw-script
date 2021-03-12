@@ -127,7 +127,7 @@ propToRewriteRule _sc (Prop tm) =
     Just r  -> pure (Just r)
 
 -- | Attempt to split a conjunctive proposition into two propositions,
---   such that a proof of both return propositions is equivalant to
+--   such that a proof of both return propositions is equivalent to
 --   a proof of the original.
 splitProp :: SharedContext -> Prop -> IO (Maybe (Prop, Prop))
 splitProp sc (Prop p) =
@@ -192,7 +192,7 @@ falseProp sc = Prop <$> (scEqTrue sc =<< scApplyPrelude_False sc)
 propSize :: Prop -> Integer
 propSize (Prop tm) = scSharedSize tm
 
--- | Test if the given proposition is trivally true.  This holds
+-- | Test if the given proposition is trivially true.  This holds
 --   just when the proposition is a (possibly empty) sequence of
 --   Pi-types followed by an @EqTrue@ proposition for a
 --   concretely-true boolean value.
@@ -225,7 +225,7 @@ data Theorem =
       -- This constructor is used to construct "hypothetical" theorems that
       -- are intended to be used in local scopes when proving implications.
 
--- | Check that the proported theorem is valid.
+-- | Check that the purported theorem is valid.
 --
 --   This checks that the given theorem object does not correspond
 --   to a local assumption that has been leaked from its scope,
@@ -264,7 +264,7 @@ data Evidence
 
     -- | This type of evidence is produced when the given proposition
     --   has been randomly tested against input vectors in the style
-    --   of quickcheck.  The included number is the number of sucessfully
+    --   of quickcheck.  The included number is the number of successfully
     --   passed test vectors.
   | QuickcheckEvidence Integer Prop
 
@@ -273,7 +273,7 @@ data Evidence
     --   user's direction.
   | Admitted Prop
 
-    -- | This type of evidence is produced when a given propisition is trivally
+    -- | This type of evidence is produced when a given proposition is trivially
     --   true.
   | TrivialEvidence
 
@@ -302,7 +302,7 @@ data Evidence
   | CutEvidence Theorem Evidence
 
     -- | This type of evidence is used to modify a goal to prove via rewriting.
-    --   The goal to prove is rewriten by the given simpset; then the provided
+    --   The goal to prove is rewritten by the given simpset; then the provided
     --   evidence is used to check the modified goal.
   | RewriteEvidence Simpset Evidence
 
@@ -367,7 +367,7 @@ proofByTerm sc prf =
 
 -- | Construct a theorem directly from a proposition and evidence
 --   for that proposition.  The evidence will be validated to
---   check that it supports the given propsition; if not, an
+--   check that it supports the given proposition; if not, an
 --   error will be raised.
 constructTheorem :: SharedContext -> Prop -> Evidence -> IO Theorem
 constructTheorem sc p e =
@@ -575,7 +575,7 @@ checkEvidence sc = check mempty
                    , showTerm p'
                    ]
                unless (looseVars body == emptyBitSet) $ fail $ unlines
-                   [ "Assume evidence cannot be used on a dependent propsition"
+                   [ "Assume evidence cannot be used on a dependent proposition"
                    , showTerm ptm
                    ]
                check (Set.insert p' hyps) e' (Prop body)
@@ -874,7 +874,7 @@ tacticSolve f = Tactic \gl ->
 
 -- | Attempt to simplify a proof goal via computation, rewriting or similar.
 --   The tactic should return a new proposition to prove and a method for
---   transferring evidence for the modifed proposition into a evidence for
+--   transferring evidence for the modified proposition into a evidence for
 --   the original goal.
 tacticChange :: Monad m => (ProofGoal -> m (Prop, Evidence -> Evidence)) -> Tactic m ()
 tacticChange f = Tactic \gl ->
