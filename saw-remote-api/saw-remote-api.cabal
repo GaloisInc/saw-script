@@ -15,10 +15,7 @@ maintainer:          kwf@galois.com
 -- copyright:
 category:            Network
 extra-source-files:  CHANGELOG.md
-data-files:          test-scripts/*.py
-                     test-scripts/*.cry
-                     test-scripts/*.bc
-                     test-scripts/*.c
+
 
 flag builtin-abc
   description: Link with ABC as a static library
@@ -28,6 +25,13 @@ common warnings
   ghc-options:
     -Wall
     -Wno-orphans
+
+common errors
+  ghc-options:
+    -Werror=missing-fields
+    -Werror=incomplete-patterns
+    -Werror=missing-methods
+    -Werror=overlapping-patterns
 
 common deps
   build-depends: base >=4.11.1.0 && <4.15,
@@ -64,9 +68,10 @@ common deps
     build-depends: aig
 
 library
-  import: deps, warnings
+  import: deps, warnings, errors
   hs-source-dirs: src
   exposed-modules: SAWServer,
+                   SAWServer.ClearState,
                    SAWServer.CryptolExpression,
                    SAWServer.CryptolSetup,
                    SAWServer.Data.Contract,
@@ -89,7 +94,7 @@ library
                    SAWServer.VerifyCommon
 
 executable saw-remote-api
-  import: deps, warnings
+  import: deps, warnings, errors
   main-is:             Main.hs
   build-depends:       saw-remote-api
   -- other-modules:

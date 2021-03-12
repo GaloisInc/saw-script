@@ -28,7 +28,6 @@ import Control.Monad.State
 import Data.Aeson (FromJSON(..), withObject, (.:))
 import Data.ByteString (ByteString)
 import Data.Foldable ( traverse_ )
-import Data.Functor (($>))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe ( maybeToList )
