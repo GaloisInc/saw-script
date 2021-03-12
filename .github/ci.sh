@@ -100,9 +100,7 @@ install_yices() {
     mv "yices-$YICES_VERSION"/bin/*.exe "$BIN"
   else
     tar -xzf "yices$ext"
-    pushd "yices-$YICES_VERSION" || exit
-    sudo ./install-yices
-    popd || exit
+    (cd "yices-$YICES_VERSION" && sudo ./install-yices)
   fi
   rm -rf "yices$ext" "yices-$YICES_VERSION"
 }
@@ -145,12 +143,11 @@ build_abc() {
   case "$RUNNER_OS" in
     Linux) os="Linux" ;;
     macOS) os="OSX" ;;
-    Windows) return ;;
+    Windows) os="Windows" ;;
   esac
-  pushd deps/abcBridge
-  $IS_WIN || scripts/build-abc.sh $arch $os
-  cp abc-build/abc $BIN/abc
-  popd
+  (cd deps/abcBridge &&
+    scripts/build-abc.sh $arch $os &&
+    cp abc-build/abc $BIN/abc)
   output path $BIN/abc
 }
 
@@ -166,18 +163,17 @@ install_system_deps() {
 }
 
 test_dist() {
-  pushd intTests
-  env
-  LOUD=true ./runtests.sh
-  sh -c "! grep '<failure>' results.xml"
+  (cd intTests &&
+    env &&
+    LOUD=true ./runtests.sh &&
+    sh -c "! grep '<failure>' results.xml")
 }
 
 build_cryptol() {
   is_exe "dist/bin" "cryptol" && return
-  pushd deps/cryptol
-  git submodule update --init
-  .github/ci.sh build
-  popd
+  (cd deps/cryptol &&
+    git submodule update --init &&
+    .github/ci.sh build)
 }
 
 bundle_files() {
