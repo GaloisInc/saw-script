@@ -12,7 +12,7 @@ on:
 
 env:
   CACHE_VERSION: 1
-  TEST_TARGETS: "cryptol-saw-core"
+  CABAL_TEST_SUITES: "cryptol-saw-core-tc-test"
 
 jobs:
   outputs:
@@ -66,8 +66,7 @@ jobs:
       RELEASE: ${{ needs.outputs.outputs.release }}
     continue-on-error: ${{ matrix.continue-on-error }}
     outputs:
-      test-suites: ${{ steps.test-suites.outputs.suites }}
-      test-suite-bins: ${{ steps.test-suites.outputs.bins }}
+      suitesJson: ${{ steps.cabal-test-suites.outputs.suitesJson }}
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -104,32 +103,45 @@ jobs:
         run: .github/ci.sh build
         continue-on-error: false
 
+      - name: Build and collect cabal test suites
+        id: cabal-test-suites
+        shell: bash
+        run: |
+          BINS_DIR=test-suite-bins
+          mkdir -p $BINS_DIR
+          cabal v2-build $CABAL_TEST_SUITES
+          for SUITE in $CABAL_TEST_SUITES; do
+              BIN=$(cabal list-bin $SUITE)
+              cp $BIN $BINS_DIR
+          done
+          .github/ci.sh output suitesJson "$(echo -n $CABAL_TEST_SUITES | jq -Rsc 'split(" ")')"
+
       # - uses: galoisinc/.github/actions/cabal-suites-bins
       #   id: test-suites
 
-      - name: Cabal Suites Bins
-        shell: bash
-        id: test-suites
-        run: |
-          SUITES=""
-          BINS_DIR=test-suite-bins
-          mkdir -p $BINS_DIR
-          for TARGET in $TEST_TARGETS; do
-              export FILE=$(mktemp)
-              cabal v2-test --test-wrapper=$PWD/.github/arg2file.sh $TARGET
-              while IFS="" read -r BIN; do
-                  SUITE=$(basename $BIN)
-                  ln -s $BIN $BINS_DIR/$SUITE
-                  SUITES="$SUITES $SUITE"
-              done < $FILE
-              rm $FILE
-          done
-          .github/ci.sh output suites "$(echo -n $SUITES | jq -Rsc 'split(" ")')"
-          .github/ci.sh output bins $BINS_DIR
+      # - name: Cabal Suites Bins
+      #   shell: bash
+      #   id: test-suites
+      #   run: |
+      #     SUITES=""
+      #     BINS_DIR=test-suite-bins
+      #     mkdir -p $BINS_DIR
+      #     for TARGET in $CABAL_TEST_SUITES; do
+      #         export FILE=$(mktemp)
+      #         cabal v2-test --test-wrapper=$PWD/.github/arg2file.sh $TARGET
+      #         while IFS="" read -r BIN; do
+      #             SUITE=$(basename $BIN)
+      #             ln -s $BIN $BINS_DIR/$SUITE
+      #             SUITES="$SUITES $SUITE"
+      #         done < $FILE
+      #         rm $FILE
+      #     done
+      #     .github/ci.sh output suites "$(echo -n $SUITES | jq -Rsc 'split(" ")')"
+      #     .github/ci.sh output bins $BINS_DIR
       - if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
-          path: ${{ steps.test-suites.outputs.bins }}
+          path: test-suite-bins
           name: test-suite-bins-${{ matrix.os }}
 
       - shell: bash
@@ -174,7 +186,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: ${{ fromJson(needs.build.outputs.test-suites) }}
+        suite: ${{ fromJson(needs.build.outputs.suitesJson) }}
         os: [ubuntu-18.04]
     steps:
       - uses: actions/checkout@v2
@@ -197,7 +209,7 @@ jobs:
       - name: Run suite
         id: run-suite
         run: |
-          export PATH="$PATH:$PWD/dist/bin"
+          export PATH="$PWD/dist/bin:$PATH"
           chmod -R +x test-suite-bins
           test-suite-bins/${{ matrix.suite }}
 
