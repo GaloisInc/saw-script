@@ -174,7 +174,7 @@ jobs:
         if: "runner.os != 'Windows'"
         uses: actions/download-artifact@v2
         with:
-          path: bin/abc
+          path: bin
           name: abc-${{ runner.os }}
 
       - uses: actions/setup-java@v1
