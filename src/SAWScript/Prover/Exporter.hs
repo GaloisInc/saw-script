@@ -39,7 +39,7 @@ module SAWScript.Prover.Exporter
 import Data.Foldable(toList)
 
 import Control.Monad.Except (runExceptT, throwError)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (liftIO, MonadIO)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
@@ -85,7 +85,7 @@ import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
 
 proveWithSATExporter ::
-  (SharedContext -> FilePath -> SATQuery -> TopLevel ()) ->
+  (SharedContext -> FilePath -> SATQuery -> TopLevel a) ->
   Set VarIndex ->
   String ->
   Prop ->
@@ -93,19 +93,19 @@ proveWithSATExporter ::
 proveWithSATExporter exporter unintSet path goal =
   do sc <- getSharedContext
      satq <- io $ propToSATQuery sc unintSet goal
-     exporter sc path satq
+     _ <- exporter sc path satq
      let stats = solverStats ("offline: "++ path) (propSize goal)
      return stats
 
 
 proveWithPropExporter ::
-  (SharedContext -> FilePath -> Prop -> TopLevel ()) ->
+  (SharedContext -> FilePath -> Prop -> TopLevel a) ->
   String ->
   Prop ->
   TopLevel SolverStats
 proveWithPropExporter exporter path goal =
   do sc <- getSharedContext
-     exporter sc path goal
+     _ <- exporter sc path goal
      let stats = solverStats ("offline: "++ path) (propSize goal)
      return stats
 
@@ -225,7 +225,7 @@ writeSMTLib2 sc f satq = io $
 writeSMTLib2What4 :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
 writeSMTLib2What4 sc f satq = io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
-     (_argNames, _labels, lit) <- W.w4Solve sym sc satq
+     (_argNames, _argTys, _labels, lit) <- W.w4Solve sym sc satq
      withFile f WriteMode $ \h ->
        writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit]
 
@@ -235,10 +235,24 @@ writeCore path t = io $ writeFile path (scWriteExternal t)
 write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 write_verilog sc path t = io $ writeVerilog sc path t
 
-writeVerilogSAT :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
-writeVerilogSAT sc path satq = io $
-  do t <- satQueryAsTerm sc satq
-     writeVerilog sc path t
+writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([String],[FiniteType])
+writeVerilogSAT sc path satq = liftIO $
+  do sym <- newSAWCoreBackend sc
+     (argNames, argTys, _lbls, bval) <- W.w4Solve sym sc satq
+     let f fot = case toFiniteType fot of
+                   Nothing -> fail $ "writeVerilogSAT: Unsupported argument type " ++ show fot
+                   Just ft -> return ft
+     argTys' <- traverse f argTys
+
+     edoc <- runExceptT $ exprVerilog sym bval "f"
+     case edoc of
+       Left err -> fail $ "Failed to translate to Verilog: " ++ err
+       Right doc -> do
+         h <- openFile path WriteMode
+         hPutDoc h doc
+         hPutStrLn h ""
+         hClose h
+     return (argNames, argTys')
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do

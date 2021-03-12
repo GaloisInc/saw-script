@@ -122,7 +122,7 @@ setupWhat4_solver solver sym unintSet sc goal =
   do
      -- symbolically evaluate
      satq <- propToSATQuery sc unintSet goal
-     (argNames, bvs, lit) <- W.w4Solve sym sc satq
+     (argNames, _argTys, bvs, lit) <- W.w4Solve sym sc satq
 
      extendConfig (solver_adapter_config_options solver)
                   (getConfiguration sym)

@@ -33,13 +33,11 @@ import qualified Control.Exception as Ex
 import qualified Data.ByteString as StrictBS
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.UTF8 as B
-import Data.Char (isSpace)
 import qualified Data.IntMap as IntMap
 import Data.List (isPrefixOf, isInfixOf)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Maybe
 import Data.Time.Clock
 import Data.Typeable
 
@@ -61,7 +59,7 @@ import Verifier.SAW.Grammar (parseSAWTerm)
 import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
-  , FirstOrderValue(..), asFiniteType
+  , FirstOrderValue(..)
   , toFirstOrderValue, scFirstOrderValue
   )
 import Verifier.SAW.SATQuery
@@ -71,21 +69,14 @@ import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.Concrete as Concrete
 import Verifier.SAW.Prim (rethrowEvalError)
-import Verifier.SAW.Recognizer
 import Verifier.SAW.Rewriter
 import Verifier.SAW.Testing.Random (prepareSATQuery, runManyTests)
 import Verifier.SAW.TypedAST
 
 import SAWScript.Position
 
--- crucible-jvm
-import Lang.JVM.ProcessUtils
-
 -- cryptol-saw-core
 import qualified Verifier.SAW.CryptolEnv as CEnv
-
--- saw-core-aig
-import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 
 -- saw-core-sbv
 import qualified Verifier.SAW.Simulator.SBV as SBVSim
@@ -122,7 +113,7 @@ import SAWScript.TopLevel
 import qualified SAWScript.Value as SV
 import SAWScript.Value (ProofScript, printOutLnTop, AIGNetwork)
 
-import SAWScript.Prover.Util(checkBooleanSchema,liftCexBB)
+import SAWScript.Prover.Util(checkBooleanSchema)
 import SAWScript.Prover.SolverStats
 import qualified SAWScript.Prover.SBV as Prover
 import qualified SAWScript.Prover.RME as Prover
@@ -552,64 +543,15 @@ proveABC = do
   SV.AIGProxy proxy <- lift SV.getProxy
   wrapProver (Prover.proveABC proxy)
 
-parseDimacsSolution :: [Int]    -- ^ The list of CNF variables to return
-                    -> [String] -- ^ The value lines from the solver
-                    -> [Bool]
-parseDimacsSolution vars ls = map lkup vars
-  where
-    vs :: [Int]
-    vs = concatMap (filter (/= 0) . mapMaybe readMaybe . tail . words) ls
-    varToPair n | n < 0 = (-n, False)
-                | otherwise = (n, True)
-    assgnMap = Map.fromList (map varToPair vs)
-    lkup v = Map.findWithDefault False v assgnMap
-
 satExternal :: Bool -> String -> [String] -> ProofScript SV.SatResult
-satExternal doCNF execName args = withFirstGoal $ tacticSolve $ \g -> do
-  sc <- SV.getSharedContext
-  SV.AIGProxy proxy <- SV.getProxy
-  io $ do
-  satq <- propToSATQuery sc mempty (goalProp g)
-  let cnfName = goalType g ++ show (goalNum g) ++ ".cnf"
-  (path, fh) <- openTempFile "." cnfName
-  hClose fh -- Yuck. TODO: allow writeCNF et al. to work on handles.
-
-  let args' = map replaceFileName args
-      replaceFileName "%f" = path
-      replaceFileName a = a
-
-  BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \be l shapes -> do
-
-  variables <- (if doCNF then AIG.writeCNF else writeAIGWithMapping) be l path
-  (_ec, out, err) <- readProcessWithExitCode execName args' ""
-  removeFile path
-  unless (null err) $
-    print $ unlines ["Standard error from SAT solver:", err]
-  let ls = lines out
-      sls = filter ("s " `isPrefixOf`) ls
-      vls = filter ("v " `isPrefixOf`) ls
-  let stats = solverStats ("external SAT:" ++ execName) (propSize (goalProp g))
-  case (sls, vls) of
-    (["s SATISFIABLE"], _) -> do
-      let bs = parseDimacsSolution variables vls
-      let r = liftCexBB (map snd shapes) bs
-          argNames = map (Text.unpack . toShortName . ecName . fst) shapes
-      case r of
-        Left msg -> fail $ "Can't parse counterexample: " ++ msg
-        Right vs
-          | length argNames == length vs -> do
-            let r' = SV.SatMulti stats (zip argNames (map toFirstOrderValue vs))
-            return (r', stats, Nothing)
-          | otherwise -> fail $ unwords ["external SAT results do not match expected arguments", show argNames, show vs]
-    (["s UNSATISFIABLE"], []) ->
-      return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
-    _ -> fail $ "Unexpected result from SAT solver:\n" ++ out
-
-writeAIGWithMapping :: AIG.IsAIG l g => g s -> l s -> FilePath -> IO [Int]
-writeAIGWithMapping be l path = do
-  nins <- AIG.inputCount be
-  AIG.writeAiger path (AIG.Network be [l])
-  return [1..nins]
+satExternal doCNF execName args =
+  withFirstGoal $ tacticSolve $ \g ->
+    do SV.AIGProxy proxy <- SV.getProxy
+       sc <- SV.getSharedContext
+       (mb, stats) <- Prover.abcSatExternal proxy sc doCNF execName args g
+       case mb of
+         Nothing -> return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
+         Just a  -> return (SV.SatMulti stats a, stats, Nothing)
 
 writeAIGPrim :: FilePath -> Term -> TopLevel ()
 writeAIGPrim f t = do
@@ -774,7 +716,7 @@ offline_w4_unint_yices unints path =
      wrapW4ProveExporter Prover.proveExportWhat4_yices unints path ".smt2"
 
 proveWithSATExporter ::
-  (SharedContext -> FilePath -> SATQuery -> TopLevel ()) ->
+  (SharedContext -> FilePath -> SATQuery -> TopLevel a) ->
   Set VarIndex ->
   String ->
   String ->
@@ -786,7 +728,7 @@ proveWithSATExporter exporter unintSet path ext =
      return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
 
 proveWithPropExporter ::
-  (SharedContext -> FilePath -> Prop -> TopLevel ()) ->
+  (SharedContext -> FilePath -> Prop -> TopLevel a) ->
   String ->
   String ->
   ProofScript SV.SatResult
@@ -828,65 +770,8 @@ offline_verilog :: FilePath -> ProofScript SV.SatResult
 offline_verilog path =
   proveWithSATExporter Prover.writeVerilogSAT mempty path ".v"
 
-parseAigerCex :: String -> IO [Bool]
-parseAigerCex text =
-  case lines text of
-    [_, cex] ->
-      case words cex of
-        [bits, _] -> mapM bitToBool bits
-        _ -> fail $ "invalid counterexample line: " ++ cex
-    _ -> fail $ "invalid counterexample text: " ++ text
-  where
-    bitToBool '0' = return False
-    bitToBool '1' = return True
-    bitToBool c   = fail ("invalid bit: " ++ [c])
-
 w4_abc_verilog :: ProofScript SV.SatResult
-w4_abc_verilog = wrapW4Prover w4AbcVerilog []
-
-w4AbcVerilog ::
-  Set VarIndex ->
-  SharedContext ->
-  Bool ->
-  Prop ->
-  IO (Maybe [(String, FirstOrderValue)], SolverStats)
-w4AbcVerilog _unints sc _hashcons g =
-       -- Create temporary files
-    do let tpl = "abc_verilog.v"
-           tplCex = "abc_verilog.cex"
-       tmp <- emptySystemTempFile tpl
-       tmpCex <- emptySystemTempFile tplCex
-
-       -- Get goal into the right form (TODO, push this into Proof.hs)
-       (goalArgs, concl) <- asPiList <$> propToTerm sc g
-       p <- case asEqTrue concl of
-              Just p -> return p
-              Nothing -> fail "adaptExporter: expected EqTrue"
-       t <- scLambdaList sc goalArgs =<< scNot sc p
-       Prover.writeVerilog sc tmp t
-
-       -- Run ABC and remove temporaries
-       let execName = "abc"
-           args = ["-q", "%read " ++ tmp ++"; %blast; &sweep -C 5000; &syn4; &cec -m; write_aiger_cex " ++ tmpCex]
-       (_out, _err) <- readProcessExitIfFailure execName args
-       cexText <- readFile tmpCex
-       removeFile tmp
-       removeFile tmpCex
-
-       -- Parse and report results
-       let stats = solverStats "abc_verilog" (propSize g)
-       res <- if all isSpace cexText
-              then return Nothing
-              else do bits <- reverse <$> parseAigerCex cexText
-                      let goalArgs' = reverse goalArgs
-                          argTys = map snd goalArgs'
-                          argNms = map (Text.unpack . fst) goalArgs'
-                      finiteArgTys <- traverse (asFiniteType sc) argTys
-                      case liftCexBB finiteArgTys bits of
-                        Left parseErr -> fail parseErr
-                        Right vs -> return $ Just model
-                          where model = zip argNms (map toFirstOrderValue vs)
-       return (res, stats)
+w4_abc_verilog = wrapW4Prover Prover.w4AbcVerilog []
 
 set_timeout :: Integer -> ProofScript ()
 set_timeout to = modify (setProofTimeout to)
