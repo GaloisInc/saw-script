@@ -104,7 +104,7 @@ jobs:
           targets: cryptol-saw-core-tc-test
           dest: cabal-test-suites-bins
 
-      - name: "Upload Artifact: abc"
+      - name: "Upload Artifact: bin/abc"
         if: |
           matrix.ghc == '8.6.5' &&
           runner.os != 'Windows'
@@ -146,6 +146,7 @@ jobs:
   integration-tests:
     runs-on: ${{ matrix.os }}
     needs: [build]
+    continue-on-error: ${{ matrix.continue-on-error }}
     strategy:
       fail-fast: false
       matrix:
@@ -170,7 +171,7 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
-      - name: "Download Artifact: abc"
+      - name: "Download Artifact: bin/abc"
         if: "runner.os != 'Windows'"
         uses: actions/download-artifact@v2
         with:
