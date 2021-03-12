@@ -104,7 +104,7 @@ jobs:
           targets: cryptol-saw-core-tc-test
           dest: cabal-test-suites-bins
 
-      - name: "Upload Artifact: dist/bin"
+      - name: "Upload Artifact: cabal-test-suites-bins"
         if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
@@ -181,10 +181,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test:
-          - "saw-remote-api/scripts/run_rpc_tests.sh"
-          - "saw-remote-api/scripts/check_docs.sh"
-        os: [ubuntu-18.04, macos-latest]
+        include:
+          - test: saw-remote-api/scripts/run_rpc_tests.sh
+            os: ubuntu-18.04
+          - test: saw-remote-api/scripts/run_rpc_tests.sh
+            os: macos-latest
+          - test: saw-remote-api/scripts/check_docs.sh
+            os: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
         with:
