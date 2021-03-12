@@ -140,9 +140,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-18.04, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-18.04
+            continue-on-error: false
+          - os: macos-latest
+            continue-on-error: true
+          - os: windows-latest
+            continue-on-error: true
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
 
       - shell: bash
         run: .github/ci.sh install_system_deps
@@ -159,10 +167,9 @@ jobs:
           java-package: jdk
           architecture: x64
 
-      - shell: bash
+      - name: Integration Tests
         id: test
-        continue-on-error: ${{ matrix.continue-on-error }}
-        name: Integration Tests
+        shell: bash
         run: |
           chmod +x dist/bin/*
           export PATH="$PWD/dist/bin:$PATH"
@@ -174,6 +181,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        test:
+          - "saw-remote-api/scripts/run_rpc_tests.sh"
+          - "saw-remote-api/scripts/check_docs.sh"
         os: [ubuntu-18.04, macos-latest]
     steps:
       - uses: actions/checkout@v2
@@ -197,12 +207,12 @@ jobs:
         with:
           poetry-version: 1.1.5
 
-      - shell: bash
+      - name: ${{ matrix.test }}
+        shell: bash
         run: |
           chmod +x dist/bin/*
           export PATH="$PWD/dist/bin:$PATH"
-          saw-remote-api/scripts/run_rpc_tests.sh
-          saw-remote-api/scripts/check_docs.sh
+          ${{ matrix.test }}
 
   cabal-test:
     runs-on: ${{ matrix.os }}
@@ -230,7 +240,7 @@ jobs:
           name: cabal-test-suites-bins-${{ matrix.os }}
           path: cabal-test-suites-bins
 
-      - name: Run suite
+      - name: ${{ matrix.suite }}
         id: run-suite
         run: |
           chmod +x dist/bin/* cabal-test-suites-bins/*
