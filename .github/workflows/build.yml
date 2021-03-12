@@ -177,6 +177,8 @@ jobs:
         os: [ubuntu-18.04, macos-latest]
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: true
 
       - shell: bash
         run: .github/ci.sh install_system_deps
