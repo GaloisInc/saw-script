@@ -659,6 +659,17 @@ impliesI (x y : Bool) : (EqTrue x -> EqTrue y) -> EqTrue (implies x y) =
            trans Bool (implies True y) y True (implies_True1 y) (H TrueI))
          (\ (_ : EqTrue False -> EqTrue y) -> implies_False1 y);
 
+ValidEq : (a : sort 0) -> (a -> a -> Bool) -> Prop;
+ValidEq a eq = (x y : a) -> EqTrue (eq x y) -> Eq a x y;
+
+axiom ValidEq_boolEq : ValidEq Bool boolEq;
+
+axiom ValidEq_unitEq : ValidEq UnitType unitEq;
+
+axiom ValidEq_pairEq :
+  (a b : sort 0) -> (eqa : a -> a -> Bool) -> (eqb : b -> b -> Bool) ->
+  ValidEq a eqa -> ValidEq b eqb -> ValidEq (a * b) (pairEq a b eqa eqb);
+
 
 --------------------------------------------------------------------------------
 -- Either
@@ -958,6 +969,11 @@ vecEq : (n : Nat) -> (a : sort 0) -> (a -> a -> Bool)
 vecEq n a eqFn x y =
   foldr Bool Bool n and True (zipWith a a Bool eqFn n x y);
 
+-- vecEq implies logical equality
+axiom ValidEq_vecEq :
+  (n : Nat) -> (a : sort 0) -> (eqa : a -> a -> Bool) ->
+  ValidEq a eqa -> ValidEq (Vec n a) (vecEq n a eqa);
+
 -- | Take a prefix of a vector.
 take : (a : sort 0) -> (m n : Nat) -> Vec (addNat m n) a -> Vec m a;
 take a m n v = gen m a (\ (i : Nat) -> at (addNat m n) a v i);
@@ -1194,6 +1210,9 @@ bvXor = bvZipWith xor;
 bvEq : (n : Nat) -> Vec n Bool -> Vec n Bool -> Bool;
 bvEq n x y = vecEq n Bool boolEq x y;
 
+-- bvEq implies logical equality
+axiom ValidEq_bvEq : (n : Nat) -> ValidEq (Vec n Bool) (bvEq n);
+
 axiom bvEq_refl : (n : Nat) -> (x : Vec n Bool) -> Eq Bool (bvEq n x x) True;
 
 axiom equalNat_bv : (n : Nat) -> (x : Vec n Bool) -> (i : Nat) ->
@@ -1342,6 +1361,9 @@ primitive bvToInt : (n:Nat) -> Vec n Bool -> Integer;
 -- return the 2's complement signed value of the bitvector as an integer
 primitive sbvToInt : (n:Nat) -> Vec n Bool -> Integer;
 
+-- intEq implies logical equality
+axiom ValidEq_intEq : ValidEq Integer intEq;
+
 
 --------------------------------------------------------------------------------
 -- Integers mod n
@@ -1356,6 +1378,9 @@ primitive intModAdd : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
 primitive intModSub : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
 primitive intModMul : (n : Nat) -> IntMod n -> IntMod n -> IntMod n;
 primitive intModNeg : (n : Nat) -> IntMod n -> IntMod n;
+
+-- intModEq implies logical equality
+axiom ValidEq_intModEq : (n : Nat) -> ValidEq (IntMod n) (intModEq n);
 
 
 --------------------------------------------------------------------------------

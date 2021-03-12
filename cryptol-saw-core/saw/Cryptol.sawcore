@@ -1643,6 +1643,46 @@ ecArrayUpdate : (a b : sort 0) -> (Array a b) -> a -> b -> (Array a b);
 ecArrayUpdate = arrayUpdate;
 
 --------------------------------------------------------------------------------
+-- Laws for class dictionaries
+
+-- Correctness property for Eq class dictionaries
+ValidPEq : (a : sort 0) -> PEq a -> Prop;
+ValidPEq a pa = ValidEq a (ecEq a pa);
+
+ValidPEqBit : ValidPEq Bool PEqBit;
+ValidPEqBit = ValidEq_boolEq;
+
+ValidPEqInteger : ValidPEq Integer PEqInteger;
+ValidPEqInteger = ValidEq_intEq;
+
+-- TODO: ValidPEqRational : ValidPEq Rational PEqRational;
+
+ValidPEqIntMod : (n : Nat) -> ValidPEq (IntMod n) (PEqIntMod n);
+ValidPEqIntMod n = ValidEq_intModEq n;
+
+ValidPEqIntModNum : (n : Num) -> ValidPEq (IntModNum n) (PEqIntModNum n);
+ValidPEqIntModNum n =
+  Num#rec (\ (n : Num) -> ValidPEq (IntModNum n) (PEqIntModNum n))
+  ValidPEqIntMod ValidPEqInteger n;
+
+ValidPEqVec :
+  (n : Nat) -> (a : sort 0) -> (pa : PEq a) ->
+  ValidPEq a pa -> ValidPEq (Vec n a) (PEqVec n a pa);
+ValidPEqVec n a pa va = ValidEq_vecEq n a pa.eq va;
+
+ValidPEqWord : (n : Nat) -> ValidPEq (Vec n Bool) (PEqWord n);
+ValidPEqWord n = ValidEq_bvEq n;
+
+axiom ValidPEqSeqBool : (n : Num) -> ValidPEq (seq n Bool) (PEqSeqBool n);
+
+axiom ValidPEqUnit : ValidPEq #() PEqUnit;
+
+ValidPEqPair :
+  (a b : sort 0) -> (pa : PEq a) -> (pb : PEq b) ->
+  ValidPEq a pa -> ValidPEq b pb -> ValidPEq (a * b) (PEqPair a b pa pb);
+ValidPEqPair a b pa pb va vb = ValidEq_pairEq a b pa.eq pb.eq va vb;
+
+--------------------------------------------------------------------------------
 -- Rewrite rules
 
 axiom replicate_False : (n : Nat) -> Eq (Vec n Bool) (replicate n Bool False) (bvNat n 0);
