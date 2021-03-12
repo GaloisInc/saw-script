@@ -867,18 +867,19 @@ w4Solve :: forall sym.
   sym ->
   SharedContext ->
   SATQuery ->
-  IO ([String], [Labeler sym], SBool sym)
+  IO ([String], [FirstOrderType], [Labeler sym], SBool sym)
 w4Solve sym sc satq =
   do t <- satQueryAsTerm sc satq
-     varMap <- evalStateT (traverse (newVarFOT sym) (satVariables satq)) 0
-     let vars = Map.toList varMap
-     let argNames = map (Text.unpack . toShortName . ecName . fst) vars
+     let varList  = Map.toList (satVariables satq)
+     let argNames = map (Text.unpack . toShortName . ecName . fst) varList
+     let argTys   = map snd varList
+     vars <- evalStateT (traverse (traverse (newVarFOT sym)) varList) 0
      let lbls     = map (fst . snd) vars
-     let varMap' = Map.fromList [ (ecVarIndex ec, v) | (ec, (_,v)) <- vars ]
+     let varMap   = Map.fromList [ (ecVarIndex ec, v) | (ec, (_,v)) <- vars ]
      ref <- newIORef Map.empty
-     bval <- w4SolveBasic sym sc mempty varMap' ref (satUninterp satq) t
+     bval <- w4SolveBasic sym sc mempty varMap ref (satUninterp satq) t
      case bval of
-       VBool v -> return (argNames, lbls, v)
+       VBool v -> return (argNames, argTys, lbls, v)
        _ -> fail $ "w4Solve: non-boolean result type. " ++ show bval
 
 --
