@@ -12,7 +12,6 @@ import qualified Verifier.SAW.Simulator.RME as RME
 import Verifier.SAW.Recognizer(asPiList)
 
 import SAWScript.Proof(Prop, propToPredicate)
-import SAWScript.Prover.Rewrite(rewriteEqs)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 
@@ -23,7 +22,7 @@ proveRME ::
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
 proveRME sc goal =
   do t0 <- propToPredicate sc goal
-     t <- bindAllExts sc t0 >>= rewriteEqs sc
+     t <- bindAllExts sc t0
      tp <- scWhnf sc =<< scTypeOf sc t
      let (args, _) = asPiList tp
          argNames = map (Text.unpack . fst) args

@@ -471,7 +471,9 @@ buildTopLevelEnv proxy opts =
                    , rwProfilingFile = Nothing
                    , rwLaxArith = False
                    , rwWhat4HashConsing = False
+                   , rwWhat4HashConsingX86 = False
                    , rwPreservedRegs = []
+                   , rwStackBaseAlign = defaultStackBaseAlign
                    }
        return (bic, ro0, rw0)
 
@@ -546,6 +548,16 @@ disable_what4_hash_consing = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwWhat4HashConsing = False }
 
+enable_x86_what4_hash_consing :: TopLevel ()
+enable_x86_what4_hash_consing = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4HashConsingX86 = True }
+
+disable_x86_what4_hash_consing :: TopLevel ()
+disable_x86_what4_hash_consing = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwWhat4HashConsingX86 = False }
+
 add_x86_preserved_reg :: String -> TopLevel ()
 add_x86_preserved_reg r = do
   rw <- getTopLevelRW
@@ -555,6 +567,16 @@ default_x86_preserved_reg :: TopLevel ()
 default_x86_preserved_reg = do
   rw <- getTopLevelRW
   putTopLevelRW rw { rwPreservedRegs = [] }
+
+set_x86_stack_base_align :: Integer -> TopLevel ()
+set_x86_stack_base_align a = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwStackBaseAlign = a }
+
+default_x86_stack_base_align :: TopLevel ()
+default_x86_stack_base_align = do
+  rw <- getTopLevelRW
+  putTopLevelRW rw { rwStackBaseAlign = defaultStackBaseAlign }
 
 include_value :: FilePath -> TopLevel ()
 include_value file = do
@@ -2387,6 +2409,16 @@ primitives = Map.fromList
     Experimental
     [ "Legacy alternative name for `llvm_verify_x86`." ]
 
+  , prim "enable_x86_what4_hash_consing" "TopLevel ()"
+    (pureVal enable_x86_what4_hash_consing)
+    Experimental
+    [ "Enable hash consing for What4 expressions during x86 verification." ]
+
+  , prim "disable_x86_what4_hash_consing" "TopLevel ()"
+    (pureVal disable_x86_what4_hash_consing)
+    Current
+    [ "Disable hash consing for What4 expressions during x86 verification." ]
+
   , prim "add_x86_preserved_reg" "String -> TopLevel ()"
     (pureVal add_x86_preserved_reg)
     Current
@@ -2395,7 +2427,17 @@ primitives = Map.fromList
   , prim "default_x86_preserved_reg" "TopLevel ()"
     (pureVal default_x86_preserved_reg)
     Current
-    [ "Use the default set of callee-saved registers during x86 verification.." ]
+    [ "Use the default set of callee-saved registers during x86 verification." ]
+
+  , prim "set_x86_stack_base_align" "Int -> TopLevel ()"
+    (pureVal set_x86_stack_base_align)
+    Experimental
+    [ "Set the alignment of the stack allocation base to 2^n during x86 verification." ]
+
+  , prim "default_x86_stack_base_align" "TopLevel ()"
+    (pureVal default_x86_stack_base_align)
+    Experimental
+    [ "Use the default stack allocation base alignment during x86 verification." ]
 
   , prim "llvm_array_value"
     "[SetupValue] -> SetupValue"
