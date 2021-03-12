@@ -465,7 +465,7 @@ checkEvidence sc = check mempty
     checkApply hyps (Prop p) (e:es)
       | Just (_lnm, tp, body) <- asPi p
       , looseVars body == emptyBitSet
-      = do check hyps e (Prop tp) -- TODO, check that tp is a prop
+      = do check hyps e =<< termToProp sc tp
            checkApply hyps (Prop body) es
       | otherwise = fail $ unlines
            [ "Apply evidence mismatch: non-function or dependent function"
