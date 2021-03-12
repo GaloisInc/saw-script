@@ -12,7 +12,6 @@ on:
 
 env:
   CACHE_VERSION: 1
-  CABAL_TEST_SUITES: "cryptol-saw-core-tc-test"
 
 jobs:
   outputs:
@@ -66,7 +65,7 @@ jobs:
       RELEASE: ${{ needs.outputs.outputs.release }}
     continue-on-error: ${{ matrix.continue-on-error }}
     outputs:
-      suitesJson: ${{ steps.cabal-test-suites.outputs.suitesJson }}
+      cabal-test-suites-json: ${{ steps.cabal-test-suites.outputs.targets-json }}
     steps:
       - uses: actions/checkout@v2
       - run: |
@@ -103,28 +102,31 @@ jobs:
         run: .github/ci.sh build
         continue-on-error: false
 
-      - name: Build and collect cabal test suites
-        id: cabal-test-suites
-        shell: bash
-        run: |
-          BINS_DIR=test-suite-bins
-          mkdir -p $BINS_DIR
-          cabal v2-build $CABAL_TEST_SUITES
-          for SUITE in $CABAL_TEST_SUITES; do
-              BIN=$(cabal list-bin $SUITE)
-              cp $BIN $BINS_DIR
-          done
-          .github/ci.sh output suitesJson "$(echo -n $CABAL_TEST_SUITES | jq -Rsc 'split(" ")')"
+      # - name: Build and collect cabal test suites
+      #   id: cabal-test-suites
+      #   shell: bash
+      #   run: |
+      #     BINS_DIR=cabal-test-suites-bins
+      #     mkdir -p $BINS_DIR
+      #     cabal v2-build $CABAL_TEST_SUITES
+      #     for SUITE in $CABAL_TEST_SUITES; do
+      #         BIN=$(cabal list-bin $SUITE)
+      #         cp $BIN $BINS_DIR
+      #     done
+      #     .github/ci.sh output suitesJson "$(echo -n $CABAL_TEST_SUITES | jq -Rsc 'split(" ")')"
 
-      # - uses: galoisinc/.github/actions/cabal-suites-bins
-      #   id: test-suites
+      - uses: LisannaAtGalois/.github/actions/cabal-collect-bins@lisanna/cabal-collect-bins  # GaloisInc/.github/actions/cabal-collect-bins@master
+        id: cabal-test-suites
+        with:
+          targets: "cryptol-saw-core-tc-test"
+          dest: cabal-test-suites-bins
 
       # - name: Cabal Suites Bins
       #   shell: bash
       #   id: test-suites
       #   run: |
       #     SUITES=""
-      #     BINS_DIR=test-suite-bins
+      #     BINS_DIR=cabal-test-suites-bins
       #     mkdir -p $BINS_DIR
       #     for TARGET in $CABAL_TEST_SUITES; do
       #         export FILE=$(mktemp)
@@ -141,8 +143,8 @@ jobs:
       - if: "matrix.ghc == '8.6.5'"
         uses: actions/upload-artifact@v2
         with:
-          path: test-suite-bins
-          name: test-suite-bins-${{ matrix.os }}
+          path: cabal-test-suites-bins
+          name: cabal-test-suites-bins-${{ matrix.os }}
 
       - shell: bash
         run: .github/ci.sh setup_dist_bins
@@ -186,7 +188,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: ${{ fromJson(needs.build.outputs.suitesJson) }}
+        suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
         os: [ubuntu-18.04]
     steps:
       - uses: actions/checkout@v2
@@ -204,14 +206,14 @@ jobs:
           path: dist/bin
       - uses: actions/download-artifact@v2
         with:
-          name: test-suite-bins-${{ matrix.os }}
-          path: test-suite-bins
+          name: cabal-test-suites-bins-${{ matrix.os }}
+          path: cabal-test-suites-bins
       - name: Run suite
         id: run-suite
         run: |
           export PATH="$PWD/dist/bin:$PATH"
-          chmod -R +x test-suite-bins
-          test-suite-bins/${{ matrix.suite }}
+          chmod -R +x cabal-test-suites-bins
+          cabal-test-suites-bins/${{ matrix.suite }}
 
   # docker:
   #   runs-on: ubuntu-18.04
