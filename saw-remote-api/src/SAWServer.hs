@@ -48,6 +48,7 @@ import Verifier.SAW.TypedTerm (TypedTerm, CryptolModule)
 
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS (CrucibleMethodSpecIR)
 import SAWScript.Crucible.LLVM.Builtins (CheckPointsToType)
+import SAWScript.Crucible.LLVM.X86 (defaultStackBaseAlign)
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMS (SomeLLVM, LLVMModule)
 import SAWScript.JavaExpr (JavaType(..))
 import SAWScript.Options (defaultOptions)
@@ -218,6 +219,8 @@ initialState readFileFn =
                 , rwCrucibleAssertThenAssume = False
                 , rwLaxArith = False
                 , rwWhat4HashConsing = False
+                , rwWhat4HashConsingX86 = False
+                , rwStackBaseAlign = defaultStackBaseAlign
                 , rwProofs = []
                 , rwPreservedRegs = []
                 }
