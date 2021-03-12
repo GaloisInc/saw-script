@@ -88,7 +88,8 @@ jobs:
           restore-keys: |
             ${{ env.CACHE_VERSION }}-cabal-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles(format('cabal.GHC-{0}.config', matrix.ghc)) }}-
 
-      - shell: bash
+      - id: abc
+        shell: bash
         run: .github/ci.sh build_abc
         if: runner.os != 'Windows'
 
@@ -103,9 +104,18 @@ jobs:
           targets: cryptol-saw-core-tc-test
           dest: cabal-test-suites-bins
 
-      - name: "Upload Artifact: cabal-test-suites-bins"
-        if: "matrix.ghc == '8.6.5'"
+      - name: "Upload Artifact: abc"
+        if: |
+          matrix.ghc == '8.6.5' &&
+          runner.os != 'Windows'
         uses: actions/upload-artifact@v2
+        with:
+          path: ${{ steps.abc.outputs.path }}
+          name: abc-${{ runner.os }}
+
+      - name: "Upload Artifact: cabal-test-suites-bins"
+        uses: actions/upload-artifact@v2
+        if: "matrix.ghc == '8.6.5'"
         with:
           path: cabal-test-suites-bins
           name: cabal-test-suites-bins-${{ matrix.os }}
@@ -160,6 +170,13 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
+      - name: "Download Artifact: abc"
+        if: "runner.os != 'Windows'"
+        uses: actions/download-artifact@v2
+        with:
+          path: bin/abc
+          name: abc-${{ runner.os }}
+
       - uses: actions/setup-java@v1
         with:
           java-version: "8"
@@ -171,7 +188,7 @@ jobs:
         shell: bash
         run: |
           chmod +x dist/bin/*
-          export PATH="$PWD/dist/bin:$PATH"
+          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           .github/ci.sh test_dist
 
   saw-remote-api-tests:

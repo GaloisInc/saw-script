@@ -151,6 +151,7 @@ build_abc() {
   $IS_WIN || scripts/build-abc.sh $arch $os
   cp abc-build/abc $BIN/abc
   popd
+  output path $BIN/abc
 }
 
 install_system_deps() {
