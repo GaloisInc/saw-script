@@ -12,6 +12,10 @@ on:
 
 env:
   CACHE_VERSION: 1
+  # Solver versions - also update in the following locations:
+  # ./saw/Dockerfile
+  # ./saw-remote-api/Dockerfile
+  # ./s2nTests/docker/saw.dockerfile
   Z3_VERSION: "4.8.10"
   CVC4_VERSION: "4.1.8"
   YICES_VERSION: "2.6.2"
