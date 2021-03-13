@@ -900,43 +900,44 @@ proveWithExporter ::
   (SharedContext -> FilePath -> Prop -> TopLevel ()) ->
   String ->
   String ->
+  String ->
   ProofScript SV.SatResult
-proveWithExporter exporter path ext =
+proveWithExporter exporter path sep ext =
   withFirstGoal $ \g ->
-  do let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
+  do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
      stats <- Prover.proveWithExporter exporter file (goalProp g)
      return (SV.Unsat stats, stats, Nothing)
 
 offline_aig :: FilePath -> ProofScript SV.SatResult
 offline_aig path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  proveWithExporter (Prover.adaptExporter (Prover.writeAIG proxy)) path ".aig"
+  proveWithExporter (Prover.adaptExporter (Prover.writeAIG proxy)) path "." ".aig"
 
 offline_cnf :: FilePath -> ProofScript SV.SatResult
 offline_cnf path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  proveWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path ".cnf"
+  proveWithExporter (Prover.adaptExporter (Prover.writeCNF proxy)) path "." ".cnf"
 
 offline_coq :: FilePath -> ProofScript SV.SatResult
-offline_coq path = proveWithExporter (const (Prover.writeCoqProp "goal" [] [])) path ".v"
+offline_coq path = proveWithExporter (const (Prover.writeCoqProp "goal" [] [])) path "_" ".v"
 
 offline_extcore :: FilePath -> ProofScript SV.SatResult
-offline_extcore path = proveWithExporter (const Prover.writeCoreProp) path ".extcore"
+offline_extcore path = proveWithExporter (const Prover.writeCoreProp) path "." ".extcore"
 
 offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
-offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2 path ".smt2"
+offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2 path "." ".smt2"
 
 w4_offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
-w4_offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2What4 path ".smt2"
+w4_offline_smtlib2 path = proveWithExporter Prover.writeSMTLib2What4 path "." ".smt2"
 
 offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript SV.SatResult
 offline_unint_smtlib2 unints path =
   do unintSet <- lift $ resolveNames unints
-     proveWithExporter (Prover.writeUnintSMTLib2 unintSet) path ".smt2"
+     proveWithExporter (Prover.writeUnintSMTLib2 unintSet) path "." ".smt2"
 
 offline_verilog :: FilePath -> ProofScript SV.SatResult
 offline_verilog path =
-  proveWithExporter (Prover.adaptExporter Prover.write_verilog) path ".v"
+  proveWithExporter (Prover.adaptExporter Prover.write_verilog) path "." ".v"
 
 parseAigerCex :: String -> IO [Bool]
 parseAigerCex text =
