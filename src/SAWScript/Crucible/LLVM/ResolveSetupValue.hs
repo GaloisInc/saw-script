@@ -60,6 +60,9 @@ import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
+import qualified Verifier.SAW.Prim as Prim
+import qualified Verifier.SAW.Simulator.Concrete as Concrete
+
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip
@@ -394,10 +397,10 @@ resolveSAWSymBV cc w tm =
      st <- sawCoreState sym
      let sc = saw_ctx st
      mx <- case getAllExts tm of
-             [] -> do
-               -- Evaluate in SBV to test whether 'tm' is a concrete value
-               sbv <- SBV.toWord =<< SBV.sbvSolveBasic sc Map.empty mempty tm
-               return (SBV.svAsInteger sbv)
+             -- concretely evaluate if it is a closed term
+             [] -> do modmap <- scGetModuleMap sc
+                      let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                      pure (Just (Prim.unsigned (Concrete.toWord v)))
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
