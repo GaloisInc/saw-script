@@ -68,9 +68,6 @@ import Verifier.SAW.TypedTerm
 import Verifier.SAW.Simulator.What4.ReturnTrip
 import Text.LLVM.DebugUtils as L
 
-import qualified Verifier.SAW.Simulator.SBV as SBV
-import qualified Data.SBV.Dynamic as SBV
-
 import           SAWScript.Crucible.Common (Sym, sawCoreState)
 import           SAWScript.Crucible.Common.MethodSpec (AllocIndex(..), SetupValue(..))
 
@@ -377,10 +374,10 @@ resolveSAWPred cc tm = do
      let ss = cc^.ccBasicSS
      tm' <- rewriteSharedTerm sc ss tm
      mx <- case getAllExts tm' of
-             [] -> do
-               -- Evaluate in SBV to test whether 'tm' is a concrete value
-               sbv <- SBV.toBool <$> SBV.sbvSolveBasic sc Map.empty mempty tm'
-               return (SBV.svAsBool sbv)
+             -- concretely evaluate if it is a closed term
+             [] -> do modmap <- scGetModuleMap sc
+                      let v = Concrete.evalSharedTerm modmap mempty mempty tm
+                      pure (Just (Concrete.toBool v))
              _ -> return Nothing
      case mx of
        Just x  -> return $ W4.backendPred sym x
