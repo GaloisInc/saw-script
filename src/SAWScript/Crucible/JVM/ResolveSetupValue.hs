@@ -43,7 +43,6 @@ import qualified What4.BaseTypes as W4
 import qualified What4.Interface as W4
 import qualified What4.ProgramLoc as W4
 
-import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
@@ -69,7 +68,6 @@ import SAWScript.Crucible.Common
 import SAWScript.Crucible.Common.MethodSpec (AllocIndex(..))
 
 import SAWScript.Panic
-import SAWScript.Prover.Rewrite
 import SAWScript.Crucible.JVM.MethodSpecIR
 import qualified SAWScript.Crucible.Common.MethodSpec as MS
 
@@ -250,10 +248,7 @@ resolveBitvectorTerm ::
 resolveBitvectorTerm sym w tm =
   do st <- sawCoreState sym
      let sc = saw_ctx st
-     --ss <- basic_ss sc
-     --tm' <- rewriteSharedTerm sc ss tm
-     let tm' = tm
-     mx <- case getAllExts tm' of
+     mx <- case getAllExts tm of
              -- concretely evaluate if it is a closed term
              [] ->
                do modmap <- scGetModuleMap sc
@@ -262,15 +257,13 @@ resolveBitvectorTerm sym w tm =
              _ -> return Nothing
      case mx of
        Just x  -> W4.bvLit sym w (BV.mkBV w x)
-       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm'
+       Nothing -> bindSAWTerm sym st (W4.BaseBVRepr w) tm
 
 resolveBoolTerm :: Sym -> Term -> IO (W4.Pred Sym)
 resolveBoolTerm sym tm =
   do st <- sawCoreState sym
      let sc = saw_ctx st
-     ss <- basic_ss sc
-     tm' <- rewriteSharedTerm sc ss tm
-     mx <- case getAllExts tm' of
+     mx <- case getAllExts tm of
              -- concretely evaluate if it is a closed term
              [] ->
                do modmap <- scGetModuleMap sc
@@ -279,7 +272,7 @@ resolveBoolTerm sym tm =
              _ -> return Nothing
      case mx of
        Just x  -> return (W4.backendPred sym x)
-       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm'
+       Nothing -> bindSAWTerm sym st W4.BaseBoolRepr tm
 
 toJVMType :: Cryptol.TValue -> Maybe J.Type
 toJVMType tp =
