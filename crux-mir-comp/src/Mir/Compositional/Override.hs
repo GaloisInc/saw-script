@@ -304,10 +304,6 @@ runSpec cs mh ms = do
 
     -- Handle return value and post-state PointsTos
 
-    -- TODO: clobber all writable memory that's accessible in the pre state
-    -- + record mut vs imm for each reference discovered within args
-    -- + clobber all mut memory
-
     let retTy = maybe (M.TyTuple []) id $ ms ^. MS.csRet
     let retTpr = handleReturnType mh
     let retShp = tyToShapeEq col retTy retTpr
