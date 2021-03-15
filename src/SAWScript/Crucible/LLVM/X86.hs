@@ -18,6 +18,7 @@ Stability   : provisional
 {-# Language TypeApplications #-}
 {-# Language GADTs #-}
 {-# Language DataKinds #-}
+{-# Language RankNTypes #-}
 {-# Language ConstraintKinds #-}
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language TemplateHaskell #-}
@@ -329,6 +330,52 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
                       , show $ W4.ppExpr off
                       ]
         noExtraValidityPred _ _ _ _ = return Nothing
+        defaultMacawExtensions_x86_64 = Macaw.macawExtensions
+          (Macaw.x86_64MacawEvalFn sfs) mvar
+          (mkGlobalMap . Map.singleton 0 $ preState ^. x86GlobalBase)
+          funcLookup
+          noExtraValidityPred
+        llvmPointerBlock = fst . C.LLVM.llvmPointerView
+        llvmPointerOffset = snd . C.LLVM.llvmPointerView
+        -- Compare pointers that are not valid LLVM pointers. Comparing the
+        -- offsets as unsigned bitvectors is not sound, because of overflow
+        -- (e.g. `base - 1` is less than `base`, but -1 is not less than 0 when
+        -- compared as unsigned). It is safe to allow a small negative offset,
+        -- because each pointer base is mapped to an address that is not in
+        -- the first page, which is never mapped on X86_64 Linux.
+        doPtrCmp ::
+          (sym -> W4.SymExpr sym (C.BaseBVType w) -> W4.SymExpr sym (C.BaseBVType w) -> IO (W4.SymExpr sym C.BaseBoolType)) ->
+          Macaw.PtrOp sym w (C.RegValue sym C.BoolType)
+        doPtrCmp f = Macaw.ptrOp $ \sym mem w xPtr xBits yPtr yBits x y -> do
+          let ptr_as_bv_for_cmp ptr = do
+                page_size <- W4.bvLit sym (W4.bvWidth $ llvmPointerOffset ptr) $
+                  BV.mkBV (W4.bvWidth $ llvmPointerOffset ptr) 4096
+                ptr_as_bv <- W4.bvAdd sym (llvmPointerOffset ptr) page_size
+                is_valid <- Macaw.isValidPtr sym mem w ptr
+                is_negative_offset <- W4.bvIsNeg sym (llvmPointerOffset ptr)
+                is_not_overflow <- W4.notPred sym =<< W4.bvIsNeg sym ptr_as_bv
+                ok <- W4.orPred sym is_valid
+                  =<< W4.andPred sym is_negative_offset is_not_overflow
+                return (ptr_as_bv, ok)
+          both_bits <- W4.andPred sym xBits yBits
+          both_ptrs <- W4.andPred sym xPtr yPtr
+          same_region <- W4.natEq sym (llvmPointerBlock x) (llvmPointerBlock y)
+          (x_ptr_as_bv, ok_x) <- ptr_as_bv_for_cmp x
+          (y_ptr_as_bv, ok_y) <- ptr_as_bv_for_cmp y
+          ok_both_ptrs <- W4.andPred sym both_ptrs
+            =<< W4.andPred sym same_region
+            =<< W4.andPred sym ok_x ok_y
+          res_both_bits <- f sym (llvmPointerOffset x) (llvmPointerOffset y)
+          res_both_ptrs <- f sym x_ptr_as_bv y_ptr_as_bv
+          undef <- Macaw.mkUndefinedBool sym "ptr_cmp"
+          W4.itePred sym both_bits res_both_bits
+            =<< W4.itePred sym ok_both_ptrs res_both_ptrs undef
+        sawMacawExtensions = defaultMacawExtensions_x86_64
+          { C.extensionExec = \s0 st -> case s0 of
+              Macaw.PtrLt w x y -> doPtrCmp W4.bvUlt st mvar w x y
+              Macaw.PtrLeq w x y -> doPtrCmp W4.bvUle st mvar w x y
+              _ -> (C.extensionExec defaultMacawExtensions_x86_64) s0 st
+          }
         ctx :: C.SimContext (Macaw.MacawSimulatorState Sym) Sym (Macaw.MacawExt Macaw.X86_64)
         ctx = C.SimContext
               { C._ctxSymInterface = sym
@@ -336,10 +383,8 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
               , C.ctxIntrinsicTypes = C.LLVM.llvmIntrinsicTypes
               , C.simHandleAllocator = halloc
               , C.printHandle = stdout
-              , C.extensionImpl =
-                Macaw.macawExtensions (Macaw.x86_64MacawEvalFn sfs) mvar
-                (mkGlobalMap . Map.singleton 0 $ preState ^. x86GlobalBase)
-                funcLookup noExtraValidityPred
+              , C.extensionImpl = sawMacawExtensions
+              , C._functionBindings = C.insertHandleMap (C.cfgHandle cfg) (C.UseCFG cfg $ C.postdomInfo cfg) C.emptyHandleMap
               , C._functionBindings = C.FnBindings $ C.insertHandleMap (C.cfgHandle cfg) (C.UseCFG cfg $ C.postdomInfo cfg) C.emptyHandleMap
               , C._cruciblePersonality = Macaw.MacawSimulatorState
               , C._profilingMetrics = Map.empty
