@@ -72,6 +72,7 @@ library
      Verifier.SAW.Prim
      Verifier.SAW.Recognizer
      Verifier.SAW.Rewriter
+     Verifier.SAW.SATQuery
      Verifier.SAW.SCTypeCheck
      Verifier.SAW.Simulator
      Verifier.SAW.Simulator.Concrete

@@ -27,12 +27,14 @@ Portability : non-portable (language extensions)
 module Verifier.SAW.Simulator.SBV
   ( sbvSolve
   , sbvSolveBasic
+  , sbvSATQuery
   , SValue
   , Labeler(..)
   , sbvCodeGen_definition
   , sbvCodeGen
   , toWord
   , toBool
+  , getLabels
   , module Verifier.SAW.Simulator.SBV.SWord
   ) where
 
@@ -65,10 +67,14 @@ import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
+import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.TypedAST (FieldName, identName, toShortName)
-import Verifier.SAW.FiniteValue (FirstOrderType(..), asFirstOrderType)
+import Verifier.SAW.FiniteValue
+            (FirstOrderType(..), FirstOrderValue(..)
+            , fovVec, firstOrderTypeOf, asFirstOrderType
+            )
 
 data SBV
 
@@ -661,6 +667,42 @@ vAsFirstOrderType v =
           mapM (\(f,tp) -> (f,) <$> vAsFirstOrderType tp) tps)
     _ -> Nothing
 
+sbvSATQuery :: SharedContext -> Map Ident SValue -> SATQuery -> IO ([Labeler], [Text.Text], Symbolic SBool)
+sbvSATQuery sc addlPrims query =
+  do true <- liftIO (scBool sc True)
+     t <- liftIO (foldM (scAnd sc) true (satAsserts query))
+     let qvars = Map.toList (satVariables query)
+     let unintSet = satUninterp query
+
+     (labels, vars) <-
+       flip evalStateT 0 $ unzip <$>
+       mapM (newVars . snd) qvars
+
+     let varNames = map (toShortName . ecName . fst) qvars
+
+     m <- liftIO (scGetModuleMap sc)
+
+     return (labels, varNames,
+       do vars' <- sequence vars
+          let varMap = Map.fromList (zip (map (ecVarIndex . fst) qvars) vars')
+
+          let mkUninterp (EC ix nm ty) =
+                parseUninterpreted [] (Text.unpack (toShortName nm) ++ "#" ++ show ix) ty
+          let extcns ec
+                | Just v <- Map.lookup (ecVarIndex ec) varMap = pure v
+                | otherwise = mkUninterp ec
+          let uninterpreted ec
+                | Set.member (ecVarIndex ec) unintSet = Just (mkUninterp ec)
+                | otherwise                           = Nothing
+
+          cfg  <- liftIO (Sim.evalGlobal m (Map.union constMap addlPrims) extcns uninterpreted)
+          bval <- liftIO (Sim.evalSharedTerm cfg t)
+
+          case bval of
+            VBool b -> return b
+            _ -> fail $ "sbvSATQuery: non-boolean result type. " ++ show bval
+      )
+
 sbvSolve :: SharedContext
          -> Map Ident SValue
          -> Set VarIndex
@@ -730,6 +772,47 @@ newVars (FOTTuple ts) = do
 newVars (FOTRec tm) = do
   (labels, vals) <- myfun <$> (traverse newVars tm :: StateT Int IO (Map FieldName (Labeler, Symbolic SValue)))
   return (RecLabel labels, vRecord <$> traverse (fmap ready) (vals :: (Map FieldName (Symbolic SValue))))
+
+
+getLabels ::
+  [Labeler] ->
+  Map String CV ->
+  [String] -> Maybe [(String,FirstOrderValue)]
+
+getLabels ls d argNames
+  | length argNames == length xs = Just (zip argNames xs)
+  | otherwise = error $ unwords
+                [ "SBV SAT results do not match expected arguments "
+                , show argNames, show xs]
+
+  where
+  xs = fmap getLabel ls
+
+  getLabel (BoolLabel s)    = FOVBit (cvToBool (d Map.! s))
+  getLabel (IntegerLabel s) = FOVInt (cvToInteger (d Map.! s))
+
+  getLabel (WordLabel s)    = FOVWord (cvKind cv) (cvToInteger cv)
+    where cv = d Map.! s
+
+  getLabel (VecLabel ns)
+    | V.null ns = error "getLabel of empty vector"
+    | otherwise = fovVec t vs
+    where vs = map getLabel (V.toList ns)
+          t  = firstOrderTypeOf (head vs)
+
+  getLabel (TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
+  getLabel (RecLabel ns) = FOVRec $ fmap getLabel ns
+
+  cvKind cv =
+    case kindOf cv of
+      KBounded _ k -> fromIntegral k
+      _                -> error "cvKind"
+
+  cvToInteger cv =
+    case cvVal cv of
+      CInteger i -> i
+      _               -> error "cvToInteger"
+
 
 ------------------------------------------------------------
 -- Code Generation

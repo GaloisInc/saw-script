@@ -24,6 +24,7 @@ module Verifier.SAW.Simulator.RME
   , toWord
   , runIdentity
   , withBitBlastedPred
+  , withBitBlastedSATQuery
   ) where
 
 import Control.Monad.Identity
@@ -33,6 +34,7 @@ import Data.IntTrie (IntTrie)
 import qualified Data.IntTrie as IntTrie
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
@@ -44,11 +46,12 @@ import qualified Verifier.SAW.Prim as Prim
 import qualified Verifier.SAW.Simulator as Sim
 import Verifier.SAW.Simulator.Value
 import qualified Verifier.SAW.Simulator.Prims as Prims
-import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType)
+import Verifier.SAW.FiniteValue (FiniteType(..), asFiniteType, FirstOrderType, toFiniteType)
 import qualified Verifier.SAW.Recognizer as R
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST (ModuleMap)
 import Verifier.SAW.Utils (panic)
+import Verifier.SAW.SATQuery
 
 #if !MIN_VERSION_base(4,8,0)
 import Control.Applicative
@@ -383,11 +386,14 @@ newVars' shape = ready <$> newVars shape
 
 bitBlastBasic :: ModuleMap
               -> Map Ident RValue
+              -> Map VarIndex RValue
               -> Term
               -> RValue
-bitBlastBasic m addlPrims t = runIdentity $ do
+bitBlastBasic m addlPrims ecMap t = runIdentity $ do
   cfg <- Sim.evalGlobal m (Map.union constMap addlPrims)
-         (\ec -> error ("RME: unsupported ExtCns: " ++ show (ecName ec)))
+         (\ec -> case Map.lookup (ecVarIndex ec) ecMap of
+                   Just v -> pure v
+                   Nothing -> error ("RME: unknown ExtCns: " ++ show (ecName ec)))
          (const Nothing)
   Sim.evalSharedTerm cfg t
 
@@ -410,8 +416,36 @@ withBitBlastedPred sc addlPrims t c = do
   shapes <- traverse (asFiniteType sc) argTs
   modmap <- scGetModuleMap sc
   let vars = evalState (traverse newVars' shapes) 0
-  let bval = bitBlastBasic modmap addlPrims t
+  let bval = bitBlastBasic modmap addlPrims mempty t
   let bval' = runIdentity $ applyAll bval vars
   case bval' of
     VBool anf -> c anf shapes
     _ -> panic "Verifier.SAW.Simulator.RME.bitBlast" ["non-boolean result type."]
+
+
+processVar ::
+  (ExtCns Term, FirstOrderType) ->
+  IO (ExtCns Term, FiniteType)
+processVar (ec, fot) =
+  case toFiniteType fot of
+    Nothing -> fail ("RME solver does not support variables of type " ++ show fot)
+    Just ft -> pure (ec, ft)
+
+withBitBlastedSATQuery ::
+  SharedContext ->
+  Map Ident RValue ->
+  SATQuery ->
+  (RME -> [(ExtCns Term, FiniteType)] -> IO a) ->
+  IO a
+withBitBlastedSATQuery sc addlPrims satq cont =
+  do unless (Set.null (satUninterp satq)) $ fail
+        "RME prover does not support uninterpreted symbols"
+     t <- satQueryAsTerm sc satq
+     varShapes <- mapM processVar (Map.toList (satVariables satq))
+     modmap <- scGetModuleMap sc
+     let vars = evalState (traverse (traverse newVars) varShapes) 0
+     let varMap = Map.fromList [ (ecVarIndex ec, v) | (ec,v) <- vars ]
+     let bval = bitBlastBasic modmap addlPrims varMap t
+     case bval of
+       VBool anf -> cont anf varShapes
+       _ -> panic "Verifier.SAW.Simulator.RME.bitBlast" ["non-boolean result type."]

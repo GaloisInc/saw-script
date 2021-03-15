@@ -40,7 +40,6 @@
 
 module Verifier.SAW.Simulator.What4
   ( w4Solve
-  , w4SolveAny
   , w4SolveBasic
   , SymFnCache
   , TypedExpr(..)
@@ -82,6 +81,7 @@ import Numeric.Natural (Natural)
 import qualified Verifier.SAW.Recognizer as R
 import qualified Verifier.SAW.Simulator as Sim
 import qualified Verifier.SAW.Simulator.Prims as Prims
+import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Simulator.Value
 import Verifier.SAW.FiniteValue (FirstOrderType(..), FirstOrderValue(..))
@@ -658,14 +658,16 @@ w4SolveBasic ::
   sym ->
   SharedContext ->
   Map Ident (SValue sym) {- ^ additional primitives -} ->
+  Map VarIndex (SValue sym) {- ^ bindings for ExtCns values -} ->
   IORef (SymFnCache sym) {- ^ cache for uninterpreted function symbols -} ->
   Set VarIndex {- ^ 'unints' Constants in this list are kept uninterpreted -} ->
   Term {- ^ term to simulate -} ->
   IO (SValue sym)
-w4SolveBasic sym sc addlPrims ref unintSet t =
+w4SolveBasic sym sc addlPrims ecMap ref unintSet t =
   do m <- scGetModuleMap sc
-     let extcns (EC ix nm ty) =
-             parseUninterpreted sym ref (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
+     let extcns (EC ix nm ty)
+            | Just v <- Map.lookup ix ecMap = return v
+            | otherwise = parseUninterpreted sym ref (mkUnintApp (Text.unpack (toShortName nm) ++ "_" ++ show ix)) ty
      let uninterpreted ec
            | Set.member (ecVarIndex ec) unintSet = Just (extcns ec)
            | otherwise                           = Nothing
@@ -860,47 +862,25 @@ applyUnintApp sym app0 v =
 
 ------------------------------------------------------------
 
-w4SolveAny ::
-  forall sym. (IsSymExprBuilder sym) =>
-  sym -> SharedContext -> Map Ident (SValue sym) -> Set VarIndex -> Term ->
-  IO ([String], ([Maybe (Labeler sym)], SValue sym))
-w4SolveAny sym sc ps unintSet t = do
-  ref <- newIORef Map.empty
-  let eval = w4SolveBasic sym sc ps ref unintSet
-  ty <- eval =<< scTypeOf sc t
-
-  -- get the names of the arguments to the function
-  let argNames = map (Text.unpack . fst) (fst (R.asLambdaList t))
-  let moreNames = [ "var" ++ show (i :: Integer) | i <- [0 ..] ]
-
-  -- and their types
-  argTs <- argTypes (toTValue ty)
-
-  -- construct symbolic expressions for the variables
-  vars' <-
-    flip evalStateT 0 $
-    sequence (zipWith (newVarsForType sym ref) argTs (argNames ++ moreNames))
-
-  -- symbolically evaluate
-  bval <- eval t
-
-  -- apply and existentially quantify
-  let (bvs, vars) = unzip vars'
-  let vars'' = fmap ready vars
-  bval' <- applyAll bval vars''
-
-  return (argNames, (bvs, bval'))
-
-w4Solve ::
-  forall sym. (IsSymExprBuilder sym) =>
-  sym -> SharedContext -> Map Ident (SValue sym) -> Set VarIndex -> Term ->
-  IO ([String], ([Maybe (Labeler sym)], SBool sym))
-w4Solve sym sc ps unintSet t =
-  do (argNames, (bvs, bval)) <- w4SolveAny sym sc ps unintSet t
+w4Solve :: forall sym.
+  IsSymExprBuilder sym =>
+  sym ->
+  SharedContext ->
+  SATQuery ->
+  IO ([String], [FirstOrderType], [Labeler sym], SBool sym)
+w4Solve sym sc satq =
+  do t <- satQueryAsTerm sc satq
+     let varList  = Map.toList (satVariables satq)
+     let argNames = map (Text.unpack . toShortName . ecName . fst) varList
+     let argTys   = map snd varList
+     vars <- evalStateT (traverse (traverse (newVarFOT sym)) varList) 0
+     let lbls     = map (fst . snd) vars
+     let varMap   = Map.fromList [ (ecVarIndex ec, v) | (ec, (_,v)) <- vars ]
+     ref <- newIORef Map.empty
+     bval <- w4SolveBasic sym sc mempty varMap ref (satUninterp satq) t
      case bval of
-       VBool b -> return (argNames, (bvs, b))
+       VBool v -> return (argNames, argTys, lbls, v)
        _ -> fail $ "w4Solve: non-boolean result type. " ++ show bval
-
 
 --
 -- Pull out argument types until bottoming out at a non-Pi type

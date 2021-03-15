@@ -14,6 +14,10 @@ module Verifier.SAW.FiniteValue where
 import Control.Applicative
 import Data.Traversable
 #endif
+
+import Control.Monad (mzero)
+import Control.Monad.Trans (lift)
+import Control.Monad.Trans.Maybe
 import qualified Control.Monad.State as S
 import Data.List (intersperse)
 import Data.Map (Map)
@@ -84,6 +88,16 @@ toFirstOrderValue fv =
     FVVec t vs -> FOVVec (toFirstOrderType t) (map toFirstOrderValue vs)
     FVTuple vs -> FOVTuple (map toFirstOrderValue vs)
     FVRec vm   -> FOVRec (fmap toFirstOrderValue vm)
+
+
+toFiniteType :: FirstOrderType -> Maybe FiniteType
+toFiniteType FOTBit        = pure FTBit
+toFiniteType (FOTVec n t)  = FTVec n <$> toFiniteType t
+toFiniteType (FOTTuple ts) = FTTuple <$> traverse toFiniteType ts
+toFiniteType (FOTRec fs)   = FTRec   <$> traverse toFiniteType fs
+toFiniteType FOTInt{}      = Nothing
+toFiniteType FOTIntMod{}   = Nothing
+toFiniteType FOTArray{}    = Nothing
 
 instance Show FiniteValue where
   showsPrec p fv = showsPrec p (toFirstOrderValue fv)
@@ -200,26 +214,34 @@ asFiniteType sc t = do
     _ -> fail $ "asFiniteType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t'
 
 asFirstOrderType :: SharedContext -> Term -> IO FirstOrderType
-asFirstOrderType sc t = do
-  t' <- scWhnf sc t
-  case t' of
-    (R.asBoolType -> Just ())
-      -> return FOTBit
-    (R.asIntegerType -> Just ())
-      -> return FOTInt
-    (R.asIntModType -> Just n)
-      -> return (FOTIntMod n)
-    (R.isVecType return -> Just (n R.:*: tp))
-      -> FOTVec n <$> asFirstOrderType sc tp
-    (R.asArrayType -> Just (tp1 R.:*: tp2)) -> do
-      tp1' <- asFirstOrderType sc tp1
-      tp2' <- asFirstOrderType sc tp2
-      return $ FOTArray tp1' tp2'
-    (R.asTupleType -> Just ts)
-      -> FOTTuple <$> traverse (asFirstOrderType sc) ts
-    (R.asRecordType -> Just tm)
-      -> FOTRec <$> traverse (asFirstOrderType sc) tm
-    _ -> fail $ "asFirstOrderType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t'
+asFirstOrderType sc t = maybe err pure =<< runMaybeT (asFirstOrderTypeMaybe sc t)
+  where
+    err =
+      do t' <- scWhnf sc t
+         fail ("asFirstOrderType: unsupported argument type: " ++ scPrettyTerm defaultPPOpts t')
+
+asFirstOrderTypeMaybe :: SharedContext -> Term -> MaybeT IO FirstOrderType
+asFirstOrderTypeMaybe sc t =
+  do t' <- lift (scWhnf sc t)
+     case t' of
+       (R.asBoolType -> Just ())
+         -> return FOTBit
+       (R.asIntegerType -> Just ())
+         -> return FOTInt
+       (R.asIntModType -> Just n)
+         -> return (FOTIntMod n)
+       (R.isVecType return -> Just (n R.:*: tp))
+         -> FOTVec n <$> asFirstOrderTypeMaybe sc tp
+       (R.asArrayType -> Just (tp1 R.:*: tp2)) -> do
+         tp1' <- asFirstOrderTypeMaybe sc tp1
+         tp2' <- asFirstOrderTypeMaybe sc tp2
+         return $ FOTArray tp1' tp2'
+       (R.asTupleType -> Just ts)
+         -> FOTTuple <$> traverse (asFirstOrderTypeMaybe sc) ts
+       (R.asRecordType -> Just tm)
+         -> FOTRec <$> traverse (asFirstOrderTypeMaybe sc) tm
+       _ -> mzero
+
 
 asFiniteTypePure :: Term -> Maybe FiniteType
 asFiniteTypePure t =
