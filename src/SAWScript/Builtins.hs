@@ -720,10 +720,11 @@ proveWithSATExporter ::
   Set VarIndex ->
   String ->
   String ->
+  String ->
   ProofScript SV.SatResult
-proveWithSATExporter exporter unintSet path ext =
+proveWithSATExporter exporter unintSet path sep ext =
   withFirstGoal $ tacticSolve $ \g ->
-  do let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
+  do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
      stats <- Prover.proveWithSATExporter exporter unintSet file (goalProp g)
      return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
 
@@ -731,44 +732,44 @@ proveWithPropExporter ::
   (SharedContext -> FilePath -> Prop -> TopLevel a) ->
   String ->
   String ->
+  String ->
   ProofScript SV.SatResult
-proveWithPropExporter exporter path ext =
+proveWithPropExporter exporter path sep ext =
   withFirstGoal $ tacticSolve $ \g ->
-  do let file = path ++ "." ++ goalType g ++ show (goalNum g) ++ ext
+  do let file = path ++ sep ++ goalType g ++ show (goalNum g) ++ ext
      stats <- Prover.proveWithPropExporter exporter file (goalProp g)
      return (SV.Unsat stats, stats, Just (SolverEvidence stats (goalProp g)))
-
 
 offline_aig :: FilePath -> ProofScript SV.SatResult
 offline_aig path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  proveWithSATExporter (Prover.writeAIG_SAT proxy) mempty path ".aig"
+  proveWithSATExporter (Prover.writeAIG_SAT proxy) mempty path "." ".aig"
 
 offline_cnf :: FilePath -> ProofScript SV.SatResult
 offline_cnf path = do
   SV.AIGProxy proxy <- lift $ SV.getProxy
-  proveWithSATExporter (Prover.writeCNF proxy) mempty path ".cnf"
+  proveWithSATExporter (Prover.writeCNF proxy) mempty path "." ".cnf"
 
 offline_coq :: FilePath -> ProofScript SV.SatResult
-offline_coq path = proveWithPropExporter (const (Prover.writeCoqProp "goal" [] [])) path ".v"
+offline_coq path = proveWithPropExporter (const (Prover.writeCoqProp "goal" [] [])) path "_" ".v"
 
 offline_extcore :: FilePath -> ProofScript SV.SatResult
-offline_extcore path = proveWithPropExporter (const Prover.writeCoreProp) path ".extcore"
+offline_extcore path = proveWithPropExporter (const Prover.writeCoreProp) path "." ".extcore"
 
 offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
-offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2 mempty path ".smt2"
+offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2 mempty path "." ".smt2"
 
 w4_offline_smtlib2 :: FilePath -> ProofScript SV.SatResult
-w4_offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2What4 mempty path ".smt2"
+w4_offline_smtlib2 path = proveWithSATExporter Prover.writeSMTLib2What4 mempty path "." ".smt2"
 
 offline_unint_smtlib2 :: [String] -> FilePath -> ProofScript SV.SatResult
 offline_unint_smtlib2 unints path =
   do unintSet <- lift $ resolveNames unints
-     proveWithSATExporter Prover.writeSMTLib2 unintSet path ".smt2"
+     proveWithSATExporter Prover.writeSMTLib2 unintSet path "." ".smt2"
 
 offline_verilog :: FilePath -> ProofScript SV.SatResult
 offline_verilog path =
-  proveWithSATExporter Prover.writeVerilogSAT mempty path ".v"
+  proveWithSATExporter Prover.writeVerilogSAT mempty path "." ".v"
 
 w4_abc_verilog :: ProofScript SV.SatResult
 w4_abc_verilog = wrapW4Prover Prover.w4AbcVerilog []
