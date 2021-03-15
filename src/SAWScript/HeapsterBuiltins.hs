@@ -226,15 +226,11 @@ parseAndInsDef henv nm term_tp term_string =
      typed_term <- liftIO $ scTypeCheckCompleteError sc (Just mnm) un_term
      liftIO $ scCheckSubtype sc (Just mnm) typed_term term_tp
      case typedVal typed_term of
-       STApp _ _ (FTermF (GlobalDef term_ident)) ->
+       STApp _ _ (Constant (EC _ (ModuleIdentifier term_ident) _) _) ->
          return term_ident
        term -> do
          let term_ident = mkSafeIdent mnm nm
-         liftIO $ scModifyModule sc mnm $ \m ->
-           insDef m $ Def { defIdent = term_ident,
-                            defQualifier = NoQualifier,
-                            defType = term_tp,
-                            defBody = Just term }
+         liftIO $ scInsertDef sc mnm term_ident term_tp term
          pure term_ident
 
 
@@ -298,8 +294,7 @@ heapster_get_cfg :: BuiltinContext -> Options -> HeapsterEnv ->
                     String -> TopLevel SAW_CFG
 heapster_get_cfg _ _ henv nm =
   case lookupModDefiningSym henv nm of
-    Just (Some lm) ->
-      crucible_llvm_cfg (Some lm) nm
+    Just (Some lm) -> llvm_cfg (Some lm) nm
     Nothing -> fail ("Could not find CFG for symbol: " ++ nm)
 
 -- | Define a new opaque named permission with the given name, arguments, and

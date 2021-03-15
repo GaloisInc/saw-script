@@ -65,7 +65,6 @@ basic_ss sc =
          , "and_triv1"
          , "or_triv2"
          , "and_triv2"
-         , "eq_refl"
          , "bvAddZeroL"
          , "bvAddZeroR"
          , "bveq_sameL"
