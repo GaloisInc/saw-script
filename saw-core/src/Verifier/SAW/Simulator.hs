@@ -38,8 +38,6 @@ import Control.Monad.Fix (MonadFix(mfix))
 import Control.Monad.Identity (Identity)
 import qualified Control.Monad.State as State
 import Data.Foldable (foldlM)
-import Data.HashMap.Lazy (HashMap)
-import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -74,9 +72,18 @@ panic msg = Panic.panic "Verifier.SAW.Simulator" [msg]
 
 data SimulatorConfig l =
   SimulatorConfig
-  { simGlobal :: Ident -> MValue l
+  { simPrimitive :: Ident -> MValue l
+  -- ^ Interpretation of 'Primitive' terms.
   , simExtCns :: TermF Term -> ExtCns (TValue l) -> MValue l
-  , simUninterpreted :: TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)
+  -- ^ Interpretation of 'ExtCns' terms.
+  , simConstant :: TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)
+  -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
+  -- the body of the constant should be evaluated. 'Just' indicates
+  -- that the constant's definition should be overridden.
+  , simCtorApp :: Ident -> Maybe (MValue l)
+  -- ^ Interpretation of 'Constant' terms. 'Nothing' indicates that
+  -- the constructor is treated as normal. 'Just' replaces the
+  -- constructor with a custom implementation.
   , simModMap :: ModuleMap
   }
 
@@ -118,13 +125,13 @@ evalTermF cfg lam recEval tf env =
                                   return $ TValue $ VPiType v (\x -> toTValue <$> lam t2 (x : env))
     LocalVar i              -> force (env !! i)
     Constant ec t           -> do ec' <- traverse (fmap toTValue . recEval) ec
-                                  maybe (recEval t) id (simUninterpreted cfg tf ec')
+                                  maybe (recEval t) id (simConstant cfg tf ec')
     FTermF ftf              ->
       case ftf of
         Primitive ec ->
           do ec' <- traverse (fmap toTValue . recEval) ec
              case ecName ec' of
-               ModuleIdentifier ident -> simGlobal cfg ident
+               ModuleIdentifier ident -> simPrimitive cfg ident
                _ -> simExtCns cfg tf ec'
         UnitValue           -> return VUnit
         UnitType            -> return $ TValue VUnitType
@@ -136,10 +143,14 @@ evalTermF cfg lam recEval tf env =
                                   return $ TValue $ VPairType vx vy
         PairLeft x          -> valPairLeft =<< recEval x
         PairRight x         -> valPairRight =<< recEval x
-        CtorApp ident ps ts -> do v <- simGlobal cfg ident
-                                  ps' <- mapM recEvalDelay ps
+        CtorApp ident ps ts -> do ps' <- mapM recEvalDelay ps
                                   ts' <- mapM recEvalDelay ts
-                                  foldM apply v (ps' ++ ts')
+                                  case simCtorApp cfg ident of
+                                    Just mv ->
+                                      do v <- mv
+                                         foldM apply v (ps' ++ ts')
+                                    Nothing ->
+                                      pure $ VCtorApp ident (V.fromList (ps' ++ ts'))
         DataTypeApp i ps ts -> TValue . VDataType i <$> mapM recEval (ps ++ ts)
         RecursorApp _d ps p_ret cs_fs _ixs arg ->
           do ps_th <- mapM recEvalDelay ps
@@ -203,45 +214,35 @@ evalGlobal modmap prims extcns uninterpreted =
 -- symbol and external-constant callbacks have access to the 'TermF'.
 evalGlobal' ::
   forall l. (VMonadLazy l, Show (Extra l)) =>
-  ModuleMap -> Map Ident (Value l) ->
+  ModuleMap ->
+  -- | Implementations of 'Primitive' terms, plus overrides for 'Constant' and 'CtorApp' terms
+  Map Ident (Value l) ->
+  -- | Implementations of ExtCns terms
   (TermF Term -> ExtCns (TValue l) -> MValue l) ->
+  -- | Overrides for Constant terms (e.g. uninterpreted functions)
   (TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)) ->
   EvalM l (SimulatorConfig l)
-evalGlobal' modmap prims extcns uninterpreted = do
-   checkPrimitives modmap prims
-   thunks <- mapM delay globals
-   return (SimulatorConfig (global thunks) extcns uninterpreted' modmap)
+evalGlobal' modmap prims extcns constant =
+  do checkPrimitives modmap prims
+     return (SimulatorConfig primitive extcns constant' ctors modmap)
   where
-    ms :: [Module]
-    ms = HashMap.elems modmap
-
-    uninterpreted' :: TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)
-    uninterpreted' tf ec =
-      case uninterpreted tf ec of
+    constant' :: TermF Term -> ExtCns (TValue l) -> Maybe (MValue l)
+    constant' tf ec =
+      case constant tf ec of
         Just v -> Just v
         Nothing ->
           case ecName ec of
             ModuleIdentifier ident -> pure <$> Map.lookup ident prims
             _ -> Nothing
 
-    global :: HashMap Ident (Thunk l) -> Ident -> MValue l
-    global thunks ident =
-      case HashMap.lookup ident thunks of
-        Just v -> force v
+    ctors :: Ident -> Maybe (MValue l)
+    ctors ident = pure <$> Map.lookup ident prims
+
+    primitive :: Ident -> MValue l
+    primitive ident =
+      case Map.lookup ident prims of
+        Just v -> pure v
         Nothing -> panic $ "Unimplemented global: " ++ show ident
-
-    globals :: HashMap Ident (MValue l)
-    globals =
-      HashMap.fromList $
-      [ (ctorName ct, return (vCtor (ctorName ct) [] (ctorType ct))) |
-        m <- ms, ct <- moduleCtors m ] ++
-      Map.assocs (fmap return prims) -- Later mappings take precedence
-
-    -- Convert a constructor to a value by creating a function that takes in one
-    -- argument for each nested pi type of the constructor
-    vCtor :: Ident -> [Thunk l] -> Term -> Value l
-    vCtor ident xs (unwrapTermF -> (Pi _ _ t)) = VFun (\x -> return (vCtor ident (x : xs) t))
-    vCtor ident xs _ = VCtorApp ident (V.fromList (reverse xs))
 
 -- | Check that all the primitives declared in the given module
 --   are implemented, and that terms with implementations are not
