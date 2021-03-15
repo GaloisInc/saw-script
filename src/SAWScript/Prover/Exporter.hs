@@ -6,11 +6,12 @@
 {-# Language FlexibleContexts #-}
 {-# Language TypeApplications #-}
 module SAWScript.Prover.Exporter
-  ( proveWithExporter
-  , adaptExporter
+  ( proveWithSATExporter
+  , proveWithPropExporter
 
     -- * External formats
   , writeAIG
+  , writeAIG_SAT
   , writeSAIG
   , writeSAIGInferLatches
   , writeAIGComputedLatches
@@ -20,8 +21,6 @@ module SAWScript.Prover.Exporter
   , writeSMTLib2What4
   , write_smtlib2
   , write_smtlib2_w4
-  , writeUnintSMTLib2
-  , writeUnintSMTLib2What4
   , writeCoqCryptolPrimitivesForSAWCore
   , writeCoqCryptolModule
   , writeCoqSAWCorePrelude
@@ -29,6 +28,7 @@ module SAWScript.Prover.Exporter
   , writeCoqProp
   , writeCore
   , writeVerilog
+  , writeVerilogSAT
   , write_verilog
   , writeCoreProp
 
@@ -39,7 +39,7 @@ module SAWScript.Prover.Exporter
 import Data.Foldable(toList)
 
 import Control.Monad.Except (runExceptT, throwError)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (liftIO, MonadIO)
 import qualified Data.AIG as AIG
 import qualified Data.ByteString as BS
 import Data.Parameterized.Nonce (globalNonceGenerator)
@@ -57,7 +57,8 @@ import Verifier.SAW.ExternalFormat(scWriteExternal)
 import Verifier.SAW.FiniteValue
 import Verifier.SAW.Module (emptyModule, moduleDecls)
 import Verifier.SAW.Prelude (preludeModule)
-import Verifier.SAW.Recognizer (asPi, asPiList, asEqTrue)
+import Verifier.SAW.Recognizer (asPi)
+import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm as SC
 import qualified Verifier.SAW.Translation.Coq as Coq
 import Verifier.SAW.TypedAST (mkModuleName)
@@ -65,54 +66,58 @@ import Verifier.SAW.TypedTerm
 import qualified Verifier.SAW.Simulator.BitBlast as BBSim
 import qualified Verifier.SAW.Simulator.Value as Sim
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
+import qualified Verifier.SAW.Simulator.SBV as SBV
+import qualified Verifier.SAW.Simulator.What4 as W
 
 import qualified Verifier.SAW.UntypedAST as Un
 
 import SAWScript.Crucible.Common
-import SAWScript.Proof (Prop(..), predicateToProp, Quantification(..), propToPredicate)
+import SAWScript.Proof (Prop, propSize, propToTerm, predicateToSATQuery, propToSATQuery)
 import SAWScript.Prover.SolverStats
 import SAWScript.Prover.Util
 import SAWScript.Prover.What4
-import SAWScript.Prover.SBV (prepNegatedSBV)
 import SAWScript.Value
 
-import qualified What4.Interface as W4
 import qualified What4.Expr.Builder as W4
 import What4.Protocol.SMTLib2 (writeDefaultSMT2)
 import What4.Protocol.VerilogWriter (exprVerilog)
 import What4.Solver.Adapter
 import qualified What4.SWord as W4Sim
 
-proveWithExporter ::
-  (SharedContext -> FilePath -> Prop -> TopLevel ()) ->
+proveWithSATExporter ::
+  (SharedContext -> FilePath -> SATQuery -> TopLevel a) ->
+  Set VarIndex ->
   String ->
   Prop ->
   TopLevel SolverStats
-proveWithExporter exporter path goal =
+proveWithSATExporter exporter unintSet path goal =
   do sc <- getSharedContext
-     exporter sc path goal
-     let stats = solverStats ("offline: "++ path) (scSharedSize (unProp goal))
+     satq <- io $ propToSATQuery sc unintSet goal
+     _ <- exporter sc path satq
+     let stats = solverStats ("offline: "++ path) (propSize goal)
      return stats
 
--- | Converts an old-style exporter (which expects to take a predicate
--- as an argument) into a new-style one (which takes a pi-type proposition).
-adaptExporter ::
-  (SharedContext -> FilePath -> Term -> TopLevel ()) ->
-  (SharedContext -> FilePath -> Prop -> TopLevel ())
-adaptExporter exporter sc path (Prop goal) =
-  do let (args, concl) = asPiList goal
-     p <-
-       case asEqTrue concl of
-         Just p -> return p
-         Nothing -> throwTopLevel "adaptExporter: expected EqTrue"
-     p' <- io $ scNot sc p -- is this right?
-     t <- io $ scLambdaList sc args p'
-     exporter sc path t
+
+proveWithPropExporter ::
+  (SharedContext -> FilePath -> Prop -> TopLevel a) ->
+  String ->
+  Prop ->
+  TopLevel SolverStats
+proveWithPropExporter exporter path goal =
+  do sc <- getSharedContext
+     _ <- exporter sc path goal
+     let stats = solverStats ("offline: "++ path) (propSize goal)
+     return stats
 
 --------------------------------------------------------------------------------
 
--- | Write a @Term@ representing a theorem or an arbitrary
--- function to an AIG file.
+writeAIG_SAT :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> SATQuery -> TopLevel ()
+writeAIG_SAT proxy sc f satq = io $
+  do t  <- satQueryAsTerm sc satq
+     BBSim.withBitBlastedPred proxy sc mempty t $ \g l _vars -> do
+       AIG.writeAiger f (AIG.Network g [l])
+
+-- | Write a @Term@ representing a an arbitrary function to an AIG file.
 writeAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> TopLevel ()
 writeAIG proxy sc f t = do
   io $ do
@@ -174,31 +179,18 @@ writeAIGComputedLatches ::
 writeAIGComputedLatches proxy sc file term numLatches =
   writeSAIG proxy sc file term numLatches
 
-writeCNF :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> TopLevel ()
-writeCNF proxy sc f t = do
-  AIG.Network be ls <- io $ bitblastPrim proxy sc t
-  case ls of
-    [l] -> do
-      _ <- io $ AIG.writeCNF be l f
-      return ()
-    _ -> throwTopLevel "writeCNF: non-boolean term"
+writeCNF :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> SATQuery -> TopLevel ()
+writeCNF proxy sc f satq = io $
+  do t  <- satQueryAsTerm sc satq
+     _ <- BBSim.withBitBlastedPred proxy sc mempty t $ \g l _vars -> AIG.writeCNF g l f
+     return ()
 
 write_cnf :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
 write_cnf sc f (TypedTerm schema t) = do
   liftIO $ checkBooleanSchema schema
   AIGProxy proxy <- getProxy
-  writeCNF proxy sc f t
-
--- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
--- assumed to have universally quantified variables, it will be negated.
-writeSMTLib2 :: SharedContext -> FilePath -> Prop -> TopLevel ()
-writeSMTLib2 sc f t = writeUnintSMTLib2 mempty sc f t
-
--- | Write a proposition to an SMT-Lib version 2 file. Because @Prop@ is
--- assumed to have universally quantified variables, it will be negated.
--- This version uses What4 instead of SBV.
-writeSMTLib2What4 :: SharedContext -> FilePath -> Prop -> TopLevel ()
-writeSMTLib2What4 sc f t = writeUnintSMTLib2What4 mempty sc f t
+  satq <- io (predicateToSATQuery sc mempty t)
+  writeCNF proxy sc f satq
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
@@ -207,8 +199,8 @@ writeSMTLib2What4 sc f t = writeUnintSMTLib2What4 mempty sc f t
 write_smtlib2 :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
 write_smtlib2 sc f (TypedTerm schema t) = do
   io $ checkBooleanSchema schema
-  p <- io $ predicateToProp sc Existential [] t
-  writeSMTLib2 sc f p
+  satq <- io $ predicateToSATQuery sc mempty t
+  writeSMTLib2 sc f satq
 
 -- | Write a @Term@ representing a predicate (i.e. a monomorphic
 -- function returning a boolean) to an SMT-Lib version 2 file. The goal
@@ -217,29 +209,23 @@ write_smtlib2 sc f (TypedTerm schema t) = do
 write_smtlib2_w4 :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
 write_smtlib2_w4 sc f (TypedTerm schema t) = do
   io $ checkBooleanSchema schema
-  p <- io $ predicateToProp sc Existential [] t
-  writeUnintSMTLib2What4 mempty sc f p
+  satq <- io $ predicateToSATQuery sc mempty t
+  writeSMTLib2What4 sc f satq
 
--- | Write a proposition to an SMT-Lib version 2 file, treating some
--- constants as uninterpreted. Because @Prop@ is assumed to have
--- universally quantified variables, it will be negated.
-writeUnintSMTLib2 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> TopLevel ()
-writeUnintSMTLib2 unintSet sc f p = io $
-  do (_, _, l) <- prepNegatedSBV sc unintSet p
+-- | Write a SAT query to an SMT-Lib version 2 file.
+writeSMTLib2 :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
+writeSMTLib2 sc f satq = io $
+  do (_, _, l) <- SBV.sbvSATQuery sc mempty satq
      let isSat = True -- l is encoded as an existential formula
      txt <- SBV.generateSMTBenchmark isSat l
      writeFile f txt
 
--- | Write a proposition to an SMT-Lib version 2 file, treating some
--- constants as uninterpreted. Because @Prop@ is assumed to have
--- universally quantified variables, it will be negated. This version
--- uses What4 instead of SBV.
-writeUnintSMTLib2What4 :: Set VarIndex -> SharedContext -> FilePath -> Prop -> TopLevel ()
-writeUnintSMTLib2What4 unints sc f goal = io $
+-- | Write a SAT query an SMT-Lib version 2 file.
+-- This version uses What4 instead of SBV.
+writeSMTLib2What4 :: SharedContext -> FilePath -> SATQuery -> TopLevel ()
+writeSMTLib2What4 sc f satq = io $
   do sym <- W4.newExprBuilder W4.FloatRealRepr St globalNonceGenerator
-     term <- propToPredicate sc goal
-     (_, _, (_,lit0)) <- prepWhat4 sym sc unints term
-     lit <- W4.notPred sym lit0 -- for symmetry with `prepNegatedSBV` above
+     (_argNames, _argTys, _labels, lit) <- W.w4Solve sym sc satq
      withFile f WriteMode $ \h ->
        writeDefaultSMT2 () "Offline SMTLib2" defaultWriteSMTLIB2Features sym h [lit]
 
@@ -248,6 +234,25 @@ writeCore path t = io $ writeFile path (scWriteExternal t)
 
 write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 write_verilog sc path t = io $ writeVerilog sc path t
+
+writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([String],[FiniteType])
+writeVerilogSAT sc path satq = liftIO $
+  do sym <- newSAWCoreBackend sc
+     (argNames, argTys, _lbls, bval) <- W.w4Solve sym sc satq
+     let f fot = case toFiniteType fot of
+                   Nothing -> fail $ "writeVerilogSAT: Unsupported argument type " ++ show fot
+                   Just ft -> return ft
+     argTys' <- traverse f argTys
+
+     edoc <- runExceptT $ exprVerilog sym bval "f"
+     case edoc of
+       Left err -> fail $ "Failed to translate to Verilog: " ++ err
+       Right doc -> do
+         h <- openFile path WriteMode
+         hPutDoc h doc
+         hPutStrLn h ""
+         hClose h
+     return (argNames, argTys')
 
 writeVerilog :: SharedContext -> FilePath -> Term -> IO ()
 writeVerilog sc path t = do
@@ -268,7 +273,10 @@ writeVerilog sc path t = do
       hClose h
 
 writeCoreProp :: FilePath -> Prop -> TopLevel ()
-writeCoreProp path (Prop t) = io $ writeFile path (scWriteExternal t)
+writeCoreProp path t =
+  do sc <- getSharedContext
+     tm <- io (propToTerm sc t)
+     io $ writeFile path (scWriteExternal tm)
 
 coqTranslationConfiguration ::
   [(String, String)] ->
@@ -303,8 +311,10 @@ writeCoqProp ::
   FilePath ->
   Prop ->
   TopLevel ()
-writeCoqProp name notations skips path (Prop t) =
-  writeCoqTerm name notations skips path t
+writeCoqProp name notations skips path t =
+  do sc <- getSharedContext
+     tm <- io (propToTerm sc t)
+     writeCoqTerm name notations skips path tm
 
 writeCoqCryptolModule ::
   FilePath ->
