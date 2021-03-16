@@ -271,7 +271,7 @@ verifyObligations cc mspec tactic assumes asserts =
        goal'  <- io $ predicateToProp sc Universal goal
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
            proofgoal = ProofGoal n "vc" goalname goal'
-       r      <- evalStateT tactic (startProof proofgoal)
+       (r,_) <- runProofScript tactic (startProof proofgoal)
        case r of
          Unsat stats -> return stats
          SatMulti stats vals -> do

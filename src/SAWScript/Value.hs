@@ -592,7 +592,24 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
   deriving (Applicative, Functor, Monad)
 
 --
-type ProofScript a = StateT ProofState TopLevel a
+newtype ProofScript a = ProofScript (StateT ProofState TopLevel a)
+ deriving (Functor, Applicative, Monad)
+
+runProofScript :: ProofScript a -> ProofState -> TopLevel (a, ProofState)
+runProofScript (ProofScript m) st = runStateT m st
+
+scriptTopLevel :: TopLevel a -> ProofScript a
+scriptTopLevel m = ProofScript (lift m)
+
+instance MonadIO ProofScript where
+  liftIO m = ProofScript (liftIO m)
+
+instance MonadFail ProofScript where
+  fail msg = ProofScript (fail msg)
+
+instance MonadState ProofState ProofScript where
+  get = ProofScript get
+  put x = ProofScript (put x)
 
 -- IsValue class ---------------------------------------------------------------
 
@@ -664,15 +681,15 @@ instance FromValue a => FromValue (TopLevel a) where
       fromValue m2
     fromValue _ = error "fromValue TopLevel"
 
-instance IsValue a => IsValue (StateT ProofState TopLevel a) where
+instance IsValue a => IsValue (ProofScript a) where
     toValue m = VProofScript (fmap toValue m)
 
-instance FromValue a => FromValue (StateT ProofState TopLevel a) where
+instance FromValue a => FromValue (ProofScript a) where
     fromValue (VProofScript m) = fmap fromValue m
     fromValue (VReturn v) = return (fromValue v)
     fromValue (VBind _pos m1 v2) = do
       v1 <- fromValue m1
-      m2 <- lift $ applyValue v2 v1
+      m2 <- scriptTopLevel $ applyValue v2 v1
       fromValue m2
     fromValue _ = error "fromValue ProofScript"
 
@@ -928,7 +945,7 @@ addTrace str val =
   case val of
     VLambda        f -> VLambda        (\x -> addTrace str `fmap` addTraceTopLevel str (f x))
     VTopLevel      m -> VTopLevel      (addTrace str `fmap` addTraceTopLevel str m)
-    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceStateT str m)
+    VProofScript   m -> VProofScript   (addTrace str `fmap` addTraceProofScript str m)
     VBind pos v1 v2  -> VBind pos      (addTrace str v1) (addTrace str v2)
     VLLVMCrucibleSetup (LLVMCrucibleSetupM m) -> VLLVMCrucibleSetup $ LLVMCrucibleSetupM $
         addTrace str `fmap` underStateT (addTraceTopLevel str) m
@@ -955,6 +972,9 @@ addTraceIO str action = X.catches action
 -- | Similar to 'addTraceIO', but for state monads built from 'TopLevel'.
 addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
 addTraceStateT str = underStateT (addTraceTopLevel str)
+
+addTraceProofScript :: String -> ProofScript a -> ProofScript a
+addTraceProofScript str (ProofScript m) = ProofScript (addTraceStateT str m)
 
 -- | Similar to 'addTraceIO', but for reader monads built from 'TopLevel'.
 addTraceReaderT :: String -> ReaderT s TopLevel a -> ReaderT s TopLevel a

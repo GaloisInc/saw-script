@@ -645,18 +645,17 @@ newtype Tactic m a = Tactic
 
 -- | Choose the first subgoal in the current proof state and apply the given
 --   proof tactic.
-withFirstGoal :: F.MonadFail m => Tactic m a -> StateT ProofState m a
-withFirstGoal f =
-  StateT $ \(ProofState goals concl stats timeout evidenceCont) ->
-  case goals of
-    [] -> fail "ProofScript failed: no subgoal"
-    g : gs -> do
-      (x, stats', gs', buildTacticEvidence) <- runTactic f g
-      let evidenceCont' es =
-              do let (es1, es2) = splitAt (length gs') es
-                 e <- buildTacticEvidence es1
-                 evidenceCont (e:es2)
-      return (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont')
+withFirstGoal :: F.MonadFail m => Tactic m a -> ProofState -> m (a, ProofState)
+withFirstGoal f (ProofState goals concl stats timeout evidenceCont) =
+     case goals of
+       [] -> fail "ProofScript failed: no subgoal"
+       g : gs -> do
+         (x, stats', gs', buildTacticEvidence) <- runTactic f g
+         let evidenceCont' es =
+                 do let (es1, es2) = splitAt (length gs') es
+                    e <- buildTacticEvidence es1
+                    evidenceCont (e:es2)
+         return (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont')
 
 predicateToSATQuery :: SharedContext -> Set VarIndex -> Term -> IO SATQuery
 predicateToSATQuery sc unintSet tm0 =
