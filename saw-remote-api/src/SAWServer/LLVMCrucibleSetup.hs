@@ -18,6 +18,7 @@ module SAWServer.LLVMCrucibleSetup
   , compileLLVMContract
   ) where
 
+import Control.Exception (throw)
 import Control.Lens ( view )
 import Control.Monad.State
     ( evalStateT,
@@ -71,7 +72,7 @@ import SAWServer.Data.Contract
     ( PointsTo(..), Allocated(..), ContractVar(..), Contract(..) )
 import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
 import SAWServer.Data.SetupValue ()
-import SAWServer.CryptolExpression (getTypedTermOfCExp)
+import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
 import SAWServer.Exceptions ( notAtTopLevel, cantLoadLLVMModule )
 import SAWServer.OK ( OK, ok )
 import SAWServer.TrackFile ( trackFile )
@@ -181,23 +182,19 @@ interpretLLVMSetup fileReader bic cenv0 ss =
         Val x -> return x -- TODO add cases for the named server values that
                           -- are not coming from the setup monad
                           -- (e.g. surrounding context)
-    getSetupVal (_, cenv) (CryptolExpr expr) = LLVMCrucibleSetupM $
-      do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
-         -- TODO: add warnings (snd res)
-         case fst res of
-           Right (t, _) -> return (CMS.anySetupTerm t)
-           Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
+    getSetupVal env (CryptolExpr expr) =
+      do t <- getTypedTerm env expr
+         return (CMS.anySetupTerm t)
 
     getTypedTerm ::
       (Map ServerName ServerSetupVal, CryptolEnv) ->
       P.Expr P.PName ->
       LLVMCrucibleSetupM TypedTerm
-    getTypedTerm (_, cenv) expr = LLVMCrucibleSetupM $
-      do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
-         -- TODO: add warnings (snd res)
-         case fst res of
-           Right (t, _) -> return t
-           Left err -> error $ "Cryptol error: " ++ show err -- TODO: report properly
+    getTypedTerm (_, cenv) expr = LLVMCrucibleSetupM $ liftIO $
+      do (res, warnings) <- getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
+         case res of
+           Right (t, _) -> return t -- TODO: report warnings
+           Left err -> throw $ CryptolModuleException err warnings
 
     resolve env name =
        case Map.lookup name env of
