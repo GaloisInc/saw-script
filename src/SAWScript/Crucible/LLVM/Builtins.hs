@@ -600,7 +600,7 @@ verifyObligations cc mspec tactic assumes asserts =
           goal'  <- io $ predicateToProp sc Universal goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
               proofgoal = ProofGoal n "vc" goalname goal'
-          r <- evalStateT tactic (startProof proofgoal)
+          (r,_) <- runProofScript tactic (startProof proofgoal)
           case r of
             Unsat stats -> return stats
             SatMulti stats vals ->
@@ -761,9 +761,9 @@ assumptionsContainContradiction cc tactic assumptions =
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
          goal' <- predicateToProp sc Universal goal
          return $ ProofGoal 0 "vc" "vacuousness check" goal'
-     evalStateT tactic (startProof pgl) >>= \case
-       Unsat _stats -> return True
-       SatMulti _stats _vals -> return False
+     runProofScript tactic (startProof pgl) >>= \case
+       (Unsat _stats,_) -> return True
+       (SatMulti _stats _vals,_) -> return False
 
 -- | Given a list of assumptions, computes and displays a smallest subset of
 -- them that are contradictory among each themselves.  This is **not**

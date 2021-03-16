@@ -1225,7 +1225,7 @@ primitives = Map.fromList
     [ "Run the given proof script only when the goal name contains"
     , "the given string."
     ]
-  , prim "goal_num_ite"       "Int -> ProofScript SatResult -> ProofScript SatResult -> ProofScript SatResult"
+  , prim "goal_num_ite"       "{a} Int -> ProofScript a -> ProofScript a -> ProofScript a"
     (pureVal goal_num_ite)
     Experimental
     [ "If the goal number is the given number, runs the first script."
