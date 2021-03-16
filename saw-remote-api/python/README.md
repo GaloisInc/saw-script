@@ -28,7 +28,7 @@ cd saw-remote-api/python
    E.g., here is how the docker image of the server might be used:
 ```
 $ docker run --name=saw-remote-api -d \
-  -v $PWD/tests/saw/test-files:/home/saw/tests/test-files \
+  -v $PWD/tests/saw/test-files:/home/saw/tests/saw/test-files \
   -p 8080:8080 \
   galoisinc/saw-remote-api:nightly
 $ export SAW_SERVER_URL="http://localhost:8080/"
