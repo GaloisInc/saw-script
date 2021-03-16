@@ -24,6 +24,9 @@ To avoid confusion, a new `llvm_alias` function has been introduced, and
 `llvm_struct` is now a synonym for `llvm_alias`. The `llvm_struct` function
 continues to be available for now.
 
+SAWScript includes a new `llvm_pointer : LLVMType -> LLVMType` function for
+constructing LLVM pointer types.
+
 # Version 0.7
 
 ## New Features
