@@ -115,9 +115,8 @@ proveWithPropExporter exporter path goal =
 
 writeAIG_SAT :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> SATQuery -> TopLevel ()
 writeAIG_SAT proxy sc f satq = io $
-  do t  <- satQueryAsTerm sc satq
-     BBSim.withBitBlastedPred proxy sc mempty t $ \g l _vars -> do
-       AIG.writeAiger f (AIG.Network g [l])
+  BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \g l _vars ->
+    AIG.writeAiger f (AIG.Network g [l])
 
 -- | Write a @Term@ representing a an arbitrary function to an AIG file.
 writeAIG :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> Term -> TopLevel ()
@@ -183,8 +182,7 @@ writeAIGComputedLatches proxy sc file term numLatches =
 
 writeCNF :: (AIG.IsAIG l g) => AIG.Proxy l g -> SharedContext -> FilePath -> SATQuery -> TopLevel ()
 writeCNF proxy sc f satq = io $
-  do t  <- satQueryAsTerm sc satq
-     _ <- BBSim.withBitBlastedPred proxy sc mempty t $ \g l _vars -> AIG.writeCNF g l f
+  do _ <- BBSim.withBitBlastedSATQuery proxy sc mempty satq $ \g l _vars -> AIG.writeCNF g l f
      return ()
 
 write_cnf :: SharedContext -> FilePath -> TypedTerm -> TopLevel ()
