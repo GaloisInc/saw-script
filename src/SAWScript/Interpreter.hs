@@ -1746,6 +1746,12 @@ primitives = Map.fromList
     [ "Legacy alternative name for `llvm_alias`."
     ]
 
+  , prim "llvm_pointer"        "LLVMType -> LLVMType"
+    (pureVal llvm_pointer)
+    Current
+    [ "The type of an LLVM pointer that points to the given type."
+    ]
+
   , prim "llvm_load_module"    "String -> TopLevel LLVMModule"
     (pureVal llvm_load_module)
     Current

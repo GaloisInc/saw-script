@@ -27,7 +27,7 @@ class LLVMPointerType(LLVMType):
         self.points_to = points_to
 
     def to_json(self) -> Any:
-        return {'type': 'pointer', 'points to': self.points_to.to_json()}
+        return {'type': 'pointer', 'to type': self.points_to.to_json()}
 
 class LLVMAliasType(LLVMType):
     def __init__(self, name : str) -> None:
