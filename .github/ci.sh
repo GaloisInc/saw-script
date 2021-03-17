@@ -162,10 +162,6 @@ install_system_deps() {
   is_exe "$BIN" z3 && is_exe "$BIN" cvc4 && is_exe "$BIN" yices && is_exe "$BIN" yasm
 }
 
-test_dist() {
-  VERBOSE=y cabal v2-test integration_tests
-}
-
 build_cryptol() {
   is_exe "dist/bin" "cryptol" && return
   (cd deps/cryptol &&

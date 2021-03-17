@@ -105,7 +105,9 @@ jobs:
         # uses: GaloisInc/.github/actions/cabal-collect-bins@master
         id: cabal-test-suites
         with:
-          targets: cryptol-saw-core-tc-test
+          targets: |
+            integration_tests
+            cryptol-saw-core-tc-test
           dest: cabal-test-suites-bins
 
       - name: "Upload Artifact: bin/abc"
@@ -146,55 +148,6 @@ jobs:
         with:
           name: "saw-${{ runner.os }}-${{ matrix.ghc }}"
           path: "dist/bin/saw"
-
-  integration-tests:
-    runs-on: ${{ matrix.os }}
-    needs: [build]
-    continue-on-error: ${{ matrix.continue-on-error }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-18.04
-            continue-on-error: false
-          - os: macos-latest
-            continue-on-error: true
-          - os: windows-latest
-            continue-on-error: true
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-
-      - shell: bash
-        run: .github/ci.sh install_system_deps
-
-      - name: "Download Artifact: dist/bin"
-        uses: actions/download-artifact@v2
-        with:
-          name: "${{ runner.os }}-bins"
-          path: dist/bin
-
-      - name: "Download Artifact: bin/abc"
-        if: "runner.os != 'Windows'"
-        uses: actions/download-artifact@v2
-        with:
-          path: bin
-          name: abc-${{ runner.os }}
-
-      - uses: actions/setup-java@v1
-        with:
-          java-version: "8"
-          java-package: jdk
-          architecture: x64
-
-      - name: Integration Tests
-        id: test
-        shell: bash
-        run: |
-          chmod +x bin/* dist/bin/*
-          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
-          .github/ci.sh test_dist
 
   saw-remote-api-tests:
     runs-on: ${{ matrix.os }}
@@ -246,6 +199,21 @@ jobs:
       matrix:
         suite: ${{ fromJson(needs.build.outputs.cabal-test-suites-json) }}
         os: [ubuntu-18.04]
+        continue-on-error: [false]
+        include:
+          - suite: integration_tests
+            os: macos-latest
+            continue-on-error: true
+          - suite: integration_tests
+            os: windows-latest
+            continue-on-error: true
+        exclude:
+          - suite: integration_tests
+            os: macos-latest
+            continue-on-error: false
+          - suite: integration_tests
+            os: windows-latest
+            continue-on-error: false
     steps:
       - uses: actions/checkout@v2
 
@@ -258,17 +226,43 @@ jobs:
           name: "${{ runner.os }}-bins"
           path: dist/bin
 
+      - shell: bash
+        if: "runner.os != 'Windows'"
+        run: chmod +x dist/bin/*
+
+      - name: "Download Artifact: bin/abc"
+        if: |
+          runner.os != 'Windows' &&
+          matrix.suite == 'integration_tests'
+        uses: actions/download-artifact@v2
+        with:
+          path: bin
+          name: abc-${{ runner.os }}
+
+      - shell: bash
+        if: |
+          runner.os != 'Windows' &&
+          matrix.suite == 'integration_tests'
+        run: chmod +x dist/bin/*
+
       - name: "Download Artifact: cabal-test-suites-bins"
         uses: actions/download-artifact@v2
         with:
           name: cabal-test-suites-bins-${{ matrix.os }}
           path: cabal-test-suites-bins
 
+      - uses: actions/setup-java@v1
+        if: "matrix.suite == 'integration_tests'"
+        with:
+          java-version: "8"
+          java-package: jdk
+          architecture: x64
+
       - name: ${{ matrix.suite }}
-        id: run-suite
+        continue-on-error: ${{ matrix.continue-on-error }}
+        shell: bash
         run: |
-          chmod +x dist/bin/* cabal-test-suites-bins/*
-          export PATH="$PWD/dist/bin:$PATH"
+          export PATH="$PWD/bin:$PWD/dist/bin:$PATH"
           cabal-test-suites-bins/${{ matrix.suite }}
 
   docker:
@@ -405,7 +399,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
-      - integration-tests
       - saw-remote-api-tests
       - cabal-test
       - docker-server-test
