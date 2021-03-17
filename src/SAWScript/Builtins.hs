@@ -1046,25 +1046,27 @@ toValueCase prim =
 
 caseProofResultPrim ::
   ProofResult ->
-  SV.Value ->
-  SV.Value ->
+  SV.Value {- ^ valid case -} ->
+  SV.Value {- ^ invalid/unknown case -} ->
   TopLevel SV.Value
 caseProofResultPrim pr vValid vInvalid = do
   sc <- getSharedContext
   case pr of
-    ValidProof _ _ -> return vValid
+    ValidProof _ thm ->
+      SV.applyValue vValid (SV.toValue thm)
     InvalidProof _ pairs _pst -> do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vInvalid (SV.toValue tt)
-    -- TODO? What to do in the unfinished case?
     UnfinishedProof _ -> do
       tt <- io $ typedTermOfFirstOrderValue sc (FOVTuple [])
       SV.applyValue vInvalid (SV.toValue tt)
 
-caseSatResultPrim :: SV.SatResult
-                  -> SV.Value -> SV.Value
-                  -> TopLevel SV.Value
+caseSatResultPrim ::
+  SV.SatResult ->
+  SV.Value {- ^ unsat case -} ->
+  SV.Value {- ^ sat/unknown case -} ->
+  TopLevel SV.Value
 caseSatResultPrim sr vUnsat vSat = do
   sc <- getSharedContext
   case sr of
@@ -1073,7 +1075,6 @@ caseSatResultPrim sr vUnsat vSat = do
       let fov = FOVTuple (map snd pairs)
       tt <- io $ typedTermOfFirstOrderValue sc fov
       SV.applyValue vSat (SV.toValue tt)
-    -- TODO? What to do in the unknown case?
     SV.SatUnknown -> do
       let fov = FOVTuple []
       tt <- io $ typedTermOfFirstOrderValue sc fov
