@@ -629,7 +629,7 @@ mkUninterpreted :: Kind -> [SVal] -> String -> SVal
 mkUninterpreted k args nm = svUninterpreted k nm' Nothing args
   where nm' = "|" ++ nm ++ "|" -- enclose name to allow primes and other non-alphanum chars
 
-sbvSATQuery :: SharedContext -> Map Ident SValue -> SATQuery -> IO ([Labeler], [Text.Text], Symbolic SBool)
+sbvSATQuery :: SharedContext -> Map Ident SValue -> SATQuery -> IO ([Labeler], [ExtCns Term], Symbolic SBool)
 sbvSATQuery sc addlPrims query =
   do true <- liftIO (scBool sc True)
      t <- liftIO (foldM (scAnd sc) true (satAsserts query))
@@ -640,11 +640,9 @@ sbvSATQuery sc addlPrims query =
        flip evalStateT 0 $ unzip <$>
        mapM (newVars . snd) qvars
 
-     let varNames = map (toShortName . ecName . fst) qvars
-
      m <- liftIO (scGetModuleMap sc)
 
-     return (labels, varNames,
+     return (labels, map fst qvars,
        do vars' <- sequence vars
           let varMap = Map.fromList (zip (map (ecVarIndex . fst) qvars) vars')
 
@@ -703,13 +701,13 @@ newVars (FOTRec tm) = do
 getLabels ::
   [Labeler] ->
   Map String CV ->
-  [String] -> Maybe [(String,FirstOrderValue)]
+  [ExtCns Term] -> Maybe [(ExtCns Term,FirstOrderValue)]
 
-getLabels ls d argNames
-  | length argNames == length xs = Just (zip argNames xs)
+getLabels ls d args
+  | length args == length xs = Just (zip args xs)
   | otherwise = error $ unwords
                 [ "SBV SAT results do not match expected arguments "
-                , show argNames, show xs]
+                , show (map (toShortName . ecName) args), show xs]
 
   where
   xs = fmap getLabel ls
