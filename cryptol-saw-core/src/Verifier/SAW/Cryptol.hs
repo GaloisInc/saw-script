@@ -196,27 +196,27 @@ importTFun sc tf =
 importPC :: SharedContext -> C.PC -> IO Term
 importPC sc pc =
   case pc of
-    C.PEqual     -> panic "importPC PEqual" []
-    C.PNeq       -> panic "importPC PNeq" []
-    C.PGeq       -> panic "importPC PGeq" []
-    C.PFin       -> panic "importPC PFin" []
-    C.PHas _     -> panic "importPC PHas" []
-    C.PPrime     -> panic "importPC PPrime" []
-    C.PZero      -> scGlobalDef sc "Cryptol.PZero"
-    C.PLogic     -> scGlobalDef sc "Cryptol.PLogic"
-    C.PRing      -> scGlobalDef sc "Cryptol.PRing"
-    C.PIntegral  -> scGlobalDef sc "Cryptol.PIntegral"
-    C.PField     -> scGlobalDef sc "Cryptol.PField"
-    C.PRound     -> scGlobalDef sc "Cryptol.PRound"
-    C.PEq        -> scGlobalDef sc "Cryptol.PEq"
-    C.PCmp       -> scGlobalDef sc "Cryptol.PCmp"
-    C.PSignedCmp -> scGlobalDef sc "Cryptol.PSignedCmp"
-    C.PLiteral   -> scGlobalDef sc "Cryptol.PLiteral"
+    C.PEqual           -> panic "importPC PEqual" []
+    C.PNeq             -> panic "importPC PNeq" []
+    C.PGeq             -> panic "importPC PGeq" []
+    C.PFin             -> panic "importPC PFin" []
+    C.PHas _           -> panic "importPC PHas" []
+    C.PPrime           -> panic "importPC PPrime" []
+    C.PZero            -> scGlobalDef sc "Cryptol.PZero"
+    C.PLogic           -> scGlobalDef sc "Cryptol.PLogic"
+    C.PRing            -> scGlobalDef sc "Cryptol.PRing"
+    C.PIntegral        -> scGlobalDef sc "Cryptol.PIntegral"
+    C.PField           -> scGlobalDef sc "Cryptol.PField"
+    C.PRound           -> scGlobalDef sc "Cryptol.PRound"
+    C.PEq              -> scGlobalDef sc "Cryptol.PEq"
+    C.PCmp             -> scGlobalDef sc "Cryptol.PCmp"
+    C.PSignedCmp       -> scGlobalDef sc "Cryptol.PSignedCmp"
+    C.PLiteral         -> scGlobalDef sc "Cryptol.PLiteral"
     C.PLiteralLessThan -> scGlobalDef sc "Cryptol.PLiteralLessThan"
-    C.PAnd       -> panic "importPC PAnd" []
-    C.PTrue      -> panic "importPC PTrue" []
-    C.PFLiteral  -> panic "importPC PFLiteral" []
-    C.PValidFloat -> panic "importPC PValidFloat" []
+    C.PAnd             -> panic "importPC PAnd" []
+    C.PTrue            -> panic "importPC PTrue" []
+    C.PFLiteral        -> panic "importPC PFLiteral" []
+    C.PValidFloat      -> panic "importPC PValidFloat" []
 
 -- | Translate size types to SAW values of type Num, value types to SAW types of sort 0.
 importType :: SharedContext -> Env -> C.Type -> IO Term
@@ -281,16 +281,16 @@ importType sc env ty =
 isErasedProp :: C.Prop -> Bool
 isErasedProp prop =
   case prop of
-    C.TCon (C.PC C.PZero     ) _ -> False
-    C.TCon (C.PC C.PLogic    ) _ -> False
-    C.TCon (C.PC C.PRing     ) _ -> False
-    C.TCon (C.PC C.PIntegral ) _ -> False
-    C.TCon (C.PC C.PField    ) _ -> False
-    C.TCon (C.PC C.PRound    ) _ -> False
-    C.TCon (C.PC C.PEq       ) _ -> False
-    C.TCon (C.PC C.PCmp      ) _ -> False
-    C.TCon (C.PC C.PSignedCmp) _ -> False
-    C.TCon (C.PC C.PLiteral  ) _ -> False
+    C.TCon (C.PC C.PZero           ) _ -> False
+    C.TCon (C.PC C.PLogic          ) _ -> False
+    C.TCon (C.PC C.PRing           ) _ -> False
+    C.TCon (C.PC C.PIntegral       ) _ -> False
+    C.TCon (C.PC C.PField          ) _ -> False
+    C.TCon (C.PC C.PRound          ) _ -> False
+    C.TCon (C.PC C.PEq             ) _ -> False
+    C.TCon (C.PC C.PCmp            ) _ -> False
+    C.TCon (C.PC C.PSignedCmp      ) _ -> False
+    C.TCon (C.PC C.PLiteral        ) _ -> False
     C.TCon (C.PC C.PLiteralLessThan) _ -> False
     _ -> True
 
@@ -723,7 +723,7 @@ prelPrims =
   , ("updateEnd",    flip scGlobalDef "Cryptol.ecUpdateEnd")   -- {n, a, ix} (fin n, Integral ix) => [n]a -> ix -> a -> [n]a
 
     -- -- Enumerations
-  , ("fromTo",       flip scGlobalDef "Cryptol.ecFromTo")
+  , ("fromTo",         flip scGlobalDef "Cryptol.ecFromTo")
     --                            -- fromTo : {first, last, bits, a}
     --                            --           ( fin last, fin bits, last >== first,
     --                            --             Literal first a, Literal last a)
@@ -733,7 +733,7 @@ prelPrims =
     --                            --                   ( fin first, bound >= first,
     --                            --                     LiteralLessThan bound a)
     --                            --                => [bound - first]a
-  , ("fromThenTo",   flip scGlobalDef "Cryptol.ecFromThenTo")
+  , ("fromThenTo",     flip scGlobalDef "Cryptol.ecFromThenTo")
     --                            -- fromThenTo : {first, next, last, a, len}
     --                            --              ( fin first, fin next, fin last
     --                            --              , Literal first a, Literal next a, Literal last a
