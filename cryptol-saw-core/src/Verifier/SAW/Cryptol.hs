@@ -212,6 +212,7 @@ importPC sc pc =
     C.PCmp       -> scGlobalDef sc "Cryptol.PCmp"
     C.PSignedCmp -> scGlobalDef sc "Cryptol.PSignedCmp"
     C.PLiteral   -> scGlobalDef sc "Cryptol.PLiteral"
+    C.PLiteralLessThan -> scGlobalDef sc "Cryptol.PLiteralLessThan"
     C.PAnd       -> panic "importPC PAnd" []
     C.PTrue      -> panic "importPC PTrue" []
     C.PFLiteral  -> panic "importPC PFLiteral" []
@@ -261,6 +262,9 @@ importType sc env ty =
             C.PLiteral -> -- we omit first argument to class Literal
               do a <- go (tyargs !! 1)
                  scGlobalApply sc "Cryptol.PLiteral" [a]
+            C.PLiteralLessThan -> -- we omit first argument to class LiteralLessThan
+              do a <- go (tyargs !! 1)
+                 scGlobalApply sc "Cryptol.PLiteralLessThan" [a]
             _ ->
               do pc' <- importPC sc pc
                  tyargs' <- traverse go tyargs
@@ -287,6 +291,7 @@ isErasedProp prop =
     C.TCon (C.PC C.PCmp      ) _ -> False
     C.TCon (C.PC C.PSignedCmp) _ -> False
     C.TCon (C.PC C.PLiteral  ) _ -> False
+    C.TCon (C.PC C.PLiteralLessThan) _ -> False
     _ -> True
 
 importPropsType :: SharedContext -> Env -> [C.Prop] -> C.Type -> IO Term
@@ -723,6 +728,11 @@ prelPrims =
     --                            --           ( fin last, fin bits, last >== first,
     --                            --             Literal first a, Literal last a)
     --                            --        => [1 + (last - first)]a
+  , ("fromToLessThan", flip scGlobalDef "Cryptol.ecFromToLessThan")
+    --                            -- fromToLessThan : {first, bound, a}
+    --                            --                   ( fin first, bound >= first,
+    --                            --                     LiteralLessThan bound a)
+    --                            --                => [bound - first]a
   , ("fromThenTo",   flip scGlobalDef "Cryptol.ecFromThenTo")
     --                            -- fromThenTo : {first, next, last, a, len}
     --                            --              ( fin first, fin next, fin last

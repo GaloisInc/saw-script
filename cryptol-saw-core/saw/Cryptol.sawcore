@@ -945,6 +945,9 @@ PRoundRational =
 PLiteral : (a : sort 0) -> sort 0;
 PLiteral a = Nat -> a;
 
+PLiteralLessThan : (a : sort 0) -> sort 0;
+PLiteralLessThan a = Nat -> a;
+
 PLiteralSeqBool : (n : Num) -> PLiteral (seq n Bool);
 PLiteralSeqBool n =
   Num#rec (\ (n : Num) -> PLiteral (seq n Bool)) bvNat
@@ -1342,6 +1345,24 @@ ecFromTo =
          (\ (last:Nat) -> \ (a : sort 0) -> \ (pa : PLiteral a) -> \ (_ : PLiteral a) ->
             gen (addNat 1 (subNat last first)) a
                 (\ (i : Nat) -> pa (addNat i first))));
+
+ecFromToLessThan :
+  (first bound : Num) -> (a : sort 0) -> PLiteralLessThan a -> seq (tcSub bound first) a;
+ecFromToLessThan first bound a =
+  finNumRec
+    (\ (first:Num) -> PLiteralLessThan a ->
+       seq (tcSub bound first) a)
+    (\ (first:Nat) ->
+       Num#rec
+         (\ (bound:Num) -> PLiteralLessThan a ->
+            seq (tcSub bound (TCNum first)) a)
+         (\ (bound:Nat) -> \ (pa : PLiteralLessThan a) ->
+            gen (subNat bound first) a
+                (\ (i : Nat) -> pa (addNat i first)))
+         (\ (pa : PLiteralLessThan a) ->
+            MkStream a (\ (i : Nat) -> pa (addNat i first)))
+         bound)
+    first;
 
 ecFromThenTo :
   (first next last : Num) -> (a : sort 0) -> (len : Num) ->
