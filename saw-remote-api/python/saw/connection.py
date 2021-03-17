@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import signal
 from distutils.spawn import find_executable
-from argo_client.connection import ServerConnection, DynamicSocketProcess, ServerProcess, HttpProcess
+from argo_client.connection import ServerConnection, DynamicSocketProcess, HttpProcess, ManagedProcess
 from argo_client.interaction import Interaction, Command
 from .commands import *
 
@@ -72,7 +72,7 @@ class SAWConnection:
 
     most_recent_result: Optional[Interaction]
     server_connection: ServerConnection
-    proc: ServerProcess
+    proc: Optional[ManagedProcess]
 
     def __init__(self,
                  command_or_connection: Union[str, ServerConnection],
@@ -108,7 +108,7 @@ class SAWConnection:
                 self.proc = None
 
 
-    def __del__(self):
+    def __del__(self) -> None:
         # when being deleted, ensure we don't have a lingering state on the server
         if self.most_recent_result is not None:
             SAWReset(self)
@@ -119,11 +119,17 @@ class SAWConnection:
 
     def pid(self) -> Optional[int]:
         """Return the PID of the running server process."""
-        return self.proc.pid()
+        if self.proc is not None:
+            return self.proc.pid()
+        else:
+            return None
 
     def running(self) -> bool:
         """Return whether the underlying server process is still running."""
-        return self.proc.running()
+        if self.proc is not None:
+            return self.proc.running()
+        else:
+            return False
 
     def snapshot(self) -> SAWConnection:
         """Return a ``SAWConnection`` that has the same process and state as

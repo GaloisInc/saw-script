@@ -184,7 +184,8 @@ def reset_server() -> None:
         __designated_connection.reset_server()
     else:
         connect()
-        __designated_connection.reset_server()
+        if __designated_connection is not None:
+            __designated_connection.reset_server()
 
 def disconnect() -> None:
     global __designated_connection
