@@ -18,7 +18,6 @@ Portability : non-portable (language extensions)
 
 module Verifier.SAW.Simulator.BitBlast
   ( BValue
-  , withBitBlastedPred
   , withBitBlastedTerm
   , withBitBlastedSATQuery
   ) where
@@ -497,21 +496,7 @@ bitBlastTerm be sc addlPrims t = do
       shapes = argShapes ++ ecShapes
   return (bval', zip names shapes)
 
--- | Bitblast a predicate and apply a function to the result. Supports
--- @ExtCns@ subterms.
-withBitBlastedPred :: AIG.IsAIG l g => AIG.Proxy l g ->
-  SharedContext ->
-  PrimMap l g ->
-  Term ->
-  (forall s. g s -> l s -> [(String, FiniteType)] -> IO a) -> IO a
-withBitBlastedPred proxy sc addlPrims t c = AIG.withNewGraph proxy $ \be -> do
-  (bval, args) <- bitBlastTerm be sc addlPrims t
-  case bval of
-    VBool l -> c be l args
-    _ -> fail "Verifier.SAW.Simulator.BitBlast.bitBlast: non-boolean result type."
-
--- | Bitblast a term and apply a function to the result. Does not
--- support @ExtCns@ subterms.
+-- | Bitblast a term and apply a function to the result.
 withBitBlastedTerm :: AIG.IsAIG l g => AIG.Proxy l g ->
   SharedContext ->
   PrimMap l g ->
