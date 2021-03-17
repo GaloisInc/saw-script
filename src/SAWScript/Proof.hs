@@ -885,12 +885,12 @@ data SolveResult
 --   If the goal is discharged, return evidence for the goal.  If there
 --   is a counterexample for the goal, the counterexample will be used
 --   to indicate the goal is unsolvable. Otherwise, the goal will remain unchanged.
-tacticSolve :: Monad m => (ProofGoal -> m (a, SolverStats, SolveResult)) -> Tactic m a
+tacticSolve :: Monad m => (ProofGoal -> m (SolverStats, SolveResult)) -> Tactic m ()
 tacticSolve f = Tactic \gl ->
-  do (a, stats, sres) <- lift (f gl)
+  do (stats, sres) <- lift (f gl)
      case sres of
-       SolveSuccess e -> return (a, stats, [], leafEvidence e)
-       SolveUnknown   -> return (a, stats, [gl], passthroughEvidence)
+       SolveSuccess e -> return ((), stats, [], leafEvidence e)
+       SolveUnknown   -> return ((), stats, [gl], passthroughEvidence)
        SolveCounterexample cex -> throwError (stats, cex)
 
 -- | Attempt to simplify a proof goal via computation, rewriting or similar.

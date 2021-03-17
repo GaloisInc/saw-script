@@ -269,7 +269,7 @@ llvm_verify ::
   [SomeLLVM MS.CrucibleMethodSpecIR] ->
   Bool                   ->
   LLVMCrucibleSetupM ()      ->
-  ProofScript SatResult  ->
+  ProofScript () ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 llvm_verify (Some lm) nm lemmas checkSat setup tactic =
   do lemmas' <- checkModuleCompatibility lm lemmas
@@ -289,7 +289,7 @@ llvm_unsafe_assume_spec (Some lm) nm setup =
      returnProof $ SomeLLVM method_spec
 
 llvm_array_size_profile ::
-  ProofScript SatResult  ->
+  ProofScript () ->
   Some LLVMModule ->
   String ->
   [SomeLLVM MS.CrucibleMethodSpecIR] ->
@@ -326,7 +326,7 @@ llvm_compositional_extract ::
   [SomeLLVM MS.CrucibleMethodSpecIR] ->
   Bool {- ^ check sat -} ->
   LLVMCrucibleSetupM () ->
-  ProofScript SatResult ->
+  ProofScript () ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 llvm_compositional_extract (Some lm) nm func_name lemmas checkSat setup tactic =
   do lemmas' <- checkModuleCompatibility lm lemmas
@@ -518,7 +518,7 @@ verifyMethodSpec ::
   MS.CrucibleMethodSpecIR (LLVM arch) ->
   [MS.CrucibleMethodSpecIR (LLVM arch)] ->
   Bool ->
-  ProofScript SatResult ->
+  ProofScript () ->
   Maybe (IORef (Map Text.Text [Crucible.FunctionProfile])) ->
   TopLevel (MS.CrucibleMethodSpecIR (LLVM arch), OverrideState (LLVM arch))
 verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
@@ -585,7 +585,7 @@ verifyMethodSpec cc methodSpec lemmas checkSat tactic asp =
 
 verifyObligations :: LLVMCrucibleContext arch
                   -> MS.CrucibleMethodSpecIR (LLVM arch)
-                  -> ProofScript SatResult
+                  -> ProofScript ()
                   -> [Crucible.LabeledPred Term Crucible.AssumptionReason]
                   -> [(String, Term)]
                   -> TopLevel SolverStats
@@ -749,7 +749,7 @@ verifyPrestate opts cc mspec globals =
 assumptionsContainContradiction ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
-  ProofScript SatResult ->
+  ProofScript () ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   TopLevel Bool
 assumptionsContainContradiction cc tactic assumptions =
@@ -772,7 +772,7 @@ assumptionsContainContradiction cc tactic assumptions =
        UnfinishedProof _  ->
          -- TODO? is this the right behavior?
          do printOutLnTop Warn "Could not determine if preconditions are vacuous"
-            return True 
+            return True
 
 -- | Given a list of assumptions, computes and displays a smallest subset of
 -- them that are contradictory among each themselves.  This is **not**
@@ -780,7 +780,7 @@ assumptionsContainContradiction cc tactic assumptions =
 computeMinimalContradictingCore ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
-  ProofScript SatResult ->
+  ProofScript () ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   TopLevel ()
 computeMinimalContradictingCore cc tactic assumes =
@@ -801,7 +801,7 @@ computeMinimalContradictingCore cc tactic assumes =
 checkAssumptionsForContradictions ::
   (Crucible.HasPtrWidth (Crucible.ArchWidth arch), Crucible.HasLLVMAnn Sym) =>
   LLVMCrucibleContext arch ->
-  ProofScript SatResult ->
+  ProofScript () ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   TopLevel ()
 checkAssumptionsForContradictions cc tactic assumes =

@@ -1102,7 +1102,7 @@ primitives = Map.fromList
     , "The third argument is a list of identifiers to skip translating."
     ]
 
-  , prim "offline_coq" "String -> ProofScript SatResult"
+  , prim "offline_coq" "String -> ProofScript ()"
     (pureVal offline_coq)
     Experimental
     [ "Write out a representation of the current goal in Gallina syntax"
@@ -1116,7 +1116,7 @@ primitives = Map.fromList
     , "language and prints the result."
     ]
 
-  , prim "prove"               "ProofScript SatResult -> Term -> TopLevel ProofResult"
+  , prim "prove"               "ProofScript () -> Term -> TopLevel ProofResult"
     (pureVal provePrim)
     Current
     [ "Use the given proof script to attempt to prove that a term is valid"
@@ -1125,7 +1125,7 @@ primitives = Map.fromList
     , "proof or a counter-example."
     ]
 
-  , prim "prove_print"         "ProofScript SatResult -> Term -> TopLevel Theorem"
+  , prim "prove_print"         "ProofScript () -> Term -> TopLevel Theorem"
     (pureVal provePrintPrim)
     Current
     [ "Use the given proof script to attempt to prove that a term is valid"
@@ -1133,7 +1133,7 @@ primitives = Map.fromList
     , "if unsuccessful."
     ]
 
-  , prim "sat"                 "ProofScript SatResult -> Term -> TopLevel SatResult"
+  , prim "sat"                 "ProofScript () -> Term -> TopLevel SatResult"
     (pureVal satPrim)
     Current
     [ "Use the given proof script to attempt to prove that a term is"
@@ -1142,7 +1142,7 @@ primitives = Map.fromList
     , "a satisfying assignment or an indication of unsatisfiability."
     ]
 
-  , prim "sat_print"           "ProofScript SatResult -> Term -> TopLevel ()"
+  , prim "sat_print"           "ProofScript () -> Term -> TopLevel ()"
     (pureVal satPrintPrim)
     Current
     [ "Use the given proof script to attempt to prove that a term is"
@@ -1259,17 +1259,17 @@ primitives = Map.fromList
     , "and the number of nodes it would have if represented as a tree."
     ]
 
-  , prim "assume_valid"        "ProofScript ProofResult"
+  , prim "assume_valid"        "ProofScript ()"
     (pureVal assumeValid)
     Current
     [ "Assume the current goal is valid, completing the proof." ]
 
-  , prim "assume_unsat"        "ProofScript SatResult"
+  , prim "assume_unsat"        "ProofScript ()"
     (pureVal assumeUnsat)
     Current
     [ "Assume the current goal is unsatisfiable, completing the proof." ]
 
-  , prim "quickcheck"          "Int -> ProofScript SatResult"
+  , prim "quickcheck"          "Int -> ProofScript ()"
     (scVal quickcheckGoal)
     Current
     [ "Quick Check the current goal by applying it to a sequence of random"
@@ -1277,146 +1277,146 @@ primitives = Map.fromList
     , "of these inputs."
     ]
 
-  , prim "abc"                 "ProofScript SatResult"
+  , prim "abc"                 "ProofScript ()"
     (pureVal proveABC)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
-  , prim "sbv_abc"             "ProofScript SatResult"
+  , prim "sbv_abc"             "ProofScript ()"
     (pureVal proveABC_SBV)
     Current
     [ "Use the ABC theorem prover to prove the current goal." ]
 
-  , prim "boolector"           "ProofScript SatResult"
+  , prim "boolector"           "ProofScript ()"
     (pureVal proveBoolector)
     Current
     [ "Use the Boolector theorem prover to prove the current goal." ]
 
-  , prim "cvc4"                "ProofScript SatResult"
+  , prim "cvc4"                "ProofScript ()"
     (pureVal proveCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
 
-  , prim "z3"                  "ProofScript SatResult"
+  , prim "z3"                  "ProofScript ()"
     (pureVal proveZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal." ]
 
-  , prim "mathsat"             "ProofScript SatResult"
+  , prim "mathsat"             "ProofScript ()"
     (pureVal proveMathSAT)
     Current
     [ "Use the MathSAT theorem prover to prove the current goal." ]
 
-  , prim "yices"               "ProofScript SatResult"
+  , prim "yices"               "ProofScript ()"
     (pureVal proveYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal." ]
 
-  , prim "unint_z3"            "[String] -> ProofScript SatResult"
+  , prim "unint_z3"            "[String] -> ProofScript ()"
     (pureVal proveUnintZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "unint_cvc4"            "[String] -> ProofScript SatResult"
+  , prim "unint_cvc4"            "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "unint_yices"           "[String] -> ProofScript SatResult"
+  , prim "unint_yices"           "[String] -> ProofScript ()"
     (pureVal proveUnintYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "sbv_boolector"       "ProofScript SatResult"
+  , prim "sbv_boolector"       "ProofScript ()"
     (pureVal proveBoolector)
     Current
     [ "Use the Boolector theorem prover to prove the current goal." ]
 
-  , prim "sbv_cvc4"            "ProofScript SatResult"
+  , prim "sbv_cvc4"            "ProofScript ()"
     (pureVal proveCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal." ]
 
-  , prim "sbv_z3"              "ProofScript SatResult"
+  , prim "sbv_z3"              "ProofScript ()"
     (pureVal proveZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal." ]
 
-  , prim "sbv_mathsat"         "ProofScript SatResult"
+  , prim "sbv_mathsat"         "ProofScript ()"
     (pureVal proveMathSAT)
     Current
     [ "Use the MathSAT theorem prover to prove the current goal." ]
 
-  , prim "sbv_yices"           "ProofScript SatResult"
+  , prim "sbv_yices"           "ProofScript ()"
     (pureVal proveYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal." ]
 
-  , prim "sbv_unint_z3"        "[String] -> ProofScript SatResult"
+  , prim "sbv_unint_z3"        "[String] -> ProofScript ()"
     (pureVal proveUnintZ3)
     Current
     [ "Use the Z3 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "sbv_unint_cvc4"        "[String] -> ProofScript SatResult"
+  , prim "sbv_unint_cvc4"        "[String] -> ProofScript ()"
     (pureVal proveUnintCVC4)
     Current
     [ "Use the CVC4 theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "sbv_unint_yices"       "[String] -> ProofScript SatResult"
+  , prim "sbv_unint_yices"       "[String] -> ProofScript ()"
     (pureVal proveUnintYices)
     Current
     [ "Use the Yices theorem prover to prove the current goal. Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "offline_aig"         "String -> ProofScript SatResult"
+  , prim "offline_aig"         "String -> ProofScript ()"
     (pureVal offline_aig)
     Current
     [ "Write the current goal to the given file in AIGER format." ]
 
-  , prim "offline_cnf"         "String -> ProofScript SatResult"
+  , prim "offline_cnf"         "String -> ProofScript ()"
     (pureVal offline_cnf)
     Current
     [ "Write the current goal to the given file in CNF format." ]
 
-  , prim "offline_extcore"     "String -> ProofScript SatResult"
+  , prim "offline_extcore"     "String -> ProofScript ()"
     (pureVal offline_extcore)
     Current
     [ "Write the current goal to the given file in SAWCore format." ]
 
-  , prim "offline_smtlib2"     "String -> ProofScript SatResult"
+  , prim "offline_smtlib2"     "String -> ProofScript ()"
     (pureVal offline_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
-  , prim "w4_offline_smtlib2"  "String -> ProofScript SatResult"
+  , prim "w4_offline_smtlib2"  "String -> ProofScript ()"
     (pureVal offline_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format." ]
 
-  , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript SatResult"
+  , prim "offline_unint_smtlib2"  "[String] -> String -> ProofScript ()"
     (pureVal offline_unint_smtlib2)
     Current
     [ "Write the current goal to the given file in SMT-Lib2 format,"
     , "leaving the listed functions uninterpreted."
     ]
 
-  , prim "offline_verilog"        "String -> ProofScript SatResult"
+  , prim "offline_verilog"        "String -> ProofScript ()"
     (pureVal offline_verilog)
     Experimental
     [ "Write the current goal to the given file in Verilog format." ]
 
-  , prim "external_cnf_solver" "String -> [String] -> ProofScript SatResult"
+  , prim "external_cnf_solver" "String -> [String] -> ProofScript ()"
     (pureVal (satExternal True))
     Current
     [ "Use an external SAT solver supporting CNF to prove the current goal."
@@ -1425,7 +1425,7 @@ primitives = Map.fromList
     , "anywhere in the argument list will be replaced with the name of the"
     , "temporary file holding the CNF version of the formula."]
 
-  , prim "external_aig_solver" "String -> [String] -> ProofScript SatResult"
+  , prim "external_aig_solver" "String -> [String] -> ProofScript ()"
     (pureVal (satExternal False))
     Current
     [ "Use an external SAT solver supporting AIG to prove the current goal."
@@ -1434,43 +1434,43 @@ primitives = Map.fromList
     , "anywhere in the argument list will be replaced with the name of the"
     , "temporary file holding the AIG version of the formula."]
 
-  , prim "rme"                 "ProofScript SatResult"
+  , prim "rme"                 "ProofScript ()"
     (pureVal proveRME)
     Current
     [ "Prove the current goal by expansion to Reed-Muller Normal Form." ]
 
-  , prim "trivial"             "ProofScript SatResult"
+  , prim "trivial"             "ProofScript ()"
     (pureVal trivial)
     Current
     [ "Succeed only if the proof goal is a literal 'True'." ]
 
-  , prim "w4"                  "ProofScript SatResult"
+  , prim "w4"                  "ProofScript ()"
     (pureVal w4_z3)
     Current
     [ "Prove the current goal using What4 (Z3 backend)." ]
 
-  , prim "w4_unint_z3"         "[String] -> ProofScript SatResult"
+  , prim "w4_unint_z3"         "[String] -> ProofScript ()"
     (pureVal w4_unint_z3)
     Current
     [ "Prove the current goal using What4 (Z3 backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "w4_unint_yices"         "[String] -> ProofScript SatResult"
+  , prim "w4_unint_yices"         "[String] -> ProofScript ()"
     (pureVal w4_unint_yices)
     Current
     [ "Prove the current goal using What4 (Yices backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "w4_unint_cvc4"         "[String] -> ProofScript SatResult"
+  , prim "w4_unint_cvc4"         "[String] -> ProofScript ()"
     (pureVal w4_unint_cvc4)
     Current
     [ "Prove the current goal using What4 (CVC4 backend). Leave the"
     , "given list of names, as defined with 'define', as uninterpreted."
     ]
 
-  , prim "w4_abc_smtlib2"        "ProofScript SatResult"
+  , prim "w4_abc_smtlib2"        "ProofScript ()"
     (pureVal w4_abc_smtlib2)
     Experimental
     [ "Use the ABC theorem prover as an external process to prove the"
@@ -1478,7 +1478,7 @@ primitives = Map.fromList
     , "using the What4 backend."
     ]
 
-  , prim "w4_abc_verilog"        "ProofScript SatResult"
+  , prim "w4_abc_verilog"        "ProofScript ()"
     (pureVal w4_abc_verilog)
     Experimental
     [ "Use the ABC theorem prover as an external process to prove the"
@@ -1486,7 +1486,7 @@ primitives = Map.fromList
     , "using the What4 backend."
     ]
 
-  , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript SatResult"
+  , prim "offline_w4_unint_z3"    "[String] -> String -> ProofScript ()"
     (pureVal offline_w4_unint_z3)
     Current
     [ "Write the current goal to the given file using What4 (Z3 backend) in"
@@ -1494,7 +1494,7 @@ primitives = Map.fromList
     , "'define', as uninterpreted."
     ]
 
-  , prim "offline_w4_unint_yices" "[String] -> String -> ProofScript SatResult"
+  , prim "offline_w4_unint_yices" "[String] -> String -> ProofScript ()"
     (pureVal offline_w4_unint_yices)
     Current
     [ "Write the current goal to the given file using What4 (Yices backend) in"
@@ -1502,7 +1502,7 @@ primitives = Map.fromList
     , "'define', as uninterpreted."
     ]
 
-  , prim "offline_w4_unint_cvc4"  "[String] -> String -> ProofScript SatResult"
+  , prim "offline_w4_unint_cvc4"  "[String] -> String -> ProofScript ()"
     (pureVal offline_w4_unint_cvc4)
     Current
     [ "Write the current goal to the given file using What4 (CVC4 backend) in"
@@ -1976,7 +1976,7 @@ primitives = Map.fromList
     [ "Parse a Term from a String in SAWCore syntax."
     ]
 
-  , prim "prove_core"         "ProofScript SatResult -> String -> TopLevel Theorem"
+  , prim "prove_core"         "ProofScript () -> String -> TopLevel Theorem"
     (pureVal prove_core)
     Current
     [ "Use the given proof script to attempt to prove that a term is valid"
@@ -2035,7 +2035,7 @@ primitives = Map.fromList
     [ "Legacy alternative name for `llvm_extract`." ]
 
   , prim "llvm_compositional_extract"
-    "LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    "LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_compositional_extract)
     Experimental
     [ "Translate an LLVM function directly to a Term. The parameters of the"
@@ -2048,7 +2048,7 @@ primitives = Map.fromList
     , "`llvm_points_to`). For more flexibility, see `llvm_verify`."
     ]
   , prim "crucible_llvm_compositional_extract"
-    "LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    "LLVMModule -> String -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_compositional_extract)
     Experimental
     [ "Legacy alternative name for `llvm_compositional_extract`." ]
@@ -2348,7 +2348,7 @@ primitives = Map.fromList
     [ "Legacy alternative name for `llvm_return`." ]
 
   , prim "llvm_verify"
-    "LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    "LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_verify)
     Current
     [ "Verify the LLVM function named by the second parameter in the module"
@@ -2360,7 +2360,7 @@ primitives = Map.fromList
     , "verification conditions."
     ]
   , prim "crucible_llvm_verify"
-    "LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    "LLVMModule -> String -> [LLVMSpec] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_verify)
     Current
     [ "Legacy alternative name for `llvm_verify`." ]
@@ -2396,7 +2396,7 @@ primitives = Map.fromList
     [ "Legacy alternative name for `llvm_array_size_profile`." ]
 
   , prim "llvm_verify_x86"
-    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_verify_x86)
     Experimental
     [ "Verify an x86 function from an ELF file for use as an override in an"
@@ -2410,7 +2410,7 @@ primitives = Map.fromList
     , "that can be used as an override when verifying other LLVM functions."
     ]
   , prim "crucible_llvm_verify_x86"
-    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript SatResult -> TopLevel LLVMSpec"
+    "LLVMModule -> String -> String -> [(String, Int)] -> Bool -> LLVMSetup () -> ProofScript () -> TopLevel LLVMSpec"
     (pureVal llvm_verify_x86)
     Experimental
     [ "Legacy alternative name for `llvm_verify_x86`." ]
@@ -2734,7 +2734,7 @@ primitives = Map.fromList
     , "has a non-void return type." ]
 
   , prim "jvm_verify"
-    "JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript SatResult -> TopLevel JVMSpec"
+    "JavaClass -> String -> [JVMSpec] -> Bool -> JVMSetup () -> ProofScript () -> TopLevel JVMSpec"
     (pureVal jvm_verify)
     Experimental
     [ "Verify the JVM method named by the second parameter in the class"
