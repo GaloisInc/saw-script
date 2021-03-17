@@ -7,6 +7,7 @@ Stability   : provisional
 -}
 
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -60,16 +61,21 @@ module SAWScript.Proof
   , ProofState
   , psTimeout
   , psGoals
+  , psStats
   , setProofTimeout
   , ProofGoal(..)
   , startProof
   , finishProof
 
+  , CEX
+  , ProofResult(..)
+  , SolveResult(..)
+
   , predicateToSATQuery
   ) where
 
 import qualified Control.Monad.Fail as F
-import           Control.Monad.State
+import           Control.Monad.Except
 import           Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import           Data.Set (Set)
@@ -84,6 +90,7 @@ import Verifier.SAW.SATQuery
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedAST
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.FiniteValue (FirstOrderValue)
 import Verifier.SAW.Term.Pretty (SawDoc)
 import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 
@@ -334,9 +341,6 @@ thmEvidence :: Theorem -> Evidence
 thmEvidence (LocalAssumption p) = LocalAssumptionEvidence p
 thmEvidence Theorem{ _thmEvidence = e } = e
 
-impossibleEvidence :: [Evidence] -> IO Evidence
-impossibleEvidence _ = fail "impossibleEvidence: attempted to check an impossible proof!"
-
 splitEvidence :: [Evidence] -> IO Evidence
 splitEvidence [e1,e2] = pure (SplitEvidence e1 e2)
 splitEvidence _ = fail "splitEvidence: expected two evidence values"
@@ -455,6 +459,9 @@ psTimeout = _psTimeout
 
 psGoals :: ProofState -> [ProofGoal]
 psGoals = _psGoals
+
+psStats :: ProofState -> SolverStats
+psStats = _psStats
 
 -- | Verify that the given evidence in fact supports
 --   the given proposition.
@@ -618,8 +625,8 @@ startProof g = ProofState [g] (goalProp g) mempty Nothing passthroughEvidence
 --   and validate the computed evidence to ensure that it supports the original
 --   proposition.  If successful, return the completed @Theorem@ and a summary
 --   of solver resources used in the proof.
-finishProof :: SharedContext -> ProofState -> IO (SolverStats, Maybe Theorem)
-finishProof sc (ProofState gs concl stats _ checkEv) =
+finishProof :: SharedContext -> ProofState -> IO ProofResult
+finishProof sc ps@(ProofState gs concl stats _ checkEv) =
   case gs of
     [] ->
       do e <- checkEv []
@@ -629,9 +636,16 @@ finishProof sc (ProofState gs concl stats _ checkEv) =
                    , _thmStats = stats
                    , _thmEvidence = e
                    }
-         pure (stats, Just thm)
+         pure (ValidProof stats thm)
     _ : _ ->
-         pure (stats, Nothing)
+         pure (UnfinishedProof ps)
+
+type CEX = [(String, FirstOrderValue)]
+
+data ProofResult
+  = ValidProof SolverStats Theorem
+  | InvalidProof SolverStats CEX ProofState
+  | UnfinishedProof ProofState
 
 -- | A @Tactic@ is a computation that examines, simplifies
 --   and/or solves a proof goal.  Given a goal, it does some
@@ -640,22 +654,23 @@ finishProof sc (ProofState gs concl stats _ checkEv) =
 --   evidence for the original goal when given evidence for the generated
 --   subgoal.  An important special case is a tactic that returns 0 subgoals,
 --   and therefore completely solves the goal.
-newtype Tactic m a = Tactic
-    { runTactic :: ProofGoal -> m (a, SolverStats, [ProofGoal], [Evidence] -> IO Evidence) }
+newtype Tactic m a =
+  Tactic (ProofGoal -> ExceptT (SolverStats, CEX) m (a, SolverStats, [ProofGoal], [Evidence] -> IO Evidence))
 
 -- | Choose the first subgoal in the current proof state and apply the given
 --   proof tactic.
-withFirstGoal :: F.MonadFail m => Tactic m a -> ProofState -> m (a, ProofState)
-withFirstGoal f (ProofState goals concl stats timeout evidenceCont) =
+withFirstGoal :: F.MonadFail m => Tactic m a -> ProofState -> m (Either (SolverStats, CEX) (a, ProofState))
+withFirstGoal (Tactic f) (ProofState goals concl stats timeout evidenceCont) =
      case goals of
        [] -> fail "ProofScript failed: no subgoal"
-       g : gs -> do
-         (x, stats', gs', buildTacticEvidence) <- runTactic f g
-         let evidenceCont' es =
-                 do let (es1, es2) = splitAt (length gs') es
-                    e <- buildTacticEvidence es1
-                    evidenceCont (e:es2)
-         return (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont')
+       g : gs -> runExceptT (f g) >>= \case
+         Left cex -> return (Left cex)
+         Right (x, stats', gs', buildTacticEvidence) ->
+           do let evidenceCont' es =
+                      do let (es1, es2) = splitAt (length gs') es
+                         e <- buildTacticEvidence es1
+                         evidenceCont (e:es2)
+              return (Right (x, ProofState (gs' <> gs) concl (stats <> stats') timeout evidenceCont'))
 
 predicateToSATQuery :: SharedContext -> Set VarIndex -> Term -> IO SATQuery
 predicateToSATQuery sc unintSet tm0 =
@@ -858,18 +873,25 @@ tacticTrivial _sc = Tactic \goal ->
 --   but do not alter the proof state.
 tacticId :: Monad m => (ProofGoal -> m ()) -> Tactic m ()
 tacticId f = Tactic \gl ->
-  do f gl
+  do lift (f gl)
      return ((), mempty, [gl], passthroughEvidence)
 
+data SolveResult
+  = SolveSuccess Evidence
+  | SolveCounterexample CEX
+  | SolveUnknown
+
 -- | Attempt to solve the given goal, usually via an automatic solver.
---   If the goal is discharged, return evidence for the goal.  Otherwise,
---   the goal will be considered unsolvable.
-tacticSolve :: Monad m => (ProofGoal -> m (a, SolverStats, Maybe Evidence)) -> Tactic m a
+--   If the goal is discharged, return evidence for the goal.  If there
+--   is a counterexample for the goal, the counterexample will be used
+--   to indicate the goal is unsolvable. Otherwise, the goal will remain unchanged.
+tacticSolve :: Monad m => (ProofGoal -> m (a, SolverStats, SolveResult)) -> Tactic m a
 tacticSolve f = Tactic \gl ->
-  do (a, stats, me) <- f gl
-     case me of
-       Nothing -> return (a, stats, [gl], impossibleEvidence)
-       Just e  -> return (a, stats, [], leafEvidence e)
+  do (a, stats, sres) <- lift (f gl)
+     case sres of
+       SolveSuccess e -> return (a, stats, [], leafEvidence e)
+       SolveUnknown   -> return (a, stats, [gl], passthroughEvidence)
+       SolveCounterexample cex -> throwError (stats, cex)
 
 -- | Attempt to simplify a proof goal via computation, rewriting or similar.
 --   The tactic should return a new proposition to prove and a method for
@@ -877,5 +899,5 @@ tacticSolve f = Tactic \gl ->
 --   the original goal.
 tacticChange :: Monad m => (ProofGoal -> m (Prop, Evidence -> Evidence)) -> Tactic m ()
 tacticChange f = Tactic \gl ->
-  do (p, ef) <- f gl
+  do (p, ef) <- lift (f gl)
      return ((), mempty, [ gl{ goalProp = p } ], updateEvidence ef)

@@ -878,10 +878,14 @@ checkGoals sym opts sc tactic = do
   stats <- forM (zip [0..] gs) $ \(n, g) -> do
     term <- liftIO $ gGoal sc g
     let proofgoal = ProofGoal n "vc" (show $ gMessage g) term
-    (r,_) <- runProofScript tactic $ startProof proofgoal
-    case r of
-      Unsat stats -> return stats
-      SatMulti stats vals -> do
+    res <- runProofScript tactic proofgoal
+    case res of
+      ValidProof stats _thm -> return stats -- TODO do something with these theorems
+      UnfinishedProof pst -> do
+        printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
+        printOutLnTop Info (show (psStats pst))
+        throwTopLevel $ "Proof failed: " ++ show (length (psGoals pst)) ++ " goals remaining."
+      InvalidProof stats vals _pst -> do
         printOutLnTop Info $ unwords ["Subgoal failed:", show $ gMessage g]
         printOutLnTop Info (show stats)
         printOutLnTop OnlyCounterExamples "----------Counterexample----------"
