@@ -97,6 +97,7 @@ import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
 import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue)
 
+import SAWScript.Position
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
@@ -278,7 +279,7 @@ data Evidence
     -- | This type of evidence is produced when the given proposition
     --   has been explicitly assumed without other evidence at the
     --   user's direction.
-  | Admitted Prop
+  | Admitted String Pos Prop -- TODO, Text instead?
 
     -- | This type of evidence is produced when a given proposition is trivially
     --   true.
@@ -384,12 +385,14 @@ constructTheorem sc p e =
        }
 
 -- | Admit the given theorem without evidence.
-admitTheorem :: Prop -> Theorem
-admitTheorem p =
+--   The provided message allows the user to
+--   explain why this proposition is being admitted.
+admitTheorem :: String -> Pos -> Prop -> Theorem
+admitTheorem msg pos p =
   Theorem
   { _thmProp      = p
   , _thmStats     = solverStats "ADMITTED" (propSize p)
-  , _thmEvidence  = Admitted p
+  , _thmEvidence  = Admitted msg pos p
   }
 
 -- | Construct a theorem that an external solver has proved.
@@ -512,10 +515,11 @@ checkEvidence sc = check mempty
                , showTerm p'
                ]
 
-      Admitted (Prop p') ->
+      Admitted msg pos (Prop p') ->
         do ok <- scConvertible sc False ptm p'
            unless ok $ fail $ unlines
-               [ "Admitted proof does not match the required proposition"
+               [ "Admitted proof does not match the required proposition " ++ show pos
+               , msg
                , showTerm ptm
                , showTerm p'
                ]
