@@ -233,7 +233,7 @@ writeCore path t = io $ writeFile path (scWriteExternal t)
 write_verilog :: SharedContext -> FilePath -> Term -> TopLevel ()
 write_verilog sc path t = io $ writeVerilog sc path t
 
-writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([String],[FiniteType])
+writeVerilogSAT :: MonadIO m => SharedContext -> FilePath -> SATQuery -> m ([ExtCns Term],[FiniteType])
 writeVerilogSAT sc path satq = liftIO $
   do sym <- newSAWCoreBackend sc
      (argNames, argTys, _lbls, bval) <- W.w4Solve sym sc satq

@@ -76,6 +76,7 @@ import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.LLVM.Skeleton
 
+import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.CryptolEnv as CEnv
 import Verifier.SAW.FiniteValue (FirstOrderValue, ppFirstOrderValue)
 import Verifier.SAW.Rewriter (Simpset, lhsRewriteRule, rhsRewriteRule, listRules)
@@ -168,7 +169,7 @@ data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
 
 data SatResult
   = Unsat SolverStats
-  | Sat SolverStats [(String, FirstOrderValue)]
+  | Sat SolverStats [(ExtCns Term, FirstOrderValue)]
   | SatUnknown
     deriving (Show)
 
@@ -221,9 +222,12 @@ showsProofResult opts r =
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
-    showEqn (x, t) = showString x . showString " = " . showVal t
+    showEqn (x, t) = showEC x . showString " = " . showVal t
+    showEC ec = showString (unpack (toShortName (ecName ec)))
+
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
+
 
 showsSatResult :: PPOpts -> SatResult -> ShowS
 showsSatResult opts r =
@@ -234,7 +238,8 @@ showsSatResult opts r =
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
-    showEqn (x, t) = showString x . showString " = " . showVal t
+    showEC ec = showString (unpack (toShortName (ecName ec)))
+    showEqn (x, t) = showEC x . showString " = " . showVal t
     showMulti _ [] = showString "]"
     showMulti s (eqn : eqns) = showString s . showEqn eqn . showMulti ", " eqns
 
