@@ -61,7 +61,7 @@ import Verifier.SAW.ExternalFormat
 import Verifier.SAW.FiniteValue
   ( FiniteType(..), readFiniteValue
   , FirstOrderValue(..)
-  , toFirstOrderValue, scFirstOrderValue
+  , scFirstOrderValue
   )
 import Verifier.SAW.SATQuery
 import Verifier.SAW.SCTypeCheck hiding (TypedTerm)
@@ -211,8 +211,8 @@ cecPrim (SV.AIGNetwork x) (SV.AIGNetwork y) = do
   case res of
     AIG.Valid -> return $ ValidProof stats (error "cecPrim: deprecated function!")
     AIG.Invalid bs
-      | Just fv <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
-           return $ InvalidProof stats [("x", toFirstOrderValue fv)] (error "cecPRim : deprecated function!")
+      | Just _fv <- readFiniteValue (FTVec (fromIntegral (length bs)) FTBit) bs ->
+           return $ InvalidProof stats [] (error "cecPRim : deprecated function!")
       | otherwise -> fail "cec: impossible, could not parse counterexample"
     AIG.VerifyUnknown -> fail "cec: unknown result "
 
@@ -350,9 +350,7 @@ quickcheckGoal sc n = do
        Nothing ->
          do printOutLn opts Info $ "checked " ++ show n ++ " cases."
             return (stats, SolveSuccess (QuickcheckEvidence n (goalProp goal)))
-       Just cex ->
-         let cex' = [ (Text.unpack (toShortName (ecName ec)), v) | (ec,v) <- cex ]
-          in return (stats, SolveCounterexample cex')
+       Just cex -> return (stats, SolveCounterexample cex)
 
 assumeValid :: ProofScript ()
 assumeValid =

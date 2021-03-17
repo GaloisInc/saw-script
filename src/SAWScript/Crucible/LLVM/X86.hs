@@ -57,6 +57,7 @@ import Data.Parameterized.Context hiding (view)
 
 import Verifier.SAW.CryptolEnv
 import Verifier.SAW.FiniteValue
+import Verifier.SAW.Name (toShortName)
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.TypedTerm
 
@@ -952,8 +953,9 @@ checkGoals sym opts sc tactic = do
         ppOpts <- sawPPOpts . rwPPOpts <$> getTopLevelRW
         case vals of
           [] -> printOutLnTop OnlyCounterExamples "<<All settings of the symbolic variables constitute a counterexample>>"
-          _ -> let showAssignment (name, val) =
-                     mconcat [ " ", name, ": ", show $ ppFirstOrderValue ppOpts val ]
+          _ -> let showEC ec = Text.unpack (toShortName (ecName ec)) in
+               let showAssignment (ec, val) =
+                     mconcat [ " ", showEC ec, ": ", show $ ppFirstOrderValue ppOpts val ]
                in mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
         printOutLnTop OnlyCounterExamples "----------------------------------"
         throwTopLevel "Proof failed."

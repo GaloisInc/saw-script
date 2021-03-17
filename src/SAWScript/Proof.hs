@@ -645,7 +645,7 @@ finishProof sc ps@(ProofState gs concl stats _ checkEv) =
          pure (UnfinishedProof ps)
 
 -- | A type describing counterexamples.
-type CEX = [(String, FirstOrderValue)]
+type CEX = [(ExtCns Term, FirstOrderValue)]
 
 -- | The results that can occur after a proof attempt.
 data ProofResult
