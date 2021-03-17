@@ -644,11 +644,18 @@ finishProof sc ps@(ProofState gs concl stats _ checkEv) =
     _ : _ ->
          pure (UnfinishedProof ps)
 
+-- | A type describing counterexamples.
 type CEX = [(String, FirstOrderValue)]
 
+-- | The results that can occur after a proof attempt.
 data ProofResult
-  = ValidProof SolverStats Theorem
+  = -- | The proof was completed and results in a theorem
+    ValidProof SolverStats Theorem
+    -- | The proof failed, and we found a counterexample to
+    --   one of the proof's subgoals.
   | InvalidProof SolverStats CEX ProofState
+    -- | The proof was not completed, but we did not find
+    --   a counterexample.
   | UnfinishedProof ProofState
 
 -- | A @Tactic@ is a computation that examines, simplifies
