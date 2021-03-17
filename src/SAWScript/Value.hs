@@ -38,7 +38,7 @@ import Control.Applicative (Applicative)
 import Control.Lens
 import Control.Monad.Fail (MonadFail(..))
 import Control.Monad.Catch (MonadThrow(..), MonadMask(..), MonadCatch(..))
-import Control.Monad.Except (ExceptT(..), runExceptT)
+import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
 import Control.Monad.Reader (MonadReader)
 import qualified Control.Exception as X
 import qualified System.IO.Error as IOError
@@ -166,19 +166,11 @@ data BuiltinContext = BuiltinContext { biSharedContext :: SharedContext
                                      }
   deriving Generic
 
-data ProofResult
-  = Valid SolverStats
-  | InvalidMulti SolverStats [(String, FirstOrderValue)]
-    deriving (Show)
-
 data SatResult
   = Unsat SolverStats
-  | SatMulti SolverStats [(String, FirstOrderValue)]
+  | Sat SolverStats [(String, FirstOrderValue)]
+  | SatUnknown
     deriving (Show)
-
-flipSatResult :: SatResult -> ProofResult
-flipSatResult (Unsat stats) = Valid stats
-flipSatResult (SatMulti stats t) = InvalidMulti stats t
 
 isVUnit :: Value -> Bool
 isVUnit (VTuple []) = True
@@ -223,8 +215,9 @@ showBraces s = showString "{" . s . showString "}"
 showsProofResult :: PPOpts -> ProofResult -> ShowS
 showsProofResult opts r =
   case r of
-    Valid _ -> showString "Valid"
-    InvalidMulti _ ts -> showString "Invalid: [" . showMulti "" ts
+    ValidProof _ _ -> showString "Valid"
+    InvalidProof _ ts _ -> showString "Invalid: [" . showMulti "" ts
+    UnfinishedProof st  -> showString "Unfinished: " . shows (length (psGoals st)) . showString " goals remaining" 
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
@@ -236,7 +229,8 @@ showsSatResult :: PPOpts -> SatResult -> ShowS
 showsSatResult opts r =
   case r of
     Unsat _ -> showString "Unsat"
-    SatMulti _ ts -> showString "Sat: [" . showMulti "" ts
+    Sat _ ts -> showString "Sat: [" . showMulti "" ts
+    SatUnknown  -> showString "Unknown"
   where
     opts' = sawPPOpts opts
     showVal t = shows (ppFirstOrderValue opts' t)
@@ -592,14 +586,20 @@ newtype JVMSetupM a = JVMSetupM { runJVMSetupM :: JVMSetup a }
   deriving (Applicative, Functor, Monad)
 
 --
-newtype ProofScript a = ProofScript (StateT ProofState TopLevel a)
+newtype ProofScript a = ProofScript { unProofScript :: ExceptT (SolverStats, CEX) (StateT ProofState TopLevel) a }
  deriving (Functor, Applicative, Monad)
 
-runProofScript :: ProofScript a -> ProofState -> TopLevel (a, ProofState)
-runProofScript (ProofScript m) st = runStateT m st
+runProofScript :: ProofScript a -> ProofGoal -> TopLevel ProofResult
+runProofScript (ProofScript m) gl =
+  do (r,pstate) <- runStateT (runExceptT m) (startProof gl)
+     case r of
+       Left (stats,cex) -> return (InvalidProof stats cex pstate)
+       Right _ ->
+         do sc <- getSharedContext
+            io (finishProof sc pstate)
 
 scriptTopLevel :: TopLevel a -> ProofScript a
-scriptTopLevel m = ProofScript (lift m)
+scriptTopLevel m = ProofScript (lift (lift m))
 
 instance MonadIO ProofScript where
   liftIO m = ProofScript (liftIO m)
@@ -610,6 +610,10 @@ instance MonadFail ProofScript where
 instance MonadState ProofState ProofScript where
   get = ProofScript get
   put x = ProofScript (put x)
+
+instance MonadError (SolverStats, CEX) ProofScript where
+  throwError cex = ProofScript (throwError cex)
+  catchError (ProofScript m) f = ProofScript (catchError m (unProofScript . f))
 
 -- IsValue class ---------------------------------------------------------------
 
@@ -974,7 +978,7 @@ addTraceStateT :: String -> StateT s TopLevel a -> StateT s TopLevel a
 addTraceStateT str = underStateT (addTraceTopLevel str)
 
 addTraceProofScript :: String -> ProofScript a -> ProofScript a
-addTraceProofScript str (ProofScript m) = ProofScript (addTraceStateT str m)
+addTraceProofScript str (ProofScript m) = ProofScript (underExceptT (underStateT (addTraceTopLevel str)) m)
 
 -- | Similar to 'addTraceIO', but for reader monads built from 'TopLevel'.
 addTraceReaderT :: String -> ReaderT s TopLevel a -> ReaderT s TopLevel a

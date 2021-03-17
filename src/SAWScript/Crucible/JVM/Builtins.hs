@@ -271,10 +271,10 @@ verifyObligations cc mspec tactic assumes asserts =
        goal'  <- io $ predicateToProp sc Universal goal
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
            proofgoal = ProofGoal n "vc" goalname goal'
-       (r,_) <- runProofScript tactic (startProof proofgoal)
-       case r of
-         Unsat stats -> return stats
-         SatMulti stats vals -> do
+       res <- runProofScript tactic proofgoal
+       case res of
+         ValidProof stats _thm -> return stats -- TODO, do something with these theorems!
+         InvalidProof stats vals _pst -> do
            printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
            printOutLnTop Info (show stats)
            printOutLnTop OnlyCounterExamples "----------Counterexample----------"
@@ -282,6 +282,9 @@ verifyObligations cc mspec tactic assumes asserts =
            let showAssignment (name, val) = "  " ++ name ++ ": " ++ show (ppFirstOrderValue opts val)
            mapM_ (printOutLnTop OnlyCounterExamples . showAssignment) vals
            io $ fail "Proof failed." -- Mirroring behavior of llvm_verify
+         UnfinishedProof pst ->
+           io $ fail $ "Proof failed " ++ show (length (psGoals pst)) ++ " goals remaining."
+
      printOutLnTop Info $ unwords ["Proof succeeded!", nm]
      return (mconcat stats)
 

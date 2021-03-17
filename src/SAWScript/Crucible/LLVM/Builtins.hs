@@ -600,10 +600,13 @@ verifyObligations cc mspec tactic assumes asserts =
           goal'  <- io $ predicateToProp sc Universal goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
               proofgoal = ProofGoal n "vc" goalname goal'
-          (r,_) <- runProofScript tactic (startProof proofgoal)
-          case r of
-            Unsat stats -> return stats
-            SatMulti stats vals ->
+          res <- runProofScript tactic proofgoal
+          case res of
+            ValidProof stats _thm -> return stats -- TODO do something with these theorems
+            UnfinishedProof pst ->
+              do printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
+                 throwTopLevel $ "Proof failed " ++ show (length (psGoals pst)) ++ " goals remaining."
+            InvalidProof stats vals _pst ->
               do printOutLnTop Info $ unwords ["Subgoal failed:", nm, msg]
                  printOutLnTop Info (show stats)
                  printOutLnTop OnlyCounterExamples "----------Counterexample----------"
@@ -750,20 +753,25 @@ assumptionsContainContradiction ::
   TopLevel Bool
 assumptionsContainContradiction cc tactic assumptions =
   do
+     let sym = cc^.ccBackend
+     st <- io $ Common.sawCoreState sym
+     let sc  = saw_ctx st
      pgl <- io $
       do
-         let sym = cc^.ccBackend
-         st <- Common.sawCoreState sym
-         let sc  = saw_ctx st
          -- conjunction of all assumptions
          assume <- scAndList sc (toListOf (folded . Crucible.labeledPred) assumptions)
          -- implies falsehood
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
          goal' <- predicateToProp sc Universal goal
          return $ ProofGoal 0 "vc" "vacuousness check" goal'
-     runProofScript tactic (startProof pgl) >>= \case
-       (Unsat _stats,_) -> return True
-       (SatMulti _stats _vals,_) -> return False
+     res <- runProofScript tactic pgl
+     case res of
+       ValidProof _ _     -> return True
+       InvalidProof _ _ _ -> return False
+       UnfinishedProof _  ->
+         -- TODO? is this the right behavior?
+         do printOutLnTop Warn "Could not determine if preconditions are vacuous"
+            return True 
 
 -- | Given a list of assumptions, computes and displays a smallest subset of
 -- them that are contradictory among each themselves.  This is **not**
