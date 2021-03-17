@@ -182,7 +182,7 @@ jvm_verify ::
   [CrucibleMethodSpecIR] {- ^ overrides -} ->
   Bool {- ^ path sat checking -} ->
   JVMSetupM () ->
-  ProofScript SatResult ->
+  ProofScript () ->
   TopLevel CrucibleMethodSpecIR
 jvm_verify cls nm lemmas checkSat setup tactic =
   do cb <- getJavaCodebase
@@ -256,7 +256,7 @@ jvm_unsafe_assume_spec cls nm setup =
 verifyObligations ::
   JVMCrucibleContext ->
   CrucibleMethodSpecIR ->
-  ProofScript SatResult ->
+  ProofScript () ->
   [Crucible.LabeledPred Term Crucible.AssumptionReason] ->
   [(String, Term)] ->
   TopLevel SolverStats

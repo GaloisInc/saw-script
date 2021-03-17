@@ -285,7 +285,7 @@ llvm_verify_x86 ::
   [(String, Integer)] {- ^ Global variable symbol names and sizes (in bytes) -} ->
   Bool {- ^ Whether to enable path satisfiability checking -} ->
   LLVMCrucibleSetupM () {- ^ Specification to verify against -} ->
-  ProofScript SatResult {- ^ Tactic used to use when discharging goals -} ->
+  ProofScript () {- ^ Tactic used to use when discharging goals -} ->
   TopLevel (SomeLLVM MS.CrucibleMethodSpecIR)
 llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat setup tactic
   | Just Refl <- testEquality (C.LLVM.X86Repr $ knownNat @64) . C.LLVM.llvmArch
@@ -926,7 +926,7 @@ checkGoals ::
   Sym ->
   Options ->
   SharedContext ->
-  ProofScript SatResult ->
+  ProofScript () ->
   TopLevel SolverStats
 checkGoals sym opts sc tactic = do
   gs <- liftIO $ getGoals sym
