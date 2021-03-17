@@ -8,11 +8,8 @@ module SAWScript.Prover.SBV
 import System.Directory
 
 import           Data.Maybe
-import           Data.Map ( Map )
-import qualified Data.Map as Map
 import           Data.Set ( Set )
 import qualified Data.Text as Text
-import qualified Data.Vector as V
 import           Control.Monad
 
 import qualified Data.SBV.Dynamic as SBV
@@ -22,11 +19,9 @@ import qualified Verifier.SAW.Simulator.SBV as SBVSim
 
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.FiniteValue
-import Verifier.SAW.Recognizer(asPi, asPiList)
 
-import SAWScript.Proof(Prop, propToPredicate)
+import SAWScript.Proof(Prop, propSize, propToSATQuery)
 import SAWScript.Prover.SolverStats
-
 
 -- | Bit-blast a proposition and check its validity using SBV.
 -- Constants with names in @unints@ are kept as uninterpreted
@@ -39,7 +34,7 @@ proveUnintSBV ::
   Prop          {- ^ A proposition to be proved -} ->
   IO (Maybe [(String, FirstOrderValue)], SolverStats)
     -- ^ (example/counter-example, solver statistics)
-proveUnintSBV conf unintSet timeout sc term =
+proveUnintSBV conf unintSet timeout sc goal =
   do p <- findExecutable . SBV.executable $ SBV.solver conf
      unless (isJust p) . fail $ mconcat
        [ "Unable to locate the executable \""
@@ -48,93 +43,39 @@ proveUnintSBV conf unintSet timeout sc term =
        , show . SBV.name $ SBV.solver conf
        ]
 
-     (t', mlabels, lit) <- prepNegatedSBV sc unintSet term
+     (labels, argNames, lit) <- prepNegatedSBV sc unintSet goal
 
-     tp <- scWhnf sc =<< scTypeOf sc t'
-     let (args, _) = asPiList tp
-         (labels, argNames) = unzip [ (l, n) | (Just l, n) <- zip mlabels (map fst args) ]
+     let script = maybe (return ()) SBV.setTimeOut timeout >> lit
 
-         script = do
-           maybe (return ()) SBV.setTimeOut timeout
-           lit
      SBV.SatResult r <- SBV.satWith conf script
 
      let stats = solverStats ("SBV->" ++ show (SBV.name (SBV.solver conf)))
-                             (scSharedSize t')
+                             (propSize goal)
      case r of
+       SBV.Unsatisfiable {} -> return (Nothing, stats)
 
        SBV.Satisfiable {} ->
          do let dict = SBV.getModelDictionary r
-                r'   = getLabels labels dict (map Text.unpack argNames)
+                r'   = SBVSim.getLabels labels dict (map Text.unpack argNames)
             return (r', stats)
 
        SBV.SatExtField {} -> fail "Prover returned model in extension field"
-
-       SBV.Unsatisfiable {} -> return (Nothing, stats)
 
        SBV.Unknown {} -> fail "Prover returned Unknown"
 
        SBV.ProofError _ ls _ -> fail . unlines $ "Prover returned error: " : ls
 
+
 -- | Convert a saw-core proposition to a logically-negated SBV
 -- symbolic boolean formula with existentially quantified variables.
 -- The returned formula is suitable for checking satisfiability. The
 -- specified function names are left uninterpreted.
+
 prepNegatedSBV ::
   SharedContext ->
   Set VarIndex {- ^ Uninterpreted function names -} ->
   Prop     {- ^ Proposition to prove -} ->
-  IO (Term, [Maybe SBVSim.Labeler], SBV.Symbolic SBV.SVal)
+  IO ([SBVSim.Labeler], [Text.Text], SBV.Symbolic SBV.SVal)
 prepNegatedSBV sc unintSet goal =
-  do t0 <- propToPredicate sc goal
-     -- Abstract over all non-function ExtCns variables
-     let nonFun e = fmap ((== Nothing) . asPi) (scWhnf sc (ecType e))
-     exts <- filterM nonFun (getAllExts t0)
-
-     t' <- scAbstractExts sc exts t0
-
-     (labels, lit) <- SBVSim.sbvSolve sc mempty unintSet t'
-     let lit' = liftM SBV.svNot lit
-     return (t', labels, lit')
-
-
-
-
-getLabels ::
-  [SBVSim.Labeler] ->
-  Map String SBV.CV ->
-  [String] -> Maybe [(String,FirstOrderValue)]
-
-getLabels ls d argNames
-  | length argNames == length xs = Just (zip argNames xs)
-  | otherwise = error $ unwords
-                [ "SBV SAT results do not match expected arguments "
-                , show argNames, show xs]
-
-  where
-  xs = fmap getLabel ls
-
-  getLabel (SBVSim.BoolLabel s)    = FOVBit (SBV.cvToBool (d Map.! s))
-  getLabel (SBVSim.IntegerLabel s) = FOVInt (cvToInteger (d Map.! s))
-
-  getLabel (SBVSim.WordLabel s)    = FOVWord (cvKind cv) (cvToInteger cv)
-    where cv = d Map.! s
-
-  getLabel (SBVSim.VecLabel ns)
-    | V.null ns = error "getLabel of empty vector"
-    | otherwise = fovVec t vs
-    where vs = map getLabel (V.toList ns)
-          t  = firstOrderTypeOf (head vs)
-
-  getLabel (SBVSim.TupleLabel ns) = FOVTuple $ map getLabel (V.toList ns)
-  getLabel (SBVSim.RecLabel ns) = FOVRec $ fmap getLabel ns
-
-  cvKind cv =
-    case SBV.kindOf cv of
-      SBV.KBounded _ k -> fromIntegral k
-      _                -> error "cvKind"
-
-  cvToInteger cv =
-    case SBV.cvVal cv of
-      SBV.CInteger i -> i
-      _               -> error "cvToInteger"
+  do satq <- propToSATQuery sc unintSet goal
+     SBVSim.sbvSATQuery sc mempty satq

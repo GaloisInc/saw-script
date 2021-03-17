@@ -20,3 +20,11 @@ cabal.project.freeze
 *~
 *#
 .#*
+intTests/test_intro_examples/*.cnf
+intTests/test_llvm_x86_0[1234]/test
+intTests/test_llvm_x86_0[1234]/test.o
+intTests/test_llvm_x86_0[1234]/test.bc
+intTests/test*/*.out
+intTests/test_crucible_jvm/Stat.class
+intTests/test_profiling/prof
+intTests/test_smtlib/*.smt2

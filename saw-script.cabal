@@ -224,3 +224,23 @@ executable saw
   else
     build-depends: aig
     GHC-options: -O2 -Wall -Werror -fno-ignore-asserts -fno-spec-constr-count
+
+test-suite integration_tests
+  type: exitcode-stdio-1.0
+  hs-source-dirs: intTests
+
+  ghc-options: -Wall
+  default-language: Haskell2010
+
+  main-is: IntegrationTest.hs
+
+  build-depends: base
+               , directory
+               , filemanip
+               , filepath
+               , process
+               , tasty
+               , tasty-hunit
+               , tasty-expected-failure
+
+  build-tool-depends: saw-script:saw
