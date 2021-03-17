@@ -358,15 +358,27 @@ assumeValid :: ProofScript ()
 assumeValid =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is valid"
+     pos <- SV.getPosition
+     let admitMsg = "assumeValid: " ++ goalName goal
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (stats, SolveSuccess (Admitted (goalProp goal)))
+     return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
 
 assumeUnsat :: ProofScript ()
 assumeUnsat =
   execTactic $ tacticSolve $ \goal ->
   do printOutLnTop Warn $ "WARNING: assuming goal " ++ goalName goal ++ " is unsat"
+     pos <- SV.getPosition
+     let admitMsg = "assumeUnsat: " ++ goalName goal
      let stats = solverStats "ADMITTED" (propSize (goalProp goal))
-     return (stats, SolveSuccess (Admitted (goalProp goal)))
+     return (stats, SolveSuccess (Admitted admitMsg pos (goalProp goal)))
+
+admitProof :: String -> ProofScript ()
+admitProof msg =
+  execTactic $ tacticSolve $ \goal ->
+  do printOutLnTop Warn $ "WARNING: admitting goal " ++ goalName goal
+     pos <- SV.getPosition
+     let stats = solverStats "ADMITTED" (propSize (goalProp goal))
+     return (stats, SolveSuccess (Admitted msg pos (goalProp goal)))
 
 trivial :: ProofScript ()
 trivial =
@@ -1284,9 +1296,10 @@ prove_core script input =
 core_axiom :: String -> TopLevel Theorem
 core_axiom input =
   do sc <- getSharedContext
+     pos <- SV.getPosition
      t <- parseCore input
      p <- io (termToProp sc t)
-     SV.returnProof (admitTheorem p)
+     SV.returnProof (admitTheorem "core_axiom" pos p)
 
 core_thm :: String -> TopLevel Theorem
 core_thm input =

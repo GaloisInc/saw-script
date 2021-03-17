@@ -1262,12 +1262,24 @@ primitives = Map.fromList
   , prim "assume_valid"        "ProofScript ()"
     (pureVal assumeValid)
     Current
-    [ "Assume the current goal is valid, completing the proof." ]
+    [ "Assume the current goal is valid, completing the proof."
+    , "Prefer to use 'admit', this command will eventually be removed."
+    ]
 
   , prim "assume_unsat"        "ProofScript ()"
     (pureVal assumeUnsat)
     Current
-    [ "Assume the current goal is unsatisfiable, completing the proof." ]
+    [ "Assume the current goal is unsatisfiable, completing the proof."
+    , "Prefer to use 'admit', this command will eventually be removed."
+    ]
+
+  , prim "admit"               "String -> ProofScript ()"
+    (pureVal admitProof)
+    Current
+    [ "Admit the current goal, completing the proof by assumption."
+    , "The string argument provides a description of why the user"
+    , "had decided to admit this goal."
+    ]
 
   , prim "quickcheck"          "Int -> ProofScript ()"
     (scVal quickcheckGoal)
