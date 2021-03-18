@@ -270,7 +270,7 @@ verifyObligations cc mspec tactic assumes asserts =
      let nm = mspec ^. csMethodName
      stats <- forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) -> do
        goal   <- io $ scImplies sc assume assert
-       goal'  <- io $ predicateToProp sc Universal goal
+       goal'  <- io $ boolToProp sc [] goal -- TODO, generalize over inputs
        let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
            proofgoal = ProofGoal n "vc" goalname goal'
        res <- runProofScript tactic proofgoal

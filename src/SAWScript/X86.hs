@@ -132,7 +132,7 @@ import Verifier.SAW.Cryptol.Prelude(scLoadPreludeModule,scLoadCryptolModule)
 
 -- SAWScript
 import SAWScript.X86Spec hiding (Prop)
-import SAWScript.Proof(predicateToProp, Quantification(Universal), Prop)
+import SAWScript.Proof(boolToProp, Prop)
 import SAWScript.Crucible.Common (newSAWCoreBackend, sawCoreState)
 
 
@@ -540,7 +540,7 @@ data Goal = Goal
 
 -- | The proposition that needs proving (i.e., assumptions imply conclusion)
 gGoal :: SharedContext -> Goal -> IO Prop
-gGoal sc g0 = predicateToProp sc Universal =<< go (gAssumes g)
+gGoal sc g0 = boolToProp sc [] =<< go (gAssumes g)
   where
   g = g0 { gAssumes = mapMaybe skip (gAssumes g0) }
 
