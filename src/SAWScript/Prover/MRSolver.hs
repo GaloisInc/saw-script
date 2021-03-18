@@ -21,7 +21,7 @@ import Verifier.SAW.Term.Functor
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Recognizer
 
-import SAWScript.Proof (predicateToProp, Quantification(..))
+import SAWScript.Proof (boolToProp)
 import qualified SAWScript.Prover.SBV as SBV
 
 import Prelude
@@ -281,7 +281,7 @@ mrProvable bool_prop =
      path_prop <- mrPathCondition <$> get
      bool_prop' <- liftSC2 scImplies path_prop bool_prop
      sc <- mrSC <$> get
-     prop <- liftIO (predicateToProp sc Universal bool_prop')
+     prop <- liftIO (boolToProp sc [] bool_prop')
      (smt_res, _) <- liftSC1 (SBV.proveUnintSBV smt_conf mempty timeout) prop
      case smt_res of
        Just _ -> return False

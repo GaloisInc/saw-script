@@ -598,7 +598,7 @@ verifyObligations cc mspec tactic assumes asserts =
      stats <-
        forM (zip [(0::Int)..] asserts) $ \(n, (msg, assert)) ->
        do goal   <- io $ scImplies sc assume assert
-          goal'  <- io $ predicateToProp sc Universal goal
+          goal'  <- io $ boolToProp sc [] goal
           let goalname = concat [nm, " (", takeWhile (/= '\n') msg, ")"]
               proofgoal = ProofGoal n "vc" goalname goal'
           res <- runProofScript tactic proofgoal
@@ -764,7 +764,7 @@ assumptionsContainContradiction cc tactic assumptions =
          assume <- scAndList sc (toListOf (folded . Crucible.labeledPred) assumptions)
          -- implies falsehood
          goal  <- scImplies sc assume =<< toSC sym st (W4.falsePred sym)
-         goal' <- predicateToProp sc Universal goal
+         goal' <- boolToProp sc [] goal
          return $ ProofGoal 0 "vc" "vacuousness check" goal'
      res <- runProofScript tactic pgl
      case res of

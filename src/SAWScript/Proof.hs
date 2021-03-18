@@ -57,6 +57,7 @@ module SAWScript.Proof
 
   , Quantification(..)
   , predicateToProp
+  , boolToProp
 
   , ProofState
   , psTimeout
@@ -95,7 +96,7 @@ import Verifier.SAW.Term.Pretty (SawDoc)
 import Verifier.SAW.SCTypeCheck (scTypeCheckError)
 
 import Verifier.SAW.Simulator.Concrete (evalSharedTerm)
-import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue)
+import Verifier.SAW.Simulator.Value (asFirstOrderTypeValue, Value(..), TValue(..))
 
 import SAWScript.Position
 import SAWScript.Prover.SolverStats
@@ -103,12 +104,12 @@ import SAWScript.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim
 
--- | A proposition is a saw-core type (i.e. a term of type @sort n@
--- for some @n@). In particular, this includes any pi type whose
--- result type is a proposition. The argument of a pi type represents
+-- | A proposition is a saw-core type of type `Prop`.
+-- In particular, this includes any pi type whose result
+-- type is a proposition. The argument of a pi type represents
 -- a universally quantified variable.
 newtype Prop = Prop Term
-  -- INVARIANT: The type of the given term is a sort
+  -- INVARIANT: The type of the given term is `Prop`
 
 unProp :: Prop -> Term
 unProp (Prop tm) = tm
@@ -118,10 +119,25 @@ unProp (Prop tm) = tm
 --   is a sort.
 termToProp :: SharedContext -> Term -> IO Prop
 termToProp sc tm =
-   do ty <- scWhnf sc =<< scTypeOf sc tm
-      case asSort ty of
-        Nothing -> fail $ unlines [ "termToProp: Term is not a proposition", showTerm tm ]
-        Just _s -> return (Prop tm)
+   do mmap <- scGetModuleMap sc
+      ty <- scTypeOf sc tm
+      case evalSharedTerm mmap mempty mempty ty of
+        TValue (VSort s) | s == propSort -> return (Prop tm)
+        _ -> fail $ unlines [ "termToProp: Term is not a proposition", showTerm tm, showTerm ty ]
+
+
+-- | Turn a boolean-valued saw-core term into a proposition by asserting
+--   that it is equal to the true boolean value.  Generalize the proposition
+--   by universally quantifing over the variables given in the list.
+boolToProp :: SharedContext -> [ExtCns Term] -> Term -> IO Prop
+boolToProp sc vars tm =
+  do mmap <- scGetModuleMap sc
+     ty <- scTypeOf sc tm
+     case evalSharedTerm mmap mempty mempty ty of
+       TValue VBoolType ->
+         do p0 <- scEqTrue sc tm
+            Prop <$> scGeneralizeExts sc vars p0
+       _ -> fail $ unlines [ "boolToProp: Term is not a boolean", showTerm tm, showTerm ty ]
 
 -- | Return the saw-core term that represents this proposition.
 propToTerm :: SharedContext -> Prop -> IO Term
@@ -418,6 +434,7 @@ data ProofGoal =
 data Quantification = Existential | Universal
   deriving Eq
 
+
 -- | Convert a term with a function type of any arity into a pi type.
 -- Negate the term if the result type is @Bool@ and the quantification
 -- is 'Existential'.
@@ -433,7 +450,7 @@ predicateToProp sc quant = loop []
         do (argTs, resT) <- asPiList <$> scTypeOf' sc env t
            let toPi [] t0 =
                  case asBoolType resT of
-                   Nothing -> return t0 -- TODO: check quantification  TODO2: should this just be an error?
+                   Nothing -> fail $ unlines ["predicateToProp : Expected boolean result type but got", showTerm resT]
                    Just () ->
                      case quant of
                        Universal -> scEqTrue sc t0
