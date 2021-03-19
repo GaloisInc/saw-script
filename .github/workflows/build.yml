@@ -102,8 +102,7 @@ jobs:
         run: .github/ci.sh build
         continue-on-error: false
 
-      - uses: LisannaAtGalois/.github/actions/cabal-collect-bins@lisanna/cabal-collect-bins
-        # uses: GaloisInc/.github/actions/cabal-collect-bins@master
+      - uses: GaloisInc/.github/actions/cabal-collect-bins@lisanna/cabal-collect-bins
         id: cabal-test-suites
         continue-on-error: true
         with:
