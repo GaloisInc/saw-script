@@ -1,5 +1,6 @@
 {-# Language GADTs #-}
 {-# Language ImplicitParams #-}
+{-# Language NamedFieldPuns #-}
 {-# Language OverloadedStrings #-}
 {-# Language ViewPatterns #-}
 {-# Language ExplicitForAll #-}
@@ -283,10 +284,28 @@ coqTranslationConfiguration ::
   [String] ->
   Coq.TranslationConfiguration
 coqTranslationConfiguration notations skips = Coq.TranslationConfiguration
-  { Coq.notations          = notations
+  { Coq.notations = notations
   , Coq.monadicTranslation = False
-  , Coq.skipDefinitions    = skips
-  , Coq.vectorModule       = "SAWCoreVectorsAsCoqVectors"
+  , Coq.postPreamble = []
+  , Coq.skipDefinitions = skips
+  , Coq.vectorModule = "SAWCoreVectorsAsCoqVectors"
+  }
+
+withImportSAWCorePrelude :: Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportSAWCorePrelude config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import SAWCorePrelude."
+   , "Import SAWCorePrelude."
+   ]
+  }
+
+withImportCryptolPrimitivesForSAWCore ::
+  Coq.TranslationConfiguration  -> Coq.TranslationConfiguration
+withImportCryptolPrimitivesForSAWCore config@(Coq.TranslationConfiguration { Coq.postPreamble }) =
+  config { Coq.postPreamble = postPreamble ++ unlines
+   [ "From CryptolToCoq Require Import CryptolPrimitivesForSAWCore."
+   , "Import CryptolPrimitivesForSAWCore."
+   ]
   }
 
 writeCoqTerm ::
@@ -297,7 +316,10 @@ writeCoqTerm ::
   Term ->
   TopLevel ()
 writeCoqTerm name notations skips path t = do
-  let configuration = coqTranslationConfiguration notations skips
+  let configuration =
+        withImportSAWCorePrelude $
+        withImportCryptolPrimitivesForSAWCore $
+        coqTranslationConfiguration notations skips
   case Coq.translateTermAsDeclImports configuration name t of
     Left err -> throwTopLevel $ "Error translating: " ++ show err
     Right doc -> io $ case path of
@@ -331,7 +353,10 @@ writeCoqCryptolModule inputFile outputFile notations skips = io $ do
   cryptolPrimitivesForSAWCoreModule <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
   (cm, _) <- loadCryptolModule sc env inputFile
   let cryptolPreludeDecls = map Coq.moduleDeclName (moduleDecls cryptolPrimitivesForSAWCoreModule)
-  let configuration = coqTranslationConfiguration notations skips
+  let configuration =
+        withImportSAWCorePrelude $
+        withImportCryptolPrimitivesForSAWCore $
+        coqTranslationConfiguration notations skips
   case Coq.translateCryptolModule configuration cryptolPreludeDecls cm of
     Left e -> putStrLn $ show e
     Right cmDoc ->
@@ -376,13 +401,11 @@ writeCoqCryptolPrimitivesForSAWCore outputFile notations skips = do
   () <- scLoadCryptolModule sc
   () <- scLoadModule sc (emptyModule (mkModuleName ["CryptolPrimitivesForSAWCore"]))
   m  <- scFindModule sc nameOfCryptolPrimitivesForSAWCoreModule
-  let configuration = coqTranslationConfiguration notations skips
+  let configuration =
+        withImportSAWCorePrelude $
+        coqTranslationConfiguration notations skips
   let doc = Coq.translateSAWModule configuration m
-  let extraPreamble = vcat $
-        [ "From CryptolToCoq Require Import SAWCorePrelude."
-        , "Import SAWCorePrelude."
-        ]
-  writeFile outputFile (show . vcat $ [ Coq.preamblePlus configuration extraPreamble
+  writeFile outputFile (show . vcat $ [ Coq.preamble configuration
                                       , doc
                                       ])
 
