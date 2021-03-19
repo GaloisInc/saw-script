@@ -65,7 +65,7 @@ import SAWServer as Server
       getHandleAlloc,
       setServerVal )
 import SAWServer.Data.Contract
-    ( PointsTo(..), Allocated(..), ContractVar(..), Contract(..) )
+    ( PointsTo(..), GhostPointsTo(..), Allocated(..), ContractVar(..), Contract(..) )
 import SAWServer.Data.LLVMType (JSONLLVMType, llvmType)
 import SAWServer.Data.SetupValue ()
 import SAWServer.CryptolExpression (CryptolModuleException(..), getTypedTermOfCExp)
@@ -154,9 +154,9 @@ compileLLVMContract fileReader bic ghostEnv cenv0 c =
       P.Expr P.PName ->
       LLVMCrucibleSetupM TypedTerm
     getTypedTerm cenv expr = LLVMCrucibleSetupM $
-      do res <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
-         case fst res of
-           Right (t, warnings) -> return t
+      do (res, warnings) <- liftIO $ getTypedTermOfCExp fileReader (biSharedContext bic) cenv expr
+         case res of
+           Right (t, _) -> return t
            Left err -> throw $ CryptolModuleException err warnings
 
     getSetupVal ::

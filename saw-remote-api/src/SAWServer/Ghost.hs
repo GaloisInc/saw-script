@@ -21,12 +21,12 @@ createGhostVariableDescr :: Doc.Block
 createGhostVariableDescr =
   Doc.Paragraph [Doc.Text "Create a ghost global variable to represent proof-specific program state."]
 
-freshGhost :: ServerName -> Method SAWState GhostGlobal
+freshGhost :: ServerName -> Command SAWState GhostGlobal
 freshGhost (ServerName name) =
   do allocator <- getHandleAlloc
      liftIO (freshGlobalVar allocator name knownRepr)
 
-createGhostVariable :: CreateGhostParams -> Method SAWState OK
+createGhostVariable :: CreateGhostParams -> Command SAWState OK
 createGhostVariable (CreateGhostParams name) =
   do setServerVal name =<< freshGhost name
      ok

@@ -418,14 +418,14 @@ getTerm n =
        VTerm t -> return t
        _other -> Argo.raise (notATerm n)
 
-getGhost :: ServerName -> Method SAWState CMS.GhostGlobal
+getGhost :: ServerName -> Argo.Command SAWState CMS.GhostGlobal
 getGhost n =
   do v <- getServerVal n
      case v of
        VGhostVar x -> return x
        _other -> error "TODO" -- raise (notAGhostVariable n) -- TODO
 
-getGhosts :: Method SAWState [(ServerName, CMS.GhostGlobal)]
+getGhosts :: Argo.Command SAWState [(ServerName, CMS.GhostGlobal)]
 getGhosts =
-  do SAWEnv serverEnv <- view sawEnv <$> getState
+  do SAWEnv serverEnv <- view sawEnv <$> Argo.getState
      return [ (n, g) | (n, VGhostVar g) <- M.toList serverEnv ]

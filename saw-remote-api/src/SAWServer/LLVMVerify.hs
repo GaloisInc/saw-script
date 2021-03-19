@@ -29,6 +29,7 @@ import SAWServer
       pushTask,
       dropTask,
       setServerVal,
+      getGhosts,
       getLLVMModule,
       getLLVMMethodSpecIR )
 import SAWServer.CryptolExpression (getCryptolExpr)
@@ -53,7 +54,7 @@ llvmVerifyAssume mode (VerifyParams modName fun lemmaNames checkSat contract scr
        (_:_) -> Argo.raise $ notAtTopLevel $ map fst tasks
        [] ->
          do pushTask (LLVMCrucibleSetup lemmaName)
-            state <- getState
+            state <- Argo.getState
             mod <- getLLVMModule modName
             let bic = view sawBIC state
                 cenv = rwCryptol (view sawTopLevelRW state)
