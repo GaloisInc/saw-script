@@ -94,6 +94,9 @@ library
     , elf-edit
     , reflection
     , aeson
+    , unagi-bloomfilter == 0.1.1.2
+    , hashabler == 2.0.0
+    , hashable
 
   hs-source-dirs: src
 

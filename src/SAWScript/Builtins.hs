@@ -27,6 +27,8 @@ import Data.Functor
 import Control.Applicative
 import Data.Monoid
 #endif
+import qualified Control.Concurrent.BloomFilter as BF
+
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State
 import Control.Monad.Reader (ask)
@@ -620,10 +622,26 @@ applyProverToGoal :: (SharedContext
                      -> ProofGoal
                      -> TopLevel (SolverStats, SolveResult)
 applyProverToGoal f sc g = do
-  (mb, stats) <- io $ f sc (goalProp g)
-  case mb of
-    Nothing -> return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
-    Just a  -> return (stats, SolveCounterexample a)
+  -- Check if the proposition is in the bloom filter
+  bf <- SV.getTheoremFilter
+  genprop <- io $ generalizeProp sc (goalProp g)
+  -- gentm <- io $ propToTerm sc genprop
+  inFilter <- io $ BF.lookup bf genprop
+  if inFilter then
+    do printOutLnTop Info $ "Bloom filter hit!"
+       return (mempty, SolveSuccess (SolverEvidence mempty (goalProp g))) -- TODO... better evidence
+  else do
+    printOutLnTop Info $ "Bloom filter miss"
+    --printOutLnTop Info $ "================="
+    --printOutLnTop Info $ scWriteExternal gentm
+    --printOutLnTop Info $ "================="
+    
+    (mb, stats) <- io $ f sc (goalProp g)
+    case mb of
+      Nothing ->
+        do _ <- io $ BF.insert bf genprop
+           return (stats, SolveSuccess (SolverEvidence stats (goalProp g)))
+      Just a  -> return (stats, SolveCounterexample a)
 
 wrapProver ::
   (SharedContext -> Prop -> IO (Maybe CEX, SolverStats)) ->

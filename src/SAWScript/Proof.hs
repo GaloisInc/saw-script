@@ -28,6 +28,7 @@ module SAWScript.Proof
   , prettyProp
   , ppProp
   , propToSATQuery
+  , generalizeProp
 
   , Theorem
   , thmProp
@@ -77,12 +78,16 @@ module SAWScript.Proof
 
 import qualified Control.Monad.Fail as F
 import           Control.Monad.Except
+import           Data.List (sortOn)
 import           Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Text (Text)
 import qualified Data.Text as Text
+
+import qualified Data.Hashable as H
+import qualified Data.Hashabler as HR
 
 import Verifier.SAW.Prelude (scApplyPrelude_False)
 import Verifier.SAW.Recognizer
@@ -103,6 +108,7 @@ import SAWScript.Prover.SolverStats
 import SAWScript.Crucible.Common as Common
 import qualified Verifier.SAW.Simulator.What4 as W4Sim
 import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim
+import           Verifier.SAW.ExternalFormat (scWriteExternal)
 
 -- | A proposition is a saw-core type of type `Prop`.
 -- In particular, this includes any pi type whose result
@@ -110,6 +116,17 @@ import qualified Verifier.SAW.Simulator.What4.ReturnTrip as W4Sim
 -- a universally quantified variable.
 newtype Prop = Prop Term
   -- INVARIANT: The type of the given term is `Prop`
+
+instance HR.Hashable Prop where
+  hash hst (Prop tm) = HR.hash hst (scWriteExternal tm)
+
+instance HR.StableHashable Prop where
+  typeHash = HR.TypeHash 0xdeadbeef
+
+generalizeProp :: SharedContext -> Prop -> IO Prop
+generalizeProp sc (Prop tm) =
+  do let allexts = sortOn (toShortName . ecName) $ getAllExts tm
+     Prop <$> scGeneralizeExts sc allexts tm
 
 unProp :: Prop -> Term
 unProp (Prop tm) = tm

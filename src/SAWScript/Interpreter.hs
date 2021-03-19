@@ -33,6 +33,8 @@ module SAWScript.Interpreter
 import Control.Applicative
 import Data.Traversable hiding ( mapM )
 #endif
+import qualified Control.Concurrent.BloomFilter as BF
+import qualified Control.Concurrent.BloomFilter.Internal as BF
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
 import Control.Monad.IO.Class (liftIO)
@@ -42,7 +44,7 @@ import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
 import Data.Set ( Set )
-import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath)
+import System.Directory (getCurrentDirectory, setCurrentDirectory, canonicalizePath,doesFileExist)
 import System.FilePath (takeDirectory, hasDrive, (</>))
 import System.Process (readProcess)
 
@@ -61,8 +63,10 @@ import SAWScript.Parser (parseSchema)
 import SAWScript.TopLevel
 import SAWScript.Utils
 import SAWScript.Value
+import SAWScript.Proof (Prop)
 import SAWScript.Prover.Rewrite(basic_ss)
 import SAWScript.Prover.Exporter
+
 import Verifier.SAW.Conversion
 --import Verifier.SAW.PrettySExp
 import Verifier.SAW.Prim (rethrowEvalError)
@@ -437,6 +441,7 @@ buildTopLevelEnv proxy opts =
        jcb <- JCB.loadCodebase (jarList opts) (classPath opts) (javaBinDirs opts)
        currDir <- getCurrentDirectory
        Crucible.withHandleAllocator $ \halloc -> do
+       bf <- loadTheoremFilter
        let ro0 = TopLevelRO
                    { roSharedContext = sc
                    , roJavaCodebase = jcb
@@ -446,6 +451,7 @@ buildTopLevelEnv proxy opts =
                    , roProxy = proxy
                    , roInitWorkDir = currDir
                    , roBasicSS = ss
+                   , roTheoremFilter = bf
                    }
        let bic = BuiltinContext {
                    biSharedContext = sc
@@ -487,8 +493,26 @@ processFile proxy opts file = do
   setCurrentDirectory (takeDirectory file')
   _ <- runTopLevel (interpretFile file' >> interpretMain) ro rw
             `X.catch` (handleException opts)
+  saveTheoremFilter (roTheoremFilter ro)
   setCurrentDirectory oldpath
   return ()
+
+
+bloomFilterPath :: FilePath
+bloomFilterPath = "/Users/rdockins/code/saw-script/theorems.bloom"
+
+saveTheoremFilter :: BF.BloomFilter Prop -> IO ()
+saveTheoremFilter bf =
+   BS.writeFile bloomFilterPath =<< BF.unsafeSerialize bf
+
+loadTheoremFilter :: IO (BF.BloomFilter Prop)
+loadTheoremFilter =
+   do let sipKey = BF.SipKey 0x42 0xdeadbeef
+      ex <- doesFileExist bloomFilterPath
+      if ex then
+        BF.deserialize sipKey =<< BS.readFile bloomFilterPath
+      else
+        BF.new sipKey 3 20
 
 -- Primitives ------------------------------------------------------------------
 

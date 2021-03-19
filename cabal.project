@@ -32,3 +32,6 @@ packages:
     deps/argo/argo
     deps/argo/tasty-script-exitcode
     deps/cryptol/cryptol-remote-api
+
+    unagi-bloomfilter-0.1.1.2/
+    hashabler-2.0.0/

@@ -36,6 +36,7 @@ import Prelude hiding (fail)
 import Control.Applicative (Applicative)
 #endif
 import Control.Lens
+import qualified Control.Concurrent.BloomFilter as BF
 import Control.Monad.Fail (MonadFail(..))
 import Control.Monad.Catch (MonadThrow(..), MonadMask(..), MonadCatch(..))
 import Control.Monad.Except (ExceptT(..), runExceptT, MonadError(..))
@@ -381,6 +382,7 @@ data TopLevelRO =
   , roProxy         :: AIGProxy
   , roInitWorkDir   :: FilePath
   , roBasicSS       :: Simpset
+  , roTheoremFilter :: BF.BloomFilter Prop
   }
 
 data TopLevelRW =
@@ -441,6 +443,9 @@ getSharedContext = TopLevel (asks roSharedContext)
 
 getJavaCodebase :: TopLevel JSS.Codebase
 getJavaCodebase = TopLevel (asks roJavaCodebase)
+
+getTheoremFilter :: TopLevel (BF.BloomFilter Prop)
+getTheoremFilter = TopLevel (asks roTheoremFilter)
 
 getOptions :: TopLevel Options
 getOptions = TopLevel (asks roOptions)
