@@ -51,21 +51,22 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-18.04]
-        ghc: ["8.6.5", "8.8.4", "8.10.3"]
+        # ghc: ["8.6.5", "8.8.4", "8.10.3"]
+        ghc: ["8.8.4"]
         continue-on-error: [false]
-        include:
-          - os: macos-latest
-            ghc: "8.6.5"
-            continue-on-error: true
-          - os: macos-latest
-            ghc: "8.8.4"
-            continue-on-error: true
-          - os: windows-latest
-            ghc: "8.6.5"
-            continue-on-error: true
-        exclude:
-          - os: windows-latest
-            ghc: "8.8.4"
+        # include:
+        #   - os: macos-latest
+        #     ghc: "8.6.5"
+        #     continue-on-error: true
+        #   - os: macos-latest
+        #     ghc: "8.8.4"
+        #     continue-on-error: true
+        #   - os: windows-latest
+        #     ghc: "8.6.5"
+        #     continue-on-error: true
+        # exclude:
+        #   - os: windows-latest
+        #     ghc: "8.8.4"
     env:
       RELEASE: ${{ needs.outputs.outputs.release }}
     continue-on-error: ${{ matrix.continue-on-error }}
@@ -104,11 +105,14 @@ jobs:
       - uses: LisannaAtGalois/.github/actions/cabal-collect-bins@lisanna/cabal-collect-bins
         # uses: GaloisInc/.github/actions/cabal-collect-bins@master
         id: cabal-test-suites
+        continue-on-error: true
         with:
           targets: |
             integration_tests
             cryptol-saw-core-tc-test
           dest: cabal-test-suites-bins
+
+      - uses: mxschmitt/action-tmate@v3
 
       - name: "Upload Artifact: bin/abc"
         if: |
