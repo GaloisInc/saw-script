@@ -82,7 +82,7 @@ import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.TermNet as Net
 
 data RewriteRule
-  = RewriteRule { ctxt :: [Term], lhs :: Term, rhs :: Term }
+  = RewriteRule { ctxt :: [Term], lhs :: Term, rhs :: Term, permutative :: Bool }
   deriving (Eq, Show)
 -- ^ Invariant: The set of loose variables in @lhs@ must be exactly
 -- @[0 .. length ctxt - 1]@. The @rhs@ may contain a subset of these.
@@ -97,7 +97,7 @@ rhsRewriteRule :: RewriteRule -> Term
 rhsRewriteRule = rhs
 
 instance Net.Pattern RewriteRule where
-  toPat (RewriteRule _ lhs _) = Net.toPat lhs
+  toPat (RewriteRule _ lhs _ _) = Net.toPat lhs
 
 ----------------------------------------------------------------------
 -- Matching
@@ -290,15 +290,30 @@ ruleOfTerm t =
       -- NOTE: this assumes the Coq-style equality type Eq X x y, where both X
       -- (the type of x and y) and x are parameters, and y is an index
       FTermF (DataTypeApp ident [_, x] [y])
-          | ident == eqIdent -> RewriteRule { ctxt = [], lhs = x, rhs = y }
+          | ident == eqIdent -> mkRewriteRule [] x y
       Pi _ ty body -> rule { ctxt = ty : ctxt rule }
           where rule = ruleOfTerm body
       _ -> error "ruleOfSharedTerm: Illegal argument"
 
+-- Test whether a rewrite rule is permutative
+-- this is a rule that immediately loops whether used forwards or backwards.
+rulePermutes :: Term -> Term -> Bool
+rulePermutes lhs rhs =
+    case first_order_match lhs rhs of
+        Nothing -> False -- rhs is not an instance of lhs
+        Just _ ->
+          case first_order_match rhs lhs of
+            Nothing -> False -- but here we have a looping rule, not good!
+            Just _ -> True
+
+mkRewriteRule :: [Term] -> Term -> Term  -> RewriteRule
+mkRewriteRule c l r =
+    RewriteRule {ctxt = c, lhs = l, rhs = r , permutative = rulePermutes l r} 
+
 -- | Converts a universally quantified equality proposition between the
 -- two given terms to a RewriteRule.
 ruleOfTerms :: Term -> Term -> RewriteRule
-ruleOfTerms l r = RewriteRule { ctxt = [], lhs = l, rhs = r }
+ruleOfTerms l r = mkRewriteRule [] l r
 
 -- | Converts a parameterized equality predicate to a RewriteRule,
 -- returning 'Nothing' if the predicate is not an equation.
@@ -309,20 +324,19 @@ ruleOfProp (R.asPi -> Just (_, ty, body)) =
 ruleOfProp (R.asLambda -> Just (_, ty, body)) =
   do rule <- ruleOfProp body
      Just rule { ctxt = ty : ctxt rule }
-
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef ecEqIdent -> Just (), [_, _, x, y])) =
-  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just $ mkRewriteRule [] x y
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef bvEqIdent -> Just (), [_, x, y])) =
-  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just $ mkRewriteRule [] x y
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef equalNatIdent -> Just (), [x, y])) =
-  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just $ mkRewriteRule [] x y
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef boolEqIdent -> Just (), [x, y])) =
-  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just $ mkRewriteRule [] x y
 ruleOfProp (R.asApplyAll -> (R.isGlobalDef vecEqIdent -> Just (), [_, _, _, x, y])) =
-  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just $ mkRewriteRule [] x y
 ruleOfProp (unwrapTermF -> Constant _ body) = ruleOfProp body
 ruleOfProp (R.asEq -> Just (_, x, y)) =
-  Just RewriteRule { ctxt = [], lhs = x, rhs = y }
+  Just $ mkRewriteRule [] x y
 ruleOfProp (R.asEqTrue -> Just body) = ruleOfProp body
 ruleOfProp _ = Nothing
 
@@ -341,18 +355,18 @@ scEqsRewriteRules sc = mapM (scEqRewriteRule sc)
 -- * If the rhs is a recursor, then split into a separate rule for each constructor.
 -- * If the rhs is a record, then split into a separate rule for each accessor.
 scExpandRewriteRule :: SharedContext -> RewriteRule -> IO (Maybe [RewriteRule])
-scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
+scExpandRewriteRule sc (RewriteRule ctxt lhs rhs _) =
   case rhs of
     (R.asLambda -> Just (_, ty, body)) ->
       do let ctxt' = ctxt ++ [ty]
          lhs1 <- incVars sc 0 1 lhs
          var0 <- scLocalVar sc 0
          lhs' <- scApply sc lhs1 var0
-         return $ Just [RewriteRule ctxt' lhs' body]
+         return $ Just [mkRewriteRule ctxt' lhs' body]
     (R.asRecordValue -> Just m) ->
       do let mkRule (k, x) =
                do l <- scRecordSelect sc lhs k
-                  return (RewriteRule ctxt l x)
+                  return (mkRewriteRule ctxt l x)
          Just <$> traverse mkRule (Map.assocs m)
     (R.asApplyAll ->
      (R.asRecursorApp -> Just (d, params, p_ret, cs_fs, _ixs, R.asLocalVar -> Just i),
@@ -393,9 +407,9 @@ scExpandRewriteRule sc (RewriteRule ctxt lhs rhs) =
                   rhs2 <- scApplyAll sc rhs1 more'
                   rhs3 <- betaReduce rhs2
                   -- re-fold recursive occurrences of the original rhs
-                  let ss = addRule (RewriteRule ctxt rhs lhs) emptySimpset
+                  let ss = addRule (mkRewriteRule ctxt rhs lhs) emptySimpset
                   rhs' <- rewriteSharedTerm sc ss rhs3
-                  return (RewriteRule ctxt' lhs' rhs')
+                  return (mkRewriteRule ctxt' lhs' rhs')
          dt <- scRequireDataType sc d
          rules <- traverse ctorRule (dtCtors dt)
          return (Just rules)
@@ -436,7 +450,7 @@ scDefRewriteRules _ (Def { defBody = Nothing }) = return []
 scDefRewriteRules sc (Def { defIdent = ident, defBody = Just body }) =
   do lhs <- scGlobalDef sc ident
      rhs <- scSharedTerm sc body
-     scExpandRewriteRules sc [RewriteRule { ctxt = [], lhs = lhs, rhs = rhs }]
+     scExpandRewriteRules sc [mkRewriteRule [] lhs rhs]
 
 
 ----------------------------------------------------------------------
@@ -517,6 +531,45 @@ asIotaRedex t =
 ----------------------------------------------------------------------
 -- Bottom-up rewriting
 
+-- | Term ordering
+-- The existing "<" on terms is not adequate for deciding how to handle permutative rules,
+-- as then associativity and commutativity can loop.
+-- The following rather unsophisticated functions *might* prevent looping.
+-- More analysis is needed!
+--
+-- here we get the "fringe" of arguments in an application, looking at either curried or
+-- tupled arguments.  That is
+--   for `f x y z`, return [x,y,z]
+--   for `f (x,y)` return [x,y]
+--   for `f (f x y) z`, return [x,y,z]
+--   for `f (x, f (y,z))`, return [x,y,z]
+appCollectedArgs :: Term -> [Term]
+appCollectedArgs t = step0 (unshared t) []
+  where
+    unshared (STApp{stAppIndex = _, stAppTermF = tf1}) = tf1
+    unshared (Unshared tf1) = tf1
+    -- step 0: accumulate curried args, find the function
+    step0 ::  TermF Term -> [Term] -> [Term]
+    step0 (App f a) args = step0 (unshared f) (a:args)
+    step0 other args = step1 other args
+    -- step 1: analyse each arg, knowing the called function, append together
+    step1 :: TermF Term -> [Term] -> [Term]
+    step1 f args = foldl (++) [] (map (\ x -> step2 f $ unshared x) args)
+    -- step2: analyse an arg.  look inside tuples, sequences (TBD), more calls to f
+    step2 :: TermF Term -> TermF Term -> [Term]
+    step2 f (FTermF (PairValue x y)) = (step2 f $ unshared x) ++ (step2 f $ unshared y)
+    step2 f (s@(App g a)) = possibly_curried_args s f (unshared g) (step2 f $ unshared a) 
+    step2 _ a = [Unshared a]
+    --
+    possibly_curried_args :: TermF Term -> TermF Term -> TermF Term -> [Term] -> [Term]
+    possibly_curried_args s f (App g a) args = possibly_curried_args s f (unshared g) ((step2 f $ unshared a) ++ args)
+    possibly_curried_args s f h args = if f == h then args else [Unshared s]
+
+
+termWeightLt :: Term -> Term -> Bool
+termWeightLt t t' =
+  (appCollectedArgs t) < (appCollectedArgs t')
+
 -- | Do a single reduction step (beta, record or tuple selector) at top
 -- level, if possible.
 reduceSharedTerm :: SharedContext -> Term -> Maybe (IO Term)
@@ -549,7 +602,7 @@ rewriteSharedTerm sc ss t0 =
     apply :: (?cache :: Cache IO TermIndex Term) =>
              [Either RewriteRule Conversion] -> Term -> IO Term
     apply [] t = return t
-    apply (Left (RewriteRule {ctxt, lhs, rhs}) : rules) t = do
+    apply (Left (RewriteRule {ctxt, lhs, rhs, permutative}) : rules) t = do
       result <- scMatch sc lhs t
       case result of
         Nothing -> apply rules t
@@ -564,6 +617,12 @@ rewriteSharedTerm sc ss t0 =
             do putStrLn $ "rewriteSharedTerm: invalid lhs does not contain all variables: "
                  ++ scPrettyTerm defaultPPOpts lhs
                apply rules t
+          | permutative ->
+            do
+              t' <- instantiateVarList sc 0 (Map.elems inst) rhs
+              case termWeightLt t' t of
+                True -> rewriteAll t' -- keep the result only if it is "smaller"
+                False -> apply rules t
           | otherwise ->
             do -- putStrLn "REWRITING:"
                -- print lhs
@@ -667,7 +726,7 @@ rewritingSharedContext sc ss = sc'
              Term -> IO Term
     apply [] (Unshared tf) = scTermF sc tf
     apply [] STApp{ stAppTermF = tf } = scTermF sc tf
-    apply (Left (RewriteRule _ l r) : rules) t =
+    apply (Left (RewriteRule _ l r _) : rules) t =
       case first_order_match l t of
         Nothing -> apply rules t
         Just inst
