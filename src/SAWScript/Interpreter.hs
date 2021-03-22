@@ -2787,6 +2787,18 @@ primitives = Map.fromList
     , " p1 \\/ ... \\/ pn, where the pi can contain name."
     ]
 
+  , prim "heapster_define_irt_recursive_perm"
+    "HeapsterEnv -> String -> String -> String -> [String] -> TopLevel HeapsterEnv"
+    (bicVal heapster_define_irt_recursive_perm)
+    Experimental
+    [ "heapster_define_irt_recursive_perm env name arg_ctx value_type"
+    , " [ p1, ..., pn ] defines an recursive named Heapster permission named"
+    , " nm with arguments parsed from args_ctx and type parsed from value_type"
+    , " that translates to the appropriate IRT type. The resulting permission"
+    , " is equivalent to he permission p1 \\/ ... \\/ pn, where the pi can"
+    , " contain name."
+    ]
+
   , prim "heapster_define_reachability_perm"
     "HeapsterEnv -> String -> String -> String -> String -> String -> String -> String -> String -> String -> String -> TopLevel HeapsterEnv"
     (bicVal heapster_define_reachability_perm)

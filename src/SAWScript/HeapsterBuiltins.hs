@@ -24,6 +24,7 @@ module SAWScript.HeapsterBuiltins
        -- , heapster_typecheck_fun_rename_rs
        , heapster_define_opaque_perm
        , heapster_define_recursive_perm
+       , heapster_define_irt_recursive_perm
        , heapster_define_reachability_perm
        , heapster_define_perm
        , heapster_define_llvmshape
@@ -96,6 +97,7 @@ import SAWScript.Crucible.LLVM.MethodSpecIR
 import Verifier.SAW.Heapster.CruUtil
 import Verifier.SAW.Heapster.Permissions
 import Verifier.SAW.Heapster.SAWTranslation
+import Verifier.SAW.Heapster.IRTTranslation
 import Verifier.SAW.Heapster.PermParser
 
 import SAWScript.Prover.Exporter
@@ -357,6 +359,69 @@ heapster_define_recursive_perm _bic _opts henv
               return (fold_ident, unfold_ident))
          (\_ _ -> return NoReachMethods)
        liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
+
+-- | Define a new recursive named permission with the given name, arguments,
+-- and type, auto-generating SAWCore definitions using `IRT`
+heapster_define_irt_recursive_perm :: BuiltinContext -> Options -> HeapsterEnv ->
+                                      String -> String -> String -> [String] ->
+                                      TopLevel ()
+heapster_define_irt_recursive_perm _bic _opts henv nm args_str tp_str p_strs =
+  do env <- liftIO $ readIORef $ heapsterEnvPermEnvRef henv
+     sc <- getSharedContext
+
+     -- Parse the arguments, the type, and the translation type
+     Some args_ctx <- parseParsedCtxString "argument types" env args_str
+     let args = parsedCtxCtx args_ctx
+     Some tp <- parseTypeString "permission type" env tp_str
+     let mnm = heapsterEnvSAWModule henv
+         trans_ident = mkSafeIdent mnm (nm ++ "IRT")
+
+     -- Use permEnvAddRecPermM to tie the knot of adding a recursive
+     -- permission whose cases and fold/unfold identifiers depend on that
+     -- recursive permission being defined
+     env' <-
+       permEnvAddRecPermM env nm args tp trans_ident NameNonReachConstr
+       (\_ tmp_env ->
+         forM p_strs $
+         parsePermInCtxString "disjunctive perm" tmp_env args_ctx tp)
+       (\npn cases tmp_env -> liftIO $
+         do let or_tp = foldr1 (mbMap2 ValPerm_Or) cases
+                nm_tp = nus (cruCtxProxies args)
+                  (\ns -> ValPerm_Named npn (namesToExprs ns) NoPermOffset)
+            -- translate the list of type variables
+            (TypedTerm ls_tm ls_tp, ixs) <-
+              translateCompleteIRTTyVars sc tmp_env npn args or_tp
+            let ls_ident = mkSafeIdent mnm (nm ++ "IRTTyVars")
+            scInsertDef sc mnm ls_ident ls_tp ls_tm
+            -- translate the type description
+            (TypedTerm d_tm d_tp) <-
+              translateCompleteIRTDesc sc tmp_env ls_ident args or_tp ixs
+            let d_ident = mkSafeIdent mnm (nm ++ "IRTDesc")
+            scInsertDef sc mnm d_ident d_tp d_tm
+            -- translate the final definition
+            (TypedTerm tp_tm tp_tp) <-
+              translateCompleteIRTDef sc tmp_env ls_ident d_ident args
+            scInsertDef sc mnm trans_ident tp_tp tp_tm
+            -- translate the fold and unfold functions
+            fold_fun_tp <-
+              translateCompletePureFun sc tmp_env args (singletonValuePerms
+                                                        <$> or_tp) nm_tp
+            unfold_fun_tp <-
+              translateCompletePureFun sc tmp_env args (singletonValuePerms
+                                                        <$> nm_tp) or_tp
+            fold_fun_tm <-
+              translateCompleteIRTFoldFun sc tmp_env ls_ident d_ident
+                                          trans_ident args
+            unfold_fun_tm <-
+              translateCompleteIRTUnfoldFun sc tmp_env ls_ident d_ident
+                                            trans_ident args
+            let fold_ident   = mkSafeIdent mnm ("fold"   ++ nm ++ "IRT")
+            let unfold_ident = mkSafeIdent mnm ("unfold" ++ nm ++ "IRT")
+            scInsertDef sc mnm fold_ident   fold_fun_tp   fold_fun_tm
+            scInsertDef sc mnm unfold_ident unfold_fun_tp unfold_fun_tm
+            return (fold_ident, unfold_ident))
+       (\_ _ -> return NoReachMethods)
+     liftIO $ writeIORef (heapsterEnvPermEnvRef henv) env'
 
 -- | Define a new reachability permission
 heapster_define_reachability_perm :: BuiltinContext -> Options -> HeapsterEnv ->
