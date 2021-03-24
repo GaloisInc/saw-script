@@ -311,9 +311,9 @@ llvm_verify_x86 (Some (llvmModule :: LLVMModule x)) path nm globsyms checkSat se
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnAesIMC sfs) $ cryptolUninterpreted cenv "aesimc"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnClMul sfs) $ cryptolUninterpreted cenv "clmul"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShasigma0 sfs) $ cryptolUninterpreted cenv "sigma_0"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShasigma1 sfs) $ cryptolUninterpreted cenv "sigma_0"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShasigma1 sfs) $ cryptolUninterpreted cenv "sigma_1"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaSigma0 sfs) $ cryptolUninterpreted cenv "SIGMA_0"
-      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaSigma1 sfs) $ cryptolUninterpreted cenv "SIGMA_0"
+      liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaSigma1 sfs) $ cryptolUninterpreted cenv "SIGMA_1"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaCh sfs) $ cryptolUninterpreted cenv "Ch"
       liftIO $ sawRegisterSymFunInterp sawst (Macaw.fnShaMaj sfs) $ cryptolUninterpreted cenv "Maj"
 
